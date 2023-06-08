@@ -109,6 +109,7 @@ type ConfigurationSpec struct {
 	APISpec             APISpec            `json:"api,omitempty" yaml:"api,omitempty"`
 	ComponentsSpec      ComponentsSpec     `json:"components,omitempty" yaml:"components,omitempty"`
 	LoggingSpec         LoggingSpec        `json:"logging,omitempty" yaml:"logging,omitempty"`
+	WasmSpec            WasmSpec           `json:"wasm,omitempty" yaml:"wasm,omitempty"`
 }
 
 type SecretsSpec struct {
@@ -277,6 +278,11 @@ type FeatureSpec struct {
 type ComponentsSpec struct {
 	// Denylist of component types that cannot be instantiated
 	Deny []string `json:"deny,omitempty" yaml:"deny,omitempty"`
+}
+
+// WasmSpec describes the configuration for Wasm across all Dapr components.
+type WasmSpec struct {
+	StrictSandbox *bool `json:"strictSandbox,omitempty" yaml:"strictSandbox,omitempty"`
 }
 
 // LoggingSpec defines the configuration for logging.

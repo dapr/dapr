@@ -397,6 +397,14 @@ spec:
                 required:
                 - samplingRate
                 type: object
+              wasm:
+                description: WasmSpec describes the configuration for Wasm across all Dapr components.
+                properties:
+                  strictSandbox:
+                    type: boolean
+                required:
+                  - strictSandbox
+                type: object
             type: object
         type: object
     served: true

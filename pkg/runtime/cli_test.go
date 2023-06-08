@@ -81,3 +81,16 @@ func TestStandaloneGlobalConfig(t *testing.T) {
 	assert.EqualValues(t, string(modes.StandaloneMode), runtime.runtimeConfig.Mode)
 	assert.False(t, runtime.globalConfig.Spec.MetricsSpec.Enabled)
 }
+
+func TestStandaloneWasmStrictSandbox(t *testing.T) {
+	// reset CommandLine to avoid conflicts from other tests
+	flag.CommandLine = flag.NewFlagSet("runtime-flag-test-cmd", flag.ExitOnError)
+	// avoid port conflicts from other tests
+	testMetricsPort++
+
+	runtime, err := FromFlags([]string{"--app-id", testAppID, "--mode", string(modes.StandaloneMode), "--config", "../config/testdata/wasm_strict_sandbox.yaml", "--metrics-port", strconv.Itoa(testMetricsPort)})
+	assert.NoError(t, err)
+	assert.EqualValues(t, testAppID, runtime.runtimeConfig.ID)
+	assert.EqualValues(t, string(modes.StandaloneMode), runtime.runtimeConfig.Mode)
+	assert.True(t, *runtime.globalConfig.Spec.WasmSpec.StrictSandbox)
+}

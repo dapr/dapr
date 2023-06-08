@@ -77,6 +77,7 @@ import (
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/runtime/component"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
@@ -253,6 +254,10 @@ type pubsubSubscribedMessage struct {
 // NewDaprRuntime returns a new runtime with the given runtime config and global config.
 func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, accessControlList *config.AccessControlList, resiliencyProvider resiliency.Provider) *DaprRuntime {
 	ctx, cancel := context.WithCancel(context.Background())
+	if globalConfig.Spec.WasmSpec.StrictSandbox != nil {
+		// set wasm strict sandbox mode to global context, so that it can be used by all components
+		ctx = component.WithWasmStrictSandbox(ctx, *globalConfig.Spec.WasmSpec.StrictSandbox)
+	}
 
 	rt := &DaprRuntime{
 		ctx:                        ctx,

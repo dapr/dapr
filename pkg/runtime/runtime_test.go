@@ -77,6 +77,7 @@ import (
 	nrLoader "github.com/dapr/dapr/pkg/components/nameresolution"
 	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
 	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
+	"github.com/dapr/dapr/pkg/runtime/component"
 
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
@@ -2469,6 +2470,31 @@ func TestPopulateSecretsConfiguration(t *testing.T) {
 		assert.Equal(t, config.AllowAccess, secConf.DefaultAccess, "Expected default access as allow")
 		assert.Empty(t, secConf.DeniedSecrets, "Expected testMock deniedSecrets to not be populated")
 		assert.NotContains(t, secConf.AllowedSecrets, "Expected testMock allowedSecrets to not be populated")
+	})
+}
+
+func TestWasmConfiguration(t *testing.T) {
+	t.Run("wasm configuration", func(t *testing.T) {
+		// setup
+		testRuntimeConfig := NewTestDaprRuntimeConfig(modes.StandaloneMode, "http", 8080)
+		testGlobalConfig := &config.Configuration{Spec: config.ConfigurationSpec{WasmSpec: config.WasmSpec{StrictSandbox: ptr.Of(true)}}}
+		rt := NewDaprRuntime(testRuntimeConfig, testGlobalConfig, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		defer stopRuntime(t, rt)
+
+		// verify
+		strictSandbox := component.GetWasmStrictSandbox(rt.ctx)
+		require.True(t, strictSandbox, "Expected strictSandbox mod get from context to be true")
+	})
+	t.Run("without wasm configuration", func(t *testing.T) {
+		// setup
+		testRuntimeConfig := NewTestDaprRuntimeConfig(modes.StandaloneMode, "http", 8080)
+		rt := NewDaprRuntime(testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		defer stopRuntime(t, rt)
+
+		// verify
+		strictSandbox := component.GetWasmStrictSandbox(rt.ctx)
+		// todo this should be the default value, currently assume it is false
+		require.False(t, strictSandbox, "Expected strictSandbox false when wasm configuration is not present")
 	})
 }
 
