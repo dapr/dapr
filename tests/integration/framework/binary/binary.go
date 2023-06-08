@@ -59,7 +59,7 @@ func Build(t *testing.T, name string) {
 		}
 
 		// Ensure CGO is disabled to avoid linking against system libraries.
-		os.Setenv("CGO_ENABLED", "0")
+		require.NoError(t, os.Setenv("CGO_ENABLED", "0"))
 
 		t.Logf("Root dir: %q", rootDir)
 		t.Logf("Compiling %q binary to: %q", name, binPath)
