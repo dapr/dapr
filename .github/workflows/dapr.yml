@@ -87,7 +87,7 @@ jobs:
         with:
           version: ${{ env.GOLANGCILINT_VER }}
           skip-cache: true
-          args: --build-tags all_components
+          args: --build-tags allcomponents
       - name: Run go mod tidy check diff
         run: make modtidy check-diff
       - name: Run gen-proto check diff
@@ -192,54 +192,54 @@ jobs:
             target_os: linux
             target_arch: amd64
             job_name: "Linux/amd64"
-            sidecar_flavor: "all"
+            sidecar_flavor: "allcomponents"
           - os: ubuntu-latest
             target_os: linux
             target_arch: amd64
             job_name: "Linux/amd64"
-            sidecar_flavor: "stable"
+            sidecar_flavor: "stablecomponents"
           - os: ubuntu-latest
             target_os: linux
             target_arch: arm64
             job_name: "Linux/arm64"
-            sidecar_flavor: "all"
+            sidecar_flavor: "allcomponents"
           - os: ubuntu-latest
             target_os: linux
             target_arch: arm64
             job_name: "Linux/arm64"
-            sidecar_flavor: "stable"
+            sidecar_flavor: "stablecomponents"
           - os: ubuntu-latest
             target_os: linux
             target_arch: arm
             job_name: "Linux/arm"
-            sidecar_flavor: "all"
+            sidecar_flavor: "allcomponents"
           - os: ubuntu-latest
             target_os: linux
             target_arch: arm
             job_name: "Linux/arm"
-            sidecar_flavor: "stable"
+            sidecar_flavor: "stablecomponents"
           - os: windows-2019
             target_os: windows
             target_arch: amd64
             windows_version: "1809"
             job_name: "Windows 1809"
-            sidecar_flavor: "all"
+            sidecar_flavor: "allcomponents"
           - os: windows-2022
             target_os: windows
             target_arch: amd64
             windows_version: ltsc2022
             job_name: "Windows LTSC 2022"
-            sidecar_flavor: "all"
+            sidecar_flavor: "allcomponents"
           - os: macOS-latest
             target_os: darwin
             target_arch: amd64
             job_name: "macOS/Intel"
-            sidecar_flavor: "all"
+            sidecar_flavor: "allcomponents"
           - os: macOS-latest
             target_os: darwin
             target_arch: arm64
             job_name: "macOS/Apple Silicon"
-            sidecar_flavor: "all"
+            sidecar_flavor: "allcomponents"
     steps:
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v1
@@ -262,7 +262,7 @@ jobs:
       - name: Parse release version and set REL_VERSION and LATEST_RELEASE
         run: python ./.github/scripts/get_release_version.py ${{ github.event_name }}
       - name: Updates version for sidecar flavor
-        if: matrix.sidecar_flavor != 'all'
+        if: matrix.sidecar_flavor != 'allcomponents'
         run: |
           echo "REL_VERSION=${REL_VERSION}-${{matrix.sidecar_flavor}}" >>${GITHUB_ENV}
           # Only sidecar is built
@@ -310,7 +310,7 @@ jobs:
           GOOS: ${{ matrix.target_os }}
           GOARCH: ${{ matrix.target_arch }}
           ARCHIVE_OUT_DIR: ${{ env.ARCHIVE_OUTDIR }}
-        if: matrix.sidecar_flavor == 'all'
+        if: matrix.sidecar_flavor == 'allcomponents'
         run: |
           mkdir -p "${ARCHIVE_OUT_DIR}"
           make release
@@ -321,7 +321,7 @@ jobs:
           GOARCH: ${{ matrix.target_arch }}
           ARCHIVE_OUT_DIR: ${{ env.ARCHIVE_OUTDIR }}
           DAPR_SIDECAR_FLAVOR: "${{ matrix.sidecar_flavor }}"
-        if: matrix.sidecar_flavor != 'all'
+        if: matrix.sidecar_flavor != 'allcomponents'
         run: |
           mkdir -p "${ARCHIVE_OUT_DIR}"
           make release-flavor
@@ -332,7 +332,7 @@ jobs:
           name: dapr_${{ matrix.target_os }}_${{ matrix.target_arch }}_${{ matrix.sidecar_flavor }}
           path: ${{ env.ARCHIVE_OUTDIR }}
       - name: upload artifacts - grafana dashboards
-        if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux' && matrix.sidecar_flavor == 'all'
+        if: matrix.target_arch == 'amd64' && matrix.target_os == 'linux' && matrix.sidecar_flavor == 'allcomponents'
         uses: actions/upload-artifact@master
         with:
           name: dapr_grafana_dashboards
@@ -405,50 +405,50 @@ jobs:
           REPO_OWNER=${{ github.repository_owner }}
           # Lowercase the value
           echo "REPO_OWNER=${REPO_OWNER,,}" >>${GITHUB_ENV}
-      - name: "download artifact: dapr_linux_amd64_all"
+      - name: "download artifact: dapr_linux_amd64_allcomponents"
         uses: actions/download-artifact@master
         with:
-          name: dapr_linux_amd64_all
+          name: dapr_linux_amd64_allcomponents
           path: ${{ env.ARTIFACT_DIR }}
-      - name: "download artifact: dapr_linux_amd64_stable"
+      - name: "download artifact: dapr_linux_amd64_stablecomponents"
         uses: actions/download-artifact@master
         with:
-          name: dapr_linux_amd64_stable
+          name: dapr_linux_amd64_stablecomponents
           path: ${{ env.ARTIFACT_DIR }}
-      - name: "download artifact: dapr_linux_arm_all"
+      - name: "download artifact: dapr_linux_arm_allcomponents"
         uses: actions/download-artifact@master
         with:
-          name: dapr_linux_arm_all
+          name: dapr_linux_arm_allcomponents
           path: ${{ env.ARTIFACT_DIR }}
-      - name: "download artifact: dapr_linux_arm_stable"
+      - name: "download artifact: dapr_linux_arm_stablecomponents"
         uses: actions/download-artifact@master
         with:
-          name: dapr_linux_arm_stable
+          name: dapr_linux_arm_stablecomponents
           path: ${{ env.ARTIFACT_DIR }}
-      - name: "download artifact: dapr_linux_arm64_all"
+      - name: "download artifact: dapr_linux_arm64_allcomponents"
         uses: actions/download-artifact@master
         with:
-          name: dapr_linux_arm64_all
+          name: dapr_linux_arm64_allcomponents
           path: ${{ env.ARTIFACT_DIR }}
-      - name: "download artifact: dapr_linux_arm64_stable"
+      - name: "download artifact: dapr_linux_arm64_stablecomponents"
         uses: actions/download-artifact@master
         with:
-          name: dapr_linux_arm64_stable
+          name: dapr_linux_arm64_stablecomponents
           path: ${{ env.ARTIFACT_DIR }}
-      - name: "download artifact: dapr_windows_amd64_all"
+      - name: "download artifact: dapr_windows_amd64_allcomponents"
         uses: actions/download-artifact@master
         with:
-          name: dapr_windows_amd64_all
+          name: dapr_windows_amd64_allcomponents
           path: ${{ env.ARTIFACT_DIR }}
-      - name: "download artifact: dapr_darwin_amd64_all"
+      - name: "download artifact: dapr_darwin_amd64_allcomponents"
         uses: actions/download-artifact@master
         with:
-          name: dapr_darwin_amd64_all
+          name: dapr_darwin_amd64_allcomponents
           path: ${{ env.ARTIFACT_DIR }}
-      - name: "download artifact: dapr_darwin_arm64_all"
+      - name: "download artifact: dapr_darwin_arm64_allcomponents"
         uses: actions/download-artifact@master
         with:
-          name: dapr_darwin_arm64_all
+          name: dapr_darwin_arm64_allcomponents
           path: ${{ env.ARTIFACT_DIR }}
       - name: "download artifact: dapr_grafana_dashboards"
         uses: actions/download-artifact@master
@@ -495,10 +495,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        sidecar_flavor: ["all", "stable"]
+        sidecar_flavor: ["allcomponents", "stablecomponents"]
         target_os: ["linux", "windows"]
         exclude:
-          - sidecar_flavor: "stable"
+          - sidecar_flavor: "stablecomponents"
             target_os: "windows"
     steps:
       - name: Check out code into the Go module directory
@@ -506,7 +506,7 @@ jobs:
       - name: Parse release version and set REL_VERSION and LATEST_RELEASE
         run: python ./.github/scripts/get_release_version.py ${{ github.event_name }}
       - name: Updates version for sidecar flavor
-        if: matrix.sidecar_flavor != 'all'
+        if: matrix.sidecar_flavor != 'allcomponents'
         run: |
           echo "REL_VERSION=${REL_VERSION}-${{matrix.sidecar_flavor}}" >>${GITHUB_ENV}
           echo "LATEST_TAG=latest-${{matrix.sidecar_flavor}}" >>${GITHUB_ENV}
@@ -553,7 +553,7 @@ jobs:
             make docker-publish
         shell: bash
       - name: Build and push Docker multiarch Windows manifest to Docker Hub
-        if: matrix.target_os != 'darwin' && env.DOCKER_REGISTRY_ID != '' && matrix.sidecar_flavor == 'all'
+        if: matrix.target_os != 'darwin' && env.DOCKER_REGISTRY_ID != '' && matrix.sidecar_flavor == 'allcomponents'
         env:
           DOCKER_REGISTRY_ID: ${{ secrets.DOCKER_REGISTRY_ID }}
           DAPR_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
@@ -582,7 +582,7 @@ jobs:
           LATEST_TAG=${{ env.LATEST_TAG }}-mariner \
             make docker-publish
       - name: Build and push Docker multiarch Windows manifest to GHCR
-        if: matrix.target_os != 'darwin' && matrix.sidecar_flavor == 'all'
+        if: matrix.target_os != 'darwin' && matrix.sidecar_flavor == 'allcomponents'
         env:
           DAPR_REGISTRY: ghcr.io/${{ env.REPO_OWNER }}
         run: |

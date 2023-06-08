@@ -9,8 +9,8 @@ require (
 	github.com/PuerkitoBio/purell v1.2.0
 	github.com/argoproj/argo-rollouts v1.4.1
 	github.com/cenkalti/backoff/v4 v4.2.1
-	github.com/dapr/components-contrib v1.11.0-rc.9
-	github.com/dapr/kit v0.11.0
+	github.com/dapr/components-contrib v1.11.0-rc.11
+	github.com/dapr/kit v0.11.2
 	github.com/evanphx/json-patch/v5 v5.6.0
 	github.com/fasthttp/router v1.4.18
 	github.com/go-logr/logr v1.2.4
@@ -331,6 +331,7 @@ require (
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rs/zerolog v1.28.0 // indirect
 	github.com/savsgio/gotils v0.0.0-20230208104028-c358bd845dee // indirect
+	github.com/segmentio/asm v1.2.0 // indirect
 	github.com/sendgrid/rest v2.6.9+incompatible // indirect
 	github.com/sendgrid/sendgrid-go v3.12.0+incompatible // indirect
 	github.com/shirou/gopsutil/v3 v3.22.2 // indirect
@@ -368,7 +369,7 @@ require (
 	go.etcd.io/etcd/api/v3 v3.5.5 // indirect
 	go.etcd.io/etcd/client/pkg/v3 v3.5.5 // indirect
 	go.etcd.io/etcd/client/v3 v3.5.5 // indirect
-	go.mongodb.org/mongo-driver v1.11.2 // indirect
+	go.mongodb.org/mongo-driver v1.11.6 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/internal/retry v1.14.0 // indirect
 	go.opentelemetry.io/proto/otlp v0.19.0 // indirect
 	go.starlark.net v0.0.0-20200306205701-8dd3e2ee1dd5 // indirect
@@ -429,6 +430,9 @@ replace (
 	github.com/toolkits/concurrent => github.com/niean/gotools v0.0.0-20151221085310-ff3f51fc5c60
 	gopkg.in/couchbaselabs/gocbconnstr.v1 => github.com/couchbaselabs/gocbconnstr v1.0.5
 )
+
+// TODO: Remove this when upgrading the library to 2.0.10 or higher
+replace github.com/lestrrat-go/jwx/v2 => github.com/lestrrat-go/jwx/v2 v2.0.9-0.20230526134723-5f998ac6c826
 
 // Uncomment for local development for testing with changes in the components-contrib repository.
 // Don't commit with this uncommented!
