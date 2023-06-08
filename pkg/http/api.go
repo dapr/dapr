@@ -1272,6 +1272,10 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
+	// Store target and method as user values so they can be picked up by the tracing library
+	reqCtx.SetUserValue("id", targetID)
+	reqCtx.SetUserValue("method", invokeMethodName)
+
 	verb := strings.ToUpper(string(reqCtx.Method()))
 	if a.directMessaging == nil {
 		msg := NewErrorResponse("ERR_DIRECT_INVOKE", messages.ErrDirectInvokeNotReady)
