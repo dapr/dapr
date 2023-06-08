@@ -48,6 +48,8 @@ env:
   MAX_TEST_TIMEOUT: 5400
   # Enable HA mode for tests
   HA_MODE: true
+  # Enable tests on ARM64
+  ENABLE_ARM: false
   # Space-separated of supported Azure regions: one will be picked randomly for each cluster
   AZURE_REGIONS: "westus3"
   AZURE_ARM_REGIONS: "eastus"
@@ -146,6 +148,7 @@ jobs:
               --template-file ./tests/test-infra/azure-all.bicep \
               --parameters \
                 namePrefix="${{ env.TEST_PREFIX }}" \
+                enableArm="${{ env.ENABLE_ARM }}" \
                 location1=${REGION1} \
                 location2=${REGION2} \
                 location3=${REGION3} \
@@ -207,17 +210,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, windows-2022]
-        target_arch: [amd64]
         include:
           - os: ubuntu-22.04
             target_os: linux
+            target_arch: amd64
           - os: windows-2022
             target_os: windows
+            target_arch: amd64
             windows_version: ltsc2022
-          - target_arch: arm64
-            target_os: linux
-            os: ubuntu-latest
     steps:
       - name: Set up for scheduled test
         if: github.event_name != 'repository_dispatch'
@@ -397,9 +397,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target_os: [linux]
-        target_arch: [amd64, arm64]
         include:
+          - target_os: linux
+            target_arch: amd64
           - target_os: windows
             target_arch: amd64
             windows_version: ltsc2022
@@ -452,12 +452,12 @@ jobs:
           key: ${{ runner.os }}-go-tests-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-tests-
-      - uses: azure/setup-kubectl@v1
+      - uses: azure/setup-kubectl@v3
         with:
           version: ${{ env.KUBECTLVER }}
         id: install
       - name: Set up Helm ${{ env.HELMVER }}
-        uses: azure/setup-helm@v1
+        uses: azure/setup-helm@v3
         with:
           version: ${{ env.HELMVER }}
       - name: Login to Azure
@@ -681,6 +681,7 @@ jobs:
           az group delete --no-wait --yes --name "Dapr-E2E-${{ env.TEST_PREFIX }}w" || true
         shell: bash
       - name: Delete Arm64 cluster
+        if: env.ENABLE_ARM
         run: |
           # We are not waiting for these commands to complete, and we're ignoring errors
           echo "Starting removal of resource group Dapr-E2E-${{ env.TEST_PREFIX }}la"
