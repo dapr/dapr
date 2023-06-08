@@ -246,9 +246,9 @@ func (c *KubeTestPlatform) appMemoryLimit() string {
 }
 
 // GetOrCreateNamespace gets or creates namespace unless namespace exists.
-func (m *KubeTestPlatform) GetOrCreateNamespace(parentCtx context.Context, namespace string) (*corev1.Namespace, error) {
+func (c *KubeTestPlatform) GetOrCreateNamespace(parentCtx context.Context, namespace string) (*corev1.Namespace, error) {
 	log.Printf("Checking namespace %q ...", namespace)
-	namespaceClient := m.KubeClient.Namespaces()
+	namespaceClient := c.KubeClient.Namespaces()
 	ctx, cancel := context.WithTimeout(parentCtx, 30*time.Second)
 	ns, err := namespaceClient.Get(ctx, namespace, metav1.GetOptions{})
 	cancel()

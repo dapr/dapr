@@ -15,6 +15,7 @@ package runner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"sync"
@@ -106,18 +107,19 @@ func (r *TestResources) setup() error {
 		}()
 	}
 
+	allErrs := make([]error, 0)
 	for i := 0; i < resourceCount; i++ {
 		err := <-errs
 		if err != nil {
-			return err
+			allErrs = append(allErrs, err)
 		}
 	}
 
-	return nil
+	return errors.Join(allErrs...)
 }
 
 // TearDown initializes the resources by calling Dispose.
-func (r *TestResources) tearDown() (retErr error) {
+func (r *TestResources) tearDown() error {
 	resourceCount := 0
 	errs := make(chan error)
 	for {
@@ -136,11 +138,12 @@ func (r *TestResources) tearDown() (retErr error) {
 		}()
 	}
 
+	allErrs := make([]error, 0)
 	for i := 0; i < resourceCount; i++ {
 		err := <-errs
 		if err != nil {
 			os.Stderr.WriteString(err.Error() + "\n")
-			retErr = err
+			allErrs = append(allErrs, err)
 		}
 	}
 
@@ -148,5 +151,5 @@ func (r *TestResources) tearDown() (retErr error) {
 		r.cancel()
 		r.cancel = nil
 	}
-	return retErr
+	return errors.Join(allErrs...)
 }
