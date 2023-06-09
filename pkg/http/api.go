@@ -1545,6 +1545,9 @@ func (a *api) findTargetID(reqCtx *fasthttp.RequestCtx) string {
 	uri := string(reqCtx.URI().Path())
 	if strings.HasPrefix(uri, "/v1.0/invoke/") {
 		parts := strings.Split(uri, "/")
+		if len(parts) < 5 {
+			return ""
+		}
 		// Example: http://localhost:3500/v1.0/invoke/http://api.github.com/method/<method>
 		// parts[0]: /
 		// parts[1]: v1.0
