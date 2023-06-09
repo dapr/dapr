@@ -1840,7 +1840,7 @@ func (a *DaprRuntime) initState(s componentsV1alpha1.Component) error {
 		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
 	}
 	if store != nil {
-		secretStoreName := a.authSecretStoreOrDefault(s)
+		secretStoreName := a.authSecretStoreOrDefault(&s)
 
 		secretStore, _ := a.compStore.GetSecretStore(secretStoreName)
 		encKeys, encErr := encryption.ComponentEncryptionKey(s, secretStore)
@@ -2957,6 +2957,7 @@ type resourceWithMetadata interface {
 	Kind() string
 	GetName() string
 	GetNamespace() string
+	GetSecretStore() string
 	NameValuePairs() []sharedapi.NameValuePair
 }
 
@@ -3043,17 +3044,8 @@ func (a *DaprRuntime) processResourceSecrets(resource resourceWithMetadata) (upd
 	return updated, ""
 }
 
-func (a *DaprRuntime) authSecretStoreOrDefault(object interface{}) string {
-	var secretStore string
-	switch obj := object.(type) {
-	case componentsV1alpha1.Component:
-		secretStore = obj.SecretStore
-	case httpEndpointV1alpha1.HTTPEndpoint:
-		secretStore = obj.SecretStore
-	default:
-		// Handle unsupported types
-		return ""
-	}
+func (a *DaprRuntime) authSecretStoreOrDefault(resource resourceWithMetadata) string {
+	secretStore := resource.GetSecretStore()
 	if secretStore == "" {
 		switch a.runtimeConfig.Mode {
 		case modes.KubernetesMode:

@@ -2504,7 +2504,7 @@ func TestProcessComponentSecrets(t *testing.T) {
 
 	t.Run("Standalone Mode", func(t *testing.T) {
 		mockBinding.Spec.Metadata[0].Value = sharedapi.DynamicValue{
-			JSON: v1.JSON{Raw: []byte("")},
+			JSON: v1.JSON{},
 		}
 		mockBinding.Spec.Metadata[0].SecretKeyRef = sharedapi.SecretKeyRef{
 			Key:  "key1",

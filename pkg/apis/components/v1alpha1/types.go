@@ -46,6 +46,11 @@ func (c Component) LogName() string {
 	return utils.ComponentLogName(c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
 }
 
+// GetSecretStore returns the name of the secret store.
+func (c Component) GetSecretStore() string {
+	return c.Auth.SecretStore
+}
+
 // NameValuePairs returns the component's metadata as name/value pairs
 func (c Component) NameValuePairs() []shared.NameValuePair {
 	return c.Spec.Metadata

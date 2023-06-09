@@ -41,6 +41,11 @@ func (HTTPEndpoint) Kind() string {
 	return "HTTPEndpoint"
 }
 
+// GetSecretStore returns the name of the secret store.
+func (h HTTPEndpoint) GetSecretStore() string {
+	return h.Auth.SecretStore
+}
+
 // NameValuePairs returns the component's headers as name/value pairs
 func (h HTTPEndpoint) NameValuePairs() []shared.NameValuePair {
 	return h.Spec.Headers
