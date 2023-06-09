@@ -491,6 +491,7 @@ jobs:
     if: github.event_name != 'pull_request'
     env:
       DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
+      LATEST_TAG: latest
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
