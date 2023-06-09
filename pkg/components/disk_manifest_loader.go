@@ -16,12 +16,15 @@ package components
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/dapr/dapr/utils"
 
 	"github.com/ghodss/yaml"
+	"k8s.io/apimachinery/pkg/api/validation/path"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -118,7 +121,13 @@ func (m DiskManifestLoader[T]) decodeYaml(b []byte) ([]T, []error) {
 			continue
 		}
 
+		if errs := path.IsValidPathSegmentName(ti.Name); len(errs) > 0 {
+			errors = append(errors, fmt.Errorf("invalid name %q for %q: %s", ti.Name, m.kind, strings.Join(errs, "; ")))
+			continue
+		}
+
 		manifest := m.zv()
+
 		if err := yaml.Unmarshal(scannerBytes, &manifest); err != nil {
 			errors = append(errors, err)
 
