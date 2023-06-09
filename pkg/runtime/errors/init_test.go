@@ -1,5 +1,5 @@
 /*
-Copyright 2023 The Dapr Authors
+Copyright 2021 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,30 +11,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package runtime
+package errors
 
-type RetriableError struct {
-	err error
-}
+import "testing"
 
-func (e *RetriableError) Error() string {
-	if e.err != nil {
-		return "retriable error occurred: " + e.err.Error()
-	}
-	return "retriable error occurred"
-}
-
-func (e *RetriableError) Unwrap() error {
-	if e == nil {
-		return nil
-	}
-
-	return e.err
-}
-
-// NewRetriableError returns a RetriableError wrapping an existing context error.
-func NewRetriableError(err error) *RetriableError {
-	return &RetriableError{
-		err: err,
-	}
+func TestInitError(t *testing.T) {
+	var _ error = new(InitError)
 }

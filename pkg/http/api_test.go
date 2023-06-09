@@ -349,7 +349,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 
 	bulkRequest := []bulkPublishMessageEntry{
 		{
-			EntryId: "1",
+			EntryID: "1",
 			Event: map[string]string{
 				"key":   "first",
 				"value": "first value",
@@ -357,7 +357,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 			ContentType: "application/json",
 		},
 		{
-			EntryId: "2",
+			EntryID: "2",
 			Event: map[string]string{
 				"key":   "second",
 				"value": "second value",
@@ -369,7 +369,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 			},
 		},
 		{
-			EntryId: "3",
+			EntryID: "3",
 			Event: map[string]string{
 				"key":   "third",
 				"value": "third value",
@@ -466,7 +466,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 		errBulkRequest := []bulkPublishMessageEntry{}
 		for _, entry := range bulkRequest {
 			// Fail entries 2 and 3
-			if entry.EntryId == "2" || entry.EntryId == "3" {
+			if entry.EntryID == "2" || entry.EntryID == "3" {
 				if entry.Metadata == nil {
 					entry.Metadata = map[string]string{}
 				}
@@ -555,7 +555,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 	t.Run("Bulk Publish with duplicate entryId - 400", func(t *testing.T) {
 		reqWithoutEntryId := []bulkPublishMessageEntry{ //nolint:stylecheck
 			{
-				EntryId: "1",
+				EntryID: "1",
 				Event: map[string]string{
 					"key":   "first",
 					"value": "first value",
@@ -563,7 +563,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 				ContentType: "application/json",
 			},
 			{
-				EntryId: "1",
+				EntryID: "1",
 				Event: map[string]string{
 					"key":   "second",
 					"value": "second value",
@@ -604,7 +604,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 	t.Run("Bulk Publish invalid cloudevent - 400", func(t *testing.T) {
 		reqInvalidCE := []bulkPublishMessageEntry{
 			{
-				EntryId: "1",
+				EntryID: "1",
 				Event: map[string]string{
 					"key":   "first",
 					"value": "first value",
@@ -612,7 +612,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 				ContentType: "application/json",
 			},
 			{
-				EntryId:     "2",
+				EntryID:     "2",
 				Event:       "this is not a cloudevent!",
 				ContentType: "application/cloudevents+json",
 				Metadata: map[string]string{
@@ -637,7 +637,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 	t.Run("Bulk Publish dataContentType mismatch - 400", func(t *testing.T) {
 		dCTMismatch := []bulkPublishMessageEntry{
 			{
-				EntryId: "1",
+				EntryID: "1",
 				Event: map[string]string{
 					"key":   "first",
 					"value": "first value",
@@ -645,7 +645,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 				ContentType: "application/json",
 			},
 			{
-				EntryId: "2",
+				EntryID: "2",
 				Event: map[string]string{
 					"key":   "second",
 					"value": "second value",
@@ -4135,10 +4135,12 @@ func (f *fakeHTTPServer) StartServer(endpoints []Endpoint) {
 }
 
 func (f *fakeHTTPServer) StartServerWithTracing(spec config.TracingSpec, endpoints []Endpoint) {
-	router := f.getRouter(endpoints)
+	router := nethttpadaptor.NewNetHTTPHandlerFunc(f.getRouter(endpoints).Handler)
 	f.ln = fasthttputil.NewInmemoryListener()
 	go func() {
-		if err := fasthttp.Serve(f.ln, diag.HTTPTraceMiddleware(router.Handler, "fakeAppID", spec)); err != nil {
+		h := fasthttpadaptor.NewFastHTTPHandler(diag.HTTPTraceMiddleware(router, "fakeAppID", spec))
+		err := fasthttp.Serve(f.ln, h)
+		if err != nil {
 			panic(fmt.Errorf("failed to set tracing span context: %v", err))
 		}
 	}()
@@ -4155,8 +4157,10 @@ func (f *fakeHTTPServer) StartServerWithTracing(spec config.TracingSpec, endpoin
 func (f *fakeHTTPServer) StartServerWithAPIToken(endpoints []Endpoint) {
 	router := f.getRouter(endpoints)
 	f.ln = fasthttputil.NewInmemoryListener()
+	h := nethttpadaptor.NewNetHTTPHandlerFunc(router.Handler)
 	go func() {
-		if err := fasthttp.Serve(f.ln, useAPIAuthentication(router.Handler)); err != nil {
+		err := gohttp.Serve(f.ln, useAPIAuthentication(h)) //nolint:gosec
+		if err != nil {
 			panic(fmt.Errorf("failed to serve: %v", err))
 		}
 	}()
@@ -4175,11 +4179,12 @@ func (f *fakeHTTPServer) StartServerWithTracingAndPipeline(spec config.TracingSp
 	f.ln = fasthttputil.NewInmemoryListener()
 	go func() {
 		handler := fasthttpadaptor.NewFastHTTPHandler(
-			pipeline.Apply(
+			diag.HTTPTraceMiddleware(pipeline.Apply(
 				nethttpadaptor.NewNetHTTPHandlerFunc(router.Handler),
-			),
+			), "fakeAppID", spec),
 		)
-		if err := fasthttp.Serve(f.ln, diag.HTTPTraceMiddleware(handler, "fakeAppID", spec)); err != nil {
+		err := fasthttp.Serve(f.ln, handler)
+		if err != nil {
 			panic(fmt.Errorf("failed to serve tracing span context: %v", err))
 		}
 	}()

@@ -194,8 +194,9 @@ func (t *Table) OutputK6(k6results []*loadtest.K6RunnerMetricsSummary) *Table {
 	for i, result := range k6results {
 		t.OutputInt(fmt.Sprintf("[Runner %d]: VUs Max", i), result.Vus.Values.Max)
 		t.OutputFloat64(fmt.Sprintf("[Runner %d]: Iterations Count", i), result.Iterations.Values.Count)
-		t.OutputK6Trend(fmt.Sprintf("[Runner %d]: Req duration", i), millisecond, result.HTTPReqDuration)
+		t.OutputK6Trend(fmt.Sprintf("[Runner %d]: Req Duration", i), millisecond, result.HTTPReqDuration)
 		t.OutputK6Trend(fmt.Sprintf("[Runner %d]: Req Waiting", i), millisecond, result.HTTPReqWaiting)
+		t.OutputK6Trend(fmt.Sprintf("[Runner %d]: Iteration Duration", i), millisecond, result.IterationDuration)
 	}
 	return t
 }

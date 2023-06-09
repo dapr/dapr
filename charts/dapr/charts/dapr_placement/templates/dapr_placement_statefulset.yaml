@@ -3,6 +3,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: dapr-placement-server
+  namespace: {{ .Release.Namespace }}
   labels:
     app: dapr-placement-server
     {{- range $key, $value := .Values.global.k8sLabels }}
@@ -117,9 +118,9 @@ spec:
   {{- if eq .Values.cluster.forceInMemoryLog false }}
         - "--raft-logstore-path"
     {{- if eq .Values.global.daprControlPlaneOs "windows" }}
-        - "{{ .Values.cluster.logStoreWinPath }}\\$(PLACEMENT_ID)"
+        - "{{ .Values.cluster.logStoreWinPath }}\\cluster-v2-$(PLACEMENT_ID)"
     {{- else }}
-        - "{{ .Values.cluster.logStorePath }}/$(PLACEMENT_ID)"
+        - "{{ .Values.cluster.logStorePath }}/cluster-v2-$(PLACEMENT_ID)"
     {{- end }}
   {{- end }}
 {{- end }}
