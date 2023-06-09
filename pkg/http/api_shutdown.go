@@ -14,17 +14,18 @@ limitations under the License.
 package http
 
 import (
-	"github.com/valyala/fasthttp"
+	"net/http"
+
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 func (a *api) constructShutdownEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{fasthttp.MethodPost},
+			Methods: []string{http.MethodPost},
 			Route:   "shutdown",
 			Version: apiVersionV1,
-			FastHTTPHandler: UniversalFastHTTPHandler(
+			Handler: UniversalHTTPHandler(
 				a.universal.Shutdown,
 				UniversalHTTPHandlerOpts[*emptypb.Empty, *emptypb.Empty]{
 					OutModifier: func(out *emptypb.Empty) (any, error) {

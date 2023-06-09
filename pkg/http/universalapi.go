@@ -63,7 +63,7 @@ type UniversalHTTPHandlerOpts[T proto.Message, U proto.Message] struct {
 func UniversalHTTPHandler[T proto.Message, U proto.Message](
 	handler func(ctx context.Context, in T) (U, error),
 	opts UniversalHTTPHandlerOpts[T, U],
-) func(http.ResponseWriter, *http.Request) {
+) http.HandlerFunc {
 	var zero T
 	rt := reflect.ValueOf(zero).Type().Elem()
 	pjsonDec := protojson.UnmarshalOptions{

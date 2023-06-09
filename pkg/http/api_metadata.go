@@ -14,31 +14,35 @@ limitations under the License.
 package http
 
 import (
-	"github.com/valyala/fasthttp"
+	"io"
+	"net/http"
+
+	"github.com/go-chi/chi/v5"
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
 func (a *api) constructMetadataEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods:         []string{fasthttp.MethodGet},
-			Route:           "metadata",
-			Version:         apiVersionV1,
-			FastHTTPHandler: a.onGetMetadata(),
+			Methods: []string{http.MethodGet},
+			Route:   "metadata",
+			Version: apiVersionV1,
+			Handler: a.onGetMetadata(),
 		},
 		{
-			Methods:         []string{fasthttp.MethodPut},
-			Route:           "metadata/{key}",
-			Version:         apiVersionV1,
-			FastHTTPHandler: a.onPutMetadata(),
+			Methods: []string{http.MethodPut},
+			Route:   "metadata/{key}",
+			Version: apiVersionV1,
+			Handler: a.onPutMetadata(),
 		},
 	}
 }
 
-func (a *api) onGetMetadata() fasthttp.RequestHandler {
-	return UniversalFastHTTPHandler(
+func (a *api) onGetMetadata() http.HandlerFunc {
+	return UniversalHTTPHandler(
 		a.universal.GetMetadata,
 		UniversalHTTPHandlerOpts[*emptypb.Empty, *runtimev1pb.GetMetadataResponse]{
 			OutModifier: func(out *runtimev1pb.GetMetadataResponse) (any, error) {
@@ -83,14 +87,20 @@ func (a *api) onGetMetadata() fasthttp.RequestHandler {
 	)
 }
 
-func (a *api) onPutMetadata() fasthttp.RequestHandler {
-	return UniversalFastHTTPHandler(
+func (a *api) onPutMetadata() http.HandlerFunc {
+	return UniversalHTTPHandler(
 		a.universal.SetMetadata,
 		UniversalHTTPHandlerOpts[*runtimev1pb.SetMetadataRequest, *emptypb.Empty]{
 			SkipInputBody: true,
-			InModifierFastHTTP: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.SetMetadataRequest) (*runtimev1pb.SetMetadataRequest, error) {
-				in.Key = reqCtx.UserValue("key").(string)
-				in.Value = string(reqCtx.Request.Body())
+			InModifier: func(r *http.Request, in *runtimev1pb.SetMetadataRequest) (*runtimev1pb.SetMetadataRequest, error) {
+				in.Key = chi.URLParam(r, "key")
+
+				body, err := io.ReadAll(r.Body)
+				if err != nil {
+					return nil, messages.ErrBodyRead.WithFormat(err)
+				}
+				in.Value = string(body)
+
 				return in, nil
 			},
 			OutModifier: func(out *emptypb.Empty) (any, error) {
