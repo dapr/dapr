@@ -59,6 +59,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpEndpointV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	sharedapi "github.com/dapr/dapr/pkg/apis/shared"
 	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/channel"
 	httpEndpointChannel "github.com/dapr/dapr/pkg/channel/external"
@@ -2122,7 +2123,7 @@ func (a *DaprRuntime) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPu
 	return runtimePubsub.ApplyBulkPublishResiliency(context.TODO(), req, policyDef, defaultBulkPublisher)
 }
 
-func metadataContainsNamespace(items []componentsV1alpha1.MetadataItem) bool {
+func metadataContainsNamespace(items []sharedapi.NameValuePair) bool {
 	for _, c := range items {
 		val := c.Value.String()
 		if strings.Contains(val, "{namespace}") {
@@ -2983,7 +2984,7 @@ func (a *DaprRuntime) processComponentSecrets(component componentsV1alpha1.Compo
 				continue
 			}
 
-			m.Value = componentsV1alpha1.DynamicValue{
+			m.Value = sharedapi.DynamicValue{
 				JSON: v1.JSON{
 					Raw: dec,
 				},
@@ -3023,7 +3024,7 @@ func (a *DaprRuntime) processComponentSecrets(component componentsV1alpha1.Compo
 
 		val, ok := resp.Data[secretKeyName]
 		if ok && val != "" {
-			component.Spec.Metadata[i].Value = componentsV1alpha1.DynamicValue{
+			component.Spec.Metadata[i].Value = sharedapi.DynamicValue{
 				JSON: v1.JSON{
 					Raw: []byte(val),
 				},
@@ -3063,7 +3064,7 @@ func (a *DaprRuntime) processHTTPEndpointSecrets(endpoint httpEndpointV1alpha1.H
 				continue
 			}
 
-			header.Value = httpEndpointV1alpha1.DynamicValue{
+			header.Value = sharedapi.DynamicValue{
 				JSON: v1.JSON{
 					Raw: dec,
 				},
@@ -3103,7 +3104,7 @@ func (a *DaprRuntime) processHTTPEndpointSecrets(endpoint httpEndpointV1alpha1.H
 
 		val, ok := resp.Data[secretKeyName]
 		if ok {
-			endpoint.Spec.Headers[i].Value = httpEndpointV1alpha1.DynamicValue{
+			endpoint.Spec.Headers[i].Value = sharedapi.DynamicValue{
 				JSON: v1.JSON{
 					Raw: []byte(val),
 				},
@@ -3382,7 +3383,7 @@ func (a *DaprRuntime) initSecretStore(c componentsV1alpha1.Component) error {
 	return nil
 }
 
-func (a *DaprRuntime) convertMetadataItemsToProperties(items []componentsV1alpha1.MetadataItem) map[string]string {
+func (a *DaprRuntime) convertMetadataItemsToProperties(items []sharedapi.NameValuePair) map[string]string {
 	properties := map[string]string{}
 	for _, c := range items {
 		val := c.Value.String()

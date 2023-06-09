@@ -26,6 +26,7 @@ import (
 
 	"github.com/dapr/components-contrib/workflows"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1" // This will be removed
+	sharedapi "github.com/dapr/dapr/pkg/apis/shared"
 	"github.com/dapr/kit/logger"
 )
 
@@ -39,7 +40,7 @@ var ComponentDefinition = componentsV1alpha1.Component{
 	Spec: componentsV1alpha1.ComponentSpec{
 		Type:     "workflow.dapr",
 		Version:  "v1",
-		Metadata: []componentsV1alpha1.MetadataItem{},
+		Metadata: []sharedapi.NameValuePair{},
 	},
 }
 

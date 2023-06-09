@@ -39,7 +39,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/anypb"
-	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apiextensionsV1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/dapr/components-contrib/bindings"
@@ -55,6 +55,7 @@ import (
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpEndpointsV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
+	"github.com/dapr/dapr/pkg/apis/shared"
 	"github.com/dapr/dapr/pkg/channel/http"
 	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
 	"github.com/dapr/dapr/pkg/config"
@@ -2631,11 +2632,11 @@ func TestV1MetadataEndpoint(t *testing.T) {
 		Spec: componentsV1alpha1.ComponentSpec{
 			Type:    "mock.component1Type",
 			Version: "v1.0",
-			Metadata: []componentsV1alpha1.MetadataItem{
+			Metadata: []shared.NameValuePair{
 				{
 					Name: "actorMockComponent1",
-					Value: componentsV1alpha1.DynamicValue{
-						JSON: v1.JSON{Raw: []byte("true")},
+					Value: shared.DynamicValue{
+						JSON: apiextensionsV1.JSON{Raw: []byte("true")},
 					},
 				},
 			},
@@ -2648,11 +2649,11 @@ func TestV1MetadataEndpoint(t *testing.T) {
 		Spec: componentsV1alpha1.ComponentSpec{
 			Type:    "mock.component2Type",
 			Version: "v1.0",
-			Metadata: []componentsV1alpha1.MetadataItem{
+			Metadata: []shared.NameValuePair{
 				{
 					Name: "actorMockComponent2",
-					Value: componentsV1alpha1.DynamicValue{
-						JSON: v1.JSON{Raw: []byte("true")},
+					Value: shared.DynamicValue{
+						JSON: apiextensionsV1.JSON{Raw: []byte("true")},
 					},
 				},
 			},
@@ -2678,11 +2679,11 @@ func TestV1MetadataEndpoint(t *testing.T) {
 		},
 		Spec: httpEndpointsV1alpha1.HTTPEndpointSpec{
 			BaseURL: "api.test.com",
-			Headers: []httpEndpointsV1alpha1.Header{
+			Headers: []shared.NameValuePair{
 				{
 					Name: "Accept-Language",
-					Value: httpEndpointsV1alpha1.DynamicValue{
-						JSON: v1.JSON{Raw: []byte("en-US")},
+					Value: shared.DynamicValue{
+						JSON: apiextensionsV1.JSON{Raw: []byte("en-US")},
 					},
 				},
 			},

@@ -67,6 +67,7 @@ import (
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpEndpointV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
+	sharedapi "github.com/dapr/dapr/pkg/apis/shared"
 	subscriptionsapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	"github.com/dapr/dapr/pkg/components"
@@ -406,10 +407,10 @@ func TestDoProcessComponent(t *testing.T) {
 		)
 
 		lockComponentWithWrongStrategy := lockComponent
-		lockComponentWithWrongStrategy.Spec.Metadata = []componentsV1alpha1.MetadataItem{
+		lockComponentWithWrongStrategy.Spec.Metadata = []sharedapi.NameValuePair{
 			{
 				Name: "keyPrefix",
-				Value: componentsV1alpha1.DynamicValue{
+				Value: sharedapi.DynamicValue{
 					JSON: v1.JSON{Raw: []byte("||")},
 				},
 			},
@@ -823,16 +824,16 @@ func TestInitState(t *testing.T) {
 		Spec: componentsV1alpha1.ComponentSpec{
 			Type:    "state.mockState",
 			Version: "v1",
-			Metadata: []componentsV1alpha1.MetadataItem{
+			Metadata: []sharedapi.NameValuePair{
 				{
 					Name: actorStateStore,
-					Value: componentsV1alpha1.DynamicValue{
+					Value: sharedapi.DynamicValue{
 						JSON: v1.JSON{Raw: []byte("true")},
 					},
 				},
 				{
 					Name: "primaryEncryptionKey",
-					Value: componentsV1alpha1.DynamicValue{
+					Value: sharedapi.DynamicValue{
 						JSON: v1.JSON{Raw: []byte(primaryKey)},
 					},
 				},
@@ -1112,16 +1113,16 @@ func TestMetadataUUID(t *testing.T) {
 
 	pubsubComponent.Spec.Metadata = append(
 		pubsubComponent.Spec.Metadata,
-		componentsV1alpha1.MetadataItem{
+		sharedapi.NameValuePair{
 			Name: "consumerID",
-			Value: componentsV1alpha1.DynamicValue{
+			Value: sharedapi.DynamicValue{
 				JSON: v1.JSON{
 					Raw: []byte("{uuid}"),
 				},
 			},
-		}, componentsV1alpha1.MetadataItem{
+		}, sharedapi.NameValuePair{
 			Name: "twoUUIDs",
-			Value: componentsV1alpha1.DynamicValue{
+			Value: sharedapi.DynamicValue{
 				JSON: v1.JSON{
 					Raw: []byte("{uuid} {uuid}"),
 				},
@@ -1175,9 +1176,9 @@ func TestMetadataPodName(t *testing.T) {
 
 	pubsubComponent.Spec.Metadata = append(
 		pubsubComponent.Spec.Metadata,
-		componentsV1alpha1.MetadataItem{
+		sharedapi.NameValuePair{
 			Name: "consumerID",
-			Value: componentsV1alpha1.DynamicValue{
+			Value: sharedapi.DynamicValue{
 				JSON: v1.JSON{
 					Raw: []byte("{podName}"),
 				},
@@ -1221,9 +1222,9 @@ func TestMetadataNamespace(t *testing.T) {
 
 	pubsubComponent.Spec.Metadata = append(
 		pubsubComponent.Spec.Metadata,
-		componentsV1alpha1.MetadataItem{
+		sharedapi.NameValuePair{
 			Name: "consumerID",
-			Value: componentsV1alpha1.DynamicValue{
+			Value: sharedapi.DynamicValue{
 				JSON: v1.JSON{
 					Raw: []byte("{namespace}"),
 				},
@@ -1268,9 +1269,9 @@ func TestMetadataAppID(t *testing.T) {
 
 	pubsubComponent.Spec.Metadata = append(
 		pubsubComponent.Spec.Metadata,
-		componentsV1alpha1.MetadataItem{
+		sharedapi.NameValuePair{
 			Name: "clientID",
-			Value: componentsV1alpha1.DynamicValue{
+			Value: sharedapi.DynamicValue{
 				JSON: v1.JSON{
 					Raw: []byte("{appID} {appID}"),
 				},
@@ -1312,10 +1313,10 @@ func TestOnComponentUpdated(t *testing.T) {
 			Spec: componentsV1alpha1.ComponentSpec{
 				Type:    "pubsub.mockPubSub",
 				Version: "v1",
-				Metadata: []componentsV1alpha1.MetadataItem{
+				Metadata: []sharedapi.NameValuePair{
 					{
 						Name: "name1",
-						Value: componentsV1alpha1.DynamicValue{
+						Value: sharedapi.DynamicValue{
 							JSON: v1.JSON{
 								Raw: []byte("value1"),
 							},
@@ -1336,10 +1337,10 @@ func TestOnComponentUpdated(t *testing.T) {
 			Spec: componentsV1alpha1.ComponentSpec{
 				Type:    "pubsub.mockPubSub",
 				Version: "v1",
-				Metadata: []componentsV1alpha1.MetadataItem{
+				Metadata: []sharedapi.NameValuePair{
 					{
 						Name: "name1",
-						Value: componentsV1alpha1.DynamicValue{
+						Value: sharedapi.DynamicValue{
 							JSON: v1.JSON{
 								Raw: []byte("value2"),
 							},
@@ -1361,10 +1362,10 @@ func TestOnComponentUpdated(t *testing.T) {
 			Spec: componentsV1alpha1.ComponentSpec{
 				Type:    "pubsub.mockPubSub",
 				Version: "v1",
-				Metadata: []componentsV1alpha1.MetadataItem{
+				Metadata: []sharedapi.NameValuePair{
 					{
 						Name: "name1",
-						Value: componentsV1alpha1.DynamicValue{
+						Value: sharedapi.DynamicValue{
 							JSON: v1.JSON{
 								Raw: []byte("value1"),
 							},
@@ -1385,10 +1386,10 @@ func TestOnComponentUpdated(t *testing.T) {
 			Spec: componentsV1alpha1.ComponentSpec{
 				Type:    "pubsub.mockPubSub",
 				Version: "v1",
-				Metadata: []componentsV1alpha1.MetadataItem{
+				Metadata: []sharedapi.NameValuePair{
 					{
 						Name: "name1",
-						Value: componentsV1alpha1.DynamicValue{
+						Value: sharedapi.DynamicValue{
 							JSON: v1.JSON{
 								Raw: []byte("value1"),
 							},
@@ -1403,10 +1404,10 @@ func TestOnComponentUpdated(t *testing.T) {
 }
 
 func TestConsumerID(t *testing.T) {
-	metadata := []componentsV1alpha1.MetadataItem{
+	metadata := []sharedapi.NameValuePair{
 		{
 			Name: "host",
-			Value: componentsV1alpha1.DynamicValue{
+			Value: sharedapi.DynamicValue{
 				JSON: v1.JSON{
 					Raw: []byte("localhost"),
 				},
@@ -1414,7 +1415,7 @@ func TestConsumerID(t *testing.T) {
 		},
 		{
 			Name: "password",
-			Value: componentsV1alpha1.DynamicValue{
+			Value: sharedapi.DynamicValue{
 				JSON: v1.JSON{
 					Raw: []byte("fakePassword"),
 				},
@@ -2302,8 +2303,8 @@ func TestMiddlewareBuildPipeline(t *testing.T) {
 				Type:         "middleware.http.fakemw",
 				Version:      "v1",
 				IgnoreErrors: ignoreErrors,
-				Metadata: []componentsV1alpha1.MetadataItem{
-					{Name: "fail", Value: componentsV1alpha1.DynamicValue{JSON: v1.JSON{Raw: []byte("true")}}},
+				Metadata: []sharedapi.NameValuePair{
+					{Name: "fail", Value: sharedapi.DynamicValue{JSON: v1.JSON{Raw: []byte("true")}}},
 				},
 			},
 		})
@@ -2370,10 +2371,10 @@ func TestMetadataItemsToPropertiesConversion(t *testing.T) {
 	t.Run("string", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
-		items := []componentsV1alpha1.MetadataItem{
+		items := []sharedapi.NameValuePair{
 			{
 				Name: "a",
-				Value: componentsV1alpha1.DynamicValue{
+				Value: sharedapi.DynamicValue{
 					JSON: v1.JSON{Raw: []byte("b")},
 				},
 			},
@@ -2386,10 +2387,10 @@ func TestMetadataItemsToPropertiesConversion(t *testing.T) {
 	t.Run("int", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
-		items := []componentsV1alpha1.MetadataItem{
+		items := []sharedapi.NameValuePair{
 			{
 				Name: "a",
-				Value: componentsV1alpha1.DynamicValue{
+				Value: sharedapi.DynamicValue{
 					JSON: v1.JSON{Raw: []byte(strconv.Itoa(6))},
 				},
 			},
@@ -2402,10 +2403,10 @@ func TestMetadataItemsToPropertiesConversion(t *testing.T) {
 	t.Run("bool", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
-		items := []componentsV1alpha1.MetadataItem{
+		items := []sharedapi.NameValuePair{
 			{
 				Name: "a",
-				Value: componentsV1alpha1.DynamicValue{
+				Value: sharedapi.DynamicValue{
 					JSON: v1.JSON{Raw: []byte("true")},
 				},
 			},
@@ -2418,10 +2419,10 @@ func TestMetadataItemsToPropertiesConversion(t *testing.T) {
 	t.Run("float", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
-		items := []componentsV1alpha1.MetadataItem{
+		items := []sharedapi.NameValuePair{
 			{
 				Name: "a",
-				Value: componentsV1alpha1.DynamicValue{
+				Value: sharedapi.DynamicValue{
 					JSON: v1.JSON{Raw: []byte("5.5")},
 				},
 			},
@@ -2434,10 +2435,10 @@ func TestMetadataItemsToPropertiesConversion(t *testing.T) {
 	t.Run("JSON string", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
-		items := []componentsV1alpha1.MetadataItem{
+		items := []sharedapi.NameValuePair{
 			{
 				Name: "a",
-				Value: componentsV1alpha1.DynamicValue{
+				Value: sharedapi.DynamicValue{
 					JSON: v1.JSON{Raw: []byte(`"hello there"`)},
 				},
 			},
@@ -2480,17 +2481,17 @@ func TestProcessComponentSecrets(t *testing.T) {
 		Spec: componentsV1alpha1.ComponentSpec{
 			Type:    "bindings.mock",
 			Version: "v1",
-			Metadata: []componentsV1alpha1.MetadataItem{
+			Metadata: []sharedapi.NameValuePair{
 				{
 					Name: "a",
-					SecretKeyRef: componentsV1alpha1.SecretKeyRef{
+					SecretKeyRef: sharedapi.SecretKeyRef{
 						Key:  "key1",
 						Name: "name1",
 					},
 				},
 				{
 					Name: "b",
-					Value: componentsV1alpha1.DynamicValue{
+					Value: sharedapi.DynamicValue{
 						JSON: v1.JSON{Raw: []byte("value2")},
 					},
 				},
@@ -2502,10 +2503,10 @@ func TestProcessComponentSecrets(t *testing.T) {
 	}
 
 	t.Run("Standalone Mode", func(t *testing.T) {
-		mockBinding.Spec.Metadata[0].Value = componentsV1alpha1.DynamicValue{
+		mockBinding.Spec.Metadata[0].Value = sharedapi.DynamicValue{
 			JSON: v1.JSON{Raw: []byte("")},
 		}
-		mockBinding.Spec.Metadata[0].SecretKeyRef = componentsV1alpha1.SecretKeyRef{
+		mockBinding.Spec.Metadata[0].SecretKeyRef = sharedapi.SecretKeyRef{
 			Key:  "key1",
 			Name: "name1",
 		}
@@ -2537,10 +2538,10 @@ func TestProcessComponentSecrets(t *testing.T) {
 	})
 
 	t.Run("Look up name only", func(t *testing.T) {
-		mockBinding.Spec.Metadata[0].Value = componentsV1alpha1.DynamicValue{
+		mockBinding.Spec.Metadata[0].Value = sharedapi.DynamicValue{
 			JSON: v1.JSON{Raw: []byte("")},
 		}
-		mockBinding.Spec.Metadata[0].SecretKeyRef = componentsV1alpha1.SecretKeyRef{
+		mockBinding.Spec.Metadata[0].SecretKeyRef = sharedapi.SecretKeyRef{
 			Name: "name1",
 		}
 		mockBinding.Auth.SecretStore = "mock"
@@ -2701,10 +2702,10 @@ func TestFlushOutstandingComponent(t *testing.T) {
 			Spec: componentsV1alpha1.ComponentSpec{
 				Type:    "secretstores.kubernetesMockGrandChild",
 				Version: "v1",
-				Metadata: []componentsV1alpha1.MetadataItem{
+				Metadata: []sharedapi.NameValuePair{
 					{
 						Name: "a",
-						SecretKeyRef: componentsV1alpha1.SecretKeyRef{
+						SecretKeyRef: sharedapi.SecretKeyRef{
 							Key:  "key1",
 							Name: "name1",
 						},
@@ -2722,10 +2723,10 @@ func TestFlushOutstandingComponent(t *testing.T) {
 			Spec: componentsV1alpha1.ComponentSpec{
 				Type:    "secretstores.kubernetesMockChild",
 				Version: "v1",
-				Metadata: []componentsV1alpha1.MetadataItem{
+				Metadata: []sharedapi.NameValuePair{
 					{
 						Name: "a",
-						SecretKeyRef: componentsV1alpha1.SecretKeyRef{
+						SecretKeyRef: sharedapi.SecretKeyRef{
 							Key:  "key1",
 							Name: "name1",
 						},
@@ -3535,7 +3536,7 @@ func TestPubsubLifecycle(t *testing.T) {
 		Spec: componentsV1alpha1.ComponentSpec{
 			Type:     "pubsub.mockPubSubAlpha",
 			Version:  "v1",
-			Metadata: []componentsV1alpha1.MetadataItem{},
+			Metadata: []sharedapi.NameValuePair{},
 		},
 	}
 	comp2 := componentsV1alpha1.Component{
@@ -3545,7 +3546,7 @@ func TestPubsubLifecycle(t *testing.T) {
 		Spec: componentsV1alpha1.ComponentSpec{
 			Type:     "pubsub.mockPubSubBeta",
 			Version:  "v1",
-			Metadata: []componentsV1alpha1.MetadataItem{},
+			Metadata: []sharedapi.NameValuePair{},
 		},
 	}
 	comp3 := componentsV1alpha1.Component{
@@ -3555,7 +3556,7 @@ func TestPubsubLifecycle(t *testing.T) {
 		Spec: componentsV1alpha1.ComponentSpec{
 			Type:     "pubsub.mockPubSubBeta",
 			Version:  "v1",
-			Metadata: []componentsV1alpha1.MetadataItem{},
+			Metadata: []sharedapi.NameValuePair{},
 		},
 	}
 
@@ -4245,11 +4246,11 @@ func getFakeProperties() map[string]string {
 	}
 }
 
-func getFakeMetadataItems() []componentsV1alpha1.MetadataItem {
-	return []componentsV1alpha1.MetadataItem{
+func getFakeMetadataItems() []sharedapi.NameValuePair {
+	return []sharedapi.NameValuePair{
 		{
 			Name: "host",
-			Value: componentsV1alpha1.DynamicValue{
+			Value: sharedapi.DynamicValue{
 				JSON: v1.JSON{
 					Raw: []byte("localhost"),
 				},
@@ -4257,7 +4258,7 @@ func getFakeMetadataItems() []componentsV1alpha1.MetadataItem {
 		},
 		{
 			Name: "password",
-			Value: componentsV1alpha1.DynamicValue{
+			Value: sharedapi.DynamicValue{
 				JSON: v1.JSON{
 					Raw: []byte("fakePassword"),
 				},
@@ -4265,7 +4266,7 @@ func getFakeMetadataItems() []componentsV1alpha1.MetadataItem {
 		},
 		{
 			Name: "consumerID",
-			Value: componentsV1alpha1.DynamicValue{
+			Value: sharedapi.DynamicValue{
 				JSON: v1.JSON{
 					Raw: []byte(TestRuntimeConfigID),
 				},
@@ -4273,7 +4274,7 @@ func getFakeMetadataItems() []componentsV1alpha1.MetadataItem {
 		},
 		{
 			Name: scopes.SubscriptionScopes,
-			Value: componentsV1alpha1.DynamicValue{
+			Value: sharedapi.DynamicValue{
 				JSON: v1.JSON{
 					Raw: []byte(fmt.Sprintf("%s=topic0,topic1", TestRuntimeConfigID)),
 				},
@@ -4281,7 +4282,7 @@ func getFakeMetadataItems() []componentsV1alpha1.MetadataItem {
 		},
 		{
 			Name: scopes.PublishingScopes,
-			Value: componentsV1alpha1.DynamicValue{
+			Value: sharedapi.DynamicValue{
 				JSON: v1.JSON{
 					Raw: []byte(fmt.Sprintf("%s=topic0,topic1", TestRuntimeConfigID)),
 				},
@@ -5414,10 +5415,10 @@ func TestStopWithErrors(t *testing.T) {
 		Spec: componentsV1alpha1.ComponentSpec{
 			Type:    "bindings.output",
 			Version: "v1",
-			Metadata: []componentsV1alpha1.MetadataItem{
+			Metadata: []sharedapi.NameValuePair{
 				{
 					Name: "output",
-					Value: componentsV1alpha1.DynamicValue{
+					Value: sharedapi.DynamicValue{
 						JSON: v1.JSON{},
 					},
 				},
@@ -5431,10 +5432,10 @@ func TestStopWithErrors(t *testing.T) {
 		Spec: componentsV1alpha1.ComponentSpec{
 			Type:    "pubsub.pubsub",
 			Version: "v1",
-			Metadata: []componentsV1alpha1.MetadataItem{
+			Metadata: []sharedapi.NameValuePair{
 				{
 					Name: "pubsub",
-					Value: componentsV1alpha1.DynamicValue{
+					Value: sharedapi.DynamicValue{
 						JSON: v1.JSON{},
 					},
 				},
@@ -5448,10 +5449,10 @@ func TestStopWithErrors(t *testing.T) {
 		Spec: componentsV1alpha1.ComponentSpec{
 			Type:    "state.statestore",
 			Version: "v1",
-			Metadata: []componentsV1alpha1.MetadataItem{
+			Metadata: []sharedapi.NameValuePair{
 				{
 					Name: "statestore",
-					Value: componentsV1alpha1.DynamicValue{
+					Value: sharedapi.DynamicValue{
 						JSON: v1.JSON{},
 					},
 				},
@@ -5465,10 +5466,10 @@ func TestStopWithErrors(t *testing.T) {
 		Spec: componentsV1alpha1.ComponentSpec{
 			Type:    "secretstores.secretstore",
 			Version: "v1",
-			Metadata: []componentsV1alpha1.MetadataItem{
+			Metadata: []sharedapi.NameValuePair{
 				{
 					Name: "secretstore",
-					Value: componentsV1alpha1.DynamicValue{
+					Value: sharedapi.DynamicValue{
 						JSON: v1.JSON{},
 					},
 				},
@@ -5795,9 +5796,9 @@ func matchDaprRequestMethod(method string) any {
 func TestMetadataContainsNamespace(t *testing.T) {
 	t.Run("namespace field present", func(t *testing.T) {
 		r := metadataContainsNamespace(
-			[]componentsV1alpha1.MetadataItem{
+			[]sharedapi.NameValuePair{
 				{
-					Value: componentsV1alpha1.DynamicValue{
+					Value: sharedapi.DynamicValue{
 						JSON: v1.JSON{Raw: []byte("{namespace}")},
 					},
 				},
@@ -5809,7 +5810,7 @@ func TestMetadataContainsNamespace(t *testing.T) {
 
 	t.Run("namespace field not present", func(t *testing.T) {
 		r := metadataContainsNamespace(
-			[]componentsV1alpha1.MetadataItem{
+			[]sharedapi.NameValuePair{
 				{},
 			},
 		)
@@ -5937,16 +5938,16 @@ func TestGracefulShutdownActors(t *testing.T) {
 		Spec: componentsV1alpha1.ComponentSpec{
 			Type:    "state.mockState",
 			Version: "v1",
-			Metadata: []componentsV1alpha1.MetadataItem{
+			Metadata: []sharedapi.NameValuePair{
 				{
 					Name: strings.ToUpper(actorStateStore),
-					Value: componentsV1alpha1.DynamicValue{
+					Value: sharedapi.DynamicValue{
 						JSON: v1.JSON{Raw: []byte("true")},
 					},
 				},
 				{
 					Name: "primaryEncryptionKey",
-					Value: componentsV1alpha1.DynamicValue{
+					Value: sharedapi.DynamicValue{
 						JSON: v1.JSON{Raw: []byte(encryptKey)},
 					},
 				},

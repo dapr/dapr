@@ -47,29 +47,30 @@ spec:
                 type: string
               metadata:
                 items:
-                  description: MetadataItem is a name/value pair for a metadata.
+                  description: NameValuePair is a name/value pair.
                   properties:
                     envRef:
                       description: EnvRef is the name of an environmental variable
                         to read the value from.
                       type: string
                     name:
-                      description: Name of the metadata property.
+                      description: Name of the property.
                       type: string
                     secretKeyRef:
                       description: SecretKeyRef is the reference of a value in a secret
-                        store component to load the value from.
+                        store component.
                       properties:
                         key:
+                          description: Field in the secret.
                           type: string
                         name:
+                          description: Secret name.
                           type: string
                       required:
-                      - key
                       - name
                       type: object
                     value:
-                      description: Value of the metadata property, in clear-text.
+                      description: Value of the property, in plaintext.
                       type: object
                       x-kubernetes-preserve-unknown-fields: true
                   required:
