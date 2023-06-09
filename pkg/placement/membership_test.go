@@ -97,7 +97,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 		// arrange
 		testServer.faultyHostDetectDuration.Store(int64(faultyHostDetectInitialDuration))
 
-		conn, _, stream := newTestClient(t, serverAddress)
+		conn, stream := newTestClient(t, serverAddress)
 
 		done := make(chan bool)
 		go func() {
@@ -202,7 +202,7 @@ func TestPerformTableUpdate(t *testing.T) {
 	clientUpToDateCh := make(chan struct{}, testClients)
 
 	for i := 0; i < testClients; i++ {
-		conn, _, stream := newTestClient(t, serverAddress)
+		conn, stream := newTestClient(t, serverAddress)
 		clientConns = append(clientConns, conn)
 		clientStreams = append(clientStreams, stream)
 		clientRecvData = append(clientRecvData, map[string]int64{})
@@ -327,7 +327,7 @@ func PerformTableUpdateCostTime(t *testing.T) (wastedTime int64) {
 	startFlag.Store(false)
 	wg.Add(testClients)
 	for i := 0; i < testClients; i++ {
-		conn, _, stream := newTestClient(t, serverAddress)
+		conn, stream := newTestClient(t, serverAddress)
 		clientConns = append(clientConns, conn)
 		clientStreams = append(clientStreams, stream)
 		go func(clientID int, clientStream v1pb.Placement_ReportDaprStatusClient) {

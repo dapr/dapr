@@ -30,9 +30,9 @@ rules:
   - apiGroups: [""]
     resources: ["pods"]
 {{- if .Values.global.operator.watchdogCanPatchPodLabels }}
-    verbs: ["get", "list", "delete", "watch"]
-{{- else }}
     verbs: ["get", "list", "delete", "watch", "patch"]
+{{- else }}
+    verbs: ["get", "list", "delete", "watch"]
 {{- end }}
   - apiGroups: [""]
     resources: ["services","services/finalizers"]
