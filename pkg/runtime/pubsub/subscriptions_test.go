@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/slices"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -139,7 +140,7 @@ func TestDeclarativeSubscriptionsV1(t *testing.T) {
 		writeSubscriptionToDisk(s, filePath)
 		defer os.RemoveAll(filePath)
 
-		subs := DeclarativeLocal([]string{dir}, log)
+		subs := DeclarativeLocal([]string{dir}, "", log)
 		if assert.Len(t, subs, 1) {
 			assert.Equal(t, "topic1", subs[0].Topic)
 			if assert.Len(t, subs[0].Rules, 1) {
@@ -167,7 +168,7 @@ func TestDeclarativeSubscriptionsV1(t *testing.T) {
 			defer os.RemoveAll(filepath)
 		}
 
-		subs := DeclarativeLocal([]string{dir}, log)
+		subs := DeclarativeLocal([]string{dir}, "", log)
 		if assert.Len(t, subs, subscriptionCount) {
 			for i := 0; i < subscriptionCount; i++ {
 				assert.Equal(t, fmt.Sprintf("%v", i), subs[i].Topic)
@@ -200,7 +201,7 @@ func TestDeclarativeSubscriptionsV1(t *testing.T) {
 		writeSubscriptionsToDisk(subscriptions, filepath)
 		defer os.RemoveAll(filepath)
 
-		subs := DeclarativeLocal([]string{dir}, log)
+		subs := DeclarativeLocal([]string{dir}, "", log)
 		if assert.Len(t, subs, subscriptionCount) {
 			for i := 0; i < subscriptionCount; i++ {
 				assert.Equal(t, fmt.Sprintf("%v", i), subs[i].Topic)
@@ -214,6 +215,50 @@ func TestDeclarativeSubscriptionsV1(t *testing.T) {
 		}
 	})
 
+	t.Run("filter subscriptions by namespace", func(t *testing.T) {
+		// Subscription in namespace dev
+		s := testDeclarativeSubscriptionV1()
+		s.ObjectMeta.Namespace = "dev"
+		s.Spec.Topic = "dev"
+		path := filepath.Join(dir, "dev.yaml")
+		writeSubscriptionToDisk(s, path)
+		defer os.RemoveAll(path)
+
+		// Subscription in namespace prod
+		s = testDeclarativeSubscriptionV1()
+		s.ObjectMeta.Namespace = "prod"
+		s.Spec.Topic = "prod"
+		path = filepath.Join(dir, "prod.yaml")
+		writeSubscriptionToDisk(s, path)
+		defer os.RemoveAll(path)
+
+		// Subscription doesn't have a namespace
+		s = testDeclarativeSubscriptionV1()
+		s.ObjectMeta.Namespace = ""
+		s.Spec.Topic = "all"
+		path = filepath.Join(dir, "all.yaml")
+		writeSubscriptionToDisk(s, path)
+		defer os.RemoveAll(path)
+
+		// Test function
+		loadAndReturnTopics := func(namespace string, expect []string) func(t *testing.T) {
+			return func(t *testing.T) {
+				res := []string{}
+				subs := DeclarativeLocal([]string{dir}, namespace, log)
+				for _, sub := range subs {
+					res = append(res, sub.Topic)
+				}
+				slices.Sort(res)
+
+				require.Equal(t, expect, res)
+			}
+		}
+
+		t.Run("load all subscriptions without a namespace specified", loadAndReturnTopics("", []string{"all", "dev", "prod"}))
+		t.Run("load subscriptions for dev namespace only", loadAndReturnTopics("dev", []string{"all", "dev"}))
+		t.Run("load subscriptions for prod namespace only", loadAndReturnTopics("prod", []string{"all", "prod"}))
+	})
+
 	t.Run("will not load non yaml file", func(t *testing.T) {
 		s := testDeclarativeSubscriptionV1()
 		s.Scopes = []string{"scope1"}
@@ -222,7 +267,7 @@ func TestDeclarativeSubscriptionsV1(t *testing.T) {
 		writeSubscriptionToDisk(s, filePath)
 		defer os.RemoveAll(filePath)
 
-		subs := DeclarativeLocal([]string{dir}, log)
+		subs := DeclarativeLocal([]string{dir}, "", log)
 		assert.Len(t, subs, 0)
 	})
 
@@ -234,7 +279,7 @@ func TestDeclarativeSubscriptionsV1(t *testing.T) {
 
 		writeSubscriptionToDisk(s, dir)
 
-		subs := DeclarativeLocal([]string{dir}, log)
+		subs := DeclarativeLocal([]string{dir}, "", log)
 		assert.Len(t, subs, 0)
 	})
 }
@@ -253,7 +298,7 @@ func TestDeclarativeSubscriptionsV2(t *testing.T) {
 		writeSubscriptionToDisk(s, filePath)
 		defer os.RemoveAll(filePath)
 
-		subs := DeclarativeLocal([]string{dir}, log)
+		subs := DeclarativeLocal([]string{dir}, "", log)
 		if assert.Len(t, subs, 1) {
 			assert.Equal(t, "topic1", subs[0].Topic)
 			if assert.Len(t, subs[0].Rules, 3) {
@@ -287,7 +332,7 @@ func TestDeclarativeSubscriptionsV2(t *testing.T) {
 			defer os.RemoveAll(filePath)
 		}
 
-		subs := DeclarativeLocal([]string{dir}, log)
+		subs := DeclarativeLocal([]string{dir}, "", log)
 		if assert.Len(t, subs, subscriptionCount) {
 			for i := 0; i < subscriptionCount; i++ {
 				iStr := fmt.Sprintf("%v", i)
@@ -325,7 +370,7 @@ func TestDeclarativeSubscriptionsV2(t *testing.T) {
 		writeSubscriptionsToDisk(subscriptions, filepath)
 		defer os.RemoveAll(filepath)
 
-		subs := DeclarativeLocal([]string{dir}, log)
+		subs := DeclarativeLocal([]string{dir}, "", log)
 		if assert.Len(t, subs, subscriptionCount) {
 			for i := 0; i < subscriptionCount; i++ {
 				iStr := fmt.Sprintf("%v", i)
@@ -348,7 +393,7 @@ func TestDeclarativeSubscriptionsV2(t *testing.T) {
 
 		writeSubscriptionToDisk(s, dir)
 
-		subs := DeclarativeLocal([]string{dir}, log)
+		subs := DeclarativeLocal([]string{dir}, "", log)
 		assert.Len(t, subs, 0)
 	})
 }
