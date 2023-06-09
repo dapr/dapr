@@ -107,7 +107,8 @@ func (m DiskManifestLoader[T]) loadManifestsFromFile(manifestPath string) []T {
 }
 
 type typeInfo struct {
-	metav1.TypeMeta `json:",inline"`
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
 }
 
 // decodeYaml decodes the yaml document.
