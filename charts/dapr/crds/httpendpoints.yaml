@@ -49,10 +49,16 @@ spec:
                 items:
                   description: Header is the name/value pair for a header specification.
                   properties:
+                    envRef:
+                      description: EnvRef is the name of an environmental variable
+                        to read the value from.
+                      type: string
                     name:
+                      description: Name of the header.
                       type: string
                     secretKeyRef:
-                      description: SecretKeyRef is a reference to a secret holding the value for the metadata item. Name is the secret name, and key is the field in the secret.
+                      description: SecretKeyRef is the reference of a value in a secret
+                        store component to load the value from.
                       properties:
                         key:
                           type: string
@@ -63,6 +69,8 @@ spec:
                       - name
                       type: object
                     value:
+                      description: Value of the header, in clear-text.
+                      type: object
                       x-kubernetes-preserve-unknown-fields: true
                   required:
                   - name
