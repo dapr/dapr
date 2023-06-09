@@ -41,6 +41,11 @@ func (HTTPEndpoint) Kind() string {
 	return "HTTPEndpoint"
 }
 
+// NameValuePairs returns the component's headers as name/value pairs
+func (h HTTPEndpoint) NameValuePairs() []shared.NameValuePair {
+	return h.Spec.Headers
+}
+
 // HTTPEndpointSpec describes an access specification for allowing external service invocations.
 type HTTPEndpointSpec struct {
 	BaseURL string `json:"baseUrl" validate:"required"`

@@ -2474,7 +2474,7 @@ func TestPopulateSecretsConfiguration(t *testing.T) {
 }
 
 func TestProcessComponentSecrets(t *testing.T) {
-	mockBinding := componentsV1alpha1.Component{
+	mockBinding := &componentsV1alpha1.Component{
 		ObjectMeta: metaV1.ObjectMeta{
 			Name: "mockBinding",
 		},
@@ -2532,8 +2532,9 @@ func TestProcessComponentSecrets(t *testing.T) {
 			},
 		})
 
-		mod, unready := rt.processComponentSecrets(mockBinding)
-		assert.Equal(t, "value1", mod.Spec.Metadata[0].Value.String())
+		updated, unready := rt.processResourceSecrets(mockBinding)
+		assert.True(t, updated)
+		assert.Equal(t, "value1", mockBinding.Spec.Metadata[0].Value.String())
 		assert.Empty(t, unready)
 	})
 
@@ -2568,8 +2569,9 @@ func TestProcessComponentSecrets(t *testing.T) {
 		})
 		assert.NoError(t, err)
 
-		mod, unready := rt.processComponentSecrets(mockBinding)
-		assert.Equal(t, "value1", mod.Spec.Metadata[0].Value.String())
+		updated, unready := rt.processResourceSecrets(mockBinding)
+		assert.True(t, updated)
+		assert.Equal(t, "value1", mockBinding.Spec.Metadata[0].Value.String())
 		assert.Empty(t, unready)
 	})
 }

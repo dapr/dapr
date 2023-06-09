@@ -1134,10 +1134,10 @@ func (a *DaprRuntime) beginComponentsUpdates() error {
 }
 
 func (a *DaprRuntime) onComponentUpdated(component componentsV1alpha1.Component) bool {
-	oldComp, exists := a.compStore.GetComponent(component.Spec.Type, component.Name)
-	newComp, _ := a.processComponentSecrets(component)
+	_, exists := a.compStore.GetComponent(component.Spec.Type, component.Name)
+	updated, _ := a.processResourceSecrets(&component)
 
-	if exists && reflect.DeepEqual(oldComp.Spec, newComp.Spec) {
+	if exists && !updated {
 		return false
 	}
 
@@ -1231,17 +1231,14 @@ func (a *DaprRuntime) beginHTTPEndpointsUpdates() error {
 }
 
 func (a *DaprRuntime) onHTTPEndpointUpdated(endpoint httpEndpointV1alpha1.HTTPEndpoint) bool {
-	oldEndpoint, exists := a.compStore.GetHTTPEndpoint(endpoint.Name)
-	newEndpoint, _ := a.processHTTPEndpointSecrets(endpoint)
+	_, exists := a.compStore.GetHTTPEndpoint(endpoint.Name)
+	updated, _ := a.processResourceSecrets(&endpoint)
 
-	if exists && reflect.DeepEqual(oldEndpoint.Spec, newEndpoint.Spec) {
+	if exists && !updated {
 		return false
 	}
 
 	a.pendingHTTPEndpoints <- endpoint
-
-	log.Infof("http endpoint updated for http endpoint named: %s", endpoint.Name)
-
 	return true
 }
 
@@ -2668,8 +2665,8 @@ func (a *DaprRuntime) processHTTPEndpoints() {
 		if endpoint.Name == "" {
 			continue
 		}
-		newEndpoint, _ := a.processHTTPEndpointSecrets(endpoint)
-		a.compStore.AddHTTPEndpoint(newEndpoint)
+		_, _ = a.processResourceSecrets(&endpoint)
+		a.compStore.AddHTTPEndpoint(endpoint)
 	}
 }
 
@@ -2765,8 +2762,7 @@ func (a *DaprRuntime) doProcessOneComponent(category components.Category, comp c
 }
 
 func (a *DaprRuntime) preprocessOneComponent(comp *componentsV1alpha1.Component) componentPreprocessRes {
-	var unreadySecretsStore string
-	*comp, unreadySecretsStore = a.processComponentSecrets(*comp)
+	_, unreadySecretsStore := a.processResourceSecrets(comp)
 	if unreadySecretsStore != "" {
 		return componentPreprocessRes{
 			unreadyDependency: componentDependency(components.CategorySecretStore, unreadySecretsStore),
@@ -2956,17 +2952,26 @@ func (a *DaprRuntime) WaitUntilShutdown() error {
 	return <-a.shutdownC
 }
 
-// Returns the component updated with the secrets applied.
-// If the component references a secret store that hasn't been loaded yet, it returns the name of the secret store component as second returned value.
-func (a *DaprRuntime) processComponentSecrets(component componentsV1alpha1.Component) (componentsV1alpha1.Component, string) {
+// Interface that applies to both Component and HTTPEndpoint resources.
+type resourceWithMetadata interface {
+	Kind() string
+	GetName() string
+	GetNamespace() string
+	NameValuePairs() []sharedapi.NameValuePair
+}
+
+// Returns the component or HTTP endpoint updated with the secrets applied.
+// If the resource references a secret store that hasn't been loaded yet, it returns the name of the secret store component as second returned value.
+func (a *DaprRuntime) processResourceSecrets(resource resourceWithMetadata) (updated bool, secretStoreName string) {
 	cache := map[string]secretstores.GetSecretResponse{}
 
-	for i, m := range component.Spec.Metadata {
+	secretStoreName = a.authSecretStoreOrDefault(resource)
+
+	metadata := resource.NameValuePairs()
+	for i, m := range metadata {
 		if m.SecretKeyRef.Name == "" {
 			continue
 		}
-
-		secretStoreName := a.authSecretStoreOrDefault(component)
 
 		// If running in Kubernetes and have an operator client, do not fetch secrets from the Kubernetes secret store as they will be populated by the operator.
 		// Instead, base64 decode the secret values into their real self.
@@ -2984,20 +2989,20 @@ func (a *DaprRuntime) processComponentSecrets(component componentsV1alpha1.Compo
 				continue
 			}
 
-			m.Value = sharedapi.DynamicValue{
+			metadata[i].Value = sharedapi.DynamicValue{
 				JSON: v1.JSON{
 					Raw: dec,
 				},
 			}
-
-			component.Spec.Metadata[i] = m
+			metadata[i].SecretKeyRef = sharedapi.SecretKeyRef{}
+			updated = true
 			continue
 		}
 
 		secretStore, ok := a.compStore.GetSecretStore(secretStoreName)
 		if !ok {
-			log.Warnf("Component %s references a secret store that isn't loaded: %s", component.Name, secretStoreName)
-			return component, secretStoreName
+			log.Warnf("%s %s references a secret store that isn't loaded: %s", resource.Kind(), resource.GetName(), secretStoreName)
+			return updated, secretStoreName
 		}
 
 		resp, ok := cache[m.SecretKeyRef.Name]
@@ -3006,7 +3011,7 @@ func (a *DaprRuntime) processComponentSecrets(component componentsV1alpha1.Compo
 			r, err := secretStore.GetSecret(context.TODO(), secretstores.GetSecretRequest{
 				Name: m.SecretKeyRef.Name,
 				Metadata: map[string]string{
-					"namespace": component.ObjectMeta.Namespace,
+					"namespace": resource.GetNamespace(),
 				},
 			})
 			if err != nil {
@@ -3024,96 +3029,18 @@ func (a *DaprRuntime) processComponentSecrets(component componentsV1alpha1.Compo
 
 		val, ok := resp.Data[secretKeyName]
 		if ok && val != "" {
-			component.Spec.Metadata[i].Value = sharedapi.DynamicValue{
+			metadata[i].Value = sharedapi.DynamicValue{
 				JSON: v1.JSON{
 					Raw: []byte(val),
 				},
 			}
+			metadata[i].SecretKeyRef = sharedapi.SecretKeyRef{}
+			updated = true
 		}
 
 		cache[m.SecretKeyRef.Name] = resp
 	}
-	return component, ""
-}
-
-// Returns the http endpoint updated with the secrets applied.
-// If the http endpoint references a secret store that hasn't been loaded yet, it returns the name of the secret store component as second returned value.
-func (a *DaprRuntime) processHTTPEndpointSecrets(endpoint httpEndpointV1alpha1.HTTPEndpoint) (httpEndpointV1alpha1.HTTPEndpoint, string) {
-	cache := map[string]secretstores.GetSecretResponse{}
-
-	for i, header := range endpoint.Spec.Headers {
-		if header.SecretKeyRef.Name == "" {
-			continue
-		}
-
-		secretStoreName := a.authSecretStoreOrDefault(endpoint)
-
-		// If running in Kubernetes and have an operator client, do not fetch secrets from the Kubernetes secret store as they will be populated by the operator.
-		// Instead, base64 decode the secret values into their real self.
-		if a.operatorClient != nil && secretStoreName == secretstoresLoader.BuiltinKubernetesSecretStore {
-			var jsonVal string
-			err := json.Unmarshal(header.Value.Raw, &jsonVal)
-			if err != nil {
-				log.Errorf("Error decoding secret: %v", err)
-				continue
-			}
-
-			dec, err := base64.StdEncoding.DecodeString(jsonVal)
-			if err != nil {
-				log.Errorf("Error decoding secret: %v", err)
-				continue
-			}
-
-			header.Value = sharedapi.DynamicValue{
-				JSON: v1.JSON{
-					Raw: dec,
-				},
-			}
-
-			endpoint.Spec.Headers[i] = header
-			continue
-		}
-
-		secretStore, ok := a.compStore.GetSecretStore(secretStoreName)
-		if !ok {
-			log.Warnf("HTTP Endpoint %s references a secret store that isn't loaded: %s", endpoint.Name, secretStoreName)
-			return endpoint, secretStoreName
-		}
-
-		resp, ok := cache[header.SecretKeyRef.Name]
-		if !ok {
-			// TODO: cascade context.
-			r, err := secretStore.GetSecret(context.TODO(), secretstores.GetSecretRequest{
-				Name: header.SecretKeyRef.Name,
-				Metadata: map[string]string{
-					"namespace": endpoint.ObjectMeta.Namespace,
-				},
-			})
-			if err != nil {
-				log.Errorf("Error getting secret: %v", err)
-				continue
-			}
-			resp = r
-		}
-
-		// Use the SecretKeyRef.Name key if SecretKeyRef.Key is not given
-		secretKeyName := header.SecretKeyRef.Key
-		if secretKeyName == "" {
-			secretKeyName = header.SecretKeyRef.Name
-		}
-
-		val, ok := resp.Data[secretKeyName]
-		if ok {
-			endpoint.Spec.Headers[i].Value = sharedapi.DynamicValue{
-				JSON: v1.JSON{
-					Raw: []byte(val),
-				},
-			}
-		}
-
-		cache[header.SecretKeyRef.Name] = resp
-	}
-	return endpoint, ""
+	return updated, ""
 }
 
 func (a *DaprRuntime) authSecretStoreOrDefault(object interface{}) string {

@@ -46,6 +46,11 @@ func (c Component) LogName() string {
 	return utils.ComponentLogName(c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
 }
 
+// NameValuePairs returns the component's metadata as name/value pairs
+func (c Component) NameValuePairs() []shared.NameValuePair {
+	return c.Spec.Metadata
+}
+
 // ComponentSpec is the spec for a component.
 type ComponentSpec struct {
 	Type    string `json:"type"`
