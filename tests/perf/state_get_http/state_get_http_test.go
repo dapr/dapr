@@ -152,6 +152,15 @@ func TestStateGetGrpcPerformance(t *testing.T) {
 	t.Logf("dapr latency avg: %sms", fmt.Sprintf("%.2f", daprLatency))
 	t.Logf("added latency avg: %sms", fmt.Sprintf("%.2f", avg))
 
+	dapr_metrics:=utils.DaprMetrics{
+		Dapr_latency: daprLatency,
+		Sidecar_cpu: sidecarUsage.CPUm,
+		Sidecar_memory: sidecarUsage.MemoryMb,
+		Application_throughput: daprResult.ActualQPS,
+	}
+
+	utils.PrometheusMetrics(dapr_metrics,"state_get_http","inmemory")
+
 	summary.ForTest(t).
 		Service("tester").
 		CPU(appUsage.CPUm).
