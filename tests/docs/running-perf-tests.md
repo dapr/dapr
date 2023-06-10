@@ -144,3 +144,150 @@ make test-perf-all
 To keep the build infrastructure simple, Dapr uses dapr-test GitHub Actions Workflow to run e2e tests using one of AKS clusters. A separate workflow also runs E2E in KinD clusters.
 
 Once a contributor creates a pull request, E2E tests on KinD clusters are automatically executed for faster feedback. In order to run the E2E tests on AKS, ask a maintainer or approver to add /ok-to-perf comment to the Pull Request.
+
+
+
+
+# Setup Required For Visualising Performance Test Metrics
+
+The setup in AKS requires three servers for:
+ - Prometheus 
+ - Pushgateway
+ - Grafana
+ 
+All the servers should be installed in the same namespace to ensure effective communication between them.
+ 
+ * Create a namesapce
+  
+    ```bash
+    kubectl create namespace <namespace-name>
+    ```
+ * Set this as the current namespace
+    
+    ```bash
+    kubectl config set-context --current --namespace=<namespace-name>
+    ```
+ * Check if the namespace is set
+  
+    ```bash
+    kubectl config view | grep namespace:
+    ```
+
+## Setup for Prometheus Server
+
+* Prometheus can be installed on AKS using the following commands:
+ 
+  ```bash
+  helm repo add prometheus-community https://prometheus-community.github.io/helm-charts 
+  helm repo update
+  helm install prometheus prometheus-community/prometheus
+  ```
+* While installing this, there may be an error saying that some clusterrole or clusterrolebindings already exist. In that case delete the clusterrole or clusterrolebinding
+
+  ```bash
+  kubectl delete clusterrole <clusterrole-name>
+  kubectl delete clusterrolebinding <clusterrolebinding-name>
+  ```
+* Check if the setup was properly installed
+
+  ```bash
+  kubectl get deployments -n <namespace-name>
+  kubectl get pods -n <namespace-name>
+  ```
+  All the pods should show a running status.
+  
+* Forward port 9090 from your local machine to the pod where the prometheus-server is running
+
+  ```bash
+  kubectl port-forward -n <namespace-name> <prometheus-server-pod> 9090
+  ```
+* The Prometheus-server can now be accessed on localhost:9090.
+
+
+## Setup for Prometheus Pushgateway
+
+* There is no need for an individual set-up for pushgateway server as the Prometheus-pushgateway pod which was created while setting up prometheus on AKS can be used. This method is favorable as the connection between Prometheus and Pushgateway is already established in this case, and there is no need for setting up the individual configurations. 
+
+* Forward port 9091 from your local machine to the prometheus-pushgateway pod and access it on localhost:9091 
+
+  ```bash
+  kubectl port-forward -n <namespace-name> <prometheus-pushgateway-pod> 9091
+  ```
+
+## Setup for Grafana Server
+
+* Create a grafana.yaml file with the following configurations:
+
+    ```yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: grafana
+      namespace: <namespace-name>
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app: grafana
+      template:
+        metadata:
+          labels:
+            app: grafana
+        spec:
+          containers:
+            - name: grafana
+              image: grafana/grafana:latest
+              ports:
+                - containerPort: 3000
+              env:
+                - name: GF_INSTALL_PLUGINS
+                  value: "grafana-piechart-panel,grafana-simple-json-datasource"
+    ---
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: grafana
+      namespace: <namespace-name>
+    spec:
+      type: LoadBalancer
+      ports:
+        - port: 80
+          targetPort: 3000
+          protocol: TCP
+      selector:
+        app: grafana
+    ```
+* Check if the setup was properly installed
+  
+  ```bash
+  kubectl get deployments -n <namespace-name>
+  kubectl get pods -n <namespace-name>
+  ```
+  This should show a grafana pod in the list of pods along with a running status for all.
+  
+* Apply the configurations
+  
+  ```bash
+  kubectl apply -f <path to grafana.yaml file>
+  ```
+* Forward port 3000 from your local machine to the pod where grafana is running.
+  
+  ```bash
+  kubectl port-forward -n <namespace-name> <grafana-pod> 3000
+  ```
+  The grafana server can now be accessed on localhost:3000
+  
+* Login to grafana with the default username and password 'admin' for both.
+
+* Now go to data sources and connect Prometheus as a data source.
+
+* The http URL will be the ClusterIP of the prometheus-server pod running on AKS which can be obtained by the command:
+  
+  ```bash
+  kubectl get svc -n <namespace-name>
+  ```
+  So, the http URL will be http:// ClusterIP of prometheus-server pod
+  
+* [Grafana Dashboard for Perf Test](../config/grafana-perf-test-dashboard.json)
+  
+  On running the perf-tests now, the metrics are collected from pushgateway by prometheus and is made available for visualization as a dashboard by importing the above template in Grafana. 
