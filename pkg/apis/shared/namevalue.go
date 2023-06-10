@@ -36,6 +36,20 @@ type NameValuePair struct {
 	EnvRef string `json:"envRef,omitempty"`
 }
 
+// HasValue returns true if the NameValuePair has a non-empty value.
+func (nvp NameValuePair) HasValue() bool {
+	return len(nvp.Value.JSON.Raw) > 0
+}
+
+// SerValue sets the value.
+func (nvp *NameValuePair) SetValue(val []byte) {
+	nvp.Value = DynamicValue{
+		JSON: apiextensionsV1.JSON{
+			Raw: val,
+		},
+	}
+}
+
 // SecretKeyRef is a reference to a secret holding the value for the name/value item.
 type SecretKeyRef struct {
 	// Secret name.

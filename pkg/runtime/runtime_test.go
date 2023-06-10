@@ -2473,43 +2473,30 @@ func TestPopulateSecretsConfiguration(t *testing.T) {
 	})
 }
 
-func TestProcessComponentSecrets(t *testing.T) {
-	mockBinding := &componentsV1alpha1.Component{
-		ObjectMeta: metaV1.ObjectMeta{
-			Name: "mockBinding",
-		},
-		Spec: componentsV1alpha1.ComponentSpec{
-			Type:    "bindings.mock",
-			Version: "v1",
-			Metadata: []sharedapi.NameValuePair{
-				{
-					Name: "a",
-					SecretKeyRef: sharedapi.SecretKeyRef{
-						Key:  "key1",
-						Name: "name1",
-					},
-				},
-				{
-					Name: "b",
-					Value: sharedapi.DynamicValue{
-						JSON: v1.JSON{Raw: []byte("value2")},
-					},
-				},
+func TestProcessResourceSecrets(t *testing.T) {
+	createMockBinding := func() *componentsV1alpha1.Component {
+		return &componentsV1alpha1.Component{
+			ObjectMeta: metaV1.ObjectMeta{
+				Name: "mockBinding",
 			},
-		},
-		Auth: componentsV1alpha1.Auth{
-			SecretStore: secretstoresLoader.BuiltinKubernetesSecretStore,
-		},
+			Spec: componentsV1alpha1.ComponentSpec{
+				Type:     "bindings.mock",
+				Version:  "v1",
+				Metadata: []sharedapi.NameValuePair{},
+			},
+		}
 	}
 
 	t.Run("Standalone Mode", func(t *testing.T) {
-		mockBinding.Spec.Metadata[0].Value = sharedapi.DynamicValue{
-			JSON: v1.JSON{},
-		}
-		mockBinding.Spec.Metadata[0].SecretKeyRef = sharedapi.SecretKeyRef{
-			Key:  "key1",
-			Name: "name1",
-		}
+		mockBinding := createMockBinding()
+		mockBinding.Spec.Metadata = append(mockBinding.Spec.Metadata, sharedapi.NameValuePair{
+			Name: "a",
+			SecretKeyRef: sharedapi.SecretKeyRef{
+				Key:  "key1",
+				Name: "name1",
+			},
+		})
+		mockBinding.Auth.SecretStore = secretstoresLoader.BuiltinKubernetesSecretStore
 
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
@@ -2539,12 +2526,13 @@ func TestProcessComponentSecrets(t *testing.T) {
 	})
 
 	t.Run("Look up name only", func(t *testing.T) {
-		mockBinding.Spec.Metadata[0].Value = sharedapi.DynamicValue{
-			JSON: v1.JSON{Raw: []byte("")},
-		}
-		mockBinding.Spec.Metadata[0].SecretKeyRef = sharedapi.SecretKeyRef{
-			Name: "name1",
-		}
+		mockBinding := createMockBinding()
+		mockBinding.Spec.Metadata = append(mockBinding.Spec.Metadata, sharedapi.NameValuePair{
+			Name: "a",
+			SecretKeyRef: sharedapi.SecretKeyRef{
+				Name: "name1",
+			},
+		})
 		mockBinding.Auth.SecretStore = "mock"
 
 		rt := NewTestDaprRuntime(modes.KubernetesMode)
@@ -2572,6 +2560,50 @@ func TestProcessComponentSecrets(t *testing.T) {
 		updated, unready := rt.processResourceSecrets(mockBinding)
 		assert.True(t, updated)
 		assert.Equal(t, "value1", mockBinding.Spec.Metadata[0].Value.String())
+		assert.Empty(t, unready)
+	})
+
+	t.Run("Secret from env", func(t *testing.T) {
+		t.Setenv("MY_ENV_VAR", "ciao mondo")
+
+		mockBinding := createMockBinding()
+		mockBinding.Spec.Metadata = append(mockBinding.Spec.Metadata, sharedapi.NameValuePair{
+			Name:   "a",
+			EnvRef: "MY_ENV_VAR",
+		})
+
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		defer stopRuntime(t, rt)
+
+		updated, unready := rt.processResourceSecrets(mockBinding)
+		assert.True(t, updated)
+		assert.Equal(t, "ciao mondo", mockBinding.Spec.Metadata[0].Value.String())
+		assert.Empty(t, unready)
+	})
+
+	t.Run("Disallowed env var", func(t *testing.T) {
+		t.Setenv("APP_API_TOKEN", "test")
+		t.Setenv("DAPR_KEY", "test")
+
+		mockBinding := createMockBinding()
+		mockBinding.Spec.Metadata = append(mockBinding.Spec.Metadata,
+			sharedapi.NameValuePair{
+				Name:   "a",
+				EnvRef: "DAPR_KEY",
+			},
+			sharedapi.NameValuePair{
+				Name:   "b",
+				EnvRef: "APP_API_TOKEN",
+			},
+		)
+
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		defer stopRuntime(t, rt)
+
+		updated, unready := rt.processResourceSecrets(mockBinding)
+		assert.True(t, updated)
+		assert.Equal(t, "", mockBinding.Spec.Metadata[0].Value.String())
+		assert.Equal(t, "", mockBinding.Spec.Metadata[1].Value.String())
 		assert.Empty(t, unready)
 	})
 }

@@ -52,7 +52,6 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/structpb"
-	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 
@@ -1134,10 +1133,10 @@ func (a *DaprRuntime) beginComponentsUpdates() error {
 }
 
 func (a *DaprRuntime) onComponentUpdated(component componentsV1alpha1.Component) bool {
-	_, exists := a.compStore.GetComponent(component.Spec.Type, component.Name)
-	updated, _ := a.processResourceSecrets(&component)
+	oldComp, exists := a.compStore.GetComponent(component.Spec.Type, component.Name)
+	_, _ = a.processResourceSecrets(&component)
 
-	if exists && !updated {
+	if exists && reflect.DeepEqual(oldComp.Spec, component.Spec) {
 		return false
 	}
 
@@ -1231,10 +1230,10 @@ func (a *DaprRuntime) beginHTTPEndpointsUpdates() error {
 }
 
 func (a *DaprRuntime) onHTTPEndpointUpdated(endpoint httpEndpointV1alpha1.HTTPEndpoint) bool {
-	_, exists := a.compStore.GetHTTPEndpoint(endpoint.Name)
-	updated, _ := a.processResourceSecrets(&endpoint)
+	oldEndpoint, exists := a.compStore.GetHTTPEndpoint(endpoint.Name)
+	_, _ = a.processResourceSecrets(&endpoint)
 
-	if exists && !updated {
+	if exists && reflect.DeepEqual(oldEndpoint.Spec, endpoint.Spec) {
 		return false
 	}
 
@@ -2961,6 +2960,18 @@ type resourceWithMetadata interface {
 	NameValuePairs() []sharedapi.NameValuePair
 }
 
+func isEnvVarAllowed(key string) bool {
+	key = strings.ToUpper(key)
+	switch {
+	case key == "APP_API_TOKEN":
+		return false
+	case strings.HasPrefix(key, "DAPR_"):
+		return false
+	default:
+		return true
+	}
+}
+
 // Returns the component or HTTP endpoint updated with the secrets applied.
 // If the resource references a secret store that hasn't been loaded yet, it returns the name of the secret store component as second returned value.
 func (a *DaprRuntime) processResourceSecrets(resource resourceWithMetadata) (updated bool, secretStoreName string) {
@@ -2970,6 +2981,18 @@ func (a *DaprRuntime) processResourceSecrets(resource resourceWithMetadata) (upd
 
 	metadata := resource.NameValuePairs()
 	for i, m := range metadata {
+		// If there's an env var and no value, use that
+		if !m.HasValue() && m.EnvRef != "" {
+			if isEnvVarAllowed(m.EnvRef) {
+				metadata[i].SetValue([]byte(os.Getenv(m.EnvRef)))
+			} else {
+				log.Warnf("%s %s references an env variable that isn't allowed: %s", resource.Kind(), resource.GetName(), m.EnvRef)
+			}
+			metadata[i].EnvRef = ""
+			updated = true
+			continue
+		}
+
 		if m.SecretKeyRef.Name == "" {
 			continue
 		}
@@ -2990,11 +3013,7 @@ func (a *DaprRuntime) processResourceSecrets(resource resourceWithMetadata) (upd
 				continue
 			}
 
-			metadata[i].Value = sharedapi.DynamicValue{
-				JSON: v1.JSON{
-					Raw: dec,
-				},
-			}
+			metadata[i].SetValue(dec)
 			metadata[i].SecretKeyRef = sharedapi.SecretKeyRef{}
 			updated = true
 			continue
@@ -3030,11 +3049,7 @@ func (a *DaprRuntime) processResourceSecrets(resource resourceWithMetadata) (upd
 
 		val, ok := resp.Data[secretKeyName]
 		if ok && val != "" {
-			metadata[i].Value = sharedapi.DynamicValue{
-				JSON: v1.JSON{
-					Raw: []byte(val),
-				},
-			}
+			metadata[i].SetValue([]byte(val))
 			metadata[i].SecretKeyRef = sharedapi.SecretKeyRef{}
 			updated = true
 		}
