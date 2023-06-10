@@ -48,34 +48,26 @@ env:
   MAX_TEST_TIMEOUT: 5400
   # Enable HA mode for tests
   HA_MODE: true
-  # Enable tests on ARM64
-  ENABLE_ARM: "false"
   # Space-separated of supported Azure regions: one will be picked randomly for each cluster
   AZURE_REGIONS: "westus3"
   AZURE_ARM_REGIONS: "eastus"
   # Container registry where to cache e2e test images
   DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
   # Whether to collect TCP dumps
-  TCP_DUMPS: "false"
+  TCP_DUMPS: false
 
 jobs:
   deploy-infrastructure:
     name: Deploy test infrastructure
     runs-on: ubuntu-22.04
     steps:
-      - name: Set up for manual runs
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
-          echo "CHECKOUT_REF=${{ github.ref }}" >> $GITHUB_ENV
-        shell: bash
       - name: Set up for scheduled test
-        if: github.event_name == 'schedule'
+        if: github.event_name != 'repository_dispatch'
         run: |
           echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
           echo "CHECKOUT_REF=refs/heads/master" >> $GITHUB_ENV
         shell: bash
-      - name: Set up for dispatched events
+      - name: Parse test payload
         if: github.event_name == 'repository_dispatch'
         uses: actions/github-script@v6.2.0
         with:
@@ -154,7 +146,6 @@ jobs:
               --template-file ./tests/test-infra/azure-all.bicep \
               --parameters \
                 namePrefix="${{ env.TEST_PREFIX }}" \
-                enableArm="${{ env.ENABLE_ARM }}" \
                 location1=${REGION1} \
                 location2=${REGION2} \
                 location3=${REGION3} \
@@ -216,28 +207,25 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-22.04, windows-2022]
+        target_arch: [amd64]
         include:
           - os: ubuntu-22.04
             target_os: linux
-            target_arch: amd64
           - os: windows-2022
             target_os: windows
-            target_arch: amd64
             windows_version: ltsc2022
+          - target_arch: arm64
+            target_os: linux
+            os: ubuntu-latest
     steps:
-      - name: Set up for manual runs
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
-          echo "CHECKOUT_REF=${{ github.ref }}" >> $GITHUB_ENV
-        shell: bash
       - name: Set up for scheduled test
-        if: github.event_name == 'schedule'
+        if: github.event_name != 'repository_dispatch'
         run: |
           echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
           echo "CHECKOUT_REF=refs/heads/master" >> $GITHUB_ENV
         shell: bash
-      - name: Set up for dispatched events
+      - name: Parse test payload
         if: github.event_name == 'repository_dispatch'
         uses: actions/github-script@v6.2.0
         with:
@@ -409,9 +397,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        target_os: [linux]
+        target_arch: [amd64, arm64]
         include:
-          - target_os: linux
-            target_arch: amd64
           - target_os: windows
             target_arch: amd64
             windows_version: ltsc2022
@@ -421,19 +409,13 @@ jobs:
           echo "DAPR_CONTAINER_LOG_PATH=$GITHUB_WORKSPACE/container_logs/${{ matrix.target_os }}_${{ matrix.target_arch }}" | sed 's/\\/\//g' >> $GITHUB_ENV
           echo "DAPR_TEST_LOG_PATH=$GITHUB_WORKSPACE/test_logs/${{ matrix.target_os }}_${{ matrix.target_arch }}" | sed 's/\\/\//g' >> $GITHUB_ENV
         shell: bash
-      - name: Set up for manual runs
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
-          echo "CHECKOUT_REF=${{ github.ref }}" >> $GITHUB_ENV
-        shell: bash
       - name: Set up for scheduled test
-        if: github.event_name == 'schedule'
+        if: github.event_name != 'repository_dispatch'
         run: |
           echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
           echo "CHECKOUT_REF=refs/heads/master" >> $GITHUB_ENV
         shell: bash
-      - name: Set up for dispatched events
+      - name: Parse test payload
         if: github.event_name == 'repository_dispatch'
         uses: actions/github-script@v6.2.0
         with:
@@ -470,12 +452,12 @@ jobs:
           key: ${{ runner.os }}-go-tests-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-tests-
-      - uses: azure/setup-kubectl@v3
+      - uses: azure/setup-kubectl@v1
         with:
           version: ${{ env.KUBECTLVER }}
         id: install
       - name: Set up Helm ${{ env.HELMVER }}
-        uses: azure/setup-helm@v3
+        uses: azure/setup-helm@v1
         with:
           version: ${{ env.HELMVER }}
       - name: Login to Azure
@@ -699,7 +681,6 @@ jobs:
           az group delete --no-wait --yes --name "Dapr-E2E-${{ env.TEST_PREFIX }}w" || true
         shell: bash
       - name: Delete Arm64 cluster
-        if: env.ENABLE_ARM == 'true'
         run: |
           # We are not waiting for these commands to complete, and we're ignoring errors
           echo "Starting removal of resource group Dapr-E2E-${{ env.TEST_PREFIX }}la"

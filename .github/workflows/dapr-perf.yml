@@ -60,19 +60,13 @@ jobs:
     name: Deploy test infrastructure
     runs-on: ubuntu-latest
     steps:
-      - name: Set up for manual runs
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
-          echo "CHECKOUT_REF=${{ github.ref }}" >> $GITHUB_ENV
-        shell: bash
       - name: Set up for scheduled test
-        if: github.event_name == 'schedule'
+        if: github.event_name != 'repository_dispatch'
         run: |
           echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
           echo "CHECKOUT_REF=refs/heads/master" >> $GITHUB_ENV
         shell: bash
-      - name: Set up for dispatched events
+      - name: Parse test payload
         if: github.event_name == 'repository_dispatch'
         uses: actions/github-script@v6.2.0
         with:
@@ -206,19 +200,13 @@ jobs:
       TARGET_OS: linux
       TARGET_ARCH: amd64
     steps:
-      - name: Set up for manual runs
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
-          echo "CHECKOUT_REF=${{ github.ref }}" >> $GITHUB_ENV
-        shell: bash
       - name: Set up for scheduled test
-        if: github.event_name == 'schedule'
+        if: github.event_name != 'repository_dispatch'
         run: |
           echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
           echo "CHECKOUT_REF=refs/heads/master" >> $GITHUB_ENV
         shell: bash
-      - name: Set up for dispatched events
+      - name: Parse test payload
         if: github.event_name == 'repository_dispatch'
         uses: actions/github-script@v6.2.0
         with:
@@ -361,22 +349,16 @@ jobs:
           echo "DAPR_CONTAINER_LOG_PATH=$GITHUB_WORKSPACE/container_logs/perf_tests" >> $GITHUB_ENV
           echo "DAPR_TEST_LOG_PATH=$GITHUB_WORKSPACE/test_logs/perf_tests" >> $GITHUB_ENV
         shell: bash
-      - name: Set up for manual runs
-        if: github.event_name == 'workflow_dispatch'
+      - name: Set up for scheduled test
+        if: github.event_name != 'repository_dispatch'
         run: |
           echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
-          echo "CHECKOUT_REF=${{ github.ref }}" >> $GITHUB_ENV
+          echo "CHECKOUT_REF=refs/heads/master" >> $GITHUB_ENV
           if [ "${{ inputs.tests }}" != "" ] ; then
             echo "DAPR_PERF_TEST=${{ inputs.tests }}" >> $GITHUB_ENV
           fi
         shell: bash
-      - name: Set up for scheduled test
-        if: github.event_name == 'schedule'
-        run: |
-          echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
-          echo "CHECKOUT_REF=refs/heads/master" >> $GITHUB_ENV
-        shell: bash
-      - name: Set up for dispatched events
+      - name: Parse test payload
         if: github.event_name == 'repository_dispatch'
         uses: actions/github-script@v6.2.0
         with:
@@ -418,12 +400,12 @@ jobs:
           key: ${{ runner.os }}-go-perf-test-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-perf-test-
-      - uses: azure/setup-kubectl@v3
+      - uses: azure/setup-kubectl@v1
         with:
           version: ${{ env.KUBECTLVER }}
         id: install
       - name: Set up Helm ${{ env.HELMVER }}
-        uses: azure/setup-helm@v3
+        uses: azure/setup-helm@v1
         with:
           version: ${{ env.HELMVER }}
       - name: Login to Azure
