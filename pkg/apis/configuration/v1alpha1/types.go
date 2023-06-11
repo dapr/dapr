@@ -75,7 +75,7 @@ type APISpec struct {
 	Denied []APIAccessRule `json:"denied,omitempty"`
 }
 
-// WasmSpec describes the configuration for Wasm across all Dapr components.
+// WasmSpec describes the security profile for all Dapr Wasm components.
 type WasmSpec struct {
 	StrictSandbox bool `json:"strictSandbox,omitempty"`
 }

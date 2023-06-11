@@ -280,9 +280,9 @@ type ComponentsSpec struct {
 	Deny []string `json:"deny,omitempty" yaml:"deny,omitempty"`
 }
 
-// WasmSpec describes the configuration for Wasm across all Dapr components.
+// WasmSpec describes the security profile for all Dapr Wasm components.
 type WasmSpec struct {
-	StrictSandbox *bool `json:"strictSandbox,omitempty" yaml:"strictSandbox,omitempty"`
+	StrictSandbox bool `json:"strictSandbox,omitempty" yaml:"strictSandbox,omitempty"`
 }
 
 // LoggingSpec defines the configuration for logging.

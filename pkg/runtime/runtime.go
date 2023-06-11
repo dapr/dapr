@@ -77,7 +77,7 @@ import (
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
 	"github.com/dapr/dapr/pkg/resiliency"
-	"github.com/dapr/dapr/pkg/runtime/component"
+	contribComponent "github.com/dapr/dapr/pkg/runtime/component"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
@@ -254,10 +254,6 @@ type pubsubSubscribedMessage struct {
 // NewDaprRuntime returns a new runtime with the given runtime config and global config.
 func NewDaprRuntime(runtimeConfig *Config, globalConfig *config.Configuration, accessControlList *config.AccessControlList, resiliencyProvider resiliency.Provider) *DaprRuntime {
 	ctx, cancel := context.WithCancel(context.Background())
-	if globalConfig.Spec.WasmSpec.StrictSandbox != nil {
-		// set wasm strict sandbox mode to global context, so that it can be used by all components
-		ctx = component.WithWasmStrictSandbox(ctx, *globalConfig.Spec.WasmSpec.StrictSandbox)
-	}
 
 	rt := &DaprRuntime{
 		ctx:                        ctx,
@@ -689,8 +685,10 @@ func (a *DaprRuntime) buildHTTPPipelineForSpec(spec config.PipelineSpec, targetP
 					middlewareSpec.Name, middlewareSpec.Type, middlewareSpec.Version)
 				continue
 			}
+			// set wasm strict sandbox mode to middleware context
+			ctx := contribComponent.WithWasmStrictSandbox(a.ctx, a.globalConfig.Spec.WasmSpec.StrictSandbox)
 			md := middleware.Metadata{Base: a.toBaseMetadata(component)}
-			handler, err := a.httpMiddlewareRegistry.Create(a.ctx, middlewareSpec.Type, middlewareSpec.Version, md, middlewareSpec.LogName())
+			handler, err := a.httpMiddlewareRegistry.Create(ctx, middlewareSpec.Type, middlewareSpec.Version, md, middlewareSpec.LogName())
 			if err != nil {
 				e := fmt.Sprintf("process component %s error: %s", component.Name, err.Error())
 				if !component.Spec.IgnoreErrors {
@@ -1745,7 +1743,9 @@ func (a *DaprRuntime) initOutputBinding(c componentsV1alpha1.Component) error {
 	}
 
 	if binding != nil {
-		err := binding.Init(a.ctx, bindings.Metadata{Base: a.toBaseMetadata(c)})
+		// set wasm strict sandbox mode to binding context
+		ctx := contribComponent.WithWasmStrictSandbox(a.ctx, a.globalConfig.Spec.WasmSpec.StrictSandbox)
+		err := binding.Init(ctx, bindings.Metadata{Base: a.toBaseMetadata(c)})
 		if err != nil {
 			diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
 			return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
