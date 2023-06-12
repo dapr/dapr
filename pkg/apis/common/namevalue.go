@@ -60,6 +60,7 @@ type SecretKeyRef struct {
 }
 
 // DynamicValue is a dynamic value struct for the component.metadata pair value.
+// +kubebuilder:validation:Type="string"
 type DynamicValue struct {
 	apiextensionsV1.JSON `json:",inline"`
 }
