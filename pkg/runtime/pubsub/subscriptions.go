@@ -247,7 +247,7 @@ func declarativeFile(resourcesPath string, namespace string, log logger.Logger) 
 
 	files, err := os.ReadDir(resourcesPath)
 	if err != nil {
-		log.Errorf("failed to read subscriptions from path %s: %s", resourcesPath, err)
+		log.Errorf("Failed to read subscriptions from path %s: %s", resourcesPath, err)
 		return subs
 	}
 
@@ -264,7 +264,7 @@ func declarativeFile(resourcesPath string, namespace string, log logger.Logger) 
 		filePath := filepath.Join(resourcesPath, f.Name())
 		b, err := os.ReadFile(filePath)
 		if err != nil {
-			log.Warnf("failed to read file %s: %v", f.Name(), err)
+			log.Warnf("Failed to read file %s: %v", f.Name(), err)
 			continue
 		}
 
@@ -278,7 +278,7 @@ func declarativeFile(resourcesPath string, namespace string, log logger.Logger) 
 
 			subs, err = appendSubscription(subs, item, namespace)
 			if err != nil {
-				log.Warnf("failed to add subscription from file %s: %v", f.Name(), err)
+				log.Warnf("Failed to add subscription from file %s: %v", f.Name(), err)
 				continue
 			}
 		}
@@ -452,7 +452,7 @@ func DeclarativeKubernetes(client operatorv1pb.OperatorClient, podName string, n
 		Namespace: namespace,
 	})
 	if err != nil {
-		log.Errorf("failed to list subscriptions from operator: %s", err)
+		log.Errorf("Failed to list subscriptions from operator: %s", err)
 		return subs
 	}
 
@@ -460,7 +460,7 @@ func DeclarativeKubernetes(client operatorv1pb.OperatorClient, podName string, n
 		// No namespace filtering here as it's been already filtered by the operator
 		subs, err = appendSubscription(subs, s, "")
 		if err != nil {
-			log.Warnf("failed to add subscription from operator: %s", err)
+			log.Warnf("Failed to add subscription from operator: %s", err)
 			continue
 		}
 	}

@@ -111,15 +111,19 @@ func testDeclarativeSubscriptionV2() subscriptionsapiV2alpha1.Subscription {
 	}
 }
 
-func writeSubscriptionToDisk(subscription interface{}, filePath string) {
+func writeSubscriptionToDisk(subscription any, filePath string) {
 	b, _ := yaml.Marshal(subscription)
 	os.WriteFile(filePath, b, 0o600)
 }
 
-func writeSubscriptionsToDisk(subscriptions []interface{}, filePath string) {
+func writeSubscriptionsToDisk(subscriptions []any, filePath string) {
 	byteArray := make([][]byte, len(subscriptions))
 	for i, sub := range subscriptions {
-		byteArray[i], _ = yaml.Marshal(sub)
+		if sub != nil {
+			byteArray[i], _ = yaml.Marshal(sub)
+		} else {
+			byteArray[i] = []byte{}
+		}
 	}
 
 	b := bytes.Join(byteArray, []byte("\n---\n"))
@@ -183,7 +187,10 @@ func TestDeclarativeSubscriptionsV1(t *testing.T) {
 	})
 
 	t.Run("load multiple subscriptions in single file", func(t *testing.T) {
-		subscriptions := []interface{}{}
+		subscriptions := []any{}
+		// Add an empty block at the beginning which will be ignored
+		subscriptions = append(subscriptions, nil)
+
 		for i := 0; i < subscriptionCount; i++ {
 			s := testDeclarativeSubscriptionV1()
 			s.Spec.Topic = fmt.Sprintf("%v", i)
@@ -215,8 +222,8 @@ func TestDeclarativeSubscriptionsV1(t *testing.T) {
 		}
 	})
 
-	t.Run("filter subscriptions by namespace", func(t *testing.T) {
-		// Subscription in namespace dev
+	t.Run("filter subscriptions by namespace v1", func(t *testing.T) {
+		// Subscription v1 in namespace dev
 		s := testDeclarativeSubscriptionV1()
 		s.ObjectMeta.Namespace = "dev"
 		s.Spec.Topic = "dev"
@@ -224,7 +231,7 @@ func TestDeclarativeSubscriptionsV1(t *testing.T) {
 		writeSubscriptionToDisk(s, path)
 		defer os.RemoveAll(path)
 
-		// Subscription in namespace prod
+		// Subscription v1 in namespace prod
 		s = testDeclarativeSubscriptionV1()
 		s.ObjectMeta.Namespace = "prod"
 		s.Spec.Topic = "prod"
@@ -232,8 +239,52 @@ func TestDeclarativeSubscriptionsV1(t *testing.T) {
 		writeSubscriptionToDisk(s, path)
 		defer os.RemoveAll(path)
 
-		// Subscription doesn't have a namespace
+		// Subscription v1 doesn't have a namespace
 		s = testDeclarativeSubscriptionV1()
+		s.ObjectMeta.Namespace = ""
+		s.Spec.Topic = "all"
+		path = filepath.Join(dir, "all.yaml")
+		writeSubscriptionToDisk(s, path)
+		defer os.RemoveAll(path)
+
+		// Test function
+		loadAndReturnTopics := func(namespace string, expect []string) func(t *testing.T) {
+			return func(t *testing.T) {
+				res := []string{}
+				subs := DeclarativeLocal([]string{dir}, namespace, log)
+				for _, sub := range subs {
+					res = append(res, sub.Topic)
+				}
+				slices.Sort(res)
+
+				require.Equal(t, expect, res)
+			}
+		}
+
+		t.Run("load all subscriptions without a namespace specified", loadAndReturnTopics("", []string{"all", "dev", "prod"}))
+		t.Run("load subscriptions for dev namespace only", loadAndReturnTopics("dev", []string{"all", "dev"}))
+		t.Run("load subscriptions for prod namespace only", loadAndReturnTopics("prod", []string{"all", "prod"}))
+	})
+
+	t.Run("filter subscriptions by namespace v2", func(t *testing.T) {
+		// Subscription v2 in namespace dev
+		s := testDeclarativeSubscriptionV2()
+		s.ObjectMeta.Namespace = "dev"
+		s.Spec.Topic = "dev"
+		path := filepath.Join(dir, "dev.yaml")
+		writeSubscriptionToDisk(s, path)
+		defer os.RemoveAll(path)
+
+		// Subscription v2 in namespace prod
+		s = testDeclarativeSubscriptionV2()
+		s.ObjectMeta.Namespace = "prod"
+		s.Spec.Topic = "prod"
+		path = filepath.Join(dir, "prod.yaml")
+		writeSubscriptionToDisk(s, path)
+		defer os.RemoveAll(path)
+
+		// Subscription v2 doesn't have a namespace
+		s = testDeclarativeSubscriptionV2()
 		s.ObjectMeta.Namespace = ""
 		s.Spec.Topic = "all"
 		path = filepath.Join(dir, "all.yaml")
@@ -348,7 +399,7 @@ func TestDeclarativeSubscriptionsV2(t *testing.T) {
 	})
 
 	t.Run("load multiple subscriptions in single file", func(t *testing.T) {
-		subscriptions := []interface{}{}
+		subscriptions := []any{}
 		for i := 0; i < subscriptionCount; i++ {
 			iStr := fmt.Sprintf("%v", i)
 			s := testDeclarativeSubscriptionV2()
