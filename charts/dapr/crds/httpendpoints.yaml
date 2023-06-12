@@ -78,7 +78,7 @@ spec:
                       type: object
                     value:
                       description: Value of the property, in plaintext.
-                      type: string
+                      x-kubernetes-preserve-unknown-fields: true
                   required:
                   - name
                   type: object
