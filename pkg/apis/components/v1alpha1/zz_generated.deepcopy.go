@@ -22,7 +22,7 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"github.com/dapr/dapr/pkg/apis/shared"
+	"github.com/dapr/dapr/pkg/apis/common"
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -106,7 +106,7 @@ func (in *ComponentSpec) DeepCopyInto(out *ComponentSpec) {
 	*out = *in
 	if in.Metadata != nil {
 		in, out := &in.Metadata, &out.Metadata
-		*out = make([]shared.NameValuePair, len(*in))
+		*out = make([]common.NameValuePair, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}

@@ -19,8 +19,8 @@ import (
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	sharedapi "github.com/dapr/dapr/pkg/apis/shared"
 )
 
 // DaprComponent holds kubernetes client and component information.
@@ -41,24 +41,24 @@ func NewDaprComponent(client *KubeClient, ns string, comp ComponentDescription) 
 
 // toComponentSpec builds the componentSpec for the given ComponentDescription
 func (do *DaprComponent) toComponentSpec() *v1alpha1.Component {
-	metadata := []sharedapi.NameValuePair{}
+	metadata := []commonapi.NameValuePair{}
 
 	for k, v := range do.component.MetaData {
-		var item sharedapi.NameValuePair
+		var item commonapi.NameValuePair
 
 		if v.FromSecretRef == nil {
-			item = sharedapi.NameValuePair{
+			item = commonapi.NameValuePair{
 				Name: k,
-				Value: sharedapi.DynamicValue{
+				Value: commonapi.DynamicValue{
 					JSON: v1.JSON{
 						Raw: []byte(v.Raw),
 					},
 				},
 			}
 		} else {
-			item = sharedapi.NameValuePair{
+			item = commonapi.NameValuePair{
 				Name: k,
-				SecretKeyRef: sharedapi.SecretKeyRef{
+				SecretKeyRef: commonapi.SecretKeyRef{
 					Name: v.FromSecretRef.Name,
 					Key:  v.FromSecretRef.Key,
 				},

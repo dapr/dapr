@@ -56,9 +56,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 
 	"github.com/dapr/dapr/pkg/actors"
+	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpEndpointV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
-	sharedapi "github.com/dapr/dapr/pkg/apis/shared"
 	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/channel"
 	httpEndpointChannel "github.com/dapr/dapr/pkg/channel/external"
@@ -2119,7 +2119,7 @@ func (a *DaprRuntime) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPu
 	return runtimePubsub.ApplyBulkPublishResiliency(context.TODO(), req, policyDef, defaultBulkPublisher)
 }
 
-func metadataContainsNamespace(items []sharedapi.NameValuePair) bool {
+func metadataContainsNamespace(items []commonapi.NameValuePair) bool {
 	for _, c := range items {
 		val := c.Value.String()
 		if strings.Contains(val, "{namespace}") {
@@ -2957,7 +2957,7 @@ type resourceWithMetadata interface {
 	GetName() string
 	GetNamespace() string
 	GetSecretStore() string
-	NameValuePairs() []sharedapi.NameValuePair
+	NameValuePairs() []commonapi.NameValuePair
 }
 
 func isEnvVarAllowed(key string) bool {
@@ -3014,7 +3014,7 @@ func (a *DaprRuntime) processResourceSecrets(resource resourceWithMetadata) (upd
 			}
 
 			metadata[i].SetValue(dec)
-			metadata[i].SecretKeyRef = sharedapi.SecretKeyRef{}
+			metadata[i].SecretKeyRef = commonapi.SecretKeyRef{}
 			updated = true
 			continue
 		}
@@ -3050,7 +3050,7 @@ func (a *DaprRuntime) processResourceSecrets(resource resourceWithMetadata) (upd
 		val, ok := resp.Data[secretKeyName]
 		if ok && val != "" {
 			metadata[i].SetValue([]byte(val))
-			metadata[i].SecretKeyRef = sharedapi.SecretKeyRef{}
+			metadata[i].SecretKeyRef = commonapi.SecretKeyRef{}
 			updated = true
 		}
 
@@ -3317,7 +3317,7 @@ func (a *DaprRuntime) initSecretStore(c componentsV1alpha1.Component) error {
 	return nil
 }
 
-func (a *DaprRuntime) convertMetadataItemsToProperties(items []sharedapi.NameValuePair) map[string]string {
+func (a *DaprRuntime) convertMetadataItemsToProperties(items []commonapi.NameValuePair) map[string]string {
 	properties := map[string]string{}
 	for _, c := range items {
 		val := c.Value.String()

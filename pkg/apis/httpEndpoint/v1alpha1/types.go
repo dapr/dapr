@@ -16,7 +16,7 @@ package v1alpha1
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/dapr/dapr/pkg/apis/shared"
+	"github.com/dapr/dapr/pkg/apis/common"
 )
 
 //+genclient
@@ -33,7 +33,7 @@ type HTTPEndpoint struct {
 	Spec HTTPEndpointSpec `json:"spec,omitempty"`
 	//+optional
 	Auth          `json:"auth,omitempty"`
-	shared.Scoped `json:",inline"`
+	common.Scoped `json:",inline"`
 }
 
 // Kind returns the component kind.
@@ -47,7 +47,7 @@ func (h HTTPEndpoint) GetSecretStore() string {
 }
 
 // NameValuePairs returns the component's headers as name/value pairs
-func (h HTTPEndpoint) NameValuePairs() []shared.NameValuePair {
+func (h HTTPEndpoint) NameValuePairs() []common.NameValuePair {
 	return h.Spec.Headers
 }
 
@@ -55,7 +55,7 @@ func (h HTTPEndpoint) NameValuePairs() []shared.NameValuePair {
 type HTTPEndpointSpec struct {
 	BaseURL string `json:"baseUrl" validate:"required"`
 	//+optional
-	Headers []shared.NameValuePair `json:"headers"`
+	Headers []common.NameValuePair `json:"headers"`
 }
 
 // Auth represents authentication details for the component.

@@ -17,8 +17,8 @@ import (
 	"fmt"
 	"testing"
 
+	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	"github.com/dapr/dapr/pkg/apis/shared"
 	"github.com/dapr/dapr/pkg/injector/annotations"
 	"github.com/dapr/dapr/pkg/injector/patcher"
 
@@ -100,7 +100,7 @@ func TestComponentsPatch(t *testing.T) {
 			appName,
 			[]componentsapi.Component{
 				{
-					Scoped: shared.Scoped{Scopes: []string{appName}},
+					Scoped: commonapi.Scoped{Scopes: []string{appName}},
 				},
 			},
 			&corev1.Pod{
@@ -151,7 +151,7 @@ func TestComponentsPatch(t *testing.T) {
 						}`, componentImage),
 					},
 				},
-				Scoped: shared.Scoped{Scopes: []string{appName}},
+				Scoped: commonapi.Scoped{Scopes: []string{appName}},
 			}},
 			&corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{

@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package shared
+package common
 
 // +kubebuilder:object:generate=true
 
@@ -41,7 +41,7 @@ func (nvp NameValuePair) HasValue() bool {
 	return len(nvp.Value.JSON.Raw) > 0
 }
 
-// SerValue sets the value.
+// SetValue sets the value.
 func (nvp *NameValuePair) SetValue(val []byte) {
 	nvp.Value = DynamicValue{
 		JSON: apiextensionsV1.JSON{

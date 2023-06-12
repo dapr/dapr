@@ -16,7 +16,7 @@ package v1alpha1
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/dapr/dapr/pkg/apis/shared"
+	"github.com/dapr/dapr/pkg/apis/common"
 	"github.com/dapr/dapr/utils"
 )
 
@@ -33,7 +33,7 @@ type Component struct {
 	Spec ComponentSpec `json:"spec,omitempty"`
 	//+optional
 	Auth          `json:"auth,omitempty"`
-	shared.Scoped `json:",inline"`
+	common.Scoped `json:",inline"`
 }
 
 // Kind returns the component kind.
@@ -52,7 +52,7 @@ func (c Component) GetSecretStore() string {
 }
 
 // NameValuePairs returns the component's metadata as name/value pairs
-func (c Component) NameValuePairs() []shared.NameValuePair {
+func (c Component) NameValuePairs() []common.NameValuePair {
 	return c.Spec.Metadata
 }
 
@@ -62,7 +62,7 @@ type ComponentSpec struct {
 	Version string `json:"version"`
 	//+optional
 	IgnoreErrors bool                   `json:"ignoreErrors"`
-	Metadata     []shared.NameValuePair `json:"metadata"`
+	Metadata     []common.NameValuePair `json:"metadata"`
 	//+optional
 	InitTimeout string `json:"initTimeout"`
 }

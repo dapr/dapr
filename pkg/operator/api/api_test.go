@@ -29,10 +29,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/yaml"
 
+	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpendpointapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
-	sharedapi "github.com/dapr/dapr/pkg/apis/shared"
 	subscriptionsapiV2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/client/clientset/versioned/scheme"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
@@ -70,10 +70,10 @@ func TestProcessComponentSecrets(t *testing.T) {
 	t.Run("secret ref exists, not kubernetes secret store, no error", func(t *testing.T) {
 		c := componentsapi.Component{
 			Spec: componentsapi.ComponentSpec{
-				Metadata: []sharedapi.NameValuePair{
+				Metadata: []commonapi.NameValuePair{
 					{
 						Name: "test1",
-						SecretKeyRef: sharedapi.SecretKeyRef{
+						SecretKeyRef: commonapi.SecretKeyRef{
 							Name: "secret1",
 							Key:  "key1",
 						},
@@ -92,10 +92,10 @@ func TestProcessComponentSecrets(t *testing.T) {
 	t.Run("secret ref exists, kubernetes secret store, secret extracted", func(t *testing.T) {
 		c := componentsapi.Component{
 			Spec: componentsapi.ComponentSpec{
-				Metadata: []sharedapi.NameValuePair{
+				Metadata: []commonapi.NameValuePair{
 					{
 						Name: "test1",
-						SecretKeyRef: sharedapi.SecretKeyRef{
+						SecretKeyRef: commonapi.SecretKeyRef{
 							Name: "secret1",
 							Key:  "key1",
 						},
@@ -139,10 +139,10 @@ func TestProcessComponentSecrets(t *testing.T) {
 	t.Run("secret ref exists, default kubernetes secret store, secret extracted", func(t *testing.T) {
 		c := componentsapi.Component{
 			Spec: componentsapi.ComponentSpec{
-				Metadata: []sharedapi.NameValuePair{
+				Metadata: []commonapi.NameValuePair{
 					{
 						Name: "test1",
-						SecretKeyRef: sharedapi.SecretKeyRef{
+						SecretKeyRef: commonapi.SecretKeyRef{
 							Name: "secret1",
 							Key:  "key1",
 						},
@@ -560,10 +560,10 @@ func TestProcessHTTPEndpointSecrets(t *testing.T) {
 	e := httpendpointapi.HTTPEndpoint{
 		Spec: httpendpointapi.HTTPEndpointSpec{
 			BaseURL: "http://test.com/",
-			Headers: []sharedapi.NameValuePair{
+			Headers: []commonapi.NameValuePair{
 				{
 					Name: "test1",
-					SecretKeyRef: sharedapi.SecretKeyRef{
+					SecretKeyRef: commonapi.SecretKeyRef{
 						Name: "secret1",
 						Key:  "key1",
 					},

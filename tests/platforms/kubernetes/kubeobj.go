@@ -25,8 +25,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
+	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	sharedapi "github.com/dapr/dapr/pkg/apis/shared"
 	"github.com/dapr/dapr/utils"
 )
 
@@ -341,7 +341,7 @@ func buildServiceObject(namespace string, appDesc AppDescription) *apiv1.Service
 }
 
 // buildDaprComponentObject creates dapr component object.
-func buildDaprComponentObject(componentName string, typeName string, scopes []string, annotations map[string]string, metaData []sharedapi.NameValuePair) *v1alpha1.Component {
+func buildDaprComponentObject(componentName string, typeName string, scopes []string, annotations map[string]string, metaData []commonapi.NameValuePair) *v1alpha1.Component {
 	return &v1alpha1.Component{
 		TypeMeta: metav1.TypeMeta{
 			Kind: DaprComponentsKind,
@@ -354,7 +354,7 @@ func buildDaprComponentObject(componentName string, typeName string, scopes []st
 			Type:     typeName,
 			Metadata: metaData,
 		},
-		Scoped: sharedapi.Scoped{Scopes: scopes},
+		Scoped: commonapi.Scoped{Scopes: scopes},
 	}
 }
 

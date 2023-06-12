@@ -31,11 +31,11 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
-	sharedapi "github.com/dapr/dapr/pkg/apis/shared"
 	subscriptionsapiV2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	daprCredentials "github.com/dapr/dapr/pkg/credentials"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
@@ -224,7 +224,7 @@ func processComponentSecrets(ctx context.Context, component *componentsapi.Compo
 				if err != nil {
 					return err
 				}
-				component.Spec.Metadata[i].Value = sharedapi.DynamicValue{
+				component.Spec.Metadata[i].Value = commonapi.DynamicValue{
 					JSON: v1.JSON{
 						Raw: jsonEnc,
 					},
@@ -261,7 +261,7 @@ func processHTTPEndpointSecrets(ctx context.Context, endpoint *httpendpointsapi.
 				if err != nil {
 					return err
 				}
-				endpoint.Spec.Headers[i].Value = sharedapi.DynamicValue{
+				endpoint.Spec.Headers[i].Value = commonapi.DynamicValue{
 					JSON: v1.JSON{
 						Raw: jsonEnc,
 					},

@@ -25,8 +25,8 @@ import (
 	"io"
 
 	"github.com/dapr/components-contrib/secretstores"
+	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	"github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	"github.com/dapr/dapr/pkg/apis/shared"
 )
 
 type Algorithm string
@@ -124,7 +124,7 @@ func ComponentEncryptionKey(component v1alpha1.Component, secretStore secretstor
 	return cek, nil
 }
 
-func tryGetEncryptionKeyFromMetadataItem(namespace string, item shared.NameValuePair, secretStore secretstores.SecretStore) (Key, error) {
+func tryGetEncryptionKeyFromMetadataItem(namespace string, item commonapi.NameValuePair, secretStore secretstores.SecretStore) (Key, error) {
 	if item.SecretKeyRef.Name == "" {
 		return Key{}, fmt.Errorf("%s: secretKeyRef cannot be empty", errPrefix)
 	}
