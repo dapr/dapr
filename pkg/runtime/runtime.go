@@ -79,6 +79,7 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/security"
+	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
 	"github.com/dapr/dapr/pkg/scopes"
 	"github.com/dapr/dapr/utils"
@@ -2961,15 +2962,33 @@ type resourceWithMetadata interface {
 }
 
 func isEnvVarAllowed(key string) bool {
+	// First, apply a denylist that blocks access to sensitive env vars
 	key = strings.ToUpper(key)
 	switch {
+	case key == "":
+		return false
 	case key == "APP_API_TOKEN":
 		return false
 	case strings.HasPrefix(key, "DAPR_"):
 		return false
-	default:
+	case strings.Contains(key, " "):
+		return false
+	}
+
+	// If we have a `DAPR_ENV_KEYS` env var (which is added by the Dapr Injector in Kubernetes mode), use that as allowlist too
+	allowlist := os.Getenv(authConsts.EnvKeysEnvVar)
+	if allowlist == "" {
 		return true
 	}
+
+	// Need to check for the full var, so there must be a space after OR it must be the end of the string, and there must be a space before OR it must be at the beginning of the string
+	idx := strings.Index(allowlist, key)
+	if idx >= 0 &&
+		(idx+len(key) == len(allowlist) || allowlist[idx+len(key)] == ' ') &&
+		(idx == 0 || allowlist[idx-1] == ' ') {
+		return true
+	}
+	return false
 }
 
 // Returns the component or HTTP endpoint updated with the secrets applied.

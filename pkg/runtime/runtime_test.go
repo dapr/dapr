@@ -96,6 +96,7 @@ import (
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/security"
+	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
 	"github.com/dapr/dapr/pkg/scopes"
 	sentryConsts "github.com/dapr/dapr/pkg/sentry/consts"
 	daprt "github.com/dapr/dapr/pkg/testing"
@@ -6171,4 +6172,55 @@ func TestHTTPEndpointsUpdate(t *testing.T) {
 	}
 	_, exists = rt.compStore.GetHTTPEndpoint(endpoint3.Name)
 	assert.True(t, exists, fmt.Sprintf("expect http endpoint with name: %s", endpoint3.Name))
+}
+
+func TestIsEnvVarAllowed(t *testing.T) {
+	t.Run("no allowlist", func(t *testing.T) {
+		tests := []struct {
+			name string
+			key  string
+			want bool
+		}{
+			{name: "empty string is not allowed", key: "", want: false},
+			{name: "key is allowed", key: "FOO", want: true},
+			{name: "keys starting with DAPR_ are denied", key: "DAPR_TEST", want: false},
+			{name: "APP_API_TOKEN is denied", key: "APP_API_TOKEN", want: false},
+			{name: "keys with a space are denied", key: "FOO BAR", want: false},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				if got := isEnvVarAllowed(tt.key); got != tt.want {
+					t.Errorf("isEnvVarAllowed(%q) = %v, want %v", tt.key, got, tt.want)
+				}
+			})
+		}
+	})
+
+	t.Run("with allowlist", func(t *testing.T) {
+		t.Setenv(authConsts.EnvKeysEnvVar, "FOO BAR TEST")
+
+		tests := []struct {
+			name string
+			key  string
+			want bool
+		}{
+			{name: "FOO is allowed", key: "FOO", want: true},
+			{name: "BAR is allowed", key: "BAR", want: true},
+			{name: "TEST is allowed", key: "TEST", want: true},
+			{name: "FO is not allowed", key: "FO", want: false},
+			{name: "EST is not allowed", key: "EST", want: false},
+			{name: "BA is not allowed", key: "BA", want: false},
+			{name: "AR is not allowed", key: "AR", want: false},
+			{name: "keys starting with DAPR_ are denied", key: "DAPR_TEST", want: false},
+			{name: "APP_API_TOKEN is denied", key: "APP_API_TOKEN", want: false},
+			{name: "keys with a space are denied", key: "FOO BAR", want: false},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				if got := isEnvVarAllowed(tt.key); got != tt.want {
+					t.Errorf("isEnvVarAllowed(%q) = %v, want %v", tt.key, got, tt.want)
+				}
+			})
+		}
+	})
 }
