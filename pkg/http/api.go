@@ -533,7 +533,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	// merge metadata from URL query parameters
-	metadata := getMetadataFromRequest(reqCtx)
+	metadata := getMetadataFromFastHTTPRequest(reqCtx)
 	if req.Metadata == nil {
 		req.Metadata = metadata
 	} else {
@@ -771,7 +771,7 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	metadata := getMetadataFromRequest(reqCtx)
+	metadata := getMetadataFromFastHTTPRequest(reqCtx)
 
 	key := reqCtx.UserValue(stateKeyParam).(string)
 	consistency := string(reqCtx.QueryArgs().Peek(consistencyParam))
@@ -926,7 +926,7 @@ func (a *api) onSubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
 		log.Debug(msg)
 		return
 	}
-	metadata := getMetadataFromRequest(reqCtx)
+	metadata := getMetadataFromFastHTTPRequest(reqCtx)
 	subscribeKeys := make([]string, 0)
 
 	keys := make([]string, 0)
@@ -1019,7 +1019,7 @@ func (a *api) onGetConfiguration(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	metadata := getMetadataFromRequest(reqCtx)
+	metadata := getMetadataFromFastHTTPRequest(reqCtx)
 
 	keys := make([]string, 0)
 	queryKeys := reqCtx.QueryArgs().PeekMulti(configurationKeyParam)
@@ -1083,7 +1083,7 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 	concurrency := string(reqCtx.QueryArgs().Peek(concurrencyParam))
 	consistency := string(reqCtx.QueryArgs().Peek(consistencyParam))
 
-	metadata := getMetadataFromRequest(reqCtx)
+	metadata := getMetadataFromFastHTTPRequest(reqCtx)
 	k, err := stateLoader.GetModifiedStateKey(key, storeName, a.universal.AppID)
 	if err != nil {
 		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
@@ -1147,7 +1147,7 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	metadata := getMetadataFromRequest(reqCtx)
+	metadata := getMetadataFromFastHTTPRequest(reqCtx)
 
 	for i, r := range reqs {
 		// merge metadata from URL query parameters
@@ -1847,7 +1847,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 
 	body := reqCtx.PostBody()
 	contentType := string(reqCtx.Request.Header.Peek("Content-Type"))
-	metadata := getMetadataFromRequest(reqCtx)
+	metadata := getMetadataFromFastHTTPRequest(reqCtx)
 	rawPayload, metaErr := contribMetadata.IsRawPayload(metadata)
 	if metaErr != nil {
 		msg := messages.ErrPubSubMetadataDeserialize.WithFormat(metaErr)
@@ -1949,7 +1949,7 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	body := reqCtx.PostBody()
-	metadata := getMetadataFromRequest(reqCtx)
+	metadata := getMetadataFromFastHTTPRequest(reqCtx)
 	rawPayload, metaErr := contribMetadata.IsRawPayload(metadata)
 	if metaErr != nil {
 		msg := messages.ErrPubSubMetadataDeserialize.WithFormat(metaErr)
@@ -2185,7 +2185,22 @@ func (a *api) onGetOutboundHealthz(reqCtx *fasthttp.RequestCtx) {
 	}
 }
 
-func getMetadataFromRequest(reqCtx *fasthttp.RequestCtx) map[string]string {
+func getMetadataFromRequest(r *nethttp.Request) map[string]string {
+	pl := len(metadataPrefix)
+	qs := r.URL.Query()
+
+	metadata := make(map[string]string, len(qs))
+	for key, value := range qs {
+		if !strings.HasPrefix(key, metadataPrefix) {
+			continue
+		}
+		metadata[key[pl:]] = value[0]
+	}
+
+	return metadata
+}
+
+func getMetadataFromFastHTTPRequest(reqCtx *fasthttp.RequestCtx) map[string]string {
 	metadata := map[string]string{}
 	prefixBytes := []byte(metadataPrefix)
 	reqCtx.QueryArgs().VisitAll(func(key []byte, value []byte) {
@@ -2247,7 +2262,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	// merge metadata from URL query parameters
-	metadata := getMetadataFromRequest(reqCtx)
+	metadata := getMetadataFromFastHTTPRequest(reqCtx)
 	if req.Metadata == nil {
 		req.Metadata = metadata
 	} else {
@@ -2356,7 +2371,7 @@ func (a *api) onQueryStateHandler() fasthttp.RequestHandler {
 			SkipInputBody: true,
 			InModifierFastHTTP: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.QueryStateRequest) (*runtimev1pb.QueryStateRequest, error) {
 				in.StoreName = reqCtx.UserValue(storeNameParam).(string)
-				in.Metadata = getMetadataFromRequest(reqCtx)
+				in.Metadata = getMetadataFromFastHTTPRequest(reqCtx)
 				in.Query = string(reqCtx.PostBody())
 				return in, nil
 			},

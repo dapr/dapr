@@ -819,12 +819,27 @@ func TestGetStatusCodeFromMetadata(t *testing.T) {
 }
 
 func TestGetMetadataFromRequest(t *testing.T) {
+	// set
+	r, _ := gohttp.NewRequest(gohttp.MethodGet, "http://test.example.com/resource?metadata.test=test&&other=other", nil)
+
+	// act
+	m := getMetadataFromRequest(r)
+
+	// assert
+	assert.NotEmpty(t, m, "expected map to be populated")
+	assert.Equal(t, 1, len(m), "expected length to match")
+	assert.Equal(t, "test", m["test"], "test", "expected value to be equal")
+}
+
+func TestGetMetadataFromFastHTTPRequest(t *testing.T) {
 	t.Run("request with query args", func(t *testing.T) {
 		// set
 		ctx := &fasthttp.RequestCtx{}
 		ctx.Request.SetRequestURI("http://test.example.com/resource?metadata.test=test&&other=other")
+
 		// act
-		m := getMetadataFromRequest(ctx)
+		m := getMetadataFromFastHTTPRequest(ctx)
+
 		// assert
 		assert.NotEmpty(t, m, "expected map to be populated")
 		assert.Equal(t, 1, len(m), "expected length to match")
