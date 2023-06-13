@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"strings"
 	"testing"
 
@@ -404,9 +405,9 @@ func TestAddHeaders(t *testing.T) {
 	t.Run("single value", func(t *testing.T) {
 		req := NewInvokeMethodRequest("test_method")
 		defer req.Close()
-		header := fasthttp.RequestHeader{}
+		header := http.Header{}
 		header.Add("Dapr-Reentrant-Id", "test")
-		req.AddHeaders(&header)
+		req.AddMetadata(header)
 
 		require.NotNil(t, req.r.Metadata)
 		require.NotNil(t, req.r.Metadata["Dapr-Reentrant-Id"])
@@ -417,10 +418,10 @@ func TestAddHeaders(t *testing.T) {
 	t.Run("multiple values", func(t *testing.T) {
 		req := NewInvokeMethodRequest("test_method")
 		defer req.Close()
-		header := fasthttp.RequestHeader{}
+		header := http.Header{}
 		header.Add("Dapr-Reentrant-Id", "test")
 		header.Add("Dapr-Reentrant-Id", "test2")
-		req.AddHeaders(&header)
+		req.AddMetadata(header)
 
 		require.NotNil(t, req.r.Metadata)
 		require.NotNil(t, req.r.Metadata["Dapr-Reentrant-Id"])
@@ -429,13 +430,13 @@ func TestAddHeaders(t *testing.T) {
 	})
 
 	t.Run("does not overwrite", func(t *testing.T) {
-		header := fasthttp.RequestHeader{}
+		header := http.Header{}
 		header.Add("Dapr-Reentrant-Id", "test")
-		req := NewInvokeMethodRequest("test_method").WithFastHTTPHeaders(&header)
+		req := NewInvokeMethodRequest("test_method").WithHTTPHeaders(header)
 		defer req.Close()
 
 		header.Set("Dapr-Reentrant-Id", "test2")
-		req.AddHeaders(&header)
+		req.AddMetadata(header)
 
 		require.NotNil(t, req.r.Metadata["Dapr-Reentrant-Id"])
 		require.NotEmpty(t, req.r.Metadata["Dapr-Reentrant-Id"].Values)

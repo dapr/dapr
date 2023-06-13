@@ -30,7 +30,6 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/google/uuid"
-	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -487,14 +486,14 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 		if headerValue, ok := req.Metadata()["Dapr-Reentrancy-Id"]; ok {
 			reentrancyID = &headerValue.GetValues()[0]
 		} else {
-			reentrancyHeader := fasthttp.RequestHeader{}
 			uuidObj, err := uuid.NewRandom()
 			if err != nil {
 				return nil, fmt.Errorf("failed to generate UUID: %w", err)
 			}
 			uuid := uuidObj.String()
-			reentrancyHeader.Add("Dapr-Reentrancy-Id", uuid)
-			req.AddHeaders(&reentrancyHeader)
+			req.AddMetadata(map[string][]string{
+				"Dapr-Reentrancy-Id": {uuid},
+			})
 			reentrancyID = &uuid
 		}
 	}
