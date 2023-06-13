@@ -25,7 +25,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/valyala/fasthttp"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -149,13 +148,13 @@ func TestMetadata(t *testing.T) {
 	})
 
 	t.Run("HTTP headers", func(t *testing.T) {
-		req := fasthttp.AcquireRequest()
-		req.Header.Set("Header1", "Value1")
-		req.Header.Set("Header2", "Value2")
-		req.Header.Set("Header3", "Value3")
+		headers := http.Header{}
+		headers.Set("Header1", "Value1")
+		headers.Set("Header2", "Value2")
+		headers.Set("Header3", "Value3")
 
 		re := NewInvokeMethodRequest("test_method").
-			WithFastHTTPHeaders(&req.Header)
+			WithHTTPHeaders(headers)
 		defer re.Close()
 		mheader := re.Metadata()
 
