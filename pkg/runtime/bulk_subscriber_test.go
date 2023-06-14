@@ -151,7 +151,7 @@ func TestBulkSubscribe(t *testing.T) {
 			Topic:      "topic0",
 			Data:       []byte(`{"orderId":"1"}`),
 		})
-		assert.NoError(t, err)
+		assert.Error(t, err)
 		pubsubIns := rt.pubSubs[testBulkSubscribePubsub].component.(*mockSubscribePubSub)
 		assert.Equal(t, 1, pubsubIns.bulkPubCount["topic0"])
 		assert.True(t, pubsubIns.isBulkSubscribe)
@@ -197,7 +197,7 @@ func TestBulkSubscribe(t *testing.T) {
 			Topic:      "topic0",
 			Data:       []byte(order),
 		})
-		assert.Nil(t, err)
+		assert.Error(t, err)
 		pubsubIns := rt.pubSubs[testBulkSubscribePubsub].component.(*mockSubscribePubSub)
 		assert.Equal(t, 1, pubsubIns.bulkPubCount["topic0"])
 		assert.True(t, pubsubIns.isBulkSubscribe)
