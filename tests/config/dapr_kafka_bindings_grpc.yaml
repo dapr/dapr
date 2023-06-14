@@ -36,4 +36,4 @@ spec:
   - name: initialOffset
     value: oldest
   - name: direction
-    value: input, outputs
+    value: input, output
