@@ -47,7 +47,6 @@ scopes:
 - actorphp
 - resiliencyapp
 - resiliencyappgrpc
-- workflowsapp
 - perf-actor-activation-service
 - perf-actor-activation-client
 - perf-actor-reminder-service
