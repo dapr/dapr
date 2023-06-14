@@ -19,6 +19,10 @@ ports:
   targetPort: 50001
 
 tls:
+  # If enabled, you have to provision your own Kubernetes Secret "dapr-trust-bundle" object
+  # following https://docs.dapr.io/operations/security/mtls/#bringing-your-own-certificates
+  # this is useful when using an external tool for handling secrets
+  useExistingSecret: false
   issuer:
     certPEM: ""
     keyPEM: ""

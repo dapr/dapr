@@ -1,3 +1,4 @@
+{{- if not .Values.tls.useExistingSecret }}
 {{- $existingSecret := lookup "v1" "Secret" .Release.Namespace "dapr-trust-bundle"}}
 ---
 apiVersion: v1
@@ -20,6 +21,7 @@ data:
   {{ if .Values.tls.root.certPEM }}ca.crt: {{ b64enc .Values.tls.root.certPEM | trim }}
   {{ else if $existingSecret }}ca.crt: {{ index $existingSecret.data "ca.crt" }}
   {{end}}
+{{- end }}
 ---
 apiVersion: apps/v1
 kind: Deployment
