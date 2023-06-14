@@ -1220,20 +1220,45 @@ func TestDeleteReminderWithPartitions(t *testing.T) {
 	appChannel := new(mockAppChannel)
 	testActorsRuntime := newTestActorsRuntimeWithMockAndActorMetadataPartition(appChannel)
 	defer testActorsRuntime.Stop()
+	stateStore, _ := testActorsRuntime.stateStore()
 
 	actorType, actorID := getTestActorTypeAndID()
 	ctx := context.Background()
-	reminder := createReminderData(actorID, actorType, "reminder1", "1s", "1s", "", "")
-	err := testActorsRuntime.CreateReminder(ctx, &reminder)
-	require.NoError(t, err)
-	assert.Equal(t, 1, len(testActorsRuntime.reminders[actorType]))
-	err = testActorsRuntime.DeleteReminder(ctx, &DeleteReminderRequest{
-		Name:      "reminder1",
-		ActorID:   actorID,
-		ActorType: actorType,
+
+	t.Run("Delete a reminder", func(t *testing.T) {
+		// Create a reminder
+		reminder := createReminderData(actorID, actorType, "reminder1", "1s", "1s", "", "")
+		err := testActorsRuntime.CreateReminder(ctx, &reminder)
+		require.NoError(t, err)
+		assert.Equal(t, 1, len(testActorsRuntime.reminders[actorType]))
+
+		// Delete the reminder
+		startCount := stateStore.(*daprt.FakeStateStore).CallCount("Multi")
+		err = testActorsRuntime.DeleteReminder(ctx, &DeleteReminderRequest{
+			Name:      "reminder1",
+			ActorID:   actorID,
+			ActorType: actorType,
+		})
+		require.NoError(t, err)
+		assert.Equal(t, 0, len(testActorsRuntime.reminders[actorType]))
+
+		// There should have been 1 Multi operation in the state store
+		require.Equal(t, startCount+1, stateStore.(*daprt.FakeStateStore).CallCount("Multi"))
 	})
-	require.NoError(t, err)
-	assert.Equal(t, 0, len(testActorsRuntime.reminders[actorType]))
+
+	t.Run("Delete a reminder that doesn't exist", func(t *testing.T) {
+		startCount := stateStore.(*daprt.FakeStateStore).CallCount("Multi")
+		err := testActorsRuntime.DeleteReminder(ctx, &DeleteReminderRequest{
+			Name:      "does-not-exist",
+			ActorID:   actorID,
+			ActorType: actorType,
+		})
+		require.NoError(t, err)
+		assert.Equal(t, 0, len(testActorsRuntime.reminders[actorType]))
+
+		// There should have been no Multi operation in the state store
+		require.Equal(t, startCount, stateStore.(*daprt.FakeStateStore).CallCount("Multi"))
+	})
 }
 
 func TestDeleteReminder(t *testing.T) {
@@ -1248,40 +1273,60 @@ func TestDeleteReminder(t *testing.T) {
 	actorType, actorID := getTestActorTypeAndID()
 	ctx := context.Background()
 
-	// Create 2 reminders (in parallel)
-	errs := make(chan error, 2)
-	go func() {
-		reminder := createReminderData(actorID, actorType, "reminder1", "1s", "1s", "", "")
-		errs <- testActorsRuntime.CreateReminder(ctx, &reminder)
-	}()
-	go func() {
-		reminder := createReminderData(actorID, actorType, "reminder2", "1s", "1s", "", "")
-		errs <- testActorsRuntime.CreateReminder(ctx, &reminder)
-	}()
-	for i := 0; i < 2; i++ {
-		require.NoError(t, <-errs)
-	}
-	assert.Equal(t, 2, len(testActorsRuntime.reminders[actorType]))
+	t.Run("Delete reminders in parallel should not have race conditions", func(t *testing.T) {
+		// Create 2 reminders (in parallel)
+		errs := make(chan error, 2)
+		go func() {
+			reminder := createReminderData(actorID, actorType, "reminder1", "1s", "1s", "", "")
+			errs <- testActorsRuntime.CreateReminder(ctx, &reminder)
+		}()
+		go func() {
+			reminder := createReminderData(actorID, actorType, "reminder2", "1s", "1s", "", "")
+			errs <- testActorsRuntime.CreateReminder(ctx, &reminder)
+		}()
+		for i := 0; i < 2; i++ {
+			require.NoError(t, <-errs)
+		}
+		assert.Equal(t, 2, len(testActorsRuntime.reminders[actorType]))
 
-	// Delete the reminders (in parallel)
-	go func() {
-		errs <- testActorsRuntime.DeleteReminder(ctx, &DeleteReminderRequest{
-			Name:      "reminder1",
+		// Delete the reminders (in parallel)
+		startCount := stateStore.(*daprt.FakeStateStore).CallCount("Multi")
+		go func() {
+			errs <- testActorsRuntime.DeleteReminder(ctx, &DeleteReminderRequest{
+				Name:      "reminder1",
+				ActorID:   actorID,
+				ActorType: actorType,
+			})
+		}()
+		go func() {
+			errs <- testActorsRuntime.DeleteReminder(ctx, &DeleteReminderRequest{
+				Name:      "reminder2",
+				ActorID:   actorID,
+				ActorType: actorType,
+			})
+		}()
+		for i := 0; i < 2; i++ {
+			require.NoError(t, <-errs)
+		}
+		assert.Equal(t, 0, len(testActorsRuntime.reminders[actorType]))
+
+		// There should have been 2 Multi operations in the state store
+		require.Equal(t, startCount+2, stateStore.(*daprt.FakeStateStore).CallCount("Multi"))
+	})
+
+	t.Run("Delete a reminder that doesn't exist", func(t *testing.T) {
+		startCount := stateStore.(*daprt.FakeStateStore).CallCount("Multi")
+		err := testActorsRuntime.DeleteReminder(ctx, &DeleteReminderRequest{
+			Name:      "does-not-exist",
 			ActorID:   actorID,
 			ActorType: actorType,
 		})
-	}()
-	go func() {
-		errs <- testActorsRuntime.DeleteReminder(ctx, &DeleteReminderRequest{
-			Name:      "reminder2",
-			ActorID:   actorID,
-			ActorType: actorType,
-		})
-	}()
-	for i := 0; i < 2; i++ {
-		require.NoError(t, <-errs)
-	}
-	assert.Equal(t, 0, len(testActorsRuntime.reminders[actorType]))
+		require.NoError(t, err)
+		assert.Equal(t, 0, len(testActorsRuntime.reminders[actorType]))
+
+		// There should have been no Multi operation in the state store
+		require.Equal(t, startCount, stateStore.(*daprt.FakeStateStore).CallCount("Multi"))
+	})
 }
 
 func TestReminderRepeats(t *testing.T) {
@@ -2498,6 +2543,29 @@ func TestTransactionalOperation(t *testing.T) {
 		}
 		resI, err := op.StateOperation("base||", StateOperationOpts{})
 		require.NoError(t, err)
+
+		res, ok := resI.(state.SetRequest)
+		require.True(t, ok)
+		assert.Equal(t, "base||"+TestKeyName, res.Key)
+	})
+
+	t.Run("error if ttlInSeconds and actor state TTL not enabled", func(t *testing.T) {
+		op := TransactionalOperation{
+			Operation: Upsert,
+			Request: map[string]any{
+				"key":      TestKeyName,
+				"metadata": map[string]string{"ttlInSeconds": "1"},
+			},
+		}
+		_, err := op.StateOperation("base||", StateOperationOpts{
+			StateTTLEnabled: false,
+		})
+		assert.ErrorContains(t, err, `ttlInSeconds is not supported without the "ActorStateTTL" feature enabled`)
+
+		resI, err := op.StateOperation("base||", StateOperationOpts{
+			StateTTLEnabled: true,
+		})
+		assert.NoError(t, err)
 
 		res, ok := resI.(state.SetRequest)
 		require.True(t, ok)
