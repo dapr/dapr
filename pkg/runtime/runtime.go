@@ -1709,7 +1709,7 @@ func isBindingOfDirection(direction string, metadata []componentsV1alpha1.Metada
 	directionFound := false
 
 	for _, m := range metadata {
-		if strings.ToLower(m.Name) == "direction" {
+		if strings.EqualFold(m.Name, "direction") {
 			directionFound = true
 
 			directions := strings.Split(string(m.Value.Raw), ",")
