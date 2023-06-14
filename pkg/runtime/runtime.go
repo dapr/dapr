@@ -122,6 +122,9 @@ const (
 	bindingsConcurrencyParallel   = "parallel"
 	bindingsConcurrencySequential = "sequential"
 	pubsubName                    = "pubsubName"
+	bindingDirection              = "direction"
+	inputBinding                  = "input"
+	outputBinding                 = "output"
 
 	// hot reloading is currently unsupported, but
 	// setting this environment variable restores the
@@ -1709,7 +1712,7 @@ func isBindingOfDirection(direction string, metadata []componentsV1alpha1.Metada
 	directionFound := false
 
 	for _, m := range metadata {
-		if strings.EqualFold(m.Name, "direction") {
+		if strings.EqualFold(m.Name, bindingDirection) {
 			directionFound = true
 
 			directions := strings.Split(string(m.Value.Raw), ",")
@@ -1725,7 +1728,7 @@ func isBindingOfDirection(direction string, metadata []componentsV1alpha1.Metada
 }
 
 func (a *DaprRuntime) initInputBinding(c componentsV1alpha1.Component) error {
-	if !isBindingOfDirection("input", c.Spec.Metadata) {
+	if !isBindingOfDirection(inputBinding, c.Spec.Metadata) {
 		return nil
 	}
 
@@ -1755,7 +1758,7 @@ func (a *DaprRuntime) initInputBinding(c componentsV1alpha1.Component) error {
 }
 
 func (a *DaprRuntime) initOutputBinding(c componentsV1alpha1.Component) error {
-	if !isBindingOfDirection("output", c.Spec.Metadata) {
+	if !isBindingOfDirection(outputBinding, c.Spec.Metadata) {
 		return nil
 	}
 
