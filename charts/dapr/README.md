@@ -143,6 +143,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_sentry.replicaCount`                | Number of replicas                                                      | `1`                     |
 | `dapr_sentry.logLevel`                    | Log level                                                               | `info`                  |
 | `dapr_sentry.image.name`                  | Docker image name (`global.registry/dapr_sentry.image.name`)            | `dapr`                  |
+| `dapr_sentry.tls.useExistingSecret`       | Use an already created dapr-trust-bundle secret                                                | `false`                 |
 | `dapr_sentry.tls.issuer.certPEM`          | Issuer Certificate cert                                                 | `""`                    |
 | `dapr_sentry.tls.issuer.keyPEM`           | Issuer Private Key cert                                                 | `""`                    |
 | `dapr_sentry.tls.root.certPEM`            | Root Certificate cert                                                   | `""`                    |
