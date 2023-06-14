@@ -223,7 +223,7 @@ func (a *UniversalAPI) PurgeWorkflowAlpha1(ctx context.Context, in *runtimev1pb.
 
 	err = workflowComponent.Purge(ctx, &req)
 	if err != nil {
-		err = messages.ErrPurgeWorkflow.WithFormat(in.InstanceId)
+		err = messages.ErrPurgeWorkflow.WithFormat(in.InstanceId, err)
 		a.Logger.Debug(err)
 		return emptyResponse, err
 	}
