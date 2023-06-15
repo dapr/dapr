@@ -54,7 +54,7 @@ func FromFlags(args []string) (*DaprRuntime, error) {
 	daprInternalGRPCPort := flag.String("dapr-internal-grpc-port", "", "gRPC port for the Dapr Internal API to listen on")
 	appPort := flag.String("app-port", "", "The port the application is listening on")
 	profilePort := flag.String("profile-port", strconv.Itoa(DefaultProfilePort), "The port for the profile server")
-	appProtocolPtr := flag.String("app-protocol", string(HTTPProtocol), "Protocol for the application: grpc, grpcs, http, https, h2c")
+	appProtocolPtr := flag.String("app-protocol", string(daprGlobalConfig.HTTPProtocol), "Protocol for the application: grpc, grpcs, http, https, h2c")
 	componentsPath := flag.String("components-path", "", "Alias for --resources-path [Deprecated, use --resources-path]")
 	var resourcesPath stringSliceFlag
 	flag.Var(&resourcesPath, "resources-path", "Path for resources directory. If not specified, no resources will be loaded. Can be passed multiple times")
@@ -239,28 +239,28 @@ func FromFlags(args []string) (*DaprRuntime, error) {
 	{
 		p := strings.ToLower(*appProtocolPtr)
 		switch p {
-		case string(GRPCSProtocol), string(HTTPSProtocol), string(H2CProtocol):
+		case string(daprGlobalConfig.GRPCSProtocol), string(daprGlobalConfig.HTTPSProtocol), string(daprGlobalConfig.H2CProtocol):
 			appProtocol = p
-		case string(HTTPProtocol):
+		case string(daprGlobalConfig.HTTPProtocol):
 			// For backwards compatibility, when protocol is HTTP and --app-ssl is set, use "https"
 			// TODO: Remove in a future Dapr version
 			if *appSSL {
 				log.Warn("The 'app-ssl' flag is deprecated; use 'app-protocol=https' instead")
-				appProtocol = string(HTTPSProtocol)
+				appProtocol = string(daprGlobalConfig.HTTPSProtocol)
 			} else {
-				appProtocol = string(HTTPProtocol)
+				appProtocol = string(daprGlobalConfig.HTTPProtocol)
 			}
-		case string(GRPCProtocol):
+		case string(daprGlobalConfig.GRPCProtocol):
 			// For backwards compatibility, when protocol is GRPC and --app-ssl is set, use "grpcs"
 			// TODO: Remove in a future Dapr version
 			if *appSSL {
 				log.Warn("The 'app-ssl' flag is deprecated; use 'app-protocol=grpcs' instead")
-				appProtocol = string(GRPCSProtocol)
+				appProtocol = string(daprGlobalConfig.GRPCSProtocol)
 			} else {
-				appProtocol = string(GRPCProtocol)
+				appProtocol = string(daprGlobalConfig.GRPCProtocol)
 			}
 		case "":
-			appProtocol = string(HTTPProtocol)
+			appProtocol = string(daprGlobalConfig.HTTPProtocol)
 		default:
 			return nil, fmt.Errorf("invalid value for 'app-protocol': %v", *appProtocolPtr)
 		}

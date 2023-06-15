@@ -3244,9 +3244,9 @@ func (a *DaprRuntime) getAppHTTPEndpoint() string {
 	// Application protocol is "http" or "https"
 	port := strconv.Itoa(a.runtimeConfig.ApplicationPort)
 	switch a.runtimeConfig.AppConnectionConfig.Protocol {
-	case HTTPProtocol, H2CProtocol:
+	case config.HTTPProtocol, config.H2CProtocol:
 		return "http://" + a.runtimeConfig.AppConnectionConfig.ChannelAddress + ":" + port
-	case HTTPSProtocol:
+	case config.HTTPSProtocol:
 		return "https://" + a.runtimeConfig.AppConnectionConfig.ChannelAddress + ":" + port
 	default:
 		return ""
@@ -3256,7 +3256,7 @@ func (a *DaprRuntime) getAppHTTPEndpoint() string {
 // Initializes the appHTTPClient property.
 func (a *DaprRuntime) initAppHTTPClient() {
 	var transport nethttp.RoundTripper
-	if a.runtimeConfig.AppConnectionConfig.Protocol == H2CProtocol {
+	if a.runtimeConfig.AppConnectionConfig.Protocol == config.H2CProtocol {
 		// Enable HTTP/2 Cleartext transport
 		transport = &http2.Transport{
 			AllowHTTP: true, // To enable using "http" as protocol
@@ -3269,7 +3269,7 @@ func (a *DaprRuntime) initAppHTTPClient() {
 		}
 	} else {
 		var tlsConfig *tls.Config
-		if a.runtimeConfig.AppConnectionConfig.Protocol == HTTPSProtocol {
+		if a.runtimeConfig.AppConnectionConfig.Protocol == config.HTTPSProtocol {
 			tlsConfig = &tls.Config{
 				InsecureSkipVerify: true, //nolint:gosec
 				// For 1.11
@@ -3571,7 +3571,7 @@ func createGRPCManager(runtimeConfig *Config, globalConfig *config.Configuration
 	if runtimeConfig != nil {
 		grpcAppChannelConfig.Port = runtimeConfig.ApplicationPort
 		grpcAppChannelConfig.MaxConcurrency = runtimeConfig.AppConnectionConfig.MaxConcurrency
-		grpcAppChannelConfig.EnableTLS = (runtimeConfig.AppConnectionConfig.Protocol == GRPCSProtocol)
+		grpcAppChannelConfig.EnableTLS = (runtimeConfig.AppConnectionConfig.Protocol == config.GRPCSProtocol)
 		grpcAppChannelConfig.MaxRequestBodySizeMB = runtimeConfig.MaxRequestBodySize
 		grpcAppChannelConfig.ReadBufferSizeKB = runtimeConfig.ReadBufferSize
 		grpcAppChannelConfig.BaseAddress = runtimeConfig.AppConnectionConfig.ChannelAddress

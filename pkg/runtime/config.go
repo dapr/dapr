@@ -17,26 +17,13 @@ import (
 	"time"
 
 	"github.com/dapr/dapr/pkg/apphealth"
-	config "github.com/dapr/dapr/pkg/config/modes"
+	"github.com/dapr/dapr/pkg/config"
+	modesConfig "github.com/dapr/dapr/pkg/config/modes"
 	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/modes"
 )
 
-// Protocol is a communications protocol.
-type Protocol string
-
 const (
-	// GRPCProtocol is the gRPC communication protocol.
-	GRPCProtocol Protocol = "grpc"
-	// GRPCSProtocol is the gRPC communication protocol with TLS (without validating certificates).
-	GRPCSProtocol Protocol = "grpcs"
-	// HTTPProtocol is the HTTP communication protocol.
-	HTTPProtocol Protocol = "http"
-	// HTTPSProtocol is the HTTPS communication protocol with TLS (without validating certificates).
-	HTTPSProtocol Protocol = "https"
-	// H2CProtocol is the HTTP/2 Cleartext communication protocol (HTTP/2 without TLS).
-	H2CProtocol Protocol = "h2c"
-
 	// DefaultDaprHTTPPort is the default http port for Dapr.
 	DefaultDaprHTTPPort = 3500
 	// DefaultDaprPublicPort is the default http port for Dapr.
@@ -61,26 +48,6 @@ const (
 	DefaultChannelAddress = "127.0.0.1"
 )
 
-// IsHTTP returns true if the app protocol is using HTTP (including HTTPS and H2C).
-func (p Protocol) IsHTTP() bool {
-	switch p {
-	case HTTPProtocol, HTTPSProtocol, H2CProtocol:
-		return true
-	default:
-		return false
-	}
-}
-
-// AppConnectionConfig holds the configuration for the app connection.
-type AppConnectionConfig struct {
-	ChannelAddress      string
-	HealthCheck         *apphealth.Config
-	HealthCheckHTTPPath string
-	MaxConcurrency      int
-	Port                int
-	Protocol            Protocol
-}
-
 // Config holds the Dapr Runtime configuration.
 type Config struct {
 	ID                           string
@@ -95,8 +62,8 @@ type Config struct {
 	Mode                         modes.DaprMode
 	PlacementAddresses           []string
 	AllowedOrigins               string
-	Standalone                   config.StandaloneConfig
-	Kubernetes                   config.KubernetesConfig
+	Standalone                   modesConfig.StandaloneConfig
+	Kubernetes                   modesConfig.KubernetesConfig
 	mtlsEnabled                  bool
 	SentryServiceAddress         string
 	CertChain                    *credentials.CertChain
@@ -106,7 +73,7 @@ type Config struct {
 	GracefulShutdownDuration     time.Duration
 	EnableAPILogging             bool
 	DisableBuiltinK8sSecretStore bool
-	AppConnectionConfig          AppConnectionConfig
+	AppConnectionConfig          config.AppConnectionConfig
 }
 
 // NewRuntimeConfigOpts contains options for NewRuntimeConfig.
@@ -171,10 +138,10 @@ func NewRuntimeConfig(opts NewRuntimeConfigOpts) *Config {
 		Mode:               modes.DaprMode(opts.Mode),
 		PlacementAddresses: opts.PlacementAddresses,
 		AllowedOrigins:     opts.AllowedOrigins,
-		Standalone: config.StandaloneConfig{
+		Standalone: modesConfig.StandaloneConfig{
 			ResourcesPath: opts.ResourcesPath,
 		},
-		Kubernetes: config.KubernetesConfig{
+		Kubernetes: modesConfig.KubernetesConfig{
 			ControlPlaneAddress: opts.ControlPlaneAddress,
 		},
 		EnableProfiling:              opts.EnableProfiling,
@@ -186,11 +153,11 @@ func NewRuntimeConfig(opts NewRuntimeConfigOpts) *Config {
 		GracefulShutdownDuration:     opts.GracefulShutdownDuration,
 		EnableAPILogging:             opts.EnableAPILogging,
 		DisableBuiltinK8sSecretStore: opts.DisableBuiltinK8sSecretStore,
-		AppConnectionConfig: AppConnectionConfig{
+		AppConnectionConfig: config.AppConnectionConfig{
 			ChannelAddress:      opts.AppChannelAddress,
 			HealthCheck:         appHealthCheck,
 			HealthCheckHTTPPath: opts.AppHealthCheckPath,
-			Protocol:            Protocol(opts.AppProtocol),
+			Protocol:            config.Protocol(opts.AppProtocol),
 			Port:                opts.AppPort,
 			MaxConcurrency:      opts.MaxConcurrency,
 		},
