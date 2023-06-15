@@ -42,6 +42,21 @@ func (a *UniversalAPI) GetMetadata(ctx context.Context, in *emptypb.Empty) (*run
 		activeActorsCount = a.Actors.GetActiveActorsCount(ctx)
 	}
 
+	// App connection information
+	appConnectionProperties := &runtimev1pb.AppConnectionProperties{
+		Port:           int32(a.AppConnectionConfig.Port),
+		Protocol:       string(a.AppConnectionConfig.Protocol),
+		MaxConcurrency: int32(a.AppConnectionConfig.MaxConcurrency),
+		Health: &runtimev1pb.AppConnectionHealthProperties{
+			HealthCheckPath: a.AppConnectionConfig.HealthCheckHTTPPath,
+		},
+	}
+	if a.AppConnectionConfig.HealthCheck != nil {
+		appConnectionProperties.Health.HealthProbeInterval = a.AppConnectionConfig.HealthCheck.ProbeInterval.String()
+		appConnectionProperties.Health.HealthProbeTimeout = a.AppConnectionConfig.HealthCheck.ProbeTimeout.String()
+		appConnectionProperties.Health.HealthThreshold = string(a.AppConnectionConfig.HealthCheck.Threshold)
+	}
+
 	// Components
 	components := a.CompStore.ListComponents()
 	registeredComponents := make([]*runtimev1pb.RegisteredComponents, len(components))
@@ -78,12 +93,13 @@ func (a *UniversalAPI) GetMetadata(ctx context.Context, in *emptypb.Empty) (*run
 	}
 
 	return &runtimev1pb.GetMetadataResponse{
-		Id:                   a.AppID,
-		ExtendedMetadata:     extendedMetadata,
-		RegisteredComponents: registeredComponents,
-		ActiveActorsCount:    activeActorsCount,
-		Subscriptions:        ps,
-		HttpEndpoints:        registeredHTTPEndpoints,
+		Id:                      a.AppID,
+		ExtendedMetadata:        extendedMetadata,
+		RegisteredComponents:    registeredComponents,
+		ActiveActorsCount:       activeActorsCount,
+		Subscriptions:           ps,
+		HttpEndpoints:           registeredHTTPEndpoints,
+		AppConnectionProperties: appConnectionProperties,
 	}, nil
 }
 

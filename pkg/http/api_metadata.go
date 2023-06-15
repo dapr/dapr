@@ -48,9 +48,10 @@ func (a *api) onGetMetadata() fasthttp.RequestHandler {
 					ID:       out.Id,
 					Extended: out.ExtendedMetadata,
 					// We can embed the proto object directly only for as long as the protojson key is == json key
-					ActiveActorsCount:    out.ActiveActorsCount,
-					RegisteredComponents: out.RegisteredComponents,
-					HTTPEndpoints:        out.HttpEndpoints,
+					ActiveActorsCount:       out.ActiveActorsCount,
+					RegisteredComponents:    out.RegisteredComponents,
+					HTTPEndpoints:           out.HttpEndpoints,
+					AppConnectionProperties: out.AppConnectionProperties,
 				}
 
 				// Copy the subscriptions into a custom struct
@@ -102,12 +103,13 @@ func (a *api) onPutMetadata() fasthttp.RequestHandler {
 }
 
 type metadataResponse struct {
-	ID                   string                               `json:"id,omitempty"`
-	ActiveActorsCount    []*runtimev1pb.ActiveActorsCount     `json:"actors,omitempty"`
-	RegisteredComponents []*runtimev1pb.RegisteredComponents  `json:"components,omitempty"`
-	Extended             map[string]string                    `json:"extended,omitempty"`
-	Subscriptions        []metadataResponsePubsubSubscription `json:"subscriptions,omitempty"`
-	HTTPEndpoints        []*runtimev1pb.MetadataHTTPEndpoint  `json:"httpEndpoints,omitempty"`
+	ID                      string                               `json:"id,omitempty"`
+	ActiveActorsCount       []*runtimev1pb.ActiveActorsCount     `json:"actors,omitempty"`
+	RegisteredComponents    []*runtimev1pb.RegisteredComponents  `json:"components,omitempty"`
+	Extended                map[string]string                    `json:"extended,omitempty"`
+	Subscriptions           []metadataResponsePubsubSubscription `json:"subscriptions,omitempty"`
+	HTTPEndpoints           []*runtimev1pb.MetadataHTTPEndpoint  `json:"httpEndpoints,omitempty"`
+	AppConnectionProperties *runtimev1pb.AppConnectionProperties `json:"appConnectionProperties,omitempty"`
 }
 
 type metadataResponsePubsubSubscription struct {

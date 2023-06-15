@@ -1548,6 +1548,7 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		GetComponentsCapabilitiesFn: a.getComponentsCapabilitesMap,
 		MaxRequestBodySize:          int64(a.runtimeConfig.MaxRequestBodySize) << 20, // Convert from MB to bytes
 		CompStore:                   a.compStore,
+		AppConnectionConfig:         a.runtimeConfig.AppConnectionConfig,
 	})
 
 	serverConf := http.ServerConfig{
@@ -1638,10 +1639,10 @@ func (a *DaprRuntime) getGRPCAPI() grpc.API {
 		SendToOutputBindingFn:       a.sendToOutputBinding,
 		TracingSpec:                 a.globalConfig.Spec.TracingSpec,
 		AccessControlList:           a.accessControlList,
-		AppProtocolIsHTTP:           a.runtimeConfig.AppConnectionConfig.Protocol.IsHTTP(),
 		Shutdown:                    a.ShutdownWithWait,
 		GetComponentsCapabilitiesFn: a.getComponentsCapabilitesMap,
 		CompStore:                   a.compStore,
+		AppConnectionConfig:         a.runtimeConfig.AppConnectionConfig,
 	})
 }
 
