@@ -911,11 +911,11 @@ func (a *actorsRuntime) startReminder(reminder *reminders.Reminder, stopChannel 
 
 		nextTimer = a.clock.NewTimer(reminder.NextTick().Sub(a.clock.Now()))
 		defer func() {
-			if nextTimer.Stop() {
+			if !nextTimer.Stop() {
 				<-nextTimer.C()
 			}
-			if ttlTimer != nil && ttlTimer.Stop() {
-				<-ttlTimerC
+			if ttlTimer != nil && !ttlTimer.Stop() {
+				<-ttlTimer.C()
 			}
 		}()
 
@@ -979,9 +979,6 @@ func (a *actorsRuntime) startReminder(reminder *reminders.Reminder, stopChannel 
 				break L
 			}
 
-			if nextTimer.Stop() {
-				<-nextTimer.C()
-			}
 			nextTimer.Reset(reminder.NextTick().Sub(a.clock.Now()))
 		}
 
@@ -1296,11 +1293,11 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 
 		nextTimer = a.clock.NewTimer(reminder.NextTick().Sub(a.clock.Now()))
 		defer func() {
-			if nextTimer.Stop() {
+			if !nextTimer.Stop() {
 				<-nextTimer.C()
 			}
-			if ttlTimer != nil && ttlTimer.Stop() {
-				<-ttlTimerC
+			if ttlTimer != nil && !ttlTimer.Stop() {
+				<-ttlTimer.C()
 			}
 		}()
 
@@ -1335,9 +1332,6 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 				break L
 			}
 
-			if nextTimer.Stop() {
-				<-nextTimer.C()
-			}
 			nextTimer.Reset(reminder.NextTick().Sub(a.clock.Now()))
 		}
 
