@@ -76,4 +76,7 @@ func TestNewConfig(t *testing.T) {
 	assert.Equal(t, true, c.EnableAPILogging)
 	assert.Equal(t, true, c.DisableBuiltinK8sSecretStore)
 	assert.Equal(t, "1.1.1.1", c.AppConnectionConfig.ChannelAddress)
+	assert.Equal(t, 8080, c.AppConnectionConfig.Port)
+	assert.Equal(t, "http", string(c.AppConnectionConfig.Protocol))
+	assert.Equal(t, 1, c.AppConnectionConfig.MaxConcurrency)
 }

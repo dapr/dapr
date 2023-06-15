@@ -45,6 +45,7 @@ func (a *UniversalAPI) GetMetadata(ctx context.Context, in *emptypb.Empty) (*run
 
 	// App connection information
 	appConnectionProperties := &runtimev1pb.AppConnectionProperties{
+		ChannelAddress: a.AppConnectionConfig.ChannelAddress,
 		Port:           int32(a.AppConnectionConfig.Port),
 		Protocol:       string(a.AppConnectionConfig.Protocol),
 		MaxConcurrency: int32(a.AppConnectionConfig.MaxConcurrency),
