@@ -71,6 +71,16 @@ func (p Protocol) IsHTTP() bool {
 	}
 }
 
+// AppConnectionConfig holds the configuration for the app connection.
+type AppConnectionConfig struct {
+	ChannelAddress      string
+	HealthCheck         *apphealth.Config
+	HealthCheckHTTPPath string
+	MaxConcurrency      int
+	Port                int
+	Protocol            Protocol
+}
+
 // Config holds the Dapr Runtime configuration.
 type Config struct {
 	ID                           string
@@ -82,13 +92,11 @@ type Config struct {
 	InternalGRPCPort             int
 	ApplicationPort              int
 	APIListenAddresses           []string
-	ApplicationProtocol          Protocol
 	Mode                         modes.DaprMode
 	PlacementAddresses           []string
 	AllowedOrigins               string
 	Standalone                   config.StandaloneConfig
 	Kubernetes                   config.KubernetesConfig
-	MaxConcurrency               int
 	mtlsEnabled                  bool
 	SentryServiceAddress         string
 	CertChain                    *credentials.CertChain
@@ -98,9 +106,7 @@ type Config struct {
 	GracefulShutdownDuration     time.Duration
 	EnableAPILogging             bool
 	DisableBuiltinK8sSecretStore bool
-	AppHealthCheck               *apphealth.Config
-	AppHealthCheckHTTPPath       string
-	AppChannelAddress            string
+	AppConnectionConfig          AppConnectionConfig
 }
 
 // NewRuntimeConfigOpts contains options for NewRuntimeConfig.
@@ -154,18 +160,17 @@ func NewRuntimeConfig(opts NewRuntimeConfigOpts) *Config {
 	}
 
 	return &Config{
-		ID:                  opts.ID,
-		HTTPPort:            opts.HTTPPort,
-		PublicPort:          opts.PublicPort,
-		InternalGRPCPort:    opts.InternalGRPCPort,
-		APIGRPCPort:         opts.APIGRPCPort,
-		ApplicationPort:     opts.AppPort,
-		ProfilePort:         opts.ProfilePort,
-		APIListenAddresses:  opts.APIListenAddresses,
-		ApplicationProtocol: Protocol(opts.AppProtocol),
-		Mode:                modes.DaprMode(opts.Mode),
-		PlacementAddresses:  opts.PlacementAddresses,
-		AllowedOrigins:      opts.AllowedOrigins,
+		ID:                 opts.ID,
+		HTTPPort:           opts.HTTPPort,
+		PublicPort:         opts.PublicPort,
+		InternalGRPCPort:   opts.InternalGRPCPort,
+		APIGRPCPort:        opts.APIGRPCPort,
+		ApplicationPort:    opts.AppPort,
+		ProfilePort:        opts.ProfilePort,
+		APIListenAddresses: opts.APIListenAddresses,
+		Mode:               modes.DaprMode(opts.Mode),
+		PlacementAddresses: opts.PlacementAddresses,
+		AllowedOrigins:     opts.AllowedOrigins,
 		Standalone: config.StandaloneConfig{
 			ResourcesPath: opts.ResourcesPath,
 		},
@@ -173,7 +178,6 @@ func NewRuntimeConfig(opts NewRuntimeConfigOpts) *Config {
 			ControlPlaneAddress: opts.ControlPlaneAddress,
 		},
 		EnableProfiling:              opts.EnableProfiling,
-		MaxConcurrency:               opts.MaxConcurrency,
 		mtlsEnabled:                  opts.MTLSEnabled,
 		SentryServiceAddress:         opts.SentryAddress,
 		MaxRequestBodySize:           opts.MaxRequestBodySize,
@@ -182,8 +186,13 @@ func NewRuntimeConfig(opts NewRuntimeConfigOpts) *Config {
 		GracefulShutdownDuration:     opts.GracefulShutdownDuration,
 		EnableAPILogging:             opts.EnableAPILogging,
 		DisableBuiltinK8sSecretStore: opts.DisableBuiltinK8sSecretStore,
-		AppHealthCheck:               appHealthCheck,
-		AppHealthCheckHTTPPath:       opts.AppHealthCheckPath,
-		AppChannelAddress:            opts.AppChannelAddress,
+		AppConnectionConfig: AppConnectionConfig{
+			ChannelAddress:      opts.AppChannelAddress,
+			HealthCheck:         appHealthCheck,
+			HealthCheckHTTPPath: opts.AppHealthCheckPath,
+			Protocol:            Protocol(opts.AppProtocol),
+			Port:                opts.AppPort,
+			MaxConcurrency:      opts.MaxConcurrency,
+		},
 	}
 }

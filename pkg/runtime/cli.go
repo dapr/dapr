@@ -429,7 +429,7 @@ func FromFlags(args []string) (*DaprRuntime, error) {
 
 	accessControlList, err = acl.ParseAccessControlSpec(
 		globalConfig.Spec.AccessControlSpec,
-		runtimeConfig.ApplicationProtocol.IsHTTP(),
+		runtimeConfig.AppConnectionConfig.Protocol.IsHTTP(),
 	)
 	if err != nil {
 		log.Fatalf(err.Error())

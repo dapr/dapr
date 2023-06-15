@@ -66,7 +66,7 @@ func TestAppFlag(t *testing.T) {
 	assert.NoError(t, err)
 	assert.EqualValues(t, testAppID, runtime.runtimeConfig.ID)
 	assert.EqualValues(t, 80, runtime.runtimeConfig.ApplicationPort)
-	assert.EqualValues(t, testAppProtocol, runtime.runtimeConfig.ApplicationProtocol)
+	assert.EqualValues(t, testAppProtocol, runtime.runtimeConfig.AppConnectionConfig.Protocol)
 }
 
 func TestStandaloneGlobalConfig(t *testing.T) {

@@ -3893,7 +3893,7 @@ func TestPubsubWithResiliency(t *testing.T) {
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
-	r.runtimeConfig.ApplicationProtocol = HTTPProtocol
+	r.runtimeConfig.AppConnectionConfig.Protocol = HTTPProtocol
 	r.appChannel = &failingAppChannel
 
 	t.Run("pubsub retries subscription event with resiliency", func(t *testing.T) {
@@ -5163,7 +5163,7 @@ func TestBindingResiliency(t *testing.T) {
 	}
 
 	r.appChannel = &failingChannel
-	r.runtimeConfig.ApplicationProtocol = HTTPProtocol
+	r.runtimeConfig.AppConnectionConfig.Protocol = HTTPProtocol
 
 	failingBinding := daprt.FailingBinding{
 		Failure: daprt.NewFailure(
@@ -5298,7 +5298,7 @@ func TestActorReentrancyConfig(t *testing.T) {
 
 			mockAppChannel := new(channelt.MockAppChannel)
 			r.appChannel = mockAppChannel
-			r.runtimeConfig.ApplicationProtocol = HTTPProtocol
+			r.runtimeConfig.AppConnectionConfig.Protocol = HTTPProtocol
 
 			configResp := config.ApplicationConfig{}
 			json.Unmarshal(tc.Config, &configResp)
@@ -5523,7 +5523,7 @@ func createRoutingRule(match, path string) (*runtimePubsub.Rule, error) {
 
 func TestGetAppHTTPChannelConfigWithCustomChannel(t *testing.T) {
 	rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, "http", 0)
-	rt.runtimeConfig.AppChannelAddress = "my.app"
+	rt.runtimeConfig.AppConnectionConfig.ChannelAddress = "my.app"
 
 	defer stopRuntime(t, rt)
 

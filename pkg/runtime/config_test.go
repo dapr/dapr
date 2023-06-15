@@ -56,7 +56,7 @@ func TestNewConfig(t *testing.T) {
 	assert.Equal(t, "*", c.AllowedOrigins)
 	_ = assert.Len(t, c.Standalone.ResourcesPath, 1) &&
 		assert.Equal(t, "components", c.Standalone.ResourcesPath[0])
-	assert.Equal(t, "http", string(c.ApplicationProtocol))
+	assert.Equal(t, "http", string(c.AppConnectionConfig.Protocol))
 	assert.Equal(t, "kubernetes", string(c.Mode))
 	assert.Equal(t, 3500, c.HTTPPort)
 	assert.Equal(t, 50002, c.InternalGRPCPort)
@@ -66,7 +66,7 @@ func TestNewConfig(t *testing.T) {
 	assert.Equal(t, 8080, c.ApplicationPort)
 	assert.Equal(t, 7070, c.ProfilePort)
 	assert.Equal(t, true, c.EnableProfiling)
-	assert.Equal(t, 1, c.MaxConcurrency)
+	assert.Equal(t, 1, c.AppConnectionConfig.MaxConcurrency)
 	assert.Equal(t, true, c.mtlsEnabled)
 	assert.Equal(t, "localhost:5052", c.SentryServiceAddress)
 	assert.Equal(t, 4, c.MaxRequestBodySize)
@@ -75,5 +75,5 @@ func TestNewConfig(t *testing.T) {
 	assert.Equal(t, time.Second, c.GracefulShutdownDuration)
 	assert.Equal(t, true, c.EnableAPILogging)
 	assert.Equal(t, true, c.DisableBuiltinK8sSecretStore)
-	assert.Equal(t, "1.1.1.1", c.AppChannelAddress)
+	assert.Equal(t, "1.1.1.1", c.AppConnectionConfig.ChannelAddress)
 }
