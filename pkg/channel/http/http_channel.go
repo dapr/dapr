@@ -138,7 +138,7 @@ func (h *Channel) GetAppConfig() (*config.ApplicationConfig, error) {
 }
 
 // InvokeMethod invokes user code via HTTP.
-func (h *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (rsp *invokev1.InvokeMethodResponse, err error) {
+func (h *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*invokev1.InvokeMethodResponse, error) {
 	// Check if HTTP Extension is given. Otherwise, it will return error.
 	httpExt := req.Message().GetHttpExtension()
 	if httpExt == nil {
@@ -156,14 +156,11 @@ func (h *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRe
 
 	switch req.APIVersion() {
 	case internalv1pb.APIVersion_V1: //nolint:nosnakecase
-		rsp, err = h.invokeMethodV1(ctx, req, appID)
-
-	default:
-		// Reject unsupported version
-		err = status.Error(codes.Unimplemented, fmt.Sprintf("Unsupported spec version: %d", req.APIVersion()))
+		return h.invokeMethodV1(ctx, req, appID)
 	}
 
-	return rsp, err
+	// Reject unsupported version
+	return nil, status.Error(codes.Unimplemented, fmt.Sprintf("Unsupported spec version: %d", req.APIVersion()))
 }
 
 // SetAppHealthCheckPath sets the path where to send requests for health probes.
