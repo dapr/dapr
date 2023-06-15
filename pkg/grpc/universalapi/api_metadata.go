@@ -16,6 +16,7 @@ package universalapi
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"google.golang.org/protobuf/types/known/emptypb"
 
@@ -54,7 +55,7 @@ func (a *UniversalAPI) GetMetadata(ctx context.Context, in *emptypb.Empty) (*run
 	if a.AppConnectionConfig.HealthCheck != nil {
 		appConnectionProperties.Health.HealthProbeInterval = a.AppConnectionConfig.HealthCheck.ProbeInterval.String()
 		appConnectionProperties.Health.HealthProbeTimeout = a.AppConnectionConfig.HealthCheck.ProbeTimeout.String()
-		appConnectionProperties.Health.HealthThreshold = string(a.AppConnectionConfig.HealthCheck.Threshold)
+		appConnectionProperties.Health.HealthThreshold = strconv.Itoa(int(a.AppConnectionConfig.HealthCheck.Threshold))
 	}
 
 	// Components
