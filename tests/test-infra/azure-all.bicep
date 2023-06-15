@@ -44,6 +44,9 @@ param armDiagLogAnalyticsWorkspaceResourceId string = ''
 @description('If set, sends certain Arm64 diagnostic logs to Azure Storage')
 param armDiagStorageResourceId string = ''
 
+@description('If enabled, deploy an Arm64 cluster')
+param enableArm bool = true
+
 @description('If enabled, deploy Cosmos DB')
 param enableCosmosDB bool = true
 
@@ -97,14 +100,14 @@ module windowsCluster 'azure.bicep' = {
 }
 
 // Deploy the Arm cluster in the third location
-resource ArmResources 'Microsoft.Resources/resourceGroups@2020-10-01' = {
+resource ArmResources 'Microsoft.Resources/resourceGroups@2020-10-01' = if (enableArm) {
   name: 'Dapr-E2E-${namePrefix}la'
   location: location3
   tags: dateTag != '' ? {
     date: dateTag
   } : {}
 }
-module armCluster 'azure.bicep' = {
+module armCluster 'azure.bicep' = if (enableArm) {
   name: 'armCluster'
   scope: ArmResources
   params: {

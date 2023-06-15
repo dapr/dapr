@@ -21,8 +21,9 @@ spec:
   metadata:
     - name: schedule
       envRef: "CRON_SCHEDULE"
+    - name: direction
+      value: input
 scopes:
   - healthapp-http
   - healthapp-grpc
   - healthapp-h2c
-

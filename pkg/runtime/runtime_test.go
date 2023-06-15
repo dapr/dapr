@@ -6224,3 +6224,103 @@ func TestIsEnvVarAllowed(t *testing.T) {
 		}
 	})
 }
+
+func TestIsBindingOfDirection(t *testing.T) {
+	t.Run("no direction in metadata for input binding", func(t *testing.T) {
+		m := []commonapi.NameValuePair{}
+		r := isBindingOfDirection("input", m)
+
+		assert.True(t, r)
+	})
+
+	t.Run("no direction in metadata for output binding", func(t *testing.T) {
+		m := []commonapi.NameValuePair{}
+		r := isBindingOfDirection("output", m)
+
+		assert.True(t, r)
+	})
+
+	t.Run("input direction in metadata", func(t *testing.T) {
+		m := []commonapi.NameValuePair{
+			{
+				Name: "direction",
+				Value: commonapi.DynamicValue{
+					JSON: v1.JSON{
+						Raw: []byte("input"),
+					},
+				},
+			},
+		}
+		r := isBindingOfDirection("input", m)
+		f := isBindingOfDirection("output", m)
+
+		assert.True(t, r)
+		assert.False(t, f)
+	})
+
+	t.Run("output direction in metadata", func(t *testing.T) {
+		m := []commonapi.NameValuePair{
+			{
+				Name: "direction",
+				Value: commonapi.DynamicValue{
+					JSON: v1.JSON{
+						Raw: []byte("output"),
+					},
+				},
+			},
+		}
+		r := isBindingOfDirection("output", m)
+		f := isBindingOfDirection("input", m)
+
+		assert.True(t, r)
+		assert.False(t, f)
+	})
+
+	t.Run("input and output direction in metadata", func(t *testing.T) {
+		m := []commonapi.NameValuePair{
+			{
+				Name: "direction",
+				Value: commonapi.DynamicValue{
+					JSON: v1.JSON{
+						Raw: []byte("input, output"),
+					},
+				},
+			},
+		}
+		r := isBindingOfDirection("output", m)
+		f := isBindingOfDirection("input", m)
+
+		assert.True(t, r)
+		assert.True(t, f)
+	})
+
+	t.Run("invalid direction for input binding", func(t *testing.T) {
+		m := []commonapi.NameValuePair{
+			{
+				Name: "direction",
+				Value: commonapi.DynamicValue{
+					JSON: v1.JSON{
+						Raw: []byte("aaa"),
+					},
+				},
+			},
+		}
+		f := isBindingOfDirection("input", m)
+		assert.False(t, f)
+	})
+
+	t.Run("invalid direction for output binding", func(t *testing.T) {
+		m := []commonapi.NameValuePair{
+			{
+				Name: "direction",
+				Value: commonapi.DynamicValue{
+					JSON: v1.JSON{
+						Raw: []byte("aaa"),
+					},
+				},
+			},
+		}
+		f := isBindingOfDirection("output", m)
+		assert.False(t, f)
+	})
+}
