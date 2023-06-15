@@ -43,9 +43,6 @@ var ComponentDefinition = componentsV1alpha1.Component{
 	},
 }
 
-// This error was obtained from backend.go from the durabletask.go package
-var ErrInstanceNotFound = errors.New("No such instance exists")
-
 // Status values are defined at: https://github.com/microsoft/durabletask-go/blob/119b361079c45e368f83b223888d56a436ac59b9/internal/protos/orchestrator_service.pb.go#L42-L64
 var statusMap = map[int32]string{
 	0: "RUNNING",
@@ -125,7 +122,7 @@ func (c *workflowEngineComponent) Terminate(ctx context.Context, req *workflows.
 	}
 
 	if err := c.client.TerminateOrchestration(ctx, api.InstanceID(req.InstanceID), ""); err != nil {
-		if err == ErrInstanceNotFound {
+		if errors.Is(err, api.ErrInstanceNotFound) {
 			c.logger.Infof("No such instance exists")
 			return nil
 		}
@@ -177,7 +174,7 @@ func (c *workflowEngineComponent) Get(ctx context.Context, req *workflows.GetReq
 	}
 
 	if metadata, err := c.client.FetchOrchestrationMetadata(ctx, api.InstanceID(req.InstanceID)); err != nil {
-		if err == ErrInstanceNotFound {
+		if errors.Is(err, api.ErrInstanceNotFound) {
 			c.logger.Infof("Unable to get data on the instance, no such instance exists")
 			return nil, nil
 		}
@@ -241,7 +238,7 @@ func (c *workflowEngineComponent) PurgeWorkflow(ctx context.Context, req *workfl
 	}
 
 	if err := c.client.PurgeOrchestrationState(ctx, api.InstanceID(req.InstanceID)); err != nil {
-		if err == ErrInstanceNotFound {
+		if errors.Is(err, api.ErrInstanceNotFound) {
 			c.logger.Infof("The requested instance does not exist or has already been purged")
 			return nil
 		}
