@@ -911,7 +911,7 @@ func (a *actorsRuntime) startReminder(reminder *reminders.Reminder, stopChannel 
 
 		nextTimer = a.clock.NewTimer(reminder.NextTick().Sub(a.clock.Now()))
 		defer func() {
-			if !nextTimer.Stop() {
+			if nextTimer != nil && !nextTimer.Stop() {
 				<-nextTimer.C()
 			}
 			if ttlTimer != nil && !ttlTimer.Stop() {
@@ -927,6 +927,7 @@ func (a *actorsRuntime) startReminder(reminder *reminders.Reminder, stopChannel 
 			case <-ttlTimerC:
 				// proceed with reminder deletion
 				log.Infof("Reminder %s with parameters: dueTime: %s, period: %s has expired", reminderKey, reminder.DueTime, reminder.Period)
+				ttlTimer = nil
 				break L
 			case <-stopChannel:
 				// reminder has been already deleted
@@ -976,6 +977,7 @@ func (a *actorsRuntime) startReminder(reminder *reminders.Reminder, stopChannel 
 			}
 
 			if reminder.TickExecuted() {
+				nextTimer = nil
 				break L
 			}
 
@@ -1293,7 +1295,7 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 
 		nextTimer = a.clock.NewTimer(reminder.NextTick().Sub(a.clock.Now()))
 		defer func() {
-			if !nextTimer.Stop() {
+			if nextTimer != nil && !nextTimer.Stop() {
 				<-nextTimer.C()
 			}
 			if ttlTimer != nil && !ttlTimer.Stop() {
@@ -1309,6 +1311,7 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 			case <-ttlTimerC:
 				// timer has expired; proceed with deletion
 				log.Infof("Timer %s with parameters: dueTime: %s, period: %s, TTL: %s has expired", timerKey, req.DueTime, req.Period, req.TTL)
+				ttlTimer = nil
 				break L
 			case <-stop:
 				// timer has been already deleted
@@ -1329,6 +1332,7 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 
 			if reminder.TickExecuted() {
 				log.Infof("Timer %s has been completed", timerKey)
+				nextTimer = nil
 				break L
 			}
 
