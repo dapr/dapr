@@ -14,9 +14,12 @@ limitations under the License.
 package reminders
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"go.mongodb.org/mongo-driver/bson"
 
 	timeutils "github.com/dapr/kit/time"
 )
@@ -113,7 +116,7 @@ func (r *Reminder) MarshalJSON() ([]byte, error) {
 	}
 
 	m.Period = r.Period.String()
-	if len(r.Data) > 0 {
+	if len(r.Data) > 0 && !bytes.Equal(r.Data, []byte("null")) {
 		m.Data = &r.Data
 	}
 
@@ -157,6 +160,23 @@ func (r *Reminder) UnmarshalJSON(data []byte) error {
 	}
 
 	return nil
+}
+
+// MarshalBSON implements bson.Marshaler.
+// It encodes the message into a map[string]any before calling bson.Marshal.
+func (r *Reminder) MarshalBSON() ([]byte, error) {
+	// We do this to make sure that the custom MarshalJSON above is invoked.
+	// This round-trip via JSON is not great, but it works.
+	j, err := json.Marshal(r)
+	if err != nil {
+		return nil, err
+	}
+	var dec map[string]any
+	err = json.Unmarshal(j, &dec)
+	if err != nil {
+		return nil, err
+	}
+	return bson.Marshal(dec)
 }
 
 // String implements fmt.Stringer and is used for debugging.
