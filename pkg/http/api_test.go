@@ -2712,6 +2712,20 @@ func TestV1MetadataEndpoint(t *testing.T) {
 	mockActors := new(actors.MockActors)
 	mockActors.On("GetActiveActorsCount")
 
+	appConnectionConfig := config.AppConnectionConfig{
+		ChannelAddress:      "1.2.3.4",
+		MaxConcurrency:      10,
+		Port:                5000,
+		Protocol:            "http",
+		HealthCheckHTTPPath: "/healthz",
+		HealthCheck: &config.AppHealthConfig{
+			ProbeInterval: 10 * time.Second,
+			ProbeTimeout:  5 * time.Second,
+			ProbeOnly:     true,
+			Threshold:     3,
+		},
+	}
+
 	testAPI := &api{
 		universal: &universalapi.UniversalAPI{
 			AppID:     "xyz",
@@ -2726,6 +2740,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 			ExtendedMetadata: map[string]string{
 				"test": "value",
 			},
+			AppConnectionConfig: appConnectionConfig,
 		},
 	}
 
@@ -2736,7 +2751,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 		assert.Equal(t, 204, resp.StatusCode)
 	})
 
-	const expectedBody = `{"id":"xyz","actors":[{"type":"abcd","count":10},{"type":"xyz","count":5}],"components":[{"name":"MockComponent1Name","type":"mock.component1Type","version":"v1.0","capabilities":["mock.feat.MockComponent1Name"]},{"name":"MockComponent2Name","type":"mock.component2Type","version":"v1.0","capabilities":["mock.feat.MockComponent2Name"]}],"extended":{"daprRuntimeVersion":"edge","foo":"bar","test":"value"},"subscriptions":[{"pubsubname":"test","topic":"topic","rules":[{"path":"path"}],"deadLetterTopic":"dead"}],"httpEndpoints":[{"name":"MockHTTPEndpoint"}]}`
+	const expectedBody = `{"id":"xyz","actors":[{"type":"abcd","count":10},{"type":"xyz","count":5}],"components":[{"name":"MockComponent1Name","type":"mock.component1Type","version":"v1.0","capabilities":["mock.feat.MockComponent1Name"]},{"name":"MockComponent2Name","type":"mock.component2Type","version":"v1.0","capabilities":["mock.feat.MockComponent2Name"]}],"extended":{"daprRuntimeVersion":"edge","foo":"bar","test":"value"},"subscriptions":[{"pubsubname":"test","topic":"topic","rules":[{"path":"path"}],"deadLetterTopic":"dead"}],"httpEndpoints":[{"name":"MockHTTPEndpoint"}],"appConnectionProperties":{"port":5000,"protocol":"http","channelAddress":"1.2.3.4","maxConcurrency":10,"health":{"healthCheckPath":"/healthz","healthProbeInterval":"10s","healthProbeTimeout":"5s","healthThreshold":3}}}`
 
 	t.Run("Get Metadata", func(t *testing.T) {
 		resp := fakeServer.DoRequest("GET", "v1.0/metadata", nil, nil)
