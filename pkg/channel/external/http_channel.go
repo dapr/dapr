@@ -38,10 +38,7 @@ import (
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
 	streamutils "github.com/dapr/dapr/utils/streams"
-	"github.com/dapr/kit/logger"
 )
-
-var log = logger.NewLogger("dapr.external-app-channel")
 
 const (
 	// HTTPStatusCode is an dapr http channel status code.
@@ -94,7 +91,6 @@ func (h *HTTPEndpointAppChannel) InvokeMethod(ctx context.Context, req *invokev1
 	switch req.APIVersion() {
 	case internalv1pb.APIVersion_V1: //nolint:nosnakecase
 		rsp, err = h.invokeMethodV1(ctx, req, appID)
-		log.Infof("external http endpoint response %v and err %v", rsp, err)
 
 	default:
 		// Reject unsupported version
@@ -107,7 +103,6 @@ func (h *HTTPEndpointAppChannel) InvokeMethod(ctx context.Context, req *invokev1
 // invokeMethodV1 constructs the http endpoint request and performs the request while collecting metrics.
 func (h *HTTPEndpointAppChannel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*invokev1.InvokeMethodResponse, error) {
 	channelReq, err := h.constructRequest(ctx, req, appID)
-	log.Infof("channelReq %v and err %v", channelReq, err)
 	if err != nil {
 		return nil, err
 	}
