@@ -15,33 +15,8 @@ package config
 
 import (
 	"github.com/dapr/dapr/pkg/apphealth"
+	"github.com/dapr/dapr/pkg/config/protocol"
 )
-
-// Protocol is a communications protocol.
-type Protocol string
-
-const (
-	// GRPCProtocol is the gRPC communication protocol.
-	GRPCProtocol Protocol = "grpc"
-	// GRPCSProtocol is the gRPC communication protocol with TLS (without validating certificates).
-	GRPCSProtocol Protocol = "grpcs"
-	// HTTPProtocol is the HTTP communication protocol.
-	HTTPProtocol Protocol = "http"
-	// HTTPSProtocol is the HTTPS communication protocol with TLS (without validating certificates).
-	HTTPSProtocol Protocol = "https"
-	// H2CProtocol is the HTTP/2 Cleartext communication protocol (HTTP/2 without TLS).
-	H2CProtocol Protocol = "h2c"
-)
-
-// IsHTTP returns true if the app protocol is using HTTP (including HTTPS and H2C).
-func (p Protocol) IsHTTP() bool {
-	switch p {
-	case HTTPProtocol, HTTPSProtocol, H2CProtocol:
-		return true
-	default:
-		return false
-	}
-}
 
 // AppConnectionConfig holds the configuration for the app connection.
 type AppConnectionConfig struct {
@@ -50,5 +25,5 @@ type AppConnectionConfig struct {
 	HealthCheckHTTPPath string
 	MaxConcurrency      int
 	Port                int
-	Protocol            Protocol
+	Protocol            protocol.Protocol
 }

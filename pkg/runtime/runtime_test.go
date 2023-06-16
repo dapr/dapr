@@ -77,6 +77,7 @@ import (
 	nrLoader "github.com/dapr/dapr/pkg/components/nameresolution"
 	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
 	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
+	"github.com/dapr/dapr/pkg/config/protocol"
 
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
@@ -3472,7 +3473,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			// setup
 			// getting new port for every run to avoid conflict and timing issues between tests if sharing same port
 			port, _ := freeport.GetFreePort()
-			rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(config.GRPCProtocol), port)
+			rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(protocol.GRPCProtocol), port)
 			rt.compStore.SetTopicRoutes(map[string]compstore.TopicRoutes{
 				TestPubsubName: map[string]compstore.TopicRouteElem{
 					topic: {
@@ -3893,7 +3894,7 @@ func TestPubsubWithResiliency(t *testing.T) {
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
-	r.runtimeConfig.AppConnectionConfig.Protocol = config.HTTPProtocol
+	r.runtimeConfig.AppConnectionConfig.Protocol = protocol.HTTPProtocol
 	r.appChannel = &failingAppChannel
 
 	t.Run("pubsub retries subscription event with resiliency", func(t *testing.T) {
@@ -4197,7 +4198,7 @@ func TestGetSubscribedBindingsGRPC(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			port, _ := freeport.GetFreePort()
-			rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(config.GRPCProtocol), port)
+			rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(protocol.GRPCProtocol), port)
 			// create mock application server first
 			grpcServer := startTestAppCallbackGRPCServer(t, port, &channelt.MockServer{
 				Error:    tc.responseError,
@@ -4291,7 +4292,7 @@ func getFakeMetadataItems() []componentsV1alpha1.MetadataItem {
 }
 
 func NewTestDaprRuntime(mode modes.DaprMode) *DaprRuntime {
-	return NewTestDaprRuntimeWithProtocol(mode, string(config.HTTPProtocol), 1024)
+	return NewTestDaprRuntimeWithProtocol(mode, string(protocol.HTTPProtocol), 1024)
 }
 
 func NewTestDaprRuntimeWithProtocol(mode modes.DaprMode, protocol string, appPort int) *DaprRuntime {
@@ -4809,7 +4810,7 @@ func TestAuthorizedComponents(t *testing.T) {
 	})
 
 	t.Run("additional authorizer denies all", func(t *testing.T) {
-		cfg := NewTestDaprRuntimeConfig(modes.StandaloneMode, string(config.HTTPSProtocol), 1024)
+		cfg := NewTestDaprRuntimeConfig(modes.StandaloneMode, string(protocol.HTTPSProtocol), 1024)
 		rt := NewDaprRuntime(cfg, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		rt.componentAuthorizers = append(rt.componentAuthorizers, func(component componentsV1alpha1.Component) bool {
 			return false
@@ -5163,7 +5164,7 @@ func TestBindingResiliency(t *testing.T) {
 	}
 
 	r.appChannel = &failingChannel
-	r.runtimeConfig.AppConnectionConfig.Protocol = config.HTTPProtocol
+	r.runtimeConfig.AppConnectionConfig.Protocol = protocol.HTTPProtocol
 
 	failingBinding := daprt.FailingBinding{
 		Failure: daprt.NewFailure(
@@ -5298,7 +5299,7 @@ func TestActorReentrancyConfig(t *testing.T) {
 
 			mockAppChannel := new(channelt.MockAppChannel)
 			r.appChannel = mockAppChannel
-			r.runtimeConfig.AppConnectionConfig.Protocol = config.HTTPProtocol
+			r.runtimeConfig.AppConnectionConfig.Protocol = protocol.HTTPProtocol
 
 			configResp := config.ApplicationConfig{}
 			json.Unmarshal(tc.Config, &configResp)

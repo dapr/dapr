@@ -15,37 +15,39 @@ package config
 
 import (
 	"testing"
+
+	"github.com/dapr/dapr/pkg/config/protocol"
 )
 
 func TestProtocolIsHttp(t *testing.T) {
 	tests := []struct {
 		name     string
-		protocol Protocol
+		protocol protocol.Protocol
 		want     bool
 	}{
 		{
 			name:     "http",
-			protocol: HTTPProtocol,
+			protocol: protocol.HTTPProtocol,
 			want:     true,
 		},
 		{
 			name:     "https",
-			protocol: HTTPSProtocol,
+			protocol: protocol.HTTPSProtocol,
 			want:     true,
 		},
 		{
 			name:     "h2c",
-			protocol: H2CProtocol,
+			protocol: protocol.H2CProtocol,
 			want:     true,
 		},
 		{
 			name:     "grpc",
-			protocol: GRPCProtocol,
+			protocol: protocol.GRPCProtocol,
 			want:     false,
 		},
 		{
 			name:     "grpcs",
-			protocol: GRPCSProtocol,
+			protocol: protocol.GRPCSProtocol,
 			want:     false,
 		},
 	}

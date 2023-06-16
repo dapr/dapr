@@ -19,6 +19,7 @@ import (
 	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/config"
 	modesConfig "github.com/dapr/dapr/pkg/config/modes"
+	"github.com/dapr/dapr/pkg/config/protocol"
 	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/modes"
 )
@@ -157,7 +158,7 @@ func NewRuntimeConfig(opts NewRuntimeConfigOpts) *Config {
 			ChannelAddress:      opts.AppChannelAddress,
 			HealthCheck:         appHealthCheck,
 			HealthCheckHTTPPath: opts.AppHealthCheckPath,
-			Protocol:            config.Protocol(opts.AppProtocol),
+			Protocol:            protocol.Protocol(opts.AppProtocol),
 			Port:                opts.AppPort,
 			MaxConcurrency:      opts.MaxConcurrency,
 		},
