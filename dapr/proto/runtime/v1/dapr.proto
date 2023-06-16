@@ -616,7 +616,7 @@ message AppConnectionHealthProperties {
   string health_check_path = 1 [json_name = "healthCheckPath"];
   string health_probe_interval = 2 [json_name = "healthProbeInterval"];
   string health_probe_timeout = 3 [json_name = "healthProbeTimeout"];
-  string health_threshold = 4 [json_name = "healthThreshold"];
+  int32 health_threshold = 4 [json_name = "healthThreshold"];
 }
 
 message PubsubSubscription {

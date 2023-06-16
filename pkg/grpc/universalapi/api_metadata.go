@@ -16,7 +16,6 @@ package universalapi
 import (
 	"context"
 	"fmt"
-	"strconv"
 
 	"google.golang.org/protobuf/types/known/emptypb"
 
@@ -49,14 +48,15 @@ func (a *UniversalAPI) GetMetadata(ctx context.Context, in *emptypb.Empty) (*run
 		Port:           int32(a.AppConnectionConfig.Port),
 		Protocol:       string(a.AppConnectionConfig.Protocol),
 		MaxConcurrency: int32(a.AppConnectionConfig.MaxConcurrency),
-		Health: &runtimev1pb.AppConnectionHealthProperties{
-			HealthCheckPath: a.AppConnectionConfig.HealthCheckHTTPPath,
-		},
 	}
+
 	if a.AppConnectionConfig.HealthCheck != nil {
-		appConnectionProperties.Health.HealthProbeInterval = a.AppConnectionConfig.HealthCheck.ProbeInterval.String()
-		appConnectionProperties.Health.HealthProbeTimeout = a.AppConnectionConfig.HealthCheck.ProbeTimeout.String()
-		appConnectionProperties.Health.HealthThreshold = strconv.Itoa(int(a.AppConnectionConfig.HealthCheck.Threshold))
+		appConnectionProperties.Health = &runtimev1pb.AppConnectionHealthProperties{
+			HealthCheckPath:     a.AppConnectionConfig.HealthCheckHTTPPath,
+			HealthProbeInterval: a.AppConnectionConfig.HealthCheck.ProbeInterval.String(),
+			HealthProbeTimeout:  a.AppConnectionConfig.HealthCheck.ProbeTimeout.String(),
+			HealthThreshold:     int32(a.AppConnectionConfig.HealthCheck.Threshold),
+		}
 	}
 
 	// Components
