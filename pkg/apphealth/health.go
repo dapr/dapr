@@ -23,6 +23,7 @@ import (
 
 	"k8s.io/utils/clock"
 
+	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/kit/logger"
 )
 
@@ -38,7 +39,7 @@ var log = logger.NewLogger("dapr.apphealth")
 
 // AppHealth manages the health checks for the app.
 type AppHealth struct {
-	config       Config
+	config       config.AppHealthConfig
 	probeFn      ProbeFunction
 	changeCb     ChangeCallback
 	report       chan uint8
@@ -63,7 +64,7 @@ type ProbeFunction func(context.Context) (bool, error)
 type ChangeCallback func(status uint8)
 
 // New creates a new AppHealth object.
-func New(config Config, probeFn ProbeFunction) *AppHealth {
+func New(config config.AppHealthConfig, probeFn ProbeFunction) *AppHealth {
 	a := &AppHealth{
 		config:  config,
 		probeFn: probeFn,
