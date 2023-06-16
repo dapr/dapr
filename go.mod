@@ -8,7 +8,7 @@ require (
 	github.com/PaesslerAG/jsonpath v0.1.1
 	github.com/PuerkitoBio/purell v1.2.0
 	github.com/cenkalti/backoff/v4 v4.2.0
-	github.com/dapr/components-contrib v1.10.6
+	github.com/dapr/components-contrib v1.10.8
 	github.com/dapr/kit v0.0.5-0.20230307192505-b5bafe889a81
 	github.com/fasthttp/router v1.4.15
 	github.com/ghodss/yaml v1.0.0
@@ -370,7 +370,7 @@ require (
 	github.com/youmark/pkcs8 v0.0.0-20181117223130-1be2e3e5546d // indirect
 	github.com/yuin/gopher-lua v0.0.0-20220504180219-658193537a64 // indirect
 	github.com/yusufpapurcu/wmi v1.2.2 // indirect
-	go.mongodb.org/mongo-driver v1.11.1 // indirect
+	go.mongodb.org/mongo-driver v1.11.6 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/internal/retry v1.11.2 // indirect
 	go.opentelemetry.io/proto/otlp v0.19.0 // indirect
 	go.starlark.net v0.0.0-20200306205701-8dd3e2ee1dd5 // indirect
