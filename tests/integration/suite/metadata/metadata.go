@@ -49,21 +49,20 @@ func (*Metadata) Run(t *testing.T, ctx context.Context, cmd *framework.Command) 
 
 	reqURL := fmt.Sprintf("http://localhost:%d/v1.0/metadata", cmd.PublicPort)
 
-	assert.Eventually(t, func() bool {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
-		require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(ctx, time.Second*5)
+	defer cancel()
 
-		resp, err := http.DefaultClient.Do(req)
-		require.NoError(t, err)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	require.NoError(t, err)
 
-		resBody, err := io.ReadAll(resp.Body)
-		require.NoError(t, err)
-		require.NoError(t, resp.Body.Close())
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
 
-		validateResponse(t, cmd.AppID, cmd.AppPort, string(resBody))
+	resBody, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
 
-		return resp.StatusCode == http.StatusOK
-	}, time.Second*20, 100*time.Millisecond, "expect metadata API to respond with correct status code and body")
+	validateResponse(t, cmd.AppID, cmd.AppPort, string(resBody))
 }
 
 // validateResponse asserts that the response body is valid JSON
