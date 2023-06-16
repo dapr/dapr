@@ -175,10 +175,85 @@ jobs:
         with:
           name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_test_unit.json
           path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_unit.json
+
+  integration-tests:
+    name: Integration tests
+    needs: lint
+    runs-on: "${{ matrix.os }}"
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target_os: linux
+            target_arch: amd64
+          - os: windows-2022
+            target_os: windows
+            target_arch: amd64
+            windows_version: ltsc2022
+          - os: macOS-latest
+            target_os: darwin
+            target_arch: amd64
+    env:
+      GOOS: "${{ matrix.target_os }}"
+      GOARCH: "${{ matrix.target_arch }}"
+      GOPROXY: "https://proxy.golang.org"
+      ARCHIVE_OUTDIR: "dist/archives"
+      TEST_OUTPUT_FILE_PREFIX: "test_report"
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v3
+      - name: Set up Go
+        id: setup-go
+        uses: actions/setup-go@v3
+        with:
+          go-version-file: "go.mod"
+      - name: Cache Go modules (Linux)
+        if: matrix.target_os == 'linux'
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-
+      - name: Cache Go modules (Windows)
+        if: matrix.target_os == 'windows'
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~\AppData\Local\go-build
+            ~\go\pkg\mod
+          key: ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-
+      - name: Cache Go modules (macOS)
+        if: matrix.target_os == 'darwin'
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/Library/Caches/go-build
+            ~/go/pkg/mod
+          key: ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-
+      - name: Run make test-integration
+        env:
+          COVERAGE_OPTS: "-coverprofile=coverage.txt -covermode=atomic"
+        run: make test-integration
+      - name: Codecov
+        uses: codecov/codecov-action@v1
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@master
+        with:
+          name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_test_integration.json
+          path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_integration.json
   build:
     name: "Build artifacts on ${{ matrix.job_name }} - ${{ matrix.sidecar_flavor }}"
     runs-on: "${{ matrix.os }}"
-    needs: unit-tests
+    needs: [unit-tests, integration-tests]
     env:
       GOOS: "${{ matrix.target_os }}"
       GOARCH: "${{ matrix.target_arch }}"
