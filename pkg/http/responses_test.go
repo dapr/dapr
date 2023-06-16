@@ -18,8 +18,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/valyala/fasthttp"
-
-	"github.com/dapr/kit/ptr"
 )
 
 func TestHeaders(t *testing.T) {
@@ -36,14 +34,6 @@ func TestHeaders(t *testing.T) {
 		respond(ctx, withJSON(200, nil))
 
 		assert.Equal(t, "application/json", string(ctx.Response.Header.ContentType()))
-	})
-
-	t.Run("Respond with ETag JSON", func(t *testing.T) {
-		ctx := &fasthttp.RequestCtx{Request: fasthttp.Request{}}
-		etagValue := "etagValue"
-		respond(ctx, withJSON(200, nil), withEtag(ptr.Of(etagValue)))
-
-		assert.Equal(t, etagValue, string(ctx.Response.Header.Peek(etagHeader)))
 	})
 
 	t.Run("Respond with metadata and JSON", func(t *testing.T) {

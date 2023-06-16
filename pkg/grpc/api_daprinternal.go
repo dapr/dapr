@@ -170,9 +170,11 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 	// Submit the request to the app
 	res, err := a.appChannel.InvokeMethod(ctx, req)
 	if err != nil {
+		statusCode = int32(codes.Internal)
 		return status.Errorf(codes.Internal, messages.ErrChannelInvoke, err)
 	}
 	defer res.Close()
+	statusCode = res.Status().Code
 
 	// Respond to the caller
 	buf := invokev1.BufPool.Get().(*[]byte)
@@ -268,13 +270,14 @@ func (a *api) callLocalValidateACL(ctx context.Context, req *invokev1.InvokeMeth
 		operation := req.Message().Method
 		var httpVerb commonv1pb.HTTPExtension_Verb //nolint:nosnakecase
 		// Get the HTTP verb in case the application protocol is "http"
-		if a.appProtocolIsHTTP && req.Metadata() != nil && len(req.Metadata()) > 0 {
+		appProtocolIsHTTP := a.UniversalAPI.AppConnectionConfig.Protocol.IsHTTP()
+		if appProtocolIsHTTP && req.Metadata() != nil && len(req.Metadata()) > 0 {
 			httpExt := req.Message().GetHttpExtension()
 			if httpExt != nil {
 				httpVerb = httpExt.GetVerb()
 			}
 		}
-		callAllowed, errMsg := acl.ApplyAccessControlPolicies(ctx, operation, httpVerb, a.appProtocolIsHTTP, a.accessControlList)
+		callAllowed, errMsg := acl.ApplyAccessControlPolicies(ctx, operation, httpVerb, appProtocolIsHTTP, a.accessControlList)
 
 		if !callAllowed {
 			return status.Errorf(codes.PermissionDenied, errMsg)

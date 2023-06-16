@@ -77,6 +77,7 @@ import (
 	nrLoader "github.com/dapr/dapr/pkg/components/nameresolution"
 	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
 	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
+	"github.com/dapr/dapr/pkg/config/protocol"
 
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
@@ -92,6 +93,7 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/scopes"
@@ -365,7 +367,7 @@ func TestDoProcessComponent(t *testing.T) {
 
 		// assert
 		assert.Error(t, err, "expected an error")
-		assert.Equal(t, err.Error(), NewInitError(InitComponentFailure, "testlock (lock.mockLock/v1)", assert.AnError).Error(), "expected error strings to match")
+		assert.Equal(t, err.Error(), rterrors.NewInit(rterrors.InitComponentFailure, "testlock (lock.mockLock/v1)", assert.AnError).Error(), "expected error strings to match")
 	})
 
 	t.Run("test error when lock version invalid", func(t *testing.T) {
@@ -388,7 +390,7 @@ func TestDoProcessComponent(t *testing.T) {
 
 		// assert
 		assert.Error(t, err, "expected an error")
-		assert.Equal(t, err.Error(), NewInitError(CreateComponentFailure, "testlock (lock.mockLock/v3)", fmt.Errorf("couldn't find lock store lock.mockLock/v3")).Error())
+		assert.Equal(t, err.Error(), rterrors.NewInit(rterrors.CreateComponentFailure, "testlock (lock.mockLock/v3)", fmt.Errorf("couldn't find lock store lock.mockLock/v3")).Error())
 	})
 
 	t.Run("test error when lock prefix strategy invalid", func(t *testing.T) {
@@ -466,7 +468,7 @@ func TestDoProcessComponent(t *testing.T) {
 
 		// assert
 		assert.Error(t, err, "expected an error")
-		assert.Equal(t, err.Error(), NewInitError(InitComponentFailure, "testpubsub (pubsub.mockPubSub/v1)", assert.AnError).Error(), "expected error strings to match")
+		assert.Equal(t, err.Error(), rterrors.NewInit(rterrors.InitComponentFailure, "testpubsub (pubsub.mockPubSub/v1)", assert.AnError).Error(), "expected error strings to match")
 	})
 
 	t.Run("test invalid category component", func(t *testing.T) {
@@ -862,7 +864,7 @@ func TestInitState(t *testing.T) {
 
 		// assert
 		assert.Error(t, err, "expected error")
-		assert.Equal(t, err.Error(), NewInitError(InitComponentFailure, "testpubsub (state.mockState/v1)", assert.AnError).Error(), "expected error strings to match")
+		assert.Equal(t, err.Error(), rterrors.NewInit(rterrors.InitComponentFailure, "testpubsub (state.mockState/v1)", assert.AnError).Error(), "expected error strings to match")
 	})
 
 	t.Run("test init state store, encryption not enabled", func(t *testing.T) {
@@ -3184,7 +3186,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		// assert
 		var cloudEvent map[string]interface{}
 		json.Unmarshal(testPubSubMessage.data, &cloudEvent)
-		expectedClientError := fmt.Errorf("RETRY status returned from app while processing pub/sub event %v: %w", cloudEvent["id"].(string), NewRetriableError(nil))
+		expectedClientError := fmt.Errorf("RETRY status returned from app while processing pub/sub event %v: %w", cloudEvent["id"].(string), rterrors.NewRetriable(nil))
 		assert.Equal(t, expectedClientError.Error(), err.Error())
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
@@ -3280,7 +3282,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		err := rt.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
-		expectedError := fmt.Errorf("error returned from app channel while sending pub/sub event to app: %w", NewRetriableError(invokeError))
+		expectedError := fmt.Errorf("error returned from app channel while sending pub/sub event to app: %w", rterrors.NewRetriable(invokeError))
 		assert.Equal(t, expectedError.Error(), err.Error(), "expected errors to match")
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
@@ -3322,7 +3324,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		var cloudEvent map[string]interface{}
 		json.Unmarshal(testPubSubMessage.data, &cloudEvent)
 		errMsg := fmt.Sprintf("retriable error returned from app while processing pub/sub event %v, topic: %v, body: Internal Error. status code returned: 500", cloudEvent["id"].(string), cloudEvent["topic"])
-		expectedClientError := NewRetriableError(errors.New(errMsg))
+		expectedClientError := rterrors.NewRetriable(errors.New(errMsg))
 		assert.Equal(t, expectedClientError.Error(), err.Error())
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
@@ -3394,7 +3396,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			expectedError: fmt.Errorf(
 				"error returned from app while processing pub/sub event %v: %w",
 				testPubSubMessage.cloudEvent[pubsub.IDField],
-				NewRetriableError(status.Error(codes.Unknown, assert.AnError.Error())),
+				rterrors.NewRetriable(status.Error(codes.Unknown, assert.AnError.Error())),
 			),
 		},
 		{
@@ -3419,7 +3421,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			expectedError: fmt.Errorf(
 				"RETRY status returned from app while processing pub/sub event %v: %w",
 				testPubSubMessage.cloudEvent[pubsub.IDField],
-				NewRetriableError(nil),
+				rterrors.NewRetriable(nil),
 			),
 		},
 		{
@@ -3435,7 +3437,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 				"unknown status returned from app while processing pub/sub event %v, status: %v, err: %w",
 				testPubSubMessage.cloudEvent[pubsub.IDField],
 				runtimev1pb.TopicEventResponse_TopicEventResponseStatus(99),
-				NewRetriableError(nil),
+				rterrors.NewRetriable(nil),
 			),
 		},
 		{
@@ -3471,7 +3473,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			// setup
 			// getting new port for every run to avoid conflict and timing issues between tests if sharing same port
 			port, _ := freeport.GetFreePort()
-			rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
+			rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(protocol.GRPCProtocol), port)
 			rt.compStore.SetTopicRoutes(map[string]compstore.TopicRoutes{
 				TestPubsubName: map[string]compstore.TopicRouteElem{
 					topic: {
@@ -3892,7 +3894,7 @@ func TestPubsubWithResiliency(t *testing.T) {
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
-	r.runtimeConfig.ApplicationProtocol = HTTPProtocol
+	r.runtimeConfig.AppConnectionConfig.Protocol = protocol.HTTPProtocol
 	r.appChannel = &failingAppChannel
 
 	t.Run("pubsub retries subscription event with resiliency", func(t *testing.T) {
@@ -3984,6 +3986,7 @@ func (m *mockSubscribePubSub) Init(ctx context.Context, metadata pubsub.Metadata
 // Publish is a mock publish method. Immediately trigger handler if topic is subscribed.
 func (m *mockSubscribePubSub) Publish(ctx context.Context, req *pubsub.PublishRequest) error {
 	m.pubCount[req.Topic]++
+	var err error
 	if handler, ok := m.handlers[req.Topic]; ok {
 		pubsubMsg := &pubsub.NewMessage{
 			Data:  req.Data,
@@ -4001,9 +4004,9 @@ func (m *mockSubscribePubSub) Publish(ctx context.Context, req *pubsub.PublishRe
 			Entries: msgArr,
 			Topic:   req.Topic,
 		}
-		bulkHandler(context.Background(), nbm)
+		_, err = bulkHandler(context.Background(), nbm)
 	}
-	return nil
+	return err
 }
 
 // BulkPublish is a mock publish method. Immediately call the handler for each event in request if topic is subscribed.
@@ -4055,6 +4058,10 @@ func (m *mockSubscribePubSub) BulkSubscribe(ctx context.Context, req pubsub.Subs
 
 func (m *mockSubscribePubSub) GetComponentMetadata() map[string]string {
 	return map[string]string{}
+}
+
+func (m *mockSubscribePubSub) GetBulkResponse() pubsub.BulkSubscribeResponse {
+	return m.bulkReponse
 }
 
 func TestPubSubDeadLetter(t *testing.T) {
@@ -4191,7 +4198,7 @@ func TestGetSubscribedBindingsGRPC(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			port, _ := freeport.GetFreePort()
-			rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
+			rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(protocol.GRPCProtocol), port)
 			// create mock application server first
 			grpcServer := startTestAppCallbackGRPCServer(t, port, &channelt.MockServer{
 				Error:    tc.responseError,
@@ -4285,7 +4292,7 @@ func getFakeMetadataItems() []componentsV1alpha1.MetadataItem {
 }
 
 func NewTestDaprRuntime(mode modes.DaprMode) *DaprRuntime {
-	return NewTestDaprRuntimeWithProtocol(mode, string(HTTPProtocol), 1024)
+	return NewTestDaprRuntimeWithProtocol(mode, string(protocol.HTTPProtocol), 1024)
 }
 
 func NewTestDaprRuntimeWithProtocol(mode modes.DaprMode, protocol string, appPort int) *DaprRuntime {
@@ -4803,7 +4810,7 @@ func TestAuthorizedComponents(t *testing.T) {
 	})
 
 	t.Run("additional authorizer denies all", func(t *testing.T) {
-		cfg := NewTestDaprRuntimeConfig(modes.StandaloneMode, string(HTTPSProtocol), 1024)
+		cfg := NewTestDaprRuntimeConfig(modes.StandaloneMode, string(protocol.HTTPSProtocol), 1024)
 		rt := NewDaprRuntime(cfg, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		rt.componentAuthorizers = append(rt.componentAuthorizers, func(component componentsV1alpha1.Component) bool {
 			return false
@@ -5076,6 +5083,19 @@ func TestInitBindings(t *testing.T) {
 		err = r.initBinding(output)
 		assert.NoError(t, err)
 	})
+
+	t.Run("one not exist binding", func(t *testing.T) {
+		r := NewDaprRuntime(&Config{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		r.bindingsRegistry = bindingsLoader.NewRegistry()
+		defer stopRuntime(t, r)
+		// no binding registered, just try to init a not exist binding
+
+		c := componentsV1alpha1.Component{}
+		c.ObjectMeta.Name = "testNotExistBinding"
+		c.Spec.Type = "bindings.testNotExistBinding"
+		err := r.initBinding(c)
+		assert.Error(t, err)
+	})
 }
 
 func TestBindingTracingHttp(t *testing.T) {
@@ -5144,7 +5164,7 @@ func TestBindingResiliency(t *testing.T) {
 	}
 
 	r.appChannel = &failingChannel
-	r.runtimeConfig.ApplicationProtocol = HTTPProtocol
+	r.runtimeConfig.AppConnectionConfig.Protocol = protocol.HTTPProtocol
 
 	failingBinding := daprt.FailingBinding{
 		Failure: daprt.NewFailure(
@@ -5279,7 +5299,7 @@ func TestActorReentrancyConfig(t *testing.T) {
 
 			mockAppChannel := new(channelt.MockAppChannel)
 			r.appChannel = mockAppChannel
-			r.runtimeConfig.ApplicationProtocol = HTTPProtocol
+			r.runtimeConfig.AppConnectionConfig.Protocol = protocol.HTTPProtocol
 
 			configResp := config.ApplicationConfig{}
 			json.Unmarshal(tc.Config, &configResp)
@@ -5504,7 +5524,7 @@ func createRoutingRule(match, path string) (*runtimePubsub.Rule, error) {
 
 func TestGetAppHTTPChannelConfigWithCustomChannel(t *testing.T) {
 	rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, "http", 0)
-	rt.runtimeConfig.AppChannelAddress = "my.app"
+	rt.runtimeConfig.AppConnectionConfig.ChannelAddress = "my.app"
 
 	defer stopRuntime(t, rt)
 
@@ -6117,4 +6137,104 @@ func TestHTTPEndpointsUpdate(t *testing.T) {
 	}
 	_, exists = rt.compStore.GetHTTPEndpoint(endpoint3.Name)
 	assert.True(t, exists, fmt.Sprintf("expect http endpoint with name: %s", endpoint3.Name))
+}
+
+func TestIsBindingOfDirection(t *testing.T) {
+	t.Run("no direction in metadata for input binding", func(t *testing.T) {
+		m := []componentsV1alpha1.MetadataItem{}
+		r := isBindingOfDirection("input", m)
+
+		assert.True(t, r)
+	})
+
+	t.Run("no direction in metadata for output binding", func(t *testing.T) {
+		m := []componentsV1alpha1.MetadataItem{}
+		r := isBindingOfDirection("output", m)
+
+		assert.True(t, r)
+	})
+
+	t.Run("input direction in metadata", func(t *testing.T) {
+		m := []componentsV1alpha1.MetadataItem{
+			{
+				Name: "direction",
+				Value: componentsV1alpha1.DynamicValue{
+					JSON: v1.JSON{
+						Raw: []byte("input"),
+					},
+				},
+			},
+		}
+		r := isBindingOfDirection("input", m)
+		f := isBindingOfDirection("output", m)
+
+		assert.True(t, r)
+		assert.False(t, f)
+	})
+
+	t.Run("output direction in metadata", func(t *testing.T) {
+		m := []componentsV1alpha1.MetadataItem{
+			{
+				Name: "direction",
+				Value: componentsV1alpha1.DynamicValue{
+					JSON: v1.JSON{
+						Raw: []byte("output"),
+					},
+				},
+			},
+		}
+		r := isBindingOfDirection("output", m)
+		f := isBindingOfDirection("input", m)
+
+		assert.True(t, r)
+		assert.False(t, f)
+	})
+
+	t.Run("input and output direction in metadata", func(t *testing.T) {
+		m := []componentsV1alpha1.MetadataItem{
+			{
+				Name: "direction",
+				Value: componentsV1alpha1.DynamicValue{
+					JSON: v1.JSON{
+						Raw: []byte("input, output"),
+					},
+				},
+			},
+		}
+		r := isBindingOfDirection("output", m)
+		f := isBindingOfDirection("input", m)
+
+		assert.True(t, r)
+		assert.True(t, f)
+	})
+
+	t.Run("invalid direction for input binding", func(t *testing.T) {
+		m := []componentsV1alpha1.MetadataItem{
+			{
+				Name: "direction",
+				Value: componentsV1alpha1.DynamicValue{
+					JSON: v1.JSON{
+						Raw: []byte("aaa"),
+					},
+				},
+			},
+		}
+		f := isBindingOfDirection("input", m)
+		assert.False(t, f)
+	})
+
+	t.Run("invalid direction for output binding", func(t *testing.T) {
+		m := []componentsV1alpha1.MetadataItem{
+			{
+				Name: "direction",
+				Value: componentsV1alpha1.DynamicValue{
+					JSON: v1.JSON{
+						Raw: []byte("aaa"),
+					},
+				},
+			},
+		}
+		f := isBindingOfDirection("output", m)
+		assert.False(t, f)
+	})
 }

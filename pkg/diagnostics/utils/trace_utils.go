@@ -15,6 +15,7 @@ package utils
 
 import (
 	"context"
+	"net/http"
 	"strconv"
 
 	"github.com/valyala/fasthttp"
@@ -24,11 +25,12 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
+type daprContextKey string
+
 const (
 	defaultSamplingRate = 1e-4
 
-	// daprFastHTTPContextKey is the context value of span in fasthttp.RequestCtx.
-	daprFastHTTPContextKey = "daprSpanContextKey"
+	spanContextKey daprContextKey = "span"
 )
 
 var emptySpanContext trace.SpanContext
@@ -93,27 +95,37 @@ func IsTracingEnabled(rate string) bool {
 	return GetTraceSamplingRate(rate) != 0
 }
 
-// SpanFromContext returns the SpanContext stored in a context, or nil or trace.nooSpan{} if there isn't one. - TODO
+// SpanFromContext returns the Span stored in a context, or nil or trace.noopSpan{} if there isn't one.
 func SpanFromContext(ctx context.Context) trace.Span {
+	// TODO: Remove fasthttp compatibility when no HTTP API using contexts depend on fasthttp
+	var val any
 	if reqCtx, ok := ctx.(*fasthttp.RequestCtx); ok {
-		val := reqCtx.UserValue(daprFastHTTPContextKey)
-		if val != nil {
-			return val.(trace.Span)
-		}
+		val = reqCtx.UserValue(spanContextKey)
 	} else {
-		val := ctx.Value(daprFastHTTPContextKey)
-		if val != nil {
-			return val.(trace.Span)
+		val = ctx.Value(spanContextKey)
+	}
+
+	if val != nil {
+		span, ok := val.(trace.Span)
+		if ok {
+			return span
 		}
 	}
 
-	span := trace.SpanFromContext(ctx)
-	return span
+	// Return the default span, which can be a noop
+	return trace.SpanFromContext(ctx)
 }
 
-// SpanToFastHTTPContext sets span into fasthttp.RequestCtx.
-func SpanToFastHTTPContext(ctx *fasthttp.RequestCtx, span trace.Span) {
-	ctx.SetUserValue(daprFastHTTPContextKey, span)
+// AddSpanToFasthttpContext adds the span to the fasthttp request context.
+// TODO: Remove fasthttp compatibility when no HTTP API using contexts depend on fasthttp.
+func AddSpanToFasthttpContext(ctx *fasthttp.RequestCtx, span trace.Span) {
+	ctx.SetUserValue(spanContextKey, span)
+}
+
+// AddSpanToRequest sets span into a request context.
+func AddSpanToRequest(r *http.Request, span trace.Span) {
+	ctx := context.WithValue(r.Context(), spanContextKey, span)
+	*r = *(r.WithContext(ctx))
 }
 
 // BinaryFromSpanContext returns the binary format representation of a SpanContext.

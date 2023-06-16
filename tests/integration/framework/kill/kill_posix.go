@@ -1,4 +1,5 @@
-//go:build all_components
+//go:build !windows
+// +build !windows
 
 /*
 Copyright 2023 The Dapr Authors
@@ -13,13 +14,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package components
+package kill
 
 import (
-	"github.com/dapr/components-contrib/bindings/wasm"
-	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
+	"os"
+	"os/exec"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
-func init() {
-	bindingsLoader.DefaultRegistry.RegisterOutputBinding(wasm.NewWasmOutput, "wasm")
+func interrupt(t *testing.T, cmd *exec.Cmd) {
+	assert.NoError(t, cmd.Process.Signal(os.Interrupt))
 }
