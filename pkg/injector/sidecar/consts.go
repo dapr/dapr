@@ -31,9 +31,16 @@ const (
 	SidecarMetricsEnabledLabel     = "dapr.io/metrics-enabled"
 	APIVersionV1                   = "v1.0"
 	UnixDomainSocketVolume         = "dapr-unix-domain-socket" // Name of the Unix domain socket volume.
+	UserContainerAppProtocolName   = "APP_PROTOCOL"            // Name of the variable exposed to the app containing the app protocol.
 	UserContainerDaprHTTPPortName  = "DAPR_HTTP_PORT"          // Name of the variable exposed to the app containing the Dapr HTTP port.
 	UserContainerDaprGRPCPortName  = "DAPR_GRPC_PORT"          // Name of the variable exposed to the app containing the Dapr gRPC port.
 	PatchPathLabels                = "/metadata/labels"
 	TokenVolumeKubernetesMountPath = "/var/run/secrets/dapr.io/sentrytoken" /* #nosec */ // Mount path for the Kubernetes service account volume with the sentry token.
 	TokenVolumeName                = "dapr-identity-token"                  /* #nosec */ // Name of the volume with the service account token for daprd.
+
+	GRPCProtocol  = "grpc"  // GRPCProtocol is the gRPC communication protocol.
+	GRPCSProtocol = "grpcs" // GRPCSProtocol is the gRPC communication protocol with TLS (without validating certificates).
+	HTTPProtocol  = "http"  // HTTPProtocol is the HTTP communication protocol.
+	HTTPSProtocol = "https" // HTTPSProtocol is the HTTPS communication protocol with TLS (without validating certificates).
+	H2CProtocol   = "h2c"   // H2CProtocol is the HTTP/2 Cleartext communication protocol (HTTP/2 without TLS).
 )
