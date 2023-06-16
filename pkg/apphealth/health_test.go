@@ -21,10 +21,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dapr/dapr/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	clocktesting "k8s.io/utils/clock/testing"
+
+	"github.com/dapr/dapr/pkg/config"
 )
 
 func TestAppHealth_setResult(t *testing.T) {
