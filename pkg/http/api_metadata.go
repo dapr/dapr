@@ -48,10 +48,24 @@ func (a *api) onGetMetadata() fasthttp.RequestHandler {
 					ID:       out.Id,
 					Extended: out.ExtendedMetadata,
 					// We can embed the proto object directly only for as long as the protojson key is == json key
-					ActiveActorsCount:       out.ActiveActorsCount,
-					RegisteredComponents:    out.RegisteredComponents,
-					HTTPEndpoints:           out.HttpEndpoints,
-					AppConnectionProperties: out.AppConnectionProperties,
+					ActiveActorsCount:    out.ActiveActorsCount,
+					RegisteredComponents: out.RegisteredComponents,
+					HTTPEndpoints:        out.HttpEndpoints,
+				}
+
+				// Copy the app connection properties into a custom struct
+				// See https://github.com/golang/protobuf/issues/256
+				res.AppConnectionProperties = metadataResponseAppConnectionProperties{
+					Port:           out.AppConnectionProperties.Port,
+					Protocol:       out.AppConnectionProperties.Protocol,
+					ChannelAddress: out.AppConnectionProperties.ChannelAddress,
+					MaxConcurrency: out.AppConnectionProperties.MaxConcurrency,
+					Health: &metadataResponseAppConnectionHealthProperties{
+						HealthCheckPath:     out.AppConnectionProperties.Health.HealthCheckPath,
+						HealthProbeInterval: out.AppConnectionProperties.Health.HealthProbeInterval,
+						HealthProbeTimeout:  out.AppConnectionProperties.Health.HealthProbeTimeout,
+						HealthThreshold:     out.AppConnectionProperties.Health.HealthThreshold,
+					},
 				}
 
 				// Copy the subscriptions into a custom struct
@@ -103,13 +117,13 @@ func (a *api) onPutMetadata() fasthttp.RequestHandler {
 }
 
 type metadataResponse struct {
-	ID                      string                               `json:"id,omitempty"`
-	ActiveActorsCount       []*runtimev1pb.ActiveActorsCount     `json:"actors,omitempty"`
-	RegisteredComponents    []*runtimev1pb.RegisteredComponents  `json:"components,omitempty"`
-	Extended                map[string]string                    `json:"extended,omitempty"`
-	Subscriptions           []metadataResponsePubsubSubscription `json:"subscriptions,omitempty"`
-	HTTPEndpoints           []*runtimev1pb.MetadataHTTPEndpoint  `json:"httpEndpoints,omitempty"`
-	AppConnectionProperties *runtimev1pb.AppConnectionProperties `json:"appConnectionProperties,omitempty"`
+	ID                      string                                  `json:"id,omitempty"`
+	ActiveActorsCount       []*runtimev1pb.ActiveActorsCount        `json:"actors,omitempty"`
+	RegisteredComponents    []*runtimev1pb.RegisteredComponents     `json:"components,omitempty"`
+	Extended                map[string]string                       `json:"extended,omitempty"`
+	Subscriptions           []metadataResponsePubsubSubscription    `json:"subscriptions,omitempty"`
+	HTTPEndpoints           []*runtimev1pb.MetadataHTTPEndpoint     `json:"httpEndpoints,omitempty"`
+	AppConnectionProperties metadataResponseAppConnectionProperties `json:"appConnectionProperties,omitempty"`
 }
 
 type metadataResponsePubsubSubscription struct {
@@ -123,4 +137,19 @@ type metadataResponsePubsubSubscription struct {
 type metadataResponsePubsubSubscriptionRule struct {
 	Match string `json:"match,omitempty"`
 	Path  string `json:"path,omitempty"`
+}
+
+type metadataResponseAppConnectionProperties struct {
+	Port           int32                                          `json:"port,omitempty"`
+	Protocol       string                                         `json:"protocol,omitempty"`
+	ChannelAddress string                                         `json:"channelAddress,omitempty"`
+	MaxConcurrency int32                                          `json:"maxConcurrency,omitempty"`
+	Health         *metadataResponseAppConnectionHealthProperties `json:"health,omitempty"`
+}
+
+type metadataResponseAppConnectionHealthProperties struct {
+	HealthCheckPath     string `json:"healthCheckPath,omitempty"`
+	HealthProbeInterval string `json:"healthProbeInterval,omitempty"`
+	HealthProbeTimeout  string `json:"healthProbeTimeout,omitempty"`
+	HealthThreshold     int32  `json:"healthThreshold,omitempty"`
 }
