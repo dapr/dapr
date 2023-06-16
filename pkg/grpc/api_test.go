@@ -15,6 +15,7 @@ package grpc
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -39,9 +40,6 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/emptypb"
-
-	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
@@ -73,6 +71,8 @@ import (
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
+	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
@@ -4329,54 +4329,19 @@ func TestMetadata(t *testing.T) {
 
 		assert.Equal(t, "fakeAPI", res.Id)
 
-		// Assert actors
-		assert.Len(t, res.ActiveActorsCount, 2)
-		assert.Equal(t, "abcd", res.ActiveActorsCount[0].Type)
-		assert.Equal(t, int32(10), res.ActiveActorsCount[0].Count)
-		assert.Equal(t, "xyz", res.ActiveActorsCount[1].Type)
-		assert.Equal(t, int32(5), res.ActiveActorsCount[1].Count)
+		bytes, err := json.Marshal(res)
+		assert.NoError(t, err)
 
-		// Assert components
-		assert.Len(t, res.RegisteredComponents, 2)
-		assert.Equal(t, "MockComponent1Name", res.RegisteredComponents[0].Name)
-		assert.Equal(t, "mock.component1Type", res.RegisteredComponents[0].Type)
-		assert.Equal(t, "v1.0", res.RegisteredComponents[0].Version)
-		assert.Len(t, res.RegisteredComponents[0].Capabilities, 1)
-		assert.Equal(t, "mock.feat.MockComponent1Name", res.RegisteredComponents[0].Capabilities[0])
-		assert.Equal(t, "MockComponent2Name", res.RegisteredComponents[1].Name)
-		assert.Equal(t, "mock.component2Type", res.RegisteredComponents[1].Type)
-		assert.Equal(t, "v1.0", res.RegisteredComponents[1].Version)
-		assert.Len(t, res.RegisteredComponents[1].Capabilities, 1)
-		assert.Equal(t, "mock.feat.MockComponent2Name", res.RegisteredComponents[1].Capabilities[0])
-
-		// Assert extended metadata
-		assert.NotNil(t, res.ExtendedMetadata)
-		assert.Equal(t, "value", res.ExtendedMetadata["test"])
-		assert.Equal(t, "edge", res.ExtendedMetadata["daprRuntimeVersion"])
-		assert.Equal(t, "bar", res.ExtendedMetadata["foo"])
-
-		// Assert subscriptions
-		assert.Len(t, res.Subscriptions, 1)
-		assert.Equal(t, "test", res.Subscriptions[0].PubsubName)
-		assert.Equal(t, "topic", res.Subscriptions[0].Topic)
-		assert.Equal(t, "dead", res.Subscriptions[0].DeadLetterTopic)
-		assert.Len(t, res.Subscriptions[0].Rules.Rules, 1)
-		assert.Equal(t, "path", res.Subscriptions[0].Rules.Rules[0].Path)
-
-		// Assert http endpoints
-		assert.Len(t, res.HttpEndpoints, 1)
-		assert.Equal(t, "MockHTTPEndpoint", res.HttpEndpoints[0].Name)
-
-		// Assert app connection config
-		assert.Equal(t, int32(5000), res.AppConnectionProperties.Port)
-		assert.Equal(t, "grpc", res.AppConnectionProperties.Protocol)
-		assert.Equal(t, "1.2.3.4", res.AppConnectionProperties.ChannelAddress)
-		assert.Equal(t, int32(10), res.AppConnectionProperties.MaxConcurrency)
-		assert.NotNil(t, res.AppConnectionProperties.Health)
-		assert.Equal(t, "", res.AppConnectionProperties.Health.HealthCheckPath)
-		assert.Equal(t, "10s", res.AppConnectionProperties.Health.HealthProbeInterval)
-		assert.Equal(t, "5s", res.AppConnectionProperties.Health.HealthProbeTimeout)
-		assert.Equal(t, int32(3), res.AppConnectionProperties.Health.HealthThreshold)
+		expectedResponse := `{"id":"fakeAPI",` +
+			`"active_actors_count":[{"type":"abcd","count":10},{"type":"xyz","count":5}],` +
+			`"registered_components":[{"name":"MockComponent1Name","type":"mock.component1Type","version":"v1.0","capabilities":["mock.feat.MockComponent1Name"]},` +
+			`{"name":"MockComponent2Name","type":"mock.component2Type","version":"v1.0","capabilities":["mock.feat.MockComponent2Name"]}],` +
+			`"extended_metadata":{"daprRuntimeVersion":"edge","foo":"bar","test":"value"},` +
+			`"subscriptions":[{"pubsub_name":"test","topic":"topic","rules":{"rules":[{"path":"path"}]},"dead_letter_topic":"dead"}],` +
+			`"http_endpoints":[{"name":"MockHTTPEndpoint"}],` +
+			`"app_connection_properties":{"port":5000,"protocol":"grpc","channel_address":"1.2.3.4","max_concurrency":10,` +
+			`"health":{"health_probe_interval":"10s","health_probe_timeout":"5s","health_threshold":3}}}`
+		assert.Equal(t, expectedResponse, string(bytes))
 	})
 }
 

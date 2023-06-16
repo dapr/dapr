@@ -15,7 +15,7 @@ package universalapi
 
 import (
 	"context"
-	"fmt"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -25,7 +25,6 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors"
 	componentsV1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/expr"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -110,37 +109,23 @@ func TestGetMetadata(t *testing.T) {
 
 			response, err := fakeAPI.GetMetadata(context.Background(), &emptypb.Empty{})
 			require.NoError(t, err, "Expected no error")
-			assert.Equal(t, response.Id, "fakeAPI")
-			assert.Len(t, response.RegisteredComponents, 1, "One component should be returned")
-			assert.Equal(t, response.RegisteredComponents[0].Name, "testComponent")
-			assert.Contains(t, response.ExtendedMetadata, "testKey")
-			assert.Equal(t, response.ExtendedMetadata["testKey"], "testValue")
-			assert.Equal(t, response.ExtendedMetadata[daprRuntimeVersionKey], buildinfo.Version())
-			assert.Len(t, response.RegisteredComponents[0].Capabilities, 1, "One capabilities should be returned")
-			assert.Equal(t, response.RegisteredComponents[0].Capabilities[0], "mock.feat.testComponent")
-			assert.Equal(t, response.GetActiveActorsCount()[0].Type, "abcd")
-			assert.Equal(t, response.GetActiveActorsCount()[0].Count, int32(10))
-			assert.Len(t, response.Subscriptions, 1)
-			assert.Equal(t, response.Subscriptions[0].PubsubName, "test")
-			assert.Equal(t, response.Subscriptions[0].Topic, "topic")
-			assert.Equal(t, response.Subscriptions[0].DeadLetterTopic, "dead")
-			assert.Equal(t, response.Subscriptions[0].PubsubName, "test")
-			assert.Len(t, response.Subscriptions[0].Rules.Rules, 1)
-			assert.Equal(t, fmt.Sprintf("%s", response.Subscriptions[0].Rules.Rules[0].Match), "")
-			assert.Equal(t, response.Subscriptions[0].Rules.Rules[0].Path, "path")
-			assert.Equal(t, int32(1234), response.AppConnectionProperties.Port)
-			assert.Equal(t, "http", response.AppConnectionProperties.Protocol)
-			assert.Equal(t, "1.2.3.4", response.AppConnectionProperties.ChannelAddress)
-			assert.Equal(t, int32(10), response.AppConnectionProperties.MaxConcurrency)
 
+			bytes, err := json.Marshal(response)
+			assert.NoError(t, err)
+
+			healthCheckJSON := "}}"
 			if tc.expectHealthCheckEnabled {
-				assert.Equal(t, "/healthz", response.AppConnectionProperties.Health.HealthCheckPath)
-				assert.Equal(t, "10s", response.AppConnectionProperties.Health.HealthProbeInterval)
-				assert.Equal(t, "5s", response.AppConnectionProperties.Health.HealthProbeTimeout)
-				assert.Equal(t, int32(3), response.AppConnectionProperties.Health.HealthThreshold)
-			} else {
-				assert.Nil(t, response.AppConnectionProperties.Health)
+				healthCheckJSON = `,"health":{"health_check_path":"/healthz","health_probe_interval":"10s","health_probe_timeout":"5s","health_threshold":3}}}`
 			}
+
+			expectedResponse := `{"id":"fakeAPI",` +
+				`"active_actors_count":[{"type":"abcd","count":10},{"type":"xyz","count":5}],` +
+				`"registered_components":[{"name":"testComponent","capabilities":["mock.feat.testComponent"]}],` +
+				`"extended_metadata":{"daprRuntimeVersion":"edge","testKey":"testValue"},` +
+				`"subscriptions":[{"pubsub_name":"test","topic":"topic","rules":{"rules":[{"path":"path"}]},"dead_letter_topic":"dead"}],` +
+				`"app_connection_properties":{"port":1234,"protocol":"http","channel_address":"1.2.3.4","max_concurrency":10` +
+				healthCheckJSON
+			assert.Equal(t, expectedResponse, string(bytes))
 		})
 	}
 }
