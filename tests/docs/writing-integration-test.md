@@ -12,7 +12,7 @@ always built from source within the test.
 ## Invoking the test
 
 ```go
-go test -v -race -tags="integration" ./tests/integration`
+go test -v -race -tags="integration" ./tests/integration
 ```
 
 Rather than building from source, you can also set a custom daprd binary path
