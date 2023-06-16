@@ -29,6 +29,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/suite"
 	_ "github.com/dapr/dapr/tests/integration/suite/healthz"
+	_ "github.com/dapr/dapr/tests/integration/suite/metadata"
 	_ "github.com/dapr/dapr/tests/integration/suite/ports"
 )
 
