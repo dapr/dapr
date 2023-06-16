@@ -55,7 +55,7 @@ func (a *UniversalAPI) GetMetadata(ctx context.Context, in *emptypb.Empty) (*run
 		appConnectionProperties.Health = &runtimev1pb.AppConnectionHealthProperties{
 			HealthProbeInterval: a.AppConnectionConfig.HealthCheck.ProbeInterval.String(),
 			HealthProbeTimeout:  a.AppConnectionConfig.HealthCheck.ProbeTimeout.String(),
-			HealthThreshold:     int32(a.AppConnectionConfig.HealthCheck.Threshold),
+			HealthThreshold:     a.AppConnectionConfig.HealthCheck.Threshold,
 		}
 
 		// Health check path is not applicable for gRPC.
