@@ -344,6 +344,17 @@ test-race:
 		go test -tags="allcomponents unit" -race
 
 ################################################################################
+# Target: test-integration                                                                 #
+################################################################################
+.PHONY: test-integration
+test-integration: test-deps
+		gotestsum \
+			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json \
+			--format standard-verbose \
+			-- \
+			./tests/integration $(COVERAGE_OPTS) -v -race -tags="integration"
+
+################################################################################
 # Target: lint                                                                 #
 ################################################################################
 # Please use golangci-lint version v1.51.2 , otherwise you might encounter errors.
