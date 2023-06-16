@@ -25,7 +25,6 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors"
 	componentsV1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/expr"
@@ -63,12 +62,12 @@ func TestGetMetadata(t *testing.T) {
 
 	testcases := []struct {
 		name                     string
-		HealthCheck              *apphealth.Config
+		HealthCheck              *config.AppHealthConfig
 		expectHealthCheckEnabled bool
 	}{
 		{
 			name: "health check enabled",
-			HealthCheck: &apphealth.Config{
+			HealthCheck: &config.AppHealthConfig{
 				ProbeOnly:     true,
 				ProbeInterval: 10 * time.Second,
 				ProbeTimeout:  5 * time.Second,

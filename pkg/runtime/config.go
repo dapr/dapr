@@ -16,7 +16,6 @@ package runtime
 import (
 	"time"
 
-	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/config"
 	modesConfig "github.com/dapr/dapr/pkg/config/modes"
 	"github.com/dapr/dapr/pkg/config/protocol"
@@ -113,9 +112,9 @@ type NewRuntimeConfigOpts struct {
 
 // NewRuntimeConfig returns a new runtime config.
 func NewRuntimeConfig(opts NewRuntimeConfigOpts) *Config {
-	var appHealthCheck *apphealth.Config
+	var appHealthCheck *config.AppHealthConfig
 	if opts.EnableAppHealthCheck {
-		appHealthCheck = &apphealth.Config{
+		appHealthCheck = &config.AppHealthConfig{
 			ProbeInterval: opts.AppHealthProbeInterval,
 			ProbeTimeout:  opts.AppHealthProbeTimeout,
 			ProbeOnly:     true,

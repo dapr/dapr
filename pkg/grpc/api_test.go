@@ -53,7 +53,6 @@ import (
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpEndpointsV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
-	"github.com/dapr/dapr/pkg/apphealth"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -4282,7 +4281,7 @@ func TestMetadata(t *testing.T) {
 		Port:                5000,
 		Protocol:            "grpc",
 		HealthCheckHTTPPath: "/healthz",
-		HealthCheck: &apphealth.Config{
+		HealthCheck: &config.AppHealthConfig{
 			ProbeInterval: 10 * time.Second,
 			ProbeTimeout:  5 * time.Second,
 			ProbeOnly:     true,

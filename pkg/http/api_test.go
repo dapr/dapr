@@ -55,7 +55,6 @@ import (
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpEndpointsV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
-	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/channel/http"
 	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
 	"github.com/dapr/dapr/pkg/config"
@@ -2699,7 +2698,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 		Port:                5000,
 		Protocol:            "http",
 		HealthCheckHTTPPath: "/healthz",
-		HealthCheck: &apphealth.Config{
+		HealthCheck: &config.AppHealthConfig{
 			ProbeInterval: 10 * time.Second,
 			ProbeTimeout:  5 * time.Second,
 			ProbeOnly:     true,

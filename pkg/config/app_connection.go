@@ -14,14 +14,32 @@ limitations under the License.
 package config
 
 import (
-	"github.com/dapr/dapr/pkg/apphealth"
+	"time"
+
 	"github.com/dapr/dapr/pkg/config/protocol"
 )
+
+const (
+	// AppHealthConfigDefaultProbeInterval is the default interval for app health probes.
+	AppHealthConfigDefaultProbeInterval = 5 * time.Second
+	// AppHealthConfigDefaultProbeTimeout is the default value for probe timeouts.
+	AppHealthConfigDefaultProbeTimeout = 500 * time.Millisecond
+	// AppHealthConfigDefaultThreshold is the default threshold for determining failures in app health checks.
+	AppHealthConfigDefaultThreshold = int32(3)
+)
+
+// AppHealthConfig is the configuration object for the app health probes.
+type AppHealthConfig struct {
+	ProbeInterval time.Duration
+	ProbeTimeout  time.Duration
+	ProbeOnly     bool
+	Threshold     int32
+}
 
 // AppConnectionConfig holds the configuration for the app connection.
 type AppConnectionConfig struct {
 	ChannelAddress      string
-	HealthCheck         *apphealth.Config
+	HealthCheck         *AppHealthConfig
 	HealthCheckHTTPPath string
 	MaxConcurrency      int
 	Port                int

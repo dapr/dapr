@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"github.com/dapr/dapr/pkg/acl"
-	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	daprGlobalConfig "github.com/dapr/dapr/pkg/config"
 	env "github.com/dapr/dapr/pkg/config/env"
@@ -80,9 +79,9 @@ func FromFlags(args []string) (*DaprRuntime, error) {
 	disableBuiltinK8sSecretStore := flag.Bool("disable-builtin-k8s-secret-store", false, "Disable the built-in Kubernetes Secret Store")
 	enableAppHealthCheck := flag.Bool("enable-app-health-check", false, "Enable health checks for the application using the protocol defined with app-protocol")
 	appHealthCheckPath := flag.String("app-health-check-path", DefaultAppHealthCheckPath, "Path used for health checks; HTTP only")
-	appHealthProbeInterval := flag.Int("app-health-probe-interval", int(apphealth.DefaultProbeInterval/time.Second), "Interval to probe for the health of the app in seconds")
-	appHealthProbeTimeout := flag.Int("app-health-probe-timeout", int(apphealth.DefaultProbeTimeout/time.Millisecond), "Timeout for app health probes in milliseconds")
-	appHealthThreshold := flag.Int("app-health-threshold", int(apphealth.DefaultThreshold), "Number of consecutive failures for the app to be considered unhealthy")
+	appHealthProbeInterval := flag.Int("app-health-probe-interval", int(daprGlobalConfig.AppHealthConfigDefaultProbeInterval/time.Second), "Interval to probe for the health of the app in seconds")
+	appHealthProbeTimeout := flag.Int("app-health-probe-timeout", int(daprGlobalConfig.AppHealthConfigDefaultProbeTimeout/time.Millisecond), "Timeout for app health probes in milliseconds")
+	appHealthThreshold := flag.Int("app-health-threshold", int(daprGlobalConfig.AppHealthConfigDefaultThreshold), "Number of consecutive failures for the app to be considered unhealthy")
 
 	appChannelAddress := flag.String("app-channel-address", DefaultChannelAddress, "The network address the application listens on")
 
@@ -274,14 +273,14 @@ func FromFlags(args []string) (*DaprRuntime, error) {
 
 	var healthProbeInterval time.Duration
 	if *appHealthProbeInterval <= 0 {
-		healthProbeInterval = apphealth.DefaultProbeInterval
+		healthProbeInterval = daprGlobalConfig.AppHealthConfigDefaultProbeInterval
 	} else {
 		healthProbeInterval = time.Duration(*appHealthProbeInterval) * time.Second
 	}
 
 	var healthProbeTimeout time.Duration
 	if *appHealthProbeTimeout <= 0 {
-		healthProbeTimeout = apphealth.DefaultProbeTimeout
+		healthProbeTimeout = daprGlobalConfig.AppHealthConfigDefaultProbeTimeout
 	} else {
 		healthProbeTimeout = time.Duration(*appHealthProbeTimeout) * time.Millisecond
 	}
@@ -293,7 +292,7 @@ func FromFlags(args []string) (*DaprRuntime, error) {
 	// Also check to ensure no overflow with int32
 	var healthThreshold int32
 	if *appHealthThreshold < 1 || int32(*appHealthThreshold+1) < 0 {
-		healthThreshold = apphealth.DefaultThreshold
+		healthThreshold = daprGlobalConfig.AppHealthConfigDefaultThreshold
 	} else {
 		healthThreshold = int32(*appHealthThreshold)
 	}
