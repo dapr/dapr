@@ -20,6 +20,7 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/dapr/dapr/pkg/buildinfo"
+	"github.com/dapr/dapr/pkg/config"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 )
@@ -52,10 +53,14 @@ func (a *UniversalAPI) GetMetadata(ctx context.Context, in *emptypb.Empty) (*run
 
 	if a.AppConnectionConfig.HealthCheck != nil {
 		appConnectionProperties.Health = &runtimev1pb.AppConnectionHealthProperties{
-			HealthCheckPath:     a.AppConnectionConfig.HealthCheckHTTPPath,
 			HealthProbeInterval: a.AppConnectionConfig.HealthCheck.ProbeInterval.String(),
 			HealthProbeTimeout:  a.AppConnectionConfig.HealthCheck.ProbeTimeout.String(),
 			HealthThreshold:     int32(a.AppConnectionConfig.HealthCheck.Threshold),
+		}
+
+		// Health check path is not applicable for gRPC.
+		if config.Protocol(appConnectionProperties.Protocol).IsHTTP() {
+			appConnectionProperties.Health.HealthCheckPath = a.AppConnectionConfig.HealthCheckHTTPPath
 		}
 	}
 

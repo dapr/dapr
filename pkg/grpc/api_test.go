@@ -46,12 +46,17 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/dapr/pkg/actors"
+	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	httpEndpointsV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
+	"github.com/dapr/dapr/pkg/apphealth"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
+	"github.com/dapr/dapr/pkg/expr"
 	"github.com/dapr/dapr/pkg/grpc/metadata"
 	"github.com/dapr/dapr/pkg/grpc/universalapi"
 	"github.com/dapr/dapr/pkg/messages"
@@ -66,6 +71,8 @@ import (
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
+	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
@@ -4195,6 +4202,181 @@ func TestUnlock(t *testing.T) {
 		resp, err := api.UnlockAlpha1(context.Background(), req)
 		assert.NoError(t, err)
 		assert.Equal(t, runtimev1pb.UnlockResponse_SUCCESS, resp.Status) //nolint:nosnakecase
+	})
+}
+
+func TestMetadata(t *testing.T) {
+	compStore := compstore.New()
+	compStore.AddComponent(componentsV1alpha1.Component{
+		ObjectMeta: metaV1.ObjectMeta{
+			Name: "MockComponent1Name",
+		},
+		Spec: componentsV1alpha1.ComponentSpec{
+			Type:    "mock.component1Type",
+			Version: "v1.0",
+			Metadata: []componentsV1alpha1.MetadataItem{
+				{
+					Name: "actorMockComponent1",
+					Value: componentsV1alpha1.DynamicValue{
+						JSON: v1.JSON{Raw: []byte("true")},
+					},
+				},
+			},
+		},
+	})
+	compStore.AddComponent(componentsV1alpha1.Component{
+		ObjectMeta: metaV1.ObjectMeta{
+			Name: "MockComponent2Name",
+		},
+		Spec: componentsV1alpha1.ComponentSpec{
+			Type:    "mock.component2Type",
+			Version: "v1.0",
+			Metadata: []componentsV1alpha1.MetadataItem{
+				{
+					Name: "actorMockComponent2",
+					Value: componentsV1alpha1.DynamicValue{
+						JSON: v1.JSON{Raw: []byte("true")},
+					},
+				},
+			},
+		},
+	})
+	compStore.SetSubscriptions([]runtimePubsub.Subscription{
+		{
+			PubsubName:      "test",
+			Topic:           "topic",
+			DeadLetterTopic: "dead",
+			Metadata:        map[string]string{},
+			Rules: []*runtimePubsub.Rule{
+				{
+					Match: &expr.Expr{},
+					Path:  "path",
+				},
+			},
+		},
+	})
+	compStore.AddHTTPEndpoint(httpEndpointsV1alpha1.HTTPEndpoint{
+		ObjectMeta: metaV1.ObjectMeta{
+			Name: "MockHTTPEndpoint",
+		},
+		Spec: httpEndpointsV1alpha1.HTTPEndpointSpec{
+			BaseURL: "api.test.com",
+			Headers: []httpEndpointsV1alpha1.Header{
+				{
+					Name: "Accept-Language",
+					Value: httpEndpointsV1alpha1.DynamicValue{
+						JSON: v1.JSON{Raw: []byte("en-US")},
+					},
+				},
+			},
+		},
+	})
+
+	mockActors := new(actors.MockActors)
+	mockActors.On("GetActiveActorsCount")
+
+	appConnectionConfig := config.AppConnectionConfig{
+		ChannelAddress:      "1.2.3.4",
+		MaxConcurrency:      10,
+		Port:                5000,
+		Protocol:            "grpc",
+		HealthCheckHTTPPath: "/healthz",
+		HealthCheck: &apphealth.Config{
+			ProbeInterval: 10 * time.Second,
+			ProbeTimeout:  5 * time.Second,
+			ProbeOnly:     true,
+			Threshold:     3,
+		},
+	}
+
+	server, lis := startDaprAPIServer(&api{
+		UniversalAPI: &universalapi.UniversalAPI{
+			AppID:     "fakeAPI",
+			Actors:    mockActors,
+			Logger:    logger.NewLogger("grpc.api.test"),
+			CompStore: compStore,
+			GetComponentsCapabilitesFn: func() map[string][]string {
+				capsMap := make(map[string][]string)
+				capsMap["MockComponent1Name"] = []string{"mock.feat.MockComponent1Name"}
+				capsMap["MockComponent2Name"] = []string{"mock.feat.MockComponent2Name"}
+				return capsMap
+			},
+			Resiliency: resiliency.New(nil),
+			ExtendedMetadata: map[string]string{
+				"test": "value",
+			},
+			AppConnectionConfig: appConnectionConfig,
+		},
+	}, "")
+	defer server.Stop()
+
+	clientConn := createTestClient(lis)
+	defer clientConn.Close()
+
+	client := runtimev1pb.NewDaprClient(clientConn)
+
+	t.Run("Set Metadata", func(t *testing.T) {
+		_, err := client.SetMetadata(context.Background(), &runtimev1pb.SetMetadataRequest{
+			Key:   "foo",
+			Value: "bar",
+		})
+		assert.NoError(t, err)
+	})
+
+	t.Run("Get Metadata", func(t *testing.T) {
+		res, err := client.GetMetadata(context.Background(), &emptypb.Empty{})
+		assert.NoError(t, err)
+
+		assert.Equal(t, "fakeAPI", res.Id)
+
+		// Assert actors
+		assert.Len(t, res.ActiveActorsCount, 2)
+		assert.Equal(t, "abcd", res.ActiveActorsCount[0].Type)
+		assert.Equal(t, int32(10), res.ActiveActorsCount[0].Count)
+		assert.Equal(t, "xyz", res.ActiveActorsCount[1].Type)
+		assert.Equal(t, int32(5), res.ActiveActorsCount[1].Count)
+
+		// Assert components
+		assert.Len(t, res.RegisteredComponents, 2)
+		assert.Equal(t, "MockComponent1Name", res.RegisteredComponents[0].Name)
+		assert.Equal(t, "mock.component1Type", res.RegisteredComponents[0].Type)
+		assert.Equal(t, "v1.0", res.RegisteredComponents[0].Version)
+		assert.Len(t, res.RegisteredComponents[0].Capabilities, 1)
+		assert.Equal(t, "mock.feat.MockComponent1Name", res.RegisteredComponents[0].Capabilities[0])
+		assert.Equal(t, "MockComponent2Name", res.RegisteredComponents[1].Name)
+		assert.Equal(t, "mock.component2Type", res.RegisteredComponents[1].Type)
+		assert.Equal(t, "v1.0", res.RegisteredComponents[1].Version)
+		assert.Len(t, res.RegisteredComponents[1].Capabilities, 1)
+		assert.Equal(t, "mock.feat.MockComponent2Name", res.RegisteredComponents[1].Capabilities[0])
+
+		// Assert extended metadata
+		assert.NotNil(t, res.ExtendedMetadata)
+		assert.Equal(t, "value", res.ExtendedMetadata["test"])
+		assert.Equal(t, "edge", res.ExtendedMetadata["daprRuntimeVersion"])
+		assert.Equal(t, "bar", res.ExtendedMetadata["foo"])
+
+		// Assert subscriptions
+		assert.Len(t, res.Subscriptions, 1)
+		assert.Equal(t, "test", res.Subscriptions[0].PubsubName)
+		assert.Equal(t, "topic", res.Subscriptions[0].Topic)
+		assert.Equal(t, "dead", res.Subscriptions[0].DeadLetterTopic)
+		assert.Len(t, res.Subscriptions[0].Rules.Rules, 1)
+		assert.Equal(t, "path", res.Subscriptions[0].Rules.Rules[0].Path)
+
+		// Assert http endpoints
+		assert.Len(t, res.HttpEndpoints, 1)
+		assert.Equal(t, "MockHTTPEndpoint", res.HttpEndpoints[0].Name)
+
+		// Assert app connection config
+		assert.Equal(t, int32(5000), res.AppConnectionProperties.Port)
+		assert.Equal(t, "grpc", res.AppConnectionProperties.Protocol)
+		assert.Equal(t, "1.2.3.4", res.AppConnectionProperties.ChannelAddress)
+		assert.Equal(t, int32(10), res.AppConnectionProperties.MaxConcurrency)
+		assert.NotNil(t, res.AppConnectionProperties.Health)
+		assert.Equal(t, "", res.AppConnectionProperties.Health.HealthCheckPath)
+		assert.Equal(t, "10s", res.AppConnectionProperties.Health.HealthProbeInterval)
+		assert.Equal(t, "5s", res.AppConnectionProperties.Health.HealthProbeTimeout)
+		assert.Equal(t, int32(3), res.AppConnectionProperties.Health.HealthThreshold)
 	})
 }
 
