@@ -77,6 +77,7 @@ import (
 	nrLoader "github.com/dapr/dapr/pkg/components/nameresolution"
 	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
 	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
+	"github.com/dapr/dapr/pkg/config/protocol"
 
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
@@ -3472,7 +3473,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			// setup
 			// getting new port for every run to avoid conflict and timing issues between tests if sharing same port
 			port, _ := freeport.GetFreePort()
-			rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
+			rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(protocol.GRPCProtocol), port)
 			rt.compStore.SetTopicRoutes(map[string]compstore.TopicRoutes{
 				TestPubsubName: map[string]compstore.TopicRouteElem{
 					topic: {
@@ -3893,7 +3894,7 @@ func TestPubsubWithResiliency(t *testing.T) {
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
-	r.runtimeConfig.ApplicationProtocol = HTTPProtocol
+	r.runtimeConfig.AppConnectionConfig.Protocol = protocol.HTTPProtocol
 	r.appChannel = &failingAppChannel
 
 	t.Run("pubsub retries subscription event with resiliency", func(t *testing.T) {
@@ -4197,7 +4198,7 @@ func TestGetSubscribedBindingsGRPC(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			port, _ := freeport.GetFreePort()
-			rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
+			rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(protocol.GRPCProtocol), port)
 			// create mock application server first
 			grpcServer := startTestAppCallbackGRPCServer(t, port, &channelt.MockServer{
 				Error:    tc.responseError,
@@ -4291,7 +4292,7 @@ func getFakeMetadataItems() []componentsV1alpha1.MetadataItem {
 }
 
 func NewTestDaprRuntime(mode modes.DaprMode) *DaprRuntime {
-	return NewTestDaprRuntimeWithProtocol(mode, string(HTTPProtocol), 1024)
+	return NewTestDaprRuntimeWithProtocol(mode, string(protocol.HTTPProtocol), 1024)
 }
 
 func NewTestDaprRuntimeWithProtocol(mode modes.DaprMode, protocol string, appPort int) *DaprRuntime {
@@ -4809,7 +4810,7 @@ func TestAuthorizedComponents(t *testing.T) {
 	})
 
 	t.Run("additional authorizer denies all", func(t *testing.T) {
-		cfg := NewTestDaprRuntimeConfig(modes.StandaloneMode, string(HTTPSProtocol), 1024)
+		cfg := NewTestDaprRuntimeConfig(modes.StandaloneMode, string(protocol.HTTPSProtocol), 1024)
 		rt := NewDaprRuntime(cfg, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		rt.componentAuthorizers = append(rt.componentAuthorizers, func(component componentsV1alpha1.Component) bool {
 			return false
@@ -5163,7 +5164,7 @@ func TestBindingResiliency(t *testing.T) {
 	}
 
 	r.appChannel = &failingChannel
-	r.runtimeConfig.ApplicationProtocol = HTTPProtocol
+	r.runtimeConfig.AppConnectionConfig.Protocol = protocol.HTTPProtocol
 
 	failingBinding := daprt.FailingBinding{
 		Failure: daprt.NewFailure(
@@ -5298,7 +5299,7 @@ func TestActorReentrancyConfig(t *testing.T) {
 
 			mockAppChannel := new(channelt.MockAppChannel)
 			r.appChannel = mockAppChannel
-			r.runtimeConfig.ApplicationProtocol = HTTPProtocol
+			r.runtimeConfig.AppConnectionConfig.Protocol = protocol.HTTPProtocol
 
 			configResp := config.ApplicationConfig{}
 			json.Unmarshal(tc.Config, &configResp)
@@ -5523,7 +5524,7 @@ func createRoutingRule(match, path string) (*runtimePubsub.Rule, error) {
 
 func TestGetAppHTTPChannelConfigWithCustomChannel(t *testing.T) {
 	rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, "http", 0)
-	rt.runtimeConfig.AppChannelAddress = "my.app"
+	rt.runtimeConfig.AppConnectionConfig.ChannelAddress = "my.app"
 
 	defer stopRuntime(t, rt)
 
@@ -6136,4 +6137,104 @@ func TestHTTPEndpointsUpdate(t *testing.T) {
 	}
 	_, exists = rt.compStore.GetHTTPEndpoint(endpoint3.Name)
 	assert.True(t, exists, fmt.Sprintf("expect http endpoint with name: %s", endpoint3.Name))
+}
+
+func TestIsBindingOfDirection(t *testing.T) {
+	t.Run("no direction in metadata for input binding", func(t *testing.T) {
+		m := []componentsV1alpha1.MetadataItem{}
+		r := isBindingOfDirection("input", m)
+
+		assert.True(t, r)
+	})
+
+	t.Run("no direction in metadata for output binding", func(t *testing.T) {
+		m := []componentsV1alpha1.MetadataItem{}
+		r := isBindingOfDirection("output", m)
+
+		assert.True(t, r)
+	})
+
+	t.Run("input direction in metadata", func(t *testing.T) {
+		m := []componentsV1alpha1.MetadataItem{
+			{
+				Name: "direction",
+				Value: componentsV1alpha1.DynamicValue{
+					JSON: v1.JSON{
+						Raw: []byte("input"),
+					},
+				},
+			},
+		}
+		r := isBindingOfDirection("input", m)
+		f := isBindingOfDirection("output", m)
+
+		assert.True(t, r)
+		assert.False(t, f)
+	})
+
+	t.Run("output direction in metadata", func(t *testing.T) {
+		m := []componentsV1alpha1.MetadataItem{
+			{
+				Name: "direction",
+				Value: componentsV1alpha1.DynamicValue{
+					JSON: v1.JSON{
+						Raw: []byte("output"),
+					},
+				},
+			},
+		}
+		r := isBindingOfDirection("output", m)
+		f := isBindingOfDirection("input", m)
+
+		assert.True(t, r)
+		assert.False(t, f)
+	})
+
+	t.Run("input and output direction in metadata", func(t *testing.T) {
+		m := []componentsV1alpha1.MetadataItem{
+			{
+				Name: "direction",
+				Value: componentsV1alpha1.DynamicValue{
+					JSON: v1.JSON{
+						Raw: []byte("input, output"),
+					},
+				},
+			},
+		}
+		r := isBindingOfDirection("output", m)
+		f := isBindingOfDirection("input", m)
+
+		assert.True(t, r)
+		assert.True(t, f)
+	})
+
+	t.Run("invalid direction for input binding", func(t *testing.T) {
+		m := []componentsV1alpha1.MetadataItem{
+			{
+				Name: "direction",
+				Value: componentsV1alpha1.DynamicValue{
+					JSON: v1.JSON{
+						Raw: []byte("aaa"),
+					},
+				},
+			},
+		}
+		f := isBindingOfDirection("input", m)
+		assert.False(t, f)
+	})
+
+	t.Run("invalid direction for output binding", func(t *testing.T) {
+		m := []componentsV1alpha1.MetadataItem{
+			{
+				Name: "direction",
+				Value: componentsV1alpha1.DynamicValue{
+					JSON: v1.JSON{
+						Raw: []byte("aaa"),
+					},
+				},
+			},
+		}
+		f := isBindingOfDirection("output", m)
+		assert.False(t, f)
+	})
 }
