@@ -60,12 +60,14 @@ func (a *api) onGetMetadata() fasthttp.RequestHandler {
 					Protocol:       out.AppConnectionProperties.Protocol,
 					ChannelAddress: out.AppConnectionProperties.ChannelAddress,
 					MaxConcurrency: out.AppConnectionProperties.MaxConcurrency,
-					Health: &metadataResponseAppConnectionHealthProperties{
+				}
+				if out.AppConnectionProperties.Health != nil {
+					res.AppConnectionProperties.Health = &metadataResponseAppConnectionHealthProperties{
 						HealthCheckPath:     out.AppConnectionProperties.Health.HealthCheckPath,
 						HealthProbeInterval: out.AppConnectionProperties.Health.HealthProbeInterval,
 						HealthProbeTimeout:  out.AppConnectionProperties.Health.HealthProbeTimeout,
 						HealthThreshold:     out.AppConnectionProperties.Health.HealthThreshold,
-					},
+					}
 				}
 
 				// Copy the subscriptions into a custom struct
