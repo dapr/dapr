@@ -1339,3 +1339,40 @@ func TestCrossNamespaceCases(t *testing.T) {
 		})
 	}
 }
+
+func TestPathURLNormalization(t *testing.T) {
+	t.Parallel()
+
+	externalURL := tr.Platform.AcquireAppExternalURL("serviceinvocation-caller")
+	require.NotEmpty(t, externalURL, "external URL must not be empty!")
+
+	// This initial probe makes the test wait a little bit longer when needed,
+	// making this test less flaky due to delays in the deployment.
+	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
+	require.NoError(t, err)
+
+	t.Logf("externalURL is '%s'\n", externalURL)
+
+	for path, exp := range map[string]string{
+		`/foo/%2Fbbb%2F%2E`:     `/foo/%2Fbbb%2F%2E`,
+		`//foo/%2Fb/bb%2F%2E`:   `/foo/%2Fb/bb%2F%2E`,
+		`//foo/%2Fb///bb%2F%2E`: `/foo/%2Fb/bb%2F%2E`,
+		`/foo/%2E`:              `/foo/%2E`,
+		`///foo///%2E`:          `/foo/%2E`,
+	} {
+		t.Run(path, func(t *testing.T) {
+			body, err := json.Marshal(testCommandRequest{
+				RemoteApp: "serviceinvocation-callee-0",
+				Method:    "normalization",
+			})
+			require.NoError(t, err)
+
+			url := fmt.Sprintf("http://%s/%s", externalURL, path)
+			resp, err := utils.HTTPPost(url, body)
+			require.NoError(t, err)
+
+			t.Logf("checking piped path..%s\n", string(resp))
+			assert.Contains(t, exp, string(resp))
+		})
+	}
+}
