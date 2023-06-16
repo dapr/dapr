@@ -235,7 +235,7 @@ func (s *server) useTracing(next http.Handler) http.Handler {
 }
 
 func (s *server) useMetrics(next http.Handler) http.Handler {
-	if s.metricSpec.Enabled {
+	if s.metricSpec.GetEnabled() {
 		log.Infof("enabled metrics http middleware")
 
 		return diag.DefaultHTTPMonitoring.HTTPMiddleware(next.ServeHTTP)

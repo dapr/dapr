@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
@@ -33,14 +34,14 @@ const (
 func TestGetResourceRequirements(t *testing.T) {
 	t.Run("no resource requirements", func(t *testing.T) {
 		r, err := getResourceRequirements(nil)
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		assert.Nil(t, r)
 	})
 
 	t.Run("valid resource limits", func(t *testing.T) {
 		a := map[string]string{annotations.KeyCPULimit: "100m", annotations.KeyMemoryLimit: "1Gi"}
 		r, err := getResourceRequirements(a)
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, "100m", r.Limits.Cpu().String())
 		assert.Equal(t, "1Gi", r.Limits.Memory().String())
 	})
@@ -62,7 +63,7 @@ func TestGetResourceRequirements(t *testing.T) {
 	t.Run("valid resource requests", func(t *testing.T) {
 		a := map[string]string{annotations.KeyCPURequest: "100m", annotations.KeyMemoryRequest: "1Gi"}
 		r, err := getResourceRequirements(a)
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, "100m", r.Requests.Cpu().String())
 		assert.Equal(t, "1Gi", r.Requests.Memory().String())
 	})
@@ -162,7 +163,6 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--control-plane-address", "controlplane:9000",
 			"--app-protocol", "http",
 			"--placement-host-address", "placement:50000",
-			"--config", defaultTestConfig,
 			"--log-level", "info",
 			"--app-max-concurrency", "-1",
 			"--sentry-address", "sentry:50000",
@@ -172,6 +172,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
 			"--disable-builtin-k8s-secret-store=false",
+			"--config", defaultTestConfig,
 			"--log-as-json",
 			"--enable-mtls",
 		}
@@ -236,7 +237,6 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--control-plane-address", "controlplane:9000",
 			"--app-protocol", "http",
 			"--placement-host-address", "placement:50000",
-			"--config", defaultTestConfig,
 			"--log-level", "info",
 			"--app-max-concurrency", "-1",
 			"--sentry-address", "sentry:50000",
@@ -246,6 +246,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
 			"--disable-builtin-k8s-secret-store=false",
+			"--config", defaultTestConfig,
 			"--log-as-json",
 			"--enable-mtls",
 		}
@@ -310,7 +311,6 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--control-plane-address", "controlplane:9000",
 			"--app-protocol", "http",
 			"--placement-host-address", "",
-			"--config", defaultTestConfig,
 			"--log-level", "info",
 			"--app-max-concurrency", "-1",
 			"--sentry-address", "sentry:50000",
@@ -320,6 +320,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
 			"--disable-builtin-k8s-secret-store=false",
+			"--config", defaultTestConfig,
 			"--log-as-json",
 			"--enable-mtls",
 		}
@@ -382,7 +383,6 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--control-plane-address", "controlplane:9000",
 			"--app-protocol", "http",
 			"--placement-host-address", "",
-			"--config", defaultTestConfig,
 			"--log-level", "info",
 			"--app-max-concurrency", "-1",
 			"--sentry-address", "sentry:50000",
@@ -392,6 +392,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
 			"--disable-builtin-k8s-secret-store=false",
+			"--config", defaultTestConfig,
 			"--log-as-json",
 			"--enable-mtls",
 		}
@@ -455,7 +456,6 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--control-plane-address", "controlplane:9000",
 			"--app-protocol", "http",
 			"--placement-host-address", "some-host:50000",
-			"--config", defaultTestConfig,
 			"--log-level", "info",
 			"--app-max-concurrency", "-1",
 			"--sentry-address", "sentry:50000",
@@ -465,6 +465,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
 			"--disable-builtin-k8s-secret-store=false",
+			"--config", defaultTestConfig,
 			"--log-as-json",
 			"--enable-mtls",
 		}
@@ -510,7 +511,6 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--control-plane-address", "controlplane:9000",
 			"--app-protocol", "http",
 			"--placement-host-address", "placement:50000",
-			"--config", defaultTestConfig,
 			"--log-level", "info",
 			"--app-max-concurrency", "-1",
 			"--sentry-address", "sentry:50000",
@@ -520,6 +520,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
 			"--disable-builtin-k8s-secret-store=false",
+			"--config", defaultTestConfig,
 			"--enable-mtls",
 		}
 
@@ -553,7 +554,6 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--control-plane-address", "controlplane:9000",
 			"--app-protocol", "http",
 			"--placement-host-address", "placement:50000",
-			"--config", defaultTestConfig,
 			"--log-level", "info",
 			"--app-max-concurrency", "-1",
 			"--sentry-address", "sentry:50000",
@@ -563,6 +563,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
 			"--disable-builtin-k8s-secret-store=false",
+			"--config", defaultTestConfig,
 			"--enable-mtls",
 		}
 
@@ -596,7 +597,6 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--control-plane-address", "controlplane:9000",
 			"--app-protocol", "http",
 			"--placement-host-address", "placement:50000",
-			"--config", defaultTestConfig,
 			"--log-level", "info",
 			"--app-max-concurrency", "-1",
 			"--sentry-address", "sentry:50000",
@@ -606,6 +606,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "5",
 			"--disable-builtin-k8s-secret-store=false",
+			"--config", defaultTestConfig,
 			"--enable-mtls",
 		}
 
@@ -683,7 +684,6 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--control-plane-address", "controlplane:9000",
 			"--app-protocol", "http",
 			"--placement-host-address", "placement:50000",
-			"--config", defaultTestConfig,
 			"--log-level", "info",
 			"--app-max-concurrency", "-1",
 			"--sentry-address", "sentry:50000",
@@ -693,10 +693,130 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-http-read-buffer-size", "-1",
 			"--dapr-graceful-shutdown-seconds", "-1",
 			"--disable-builtin-k8s-secret-store=true",
+			"--config", defaultTestConfig,
 			"--enable-mtls",
 		}
 
 		assert.EqualValues(t, expectedArgs, container.Args)
+	})
+
+	t.Run("config annotation", func(t *testing.T) {
+		an := map[string]string{}
+
+		t.Run("no config annotation", func(t *testing.T) {
+			container, _ := GetSidecarContainer(ContainerConfig{
+				AppID:                   "app_id",
+				Annotations:             an,
+				ControlPlaneAddress:     "controlplane:9000",
+				PlacementServiceAddress: "placement:50000",
+				SentryAddress:           "sentry:50000",
+			})
+
+			expectedArgs := []string{
+				"/daprd",
+				"--mode", "kubernetes",
+				"--dapr-http-port", "3500",
+				"--dapr-grpc-port", "50001",
+				"--dapr-internal-grpc-port", "50002",
+				"--dapr-listen-addresses", "[::1],127.0.0.1",
+				"--dapr-public-port", "3501",
+				"--app-port", "",
+				"--app-id", "app_id",
+				"--control-plane-address", "controlplane:9000",
+				"--app-protocol", "http",
+				"--placement-host-address", "placement:50000",
+				"--log-level", "info",
+				"--app-max-concurrency", "-1",
+				"--sentry-address", "sentry:50000",
+				"--enable-metrics=true",
+				"--metrics-port", "9090",
+				"--dapr-http-max-request-size", "-1",
+				"--dapr-http-read-buffer-size", "-1",
+				"--dapr-graceful-shutdown-seconds", "-1",
+				"--disable-builtin-k8s-secret-store=false",
+			}
+
+			assert.EqualValues(t, expectedArgs, container.Args)
+		})
+
+		t.Run("single config", func(t *testing.T) {
+			an[annotations.KeyConfig] = "foo"
+
+			container, _ := GetSidecarContainer(ContainerConfig{
+				AppID:                   "app_id",
+				Annotations:             an,
+				ControlPlaneAddress:     "controlplane:9000",
+				PlacementServiceAddress: "placement:50000",
+				SentryAddress:           "sentry:50000",
+			})
+
+			expectedArgs := []string{
+				"/daprd",
+				"--mode", "kubernetes",
+				"--dapr-http-port", "3500",
+				"--dapr-grpc-port", "50001",
+				"--dapr-internal-grpc-port", "50002",
+				"--dapr-listen-addresses", "[::1],127.0.0.1",
+				"--dapr-public-port", "3501",
+				"--app-port", "",
+				"--app-id", "app_id",
+				"--control-plane-address", "controlplane:9000",
+				"--app-protocol", "http",
+				"--placement-host-address", "placement:50000",
+				"--log-level", "info",
+				"--app-max-concurrency", "-1",
+				"--sentry-address", "sentry:50000",
+				"--enable-metrics=true",
+				"--metrics-port", "9090",
+				"--dapr-http-max-request-size", "-1",
+				"--dapr-http-read-buffer-size", "-1",
+				"--dapr-graceful-shutdown-seconds", "-1",
+				"--disable-builtin-k8s-secret-store=false",
+				"--config", "foo",
+			}
+
+			assert.EqualValues(t, expectedArgs, container.Args)
+		})
+
+		t.Run("multiple configs", func(t *testing.T) {
+			an[annotations.KeyConfig] = "foo,bar"
+
+			container, _ := GetSidecarContainer(ContainerConfig{
+				AppID:                   "app_id",
+				Annotations:             an,
+				ControlPlaneAddress:     "controlplane:9000",
+				PlacementServiceAddress: "placement:50000",
+				SentryAddress:           "sentry:50000",
+			})
+
+			expectedArgs := []string{
+				"/daprd",
+				"--mode", "kubernetes",
+				"--dapr-http-port", "3500",
+				"--dapr-grpc-port", "50001",
+				"--dapr-internal-grpc-port", "50002",
+				"--dapr-listen-addresses", "[::1],127.0.0.1",
+				"--dapr-public-port", "3501",
+				"--app-port", "",
+				"--app-id", "app_id",
+				"--control-plane-address", "controlplane:9000",
+				"--app-protocol", "http",
+				"--placement-host-address", "placement:50000",
+				"--log-level", "info",
+				"--app-max-concurrency", "-1",
+				"--sentry-address", "sentry:50000",
+				"--enable-metrics=true",
+				"--metrics-port", "9090",
+				"--dapr-http-max-request-size", "-1",
+				"--dapr-http-read-buffer-size", "-1",
+				"--dapr-graceful-shutdown-seconds", "-1",
+				"--disable-builtin-k8s-secret-store=false",
+				"--config", "foo",
+				"--config", "bar",
+			}
+
+			assert.EqualValues(t, expectedArgs, container.Args)
+		})
 	})
 
 	t.Run("test enable-api-logging", func(t *testing.T) {
@@ -729,7 +849,6 @@ func TestGetSidecarContainer(t *testing.T) {
 				"--control-plane-address", "controlplane:9000",
 				"--app-protocol", "http",
 				"--placement-host-address", "placement:50000",
-				"--config", defaultTestConfig,
 				"--log-level", "info",
 				"--app-max-concurrency", "-1",
 				"--sentry-address", "sentry:50000",
@@ -739,6 +858,7 @@ func TestGetSidecarContainer(t *testing.T) {
 				"--dapr-http-read-buffer-size", "-1",
 				"--dapr-graceful-shutdown-seconds", "-1",
 				"--disable-builtin-k8s-secret-store=true",
+				"--config", defaultTestConfig,
 				"--enable-mtls",
 			}
 
@@ -763,7 +883,6 @@ func TestGetSidecarContainer(t *testing.T) {
 				"--control-plane-address", "controlplane:9000",
 				"--app-protocol", "http",
 				"--placement-host-address", "placement:50000",
-				"--config", defaultTestConfig,
 				"--log-level", "info",
 				"--app-max-concurrency", "-1",
 				"--sentry-address", "sentry:50000",
@@ -773,6 +892,7 @@ func TestGetSidecarContainer(t *testing.T) {
 				"--dapr-http-read-buffer-size", "-1",
 				"--dapr-graceful-shutdown-seconds", "-1",
 				"--disable-builtin-k8s-secret-store=true",
+				"--config", defaultTestConfig,
 				"--enable-api-logging=true",
 				"--enable-mtls",
 			}
@@ -798,7 +918,6 @@ func TestGetSidecarContainer(t *testing.T) {
 				"--control-plane-address", "controlplane:9000",
 				"--app-protocol", "http",
 				"--placement-host-address", "placement:50000",
-				"--config", defaultTestConfig,
 				"--log-level", "info",
 				"--app-max-concurrency", "-1",
 				"--sentry-address", "sentry:50000",
@@ -808,6 +927,7 @@ func TestGetSidecarContainer(t *testing.T) {
 				"--dapr-http-read-buffer-size", "-1",
 				"--dapr-graceful-shutdown-seconds", "-1",
 				"--disable-builtin-k8s-secret-store=true",
+				"--config", defaultTestConfig,
 				"--enable-api-logging=false",
 				"--enable-mtls",
 			}

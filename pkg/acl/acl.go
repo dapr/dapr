@@ -35,25 +35,26 @@ import (
 var log = logger.NewLogger("dapr.acl")
 
 // ParseAccessControlSpec creates an in-memory copy of the Access Control Spec for fast lookup.
-func ParseAccessControlSpec(accessControlSpec config.AccessControlSpec, isHTTP bool) (*config.AccessControlList, error) {
-	if accessControlSpec.TrustDomain == "" &&
-		accessControlSpec.DefaultAction == "" &&
-		(accessControlSpec.AppPolicies == nil || len(accessControlSpec.AppPolicies) == 0) {
+func ParseAccessControlSpec(accessControlSpec *config.AccessControlSpec, isHTTP bool) (*config.AccessControlList, error) {
+	if accessControlSpec == nil ||
+		(accessControlSpec.TrustDomain == "" &&
+			accessControlSpec.DefaultAction == "" &&
+			len(accessControlSpec.AppPolicies) == 0) {
 		// No ACL has been specified
 		log.Debugf("No Access control policy specified")
 		return nil, nil
 	}
 
-	var accessControlList config.AccessControlList
-	accessControlList.PolicySpec = make(map[string]config.AccessControlListPolicySpec)
-	accessControlList.DefaultAction = strings.ToLower(accessControlSpec.DefaultAction)
+	accessControlList := config.AccessControlList{
+		PolicySpec:    make(map[string]config.AccessControlListPolicySpec),
+		DefaultAction: strings.ToLower(accessControlSpec.DefaultAction),
+		TrustDomain:   accessControlSpec.TrustDomain,
+	}
 
-	accessControlList.TrustDomain = accessControlSpec.TrustDomain
 	if accessControlSpec.TrustDomain == "" {
 		accessControlList.TrustDomain = config.DefaultTrustDomain
 	}
 
-	accessControlList.DefaultAction = accessControlSpec.DefaultAction
 	if accessControlSpec.DefaultAction == "" {
 		if accessControlSpec.AppPolicies == nil || len(accessControlSpec.AppPolicies) > 0 {
 			// Some app level policies have been specified but not default global action is set. Default to more secure option - Deny

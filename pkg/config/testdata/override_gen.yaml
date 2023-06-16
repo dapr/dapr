@@ -1,0 +1,33 @@
+kind: Configuration
+apiversion: ""
+metadata:
+    name: daprsystem
+    generatename: ""
+    namespace: default
+    selflink: ""
+    uid: ""
+    resourceversion: ""
+    generation: 0
+    creationtimestamp: "0001-01-01T00:00:00Z"
+    deletiontimestamp: null
+    deletiongraceperiodseconds: null
+    labels: {}
+    annotations: {}
+    ownerreferences: []
+    finalizers: []
+    managedfields: []
+spec:
+    tracing:
+        otel:
+            isSecure: true
+    mtls:
+        workloadCertTTL: 25s
+        allowedClockSkew: 1h
+    metric:
+        enabled: true
+    accessControl:
+        defaultAction: allow
+        trustDomain: public
+    features:
+        - name: Test.Feature
+          enabled: true

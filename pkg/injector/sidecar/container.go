@@ -138,7 +138,6 @@ func GetSidecarContainer(cfg ContainerConfig) (*corev1.Container, error) {
 		"--control-plane-address", cfg.ControlPlaneAddress,
 		"--app-protocol", cfg.Annotations.GetStringOrDefault(annotations.KeyAppProtocol, annotations.DefaultAppProtocol),
 		"--placement-host-address", cfg.PlacementServiceAddress,
-		"--config", cfg.Annotations.GetString(annotations.KeyConfig),
 		"--log-level", cfg.Annotations.GetStringOrDefault(annotations.KeyLogLevel, annotations.DefaultLogLevel),
 		"--app-max-concurrency", strconv.Itoa(int(maxConcurrency)),
 		"--sentry-address", cfg.SentryAddress,
@@ -148,6 +147,18 @@ func GetSidecarContainer(cfg ContainerConfig) (*corev1.Container, error) {
 		"--dapr-http-read-buffer-size", strconv.Itoa(int(readBufferSize)),
 		"--dapr-graceful-shutdown-seconds", strconv.Itoa(int(gracefulShutdownSeconds)),
 		"--disable-builtin-k8s-secret-store=" + strconv.FormatBool(disableBuiltinK8sSecretStore),
+	}
+
+	// Allow loading multiple configurations if the annotation contains a comma-separated list
+	if configsVal := cfg.Annotations.GetString(annotations.KeyConfig); configsVal != "" {
+		configs := strings.Split(configsVal, ",")
+		for _, config := range configs {
+			config = strings.TrimSpace(config)
+			if config == "" {
+				continue
+			}
+			args = append(args, "--config", config)
+		}
 	}
 
 	if v, ok := cfg.Annotations[annotations.KeyAppChannel]; ok && v != "" {

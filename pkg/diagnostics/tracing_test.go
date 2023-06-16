@@ -122,7 +122,7 @@ func TestStartInternalCallbackSpan(t *testing.T) {
 	otel.SetTracerProvider(tp)
 
 	t.Run("traceparent is provided and sampling is enabled", func(t *testing.T) {
-		traceSpec := config.TracingSpec{SamplingRate: "1"}
+		traceSpec := &config.TracingSpec{SamplingRate: "1"}
 
 		scConfig := trace.SpanContextConfig{
 			TraceID:    trace.TraceID{75, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54},
@@ -142,7 +142,7 @@ func TestStartInternalCallbackSpan(t *testing.T) {
 	})
 
 	t.Run("traceparent is provided with sampling flag = 1 but sampling is disabled", func(t *testing.T) {
-		traceSpec := config.TracingSpec{SamplingRate: "0"}
+		traceSpec := &config.TracingSpec{SamplingRate: "0"}
 
 		scConfig := trace.SpanContextConfig{
 			TraceID:    trace.TraceID{75, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54},

@@ -259,7 +259,7 @@ func TestMain(m *testing.M) {
 	testApps := []kube.AppDescription{
 		{
 			// "secretappconfig" restricts access to the Kubernetes secret store, but the built-in one (called "kubernetes") should work anyways
-			Config:         "secretappconfig",
+			Config:         "secretappconfig,secretappconfig-components",
 			AppName:        appName,
 			DaprEnabled:    true,
 			ImageName:      "e2e-secretapp",
@@ -268,7 +268,7 @@ func TestMain(m *testing.M) {
 			MetricsEnabled: true,
 		},
 		{
-			Config:             "secretappconfig",
+			Config:             "secretappconfig,secretappconfig-components",
 			AppName:            "secretapp-disable",
 			DaprEnabled:        true,
 			ImageName:          "e2e-secretapp",

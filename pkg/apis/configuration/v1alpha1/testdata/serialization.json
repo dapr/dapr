@@ -1,0 +1,42 @@
+{
+    "empty": {},
+    "mtls-empty": {
+        "mtls": {}
+    },
+    "mtls-enabled": {
+        "mtls": {
+            "enabled": true
+        }
+    },
+    "mtls-disabled": {
+        "mtls": {
+            "enabled": false
+        }
+    },
+    "metric-empty": {
+        "metric": {}
+    },
+    "metric-enabled": {
+        "metric": {
+            "enabled": true,
+            "rules": [
+                {
+                    "name": "myrule",
+                    "labels": [
+                        {
+                            "name": "mylabel",
+                            "regex": {
+                                "foo": "bar"
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
+    },
+    "metric-disabled": {
+        "metric": {
+            "enabled": false
+        }
+    }
+}
