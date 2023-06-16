@@ -41,6 +41,7 @@ Dapr uses prometheus process and go collectors by default.
 
 * dapr_placement_runtimes_total: The total number of hosts reported to placement service.
 * dapr_placement_actorruntimes_total: The total number of actor runtimes reported to placement service.
+* dapr_placement_actor_heartbeat_timestamp: The actor's heartbeat timestamp (in seconds) was last reported to the placement service.
 
 ## Dapr Sentry metrics
 

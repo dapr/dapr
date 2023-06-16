@@ -30,6 +30,7 @@ import (
 	"k8s.io/utils/clock"
 
 	daprCredentials "github.com/dapr/dapr/pkg/credentials"
+	"github.com/dapr/dapr/pkg/placement/monitoring"
 	"github.com/dapr/dapr/pkg/placement/raft"
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/kit/logger"
@@ -213,6 +214,10 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 			if !isActorRuntime {
 				// ignore if this runtime is non-actor.
 				continue
+			}
+
+			for _, entity := range req.Entities {
+				monitoring.RecordActorHeartbeat(req.Id, entity, req.Name, req.Pod, p.clock.Now())
 			}
 
 			// Record the heartbeat timestamp. This timestamp will be used to check if the member
