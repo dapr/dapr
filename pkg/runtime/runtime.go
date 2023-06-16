@@ -122,6 +122,9 @@ const (
 	bindingsConcurrencyParallel   = "parallel"
 	bindingsConcurrencySequential = "sequential"
 	pubsubName                    = "pubsubName"
+	bindingDirection              = "direction"
+	inputBinding                  = "input"
+	outputBinding                 = "output"
 
 	// hot reloading is currently unsupported, but
 	// setting this environment variable restores the
@@ -1705,7 +1708,30 @@ func (a *DaprRuntime) isAppSubscribedToBinding(binding string) (bool, error) {
 	return false, nil
 }
 
+func isBindingOfDirection(direction string, metadata []componentsV1alpha1.MetadataItem) bool {
+	directionFound := false
+
+	for _, m := range metadata {
+		if strings.EqualFold(m.Name, bindingDirection) {
+			directionFound = true
+
+			directions := strings.Split(m.Value.String(), ",")
+			for _, d := range directions {
+				if strings.TrimSpace(strings.ToLower(d)) == direction {
+					return true
+				}
+			}
+		}
+	}
+
+	return !directionFound
+}
+
 func (a *DaprRuntime) initInputBinding(c componentsV1alpha1.Component) error {
+	if !isBindingOfDirection(inputBinding, c.Spec.Metadata) {
+		return nil
+	}
+
 	fName := c.LogName()
 	binding, err := a.bindingsRegistry.CreateInputBinding(c.Spec.Type, c.Spec.Version, fName)
 	if err != nil {
@@ -1732,6 +1758,10 @@ func (a *DaprRuntime) initInputBinding(c componentsV1alpha1.Component) error {
 }
 
 func (a *DaprRuntime) initOutputBinding(c componentsV1alpha1.Component) error {
+	if !isBindingOfDirection(outputBinding, c.Spec.Metadata) {
+		return nil
+	}
+
 	fName := c.LogName()
 	binding, err := a.bindingsRegistry.CreateOutputBinding(c.Spec.Type, c.Spec.Version, fName)
 	if err != nil {
@@ -2535,6 +2565,8 @@ func (a *DaprRuntime) initActors() error {
 		Resiliency:       a.resiliency,
 		StateStoreName:   a.actorStateStoreName,
 		CompStore:        a.compStore,
+		// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
+		StateTTLEnabled: a.globalConfig.IsFeatureEnabled(config.ActorStateTTL),
 	})
 	err = act.Init()
 	if err == nil {

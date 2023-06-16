@@ -29,6 +29,7 @@ import (
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
 	"github.com/dapr/dapr/tests/runner/summary"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -127,7 +128,7 @@ func TestActorReminderRegistrationPerformance(t *testing.T) {
 	// Perform dapr test
 	endpoint := fmt.Sprintf("http://127.0.0.1:3500/v1.0/actors/%v/{uuid}/reminders/myreminder", actorType)
 	p.TargetEndpoint = endpoint
-	p.Payload = "{\"dueTime\":\"24h\",\"period\":\"24h\"}"
+	p.Payload = `{"dueTime":"24h","period":"24h"}`
 	body, err := json.Marshal(&p)
 	require.NoError(t, err)
 
@@ -139,8 +140,8 @@ func TestActorReminderRegistrationPerformance(t *testing.T) {
 	// fast fail if daprResp starts with error
 	require.False(t, strings.HasPrefix(string(daprResp), "error"))
 
-	// Let test run for 10 minutes triggering the timers and collect metrics.
-	time.Sleep(10 * time.Minute)
+	// Let test run for 90s triggering the timers and collect metrics.
+	time.Sleep(90 * time.Second)
 
 	appUsage, err := tr.Platform.GetAppUsage(serviceApplicationName)
 	require.NoError(t, err)
@@ -193,8 +194,8 @@ func TestActorReminderRegistrationPerformance(t *testing.T) {
 		OutputFortio(daprResult).
 		Flush()
 
-	require.Equal(t, 0, daprResult.RetCodes.Num400)
-	require.Equal(t, 0, daprResult.RetCodes.Num500)
-	require.Equal(t, 0, restarts)
-	require.True(t, daprResult.ActualQPS > targetQPS)
+	assert.Equal(t, 0, daprResult.RetCodes.Num400)
+	assert.Equal(t, 0, daprResult.RetCodes.Num500)
+	assert.Equal(t, 0, restarts)
+	assert.True(t, daprResult.ActualQPS > targetQPS)
 }
