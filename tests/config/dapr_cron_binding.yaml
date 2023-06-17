@@ -21,3 +21,5 @@ spec:
   metadata:
   - name: schedule
     value: "@every 1s"
+  - name: direction
+    value: input

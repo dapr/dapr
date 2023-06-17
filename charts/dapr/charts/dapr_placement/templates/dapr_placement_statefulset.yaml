@@ -10,7 +10,7 @@ metadata:
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
 spec:
-{{- if eq .Values.global.ha.enabled true }}
+{{- if or (eq .Values.global.ha.enabled true) (eq .Values.ha true) }}
   replicas: 3
 {{- else }}
   replicas: 1
@@ -73,7 +73,7 @@ spec:
           - name: credentials
             mountPath: /var/run/dapr/credentials
             readOnly: true
-{{- if eq .Values.global.ha.enabled true }}
+{{- if or (eq .Values.global.ha.enabled true) (eq .Values.ha true) }}
   {{- if eq .Values.cluster.forceInMemoryLog false }}
           - name: raft-log
     {{- if eq .Values.global.daprControlPlaneOs "windows" }}
@@ -110,7 +110,7 @@ spec:
         - "/placement"
         - "--"
 {{- end }}
-{{- if eq .Values.global.ha.enabled true }}
+{{- if or (eq .Values.global.ha.enabled true) (eq .Values.ha true) }}
         - "--id"
         - "$(PLACEMENT_ID)"
         - "--initial-cluster"
@@ -214,7 +214,7 @@ spec:
       tolerations:
 {{ toYaml .Values.global.tolerations | indent 8 }}
 {{- end }}
-{{- if eq .Values.global.ha.enabled true }}
+{{- if or (eq .Values.global.ha.enabled true) (eq .Values.ha true) }}
   {{- if eq .Values.cluster.forceInMemoryLog false }}
   volumeClaimTemplates:
   - metadata:
