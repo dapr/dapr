@@ -90,7 +90,7 @@ func main() {
 		},
 		apiServer.MonitorLeadership,
 		func(ctx context.Context) error {
-			healthzServer := health.NewServer(log)
+			healthzServer := health.NewServer(log, health.NewJsonDataRouterOptions[*placement.PlacementTables]("/tables", apiServer.GetPlacementTables))
 			healthzServer.Ready()
 			if healthzErr := healthzServer.Run(ctx, cfg.healthzPort); healthzErr != nil {
 				return fmt.Errorf("failed to start healthz server: %w", healthzErr)
