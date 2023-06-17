@@ -113,9 +113,9 @@ func TestGetMetadata(t *testing.T) {
 			bytes, err := json.Marshal(response)
 			assert.NoError(t, err)
 
-			healthCheckJSON := "}}"
+			healthCheckJSON := "},"
 			if tc.expectHealthCheckEnabled {
-				healthCheckJSON = `,"health":{"health_check_path":"/healthz","health_probe_interval":"10s","health_probe_timeout":"5s","health_threshold":3}}}`
+				healthCheckJSON = `,"health":{"health_check_path":"/healthz","health_probe_interval":"10s","health_probe_timeout":"5s","health_threshold":3}},`
 			}
 
 			expectedResponse := `{"id":"fakeAPI",` +
@@ -124,7 +124,8 @@ func TestGetMetadata(t *testing.T) {
 				`"extended_metadata":{"daprRuntimeVersion":"edge","testKey":"testValue"},` +
 				`"subscriptions":[{"pubsub_name":"test","topic":"topic","rules":{"rules":[{"path":"path"}]},"dead_letter_topic":"dead"}],` +
 				`"app_connection_properties":{"port":1234,"protocol":"http","channel_address":"1.2.3.4","max_concurrency":10` +
-				healthCheckJSON
+				healthCheckJSON +
+				`"runtimeVersion":"edge"}`
 			assert.Equal(t, expectedResponse, string(bytes))
 		})
 	}

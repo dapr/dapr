@@ -586,6 +586,7 @@ message GetMetadataResponse {
   repeated PubsubSubscription subscriptions = 5 [json_name = "subscriptions"];
   repeated MetadataHTTPEndpoint http_endpoints = 6 [json_name = "httpEndpoints"];
   AppConnectionProperties app_connection_properties = 7 [json_name = "appConnectionProperties"];
+  string runtimeVersion = 8 [json_name = "runtimeVersion"];
 }
 
 message ActiveActorsCount {
