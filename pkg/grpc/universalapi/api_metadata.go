@@ -35,6 +35,8 @@ func (a *UniversalAPI) GetMetadata(ctx context.Context, in *emptypb.Empty) (*run
 		extendedMetadata[k] = v
 	}
 	a.extendedMetadataLock.RUnlock()
+
+	// This is deprecated, but we still need to support it for backward compatibility.
 	extendedMetadata[daprRuntimeVersionKey] = buildinfo.Version()
 
 	// Active actors count
