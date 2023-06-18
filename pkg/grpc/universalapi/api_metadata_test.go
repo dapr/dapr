@@ -128,7 +128,9 @@ func TestGetMetadata(t *testing.T) {
 				`"subscriptions":[{"pubsub_name":"test","topic":"topic","rules":{"rules":[{"path":"path"}]},"dead_letter_topic":"dead"}],` +
 				`"app_connection_properties":{"port":1234,"protocol":"http","channel_address":"1.2.3.4","max_concurrency":10` +
 				healthCheckJSON +
-				`"runtime_version":"edge","enabled_features":` + string(featuresJSON) + `}`
+				`"runtime_version":"edge",` +
+				`"enabled_features":` + string(featuresJSON) +
+				`}`
 			assert.Equal(t, expectedResponse, string(bytes))
 		})
 	}
