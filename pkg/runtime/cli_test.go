@@ -79,5 +79,5 @@ func TestStandaloneGlobalConfig(t *testing.T) {
 	assert.NoError(t, err)
 	assert.EqualValues(t, testAppID, runtime.runtimeConfig.ID)
 	assert.EqualValues(t, string(modes.StandaloneMode), runtime.runtimeConfig.Mode)
-	assert.False(t, runtime.globalConfig.Spec.MetricsSpec.Enabled)
+	assert.False(t, runtime.globalConfig.GetMetricsSpec().GetEnabled())
 }
