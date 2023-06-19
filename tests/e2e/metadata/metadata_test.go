@@ -43,6 +43,7 @@ type mockMetadata struct {
 	ActiveActorsCount    []activeActorsCount       `json:"actors"`
 	Extended             map[string]string         `json:"extended"`
 	RegisteredComponents []mockRegisteredComponent `json:"components"`
+	EnabledFeatures      []string                  `json:"enabledFeatures"`
 }
 
 type activeActorsCount struct {
@@ -82,6 +83,8 @@ func testGetMetadata(t *testing.T, metadataAppExternalURL string) {
 	require.NotEmpty(t, metadata.Extended)
 	require.NotEmpty(t, metadata.Extended["daprRuntimeVersion"])
 	require.Equal(t, "newvalue", metadata.Extended["newkey"])
+	require.Contains(t, metadata.EnabledFeatures, "IsEnabled")
+	require.NotContains(t, metadata.EnabledFeatures, "NotEnabled")
 }
 
 func TestMain(m *testing.M) {
@@ -98,17 +101,17 @@ func TestMain(m *testing.M) {
 			Replicas:       1,
 			IngressEnabled: true,
 			MetricsEnabled: true,
+			Config:         "previewconfig",
 		},
 	}
 
-	log.Printf("Creating TestRunner\n")
+	log.Printf("Creating TestRunner")
 	tr = runner.NewTestRunner("metadatatest", testApps, nil, nil)
-	log.Printf("Starting TestRunner\n")
+	log.Printf("Starting TestRunner")
 	os.Exit(tr.Start(m))
 }
 
 func TestMetadata(t *testing.T) {
-	t.Log("Enter TestMetadataHTTP")
 	metadataAppExternalURL := tr.Platform.AcquireAppExternalURL(appName)
 	require.NotEmpty(t, metadataAppExternalURL, "metadataAppExternalURL must not be empty!")
 

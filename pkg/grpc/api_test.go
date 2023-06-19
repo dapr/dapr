@@ -54,7 +54,6 @@ import (
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpEndpointsV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
-	"github.com/dapr/dapr/pkg/buildinfo"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -4308,6 +4307,7 @@ func TestMetadata(t *testing.T) {
 				"test": "value",
 			},
 			AppConnectionConfig: appConnectionConfig,
+			GlobalConfig:        &config.Configuration{},
 		},
 	}, "")
 	defer server.Stop()
@@ -4334,8 +4334,6 @@ func TestMetadata(t *testing.T) {
 		bytes, err := json.Marshal(res)
 		assert.NoError(t, err)
 
-		featuresJSON, _ := json.Marshal(buildinfo.Features())
-
 		expectedResponse := `{"id":"fakeAPI",` +
 			`"active_actors_count":[{"type":"abcd","count":10},{"type":"xyz","count":5}],` +
 			`"registered_components":[{"name":"MockComponent1Name","type":"mock.component1Type","version":"v1.0","capabilities":["mock.feat.MockComponent1Name"]},` +
@@ -4345,9 +4343,7 @@ func TestMetadata(t *testing.T) {
 			`"http_endpoints":[{"name":"MockHTTPEndpoint"}],` +
 			`"app_connection_properties":{"port":5000,"protocol":"grpc","channel_address":"1.2.3.4","max_concurrency":10,` +
 			`"health":{"health_probe_interval":"10s","health_probe_timeout":"5s","health_threshold":3}},` +
-			`"runtime_version":"edge",` +
-			`"enabled_features":` + string(featuresJSON) +
-			`}`
+			`"runtime_version":"edge"}`
 		assert.Equal(t, expectedResponse, string(bytes))
 	})
 }

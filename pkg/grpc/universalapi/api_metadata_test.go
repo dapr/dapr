@@ -25,7 +25,6 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors"
 	componentsV1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/expr"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -106,6 +105,7 @@ func TestGetMetadata(t *testing.T) {
 					"testKey": "testValue",
 				},
 				AppConnectionConfig: appConnectionConfig,
+				GlobalConfig:        &config.Configuration{},
 			}
 
 			response, err := fakeAPI.GetMetadata(context.Background(), &emptypb.Empty{})
@@ -119,8 +119,6 @@ func TestGetMetadata(t *testing.T) {
 				healthCheckJSON = `,"health":{"health_check_path":"/healthz","health_probe_interval":"10s","health_probe_timeout":"5s","health_threshold":3}},`
 			}
 
-			featuresJSON, _ := json.Marshal(buildinfo.Features())
-
 			expectedResponse := `{"id":"fakeAPI",` +
 				`"active_actors_count":[{"type":"abcd","count":10},{"type":"xyz","count":5}],` +
 				`"registered_components":[{"name":"testComponent","capabilities":["mock.feat.testComponent"]}],` +
@@ -128,9 +126,7 @@ func TestGetMetadata(t *testing.T) {
 				`"subscriptions":[{"pubsub_name":"test","topic":"topic","rules":{"rules":[{"path":"path"}]},"dead_letter_topic":"dead"}],` +
 				`"app_connection_properties":{"port":1234,"protocol":"http","channel_address":"1.2.3.4","max_concurrency":10` +
 				healthCheckJSON +
-				`"runtime_version":"edge",` +
-				`"enabled_features":` + string(featuresJSON) +
-				`}`
+				`"runtime_version":"edge"}`
 			assert.Equal(t, expectedResponse, string(bytes))
 		})
 	}
