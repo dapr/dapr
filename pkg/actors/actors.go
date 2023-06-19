@@ -303,7 +303,7 @@ func (a *actorsRuntime) deactivateActor(actorType, actorID string) error {
 	// TODO Propagate context.
 	ctx := context.TODO()
 
-	resp, err := a.getAppChannel(actorType).InvokeMethod(ctx, req)
+	resp, err := a.getAppChannel(actorType).InvokeMethod(ctx, req, "")
 	if err != nil {
 		diag.DefaultMonitoring.ActorDeactivationFailed(actorType, "invoke")
 		return err
@@ -535,7 +535,7 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 		},
 	)
 	resp, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
-		return a.getAppChannel(act.actorType).InvokeMethod(ctx, req)
+		return a.getAppChannel(act.actorType).InvokeMethod(ctx, req, "")
 	})
 	if err != nil {
 		return nil, err
