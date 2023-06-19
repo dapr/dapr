@@ -896,7 +896,7 @@ func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *c
 
 		policyRunner := resiliency.NewRunner[struct{}](ctx, policyDef)
 		_, err := policyRunner(func(ctx context.Context) (struct{}, error) {
-			rResp, rErr := h.appChannel.InvokeMethod(ctx, req)
+			rResp, rErr := h.appChannel.InvokeMethod(ctx, req, "")
 			if rErr != nil {
 				return struct{}{}, rErr
 			}

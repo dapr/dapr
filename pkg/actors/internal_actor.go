@@ -88,7 +88,7 @@ func (internalActorChannel) HealthProbe(ctx context.Context) (bool, error) {
 }
 
 // InvokeMethod implements channel.AppChannel
-func (c *internalActorChannel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+func (c *internalActorChannel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest, _ string) (*invokev1.InvokeMethodResponse, error) {
 	actorType := req.Actor().GetActorType()
 	actor, ok := c.actors[actorType]
 	if !ok {
