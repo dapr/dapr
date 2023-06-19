@@ -53,6 +53,7 @@ type mockMetadata struct {
 	ActiveActorsCount    []activeActorsCount       `json:"actors"`
 	Extended             map[string]string         `json:"extended"`
 	RegisteredComponents []mockRegisteredComponent `json:"components"`
+	EnabledFeatures      []string                  `json:"enabledFeatures"`
 }
 
 type activeActorsCount struct {
