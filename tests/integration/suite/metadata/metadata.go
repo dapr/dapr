@@ -83,6 +83,7 @@ func validateResponse(t *testing.T, appID string, appPort int, body string) {
 	require.NoError(t, err)
 
 	require.Equal(t, appID, bodyMap["id"])
+	require.Equal(t, "edge", bodyMap["runtimeVersion"])
 
 	extended, ok := bodyMap["extended"].(map[string]interface{})
 	require.True(t, ok)
