@@ -938,12 +938,14 @@ func (a *actorsRuntime) startReminder(reminder *reminders.Reminder, stopChannel 
 			_, exists := a.activeReminders.Load(reminderKey)
 			if !exists {
 				log.Error("Could not find active reminder with key: " + reminderKey)
+				nextTimer = nil
 				return
 			}
 
 			// if all repetitions are completed, proceed with reminder deletion
 			if reminder.RepeatsLeft() == 0 {
 				log.Info("Reminder " + reminderKey + " has been completed")
+				nextTimer = nil
 				break L
 			}
 
@@ -953,6 +955,7 @@ func (a *actorsRuntime) startReminder(reminder *reminders.Reminder, stopChannel 
 				if errors.Is(err, ErrReminderCanceled) {
 					// The handler is explicitly canceling the timer
 					log.Debug("Reminder " + reminderKey + " was canceled by the actor")
+					nextTimer = nil
 					break L
 				} else {
 					log.Errorf("Error while executing reminder %s: %v", reminderKey, err)
@@ -973,6 +976,7 @@ func (a *actorsRuntime) startReminder(reminder *reminders.Reminder, stopChannel 
 				}
 			} else {
 				log.Error("Could not find active reminder with key: " + reminderKey)
+				nextTimer = nil
 				return
 			}
 
@@ -1327,6 +1331,7 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 				}
 			} else {
 				log.Errorf("Could not find active timer %s", timerKey)
+				nextTimer = nil
 				return
 			}
 
