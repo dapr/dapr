@@ -131,6 +131,7 @@ type APIOpts struct {
 	GetComponentsCapabilitiesFn func() map[string][]string
 	MaxRequestBodySize          int64 // In bytes
 	AppConnectionConfig         config.AppConnectionConfig
+	GlobalConfig                *config.Configuration
 }
 
 // NewAPI returns a new API.
@@ -153,6 +154,7 @@ func NewAPI(opts APIOpts) API {
 			ShutdownFn:                 opts.Shutdown,
 			GetComponentsCapabilitesFn: opts.GetComponentsCapabilitiesFn,
 			AppConnectionConfig:        opts.AppConnectionConfig,
+			GlobalConfig:               opts.GlobalConfig,
 		},
 	}
 
