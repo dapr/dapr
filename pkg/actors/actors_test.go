@@ -3337,7 +3337,7 @@ func TestCreateTimerReminderGoroutineLeak(t *testing.T) {
 				require.NoError(t, createFn(i, false))
 			}
 
-			// Create 5 timers/reminders that have TTL
+			// Create 5 timers/reminders that have TTLs
 			for i := 10; i < 15; i++ {
 				require.NoError(t, createFn(i, true))
 			}

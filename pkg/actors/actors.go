@@ -942,7 +942,7 @@ func (a *actorsRuntime) startReminder(reminder *reminders.Reminder, stopChannel 
 				return
 			}
 
-			// if all repetitions are completed, proceed with reminder deletion
+			// If all repetitions are completed, delete the reminder and do not execute it
 			if reminder.RepeatsLeft() == 0 {
 				log.Info("Reminder " + reminderKey + " has been completed")
 				nextTimer = nil
