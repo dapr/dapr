@@ -91,7 +91,7 @@ jobs:
       - name: Run go mod tidy check diff
         run: make modtidy check-diff
       - name: Check for retracted dependencies
-        run |
+        run: |
           if [[ $(go list -mod=mod -f '{{if .Retracted}}{{.}}{{end}}' -u -m all) ]]; then
             exit 1
           else
