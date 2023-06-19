@@ -24,7 +24,6 @@ import (
 
 	"github.com/dapr/dapr/pkg/acl"
 	"github.com/dapr/dapr/pkg/config"
-	daprGlobalConfig "github.com/dapr/dapr/pkg/config"
 	env "github.com/dapr/dapr/pkg/config/env"
 	configmodes "github.com/dapr/dapr/pkg/config/modes"
 	"github.com/dapr/dapr/pkg/config/protocol"
@@ -115,7 +114,6 @@ type internalConfig struct {
 	internalGRPCPort             int
 	apiListenAddresses           []string
 	appConnectionConfig          config.AppConnectionConfig
-	appConfig                    config.ApplicationConfig
 	mode                         modes.DaprMode
 	placementAddresses           []string
 	allowedOrigins               string
@@ -168,7 +166,7 @@ func FromConfig(cfg *Config) (*DaprRuntime, error) {
 		return nil, err
 	}
 
-	var globalConfig *daprGlobalConfig.Configuration
+	var globalConfig *config.Configuration
 	var configErr error
 
 	if intc.mTLSEnabled || intc.mode == modes.KubernetesMode {
@@ -190,7 +188,7 @@ func FromConfig(cfg *Config) (*DaprRuntime, error) {
 		operatorClient = client
 	}
 
-	var accessControlList *daprGlobalConfig.AccessControlList
+	var accessControlList *config.AccessControlList
 	namespace := os.Getenv("NAMESPACE")
 	podName := os.Getenv("POD_NAME")
 
@@ -198,10 +196,10 @@ func FromConfig(cfg *Config) (*DaprRuntime, error) {
 		switch intc.mode {
 		case modes.KubernetesMode:
 			log.Debug("Loading Kubernetes config resource: " + intc.configPath)
-			globalConfig, configErr = daprGlobalConfig.LoadKubernetesConfiguration(intc.configPath, namespace, podName, operatorClient)
+			globalConfig, configErr = config.LoadKubernetesConfiguration(intc.configPath, namespace, podName, operatorClient)
 		case modes.StandaloneMode:
 			log.Debug("Loading config from file: " + intc.configPath)
-			globalConfig, _, configErr = daprGlobalConfig.LoadStandaloneConfiguration(intc.configPath)
+			globalConfig, _, configErr = config.LoadStandaloneConfiguration(intc.configPath)
 		}
 	}
 
@@ -210,9 +208,9 @@ func FromConfig(cfg *Config) (*DaprRuntime, error) {
 	}
 	if globalConfig == nil {
 		log.Info("loading default configuration")
-		globalConfig = daprGlobalConfig.LoadDefaultConfiguration()
+		globalConfig = config.LoadDefaultConfiguration()
 	}
-	daprGlobalConfig.SetTracingSpecFromEnv(globalConfig)
+	config.SetTracingSpecFromEnv(globalConfig)
 
 	globalConfig.LoadFeatures()
 	if enabledFeatures := globalConfig.EnabledFeatures(); len(enabledFeatures) > 0 {
