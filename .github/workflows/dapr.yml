@@ -90,6 +90,13 @@ jobs:
           args: --build-tags allcomponents
       - name: Run go mod tidy check diff
         run: make modtidy check-diff
+      - name: Check for retracted dependencies
+        run: |
+          if [[ $(go list -mod=mod -f '{{if .Retracted}}{{.}}{{end}}' -u -m all) ]]; then
+            exit 1
+          else
+            exit 0
+          fi
       - name: Run gen-proto check diff
         run: |
           wget https://github.com/protocolbuffers/protobuf/releases/download/v${{ env.PROTOC_VERSION }}/protoc-${{ env.PROTOC_VERSION }}-linux-x86_64.zip
