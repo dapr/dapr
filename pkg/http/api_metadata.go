@@ -51,6 +51,8 @@ func (a *api) onGetMetadata() fasthttp.RequestHandler {
 					ActiveActorsCount:    out.ActiveActorsCount,
 					RegisteredComponents: out.RegisteredComponents,
 					HTTPEndpoints:        out.HttpEndpoints,
+					RuntimeVersion:       out.RuntimeVersion,
+					EnabledFeatures:      out.EnabledFeatures,
 				}
 
 				// Copy the app connection properties into a custom struct
@@ -120,6 +122,8 @@ func (a *api) onPutMetadata() fasthttp.RequestHandler {
 
 type metadataResponse struct {
 	ID                      string                                  `json:"id,omitempty"`
+	RuntimeVersion          string                                  `json:"runtimeVersion,omitempty"`
+	EnabledFeatures         []string                                `json:"enabledFeatures,omitempty"`
 	ActiveActorsCount       []*runtimev1pb.ActiveActorsCount        `json:"actors,omitempty"`
 	RegisteredComponents    []*runtimev1pb.RegisteredComponents     `json:"components,omitempty"`
 	Extended                map[string]string                       `json:"extended,omitempty"`

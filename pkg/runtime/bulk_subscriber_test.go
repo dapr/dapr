@@ -856,7 +856,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		}
 
 		// create a new AppChannel and gRPC client for every test
-		rt.createAppChannel()
+		rt.createChannels()
 		// properly close the app channel created
 		defer rt.grpc.CloseAppClient()
 
@@ -995,7 +995,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			defer grpcServer.Stop()
 		}
 
-		rt.createAppChannel()
+		rt.createChannels()
 		defer rt.grpc.CloseAppClient()
 
 		require.NoError(t, rt.initPubSub(pubsubComponent))
@@ -1084,7 +1084,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			defer grpcServer.Stop()
 		}
 
-		rt.createAppChannel()
+		rt.createChannels()
 		defer rt.grpc.CloseAppClient()
 
 		require.NoError(t, rt.initPubSub(pubsubComponent))
@@ -1175,7 +1175,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			defer grpcServer.Stop()
 		}
 
-		rt.createAppChannel()
+		rt.createChannels()
 		defer rt.grpc.CloseAppClient()
 
 		require.NoError(t, rt.initPubSub(pubsubComponent))
@@ -1261,7 +1261,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			defer grpcServer.Stop()
 		}
 
-		rt.createAppChannel()
+		rt.createChannels()
 		defer rt.grpc.CloseAppClient()
 
 		require.NoError(t, rt.initPubSub(pubsubComponent))
@@ -1333,7 +1333,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			defer grpcServer.Stop()
 		}
 
-		rt.createAppChannel()
+		rt.createChannels()
 		defer rt.grpc.CloseAppClient()
 
 		require.NoError(t, rt.initPubSub(pubsubComponent))
