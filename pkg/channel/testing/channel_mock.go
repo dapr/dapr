@@ -70,8 +70,8 @@ func (_m *MockAppChannel) Init() {
 	_m.mutex.Unlock()
 }
 
-// InvokeMethod provides a mock function with given fields: ctx, req
-func (_m *MockAppChannel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+// InvokeMethod provides a mock function with given fields: ctx, req, appID
+func (_m *MockAppChannel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*invokev1.InvokeMethodResponse, error) {
 	_m.mutex.Lock()
 	if _m.requestsReceived != nil {
 		req.WithReplay(true)
@@ -89,8 +89,8 @@ func (_m *MockAppChannel) InvokeMethod(ctx context.Context, req *invokev1.Invoke
 	ret := _m.Called(ctx, req)
 
 	var r0 *invokev1.InvokeMethodResponse
-	if rf, ok := ret.Get(0).(func(context.Context, *invokev1.InvokeMethodRequest) *invokev1.InvokeMethodResponse); ok {
-		r0 = rf(ctx, req)
+	if rf, ok := ret.Get(0).(func(context.Context, *invokev1.InvokeMethodRequest, string) *invokev1.InvokeMethodResponse); ok {
+		r0 = rf(ctx, req, appID)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*invokev1.InvokeMethodResponse)
