@@ -3539,7 +3539,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			}
 
 			// create a new AppChannel and gRPC client for every test
-			rt.createAppChannel()
+			rt.createChannels()
 			// properly close the app channel created
 			defer rt.grpc.CloseAppClient()
 
@@ -4243,7 +4243,7 @@ func TestGetSubscribedBindingsGRPC(t *testing.T) {
 			defer grpcServer.Stop()
 
 			// create a new AppChannel and gRPC client for every test
-			rt.createAppChannel()
+			rt.createChannels()
 			// properly close the app channel created
 			defer rt.grpc.CloseAppClient()
 
@@ -5567,13 +5567,13 @@ func TestGetAppHTTPChannelConfigWithCustomChannel(t *testing.T) {
 	p, err := rt.buildAppHTTPPipeline()
 	assert.Nil(t, err)
 
-	c := rt.getAppHTTPChannelConfig(p)
+	c := rt.getAppHTTPChannelConfig(p, false)
 	assert.Equal(t, "http://my.app:0", c.Endpoint)
 }
 
 func TestComponentsCallback(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "OK")
+		fmt.Fprint(w, "OK")
 	}))
 	defer srv.Close()
 
