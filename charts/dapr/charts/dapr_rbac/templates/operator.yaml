@@ -24,8 +24,14 @@ rules:
     resources: ["deployments", "deployments/finalizers"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["apps"]
+    resources: ["deployments/finalizers"]
+    verbs: ["update"]
+  - apiGroups: ["apps"]
     resources: ["statefulsets", "statefulsets/finalizers"]
     verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["statefulsets/finalizers"]
+    verbs: ["update"]
   - apiGroups: [""]
     resources: ["pods"]
 {{- if .Values.global.operator.watchdogCanPatchPodLabels }}
@@ -37,6 +43,9 @@ rules:
     resources: ["services","services/finalizers"]
     verbs: ["get", "list", "watch", "update", "create"]
   - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["delete"]
+  - apiGroups: [""]
     resources: ["secrets"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["dapr.io"]
@@ -46,7 +55,10 @@ rules:
 {{- if .Values.global.argoRolloutServiceReconciler.enabled }}
   - apiGroups: ["argoproj.io"]
     resources: ["rollouts"]
-    verbs: ["get", "list", "watch"]
+    verbs: ["get", "list", "watch", "delete"]
+  - apiGroups: ["argoproj.io"]
+    resources: ["rollouts/finalizers"]
+    verbs: ["update"]
 {{- end }}
 ---
 {{- if not .Values.global.rbac.namespaced }}
@@ -101,14 +113,23 @@ rules:
     resources: ["deployments", "deployments/finalizers"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["apps"]
+    resources: ["deployments/finalizers"]
+    verbs: ["update"]
+  - apiGroups: ["apps"]
     resources: ["statefulsets", "statefulsets/finalizers"]
     verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["statefulsets/finalizers"]
+    verbs: ["update"]
   - apiGroups: [""]
     resources: ["pods"]
     verbs: ["get", "list", "delete"]
   - apiGroups: [""]
     resources: ["services","services/finalizers"]
     verbs: ["get", "list", "watch", "update", "create"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["delete"]
   - apiGroups: [""]
     resources: ["secrets"]
     verbs: ["get", "list", "watch"]
@@ -119,7 +140,10 @@ rules:
 {{- if .Values.global.argoRolloutServiceReconciler.enabled }}
   - apiGroups: ["argoproj.io"]
     resources: ["rollouts"]
-    verbs: ["get", "list", "watch"]
+    verbs: ["get", "list", "watch", "delete"]
+  - apiGroups: ["argoproj.io"]
+    resources: ["rollouts/finalizers"]
+    verbs: ["update"]
 {{- end }}
 ---
 kind: RoleBinding
