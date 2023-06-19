@@ -55,6 +55,7 @@ import (
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpEndpointsV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
+	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/channel/http"
 	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
 	"github.com/dapr/dapr/pkg/config"
@@ -2731,7 +2732,10 @@ func TestV1MetadataEndpoint(t *testing.T) {
 		assert.Equal(t, 204, resp.StatusCode)
 	})
 
+	featuresJSON, _ := json.Marshal(buildinfo.Features())
+
 	expectedBody := `{"id":"xyz","runtimeVersion":"edge",` +
+		`"enabledFeatures":` + string(featuresJSON) + "," +
 		`"actors":[{"type":"abcd","count":10},{"type":"xyz","count":5}],` +
 		`"components":[{"name":"MockComponent1Name","type":"mock.component1Type","version":"v1.0","capabilities":["mock.feat.MockComponent1Name"]},` +
 		`{"name":"MockComponent2Name","type":"mock.component2Type","version":"v1.0","capabilities":["mock.feat.MockComponent2Name"]}],` +

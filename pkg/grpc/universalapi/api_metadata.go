@@ -110,6 +110,7 @@ func (a *UniversalAPI) GetMetadata(ctx context.Context, in *emptypb.Empty) (*run
 		HttpEndpoints:           registeredHTTPEndpoints,
 		AppConnectionProperties: appConnectionProperties,
 		RuntimeVersion:          buildinfo.Version(),
+		EnabledFeatures:         buildinfo.Features(),
 	}, nil
 }
 
