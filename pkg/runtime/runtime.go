@@ -1547,6 +1547,7 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		MaxRequestBodySize:          int64(a.runtimeConfig.MaxRequestBodySize) << 20, // Convert from MB to bytes
 		CompStore:                   a.compStore,
 		AppConnectionConfig:         a.runtimeConfig.AppConnectionConfig,
+		GlobalConfig:                a.globalConfig,
 	})
 
 	serverConf := http.ServerConfig{
@@ -1641,6 +1642,7 @@ func (a *DaprRuntime) getGRPCAPI() grpc.API {
 		GetComponentsCapabilitiesFn: a.getComponentsCapabilitesMap,
 		CompStore:                   a.compStore,
 		AppConnectionConfig:         a.runtimeConfig.AppConnectionConfig,
+		GlobalConfig:                a.globalConfig,
 	})
 }
 

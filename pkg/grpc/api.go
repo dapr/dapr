@@ -99,6 +99,7 @@ type APIOpts struct {
 	Shutdown                    func()
 	GetComponentsCapabilitiesFn func() map[string][]string
 	AppConnectionConfig         config.AppConnectionConfig
+	GlobalConfig                *config.Configuration
 }
 
 // NewAPI returns a new gRPC API.
@@ -113,6 +114,7 @@ func NewAPI(opts APIOpts) API {
 			ShutdownFn:                 opts.Shutdown,
 			GetComponentsCapabilitesFn: opts.GetComponentsCapabilitiesFn,
 			AppConnectionConfig:        opts.AppConnectionConfig,
+			GlobalConfig:               opts.GlobalConfig,
 		},
 		directMessaging:       opts.DirectMessaging,
 		resiliency:            opts.Resiliency,
