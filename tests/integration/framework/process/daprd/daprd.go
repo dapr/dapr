@@ -68,7 +68,7 @@ type Daprd struct {
 func New(t *testing.T, fopts ...Option) *Daprd {
 	t.Helper()
 
-	uid, err := uuid.NewUUID()
+	uid, err := uuid.NewRandom()
 	require.NoError(t, err)
 
 	appListener, err := net.Listen("tcp", "127.0.0.1:0")

@@ -59,8 +59,8 @@ func (c SentryConfig) String() string {
 		caStore = c.CAStore
 	}
 
-	return fmt.Sprintf("Configuration: ca store:'%s', allowed clock skew:'%s', workload cert ttl:'%s'",
-		caStore, c.AllowedClockSkew.String(), c.WorkloadCertTTL.String())
+	return fmt.Sprintf("Configuration: port:'%v' ca store:'%s', allowed clock skew:'%s', workload cert ttl:'%s'",
+		c.Port, caStore, c.AllowedClockSkew.String(), c.WorkloadCertTTL.String())
 }
 
 var configGetters = map[string]func(string) (SentryConfig, error){

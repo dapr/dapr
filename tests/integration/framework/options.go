@@ -21,7 +21,16 @@ import (
 func WithProcesses(procs ...process.Interface) Option {
 	return func(o *options) {
 		for _, proc := range procs {
-			o.procs = append(o.procs, once.Wrap(proc))
+			var found bool
+			for _, d := range o.procs {
+				if d == proc {
+					found = true
+					break
+				}
+			}
+			if !found {
+				o.procs = append(o.procs, once.Wrap(proc))
+			}
 		}
 	}
 }

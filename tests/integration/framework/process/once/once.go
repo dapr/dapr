@@ -26,17 +26,27 @@ type once struct {
 	process.Interface
 	runOnce   atomic.Bool
 	cleanOnce atomic.Bool
+
+	failRun     func(t *testing.T)
+	failCleanup func(t *testing.T)
 }
 
 func Wrap(proc process.Interface) process.Interface {
 	return &once{
 		Interface: proc,
+		failRun: func(t *testing.T) {
+			t.Fatal("process has already been run")
+		},
+		failCleanup: func(t *testing.T) {
+			t.Fatal("process has already been cleaned up")
+		},
 	}
 }
 
 func (o *once) Run(t *testing.T, ctx context.Context) {
 	if !o.runOnce.CompareAndSwap(false, true) {
-		t.Fatal("process has already been run")
+		o.failRun(t)
+		return
 	}
 
 	o.Interface.Run(t, ctx)
@@ -44,7 +54,8 @@ func (o *once) Run(t *testing.T, ctx context.Context) {
 
 func (o *once) Cleanup(t *testing.T) {
 	if !o.cleanOnce.CompareAndSwap(false, true) {
-		t.Fatal("process has already been cleaned up")
+		o.failCleanup(t)
+		return
 	}
 
 	o.Interface.Cleanup(t)
