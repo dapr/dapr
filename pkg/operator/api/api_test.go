@@ -29,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/yaml"
 
+	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpendpointapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
@@ -69,10 +70,10 @@ func TestProcessComponentSecrets(t *testing.T) {
 	t.Run("secret ref exists, not kubernetes secret store, no error", func(t *testing.T) {
 		c := componentsapi.Component{
 			Spec: componentsapi.ComponentSpec{
-				Metadata: []componentsapi.MetadataItem{
+				Metadata: []commonapi.NameValuePair{
 					{
 						Name: "test1",
-						SecretKeyRef: componentsapi.SecretKeyRef{
+						SecretKeyRef: commonapi.SecretKeyRef{
 							Name: "secret1",
 							Key:  "key1",
 						},
@@ -91,10 +92,10 @@ func TestProcessComponentSecrets(t *testing.T) {
 	t.Run("secret ref exists, kubernetes secret store, secret extracted", func(t *testing.T) {
 		c := componentsapi.Component{
 			Spec: componentsapi.ComponentSpec{
-				Metadata: []componentsapi.MetadataItem{
+				Metadata: []commonapi.NameValuePair{
 					{
 						Name: "test1",
-						SecretKeyRef: componentsapi.SecretKeyRef{
+						SecretKeyRef: commonapi.SecretKeyRef{
 							Name: "secret1",
 							Key:  "key1",
 						},
@@ -138,10 +139,10 @@ func TestProcessComponentSecrets(t *testing.T) {
 	t.Run("secret ref exists, default kubernetes secret store, secret extracted", func(t *testing.T) {
 		c := componentsapi.Component{
 			Spec: componentsapi.ComponentSpec{
-				Metadata: []componentsapi.MetadataItem{
+				Metadata: []commonapi.NameValuePair{
 					{
 						Name: "test1",
-						SecretKeyRef: componentsapi.SecretKeyRef{
+						SecretKeyRef: commonapi.SecretKeyRef{
 							Name: "secret1",
 							Key:  "key1",
 						},
@@ -559,10 +560,10 @@ func TestProcessHTTPEndpointSecrets(t *testing.T) {
 	e := httpendpointapi.HTTPEndpoint{
 		Spec: httpendpointapi.HTTPEndpointSpec{
 			BaseURL: "http://test.com/",
-			Headers: []httpendpointapi.Header{
+			Headers: []commonapi.NameValuePair{
 				{
 					Name: "test1",
-					SecretKeyRef: httpendpointapi.SecretKeyRef{
+					SecretKeyRef: commonapi.SecretKeyRef{
 						Name: "secret1",
 						Key:  "key1",
 					},
