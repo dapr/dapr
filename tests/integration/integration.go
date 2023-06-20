@@ -21,7 +21,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -36,21 +35,8 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/ports"
 )
 
-const (
-	defaultConcurrency = 3
-
-	envConcurrency = "DAPR_INTEGRATION_CONCURRENCY"
-)
-
 func RunIntegrationTests(t *testing.T) {
-	// Parallelise the integration tests, but don't run more than `conc` (default
-	// 3) at once.
-	conc := concurrency(t)
-	t.Logf("running integration tests with concurrency: %d", conc)
-
 	buildBinaries(t)
-
-	guard := make(chan struct{}, conc)
 
 	for _, tcase := range suite.All() {
 		tcase := tcase
@@ -60,15 +46,6 @@ func RunIntegrationTests(t *testing.T) {
 		t.Run(testName, func(t *testing.T) {
 			t.Logf("%s: setting up test case", testName)
 			options := tcase.Setup(t)
-
-			t.Parallel()
-
-			// Wait for a slot to become available.
-			guard <- struct{}{}
-			t.Cleanup(func() {
-				// Release the slot.
-				<-guard
-			})
 
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
@@ -85,23 +62,6 @@ func RunIntegrationTests(t *testing.T) {
 			t.Log("done")
 		})
 	}
-}
-
-func concurrency(t *testing.T) int {
-	conc := defaultConcurrency
-	concS, ok := os.LookupEnv(envConcurrency)
-	if ok {
-		var err error
-		conc, err = strconv.Atoi(concS)
-		if err != nil {
-			t.Fatalf("failed to parse %q: %s", envConcurrency, err)
-		}
-		if conc < 1 {
-			t.Fatalf("%q must be >= 1", envConcurrency)
-		}
-	}
-
-	return conc
 }
 
 func buildBinaries(t *testing.T) {
