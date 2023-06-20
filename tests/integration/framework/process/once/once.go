@@ -11,17 +11,41 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package framework
+package once
 
 import (
+	"context"
+	"sync/atomic"
+	"testing"
+
 	"github.com/dapr/dapr/tests/integration/framework/process"
-	"github.com/dapr/dapr/tests/integration/framework/process/once"
 )
 
-func WithProcesses(procs ...process.Interface) Option {
-	return func(o *options) {
-		for _, proc := range procs {
-			o.procs = append(o.procs, once.Wrap(proc))
-		}
+// once ensures that a process is only run and cleaned up once.
+type once struct {
+	process.Interface
+	runOnce   atomic.Bool
+	cleanOnce atomic.Bool
+}
+
+func Wrap(proc process.Interface) process.Interface {
+	return &once{
+		Interface: proc,
 	}
+}
+
+func (o *once) Run(t *testing.T, ctx context.Context) {
+	if !o.runOnce.CompareAndSwap(false, true) {
+		t.Fatal("process has already been run")
+	}
+
+	o.Interface.Run(t, ctx)
+}
+
+func (o *once) Cleanup(t *testing.T) {
+	if !o.cleanOnce.CompareAndSwap(false, true) {
+		t.Fatal("process has already been cleaned up")
+	}
+
+	o.Interface.Cleanup(t)
 }

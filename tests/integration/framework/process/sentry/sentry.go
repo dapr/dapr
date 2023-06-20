@@ -54,10 +54,10 @@ type Sentry struct {
 	exec     process.Interface
 	freeport *freeport.FreePort
 
-	CA          *certs.Credentials
-	Port        int
-	HealthzPort int
-	MetricsPort int
+	ca          *certs.Credentials
+	port        int
+	healthzPort int
+	metricsPort int
 }
 
 func New(t *testing.T, fopts ...Option) *Sentry {
@@ -118,10 +118,10 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 	return &Sentry{
 		exec:        exec.New(t, binary.EnvValue("sentry"), args, opts.execOpts...),
 		freeport:    fp,
-		CA:          opts.ca,
-		Port:        opts.port,
-		MetricsPort: opts.metricsPort,
-		HealthzPort: opts.healthzPort,
+		ca:          opts.ca,
+		port:        opts.port,
+		metricsPort: opts.metricsPort,
+		healthzPort: opts.healthzPort,
 	}
 }
 
@@ -132,4 +132,20 @@ func (s *Sentry) Run(t *testing.T, ctx context.Context) {
 
 func (s *Sentry) Cleanup(t *testing.T) {
 	s.exec.Cleanup(t)
+}
+
+func (s *Sentry) CA() *certs.Credentials {
+	return s.ca
+}
+
+func (s *Sentry) Port() int {
+	return s.port
+}
+
+func (s *Sentry) MetricsPort() int {
+	return s.metricsPort
+}
+
+func (s *Sentry) HealthzPort() int {
+	return s.healthzPort
 }

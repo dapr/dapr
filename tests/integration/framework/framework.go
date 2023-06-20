@@ -57,5 +57,6 @@ func (f *Framework) Cleanup(t *testing.T) {
 
 	for _, proc := range f.procs {
 		proc.Cleanup(t)
+		proc.Cleanup(t)
 	}
 }

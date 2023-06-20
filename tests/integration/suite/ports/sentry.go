@@ -46,9 +46,9 @@ func (s *sentry) Setup(t *testing.T) []framework.Option {
 
 func (s *sentry) Run(t *testing.T, _ context.Context) {
 	for name, port := range map[string]int{
-		"port":    s.proc.Port,
-		"healthz": s.proc.HealthzPort,
-		"metrics": s.proc.MetricsPort,
+		"port":    s.proc.Port(),
+		"healthz": s.proc.HealthzPort(),
+		"metrics": s.proc.MetricsPort(),
 	} {
 		assert.Eventuallyf(t, func() bool {
 			conn, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", port))
