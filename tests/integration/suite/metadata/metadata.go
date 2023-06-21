@@ -27,27 +27,37 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
 func init() {
-	suite.Register(new(Metadata))
+	suite.Register(new(metadata))
 }
 
-// Metadata tests Dapr's response to metadata API requests.
-type Metadata struct{}
-
-func (*Metadata) Setup(*testing.T, context.Context) []framework.RunDaprdOption {
-	return nil
+// metadata tests Dapr's response to metadata API requests.
+type metadata struct {
+	proc *procdaprd.Daprd
 }
 
-func (*Metadata) Run(t *testing.T, ctx context.Context, cmd *framework.Command) {
+func (m *metadata) Setup(t *testing.T) []framework.Option {
+	m.proc = procdaprd.New(t)
+	return []framework.Option{
+		framework.WithProcesses(m.proc),
+	}
+}
+
+func (m *metadata) Run(t *testing.T, ctx context.Context) {
 	assert.Eventually(t, func() bool {
-		_, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", cmd.InternalGRPCPort))
-		return err == nil
+		conn, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", m.proc.InternalGRPCPort))
+		if err != nil {
+			return false
+		}
+		require.NoError(t, conn.Close())
+		return true
 	}, time.Second*5, 100*time.Millisecond)
 
-	reqURL := fmt.Sprintf("http://localhost:%d/v1.0/metadata", cmd.PublicPort)
+	reqURL := fmt.Sprintf("http://localhost:%d/v1.0/metadata", m.proc.PublicPort)
 
 	ctx, cancel := context.WithTimeout(ctx, time.Second*5)
 	defer cancel()
@@ -62,7 +72,7 @@ func (*Metadata) Run(t *testing.T, ctx context.Context, cmd *framework.Command) 
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
 
-	validateResponse(t, cmd.AppID, cmd.AppPort, string(resBody))
+	validateResponse(t, m.proc.AppID, m.proc.AppPort, string(resBody))
 }
 
 // validateResponse asserts that the response body is valid JSON

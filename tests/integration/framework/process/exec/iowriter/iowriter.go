@@ -31,15 +31,16 @@ type Logger interface {
 // writes until a newline is encountered, at which point it flushes the buffer
 // to the test logger.
 type stdwriter struct {
-	t    Logger
-	buf  bytes.Buffer
-	lock sync.Mutex
+	t        Logger
+	procName string
+	buf      bytes.Buffer
+	lock     sync.Mutex
 }
 
-func New(t Logger) io.WriteCloser {
+func New(t Logger, procName string) io.WriteCloser {
 	return &stdwriter{
-		t:   t,
-		buf: bytes.Buffer{},
+		t:        t,
+		procName: procName,
 	}
 }
 
@@ -72,8 +73,7 @@ func (w *stdwriter) Close() error {
 // before calling.
 func (w *stdwriter) flush() {
 	defer w.buf.Reset()
-
 	if b := w.buf.Bytes(); len(b) > 0 {
-		w.t.Log(w.t.Name() + ": " + string(b))
+		w.t.Log(w.t.Name() + "/" + w.procName + ": " + string(b))
 	}
 }

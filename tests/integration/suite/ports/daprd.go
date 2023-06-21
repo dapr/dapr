@@ -21,34 +21,45 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
 func init() {
-	suite.Register(new(Ports))
+	suite.Register(new(daprd))
 }
 
-// Ports tests that the ports are available when the app is running.
-type Ports struct{}
-
-func (p *Ports) Setup(t *testing.T, _ context.Context) []framework.RunDaprdOption {
-	return nil
+// daprd tests that the ports are available when daprd is running.
+type daprd struct {
+	proc *procdaprd.Daprd
 }
 
-func (p *Ports) Run(t *testing.T, _ context.Context, cmd *framework.Command) {
+func (d *daprd) Setup(t *testing.T) []framework.Option {
+	d.proc = procdaprd.New(t)
+	return []framework.Option{
+		framework.WithProcesses(d.proc),
+	}
+}
+
+func (d *daprd) Run(t *testing.T, _ context.Context) {
 	for name, port := range map[string]int{
-		"app":           cmd.AppPort,
-		"grpc":          cmd.GRPCPort,
-		"http":          cmd.HTTPPort,
-		"metrics":       cmd.MetricsPort,
-		"internal-grpc": cmd.InternalGRPCPort,
-		"public":        cmd.PublicPort,
+		"app":           d.proc.AppPort,
+		"grpc":          d.proc.GRPCPort,
+		"http":          d.proc.HTTPPort,
+		"metrics":       d.proc.MetricsPort,
+		"internal-grpc": d.proc.InternalGRPCPort,
+		"public":        d.proc.PublicPort,
 	} {
 		assert.Eventuallyf(t, func() bool {
-			_, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", port))
-			return err == nil
+			conn, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", port))
+			if err != nil {
+				return false
+			}
+			require.NoError(t, conn.Close())
+			return true
 		}, time.Second*5, 100*time.Millisecond, "port %s (:%d) was not available in time", name, port)
 	}
 }
