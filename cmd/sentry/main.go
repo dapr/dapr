@@ -44,7 +44,7 @@ const (
 	// defaultDaprSystemConfigName is the default resource object name for Dapr System Config.
 	defaultDaprSystemConfigName = "daprsystem"
 
-	healthzPort = 8080
+	defaultHealthzPort = 8080
 )
 
 func main() {
@@ -55,6 +55,8 @@ func main() {
 	flag.StringVar(&credentials.IssuerKeyFilename, "issuer-key-filename", credentials.IssuerKeyFilename, "Issuer private key filename")
 	trustDomain := flag.String("trust-domain", "localhost", "The CA trust domain")
 	tokenAudience := flag.String("token-audience", "", "Expected audience for tokens; multiple values can be separated by a comma")
+	port := flag.Int("port", config.DefaultPort, "The port for the sentry server to listen on")
+	healthzPort := flag.Int("healthz-port", defaultHealthzPort, "The port for the healthz server to listen on")
 
 	loggerOptions := logger.DefaultOptions()
 	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
@@ -105,6 +107,7 @@ func main() {
 	config.IssuerKeyPath = issuerKeyPath
 	config.RootCertPath = rootCertPath
 	config.TrustDomain = *trustDomain
+	config.Port = *port
 	if *tokenAudience != "" {
 		config.TokenAudience = tokenAudience
 	}
@@ -171,7 +174,7 @@ func main() {
 	mngr.Add(func(ctx context.Context) error {
 		healthzServer := health.NewServer(log)
 		healthzServer.Ready()
-		if err := healthzServer.Run(ctx, healthzPort); err != nil {
+		if err := healthzServer.Run(ctx, *healthzPort); err != nil {
 			return fmt.Errorf("failed to start healthz server: %s", err)
 		}
 		return nil

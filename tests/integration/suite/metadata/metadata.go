@@ -49,7 +49,7 @@ func (m *metadata) Setup(t *testing.T) []framework.Option {
 
 func (m *metadata) Run(t *testing.T, ctx context.Context) {
 	assert.Eventually(t, func() bool {
-		conn, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", m.proc.InternalGRPCPort))
+		conn, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", m.proc.InternalGRPCPort()))
 		if err != nil {
 			return false
 		}
@@ -57,7 +57,7 @@ func (m *metadata) Run(t *testing.T, ctx context.Context) {
 		return true
 	}, time.Second*5, 100*time.Millisecond)
 
-	reqURL := fmt.Sprintf("http://localhost:%d/v1.0/metadata", m.proc.PublicPort)
+	reqURL := fmt.Sprintf("http://localhost:%d/v1.0/metadata", m.proc.PublicPort())
 
 	ctx, cancel := context.WithTimeout(ctx, time.Second*5)
 	defer cancel()
@@ -72,7 +72,7 @@ func (m *metadata) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
 
-	validateResponse(t, m.proc.AppID, m.proc.AppPort, string(resBody))
+	validateResponse(t, m.proc.AppID(), m.proc.AppPort(), string(resBody))
 }
 
 // validateResponse asserts that the response body is valid JSON
