@@ -17,7 +17,6 @@ import (
 	"context"
 	"errors"
 	"net"
-	"os"
 	"strconv"
 	"testing"
 
@@ -25,6 +24,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/framework/freeport"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
@@ -55,20 +55,20 @@ type Daprd struct {
 	exec     process.Interface
 	freeport *freeport.FreePort
 
-	AppID            string
-	AppPort          int
-	GRPCPort         int
-	HTTPPort         int
-	InternalGRPCPort int
-	PublicPort       int
-	MetricsPort      int
-	ProfilePort      int
+	appID            string
+	appPort          int
+	grpcPort         int
+	httpPort         int
+	internalGRPCPort int
+	publicPort       int
+	metricsPort      int
+	profilePort      int
 }
 
 func New(t *testing.T, fopts ...Option) *Daprd {
 	t.Helper()
 
-	uid, err := uuid.NewUUID()
+	uid, err := uuid.NewRandom()
 	require.NoError(t, err)
 
 	appListener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -122,16 +122,16 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	}
 
 	return &Daprd{
-		exec:             exec.New(t, os.Getenv("DAPR_INTEGRATION_DAPRD_PATH"), args, opts.execOpts...),
+		exec:             exec.New(t, binary.EnvValue("daprd"), args, opts.execOpts...),
 		freeport:         fp,
-		AppID:            opts.appID,
-		AppPort:          opts.appPort,
-		GRPCPort:         opts.grpcPort,
-		HTTPPort:         opts.httpPort,
-		InternalGRPCPort: opts.internalGRPCPort,
-		PublicPort:       opts.publicPort,
-		MetricsPort:      opts.metricsPort,
-		ProfilePort:      opts.profilePort,
+		appID:            opts.appID,
+		appPort:          opts.appPort,
+		grpcPort:         opts.grpcPort,
+		httpPort:         opts.httpPort,
+		internalGRPCPort: opts.internalGRPCPort,
+		publicPort:       opts.publicPort,
+		metricsPort:      opts.metricsPort,
+		profilePort:      opts.profilePort,
 	}
 }
 
@@ -142,4 +142,36 @@ func (d *Daprd) Run(t *testing.T, ctx context.Context) {
 
 func (d *Daprd) Cleanup(t *testing.T) {
 	d.exec.Cleanup(t)
+}
+
+func (d *Daprd) AppID() string {
+	return d.appID
+}
+
+func (d *Daprd) AppPort() int {
+	return d.appPort
+}
+
+func (d *Daprd) GRPCPort() int {
+	return d.grpcPort
+}
+
+func (d *Daprd) HTTPPort() int {
+	return d.httpPort
+}
+
+func (d *Daprd) InternalGRPCPort() int {
+	return d.internalGRPCPort
+}
+
+func (d *Daprd) PublicPort() int {
+	return d.publicPort
+}
+
+func (d *Daprd) MetricsPort() int {
+	return d.metricsPort
+}
+
+func (d *Daprd) ProfilePort() int {
+	return d.profilePort
 }

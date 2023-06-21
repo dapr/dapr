@@ -11,33 +11,42 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package exec
+package sentry
 
 import (
-	"io"
-	"testing"
+	"github.com/dapr/dapr/pkg/sentry/certs"
+	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 )
 
-func WithStdout(stdout io.WriteCloser) Option {
+func WithExecOptions(execOptions ...exec.Option) Option {
 	return func(o *options) {
-		o.stdout = stdout
+		o.execOpts = execOptions
 	}
 }
 
-func WithStderr(stderr io.WriteCloser) Option {
+func WithPort(port int) Option {
 	return func(o *options) {
-		o.stderr = stderr
+		o.port = port
 	}
 }
 
-func WithRunError(ferr func(*testing.T, error)) Option {
+func WithMetricsPort(port int) Option {
 	return func(o *options) {
-		o.runErrorFn = ferr
+		o.metricsPort = port
 	}
 }
 
-func WithExitCode(code int) Option {
+func WithHealthzPort(port int) Option {
 	return func(o *options) {
-		o.exitCode = code
+		o.healthzPort = port
+	}
+}
+
+func WithCA(ca *certs.Credentials, rootPEM, certPEM, keyPEM []byte) Option {
+	return func(o *options) {
+		o.ca = ca
+		o.rootPEM = rootPEM
+		o.certPEM = certPEM
+		o.keyPEM = keyPEM
 	}
 }
