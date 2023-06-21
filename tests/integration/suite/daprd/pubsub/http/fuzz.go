@@ -16,11 +16,12 @@ package http
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
-	"math/rand"
+	"math/big"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -57,7 +58,6 @@ type testTopic struct {
 
 type fuzzpubsub struct {
 	daprd *procdaprd.Daprd
-	srv   *prochttp.HTTP
 
 	pubSubs  []testPubSub
 	respChan map[string]chan []byte
@@ -113,7 +113,9 @@ func (f *fuzzpubsub) Setup(t *testing.T) []framework.Option {
 	for i := 0; i < numTests; i++ {
 		psNameFz.Fuzz(&f.pubSubs[i].Name)
 
-		topics := rand.Intn(50) + 1
+		topicsB, err := rand.Int(rand.Reader, big.NewInt(30))
+		require.NoError(t, err)
+		topics := int(topicsB.Int64() + 1)
 		f.pubSubs[i].Topics = make([]testTopic, topics)
 		for j := 0; j < topics; j++ {
 			psTopicFz.Fuzz(&f.pubSubs[i].Topics[j].Name)
