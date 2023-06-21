@@ -585,6 +585,9 @@ message GetMetadataResponse {
   map<string, string> extended_metadata = 4 [json_name = "extended"];
   repeated PubsubSubscription subscriptions = 5 [json_name = "subscriptions"];
   repeated MetadataHTTPEndpoint http_endpoints = 6 [json_name = "httpEndpoints"];
+  AppConnectionProperties app_connection_properties = 7 [json_name = "appConnectionProperties"];
+  string runtime_version = 8 [json_name = "runtimeVersion"];
+  repeated string enabled_features = 9 [json_name = "enabledFeatures"];
 }
 
 message ActiveActorsCount {
@@ -601,6 +604,21 @@ message RegisteredComponents {
 
 message MetadataHTTPEndpoint {
   string name = 1 [json_name = "name"];
+}
+
+message AppConnectionProperties {
+  int32 port = 1;
+  string protocol = 2;
+  string channel_address = 3 [json_name = "channelAddress"];
+  int32 max_concurrency = 4 [json_name = "maxConcurrency"];
+  AppConnectionHealthProperties health = 5;
+}
+
+message AppConnectionHealthProperties {
+  string health_check_path = 1 [json_name = "healthCheckPath"];
+  string health_probe_interval = 2 [json_name = "healthProbeInterval"];
+  string health_probe_timeout = 3 [json_name = "healthProbeTimeout"];
+  int32 health_threshold = 4 [json_name = "healthThreshold"];
 }
 
 message PubsubSubscription {

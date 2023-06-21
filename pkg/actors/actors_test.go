@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -119,7 +120,7 @@ var testResiliency = &v1alpha1.Resiliency{
 	},
 }
 
-func (m *mockAppChannel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+func (m *mockAppChannel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*invokev1.InvokeMethodResponse, error) {
 	if m.requestC != nil {
 		var request testRequest
 		err := json.NewDecoder(req.RawData()).Decode(&request)
@@ -136,7 +137,7 @@ type mockAppChannelBadInvoke struct {
 	requestC chan testRequest
 }
 
-func (m *mockAppChannelBadInvoke) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+func (m *mockAppChannelBadInvoke) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*invokev1.InvokeMethodResponse, error) {
 	if m.requestC != nil {
 		var request testRequest
 		err := json.NewDecoder(req.RawData()).Decode(&request)
@@ -155,7 +156,7 @@ type reentrantAppChannel struct {
 	a        *actorsRuntime
 }
 
-func (r *reentrantAppChannel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+func (r *reentrantAppChannel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*invokev1.InvokeMethodResponse, error) {
 	r.callLog = append(r.callLog, "Entering "+req.Message().Method)
 	if len(r.nextCall) > 0 {
 		nextReq := r.nextCall[0]
@@ -3312,4 +3313,81 @@ func TestPlacementSwitchIsNotTurnedOn(t *testing.T) {
 	t.Run("the actor store can not be initialized normally", func(t *testing.T) {
 		assert.Empty(t, testActorsRuntime.compStore.ListStateStores())
 	})
+}
+
+func TestCreateTimerReminderGoroutineLeak(t *testing.T) {
+	testActorsRuntime := newTestActorsRuntime()
+	defer testActorsRuntime.Stop()
+
+	actorType, actorID := getTestActorTypeAndID()
+	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
+
+	testFn := func(createFn func(i int, ttl bool) error) func(t *testing.T) {
+		return func(t *testing.T) {
+			// Get the baseline goroutines
+			initialCount := runtime.NumGoroutine()
+
+			// Create 10 timers/reminders with unique names
+			for i := 0; i < 10; i++ {
+				require.NoError(t, createFn(i, false))
+			}
+
+			// Create 5 timers/reminders that override the first ones
+			for i := 0; i < 5; i++ {
+				require.NoError(t, createFn(i, false))
+			}
+
+			// Create 5 timers/reminders that have TTLs
+			for i := 10; i < 15; i++ {
+				require.NoError(t, createFn(i, true))
+			}
+
+			// Advance the clock to make the timers/reminders fire
+			time.Sleep(200 * time.Millisecond)
+			testActorsRuntime.clock.Sleep(5 * time.Second)
+			time.Sleep(200 * time.Millisecond)
+			testActorsRuntime.clock.Sleep(5 * time.Second)
+
+			// Sleep to allow for cleanup
+			time.Sleep(200 * time.Millisecond)
+
+			// Get the number of goroutines again, which should be +/- 2 the initial one (we give it some buffer)
+			currentCount := runtime.NumGoroutine()
+			if currentCount >= (initialCount+2) || currentCount <= (initialCount-2) {
+				t.Fatalf("Current number of goroutine %[1]d is outside of range [%[2]d-2, %[2]d+2]", currentCount, initialCount)
+			}
+		}
+	}
+
+	t.Run("timers", testFn(func(i int, ttl bool) error {
+		req := &CreateTimerRequest{
+			ActorType: actorType,
+			ActorID:   actorID,
+			Name:      fmt.Sprintf("timer%d", i),
+			Data:      json.RawMessage(`"data"`),
+			DueTime:   "2s",
+		}
+		if ttl {
+			req.DueTime = "1s"
+			req.Period = "1s"
+			req.TTL = "2s"
+		}
+		return testActorsRuntime.CreateTimer(context.Background(), req)
+	}))
+
+	t.Run("reminders", testFn(func(i int, ttl bool) error {
+		req := &CreateReminderRequest{
+			ActorType: actorType,
+			ActorID:   actorID,
+			Name:      fmt.Sprintf("reminder%d", i),
+			Data:      json.RawMessage(`"data"`),
+			DueTime:   "2s",
+		}
+		if ttl {
+			req.DueTime = "1s"
+			req.Period = "1s"
+			req.TTL = "2s"
+		}
+		return testActorsRuntime.CreateReminder(context.Background(), req)
+	}))
 }

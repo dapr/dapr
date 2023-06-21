@@ -150,7 +150,7 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policyDef *resilie
 					continue
 				}
 				// For grpc, we can still send the entry even if path is blank, App can take a decision
-				if rPath == "" && a.runtimeConfig.ApplicationProtocol.IsHTTP() {
+				if rPath == "" && a.runtimeConfig.AppConnectionConfig.Protocol.IsHTTP() {
 					continue
 				}
 				dataB64 := base64.StdEncoding.EncodeToString(message.Event)
@@ -189,7 +189,7 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policyDef *resilie
 					continue
 				}
 				// For grpc, we can still send the entry even if path is blank, App can take a decision
-				if rPath == "" && a.runtimeConfig.ApplicationProtocol.IsHTTP() {
+				if rPath == "" && a.runtimeConfig.AppConnectionConfig.Protocol.IsHTTP() {
 					continue
 				}
 				if message.ContentType == "" {
@@ -377,7 +377,7 @@ func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, bulkSubCallDat
 	spans = spans[:n]
 	defer endSpans(spans)
 	start := time.Now()
-	resp, err := a.appChannel.InvokeMethod(ctx, req)
+	resp, err := a.appChannel.InvokeMethod(ctx, req, "")
 	elapsed := diag.ElapsedSince(start)
 	if err != nil {
 		bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += int64(len(rawMsgEntries))

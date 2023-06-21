@@ -64,6 +64,7 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
+	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpEndpointV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
@@ -77,6 +78,7 @@ import (
 	nrLoader "github.com/dapr/dapr/pkg/components/nameresolution"
 	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
 	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
+	"github.com/dapr/dapr/pkg/config/protocol"
 
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
@@ -95,6 +97,7 @@ import (
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/security"
+	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
 	"github.com/dapr/dapr/pkg/scopes"
 	sentryConsts "github.com/dapr/dapr/pkg/sentry/consts"
 	daprt "github.com/dapr/dapr/pkg/testing"
@@ -406,10 +409,10 @@ func TestDoProcessComponent(t *testing.T) {
 		)
 
 		lockComponentWithWrongStrategy := lockComponent
-		lockComponentWithWrongStrategy.Spec.Metadata = []componentsV1alpha1.MetadataItem{
+		lockComponentWithWrongStrategy.Spec.Metadata = []commonapi.NameValuePair{
 			{
 				Name: "keyPrefix",
-				Value: componentsV1alpha1.DynamicValue{
+				Value: commonapi.DynamicValue{
 					JSON: v1.JSON{Raw: []byte("||")},
 				},
 			},
@@ -823,16 +826,16 @@ func TestInitState(t *testing.T) {
 		Spec: componentsV1alpha1.ComponentSpec{
 			Type:    "state.mockState",
 			Version: "v1",
-			Metadata: []componentsV1alpha1.MetadataItem{
+			Metadata: []commonapi.NameValuePair{
 				{
 					Name: actorStateStore,
-					Value: componentsV1alpha1.DynamicValue{
+					Value: commonapi.DynamicValue{
 						JSON: v1.JSON{Raw: []byte("true")},
 					},
 				},
 				{
 					Name: "primaryEncryptionKey",
-					Value: componentsV1alpha1.DynamicValue{
+					Value: commonapi.DynamicValue{
 						JSON: v1.JSON{Raw: []byte(primaryKey)},
 					},
 				},
@@ -1112,16 +1115,16 @@ func TestMetadataUUID(t *testing.T) {
 
 	pubsubComponent.Spec.Metadata = append(
 		pubsubComponent.Spec.Metadata,
-		componentsV1alpha1.MetadataItem{
+		commonapi.NameValuePair{
 			Name: "consumerID",
-			Value: componentsV1alpha1.DynamicValue{
+			Value: commonapi.DynamicValue{
 				JSON: v1.JSON{
 					Raw: []byte("{uuid}"),
 				},
 			},
-		}, componentsV1alpha1.MetadataItem{
+		}, commonapi.NameValuePair{
 			Name: "twoUUIDs",
-			Value: componentsV1alpha1.DynamicValue{
+			Value: commonapi.DynamicValue{
 				JSON: v1.JSON{
 					Raw: []byte("{uuid} {uuid}"),
 				},
@@ -1175,9 +1178,9 @@ func TestMetadataPodName(t *testing.T) {
 
 	pubsubComponent.Spec.Metadata = append(
 		pubsubComponent.Spec.Metadata,
-		componentsV1alpha1.MetadataItem{
+		commonapi.NameValuePair{
 			Name: "consumerID",
-			Value: componentsV1alpha1.DynamicValue{
+			Value: commonapi.DynamicValue{
 				JSON: v1.JSON{
 					Raw: []byte("{podName}"),
 				},
@@ -1221,9 +1224,9 @@ func TestMetadataNamespace(t *testing.T) {
 
 	pubsubComponent.Spec.Metadata = append(
 		pubsubComponent.Spec.Metadata,
-		componentsV1alpha1.MetadataItem{
+		commonapi.NameValuePair{
 			Name: "consumerID",
-			Value: componentsV1alpha1.DynamicValue{
+			Value: commonapi.DynamicValue{
 				JSON: v1.JSON{
 					Raw: []byte("{namespace}"),
 				},
@@ -1268,9 +1271,9 @@ func TestMetadataAppID(t *testing.T) {
 
 	pubsubComponent.Spec.Metadata = append(
 		pubsubComponent.Spec.Metadata,
-		componentsV1alpha1.MetadataItem{
+		commonapi.NameValuePair{
 			Name: "clientID",
-			Value: componentsV1alpha1.DynamicValue{
+			Value: commonapi.DynamicValue{
 				JSON: v1.JSON{
 					Raw: []byte("{appID} {appID}"),
 				},
@@ -1312,10 +1315,10 @@ func TestOnComponentUpdated(t *testing.T) {
 			Spec: componentsV1alpha1.ComponentSpec{
 				Type:    "pubsub.mockPubSub",
 				Version: "v1",
-				Metadata: []componentsV1alpha1.MetadataItem{
+				Metadata: []commonapi.NameValuePair{
 					{
 						Name: "name1",
-						Value: componentsV1alpha1.DynamicValue{
+						Value: commonapi.DynamicValue{
 							JSON: v1.JSON{
 								Raw: []byte("value1"),
 							},
@@ -1336,10 +1339,10 @@ func TestOnComponentUpdated(t *testing.T) {
 			Spec: componentsV1alpha1.ComponentSpec{
 				Type:    "pubsub.mockPubSub",
 				Version: "v1",
-				Metadata: []componentsV1alpha1.MetadataItem{
+				Metadata: []commonapi.NameValuePair{
 					{
 						Name: "name1",
-						Value: componentsV1alpha1.DynamicValue{
+						Value: commonapi.DynamicValue{
 							JSON: v1.JSON{
 								Raw: []byte("value2"),
 							},
@@ -1361,10 +1364,10 @@ func TestOnComponentUpdated(t *testing.T) {
 			Spec: componentsV1alpha1.ComponentSpec{
 				Type:    "pubsub.mockPubSub",
 				Version: "v1",
-				Metadata: []componentsV1alpha1.MetadataItem{
+				Metadata: []commonapi.NameValuePair{
 					{
 						Name: "name1",
-						Value: componentsV1alpha1.DynamicValue{
+						Value: commonapi.DynamicValue{
 							JSON: v1.JSON{
 								Raw: []byte("value1"),
 							},
@@ -1385,10 +1388,10 @@ func TestOnComponentUpdated(t *testing.T) {
 			Spec: componentsV1alpha1.ComponentSpec{
 				Type:    "pubsub.mockPubSub",
 				Version: "v1",
-				Metadata: []componentsV1alpha1.MetadataItem{
+				Metadata: []commonapi.NameValuePair{
 					{
 						Name: "name1",
-						Value: componentsV1alpha1.DynamicValue{
+						Value: commonapi.DynamicValue{
 							JSON: v1.JSON{
 								Raw: []byte("value1"),
 							},
@@ -1403,10 +1406,10 @@ func TestOnComponentUpdated(t *testing.T) {
 }
 
 func TestConsumerID(t *testing.T) {
-	metadata := []componentsV1alpha1.MetadataItem{
+	metadata := []commonapi.NameValuePair{
 		{
 			Name: "host",
-			Value: componentsV1alpha1.DynamicValue{
+			Value: commonapi.DynamicValue{
 				JSON: v1.JSON{
 					Raw: []byte("localhost"),
 				},
@@ -1414,7 +1417,7 @@ func TestConsumerID(t *testing.T) {
 		},
 		{
 			Name: "password",
-			Value: componentsV1alpha1.DynamicValue{
+			Value: commonapi.DynamicValue{
 				JSON: v1.JSON{
 					Raw: []byte("fakePassword"),
 				},
@@ -2302,8 +2305,8 @@ func TestMiddlewareBuildPipeline(t *testing.T) {
 				Type:         "middleware.http.fakemw",
 				Version:      "v1",
 				IgnoreErrors: ignoreErrors,
-				Metadata: []componentsV1alpha1.MetadataItem{
-					{Name: "fail", Value: componentsV1alpha1.DynamicValue{JSON: v1.JSON{Raw: []byte("true")}}},
+				Metadata: []commonapi.NameValuePair{
+					{Name: "fail", Value: commonapi.DynamicValue{JSON: v1.JSON{Raw: []byte("true")}}},
 				},
 			},
 		})
@@ -2370,10 +2373,10 @@ func TestMetadataItemsToPropertiesConversion(t *testing.T) {
 	t.Run("string", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
-		items := []componentsV1alpha1.MetadataItem{
+		items := []commonapi.NameValuePair{
 			{
 				Name: "a",
-				Value: componentsV1alpha1.DynamicValue{
+				Value: commonapi.DynamicValue{
 					JSON: v1.JSON{Raw: []byte("b")},
 				},
 			},
@@ -2386,10 +2389,10 @@ func TestMetadataItemsToPropertiesConversion(t *testing.T) {
 	t.Run("int", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
-		items := []componentsV1alpha1.MetadataItem{
+		items := []commonapi.NameValuePair{
 			{
 				Name: "a",
-				Value: componentsV1alpha1.DynamicValue{
+				Value: commonapi.DynamicValue{
 					JSON: v1.JSON{Raw: []byte(strconv.Itoa(6))},
 				},
 			},
@@ -2402,10 +2405,10 @@ func TestMetadataItemsToPropertiesConversion(t *testing.T) {
 	t.Run("bool", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
-		items := []componentsV1alpha1.MetadataItem{
+		items := []commonapi.NameValuePair{
 			{
 				Name: "a",
-				Value: componentsV1alpha1.DynamicValue{
+				Value: commonapi.DynamicValue{
 					JSON: v1.JSON{Raw: []byte("true")},
 				},
 			},
@@ -2418,10 +2421,10 @@ func TestMetadataItemsToPropertiesConversion(t *testing.T) {
 	t.Run("float", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
-		items := []componentsV1alpha1.MetadataItem{
+		items := []commonapi.NameValuePair{
 			{
 				Name: "a",
-				Value: componentsV1alpha1.DynamicValue{
+				Value: commonapi.DynamicValue{
 					JSON: v1.JSON{Raw: []byte("5.5")},
 				},
 			},
@@ -2434,10 +2437,10 @@ func TestMetadataItemsToPropertiesConversion(t *testing.T) {
 	t.Run("JSON string", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
-		items := []componentsV1alpha1.MetadataItem{
+		items := []commonapi.NameValuePair{
 			{
 				Name: "a",
-				Value: componentsV1alpha1.DynamicValue{
+				Value: commonapi.DynamicValue{
 					JSON: v1.JSON{Raw: []byte(`"hello there"`)},
 				},
 			},
@@ -2472,43 +2475,30 @@ func TestPopulateSecretsConfiguration(t *testing.T) {
 	})
 }
 
-func TestProcessComponentSecrets(t *testing.T) {
-	mockBinding := componentsV1alpha1.Component{
-		ObjectMeta: metaV1.ObjectMeta{
-			Name: "mockBinding",
-		},
-		Spec: componentsV1alpha1.ComponentSpec{
-			Type:    "bindings.mock",
-			Version: "v1",
-			Metadata: []componentsV1alpha1.MetadataItem{
-				{
-					Name: "a",
-					SecretKeyRef: componentsV1alpha1.SecretKeyRef{
-						Key:  "key1",
-						Name: "name1",
-					},
-				},
-				{
-					Name: "b",
-					Value: componentsV1alpha1.DynamicValue{
-						JSON: v1.JSON{Raw: []byte("value2")},
-					},
-				},
+func TestProcessResourceSecrets(t *testing.T) {
+	createMockBinding := func() *componentsV1alpha1.Component {
+		return &componentsV1alpha1.Component{
+			ObjectMeta: metaV1.ObjectMeta{
+				Name: "mockBinding",
 			},
-		},
-		Auth: componentsV1alpha1.Auth{
-			SecretStore: secretstoresLoader.BuiltinKubernetesSecretStore,
-		},
+			Spec: componentsV1alpha1.ComponentSpec{
+				Type:     "bindings.mock",
+				Version:  "v1",
+				Metadata: []commonapi.NameValuePair{},
+			},
+		}
 	}
 
 	t.Run("Standalone Mode", func(t *testing.T) {
-		mockBinding.Spec.Metadata[0].Value = componentsV1alpha1.DynamicValue{
-			JSON: v1.JSON{Raw: []byte("")},
-		}
-		mockBinding.Spec.Metadata[0].SecretKeyRef = componentsV1alpha1.SecretKeyRef{
-			Key:  "key1",
-			Name: "name1",
-		}
+		mockBinding := createMockBinding()
+		mockBinding.Spec.Metadata = append(mockBinding.Spec.Metadata, commonapi.NameValuePair{
+			Name: "a",
+			SecretKeyRef: commonapi.SecretKeyRef{
+				Key:  "key1",
+				Name: "name1",
+			},
+		})
+		mockBinding.Auth.SecretStore = secretstoresLoader.BuiltinKubernetesSecretStore
 
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
@@ -2531,18 +2521,20 @@ func TestProcessComponentSecrets(t *testing.T) {
 			},
 		})
 
-		mod, unready := rt.processComponentSecrets(mockBinding)
-		assert.Equal(t, "value1", mod.Spec.Metadata[0].Value.String())
+		updated, unready := rt.processResourceSecrets(mockBinding)
+		assert.True(t, updated)
+		assert.Equal(t, "value1", mockBinding.Spec.Metadata[0].Value.String())
 		assert.Empty(t, unready)
 	})
 
 	t.Run("Look up name only", func(t *testing.T) {
-		mockBinding.Spec.Metadata[0].Value = componentsV1alpha1.DynamicValue{
-			JSON: v1.JSON{Raw: []byte("")},
-		}
-		mockBinding.Spec.Metadata[0].SecretKeyRef = componentsV1alpha1.SecretKeyRef{
-			Name: "name1",
-		}
+		mockBinding := createMockBinding()
+		mockBinding.Spec.Metadata = append(mockBinding.Spec.Metadata, commonapi.NameValuePair{
+			Name: "a",
+			SecretKeyRef: commonapi.SecretKeyRef{
+				Name: "name1",
+			},
+		})
 		mockBinding.Auth.SecretStore = "mock"
 
 		rt := NewTestDaprRuntime(modes.KubernetesMode)
@@ -2567,8 +2559,53 @@ func TestProcessComponentSecrets(t *testing.T) {
 		})
 		assert.NoError(t, err)
 
-		mod, unready := rt.processComponentSecrets(mockBinding)
-		assert.Equal(t, "value1", mod.Spec.Metadata[0].Value.String())
+		updated, unready := rt.processResourceSecrets(mockBinding)
+		assert.True(t, updated)
+		assert.Equal(t, "value1", mockBinding.Spec.Metadata[0].Value.String())
+		assert.Empty(t, unready)
+	})
+
+	t.Run("Secret from env", func(t *testing.T) {
+		t.Setenv("MY_ENV_VAR", "ciao mondo")
+
+		mockBinding := createMockBinding()
+		mockBinding.Spec.Metadata = append(mockBinding.Spec.Metadata, commonapi.NameValuePair{
+			Name:   "a",
+			EnvRef: "MY_ENV_VAR",
+		})
+
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		defer stopRuntime(t, rt)
+
+		updated, unready := rt.processResourceSecrets(mockBinding)
+		assert.True(t, updated)
+		assert.Equal(t, "ciao mondo", mockBinding.Spec.Metadata[0].Value.String())
+		assert.Empty(t, unready)
+	})
+
+	t.Run("Disallowed env var", func(t *testing.T) {
+		t.Setenv("APP_API_TOKEN", "test")
+		t.Setenv("DAPR_KEY", "test")
+
+		mockBinding := createMockBinding()
+		mockBinding.Spec.Metadata = append(mockBinding.Spec.Metadata,
+			commonapi.NameValuePair{
+				Name:   "a",
+				EnvRef: "DAPR_KEY",
+			},
+			commonapi.NameValuePair{
+				Name:   "b",
+				EnvRef: "APP_API_TOKEN",
+			},
+		)
+
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		defer stopRuntime(t, rt)
+
+		updated, unready := rt.processResourceSecrets(mockBinding)
+		assert.True(t, updated)
+		assert.Equal(t, "", mockBinding.Spec.Metadata[0].Value.String())
+		assert.Equal(t, "", mockBinding.Spec.Metadata[1].Value.String())
 		assert.Empty(t, unready)
 	})
 }
@@ -2701,10 +2738,10 @@ func TestFlushOutstandingComponent(t *testing.T) {
 			Spec: componentsV1alpha1.ComponentSpec{
 				Type:    "secretstores.kubernetesMockGrandChild",
 				Version: "v1",
-				Metadata: []componentsV1alpha1.MetadataItem{
+				Metadata: []commonapi.NameValuePair{
 					{
 						Name: "a",
-						SecretKeyRef: componentsV1alpha1.SecretKeyRef{
+						SecretKeyRef: commonapi.SecretKeyRef{
 							Key:  "key1",
 							Name: "name1",
 						},
@@ -2722,10 +2759,10 @@ func TestFlushOutstandingComponent(t *testing.T) {
 			Spec: componentsV1alpha1.ComponentSpec{
 				Type:    "secretstores.kubernetesMockChild",
 				Version: "v1",
-				Metadata: []componentsV1alpha1.MetadataItem{
+				Metadata: []commonapi.NameValuePair{
 					{
 						Name: "a",
-						SecretKeyRef: componentsV1alpha1.SecretKeyRef{
+						SecretKeyRef: commonapi.SecretKeyRef{
 							Key:  "key1",
 							Name: "name1",
 						},
@@ -3472,7 +3509,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			// setup
 			// getting new port for every run to avoid conflict and timing issues between tests if sharing same port
 			port, _ := freeport.GetFreePort()
-			rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
+			rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(protocol.GRPCProtocol), port)
 			rt.compStore.SetTopicRoutes(map[string]compstore.TopicRoutes{
 				TestPubsubName: map[string]compstore.TopicRouteElem{
 					topic: {
@@ -3502,7 +3539,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			}
 
 			// create a new AppChannel and gRPC client for every test
-			rt.createAppChannel()
+			rt.createChannels()
 			// properly close the app channel created
 			defer rt.grpc.CloseAppClient()
 
@@ -3535,7 +3572,7 @@ func TestPubsubLifecycle(t *testing.T) {
 		Spec: componentsV1alpha1.ComponentSpec{
 			Type:     "pubsub.mockPubSubAlpha",
 			Version:  "v1",
-			Metadata: []componentsV1alpha1.MetadataItem{},
+			Metadata: []commonapi.NameValuePair{},
 		},
 	}
 	comp2 := componentsV1alpha1.Component{
@@ -3545,7 +3582,7 @@ func TestPubsubLifecycle(t *testing.T) {
 		Spec: componentsV1alpha1.ComponentSpec{
 			Type:     "pubsub.mockPubSubBeta",
 			Version:  "v1",
-			Metadata: []componentsV1alpha1.MetadataItem{},
+			Metadata: []commonapi.NameValuePair{},
 		},
 	}
 	comp3 := componentsV1alpha1.Component{
@@ -3555,7 +3592,7 @@ func TestPubsubLifecycle(t *testing.T) {
 		Spec: componentsV1alpha1.ComponentSpec{
 			Type:     "pubsub.mockPubSubBeta",
 			Version:  "v1",
-			Metadata: []componentsV1alpha1.MetadataItem{},
+			Metadata: []commonapi.NameValuePair{},
 		},
 	}
 
@@ -3893,7 +3930,7 @@ func TestPubsubWithResiliency(t *testing.T) {
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
 
-	r.runtimeConfig.ApplicationProtocol = HTTPProtocol
+	r.runtimeConfig.AppConnectionConfig.Protocol = protocol.HTTPProtocol
 	r.appChannel = &failingAppChannel
 
 	t.Run("pubsub retries subscription event with resiliency", func(t *testing.T) {
@@ -4197,7 +4234,7 @@ func TestGetSubscribedBindingsGRPC(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			port, _ := freeport.GetFreePort()
-			rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
+			rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(protocol.GRPCProtocol), port)
 			// create mock application server first
 			grpcServer := startTestAppCallbackGRPCServer(t, port, &channelt.MockServer{
 				Error:    tc.responseError,
@@ -4206,7 +4243,7 @@ func TestGetSubscribedBindingsGRPC(t *testing.T) {
 			defer grpcServer.Stop()
 
 			// create a new AppChannel and gRPC client for every test
-			rt.createAppChannel()
+			rt.createChannels()
 			// properly close the app channel created
 			defer rt.grpc.CloseAppClient()
 
@@ -4245,11 +4282,11 @@ func getFakeProperties() map[string]string {
 	}
 }
 
-func getFakeMetadataItems() []componentsV1alpha1.MetadataItem {
-	return []componentsV1alpha1.MetadataItem{
+func getFakeMetadataItems() []commonapi.NameValuePair {
+	return []commonapi.NameValuePair{
 		{
 			Name: "host",
-			Value: componentsV1alpha1.DynamicValue{
+			Value: commonapi.DynamicValue{
 				JSON: v1.JSON{
 					Raw: []byte("localhost"),
 				},
@@ -4257,7 +4294,7 @@ func getFakeMetadataItems() []componentsV1alpha1.MetadataItem {
 		},
 		{
 			Name: "password",
-			Value: componentsV1alpha1.DynamicValue{
+			Value: commonapi.DynamicValue{
 				JSON: v1.JSON{
 					Raw: []byte("fakePassword"),
 				},
@@ -4265,7 +4302,7 @@ func getFakeMetadataItems() []componentsV1alpha1.MetadataItem {
 		},
 		{
 			Name: "consumerID",
-			Value: componentsV1alpha1.DynamicValue{
+			Value: commonapi.DynamicValue{
 				JSON: v1.JSON{
 					Raw: []byte(TestRuntimeConfigID),
 				},
@@ -4273,7 +4310,7 @@ func getFakeMetadataItems() []componentsV1alpha1.MetadataItem {
 		},
 		{
 			Name: scopes.SubscriptionScopes,
-			Value: componentsV1alpha1.DynamicValue{
+			Value: commonapi.DynamicValue{
 				JSON: v1.JSON{
 					Raw: []byte(fmt.Sprintf("%s=topic0,topic1", TestRuntimeConfigID)),
 				},
@@ -4281,7 +4318,7 @@ func getFakeMetadataItems() []componentsV1alpha1.MetadataItem {
 		},
 		{
 			Name: scopes.PublishingScopes,
-			Value: componentsV1alpha1.DynamicValue{
+			Value: commonapi.DynamicValue{
 				JSON: v1.JSON{
 					Raw: []byte(fmt.Sprintf("%s=topic0,topic1", TestRuntimeConfigID)),
 				},
@@ -4291,7 +4328,7 @@ func getFakeMetadataItems() []componentsV1alpha1.MetadataItem {
 }
 
 func NewTestDaprRuntime(mode modes.DaprMode) *DaprRuntime {
-	return NewTestDaprRuntimeWithProtocol(mode, string(HTTPProtocol), 1024)
+	return NewTestDaprRuntimeWithProtocol(mode, string(protocol.HTTPProtocol), 1024)
 }
 
 func NewTestDaprRuntimeWithProtocol(mode modes.DaprMode, protocol string, appPort int) *DaprRuntime {
@@ -4809,7 +4846,7 @@ func TestAuthorizedComponents(t *testing.T) {
 	})
 
 	t.Run("additional authorizer denies all", func(t *testing.T) {
-		cfg := NewTestDaprRuntimeConfig(modes.StandaloneMode, string(HTTPSProtocol), 1024)
+		cfg := NewTestDaprRuntimeConfig(modes.StandaloneMode, string(protocol.HTTPSProtocol), 1024)
 		rt := NewDaprRuntime(cfg, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		rt.componentAuthorizers = append(rt.componentAuthorizers, func(component componentsV1alpha1.Component) bool {
 			return false
@@ -5163,7 +5200,7 @@ func TestBindingResiliency(t *testing.T) {
 	}
 
 	r.appChannel = &failingChannel
-	r.runtimeConfig.ApplicationProtocol = HTTPProtocol
+	r.runtimeConfig.AppConnectionConfig.Protocol = protocol.HTTPProtocol
 
 	failingBinding := daprt.FailingBinding{
 		Failure: daprt.NewFailure(
@@ -5298,7 +5335,7 @@ func TestActorReentrancyConfig(t *testing.T) {
 
 			mockAppChannel := new(channelt.MockAppChannel)
 			r.appChannel = mockAppChannel
-			r.runtimeConfig.ApplicationProtocol = HTTPProtocol
+			r.runtimeConfig.AppConnectionConfig.Protocol = protocol.HTTPProtocol
 
 			configResp := config.ApplicationConfig{}
 			json.Unmarshal(tc.Config, &configResp)
@@ -5414,10 +5451,10 @@ func TestStopWithErrors(t *testing.T) {
 		Spec: componentsV1alpha1.ComponentSpec{
 			Type:    "bindings.output",
 			Version: "v1",
-			Metadata: []componentsV1alpha1.MetadataItem{
+			Metadata: []commonapi.NameValuePair{
 				{
 					Name: "output",
-					Value: componentsV1alpha1.DynamicValue{
+					Value: commonapi.DynamicValue{
 						JSON: v1.JSON{},
 					},
 				},
@@ -5431,10 +5468,10 @@ func TestStopWithErrors(t *testing.T) {
 		Spec: componentsV1alpha1.ComponentSpec{
 			Type:    "pubsub.pubsub",
 			Version: "v1",
-			Metadata: []componentsV1alpha1.MetadataItem{
+			Metadata: []commonapi.NameValuePair{
 				{
 					Name: "pubsub",
-					Value: componentsV1alpha1.DynamicValue{
+					Value: commonapi.DynamicValue{
 						JSON: v1.JSON{},
 					},
 				},
@@ -5448,10 +5485,10 @@ func TestStopWithErrors(t *testing.T) {
 		Spec: componentsV1alpha1.ComponentSpec{
 			Type:    "state.statestore",
 			Version: "v1",
-			Metadata: []componentsV1alpha1.MetadataItem{
+			Metadata: []commonapi.NameValuePair{
 				{
 					Name: "statestore",
-					Value: componentsV1alpha1.DynamicValue{
+					Value: commonapi.DynamicValue{
 						JSON: v1.JSON{},
 					},
 				},
@@ -5465,10 +5502,10 @@ func TestStopWithErrors(t *testing.T) {
 		Spec: componentsV1alpha1.ComponentSpec{
 			Type:    "secretstores.secretstore",
 			Version: "v1",
-			Metadata: []componentsV1alpha1.MetadataItem{
+			Metadata: []commonapi.NameValuePair{
 				{
 					Name: "secretstore",
-					Value: componentsV1alpha1.DynamicValue{
+					Value: commonapi.DynamicValue{
 						JSON: v1.JSON{},
 					},
 				},
@@ -5523,20 +5560,20 @@ func createRoutingRule(match, path string) (*runtimePubsub.Rule, error) {
 
 func TestGetAppHTTPChannelConfigWithCustomChannel(t *testing.T) {
 	rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, "http", 0)
-	rt.runtimeConfig.AppChannelAddress = "my.app"
+	rt.runtimeConfig.AppConnectionConfig.ChannelAddress = "my.app"
 
 	defer stopRuntime(t, rt)
 
 	p, err := rt.buildAppHTTPPipeline()
 	assert.Nil(t, err)
 
-	c := rt.getAppHTTPChannelConfig(p)
+	c := rt.getAppHTTPChannelConfig(p, false)
 	assert.Equal(t, "http://my.app:0", c.Endpoint)
 }
 
 func TestComponentsCallback(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "OK")
+		fmt.Fprint(w, "OK")
 	}))
 	defer srv.Close()
 
@@ -5795,9 +5832,9 @@ func matchDaprRequestMethod(method string) any {
 func TestMetadataContainsNamespace(t *testing.T) {
 	t.Run("namespace field present", func(t *testing.T) {
 		r := metadataContainsNamespace(
-			[]componentsV1alpha1.MetadataItem{
+			[]commonapi.NameValuePair{
 				{
-					Value: componentsV1alpha1.DynamicValue{
+					Value: commonapi.DynamicValue{
 						JSON: v1.JSON{Raw: []byte("{namespace}")},
 					},
 				},
@@ -5809,7 +5846,7 @@ func TestMetadataContainsNamespace(t *testing.T) {
 
 	t.Run("namespace field not present", func(t *testing.T) {
 		r := metadataContainsNamespace(
-			[]componentsV1alpha1.MetadataItem{
+			[]commonapi.NameValuePair{
 				{},
 			},
 		)
@@ -5937,16 +5974,16 @@ func TestGracefulShutdownActors(t *testing.T) {
 		Spec: componentsV1alpha1.ComponentSpec{
 			Type:    "state.mockState",
 			Version: "v1",
-			Metadata: []componentsV1alpha1.MetadataItem{
+			Metadata: []commonapi.NameValuePair{
 				{
 					Name: strings.ToUpper(actorStateStore),
-					Value: componentsV1alpha1.DynamicValue{
+					Value: commonapi.DynamicValue{
 						JSON: v1.JSON{Raw: []byte("true")},
 					},
 				},
 				{
 					Name: "primaryEncryptionKey",
-					Value: componentsV1alpha1.DynamicValue{
+					Value: commonapi.DynamicValue{
 						JSON: v1.JSON{Raw: []byte(encryptKey)},
 					},
 				},
@@ -6138,26 +6175,77 @@ func TestHTTPEndpointsUpdate(t *testing.T) {
 	assert.True(t, exists, fmt.Sprintf("expect http endpoint with name: %s", endpoint3.Name))
 }
 
+func TestIsEnvVarAllowed(t *testing.T) {
+	t.Run("no allowlist", func(t *testing.T) {
+		tests := []struct {
+			name string
+			key  string
+			want bool
+		}{
+			{name: "empty string is not allowed", key: "", want: false},
+			{name: "key is allowed", key: "FOO", want: true},
+			{name: "keys starting with DAPR_ are denied", key: "DAPR_TEST", want: false},
+			{name: "APP_API_TOKEN is denied", key: "APP_API_TOKEN", want: false},
+			{name: "keys with a space are denied", key: "FOO BAR", want: false},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				if got := isEnvVarAllowed(tt.key); got != tt.want {
+					t.Errorf("isEnvVarAllowed(%q) = %v, want %v", tt.key, got, tt.want)
+				}
+			})
+		}
+	})
+
+	t.Run("with allowlist", func(t *testing.T) {
+		t.Setenv(authConsts.EnvKeysEnvVar, "FOO BAR TEST")
+
+		tests := []struct {
+			name string
+			key  string
+			want bool
+		}{
+			{name: "FOO is allowed", key: "FOO", want: true},
+			{name: "BAR is allowed", key: "BAR", want: true},
+			{name: "TEST is allowed", key: "TEST", want: true},
+			{name: "FO is not allowed", key: "FO", want: false},
+			{name: "EST is not allowed", key: "EST", want: false},
+			{name: "BA is not allowed", key: "BA", want: false},
+			{name: "AR is not allowed", key: "AR", want: false},
+			{name: "keys starting with DAPR_ are denied", key: "DAPR_TEST", want: false},
+			{name: "APP_API_TOKEN is denied", key: "APP_API_TOKEN", want: false},
+			{name: "keys with a space are denied", key: "FOO BAR", want: false},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				if got := isEnvVarAllowed(tt.key); got != tt.want {
+					t.Errorf("isEnvVarAllowed(%q) = %v, want %v", tt.key, got, tt.want)
+				}
+			})
+		}
+	})
+}
+
 func TestIsBindingOfDirection(t *testing.T) {
 	t.Run("no direction in metadata for input binding", func(t *testing.T) {
-		m := []componentsV1alpha1.MetadataItem{}
+		m := []commonapi.NameValuePair{}
 		r := isBindingOfDirection("input", m)
 
 		assert.True(t, r)
 	})
 
 	t.Run("no direction in metadata for output binding", func(t *testing.T) {
-		m := []componentsV1alpha1.MetadataItem{}
+		m := []commonapi.NameValuePair{}
 		r := isBindingOfDirection("output", m)
 
 		assert.True(t, r)
 	})
 
 	t.Run("input direction in metadata", func(t *testing.T) {
-		m := []componentsV1alpha1.MetadataItem{
+		m := []commonapi.NameValuePair{
 			{
 				Name: "direction",
-				Value: componentsV1alpha1.DynamicValue{
+				Value: commonapi.DynamicValue{
 					JSON: v1.JSON{
 						Raw: []byte("input"),
 					},
@@ -6172,10 +6260,10 @@ func TestIsBindingOfDirection(t *testing.T) {
 	})
 
 	t.Run("output direction in metadata", func(t *testing.T) {
-		m := []componentsV1alpha1.MetadataItem{
+		m := []commonapi.NameValuePair{
 			{
 				Name: "direction",
-				Value: componentsV1alpha1.DynamicValue{
+				Value: commonapi.DynamicValue{
 					JSON: v1.JSON{
 						Raw: []byte("output"),
 					},
@@ -6190,10 +6278,10 @@ func TestIsBindingOfDirection(t *testing.T) {
 	})
 
 	t.Run("input and output direction in metadata", func(t *testing.T) {
-		m := []componentsV1alpha1.MetadataItem{
+		m := []commonapi.NameValuePair{
 			{
 				Name: "direction",
-				Value: componentsV1alpha1.DynamicValue{
+				Value: commonapi.DynamicValue{
 					JSON: v1.JSON{
 						Raw: []byte("input, output"),
 					},
@@ -6208,10 +6296,10 @@ func TestIsBindingOfDirection(t *testing.T) {
 	})
 
 	t.Run("invalid direction for input binding", func(t *testing.T) {
-		m := []componentsV1alpha1.MetadataItem{
+		m := []commonapi.NameValuePair{
 			{
 				Name: "direction",
-				Value: componentsV1alpha1.DynamicValue{
+				Value: commonapi.DynamicValue{
 					JSON: v1.JSON{
 						Raw: []byte("aaa"),
 					},
@@ -6223,10 +6311,10 @@ func TestIsBindingOfDirection(t *testing.T) {
 	})
 
 	t.Run("invalid direction for output binding", func(t *testing.T) {
-		m := []componentsV1alpha1.MetadataItem{
+		m := []commonapi.NameValuePair{
 			{
 				Name: "direction",
-				Value: componentsV1alpha1.DynamicValue{
+				Value: commonapi.DynamicValue{
 					JSON: v1.JSON{
 						Raw: []byte("aaa"),
 					},
