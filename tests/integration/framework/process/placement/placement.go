@@ -15,13 +15,13 @@ package placement
 
 import (
 	"context"
-	"os"
 	"strconv"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/framework/freeport"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
@@ -46,12 +46,12 @@ type Placement struct {
 	exec     process.Interface
 	freeport *freeport.FreePort
 
-	ID                  string
-	Port                int
-	HealthzPort         int
-	MetricsPort         int
-	InitialCluster      string
-	InitialClusterPorts []int
+	id                  string
+	port                int
+	healthzPort         int
+	metricsPort         int
+	initialCluster      string
+	initialClusterPorts []int
 }
 
 func New(t *testing.T, fopts ...Option) *Placement {
@@ -84,14 +84,14 @@ func New(t *testing.T, fopts ...Option) *Placement {
 	}
 
 	return &Placement{
-		exec:                exec.New(t, os.Getenv("DAPR_INTEGRATION_PLACEMENT_PATH"), args, opts.execOpts...),
+		exec:                exec.New(t, binary.EnvValue("placement"), args, opts.execOpts...),
 		freeport:            fp,
-		ID:                  opts.id,
-		Port:                opts.port,
-		HealthzPort:         opts.healthzPort,
-		MetricsPort:         opts.metricsPort,
-		InitialCluster:      opts.initialCluster,
-		InitialClusterPorts: opts.initialClusterPorts,
+		id:                  opts.id,
+		port:                opts.port,
+		healthzPort:         opts.healthzPort,
+		metricsPort:         opts.metricsPort,
+		initialCluster:      opts.initialCluster,
+		initialClusterPorts: opts.initialClusterPorts,
 	}
 }
 
@@ -102,4 +102,28 @@ func (p *Placement) Run(t *testing.T, ctx context.Context) {
 
 func (p *Placement) Cleanup(t *testing.T) {
 	p.exec.Cleanup(t)
+}
+
+func (p *Placement) ID() string {
+	return p.id
+}
+
+func (p *Placement) Port() int {
+	return p.port
+}
+
+func (p *Placement) HealthzPort() int {
+	return p.healthzPort
+}
+
+func (p *Placement) MetricsPort() int {
+	return p.metricsPort
+}
+
+func (p *Placement) InitialCluster() string {
+	return p.initialCluster
+}
+
+func (p *Placement) InitialClusterPorts() []int {
+	return p.initialClusterPorts
 }
