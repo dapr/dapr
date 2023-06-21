@@ -47,7 +47,7 @@ func (d *daprd) Setup(t *testing.T) []framework.Option {
 
 func (d *daprd) Run(t *testing.T, ctx context.Context) {
 	assert.Eventually(t, func() bool {
-		conn, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", d.proc.PublicPort))
+		conn, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", d.proc.PublicPort()))
 		if err != nil {
 			return false
 		}
@@ -55,7 +55,7 @@ func (d *daprd) Run(t *testing.T, ctx context.Context) {
 		return true
 	}, time.Second*5, 100*time.Millisecond)
 
-	reqURL := fmt.Sprintf("http://localhost:%d/v1.0/healthz", d.proc.PublicPort)
+	reqURL := fmt.Sprintf("http://localhost:%d/v1.0/healthz", d.proc.PublicPort())
 
 	assert.Eventually(t, func() bool {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)

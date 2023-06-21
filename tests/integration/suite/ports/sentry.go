@@ -24,32 +24,31 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
-	procplace "github.com/dapr/dapr/tests/integration/framework/process/placement"
+	procsentry "github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
 func init() {
-	suite.Register(new(placement))
+	suite.Register(new(sentry))
 }
 
-// placement tests that the ports are available when daprd is running.
-type placement struct {
-	proc *procplace.Placement
+// sentry tests that the ports are available when sentry is running.
+type sentry struct {
+	proc *procsentry.Sentry
 }
 
-func (p *placement) Setup(t *testing.T) []framework.Option {
-	p.proc = procplace.New(t)
+func (s *sentry) Setup(t *testing.T) []framework.Option {
+	s.proc = procsentry.New(t)
 	return []framework.Option{
-		framework.WithProcesses(p.proc),
+		framework.WithProcesses(s.proc),
 	}
 }
 
-func (p *placement) Run(t *testing.T, _ context.Context) {
+func (s *sentry) Run(t *testing.T, _ context.Context) {
 	for name, port := range map[string]int{
-		"port":           p.proc.Port(),
-		"metrics":        p.proc.MetricsPort(),
-		"healthz":        p.proc.HealthzPort(),
-		"initialCluster": p.proc.InitialClusterPorts()[0],
+		"port":    s.proc.Port(),
+		"healthz": s.proc.HealthzPort(),
+		"metrics": s.proc.MetricsPort(),
 	} {
 		assert.Eventuallyf(t, func() bool {
 			conn, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", port))
