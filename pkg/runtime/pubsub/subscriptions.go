@@ -83,7 +83,7 @@ func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger, r resil
 		},
 	)
 	resp, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
-		return channel.InvokeMethod(ctx, req)
+		return channel.InvokeMethod(ctx, req, "")
 	})
 	if err != nil {
 		return nil, err
@@ -99,8 +99,9 @@ func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger, r resil
 	case http.StatusOK:
 		err = json.NewDecoder(resp.RawData()).Decode(&subscriptionItems)
 		if err != nil {
-			log.Errorf(deserializeTopicsError, err)
-			return nil, fmt.Errorf(deserializeTopicsError, err)
+			err = fmt.Errorf(deserializeTopicsError, err)
+			log.Error(err)
+			return nil, err
 		}
 		subscriptions = make([]Subscription, len(subscriptionItems))
 		for i, si := range subscriptionItems {
@@ -229,9 +230,9 @@ func GetSubscriptionsGRPC(channel runtimev1pb.AppCallbackClient, log logger.Logg
 }
 
 // DeclarativeLocal loads subscriptions from the given local resources path.
-func DeclarativeLocal(resourcesPaths []string, log logger.Logger) (subs []Subscription) {
+func DeclarativeLocal(resourcesPaths []string, namespace string, log logger.Logger) (subs []Subscription) {
 	for _, path := range resourcesPaths {
-		res := declarativeFile(path, log)
+		res := declarativeFile(path, namespace, log)
 		if len(res) > 0 {
 			subs = append(subs, res...)
 		}
@@ -240,14 +241,14 @@ func DeclarativeLocal(resourcesPaths []string, log logger.Logger) (subs []Subscr
 }
 
 // Used by DeclarativeLocal to load a single path.
-func declarativeFile(resourcesPath string, log logger.Logger) (subs []Subscription) {
+func declarativeFile(resourcesPath string, namespace string, log logger.Logger) (subs []Subscription) {
 	if _, err := os.Stat(resourcesPath); os.IsNotExist(err) {
 		return subs
 	}
 
 	files, err := os.ReadDir(resourcesPath)
 	if err != nil {
-		log.Errorf("failed to read subscriptions from path %s: %s", resourcesPath, err)
+		log.Errorf("Failed to read subscriptions from path %s: %s", resourcesPath, err)
 		return subs
 	}
 
@@ -264,15 +265,21 @@ func declarativeFile(resourcesPath string, log logger.Logger) (subs []Subscripti
 		filePath := filepath.Join(resourcesPath, f.Name())
 		b, err := os.ReadFile(filePath)
 		if err != nil {
-			log.Warnf("failed to read file %s: %v", f.Name(), err)
+			log.Warnf("Failed to read file %s: %v", f.Name(), err)
 			continue
 		}
 
 		bytesArray := bytes.Split(b, []byte("\n---"))
 		for _, item := range bytesArray {
-			subs, err = appendSubscription(subs, item)
+			// Skip empty items
+			item = bytes.TrimSpace(item)
+			if len(item) == 0 {
+				continue
+			}
+
+			subs, err = appendSubscription(subs, item, namespace)
 			if err != nil {
-				log.Warnf("failed to add subscription from file %s: %v", f.Name(), err)
+				log.Warnf("Failed to add subscription from file %s: %v", f.Name(), err)
 				continue
 			}
 		}
@@ -281,7 +288,7 @@ func declarativeFile(resourcesPath string, log logger.Logger) (subs []Subscripti
 	return subs
 }
 
-func marshalSubscription(b []byte) (*Subscription, error) {
+func unmarshalSubscription(b []byte, namespace string) (*Subscription, error) {
 	// Parse only the type metadata first in order
 	// to filter out non-Subscriptions without other errors.
 	type typeInfo struct {
@@ -303,6 +310,9 @@ func marshalSubscription(b []byte) (*Subscription, error) {
 		var sub subscriptionsapiV2alpha1.Subscription
 		if err := yaml.Unmarshal(b, &sub); err != nil {
 			return nil, err
+		}
+		if namespace != "" && sub.Namespace != "" && sub.Namespace != namespace {
+			return nil, nil
 		}
 
 		rules, err := parseRoutingRulesYAML(sub.Spec.Routes)
@@ -330,6 +340,9 @@ func marshalSubscription(b []byte) (*Subscription, error) {
 		var sub subscriptionsapiV1alpha1.Subscription
 		if err := yaml.Unmarshal(b, &sub); err != nil {
 			return nil, err
+		}
+		if namespace != "" && sub.Namespace != "" && sub.Namespace != namespace {
+			return nil, nil
 		}
 
 		return &Subscription{
@@ -440,14 +453,15 @@ func DeclarativeKubernetes(client operatorv1pb.OperatorClient, podName string, n
 		Namespace: namespace,
 	})
 	if err != nil {
-		log.Errorf("failed to list subscriptions from operator: %s", err)
+		log.Errorf("Failed to list subscriptions from operator: %s", err)
 		return subs
 	}
 
 	for _, s := range resp.Subscriptions {
-		subs, err = appendSubscription(subs, s)
+		// No namespace filtering here as it's been already filtered by the operator
+		subs, err = appendSubscription(subs, s, "")
 		if err != nil {
-			log.Warnf("failed to add subscription from operator: %s", err)
+			log.Warnf("Failed to add subscription from operator: %s", err)
 			continue
 		}
 	}
@@ -455,8 +469,8 @@ func DeclarativeKubernetes(client operatorv1pb.OperatorClient, podName string, n
 	return subs
 }
 
-func appendSubscription(list []Subscription, subBytes []byte) ([]Subscription, error) {
-	sub, err := marshalSubscription(subBytes)
+func appendSubscription(list []Subscription, subBytes []byte, namespace string) ([]Subscription, error) {
+	sub, err := unmarshalSubscription(subBytes, namespace)
 	if err != nil {
 		return nil, err
 	}

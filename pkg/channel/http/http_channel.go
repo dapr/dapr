@@ -27,6 +27,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
@@ -37,6 +38,7 @@ import (
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	"github.com/dapr/dapr/pkg/runtime/compstore"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
 	streamutils "github.com/dapr/dapr/utils/streams"
@@ -56,6 +58,7 @@ type Channel struct {
 	client                *http.Client
 	baseAddress           string
 	ch                    chan struct{}
+	compStore             *compstore.ComponentStore
 	tracingSpec           config.TracingSpec
 	appHeaderToken        string
 	maxResponseBodySizeMB int
@@ -67,6 +70,7 @@ type Channel struct {
 // ChannelConfiguration is the configuration used to create an HTTP AppChannel.
 type ChannelConfiguration struct {
 	Client               *http.Client
+	CompStore            *compstore.ComponentStore
 	Endpoint             string
 	MaxConcurrency       int
 	Pipeline             httpMiddleware.Pipeline
@@ -74,11 +78,12 @@ type ChannelConfiguration struct {
 	MaxRequestBodySizeMB int
 }
 
-// CreateLocalChannel creates an HTTP AppChannel.
-func CreateLocalChannel(config ChannelConfiguration) (channel.AppChannel, error) {
+// CreateHTTPChannel creates an HTTP AppChannel.
+func CreateHTTPChannel(config ChannelConfiguration) (channel.AppChannel, error) {
 	c := &Channel{
 		pipeline:              config.Pipeline,
 		client:                config.Client,
+		compStore:             config.CompStore,
 		baseAddress:           config.Endpoint,
 		tracingSpec:           config.TracingSpec,
 		appHeaderToken:        auth.GetAppToken(),
@@ -100,7 +105,7 @@ func (h *Channel) GetAppConfig() (*config.ApplicationConfig, error) {
 		WithContentType(invokev1.JSONContentType)
 	defer req.Close()
 
-	resp, err := h.InvokeMethod(context.TODO(), req)
+	resp, err := h.InvokeMethod(context.TODO(), req, "")
 	if err != nil {
 		return nil, err
 	}
@@ -133,11 +138,7 @@ func (h *Channel) GetAppConfig() (*config.ApplicationConfig, error) {
 }
 
 // InvokeMethod invokes user code via HTTP.
-func (h *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (rsp *invokev1.InvokeMethodResponse, err error) {
-	if h.appHealth != nil && h.appHealth.GetStatus() != apphealth.AppStatusHealthy {
-		return nil, status.Error(codes.Internal, messages.ErrAppUnhealthy)
-	}
-
+func (h *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*invokev1.InvokeMethodResponse, error) {
 	// Check if HTTP Extension is given. Otherwise, it will return error.
 	httpExt := req.Message().GetHttpExtension()
 	if httpExt == nil {
@@ -148,16 +149,18 @@ func (h *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRe
 		return nil, status.Error(codes.InvalidArgument, "invalid HTTP verb")
 	}
 
-	switch req.APIVersion() {
-	case internalv1pb.APIVersion_V1: //nolint:nosnakecase
-		rsp, err = h.invokeMethodV1(ctx, req)
-
-	default:
-		// Reject unsupported version
-		err = status.Error(codes.Unimplemented, fmt.Sprintf("Unsupported spec version: %d", req.APIVersion()))
+	// If the request is for an internal endpoint, do not allow it if the app health status is not successful
+	if h.baseAddress != "" && appID == "" && h.appHealth != nil && h.appHealth.GetStatus() != apphealth.AppStatusHealthy {
+		return nil, status.Error(codes.Internal, messages.ErrAppUnhealthy)
 	}
 
-	return rsp, err
+	switch req.APIVersion() {
+	case internalv1pb.APIVersion_V1: //nolint:nosnakecase
+		return h.invokeMethodV1(ctx, req, appID)
+	}
+
+	// Reject unsupported version
+	return nil, status.Error(codes.Unimplemented, fmt.Sprintf("Unsupported spec version: %d", req.APIVersion()))
 }
 
 // SetAppHealthCheckPath sets the path where to send requests for health probes.
@@ -202,8 +205,8 @@ func (h *Channel) HealthProbe(ctx context.Context) (bool, error) {
 	return status, nil
 }
 
-func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
-	channelReq, err := h.constructRequest(ctx, req)
+func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*invokev1.InvokeMethodResponse, error) {
+	channelReq, err := h.constructRequest(ctx, req, appID)
 	if err != nil {
 		return nil, err
 	}
@@ -275,14 +278,30 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	return rsp, nil
 }
 
-func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMethodRequest) (*http.Request, error) {
+func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*http.Request, error) {
 	// Construct app channel URI: VERB http://localhost:3000/method?query1=value1
 	msg := req.Message()
 	verb := msg.HttpExtension.Verb.String()
 	method := msg.Method
+	var headers []commonapi.NameValuePair
 
 	uri := strings.Builder{}
-	uri.WriteString(h.baseAddress)
+
+	if appID != "" {
+		// If appID includes http(s)://, use that as base URL
+		// Otherwise, use baseAddress if this is an internal endpoint, or the base URL from the external endpoint configuration if external
+		if strings.HasPrefix(appID, "https://") || strings.HasPrefix(appID, "http://") {
+			uri.WriteString(appID)
+		} else if endpoint, ok := h.compStore.GetHTTPEndpoint(appID); ok {
+			uri.WriteString(endpoint.Spec.BaseURL)
+			headers = endpoint.Spec.Headers
+		} else {
+			uri.WriteString(h.baseAddress)
+		}
+	} else {
+		uri.WriteString(h.baseAddress)
+	}
+
 	if len(method) > 0 && method[0] != '/' {
 		uri.WriteRune('/')
 	}
@@ -306,6 +325,11 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 		channelReq.Header.Set("content-type", ct)
 	} else {
 		channelReq.Header.Del("content-type")
+	}
+
+	// Configure headers from http endpoint CRD (if any)
+	for _, hdr := range headers {
+		channelReq.Header.Set(hdr.Name, hdr.Value.String())
 	}
 
 	// HTTP client needs to inject traceparent header for proper tracing stack.

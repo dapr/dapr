@@ -14,10 +14,9 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"strconv"
-
-	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/dapr/dapr/pkg/apis/common"
 )
 
 //+genclient
@@ -33,9 +32,8 @@ type HTTPEndpoint struct {
 	//+optional
 	Spec HTTPEndpointSpec `json:"spec,omitempty"`
 	//+optional
-	Auth `json:"auth,omitempty"`
-	//+optional
-	Scopes []string `json:"scopes,omitempty"`
+	Auth          `json:"auth,omitempty"`
+	common.Scoped `json:",inline"`
 }
 
 // Kind returns the component kind.
@@ -43,42 +41,21 @@ func (HTTPEndpoint) Kind() string {
 	return "HTTPEndpoint"
 }
 
-// IsAppScoped returns true if the appID is allowed in the scopes for the http endpoint.
-func (e HTTPEndpoint) IsAppScoped(appID string) bool {
-	if len(e.Scopes) == 0 {
-		// If there are no scopes, then every app is allowed
-		return true
-	}
-
-	for _, s := range e.Scopes {
-		if s == appID {
-			return true
-		}
-	}
-
-	return false
+// GetSecretStore returns the name of the secret store.
+func (h HTTPEndpoint) GetSecretStore() string {
+	return h.Auth.SecretStore
 }
 
-// Header is the name/value pair for a header specification.
-type Header struct {
-	Name string `json:"name"`
-	//+optional
-	Value DynamicValue `json:"value"`
-	//+optional
-	SecretKeyRef SecretKeyRef `json:"secretKeyRef,omitempty"`
+// NameValuePairs returns the component's headers as name/value pairs
+func (h HTTPEndpoint) NameValuePairs() []common.NameValuePair {
+	return h.Spec.Headers
 }
 
 // HTTPEndpointSpec describes an access specification for allowing external service invocations.
 type HTTPEndpointSpec struct {
 	BaseURL string `json:"baseUrl" validate:"required"`
 	//+optional
-	Headers []Header `json:"headers"`
-}
-
-// SecretKeyRef is a reference to a secret holding the value for the metadata item. Name is the secret name, and key is the field in the secret.
-type SecretKeyRef struct {
-	Name string `json:"name" validate:"required"`
-	Key  string `json:"key" validate:"required"`
+	Headers []common.NameValuePair `json:"headers"`
 }
 
 // Auth represents authentication details for the component.
@@ -94,21 +71,4 @@ type HTTPEndpointList struct {
 	metav1.ListMeta `json:"metadata"`
 
 	Items []HTTPEndpoint `json:"items"`
-}
-
-// DynamicValue is a dynamic value struct for the header.value.
-type DynamicValue struct {
-	v1.JSON `json:",inline"`
-}
-
-// String returns the string representation of the raw value.
-// If the value is a string, it will be unquoted as the string is guaranteed to be a JSON serialized string.
-func (d *DynamicValue) String() string {
-	s := string(d.Raw)
-	c, err := strconv.Unquote(s)
-	if err == nil {
-		s = c
-	}
-
-	return s
 }

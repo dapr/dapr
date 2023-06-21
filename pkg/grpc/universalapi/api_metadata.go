@@ -20,6 +20,7 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/dapr/dapr/pkg/buildinfo"
+	"github.com/dapr/dapr/pkg/config/protocol"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 )
@@ -34,12 +35,35 @@ func (a *UniversalAPI) GetMetadata(ctx context.Context, in *emptypb.Empty) (*run
 		extendedMetadata[k] = v
 	}
 	a.extendedMetadataLock.RUnlock()
+
+	// This is deprecated, but we still need to support it for backward compatibility.
 	extendedMetadata[daprRuntimeVersionKey] = buildinfo.Version()
 
 	// Active actors count
 	activeActorsCount := []*runtimev1pb.ActiveActorsCount{}
 	if a.Actors != nil {
 		activeActorsCount = a.Actors.GetActiveActorsCount(ctx)
+	}
+
+	// App connection information
+	appConnectionProperties := &runtimev1pb.AppConnectionProperties{
+		ChannelAddress: a.AppConnectionConfig.ChannelAddress,
+		Port:           int32(a.AppConnectionConfig.Port),
+		Protocol:       string(a.AppConnectionConfig.Protocol),
+		MaxConcurrency: int32(a.AppConnectionConfig.MaxConcurrency),
+	}
+
+	if a.AppConnectionConfig.HealthCheck != nil {
+		appConnectionProperties.Health = &runtimev1pb.AppConnectionHealthProperties{
+			HealthProbeInterval: a.AppConnectionConfig.HealthCheck.ProbeInterval.String(),
+			HealthProbeTimeout:  a.AppConnectionConfig.HealthCheck.ProbeTimeout.String(),
+			HealthThreshold:     a.AppConnectionConfig.HealthCheck.Threshold,
+		}
+
+		// Health check path is not applicable for gRPC.
+		if protocol.Protocol(appConnectionProperties.Protocol).IsHTTP() {
+			appConnectionProperties.Health.HealthCheckPath = a.AppConnectionConfig.HealthCheckHTTPPath
+		}
 	}
 
 	// Components
@@ -78,12 +102,15 @@ func (a *UniversalAPI) GetMetadata(ctx context.Context, in *emptypb.Empty) (*run
 	}
 
 	return &runtimev1pb.GetMetadataResponse{
-		Id:                   a.AppID,
-		ExtendedMetadata:     extendedMetadata,
-		RegisteredComponents: registeredComponents,
-		ActiveActorsCount:    activeActorsCount,
-		Subscriptions:        ps,
-		HttpEndpoints:        registeredHTTPEndpoints,
+		Id:                      a.AppID,
+		ExtendedMetadata:        extendedMetadata,
+		RegisteredComponents:    registeredComponents,
+		ActiveActorsCount:       activeActorsCount,
+		Subscriptions:           ps,
+		HttpEndpoints:           registeredHTTPEndpoints,
+		AppConnectionProperties: appConnectionProperties,
+		RuntimeVersion:          buildinfo.Version(),
+		EnabledFeatures:         a.GlobalConfig.EnabledFeatures(),
 	}, nil
 }
 

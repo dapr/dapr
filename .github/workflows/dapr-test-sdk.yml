@@ -28,6 +28,7 @@ on:
     - test-sdk-python
     - test-sdk-java
     - test-sdk-js
+    - test-sdk-go
 env:
   GOOS: linux
   GOARCH: amd64
@@ -38,6 +39,7 @@ env:
   # /test-sdk-python
   # /test-sdk-java
   # /test-sdk-js
+  # /test-sdk-go
 jobs:
   python-sdk:
     if: |
@@ -462,5 +464,133 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
           message: |
             ## ⚠️ JS SDK tests cancelled
+
+            The Action has been canceled
+
+  go-sdk:
+    if: |
+      github.event_name == 'schedule' ||
+      ( github.event_name == 'repository_dispatch' &&
+        (
+          github.event.action == 'test-sdk-all' ||
+          github.event.action == 'test-sdk-go'
+        )
+      )
+    name: "Go SDK verification tests"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up for scheduled test
+        if: github.event_name != 'repository_dispatch'
+        run: |
+          echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
+          echo "CHECKOUT_REF=refs/heads/master" >> $GITHUB_ENV
+        shell: bash
+      - name: Parse test payload
+        if: github.event_name == 'repository_dispatch'
+        uses: actions/github-script@v6.2.0
+        with:
+          github-token: ${{secrets.DAPR_BOT_TOKEN}}
+          script: |
+            const testPayload = context.payload.client_payload;
+            if (testPayload) {
+              var fs = require('fs');
+              // Set environment variables
+              fs.appendFileSync(process.env.GITHUB_ENV,
+                `CHECKOUT_REPO=${testPayload.pull_head_repo}\n`+
+                `CHECKOUT_REF=${testPayload.pull_head_ref}\n`+
+                `PR_NUMBER=${testPayload.issue.number}`
+              );
+            }
+      - name: Create PR comment
+        if: env.PR_NUMBER != ''
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
+        with:
+          header: ${{ github.run_id }}-go
+          number: ${{ env.PR_NUMBER }}
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            # Dapr SDK Go test
+
+            🔗 **[Link to Action run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})**
+
+            Commit ref: ${{ env.CHECKOUT_REF }}
+      - name: Check out code
+        uses: actions/checkout@v3
+        with:
+          repository: ${{ env.CHECKOUT_REPO }}
+          ref: ${{ env.CHECKOUT_REF }}
+      - name: "Set up Go"
+        id: setup-go
+        uses: actions/setup-go@v4
+        with:
+          go-version-file: "go.mod"
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.9
+      - name: Checkout go-sdk repo to run tests.
+        uses: actions/checkout@v3
+        with:
+          repository: dapr/go-sdk
+          path: go-sdk
+      - name: Install Mechanical Markdown
+        run: |
+          cd go-sdk
+          python -m pip install --upgrade pip
+          pip install mechanical-markdown
+      - name: Set up Dapr CLI
+        run: wget -q https://raw.githubusercontent.com/dapr/cli/master/install/install.sh -O - | /bin/bash -s
+      - name: Initialize Dapr runtime
+        run: |
+          dapr uninstall --all
+          dapr init
+      - name: Build and override daprd with HEAD.
+        run: |
+          make
+          mkdir -p $HOME/.dapr/bin/
+          cp dist/linux_amd64/release/daprd $HOME/.dapr/bin/daprd
+      - name: Override placement service.
+        run: |
+          docker stop dapr_placement
+          ./dist/linux_amd64/release/placement --healthz-port 9091 &
+      - name: Check Examples
+        run: |
+          cd go-sdk/examples
+          ./validate.sh hello-world
+          ./validate.sh pubsub
+          ./validate.sh service
+          ./validate.sh actor
+      - name: Update PR comment for success
+        if: ${{ success() }}
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
+        with:
+          header: ${{ github.run_id }}-go
+          number: ${{ env.PR_NUMBER }}
+          append: true
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            ## ✅ Go SDK tests passed
+      - name: Update PR comment for failure
+        if: ${{ failure() }}
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
+        with:
+          header: ${{ github.run_id }}-go
+          number: ${{ env.PR_NUMBER }}
+          append: true
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            ## ❌ Go SDK tests failed
+
+            Please check the logs for details on the error.
+      - name: Update PR comment for cancellation
+        if: ${{ cancelled() }}
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
+        with:
+          header: ${{ github.run_id }}-go
+          number: ${{ env.PR_NUMBER }}
+          append: true
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            ## ⚠️ Go SDK tests cancelled
 
             The Action has been canceled

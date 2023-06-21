@@ -39,7 +39,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/anypb"
-	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apiextensionsV1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/dapr/components-contrib/bindings"
@@ -52,6 +52,7 @@ import (
 	workflowContrib "github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/actors/reminders"
+	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpEndpointsV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
@@ -1012,9 +1013,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 				mock.MatchedBy(func(b string) bool {
 					return b == "fakeAppID"
 				}),
-				mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
-					return true
-				}),
+				mock.AnythingOfType("*v1.InvokeMethodRequest"),
 			).
 			Return(fakeDirectMessageResponse, nil).
 			Once()
@@ -1044,9 +1043,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 				mock.MatchedBy(func(b string) bool {
 					return b == "http://api.github.com"
 				}),
-				mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
-					return true
-				}),
+				mock.AnythingOfType("*v1.InvokeMethodRequest"),
 			).
 			Return(fakeDirectMessageResponse, nil).
 			Once()
@@ -1076,9 +1073,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 				mock.MatchedBy(func(b string) bool {
 					return b == "http://123.45.67.89:3000"
 				}),
-				mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
-					return true
-				}),
+				mock.AnythingOfType("*v1.InvokeMethodRequest"),
 			).
 			Return(fakeDirectMessageResponse, nil).
 			Once()
@@ -1108,9 +1103,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 				mock.MatchedBy(func(b string) bool {
 					return b == "fakeAppID"
 				}),
-				mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
-					return true
-				}),
+				mock.AnythingOfType("*v1.InvokeMethodRequest"),
 			).
 			Return(fakeDirectMessageResponse, nil).
 			Once()
@@ -1140,9 +1133,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 				mock.MatchedBy(func(b string) bool {
 					return b == "http://api.github.com"
 				}),
-				mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
-					return true
-				}),
+				mock.AnythingOfType("*v1.InvokeMethodRequest"),
 			).
 			Return(fakeDirectMessageResponse, nil).
 			Once()
@@ -1172,9 +1163,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 				mock.MatchedBy(func(b string) bool {
 					return b == "fakeAppID"
 				}),
-				mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
-					return true
-				}),
+				mock.AnythingOfType("*v1.InvokeMethodRequest"),
 			).
 			Return(fakeDirectMessageResponse, nil).
 			Once()
@@ -1204,9 +1193,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 				mock.MatchedBy(func(b string) bool {
 					return b == "http://api.github.com"
 				}),
-				mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
-					return true
-				}),
+				mock.AnythingOfType("*v1.InvokeMethodRequest"),
 			).
 			Return(fakeDirectMessageResponse, nil).
 			Once()
@@ -1236,9 +1223,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 				mock.MatchedBy(func(b string) bool {
 					return b == "fakeAppID"
 				}),
-				mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
-					return true
-				}),
+				mock.AnythingOfType("*v1.InvokeMethodRequest"),
 			).
 			Return(fakeDirectMessageResponse, nil).
 			Once()
@@ -1408,9 +1393,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 				mock.MatchedBy(func(b string) bool {
 					return b == "fakeAppID"
 				}),
-				mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
-					return true
-				}),
+				mock.AnythingOfType("*v1.InvokeMethodRequest"),
 			).
 			Return(fakeDirectMessageResponse, nil).
 			Once()
@@ -1440,9 +1423,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 				mock.MatchedBy(func(b string) bool {
 					return b == "http://api.github.com"
 				}),
-				mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
-					return true
-				}),
+				mock.AnythingOfType("*v1.InvokeMethodRequest"),
 			).
 			Return(fakeDirectMessageResponse, nil).
 			Once()
@@ -1471,9 +1452,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 				mock.MatchedBy(func(b string) bool {
 					return b == "fakeAppID"
 				}),
-				mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
-					return true
-				}),
+				mock.AnythingOfType("*v1.InvokeMethodRequest"),
 			).
 			Return(fakeDirectMessageResponse, nil).
 			Once()
@@ -1502,9 +1481,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 				mock.MatchedBy(func(b string) bool {
 					return b == "fakeAppID"
 				}),
-				mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
-					return true
-				}),
+				mock.AnythingOfType("*v1.InvokeMethodRequest"),
 			).
 			Return(fakeDirectMessageResponse, nil).
 			Once()
@@ -1533,9 +1510,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 				mock.MatchedBy(func(b string) bool {
 					return b == "http://api.github.com"
 				}),
-				mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
-					return true
-				}),
+				mock.AnythingOfType("*v1.InvokeMethodRequest"),
 			).
 			Return(fakeDirectMessageResponse, nil).
 			Once()
@@ -1562,9 +1537,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 				mock.MatchedBy(func(b string) bool {
 					return b == "fakeAppID"
 				}),
-				mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
-					return true
-				}),
+				mock.AnythingOfType("*v1.InvokeMethodRequest"),
 			).
 			Return(nil, errors.New("UPSTREAM_ERROR")).
 			Once()
@@ -1591,9 +1564,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 				mock.MatchedBy(func(b string) bool {
 					return b == "http://api.github.com"
 				}),
-				mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
-					return true
-				}),
+				mock.AnythingOfType("*v1.InvokeMethodRequest"),
 			).
 			Return(nil, errors.New("UPSTREAM_ERROR")).
 			Once()
@@ -1620,9 +1591,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 				mock.MatchedBy(func(b string) bool {
 					return b == "fakeAppID"
 				}),
-				mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
-					return true
-				}),
+				mock.AnythingOfType("*v1.InvokeMethodRequest"),
 			).
 			Return(nil, status.Errorf(codes.PermissionDenied, "Permission Denied")).
 			Once()
@@ -1649,9 +1618,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 				mock.MatchedBy(func(b string) bool {
 					return b == "http://api.github.com"
 				}),
-				mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
-					return true
-				}),
+				mock.AnythingOfType("*v1.InvokeMethodRequest"),
 			).
 			Return(nil, status.Errorf(codes.PermissionDenied, "Permission Denied")).
 			Once()
@@ -1673,7 +1640,7 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 
 	fakeServer := newFakeHTTPServer()
 
-	buffer := ""
+	var buffer string
 	spec := config.TracingSpec{SamplingRate: "1"}
 
 	createExporters(&buffer)
@@ -1700,11 +1667,11 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 		mockDirectMessaging.Calls = nil // reset call count
 		mockDirectMessaging.On(
 			"Invoke",
-			mock.MatchedBy(matchContextInterface), mock.MatchedBy(func(b string) bool {
+			mock.MatchedBy(matchContextInterface),
+			mock.MatchedBy(func(b string) bool {
 				return b == "fakeAppID"
-			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
-				return true
 			}),
+			mock.AnythingOfType("*v1.InvokeMethodRequest"),
 		).Return(fakeDirectMessageResponse, nil).Once()
 
 		// act
@@ -1726,11 +1693,11 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 		mockDirectMessaging.Calls = nil // reset call count
 		mockDirectMessaging.On(
 			"Invoke",
-			mock.MatchedBy(matchContextInterface), mock.MatchedBy(func(b string) bool {
+			mock.MatchedBy(matchContextInterface),
+			mock.MatchedBy(func(b string) bool {
 				return b == "fakeAppID"
-			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
-				return true
 			}),
+			mock.AnythingOfType("*v1.InvokeMethodRequest"),
 		).Return(fakeDirectMessageResponse, nil).Once()
 
 		// act
@@ -1752,11 +1719,11 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 		mockDirectMessaging.Calls = nil // reset call count
 		mockDirectMessaging.On(
 			"Invoke",
-			mock.MatchedBy(matchContextInterface), mock.MatchedBy(func(b string) bool {
+			mock.MatchedBy(matchContextInterface),
+			mock.MatchedBy(func(b string) bool {
 				return b == "fakeAppID"
-			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
-				return true
 			}),
+			mock.AnythingOfType("*v1.InvokeMethodRequest"),
 		).Return(fakeDirectMessageResponse, nil).Once()
 
 		// act
@@ -2631,11 +2598,11 @@ func TestV1MetadataEndpoint(t *testing.T) {
 		Spec: componentsV1alpha1.ComponentSpec{
 			Type:    "mock.component1Type",
 			Version: "v1.0",
-			Metadata: []componentsV1alpha1.MetadataItem{
+			Metadata: []commonapi.NameValuePair{
 				{
 					Name: "actorMockComponent1",
-					Value: componentsV1alpha1.DynamicValue{
-						JSON: v1.JSON{Raw: []byte("true")},
+					Value: commonapi.DynamicValue{
+						JSON: apiextensionsV1.JSON{Raw: []byte("true")},
 					},
 				},
 			},
@@ -2648,11 +2615,11 @@ func TestV1MetadataEndpoint(t *testing.T) {
 		Spec: componentsV1alpha1.ComponentSpec{
 			Type:    "mock.component2Type",
 			Version: "v1.0",
-			Metadata: []componentsV1alpha1.MetadataItem{
+			Metadata: []commonapi.NameValuePair{
 				{
 					Name: "actorMockComponent2",
-					Value: componentsV1alpha1.DynamicValue{
-						JSON: v1.JSON{Raw: []byte("true")},
+					Value: commonapi.DynamicValue{
+						JSON: apiextensionsV1.JSON{Raw: []byte("true")},
 					},
 				},
 			},
@@ -2678,11 +2645,11 @@ func TestV1MetadataEndpoint(t *testing.T) {
 		},
 		Spec: httpEndpointsV1alpha1.HTTPEndpointSpec{
 			BaseURL: "api.test.com",
-			Headers: []httpEndpointsV1alpha1.Header{
+			Headers: []commonapi.NameValuePair{
 				{
 					Name: "Accept-Language",
-					Value: httpEndpointsV1alpha1.DynamicValue{
-						JSON: v1.JSON{Raw: []byte("en-US")},
+					Value: commonapi.DynamicValue{
+						JSON: apiextensionsV1.JSON{Raw: []byte("en-US")},
 					},
 				},
 			},
@@ -2691,6 +2658,20 @@ func TestV1MetadataEndpoint(t *testing.T) {
 
 	mockActors := new(actors.MockActors)
 	mockActors.On("GetActiveActorsCount")
+
+	appConnectionConfig := config.AppConnectionConfig{
+		ChannelAddress:      "1.2.3.4",
+		MaxConcurrency:      10,
+		Port:                5000,
+		Protocol:            "http",
+		HealthCheckHTTPPath: "/healthz",
+		HealthCheck: &config.AppHealthConfig{
+			ProbeInterval: 10 * time.Second,
+			ProbeTimeout:  5 * time.Second,
+			ProbeOnly:     true,
+			Threshold:     3,
+		},
+	}
 
 	testAPI := &api{
 		universal: &universalapi.UniversalAPI{
@@ -2706,6 +2687,8 @@ func TestV1MetadataEndpoint(t *testing.T) {
 			ExtendedMetadata: map[string]string{
 				"test": "value",
 			},
+			AppConnectionConfig: appConnectionConfig,
+			GlobalConfig:        &config.Configuration{},
 		},
 	}
 
@@ -2716,7 +2699,15 @@ func TestV1MetadataEndpoint(t *testing.T) {
 		assert.Equal(t, 204, resp.StatusCode)
 	})
 
-	expectedBody := `{"id":"xyz","actors":[{"type":"abcd","count":10},{"type":"xyz","count":5}],"components":[{"name":"MockComponent1Name","type":"mock.component1Type","version":"v1.0","capabilities":["mock.feat.MockComponent1Name"]},{"name":"MockComponent2Name","type":"mock.component2Type","version":"v1.0","capabilities":["mock.feat.MockComponent2Name"]}],"extended":{"daprRuntimeVersion":"edge","foo":"bar","test":"value"},"subscriptions":[{"pubsubname":"test","topic":"topic","rules":[{"path":"path"}],"deadLetterTopic":"dead"}],"httpEndpoints":[{"name":"MockHTTPEndpoint"}]}`
+	expectedBody := `{"id":"xyz","runtimeVersion":"edge",` +
+		`"actors":[{"type":"abcd","count":10},{"type":"xyz","count":5}],` +
+		`"components":[{"name":"MockComponent1Name","type":"mock.component1Type","version":"v1.0","capabilities":["mock.feat.MockComponent1Name"]},` +
+		`{"name":"MockComponent2Name","type":"mock.component2Type","version":"v1.0","capabilities":["mock.feat.MockComponent2Name"]}],` +
+		`"extended":{"daprRuntimeVersion":"edge","foo":"bar","test":"value"},` +
+		`"subscriptions":[{"pubsubname":"test","topic":"topic","rules":[{"path":"path"}],"deadLetterTopic":"dead"}],` +
+		`"httpEndpoints":[{"name":"MockHTTPEndpoint"}],` +
+		`"appConnectionProperties":{"port":5000,"protocol":"http","channelAddress":"1.2.3.4","maxConcurrency":10,` +
+		`"health":{"healthCheckPath":"/healthz","healthProbeInterval":"10s","healthProbeTimeout":"5s","healthThreshold":3}}}`
 
 	t.Run("Get Metadata", func(t *testing.T) {
 		resp := fakeServer.DoRequest("GET", "v1.0/metadata", nil, nil)
@@ -2889,11 +2880,11 @@ func TestAPIToken(t *testing.T) {
 		mockDirectMessaging.Calls = nil // reset call count
 		mockDirectMessaging.On(
 			"Invoke",
-			mock.MatchedBy(matchContextInterface), mock.MatchedBy(func(b string) bool {
+			mock.MatchedBy(matchContextInterface),
+			mock.MatchedBy(func(b string) bool {
 				return b == "fakeDaprID"
-			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
-				return true
 			}),
+			mock.AnythingOfType("*v1.InvokeMethodRequest"),
 		).Return(fakeDirectMessageResponse, nil).Once()
 
 		// act
@@ -2912,11 +2903,11 @@ func TestAPIToken(t *testing.T) {
 		mockDirectMessaging.Calls = nil // reset call count
 		mockDirectMessaging.On(
 			"Invoke",
-			mock.MatchedBy(matchContextInterface), mock.MatchedBy(func(b string) bool {
+			mock.MatchedBy(matchContextInterface),
+			mock.MatchedBy(func(b string) bool {
 				return b == "fakeDaprID"
-			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
-				return true
 			}),
+			mock.AnythingOfType("*v1.InvokeMethodRequest"),
 		).Return(fakeDirectMessageResponse, nil).Once()
 
 		// act
@@ -2935,11 +2926,11 @@ func TestAPIToken(t *testing.T) {
 		mockDirectMessaging.Calls = nil // reset call count
 		mockDirectMessaging.On(
 			"Invoke",
-			mock.MatchedBy(matchContextInterface), mock.MatchedBy(func(b string) bool {
+			mock.MatchedBy(matchContextInterface),
+			mock.MatchedBy(func(b string) bool {
 				return b == "fakeDaprID"
-			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
-				return true
 			}),
+			mock.AnythingOfType("*v1.InvokeMethodRequest"),
 		).Return(fakeDirectMessageResponse, nil).Once()
 
 		// act
@@ -2958,11 +2949,11 @@ func TestAPIToken(t *testing.T) {
 		mockDirectMessaging.Calls = nil // reset call count
 		mockDirectMessaging.On(
 			"Invoke",
-			mock.MatchedBy(matchContextInterface), mock.MatchedBy(func(b string) bool {
-				return b == "fakeDaprID"
-			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
-				return true
+			mock.MatchedBy(matchContextInterface),
+			mock.MatchedBy(func(b string) bool {
+				return b == "fakeAppID"
 			}),
+			mock.AnythingOfType("*v1.InvokeMethodRequest"),
 		).Return(fakeDirectMessageResponse, nil).Once()
 
 		// act
@@ -3007,12 +2998,14 @@ func TestEmptyPipelineWithTracer(t *testing.T) {
 		fakeData := []byte("fakeData")
 
 		mockDirectMessaging.Calls = nil // reset call count
-		mockDirectMessaging.On("Invoke",
-			mock.MatchedBy(matchContextInterface), mock.MatchedBy(func(b string) bool {
+		mockDirectMessaging.On(
+			"Invoke",
+			mock.MatchedBy(matchContextInterface),
+			mock.MatchedBy(func(b string) bool {
 				return b == "fakeDaprID"
-			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
-				return true
-			})).Return(fakeDirectMessageResponse, nil).Once()
+			}),
+			mock.AnythingOfType("*v1.InvokeMethodRequest"),
+		).Return(fakeDirectMessageResponse, nil).Once()
 
 		// act
 		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
@@ -4021,12 +4014,14 @@ func TestSinglePipelineWithTracer(t *testing.T) {
 		fakeData := []byte("fakeData")
 
 		mockDirectMessaging.Calls = nil // reset call count
-		mockDirectMessaging.On("Invoke",
-			mock.MatchedBy(matchContextInterface), mock.MatchedBy(func(b string) bool {
+		mockDirectMessaging.On(
+			"Invoke",
+			mock.MatchedBy(matchContextInterface),
+			mock.MatchedBy(func(b string) bool {
 				return b == "fakeAppID"
-			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
-				return true
-			})).Return(fakeDirectMessageResponse, nil).Once()
+			}),
+			mock.AnythingOfType("*v1.InvokeMethodRequest"),
+		).Return(fakeDirectMessageResponse, nil).Once()
 
 		// act
 		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
@@ -4080,11 +4075,11 @@ func TestSinglePipelineWithNoTracing(t *testing.T) {
 		mockDirectMessaging.Calls = nil // reset call count
 		mockDirectMessaging.On(
 			"Invoke",
-			mock.MatchedBy(matchContextInterface), mock.MatchedBy(func(b string) bool {
+			mock.MatchedBy(matchContextInterface),
+			mock.MatchedBy(func(b string) bool {
 				return b == "fakeAppID"
-			}), mock.MatchedBy(func(c *invokev1.InvokeMethodRequest) bool {
-				return true
 			}),
+			mock.AnythingOfType("*v1.InvokeMethodRequest"),
 		).Return(fakeDirectMessageResponse, nil).Once()
 
 		// act

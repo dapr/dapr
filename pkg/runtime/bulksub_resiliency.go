@@ -38,7 +38,7 @@ func (a *DaprRuntime) ApplyBulkSubscribeResiliency(ctx context.Context, bulkSubC
 	_, err := policyRunner(func(ctx context.Context) (*[]pubsub.BulkSubscribeResponseEntry, error) {
 		var pErr error
 		bsre := []pubsub.BulkSubscribeResponseEntry{}
-		if a.runtimeConfig.ApplicationProtocol.IsHTTP() {
+		if a.runtimeConfig.AppConnectionConfig.Protocol.IsHTTP() {
 			pErr = a.publishBulkMessageHTTP(ctx, &bscData, &psm, &bsre, envelope, deadLetterTopic)
 		} else {
 			pErr = a.publishBulkMessageGRPC(ctx, &bscData, &psm, &bsre, rawPayload)
