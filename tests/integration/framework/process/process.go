@@ -11,12 +11,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package framework
+package process
 
-import "github.com/dapr/dapr/tests/integration/framework/process"
+import (
+	"context"
+	"testing"
+)
 
-func WithProcesses(procs ...process.Interface) Option {
-	return func(o *options) {
-		o.procs = procs
-	}
+// Interface is an interface for running and cleaning up a process.
+type Interface interface {
+	Run(*testing.T, context.Context)
+	Cleanup(*testing.T)
 }
