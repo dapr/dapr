@@ -18,6 +18,22 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 )
 
+// options contains the options for running Sentry in integration tests.
+type options struct {
+	execOpts []exec.Option
+
+	ca          *certs.Credentials
+	rootPEM     []byte
+	certPEM     []byte
+	keyPEM      []byte
+	port        int
+	healthzPort int
+	metricsPort int
+}
+
+// Option is a function that configures the process.
+type Option func(*options)
+
 func WithExecOptions(execOptions ...exec.Option) Option {
 	return func(o *options) {
 		o.execOpts = execOptions

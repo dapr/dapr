@@ -15,14 +15,17 @@ package integration
 
 import (
 	"context"
-	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/stretchr/testify/require"
+
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd"
 	_ "github.com/dapr/dapr/tests/integration/suite/healthz"
 	_ "github.com/dapr/dapr/tests/integration/suite/metadata"
 	_ "github.com/dapr/dapr/tests/integration/suite/ports"
@@ -34,20 +37,23 @@ func RunIntegrationTests(t *testing.T) {
 	for _, tcase := range suite.All() {
 		tcase := tcase
 		tof := reflect.TypeOf(tcase).Elem()
-		testName := filepath.Base(tof.PkgPath()) + "/" + tof.Name()
+		_, aft, ok := strings.Cut(tof.PkgPath(), "tests/integration/suite/")
+		require.True(t, ok)
+		testName := aft + "/" + tof.Name()
 
 		t.Run(testName, func(t *testing.T) {
 			t.Logf("%s: setting up test case", testName)
 			options := tcase.Setup(t)
 
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			defer cancel()
+			t.Cleanup(cancel)
 
-			t.Log("running framework")
 			f := framework.Run(t, ctx, options...)
 
-			t.Log("running test case")
-			tcase.Run(t, ctx)
+			t.Run("run", func(t *testing.T) {
+				t.Log("running test case")
+				tcase.Run(t, ctx)
+			})
 
 			t.Log("cleaning up framework")
 			f.Cleanup(t)
