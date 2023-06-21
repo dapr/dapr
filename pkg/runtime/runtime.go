@@ -538,7 +538,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 
 	err = a.createHTTPEndpointsAppChannel()
 	if err != nil {
-		log.Warnf("failed to open %s channel to app for external service invocation: %s", string(a.runtimeConfig.ApplicationProtocol), err)
+		log.Warnf("failed to open app channel for external service invocation: %s", err)
 	}
 
 	// add another app channel dedicated to external service invocation
