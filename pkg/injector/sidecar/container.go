@@ -267,9 +267,13 @@ func GetSidecarContainer(cfg ContainerConfig) (*corev1.Container, error) {
 		container.Args = append(container.Args, args...)
 	}
 
-	containerEnv := ParseEnvString(cfg.Annotations[annotations.KeyEnv])
+	containerEnvKeys, containerEnv := ParseEnvString(cfg.Annotations[annotations.KeyEnv])
 	if len(containerEnv) > 0 {
 		container.Env = append(container.Env, containerEnv...)
+		container.Env = append(container.Env, corev1.EnvVar{
+			Name:  authConsts.EnvKeysEnvVar,
+			Value: strings.Join(containerEnvKeys, " "),
+		})
 	}
 
 	// This is a special case that requires administrator privileges in Windows containers

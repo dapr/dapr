@@ -11,26 +11,28 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package kill
+package common
 
-import (
-	"os/exec"
-	"testing"
-	"time"
-)
+// +kubebuilder:object:generate=true
 
-func Kill(t *testing.T, cmd *exec.Cmd) {
-	t.Helper()
+// Scoped is a base struct for components and other resources that can be scoped to apps.
+type Scoped struct {
+	//+optional
+	Scopes []string `json:"scopes,omitempty"`
+}
 
-	if cmd == nil || cmd.ProcessState != nil {
-		return
+// IsAppScoped returns true if the appID is allowed in the scopes for the resource.
+func (s Scoped) IsAppScoped(appID string) bool {
+	if len(s.Scopes) == 0 {
+		// If there are no scopes, then every app is allowed
+		return true
 	}
 
-	t.Log("interrupting daprd process")
+	for _, s := range s.Scopes {
+		if s == appID {
+			return true
+		}
+	}
 
-	// TODO: daprd does not currently gracefully exit on a single interrupt
-	// signal. Remove once fixed.
-	interrupt(t, cmd)
-	time.Sleep(time.Millisecond * 300)
-	interrupt(t, cmd)
+	return false
 }

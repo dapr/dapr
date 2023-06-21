@@ -52,11 +52,11 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/structpb"
-	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 
 	"github.com/dapr/dapr/pkg/actors"
+	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpEndpointV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/apphealth"
@@ -79,6 +79,7 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/security"
+	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
 	"github.com/dapr/dapr/pkg/scopes"
 	"github.com/dapr/dapr/utils"
@@ -1132,9 +1133,9 @@ func (a *DaprRuntime) beginComponentsUpdates() error {
 
 func (a *DaprRuntime) onComponentUpdated(component componentsV1alpha1.Component) bool {
 	oldComp, exists := a.compStore.GetComponent(component.Spec.Type, component.Name)
-	newComp, _ := a.processComponentSecrets(component)
+	_, _ = a.processResourceSecrets(&component)
 
-	if exists && reflect.DeepEqual(oldComp.Spec, newComp.Spec) {
+	if exists && reflect.DeepEqual(oldComp.Spec, component.Spec) {
 		return false
 	}
 
@@ -1229,16 +1230,13 @@ func (a *DaprRuntime) beginHTTPEndpointsUpdates() error {
 
 func (a *DaprRuntime) onHTTPEndpointUpdated(endpoint httpEndpointV1alpha1.HTTPEndpoint) bool {
 	oldEndpoint, exists := a.compStore.GetHTTPEndpoint(endpoint.Name)
-	newEndpoint, _ := a.processHTTPEndpointSecrets(endpoint)
+	_, _ = a.processResourceSecrets(&endpoint)
 
-	if exists && reflect.DeepEqual(oldEndpoint.Spec, newEndpoint.Spec) {
+	if exists && reflect.DeepEqual(oldEndpoint.Spec, endpoint.Spec) {
 		return false
 	}
 
 	a.pendingHTTPEndpoints <- endpoint
-
-	log.Infof("http endpoint updated for http endpoint named: %s", endpoint.Name)
-
 	return true
 }
 
@@ -1706,7 +1704,7 @@ func (a *DaprRuntime) isAppSubscribedToBinding(binding string) (bool, error) {
 	return false, nil
 }
 
-func isBindingOfDirection(direction string, metadata []componentsV1alpha1.MetadataItem) bool {
+func isBindingOfDirection(direction string, metadata []commonapi.NameValuePair) bool {
 	directionFound := false
 
 	for _, m := range metadata {
@@ -1870,7 +1868,7 @@ func (a *DaprRuntime) initState(s componentsV1alpha1.Component) error {
 		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
 	}
 	if store != nil {
-		secretStoreName := a.authSecretStoreOrDefault(s)
+		secretStoreName := a.authSecretStoreOrDefault(&s)
 
 		secretStore, _ := a.compStore.GetSecretStore(secretStoreName)
 		encKeys, encErr := encryption.ComponentEncryptionKey(s, secretStore)
@@ -2150,7 +2148,7 @@ func (a *DaprRuntime) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPu
 	return runtimePubsub.ApplyBulkPublishResiliency(context.TODO(), req, policyDef, defaultBulkPublisher)
 }
 
-func metadataContainsNamespace(items []componentsV1alpha1.MetadataItem) bool {
+func metadataContainsNamespace(items []commonapi.NameValuePair) bool {
 	for _, c := range items {
 		val := c.Value.String()
 		if strings.Contains(val, "{namespace}") {
@@ -2696,8 +2694,8 @@ func (a *DaprRuntime) processHTTPEndpoints() {
 		if endpoint.Name == "" {
 			continue
 		}
-		newEndpoint, _ := a.processHTTPEndpointSecrets(endpoint)
-		a.compStore.AddHTTPEndpoint(newEndpoint)
+		_, _ = a.processResourceSecrets(&endpoint)
+		a.compStore.AddHTTPEndpoint(endpoint)
 	}
 }
 
@@ -2793,8 +2791,7 @@ func (a *DaprRuntime) doProcessOneComponent(category components.Category, comp c
 }
 
 func (a *DaprRuntime) preprocessOneComponent(comp *componentsV1alpha1.Component) componentPreprocessRes {
-	var unreadySecretsStore string
-	*comp, unreadySecretsStore = a.processComponentSecrets(*comp)
+	_, unreadySecretsStore := a.processResourceSecrets(comp)
 	if unreadySecretsStore != "" {
 		return componentPreprocessRes{
 			unreadyDependency: componentDependency(components.CategorySecretStore, unreadySecretsStore),
@@ -2984,17 +2981,69 @@ func (a *DaprRuntime) WaitUntilShutdown() error {
 	return <-a.shutdownC
 }
 
-// Returns the component updated with the secrets applied.
-// If the component references a secret store that hasn't been loaded yet, it returns the name of the secret store component as second returned value.
-func (a *DaprRuntime) processComponentSecrets(component componentsV1alpha1.Component) (componentsV1alpha1.Component, string) {
+// Interface that applies to both Component and HTTPEndpoint resources.
+type resourceWithMetadata interface {
+	Kind() string
+	GetName() string
+	GetNamespace() string
+	GetSecretStore() string
+	NameValuePairs() []commonapi.NameValuePair
+}
+
+func isEnvVarAllowed(key string) bool {
+	// First, apply a denylist that blocks access to sensitive env vars
+	key = strings.ToUpper(key)
+	switch {
+	case key == "":
+		return false
+	case key == "APP_API_TOKEN":
+		return false
+	case strings.HasPrefix(key, "DAPR_"):
+		return false
+	case strings.Contains(key, " "):
+		return false
+	}
+
+	// If we have a `DAPR_ENV_KEYS` env var (which is added by the Dapr Injector in Kubernetes mode), use that as allowlist too
+	allowlist := os.Getenv(authConsts.EnvKeysEnvVar)
+	if allowlist == "" {
+		return true
+	}
+
+	// Need to check for the full var, so there must be a space after OR it must be the end of the string, and there must be a space before OR it must be at the beginning of the string
+	idx := strings.Index(allowlist, key)
+	if idx >= 0 &&
+		(idx+len(key) == len(allowlist) || allowlist[idx+len(key)] == ' ') &&
+		(idx == 0 || allowlist[idx-1] == ' ') {
+		return true
+	}
+	return false
+}
+
+// Returns the component or HTTP endpoint updated with the secrets applied.
+// If the resource references a secret store that hasn't been loaded yet, it returns the name of the secret store component as second returned value.
+func (a *DaprRuntime) processResourceSecrets(resource resourceWithMetadata) (updated bool, secretStoreName string) {
 	cache := map[string]secretstores.GetSecretResponse{}
 
-	for i, m := range component.Spec.Metadata {
-		if m.SecretKeyRef.Name == "" {
+	secretStoreName = a.authSecretStoreOrDefault(resource)
+
+	metadata := resource.NameValuePairs()
+	for i, m := range metadata {
+		// If there's an env var and no value, use that
+		if !m.HasValue() && m.EnvRef != "" {
+			if isEnvVarAllowed(m.EnvRef) {
+				metadata[i].SetValue([]byte(os.Getenv(m.EnvRef)))
+			} else {
+				log.Warnf("%s %s references an env variable that isn't allowed: %s", resource.Kind(), resource.GetName(), m.EnvRef)
+			}
+			metadata[i].EnvRef = ""
+			updated = true
 			continue
 		}
 
-		secretStoreName := a.authSecretStoreOrDefault(component)
+		if m.SecretKeyRef.Name == "" {
+			continue
+		}
 
 		// If running in Kubernetes and have an operator client, do not fetch secrets from the Kubernetes secret store as they will be populated by the operator.
 		// Instead, base64 decode the secret values into their real self.
@@ -3012,20 +3061,16 @@ func (a *DaprRuntime) processComponentSecrets(component componentsV1alpha1.Compo
 				continue
 			}
 
-			m.Value = componentsV1alpha1.DynamicValue{
-				JSON: v1.JSON{
-					Raw: dec,
-				},
-			}
-
-			component.Spec.Metadata[i] = m
+			metadata[i].SetValue(dec)
+			metadata[i].SecretKeyRef = commonapi.SecretKeyRef{}
+			updated = true
 			continue
 		}
 
 		secretStore, ok := a.compStore.GetSecretStore(secretStoreName)
 		if !ok {
-			log.Warnf("Component %s references a secret store that isn't loaded: %s", component.Name, secretStoreName)
-			return component, secretStoreName
+			log.Warnf("%s %s references a secret store that isn't loaded: %s", resource.Kind(), resource.GetName(), secretStoreName)
+			return updated, secretStoreName
 		}
 
 		resp, ok := cache[m.SecretKeyRef.Name]
@@ -3034,7 +3079,7 @@ func (a *DaprRuntime) processComponentSecrets(component componentsV1alpha1.Compo
 			r, err := secretStore.GetSecret(context.TODO(), secretstores.GetSecretRequest{
 				Name: m.SecretKeyRef.Name,
 				Metadata: map[string]string{
-					"namespace": component.ObjectMeta.Namespace,
+					"namespace": resource.GetNamespace(),
 				},
 			})
 			if err != nil {
@@ -3052,109 +3097,18 @@ func (a *DaprRuntime) processComponentSecrets(component componentsV1alpha1.Compo
 
 		val, ok := resp.Data[secretKeyName]
 		if ok && val != "" {
-			component.Spec.Metadata[i].Value = componentsV1alpha1.DynamicValue{
-				JSON: v1.JSON{
-					Raw: []byte(val),
-				},
-			}
+			metadata[i].SetValue([]byte(val))
+			metadata[i].SecretKeyRef = commonapi.SecretKeyRef{}
+			updated = true
 		}
 
 		cache[m.SecretKeyRef.Name] = resp
 	}
-	return component, ""
+	return updated, ""
 }
 
-// Returns the http endpoint updated with the secrets applied.
-// If the http endpoint references a secret store that hasn't been loaded yet, it returns the name of the secret store component as second returned value.
-func (a *DaprRuntime) processHTTPEndpointSecrets(endpoint httpEndpointV1alpha1.HTTPEndpoint) (httpEndpointV1alpha1.HTTPEndpoint, string) {
-	cache := map[string]secretstores.GetSecretResponse{}
-
-	for i, header := range endpoint.Spec.Headers {
-		if header.SecretKeyRef.Name == "" {
-			continue
-		}
-
-		secretStoreName := a.authSecretStoreOrDefault(endpoint)
-
-		// If running in Kubernetes and have an operator client, do not fetch secrets from the Kubernetes secret store as they will be populated by the operator.
-		// Instead, base64 decode the secret values into their real self.
-		if a.operatorClient != nil && secretStoreName == secretstoresLoader.BuiltinKubernetesSecretStore {
-			var jsonVal string
-			err := json.Unmarshal(header.Value.Raw, &jsonVal)
-			if err != nil {
-				log.Errorf("Error decoding secret: %v", err)
-				continue
-			}
-
-			dec, err := base64.StdEncoding.DecodeString(jsonVal)
-			if err != nil {
-				log.Errorf("Error decoding secret: %v", err)
-				continue
-			}
-
-			header.Value = httpEndpointV1alpha1.DynamicValue{
-				JSON: v1.JSON{
-					Raw: dec,
-				},
-			}
-
-			endpoint.Spec.Headers[i] = header
-			continue
-		}
-
-		secretStore, ok := a.compStore.GetSecretStore(secretStoreName)
-		if !ok {
-			log.Warnf("HTTP Endpoint %s references a secret store that isn't loaded: %s", endpoint.Name, secretStoreName)
-			return endpoint, secretStoreName
-		}
-
-		resp, ok := cache[header.SecretKeyRef.Name]
-		if !ok {
-			// TODO: cascade context.
-			r, err := secretStore.GetSecret(context.TODO(), secretstores.GetSecretRequest{
-				Name: header.SecretKeyRef.Name,
-				Metadata: map[string]string{
-					"namespace": endpoint.ObjectMeta.Namespace,
-				},
-			})
-			if err != nil {
-				log.Errorf("Error getting secret: %v", err)
-				continue
-			}
-			resp = r
-		}
-
-		// Use the SecretKeyRef.Name key if SecretKeyRef.Key is not given
-		secretKeyName := header.SecretKeyRef.Key
-		if secretKeyName == "" {
-			secretKeyName = header.SecretKeyRef.Name
-		}
-
-		val, ok := resp.Data[secretKeyName]
-		if ok {
-			endpoint.Spec.Headers[i].Value = httpEndpointV1alpha1.DynamicValue{
-				JSON: v1.JSON{
-					Raw: []byte(val),
-				},
-			}
-		}
-
-		cache[header.SecretKeyRef.Name] = resp
-	}
-	return endpoint, ""
-}
-
-func (a *DaprRuntime) authSecretStoreOrDefault(object interface{}) string {
-	var secretStore string
-	switch obj := object.(type) {
-	case componentsV1alpha1.Component:
-		secretStore = obj.SecretStore
-	case httpEndpointV1alpha1.HTTPEndpoint:
-		secretStore = obj.SecretStore
-	default:
-		// Handle unsupported types
-		return ""
-	}
+func (a *DaprRuntime) authSecretStoreOrDefault(resource resourceWithMetadata) string {
+	secretStore := resource.GetSecretStore()
 	if secretStore == "" {
 		switch a.runtimeConfig.Mode {
 		case modes.KubernetesMode:
@@ -3388,7 +3342,7 @@ func (a *DaprRuntime) initSecretStore(c componentsV1alpha1.Component) error {
 	return nil
 }
 
-func (a *DaprRuntime) convertMetadataItemsToProperties(items []componentsV1alpha1.MetadataItem) map[string]string {
+func (a *DaprRuntime) convertMetadataItemsToProperties(items []commonapi.NameValuePair) map[string]string {
 	properties := map[string]string{}
 	for _, c := range items {
 		val := c.Value.String()

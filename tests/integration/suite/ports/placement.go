@@ -21,34 +21,43 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	procplace "github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
 func init() {
-	suite.Register(new(Ports))
+	suite.Register(new(placement))
 }
 
-// Ports tests that the ports are available when the app is running.
-type Ports struct{}
-
-func (p *Ports) Setup(t *testing.T, _ context.Context) []framework.RunDaprdOption {
-	return nil
+// placement tests that the ports are available when daprd is running.
+type placement struct {
+	proc *procplace.Placement
 }
 
-func (p *Ports) Run(t *testing.T, _ context.Context, cmd *framework.Command) {
+func (p *placement) Setup(t *testing.T) []framework.Option {
+	p.proc = procplace.New(t)
+	return []framework.Option{
+		framework.WithProcesses(p.proc),
+	}
+}
+
+func (p *placement) Run(t *testing.T, _ context.Context) {
 	for name, port := range map[string]int{
-		"app":           cmd.AppPort,
-		"grpc":          cmd.GRPCPort,
-		"http":          cmd.HTTPPort,
-		"metrics":       cmd.MetricsPort,
-		"internal-grpc": cmd.InternalGRPCPort,
-		"public":        cmd.PublicPort,
+		"port":           p.proc.Port(),
+		"metrics":        p.proc.MetricsPort(),
+		"healthz":        p.proc.HealthzPort(),
+		"initialCluster": p.proc.InitialClusterPorts()[0],
 	} {
 		assert.Eventuallyf(t, func() bool {
-			_, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", port))
-			return err == nil
+			conn, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", port))
+			if err != nil {
+				return false
+			}
+			require.NoError(t, conn.Close())
+			return true
 		}, time.Second*5, 100*time.Millisecond, "port %s (:%d) was not available in time", name, port)
 	}
 }

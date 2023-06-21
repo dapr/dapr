@@ -64,6 +64,7 @@ func TestMain(m *testing.M) {
 			AppHealthProbeInterval: 3,
 			AppHealthProbeTimeout:  200,
 			AppHealthThreshold:     3,
+			DaprEnv:                `CRON_SCHEDULE="@every 1s"`, // Test envRef for components
 			AppEnv: map[string]string{
 				"APP_PORT":            "4000",
 				"CONTROL_PORT":        "3000",
@@ -85,6 +86,7 @@ func TestMain(m *testing.M) {
 			AppHealthProbeInterval: 3,
 			AppHealthProbeTimeout:  200,
 			AppHealthThreshold:     3,
+			DaprEnv:                `CRON_SCHEDULE="@every 1s"`,
 			AppEnv: map[string]string{
 				"APP_PORT":            "4000",
 				"CONTROL_PORT":        "3000",
@@ -106,6 +108,7 @@ func TestMain(m *testing.M) {
 			AppHealthProbeInterval: 3,
 			AppHealthProbeTimeout:  200,
 			AppHealthThreshold:     3,
+			DaprEnv:                `CRON_SCHEDULE="@every 1s"`,
 			AppEnv: map[string]string{
 				"APP_PORT":            "4000",
 				"CONTROL_PORT":        "3000",

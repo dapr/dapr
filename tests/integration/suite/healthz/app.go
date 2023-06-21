@@ -28,23 +28,24 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
 func init() {
-	suite.Register(new(AppHealthz))
+	suite.Register(new(app))
 }
 
-// AppHealthz tests that Dapr responds to healthz requests for the app.
-type AppHealthz struct {
-	healthy atomic.Bool
-	server  http.Server
-	done    chan struct{}
+// app tests that Dapr responds to healthz requests for the app.
+type app struct {
+	daprd    *procdaprd.Daprd
+	healthy  atomic.Bool
+	server   http.Server
+	listener net.Listener
 }
 
-func (a *AppHealthz) Setup(t *testing.T, _ context.Context) []framework.RunDaprdOption {
+func (a *app) Setup(t *testing.T) []framework.Option {
 	a.healthy.Store(true)
-	a.done = make(chan struct{})
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/foo", func(w http.ResponseWriter, r *http.Request) {
@@ -61,36 +62,49 @@ func (a *AppHealthz) Setup(t *testing.T, _ context.Context) []framework.RunDaprd
 		fmt.Fprintf(w, "%s %s", r.Method, r.URL.Path)
 	})
 
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	var err error
+	a.listener, err = net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	a.server = http.Server{
 		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
-	go func() {
-		defer close(a.done)
-		require.ErrorIs(t, a.server.Serve(listener), http.ErrServerClosed)
-	}()
+	a.daprd = procdaprd.New(t,
+		procdaprd.WithAppHealthCheck(true),
+		procdaprd.WithAppHealthCheckPath("/foo"),
+		procdaprd.WithAppPort(a.listener.Addr().(*net.TCPAddr).Port),
+		procdaprd.WithAppHealthProbeInterval(1),
+		procdaprd.WithAppHealthProbeThreshold(1),
+	)
 
-	return []framework.RunDaprdOption{
-		framework.WithAppHealthCheck(true),
-		framework.WithAppHealthCheckPath("/foo"),
-		framework.WithAppPort(listener.Addr().(*net.TCPAddr).Port),
-		framework.WithAppHealthProbeInterval(1),
-		framework.WithAppHealthProbeThreshold(1),
+	return []framework.Option{
+		framework.WithProcesses(a.daprd),
 	}
 }
 
-func (a *AppHealthz) Run(t *testing.T, ctx context.Context, cmd *framework.Command) {
+func (a *app) Run(t *testing.T, ctx context.Context) {
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+		require.ErrorIs(t, a.server.Serve(a.listener), http.ErrServerClosed)
+	}()
+
 	assert.Eventually(t, func() bool {
-		_, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", cmd.InternalGRPCPort))
-		return err == nil
+		conn, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", a.daprd.InternalGRPCPort()))
+		if err != nil {
+			return false
+		}
+		require.NoError(t, conn.Close())
+		return true
 	}, time.Second*5, 100*time.Millisecond)
 
 	a.healthy.Store(true)
 
-	reqURL := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/myfunc", cmd.HTTPPort, cmd.AppID)
+	reqURL := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/myfunc", a.daprd.HTTPPort(), a.daprd.AppID())
+
+	a.healthy.Store(true)
 
 	assert.Eventually(t, func() bool {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
@@ -124,7 +138,7 @@ func (a *AppHealthz) Run(t *testing.T, ctx context.Context, cmd *framework.Comma
 	require.NoError(t, a.server.Shutdown(ctx))
 
 	select {
-	case <-a.done:
+	case <-done:
 	case <-time.After(5 * time.Second):
 		t.Error("timed out waiting for healthz server to close")
 	}
