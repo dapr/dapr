@@ -652,6 +652,10 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 
 	reqs := make([]state.SetRequest, l)
 	for i, s := range in.States {
+		if len(s.Key) == 0 {
+			return empty, status.Errorf(codes.InvalidArgument, "state key cannot be empty")
+		}
+
 		var key string
 		key, err = stateLoader.GetModifiedStateKey(s.Key, in.StoreName, a.UniversalAPI.AppID)
 		if err != nil {
