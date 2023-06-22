@@ -324,8 +324,8 @@ github.com/cespare/xxhash/v2 v2.2.0 h1:DC2CZ1Ep5Y4k3ZQ899DldepgrayRUGE6BBZ/cd9Cj
 github.com/cespare/xxhash/v2 v2.2.0/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
 github.com/chebyrash/promise v0.0.0-20220530143319-1123826567d6 h1:AtcTeZIfucJjiqhIeMoOAR292ti2QOyo2aqN3SoWopo=
 github.com/chebyrash/promise v0.0.0-20220530143319-1123826567d6/go.mod h1:4DRxP3p0R7/5msq1uKcI1THYmfWgFXxQqr0DutaIAEk=
-github.com/chenzhuoyu/iasm v0.0.0-20230222070914-0b1b64b0e762 h1:4+00EOUb1t9uxAbgY8VvgfKJKDpim3co4MqsAbelIbs=
-github.com/chenzhuoyu/iasm v0.0.0-20230222070914-0b1b64b0e762/go.mod h1:Xjy2NpN3h7aUqeqM+woSuuvxmIe6+DDsiNLIrkAmYog=
+github.com/chenzhuoyu/iasm v0.9.0 h1:9fhXjVzq5hUy2gkhhgHl95zG2cEAhw9OSGs8toWWAwo=
+github.com/chenzhuoyu/iasm v0.9.0/go.mod h1:Xjy2NpN3h7aUqeqM+woSuuvxmIe6+DDsiNLIrkAmYog=
 github.com/choleraehyq/pid v0.0.16 h1:1/714sMH9IBlE/aK6xM0acTagGKSzpiR0bDt7l0cG7o=
 github.com/choleraehyq/pid v0.0.16/go.mod h1:uhzeFgxJZWQsZulelVQZwdASxQ9TIPZYL4TPkQMtL/U=
 github.com/chzyer/logex v1.2.1/go.mod h1:JLbx6lG2kDbNRFnfkgvh4eRJRPX1QCoOIWomwysCBrQ=

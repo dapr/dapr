@@ -425,11 +425,16 @@ require (
 replace (
 	// this is a fork which addresses a performance issues due to go routines
 	dubbo.apache.org/dubbo-go/v3 => dubbo.apache.org/dubbo-go/v3 v3.0.3-0.20230118042253-4f159a2b38f3
-	// the following lines are necessary to update to commits with proper licenses
-	github.com/chzyer/logex => github.com/chzyer/logex v1.2.1
 
-	github.com/toolkits/concurrent => github.com/niean/gotools v0.0.0-20151221085310-ff3f51fc5c60
 	gopkg.in/couchbaselabs/gocbconnstr.v1 => github.com/couchbaselabs/gocbconnstr v1.0.5
+)
+
+// the following lines are necessary to update to commits with proper licenses
+replace (
+	github.com/chenzhuoyu/iasm => github.com/chenzhuoyu/iasm v0.9.0
+	github.com/chzyer/logex => github.com/chzyer/logex v1.2.1
+	github.com/gobwas/pool => github.com/gobwas/pool v0.2.1
+	github.com/toolkits/concurrent => github.com/niean/gotools v0.0.0-20151221085310-ff3f51fc5c60
 )
 
 // update retracted indirect dependencies if necessary
