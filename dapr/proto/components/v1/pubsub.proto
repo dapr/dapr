@@ -99,7 +99,7 @@ message BulkMessageEntry {
 }
 
 message BulkPublishResponse {
-  repeated BulkPublishResponseFailedEntry FailedEntries = 1;
+  repeated BulkPublishResponseFailedEntry failed_entries = 1;
 }
 
 message BulkPublishResponseFailedEntry {

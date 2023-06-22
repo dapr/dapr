@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"golang.org/x/exp/slices"
 	"io"
 	"net"
 	nethttp "net/http"
@@ -2135,13 +2136,24 @@ func (a *DaprRuntime) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPu
 		return pubsub.BulkPublishResponse{}, runtimePubsub.NotFoundError{PubsubName: req.PubsubName}
 	}
 
-	if allowed := a.isPubSubOperationAllowed(req.PubsubName, req.Topic, ps.ScopedPublishings); !allowed {
+	allowed := a.isPubSubOperationAllowed(req.PubsubName, req.Topic, ps.ScopedPublishings)
+	if !allowed {
 		return pubsub.BulkPublishResponse{}, runtimePubsub.NotAllowedError{Topic: req.Topic, ID: a.runtimeConfig.ID}
 	}
+
 	policyDef := a.resiliency.ComponentOutboundPolicy(req.PubsubName, resiliency.Pubsub)
-	if bulkPublisher, ok := ps.Component.(pubsub.BulkPublisher); ok {
+
+	bulkPublisher, ok := ps.Component.(pubsub.BulkPublisher)
+	if !ok {
+		log.Debugf("pubsub %s does not implement the BulkPublish API; falling back to publishing messages individually", req.PubsubName)
+		defaultBulkPublisher := runtimePubsub.NewDefaultBulkPublisher(ps.Component)
+		return runtimePubsub.ApplyBulkPublishResiliency(context.TODO(), req, policyDef, defaultBulkPublisher)
+	}
+
+	if slices.Contains(a.getComponentsCapabilitesMap()[req.PubsubName], string(pubsub.FeatureBulkPublish)) {
 		return runtimePubsub.ApplyBulkPublishResiliency(context.TODO(), req, policyDef, bulkPublisher)
 	}
+
 	log.Debugf("pubsub %s does not implement the BulkPublish API; falling back to publishing messages individually", req.PubsubName)
 	defaultBulkPublisher := runtimePubsub.NewDefaultBulkPublisher(ps.Component)
 

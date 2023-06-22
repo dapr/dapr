@@ -327,7 +327,7 @@ require (
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
 	github.com/prometheus/procfs v0.8.0 // indirect
 	github.com/prometheus/statsd_exporter v0.22.7 // indirect
-	github.com/rabbitmq/amqp091-go v1.7.0 // indirect
+	github.com/rabbitmq/amqp091-go v1.8.1 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rs/zerolog v1.28.0 // indirect
@@ -437,7 +437,7 @@ replace github.com/lestrrat-go/jwx/v2 => github.com/lestrrat-go/jwx/v2 v2.0.9-0.
 // Uncomment for local development for testing with changes in the components-contrib repository.
 // Don't commit with this uncommented!
 //
-replace github.com/dapr/components-contrib => ../components-contrib
+//replace github.com/dapr/components-contrib => ../components-contrib
 
 //
 // Then, run `make modtidy` in this repository.
