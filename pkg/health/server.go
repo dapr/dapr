@@ -39,32 +39,34 @@ type server struct {
 	log    logger.Logger
 }
 
-type RouterOptions func() (string, http.Handler)
+type RouterOptions func(log logger.Logger) (string, http.Handler)
 
 func NewRouterOptions(path string, handler http.Handler) RouterOptions {
-	return func() (string, http.Handler) {
+	return func(log logger.Logger) (string, http.Handler) {
 		return path, handler
 	}
 }
 
 func NewJsonDataRouterOptions[T any](path string, getter func() (T, error)) RouterOptions {
-	return NewRouterOptions(path, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		data, err := getter()
-		if err != nil {
-			writer.WriteHeader(http.StatusInternalServerError)
-			writer.Write([]byte(err.Error()))
-			return
-		}
-		bytes, err := json.Marshal(data)
-		if err != nil {
-			writer.WriteHeader(http.StatusInternalServerError)
-			writer.Write([]byte(err.Error()))
-			return
-		}
-		writer.Header().Set("Content-Type", "application/json")
-		writer.WriteHeader(http.StatusOK)
-		writer.Write(bytes)
-	}))
+	return func(log logger.Logger) (string, http.Handler) {
+		return path, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			data, err := getter()
+			if err != nil {
+				writer.WriteHeader(http.StatusInternalServerError)
+				writer.Write([]byte(err.Error()))
+				return
+			}
+			writer.Header().Set("Content-Type", "application/json")
+			writer.WriteHeader(http.StatusOK)
+			err = json.NewEncoder(writer).Encode(data)
+			if err != nil {
+				log.Warnf("failed to encode json to response writer: %s", err.Error())
+				writer.WriteHeader(http.StatusInternalServerError)
+				writer.Write([]byte(err.Error()))
+				return
+			}
+		})
+	}
 }
 
 // NewServer returns a new healthz server.
@@ -75,8 +77,9 @@ func NewServer(log logger.Logger, options ...RouterOptions) Server {
 	}
 	router := http.NewServeMux()
 	router.Handle("/healthz", s.healthz())
+	// add public handlers to the router
 	for _, option := range options {
-		path, handler := option()
+		path, handler := option(log)
 		router.Handle(path, handler)
 	}
 	s.router = router
