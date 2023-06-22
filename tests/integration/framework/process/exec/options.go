@@ -11,26 +11,33 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package kill
+package exec
 
 import (
-	"os/exec"
+	"io"
 	"testing"
-	"time"
 )
 
-func Kill(t *testing.T, cmd *exec.Cmd) {
-	t.Helper()
-
-	if cmd == nil || cmd.ProcessState != nil {
-		return
+func WithStdout(stdout io.WriteCloser) Option {
+	return func(o *options) {
+		o.stdout = stdout
 	}
+}
 
-	t.Log("interrupting daprd process")
+func WithStderr(stderr io.WriteCloser) Option {
+	return func(o *options) {
+		o.stderr = stderr
+	}
+}
 
-	// TODO: daprd does not currently gracefully exit on a single interrupt
-	// signal. Remove once fixed.
-	interrupt(t, cmd)
-	time.Sleep(time.Millisecond * 300)
-	interrupt(t, cmd)
+func WithRunError(ferr func(*testing.T, error)) Option {
+	return func(o *options) {
+		o.runErrorFn = ferr
+	}
+}
+
+func WithExitCode(code int) Option {
+	return func(o *options) {
+		o.exitCode = code
+	}
 }

@@ -36,7 +36,7 @@ func (m mockLogger) Name() string {
 
 func TestNew(t *testing.T) {
 	t.Run("should return new stdwriter", func(t *testing.T) {
-		writer := New(new(mockLogger))
+		writer := New(new(mockLogger), "proc")
 		_, ok := writer.(*stdwriter)
 		assert.True(t, ok)
 	})
@@ -45,7 +45,7 @@ func TestNew(t *testing.T) {
 func TestWrite(t *testing.T) {
 	t.Run("should write to buffer", func(t *testing.T) {
 		logger := new(mockLogger)
-		writer := New(logger).(*stdwriter)
+		writer := New(logger, "proc").(*stdwriter)
 
 		_, err := writer.Write([]byte("test"))
 		require.NoError(t, err)
@@ -54,18 +54,18 @@ func TestWrite(t *testing.T) {
 
 	t.Run("should flush on newline", func(t *testing.T) {
 		logger := new(mockLogger)
-		writer := New(logger).(*stdwriter)
+		writer := New(logger, "proc").(*stdwriter)
 
 		_, err := writer.Write([]byte("test\n"))
 		require.NoError(t, err)
 
 		assert.Equal(t, 0, writer.buf.Len())
 
-		_ = assert.Len(t, logger.msgs, 1) && assert.Equal(t, "TestLogger: test", logger.msgs[0])
+		_ = assert.Len(t, logger.msgs, 1) && assert.Equal(t, "TestLogger/proc: test", logger.msgs[0])
 	})
 
 	t.Run("should return error when closed", func(t *testing.T) {
-		writer := New(new(mockLogger)).(*stdwriter)
+		writer := New(new(mockLogger), "proc").(*stdwriter)
 		writer.Close()
 
 		_, err := writer.Write([]byte("test\n"))
@@ -77,19 +77,19 @@ func TestWrite(t *testing.T) {
 func TestClose(t *testing.T) {
 	t.Run("should flush and close", func(t *testing.T) {
 		logger := new(mockLogger)
-		writer := New(logger).(*stdwriter)
+		writer := New(logger, "proc").(*stdwriter)
 		writer.Write([]byte("test"))
 		writer.Close()
 
 		assert.Equal(t, 0, writer.buf.Len())
-		_ = assert.Equal(t, 1, len(logger.msgs)) && assert.Equal(t, "TestLogger: test", logger.msgs[0])
+		_ = assert.Equal(t, 1, len(logger.msgs)) && assert.Equal(t, "TestLogger/proc: test", logger.msgs[0])
 	})
 }
 
 func TestConcurrency(t *testing.T) {
 	t.Run("should handle concurrent writes", func(t *testing.T) {
 		logger := new(mockLogger)
-		writer := New(logger).(*stdwriter)
+		writer := New(logger, "proc").(*stdwriter)
 		wg := sync.WaitGroup{}
 		wg.Add(2)
 
@@ -113,7 +113,7 @@ func TestConcurrency(t *testing.T) {
 		assert.Len(t, logger.msgs, 2000)
 
 		for _, msg := range logger.msgs {
-			assert.Contains(t, msg, "TestLogger: test ")
+			assert.Contains(t, msg, "TestLogger/proc: test ")
 		}
 	})
 }

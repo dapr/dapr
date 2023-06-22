@@ -11,29 +11,30 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package suite
+package kill
 
 import (
-	"context"
+	"os/exec"
+	"path/filepath"
 	"testing"
-
-	"github.com/dapr/dapr/tests/integration/framework"
+	"time"
 )
 
-var cases []Case
+func Kill(t *testing.T, cmd *exec.Cmd) {
+	t.Helper()
 
-// Case is a test case for the integration test suite.
-type Case interface {
-	Setup(*testing.T) []framework.Option
-	Run(*testing.T, context.Context)
-}
+	if cmd == nil || cmd.ProcessState != nil {
+		return
+	}
 
-// Register registers a test case.
-func Register(c Case) {
-	cases = append(cases, c)
-}
+	t.Log("interrupting daprd process")
 
-// All returns all registered test cases.
-func All() []Case {
-	return cases
+	interrupt(t, cmd)
+
+	if filepath.Base(cmd.Path) == "daprd" {
+		// TODO: daprd does not currently gracefully exit on a single interrupt
+		// signal. Remove once fixed.
+		time.Sleep(time.Millisecond * 300)
+		interrupt(t, cmd)
+	}
 }

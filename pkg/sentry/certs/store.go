@@ -68,7 +68,18 @@ func CredentialsExist(ctx context.Context, conf config.SentryConfig) (bool, erro
 		}
 		return len(s.Data) > 0, nil
 	}
-	return false, nil
+
+	for _, path := range []string{conf.RootCertPath, conf.IssuerCertPath, conf.IssuerKeyPath} {
+		_, err := os.Stat(path)
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		if err != nil {
+			return false, err
+		}
+	}
+
+	return true, nil
 }
 
 /* #nosec. */

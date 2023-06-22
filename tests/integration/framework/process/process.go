@@ -11,29 +11,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package suite
+package process
 
 import (
 	"context"
 	"testing"
-
-	"github.com/dapr/dapr/tests/integration/framework"
 )
 
-var cases []Case
-
-// Case is a test case for the integration test suite.
-type Case interface {
-	Setup(*testing.T) []framework.Option
+// Interface is an interface for running and cleaning up a process.
+type Interface interface {
 	Run(*testing.T, context.Context)
-}
-
-// Register registers a test case.
-func Register(c Case) {
-	cases = append(cases, c)
-}
-
-// All returns all registered test cases.
-func All() []Case {
-	return cases
+	Cleanup(*testing.T)
 }
