@@ -9,7 +9,7 @@ require (
 	github.com/PuerkitoBio/purell v1.2.0
 	github.com/argoproj/argo-rollouts v1.4.1
 	github.com/cenkalti/backoff/v4 v4.2.1
-	github.com/dapr/components-contrib v1.11.2
+	github.com/dapr/components-contrib v1.11.3
 	github.com/dapr/kit v0.11.3
 	github.com/evanphx/json-patch/v5 v5.6.0
 	github.com/fasthttp/router v1.4.18
@@ -327,7 +327,7 @@ require (
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
 	github.com/prometheus/procfs v0.8.0 // indirect
 	github.com/prometheus/statsd_exporter v0.22.7 // indirect
-	github.com/rabbitmq/amqp091-go v1.7.0 // indirect
+	github.com/rabbitmq/amqp091-go v1.8.1 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rs/zerolog v1.28.0 // indirect
