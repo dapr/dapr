@@ -15,8 +15,10 @@ package main
 
 import (
 	"flag"
+	"os"
 	"strings"
 
+	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 
 	"github.com/dapr/dapr/pkg/credentials"
@@ -30,6 +32,7 @@ const (
 	defaultHealthzPort       = 8080
 	defaultPlacementPort     = 50005
 	defaultReplicationFactor = 100
+	envMetadataEnabled       = "DAPR_PLACEMENT_METADATA_ENABLED"
 )
 
 type config struct {
@@ -89,6 +92,12 @@ func newConfig() *config {
 
 	cfg.metricsExporter = metrics.NewExporter(metrics.DefaultMetricNamespace)
 	cfg.metricsExporter.Options().AttachCmdFlags(flag.StringVar, flag.BoolVar)
+
+	// parse env variables before parsing flags, so the flags takes priority over env variables
+	metadataEnable := os.Getenv(envMetadataEnabled)
+	if len(metadataEnable) > 0 {
+		cfg.metadataEnabled = utils.IsTruthy(metadataEnable)
+	}
 
 	flag.Parse()
 
