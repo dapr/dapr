@@ -47,7 +47,7 @@ func NewRouterOptions(path string, handler http.Handler) RouterOptions {
 	}
 }
 
-func NewJsonDataRouterOptions[T any](path string, getter func() (T, error)) RouterOptions {
+func NewJSONDataRouterOptions[T any](path string, getter func() (T, error)) RouterOptions {
 	return func(log logger.Logger) (string, http.Handler) {
 		return path, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 			data, err := getter()

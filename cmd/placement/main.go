@@ -92,7 +92,7 @@ func main() {
 		func(ctx context.Context) error {
 			var metadataOptions []health.RouterOptions
 			if cfg.metadataEnabled {
-				metadataOptions = append(metadataOptions, health.NewJsonDataRouterOptions[*placement.PlacementTables]("/tables", apiServer.GetPlacementTables))
+				metadataOptions = append(metadataOptions, health.NewJSONDataRouterOptions[*placement.PlacementTables]("/placement/state", apiServer.GetPlacementTables))
 			}
 			healthzServer := health.NewServer(log, metadataOptions...)
 			healthzServer.Ready()
