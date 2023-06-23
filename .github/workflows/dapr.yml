@@ -198,6 +198,7 @@ jobs:
       GOOS: "${{ matrix.target_os }}"
       GOARCH: "${{ matrix.target_arch }}"
       GOPROXY: "https://proxy.golang.org"
+      TEST_OUTPUT_FILE_PREFIX: "test_report"
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v3
