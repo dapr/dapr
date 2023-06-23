@@ -40,7 +40,34 @@ import (
 )
 
 func init() {
-	suite.Register(new(fuzzpubsub))
+	suite.Register(new(fuzzpubsubNoRaw))
+	suite.Register(new(fuzzpubsubRaw))
+}
+
+type fuzzpubsubNoRaw struct {
+	fuzzpubsub
+}
+
+type fuzzpubsubRaw struct {
+	fuzzpubsub
+}
+
+func (f *fuzzpubsubNoRaw) Setup(t *testing.T) []framework.Option {
+	f.fuzzpubsub = fuzzpubsub{withRaw: false}
+	return f.fuzzpubsub.Setup(t)
+}
+
+func (f *fuzzpubsubNoRaw) Run(t *testing.T, ctx context.Context) {
+	f.fuzzpubsub.Run(t, ctx)
+}
+
+func (f *fuzzpubsubRaw) Setup(t *testing.T) []framework.Option {
+	f.fuzzpubsub = fuzzpubsub{withRaw: true}
+	return f.fuzzpubsub.Setup(t)
+}
+
+func (f *fuzzpubsubRaw) Run(t *testing.T, ctx context.Context) {
+	f.fuzzpubsub.Run(t, ctx)
 }
 
 // TODO: @joshvanl: add error to Dapr pubsub subscribe client to reject when
@@ -59,6 +86,7 @@ type testTopic struct {
 type fuzzpubsub struct {
 	daprd *procdaprd.Daprd
 
+	withRaw  bool
 	pubSubs  []testPubSub
 	respChan map[string]chan []byte
 }
@@ -72,7 +100,7 @@ type pubSubMessageData struct {
 }
 
 func (f *fuzzpubsub) Setup(t *testing.T) []framework.Option {
-	const numTests = 30
+	const numTests = 20
 	takenNames := make(map[string]bool)
 
 	reg, err := regexp.Compile("^([a-zA-Z].*)$")
@@ -120,7 +148,7 @@ func (f *fuzzpubsub) Setup(t *testing.T) []framework.Option {
 		for j := 0; j < topics; j++ {
 			psTopicFz.Fuzz(&f.pubSubs[i].Topics[j].Name)
 			psRouteFz.Fuzz(&f.pubSubs[i].Topics[j].Route)
-			f.respChan[f.pubSubs[i].Topics[j].Route] = make(chan []byte, 1)
+			f.respChan[f.pubSubs[i].Topics[j].Route] = make(chan []byte, 0)
 			fuzz.New().Fuzz(&f.pubSubs[i].Topics[j].payload)
 		}
 
@@ -147,7 +175,8 @@ spec:
 			require.NoError(t, err)
 			route, err := json.Marshal(topic.Route)
 			require.NoError(t, err)
-			topicSubs = append(topicSubs, fmt.Sprintf(`{
+			if f.withRaw {
+				topicSubs = append(topicSubs, fmt.Sprintf(`{
   "pubsubname": %s,
   "topic": %s,
   "route": %s,
@@ -155,6 +184,13 @@ spec:
     "rawPayload": "true"
   }
 }`, pubsubName, topicName, route))
+			} else {
+				topicSubs = append(topicSubs, fmt.Sprintf(`{
+  "pubsubname": %s,
+  "topic": %s,
+  "route": %s
+}`, pubsubName, topicName, route))
+			}
 
 			handler.HandleFunc(topic.Route, func(w http.ResponseWriter, r *http.Request) {
 				body, err := io.ReadAll(r.Body)
@@ -210,10 +246,15 @@ func (f *fuzzpubsub) Run(t *testing.T, ctx context.Context) {
 
 				select {
 				case body := <-f.respChan[route]:
-					var message pubSubMessage
-					require.NoError(t, json.Unmarshal(body, &message))
-					data, err := base64.StdEncoding.DecodeString(message.DataBase64)
-					require.NoError(t, err)
+					var data []byte
+					if f.withRaw {
+						var message pubSubMessage
+						require.NoError(t, json.Unmarshal(body, &message))
+						data, err = base64.StdEncoding.DecodeString(message.DataBase64)
+						require.NoError(t, err)
+					} else {
+						data = body
+					}
 					var messageData pubSubMessageData
 					require.NoError(t, json.Unmarshal(data, &messageData), string(data))
 					assert.Equal(t, payload, messageData.Data)
