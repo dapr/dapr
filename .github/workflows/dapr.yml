@@ -239,11 +239,7 @@ jobs:
           restore-keys: |
             ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-
       - name: Run make test-integration
-        env:
-          COVERAGE_OPTS: "-coverprofile=coverage.txt -covermode=atomic"
         run: make test-integration
-      - name: Codecov
-        uses: codecov/codecov-action@v1
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@master
