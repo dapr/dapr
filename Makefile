@@ -350,7 +350,7 @@ test-race:
 test-integration: test-deps
 		gotestsum \
 			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json \
-			--format dots \
+			--format testname \
 			-- \
 			./tests/integration -count=1 -v -race -tags="integration"
 
