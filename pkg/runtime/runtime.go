@@ -2322,7 +2322,7 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 		if err != nil {
 			log.Debugf("skipping status check due to error parsing result from pub/sub event %v: %s", cloudEvent[pubsub.IDField], err)
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Success)), msg.topic, elapsed)
-			return nil //nolint:nilerr
+			return nil
 		}
 
 		switch appResponse.Status {
