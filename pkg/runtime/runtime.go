@@ -3169,7 +3169,7 @@ func (a *DaprRuntime) loadAppConfiguration() {
 		return
 	}
 
-	appConfig, err := a.appChannel.GetAppConfig()
+	appConfig, err := a.appChannel.GetAppConfig(a.runtimeConfig.ID)
 	if err != nil {
 		return
 	}
