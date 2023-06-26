@@ -19,8 +19,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/stretchr/testify/require"
+
+	"github.com/dapr/dapr/tests/integration/framework"
 )
 
 var cases []Case
