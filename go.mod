@@ -431,9 +431,6 @@ replace (
 	gopkg.in/couchbaselabs/gocbconnstr.v1 => github.com/couchbaselabs/gocbconnstr v1.0.5
 )
 
-// TODO: Remove this when upgrading the library to 2.0.10 or higher
-replace github.com/lestrrat-go/jwx/v2 => github.com/lestrrat-go/jwx/v2 v2.0.9-0.20230526134723-5f998ac6c826
-
 // Uncomment for local development for testing with changes in the components-contrib repository.
 // Don't commit with this uncommented!
 //
