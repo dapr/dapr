@@ -35,6 +35,7 @@ import (
 	operatorV1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	resiliencyConfig "github.com/dapr/dapr/pkg/resiliency"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
+	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/validation"
 	"github.com/dapr/dapr/utils"
@@ -102,6 +103,7 @@ type Config struct {
 	AppHealthCheckPath           string
 	AppChannelAddress            string
 	Metrics                      *metrics.Options
+	Registry                     *registry.Options
 }
 
 type internalConfig struct {
@@ -129,6 +131,7 @@ type internalConfig struct {
 	disableBuiltinK8sSecretStore bool
 	configPath                   string
 	certChain                    *credentials.CertChain
+	registry                     *registry.Registry
 }
 
 // FromConfig creates a new Dapr Runtime from a configuration.
@@ -282,6 +285,7 @@ func (c *Config) toInternal() (*internalConfig, error) {
 			HealthCheckHTTPPath: c.AppHealthCheckPath,
 			MaxConcurrency:      c.AppMaxConcurrency,
 		},
+		registry: registry.New(c.Registry),
 	}
 
 	if len(intc.standalone.ResourcesPath) == 0 && c.ComponentsPath != "" {
