@@ -31,21 +31,15 @@ import (
 func RunIntegrationTests(t *testing.T) {
 	binary.BuildAll(t)
 
-	options := make(map[string][]framework.Option)
 	for name, tcase := range suite.All(t) {
 		t.Run(name, func(t *testing.T) {
 			t.Logf("setting up test case")
-			options[name] = tcase.Setup(t)
-		})
-	}
+			options := tcase.Setup(t)
 
-	for name, tcase := range suite.All(t) {
-		t.Run(name, func(t *testing.T) {
-			options[name] = tcase.Setup(t)
 			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 			t.Cleanup(cancel)
 
-			f := framework.Run(t, ctx, options[name]...)
+			f := framework.Run(t, ctx, options...)
 
 			t.Run("run", func(t *testing.T) {
 				t.Log("running test case")

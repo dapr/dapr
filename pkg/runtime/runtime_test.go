@@ -15,6 +15,7 @@ limitations under the License.
 package runtime
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
@@ -2899,7 +2900,10 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 
 		// User App subscribes 1 topics via http app channel
 
-		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+		var appResp pubsub.AppResponse
+		var buf bytes.Buffer
+		require.NoError(t, json.NewEncoder(&buf).Encode(appResp))
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).WithRawData(&buf)
 		defer fakeResp.Close()
 
 		mockAppChannel.On("InvokeMethod", mock.Anything, fakeReq).Return(fakeResp, nil)
@@ -3112,7 +3116,10 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		rt.appChannel = mockAppChannel
 
 		// User App subscribes 1 topics via http app channel
-		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+		var appResp pubsub.AppResponse
+		var buf bytes.Buffer
+		require.NoError(t, json.NewEncoder(&buf).Encode(appResp))
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).WithRawData(&buf)
 		defer fakeResp.Close()
 
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReq).Return(fakeResp, nil)
@@ -3130,7 +3137,10 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		rt.appChannel = mockAppChannel
 
 		// User App subscribes 1 topics via http app channel
-		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+		var appResp pubsub.AppResponse
+		var buf bytes.Buffer
+		require.NoError(t, json.NewEncoder(&buf).Encode(appResp))
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).WithRawData(&buf)
 		defer fakeResp.Close()
 
 		// Generate a new envelope to avoid affecting other tests by modifying shared `envelope`

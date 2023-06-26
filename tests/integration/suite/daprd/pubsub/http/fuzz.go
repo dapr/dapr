@@ -27,6 +27,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	fuzz "github.com/google/gofuzz"
 	"github.com/stretchr/testify/assert"
@@ -231,6 +232,9 @@ func (f *fuzzpubsub) Run(t *testing.T, ctx context.Context) {
 
 				b, err := json.Marshal(payload)
 				require.NoError(t, err)
+
+				ctx, cancel := context.WithTimeout(ctx, time.Second*10)
+				defer cancel()
 
 				reqURL := fmt.Sprintf("http://127.0.0.1:%d/v1.0/publish/%s/%s", f.daprd.HTTPPort(), url.QueryEscape(pubsubName), url.QueryEscape(topicName))
 				req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, bytes.NewReader(b))
