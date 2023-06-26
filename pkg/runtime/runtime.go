@@ -1631,7 +1631,7 @@ func (a *DaprRuntime) isAppSubscribedToBinding(binding string) (bool, error) {
 
 func isBindingOfExplicitDirection(direction string, metadata map[string]string) bool {
 	for k, v := range metadata {
-		if strings.EqualFold(k, processor.BindingDirection) {
+		if strings.EqualFold(k, binding.ComponentDirection) {
 			directions := strings.Split(v, ",")
 			for _, d := range directions {
 				if strings.TrimSpace(strings.ToLower(d)) == direction {

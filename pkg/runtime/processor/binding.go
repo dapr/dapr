@@ -29,9 +29,9 @@ import (
 )
 
 const (
-	BindingDirection  = "direction"
-	BindingTypeInput  = "input"
-	BindingTypeOutput = "output"
+	ComponentDirection  = "direction"
+	ComponentTypeInput  = "input"
+	ComponentTypeOutput = "output"
 )
 
 type binding struct {
@@ -66,7 +66,7 @@ func (b *binding) init(ctx context.Context, comp compapi.Component) error {
 }
 
 func (b *binding) initInputBinding(ctx context.Context, comp compapi.Component) error {
-	if !b.isBindingOfDirection(BindingTypeInput, comp.Spec.Metadata) {
+	if !b.isBindingOfDirection(ComponentDirection, comp.Spec.Metadata) {
 		return nil
 	}
 
@@ -96,7 +96,7 @@ func (b *binding) initInputBinding(ctx context.Context, comp compapi.Component) 
 }
 
 func (b *binding) initOutputBinding(ctx context.Context, comp compapi.Component) error {
-	if !b.isBindingOfDirection(BindingTypeOutput, comp.Spec.Metadata) {
+	if !b.isBindingOfDirection(ComponentTypeOutput, comp.Spec.Metadata) {
 		return nil
 	}
 
@@ -124,7 +124,7 @@ func (b *binding) isBindingOfDirection(direction string, metadata []common.NameV
 	directionFound := false
 
 	for _, m := range metadata {
-		if strings.EqualFold(m.Name, BindingDirection) {
+		if strings.EqualFold(m.Name, ComponentDirection) {
 			directionFound = true
 
 			directions := strings.Split(m.Value.String(), ",")
