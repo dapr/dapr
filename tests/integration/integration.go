@@ -15,12 +15,8 @@ package integration
 
 import (
 	"context"
-	"reflect"
-	"strings"
 	"testing"
 	"time"
-
-	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/binary"
@@ -35,21 +31,21 @@ import (
 func RunIntegrationTests(t *testing.T) {
 	binary.BuildAll(t)
 
-	for _, tcase := range suite.All() {
-		tcase := tcase
-		tof := reflect.TypeOf(tcase).Elem()
-		_, aft, ok := strings.Cut(tof.PkgPath(), "tests/integration/suite/")
-		require.True(t, ok)
-		testName := aft + "/" + tof.Name()
+	options := make(map[string][]framework.Option)
+	for name, tcase := range suite.All(t) {
+		t.Run(name, func(t *testing.T) {
+			t.Logf("setting up test case")
+			options[name] = tcase.Setup(t)
+		})
+	}
 
-		t.Run(testName, func(t *testing.T) {
-			t.Logf("%s: setting up test case", testName)
-			options := tcase.Setup(t)
-
+	for name, tcase := range suite.All(t) {
+		t.Run(name, func(t *testing.T) {
+			options[name] = tcase.Setup(t)
 			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 			t.Cleanup(cancel)
 
-			f := framework.Run(t, ctx, options...)
+			f := framework.Run(t, ctx, options[name]...)
 
 			t.Run("run", func(t *testing.T) {
 				t.Log("running test case")

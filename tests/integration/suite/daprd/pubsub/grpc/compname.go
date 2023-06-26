@@ -27,7 +27,6 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"k8s.io/apimachinery/pkg/api/validation/path"
 
-	commonv1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -41,7 +40,8 @@ func init() {
 type componentName struct {
 	daprd *procdaprd.Daprd
 
-	storeNames []string
+	pubsubNames []string
+	topicNames  []string
 }
 
 func (c *componentName) Setup(t *testing.T) []framework.Option {
@@ -61,10 +61,12 @@ func (c *componentName) Setup(t *testing.T) []framework.Option {
 		takenNames[*s] = true
 	})
 
-	c.storeNames = make([]string, numTests)
+	c.pubsubNames = make([]string, numTests)
+	c.topicNames = make([]string, numTests)
 	files := make([]string, numTests)
 	for i := 0; i < numTests; i++ {
-		fz.Fuzz(&c.storeNames[i])
+		fz.Fuzz(&c.pubsubNames[i])
+		fz.Fuzz(&c.topicNames[i])
 
 		files[i] = fmt.Sprintf(`
 apiVersion: dapr.io/v1alpha1
@@ -72,11 +74,11 @@ kind: Component
 metadata:
   name: '%s'
 spec:
-  type: state.in-memory
+  type: pubsub.in-memory
   version: v1
 `,
 			// Escape single quotes in the store name.
-			strings.ReplaceAll(c.storeNames[i], "'", "''"))
+			strings.ReplaceAll(c.pubsubNames[i], "'", "''"))
 	}
 
 	c.daprd = procdaprd.New(t, procdaprd.WithComponentFiles(files...))
@@ -89,9 +91,10 @@ spec:
 func (c *componentName) Run(t *testing.T, ctx context.Context) {
 	c.daprd.WaitUntilRunning(t, ctx)
 
-	for _, storeName := range c.storeNames {
-		storeName := storeName
-		t.Run(storeName, func(t *testing.T) {
+	for i := range c.pubsubNames {
+		pubsubName := c.pubsubNames[i]
+		topicName := c.topicNames[i]
+		t.Run(pubsubName, func(t *testing.T) {
 			t.Parallel()
 
 			conn, err := grpc.DialContext(ctx, fmt.Sprintf("localhost:%d", c.daprd.GRPCPort()), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
@@ -99,38 +102,12 @@ func (c *componentName) Run(t *testing.T, ctx context.Context) {
 			t.Cleanup(func() { require.NoError(t, conn.Close()) })
 
 			client := rtv1.NewDaprClient(conn)
-
-			_, err = client.SaveState(ctx, &rtv1.SaveStateRequest{
-				StoreName: storeName,
-				States: []*commonv1.StateItem{
-					{Key: "key1", Value: []byte("value1")},
-					{Key: "key2", Value: []byte("value2")},
-				},
+			_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
+				PubsubName: pubsubName,
+				Topic:      topicName,
+				Data:       []byte(`{"status": "completed"}`),
 			})
-			require.NoError(t, err)
-
-			_, err = client.SaveState(ctx, &rtv1.SaveStateRequest{
-				StoreName: storeName,
-				States: []*commonv1.StateItem{
-					{Key: "key1", Value: []byte("value1")},
-					{Key: "key2", Value: []byte("value2")},
-				},
-			})
-			require.NoError(t, err)
-
-			resp, err := client.GetState(ctx, &rtv1.GetStateRequest{
-				StoreName: storeName,
-				Key:       "key1",
-			})
-			require.NoError(t, err)
-			assert.Equal(t, "value1", string(resp.Data))
-
-			resp, err = client.GetState(ctx, &rtv1.GetStateRequest{
-				StoreName: storeName,
-				Key:       "key2",
-			})
-			require.NoError(t, err)
-			assert.Equal(t, "value2", string(resp.Data))
+			assert.NoError(t, err)
 		})
 	}
 }
