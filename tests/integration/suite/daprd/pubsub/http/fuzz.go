@@ -19,6 +19,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math/big"
@@ -233,15 +234,28 @@ func (f *fuzzpubsub) Run(t *testing.T, ctx context.Context) {
 				b, err := json.Marshal(payload)
 				require.NoError(t, err)
 
-				reqCtx, cancel := context.WithTimeout(ctx, time.Second*10)
-				defer cancel()
-
 				reqURL := fmt.Sprintf("http://127.0.0.1:%d/v1.0/publish/%s/%s", f.daprd.HTTPPort(), url.QueryEscape(pubsubName), url.QueryEscape(topicName))
-				req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, reqURL, bytes.NewReader(b))
-				require.NoError(t, err)
-				req.Header.Set("Content-Type", "application/json")
-				resp, err := http.DefaultClient.Do(req)
-				require.NoError(t, err)
+				var resp *http.Response
+
+				// TODO: @joshvanl: under heavy load, messages seem to get lost here
+				// with no response from Dapr. Until this is fixed, we use to smaller
+				// timeout, and retry on context deadline exceeded.
+				assert.Eventually(t, func() bool {
+					reqCtx, cancel := context.WithTimeout(ctx, time.Second*3)
+					defer cancel()
+					req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, reqURL, bytes.NewReader(b))
+					require.NoError(t, err)
+					req.Header.Set("Content-Type", "application/json")
+					resp, err = http.DefaultClient.Do(req)
+					if errors.Is(err, context.DeadlineExceeded) {
+						// Only retry if we haven't exceeded the test timeout.
+						d, _ := ctx.Deadline()
+						return time.Now().Before(d)
+					}
+					require.NoError(t, err)
+					return true
+				}, time.Second*15, time.Second)
+
 				assert.Equal(t, http.StatusNoContent, resp.StatusCode, reqURL)
 				respBody, err := io.ReadAll(resp.Body)
 				require.NoError(t, err)
