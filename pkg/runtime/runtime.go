@@ -3124,6 +3124,8 @@ func (a *DaprRuntime) blockUntilAppIsReady() {
 
 	log.Infof("application protocol: %s. waiting on port %v.  This will block until the app is listening on that port.", string(a.runtimeConfig.AppConnectionConfig.Protocol), a.runtimeConfig.ApplicationPort)
 
+	dialAddr := a.runtimeConfig.AppConnectionConfig.ChannelAddress + ":" + strconv.Itoa(a.runtimeConfig.ApplicationPort)
+
 	stopCh := ShutdownSignal()
 	defer signal.Stop(stopCh)
 	for {
@@ -3138,13 +3140,27 @@ func (a *DaprRuntime) blockUntilAppIsReady() {
 		default:
 			// nop - continue execution
 		}
-		conn, _ := net.DialTimeout("tcp", a.runtimeConfig.AppConnectionConfig.ChannelAddress+":"+strconv.Itoa(a.runtimeConfig.ApplicationPort), time.Millisecond*500)
-		if conn != nil {
+
+		var (
+			conn net.Conn
+			err  error
+		)
+		dialer := &net.Dialer{
+			Timeout: 500 * time.Millisecond,
+		}
+		if a.runtimeConfig.AppConnectionConfig.Protocol.HasTLS() {
+			conn, err = tls.DialWithDialer(dialer, "tcp", dialAddr, &tls.Config{
+				InsecureSkipVerify: true, //nolint:gosec
+			})
+		} else {
+			conn, err = dialer.Dial("tcp", dialAddr)
+		}
+		if err == nil && conn != nil {
 			conn.Close()
 			break
 		}
 		// prevents overwhelming the OS with open connections
-		time.Sleep(time.Millisecond * 50)
+		time.Sleep(time.Millisecond * 100)
 	}
 
 	log.Infof("application discovered on port %v", a.runtimeConfig.ApplicationPort)

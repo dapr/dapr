@@ -25,42 +25,38 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
-	procplace "github.com/dapr/dapr/tests/integration/framework/process/placement"
+	procsentry "github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
 func init() {
-	suite.Register(new(placement))
+	suite.Register(new(sentry))
 }
 
-// placement tests that Placement responds to healthz requests.
-type placement struct {
-	proc *procplace.Placement
+// sentry tests that Sentry responds to healthz requests.
+type sentry struct {
+	proc *procsentry.Sentry
 }
 
-func (d *placement) Setup(t *testing.T) []framework.Option {
-	d.proc = procplace.New(t)
+func (s *sentry) Setup(t *testing.T) []framework.Option {
+	s.proc = procsentry.New(t)
 	return []framework.Option{
-		framework.WithProcesses(d.proc),
+		framework.WithProcesses(s.proc),
 	}
 }
 
-func (d *placement) Run(t *testing.T, ctx context.Context) {
+func (s *sentry) Run(t *testing.T, _ context.Context) {
 	assert.Eventuallyf(t, func() bool {
-		conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", d.proc.HealthzPort()))
+		conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", s.proc.HealthzPort()))
 		if err != nil {
 			return false
 		}
 		require.NoError(t, conn.Close())
 		return true
-	}, time.Second*5, 100*time.Millisecond, "healthz port %d not ready", d.proc.HealthzPort())
-
-	reqURL := fmt.Sprintf("http://127.0.0.1:%d/healthz", d.proc.HealthzPort())
+	}, time.Second*5, 100*time.Millisecond, "healthz port %d not ready", s.proc.HealthzPort())
 
 	assert.Eventually(t, func() bool {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
-		require.NoError(t, err)
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := http.DefaultClient.Get(fmt.Sprintf("http://127.0.0.1:%d/healthz", s.proc.HealthzPort()))
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 		return http.StatusOK == resp.StatusCode

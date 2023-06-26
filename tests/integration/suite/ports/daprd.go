@@ -46,12 +46,12 @@ func (d *daprd) Setup(t *testing.T) []framework.Option {
 
 func (d *daprd) Run(t *testing.T, _ context.Context) {
 	for name, port := range map[string]int{
-		"app":           d.proc.AppPort,
-		"grpc":          d.proc.GRPCPort,
-		"http":          d.proc.HTTPPort,
-		"metrics":       d.proc.MetricsPort,
-		"internal-grpc": d.proc.InternalGRPCPort,
-		"public":        d.proc.PublicPort,
+		"app":           d.proc.AppPort(),
+		"grpc":          d.proc.GRPCPort(),
+		"http":          d.proc.HTTPPort(),
+		"metrics":       d.proc.MetricsPort(),
+		"internal-grpc": d.proc.InternalGRPCPort(),
+		"public":        d.proc.PublicPort(),
 	} {
 		assert.Eventuallyf(t, func() bool {
 			conn, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", port))
