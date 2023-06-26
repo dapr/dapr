@@ -231,36 +231,38 @@ func (f *fuzzpubsub) Run(t *testing.T, ctx context.Context) {
 			t.Run(pubsubName+"/"+topicName+route, func(t *testing.T) {
 				t.Parallel()
 
-				b, err := json.Marshal(payload)
-				require.NoError(t, err)
-
 				reqURL := fmt.Sprintf("http://127.0.0.1:%d/v1.0/publish/%s/%s", f.daprd.HTTPPort(), url.QueryEscape(pubsubName), url.QueryEscape(topicName))
-				var resp *http.Response
-
 				// TODO: @joshvanl: under heavy load, messages seem to get lost here
 				// with no response from Dapr. Until this is fixed, we use to smaller
 				// timeout, and retry on context deadline exceeded.
-				assert.Eventually(t, func() bool {
-					reqCtx, cancel := context.WithTimeout(ctx, time.Second*3)
-					defer cancel()
+				for {
+					reqCtx, cancel := context.WithTimeout(ctx, time.Second*5)
+					t.Cleanup(cancel)
+
+					b, err := json.Marshal(payload)
+					require.NoError(t, err)
+
 					req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, reqURL, bytes.NewReader(b))
 					require.NoError(t, err)
 					req.Header.Set("Content-Type", "application/json")
-					resp, err = http.DefaultClient.Do(req)
+					resp, err := http.DefaultClient.Do(req)
 					if errors.Is(err, context.DeadlineExceeded) {
 						// Only retry if we haven't exceeded the test timeout.
-						d, _ := ctx.Deadline()
-						return time.Now().Before(d)
+						d, ok := ctx.Deadline()
+						require.True(t, ok)
+						require.True(t, time.Now().After(d))
+						continue
 					}
 					require.NoError(t, err)
-					return true
-				}, time.Second*15, time.Second)
 
-				assert.Equal(t, http.StatusNoContent, resp.StatusCode, reqURL)
-				respBody, err := io.ReadAll(resp.Body)
-				require.NoError(t, err)
-				require.NoError(t, resp.Body.Close())
-				assert.Empty(t, string(respBody))
+					assert.Equal(t, http.StatusNoContent, resp.StatusCode, reqURL)
+					var respBody []byte
+					respBody, err = io.ReadAll(resp.Body)
+					require.NoError(t, err)
+					require.NoError(t, resp.Body.Close())
+					assert.Empty(t, string(respBody))
+					break
+				}
 
 				select {
 				case body := <-f.respChan[route]:
@@ -268,6 +270,7 @@ func (f *fuzzpubsub) Run(t *testing.T, ctx context.Context) {
 					if f.withRaw {
 						var message pubSubMessage
 						require.NoError(t, json.Unmarshal(body, &message))
+						var err error
 						data, err = base64.StdEncoding.DecodeString(message.DataBase64)
 						require.NoError(t, err)
 					} else {
