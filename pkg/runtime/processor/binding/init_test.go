@@ -11,124 +11,24 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package processor
+package binding_test
 
 import (
 	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 
 	"github.com/dapr/components-contrib/bindings"
-	"github.com/dapr/dapr/pkg/apis/common"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/meta"
+	"github.com/dapr/dapr/pkg/runtime/processor"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/logger"
 )
-
-func TestIsBindingOfDirection(t *testing.T) {
-	t.Run("no direction in metadata for input binding", func(t *testing.T) {
-		m := []common.NameValuePair{}
-		r := (new(binding)).isBindingOfDirection("input", m)
-
-		assert.True(t, r)
-	})
-
-	t.Run("no direction in metadata for output binding", func(t *testing.T) {
-		m := []common.NameValuePair{}
-		r := (new(binding)).isBindingOfDirection("output", m)
-
-		assert.True(t, r)
-	})
-
-	t.Run("input direction in metadata", func(t *testing.T) {
-		m := []common.NameValuePair{
-			{
-				Name: "direction",
-				Value: common.DynamicValue{
-					JSON: v1.JSON{
-						Raw: []byte("input"),
-					},
-				},
-			},
-		}
-		r := (new(binding)).isBindingOfDirection("input", m)
-		f := (new(binding)).isBindingOfDirection("output", m)
-
-		assert.True(t, r)
-		assert.False(t, f)
-	})
-
-	t.Run("output direction in metadata", func(t *testing.T) {
-		m := []common.NameValuePair{
-			{
-				Name: "direction",
-				Value: common.DynamicValue{
-					JSON: v1.JSON{
-						Raw: []byte("output"),
-					},
-				},
-			},
-		}
-		r := (new(binding)).isBindingOfDirection("output", m)
-		f := (new(binding)).isBindingOfDirection("input", m)
-
-		assert.True(t, r)
-		assert.False(t, f)
-	})
-
-	t.Run("input and output direction in metadata", func(t *testing.T) {
-		m := []common.NameValuePair{
-			{
-				Name: "direction",
-				Value: common.DynamicValue{
-					JSON: v1.JSON{
-						Raw: []byte("input, output"),
-					},
-				},
-			},
-		}
-		r := (new(binding)).isBindingOfDirection("output", m)
-		f := (new(binding)).isBindingOfDirection("input", m)
-
-		assert.True(t, r)
-		assert.True(t, f)
-	})
-
-	t.Run("invalid direction for input binding", func(t *testing.T) {
-		m := []common.NameValuePair{
-			{
-				Name: "direction",
-				Value: common.DynamicValue{
-					JSON: v1.JSON{
-						Raw: []byte("aaa"),
-					},
-				},
-			},
-		}
-		f := (new(binding)).isBindingOfDirection("input", m)
-		assert.False(t, f)
-	})
-
-	t.Run("invalid direction for output binding", func(t *testing.T) {
-		m := []common.NameValuePair{
-			{
-				Name: "direction",
-				Value: common.DynamicValue{
-					JSON: v1.JSON{
-						Raw: []byte("aaa"),
-					},
-				},
-			},
-		}
-		f := (new(binding)).isBindingOfDirection("output", m)
-		assert.False(t, f)
-	})
-}
 
 func TestInitBindings(t *testing.T) {
 	t.Run("single input binding", func(t *testing.T) {
@@ -139,16 +39,17 @@ func TestInitBindings(t *testing.T) {
 			},
 			"testInputBinding",
 		)
-		proc := New(Options{
+		proc := processor.New(processor.Options{
 			Registry:       reg,
 			ComponentStore: compstore.New(),
+			GlobalConfig:   new(config.Configuration),
 			Meta:           meta.New(meta.Options{}),
 		})
 
 		c := compapi.Component{}
 		c.ObjectMeta.Name = "testInputBinding"
 		c.Spec.Type = "bindings.testInputBinding"
-		err := proc.One(context.TODO(), c)
+		err := proc.Init(context.TODO(), c)
 		assert.NoError(t, err)
 	})
 
@@ -160,16 +61,17 @@ func TestInitBindings(t *testing.T) {
 			"testOutputBinding",
 		)
 
-		proc := New(Options{
+		proc := processor.New(processor.Options{
 			Registry:       reg,
 			ComponentStore: compstore.New(),
+			GlobalConfig:   new(config.Configuration),
 			Meta:           meta.New(meta.Options{}),
 		})
 
 		c := compapi.Component{}
 		c.ObjectMeta.Name = "testOutputBinding"
 		c.Spec.Type = "bindings.testOutputBinding"
-		err := proc.One(context.TODO(), c)
+		err := proc.Init(context.TODO(), c)
 		assert.NoError(t, err)
 	})
 
@@ -188,22 +90,23 @@ func TestInitBindings(t *testing.T) {
 			"testoutput",
 		)
 
-		proc := New(Options{
+		proc := processor.New(processor.Options{
 			Registry:       reg,
 			ComponentStore: compstore.New(),
+			GlobalConfig:   new(config.Configuration),
 			Meta:           meta.New(meta.Options{}),
 		})
 
 		input := compapi.Component{}
 		input.ObjectMeta.Name = "testinput"
 		input.Spec.Type = "bindings.testinput"
-		err := proc.One(context.TODO(), input)
+		err := proc.Init(context.TODO(), input)
 		assert.NoError(t, err)
 
 		output := compapi.Component{}
 		output.ObjectMeta.Name = "testinput"
 		output.Spec.Type = "bindings.testoutput"
-		err = proc.One(context.TODO(), output)
+		err = proc.Init(context.TODO(), output)
 		assert.NoError(t, err)
 	})
 
@@ -211,16 +114,17 @@ func TestInitBindings(t *testing.T) {
 		reg := registry.New(registry.NewOptions())
 		// no binding registered, just try to init a not exist binding
 
-		proc := New(Options{
+		proc := processor.New(processor.Options{
 			Registry:       reg,
 			ComponentStore: compstore.New(),
+			GlobalConfig:   new(config.Configuration),
 			Meta:           meta.New(meta.Options{}),
 		})
 
 		c := compapi.Component{}
 		c.ObjectMeta.Name = "testNotExistBinding"
 		c.Spec.Type = "bindings.testNotExistBinding"
-		err := proc.One(context.TODO(), c)
+		err := proc.Init(context.TODO(), c)
 		assert.Error(t, err)
 	})
 }

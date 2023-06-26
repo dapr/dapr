@@ -11,11 +11,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package processor
+package state
 
 import (
 	"context"
 	"fmt"
+	"io"
 	"strings"
 	"sync"
 
@@ -28,23 +29,45 @@ import (
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	"github.com/dapr/dapr/pkg/runtime/meta"
 	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/logger"
 )
 
 const (
 	propertyKeyActorStateStore = "actorstatestore"
 )
 
+var log = logger.NewLogger("dapr.runtime.processor.state")
+
+type Options struct {
+	Registry         *compstate.Registry
+	ComponentStore   *compstore.ComponentStore
+	Meta             *meta.Meta
+	PlacementEnabled bool
+}
+
 type state struct {
 	registry  *compstate.Registry
 	compStore *compstore.ComponentStore
 	meta      *meta.Meta
-	lock      sync.Mutex
+	lock      sync.RWMutex
 
-	actorStateStoreName string
+	actorStateStoreName *string
 	placementEnabled    bool
 }
 
-func (s *state) init(ctx context.Context, comp compapi.Component) error {
+func New(opts Options) *state {
+	return &state{
+		registry:         opts.Registry,
+		compStore:        opts.ComponentStore,
+		meta:             opts.Meta,
+		placementEnabled: opts.PlacementEnabled,
+	}
+}
+
+func (s *state) Init(ctx context.Context, comp compapi.Component) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
 	fName := comp.LogName()
 	store, err := s.registry.Create(comp.Spec.Type, comp.Spec.Version, fName)
 	if err != nil {
@@ -98,14 +121,11 @@ func (s *state) init(ctx context.Context, comp compapi.Component) error {
 			}
 
 			if actorStoreSpecified {
-				s.lock.Lock()
-				defer s.lock.Unlock()
-				if s.actorStateStoreName == "" {
+				if s.actorStateStoreName == nil {
 					log.Info("Using '" + comp.ObjectMeta.Name + "' as actor state store")
-					s.actorStateStoreName = comp.ObjectMeta.Name
-				} else if s.actorStateStoreName != comp.ObjectMeta.Name {
-					// TODO: @joshvanl: Don't fatal here. Return error.
-					log.Fatalf("Detected duplicate actor state store: %s and %s", s.actorStateStoreName, comp.ObjectMeta.Name)
+					s.actorStateStoreName = &comp.ObjectMeta.Name
+				} else if *s.actorStateStoreName != comp.ObjectMeta.Name {
+					return fmt.Errorf("detected duplicate actor state store: %s and %s", *s.actorStateStoreName, comp.ObjectMeta.Name)
 				}
 			}
 		}
@@ -114,4 +134,35 @@ func (s *state) init(ctx context.Context, comp compapi.Component) error {
 	}
 
 	return nil
+}
+
+func (s *state) Close(comp compapi.Component) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	ss, ok := s.compStore.GetStateStore(comp.Name)
+	if !ok {
+		return nil
+	}
+
+	closer, ok := ss.(io.Closer)
+	if ok && closer != nil {
+		if err := closer.Close(); err != nil {
+			return err
+		}
+	}
+
+	s.compStore.DeleteStateStore(comp.Name)
+
+	return nil
+}
+
+func (s *state) ActorStateStoreName() (string, bool) {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	if s.actorStateStoreName == nil {
+		return "", false
+	}
+	return *s.actorStateStoreName, true
 }
