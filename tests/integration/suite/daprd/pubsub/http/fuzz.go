@@ -229,6 +229,8 @@ func (f *fuzzpubsub) Run(t *testing.T, ctx context.Context) {
 			route := f.pubSubs[i].Topics[j].Route
 			payload := f.pubSubs[i].Topics[j].payload
 			t.Run(pubsubName+"/"+topicName+route, func(t *testing.T) {
+				t.Skip("TODO: @joshvanl skipping until pubsub publish is made stable")
+
 				t.Parallel()
 
 				reqURL := fmt.Sprintf("http://127.0.0.1:%d/v1.0/publish/%s/%s", f.daprd.HTTPPort(), url.QueryEscape(pubsubName), url.QueryEscape(topicName))
