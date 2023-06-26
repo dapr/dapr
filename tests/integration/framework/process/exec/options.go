@@ -1,5 +1,3 @@
-//go:build all_components
-
 /*
 Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,13 +11,33 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package components
+package exec
 
 import (
-	"github.com/dapr/components-contrib/bindings/wasm"
-	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
+	"io"
+	"testing"
 )
 
-func init() {
-	bindingsLoader.DefaultRegistry.RegisterOutputBinding(wasm.NewWasmOutput, "wasm")
+func WithStdout(stdout io.WriteCloser) Option {
+	return func(o *options) {
+		o.stdout = stdout
+	}
+}
+
+func WithStderr(stderr io.WriteCloser) Option {
+	return func(o *options) {
+		o.stderr = stderr
+	}
+}
+
+func WithRunError(ferr func(*testing.T, error)) Option {
+	return func(o *options) {
+		o.runErrorFn = ferr
+	}
+}
+
+func WithExitCode(code int) Option {
+	return func(o *options) {
+		o.exitCode = code
+	}
 }

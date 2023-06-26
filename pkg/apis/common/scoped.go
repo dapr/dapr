@@ -11,30 +11,28 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package runtime
+package common
 
-type RetriableError struct {
-	err error
+// +kubebuilder:object:generate=true
+
+// Scoped is a base struct for components and other resources that can be scoped to apps.
+type Scoped struct {
+	//+optional
+	Scopes []string `json:"scopes,omitempty"`
 }
 
-func (e *RetriableError) Error() string {
-	if e.err != nil {
-		return "retriable error occurred: " + e.err.Error()
-	}
-	return "retriable error occurred"
-}
-
-func (e *RetriableError) Unwrap() error {
-	if e == nil {
-		return nil
+// IsAppScoped returns true if the appID is allowed in the scopes for the resource.
+func (s Scoped) IsAppScoped(appID string) bool {
+	if len(s.Scopes) == 0 {
+		// If there are no scopes, then every app is allowed
+		return true
 	}
 
-	return e.err
-}
-
-// NewRetriableError returns a RetriableError wrapping an existing context error.
-func NewRetriableError(err error) *RetriableError {
-	return &RetriableError{
-		err: err,
+	for _, s := range s.Scopes {
+		if s == appID {
+			return true
+		}
 	}
+
+	return false
 }

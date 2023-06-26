@@ -580,10 +580,14 @@ message InvokeActorResponse {
 // GetMetadataResponse is a message that is returned on GetMetadata rpc call
 message GetMetadataResponse {
   string id = 1;
-  repeated ActiveActorsCount active_actors_count = 2;
-  repeated RegisteredComponents registered_components = 3;
-  map<string, string> extended_metadata = 4;
-  repeated PubsubSubscription subscriptions = 5;
+  repeated ActiveActorsCount active_actors_count = 2 [json_name = "actors"];
+  repeated RegisteredComponents registered_components = 3 [json_name = "components"];
+  map<string, string> extended_metadata = 4 [json_name = "extended"];
+  repeated PubsubSubscription subscriptions = 5 [json_name = "subscriptions"];
+  repeated MetadataHTTPEndpoint http_endpoints = 6 [json_name = "httpEndpoints"];
+  AppConnectionProperties app_connection_properties = 7 [json_name = "appConnectionProperties"];
+  string runtime_version = 8 [json_name = "runtimeVersion"];
+  repeated string enabled_features = 9 [json_name = "enabledFeatures"];
 }
 
 message ActiveActorsCount {
@@ -598,12 +602,31 @@ message RegisteredComponents {
   repeated string capabilities = 4;
 }
 
+message MetadataHTTPEndpoint {
+  string name = 1 [json_name = "name"];
+}
+
+message AppConnectionProperties {
+  int32 port = 1;
+  string protocol = 2;
+  string channel_address = 3 [json_name = "channelAddress"];
+  int32 max_concurrency = 4 [json_name = "maxConcurrency"];
+  AppConnectionHealthProperties health = 5;
+}
+
+message AppConnectionHealthProperties {
+  string health_check_path = 1 [json_name = "healthCheckPath"];
+  string health_probe_interval = 2 [json_name = "healthProbeInterval"];
+  string health_probe_timeout = 3 [json_name = "healthProbeTimeout"];
+  int32 health_threshold = 4 [json_name = "healthThreshold"];
+}
+
 message PubsubSubscription {
-  string pubsub_name = 1;
-  string topic = 2;
-  map<string,string> metadata = 3;
-  PubsubSubscriptionRules rules = 4;
-  string dead_letter_topic = 5;
+  string pubsub_name = 1 [json_name = "pubsubname"];
+  string topic = 2 [json_name = "topic"];
+  map<string,string> metadata = 3 [json_name = "metadata"];
+  PubsubSubscriptionRules rules = 4 [json_name = "rules"];
+  string dead_letter_topic = 5 [json_name = "deadLetterTopic"];
 }
 
 message PubsubSubscriptionRules {

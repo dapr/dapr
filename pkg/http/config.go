@@ -23,9 +23,9 @@ type ServerConfig struct {
 	ProfilePort             int
 	AllowedOrigins          string
 	EnableProfiling         bool
-	MaxRequestBodySize      int
+	MaxRequestBodySizeMB    int
 	UnixDomainSocket        string
-	ReadBufferSize          int
+	ReadBufferSizeKB        int
 	EnableAPILogging        bool
 	APILoggingObfuscateURLs bool
 	APILogHealthChecks      bool

@@ -3,6 +3,7 @@ package runtime
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -14,11 +15,14 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/dapr/components-contrib/pubsub"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
+	"github.com/dapr/dapr/pkg/config/protocol"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -148,7 +152,7 @@ func TestBulkSubscribe(t *testing.T) {
 			Topic:      "topic0",
 			Data:       []byte(`{"orderId":"1"}`),
 		})
-		assert.NoError(t, err)
+		assert.Error(t, err)
 		pubSub, ok := rt.compStore.GetPubSub(testBulkSubscribePubsub)
 		require.True(t, ok)
 		pubsubIns := pubSub.Component.(*mockSubscribePubSub)
@@ -196,7 +200,7 @@ func TestBulkSubscribe(t *testing.T) {
 			Topic:      "topic0",
 			Data:       []byte(order),
 		})
-		assert.Nil(t, err)
+		assert.Error(t, err)
 		pubSub, ok := rt.compStore.GetPubSub(testBulkSubscribePubsub)
 		require.True(t, ok)
 		pubsubIns := pubSub.Component.(*mockSubscribePubSub)
@@ -210,9 +214,10 @@ func TestBulkSubscribe(t *testing.T) {
 	t.Run("bulk Subscribe multiple Messages at once for cloud events", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
+		ms := &mockSubscribePubSub{}
 		rt.pubSubRegistry.RegisterComponent(
 			func(_ logger.Logger) pubsub.PubSub {
-				return &mockSubscribePubSub{}
+				return ms
 			},
 			"mockPubSub",
 		)
@@ -233,19 +238,24 @@ func TestBulkSubscribe(t *testing.T) {
 		mockAppChannel.Init()
 		rt.appChannel = mockAppChannel
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
-		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).Return(fakeResp, nil)
+		fakeResp1 := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+		defer fakeResp1.Close()
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).Return(fakeResp1, nil)
 
 		require.NoError(t, rt.initPubSub(pubsubComponent))
 		rt.startSubscriptions()
 
 		msgArr := getBulkMessageEntries(2)
 
-		_, err := rt.BulkPublish(&pubsub.BulkPublishRequest{
+		rt.BulkPublish(&pubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
 		})
-		assert.Nil(t, err)
+
+		assert.Equal(t, 2, len(ms.GetBulkResponse().Statuses))
+		assert.Error(t, ms.GetBulkResponse().Error)
+		assert.Nil(t, assertItemExistsOnce(ms.GetBulkResponse().Statuses, "1111111a", "2222222b"))
 
 		pubSub, ok := rt.compStore.GetPubSub(testBulkSubscribePubsub)
 		require.True(t, ok)
@@ -256,6 +266,83 @@ func TestBulkSubscribe(t *testing.T) {
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 2)
 		assert.Contains(t, string(reqs["orders"]), `"event":`+order1)
 		assert.Contains(t, string(reqs["orders"]), `"event":`+order2)
+
+		fakeResp2 := invokev1.NewInvokeMethodResponse(404, "OK", nil)
+		defer fakeResp2.Close()
+		mockAppChannel1 := new(channelt.MockAppChannel)
+		mockAppChannel1.Init()
+		rt.appChannel = mockAppChannel1
+		mockAppChannel1.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).Return(fakeResp2, nil)
+
+		msgArr = getBulkMessageEntries(3)
+
+		rt.BulkPublish(&pubsub.BulkPublishRequest{
+			PubsubName: testBulkSubscribePubsub,
+			Topic:      "topic0",
+			Entries:    msgArr,
+		})
+
+		assert.Equal(t, 3, len(ms.GetBulkResponse().Statuses))
+		assert.Nil(t, ms.GetBulkResponse().Error)
+		assert.Nil(t, assertItemExistsOnce(ms.GetBulkResponse().Statuses, "1111111a", "2222222b", "333333c"))
+
+		assert.Equal(t, 2, pubsubIns.bulkPubCount["topic0"])
+		assert.True(t, pubsubIns.isBulkSubscribe)
+		reqs = mockAppChannel1.GetInvokedRequest()
+		mockAppChannel1.AssertNumberOfCalls(t, "InvokeMethod", 1)
+		assert.Contains(t, string(reqs["orders"]), `"event":`+order1)
+		assert.Contains(t, string(reqs["orders"]), `"event":`+order2)
+		assert.Contains(t, string(reqs["orders"]), `"event":`+order3)
+
+		fakeResp3 := invokev1.NewInvokeMethodResponse(400, "OK", nil)
+		defer fakeResp3.Close()
+		mockAppChannel2 := new(channelt.MockAppChannel)
+		mockAppChannel2.Init()
+		rt.appChannel = mockAppChannel2
+		mockAppChannel2.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).Return(fakeResp3, nil)
+
+		msgArr = getBulkMessageEntries(4)
+
+		rt.BulkPublish(&pubsub.BulkPublishRequest{
+			PubsubName: testBulkSubscribePubsub,
+			Topic:      "topic0",
+			Entries:    msgArr,
+		})
+
+		assert.Equal(t, 4, len(ms.GetBulkResponse().Statuses))
+		assert.Error(t, ms.GetBulkResponse().Error)
+		assert.Nil(t, assertItemExistsOnce(ms.GetBulkResponse().Statuses, "1111111a", "2222222b", "333333c", "4444444d"))
+
+		assert.Equal(t, 3, pubsubIns.bulkPubCount["topic0"])
+		assert.True(t, pubsubIns.isBulkSubscribe)
+		reqs = mockAppChannel2.GetInvokedRequest()
+		mockAppChannel2.AssertNumberOfCalls(t, "InvokeMethod", 1)
+		assert.Contains(t, string(reqs["orders"]), `"event":`+order1)
+		assert.Contains(t, string(reqs["orders"]), `"event":`+order2)
+		assert.Contains(t, string(reqs["orders"]), `"event":`+order3)
+		assert.Contains(t, string(reqs["orders"]), `"event":`+order4)
+
+		mockAppChannel3 := new(channelt.MockAppChannel)
+		mockAppChannel3.Init()
+		rt.appChannel = mockAppChannel3
+		mockAppChannel3.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).Return(nil, errors.New("Mock error"))
+		msgArr = getBulkMessageEntries(1)
+
+		rt.BulkPublish(&pubsub.BulkPublishRequest{
+			PubsubName: testBulkSubscribePubsub,
+			Topic:      "topic0",
+			Entries:    msgArr,
+		})
+
+		assert.Equal(t, 1, len(ms.GetBulkResponse().Statuses))
+		assert.Error(t, ms.GetBulkResponse().Error)
+		assert.Nil(t, assertItemExistsOnce(ms.GetBulkResponse().Statuses, "1111111a"))
+
+		assert.Equal(t, 4, pubsubIns.bulkPubCount["topic0"])
+		assert.True(t, pubsubIns.isBulkSubscribe)
+		reqs = mockAppChannel3.GetInvokedRequest()
+		mockAppChannel3.AssertNumberOfCalls(t, "InvokeMethod", 1)
+		assert.Contains(t, string(reqs["orders"]), `"event":`+order1)
 	})
 
 	t.Run("bulk Subscribe events on different paths", func(t *testing.T) {
@@ -713,12 +800,13 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 
 	t.Run("GRPC - bulk Subscribe Message for raw payload", func(t *testing.T) {
 		port, _ := freeport.GetFreePort()
-		rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
+		rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(protocol.GRPCProtocol), port)
 		defer stopRuntime(t, rt)
+		ms := &mockSubscribePubSub{}
 
 		rt.pubSubRegistry.RegisterComponent(
 			func(_ logger.Logger) pubsub.PubSub {
-				return &mockSubscribePubSub{}
+				return ms
 			},
 			"mockPubSub",
 		)
@@ -768,7 +856,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		}
 
 		// create a new AppChannel and gRPC client for every test
-		rt.createAppChannel()
+		rt.createChannels()
 		// properly close the app channel created
 		defer rt.grpc.CloseAppClient()
 
@@ -780,6 +868,10 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			Topic:      "topic0",
 			Entries:    msgArr,
 		})
+		assert.Equal(t, 2, len(ms.GetBulkResponse().Statuses))
+		assert.Nil(t, ms.GetBulkResponse().Error)
+		assert.Nil(t, assertItemExistsOnce(ms.GetBulkResponse().Statuses, "1111111a", "2222222b"))
+
 		assert.Nil(t, err)
 		pubSub, ok := rt.compStore.GetPubSub(testBulkSubscribePubsub)
 		require.True(t, ok)
@@ -794,11 +886,32 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		assert.Contains(t, string(mockServer.RequestsReceived["orders"].GetEntries()[0].GetBytes()), `{"orderId":"1"}`)
 		assert.Contains(t, string(mockServer.RequestsReceived["orders"].GetEntries()[1].GetBytes()), `{"orderId":"2"}`)
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse.Statuses))
+
+		mockServer.BulkResponsePerPath = nil
+		mockServer.Error = status.Error(codes.Unimplemented, "method not implemented")
+		rt.BulkPublish(&pubsub.BulkPublishRequest{
+			PubsubName: testBulkSubscribePubsub,
+			Topic:      "topic0",
+			Entries:    msgArr,
+		})
+		assert.Equal(t, 2, len(ms.GetBulkResponse().Statuses))
+		assert.Nil(t, ms.GetBulkResponse().Error)
+		assert.Nil(t, assertItemExistsOnce(ms.GetBulkResponse().Statuses, "1111111a", "2222222b"))
+
+		mockServer.Error = status.Error(codes.Unknown, "unknown error")
+		rt.BulkPublish(&pubsub.BulkPublishRequest{
+			PubsubName: testBulkSubscribePubsub,
+			Topic:      "topic0",
+			Entries:    msgArr,
+		})
+		assert.Equal(t, 2, len(ms.GetBulkResponse().Statuses))
+		assert.Error(t, ms.GetBulkResponse().Error)
+		assert.Nil(t, assertItemExistsOnce(ms.GetBulkResponse().Statuses, "1111111a", "2222222b"))
 	})
 
 	t.Run("GRPC - bulk Subscribe cloud event Message on different paths and verify response", func(t *testing.T) {
 		port, _ := freeport.GetFreePort()
-		rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
+		rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(protocol.GRPCProtocol), port)
 		defer stopRuntime(t, rt)
 
 		rt.pubSubRegistry.RegisterComponent(
@@ -882,7 +995,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			defer grpcServer.Stop()
 		}
 
-		rt.createAppChannel()
+		rt.createChannels()
 		defer rt.grpc.CloseAppClient()
 
 		require.NoError(t, rt.initPubSub(pubsubComponent))
@@ -921,7 +1034,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 
 	t.Run("GRPC - verify Responses when entryId supplied blank while sending messages", func(t *testing.T) {
 		port, _ := freeport.GetFreePort()
-		rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
+		rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(protocol.GRPCProtocol), port)
 		defer stopRuntime(t, rt)
 
 		rt.pubSubRegistry.RegisterComponent(
@@ -971,7 +1084,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			defer grpcServer.Stop()
 		}
 
-		rt.createAppChannel()
+		rt.createChannels()
 		defer rt.grpc.CloseAppClient()
 
 		require.NoError(t, rt.initPubSub(pubsubComponent))
@@ -1001,7 +1114,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 
 	t.Run("GRPC - verify bulk Subscribe Responses when App sends back out of order entryIds", func(t *testing.T) {
 		port, _ := freeport.GetFreePort()
-		rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
+		rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(protocol.GRPCProtocol), port)
 		defer stopRuntime(t, rt)
 
 		rt.pubSubRegistry.RegisterComponent(
@@ -1062,7 +1175,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			defer grpcServer.Stop()
 		}
 
-		rt.createAppChannel()
+		rt.createChannels()
 		defer rt.grpc.CloseAppClient()
 
 		require.NoError(t, rt.initPubSub(pubsubComponent))
@@ -1093,7 +1206,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 
 	t.Run("GRPC - verify bulk Subscribe Responses when App sends back wrong entryIds", func(t *testing.T) {
 		port, _ := freeport.GetFreePort()
-		rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
+		rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(protocol.GRPCProtocol), port)
 		defer stopRuntime(t, rt)
 
 		rt.pubSubRegistry.RegisterComponent(
@@ -1148,7 +1261,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			defer grpcServer.Stop()
 		}
 
-		rt.createAppChannel()
+		rt.createChannels()
 		defer rt.grpc.CloseAppClient()
 
 		require.NoError(t, rt.initPubSub(pubsubComponent))
@@ -1179,7 +1292,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 
 	t.Run("GRPC - verify bulk Subscribe Response when error while fetching Entry due to wrong dataContentType", func(t *testing.T) {
 		port, _ := freeport.GetFreePort()
-		rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
+		rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(protocol.GRPCProtocol), port)
 		defer stopRuntime(t, rt)
 
 		rt.pubSubRegistry.RegisterComponent(
@@ -1220,7 +1333,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			defer grpcServer.Stop()
 		}
 
-		rt.createAppChannel()
+		rt.createChannels()
 		defer rt.grpc.CloseAppClient()
 
 		require.NoError(t, rt.initPubSub(pubsubComponent))
@@ -1321,4 +1434,20 @@ func verifyBulkSubscribeRequest(expectedData []string, expectedExtension Expecte
 		}
 	}
 	return true
+}
+
+func assertItemExistsOnce(collection []pubsub.BulkSubscribeResponseEntry, items ...string) error {
+	count := 0
+	for _, item := range items {
+		for _, c := range collection {
+			if c.EntryId == item {
+				count++
+			}
+		}
+		if count != 1 {
+			return fmt.Errorf("item %s not found or found more than once", item)
+		}
+		count = 0
+	}
+	return nil
 }

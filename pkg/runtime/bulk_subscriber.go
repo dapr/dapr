@@ -150,7 +150,7 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policyDef *resilie
 					continue
 				}
 				// For grpc, we can still send the entry even if path is blank, App can take a decision
-				if rPath == "" && a.runtimeConfig.ApplicationProtocol.IsHTTP() {
+				if rPath == "" && a.runtimeConfig.AppConnectionConfig.Protocol.IsHTTP() {
 					continue
 				}
 				dataB64 := base64.StdEncoding.EncodeToString(message.Event)
@@ -189,7 +189,7 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policyDef *resilie
 					continue
 				}
 				// For grpc, we can still send the entry even if path is blank, App can take a decision
-				if rPath == "" && a.runtimeConfig.ApplicationProtocol.IsHTTP() {
+				if rPath == "" && a.runtimeConfig.AppConnectionConfig.Protocol.IsHTTP() {
 					continue
 				}
 				if message.ContentType == "" {
@@ -377,12 +377,12 @@ func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, bulkSubCallDat
 	spans = spans[:n]
 	defer endSpans(spans)
 	start := time.Now()
-	resp, err := a.appChannel.InvokeMethod(ctx, req)
+	resp, err := a.appChannel.InvokeMethod(ctx, req, "")
 	elapsed := diag.ElapsedSince(start)
 	if err != nil {
 		bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += int64(len(rawMsgEntries))
 		bscData.bulkSubDiag.elapsed = elapsed
-		populateBulkSubscribeResponsesWithError(psm, bscData.bulkResponses, err)
+		populateBulkSubscribeResponsesWithError(psm, bulkResponses, err)
 		return fmt.Errorf("error from app channel while sending pub/sub event to app: %w", err)
 	}
 	defer resp.Close()
@@ -402,7 +402,7 @@ func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, bulkSubCallDat
 		if err != nil {
 			bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += int64(len(rawMsgEntries))
 			bscData.bulkSubDiag.elapsed = elapsed
-			populateBulkSubscribeResponsesWithError(psm, bscData.bulkResponses, err)
+			populateBulkSubscribeResponsesWithError(psm, bulkResponses, err)
 			return fmt.Errorf("failed unmarshalling app response for bulk subscribe: %w", err)
 		}
 
@@ -474,7 +474,7 @@ func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, bulkSubCallDat
 		log.Errorf("Non-retriable error returned from app while processing bulk pub/sub event. status code returned: %v", statusCode)
 		bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Drop)] += int64(len(rawMsgEntries))
 		bscData.bulkSubDiag.elapsed = elapsed
-		populateBulkSubscribeResponsesWithError(psm, bscData.bulkResponses, nil)
+		populateBulkSubscribeResponsesWithError(psm, bulkResponses, nil)
 		return nil
 	}
 
@@ -484,7 +484,7 @@ func (a *DaprRuntime) publishBulkMessageHTTP(ctx context.Context, bulkSubCallDat
 	log.Warn(retriableErrorStr)
 	bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += int64(len(rawMsgEntries))
 	bscData.bulkSubDiag.elapsed = elapsed
-	populateBulkSubscribeResponsesWithError(psm, bscData.bulkResponses, retriableError)
+	populateBulkSubscribeResponsesWithError(psm, bulkResponses, retriableError)
 	return retriableError
 }
 
@@ -628,7 +628,7 @@ func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, bulkSubCallDat
 			log.Warnf("non-retriable error returned from app while processing bulk pub/sub event: %s", err)
 			bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Drop)] += int64(len(psm.pubSubMessages))
 			bscData.bulkSubDiag.elapsed = elapsed
-			populateBulkSubscribeResponsesWithError(psm, bscData.bulkResponses, nil)
+			populateBulkSubscribeResponsesWithError(psm, bulkResponses, nil)
 			return nil
 		}
 
@@ -636,9 +636,9 @@ func (a *DaprRuntime) publishBulkMessageGRPC(ctx context.Context, bulkSubCallDat
 		log.Debug(err)
 		bscData.bulkSubDiag.statusWiseDiag[string(pubsub.Retry)] += int64(len(psm.pubSubMessages))
 		bscData.bulkSubDiag.elapsed = elapsed
-		populateBulkSubscribeResponsesWithError(psm, bscData.bulkResponses, err)
+		populateBulkSubscribeResponsesWithError(psm, bulkResponses, err)
 		// on error from application, return error for redelivery of event
-		return nil
+		return err
 	}
 
 	hasAnyError := false

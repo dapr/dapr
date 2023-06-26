@@ -11,25 +11,19 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package apphealth
+package universalapi
 
 import (
-	"time"
+	"context"
+
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-const (
-	// DefaultProbeInterval is the default interval for app health probes.
-	DefaultProbeInterval = 5 * time.Second
-	// DefaultProbeTimeout is the default value for probe timeouts.
-	DefaultProbeTimeout = 500 * time.Millisecond
-	// DefaultThreshold is the default threshold for determining failures in app health checks.
-	DefaultThreshold = int32(3)
-)
-
-// Config is the configuration object for the app health probes.
-type Config struct {
-	ProbeInterval time.Duration
-	ProbeTimeout  time.Duration
-	ProbeOnly     bool
-	Threshold     int32
+// Shutdown the sidecar.
+func (a *UniversalAPI) Shutdown(ctx context.Context, in *emptypb.Empty) (*emptypb.Empty, error) {
+	go func() {
+		<-ctx.Done()
+		a.ShutdownFn()
+	}()
+	return &emptypb.Empty{}, nil
 }

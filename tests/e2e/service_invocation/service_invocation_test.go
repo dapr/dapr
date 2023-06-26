@@ -146,12 +146,13 @@ func TestMain(m *testing.M) {
 			AppProtocol:    "grpc",
 		},
 		{
-			AppName:        "grpcproxyclient",
-			DaprEnabled:    true,
-			ImageName:      "e2e-service_invocation_grpc_proxy_client",
-			Replicas:       1,
-			IngressEnabled: true,
-			MetricsEnabled: true,
+			AppName:          "grpcproxyclient",
+			DaprEnabled:      true,
+			ImageName:        "e2e-service_invocation_grpc_proxy_client",
+			Replicas:         1,
+			IngressEnabled:   true,
+			MetricsEnabled:   true,
+			MaxRequestSizeMB: 6,
 		},
 		{
 			AppName:        "grpcproxyserverexternal",
@@ -171,6 +172,7 @@ func TestMain(m *testing.M) {
 			AppProtocol:       "grpc",
 			AppPort:           50051,
 			AppChannelAddress: "grpcproxyserver-app",
+			MaxRequestSizeMB:  6,
 		},
 		{
 			AppName:        "serviceinvocation-callee-external",
@@ -368,6 +370,12 @@ var grpcProxyTests = []struct {
 		"Test grpc proxy",
 		"grpcproxyclient",
 		"",
+		"success",
+	},
+	{
+		"Test grpc proxy",
+		"grpcproxyclient",
+		"maxsize",
 		"success",
 	},
 }
@@ -846,8 +854,6 @@ func TestHeaders(t *testing.T) {
 
 				require.NoError(t, err)
 
-				_ = assert.NotEmpty(t, requestHeaders["dapr-host"]) &&
-					assert.True(t, strings.HasPrefix(requestHeaders["dapr-host"][0], "localhost:"))
 				_ = assert.NotEmpty(t, requestHeaders["content-type"]) &&
 					assert.Equal(t, "application/grpc", requestHeaders["content-type"][0])
 				_ = assert.NotEmpty(t, requestHeaders[":authority"]) &&
@@ -1483,20 +1489,20 @@ func TestNegativeCases(t *testing.T) {
 				var testResults negativeTestResult
 				json.Unmarshal(resp, &testResults)
 
-				require.Nil(t, err)
+				require.NoError(t, err)
 				require.True(t, testResults.MainCallSuccessful)
 				require.Len(t, testResults.Results, 4)
 
 				for _, result := range testResults.Results {
 					switch result.TestCase {
 					case "1MB":
-						require.True(t, result.CallSuccessful)
+						assert.True(t, result.CallSuccessful)
 					case "4MB":
-						require.True(t, result.CallSuccessful)
+						assert.True(t, result.CallSuccessful)
 					case "4MB+":
-						require.False(t, result.CallSuccessful)
+						assert.False(t, result.CallSuccessful)
 					case "8MB":
-						require.False(t, result.CallSuccessful)
+						assert.False(t, result.CallSuccessful)
 					}
 				}
 			})
@@ -1514,20 +1520,20 @@ func TestNegativeCases(t *testing.T) {
 				var testResults negativeTestResult
 				json.Unmarshal(resp, &testResults)
 
-				require.Nil(t, err)
+				require.NoError(t, err)
 				require.True(t, testResults.MainCallSuccessful)
 				require.Len(t, testResults.Results, 4)
 
 				for _, result := range testResults.Results {
 					switch result.TestCase {
 					case "1MB":
-						require.True(t, result.CallSuccessful)
+						assert.True(t, result.CallSuccessful)
 					case "4MB":
-						require.True(t, result.CallSuccessful)
+						assert.True(t, result.CallSuccessful)
 					case "4MB+":
-						require.False(t, result.CallSuccessful)
+						assert.False(t, result.CallSuccessful)
 					case "8MB":
-						require.False(t, result.CallSuccessful)
+						assert.False(t, result.CallSuccessful)
 					}
 				}
 			})
@@ -1645,4 +1651,41 @@ func TestCrossNamespaceCases(t *testing.T) {
 
 	t.Run("serviceinvocation-caller", testFn("serviceinvocation-caller"))
 	t.Run("serviceinvocation-caller-stream", testFn("serviceinvocation-caller-stream"))
+}
+
+func TestPathURLNormalization(t *testing.T) {
+	t.Parallel()
+
+	externalURL := tr.Platform.AcquireAppExternalURL("serviceinvocation-caller")
+	require.NotEmpty(t, externalURL, "external URL must not be empty!")
+
+	// This initial probe makes the test wait a little bit longer when needed,
+	// making this test less flaky due to delays in the deployment.
+	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
+	require.NoError(t, err)
+
+	t.Logf("externalURL is '%s'\n", externalURL)
+
+	for path, exp := range map[string]string{
+		`/foo/%2Fbbb%2F%2E`:     `/foo/%2Fbbb%2F%2E`,
+		`//foo/%2Fb/bb%2F%2E`:   `/foo/%2Fb/bb%2F%2E`,
+		`//foo/%2Fb///bb%2F%2E`: `/foo/%2Fb/bb%2F%2E`,
+		`/foo/%2E`:              `/foo/%2E`,
+		`///foo///%2E`:          `/foo/%2E`,
+	} {
+		t.Run(path, func(t *testing.T) {
+			body, err := json.Marshal(testCommandRequest{
+				RemoteApp: "serviceinvocation-callee-0",
+				Method:    "normalization",
+			})
+			require.NoError(t, err)
+
+			url := fmt.Sprintf("http://%s/%s", externalURL, path)
+			resp, err := utils.HTTPPost(url, body)
+			require.NoError(t, err)
+
+			t.Logf("checking piped path..%s\n", string(resp))
+			assert.Contains(t, exp, string(resp))
+		})
+	}
 }

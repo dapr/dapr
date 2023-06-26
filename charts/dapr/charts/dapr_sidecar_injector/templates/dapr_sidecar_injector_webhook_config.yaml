@@ -12,6 +12,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: dapr-sidecar-injector-cert
+  namespace: {{ .Release.Namespace }}
   labels:
     app: dapr-sidecar-injector
     {{- range $key, $value := .Values.global.k8sLabels }}

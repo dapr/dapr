@@ -28,10 +28,10 @@ HA_MODE     ?= false
 # Force in-memory log for placement
 FORCE_INMEM ?= true
 # Go's build tags:
-# all_components - includes all components in Dapr sidecar
-# stable_components - includes all stable components in Dapr sidecar
-DAPR_SIDECAR_FLAVOR ?= all
-DAPR_GO_BUILD_TAGS = $(DAPR_SIDECAR_FLAVOR)_components
+# allcomponents - (default) includes all components in Dapr sidecar
+# stablecomponents - includes all stable components in Dapr sidecar
+DAPR_SIDECAR_FLAVOR ?= allcomponents
+DAPR_GO_BUILD_TAGS = $(DAPR_SIDECAR_FLAVOR)
 
 # Add latest tag if LATEST_RELEASE is true
 LATEST_RELEASE ?=
@@ -300,9 +300,9 @@ test: test-deps
 			--format standard-quiet \
 			-- \
 				./pkg/... ./utils/... ./cmd/... \
-				$(COVERAGE_OPTS) --tags=unit,all_components
+				$(COVERAGE_OPTS) --tags=unit,allcomponents
 	CGO_ENABLED=$(CGO) \
-		go test --tags=all_components ./tests/...
+		go test --tags=allcomponents ./tests/...
 
 ################################################################################
 # Target: test-race                                                            #
@@ -341,7 +341,18 @@ TEST_WITH_RACE=./pkg/acl/... \
 .PHONY: test-race
 test-race:
 	echo "$(TEST_WITH_RACE)" | xargs \
-		go test -tags="all_components unit" -race
+		go test -tags="allcomponents unit" -race
+
+################################################################################
+# Target: test-integration                                                                 #
+################################################################################
+.PHONY: test-integration
+test-integration: test-deps
+		gotestsum \
+			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json \
+			--format dots \
+			-- \
+			./tests/integration $(COVERAGE_OPTS) -v -race -tags="integration"
 
 ################################################################################
 # Target: lint                                                                 #
@@ -350,7 +361,7 @@ test-race:
 # You can download version v1.51.2 at https://github.com/golangci/golangci-lint/releases/tag/v1.51.2
 .PHONY: lint
 lint:
-	$(GOLANGCI_LINT) run --build-tags=all_components --timeout=20m
+	$(GOLANGCI_LINT) run --build-tags=allcomponents --timeout=20m
 
 ################################################################################
 # Target: modtidy-all                                                          #

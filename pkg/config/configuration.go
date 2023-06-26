@@ -45,6 +45,9 @@ const (
 	// Disables enforcing minimum TLS version 1.2 in AppChannel, which is insecure.
 	// TODO: Remove this feature flag in Dapr 1.13.
 	AppChannelAllowInsecureTLS Feature = "AppChannelAllowInsecureTLS"
+	// Enables support for setting TTL on Actor state keys. Remove this flag in
+	// Dapr 1.12.
+	ActorStateTTL Feature = "ActorStateTTL"
 )
 
 // end feature flags section

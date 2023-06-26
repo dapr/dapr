@@ -25,10 +25,10 @@ import (
 	"time"
 
 	"github.com/dapr/dapr/pkg/acl"
-	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	daprGlobalConfig "github.com/dapr/dapr/pkg/config"
 	env "github.com/dapr/dapr/pkg/config/env"
+	"github.com/dapr/dapr/pkg/config/protocol"
 	"github.com/dapr/dapr/pkg/cors"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/metrics"
@@ -36,6 +36,7 @@ import (
 	"github.com/dapr/dapr/pkg/operator/client"
 	operatorV1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	resiliencyConfig "github.com/dapr/dapr/pkg/resiliency"
+	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/validation"
 	"github.com/dapr/dapr/utils"
@@ -44,7 +45,7 @@ import (
 )
 
 // FromFlags parses command flags and returns DaprRuntime instance.
-func FromFlags() (*DaprRuntime, error) {
+func FromFlags(args []string) (*DaprRuntime, error) {
 	mode := flag.String("mode", string(modes.StandaloneMode), "Runtime mode for Dapr")
 	daprHTTPPort := flag.String("dapr-http-port", strconv.Itoa(DefaultDaprHTTPPort), "HTTP port for Dapr API to listen on")
 	daprAPIListenAddresses := flag.String("dapr-listen-addresses", DefaultAPIListenAddress, "One or more addresses for the Dapr API to listen on, CSV limited")
@@ -53,7 +54,7 @@ func FromFlags() (*DaprRuntime, error) {
 	daprInternalGRPCPort := flag.String("dapr-internal-grpc-port", "", "gRPC port for the Dapr Internal API to listen on")
 	appPort := flag.String("app-port", "", "The port the application is listening on")
 	profilePort := flag.String("profile-port", strconv.Itoa(DefaultProfilePort), "The port for the profile server")
-	appProtocolPtr := flag.String("app-protocol", string(HTTPProtocol), "Protocol for the application: grpc, grpcs, http, https, h2c")
+	appProtocolPtr := flag.String("app-protocol", string(protocol.HTTPProtocol), "Protocol for the application: grpc, grpcs, http, https, h2c")
 	componentsPath := flag.String("components-path", "", "Alias for --resources-path [Deprecated, use --resources-path]")
 	var resourcesPath stringSliceFlag
 	flag.Var(&resourcesPath, "resources-path", "Path for resources directory. If not specified, no resources will be loaded. Can be passed multiple times")
@@ -79,9 +80,9 @@ func FromFlags() (*DaprRuntime, error) {
 	disableBuiltinK8sSecretStore := flag.Bool("disable-builtin-k8s-secret-store", false, "Disable the built-in Kubernetes Secret Store")
 	enableAppHealthCheck := flag.Bool("enable-app-health-check", false, "Enable health checks for the application using the protocol defined with app-protocol")
 	appHealthCheckPath := flag.String("app-health-check-path", DefaultAppHealthCheckPath, "Path used for health checks; HTTP only")
-	appHealthProbeInterval := flag.Int("app-health-probe-interval", int(apphealth.DefaultProbeInterval/time.Second), "Interval to probe for the health of the app in seconds")
-	appHealthProbeTimeout := flag.Int("app-health-probe-timeout", int(apphealth.DefaultProbeTimeout/time.Millisecond), "Timeout for app health probes in milliseconds")
-	appHealthThreshold := flag.Int("app-health-threshold", int(apphealth.DefaultThreshold), "Number of consecutive failures for the app to be considered unhealthy")
+	appHealthProbeInterval := flag.Int("app-health-probe-interval", int(daprGlobalConfig.AppHealthConfigDefaultProbeInterval/time.Second), "Interval to probe for the health of the app in seconds")
+	appHealthProbeTimeout := flag.Int("app-health-probe-timeout", int(daprGlobalConfig.AppHealthConfigDefaultProbeTimeout/time.Millisecond), "Timeout for app health probes in milliseconds")
+	appHealthThreshold := flag.Int("app-health-threshold", int(daprGlobalConfig.AppHealthConfigDefaultThreshold), "Number of consecutive failures for the app to be considered unhealthy")
 
 	appChannelAddress := flag.String("app-channel-address", DefaultChannelAddress, "The network address the application listens on")
 
@@ -93,14 +94,15 @@ func FromFlags() (*DaprRuntime, error) {
 	metricsExporter.Options().AttachCmdFlags(flag.StringVar, flag.BoolVar)
 
 	// Finally parse the CLI flags!
-	flag.Parse()
+	// Ignore errors; CommandLine is set for ExitOnError.
+	flag.CommandLine.Parse(args)
 
 	// flag.Parse() will always set a value to "enableAPILogging", and it will be false whether it's explicitly set to false or unset
 	// For this flag, we need the third state (unset) so we need to do a bit more work here to check if it's unset, then mark "enableAPILogging" as nil
 	// It's not the prettiest approach, but…
 	if !*enableAPILogging {
 		enableAPILogging = nil
-		for _, v := range os.Args {
+		for _, v := range args {
 			if strings.HasPrefix(v, "--enable-api-logging") || strings.HasPrefix(v, "-enable-api-logging") {
 				// This means that enable-api-logging was explicitly set to false
 				enableAPILogging = ptr.Of(false)
@@ -238,28 +240,28 @@ func FromFlags() (*DaprRuntime, error) {
 	{
 		p := strings.ToLower(*appProtocolPtr)
 		switch p {
-		case string(GRPCSProtocol), string(HTTPSProtocol), string(H2CProtocol):
+		case string(protocol.GRPCSProtocol), string(protocol.HTTPSProtocol), string(protocol.H2CProtocol):
 			appProtocol = p
-		case string(HTTPProtocol):
+		case string(protocol.HTTPProtocol):
 			// For backwards compatibility, when protocol is HTTP and --app-ssl is set, use "https"
 			// TODO: Remove in a future Dapr version
 			if *appSSL {
 				log.Warn("The 'app-ssl' flag is deprecated; use 'app-protocol=https' instead")
-				appProtocol = string(HTTPSProtocol)
+				appProtocol = string(protocol.HTTPSProtocol)
 			} else {
-				appProtocol = string(HTTPProtocol)
+				appProtocol = string(protocol.HTTPProtocol)
 			}
-		case string(GRPCProtocol):
+		case string(protocol.GRPCProtocol):
 			// For backwards compatibility, when protocol is GRPC and --app-ssl is set, use "grpcs"
 			// TODO: Remove in a future Dapr version
 			if *appSSL {
 				log.Warn("The 'app-ssl' flag is deprecated; use 'app-protocol=grpcs' instead")
-				appProtocol = string(GRPCSProtocol)
+				appProtocol = string(protocol.GRPCSProtocol)
 			} else {
-				appProtocol = string(GRPCProtocol)
+				appProtocol = string(protocol.GRPCProtocol)
 			}
 		case "":
-			appProtocol = string(HTTPProtocol)
+			appProtocol = string(protocol.HTTPProtocol)
 		default:
 			return nil, fmt.Errorf("invalid value for 'app-protocol': %v", *appProtocolPtr)
 		}
@@ -272,14 +274,14 @@ func FromFlags() (*DaprRuntime, error) {
 
 	var healthProbeInterval time.Duration
 	if *appHealthProbeInterval <= 0 {
-		healthProbeInterval = apphealth.DefaultProbeInterval
+		healthProbeInterval = daprGlobalConfig.AppHealthConfigDefaultProbeInterval
 	} else {
 		healthProbeInterval = time.Duration(*appHealthProbeInterval) * time.Second
 	}
 
 	var healthProbeTimeout time.Duration
 	if *appHealthProbeTimeout <= 0 {
-		healthProbeTimeout = apphealth.DefaultProbeTimeout
+		healthProbeTimeout = daprGlobalConfig.AppHealthConfigDefaultProbeTimeout
 	} else {
 		healthProbeTimeout = time.Duration(*appHealthProbeTimeout) * time.Millisecond
 	}
@@ -291,7 +293,7 @@ func FromFlags() (*DaprRuntime, error) {
 	// Also check to ensure no overflow with int32
 	var healthThreshold int32
 	if *appHealthThreshold < 1 || int32(*appHealthThreshold+1) < 0 {
-		healthThreshold = apphealth.DefaultThreshold
+		healthThreshold = daprGlobalConfig.AppHealthConfigDefaultThreshold
 	} else {
 		healthThreshold = int32(*appHealthThreshold)
 	}
@@ -405,7 +407,7 @@ func FromFlags() (*DaprRuntime, error) {
 	metricsSpec := globalConfig.GetMetricsSpec()
 	if metricsSpec.GetEnabled() {
 		if mErr := diag.InitMetrics(runtimeConfig.ID, namespace, metricsSpec.Rules); mErr != nil {
-			log.Errorf(NewInitError(InitFailure, "metrics", mErr).Error())
+			log.Errorf(rterrors.NewInit(rterrors.InitFailure, "metrics", mErr).Error())
 		}
 	}
 
@@ -429,7 +431,7 @@ func FromFlags() (*DaprRuntime, error) {
 
 	accessControlList, err := acl.ParseAccessControlSpec(
 		globalConfig.Spec.AccessControlSpec,
-		runtimeConfig.ApplicationProtocol.IsHTTP(),
+		runtimeConfig.AppConnectionConfig.Protocol.IsHTTP(),
 	)
 	if err != nil {
 		log.Fatalf(err.Error())

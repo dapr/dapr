@@ -196,7 +196,12 @@ func withBodyHandler(w http.ResponseWriter, r *http.Request) {
 		onBadRequest(w, err)
 		return
 	}
-	fmt.Printf("withBodyHandler body: %s\n", string(body))
+
+	if len(body) > 100 {
+		fmt.Printf("withBodyHandler body (first 100 bytes): %s\n", string(body[:100]))
+	} else {
+		fmt.Printf("withBodyHandler body: %s\n", string(body))
+	}
 	var s string
 	err = json.Unmarshal(body, &s)
 	if err != nil {
@@ -347,8 +352,8 @@ func constructRequest(id, method, httpVerb string, body []byte) *runtimev1pb.Inv
 }
 
 // appRouter initializes restful api router
-func appRouter() *mux.Router {
-	router := mux.NewRouter().StrictSlash(true)
+func appRouter() http.Handler {
+	router := mux.NewRouter().StrictSlash(true).UseEncodedPath()
 
 	// Log requests and their processing time
 	router.Use(utils.LoggerMiddleware)
@@ -386,6 +391,12 @@ func appRouter() *mux.Router {
 	router.HandleFunc("/grpctohttptest", grpcToHTTPTest).Methods("POST")
 	router.HandleFunc("/badservicecalltesthttp", badServiceCallTestHTTP).Methods("POST")
 	router.HandleFunc("/badservicecalltestgrpc", badServiceCallTestGrpc).Methods("POST")
+
+	// called by Dapr invocation to ensure path separators are correctly
+	// normalized, but not path segment contents.
+	router.HandleFunc("/foo/%2E", echoPathHandler).Methods("GET", "POST")
+	router.HandleFunc("/foo/%2Fbbb%2F%2E", echoPathHandler).Methods("GET", "POST")
+	router.HandleFunc("/foo/%2Fb/bb%2F%2E", echoPathHandler).Methods("GET", "POST")
 
 	// service invocation v1 e2e tests
 	router.HandleFunc("/tests/dapr_id_httptohttptest", testDaprIDRequestHTTPToHTTP).Methods("POST")
@@ -1262,6 +1273,13 @@ func badServiceCallTestHTTP(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(testResponse)
 }
 
+// echoPathHandler is a test endpoint that returns the path of the request as
+// is.
+func echoPathHandler(w http.ResponseWriter, r *http.Request) {
+	w.Write([]byte(r.URL.EscapedPath()))
+	w.WriteHeader(http.StatusOK)
+}
+
 func badServiceCallTestGrpc(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Enter badServiceCallTestGrpc")
 	var commandBody testCommandRequest
@@ -1363,7 +1381,7 @@ func largeDataErrorServiceCall(w http.ResponseWriter, r *http.Request, isHTTP bo
 			name: "4MB",
 		},
 		{
-			size: 1024*1024*3 - 1,
+			size: 1024*1024*3 + 10,
 			name: "4MB+",
 		},
 		{
@@ -1379,7 +1397,7 @@ func largeDataErrorServiceCall(w http.ResponseWriter, r *http.Request, isHTTP bo
 
 		body := make([]byte, test.size)
 		jsonBody, _ := json.Marshal(body)
-		fmt.Printf("largeDataErrorServiceCall - Request size: %d\n", len(jsonBody))
+		fmt.Printf("largeDataErrorServiceCall %s - Request size: %d\n", test.name, len(jsonBody))
 
 		if isHTTP {
 			resp, err := httpClient.Post(sanitizeHTTPURL(url), jsonContentType, bytes.NewReader(jsonBody))

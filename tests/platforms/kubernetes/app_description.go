@@ -74,6 +74,7 @@ type AppDescription struct {
 	AppHealthProbeTimeout     int                             `json:",omitempty"` // In milliseconds
 	AppHealthThreshold        int                             `json:",omitempty"`
 	AppChannelAddress         string                          `json:",omitempty"`
+	MaxRequestSizeMB          int                             `json:",omitempty"`
 }
 
 func (a AppDescription) String() string {

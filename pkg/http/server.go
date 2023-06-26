@@ -14,6 +14,7 @@ limitations under the License.
 package http
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -23,12 +24,16 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
-	cors "github.com/AdhityaRamadhanus/fasthttpcors"
+	// Import pprof that automatically registers itself in the default server mux.
+	// Putting "nolint:gosec" here because the linter points out this is automatically exposed on the default server mux, but we only use that in the profiling server.
+	//nolint:gosec
+	_ "net/http/pprof"
+
 	routing "github.com/fasthttp/router"
-	"github.com/hashicorp/go-multierror"
+	"github.com/go-chi/cors"
 	"github.com/valyala/fasthttp"
-	"github.com/valyala/fasthttp/pprofhandler"
 
 	"github.com/dapr/dapr/pkg/config"
 	corsDapr "github.com/dapr/dapr/pkg/cors"
@@ -37,8 +42,8 @@ import (
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
 	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
-	"github.com/dapr/dapr/utils/fasthttpadaptor"
 	"github.com/dapr/dapr/utils/nethttpadaptor"
+	"github.com/dapr/dapr/utils/streams"
 	"github.com/dapr/kit/logger"
 )
 
@@ -60,7 +65,7 @@ type server struct {
 	pipeline           httpMiddleware.Pipeline
 	api                API
 	apiSpec            config.APISpec
-	servers            []*fasthttp.Server
+	servers            []*http.Server
 	profilingListeners []net.Listener
 }
 
@@ -90,11 +95,14 @@ func NewServer(opts NewServerOpts) Server {
 // StartNonBlocking starts a new server in a goroutine.
 func (s *server) StartNonBlocking() error {
 	handler := s.useRouter()
-	handler = s.useComponents(handler)
-	handler = s.useCors(handler)
-	handler = useAPIAuthentication(handler)
-	handler = s.useMetrics(handler)
-	handler = s.useTracing(handler)
+
+	// These middlewares use net/http handlers
+	netHTTPHandler := s.useComponents(nethttpadaptor.NewNetHTTPHandlerFunc(handler))
+	netHTTPHandler = s.useCors(netHTTPHandler)
+	netHTTPHandler = useAPIAuthentication(netHTTPHandler)
+	netHTTPHandler = s.useMetrics(netHTTPHandler)
+	netHTTPHandler = s.useTracing(netHTTPHandler)
+	netHTTPHandler = s.useMaxBodySize(netHTTPHandler)
 
 	var listeners []net.Listener
 	var profilingListeners []net.Listener
@@ -123,18 +131,17 @@ func (s *server) StartNonBlocking() error {
 	}
 
 	for _, listener := range listeners {
-		// customServer is created in a loop because each instance
+		// srv is created in a loop because each instance
 		// has a handle on the underlying listener.
-		customServer := &fasthttp.Server{
-			Handler:               handler,
-			MaxRequestBodySize:    s.config.MaxRequestBodySize * 1024 * 1024,
-			ReadBufferSize:        s.config.ReadBufferSize * 1024,
-			NoDefaultServerHeader: true,
+		srv := &http.Server{
+			Handler:           netHTTPHandler,
+			ReadHeaderTimeout: 10 * time.Second,
+			MaxHeaderBytes:    s.config.ReadBufferSizeKB << 10, // To bytes
 		}
-		s.servers = append(s.servers, customServer)
+		s.servers = append(s.servers, srv)
 
 		go func(l net.Listener) {
-			if err := customServer.Serve(l); err != nil {
+			if err := srv.Serve(l); err != http.ErrServerClosed {
 				log.Fatal(err)
 			}
 		}(listener)
@@ -142,18 +149,21 @@ func (s *server) StartNonBlocking() error {
 
 	if s.config.PublicPort != nil {
 		publicHandler := s.usePublicRouter()
-		publicHandler = s.useMetrics(publicHandler)
-		publicHandler = s.useTracing(publicHandler)
 
-		healthServer := &fasthttp.Server{
-			Handler:               publicHandler,
-			MaxRequestBodySize:    s.config.MaxRequestBodySize * 1024 * 1024,
-			NoDefaultServerHeader: true,
+		// Convert to net/http
+		netHTTPPublicHandler := s.useMetrics(nethttpadaptor.NewNetHTTPHandlerFunc(publicHandler))
+		netHTTPPublicHandler = s.useTracing(netHTTPPublicHandler)
+
+		healthServer := &http.Server{
+			Addr:              fmt.Sprintf(":%d", *s.config.PublicPort),
+			Handler:           netHTTPPublicHandler,
+			ReadHeaderTimeout: 10 * time.Second,
+			MaxHeaderBytes:    s.config.ReadBufferSizeKB << 10, // To bytes
 		}
 		s.servers = append(s.servers, healthServer)
 
 		go func() {
-			if err := healthServer.ListenAndServe(fmt.Sprintf(":%d", *s.config.PublicPort)); err != nil {
+			if err := healthServer.ListenAndServe(); err != http.ErrServerClosed {
 				log.Fatal(err)
 			}
 		}()
@@ -179,15 +189,16 @@ func (s *server) StartNonBlocking() error {
 		for _, listener := range profilingListeners {
 			// profServer is created in a loop because each instance
 			// has a handle on the underlying listener.
-			profServer := &fasthttp.Server{
-				Handler:               pprofhandler.PprofHandler,
-				MaxRequestBodySize:    s.config.MaxRequestBodySize * 1024 * 1024,
-				NoDefaultServerHeader: true,
+			profServer := &http.Server{
+				// pprof is automatically registered in the DefaultServerMux
+				Handler:           http.DefaultServeMux,
+				ReadHeaderTimeout: 10 * time.Second,
+				MaxHeaderBytes:    s.config.ReadBufferSizeKB << 10, // To bytes
 			}
 			s.servers = append(s.servers, profServer)
 
 			go func(l net.Listener) {
-				if err := profServer.Serve(l); err != nil {
+				if err := profServer.Serve(l); err != http.ErrServerClosed {
 					log.Fatal(err)
 				}
 			}(listener)
@@ -198,19 +209,24 @@ func (s *server) StartNonBlocking() error {
 }
 
 func (s *server) Close() error {
-	var merr error
+	var err error
 
 	for _, ln := range s.servers {
 		// This calls `Close()` on the underlying listener.
-		if err := ln.Shutdown(); err != nil {
-			merr = multierror.Append(merr, err)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		shutdownErr := ln.Shutdown(ctx)
+		// Error will be ErrServerClosed if everything went well
+		if errors.Is(shutdownErr, http.ErrServerClosed) {
+			shutdownErr = nil
 		}
+		err = errors.Join(err, shutdownErr)
+		cancel()
 	}
 
-	return merr
+	return err
 }
 
-func (s *server) useTracing(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+func (s *server) useTracing(next http.Handler) http.Handler {
 	if diagUtils.IsTracingEnabled(s.tracingSpec.SamplingRate) {
 		log.Infof("enabled tracing http middleware")
 		return diag.HTTPTraceMiddleware(next, s.config.AppID, s.tracingSpec)
@@ -218,13 +234,23 @@ func (s *server) useTracing(next fasthttp.RequestHandler) fasthttp.RequestHandle
 	return next
 }
 
-func (s *server) useMetrics(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+func (s *server) useMetrics(next http.Handler) http.Handler {
 	if s.metricSpec.GetEnabled() {
-		log.Infof("enabled metrics http middleware")
-
-		return diag.DefaultHTTPMonitoring.FastHTTPMiddleware(next)
+		log.Infof("Enabled metrics HTTP middleware")
+		return diag.DefaultHTTPMonitoring.HTTPMiddleware(next.ServeHTTP)
 	}
 
+	return next
+}
+
+func (s *server) useMaxBodySize(next http.Handler) http.Handler {
+	if s.config.MaxRequestBodySizeMB > 0 {
+		maxSize := int64(s.config.MaxRequestBodySizeMB) << 20 // To bytes
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r.Body = streams.LimitReadCloser(r.Body, maxSize)
+			next.ServeHTTP(w, r)
+		})
+	}
 	return next
 }
 
@@ -259,47 +285,39 @@ func (s *server) usePublicRouter() fasthttp.RequestHandler {
 	return router.Handler
 }
 
-func (s *server) useComponents(next fasthttp.RequestHandler) fasthttp.RequestHandler {
-	return fasthttpadaptor.NewFastHTTPHandler(
-		s.pipeline.Apply(
-			nethttpadaptor.NewNetHTTPHandlerFunc(next),
-		),
-	)
+func (s *server) useComponents(next http.Handler) http.Handler {
+	return s.pipeline.Apply(next)
 }
 
-func (s *server) useCors(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+func (s *server) useCors(next http.Handler) http.Handler {
+	// TODO: Technically, if "AllowedOrigins" is "*", all origins should be allowed
+	// This behavior is not quite correct as in this case we are disallowing all origins
 	if s.config.AllowedOrigins == corsDapr.DefaultAllowedOrigins {
 		return next
 	}
 
-	log.Infof("enabled cors http middleware")
-	origins := strings.Split(s.config.AllowedOrigins, ",")
-	corsHandler := s.getCorsHandler(origins)
-	return corsHandler.CorsMiddleware(next)
+	log.Infof("Enabled cors http middleware")
+	return cors.New(cors.Options{
+		AllowedOrigins: strings.Split(s.config.AllowedOrigins, ","),
+		Debug:          false,
+	}).Handler(next)
 }
 
-func useAPIAuthentication(next fasthttp.RequestHandler) fasthttp.RequestHandler {
+func useAPIAuthentication(next http.Handler) http.Handler {
 	token := auth.GetAPIToken()
 	if token == "" {
 		return next
 	}
-	log.Info("enabled token authentication on http server")
+	log.Info("Enabled token authentication on HTTP server")
 
-	return func(ctx *fasthttp.RequestCtx) {
-		v := ctx.Request.Header.Peek(authConsts.APITokenHeader)
-		if auth.ExcludedRoute(string(ctx.Request.URI().FullURI())) || string(v) == token {
-			ctx.Request.Header.Del(authConsts.APITokenHeader)
-			next(ctx)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		v := r.Header.Get(authConsts.APITokenHeader)
+		if auth.ExcludedRoute(r.URL.String()) || v == token {
+			r.Header.Del(authConsts.APITokenHeader)
+			next.ServeHTTP(w, r)
 		} else {
-			ctx.Error("invalid api token", http.StatusUnauthorized)
+			http.Error(w, "invalid api token", http.StatusUnauthorized)
 		}
-	}
-}
-
-func (s *server) getCorsHandler(allowedOrigins []string) *cors.CorsHandler {
-	return cors.NewCorsHandler(cors.Options{
-		AllowedOrigins: allowedOrigins,
-		Debug:          false,
 	})
 }
 

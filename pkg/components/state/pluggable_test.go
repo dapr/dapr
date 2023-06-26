@@ -483,7 +483,7 @@ func TestComponentCalls(t *testing.T) {
 		require.NoError(t, err)
 		defer cleanup()
 
-		err = stStore.BulkSet(context.Background(), []state.SetRequest{})
+		err = stStore.BulkSet(context.Background(), []state.SetRequest{}, state.BulkStoreOpts{})
 
 		assert.NotNil(t, err)
 		assert.Equal(t, int64(1), svc.bulkSetCalled.Load())
@@ -504,7 +504,7 @@ func TestComponentCalls(t *testing.T) {
 		require.NoError(t, err)
 		defer cleanup()
 
-		err = stStore.BulkSet(context.Background(), requests)
+		err = stStore.BulkSet(context.Background(), requests, state.BulkStoreOpts{})
 
 		assert.ErrorIs(t, ErrNilSetValue, err)
 		assert.Equal(t, int64(0), svc.bulkSetCalled.Load())
@@ -531,7 +531,7 @@ func TestComponentCalls(t *testing.T) {
 		require.NoError(t, err)
 		defer cleanup()
 
-		err = stStore.BulkSet(context.Background(), requests)
+		err = stStore.BulkSet(context.Background(), requests, state.BulkStoreOpts{})
 
 		require.NoError(t, err)
 		assert.Equal(t, int64(1), svc.bulkSetCalled.Load())
@@ -556,7 +556,7 @@ func TestComponentCalls(t *testing.T) {
 		require.NoError(t, err)
 		defer cleanup()
 
-		err = stStore.BulkDelete(context.Background(), requests)
+		err = stStore.BulkDelete(context.Background(), requests, state.BulkStoreOpts{})
 
 		require.NoError(t, err)
 		assert.Equal(t, int64(1), svc.bulkDeleteCalled.Load())
@@ -578,7 +578,7 @@ func TestComponentCalls(t *testing.T) {
 		require.NoError(t, err)
 		defer cleanup()
 
-		err = stStore.BulkDelete(context.Background(), requests)
+		err = stStore.BulkDelete(context.Background(), requests, state.BulkStoreOpts{})
 
 		assert.NotNil(t, err)
 		assert.Equal(t, int64(1), svc.bulkDeleteCalled.Load())
@@ -610,7 +610,7 @@ func TestComponentCalls(t *testing.T) {
 		require.NoError(t, err)
 		defer cleanup()
 
-		err = stStore.BulkDelete(context.Background(), requests)
+		err = stStore.BulkDelete(context.Background(), requests, state.BulkStoreOpts{})
 
 		assert.NotNil(t, err)
 		_, ok := err.(*state.BulkDeleteRowMismatchError)
