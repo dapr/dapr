@@ -99,7 +99,6 @@ func (p *grpcPubSub) BulkPublish(ctx context.Context, req *pubsub.BulkPublishReq
 		Entries:    entries,
 		Metadata:   req.Metadata,
 	})
-
 	if err != nil {
 		return pubsub.BulkPublishResponse{}, err
 	}
