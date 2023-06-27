@@ -62,6 +62,20 @@ spec:
       value: "daprv2"
     - name: tlsEnable
       value: "false"
+---
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: etcd-omitted
+spec:
+  type: state.etcd
+  metadata:
+    - name: endpoints
+      value: "localhost:12379"
+    - name: keyPrefixPath
+      value: "daprv2"
+    - name: tlsEnable
+      value: "false"
 `))
 	return []framework.Option{
 		framework.WithProcesses(v.proc),

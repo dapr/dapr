@@ -21,6 +21,7 @@ import (
 )
 
 func init() {
+	stateLoader.DefaultRegistry.RegisterComponent(etcd.NewEtcdStateStoreV1, "etcd")
 	stateLoader.DefaultRegistry.RegisterComponent(etcd.NewEtcdStateStoreV1, "etcd/v1")
 	stateLoader.DefaultRegistry.RegisterComponent(etcd.NewEtcdStateStoreV2, "etcd/v2")
 }
