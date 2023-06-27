@@ -20,12 +20,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	nethttp "net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/mitchellh/mapstructure"
 	"github.com/valyala/fasthttp"
 	"go.opentelemetry.io/otel/trace"
@@ -233,10 +235,10 @@ func (a *api) constructStateEndpoints() []Endpoint {
 			FastHTTPHandler: a.onPostStateTransaction,
 		},
 		{
-			Methods:         []string{nethttp.MethodPost, nethttp.MethodPut},
-			Route:           "state/{storeName}/query",
-			Version:         apiVersionV1alpha1,
-			FastHTTPHandler: a.onQueryStateHandler(),
+			Methods: []string{nethttp.MethodPost, nethttp.MethodPut},
+			Route:   "state/{storeName}/query",
+			Version: apiVersionV1alpha1,
+			Handler: a.onQueryStateHandler(),
 		},
 	}
 }
@@ -2199,16 +2201,21 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	}
 }
 
-func (a *api) onQueryStateHandler() fasthttp.RequestHandler {
-	return UniversalFastHTTPHandler(
+func (a *api) onQueryStateHandler() nethttp.HandlerFunc {
+	return UniversalHTTPHandler(
 		a.universal.QueryStateAlpha1,
 		UniversalHTTPHandlerOpts[*runtimev1pb.QueryStateRequest, *runtimev1pb.QueryStateResponse]{
 			// We pass the input body manually rather than parsing it using protojson
 			SkipInputBody: true,
-			InModifierFastHTTP: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.QueryStateRequest) (*runtimev1pb.QueryStateRequest, error) {
-				in.StoreName = reqCtx.UserValue(storeNameParam).(string)
-				in.Metadata = getMetadataFromFastHTTPRequest(reqCtx)
-				in.Query = string(reqCtx.PostBody())
+			InModifier: func(r *nethttp.Request, in *runtimev1pb.QueryStateRequest) (*runtimev1pb.QueryStateRequest, error) {
+				in.StoreName = chi.URLParam(r, storeNameParam)
+				in.Metadata = getMetadataFromRequest(r)
+
+				body, err := io.ReadAll(r.Body)
+				if err != nil {
+					return nil, messages.ErrBodyRead.WithFormat(err)
+				}
+				in.Query = string(body)
 				return in, nil
 			},
 			OutModifier: func(out *runtimev1pb.QueryStateResponse) (any, error) {
