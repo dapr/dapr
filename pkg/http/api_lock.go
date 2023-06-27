@@ -15,7 +15,9 @@ package http
 
 import (
 	"fmt"
+	"net/http"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/valyala/fasthttp"
 	"google.golang.org/protobuf/encoding/protojson"
 
@@ -39,12 +41,12 @@ func (a *api) constructDistributedLockEndpoints() []Endpoint {
 	}
 }
 
-func (a *api) onTryLockAlpha1() fasthttp.RequestHandler {
-	return UniversalFastHTTPHandler(
+func (a *api) onTryLockAlpha1() http.HandlerFunc {
+	return UniversalHTTPHandler(
 		a.universal.TryLockAlpha1,
-		UniversalFastHTTPHandlerOpts[*runtimev1pb.TryLockRequest, *runtimev1pb.TryLockResponse]{
-			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.TryLockRequest) (*runtimev1pb.TryLockRequest, error) {
-				in.StoreName = reqCtx.UserValue(storeNameParam).(string)
+		UniversalHTTPHandlerOpts[*runtimev1pb.TryLockRequest, *runtimev1pb.TryLockResponse]{
+			InModifier: func(r *http.Request, in *runtimev1pb.TryLockRequest) (*runtimev1pb.TryLockRequest, error) {
+				in.StoreName = chi.URLParam(r, storeNameParam)
 				return in, nil
 			},
 			// We need to emit unpopulated fields in the response
@@ -53,12 +55,12 @@ func (a *api) onTryLockAlpha1() fasthttp.RequestHandler {
 	)
 }
 
-func (a *api) onUnlockAlpha1() fasthttp.RequestHandler {
-	return UniversalFastHTTPHandler(
+func (a *api) onUnlockAlpha1() http.HandlerFunc {
+	return UniversalHTTPHandler(
 		a.universal.UnlockAlpha1,
-		UniversalFastHTTPHandlerOpts[*runtimev1pb.UnlockRequest, *runtimev1pb.UnlockResponse]{
-			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.UnlockRequest) (*runtimev1pb.UnlockRequest, error) {
-				in.StoreName = reqCtx.UserValue(storeNameParam).(string)
+		UniversalHTTPHandlerOpts[*runtimev1pb.UnlockRequest, *runtimev1pb.UnlockResponse]{
+			InModifier: func(r *http.Request, in *runtimev1pb.UnlockRequest) (*runtimev1pb.UnlockRequest, error) {
+				in.StoreName = chi.URLParam(r, storeNameParam)
 				return in, nil
 			},
 			OutModifier: func(out *runtimev1pb.UnlockResponse) (any, error) {
