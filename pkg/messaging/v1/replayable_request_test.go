@@ -16,7 +16,9 @@ package v1
 import (
 	"bytes"
 	"crypto/rand"
+	"errors"
 	"io"
+	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -31,7 +33,7 @@ func TestReplayableRequest(t *testing.T) {
 
 	newReplayable := func() *replayableRequest {
 		rr := &replayableRequest{}
-		rr.WithRawData(bytes.NewReader(message))
+		rr.WithRawData(newReaderCloser(bytes.NewReader(message)))
 		rr.SetReplay(true)
 		return rr
 	}
@@ -50,7 +52,7 @@ func TestReplayableRequest(t *testing.T) {
 			buf := make([]byte, 9)
 			n, err := io.ReadFull(rr.data, buf)
 			assert.Equal(t, 0, n)
-			assert.ErrorIs(t, err, io.EOF)
+			assert.Truef(t, errors.Is(err, io.EOF) || errors.Is(err, http.ErrBodyReadAfterClose), "unexpected error: %v", err)
 		})
 
 		t.Run("replay buffer is full", func(t *testing.T) {
@@ -82,7 +84,7 @@ func TestReplayableRequest(t *testing.T) {
 			buf := make([]byte, 9)
 			n, err := io.ReadFull(rr.data, buf)
 			assert.Equal(t, 0, n)
-			assert.ErrorIs(t, err, io.EOF)
+			assert.Truef(t, errors.Is(err, io.EOF) || errors.Is(err, http.ErrBodyReadAfterClose), "unexpected error: %v", err)
 		})
 
 		t.Run("replay buffer is full", func(t *testing.T) {
@@ -191,7 +193,7 @@ func TestReplayableRequest(t *testing.T) {
 			buf := make([]byte, partial)
 			n, err := io.ReadFull(rr.data, buf)
 			assert.Equal(t, 0, n)
-			assert.ErrorIs(t, err, io.EOF)
+			assert.Truef(t, errors.Is(err, io.EOF) || errors.Is(err, http.ErrBodyReadAfterClose), "unexpected error: %v", err)
 		})
 
 		t.Run("replay buffer is full", func(t *testing.T) {
@@ -214,4 +216,30 @@ func TestReplayableRequest(t *testing.T) {
 			assert.Nil(t, rr.replay)
 		})
 	})
+}
+
+// readerCloser is a io.Reader that can be closed. Once the stream is closed, reading from it returns an error.
+type readerCloser struct {
+	r      io.Reader
+	closed bool
+}
+
+func newReaderCloser(r io.Reader) *readerCloser {
+	return &readerCloser{
+		r:      r,
+		closed: false,
+	}
+}
+
+func (b *readerCloser) Read(p []byte) (n int, err error) {
+	if b.closed {
+		// Use http.ErrBodyReadAfterClose which is the error returned by http.Response.Body
+		return 0, http.ErrBodyReadAfterClose
+	}
+	return b.r.Read(p)
+}
+
+func (b *readerCloser) Close() error {
+	b.closed = true
+	return nil
 }

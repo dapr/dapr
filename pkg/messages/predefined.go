@@ -72,11 +72,6 @@ const (
 	ErrActorStateGet             = "error getting actor state: %s"
 	ErrActorStateTransactionSave = "error saving actor transaction state: %s"
 
-	// DirectMessaging.
-	ErrDirectInvoke         = "fail to invoke, id: %s, err: %s"
-	ErrDirectInvokeNoAppID  = "failed getting app id either from the URL path or the header dapr-app-id"
-	ErrDirectInvokeNotReady = "invoke API is not ready"
-
 	// Healthz.
 	ErrHealthNotReady         = "dapr is not ready"
 	ErrOutboundHealthNotReady = "dapr outbound is not ready"
@@ -97,6 +92,11 @@ var (
 	// HTTP.
 	ErrBodyRead         = APIError{"failed to read request body: %v", "ERR_BODY_READ", http.StatusBadRequest, grpcCodes.InvalidArgument}
 	ErrMalformedRequest = APIError{"failed deserializing HTTP body: %v", "ERR_MALFORMED_REQUEST", http.StatusBadRequest, grpcCodes.InvalidArgument}
+
+	// DirectMessaging.
+	ErrDirectInvoke         = APIError{"fail to invoke, id: %s, err: %v", "ERR_DIRECT_INVOKE", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrDirectInvokeNoAppID  = APIError{"failed getting app id either from the URL path or the header dapr-app-id", "ERR_DIRECT_INVOKE", http.StatusNotFound, grpcCodes.NotFound}
+	ErrDirectInvokeNotReady = APIError{"invoke API is not ready", "ERR_DIRECT_INVOKE", http.StatusInternalServerError, grpcCodes.Internal}
 
 	// State.
 	ErrStateStoresNotConfigured = APIError{"state store is not configured", "ERR_STATE_STORE_NOT_CONFIGURED", http.StatusInternalServerError, grpcCodes.FailedPrecondition}
