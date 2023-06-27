@@ -14,11 +14,11 @@ limitations under the License.
 package http
 
 import (
-	"bytes"
 	"io"
+	"net/http"
 	"strings"
 
-	"github.com/valyala/fasthttp"
+	"github.com/go-chi/chi/v5"
 
 	contribCrypto "github.com/dapr/components-contrib/crypto"
 	"github.com/dapr/dapr/pkg/messages"
@@ -39,16 +39,16 @@ func (a *api) constructCryptoEndpoints() []Endpoint {
 	// These APIs are not implemented as Universal because the gRPC APIs are stream-based.
 	return []Endpoint{
 		{
-			Methods:         []string{fasthttp.MethodPut},
-			Route:           "crypto/{name}/encrypt",
-			Version:         apiVersionV1alpha1,
-			FastHTTPHandler: a.onCryptoEncrypt,
+			Methods: []string{http.MethodPut},
+			Route:   "crypto/{name}/encrypt",
+			Version: apiVersionV1alpha1,
+			Handler: a.onCryptoEncrypt,
 		},
 		{
-			Methods:         []string{fasthttp.MethodPut},
-			Route:           "crypto/{name}/decrypt",
-			Version:         apiVersionV1alpha1,
-			FastHTTPHandler: a.onCryptoDecrypt,
+			Methods: []string{http.MethodPut},
+			Route:   "crypto/{name}/decrypt",
+			Version: apiVersionV1alpha1,
+			Handler: a.onCryptoDecrypt,
 		},
 	}
 }
@@ -60,29 +60,31 @@ func (a *api) constructCryptoEndpoints() []Endpoint {
 // - dapr-omit-decryption-key-name
 // - dapr-decryption-key-name
 // - dapr-data-encryption-cipher
-func (a *api) onCryptoEncrypt(reqCtx *fasthttp.RequestCtx) {
+func (a *api) onCryptoEncrypt(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	// Get the component
-	componentName := reqCtx.UserValue(nameParam).(string)
+	componentName := chi.URLParamFromCtx(ctx, nameParam)
 	component, err := a.cryptoGetComponent(componentName)
 	if err != nil {
 		// Error has been logged already
-		universalFastHTTPErrorResponder(reqCtx, err)
+		respondWithError(w, err)
 		return
 	}
 
 	// Get the required properties from the headers
-	keyName := string(reqCtx.Request.Header.Peek(cryptoHeaderKeyName))
+	keyName := r.Header.Get(cryptoHeaderKeyName)
 	if keyName == "" {
 		err = messages.ErrBadRequest.WithFormat("missing header '" + cryptoHeaderKeyName + "'")
 		log.Debug(err)
-		universalFastHTTPErrorResponder(reqCtx, err)
+		respondWithError(w, err)
 		return
 	}
-	algorithm := string(reqCtx.Request.Header.Peek(cryptoHeaderKeyWrapAlgorithm))
+	algorithm := r.Header.Get(cryptoHeaderKeyWrapAlgorithm)
 	if algorithm == "" {
 		err = messages.ErrBadRequest.WithFormat("missing header '" + cryptoHeaderKeyWrapAlgorithm + "'")
 		log.Debug(err)
-		universalFastHTTPErrorResponder(reqCtx, err)
+		respondWithError(w, err)
 		return
 	}
 
@@ -90,92 +92,82 @@ func (a *api) onCryptoEncrypt(reqCtx *fasthttp.RequestCtx) {
 	encOpts := encv1.EncryptOptions{
 		KeyName:   keyName,
 		Algorithm: encv1.KeyAlgorithm(strings.ToUpper(algorithm)),
-		WrapKeyFn: a.universal.CryptoGetWrapKeyFn(reqCtx, componentName, component),
+		WrapKeyFn: a.universal.CryptoGetWrapKeyFn(ctx, componentName, component),
 
 		// The next values are optional and could be empty
-		OmitKeyName:       utils.IsTruthy(string(reqCtx.Request.Header.Peek(cryptoHeaderOmitDecryptionKeyName))),
-		DecryptionKeyName: string(reqCtx.Request.Header.Peek(cryptoHeaderDecryptionKeyName)),
+		OmitKeyName:       utils.IsTruthy(r.Header.Get(cryptoHeaderOmitDecryptionKeyName)),
+		DecryptionKeyName: r.Header.Get(cryptoHeaderDecryptionKeyName),
 	}
 
 	// Set the cipher if present
-	cipher := string(reqCtx.Request.Header.Peek(cryptoHeaderDataEncryptionCipher))
+	cipher := r.Header.Get(cryptoHeaderDataEncryptionCipher)
 	if cipher != "" {
 		encOpts.Cipher = ptr.Of(encv1.Cipher(strings.ToUpper(cipher)))
 	}
 
-	// Get the body of the request
-	// The body is released when this handler returns, so in order to be safe we need to create a copy of the data (yes, this means doubling the memory usage)
-	// TODO: When we have proper support for streaming, read the data as a stream
-	bodyOrig := reqCtx.Request.Body()
-	body := make([]byte, len(bodyOrig))
-	copy(body, bodyOrig)
-
 	// Perform the encryption
 	// Errors returned here, synchronously, are initialization errors, for example due to failed wrapping
-	enc, err := encv1.Encrypt(bytes.NewReader(body), encOpts)
+	enc, err := encv1.Encrypt(r.Body, encOpts)
 	if err != nil {
 		err = messages.ErrCryptoOperation.WithFormat(err)
 		log.Debug(err)
-		universalFastHTTPErrorResponder(reqCtx, err)
+		respondWithError(w, err)
 		return
 	}
 
 	// Respond with the encrypted data
-	resBody, err := io.ReadAll(enc)
+	w.Header().Set("content-type", "application/octet-stream")
+	w.WriteHeader(http.StatusOK)
+	_, err = io.Copy(w, enc)
 	if err != nil {
-		universalFastHTTPErrorResponder(reqCtx, err)
-		return
+		err = messages.ErrCryptoOperation.WithFormat(err)
+		log.Debug(err)
+		respondWithError(w, err)
 	}
-	reqCtx.Response.Header.SetContentType("application/octet-stream")
-	fasthttpRespond(reqCtx, fasthttpResponseWith(fasthttp.StatusOK, resBody))
 }
 
 // Handler for crypto/<component-name>/decrypt
 // Headers:
 // - dapr-key-name
-func (a *api) onCryptoDecrypt(reqCtx *fasthttp.RequestCtx) {
+func (a *api) onCryptoDecrypt(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
 	// Get the component
-	componentName := reqCtx.UserValue(nameParam).(string)
+	componentName := chi.URLParamFromCtx(ctx, nameParam)
 	component, err := a.cryptoGetComponent(componentName)
 	if err != nil {
 		// Error has been logged already
-		universalFastHTTPErrorResponder(reqCtx, err)
+		respondWithError(w, err)
 		return
 	}
 
 	// Build the options
 	decOpts := encv1.DecryptOptions{
-		UnwrapKeyFn: a.universal.CryptoGetUnwrapKeyFn(reqCtx, componentName, component),
+		UnwrapKeyFn: a.universal.CryptoGetUnwrapKeyFn(ctx, componentName, component),
 
 		// The next values are optional and could be empty
-		KeyName: string(reqCtx.Request.Header.Peek(cryptoHeaderKeyName)),
+		KeyName: r.Header.Get(cryptoHeaderKeyName),
 	}
-
-	// Get the body of the request
-	// The body is released when this handler returns, so in order to be safe we need to create a copy of the data (yes, this means doubling the memory usage)
-	// TODO: When we have proper support for streaming, read the data as a stream
-	bodyOrig := reqCtx.Request.Body()
-	body := make([]byte, len(bodyOrig))
-	copy(body, bodyOrig)
 
 	// Perform the encryption
 	// Errors returned here, synchronously, are initialization errors, for example due to failed unwrapping
-	dec, err := encv1.Decrypt(bytes.NewReader(body), decOpts)
+	dec, err := encv1.Decrypt(r.Body, decOpts)
 	if err != nil {
 		err = messages.ErrCryptoOperation.WithFormat(err)
 		log.Debug(err)
-		universalFastHTTPErrorResponder(reqCtx, err)
+		respondWithError(w, err)
 		return
 	}
 
 	// Respond with the decrypted data
-	resBody, err := io.ReadAll(dec)
+	w.Header().Set("content-type", "application/octet-stream")
+	w.WriteHeader(http.StatusOK)
+	_, err = io.Copy(w, dec)
 	if err != nil {
-		universalFastHTTPErrorResponder(reqCtx, err)
-		return
+		err = messages.ErrCryptoOperation.WithFormat(err)
+		log.Debug(err)
+		respondWithError(w, err)
 	}
-	reqCtx.Response.Header.SetContentType("application/octet-stream")
-	fasthttpRespond(reqCtx, fasthttpResponseWith(fasthttp.StatusOK, resBody))
 }
 
 func (a *api) cryptoGetComponent(componentName string) (contribCrypto.SubtleCrypto, error) {
