@@ -101,6 +101,7 @@ func New(opts Options) *Processor {
 				compStore: opts.ComponentStore,
 				meta:      opts.Meta,
 			},
+			components.CategoryMiddleware: &middleware{},
 		},
 	}
 }
