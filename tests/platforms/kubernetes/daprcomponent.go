@@ -15,6 +15,7 @@ package kubernetes
 
 import (
 	"context"
+	"log"
 
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -76,11 +77,12 @@ func (do *DaprComponent) toComponentSpec() *v1alpha1.Component {
 }
 
 func (do *DaprComponent) addComponent() (*v1alpha1.Component, error) {
-	return do.kubeClient.DaprComponents(DaprTestNamespace).Create(do.toComponentSpec())
+	log.Printf("Adding component %q ...", do.Name())
+	return do.kubeClient.DaprComponents(do.namespace).Create(do.toComponentSpec())
 }
 
 func (do *DaprComponent) deleteComponent() error {
-	client := do.kubeClient.DaprComponents(DaprTestNamespace)
+	client := do.kubeClient.DaprComponents(do.namespace)
 	return client.Delete(do.component.Name, &metav1.DeleteOptions{})
 }
 
@@ -89,6 +91,9 @@ func (do *DaprComponent) Name() string {
 }
 
 func (do *DaprComponent) Init(ctx context.Context) error {
+	// Ignore errors here as the component may not exist
+	_ = do.Dispose(true)
+
 	_, err := do.addComponent()
 	return err
 }
