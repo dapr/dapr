@@ -19,12 +19,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/valyala/fasthttp"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -148,13 +148,13 @@ func TestMetadata(t *testing.T) {
 	})
 
 	t.Run("HTTP headers", func(t *testing.T) {
-		req := fasthttp.AcquireRequest()
-		req.Header.Set("Header1", "Value1")
-		req.Header.Set("Header2", "Value2")
-		req.Header.Set("Header3", "Value3")
+		headers := http.Header{}
+		headers.Set("Header1", "Value1")
+		headers.Set("Header2", "Value2")
+		headers.Set("Header3", "Value3")
 
 		re := NewInvokeMethodRequest("test_method").
-			WithFastHTTPHeaders(&req.Header)
+			WithHTTPHeaders(headers)
 		defer re.Close()
 		mheader := re.Metadata()
 
@@ -404,9 +404,9 @@ func TestAddHeaders(t *testing.T) {
 	t.Run("single value", func(t *testing.T) {
 		req := NewInvokeMethodRequest("test_method")
 		defer req.Close()
-		header := fasthttp.RequestHeader{}
+		header := http.Header{}
 		header.Add("Dapr-Reentrant-Id", "test")
-		req.AddHeaders(&header)
+		req.AddMetadata(header)
 
 		require.NotNil(t, req.r.Metadata)
 		require.NotNil(t, req.r.Metadata["Dapr-Reentrant-Id"])
@@ -417,10 +417,10 @@ func TestAddHeaders(t *testing.T) {
 	t.Run("multiple values", func(t *testing.T) {
 		req := NewInvokeMethodRequest("test_method")
 		defer req.Close()
-		header := fasthttp.RequestHeader{}
+		header := http.Header{}
 		header.Add("Dapr-Reentrant-Id", "test")
 		header.Add("Dapr-Reentrant-Id", "test2")
-		req.AddHeaders(&header)
+		req.AddMetadata(header)
 
 		require.NotNil(t, req.r.Metadata)
 		require.NotNil(t, req.r.Metadata["Dapr-Reentrant-Id"])
@@ -429,13 +429,13 @@ func TestAddHeaders(t *testing.T) {
 	})
 
 	t.Run("does not overwrite", func(t *testing.T) {
-		header := fasthttp.RequestHeader{}
+		header := http.Header{}
 		header.Add("Dapr-Reentrant-Id", "test")
-		req := NewInvokeMethodRequest("test_method").WithFastHTTPHeaders(&header)
+		req := NewInvokeMethodRequest("test_method").WithHTTPHeaders(header)
 		defer req.Close()
 
 		header.Set("Dapr-Reentrant-Id", "test2")
-		req.AddHeaders(&header)
+		req.AddMetadata(header)
 
 		require.NotNil(t, req.r.Metadata["Dapr-Reentrant-Id"])
 		require.NotEmpty(t, req.r.Metadata["Dapr-Reentrant-Id"].Values)

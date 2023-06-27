@@ -14,9 +14,9 @@ limitations under the License.
 package http
 
 import (
-	nethttp "net/http"
+	"net/http"
 
-	"github.com/valyala/fasthttp"
+	"github.com/go-chi/chi/v5"
 
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
@@ -24,13 +24,13 @@ import (
 func (a *api) constructSecretEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{nethttp.MethodGet},
+			Methods: []string{http.MethodGet},
 			Route:   "secrets/{secretStoreName}/bulk",
 			Version: apiVersionV1,
 			Handler: a.onBulkGetSecretHandler(),
 		},
 		{
-			Methods: []string{nethttp.MethodGet},
+			Methods: []string{http.MethodGet},
 			Route:   "secrets/{secretStoreName}/{key}",
 			Version: apiVersionV1,
 			Handler: a.onGetSecretHandler(),
@@ -38,14 +38,14 @@ func (a *api) constructSecretEndpoints() []Endpoint {
 	}
 }
 
-func (a *api) onGetSecretHandler() fasthttp.RequestHandler {
-	return UniversalFastHTTPHandler(
+func (a *api) onGetSecretHandler() http.HandlerFunc {
+	return UniversalHTTPHandler(
 		a.universal.GetSecret,
-		UniversalFastHTTPHandlerOpts[*runtimev1pb.GetSecretRequest, *runtimev1pb.GetSecretResponse]{
-			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretRequest, error) {
-				in.StoreName = reqCtx.UserValue(secretStoreNameParam).(string)
-				in.Key = reqCtx.UserValue(secretNameParam).(string)
-				in.Metadata = getMetadataFromRequest(reqCtx)
+		UniversalHTTPHandlerOpts[*runtimev1pb.GetSecretRequest, *runtimev1pb.GetSecretResponse]{
+			InModifier: func(r *http.Request, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretRequest, error) {
+				in.StoreName = chi.URLParam(r, secretStoreNameParam)
+				in.Key = chi.URLParam(r, secretNameParam)
+				in.Metadata = getMetadataFromRequest(r)
 				return in, nil
 			},
 			OutModifier: func(out *runtimev1pb.GetSecretResponse) (any, error) {
@@ -61,13 +61,13 @@ func (a *api) onGetSecretHandler() fasthttp.RequestHandler {
 	)
 }
 
-func (a *api) onBulkGetSecretHandler() fasthttp.RequestHandler {
-	return UniversalFastHTTPHandler(
+func (a *api) onBulkGetSecretHandler() http.HandlerFunc {
+	return UniversalHTTPHandler(
 		a.universal.GetBulkSecret,
-		UniversalFastHTTPHandlerOpts[*runtimev1pb.GetBulkSecretRequest, *runtimev1pb.GetBulkSecretResponse]{
-			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.GetBulkSecretRequest) (*runtimev1pb.GetBulkSecretRequest, error) {
-				in.StoreName = reqCtx.UserValue(secretStoreNameParam).(string)
-				in.Metadata = getMetadataFromRequest(reqCtx)
+		UniversalHTTPHandlerOpts[*runtimev1pb.GetBulkSecretRequest, *runtimev1pb.GetBulkSecretResponse]{
+			InModifier: func(r *http.Request, in *runtimev1pb.GetBulkSecretRequest) (*runtimev1pb.GetBulkSecretRequest, error) {
+				in.StoreName = chi.URLParam(r, secretStoreNameParam)
+				in.Metadata = getMetadataFromRequest(r)
 				return in, nil
 			},
 			OutModifier: func(out *runtimev1pb.GetBulkSecretResponse) (any, error) {

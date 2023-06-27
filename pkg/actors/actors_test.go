@@ -33,7 +33,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	kclock "k8s.io/utils/clock"
@@ -163,9 +162,9 @@ func (r *reentrantAppChannel) InvokeMethod(ctx context.Context, req *invokev1.In
 		r.nextCall = r.nextCall[1:]
 
 		if val, ok := req.Metadata()["Dapr-Reentrancy-Id"]; ok {
-			header := fasthttp.RequestHeader{}
-			header.Add("Dapr-Reentrancy-Id", val.Values[0])
-			nextReq.AddHeaders(&header)
+			nextReq.AddMetadata(map[string][]string{
+				"Dapr-Reentrancy-Id": val.Values,
+			})
 		}
 		resp, err := r.a.callLocalActor(context.Background(), nextReq)
 		if err != nil {
