@@ -4047,6 +4047,7 @@ type mockSubscribePubSub struct {
 	bulkPubCount    map[string]int
 	isBulkSubscribe bool
 	bulkReponse     pubsub.BulkSubscribeResponse
+	features        []pubsub.Feature
 }
 
 // type BulkSubscribeResponse struct {
@@ -4124,7 +4125,7 @@ func (m *mockSubscribePubSub) Close() error {
 }
 
 func (m *mockSubscribePubSub) Features() []pubsub.Feature {
-	return nil
+	return m.features
 }
 
 func (m *mockSubscribePubSub) BulkSubscribe(ctx context.Context, req pubsub.SubscribeRequest, handler pubsub.BulkHandler) error {

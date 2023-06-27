@@ -30,6 +30,8 @@ service PubSub {
   // Publish publishes a new message for the given topic.
   rpc Publish(PublishRequest) returns (PublishResponse) {}
 
+  rpc BulkPublish(BulkPublishRequest) returns (BulkPublishResponse) {}
+
   // Establishes a stream with the server (PubSub component), which sends
   // messages down to the client (daprd). The client streams acknowledgements
   // back to the server. The server will close the stream and return the status
@@ -80,6 +82,29 @@ message PublishRequest {
   map<string, string> metadata = 4;
   // The data content type.
   string content_type = 5;
+}
+
+message BulkPublishRequest {
+  repeated  BulkMessageEntry  entries = 1;
+  string pubsub_name = 2;
+  string topic = 3;
+  map<string, string> metadata = 4;
+}
+
+message BulkMessageEntry {
+  string   entry_id = 1;
+  bytes    event = 2;
+  string   content_type = 3;
+  map<string, string> metadata = 4;
+}
+
+message BulkPublishResponse {
+  repeated BulkPublishResponseFailedEntry failed_entries = 1;
+}
+
+message BulkPublishResponseFailedEntry {
+  string entry_id = 1;
+  string error = 2;
 }
 
 // reserved for future-proof extensibility
