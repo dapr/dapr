@@ -116,6 +116,11 @@ func (a *UniversalAPI) GetMetadata(ctx context.Context, in *emptypb.Empty) (*run
 
 // SetMetadata Sets value in extended metadata of the sidecar.
 func (a *UniversalAPI) SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadataRequest) (*emptypb.Empty, error) {
+	// Nop if the key is empty
+	if in.Key == "" {
+		return &emptypb.Empty{}, nil
+	}
+
 	a.extendedMetadataLock.Lock()
 	if a.ExtendedMetadata == nil {
 		a.ExtendedMetadata = make(map[string]string)

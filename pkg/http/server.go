@@ -31,9 +31,9 @@ import (
 	//nolint:gosec
 	_ "net/http/pprof"
 
-	routing "github.com/fasthttp/router"
+	chi "github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
-	"github.com/valyala/fasthttp"
 
 	"github.com/dapr/dapr/pkg/config"
 	corsDapr "github.com/dapr/dapr/pkg/cors"
@@ -41,9 +41,6 @@ import (
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
-	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
-	"github.com/dapr/dapr/utils/nethttpadaptor"
-	"github.com/dapr/dapr/utils/streams"
 	"github.com/dapr/kit/logger"
 )
 
@@ -94,15 +91,17 @@ func NewServer(opts NewServerOpts) Server {
 
 // StartNonBlocking starts a new server in a goroutine.
 func (s *server) StartNonBlocking() error {
-	handler := s.useRouter()
+	// Create a chi router and add middlewares
+	r := s.getRouter()
+	s.useMaxBodySize(r)
+	s.useTracing(r)
+	s.useMetrics(r)
+	s.useAPIAuthentication(r)
+	s.useCors(r)
+	s.useComponents(r)
 
-	// These middlewares use net/http handlers
-	netHTTPHandler := s.useComponents(nethttpadaptor.NewNetHTTPHandlerFunc(handler))
-	netHTTPHandler = s.useCors(netHTTPHandler)
-	netHTTPHandler = useAPIAuthentication(netHTTPHandler)
-	netHTTPHandler = s.useMetrics(netHTTPHandler)
-	netHTTPHandler = s.useTracing(netHTTPHandler)
-	netHTTPHandler = s.useMaxBodySize(netHTTPHandler)
+	// Add all routes
+	s.setupRoutes(r, s.api.APIEndpoints())
 
 	var listeners []net.Listener
 	var profilingListeners []net.Listener
@@ -134,7 +133,7 @@ func (s *server) StartNonBlocking() error {
 		// srv is created in a loop because each instance
 		// has a handle on the underlying listener.
 		srv := &http.Server{
-			Handler:           netHTTPHandler,
+			Handler:           r,
 			ReadHeaderTimeout: 10 * time.Second,
 			MaxHeaderBytes:    s.config.ReadBufferSizeKB << 10, // To bytes
 		}
@@ -147,16 +146,17 @@ func (s *server) StartNonBlocking() error {
 		}(listener)
 	}
 
+	// Start the public HTTP server
 	if s.config.PublicPort != nil {
-		publicHandler := s.usePublicRouter()
+		publicR := s.getRouter()
+		s.useTracing(publicR)
+		s.useMetrics(publicR)
 
-		// Convert to net/http
-		netHTTPPublicHandler := s.useMetrics(nethttpadaptor.NewNetHTTPHandlerFunc(publicHandler))
-		netHTTPPublicHandler = s.useTracing(netHTTPPublicHandler)
+		s.setupRoutes(publicR, s.api.PublicEndpoints())
 
 		healthServer := &http.Server{
 			Addr:              fmt.Sprintf(":%d", *s.config.PublicPort),
-			Handler:           netHTTPPublicHandler,
+			Handler:           publicR,
 			ReadHeaderTimeout: 10 * time.Second,
 			MaxHeaderBytes:    s.config.ReadBufferSizeKB << 10, // To bytes
 		}
@@ -226,133 +226,125 @@ func (s *server) Close() error {
 	return err
 }
 
-func (s *server) useTracing(next http.Handler) http.Handler {
-	if diagUtils.IsTracingEnabled(s.tracingSpec.SamplingRate) {
-		log.Infof("enabled tracing http middleware")
+func (s *server) getRouter() *chi.Mux {
+	r := chi.NewRouter()
+	r.Use(middleware.CleanPath, StripSlashesMiddleware)
+	return r
+}
+
+func (s *server) useTracing(r chi.Router) {
+	if !diagUtils.IsTracingEnabled(s.tracingSpec.SamplingRate) {
+		return
+	}
+
+	log.Info("Enabled tracing HTTP middleware")
+	r.Use(func(next http.Handler) http.Handler {
 		return diag.HTTPTraceMiddleware(next, s.config.AppID, s.tracingSpec)
-	}
-	return next
+	})
 }
 
-func (s *server) useMetrics(next http.Handler) http.Handler {
-	if s.metricSpec.Enabled {
-		log.Infof("enabled metrics http middleware")
-
-		return diag.DefaultHTTPMonitoring.HTTPMiddleware(next.ServeHTTP)
+func (s *server) useMetrics(r chi.Router) {
+	if !s.metricSpec.Enabled {
+		return
 	}
 
-	return next
+	log.Info("Enabled metrics HTTP middleware")
+	r.Use(diag.DefaultHTTPMonitoring.HTTPMiddleware)
 }
 
-func (s *server) useMaxBodySize(next http.Handler) http.Handler {
-	if s.config.MaxRequestBodySizeMB > 0 {
-		maxSize := int64(s.config.MaxRequestBodySizeMB) << 20 // To bytes
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			r.Body = streams.LimitReadCloser(r.Body, maxSize)
-			next.ServeHTTP(w, r)
-		})
+func (s *server) useMaxBodySize(r chi.Router) {
+	if s.config.MaxRequestBodySizeMB <= 0 {
+		return
 	}
-	return next
+
+	maxSize := int64(s.config.MaxRequestBodySizeMB) << 20 // To bytes
+	log.Infof("Enabled max body size HTTP middleware with size %d MB", maxSize)
+
+	r.Use(MaxBodySizeMiddleware(maxSize))
 }
 
-func (s *server) apiLoggingInfo(route string, next fasthttp.RequestHandler) fasthttp.RequestHandler {
-	return func(ctx *fasthttp.RequestCtx) {
+func (s *server) apiLoggingInfo(route string, next http.Handler) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fields := make(map[string]any, 2)
 		if s.config.APILoggingObfuscateURLs {
-			fields["method"] = string(ctx.Method()) + " " + route
+			fields["method"] = r.Method + " " + route
 		} else {
-			fields["method"] = string(ctx.Method()) + " " + string(ctx.Path())
+			fields["method"] = r.Method + " " + r.URL.Path
 		}
-		if userAgent := string(ctx.Request.Header.Peek("User-Agent")); userAgent != "" {
+		if userAgent := r.Header.Get("User-Agent"); userAgent != "" {
 			fields["useragent"] = userAgent
 		}
 
 		infoLog.WithFields(fields).Info("HTTP API Called")
-		next(ctx)
-	}
-}
-
-func (s *server) useRouter() fasthttp.RequestHandler {
-	endpoints := s.api.APIEndpoints()
-	router := s.getRouter(endpoints)
-
-	return router.Handler
-}
-
-func (s *server) usePublicRouter() fasthttp.RequestHandler {
-	endpoints := s.api.PublicEndpoints()
-	router := s.getRouter(endpoints)
-
-	return router.Handler
-}
-
-func (s *server) useComponents(next http.Handler) http.Handler {
-	return s.pipeline.Apply(next)
-}
-
-func (s *server) useCors(next http.Handler) http.Handler {
-	// TODO: Technically, if "AllowedOrigins" is "*", all origins should be allowed
-	// This behavior is not quite correct as in this case we are disallowing all origins
-	if s.config.AllowedOrigins == corsDapr.DefaultAllowedOrigins {
-		return next
-	}
-
-	log.Infof("Enabled cors http middleware")
-	return cors.New(cors.Options{
-		AllowedOrigins: strings.Split(s.config.AllowedOrigins, ","),
-		Debug:          false,
-	}).Handler(next)
-}
-
-func useAPIAuthentication(next http.Handler) http.Handler {
-	token := auth.GetAPIToken()
-	if token == "" {
-		return next
-	}
-	log.Info("Enabled token authentication on HTTP server")
-
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		v := r.Header.Get(authConsts.APITokenHeader)
-		if auth.ExcludedRoute(r.URL.String()) || v == token {
-			r.Header.Del(authConsts.APITokenHeader)
-			next.ServeHTTP(w, r)
-		} else {
-			http.Error(w, "invalid api token", http.StatusUnauthorized)
-		}
+		next.ServeHTTP(w, r)
 	})
 }
 
-func (s *server) unescapeRequestParametersHandler(next fasthttp.RequestHandler) fasthttp.RequestHandler {
-	return func(ctx *fasthttp.RequestCtx) {
-		parseError := false
-		unescapeRequestParameters := func(parameter []byte, valI interface{}) {
-			value, ok := valI.(string)
-			if !ok {
-				return
-			}
-
-			if !parseError {
-				parameterUnescapedValue, err := url.QueryUnescape(value)
-				if err == nil {
-					ctx.SetUserValueBytes(parameter, parameterUnescapedValue)
-				} else {
-					parseError = true
-					errorMessage := fmt.Sprintf("Failed to unescape request parameter %s with value %s. Error: %s", parameter, value, err.Error())
-					log.Debug(errorMessage)
-					ctx.Error(errorMessage, fasthttp.StatusBadRequest)
-				}
-			}
-		}
-		ctx.VisitUserValues(unescapeRequestParameters)
-
-		if !parseError {
-			next(ctx)
-		}
+func (s *server) useComponents(r chi.Router) {
+	if len(s.pipeline.Handlers) == 0 {
+		return
 	}
+
+	r.Use(s.pipeline.Handlers...)
 }
 
-func (s *server) getRouter(endpoints []Endpoint) *routing.Router {
-	router := routing.New()
+func (s *server) useCors(r chi.Router) {
+	// TODO: Technically, if "AllowedOrigins" is "*", all origins should be allowed
+	// This behavior is not quite correct as in this case we are disallowing all origins
+	if s.config.AllowedOrigins == corsDapr.DefaultAllowedOrigins {
+		return
+	}
+
+	log.Info("Enabled CORS HTTP middleware")
+	r.Use(cors.New(cors.Options{
+		AllowedOrigins: strings.Split(s.config.AllowedOrigins, ","),
+		Debug:          false,
+	}).Handler)
+}
+
+func (s *server) useAPIAuthentication(r chi.Router) {
+	token := auth.GetAPIToken()
+	if token == "" {
+		return
+	}
+
+	log.Info("Enabled token authentication on HTTP server")
+	r.Use(APITokenAuthMiddleware(token))
+}
+
+func (s *server) unescapeRequestParametersHandler(keepWildcardUnescaped bool, next http.Handler) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		chiCtx := chi.RouteContext(r.Context())
+		if chiCtx != nil {
+			err := s.unespaceRequestParametersInContext(chiCtx, keepWildcardUnescaped)
+			if err != nil {
+				errMsg := err.Error()
+				log.Debug(errMsg)
+				http.Error(w, errMsg, http.StatusBadRequest)
+				return
+			}
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *server) unespaceRequestParametersInContext(chiCtx *chi.Context, keepWildcardUnescaped bool) (err error) {
+	for i, key := range chiCtx.URLParams.Keys {
+		if keepWildcardUnescaped && key == "*" {
+			continue
+		}
+
+		chiCtx.URLParams.Values[i], err = url.QueryUnescape(chiCtx.URLParams.Values[i])
+		if err != nil {
+			return fmt.Errorf("failed to unescape request parameter %q. Error: %w", key, err)
+		}
+	}
+
+	return nil
+}
+
+func (s *server) setupRoutes(r chi.Router, endpoints []Endpoint) {
 	parameterFinder, _ := regexp.Compile("/{.*}")
 
 	// Build the API allowlist and denylist
@@ -364,30 +356,52 @@ func (s *server) getRouter(endpoints []Endpoint) *routing.Router {
 			continue
 		}
 
-		s.handle(e, parameterFinder, "/"+e.Version+"/"+e.Route, router)
+		path := "/" + e.Version + "/" + e.Route
+		s.handle(
+			e, path, r,
+			parameterFinder.MatchString(path),
+			s.config.EnableAPILogging && (!e.IsHealthCheck || s.config.APILogHealthChecks),
+		)
+	}
+}
 
-		if e.Alias != "" {
-			s.handle(e, parameterFinder, "/"+e.Alias, router)
+func (s *server) handle(e Endpoint, path string, r chi.Router, unescapeParameters bool, apiLogging bool) {
+	handler := e.GetHandler()
+
+	if unescapeParameters {
+		handler = s.unescapeRequestParametersHandler(e.KeepWildcardUnescaped, handler)
+	}
+
+	if apiLogging {
+		handler = s.apiLoggingInfo(path, handler)
+	}
+
+	// If no method is defined, match any method
+	if len(e.Methods) == 0 {
+		r.Handle(path, handler)
+	} else {
+		for _, m := range e.Methods {
+			r.Method(m, path, handler)
 		}
 	}
 
-	return router
-}
+	// Set as fallback method
+	if e.IsFallback {
+		fallbackHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Populate the wildcard path with the full path
+			chiCtx := chi.RouteContext(r.Context())
+			if chiCtx != nil {
+				// r.URL.RawPath could be empty
+				path := r.URL.RawPath
+				if path == "" {
+					path = r.URL.Path
+				}
+				chiCtx.URLParams.Add("*", strings.TrimPrefix(path, "/"))
+			}
 
-func (s *server) handle(e Endpoint, parameterFinder *regexp.Regexp, path string, router *routing.Router) {
-	pathIncludesParameters := parameterFinder.MatchString(path)
-
-	for _, m := range e.Methods {
-		handler := e.Handler
-
-		if pathIncludesParameters && !e.KeepParamUnescape {
-			handler = s.unescapeRequestParametersHandler(handler)
-		}
-
-		if s.config.EnableAPILogging && (!e.IsHealthCheck || s.config.APILogHealthChecks) {
-			handler = s.apiLoggingInfo(path, handler)
-		}
-
-		router.Handle(m, path, handler)
+			handler(w, r)
+		})
+		r.NotFound(fallbackHandler)
+		r.MethodNotAllowed(fallbackHandler)
 	}
 }

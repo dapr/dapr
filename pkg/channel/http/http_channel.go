@@ -99,10 +99,13 @@ func CreateHTTPChannel(config ChannelConfiguration) (channel.AppChannel, error) 
 
 // GetAppConfig gets application config from user application
 // GET http://localhost:<app_port>/dapr/config
-func (h *Channel) GetAppConfig() (*config.ApplicationConfig, error) {
+func (h *Channel) GetAppConfig(appID string) (*config.ApplicationConfig, error) {
 	req := invokev1.NewInvokeMethodRequest(appConfigEndpoint).
 		WithHTTPExtension(http.MethodGet, "").
-		WithContentType(invokev1.JSONContentType)
+		WithContentType(invokev1.JSONContentType).
+		WithMetadata(map[string][]string{
+			"dapr-app-id": {appID},
+		})
 	defer req.Close()
 
 	resp, err := h.InvokeMethod(context.TODO(), req, "")

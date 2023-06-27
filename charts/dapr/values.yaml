@@ -26,6 +26,7 @@ global:
     enabled: true
   daprControlPlaneOs: linux
   labels: {}
+  seccompProfile: ""
   k8sLabels:
     app.kubernetes.io/name: "{{ .Release.Name }}"
     app.kubernetes.io/version: "{{ .Values.global.tag }}"
