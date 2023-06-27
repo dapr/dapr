@@ -14,19 +14,20 @@ limitations under the License.
 package http
 
 import (
-	"github.com/valyala/fasthttp"
+	"net/http"
+
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 func (a *api) constructShutdownEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{fasthttp.MethodPost},
+			Methods: []string{http.MethodPost},
 			Route:   "shutdown",
 			Version: apiVersionV1,
-			Handler: UniversalFastHTTPHandler(
+			Handler: UniversalHTTPHandler(
 				a.universal.Shutdown,
-				UniversalFastHTTPHandlerOpts[*emptypb.Empty, *emptypb.Empty]{
+				UniversalHTTPHandlerOpts[*emptypb.Empty, *emptypb.Empty]{
 					OutModifier: func(out *emptypb.Empty) (any, error) {
 						// Nullify the response so status code is 204
 						return nil, nil
