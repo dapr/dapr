@@ -358,11 +358,6 @@ func buildDaprComponentObject(componentName string, typeName string, scopes []st
 	}
 }
 
-// buildNamespaceObject creates the Kubernetes Namespace object.
-func buildNamespaceObject(namespace string) *apiv1.Namespace {
-	return &apiv1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
-}
-
 func int32Ptr(i int32) *int32 {
 	return &i
 }
