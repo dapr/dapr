@@ -22,6 +22,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/suite"
 
+	_ "github.com/dapr/dapr/tests/integration/suite/components"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd"
 	_ "github.com/dapr/dapr/tests/integration/suite/healthz"
 	_ "github.com/dapr/dapr/tests/integration/suite/metadata"

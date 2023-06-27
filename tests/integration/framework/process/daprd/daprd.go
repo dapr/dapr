@@ -140,6 +140,18 @@ func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
 	}, time.Second*5, 100*time.Millisecond)
 }
 
+func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
+	dialer := &net.Dialer{Timeout: time.Second * 5}
+	assert.Eventually(t, func() bool {
+		conn, err := dialer.DialContext(ctx, "tcp", fmt.Sprintf("localhost:%d", d.publicPort))
+		if err != nil {
+			return false
+		}
+		require.NoError(t, conn.Close())
+		return true
+	}, time.Second*5, 100*time.Millisecond)
+}
+
 func (d *Daprd) AppID() string {
 	return d.appID
 }
