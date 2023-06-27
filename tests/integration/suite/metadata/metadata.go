@@ -91,7 +91,9 @@ func validateResponse(t *testing.T, appID string, appPort int, body string) {
 
 	appConnectionProperties, ok := bodyMap["appConnectionProperties"].(map[string]interface{})
 	require.True(t, ok)
-	require.Equal(t, appPort, int(appConnectionProperties["port"].(float64)))
+	port, ok := appConnectionProperties["port"].(float64)
+	require.True(t, ok)
+	require.Equal(t, appPort, int(port))
 	require.Equal(t, "http", appConnectionProperties["protocol"])
 	require.Equal(t, "127.0.0.1", appConnectionProperties["channelAddress"])
 }

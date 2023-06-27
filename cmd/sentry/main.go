@@ -15,13 +15,11 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"path/filepath"
 	"time"
 
-	"k8s.io/client-go/util/homedir"
-
+	"github.com/dapr/dapr/cmd/sentry/options"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/credentials"
@@ -38,52 +36,25 @@ import (
 
 var log = logger.NewLogger("dapr.sentry")
 
-//nolint:gosec
-const (
-	defaultCredentialsPath = "/var/run/dapr/credentials"
-	// defaultDaprSystemConfigName is the default resource object name for Dapr System Config.
-	defaultDaprSystemConfigName = "daprsystem"
-
-	defaultHealthzPort = 8080
-)
-
 func main() {
-	configName := flag.String("config", defaultDaprSystemConfigName, "Path to config file, or name of a configuration object")
-	credsPath := flag.String("issuer-credentials", defaultCredentialsPath, "Path to the credentials directory holding the issuer data")
-	flag.StringVar(&credentials.RootCertFilename, "issuer-ca-filename", credentials.RootCertFilename, "Certificate Authority certificate filename")
-	flag.StringVar(&credentials.IssuerCertFilename, "issuer-certificate-filename", credentials.IssuerCertFilename, "Issuer certificate filename")
-	flag.StringVar(&credentials.IssuerKeyFilename, "issuer-key-filename", credentials.IssuerKeyFilename, "Issuer private key filename")
-	trustDomain := flag.String("trust-domain", "localhost", "The CA trust domain")
-	tokenAudience := flag.String("token-audience", "", "Expected audience for tokens; multiple values can be separated by a comma")
-	port := flag.Int("port", config.DefaultPort, "The port for the sentry server to listen on")
-	healthzPort := flag.Int("healthz-port", defaultHealthzPort, "The port for the healthz server to listen on")
+	log.Infof("starting sentry certificate authority -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
 
-	loggerOptions := logger.DefaultOptions()
-	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
+	opts := options.New()
 
-	metricsExporter := metrics.NewExporter(metrics.DefaultMetricNamespace)
-	metricsExporter.Options().AttachCmdFlags(flag.StringVar, flag.BoolVar)
+	metricsExporter := metrics.NewExporterWithOptions(metrics.DefaultMetricNamespace, opts.Metrics)
 
-	var kubeconfig *string
-	if home := homedir.HomeDir(); home != "" {
-		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
-	} else {
-		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
-	}
-	flag.Parse()
 	if err := utils.SetEnvVariables(map[string]string{
-		utils.KubeConfigVar: *kubeconfig,
+		utils.KubeConfigVar: opts.Kubeconfig,
 	}); err != nil {
 		log.Fatalf("error set env failed:  %s", err.Error())
 	}
 
 	// Apply options to all loggers
-	if err := logger.ApplyOptionsToLoggers(&loggerOptions); err != nil {
+	if err := logger.ApplyOptionsToLoggers(&opts.Logger); err != nil {
 		log.Fatal(err)
 	}
 
-	log.Infof("starting sentry certificate authority -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
-	log.Infof("log level set to: %s", loggerOptions.OutputLevel)
+	log.Infof("log level set to: %s", opts.Logger.OutputLevel)
 
 	// Initialize dapr metrics exporter
 	if err := metricsExporter.Init(); err != nil {
@@ -94,11 +65,11 @@ func main() {
 		log.Fatal(err)
 	}
 
-	issuerCertPath := filepath.Join(*credsPath, credentials.IssuerCertFilename)
-	issuerKeyPath := filepath.Join(*credsPath, credentials.IssuerKeyFilename)
-	rootCertPath := filepath.Join(*credsPath, credentials.RootCertFilename)
+	issuerCertPath := filepath.Join(opts.IssuerCredentialsPath, credentials.IssuerCertFilename)
+	issuerKeyPath := filepath.Join(opts.IssuerCredentialsPath, credentials.IssuerKeyFilename)
+	rootCertPath := filepath.Join(opts.IssuerCredentialsPath, credentials.RootCertFilename)
 
-	config, err := config.FromConfigName(*configName)
+	config, err := config.FromConfigName(opts.ConfigName)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -106,10 +77,10 @@ func main() {
 	config.IssuerCertPath = issuerCertPath
 	config.IssuerKeyPath = issuerKeyPath
 	config.RootCertPath = rootCertPath
-	config.TrustDomain = *trustDomain
-	config.Port = *port
-	if *tokenAudience != "" {
-		config.TokenAudience = tokenAudience
+	config.TrustDomain = opts.TrustDomain
+	config.Port = opts.Port
+	if opts.TokenAudience != "" {
+		config.TokenAudience = &opts.TokenAudience
 	}
 
 	var (
@@ -174,7 +145,7 @@ func main() {
 	mngr.Add(func(ctx context.Context) error {
 		healthzServer := health.NewServer(log)
 		healthzServer.Ready()
-		if err := healthzServer.Run(ctx, *healthzPort); err != nil {
+		if err := healthzServer.Run(ctx, opts.HealthzPort); err != nil {
 			return fmt.Errorf("failed to start healthz server: %s", err)
 		}
 		return nil

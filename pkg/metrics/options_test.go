@@ -22,13 +22,13 @@ import (
 
 func TestOptions(t *testing.T) {
 	t.Run("default options", func(t *testing.T) {
-		o := defaultMetricOptions()
+		o := DefaultMetricOptions()
 		assert.Equal(t, defaultMetricsPort, o.Port)
 		assert.Equal(t, defaultMetricsEnabled, o.MetricsEnabled)
 	})
 
 	t.Run("attaching metrics related cmd flags", func(t *testing.T) {
-		o := defaultMetricOptions()
+		o := DefaultMetricOptions()
 
 		metricsPortAsserted := false
 		testStringVarFn := func(p *string, name string, value string, usage string) {
@@ -72,7 +72,7 @@ func TestOptions(t *testing.T) {
 	})
 
 	t.Run("attaching single metrics related cmd flag", func(t *testing.T) {
-		o := defaultMetricOptions()
+		o := DefaultMetricOptions()
 
 		metricsPortAsserted := false
 		testStringVarFn := func(p *string, name string, value string, usage string) {
