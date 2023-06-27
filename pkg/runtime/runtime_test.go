@@ -53,7 +53,6 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/yaml"
 
@@ -1301,7 +1300,7 @@ func TestInitPubSub(t *testing.T) {
 
 	pubsubComponents := []componentsV1alpha1.Component{
 		{
-			ObjectMeta: metaV1.ObjectMeta{
+			ObjectMeta: metav1.ObjectMeta{
 				Name: TestPubsubName,
 			},
 			Spec: componentsV1alpha1.ComponentSpec{
@@ -1310,7 +1309,7 @@ func TestInitPubSub(t *testing.T) {
 				Metadata: getFakeMetadataItems(),
 			},
 		}, {
-			ObjectMeta: metaV1.ObjectMeta{
+			ObjectMeta: metav1.ObjectMeta{
 				Name: TestSecondPubsubName,
 			},
 			Spec: componentsV1alpha1.ComponentSpec{
@@ -1945,7 +1944,7 @@ func TestInitSecretStores(t *testing.T) {
 		)
 
 		err := rt.processComponentAndDependents(componentsV1alpha1.Component{
-			ObjectMeta: metaV1.ObjectMeta{
+			ObjectMeta: metav1.ObjectMeta{
 				Name: "kubernetesMock",
 			},
 			Spec: componentsV1alpha1.ComponentSpec{
@@ -1968,7 +1967,7 @@ func TestInitSecretStores(t *testing.T) {
 		)
 
 		err := rt.processComponentAndDependents(componentsV1alpha1.Component{
-			ObjectMeta: metaV1.ObjectMeta{
+			ObjectMeta: metav1.ObjectMeta{
 				Name: "kubernetesMock",
 			},
 			Spec: componentsV1alpha1.ComponentSpec{
@@ -1994,7 +1993,7 @@ func TestInitSecretStores(t *testing.T) {
 		)
 
 		rt.processComponentAndDependents(componentsV1alpha1.Component{
-			ObjectMeta: metaV1.ObjectMeta{
+			ObjectMeta: metav1.ObjectMeta{
 				Name: "kubernetesMock",
 			},
 			Spec: componentsV1alpha1.ComponentSpec{
