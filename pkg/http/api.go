@@ -1156,7 +1156,7 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 	for i, r := range reqs {
 		if len(reqs[i].Key) == 0 {
 			msg := NewErrorResponse("ERR_MALFORMED_REQUEST", `"key" is a required field`)
-			respond(reqCtx, withError(nethttp.StatusBadRequest, msg))
+			fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusBadRequest, msg))
 			log.Debug(msg)
 			return
 		}
