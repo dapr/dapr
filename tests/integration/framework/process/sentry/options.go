@@ -14,7 +14,7 @@ limitations under the License.
 package sentry
 
 import (
-	"github.com/dapr/dapr/pkg/sentry/certs"
+	"github.com/dapr/dapr/pkg/sentry/server/ca"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 )
 
@@ -58,11 +58,8 @@ func WithHealthzPort(port int) Option {
 	}
 }
 
-func WithCA(ca *certs.Credentials, rootPEM, certPEM, keyPEM []byte) Option {
+func WithCABundle(bundle ca.CABundle) Option {
 	return func(o *options) {
-		o.ca = ca
-		o.rootPEM = rootPEM
-		o.certPEM = certPEM
-		o.keyPEM = keyPEM
+		o.bundle = bundle
 	}
 }

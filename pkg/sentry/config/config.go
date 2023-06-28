@@ -92,8 +92,8 @@ func IsKubernetesHosted() bool {
 	return os.Getenv(kubernetesServiceHostEnvVar) != ""
 }
 
-func getDefaultConfig() SentryConfig {
-	return SentryConfig{
+func getDefaultConfig() Config {
+	return Config{
 		Port:             DefaultPort,
 		WorkloadCertTTL:  defaultWorkloadCertTTL,
 		AllowedClockSkew: defaultAllowedClockSkew,

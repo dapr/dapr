@@ -22,6 +22,7 @@ import (
 	"github.com/dapr/dapr/cmd/sentry/options"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/concurrency"
+	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/sentry"
@@ -47,6 +48,10 @@ func main() {
 	log.Infof("Log level set to: %s", opts.Logger.OutputLevel)
 
 	metricsExporter := metrics.NewExporterWithOptions(log, metrics.DefaultMetricNamespace, opts.Metrics)
+
+	if len(opts.TokenAudience) > 0 {
+		log.Warn("--token-audience is deprecated and will be removed in v1.14")
+	}
 
 	if err := utils.SetEnvVariables(map[string]string{
 		utils.KubeConfigVar: opts.Kubeconfig,
@@ -77,9 +82,6 @@ func main() {
 	config.RootCertPath = rootCertPath
 	config.TrustDomain = opts.TrustDomain
 	config.Port = opts.Port
-	if opts.TokenAudience != "" {
-		config.TokenAudience = &opts.TokenAudience
-	}
 
 	var (
 		watchDir    = filepath.Dir(config.IssuerCertPath)

@@ -39,6 +39,7 @@ type Options struct {
 	HealthzPort           int
 	IssuerCredentialsPath string
 	TrustDomain           string
+	TokenAudience         string
 	Kubeconfig            string
 	Logger                logger.Options
 	Metrics               *metrics.Options
@@ -53,7 +54,7 @@ func New() *Options {
 	flag.StringVar(&credentials.IssuerCertFilename, "issuer-certificate-filename", credentials.IssuerCertFilename, "Issuer certificate filename")
 	flag.StringVar(&credentials.IssuerKeyFilename, "issuer-key-filename", credentials.IssuerKeyFilename, "Issuer private key filename")
 	flag.StringVar(&opts.TrustDomain, "trust-domain", "localhost", "The CA trust domain")
-	depTA := flag.String("token-audience", "", "DEPRECATED, flag has no effect.")
+	flag.StringVar(&opts.TokenAudience, "token-audience", "", "DEPRECATED, flag has no effect.")
 	flag.IntVar(&opts.Port, "port", config.DefaultPort, "The port for the sentry server to listen on")
 	flag.IntVar(&opts.HealthzPort, "healthz-port", 8080, "The port for the healthz server to listen on")
 
@@ -70,10 +71,6 @@ func New() *Options {
 	opts.Metrics.AttachCmdFlags(flag.StringVar, flag.BoolVar)
 
 	flag.Parse()
-
-	if len(*depTA) > 0 {
-		opts.Logger.Warn("--token-audience is deprecated and will be removed in v1.14")
-	}
 
 	return &opts
 }
