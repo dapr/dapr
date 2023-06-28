@@ -15,10 +15,14 @@ package placement
 
 import (
 	"context"
+	"fmt"
+	"net"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework/binary"
@@ -26,21 +30,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 )
-
-// options contains the options for running Placement in integration tests.
-type options struct {
-	execOpts []exec.Option
-
-	id                  string
-	port                int
-	healthzPort         int
-	metricsPort         int
-	initialCluster      string
-	initialClusterPorts []int
-}
-
-// Option is a function that configures the process.
-type Option func(*options)
 
 type Placement struct {
 	exec     process.Interface
@@ -102,6 +91,18 @@ func (p *Placement) Run(t *testing.T, ctx context.Context) {
 
 func (p *Placement) Cleanup(t *testing.T) {
 	p.exec.Cleanup(t)
+}
+
+func (p *Placement) WaitUntilRunning(t *testing.T, ctx context.Context) {
+	dialer := &net.Dialer{Timeout: time.Second * 5}
+	assert.Eventually(t, func() bool {
+		conn, err := dialer.DialContext(ctx, "tcp", fmt.Sprintf("localhost:%d", p.port))
+		if err != nil {
+			return false
+		}
+		require.NoError(t, conn.Close())
+		return true
+	}, time.Second*5, 100*time.Millisecond)
 }
 
 func (p *Placement) ID() string {

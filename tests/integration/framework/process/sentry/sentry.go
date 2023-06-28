@@ -18,12 +18,15 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strconv"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/pkg/sentry/ca"
@@ -33,22 +36,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 )
-
-// options contains the options for running Sentry in integration tests.
-type options struct {
-	execOpts []exec.Option
-
-	ca          *certs.Credentials
-	rootPEM     []byte
-	certPEM     []byte
-	keyPEM      []byte
-	port        int
-	healthzPort int
-	metricsPort int
-}
-
-// Option is a function that configures the process.
-type Option func(*options)
 
 type Sentry struct {
 	exec     process.Interface
@@ -132,6 +119,18 @@ func (s *Sentry) Run(t *testing.T, ctx context.Context) {
 
 func (s *Sentry) Cleanup(t *testing.T) {
 	s.exec.Cleanup(t)
+}
+
+func (s *Sentry) WaitUntilRunning(t *testing.T, ctx context.Context) {
+	dialer := net.Dialer{Timeout: time.Second * 5}
+	assert.Eventually(t, func() bool {
+		conn, err := dialer.DialContext(ctx, "tcp", fmt.Sprintf("localhost:%d", s.port))
+		if err != nil {
+			return false
+		}
+		require.NoError(t, conn.Close())
+		return true
+	}, time.Second*5, 100*time.Millisecond)
 }
 
 func (s *Sentry) CA() *certs.Credentials {

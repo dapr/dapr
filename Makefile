@@ -297,7 +297,7 @@ test: test-deps
 	CGO_ENABLED=$(CGO) \
 		gotestsum \
 			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_unit.json \
-			--format standard-quiet \
+			--format pkgname-and-test-fails \
 			-- \
 				./pkg/... ./utils/... ./cmd/... \
 				$(COVERAGE_OPTS) --tags=unit,allcomponents
@@ -350,9 +350,9 @@ test-race:
 test-integration: test-deps
 		gotestsum \
 			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json \
-			--format dots \
+			--format testname \
 			-- \
-			./tests/integration $(COVERAGE_OPTS) -v -race -tags="integration"
+			./tests/integration -count=1 -v -race -tags="integration"
 
 ################################################################################
 # Target: lint                                                                 #
