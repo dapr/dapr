@@ -36,7 +36,7 @@ func (w *workflow) init(ctx context.Context, comp compapi.Component) error {
 	fName := comp.LogName()
 	workflowComp, err := w.registry.Create(comp.Spec.Type, comp.Spec.Version, fName)
 	if err != nil {
-		log.Warnf("error creating workflow component %s (%s): %s", comp.ObjectMeta.Name, comp.LogName(), err)
+		log.Warnf("error creating workflow component (%s): %s", comp.LogName(), err)
 		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
 		return err
 	}

@@ -77,7 +77,7 @@ func (b *binding) initInputBinding(ctx context.Context, comp compapi.Component) 
 		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 	}
 
-	log.Infof("successful init for input binding %s (%s)", comp.ObjectMeta.Name, comp.LogName())
+	log.Infof("successful init for input binding (%s)", comp.LogName())
 	b.compStore.AddInputBindingRoute(comp.Name, comp.Name)
 	for _, item := range comp.Spec.Metadata {
 		if item.Name == "route" {
@@ -108,7 +108,7 @@ func (b *binding) initOutputBinding(ctx context.Context, comp compapi.Component)
 			diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
 			return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 		}
-		log.Infof("successful init for output binding %s (%s)", comp.ObjectMeta.Name, comp.LogName())
+		log.Infof("successful init for output binding (%s)", comp.LogName())
 		b.compStore.AddOutputBinding(comp.ObjectMeta.Name, binding)
 		diag.DefaultMonitoring.ComponentInitialized(comp.Spec.Type)
 	}
