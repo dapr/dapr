@@ -21,7 +21,7 @@ spec:
       - v1
       - v2alpha1
   versions:
-  - name: v1alpha1
+  - name: v1
     schema:
       openAPIV3Schema:
         description: Subscription describes an pub/sub event subscription.
@@ -46,8 +46,10 @@ spec:
             description: SubscriptionSpec is the spec for an event subscription.
             properties:
               pubsubname:
+               description: The PubSub component name.
                 type: string
               route:
+              description: The Routes configuration for this topic.
                 type: string
               topic:
                 type: string
@@ -76,7 +78,7 @@ spec:
             type: object
         type: object
     served: true
-    storage: false
+    storage: true
   - name: v2alpha1
     schema:
       openAPIV3Schema:
