@@ -76,7 +76,7 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	}
 
 	dir := t.TempDir()
-	for i, file := range opts.componentFiles {
+	for i, file := range opts.resourceFiles {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, strconv.Itoa(i)+".yaml"), []byte(file), 0o600))
 	}
 
@@ -98,8 +98,8 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	if opts.appHealthCheckPath != "" {
 		args = append(args, "--app-health-check-path="+opts.appHealthCheckPath)
 	}
-	if len(opts.componentFiles) > 0 {
-		args = append(args, "-components-path="+dir)
+	if len(opts.resourceFiles) > 0 {
+		args = append(args, "-resources-path="+dir)
 	}
 
 	return &Daprd{

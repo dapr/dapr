@@ -123,9 +123,9 @@ func WithAppHealthProbeThreshold(threshold int) Option {
 	}
 }
 
-func WithComponentFiles(files ...string) Option {
+func WithResourceFiles(files ...string) Option {
 	return func(o *options) {
-		o.componentFiles = files
+		o.resourceFiles = files
 	}
 }
 

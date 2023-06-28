@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package components
+package resources
 
 import (
 	"context"
@@ -32,7 +32,22 @@ type versionv2 struct {
 }
 
 func (v *versionv2) Setup(t *testing.T) []framework.Option {
-	v.proc = procdaprd.New(t, procdaprd.WithComponentFiles(`
+	v.proc = procdaprd.New(t, procdaprd.WithResourceFiles(`
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: inmem-v1
+spec:
+  type: state.in-memory
+---
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: inmem-omitted
+spec:
+  type: state.in-memory
+  version: v1
+---
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -73,7 +88,7 @@ spec:
     - name: endpoints
       value: "localhost:12379"
     - name: keyPrefixPath
-      value: "daprv2"
+      value: "daprv1"
     - name: tlsEnable
       value: "false"
 `))
