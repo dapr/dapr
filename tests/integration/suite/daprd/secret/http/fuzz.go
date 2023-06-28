@@ -126,7 +126,7 @@ func (f *fuzzsecret) Run(t *testing.T, ctx context.Context) {
 		value := value
 		t.Run(key+":"+value, func(t *testing.T) {
 			t.Parallel()
-			getURL := fmt.Sprintf("http://localhost:%d/v1.0/secrets/%s/%s", f.daprd.HTTPPort(), url.QueryEscape(f.secretStoreName), url.QueryEscape(key))
+			getURL := fmt.Sprintf("http://localhost:%d/v1.0/secrets/%s/%s", f.daprd.HTTPPort(), url.PathEscape(f.secretStoreName), url.PathEscape(key))
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, getURL, nil)
 			require.NoError(t, err)
 			resp, err := http.DefaultClient.Do(req)

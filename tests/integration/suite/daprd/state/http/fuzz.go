@@ -153,7 +153,7 @@ func (f *fuzzstate) Run(t *testing.T, ctx context.Context) {
 	t.Run("get", func(t *testing.T) {
 		t.Parallel()
 		for i := range f.getFuzzKeys {
-			getURL := fmt.Sprintf("http://localhost:%d/v1.0/state/%s/%s", f.daprd.HTTPPort(), url.QueryEscape(f.storeName), url.QueryEscape(f.getFuzzKeys[i]))
+			getURL := fmt.Sprintf("http://localhost:%d/v1.0/state/%s/%s", f.daprd.HTTPPort(), url.PathEscape(f.storeName), url.PathEscape(f.getFuzzKeys[i]))
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, getURL, nil)
 			require.NoError(t, err)
 			resp, err := http.DefaultClient.Do(req)
@@ -171,14 +171,14 @@ func (f *fuzzstate) Run(t *testing.T, ctx context.Context) {
 		t.Run("save "+strconv.Itoa(i), func(t *testing.T) {
 			t.Parallel()
 			for _, req := range []any{f.saveReqBinaries[i], f.saveReqStrings[i]} {
-				postURL := fmt.Sprintf("http://localhost:%d/v1.0/state/%s", f.daprd.HTTPPort(), url.QueryEscape(f.storeName))
+				postURL := fmt.Sprintf("http://localhost:%d/v1.0/state/%s", f.daprd.HTTPPort(), url.PathEscape(f.storeName))
 				b := new(bytes.Buffer)
 				require.NoError(t, json.NewEncoder(b).Encode(req))
 				req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, b)
 				require.NoError(t, err)
 				resp, err := http.DefaultClient.Do(req)
 				require.NoError(t, err)
-				assert.Equalf(t, http.StatusNoContent, resp.StatusCode, "key: %s", url.QueryEscape(f.storeName))
+				assert.Equalf(t, http.StatusNoContent, resp.StatusCode, "key: %s", url.PathEscape(f.storeName))
 				respBody, err := io.ReadAll(resp.Body)
 				require.NoError(t, err)
 				require.NoError(t, resp.Body.Close())
@@ -186,7 +186,7 @@ func (f *fuzzstate) Run(t *testing.T, ctx context.Context) {
 			}
 
 			for _, s := range f.saveReqBinaries[i] {
-				getURL := fmt.Sprintf("http://localhost:%d/v1.0/state/%s/%s", f.daprd.HTTPPort(), url.QueryEscape(f.storeName), url.QueryEscape(s.Key))
+				getURL := fmt.Sprintf("http://localhost:%d/v1.0/state/%s/%s", f.daprd.HTTPPort(), url.PathEscape(f.storeName), url.PathEscape(s.Key))
 				req, err := http.NewRequestWithContext(ctx, http.MethodGet, getURL, nil)
 				require.NoError(t, err)
 				resp, err := http.DefaultClient.Do(req)
@@ -202,7 +202,7 @@ func (f *fuzzstate) Run(t *testing.T, ctx context.Context) {
 			}
 
 			for _, s := range f.saveReqStrings[i] {
-				getURL := fmt.Sprintf("http://localhost:%d/v1.0/state/%s/%s", f.daprd.HTTPPort(), url.QueryEscape(f.storeName), url.QueryEscape(s.Key))
+				getURL := fmt.Sprintf("http://localhost:%d/v1.0/state/%s/%s", f.daprd.HTTPPort(), url.PathEscape(f.storeName), url.PathEscape(s.Key))
 				req, err := http.NewRequestWithContext(ctx, http.MethodGet, getURL, nil)
 				require.NoError(t, err)
 				resp, err := http.DefaultClient.Do(req)
