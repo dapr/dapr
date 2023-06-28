@@ -148,58 +148,36 @@ Once a contributor creates a pull request, E2E tests on KinD clusters are automa
 
 
 
-# Setup Required For Visualising Performance Test Metrics
+#  Visualize Performance Test Metrics (Optional)
 
-The setup in AKS requires three servers for:
+```bash
+export DAPR_PERF_METRICS_PROMETHEUS_URL="http://localhost:9091"
+```
+
+Install the following in your Kubernetes cluster:
  - Prometheus 
  - Pushgateway
  - Grafana
  
-All the servers should be installed in the same namespace to ensure effective communication between them.
- 
- * Create a namesapce
+ * Create a new namesapce
   
     ```bash
-    kubectl create namespace <namespace-name>
-    ```
- * Set this as the current namespace
-    
-    ```bash
-    kubectl config set-context --current --namespace=<namespace-name>
-    ```
- * Check if the namespace is set
-  
-    ```bash
-    kubectl config view | grep namespace:
+    DAPR_PERF_METRICS_NAMESPACE=dapr-perf-metrics
+    kubectl create namespace $DAPR_PERF_METRICS_NAMESPACE
     ```
 
 ## Setup for Prometheus Server
 
-* Prometheus can be installed on AKS using the following commands:
- 
   ```bash
   helm repo add prometheus-community https://prometheus-community.github.io/helm-charts 
   helm repo update
-  helm install prometheus prometheus-community/prometheus
+  helm install --namespace $DAPR_PERF_METRICS_NAMESPACE prometheus prometheus-community/prometheus
   ```
-* While installing this, there may be an error saying that some clusterrole or clusterrolebindings already exist. In that case delete the clusterrole or clusterrolebinding
 
-  ```bash
-  kubectl delete clusterrole <clusterrole-name>
-  kubectl delete clusterrolebinding <clusterrolebinding-name>
-  ```
-* Check if the setup was properly installed
-
-  ```bash
-  kubectl get deployments -n <namespace-name>
-  kubectl get pods -n <namespace-name>
-  ```
-  All the pods should show a running status.
-  
 * Forward port 9090 from your local machine to the pod where the prometheus-server is running
 
   ```bash
-  kubectl port-forward -n <namespace-name> <prometheus-server-pod> 9090
+   kubectl port-forward --namespace $DAPR_PERF_METRICS_NAMESPACE deployment/prometheus-server 9090
   ```
 * The Prometheus-server can now be accessed on localhost:9090.
 
@@ -211,7 +189,7 @@ All the servers should be installed in the same namespace to ensure effective co
 * Forward port 9091 from your local machine to the prometheus-pushgateway pod and access it on localhost:9091 
 
   ```bash
-  kubectl port-forward -n <namespace-name> <prometheus-pushgateway-pod> 9091
+  kubectl port-forward --namespace $DAPR_PERF_METRICS_NAMESPACE deployment/prometheus-prometheus-pushgateway 9091
   ```
 
 ## Setup for Grafana Server
@@ -223,7 +201,7 @@ All the servers should be installed in the same namespace to ensure effective co
     kind: Deployment
     metadata:
       name: grafana
-      namespace: <namespace-name>
+      namespace: dapr-perf-metrics
     spec:
       replicas: 1
       selector:
@@ -231,7 +209,7 @@ All the servers should be installed in the same namespace to ensure effective co
           app: grafana
       template:
         metadata:
-          labels:
+          labels:grafana
             app: grafana
         spec:
           containers:
@@ -239,15 +217,12 @@ All the servers should be installed in the same namespace to ensure effective co
               image: grafana/grafana:latest
               ports:
                 - containerPort: 3000
-              env:
-                - name: GF_INSTALL_PLUGINS
-                  value: "grafana-piechart-panel,grafana-simple-json-datasource"
     ---
     apiVersion: v1
     kind: Service
     metadata:
       name: grafana
-      namespace: <namespace-name>
+      namespace: dapr-perf-metrics
     spec:
       type: LoadBalancer
       ports:
@@ -257,14 +232,7 @@ All the servers should be installed in the same namespace to ensure effective co
       selector:
         app: grafana
     ```
-* Check if the setup was properly installed
-  
-  ```bash
-  kubectl get deployments -n <namespace-name>
-  kubectl get pods -n <namespace-name>
-  ```
-  This should show a grafana pod in the list of pods along with a running status for all.
-  
+
 * Apply the configurations
   
   ```bash
@@ -273,7 +241,7 @@ All the servers should be installed in the same namespace to ensure effective co
 * Forward port 3000 from your local machine to the pod where grafana is running.
   
   ```bash
-  kubectl port-forward -n <namespace-name> <grafana-pod> 3000
+  kubectl port-forward --namespace $DAPR_PERF_METRICS_NAMESPACE deployment/grafana 3000
   ```
   The grafana server can now be accessed on localhost:3000
   
@@ -284,7 +252,7 @@ All the servers should be installed in the same namespace to ensure effective co
 * The http URL will be the ClusterIP of the prometheus-server pod running on AKS which can be obtained by the command:
   
   ```bash
-  kubectl get svc -n <namespace-name>
+  kubectl get svc --namespace $DAPR_PERF_METRICS_NAMESPACE
   ```
   So, the http URL will be http:// ClusterIP of prometheus-server pod
   
