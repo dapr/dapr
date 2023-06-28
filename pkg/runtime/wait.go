@@ -28,7 +28,7 @@ var (
 	urlFormat            = "http://localhost:%s/v1.0/healthz/outbound"
 )
 
-func waitUntilDaprOutboundReady(daprHTTPPort string) {
+func WaitUntilDaprOutboundReady(daprHTTPPort string) {
 	outboundReadyHealthURL := fmt.Sprintf(urlFormat, daprHTTPPort)
 	client := &http.Client{
 		Timeout: time.Duration(requestTimeoutMillis) * time.Millisecond,

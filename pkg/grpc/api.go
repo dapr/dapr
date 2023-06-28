@@ -82,7 +82,6 @@ type api struct {
 	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	tracingSpec           config.TracingSpec
 	accessControlList     *config.AccessControlList
-	appProtocolIsHTTP     bool
 }
 
 // APIOpts contains options for NewAPI.
@@ -97,9 +96,10 @@ type APIOpts struct {
 	SendToOutputBindingFn       func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	TracingSpec                 config.TracingSpec
 	AccessControlList           *config.AccessControlList
-	AppProtocolIsHTTP           bool
 	Shutdown                    func()
 	GetComponentsCapabilitiesFn func() map[string][]string
+	AppConnectionConfig         config.AppConnectionConfig
+	GlobalConfig                *config.Configuration
 }
 
 // NewAPI returns a new gRPC API.
@@ -113,6 +113,8 @@ func NewAPI(opts APIOpts) API {
 			CompStore:                  opts.CompStore,
 			ShutdownFn:                 opts.Shutdown,
 			GetComponentsCapabilitesFn: opts.GetComponentsCapabilitiesFn,
+			AppConnectionConfig:        opts.AppConnectionConfig,
+			GlobalConfig:               opts.GlobalConfig,
 		},
 		directMessaging:       opts.DirectMessaging,
 		resiliency:            opts.Resiliency,
@@ -121,7 +123,6 @@ func NewAPI(opts APIOpts) API {
 		sendToOutputBindingFn: opts.SendToOutputBindingFn,
 		tracingSpec:           opts.TracingSpec,
 		accessControlList:     opts.AccessControlList,
-		appProtocolIsHTTP:     opts.AppProtocolIsHTTP,
 	}
 }
 

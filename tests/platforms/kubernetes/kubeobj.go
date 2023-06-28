@@ -25,6 +25,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
+	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/utils"
 )
@@ -340,7 +341,7 @@ func buildServiceObject(namespace string, appDesc AppDescription) *apiv1.Service
 }
 
 // buildDaprComponentObject creates dapr component object.
-func buildDaprComponentObject(componentName string, typeName string, scopes []string, annotations map[string]string, metaData []v1alpha1.MetadataItem) *v1alpha1.Component {
+func buildDaprComponentObject(componentName string, typeName string, scopes []string, annotations map[string]string, metaData []commonapi.NameValuePair) *v1alpha1.Component {
 	return &v1alpha1.Component{
 		TypeMeta: metav1.TypeMeta{
 			Kind: DaprComponentsKind,
@@ -353,13 +354,8 @@ func buildDaprComponentObject(componentName string, typeName string, scopes []st
 			Type:     typeName,
 			Metadata: metaData,
 		},
-		Scopes: scopes,
+		Scoped: commonapi.Scoped{Scopes: scopes},
 	}
-}
-
-// buildNamespaceObject creates the Kubernetes Namespace object.
-func buildNamespaceObject(namespace string) *apiv1.Namespace {
-	return &apiv1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 }
 
 func int32Ptr(i int32) *int32 {

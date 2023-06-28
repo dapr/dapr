@@ -12,7 +12,7 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: Component describes an Dapr component type
+        description: Component describes an Dapr component type.
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -20,7 +20,7 @@ spec:
               internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
             type: string
           auth:
-            description: Auth represents authentication details for the component
+            description: Auth represents authentication details for the component.
             properties:
               secretStore:
                 type: string
@@ -39,32 +39,38 @@ spec:
               type: string
             type: array
           spec:
-            description: ComponentSpec is the spec for a component
+            description: ComponentSpec is the spec for a component.
             properties:
-              initTimeout:
-                type: string
               ignoreErrors:
                 type: boolean
+              initTimeout:
+                type: string
               metadata:
                 items:
-                  description: MetadataItem is a name/value pair for a metadata
+                  description: NameValuePair is a name/value pair.
                   properties:
+                    envRef:
+                      description: EnvRef is the name of an environmental variable
+                        to read the value from.
+                      type: string
                     name:
+                      description: Name of the property.
                       type: string
                     secretKeyRef:
-                      description: SecretKeyRef is a reference to a secret holding
-                        the value for the metadata item. Name is the secret name,
-                        and key is the field in the secret.
+                      description: SecretKeyRef is the reference of a value in a secret
+                        store component.
                       properties:
                         key:
+                          description: Field in the secret.
                           type: string
                         name:
+                          description: Secret name.
                           type: string
                       required:
-                      - key
                       - name
                       type: object
                     value:
+                      description: Value of the property, in plaintext.
                       x-kubernetes-preserve-unknown-fields: true
                   required:
                   - name

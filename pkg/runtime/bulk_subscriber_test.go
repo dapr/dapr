@@ -22,6 +22,7 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
+	"github.com/dapr/dapr/pkg/config/protocol"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -213,7 +214,9 @@ func TestBulkSubscribe(t *testing.T) {
 	t.Run("bulk Subscribe multiple Messages at once for cloud events", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
-		ms := &mockSubscribePubSub{}
+		ms := &mockSubscribePubSub{
+			features: []pubsub.Feature{pubsub.FeatureBulkPublish},
+		}
 		rt.pubSubRegistry.RegisterComponent(
 			func(_ logger.Logger) pubsub.PubSub {
 				return ms
@@ -349,7 +352,9 @@ func TestBulkSubscribe(t *testing.T) {
 		defer stopRuntime(t, rt)
 		rt.pubSubRegistry.RegisterComponent(
 			func(_ logger.Logger) pubsub.PubSub {
-				return &mockSubscribePubSub{}
+				return &mockSubscribePubSub{
+					features: []pubsub.Feature{pubsub.FeatureBulkPublish},
+				}
 			},
 			"mockPubSub",
 		)
@@ -415,7 +420,9 @@ func TestBulkSubscribe(t *testing.T) {
 		defer stopRuntime(t, rt)
 		rt.pubSubRegistry.RegisterComponent(
 			func(_ logger.Logger) pubsub.PubSub {
-				return &mockSubscribePubSub{}
+				return &mockSubscribePubSub{
+					features: []pubsub.Feature{pubsub.FeatureBulkPublish},
+				}
 			},
 			"mockPubSub",
 		)
@@ -535,7 +542,9 @@ func TestBulkSubscribe(t *testing.T) {
 		defer stopRuntime(t, rt)
 		rt.pubSubRegistry.RegisterComponent(
 			func(_ logger.Logger) pubsub.PubSub {
-				return &mockSubscribePubSub{}
+				return &mockSubscribePubSub{
+					features: []pubsub.Feature{pubsub.FeatureBulkPublish},
+				}
 			},
 			"mockPubSub",
 		)
@@ -617,7 +626,9 @@ func TestBulkSubscribe(t *testing.T) {
 		defer stopRuntime(t, rt)
 		rt.pubSubRegistry.RegisterComponent(
 			func(_ logger.Logger) pubsub.PubSub {
-				return &mockSubscribePubSub{}
+				return &mockSubscribePubSub{
+					features: []pubsub.Feature{pubsub.FeatureBulkPublish},
+				}
 			},
 			"mockPubSub",
 		)
@@ -703,7 +714,9 @@ func TestBulkSubscribe(t *testing.T) {
 		defer stopRuntime(t, rt)
 		rt.pubSubRegistry.RegisterComponent(
 			func(_ logger.Logger) pubsub.PubSub {
-				return &mockSubscribePubSub{}
+				return &mockSubscribePubSub{
+					features: []pubsub.Feature{pubsub.FeatureBulkPublish},
+				}
 			},
 			"mockPubSub",
 		)
@@ -799,9 +812,11 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 
 	t.Run("GRPC - bulk Subscribe Message for raw payload", func(t *testing.T) {
 		port, _ := freeport.GetFreePort()
-		rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
+		rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(protocol.GRPCProtocol), port)
 		defer stopRuntime(t, rt)
-		ms := &mockSubscribePubSub{}
+		ms := &mockSubscribePubSub{
+			features: []pubsub.Feature{pubsub.FeatureBulkPublish},
+		}
 
 		rt.pubSubRegistry.RegisterComponent(
 			func(_ logger.Logger) pubsub.PubSub {
@@ -855,7 +870,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		}
 
 		// create a new AppChannel and gRPC client for every test
-		rt.createAppChannel()
+		rt.createChannels()
 		// properly close the app channel created
 		defer rt.grpc.CloseAppClient()
 
@@ -910,12 +925,14 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 
 	t.Run("GRPC - bulk Subscribe cloud event Message on different paths and verify response", func(t *testing.T) {
 		port, _ := freeport.GetFreePort()
-		rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
+		rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(protocol.GRPCProtocol), port)
 		defer stopRuntime(t, rt)
 
 		rt.pubSubRegistry.RegisterComponent(
 			func(_ logger.Logger) pubsub.PubSub {
-				return &mockSubscribePubSub{}
+				return &mockSubscribePubSub{
+					features: []pubsub.Feature{pubsub.FeatureBulkPublish},
+				}
 			},
 			"mockPubSub",
 		)
@@ -994,7 +1011,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			defer grpcServer.Stop()
 		}
 
-		rt.createAppChannel()
+		rt.createChannels()
 		defer rt.grpc.CloseAppClient()
 
 		require.NoError(t, rt.initPubSub(pubsubComponent))
@@ -1033,12 +1050,14 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 
 	t.Run("GRPC - verify Responses when entryId supplied blank while sending messages", func(t *testing.T) {
 		port, _ := freeport.GetFreePort()
-		rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
+		rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(protocol.GRPCProtocol), port)
 		defer stopRuntime(t, rt)
 
 		rt.pubSubRegistry.RegisterComponent(
 			func(_ logger.Logger) pubsub.PubSub {
-				return &mockSubscribePubSub{}
+				return &mockSubscribePubSub{
+					features: []pubsub.Feature{pubsub.FeatureBulkPublish},
+				}
 			},
 			"mockPubSub",
 		)
@@ -1083,7 +1102,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			defer grpcServer.Stop()
 		}
 
-		rt.createAppChannel()
+		rt.createChannels()
 		defer rt.grpc.CloseAppClient()
 
 		require.NoError(t, rt.initPubSub(pubsubComponent))
@@ -1113,12 +1132,14 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 
 	t.Run("GRPC - verify bulk Subscribe Responses when App sends back out of order entryIds", func(t *testing.T) {
 		port, _ := freeport.GetFreePort()
-		rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
+		rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(protocol.GRPCProtocol), port)
 		defer stopRuntime(t, rt)
 
 		rt.pubSubRegistry.RegisterComponent(
 			func(_ logger.Logger) pubsub.PubSub {
-				return &mockSubscribePubSub{}
+				return &mockSubscribePubSub{
+					features: []pubsub.Feature{pubsub.FeatureBulkPublish},
+				}
 			},
 			"mockPubSub",
 		)
@@ -1174,7 +1195,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			defer grpcServer.Stop()
 		}
 
-		rt.createAppChannel()
+		rt.createChannels()
 		defer rt.grpc.CloseAppClient()
 
 		require.NoError(t, rt.initPubSub(pubsubComponent))
@@ -1205,12 +1226,14 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 
 	t.Run("GRPC - verify bulk Subscribe Responses when App sends back wrong entryIds", func(t *testing.T) {
 		port, _ := freeport.GetFreePort()
-		rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
+		rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(protocol.GRPCProtocol), port)
 		defer stopRuntime(t, rt)
 
 		rt.pubSubRegistry.RegisterComponent(
 			func(_ logger.Logger) pubsub.PubSub {
-				return &mockSubscribePubSub{}
+				return &mockSubscribePubSub{
+					features: []pubsub.Feature{pubsub.FeatureBulkPublish},
+				}
 			},
 			"mockPubSub",
 		)
@@ -1260,7 +1283,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			defer grpcServer.Stop()
 		}
 
-		rt.createAppChannel()
+		rt.createChannels()
 		defer rt.grpc.CloseAppClient()
 
 		require.NoError(t, rt.initPubSub(pubsubComponent))
@@ -1291,12 +1314,14 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 
 	t.Run("GRPC - verify bulk Subscribe Response when error while fetching Entry due to wrong dataContentType", func(t *testing.T) {
 		port, _ := freeport.GetFreePort()
-		rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(GRPCProtocol), port)
+		rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(protocol.GRPCProtocol), port)
 		defer stopRuntime(t, rt)
 
 		rt.pubSubRegistry.RegisterComponent(
 			func(_ logger.Logger) pubsub.PubSub {
-				return &mockSubscribePubSub{}
+				return &mockSubscribePubSub{
+					features: []pubsub.Feature{pubsub.FeatureBulkPublish},
+				}
 			},
 			"mockPubSub",
 		)
@@ -1332,7 +1357,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			defer grpcServer.Stop()
 		}
 
-		rt.createAppChannel()
+		rt.createChannels()
 		defer rt.grpc.CloseAppClient()
 
 		require.NoError(t, rt.initPubSub(pubsubComponent))
