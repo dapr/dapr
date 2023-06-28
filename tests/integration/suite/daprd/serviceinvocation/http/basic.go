@@ -21,6 +21,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -43,6 +44,7 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 	newHTTPServer := func() *prochttp.HTTP {
 		handler := http.NewServeMux()
 		handler.HandleFunc("/foo", func(w http.ResponseWriter, r *http.Request) {
+			fmt.Println("INVOKED /FOO", r.URL, r.Method)
 			switch r.Method {
 			case http.MethodPatch:
 				w.WriteHeader(http.StatusBadGateway)
@@ -56,6 +58,10 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 				w.WriteHeader(http.StatusConflict)
 			}
 			w.Write([]byte(r.Method))
+		})
+		handler.HandleFunc("/echo", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("x-method", r.Method)
+			io.Copy(w, r.Body)
 		})
 		handler.HandleFunc("/with-headers-and-body", func(w http.ResponseWriter, r *http.Request) {
 			body, err := io.ReadAll(r.Body)
@@ -114,7 +120,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			return resp.StatusCode, string(body)
 		}
 
-		for _, ts := range []struct {
+		for i, ts := range []struct {
 			url     string
 			headers map[string]string
 		}{
@@ -122,30 +128,35 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			{url: fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/foo", b.daprd2.HTTPPort(), b.daprd1.AppID())},
 			{url: fmt.Sprintf("http://localhost:%d/v1.0////invoke/%s/method/foo", b.daprd2.HTTPPort(), b.daprd1.AppID())},
 			{url: fmt.Sprintf("http://localhost:%d/v1.0//invoke//%s/method//foo", b.daprd1.HTTPPort(), b.daprd2.AppID())},
-			{url: fmt.Sprintf("http://localhost:%d///foo", b.daprd1.HTTPPort()), headers: map[string]string{
+			// We cannot use `///foo` here because the test app uses the standard Go mux which responds with a 301 status code if the invocation is for `///foo`
+			// This makes Dapr retry with a GET request in all cases, as per specs
+			// See: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/301
+			{url: fmt.Sprintf("http://localhost:%d/foo", b.daprd1.HTTPPort()), headers: map[string]string{
 				"foo":         "bar",
 				"dapr-app-id": b.daprd2.AppID(),
 			}},
 		} {
-			status, body := doReq(http.MethodGet, ts.url, ts.headers)
-			assert.Equal(t, http.StatusOK, status)
-			assert.Equal(t, "GET", body)
+			t.Run(fmt.Sprintf("url %d", i), func(t *testing.T) {
+				status, body := doReq(http.MethodGet, ts.url, ts.headers)
+				assert.Equal(t, http.StatusOK, status)
+				assert.Equal(t, "GET", body)
 
-			status, body = doReq(http.MethodPost, ts.url, ts.headers)
-			assert.Equal(t, http.StatusCreated, status)
-			assert.Equal(t, "POST", body)
+				status, body = doReq(http.MethodPost, ts.url, ts.headers)
+				assert.Equal(t, http.StatusCreated, status)
+				assert.Equal(t, "POST", body)
 
-			status, body = doReq(http.MethodPut, ts.url, ts.headers)
-			assert.Equal(t, http.StatusAccepted, status)
-			assert.Equal(t, "PUT", body)
+				status, body = doReq(http.MethodPut, ts.url, ts.headers)
+				assert.Equal(t, http.StatusAccepted, status)
+				assert.Equal(t, "PUT", body)
 
-			status, body = doReq(http.MethodDelete, ts.url, ts.headers)
-			assert.Equal(t, http.StatusConflict, status)
-			assert.Equal(t, "DELETE", body)
+				status, body = doReq(http.MethodDelete, ts.url, ts.headers)
+				assert.Equal(t, http.StatusConflict, status)
+				assert.Equal(t, "DELETE", body)
 
-			status, body = doReq(http.MethodPatch, ts.url, ts.headers)
-			assert.Equal(t, http.StatusBadGateway, status)
-			assert.Equal(t, "PATCH", body)
+				status, body = doReq(http.MethodPatch, ts.url, ts.headers)
+				assert.Equal(t, http.StatusBadGateway, status)
+				assert.Equal(t, "PATCH", body)
+			})
 		}
 	})
 
@@ -206,8 +217,9 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	for i := 0; i < 100; i++ {
 		t.Run("parallel requests", func(t *testing.T) {
 			t.Parallel()
-			reqURL := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/foo", b.daprd1.HTTPPort(), b.daprd2.AppID())
-			req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, nil)
+			u := uuid.New().String()
+			reqURL := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/echo", b.daprd1.HTTPPort(), b.daprd2.AppID())
+			req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, strings.NewReader(u))
 			require.NoError(t, err)
 			resp, err := http.DefaultClient.Do(req)
 			require.NoError(t, err)
@@ -215,7 +227,8 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			body, err := io.ReadAll(resp.Body)
 			require.NoError(t, err)
 			require.NoError(t, resp.Body.Close())
-			assert.Equal(t, "POST", string(body))
+			assert.Equal(t, "POST", resp.Header.Get("x-method"))
+			assert.Equal(t, u, string(body))
 			assert.NoError(t, resp.Body.Close())
 		})
 	}
