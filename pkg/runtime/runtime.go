@@ -2317,10 +2317,15 @@ func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscri
 		// Any 2xx is considered a success.
 		var appResponse pubsub.AppResponse
 		err := json.NewDecoder(resp.RawData()).Decode(&appResponse)
+		// We need to return an error here since the app didn't return a valid
+		// AppResponse.
+		if errors.Is(err, io.EOF) {
+			return err
+		}
 		if err != nil {
-			log.Debugf("skipping status check due to error parsing result from pub/sub event %v", cloudEvent[pubsub.IDField])
+			log.Debugf("skipping status check due to error parsing result from pub/sub event %v: %s", cloudEvent[pubsub.IDField], err)
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Success)), msg.topic, elapsed)
-			return nil //nolint:nilerr
+			return nil
 		}
 
 		switch appResponse.Status {
