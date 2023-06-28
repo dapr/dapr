@@ -39,7 +39,7 @@ import (
 
 func TestDestinationHeaders(t *testing.T) {
 	t.Run("destination header present", func(t *testing.T) {
-		appID := "test1"
+		const appID = "test1"
 		req := invokev1.NewInvokeMethodRequest("GET").
 			WithMetadata(map[string][]string{})
 		defer req.Close()

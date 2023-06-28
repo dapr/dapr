@@ -19,7 +19,11 @@ spec:
   type: bindings.cron
   version: v1
   metadata:
-  - name: schedule
-    value: "@every 1s"
-  - name: direction
-    value: input
+    - name: schedule
+      envRef: "CRON_SCHEDULE"
+    - name: direction
+      value: input
+scopes:
+  - healthapp-http
+  - healthapp-grpc
+  - healthapp-h2c

@@ -350,7 +350,7 @@ test-race:
 test-integration: test-deps
 		gotestsum \
 			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json \
-			--format standard-verbose \
+			--format dots \
 			-- \
 			./tests/integration $(COVERAGE_OPTS) -v -race -tags="integration"
 

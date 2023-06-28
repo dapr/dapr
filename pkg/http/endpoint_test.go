@@ -18,8 +18,8 @@ import (
 	"strings"
 	"testing"
 
+	chi "github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
-	"github.com/valyala/fasthttp"
 
 	"github.com/dapr/dapr/pkg/config"
 )
@@ -463,16 +463,13 @@ func TestAPIAllowlist(t *testing.T) {
 		a := &api{}
 		eps := a.APIEndpoints()
 
-		router := s.getRouter(eps)
-		r := &fasthttp.RequestCtx{
-			Request: fasthttp.Request{},
-		}
+		router := chi.NewRouter()
+		s.setupRoutes(router, eps)
 
 		for _, e := range eps {
 			path := fmt.Sprintf("/%s/%s", e.Version, e.Route)
 			for _, m := range e.Methods {
-				handler, ok := router.Lookup(m, path, r)
-				assert.NotNil(t, handler)
+				ok := router.Match(chi.NewRouteContext(), m, path)
 				assert.True(t, ok)
 			}
 		}
@@ -494,16 +491,13 @@ func TestAPIAllowlist(t *testing.T) {
 		a := &api{}
 		eps := a.APIEndpoints()
 
-		router := s.getRouter(eps)
-		r := &fasthttp.RequestCtx{
-			Request: fasthttp.Request{},
-		}
+		router := chi.NewRouter()
+		s.setupRoutes(router, eps)
 
 		for _, e := range eps {
 			path := fmt.Sprintf("/%s/%s", e.Version, e.Route)
 			for _, m := range e.Methods {
-				handler, ok := router.Lookup(m, path, r)
-				assert.NotNil(t, handler)
+				ok := router.Match(chi.NewRouteContext(), m, path)
 				assert.True(t, ok)
 			}
 		}
@@ -525,16 +519,13 @@ func TestAPIAllowlist(t *testing.T) {
 		a := &api{}
 		eps := a.APIEndpoints()
 
-		router := s.getRouter(eps)
-		r := &fasthttp.RequestCtx{
-			Request: fasthttp.Request{},
-		}
+		router := chi.NewRouter()
+		s.setupRoutes(router, eps)
 
 		for _, e := range eps {
 			path := fmt.Sprintf("/%s/%s", e.Version, e.Route)
 			for _, m := range e.Methods {
-				handler, ok := router.Lookup(m, path, r)
-				assert.NotNil(t, handler)
+				ok := router.Match(chi.NewRouteContext(), m, path)
 				assert.True(t, ok)
 			}
 		}
@@ -556,21 +547,17 @@ func TestAPIAllowlist(t *testing.T) {
 		a := &api{}
 		eps := a.APIEndpoints()
 
-		router := s.getRouter(eps)
-		r := &fasthttp.RequestCtx{
-			Request: fasthttp.Request{},
-		}
+		router := chi.NewRouter()
+		s.setupRoutes(router, eps)
 
 		for _, e := range eps {
 			path := fmt.Sprintf("/%s/%s", e.Version, e.Route)
 			for _, m := range e.Methods {
-				handler, ok := router.Lookup(m, path, r)
+				ok := router.Match(chi.NewRouteContext(), m, path)
 
 				if strings.Index(e.Route, "state") == 0 {
-					assert.NotNil(t, handler)
 					assert.True(t, ok)
 				} else {
-					assert.Nil(t, handler)
 					assert.False(t, ok)
 				}
 			}

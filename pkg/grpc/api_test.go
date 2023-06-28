@@ -51,6 +51,7 @@ import (
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
+	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpEndpointsV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
@@ -4215,10 +4216,10 @@ func TestMetadata(t *testing.T) {
 		Spec: componentsV1alpha1.ComponentSpec{
 			Type:    "mock.component1Type",
 			Version: "v1.0",
-			Metadata: []componentsV1alpha1.MetadataItem{
+			Metadata: []commonapi.NameValuePair{
 				{
 					Name: "actorMockComponent1",
-					Value: componentsV1alpha1.DynamicValue{
+					Value: commonapi.DynamicValue{
 						JSON: v1.JSON{Raw: []byte("true")},
 					},
 				},
@@ -4232,10 +4233,10 @@ func TestMetadata(t *testing.T) {
 		Spec: componentsV1alpha1.ComponentSpec{
 			Type:    "mock.component2Type",
 			Version: "v1.0",
-			Metadata: []componentsV1alpha1.MetadataItem{
+			Metadata: []commonapi.NameValuePair{
 				{
 					Name: "actorMockComponent2",
-					Value: componentsV1alpha1.DynamicValue{
+					Value: commonapi.DynamicValue{
 						JSON: v1.JSON{Raw: []byte("true")},
 					},
 				},
@@ -4262,10 +4263,10 @@ func TestMetadata(t *testing.T) {
 		},
 		Spec: httpEndpointsV1alpha1.HTTPEndpointSpec{
 			BaseURL: "api.test.com",
-			Headers: []httpEndpointsV1alpha1.Header{
+			Headers: []commonapi.NameValuePair{
 				{
 					Name: "Accept-Language",
-					Value: httpEndpointsV1alpha1.DynamicValue{
+					Value: commonapi.DynamicValue{
 						JSON: v1.JSON{Raw: []byte("en-US")},
 					},
 				},
@@ -4307,6 +4308,7 @@ func TestMetadata(t *testing.T) {
 				"test": "value",
 			},
 			AppConnectionConfig: appConnectionConfig,
+			GlobalConfig:        &config.Configuration{},
 		},
 	}, "")
 	defer server.Stop()
@@ -4341,7 +4343,8 @@ func TestMetadata(t *testing.T) {
 			`"subscriptions":[{"pubsub_name":"test","topic":"topic","rules":{"rules":[{"path":"path"}]},"dead_letter_topic":"dead"}],` +
 			`"http_endpoints":[{"name":"MockHTTPEndpoint"}],` +
 			`"app_connection_properties":{"port":5000,"protocol":"grpc","channel_address":"1.2.3.4","max_concurrency":10,` +
-			`"health":{"health_probe_interval":"10s","health_probe_timeout":"5s","health_threshold":3}}}`
+			`"health":{"health_probe_interval":"10s","health_probe_timeout":"5s","health_threshold":3}},` +
+			`"runtime_version":"edge"}`
 		assert.Equal(t, expectedResponse, string(bytes))
 	})
 }

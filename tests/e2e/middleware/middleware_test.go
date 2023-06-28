@@ -103,7 +103,7 @@ func TestSimpleMiddleware(t *testing.T) {
 	t.Run("test_basicMiddleware", func(t *testing.T) {
 		resp, status, err := utils.HTTPPostWithStatus(fmt.Sprintf("http://%s/test/logCall/%s", middlewareURL, "middlewareapp"), []byte{})
 
-		require.Nil(t, err)
+		require.NoError(t, err)
 		require.Equal(t, 200, status)
 		require.NotNil(t, resp)
 
@@ -117,7 +117,7 @@ func TestSimpleMiddleware(t *testing.T) {
 	t.Run("test_basicAppChannelMiddleware", func(t *testing.T) {
 		resp, status, err := utils.HTTPPostWithStatus(fmt.Sprintf("http://%s/test/logCall/%s", appMiddlewareURL, "app-channel-middleware"), []byte{})
 
-		require.Nil(t, err)
+		require.NoError(t, err)
 		require.Equal(t, 200, status)
 		require.NotNil(t, resp)
 
@@ -131,7 +131,7 @@ func TestSimpleMiddleware(t *testing.T) {
 	t.Run("test_noMiddleware", func(t *testing.T) {
 		resp, status, err := utils.HTTPPostWithStatus(fmt.Sprintf("http://%s/test/logCall/%s", noMiddlewareURL, "no-middleware"), []byte{})
 
-		require.Nil(t, err)
+		require.NoError(t, err)
 		require.Equal(t, 200, status)
 		require.NotNil(t, resp)
 

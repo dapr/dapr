@@ -86,14 +86,13 @@ Dapr uses prometheus process and go collectors by default.
 * dapr_runtime_actor_status_report_fail_total: The number of the failed status reports to placement service
 * dapr_runtime_actor_table_operation_recv_total: The number of the received actor placement table operations.
 * dapr_runtime_actor_rebalanced_total: The number of the actor rebalance requests.
-* dapr_runtime_actor_activated_total: The number of the actor activation.
-* dapr_runtime_actor_activated_failed_total: The number of the actor activation failures.
 * dapr_runtime_actor_deactivated_total: The number of the successful actor deactivation.
 * dapr_runtime_actor_deactivated_failed_total: The number of the failed actor deactivation.
+* dapr_runtime_actor_pending_actor_calls: The number of pending actor calls waiting to acquire the per-actor lock.
 * dapr_runtime_actor_timers: The number of actor timers requests.
 * dapr_runtime_actor_reminders: The number of actor reminders requests.
 * dapr_runtime_actor_reminders_fired_total: The number of actor reminders fired requests.
-* dpar_runtime_actor_timers_fired_total: The number of actor timers fired requests.
+* dapr_runtime_actor_timers_fired_total: The number of actor timers fired requests.
 
 #### Resiliency
 

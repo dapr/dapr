@@ -36,6 +36,7 @@ type UniversalAPI struct {
 	GetComponentsCapabilitesFn func() map[string][]string
 	ExtendedMetadata           map[string]string
 	AppConnectionConfig        config.AppConnectionConfig
+	GlobalConfig               *config.Configuration
 
 	extendedMetadataLock sync.RWMutex
 }

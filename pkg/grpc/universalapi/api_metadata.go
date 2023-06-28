@@ -35,6 +35,8 @@ func (a *UniversalAPI) GetMetadata(ctx context.Context, in *emptypb.Empty) (*run
 		extendedMetadata[k] = v
 	}
 	a.extendedMetadataLock.RUnlock()
+
+	// This is deprecated, but we still need to support it for backward compatibility.
 	extendedMetadata[daprRuntimeVersionKey] = buildinfo.Version()
 
 	// Active actors count
@@ -107,11 +109,18 @@ func (a *UniversalAPI) GetMetadata(ctx context.Context, in *emptypb.Empty) (*run
 		Subscriptions:           ps,
 		HttpEndpoints:           registeredHTTPEndpoints,
 		AppConnectionProperties: appConnectionProperties,
+		RuntimeVersion:          buildinfo.Version(),
+		EnabledFeatures:         a.GlobalConfig.EnabledFeatures(),
 	}, nil
 }
 
 // SetMetadata Sets value in extended metadata of the sidecar.
 func (a *UniversalAPI) SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadataRequest) (*emptypb.Empty, error) {
+	// Nop if the key is empty
+	if in.Key == "" {
+		return &emptypb.Empty{}, nil
+	}
+
 	a.extendedMetadataLock.Lock()
 	if a.ExtendedMetadata == nil {
 		a.ExtendedMetadata = make(map[string]string)
