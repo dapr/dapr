@@ -13,13 +13,37 @@ limitations under the License.
 
 package components
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/dapr/kit/logger"
+)
+
+// Versioning is a struct that contains the versioning information for a single
+// component Type.
+type Versioning struct {
+	Default    string
+	Preferred  string
+	Deprecated []string
+}
 
 // IsInitialVersion returns true when a version is considered an unstable version (v0)
 // or first stable version (v1). For backward compatibility, empty strings are also included.
 func IsInitialVersion(version string) bool {
 	v := strings.ToLower(version)
 	return v == "" || v == UnstableVersion || v == FirstStableVersion
+}
+
+func CheckDeprecated(log logger.Logger, name, version string, verSet map[string]Versioning) {
+	if dep, ok := verSet[name]; ok {
+		for _, v := range dep.Deprecated {
+			if v == version {
+				log.Warnf(
+					"WARNING: state store %[1]s/%[2]s is deprecated and will be removed in a future version, please use %[3]s/%[4]s",
+					name, version, name, dep.Preferred)
+			}
+		}
+	}
 }
 
 const (

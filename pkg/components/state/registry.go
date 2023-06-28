@@ -26,6 +26,9 @@ import (
 type Registry struct {
 	Logger      logger.Logger
 	stateStores map[string]func(logger.Logger) state.Store
+	// verSet holds a set of component types version information for components
+	// which have multiple versions.
+	verSet map[string]components.Versioning
 }
 
 // DefaultRegistry is the singleton with the registry.
@@ -35,6 +38,13 @@ var DefaultRegistry *Registry = NewRegistry()
 func NewRegistry() *Registry {
 	return &Registry{
 		stateStores: map[string]func(logger.Logger) state.Store{},
+		verSet: map[string]components.Versioning{
+			"state.etcd": components.Versioning{
+				Default:    "v1",
+				Preferred:  "v2",
+				Deprecated: []string{"v1"},
+			},
+		},
 	}
 }
 
@@ -53,14 +63,24 @@ func (s *Registry) Create(name, version, logName string) (state.Store, error) {
 }
 
 func (s *Registry) getStateStore(name, version, logName string) (func() state.Store, bool) {
-	nameLower := strings.ToLower(name)
-	versionLower := strings.ToLower(version)
-	stateStoreFn, ok := s.stateStores[nameLower+"/"+versionLower]
+	name = strings.ToLower(name)
+	version = strings.ToLower(version)
+
+	// Default the version if empty string and component has multiple versions.
+	if ver, ok := s.verSet[name]; ok {
+		if len(version) == 0 {
+			version = ver.Default
+		}
+	}
+
+	components.CheckDeprecated(s.Logger, name, version, s.verSet)
+
+	stateStoreFn, ok := s.stateStores[name+"/"+version]
 	if ok {
 		return s.wrapFn(stateStoreFn, logName), true
 	}
-	if components.IsInitialVersion(versionLower) {
-		stateStoreFn, ok = s.stateStores[nameLower]
+	if components.IsInitialVersion(version) {
+		stateStoreFn, ok = s.stateStores[name]
 		if ok {
 			return s.wrapFn(stateStoreFn, logName), true
 		}
