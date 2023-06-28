@@ -16,7 +16,6 @@ package kill
 import (
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"testing"
 	"time"
 )
@@ -32,7 +31,7 @@ func Kill(t *testing.T, cmd *exec.Cmd) {
 
 	interrupt(t, cmd)
 
-	if filepath.Base(cmd.Path) == "daprd" && runtime.GOOS != "windows" {
+	if filepath.Base(cmd.Path) == "daprd" {
 		// TODO: daprd does not currently gracefully exit on a single interrupt
 		// signal. Remove once fixed.
 		time.Sleep(time.Millisecond * 300)
