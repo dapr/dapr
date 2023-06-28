@@ -62,7 +62,8 @@ func (f *fuzzsecret) Setup(t *testing.T) []framework.Option {
 		for *s == "" ||
 			takenNames[*s] ||
 			len(path.IsValidPathSegmentName(*s)) > 0 ||
-			!reg.MatchString(*s) {
+			!reg.MatchString(*s) ||
+			strings.HasSuffix(*s, ".") {
 			*s = c.RandString()
 		}
 		takenNames[*s] = true

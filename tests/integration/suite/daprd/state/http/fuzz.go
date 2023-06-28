@@ -132,7 +132,8 @@ spec:
 	fz := fuzz.New().Funcs(fuzzFuncs...)
 	for i := 0; i < numTests; i++ {
 		fz.Fuzz(&f.getFuzzKeys[i])
-		if strings.Contains(f.getFuzzKeys[i], "||") || len(path.IsValidPathSegmentName(f.getFuzzKeys[i])) > 0 {
+		// Prevent invalid names
+		if strings.Contains(f.getFuzzKeys[i], "||") || strings.HasSuffix(f.getFuzzKeys[i], ".") || len(path.IsValidPathSegmentName(f.getFuzzKeys[i])) > 0 {
 			f.getFuzzKeys[i] = ""
 			i--
 		}
