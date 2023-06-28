@@ -18,12 +18,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -48,14 +46,7 @@ func (m *metadata) Setup(t *testing.T) []framework.Option {
 }
 
 func (m *metadata) Run(t *testing.T, ctx context.Context) {
-	assert.Eventually(t, func() bool {
-		conn, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", m.proc.InternalGRPCPort()))
-		if err != nil {
-			return false
-		}
-		require.NoError(t, conn.Close())
-		return true
-	}, time.Second*5, 100*time.Millisecond)
+	m.proc.WaitUntilRunning(t, ctx)
 
 	reqURL := fmt.Sprintf("http://localhost:%d/v1.0/metadata", m.proc.PublicPort())
 

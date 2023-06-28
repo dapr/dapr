@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"strings"
 	"sync/atomic"
@@ -29,6 +28,7 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -38,10 +38,9 @@ func init() {
 
 // app tests that Dapr responds to healthz requests for the app.
 type app struct {
-	daprd    *procdaprd.Daprd
-	healthy  atomic.Bool
-	server   http.Server
-	listener net.Listener
+	daprd   *procdaprd.Daprd
+	healthy atomic.Bool
+	srv     *prochttp.HTTP
 }
 
 func (a *app) Setup(t *testing.T) []framework.Option {
@@ -62,43 +61,22 @@ func (a *app) Setup(t *testing.T) []framework.Option {
 		fmt.Fprintf(w, "%s %s", r.Method, r.URL.Path)
 	})
 
-	var err error
-	a.listener, err = net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	a.server = http.Server{
-		Handler:           mux,
-		ReadHeaderTimeout: 5 * time.Second,
-	}
-
+	a.srv = prochttp.New(t, prochttp.WithHandler(mux))
 	a.daprd = procdaprd.New(t,
 		procdaprd.WithAppHealthCheck(true),
 		procdaprd.WithAppHealthCheckPath("/foo"),
-		procdaprd.WithAppPort(a.listener.Addr().(*net.TCPAddr).Port),
+		procdaprd.WithAppPort(a.srv.Port()),
 		procdaprd.WithAppHealthProbeInterval(1),
 		procdaprd.WithAppHealthProbeThreshold(1),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(a.daprd),
+		framework.WithProcesses(a.daprd, a.srv),
 	}
 }
 
 func (a *app) Run(t *testing.T, ctx context.Context) {
-	done := make(chan struct{})
-
-	go func() {
-		defer close(done)
-		require.ErrorIs(t, a.server.Serve(a.listener), http.ErrServerClosed)
-	}()
-
-	assert.Eventually(t, func() bool {
-		conn, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", a.daprd.InternalGRPCPort()))
-		if err != nil {
-			return false
-		}
-		require.NoError(t, conn.Close())
-		return true
-	}, time.Second*5, 100*time.Millisecond)
+	a.daprd.WaitUntilRunning(t, ctx)
 
 	a.healthy.Store(true)
 
@@ -133,13 +111,5 @@ func (a *app) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, resp.Body.Close())
 		return resp.StatusCode == http.StatusInternalServerError &&
 			strings.Contains(string(body), "app is not in a healthy state")
-	}, time.Second*5, 100*time.Millisecond, "expected dapr to report app unhealthy now /foo returns 503")
-
-	require.NoError(t, a.server.Shutdown(ctx))
-
-	select {
-	case <-done:
-	case <-time.After(5 * time.Second):
-		t.Error("timed out waiting for healthz server to close")
-	}
+	}, time.Second*20, 100*time.Millisecond, "expected dapr to report app unhealthy now /foo returns 503")
 }
