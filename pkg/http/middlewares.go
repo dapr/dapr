@@ -15,6 +15,7 @@ package http
 
 import (
 	"net/http"
+	"path"
 
 	chi "github.com/go-chi/chi/v5"
 
@@ -63,7 +64,7 @@ func StripSlashesMiddleware(next http.Handler) http.Handler {
 		if rctx != nil && rctx.RoutePath != "" {
 			path = rctx.RoutePath
 		} else {
-			path = r.URL.Path
+			path = r.URL.EscapedPath()
 		}
 		if len(path) > 1 && path[len(path)-1] == '/' {
 			newPath := path[:len(path)-1]
@@ -77,4 +78,22 @@ func StripSlashesMiddleware(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	}
 	return http.HandlerFunc(fn)
+}
+
+// CleanPathMiddleware middleware will clean out double slash mistakes from a user's request path.
+// For example, if a user requests /users//1 or //users////1 will both be treated as: /users/1
+//
+// This is a modified version of the code from https://github.com/go-chi/chi/blob/v5.0.8/middleware/clean_path.go
+// Original code Copyright (c) 2015-present Peter Kieltyka (https://github.com/pkieltyka), Google Inc.
+// Original code license: MIT: https://github.com/go-chi/chi/blob/v5.0.8/LICENSE
+func CleanPathMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rctx := chi.RouteContext(r.Context())
+
+		// Set RoutePath to the EscapedPath always
+		// See: https://github.com/go-chi/chi/issues/641
+		rctx.RoutePath = path.Clean(r.URL.EscapedPath())
+
+		next.ServeHTTP(w, r)
+	})
 }
