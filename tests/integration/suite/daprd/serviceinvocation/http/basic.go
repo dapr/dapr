@@ -44,7 +44,6 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 	newHTTPServer := func() *prochttp.HTTP {
 		handler := http.NewServeMux()
 		handler.HandleFunc("/foo", func(w http.ResponseWriter, r *http.Request) {
-			fmt.Println("INVOKED /FOO", r.URL, r.Method)
 			switch r.Method {
 			case http.MethodPatch:
 				w.WriteHeader(http.StatusBadGateway)
@@ -59,10 +58,12 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 			}
 			w.Write([]byte(r.Method))
 		})
+
 		handler.HandleFunc("/echo", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("x-method", r.Method)
 			io.Copy(w, r.Body)
 		})
+
 		handler.HandleFunc("/with-headers-and-body", func(w http.ResponseWriter, r *http.Request) {
 			body, err := io.ReadAll(r.Body)
 			if err != nil {
@@ -79,6 +80,7 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 			}
 			w.WriteHeader(http.StatusOK)
 		})
+
 		handler.HandleFunc("/multiple/segments", func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path != "/multiple/segments" {
 				w.WriteHeader(http.StatusBadRequest)
@@ -223,7 +225,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			require.NoError(t, err)
 			resp, err := http.DefaultClient.Do(req)
 			require.NoError(t, err)
-			assert.Equal(t, http.StatusCreated, resp.StatusCode)
+			assert.Equal(t, http.StatusOK, resp.StatusCode)
 			body, err := io.ReadAll(resp.Body)
 			require.NoError(t, err)
 			require.NoError(t, resp.Body.Close())
