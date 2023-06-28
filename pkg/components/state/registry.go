@@ -39,7 +39,7 @@ func NewRegistry() *Registry {
 	return &Registry{
 		stateStores: map[string]func(logger.Logger) state.Store{},
 		verSet: map[string]components.Versioning{
-			"state.etcd": components.Versioning{
+			"state.etcd": {
 				Default:    "v1",
 				Preferred:  "v2",
 				Deprecated: []string{"v1"},
