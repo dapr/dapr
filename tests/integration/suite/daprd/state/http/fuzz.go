@@ -75,7 +75,7 @@ func (f *fuzzstate) Setup(t *testing.T) []framework.Option {
 	fuzzFuncs := []any{
 		func(s *saveReqBinary, c fuzz.Continue) {
 			var ok bool
-			for len(s.Key) == 0 || strings.Contains(s.Key, "||") || strings.HasSuffix(f.getFuzzKeys[i], ".") || ok {
+			for len(s.Key) == 0 || strings.Contains(s.Key, "||") || strings.HasSuffix(s.Key, ".") || ok {
 				s.Key = c.RandString()
 				_, ok = takenKeys.LoadOrStore(s.Key, true)
 			}
@@ -85,7 +85,7 @@ func (f *fuzzstate) Setup(t *testing.T) []framework.Option {
 		},
 		func(s *saveReqString, c fuzz.Continue) {
 			var ok bool
-			for len(s.Key) == 0 || strings.Contains(s.Key, "||") || strings.HasSuffix(f.getFuzzKeys[i], ".") || ok {
+			for len(s.Key) == 0 || strings.Contains(s.Key, "||") || strings.HasSuffix(s.Key, ".") || ok {
 				s.Key = c.RandString()
 				_, ok = takenKeys.LoadOrStore(s.Key, true)
 			}
@@ -95,7 +95,7 @@ func (f *fuzzstate) Setup(t *testing.T) []framework.Option {
 		},
 		func(s *saveReqAny, c fuzz.Continue) {
 			var ok bool
-			for len(s.Key) == 0 || strings.Contains(s.Key, "||") || strings.HasSuffix(f.getFuzzKeys[i], ".") || ok {
+			for len(s.Key) == 0 || strings.Contains(s.Key, "||") || strings.HasSuffix(s.Key, ".") || ok {
 				s.Key = c.RandString()
 				_, ok = takenKeys.LoadOrStore(s.Key, true)
 			}
