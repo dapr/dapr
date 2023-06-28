@@ -93,6 +93,7 @@ func (s *state) init(ctx context.Context, comp compapi.Component) error {
 				//nolint:gocritic
 				if strings.ToLower(k) == propertyKeyActorStateStore {
 					actorStoreSpecified = utils.IsTruthy(v)
+					break
 				}
 			}
 

@@ -629,8 +629,8 @@ func (a *DaprRuntime) buildHTTPPipelineForSpec(spec config.PipelineSpec, targetP
 			component, exists := a.compStore.GetComponent(middlewareSpec.Type, middlewareSpec.Name)
 			if !exists {
 				// Log the error but continue with initializing the pipeline
-				log.Error("couldn't find middleware component defined in configuration with name %s and type %s/%s",
-					middlewareSpec.Name, middlewareSpec.Type, middlewareSpec.Version)
+				log.Error("couldn't find middleware component defined in configuration with name %s and type %s",
+					middlewareSpec.Name, middlewareSpec.LogName())
 				continue
 			}
 			md := middleware.Metadata{Base: a.meta.ToBaseMetadata(component)}
@@ -988,11 +988,11 @@ func (a *DaprRuntime) beginComponentsUpdates() error {
 			}
 
 			if !a.isObjectAuthorized(component) {
-				log.Debugf("received unauthorized component update, ignored. name: %s, type: %s/%s", component.ObjectMeta.Name, component.Spec.Type, component.Spec.Version)
+				log.Debugf("received unauthorized component update, ignored. name: %s, type: %s", component.ObjectMeta.Name, component.LogName())
 				return
 			}
 
-			log.Debugf("received component update. name: %s, type: %s/%s", component.ObjectMeta.Name, component.Spec.Type, component.Spec.Version)
+			log.Debugf("received component update. name: %s, type: %s", component.ObjectMeta.Name, component.LogName())
 			updated := a.onComponentUpdated(component)
 			if !updated {
 				log.Info("component update skipped: .spec field unchanged")

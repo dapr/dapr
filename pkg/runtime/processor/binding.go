@@ -54,7 +54,7 @@ func (b *binding) init(ctx context.Context, comp compapi.Component) error {
 
 	default:
 		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "creation", comp.ObjectMeta.Name)
-		return fmt.Errorf("couldn't find binding %s/%s", comp.Spec.Type, comp.Spec.Version)
+		return fmt.Errorf("couldn't find binding %s", comp.LogName())
 	}
 
 	return nil
@@ -77,7 +77,7 @@ func (b *binding) initInputBinding(ctx context.Context, comp compapi.Component) 
 		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 	}
 
-	log.Infof("successful init for input binding %s (%s/%s)", comp.ObjectMeta.Name, comp.Spec.Type, comp.Spec.Version)
+	log.Infof("successful init for input binding %s (%s)", comp.ObjectMeta.Name, comp.LogName())
 	b.compStore.AddInputBindingRoute(comp.Name, comp.Name)
 	for _, item := range comp.Spec.Metadata {
 		if item.Name == "route" {
@@ -108,7 +108,7 @@ func (b *binding) initOutputBinding(ctx context.Context, comp compapi.Component)
 			diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
 			return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 		}
-		log.Infof("successful init for output binding %s (%s/%s)", comp.ObjectMeta.Name, comp.Spec.Type, comp.Spec.Version)
+		log.Infof("successful init for output binding %s (%s)", comp.ObjectMeta.Name, comp.LogName())
 		b.compStore.AddOutputBinding(comp.ObjectMeta.Name, binding)
 		diag.DefaultMonitoring.ComponentInitialized(comp.Spec.Type)
 	}

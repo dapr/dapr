@@ -62,19 +62,15 @@ func (m *Meta) convertItemsToProps(items []common.NameValuePair) map[string]stri
 		for strings.Contains(val, "{uuid}") {
 			val = strings.Replace(val, "{uuid}", uuid.New().String(), 1)
 		}
-		for strings.Contains(val, "{podName}") {
+		if strings.Contains(val, "{podName}") {
 			if m.podName == "" {
 				// TODO: @joshvanl: return error here rather than panicing.
 				log.Fatalf("failed to parse metadata: property %s refers to {podName} but podName is not set", c.Name)
 			}
-			val = strings.Replace(val, "{podName}", m.podName, 1)
+			val = strings.ReplaceAll(val, "{podName}", m.podName)
 		}
-		for strings.Contains(val, "{namespace}") {
-			val = strings.Replace(val, "{namespace}", fmt.Sprintf("%s.%s", m.namespace, m.id), 1)
-		}
-		for strings.Contains(val, "{appID}") {
-			val = strings.Replace(val, "{appID}", m.id, 1)
-		}
+		val = strings.ReplaceAll(val, "{namespace}", fmt.Sprintf("%s.%s", m.namespace, m.id))
+		val = strings.ReplaceAll(val, "{appID}", m.id)
 		properties[c.Name] = val
 	}
 	return properties

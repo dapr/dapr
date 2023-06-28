@@ -95,6 +95,7 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
+	"github.com/dapr/dapr/pkg/runtime/meta"
 	rtmock "github.com/dapr/dapr/pkg/runtime/mock"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/registry"
@@ -2155,6 +2156,7 @@ func TestMiddlewareBuildPipeline(t *testing.T) {
 			rt := &DaprRuntime{
 				compStore:    compStore,
 				globalConfig: &config.Configuration{},
+				meta:         meta.New(meta.Options{}),
 				runtimeConfig: &internalConfig{
 					registry: registry.New(registry.NewOptions().WithHTTPMiddlewares(
 						httpMiddlewareLoader.NewRegistry(),
