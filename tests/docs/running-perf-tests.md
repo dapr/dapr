@@ -148,7 +148,7 @@ Once a contributor creates a pull request, E2E tests on KinD clusters are automa
 
 
 
-#  Visualize Performance Test Metrics (Optional)
+## Optional: Visualize Performance Test Metrics
 
 ```bash
 export DAPR_PERF_METRICS_PROMETHEUS_URL="http://localhost:9091"
@@ -159,32 +159,24 @@ Install the following in your Kubernetes cluster:
  - Pushgateway
  - Grafana
  
- * Create a new namesapce
+* Create a new namesapce
   
-    ```bash
-    DAPR_PERF_METRICS_NAMESPACE=dapr-perf-metrics
-    kubectl create namespace $DAPR_PERF_METRICS_NAMESPACE
-    ```
+  ```bash
+  DAPR_PERF_METRICS_NAMESPACE=dapr-perf-metrics
+  kubectl create namespace $DAPR_PERF_METRICS_NAMESPACE
+  ```
 
 ## Setup for Prometheus Server
 
-  ```bash
-  helm repo add prometheus-community https://prometheus-community.github.io/helm-charts 
-  helm repo update
-  helm install --namespace $DAPR_PERF_METRICS_NAMESPACE prometheus prometheus-community/prometheus
-  ```
-
-* Forward port 9090 from your local machine to the pod where the prometheus-server is running
-
-  ```bash
-   kubectl port-forward --namespace $DAPR_PERF_METRICS_NAMESPACE deployment/prometheus-server 9090
-  ```
-* The Prometheus-server can now be accessed on localhost:9090.
-
+```bash
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts 
+helm repo update
+helm install --namespace $DAPR_PERF_METRICS_NAMESPACE prometheus prometheus-community/prometheus
+```
 
 ## Setup for Prometheus Pushgateway
 
-* There is no need for an individual set-up for pushgateway server as the Prometheus-pushgateway pod which was created while setting up prometheus on AKS can be used. This method is favorable as the connection between Prometheus and Pushgateway is already established in this case, and there is no need for setting up the individual configurations. 
+The Prometheus installation above comes with a pushgateway. 
 
 * Forward port 9091 from your local machine to the prometheus-pushgateway pod and access it on localhost:9091 
 
@@ -196,42 +188,42 @@ Install the following in your Kubernetes cluster:
 
 * Create a grafana.yaml file with the following configurations:
 
-    ```yaml
-    apiVersion: apps/v1
-    kind: Deployment
-    metadata:
-      name: grafana
-      namespace: dapr-perf-metrics
-    spec:
-      replicas: 1
-      selector:
-        matchLabels:
-          app: grafana
-      template:
-        metadata:
-          labels:grafana
-            app: grafana
-        spec:
-          containers:
-            - name: grafana
-              image: grafana/grafana:latest
-              ports:
-                - containerPort: 3000
-    ---
-    apiVersion: v1
-    kind: Service
-    metadata:
-      name: grafana
-      namespace: dapr-perf-metrics
-    spec:
-      type: LoadBalancer
-      ports:
-        - port: 80
-          targetPort: 3000
-          protocol: TCP
-      selector:
+  ```yaml
+  apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: grafana
+    namespace: dapr-perf-metrics
+  spec:
+    replicas: 1
+    selector:
+      matchLabels:
         app: grafana
-    ```
+    template:
+      metadata:
+        labels:grafana
+          app: grafana
+      spec:
+        containers:
+          - name: grafana
+            image: grafana/grafana:latest
+            ports:
+              - containerPort: 3000
+  ---
+  apiVersion: v1
+  kind: Service
+  metadata:
+    name: grafana
+    namespace: dapr-perf-metrics
+  spec:
+    type: LoadBalancer
+    ports:
+      - port: 80
+        targetPort: 3000
+        protocol: TCP
+    selector:
+      app: grafana
+  ```
 
 * Apply the configurations
   
@@ -249,13 +241,12 @@ Install the following in your Kubernetes cluster:
 
 * Now go to data sources and connect Prometheus as a data source.
 
-* The http URL will be the ClusterIP of the prometheus-server pod running on AKS which can be obtained by the command:
+* The HTTP URL will be the ClusterIP of the prometheus-server pod running on AKS which can be obtained by the command:
   
   ```bash
   kubectl get svc --namespace $DAPR_PERF_METRICS_NAMESPACE
   ```
-  So, the http URL will be http:// ClusterIP of prometheus-server pod
-  
+
 * [Grafana Dashboard for Perf Test](../config/grafana-perf-test-dashboard.json)
   
   On running the perf-tests now, the metrics are collected from pushgateway by prometheus and is made available for visualization as a dashboard by importing the above template in Grafana. 
