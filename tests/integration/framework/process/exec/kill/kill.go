@@ -14,9 +14,9 @@ limitations under the License.
 package kill
 
 import (
-	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -32,11 +32,7 @@ func Kill(t *testing.T, cmd *exec.Cmd) {
 
 	interrupt(t, cmd)
 
-	if filepath.Base(cmd.Path) == "daprd" {
-		// If the process is already killed on non-unix, return early.
-		if _, err := os.FindProcess(cmd.Process.Pid); err != nil {
-			return
-		}
+	if filepath.Base(cmd.Path) == "daprd" && runtime.GOOS != "windows" {
 		// TODO: daprd does not currently gracefully exit on a single interrupt
 		// signal. Remove once fixed.
 		time.Sleep(time.Millisecond * 300)
