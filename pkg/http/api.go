@@ -23,6 +23,7 @@ import (
 	"io"
 	nethttp "net/http"
 	"net/url"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -1246,16 +1247,16 @@ func (a *api) onDirectMessage(w nethttp.ResponseWriter, r *nethttp.Request) {
 // 1. HTTP header 'dapr-app-id' (path is method)
 // 2. Basic auth header: `http://dapr-app-id:<service-id>@localhost:3500/<method>`
 // 3. URL parameter: `http://localhost:3500/v1.0/invoke/<app-id>/method/<method>`
-func findTargetIDAndMethod(path string, headers nethttp.Header) (targetID string, method string) {
+func findTargetIDAndMethod(reqPath string, headers nethttp.Header) (targetID string, method string) {
 	if appID := headers.Get(daprAppID); appID != "" {
-		return appID, strings.TrimPrefix(path, "/")
+		return appID, strings.TrimPrefix(path.Clean(reqPath), "/")
 	}
 
 	if auth := headers.Get(fasthttp.HeaderAuthorization); strings.HasPrefix(auth, "Basic ") {
 		if s, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(auth, "Basic ")); err == nil {
 			pair := strings.Split(string(s), ":")
 			if len(pair) == 2 && pair[0] == daprAppID {
-				return pair[1], strings.TrimPrefix(path, "/")
+				return pair[1], strings.TrimPrefix(path.Clean(reqPath), "/")
 			}
 		}
 	}
@@ -1263,8 +1264,8 @@ func findTargetIDAndMethod(path string, headers nethttp.Header) (targetID string
 	// If we're here, the handler was probably invoked with /v1.0/invoke/ (or the invocation is invalid, missing the app id provided as header or Basic auth)
 	// However, we are not relying on wildcardParam because the URL may have been sanitized to remove `//``, so `http://` would have been turned into `http:/`
 	// First, check to make sure that the path has the prefix
-	if idx := pathHasPrefix(path, apiVersionV1, "invoke"); idx > 0 {
-		path = path[idx:]
+	if idx := pathHasPrefix(reqPath, apiVersionV1, "invoke"); idx > 0 {
+		reqPath = reqPath[idx:]
 
 		// Scan to find app ID and method
 		// Matches `<appid>/method/<method>`.
@@ -1273,9 +1274,9 @@ func findTargetIDAndMethod(path string, headers nethttp.Header) (targetID string
 		// - `http://example.com/method/mymethod`
 		// - `https://example.com/method/mymethod`
 		// - `http%3A%2F%2Fexample.com/method/mymethod`
-		if idx = strings.Index(path, "/method/"); idx > 0 {
-			targetID = path[:idx]
-			method = path[(idx + len("/method/")):]
+		if idx = strings.Index(reqPath, "/method/"); idx > 0 {
+			targetID = reqPath[:idx]
+			method = reqPath[(idx + len("/method/")):]
 			if t, _ := url.QueryUnescape(targetID); t != "" {
 				targetID = t
 			}
