@@ -12,7 +12,6 @@ import (
 
 	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpcRetry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
-	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
@@ -115,14 +114,10 @@ func (a *authenticator) CreateSignedWorkloadCert(id, namespace, trustDomain stri
 	if err != nil {
 		return nil, fmt.Errorf("error obtaining token: %w", err)
 	}
-	idSpiffe, err := getSentryIdentifier(trustDomain, namespace, id, tokenValidator)
-	if err != nil {
-		return nil, err
-	}
 	resp, err := c.SignCertificate(context.Background(),
 		&sentryv1pb.SignCertificateRequest{
 			CertificateSigningRequest: certPem,
-			Id:                        idSpiffe,
+			Id:                        getSentryIdentifier(id),
 			Token:                     token,
 			TokenValidator:            tokenValidator,
 			TrustDomain:               trustDomain,
@@ -181,6 +176,10 @@ func getToken() (token string, validator sentryv1pb.SignCertificateRequest_Token
 			log.Warnf("Failed to read token at path %q: %v", path, err)
 			return "", sentryv1pb.SignCertificateRequest_UNKNOWN, fmt.Errorf("failed to read token at path %q: %w", path, err)
 		}
+		if len(b) == 0 {
+			log.Warnf("Token at path %q is empty", path)
+			return "", sentryv1pb.SignCertificateRequest_UNKNOWN, fmt.Errorf("token at path %q is empty", path)
+		}
 
 		log.Debugf("Loaded token from path %q specified in the DAPR_SENTRY_TOKEN_FILE environmental variable", path)
 		return string(b), sentryv1pb.SignCertificateRequest_JWKS, nil
@@ -202,26 +201,12 @@ func getToken() (token string, validator sentryv1pb.SignCertificateRequest_Token
 	return "", sentryv1pb.SignCertificateRequest_UNKNOWN, nil
 }
 
-func getSentryIdentifier(trustDomain, namespace, appID string, tokenValidator sentryv1pb.SignCertificateRequest_TokenValidator) (string, error) {
-	switch tokenValidator {
-	case sentryv1pb.SignCertificateRequest_JWKS:
-		// For the JWKS validator, we need to return a SPIFFE ID
-		td, err := spiffeid.TrustDomainFromString(trustDomain)
-		if err != nil {
-			return "", fmt.Errorf("failed to get SPIFFE trust domain: %w", err)
-		}
-		id, err := spiffeid.FromPathf(td, "/ns/%s/%s", namespace, appID)
-		if err != nil {
-			return "", fmt.Errorf("failed to get SPIFFE ID: %w", err)
-		}
-		return id.String(), nil
-	default:
-		// For all other validators, return the injected identity
-		// Defaults to app ID if not present
-		localID := os.Getenv(consts.SentryLocalIdentityEnvVar)
-		if localID != "" {
-			return localID, nil
-		}
-		return appID, nil
+func getSentryIdentifier(appID string) string {
+	// Return the injected identity
+	// Defaults to app ID if not present
+	localID := os.Getenv(consts.SentryLocalIdentityEnvVar)
+	if localID != "" {
+		return localID
 	}
+	return appID
 }

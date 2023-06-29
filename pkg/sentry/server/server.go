@@ -151,7 +151,7 @@ func (s *server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 		dns = fmt.Sprintf("%s.%s.svc.cluster.local", req.Id, req.Namespace)
 	}
 
-	log.Debugf("Processing SignCertificate requests for %s (validator: %s)", dns, string(validator))
+	log.Debugf("Processing SignCertificate requests for %s (validator: %s)", dns, validator.String())
 
 	chain, err := s.ca.SignIdentity(ctx, &ca.SignRequest{
 		PublicKey:          csr.PublicKey,
