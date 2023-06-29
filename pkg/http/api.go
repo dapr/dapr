@@ -1154,6 +1154,13 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 	metadata := getMetadataFromFastHTTPRequest(reqCtx)
 
 	for i, r := range reqs {
+		if len(reqs[i].Key) == 0 {
+			msg := NewErrorResponse("ERR_MALFORMED_REQUEST", `"key" is a required field`)
+			fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusBadRequest, msg))
+			log.Debug(msg)
+			return
+		}
+
 		// merge metadata from URL query parameters
 		if reqs[i].Metadata == nil {
 			reqs[i].Metadata = metadata

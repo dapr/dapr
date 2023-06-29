@@ -15,6 +15,30 @@ package daprd
 
 import "github.com/dapr/dapr/tests/integration/framework/process/exec"
 
+// Option is a function that configures the dapr process.
+type Option func(*options)
+
+// options contains the options for running Daprd in integration tests.
+type options struct {
+	execOpts []exec.Option
+
+	appID                   string
+	appPort                 int
+	grpcPort                int
+	httpPort                int
+	internalGRPCPort        int
+	publicPort              int
+	metricsPort             int
+	profilePort             int
+	appProtocol             string
+	appHealthCheck          bool
+	appHealthCheckPath      string
+	appHealthProbeInterval  int
+	appHealthProbeThreshold int
+	componentFiles          []string
+	logLevel                string
+}
+
 func WithExecOptions(execOptions ...exec.Option) Option {
 	return func(o *options) {
 		o.execOpts = execOptions
@@ -30,6 +54,12 @@ func WithAppID(appID string) Option {
 func WithAppPort(port int) Option {
 	return func(o *options) {
 		o.appPort = port
+	}
+}
+
+func WithAppProtocol(protocol string) Option {
+	return func(o *options) {
+		o.appProtocol = protocol
 	}
 }
 
@@ -90,5 +120,17 @@ func WithAppHealthProbeInterval(interval int) Option {
 func WithAppHealthProbeThreshold(threshold int) Option {
 	return func(o *options) {
 		o.appHealthProbeThreshold = threshold
+	}
+}
+
+func WithComponentFiles(files ...string) Option {
+	return func(o *options) {
+		o.componentFiles = files
+	}
+}
+
+func WithLogLevel(logLevel string) Option {
+	return func(o *options) {
+		o.logLevel = logLevel
 	}
 }
