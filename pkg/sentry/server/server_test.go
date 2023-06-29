@@ -40,7 +40,6 @@ import (
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/dapr/dapr/pkg/security"
 	securityfake "github.com/dapr/dapr/pkg/security/fake"
-	"github.com/dapr/dapr/pkg/sentry/config"
 	"github.com/dapr/dapr/pkg/sentry/server/ca"
 	cafake "github.com/dapr/dapr/pkg/sentry/server/ca/fake"
 	"github.com/dapr/dapr/pkg/sentry/server/validator"
@@ -97,7 +96,7 @@ func TestRun(t *testing.T) {
 				TrustDomain:               "my-trust-domain",
 				Namespace:                 "my-namespace",
 				CertificateSigningRequest: csrPEM,
-				TokenValidator:            "test",
+				TokenValidator:            sentryv1pb.SignCertificateRequest_TokenValidator(-1),
 			},
 			expResp: nil,
 			expErr:  true,
@@ -121,7 +120,7 @@ func TestRun(t *testing.T) {
 				TrustDomain:               "my-trust-domain",
 				Namespace:                 "my-namespace",
 				CertificateSigningRequest: csrPEM,
-				TokenValidator:            "test",
+				TokenValidator:            sentryv1pb.SignCertificateRequest_TokenValidator(-1),
 			},
 			expResp: nil,
 			expErr:  true,
@@ -145,7 +144,7 @@ func TestRun(t *testing.T) {
 				TrustDomain:               "my-trust-domain",
 				Namespace:                 "my-namespace",
 				CertificateSigningRequest: []byte("bad csr"),
-				TokenValidator:            "test",
+				TokenValidator:            sentryv1pb.SignCertificateRequest_TokenValidator(-1),
 			},
 			expResp: nil,
 			expErr:  true,
@@ -169,7 +168,7 @@ func TestRun(t *testing.T) {
 				TrustDomain:               "my-trust-domain",
 				Namespace:                 "my-namespace",
 				CertificateSigningRequest: csrPEM,
-				TokenValidator:            "test",
+				TokenValidator:            sentryv1pb.SignCertificateRequest_TokenValidator(-1),
 			},
 			expResp: nil,
 			expErr:  true,
@@ -193,7 +192,7 @@ func TestRun(t *testing.T) {
 				TrustDomain:               "my-trust-domain",
 				Namespace:                 "my-namespace",
 				CertificateSigningRequest: csrPEM,
-				TokenValidator:            "test",
+				TokenValidator:            sentryv1pb.SignCertificateRequest_TokenValidator(-1),
 			},
 			expResp: &sentryv1pb.SignCertificateResponse{
 				WorkloadCertificate:    crtPEM,
@@ -222,7 +221,7 @@ func TestRun(t *testing.T) {
 				TrustDomain:               "my-trust-domain",
 				Namespace:                 "default",
 				CertificateSigningRequest: csrPEM,
-				TokenValidator:            "test",
+				TokenValidator:            sentryv1pb.SignCertificateRequest_TokenValidator(-1),
 			},
 			expResp: &sentryv1pb.SignCertificateResponse{
 				WorkloadCertificate:    crtPEM,
@@ -251,7 +250,7 @@ func TestRun(t *testing.T) {
 				TrustDomain:               "my-trust-domain",
 				Namespace:                 "default",
 				CertificateSigningRequest: csrPEM,
-				TokenValidator:            "test",
+				TokenValidator:            sentryv1pb.SignCertificateRequest_TokenValidator(-1),
 			},
 			expResp: &sentryv1pb.SignCertificateResponse{
 				WorkloadCertificate:    crtPEM,
@@ -269,10 +268,13 @@ func TestRun(t *testing.T) {
 			require.NoError(t, err)
 			ctx, cancel := context.WithCancel(context.Background())
 			opts := Options{
-				Port:       port,
-				Security:   test.sec,
-				Validators: map[config.ValidatorName]validator.Validator{"test": test.val},
-				CA:         test.ca,
+				Port:     port,
+				Security: test.sec,
+				Validators: map[sentryv1pb.SignCertificateRequest_TokenValidator]validator.Validator{
+					// This is an invalid validator that is just used for tests
+					-1: test.val,
+				},
+				CA: test.ca,
 			}
 
 			serverClosed := make(chan struct{})

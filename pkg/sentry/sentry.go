@@ -23,6 +23,7 @@ import (
 
 	"k8s.io/client-go/rest"
 
+	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/pkg/sentry/config"
 	"github.com/dapr/dapr/pkg/sentry/monitoring"
@@ -115,7 +116,7 @@ func (s *sentry) Start(parentCtx context.Context) error {
 
 	errCh := make(chan error, 2+len(vals))
 	for name, val := range vals {
-		go func(name config.ValidatorName, val validator.Validator) {
+		go func(name sentryv1pb.SignCertificateRequest_TokenValidator, val validator.Validator) {
 			log.Infof("Starting validator %s", name)
 			errCh <- val.Start(ctx)
 		}(name, val)
@@ -145,11 +146,11 @@ func (s *sentry) Start(parentCtx context.Context) error {
 	return <-errCh
 }
 
-func (s *sentry) getValidators(ctx context.Context) (map[config.ValidatorName]validator.Validator, error) {
-	vals := make(map[config.ValidatorName]validator.Validator, len(s.conf.Validators))
-	for name, opts := range s.conf.Validators {
-		switch name {
-		case config.ValidatorKubernetes:
+func (s *sentry) getValidators(ctx context.Context) (map[sentryv1pb.SignCertificateRequest_TokenValidator]validator.Validator, error) {
+	vals := make(map[sentryv1pb.SignCertificateRequest_TokenValidator]validator.Validator, len(s.conf.Validators))
+	for validatorID, opts := range s.conf.Validators {
+		switch validatorID {
+		case sentryv1pb.SignCertificateRequest_KUBERNETES:
 			config, err := rest.InClusterConfig()
 			if err != nil {
 				return nil, err
@@ -167,13 +168,13 @@ func (s *sentry) getValidators(ctx context.Context) (map[config.ValidatorName]va
 				return nil, err
 			}
 			log.Info("Adding validator 'kubernetes' with Sentry ID: " + sentryID.String())
-			vals[name] = val
+			vals[validatorID] = val
 
-		case config.ValidatorInsecure:
+		case sentryv1pb.SignCertificateRequest_INSECURE:
 			log.Info("Adding validator 'insecure'")
-			vals[name] = validatorInsecure.New()
+			vals[validatorID] = validatorInsecure.New()
 
-		case config.ValidatorJWKS:
+		case sentryv1pb.SignCertificateRequest_JWKS:
 			sentryID, err := security.SentryID(s.conf.TrustDomain, security.CurrentNamespace())
 			if err != nil {
 				return nil, err
@@ -190,7 +191,7 @@ func (s *sentry) getValidators(ctx context.Context) (map[config.ValidatorName]va
 				return nil, err
 			}
 			log.Info("Adding validator 'jwks' with Sentry ID: " + sentryID.String())
-			vals[name] = val
+			vals[validatorID] = val
 		}
 	}
 

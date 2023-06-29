@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	daprDaprConfig "github.com/dapr/dapr/pkg/config"
+	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 )
 
 func TestConfig(t *testing.T) {
@@ -78,23 +79,23 @@ func TestConfig(t *testing.T) {
 				require.NoError(t, err)
 
 				require.Len(t, conf.Validators, 1)
-				require.NotNil(t, conf.Validators[ValidatorKubernetes])
-				require.Equal(t, ValidatorKubernetes, conf.DefaultValidator)
+				require.NotNil(t, conf.Validators[sentryv1pb.SignCertificateRequest_KUBERNETES])
+				require.Equal(t, sentryv1pb.SignCertificateRequest_KUBERNETES, conf.DefaultValidator)
 			})
 
 			t.Run("additional validators", func(t *testing.T) {
 				daprConfig.Spec.MTLSSpec.TokenValidators = []daprDaprConfig.ValidatorSpec{
-					{Name: string(ValidatorJWKS), Options: map[any]any{"foo": "bar"}},
+					{Name: sentryv1pb.SignCertificateRequest_JWKS.String(), Options: map[any]any{"foo": "bar"}},
 				}
 
 				conf, err := parseConfiguration(defaultConfig, &daprConfig)
 				require.NoError(t, err)
 
 				require.Len(t, conf.Validators, 2)
-				require.NotNil(t, conf.Validators[ValidatorKubernetes])
-				require.NotNil(t, conf.Validators[ValidatorJWKS])
-				require.Equal(t, map[string]string{"foo": "bar"}, conf.Validators[ValidatorJWKS])
-				require.Equal(t, ValidatorKubernetes, conf.DefaultValidator)
+				require.NotNil(t, conf.Validators[sentryv1pb.SignCertificateRequest_KUBERNETES])
+				require.NotNil(t, conf.Validators[sentryv1pb.SignCertificateRequest_JWKS])
+				require.Equal(t, map[string]string{"foo": "bar"}, conf.Validators[sentryv1pb.SignCertificateRequest_JWKS])
+				require.Equal(t, sentryv1pb.SignCertificateRequest_KUBERNETES, conf.DefaultValidator)
 			})
 		})
 
@@ -109,22 +110,22 @@ func TestConfig(t *testing.T) {
 				require.NoError(t, err)
 
 				require.Len(t, conf.Validators, 1)
-				require.NotNil(t, conf.Validators[ValidatorInsecure])
-				require.Equal(t, ValidatorInsecure, conf.DefaultValidator)
+				require.NotNil(t, conf.Validators[sentryv1pb.SignCertificateRequest_INSECURE])
+				require.Equal(t, sentryv1pb.SignCertificateRequest_INSECURE, conf.DefaultValidator)
 			})
 
 			t.Run("additional validators", func(t *testing.T) {
 				daprConfig.Spec.MTLSSpec.TokenValidators = []daprDaprConfig.ValidatorSpec{
-					{Name: string(ValidatorJWKS), Options: map[any]any{"foo": "bar"}},
+					{Name: sentryv1pb.SignCertificateRequest_JWKS.String(), Options: map[any]any{"foo": "bar"}},
 				}
 
 				conf, err := parseConfiguration(defaultConfig, &daprConfig)
 				require.NoError(t, err)
 
 				require.Len(t, conf.Validators, 1)
-				require.NotNil(t, conf.Validators[ValidatorJWKS])
-				require.Equal(t, map[string]string{"foo": "bar"}, conf.Validators[ValidatorJWKS])
-				require.Equal(t, ValidatorName(""), conf.DefaultValidator)
+				require.NotNil(t, conf.Validators[sentryv1pb.SignCertificateRequest_JWKS])
+				require.Equal(t, map[string]string{"foo": "bar"}, conf.Validators[sentryv1pb.SignCertificateRequest_JWKS])
+				require.Equal(t, 0, int(conf.DefaultValidator))
 			})
 		})
 	})

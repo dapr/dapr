@@ -28,6 +28,12 @@ service CA {
 }
 
 message SignCertificateRequest {
+  enum TokenValidator {
+    UNKNOWN = 0;
+    INSECURE = 1;
+    KUBERNETES = 2;
+    JWKS = 3;
+  }
   string id = 1;
   string token = 2;
   string trust_domain = 3;
@@ -35,7 +41,7 @@ message SignCertificateRequest {
   // A PEM-encoded x509 CSR.
   bytes certificate_signing_request = 5;
   // Name of the validator to use, if not the default for the environemtn. 
-  string token_validator = 6;
+  TokenValidator token_validator = 6;
 }
 
 message SignCertificateResponse {

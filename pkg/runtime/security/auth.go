@@ -6,6 +6,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -113,12 +114,13 @@ func (a *authenticator) CreateSignedWorkloadCert(id, namespace, trustDomain stri
 	c := sentryv1pb.NewCAClient(conn)
 
 	token, validatorName := getToken()
+	tokenValidator := sentryv1pb.SignCertificateRequest_TokenValidator(sentryv1pb.SignCertificateRequest_TokenValidator_value[strings.ToUpper(validatorName)])
 	resp, err := c.SignCertificate(context.Background(),
 		&sentryv1pb.SignCertificateRequest{
 			CertificateSigningRequest: certPem,
 			Id:                        getSentryIdentifier(id),
 			Token:                     token,
-			TokenValidator:            validatorName,
+			TokenValidator:            tokenValidator,
 			TrustDomain:               trustDomain,
 			Namespace:                 namespace,
 		}, grpcRetry.WithMax(sentryMaxRetries), grpcRetry.WithPerRetryTimeout(sentrySignTimeout))

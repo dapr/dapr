@@ -28,7 +28,6 @@ import (
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/dapr/dapr/pkg/security"
 	secpem "github.com/dapr/dapr/pkg/security/pem"
-	"github.com/dapr/dapr/pkg/sentry/config"
 	"github.com/dapr/dapr/pkg/sentry/monitoring"
 	"github.com/dapr/dapr/pkg/sentry/server/ca"
 	"github.com/dapr/dapr/pkg/sentry/server/validator"
@@ -46,10 +45,10 @@ type Options struct {
 	Security security.Handler
 
 	// Validator are the client authentication validator.
-	Validators map[config.ValidatorName]validator.Validator
+	Validators map[sentryv1pb.SignCertificateRequest_TokenValidator]validator.Validator
 
 	// Name of the default validator to use if the request doesn't specify one.
-	DefaultValidator config.ValidatorName
+	DefaultValidator sentryv1pb.SignCertificateRequest_TokenValidator
 
 	// CA is the certificate authority which signs client certificates.
 	CA ca.Signer
@@ -57,8 +56,8 @@ type Options struct {
 
 // server is the gRPC server for the Sentry service.
 type server struct {
-	vals             map[config.ValidatorName]validator.Validator
-	defaultValidator config.ValidatorName
+	vals             map[sentryv1pb.SignCertificateRequest_TokenValidator]validator.Validator
+	defaultValidator sentryv1pb.SignCertificateRequest_TokenValidator
 	ca               ca.Signer
 }
 
@@ -109,10 +108,10 @@ func (s *server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 
 func (s *server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (*sentryv1pb.SignCertificateResponse, error) {
 	validator := s.defaultValidator
-	if req.TokenValidator != "" {
-		validator = config.ValidatorName(req.TokenValidator)
+	if req.TokenValidator != 0 && req.TokenValidator.String() != "" {
+		validator = req.TokenValidator
 	}
-	if validator == "" {
+	if req.TokenValidator == 0 {
 		return nil, status.Error(codes.InvalidArgument, "a validator name must be specified in this environment")
 	}
 	if _, ok := s.vals[validator]; !ok {

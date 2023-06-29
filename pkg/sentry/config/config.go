@@ -25,6 +25,7 @@ import (
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	daprGlobalConfig "github.com/dapr/dapr/pkg/config"
+	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/dapr/dapr/utils"
 )
 
@@ -51,18 +52,6 @@ const (
 	DefaultIssuerKeyFilename = "issuer.key"
 )
 
-// ValidatorName is the name of a supported validator.
-type ValidatorName string
-
-const (
-	// Kubernetes validator (default on Kubernetes).
-	ValidatorKubernetes ValidatorName = "kubernetes"
-	// Insecure validator (default on self-hosted).
-	ValidatorInsecure ValidatorName = "insecure"
-	// JWKS validator
-	ValidatorJWKS ValidatorName = "jwks"
-)
-
 // Config holds the configuration for the Certificate Authority.
 type Config struct {
 	Port             int
@@ -73,8 +62,8 @@ type Config struct {
 	RootCertPath     string
 	IssuerCertPath   string
 	IssuerKeyPath    string
-	Validators       map[ValidatorName]map[string]string
-	DefaultValidator ValidatorName
+	Validators       map[sentryv1pb.SignCertificateRequest_TokenValidator]map[string]string
+	DefaultValidator sentryv1pb.SignCertificateRequest_TokenValidator
 	Features         []daprGlobalConfig.FeatureSpec
 }
 
@@ -184,31 +173,34 @@ func parseConfiguration(conf Config, daprConfig *daprGlobalConfig.Configuration)
 	// Get token validators
 	// In Kubernetes mode, we always allow the built-in "kubernetes" validator
 	// In self-hosted mode, the built-in "insecure" validator is enabled only if no other validator is configured
-	conf.Validators = map[ValidatorName]map[string]string{}
+	conf.Validators = map[sentryv1pb.SignCertificateRequest_TokenValidator]map[string]string{}
 	tokenValidatorSpec := daprConfig.Spec.MTLSSpec.TokenValidators
 	if IsKubernetesHosted() {
-		conf.DefaultValidator = ValidatorKubernetes
-		conf.Validators[ValidatorKubernetes] = map[string]string{}
+		conf.DefaultValidator = sentryv1pb.SignCertificateRequest_KUBERNETES
+		conf.Validators[sentryv1pb.SignCertificateRequest_KUBERNETES] = map[string]string{}
 	}
 	if len(tokenValidatorSpec) > 0 {
 		for _, v := range tokenValidatorSpec {
 			// Check if the name is a valid one
 			// We do not allow re-configuring the built-in validators
-			name := ValidatorName(strings.ToLower(v.Name))
-			switch name {
-			case ValidatorJWKS:
+			val, ok := sentryv1pb.SignCertificateRequest_TokenValidator_value[strings.ToUpper(v.Name)]
+			if !ok {
+				return conf, fmt.Errorf("invalid token validator name: '%s'; supported values: 'jwks'", v.Name)
+			}
+			switch val {
+			case int32(sentryv1pb.SignCertificateRequest_JWKS):
 				// All good - nop
-			case ValidatorKubernetes, ValidatorInsecure:
+			case int32(sentryv1pb.SignCertificateRequest_KUBERNETES), int32(sentryv1pb.SignCertificateRequest_INSECURE):
 				return conf, fmt.Errorf("invalid token validator: the built-in 'kubernetes' and 'insecure' validators cannot be configured manually")
 			default:
 				return conf, fmt.Errorf("invalid token validator name: '%s'; supported values: 'jwks'", v.Name)
 			}
 
-			conf.Validators[name] = v.OptionsMap()
+			conf.Validators[sentryv1pb.SignCertificateRequest_TokenValidator(val)] = v.OptionsMap()
 		}
 	} else if !IsKubernetesHosted() {
-		conf.DefaultValidator = ValidatorInsecure
-		conf.Validators[ValidatorInsecure] = map[string]string{}
+		conf.DefaultValidator = sentryv1pb.SignCertificateRequest_INSECURE
+		conf.Validators[sentryv1pb.SignCertificateRequest_INSECURE] = map[string]string{}
 	}
 
 	return conf, nil
