@@ -155,18 +155,22 @@ export DAPR_PERF_METRICS_PROMETHEUS_URL="http://localhost:9091"
 ```
 
 Install the following in your Kubernetes cluster:
+
  - Prometheus 
  - Pushgateway
  - Grafana
- 
-* Create a new namesapce
-  
+
+
+### Create a new namespace
+
+Create a new namesapce:
+
   ```bash
   DAPR_PERF_METRICS_NAMESPACE=dapr-perf-metrics
   kubectl create namespace $DAPR_PERF_METRICS_NAMESPACE
   ```
 
-## Setup for Prometheus Server
+### Setup for Prometheus Server
 
 ```bash
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts 
@@ -174,19 +178,19 @@ helm repo update
 helm install --namespace $DAPR_PERF_METRICS_NAMESPACE prometheus prometheus-community/prometheus
 ```
 
-## Setup for Prometheus Pushgateway
+### Setup for Prometheus Pushgateway
 
 The Prometheus installation above comes with a pushgateway. 
 
-* Forward port 9091 from your local machine to the prometheus-pushgateway pod and access it on localhost:9091 
+* Forward port 9091 from your local machine to the prometheus-pushgateway pod and access it on `http://localhost:9091` 
 
   ```bash
   kubectl port-forward --namespace $DAPR_PERF_METRICS_NAMESPACE deployment/prometheus-prometheus-pushgateway 9091
   ```
 
-## Setup for Grafana Server
+### Setup for Grafana Server
 
-* Create a grafana.yaml file with the following configurations:
+* Create a `grafana.yaml` file with the following configurations:
 
   ```yaml
   apiVersion: apps/v1
@@ -228,20 +232,22 @@ The Prometheus installation above comes with a pushgateway.
 * Apply the configurations
   
   ```bash
-  kubectl apply -f <path to grafana.yaml file>
+  kubectl apply -f grafana.yaml
   ```
-* Forward port 3000 from your local machine to the pod where grafana is running.
+
+* Forward port 3000 from your local machine to the pod where Grafana is running.
   
   ```bash
   kubectl port-forward --namespace $DAPR_PERF_METRICS_NAMESPACE deployment/grafana 3000
   ```
-  The grafana server can now be accessed on localhost:3000
   
-* Login to grafana with the default username and password 'admin' for both.
+  The Grafana server can now be accessed on localhost:3000
+  
+* Login to Grafana with the default username and password 'admin' for both.
 
 * Now go to data sources and connect Prometheus as a data source.
 
-* The HTTP URL will be the ClusterIP of the prometheus-server pod running on AKS which can be obtained by the command:
+* The HTTP URL will be the ClusterIP of the prometheus-server pod running on Kubernetes which can be obtained by the command:
   
   ```bash
   kubectl get svc --namespace $DAPR_PERF_METRICS_NAMESPACE
@@ -249,4 +255,4 @@ The Prometheus installation above comes with a pushgateway.
 
 * [Grafana Dashboard for Perf Test](../config/grafana-perf-test-dashboard.json)
   
-  On running the perf-tests now, the metrics are collected from pushgateway by prometheus and is made available for visualization as a dashboard by importing the above template in Grafana. 
+  On running the perf-tests now, the metrics are collected from pushgateway by Prometheus and is made available for visualization as a dashboard by importing the above template in Grafana. 
