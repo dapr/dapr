@@ -86,19 +86,27 @@ func (j *jwks) Validate(ctx context.Context, req *sentryv1pb.SignCertificateRequ
 		return res, errors.New("the request does not contain a token")
 	}
 
+	// Validate the internal request
+	// This also returns the trust domain.
+	res, err = internal.Validate(ctx, req)
+	if err != nil {
+		return res, err
+	}
+
+	// Construct the expected value for the subject, which is the SPIFFE ID of the requestor
+	sub := fmt.Sprintf("spiffe://%s/ns/%s/%s", res.String(), req.Namespace, req.Id)
+
 	// Validate the authorization token
 	_, err = jwt.Parse([]byte(req.Token),
 		jwt.WithKeySet(j.cache.KeySet()),
 		jwt.WithAcceptableSkew(5*time.Minute),
 		jwt.WithContext(ctx),
 		jwt.WithAudience(j.sentryAudience),
-		jwt.WithSubject(req.Id),
+		jwt.WithSubject(sub),
 	)
 	if err != nil {
 		return res, fmt.Errorf("token validation failed: %w", err)
 	}
 
-	// Validate the internal request
-	// This also returns the trust domain.
-	return internal.Validate(ctx, req)
+	return res, nil
 }

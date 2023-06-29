@@ -36,9 +36,9 @@ func Validate(_ context.Context, req *sentryv1pb.SignCertificateRequest) (spiffe
 		return spiffeid.TrustDomain{}, fmt.Errorf("invalid request: %w", err)
 	}
 
-	if len(req.GetTrustDomain()) == 0 {
+	if req.GetTrustDomain() == "" {
 		// Default to public trust domain if not specified.
-		return spiffeid.RequireTrustDomainFromString("public"), nil
+		return spiffeid.TrustDomainFromString("public")
 	}
 
 	return spiffeid.TrustDomainFromString(req.GetTrustDomain())
@@ -59,7 +59,7 @@ func csrIsRequired(csr []byte) error {
 }
 
 func namespaceIsRequired(namespace string) error {
-	if len(namespace) == 0 {
+	if namespace == "" {
 		return errors.New("namespace is required")
 	}
 	return nil
