@@ -161,12 +161,6 @@ func (a *authenticator) CreateSignedWorkloadCert(id, namespace, trustDomain stri
 
 // Returns the token for authenticating with Sentry.
 func getToken() (token string, validator sentryv1pb.SignCertificateRequest_TokenValidator, err error) {
-	// Check if we have a token in the DAPR_SENTRY_TOKEN env var (for the JWKS validator)
-	if v, ok := os.LookupEnv(consts.SentryTokenEnvVar); ok {
-		log.Debug("Loaded token from DAPR_SENTRY_TOKEN environmental variable")
-		return v, sentryv1pb.SignCertificateRequest_JWKS, nil
-	}
-
 	// Check if we have a token file in the DAPR_SENTRY_TOKEN_FILE env var (for the JWKS validator)
 	if path, ok := os.LookupEnv(consts.SentryTokenFileEnvVar); ok {
 		if path == "" {

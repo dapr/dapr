@@ -21,8 +21,6 @@ const (
 	AppAPITokenEnvVar = "APP_API_TOKEN"
 	// SentryLocalIdentityEnvVar is the environment variable for the local identity sent to Sentry.
 	SentryLocalIdentityEnvVar = "SENTRY_LOCAL_IDENTITY"
-	// SentryTokenEnvVar is the environment variable for the Sentry token.
-	SentryTokenEnvVar = "DAPR_SENTRY_TOKEN"
 	// SentryTokenEnvVar is the environment variable for the Sentry token file.
 	SentryTokenFileEnvVar = "DAPR_SENTRY_TOKEN_FILE"
 	// APITokenHeader is header name for HTTP/gRPC calls to hold the token.
