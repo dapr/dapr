@@ -41,18 +41,23 @@ type binding struct {
 }
 
 func (b *binding) init(ctx context.Context, comp compapi.Component) error {
-	switch {
-	case b.registry.HasInputBinding(comp.Spec.Type, comp.Spec.Version):
+	var found bool
+
+	if b.registry.HasInputBinding(comp.Spec.Type, comp.Spec.Version) {
 		if err := b.initInputBinding(ctx, comp); err != nil {
 			return err
 		}
+		found = true
+	}
 
-	case b.registry.HasOutputBinding(comp.Spec.Type, comp.Spec.Version):
+	if b.registry.HasOutputBinding(comp.Spec.Type, comp.Spec.Version) {
 		if err := b.initOutputBinding(ctx, comp); err != nil {
 			return err
 		}
+		found = true
+	}
 
-	default:
+	if !found {
 		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "creation", comp.ObjectMeta.Name)
 		return fmt.Errorf("couldn't find binding %s", comp.LogName())
 	}
