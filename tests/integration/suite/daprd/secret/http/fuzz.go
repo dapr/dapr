@@ -61,7 +61,8 @@ func (f *fuzzsecret) Setup(t *testing.T) []framework.Option {
 		for *s == "" ||
 			takenNames[*s] ||
 			len(path.IsValidPathSegmentName(*s)) > 0 ||
-			!reg.MatchString(*s) {
+			!reg.MatchString(*s) ||
+			*s == "." {
 			*s = c.RandString()
 		}
 		takenNames[*s] = true
@@ -126,7 +127,10 @@ func (f *fuzzsecret) Run(t *testing.T, ctx context.Context) {
 		value := value
 		t.Run(key+":"+value, func(t *testing.T) {
 			t.Parallel()
-			getURL := fmt.Sprintf("http://localhost:%d/v1.0/secrets/%s/%s", f.daprd.HTTPPort(), url.PathEscape(f.secretStoreName), url.PathEscape(key))
+			getURL := fmt.Sprintf("http://localhost:%d/v1.0/secrets/%s/%s", f.daprd.HTTPPort(), url.QueryEscape(f.secretStoreName), url.QueryEscape(key))
+			// t.Log("URL", getURL)
+			// t.Log("Secret store name", f.secretStoreName, printRunes(f.secretStoreName))
+			// t.Log("Key", key, printRunes(key))
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, getURL, nil)
 			require.NoError(t, err)
 			resp, err := http.DefaultClient.Do(req)
@@ -135,9 +139,19 @@ func (f *fuzzsecret) Run(t *testing.T, ctx context.Context) {
 			respBody, err := io.ReadAll(resp.Body)
 			require.NoError(t, err)
 			require.NoError(t, resp.Body.Close())
-			assert.Equal(t, `{"`+key+`":"`+value+`"}`, string(respBody))
+			assert.Equal(t, `{"`+key+`":"`+value+`"}`, strings.TrimSpace(string(respBody)))
 		})
 	}
 
 	// TODO: Bulk APIs, nesting, multi-valued
 }
+
+/*
+func printRunes(str string) []string {
+	result := make([]string, 0, len(str))
+	for _, r := range str {
+		result = append(result, strconv.Itoa(int(r)))
+	}
+	return result
+}
+*/
