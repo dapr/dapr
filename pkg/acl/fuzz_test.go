@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	fuzz "github.com/AdamKorcz/go-fuzz-headers-1"
+
 	"github.com/dapr/kit/logger"
 
 	"github.com/dapr/dapr/pkg/config"

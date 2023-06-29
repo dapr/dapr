@@ -11,7 +11,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-//nolint:goimports
 package runtime
 
 import (
@@ -19,17 +18,16 @@ import (
 	"sync/atomic"
 	"testing"
 
+	fuzz "github.com/AdamKorcz/go-fuzz-headers-1"
+
+	"github.com/dapr/components-contrib/pubsub"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	cryptoLoader "github.com/dapr/dapr/pkg/components/crypto"
+	workflowsLoader "github.com/dapr/dapr/pkg/components/workflows"
 
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/kit/logger"
-
-	fuzz "github.com/AdamKorcz/go-fuzz-headers-1"
-
-	"github.com/dapr/components-contrib/pubsub"
-	cryptoLoader "github.com/dapr/dapr/pkg/components/crypto"
-	workflowsLoader "github.com/dapr/dapr/pkg/components/workflows"
 )
 
 var fuzzRT *DaprRuntime
