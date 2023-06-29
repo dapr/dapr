@@ -23,6 +23,7 @@ import (
 
 	"k8s.io/client-go/rest"
 
+	"github.com/dapr/dapr/pkg/concurrency"
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/pkg/sentry/config"
@@ -114,36 +115,36 @@ func (s *sentry) Start(parentCtx context.Context) error {
 		return err
 	}
 
-	errCh := make(chan error, 2+len(vals))
+	// Start all background processes
+	runners := []concurrency.Runner{
+		provider.Start,
+		func(ctx context.Context) error {
+			sec, err := provider.Handler(ctx)
+			if err != nil {
+				return err
+			}
+
+			return server.Start(ctx, server.Options{
+				Port:             s.conf.Port,
+				Security:         sec,
+				Validators:       vals,
+				DefaultValidator: s.conf.DefaultValidator,
+				CA:               camngr,
+			})
+		},
+	}
 	for name, val := range vals {
-		go func(name sentryv1pb.SignCertificateRequest_TokenValidator, val validator.Validator) {
-			log.Infof("Starting validator %s", name)
-			errCh <- val.Start(ctx)
-		}(name, val)
+		log.Infof("Starting validator %s", name)
+		runners = append(runners, val.Start)
 	}
-	go func() {
-		log.Info("Starting security provider")
-		errCh <- provider.Start(ctx)
-	}()
 
-	sec, err := provider.Handler(ctx)
+	mngr := concurrency.NewRunnerManager(runners...)
+	err = mngr.Run(ctx)
 	if err != nil {
-		return err
+		log.Fatalf("Error running Sentry: %v", err)
 	}
 
-	go func() {
-		log.Info("Starting Sentry server")
-		errCh <- server.Start(ctx, server.Options{
-			Port:             s.conf.Port,
-			Security:         sec,
-			Validators:       vals,
-			DefaultValidator: s.conf.DefaultValidator,
-			CA:               camngr,
-		})
-	}()
-
-	// On the first error, cancel the context and return
-	return <-errCh
+	return nil
 }
 
 func (s *sentry) getValidators(ctx context.Context) (map[sentryv1pb.SignCertificateRequest_TokenValidator]validator.Validator, error) {
