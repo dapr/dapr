@@ -130,10 +130,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			{url: fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/foo", b.daprd2.HTTPPort(), b.daprd1.AppID())},
 			{url: fmt.Sprintf("http://localhost:%d/v1.0////invoke/%s/method/foo", b.daprd2.HTTPPort(), b.daprd1.AppID())},
 			{url: fmt.Sprintf("http://localhost:%d/v1.0//invoke//%s/method//foo", b.daprd1.HTTPPort(), b.daprd2.AppID())},
-			// We cannot use `///foo` here because the test app uses the standard Go mux which responds with a 301 status code if the invocation is for `///foo`
-			// This makes Dapr retry with a GET request in all cases, as per specs
-			// See: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/301
-			{url: fmt.Sprintf("http://localhost:%d/foo", b.daprd1.HTTPPort()), headers: map[string]string{
+			{url: fmt.Sprintf("http://localhost:%d///foo", b.daprd1.HTTPPort()), headers: map[string]string{
 				"foo":         "bar",
 				"dapr-app-id": b.daprd2.AppID(),
 			}},
