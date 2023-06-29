@@ -339,6 +339,8 @@ spec:
                       properties:
                         name:
                           description: Name of the validator
+                          enum:
+                          - jwk
                           type: string
                         options:
                           description: Options for the validator, if any
