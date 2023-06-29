@@ -113,7 +113,7 @@ func (f *fuzzstate) Setup(t *testing.T) []framework.Option {
 		fuzz.New().Fuzz(&f.storeName)
 	}
 
-	f.daprd = procdaprd.New(t, procdaprd.WithComponentFiles(fmt.Sprintf(`
+	f.daprd = procdaprd.New(t, procdaprd.WithResourceFiles(fmt.Sprintf(`
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:

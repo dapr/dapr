@@ -35,7 +35,7 @@ type options struct {
 	appHealthCheckPath      string
 	appHealthProbeInterval  int
 	appHealthProbeThreshold int
-	componentFiles          []string
+	resourceFiles           []string
 	logLevel                string
 }
 

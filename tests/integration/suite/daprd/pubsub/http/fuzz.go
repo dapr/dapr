@@ -212,7 +212,7 @@ spec:
 	})
 
 	srv := prochttp.New(t, prochttp.WithHandler(handler))
-	f.daprd = procdaprd.New(t, procdaprd.WithAppPort(srv.Port()), procdaprd.WithComponentFiles(files...))
+	f.daprd = procdaprd.New(t, procdaprd.WithAppPort(srv.Port()), procdaprd.WithResourceFiles(files...))
 
 	return []framework.Option{
 		framework.WithProcesses(f.daprd, srv),
