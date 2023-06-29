@@ -26,9 +26,9 @@ import (
 type Registry struct {
 	Logger      logger.Logger
 	stateStores map[string]func(logger.Logger) state.Store
-	// verSet holds a set of component types version information for components
-	// which have multiple versions.
-	verSet map[string]components.Versioning
+	// versionsSet holds a set of component types version information for
+	// component types that have multiple versions.
+	versionsSet map[string]components.Versioning
 }
 
 // DefaultRegistry is the singleton with the registry.
@@ -37,14 +37,9 @@ var DefaultRegistry *Registry = NewRegistry()
 // NewRegistry is used to create state store registry.
 func NewRegistry() *Registry {
 	return &Registry{
-		stateStores: map[string]func(logger.Logger) state.Store{},
-		verSet: map[string]components.Versioning{
-			"state.etcd": {
-				Default:    "v1",
-				Preferred:  "v2",
-				Deprecated: []string{"v1"},
-			},
-		},
+		Logger:      logger.NewLogger("dapr.state.registry"),
+		stateStores: make(map[string]func(logger.Logger) state.Store),
+		versionsSet: make(map[string]components.Versioning),
 	}
 }
 
@@ -53,6 +48,36 @@ func (s *Registry) RegisterComponent(componentFactory func(logger.Logger) state.
 	for _, name := range names {
 		s.stateStores[createFullName(name)] = componentFactory
 	}
+}
+
+// RegisterComponent adds a new state store to the registry.
+func (s *Registry) RegisterComponentWithVersions(name string, versions components.Versioning) {
+	if len(versions.Default) == 0 {
+		// Panicking here is appropriate because this is a programming error, and
+		// will happen at init time when registering components.
+		// An error here is impossible to resolve at runtime, and code change
+		// always needs to take place.
+		panic(fmt.Sprintf("default version not set for %s", name))
+	}
+
+	s.stateStores[createFullVersionedName(name, versions.Preferred.Version)] = toConstructor(versions.Preferred)
+	for _, version := range append(versions.Others, versions.Deprecated...) {
+		s.stateStores[createFullVersionedName(name, version.Version)] = toConstructor(version)
+	}
+
+	s.versionsSet[createFullName(name)] = versions
+}
+
+func toConstructor(cv components.VersionConstructor) func(logger.Logger) state.Store {
+	fn, ok := cv.Constructor.(func(logger.Logger) state.Store)
+	if !ok {
+		// Panicking here is appropriate because this is a programming error, and
+		// will happen at init time when registering components.
+		// An error here is impossible to resolve at runtime, and code change
+		// always needs to take place.
+		panic(fmt.Sprintf("constructor for %s is not a state store", cv.Version))
+	}
+	return fn
 }
 
 func (s *Registry) Create(name, version, logName string) (state.Store, error) {
@@ -66,14 +91,15 @@ func (s *Registry) getStateStore(name, version, logName string) (func() state.St
 	name = strings.ToLower(name)
 	version = strings.ToLower(version)
 
-	// Default the version if empty string and component has multiple versions.
-	if ver, ok := s.verSet[name]; ok {
+	if ver, ok := s.versionsSet[name]; ok {
+		// Default the version when an empty version string is passed, and component
+		// has multiple versions.
 		if len(version) == 0 {
 			version = ver.Default
 		}
-	}
 
-	components.CheckDeprecated(s.Logger, name, version, s.verSet)
+		components.CheckDeprecated(s.Logger, name, version, s.versionsSet[name])
+	}
 
 	stateStoreFn, ok := s.stateStores[name+"/"+version]
 	if ok {
@@ -103,4 +129,8 @@ func (s *Registry) wrapFn(componentFactory func(logger.Logger) state.Store, logN
 
 func createFullName(name string) string {
 	return strings.ToLower("state." + name)
+}
+
+func createFullVersionedName(name, version string) string {
+	return strings.ToLower("state." + name + "/" + version)
 }

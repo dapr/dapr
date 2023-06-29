@@ -16,11 +16,17 @@ limitations under the License.
 package components
 
 import (
-	etcd "github.com/dapr/components-contrib/state/etcd"
+	"github.com/dapr/components-contrib/state/etcd"
+	"github.com/dapr/dapr/pkg/components"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 )
 
 func init() {
-	stateLoader.DefaultRegistry.RegisterComponent(etcd.NewEtcdStateStoreV1, "etcd/v1")
-	stateLoader.DefaultRegistry.RegisterComponent(etcd.NewEtcdStateStoreV2, "etcd/v2")
+	stateLoader.DefaultRegistry.RegisterComponentWithVersions("etcd", components.Versioning{
+		Preferred: components.VersionConstructor{"v2", etcd.NewEtcdStateStoreV2},
+		Deprecated: []components.VersionConstructor{
+			{"v1", etcd.NewEtcdStateStoreV1},
+		},
+		Default: "v1",
+	})
 }

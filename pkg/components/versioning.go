@@ -19,12 +19,29 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
+// VersionConstructor is a version name func pair used to construct a
+// component.
+type VersionConstructor struct {
+	Version     string
+	Constructor any
+}
+
 // Versioning is a struct that contains the versioning information for a single
-// component Type.
+// component Type. It is expected that each VersionConstructor be unique.
 type Versioning struct {
-	Default    string
-	Preferred  string
-	Deprecated []string
+	// Preferred is the preferred version to use, used to log a warning if a
+	// deprecated version is used.
+	Preferred VersionConstructor
+
+	// Deprecated is a list of deprecated versions to log a warning if used.
+	Deprecated []VersionConstructor
+
+	// Others is a list of other versions that are supported, but not preferred.
+	Others []VersionConstructor
+
+	// Default is the default version to use when no version is specified. This
+	// should make a VersionConstructor from the set above.
+	Default string
 }
 
 // IsInitialVersion returns true when a version is considered an unstable version (v0)
@@ -34,14 +51,14 @@ func IsInitialVersion(version string) bool {
 	return v == "" || v == UnstableVersion || v == FirstStableVersion
 }
 
-func CheckDeprecated(log logger.Logger, name, version string, verSet map[string]Versioning) {
-	if dep, ok := verSet[name]; ok {
-		for _, v := range dep.Deprecated {
-			if v == version {
-				log.Warnf(
-					"WARNING: state store %[1]s/%[2]s is deprecated and will be removed in a future version, please use %[3]s/%[4]s",
-					name, version, name, dep.Preferred)
-			}
+// CheckDeprecated checks if a version is deprecated and logs a warning if it
+// is using information derived from the version set.
+func CheckDeprecated(log logger.Logger, name, version string, versionSet Versioning) {
+	for _, v := range versionSet.Deprecated {
+		if v.Version == version {
+			log.Warnf(
+				"WARNING: state store %[1]s/%[2]s is deprecated and will be removed in a future version, please use %[3]s/%[4]s",
+				name, version, name, versionSet.Preferred.Version)
 		}
 	}
 }
