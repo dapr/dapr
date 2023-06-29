@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"os"
 	"sync"
@@ -109,7 +110,10 @@ func (a *authenticator) CreateSignedWorkloadCert(id, namespace, trustDomain stri
 
 	c := sentryv1pb.NewCAClient(conn)
 
-	token, tokenValidator := getToken()
+	token, tokenValidator, err := getToken()
+	if err != nil {
+		return nil, fmt.Errorf("error obtaining token: %w", err)
+	}
 	resp, err := c.SignCertificate(context.Background(),
 		&sentryv1pb.SignCertificateRequest{
 			CertificateSigningRequest: certPem,
@@ -156,24 +160,26 @@ func (a *authenticator) CreateSignedWorkloadCert(id, namespace, trustDomain stri
 }
 
 // Returns the token for authenticating with Sentry.
-func getToken() (token string, validator sentryv1pb.SignCertificateRequest_TokenValidator) {
+func getToken() (token string, validator sentryv1pb.SignCertificateRequest_TokenValidator, err error) {
 	// Check if we have a token in the DAPR_SENTRY_TOKEN env var (for the JWKS validator)
 	if v, ok := os.LookupEnv(consts.SentryTokenEnvVar); ok {
-		log.Debug("Loaded token from DAPR_SENTRY_TOKEN environment variable")
-		return v, sentryv1pb.SignCertificateRequest_JWKS
+		log.Debug("Loaded token from DAPR_SENTRY_TOKEN environmental variable")
+		return v, sentryv1pb.SignCertificateRequest_JWKS, nil
 	}
 
 	// Check if we have a token file in the DAPR_SENTRY_TOKEN_FILE env var (for the JWKS validator)
-	if path := os.Getenv(consts.SentryTokenFileEnvVar); path != "" {
-		// Attempt to read the file
-		// Errors are logged but we still return the value even if empty
+	if path, ok := os.LookupEnv(consts.SentryTokenFileEnvVar); ok {
+		if path == "" {
+			return "", sentryv1pb.SignCertificateRequest_UNKNOWN, errors.New("environmental variable DAPR_SENTRY_TOKEN_FILE is set with an empty value")
+		}
 		b, err := os.ReadFile(path)
 		if err != nil {
-			log.Warnf("Failed to read token at path '%s': %v", path, err)
-		} else {
-			log.Debugf("Loaded token from path '%s' environment variable", path)
+			log.Warnf("Failed to read token at path %q: %v", path, err)
+			return "", sentryv1pb.SignCertificateRequest_UNKNOWN, fmt.Errorf("failed to read token at path %q: %w", path, err)
 		}
-		return string(b), sentryv1pb.SignCertificateRequest_JWKS
+
+		log.Debugf("Loaded token from path %q specified in the DAPR_SENTRY_TOKEN_FILE environmental variable", path)
+		return string(b), sentryv1pb.SignCertificateRequest_JWKS, nil
 	}
 
 	// Try to read a token from Kubernetes (for the default validator)
@@ -186,10 +192,10 @@ func getToken() (token string, validator sentryv1pb.SignCertificateRequest_Token
 		}
 	}
 	if len(b) > 0 {
-		return string(b), sentryv1pb.SignCertificateRequest_KUBERNETES
+		return string(b), sentryv1pb.SignCertificateRequest_KUBERNETES, nil
 	}
 
-	return "", sentryv1pb.SignCertificateRequest_UNKNOWN
+	return "", sentryv1pb.SignCertificateRequest_UNKNOWN, nil
 }
 
 func getSentryIdentifier(appID string) string {

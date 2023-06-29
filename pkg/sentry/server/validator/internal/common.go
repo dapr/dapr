@@ -65,9 +65,9 @@ func namespaceIsRequired(namespace string) error {
 	return nil
 }
 
-// IsControlPlaneComponent returns true if the app ID corresponds to a Dapr control plane component.
+// IsControlPlaneService returns true if the app ID corresponds to a Dapr control plane service.
 // Note: callers must additionally validate the namespace to ensure it matches the one of the Dapr control plane.
-func IsControlPlaneComponent(appID string) bool {
+func IsControlPlaneService(appID string) bool {
 	switch appID {
 	case "dapr-operator",
 		"dapr-placement",

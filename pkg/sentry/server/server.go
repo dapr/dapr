@@ -108,10 +108,10 @@ func (s *server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 
 func (s *server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (*sentryv1pb.SignCertificateResponse, error) {
 	validator := s.defaultValidator
-	if req.TokenValidator != 0 && req.TokenValidator.String() != "" {
+	if req.TokenValidator != sentryv1pb.SignCertificateRequest_UNKNOWN && req.TokenValidator.String() != "" {
 		validator = req.TokenValidator
 	}
-	if req.TokenValidator == 0 {
+	if req.TokenValidator == sentryv1pb.SignCertificateRequest_UNKNOWN {
 		return nil, status.Error(codes.InvalidArgument, "a validator name must be specified in this environment")
 	}
 	if _, ok := s.vals[validator]; !ok {
@@ -151,7 +151,7 @@ func (s *server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 		dns = fmt.Sprintf("%s.%s.svc.cluster.local", req.Id, req.Namespace)
 	}
 
-	log.Infof("Processing SignCertificate requests for %s (validator: %s)", dns, string(validator))
+	log.Debugf("Processing SignCertificate requests for %s (validator: %s)", dns, string(validator))
 
 	chain, err := s.ca.SignIdentity(ctx, &ca.SignRequest{
 		PublicKey:          csr.PublicKey,

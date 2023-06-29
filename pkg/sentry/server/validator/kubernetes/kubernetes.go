@@ -187,7 +187,7 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 
 	configName, ok := pod.GetAnnotations()[annotations.KeyConfig]
 	if !ok {
-		if req.Namespace == k.controlPlaneNS && internal.IsControlPlaneComponent(req.Id) {
+		if req.Namespace == k.controlPlaneNS && internal.IsControlPlaneService(req.Id) {
 			return k.controlPlaneTD, nil
 		}
 
