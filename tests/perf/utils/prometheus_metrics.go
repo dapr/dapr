@@ -39,7 +39,7 @@ type DaprMetrics struct {
 func PushPrometheusMetrics(metrics DaprMetrics, building_block string, component string) {
 	
 	dapr_perf_metrics_prometheus_url := os.Getenv("DAPR_PERF_METRICS_PROMETHEUS_URL")
-	if dapr_perf_metrics_prometheus_url == ""{
+	if dapr_perf_metrics_prometheus_url == "" {
 		return
 	}
 
