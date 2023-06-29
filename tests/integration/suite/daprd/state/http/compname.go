@@ -92,7 +92,7 @@ func (c *componentName) Run(t *testing.T, ctx context.Context) {
 		storeName := storeName
 		t.Run(storeName, func(t *testing.T) {
 			t.Parallel()
-			reqURL := fmt.Sprintf("http://localhost:%d/v1.0/state/%s", c.daprd.HTTPPort(), url.PathEscape(storeName))
+			reqURL := fmt.Sprintf("http://localhost:%d/v1.0/state/%s", c.daprd.HTTPPort(), url.QueryEscape(storeName))
 			req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, strings.NewReader(`[{"key": "key1", "value": "value1"}]`))
 			require.NoError(t, err)
 			resp, err := http.DefaultClient.Do(req)
@@ -103,7 +103,7 @@ func (c *componentName) Run(t *testing.T, ctx context.Context) {
 			require.NoError(t, resp.Body.Close())
 			assert.Empty(t, string(respBody))
 
-			getURL := fmt.Sprintf("http://localhost:%d/v1.0/state/%s/key1", c.daprd.HTTPPort(), url.PathEscape(storeName))
+			getURL := fmt.Sprintf("http://localhost:%d/v1.0/state/%s/key1", c.daprd.HTTPPort(), url.QueryEscape(storeName))
 			req, err = http.NewRequestWithContext(ctx, http.MethodGet, getURL, nil)
 			require.NoError(t, err)
 			resp, err = http.DefaultClient.Do(req)

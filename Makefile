@@ -348,7 +348,7 @@ test-race:
 ################################################################################
 .PHONY: test-integration
 test-integration: test-deps
-		gotestsum \
+		CGO_ENABLED=1 gotestsum \
 			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json \
 			--format testname \
 			-- \
