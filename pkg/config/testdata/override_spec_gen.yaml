@@ -1,0 +1,14 @@
+tracing:
+    otel:
+        isSecure: true
+mtls:
+    workloadCertTTL: 25s
+    allowedClockSkew: 1h
+metric:
+    enabled: true
+accessControl:
+    defaultAction: allow
+    trustDomain: public
+features:
+    - name: Test.Feature
+      enabled: true

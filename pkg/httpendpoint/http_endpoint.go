@@ -23,7 +23,7 @@ import (
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 )
 
 const (

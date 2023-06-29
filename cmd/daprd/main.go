@@ -74,8 +74,8 @@ func main() {
 		log.Fatal(err)
 	}
 
-	log.Infof("starting Dapr Runtime -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
-	log.Infof("log level set to: %s", opts.Logger.OutputLevel)
+	log.Infof("Starting Dapr Runtime -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
+	log.Infof("Log level set to: %s", opts.Logger.OutputLevel)
 
 	rt, err := runtime.FromConfig(&runtime.Config{
 		AppID:                        opts.AppID,
@@ -108,7 +108,7 @@ func main() {
 		AppHealthThreshold:           opts.AppHealthThreshold,
 		AppChannelAddress:            opts.AppChannelAddress,
 		EnableAPILogging:             opts.EnableAPILogging,
-		ConfigPath:                   opts.ConfigPath,
+		Config:                       opts.Config,
 		Metrics:                      opts.Metrics,
 		AppSSL:                       opts.AppSSL,
 		ComponentsPath:               opts.ComponentsPath,

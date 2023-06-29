@@ -931,7 +931,9 @@ func TestInitNameResolution(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 
 		// target resolver
-		rt.globalConfig.Spec.NameResolutionSpec.Component = "targetResolver"
+		rt.globalConfig.Spec.NameResolutionSpec = &config.NameResolutionSpec{
+			Component: "targetResolver",
+		}
 
 		// registered resolver
 		initMockResolverForRuntime(rt, "anotherResolver", nil)
@@ -948,7 +950,9 @@ func TestInitNameResolution(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 
 		// target resolver
-		rt.globalConfig.Spec.NameResolutionSpec.Component = "someResolver"
+		rt.globalConfig.Spec.NameResolutionSpec = &config.NameResolutionSpec{
+			Component: "someResolver",
+		}
 
 		// registered resolver
 		initMockResolverForRuntime(rt, "someResolver", nil)
@@ -965,7 +969,24 @@ func TestInitNameResolution(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 
 		// target resolver
-		rt.globalConfig.Spec.NameResolutionSpec.Component = ""
+		rt.globalConfig.Spec.NameResolutionSpec = &config.NameResolutionSpec{}
+
+		// registered resolver
+		initMockResolverForRuntime(rt, "mdns", nil)
+
+		// act
+		err := rt.initNameResolution()
+
+		// assert
+		assert.NoError(t, err, "expected no error")
+	})
+
+	t.Run("test init nameresolution nil in StandaloneMode", func(t *testing.T) {
+		// given
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+
+		// target resolver
+		rt.globalConfig.Spec.NameResolutionSpec = nil
 
 		// registered resolver
 		initMockResolverForRuntime(rt, "mdns", nil)
@@ -982,7 +1003,24 @@ func TestInitNameResolution(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.KubernetesMode)
 
 		// target resolver
-		rt.globalConfig.Spec.NameResolutionSpec.Component = ""
+		rt.globalConfig.Spec.NameResolutionSpec = &config.NameResolutionSpec{}
+
+		// registered resolver
+		initMockResolverForRuntime(rt, "kubernetes", nil)
+
+		// act
+		err := rt.initNameResolution()
+
+		// assert
+		assert.NoError(t, err, "expected no error")
+	})
+
+	t.Run("test init nameresolution nil in KubernetesMode", func(t *testing.T) {
+		// given
+		rt := NewTestDaprRuntime(modes.KubernetesMode)
+
+		// target resolver
+		rt.globalConfig.Spec.NameResolutionSpec = nil
 
 		// registered resolver
 		initMockResolverForRuntime(rt, "kubernetes", nil)
@@ -1014,7 +1052,7 @@ func TestSetupTracing(t *testing.T) {
 	}, {
 		name: "bad host address, failing zipkin",
 		tracingConfig: config.TracingSpec{
-			Zipkin: config.ZipkinSpec{
+			Zipkin: &config.ZipkinSpec{
 				EndpointAddress: "localhost",
 			},
 		},
@@ -1022,7 +1060,7 @@ func TestSetupTracing(t *testing.T) {
 	}, {
 		name: "zipkin trace exporter",
 		tracingConfig: config.TracingSpec{
-			Zipkin: config.ZipkinSpec{
+			Zipkin: &config.ZipkinSpec{
 				EndpointAddress: "http://foo.bar",
 			},
 		},
@@ -1030,9 +1068,9 @@ func TestSetupTracing(t *testing.T) {
 	}, {
 		name: "otel trace http exporter",
 		tracingConfig: config.TracingSpec{
-			Otel: config.OtelSpec{
+			Otel: &config.OtelSpec{
 				EndpointAddress: "foo.bar",
-				IsSecure:        false,
+				IsSecure:        ptr.Of(false),
 				Protocol:        "http",
 			},
 		},
@@ -1040,9 +1078,9 @@ func TestSetupTracing(t *testing.T) {
 	}, {
 		name: "invalid otel trace exporter protocol",
 		tracingConfig: config.TracingSpec{
-			Otel: config.OtelSpec{
+			Otel: &config.OtelSpec{
 				EndpointAddress: "foo.bar",
-				IsSecure:        false,
+				IsSecure:        ptr.Of(false),
 				Protocol:        "tcp",
 			},
 		},
@@ -1056,12 +1094,12 @@ func TestSetupTracing(t *testing.T) {
 	}, {
 		name: "all trace exporters",
 		tracingConfig: config.TracingSpec{
-			Otel: config.OtelSpec{
+			Otel: &config.OtelSpec{
 				EndpointAddress: "http://foo.bar",
-				IsSecure:        false,
+				IsSecure:        ptr.Of(false),
 				Protocol:        "http",
 			},
-			Zipkin: config.ZipkinSpec{
+			Zipkin: &config.ZipkinSpec{
 				EndpointAddress: "http://foo.bar",
 			},
 			Stdout: true,
@@ -1073,7 +1111,7 @@ func TestSetupTracing(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			rt := NewTestDaprRuntime(modes.StandaloneMode)
 			defer stopRuntime(t, rt)
-			rt.globalConfig.Spec.TracingSpec = tc.tracingConfig
+			rt.globalConfig.Spec.TracingSpec = &tc.tracingConfig
 			if tc.hostAddress != "" {
 				rt.hostAddress = tc.hostAddress
 			}
@@ -2458,10 +2496,12 @@ func TestPopulateSecretsConfiguration(t *testing.T) {
 		// setup
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
-		rt.globalConfig.Spec.Secrets.Scopes = []config.SecretsScope{
-			{
-				StoreName:     "testMock",
-				DefaultAccess: "allow",
+		rt.globalConfig.Spec.Secrets = &config.SecretsSpec{
+			Scopes: []config.SecretsScope{
+				{
+					StoreName:     "testMock",
+					DefaultAccess: "allow",
+				},
 			},
 		}
 
@@ -6069,10 +6109,10 @@ func initMockStateStoreForRuntime(rt *DaprRuntime, encryptKey string, e error) *
 func TestTraceShutdown(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	rt.runtimeConfig.gracefulShutdownDuration = 5 * time.Second
-	rt.globalConfig.Spec.TracingSpec = config.TracingSpec{
-		Otel: config.OtelSpec{
+	rt.globalConfig.Spec.TracingSpec = &config.TracingSpec{
+		Otel: &config.OtelSpec{
 			EndpointAddress: "foo.bar",
-			IsSecure:        false,
+			IsSecure:        ptr.Of(false),
 			Protocol:        "http",
 		},
 	}

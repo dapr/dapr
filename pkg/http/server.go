@@ -243,7 +243,7 @@ func (s *server) useTracing(r chi.Router) {
 }
 
 func (s *server) useMetrics(r chi.Router) {
-	if !s.metricSpec.Enabled {
+	if !s.metricSpec.GetEnabled() {
 		return
 	}
 
