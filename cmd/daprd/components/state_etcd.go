@@ -23,9 +23,11 @@ import (
 
 func init() {
 	stateLoader.DefaultRegistry.RegisterComponentWithVersions("etcd", components.Versioning{
-		Preferred: components.VersionConstructor{"v2", etcd.NewEtcdStateStoreV2},
+		Preferred: components.VersionConstructor{
+			Version: "v2", Constructor: etcd.NewEtcdStateStoreV2,
+		},
 		Deprecated: []components.VersionConstructor{
-			{"v1", etcd.NewEtcdStateStoreV1},
+			{Version: "v1", Constructor: etcd.NewEtcdStateStoreV1},
 		},
 		Default: "v1",
 	})

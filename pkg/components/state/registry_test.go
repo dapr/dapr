@@ -60,13 +60,13 @@ func TestRegistry(t *testing.T) {
 			return mockV2
 		}, stateNameV2)
 		testRegistry.RegisterComponentWithVersions("foo", components.Versioning{
-			Preferred: components.VersionConstructor{"v2", fooCV2},
+			Preferred: components.VersionConstructor{Version: "v2", Constructor: fooCV2},
 			Deprecated: []components.VersionConstructor{
-				{"v1", fooCV1},
-				{"v3", fooCV3},
+				{Version: "v1", Constructor: fooCV1},
+				{Version: "v3", Constructor: fooCV3},
 			},
 			Others: []components.VersionConstructor{
-				{"v4", fooCV4},
+				{Version: "v4", Constructor: fooCV4},
 			},
 			Default: "v1",
 		})
