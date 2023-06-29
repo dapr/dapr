@@ -81,20 +81,23 @@ func (j *jwks) Start(ctx context.Context) error {
 	return nil
 }
 
-func (j *jwks) Validate(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (res spiffeid.TrustDomain, err error) {
+func (j *jwks) Validate(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (td spiffeid.TrustDomain, err error) {
 	if req.Token == "" {
-		return res, errors.New("the request does not contain a token")
+		return td, errors.New("the request does not contain a token")
 	}
 
 	// Validate the internal request
 	// This also returns the trust domain.
-	res, err = internal.Validate(ctx, req)
+	td, err = internal.Validate(ctx, req)
 	if err != nil {
-		return res, err
+		return td, err
 	}
 
 	// Construct the expected value for the subject, which is the SPIFFE ID of the requestor
-	sub := fmt.Sprintf("spiffe://%s/ns/%s/%s", res.String(), req.Namespace, req.Id)
+	sub, err := spiffeid.FromPathf(td, "/ns/%s/%s", req.Namespace, req.Id)
+	if err != nil {
+		return td, fmt.Errorf("failed to construct SPIFFE ID for requestor: %w", err)
+	}
 
 	// Validate the authorization token
 	_, err = jwt.Parse([]byte(req.Token),
@@ -102,11 +105,11 @@ func (j *jwks) Validate(ctx context.Context, req *sentryv1pb.SignCertificateRequ
 		jwt.WithAcceptableSkew(5*time.Minute),
 		jwt.WithContext(ctx),
 		jwt.WithAudience(j.sentryAudience),
-		jwt.WithSubject(sub),
+		jwt.WithSubject(sub.String()),
 	)
 	if err != nil {
-		return res, fmt.Errorf("token validation failed: %w", err)
+		return td, fmt.Errorf("token validation failed: %w", err)
 	}
 
-	return res, nil
+	return td, nil
 }

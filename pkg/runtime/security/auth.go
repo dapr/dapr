@@ -161,12 +161,14 @@ func (a *authenticator) CreateSignedWorkloadCert(id, namespace, trustDomain stri
 
 // Returns the token for authenticating with Sentry.
 func getToken() (token string, validator sentryv1pb.SignCertificateRequest_TokenValidator, err error) {
+	var b []byte
+
 	// Check if we have a token file in the DAPR_SENTRY_TOKEN_FILE env var (for the JWKS validator)
 	if path, ok := os.LookupEnv(consts.SentryTokenFileEnvVar); ok {
 		if path == "" {
 			return "", sentryv1pb.SignCertificateRequest_UNKNOWN, errors.New("environmental variable DAPR_SENTRY_TOKEN_FILE is set with an empty value")
 		}
-		b, err := os.ReadFile(path)
+		b, err = os.ReadFile(path)
 		if err != nil {
 			log.Warnf("Failed to read token at path %q: %v", path, err)
 			return "", sentryv1pb.SignCertificateRequest_UNKNOWN, fmt.Errorf("failed to read token at path %q: %w", path, err)
@@ -177,7 +179,7 @@ func getToken() (token string, validator sentryv1pb.SignCertificateRequest_Token
 	}
 
 	// Try to read a token from Kubernetes (for the default validator)
-	b, err := os.ReadFile(kubeTknPath)
+	b, err = os.ReadFile(kubeTknPath)
 	if err != nil && os.IsNotExist(err) {
 		// Attempt to use the legacy token if that exists
 		b, _ = os.ReadFile(legacyKubeTknPath)
