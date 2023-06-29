@@ -17,7 +17,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -156,9 +155,9 @@ func (f *fuzzstate) Run(t *testing.T, ctx context.Context) {
 		t.Parallel()
 		for i := range f.getFuzzKeys {
 			getURL := fmt.Sprintf("http://localhost:%d/v1.0/state/%s/%s", f.daprd.HTTPPort(), url.QueryEscape(f.storeName), url.QueryEscape(f.getFuzzKeys[i]))
-			t.Log("URL", getURL)
-			t.Log("State store name", f.storeName, hex.EncodeToString([]byte(f.storeName)), printRunes(f.storeName))
-			t.Log("Key", f.getFuzzKeys[i], printRunes(f.getFuzzKeys[i]))
+			// t.Log("URL", getURL)
+			// t.Log("State store name", f.storeName, hex.EncodeToString([]byte(f.storeName)), printRunes(f.storeName))
+			// t.Log("Key", f.getFuzzKeys[i], printRunes(f.getFuzzKeys[i]))
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, getURL, nil)
 			require.NoError(t, err)
 			resp, err := http.DefaultClient.Do(req)
@@ -179,8 +178,8 @@ func (f *fuzzstate) Run(t *testing.T, ctx context.Context) {
 				postURL := fmt.Sprintf("http://localhost:%d/v1.0/state/%s", f.daprd.HTTPPort(), url.QueryEscape(f.storeName))
 				b := new(bytes.Buffer)
 				require.NoError(t, json.NewEncoder(b).Encode(req))
-				t.Log("URL", postURL)
-				t.Log("State store name", f.storeName, hex.EncodeToString([]byte(f.storeName)), printRunes(f.storeName))
+				// t.Log("URL", postURL)
+				// t.Log("State store name", f.storeName, hex.EncodeToString([]byte(f.storeName)), printRunes(f.storeName))
 				req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, b)
 				require.NoError(t, err)
 				resp, err := http.DefaultClient.Do(req)
@@ -194,9 +193,9 @@ func (f *fuzzstate) Run(t *testing.T, ctx context.Context) {
 
 			for _, s := range f.saveReqBinaries[i] {
 				getURL := fmt.Sprintf("http://localhost:%d/v1.0/state/%s/%s", f.daprd.HTTPPort(), url.QueryEscape(f.storeName), url.QueryEscape(s.Key))
-				t.Log("URL", getURL)
-				t.Log("State store name", f.storeName, hex.EncodeToString([]byte(f.storeName)), printRunes(f.storeName))
-				t.Log("Key", s.Key, hex.EncodeToString([]byte(s.Key)), printRunes(s.Key))
+				// t.Log("URL", getURL)
+				// t.Log("State store name", f.storeName, hex.EncodeToString([]byte(f.storeName)), printRunes(f.storeName))
+				// t.Log("Key", s.Key, hex.EncodeToString([]byte(s.Key)), printRunes(s.Key))
 				req, err := http.NewRequestWithContext(ctx, http.MethodGet, getURL, nil)
 				require.NoError(t, err)
 				resp, err := http.DefaultClient.Do(req)
@@ -213,9 +212,9 @@ func (f *fuzzstate) Run(t *testing.T, ctx context.Context) {
 
 			for _, s := range f.saveReqStrings[i] {
 				getURL := fmt.Sprintf("http://localhost:%d/v1.0/state/%s/%s", f.daprd.HTTPPort(), url.QueryEscape(f.storeName), url.QueryEscape(s.Key))
-				t.Log("URL", getURL)
-				t.Log("State store name", f.storeName, hex.EncodeToString([]byte(f.storeName)), printRunes(f.storeName))
-				t.Log("Key", s.Key, hex.EncodeToString([]byte(s.Key)), printRunes(s.Key))
+				// t.Log("URL", getURL)
+				// t.Log("State store name", f.storeName, hex.EncodeToString([]byte(f.storeName)), printRunes(f.storeName))
+				// t.Log("Key", s.Key, hex.EncodeToString([]byte(s.Key)), printRunes(s.Key))
 				req, err := http.NewRequestWithContext(ctx, http.MethodGet, getURL, nil)
 				require.NoError(t, err)
 				resp, err := http.DefaultClient.Do(req)
@@ -241,6 +240,7 @@ func (f *fuzzstate) Run(t *testing.T, ctx context.Context) {
 	}
 }
 
+/*
 func printRunes(str string) []string {
 	result := make([]string, 0, len(str))
 	for _, r := range str {
@@ -248,3 +248,4 @@ func printRunes(str string) []string {
 	}
 	return result
 }
+*/
