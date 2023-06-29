@@ -36,10 +36,14 @@ const (
 type SignCertificateRequest_TokenValidator int32
 
 const (
-	SignCertificateRequest_UNKNOWN    SignCertificateRequest_TokenValidator = 0
-	SignCertificateRequest_INSECURE   SignCertificateRequest_TokenValidator = 1
+	// Not specified - use the default value.
+	SignCertificateRequest_UNKNOWN SignCertificateRequest_TokenValidator = 0
+	// Insecure validator (default on self-hosted).
+	SignCertificateRequest_INSECURE SignCertificateRequest_TokenValidator = 1
+	// Kubernetes validator (default on Kubernetes).
 	SignCertificateRequest_KUBERNETES SignCertificateRequest_TokenValidator = 2
-	SignCertificateRequest_JWKS       SignCertificateRequest_TokenValidator = 3
+	// JWKS validator.
+	SignCertificateRequest_JWKS SignCertificateRequest_TokenValidator = 3
 )
 
 // Enum value maps for SignCertificateRequest_TokenValidator.

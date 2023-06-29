@@ -6,7 +6,6 @@ import (
 	"encoding/pem"
 	"fmt"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
@@ -27,9 +26,6 @@ const (
 	kubeTknPath       = "/var/run/secrets/dapr.io/sentrytoken/token"
 	legacyKubeTknPath = "/var/run/secrets/kubernetes.io/serviceaccount/token"
 	sentryMaxRetries  = 100
-
-	jwksValidator       = "jwks"
-	kubernetesValidator = "kubernetes"
 )
 
 type Authenticator interface {
@@ -113,8 +109,7 @@ func (a *authenticator) CreateSignedWorkloadCert(id, namespace, trustDomain stri
 
 	c := sentryv1pb.NewCAClient(conn)
 
-	token, validatorName := getToken()
-	tokenValidator := sentryv1pb.SignCertificateRequest_TokenValidator(sentryv1pb.SignCertificateRequest_TokenValidator_value[strings.ToUpper(validatorName)])
+	token, tokenValidator := getToken()
 	resp, err := c.SignCertificate(context.Background(),
 		&sentryv1pb.SignCertificateRequest{
 			CertificateSigningRequest: certPem,
@@ -161,11 +156,11 @@ func (a *authenticator) CreateSignedWorkloadCert(id, namespace, trustDomain stri
 }
 
 // Returns the token for authenticating with Sentry.
-func getToken() (token string, validator string) {
+func getToken() (token string, validator sentryv1pb.SignCertificateRequest_TokenValidator) {
 	// Check if we have a token in the DAPR_SENTRY_TOKEN env var (for the JWKS validator)
 	if v := os.Getenv(consts.SentryTokenEnvVar); v != "" {
 		log.Debug("Loaded token from DAPR_SENTRY_TOKEN environment variable")
-		return v, jwksValidator
+		return v, sentryv1pb.SignCertificateRequest_JWKS
 	}
 
 	// Check if we have a token file in the DAPR_SENTRY_TOKEN_FILE env var (for the JWKS validator)
@@ -178,7 +173,7 @@ func getToken() (token string, validator string) {
 		} else {
 			log.Debugf("Loaded token from path '%s' environment variable", path)
 		}
-		return string(b), jwksValidator
+		return string(b), sentryv1pb.SignCertificateRequest_JWKS
 	}
 
 	// Try to read a token from Kubernetes (for the default validator)
@@ -191,10 +186,10 @@ func getToken() (token string, validator string) {
 		}
 	}
 	if len(b) > 0 {
-		return string(b), kubernetesValidator
+		return string(b), sentryv1pb.SignCertificateRequest_KUBERNETES
 	}
 
-	return "", ""
+	return "", sentryv1pb.SignCertificateRequest_UNKNOWN
 }
 
 func getSentryIdentifier(appID string) string {
