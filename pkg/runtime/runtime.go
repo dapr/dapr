@@ -1724,7 +1724,6 @@ func isBindingOfDirection(direction string, metadata []commonapi.NameValuePair) 
 func isBindingOfExplicitDirection(direction string, metadata map[string]string) bool {
 	for k, v := range metadata {
 		if strings.EqualFold(k, bindingDirection) {
-
 			directions := strings.Split(v, ",")
 			for _, d := range directions {
 				if strings.TrimSpace(strings.ToLower(d)) == direction {
