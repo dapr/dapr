@@ -75,7 +75,7 @@ func (f *fuzzstate) Setup(t *testing.T) []framework.Option {
 	fuzzFuncs := []any{
 		func(s *saveReqBinary, c fuzz.Continue) {
 			var ok bool
-			for len(s.Key) == 0 || strings.Contains(s.Key, "||") || strings.HasSuffix(s.Key, ".") || ok {
+			for len(s.Key) == 0 || strings.Contains(s.Key, "||") || s.Key == "." || ok {
 				s.Key = c.RandString()
 				_, ok = takenKeys.LoadOrStore(s.Key, true)
 			}
@@ -85,7 +85,7 @@ func (f *fuzzstate) Setup(t *testing.T) []framework.Option {
 		},
 		func(s *saveReqString, c fuzz.Continue) {
 			var ok bool
-			for len(s.Key) == 0 || strings.Contains(s.Key, "||") || strings.HasSuffix(s.Key, ".") || ok {
+			for len(s.Key) == 0 || strings.Contains(s.Key, "||") || s.Key == "." || ok {
 				s.Key = c.RandString()
 				_, ok = takenKeys.LoadOrStore(s.Key, true)
 			}
@@ -95,7 +95,7 @@ func (f *fuzzstate) Setup(t *testing.T) []framework.Option {
 		},
 		func(s *saveReqAny, c fuzz.Continue) {
 			var ok bool
-			for len(s.Key) == 0 || strings.Contains(s.Key, "||") || strings.HasSuffix(s.Key, ".") || ok {
+			for len(s.Key) == 0 || strings.Contains(s.Key, "||") || s.Key == "." || ok {
 				s.Key = c.RandString()
 				_, ok = takenKeys.LoadOrStore(s.Key, true)
 			}
@@ -133,7 +133,7 @@ spec:
 	for i := 0; i < numTests; i++ {
 		fz.Fuzz(&f.getFuzzKeys[i])
 		// Prevent invalid names
-		if strings.Contains(f.getFuzzKeys[i], "||") || strings.HasSuffix(f.getFuzzKeys[i], ".") || len(path.IsValidPathSegmentName(f.getFuzzKeys[i])) > 0 {
+		if strings.Contains(f.getFuzzKeys[i], "||") || f.getFuzzKeys[i] == "." || len(path.IsValidPathSegmentName(f.getFuzzKeys[i])) > 0 {
 			f.getFuzzKeys[i] = ""
 			i--
 		}
