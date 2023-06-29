@@ -233,7 +233,7 @@ func (f *fuzzpubsub) Run(t *testing.T, ctx context.Context) {
 
 				t.Parallel()
 
-				reqURL := fmt.Sprintf("http://127.0.0.1:%d/v1.0/publish/%s/%s", f.daprd.HTTPPort(), url.PathEscape(pubsubName), url.PathEscape(topicName))
+				reqURL := fmt.Sprintf("http://127.0.0.1:%d/v1.0/publish/%s/%s", f.daprd.HTTPPort(), url.QueryEscape(pubsubName), url.QueryEscape(topicName))
 				// TODO: @joshvanl: under heavy load, messages seem to get lost here
 				// with no response from Dapr. Until this is fixed, we use to smaller
 				// timeout, and retry on context deadline exceeded.
