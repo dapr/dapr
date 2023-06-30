@@ -1,0 +1,8 @@
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: feature2
+spec:
+  features:
+    - name: Feature2
+      enabled: true
