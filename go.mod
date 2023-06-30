@@ -8,7 +8,7 @@ require (
 	github.com/PuerkitoBio/purell v1.2.0
 	github.com/argoproj/argo-rollouts v1.4.1
 	github.com/cenkalti/backoff/v4 v4.2.1
-	github.com/dapr/components-contrib v1.11.3-0.20230625233626-7ab8fde4940c
+	github.com/dapr/components-contrib v1.11.3-0.20230627174739-a2bc8cf6e036
 	github.com/dapr/kit v0.11.3-0.20230615225244-804821bb8f2d
 	github.com/evanphx/json-patch/v5 v5.6.0
 	github.com/go-chi/chi/v5 v5.0.8
