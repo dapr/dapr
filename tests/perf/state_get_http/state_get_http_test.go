@@ -165,7 +165,7 @@ func TestStateGetGrpcPerformance(t *testing.T) {
 		ApplicationThroughput: daprResult.ActualQPS,
 	}
 
-	utils.PushPrometheusMetrics(daprMetrics, testLabel, "inmemory")
+	utils.PushPrometheusMetrics(daprMetrics, testLabel,"inmemory")
 
 	summary.ForTest(t).
 		Service("tester").
