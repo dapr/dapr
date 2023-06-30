@@ -32,15 +32,15 @@ import (
 )
 
 func init() {
-	suite.Register(new(metadata))
+	suite.Register(new(multipleconfigs))
 }
 
-// metadata tests Dapr's response to metadata API requests.
-type metadata struct {
+// multipleconfigs tests instantiating daprd with multiple configuration files.
+type multipleconfigs struct {
 	proc *procdaprd.Daprd
 }
 
-func (m *metadata) Setup(t *testing.T) []framework.Option {
+func (m *multipleconfigs) Setup(t *testing.T) []framework.Option {
 	_, goFile, _, ok := runtime.Caller(0)
 	require.True(t, ok, "failed to get current file")
 	fixtures := filepath.Join(filepath.Dir(goFile), "fixtures")
@@ -55,7 +55,7 @@ func (m *metadata) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (m *metadata) Run(t *testing.T, ctx context.Context) {
+func (m *multipleconfigs) Run(t *testing.T, ctx context.Context) {
 	m.proc.WaitUntilRunning(t, ctx)
 
 	// There are not many options in the Configuration YAML that we can test in an integration test
@@ -68,7 +68,7 @@ func (m *metadata) Run(t *testing.T, ctx context.Context) {
 	})
 }
 
-func (m *metadata) loadFeatures(t *testing.T, ctx context.Context) []string {
+func (m *multipleconfigs) loadFeatures(t *testing.T, ctx context.Context) []string {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(ctx, time.Second*5)
 	defer cancel()
