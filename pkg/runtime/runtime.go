@@ -1721,6 +1721,21 @@ func isBindingOfDirection(direction string, metadata []commonapi.NameValuePair) 
 	return !directionFound
 }
 
+func isBindingOfExplicitDirection(direction string, metadata map[string]string) bool {
+	for k, v := range metadata {
+		if strings.EqualFold(k, bindingDirection) {
+			directions := strings.Split(v, ",")
+			for _, d := range directions {
+				if strings.TrimSpace(strings.ToLower(d)) == direction {
+					return true
+				}
+			}
+		}
+	}
+
+	return false
+}
+
 func (a *DaprRuntime) initInputBinding(c componentsV1alpha1.Component) error {
 	if !isBindingOfDirection(inputBinding, c.Spec.Metadata) {
 		return nil
@@ -3476,10 +3491,18 @@ func (a *DaprRuntime) startReadingFromBindings() (err error) {
 	a.inputBindingsCtx, a.inputBindingsCancel = context.WithCancel(a.ctx)
 
 	for name, binding := range a.compStore.ListInputBindings() {
-		isSubscribed, err := a.isAppSubscribedToBinding(name)
-		if err != nil {
-			return err
+		var isSubscribed bool
+		m := binding.GetComponentMetadata()
+
+		if isBindingOfExplicitDirection(inputBinding, m) {
+			isSubscribed = true
+		} else {
+			isSubscribed, err = a.isAppSubscribedToBinding(name)
+			if err != nil {
+				return err
+			}
 		}
+
 		if !isSubscribed {
 			log.Infof("app has not subscribed to binding %s.", name)
 			continue
