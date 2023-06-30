@@ -17,6 +17,7 @@ limitations under the License.
 package kill
 
 import (
+	"os"
 	"os/exec"
 	"strconv"
 	"testing"
@@ -26,5 +27,7 @@ import (
 
 func interrupt(t *testing.T, cmd *exec.Cmd) {
 	kill := exec.Command("taskkill", "/T", "/F", "/PID", strconv.Itoa(cmd.Process.Pid))
+	kill.Stdout = os.Stdout
+	kill.Stderr = os.Stderr
 	assert.NoError(t, kill.Run())
 }
