@@ -288,7 +288,7 @@ func TestDoProcessComponent(t *testing.T) {
 		)
 
 		// act
-		err := rt.processor.One(context.TODO(), lockComponent)
+		err := rt.processor.Init(context.TODO(), lockComponent)
 
 		// assert
 		assert.Error(t, err, "expected an error")
@@ -311,7 +311,7 @@ func TestDoProcessComponent(t *testing.T) {
 		lockComponentV3.Spec.Version = "v3"
 
 		// act
-		err := rt.processor.One(context.TODO(), lockComponentV3)
+		err := rt.processor.Init(context.TODO(), lockComponentV3)
 
 		// assert
 		assert.Error(t, err, "expected an error")
@@ -341,7 +341,7 @@ func TestDoProcessComponent(t *testing.T) {
 			},
 		}
 		// act
-		err := rt.processor.One(context.TODO(), lockComponentWithWrongStrategy)
+		err := rt.processor.Init(context.TODO(), lockComponentWithWrongStrategy)
 		// assert
 		assert.Error(t, err)
 	})
@@ -360,7 +360,7 @@ func TestDoProcessComponent(t *testing.T) {
 		)
 
 		// act
-		err := rt.processor.One(context.TODO(), lockComponent)
+		err := rt.processor.Init(context.TODO(), lockComponent)
 		// assert
 		assert.Nil(t, err, "unexpected error")
 		// get modified key
@@ -389,7 +389,7 @@ func TestDoProcessComponent(t *testing.T) {
 		mockPubSub.On("Init", expectedMetadata).Return(assert.AnError)
 
 		// act
-		err := rt.processor.One(context.TODO(), pubsubComponent)
+		err := rt.processor.Init(context.TODO(), pubsubComponent)
 
 		// assert
 		assert.Error(t, err, "expected an error")
@@ -398,7 +398,7 @@ func TestDoProcessComponent(t *testing.T) {
 
 	t.Run("test invalid category component", func(t *testing.T) {
 		// act
-		err := rt.processor.One(context.TODO(), componentsV1alpha1.Component{
+		err := rt.processor.Init(context.TODO(), componentsV1alpha1.Component{
 			Spec: componentsV1alpha1.ComponentSpec{
 				Type: "invalid",
 			},
@@ -3644,7 +3644,7 @@ func TestPubsubWithResiliency(t *testing.T) {
 	component.ObjectMeta.Name = "failPubsub"
 	component.Spec.Type = "pubsub.failingPubsub"
 
-	err := r.processor.One(context.TODO(), component)
+	err := r.processor.Init(context.TODO(), component)
 	assert.NoError(t, err)
 
 	t.Run("pubsub publish retries with resiliency", func(t *testing.T) {
@@ -3887,7 +3887,7 @@ func TestPubSubDeadLetter(t *testing.T) {
 			On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).
 			Return(nil, errors.New("failed to send"))
 
-		require.NoError(t, rt.processor.One(context.TODO(), pubsubComponent))
+		require.NoError(t, rt.processor.Init(context.TODO(), pubsubComponent))
 		rt.startSubscriptions()
 
 		err := rt.Publish(&pubsub.PublishRequest{
@@ -3936,7 +3936,7 @@ func TestPubSubDeadLetter(t *testing.T) {
 			On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).
 			Return(nil, errors.New("failed to send"))
 
-		require.NoError(t, rt.processor.One(context.TODO(), pubsubComponent))
+		require.NoError(t, rt.processor.Init(context.TODO(), pubsubComponent))
 		rt.startSubscriptions()
 
 		err := rt.Publish(&pubsub.PublishRequest{
@@ -4898,7 +4898,7 @@ func TestBindingResiliency(t *testing.T) {
 	output := componentsV1alpha1.Component{}
 	output.ObjectMeta.Name = "failOutput"
 	output.Spec.Type = "bindings.failingoutput"
-	err := r.processor.One(context.TODO(), output)
+	err := r.processor.Init(context.TODO(), output)
 	assert.NoError(t, err)
 
 	t.Run("output binding retries on failure with resiliency", func(t *testing.T) {
@@ -5167,10 +5167,10 @@ func TestStopWithErrors(t *testing.T) {
 		},
 	}
 
-	require.NoError(t, rt.processor.One(context.TODO(), mockOutputBindingComponent))
-	require.NoError(t, rt.processor.One(context.TODO(), mockPubSubComponent))
-	require.NoError(t, rt.processor.One(context.TODO(), mockStateComponent))
-	require.NoError(t, rt.processor.One(context.TODO(), mockSecretsComponent))
+	require.NoError(t, rt.processor.Init(context.TODO(), mockOutputBindingComponent))
+	require.NoError(t, rt.processor.Init(context.TODO(), mockPubSubComponent))
+	require.NoError(t, rt.processor.Init(context.TODO(), mockStateComponent))
+	require.NoError(t, rt.processor.Init(context.TODO(), mockSecretsComponent))
 	rt.nameResolver = &mockNameResolver{closeErr: testErr}
 
 	err := rt.shutdownOutputComponents()
@@ -5392,11 +5392,11 @@ func TestGetComponentsCapabilitiesMap(t *testing.T) {
 	cSecretStore.ObjectMeta.Name = mockSecretStoreName
 	cSecretStore.Spec.Type = "secretstores.mockSecretStore"
 
-	require.NoError(t, rt.processor.One(context.TODO(), cin))
-	require.NoError(t, rt.processor.One(context.TODO(), cout))
-	require.NoError(t, rt.processor.One(context.TODO(), cPubSub))
-	require.NoError(t, rt.processor.One(context.TODO(), cStateStore))
-	require.NoError(t, rt.processor.One(context.TODO(), cSecretStore))
+	require.NoError(t, rt.processor.Init(context.TODO(), cin))
+	require.NoError(t, rt.processor.Init(context.TODO(), cout))
+	require.NoError(t, rt.processor.Init(context.TODO(), cPubSub))
+	require.NoError(t, rt.processor.Init(context.TODO(), cStateStore))
+	require.NoError(t, rt.processor.Init(context.TODO(), cSecretStore))
 
 	capabilities := rt.getComponentsCapabilitesMap()
 	assert.Equal(t, 5, len(capabilities),
@@ -5533,7 +5533,7 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 	mockAppChannel := new(channelt.MockAppChannel)
 	rt.appChannel = mockAppChannel
 	mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
-	require.NoError(t, rt.processor.One(context.TODO(), cPubSub))
+	require.NoError(t, rt.processor.Init(context.TODO(), cPubSub))
 	mockPubSub.AssertCalled(t, "Init", mock.Anything)
 	rt.startSubscriptions()
 	mockPubSub.AssertCalled(t, "Subscribe", mock.AnythingOfType("pubsub.SubscribeRequest"), mock.AnythingOfType("pubsub.Handler"))
@@ -5570,8 +5570,8 @@ func TestGracefulShutdownBindings(t *testing.T) {
 	cout := componentsV1alpha1.Component{}
 	cout.ObjectMeta.Name = "testOutputBinding"
 	cout.Spec.Type = "bindings.testOutputBinding"
-	require.NoError(t, rt.processor.One(context.TODO(), cin))
-	require.NoError(t, rt.processor.One(context.TODO(), cout))
+	require.NoError(t, rt.processor.Init(context.TODO(), cin))
+	require.NoError(t, rt.processor.Init(context.TODO(), cout))
 	assert.Equal(t, len(rt.compStore.ListInputBindings()), 1)
 	assert.Equal(t, len(rt.compStore.ListOutputBindings()), 1)
 	rt.running.Store(true)
@@ -5624,7 +5624,7 @@ func TestGracefulShutdownActors(t *testing.T) {
 	initMockStateStoreForRuntime(rt, encryptKey, nil)
 
 	// act
-	err := rt.processor.One(context.TODO(), mockStateComponent)
+	err := rt.processor.Init(context.TODO(), mockStateComponent)
 
 	// assert
 	assert.NoError(t, err, "expected no error")

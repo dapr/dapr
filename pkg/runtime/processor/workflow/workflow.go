@@ -11,10 +11,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package processor
+package workflow
 
 import (
 	"context"
+	"sync"
 
 	"github.com/dapr/components-contrib/workflows"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
@@ -23,15 +24,36 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	"github.com/dapr/dapr/pkg/runtime/meta"
+	"github.com/dapr/kit/logger"
 )
+
+var log = logger.NewLogger("dapr.runtime.processor.workflow")
+
+type Options struct {
+	Registry       *compworkflow.Registry
+	ComponentStore *compstore.ComponentStore
+	Meta           *meta.Meta
+}
 
 type workflow struct {
 	registry  *compworkflow.Registry
 	compStore *compstore.ComponentStore
 	meta      *meta.Meta
+	lock      sync.Mutex
 }
 
-func (w *workflow) init(ctx context.Context, comp compapi.Component) error {
+func New(opts Options) *workflow {
+	return &workflow{
+		registry:  opts.Registry,
+		compStore: opts.ComponentStore,
+		meta:      opts.Meta,
+	}
+}
+
+func (w *workflow) Init(ctx context.Context, comp compapi.Component) error {
+	w.lock.Lock()
+	defer w.lock.Unlock()
+
 	// create the component
 	fName := comp.LogName()
 	workflowComp, err := w.registry.Create(comp.Spec.Type, comp.Spec.Version, fName)
@@ -56,6 +78,18 @@ func (w *workflow) init(ctx context.Context, comp compapi.Component) error {
 	// save workflow related configuration
 	w.compStore.AddWorkflow(comp.ObjectMeta.Name, workflowComp)
 	diag.DefaultMonitoring.ComponentInitialized(comp.Spec.Type)
+
+	return nil
+}
+
+func (w *workflow) Close(comp compapi.Component) error {
+	w.lock.Lock()
+	defer w.lock.Unlock()
+
+	// We don't "Close" a workflow here because that has no meaning today since
+	// Dapr doesn't support third-party workflows. Internal workflows are based
+	// on the actor subsystem so there is nothing to close.
+	w.compStore.DeleteWorkflow(comp.Name)
 
 	return nil
 }

@@ -11,10 +11,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package processor
+package secret
 
 import (
 	"context"
+	"io"
+	"sync"
 
 	"github.com/dapr/components-contrib/secretstores"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
@@ -25,13 +27,31 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/meta"
 )
 
+type Options struct {
+	Registry       *compsecret.Registry
+	ComponentStore *compstore.ComponentStore
+	Meta           *meta.Meta
+}
+
 type secret struct {
 	registry  *compsecret.Registry
 	compStore *compstore.ComponentStore
 	meta      *meta.Meta
+	lock      sync.Mutex
 }
 
-func (s *secret) init(ctx context.Context, comp compapi.Component) error {
+func New(opts Options) *secret {
+	return &secret{
+		registry:  opts.Registry,
+		compStore: opts.ComponentStore,
+		meta:      opts.Meta,
+	}
+}
+
+func (s *secret) Init(ctx context.Context, comp compapi.Component) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
 	fName := comp.LogName()
 	secretStore, err := s.registry.Create(comp.Spec.Type, comp.Spec.Version, fName)
 	if err != nil {
@@ -48,5 +68,25 @@ func (s *secret) init(ctx context.Context, comp compapi.Component) error {
 	s.compStore.AddSecretStore(comp.ObjectMeta.Name, secretStore)
 	diag.DefaultMonitoring.ComponentInitialized(comp.Spec.Type)
 
+	return nil
+}
+
+func (s *secret) Close(comp compapi.Component) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	sec, ok := s.compStore.GetSecretStore(comp.Name)
+	if !ok {
+		return nil
+	}
+
+	closer, ok := sec.(io.Closer)
+	if ok && closer != nil {
+		if err := closer.Close(); err != nil {
+			return err
+		}
+	}
+
+	s.compStore.DeleteSecretStore(comp.Name)
 	return nil
 }

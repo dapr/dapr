@@ -11,12 +11,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package processor
+package binding
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"strings"
+	"sync"
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/dapr/pkg/apis/common"
@@ -26,6 +29,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	"github.com/dapr/dapr/pkg/runtime/meta"
+	"github.com/dapr/kit/logger"
 )
 
 const (
@@ -34,13 +38,33 @@ const (
 	ComponentTypeOutput = "output"
 )
 
+var log = logger.NewLogger("dapr.runtime.processor.binding")
+
+type Options struct {
+	Registry       *compbindings.Registry
+	ComponentStore *compstore.ComponentStore
+	Meta           *meta.Meta
+}
+
 type binding struct {
 	registry  *compbindings.Registry
 	compStore *compstore.ComponentStore
 	meta      *meta.Meta
+	lock      sync.Mutex
 }
 
-func (b *binding) init(ctx context.Context, comp compapi.Component) error {
+func New(opts Options) *binding {
+	return &binding{
+		registry:  opts.Registry,
+		compStore: opts.ComponentStore,
+		meta:      opts.Meta,
+	}
+}
+
+func (b *binding) Init(ctx context.Context, comp compapi.Component) error {
+	b.lock.Lock()
+	defer b.lock.Unlock()
+
 	var found bool
 
 	if b.registry.HasInputBinding(comp.Spec.Type, comp.Spec.Version) {
@@ -62,6 +86,41 @@ func (b *binding) init(ctx context.Context, comp compapi.Component) error {
 		return fmt.Errorf("couldn't find binding %s", comp.LogName())
 	}
 
+	return nil
+}
+
+func (b *binding) Close(comp compapi.Component) error {
+	b.lock.Lock()
+	defer b.lock.Unlock()
+
+	var errs []error
+
+	inbinding, ok := b.compStore.GetInputBinding(comp.Name)
+	if ok {
+		if err := inbinding.Close(); err != nil {
+			errs = append(errs, err)
+		} else {
+			b.compStore.DeleteInputBinding(comp.Name)
+		}
+	}
+
+	outbinding, ok := b.compStore.GetOutputBinding(comp.Name)
+	if ok {
+		if err := b.closeOutputBinding(outbinding); err != nil {
+			errs = append(errs, err)
+		} else {
+			b.compStore.DeleteOutputBinding(comp.Name)
+		}
+	}
+
+	return errors.Join(errs...)
+}
+
+func (b *binding) closeOutputBinding(binding bindings.OutputBinding) error {
+	closer, ok := binding.(io.Closer)
+	if ok && closer != nil {
+		return closer.Close()
+	}
 	return nil
 }
 
@@ -108,7 +167,7 @@ func (b *binding) initOutputBinding(ctx context.Context, comp compapi.Component)
 	}
 
 	if binding != nil {
-		err := binding.Init(context.TODO(), bindings.Metadata{Base: b.meta.ToBaseMetadata(comp)})
+		err := binding.Init(ctx, bindings.Metadata{Base: b.meta.ToBaseMetadata(comp)})
 		if err != nil {
 			diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
 			return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)

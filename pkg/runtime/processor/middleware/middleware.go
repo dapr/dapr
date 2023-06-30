@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package processor
+package middleware
 
 import (
 	"context"
@@ -23,6 +23,14 @@ import (
 // currently a no-op.
 type middleware struct{}
 
-func (m *middleware) init(_ context.Context, _ compapi.Component) error {
+func New() *middleware {
+	return new(middleware)
+}
+
+func (m *middleware) Init(_ context.Context, _ compapi.Component) error {
+	return nil
+}
+
+func (m *middleware) Close(_ compapi.Component) error {
 	return nil
 }

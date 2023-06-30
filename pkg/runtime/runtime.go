@@ -77,6 +77,7 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/meta"
 	"github.com/dapr/dapr/pkg/runtime/processor"
+	"github.com/dapr/dapr/pkg/runtime/processor/binding"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/dapr/pkg/runtime/security"
@@ -567,7 +568,7 @@ func (a *DaprRuntime) initWorkflowEngine(ctx context.Context) {
 		if reg := a.runtimeConfig.registry.Workflows(); reg != nil {
 			log.Infof("Registering component for dapr workflow engine...")
 			reg.RegisterComponent(wfComponentFactory, "dapr")
-			if componentInitErr := a.processor.One(ctx, wfengine.ComponentDefinition); componentInitErr != nil {
+			if componentInitErr := a.processor.Init(ctx, wfengine.ComponentDefinition); componentInitErr != nil {
 				log.Warnf("Failed to initialize Dapr workflow component: %v", componentInitErr)
 			}
 		} else {
@@ -2409,7 +2410,7 @@ func (a *DaprRuntime) processComponentAndDependents(comp componentsV1alpha1.Comp
 	}
 
 	go func() {
-		ch <- a.processor.One(context.TODO(), comp)
+		ch <- a.processor.Init(context.TODO(), comp)
 	}()
 
 	select {
@@ -3042,11 +3043,11 @@ func (a *DaprRuntime) startReadingFromBindings() (err error) {
 	// Input bindings are stopped via cancellation of the main runtime's context
 	a.inputBindingsCtx, a.inputBindingsCancel = context.WithCancel(a.ctx)
 
-	for name, binding := range a.compStore.ListInputBindings() {
+	for name, bind := range a.compStore.ListInputBindings() {
 		var isSubscribed bool
-		m := binding.GetComponentMetadata()
+		m := bind.GetComponentMetadata()
 
-		if isBindingOfExplicitDirection(processor.BindingTypeInput, m) {
+		if isBindingOfExplicitDirection(binding.ComponentTypeInput, m) {
 			isSubscribed = true
 		} else {
 			isSubscribed, err = a.isAppSubscribedToBinding(name)
@@ -3060,7 +3061,7 @@ func (a *DaprRuntime) startReadingFromBindings() (err error) {
 			continue
 		}
 
-		err = a.readFromBinding(a.inputBindingsCtx, name, binding)
+		err = a.readFromBinding(a.inputBindingsCtx, name, bind)
 		if err != nil {
 			log.Errorf("error reading from input binding %s: %s", name, err)
 			continue

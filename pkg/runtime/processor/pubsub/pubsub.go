@@ -11,11 +11,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package processor
+package pubsub
 
 import (
 	"context"
 	"strings"
+	"sync"
 
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
@@ -27,15 +28,35 @@ import (
 	"github.com/dapr/dapr/pkg/scopes"
 )
 
+type Options struct {
+	Registry       *comppubsub.Registry
+	ComponentStore *compstore.ComponentStore
+	Meta           *meta.Meta
+	ID             string
+}
+
 type pubsub struct {
 	registry  *comppubsub.Registry
 	compStore *compstore.ComponentStore
 	meta      *meta.Meta
 
-	id string
+	id   string
+	lock sync.Mutex
 }
 
-func (p *pubsub) init(ctx context.Context, comp compapi.Component) error {
+func New(opts Options) *pubsub {
+	return &pubsub{
+		registry:  opts.Registry,
+		compStore: opts.ComponentStore,
+		meta:      opts.Meta,
+		id:        opts.ID,
+	}
+}
+
+func (p *pubsub) Init(ctx context.Context, comp compapi.Component) error {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+
 	fName := comp.LogName()
 	pubSub, err := p.registry.Create(comp.Spec.Type, comp.Spec.Version, fName)
 	if err != nil {
@@ -67,6 +88,34 @@ func (p *pubsub) init(ctx context.Context, comp compapi.Component) error {
 		NamespaceScoped:     meta.ContainsNamespace(comp.Spec.Metadata),
 	})
 	diag.DefaultMonitoring.ComponentInitialized(comp.Spec.Type)
+
+	return nil
+}
+
+func (p *pubsub) Close(comp compapi.Component) error {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+
+	// TODO: handle subscriptions
+
+	//ps, ok := p.compStore.GetPubSub(comp.Name)
+	//if !ok {
+	//	return nil
+	//}
+
+	//p.compStore.S
+
+	//if err := ps.
+
+	//closer, ok := ps.(io.Closer)
+	//if ok && closer != nil {
+	//	err := closer.Close()
+	//	if err != nil {
+	//		return err
+	//	}
+	///}
+
+	//p.compStore.DeletePubSub(comp.Name)
 
 	return nil
 }

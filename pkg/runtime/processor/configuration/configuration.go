@@ -11,10 +11,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package processor
+package configuration
 
 import (
 	"context"
+	"io"
+	"sync"
 
 	contribconfig "github.com/dapr/components-contrib/configuration"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
@@ -25,13 +27,31 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/meta"
 )
 
+type Options struct {
+	Registry       *compconfig.Registry
+	ComponentStore *compstore.ComponentStore
+	Meta           *meta.Meta
+}
+
 type configuration struct {
 	registry  *compconfig.Registry
 	compStore *compstore.ComponentStore
 	meta      *meta.Meta
+	lock      sync.Mutex
 }
 
-func (c *configuration) init(ctx context.Context, comp compapi.Component) error {
+func New(opts Options) *configuration {
+	return &configuration{
+		registry:  opts.Registry,
+		compStore: opts.ComponentStore,
+		meta:      opts.Meta,
+	}
+}
+
+func (c *configuration) Init(ctx context.Context, comp compapi.Component) error {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
 	fName := comp.LogName()
 	config, err := c.registry.Create(comp.Spec.Type, comp.Spec.Version, fName)
 	if err != nil {
@@ -49,5 +69,25 @@ func (c *configuration) init(ctx context.Context, comp compapi.Component) error 
 		diag.DefaultMonitoring.ComponentInitialized(comp.Spec.Type)
 	}
 
+	return nil
+}
+
+func (c *configuration) Close(comp compapi.Component) error {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	conf, ok := c.compStore.GetConfiguration(comp.ObjectMeta.Name)
+	if !ok {
+		return nil
+	}
+
+	closer, ok := conf.(io.Closer)
+	if ok && closer != nil {
+		if err := closer.Close(); err != nil {
+			return err
+		}
+	}
+
+	c.compStore.DeleteConfiguration(comp.ObjectMeta.Name)
 	return nil
 }
