@@ -20,3 +20,27 @@ spec:
   features:
     - name: ServiceInvocationStreaming
       enabled: true
+---
+# TODO: @joshvanl: Remove once ActorStateTTL feature is finalized (probably in
+# v1.12 release).
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: actorstatettl
+spec:
+  features:
+    - name: ActorStateTTL
+      enabled: true
+---
+# This is used in tests to validate that the features are loaded
+# It is not an actual "preview configuration"
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: previewconfig
+spec:
+  features:
+    - name: IsEnabled
+      enabled: true
+    - name: NotEnabled
+      enabled: false

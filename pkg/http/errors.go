@@ -13,6 +13,15 @@ limitations under the License.
 
 package http
 
+import (
+	"encoding/json"
+)
+
+// errorResponseValue is an interface that applies to ErrorResponse and other errors that can be used as response.
+type errorResponseValue interface {
+	JSONErrorValue() []byte
+}
+
 // ErrorResponse is an HTTP response message sent back to calling clients by the Dapr Runtime HTTP API.
 type ErrorResponse struct {
 	ErrorCode string `json:"errorCode"`
@@ -25,4 +34,10 @@ func NewErrorResponse(errorCode, message string) ErrorResponse {
 		ErrorCode: errorCode,
 		Message:   message,
 	}
+}
+
+// JSONErrorValue implements errorResponseValue.
+func (e ErrorResponse) JSONErrorValue() []byte {
+	b, _ := json.Marshal(e)
+	return b
 }

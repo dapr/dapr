@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -32,7 +33,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	kclock "k8s.io/utils/clock"
@@ -119,7 +119,7 @@ var testResiliency = &v1alpha1.Resiliency{
 	},
 }
 
-func (m *mockAppChannel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+func (m *mockAppChannel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*invokev1.InvokeMethodResponse, error) {
 	if m.requestC != nil {
 		var request testRequest
 		err := json.NewDecoder(req.RawData()).Decode(&request)
@@ -136,7 +136,7 @@ type mockAppChannelBadInvoke struct {
 	requestC chan testRequest
 }
 
-func (m *mockAppChannelBadInvoke) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+func (m *mockAppChannelBadInvoke) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*invokev1.InvokeMethodResponse, error) {
 	if m.requestC != nil {
 		var request testRequest
 		err := json.NewDecoder(req.RawData()).Decode(&request)
@@ -155,16 +155,16 @@ type reentrantAppChannel struct {
 	a        *actorsRuntime
 }
 
-func (r *reentrantAppChannel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+func (r *reentrantAppChannel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*invokev1.InvokeMethodResponse, error) {
 	r.callLog = append(r.callLog, "Entering "+req.Message().Method)
 	if len(r.nextCall) > 0 {
 		nextReq := r.nextCall[0]
 		r.nextCall = r.nextCall[1:]
 
 		if val, ok := req.Metadata()["Dapr-Reentrancy-Id"]; ok {
-			header := fasthttp.RequestHeader{}
-			header.Add("Dapr-Reentrancy-Id", val.Values[0])
-			nextReq.AddHeaders(&header)
+			nextReq.AddMetadata(map[string][]string{
+				"Dapr-Reentrancy-Id": val.Values,
+			})
 		}
 		resp, err := r.a.callLocalActor(context.Background(), nextReq)
 		if err != nil {
@@ -1220,20 +1220,45 @@ func TestDeleteReminderWithPartitions(t *testing.T) {
 	appChannel := new(mockAppChannel)
 	testActorsRuntime := newTestActorsRuntimeWithMockAndActorMetadataPartition(appChannel)
 	defer testActorsRuntime.Stop()
+	stateStore, _ := testActorsRuntime.stateStore()
 
 	actorType, actorID := getTestActorTypeAndID()
 	ctx := context.Background()
-	reminder := createReminderData(actorID, actorType, "reminder1", "1s", "1s", "", "")
-	err := testActorsRuntime.CreateReminder(ctx, &reminder)
-	require.NoError(t, err)
-	assert.Equal(t, 1, len(testActorsRuntime.reminders[actorType]))
-	err = testActorsRuntime.DeleteReminder(ctx, &DeleteReminderRequest{
-		Name:      "reminder1",
-		ActorID:   actorID,
-		ActorType: actorType,
+
+	t.Run("Delete a reminder", func(t *testing.T) {
+		// Create a reminder
+		reminder := createReminderData(actorID, actorType, "reminder1", "1s", "1s", "", "")
+		err := testActorsRuntime.CreateReminder(ctx, &reminder)
+		require.NoError(t, err)
+		assert.Equal(t, 1, len(testActorsRuntime.reminders[actorType]))
+
+		// Delete the reminder
+		startCount := stateStore.(*daprt.FakeStateStore).CallCount("Multi")
+		err = testActorsRuntime.DeleteReminder(ctx, &DeleteReminderRequest{
+			Name:      "reminder1",
+			ActorID:   actorID,
+			ActorType: actorType,
+		})
+		require.NoError(t, err)
+		assert.Equal(t, 0, len(testActorsRuntime.reminders[actorType]))
+
+		// There should have been 1 Multi operation in the state store
+		require.Equal(t, startCount+1, stateStore.(*daprt.FakeStateStore).CallCount("Multi"))
 	})
-	require.NoError(t, err)
-	assert.Equal(t, 0, len(testActorsRuntime.reminders[actorType]))
+
+	t.Run("Delete a reminder that doesn't exist", func(t *testing.T) {
+		startCount := stateStore.(*daprt.FakeStateStore).CallCount("Multi")
+		err := testActorsRuntime.DeleteReminder(ctx, &DeleteReminderRequest{
+			Name:      "does-not-exist",
+			ActorID:   actorID,
+			ActorType: actorType,
+		})
+		require.NoError(t, err)
+		assert.Equal(t, 0, len(testActorsRuntime.reminders[actorType]))
+
+		// There should have been no Multi operation in the state store
+		require.Equal(t, startCount, stateStore.(*daprt.FakeStateStore).CallCount("Multi"))
+	})
 }
 
 func TestDeleteReminder(t *testing.T) {
@@ -1248,40 +1273,60 @@ func TestDeleteReminder(t *testing.T) {
 	actorType, actorID := getTestActorTypeAndID()
 	ctx := context.Background()
 
-	// Create 2 reminders (in parallel)
-	errs := make(chan error, 2)
-	go func() {
-		reminder := createReminderData(actorID, actorType, "reminder1", "1s", "1s", "", "")
-		errs <- testActorsRuntime.CreateReminder(ctx, &reminder)
-	}()
-	go func() {
-		reminder := createReminderData(actorID, actorType, "reminder2", "1s", "1s", "", "")
-		errs <- testActorsRuntime.CreateReminder(ctx, &reminder)
-	}()
-	for i := 0; i < 2; i++ {
-		require.NoError(t, <-errs)
-	}
-	assert.Equal(t, 2, len(testActorsRuntime.reminders[actorType]))
+	t.Run("Delete reminders in parallel should not have race conditions", func(t *testing.T) {
+		// Create 2 reminders (in parallel)
+		errs := make(chan error, 2)
+		go func() {
+			reminder := createReminderData(actorID, actorType, "reminder1", "1s", "1s", "", "")
+			errs <- testActorsRuntime.CreateReminder(ctx, &reminder)
+		}()
+		go func() {
+			reminder := createReminderData(actorID, actorType, "reminder2", "1s", "1s", "", "")
+			errs <- testActorsRuntime.CreateReminder(ctx, &reminder)
+		}()
+		for i := 0; i < 2; i++ {
+			require.NoError(t, <-errs)
+		}
+		assert.Equal(t, 2, len(testActorsRuntime.reminders[actorType]))
 
-	// Delete the reminders (in parallel)
-	go func() {
-		errs <- testActorsRuntime.DeleteReminder(ctx, &DeleteReminderRequest{
-			Name:      "reminder1",
+		// Delete the reminders (in parallel)
+		startCount := stateStore.(*daprt.FakeStateStore).CallCount("Multi")
+		go func() {
+			errs <- testActorsRuntime.DeleteReminder(ctx, &DeleteReminderRequest{
+				Name:      "reminder1",
+				ActorID:   actorID,
+				ActorType: actorType,
+			})
+		}()
+		go func() {
+			errs <- testActorsRuntime.DeleteReminder(ctx, &DeleteReminderRequest{
+				Name:      "reminder2",
+				ActorID:   actorID,
+				ActorType: actorType,
+			})
+		}()
+		for i := 0; i < 2; i++ {
+			require.NoError(t, <-errs)
+		}
+		assert.Equal(t, 0, len(testActorsRuntime.reminders[actorType]))
+
+		// There should have been 2 Multi operations in the state store
+		require.Equal(t, startCount+2, stateStore.(*daprt.FakeStateStore).CallCount("Multi"))
+	})
+
+	t.Run("Delete a reminder that doesn't exist", func(t *testing.T) {
+		startCount := stateStore.(*daprt.FakeStateStore).CallCount("Multi")
+		err := testActorsRuntime.DeleteReminder(ctx, &DeleteReminderRequest{
+			Name:      "does-not-exist",
 			ActorID:   actorID,
 			ActorType: actorType,
 		})
-	}()
-	go func() {
-		errs <- testActorsRuntime.DeleteReminder(ctx, &DeleteReminderRequest{
-			Name:      "reminder2",
-			ActorID:   actorID,
-			ActorType: actorType,
-		})
-	}()
-	for i := 0; i < 2; i++ {
-		require.NoError(t, <-errs)
-	}
-	assert.Equal(t, 0, len(testActorsRuntime.reminders[actorType]))
+		require.NoError(t, err)
+		assert.Equal(t, 0, len(testActorsRuntime.reminders[actorType]))
+
+		// There should have been no Multi operation in the state store
+		require.Equal(t, startCount, stateStore.(*daprt.FakeStateStore).CallCount("Multi"))
+	})
 }
 
 func TestReminderRepeats(t *testing.T) {
@@ -2503,6 +2548,29 @@ func TestTransactionalOperation(t *testing.T) {
 		require.True(t, ok)
 		assert.Equal(t, "base||"+TestKeyName, res.Key)
 	})
+
+	t.Run("error if ttlInSeconds and actor state TTL not enabled", func(t *testing.T) {
+		op := TransactionalOperation{
+			Operation: Upsert,
+			Request: map[string]any{
+				"key":      TestKeyName,
+				"metadata": map[string]string{"ttlInSeconds": "1"},
+			},
+		}
+		_, err := op.StateOperation("base||", StateOperationOpts{
+			StateTTLEnabled: false,
+		})
+		assert.ErrorContains(t, err, `ttlInSeconds is not supported without the "ActorStateTTL" feature enabled`)
+
+		resI, err := op.StateOperation("base||", StateOperationOpts{
+			StateTTLEnabled: true,
+		})
+		assert.NoError(t, err)
+
+		res, ok := resI.(state.SetRequest)
+		require.True(t, ok)
+		assert.Equal(t, "base||"+TestKeyName, res.Key)
+	})
 }
 
 func TestCallLocalActor(t *testing.T) {
@@ -3244,4 +3312,81 @@ func TestPlacementSwitchIsNotTurnedOn(t *testing.T) {
 	t.Run("the actor store can not be initialized normally", func(t *testing.T) {
 		assert.Empty(t, testActorsRuntime.compStore.ListStateStores())
 	})
+}
+
+func TestCreateTimerReminderGoroutineLeak(t *testing.T) {
+	testActorsRuntime := newTestActorsRuntime()
+	defer testActorsRuntime.Stop()
+
+	actorType, actorID := getTestActorTypeAndID()
+	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
+
+	testFn := func(createFn func(i int, ttl bool) error) func(t *testing.T) {
+		return func(t *testing.T) {
+			// Get the baseline goroutines
+			initialCount := runtime.NumGoroutine()
+
+			// Create 10 timers/reminders with unique names
+			for i := 0; i < 10; i++ {
+				require.NoError(t, createFn(i, false))
+			}
+
+			// Create 5 timers/reminders that override the first ones
+			for i := 0; i < 5; i++ {
+				require.NoError(t, createFn(i, false))
+			}
+
+			// Create 5 timers/reminders that have TTLs
+			for i := 10; i < 15; i++ {
+				require.NoError(t, createFn(i, true))
+			}
+
+			// Advance the clock to make the timers/reminders fire
+			time.Sleep(200 * time.Millisecond)
+			testActorsRuntime.clock.Sleep(5 * time.Second)
+			time.Sleep(200 * time.Millisecond)
+			testActorsRuntime.clock.Sleep(5 * time.Second)
+
+			// Sleep to allow for cleanup
+			time.Sleep(200 * time.Millisecond)
+
+			// Get the number of goroutines again, which should be +/- 2 the initial one (we give it some buffer)
+			currentCount := runtime.NumGoroutine()
+			if currentCount >= (initialCount+2) || currentCount <= (initialCount-2) {
+				t.Fatalf("Current number of goroutine %[1]d is outside of range [%[2]d-2, %[2]d+2]", currentCount, initialCount)
+			}
+		}
+	}
+
+	t.Run("timers", testFn(func(i int, ttl bool) error {
+		req := &CreateTimerRequest{
+			ActorType: actorType,
+			ActorID:   actorID,
+			Name:      fmt.Sprintf("timer%d", i),
+			Data:      json.RawMessage(`"data"`),
+			DueTime:   "2s",
+		}
+		if ttl {
+			req.DueTime = "1s"
+			req.Period = "1s"
+			req.TTL = "2s"
+		}
+		return testActorsRuntime.CreateTimer(context.Background(), req)
+	}))
+
+	t.Run("reminders", testFn(func(i int, ttl bool) error {
+		req := &CreateReminderRequest{
+			ActorType: actorType,
+			ActorID:   actorID,
+			Name:      fmt.Sprintf("reminder%d", i),
+			Data:      json.RawMessage(`"data"`),
+			DueTime:   "2s",
+		}
+		if ttl {
+			req.DueTime = "1s"
+			req.Period = "1s"
+			req.TTL = "2s"
+		}
+		return testActorsRuntime.CreateReminder(context.Background(), req)
+	}))
 }
