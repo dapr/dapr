@@ -1729,7 +1729,7 @@ func (a *DaprRuntime) establishSecurity(sentryAddress string) error {
 	if sentryAddress == "" {
 		return errors.New("sentryAddress cannot be empty")
 	}
-	log.Info("mTLS enabled. creating sidecar authenticator")
+	log.Info("mTLS enabled; Creating sidecar authenticator")
 
 	auth, err := security.GetSidecarAuthenticator(sentryAddress, a.runtimeConfig.certChain)
 	if err != nil {
@@ -1738,7 +1738,7 @@ func (a *DaprRuntime) establishSecurity(sentryAddress string) error {
 	a.authenticator = auth
 	a.grpc.SetAuthenticator(auth)
 
-	log.Info("authenticator created")
+	log.Info("Authenticator created")
 
 	diag.DefaultMonitoring.MTLSInitCompleted()
 	return nil

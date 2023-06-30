@@ -19,6 +19,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"strings"
 	"sync/atomic"
 
 	"k8s.io/client-go/rest"
@@ -134,7 +135,7 @@ func (s *sentry) Start(parentCtx context.Context) error {
 		},
 	}
 	for name, val := range vals {
-		log.Infof("Starting validator %s", name)
+		log.Infof("Starting validator %s", strings.ToLower(name.String()))
 		runners = append(runners, val.Start)
 	}
 

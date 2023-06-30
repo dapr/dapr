@@ -58,7 +58,7 @@ func GetSidecarAuthenticator(sentryAddress string, certChain *credentials.CertCh
 	if err != nil {
 		return nil, err
 	}
-	log.Info("trust anchors and cert chain extracted successfully")
+	log.Info("Trust anchors and cert chain extracted successfully")
 
 	return newAuthenticator(sentryAddress, trustAnchors, certChain.Cert, certChain.Key, generateCSRAndPrivateKey), nil
 }
