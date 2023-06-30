@@ -101,7 +101,7 @@ func (f *fuzzsecret) Setup(t *testing.T) []framework.Option {
 	require.NoError(t, je.Encode(f.values))
 	require.NoError(t, file.Close())
 
-	f.daprd = procdaprd.New(t, procdaprd.WithComponentFiles(fmt.Sprintf(`
+	f.daprd = procdaprd.New(t, procdaprd.WithResourceFiles(fmt.Sprintf(`
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
