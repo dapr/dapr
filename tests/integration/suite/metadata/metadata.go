@@ -45,8 +45,8 @@ func (m *metadata) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (m *metadata) Run(t *testing.T, ctx context.Context) {
-	m.proc.WaitUntilRunning(t, ctx)
+func (m *metadata) Run(t *testing.T, parentCtx context.Context) {
+	m.proc.WaitUntilRunning(t, parentCtx)
 
 	t.Run("test HTTP", func(t *testing.T) {
 		tests := map[string]string{
@@ -55,7 +55,7 @@ func (m *metadata) Run(t *testing.T, ctx context.Context) {
 		}
 		for testName, reqURL := range tests {
 			t.Run(testName, func(t *testing.T) {
-				ctx, cancel := context.WithTimeout(ctx, time.Second*5)
+				ctx, cancel := context.WithTimeout(parentCtx, time.Second*5)
 				defer cancel()
 
 				req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
