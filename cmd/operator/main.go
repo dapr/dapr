@@ -61,6 +61,7 @@ func main() {
 		WatchdogEnabled:                     opts.WatchdogEnabled,
 		WatchdogInterval:                    opts.WatchdogInterval,
 		WatchdogCanPatchPodLabels:           opts.WatchdogCanPatchPodLabels,
+		NoCRDPatch:                          opts.NoCRDPatch,
 	}
 
 	ctx := signals.Context()

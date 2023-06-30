@@ -110,7 +110,7 @@ func getKubernetesConfig(configName string) (SentryConfig, error) {
 		return defaultConfig, err
 	}
 
-	list, err := daprClient.ConfigurationV1alpha1().Configurations(metaV1.NamespaceAll).List(metaV1.ListOptions{})
+	list, err := daprClient.ConfigurationV1alpha1().Configurations(GetNamespace()).List(metaV1.ListOptions{})
 	if err != nil {
 		return defaultConfig, err
 	}
@@ -170,4 +170,9 @@ func parseConfiguration(conf SentryConfig, daprConfig *daprGlobalConfig.Configur
 	conf.Features = daprConfig.Spec.Features
 
 	return conf, nil
+}
+
+// GetNamespace returns the namespace for Sentry.
+func GetNamespace() string {
+	return os.Getenv("NAMESPACE")
 }

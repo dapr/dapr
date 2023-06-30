@@ -15,6 +15,7 @@ package injector
 
 import (
 	"encoding/json"
+	"os"
 
 	"github.com/kelseyhightower/envconfig"
 	corev1 "k8s.io/api/core/v1"
@@ -37,6 +38,7 @@ type Config struct {
 	RunAsNonRoot                      string `envconfig:"SIDECAR_RUN_AS_NON_ROOT"`
 	ReadOnlyRootFilesystem            string `envconfig:"SIDECAR_READ_ONLY_ROOT_FILESYSTEM"`
 	SidecarDropALLCapabilities        string `envconfig:"SIDECAR_DROP_ALL_CAPABILITIES"`
+	ConfigNamespace                   string `envconfig:"CONFIG_NAMESPACE"`
 
 	parsedEntrypointTolerations []corev1.Toleration
 }
@@ -116,6 +118,10 @@ func (c *Config) GetDropCapabilities() bool {
 func (c *Config) GetSkipPlacement() bool {
 	// Default is false if empty
 	return utils.IsTruthy(c.SkipPlacement)
+}
+
+func GetNamespace() string {
+	return os.Getenv("NAMESPACE")
 }
 
 func (c *Config) parseTolerationsJSON() {

@@ -73,6 +73,7 @@ type Options struct {
 	ServiceReconcilerEnabled            bool
 	ArgoRolloutServiceReconcilerEnabled bool
 	WatchdogCanPatchPodLabels           bool
+	NoCRDPatch                          bool
 }
 
 type operator struct {
@@ -81,6 +82,7 @@ type operator struct {
 	configName    string
 	certChainPath string
 	config        *Config
+	noCRDPatch    bool
 
 	mgr    ctrl.Manager
 	client client.Client
@@ -151,6 +153,7 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 		client:        mgrClient,
 		configName:    opts.Config,
 		certChainPath: opts.CertChainPath,
+		noCRDPatch:    opts.NoCRDPatch,
 	}
 	o.apiServer = api.NewAPIServer(o.client)
 
@@ -293,9 +296,11 @@ func (o *operator) Run(ctx context.Context) error {
 			return fmt.Errorf("failed to load cert chain: %w", rErr)
 		}
 
-		rErr = o.patchCRDs(ctx, o.mgr.GetConfig(), "subscriptions.dapr.io")
-		if rErr != nil {
-			return rErr
+		if !o.noCRDPatch {
+			rErr = o.patchCRDs(ctx, o.mgr.GetConfig(), "subscriptions.dapr.io")
+			if rErr != nil {
+				return rErr
+			}
 		}
 
 		log.Info("Starting api server")

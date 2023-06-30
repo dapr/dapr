@@ -53,6 +53,7 @@ type Options struct {
 	WatchdogInterval                   time.Duration
 	watchdogIntervalStr                string
 	WatchdogCanPatchPodLabels          bool
+	NoCRDPatch                         bool
 	Logger                             logger.Options
 	Metrics                            *metrics.Options
 }
@@ -76,6 +77,7 @@ func New() (*Options, error) {
 	flag.StringVar(&opts.WatchNamespace, "watch-namespace", "", "Namespace to watch Dapr annotated resources in")
 	flag.BoolVar(&opts.EnableArgoRolloutServiceReconciler, "enable-argo-rollout-service-reconciler", false, "Enable the service reconciler for Dapr-enabled Argo Rollouts")
 	flag.BoolVar(&opts.WatchdogCanPatchPodLabels, "watchdog-can-patch-pod-labels", false, "Allow watchdog to patch pod labels to set pods with sidecar present")
+	flag.BoolVar(&opts.NoCRDPatch, "no-crd-patch", false, "Disable patching of CRDs")
 
 	flag.StringVar(&credentials.RootCertFilename, "issuer-ca-filename", credentials.RootCertFilename, "Certificate Authority certificate filename")
 	flag.StringVar(&credentials.IssuerCertFilename, "issuer-certificate-filename", credentials.IssuerCertFilename, "Issuer certificate filename")

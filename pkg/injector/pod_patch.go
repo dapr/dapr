@@ -164,7 +164,7 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *v1.AdmissionRe
 }
 
 func mTLSEnabled(daprClient scheme.Interface) bool {
-	resp, err := daprClient.ConfigurationV1alpha1().Configurations(metaV1.NamespaceAll).List(metaV1.ListOptions{})
+	resp, err := daprClient.ConfigurationV1alpha1().Configurations(GetNamespace()).List(metaV1.ListOptions{})
 	if err != nil {
 		log.Errorf("Failed to load dapr configuration from k8s, use default value %t for mTLSEnabled: %s", defaultMtlsEnabled, err)
 		return defaultMtlsEnabled

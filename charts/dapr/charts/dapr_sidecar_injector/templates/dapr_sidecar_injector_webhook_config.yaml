@@ -45,6 +45,14 @@ webhooks:
       name: dapr-sidecar-injector
       path: "/mutate"
     caBundle: {{ if $existingWebHookConfig }}{{ (index $existingWebHookConfig.webhooks 0).clientConfig.caBundle }}{{ else }}{{ b64enc $ca.Cert }}{{ end }}
+  {{- if .Values.global.rbac.namespaced }}
+  namespaceSelector:
+      matchExpressions:
+        - key: name
+          operator: In
+          values:
+            - {{ .Release.Namespace }}
+  {{- end }}
   rules:
   - apiGroups:
     - ""

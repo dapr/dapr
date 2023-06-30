@@ -193,6 +193,9 @@ spec:
         - "--issuer-key-filename"
         - "{{ .key }}"
 {{- end }}
+{{- if .Values.global.rbac.namespaced }}
+        - "--no-crd-patch"
+{{- end }}
 {{- if .Values.watchNamespace }}
         - "--watch-namespace"
         - "{{ .Values.watchNamespace }}"
