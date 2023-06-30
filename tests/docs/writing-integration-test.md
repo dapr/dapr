@@ -12,7 +12,7 @@ always built from source within the test.
 ## Invoking the test
 
 ```bash
-go test -v -race -tags="integration" ./tests/integration`
+go test -v -race -count -tags="integration" ./tests/integration` -run="Test_Integration/daprd/pubsub/http/fuzzpubsubNoRaw"
 ```
 
 Rather than building from source, you can also set a custom daprd binary path
