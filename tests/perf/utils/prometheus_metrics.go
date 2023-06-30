@@ -25,21 +25,21 @@ import (
 )
 
 type DaprMetrics struct {
-	Baseline_latency       float64
-	Dapr_latency           float64
-	Added_latency          float64
-	Sidecar_cpu            int64
-	App_cpu                int64
-	Sidecar_memory         float64
-	App_memory             float64
-	Application_throughput float64
+	BaselineLatency       float64
+	DaprLatency           float64
+	AddedLatency          float64
+	SidecarCPU            int64
+	AppCPU                int64
+	SidecarMemory         float64
+	AppMemory             float64
+	ApplicationThroughput float64
 }
 
 // DAPR_PERF_METRICS_PROMETHEUS_URL needs to be set
-func PushPrometheusMetrics(metrics DaprMetrics, building_block string, component string) {
-	
-	dapr_perf_metrics_prometheus_url := os.Getenv("DAPR_PERF_METRICS_PROMETHEUS_URL")
-	if dapr_perf_metrics_prometheus_url == ""{
+func PushPrometheusMetrics(metrics DaprMetrics, buildingBlock string, component string) {
+
+	daprPerfMetricsPrometheusURL := os.Getenv("DAPR_PERF_METRICS_PROMETHEUS_URL")
+	if daprPerfMetricsPrometheusURL == "" {
 		return
 	}
 
@@ -78,7 +78,7 @@ func PushPrometheusMetrics(metrics DaprMetrics, building_block string, component
 	})
 
 	// Create a pusher to push metrics to the Prometheus Pushgateway
-	pusher := push.New(dapr_perf_metrics_prometheus_url, building_block).
+	pusher := push.New(daprPerfMetricsPrometheusURL, buildingBlock).
 		Collector(baselineLatencyGauge).
 		Collector(daprLatencyGauge).
 		Collector(addedLatencyGauge).
@@ -87,7 +87,7 @@ func PushPrometheusMetrics(metrics DaprMetrics, building_block string, component
 		Collector(appMemoryGauge).
 		Collector(sidecarMemoryGauge).
 		Collector(applicationThroughputGauge).
-		Grouping("building_block", building_block)
+		Grouping("building_block", buildingBlock)
 
 	// Add the component Grouping only if specified
 	if len(component) > 0 {
@@ -95,18 +95,17 @@ func PushPrometheusMetrics(metrics DaprMetrics, building_block string, component
 	}
 
 	// Set the dapr_metrics values to the Gauges created
-	baselineLatencyGauge.Set(metrics.Baseline_latency)
-	daprLatencyGauge.Set(metrics.Dapr_latency)
-	addedLatencyGauge.Set(metrics.Added_latency)
-	appCpuGauge.Set(float64(metrics.App_cpu))
-	sidecarCpuGauge.Set(float64(metrics.Sidecar_cpu))
-	appMemoryGauge.Set(metrics.App_memory)
-	sidecarMemoryGauge.Set(metrics.Sidecar_memory)
-	applicationThroughputGauge.Set(metrics.Application_throughput)
+	baselineLatencyGauge.Set(metrics.BaselineLatency)
+	daprLatencyGauge.Set(metrics.DaprLatency)
+	addedLatencyGauge.Set(metrics.AddedLatency)
+	appCpuGauge.Set(float64(metrics.AppCPU))
+	sidecarCpuGauge.Set(float64(metrics.SidecarCPU))
+	appMemoryGauge.Set(metrics.AppMemory)
+	sidecarMemoryGauge.Set(metrics.SidecarMemory)
+	applicationThroughputGauge.Set(metrics.ApplicationThroughput)
 
 	// Push the metrics value to the Pushgateway
 	if err := pusher.Push(); err != nil {
 		log.Println("Failed to push metrics:", err)
 	}
-
 }
