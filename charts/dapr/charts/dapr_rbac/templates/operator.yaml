@@ -43,14 +43,12 @@ rules:
   - apiGroups: ["dapr.io"]
     resources: ["components", "configurations", "subscriptions", "resiliencies", "httpendpoints"]
     verbs: [ "get", "list", "watch"]
-{{- end }}
 {{- if .Values.global.argoRolloutServiceReconciler.enabled }}
   - apiGroups: ["argoproj.io"]
     resources: ["rollouts"]
     verbs: ["get", "list", "watch"]
 {{- end }}
 ---
-{{- if not .Values.global.rbac.namespaced }}
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
@@ -67,8 +65,8 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: dapr-operator-admin
-{{- end }}
 ---
+{{- end }}
 kind: Role
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:

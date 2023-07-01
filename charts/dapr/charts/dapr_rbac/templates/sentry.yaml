@@ -8,6 +8,7 @@ metadata:
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
 ---
+{{- if not .Values.global.rbac.namespaced }}
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
@@ -20,11 +21,9 @@ rules:
   - apiGroups: ["authentication.k8s.io"]
     resources: ["tokenreviews"]
     verbs: ["create"]
-{{- if not .Values.global.rbac.namespaced }}
   - apiGroups: ["dapr.io"]
     resources: ["configurations"]
     verbs: ["list"]
-{{- end }}
 ---
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
@@ -43,6 +42,7 @@ roleRef:
   kind: ClusterRole
   name: dapr-sentry
 ---
+{{- end}}
 kind: Role
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
@@ -61,6 +61,9 @@ rules:
   - apiGroups: ["dapr.io"]
     resources: ["configurations"]
     verbs: ["list"]
+  - apiGroups: ["authentication.k8s.io"]
+    resources: ["tokenreviews"]
+    verbs: ["create"]
 {{- end }}
 ---
 kind: RoleBinding
