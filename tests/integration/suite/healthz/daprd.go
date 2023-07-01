@@ -16,7 +16,6 @@ package healthz
 import (
 	"context"
 	"fmt"
-	"net"
 	"net/http"
 	"testing"
 	"time"
@@ -46,14 +45,7 @@ func (d *daprd) Setup(t *testing.T) []framework.Option {
 }
 
 func (d *daprd) Run(t *testing.T, ctx context.Context) {
-	assert.Eventually(t, func() bool {
-		conn, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", d.proc.PublicPort()))
-		if err != nil {
-			return false
-		}
-		require.NoError(t, conn.Close())
-		return true
-	}, time.Second*5, 100*time.Millisecond)
+	d.proc.WaitUntilRunning(t, ctx)
 
 	reqURL := fmt.Sprintf("http://localhost:%d/v1.0/healthz", d.proc.PublicPort())
 

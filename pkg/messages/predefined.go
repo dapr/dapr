@@ -22,7 +22,6 @@ import (
 const (
 	// Http.
 	ErrNotFound             = "method %q is not found"
-	ErrMalformedRequest     = "failed deserializing HTTP body: %s"
 	ErrMalformedRequestData = "can't serialize request data field: %s"
 
 	// State.
@@ -76,7 +75,6 @@ const (
 	// DirectMessaging.
 	ErrDirectInvoke         = "fail to invoke, id: %s, err: %s"
 	ErrDirectInvokeNoAppID  = "failed getting app id either from the URL path or the header dapr-app-id"
-	ErrDirectInvokeMethod   = "invalid method name"
 	ErrDirectInvokeNotReady = "invoke API is not ready"
 
 	// Healthz.
@@ -95,6 +93,10 @@ var (
 	// Generic.
 	ErrBadRequest       = APIError{"invalid request: %v", "ERR_BAD_REQUEST", http.StatusBadRequest, grpcCodes.InvalidArgument}
 	ErrAPIUnimplemented = APIError{"this API is currently not implemented", "ERR_API_UNIMPLEMENTED", http.StatusNotImplemented, grpcCodes.Unimplemented}
+
+	// HTTP.
+	ErrBodyRead         = APIError{"failed to read request body: %v", "ERR_BODY_READ", http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrMalformedRequest = APIError{"failed deserializing HTTP body: %v", "ERR_MALFORMED_REQUEST", http.StatusBadRequest, grpcCodes.InvalidArgument}
 
 	// State.
 	ErrStateStoresNotConfigured = APIError{"state store is not configured", "ERR_STATE_STORE_NOT_CONFIGURED", http.StatusInternalServerError, grpcCodes.FailedPrecondition}

@@ -98,7 +98,8 @@ The Helm chart has the follow configuration options that can be supplied:
 | `global.issuerFilenames.ca`               | Custom name of the file containing the root CA certificate inside the container    | `ca.crt`     |
 | `global.issuerFilenames.cert`             | Custom name of the file containing the leaf certificate inside the container       | `issuer.crt` |
 | `global.issuerFilenames.key`              | Custom name of the file containing the leaf certificate's key inside the container | `issuer.key` |
-| `global.actors.enabled`                   | Enables the Dapr actors building block. When "false", the Dapr Placement serice is not installed, and attempting to use Dapr actors will fail. | `true`                  |
+| `global.actors.enabled`                   | Enables the Dapr actors building block. When "false", the Dapr Placement serice is not installed, and attempting to use Dapr actors will fail. | `true` |
+| `global.seccompProfile` | SeccompProfile for Dapr control plane services | `""` |
 | `global.rbac.namespaced`                  | Removes cluster wide permissions where applicable  | `false` |
 | `global.argoRolloutServiceReconciler.enabled` | Enable the service reconciler for Dapr-enabled Argo Rollouts         | `false` |
 

@@ -15,7 +15,11 @@ package suite
 
 import (
 	"context"
+	"reflect"
+	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 )
@@ -34,6 +38,14 @@ func Register(c Case) {
 }
 
 // All returns all registered test cases.
-func All() []Case {
-	return cases
+func All(t *testing.T) map[string]Case {
+	mcases := make(map[string]Case)
+	for _, tcase := range cases {
+		tof := reflect.TypeOf(tcase).Elem()
+		_, aft, ok := strings.Cut(tof.PkgPath(), "tests/integration/suite/")
+		require.True(t, ok)
+		mcases[aft+"/"+tof.Name()] = tcase
+	}
+
+	return mcases
 }
