@@ -80,7 +80,7 @@ func newConfig() *config {
 	flag.IntVar(&cfg.healthzPort, "healthz-port", cfg.healthzPort, "sets the HTTP port for the healthz server")
 	flag.StringVar(&cfg.certChainPath, "certchain", cfg.certChainPath, "Path to the credentials directory holding the cert chain")
 	flag.BoolVar(&cfg.tlsEnabled, "tls-enabled", cfg.tlsEnabled, "Should TLS be enabled for the placement gRPC server")
-	flag.BoolVar(&cfg.metadataEnabled, "metadata-enable", cfg.metadataEnabled, "Expose the placement tables, using the same HTTP port as healthz")
+	flag.BoolVar(&cfg.metadataEnabled, "metadata-enabled", cfg.metadataEnabled, "Expose the placement tables, using the same HTTP port as healthz")
 	flag.IntVar(&cfg.replicationFactor, "replicationFactor", defaultReplicationFactor, "sets the replication factor for actor distribution on vnodes")
 
 	flag.StringVar(&credentials.RootCertFilename, "issuer-ca-filename", credentials.RootCertFilename, "Certificate Authority certificate filename")
