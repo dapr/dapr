@@ -275,7 +275,7 @@ func (o *operator) Run(ctx context.Context) error {
 		/*
 			Make sure to set `ENABLE_WEBHOOKS=false` when we run locally.
 		*/
-		if !strings.EqualFold(os.Getenv("ENABLE_WEBHOOKS"), "false") {
+		if !strings.EqualFold(os.Getenv("ENABLE_WEBHOOKS"), "false") && !o.noCRDPatch {
 			rErr = ctrl.NewWebhookManagedBy(o.mgr).
 				For(&subscriptionsapiV1alpha1.Subscription{}).
 				Complete()

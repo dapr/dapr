@@ -1,3 +1,4 @@
+{{- if not .Values.global.rbac.namespaced }}
 {{- $existingSecret := lookup "v1" "Secret" .Release.Namespace "dapr-webhook-cert"}}
 {{- $existingCA := lookup "v1" "Secret" .Release.Namespace "dapr-webhook-ca"}}
 {{- $ca := genCA "dapr-webhook-ca" 3650 }}
@@ -40,6 +41,7 @@ data:
   {{ if $existingCA }}caBundle: {{ index $existingCA.data "caBundle" }}
   {{ else }}caBundle: {{ b64enc $ca.Cert }}
   {{ end }}
+{{- end }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -214,9 +216,11 @@ spec:
         - name: credentials
           secret:
             secretName: dapr-trust-bundle
+{{- if not .Values.global.rbac.namespaced }}
         - name: webhook-creds
           secret:
             secretName: dapr-webhook-cert
+{{- end }}
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
