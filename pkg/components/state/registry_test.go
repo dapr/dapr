@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	s "github.com/dapr/components-contrib/state"
+	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/kit/logger"
 )
@@ -42,6 +43,14 @@ func TestRegistry(t *testing.T) {
 		// Initiate mock object
 		mock := &mockState{}
 		mockV2 := &mockState{}
+		fooV1 := new(mockState)
+		fooV2 := new(mockState)
+		fooV3 := new(mockState)
+		fooV4 := new(mockState)
+		fooCV1 := func(_ logger.Logger) s.Store { return fooV1 }
+		fooCV2 := func(_ logger.Logger) s.Store { return fooV2 }
+		fooCV3 := func(_ logger.Logger) s.Store { return fooV3 }
+		fooCV4 := func(_ logger.Logger) s.Store { return fooV4 }
 
 		// act
 		testRegistry.RegisterComponent(func(_ logger.Logger) s.Store {
@@ -50,6 +59,17 @@ func TestRegistry(t *testing.T) {
 		testRegistry.RegisterComponent(func(_ logger.Logger) s.Store {
 			return mockV2
 		}, stateNameV2)
+		testRegistry.RegisterComponentWithVersions("foo", components.Versioning{
+			Preferred: components.VersionConstructor{Version: "v2", Constructor: fooCV2},
+			Deprecated: []components.VersionConstructor{
+				{Version: "v1", Constructor: fooCV1},
+				{Version: "v3", Constructor: fooCV3},
+			},
+			Others: []components.VersionConstructor{
+				{Version: "v4", Constructor: fooCV4},
+			},
+			Default: "v1",
+		})
 
 		// assert v0 and v1
 		p, e := testRegistry.Create(componentName, "v0", "")
@@ -68,6 +88,30 @@ func TestRegistry(t *testing.T) {
 		pV2, e = testRegistry.Create(strings.ToUpper(componentName), "V2", "")
 		assert.NoError(t, e)
 		assert.Same(t, mockV2, pV2)
+
+		// Check availability of foo versions
+
+		p, err := testRegistry.Create("state.foo", "v1", "")
+		assert.NoError(t, err)
+		assert.Same(t, fooV1, p)
+		p, err = testRegistry.Create("state.foo", "v2", "")
+		assert.NoError(t, err)
+		assert.Same(t, fooV2, p)
+		p, err = testRegistry.Create("state.foo", "v3", "")
+		assert.NoError(t, err)
+		assert.Same(t, fooV3, p)
+		p, err = testRegistry.Create("state.foo", "v4", "")
+		assert.NoError(t, err)
+		assert.Same(t, fooV4, p)
+		p, err = testRegistry.Create("state.foo", "v5", "")
+		assert.Error(t, err)
+		assert.Nil(t, p)
+		p, err = testRegistry.Create("state.foo", "", "")
+		assert.NoError(t, err)
+		assert.Same(t, fooV1, p)
+		p, err = testRegistry.Create("state.foo", "v0", "")
+		assert.Error(t, err)
+		assert.Nil(t, p)
 	})
 
 	t.Run("state is not registered", func(t *testing.T) {
