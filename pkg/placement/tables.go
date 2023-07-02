@@ -14,8 +14,8 @@ limitations under the License.
 package placement
 
 type PlacementTables struct {
-	HostList     []*HostInfo `json:"hostList,omitempty"`
-	TableVersion uint64      `json:"tableVersion,omitempty"`
+	HostList     []HostInfo `json:"hostList,omitempty"`
+	TableVersion uint64     `json:"tableVersion,omitempty"`
 }
 type HostInfo struct {
 	Name      string   `json:"name,omitempty"`
@@ -34,7 +34,7 @@ func (p *Service) GetPlacementTables() (*PlacementTables, error) {
 	members := make([]HostInfo, 0, len(m))
 	// the key of the member map is the host name, so we can just ignore it.
 	for _, v := range m {
-		members = append(members, &HostInfo{
+		members = append(members, HostInfo{
 			Name:      v.Name,
 			AppID:     v.AppID,
 			Entities:  v.Entities,
