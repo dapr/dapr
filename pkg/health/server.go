@@ -57,7 +57,6 @@ func NewJSONDataRouterOptions[T any](path string, getter func() (T, error)) Rout
 				return
 			}
 			writer.Header().Set("Content-Type", "application/json")
-			writer.WriteHeader(http.StatusOK)
 			err = json.NewEncoder(writer).Encode(data)
 			if err != nil {
 				log.Warnf("failed to encode json to response writer: %s", err.Error())
