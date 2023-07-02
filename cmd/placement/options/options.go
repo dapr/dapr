@@ -83,10 +83,7 @@ func New() *Options {
 	opts.Metrics.AttachCmdFlags(flag.StringVar, flag.BoolVar)
 
 	// parse env variables before parsing flags, so the flags takes priority over env variables
-	metadataEnable := os.Getenv(envMetadataEnabled)
-	if len(metadataEnable) > 0 {
-		opts.MetadataEnabled = utils.IsTruthy(metadataEnable)
-	}
+	opts.MetadataEnabled = utils.IsTruthy(os.Getenv(envMetadataEnabled))
 
 	flag.Parse()
 
