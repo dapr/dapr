@@ -14,14 +14,14 @@ limitations under the License.
 package placement
 
 type PlacementTables struct {
-	HostList     []*HostInfo `json:"host_list,omitempty"`
-	TableVersion uint64      `json:"table_version,omitempty"`
+	HostList     []*HostInfo `json:"hostList,omitempty"`
+	TableVersion uint64      `json:"tableVersion,omitempty"`
 }
 type HostInfo struct {
 	Name      string   `json:"name,omitempty"`
-	AppID     string   `json:"app_id,omitempty"`
+	AppID     string   `json:"appId,omitempty"`
 	Entities  []string `json:"entities,omitempty"`
-	UpdatedAt int64    `json:"updated_at,omitempty"`
+	UpdatedAt int64    `json:"updatedAt,omitempty"`
 }
 
 // GetPlacementTables returns the current placement host infos.
