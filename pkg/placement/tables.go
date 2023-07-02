@@ -31,7 +31,7 @@ func (p *Service) GetPlacementTables() (*PlacementTables, error) {
 	response := &PlacementTables{
 		TableVersion: version,
 	}
-	members := make([]*HostInfo, 0, len(m))
+	members := make([]HostInfo, 0, len(m))
 	// the key of the member map is the host name, so we can just ignore it.
 	for _, v := range m {
 		members = append(members, &HostInfo{
