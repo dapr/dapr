@@ -153,24 +153,31 @@ func (wf *workflowActor) DeactivateActor(ctx context.Context, actorID string) er
 
 func (wf *workflowActor) createWorkflowInstance(ctx context.Context, actorID string, startEventBytes []byte) error {
 	// create a new state entry if one doesn't already exist
-	state, exists, err := wf.loadInternalState(ctx, actorID)
+	state, err := wf.loadInternalState(ctx, actorID)
 	if err != nil {
 		return err
-	} else if !exists {
-		state = NewWorkflowState(wf.config)
 	}
 
+	created := false
+	if state == nil {
+		state = NewWorkflowState(wf.config)
+		created = true
+	}
+
+	// Ensure that the start event payload is a valid durabletask execution-started event
 	startEvent, err := backend.UnmarshalHistoryEvent(startEventBytes)
 	if err != nil {
 		return err
-	} else if startEvent.GetExecutionStarted() == nil {
+	}
+	if startEvent.GetExecutionStarted() == nil {
 		return errors.New("invalid execution start event")
 	}
 
 	// We block (re)creation of existing workflows unless they are in a completed state.
-	if exists {
+	if !created {
 		runtimeState := getRuntimeState(actorID, state)
 		if runtimeState.IsCompleted() {
+			wfLogger.Infof("%s: workflow was previously completed and is being recreated", actorID)
 			state.Reset()
 		} else {
 			return fmt.Errorf("an active workflow with ID '%s' already exists", actorID)
@@ -189,10 +196,11 @@ func (wf *workflowActor) createWorkflowInstance(ctx context.Context, actorID str
 }
 
 func (wf *workflowActor) getWorkflowMetadata(ctx context.Context, actorID string) (*api.OrchestrationMetadata, error) {
-	state, exists, err := wf.loadInternalState(ctx, actorID)
+	state, err := wf.loadInternalState(ctx, actorID)
 	if err != nil {
 		return nil, err
-	} else if !exists {
+	}
+	if state == nil {
 		return nil, api.ErrInstanceNotFound
 	}
 
@@ -221,10 +229,11 @@ func (wf *workflowActor) getWorkflowMetadata(ctx context.Context, actorID string
 
 // This method purges all the completed activity data from a workflow associated with the given actorID
 func (wf *workflowActor) purgeWorkflowState(ctx context.Context, actorID string) error {
-	state, exists, err := wf.loadInternalState(ctx, actorID)
+	state, err := wf.loadInternalState(ctx, actorID)
 	if err != nil {
 		return err
-	} else if !exists {
+	}
+	if state == nil {
 		return api.ErrInstanceNotFound
 	}
 
@@ -253,10 +262,11 @@ func (wf *workflowActor) purgeWorkflowState(ctx context.Context, actorID string)
 }
 
 func (wf *workflowActor) addWorkflowEvent(ctx context.Context, actorID string, historyEventBytes []byte) error {
-	state, exists, err := wf.loadInternalState(ctx, actorID)
+	state, err := wf.loadInternalState(ctx, actorID)
 	if err != nil {
 		return err
-	} else if !exists {
+	}
+	if state == nil {
 		return api.ErrInstanceNotFound
 	}
 
@@ -273,10 +283,11 @@ func (wf *workflowActor) addWorkflowEvent(ctx context.Context, actorID string, h
 }
 
 func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, reminderName string, reminderData []byte) error {
-	state, exists, err := wf.loadInternalState(ctx, actorID)
+	state, err := wf.loadInternalState(ctx, actorID)
 	if err != nil {
 		return err
-	} else if !exists {
+	}
+	if state == nil {
 		// The assumption is that someone manually deleted the workflow state. This is non-recoverable.
 		return errors.New("no workflow state found")
 	}
@@ -471,27 +482,27 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 	return wf.saveInternalState(ctx, actorID, state)
 }
 
-func (wf *workflowActor) loadInternalState(ctx context.Context, actorID string) (workflowState, bool, error) {
+func (wf *workflowActor) loadInternalState(ctx context.Context, actorID string) (*workflowState, error) {
 	// see if the state for this actor is already cached in memory
 	cachedState, ok := wf.states.Load(actorID)
 	if ok {
-		return cachedState.(workflowState), true, nil
+		return cachedState.(*workflowState), nil
 	}
 
 	// state is not cached, so try to load it from the state store
 	wfLogger.Debugf("%s: loading workflow state", actorID)
 	state, err := LoadWorkflowState(ctx, wf.actors, actorID, wf.config)
 	if err != nil {
-		return workflowState{}, false, err
+		return nil, err
 	}
-	if state.Generation == 0 {
+	if state == nil {
 		// No such state exists in the state store
-		return workflowState{}, false, nil
+		return nil, nil
 	}
-	return state, true, nil
+	return state, nil
 }
 
-func (wf *workflowActor) saveInternalState(ctx context.Context, actorID string, state workflowState) error {
+func (wf *workflowActor) saveInternalState(ctx context.Context, actorID string, state *workflowState) error {
 	if !wf.cachingDisabled {
 		// update cached state
 		wf.states.Store(actorID, state)
@@ -507,6 +518,9 @@ func (wf *workflowActor) saveInternalState(ctx context.Context, actorID string, 
 	if err = wf.actors.TransactionalStateOperation(ctx, req); err != nil {
 		return err
 	}
+
+	// ResetChangeTracking should always be called after a save operation succeeds
+	state.ResetChangeTracking()
 	return nil
 }
 
@@ -529,7 +543,7 @@ func (wf *workflowActor) createReliableReminder(ctx context.Context, actorID str
 	})
 }
 
-func getRuntimeState(actorID string, state workflowState) *backend.OrchestrationRuntimeState {
+func getRuntimeState(actorID string, state *workflowState) *backend.OrchestrationRuntimeState {
 	// TODO: Add caching when a good invalidation policy can be determined
 	return backend.NewOrchestrationRuntimeState(api.InstanceID(actorID), state.History)
 }
@@ -539,7 +553,7 @@ func getActivityActorID(workflowActorID string, taskID int32, generation uint64)
 	return fmt.Sprintf("%s::%d::%d", workflowActorID, taskID, generation)
 }
 
-func (wf *workflowActor) removeCompletedStateData(ctx context.Context, state workflowState, actorID string) error {
+func (wf *workflowActor) removeCompletedStateData(ctx context.Context, state *workflowState, actorID string) error {
 	// The logic/for loop below purges/removes any leftover state from a completed or failed activity
 	// TODO: for optimization make multiple go routines and run them in parallel
 	var err error
