@@ -19,7 +19,7 @@ import (
 	"context"
 
 	"github.com/dapr/components-contrib/middleware"
-	"github.com/dapr/components-contrib/middleware/http/oauth2"
+	oauth2cookie "github.com/dapr/components-contrib/middleware/http/oauth2/cookie"
 	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/kit/logger"
@@ -28,7 +28,7 @@ import (
 func init() {
 	httpMiddlewareLoader.DefaultRegistry.RegisterComponent(func(log logger.Logger) httpMiddlewareLoader.FactoryMethod {
 		return func(metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
-			return oauth2.NewOAuth2Middleware(log).GetHandler(context.TODO(), metadata)
+			return oauth2cookie.NewOAuth2CookieMiddleware(log).GetHandler(context.TODO(), metadata)
 		}
-	}, "oauth2")
+	}, "oauth2.cookie", "oauth2")
 }
