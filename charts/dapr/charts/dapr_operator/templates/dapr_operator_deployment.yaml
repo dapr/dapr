@@ -147,6 +147,7 @@ spec:
           - name: credentials
             mountPath: /var/run/dapr/credentials
             readOnly: true
+{{- if not .Values.global.rbac.namespaced }}}
           - name: webhook-creds
             {{- if eq .Values.global.daprControlPlaneOs "windows" }}
             mountPath: "C:\\Windows\\TEMP\\k8s-webhook-server\\serving-certs"
@@ -154,6 +155,7 @@ spec:
             mountPath: /tmp/k8s-webhook-server/serving-certs
             {{- end }}
             readOnly: true
+{{- end }}
         command:
 {{- if eq .Values.debug.enabled false }}
         - "/operator"

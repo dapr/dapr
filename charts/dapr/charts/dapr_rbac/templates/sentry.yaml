@@ -61,9 +61,6 @@ rules:
   - apiGroups: ["dapr.io"]
     resources: ["configurations"]
     verbs: ["list"]
-  - apiGroups: ["authentication.k8s.io"]
-    resources: ["tokenreviews"]
-    verbs: ["create"]
 {{- end }}
 ---
 kind: RoleBinding

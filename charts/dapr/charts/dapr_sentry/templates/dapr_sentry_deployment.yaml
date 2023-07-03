@@ -16,10 +16,10 @@ data:
   {{ end }}
   {{ if .Values.tls.issuer.keyPEM }}issuer.key: {{ b64enc .Values.tls.issuer.keyPEM | trim }}
   {{ else if $existingSecret }}issuer.key: {{ index $existingSecret.data "issuer.key" }}
-  {{end}}
+  {{ end }}
   {{ if .Values.tls.root.certPEM }}ca.crt: {{ b64enc .Values.tls.root.certPEM | trim }}
   {{ else if $existingSecret }}ca.crt: {{ index $existingSecret.data "ca.crt" }}
-  {{end}}
+  {{ end }}
 ---
 apiVersion: apps/v1
 kind: Deployment
