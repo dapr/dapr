@@ -13,7 +13,10 @@ limitations under the License.
 
 package exec
 
-import "io"
+import (
+	"io"
+	"testing"
+)
 
 func WithStdout(stdout io.WriteCloser) Option {
 	return func(o *options) {
@@ -27,7 +30,7 @@ func WithStderr(stderr io.WriteCloser) Option {
 	}
 }
 
-func WithRunError(ferr func(error)) Option {
+func WithRunError(ferr func(*testing.T, error)) Option {
 	return func(o *options) {
 		o.runErrorFn = ferr
 	}

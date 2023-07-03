@@ -15,98 +15,76 @@ package daprd
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/framework/freeport"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+	"github.com/dapr/dapr/tests/integration/framework/process/http"
 )
-
-// options contains the options for running Daprd in integration tests.
-type options struct {
-	execOpts []exec.Option
-
-	appID                   string
-	appPort                 int
-	grpcPort                int
-	httpPort                int
-	internalGRPCPort        int
-	publicPort              int
-	metricsPort             int
-	profilePort             int
-	appHealthCheck          bool
-	appHealthCheckPath      string
-	appHealthProbeInterval  int
-	appHealthProbeThreshold int
-}
-
-// Option is a function that configures the dapr process.
-type Option func(*options)
 
 type Daprd struct {
 	exec     process.Interface
+	appHTTP  process.Interface
 	freeport *freeport.FreePort
 
-	AppID            string
-	AppPort          int
-	GRPCPort         int
-	HTTPPort         int
-	InternalGRPCPort int
-	PublicPort       int
-	MetricsPort      int
-	ProfilePort      int
+	appID            string
+	appPort          int
+	grpcPort         int
+	httpPort         int
+	internalGRPCPort int
+	publicPort       int
+	metricsPort      int
+	profilePort      int
 }
 
 func New(t *testing.T, fopts ...Option) *Daprd {
 	t.Helper()
 
-	uid, err := uuid.NewUUID()
+	uid, err := uuid.NewRandom()
 	require.NoError(t, err)
 
-	appListener, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		assert.NoError(t, appListener.Close())
-	})
-
-	go func() {
-		for {
-			conn, err := appListener.Accept()
-			if errors.Is(err, net.ErrClosed) {
-				return
-			}
-			conn.Close()
-		}
-	}()
+	appHTTP := http.New(t)
 
 	fp := freeport.New(t, 6)
 	opts := options{
 		appID:            uid.String(),
-		appPort:          appListener.Addr().(*net.TCPAddr).Port,
+		appPort:          appHTTP.Port(),
+		appProtocol:      "http",
 		grpcPort:         fp.Port(t, 0),
 		httpPort:         fp.Port(t, 1),
 		internalGRPCPort: fp.Port(t, 2),
 		publicPort:       fp.Port(t, 3),
 		metricsPort:      fp.Port(t, 4),
 		profilePort:      fp.Port(t, 5),
+		logLevel:         "debug",
 	}
 
 	for _, fopt := range fopts {
 		fopt(&opts)
 	}
 
+	dir := t.TempDir()
+	for i, file := range opts.resourceFiles {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, strconv.Itoa(i)+".yaml"), []byte(file), 0o600))
+	}
+
 	args := []string{
-		"--log-level=" + "debug",
+		"--log-level=" + opts.logLevel,
 		"--app-id=" + opts.appID,
 		"--app-port=" + strconv.Itoa(opts.appPort),
+		"--app-protocol=" + opts.appProtocol,
 		"--dapr-grpc-port=" + strconv.Itoa(opts.grpcPort),
 		"--dapr-http-port=" + strconv.Itoa(opts.httpPort),
 		"--dapr-internal-grpc-port=" + strconv.Itoa(opts.internalGRPCPort),
@@ -120,26 +98,76 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	if opts.appHealthCheckPath != "" {
 		args = append(args, "--app-health-check-path="+opts.appHealthCheckPath)
 	}
+	if len(opts.resourceFiles) > 0 {
+		args = append(args, "-resources-path="+dir)
+	}
 
 	return &Daprd{
-		exec:             exec.New(t, os.Getenv("DAPR_INTEGRATION_DAPRD_PATH"), args, opts.execOpts...),
+		exec:             exec.New(t, binary.EnvValue("daprd"), args, opts.execOpts...),
 		freeport:         fp,
-		AppID:            opts.appID,
-		AppPort:          opts.appPort,
-		GRPCPort:         opts.grpcPort,
-		HTTPPort:         opts.httpPort,
-		InternalGRPCPort: opts.internalGRPCPort,
-		PublicPort:       opts.publicPort,
-		MetricsPort:      opts.metricsPort,
-		ProfilePort:      opts.profilePort,
+		appHTTP:          appHTTP,
+		appID:            opts.appID,
+		appPort:          opts.appPort,
+		grpcPort:         opts.grpcPort,
+		httpPort:         opts.httpPort,
+		internalGRPCPort: opts.internalGRPCPort,
+		publicPort:       opts.publicPort,
+		metricsPort:      opts.metricsPort,
+		profilePort:      opts.profilePort,
 	}
 }
 
 func (d *Daprd) Run(t *testing.T, ctx context.Context) {
+	d.appHTTP.Run(t, ctx)
 	d.freeport.Free(t)
 	d.exec.Run(t, ctx)
 }
 
 func (d *Daprd) Cleanup(t *testing.T) {
 	d.exec.Cleanup(t)
+	d.appHTTP.Cleanup(t)
+}
+
+func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
+	dialer := &net.Dialer{Timeout: time.Second * 5}
+	assert.Eventually(t, func() bool {
+		conn, err := dialer.DialContext(ctx, "tcp", fmt.Sprintf("localhost:%d", d.publicPort))
+		if err != nil {
+			return false
+		}
+		require.NoError(t, conn.Close())
+		return true
+	}, time.Second*5, 100*time.Millisecond)
+}
+
+func (d *Daprd) AppID() string {
+	return d.appID
+}
+
+func (d *Daprd) AppPort() int {
+	return d.appPort
+}
+
+func (d *Daprd) GRPCPort() int {
+	return d.grpcPort
+}
+
+func (d *Daprd) HTTPPort() int {
+	return d.httpPort
+}
+
+func (d *Daprd) InternalGRPCPort() int {
+	return d.internalGRPCPort
+}
+
+func (d *Daprd) PublicPort() int {
+	return d.publicPort
+}
+
+func (d *Daprd) MetricsPort() int {
+	return d.metricsPort
+}
+
+func (d *Daprd) ProfilePort() int {
+	return d.profilePort
 }

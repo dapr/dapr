@@ -18,12 +18,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -48,16 +46,9 @@ func (m *metadata) Setup(t *testing.T) []framework.Option {
 }
 
 func (m *metadata) Run(t *testing.T, ctx context.Context) {
-	assert.Eventually(t, func() bool {
-		conn, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", m.proc.InternalGRPCPort))
-		if err != nil {
-			return false
-		}
-		require.NoError(t, conn.Close())
-		return true
-	}, time.Second*5, 100*time.Millisecond)
+	m.proc.WaitUntilRunning(t, ctx)
 
-	reqURL := fmt.Sprintf("http://localhost:%d/v1.0/metadata", m.proc.PublicPort)
+	reqURL := fmt.Sprintf("http://localhost:%d/v1.0/metadata", m.proc.PublicPort())
 
 	ctx, cancel := context.WithTimeout(ctx, time.Second*5)
 	defer cancel()
@@ -72,7 +63,7 @@ func (m *metadata) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
 
-	validateResponse(t, m.proc.AppID, m.proc.AppPort, string(resBody))
+	validateResponse(t, m.proc.AppID(), m.proc.AppPort(), string(resBody))
 }
 
 // validateResponse asserts that the response body is valid JSON
@@ -91,7 +82,9 @@ func validateResponse(t *testing.T, appID string, appPort int, body string) {
 
 	appConnectionProperties, ok := bodyMap["appConnectionProperties"].(map[string]interface{})
 	require.True(t, ok)
-	require.Equal(t, appPort, int(appConnectionProperties["port"].(float64)))
+	port, ok := appConnectionProperties["port"].(float64)
+	require.True(t, ok)
+	require.Equal(t, appPort, int(port))
 	require.Equal(t, "http", appConnectionProperties["protocol"])
 	require.Equal(t, "127.0.0.1", appConnectionProperties["channelAddress"])
 }

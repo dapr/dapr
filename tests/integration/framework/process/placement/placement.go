@@ -15,21 +15,25 @@ package placement
 
 import (
 	"context"
-	"os"
+	"fmt"
+	"net"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/framework/freeport"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 )
 
-// options contains the options for running Placement in integration tests.
-type options struct {
-	execOpts []exec.Option
+type Placement struct {
+	exec     process.Interface
+	freeport *freeport.FreePort
 
 	id                  string
 	port                int
@@ -37,21 +41,6 @@ type options struct {
 	metricsPort         int
 	initialCluster      string
 	initialClusterPorts []int
-}
-
-// Option is a function that configures the process.
-type Option func(*options)
-
-type Placement struct {
-	exec     process.Interface
-	freeport *freeport.FreePort
-
-	ID                  string
-	Port                int
-	HealthzPort         int
-	MetricsPort         int
-	InitialCluster      string
-	InitialClusterPorts []int
 }
 
 func New(t *testing.T, fopts ...Option) *Placement {
@@ -84,14 +73,14 @@ func New(t *testing.T, fopts ...Option) *Placement {
 	}
 
 	return &Placement{
-		exec:                exec.New(t, os.Getenv("DAPR_INTEGRATION_PLACEMENT_PATH"), args, opts.execOpts...),
+		exec:                exec.New(t, binary.EnvValue("placement"), args, opts.execOpts...),
 		freeport:            fp,
-		ID:                  opts.id,
-		Port:                opts.port,
-		HealthzPort:         opts.healthzPort,
-		MetricsPort:         opts.metricsPort,
-		InitialCluster:      opts.initialCluster,
-		InitialClusterPorts: opts.initialClusterPorts,
+		id:                  opts.id,
+		port:                opts.port,
+		healthzPort:         opts.healthzPort,
+		metricsPort:         opts.metricsPort,
+		initialCluster:      opts.initialCluster,
+		initialClusterPorts: opts.initialClusterPorts,
 	}
 }
 
@@ -102,4 +91,40 @@ func (p *Placement) Run(t *testing.T, ctx context.Context) {
 
 func (p *Placement) Cleanup(t *testing.T) {
 	p.exec.Cleanup(t)
+}
+
+func (p *Placement) WaitUntilRunning(t *testing.T, ctx context.Context) {
+	dialer := &net.Dialer{Timeout: time.Second * 5}
+	assert.Eventually(t, func() bool {
+		conn, err := dialer.DialContext(ctx, "tcp", fmt.Sprintf("localhost:%d", p.port))
+		if err != nil {
+			return false
+		}
+		require.NoError(t, conn.Close())
+		return true
+	}, time.Second*5, 100*time.Millisecond)
+}
+
+func (p *Placement) ID() string {
+	return p.id
+}
+
+func (p *Placement) Port() int {
+	return p.port
+}
+
+func (p *Placement) HealthzPort() int {
+	return p.healthzPort
+}
+
+func (p *Placement) MetricsPort() int {
+	return p.metricsPort
+}
+
+func (p *Placement) InitialCluster() string {
+	return p.initialCluster
+}
+
+func (p *Placement) InitialClusterPorts() []int {
+	return p.initialClusterPorts
 }

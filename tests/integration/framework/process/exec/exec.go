@@ -22,6 +22,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -34,7 +35,7 @@ type options struct {
 	stdout io.WriteCloser
 	stderr io.WriteCloser
 
-	runErrorFn func(error)
+	runErrorFn func(*testing.T, error)
 	exitCode   int
 }
 
@@ -46,7 +47,7 @@ type exec struct {
 
 	args       []string
 	binPath    string
-	runErrorFn func(error)
+	runErrorFn func(*testing.T, error)
 	exitCode   int
 	stdoutpipe io.WriteCloser
 	stderrpipe io.WriteCloser
@@ -64,7 +65,7 @@ func New(t *testing.T, binPath string, args []string, fopts ...Option) *exec {
 	opts := options{
 		stdout: iowriter.New(t, filepath.Base(binPath)),
 		stderr: iowriter.New(t, filepath.Base(binPath)),
-		runErrorFn: func(err error) {
+		runErrorFn: func(t *testing.T, err error) {
 			t.Helper()
 			if runtime.GOOS == "windows" {
 				// Windows returns 1 when we kill the process.
@@ -102,6 +103,8 @@ func (e *exec) Run(t *testing.T, ctx context.Context) {
 
 	e.cmd.Stdout = e.stdoutpipe
 	e.cmd.Stderr = e.stderrpipe
+	// Wait for a few seconds before killing the process completely.
+	e.cmd.WaitDelay = time.Second * 5
 
 	require.NoError(t, e.cmd.Start())
 }
@@ -123,7 +126,7 @@ func (e *exec) checkExit(t *testing.T) {
 
 	t.Logf("waiting for %q process to exit", filepath.Base(e.binPath))
 
-	e.runErrorFn(e.cmd.Wait())
+	e.runErrorFn(t, e.cmd.Wait())
 	assert.NotNil(t, e.cmd.ProcessState, "process state should not be nil")
 	assert.Equalf(t, e.exitCode, e.cmd.ProcessState.ExitCode(), "expected exit code to be %d", e.exitCode)
 }

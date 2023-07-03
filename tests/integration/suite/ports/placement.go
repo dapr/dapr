@@ -44,15 +44,16 @@ func (p *placement) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (p *placement) Run(t *testing.T, _ context.Context) {
+func (p *placement) Run(t *testing.T, ctx context.Context) {
+	dialer := net.Dialer{Timeout: time.Second * 5}
 	for name, port := range map[string]int{
-		"port":           p.proc.Port,
-		"metrics":        p.proc.MetricsPort,
-		"healthz":        p.proc.HealthzPort,
-		"initialCluster": p.proc.InitialClusterPorts[0],
+		"port":           p.proc.Port(),
+		"metrics":        p.proc.MetricsPort(),
+		"healthz":        p.proc.HealthzPort(),
+		"initialCluster": p.proc.InitialClusterPorts()[0],
 	} {
 		assert.Eventuallyf(t, func() bool {
-			conn, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", port))
+			conn, err := dialer.DialContext(ctx, "tcp", fmt.Sprintf("localhost:%d", port))
 			if err != nil {
 				return false
 			}

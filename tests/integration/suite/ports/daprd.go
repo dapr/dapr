@@ -44,17 +44,18 @@ func (d *daprd) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (d *daprd) Run(t *testing.T, _ context.Context) {
+func (d *daprd) Run(t *testing.T, ctx context.Context) {
+	dialer := net.Dialer{Timeout: time.Second * 5}
 	for name, port := range map[string]int{
-		"app":           d.proc.AppPort,
-		"grpc":          d.proc.GRPCPort,
-		"http":          d.proc.HTTPPort,
-		"metrics":       d.proc.MetricsPort,
-		"internal-grpc": d.proc.InternalGRPCPort,
-		"public":        d.proc.PublicPort,
+		"app":           d.proc.AppPort(),
+		"grpc":          d.proc.GRPCPort(),
+		"http":          d.proc.HTTPPort(),
+		"metrics":       d.proc.MetricsPort(),
+		"internal-grpc": d.proc.InternalGRPCPort(),
+		"public":        d.proc.PublicPort(),
 	} {
 		assert.Eventuallyf(t, func() bool {
-			conn, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", port))
+			conn, err := dialer.DialContext(ctx, "tcp", fmt.Sprintf("localhost:%d", port))
 			if err != nil {
 				return false
 			}
