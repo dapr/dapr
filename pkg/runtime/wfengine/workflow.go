@@ -504,8 +504,35 @@ func (wf *workflowActor) saveInternalState(ctx context.Context, actorID string, 
 	}
 
 	wfLogger.Debugf("%s: saving %d keys to actor state store", actorID, len(req.Operations))
-	if err = wf.actors.TransactionalStateOperation(ctx, req); err != nil {
-		return err
+
+	// Break down the operations into smaller groups since cosmosDB can only handle 100 at a time
+	maxOp := 100 // TODO: Make this into a user configurable parameter
+	if len(req.Operations) >= maxOp {
+		remainingOps := len(req.Operations)
+		completedOps := 0
+		for remainingOps >= maxOp {
+			var newReq *actors.TransactionalRequest
+			newReq.Operations = append(newReq.Operations, req.Operations[completedOps:completedOps+maxOp-1]...)
+
+			if err = wf.actors.TransactionalStateOperation(ctx, newReq); err != nil {
+				return err
+			}
+
+			remainingOps -= maxOp
+			completedOps += maxOp
+		}
+		if remainingOps > 0 {
+			var newReq *actors.TransactionalRequest
+			newReq.Operations = append(newReq.Operations, req.Operations[completedOps:completedOps+remainingOps-1]...)
+
+			if err = wf.actors.TransactionalStateOperation(ctx, newReq); err != nil {
+				return err
+			}
+		}
+	} else {
+		if err = wf.actors.TransactionalStateOperation(ctx, req); err != nil {
+			return err
+		}
 	}
 	return nil
 }
