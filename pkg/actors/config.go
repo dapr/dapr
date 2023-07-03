@@ -39,6 +39,7 @@ type Config struct {
 	HealthHTTPClient              *http.Client
 	HealthEndpoint                string
 	AppChannelAddress             string
+	PodName                       string
 }
 
 // Remap of daprAppConfig.EntityConfig but with more useful types for actors.go.
@@ -70,6 +71,7 @@ type ConfigOpts struct {
 	HealthHTTPClient   *http.Client
 	HealthEndpoint     string
 	AppChannelAddress  string
+	PodName            string
 }
 
 // NewConfig returns the actor runtime configuration.
@@ -92,6 +94,7 @@ func NewConfig(opts ConfigOpts) Config {
 		DrainOngoingCallTimeout:       defaultOngoingCallTimeout,
 		EntityConfigs:                 make(map[string]EntityConfig),
 		AppChannelAddress:             opts.AppChannelAddress,
+		PodName:                       opts.PodName,
 	}
 
 	scanDuration, err := time.ParseDuration(opts.AppConfig.ActorScanInterval)
