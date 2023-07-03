@@ -179,11 +179,12 @@ var testResiliency = &v1alpha1.Resiliency{
 
 func TestNewRuntime(t *testing.T) {
 	// act
-	r := newDaprRuntime(&internalConfig{
+	r, err := newDaprRuntime(context.TODO(), &internalConfig{
 		registry: registry.New(registry.NewOptions()),
 	}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 
 	// assert
+	assert.NoError(t, err)
 	assert.NotNil(t, r, "runtime must be initiated")
 }
 

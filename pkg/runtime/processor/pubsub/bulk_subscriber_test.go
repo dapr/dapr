@@ -1,5 +1,17 @@
-//nolint:nosnakecase
-package runtime
+/*
+Copyright 2023 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package pubsub
 
 import (
 	"context"
@@ -18,9 +30,10 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/dapr/components-contrib/pubsub"
+	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	"github.com/dapr/dapr/pkg/config/protocol"
@@ -28,6 +41,7 @@ import (
 	"github.com/dapr/dapr/pkg/modes"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
+	"github.com/dapr/dapr/pkg/scopes"
 	"github.com/dapr/kit/logger"
 )
 
@@ -60,26 +74,26 @@ const (
 	orders1    string = "orders1"
 )
 
-func getBulkMessageEntries(len int) []pubsub.BulkMessageEntry {
-	bulkEntries := make([]pubsub.BulkMessageEntry, 10)
+func getBulkMessageEntries(len int) []contribpubsub.BulkMessageEntry {
+	bulkEntries := make([]contribpubsub.BulkMessageEntry, 10)
 
-	bulkEntries[0] = pubsub.BulkMessageEntry{EntryId: "1111111a", Event: []byte(order1)}
-	bulkEntries[1] = pubsub.BulkMessageEntry{EntryId: "2222222b", Event: []byte(order2)}
-	bulkEntries[2] = pubsub.BulkMessageEntry{EntryId: "333333c", Event: []byte(order3)}
-	bulkEntries[3] = pubsub.BulkMessageEntry{EntryId: "4444444d", Event: []byte(order4)}
-	bulkEntries[4] = pubsub.BulkMessageEntry{EntryId: "5555555e", Event: []byte(order5)}
-	bulkEntries[5] = pubsub.BulkMessageEntry{EntryId: "66666666f", Event: []byte(order6)}
-	bulkEntries[6] = pubsub.BulkMessageEntry{EntryId: "7777777g", Event: []byte(order7)}
-	bulkEntries[7] = pubsub.BulkMessageEntry{EntryId: "8888888h", Event: []byte(order8)}
-	bulkEntries[8] = pubsub.BulkMessageEntry{EntryId: "9999999i", Event: []byte(order9)}
-	bulkEntries[9] = pubsub.BulkMessageEntry{EntryId: "10101010j", Event: []byte(order10)}
+	bulkEntries[0] = contribpubsub.BulkMessageEntry{EntryId: "1111111a", Event: []byte(order1)}
+	bulkEntries[1] = contribpubsub.BulkMessageEntry{EntryId: "2222222b", Event: []byte(order2)}
+	bulkEntries[2] = contribpubsub.BulkMessageEntry{EntryId: "333333c", Event: []byte(order3)}
+	bulkEntries[3] = contribpubsub.BulkMessageEntry{EntryId: "4444444d", Event: []byte(order4)}
+	bulkEntries[4] = contribpubsub.BulkMessageEntry{EntryId: "5555555e", Event: []byte(order5)}
+	bulkEntries[5] = contribpubsub.BulkMessageEntry{EntryId: "66666666f", Event: []byte(order6)}
+	bulkEntries[6] = contribpubsub.BulkMessageEntry{EntryId: "7777777g", Event: []byte(order7)}
+	bulkEntries[7] = contribpubsub.BulkMessageEntry{EntryId: "8888888h", Event: []byte(order8)}
+	bulkEntries[8] = contribpubsub.BulkMessageEntry{EntryId: "9999999i", Event: []byte(order9)}
+	bulkEntries[9] = contribpubsub.BulkMessageEntry{EntryId: "10101010j", Event: []byte(order10)}
 
 	return bulkEntries[:len]
 }
 
-func getBulkMessageEntriesWithWrongData() []pubsub.BulkMessageEntry {
-	bulkEntries := make([]pubsub.BulkMessageEntry, 1)
-	bulkEntries[0] = pubsub.BulkMessageEntry{EntryId: "1", Event: []byte(wrongOrder)}
+func getBulkMessageEntriesWithWrongData() []contribpubsub.BulkMessageEntry {
+	bulkEntries := make([]contribpubsub.BulkMessageEntry, 1)
+	bulkEntries[0] = contribpubsub.BulkMessageEntry{EntryId: "1", Event: []byte(wrongOrder)}
 	return bulkEntries
 }
 
@@ -120,7 +134,7 @@ func TestBulkSubscribe(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
 		rt.runtimeConfig.registry.PubSubs().RegisterComponent(
-			func(_ logger.Logger) pubsub.PubSub {
+			func(_ logger.Logger) contribpubsub.PubSub {
 				return &mockSubscribePubSub{}
 			},
 			"mockPubSub",
@@ -148,7 +162,7 @@ func TestBulkSubscribe(t *testing.T) {
 		require.NoError(t, rt.processor.Init(context.TODO(), pubsubComponent))
 		rt.startSubscriptions()
 
-		err := rt.Publish(&pubsub.PublishRequest{
+		err := rt.Publish(&contribpubsub.PublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Data:       []byte(`{"orderId":"1"}`),
@@ -168,7 +182,7 @@ func TestBulkSubscribe(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
 		rt.runtimeConfig.registry.PubSubs().RegisterComponent(
-			func(_ logger.Logger) pubsub.PubSub {
+			func(_ logger.Logger) contribpubsub.PubSub {
 				return &mockSubscribePubSub{}
 			},
 			"mockPubSub",
@@ -196,7 +210,7 @@ func TestBulkSubscribe(t *testing.T) {
 
 		order := `{"data":{"orderId":1},"datacontenttype":"application/json","id":"8b540b03-04b5-4871-96ae-c6bde0d5e16d","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","traceparent":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","tracestate":"","type":"com.dapr.event.sent"}`
 
-		err := rt.Publish(&pubsub.PublishRequest{
+		err := rt.Publish(&contribpubsub.PublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Data:       []byte(order),
@@ -216,10 +230,10 @@ func TestBulkSubscribe(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
 		ms := &mockSubscribePubSub{
-			features: []pubsub.Feature{pubsub.FeatureBulkPublish},
+			features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
 		}
 		rt.runtimeConfig.registry.PubSubs().RegisterComponent(
-			func(_ logger.Logger) pubsub.PubSub {
+			func(_ logger.Logger) contribpubsub.PubSub {
 				return ms
 			},
 			"mockPubSub",
@@ -250,7 +264,7 @@ func TestBulkSubscribe(t *testing.T) {
 
 		msgArr := getBulkMessageEntries(2)
 
-		rt.BulkPublish(&pubsub.BulkPublishRequest{
+		rt.BulkPublish(&contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -279,7 +293,7 @@ func TestBulkSubscribe(t *testing.T) {
 
 		msgArr = getBulkMessageEntries(3)
 
-		rt.BulkPublish(&pubsub.BulkPublishRequest{
+		rt.BulkPublish(&contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -306,7 +320,7 @@ func TestBulkSubscribe(t *testing.T) {
 
 		msgArr = getBulkMessageEntries(4)
 
-		rt.BulkPublish(&pubsub.BulkPublishRequest{
+		rt.BulkPublish(&contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -331,7 +345,7 @@ func TestBulkSubscribe(t *testing.T) {
 		mockAppChannel3.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).Return(nil, errors.New("Mock error"))
 		msgArr = getBulkMessageEntries(1)
 
-		rt.BulkPublish(&pubsub.BulkPublishRequest{
+		rt.BulkPublish(&contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -352,9 +366,9 @@ func TestBulkSubscribe(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
 		rt.runtimeConfig.registry.PubSubs().RegisterComponent(
-			func(_ logger.Logger) pubsub.PubSub {
+			func(_ logger.Logger) contribpubsub.PubSub {
 				return &mockSubscribePubSub{
-					features: []pubsub.Feature{pubsub.FeatureBulkPublish},
+					features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
 				}
 			},
 			"mockPubSub",
@@ -396,7 +410,7 @@ func TestBulkSubscribe(t *testing.T) {
 
 		msgArr := getBulkMessageEntries(2)
 
-		_, err := rt.BulkPublish(&pubsub.BulkPublishRequest{
+		_, err := rt.BulkPublish(&contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -420,9 +434,9 @@ func TestBulkSubscribe(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
 		rt.runtimeConfig.registry.PubSubs().RegisterComponent(
-			func(_ logger.Logger) pubsub.PubSub {
+			func(_ logger.Logger) contribpubsub.PubSub {
 				return &mockSubscribePubSub{
-					features: []pubsub.Feature{pubsub.FeatureBulkPublish},
+					features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
 				}
 			},
 			"mockPubSub",
@@ -462,8 +476,8 @@ func TestBulkSubscribe(t *testing.T) {
 		rt.startSubscriptions()
 
 		msgArr := getBulkMessageEntries(10)
-		responseItemsOrders1 := pubsub.AppBulkResponse{
-			AppResponses: []pubsub.AppBulkResponseEntry{
+		responseItemsOrders1 := contribpubsub.AppBulkResponse{
+			AppResponses: []contribpubsub.AppBulkResponseEntry{
 				{EntryId: "1111111a", Status: "SUCCESS"},
 				{EntryId: "333333c", Status: "RETRY"},
 				{EntryId: "5555555e", Status: "DROP"},
@@ -479,8 +493,8 @@ func TestBulkSubscribe(t *testing.T) {
 			WithContentType("application/json")
 		defer respInvoke1.Close()
 
-		responseItemsOrders2 := pubsub.AppBulkResponse{
-			AppResponses: []pubsub.AppBulkResponseEntry{
+		responseItemsOrders2 := contribpubsub.AppBulkResponse{
+			AppResponses: []contribpubsub.AppBulkResponseEntry{
 				{EntryId: "2222222b", Status: "SUCCESS"},
 				{EntryId: "4444444d", Status: "DROP"},
 				{EntryId: "66666666f", Status: "DROP"},
@@ -497,7 +511,7 @@ func TestBulkSubscribe(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("orders1")).Return(respInvoke1, nil)
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("orders2")).Return(respInvoke2, nil)
 
-		_, err := rt.BulkPublish(&pubsub.BulkPublishRequest{
+		_, err := rt.BulkPublish(&contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -542,9 +556,9 @@ func TestBulkSubscribe(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
 		rt.runtimeConfig.registry.PubSubs().RegisterComponent(
-			func(_ logger.Logger) pubsub.PubSub {
+			func(_ logger.Logger) contribpubsub.PubSub {
 				return &mockSubscribePubSub{
-					features: []pubsub.Feature{pubsub.FeatureBulkPublish},
+					features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
 				}
 			},
 			"mockPubSub",
@@ -576,8 +590,8 @@ func TestBulkSubscribe(t *testing.T) {
 		msgArr[0].EntryId = ""
 		msgArr[2].EntryId = ""
 
-		responseItemsOrders1 := pubsub.AppBulkResponse{
-			AppResponses: []pubsub.AppBulkResponseEntry{
+		responseItemsOrders1 := contribpubsub.AppBulkResponse{
+			AppResponses: []contribpubsub.AppBulkResponseEntry{
 				{EntryId: "2222222b", Status: "SUCCESS"},
 				{EntryId: "4444444d", Status: "SUCCESS"},
 			},
@@ -591,7 +605,7 @@ func TestBulkSubscribe(t *testing.T) {
 
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("orders")).Return(respInvoke1, nil)
 
-		_, err := rt.BulkPublish(&pubsub.BulkPublishRequest{
+		_, err := rt.BulkPublish(&contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -626,9 +640,9 @@ func TestBulkSubscribe(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
 		rt.runtimeConfig.registry.PubSubs().RegisterComponent(
-			func(_ logger.Logger) pubsub.PubSub {
+			func(_ logger.Logger) contribpubsub.PubSub {
 				return &mockSubscribePubSub{
-					features: []pubsub.Feature{pubsub.FeatureBulkPublish},
+					features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
 				}
 			},
 			"mockPubSub",
@@ -658,8 +672,8 @@ func TestBulkSubscribe(t *testing.T) {
 
 		msgArr := getBulkMessageEntries(5)
 
-		responseItemsOrders1 := pubsub.AppBulkResponse{
-			AppResponses: []pubsub.AppBulkResponseEntry{
+		responseItemsOrders1 := contribpubsub.AppBulkResponse{
+			AppResponses: []contribpubsub.AppBulkResponseEntry{
 				{EntryId: "2222222b", Status: "RETRY"},
 				{EntryId: "333333c", Status: "SUCCESS"},
 				{EntryId: "5555555e", Status: "RETRY"},
@@ -680,7 +694,7 @@ func TestBulkSubscribe(t *testing.T) {
 			matchDaprRequestMethod("orders"),
 		).Return(respInvoke1, nil)
 
-		_, err := rt.BulkPublish(&pubsub.BulkPublishRequest{
+		_, err := rt.BulkPublish(&contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -714,9 +728,9 @@ func TestBulkSubscribe(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
 		rt.runtimeConfig.registry.PubSubs().RegisterComponent(
-			func(_ logger.Logger) pubsub.PubSub {
+			func(_ logger.Logger) contribpubsub.PubSub {
 				return &mockSubscribePubSub{
-					features: []pubsub.Feature{pubsub.FeatureBulkPublish},
+					features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
 				}
 			},
 			"mockPubSub",
@@ -746,8 +760,8 @@ func TestBulkSubscribe(t *testing.T) {
 
 		msgArr := getBulkMessageEntries(5)
 
-		responseItemsOrders1 := pubsub.AppBulkResponse{
-			AppResponses: []pubsub.AppBulkResponseEntry{
+		responseItemsOrders1 := contribpubsub.AppBulkResponse{
+			AppResponses: []contribpubsub.AppBulkResponseEntry{
 				{EntryId: "wrongEntryId1", Status: "SUCCESS"},
 				{EntryId: "2222222b", Status: "RETRY"},
 				{EntryId: "333333c", Status: "SUCCESS"},
@@ -767,7 +781,7 @@ func TestBulkSubscribe(t *testing.T) {
 			matchDaprRequestMethod("orders"),
 		).Return(respInvoke1, nil)
 
-		_, err := rt.BulkPublish(&pubsub.BulkPublishRequest{
+		_, err := rt.BulkPublish(&contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -805,7 +819,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			Name: testBulkSubscribePubsub,
 		},
 		Spec: componentsV1alpha1.ComponentSpec{
-			Type:     "pubsub.mockPubSub",
+			Type:     "contribpubsub.mockPubSub",
 			Version:  "v1",
 			Metadata: getFakeMetadataItems(),
 		},
@@ -816,11 +830,11 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(protocol.GRPCProtocol), port)
 		defer stopRuntime(t, rt)
 		ms := &mockSubscribePubSub{
-			features: []pubsub.Feature{pubsub.FeatureBulkPublish},
+			features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
 		}
 
 		rt.runtimeConfig.registry.PubSubs().RegisterComponent(
-			func(_ logger.Logger) pubsub.PubSub {
+			func(_ logger.Logger) contribpubsub.PubSub {
 				return ms
 			},
 			"mockPubSub",
@@ -840,9 +854,9 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			},
 		}
 
-		nbei1 := pubsub.BulkMessageEntry{EntryId: "1111111a", Event: []byte(`{"orderId":"1"}`)}
-		nbei2 := pubsub.BulkMessageEntry{EntryId: "2222222b", Event: []byte(`{"orderId":"2"}`)}
-		msgArr := []pubsub.BulkMessageEntry{nbei1, nbei2}
+		nbei1 := contribpubsub.BulkMessageEntry{EntryId: "1111111a", Event: []byte(`{"orderId":"1"}`)}
+		nbei2 := contribpubsub.BulkMessageEntry{EntryId: "2222222b", Event: []byte(`{"orderId":"2"}`)}
+		msgArr := []contribpubsub.BulkMessageEntry{nbei1, nbei2}
 		responseEntries := make([]*runtimev1pb.TopicEventBulkResponseEntry, 2)
 		for k, msg := range msgArr {
 			responseEntries[k] = &runtimev1pb.TopicEventBulkResponseEntry{
@@ -878,7 +892,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		require.NoError(t, rt.processor.Init(context.TODO(), pubsubComponent))
 		rt.startSubscriptions()
 
-		_, err := rt.BulkPublish(&pubsub.BulkPublishRequest{
+		_, err := rt.BulkPublish(&contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -904,7 +918,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 
 		mockServer.BulkResponsePerPath = nil
 		mockServer.Error = status.Error(codes.Unimplemented, "method not implemented")
-		rt.BulkPublish(&pubsub.BulkPublishRequest{
+		rt.BulkPublish(&contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -914,7 +928,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		assert.Nil(t, assertItemExistsOnce(ms.GetBulkResponse().Statuses, "1111111a", "2222222b"))
 
 		mockServer.Error = status.Error(codes.Unknown, "unknown error")
-		rt.BulkPublish(&pubsub.BulkPublishRequest{
+		rt.BulkPublish(&contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -930,9 +944,9 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		defer stopRuntime(t, rt)
 
 		rt.runtimeConfig.registry.PubSubs().RegisterComponent(
-			func(_ logger.Logger) pubsub.PubSub {
+			func(_ logger.Logger) contribpubsub.PubSub {
 				return &mockSubscribePubSub{
-					features: []pubsub.Feature{pubsub.FeatureBulkPublish},
+					features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
 				}
 			},
 			"mockPubSub",
@@ -1018,7 +1032,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		require.NoError(t, rt.processor.Init(context.TODO(), pubsubComponent))
 		rt.startSubscriptions()
 
-		_, err := rt.BulkPublish(&pubsub.BulkPublishRequest{
+		_, err := rt.BulkPublish(&contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -1055,9 +1069,9 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		defer stopRuntime(t, rt)
 
 		rt.runtimeConfig.registry.PubSubs().RegisterComponent(
-			func(_ logger.Logger) pubsub.PubSub {
+			func(_ logger.Logger) contribpubsub.PubSub {
 				return &mockSubscribePubSub{
-					features: []pubsub.Feature{pubsub.FeatureBulkPublish},
+					features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
 				}
 			},
 			"mockPubSub",
@@ -1109,7 +1123,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		require.NoError(t, rt.processor.Init(context.TODO(), pubsubComponent))
 		rt.startSubscriptions()
 
-		_, err := rt.BulkPublish(&pubsub.BulkPublishRequest{
+		_, err := rt.BulkPublish(&contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -1137,9 +1151,9 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		defer stopRuntime(t, rt)
 
 		rt.runtimeConfig.registry.PubSubs().RegisterComponent(
-			func(_ logger.Logger) pubsub.PubSub {
+			func(_ logger.Logger) contribpubsub.PubSub {
 				return &mockSubscribePubSub{
-					features: []pubsub.Feature{pubsub.FeatureBulkPublish},
+					features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
 				}
 			},
 			"mockPubSub",
@@ -1202,7 +1216,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		require.NoError(t, rt.processor.Init(context.TODO(), pubsubComponent))
 		rt.startSubscriptions()
 
-		_, err := rt.BulkPublish(&pubsub.BulkPublishRequest{
+		_, err := rt.BulkPublish(&contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -1231,9 +1245,9 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		defer stopRuntime(t, rt)
 
 		rt.runtimeConfig.registry.PubSubs().RegisterComponent(
-			func(_ logger.Logger) pubsub.PubSub {
+			func(_ logger.Logger) contribpubsub.PubSub {
 				return &mockSubscribePubSub{
-					features: []pubsub.Feature{pubsub.FeatureBulkPublish},
+					features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
 				}
 			},
 			"mockPubSub",
@@ -1290,7 +1304,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		require.NoError(t, rt.processor.Init(context.TODO(), pubsubComponent))
 		rt.startSubscriptions()
 
-		_, err := rt.BulkPublish(&pubsub.BulkPublishRequest{
+		_, err := rt.BulkPublish(&contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -1319,9 +1333,9 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		defer stopRuntime(t, rt)
 
 		rt.runtimeConfig.registry.PubSubs().RegisterComponent(
-			func(_ logger.Logger) pubsub.PubSub {
+			func(_ logger.Logger) contribpubsub.PubSub {
 				return &mockSubscribePubSub{
-					features: []pubsub.Feature{pubsub.FeatureBulkPublish},
+					features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
 				}
 			},
 			"mockPubSub",
@@ -1364,7 +1378,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		require.NoError(t, rt.processor.Init(context.TODO(), pubsubComponent))
 		rt.startSubscriptions()
 
-		_, err := rt.BulkPublish(&pubsub.BulkPublishRequest{
+		_, err := rt.BulkPublish(&contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
@@ -1419,7 +1433,7 @@ type BulkResponseExpectation struct {
 	Responses []BulkResponseEntryExpectation
 }
 
-func verifyBulkSubscribeResponses(expected BulkResponseExpectation, actual []pubsub.BulkSubscribeResponseEntry) bool {
+func verifyBulkSubscribeResponses(expected BulkResponseExpectation, actual []contribpubsub.BulkSubscribeResponseEntry) bool {
 	for i, expectedEntryResponse := range expected.Responses {
 		if expectedEntryResponse.EntryId != actual[i].EntryId {
 			return false
@@ -1461,7 +1475,7 @@ func verifyBulkSubscribeRequest(expectedData []string, expectedExtension Expecte
 	return true
 }
 
-func assertItemExistsOnce(collection []pubsub.BulkSubscribeResponseEntry, items ...string) error {
+func assertItemExistsOnce(collection []contribpubsub.BulkSubscribeResponseEntry, items ...string) error {
 	count := 0
 	for _, item := range items {
 		for _, c := range collection {
@@ -1475,4 +1489,50 @@ func assertItemExistsOnce(collection []pubsub.BulkSubscribeResponseEntry, items 
 		count = 0
 	}
 	return nil
+}
+
+// TODO: @joshvanl
+func getFakeMetadataItems() []commonapi.NameValuePair {
+	return []commonapi.NameValuePair{
+		{
+			Name: "host",
+			Value: commonapi.DynamicValue{
+				JSON: v1.JSON{
+					Raw: []byte("localhost"),
+				},
+			},
+		},
+		{
+			Name: "password",
+			Value: commonapi.DynamicValue{
+				JSON: v1.JSON{
+					Raw: []byte("fakePassword"),
+				},
+			},
+		},
+		{
+			Name: "consumerID",
+			Value: commonapi.DynamicValue{
+				JSON: v1.JSON{
+					Raw: []byte(TestRuntimeConfigID),
+				},
+			},
+		},
+		{
+			Name: scopes.SubscriptionScopes,
+			Value: commonapi.DynamicValue{
+				JSON: v1.JSON{
+					Raw: []byte(fmt.Sprintf("%s=topic0,topic1", TestRuntimeConfigID)),
+				},
+			},
+		},
+		{
+			Name: scopes.PublishingScopes,
+			Value: commonapi.DynamicValue{
+				JSON: v1.JSON{
+					Raw: []byte(fmt.Sprintf("%s=topic0,topic1", TestRuntimeConfigID)),
+				},
+			},
+		},
+	}
 }

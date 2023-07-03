@@ -19,8 +19,16 @@ import (
 	"strings"
 	"sync"
 
+	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/components"
+	"github.com/dapr/dapr/pkg/config"
+	configmodes "github.com/dapr/dapr/pkg/config/modes"
+	"github.com/dapr/dapr/pkg/grpc"
+	"github.com/dapr/dapr/pkg/modes"
+	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
+	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/meta"
 	"github.com/dapr/dapr/pkg/runtime/processor/binding"
@@ -42,9 +50,22 @@ type Options struct {
 	// ID is the ID of this Dapr instance.
 	ID string
 
+	// Namespace is the namespace of this Dapr instance.
+	Namespace string
+
+	// Mode is the mode of this Dapr instance.
+	Mode modes.DaprMode
+
+	// PodName is the name of the pod.
+	PodName string
+
 	// PlacementEnabled indicates whether placement service is enabled in this
 	// Dapr cluster.
 	PlacementEnabled bool
+
+	// IsHTTP indicates whether the connection to the application is using the
+	// HTTP protocol.
+	IsHTTP bool
 
 	// Registry is the all-component registry.
 	Registry *registry.Registry
@@ -54,6 +75,19 @@ type Options struct {
 
 	// Metadata is the metadata helper.
 	Meta *meta.Meta
+
+	// GlobalConfig is the global configuration.
+	GlobalConfig *config.Configuration
+
+	Standalone configmodes.StandaloneConfig
+
+	Resiliency resiliency.Provider
+
+	AppChannel channel.AppChannel
+
+	GRPC *grpc.Manager
+
+	OperatorClient operatorv1.OperatorClient
 }
 
 // manager implements the life cycle events of a component category.
@@ -62,8 +96,17 @@ type manager interface {
 	Close(compapi.Component) error
 }
 
-type stateManager interface {
+type StateManager interface {
 	ActorStateStoreName() (string, bool)
+	manager
+}
+
+type PubsubManager interface {
+	Publish(context.Context, *contribpubsub.PublishRequest) error
+	BulkPublish(context.Context, *contribpubsub.BulkPublishRequest) (contribpubsub.BulkPublishResponse, error)
+
+	StartSubscriptions(context.Context) error
+	StopSubscriptions() error
 	manager
 }
 
@@ -71,7 +114,8 @@ type stateManager interface {
 type Processor struct {
 	compStore *compstore.ComponentStore
 	managers  map[components.Category]manager
-	state     stateManager
+	state     StateManager
+	pubsub    PubsubManager
 
 	lock sync.RWMutex
 }
@@ -79,9 +123,19 @@ type Processor struct {
 func New(opts Options) *Processor {
 	pubsub := pubsub.New(pubsub.Options{
 		ID:             opts.ID,
+		Namespace:      opts.Namespace,
+		Mode:           opts.Mode,
+		PodName:        opts.PodName,
+		IsHTTP:         opts.IsHTTP,
 		Registry:       opts.Registry.PubSubs(),
 		ComponentStore: opts.ComponentStore,
 		Meta:           opts.Meta,
+		Resiliency:     opts.Resiliency,
+		TracingSpec:    opts.GlobalConfig.Spec.TracingSpec,
+		AppChannel:     opts.AppChannel,
+		GRPC:           opts.GRPC,
+		OperatorClient: opts.OperatorClient,
+		ResourcesPath:  opts.Standalone.ResourcesPath,
 	})
 
 	state := state.New(state.Options{
@@ -94,6 +148,7 @@ func New(opts Options) *Processor {
 	return &Processor{
 		compStore: opts.ComponentStore,
 		state:     state,
+		pubsub:    pubsub,
 		managers: map[components.Category]manager{
 			components.CategoryBindings: binding.New(binding.Options{
 				Registry:       opts.Registry.Bindings(),
@@ -182,8 +237,14 @@ func (p *Processor) Category(comp compapi.Component) components.Category {
 	return ""
 }
 
-func (p *Processor) ActorStateStore() (string, bool) {
+func (p *Processor) State() StateManager {
 	p.lock.RLock()
 	defer p.lock.RUnlock()
-	return p.state.ActorStateStoreName()
+	return p.state
+}
+
+func (p *Processor) PubSub() PubsubManager {
+	p.lock.RLock()
+	defer p.lock.RUnlock()
+	return p.pubsub
 }

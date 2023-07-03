@@ -1,5 +1,17 @@
-//nolint:nosnakecase
-package runtime
+/*
+Copyright 2023 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package pubsub
 
 import (
 	"context"
@@ -10,7 +22,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	"github.com/dapr/components-contrib/pubsub"
+	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -25,7 +37,7 @@ import (
 var testLogger = logger.NewLogger("dapr.runtime.test")
 
 type input struct {
-	pbsm     pubsubBulkSubscribedMessage
+	pbsm     bulkSubscribedMessage
 	bscData  bulkSubscribeCallData
 	envelope map[string]interface{}
 }
@@ -37,19 +49,19 @@ type testSettings struct {
 	failCount         int
 }
 
-func getBulkMessageEntriesForResiliency(len int) []pubsub.BulkMessageEntry {
-	bulkEntries := make([]pubsub.BulkMessageEntry, 10)
+func getBulkMessageEntriesForResiliency(len int) []contribpubsub.BulkMessageEntry {
+	bulkEntries := make([]contribpubsub.BulkMessageEntry, 10)
 
-	bulkEntries[0] = pubsub.BulkMessageEntry{EntryId: "1111111a", Event: []byte(order1)}
-	bulkEntries[1] = pubsub.BulkMessageEntry{EntryId: "2222222b", Event: []byte(order2)}
-	bulkEntries[2] = pubsub.BulkMessageEntry{EntryId: "333333c", Event: []byte(order3)}
-	bulkEntries[3] = pubsub.BulkMessageEntry{EntryId: "4444444d", Event: []byte(order4)}
-	bulkEntries[4] = pubsub.BulkMessageEntry{EntryId: "5555555e", Event: []byte(order5)}
-	bulkEntries[5] = pubsub.BulkMessageEntry{EntryId: "66666666f", Event: []byte(order6)}
-	bulkEntries[6] = pubsub.BulkMessageEntry{EntryId: "7777777g", Event: []byte(order7)}
-	bulkEntries[7] = pubsub.BulkMessageEntry{EntryId: "8888888h", Event: []byte(order8)}
-	bulkEntries[8] = pubsub.BulkMessageEntry{EntryId: "9999999i", Event: []byte(order9)}
-	bulkEntries[9] = pubsub.BulkMessageEntry{EntryId: "10101010j", Event: []byte(order10)}
+	bulkEntries[0] = contribpubsub.BulkMessageEntry{EntryId: "1111111a", Event: []byte(order1)}
+	bulkEntries[1] = contribpubsub.BulkMessageEntry{EntryId: "2222222b", Event: []byte(order2)}
+	bulkEntries[2] = contribpubsub.BulkMessageEntry{EntryId: "333333c", Event: []byte(order3)}
+	bulkEntries[3] = contribpubsub.BulkMessageEntry{EntryId: "4444444d", Event: []byte(order4)}
+	bulkEntries[4] = contribpubsub.BulkMessageEntry{EntryId: "5555555e", Event: []byte(order5)}
+	bulkEntries[5] = contribpubsub.BulkMessageEntry{EntryId: "66666666f", Event: []byte(order6)}
+	bulkEntries[6] = contribpubsub.BulkMessageEntry{EntryId: "7777777g", Event: []byte(order7)}
+	bulkEntries[7] = contribpubsub.BulkMessageEntry{EntryId: "8888888h", Event: []byte(order8)}
+	bulkEntries[8] = contribpubsub.BulkMessageEntry{EntryId: "9999999i", Event: []byte(order9)}
+	bulkEntries[9] = contribpubsub.BulkMessageEntry{EntryId: "10101010j", Event: []byte(order10)}
 
 	return bulkEntries[:len]
 }
@@ -71,8 +83,8 @@ var (
 
 var orders []string = []string{order1, order2, order3, order4, order5, order6, order7, order8, order9, order10}
 
-func getPubSubMessages() []pubSubMessage {
-	pubSubMessages := make([]pubSubMessage, 10)
+func getPubSubMessages() []message {
+	pubSubMessages := make([]message, 10)
 
 	bulkEntries := getBulkMessageEntriesForResiliency(10)
 	i := 0
@@ -129,12 +141,12 @@ func getResponse(req *invokev1.InvokeMethodRequest, ts *testSettings) *invokev1.
 	var data map[string]any
 	v, _ := req.RawDataFull()
 	e := json.Unmarshal(v, &data)
-	appResponses := []pubsub.AppBulkResponseEntry{}
+	appResponses := []contribpubsub.AppBulkResponseEntry{}
 	if e == nil {
 		entries, _ := data["entries"].([]any)
 		for j := 1; j <= len(entries); j++ {
 			entryId, _ := entries[j-1].(map[string]any)["entryId"].(string) //nolint:stylecheck
-			abre := pubsub.AppBulkResponseEntry{
+			abre := contribpubsub.AppBulkResponseEntry{
 				EntryId: entryId,
 			}
 			if ts.failCount > 0 && (ts.failAllEntries || (ts.failEvenOnes && j%2 == 0)) {
@@ -153,7 +165,7 @@ func getResponse(req *invokev1.InvokeMethodRequest, ts *testSettings) *invokev1.
 		}
 		ts.failCount--
 	}
-	re := pubsub.AppBulkResponse{
+	re := contribpubsub.AppBulkResponse{
 		AppResponses: appResponses,
 	}
 	v, _ = json.Marshal(re)
@@ -168,7 +180,7 @@ func getInput() input {
 	testBulkSubscribePubsub := "bulkSubscribePubSub"
 	msgArr := getBulkMessageEntriesForResiliency(10)
 	psMessages := getPubSubMessages()
-	in.pbsm = pubsubBulkSubscribedMessage{
+	in.pbsm = bulkSubscribedMessage{
 		pubSubMessages: psMessages,
 		topic:          "topic0",
 		pubsub:         testBulkSubscribePubsub,
@@ -176,7 +188,7 @@ func getInput() input {
 		length:         len(psMessages),
 	}
 
-	bulkResponses := make([]pubsub.BulkSubscribeResponseEntry, 10)
+	bulkResponses := make([]contribpubsub.BulkSubscribeResponseEntry, 10)
 	in.bscData.bulkResponses = &bulkResponses
 	entryIdIndexMap := make(map[string]int) //nolint:stylecheck
 	in.bscData.entryIdIndexMap = &entryIdIndexMap

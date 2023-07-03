@@ -43,16 +43,10 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.10.0"
 	"go.opentelemetry.io/otel/trace"
-	"golang.org/x/net/http2"
-	gogrpc "google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
 	md "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/emptypb"
-	"google.golang.org/protobuf/types/known/structpb"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/sets"
 
 	"github.com/dapr/dapr/pkg/actors"
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
@@ -60,7 +54,6 @@ import (
 	httpEndpointV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/channel"
-	httpChannel "github.com/dapr/dapr/pkg/channel/http"
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/config/protocol"
@@ -75,10 +68,10 @@ import (
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/meta"
 	"github.com/dapr/dapr/pkg/runtime/processor"
 	"github.com/dapr/dapr/pkg/runtime/processor/binding"
-	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
@@ -96,21 +89,12 @@ import (
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 
 	"github.com/dapr/components-contrib/bindings"
-	"github.com/dapr/components-contrib/contenttype"
-	contribMetadata "github.com/dapr/components-contrib/metadata"
-	"github.com/dapr/components-contrib/middleware"
 	nr "github.com/dapr/components-contrib/nameresolution"
-	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
 )
 
 const (
-
-	// output bindings concurrency.
-	bindingsConcurrencyParallel   = "parallel"
-	bindingsConcurrencySequential = "sequential"
-	pubsubName                    = "pubsubName"
 
 	// hot reloading is currently unsupported, but
 	// setting this environment variable restores the
@@ -122,12 +106,6 @@ const (
 
 var log = logger.NewLogger("dapr.runtime")
 
-// ErrUnexpectedEnvelopeData denotes that an unexpected data type
-// was encountered when processing a cloud event's data property.
-var ErrUnexpectedEnvelopeData = errors.New("unexpected data type encountered in envelope")
-
-var cloudEventDuplicateKeys = sets.NewString(pubsub.IDField, pubsub.SourceField, pubsub.DataContentTypeField, pubsub.TypeField, pubsub.SpecVersionField, pubsub.DataField, pubsub.DataBase64Field)
-
 // Type of function that determines if a component is authorized.
 // The function receives the component and must return true if the component is authorized.
 type ComponentAuthorizer func(component componentsV1alpha1.Component) bool
@@ -138,13 +116,11 @@ type HTTPEndpointAuthorizer func(endpoint httpEndpointV1alpha1.HTTPEndpoint) boo
 
 // DaprRuntime holds all the core components of the runtime.
 type DaprRuntime struct {
-	ctx                     context.Context
-	cancel                  context.CancelFunc
 	runtimeConfig           *internalConfig
 	globalConfig            *config.Configuration
 	accessControlList       *config.AccessControlList
 	grpc                    *grpc.Manager
-	appChannel              channel.AppChannel             // 1:1 relationship between sidecar and app for communication.
+	channels                *channels.Channels
 	httpEndpointsAppChannel channel.HTTPEndpointAppChannel // extra app channel to allow for different URLs per call.
 	appConfig               config.ApplicationConfig
 	directMessaging         messaging.DirectMessaging
@@ -160,10 +136,7 @@ type DaprRuntime struct {
 	daprHTTPAPI             http.API
 	daprGRPCAPI             grpc.API
 	operatorClient          operatorv1pb.OperatorClient
-	pubsubCtx               context.Context
 	pubsubCancel            context.CancelFunc
-	topicsLock              *sync.RWMutex
-	topicCtxCancels         map[string]context.CancelFunc // Key is "componentName||topicName"
 	shutdownC               chan error
 	running                 atomic.Bool
 	apiClosers              []io.Closer
@@ -172,7 +145,6 @@ type DaprRuntime struct {
 	appHealth               *apphealth.AppHealth
 	appHealthReady          func() // Invoked the first time the app health becomes ready
 	appHealthLock           *sync.Mutex
-	bulkSubLock             *sync.Mutex
 	appHTTPClient           *nethttp.Client
 	compStore               *compstore.ComponentStore
 	processor               *processor.Processor
@@ -208,24 +180,48 @@ type pubsubSubscribedMessage struct {
 }
 
 // newDaprRuntime returns a new runtime with the given runtime config and global config.
-func newDaprRuntime(runtimeConfig *internalConfig, globalConfig *config.Configuration, accessControlList *config.AccessControlList, resiliencyProvider resiliency.Provider) *DaprRuntime {
-	ctx, cancel := context.WithCancel(context.Background())
+func newDaprRuntime(ctx context.Context,
+	runtimeConfig *internalConfig,
+	globalConfig *config.Configuration,
+	accessControlList *config.AccessControlList,
+	resiliencyProvider resiliency.Provider,
+) (*DaprRuntime, error) {
 
+	compStore := compstore.New()
 	meta := meta.New(meta.Options{
 		ID:        runtimeConfig.id,
 		PodName:   getPodName(),
 		Namespace: getNamespace(),
 		Mode:      runtimeConfig.mode,
 	})
-	compStore := compstore.New()
+
+	operatorClient, err := getOperatorClient(ctx, runtimeConfig)
+	if err != nil {
+		return nil, fmt.Errorf("error creating operator client: %w", err)
+	}
+
+	grpc := createGRPCManager(runtimeConfig, globalConfig)
+
+	channels, err := channels.New(channels.Options{
+		Registry:            runtimeConfig.registry,
+		ComponentStore:      compStore,
+		Meta:                meta,
+		AppConnectionConfig: runtimeConfig.appConnectionConfig,
+		GlobalConfig:        globalConfig,
+		MaxRequestBodySize:  runtimeConfig.maxRequestBodySize,
+		ReadBufferSize:      runtimeConfig.readBufferSize,
+		GRPC:                grpc,
+	})
+	if err != nil {
+		log.Warnf("failed to open %s channel to app: %s", string(runtimeConfig.appConnectionConfig.Protocol), err)
+	}
+
 	rt := &DaprRuntime{
-		ctx:                        ctx,
-		cancel:                     cancel,
+		channels:                   channels,
 		runtimeConfig:              runtimeConfig,
 		globalConfig:               globalConfig,
 		accessControlList:          accessControlList,
-		grpc:                       createGRPCManager(runtimeConfig, globalConfig),
-		topicsLock:                 &sync.RWMutex{},
+		grpc:                       grpc,
 		pendingHTTPEndpoints:       make(chan httpEndpointV1alpha1.HTTPEndpoint),
 		pendingComponents:          make(chan componentsV1alpha1.Component),
 		pendingComponentDependents: map[string][]componentsV1alpha1.Component{},
@@ -235,15 +231,24 @@ func newDaprRuntime(runtimeConfig *internalConfig, globalConfig *config.Configur
 		workflowEngine:             wfengine.NewWorkflowEngine(wfengine.NewWorkflowConfig(runtimeConfig.id)),
 		appHealthReady:             nil,
 		appHealthLock:              &sync.Mutex{},
-		bulkSubLock:                &sync.Mutex{},
 		compStore:                  compStore,
 		meta:                       meta,
 		processor: processor.New(processor.Options{
 			ID:               runtimeConfig.id,
+			Namespace:        getNamespace(),
+			IsHTTP:           runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
 			PlacementEnabled: len(runtimeConfig.placementAddresses) > 0,
 			Registry:         runtimeConfig.registry,
 			ComponentStore:   compStore,
 			Meta:             meta,
+			GlobalConfig:     globalConfig,
+			Resiliency:       resiliencyProvider,
+			Mode:             runtimeConfig.mode,
+			PodName:          getPodName(),
+			Standalone:       runtimeConfig.standalone,
+			AppChannel:       channels.AppChannel(),
+			OperatorClient:   operatorClient,
+			GRPC:             grpc,
 		}),
 	}
 
@@ -255,9 +260,7 @@ func newDaprRuntime(runtimeConfig *internalConfig, globalConfig *config.Configur
 
 	rt.httpEndpointAuthorizers = []HTTPEndpointAuthorizer{rt.namespaceHTTPEndpointAuthorizer}
 
-	rt.initAppHTTPClient()
-
-	return rt
+	return rt, nil
 }
 
 // Run performs initialization of the runtime with the runtime and global configurations.
@@ -291,16 +294,17 @@ func getPodName() string {
 	return os.Getenv("POD_NAME")
 }
 
-func (a *DaprRuntime) getOperatorClient() (operatorv1pb.OperatorClient, error) {
+func getOperatorClient(ctx context.Context, cfg *internalConfig) (operatorv1pb.OperatorClient, error) {
 	// Get the operator client only if we're running in Kubernetes and if we need it
-	if a.runtimeConfig.mode != modes.KubernetesMode {
+	if cfg.mode != modes.KubernetesMode {
 		return nil, nil
 	}
 
-	client, _, err := client.GetOperatorClient(context.TODO(), a.runtimeConfig.kubernetes.ControlPlaneAddress, security.TLSServerName, a.runtimeConfig.certChain)
+	client, _, err := client.GetOperatorClient(ctx, cfg.kubernetes.ControlPlaneAddress, security.TLSServerName, cfg.certChain)
 	if err != nil {
 		return nil, fmt.Errorf("error creating operator client: %w", err)
 	}
+
 	return client, nil
 }
 
@@ -346,7 +350,8 @@ func (a *DaprRuntime) setupTracing(hostAddress string, tpStore tracerProviderSto
 			}
 			client = otlptracegrpc.NewClient(clientOptions...)
 		}
-		otelExporter, err := otlptrace.New(a.ctx, client)
+		// TODO: @joshvanl
+		otelExporter, err := otlptrace.New(context.TODO(), client)
 		if err != nil {
 			return err
 		}
@@ -383,7 +388,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		return err
 	}
 	a.podName = getPodName()
-	a.operatorClient, err = a.getOperatorClient()
+	a.operatorClient, err = getOperatorClient(ctx, a.runtimeConfig)
 	if err != nil {
 		return err
 	}
@@ -427,7 +432,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 
 	a.flushOutstandingComponents()
 
-	pipeline, err := a.buildHTTPPipeline()
+	pipeline, err := a.channels.BuildHTTPPipeline(a.globalConfig.Spec.HTTPPipelineSpec)
 	if err != nil {
 		log.Warnf("failed to build HTTP pipeline: %s", err)
 	}
@@ -483,14 +488,9 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	}
 	a.blockUntilAppIsReady()
 
-	err = a.createChannels()
-	if err != nil {
-		log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.appConnectionConfig.Protocol), err)
-	}
-
-	a.daprHTTPAPI.SetAppChannel(a.appChannel)
-	a.daprGRPCAPI.SetAppChannel(a.appChannel)
-	a.directMessaging.SetAppChannel(a.appChannel)
+	a.daprHTTPAPI.SetAppChannel(a.channels.AppChannel())
+	a.daprGRPCAPI.SetAppChannel(a.channels.AppChannel())
+	a.directMessaging.SetAppChannel(a.channels.AppChannel())
 
 	// add another app channel dedicated to external service invocation
 	a.daprHTTPAPI.SetHTTPEndpointsAppChannel(a.httpEndpointsAppChannel)
@@ -506,16 +506,17 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	a.appHealthReady = func() {
 		a.appHealthReadyInit(ctx)
 	}
-	if a.runtimeConfig.appConnectionConfig.HealthCheck != nil && a.appChannel != nil {
+	if a.runtimeConfig.appConnectionConfig.HealthCheck != nil && a.channels.AppChannel() != nil {
 		// We can't just pass "a.appChannel.HealthProbe" because appChannel may be re-created
 		a.appHealth = apphealth.New(*a.runtimeConfig.appConnectionConfig.HealthCheck, func(ctx context.Context) (bool, error) {
-			return a.appChannel.HealthProbe(ctx)
+			return a.channels.AppChannel().HealthProbe(ctx)
 		})
 		a.appHealth.OnHealthChange(a.appHealthChanged)
-		a.appHealth.StartProbes(a.ctx)
+		// TODO: @joshvanl
+		a.appHealth.StartProbes(context.TODO())
 
 		// Set the appHealth object in the channel so it's aware of the app's health status
-		a.appChannel.SetAppHealth(a.appHealth)
+		a.channels.AppChannel().SetAppHealth(a.appHealth)
 
 		// Enqueue a probe right away
 		// This will also start the input components once the app is healthy
@@ -583,7 +584,8 @@ func (a *DaprRuntime) initPluggableComponents() {
 		log.Debugf("the current OS does not support pluggable components feature, skipping initialization")
 		return
 	}
-	if err := pluggable.Discover(a.ctx); err != nil {
+	// TODO: @joshvanl
+	if err := pluggable.Discover(context.TODO()); err != nil {
 		log.Errorf("could not initialize pluggable components %v", err)
 	}
 }
@@ -603,14 +605,14 @@ func (a *DaprRuntime) appHealthChanged(status uint8) {
 		}
 
 		// Start subscribing to topics and reading from input bindings
-		a.startSubscriptions()
+		a.processor.PubSub().StartSubscriptions(context.TODO())
 		err := a.startReadingFromBindings()
 		if err != nil {
 			log.Warnf("failed to read from bindings: %s ", err)
 		}
 	case apphealth.AppStatusUnhealthy:
 		// Stop topic subscriptions and input bindings
-		a.stopSubscriptions()
+		a.processor.PubSub().StopSubscriptions()
 		a.stopReadingFromBindings()
 	}
 }
@@ -622,335 +624,13 @@ func (a *DaprRuntime) populateSecretsConfiguration() {
 	}
 }
 
-func (a *DaprRuntime) buildHTTPPipelineForSpec(spec config.PipelineSpec, targetPipeline string) (pipeline httpMiddleware.Pipeline, err error) {
-	if a.globalConfig != nil {
-		pipeline.Handlers = make([]func(next nethttp.Handler) nethttp.Handler, 0, len(spec.Handlers))
-		for i := 0; i < len(spec.Handlers); i++ {
-			middlewareSpec := spec.Handlers[i]
-			component, exists := a.compStore.GetComponent(middlewareSpec.Type, middlewareSpec.Name)
-			if !exists {
-				// Log the error but continue with initializing the pipeline
-				log.Error("couldn't find middleware component defined in configuration with name %s and type %s",
-					middlewareSpec.Name, middlewareSpec.LogName())
-				continue
-			}
-			md := middleware.Metadata{Base: a.meta.ToBaseMetadata(component)}
-			handler, err := a.runtimeConfig.registry.HTTPMiddlewares().Create(middlewareSpec.Type, middlewareSpec.Version, md, middlewareSpec.LogName())
-			if err != nil {
-				e := fmt.Sprintf("process component %s error: %s", component.Name, err.Error())
-				if !component.Spec.IgnoreErrors {
-					log.Warn("error processing middleware component, daprd process will exit gracefully")
-					a.Shutdown(a.runtimeConfig.gracefulShutdownDuration)
-					log.Fatal(e)
-					// This error is only caught by tests, since during normal execution we panic
-					return pipeline, errors.New("dapr panicked")
-				}
-				log.Error(e)
-				continue
-			}
-			log.Infof("enabled %s/%s %s middleware", middlewareSpec.Type, targetPipeline, middlewareSpec.Version)
-			pipeline.Handlers = append(pipeline.Handlers, handler)
-		}
-	}
-	return pipeline, nil
-}
-
-func (a *DaprRuntime) buildHTTPPipeline() (httpMiddleware.Pipeline, error) {
-	return a.buildHTTPPipelineForSpec(a.globalConfig.Spec.HTTPPipelineSpec, "http")
-}
-
-func (a *DaprRuntime) buildAppHTTPPipeline() (httpMiddleware.Pipeline, error) {
-	return a.buildHTTPPipelineForSpec(a.globalConfig.Spec.AppHTTPPipelineSpec, "app channel")
-}
-
-func (a *DaprRuntime) sendToDeadLetter(name string, msg *pubsub.NewMessage, deadLetterTopic string) (err error) {
-	req := &pubsub.PublishRequest{
-		Data:        msg.Data,
-		PubsubName:  name,
-		Topic:       deadLetterTopic,
-		Metadata:    msg.Metadata,
-		ContentType: msg.ContentType,
-	}
-
-	err = a.Publish(req)
-	if err != nil {
-		log.Errorf("error sending message to dead letter, origin topic: %s dead letter topic %s err: %w", msg.Topic, deadLetterTopic, err)
-		return err
-	}
-	return nil
-}
-
-func (a *DaprRuntime) subscribeTopic(parentCtx context.Context, name string, topic string, route compstore.TopicRouteElem) error {
-	subKey := pubsubTopicKey(name, topic)
-
-	a.topicsLock.Lock()
-	defer a.topicsLock.Unlock()
-
-	pubSub, ok := a.compStore.GetPubSub(name)
-	if !ok {
-		return fmt.Errorf("pubsub '%s' not found", name)
-	}
-
-	allowed := a.isPubSubOperationAllowed(name, topic, pubSub.ScopedSubscriptions)
-	if !allowed {
-		return fmt.Errorf("subscription to topic '%s' on pubsub '%s' is not allowed", topic, name)
-	}
-
-	log.Debugf("subscribing to topic='%s' on pubsub='%s'", topic, name)
-
-	if _, ok := a.topicCtxCancels[subKey]; ok {
-		return fmt.Errorf("cannot subscribe to topic '%s' on pubsub '%s': the subscription already exists", topic, name)
-	}
-
-	ctx, cancel := context.WithCancel(parentCtx)
-	policyDef := a.resiliency.ComponentInboundPolicy(name, resiliency.Pubsub)
-	routeMetadata := route.Metadata
-
-	namespaced := pubSub.NamespaceScoped
-
-	if route.BulkSubscribe != nil && route.BulkSubscribe.Enabled {
-		err := a.bulkSubscribeTopic(ctx, policyDef, name, topic, route, namespaced)
-		if err != nil {
-			cancel()
-			return fmt.Errorf("failed to bulk subscribe to topic %s: %w", topic, err)
-		}
-		a.topicCtxCancels[subKey] = cancel
-		return nil
-	}
-
-	subscribeTopic := topic
-	if namespaced {
-		subscribeTopic = a.namespace + topic
-	}
-
-	err := pubSub.Component.Subscribe(ctx, pubsub.SubscribeRequest{
-		Topic:    subscribeTopic,
-		Metadata: routeMetadata,
-	}, func(ctx context.Context, msg *pubsub.NewMessage) error {
-		if msg.Metadata == nil {
-			msg.Metadata = make(map[string]string, 1)
-		}
-
-		msg.Metadata[pubsubName] = name
-
-		msgTopic := msg.Topic
-		if pubSub.NamespaceScoped {
-			msgTopic = strings.Replace(msgTopic, a.namespace, "", 1)
-		}
-
-		rawPayload, err := contribMetadata.IsRawPayload(route.Metadata)
-		if err != nil {
-			log.Errorf("error deserializing pubsub metadata: %s", err)
-			if route.DeadLetterTopic != "" {
-				if dlqErr := a.sendToDeadLetter(name, msg, route.DeadLetterTopic); dlqErr == nil {
-					// dlq has been configured and message is successfully sent to dlq.
-					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msgTopic, 0)
-					return nil
-				}
-			}
-			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msgTopic, 0)
-			return err
-		}
-
-		var cloudEvent map[string]interface{}
-		data := msg.Data
-		if rawPayload {
-			cloudEvent = pubsub.FromRawPayload(msg.Data, msgTopic, name)
-			data, err = json.Marshal(cloudEvent)
-			if err != nil {
-				log.Errorf("error serializing cloud event in pubsub %s and topic %s: %s", name, msgTopic, err)
-				if route.DeadLetterTopic != "" {
-					if dlqErr := a.sendToDeadLetter(name, msg, route.DeadLetterTopic); dlqErr == nil {
-						// dlq has been configured and message is successfully sent to dlq.
-						diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msgTopic, 0)
-						return nil
-					}
-				}
-				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msgTopic, 0)
-				return err
-			}
-		} else {
-			err = json.Unmarshal(msg.Data, &cloudEvent)
-			if err != nil {
-				log.Errorf("error deserializing cloud event in pubsub %s and topic %s: %s", name, msgTopic, err)
-				if route.DeadLetterTopic != "" {
-					if dlqErr := a.sendToDeadLetter(name, msg, route.DeadLetterTopic); dlqErr == nil {
-						// dlq has been configured and message is successfully sent to dlq.
-						diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msgTopic, 0)
-						return nil
-					}
-				}
-				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msgTopic, 0)
-				return err
-			}
-		}
-
-		if pubsub.HasExpired(cloudEvent) {
-			log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.ExpirationField])
-			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msgTopic, 0)
-
-			if route.DeadLetterTopic != "" {
-				_ = a.sendToDeadLetter(name, msg, route.DeadLetterTopic)
-			}
-			return nil
-		}
-
-		routePath, shouldProcess, err := findMatchingRoute(route.Rules, cloudEvent)
-		if err != nil {
-			log.Errorf("error finding matching route for event %v in pubsub %s and topic %s: %s", cloudEvent[pubsub.IDField], name, msgTopic, err)
-			if route.DeadLetterTopic != "" {
-				if dlqErr := a.sendToDeadLetter(name, msg, route.DeadLetterTopic); dlqErr == nil {
-					// dlq has been configured and message is successfully sent to dlq.
-					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msgTopic, 0)
-					return nil
-				}
-			}
-			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Retry)), msgTopic, 0)
-			return err
-		}
-		if !shouldProcess {
-			// The event does not match any route specified so ignore it.
-			log.Debugf("no matching route for event %v in pubsub %s and topic %s; skipping", cloudEvent[pubsub.IDField], name, msgTopic)
-			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, pubsubName, strings.ToLower(string(pubsub.Drop)), msgTopic, 0)
-			if route.DeadLetterTopic != "" {
-				_ = a.sendToDeadLetter(name, msg, route.DeadLetterTopic)
-			}
-			return nil
-		}
-
-		psm := &pubsubSubscribedMessage{
-			cloudEvent: cloudEvent,
-			data:       data,
-			topic:      msgTopic,
-			metadata:   msg.Metadata,
-			path:       routePath,
-			pubsub:     name,
-		}
-		policyRunner := resiliency.NewRunner[any](ctx, policyDef)
-		_, err = policyRunner(func(ctx context.Context) (any, error) {
-			var pErr error
-			if a.runtimeConfig.appConnectionConfig.Protocol.IsHTTP() {
-				pErr = a.publishMessageHTTP(ctx, psm)
-			} else {
-				pErr = a.publishMessageGRPC(ctx, psm)
-			}
-			var rErr *rterrors.RetriableError
-			if errors.As(pErr, &rErr) {
-				log.Warnf("encountered a retriable error while publishing a subscribed message to topic %s, err: %v", msgTopic, rErr.Unwrap())
-			} else if pErr != nil {
-				log.Errorf("encountered a non-retriable error while publishing a subscribed message to topic %s, err: %v", msgTopic, pErr)
-			}
-			return nil, pErr
-		})
-		if err != nil && err != context.Canceled {
-			// Sending msg to dead letter queue.
-			// If no DLQ is configured, return error for backwards compatibility (component-level retry).
-			if route.DeadLetterTopic == "" {
-				return err
-			}
-			_ = a.sendToDeadLetter(name, msg, route.DeadLetterTopic)
-			return nil
-		}
-		return err
-	})
-	if err != nil {
-		cancel()
-		return fmt.Errorf("failed to subscribe to topic %s: %w", topic, err)
-	}
-	a.topicCtxCancels[subKey] = cancel
-	return nil
-}
-
-func (a *DaprRuntime) unsubscribeTopic(name string, topic string) error {
-	a.topicsLock.Lock()
-	defer a.topicsLock.Unlock()
-
-	subKey := pubsubTopicKey(name, topic)
-	cancel, ok := a.topicCtxCancels[subKey]
-	if !ok {
-		return fmt.Errorf("cannot unsubscribe from topic '%s' on pubsub '%s': the subscription does not exist", topic, name)
-	}
-
-	if cancel != nil {
-		cancel()
-	}
-
-	delete(a.topicCtxCancels, subKey)
-
-	return nil
-}
-
-func (a *DaprRuntime) beginPubSub(name string) error {
-	topicRoutes, err := a.getTopicRoutes()
-	if err != nil {
-		return err
-	}
-
-	v, ok := topicRoutes[name]
-	if !ok {
-		return nil
-	}
-
-	for topic, route := range v {
-		err = a.subscribeTopic(a.pubsubCtx, name, topic, route)
-		if err != nil {
-			// Log the error only
-			log.Errorf("error occurred while beginning pubsub for topic %s on component %s: %v", topic, name, err)
-		}
-	}
-
-	return nil
-}
-
-// findMatchingRoute selects the path based on routing rules. If there are
-// no matching rules, the route-level path is used.
-func findMatchingRoute(rules []*runtimePubsub.Rule, cloudEvent interface{}) (path string, shouldProcess bool, err error) {
-	hasRules := len(rules) > 0
-	if hasRules {
-		data := map[string]interface{}{
-			"event": cloudEvent,
-		}
-		rule, err := matchRoutingRule(rules, data)
-		if err != nil {
-			return "", false, err
-		}
-		if rule != nil {
-			return rule.Path, true, nil
-		}
-	}
-
-	return "", false, nil
-}
-
-func matchRoutingRule(rules []*runtimePubsub.Rule, data map[string]interface{}) (*runtimePubsub.Rule, error) {
-	for _, rule := range rules {
-		if rule.Match == nil {
-			return rule, nil
-		}
-		iResult, err := rule.Match.Eval(data)
-		if err != nil {
-			return nil, err
-		}
-		result, ok := iResult.(bool)
-		if !ok {
-			return nil, fmt.Errorf("the result of match expression %s was not a boolean", rule.Match)
-		}
-
-		if result {
-			return rule, nil
-		}
-	}
-
-	return nil, nil
-}
-
 func (a *DaprRuntime) initDirectMessaging(resolver nr.Resolver) {
 	a.directMessaging = messaging.NewDirectMessaging(messaging.NewDirectMessagingOpts{
 		AppID:                   a.runtimeConfig.id,
 		Namespace:               a.namespace,
 		Port:                    a.runtimeConfig.internalGRPCPort,
 		Mode:                    a.runtimeConfig.mode,
-		AppChannel:              a.appChannel,
+		AppChannel:              a.channels.AppChannel(),
 		HTTPEndpointsAppChannel: a.httpEndpointsAppChannel,
 		ClientConnFn:            a.grpc.GetGRPCConnection,
 		Resolver:                resolver,
@@ -1091,7 +771,9 @@ func (a *DaprRuntime) beginHTTPEndpointsUpdates() error {
 		}
 
 		needList := false
-		for a.ctx.Err() == nil {
+		// TODO: @joshvanl
+		//for a.ctx.Err() == nil {
+		for {
 			var stream operatorv1pb.Operator_HTTPEndpointUpdateClient //nolint:nosnakecase
 			streamData, err := backoff.RetryWithData(func() (interface{}, error) {
 				var err error
@@ -1202,7 +884,9 @@ func (a *DaprRuntime) sendToOutputBinding(name string, req *bindings.InvokeReque
 		ops := binding.Operations()
 		for _, o := range ops {
 			if o == req.Operation {
-				policyRunner := resiliency.NewRunner[*bindings.InvokeResponse](a.ctx,
+				//policyRunner := resiliency.NewRunner[*bindings.InvokeResponse](a.ctx,
+				// TODO: @joshvanl
+				policyRunner := resiliency.NewRunner[*bindings.InvokeResponse](context.TODO(),
 					a.resiliency.ComponentOutboundPolicy(name, resiliency.Binding),
 				)
 				return policyRunner(func(ctx context.Context) (*bindings.InvokeResponse, error) {
@@ -1227,7 +911,9 @@ func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 				return
 			}
 
-			err := stateLoader.PerformBulkStoreOperation(a.ctx, reqs,
+			// TODO: @joshvanl
+			//err := stateLoader.PerformBulkStoreOperation(a.ctx, reqs,
+			err := stateLoader.PerformBulkStoreOperation(context.TODO(), reqs,
 				a.resiliency.ComponentOutboundPolicy(response.StoreName, resiliency.Statestore),
 				state.BulkStoreOpts{},
 				store.Set,
@@ -1245,7 +931,7 @@ func (a *DaprRuntime) onAppResponse(response *bindings.AppResponse) error {
 			return err
 		}
 
-		if response.Concurrency == bindingsConcurrencyParallel {
+		if response.Concurrency == binding.ConcurrencyParallel {
 			a.sendBatchOutputBindingsParallel(response.To, b)
 		} else {
 			return a.sendBatchOutputBindingsSequential(response.To, b)
@@ -1278,7 +964,8 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		}
 	}
 	// span is nil if tracing is disabled (sampling rate is 0)
-	ctx, span := diag.StartInternalCallbackSpan(a.ctx, spanName, spanContext, a.globalConfig.Spec.TracingSpec)
+	// TODO: @joshvanl
+	ctx, span := diag.StartInternalCallbackSpan(context.TODO(), spanName, spanContext, a.globalConfig.Spec.TracingSpec)
 
 	var appResponseBody []byte
 	path, _ := a.compStore.GetInputBindingRoute(bindingName)
@@ -1345,9 +1032,9 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 		}
 		if resp != nil {
 			if resp.Concurrency == runtimev1pb.BindingEventResponse_PARALLEL { //nolint:nosnakecase
-				response.Concurrency = bindingsConcurrencyParallel
+				response.Concurrency = binding.ConcurrencyParallel
 			} else {
-				response.Concurrency = bindingsConcurrencySequential
+				response.Concurrency = binding.ConcurrencySequential
 			}
 
 			response.To = resp.To
@@ -1386,7 +1073,7 @@ func (a *DaprRuntime) sendBindingEventToApp(bindingName string, data []byte, met
 			},
 		)
 		resp, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
-			rResp, rErr := a.appChannel.InvokeMethod(ctx, req, "")
+			rResp, rErr := a.channels.AppChannel().InvokeMethod(ctx, req, "")
 			if rErr != nil {
 				return rResp, rErr
 			}
@@ -1458,11 +1145,11 @@ func (a *DaprRuntime) readFromBinding(readCtx context.Context, name string, bind
 func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int, allowedOrigins string, pipeline httpMiddleware.Pipeline) error {
 	a.daprHTTPAPI = http.NewAPI(http.APIOpts{
 		AppID:                       a.runtimeConfig.id,
-		AppChannel:                  a.appChannel,
+		AppChannel:                  a.channels.AppChannel(),
 		HTTPEndpointsAppChannel:     a.httpEndpointsAppChannel,
 		DirectMessaging:             a.directMessaging,
 		Resiliency:                  a.resiliency,
-		PubsubAdapter:               a.getPublishAdapter(),
+		PubsubAdapter:               a.processor.PubSub(),
 		Actors:                      a.actor,
 		SendToOutputBindingFn:       a.sendToOutputBinding,
 		TracingSpec:                 a.globalConfig.Spec.TracingSpec,
@@ -1554,9 +1241,9 @@ func (a *DaprRuntime) getNewServerConfig(apiListenAddresses []string, port int) 
 func (a *DaprRuntime) getGRPCAPI() grpc.API {
 	return grpc.NewAPI(grpc.APIOpts{
 		AppID:                       a.runtimeConfig.id,
-		AppChannel:                  a.appChannel,
+		AppChannel:                  a.channels.AppChannel(),
 		Resiliency:                  a.resiliency,
-		PubsubAdapter:               a.getPublishAdapter(),
+		PubsubAdapter:               a.processor.PubSub(),
 		DirectMessaging:             a.directMessaging,
 		Actors:                      a.actor,
 		SendToOutputBindingFn:       a.sendToOutputBinding,
@@ -1568,14 +1255,6 @@ func (a *DaprRuntime) getGRPCAPI() grpc.API {
 		AppConnectionConfig:         a.runtimeConfig.appConnectionConfig,
 		GlobalConfig:                a.globalConfig,
 	})
-}
-
-func (a *DaprRuntime) getPublishAdapter() runtimePubsub.Adapter {
-	if a.compStore.PubSubsLen() == 0 {
-		return nil
-	}
-
-	return a
 }
 
 func (a *DaprRuntime) getSubscribedBindingsGRPC() ([]string, error) {
@@ -1618,7 +1297,7 @@ func (a *DaprRuntime) isAppSubscribedToBinding(binding string) (bool, error) {
 		defer req.Close()
 
 		// TODO: Propagate Context
-		resp, err := a.appChannel.InvokeMethod(context.TODO(), req, "")
+		resp, err := a.channels.AppChannel().InvokeMethod(context.TODO(), req, "")
 		if err != nil {
 			log.Fatalf("could not invoke OPTIONS method on input binding subscription endpoint %q: %v", path, err)
 		}
@@ -1643,256 +1322,6 @@ func isBindingOfExplicitDirection(direction string, metadata map[string]string) 
 	}
 
 	return false
-}
-
-// Refer for state store api decision  https://github.com/dapr/dapr/blob/master/docs/decision_records/api/API-008-multi-state-store-api-design.md
-func (a *DaprRuntime) getDeclarativeSubscriptions() []runtimePubsub.Subscription {
-	var subs []runtimePubsub.Subscription
-
-	switch a.runtimeConfig.mode {
-	case modes.KubernetesMode:
-		subs = runtimePubsub.DeclarativeKubernetes(a.operatorClient, a.podName, a.namespace, log)
-	case modes.StandaloneMode:
-		subs = runtimePubsub.DeclarativeLocal(a.runtimeConfig.standalone.ResourcesPath, a.namespace, log)
-	}
-
-	// only return valid subscriptions for this app id
-	i := 0
-	for _, s := range subs {
-		keep := false
-		if len(s.Scopes) == 0 {
-			keep = true
-		} else {
-			for _, scope := range s.Scopes {
-				if scope == a.runtimeConfig.id {
-					keep = true
-					break
-				}
-			}
-		}
-
-		if keep {
-			subs[i] = s
-			i++
-		}
-	}
-	return subs[:i]
-}
-
-func (a *DaprRuntime) getSubscriptions() ([]runtimePubsub.Subscription, error) {
-	if subs := a.compStore.ListSubscriptions(); len(subs) > 0 {
-		return subs, nil
-	}
-
-	var (
-		subscriptions []runtimePubsub.Subscription
-		err           error
-	)
-
-	if a.appChannel == nil {
-		log.Warn("app channel not initialized, make sure -app-port is specified if pubsub subscription is required")
-		return subscriptions, nil
-	}
-
-	// handle app subscriptions
-	if a.runtimeConfig.appConnectionConfig.Protocol.IsHTTP() {
-		subscriptions, err = runtimePubsub.GetSubscriptionsHTTP(a.appChannel, log, a.resiliency)
-	} else {
-		var conn gogrpc.ClientConnInterface
-		conn, err = a.grpc.GetAppClient()
-		defer a.grpc.ReleaseAppClient(conn)
-		if err != nil {
-			return nil, fmt.Errorf("error while getting app client: %w", err)
-		}
-		client := runtimev1pb.NewAppCallbackClient(conn)
-		subscriptions, err = runtimePubsub.GetSubscriptionsGRPC(client, log, a.resiliency)
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	// handle declarative subscriptions
-	ds := a.getDeclarativeSubscriptions()
-	for _, s := range ds {
-		skip := false
-
-		// don't register duplicate subscriptions
-		for _, sub := range subscriptions {
-			if sub.PubsubName == s.PubsubName && sub.Topic == s.Topic {
-				log.Warnf("two identical subscriptions found (sources: declarative, app endpoint). pubsubname: %s, topic: %s",
-					s.PubsubName, s.Topic)
-				skip = true
-				break
-			}
-		}
-
-		if !skip {
-			subscriptions = append(subscriptions, s)
-		}
-	}
-
-	a.compStore.SetSubscriptions(subscriptions)
-	return subscriptions, nil
-}
-
-func (a *DaprRuntime) getTopicRoutes() (map[string]compstore.TopicRoutes, error) {
-	if !a.compStore.TopicRoutesIsNil() {
-		return a.compStore.GetTopicRoutes(), nil
-	}
-
-	topicRoutes := make(map[string]compstore.TopicRoutes)
-
-	if a.appChannel == nil {
-		log.Warn("app channel not initialized, make sure -app-port is specified if pubsub subscription is required")
-		return topicRoutes, nil
-	}
-
-	subscriptions, err := a.getSubscriptions()
-	if err != nil {
-		return nil, err
-	}
-
-	for _, s := range subscriptions {
-		if topicRoutes[s.PubsubName] == nil {
-			topicRoutes[s.PubsubName] = compstore.TopicRoutes{}
-		}
-
-		topicRoutes[s.PubsubName][s.Topic] = compstore.TopicRouteElem{
-			Metadata:        s.Metadata,
-			Rules:           s.Rules,
-			DeadLetterTopic: s.DeadLetterTopic,
-			BulkSubscribe:   s.BulkSubscribe,
-		}
-	}
-
-	if len(topicRoutes) > 0 {
-		for pubsubName, v := range topicRoutes {
-			var topics string
-			for topic := range v {
-				if topics == "" {
-					topics += topic
-				} else {
-					topics += " " + topic
-				}
-			}
-			log.Infof("app is subscribed to the following topics: [%s] through pubsub=%s", topics, pubsubName)
-		}
-	}
-	a.compStore.SetTopicRoutes(topicRoutes)
-	return topicRoutes, nil
-}
-
-// Publish is an adapter method for the runtime to pre-validate publish requests
-// And then forward them to the Pub/Sub component.
-// This method is used by the HTTP and gRPC APIs.
-func (a *DaprRuntime) Publish(req *pubsub.PublishRequest) error {
-	a.topicsLock.RLock()
-	ps, ok := a.compStore.GetPubSub(req.PubsubName)
-	a.topicsLock.RUnlock()
-
-	if !ok {
-		return runtimePubsub.NotFoundError{PubsubName: req.PubsubName}
-	}
-
-	if allowed := a.isPubSubOperationAllowed(req.PubsubName, req.Topic, ps.ScopedPublishings); !allowed {
-		return runtimePubsub.NotAllowedError{Topic: req.Topic, ID: a.runtimeConfig.id}
-	}
-
-	if ps.NamespaceScoped {
-		req.Topic = a.namespace + req.Topic
-	}
-
-	policyRunner := resiliency.NewRunner[any](a.ctx,
-		a.resiliency.ComponentOutboundPolicy(req.PubsubName, resiliency.Pubsub),
-	)
-	_, err := policyRunner(func(ctx context.Context) (any, error) {
-		return nil, ps.Component.Publish(ctx, req)
-	})
-	return err
-}
-
-func (a *DaprRuntime) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
-	// context.TODO() is used here as later on a context will have to be passed in for each publish separately
-	ps, ok := a.compStore.GetPubSub(req.PubsubName)
-	if !ok {
-		return pubsub.BulkPublishResponse{}, runtimePubsub.NotFoundError{PubsubName: req.PubsubName}
-	}
-
-	if allowed := a.isPubSubOperationAllowed(req.PubsubName, req.Topic, ps.ScopedPublishings); !allowed {
-		return pubsub.BulkPublishResponse{}, runtimePubsub.NotAllowedError{Topic: req.Topic, ID: a.runtimeConfig.id}
-	}
-
-	policyDef := a.resiliency.ComponentOutboundPolicy(req.PubsubName, resiliency.Pubsub)
-
-	if pubsub.FeatureBulkPublish.IsPresent(ps.Component.Features()) {
-		return runtimePubsub.ApplyBulkPublishResiliency(context.TODO(), req, policyDef, ps.Component.(pubsub.BulkPublisher))
-	}
-
-	log.Debugf("pubsub %s does not implement the BulkPublish API; falling back to publishing messages individually", req.PubsubName)
-	defaultBulkPublisher := runtimePubsub.NewDefaultBulkPublisher(ps.Component)
-
-	return runtimePubsub.ApplyBulkPublishResiliency(context.TODO(), req, policyDef, defaultBulkPublisher)
-}
-
-// Subscribe is used by APIs to start a subscription to a topic.
-func (a *DaprRuntime) Subscribe(ctx context.Context, name string, routes map[string]compstore.TopicRouteElem) (err error) {
-	_, ok := a.compStore.GetPubSub(name)
-	if !ok {
-		return fmt.Errorf("pubsub component %s does not exist", name)
-	}
-
-	for topic, route := range routes {
-		err = a.subscribeTopic(ctx, name, topic, route)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// GetPubSub is an adapter method to find a pubsub by name.
-func (a *DaprRuntime) GetPubSub(pubsubName string) pubsub.PubSub {
-	ps, ok := a.compStore.GetPubSub(pubsubName)
-	if !ok {
-		return nil
-	}
-	return ps.Component
-}
-
-func (a *DaprRuntime) isPubSubOperationAllowed(pubsubName string, topic string, scopedTopics []string) bool {
-	inAllowedTopics := false
-
-	pubSub, ok := a.compStore.GetPubSub(pubsubName)
-	if !ok {
-		return false
-	}
-
-	// first check if allowedTopics contain it
-	if len(pubSub.AllowedTopics) > 0 {
-		for _, t := range pubSub.AllowedTopics {
-			if t == topic {
-				inAllowedTopics = true
-				break
-			}
-		}
-		if !inAllowedTopics {
-			return false
-		}
-	}
-	if len(scopedTopics) == 0 {
-		return true
-	}
-
-	// check if a granular scope has been applied
-	allowedScope := false
-	for _, t := range scopedTopics {
-		if t == topic {
-			allowedScope = true
-			break
-		}
-	}
-	return allowedScope
 }
 
 func (a *DaprRuntime) initNameResolution() error {
@@ -1947,270 +1376,6 @@ func (a *DaprRuntime) initNameResolution() error {
 	return nil
 }
 
-func (a *DaprRuntime) publishMessageHTTP(ctx context.Context, msg *pubsubSubscribedMessage) error {
-	cloudEvent := msg.cloudEvent
-
-	var span trace.Span
-
-	req := invokev1.NewInvokeMethodRequest(msg.path).
-		WithHTTPExtension(nethttp.MethodPost, "").
-		WithRawDataBytes(msg.data).
-		WithContentType(contenttype.CloudEventContentType).
-		WithCustomHTTPMetadata(msg.metadata)
-	defer req.Close()
-
-	iTraceID := cloudEvent[pubsub.TraceParentField]
-	if iTraceID == nil {
-		iTraceID = cloudEvent[pubsub.TraceIDField]
-	}
-	if iTraceID != nil {
-		traceID := iTraceID.(string)
-		sc, _ := diag.SpanContextFromW3CString(traceID)
-		ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+msg.topic, sc, a.globalConfig.Spec.TracingSpec)
-	}
-
-	start := time.Now()
-	resp, err := a.appChannel.InvokeMethod(ctx, req, "")
-	elapsed := diag.ElapsedSince(start)
-
-	if err != nil {
-		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
-		return fmt.Errorf("error returned from app channel while sending pub/sub event to app: %w", rterrors.NewRetriable(err))
-	}
-	defer resp.Close()
-
-	statusCode := int(resp.Status().Code)
-
-	if span != nil {
-		m := diag.ConstructSubscriptionSpanAttributes(msg.topic)
-		diag.AddAttributesToSpan(span, m)
-		diag.UpdateSpanStatusFromHTTPStatus(span, statusCode)
-		span.End()
-	}
-
-	if (statusCode >= 200) && (statusCode <= 299) {
-		// Any 2xx is considered a success.
-		var appResponse pubsub.AppResponse
-		err := json.NewDecoder(resp.RawData()).Decode(&appResponse)
-		// We need to return an error here since the app didn't return a valid
-		// AppResponse.
-		if errors.Is(err, io.EOF) {
-			return err
-		}
-		if err != nil {
-			log.Debugf("skipping status check due to error parsing result from pub/sub event %v: %s", cloudEvent[pubsub.IDField], err)
-			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Success)), msg.topic, elapsed)
-			return nil
-		}
-
-		switch appResponse.Status {
-		case "":
-			// Consider empty status field as success
-			fallthrough
-		case pubsub.Success:
-			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Success)), msg.topic, elapsed)
-			return nil
-		case pubsub.Retry:
-			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
-			return fmt.Errorf("RETRY status returned from app while processing pub/sub event %v: %w", cloudEvent[pubsub.IDField], rterrors.NewRetriable(nil))
-		case pubsub.Drop:
-			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Drop)), msg.topic, elapsed)
-			log.Warnf("DROP status returned from app while processing pub/sub event %v", cloudEvent[pubsub.IDField])
-			return nil
-		}
-		// Consider unknown status field as error and retry
-		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
-		return fmt.Errorf("unknown status returned from app while processing pub/sub event %v, status: %v, err: %w", cloudEvent[pubsub.IDField], appResponse.Status, rterrors.NewRetriable(nil))
-	}
-
-	body, _ := resp.RawDataFull()
-	if statusCode == nethttp.StatusNotFound {
-		// These are errors that are not retriable, for now it is just 404 but more status codes can be added.
-		// When adding/removing an error here, check if that is also applicable to GRPC since there is a mapping between HTTP and GRPC errors:
-		// https://cloud.google.com/apis/design/errors#handling_errors
-		log.Errorf("non-retriable error returned from app while processing pub/sub event %v: %s. status code returned: %v", cloudEvent[pubsub.IDField], body, statusCode)
-		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Drop)), msg.topic, elapsed)
-		return nil
-	}
-
-	// Every error from now on is a retriable error.
-	errMsg := fmt.Sprintf("retriable error returned from app while processing pub/sub event %v, topic: %v, body: %s. status code returned: %v", cloudEvent[pubsub.IDField], cloudEvent[pubsub.TopicField], body, statusCode)
-	log.Warnf(errMsg)
-	diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
-	return rterrors.NewRetriable(errors.New(errMsg))
-}
-
-func (a *DaprRuntime) publishMessageGRPC(ctx context.Context, msg *pubsubSubscribedMessage) error {
-	cloudEvent := msg.cloudEvent
-
-	envelope := &runtimev1pb.TopicEventRequest{
-		Id:              extractCloudEventProperty(cloudEvent, pubsub.IDField),
-		Source:          extractCloudEventProperty(cloudEvent, pubsub.SourceField),
-		DataContentType: extractCloudEventProperty(cloudEvent, pubsub.DataContentTypeField),
-		Type:            extractCloudEventProperty(cloudEvent, pubsub.TypeField),
-		SpecVersion:     extractCloudEventProperty(cloudEvent, pubsub.SpecVersionField),
-		Topic:           msg.topic,
-		PubsubName:      msg.metadata[pubsubName],
-		Path:            msg.path,
-	}
-
-	if data, ok := cloudEvent[pubsub.DataBase64Field]; ok && data != nil {
-		if dataAsString, ok := data.(string); ok {
-			decoded, decodeErr := base64.StdEncoding.DecodeString(dataAsString)
-			if decodeErr != nil {
-				log.Debugf("unable to base64 decode cloudEvent field data_base64: %s", decodeErr)
-				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, 0)
-
-				return fmt.Errorf("error returned from app while processing pub/sub event: %w", rterrors.NewRetriable(decodeErr))
-			}
-
-			envelope.Data = decoded
-		} else {
-			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, 0)
-			return fmt.Errorf("error returned from app while processing pub/sub event: %w", rterrors.NewRetriable(ErrUnexpectedEnvelopeData))
-		}
-	} else if data, ok := cloudEvent[pubsub.DataField]; ok && data != nil {
-		envelope.Data = nil
-
-		if contenttype.IsStringContentType(envelope.DataContentType) {
-			switch v := data.(type) {
-			case string:
-				envelope.Data = []byte(v)
-			case []byte:
-				envelope.Data = v
-			default:
-				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, 0)
-				return fmt.Errorf("error returned from app while processing pub/sub event: %w", rterrors.NewRetriable(ErrUnexpectedEnvelopeData))
-			}
-		} else if contenttype.IsJSONContentType(envelope.DataContentType) || contenttype.IsCloudEventContentType(envelope.DataContentType) {
-			envelope.Data, _ = json.Marshal(data)
-		}
-	}
-
-	var span trace.Span
-	iTraceID := cloudEvent[pubsub.TraceParentField]
-	if iTraceID == nil {
-		iTraceID = cloudEvent[pubsub.TraceIDField]
-	}
-	if iTraceID != nil {
-		if traceID, ok := iTraceID.(string); ok {
-			sc, _ := diag.SpanContextFromW3CString(traceID)
-			spanName := fmt.Sprintf("pubsub/%s", msg.topic)
-
-			// no ops if trace is off
-			ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, a.globalConfig.Spec.TracingSpec)
-			// span is nil if tracing is disabled (sampling rate is 0)
-			if span != nil {
-				ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
-			}
-		} else {
-			log.Warnf("ignored non-string traceid value: %v", iTraceID)
-		}
-	}
-
-	extensions, extensionsErr := extractCloudEventExtensions(cloudEvent)
-	if extensionsErr != nil {
-		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, 0)
-		return extensionsErr
-	}
-	envelope.Extensions = extensions
-
-	ctx = invokev1.WithCustomGRPCMetadata(ctx, msg.metadata)
-
-	conn, err := a.grpc.GetAppClient()
-	defer a.grpc.ReleaseAppClient(conn)
-	if err != nil {
-		return fmt.Errorf("error while getting app client: %w", err)
-	}
-	clientV1 := runtimev1pb.NewAppCallbackClient(conn)
-
-	start := time.Now()
-	res, err := clientV1.OnTopicEvent(ctx, envelope)
-	elapsed := diag.ElapsedSince(start)
-
-	if span != nil {
-		m := diag.ConstructSubscriptionSpanAttributes(envelope.Topic)
-		diag.AddAttributesToSpan(span, m)
-		diag.UpdateSpanStatusFromGRPCError(span, err)
-		span.End()
-	}
-
-	if err != nil {
-		errStatus, hasErrStatus := status.FromError(err)
-		if hasErrStatus && (errStatus.Code() == codes.Unimplemented) {
-			// DROP
-			log.Warnf("non-retriable error returned from app while processing pub/sub event %v: %s", cloudEvent[pubsub.IDField], err)
-			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Drop)), msg.topic, elapsed)
-
-			return nil
-		}
-
-		err = fmt.Errorf("error returned from app while processing pub/sub event %v: %w", cloudEvent[pubsub.IDField], rterrors.NewRetriable(err))
-		log.Debug(err)
-		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
-
-		// on error from application, return error for redelivery of event
-		return err
-	}
-
-	switch res.GetStatus() {
-	case runtimev1pb.TopicEventResponse_SUCCESS: //nolint:nosnakecase
-		// on uninitialized status, this is the case it defaults to as an uninitialized status defaults to 0 which is
-		// success from protobuf definition
-		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Success)), msg.topic, elapsed)
-		return nil
-	case runtimev1pb.TopicEventResponse_RETRY: //nolint:nosnakecase
-		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
-		return fmt.Errorf("RETRY status returned from app while processing pub/sub event %v: %w", cloudEvent[pubsub.IDField], rterrors.NewRetriable(nil))
-	case runtimev1pb.TopicEventResponse_DROP: //nolint:nosnakecase
-		log.Warnf("DROP status returned from app while processing pub/sub event %v", cloudEvent[pubsub.IDField])
-		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Drop)), msg.topic, elapsed)
-
-		return nil
-	}
-
-	// Consider unknown status field as error and retry
-	diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(pubsub.Retry)), msg.topic, elapsed)
-	return fmt.Errorf("unknown status returned from app while processing pub/sub event %v, status: %v, err: %w", cloudEvent[pubsub.IDField], res.GetStatus(), rterrors.NewRetriable(nil))
-}
-
-func extractCloudEventExtensions(cloudEvent map[string]interface{}) (*structpb.Struct, error) {
-	// Assemble Cloud Event Extensions:
-	// Create copy of the cloud event with duplicated data removed
-
-	extensions := map[string]interface{}{}
-	for key, value := range cloudEvent {
-		if !cloudEventDuplicateKeys.Has(key) {
-			extensions[key] = value
-		}
-	}
-	extensionsStruct := structpb.Struct{}
-	extensionBytes, jsonMarshalErr := json.Marshal(extensions)
-	if jsonMarshalErr != nil {
-		return &extensionsStruct, fmt.Errorf("error processing internal cloud event data: unable to marshal cloudEvent extensions: %s", jsonMarshalErr)
-	}
-
-	protoUnmarshalErr := protojson.Unmarshal(extensionBytes, &extensionsStruct)
-	if protoUnmarshalErr != nil {
-		return &extensionsStruct, fmt.Errorf("error processing internal cloud event data: unable to unmarshal cloudEvent extensions to proto struct: %s", protoUnmarshalErr)
-	}
-	return &extensionsStruct, nil
-}
-
-func extractCloudEventProperty(cloudEvent map[string]interface{}, property string) string {
-	if cloudEvent == nil {
-		return ""
-	}
-	iValue, ok := cloudEvent[property]
-	if ok {
-		if value, ok := iValue.(string); ok {
-			return value
-		}
-	}
-
-	return ""
-}
-
 func (a *DaprRuntime) initActors() error {
 	err := actors.ValidateHostEnvironment(a.runtimeConfig.mTLSEnabled, a.runtimeConfig.mode, a.namespace)
 	if err != nil {
@@ -2219,7 +1384,7 @@ func (a *DaprRuntime) initActors() error {
 	a.actorStateStoreLock.Lock()
 	defer a.actorStateStoreLock.Unlock()
 
-	actorStateStoreName, ok := a.processor.ActorStateStore()
+	actorStateStoreName, ok := a.processor.State().ActorStateStoreName()
 	if !ok {
 		log.Info("actors: state store is not configured - this is okay for clients but services with hosted actors will fail to initialize!")
 	}
@@ -2231,12 +1396,12 @@ func (a *DaprRuntime) initActors() error {
 		Namespace:          a.namespace,
 		AppConfig:          a.appConfig,
 		HealthHTTPClient:   a.appHTTPClient,
-		HealthEndpoint:     a.getAppHTTPEndpoint(),
+		HealthEndpoint:     a.channels.AppHTTPEndpoint(),
 		AppChannelAddress:  a.runtimeConfig.appConnectionConfig.ChannelAddress,
 	})
 
 	act := actors.NewActors(actors.ActorsOpts{
-		AppChannel:       a.appChannel,
+		AppChannel:       a.channels.AppChannel(),
 		GRPCConnectionFn: a.grpc.GetGRPCConnection,
 		Config:           actorConfig,
 		CertChain:        a.runtimeConfig.certChain,
@@ -2591,7 +1756,7 @@ func (a *DaprRuntime) Shutdown(duration time.Duration) {
 	defer a.cleanSocket()
 	log.Info("Dapr shutting down")
 	log.Info("Stopping PubSub subscribers and input bindings")
-	a.stopSubscriptions()
+	a.processor.PubSub().StopSubscriptions()
 	a.stopReadingFromBindings()
 
 	// shutdown workflow if it's running
@@ -2616,7 +1781,8 @@ func (a *DaprRuntime) Shutdown(duration time.Duration) {
 	}
 	a.stopTrace()
 	a.shutdownOutputComponents()
-	a.cancel()
+	// TODO: @joshvanl
+	//a.cancel()
 	a.shutdownC <- nil
 }
 
@@ -2777,9 +1943,10 @@ func (a *DaprRuntime) blockUntilAppIsReady() {
 			// Cause a shutdown
 			a.ShutdownWithWait()
 			return
-		case <-a.ctx.Done():
-			// Return
-			return
+			// TODO: @joshvanl
+		//case <-a.ctx.Done():
+		//	// Return
+		//	return
 		default:
 			// nop - continue execution
 		}
@@ -2810,11 +1977,11 @@ func (a *DaprRuntime) blockUntilAppIsReady() {
 }
 
 func (a *DaprRuntime) loadAppConfiguration() {
-	if a.appChannel == nil {
+	if a.channels.AppChannel() == nil {
 		return
 	}
 
-	appConfig, err := a.appChannel.GetAppConfig(a.runtimeConfig.id)
+	appConfig, err := a.channels.AppChannel().GetAppConfig(a.runtimeConfig.id)
 	if err != nil {
 		return
 	}
@@ -2823,88 +1990,6 @@ func (a *DaprRuntime) loadAppConfiguration() {
 		a.appConfig = *appConfig
 		log.Info("Application configuration loaded")
 	}
-}
-
-// Returns the HTTP endpoint for the app.
-func (a *DaprRuntime) getAppHTTPEndpoint() string {
-	// Application protocol is "http" or "https"
-	port := strconv.Itoa(a.runtimeConfig.appConnectionConfig.Port)
-	switch a.runtimeConfig.appConnectionConfig.Protocol {
-	case protocol.HTTPProtocol, protocol.H2CProtocol:
-		return "http://" + a.runtimeConfig.appConnectionConfig.ChannelAddress + ":" + port
-	case protocol.HTTPSProtocol:
-		return "https://" + a.runtimeConfig.appConnectionConfig.ChannelAddress + ":" + port
-	default:
-		return ""
-	}
-}
-
-// Initializes the appHTTPClient property.
-func (a *DaprRuntime) initAppHTTPClient() {
-	var transport nethttp.RoundTripper
-	if a.runtimeConfig.appConnectionConfig.Protocol == protocol.H2CProtocol {
-		// Enable HTTP/2 Cleartext transport
-		transport = &http2.Transport{
-			AllowHTTP: true, // To enable using "http" as protocol
-			DialTLS: func(network, addr string, _ *tls.Config) (net.Conn, error) {
-				// Return the TCP socket without TLS
-				return net.Dial(network, addr)
-			},
-			// TODO: This may not be exactly the same as "MaxResponseHeaderBytes" so check before enabling this
-			// MaxHeaderListSize: uint32(a.runtimeConfig.readBufferSize << 10),
-		}
-	} else {
-		var tlsConfig *tls.Config
-		if a.runtimeConfig.appConnectionConfig.Protocol == protocol.HTTPSProtocol {
-			tlsConfig = &tls.Config{
-				InsecureSkipVerify: true, //nolint:gosec
-				// For 1.11
-				MinVersion: channel.AppChannelMinTLSVersion,
-			}
-			// TODO: Remove when the feature is finalized
-			if a.globalConfig.IsFeatureEnabled(config.AppChannelAllowInsecureTLS) {
-				tlsConfig.MinVersion = 0
-			}
-		}
-
-		transport = &nethttp.Transport{
-			TLSClientConfig:        tlsConfig,
-			ReadBufferSize:         a.runtimeConfig.readBufferSize << 10,
-			MaxResponseHeaderBytes: int64(a.runtimeConfig.readBufferSize) << 10,
-			MaxConnsPerHost:        1024,
-			MaxIdleConns:           64, // A local channel connects to a single host
-			MaxIdleConnsPerHost:    64,
-		}
-	}
-
-	// Initialize this property in the object, and then pass it to the HTTP channel and the actors runtime (for health checks)
-	// We want to re-use the same client so TCP sockets can be re-used efficiently across everything that communicates with the app
-	// This is especially useful if the app supports HTTP/2
-	a.appHTTPClient = &nethttp.Client{
-		Transport: transport,
-		CheckRedirect: func(req *nethttp.Request, via []*nethttp.Request) error {
-			return nethttp.ErrUseLastResponse
-		},
-	}
-}
-
-func (a *DaprRuntime) getAppHTTPChannelConfig(pipeline httpMiddleware.Pipeline, isExternal bool) httpChannel.ChannelConfiguration {
-	conf := httpChannel.ChannelConfiguration{
-		CompStore:            a.compStore,
-		MaxConcurrency:       a.runtimeConfig.appConnectionConfig.MaxConcurrency,
-		Pipeline:             pipeline,
-		TracingSpec:          a.globalConfig.Spec.TracingSpec,
-		MaxRequestBodySizeMB: a.runtimeConfig.maxRequestBodySize,
-	}
-
-	if !isExternal {
-		conf.Endpoint = a.getAppHTTPEndpoint()
-		conf.Client = a.appHTTPClient
-	} else {
-		conf.Client = nethttp.DefaultClient
-	}
-
-	return conf
 }
 
 func (a *DaprRuntime) appendBuiltinSecretStore() {
@@ -2998,40 +2083,8 @@ func componentDependency(compCategory components.Category, name string) string {
 	return fmt.Sprintf("%s:%s", compCategory, name)
 }
 
-func (a *DaprRuntime) startSubscriptions() {
-	// Clean any previous state
-	if a.pubsubCancel != nil {
-		a.stopSubscriptions() // Stop all subscriptions
-	}
-
-	// PubSub subscribers are stopped via cancellation of the main runtime's context
-	a.pubsubCtx, a.pubsubCancel = context.WithCancel(a.ctx)
-	a.topicCtxCancels = map[string]context.CancelFunc{}
-	for pubsubName := range a.compStore.ListPubSubs() {
-		if err := a.beginPubSub(pubsubName); err != nil {
-			log.Errorf("error occurred while beginning pubsub %s: %v", pubsubName, err)
-		}
-	}
-}
-
-// Stop subscriptions to all topics and cleans the cached topics
-func (a *DaprRuntime) stopSubscriptions() {
-	if a.pubsubCtx == nil || a.pubsubCtx.Err() != nil { // no pubsub to stop
-		return
-	}
-	if a.pubsubCancel != nil {
-		a.pubsubCancel() // Stop all subscriptions by canceling the subscription context
-	}
-
-	// Remove all contexts that are specific to each component (which have been canceled already by canceling pubsubCtx)
-	a.topicCtxCancels = nil
-
-	// Delete the cached topics and routes
-	a.compStore.SetTopicRoutes(nil)
-}
-
 func (a *DaprRuntime) startReadingFromBindings() (err error) {
-	if a.appChannel == nil {
+	if a.channels.AppChannel() == nil {
 		return errors.New("app channel not initialized")
 	}
 
@@ -3041,7 +2094,9 @@ func (a *DaprRuntime) startReadingFromBindings() (err error) {
 	}
 
 	// Input bindings are stopped via cancellation of the main runtime's context
-	a.inputBindingsCtx, a.inputBindingsCancel = context.WithCancel(a.ctx)
+	//a.inputBindingsCtx, a.inputBindingsCancel = context.WithCancel(a.ctx)
+	// TODO: @joshvanl
+	a.inputBindingsCtx, a.inputBindingsCancel = context.WithCancel(context.TODO())
 
 	for name, bind := range a.compStore.ListInputBindings() {
 		var isSubscribed bool
@@ -3079,11 +2134,6 @@ func (a *DaprRuntime) stopReadingFromBindings() {
 	a.inputBindingsCancel = nil
 }
 
-// Returns "componentName||topicName", which is used as key for some maps
-func pubsubTopicKey(componentName, topicName string) string {
-	return componentName + "||" + topicName
-}
-
 func createGRPCManager(runtimeConfig *internalConfig, globalConfig *config.Configuration) *grpc.Manager {
 	grpcAppChannelConfig := &grpc.AppChannelConfig{}
 	if globalConfig != nil {
@@ -3109,7 +2159,9 @@ func (a *DaprRuntime) stopTrace() {
 		return
 	}
 	// Flush and shutdown the tracing provider.
-	shutdownCtx, shutdownCancel := context.WithCancel(a.ctx)
+	//shutdownCtx, shutdownCancel := context.WithCancel(a.ctx)
+	// TODO: @joshvanl
+	shutdownCtx, shutdownCancel := context.WithCancel(context.TODO())
 	defer shutdownCancel()
 	if err := a.tracerProvider.ForceFlush(shutdownCtx); err != nil && !errors.Is(err, context.Canceled) {
 		log.Warnf("error flushing tracing provider: %v", err)
@@ -3127,39 +2179,4 @@ func ShutdownSignal() chan os.Signal {
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGTERM, os.Interrupt)
 	return stop
-}
-
-func (a *DaprRuntime) createChannels() (err error) {
-	// Create a HTTP channel for external HTTP endpoint invocation
-	pipeline, err := a.buildAppHTTPPipeline()
-	if err != nil {
-		return fmt.Errorf("failed to build app HTTP pipeline: %w", err)
-	}
-
-	a.httpEndpointsAppChannel, err = httpChannel.CreateHTTPChannel(a.getAppHTTPChannelConfig(pipeline, false))
-	if err != nil {
-		return fmt.Errorf("failed to create external HTTP app channel: %w", err)
-	}
-
-	if a.runtimeConfig.appConnectionConfig.Port == 0 {
-		log.Warn("App channel is not initialized. Did you configure an app-port?")
-		return nil
-	}
-
-	if a.runtimeConfig.appConnectionConfig.Protocol.IsHTTP() {
-		// Create a HTTP channel
-		a.appChannel, err = httpChannel.CreateHTTPChannel(a.getAppHTTPChannelConfig(pipeline, false))
-		if err != nil {
-			return fmt.Errorf("failed to create HTTP app channel: %w", err)
-		}
-		a.appChannel.(*httpChannel.Channel).SetAppHealthCheckPath(a.runtimeConfig.appConnectionConfig.HealthCheckHTTPPath)
-	} else {
-		// create gRPC app channel
-		a.appChannel, err = a.grpc.GetAppChannel()
-		if err != nil {
-			return fmt.Errorf("failed to create gRPC app channel: %w", err)
-		}
-	}
-
-	return nil
 }

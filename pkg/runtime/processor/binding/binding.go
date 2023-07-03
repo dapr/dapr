@@ -36,6 +36,10 @@ const (
 	ComponentDirection  = "direction"
 	ComponentTypeInput  = "input"
 	ComponentTypeOutput = "output"
+
+	// output bindings concurrency.
+	ConcurrencyParallel   = "parallel"
+	ConcurrencySequential = "sequential"
 )
 
 var log = logger.NewLogger("dapr.runtime.processor.binding")

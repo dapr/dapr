@@ -2319,7 +2319,7 @@ func TestPublishTopic(t *testing.T) {
 			AppID: "fakeAPI",
 		},
 		pubsubAdapter: &daprt.MockPubSubAdapter{
-			PublishFn: func(req *pubsub.PublishRequest) error {
+			PublishFn: func(ctx context.Context, req *pubsub.PublishRequest) error {
 				if req.Topic == "error-topic" {
 					return errors.New("error when publish")
 				}
@@ -2334,12 +2334,7 @@ func TestPublishTopic(t *testing.T) {
 
 				return nil
 			},
-			GetPubSubFn: func(pubsubName string) pubsub.PubSub {
-				mock := daprt.MockPubSub{}
-				mock.On("Features").Return([]pubsub.Feature{})
-				return &mock
-			},
-			BulkPublishFn: func(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+			BulkPublishFn: func(ctx context.Context, req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
 				switch req.Topic {
 				case "error-topic":
 					return pubsub.BulkPublishResponse{}, errors.New("error when publish")
@@ -2353,7 +2348,13 @@ func TestPublishTopic(t *testing.T) {
 				return pubsub.BulkPublishResponse{}, nil
 			},
 		},
+		compStore: compstore.New(),
 	}
+
+	mock := daprt.MockPubSub{}
+	mock.On("Features").Return([]pubsub.Feature{})
+	srv.compStore.AddPubSub("pubsub", compstore.PubsubItem{Component: &mock})
+
 	server, lis := startTestServerAPI(srv)
 	defer server.Stop()
 
@@ -2516,12 +2517,7 @@ func TestBulkPublish(t *testing.T) {
 			AppID: "fakeAPI",
 		},
 		pubsubAdapter: &daprt.MockPubSubAdapter{
-			GetPubSubFn: func(pubsubName string) pubsub.PubSub {
-				mock := daprt.MockPubSub{}
-				mock.On("Features").Return([]pubsub.Feature{})
-				return &mock
-			},
-			BulkPublishFn: func(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+			BulkPublishFn: func(ctx context.Context, req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
 				entries := []pubsub.BulkPublishResponseFailedEntry{}
 				// Construct sample response from the broker.
 				if req.Topic == "error-topic" {
@@ -2547,7 +2543,12 @@ func TestBulkPublish(t *testing.T) {
 				return pubsub.BulkPublishResponse{FailedEntries: entries}, nil
 			},
 		},
+		compStore: compstore.New(),
 	}
+
+	mock := daprt.MockPubSub{}
+	mock.On("Features").Return([]pubsub.Feature{})
+	fakeAPI.compStore.AddPubSub("pubsub", compstore.PubsubItem{Component: &mock})
 
 	server, lis := startDaprAPIServer(fakeAPI, "")
 	defer server.Stop()

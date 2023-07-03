@@ -150,7 +150,7 @@ func TestPubSubEndpoints(t *testing.T) {
 			AppID: "fakeAPI",
 		},
 		pubsubAdapter: &daprt.MockPubSubAdapter{
-			PublishFn: func(req *pubsub.PublishRequest) error {
+			PublishFn: func(ctx context.Context, req *pubsub.PublishRequest) error {
 				if req.PubsubName == "errorpubsub" {
 					return fmt.Errorf("Error from pubsub %s", req.PubsubName)
 				}
@@ -165,13 +165,17 @@ func TestPubSubEndpoints(t *testing.T) {
 
 				return nil
 			},
-			GetPubSubFn: func(pubsubName string) pubsub.PubSub {
-				mock := daprt.MockPubSub{}
-				mock.On("Features").Return([]pubsub.Feature{})
-				return &mock
-			},
 		},
+		compStore: compstore.New(),
 	}
+
+	mock := daprt.MockPubSub{}
+	mock.On("Features").Return([]pubsub.Feature{})
+	testAPI.compStore.AddPubSub("pubsubname", compstore.PubsubItem{Component: &mock})
+	testAPI.compStore.AddPubSub("errorpubsub", compstore.PubsubItem{Component: &mock})
+	testAPI.compStore.AddPubSub("errnotfound", compstore.PubsubItem{Component: &mock})
+	testAPI.compStore.AddPubSub("errnotallowed", compstore.PubsubItem{Component: &mock})
+
 	fakeServer.StartServer(testAPI.constructPubSubEndpoints(), nil)
 
 	t.Run("Publish successfully - 204 No Content", func(t *testing.T) {
@@ -316,7 +320,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 			AppID: "fakeAPI",
 		},
 		pubsubAdapter: &daprt.MockPubSubAdapter{
-			BulkPublishFn: func(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+			BulkPublishFn: func(ctx context.Context, req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
 				switch req.PubsubName {
 				case "errorpubsub":
 					err := fmt.Errorf("Error from pubsub %s", req.PubsubName)
@@ -339,13 +343,17 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 					return pubsub.BulkPublishResponse{}, nil
 				}
 			},
-			GetPubSubFn: func(pubsubName string) pubsub.PubSub {
-				mock := daprt.MockPubSub{}
-				mock.On("Features").Return([]pubsub.Feature{})
-				return &mock
-			},
 		},
+		compStore: compstore.New(),
 	}
+
+	mock := daprt.MockPubSub{}
+	mock.On("Features").Return([]pubsub.Feature{})
+	testAPI.compStore.AddPubSub("pubsubname", compstore.PubsubItem{Component: &mock})
+	testAPI.compStore.AddPubSub("errorpubsub", compstore.PubsubItem{Component: &mock})
+	testAPI.compStore.AddPubSub("errnotfound", compstore.PubsubItem{Component: &mock})
+	testAPI.compStore.AddPubSub("errnotallowed", compstore.PubsubItem{Component: &mock})
+
 	fakeServer.StartServer(testAPI.constructPubSubEndpoints(), nil)
 
 	bulkRequest := []bulkPublishMessageEntry{
