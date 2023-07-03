@@ -27,7 +27,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	endpointV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
@@ -99,10 +99,13 @@ func CreateHTTPChannel(config ChannelConfiguration) (channel.AppChannel, error) 
 
 // GetAppConfig gets application config from user application
 // GET http://localhost:<app_port>/dapr/config
-func (h *Channel) GetAppConfig() (*config.ApplicationConfig, error) {
+func (h *Channel) GetAppConfig(appID string) (*config.ApplicationConfig, error) {
 	req := invokev1.NewInvokeMethodRequest(appConfigEndpoint).
 		WithHTTPExtension(http.MethodGet, "").
-		WithContentType(invokev1.JSONContentType)
+		WithContentType(invokev1.JSONContentType).
+		WithMetadata(map[string][]string{
+			"dapr-app-id": {appID},
+		})
 	defer req.Close()
 
 	resp, err := h.InvokeMethod(context.TODO(), req, "")
@@ -283,7 +286,7 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 	msg := req.Message()
 	verb := msg.HttpExtension.Verb.String()
 	method := msg.Method
-	var headers []endpointV1alpha1.Header
+	var headers []commonapi.NameValuePair
 
 	uri := strings.Builder{}
 

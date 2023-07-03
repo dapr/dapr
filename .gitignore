@@ -1,6 +1,7 @@
 /dist
 .idea
 **/.DS_Store
+config/crd/bases
 
 github.com/
 

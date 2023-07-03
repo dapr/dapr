@@ -38,3 +38,13 @@ func (p Protocol) IsHTTP() bool {
 		return false
 	}
 }
+
+// HasTLS returns true if the app protocol is using TLS.
+func (p Protocol) HasTLS() bool {
+	switch p {
+	case HTTPSProtocol, GRPCSProtocol:
+		return true
+	default:
+		return false
+	}
+}

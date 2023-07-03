@@ -18,36 +18,37 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
 func init() {
-	suite.Register(new(Metadata))
+	suite.Register(new(metadata))
 }
 
-// Metadata tests Dapr's response to metadata API requests.
-type Metadata struct{}
-
-func (*Metadata) Setup(*testing.T, context.Context) []framework.RunDaprdOption {
-	return nil
+// metadata tests Dapr's response to metadata API requests.
+type metadata struct {
+	proc *procdaprd.Daprd
 }
 
-func (*Metadata) Run(t *testing.T, ctx context.Context, cmd *framework.Command) {
-	assert.Eventually(t, func() bool {
-		_, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", cmd.InternalGRPCPort))
-		return err == nil
-	}, time.Second*5, 100*time.Millisecond)
+func (m *metadata) Setup(t *testing.T) []framework.Option {
+	m.proc = procdaprd.New(t)
+	return []framework.Option{
+		framework.WithProcesses(m.proc),
+	}
+}
 
-	reqURL := fmt.Sprintf("http://localhost:%d/v1.0/metadata", cmd.PublicPort)
+func (m *metadata) Run(t *testing.T, ctx context.Context) {
+	m.proc.WaitUntilRunning(t, ctx)
+
+	reqURL := fmt.Sprintf("http://localhost:%d/v1.0/metadata", m.proc.PublicPort())
 
 	ctx, cancel := context.WithTimeout(ctx, time.Second*5)
 	defer cancel()
@@ -62,7 +63,7 @@ func (*Metadata) Run(t *testing.T, ctx context.Context, cmd *framework.Command) 
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
 
-	validateResponse(t, cmd.AppID, cmd.AppPort, string(resBody))
+	validateResponse(t, m.proc.AppID(), m.proc.AppPort(), string(resBody))
 }
 
 // validateResponse asserts that the response body is valid JSON
@@ -81,7 +82,9 @@ func validateResponse(t *testing.T, appID string, appPort int, body string) {
 
 	appConnectionProperties, ok := bodyMap["appConnectionProperties"].(map[string]interface{})
 	require.True(t, ok)
-	require.Equal(t, appPort, int(appConnectionProperties["port"].(float64)))
+	port, ok := appConnectionProperties["port"].(float64)
+	require.True(t, ok)
+	require.Equal(t, appPort, int(port))
 	require.Equal(t, "http", appConnectionProperties["protocol"])
 	require.Equal(t, "127.0.0.1", appConnectionProperties["channelAddress"])
 }
