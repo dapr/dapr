@@ -15,6 +15,7 @@ limitations under the License.
 package runtime
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
@@ -2899,7 +2900,10 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 
 		// User App subscribes 1 topics via http app channel
 
-		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+		var appResp pubsub.AppResponse
+		var buf bytes.Buffer
+		require.NoError(t, json.NewEncoder(&buf).Encode(appResp))
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).WithRawData(&buf)
 		defer fakeResp.Close()
 
 		mockAppChannel.On("InvokeMethod", mock.Anything, fakeReq).Return(fakeResp, nil)
@@ -3112,7 +3116,10 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		rt.appChannel = mockAppChannel
 
 		// User App subscribes 1 topics via http app channel
-		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+		var appResp pubsub.AppResponse
+		var buf bytes.Buffer
+		require.NoError(t, json.NewEncoder(&buf).Encode(appResp))
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).WithRawData(&buf)
 		defer fakeResp.Close()
 
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReq).Return(fakeResp, nil)
@@ -3130,7 +3137,10 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		rt.appChannel = mockAppChannel
 
 		// User App subscribes 1 topics via http app channel
-		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
+		var appResp pubsub.AppResponse
+		var buf bytes.Buffer
+		require.NoError(t, json.NewEncoder(&buf).Encode(appResp))
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).WithRawData(&buf)
 		defer fakeResp.Close()
 
 		// Generate a new envelope to avoid affecting other tests by modifying shared `envelope`
@@ -4469,7 +4479,7 @@ func (b *mockBinding) Close() error {
 }
 
 func (b *mockBinding) GetComponentMetadata() map[string]string {
-	return map[string]string{}
+	return b.metadata
 }
 
 func TestInvokeOutputBindings(t *testing.T) {
@@ -6329,5 +6339,110 @@ func TestIsBindingOfDirection(t *testing.T) {
 		}
 		f := isBindingOfDirection("output", m)
 		assert.False(t, f)
+	})
+}
+
+func TestIsBindingOfExplicitDirection(t *testing.T) {
+	t.Run("no direction in metadata input binding", func(t *testing.T) {
+		m := map[string]string{}
+		r := isBindingOfExplicitDirection("input", m)
+
+		assert.False(t, r)
+	})
+
+	t.Run("no direction in metadata output binding", func(t *testing.T) {
+		m := map[string]string{}
+		r := isBindingOfExplicitDirection("input", m)
+
+		assert.False(t, r)
+	})
+
+	t.Run("direction is input binding", func(t *testing.T) {
+		m := map[string]string{
+			"direction": "input",
+		}
+		r := isBindingOfExplicitDirection("input", m)
+
+		assert.True(t, r)
+	})
+
+	t.Run("direction is output binding", func(t *testing.T) {
+		m := map[string]string{
+			"direction": "output",
+		}
+		r := isBindingOfExplicitDirection("output", m)
+
+		assert.True(t, r)
+	})
+
+	t.Run("direction is not output binding", func(t *testing.T) {
+		m := map[string]string{
+			"direction": "input",
+		}
+		r := isBindingOfExplicitDirection("output", m)
+
+		assert.False(t, r)
+	})
+
+	t.Run("direction is not input binding", func(t *testing.T) {
+		m := map[string]string{
+			"direction": "output",
+		}
+		r := isBindingOfExplicitDirection("input", m)
+
+		assert.False(t, r)
+	})
+
+	t.Run("direction is both input and output binding", func(t *testing.T) {
+		m := map[string]string{
+			"direction": "output, input",
+		}
+
+		r := isBindingOfExplicitDirection("input", m)
+		assert.True(t, r)
+
+		r2 := isBindingOfExplicitDirection("output", m)
+
+		assert.True(t, r2)
+	})
+}
+
+func TestStartReadingFromBindings(t *testing.T) {
+	t.Run("OPTIONS request when direction is not specified", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.KubernetesMode)
+		mockAppChannel := new(channelt.MockAppChannel)
+
+		mockAppChannel.On("InvokeMethod", mock.Anything, mock.Anything).Return(invokev1.NewInvokeMethodResponse(200, "OK", nil), nil)
+		rt.appChannel = mockAppChannel
+		defer stopRuntime(t, rt)
+
+		m := &mockBinding{}
+
+		rt.compStore.AddInputBinding("test", m)
+		err := rt.startReadingFromBindings()
+
+		assert.NoError(t, err)
+		assert.Len(t, mockAppChannel.Calls, 1)
+	})
+
+	t.Run("No OPTIONS request when direction is specified", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.KubernetesMode)
+		mockAppChannel := new(channelt.MockAppChannel)
+
+		mockAppChannel.On("InvokeMethod", mock.Anything, mock.Anything).Return(invokev1.NewInvokeMethodResponse(200, "OK", nil), nil)
+		rt.appChannel = mockAppChannel
+		defer stopRuntime(t, rt)
+
+		m := &mockBinding{
+			metadata: map[string]string{
+				"direction": "input",
+			},
+		}
+
+		rt.compStore.AddInputBinding("test", m)
+		err := rt.startReadingFromBindings()
+
+		assert.NoError(t, err)
+		assert.Len(t, mockAppChannel.Calls, 0)
 	})
 }
