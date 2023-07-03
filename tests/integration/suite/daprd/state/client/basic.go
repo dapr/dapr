@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package http
+package client
 
 import (
 	"context"
@@ -27,7 +27,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/suite"
-	clients "github.com/darp/sig-api/tck/clients"
+	clients "github.com/salaboy/sig-api/tck/clients"
 )
 
 func init() {
