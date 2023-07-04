@@ -119,7 +119,7 @@
             "uid": "edf213dd-f753-41cd-9666-cc2d18daaa45"
           },
           "editorMode": "builder",
-          "expr": "BASELINE_RESPONSE_TIME{building_block=\"$Building_Block\"}",
+          "expr": "BASELINE_RESPONSE_TIME{perf_test=\"$perf_test\"}",
           "instant": false,
           "range": true,
           "refId": "A"
@@ -130,7 +130,7 @@
             "uid": "edf213dd-f753-41cd-9666-cc2d18daaa45"
           },
           "editorMode": "builder",
-          "expr": "DAPR_RESPONSE_TIME{building_block=\"$Building_Block\"}",
+          "expr": "DAPR_RESPONSE_TIME{perf_test=\"$perf_test\"}",
           "hide": false,
           "instant": false,
           "range": true,
@@ -142,7 +142,7 @@
             "uid": "edf213dd-f753-41cd-9666-cc2d18daaa45"
           },
           "editorMode": "builder",
-          "expr": "LATENCY_BY_DAPR{building_block=\"$Building_Block\"}",
+          "expr": "LATENCY_BY_DAPR{perf_test=\"$perf_test\"}",
           "hide": false,
           "instant": false,
           "range": true,
@@ -237,6 +237,36 @@
                 }
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "APPLICATION_THROUGHPUT{job=\"service-invocation-http\", perf_test=\"service-invocation-http\"}"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "dark-blue",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "APPLICATION_THROUGHPUT{component=\"inmemory\", job=\"state_get_http\", perf_test=\"state_get_http\"}"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "dark-blue",
+                  "mode": "fixed"
+                }
+              }
+            ]
           }
         ]
       },
@@ -266,7 +296,7 @@
             "uid": "edf213dd-f753-41cd-9666-cc2d18daaa45"
           },
           "editorMode": "builder",
-          "expr": "APPLICATION_THROUGHPUT{building_block=\"$Building_Block\"}",
+          "expr": "APPLICATION_THROUGHPUT{perf_test=\"$perf_test\"}",
           "instant": false,
           "range": true,
           "refId": "A"
@@ -361,6 +391,36 @@
                 }
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "APP_CPU_USAGE{job=\"service-invocation-http\", perf_test=\"service-invocation-http\"}"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "super-light-yellow",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "APP_CPU_USAGE{component=\"inmemory\", job=\"state_get_http\", perf_test=\"state_get_http\"}"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "super-light-yellow",
+                  "mode": "fixed"
+                }
+              }
+            ]
           }
         ]
       },
@@ -390,7 +450,7 @@
             "uid": "edf213dd-f753-41cd-9666-cc2d18daaa45"
           },
           "editorMode": "builder",
-          "expr": "APP_CPU_USAGE{building_block=\"$Building_Block\"}",
+          "expr": "APP_CPU_USAGE{perf_test=\"$perf_test\"}",
           "instant": false,
           "range": true,
           "refId": "A"
@@ -485,6 +545,36 @@
                 }
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "APP_MEMORY_USAGE{job=\"service-invocation-http\", perf_test=\"service-invocation-http\"}"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "dark-red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "APP_MEMORY_USAGE{component=\"inmemory\", job=\"state_get_http\", perf_test=\"state_get_http\"}"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "dark-red",
+                  "mode": "fixed"
+                }
+              }
+            ]
           }
         ]
       },
@@ -514,7 +604,7 @@
             "uid": "edf213dd-f753-41cd-9666-cc2d18daaa45"
           },
           "editorMode": "builder",
-          "expr": "APP_MEMORY_USAGE{building_block=\"$Building_Block\"}",
+          "expr": "APP_MEMORY_USAGE{perf_test=\"$perf_test\"}",
           "instant": false,
           "range": true,
           "refId": "A"
@@ -622,6 +712,36 @@
                 }
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "DAPR_SIDECAR_CPU_USAGE{job=\"service-invocation-http\", perf_test=\"service-invocation-http\"}"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "dark-orange",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "DAPR_SIDECAR_CPU_USAGE{component=\"inmemory\", job=\"state_get_http\", perf_test=\"state_get_http\"}"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "dark-orange",
+                  "mode": "fixed"
+                }
+              }
+            ]
           }
         ]
       },
@@ -651,7 +771,7 @@
             "uid": "edf213dd-f753-41cd-9666-cc2d18daaa45"
           },
           "editorMode": "builder",
-          "expr": "DAPR_SIDECAR_CPU_USAGE{building_block=\"$Building_Block\"}",
+          "expr": "DAPR_SIDECAR_CPU_USAGE{perf_test=\"$perf_test\"}",
           "instant": false,
           "range": true,
           "refId": "A"
@@ -746,6 +866,36 @@
                 }
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "DAPR_SIDECAR_MEMORY_USAGE{job=\"service-invocation-http\", perf_test=\"service-invocation-http\"}"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "semi-dark-green",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "DAPR_SIDECAR_MEMORY_USAGE{component=\"inmemory\", job=\"state_get_http\", perf_test=\"state_get_http\"}"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "semi-dark-green",
+                  "mode": "fixed"
+                }
+              }
+            ]
           }
         ]
       },
@@ -775,7 +925,7 @@
             "uid": "edf213dd-f753-41cd-9666-cc2d18daaa45"
           },
           "editorMode": "builder",
-          "expr": "DAPR_SIDECAR_MEMORY_USAGE{building_block=\"$Building_Block\"}",
+          "expr": "DAPR_SIDECAR_MEMORY_USAGE{perf_test=\"$perf_test\"}",
           "instant": false,
           "range": true,
           "refId": "A"
@@ -793,7 +943,7 @@
     "list": [
       {
         "current": {
-          "selected": true,
+          "selected": false,
           "text": "service-invocation-http",
           "value": "service-invocation-http"
         },
@@ -801,14 +951,14 @@
           "type": "prometheus",
           "uid": "edf213dd-f753-41cd-9666-cc2d18daaa45"
         },
-        "definition": "label_values(building_block)",
+        "definition": "label_values(perf_test)",
         "hide": 0,
         "includeAll": false,
         "multi": false,
-        "name": "Building_Block",
+        "name": "perf_test",
         "options": [],
         "query": {
-          "query": "label_values(building_block)",
+          "query": "label_values(perf_test)",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,
@@ -820,7 +970,7 @@
     ]
   },
   "time": {
-    "from": "now-6h",
+    "from": "now-12h",
     "to": "now"
   },
   "timepicker": {
@@ -844,6 +994,6 @@
   "timezone": "browser",
   "title": "Dapr_Perf_Test",
   "uid": "aad72cef-667a-402f-b850-241f6d92d943",
-  "version": 16,
+  "version": 26,
   "weekStart": ""
 }

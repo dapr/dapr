@@ -36,7 +36,7 @@ type DaprMetrics struct {
 }
 
 // DAPR_PERF_METRICS_PROMETHEUS_URL needs to be set
-func PushPrometheusMetrics(metrics DaprMetrics, buildingBlock string, component string) {
+func PushPrometheusMetrics(metrics DaprMetrics, perfTest string, component string) {
 
 	daprPerfMetricsPrometheusURL := os.Getenv("DAPR_PERF_METRICS_PROMETHEUS_URL")
 	if daprPerfMetricsPrometheusURL == "" {
@@ -78,7 +78,7 @@ func PushPrometheusMetrics(metrics DaprMetrics, buildingBlock string, component 
 	})
 
 	// Create a pusher to push metrics to the Prometheus Pushgateway
-	pusher := push.New(daprPerfMetricsPrometheusURL, buildingBlock).
+	pusher := push.New(daprPerfMetricsPrometheusURL, perfTest).
 		Collector(baselineLatencyGauge).
 		Collector(daprLatencyGauge).
 		Collector(addedLatencyGauge).
@@ -87,7 +87,7 @@ func PushPrometheusMetrics(metrics DaprMetrics, buildingBlock string, component 
 		Collector(appMemoryGauge).
 		Collector(sidecarMemoryGauge).
 		Collector(applicationThroughputGauge).
-		Grouping("building_block", buildingBlock)
+		Grouping("perf_test", perfTest)
 
 	// Add the component Grouping only if specified
 	if len(component) > 0 {
