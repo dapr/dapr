@@ -253,7 +253,7 @@ The Prometheus installation above comes with a pushgateway.
   kubectl get svc --namespace $DAPR_PERF_METRICS_NAMESPACE
   ```
 
-* [Grafana Dashboard for Perf Test](../config/grafana-perf-test-dashboard.json)
+* [Grafana Dashboard for Perf Test](../grafana/grafana-perf-test-dashboard.json)
   
   On running the perf-tests now, the metrics are collected from pushgateway by Prometheus and is made available for visualization as a dashboard by importing the above template in Grafana.
 
