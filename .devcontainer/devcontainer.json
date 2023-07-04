@@ -75,7 +75,7 @@
                 "terminal.integrated.env.linux": {
                     "GOLANG_PROTOBUF_REGISTRATION_CONFLICT": "ignore"
                 }
-            },
+            }
         }
     },
     "workspaceFolder": "/workspaces/dapr",
