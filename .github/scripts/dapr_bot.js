@@ -94,7 +94,6 @@ async function handleIssueCommentCreate({ github, context }) {
         console.log(
             `[handleIssueCommentCreate] user ${username} is not an owner, exiting.`
         )
-        await commentUserNotAllowed(github, issue, username)
         return
     }
 
@@ -135,8 +134,7 @@ async function handleIssueCommentCreate({ github, context }) {
             )
             break
         case '/test-version-skew':
-            const previousVersion =
-                commandParts.length > 0 ? commandParts.shift() : null
+            const previousVersion = commandParts.length > 0 ? commandParts.shift() : null
             await cmdTestVersionSkew(
                 github,
                 issue,
@@ -172,7 +170,7 @@ async function handleIssueLabeled({ github, context }) {
     // Only authorized users can add labels to issues.
     if (label == 'docs-needed') {
         // Open a new issue
-        await github.rest.issues.create({
+        await github.issues.create({
             owner: 'dapr',
             repo: 'docs',
             title: `New content needed for dapr/dapr#${issueNumber}`,
@@ -182,7 +180,7 @@ async function handleIssueLabeled({ github, context }) {
     } else if (label == 'sdk-needed') {
         // Open an issue in all SDK repos.
         for (const sdk of SDKs) {
-            await github.rest.issues.create({
+            await github.issues.create({
                 owner: 'dapr',
                 repo: sdk,
                 title: `Add support for dapr/dapr#${issueNumber}`,
@@ -217,7 +215,7 @@ async function cmdAssign(github, issue, username, isFromPulls) {
         return
     }
 
-    await github.rest.issues.addAssignees({
+    await github.issues.addAssignees({
         owner: issue.owner,
         repo: issue.repo,
         issue_number: issue.number,
@@ -240,7 +238,7 @@ async function cmdMakeMeLaugh(github, issue) {
         joke = `${jokedata.setup} - ${jokedata.punchline}`
     }
 
-    await github.rest.issues.createComment({
+    await github.issues.createComment({
         owner: issue.owner,
         repo: issue.repo,
         issue_number: issue.number,
@@ -263,7 +261,7 @@ async function cmdOkToTest(github, issue, isFromPulls) {
     }
 
     // Get pull request
-    const pull = await github.rest.pulls.get({
+    const pull = await github.pulls.get({
         owner: issue.owner,
         repo: issue.repo,
         pull_number: issue.number,
@@ -279,7 +277,7 @@ async function cmdOkToTest(github, issue, isFromPulls) {
         }
 
         // Fire repository_dispatch event to trigger e2e test
-        await github.rest.repos.createDispatchEvent({
+        await github.repos.createDispatchEvent({
             owner: issue.owner,
             repo: issue.repo,
             event_type: 'e2e-test',
@@ -309,7 +307,7 @@ async function cmdOkToPerf(github, issue, isFromPulls, args) {
     }
 
     // Get pull request
-    const pull = await github.rest.pulls.get({
+    const pull = await github.pulls.get({
         owner: issue.owner,
         repo: issue.repo,
         pull_number: issue.number,
@@ -326,7 +324,7 @@ async function cmdOkToPerf(github, issue, isFromPulls, args) {
         }
 
         // Fire repository_dispatch event to trigger e2e test
-        await github.rest.repos.createDispatchEvent({
+        await github.repos.createDispatchEvent({
             owner: issue.owner,
             repo: issue.repo,
             event_type: 'perf-test',
@@ -356,7 +354,7 @@ async function cmdOkToPerfComponents(github, issue, isFromPulls, args) {
     }
 
     // Get pull request
-    const pull = await github.rest.pulls.get({
+    const pull = await github.pulls.get({
         owner: issue.owner,
         repo: issue.repo,
         pull_number: issue.number,
@@ -373,7 +371,7 @@ async function cmdOkToPerfComponents(github, issue, isFromPulls, args) {
         }
 
         // Fire repository_dispatch event to trigger e2e test
-        await github.rest.repos.createDispatchEvent({
+        await github.repos.createDispatchEvent({
             owner: issue.owner,
             repo: issue.repo,
             event_type: 'components-perf-test',
@@ -404,7 +402,7 @@ async function cmdTestSDK(github, issue, isFromPulls, command, args) {
     }
 
     // Get pull request
-    const pull = await github.rest.pulls.get({
+    const pull = await github.pulls.get({
         owner: issue.owner,
         repo: issue.repo,
         pull_number: issue.number,
@@ -421,7 +419,7 @@ async function cmdTestSDK(github, issue, isFromPulls, command, args) {
         }
 
         // Fire repository_dispatch event to trigger e2e test
-        await github.rest.repos.createDispatchEvent({
+        await github.repos.createDispatchEvent({
             owner: issue.owner,
             repo: issue.repo,
             event_type: command.substring(1),
@@ -437,21 +435,6 @@ async function cmdTestSDK(github, issue, isFromPulls, command, args) {
 }
 
 /**
- * Sends a comment when the user who tried triggering the bot action is not allowed to do so.
- * @param {*} github GitHub object reference
- * @param {*} issue GitHub issue object
- * @param {string} username GitHub user who commented
- */
-async function commentUserNotAllowed(github, issue, username) {
-    await github.rest.issues.createComment({
-        owner: issue.owner,
-        repo: issue.repo,
-        issue_number: issue.number,
-        body: `👋 @${username}, my apologies but I can't perform this action for you because your username is not in the allowlist in the file ${'`.github/scripts/dapr_bot.js`'}.`,
-    })
-}
-
-/**
  * Trigger Version Skew tests for the pull request.
  * @param {*} github GitHub object reference
  * @param {*} issue GitHub issue object
@@ -459,14 +442,7 @@ async function commentUserNotAllowed(github, issue, username) {
  * @param {string} command which was used
  * @param {string} previousVersion previous version to test against
  */
-async function cmdTestVersionSkew(
-    github,
-    issue,
-    isFromPulls,
-    command,
-    previousVersion,
-    args
-) {
+async function cmdTestVersionSkew(github, issue, isFromPulls, command, previousVersion, args) {
     if (!isFromPulls) {
         console.log(
             '[cmdTestVersionSkew] only pull requests supported, skipping command execution.'
