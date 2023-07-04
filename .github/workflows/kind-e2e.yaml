@@ -75,15 +75,15 @@ jobs:
         - k8s-version: v1.23.13
           kind-version: v0.17.0
           kind-image-sha: sha256:ef453bb7c79f0e3caba88d2067d4196f427794086a7d0df8df4f019d5e336b61
-          DAPR_TEST_CONFIG_STORE: "postgres"
+          dapr-test-config-store: "postgres"
         - k8s-version: v1.24.7
           kind-version: v0.17.0
           kind-image-sha: sha256:577c630ce8e509131eab1aea12c022190978dd2f745aac5eb1fe65c0807eb315
-          DAPR_TEST_CONFIG_STORE: "redis"
+          dapr-test-config-store: "redis"
         - k8s-version: v1.25.3
           kind-version: v0.17.0
           kind-image-sha: sha256:f52781bc0d7a19fb6c405c2af83abfeb311f130707a0e219175677e366cc45d1
-          DAPR_TEST_CONFIG_STORE: "redis"
+          dapr-test-config-store: "redis"
         exclude:
         - k8s-version: v1.23.13
           mode: non-ha
@@ -202,7 +202,7 @@ jobs:
         make setup-test-env-zipkin
 
     - name: Setup postgres
-      if: matrix.DAPR_TEST_CONFIG_STORE == 'postgres'
+      if: matrix.dapr-test-config-store == 'postgres'
       run: |
         make setup-test-env-postgres
 
@@ -210,7 +210,7 @@ jobs:
       run: |
         make setup-test-components
       env:
-        DAPR_TEST_CONFIG_STORE: ${{ matrix.DAPR_TEST_CONFIG_STORE }}
+        DAPR_TEST_CONFIG_STORE: ${{ matrix.dapr-test-config-store }}
 
     - name: Free up some diskspace
       run: |
@@ -220,7 +220,7 @@ jobs:
       run: |
         make test-e2e-all
       env:
-        DAPR_TEST_CONFIG_STORE: ${{ matrix.DAPR_TEST_CONFIG_STORE }}
+        DAPR_TEST_CONFIG_STORE: ${{ matrix.dapr-test-config-store }}
 
     - name: Save control plane logs
       if: always()
