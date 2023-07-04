@@ -257,6 +257,6 @@ The Prometheus installation above comes with a pushgateway.
   
   On running the perf-tests now, the metrics are collected from pushgateway by Prometheus and is made available for visualization as a dashboard by importing the above template in Grafana.
 
-### Dashboard for service_invocation_http
+### Sample dashboard view
 <img width="1267" alt="grafana_dashboard" src="https://github.com/SushmitaSeth/dapr/assets/106324338/fefbf1af-a129-49e7-a6c2-c74536514ed6">
 
