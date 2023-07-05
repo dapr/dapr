@@ -16,7 +16,7 @@ import { check } from 'k6'
 import crypto from 'k6/crypto'
 import { SharedArray } from 'k6/data'
 
-const PUBLISH_TYPE_BULK = "bulk"
+const PUBLISH_TYPE_BULK = 'bulk'
 const KB = 1024
 const MAX_MS_ALLOWED = 500
 // padd with leading 0 if <16
@@ -51,35 +51,35 @@ function getBulkPublishPayload(numMsgs, msgSize) {
 }
 
 const data = new SharedArray('scenarios', function () {
-    let scenarios = {};
+    let scenarios = {}
     const thresholds = {
         checks: ['rate==1'],
-        http_req_duration: [`avg<${MAX_MS_ALLOWED}`]
-    };
-
-    const brokerName = __ENV.BROKER_NAME;
-    const publishType = __ENV.PUBLISH_TYPE;
-    const bulkSize = parseInt(__ENV.BULK_SIZE);
-    const messageSizeKb = parseInt(__ENV.MESSAGE_SIZE_KB);
-    const durationMs = parseInt(__ENV.DURATION_MS);
-    const numVus = parseInt(__ENV.NUM_VUS);
-
-    let payload = '';
-    if (publishType == PUBLISH_TYPE_BULK) {
-        payload = getBulkPublishPayload(bulkSize, messageSizeKb);
-    } else {
-        payload = randomStringOfSize(messageSizeKb * KB);
+        http_req_duration: [`avg<${MAX_MS_ALLOWED}`],
     }
 
-    const scenario = `${brokerName}_b${bulkSize}_s${messageSizeKb}KB_${publishType}`;
+    const brokerName = __ENV.BROKER_NAME
+    const publishType = __ENV.PUBLISH_TYPE
+    const bulkSize = parseInt(__ENV.BULK_SIZE)
+    const messageSizeKb = parseInt(__ENV.MESSAGE_SIZE_KB)
+    const durationMs = parseInt(__ENV.DURATION_MS)
+    const numVus = parseInt(__ENV.NUM_VUS)
+
+    let payload = ''
+    if (publishType == PUBLISH_TYPE_BULK) {
+        payload = getBulkPublishPayload(bulkSize, messageSizeKb)
+    } else {
+        payload = randomStringOfSize(messageSizeKb * KB)
+    }
+
+    const scenario = `${brokerName}_b${bulkSize}_s${messageSizeKb}KB_${publishType}`
     scenarios[scenario] = Object.assign({
         executor: 'constant-vus',
         vus: numVus,
         duration: `${durationMs}ms`,
         env: {
             PAYLOAD: payload,
-        }
-    });
+        },
+    })
 
     return [{ scenarios, thresholds }] // must be an array
 })
@@ -97,8 +97,8 @@ function bulkPublishRawMsgs(broker, topic, payload) {
     const result = http.post(
         `${DAPR_ADDRESS}/v1.0-alpha1/publish/bulk/${broker}/${topic}?metadata.rawPayload=true`,
         payload
-    );
-    return result.status;
+    )
+    return result.status
 }
 
 function publishRawMsgs(broker, topic, payload, bulkSize) {
@@ -107,7 +107,7 @@ function publishRawMsgs(broker, topic, payload, bulkSize) {
         const result = http.post(
             `${DAPR_ADDRESS}/v1.0/publish/${broker}/${topic}?metadata.rawPayload=true`,
             payload
-        );
+        )
         statusCodes.push(result.status)
     }
     return statusCodes
@@ -118,23 +118,33 @@ export default function () {
     const statusCodes = []
     if (publishType == PUBLISH_TYPE_BULK) {
         // Do bulk publish
-        const statusCode = bulkPublishRawMsgs(__ENV.BROKER_NAME, __ENV.TOPIC_NAME, __ENV.PAYLOAD)
+        const statusCode = bulkPublishRawMsgs(
+            __ENV.BROKER_NAME,
+            __ENV.TOPIC_NAME,
+            __ENV.PAYLOAD
+        )
         statusCodes.push(statusCode)
     } else {
         // Do normal publish
-        const _statusCodes = publishRawMsgs(__ENV.BROKER_NAME, __ENV.TOPIC_NAME, __ENV.PAYLOAD, __ENV.BULK_SIZE)
+        const _statusCodes = publishRawMsgs(
+            __ENV.BROKER_NAME,
+            __ENV.TOPIC_NAME,
+            __ENV.PAYLOAD,
+            __ENV.BULK_SIZE
+        )
         statusCodes.push(..._statusCodes)
     }
 
-    const failedStatusCodes = statusCodes.filter(statusCode => statusCode < 200 || statusCode >= 300)
+    const failedStatusCodes = statusCodes.filter(
+        (statusCode) => statusCode < 200 || statusCode >= 300
+    )
 
     if (failedStatusCodes.length > 0) {
         console.log(`Publish failed: ${JSON.stringify(failedStatusCodes)}`)
     }
 
     check(failedStatusCodes, {
-        'publish response status code is 2xx':
-            failedStatusCodes.length == 0,
+        'publish response status code is 2xx': failedStatusCodes.length == 0,
     })
 }
 
