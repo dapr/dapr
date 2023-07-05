@@ -2571,6 +2571,7 @@ func (a *DaprRuntime) initActors() error {
 		HealthHTTPClient:   a.appHTTPClient,
 		HealthEndpoint:     a.getAppHTTPEndpoint(),
 		AppChannelAddress:  a.runtimeConfig.appConnectionConfig.ChannelAddress,
+		PodName:            a.getPodName(),
 	})
 
 	act := actors.NewActors(actors.ActorsOpts{
