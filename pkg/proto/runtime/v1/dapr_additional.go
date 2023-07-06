@@ -20,6 +20,74 @@ import (
 
 // This file contains additional, hand-written methods added to the generated objects.
 
+// WorkflowRequests is an interface for all a number of *WorkflowRequest structs.
+type WorkflowRequests interface {
+	// SetWorkflowComponent sets the value of the WorkflowComponent property.
+	SetWorkflowComponent(val string)
+	// SetInstanceId sets the value of the InstanceId property.
+	SetInstanceId(val string)
+}
+
+func (x *GetWorkflowRequest) SetWorkflowComponent(val string) {
+	if x != nil {
+		x.WorkflowComponent = val
+	}
+}
+
+func (x *GetWorkflowRequest) SetInstanceId(val string) {
+	if x != nil {
+		x.InstanceId = val
+	}
+}
+
+func (x *TerminateWorkflowRequest) SetWorkflowComponent(val string) {
+	if x != nil {
+		x.WorkflowComponent = val
+	}
+}
+
+func (x *TerminateWorkflowRequest) SetInstanceId(val string) {
+	if x != nil {
+		x.InstanceId = val
+	}
+}
+
+func (x *PauseWorkflowRequest) SetWorkflowComponent(val string) {
+	if x != nil {
+		x.WorkflowComponent = val
+	}
+}
+
+func (x *PauseWorkflowRequest) SetInstanceId(val string) {
+	if x != nil {
+		x.InstanceId = val
+	}
+}
+
+func (x *ResumeWorkflowRequest) SetWorkflowComponent(val string) {
+	if x != nil {
+		x.WorkflowComponent = val
+	}
+}
+
+func (x *ResumeWorkflowRequest) SetInstanceId(val string) {
+	if x != nil {
+		x.InstanceId = val
+	}
+}
+
+func (x *PurgeWorkflowRequest) SetWorkflowComponent(val string) {
+	if x != nil {
+		x.WorkflowComponent = val
+	}
+}
+
+func (x *PurgeWorkflowRequest) SetInstanceId(val string) {
+	if x != nil {
+		x.InstanceId = val
+	}
+}
+
 // SubtleCryptoRequests is an interface for all Subtle*Request structs.
 type SubtleCryptoRequests interface {
 	// SetComponentName sets the value of the ComponentName property.
