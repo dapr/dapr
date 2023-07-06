@@ -183,6 +183,19 @@ func TestServiceInvocationHTTPPerformance(t *testing.T) {
 	t.Logf("dapr latency avg: %sms", fmt.Sprintf("%.2f", daprLatency))
 	t.Logf("added latency avg: %sms", fmt.Sprintf("%.2f", avg))
 
+	daprMetrics := utils.DaprMetrics{
+		BaselineLatency:       baselineLatency,
+		DaprLatency:           daprLatency,
+		AddedLatency:          avg,
+		SidecarCPU:            sidecarUsage.CPUm,
+		AppCPU:                appUsage.CPUm,
+		SidecarMemory:         sidecarUsage.MemoryMb,
+		AppMemory:             appUsage.MemoryMb,
+		ApplicationThroughput: daprResult.ActualQPS,
+	}
+
+	utils.PushPrometheusMetrics(daprMetrics, testLabel, "")
+
 	summary.ForTest(t).
 		Service("testapp").
 		CPU(appUsage.CPUm).
