@@ -124,11 +124,23 @@ async function handleIssueCommentCreate({ github, context }) {
         case '/test-sdk-java':
         case '/test-sdk-python':
         case '/test-sdk-js':
+        case '/test-sdk-go':
             await cmdTestSDK(
                 github,
                 issue,
                 isFromPulls,
                 command,
+                commandParts.join(' ')
+            )
+            break
+        case '/test-version-skew':
+            const previousVersion = commandParts.length > 0 ? commandParts.shift() : null
+            await cmdTestVersionSkew(
+                github,
+                issue,
+                isFromPulls,
+                command,
+                previousVersion,
                 commandParts.join(' ')
             )
             break
@@ -417,6 +429,56 @@ async function cmdTestSDK(github, issue, isFromPulls, command, args) {
         console.log(
             `[cmdTestSDK] triggered SDK test for ${JSON.stringify(
                 testSDKPayload
+            )}`
+        )
+    }
+}
+
+/**
+ * Trigger Version Skew tests for the pull request.
+ * @param {*} github GitHub object reference
+ * @param {*} issue GitHub issue object
+ * @param {boolean} isFromPulls is the workflow triggered by a pull request?
+ * @param {string} command which was used
+ * @param {string} previousVersion previous version to test against
+ */
+async function cmdTestVersionSkew(github, issue, isFromPulls, command, previousVersion, args) {
+    if (!isFromPulls) {
+        console.log(
+            '[cmdTestVersionSkew] only pull requests supported, skipping command execution.'
+        )
+        return
+    }
+
+    // Get pull request
+    const pull = await github.pulls.get({
+        owner: issue.owner,
+        repo: issue.repo,
+        pull_number: issue.number,
+    })
+
+    if (pull && pull.data) {
+        // Get commit id and repo from pull head
+        const testVersionSkewPayload = {
+            pull_head_ref: pull.data.head.sha,
+            pull_head_repo: pull.data.head.repo.full_name,
+            command: command.substring(1),
+            previous_version: previousVersion,
+            args,
+            issue: issue,
+        }
+
+        // Fire repository_dispatch event to trigger e2e test
+        await github.repos.createDispatchEvent({
+            owner: issue.owner,
+            repo: issue.repo,
+            event_type: command.substring(1),
+            client_payload: testVersionSkewPayload,
+        })
+
+        console.log(
+            `[cmdTestVersionSkew] triggered Version Skew test for ${JSON.stringify(
+                testVersionSkewPayload
             )}`
         )
     }

@@ -15,10 +15,12 @@ package kubernetes
 
 import (
 	"context"
+	"log"
 
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 )
 
@@ -40,24 +42,24 @@ func NewDaprComponent(client *KubeClient, ns string, comp ComponentDescription) 
 
 // toComponentSpec builds the componentSpec for the given ComponentDescription
 func (do *DaprComponent) toComponentSpec() *v1alpha1.Component {
-	metadata := []v1alpha1.MetadataItem{}
+	metadata := []commonapi.NameValuePair{}
 
 	for k, v := range do.component.MetaData {
-		var item v1alpha1.MetadataItem
+		var item commonapi.NameValuePair
 
 		if v.FromSecretRef == nil {
-			item = v1alpha1.MetadataItem{
+			item = commonapi.NameValuePair{
 				Name: k,
-				Value: v1alpha1.DynamicValue{
+				Value: commonapi.DynamicValue{
 					JSON: v1.JSON{
 						Raw: []byte(v.Raw),
 					},
 				},
 			}
 		} else {
-			item = v1alpha1.MetadataItem{
+			item = commonapi.NameValuePair{
 				Name: k,
-				SecretKeyRef: v1alpha1.SecretKeyRef{
+				SecretKeyRef: commonapi.SecretKeyRef{
 					Name: v.FromSecretRef.Name,
 					Key:  v.FromSecretRef.Key,
 				},
@@ -75,11 +77,12 @@ func (do *DaprComponent) toComponentSpec() *v1alpha1.Component {
 }
 
 func (do *DaprComponent) addComponent() (*v1alpha1.Component, error) {
-	return do.kubeClient.DaprComponents(DaprTestNamespace).Create(do.toComponentSpec())
+	log.Printf("Adding component %q ...", do.Name())
+	return do.kubeClient.DaprComponents(do.namespace).Create(do.toComponentSpec())
 }
 
 func (do *DaprComponent) deleteComponent() error {
-	client := do.kubeClient.DaprComponents(DaprTestNamespace)
+	client := do.kubeClient.DaprComponents(do.namespace)
 	return client.Delete(do.component.Name, &metav1.DeleteOptions{})
 }
 
@@ -88,6 +91,9 @@ func (do *DaprComponent) Name() string {
 }
 
 func (do *DaprComponent) Init(ctx context.Context) error {
+	// Ignore errors here as the component may not exist
+	_ = do.Dispose(true)
+
 	_, err := do.addComponent()
 	return err
 }

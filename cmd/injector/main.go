@@ -15,16 +15,12 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
-	"path/filepath"
 
-	"k8s.io/client-go/util/homedir"
-
+	"github.com/dapr/dapr/cmd/injector/options"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"github.com/dapr/dapr/pkg/concurrency"
-	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/injector"
 	"github.com/dapr/dapr/pkg/injector/monitoring"
@@ -34,13 +30,35 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var (
-	log         = logger.NewLogger("dapr.injector")
-	healthzPort int
-)
+var log = logger.NewLogger("dapr.injector")
 
 func main() {
 	log.Infof("starting Dapr Sidecar Injector -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
+
+	opts := options.New()
+
+	metricsExporter := metrics.NewExporterWithOptions(metrics.DefaultMetricNamespace, opts.Metrics)
+
+	if err := utils.SetEnvVariables(map[string]string{
+		utils.KubeConfigVar: opts.Kubeconfig,
+	}); err != nil {
+		log.Fatalf("error set env failed:  %s", err.Error())
+	}
+
+	// Apply options to all loggers
+	if err := logger.ApplyOptionsToLoggers(&opts.Logger); err != nil {
+		log.Fatal(err)
+	}
+
+	// Initialize dapr metrics exporter
+	if err := metricsExporter.Init(); err != nil {
+		log.Fatal(err)
+	}
+
+	// Initialize injector service metrics
+	if err := monitoring.InitMetrics(); err != nil {
+		log.Fatal(err)
+	}
 
 	ctx := signals.Context()
 	cfg, err := injector.GetConfig()
@@ -76,7 +94,7 @@ func main() {
 			return nil
 		},
 		func(ctx context.Context) error {
-			if err := healthzServer.Run(ctx, healthzPort); err != nil {
+			if err := healthzServer.Run(ctx, opts.HealthzPort); err != nil {
 				return fmt.Errorf("failed to start healthz server: %w", err)
 			}
 			return nil
@@ -88,49 +106,4 @@ func main() {
 	}
 
 	log.Infof("Dapr sidecar injector shut down gracefully")
-}
-
-func init() {
-	loggerOptions := logger.DefaultOptions()
-	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
-
-	metricsExporter := metrics.NewExporter(metrics.DefaultMetricNamespace)
-	metricsExporter.Options().AttachCmdFlags(flag.StringVar, flag.BoolVar)
-	var kubeconfig *string
-	if home := homedir.HomeDir(); home != "" {
-		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
-	} else {
-		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
-	}
-
-	flag.IntVar(&healthzPort, "healthz-port", 8080, "The port used for health checks")
-
-	flag.StringVar(&credentials.RootCertFilename, "issuer-ca-secret-key", credentials.RootCertFilename, "Certificate Authority certificate secret key")
-	flag.StringVar(&credentials.IssuerCertFilename, "issuer-certificate-secret-key", credentials.IssuerCertFilename, "Issuer certificate secret key")
-	flag.StringVar(&credentials.IssuerKeyFilename, "issuer-key-secret-key", credentials.IssuerKeyFilename, "Issuer private key secret key")
-
-	flag.Parse()
-
-	if err := utils.SetEnvVariables(map[string]string{
-		utils.KubeConfigVar: *kubeconfig,
-	}); err != nil {
-		log.Fatalf("error set env failed:  %s", err.Error())
-	}
-
-	// Apply options to all loggers
-	if err := logger.ApplyOptionsToLoggers(&loggerOptions); err != nil {
-		log.Fatal(err)
-	} else {
-		log.Infof("log level set to: %s", loggerOptions.OutputLevel)
-	}
-
-	// Initialize dapr metrics exporter
-	if err := metricsExporter.Init(); err != nil {
-		log.Fatal(err)
-	}
-
-	// Initialize injector service metrics
-	if err := monitoring.InitMetrics(); err != nil {
-		log.Fatal(err)
-	}
 }

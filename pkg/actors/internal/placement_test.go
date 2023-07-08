@@ -29,7 +29,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/dapr/dapr/pkg/placement/hashing"
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
@@ -72,7 +71,7 @@ func TestPlacementStream_RoundRobin(t *testing.T) {
 	noopTableUpdateFunc := func() {}
 
 	testPlacement := NewActorPlacement(
-		address, nil, "testAppID", "127.0.0.1:1000", []string{"actorOne", "actorTwo"},
+		address, nil, "testAppID", "127.0.0.1:1000", "testPodName", []string{"actorOne", "actorTwo"},
 		appHealthFunc, noopTableUpdateFunc)
 
 	t.Run("found leader placement in a round robin way", func(t *testing.T) {
@@ -124,7 +123,7 @@ func TestAppHealthyStatus(t *testing.T) {
 	appHealthFunc := appHealth.Load
 	noopTableUpdateFunc := func() {}
 	testPlacement := NewActorPlacement(
-		[]string{address}, nil, "testAppID", "127.0.0.1:1000", []string{"actorOne", "actorTwo"},
+		[]string{address}, nil, "testAppID", "127.0.0.1:1000", "testPodName", []string{"actorOne", "actorTwo"},
 		appHealthFunc, noopTableUpdateFunc)
 
 	// act
@@ -151,7 +150,7 @@ func TestOnPlacementOrder(t *testing.T) {
 	tableUpdateFunc := func() { tableUpdateCount++ }
 	testPlacement := NewActorPlacement(
 		[]string{}, nil,
-		"testAppID", "127.0.0.1:1000",
+		"testAppID", "127.0.0.1:1000", "testPodName",
 		[]string{"actorOne", "actorTwo"},
 		appHealthFunc, tableUpdateFunc)
 
@@ -200,7 +199,7 @@ func TestWaitUntilPlacementTableIsReady(t *testing.T) {
 	tableUpdateFunc := func() {}
 	testPlacement := NewActorPlacement(
 		[]string{}, nil,
-		"testAppID", "127.0.0.1:1000",
+		"testAppID", "127.0.0.1:1000", "testPodName",
 		[]string{"actorOne", "actorTwo"},
 		appHealthFunc, tableUpdateFunc)
 
@@ -274,7 +273,7 @@ func TestLookupActor(t *testing.T) {
 	tableUpdateFunc := func() {}
 	testPlacement := NewActorPlacement(
 		[]string{}, nil,
-		"testAppID", "127.0.0.1:1000",
+		"testAppID", "127.0.0.1:1000", "testPodName",
 		[]string{"actorOne", "actorTwo"},
 		appHealthFunc, tableUpdateFunc)
 
@@ -314,7 +313,7 @@ func TestConcurrentUnblockPlacements(t *testing.T) {
 	tableUpdateFunc := func() {}
 	testPlacement := NewActorPlacement(
 		[]string{}, nil,
-		"testAppID", "127.0.0.1:1000",
+		"testAppID", "127.0.0.1:1000", "testPodName",
 		[]string{"actorOne", "actorTwo"},
 		appHealthFunc, tableUpdateFunc)
 
@@ -378,10 +377,6 @@ type testServer struct {
 	lastTimestamp      time.Time
 	recvError          error
 	isGracefulShutdown atomic.Bool
-}
-
-func (s *testServer) GetPlacementTables(ctx context.Context, empty *emptypb.Empty) (*placementv1pb.GetPlacementTablesResponse, error) {
-	return nil, nil
 }
 
 func (s *testServer) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusServer) error { //nolint:nosnakecase

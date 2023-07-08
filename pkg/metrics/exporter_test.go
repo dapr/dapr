@@ -25,14 +25,14 @@ func TestMetricsExporter(t *testing.T) {
 	t.Run("returns default options", func(t *testing.T) {
 		e := NewExporter("test")
 		op := e.Options()
-		assert.Equal(t, defaultMetricOptions(), op)
+		assert.Equal(t, DefaultMetricOptions(), op)
 	})
 
 	t.Run("return error if exporter is not initialized", func(t *testing.T) {
 		e := &promMetricsExporter{
 			&exporter{
 				namespace: "test",
-				options:   defaultMetricOptions(),
+				options:   DefaultMetricOptions(),
 				logger:    logger.NewLogger("dapr.metrics"),
 			},
 			nil,

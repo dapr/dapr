@@ -42,3 +42,6 @@ spec:
     value: 1
   - name: maxActiveMessages
     value: 100
+scopes:
+  - resiliencyappgrpc
+  - resiliencyapp
