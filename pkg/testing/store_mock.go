@@ -124,7 +124,7 @@ func (f *FailingConfigurationStore) Subscribe(ctx context.Context, req *configur
 		return "", err
 	}
 
-	handler(ctx, &configuration.UpdateEvent{
+	go handler(ctx, &configuration.UpdateEvent{
 		Items: map[string]*configuration.Item{
 			req.Metadata["key"]: {
 				Value: "testConfig",
