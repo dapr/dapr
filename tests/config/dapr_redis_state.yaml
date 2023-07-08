@@ -26,3 +26,9 @@ spec:
       key: host
   - name: redisPassword
     value: ""
+scopes:
+  - stateapp
+  - stateapp-pluggable
+  - httpmetrics
+  - grpcmetrics
+  - disabledmetric
