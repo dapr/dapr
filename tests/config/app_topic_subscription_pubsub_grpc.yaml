@@ -7,4 +7,4 @@ spec:
   topic: pubsub-c-topic-grpc
   route: /pubsub-c-topic-grpc
 scopes:
-- pubsub-subscriber-grpc
+  - pubsub-subscriber-grpc

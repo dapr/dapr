@@ -94,7 +94,11 @@ func main() {
 		},
 		apiServer.MonitorLeadership,
 		func(ctx context.Context) error {
-			healthzServer := health.NewServer(log)
+			var metadataOptions []health.RouterOptions
+			if opts.MetadataEnabled {
+				metadataOptions = append(metadataOptions, health.NewJSONDataRouterOptions[*placement.PlacementTables]("/placement/state", apiServer.GetPlacementTables))
+			}
+			healthzServer := health.NewServer(log, metadataOptions...)
 			healthzServer.Ready()
 			if healthzErr := healthzServer.Run(ctx, opts.HealthzPort); healthzErr != nil {
 				return fmt.Errorf("failed to start healthz server: %w", healthzErr)
