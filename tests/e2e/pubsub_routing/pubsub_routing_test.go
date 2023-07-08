@@ -325,7 +325,6 @@ func TestMain(m *testing.M) {
 			MetricsEnabled:   true,
 			AppMemoryLimit:   "200Mi",
 			AppMemoryRequest: "100Mi",
-			Config:           "pubsubroutingconfig",
 		},
 	}
 
