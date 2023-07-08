@@ -71,7 +71,7 @@ func TestPlacementStream_RoundRobin(t *testing.T) {
 	noopTableUpdateFunc := func() {}
 
 	testPlacement := NewActorPlacement(
-		address, nil, "testAppID", "127.0.0.1:1000", []string{"actorOne", "actorTwo"},
+		address, nil, "testAppID", "127.0.0.1:1000", "testPodName", []string{"actorOne", "actorTwo"},
 		appHealthFunc, noopTableUpdateFunc)
 
 	t.Run("found leader placement in a round robin way", func(t *testing.T) {
@@ -123,7 +123,7 @@ func TestAppHealthyStatus(t *testing.T) {
 	appHealthFunc := appHealth.Load
 	noopTableUpdateFunc := func() {}
 	testPlacement := NewActorPlacement(
-		[]string{address}, nil, "testAppID", "127.0.0.1:1000", []string{"actorOne", "actorTwo"},
+		[]string{address}, nil, "testAppID", "127.0.0.1:1000", "testPodName", []string{"actorOne", "actorTwo"},
 		appHealthFunc, noopTableUpdateFunc)
 
 	// act
@@ -150,7 +150,7 @@ func TestOnPlacementOrder(t *testing.T) {
 	tableUpdateFunc := func() { tableUpdateCount++ }
 	testPlacement := NewActorPlacement(
 		[]string{}, nil,
-		"testAppID", "127.0.0.1:1000",
+		"testAppID", "127.0.0.1:1000", "testPodName",
 		[]string{"actorOne", "actorTwo"},
 		appHealthFunc, tableUpdateFunc)
 
@@ -199,7 +199,7 @@ func TestWaitUntilPlacementTableIsReady(t *testing.T) {
 	tableUpdateFunc := func() {}
 	testPlacement := NewActorPlacement(
 		[]string{}, nil,
-		"testAppID", "127.0.0.1:1000",
+		"testAppID", "127.0.0.1:1000", "testPodName",
 		[]string{"actorOne", "actorTwo"},
 		appHealthFunc, tableUpdateFunc)
 
@@ -273,7 +273,7 @@ func TestLookupActor(t *testing.T) {
 	tableUpdateFunc := func() {}
 	testPlacement := NewActorPlacement(
 		[]string{}, nil,
-		"testAppID", "127.0.0.1:1000",
+		"testAppID", "127.0.0.1:1000", "testPodName",
 		[]string{"actorOne", "actorTwo"},
 		appHealthFunc, tableUpdateFunc)
 
@@ -313,7 +313,7 @@ func TestConcurrentUnblockPlacements(t *testing.T) {
 	tableUpdateFunc := func() {}
 	testPlacement := NewActorPlacement(
 		[]string{}, nil,
-		"testAppID", "127.0.0.1:1000",
+		"testAppID", "127.0.0.1:1000", "testPodName",
 		[]string{"actorOne", "actorTwo"},
 		appHealthFunc, tableUpdateFunc)
 

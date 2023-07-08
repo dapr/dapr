@@ -59,7 +59,7 @@ func TestAddingToInbox(t *testing.T) {
 		assert.Equal(t, workflowActorType, req.ActorType)
 
 		upsertCount, deleteCount := countOperations(t, req)
-		assert.Equal(t, 12, upsertCount) // 10x inbox + metadata + customStatus
+		assert.Equal(t, 11, upsertCount) // 10x inbox + metadata
 		assert.Equal(t, 0, deleteCount)
 	}
 }
@@ -78,7 +78,7 @@ func TestClearingInbox(t *testing.T) {
 		assert.Equal(t, workflowActorType, req.ActorType)
 
 		upsertCount, deleteCount := countOperations(t, req)
-		assert.Equal(t, 2, upsertCount)  // metadata + customStatus
+		assert.Equal(t, 1, upsertCount)  // metadata only
 		assert.Equal(t, 10, deleteCount) // the 10 inbox messages should get deleted
 	}
 }

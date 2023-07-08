@@ -30,3 +30,6 @@ spec:
     value: "0"
   - name: redeliverInterval
     value: "0"
+scopes:
+  - resiliencyappgrpc
+  - resiliencyapp

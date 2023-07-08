@@ -322,7 +322,6 @@ func TestMain(m *testing.M) {
 			IngressEnabled: true,
 			MetricsEnabled: true,
 			AppProtocol:    "grpc",
-			Config:         "pubsubroutingconfig",
 		},
 	}
 
