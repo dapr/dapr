@@ -107,7 +107,7 @@ type APIOpts struct {
 
 // NewAPI returns a new gRPC API.
 func NewAPI(opts APIOpts) API {
-	return &api{
+	api := &api{
 		UniversalAPI: &universalapi.UniversalAPI{
 			AppID:                      opts.AppID,
 			Logger:                     apiServerLogger,
@@ -118,8 +118,6 @@ func NewAPI(opts APIOpts) API {
 			GetComponentsCapabilitesFn: opts.GetComponentsCapabilitiesFn,
 			AppConnectionConfig:        opts.AppConnectionConfig,
 			GlobalConfig:               opts.GlobalConfig,
-			ActorsReminders:            opts.Actors.GetActorsReminders(),
-			ActorsTimers:               opts.Actors.GetActorsTimers(),
 		},
 		directMessaging:       opts.DirectMessaging,
 		resiliency:            opts.Resiliency,
@@ -129,6 +127,11 @@ func NewAPI(opts APIOpts) API {
 		tracingSpec:           opts.TracingSpec,
 		accessControlList:     opts.AccessControlList,
 	}
+	if opts.Actors != nil {
+		api.UniversalAPI.ActorsReminders = opts.Actors.GetActorsReminders()
+		api.UniversalAPI.ActorsTimers = opts.Actors.GetActorsTimers()
+	}
+	return api
 }
 
 // validateAndGetPubsbuAndTopic validates the request parameters and returns the pubsub interface, pubsub name, topic name, rawPayload metadata if set

@@ -157,9 +157,12 @@ func NewAPI(opts APIOpts) API {
 			GetComponentsCapabilitesFn: opts.GetComponentsCapabilitiesFn,
 			AppConnectionConfig:        opts.AppConnectionConfig,
 			GlobalConfig:               opts.GlobalConfig,
-			ActorsReminders:            opts.Actors.GetActorsReminders(),
-			ActorsTimers:               opts.Actors.GetActorsTimers(),
 		},
+	}
+
+	if opts.Actors != nil {
+		api.universal.ActorsReminders = opts.Actors.GetActorsReminders()
+		api.universal.ActorsTimers = opts.Actors.GetActorsTimers()
 	}
 
 	metadataEndpoints := api.constructMetadataEndpoints()

@@ -2193,10 +2193,11 @@ func TestV1ActorEndpoints(t *testing.T) {
 			Period:    "0h0m7s0ms",
 		}
 		mockActors := new(actors.MockActors)
-
-		mockActors.On("CreateReminder", &reminderRequest).Return(nil)
+		mockReminders := new(actors.MockReminders)
+		mockReminders.On("CreateReminder", &reminderRequest).Return(nil)
 
 		testAPI.universal.Actors = mockActors
+		testAPI.universal.ActorsReminders = mockReminders
 
 		// act
 		inputBodyBytes, err := json.Marshal(reminderRequest)
@@ -2208,7 +2209,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		}
 
 		// assert
-		mockActors.AssertNumberOfCalls(t, "CreateReminder", 2)
+		mockReminders.AssertNumberOfCalls(t, "CreateReminder", 2)
 	})
 
 	t.Run("Reminder Create - 500 when CreateReminderFails", func(t *testing.T) {
@@ -2223,10 +2224,12 @@ func TestV1ActorEndpoints(t *testing.T) {
 			Period:    "0h0m7s0ms",
 		}
 		mockActors := new(actors.MockActors)
+		mockReminders := new(actors.MockReminders)
 
-		mockActors.On("CreateReminder", &reminderRequest).Return(errors.New("UPSTREAM_ERROR"))
+		mockReminders.On("CreateReminder", &reminderRequest).Return(errors.New("UPSTREAM_ERROR"))
 
 		testAPI.universal.Actors = mockActors
+		testAPI.universal.ActorsReminders = mockReminders
 
 		// act
 		inputBodyBytes, err := json.Marshal(reminderRequest)
@@ -2237,7 +2240,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		// assert
 		assert.Equal(t, 500, resp.StatusCode)
 		assert.Equal(t, "ERR_ACTOR_REMINDER_CREATE", resp.ErrorBody["errorCode"])
-		mockActors.AssertNumberOfCalls(t, "CreateReminder", 1)
+		mockReminders.AssertNumberOfCalls(t, "CreateReminder", 1)
 	})
 
 	t.Run("Reminder Rename - 204 when RenameReminderFails", func(t *testing.T) {
@@ -2250,10 +2253,12 @@ func TestV1ActorEndpoints(t *testing.T) {
 			NewName:   "reminder2",
 		}
 		mockActors := new(actors.MockActors)
+		mockReminders := new(actors.MockReminders)
 
-		mockActors.On("RenameReminder", &reminderRequest).Return(nil)
+		mockReminders.On("RenameReminder", &reminderRequest).Return(nil)
 
 		testAPI.universal.Actors = mockActors
+		testAPI.universal.ActorsReminders = mockReminders
 
 		// act
 		inputBodyBytes, err := json.Marshal(reminderRequest)
@@ -2263,7 +2268,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 		// assert
 		assert.Equal(t, 204, resp.StatusCode)
-		mockActors.AssertNumberOfCalls(t, "RenameReminder", 1)
+		mockReminders.AssertNumberOfCalls(t, "RenameReminder", 1)
 	})
 
 	t.Run("Reminder Rename - 500 when RenameReminderFails", func(t *testing.T) {
@@ -2276,10 +2281,12 @@ func TestV1ActorEndpoints(t *testing.T) {
 			NewName:   "reminder2",
 		}
 		mockActors := new(actors.MockActors)
+		mockReminders := new(actors.MockReminders)
 
-		mockActors.On("RenameReminder", &reminderRequest).Return(errors.New("UPSTREAM_ERROR"))
+		mockReminders.On("RenameReminder", &reminderRequest).Return(errors.New("UPSTREAM_ERROR"))
 
 		testAPI.universal.Actors = mockActors
+		testAPI.universal.ActorsReminders = mockReminders
 
 		// act
 		inputBodyBytes, err := json.Marshal(reminderRequest)
@@ -2290,7 +2297,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		// assert
 		assert.Equal(t, 500, resp.StatusCode)
 		assert.Equal(t, "ERR_ACTOR_REMINDER_RENAME", resp.ErrorBody["errorCode"])
-		mockActors.AssertNumberOfCalls(t, "RenameReminder", 1)
+		mockReminders.AssertNumberOfCalls(t, "RenameReminder", 1)
 	})
 
 	t.Run("Reminder Delete - 204 No Content", func(t *testing.T) {
@@ -2302,10 +2309,12 @@ func TestV1ActorEndpoints(t *testing.T) {
 		}
 
 		mockActors := new(actors.MockActors)
+		mockReminders := new(actors.MockReminders)
 
-		mockActors.On("DeleteReminder", &reminderRequest).Return(nil)
+		mockReminders.On("DeleteReminder", &reminderRequest).Return(nil)
 
 		testAPI.universal.Actors = mockActors
+		testAPI.universal.ActorsReminders = mockReminders
 
 		// act
 		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil)
@@ -2313,7 +2322,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		// assert
 		assert.Equal(t, 204, resp.StatusCode)
 		assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
-		mockActors.AssertNumberOfCalls(t, "DeleteReminder", 1)
+		mockReminders.AssertNumberOfCalls(t, "DeleteReminder", 1)
 	})
 
 	t.Run("Reminder Delete - 500 on upstream actor error", func(t *testing.T) {
@@ -2325,10 +2334,12 @@ func TestV1ActorEndpoints(t *testing.T) {
 		}
 
 		mockActors := new(actors.MockActors)
+		mockReminders := new(actors.MockReminders)
 
-		mockActors.On("DeleteReminder", &reminderRequest).Return(errors.New("UPSTREAM_ERROR"))
+		mockReminders.On("DeleteReminder", &reminderRequest).Return(errors.New("UPSTREAM_ERROR"))
 
 		testAPI.universal.Actors = mockActors
+		testAPI.universal.ActorsReminders = mockReminders
 
 		// act
 		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil)
@@ -2336,7 +2347,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		// assert
 		assert.Equal(t, 500, resp.StatusCode)
 		assert.Equal(t, "ERR_ACTOR_REMINDER_DELETE", resp.ErrorBody["errorCode"])
-		mockActors.AssertNumberOfCalls(t, "DeleteReminder", 1)
+		mockReminders.AssertNumberOfCalls(t, "DeleteReminder", 1)
 	})
 
 	t.Run("Reminder Get - 200 OK", func(t *testing.T) {
@@ -2348,17 +2359,19 @@ func TestV1ActorEndpoints(t *testing.T) {
 		}
 
 		mockActors := new(actors.MockActors)
+		mockReminders := new(actors.MockReminders)
 
-		mockActors.On("GetReminder", &reminderRequest).Return(nil, nil)
+		mockReminders.On("GetReminder", &reminderRequest).Return(nil, nil)
 
 		testAPI.universal.Actors = mockActors
+		testAPI.universal.ActorsReminders = mockReminders
 
 		// act
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 
 		// assert
 		assert.Equal(t, 200, resp.StatusCode)
-		mockActors.AssertNumberOfCalls(t, "GetReminder", 1)
+		mockReminders.AssertNumberOfCalls(t, "GetReminder", 1)
 	})
 
 	t.Run("Reminder Get - 500 on upstream actor error", func(t *testing.T) {
@@ -2370,10 +2383,12 @@ func TestV1ActorEndpoints(t *testing.T) {
 		}
 
 		mockActors := new(actors.MockActors)
+		mockReminders := new(actors.MockReminders)
 
-		mockActors.On("GetReminder", &reminderRequest).Return(nil, errors.New("UPSTREAM_ERROR"))
+		mockReminders.On("GetReminder", &reminderRequest).Return(nil, errors.New("UPSTREAM_ERROR"))
 
 		testAPI.universal.Actors = mockActors
+		testAPI.universal.ActorsReminders = mockReminders
 
 		// act
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
@@ -2381,7 +2396,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		// assert
 		assert.Equal(t, 500, resp.StatusCode)
 		assert.Equal(t, "ERR_ACTOR_REMINDER_GET", resp.ErrorBody["errorCode"])
-		mockActors.AssertNumberOfCalls(t, "GetReminder", 1)
+		mockReminders.AssertNumberOfCalls(t, "GetReminder", 1)
 	})
 
 	t.Run("Reminder Get - 500 on JSON encode failure from actor", func(t *testing.T) {
@@ -2398,10 +2413,12 @@ func TestV1ActorEndpoints(t *testing.T) {
 		}
 
 		mockActors := new(actors.MockActors)
+		mockReminders := new(actors.MockReminders)
 
-		mockActors.On("GetReminder", &reminderRequest).Return(&reminderResponse, nil)
+		mockReminders.On("GetReminder", &reminderRequest).Return(&reminderResponse, nil)
 
 		testAPI.universal.Actors = mockActors
+		testAPI.universal.ActorsReminders = mockReminders
 
 		// act
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
@@ -2409,7 +2426,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		// assert
 		assert.Equal(t, 500, resp.StatusCode)
 		assert.Equal(t, "ERR_ACTOR_REMINDER_GET", resp.ErrorBody["errorCode"])
-		mockActors.AssertNumberOfCalls(t, "GetReminder", 1)
+		mockReminders.AssertNumberOfCalls(t, "GetReminder", 1)
 	})
 
 	t.Run("Timer Create - 204 No Content", func(t *testing.T) {
@@ -2425,10 +2442,12 @@ func TestV1ActorEndpoints(t *testing.T) {
 			Callback:  "",
 		}
 		mockActors := new(actors.MockActors)
+		mockTimers := new(actors.MockTimers)
 
-		mockActors.On("CreateTimer", &timerRequest).Return(nil)
+		mockTimers.On("CreateTimer", &timerRequest).Return(nil)
 
 		testAPI.universal.Actors = mockActors
+		testAPI.universal.ActorsTimers = mockTimers
 
 		// act
 		inputBodyBytes, err := json.Marshal(timerRequest)
@@ -2440,7 +2459,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		}
 
 		// assert
-		mockActors.AssertNumberOfCalls(t, "CreateTimer", 2)
+		mockTimers.AssertNumberOfCalls(t, "CreateTimer", 2)
 	})
 
 	t.Run("Timer Create - 500 on upstream error", func(t *testing.T) {
@@ -2455,10 +2474,12 @@ func TestV1ActorEndpoints(t *testing.T) {
 			Period:    "0h0m7s0ms",
 		}
 		mockActors := new(actors.MockActors)
+		mockTimers := new(actors.MockTimers)
 
-		mockActors.On("CreateTimer", &timerRequest).Return(errors.New("UPSTREAM_ERROR"))
+		mockTimers.On("CreateTimer", &timerRequest).Return(errors.New("UPSTREAM_ERROR"))
 
 		testAPI.universal.Actors = mockActors
+		testAPI.universal.ActorsTimers = mockTimers
 
 		// act
 		inputBodyBytes, err := json.Marshal(timerRequest)
@@ -2469,7 +2490,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		assert.Equal(t, "ERR_ACTOR_TIMER_CREATE", resp.ErrorBody["errorCode"])
 
 		// assert
-		mockActors.AssertNumberOfCalls(t, "CreateTimer", 1)
+		mockTimers.AssertNumberOfCalls(t, "CreateTimer", 1)
 	})
 
 	t.Run("Timer Delete - 204 No Conent", func(t *testing.T) {
@@ -2481,10 +2502,12 @@ func TestV1ActorEndpoints(t *testing.T) {
 		}
 
 		mockActors := new(actors.MockActors)
+		mockTimers := new(actors.MockTimers)
 
-		mockActors.On("DeleteTimer", &timerRequest).Return(nil)
+		mockTimers.On("DeleteTimer", &timerRequest).Return(nil)
 
 		testAPI.universal.Actors = mockActors
+		testAPI.universal.ActorsTimers = mockTimers
 
 		// act
 		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil)
@@ -2492,7 +2515,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		// assert
 		assert.Equal(t, 204, resp.StatusCode)
 		assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
-		mockActors.AssertNumberOfCalls(t, "DeleteTimer", 1)
+		mockTimers.AssertNumberOfCalls(t, "DeleteTimer", 1)
 	})
 
 	t.Run("Timer Delete - 500 For upstream error", func(t *testing.T) {
@@ -2504,10 +2527,12 @@ func TestV1ActorEndpoints(t *testing.T) {
 		}
 
 		mockActors := new(actors.MockActors)
+		mockTimers := new(actors.MockTimers)
 
-		mockActors.On("DeleteTimer", &timerRequest).Return(errors.New("UPSTREAM_ERROR"))
+		mockTimers.On("DeleteTimer", &timerRequest).Return(errors.New("UPSTREAM_ERROR"))
 
 		testAPI.universal.Actors = mockActors
+		testAPI.universal.ActorsTimers = mockTimers
 
 		// act
 		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil)
@@ -2515,7 +2540,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		// assert
 		assert.Equal(t, 500, resp.StatusCode)
 		assert.Equal(t, "ERR_ACTOR_TIMER_DELETE", resp.ErrorBody["errorCode"])
-		mockActors.AssertNumberOfCalls(t, "DeleteTimer", 1)
+		mockTimers.AssertNumberOfCalls(t, "DeleteTimer", 1)
 	})
 
 	t.Run("Direct Message - Forwards downstream status", func(t *testing.T) {
