@@ -77,10 +77,6 @@ const (
 	ErrDirectInvokeNoAppID  = "failed getting app id either from the URL path or the header dapr-app-id"
 	ErrDirectInvokeNotReady = "invoke API is not ready"
 
-	// Healthz.
-	ErrHealthNotReady         = "dapr is not ready"
-	ErrOutboundHealthNotReady = "dapr outbound is not ready"
-
 	// Configuration.
 	ErrConfigurationStoresNotConfigured = "configuration stores not configured"
 	ErrConfigurationStoreNotFound       = "configuration store %s not found"
@@ -97,6 +93,11 @@ var (
 	// HTTP.
 	ErrBodyRead         = APIError{"failed to read request body: %v", "ERR_BODY_READ", http.StatusBadRequest, grpcCodes.InvalidArgument}
 	ErrMalformedRequest = APIError{"failed deserializing HTTP body: %v", "ERR_MALFORMED_REQUEST", http.StatusBadRequest, grpcCodes.InvalidArgument}
+
+	// Healthz.
+	ErrHealthNotReady         = APIError{"dapr is not ready", "ERR_HEALTH_NOT_READY", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrOutboundHealthNotReady = APIError{"dapr outbound is not ready", "ERR_OUTBOUND_HEALTH_NOT_READY", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrHealthAppIDNotMatch    = APIError{"dapr app-id does not match", "ERR_HEALTH_APPID_NOT_MATCH", http.StatusInternalServerError, grpcCodes.Internal}
 
 	// State.
 	ErrStateStoresNotConfigured = APIError{"state store is not configured", "ERR_STATE_STORE_NOT_CONFIGURED", http.StatusInternalServerError, grpcCodes.FailedPrecondition}
