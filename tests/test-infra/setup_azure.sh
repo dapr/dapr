@@ -22,9 +22,10 @@ if [[ -z "$TEST_RESOURCE_GROUP" ]]; then
     exit 1
 fi
 
-# Control if we're using Cosmos DB
+# Control if we're using Cosmos DB, Service Bus, and Azure Key Vault
 USE_COSMOSDB=${1:-true}
 USE_SERVICEBUS=${2:-true}
+USE_KEYVAULT=${3:-true}
 
 if $USE_COSMOSDB ; then
   echo "Configuring Cosmos DB as state store"
@@ -56,9 +57,9 @@ else
 fi
 
 if $USE_SERVICEBUS ; then
-  echo "Configuring Service Bus as pubsub store"
+  echo "Configuring Service Bus as pubsub broker"
 
-  # Set environmental variables to Service Bus state store
+  # Set environmental variables to Service Bus pubsub
   export DAPR_TEST_PUBSUB=servicebus
   if [ -n "$GITHUB_ENV" ]; then
     echo "DAPR_TEST_PUBSUB=${DAPR_TEST_PUBSUB}" >> $GITHUB_ENV
@@ -77,5 +78,27 @@ if $USE_SERVICEBUS ; then
     --namespace=$DAPR_NAMESPACE \
     --from-literal=connectionString=${SERVICEBUS_CONNSTRING}
 else
-  echo "NOT configuring Service Bus as pubsub store"
+  echo "NOT configuring Service Bus as pubsub broker"
+fi
+
+if $USE_KEYVAULT ; then
+  echo "Configuring Azure Key Vault as crypto provider"
+
+  # Set environmental variables to Azure Key Vault crypto provider
+  export DAPR_TEST_CRYPTO=azurekeyvault
+  if [ -n "$GITHUB_ENV" ]; then
+    echo "DAPR_TEST_CRYPTO=${DAPR_TEST_CRYPTO}" >> $GITHUB_ENV
+  fi
+
+  AzureKeyVaultTenantId=$(echo $AZURE_CREDENTIALS | jq -r '.tenantId')
+  AzureKeyVaultClientId=$(echo $AZURE_CREDENTIALS | jq -r '.clientId')
+  AzureKeyVaultClientSecret=$(echo $AZURE_CREDENTIALS | jq -r '.clientSecret')
+
+  kubectl create secret generic azurekeyvault-secret \
+    --namespace=$DAPR_NAMESPACE \
+    --from-literal="tenant-id=${AzureKeyVaultTenantId}" \
+    --from-literal="client-id=${AzureKeyVaultClientId}" \
+    --from-literal="client-secret=${AzureKeyVaultClientSecret}"
+else
+  echo "NOT configuring Azure Key Vault as crypto provider"
 fi

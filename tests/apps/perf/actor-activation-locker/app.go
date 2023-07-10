@@ -22,15 +22,16 @@ import (
 	"time"
 
 	"github.com/bsm/redislock"
+	redis "github.com/go-redis/redis/v9"
+
 	"github.com/dapr/go-sdk/actor"
 	dapr "github.com/dapr/go-sdk/client"
 	daprd "github.com/dapr/go-sdk/service/http"
-	redis "github.com/go-redis/redis/v9"
 )
 
-func testActorFactory(client dapr.Client, redisClient *redis.Client) func() actor.Server {
+func testActorFactory(client dapr.Client, redisClient *redis.Client) func() actor.ServerContext {
 	lockClient := redislock.New(redisClient)
-	return func() actor.Server {
+	return func() actor.ServerContext {
 		return &TestActor{
 			daprClient: client,
 			locker:     lockClient,
@@ -39,7 +40,7 @@ func testActorFactory(client dapr.Client, redisClient *redis.Client) func() acto
 }
 
 type TestActor struct {
-	actor.ServerImplBase
+	actor.ServerImplBaseCtx
 	daprClient dapr.Client
 	locker     *redislock.Client
 }
@@ -87,7 +88,7 @@ func main() {
 	defer client.Close()
 
 	s := daprd.NewService(":3000")
-	s.RegisterActorImplFactory(testActorFactory(client, redisClient))
+	s.RegisterActorImplFactoryContext(testActorFactory(client, redisClient))
 	log.Println("started")
 	if err := s.Start(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("error listenning: %v", err)
