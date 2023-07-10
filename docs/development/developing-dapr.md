@@ -73,9 +73,14 @@ This section introduces how to start debugging with the Delve CLI. Please refer 
 
 ### Start the Dapr runtime with a debugger
 
+To start the Dapr runtime with a debugger, you need to use build tags to include the components you want to debug. The following build tags are available:
+
+- allcomponents - (default) includes all components in Dapr sidecar
+- stablecomponents - includes all stable components in Dapr sidecar
+
 ```bash
 $ cd dapr/dapr/cmd/daprd
-$ dlv debug .
+$ dlv debug . --build-flags=--tags=allcomponents
 Type 'help' for list of commands.
 (dlv) break main.main
 (dlv) continue
