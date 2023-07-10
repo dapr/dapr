@@ -158,6 +158,7 @@ func NewAPI(opts APIOpts) API {
 			AppConnectionConfig:        opts.AppConnectionConfig,
 			GlobalConfig:               opts.GlobalConfig,
 			ActorsReminders:            opts.Actors.GetActorsReminders(),
+			ActorsTimers:               opts.Actors.GetActorsTimers(),
 		},
 	}
 
@@ -1410,7 +1411,7 @@ func (a *api) onCreateActorTimer(reqCtx *fasthttp.RequestCtx) {
 	req.ActorType = actorType
 	req.ActorID = actorID
 
-	err = a.universal.Actors.CreateTimer(reqCtx, &req)
+	err = a.universal.ActorsTimers.CreateTimer(reqCtx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_TIMER_CREATE", fmt.Sprintf(messages.ErrActorTimerCreate, err))
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
@@ -1548,7 +1549,7 @@ func (a *api) onDeleteActorTimer(reqCtx *fasthttp.RequestCtx) {
 		ActorID:   actorID,
 		ActorType: actorType,
 	}
-	err := a.universal.Actors.DeleteTimer(reqCtx, &req)
+	err := a.universal.ActorsTimers.DeleteTimer(reqCtx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_TIMER_DELETE", fmt.Sprintf(messages.ErrActorTimerDelete, err))
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))

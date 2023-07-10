@@ -79,10 +79,6 @@ type RemindersOpts struct {
 }
 
 func NewReminders(opts RemindersOpts) core.Reminders {
-	return newRemindersWithClock(opts)
-}
-
-func newRemindersWithClock(opts RemindersOpts) core.Reminders {
 	return &ActorsReminders{
 		clock:                opts.Clock,
 		remindersStoringLock: opts.RemindersStoringLock,

@@ -1723,7 +1723,7 @@ func TestCreateTimerDueTimes(t *testing.T) {
 		fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 
 		timer := createTimerData(actorID, actorType, "positiveTimer", "1s", "2s", "", "callback", "testTimer")
-		err := testActorsRuntime.CreateTimer(context.Background(), &timer)
+		err := testActorsRuntime.actorsTimers.CreateTimer(context.Background(), &timer)
 		assert.NoError(t, err)
 		assert.Equal(t, int64(1), atomic.LoadInt64(testActorsRuntime.activeTimersCount[actorType]))
 	})
@@ -1735,7 +1735,7 @@ func TestCreateTimerDueTimes(t *testing.T) {
 		fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 
 		timer := createTimerData(actorID, actorType, "positiveTimer", "1s", "0s", "", "callback", "testTimer")
-		err := testActorsRuntime.CreateTimer(context.Background(), &timer)
+		err := testActorsRuntime.actorsTimers.CreateTimer(context.Background(), &timer)
 		assert.NoError(t, err)
 	})
 
@@ -1746,7 +1746,7 @@ func TestCreateTimerDueTimes(t *testing.T) {
 		fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 
 		timer := createTimerData(actorID, actorType, "positiveTimer", "1s", "", "", "callback", "testTimer")
-		err := testActorsRuntime.CreateTimer(context.Background(), &timer)
+		err := testActorsRuntime.actorsTimers.CreateTimer(context.Background(), &timer)
 		assert.NoError(t, err)
 	})
 }
@@ -1775,7 +1775,7 @@ func TestTimerCounter(t *testing.T) {
 		go func(idx int) {
 			defer wg.Done()
 			timer := createTimerData(actorID, actorType, fmt.Sprintf("positiveTimer%d", idx), "R10/PT1S", "500ms", "", "callback", "testTimer")
-			err := testActorsRuntime.CreateTimer(context.Background(), &timer)
+			err := testActorsRuntime.actorsTimers.CreateTimer(context.Background(), &timer)
 			assert.NoError(t, err)
 		}(i)
 	}
@@ -1784,7 +1784,7 @@ func TestTimerCounter(t *testing.T) {
 		go func(idx int) {
 			defer wg.Done()
 			timer := createTimerData(actorID, actorType, fmt.Sprintf("positiveTimerOneTime%d", idx), "", "500ms", "", "callback", "testTimer")
-			err := testActorsRuntime.CreateTimer(context.Background(), &timer)
+			err := testActorsRuntime.actorsTimers.CreateTimer(context.Background(), &timer)
 			assert.NoError(t, err)
 		}(i)
 	}
@@ -1796,7 +1796,7 @@ func TestTimerCounter(t *testing.T) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			err := testActorsRuntime.DeleteTimer(context.Background(), &coreReminder.DeleteTimerRequest{
+			err := testActorsRuntime.actorsTimers.DeleteTimer(context.Background(), &coreReminder.DeleteTimerRequest{
 				ActorID:   actorID,
 				ActorType: actorType,
 				Name:      fmt.Sprintf("positiveTimer%d", idx),
@@ -1833,7 +1833,7 @@ func TestDeleteTimer(t *testing.T) {
 	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 
 	timer := createTimerData(actorID, actorType, "timer1", "100ms", "100ms", "", "callback", "")
-	err := testActorsRuntime.CreateTimer(ctx, &timer)
+	err := testActorsRuntime.actorsTimers.CreateTimer(ctx, &timer)
 	assert.NoError(t, err)
 
 	timerKey := constructCompositeKey(actorKey, timer.Name)
@@ -1841,7 +1841,7 @@ func TestDeleteTimer(t *testing.T) {
 	_, ok := testActorsRuntime.activeTimers.Load(timerKey)
 	assert.True(t, ok)
 
-	err = testActorsRuntime.DeleteTimer(ctx, &coreReminder.DeleteTimerRequest{
+	err = testActorsRuntime.actorsTimers.DeleteTimer(ctx, &coreReminder.DeleteTimerRequest{
 		Name:      timer.Name,
 		ActorID:   actorID,
 		ActorType: actorType,
@@ -1868,14 +1868,14 @@ func TestOverrideTimerCancelsActiveTimers(t *testing.T) {
 		timerName := "timer1"
 
 		timer := createTimerData(actorID, actorType, timerName, "10s", "1s", "0s", "callback1", "a")
-		err := testActorsRuntime.CreateTimer(ctx, &timer)
+		err := testActorsRuntime.actorsTimers.CreateTimer(ctx, &timer)
 		assert.NoError(t, err)
 
 		timer2 := createTimerData(actorID, actorType, timerName, "PT9S", "PT1S", "PT0S", "callback2", "b")
-		testActorsRuntime.CreateTimer(ctx, &timer2)
+		testActorsRuntime.actorsTimers.CreateTimer(ctx, &timer2)
 
 		timer3 := createTimerData(actorID, actorType, timerName, "8s", "2s", "", "callback3", "c")
-		testActorsRuntime.CreateTimer(ctx, &timer3)
+		testActorsRuntime.actorsTimers.CreateTimer(ctx, &timer3)
 
 		// due time for timer3 is 2s
 		advanceTickers(t, clock, time.Second)
@@ -1908,20 +1908,20 @@ func TestOverrideTimerCancelsMultipleActiveTimers(t *testing.T) {
 		fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 
 		timer := createTimerData(actorID, actorType, timerName, "10s", "3s", "", "callback1", "a")
-		err := testActorsRuntime.CreateTimer(ctx, &timer)
+		err := testActorsRuntime.actorsTimers.CreateTimer(ctx, &timer)
 		assert.NoError(t, err)
 
 		timer2 := createTimerData(actorID, actorType, timerName, "8s", "4s", "", "callback2", "b")
 		timer3 := createTimerData(actorID, actorType, timerName, "8s", "4s", "", "callback3", "c")
-		require.NoError(t, testActorsRuntime.CreateTimer(ctx, &timer2))
-		require.NoError(t, testActorsRuntime.CreateTimer(ctx, &timer3))
+		require.NoError(t, testActorsRuntime.actorsTimers.CreateTimer(ctx, &timer2))
+		require.NoError(t, testActorsRuntime.actorsTimers.CreateTimer(ctx, &timer3))
 
 		// due time for timer2/timer3 is 4s, advance less
 		advanceTickers(t, clock, time.Second)
 		advanceTickers(t, clock, time.Second)
 
 		timer4 := createTimerData(actorID, actorType, timerName, "7s", "2s", "", "callback4", "d")
-		testActorsRuntime.CreateTimer(ctx, &timer4)
+		testActorsRuntime.actorsTimers.CreateTimer(ctx, &timer4)
 
 		// due time for timer4 is 2s
 		advanceTickers(t, clock, time.Second*2)
@@ -2058,7 +2058,7 @@ func Test_TimerRepeats(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 			t.Cleanup(cancel)
 
-			err := testActorsRuntime.CreateTimer(ctx, &timer)
+			err := testActorsRuntime.actorsTimers.CreateTimer(ctx, &timer)
 			if test.expRepeats == 0 {
 				assert.ErrorContains(t, err, "has zero repetitions")
 				return
@@ -2080,7 +2080,7 @@ func Test_TimerRepeats(t *testing.T) {
 
 				for i := 0; i < 10; i++ {
 					if test.delAfterSeconds > 0 && clock.Now().Sub(start).Seconds() >= test.delAfterSeconds {
-						require.NoError(t, testActorsRuntime.DeleteTimer(ctx, &coreReminder.DeleteTimerRequest{
+						require.NoError(t, testActorsRuntime.actorsTimers.DeleteTimer(ctx, &coreReminder.DeleteTimerRequest{
 							Name:      timer.Name,
 							ActorID:   timer.ActorID,
 							ActorType: timer.ActorType,
@@ -2145,7 +2145,7 @@ func Test_TimerTTL(t *testing.T) {
 
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 			t.Cleanup(cancel)
-			assert.NoError(t, testActorsRuntime.CreateTimer(ctx, &timer))
+			assert.NoError(t, testActorsRuntime.actorsTimers.CreateTimer(ctx, &timer))
 
 			count := 0
 
@@ -2200,7 +2200,7 @@ func timerValidation(dueTime, period, ttl, msg string) func(t *testing.T) {
 		fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 
 		timer := createTimerData(actorID, actorType, "timer", period, dueTime, ttl, "callback", "data")
-		err := testActorsRuntime.CreateTimer(context.Background(), &timer)
+		err := testActorsRuntime.actorsTimers.CreateTimer(context.Background(), &timer)
 		assert.ErrorContains(t, err, msg)
 	}
 }
@@ -3379,7 +3379,7 @@ func TestCreateTimerReminderGoroutineLeak(t *testing.T) {
 			req.Period = "1s"
 			req.TTL = "2s"
 		}
-		return testActorsRuntime.CreateTimer(context.Background(), req)
+		return testActorsRuntime.actorsTimers.CreateTimer(context.Background(), req)
 	}))
 
 	t.Run("reminders", testFn(func(i int, ttl bool) error {

@@ -12,20 +12,17 @@ import (
 )
 
 // Actors allow calling into virtual actors as well as actor state management.
-//
-//nolint:interfacebloat
 type Actors interface {
 	Call(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error)
 	Init() error
 	Stop()
 	GetState(ctx context.Context, req *reminder.GetStateRequest) (*reminder.StateResponse, error)
 	TransactionalStateOperation(ctx context.Context, req *TransactionalRequest) error
-	CreateTimer(ctx context.Context, req *reminder.CreateTimerRequest) error
-	DeleteTimer(ctx context.Context, req *reminder.DeleteTimerRequest) error
 	IsActorHosted(ctx context.Context, req *reminder.ActorHostedRequest) bool
 	GetActiveActorsCount(ctx context.Context) []*runtimev1pb.ActiveActorsCount
 	RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor) error
 	GetActorsReminders() Reminders
+	GetActorsTimers() Timers
 }
 
 const metadataZeroID = "00000000-0000-0000-0000-000000000000"

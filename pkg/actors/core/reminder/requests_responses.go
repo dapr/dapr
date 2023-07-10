@@ -15,6 +15,11 @@ package reminder
 
 import "encoding/json"
 
+const (
+	DaprSeparator        = "||"
+	metadataPartitionKey = "partitionKey"
+)
+
 // ActorHostedRequest is the request object for checking if an actor is hosted on this instance.
 type ActorHostedRequest struct {
 	ActorID   string `json:"actorId"`
@@ -32,19 +37,6 @@ type CreateReminderRequest struct {
 	TTL       string          `json:"ttl"`
 }
 
-// // CreateReminderRequest is the request object to create a new reminder.
-// type CreateReminderRequest = reminders.CreateReminderRequest
-
-// // CreateTimerRequest is the request object to create a new timer.
-// type CreateTimerRequest = reminders.CreateTimerRequest
-
-// // DeleteReminderRequest is the request object for deleting a reminder.
-// type DeleteReminderRequest struct {
-// 	Name      string
-// 	ActorType string
-// 	ActorID   string
-// }
-
 // DeleteStateRequest is the request object for deleting an actor state.
 type DeleteStateRequest struct {
 	ActorID   string `json:"actorId"`
@@ -59,13 +51,6 @@ type DeleteTimerRequest struct {
 	ActorID   string
 }
 
-// // GetReminderRequest is the request object to get an existing reminder.
-// type GetReminderRequest struct {
-// 	Name      string
-// 	ActorType string
-// 	ActorID   string
-// }
-
 // GetStateRequest is the request object for getting actor state.
 type GetStateRequest struct {
 	ActorID   string `json:"actorId"`
@@ -78,45 +63,6 @@ func (r GetStateRequest) ActorKey() string {
 	return r.ActorType + DaprSeparator + r.ActorID
 }
 
-// // ReminderResponse is the payload that is sent to an Actor SDK API for execution.
-// type ReminderResponse struct {
-// 	Data    any    `json:"data"`
-// 	DueTime string `json:"dueTime"`
-// 	Period  string `json:"period"`
-// }
-
-// // MarshalJSON is a custom JSON marshaler that encodes the data as JSON.
-// // Actor SDKs expect "data" to be a base64-encoded message with the JSON representation of the data, so this makes sure that happens.
-// // This method implements the json.Marshaler interface.
-// func (r *ReminderResponse) MarshalJSON() ([]byte, error) {
-// 	type responseAlias ReminderResponse
-// 	m := struct {
-// 		Data json.RawMessage `json:"data,omitempty"`
-// 		*responseAlias
-// 	}{
-// 		responseAlias: (*responseAlias)(r),
-// 	}
-
-// 	if raw, ok := r.Data.(json.RawMessage); ok {
-// 		m.Data = raw
-// 	} else {
-// 		var err error
-// 		m.Data, err = json.Marshal(r.Data)
-// 		if err != nil {
-// 			return nil, err
-// 		}
-// 	}
-// 	return json.Marshal(m)
-// }
-
-// // RenameReminderRequest is the request object for rename a reminder.
-// type RenameReminderRequest struct {
-// 	OldName   string
-// 	ActorType string
-// 	ActorID   string
-// 	NewName   string
-// }
-
 // SaveStateRequest is the request object for saving an actor state.
 type SaveStateRequest struct {
 	ActorID   string `json:"actorId"`
@@ -128,4 +74,69 @@ type SaveStateRequest struct {
 // StateResponse is the response returned from getting an actor state.
 type StateResponse struct {
 	Data []byte `json:"data"`
+}
+
+// CreateTimerRequest is the request object to create a new timer.
+type CreateTimerRequest struct {
+	Name      string
+	ActorType string
+	ActorID   string
+	DueTime   string          `json:"dueTime"`
+	Period    string          `json:"period"`
+	TTL       string          `json:"ttl"`
+	Callback  string          `json:"callback"`
+	Data      json.RawMessage `json:"data"`
+}
+
+// DeleteReminderRequest is the request object for deleting a reminder.
+type DeleteReminderRequest struct {
+	Name      string
+	ActorType string
+	ActorID   string
+}
+
+// GetReminderRequest is the request object to get an existing reminder.
+type GetReminderRequest struct {
+	Name      string
+	ActorType string
+	ActorID   string
+}
+
+// ReminderResponse is the payload that is sent to an Actor SDK API for execution.
+type ReminderResponse struct {
+	Data    any    `json:"data"`
+	DueTime string `json:"dueTime"`
+	Period  string `json:"period"`
+}
+
+// MarshalJSON is a custom JSON marshaler that encodes the data as JSON.
+// Actor SDKs expect "data" to be a base64-encoded message with the JSON representation of the data, so this makes sure that happens.
+// This method implements the json.Marshaler interface.
+func (r *ReminderResponse) MarshalJSON() ([]byte, error) {
+	type responseAlias ReminderResponse
+	m := struct {
+		Data json.RawMessage `json:"data,omitempty"`
+		*responseAlias
+	}{
+		responseAlias: (*responseAlias)(r),
+	}
+
+	if raw, ok := r.Data.(json.RawMessage); ok {
+		m.Data = raw
+	} else {
+		var err error
+		m.Data, err = json.Marshal(r.Data)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return json.Marshal(m)
+}
+
+// RenameReminderRequest is the request object for rename a reminder.
+type RenameReminderRequest struct {
+	OldName   string
+	ActorType string
+	ActorID   string
+	NewName   string
 }

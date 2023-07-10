@@ -119,6 +119,7 @@ func NewAPI(opts APIOpts) API {
 			AppConnectionConfig:        opts.AppConnectionConfig,
 			GlobalConfig:               opts.GlobalConfig,
 			ActorsReminders:            opts.Actors.GetActorsReminders(),
+			ActorsTimers:               opts.Actors.GetActorsTimers(),
 		},
 		directMessaging:       opts.DirectMessaging,
 		resiliency:            opts.Resiliency,
@@ -975,7 +976,7 @@ func (a *api) RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterAc
 		}
 		req.Data = j
 	}
-	err := a.UniversalAPI.Actors.CreateTimer(ctx, req)
+	err := a.UniversalAPI.ActorsTimers.CreateTimer(ctx, req)
 	return &emptypb.Empty{}, err
 }
 
@@ -992,7 +993,7 @@ func (a *api) UnregisterActorTimer(ctx context.Context, in *runtimev1pb.Unregist
 		ActorType: in.ActorType,
 	}
 
-	err := a.UniversalAPI.Actors.DeleteTimer(ctx, req)
+	err := a.UniversalAPI.ActorsTimers.DeleteTimer(ctx, req)
 	return &emptypb.Empty{}, err
 }
 

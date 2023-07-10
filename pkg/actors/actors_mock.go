@@ -246,6 +246,10 @@ func (_m *MockActors) GetActorsReminders() core.Reminders {
 	return nil
 }
 
+func (_m *MockActors) GetActorsTimers() core.Timers {
+	return nil
+}
+
 type FailingActors struct {
 	Failure daprt.Failure
 }
@@ -322,5 +326,9 @@ func (f *FailingActors) GetActiveActorsCount(ctx context.Context) []*runtimev1pb
 }
 
 func (f *FailingActors) GetActorsReminders() core.Reminders {
+	return nil
+}
+
+func (f *FailingActors) GetActorsTimers() core.Timers {
 	return nil
 }

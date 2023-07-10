@@ -38,6 +38,7 @@ type UniversalAPI struct {
 	AppConnectionConfig        config.AppConnectionConfig
 	GlobalConfig               *config.Configuration
 	ActorsReminders            coreActors.Reminders
+	ActorsTimers               coreActors.Timers
 
 	extendedMetadataLock sync.RWMutex
 }
