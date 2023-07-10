@@ -5,30 +5,31 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/dapr/dapr/pkg/actors/core/reminder"
 	timeutils "github.com/dapr/kit/time"
 )
 
 // Reminder represents a reminder or timer for a unique actor.
 type Reminder struct {
-	ActorID        string          `json:"actorID,omitempty"`
-	ActorType      string          `json:"actorType,omitempty"`
-	Name           string          `json:"name,omitempty"`
-	Data           json.RawMessage `json:"data,omitempty"`
-	Period         ReminderPeriod  `json:"period,omitempty"`
-	RegisteredTime time.Time       `json:"registeredTime,omitempty"`
-	DueTime        string          `json:"dueTime,omitempty"` // Exact input value from user
-	ExpirationTime time.Time       `json:"expirationTime,omitempty"`
-	Callback       string          `json:"callback,omitempty"` // Used by timers only
+	ActorID        string                  `json:"actorID,omitempty"`
+	ActorType      string                  `json:"actorType,omitempty"`
+	Name           string                  `json:"name,omitempty"`
+	Data           json.RawMessage         `json:"data,omitempty"`
+	Period         reminder.ReminderPeriod `json:"period,omitempty"`
+	RegisteredTime time.Time               `json:"registeredTime,omitempty"`
+	DueTime        string                  `json:"dueTime,omitempty"` // Exact input value from user
+	ExpirationTime time.Time               `json:"expirationTime,omitempty"`
+	Callback       string                  `json:"callback,omitempty"` // Used by timers only
 }
 
 // ActorKey returns the key of the actor for this reminder.
 func (r Reminder) ActorKey() string {
-	return r.ActorType + daprSeparator + r.ActorID
+	return r.ActorType + reminder.DaprSeparator + r.ActorID
 }
 
 // Key returns the key for this unique reminder.
 func (r Reminder) Key() string {
-	return r.ActorType + daprSeparator + r.ActorID + daprSeparator + r.Name
+	return r.ActorType + reminder.DaprSeparator + r.ActorID + reminder.DaprSeparator + r.Name
 }
 
 // NextTick returns the time the reminder should tick again next.
@@ -65,7 +66,7 @@ func (r *Reminder) TickExecuted() (done bool) {
 }
 
 // UpdateFromTrack updates the reminder with data from the track object.
-func (r *Reminder) UpdateFromTrack(track *ReminderTrack) {
+func (r *Reminder) UpdateFromTrack(track *reminder.ReminderTrack) {
 	if track == nil || track.LastFiredTime.IsZero() {
 		return
 	}
@@ -109,7 +110,7 @@ func (r *Reminder) UnmarshalJSON(data []byte) error {
 	type reminderAlias Reminder
 
 	*r = Reminder{
-		Period: NewEmptyReminderPeriod(),
+		Period: reminder.NewEmptyReminderPeriod(),
 	}
 
 	// Parse RegisteredTime and ExpirationTime as dates in the RFC3339 format

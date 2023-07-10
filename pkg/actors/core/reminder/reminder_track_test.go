@@ -11,9 +11,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package core
+package reminder
 
 import (
+	"bytes"
 	"encoding/json"
 	"reflect"
 	"testing"
@@ -72,4 +73,11 @@ func TestReminderTrackJSON(t *testing.T) {
 			assert.True(t, reflect.DeepEqual(dec, r), "Got: `%#v`. Expected: `%#v`", dec, r)
 		})
 	}
+}
+
+func compactJSON(t *testing.T, data []byte) []byte {
+	out := &bytes.Buffer{}
+	err := json.Compact(out, data)
+	require.NoError(t, err)
+	return out.Bytes()
 }

@@ -28,6 +28,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/actors/core"
+	coreReminder "github.com/dapr/dapr/pkg/actors/core/reminder"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 )
 
@@ -240,7 +241,7 @@ func (a *activityActor) loadActivityState(ctx context.Context, actorID string) (
 	// Loading from the state store is only expected in process failure recovery scenarios.
 	wfLogger.Debugf("%s: loading activity state", actorID)
 
-	req := core.GetStateRequest{
+	req := coreReminder.GetStateRequest{
 		ActorType: a.config.activityActorType,
 		ActorID:   actorID,
 		Key:       activityStateKey,
@@ -309,7 +310,7 @@ func (a *activityActor) createReliableReminder(ctx context.Context, actorID stri
 	if err != nil {
 		return fmt.Errorf("failed to encode data as JSON: %w", err)
 	}
-	return a.actorsReminders.CreateReminder(ctx, &core.CreateReminderRequest{
+	return a.actorsReminders.CreateReminder(ctx, &coreReminder.CreateReminderRequest{
 		ActorType: a.config.activityActorType,
 		ActorID:   actorID,
 		Data:      dataEnc,

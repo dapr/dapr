@@ -34,6 +34,7 @@ import (
 
 	"github.com/dapr/components-contrib/state"
 	core "github.com/dapr/dapr/pkg/actors/core"
+	coreReminder "github.com/dapr/dapr/pkg/actors/core/reminder"
 	"github.com/dapr/dapr/pkg/actors/internal"
 	"github.com/dapr/dapr/pkg/actors/reminders"
 	"github.com/dapr/dapr/pkg/channel"
@@ -499,7 +500,7 @@ func (a *actorsRuntime) isActorLocal(targetActorAddress, hostAddress string, grp
 		targetActorAddress == hostAddress+":"+strconv.Itoa(grpcPort)
 }
 
-func (a *actorsRuntime) GetState(ctx context.Context, req *core.GetStateRequest) (*core.StateResponse, error) {
+func (a *actorsRuntime) GetState(ctx context.Context, req *coreReminder.GetStateRequest) (*coreReminder.StateResponse, error) {
 	store, err := a.stateStore()
 	if err != nil {
 		return nil, err
@@ -527,10 +528,10 @@ func (a *actorsRuntime) GetState(ctx context.Context, req *core.GetStateRequest)
 	}
 
 	if resp == nil {
-		return &core.StateResponse{}, nil
+		return &coreReminder.StateResponse{}, nil
 	}
 
-	return &core.StateResponse{
+	return &coreReminder.StateResponse{
 		Data: resp.Data,
 	}, nil
 }
@@ -560,7 +561,7 @@ func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *co
 	return a.actorsReminders.ExecuteStateStoreTransaction(ctx, store, operations, metadata)
 }
 
-func (a *actorsRuntime) IsActorHosted(ctx context.Context, req *core.ActorHostedRequest) bool {
+func (a *actorsRuntime) IsActorHosted(ctx context.Context, req *coreReminder.ActorHostedRequest) bool {
 	key := constructCompositeKey(req.ActorType, req.ActorID)
 	policyDef := a.resiliency.BuiltInPolicy(resiliency.BuiltInActorNotFoundRetries)
 	policyRunner := resiliency.NewRunner[any](ctx, policyDef)
@@ -709,20 +710,6 @@ func (a *actorsRuntime) evaluateReminders(ctx context.Context) {
 	<-a.evaluationChan
 }
 
-func (a *actorsRuntime) waitForEvaluationChan() bool {
-	t := a.clock.NewTimer(5 * time.Second)
-	defer t.Stop()
-	select {
-	case <-a.ctx.Done():
-		return false
-	case <-t.C():
-		return false
-	case a.evaluationChan <- struct{}{}:
-		<-a.evaluationChan
-	}
-	return true
-}
-
 func (a *actorsRuntime) CreateTimer(ctx context.Context, req *reminders.CreateTimerRequest) error {
 	reminder, err := reminders.NewReminderFromCreateTimerRequest(req, a.clock.Now())
 	if err != nil {
@@ -811,7 +798,7 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *reminders.CreateTi
 			nextTimer.Reset(reminder.NextTick().Sub(a.clock.Now()))
 		}
 
-		err = a.DeleteTimer(ctx, &core.DeleteTimerRequest{
+		err = a.DeleteTimer(ctx, &coreReminder.DeleteTimerRequest{
 			Name:      req.Name,
 			ActorID:   req.ActorID,
 			ActorType: req.ActorType,
@@ -838,149 +825,11 @@ func (a *actorsRuntime) updateActiveTimersCount(actorType string, inc int64) {
 	diag.DefaultMonitoring.ActorTimers(actorType, atomic.AddInt64(a.activeTimersCount[actorType], inc))
 }
 
-func (a *actorsRuntime) saveActorTypeMetadataRequest(actorType string, actorMetadata *core.ActorMetadata, stateMetadata map[string]string) state.SetRequest {
-	return state.SetRequest{
-		Key:      constructCompositeKey("actors", actorType, "metadata"),
-		Value:    actorMetadata,
-		ETag:     actorMetadata.Etag,
-		Metadata: stateMetadata,
-		Options: state.SetStateOption{
-			Concurrency: state.FirstWrite,
-		},
-	}
-}
-
-// func (a *actorsRuntime) getActorTypeMetadata(ctx context.Context, actorType string, migrate bool) (*core.ActorMetadata, error) {
-// 	store, err := a.stateStore()
-// 	if err != nil {
-// 		return nil, err
-// 	}
-
-// 	var policyDef *resiliency.PolicyDefinition
-// 	if !a.resiliency.PolicyDefined(a.storeName, resiliency.ComponentOutboundPolicy) {
-// 		// If there is no policy defined, wrap the whole logic in the built-in.
-// 		policyDef = a.resiliency.BuiltInPolicy(resiliency.BuiltInActorReminderRetries)
-// 	} else {
-// 		// Else, we can rely on the underlying operations all being covered by resiliency.
-// 		noOp := resiliency.NoOp{}
-// 		policyDef = noOp.EndpointPolicy("", "")
-// 	}
-// 	policyRunner := resiliency.NewRunner[*core.ActorMetadata](ctx, policyDef)
-// 	getReq := &state.GetRequest{
-// 		Key: constructCompositeKey("actors", actorType, "metadata"),
-// 		Metadata: map[string]string{
-// 			metadataPartitionKey: constructCompositeKey("actors", actorType),
-// 		},
-// 	}
-// 	return policyRunner(func(ctx context.Context) (*core.ActorMetadata, error) {
-// 		rResp, rErr := store.Get(ctx, getReq)
-// 		if rErr != nil {
-// 			return nil, rErr
-// 		}
-// 		actorMetadata := &core.ActorMetadata{
-// 			ID: metadataZeroID,
-// 			RemindersMetadata: core.ActorRemindersMetadata{
-// 				PartitionsEtag: nil,
-// 				PartitionCount: 0,
-// 			},
-// 			Etag: nil,
-// 		}
-// 		if len(rResp.Data) > 0 {
-// 			rErr = json.Unmarshal(rResp.Data, actorMetadata)
-// 			if rErr != nil {
-// 				return nil, fmt.Errorf("could not parse metadata for actor type %s (%s): %w", actorType, string(rResp.Data), rErr)
-// 			}
-// 			actorMetadata.Etag = rResp.ETag
-// 		}
-
-// 		if migrate && ctx.Err() == nil {
-// 			rErr = a.migrateRemindersForActorType(ctx, store, actorType, actorMetadata)
-// 			if rErr != nil {
-// 				return nil, rErr
-// 			}
-// 		}
-
-// 		return actorMetadata, nil
-// 	})
-// }
-
-// func (a *actorsRuntime) migrateRemindersForActorType(ctx context.Context, store core.TransactionalStateStore, actorType string, actorMetadata *core.ActorMetadata) error {
-// 	reminderPartitionCount := a.config.con.GetRemindersPartitionCountForType(actorType)
-// 	if actorMetadata.RemindersMetadata.PartitionCount == reminderPartitionCount {
-// 		return nil
-// 	}
-
-// 	if actorMetadata.RemindersMetadata.PartitionCount > reminderPartitionCount {
-// 		log.Warnf("cannot decrease number of partitions for reminders of actor type %s", actorType)
-// 		return nil
-// 	}
-
-// 	a.remindersStoringLock.Lock()
-// 	defer a.remindersStoringLock.Unlock()
-
-// 	log.Warnf("migrating actor metadata record for actor type %s", actorType)
-
-// 	// Fetch all reminders for actor type.
-// 	reminderRefs, refreshedActorMetadata, err := a.getRemindersForActorType(ctx, actorType, false)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	if refreshedActorMetadata.ID != actorMetadata.ID {
-// 		return fmt.Errorf("could not migrate reminders for actor type %s due to race condition in actor metadata", actorType)
-// 	}
-
-// 	log.Infof("migrating %d reminders for actor type %s", len(reminderRefs), actorType)
-// 	*actorMetadata = *refreshedActorMetadata
-
-// 	// Recreate as a new metadata identifier.
-// 	idObj, err := uuid.NewRandom()
-// 	if err != nil {
-// 		return fmt.Errorf("failed to generate UUID: %w", err)
-// 	}
-// 	actorMetadata.ID = idObj.String()
-// 	actorMetadata.RemindersMetadata.PartitionCount = reminderPartitionCount
-// 	actorRemindersPartitions := make([][]core.Reminder, actorMetadata.RemindersMetadata.PartitionCount)
-// 	for i := 0; i < actorMetadata.RemindersMetadata.PartitionCount; i++ {
-// 		actorRemindersPartitions[i] = make([]core.Reminder, 0)
-// 	}
-
-// 	// Recalculate partition for each reminder.
-// 	for _, reminderRef := range reminderRefs {
-// 		partitionID := actorMetadata.CalculateReminderPartition(reminderRef.Reminder.ActorID, reminderRef.Reminder.Name)
-// 		actorRemindersPartitions[partitionID-1] = append(actorRemindersPartitions[partitionID-1], reminderRef.Reminder)
-// 	}
-
-// 	// Create the requests to put in the transaction.
-// 	stateOperations := make([]state.TransactionalStateOperation, actorMetadata.RemindersMetadata.PartitionCount+1)
-// 	stateMetadata := map[string]string{
-// 		metadataPartitionKey: actorMetadata.ID,
-// 	}
-// 	for i := 0; i < actorMetadata.RemindersMetadata.PartitionCount; i++ {
-// 		stateKey := actorMetadata.CalculateRemindersStateKey(actorType, uint32(i+1))
-// 		stateOperations[i] = a.actorsReminders.SaveRemindersInPartitionRequest(stateKey, actorRemindersPartitions[i], nil, stateMetadata)
-// 	}
-
-// 	// Also create a request to save the new metadata, so the new "metadataID" becomes the new de facto referenced list for reminders
-// 	stateOperations[len(stateOperations)-1] = a.saveActorTypeMetadataRequest(actorType, actorMetadata, stateMetadata)
-
-// 	// Perform all operations in a transaction
-// 	err = a.actorsReminders.ExecuteStateStoreTransaction(ctx, store, stateOperations, stateMetadata)
-// 	if err != nil {
-// 		return fmt.Errorf("failed to perform transaction to migrate records for actor type %s: %w", actorType, err)
-// 	}
-
-// 	log.Warnf(
-// 		"completed actor metadata record migration for actor type %s, new metadata ID = %s",
-// 		actorType, actorMetadata.ID)
-// 	return nil
-// }
-
 func (a *actorsRuntime) getRemindersForActorType(ctx context.Context, actorType string, migrate bool) ([]core.ActorReminderReference, *core.ActorMetadata, error) {
 	store, err := a.stateStore()
 	if err != nil {
 		return nil, nil, err
 	}
-	// store := a.stateStoreS
 
 	actorMetadata, err := a.actorsReminders.GetActorTypeMetadata(ctx, actorType, migrate)
 	if err != nil {
@@ -1110,7 +959,7 @@ func newActor(actorType, actorID string, maxReentrancyDepth *int, cl clock.Clock
 	}
 }
 
-func (a *actorsRuntime) DeleteTimer(ctx context.Context, req *core.DeleteTimerRequest) error {
+func (a *actorsRuntime) DeleteTimer(ctx context.Context, req *coreReminder.DeleteTimerRequest) error {
 	actorKey := constructCompositeKey(req.ActorType, req.ActorID)
 	timerKey := constructCompositeKey(actorKey, req.Name)
 

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/dapr/dapr/pkg/actors/core/reminder"
 	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/config"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -101,7 +102,7 @@ func (c *InternalActorChannel) InvokeMethod(ctx context.Context, req *invokev1.I
 		// Check for well-known method names; otherwise, just call InvokeMethod on the internal actor.
 		if strings.HasPrefix(methodName, "remind/") {
 			reminderName := strings.TrimPrefix(methodName, "remind/")
-			reminderInfo, ok := req.GetDataObject().(*ReminderResponse)
+			reminderInfo, ok := req.GetDataObject().(*reminder.ReminderResponse)
 			if !ok {
 				return nil, fmt.Errorf("unexpected type for reminder object: %T", req.GetDataObject())
 			}

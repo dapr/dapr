@@ -1,4 +1,4 @@
-package core
+package reminder
 
 import (
 	"encoding/json"

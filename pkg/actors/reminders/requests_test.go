@@ -19,8 +19,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dapr/dapr/pkg/actors/core"
 	"github.com/stretchr/testify/require"
+
+	"github.com/dapr/dapr/pkg/actors/core"
+	coreReminder "github.com/dapr/dapr/pkg/actors/core/reminder"
 )
 
 func TestNewReminderFromCreateReminderRequest(t *testing.T) {
@@ -62,7 +64,7 @@ func TestNewReminderFromCreateReminderRequest(t *testing.T) {
 				r.Period = "2s"
 			},
 			wantReminder: func(r *core.Reminder) {
-				r.Period, _ = core.NewReminderPeriod("2s")
+				r.Period, _ = coreReminder.NewReminderPeriod("2s")
 			},
 		},
 		{
@@ -117,7 +119,7 @@ func TestNewReminderFromCreateReminderRequest(t *testing.T) {
 				ActorID:        "id",
 				ActorType:      "type",
 				Name:           "name",
-				Period:         core.NewEmptyReminderPeriod(),
+				Period:         coreReminder.NewEmptyReminderPeriod(),
 				RegisteredTime: now,
 			}
 			tt.wantReminder(wantReminder)
@@ -186,7 +188,7 @@ func TestNewReminderFromCreateTimerRequest(t *testing.T) {
 				r.Period = "2s"
 			},
 			wantReminder: func(r *core.Reminder) {
-				r.Period, _ = core.NewReminderPeriod("2s")
+				r.Period, _ = coreReminder.NewReminderPeriod("2s")
 			},
 		},
 		{
@@ -241,7 +243,7 @@ func TestNewReminderFromCreateTimerRequest(t *testing.T) {
 				ActorID:        "id",
 				ActorType:      "type",
 				Name:           "name",
-				Period:         core.NewEmptyReminderPeriod(),
+				Period:         coreReminder.NewEmptyReminderPeriod(),
 				RegisteredTime: now,
 			}
 			tt.wantReminder(wantReminder)

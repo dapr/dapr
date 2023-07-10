@@ -23,12 +23,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dapr/components-contrib/state"
-	"github.com/dapr/kit/logger"
 	"github.com/google/uuid"
 	"k8s.io/utils/clock"
 
+	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/kit/logger"
+
 	"github.com/dapr/dapr/pkg/actors/core"
+	coreReminder "github.com/dapr/dapr/pkg/actors/core/reminder"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -101,7 +103,7 @@ func (a *ActorsReminders) SetStateStore(store core.TransactionalStateStore) {
 	a.stateStoreS = store
 }
 
-func (a *ActorsReminders) GetReminder(ctx context.Context, req *core.GetReminderRequest) (*core.Reminder, error) {
+func (a *ActorsReminders) GetReminder(ctx context.Context, req *coreReminder.GetReminderRequest) (*core.Reminder, error) {
 	list, _, err := a.getRemindersForActorType(ctx, req.ActorType, false)
 	if err != nil {
 		return nil, err
@@ -158,7 +160,7 @@ func (a *ActorsReminders) CreateReminder(ctx context.Context, req *CreateReminde
 	return a.StartReminder(reminder, stop)
 }
 
-func (a *ActorsReminders) DeleteReminder(ctx context.Context, req *core.DeleteReminderRequest) error {
+func (a *ActorsReminders) DeleteReminder(ctx context.Context, req *coreReminder.DeleteReminderRequest) error {
 	if !a.waitForEvaluationChan() {
 		return errors.New("error deleting reminder: timed out after 5s")
 	}
@@ -171,7 +173,7 @@ func (a *ActorsReminders) DeleteReminder(ctx context.Context, req *core.DeleteRe
 
 // Deprecated: Currently RenameReminder renames by deleting-then-inserting-again.
 // This implementation is not fault-tolerant, as a failed insert after deletion would result in no reminder
-func (a *ActorsReminders) RenameReminder(ctx context.Context, req *core.RenameReminderRequest) error {
+func (a *ActorsReminders) RenameReminder(ctx context.Context, req *coreReminder.RenameReminderRequest) error {
 	log.Warn("[DEPRECATION NOTICE] Currently RenameReminder renames by deleting-then-inserting-again. This implementation is not fault-tolerant, as a failed insert after deletion would result in no reminder")
 
 	store, err := a.stateStore()
@@ -218,7 +220,7 @@ func (a *ActorsReminders) RenameReminder(ctx context.Context, req *core.RenameRe
 	return a.StartReminder(reminder, stop)
 }
 
-func (a *ActorsReminders) GetReminderTrack(ctx context.Context, key string) (*core.ReminderTrack, error) {
+func (a *ActorsReminders) GetReminderTrack(ctx context.Context, key string) (*coreReminder.ReminderTrack, error) {
 	store, err := a.stateStore()
 	if err != nil {
 		return nil, err
@@ -240,7 +242,7 @@ func (a *ActorsReminders) GetReminderTrack(ctx context.Context, key string) (*co
 	if resp == nil {
 		resp = &state.GetResponse{}
 	}
-	track := &core.ReminderTrack{
+	track := &coreReminder.ReminderTrack{
 		RepetitionLeft: -1,
 	}
 	_ = json.Unmarshal(resp.Data, track)
@@ -347,7 +349,7 @@ func (a *ActorsReminders) StartReminder(reminder *core.Reminder, stopChannel cha
 			nextTimer.Reset(reminder.NextTick().Sub((*a.clock).Now()))
 		}
 
-		err = a.DeleteReminder(context.TODO(), &core.DeleteReminderRequest{
+		err = a.DeleteReminder(context.TODO(), &coreReminder.DeleteReminderRequest{
 			Name:      reminder.Name,
 			ActorID:   reminder.ActorID,
 			ActorType: reminder.ActorType,
@@ -366,7 +368,7 @@ func (a *ActorsReminders) UpdateReminderTrack(ctx context.Context, key string, r
 		return err
 	}
 
-	track := core.ReminderTrack{
+	track := coreReminder.ReminderTrack{
 		LastFiredTime:  lastInvokeTime,
 		RepetitionLeft: repetition,
 	}
@@ -389,7 +391,7 @@ func (a *ActorsReminders) UpdateReminderTrack(ctx context.Context, key string, r
 }
 
 // Executes a reminder or timer
-func (l *ActorsReminders) ExecuteReminder(reminder *core.Reminder, isTimer bool) (err error) {
+func (a *ActorsReminders) ExecuteReminder(reminder *core.Reminder, isTimer bool) (err error) {
 	var (
 		data         any
 		logName      string
@@ -408,13 +410,13 @@ func (l *ActorsReminders) ExecuteReminder(reminder *core.Reminder, isTimer bool)
 	} else {
 		logName = "reminder"
 		invokeMethod = "remind/" + reminder.Name
-		data = &core.ReminderResponse{
+		data = &coreReminder.ReminderResponse{
 			DueTime: reminder.DueTime,
 			Period:  reminder.Period.String(),
 			Data:    reminder.Data,
 		}
 	}
-	policyDef := (*l.resiliency).ActorPreLockPolicy(reminder.ActorType, reminder.ActorID)
+	policyDef := (*a.resiliency).ActorPreLockPolicy(reminder.ActorType, reminder.ActorID)
 
 	log.Debug("Executing " + logName + " for actor " + reminder.Key())
 	req := invokev1.NewInvokeMethodRequest(invokeMethod).
@@ -432,7 +434,7 @@ func (l *ActorsReminders) ExecuteReminder(reminder *core.Reminder, isTimer bool)
 		},
 	)
 	imr, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
-		return l.callActorFn(ctx, req)
+		return a.callActorFn(ctx, req)
 	})
 	if err != nil && !errors.Is(err, ErrReminderCanceled) {
 		log.Errorf("Error executing %s for actor %s: %v", logName, reminder.Key(), err)

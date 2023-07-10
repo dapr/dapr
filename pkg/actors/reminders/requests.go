@@ -20,13 +20,14 @@ import (
 	"time"
 
 	"github.com/dapr/dapr/pkg/actors/core"
+	coreReminder "github.com/dapr/dapr/pkg/actors/core/reminder"
 )
 
 // CreateReminderRequest is the request object to create a new reminder.
-type CreateReminderRequest = core.CreateReminderRequest
+type CreateReminderRequest = coreReminder.CreateReminderRequest
 
 // CreateTimerRequest is the request object to create a new timer.
-type CreateTimerRequest = core.CreateTimerRequest
+type CreateTimerRequest = coreReminder.CreateTimerRequest
 
 // NewReminderFromCreateReminderRequest returns a new Reminder from a CreateReminderRequest object.
 func NewReminderFromCreateReminderRequest(req *CreateReminderRequest, now time.Time) (reminder *core.Reminder, err error) {
@@ -102,7 +103,7 @@ func setReminderTimes(reminder *core.Reminder, dueTime string, period string, tt
 	}
 
 	// Parse period and check correctness
-	reminder.Period, err = core.NewReminderPeriod(period)
+	reminder.Period, err = coreReminder.NewReminderPeriod(period)
 	if err != nil {
 		return fmt.Errorf("invalid %s period: %w", logMsg, err)
 	}

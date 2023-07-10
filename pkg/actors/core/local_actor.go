@@ -8,14 +8,16 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/dapr/dapr/pkg/channel"
-	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
-	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/gogo/status"
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
 	"k8s.io/utils/clock"
+
+	"github.com/dapr/dapr/pkg/actors/core/reminder"
+	"github.com/dapr/dapr/pkg/channel"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	"github.com/dapr/dapr/pkg/resiliency"
 )
 
 var ErrDaprResponseHeader = errors.New("error indicated via actor header response")
@@ -154,7 +156,7 @@ func (l *LocalActor) GetOrCreateActor(actorType, actorID string) *Actor {
 }
 
 func constructCompositeKey(keys ...string) string {
-	return strings.Join(keys, daprSeparator)
+	return strings.Join(keys, reminder.DaprSeparator)
 }
 
 func newActor(actorType, actorID string, maxReentrancyDepth *int, cl clock.Clock) *Actor {

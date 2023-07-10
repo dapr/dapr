@@ -40,6 +40,7 @@ import (
 
 	"github.com/dapr/components-contrib/state"
 	core "github.com/dapr/dapr/pkg/actors/core"
+	coreReminder "github.com/dapr/dapr/pkg/actors/core/reminder"
 	"github.com/dapr/dapr/pkg/actors/reminders"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
@@ -569,12 +570,12 @@ func TestStoreIsNotInitialized(t *testing.T) {
 	})
 
 	t.Run("DeleteReminder", func(t *testing.T) {
-		err := testActorsRuntime.actorsReminders.DeleteReminder(context.Background(), &core.DeleteReminderRequest{})
+		err := testActorsRuntime.actorsReminders.DeleteReminder(context.Background(), &coreReminder.DeleteReminderRequest{})
 		assert.Error(t, err)
 	})
 
 	t.Run("RenameReminder", func(t *testing.T) {
-		err := testActorsRuntime.actorsReminders.RenameReminder(context.Background(), &core.RenameReminderRequest{})
+		err := testActorsRuntime.actorsReminders.RenameReminder(context.Background(), &coreReminder.RenameReminderRequest{})
 		assert.Error(t, err)
 	})
 }
@@ -586,7 +587,7 @@ func TestTimerExecution(t *testing.T) {
 	actorType, actorID := getTestActorTypeAndID()
 	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 
-	period, _ := core.NewReminderPeriod("2s")
+	period, _ := coreReminder.NewReminderPeriod("2s")
 	err := testActorsRuntime.actorsReminders.ExecuteReminder(&core.Reminder{
 		ActorType:      actorType,
 		ActorID:        actorID,
@@ -607,7 +608,7 @@ func TestTimerExecutionZeroDuration(t *testing.T) {
 	actorType, actorID := getTestActorTypeAndID()
 	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 
-	period, _ := core.NewReminderPeriod("0ms")
+	period, _ := coreReminder.NewReminderPeriod("0ms")
 	err := testActorsRuntime.actorsReminders.ExecuteReminder(&core.Reminder{
 		ActorType:      actorType,
 		ActorID:        actorID,
@@ -628,7 +629,7 @@ func TestReminderExecution(t *testing.T) {
 	actorType, actorID := getTestActorTypeAndID()
 	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 
-	period, _ := core.NewReminderPeriod("2s")
+	period, _ := coreReminder.NewReminderPeriod("2s")
 	err := testActorsRuntime.actorsReminders.ExecuteReminder(&core.Reminder{
 		ActorType:      actorType,
 		ActorID:        actorID,
@@ -746,7 +747,7 @@ func TestReminderExecutionZeroDuration(t *testing.T) {
 	actorType, actorID := getTestActorTypeAndID()
 	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 
-	period, _ := core.NewReminderPeriod("0ms")
+	period, _ := coreReminder.NewReminderPeriod("0ms")
 	err := testActorsRuntime.actorsReminders.ExecuteReminder(&core.Reminder{
 		ActorType: actorType,
 		ActorID:   actorID,
@@ -955,7 +956,7 @@ func TestRenameReminder(t *testing.T) {
 
 	// Rename reminders, in parallel
 	go func() {
-		errs <- testActorsRuntime.actorsReminders.RenameReminder(ctx, &core.RenameReminderRequest{
+		errs <- testActorsRuntime.actorsReminders.RenameReminder(ctx, &coreReminder.RenameReminderRequest{
 			ActorID:   actorID,
 			ActorType: actorType,
 			OldName:   "reminder0",
@@ -963,7 +964,7 @@ func TestRenameReminder(t *testing.T) {
 		})
 	}()
 	go func() {
-		errs <- testActorsRuntime.actorsReminders.RenameReminder(ctx, &core.RenameReminderRequest{
+		errs <- testActorsRuntime.actorsReminders.RenameReminder(ctx, &coreReminder.RenameReminderRequest{
 			ActorID:   actorID,
 			ActorType: actorType,
 			OldName:   "reminderA",
@@ -977,7 +978,7 @@ func TestRenameReminder(t *testing.T) {
 
 	// Verify that the reminders retrieved with the old name no longer exists (in parallel)
 	go func() {
-		reminder, err := testActorsRuntime.actorsReminders.GetReminder(ctx, &core.GetReminderRequest{
+		reminder, err := testActorsRuntime.actorsReminders.GetReminder(ctx, &coreReminder.GetReminderRequest{
 			ActorType: actorType,
 			ActorID:   actorID,
 			Name:      "reminder0",
@@ -986,7 +987,7 @@ func TestRenameReminder(t *testing.T) {
 		retrieved <- reminder
 	}()
 	go func() {
-		reminder, err := testActorsRuntime.actorsReminders.GetReminder(ctx, &core.GetReminderRequest{
+		reminder, err := testActorsRuntime.actorsReminders.GetReminder(ctx, &coreReminder.GetReminderRequest{
 			ActorType: actorType,
 			ActorID:   actorID,
 			Name:      "reminderA",
@@ -1003,7 +1004,7 @@ func TestRenameReminder(t *testing.T) {
 
 	// Verify that the reminders retrieved with the new name already exists (in parallel)
 	go func() {
-		reminder, err := testActorsRuntime.actorsReminders.GetReminder(ctx, &core.GetReminderRequest{
+		reminder, err := testActorsRuntime.actorsReminders.GetReminder(ctx, &coreReminder.GetReminderRequest{
 			ActorType: actorType,
 			ActorID:   actorID,
 			Name:      "reminder1",
@@ -1012,7 +1013,7 @@ func TestRenameReminder(t *testing.T) {
 		retrieved <- reminder
 	}()
 	go func() {
-		reminder, err := testActorsRuntime.actorsReminders.GetReminder(ctx, &core.GetReminderRequest{
+		reminder, err := testActorsRuntime.actorsReminders.GetReminder(ctx, &coreReminder.GetReminderRequest{
 			ActorType: actorType,
 			ActorID:   actorID,
 			Name:      "reminderB",
@@ -1239,7 +1240,7 @@ func TestDeleteReminderWithPartitions(t *testing.T) {
 
 		// Delete the reminder
 		startCount := stateStore.(*daprt.FakeStateStore).CallCount("Multi")
-		err = testActorsRuntime.actorsReminders.DeleteReminder(ctx, &core.DeleteReminderRequest{
+		err = testActorsRuntime.actorsReminders.DeleteReminder(ctx, &coreReminder.DeleteReminderRequest{
 			Name:      "reminder1",
 			ActorID:   actorID,
 			ActorType: actorType,
@@ -1253,7 +1254,7 @@ func TestDeleteReminderWithPartitions(t *testing.T) {
 
 	t.Run("Delete a reminder that doesn't exist", func(t *testing.T) {
 		startCount := stateStore.(*daprt.FakeStateStore).CallCount("Multi")
-		err := testActorsRuntime.actorsReminders.DeleteReminder(ctx, &core.DeleteReminderRequest{
+		err := testActorsRuntime.actorsReminders.DeleteReminder(ctx, &coreReminder.DeleteReminderRequest{
 			Name:      "does-not-exist",
 			ActorID:   actorID,
 			ActorType: actorType,
@@ -1297,14 +1298,14 @@ func TestDeleteReminder(t *testing.T) {
 		// Delete the reminders (in parallel)
 		startCount := stateStore.(*daprt.FakeStateStore).CallCount("Multi")
 		go func() {
-			errs <- testActorsRuntime.actorsReminders.DeleteReminder(ctx, &core.DeleteReminderRequest{
+			errs <- testActorsRuntime.actorsReminders.DeleteReminder(ctx, &coreReminder.DeleteReminderRequest{
 				Name:      "reminder1",
 				ActorID:   actorID,
 				ActorType: actorType,
 			})
 		}()
 		go func() {
-			errs <- testActorsRuntime.actorsReminders.DeleteReminder(ctx, &core.DeleteReminderRequest{
+			errs <- testActorsRuntime.actorsReminders.DeleteReminder(ctx, &coreReminder.DeleteReminderRequest{
 				Name:      "reminder2",
 				ActorID:   actorID,
 				ActorType: actorType,
@@ -1321,7 +1322,7 @@ func TestDeleteReminder(t *testing.T) {
 
 	t.Run("Delete a reminder that doesn't exist", func(t *testing.T) {
 		startCount := stateStore.(*daprt.FakeStateStore).CallCount("Multi")
-		err := testActorsRuntime.actorsReminders.DeleteReminder(ctx, &core.DeleteReminderRequest{
+		err := testActorsRuntime.actorsReminders.DeleteReminder(ctx, &coreReminder.DeleteReminderRequest{
 			Name:      "does-not-exist",
 			ActorID:   actorID,
 			ActorType: actorType,
@@ -1507,7 +1508,7 @@ func TestReminderRepeats(t *testing.T) {
 
 				for i := 0; i < 10; i++ {
 					if test.delAfterSeconds > 0 && clock.Now().Sub(start).Seconds() >= test.delAfterSeconds {
-						require.NoError(t, testActorsRuntime.actorsReminders.DeleteReminder(ctx, &core.DeleteReminderRequest{
+						require.NoError(t, testActorsRuntime.actorsReminders.DeleteReminder(ctx, &coreReminder.DeleteReminderRequest{
 							Name:      reminder.Name,
 							ActorID:   reminder.ActorID,
 							ActorType: reminder.ActorType,
@@ -1697,7 +1698,7 @@ func TestGetReminder(t *testing.T) {
 	reminder := createReminderData(actorID, actorType, "reminder1", "1s", "1s", "", "a")
 	testActorsRuntime.actorsReminders.CreateReminder(ctx, &reminder)
 	assert.Equal(t, 1, len(testActorsRuntime.reminders[actorType]))
-	r, err := testActorsRuntime.actorsReminders.GetReminder(ctx, &core.GetReminderRequest{
+	r, err := testActorsRuntime.actorsReminders.GetReminder(ctx, &coreReminder.GetReminderRequest{
 		Name:      "reminder1",
 		ActorID:   actorID,
 		ActorType: actorType,
@@ -1795,7 +1796,7 @@ func TestTimerCounter(t *testing.T) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			err := testActorsRuntime.DeleteTimer(context.Background(), &core.DeleteTimerRequest{
+			err := testActorsRuntime.DeleteTimer(context.Background(), &coreReminder.DeleteTimerRequest{
 				ActorID:   actorID,
 				ActorType: actorType,
 				Name:      fmt.Sprintf("positiveTimer%d", idx),
@@ -1840,7 +1841,7 @@ func TestDeleteTimer(t *testing.T) {
 	_, ok := testActorsRuntime.activeTimers.Load(timerKey)
 	assert.True(t, ok)
 
-	err = testActorsRuntime.DeleteTimer(ctx, &core.DeleteTimerRequest{
+	err = testActorsRuntime.DeleteTimer(ctx, &coreReminder.DeleteTimerRequest{
 		Name:      timer.Name,
 		ActorID:   actorID,
 		ActorType: actorType,
@@ -2079,7 +2080,7 @@ func Test_TimerRepeats(t *testing.T) {
 
 				for i := 0; i < 10; i++ {
 					if test.delAfterSeconds > 0 && clock.Now().Sub(start).Seconds() >= test.delAfterSeconds {
-						require.NoError(t, testActorsRuntime.DeleteTimer(ctx, &core.DeleteTimerRequest{
+						require.NoError(t, testActorsRuntime.DeleteTimer(ctx, &coreReminder.DeleteTimerRequest{
 							Name:      timer.Name,
 							ActorID:   timer.ActorID,
 							ActorType: timer.ActorType,
@@ -2285,8 +2286,8 @@ func TestReminderPeriod(t *testing.T) {
 	advanceTickers(t, clock, 0)
 
 	var (
-		track  *core.ReminderTrack
-		track2 *core.ReminderTrack
+		track  *coreReminder.ReminderTrack
+		track2 *coreReminder.ReminderTrack
 		err    error
 	)
 
@@ -2376,7 +2377,7 @@ func TestGetState(t *testing.T) {
 	require.NoError(t, err)
 
 	// act
-	response, err := testActorsRuntime.GetState(ctx, &core.GetStateRequest{
+	response, err := testActorsRuntime.GetState(ctx, &coreReminder.GetStateRequest{
 		ActorID:   actorID,
 		ActorType: actorType,
 		Key:       TestKeyName,
@@ -2417,7 +2418,7 @@ func TestDeleteState(t *testing.T) {
 	require.NoError(t, err)
 
 	// save state
-	response, err := testActorsRuntime.GetState(ctx, &core.GetStateRequest{
+	response, err := testActorsRuntime.GetState(ctx, &coreReminder.GetStateRequest{
 		ActorID:   actorID,
 		ActorType: actorType,
 		Key:       TestKeyName,
@@ -2443,7 +2444,7 @@ func TestDeleteState(t *testing.T) {
 	require.NoError(t, err)
 
 	// act
-	response, err = testActorsRuntime.GetState(ctx, &core.GetStateRequest{
+	response, err = testActorsRuntime.GetState(ctx, &coreReminder.GetStateRequest{
 		ActorID:   actorID,
 		ActorType: actorType,
 		Key:       TestKeyName,
@@ -3211,7 +3212,7 @@ func TestActorsRuntimeResiliency(t *testing.T) {
 	})
 
 	t.Run("test get state retries with resiliency", func(t *testing.T) {
-		req := &core.GetStateRequest{
+		req := &coreReminder.GetStateRequest{
 			Key:       "failingGetStateKey",
 			ActorType: actorType,
 			ActorID:   actorID,
@@ -3224,7 +3225,7 @@ func TestActorsRuntimeResiliency(t *testing.T) {
 	})
 
 	t.Run("test get state times out with resiliency", func(t *testing.T) {
-		req := &core.GetStateRequest{
+		req := &coreReminder.GetStateRequest{
 			Key:       "timeoutGetStateKey",
 			ActorType: actorType,
 			ActorID:   actorID,
@@ -3285,7 +3286,7 @@ func TestActorsRuntimeResiliency(t *testing.T) {
 	})
 
 	t.Run("test get reminders retries and times out with resiliency", func(t *testing.T) {
-		_, err := runtime.actorsReminders.GetReminder(context.Background(), &core.GetReminderRequest{
+		_, err := runtime.actorsReminders.GetReminder(context.Background(), &coreReminder.GetReminderRequest{
 			ActorType: actorType,
 			ActorID:   actorID,
 		})
@@ -3296,7 +3297,7 @@ func TestActorsRuntimeResiliency(t *testing.T) {
 
 		// Key will no longer fail, so now we can check the timeout.
 		start := time.Now()
-		_, err = runtime.actorsReminders.GetReminder(context.Background(), &core.GetReminderRequest{
+		_, err = runtime.actorsReminders.GetReminder(context.Background(), &coreReminder.GetReminderRequest{
 			ActorType: actorType,
 			ActorID:   actorID,
 		})

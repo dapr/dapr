@@ -41,7 +41,7 @@ import (
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/actors/core"
-	actorsCore "github.com/dapr/dapr/pkg/actors/core"
+	coreReminder "github.com/dapr/dapr/pkg/actors/core/reminder"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/channel/http"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
@@ -1328,7 +1328,7 @@ func (a *api) onCreateActorReminder(reqCtx *fasthttp.RequestCtx) {
 	actorID := reqCtx.UserValue(actorIDParam).(string)
 	name := reqCtx.UserValue(nameParam).(string)
 
-	var req actorsCore.CreateReminderRequest
+	var req coreReminder.CreateReminderRequest
 	err := json.Unmarshal(reqCtx.PostBody(), &req)
 	if err != nil {
 		msg := messages.ErrMalformedRequest.WithFormat(err)
@@ -1362,7 +1362,7 @@ func (a *api) onRenameActorReminder(reqCtx *fasthttp.RequestCtx) {
 	actorID := reqCtx.UserValue(actorIDParam).(string)
 	name := reqCtx.UserValue(nameParam).(string)
 
-	var req core.RenameReminderRequest
+	var req coreReminder.RenameReminderRequest
 	err := json.Unmarshal(reqCtx.PostBody(), &req)
 	if err != nil {
 		msg := messages.ErrMalformedRequest.WithFormat(err)
@@ -1397,7 +1397,7 @@ func (a *api) onCreateActorTimer(reqCtx *fasthttp.RequestCtx) {
 	actorID := reqCtx.UserValue(actorIDParam).(string)
 	name := reqCtx.UserValue(nameParam).(string)
 
-	var req core.CreateTimerRequest
+	var req coreReminder.CreateTimerRequest
 	err := json.Unmarshal(reqCtx.PostBody(), &req)
 	if err != nil {
 		msg := messages.ErrMalformedRequest.WithFormat(err)
@@ -1432,7 +1432,7 @@ func (a *api) onDeleteActorReminder(reqCtx *fasthttp.RequestCtx) {
 	actorID := reqCtx.UserValue(actorIDParam).(string)
 	name := reqCtx.UserValue(nameParam).(string)
 
-	req := actorsCore.DeleteReminderRequest{
+	req := coreReminder.DeleteReminderRequest{
 		Name:      name,
 		ActorID:   actorID,
 		ActorType: actorType,
@@ -1469,7 +1469,7 @@ func (a *api) onActorStateTransaction(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	hosted := a.universal.Actors.IsActorHosted(reqCtx, &core.ActorHostedRequest{
+	hosted := a.universal.Actors.IsActorHosted(reqCtx, &coreReminder.ActorHostedRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 	})
@@ -1509,7 +1509,7 @@ func (a *api) onGetActorReminder(reqCtx *fasthttp.RequestCtx) {
 	actorID := reqCtx.UserValue(actorIDParam).(string)
 	name := reqCtx.UserValue(nameParam).(string)
 
-	resp, err := a.universal.ActorsReminders.GetReminder(reqCtx, &core.GetReminderRequest{
+	resp, err := a.universal.ActorsReminders.GetReminder(reqCtx, &coreReminder.GetReminderRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 		Name:      name,
@@ -1543,7 +1543,7 @@ func (a *api) onDeleteActorTimer(reqCtx *fasthttp.RequestCtx) {
 	actorID := reqCtx.UserValue(actorIDParam).(string)
 	name := reqCtx.UserValue(nameParam).(string)
 
-	req := core.DeleteTimerRequest{
+	req := coreReminder.DeleteTimerRequest{
 		Name:      name,
 		ActorID:   actorID,
 		ActorType: actorType,
@@ -1646,7 +1646,7 @@ func (a *api) onGetActorState(reqCtx *fasthttp.RequestCtx) {
 	actorID := reqCtx.UserValue(actorIDParam).(string)
 	key := reqCtx.UserValue(stateKeyParam).(string)
 
-	hosted := a.universal.Actors.IsActorHosted(reqCtx, &core.ActorHostedRequest{
+	hosted := a.universal.Actors.IsActorHosted(reqCtx, &coreReminder.ActorHostedRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 	})
@@ -1658,7 +1658,7 @@ func (a *api) onGetActorState(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	req := core.GetStateRequest{
+	req := coreReminder.GetStateRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 		Key:       key,

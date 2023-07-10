@@ -25,6 +25,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	core "github.com/dapr/dapr/pkg/actors/core"
+	coreReminder "github.com/dapr/dapr/pkg/actors/core/reminder"
 	"github.com/dapr/dapr/pkg/config"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -192,7 +193,7 @@ func TestInternalActorReminder(t *testing.T) {
 	testActorRuntime, err := newTestActorsRuntimeWithInternalActors(internalActors)
 	require.NoError(t, err)
 
-	period, _ := core.NewReminderPeriod("2s")
+	period, _ := coreReminder.NewReminderPeriod("2s")
 	data, _ := json.Marshal(testReminderData{
 		SomeBytes:  []byte("こんにちは！"),
 		SomeInt:    42,

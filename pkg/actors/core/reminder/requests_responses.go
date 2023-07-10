@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package core
+package reminder
 
 import "encoding/json"
 
@@ -75,7 +75,7 @@ type GetStateRequest struct {
 
 // ActorKey returns the key of the actor for this request.
 func (r GetStateRequest) ActorKey() string {
-	return r.ActorType + daprSeparator + r.ActorID
+	return r.ActorType + DaprSeparator + r.ActorID
 }
 
 // // ReminderResponse is the payload that is sent to an Actor SDK API for execution.

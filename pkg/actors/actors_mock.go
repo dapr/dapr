@@ -24,6 +24,8 @@ import (
 
 	mock "github.com/stretchr/testify/mock"
 
+	core "github.com/dapr/dapr/pkg/actors/core"
+	coreReminder "github.com/dapr/dapr/pkg/actors/core/reminder"
 	"github.com/dapr/dapr/pkg/actors/reminders"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -35,7 +37,7 @@ type MockActors struct {
 	mock.Mock
 }
 
-func (_m *MockActors) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor) error {
+func (_m *MockActors) RegisterInternalActor(ctx context.Context, actorType string, actor core.InternalActor) error {
 	return nil
 }
 
@@ -63,11 +65,11 @@ func (_m *MockActors) Call(ctx context.Context, req *invokev1.InvokeMethodReques
 }
 
 // CreateReminder provides a mock function with given fields: req
-func (_m *MockActors) CreateReminder(ctx context.Context, req *CreateReminderRequest) error {
+func (_m *MockActors) CreateReminder(ctx context.Context, req *reminders.CreateReminderRequest) error {
 	ret := _m.Called(req)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(*CreateReminderRequest) error); ok {
+	if rf, ok := ret.Get(0).(func(*reminders.CreateReminderRequest) error); ok {
 		r0 = rf(req)
 	} else {
 		r0 = ret.Error(0)
@@ -77,11 +79,11 @@ func (_m *MockActors) CreateReminder(ctx context.Context, req *CreateReminderReq
 }
 
 // RenameReminder provides a mock function with given fields: req
-func (_m *MockActors) RenameReminder(ctx context.Context, req *RenameReminderRequest) error {
+func (_m *MockActors) RenameReminder(ctx context.Context, req *coreReminder.RenameReminderRequest) error {
 	ret := _m.Called(req)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(request *RenameReminderRequest) error); ok {
+	if rf, ok := ret.Get(0).(func(request *coreReminder.RenameReminderRequest) error); ok {
 		r0 = rf(req)
 	} else {
 		r0 = ret.Error(0)
@@ -91,11 +93,11 @@ func (_m *MockActors) RenameReminder(ctx context.Context, req *RenameReminderReq
 }
 
 // IsActorHosted provides a mock function with given fields: req
-func (_m *MockActors) IsActorHosted(ctx context.Context, req *ActorHostedRequest) bool {
+func (_m *MockActors) IsActorHosted(ctx context.Context, req *coreReminder.ActorHostedRequest) bool {
 	ret := _m.Called(req)
 
 	var r0 bool
-	if rf, ok := ret.Get(0).(func(*ActorHostedRequest) bool); ok {
+	if rf, ok := ret.Get(0).(func(*coreReminder.ActorHostedRequest) bool); ok {
 		r0 = rf(req)
 	} else {
 		r0 = true
@@ -105,11 +107,11 @@ func (_m *MockActors) IsActorHosted(ctx context.Context, req *ActorHostedRequest
 }
 
 // CreateTimer provides a mock function with given fields: req
-func (_m *MockActors) CreateTimer(ctx context.Context, req *CreateTimerRequest) error {
+func (_m *MockActors) CreateTimer(ctx context.Context, req *reminders.CreateTimerRequest) error {
 	ret := _m.Called(req)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(*CreateTimerRequest) error); ok {
+	if rf, ok := ret.Get(0).(func(*reminders.CreateTimerRequest) error); ok {
 		r0 = rf(req)
 	} else {
 		r0 = ret.Error(0)
@@ -119,11 +121,11 @@ func (_m *MockActors) CreateTimer(ctx context.Context, req *CreateTimerRequest) 
 }
 
 // DeleteReminder provides a mock function with given fields: req
-func (_m *MockActors) DeleteReminder(ctx context.Context, req *DeleteReminderRequest) error {
+func (_m *MockActors) DeleteReminder(ctx context.Context, req *coreReminder.DeleteReminderRequest) error {
 	ret := _m.Called(req)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(*DeleteReminderRequest) error); ok {
+	if rf, ok := ret.Get(0).(func(*coreReminder.DeleteReminderRequest) error); ok {
 		r0 = rf(req)
 	} else {
 		r0 = ret.Error(0)
@@ -133,11 +135,11 @@ func (_m *MockActors) DeleteReminder(ctx context.Context, req *DeleteReminderReq
 }
 
 // DeleteTimer provides a mock function with given fields: req
-func (_m *MockActors) DeleteTimer(ctx context.Context, req *DeleteTimerRequest) error {
+func (_m *MockActors) DeleteTimer(ctx context.Context, req *coreReminder.DeleteTimerRequest) error {
 	ret := _m.Called(req)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(*DeleteTimerRequest) error); ok {
+	if rf, ok := ret.Get(0).(func(*coreReminder.DeleteTimerRequest) error); ok {
 		r0 = rf(req)
 	} else {
 		r0 = ret.Error(0)
@@ -147,20 +149,20 @@ func (_m *MockActors) DeleteTimer(ctx context.Context, req *DeleteTimerRequest) 
 }
 
 // GetState provides a mock function with given fields: req
-func (_m *MockActors) GetState(ctx context.Context, req *GetStateRequest) (*StateResponse, error) {
+func (_m *MockActors) GetState(ctx context.Context, req *coreReminder.GetStateRequest) (*coreReminder.StateResponse, error) {
 	ret := _m.Called(req)
 
-	var r0 *StateResponse
-	if rf, ok := ret.Get(0).(func(*GetStateRequest) *StateResponse); ok {
+	var r0 *coreReminder.StateResponse
+	if rf, ok := ret.Get(0).(func(*coreReminder.GetStateRequest) *coreReminder.StateResponse); ok {
 		r0 = rf(req)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*StateResponse)
+			r0 = ret.Get(0).(*coreReminder.StateResponse)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*GetStateRequest) error); ok {
+	if rf, ok := ret.Get(1).(func(*coreReminder.GetStateRequest) error); ok {
 		r1 = rf(req)
 	} else {
 		r1 = ret.Error(1)
@@ -189,11 +191,11 @@ func (_m *MockActors) Stop() {
 }
 
 // TransactionalStateOperation provides a mock function with given fields: req
-func (_m *MockActors) TransactionalStateOperation(ctx context.Context, req *TransactionalRequest) error {
+func (_m *MockActors) TransactionalStateOperation(ctx context.Context, req *core.TransactionalRequest) error {
 	ret := _m.Called(req)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(*TransactionalRequest) error); ok {
+	if rf, ok := ret.Get(0).(func(*core.TransactionalRequest) error); ok {
 		r0 = rf(req)
 	} else {
 		r0 = ret.Error(0)
@@ -203,20 +205,20 @@ func (_m *MockActors) TransactionalStateOperation(ctx context.Context, req *Tran
 }
 
 // GetReminder provides a mock function with given fields: req
-func (_m *MockActors) GetReminder(ctx context.Context, req *GetReminderRequest) (*reminders.Reminder, error) {
+func (_m *MockActors) GetReminder(ctx context.Context, req *coreReminder.GetReminderRequest) (*core.Reminder, error) {
 	ret := _m.Called(req)
 
-	var r0 *reminders.Reminder
-	if rf, ok := ret.Get(0).(func(*GetReminderRequest) *reminders.Reminder); ok {
+	var r0 *core.Reminder
+	if rf, ok := ret.Get(0).(func(*coreReminder.GetReminderRequest) *core.Reminder); ok {
 		r0 = rf(req)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*reminders.Reminder)
+			r0 = ret.Get(0).(*core.Reminder)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*GetReminderRequest) error); ok {
+	if rf, ok := ret.Get(1).(func(*coreReminder.GetReminderRequest) error); ok {
 		r1 = rf(req)
 	} else {
 		r1 = ret.Error(1)
@@ -240,11 +242,15 @@ func (_m *MockActors) GetActiveActorsCount(ctx context.Context) []*runtimev1pb.A
 	}
 }
 
+func (_m *MockActors) GetActorsReminders() core.Reminders {
+	return nil
+}
+
 type FailingActors struct {
 	Failure daprt.Failure
 }
 
-func (f *FailingActors) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor) error {
+func (f *FailingActors) RegisterInternalActor(ctx context.Context, actorType string, actor core.InternalActor) error {
 	return nil
 }
 
@@ -275,42 +281,46 @@ func (f *FailingActors) Init() error {
 func (f *FailingActors) Stop() {
 }
 
-func (f *FailingActors) GetState(ctx context.Context, req *GetStateRequest) (*StateResponse, error) {
+func (f *FailingActors) GetState(ctx context.Context, req *coreReminder.GetStateRequest) (*coreReminder.StateResponse, error) {
 	return nil, nil
 }
 
-func (f *FailingActors) TransactionalStateOperation(ctx context.Context, req *TransactionalRequest) error {
+func (f *FailingActors) TransactionalStateOperation(ctx context.Context, req *core.TransactionalRequest) error {
 	return nil
 }
 
-func (f *FailingActors) GetReminder(ctx context.Context, req *GetReminderRequest) (*reminders.Reminder, error) {
+func (f *FailingActors) GetReminder(ctx context.Context, req *coreReminder.GetReminderRequest) (*core.Reminder, error) {
 	return nil, nil
 }
 
-func (f *FailingActors) CreateReminder(ctx context.Context, req *CreateReminderRequest) error {
+func (f *FailingActors) CreateReminder(ctx context.Context, req *reminders.CreateReminderRequest) error {
 	return nil
 }
 
-func (f *FailingActors) DeleteReminder(ctx context.Context, req *DeleteReminderRequest) error {
+func (f *FailingActors) DeleteReminder(ctx context.Context, req *coreReminder.DeleteReminderRequest) error {
 	return nil
 }
 
-func (f *FailingActors) RenameReminder(ctx context.Context, req *RenameReminderRequest) error {
+func (f *FailingActors) RenameReminder(ctx context.Context, req *coreReminder.RenameReminderRequest) error {
 	return nil
 }
 
-func (f *FailingActors) CreateTimer(ctx context.Context, req *CreateTimerRequest) error {
+func (f *FailingActors) CreateTimer(ctx context.Context, req *reminders.CreateTimerRequest) error {
 	return nil
 }
 
-func (f *FailingActors) DeleteTimer(ctx context.Context, req *DeleteTimerRequest) error {
+func (f *FailingActors) DeleteTimer(ctx context.Context, req *coreReminder.DeleteTimerRequest) error {
 	return nil
 }
 
-func (f *FailingActors) IsActorHosted(ctx context.Context, req *ActorHostedRequest) bool {
+func (f *FailingActors) IsActorHosted(ctx context.Context, req *coreReminder.ActorHostedRequest) bool {
 	return true
 }
 
 func (f *FailingActors) GetActiveActorsCount(ctx context.Context) []*runtimev1pb.ActiveActorsCount {
 	return []*runtimev1pb.ActiveActorsCount{}
+}
+
+func (f *FailingActors) GetActorsReminders() core.Reminders {
+	return nil
 }

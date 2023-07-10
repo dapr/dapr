@@ -22,6 +22,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/dapr/dapr/pkg/actors/core/reminder"
 )
 
 func TestReminderProperties(t *testing.T) {
@@ -56,7 +58,7 @@ func TestReminderProperties(t *testing.T) {
 
 	// Update the object to add a period
 	var err error
-	r.Period, err = NewReminderPeriod("2s")
+	r.Period, err = reminder.NewReminderPeriod("2s")
 	require.NoError(t, err)
 
 	t.Run("with unlimited repeats", func(t *testing.T) {
@@ -73,7 +75,7 @@ func TestReminderProperties(t *testing.T) {
 
 	// Update the object to add limited repeats
 	r.RegisteredTime = time1
-	r.Period, err = NewReminderPeriod("R4/PT2S")
+	r.Period, err = reminder.NewReminderPeriod("R4/PT2S")
 	require.NoError(t, err)
 
 	t.Run("with limited repeats", func(t *testing.T) {
@@ -138,7 +140,7 @@ func TestReminderJSON(t *testing.T) {
 					r.Data, _ = json.Marshal(tt.fields.Data)
 				}
 			}
-			r.Period, err = NewReminderPeriod(tt.fields.Period)
+			r.Period, err = reminder.NewReminderPeriod(tt.fields.Period)
 			require.NoError(t, err)
 
 			// Marshal
@@ -240,7 +242,7 @@ func TestReminderString(t *testing.T) {
 				ExpirationTime: tt.fields.ExpirationTime,
 				Data:           tt.fields.Data,
 			}
-			r.Period, err = NewReminderPeriod(tt.fields.Period)
+			r.Period, err = reminder.NewReminderPeriod(tt.fields.Period)
 			require.NoError(t, err)
 
 			// Encode to string

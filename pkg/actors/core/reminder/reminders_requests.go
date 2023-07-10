@@ -11,32 +11,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package core
+package reminder
 
 import (
 	"encoding/json"
 )
 
 const (
-	daprSeparator        = "||"
+	DaprSeparator        = "||"
 	metadataPartitionKey = "partitionKey"
-	metadataZeroID       = "00000000-0000-0000-0000-000000000000"
-
-	errStateStoreNotFound      = "actors: state store does not exist or incorrectly configured"
-	errStateStoreNotConfigured = `actors: state store does not exist or incorrectly configured. Have you set the property '{"name": "actorStateStore", "value": "true"}' in your state store component file?`
 )
-
-// // ActorHostedRequest is the request object for checking if an actor is hosted on this instance.
-// type ActorHostedRequest struct {
-// 	ActorID   string `json:"actorId"`
-// 	ActorType string `json:"actorType"`
-// }
-
-// // CreateReminderRequest is the request object to create a new reminder.
-// type CreateReminderRequest = CreateReminderRequest
-
-// // CreateTimerRequest is the request object to create a new timer.
-// type CreateTimerRequest = reminders.CreateTimerRequest
 
 // CreateTimerRequest is the request object to create a new timer.
 type CreateTimerRequest struct {

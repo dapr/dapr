@@ -23,6 +23,7 @@ import (
 	"github.com/microsoft/durabletask-go/backend"
 
 	"github.com/dapr/dapr/pkg/actors/core"
+	coreReminder "github.com/dapr/dapr/pkg/actors/core/reminder"
 )
 
 const (
@@ -185,7 +186,7 @@ func LoadWorkflowState(ctx context.Context, actorRuntime core.Actors, actorID st
 	loadStartTime := time.Now()
 	loadedRecords := 0
 
-	req := core.GetStateRequest{
+	req := coreReminder.GetStateRequest{
 		ActorType: config.workflowActorType,
 		ActorID:   actorID,
 		Key:       metadataKey,

@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/dapr/pkg/actors/core/reminder"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
@@ -17,15 +18,17 @@ type Actors interface {
 	Call(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error)
 	Init() error
 	Stop()
-	GetState(ctx context.Context, req *GetStateRequest) (*StateResponse, error)
+	GetState(ctx context.Context, req *reminder.GetStateRequest) (*reminder.StateResponse, error)
 	TransactionalStateOperation(ctx context.Context, req *TransactionalRequest) error
-	CreateTimer(ctx context.Context, req *CreateTimerRequest) error
-	DeleteTimer(ctx context.Context, req *DeleteTimerRequest) error
-	IsActorHosted(ctx context.Context, req *ActorHostedRequest) bool
+	CreateTimer(ctx context.Context, req *reminder.CreateTimerRequest) error
+	DeleteTimer(ctx context.Context, req *reminder.DeleteTimerRequest) error
+	IsActorHosted(ctx context.Context, req *reminder.ActorHostedRequest) bool
 	GetActiveActorsCount(ctx context.Context) []*runtimev1pb.ActiveActorsCount
 	RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor) error
 	GetActorsReminders() Reminders
 }
+
+const metadataZeroID = "00000000-0000-0000-0000-000000000000"
 
 // ActiveActorsCount contain actorType and count of actors each type has.
 type ActiveActorsCount struct {

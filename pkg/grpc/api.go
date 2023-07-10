@@ -38,6 +38,7 @@ import (
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/actors/core"
+	coreReminder "github.com/dapr/dapr/pkg/actors/core/reminder"
 	"github.com/dapr/dapr/pkg/channel"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
@@ -957,7 +958,7 @@ func (a *api) RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterAc
 		return &emptypb.Empty{}, err
 	}
 
-	req := &core.CreateTimerRequest{
+	req := &coreReminder.CreateTimerRequest{
 		Name:      in.Name,
 		ActorID:   in.ActorId,
 		ActorType: in.ActorType,
@@ -985,7 +986,7 @@ func (a *api) UnregisterActorTimer(ctx context.Context, in *runtimev1pb.Unregist
 		return &emptypb.Empty{}, err
 	}
 
-	req := &core.DeleteTimerRequest{
+	req := &coreReminder.DeleteTimerRequest{
 		Name:      in.Name,
 		ActorID:   in.ActorId,
 		ActorType: in.ActorType,
@@ -1002,7 +1003,7 @@ func (a *api) RegisterActorReminder(ctx context.Context, in *runtimev1pb.Registe
 		return &emptypb.Empty{}, err
 	}
 
-	req := &core.CreateReminderRequest{
+	req := &coreReminder.CreateReminderRequest{
 		Name:      in.Name,
 		ActorID:   in.ActorId,
 		ActorType: in.ActorType,
@@ -1029,7 +1030,7 @@ func (a *api) UnregisterActorReminder(ctx context.Context, in *runtimev1pb.Unreg
 		return &emptypb.Empty{}, err
 	}
 
-	req := &core.DeleteReminderRequest{
+	req := &coreReminder.DeleteReminderRequest{
 		Name:      in.Name,
 		ActorID:   in.ActorId,
 		ActorType: in.ActorType,
@@ -1046,7 +1047,7 @@ func (a *api) RenameActorReminder(ctx context.Context, in *runtimev1pb.RenameAct
 		return &emptypb.Empty{}, err
 	}
 
-	req := &core.RenameReminderRequest{
+	req := &coreReminder.RenameReminderRequest{
 		OldName:   in.OldName,
 		ActorID:   in.ActorId,
 		ActorType: in.ActorType,
@@ -1068,7 +1069,7 @@ func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRe
 	actorID := in.ActorId
 	key := in.Key
 
-	hosted := a.UniversalAPI.Actors.IsActorHosted(ctx, &core.ActorHostedRequest{
+	hosted := a.UniversalAPI.Actors.IsActorHosted(ctx, &coreReminder.ActorHostedRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 	})
@@ -1079,7 +1080,7 @@ func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRe
 		return nil, err
 	}
 
-	req := core.GetStateRequest{
+	req := coreReminder.GetStateRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 		Key:       key,
@@ -1145,7 +1146,7 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 		actorOps = append(actorOps, actorOp)
 	}
 
-	hosted := a.UniversalAPI.Actors.IsActorHosted(ctx, &core.ActorHostedRequest{
+	hosted := a.UniversalAPI.Actors.IsActorHosted(ctx, &coreReminder.ActorHostedRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 	})

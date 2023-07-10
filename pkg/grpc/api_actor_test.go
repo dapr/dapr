@@ -24,6 +24,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/actors/core"
+	coreReminder "github.com/dapr/dapr/pkg/actors/core/reminder"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/grpc/universalapi"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -129,15 +130,15 @@ func TestGetActorState(t *testing.T) {
 	t.Run("Get actor state - OK", func(t *testing.T) {
 		data := []byte(`{ "data": 123 }`)
 		mockActors := new(actors.MockActors)
-		mockActors.On("GetState", &core.GetStateRequest{
+		mockActors.On("GetState", &coreReminder.GetStateRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
 			Key:       "key1",
-		}).Return(&core.StateResponse{
+		}).Return(&coreReminder.StateResponse{
 			Data: data,
 		}, nil)
 
-		mockActors.On("IsActorHosted", &core.ActorHostedRequest{
+		mockActors.On("IsActorHosted", &coreReminder.ActorHostedRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
 		}).Return(true)
@@ -212,7 +213,7 @@ func TestExecuteActorStateTransaction(t *testing.T) {
 			},
 		}).Return(nil)
 
-		mockActors.On("IsActorHosted", &core.ActorHostedRequest{
+		mockActors.On("IsActorHosted", &coreReminder.ActorHostedRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
 		}).Return(true)

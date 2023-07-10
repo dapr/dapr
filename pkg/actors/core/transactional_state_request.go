@@ -21,6 +21,7 @@ import (
 	"golang.org/x/exp/maps"
 
 	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/dapr/pkg/actors/core/reminder"
 	"github.com/dapr/dapr/pkg/config"
 )
 
@@ -55,7 +56,7 @@ type TransactionalRequest struct {
 
 // ActorKey returns the key of the actor for this request.
 func (r TransactionalRequest) ActorKey() string {
-	return r.ActorType + daprSeparator + r.ActorID
+	return r.ActorType + reminder.DaprSeparator + r.ActorID
 }
 
 // TransactionalOperation is the request object for a state operation participating in a transaction.

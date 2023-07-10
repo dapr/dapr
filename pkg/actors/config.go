@@ -107,8 +107,8 @@ func NewConfig(opts ConfigOpts) Config {
 			}
 		}
 	}
-	Config := Config{coreConfig: c}
-	return Config
+	conf := Config{coreConfig: c}
+	return conf
 }
 
 func (c *Config) GetIdleTimeoutForType(actorType string) time.Duration {
