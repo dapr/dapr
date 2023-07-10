@@ -83,7 +83,7 @@ func (c *InternalActorChannel) GetAppConfig(appID string) (*config.ApplicationCo
 }
 
 // HealthProbe implements channel.AppChannel
-func (InternalActorChannel) HealthProbe(ctx context.Context) (bool, error) {
+func (c *InternalActorChannel) HealthProbe(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
@@ -157,7 +157,7 @@ func (c *InternalActorChannel) InvokeMethod(ctx context.Context, req *invokev1.I
 }
 
 // SetAppHealth implements channel.AppChannel
-func (InternalActorChannel) SetAppHealth(ah *apphealth.AppHealth) {
+func (c *InternalActorChannel) SetAppHealth(ah *apphealth.AppHealth) {
 	// no-op
 }
 

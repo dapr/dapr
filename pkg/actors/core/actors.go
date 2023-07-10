@@ -26,9 +26,9 @@ import (
 
 // Actors allow calling into virtual actors as well as actor state management.
 type Actors interface {
-	Call(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error)
 	Init() error
 	Stop()
+	Call(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error)
 	GetState(ctx context.Context, req *reminder.GetStateRequest) (*reminder.StateResponse, error)
 	TransactionalStateOperation(ctx context.Context, req *TransactionalRequest) error
 	IsActorHosted(ctx context.Context, req *reminder.ActorHostedRequest) bool
@@ -75,7 +75,7 @@ func (m *ActorMetadata) CalculateReminderPartition(actorID, reminderName string)
 		return 0
 	}
 
-	// do not change this hash function because it would be a breaking change.
+	// Do not change this hash function because it would be a breaking change.
 	h := fnv.New32a()
 	h.Write([]byte(actorID))
 	h.Write([]byte(reminderName))

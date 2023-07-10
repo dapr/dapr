@@ -27,14 +27,13 @@ import (
 	"k8s.io/utils/clock"
 
 	"github.com/dapr/components-contrib/state"
-	"github.com/dapr/kit/logger"
-
 	actorsCore "github.com/dapr/dapr/pkg/actors/core"
 	actorsCoreReminder "github.com/dapr/dapr/pkg/actors/core/reminder"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.runtime.actor")

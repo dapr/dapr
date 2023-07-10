@@ -28,34 +28,30 @@ import (
 )
 
 type ActorsTimers struct {
-	activeTimersLock      *sync.RWMutex
+	activeTimersLock      sync.RWMutex
 	clock                 *clock.WithTicker
 	actorsTable           *sync.Map
 	activeTimers          *sync.Map
 	actorsReminders       actorsCore.Reminders
-	activeTimersCountLock *sync.RWMutex
+	activeTimersCountLock sync.RWMutex
 	activeTimersCount     map[string]*int64
 }
 
 type TimerOpts struct {
-	ActiveTimersLock      *sync.RWMutex
-	Clock                 *clock.WithTicker
-	ActorsTable           *sync.Map
-	ActiveTimers          *sync.Map
-	ActorsReminders       actorsCore.Reminders
-	ActiveTimersCountLock *sync.RWMutex
-	ActiveTimersCount     map[string]*int64
+	Clock             *clock.WithTicker
+	ActorsTable       *sync.Map
+	ActiveTimers      *sync.Map
+	ActorsReminders   actorsCore.Reminders
+	ActiveTimersCount map[string]*int64
 }
 
 func NewTimers(opts TimerOpts) actorsCore.Timers {
 	return &ActorsTimers{
-		activeTimersLock:      opts.ActiveTimersLock,
-		clock:                 opts.Clock,
-		actorsTable:           opts.ActorsTable,
-		activeTimers:          opts.ActiveTimers,
-		actorsReminders:       opts.ActorsReminders,
-		activeTimersCountLock: opts.ActiveTimersCountLock,
-		activeTimersCount:     opts.ActiveTimersCount,
+		clock:             opts.Clock,
+		actorsTable:       opts.ActorsTable,
+		activeTimers:      opts.ActiveTimers,
+		actorsReminders:   opts.ActorsReminders,
+		activeTimersCount: opts.ActiveTimersCount,
 	}
 }
 

@@ -77,34 +77,32 @@ type PlacementService interface {
 type GRPCConnectionFn func(ctx context.Context, address string, id string, namespace string, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(destroy bool), error)
 
 type actorsRuntime struct {
-	appChannel            channel.AppChannel
-	placement             PlacementService
-	grpcConnectionFn      GRPCConnectionFn
-	config                Config
-	actorsTable           *sync.Map
-	activeTimers          *sync.Map
-	activeTimersCount     map[string]*int64
-	activeTimersCountLock *sync.RWMutex
-	activeTimersLock      *sync.RWMutex
-	activeReminders       *sync.Map
-	remindersLock         *sync.RWMutex
-	reminders             map[string][]actorsCore.ActorReminderReference
-	evaluationLock        sync.RWMutex
-	evaluationChan        chan struct{}
-	appHealthy            *atomic.Bool
-	certChain             *daprCredentials.CertChain
-	tracingSpec           configuration.TracingSpec
-	resiliency            resiliency.Provider
-	storeName             string
-	compStore             *compstore.ComponentStore
-	ctx                   context.Context
-	cancel                context.CancelFunc
-	clock                 clock.WithTicker
-	internalActors        map[string]actorsCore.InternalActor
-	internalActorChannel  *actorsCore.InternalActorChannel
-	localActor            *actorsCore.LocalActor
-	actorsReminders       actorsCore.Reminders
-	actorsTimers          actorsCore.Timers
+	appChannel           channel.AppChannel
+	placement            PlacementService
+	grpcConnectionFn     GRPCConnectionFn
+	config               Config
+	actorsTable          *sync.Map
+	activeTimers         *sync.Map
+	activeTimersCount    map[string]*int64
+	activeReminders      *sync.Map
+	remindersLock        *sync.RWMutex
+	reminders            map[string][]actorsCore.ActorReminderReference
+	evaluationLock       sync.RWMutex
+	evaluationChan       chan struct{}
+	appHealthy           *atomic.Bool
+	certChain            *daprCredentials.CertChain
+	tracingSpec          configuration.TracingSpec
+	resiliency           resiliency.Provider
+	storeName            string
+	compStore            *compstore.ComponentStore
+	ctx                  context.Context
+	cancel               context.CancelFunc
+	clock                clock.WithTicker
+	internalActors       map[string]actorsCore.InternalActor
+	internalActorChannel *actorsCore.InternalActorChannel
+	localActor           *actorsCore.LocalActor
+	actorsReminders      actorsCore.Reminders
+	actorsTimers         actorsCore.Timers
 
 	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 	stateTTLEnabled bool
@@ -175,47 +173,42 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) actorsCore.Acto
 		CompStore:            compStore,
 	}
 	actorsReminders := reminders.NewReminders(remindersOpts)
-	activeTimersLock := sync.RWMutex{}
-	activeTimersCountLock := sync.RWMutex{}
 	activeTimers := &sync.Map{}
 	activeTimersCount := make(map[string]*int64)
 	timerOpts := reminders.TimerOpts{
-		ActiveTimersLock:      &activeTimersLock,
-		Clock:                 &clock,
-		ActorsTable:           actorsTable,
-		ActiveTimers:          activeTimers,
-		ActorsReminders:       actorsReminders,
-		ActiveTimersCountLock: &activeTimersCountLock,
-		ActiveTimersCount:     activeTimersCount,
+		Clock:             &clock,
+		ActorsTable:       actorsTable,
+		ActiveTimers:      activeTimers,
+		ActorsReminders:   actorsReminders,
+		ActiveTimersCount: activeTimersCount,
 	}
 	a := actorsRuntime{
-		appChannel:            opts.AppChannel,
-		grpcConnectionFn:      opts.GRPCConnectionFn,
-		config:                opts.Config,
-		certChain:             opts.CertChain,
-		tracingSpec:           opts.TracingSpec,
-		resiliency:            opts.Resiliency,
-		storeName:             opts.StateStoreName,
-		placement:             opts.MockPlacement,
-		actorsTable:           actorsTable,
-		activeTimers:          activeTimers,
-		activeTimersCount:     activeTimersCount,
-		activeReminders:       activeReminders,
-		reminders:             remindersMap,
-		evaluationChan:        evaluationChan,
-		appHealthy:            appHealthy,
-		ctx:                   ctx,
-		cancel:                cancel,
-		clock:                 clock,
-		internalActors:        map[string]actorsCore.InternalActor{},
-		internalActorChannel:  internalActorChannel,
-		compStore:             compStore,
-		localActor:            localActor,
-		remindersLock:         &remindersLock,
-		activeTimersLock:      &activeTimersLock,
-		activeTimersCountLock: &activeTimersCountLock,
-		actorsReminders:       actorsReminders,
-		actorsTimers:          reminders.NewTimers(timerOpts),
+		appChannel:           opts.AppChannel,
+		grpcConnectionFn:     opts.GRPCConnectionFn,
+		config:               opts.Config,
+		certChain:            opts.CertChain,
+		tracingSpec:          opts.TracingSpec,
+		resiliency:           opts.Resiliency,
+		storeName:            opts.StateStoreName,
+		placement:            opts.MockPlacement,
+		actorsTable:          actorsTable,
+		activeTimers:         activeTimers,
+		activeTimersCount:    activeTimersCount,
+		activeReminders:      activeReminders,
+		reminders:            remindersMap,
+		evaluationChan:       evaluationChan,
+		appHealthy:           appHealthy,
+		ctx:                  ctx,
+		cancel:               cancel,
+		clock:                clock,
+		internalActors:       map[string]actorsCore.InternalActor{},
+		internalActorChannel: internalActorChannel,
+		compStore:            compStore,
+		localActor:           localActor,
+		remindersLock:        &remindersLock,
+		actorsReminders:      actorsReminders,
+		actorsTimers:         reminders.NewTimers(timerOpts),
+
 		// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 		stateTTLEnabled: opts.StateTTLEnabled,
 	}
@@ -238,11 +231,10 @@ func (a *actorsRuntime) Init() error {
 		return errors.New("actors: couldn't connect to placement service: address is empty")
 	}
 
-	if len(a.config.coreConfig.HostedActorTypes) > 0 {
-		if !a.haveCompatibleStorage() {
-			return ErrIncompatibleStateStore
-		}
+	if len(a.config.coreConfig.HostedActorTypes) > 0 && !a.haveCompatibleStorage() {
+		return ErrIncompatibleStateStore
 	}
+
 	store, _ := a.stateStore()
 	a.actorsReminders.SetStateStore(store)
 	hostname := net.JoinHostPort(a.config.coreConfig.HostAddress, strconv.Itoa(a.config.coreConfig.Port))
@@ -516,7 +508,6 @@ func (a *actorsRuntime) GetState(ctx context.Context, req *actorsCoreReminder.Ge
 	if err != nil {
 		return nil, err
 	}
-	// store := a.stateStoreS
 
 	actorKey := req.ActorKey()
 	partitionKey := constructCompositeKey(a.config.coreConfig.AppID, actorKey)
@@ -552,7 +543,6 @@ func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *ac
 	if err != nil {
 		return err
 	}
-	// store := a.stateStoreS
 
 	operations := make([]state.TransactionalStateOperation, len(req.Operations))
 	baseKey := constructCompositeKey(a.config.coreConfig.AppID, req.ActorKey())
