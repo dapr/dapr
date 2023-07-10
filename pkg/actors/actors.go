@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -33,8 +33,8 @@ import (
 	"k8s.io/utils/clock"
 
 	"github.com/dapr/components-contrib/state"
-	core "github.com/dapr/dapr/pkg/actors/core"
-	coreReminder "github.com/dapr/dapr/pkg/actors/core/reminder"
+	actorsCore "github.com/dapr/dapr/pkg/actors/core"
+	actorsCoreReminder "github.com/dapr/dapr/pkg/actors/core/reminder"
 	"github.com/dapr/dapr/pkg/actors/internal"
 	"github.com/dapr/dapr/pkg/actors/reminders"
 	"github.com/dapr/dapr/pkg/channel"
@@ -89,7 +89,7 @@ type actorsRuntime struct {
 	activeReminders       *sync.Map
 	remindersLock         *sync.RWMutex
 	remindersStoringLock  *sync.Mutex
-	reminders             map[string][]core.ActorReminderReference
+	reminders             map[string][]actorsCore.ActorReminderReference
 	evaluationLock        sync.RWMutex
 	evaluationChan        chan struct{}
 	appHealthy            *atomic.Bool
@@ -101,11 +101,11 @@ type actorsRuntime struct {
 	ctx                   context.Context
 	cancel                context.CancelFunc
 	clock                 clock.WithTicker
-	internalActors        map[string]core.InternalActor
-	internalActorChannel  *core.InternalActorChannel
-	localActor            *core.LocalActor
-	actorsReminders       core.Reminders
-	actorsTimers          core.Timers
+	internalActors        map[string]actorsCore.InternalActor
+	internalActorChannel  *actorsCore.InternalActorChannel
+	localActor            *actorsCore.LocalActor
+	actorsReminders       actorsCore.Reminders
+	actorsTimers          actorsCore.Timers
 
 	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 	stateTTLEnabled bool
@@ -136,19 +136,19 @@ type ActorsOpts struct {
 }
 
 // NewActors create a new actors runtime with given config.
-func NewActors(opts ActorsOpts) core.Actors {
+func NewActors(opts ActorsOpts) actorsCore.Actors {
 	return newActorsWithClock(opts, &clock.RealClock{})
 }
 
-func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) core.Actors {
+func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) actorsCore.Actors {
 	appHealthy := &atomic.Bool{}
 	appHealthy.Store(true)
 	ctx, cancel := context.WithCancel(context.Background())
 	evaluationChan := make(chan struct{}, 1)
-	internalActorChannel := core.NewInternalActorChannel()
+	internalActorChannel := actorsCore.NewInternalActorChannel()
 	actorsTable := &sync.Map{}
 	compStore := opts.CompStore
-	localActorOpts := core.LocalActorOpts{
+	localActorOpts := actorsCore.LocalActorOpts{
 		AppChannel:           opts.AppChannel,
 		Config:               opts.Config.coreConfig,
 		Resiliency:           opts.Resiliency,
@@ -156,8 +156,8 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) core.Actors {
 		Clock:                clock,
 		ActorsTable:          actorsTable,
 	}
-	localActor := core.NewLocalActor(localActorOpts, clock)
-	remindersMap := map[string][]core.ActorReminderReference{}
+	localActor := actorsCore.NewLocalActor(localActorOpts, clock)
+	remindersMap := map[string][]actorsCore.ActorReminderReference{}
 	remindersStoringLock := &sync.Mutex{}
 	remindersLock := sync.RWMutex{}
 	activeReminders := &sync.Map{}
@@ -208,7 +208,7 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) core.Actors {
 		ctx:                   ctx,
 		cancel:                cancel,
 		clock:                 clock,
-		internalActors:        map[string]core.InternalActor{},
+		internalActors:        map[string]actorsCore.InternalActor{},
 		internalActorChannel:  internalActorChannel,
 		compStore:             compStore,
 		localActor:            localActor,
@@ -353,7 +353,7 @@ func (a *actorsRuntime) deactivationTicker(configuration Config, deactivateFn de
 		select {
 		case t := <-ch:
 			a.actorsTable.Range(func(key, value interface{}) bool {
-				actorInstance := value.(*core.Actor)
+				actorInstance := value.(*actorsCore.Actor)
 
 				if actorInstance.IsBusy() {
 					return true
@@ -513,7 +513,7 @@ func (a *actorsRuntime) isActorLocal(targetActorAddress, hostAddress string, grp
 		targetActorAddress == hostAddress+":"+strconv.Itoa(grpcPort)
 }
 
-func (a *actorsRuntime) GetState(ctx context.Context, req *coreReminder.GetStateRequest) (*coreReminder.StateResponse, error) {
+func (a *actorsRuntime) GetState(ctx context.Context, req *actorsCoreReminder.GetStateRequest) (*actorsCoreReminder.StateResponse, error) {
 	store, err := a.stateStore()
 	if err != nil {
 		return nil, err
@@ -541,15 +541,15 @@ func (a *actorsRuntime) GetState(ctx context.Context, req *coreReminder.GetState
 	}
 
 	if resp == nil {
-		return &coreReminder.StateResponse{}, nil
+		return &actorsCoreReminder.StateResponse{}, nil
 	}
 
-	return &coreReminder.StateResponse{
+	return &actorsCoreReminder.StateResponse{
 		Data: resp.Data,
 	}, nil
 }
 
-func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *core.TransactionalRequest) error {
+func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *actorsCore.TransactionalRequest) error {
 	store, err := a.stateStore()
 	if err != nil {
 		return err
@@ -561,7 +561,7 @@ func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *co
 	metadata := map[string]string{metadataPartitionKey: baseKey}
 	baseKey += daprSeparator
 	for i, o := range req.Operations {
-		operations[i], err = o.StateOperation(baseKey, core.StateOperationOpts{
+		operations[i], err = o.StateOperation(baseKey, actorsCore.StateOperationOpts{
 			Metadata: metadata,
 			// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 			StateTTLEnabled: a.stateTTLEnabled,
@@ -574,7 +574,7 @@ func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *co
 	return a.actorsReminders.ExecuteStateStoreTransaction(ctx, store, operations, metadata)
 }
 
-func (a *actorsRuntime) IsActorHosted(ctx context.Context, req *coreReminder.ActorHostedRequest) bool {
+func (a *actorsRuntime) IsActorHosted(ctx context.Context, req *actorsCoreReminder.ActorHostedRequest) bool {
 	key := constructCompositeKey(req.ActorType, req.ActorID)
 	policyDef := a.resiliency.BuiltInPolicy(resiliency.BuiltInActorNotFoundRetries)
 	policyRunner := resiliency.NewRunner[any](ctx, policyDef)
@@ -623,7 +623,7 @@ func (a *actorsRuntime) drainRebalancedActors() {
 					}
 				}
 
-				actor := value.(*core.Actor)
+				actor := value.(*actorsCore.Actor)
 				if a.config.GetDrainRebalancedActorsForType(actorType) {
 					// wait until actor isn't busy or timeout hits
 					if actor.IsBusy() {
@@ -723,7 +723,7 @@ func (a *actorsRuntime) evaluateReminders(ctx context.Context) {
 	<-a.evaluationChan
 }
 
-func (a *actorsRuntime) getRemindersForActorType(ctx context.Context, actorType string, migrate bool) ([]core.ActorReminderReference, *core.ActorMetadata, error) {
+func (a *actorsRuntime) getRemindersForActorType(ctx context.Context, actorType string, migrate bool) ([]actorsCore.ActorReminderReference, *actorsCore.ActorMetadata, error) {
 	store, err := a.stateStore()
 	if err != nil {
 		return nil, nil, err
@@ -764,7 +764,7 @@ func (a *actorsRuntime) getRemindersForActorType(ctx context.Context, actorType 
 			return nil, nil, err
 		}
 
-		list := []core.ActorReminderReference{}
+		list := []actorsCore.ActorReminderReference{}
 		for _, resp := range bulkResponse {
 			partition := keyPartitionMap[resp.Key]
 			actorMetadata.RemindersMetadata.PartitionsEtag[partition] = resp.ETag
@@ -772,7 +772,7 @@ func (a *actorsRuntime) getRemindersForActorType(ctx context.Context, actorType 
 				return nil, nil, fmt.Errorf("could not get reminders partition %v: %v", resp.Key, resp.Error)
 			}
 
-			var batch []core.Reminder
+			var batch []actorsCore.Reminder
 			if len(resp.Data) > 0 {
 				err = json.Unmarshal(resp.Data, &batch)
 				if err != nil {
@@ -784,9 +784,9 @@ func (a *actorsRuntime) getRemindersForActorType(ctx context.Context, actorType 
 
 			// We can't pre-allocate "list" with the needed capacity because we don't know how many items are in each partition
 			// However, we can limit the number of times we call "append" on list in a way that could cause the slice to be re-allocated, by managing a separate list here with a fixed capacity and modify "list" just once at per iteration on "bulkResponse".
-			batchList := make([]core.ActorReminderReference, len(batch))
+			batchList := make([]actorsCore.ActorReminderReference, len(batch))
 			for j := range batch {
-				batchList[j] = core.ActorReminderReference{
+				batchList[j] = actorsCore.ActorReminderReference{
 					ActorMetadataID:           actorMetadata.ID,
 					ActorRemindersPartitionID: partition,
 					Reminder:                  batch[j],
@@ -817,7 +817,7 @@ func (a *actorsRuntime) getRemindersForActorType(ctx context.Context, actorType 
 	}
 	log.Debugf("read reminders from %s without partition", key)
 
-	var reminders []core.Reminder
+	var reminders []actorsCore.Reminder
 	if len(resp.Data) > 0 {
 		err = json.Unmarshal(resp.Data, &reminders)
 		if err != nil {
@@ -825,9 +825,9 @@ func (a *actorsRuntime) getRemindersForActorType(ctx context.Context, actorType 
 		}
 	}
 
-	reminderRefs := make([]core.ActorReminderReference, len(reminders))
+	reminderRefs := make([]actorsCore.ActorReminderReference, len(reminders))
 	for j := range reminders {
-		reminderRefs[j] = core.ActorReminderReference{
+		reminderRefs[j] = actorsCore.ActorReminderReference{
 			ActorMetadataID:           actorMetadata.ID,
 			ActorRemindersPartitionID: 0,
 			Reminder:                  reminders[j],
@@ -844,20 +844,20 @@ func (a *actorsRuntime) getRemindersForActorType(ctx context.Context, actorType 
 	return reminderRefs, actorMetadata, nil
 }
 
-func newActor(actorType, actorID string, maxReentrancyDepth *int, cl clock.Clock) *core.Actor {
+func newActor(actorType, actorID string, maxReentrancyDepth *int, cl clock.Clock) *actorsCore.Actor {
 	if cl == nil {
 		cl = &clock.RealClock{}
 	}
-	return &core.Actor{
+	return &actorsCore.Actor{
 		ActorType:    actorType,
 		ActorID:      actorID,
-		ActorLock:    core.NewActorLock(int32(*maxReentrancyDepth)),
+		ActorLock:    actorsCore.NewActorLock(int32(*maxReentrancyDepth)),
 		Clock:        cl,
 		LastUsedTime: cl.Now().UTC(),
 	}
 }
 
-func (a *actorsRuntime) RegisterInternalActor(ctx context.Context, actorType string, actor core.InternalActor) error {
+func (a *actorsRuntime) RegisterInternalActor(ctx context.Context, actorType string, actor actorsCore.InternalActor) error {
 	if !a.haveCompatibleStorage() {
 		return fmt.Errorf("unable to register internal actor '%s': %w", actorType, ErrIncompatibleStateStore)
 	}
@@ -882,11 +882,11 @@ func (a *actorsRuntime) RegisterInternalActor(ctx context.Context, actorType str
 	return nil
 }
 
-func (a *actorsRuntime) GetActorsReminders() core.Reminders {
+func (a *actorsRuntime) GetActorsReminders() actorsCore.Reminders {
 	return a.actorsReminders
 }
 
-func (a *actorsRuntime) GetActorsTimers() core.Timers {
+func (a *actorsRuntime) GetActorsTimers() actorsCore.Timers {
 	return a.actorsTimers
 }
 
@@ -916,7 +916,7 @@ func (a *actorsRuntime) GetActiveActorsCount(ctx context.Context) []*runtimev1pb
 }
 
 func isInternalActor(actorType string) bool {
-	return strings.HasPrefix(actorType, core.InternalActorTypePrefix)
+	return strings.HasPrefix(actorType, actorsCore.InternalActorTypePrefix)
 }
 
 // Stop closes all network connections and resources used in actor runtime.
@@ -942,13 +942,13 @@ func ValidateHostEnvironment(mTLSEnabled bool, mode modes.DaprMode, namespace st
 	return nil
 }
 
-func (a *actorsRuntime) stateStore() (core.TransactionalStateStore, error) {
+func (a *actorsRuntime) stateStore() (actorsCore.TransactionalStateStore, error) {
 	storeS, ok := a.compStore.GetStateStore(a.storeName)
 	if !ok {
 		return nil, errors.New(errStateStoreNotFound)
 	}
 
-	store, ok := storeS.(core.TransactionalStateStore)
+	store, ok := storeS.(actorsCore.TransactionalStateStore)
 	if !ok || !state.FeatureETag.IsPresent(store.Features()) || !state.FeatureTransactional.IsPresent(store.Features()) {
 		return nil, errors.New(errStateStoreNotConfigured)
 	}

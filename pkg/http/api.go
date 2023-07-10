@@ -40,8 +40,8 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
-	"github.com/dapr/dapr/pkg/actors/core"
-	coreReminder "github.com/dapr/dapr/pkg/actors/core/reminder"
+	actorsCore "github.com/dapr/dapr/pkg/actors/core"
+	actorsCoreReminder "github.com/dapr/dapr/pkg/actors/core/reminder"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/channel/http"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
@@ -70,7 +70,7 @@ type API interface {
 	SetAppChannel(appChannel channel.AppChannel)
 	SetHTTPEndpointsAppChannel(appChannel channel.HTTPEndpointAppChannel)
 	SetDirectMessaging(directMessaging messaging.DirectMessaging)
-	SetActorRuntime(actor core.Actors)
+	SetActorRuntime(actor actorsCore.Actors)
 }
 
 type api struct {
@@ -126,7 +126,7 @@ type APIOpts struct {
 	Resiliency                  resiliency.Provider
 	CompStore                   *compstore.ComponentStore
 	PubsubAdapter               runtimePubsub.Adapter
-	Actors                      core.Actors
+	Actors                      actorsCore.Actors
 	SendToOutputBindingFn       func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	TracingSpec                 config.TracingSpec
 	Shutdown                    func()
@@ -1332,7 +1332,7 @@ func (a *api) onCreateActorReminder(reqCtx *fasthttp.RequestCtx) {
 	actorID := reqCtx.UserValue(actorIDParam).(string)
 	name := reqCtx.UserValue(nameParam).(string)
 
-	var req coreReminder.CreateReminderRequest
+	var req actorsCoreReminder.CreateReminderRequest
 	err := json.Unmarshal(reqCtx.PostBody(), &req)
 	if err != nil {
 		msg := messages.ErrMalformedRequest.WithFormat(err)
@@ -1366,7 +1366,7 @@ func (a *api) onRenameActorReminder(reqCtx *fasthttp.RequestCtx) {
 	actorID := reqCtx.UserValue(actorIDParam).(string)
 	name := reqCtx.UserValue(nameParam).(string)
 
-	var req coreReminder.RenameReminderRequest
+	var req actorsCoreReminder.RenameReminderRequest
 	err := json.Unmarshal(reqCtx.PostBody(), &req)
 	if err != nil {
 		msg := messages.ErrMalformedRequest.WithFormat(err)
@@ -1401,7 +1401,7 @@ func (a *api) onCreateActorTimer(reqCtx *fasthttp.RequestCtx) {
 	actorID := reqCtx.UserValue(actorIDParam).(string)
 	name := reqCtx.UserValue(nameParam).(string)
 
-	var req coreReminder.CreateTimerRequest
+	var req actorsCoreReminder.CreateTimerRequest
 	err := json.Unmarshal(reqCtx.PostBody(), &req)
 	if err != nil {
 		msg := messages.ErrMalformedRequest.WithFormat(err)
@@ -1436,7 +1436,7 @@ func (a *api) onDeleteActorReminder(reqCtx *fasthttp.RequestCtx) {
 	actorID := reqCtx.UserValue(actorIDParam).(string)
 	name := reqCtx.UserValue(nameParam).(string)
 
-	req := coreReminder.DeleteReminderRequest{
+	req := actorsCoreReminder.DeleteReminderRequest{
 		Name:      name,
 		ActorID:   actorID,
 		ActorType: actorType,
@@ -1464,7 +1464,7 @@ func (a *api) onActorStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	actorID := reqCtx.UserValue(actorIDParam).(string)
 	body := reqCtx.PostBody()
 
-	var ops []core.TransactionalOperation
+	var ops []actorsCore.TransactionalOperation
 	err := json.Unmarshal(body, &ops)
 	if err != nil {
 		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
@@ -1473,7 +1473,7 @@ func (a *api) onActorStateTransaction(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	hosted := a.universal.Actors.IsActorHosted(reqCtx, &coreReminder.ActorHostedRequest{
+	hosted := a.universal.Actors.IsActorHosted(reqCtx, &actorsCoreReminder.ActorHostedRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 	})
@@ -1485,7 +1485,7 @@ func (a *api) onActorStateTransaction(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	req := core.TransactionalRequest{
+	req := actorsCore.TransactionalRequest{
 		ActorID:    actorID,
 		ActorType:  actorType,
 		Operations: ops,
@@ -1513,7 +1513,7 @@ func (a *api) onGetActorReminder(reqCtx *fasthttp.RequestCtx) {
 	actorID := reqCtx.UserValue(actorIDParam).(string)
 	name := reqCtx.UserValue(nameParam).(string)
 
-	resp, err := a.universal.ActorsReminders.GetReminder(reqCtx, &coreReminder.GetReminderRequest{
+	resp, err := a.universal.ActorsReminders.GetReminder(reqCtx, &actorsCoreReminder.GetReminderRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 		Name:      name,
@@ -1547,7 +1547,7 @@ func (a *api) onDeleteActorTimer(reqCtx *fasthttp.RequestCtx) {
 	actorID := reqCtx.UserValue(actorIDParam).(string)
 	name := reqCtx.UserValue(nameParam).(string)
 
-	req := coreReminder.DeleteTimerRequest{
+	req := actorsCoreReminder.DeleteTimerRequest{
 		Name:      name,
 		ActorID:   actorID,
 		ActorType: actorType,
@@ -1650,7 +1650,7 @@ func (a *api) onGetActorState(reqCtx *fasthttp.RequestCtx) {
 	actorID := reqCtx.UserValue(actorIDParam).(string)
 	key := reqCtx.UserValue(stateKeyParam).(string)
 
-	hosted := a.universal.Actors.IsActorHosted(reqCtx, &coreReminder.ActorHostedRequest{
+	hosted := a.universal.Actors.IsActorHosted(reqCtx, &actorsCoreReminder.ActorHostedRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 	})
@@ -1662,7 +1662,7 @@ func (a *api) onGetActorState(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	req := coreReminder.GetStateRequest{
+	req := actorsCoreReminder.GetStateRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 		Key:       key,
@@ -2263,6 +2263,6 @@ func (a *api) SetDirectMessaging(directMessaging messaging.DirectMessaging) {
 	a.directMessaging = directMessaging
 }
 
-func (a *api) SetActorRuntime(actor core.Actors) {
+func (a *api) SetActorRuntime(actor actorsCore.Actors) {
 	a.universal.Actors = actor
 }

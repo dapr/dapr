@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -19,19 +19,19 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/dapr/dapr/pkg/actors/core"
-	coreReminder "github.com/dapr/dapr/pkg/actors/core/reminder"
+	actorsCore "github.com/dapr/dapr/pkg/actors/core"
+	actorsCoreReminder "github.com/dapr/dapr/pkg/actors/core/reminder"
 )
 
 // CreateReminderRequest is the request object to create a new reminder.
-type CreateReminderRequest = coreReminder.CreateReminderRequest
+type CreateReminderRequest = actorsCoreReminder.CreateReminderRequest
 
 // CreateTimerRequest is the request object to create a new timer.
-type CreateTimerRequest = coreReminder.CreateTimerRequest
+type CreateTimerRequest = actorsCoreReminder.CreateTimerRequest
 
 // NewReminderFromCreateReminderRequest returns a new Reminder from a CreateReminderRequest object.
-func NewReminderFromCreateReminderRequest(req *CreateReminderRequest, now time.Time) (reminder *core.Reminder, err error) {
-	reminder = &core.Reminder{
+func NewReminderFromCreateReminderRequest(req *CreateReminderRequest, now time.Time) (reminder *actorsCore.Reminder, err error) {
+	reminder = &actorsCore.Reminder{
 		ActorID:   req.ActorID,
 		ActorType: req.ActorType,
 		Name:      req.Name,
@@ -51,8 +51,8 @@ func NewReminderFromCreateReminderRequest(req *CreateReminderRequest, now time.T
 }
 
 // NewReminderFromCreateTimerRequest returns a new Timer from a CreateTimerRequest object.
-func NewReminderFromCreateTimerRequest(req *CreateTimerRequest, now time.Time) (reminder *core.Reminder, err error) {
-	reminder = &core.Reminder{
+func NewReminderFromCreateTimerRequest(req *CreateTimerRequest, now time.Time) (reminder *actorsCore.Reminder, err error) {
+	reminder = &actorsCore.Reminder{
 		ActorID:   req.ActorID,
 		ActorType: req.ActorType,
 		Name:      req.Name,
@@ -72,7 +72,7 @@ func NewReminderFromCreateTimerRequest(req *CreateTimerRequest, now time.Time) (
 	return reminder, nil
 }
 
-func setReminderData(reminder *core.Reminder, data json.RawMessage, logMsg string) error {
+func setReminderData(reminder *actorsCore.Reminder, data json.RawMessage, logMsg string) error {
 	if len(data) == 0 {
 		return nil
 	}
@@ -91,26 +91,26 @@ func setReminderData(reminder *core.Reminder, data json.RawMessage, logMsg strin
 	return nil
 }
 
-func setReminderTimes(reminder *core.Reminder, dueTime string, period string, ttl string, now time.Time, logMsg string) (err error) {
+func setReminderTimes(reminder *actorsCore.Reminder, dueTime string, period string, ttl string, now time.Time, logMsg string) (err error) {
 	// Due time and registered time
 	reminder.RegisteredTime = now
 	reminder.DueTime = dueTime
 	if dueTime != "" {
-		reminder.RegisteredTime, err = core.ParseTimeTruncateSeconds(dueTime, &now)
+		reminder.RegisteredTime, err = actorsCore.ParseTimeTruncateSeconds(dueTime, &now)
 		if err != nil {
 			return fmt.Errorf("error parsing %s due time: %w", logMsg, err)
 		}
 	}
 
 	// Parse period and check correctness
-	reminder.Period, err = coreReminder.NewReminderPeriod(period)
+	reminder.Period, err = actorsCoreReminder.NewReminderPeriod(period)
 	if err != nil {
 		return fmt.Errorf("invalid %s period: %w", logMsg, err)
 	}
 
 	// Set expiration time if configured
 	if ttl != "" {
-		reminder.ExpirationTime, err = core.ParseTimeTruncateSeconds(ttl, &reminder.RegisteredTime)
+		reminder.ExpirationTime, err = actorsCore.ParseTimeTruncateSeconds(ttl, &reminder.RegisteredTime)
 		if err != nil {
 			return fmt.Errorf("error parsing %s TTL: %w", logMsg, err)
 		}

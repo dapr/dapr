@@ -56,7 +56,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 
 	"github.com/dapr/dapr/pkg/actors"
-	"github.com/dapr/dapr/pkg/actors/core"
+	actorsCore "github.com/dapr/dapr/pkg/actors/core"
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpEndpointV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
@@ -178,7 +178,7 @@ type DaprRuntime struct {
 	httpEndpointsAppChannel channel.HTTPEndpointAppChannel // extra app channel to allow for different URLs per call.
 	appConfig               config.ApplicationConfig
 	directMessaging         messaging.DirectMessaging
-	actor                   core.Actors
+	actor                   actorsCore.Actors
 	subscribeBindingList    []string
 
 	nameResolver            nr.Resolver
@@ -237,7 +237,7 @@ type DaprRuntime struct {
 type ComponentsCallback func(components ComponentRegistry) error
 
 type ComponentRegistry struct {
-	Actors          core.Actors
+	Actors          actorsCore.Actors
 	DirectMessaging messaging.DirectMessaging
 	CompStore       *compstore.ComponentStore
 }

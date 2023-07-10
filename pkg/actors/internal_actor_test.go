@@ -24,8 +24,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	core "github.com/dapr/dapr/pkg/actors/core"
-	coreReminder "github.com/dapr/dapr/pkg/actors/core/reminder"
+	actorsCore "github.com/dapr/dapr/pkg/actors/core"
+	actorsCoreReminder "github.com/dapr/dapr/pkg/actors/core/reminder"
 	"github.com/dapr/dapr/pkg/config"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -41,7 +41,7 @@ type mockInternalActor struct {
 	TestOutput        any
 	InvokedReminders  []*reminder
 	DeactivationCalls []string
-	actorsRuntime     core.Actors
+	actorsRuntime     actorsCore.Actors
 }
 
 type invokeMethodCallInfo struct {
@@ -101,7 +101,7 @@ func (*mockInternalActor) InvokeTimer(ctx context.Context, actorID string, timer
 }
 
 // SetActorRuntime implements InternalActor
-func (ia *mockInternalActor) SetActorRuntime(actorsRuntime core.Actors) {
+func (ia *mockInternalActor) SetActorRuntime(actorsRuntime actorsCore.Actors) {
 	ia.actorsRuntime = actorsRuntime
 }
 
@@ -110,7 +110,7 @@ func (ia *mockInternalActor) SetActorRuntime(actorsRuntime core.Actors) {
 // }
 
 // newTestActorsRuntimeWithInternalActors creates and initializes an actors runtime with a specified set of internal actors
-func newTestActorsRuntimeWithInternalActors(internalActors map[string]core.InternalActor) (*actorsRuntime, error) {
+func newTestActorsRuntimeWithInternalActors(internalActors map[string]actorsCore.InternalActor) (*actorsRuntime, error) {
 	spec := config.TracingSpec{SamplingRate: "1"}
 	store := fakeStore()
 	config := NewConfig(ConfigOpts{
@@ -150,7 +150,7 @@ func TestInternalActorCall(t *testing.T) {
 		testOutput    = "ouch!"
 	)
 
-	internalActors := make(map[string]core.InternalActor)
+	internalActors := make(map[string]actorsCore.InternalActor)
 	internalActors[testActorType] = &mockInternalActor{TestOutput: testOutput}
 	testActorRuntime, err := newTestActorsRuntimeWithInternalActors(internalActors)
 	require.NoError(t, err)
@@ -188,18 +188,18 @@ func TestInternalActorCall(t *testing.T) {
 func TestInternalActorReminder(t *testing.T) {
 	const testActorType = InternalActorTypePrefix + "test"
 	ia := &mockInternalActor{}
-	internalActors := make(map[string]core.InternalActor)
+	internalActors := make(map[string]actorsCore.InternalActor)
 	internalActors[testActorType] = ia
 	testActorRuntime, err := newTestActorsRuntimeWithInternalActors(internalActors)
 	require.NoError(t, err)
 
-	period, _ := coreReminder.NewReminderPeriod("2s")
+	period, _ := actorsCoreReminder.NewReminderPeriod("2s")
 	data, _ := json.Marshal(testReminderData{
 		SomeBytes:  []byte("こんにちは！"),
 		SomeInt:    42,
 		SomeString: "Hello!",
 	})
-	testReminder := &core.Reminder{
+	testReminder := &actorsCore.Reminder{
 		ActorType:      testActorType,
 		ActorID:        "myActor",
 		RegisteredTime: time.Now().Add(2 * time.Second),
@@ -219,7 +219,7 @@ func TestInternalActorReminder(t *testing.T) {
 
 	// Reminder data gets marshaled to JSON and unmarshaled back to map[string]interface{}
 	var actualData testReminderData
-	core.DecodeInternalActorReminderData(invokedReminder.Data, &actualData)
+	actorsCore.DecodeInternalActorReminderData(invokedReminder.Data, &actualData)
 	enc, err := json.Marshal(actualData)
 	require.NoError(t, err)
 	assert.Equal(t, []byte(testReminder.Data), enc)
@@ -231,7 +231,7 @@ func TestInternalActorDeactivation(t *testing.T) {
 		testActorID   = "foo"
 	)
 	ia := &mockInternalActor{}
-	internalActors := make(map[string]core.InternalActor)
+	internalActors := make(map[string]actorsCore.InternalActor)
 	internalActors[testActorType] = ia
 	testActorRuntime, err := newTestActorsRuntimeWithInternalActors(internalActors)
 	require.NoError(t, err)
@@ -257,7 +257,7 @@ func TestInternalActorDeactivation(t *testing.T) {
 
 func decodeTestResponse(data []byte) (*invokeMethodCallInfo, error) {
 	info := new(invokeMethodCallInfo)
-	err := core.DecodeInternalActorData(data, info)
+	err := actorsCore.DecodeInternalActorData(data, info)
 	if err != nil {
 		return nil, err
 	}
@@ -267,7 +267,7 @@ func decodeTestResponse(data []byte) (*invokeMethodCallInfo, error) {
 // TestInternalActorsNotCounted verifies that internal actors are not counted in the
 // GetActiveActorsCount API, which should only include counts of user-defined actors.
 func TestInternalActorsNotCounted(t *testing.T) {
-	internalActors := make(map[string]core.InternalActor)
+	internalActors := make(map[string]actorsCore.InternalActor)
 	internalActors[InternalActorTypePrefix+"wfengine.workflow"] = &mockInternalActor{}
 	testActorRuntime, err := newTestActorsRuntimeWithInternalActors(internalActors)
 	require.NoError(t, err)

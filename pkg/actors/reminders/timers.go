@@ -1,3 +1,16 @@
+/*
+Copyright 2023 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package reminders
 
 import (
@@ -9,8 +22,8 @@ import (
 
 	"k8s.io/utils/clock"
 
-	"github.com/dapr/dapr/pkg/actors/core"
-	coreReminder "github.com/dapr/dapr/pkg/actors/core/reminder"
+	actorsCore "github.com/dapr/dapr/pkg/actors/core"
+	actorsCoreReminder "github.com/dapr/dapr/pkg/actors/core/reminder"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 )
 
@@ -19,7 +32,7 @@ type ActorsTimers struct {
 	clock                 *clock.WithTicker
 	actorsTable           *sync.Map
 	activeTimers          *sync.Map
-	actorsReminders       core.Reminders
+	actorsReminders       actorsCore.Reminders
 	activeTimersCountLock *sync.RWMutex
 	activeTimersCount     map[string]*int64
 }
@@ -29,12 +42,12 @@ type TimerOpts struct {
 	Clock                 *clock.WithTicker
 	ActorsTable           *sync.Map
 	ActiveTimers          *sync.Map
-	ActorsReminders       core.Reminders
+	ActorsReminders       actorsCore.Reminders
 	ActiveTimersCountLock *sync.RWMutex
 	ActiveTimersCount     map[string]*int64
 }
 
-func NewTimers(opts TimerOpts) core.Timers {
+func NewTimers(opts TimerOpts) actorsCore.Timers {
 	return &ActorsTimers{
 		activeTimersLock:      opts.ActiveTimersLock,
 		clock:                 opts.Clock,
@@ -134,7 +147,7 @@ func (a *ActorsTimers) CreateTimer(ctx context.Context, req *CreateTimerRequest)
 			nextTimer.Reset(reminder.NextTick().Sub((*a.clock).Now()))
 		}
 
-		err = a.DeleteTimer(ctx, &coreReminder.DeleteTimerRequest{
+		err = a.DeleteTimer(ctx, &actorsCoreReminder.DeleteTimerRequest{
 			Name:      req.Name,
 			ActorID:   req.ActorID,
 			ActorType: req.ActorType,
@@ -146,7 +159,7 @@ func (a *ActorsTimers) CreateTimer(ctx context.Context, req *CreateTimerRequest)
 	return nil
 }
 
-func (a *ActorsTimers) DeleteTimer(ctx context.Context, req *coreReminder.DeleteTimerRequest) error {
+func (a *ActorsTimers) DeleteTimer(ctx context.Context, req *actorsCoreReminder.DeleteTimerRequest) error {
 	actorKey := constructCompositeKey(req.ActorType, req.ActorID)
 	timerKey := constructCompositeKey(actorKey, req.Name)
 

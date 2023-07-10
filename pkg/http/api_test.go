@@ -50,8 +50,8 @@ import (
 	"github.com/dapr/components-contrib/state"
 	workflowContrib "github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/dapr/pkg/actors"
-	"github.com/dapr/dapr/pkg/actors/core"
-	coreReminder "github.com/dapr/dapr/pkg/actors/core/reminder"
+	actorsCore "github.com/dapr/dapr/pkg/actors/core"
+	actorsCoreReminder "github.com/dapr/dapr/pkg/actors/core/reminder"
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpEndpointsV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
@@ -1949,15 +1949,15 @@ func TestV1ActorEndpoints(t *testing.T) {
 	t.Run("Get actor state - 200 OK", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
 		mockActors := new(actors.MockActors)
-		mockActors.On("GetState", &coreReminder.GetStateRequest{
+		mockActors.On("GetState", &actorsCoreReminder.GetStateRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
 			Key:       "key1",
-		}).Return(&coreReminder.StateResponse{
+		}).Return(&actorsCoreReminder.StateResponse{
 			Data: fakeData,
 		}, nil)
 
-		mockActors.On("IsActorHosted", &coreReminder.ActorHostedRequest{
+		mockActors.On("IsActorHosted", &actorsCoreReminder.ActorHostedRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
 		}).Return(true)
@@ -1976,13 +1976,13 @@ func TestV1ActorEndpoints(t *testing.T) {
 	t.Run("Get actor state - 204 No Content", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
 		mockActors := new(actors.MockActors)
-		mockActors.On("GetState", &coreReminder.GetStateRequest{
+		mockActors.On("GetState", &actorsCoreReminder.GetStateRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
 			Key:       "key1",
 		}).Return(nil, nil)
 
-		mockActors.On("IsActorHosted", &coreReminder.ActorHostedRequest{
+		mockActors.On("IsActorHosted", &actorsCoreReminder.ActorHostedRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
 		}).Return(true)
@@ -2001,13 +2001,13 @@ func TestV1ActorEndpoints(t *testing.T) {
 	t.Run("Get actor state - 500 on GetState failure", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
 		mockActors := new(actors.MockActors)
-		mockActors.On("GetState", &coreReminder.GetStateRequest{
+		mockActors.On("GetState", &actorsCoreReminder.GetStateRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
 			Key:       "key1",
 		}).Return(nil, errors.New("UPSTREAM_ERROR"))
 
-		mockActors.On("IsActorHosted", &coreReminder.ActorHostedRequest{
+		mockActors.On("IsActorHosted", &actorsCoreReminder.ActorHostedRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
 		}).Return(true)
@@ -2026,18 +2026,18 @@ func TestV1ActorEndpoints(t *testing.T) {
 	t.Run("Get actor state - 400 for missing actor instace", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
 		mockActors := new(actors.MockActors)
-		mockActors.On("GetState", &coreReminder.GetStateRequest{
+		mockActors.On("GetState", &actorsCoreReminder.GetStateRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
 			Key:       "key1",
-		}).Return(&coreReminder.StateResponse{
+		}).Return(&actorsCoreReminder.StateResponse{
 			Data: fakeData,
 		}, nil)
 
-		mockActors.On("IsActorHosted", &coreReminder.ActorHostedRequest{
+		mockActors.On("IsActorHosted", &actorsCoreReminder.ActorHostedRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
-		}).Return(func(*coreReminder.ActorHostedRequest) bool { return false })
+		}).Return(func(*actorsCoreReminder.ActorHostedRequest) bool { return false })
 
 		testAPI.universal.Actors = mockActors
 
@@ -2053,16 +2053,16 @@ func TestV1ActorEndpoints(t *testing.T) {
 	t.Run("Transaction - 204 No Content", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state"
 
-		testTransactionalOperations := []core.TransactionalOperation{
+		testTransactionalOperations := []actorsCore.TransactionalOperation{
 			{
-				Operation: core.Upsert,
+				Operation: actorsCore.Upsert,
 				Request: map[string]interface{}{
 					"key":   "fakeKey1",
 					"value": fakeBodyObject,
 				},
 			},
 			{
-				Operation: core.Delete,
+				Operation: actorsCore.Delete,
 				Request: map[string]interface{}{
 					"key": "fakeKey1",
 				},
@@ -2070,13 +2070,13 @@ func TestV1ActorEndpoints(t *testing.T) {
 		}
 
 		mockActors := new(actors.MockActors)
-		mockActors.On("TransactionalStateOperation", &core.TransactionalRequest{
+		mockActors.On("TransactionalStateOperation", &actorsCore.TransactionalRequest{
 			ActorID:    "fakeActorID",
 			ActorType:  "fakeActorType",
 			Operations: testTransactionalOperations,
 		}).Return(nil)
 
-		mockActors.On("IsActorHosted", &coreReminder.ActorHostedRequest{
+		mockActors.On("IsActorHosted", &actorsCoreReminder.ActorHostedRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
 		}).Return(true)
@@ -2099,16 +2099,16 @@ func TestV1ActorEndpoints(t *testing.T) {
 	t.Run("Transaction - 400 when actor instance not present", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state"
 
-		testTransactionalOperations := []core.TransactionalOperation{
+		testTransactionalOperations := []actorsCore.TransactionalOperation{
 			{
-				Operation: core.Upsert,
+				Operation: actorsCore.Upsert,
 				Request: map[string]interface{}{
 					"key":   "fakeKey1",
 					"value": fakeBodyObject,
 				},
 			},
 			{
-				Operation: core.Delete,
+				Operation: actorsCore.Delete,
 				Request: map[string]interface{}{
 					"key": "fakeKey1",
 				},
@@ -2116,10 +2116,10 @@ func TestV1ActorEndpoints(t *testing.T) {
 		}
 
 		mockActors := new(actors.MockActors)
-		mockActors.On("IsActorHosted", &coreReminder.ActorHostedRequest{
+		mockActors.On("IsActorHosted", &actorsCoreReminder.ActorHostedRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
-		}).Return(func(*coreReminder.ActorHostedRequest) bool { return false })
+		}).Return(func(*actorsCoreReminder.ActorHostedRequest) bool { return false })
 
 		testAPI.universal.Actors = mockActors
 
@@ -2138,16 +2138,16 @@ func TestV1ActorEndpoints(t *testing.T) {
 	t.Run("Transaction - 500 when transactional state operation fails", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state"
 
-		testTransactionalOperations := []core.TransactionalOperation{
+		testTransactionalOperations := []actorsCore.TransactionalOperation{
 			{
-				Operation: core.Upsert,
+				Operation: actorsCore.Upsert,
 				Request: map[string]interface{}{
 					"key":   "fakeKey1",
 					"value": fakeBodyObject,
 				},
 			},
 			{
-				Operation: core.Delete,
+				Operation: actorsCore.Delete,
 				Request: map[string]interface{}{
 					"key": "fakeKey1",
 				},
@@ -2155,13 +2155,13 @@ func TestV1ActorEndpoints(t *testing.T) {
 		}
 
 		mockActors := new(actors.MockActors)
-		mockActors.On("TransactionalStateOperation", &core.TransactionalRequest{
+		mockActors.On("TransactionalStateOperation", &actorsCore.TransactionalRequest{
 			ActorID:    "fakeActorID",
 			ActorType:  "fakeActorType",
 			Operations: testTransactionalOperations,
 		}).Return(errors.New("UPSTREAM_ERROR"))
 
-		mockActors.On("IsActorHosted", &coreReminder.ActorHostedRequest{
+		mockActors.On("IsActorHosted", &actorsCoreReminder.ActorHostedRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
 		}).Return(true)
@@ -2184,7 +2184,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 	t.Run("Reminder Create - 204 No Content", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
 
-		reminderRequest := coreReminder.CreateReminderRequest{
+		reminderRequest := actorsCoreReminder.CreateReminderRequest{
 			Name:      "reminder1",
 			ActorType: "fakeActorType",
 			ActorID:   "fakeActorID",
@@ -2215,7 +2215,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 	t.Run("Reminder Create - 500 when CreateReminderFails", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
 
-		reminderRequest := coreReminder.CreateReminderRequest{
+		reminderRequest := actorsCoreReminder.CreateReminderRequest{
 			Name:      "reminder1",
 			ActorType: "fakeActorType",
 			ActorID:   "fakeActorID",
@@ -2246,7 +2246,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 	t.Run("Reminder Rename - 204 when RenameReminderFails", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
 
-		reminderRequest := coreReminder.RenameReminderRequest{
+		reminderRequest := actorsCoreReminder.RenameReminderRequest{
 			OldName:   "reminder1",
 			ActorType: "fakeActorType",
 			ActorID:   "fakeActorID",
@@ -2274,7 +2274,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 	t.Run("Reminder Rename - 500 when RenameReminderFails", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
 
-		reminderRequest := coreReminder.RenameReminderRequest{
+		reminderRequest := actorsCoreReminder.RenameReminderRequest{
 			OldName:   "reminder1",
 			ActorType: "fakeActorType",
 			ActorID:   "fakeActorID",
@@ -2302,7 +2302,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 	t.Run("Reminder Delete - 204 No Content", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
-		reminderRequest := coreReminder.DeleteReminderRequest{
+		reminderRequest := actorsCoreReminder.DeleteReminderRequest{
 			Name:      "reminder1",
 			ActorType: "fakeActorType",
 			ActorID:   "fakeActorID",
@@ -2327,7 +2327,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 	t.Run("Reminder Delete - 500 on upstream actor error", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
-		reminderRequest := coreReminder.DeleteReminderRequest{
+		reminderRequest := actorsCoreReminder.DeleteReminderRequest{
 			Name:      "reminder1",
 			ActorType: "fakeActorType",
 			ActorID:   "fakeActorID",
@@ -2352,7 +2352,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 	t.Run("Reminder Get - 200 OK", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
-		reminderRequest := coreReminder.GetReminderRequest{
+		reminderRequest := actorsCoreReminder.GetReminderRequest{
 			Name:      "reminder1",
 			ActorType: "fakeActorType",
 			ActorID:   "fakeActorID",
@@ -2376,7 +2376,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 	t.Run("Reminder Get - 500 on upstream actor error", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
-		reminderRequest := coreReminder.GetReminderRequest{
+		reminderRequest := actorsCoreReminder.GetReminderRequest{
 			Name:      "reminder1",
 			ActorType: "fakeActorType",
 			ActorID:   "fakeActorID",
@@ -2401,13 +2401,13 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 	t.Run("Reminder Get - 500 on JSON encode failure from actor", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
-		reminderRequest := coreReminder.GetReminderRequest{
+		reminderRequest := actorsCoreReminder.GetReminderRequest{
 			Name:      "reminder1",
 			ActorType: "fakeActorType",
 			ActorID:   "fakeActorID",
 		}
 
-		reminderResponse := core.Reminder{
+		reminderResponse := actorsCore.Reminder{
 			// This is not valid JSON
 			Data: json.RawMessage(`foo`),
 		}
@@ -2432,7 +2432,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 	t.Run("Timer Create - 204 No Content", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/timers/timer1"
 
-		timerRequest := coreReminder.CreateTimerRequest{
+		timerRequest := actorsCoreReminder.CreateTimerRequest{
 			Name:      "timer1",
 			ActorType: "fakeActorType",
 			ActorID:   "fakeActorID",
@@ -2465,7 +2465,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 	t.Run("Timer Create - 500 on upstream error", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/timers/timer1"
 
-		timerRequest := coreReminder.CreateTimerRequest{
+		timerRequest := actorsCoreReminder.CreateTimerRequest{
 			Name:      "timer1",
 			ActorType: "fakeActorType",
 			ActorID:   "fakeActorID",
@@ -2495,7 +2495,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 	t.Run("Timer Delete - 204 No Conent", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/timers/timer1"
-		timerRequest := coreReminder.DeleteTimerRequest{
+		timerRequest := actorsCoreReminder.DeleteTimerRequest{
 			Name:      "timer1",
 			ActorType: "fakeActorType",
 			ActorID:   "fakeActorID",
@@ -2520,7 +2520,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 	t.Run("Timer Delete - 500 For upstream error", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/timers/timer1"
-		timerRequest := coreReminder.DeleteTimerRequest{
+		timerRequest := actorsCoreReminder.DeleteTimerRequest{
 			Name:      "timer1",
 			ActorType: "fakeActorType",
 			ActorID:   "fakeActorID",
@@ -2824,15 +2824,15 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 		buffer = ""
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
 		mockActors := new(actors.MockActors)
-		mockActors.On("GetState", &coreReminder.GetStateRequest{
+		mockActors.On("GetState", &actorsCoreReminder.GetStateRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
 			Key:       "key1",
-		}).Return(&coreReminder.StateResponse{
+		}).Return(&actorsCoreReminder.StateResponse{
 			Data: fakeData,
 		}, nil)
 
-		mockActors.On("IsActorHosted", &coreReminder.ActorHostedRequest{
+		mockActors.On("IsActorHosted", &actorsCoreReminder.ActorHostedRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
 		}).Return(true)
@@ -2852,16 +2852,16 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 		buffer = ""
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state"
 
-		testTransactionalOperations := []core.TransactionalOperation{
+		testTransactionalOperations := []actorsCore.TransactionalOperation{
 			{
-				Operation: core.Upsert,
+				Operation: actorsCore.Upsert,
 				Request: map[string]interface{}{
 					"key":   "fakeKey1",
 					"value": fakeBodyObject,
 				},
 			},
 			{
-				Operation: core.Delete,
+				Operation: actorsCore.Delete,
 				Request: map[string]interface{}{
 					"key": "fakeKey1",
 				},
@@ -2869,13 +2869,13 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 		}
 
 		mockActors := new(actors.MockActors)
-		mockActors.On("TransactionalStateOperation", &core.TransactionalRequest{
+		mockActors.On("TransactionalStateOperation", &actorsCore.TransactionalRequest{
 			ActorID:    "fakeActorID",
 			ActorType:  "fakeActorType",
 			Operations: testTransactionalOperations,
 		}).Return(nil)
 
-		mockActors.On("IsActorHosted", &coreReminder.ActorHostedRequest{
+		mockActors.On("IsActorHosted", &actorsCoreReminder.ActorHostedRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
 		}).Return(true)

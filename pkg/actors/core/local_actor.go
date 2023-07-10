@@ -1,10 +1,23 @@
+/*
+Copyright 2023 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package core
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	nethttp "net/http"
+	"net/http"
 	"strings"
 	"sync"
 
@@ -93,7 +106,7 @@ func (l *LocalActor) CallLocalActor(ctx context.Context, req *invokev1.InvokeMet
 
 	// Original code overrides method with PUT. Why?
 	if msg.GetHttpExtension() == nil {
-		req.WithHTTPExtension(nethttp.MethodPut, "")
+		req.WithHTTPExtension(http.MethodPut, "")
 	} else {
 		msg.HttpExtension.Verb = commonv1pb.HTTPExtension_PUT //nolint:nosnakecase
 	}
@@ -121,7 +134,7 @@ func (l *LocalActor) CallLocalActor(ctx context.Context, req *invokev1.InvokeMet
 		return nil, errors.New("error from actor service: response object is nil")
 	}
 
-	if resp.Status().Code != nethttp.StatusOK {
+	if resp.Status().Code != http.StatusOK {
 		respData, _ := resp.RawDataFull()
 		return nil, fmt.Errorf("error from actor service: %s", string(respData))
 	}

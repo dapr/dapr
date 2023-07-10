@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -17,13 +17,13 @@ import (
 	"net/http"
 	"time"
 
-	core "github.com/dapr/dapr/pkg/actors/core"
+	actorsCore "github.com/dapr/dapr/pkg/actors/core"
 
 	daprAppConfig "github.com/dapr/dapr/pkg/config"
 )
 
 type Config struct {
-	coreConfig core.Config
+	coreConfig actorsCore.Config
 }
 
 const (
@@ -50,7 +50,7 @@ type ConfigOpts struct {
 
 // NewConfig returns the actor runtime configuration.
 func NewConfig(opts ConfigOpts) Config {
-	c := core.Config{
+	c := actorsCore.Config{
 		HostAddress:                   opts.HostAddress,
 		AppID:                         opts.AppID,
 		PlacementAddresses:            opts.PlacementAddresses,
@@ -66,7 +66,7 @@ func NewConfig(opts ConfigOpts) Config {
 		ActorDeactivationScanInterval: defaultActorScanInterval,
 		ActorIdleTimeout:              defaultActorIdleTimeout,
 		DrainOngoingCallTimeout:       defaultOngoingCallTimeout,
-		EntityConfigs:                 make(map[string]core.EntityConfig),
+		EntityConfigs:                 make(map[string]actorsCore.EntityConfig),
 		AppChannelAddress:             opts.AppChannelAddress,
 		PodName:                       opts.PodName,
 	}
@@ -139,8 +139,8 @@ func (c *Config) GetDrainRebalancedActorsForType(actorType string) bool {
 // 	return c.RemindersStoragePartitions
 // }
 
-func translateEntityConfig(appConfig daprAppConfig.EntityConfig) core.EntityConfig {
-	domainConfig := core.EntityConfig{
+func translateEntityConfig(appConfig daprAppConfig.EntityConfig) actorsCore.EntityConfig {
+	domainConfig := actorsCore.EntityConfig{
 		Entities:                   appConfig.Entities,
 		ActorIdleTimeout:           defaultActorIdleTimeout,
 		DrainOngoingCallTimeout:    defaultOngoingCallTimeout,

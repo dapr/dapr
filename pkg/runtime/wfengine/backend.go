@@ -23,7 +23,7 @@ import (
 	"github.com/microsoft/durabletask-go/api"
 	"github.com/microsoft/durabletask-go/backend"
 
-	"github.com/dapr/dapr/pkg/actors/core"
+	actorsCore "github.com/dapr/dapr/pkg/actors/core"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 )
 
@@ -34,7 +34,7 @@ type workflowScheduler interface {
 }
 
 type actorBackend struct {
-	actors                    core.Actors
+	actors                    actorsCore.Actors
 	orchestrationWorkItemChan chan *backend.OrchestrationWorkItem
 	activityWorkItemChan      chan *backend.ActivityWorkItem
 	startedOnce               sync.Once
@@ -49,7 +49,7 @@ func NewActorBackend(engine *WorkflowEngine) *actorBackend {
 	}
 }
 
-func (be *actorBackend) SetActorRuntime(actors core.Actors) {
+func (be *actorBackend) SetActorRuntime(actors actorsCore.Actors) {
 	be.actors = actors
 }
 
@@ -137,7 +137,7 @@ func (be *actorBackend) GetOrchestrationMetadata(ctx context.Context, id api.Ins
 		return nil, api.ErrInstanceNotFound
 	}
 	var metadata api.OrchestrationMetadata
-	if err := core.DecodeInternalActorData(data, &metadata); err != nil {
+	if err := actorsCore.DecodeInternalActorData(data, &metadata); err != nil {
 		return nil, fmt.Errorf("failed to decode the internal actor response: %w", err)
 	}
 	return &metadata, nil

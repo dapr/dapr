@@ -27,8 +27,8 @@ import (
 	"github.com/microsoft/durabletask-go/backend"
 
 	"github.com/dapr/dapr/pkg/actors"
-	"github.com/dapr/dapr/pkg/actors/core"
-	coreReminder "github.com/dapr/dapr/pkg/actors/core/reminder"
+	actorsCore "github.com/dapr/dapr/pkg/actors/core"
+	actorsCoreReminder "github.com/dapr/dapr/pkg/actors/core/reminder"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 )
 
@@ -37,14 +37,14 @@ var ErrDuplicateInvocation = errors.New("duplicate invocation")
 const activityStateKey = "activityState"
 
 type activityActor struct {
-	actorRuntime     core.Actors
+	actorRuntime     actorsCore.Actors
 	scheduler        workflowScheduler
 	statesCache      sync.Map
 	cachingDisabled  bool
 	defaultTimeout   time.Duration
 	reminderInterval time.Duration
 	config           wfConfig
-	actorsReminders  core.Reminders
+	actorsReminders  actorsCore.Reminders
 }
 
 // ActivityRequest represents a request by a worklow to invoke an activity.
@@ -67,7 +67,7 @@ func NewActivityActor(scheduler workflowScheduler, config wfConfig) *activityAct
 }
 
 // SetActorRuntime implements core.InternalActor
-func (a *activityActor) SetActorRuntime(actorsRuntime core.Actors) {
+func (a *activityActor) SetActorRuntime(actorsRuntime actorsCore.Actors) {
 	a.actorRuntime = actorsRuntime
 	a.actorsReminders = actorsRuntime.GetActorsReminders()
 }
@@ -79,7 +79,7 @@ func (a *activityActor) SetActorRuntime(actorsRuntime core.Actors) {
 // in parallel.
 func (a *activityActor) InvokeMethod(ctx context.Context, actorID string, methodName string, data []byte) (any, error) {
 	var ar ActivityRequest
-	if err := core.DecodeInternalActorData(data, &ar); err != nil {
+	if err := actorsCore.DecodeInternalActorData(data, &ar); err != nil {
 		return nil, fmt.Errorf("failed to decode activity request: %w", err)
 	}
 
@@ -111,7 +111,7 @@ func (a *activityActor) InvokeReminder(ctx context.Context, actorID string, remi
 	wfLogger.Debugf("invoking reminder '%s' on activity actor '%s'", reminderName, actorID)
 
 	var generation uint64
-	if err := core.DecodeInternalActorReminderData(data, &generation); err != nil {
+	if err := actorsCore.DecodeInternalActorReminderData(data, &generation); err != nil {
 		// Likely the result of an incompatible activity reminder format change. This is non-recoverable.
 		return err
 	}
@@ -241,7 +241,7 @@ func (a *activityActor) loadActivityState(ctx context.Context, actorID string) (
 	// Loading from the state store is only expected in process failure recovery scenarios.
 	wfLogger.Debugf("%s: loading activity state", actorID)
 
-	req := coreReminder.GetStateRequest{
+	req := actorsCoreReminder.GetStateRequest{
 		ActorType: a.config.activityActorType,
 		ActorID:   actorID,
 		Key:       activityStateKey,
@@ -264,12 +264,12 @@ func (a *activityActor) loadActivityState(ctx context.Context, actorID string) (
 }
 
 func (a *activityActor) saveActivityState(ctx context.Context, actorID string, state activityState) error {
-	req := core.TransactionalRequest{
+	req := actorsCore.TransactionalRequest{
 		ActorType: a.config.activityActorType,
 		ActorID:   actorID,
-		Operations: []core.TransactionalOperation{{
-			Operation: core.Upsert,
-			Request: core.TransactionalUpsert{
+		Operations: []actorsCore.TransactionalOperation{{
+			Operation: actorsCore.Upsert,
+			Request: actorsCore.TransactionalUpsert{
 				Key:   activityStateKey,
 				Value: state,
 			},
@@ -286,12 +286,12 @@ func (a *activityActor) saveActivityState(ctx context.Context, actorID string, s
 }
 
 func (a *activityActor) purgeActivityState(ctx context.Context, actorID string) error {
-	req := core.TransactionalRequest{
+	req := actorsCore.TransactionalRequest{
 		ActorType: a.config.activityActorType,
 		ActorID:   actorID,
-		Operations: []core.TransactionalOperation{{
-			Operation: core.Delete,
-			Request: core.TransactionalDelete{
+		Operations: []actorsCore.TransactionalOperation{{
+			Operation: actorsCore.Delete,
+			Request: actorsCore.TransactionalDelete{
 				Key: activityStateKey,
 			},
 		}},
@@ -310,7 +310,7 @@ func (a *activityActor) createReliableReminder(ctx context.Context, actorID stri
 	if err != nil {
 		return fmt.Errorf("failed to encode data as JSON: %w", err)
 	}
-	return a.actorsReminders.CreateReminder(ctx, &coreReminder.CreateReminderRequest{
+	return a.actorsReminders.CreateReminder(ctx, &actorsCoreReminder.CreateReminderRequest{
 		ActorType: a.config.activityActorType,
 		ActorID:   actorID,
 		Data:      dataEnc,

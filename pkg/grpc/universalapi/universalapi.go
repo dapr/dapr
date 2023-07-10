@@ -18,7 +18,7 @@ package universalapi
 import (
 	"sync"
 
-	coreActors "github.com/dapr/dapr/pkg/actors/core"
+	actorsCore "github.com/dapr/dapr/pkg/actors/core"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -30,15 +30,15 @@ type UniversalAPI struct {
 	AppID                      string
 	Logger                     logger.Logger
 	Resiliency                 resiliency.Provider
-	Actors                     coreActors.Actors
+	Actors                     actorsCore.Actors
 	CompStore                  *compstore.ComponentStore
 	ShutdownFn                 func()
 	GetComponentsCapabilitesFn func() map[string][]string
 	ExtendedMetadata           map[string]string
 	AppConnectionConfig        config.AppConnectionConfig
 	GlobalConfig               *config.Configuration
-	ActorsReminders            coreActors.Reminders
-	ActorsTimers               coreActors.Timers
+	ActorsReminders            actorsCore.Reminders
+	ActorsTimers               actorsCore.Timers
 
 	extendedMetadataLock sync.RWMutex
 }

@@ -23,8 +23,8 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/dapr/dapr/pkg/actors"
-	"github.com/dapr/dapr/pkg/actors/core"
-	coreReminder "github.com/dapr/dapr/pkg/actors/core/reminder"
+	actorsCore "github.com/dapr/dapr/pkg/actors/core"
+	actorsCoreReminder "github.com/dapr/dapr/pkg/actors/core/reminder"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/grpc/universalapi"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -130,15 +130,15 @@ func TestGetActorState(t *testing.T) {
 	t.Run("Get actor state - OK", func(t *testing.T) {
 		data := []byte(`{ "data": 123 }`)
 		mockActors := new(actors.MockActors)
-		mockActors.On("GetState", &coreReminder.GetStateRequest{
+		mockActors.On("GetState", &actorsCoreReminder.GetStateRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
 			Key:       "key1",
-		}).Return(&coreReminder.StateResponse{
+		}).Return(&actorsCoreReminder.StateResponse{
 			Data: data,
 		}, nil)
 
-		mockActors.On("IsActorHosted", &coreReminder.ActorHostedRequest{
+		mockActors.On("IsActorHosted", &actorsCoreReminder.ActorHostedRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
 		}).Return(true)
@@ -190,10 +190,10 @@ func TestExecuteActorStateTransaction(t *testing.T) {
 	t.Run("Save actor state - Upsert and Delete OK", func(t *testing.T) {
 		data := []byte("{ \"data\": 123 }")
 		mockActors := new(actors.MockActors)
-		mockActors.On("TransactionalStateOperation", &core.TransactionalRequest{
+		mockActors.On("TransactionalStateOperation", &actorsCore.TransactionalRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
-			Operations: []core.TransactionalOperation{
+			Operations: []actorsCore.TransactionalOperation{
 				{
 					Operation: "upsert",
 					Request: map[string]interface{}{
@@ -213,7 +213,7 @@ func TestExecuteActorStateTransaction(t *testing.T) {
 			},
 		}).Return(nil)
 
-		mockActors.On("IsActorHosted", &coreReminder.ActorHostedRequest{
+		mockActors.On("IsActorHosted", &actorsCoreReminder.ActorHostedRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
 		}).Return(true)

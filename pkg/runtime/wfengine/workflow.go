@@ -28,7 +28,7 @@ import (
 	"github.com/microsoft/durabletask-go/backend"
 
 	"github.com/dapr/dapr/pkg/actors"
-	"github.com/dapr/dapr/pkg/actors/core"
+	actorsCore "github.com/dapr/dapr/pkg/actors/core"
 	"github.com/dapr/dapr/pkg/actors/reminders"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 )
@@ -43,14 +43,14 @@ const (
 )
 
 type workflowActor struct {
-	actors           core.Actors
+	actors           actorsCore.Actors
 	states           sync.Map
 	scheduler        workflowScheduler
 	cachingDisabled  bool
 	defaultTimeout   time.Duration
 	reminderInterval time.Duration
 	config           wfConfig
-	actorsReminders  core.Reminders
+	actorsReminders  actorsCore.Reminders
 }
 
 type durableTimer struct {
@@ -84,7 +84,7 @@ func NewWorkflowActor(scheduler workflowScheduler, config wfConfig) *workflowAct
 }
 
 // SetActorRuntime implements core.InternalActor
-func (wf *workflowActor) SetActorRuntime(actorRuntime core.Actors) {
+func (wf *workflowActor) SetActorRuntime(actorRuntime actorsCore.Actors) {
 	wf.actors = actorRuntime
 	wf.actorsReminders = actorRuntime.GetActorsReminders()
 }
@@ -298,7 +298,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 
 	if strings.HasPrefix(reminderName, "timer-") {
 		var timerData durableTimer
-		if err = core.DecodeInternalActorReminderData(reminderData, &timerData); err != nil {
+		if err = actorsCore.DecodeInternalActorReminderData(reminderData, &timerData); err != nil {
 			// Likely the result of an incompatible durable task timer format change. This is non-recoverable.
 			return err
 		}
@@ -333,12 +333,12 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 		} else {
 			continue
 		}
-		req := core.TransactionalRequest{
+		req := actorsCore.TransactionalRequest{
 			ActorType: wf.config.activityActorType,
 			ActorID:   getActivityActorID(actorID, taskID, state.Generation),
-			Operations: []core.TransactionalOperation{{
-				Operation: core.Delete,
-				Request: core.TransactionalDelete{
+			Operations: []actorsCore.TransactionalOperation{{
+				Operation: actorsCore.Delete,
+				Request: actorsCore.TransactionalDelete{
 					Key: activityStateKey,
 				},
 			}},
@@ -426,7 +426,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 			if err != nil {
 				return err
 			}
-			activityRequestBytes, err := core.EncodeInternalActorData(ActivityRequest{
+			activityRequestBytes, err := actorsCore.EncodeInternalActorData(ActivityRequest{
 				HistoryEvent: eventData,
 			})
 			if err != nil {
@@ -570,12 +570,12 @@ func (wf *workflowActor) removeCompletedStateData(ctx context.Context, state *wo
 		} else {
 			continue
 		}
-		req := core.TransactionalRequest{
+		req := actorsCore.TransactionalRequest{
 			ActorType: wf.config.activityActorType,
 			ActorID:   getActivityActorID(actorID, taskID, state.Generation),
-			Operations: []core.TransactionalOperation{{
-				Operation: core.Delete,
-				Request: core.TransactionalDelete{
+			Operations: []actorsCore.TransactionalOperation{{
+				Operation: actorsCore.Delete,
+				Request: actorsCore.TransactionalDelete{
 					Key: activityStateKey,
 				},
 			}},
