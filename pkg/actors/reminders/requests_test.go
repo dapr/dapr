@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dapr/dapr/pkg/actors/core"
 	"github.com/stretchr/testify/require"
 )
 
@@ -28,20 +29,20 @@ func TestNewReminderFromCreateReminderRequest(t *testing.T) {
 	tests := []struct {
 		name         string
 		req          func(r *CreateReminderRequest)
-		wantReminder func(r *Reminder)
+		wantReminder func(r *core.Reminder)
 		wantErr      bool
 	}{
 		{
 			name:         "base test",
 			req:          func(r *CreateReminderRequest) { return },
-			wantReminder: func(r *Reminder) { return },
+			wantReminder: func(r *core.Reminder) { return },
 		},
 		{
 			name: "with data",
 			req: func(r *CreateReminderRequest) {
 				r.Data = json.RawMessage(`"hi"`)
 			},
-			wantReminder: func(r *Reminder) {
+			wantReminder: func(r *core.Reminder) {
 				r.Data = json.RawMessage(`"hi"`)
 			},
 		},
@@ -50,7 +51,7 @@ func TestNewReminderFromCreateReminderRequest(t *testing.T) {
 			req: func(r *CreateReminderRequest) {
 				r.Data = json.RawMessage(`{  "foo": [ 12, 4 ] } `)
 			},
-			wantReminder: func(r *Reminder) {
+			wantReminder: func(r *core.Reminder) {
 				// Gets compacted automatically
 				r.Data = json.RawMessage(`{"foo":[12,4]}`)
 			},
@@ -60,8 +61,8 @@ func TestNewReminderFromCreateReminderRequest(t *testing.T) {
 			req: func(r *CreateReminderRequest) {
 				r.Period = "2s"
 			},
-			wantReminder: func(r *Reminder) {
-				r.Period, _ = NewReminderPeriod("2s")
+			wantReminder: func(r *core.Reminder) {
+				r.Period, _ = core.NewReminderPeriod("2s")
 			},
 		},
 		{
@@ -69,7 +70,7 @@ func TestNewReminderFromCreateReminderRequest(t *testing.T) {
 			req: func(r *CreateReminderRequest) {
 				r.DueTime = "2m"
 			},
-			wantReminder: func(r *Reminder) {
+			wantReminder: func(r *core.Reminder) {
 				r.DueTime = "2m"
 				r.RegisteredTime = r.RegisteredTime.Add(2 * time.Minute)
 			},
@@ -79,7 +80,7 @@ func TestNewReminderFromCreateReminderRequest(t *testing.T) {
 			req: func(r *CreateReminderRequest) {
 				r.DueTime = now.Add(10 * time.Minute).Format(time.RFC3339)
 			},
-			wantReminder: func(r *Reminder) {
+			wantReminder: func(r *core.Reminder) {
 				r.DueTime = now.Add(10 * time.Minute).Format(time.RFC3339)
 				r.RegisteredTime = now.Add(10 * time.Minute)
 			},
@@ -89,7 +90,7 @@ func TestNewReminderFromCreateReminderRequest(t *testing.T) {
 			req: func(r *CreateReminderRequest) {
 				r.TTL = "10m"
 			},
-			wantReminder: func(r *Reminder) {
+			wantReminder: func(r *core.Reminder) {
 				r.ExpirationTime = now.Add(10 * time.Minute)
 			},
 		},
@@ -98,7 +99,7 @@ func TestNewReminderFromCreateReminderRequest(t *testing.T) {
 			req: func(r *CreateReminderRequest) {
 				r.TTL = now.Add(10 * time.Minute).Format(time.RFC3339)
 			},
-			wantReminder: func(r *Reminder) {
+			wantReminder: func(r *core.Reminder) {
 				r.ExpirationTime = now.Add(10 * time.Minute)
 			},
 		},
@@ -112,11 +113,11 @@ func TestNewReminderFromCreateReminderRequest(t *testing.T) {
 				Name:      "name",
 			}
 			tt.req(req)
-			wantReminder := &Reminder{
+			wantReminder := &core.Reminder{
 				ActorID:        "id",
 				ActorType:      "type",
 				Name:           "name",
-				Period:         NewEmptyReminderPeriod(),
+				Period:         core.NewEmptyReminderPeriod(),
 				RegisteredTime: now,
 			}
 			tt.wantReminder(wantReminder)
@@ -152,20 +153,20 @@ func TestNewReminderFromCreateTimerRequest(t *testing.T) {
 	tests := []struct {
 		name         string
 		req          func(r *CreateTimerRequest)
-		wantReminder func(r *Reminder)
+		wantReminder func(r *core.Reminder)
 		wantErr      bool
 	}{
 		{
 			name:         "base test",
 			req:          func(r *CreateTimerRequest) { return },
-			wantReminder: func(r *Reminder) { return },
+			wantReminder: func(r *core.Reminder) { return },
 		},
 		{
 			name: "with data",
 			req: func(r *CreateTimerRequest) {
 				r.Data = json.RawMessage(`"hi"`)
 			},
-			wantReminder: func(r *Reminder) {
+			wantReminder: func(r *core.Reminder) {
 				r.Data = json.RawMessage(`"hi"`)
 			},
 		},
@@ -174,7 +175,7 @@ func TestNewReminderFromCreateTimerRequest(t *testing.T) {
 			req: func(r *CreateTimerRequest) {
 				r.Data = json.RawMessage(`{  "foo": [ 12, 4 ] } `)
 			},
-			wantReminder: func(r *Reminder) {
+			wantReminder: func(r *core.Reminder) {
 				// Gets compacted automatically
 				r.Data = json.RawMessage(`{"foo":[12,4]}`)
 			},
@@ -184,8 +185,8 @@ func TestNewReminderFromCreateTimerRequest(t *testing.T) {
 			req: func(r *CreateTimerRequest) {
 				r.Period = "2s"
 			},
-			wantReminder: func(r *Reminder) {
-				r.Period, _ = NewReminderPeriod("2s")
+			wantReminder: func(r *core.Reminder) {
+				r.Period, _ = core.NewReminderPeriod("2s")
 			},
 		},
 		{
@@ -193,7 +194,7 @@ func TestNewReminderFromCreateTimerRequest(t *testing.T) {
 			req: func(r *CreateTimerRequest) {
 				r.DueTime = "2m"
 			},
-			wantReminder: func(r *Reminder) {
+			wantReminder: func(r *core.Reminder) {
 				r.DueTime = "2m"
 				r.RegisteredTime = r.RegisteredTime.Add(2 * time.Minute)
 			},
@@ -203,7 +204,7 @@ func TestNewReminderFromCreateTimerRequest(t *testing.T) {
 			req: func(r *CreateTimerRequest) {
 				r.DueTime = now.Add(10 * time.Minute).Format(time.RFC3339)
 			},
-			wantReminder: func(r *Reminder) {
+			wantReminder: func(r *core.Reminder) {
 				r.DueTime = now.Add(10 * time.Minute).Format(time.RFC3339)
 				r.RegisteredTime = now.Add(10 * time.Minute)
 			},
@@ -213,7 +214,7 @@ func TestNewReminderFromCreateTimerRequest(t *testing.T) {
 			req: func(r *CreateTimerRequest) {
 				r.TTL = "10m"
 			},
-			wantReminder: func(r *Reminder) {
+			wantReminder: func(r *core.Reminder) {
 				r.ExpirationTime = now.Add(10 * time.Minute)
 			},
 		},
@@ -222,7 +223,7 @@ func TestNewReminderFromCreateTimerRequest(t *testing.T) {
 			req: func(r *CreateTimerRequest) {
 				r.TTL = now.Add(10 * time.Minute).Format(time.RFC3339)
 			},
-			wantReminder: func(r *Reminder) {
+			wantReminder: func(r *core.Reminder) {
 				r.ExpirationTime = now.Add(10 * time.Minute)
 			},
 		},
@@ -236,11 +237,11 @@ func TestNewReminderFromCreateTimerRequest(t *testing.T) {
 				Name:      "name",
 			}
 			tt.req(req)
-			wantReminder := &Reminder{
+			wantReminder := &core.Reminder{
 				ActorID:        "id",
 				ActorType:      "type",
 				Name:           "name",
-				Period:         NewEmptyReminderPeriod(),
+				Period:         core.NewEmptyReminderPeriod(),
 				RegisteredTime: now,
 			}
 			tt.wantReminder(wantReminder)

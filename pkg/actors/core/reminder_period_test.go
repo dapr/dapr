@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package reminders
+package core
 
 import (
 	"bytes"
@@ -29,8 +29,8 @@ func TestReminderPeriod(t *testing.T) {
 		p, err := NewReminderPeriod("")
 		require.NoError(t, err)
 		expect := ReminderPeriod{
-			value:   "",
-			repeats: -1,
+			Value:   "",
+			Repeats: -1,
 		}
 		assert.Truef(t, reflect.DeepEqual(p, expect), "Got: '%#v' Expected: '%#v'", p, expect)
 	})
@@ -39,9 +39,9 @@ func TestReminderPeriod(t *testing.T) {
 		p, err := NewReminderPeriod("2s")
 		require.NoError(t, err)
 		expect := ReminderPeriod{
-			value:   "2s",
-			period:  2 * time.Second,
-			repeats: -1,
+			Value:   "2s",
+			Period:  2 * time.Second,
+			Repeats: -1,
 		}
 		assert.Truef(t, reflect.DeepEqual(p, expect), "Got: '%#v' Expected: '%#v'", p, expect)
 	})
@@ -50,10 +50,10 @@ func TestReminderPeriod(t *testing.T) {
 		p, err := NewReminderPeriod("P2WT1M")
 		require.NoError(t, err)
 		expect := ReminderPeriod{
-			value:   "P2WT1M",
-			days:    14,
-			period:  time.Minute,
-			repeats: -1,
+			Value:   "P2WT1M",
+			Days:    14,
+			Period:  time.Minute,
+			Repeats: -1,
 		}
 		assert.Truef(t, reflect.DeepEqual(p, expect), "Got: '%#v' Expected: '%#v'", p, expect)
 	})
@@ -62,10 +62,10 @@ func TestReminderPeriod(t *testing.T) {
 		p, err := NewReminderPeriod("R3/P2WT1M")
 		require.NoError(t, err)
 		expect := ReminderPeriod{
-			value:   "R3/P2WT1M",
-			days:    14,
-			period:  time.Minute,
-			repeats: 3,
+			Value:   "R3/P2WT1M",
+			Days:    14,
+			Period:  time.Minute,
+			Repeats: 3,
 		}
 		assert.Truef(t, reflect.DeepEqual(p, expect), "Got: '%#v' Expected: '%#v'", p, expect)
 	})
@@ -74,8 +74,8 @@ func TestReminderPeriod(t *testing.T) {
 		p, err := NewReminderPeriod("R2")
 		require.NoError(t, err)
 		expect := ReminderPeriod{
-			value:   "R2",
-			repeats: 2,
+			Value:   "R2",
+			Repeats: 2,
 		}
 		assert.Truef(t, reflect.DeepEqual(p, expect), "Got: '%#v' Expected: '%#v'", p, expect)
 	})
@@ -130,8 +130,8 @@ func TestReminderPeriodJSON(t *testing.T) {
 
 	t.Run("no JSON value", func(t *testing.T) {
 		expect := ReminderPeriod{
-			value:   "",
-			repeats: -1,
+			Value:   "",
+			Repeats: -1,
 		}
 		dec := ReminderPeriod{}
 		err := dec.UnmarshalJSON([]byte{}) // Note this is an empty value
@@ -148,8 +148,8 @@ func TestReminderPeriodJSON(t *testing.T) {
 		}
 
 		expect := ReminderPeriod{
-			value:   "",
-			repeats: -1,
+			Value:   "",
+			Repeats: -1,
 		}
 
 		for name, tt := range tests {

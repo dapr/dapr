@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package actors
+package core
 
 import (
 	"sync/atomic"
@@ -28,27 +28,27 @@ var reentrancyStackDepth = 32
 func TestIsBusy(t *testing.T) {
 	testActor := newActor("testType", "testID", &reentrancyStackDepth, nil)
 
-	testActor.lock(nil)
-	assert.Equal(t, true, testActor.isBusy())
-	testActor.unlock()
+	testActor.Lock(nil)
+	assert.Equal(t, true, testActor.IsBusy())
+	testActor.Unlock()
 }
 
 func TestTurnBasedConcurrencyLocks(t *testing.T) {
 	testActor := newActor("testType", "testID", &reentrancyStackDepth, nil)
 
 	// first lock
-	testActor.lock(nil)
-	assert.Equal(t, true, testActor.isBusy())
-	firstLockTime := testActor.lastUsedTime
+	testActor.Lock(nil)
+	assert.Equal(t, true, testActor.IsBusy())
+	firstLockTime := testActor.LastUsedTime
 
 	waitCh := make(chan bool)
 
 	// second lock
 	go func() {
 		waitCh <- false
-		testActor.lock(nil)
+		testActor.Lock(nil)
 		time.Sleep(10 * time.Millisecond)
-		testActor.unlock()
+		testActor.Unlock()
 		waitCh <- false
 	}()
 
@@ -56,29 +56,29 @@ func TestTurnBasedConcurrencyLocks(t *testing.T) {
 
 	time.Sleep(10 * time.Millisecond)
 	assert.Equal(t, int32(2), testActor.pendingActorCalls.Load())
-	assert.True(t, testActor.isBusy())
-	assert.Equal(t, firstLockTime, testActor.lastUsedTime)
+	assert.True(t, testActor.IsBusy())
+	assert.Equal(t, firstLockTime, testActor.LastUsedTime)
 
 	// unlock the first lock
-	testActor.unlock()
+	testActor.Unlock()
 
 	assert.Equal(t, int32(1), testActor.pendingActorCalls.Load())
-	assert.True(t, testActor.isBusy())
+	assert.True(t, testActor.IsBusy())
 
 	// unlock the second lock
 	<-waitCh
 
 	assert.Equal(t, int32(0), testActor.pendingActorCalls.Load())
-	assert.False(t, testActor.isBusy())
-	assert.True(t, testActor.lastUsedTime.Sub(firstLockTime) >= 10*time.Millisecond)
+	assert.False(t, testActor.IsBusy())
+	assert.True(t, testActor.LastUsedTime.Sub(firstLockTime) >= 10*time.Millisecond)
 }
 
 func TestDisposedActor(t *testing.T) {
 	t.Run("not disposed", func(t *testing.T) {
 		testActor := newActor("testType", "testID", &reentrancyStackDepth, nil)
 
-		testActor.lock(nil)
-		testActor.unlock()
+		testActor.Lock(nil)
+		testActor.Unlock()
 		testActor.disposeLock.RLock()
 		disposed := testActor.disposed
 		testActor.disposeLock.RUnlock()
@@ -88,12 +88,12 @@ func TestDisposedActor(t *testing.T) {
 	t.Run("disposed", func(t *testing.T) {
 		testActor := newActor("testType", "testID", &reentrancyStackDepth, nil)
 
-		testActor.lock(nil)
-		ch := testActor.channel()
+		testActor.Lock(nil)
+		ch := testActor.Channel()
 		assert.NotNil(t, ch)
-		testActor.unlock()
+		testActor.Unlock()
 
-		err := testActor.lock(nil)
+		err := testActor.Lock(nil)
 
 		assert.Equal(t, int32(0), testActor.pendingActorCalls.Load())
 		assert.IsType(t, ErrActorDisposed, err)
@@ -108,7 +108,7 @@ func TestPendingActorCalls(t *testing.T) {
 		select {
 		case <-time.After(10 * time.Millisecond):
 			break
-		case <-testActor.channel():
+		case <-testActor.Channel():
 			channelClosed = true
 			break
 		}
@@ -118,21 +118,21 @@ func TestPendingActorCalls(t *testing.T) {
 
 	t.Run("close channel before timeout", func(t *testing.T) {
 		testActor := newActor("testType", "testID", &reentrancyStackDepth, nil)
-		testActor.lock(nil)
+		testActor.Lock(nil)
 
 		channelClosed := atomic.Bool{}
 		go func() {
 			select {
 			case <-time.After(200 * time.Millisecond):
 				require.Fail(t, "channel should be closed before timeout")
-			case <-testActor.channel():
+			case <-testActor.Channel():
 				channelClosed.Store(true)
 				break
 			}
 		}()
 
 		time.Sleep(50 * time.Millisecond)
-		testActor.unlock()
+		testActor.Unlock()
 
 		assert.Eventually(t, channelClosed.Load, time.Second, 10*time.Microsecond)
 	})
@@ -140,13 +140,13 @@ func TestPendingActorCalls(t *testing.T) {
 	t.Run("multiple listeners", func(t *testing.T) {
 		clock := clocktesting.NewFakeClock(time.Now())
 		testActor := newActor("testType", "testID", &reentrancyStackDepth, clock)
-		testActor.lock(nil)
+		testActor.Lock(nil)
 
 		nListeners := 10
 		releaseSignaled := make([]atomic.Bool, nListeners)
 
 		for i := 0; i < nListeners; i++ {
-			releaseCh := testActor.channel()
+			releaseCh := testActor.Channel()
 			go func(listenerIndex int) {
 				select {
 				case <-time.After(200 * time.Millisecond):
@@ -157,7 +157,7 @@ func TestPendingActorCalls(t *testing.T) {
 				}
 			}(i)
 		}
-		testActor.unlock()
+		testActor.Unlock()
 
 		assert.Eventually(t, func() bool {
 			clock.Step(100 * time.Millisecond)

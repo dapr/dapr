@@ -1,18 +1,4 @@
-/*
-Copyright 2023 The Dapr Authors
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-	http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-package actors
+package core
 
 import (
 	"bytes"
@@ -28,8 +14,6 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 )
 
-const InternalActorTypePrefix = "dapr.internal."
-
 // InternalActor represents the interface for invoking an "internal" actor (one which is built into daprd directly).
 type InternalActor interface {
 	SetActorRuntime(actorsRuntime Actors)
@@ -41,17 +25,19 @@ type InternalActor interface {
 	InvokeTimer(ctx context.Context, actorID string, timerName string, params []byte) error
 }
 
-type internalActorChannel struct {
+const InternalActorTypePrefix = "dapr.internal."
+
+type InternalActorChannel struct {
 	actors map[string]InternalActor
 }
 
-func newInternalActorChannel() *internalActorChannel {
-	return &internalActorChannel{
+func NewInternalActorChannel() *InternalActorChannel {
+	return &InternalActorChannel{
 		actors: make(map[string]InternalActor),
 	}
 }
 
-func (c *internalActorChannel) AddInternalActor(actorType string, actorImpl InternalActor) error {
+func (c *InternalActorChannel) AddInternalActor(actorType string, actorImpl InternalActor) error {
 	// use internal type name prefixes to avoid conflicting with externally defined actor types
 	internalTypeName := actorType
 	if !strings.HasPrefix(actorType, InternalActorTypePrefix) {
@@ -65,13 +51,13 @@ func (c *internalActorChannel) AddInternalActor(actorType string, actorImpl Inte
 }
 
 // Contains returns true if this channel invokes actorType or false if it doesn't.
-func (c *internalActorChannel) Contains(actorType string) bool {
+func (c *InternalActorChannel) Contains(actorType string) bool {
 	_, exists := c.actors[actorType]
 	return exists
 }
 
 // GetAppConfig implements channel.AppChannel
-func (c *internalActorChannel) GetAppConfig(appID string) (*config.ApplicationConfig, error) {
+func (c *InternalActorChannel) GetAppConfig(appID string) (*config.ApplicationConfig, error) {
 	actorTypes := make([]string, 0, len(c.actors))
 	for actorType := range c.actors {
 		actorTypes = append(actorTypes, actorType)
@@ -83,12 +69,12 @@ func (c *internalActorChannel) GetAppConfig(appID string) (*config.ApplicationCo
 }
 
 // HealthProbe implements channel.AppChannel
-func (internalActorChannel) HealthProbe(ctx context.Context) (bool, error) {
+func (InternalActorChannel) HealthProbe(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
 // InvokeMethod implements channel.AppChannel
-func (c *internalActorChannel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest, _ string) (*invokev1.InvokeMethodResponse, error) {
+func (c *InternalActorChannel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest, _ string) (*invokev1.InvokeMethodResponse, error) {
 	actorType := req.Actor().GetActorType()
 	actor, ok := c.actors[actorType]
 	if !ok {
@@ -157,7 +143,7 @@ func (c *internalActorChannel) InvokeMethod(ctx context.Context, req *invokev1.I
 }
 
 // SetAppHealth implements channel.AppChannel
-func (internalActorChannel) SetAppHealth(ah *apphealth.AppHealth) {
+func (InternalActorChannel) SetAppHealth(ah *apphealth.AppHealth) {
 	// no-op
 }
 

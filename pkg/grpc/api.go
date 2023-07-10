@@ -37,6 +37,7 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/actors/core"
 	"github.com/dapr/dapr/pkg/channel"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
@@ -71,7 +72,7 @@ type API interface {
 	// Methods internal to the object
 	SetAppChannel(appChannel channel.AppChannel)
 	SetDirectMessaging(directMessaging messaging.DirectMessaging)
-	SetActorRuntime(actor actors.Actors)
+	SetActorRuntime(actor core.Actors)
 }
 
 type api struct {
@@ -93,7 +94,7 @@ type APIOpts struct {
 	CompStore                   *compstore.ComponentStore
 	PubsubAdapter               runtimePubsub.Adapter
 	DirectMessaging             messaging.DirectMessaging
-	Actors                      actors.Actors
+	Actors                      core.Actors
 	SendToOutputBindingFn       func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	TracingSpec                 config.TracingSpec
 	AccessControlList           *config.AccessControlList
@@ -116,6 +117,7 @@ func NewAPI(opts APIOpts) API {
 			GetComponentsCapabilitesFn: opts.GetComponentsCapabilitiesFn,
 			AppConnectionConfig:        opts.AppConnectionConfig,
 			GlobalConfig:               opts.GlobalConfig,
+			ActorsReminders:            opts.Actors.GetActorsReminders(),
 		},
 		directMessaging:       opts.DirectMessaging,
 		resiliency:            opts.Resiliency,
@@ -955,7 +957,7 @@ func (a *api) RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterAc
 		return &emptypb.Empty{}, err
 	}
 
-	req := &actors.CreateTimerRequest{
+	req := &core.CreateTimerRequest{
 		Name:      in.Name,
 		ActorID:   in.ActorId,
 		ActorType: in.ActorType,
@@ -983,7 +985,7 @@ func (a *api) UnregisterActorTimer(ctx context.Context, in *runtimev1pb.Unregist
 		return &emptypb.Empty{}, err
 	}
 
-	req := &actors.DeleteTimerRequest{
+	req := &core.DeleteTimerRequest{
 		Name:      in.Name,
 		ActorID:   in.ActorId,
 		ActorType: in.ActorType,
@@ -1000,7 +1002,7 @@ func (a *api) RegisterActorReminder(ctx context.Context, in *runtimev1pb.Registe
 		return &emptypb.Empty{}, err
 	}
 
-	req := &actors.CreateReminderRequest{
+	req := &core.CreateReminderRequest{
 		Name:      in.Name,
 		ActorID:   in.ActorId,
 		ActorType: in.ActorType,
@@ -1016,7 +1018,7 @@ func (a *api) RegisterActorReminder(ctx context.Context, in *runtimev1pb.Registe
 		}
 		req.Data = j
 	}
-	err := a.UniversalAPI.Actors.CreateReminder(ctx, req)
+	err := a.UniversalAPI.ActorsReminders.CreateReminder(ctx, req)
 	return &emptypb.Empty{}, err
 }
 
@@ -1027,13 +1029,13 @@ func (a *api) UnregisterActorReminder(ctx context.Context, in *runtimev1pb.Unreg
 		return &emptypb.Empty{}, err
 	}
 
-	req := &actors.DeleteReminderRequest{
+	req := &core.DeleteReminderRequest{
 		Name:      in.Name,
 		ActorID:   in.ActorId,
 		ActorType: in.ActorType,
 	}
 
-	err := a.UniversalAPI.Actors.DeleteReminder(ctx, req)
+	err := a.UniversalAPI.ActorsReminders.DeleteReminder(ctx, req)
 	return &emptypb.Empty{}, err
 }
 
@@ -1044,14 +1046,14 @@ func (a *api) RenameActorReminder(ctx context.Context, in *runtimev1pb.RenameAct
 		return &emptypb.Empty{}, err
 	}
 
-	req := &actors.RenameReminderRequest{
+	req := &core.RenameReminderRequest{
 		OldName:   in.OldName,
 		ActorID:   in.ActorId,
 		ActorType: in.ActorType,
 		NewName:   in.NewName,
 	}
 
-	err := a.UniversalAPI.Actors.RenameReminder(ctx, req)
+	err := a.UniversalAPI.ActorsReminders.RenameReminder(ctx, req)
 	return &emptypb.Empty{}, err
 }
 
@@ -1066,7 +1068,7 @@ func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRe
 	actorID := in.ActorId
 	key := in.Key
 
-	hosted := a.UniversalAPI.Actors.IsActorHosted(ctx, &actors.ActorHostedRequest{
+	hosted := a.UniversalAPI.Actors.IsActorHosted(ctx, &core.ActorHostedRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 	})
@@ -1077,7 +1079,7 @@ func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRe
 		return nil, err
 	}
 
-	req := actors.GetStateRequest{
+	req := core.GetStateRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 		Key:       key,
@@ -1104,10 +1106,10 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 
 	actorType := in.ActorType
 	actorID := in.ActorId
-	actorOps := []actors.TransactionalOperation{}
+	actorOps := []core.TransactionalOperation{}
 
 	for _, op := range in.Operations {
-		var actorOp actors.TransactionalOperation
+		var actorOp core.TransactionalOperation
 		switch op.OperationType {
 		case string(state.OperationUpsert):
 			setReq := map[string]any{
@@ -1119,8 +1121,8 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 				setReq["metadata"] = meta
 			}
 
-			actorOp = actors.TransactionalOperation{
-				Operation: actors.Upsert,
+			actorOp = core.TransactionalOperation{
+				Operation: core.Upsert,
 				Request:   setReq,
 			}
 		case string(state.OperationDelete):
@@ -1129,8 +1131,8 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 				// Actor state do not user other attributes from state request.
 			}
 
-			actorOp = actors.TransactionalOperation{
-				Operation: actors.Delete,
+			actorOp = core.TransactionalOperation{
+				Operation: core.Delete,
 				Request:   delReq,
 			}
 
@@ -1143,7 +1145,7 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 		actorOps = append(actorOps, actorOp)
 	}
 
-	hosted := a.UniversalAPI.Actors.IsActorHosted(ctx, &actors.ActorHostedRequest{
+	hosted := a.UniversalAPI.Actors.IsActorHosted(ctx, &core.ActorHostedRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 	})
@@ -1154,7 +1156,7 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 		return &emptypb.Empty{}, err
 	}
 
-	req := actors.TransactionalRequest{
+	req := core.TransactionalRequest{
 		ActorID:    actorID,
 		ActorType:  actorType,
 		Operations: actorOps,
@@ -1235,7 +1237,7 @@ func (a *api) SetDirectMessaging(directMessaging messaging.DirectMessaging) {
 	a.directMessaging = directMessaging
 }
 
-func (a *api) SetActorRuntime(actor actors.Actors) {
+func (a *api) SetActorRuntime(actor core.Actors) {
 	a.UniversalAPI.Actors = actor
 }
 

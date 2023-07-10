@@ -28,6 +28,8 @@ import (
 	"github.com/microsoft/durabletask-go/backend"
 
 	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/actors/core"
+	"github.com/dapr/dapr/pkg/actors/reminders"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 )
 
@@ -41,13 +43,14 @@ const (
 )
 
 type workflowActor struct {
-	actors           actors.Actors
+	actors           core.Actors
 	states           sync.Map
 	scheduler        workflowScheduler
 	cachingDisabled  bool
 	defaultTimeout   time.Duration
 	reminderInterval time.Duration
 	config           wfConfig
+	actorsReminders  core.Reminders
 }
 
 type durableTimer struct {
@@ -80,12 +83,13 @@ func NewWorkflowActor(scheduler workflowScheduler, config wfConfig) *workflowAct
 	}
 }
 
-// SetActorRuntime implements actors.InternalActor
-func (wf *workflowActor) SetActorRuntime(actorRuntime actors.Actors) {
+// SetActorRuntime implements core.InternalActor
+func (wf *workflowActor) SetActorRuntime(actorRuntime core.Actors) {
 	wf.actors = actorRuntime
+	wf.actorsReminders = actorRuntime.GetActorsReminders()
 }
 
-// InvokeMethod implements actors.InternalActor
+// InvokeMethod implements core.InternalActor
 func (wf *workflowActor) InvokeMethod(ctx context.Context, actorID string, methodName string, request []byte) (interface{}, error) {
 	wfLogger.Debugf("invoking method '%s' on workflow actor '%s'", methodName, actorID)
 
@@ -107,7 +111,7 @@ func (wf *workflowActor) InvokeMethod(ctx context.Context, actorID string, metho
 	return result, err
 }
 
-// InvokeReminder implements actors.InternalActor
+// InvokeReminder implements core.InternalActor
 func (wf *workflowActor) InvokeReminder(ctx context.Context, actorID string, reminderName string, data []byte, dueTime string, period string) error {
 	wfLogger.Debugf("invoking reminder '%s' on workflow actor '%s'", reminderName, actorID)
 
@@ -139,12 +143,12 @@ func (wf *workflowActor) InvokeReminder(ctx context.Context, actorID string, rem
 	return actors.ErrReminderCanceled
 }
 
-// InvokeTimer implements actors.InternalActor
+// InvokeTimer implements core.InternalActor
 func (wf *workflowActor) InvokeTimer(ctx context.Context, actorID string, timerName string, params []byte) error {
 	return errors.New("timers are not implemented")
 }
 
-// DeactivateActor implements actors.InternalActor
+// DeactivateActor implements core.InternalActor
 func (wf *workflowActor) DeactivateActor(ctx context.Context, actorID string) error {
 	wfLogger.Debugf("deactivating workflow actor '%s'", actorID)
 	wf.states.Delete(actorID)
@@ -294,7 +298,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 
 	if strings.HasPrefix(reminderName, "timer-") {
 		var timerData durableTimer
-		if err = actors.DecodeInternalActorReminderData(reminderData, &timerData); err != nil {
+		if err = core.DecodeInternalActorReminderData(reminderData, &timerData); err != nil {
 			// Likely the result of an incompatible durable task timer format change. This is non-recoverable.
 			return err
 		}
@@ -329,12 +333,12 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 		} else {
 			continue
 		}
-		req := actors.TransactionalRequest{
+		req := core.TransactionalRequest{
 			ActorType: wf.config.activityActorType,
 			ActorID:   getActivityActorID(actorID, taskID, state.Generation),
-			Operations: []actors.TransactionalOperation{{
-				Operation: actors.Delete,
-				Request: actors.TransactionalDelete{
+			Operations: []core.TransactionalOperation{{
+				Operation: core.Delete,
+				Request: core.TransactionalDelete{
 					Key: activityStateKey,
 				},
 			}},
@@ -422,7 +426,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 			if err != nil {
 				return err
 			}
-			activityRequestBytes, err := actors.EncodeInternalActorData(ActivityRequest{
+			activityRequestBytes, err := core.EncodeInternalActorData(ActivityRequest{
 				HistoryEvent: eventData,
 			})
 			if err != nil {
@@ -533,7 +537,7 @@ func (wf *workflowActor) createReliableReminder(ctx context.Context, actorID str
 		return reminderName, fmt.Errorf("failed to encode data as JSON: %w", err)
 	}
 
-	return reminderName, wf.actors.CreateReminder(ctx, &actors.CreateReminderRequest{
+	return reminderName, wf.actorsReminders.CreateReminder(ctx, &reminders.CreateReminderRequest{
 		ActorType: wf.config.workflowActorType,
 		ActorID:   actorID,
 		Data:      dataEnc,
@@ -566,12 +570,12 @@ func (wf *workflowActor) removeCompletedStateData(ctx context.Context, state *wo
 		} else {
 			continue
 		}
-		req := actors.TransactionalRequest{
+		req := core.TransactionalRequest{
 			ActorType: wf.config.activityActorType,
 			ActorID:   getActivityActorID(actorID, taskID, state.Generation),
-			Operations: []actors.TransactionalOperation{{
-				Operation: actors.Delete,
-				Request: actors.TransactionalDelete{
+			Operations: []core.TransactionalOperation{{
+				Operation: core.Delete,
+				Request: core.TransactionalDelete{
 					Key: activityStateKey,
 				},
 			}},

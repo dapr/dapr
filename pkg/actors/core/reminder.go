@@ -1,17 +1,4 @@
-/*
-Copyright 2021 The Dapr Authors
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-    http://www.apache.org/licenses/LICENSE-2.0
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
-package reminders
+package core
 
 import (
 	"encoding/json"
@@ -20,8 +7,6 @@ import (
 
 	timeutils "github.com/dapr/kit/time"
 )
-
-const daprSeparator = "||"
 
 // Reminder represents a reminder or timer for a unique actor.
 type Reminder struct {
@@ -58,7 +43,7 @@ func (r Reminder) HasRepeats() bool {
 
 // RepeatsLeft returns the number of repeats left.
 func (r Reminder) RepeatsLeft() int {
-	return r.Period.repeats
+	return r.Period.Repeats
 }
 
 // TickExecuted should be called after a reminder has been executed.
@@ -66,8 +51,8 @@ func (r Reminder) RepeatsLeft() int {
 // If the reminder is not done, call "NextTick" to get the time it should tick next.
 // Note: this method is not concurrency-safe.
 func (r *Reminder) TickExecuted() (done bool) {
-	if r.Period.repeats > 0 {
-		r.Period.repeats--
+	if r.Period.Repeats > 0 {
+		r.Period.Repeats--
 	}
 
 	if !r.HasRepeats() {
@@ -85,7 +70,7 @@ func (r *Reminder) UpdateFromTrack(track *ReminderTrack) {
 		return
 	}
 
-	r.Period.repeats = track.RepetitionLeft
+	r.Period.Repeats = track.RepetitionLeft
 	r.RegisteredTime = r.Period.GetFollowing(track.LastFiredTime)
 }
 
@@ -177,8 +162,8 @@ func (r Reminder) String() string {
 	)
 }
 
-// parseTimeTruncateSeconds is a wrapper around timeutils.ParseTime that truncates the time to seconds.
-func parseTimeTruncateSeconds(val string, now *time.Time) (time.Time, error) {
+// ParseTimeTruncateSeconds is a wrapper around timeutils.ParseTime that truncates the time to seconds.
+func ParseTimeTruncateSeconds(val string, now *time.Time) (time.Time, error) {
 	t, err := timeutils.ParseTime(val, now)
 	if err != nil {
 		return t, err

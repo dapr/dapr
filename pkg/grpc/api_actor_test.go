@@ -23,6 +23,7 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/actors/core"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/grpc/universalapi"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -128,15 +129,15 @@ func TestGetActorState(t *testing.T) {
 	t.Run("Get actor state - OK", func(t *testing.T) {
 		data := []byte(`{ "data": 123 }`)
 		mockActors := new(actors.MockActors)
-		mockActors.On("GetState", &actors.GetStateRequest{
+		mockActors.On("GetState", &core.GetStateRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
 			Key:       "key1",
-		}).Return(&actors.StateResponse{
+		}).Return(&core.StateResponse{
 			Data: data,
 		}, nil)
 
-		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
+		mockActors.On("IsActorHosted", &core.ActorHostedRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
 		}).Return(true)
@@ -188,10 +189,10 @@ func TestExecuteActorStateTransaction(t *testing.T) {
 	t.Run("Save actor state - Upsert and Delete OK", func(t *testing.T) {
 		data := []byte("{ \"data\": 123 }")
 		mockActors := new(actors.MockActors)
-		mockActors.On("TransactionalStateOperation", &actors.TransactionalRequest{
+		mockActors.On("TransactionalStateOperation", &core.TransactionalRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
-			Operations: []actors.TransactionalOperation{
+			Operations: []core.TransactionalOperation{
 				{
 					Operation: "upsert",
 					Request: map[string]interface{}{
@@ -211,7 +212,7 @@ func TestExecuteActorStateTransaction(t *testing.T) {
 			},
 		}).Return(nil)
 
-		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
+		mockActors.On("IsActorHosted", &core.ActorHostedRequest{
 			ActorID:   "fakeActorID",
 			ActorType: "fakeActorType",
 		}).Return(true)

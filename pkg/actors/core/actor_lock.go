@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package actors
+package core
 
 import (
 	"errors"
@@ -27,12 +27,6 @@ type ActorLock struct {
 	activeRequest *string
 	stackDepth    atomic.Int32
 	maxStackDepth int32
-}
-
-func NewActorLock(maxStackDepth int32) *ActorLock {
-	return &ActorLock{
-		maxStackDepth: maxStackDepth,
-	}
 }
 
 func (a *ActorLock) Lock(requestID *string) error {

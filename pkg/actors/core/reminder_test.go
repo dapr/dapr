@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package reminders
+package core
 
 import (
 	"bytes"
@@ -49,9 +49,9 @@ func TestReminderProperties(t *testing.T) {
 	t.Run("without repeats", func(t *testing.T) {
 		require.False(t, r.HasRepeats())
 		require.Equal(t, 0, r.RepeatsLeft())
-		require.Equal(t, 0, r.Period.repeats)
+		require.Equal(t, 0, r.Period.Repeats)
 		require.True(t, r.TickExecuted()) // It's done, no more repeats
-		require.Equal(t, 0, r.Period.repeats)
+		require.Equal(t, 0, r.Period.Repeats)
 	})
 
 	// Update the object to add a period
@@ -62,12 +62,12 @@ func TestReminderProperties(t *testing.T) {
 	t.Run("with unlimited repeats", func(t *testing.T) {
 		require.True(t, r.HasRepeats())
 		require.Equal(t, -1, r.RepeatsLeft())
-		require.Equal(t, -1, r.Period.repeats)
+		require.Equal(t, -1, r.Period.Repeats)
 		require.Equal(t, time1, r.NextTick())
 
 		// Execute the tick
 		require.False(t, r.TickExecuted()) // Will repeat
-		require.Equal(t, -1, r.Period.repeats)
+		require.Equal(t, -1, r.Period.Repeats)
 		require.Equal(t, time1.Add(2*time.Second), r.NextTick())
 	})
 
@@ -82,7 +82,7 @@ func TestReminderProperties(t *testing.T) {
 		// Execute the tick 4 times
 		for i := 4; i > 0; i-- {
 			require.Equal(t, i, r.RepeatsLeft())
-			require.Equal(t, i, r.Period.repeats)
+			require.Equal(t, i, r.Period.Repeats)
 			require.Equal(t, time1.Add(2*time.Second*time.Duration(4-i)), r.NextTick())
 
 			if i == 1 {

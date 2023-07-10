@@ -144,6 +144,9 @@ func (f *FakeStateStore) Set(ctx context.Context, req *state.SetRequest) error {
 	b, _ := marshal(&req.Value)
 	f.Items[req.Key] = f.NewItem(b)
 
+	fmt.Println("CALLED SET WITH REQ", req)
+	fmt.Println("ITEMS", f.Items)
+
 	return nil
 }
 

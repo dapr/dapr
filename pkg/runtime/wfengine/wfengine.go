@@ -24,7 +24,7 @@ import (
 	"github.com/microsoft/durabletask-go/backend"
 	"google.golang.org/grpc"
 
-	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/actors/core"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 )
@@ -39,7 +39,7 @@ type WorkflowEngine struct {
 	workflowActor *workflowActor
 	activityActor *activityActor
 
-	actorRuntime   actors.Actors
+	actorRuntime   core.Actors
 	startMutex     sync.Mutex
 	disconnectChan chan any
 	config         wfConfig
@@ -67,8 +67,8 @@ type wfConfig struct {
 func NewWorkflowConfig(appID string) wfConfig {
 	return wfConfig{
 		AppID:             appID,
-		workflowActorType: actors.InternalActorTypePrefix + utils.GetNamespaceOrDefault(defaultNamespace) + utils.DotDelimiter + appID + utils.DotDelimiter + WorkflowNameLabelKey,
-		activityActorType: actors.InternalActorTypePrefix + utils.GetNamespaceOrDefault(defaultNamespace) + utils.DotDelimiter + appID + utils.DotDelimiter + ActivityNameLabelKey,
+		workflowActorType: core.InternalActorTypePrefix + utils.GetNamespaceOrDefault(defaultNamespace) + utils.DotDelimiter + appID + utils.DotDelimiter + WorkflowNameLabelKey,
+		activityActorType: core.InternalActorTypePrefix + utils.GetNamespaceOrDefault(defaultNamespace) + utils.DotDelimiter + appID + utils.DotDelimiter + ActivityNameLabelKey,
 	}
 }
 
@@ -94,8 +94,8 @@ func NewWorkflowEngine(config wfConfig) *WorkflowEngine {
 }
 
 // InternalActors returns a map of internal actors that are used to implement workflows
-func (wfe *WorkflowEngine) InternalActors() map[string]actors.InternalActor {
-	internalActors := make(map[string]actors.InternalActor)
+func (wfe *WorkflowEngine) InternalActors() map[string]core.InternalActor {
+	internalActors := make(map[string]core.InternalActor)
 	internalActors[wfe.config.workflowActorType] = wfe.workflowActor
 	internalActors[wfe.config.activityActorType] = wfe.activityActor
 	return internalActors
@@ -129,7 +129,7 @@ func (wfe *WorkflowEngine) ConfigureExecutor(factory func(be backend.Backend) ba
 	wfe.executor = factory(wfe.backend)
 }
 
-func (wfe *WorkflowEngine) SetActorRuntime(actorRuntime actors.Actors) error {
+func (wfe *WorkflowEngine) SetActorRuntime(actorRuntime core.Actors) error {
 	wfLogger.Info("configuring workflow engine with actors backend")
 	wfe.actorRuntime = actorRuntime
 	wfe.backend.SetActorRuntime(actorRuntime)

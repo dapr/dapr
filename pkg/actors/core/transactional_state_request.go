@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package actors
+package core
 
 import (
 	"errors"
@@ -32,6 +32,9 @@ const (
 	Upsert OperationType = "upsert"
 	// Delete is a delete operation.
 	Delete OperationType = "delete"
+
+	ErrStateStoreNotFound      = "actors: state store does not exist or incorrectly configured"
+	ErrStateStoreNotConfigured = `actors: state store does not exist or incorrectly configured. Have you set the property '{"name": "actorStateStore", "value": "true"}' in your state store component file?`
 )
 
 // Options for the StateOperation method

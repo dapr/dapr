@@ -27,6 +27,7 @@ import (
 	"github.com/microsoft/durabletask-go/backend"
 
 	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/actors/core"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 )
 
@@ -35,13 +36,14 @@ var ErrDuplicateInvocation = errors.New("duplicate invocation")
 const activityStateKey = "activityState"
 
 type activityActor struct {
-	actorRuntime     actors.Actors
+	actorRuntime     core.Actors
 	scheduler        workflowScheduler
 	statesCache      sync.Map
 	cachingDisabled  bool
 	defaultTimeout   time.Duration
 	reminderInterval time.Duration
 	config           wfConfig
+	actorsReminders  core.Reminders
 }
 
 // ActivityRequest represents a request by a worklow to invoke an activity.
@@ -63,19 +65,20 @@ func NewActivityActor(scheduler workflowScheduler, config wfConfig) *activityAct
 	}
 }
 
-// SetActorRuntime implements actors.InternalActor
-func (a *activityActor) SetActorRuntime(actorsRuntime actors.Actors) {
+// SetActorRuntime implements core.InternalActor
+func (a *activityActor) SetActorRuntime(actorsRuntime core.Actors) {
 	a.actorRuntime = actorsRuntime
+	a.actorsReminders = actorsRuntime.GetActorsReminders()
 }
 
-// InvokeMethod implements actors.InternalActor and schedules the background execution of a workflow activity.
+// InvokeMethod implements core.InternalActor and schedules the background execution of a workflow activity.
 // Activities are scheduled by workflows and can execute for arbitrary lengths of time. Instead of executing
 // activity logic directly, InvokeMethod creates a reminder that executes the activity logic. InvokeMethod
 // returns immediately after creating the reminder, enabling the workflow to continue processing other events
 // in parallel.
 func (a *activityActor) InvokeMethod(ctx context.Context, actorID string, methodName string, data []byte) (any, error) {
 	var ar ActivityRequest
-	if err := actors.DecodeInternalActorData(data, &ar); err != nil {
+	if err := core.DecodeInternalActorData(data, &ar); err != nil {
 		return nil, fmt.Errorf("failed to decode activity request: %w", err)
 	}
 
@@ -102,12 +105,12 @@ func (a *activityActor) InvokeMethod(ctx context.Context, actorID string, method
 	return nil, err
 }
 
-// InvokeReminder implements actors.InternalActor and executes the activity logic.
+// InvokeReminder implements core.InternalActor and executes the activity logic.
 func (a *activityActor) InvokeReminder(ctx context.Context, actorID string, reminderName string, data []byte, dueTime string, period string) error {
 	wfLogger.Debugf("invoking reminder '%s' on activity actor '%s'", reminderName, actorID)
 
 	var generation uint64
-	if err := actors.DecodeInternalActorReminderData(data, &generation); err != nil {
+	if err := core.DecodeInternalActorReminderData(data, &generation); err != nil {
 		// Likely the result of an incompatible activity reminder format change. This is non-recoverable.
 		return err
 	}
@@ -214,12 +217,12 @@ loop:
 	return nil
 }
 
-// InvokeTimer implements actors.InternalActor
+// InvokeTimer implements core.InternalActor
 func (*activityActor) InvokeTimer(ctx context.Context, actorID string, timerName string, params []byte) error {
 	return errors.New("timers are not implemented")
 }
 
-// DeactivateActor implements actors.InternalActor
+// DeactivateActor implements core.InternalActor
 func (a *activityActor) DeactivateActor(ctx context.Context, actorID string) error {
 	wfLogger.Debugf("deactivating activity actor '%s'", actorID)
 	a.statesCache.Delete(actorID)
@@ -237,7 +240,7 @@ func (a *activityActor) loadActivityState(ctx context.Context, actorID string) (
 	// Loading from the state store is only expected in process failure recovery scenarios.
 	wfLogger.Debugf("%s: loading activity state", actorID)
 
-	req := actors.GetStateRequest{
+	req := core.GetStateRequest{
 		ActorType: a.config.activityActorType,
 		ActorID:   actorID,
 		Key:       activityStateKey,
@@ -260,12 +263,12 @@ func (a *activityActor) loadActivityState(ctx context.Context, actorID string) (
 }
 
 func (a *activityActor) saveActivityState(ctx context.Context, actorID string, state activityState) error {
-	req := actors.TransactionalRequest{
+	req := core.TransactionalRequest{
 		ActorType: a.config.activityActorType,
 		ActorID:   actorID,
-		Operations: []actors.TransactionalOperation{{
-			Operation: actors.Upsert,
-			Request: actors.TransactionalUpsert{
+		Operations: []core.TransactionalOperation{{
+			Operation: core.Upsert,
+			Request: core.TransactionalUpsert{
 				Key:   activityStateKey,
 				Value: state,
 			},
@@ -282,12 +285,12 @@ func (a *activityActor) saveActivityState(ctx context.Context, actorID string, s
 }
 
 func (a *activityActor) purgeActivityState(ctx context.Context, actorID string) error {
-	req := actors.TransactionalRequest{
+	req := core.TransactionalRequest{
 		ActorType: a.config.activityActorType,
 		ActorID:   actorID,
-		Operations: []actors.TransactionalOperation{{
-			Operation: actors.Delete,
-			Request: actors.TransactionalDelete{
+		Operations: []core.TransactionalOperation{{
+			Operation: core.Delete,
+			Request: core.TransactionalDelete{
 				Key: activityStateKey,
 			},
 		}},
@@ -306,7 +309,7 @@ func (a *activityActor) createReliableReminder(ctx context.Context, actorID stri
 	if err != nil {
 		return fmt.Errorf("failed to encode data as JSON: %w", err)
 	}
-	return a.actorRuntime.CreateReminder(ctx, &actors.CreateReminderRequest{
+	return a.actorsReminders.CreateReminder(ctx, &core.CreateReminderRequest{
 		ActorType: a.config.activityActorType,
 		ActorID:   actorID,
 		Data:      dataEnc,

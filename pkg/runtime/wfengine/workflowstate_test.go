@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/actors/core"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -191,7 +192,7 @@ func TestResetLoadedState(t *testing.T) {
 	}
 }
 
-func getActorRuntime() actors.Actors {
+func getActorRuntime() core.Actors {
 	store := fakeStore()
 	cfg := actors.NewConfig(actors.ConfigOpts{
 		AppID:              testAppID,
@@ -210,13 +211,13 @@ func getActorRuntime() actors.Actors {
 	return actors
 }
 
-func countOperations(t *testing.T, req *actors.TransactionalRequest) (int, int) {
+func countOperations(t *testing.T, req *core.TransactionalRequest) (int, int) {
 	upsertCount := 0
 	deleteCount := 0
 	for _, op := range req.Operations {
-		if op.Operation == actors.Upsert {
+		if op.Operation == core.Upsert {
 			upsertCount++
-		} else if op.Operation == actors.Delete {
+		} else if op.Operation == core.Delete {
 			deleteCount++
 		} else {
 			assert.Fail(t, "unexpected operation type", op.Operation)
