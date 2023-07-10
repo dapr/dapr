@@ -19,6 +19,7 @@ import (
 	"sync"
 
 	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/kit/logger"
@@ -34,6 +35,8 @@ type UniversalAPI struct {
 	ShutdownFn                 func()
 	GetComponentsCapabilitesFn func() map[string][]string
 	ExtendedMetadata           map[string]string
+	AppConnectionConfig        config.AppConnectionConfig
+	GlobalConfig               *config.Configuration
 
 	extendedMetadataLock sync.RWMutex
 }

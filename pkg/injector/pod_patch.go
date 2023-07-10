@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	v1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -24,6 +25,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
+	"github.com/dapr/dapr/pkg/config/protocol"
 	"github.com/dapr/dapr/pkg/injector/annotations"
 	"github.com/dapr/dapr/pkg/injector/components"
 	"github.com/dapr/dapr/pkg/injector/patcher"
@@ -147,7 +149,7 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *v1.AdmissionRe
 		sidecar.AddDaprSideCarMetricsEnabledLabel(metricsEnabled, pod.Labels))
 
 	patchOps = append(patchOps,
-		sidecar.AddDaprEnvVarsToContainers(appContainers)...)
+		sidecar.AddDaprEnvVarsToContainers(appContainers, getAppProtocol(an))...)
 	patchOps = append(patchOps,
 		sidecar.AddSocketVolumeMountToContainers(appContainers, socketVolumeMount)...)
 	volumePatchOps := sidecar.GetVolumesPatchOperations(
@@ -175,4 +177,34 @@ func mTLSEnabled(daprClient scheme.Interface) bool {
 	}
 	log.Infof("Dapr system configuration (%s) is not found, use default value %t for mTLSEnabled", defaultConfig, defaultMtlsEnabled)
 	return defaultMtlsEnabled
+}
+
+func getAppProtocol(an annotations.Map) string {
+	appProtocol := strings.ToLower(an.GetString(annotations.KeyAppProtocol))
+	appSSL := an.GetBoolOrDefault(annotations.KeyAppSSL, annotations.DefaultAppSSL)
+
+	switch appProtocol {
+	case string(protocol.GRPCSProtocol), string(protocol.HTTPSProtocol), string(protocol.H2CProtocol):
+		return appProtocol
+	case string(protocol.HTTPProtocol):
+		// For backwards compatibility, when protocol is HTTP and --app-ssl is set, use "https"
+		// TODO: Remove in a future Dapr version
+		if appSSL {
+			return string(protocol.HTTPSProtocol)
+		} else {
+			return string(protocol.HTTPProtocol)
+		}
+	case string(protocol.GRPCProtocol):
+		// For backwards compatibility, when protocol is GRPC and --app-ssl is set, use "grpcs"
+		// TODO: Remove in a future Dapr version
+		if appSSL {
+			return string(protocol.GRPCSProtocol)
+		} else {
+			return string(protocol.GRPCProtocol)
+		}
+	case "":
+		return string(protocol.HTTPProtocol)
+	default:
+		return ""
+	}
 }

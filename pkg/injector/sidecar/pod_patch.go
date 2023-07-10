@@ -28,24 +28,28 @@ import (
 	"github.com/dapr/kit/ptr"
 )
 
-// DaprPortEnv contains the env vars that are set in containers to pass the ports used by Dapr.
-var DaprPortEnv = []corev1.EnvVar{
-	{
-		Name:  UserContainerDaprHTTPPortName,
-		Value: strconv.Itoa(SidecarHTTPPort),
-	},
-	{
-		Name:  UserContainerDaprGRPCPortName,
-		Value: strconv.Itoa(SidecarAPIGRPCPort),
-	},
-}
-
 // AddDaprEnvVarsToContainers adds Dapr environment variables to all the containers in any Dapr-enabled pod.
 // The containers can be injected or user-defined.
-func AddDaprEnvVarsToContainers(containers map[int]corev1.Container) []patcher.PatchOperation {
+func AddDaprEnvVarsToContainers(containers map[int]corev1.Container, appProtocol string) []patcher.PatchOperation {
 	envPatchOps := make([]patcher.PatchOperation, 0, len(containers))
+	envVars := []corev1.EnvVar{
+		{
+			Name:  UserContainerDaprHTTPPortName,
+			Value: strconv.Itoa(SidecarHTTPPort),
+		},
+		{
+			Name:  UserContainerDaprGRPCPortName,
+			Value: strconv.Itoa(SidecarAPIGRPCPort),
+		},
+	}
+	if appProtocol != "" {
+		envVars = append(envVars, corev1.EnvVar{
+			Name:  UserContainerAppProtocolName,
+			Value: appProtocol,
+		})
+	}
 	for i, container := range containers {
-		patchOps := patcher.GetEnvPatchOperations(container.Env, DaprPortEnv, i)
+		patchOps := patcher.GetEnvPatchOperations(container.Env, envVars, i)
 		envPatchOps = append(envPatchOps, patchOps...)
 	}
 	return envPatchOps
@@ -122,17 +126,6 @@ func addVolumeMountToContainers(containers map[int]corev1.Container, addMounts c
 		volumeMountPatchOps = append(volumeMountPatchOps, patchOps...)
 	}
 	return volumeMountPatchOps
-}
-
-// AddServiceAccountTokenVolume adds the projected volume for the service account token to the daprd
-// The containers can be injected or user-defined.
-func AddServiceAccountTokenVolume(containers []corev1.Container) []patcher.PatchOperation {
-	envPatchOps := make([]patcher.PatchOperation, 0, len(containers))
-	for i, container := range containers {
-		patchOps := patcher.GetEnvPatchOperations(container.Env, DaprPortEnv, i)
-		envPatchOps = append(envPatchOps, patchOps...)
-	}
-	return envPatchOps
 }
 
 func GetVolumesPatchOperations(volumes []corev1.Volume, addVolumes []corev1.Volume, path string) []patcher.PatchOperation {

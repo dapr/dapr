@@ -22,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"github.com/dapr/dapr/pkg/injector/annotations"
+	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
 )
 
 const (
@@ -845,6 +846,32 @@ func TestGetSidecarContainer(t *testing.T) {
 				assert.Nil(t, container.SecurityContext.WindowsOptions)
 			}
 		}
+	})
+
+	t.Run("sidecar container should have env vars injected", func(t *testing.T) {
+		an := map[string]string{
+			annotations.KeyEnv: `HELLO=world, CIAO=mondo, BONJOUR=monde`,
+		}
+		container, _ := GetSidecarContainer(ContainerConfig{
+			Annotations: an,
+		})
+
+		expect := map[string]string{
+			"HELLO":                  "world",
+			"CIAO":                   "mondo",
+			"BONJOUR":                "monde",
+			authConsts.EnvKeysEnvVar: "HELLO CIAO BONJOUR",
+		}
+
+		found := map[string]string{}
+		for _, env := range container.Env {
+			switch env.Name {
+			case "HELLO", "CIAO", "BONJOUR", authConsts.EnvKeysEnvVar:
+				found[env.Name] = env.Value
+			}
+		}
+
+		assert.Equal(t, expect, found)
 	})
 
 	t.Run("sidecar container should specify commands only when ignoreEntrypointTolerations match with the pod", func(t *testing.T) {

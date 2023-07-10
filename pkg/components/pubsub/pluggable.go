@@ -15,6 +15,7 @@ package pubsub
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"sync"
@@ -80,6 +81,37 @@ func (p *grpcPubSub) Publish(ctx context.Context, req *pubsub.PublishRequest) er
 		Metadata:   req.Metadata,
 	})
 	return err
+}
+
+func (p *grpcPubSub) BulkPublish(ctx context.Context, req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+	entries := make([]*proto.BulkMessageEntry, len(req.Entries))
+	for i, entry := range req.Entries {
+		entries[i] = &proto.BulkMessageEntry{
+			EntryId:     entry.EntryId,
+			Event:       entry.Event,
+			ContentType: entry.ContentType,
+			Metadata:    entry.Metadata,
+		}
+	}
+	response, err := p.Client.BulkPublish(ctx, &proto.BulkPublishRequest{
+		Topic:      req.Topic,
+		PubsubName: req.PubsubName,
+		Entries:    entries,
+		Metadata:   req.Metadata,
+	})
+	if err != nil {
+		return pubsub.BulkPublishResponse{}, err
+	}
+
+	failedEntries := make([]pubsub.BulkPublishResponseFailedEntry, len(response.FailedEntries))
+	for i, failedEntry := range response.FailedEntries {
+		failedEntries[i] = pubsub.BulkPublishResponseFailedEntry{
+			EntryId: failedEntry.EntryId,
+			Error:   errors.New(failedEntry.Error),
+		}
+	}
+
+	return pubsub.BulkPublishResponse{FailedEntries: failedEntries}, nil
 }
 
 type messageHandler = func(*proto.PullMessagesResponse)

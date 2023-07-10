@@ -31,6 +31,7 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 	testCases := []struct {
 		testName      string
 		mockContainer coreV1.Container
+		appProtocol   string
 		expOpsLen     int
 		expOps        []patcher.PatchOperation
 	}{
@@ -133,12 +134,39 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 			expOpsLen: 0,
 			expOps:    []patcher.PatchOperation{},
 		},
+		{
+			testName: "with app protocol",
+			mockContainer: coreV1.Container{
+				Name: "MockContainer",
+			},
+			expOpsLen:   1,
+			appProtocol: "h2c",
+			expOps: []patcher.PatchOperation{
+				{
+					Op:   "add",
+					Path: "/spec/containers/0/env",
+					Value: []coreV1.EnvVar{
+						{
+							Name:  UserContainerDaprHTTPPortName,
+							Value: strconv.Itoa(SidecarHTTPPort),
+						},
+						{
+							Name:  UserContainerDaprGRPCPortName,
+							Value: strconv.Itoa(SidecarAPIGRPCPort),
+						},
+						{
+							Name:  UserContainerAppProtocolName,
+							Value: "h2c",
+						},
+					},
+				},
+			},
+		},
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.testName, func(t *testing.T) {
-			patchEnv := AddDaprEnvVarsToContainers(map[int]coreV1.Container{0: tc.mockContainer})
+			patchEnv := AddDaprEnvVarsToContainers(map[int]coreV1.Container{0: tc.mockContainer}, tc.appProtocol)
 			assert.Equal(t, tc.expOpsLen, len(patchEnv))
 			assert.Equal(t, tc.expOps, patchEnv)
 		})

@@ -31,6 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
@@ -223,7 +224,7 @@ func processComponentSecrets(ctx context.Context, component *componentsapi.Compo
 				if err != nil {
 					return err
 				}
-				component.Spec.Metadata[i].Value = componentsapi.DynamicValue{
+				component.Spec.Metadata[i].Value = commonapi.DynamicValue{
 					JSON: v1.JSON{
 						Raw: jsonEnc,
 					},
@@ -260,7 +261,7 @@ func processHTTPEndpointSecrets(ctx context.Context, endpoint *httpendpointsapi.
 				if err != nil {
 					return err
 				}
-				endpoint.Spec.Headers[i].Value = httpendpointsapi.DynamicValue{
+				endpoint.Spec.Headers[i].Value = commonapi.DynamicValue{
 					JSON: v1.JSON{
 						Raw: jsonEnc,
 					},

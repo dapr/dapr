@@ -13,106 +13,24 @@ limitations under the License.
 
 package framework
 
-import "io"
+import (
+	"github.com/dapr/dapr/tests/integration/framework/process"
+	"github.com/dapr/dapr/tests/integration/framework/process/once"
+)
 
-func WithBinPath(binPath string) RunDaprdOption {
-	return func(o *daprdOptions) {
-		o.binPath = binPath
-	}
-}
-
-func WithStdout(stdout io.WriteCloser) RunDaprdOption {
-	return func(o *daprdOptions) {
-		o.stdout = stdout
-	}
-}
-
-func WithStderr(stderr io.WriteCloser) RunDaprdOption {
-	return func(o *daprdOptions) {
-		o.stderr = stderr
-	}
-}
-
-func WithAppID(appID string) RunDaprdOption {
-	return func(o *daprdOptions) {
-		o.appID = appID
-	}
-}
-
-func WithAppPort(port int) RunDaprdOption {
-	return func(o *daprdOptions) {
-		o.appPort = port
-	}
-}
-
-func WithGRPCPort(port int) RunDaprdOption {
-	return func(o *daprdOptions) {
-		o.grpcPort = port
-	}
-}
-
-func WithHTTPPort(port int) RunDaprdOption {
-	return func(o *daprdOptions) {
-		o.httpPort = port
-	}
-}
-
-func WithInternalGRPCPort(port int) RunDaprdOption {
-	return func(o *daprdOptions) {
-		o.internalGRPCPort = port
-	}
-}
-
-func WithPublicPort(port int) RunDaprdOption {
-	return func(o *daprdOptions) {
-		o.publicPort = port
-	}
-}
-
-func WithMetricsPort(port int) RunDaprdOption {
-	return func(o *daprdOptions) {
-		o.metricsPort = port
-	}
-}
-
-func WithProfilePort(port int) RunDaprdOption {
-	return func(o *daprdOptions) {
-		o.profilePort = port
-	}
-}
-
-func WithRunError(ferr func(error)) RunDaprdOption {
-	return func(o *daprdOptions) {
-		o.runErrorFn = ferr
-	}
-}
-
-func WithExitCode(code int) RunDaprdOption {
-	return func(o *daprdOptions) {
-		o.exitCode = code
-	}
-}
-
-func WithAppHealthCheck(enabled bool) RunDaprdOption {
-	return func(o *daprdOptions) {
-		o.appHealthCheck = enabled
-	}
-}
-
-func WithAppHealthCheckPath(path string) RunDaprdOption {
-	return func(o *daprdOptions) {
-		o.appHealthCheckPath = path
-	}
-}
-
-func WithAppHealthProbeInterval(interval int) RunDaprdOption {
-	return func(o *daprdOptions) {
-		o.appHealthProbeInterval = interval
-	}
-}
-
-func WithAppHealthProbeThreshold(threshold int) RunDaprdOption {
-	return func(o *daprdOptions) {
-		o.appHealthProbeThreshold = threshold
+func WithProcesses(procs ...process.Interface) Option {
+	return func(o *options) {
+		for _, proc := range procs {
+			var found bool
+			for _, d := range o.procs {
+				if d == proc {
+					found = true
+					break
+				}
+			}
+			if !found {
+				o.procs = append(o.procs, once.Wrap(proc))
+			}
+		}
 	}
 }

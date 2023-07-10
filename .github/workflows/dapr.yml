@@ -198,7 +198,6 @@ jobs:
       GOOS: "${{ matrix.target_os }}"
       GOARCH: "${{ matrix.target_arch }}"
       GOPROXY: "https://proxy.golang.org"
-      ARCHIVE_OUTDIR: "dist/archives"
       TEST_OUTPUT_FILE_PREFIX: "test_report"
     steps:
       - name: Check out code into the Go module directory
@@ -239,17 +238,7 @@ jobs:
           restore-keys: |
             ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-
       - name: Run make test-integration
-        env:
-          COVERAGE_OPTS: "-coverprofile=coverage.txt -covermode=atomic"
         run: make test-integration
-      - name: Codecov
-        uses: codecov/codecov-action@v1
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@master
-        with:
-          name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_test_integration.json
-          path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_integration.json
   build:
     name: "Build artifacts on ${{ matrix.job_name }} - ${{ matrix.sidecar_flavor }}"
     runs-on: "${{ matrix.os }}"

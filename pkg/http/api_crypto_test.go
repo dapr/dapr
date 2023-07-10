@@ -42,7 +42,7 @@ func TestCryptoEndpoints(t *testing.T) {
 		},
 	}
 
-	fakeServer.StartServer(testAPI.constructCryptoEndpoints())
+	fakeServer.StartServer(testAPI.constructCryptoEndpoints(), nil)
 	defer fakeServer.Shutdown()
 
 	const testMessage = "Respiri piano per non far rumore, ti addormenti di sera, ti risvegli con il sole, sei chiara come un'alba, sei fresca come l'aria."
@@ -92,25 +92,6 @@ func TestCryptoEndpoints(t *testing.T) {
 				require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 				require.NotEmpty(t, resp.ErrorBody)
 				assert.Equal(t, "ERR_CRYPTO_PROVIDERS_NOT_CONFIGURED", resp.ErrorBody["errorCode"])
-			})
-		}
-	})
-
-	t.Run("Missing component name - 400", func(t *testing.T) {
-		resps := map[string]fakeHTTPResponse{
-			"encrypt": fakeServer.DoRequest(http.MethodPut, fmt.Sprintf("%s/crypto/%s/encrypt", apiVersionV1alpha1, ""), []byte(testMessage), map[string]string{
-				cryptoHeaderKeyName:          "aes-passthrough",
-				cryptoHeaderKeyWrapAlgorithm: "AES",
-			}),
-			"decrypt": fakeServer.DoRequest(http.MethodPut, fmt.Sprintf("%s/crypto/%s/decrypt", apiVersionV1alpha1, ""), encMessage, nil),
-		}
-
-		for name, resp := range resps {
-			t.Run(name, func(t *testing.T) {
-				require.Equal(t, http.StatusBadRequest, resp.StatusCode)
-				require.NotEmpty(t, resp.ErrorBody)
-				assert.Equal(t, "ERR_BAD_REQUEST", resp.ErrorBody["errorCode"])
-				assert.Contains(t, resp.ErrorBody["message"], "missing component name")
 			})
 		}
 	})

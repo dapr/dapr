@@ -33,7 +33,6 @@ import (
 	"github.com/dapr/dapr/pkg/channel"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
-	"github.com/dapr/dapr/pkg/grpc/universalapi"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -76,7 +75,7 @@ type directMessaging struct {
 	readBufferSize          int
 	resiliency              resiliency.Provider
 	isStreamingEnabled      bool
-	universal               *universalapi.UniversalAPI
+	compStore               *compstore.ComponentStore
 }
 
 type remoteApp struct {
@@ -124,12 +123,7 @@ func NewDirectMessaging(opts NewDirectMessagingOpts) DirectMessaging {
 		isStreamingEnabled:      opts.IsStreamingEnabled,
 		hostAddress:             hAddr,
 		hostName:                hName,
-		universal: &universalapi.UniversalAPI{
-			AppID:      opts.AppID,
-			Logger:     log,
-			Resiliency: opts.Resiliency,
-			CompStore:  opts.CompStore,
-		},
+		compStore:               opts.CompStore,
 	}
 
 	if dm.proxy != nil {
@@ -192,7 +186,7 @@ func (d *directMessaging) requestAppIDAndNamespace(targetAppID string) (string, 
 // checkHTTPEndpoints takes an app id and checks if the app id is associated with the http endpoint CRDs,
 // and returns the baseURL if an http endpoint is found.
 func (d *directMessaging) checkHTTPEndpoints(targetAppID string) string {
-	endpoint, ok := d.universal.CompStore.GetHTTPEndpoint(targetAppID)
+	endpoint, ok := d.compStore.GetHTTPEndpoint(targetAppID)
 	if ok {
 		if endpoint.Name == targetAppID {
 			return endpoint.Spec.BaseURL
@@ -252,7 +246,7 @@ func (d *directMessaging) invokeLocal(ctx context.Context, req *invokev1.InvokeM
 		return nil, errors.New("cannot invoke local endpoint: app channel not initialized")
 	}
 
-	return d.appChannel.InvokeMethod(ctx, req)
+	return d.appChannel.InvokeMethod(ctx, req, "")
 }
 
 func (d *directMessaging) setContextSpan(ctx context.Context) context.Context {
@@ -263,7 +257,7 @@ func (d *directMessaging) setContextSpan(ctx context.Context) context.Context {
 }
 
 func (d *directMessaging) isHTTPEndpoint(appID string) bool {
-	_, ok := d.universal.CompStore.GetHTTPEndpoint(appID)
+	_, ok := d.compStore.GetHTTPEndpoint(appID)
 	return ok
 }
 
