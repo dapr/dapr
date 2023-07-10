@@ -88,7 +88,6 @@ type actorsRuntime struct {
 	activeTimersLock      *sync.RWMutex
 	activeReminders       *sync.Map
 	remindersLock         *sync.RWMutex
-	remindersStoringLock  *sync.Mutex
 	reminders             map[string][]actorsCore.ActorReminderReference
 	evaluationLock        sync.RWMutex
 	evaluationChan        chan struct{}
@@ -212,7 +211,6 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) actorsCore.Acto
 		internalActorChannel:  internalActorChannel,
 		compStore:             compStore,
 		localActor:            localActor,
-		remindersStoringLock:  remindersStoringLock,
 		remindersLock:         &remindersLock,
 		activeTimersLock:      &activeTimersLock,
 		activeTimersCountLock: &activeTimersCountLock,

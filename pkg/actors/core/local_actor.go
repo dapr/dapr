@@ -21,9 +21,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/gogo/status"
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"k8s.io/utils/clock"
 
 	"github.com/dapr/dapr/pkg/actors/core/reminder"
