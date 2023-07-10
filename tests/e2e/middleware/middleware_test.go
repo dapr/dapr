@@ -103,9 +103,9 @@ func TestSimpleMiddleware(t *testing.T) {
 		_, err := utils.HTTPGetNTimes(appMiddlewareURL, numHealthChecks)
 		errCh <- err
 	}()
-	errs := make([]error, 0, 3)
-	for err := range errCh {
-		errs = append(errs, err)
+	errs := make([]error, 3)
+	for i := 0; i < 3; i++ {
+		errs[i] = <-errCh
 	}
 	require.NoError(t, errors.Join(errs...), "Health checks failed")
 
