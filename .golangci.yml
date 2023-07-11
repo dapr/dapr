@@ -135,6 +135,7 @@ linters-settings:
       - "github.com/cenkalti/backoff/v3": "must use github.com/cenkalti/backoff/v4"
       - "github.com/benbjohnson/clock": "must use k8s.io/utils/clock"
       - "github.com/ghodss/yaml": "must use sigs.k8s.io/yaml"
+      - "gopkg.in/yaml.v2": "must use gopkg.in/yaml.v3"
   misspell:
     # Correct spellings using locale preferences for US or UK.
     # Default is to use a neutral variety of English.
