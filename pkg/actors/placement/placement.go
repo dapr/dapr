@@ -32,7 +32,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.actor.internal.placement")
+var log = logger.NewLogger("dapr.runtime.actors.placement")
 
 const (
 	lockOperation   = "lock"

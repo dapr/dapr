@@ -16,7 +16,7 @@ package actors
 import (
 	"encoding/json"
 
-	"github.com/dapr/dapr/pkg/actors/reminders"
+	"github.com/dapr/dapr/pkg/actors/internal"
 )
 
 // ActorHostedRequest is the request object for checking if an actor is hosted on this instance.
@@ -26,13 +26,13 @@ type ActorHostedRequest struct {
 }
 
 // CreateReminderRequest is the request object to create a new reminder.
-type CreateReminderRequest = reminders.CreateReminderRequest
+type CreateReminderRequest = internal.CreateReminderRequest
 
 // CreateTimerRequest is the request object to create a new timer.
-type CreateTimerRequest = reminders.CreateTimerRequest
+type CreateTimerRequest = internal.CreateTimerRequest
 
 // DeleteReminderRequest is the request object for deleting a reminder.
-type DeleteReminderRequest = reminders.DeleteReminderRequest
+type DeleteReminderRequest = internal.DeleteReminderRequest
 
 // DeleteStateRequest is the request object for deleting an actor state.
 type DeleteStateRequest struct {
@@ -42,10 +42,10 @@ type DeleteStateRequest struct {
 }
 
 // DeleteTimerRequest is a request object for deleting a timer.
-type DeleteTimerRequest = reminders.DeleteTimerRequest
+type DeleteTimerRequest = internal.DeleteTimerRequest
 
 // GetReminderRequest is the request object to get an existing reminder.
-type GetReminderRequest = reminders.GetReminderRequest
+type GetReminderRequest = internal.GetReminderRequest
 
 // GetStateRequest is the request object for getting actor state.
 type GetStateRequest struct {
@@ -91,7 +91,7 @@ func (r *ReminderResponse) MarshalJSON() ([]byte, error) {
 }
 
 // RenameReminderRequest is the request object for rename a reminder.
-type RenameReminderRequest = reminders.RenameReminderRequest
+type RenameReminderRequest = internal.RenameReminderRequest
 
 // SaveStateRequest is the request object for saving an actor state.
 type SaveStateRequest struct {

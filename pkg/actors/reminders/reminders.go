@@ -15,12 +15,14 @@ package reminders
 
 import (
 	"context"
+
+	"github.com/dapr/dapr/pkg/actors/internal"
 )
 
 // RemindersProvider is the interface for the object that provides reminders services.
 type RemindersProvider interface {
-	GetReminder(ctx context.Context, req *GetReminderRequest) (*Reminder, error)
-	CreateReminder(ctx context.Context, req *CreateReminderRequest) error
-	DeleteReminder(ctx context.Context, req *DeleteReminderRequest) error
-	RenameReminder(ctx context.Context, req *RenameReminderRequest) error
+	GetReminder(ctx context.Context, req *internal.GetReminderRequest) (*internal.Reminder, error)
+	CreateReminder(ctx context.Context, req *internal.CreateReminderRequest) error
+	DeleteReminder(ctx context.Context, req *internal.DeleteReminderRequest) error
+	RenameReminder(ctx context.Context, req *internal.RenameReminderRequest) error
 }

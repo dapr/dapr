@@ -38,7 +38,7 @@ import (
 	clocktesting "k8s.io/utils/clock/testing"
 
 	"github.com/dapr/components-contrib/state"
-	"github.com/dapr/dapr/pkg/actors/reminders"
+	"github.com/dapr/dapr/pkg/actors/internal"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
@@ -582,8 +582,8 @@ func TestTimerExecution(t *testing.T) {
 	actorType, actorID := getTestActorTypeAndID()
 	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 
-	period, _ := reminders.NewReminderPeriod("2s")
-	err := testActorsRuntime.executeReminder(&reminders.Reminder{
+	period, _ := internal.NewReminderPeriod("2s")
+	err := testActorsRuntime.executeReminder(&internal.Reminder{
 		ActorType:      actorType,
 		ActorID:        actorID,
 		Name:           "timer1",
@@ -603,8 +603,8 @@ func TestTimerExecutionZeroDuration(t *testing.T) {
 	actorType, actorID := getTestActorTypeAndID()
 	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 
-	period, _ := reminders.NewReminderPeriod("0ms")
-	err := testActorsRuntime.executeReminder(&reminders.Reminder{
+	period, _ := internal.NewReminderPeriod("0ms")
+	err := testActorsRuntime.executeReminder(&internal.Reminder{
 		ActorType:      actorType,
 		ActorID:        actorID,
 		Name:           "timer1",
@@ -624,8 +624,8 @@ func TestReminderExecution(t *testing.T) {
 	actorType, actorID := getTestActorTypeAndID()
 	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 
-	period, _ := reminders.NewReminderPeriod("2s")
-	err := testActorsRuntime.executeReminder(&reminders.Reminder{
+	period, _ := internal.NewReminderPeriod("2s")
+	err := testActorsRuntime.executeReminder(&internal.Reminder{
 		ActorType:      actorType,
 		ActorID:        actorID,
 		RegisteredTime: time.Now().Add(2 * time.Second),
@@ -742,8 +742,8 @@ func TestReminderExecutionZeroDuration(t *testing.T) {
 	actorType, actorID := getTestActorTypeAndID()
 	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 
-	period, _ := reminders.NewReminderPeriod("0ms")
-	err := testActorsRuntime.executeReminder(&reminders.Reminder{
+	period, _ := internal.NewReminderPeriod("0ms")
+	err := testActorsRuntime.executeReminder(&internal.Reminder{
 		ActorType: actorType,
 		ActorID:   actorID,
 		Period:    period,
@@ -914,7 +914,7 @@ func TestRenameReminder(t *testing.T) {
 	actorType, actorID := getTestActorTypeAndID()
 	ctx := context.Background()
 	errs := make(chan error, 2)
-	retrieved := make(chan *reminders.Reminder, 2)
+	retrieved := make(chan *internal.Reminder, 2)
 
 	// Set the state store to not use locks when accessing data.
 	// This will cause race conditions to surface when running these tests with `go test -race` if the methods accessing reminders' storage are not safe for concurrent access.
@@ -2282,8 +2282,8 @@ func TestReminderPeriod(t *testing.T) {
 	advanceTickers(t, clock, 0)
 
 	var (
-		track  *reminders.ReminderTrack
-		track2 *reminders.ReminderTrack
+		track  *internal.ReminderTrack
+		track2 *internal.ReminderTrack
 		err    error
 	)
 

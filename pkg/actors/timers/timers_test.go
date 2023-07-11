@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package reminders
+package timers
 
 import (
 	"context"
@@ -22,6 +22,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	clocktesting "k8s.io/utils/clock/testing"
+
+	"github.com/dapr/dapr/pkg/actors/internal"
 )
 
 var startOfTime = time.Date(2022, 1, 1, 12, 0, 0, 0, time.UTC)
@@ -31,13 +33,13 @@ func TestCreateTimerDueTimes(t *testing.T) {
 	provider := NewTimersProvider(clock).(*timers)
 
 	executed := make(chan string, 1)
-	provider.SetExecuteTimerFn(func(reminder *Reminder) bool {
+	provider.SetExecuteTimerFn(func(reminder *internal.Reminder) bool {
 		executed <- reminder.Key()
 		return true
 	})
 
 	t.Run("create timer with positive DueTime", func(t *testing.T) {
-		req := CreateTimerRequest{
+		req := internal.CreateTimerRequest{
 			ActorID:   "myactor",
 			ActorType: "mytype",
 			Name:      "mytimer",
@@ -63,7 +65,7 @@ func TestCreateTimerDueTimes(t *testing.T) {
 	})
 
 	t.Run("test create timer with 0 DueTime", func(t *testing.T) {
-		req := CreateTimerRequest{
+		req := internal.CreateTimerRequest{
 			ActorID:   "myactor",
 			ActorType: "mytype",
 			Name:      "mytimer",
@@ -94,7 +96,7 @@ func TestCreateTimerDueTimes(t *testing.T) {
 	})
 
 	t.Run("test create timer with no DueTime", func(t *testing.T) {
-		req := CreateTimerRequest{
+		req := internal.CreateTimerRequest{
 			ActorID:   "myactor",
 			ActorType: "mytype",
 			Name:      "mytimer",
@@ -124,7 +126,7 @@ func TestDeleteTimer(t *testing.T) {
 	clock := clocktesting.NewFakeClock(startOfTime)
 	provider := NewTimersProvider(clock).(*timers)
 
-	req := CreateTimerRequest{
+	req := internal.CreateTimerRequest{
 		ActorID:   "myactor",
 		ActorType: "mytype",
 		Name:      "mytimer",
@@ -154,13 +156,13 @@ func TestOverrideTimer(t *testing.T) {
 	provider := NewTimersProvider(clock).(*timers)
 
 	executed := make(chan string, 1)
-	provider.SetExecuteTimerFn(func(reminder *Reminder) bool {
+	provider.SetExecuteTimerFn(func(reminder *internal.Reminder) bool {
 		executed <- string(reminder.Data)
 		return true
 	})
 
 	t.Run("override data", func(t *testing.T) {
-		timer1 := createTimer(t, clock.Now(), CreateTimerRequest{
+		timer1 := createTimer(t, clock.Now(), internal.CreateTimerRequest{
 			ActorID:   "myactor",
 			ActorType: "mytype",
 			Name:      "mytimer",
@@ -171,7 +173,7 @@ func TestOverrideTimer(t *testing.T) {
 		err := provider.CreateTimer(context.Background(), timer1)
 		require.NoError(t, err)
 
-		timer2 := createTimer(t, clock.Now(), CreateTimerRequest{
+		timer2 := createTimer(t, clock.Now(), internal.CreateTimerRequest{
 			ActorID:   "myactor",
 			ActorType: "mytype",
 			Name:      "mytimer",
@@ -182,7 +184,7 @@ func TestOverrideTimer(t *testing.T) {
 		err = provider.CreateTimer(context.Background(), timer2)
 		require.NoError(t, err)
 
-		timer3 := createTimer(t, clock.Now(), CreateTimerRequest{
+		timer3 := createTimer(t, clock.Now(), internal.CreateTimerRequest{
 			ActorID:   "myactor",
 			ActorType: "mytype",
 			Name:      "mytimer",
@@ -207,7 +209,7 @@ func TestOverrideTimer(t *testing.T) {
 	})
 }
 
-func createTimer(t *testing.T, now time.Time, req CreateTimerRequest) *Reminder {
+func createTimer(t *testing.T, now time.Time, req internal.CreateTimerRequest) *internal.Reminder {
 	t.Helper()
 
 	reminder, err := req.NewReminder(now)

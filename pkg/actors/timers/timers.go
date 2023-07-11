@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package reminders
+package timers
 
 import (
 	"context"
@@ -23,20 +23,24 @@ import (
 
 	"k8s.io/utils/clock"
 
+	"github.com/dapr/dapr/pkg/actors/internal"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/kit/logger"
 )
+
+var log = logger.NewLogger("dapr.runtime.actors.timers")
 
 // Implements a timers provider.
 type timers struct {
 	clock                 clock.WithTicker
-	executeTimerFn        ExecuteTimerFn
+	executeTimerFn        internal.ExecuteTimerFn
 	activeTimers          *sync.Map
 	activeTimersCount     map[string]*int64
 	activeTimersCountLock sync.RWMutex
 }
 
 // NewTimersProvider returns a TimerProvider.
-func NewTimersProvider(clock clock.WithTicker) TimersProvider {
+func NewTimersProvider(clock clock.WithTicker) internal.TimersProvider {
 	return &timers{
 		clock:             clock,
 		activeTimers:      &sync.Map{},
@@ -44,11 +48,11 @@ func NewTimersProvider(clock clock.WithTicker) TimersProvider {
 	}
 }
 
-func (t *timers) SetExecuteTimerFn(fn ExecuteTimerFn) {
+func (t *timers) SetExecuteTimerFn(fn internal.ExecuteTimerFn) {
 	t.executeTimerFn = fn
 }
 
-func (t *timers) CreateTimer(ctx context.Context, reminder *Reminder) error {
+func (t *timers) CreateTimer(ctx context.Context, reminder *internal.Reminder) error {
 	timerKey := reminder.Key()
 
 	log.Debugf("Create timer '%s' dueTime:'%s' period:'%s' ttl:'%v'",

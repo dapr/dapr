@@ -11,15 +11,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package reminders
+package internal
 
 import (
 	"context"
-
-	"github.com/dapr/kit/logger"
 )
-
-var log = logger.NewLogger("dapr.runtime.actor.reminders")
 
 // ExecuteTimerFn is the type of the function invoked when a timer is to be executed.
 // If this method returns false, the timer does not repeat.
