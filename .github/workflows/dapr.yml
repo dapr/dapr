@@ -90,6 +90,13 @@ jobs:
           args: --build-tags allcomponents
       - name: Run go mod tidy check diff
         run: make modtidy check-diff
+      - name: Check for retracted dependencies
+        run: |
+          if [[ $(go list -mod=mod -f '{{if .Retracted}}{{.}}{{end}}' -u -m all) ]]; then
+            exit 1
+          else
+            exit 0
+          fi
       - name: Run gen-proto check diff
         run: |
           wget https://github.com/protocolbuffers/protobuf/releases/download/v${{ env.PROTOC_VERSION }}/protoc-${{ env.PROTOC_VERSION }}-linux-x86_64.zip
@@ -555,15 +562,12 @@ jobs:
     if: github.event_name != 'pull_request'
     env:
       DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
+      LATEST_TAG: latest
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         sidecar_flavor: ["allcomponents", "stablecomponents"]
-        target_os: ["linux", "windows"]
-        exclude:
-          - sidecar_flavor: "stablecomponents"
-            target_os: "windows"
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v3
@@ -580,7 +584,6 @@ jobs:
           echo "BINARIES=daprd" >>${GITHUB_ENV}
         shell: bash
       - name: Set REPO_OWNER
-        if: matrix.target_os != 'darwin'
         shell: bash
         run: |
           REPO_OWNER=${{ github.repository_owner }}
@@ -588,19 +591,18 @@ jobs:
           echo "REPO_OWNER=${REPO_OWNER,,}" >>${GITHUB_ENV}
       - name: Docker Hub Login
         uses: docker/login-action@v2
-        if: matrix.target_os != 'darwin' && env.DOCKER_REGISTRY != ''
+        if: env.DOCKER_REGISTRY != ''
         with:
           username: ${{ secrets.DOCKER_REGISTRY_ID }}
           password: ${{ secrets.DOCKER_REGISTRY_PASS }}
       - name: GitHub Container Registry login
         uses: docker/login-action@v2
-        if: matrix.target_os != 'darwin'
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and push Docker multiarch manifest to Docker Hub
-        if: matrix.target_os != 'darwin' && env.DOCKER_REGISTRY_ID != ''
+        if: env.DOCKER_REGISTRY_ID != ''
         env:
           DOCKER_REGISTRY_ID: ${{ secrets.DOCKER_REGISTRY_ID }}
           DAPR_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
@@ -617,21 +619,21 @@ jobs:
             make docker-publish
         shell: bash
       - name: Build and push Docker multiarch Windows manifest to Docker Hub
-        if: matrix.target_os != 'darwin' && env.DOCKER_REGISTRY_ID != '' && matrix.sidecar_flavor == 'allcomponents'
+        if: env.DOCKER_REGISTRY_ID != '' && matrix.sidecar_flavor == 'allcomponents'
         env:
           DOCKER_REGISTRY_ID: ${{ secrets.DOCKER_REGISTRY_ID }}
           DAPR_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
         run: |
           # Publish the `-windows-amd64` manifest.
+          # Note, the "latest" tag from the previous step already contains 
+          # the windows images, so we don't need to publish the "latest-windows-amd64" tag.
           DOCKER_MULTI_ARCH="windows-1809-amd64 windows-ltsc2022-amd64" \
           DAPR_TAG="${{ env.REL_VERSION }}-windows-amd64" \
-          LATEST_TAG=latest-windows-amd64 \
+          LATEST_RELEASE=false \
           MANIFEST_TAG="${{ env.REL_VERSION }}" \
-          MANIFEST_LATEST_TAG="${{ env.LATEST_TAG }}" \
             make docker-publish
         shell: bash
       - name: Build and push Docker multiarch manifest to GHCR
-        if: matrix.target_os != 'darwin'
         env:
           DAPR_REGISTRY: ghcr.io/${{ env.REPO_OWNER }}
         run: |
@@ -646,16 +648,17 @@ jobs:
           LATEST_TAG=${{ env.LATEST_TAG }}-mariner \
             make docker-publish
       - name: Build and push Docker multiarch Windows manifest to GHCR
-        if: matrix.target_os != 'darwin' && matrix.sidecar_flavor == 'allcomponents'
+        if: matrix.sidecar_flavor == 'allcomponents'
         env:
           DAPR_REGISTRY: ghcr.io/${{ env.REPO_OWNER }}
         run: |
           # Publish the `-windows-amd64` manifest.
+          # Note, the "latest" tag from the previous step already contains 
+          # the windows images, so we don't need to publish the "latest-windows-amd64" tag.
           DOCKER_MULTI_ARCH="windows-1809-amd64 windows-ltsc2022-amd64" \
           DAPR_TAG="${{ env.REL_VERSION }}-windows-amd64" \
-          LATEST_TAG=latest-windows-amd64 \
+          LATEST_RELEASE=false \
           MANIFEST_TAG="${{ env.REL_VERSION }}" \
-          MANIFEST_LATEST_TAG="${{ env.LATEST_TAG }}" \
             make docker-publish
         shell: bash
   helm:
