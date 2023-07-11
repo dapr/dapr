@@ -16,11 +16,14 @@ package components
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/dapr/dapr/utils"
 
+	"k8s.io/apimachinery/pkg/api/validation/path"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/yaml"
 )
@@ -104,7 +107,8 @@ func (m DiskManifestLoader[T]) loadManifestsFromFile(manifestPath string) []T {
 }
 
 type typeInfo struct {
-	metav1.TypeMeta `json:",inline"`
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
 }
 
 // decodeYaml decodes the yaml document.
@@ -133,6 +137,11 @@ func (m DiskManifestLoader[T]) decodeYaml(b []byte) ([]T, []error) {
 		}
 
 		if ti.Kind != m.kind {
+			continue
+		}
+
+		if errs := path.IsValidPathSegmentName(ti.Name); len(errs) > 0 {
+			errors = append(errors, fmt.Errorf("invalid name %q for %q: %s", ti.Name, m.kind, strings.Join(errs, "; ")))
 			continue
 		}
 
