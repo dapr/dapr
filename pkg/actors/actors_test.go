@@ -56,6 +56,7 @@ import (
 const (
 	TestAppID                       = "fakeAppID"
 	TestKeyName                     = "key0"
+	TestPodName                     = "testPodName"
 	TestActorMetadataPartitionCount = 3
 
 	actorTimersLastValueViewName     = "runtime/actor/timers"
@@ -198,6 +199,7 @@ func (b *runtimeBuilder) buildActorRuntime() *actorsRuntime {
 			Port:               0,
 			Namespace:          "",
 			AppConfig:          config.ApplicationConfig{},
+			PodName:            TestPodName,
 		})
 		b.config = &config
 	}
@@ -2860,6 +2862,7 @@ func TestConfig(t *testing.T) {
 		Port:               3500,
 		Namespace:          "default",
 		AppConfig:          appConfig,
+		PodName:            TestPodName,
 	})
 	assert.Equal(t, "localhost:5050", c.HostAddress)
 	assert.Equal(t, "app1", c.AppID)
@@ -2871,6 +2874,7 @@ func TestConfig(t *testing.T) {
 	assert.Equal(t, "3s", c.DrainOngoingCallTimeout.String())
 	assert.Equal(t, true, c.DrainRebalancedActors)
 	assert.Equal(t, "default", c.Namespace)
+	assert.Equal(t, TestPodName, c.PodName)
 }
 
 func TestReentrancyConfig(t *testing.T) {

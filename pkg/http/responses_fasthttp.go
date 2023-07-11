@@ -14,7 +14,11 @@ limitations under the License.
 package http
 
 import (
+	"net/http"
+
 	"github.com/valyala/fasthttp"
+
+	"github.com/dapr/dapr/pkg/messages"
 )
 
 type fasthttpResponseOption = func(ctx *fasthttp.RequestCtx)
@@ -57,4 +61,21 @@ func fasthttpRespond(ctx *fasthttp.RequestCtx, options ...fasthttpResponseOption
 	for _, option := range options {
 		option(ctx)
 	}
+}
+
+func universalFastHTTPErrorResponder(reqCtx *fasthttp.RequestCtx, err error) {
+	if err == nil {
+		return
+	}
+
+	// Check if it's an APIError object
+	apiErr, ok := err.(messages.APIError)
+	if ok {
+		fasthttpRespond(reqCtx, fasthttpResponseWithError(apiErr.HTTPCode(), apiErr))
+		return
+	}
+
+	// Respond with a generic error
+	msg := NewErrorResponse("ERROR", err.Error())
+	fasthttpRespond(reqCtx, fasthttpResponseWithError(http.StatusInternalServerError, msg))
 }

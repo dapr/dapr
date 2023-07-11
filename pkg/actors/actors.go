@@ -247,7 +247,7 @@ func (a *actorsRuntime) Init() error {
 	if a.placement == nil {
 		a.placement = internal.NewActorPlacement(
 			a.config.PlacementAddresses, a.certChain,
-			a.config.AppID, hostname, a.config.HostedActorTypes,
+			a.config.AppID, hostname, a.config.PodName, a.config.HostedActorTypes,
 			appHealthFn,
 			afterTableUpdateFn)
 	}

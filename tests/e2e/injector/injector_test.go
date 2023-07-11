@@ -56,6 +56,7 @@ func TestMain(m *testing.M) {
 			MetaData: map[string]kube.MetadataValue{
 				"secretsFile": {Raw: `"/tmp/testdata/secrets.json"`},
 			},
+			Scopes: []string{appName},
 		},
 		{
 			Name:     "secured-binding",
@@ -63,6 +64,7 @@ func TestMain(m *testing.M) {
 			MetaData: map[string]kube.MetadataValue{
 				"url": {Raw: `"https://localhost:3001"`},
 			},
+			Scopes: []string{appName},
 		},
 	}
 

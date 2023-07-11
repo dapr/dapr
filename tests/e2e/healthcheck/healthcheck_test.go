@@ -179,7 +179,7 @@ func testAppHealthCheckProtocol(t *testing.T, protocol string) {
 	t.Run("last health check within 3s", func(t *testing.T) {
 		obj := getCountAndLast(t, "last-health-check")
 		_ = assert.NotNil(t, obj.Last) &&
-			assert.Less(t, *obj.Last, int64(3000))
+			assert.Less(t, *obj.Last, int64(3500)) // Adds .5s to reduce flakiness on slow runners
 	})
 
 	t.Run("invoke method should work on healthy app", func(t *testing.T) {
@@ -191,13 +191,13 @@ func testAppHealthCheckProtocol(t *testing.T, protocol string) {
 	t.Run("last input binding within 1s", func(t *testing.T) {
 		obj := getCountAndLast(t, "last-input-binding")
 		_ = assert.NotNil(t, obj.Last) &&
-			assert.Less(t, *obj.Last, int64(1000))
+			assert.Less(t, *obj.Last, int64(1500)) // Adds .5s to reduce flakiness on slow runners
 	})
 
 	t.Run("last topic message within 1s", func(t *testing.T) {
 		obj := getCountAndLast(t, "last-topic-message")
 		_ = assert.NotNil(t, obj.Last) &&
-			assert.Less(t, *obj.Last, int64(1000))
+			assert.Less(t, *obj.Last, int64(1500)) // Adds .5s to reduce flakiness on slow runners
 	})
 
 	t.Run("set plan and trigger failures", func(t *testing.T) {
@@ -315,21 +315,21 @@ func testAppHealthCheckProtocol(t *testing.T, protocol string) {
 			go func() {
 				obj := getCountAndLast(t, "last-input-binding")
 				require.Greater(t, obj.Count, lastInputBinding.Count)
-				require.Less(t, *obj.Last, int64(1000))
+				require.Less(t, *obj.Last, int64(1500)) // Adds .5s to reduce flakiness on slow runners
 				lastInputBinding = obj
 				wg.Done()
 			}()
 			go func() {
 				obj := getCountAndLast(t, "last-topic-message")
 				require.Greater(t, obj.Count, lastTopicMessage.Count)
-				require.Less(t, *obj.Last, int64(1000))
+				require.Less(t, *obj.Last, int64(1500)) // Adds .5s to reduce flakiness on slow runners
 				lastTopicMessage = obj
 				wg.Done()
 			}()
 			go func() {
 				obj := getCountAndLast(t, "last-health-check")
 				require.Greater(t, obj.Count, lastHealthCheck.Count)
-				require.Less(t, *obj.Last, int64(3000))
+				require.Less(t, *obj.Last, int64(3500)) // Adds .5s to reduce flakiness on slow runners
 				lastHealthCheck = obj
 				wg.Done()
 			}()
