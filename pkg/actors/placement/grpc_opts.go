@@ -11,18 +11,18 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package internal
+package placement
 
 import (
 	"errors"
 	"strings"
 	"sync"
 
+	"google.golang.org/grpc"
+
 	daprCredentials "github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/runtime/security"
-
-	"google.golang.org/grpc"
 )
 
 var errEstablishingTLSConn = errors.New("failed to establish TLS credentials for actor placement service")
@@ -47,7 +47,7 @@ func getGrpcOptsGetter(servers []string, clientCert *daprCredentials.CertChain) 
 
 		opts, err := daprCredentials.GetClientOptions(clientCert, security.TLSServerName)
 		if err != nil {
-			log.Errorf("%s: %s", errEstablishingTLSConn, err)
+			log.Errorf("%s: %v", errEstablishingTLSConn, err)
 			return nil, errEstablishingTLSConn
 		}
 

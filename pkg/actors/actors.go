@@ -36,7 +36,7 @@ import (
 	"k8s.io/utils/clock"
 
 	"github.com/dapr/components-contrib/state"
-	"github.com/dapr/dapr/pkg/actors/internal"
+	"github.com/dapr/dapr/pkg/actors/placement"
 	"github.com/dapr/dapr/pkg/actors/reminders"
 	"github.com/dapr/dapr/pkg/channel"
 	configuration "github.com/dapr/dapr/pkg/config"
@@ -246,7 +246,7 @@ func (a *actorsRuntime) Init() error {
 	appHealthFn := func() bool { return a.appHealthy.Load() }
 
 	if a.placement == nil {
-		a.placement = internal.NewActorPlacement(
+		a.placement = placement.NewActorPlacement(
 			a.config.PlacementAddresses, a.certChain,
 			a.config.AppID, hostname, a.config.PodName, a.config.HostedActorTypes,
 			appHealthFn,
