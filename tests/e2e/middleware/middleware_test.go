@@ -18,6 +18,7 @@ package middleware_e2e
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"testing"
@@ -41,11 +42,6 @@ func getExternalURL(t *testing.T, appName string) string {
 	externalURL := tr.Platform.AcquireAppExternalURL(appName)
 	require.NotEmpty(t, externalURL, "external URL must not be empty!")
 	return externalURL
-}
-
-func healthCheckApp(t *testing.T, externalURL string, numHealthChecks int) {
-	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
-	require.NoError(t, err)
 }
 
 func TestMain(m *testing.M) {
@@ -94,8 +90,24 @@ func TestSimpleMiddleware(t *testing.T) {
 
 	// This initial probe makes the test wait a little bit longer when needed,
 	// making this test less flaky due to delays in the deployment.
-	healthCheckApp(t, middlewareURL, numHealthChecks)
-	healthCheckApp(t, noMiddlewareURL, numHealthChecks)
+	errCh := make(chan error, 3)
+	go func() {
+		_, err := utils.HTTPGetNTimes(middlewareURL, numHealthChecks)
+		errCh <- err
+	}()
+	go func() {
+		_, err := utils.HTTPGetNTimes(noMiddlewareURL, numHealthChecks)
+		errCh <- err
+	}()
+	go func() {
+		_, err := utils.HTTPGetNTimes(appMiddlewareURL, numHealthChecks)
+		errCh <- err
+	}()
+	errs := make([]error, 3)
+	for i := 0; i < 3; i++ {
+		errs[i] = <-errCh
+	}
+	require.NoError(t, errors.Join(errs...), "Health checks failed")
 
 	t.Logf("middlewareURL is '%s'\n", middlewareURL)
 	t.Logf("noMiddlewareURL is '%s'\n", noMiddlewareURL)
