@@ -99,11 +99,6 @@ type PlacementService interface {
 // GRPCConnectionFn is the type of the function that returns a gRPC connection
 type GRPCConnectionFn func(ctx context.Context, address string, id string, namespace string, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(destroy bool), error)
 
-type transactionalStateStore interface {
-	state.Store
-	state.TransactionalStore
-}
-
 type actorsRuntime struct {
 	appChannel           channel.AppChannel
 	placement            PlacementService
@@ -155,8 +150,6 @@ type actorReminderReference struct {
 var ErrIncompatibleStateStore = errors.New("actor state store does not exist, or does not support transactions which are required to save state - please see https://docs.dapr.io/operations/components/setup-state-store/supported-state-stores/")
 
 var ErrDaprResponseHeader = errors.New("error indicated via actor header response")
-
-var ErrReminderCanceled = errors.New("reminder has been canceled")
 
 // ActorsOpts contains options for NewActors.
 type ActorsOpts struct {
@@ -666,7 +659,7 @@ func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *Tr
 	return a.executeStateStoreTransaction(ctx, store, operations, metadata)
 }
 
-func (a *actorsRuntime) executeStateStoreTransaction(ctx context.Context, store transactionalStateStore, operations []state.TransactionalStateOperation, metadata map[string]string) error {
+func (a *actorsRuntime) executeStateStoreTransaction(ctx context.Context, store internal.TransactionalStateStore, operations []state.TransactionalStateOperation, metadata map[string]string) error {
 	policyRunner := resiliency.NewRunner[struct{}](ctx,
 		a.resiliency.ComponentOutboundPolicy(a.storeName, resiliency.Statestore),
 	)
@@ -953,7 +946,7 @@ func (a *actorsRuntime) startReminder(reminder *internal.Reminder, stopChannel c
 			err = a.executeReminder(reminder, false)
 			diag.DefaultMonitoring.ActorReminderFired(reminder.ActorType, err == nil)
 			if err != nil {
-				if errors.Is(err, ErrReminderCanceled) {
+				if errors.Is(err, internal.ErrReminderCanceled) {
 					// The handler is explicitly canceling the timer
 					log.Debug("Reminder " + reminderKey + " was canceled by the actor")
 					nextTimer = nil
@@ -1067,7 +1060,7 @@ func (a *actorsRuntime) executeReminder(reminder *internal.Reminder, isTimer boo
 	imr, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
 		return a.callLocalActor(ctx, req)
 	})
-	if err != nil && !errors.Is(err, ErrReminderCanceled) {
+	if err != nil && !errors.Is(err, internal.ErrReminderCanceled) {
 		log.Errorf("Error executing %s for actor %s: %v", logName, reminder.Key(), err)
 	}
 	if imr != nil {
@@ -1356,7 +1349,7 @@ func (a *actorsRuntime) getActorTypeMetadata(ctx context.Context, actorType stri
 	})
 }
 
-func (a *actorsRuntime) migrateRemindersForActorType(ctx context.Context, store transactionalStateStore, actorType string, actorMetadata *ActorMetadata) error {
+func (a *actorsRuntime) migrateRemindersForActorType(ctx context.Context, store internal.TransactionalStateStore, actorType string, actorMetadata *ActorMetadata) error {
 	reminderPartitionCount := a.config.GetRemindersPartitionCountForType(actorType)
 	if actorMetadata.RemindersMetadata.PartitionCount == reminderPartitionCount {
 		return nil
@@ -1719,7 +1712,7 @@ func (a *actorsRuntime) RenameReminder(ctx context.Context, req *RenameReminderR
 	return a.startReminder(reminder, stop)
 }
 
-func (a *actorsRuntime) storeReminder(ctx context.Context, store transactionalStateStore, reminder *internal.Reminder, stopChannel chan struct{}) error {
+func (a *actorsRuntime) storeReminder(ctx context.Context, store internal.TransactionalStateStore, reminder *internal.Reminder, stopChannel chan struct{}) error {
 	// Store the reminder in active reminders list
 	reminderKey := reminder.Key()
 
@@ -1881,13 +1874,13 @@ func ValidateHostEnvironment(mTLSEnabled bool, mode modes.DaprMode, namespace st
 	return nil
 }
 
-func (a *actorsRuntime) stateStore() (transactionalStateStore, error) {
+func (a *actorsRuntime) stateStore() (internal.TransactionalStateStore, error) {
 	storeS, ok := a.compStore.GetStateStore(a.storeName)
 	if !ok {
 		return nil, errors.New(errStateStoreNotFound)
 	}
 
-	store, ok := storeS.(transactionalStateStore)
+	store, ok := storeS.(internal.TransactionalStateStore)
 	if !ok || !state.FeatureETag.IsPresent(store.Features()) || !state.FeatureTransactional.IsPresent(store.Features()) {
 		return nil, errors.New(errStateStoreNotConfigured)
 	}

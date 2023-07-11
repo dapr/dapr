@@ -14,15 +14,29 @@ limitations under the License.
 package reminders
 
 import (
-	"context"
+	"k8s.io/utils/clock"
 
 	"github.com/dapr/dapr/pkg/actors/internal"
 )
 
-// RemindersProvider is the interface for the object that provides reminders services.
-type RemindersProvider interface {
-	GetReminder(ctx context.Context, req *internal.GetReminderRequest) (*internal.Reminder, error)
-	CreateReminder(ctx context.Context, req *internal.CreateReminderRequest) error
-	DeleteReminder(ctx context.Context, req *internal.DeleteReminderRequest) error
-	RenameReminder(ctx context.Context, req *internal.RenameReminderRequest) error
+// Implements a reminders provider.
+type reminders struct {
+	clock             clock.WithTicker
+	executeReminderFn internal.ExecuteReminderFn
+	stateStore        internal.TransactionalStateStore
+}
+
+// NewRemindersProvider returns a TimerProvider.
+func NewRemindersProvider(clock clock.WithTicker) internal.RemindersProvider {
+	return &reminders{
+		clock: clock,
+	}
+}
+
+func (r *reminders) SetExecuteReminderFn(fn internal.ExecuteReminderFn) {
+	r.executeReminderFn = fn
+}
+
+func (r *reminders) SetStateStore(store internal.TransactionalStateStore) {
+	r.stateStore = store
 }
