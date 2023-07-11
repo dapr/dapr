@@ -5248,9 +5248,10 @@ func (l *fakeLockStore) GetComponentMetadata() map[string]string {
 func TestV1HealthzEndpoint(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 
+	const appID = "fakeAPI"
 	testAPI := &api{
 		universal: &universalapi.UniversalAPI{
-			AppID: "fakeAPI",
+			AppID: appID,
 		},
 	}
 
@@ -5268,6 +5269,20 @@ func TestV1HealthzEndpoint(t *testing.T) {
 		testAPI.MarkStatusAsReady()
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 
+		assert.Equal(t, 204, resp.StatusCode)
+	})
+
+	t.Run("Healthz - 500 No AppId Match", func(t *testing.T) {
+		apiPath := "v1.0/healthz"
+		testAPI.MarkStatusAsReady()
+		resp := fakeServer.DoRequest("GET", apiPath, nil, map[string]string{"appid": "not-test"})
+		assert.Equal(t, 500, resp.StatusCode)
+	})
+
+	t.Run("Healthz - 204 AppId Match", func(t *testing.T) {
+		apiPath := "v1.0/healthz"
+		testAPI.MarkStatusAsReady()
+		resp := fakeServer.DoRequest("GET", apiPath, nil, map[string]string{"appid": appID})
 		assert.Equal(t, 204, resp.StatusCode)
 	})
 
