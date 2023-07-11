@@ -67,6 +67,8 @@ const (
 
 var log = logger.NewLogger("dapr.runtime.actor")
 
+var ErrReminderCanceled = internal.ErrReminderCanceled
+
 // Actors allow calling into virtual actors as well as actor state management.
 //
 //nolint:interfacebloat
