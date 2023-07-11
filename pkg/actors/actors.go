@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"net"
-	nethttp "net/http"
+	"net/http"
 	"reflect"
 	"strconv"
 	"strings"
@@ -104,32 +104,29 @@ type transactionalStateStore interface {
 }
 
 type actorsRuntime struct {
-	appChannel            channel.AppChannel
-	placement             PlacementService
-	grpcConnectionFn      GRPCConnectionFn
-	config                Config
-	actorsTable           *sync.Map
-	activeTimers          *sync.Map
-	activeTimersCount     map[string]*int64
-	activeTimersCountLock sync.RWMutex
-	activeTimersLock      sync.RWMutex
-	activeReminders       *sync.Map
-	remindersLock         sync.RWMutex
-	remindersStoringLock  sync.Mutex
-	reminders             map[string][]actorReminderReference
-	evaluationLock        sync.RWMutex
-	evaluationChan        chan struct{}
-	appHealthy            *atomic.Bool
-	certChain             *daprCredentials.CertChain
-	tracingSpec           configuration.TracingSpec
-	resiliency            resiliency.Provider
-	storeName             string
-	compStore             *compstore.ComponentStore
-	ctx                   context.Context
-	cancel                context.CancelFunc
-	clock                 clock.WithTicker
-	internalActors        map[string]InternalActor
-	internalActorChannel  *internalActorChannel
+	appChannel           channel.AppChannel
+	placement            PlacementService
+	grpcConnectionFn     GRPCConnectionFn
+	config               Config
+	timers               reminders.TimersProvider
+	actorsTable          *sync.Map
+	activeReminders      *sync.Map
+	remindersLock        sync.RWMutex
+	remindersStoringLock sync.Mutex
+	reminders            map[string][]actorReminderReference
+	evaluationLock       sync.RWMutex
+	evaluationChan       chan struct{}
+	appHealthy           *atomic.Bool
+	certChain            *daprCredentials.CertChain
+	tracingSpec          configuration.TracingSpec
+	resiliency           resiliency.Provider
+	storeName            string
+	compStore            *compstore.ComponentStore
+	ctx                  context.Context
+	cancel               context.CancelFunc
+	clock                clock.WithTicker
+	internalActors       map[string]InternalActor
+	internalActorChannel *internalActorChannel
 
 	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 	stateTTLEnabled bool
@@ -187,18 +184,18 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) Actors {
 	appHealthy := &atomic.Bool{}
 	appHealthy.Store(true)
 	ctx, cancel := context.WithCancel(context.Background())
-	return &actorsRuntime{
+
+	a := &actorsRuntime{
 		appChannel:           opts.AppChannel,
 		grpcConnectionFn:     opts.GRPCConnectionFn,
 		config:               opts.Config,
+		timers:               reminders.NewTimersProvider(clock),
 		certChain:            opts.CertChain,
 		tracingSpec:          opts.TracingSpec,
 		resiliency:           opts.Resiliency,
 		storeName:            opts.StateStoreName,
 		placement:            opts.MockPlacement,
 		actorsTable:          &sync.Map{},
-		activeTimers:         &sync.Map{},
-		activeTimersCount:    make(map[string]*int64),
 		activeReminders:      &sync.Map{},
 		reminders:            map[string][]actorReminderReference{},
 		evaluationChan:       make(chan struct{}, 1),
@@ -212,6 +209,10 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) Actors {
 		// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 		stateTTLEnabled: opts.StateTTLEnabled,
 	}
+
+	a.timers.SetExecuteTimerFn(a.executeTimer)
+
+	return a
 }
 
 func (a *actorsRuntime) haveCompatibleStorage() bool {
@@ -295,7 +296,7 @@ func constructCompositeKey(keys ...string) string {
 func (a *actorsRuntime) deactivateActor(actorType, actorID string) error {
 	req := invokev1.NewInvokeMethodRequest("actors/"+actorType+"/"+actorID).
 		WithActor(actorType, actorID).
-		WithHTTPExtension(nethttp.MethodDelete, "").
+		WithHTTPExtension(http.MethodDelete, "").
 		WithContentType(invokev1.JSONContentType)
 	defer req.Close()
 
@@ -309,7 +310,7 @@ func (a *actorsRuntime) deactivateActor(actorType, actorID string) error {
 	}
 	defer resp.Close()
 
-	if resp.Status().Code != nethttp.StatusOK {
+	if resp.Status().Code != http.StatusOK {
 		diag.DefaultMonitoring.ActorDeactivationFailed(actorType, "status_code_"+strconv.FormatInt(int64(resp.Status().Code), 10))
 		body, _ := resp.RawDataFull()
 		return fmt.Errorf("error from actor service: %s", string(body))
@@ -516,7 +517,7 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 
 	// Original code overrides method with PUT. Why?
 	if msg.GetHttpExtension() == nil {
-		req.WithHTTPExtension(nethttp.MethodPut, "")
+		req.WithHTTPExtension(http.MethodPut, "")
 	} else {
 		msg.HttpExtension.Verb = commonv1pb.HTTPExtension_PUT //nolint:nosnakecase
 	}
@@ -544,7 +545,7 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 		return nil, errors.New("error from actor service: response object is nil")
 	}
 
-	if resp.Status().Code != nethttp.StatusOK {
+	if resp.Status().Code != http.StatusOK {
 		respData, _ := resp.RawDataFull()
 		return nil, fmt.Errorf("error from actor service: %s", string(respData))
 	}
@@ -1000,6 +1001,25 @@ func (a *actorsRuntime) startReminder(reminder *reminders.Reminder, stopChannel 
 	return nil
 }
 
+// executeTimer implements reminder.ExecuteReminderFn.
+func (a *actorsRuntime) executeTimer(reminder *reminders.Reminder) bool {
+	_, exists := a.actorsTable.Load(reminder.ActorKey())
+	if !exists {
+		log.Errorf("Could not find active timer %s", reminder.Key())
+		return false
+	}
+
+	err := a.executeReminder(reminder, true)
+	diag.DefaultMonitoring.ActorTimerFired(reminder.ActorType, err == nil)
+	if err != nil {
+		log.Errorf("error invoking timer on actor %s: %s", reminder.ActorKey(), err)
+		// Here we return true even if we have an error because the timer can still trigger again
+		return true
+	}
+
+	return true
+}
+
 // Executes a reminder or timer
 func (a *actorsRuntime) executeReminder(reminder *reminders.Reminder, isTimer bool) (err error) {
 	var (
@@ -1222,7 +1242,7 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 	}
 
 	// Create the new reminder object
-	reminder, err := reminders.NewReminderFromCreateReminderRequest(req, a.clock.Now())
+	reminder, err := req.NewReminder(a.clock.Now())
 	if err != nil {
 		return err
 	}
@@ -1256,118 +1276,17 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 }
 
 func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest) error {
-	reminder, err := reminders.NewReminderFromCreateTimerRequest(req, a.clock.Now())
+	_, exists := a.actorsTable.Load(req.ActorKey())
+	if !exists {
+		return fmt.Errorf("can't create timer for actor %s: actor not activated", req.ActorKey())
+	}
+
+	reminder, err := req.NewReminder(a.clock.Now())
 	if err != nil {
 		return err
 	}
 
-	a.activeTimersLock.Lock()
-	defer a.activeTimersLock.Unlock()
-
-	actorKey := reminder.ActorKey()
-	timerKey := reminder.Key()
-
-	_, exists := a.actorsTable.Load(actorKey)
-	if !exists {
-		return fmt.Errorf("can't create timer for actor %s: actor not activated", actorKey)
-	}
-
-	stopChan, exists := a.activeTimers.Load(timerKey)
-	if exists {
-		close(stopChan.(chan struct{}))
-	}
-
-	log.Debugf("Create timer '%s' dueTime:'%s' period:'%s' ttl:'%v'",
-		timerKey, reminder.DueTime, reminder.Period, reminder.ExpirationTime)
-
-	stop := make(chan struct{}, 1)
-	a.activeTimers.Store(timerKey, stop)
-	a.updateActiveTimersCount(req.ActorType, 1)
-
-	go func() {
-		var (
-			ttlTimer, nextTimer clock.Timer
-			ttlTimerC           <-chan time.Time
-			err                 error
-		)
-
-		if !reminder.ExpirationTime.IsZero() {
-			ttlTimer = a.clock.NewTimer(reminder.ExpirationTime.Sub(a.clock.Now()))
-			ttlTimerC = ttlTimer.C()
-		}
-
-		nextTimer = a.clock.NewTimer(reminder.NextTick().Sub(a.clock.Now()))
-		defer func() {
-			if nextTimer != nil && !nextTimer.Stop() {
-				<-nextTimer.C()
-			}
-			if ttlTimer != nil && !ttlTimer.Stop() {
-				<-ttlTimer.C()
-			}
-		}()
-
-	L:
-		for {
-			select {
-			case <-nextTimer.C():
-				// noop
-			case <-ttlTimerC:
-				// timer has expired; proceed with deletion
-				log.Infof("Timer %s with parameters: dueTime: %s, period: %s, TTL: %s has expired", timerKey, req.DueTime, req.Period, req.TTL)
-				ttlTimer = nil
-				break L
-			case <-stop:
-				// timer has been already deleted
-				log.Infof("Timer %s with parameters: dueTime: %s, period: %s, TTL: %s has been deleted", timerKey, req.DueTime, req.Period, req.TTL)
-				return
-			}
-
-			if _, exists := a.actorsTable.Load(actorKey); exists {
-				err = a.executeReminder(reminder, true)
-				diag.DefaultMonitoring.ActorTimerFired(req.ActorType, err == nil)
-				if err != nil {
-					log.Errorf("error invoking timer on actor %s: %s", actorKey, err)
-				}
-			} else {
-				log.Errorf("Could not find active timer %s", timerKey)
-				nextTimer = nil
-				return
-			}
-
-			if reminder.TickExecuted() {
-				log.Infof("Timer %s has been completed", timerKey)
-				nextTimer = nil
-				break L
-			}
-
-			nextTimer.Reset(reminder.NextTick().Sub(a.clock.Now()))
-		}
-
-		err = a.DeleteTimer(ctx, &DeleteTimerRequest{
-			Name:      req.Name,
-			ActorID:   req.ActorID,
-			ActorType: req.ActorType,
-		})
-		if err != nil {
-			log.Errorf("error deleting timer %s: %v", timerKey, err)
-		}
-	}()
-	return nil
-}
-
-func (a *actorsRuntime) updateActiveTimersCount(actorType string, inc int64) {
-	a.activeTimersCountLock.RLock()
-	_, ok := a.activeTimersCount[actorType]
-	a.activeTimersCountLock.RUnlock()
-	if !ok {
-		a.activeTimersCountLock.Lock()
-		if _, ok = a.activeTimersCount[actorType]; !ok { // re-check
-			a.activeTimersCount[actorType] = new(int64)
-		}
-		a.activeTimersCountLock.Unlock()
-	}
-
-	diag.DefaultMonitoring.ActorTimers(actorType, atomic.AddInt64(a.activeTimersCount[actorType], inc))
+	return a.timers.CreateTimer(ctx, reminder)
 }
 
 func (a *actorsRuntime) saveActorTypeMetadataRequest(actorType string, actorMetadata *ActorMetadata, stateMetadata map[string]string) state.SetRequest {
@@ -1881,17 +1800,7 @@ func (a *actorsRuntime) GetReminder(ctx context.Context, req *GetReminderRequest
 }
 
 func (a *actorsRuntime) DeleteTimer(ctx context.Context, req *DeleteTimerRequest) error {
-	actorKey := constructCompositeKey(req.ActorType, req.ActorID)
-	timerKey := constructCompositeKey(actorKey, req.Name)
-
-	stopChan, exists := a.activeTimers.Load(timerKey)
-	if exists {
-		close(stopChan.(chan struct{}))
-		a.activeTimers.Delete(timerKey)
-		a.updateActiveTimersCount(req.ActorType, -1)
-	}
-
-	return nil
+	return a.timers.DeleteTimer(ctx, req.Key())
 }
 
 func (a *actorsRuntime) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor) error {

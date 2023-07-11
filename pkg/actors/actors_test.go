@@ -22,7 +22,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1706,13 +1705,7 @@ func TestGetReminder(t *testing.T) {
 }
 
 func TestCreateTimerDueTimes(t *testing.T) {
-	testActorsRuntime := newTestActorsRuntime()
-	defer testActorsRuntime.Stop()
-
-	actorType, actorID := getTestActorTypeAndID()
-	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
-
-	t.Run("test create timer with positive DueTime", func(t *testing.T) {
+	t.Run("create timer with positive DueTime", func(t *testing.T) {
 		testActorsRuntime := newTestActorsRuntime()
 		defer testActorsRuntime.Stop()
 		actorType, actorID := getTestActorTypeAndID()
@@ -1721,10 +1714,10 @@ func TestCreateTimerDueTimes(t *testing.T) {
 		timer := createTimerData(actorID, actorType, "positiveTimer", "1s", "2s", "", "callback", "testTimer")
 		err := testActorsRuntime.CreateTimer(context.Background(), &timer)
 		assert.NoError(t, err)
-		assert.Equal(t, int64(1), atomic.LoadInt64(testActorsRuntime.activeTimersCount[actorType]))
+		assert.Equal(t, int64(1), testActorsRuntime.timers.GetActiveTimersCount(actorType))
 	})
 
-	t.Run("test create timer with 0 DueTime", func(t *testing.T) {
+	t.Run("create timer with 0 DueTime", func(t *testing.T) {
 		testActorsRuntime := newTestActorsRuntime()
 		defer testActorsRuntime.Stop()
 		actorType, actorID := getTestActorTypeAndID()
@@ -1735,7 +1728,7 @@ func TestCreateTimerDueTimes(t *testing.T) {
 		assert.NoError(t, err)
 	})
 
-	t.Run("test create timer with no DueTime", func(t *testing.T) {
+	t.Run("create timer with no DueTime", func(t *testing.T) {
 		testActorsRuntime := newTestActorsRuntime()
 		defer testActorsRuntime.Stop()
 		actorType, actorID := getTestActorTypeAndID()
@@ -1802,8 +1795,14 @@ func TestTimerCounter(t *testing.T) {
 	}
 	wg.Wait()
 
-	time.Sleep(1 * time.Second)
-	assert.Equal(t, int64(numberOfLongTimersToCreate-numberOfTimersToDelete), atomic.LoadInt64(testActorsRuntime.activeTimersCount[actorType]))
+	expectCount := int64(numberOfLongTimersToCreate - numberOfTimersToDelete)
+	assert.Eventuallyf(t,
+		func() bool {
+			return testActorsRuntime.timers.GetActiveTimersCount(actorType) == expectCount
+		},
+		10*time.Second, 50*time.Millisecond,
+		"Expected active timers count to be %d, but got %d (note: this value may be outdated)", expectCount, testActorsRuntime.timers.GetActiveTimersCount(actorType),
+	)
 
 	// check metrics recorded
 	rows, err := view.RetrieveData(actorTimersFiredTotalViewName)
@@ -1825,17 +1824,13 @@ func TestDeleteTimer(t *testing.T) {
 
 	actorType, actorID := getTestActorTypeAndID()
 	ctx := context.Background()
-	actorKey := constructCompositeKey(actorType, actorID)
 	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 
 	timer := createTimerData(actorID, actorType, "timer1", "100ms", "100ms", "", "callback", "")
 	err := testActorsRuntime.CreateTimer(ctx, &timer)
 	assert.NoError(t, err)
 
-	timerKey := constructCompositeKey(actorKey, timer.Name)
-
-	_, ok := testActorsRuntime.activeTimers.Load(timerKey)
-	assert.True(t, ok)
+	assert.Equal(t, int64(1), testActorsRuntime.timers.GetActiveTimersCount(actorType))
 
 	err = testActorsRuntime.DeleteTimer(ctx, &DeleteTimerRequest{
 		Name:      timer.Name,
@@ -1844,8 +1839,13 @@ func TestDeleteTimer(t *testing.T) {
 	})
 	assert.NoError(t, err)
 
-	_, ok = testActorsRuntime.activeTimers.Load(timerKey)
-	assert.False(t, ok)
+	assert.Eventuallyf(t,
+		func() bool {
+			return testActorsRuntime.timers.GetActiveTimersCount(actorType) == 0
+		},
+		10*time.Second, 50*time.Millisecond,
+		"Expected active timers count to be %d, but got %d (note: this value may be outdated)", 0, testActorsRuntime.timers.GetActiveTimersCount(actorType),
+	)
 }
 
 func TestOverrideTimerCancelsActiveTimers(t *testing.T) {
@@ -1933,7 +1933,7 @@ func TestOverrideTimerCancelsMultipleActiveTimers(t *testing.T) {
 	})
 }
 
-func Test_TimerRepeats(t *testing.T) {
+func TestTimerRepeats(t *testing.T) {
 	tests := map[string]struct {
 		dueTime         string
 		period          string
@@ -2108,7 +2108,7 @@ func Test_TimerRepeats(t *testing.T) {
 	}
 }
 
-func Test_TimerTTL(t *testing.T) {
+func TestTimerTTL(t *testing.T) {
 	tests := map[string]struct {
 		iso bool
 	}{

@@ -32,11 +32,7 @@ type CreateReminderRequest = reminders.CreateReminderRequest
 type CreateTimerRequest = reminders.CreateTimerRequest
 
 // DeleteReminderRequest is the request object for deleting a reminder.
-type DeleteReminderRequest struct {
-	Name      string
-	ActorType string
-	ActorID   string
-}
+type DeleteReminderRequest = reminders.DeleteReminderRequest
 
 // DeleteStateRequest is the request object for deleting an actor state.
 type DeleteStateRequest struct {
@@ -46,18 +42,10 @@ type DeleteStateRequest struct {
 }
 
 // DeleteTimerRequest is a request object for deleting a timer.
-type DeleteTimerRequest struct {
-	Name      string
-	ActorType string
-	ActorID   string
-}
+type DeleteTimerRequest = reminders.DeleteTimerRequest
 
 // GetReminderRequest is the request object to get an existing reminder.
-type GetReminderRequest struct {
-	Name      string
-	ActorType string
-	ActorID   string
-}
+type GetReminderRequest = reminders.GetReminderRequest
 
 // GetStateRequest is the request object for getting actor state.
 type GetStateRequest struct {
@@ -103,12 +91,7 @@ func (r *ReminderResponse) MarshalJSON() ([]byte, error) {
 }
 
 // RenameReminderRequest is the request object for rename a reminder.
-type RenameReminderRequest struct {
-	OldName   string
-	ActorType string
-	ActorID   string
-	NewName   string
-}
+type RenameReminderRequest = reminders.RenameReminderRequest
 
 // SaveStateRequest is the request object for saving an actor state.
 type SaveStateRequest struct {
