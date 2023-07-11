@@ -137,7 +137,8 @@ var (
 	ErrInvalidInstanceID             = APIError{"workflow instance ID '%s' is invalid: only alphanumeric and underscore characters are allowed", "ERR_INSTANCE_ID_INVALID", http.StatusBadRequest, grpcCodes.InvalidArgument}
 	ErrWorkflowComponentDoesNotExist = APIError{"workflow component '%s' does not exist", "ERR_WORKFLOW_COMPONENT_NOT_FOUND", http.StatusBadRequest, grpcCodes.InvalidArgument}
 	ErrMissingOrEmptyInstance        = APIError{"no instance ID was provided", "ERR_INSTANCE_ID_PROVIDED_MISSING", http.StatusBadRequest, grpcCodes.InvalidArgument}
-	ErrNoOrMissingWorkflowComponent  = APIError{"no workflow component was provided", "ERR_WORKFLOW_COMPONENT_MISSING", http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrWorkflowInstanceNotFound      = APIError{"unable to find workflow with the provided instance ID: %s", "ERR_INSTANCE_ID_NOT_FOUND", http.StatusNotFound, grpcCodes.NotFound}
+	ErrNoOrMissingWorkflowComponent  = APIError{"no workflow component was provided", "ERR_WORKFLOW_COMPONENT_MISSING", http.StatusNotFound, grpcCodes.NotFound}
 	ErrTerminateWorkflow             = APIError{"error terminating workflow '%s': %s", "ERR_TERMINATE_WORKFLOW", http.StatusInternalServerError, grpcCodes.Internal}
 	ErrMissingWorkflowEventName      = APIError{"missing workflow event name", "ERR_WORKFLOW_EVENT_NAME_MISSING", http.StatusBadRequest, grpcCodes.InvalidArgument}
 	ErrRaiseEventWorkflow            = APIError{"error raising event on workflow '%s': %s", "ERR_RAISE_EVENT_WORKFLOW", http.StatusInternalServerError, grpcCodes.Internal}
