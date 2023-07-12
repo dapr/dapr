@@ -216,7 +216,8 @@ func generateCSRAndPrivateKey(id string) ([]byte, crypto.Signer, error) {
 
 func (x *x509source) requestFromSentry(ctx context.Context, csrDER []byte) ([]*x509.Certificate, error) {
 	unaryClientInterceptor := retry.UnaryClientInterceptor(
-		retry.WithMax(sentryMaxRetries), retry.WithPerRetryTimeout(sentrySignTimeout),
+		retry.WithMax(sentryMaxRetries),
+		retry.WithPerRetryTimeout(sentrySignTimeout),
 	)
 	if diagnostics.DefaultGRPCMonitoring.IsEnabled() {
 		unaryClientInterceptor = middleware.ChainUnaryClient(
@@ -231,7 +232,8 @@ func (x *x509source) requestFromSentry(ctx context.Context, csrDER []byte) ([]*x
 			grpccredentials.TLSClientCredentials(x, tlsconfig.AuthorizeID(x.sentryID)),
 		),
 		grpc.WithUnaryInterceptor(unaryClientInterceptor),
-		grpc.WithBlock(), grpc.WithReturnConnectionError(),
+		grpc.WithBlock(),
+		grpc.WithReturnConnectionError(),
 	)
 	if err != nil {
 		diagnostics.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("sentry_conn")
