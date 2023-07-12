@@ -3491,9 +3491,19 @@ func (a *DaprRuntime) startReadingFromBindings() (err error) {
 	// Input bindings are stopped via cancellation of the main runtime's context
 	a.inputBindingsCtx, a.inputBindingsCancel = context.WithCancel(a.ctx)
 
+	comps := a.compStore.ListComponents()
+	bindings := map[string][]commonapi.NameValuePair{}
+
+	for _, c := range comps {
+		if strings.HasPrefix(c.Spec.Type, string(components.CategoryBindings)) {
+			bindings[c.ObjectMeta.Name] = c.Spec.Metadata
+		}
+	}
+
 	for name, binding := range a.compStore.ListInputBindings() {
 		var isSubscribed bool
-		m := binding.GetComponentMetadata()
+
+		m := a.convertMetadataItemsToProperties(bindings[name])
 
 		if isBindingOfExplicitDirection(inputBinding, m) {
 			isSubscribed = true
