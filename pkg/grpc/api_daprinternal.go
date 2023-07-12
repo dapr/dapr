@@ -25,6 +25,7 @@ import (
 	"github.com/dapr/dapr/pkg/acl"
 	"github.com/dapr/dapr/pkg/actors"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/grpc/metadata"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -90,6 +91,11 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 	}
 	if chunk.Request == nil || chunk.Request.Metadata == nil || chunk.Request.Message == nil {
 		return status.Errorf(codes.InvalidArgument, messages.ErrInternalInvokeRequest, "request does not contain the required fields in the leading chunk")
+	}
+
+	// Append the invoked method to the context's metadata so we can use it for tracing
+	if md, ok := metadata.FromIncomingContext(stream.Context()); ok {
+		md[diag.DaprCallLocalStreamMethodKey] = []string{chunk.Request.Message.Method}
 	}
 
 	// Create the request object
