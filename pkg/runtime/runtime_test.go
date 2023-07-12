@@ -6462,7 +6462,7 @@ func TestStartReadingFromBindings(t *testing.T) {
 		err := rt.startReadingFromBindings()
 
 		assert.NoError(t, err)
-		assert.Len(t, mockAppChannel.Calls, 1)
+		assert.True(t, mockAppChannel.AssertCalled(t, "InvokeMethod", mock.Anything, mock.Anything))
 	})
 
 	t.Run("No OPTIONS request when direction is specified", func(t *testing.T) {
@@ -6499,6 +6499,6 @@ func TestStartReadingFromBindings(t *testing.T) {
 		err := rt.startReadingFromBindings()
 
 		assert.NoError(t, err)
-		assert.Len(t, mockAppChannel.Calls, 0)
+		assert.True(t, mockAppChannel.AssertNotCalled(t, "InvokeMethod", mock.Anything, mock.Anything))
 	})
 }
