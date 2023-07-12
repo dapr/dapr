@@ -2232,7 +2232,7 @@ func (a *DaprRuntime) initActors() error {
 		HealthHTTPClient:   a.appHTTPClient,
 		HealthEndpoint:     a.getAppHTTPEndpoint(),
 		AppChannelAddress:  a.runtimeConfig.appConnectionConfig.ChannelAddress,
-		PodName:            a.getPodName(),
+		PodName:            getPodName(),
 	})
 
 	act := actors.NewActors(actors.ActorsOpts{
@@ -3044,18 +3044,17 @@ func (a *DaprRuntime) startReadingFromBindings() (err error) {
 	a.inputBindingsCtx, a.inputBindingsCancel = context.WithCancel(a.ctx)
 
 	comps := a.compStore.ListComponents()
-	bindings := map[string][]commonapi.NameValuePair{}
-
-	for _, c := range comps {
+	bindings := make(map[string]componentsV1alpha1.Component)
+	for i, c := range comps {
 		if strings.HasPrefix(c.Spec.Type, string(components.CategoryBindings)) {
-			bindings[c.ObjectMeta.Name] = c.Spec.Metadata
+			bindings[c.ObjectMeta.Name] = comps[i]
 		}
 	}
 
 	for name, binding := range a.compStore.ListInputBindings() {
 		var isSubscribed bool
 
-		m := a.convertMetadataItemsToProperties(bindings[name])
+		m := a.meta.ToBaseMetadata(bindings[name]).Properties
 
 		if isBindingOfExplicitDirection(processor.BindingTypeInput, m) {
 			isSubscribed = true
