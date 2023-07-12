@@ -6440,6 +6440,22 @@ func TestStartReadingFromBindings(t *testing.T) {
 		}
 
 		rt.compStore.AddInputBinding("test", m)
+		rt.compStore.AddComponent(componentsV1alpha1.Component{
+			ObjectMeta: metaV1.ObjectMeta{
+				Name: "test",
+			},
+			Spec: componentsV1alpha1.ComponentSpec{
+				Type: "bindings.test",
+				Metadata: []commonapi.NameValuePair{
+					{
+						Name: "direction",
+						Value: commonapi.DynamicValue{
+							JSON: v1.JSON{Raw: []byte("input")},
+						},
+					},
+				},
+			},
+		})
 		err := rt.startReadingFromBindings()
 
 		assert.NoError(t, err)
