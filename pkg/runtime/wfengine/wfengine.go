@@ -53,6 +53,7 @@ const (
 
 var (
 	wfLogger            = logger.NewLogger("dapr.runtime.wfengine")
+	wfBackendLogger     = logger.NewLogger("wfengine.backend")
 	errExecutionAborted = errors.New("execution aborted")
 )
 
@@ -102,7 +103,6 @@ func (wfe *WorkflowEngine) InternalActors() map[string]actors.InternalActor {
 }
 
 func (wfe *WorkflowEngine) ConfigureGrpc(grpcServer *grpc.Server) {
-	wfLogger.Info("configuring workflow engine gRPC endpoint")
 	wfe.ConfigureExecutor(func(be backend.Backend) backend.Executor {
 		// Enable lazy auto-starting the worker only when a workflow app connects to fetch work items.
 		autoStartCallback := backend.WithOnGetWorkItemsConnectionCallback(func(ctx context.Context) error {
@@ -168,7 +168,7 @@ func (wfe *WorkflowEngine) SetActorReminderInterval(interval time.Duration) {
 	wfe.activityActor.reminderInterval = interval
 }
 
-func (wfe *WorkflowEngine) Start(ctx context.Context) error {
+func (wfe *WorkflowEngine) Start(ctx context.Context) (err error) {
 	// Start could theoretically get called by multiple goroutines concurrently
 	wfe.startMutex.Lock()
 	defer wfe.startMutex.Unlock()
@@ -178,14 +178,15 @@ func (wfe *WorkflowEngine) Start(ctx context.Context) error {
 	}
 
 	if wfe.actorRuntime == nil {
-		return errors.New("actor runtime is not configured")
+		return errors.New("Actor runtime is not configured")
 	}
 	if wfe.executor == nil {
-		return errors.New("grpc executor is not yet configured")
+		return errors.New("gRPC executor is not yet configured")
 	}
 
 	for actorType, actor := range wfe.InternalActors() {
-		if err := wfe.actorRuntime.RegisterInternalActor(ctx, actorType, actor); err != nil {
+		err = wfe.actorRuntime.RegisterInternalActor(ctx, actorType, actor)
+		if err != nil {
 			return fmt.Errorf("failed to register workflow actor %s: %w", actorType, err)
 		}
 	}
@@ -193,15 +194,14 @@ func (wfe *WorkflowEngine) Start(ctx context.Context) error {
 	// TODO: Determine whether a more dynamic parallelism configuration is necessary.
 	parallelismOpts := backend.WithMaxParallelism(100)
 
-	orchestrationWorker := backend.NewOrchestrationWorker(wfe.backend, wfe.executor, wfLogger, parallelismOpts)
-	activityWorker := backend.NewActivityTaskWorker(wfe.backend, wfe.executor, wfLogger, parallelismOpts)
-	wfe.worker = backend.NewTaskHubWorker(wfe.backend, orchestrationWorker, activityWorker, wfLogger)
+	orchestrationWorker := backend.NewOrchestrationWorker(wfe.backend, wfe.executor, wfBackendLogger, parallelismOpts)
+	activityWorker := backend.NewActivityTaskWorker(wfe.backend, wfe.executor, wfBackendLogger, parallelismOpts)
+	wfe.worker = backend.NewTaskHubWorker(wfe.backend, orchestrationWorker, activityWorker, wfBackendLogger)
 	if err := wfe.worker.Start(ctx); err != nil {
 		return fmt.Errorf("failed to start workflow engine: %w", err)
 	}
 
-	wfe.IsRunning = true
-	wfLogger.Info("workflow engine started")
+	wfLogger.Info("Workflow engine started")
 
 	return nil
 }
@@ -209,6 +209,10 @@ func (wfe *WorkflowEngine) Start(ctx context.Context) error {
 func (wfe *WorkflowEngine) Stop(ctx context.Context) error {
 	wfe.startMutex.Lock()
 	defer wfe.startMutex.Unlock()
+
+	if !wfe.IsRunning {
+		return nil
+	}
 
 	if wfe.worker != nil {
 		if wfe.disconnectChan != nil {
@@ -219,7 +223,6 @@ func (wfe *WorkflowEngine) Stop(ctx context.Context) error {
 		if err := wfe.worker.Shutdown(ctx); err != nil {
 			return fmt.Errorf("failed to shutdown the workflow worker: %w", err)
 		}
-		wfe.IsRunning = false
 		wfLogger.Info("workflow engine stopped")
 	}
 	return nil

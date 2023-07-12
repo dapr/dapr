@@ -351,14 +351,15 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 		NewEvents:  state.Inbox,
 		RetryCount: -1, // TODO
 		State:      runtimeState,
-		Properties: make(map[string]interface{}),
+		Properties: make(map[string]any, 1),
 	}
 
 	// Executing workflow code is a one-way operation. We must wait for the app code to report its completion, which
 	// will trigger this callback channel.
 	callback := make(chan bool)
 	wi.Properties[CallbackChannelProperty] = callback
-	if err := wf.scheduler.ScheduleWorkflow(ctx, wi); err != nil {
+	err = wf.scheduler.ScheduleWorkflow(ctx, wi)
+	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
 			return newRecoverableError(fmt.Errorf("timed-out trying to schedule a workflow execution - this can happen if there are too many in-flight workflows or if the workflow engine isn't running: %w", err))
 		}
