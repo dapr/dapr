@@ -28,7 +28,7 @@ type FailingAppChannel struct {
 	KeyFunc func(req *invokev1.InvokeMethodRequest) string
 }
 
-func (f *FailingAppChannel) GetAppConfig() (*config.ApplicationConfig, error) {
+func (f *FailingAppChannel) GetAppConfig(appID string) (*config.ApplicationConfig, error) {
 	return nil, nil
 }
 

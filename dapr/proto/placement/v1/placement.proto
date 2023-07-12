@@ -46,4 +46,5 @@ message Host {
   int64 load = 3;
   repeated string entities = 4;
   string id = 5;
+  string pod = 6;
 }

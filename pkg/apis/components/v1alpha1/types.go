@@ -14,11 +14,9 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"strconv"
-
-	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/dapr/dapr/pkg/apis/common"
 	"github.com/dapr/dapr/utils"
 )
 
@@ -34,9 +32,8 @@ type Component struct {
 	//+optional
 	Spec ComponentSpec `json:"spec,omitempty"`
 	//+optional
-	Auth `json:"auth,omitempty"`
-	//+optional
-	Scopes []string `json:"scopes,omitempty"`
+	Auth          `json:"auth,omitempty"`
+	common.Scoped `json:",inline"`
 }
 
 // Kind returns the component kind.
@@ -49,20 +46,14 @@ func (c Component) LogName() string {
 	return utils.ComponentLogName(c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
 }
 
-// IsAppScoped returns true if the appID is allowed in the scopes for the component.
-func (c Component) IsAppScoped(appID string) bool {
-	if len(c.Scopes) == 0 {
-		// If there are no scopes, then every app is allowed
-		return true
-	}
+// GetSecretStore returns the name of the secret store.
+func (c Component) GetSecretStore() string {
+	return c.Auth.SecretStore
+}
 
-	for _, s := range c.Scopes {
-		if s == appID {
-			return true
-		}
-	}
-
-	return false
+// NameValuePairs returns the component's metadata as name/value pairs
+func (c Component) NameValuePairs() []common.NameValuePair {
+	return c.Spec.Metadata
 }
 
 // ComponentSpec is the spec for a component.
@@ -70,25 +61,10 @@ type ComponentSpec struct {
 	Type    string `json:"type"`
 	Version string `json:"version"`
 	//+optional
-	IgnoreErrors bool           `json:"ignoreErrors"`
-	Metadata     []MetadataItem `json:"metadata"`
+	IgnoreErrors bool                   `json:"ignoreErrors"`
+	Metadata     []common.NameValuePair `json:"metadata"`
 	//+optional
 	InitTimeout string `json:"initTimeout"`
-}
-
-// MetadataItem is a name/value pair for a metadata.
-type MetadataItem struct {
-	Name string `json:"name"`
-	//+optional
-	Value DynamicValue `json:"value,omitempty"`
-	//+optional
-	SecretKeyRef SecretKeyRef `json:"secretKeyRef,omitempty"`
-}
-
-// SecretKeyRef is a reference to a secret holding the value for the metadata item. Name is the secret name, and key is the field in the secret.
-type SecretKeyRef struct {
-	Name string `json:"name"`
-	Key  string `json:"key"`
 }
 
 // Auth represents authentication details for the component.
@@ -104,20 +80,4 @@ type ComponentList struct {
 	metav1.ListMeta `json:"metadata"`
 
 	Items []Component `json:"items"`
-}
-
-// DynamicValue is a dynamic value struct for the component.metadata pair value.
-type DynamicValue struct {
-	v1.JSON `json:",inline"`
-}
-
-// String returns the string representation of the raw value.
-// If the value is a string, it will be unquoted as the string is guaranteed to be a JSON serialized string.
-func (d *DynamicValue) String() string {
-	s := string(d.Raw)
-	c, err := strconv.Unquote(s)
-	if err == nil {
-		s = c
-	}
-	return s
 }

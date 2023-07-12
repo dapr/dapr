@@ -18,72 +18,93 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/dapr/kit/ptr"
 )
 
-func TestNewConfig(t *testing.T) {
-	publicPort := DefaultDaprPublicPort
-	c := NewRuntimeConfig(NewRuntimeConfigOpts{
-		ID:                           "app1",
-		PlacementAddresses:           []string{"localhost:5050"},
+func TestParsePlacementAddr(t *testing.T) {
+	testCases := []struct {
+		addr string
+		out  []string
+	}{
+		{
+			addr: "localhost:1020",
+			out:  []string{"localhost:1020"},
+		},
+		{
+			addr: "placement1:50005,placement2:50005,placement3:50005",
+			out:  []string{"placement1:50005", "placement2:50005", "placement3:50005"},
+		},
+		{
+			addr: "placement1:50005, placement2:50005, placement3:50005",
+			out:  []string{"placement1:50005", "placement2:50005", "placement3:50005"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.addr, func(t *testing.T) {
+			assert.EqualValues(t, tc.out, parsePlacementAddr(tc.addr))
+		})
+	}
+}
+
+func Test_toInternal(t *testing.T) {
+	cfg := &Config{
+		AppID:                        "app1",
+		PlacementServiceHostAddr:     "localhost:5050",
 		ControlPlaneAddress:          "localhost:5051",
 		AllowedOrigins:               "*",
 		ResourcesPath:                []string{"components"},
 		AppProtocol:                  "http",
 		Mode:                         "kubernetes",
-		HTTPPort:                     3500,
-		InternalGRPCPort:             50002,
-		APIGRPCPort:                  50001,
-		APIListenAddresses:           []string{"1.2.3.4"},
-		PublicPort:                   &publicPort,
-		AppPort:                      8080,
-		ProfilePort:                  7070,
+		DaprHTTPPort:                 "3500",
+		DaprInternalGRPCPort:         "50002",
+		DaprAPIGRPCPort:              "50001",
+		DaprAPIListenAddresses:       "1.2.3.4",
+		DaprPublicPort:               "3501",
+		ApplicationPort:              "8080",
+		ProfilePort:                  "7070",
 		EnableProfiling:              true,
-		MaxConcurrency:               1,
-		MTLSEnabled:                  true,
+		AppMaxConcurrency:            1,
+		EnableMTLS:                   true,
 		SentryAddress:                "localhost:5052",
-		MaxRequestBodySize:           4,
+		DaprHTTPMaxRequestSize:       4,
 		UnixDomainSocket:             "",
-		ReadBufferSize:               4,
-		GracefulShutdownDuration:     time.Second,
-		EnableAPILogging:             true,
+		DaprHTTPReadBufferSize:       4,
+		DaprGracefulShutdownSeconds:  1,
+		EnableAPILogging:             ptr.Of(true),
 		DisableBuiltinK8sSecretStore: true,
 		AppChannelAddress:            "1.1.1.1",
-		EnableAppHealthCheck:         true,
-		AppHealthCheckPath:           "/healthz",
-		AppHealthProbeInterval:       1 * time.Second,
-		AppHealthProbeTimeout:        2 * time.Second,
-		AppHealthThreshold:           3,
-	})
+	}
 
-	assert.Equal(t, "app1", c.ID)
-	assert.Equal(t, "localhost:5050", c.PlacementAddresses[0])
-	assert.Equal(t, "localhost:5051", c.Kubernetes.ControlPlaneAddress)
-	assert.Equal(t, "*", c.AllowedOrigins)
-	_ = assert.Len(t, c.Standalone.ResourcesPath, 1) &&
-		assert.Equal(t, "components", c.Standalone.ResourcesPath[0])
-	assert.Equal(t, "kubernetes", string(c.Mode))
-	assert.Equal(t, 3500, c.HTTPPort)
-	assert.Equal(t, 50002, c.InternalGRPCPort)
-	assert.Equal(t, 50001, c.APIGRPCPort)
-	assert.Equal(t, &publicPort, c.PublicPort)
-	assert.Equal(t, "1.2.3.4", c.APIListenAddresses[0])
-	assert.Equal(t, 8080, c.ApplicationPort)
-	assert.Equal(t, 7070, c.ProfilePort)
-	assert.Equal(t, true, c.EnableProfiling)
-	assert.Equal(t, true, c.mtlsEnabled)
-	assert.Equal(t, "localhost:5052", c.SentryServiceAddress)
-	assert.Equal(t, 4, c.MaxRequestBodySize)
-	assert.Equal(t, "", c.UnixDomainSocket)
-	assert.Equal(t, 4, c.ReadBufferSize)
-	assert.Equal(t, time.Second, c.GracefulShutdownDuration)
-	assert.Equal(t, true, c.EnableAPILogging)
-	assert.Equal(t, true, c.DisableBuiltinK8sSecretStore)
-	assert.Equal(t, "1.1.1.1", c.AppConnectionConfig.ChannelAddress)
-	assert.Equal(t, 8080, c.AppConnectionConfig.Port)
-	assert.Equal(t, "http", string(c.AppConnectionConfig.Protocol))
-	assert.Equal(t, 1, c.AppConnectionConfig.MaxConcurrency)
-	assert.Equal(t, "/healthz", c.AppConnectionConfig.HealthCheckHTTPPath)
-	assert.Equal(t, 1*time.Second, c.AppConnectionConfig.HealthCheck.ProbeInterval)
-	assert.Equal(t, 2*time.Second, c.AppConnectionConfig.HealthCheck.ProbeTimeout)
-	assert.Equal(t, 3, int(c.AppConnectionConfig.HealthCheck.Threshold))
+	intc, err := cfg.toInternal()
+	require.NoError(t, err)
+
+	assert.Equal(t, "app1", intc.id)
+	assert.Equal(t, "localhost:5050", intc.placementAddresses[0])
+	assert.Equal(t, "localhost:5051", intc.kubernetes.ControlPlaneAddress)
+	assert.Equal(t, "*", intc.allowedOrigins)
+	_ = assert.Len(t, intc.standalone.ResourcesPath, 1) &&
+		assert.Equal(t, "components", intc.standalone.ResourcesPath[0])
+	assert.Equal(t, "http", string(intc.appConnectionConfig.Protocol))
+	assert.Equal(t, "kubernetes", string(intc.mode))
+	assert.Equal(t, 3500, intc.httpPort)
+	assert.Equal(t, 50002, intc.internalGRPCPort)
+	assert.Equal(t, 50001, intc.apiGRPCPort)
+	assert.Equal(t, ptr.Of(3501), intc.publicPort)
+	assert.Equal(t, "1.2.3.4", intc.apiListenAddresses[0])
+	assert.Equal(t, 8080, intc.appConnectionConfig.Port)
+	assert.Equal(t, 7070, intc.profilePort)
+	assert.Equal(t, true, intc.enableProfiling)
+	assert.Equal(t, 1, intc.appConnectionConfig.MaxConcurrency)
+	assert.Equal(t, true, intc.mTLSEnabled)
+	assert.Equal(t, "localhost:5052", intc.sentryServiceAddress)
+	assert.Equal(t, 4, intc.maxRequestBodySize)
+	assert.Equal(t, "", intc.unixDomainSocket)
+	assert.Equal(t, 4, intc.readBufferSize)
+	assert.Equal(t, time.Second, intc.gracefulShutdownDuration)
+	assert.Equal(t, ptr.Of(true), intc.enableAPILogging)
+	assert.Equal(t, true, intc.disableBuiltinK8sSecretStore)
+	assert.Equal(t, "1.1.1.1", intc.appConnectionConfig.ChannelAddress)
 }

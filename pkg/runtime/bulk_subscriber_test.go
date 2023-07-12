@@ -214,7 +214,9 @@ func TestBulkSubscribe(t *testing.T) {
 	t.Run("bulk Subscribe multiple Messages at once for cloud events", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
-		ms := &mockSubscribePubSub{}
+		ms := &mockSubscribePubSub{
+			features: []pubsub.Feature{pubsub.FeatureBulkPublish},
+		}
 		rt.pubSubRegistry.RegisterComponent(
 			func(_ logger.Logger) pubsub.PubSub {
 				return ms
@@ -350,7 +352,9 @@ func TestBulkSubscribe(t *testing.T) {
 		defer stopRuntime(t, rt)
 		rt.pubSubRegistry.RegisterComponent(
 			func(_ logger.Logger) pubsub.PubSub {
-				return &mockSubscribePubSub{}
+				return &mockSubscribePubSub{
+					features: []pubsub.Feature{pubsub.FeatureBulkPublish},
+				}
 			},
 			"mockPubSub",
 		)
@@ -416,7 +420,9 @@ func TestBulkSubscribe(t *testing.T) {
 		defer stopRuntime(t, rt)
 		rt.pubSubRegistry.RegisterComponent(
 			func(_ logger.Logger) pubsub.PubSub {
-				return &mockSubscribePubSub{}
+				return &mockSubscribePubSub{
+					features: []pubsub.Feature{pubsub.FeatureBulkPublish},
+				}
 			},
 			"mockPubSub",
 		)
@@ -536,7 +542,9 @@ func TestBulkSubscribe(t *testing.T) {
 		defer stopRuntime(t, rt)
 		rt.pubSubRegistry.RegisterComponent(
 			func(_ logger.Logger) pubsub.PubSub {
-				return &mockSubscribePubSub{}
+				return &mockSubscribePubSub{
+					features: []pubsub.Feature{pubsub.FeatureBulkPublish},
+				}
 			},
 			"mockPubSub",
 		)
@@ -618,7 +626,9 @@ func TestBulkSubscribe(t *testing.T) {
 		defer stopRuntime(t, rt)
 		rt.pubSubRegistry.RegisterComponent(
 			func(_ logger.Logger) pubsub.PubSub {
-				return &mockSubscribePubSub{}
+				return &mockSubscribePubSub{
+					features: []pubsub.Feature{pubsub.FeatureBulkPublish},
+				}
 			},
 			"mockPubSub",
 		)
@@ -704,7 +714,9 @@ func TestBulkSubscribe(t *testing.T) {
 		defer stopRuntime(t, rt)
 		rt.pubSubRegistry.RegisterComponent(
 			func(_ logger.Logger) pubsub.PubSub {
-				return &mockSubscribePubSub{}
+				return &mockSubscribePubSub{
+					features: []pubsub.Feature{pubsub.FeatureBulkPublish},
+				}
 			},
 			"mockPubSub",
 		)
@@ -802,7 +814,9 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		port, _ := freeport.GetFreePort()
 		rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, string(protocol.GRPCProtocol), port)
 		defer stopRuntime(t, rt)
-		ms := &mockSubscribePubSub{}
+		ms := &mockSubscribePubSub{
+			features: []pubsub.Feature{pubsub.FeatureBulkPublish},
+		}
 
 		rt.pubSubRegistry.RegisterComponent(
 			func(_ logger.Logger) pubsub.PubSub {
@@ -916,7 +930,9 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 
 		rt.pubSubRegistry.RegisterComponent(
 			func(_ logger.Logger) pubsub.PubSub {
-				return &mockSubscribePubSub{}
+				return &mockSubscribePubSub{
+					features: []pubsub.Feature{pubsub.FeatureBulkPublish},
+				}
 			},
 			"mockPubSub",
 		)
@@ -1039,7 +1055,9 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 
 		rt.pubSubRegistry.RegisterComponent(
 			func(_ logger.Logger) pubsub.PubSub {
-				return &mockSubscribePubSub{}
+				return &mockSubscribePubSub{
+					features: []pubsub.Feature{pubsub.FeatureBulkPublish},
+				}
 			},
 			"mockPubSub",
 		)
@@ -1119,7 +1137,9 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 
 		rt.pubSubRegistry.RegisterComponent(
 			func(_ logger.Logger) pubsub.PubSub {
-				return &mockSubscribePubSub{}
+				return &mockSubscribePubSub{
+					features: []pubsub.Feature{pubsub.FeatureBulkPublish},
+				}
 			},
 			"mockPubSub",
 		)
@@ -1211,7 +1231,9 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 
 		rt.pubSubRegistry.RegisterComponent(
 			func(_ logger.Logger) pubsub.PubSub {
-				return &mockSubscribePubSub{}
+				return &mockSubscribePubSub{
+					features: []pubsub.Feature{pubsub.FeatureBulkPublish},
+				}
 			},
 			"mockPubSub",
 		)
@@ -1297,7 +1319,9 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 
 		rt.pubSubRegistry.RegisterComponent(
 			func(_ logger.Logger) pubsub.PubSub {
-				return &mockSubscribePubSub{}
+				return &mockSubscribePubSub{
+					features: []pubsub.Feature{pubsub.FeatureBulkPublish},
+				}
 			},
 			"mockPubSub",
 		)

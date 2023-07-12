@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"testing"
 
+	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/injector/annotations"
 	"github.com/dapr/dapr/pkg/injector/patcher"
@@ -97,9 +98,11 @@ func TestComponentsPatch(t *testing.T) {
 		{
 			"patch should not create injectable containers operations when app is scopped but has no annotations",
 			appName,
-			[]componentsapi.Component{{
-				Scopes: []string{appName},
-			}},
+			[]componentsapi.Component{
+				{
+					Scoped: commonapi.Scoped{Scopes: []string{appName}},
+				},
+			},
 			&corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Annotations: map[string]string{
@@ -148,7 +151,7 @@ func TestComponentsPatch(t *testing.T) {
 						}`, componentImage),
 					},
 				},
-				Scopes: []string{appName},
+				Scoped: commonapi.Scoped{Scopes: []string{appName}},
 			}},
 			&corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{

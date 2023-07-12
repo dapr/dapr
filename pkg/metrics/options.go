@@ -30,7 +30,7 @@ type Options struct {
 	Port string
 }
 
-func defaultMetricOptions() *Options {
+func DefaultMetricOptions() *Options {
 	return &Options{
 		Port:           defaultMetricsPort,
 		MetricsEnabled: defaultMetricsEnabled,

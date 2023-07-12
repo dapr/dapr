@@ -150,7 +150,7 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policyDef *resilie
 					continue
 				}
 				// For grpc, we can still send the entry even if path is blank, App can take a decision
-				if rPath == "" && a.runtimeConfig.AppConnectionConfig.Protocol.IsHTTP() {
+				if rPath == "" && a.runtimeConfig.appConnectionConfig.Protocol.IsHTTP() {
 					continue
 				}
 				dataB64 := base64.StdEncoding.EncodeToString(message.Event)
@@ -189,7 +189,7 @@ func (a *DaprRuntime) bulkSubscribeTopic(ctx context.Context, policyDef *resilie
 					continue
 				}
 				// For grpc, we can still send the entry even if path is blank, App can take a decision
-				if rPath == "" && a.runtimeConfig.AppConnectionConfig.Protocol.IsHTTP() {
+				if rPath == "" && a.runtimeConfig.appConnectionConfig.Protocol.IsHTTP() {
 					continue
 				}
 				if message.ContentType == "" {

@@ -14,22 +14,26 @@ limitations under the License.
 package http
 
 import (
-	"github.com/valyala/fasthttp"
+	"io"
+	"net/http"
+
+	"github.com/go-chi/chi/v5"
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
 func (a *api) constructMetadataEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{fasthttp.MethodGet},
+			Methods: []string{http.MethodGet},
 			Route:   "metadata",
 			Version: apiVersionV1,
 			Handler: a.onGetMetadata(),
 		},
 		{
-			Methods: []string{fasthttp.MethodPut},
+			Methods: []string{http.MethodPut},
 			Route:   "metadata/{key}",
 			Version: apiVersionV1,
 			Handler: a.onPutMetadata(),
@@ -37,10 +41,10 @@ func (a *api) constructMetadataEndpoints() []Endpoint {
 	}
 }
 
-func (a *api) onGetMetadata() fasthttp.RequestHandler {
-	return UniversalFastHTTPHandler(
+func (a *api) onGetMetadata() http.HandlerFunc {
+	return UniversalHTTPHandler(
 		a.universal.GetMetadata,
-		UniversalFastHTTPHandlerOpts[*emptypb.Empty, *runtimev1pb.GetMetadataResponse]{
+		UniversalHTTPHandlerOpts[*emptypb.Empty, *runtimev1pb.GetMetadataResponse]{
 			OutModifier: func(out *runtimev1pb.GetMetadataResponse) (any, error) {
 				// In the protos, the property subscriptions[*].rules is serialized as subscriptions[*].rules.rules
 				// To maintain backwards-compatibility, we need to copy into a custom struct and marshal that instead
@@ -102,14 +106,20 @@ func (a *api) onGetMetadata() fasthttp.RequestHandler {
 	)
 }
 
-func (a *api) onPutMetadata() fasthttp.RequestHandler {
-	return UniversalFastHTTPHandler(
+func (a *api) onPutMetadata() http.HandlerFunc {
+	return UniversalHTTPHandler(
 		a.universal.SetMetadata,
-		UniversalFastHTTPHandlerOpts[*runtimev1pb.SetMetadataRequest, *emptypb.Empty]{
+		UniversalHTTPHandlerOpts[*runtimev1pb.SetMetadataRequest, *emptypb.Empty]{
 			SkipInputBody: true,
-			InModifier: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.SetMetadataRequest) (*runtimev1pb.SetMetadataRequest, error) {
-				in.Key = reqCtx.UserValue("key").(string)
-				in.Value = string(reqCtx.Request.Body())
+			InModifier: func(r *http.Request, in *runtimev1pb.SetMetadataRequest) (*runtimev1pb.SetMetadataRequest, error) {
+				in.Key = chi.URLParam(r, "key")
+
+				body, err := io.ReadAll(r.Body)
+				if err != nil {
+					return nil, messages.ErrBodyRead.WithFormat(err)
+				}
+				in.Value = string(body)
+
 				return in, nil
 			},
 			OutModifier: func(out *emptypb.Empty) (any, error) {

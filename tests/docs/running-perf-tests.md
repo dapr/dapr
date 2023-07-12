@@ -144,3 +144,119 @@ make test-perf-all
 To keep the build infrastructure simple, Dapr uses dapr-test GitHub Actions Workflow to run e2e tests using one of AKS clusters. A separate workflow also runs E2E in KinD clusters.
 
 Once a contributor creates a pull request, E2E tests on KinD clusters are automatically executed for faster feedback. In order to run the E2E tests on AKS, ask a maintainer or approver to add /ok-to-perf comment to the Pull Request.
+
+
+
+
+## Optional: Visualize Performance Test Metrics
+
+```bash
+export DAPR_PERF_METRICS_PROMETHEUS_URL="http://localhost:9091"
+```
+
+Install the following in your Kubernetes cluster:
+
+ - Prometheus 
+ - Pushgateway
+ - Grafana
+
+
+### Create a new namespace
+
+Create a new namesapce:
+
+  ```bash
+  DAPR_PERF_METRICS_NAMESPACE=dapr-perf-metrics
+  kubectl create namespace $DAPR_PERF_METRICS_NAMESPACE
+  ```
+
+### Setup for Prometheus Server
+
+```bash
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts 
+helm repo update
+helm install --namespace $DAPR_PERF_METRICS_NAMESPACE prometheus prometheus-community/prometheus
+```
+
+### Setup for Prometheus Pushgateway
+
+The Prometheus installation above comes with a pushgateway. 
+
+* Forward port 9091 from your local machine to the prometheus-pushgateway pod and access it on `http://localhost:9091` 
+
+  ```bash
+  kubectl port-forward --namespace $DAPR_PERF_METRICS_NAMESPACE deployment/prometheus-prometheus-pushgateway 9091
+  ```
+
+### Setup for Grafana Server
+
+* Create a `grafana.yaml` file with the following configurations:
+
+  ```yaml
+  apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: grafana
+    namespace: dapr-perf-metrics
+  spec:
+    replicas: 1
+    selector:
+      matchLabels:
+        app: grafana
+    template:
+      metadata:
+        labels:grafana
+          app: grafana
+      spec:
+        containers:
+          - name: grafana
+            image: grafana/grafana:latest
+            ports:
+              - containerPort: 3000
+  ---
+  apiVersion: v1
+  kind: Service
+  metadata:
+    name: grafana
+    namespace: dapr-perf-metrics
+  spec:
+    type: LoadBalancer
+    ports:
+      - port: 80
+        targetPort: 3000
+        protocol: TCP
+    selector:
+      app: grafana
+  ```
+
+* Apply the configurations
+  
+  ```bash
+  kubectl apply -f grafana.yaml
+  ```
+
+* Forward port 3000 from your local machine to the pod where Grafana is running.
+  
+  ```bash
+  kubectl port-forward --namespace $DAPR_PERF_METRICS_NAMESPACE deployment/grafana 3000
+  ```
+  
+  The Grafana server can now be accessed on localhost:3000
+  
+* Login to Grafana with the default username and password 'admin' for both.
+
+* Now go to data sources and connect Prometheus as a data source.
+
+* The HTTP URL will be the ClusterIP of the prometheus-server pod running on Kubernetes which can be obtained by the command:
+  
+  ```bash
+  kubectl get svc --namespace $DAPR_PERF_METRICS_NAMESPACE
+  ```
+
+* [Grafana Dashboard for Perf Test](../grafana/grafana-perf-test-dashboard.json)
+  
+  On running the perf-tests now, the metrics are collected from pushgateway by Prometheus and is made available for visualization as a dashboard by importing the above template in Grafana.
+
+### Sample dashboard view
+<img width="1267" alt="grafana_dashboard" src="./img/grafana_dashboard.png">
+

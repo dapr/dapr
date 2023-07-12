@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,24 +11,23 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-//nolint:forbidigo
 package http
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
-	"runtime"
 	"testing"
 	"time"
 
-	"github.com/fasthttp/router"
+	"github.com/go-chi/chi/v5"
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/valyala/fasthttp"
 
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/cors"
@@ -52,14 +51,12 @@ func TestCorsHandler(t *testing.T) {
 		srv := newServer()
 		srv.config.AllowedOrigins = cors.DefaultAllowedOrigins
 
-		h := srv.useCors(hf)
+		h := chi.NewRouter()
+		srv.useCors(h)
+		h.Get("/", hf)
 		w := httptest.NewRecorder()
-		r := &http.Request{
-			Method: http.MethodOptions,
-			Header: http.Header{
-				"Origin": []string{"*"},
-			},
-		}
+		r := httptest.NewRequest(http.MethodOptions, "/", nil)
+		r.Header.Set("Origin", "*")
 		h.ServeHTTP(w, r)
 
 		assert.Empty(t, w.Header().Get("Access-Control-Allow-Origin"))
@@ -69,14 +66,12 @@ func TestCorsHandler(t *testing.T) {
 		srv := newServer()
 		srv.config.AllowedOrigins = "http://test.com"
 
-		h := srv.useCors(hf)
+		h := chi.NewRouter()
+		srv.useCors(h)
+		h.Get("/", hf)
 		w := httptest.NewRecorder()
-		r := &http.Request{
-			Method: http.MethodOptions,
-			Header: http.Header{
-				"Origin": []string{"http://test.com"},
-			},
-		}
+		r := httptest.NewRequest(http.MethodOptions, "/", nil)
+		r.Header.Set("Origin", "http://test.com")
 		h.ServeHTTP(w, r)
 
 		assert.NotEmpty(t, w.Header().Get("Access-Control-Allow-Origin"))
@@ -84,88 +79,108 @@ func TestCorsHandler(t *testing.T) {
 }
 
 func TestUnescapeRequestParametersHandler(t *testing.T) {
-	mh := func(reqCtx *fasthttp.RequestCtx) {
-		pc, _, _, ok := runtime.Caller(1)
-		if !ok {
-			reqCtx.Response.SetBody([]byte("error"))
-		} else {
-			handlerFunctionName := runtime.FuncForPC(pc).Name()
-			fmt.Println(handlerFunctionName)
-			reqCtx.Response.SetBody([]byte(handlerFunctionName))
+	mh := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var param string
+		chiCtx := chi.RouteContext(r.Context())
+		if chiCtx != nil {
+			param = chiCtx.URLParam("testparam")
 		}
+		w.Write([]byte(param))
+	})
+
+	// Create a context that has a URL parameter, which will allow us to determine if the UnescapeRequestParameters middleware was invoked
+	newCtx := func() context.Context {
+		chiCtx := chi.NewRouteContext()
+		chiCtx.URLParams.Add("testparam", "foo%20bar")
+		return context.WithValue(context.Background(), chi.RouteCtxKey, chiCtx)
 	}
+
 	t.Run("unescapeRequestParametersHandler is added as middleware if the endpoint includes Parameters in its path", func(t *testing.T) {
 		endpoints := []Endpoint{
 			{
-				Methods: []string{fasthttp.MethodGet},
+				Methods: []string{http.MethodGet},
 				Route:   "state/{storeName}/{key}",
 				Version: apiVersionV1,
 				Handler: mh,
 			},
 			{
-				Methods: []string{fasthttp.MethodGet},
+				Methods: []string{http.MethodGet},
 				Route:   "secrets/{secretStoreName}/{key}",
 				Version: apiVersionV1,
 				Handler: mh,
 			},
 			{
-				Methods: []string{fasthttp.MethodPost, fasthttp.MethodPut},
+				Methods: []string{http.MethodPost, http.MethodPut},
 				Route:   "publish/{pubsubname}/{topic:*}",
 				Version: apiVersionV1,
 				Handler: mh,
 			},
 			{
-				Methods: []string{fasthttp.MethodGet, fasthttp.MethodPost, fasthttp.MethodDelete, fasthttp.MethodPut},
+				Methods: []string{http.MethodGet, http.MethodPost, http.MethodDelete, http.MethodPut},
 				Route:   "actors/{actorType}/{actorId}/method/{method}",
 				Version: apiVersionV1,
 				Handler: mh,
 			},
 		}
+
 		srv := newServer()
-		router := srv.getRouter(endpoints)
-		r := &fasthttp.RequestCtx{
-			Request: fasthttp.Request{},
-		}
+		router := chi.NewRouter()
+		srv.setupRoutes(router, endpoints)
+
 		for _, e := range endpoints {
 			path := fmt.Sprintf("/%s/%s", e.Version, e.Route)
 			for _, m := range e.Methods {
-				handler, _ := router.Lookup(m, path, r)
-				handler(r)
-				handlerFunctionName := string(r.Response.Body())
-				assert.Contains(t, handlerFunctionName, "unescapeRequestParametersHandler")
+				req := httptest.NewRequest(m, path, nil)
+				req = req.WithContext(newCtx())
+				rw := httptest.NewRecorder()
+				router.ServeHTTP(rw, req)
+
+				res := rw.Result()
+				defer res.Body.Close()
+				bodyData, err := io.ReadAll(res.Body)
+				require.NoError(t, err)
+				assert.Equal(t, "foo bar", string(bodyData))
 			}
 		}
 	})
+
 	t.Run("unescapeRequestParameterHandler is not added as middleware if the endpoint does not include Parameters in its path", func(t *testing.T) {
 		endpoints := []Endpoint{
 			{
-				Methods: []string{fasthttp.MethodGet},
+				Methods: []string{http.MethodGet},
 				Route:   "metadata",
 				Version: apiVersionV1,
 				Handler: mh,
 			},
 			{
-				Methods: []string{fasthttp.MethodGet},
+				Methods: []string{http.MethodGet},
 				Route:   "healthz",
 				Version: apiVersionV1,
 				Handler: mh,
 			},
 		}
+
 		srv := newServer()
-		router := srv.getRouter(endpoints)
-		r := &fasthttp.RequestCtx{
-			Request: fasthttp.Request{},
-		}
+		router := chi.NewRouter()
+		srv.setupRoutes(router, endpoints)
+
 		for _, e := range endpoints {
 			path := fmt.Sprintf("/%s/%s", e.Version, e.Route)
 			for _, m := range e.Methods {
-				handler, _ := router.Lookup(m, path, r)
-				handler(r)
-				handlerFunctionName := string(r.Response.Body())
-				assert.Contains(t, handlerFunctionName, "TestUnescapeRequestParametersHandler")
+				req := httptest.NewRequest(m, path, nil)
+				req = req.WithContext(newCtx())
+				rw := httptest.NewRecorder()
+				router.ServeHTTP(rw, req)
+
+				res := rw.Result()
+				defer res.Body.Close()
+				bodyData, err := io.ReadAll(res.Body)
+				require.NoError(t, err)
+				assert.Equal(t, "foo%20bar", string(bodyData))
 			}
 		}
 	})
+
 	t.Run("Unescape valid Parameters", func(t *testing.T) {
 		parameters := []map[string]string{
 			{
@@ -195,70 +210,41 @@ func TestUnescapeRequestParametersHandler(t *testing.T) {
 			},
 		}
 		srv := newServer()
-		h := srv.unescapeRequestParametersHandler(mh)
+
 		for _, parameter := range parameters {
-			r := &fasthttp.RequestCtx{
-				Request: fasthttp.Request{},
-			}
-			r.SetUserValue(parameter["parameterName"], parameter["parameterValue"])
-			h(r)
-			newParameterValue := r.UserValue(parameter["parameterName"])
-			assert.Equal(t, parameter["expectedParameterValue"], newParameterValue)
+			chiCtx := chi.NewRouteContext()
+			chiCtx.URLParams.Add(parameter["parameterName"], parameter["parameterValue"])
+			err := srv.unespaceRequestParametersInContext(chiCtx, false)
+			require.NoError(t, err)
+			assert.Equal(t, parameter["expectedParameterValue"], chiCtx.URLParam(parameter["parameterName"]))
 		}
 	})
+
 	t.Run("Unescape invalid Parameters", func(t *testing.T) {
 		parameters := []map[string]string{
 			{
-				"parameterName":         "stateStore",
-				"parameterValue":        "unknown%2state%20store",
-				"expectedUnescapeError": "\"%2s\"",
+				"parameterName":  "stateStore",
+				"parameterValue": "unknown%2state%20store",
 			},
 			{
-				"parameterName":         "stateStore",
-				"parameterValue":        "stateStore%2prod",
-				"expectedUnescapeError": "\"%2p\"",
+				"parameterName":  "stateStore",
+				"parameterValue": "stateStore%2prod",
 			},
 			{
-				"parameterName":         "secretStore",
-				"parameterValue":        "unknown%20secret%2store",
-				"expectedUnescapeError": "\"%2s\"",
+				"parameterName":  "secretStore",
+				"parameterValue": "unknown%20secret%2store",
 			},
 		}
+
 		srv := newServer()
-		h := srv.unescapeRequestParametersHandler(mh)
+
 		for _, parameter := range parameters {
-			r := &fasthttp.RequestCtx{
-				Request: fasthttp.Request{},
-			}
-			r.SetUserValue(parameter["parameterName"], parameter["parameterValue"])
-			h(r)
-			expectedErrorMessage := fmt.Sprintf("Failed to unescape request parameter %s with value %s. Error: invalid URL escape %s", parameter["parameterName"], parameter["parameterValue"], parameter["expectedUnescapeError"])
-			responseStatusCode := r.Response.StatusCode()
-			errorMessage := string(r.Response.Body())
-			assert.Equal(t, errorMessage, expectedErrorMessage)
-			assert.Equal(t, responseStatusCode, fasthttp.StatusBadRequest)
+			chiCtx := chi.NewRouteContext()
+			chiCtx.URLParams.Add(parameter["parameterName"], parameter["parameterValue"])
+			err := srv.unespaceRequestParametersInContext(chiCtx, false)
+			require.Error(t, err)
+			assert.ErrorContains(t, err, "failed to unescape request parameter")
 		}
-	})
-}
-
-func TestAliasRoute(t *testing.T) {
-	t.Run("When direct messaging has alias endpoint", func(t *testing.T) {
-		s := &server{}
-		a := &api{}
-		eps := a.constructDirectMessagingEndpoints()
-		routes := s.getRouter(eps).List()
-		assert.Equal(t, 1, len(eps))
-		assert.Equal(t, 2, len(routes[router.MethodWild]))
-	})
-
-	t.Run("When direct messaging doesn't have alias defined", func(t *testing.T) {
-		s := &server{}
-		a := &api{}
-		eps := a.constructDirectMessagingEndpoints()
-		assert.Equal(t, 1, len(eps))
-		eps[0].Alias = ""
-		routes := s.getRouter(eps).List()
-		assert.Equal(t, 1, len(routes[router.MethodWild]))
 	})
 }
 
@@ -275,44 +261,47 @@ func TestAPILogging(t *testing.T) {
 
 	body := []byte("👋")
 
-	mh := func(reqCtx *fasthttp.RequestCtx) {
-		reqCtx.Response.SetBody(body)
-	}
 	endpoints := []Endpoint{
 		{
-			Methods: []string{fasthttp.MethodGet, fasthttp.MethodPost},
+			Methods: []string{http.MethodGet, http.MethodPost},
 			Route:   "state/{storeName}/{key}",
 			Version: apiVersionV1,
-			Handler: mh,
+			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Write(body)
+			}),
 		},
 	}
 	srv := newServer()
 	srv.config.EnableAPILogging = true
-	router := srv.getRouter(endpoints)
 
-	r := &fasthttp.RequestCtx{
-		Request: fasthttp.Request{},
-	}
+	router := chi.NewRouter()
+	srv.setupRoutes(router, endpoints)
+
 	dec := json.NewDecoder(logDest)
 
 	runTest := func(userAgent string, obfuscateURL bool) func(t *testing.T) {
 		return func(t *testing.T) {
 			srv.config.APILoggingObfuscateURLs = obfuscateURL
-			r.Request.Header.Set("User-Agent", userAgent)
 
 			for _, e := range endpoints {
 				routePath := fmt.Sprintf("/%s/%s", e.Version, e.Route)
 				path := fmt.Sprintf("/%s/%s", e.Version, "state/mystate/mykey")
 				for _, m := range e.Methods {
-					handler, _ := router.Lookup(m, path, r)
-					r.Request.Header.SetMethod(m)
-					r.Request.Header.SetRequestURI(path)
-					handler(r)
+					req := httptest.NewRequest(m, path, nil)
+					req.Header.Set("user-agent", userAgent)
+					rw := httptest.NewRecorder()
 
-					assert.Equal(t, body, r.Response.Body())
+					router.ServeHTTP(rw, req)
+
+					resp := rw.Result()
+					defer resp.Body.Close()
+
+					respBody, err := io.ReadAll(resp.Body)
+					require.NoError(t, err)
+					assert.Equal(t, body, respBody)
 
 					logData := map[string]string{}
-					err := dec.Decode(&logData)
+					err = dec.Decode(&logData)
 					require.NoError(t, err)
 
 					assert.Equal(t, "test-api-logging", logData["scope"])
@@ -354,43 +343,49 @@ func TestAPILoggingOmitHealthChecks(t *testing.T) {
 
 	body := []byte("👋")
 
-	mh := func(reqCtx *fasthttp.RequestCtx) {
-		reqCtx.Response.SetBody(body)
-	}
 	endpoints := []Endpoint{
 		{
-			Methods:       []string{fasthttp.MethodGet},
-			Route:         "log",
-			Version:       apiVersionV1,
-			Handler:       mh,
+			Methods: []string{http.MethodGet},
+			Route:   "log",
+			Version: apiVersionV1,
+			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Write(body)
+			}),
 			IsHealthCheck: false,
 		},
 		{
-			Methods:       []string{fasthttp.MethodGet},
-			Route:         "nolog",
-			Version:       apiVersionV1,
-			Handler:       mh,
+			Methods: []string{http.MethodGet},
+			Route:   "nolog",
+			Version: apiVersionV1,
+			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Write(body)
+			}),
 			IsHealthCheck: true,
 		},
 	}
 	srv := newServer()
 	srv.config.EnableAPILogging = true
 	srv.config.APILogHealthChecks = false
-	router := srv.getRouter(endpoints)
 
-	r := &fasthttp.RequestCtx{
-		Request: fasthttp.Request{},
-	}
+	router := chi.NewRouter()
+	srv.setupRoutes(router, endpoints)
+
 	dec := json.NewDecoder(logDest)
 
 	for _, e := range endpoints {
 		path := fmt.Sprintf("/%s/%s", e.Version, e.Route)
-		handler, _ := router.Lookup(fasthttp.MethodGet, path, r)
-		r.Request.Header.SetMethod(fasthttp.MethodGet)
-		r.Request.Header.SetRequestURI(path)
-		handler(r)
 
-		assert.Equal(t, body, r.Response.Body())
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rw := httptest.NewRecorder()
+
+		router.ServeHTTP(rw, req)
+
+		resp := rw.Result()
+		defer resp.Body.Close()
+
+		respBody, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		assert.Equal(t, body, respBody)
 
 		if e.Route == "log" {
 			logData := map[string]string{}

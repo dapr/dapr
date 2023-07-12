@@ -211,8 +211,8 @@ func (h *httpMetrics) Init(appID string) error {
 }
 
 // HTTPMiddleware is the middleware to track HTTP server-side requests.
-func (h *httpMetrics) HTTPMiddleware(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func (h *httpMetrics) HTTPMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var reqContentSize int64
 		if cl := r.Header.Get("content-length"); cl != "" {
 			reqContentSize, _ = strconv.ParseInt(cl, 10, 64)
@@ -230,13 +230,13 @@ func (h *httpMetrics) HTTPMiddleware(next http.HandlerFunc) http.HandlerFunc {
 
 		start := time.Now()
 
-		next(w, r)
+		next.ServeHTTP(w, r)
 
 		elapsed := float64(time.Since(start) / time.Millisecond)
 		status := strconv.Itoa(w.(responsewriter.ResponseWriter).Status())
 		respSize := int64(w.(responsewriter.ResponseWriter).Size())
 		h.ServerRequestCompleted(r.Context(), r.Method, path, status, respSize, elapsed)
-	}
+	})
 }
 
 // convertPathToMetricLabel removes the variant parameters in URL path for low cardinality label space

@@ -71,7 +71,7 @@ func (c *internalActorChannel) Contains(actorType string) bool {
 }
 
 // GetAppConfig implements channel.AppChannel
-func (c *internalActorChannel) GetAppConfig() (*config.ApplicationConfig, error) {
+func (c *internalActorChannel) GetAppConfig(appID string) (*config.ApplicationConfig, error) {
 	actorTypes := make([]string, 0, len(c.actors))
 	for actorType := range c.actors {
 		actorTypes = append(actorTypes, actorType)

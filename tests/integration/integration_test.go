@@ -21,5 +21,6 @@ import (
 )
 
 func Test_Integration(t *testing.T) {
+	t.Parallel()
 	RunIntegrationTests(t)
 }
