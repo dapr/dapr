@@ -114,14 +114,15 @@ func (wf *workflowActor) InvokeReminder(ctx context.Context, actorID string, rem
 	// Workflow executions should never take longer than a few seconds at the most
 	timeoutCtx, cancelTimeout := context.WithTimeout(ctx, wf.defaultTimeout)
 	defer cancelTimeout()
-	if err := wf.runWorkflow(timeoutCtx, actorID, reminderName, data); err != nil {
+	err := wf.runWorkflow(timeoutCtx, actorID, reminderName, data)
+	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			wfLogger.Warnf("%s: execution timed-out and will be retried later", actorID)
+			wfLogger.Warnf("%s: execution timed-out and will be retried later: %v", actorID, err)
 
 			// Returning nil signals that we want the execution to be retried in the next period interval
 			return nil
 		} else if errors.Is(err, context.Canceled) {
-			wfLogger.Warnf("%s: execution was canceled (process shutdown?) and will be retried later", actorID)
+			wfLogger.Warnf("%s: execution was canceled (process shutdown?) and will be retried later: %v", actorID, err)
 
 			// Returning nil signals that we want the execution to be retried in the next period interval
 			return nil
@@ -285,7 +286,7 @@ func (wf *workflowActor) addWorkflowEvent(ctx context.Context, actorID string, h
 func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, reminderName string, reminderData []byte) error {
 	state, err := wf.loadInternalState(ctx, actorID)
 	if err != nil {
-		return err
+		return fmt.Errorf("error loading internal state: %w", err)
 	}
 	if state == nil {
 		// The assumption is that someone manually deleted the workflow state. This is non-recoverable.
@@ -359,8 +360,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 	wi.Properties[CallbackChannelProperty] = callback
 	if err := wf.scheduler.ScheduleWorkflow(ctx, wi); err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			return newRecoverableError(errors.New(
-				"timed-out trying to schedule a workflow execution - this can happen if there are too many in-flight workflows or if the workflow engine isn't running"))
+			return newRecoverableError(fmt.Errorf("timed-out trying to schedule a workflow execution - this can happen if there are too many in-flight workflows or if the workflow engine isn't running: %w", err))
 		}
 		return newRecoverableError(fmt.Errorf("failed to schedule a workflow execution: %w", err))
 	}
@@ -443,7 +443,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 					wfLogger.Warnf("%s: activity invocation %s::%d was flagged as a duplicate and will be skipped", actorID, ts.Name, e.EventId)
 					continue
 				}
-				return newRecoverableError(fmt.Errorf("failed to invoke activity actor '%s' to execute '%s': %v", targetActorID, ts.Name, err))
+				return newRecoverableError(fmt.Errorf("failed to invoke activity actor '%s' to execute '%s': %w", targetActorID, ts.Name, err))
 			}
 			resp.Close()
 		} else {
@@ -469,8 +469,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 			resp, err := wf.actors.Call(ctx, req)
 			if err != nil {
 				// workflow-related actor methods are never expected to return errors
-				return newRecoverableError(
-					fmt.Errorf("method %s on actor '%s' returned an error: %w", method, msg.TargetInstanceID, err))
+				return newRecoverableError(fmt.Errorf("method %s on actor '%s' returned an error: %w", method, msg.TargetInstanceID, err))
 			}
 			defer resp.Close()
 		}
