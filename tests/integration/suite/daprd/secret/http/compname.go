@@ -68,12 +68,13 @@ func (c *componentName) Setup(t *testing.T) []framework.Option {
 		var secretFile string
 		fz.Fuzz(&c.secretStoreNames[i])
 		for len(secretFile) == 0 || strings.Contains(secretFile, "/") ||
-			strings.HasPrefix(secretFile, "..") || takenNames[secretFile] {
+			strings.HasPrefix(secretFile, "..") || secretFile == "." ||
+			takenNames[secretFile] {
+			secretFile = ""
 			fuzz.New().Fuzz(&secretFile)
 		}
 		takenNames[secretFile] = true
 		secretFile = filepath.Join(t.TempDir(), secretFile)
-
 		require.NoError(t, os.WriteFile(secretFile, []byte("{}"), 0o600))
 
 		files[i] = fmt.Sprintf(`

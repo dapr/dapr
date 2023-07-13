@@ -1,0 +1,11 @@
+{
+  "Version": 1,
+  "Hash": "T5AmOQ3cemDdZZwnQlSwOkWhMAbPtC0TOhWyWF0pqSY=",
+  "Source": "WorkflowActor",
+  "BasePath": "_content/WorkflowActor",
+  "Mode": "Default",
+  "ManifestType": "Build",
+  "ReferencedProjectsConfiguration": [],
+  "DiscoveryPatterns": [],
+  "Assets": []
+}

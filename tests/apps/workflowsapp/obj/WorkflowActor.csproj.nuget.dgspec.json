@@ -1,0 +1,86 @@
+{
+  "format": 1,
+  "restore": {
+    "/home/lettierir/github.com/dapr/dapr/tests/apps/workflowsapp/WorkflowActor.csproj": {}
+  },
+  "projects": {
+    "/home/lettierir/github.com/dapr/dapr/tests/apps/workflowsapp/WorkflowActor.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "/home/lettierir/github.com/dapr/dapr/tests/apps/workflowsapp/WorkflowActor.csproj",
+        "projectName": "WorkflowActor",
+        "projectPath": "/home/lettierir/github.com/dapr/dapr/tests/apps/workflowsapp/WorkflowActor.csproj",
+        "packagesPath": "/home/lettierir/.nuget/packages/",
+        "outputPath": "/home/lettierir/github.com/dapr/dapr/tests/apps/workflowsapp/obj/",
+        "projectStyle": "PackageReference",
+        "configFilePaths": [
+          "/home/lettierir/.nuget/NuGet/NuGet.Config"
+        ],
+        "originalTargetFrameworks": [
+          "net6.0"
+        ],
+        "sources": {
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net6.0": {
+            "targetAlias": "net6.0",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        }
+      },
+      "frameworks": {
+        "net6.0": {
+          "targetAlias": "net6.0",
+          "dependencies": {
+            "Dapr.Actors": {
+              "target": "Package",
+              "version": "[1.11.0, )"
+            },
+            "Dapr.Actors.AspNetCore": {
+              "target": "Package",
+              "version": "[1.11.0, )"
+            },
+            "Dapr.AspNetCore": {
+              "target": "Package",
+              "version": "[1.11.0, )"
+            },
+            "Dapr.Client": {
+              "target": "Package",
+              "version": "[1.11.0, )"
+            },
+            "Dapr.Workflow": {
+              "target": "Package",
+              "version": "[1.11.0, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.AspNetCore.App": {
+              "privateAssets": "none"
+            },
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "/home/lettierir/dotnet/sdk/7.0.101/RuntimeIdentifierGraph.json"
+        }
+      }
+    }
+  }
+}
