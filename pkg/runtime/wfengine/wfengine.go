@@ -32,9 +32,10 @@ import (
 type WorkflowEngine struct {
 	IsRunning bool
 
-	backend  *actorBackend
-	executor backend.Executor
-	worker   backend.TaskHubWorker
+	backend              *actorBackend
+	executor             backend.Executor
+	worker               backend.TaskHubWorker
+	registerGrpcServerFn func(grpcServer grpc.ServiceRegistrar)
 
 	workflowActor *workflowActor
 	activityActor *activityActor
@@ -102,35 +103,38 @@ func (wfe *WorkflowEngine) InternalActors() map[string]actors.InternalActor {
 	return internalActors
 }
 
-func (wfe *WorkflowEngine) ConfigureGrpc(grpcServer *grpc.Server) {
-	wfe.ConfigureExecutor(func(be backend.Backend) backend.Executor {
-		// Enable lazy auto-starting the worker only when a workflow app connects to fetch work items.
-		autoStartCallback := backend.WithOnGetWorkItemsConnectionCallback(func(ctx context.Context) error {
-			// NOTE: We don't propagate the context here because that would cause the engine to shut
-			//       down when the client disconnects and cancels the passed-in context. Once it starts
-			//       up, we want to keep the engine running until the runtime shuts down.
-			if err := wfe.Start(context.Background()); err != nil {
-				// This can happen if the workflow app connects before the sidecar has finished initializing.
-				// The client app is expected to continuously retry until successful.
-				return fmt.Errorf("failed to auto-start the workflow engine: %w", err)
-			}
-			return nil
-		})
-
-		// Create a channel that can be used to disconnect the remote client during shutdown.
-		wfe.disconnectChan = make(chan any, 1)
-		disconnectHelper := backend.WithStreamShutdownChannel(wfe.disconnectChan)
-
-		return backend.NewGrpcExecutor(grpcServer, wfe.backend, wfLogger, autoStartCallback, disconnectHelper)
-	})
+func (wfe *WorkflowEngine) RegisterGrpcServer(grpcServer *grpc.Server) {
+	wfe.registerGrpcServerFn(grpcServer)
 }
 
-func (wfe *WorkflowEngine) ConfigureExecutor(factory func(be backend.Backend) backend.Executor) {
-	wfe.executor = factory(wfe.backend)
+func (wfe *WorkflowEngine) ConfigureGrpcExecutor() {
+	// Enable lazy auto-starting the worker only when a workflow app connects to fetch work items.
+	autoStartCallback := backend.WithOnGetWorkItemsConnectionCallback(func(ctx context.Context) error {
+		// NOTE: We don't propagate the context here because that would cause the engine to shut
+		//       down when the client disconnects and cancels the passed-in context. Once it starts
+		//       up, we want to keep the engine running until the runtime shuts down.
+		if err := wfe.Start(context.Background()); err != nil {
+			// This can happen if the workflow app connects before the sidecar has finished initializing.
+			// The client app is expected to continuously retry until successful.
+			return fmt.Errorf("failed to auto-start the workflow engine: %w", err)
+		}
+		return nil
+	})
+
+	// Create a channel that can be used to disconnect the remote client during shutdown.
+	wfe.disconnectChan = make(chan any, 1)
+	disconnectHelper := backend.WithStreamShutdownChannel(wfe.disconnectChan)
+
+	wfe.executor, wfe.registerGrpcServerFn = backend.NewGrpcExecutor(wfe.backend, wfLogger, autoStartCallback, disconnectHelper)
+}
+
+// SetExecutor sets the executor property. This is primarily used for testing.
+func (wfe *WorkflowEngine) SetExecutor(fn func(be backend.Backend) backend.Executor) {
+	wfe.executor = fn(wfe.backend)
 }
 
 func (wfe *WorkflowEngine) SetActorRuntime(actorRuntime actors.Actors) error {
-	wfLogger.Info("configuring workflow engine with actors backend")
+	wfLogger.Info("Configuring workflow engine with actors backend")
 	wfe.actorRuntime = actorRuntime
 	wfe.backend.SetActorRuntime(actorRuntime)
 
@@ -176,6 +180,7 @@ func (wfe *WorkflowEngine) Start(ctx context.Context) (err error) {
 	if wfe.IsRunning {
 		return nil
 	}
+	fmt.Println("CALLED WorkflowEngine.Start")
 
 	if wfe.actorRuntime == nil {
 		return errors.New("Actor runtime is not configured")

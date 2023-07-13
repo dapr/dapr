@@ -122,7 +122,7 @@ func (c *workflowEngineComponent) Terminate(ctx context.Context, req *workflows.
 		return errors.New("a workflow instance ID is required")
 	}
 
-	if err := c.client.TerminateOrchestration(ctx, api.InstanceID(req.InstanceID), ""); err != nil {
+	if err := c.client.TerminateOrchestration(ctx, api.InstanceID(req.InstanceID)); err != nil {
 		return fmt.Errorf("failed to terminate workflow %s: %w", req.InstanceID, err)
 	}
 

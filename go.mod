@@ -440,6 +440,9 @@ replace (
 // check for retracted versions: go list -mod=mod -f '{{if .Retracted}}{{.}}{{end}}' -u -m all
 replace github.com/microcosm-cc/bluemonday => github.com/microcosm-cc/bluemonday v1.0.24
 
+// TEMP UNTIL microsoft/durabletask-go#26 IS MERGED
+replace github.com/microsoft/durabletask-go => github.com/italypaleale/durabletask-go v0.0.0-20230713010226-588ca466107b
+
 // Uncomment for local development for testing with changes in the components-contrib repository.
 // Don't commit with this uncommented!
 //

@@ -258,6 +258,9 @@ type pubsubSubscribedMessage struct {
 func newDaprRuntime(runtimeConfig *internalConfig, globalConfig *config.Configuration, accessControlList *config.AccessControlList, resiliencyProvider resiliency.Provider) *DaprRuntime {
 	ctx, cancel := context.WithCancel(context.Background())
 
+	wfe := wfengine.NewWorkflowEngine(wfengine.NewWorkflowConfig(runtimeConfig.id))
+	wfe.ConfigureGrpcExecutor()
+
 	rt := &DaprRuntime{
 		ctx:                        ctx,
 		cancel:                     cancel,
@@ -273,7 +276,7 @@ func newDaprRuntime(runtimeConfig *internalConfig, globalConfig *config.Configur
 		shutdownC:                  make(chan error, 1),
 		tracerProvider:             nil,
 		resiliency:                 resiliencyProvider,
-		workflowEngine:             wfengine.NewWorkflowEngine(wfengine.NewWorkflowConfig(runtimeConfig.id)),
+		workflowEngine:             wfe,
 		appHealthReady:             nil,
 		appHealthLock:              &sync.Mutex{},
 		bulkSubLock:                &sync.Mutex{},
@@ -2857,7 +2860,7 @@ func (a *DaprRuntime) stopActor() {
 }
 
 func (a *DaprRuntime) stopWorkflow() {
-	if a.workflowEngine != nil && a.workflowEngine.IsRunning {
+	if a.workflowEngine != nil {
 		log.Info("Shutting down workflow engine")
 		a.workflowEngine.Stop(context.TODO())
 	}
