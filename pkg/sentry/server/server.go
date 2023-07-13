@@ -111,7 +111,7 @@ func (s *server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 	if req.TokenValidator != sentryv1pb.SignCertificateRequest_UNKNOWN && req.TokenValidator.String() != "" {
 		validator = req.TokenValidator
 	}
-	if req.TokenValidator == sentryv1pb.SignCertificateRequest_UNKNOWN {
+	if validator == sentryv1pb.SignCertificateRequest_UNKNOWN {
 		return nil, status.Error(codes.InvalidArgument, "a validator name must be specified in this environment")
 	}
 	if _, ok := s.vals[validator]; !ok {

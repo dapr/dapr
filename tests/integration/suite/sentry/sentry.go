@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/spiffe/go-spiffe/v2/bundle/x509bundle"
 	"github.com/spiffe/go-spiffe/v2/spiffegrpc/grpccredentials"
@@ -24,6 +25,8 @@ import (
 	"github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	sentrypbv1 "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -37,36 +40,60 @@ func init() {
 
 // insecureValidator tests Sentry with the insecure validator.
 type insecureValidator struct {
-	proc *procsentry.Sentry
+	// Instance of Sentry that is configured with the insecure validator
+	sentryWithInsecure *procsentry.Sentry
 }
 
 func (m *insecureValidator) Setup(t *testing.T) []framework.Option {
-	m.proc = procsentry.New(t)
+	m.sentryWithInsecure = procsentry.New(t)
 	return []framework.Option{
-		framework.WithProcesses(m.proc),
+		framework.WithProcesses(m.sentryWithInsecure),
 	}
 }
 
-func (m *insecureValidator) Run(t *testing.T, ctx context.Context) {
-	bundle := m.proc.CABundle()
+func (m *insecureValidator) Run(t *testing.T, parentCtx context.Context) {
+	t.Run("insecure validator", func(t *testing.T) {
+		var client sentrypbv1.CAClient
 
-	sentrySpiffeID, err := spiffeid.FromString("spiffe://localhost/ns/default/dapr-sentry")
-	require.NoError(t, err, "failed to create Sentry SPIFFE ID")
-	x509bundle, err := x509bundle.Parse(sentrySpiffeID.TrustDomain(), bundle.TrustAnchors)
-	require.NoError(t, err, "failed to create x509 bundle")
-	transportCredentials := grpccredentials.TLSClientCredentials(x509bundle, tlsconfig.AuthorizeID(sentrySpiffeID))
+		t.Run("connect to Sentry", func(t *testing.T) {
+			// We need to set up the TLS configuration to validate the TLS certificate provided by Sentry
+			bundle := m.sentryWithInsecure.CABundle()
+			sentrySpiffeID, err := spiffeid.FromString("spiffe://localhost/ns/default/dapr-sentry")
+			require.NoError(t, err, "failed to create Sentry SPIFFE ID")
+			x509bundle, err := x509bundle.Parse(sentrySpiffeID.TrustDomain(), bundle.TrustAnchors)
+			require.NoError(t, err, "failed to create x509 bundle")
+			transportCredentials := grpccredentials.TLSClientCredentials(x509bundle, tlsconfig.AuthorizeID(sentrySpiffeID))
 
-	t.Logf("Connecting to Sentry on 127.0.0.1:%d", m.proc.Port())
-	conn, err := grpc.DialContext(
-		ctx,
-		fmt.Sprintf("127.0.0.1:%d", m.proc.Port()),
-		grpc.WithTransportCredentials(transportCredentials),
-		grpc.WithReturnConnectionError(),
-		grpc.WithBlock(),
-	)
-	require.NoError(t, err)
+			// Actually establish the connection using gRPC
+			t.Logf("Connecting to Sentry on 127.0.0.1:%d", m.sentryWithInsecure.Port())
+			ctx, cancel := context.WithTimeout(parentCtx, 10*time.Second)
+			defer cancel()
+			conn, err := grpc.DialContext(
+				ctx,
+				fmt.Sprintf("127.0.0.1:%d", m.sentryWithInsecure.Port()),
+				grpc.WithTransportCredentials(transportCredentials),
+				grpc.WithReturnConnectionError(),
+				grpc.WithBlock(),
+			)
+			require.NoError(t, err)
 
-	client := sentrypbv1.NewCAClient(conn)
+			client = sentrypbv1.NewCAClient(conn)
+		})
 
-	_ = client
+		t.Run("fails when not passing an invalid validator", func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(parentCtx, 10*time.Second)
+			defer cancel()
+			_, err := client.SignCertificate(ctx, &sentrypbv1.SignCertificateRequest{
+				Id:             "myapp",
+				Namespace:      "default",
+				TokenValidator: sentrypbv1.SignCertificateRequest_TokenValidator(-1), // -1 is an invalid enum value
+			})
+			require.Error(t, err)
+
+			grpcStatus, ok := status.FromError(err)
+			require.True(t, ok)
+			require.Equal(t, codes.InvalidArgument, grpcStatus.Code())
+			require.Contains(t, grpcStatus.Message(), "not enabled")
+		})
+	})
 }
