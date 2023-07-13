@@ -35,7 +35,6 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
-	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	otlptracegrpc "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	otlptracehttp "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
@@ -67,7 +66,6 @@ import (
 	"github.com/dapr/dapr/pkg/config/protocol"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
-	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/grpc"
 	"github.com/dapr/dapr/pkg/http"
 	"github.com/dapr/dapr/pkg/httpendpoint"
@@ -77,37 +75,27 @@ import (
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/runtime/meta"
+	"github.com/dapr/dapr/pkg/runtime/processor"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
+	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
-	"github.com/dapr/dapr/pkg/scopes"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 
-	wfs "github.com/dapr/components-contrib/workflows"
-	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
-	configurationLoader "github.com/dapr/dapr/pkg/components/configuration"
-	cryptoLoader "github.com/dapr/dapr/pkg/components/crypto"
-	lockLoader "github.com/dapr/dapr/pkg/components/lock"
-	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
-	nrLoader "github.com/dapr/dapr/pkg/components/nameresolution"
 	"github.com/dapr/dapr/pkg/components/pluggable"
-	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
 	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
-	workflowsLoader "github.com/dapr/dapr/pkg/components/workflows"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 
 	"github.com/dapr/components-contrib/bindings"
-	"github.com/dapr/components-contrib/configuration"
 	"github.com/dapr/components-contrib/contenttype"
-	contribCrypto "github.com/dapr/components-contrib/crypto"
-	"github.com/dapr/components-contrib/lock"
 	contribMetadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/middleware"
 	nr "github.com/dapr/components-contrib/nameresolution"
@@ -117,15 +105,11 @@ import (
 )
 
 const (
-	actorStateStore = "actorstatestore"
 
 	// output bindings concurrency.
 	bindingsConcurrencyParallel   = "parallel"
 	bindingsConcurrencySequential = "sequential"
 	pubsubName                    = "pubsubName"
-	bindingDirection              = "direction"
-	inputBinding                  = "input"
-	outputBinding                 = "output"
 
 	// hot reloading is currently unsupported, but
 	// setting this environment variable restores the
@@ -134,20 +118,6 @@ const (
 
 	defaultComponentInitTimeout = time.Second * 5
 )
-
-type ComponentCategory string
-
-var componentCategoriesNeedProcess = []components.Category{
-	components.CategoryBindings,
-	components.CategoryPubSub,
-	components.CategorySecretStore,
-	components.CategoryStateStore,
-	components.CategoryMiddleware,
-	components.CategoryConfiguration,
-	components.CategoryCryptoProvider,
-	components.CategoryLock,
-	components.CategoryWorkflow,
-}
 
 var log = logger.NewLogger("dapr.runtime")
 
@@ -182,8 +152,7 @@ type DaprRuntime struct {
 
 	nameResolver            nr.Resolver
 	hostAddress             string
-	actorStateStoreName     string
-	actorStateStoreLock     *sync.RWMutex
+	actorStateStoreLock     sync.RWMutex
 	authenticator           security.Authenticator
 	namespace               string
 	podName                 string
@@ -205,20 +174,11 @@ type DaprRuntime struct {
 	bulkSubLock             *sync.Mutex
 	appHTTPClient           *nethttp.Client
 	compStore               *compstore.ComponentStore
+	processor               *processor.Processor
+	meta                    *meta.Meta
 
-	stateStoreRegistry         *stateLoader.Registry
-	secretStoresRegistry       *secretstoresLoader.Registry
-	nameResolutionRegistry     *nrLoader.Registry
-	workflowComponentRegistry  *workflowsLoader.Registry
-	bindingsRegistry           *bindingsLoader.Registry
-	pubSubRegistry             *pubsubLoader.Registry
-	httpMiddlewareRegistry     *httpMiddlewareLoader.Registry
-	configurationStoreRegistry *configurationLoader.Registry
-	lockStoreRegistry          *lockLoader.Registry
-	inputBindingsCtx           context.Context
-	inputBindingsCancel        context.CancelFunc
-
-	cryptoProviderRegistry *cryptoLoader.Registry
+	inputBindingsCtx    context.Context
+	inputBindingsCancel context.CancelFunc
 
 	pendingHTTPEndpoints       chan httpEndpointV1alpha1.HTTPEndpoint
 	pendingComponents          chan componentsV1alpha1.Component
@@ -231,14 +191,6 @@ type DaprRuntime struct {
 	tracerProvider *sdktrace.TracerProvider
 
 	workflowEngine *wfengine.WorkflowEngine
-}
-
-type ComponentsCallback func(components ComponentRegistry) error
-
-type ComponentRegistry struct {
-	Actors          actors.Actors
-	DirectMessaging messaging.DirectMessaging
-	CompStore       *compstore.ComponentStore
 }
 
 type componentPreprocessRes struct {
@@ -258,13 +210,19 @@ type pubsubSubscribedMessage struct {
 func newDaprRuntime(runtimeConfig *internalConfig, globalConfig *config.Configuration, accessControlList *config.AccessControlList, resiliencyProvider resiliency.Provider) *DaprRuntime {
 	ctx, cancel := context.WithCancel(context.Background())
 
+	meta := meta.New(meta.Options{
+		ID:        runtimeConfig.id,
+		PodName:   getPodName(),
+		Namespace: getNamespace(),
+		Mode:      runtimeConfig.mode,
+	})
+	compStore := compstore.New()
 	rt := &DaprRuntime{
 		ctx:                        ctx,
 		cancel:                     cancel,
 		runtimeConfig:              runtimeConfig,
 		globalConfig:               globalConfig,
 		accessControlList:          accessControlList,
-		actorStateStoreLock:        &sync.RWMutex{},
 		grpc:                       createGRPCManager(runtimeConfig, globalConfig),
 		topicsLock:                 &sync.RWMutex{},
 		pendingHTTPEndpoints:       make(chan httpEndpointV1alpha1.HTTPEndpoint),
@@ -277,7 +235,15 @@ func newDaprRuntime(runtimeConfig *internalConfig, globalConfig *config.Configur
 		appHealthReady:             nil,
 		appHealthLock:              &sync.Mutex{},
 		bulkSubLock:                &sync.Mutex{},
-		compStore:                  compstore.New(),
+		compStore:                  compStore,
+		meta:                       meta,
+		processor: processor.New(processor.Options{
+			ID:               runtimeConfig.id,
+			PlacementEnabled: len(runtimeConfig.placementAddresses) > 0,
+			Registry:         runtimeConfig.registry,
+			ComponentStore:   compStore,
+			Meta:             meta,
+		}),
 	}
 
 	rt.componentAuthorizers = []ComponentAuthorizer{rt.namespaceComponentAuthorizer}
@@ -294,17 +260,12 @@ func newDaprRuntime(runtimeConfig *internalConfig, globalConfig *config.Configur
 }
 
 // Run performs initialization of the runtime with the runtime and global configurations.
-func (a *DaprRuntime) Run(opts ...Option) error {
+func (a *DaprRuntime) Run(ctx context.Context) error {
 	start := time.Now()
 	log.Infof("%s mode configured", a.runtimeConfig.mode)
 	log.Infof("app id: %s", a.runtimeConfig.id)
 
-	var o runtimeOpts
-	for _, opt := range opts {
-		opt(&o)
-	}
-
-	if err := a.initRuntime(&o); err != nil {
+	if err := a.initRuntime(ctx); err != nil {
 		return err
 	}
 
@@ -321,11 +282,11 @@ func (a *DaprRuntime) Run(opts ...Option) error {
 	return nil
 }
 
-func (a *DaprRuntime) getNamespace() string {
+func getNamespace() string {
 	return os.Getenv("NAMESPACE")
 }
 
-func (a *DaprRuntime) getPodName() string {
+func getPodName() string {
 	return os.Getenv("POD_NAME")
 }
 
@@ -413,14 +374,14 @@ func (a *DaprRuntime) setupTracing(hostAddress string, tpStore tracerProviderSto
 	return nil
 }
 
-func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
-	a.namespace = a.getNamespace()
+func (a *DaprRuntime) initRuntime(ctx context.Context) error {
+	a.namespace = getNamespace()
 
 	err := a.establishSecurity(a.runtimeConfig.sentryServiceAddress)
 	if err != nil {
 		return err
 	}
-	a.podName = a.getPodName()
+	a.podName = getPodName()
 	a.operatorClient, err = a.getOperatorClient()
 	if err != nil {
 		return err
@@ -433,21 +394,10 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		return fmt.Errorf("failed to setup tracing: %w", err)
 	}
 	// Register and initialize name resolution for service discovery.
-	a.nameResolutionRegistry = opts.nameResolutionRegistry
 	err = a.initNameResolution()
 	if err != nil {
 		log.Errorf(err.Error())
 	}
-
-	a.pubSubRegistry = opts.pubsubRegistry
-	a.secretStoresRegistry = opts.secretStoreRegistry
-	a.stateStoreRegistry = opts.stateRegistry
-	a.configurationStoreRegistry = opts.configurationRegistry
-	a.bindingsRegistry = opts.bindingRegistry
-	a.cryptoProviderRegistry = opts.cryptoProviderRegistry
-	a.httpMiddlewareRegistry = opts.httpMiddlewareRegistry
-	a.lockStoreRegistry = opts.lockRegistry
-	a.workflowComponentRegistry = opts.workflowComponentRegistry
 
 	a.initPluggableComponents()
 
@@ -469,7 +419,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	}
 
 	a.appendBuiltinSecretStore()
-	err = a.loadComponents(opts)
+	err = a.loadComponents()
 	if err != nil {
 		log.Warnf("failed to load components: %s", err)
 	}
@@ -481,7 +431,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 		log.Warnf("failed to build HTTP pipeline: %s", err)
 	}
 
-	err = a.loadHTTPEndpoints(opts)
+	err = a.loadHTTPEndpoints()
 	if err != nil {
 		log.Warnf("failed to load HTTP endpoints: %s", err)
 	}
@@ -553,7 +503,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	}
 
 	a.appHealthReady = func() {
-		a.appHealthReadyInit(opts)
+		a.appHealthReadyInit(ctx)
 	}
 	if a.runtimeConfig.appConnectionConfig.HealthCheck != nil && a.appChannel != nil {
 		// We can't just pass "a.appChannel.HealthProbe" because appChannel may be re-created
@@ -578,7 +528,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 }
 
 // appHealthReadyInit completes the initialization phase and is invoked after the app is healthy
-func (a *DaprRuntime) appHealthReadyInit(opts *runtimeOpts) {
+func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) {
 	var err error
 
 	// Load app configuration (for actors) and init actors
@@ -593,12 +543,12 @@ func (a *DaprRuntime) appHealthReadyInit(opts *runtimeOpts) {
 			a.daprGRPCAPI.SetActorRuntime(a.actor)
 
 			// Workflow engine depends on actor runtime being initialized
-			a.initWorkflowEngine()
+			a.initWorkflowEngine(ctx)
 		}
 	}
 
-	if opts.componentsCallback != nil {
-		if err = opts.componentsCallback(ComponentRegistry{
+	if cb := a.runtimeConfig.registry.ComponentsCallback(); cb != nil {
+		if err = cb(registry.ComponentRegistry{
 			Actors:          a.actor,
 			DirectMessaging: a.directMessaging,
 			CompStore:       a.compStore,
@@ -608,16 +558,16 @@ func (a *DaprRuntime) appHealthReadyInit(opts *runtimeOpts) {
 	}
 }
 
-func (a *DaprRuntime) initWorkflowEngine() {
+func (a *DaprRuntime) initWorkflowEngine(ctx context.Context) {
 	wfComponentFactory := wfengine.BuiltinWorkflowFactory(a.workflowEngine)
 
 	if wfInitErr := a.workflowEngine.SetActorRuntime(a.actor); wfInitErr != nil {
 		log.Warnf("Failed to set actor runtime for Dapr workflow engine - workflow engine will not start: %w", wfInitErr)
 	} else {
-		if a.workflowComponentRegistry != nil {
+		if reg := a.runtimeConfig.registry.Workflows(); reg != nil {
 			log.Infof("Registering component for dapr workflow engine...")
-			a.workflowComponentRegistry.RegisterComponent(wfComponentFactory, "dapr")
-			if componentInitErr := a.initWorkflowComponent(wfengine.ComponentDefinition); componentInitErr != nil {
+			reg.RegisterComponent(wfComponentFactory, "dapr")
+			if componentInitErr := a.processor.One(ctx, wfengine.ComponentDefinition); componentInitErr != nil {
 				log.Warnf("Failed to initialize Dapr workflow component: %v", componentInitErr)
 			}
 		} else {
@@ -679,12 +629,12 @@ func (a *DaprRuntime) buildHTTPPipelineForSpec(spec config.PipelineSpec, targetP
 			component, exists := a.compStore.GetComponent(middlewareSpec.Type, middlewareSpec.Name)
 			if !exists {
 				// Log the error but continue with initializing the pipeline
-				log.Error("couldn't find middleware component defined in configuration with name %s and type %s/%s",
-					middlewareSpec.Name, middlewareSpec.Type, middlewareSpec.Version)
+				log.Error("couldn't find middleware component defined in configuration with name %s and type %s",
+					middlewareSpec.Name, middlewareSpec.LogName())
 				continue
 			}
-			md := middleware.Metadata{Base: a.toBaseMetadata(component)}
-			handler, err := a.httpMiddlewareRegistry.Create(middlewareSpec.Type, middlewareSpec.Version, md, middlewareSpec.LogName())
+			md := middleware.Metadata{Base: a.meta.ToBaseMetadata(component)}
+			handler, err := a.runtimeConfig.registry.HTTPMiddlewares().Create(middlewareSpec.Type, middlewareSpec.Version, md, middlewareSpec.LogName())
 			if err != nil {
 				e := fmt.Sprintf("process component %s error: %s", component.Name, err.Error())
 				if !component.Spec.IgnoreErrors {
@@ -710,29 +660,6 @@ func (a *DaprRuntime) buildHTTPPipeline() (httpMiddleware.Pipeline, error) {
 
 func (a *DaprRuntime) buildAppHTTPPipeline() (httpMiddleware.Pipeline, error) {
 	return a.buildHTTPPipelineForSpec(a.globalConfig.Spec.AppHTTPPipelineSpec, "app channel")
-}
-
-func (a *DaprRuntime) initBinding(c componentsV1alpha1.Component) error {
-	found := false
-	if a.bindingsRegistry.HasOutputBinding(c.Spec.Type, c.Spec.Version) {
-		if err := a.initOutputBinding(c); err != nil {
-			return err
-		}
-		found = true
-	}
-
-	if a.bindingsRegistry.HasInputBinding(c.Spec.Type, c.Spec.Version) {
-		if err := a.initInputBinding(c); err != nil {
-			return err
-		}
-		found = true
-	}
-
-	if !found {
-		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation", c.ObjectMeta.Name)
-		return fmt.Errorf("couldn't find binding %s/%s", c.Spec.Type, c.Spec.Version)
-	}
-	return nil
 }
 
 func (a *DaprRuntime) sendToDeadLetter(name string, msg *pubsub.NewMessage, deadLetterTopic string) (err error) {
@@ -1061,11 +988,11 @@ func (a *DaprRuntime) beginComponentsUpdates() error {
 			}
 
 			if !a.isObjectAuthorized(component) {
-				log.Debugf("received unauthorized component update, ignored. name: %s, type: %s/%s", component.ObjectMeta.Name, component.Spec.Type, component.Spec.Version)
+				log.Debugf("received unauthorized component update, ignored. name: %s, type: %s", component.ObjectMeta.Name, component.LogName())
 				return
 			}
 
-			log.Debugf("received component update. name: %s, type: %s/%s", component.ObjectMeta.Name, component.Spec.Type, component.Spec.Version)
+			log.Debugf("received component update. name: %s, type: %s", component.ObjectMeta.Name, component.LogName())
 			updated := a.onComponentUpdated(component)
 			if !updated {
 				log.Info("component update skipped: .spec field unchanged")
@@ -1702,28 +1629,9 @@ func (a *DaprRuntime) isAppSubscribedToBinding(binding string) (bool, error) {
 	return false, nil
 }
 
-func isBindingOfDirection(direction string, metadata []commonapi.NameValuePair) bool {
-	directionFound := false
-
-	for _, m := range metadata {
-		if strings.EqualFold(m.Name, bindingDirection) {
-			directionFound = true
-
-			directions := strings.Split(m.Value.String(), ",")
-			for _, d := range directions {
-				if strings.TrimSpace(strings.ToLower(d)) == direction {
-					return true
-				}
-			}
-		}
-	}
-
-	return !directionFound
-}
-
 func isBindingOfExplicitDirection(direction string, metadata map[string]string) bool {
 	for k, v := range metadata {
-		if strings.EqualFold(k, bindingDirection) {
+		if strings.EqualFold(k, processor.BindingDirection) {
 			directions := strings.Split(v, ",")
 			for _, d := range directions {
 				if strings.TrimSpace(strings.ToLower(d)) == direction {
@@ -1736,210 +1644,7 @@ func isBindingOfExplicitDirection(direction string, metadata map[string]string) 
 	return false
 }
 
-func (a *DaprRuntime) initInputBinding(c componentsV1alpha1.Component) error {
-	if !isBindingOfDirection(inputBinding, c.Spec.Metadata) {
-		return nil
-	}
-
-	fName := c.LogName()
-	binding, err := a.bindingsRegistry.CreateInputBinding(c.Spec.Type, c.Spec.Version, fName)
-	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation", c.ObjectMeta.Name)
-		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
-	}
-	err = binding.Init(context.TODO(), bindings.Metadata{Base: a.toBaseMetadata(c)})
-	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
-		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
-	}
-
-	log.Infof("successful init for input binding %s (%s/%s)", c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
-	a.compStore.AddInputBindingRoute(c.Name, c.Name)
-	for _, item := range c.Spec.Metadata {
-		if item.Name == "route" {
-			a.compStore.AddInputBindingRoute(c.ObjectMeta.Name, item.Value.String())
-			break
-		}
-	}
-	a.compStore.AddInputBinding(c.Name, binding)
-	diag.DefaultMonitoring.ComponentInitialized(c.Spec.Type)
-	return nil
-}
-
-func (a *DaprRuntime) initOutputBinding(c componentsV1alpha1.Component) error {
-	if !isBindingOfDirection(outputBinding, c.Spec.Metadata) {
-		return nil
-	}
-
-	fName := c.LogName()
-	binding, err := a.bindingsRegistry.CreateOutputBinding(c.Spec.Type, c.Spec.Version, fName)
-	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation", c.ObjectMeta.Name)
-		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
-	}
-
-	if binding != nil {
-		err := binding.Init(context.TODO(), bindings.Metadata{Base: a.toBaseMetadata(c)})
-		if err != nil {
-			diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
-			return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
-		}
-		log.Infof("successful init for output binding %s (%s/%s)", c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
-		a.compStore.AddOutputBinding(c.ObjectMeta.Name, binding)
-		diag.DefaultMonitoring.ComponentInitialized(c.Spec.Type)
-	}
-	return nil
-}
-
-func (a *DaprRuntime) initConfiguration(s componentsV1alpha1.Component) error {
-	fName := s.LogName()
-	store, err := a.configurationStoreRegistry.Create(s.Spec.Type, s.Spec.Version, fName)
-	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation", s.ObjectMeta.Name)
-		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
-	}
-	if store != nil {
-		err := store.Init(context.TODO(), configuration.Metadata{Base: a.toBaseMetadata(s)})
-		if err != nil {
-			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
-			return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
-		}
-
-		a.compStore.AddConfiguration(s.ObjectMeta.Name, store)
-		diag.DefaultMonitoring.ComponentInitialized(s.Spec.Type)
-	}
-
-	return nil
-}
-
-func (a *DaprRuntime) initLock(s componentsV1alpha1.Component) error {
-	// create the component
-	fName := s.LogName()
-	store, err := a.lockStoreRegistry.Create(s.Spec.Type, s.Spec.Version, fName)
-	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation", s.ObjectMeta.Name)
-		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
-	}
-	if store == nil {
-		return nil
-	}
-	// initialization
-	baseMetadata := a.toBaseMetadata(s)
-	props := baseMetadata.Properties
-	err = store.InitLockStore(context.TODO(), lock.Metadata{Base: baseMetadata})
-	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
-		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
-	}
-	// save lock related configuration
-	a.compStore.AddLock(s.ObjectMeta.Name, store)
-	err = lockLoader.SaveLockConfiguration(s.ObjectMeta.Name, props)
-	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
-		wrapError := fmt.Errorf("failed to save lock keyprefix: %s", err.Error())
-		return rterrors.NewInit(rterrors.InitComponentFailure, fName, wrapError)
-	}
-	diag.DefaultMonitoring.ComponentInitialized(s.Spec.Type)
-
-	return nil
-}
-
-func (a *DaprRuntime) initWorkflowComponent(s componentsV1alpha1.Component) error {
-	// create the component
-	fName := s.LogName()
-	workflowComp, err := a.workflowComponentRegistry.Create(s.Spec.Type, s.Spec.Version, fName)
-	if err != nil {
-		log.Warnf("error creating workflow component %s (%s/%s): %s", s.ObjectMeta.Name, s.Spec.Type, s.Spec.Version, err)
-		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
-		return err
-	}
-
-	if workflowComp == nil {
-		return nil
-	}
-
-	// initialization
-	baseMetadata := a.toBaseMetadata(s)
-	err = workflowComp.Init(wfs.Metadata{Base: baseMetadata})
-	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
-		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
-	}
-	// save workflow related configuration
-	a.compStore.AddWorkflow(s.ObjectMeta.Name, workflowComp)
-	diag.DefaultMonitoring.ComponentInitialized(s.Spec.Type)
-
-	return nil
-}
-
 // Refer for state store api decision  https://github.com/dapr/dapr/blob/master/docs/decision_records/api/API-008-multi-state-store-api-design.md
-func (a *DaprRuntime) initState(s componentsV1alpha1.Component) error {
-	fName := s.LogName()
-	store, err := a.stateStoreRegistry.Create(s.Spec.Type, s.Spec.Version, fName)
-	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation", s.ObjectMeta.Name)
-		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
-	}
-	if store != nil {
-		secretStoreName := a.authSecretStoreOrDefault(&s)
-
-		secretStore, _ := a.compStore.GetSecretStore(secretStoreName)
-		encKeys, encErr := encryption.ComponentEncryptionKey(s, secretStore)
-		if encErr != nil {
-			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "creation", s.ObjectMeta.Name)
-			return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
-		}
-
-		if encKeys.Primary.Key != "" {
-			ok := encryption.AddEncryptedStateStore(s.ObjectMeta.Name, encKeys)
-			if ok {
-				log.Infof("automatic encryption enabled for state store %s", s.ObjectMeta.Name)
-			}
-		}
-
-		baseMetadata := a.toBaseMetadata(s)
-		props := baseMetadata.Properties
-		err = store.Init(context.TODO(), state.Metadata{Base: baseMetadata})
-		if err != nil {
-			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
-			return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
-		}
-
-		a.compStore.AddStateStore(s.ObjectMeta.Name, store)
-		err = stateLoader.SaveStateConfiguration(s.ObjectMeta.Name, props)
-		if err != nil {
-			diag.DefaultMonitoring.ComponentInitFailed(s.Spec.Type, "init", s.ObjectMeta.Name)
-			wrapError := fmt.Errorf("failed to save lock keyprefix: %s", err.Error())
-			return rterrors.NewInit(rterrors.InitComponentFailure, fName, wrapError)
-		}
-
-		// when placement address list is not empty, set specified actor store.
-		if len(a.runtimeConfig.placementAddresses) != 0 {
-			// set specified actor store if "actorStateStore" is true in the spec.
-			actorStoreSpecified := false
-			for k, v := range props {
-				if strings.ToLower(k) == actorStateStore { //nolint:gocritic
-					actorStoreSpecified = utils.IsTruthy(v)
-				}
-			}
-
-			if actorStoreSpecified {
-				a.actorStateStoreLock.Lock()
-				if a.actorStateStoreName == "" {
-					log.Info("Using '" + s.ObjectMeta.Name + "' as actor state store")
-					a.actorStateStoreName = s.ObjectMeta.Name
-				} else if a.actorStateStoreName != s.ObjectMeta.Name {
-					log.Fatalf("Detected duplicate actor state store: %s and %s", a.actorStateStoreName, s.ObjectMeta.Name)
-				}
-				a.actorStateStoreLock.Unlock()
-			}
-		}
-		diag.DefaultMonitoring.ComponentInitialized(s.Spec.Type)
-	}
-
-	return nil
-}
-
 func (a *DaprRuntime) getDeclarativeSubscriptions() []runtimePubsub.Subscription {
 	var subs []runtimePubsub.Subscription
 
@@ -2076,42 +1781,6 @@ func (a *DaprRuntime) getTopicRoutes() (map[string]compstore.TopicRoutes, error)
 	return topicRoutes, nil
 }
 
-func (a *DaprRuntime) initPubSub(c componentsV1alpha1.Component) error {
-	fName := c.LogName()
-	pubSub, err := a.pubSubRegistry.Create(c.Spec.Type, c.Spec.Version, fName)
-	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation", c.ObjectMeta.Name)
-		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
-	}
-
-	baseMetadata := a.toBaseMetadata(c)
-	properties := baseMetadata.Properties
-	consumerID := strings.TrimSpace(properties["consumerID"])
-	if consumerID == "" {
-		consumerID = a.runtimeConfig.id
-	}
-	properties["consumerID"] = consumerID
-
-	err = pubSub.Init(context.TODO(), pubsub.Metadata{Base: baseMetadata})
-	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
-		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
-	}
-
-	pubsubName := c.ObjectMeta.Name
-
-	a.compStore.AddPubSub(pubsubName, compstore.PubsubItem{
-		Component:           pubSub,
-		ScopedSubscriptions: scopes.GetScopedTopics(scopes.SubscriptionScopes, a.runtimeConfig.id, properties),
-		ScopedPublishings:   scopes.GetScopedTopics(scopes.PublishingScopes, a.runtimeConfig.id, properties),
-		AllowedTopics:       scopes.GetAllowedTopics(properties),
-		NamespaceScoped:     metadataContainsNamespace(c.Spec.Metadata),
-	})
-	diag.DefaultMonitoring.ComponentInitialized(c.Spec.Type)
-
-	return nil
-}
-
 // Publish is an adapter method for the runtime to pre-validate publish requests
 // And then forward them to the Pub/Sub component.
 // This method is used by the HTTP and gRPC APIs.
@@ -2162,16 +1831,6 @@ func (a *DaprRuntime) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPu
 	defaultBulkPublisher := runtimePubsub.NewDefaultBulkPublisher(ps.Component)
 
 	return runtimePubsub.ApplyBulkPublishResiliency(context.TODO(), req, policyDef, defaultBulkPublisher)
-}
-
-func metadataContainsNamespace(items []commonapi.NameValuePair) bool {
-	for _, c := range items {
-		val := c.Value.String()
-		if strings.Contains(val, "{namespace}") {
-			return true
-		}
-	}
-	return false
 }
 
 // Subscribe is used by APIs to start a subscription to a topic.
@@ -2260,7 +1919,7 @@ func (a *DaprRuntime) initNameResolution() error {
 	}
 
 	fName := utils.ComponentLogName(resolverName, "nameResolution", resolverVersion)
-	resolver, err = a.nameResolutionRegistry.Create(resolverName, resolverVersion, fName)
+	resolver, err = a.runtimeConfig.registry.NameResolutions().Create(resolverName, resolverVersion, fName)
 	resolverMetadata.Name = resolverName
 	resolverMetadata.Configuration = a.globalConfig.Spec.NameResolutionSpec.Configuration
 	resolverMetadata.Properties = map[string]string{
@@ -2558,7 +2217,9 @@ func (a *DaprRuntime) initActors() error {
 	}
 	a.actorStateStoreLock.Lock()
 	defer a.actorStateStoreLock.Unlock()
-	if a.actorStateStoreName == "" {
+
+	actorStateStoreName, ok := a.processor.ActorStateStore()
+	if !ok {
 		log.Info("actors: state store is not configured - this is okay for clients but services with hosted actors will fail to initialize!")
 	}
 	actorConfig := actors.NewConfig(actors.ConfigOpts{
@@ -2571,7 +2232,7 @@ func (a *DaprRuntime) initActors() error {
 		HealthHTTPClient:   a.appHTTPClient,
 		HealthEndpoint:     a.getAppHTTPEndpoint(),
 		AppChannelAddress:  a.runtimeConfig.appConnectionConfig.ChannelAddress,
-		PodName:            a.getPodName(),
+		PodName:            getPodName(),
 	})
 
 	act := actors.NewActors(actors.ActorsOpts{
@@ -2581,7 +2242,7 @@ func (a *DaprRuntime) initActors() error {
 		CertChain:        a.runtimeConfig.certChain,
 		TracingSpec:      a.globalConfig.Spec.TracingSpec,
 		Resiliency:       a.resiliency,
-		StateStoreName:   a.actorStateStoreName,
+		StateStoreName:   actorStateStoreName,
 		CompStore:        a.compStore,
 		// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 		StateTTLEnabled: a.globalConfig.IsFeatureEnabled(config.ActorStateTTL),
@@ -2643,7 +2304,7 @@ func (a *DaprRuntime) namespaceHTTPEndpointAuthorizer(endpoint httpEndpointV1alp
 	}
 }
 
-func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
+func (a *DaprRuntime) loadComponents() error {
 	var loader components.ComponentLoader
 
 	switch a.runtimeConfig.mode {
@@ -2680,15 +2341,6 @@ func (a *DaprRuntime) loadComponents(opts *runtimeOpts) error {
 	}
 
 	return nil
-}
-
-func (a *DaprRuntime) extractComponentCategory(component componentsV1alpha1.Component) components.Category {
-	for _, category := range componentCategoriesNeedProcess {
-		if strings.HasPrefix(component.Spec.Type, string(category)+".") {
-			return category
-		}
-	}
-	return ""
 }
 
 func (a *DaprRuntime) processComponents() {
@@ -2744,7 +2396,7 @@ func (a *DaprRuntime) processComponentAndDependents(comp componentsV1alpha1.Comp
 		return nil
 	}
 
-	compCategory := a.extractComponentCategory(comp)
+	compCategory := a.processor.Category(comp)
 	if compCategory == "" {
 		// the category entered is incorrect, return error
 		return fmt.Errorf("incorrect type %s", comp.Spec.Type)
@@ -2758,7 +2410,7 @@ func (a *DaprRuntime) processComponentAndDependents(comp componentsV1alpha1.Comp
 	}
 
 	go func() {
-		ch <- a.doProcessOneComponent(compCategory, comp)
+		ch <- a.processor.One(context.TODO(), comp)
 	}()
 
 	select {
@@ -2789,28 +2441,6 @@ func (a *DaprRuntime) processComponentAndDependents(comp componentsV1alpha1.Comp
 	return nil
 }
 
-func (a *DaprRuntime) doProcessOneComponent(category components.Category, comp componentsV1alpha1.Component) error {
-	switch category {
-	case components.CategoryBindings:
-		return a.initBinding(comp)
-	case components.CategoryPubSub:
-		return a.initPubSub(comp)
-	case components.CategorySecretStore:
-		return a.initSecretStore(comp)
-	case components.CategoryCryptoProvider:
-		return a.initCryptoProvider(comp)
-	case components.CategoryStateStore:
-		return a.initState(comp)
-	case components.CategoryConfiguration:
-		return a.initConfiguration(comp)
-	case components.CategoryLock:
-		return a.initLock(comp)
-	case components.CategoryWorkflow:
-		return a.initWorkflowComponent(comp)
-	}
-	return nil
-}
-
 func (a *DaprRuntime) preprocessOneComponent(comp *componentsV1alpha1.Component) componentPreprocessRes {
 	_, unreadySecretsStore := a.processResourceSecrets(comp)
 	if unreadySecretsStore != "" {
@@ -2821,7 +2451,7 @@ func (a *DaprRuntime) preprocessOneComponent(comp *componentsV1alpha1.Component)
 	return componentPreprocessRes{}
 }
 
-func (a *DaprRuntime) loadHTTPEndpoints(opts *runtimeOpts) error {
+func (a *DaprRuntime) loadHTTPEndpoints() error {
 	var loader httpendpoint.EndpointsLoader
 
 	switch a.runtimeConfig.mode {
@@ -3002,15 +2632,6 @@ func (a *DaprRuntime) WaitUntilShutdown() error {
 	return <-a.shutdownC
 }
 
-// Interface that applies to both Component and HTTPEndpoint resources.
-type resourceWithMetadata interface {
-	Kind() string
-	GetName() string
-	GetNamespace() string
-	GetSecretStore() string
-	NameValuePairs() []commonapi.NameValuePair
-}
-
 func isEnvVarAllowed(key string) bool {
 	// First, apply a denylist that blocks access to sensitive env vars
 	key = strings.ToUpper(key)
@@ -3043,7 +2664,7 @@ func isEnvVarAllowed(key string) bool {
 
 // Returns the component or HTTP endpoint updated with the secrets applied.
 // If the resource references a secret store that hasn't been loaded yet, it returns the name of the secret store component as second returned value.
-func (a *DaprRuntime) processResourceSecrets(resource resourceWithMetadata) (updated bool, secretStoreName string) {
+func (a *DaprRuntime) processResourceSecrets(resource meta.Resource) (updated bool, secretStoreName string) {
 	cache := map[string]secretstores.GetSecretResponse{}
 
 	secretStoreName = a.authSecretStoreOrDefault(resource)
@@ -3128,7 +2749,7 @@ func (a *DaprRuntime) processResourceSecrets(resource resourceWithMetadata) (upd
 	return updated, ""
 }
 
-func (a *DaprRuntime) authSecretStoreOrDefault(resource resourceWithMetadata) string {
+func (a *DaprRuntime) authSecretStoreOrDefault(resource meta.Resource) string {
 	secretStore := resource.GetSecretStore()
 	if secretStore == "" {
 		switch a.runtimeConfig.mode {
@@ -3306,75 +2927,6 @@ func (a *DaprRuntime) appendBuiltinSecretStore() {
 	}
 }
 
-func (a *DaprRuntime) initCryptoProvider(c componentsV1alpha1.Component) error {
-	fName := c.LogName()
-	component, err := a.cryptoProviderRegistry.Create(c.Spec.Type, c.Spec.Version, fName)
-	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation", c.ObjectMeta.Name)
-		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
-	}
-
-	err = component.Init(context.TODO(), contribCrypto.Metadata{Base: a.toBaseMetadata(c)})
-	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
-		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
-	}
-
-	a.compStore.AddCryptoProvider(c.ObjectMeta.Name, component)
-	diag.DefaultMonitoring.ComponentInitialized(c.Spec.Type)
-	return nil
-}
-
-func (a *DaprRuntime) initSecretStore(c componentsV1alpha1.Component) error {
-	fName := c.LogName()
-	secretStore, err := a.secretStoresRegistry.Create(c.Spec.Type, c.Spec.Version, fName)
-	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "creation", c.ObjectMeta.Name)
-		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
-	}
-
-	err = secretStore.Init(context.TODO(), secretstores.Metadata{Base: a.toBaseMetadata(c)})
-	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
-		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
-	}
-
-	a.compStore.AddSecretStore(c.ObjectMeta.Name, secretStore)
-	diag.DefaultMonitoring.ComponentInitialized(c.Spec.Type)
-	return nil
-}
-
-func (a *DaprRuntime) convertMetadataItemsToProperties(items []commonapi.NameValuePair) map[string]string {
-	properties := map[string]string{}
-	for _, c := range items {
-		val := c.Value.String()
-		for strings.Contains(val, "{uuid}") {
-			val = strings.Replace(val, "{uuid}", uuid.New().String(), 1)
-		}
-		for strings.Contains(val, "{podName}") {
-			if a.podName == "" {
-				log.Fatalf("failed to parse metadata: property %s refers to {podName} but podName is not set", c.Name)
-			}
-			val = strings.Replace(val, "{podName}", a.podName, 1)
-		}
-		for strings.Contains(val, "{namespace}") {
-			val = strings.Replace(val, "{namespace}", fmt.Sprintf("%s.%s", a.namespace, a.runtimeConfig.id), 1)
-		}
-		for strings.Contains(val, "{appID}") {
-			val = strings.Replace(val, "{appID}", a.runtimeConfig.id, 1)
-		}
-		properties[c.Name] = val
-	}
-	return properties
-}
-
-func (a *DaprRuntime) toBaseMetadata(c componentsV1alpha1.Component) contribMetadata.Base {
-	return contribMetadata.Base{
-		Properties: a.convertMetadataItemsToProperties(c.Spec.Metadata),
-		Name:       c.Name,
-	}
-}
-
 func (a *DaprRuntime) getComponentsCapabilitesMap() map[string][]string {
 	capabilities := make(map[string][]string)
 	for key, store := range a.compStore.ListStateStores() {
@@ -3492,20 +3044,19 @@ func (a *DaprRuntime) startReadingFromBindings() (err error) {
 	a.inputBindingsCtx, a.inputBindingsCancel = context.WithCancel(a.ctx)
 
 	comps := a.compStore.ListComponents()
-	bindings := map[string][]commonapi.NameValuePair{}
-
-	for _, c := range comps {
+	bindings := make(map[string]componentsV1alpha1.Component)
+	for i, c := range comps {
 		if strings.HasPrefix(c.Spec.Type, string(components.CategoryBindings)) {
-			bindings[c.ObjectMeta.Name] = c.Spec.Metadata
+			bindings[c.ObjectMeta.Name] = comps[i]
 		}
 	}
 
 	for name, binding := range a.compStore.ListInputBindings() {
 		var isSubscribed bool
 
-		m := a.convertMetadataItemsToProperties(bindings[name])
+		m := a.meta.ToBaseMetadata(bindings[name]).Properties
 
-		if isBindingOfExplicitDirection(inputBinding, m) {
+		if isBindingOfExplicitDirection(processor.BindingTypeInput, m) {
 			isSubscribed = true
 		} else {
 			isSubscribed, err = a.isAppSubscribedToBinding(name)
