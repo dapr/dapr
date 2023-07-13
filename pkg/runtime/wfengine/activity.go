@@ -178,7 +178,9 @@ loop:
 		t := time.NewTimer(10 * time.Minute)
 		select {
 		case <-ctx.Done():
-			t.Stop()
+			if !t.Stop() {
+				<-t.C
+			}
 			return ctx.Err()
 		case <-t.C:
 			if deadline, ok := ctx.Deadline(); ok {
@@ -187,7 +189,9 @@ loop:
 				wfLogger.Warnf("%s: '%s' is still running - will keep waiting indefinitely", actorID, name)
 			}
 		case completed := <-callback:
-			t.Stop()
+			if !t.Stop() {
+				<-t.C
+			}
 			if completed {
 				break loop
 			} else {

@@ -205,6 +205,7 @@ func (wfe *WorkflowEngine) Start(ctx context.Context) (err error) {
 		return fmt.Errorf("failed to start workflow engine: %w", err)
 	}
 
+	wfe.IsRunning = true
 	wfLogger.Info("Workflow engine started")
 
 	return nil
@@ -227,7 +228,8 @@ func (wfe *WorkflowEngine) Stop(ctx context.Context) error {
 		if err := wfe.worker.Shutdown(ctx); err != nil {
 			return fmt.Errorf("failed to shutdown the workflow worker: %w", err)
 		}
-		wfLogger.Info("workflow engine stopped")
+		wfe.IsRunning = false
+		wfLogger.Info("Workflow engine stopped")
 	}
 	return nil
 }
