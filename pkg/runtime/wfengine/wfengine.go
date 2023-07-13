@@ -180,10 +180,9 @@ func (wfe *WorkflowEngine) Start(ctx context.Context) (err error) {
 	if wfe.IsRunning {
 		return nil
 	}
-	fmt.Println("CALLED WorkflowEngine.Start")
 
 	if wfe.actorRuntime == nil {
-		return errors.New("Actor runtime is not configured")
+		return errors.New("actor runtime is not configured")
 	}
 	if wfe.executor == nil {
 		return errors.New("gRPC executor is not yet configured")

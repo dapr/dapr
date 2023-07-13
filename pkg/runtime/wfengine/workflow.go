@@ -303,10 +303,10 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 			wfLogger.Infof("%s: ignoring durable timer from previous generation '%v'", actorID, timerData.Generation)
 			return nil
 		} else {
-			e, err := backend.UnmarshalHistoryEvent(timerData.Bytes)
-			if err != nil {
+			e, eventErr := backend.UnmarshalHistoryEvent(timerData.Bytes)
+			if eventErr != nil {
 				// Likely the result of an incompatible durable task timer format change. This is non-recoverable.
-				return fmt.Errorf("failed to unmarshal timer data %w", err)
+				return fmt.Errorf("failed to unmarshal timer data %w", eventErr)
 			}
 			state.Inbox = append(state.Inbox, e)
 		}
@@ -340,7 +340,8 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 				},
 			}},
 		}
-		if err := wf.actors.TransactionalStateOperation(ctx, &req); err != nil {
+		err = wf.actors.TransactionalStateOperation(ctx, &req)
+		if err != nil {
 			return fmt.Errorf("failed to delete activity state with error: %w", err)
 		}
 	}
