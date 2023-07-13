@@ -82,6 +82,7 @@ func (*mockPlacement) WaitUntilPlacementTableIsReady(ctx context.Context) error 
 func TestStartWorkflowEngine(t *testing.T) {
 	ctx := context.Background()
 	engine := getEngine(t)
+	engine.ConfigureGrpcExecutor()
 	grpcServer := grpc.NewServer()
 	engine.RegisterGrpcServer(grpcServer)
 	err := engine.Start(ctx)
@@ -451,7 +452,7 @@ func TestRetryActivityOnTimeout(t *testing.T) {
 	r := task.NewTaskRegistry()
 	r.AddOrchestratorN("FlakyWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
 		var output int
-		err := ctx.CallActivity("FlakyActivity", nil).Await(&output)
+		err := ctx.CallActivity("FlakyActivity").Await(&output)
 		return output, err
 	})
 
