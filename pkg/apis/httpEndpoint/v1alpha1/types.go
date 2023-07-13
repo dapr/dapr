@@ -56,6 +56,14 @@ type HTTPEndpointSpec struct {
 	BaseURL string `json:"baseUrl" validate:"required"`
 	//+optional
 	Headers []common.NameValuePair `json:"headers"`
+	//+optional
+	TLSRootCA common.NameValuePair `json:"tlsRootCA"`
+	//+optional
+	TLSClientCert common.NameValuePair `json:"tlsClientCert"`
+	//+optional
+	TLSClientKey common.NameValuePair `json:"tlsClientKey"`
+	//+optional
+	TLSRenegotiation string `json:"tlsRenegotiation"`
 }
 
 // Auth represents authentication details for the component.

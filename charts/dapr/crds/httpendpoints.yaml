@@ -83,6 +83,95 @@ spec:
                   - name
                   type: object
                 type: array
+              tlsClientCert:
+                description: NameValuePair is a name/value pair.
+                properties:
+                  envRef:
+                    description: EnvRef is the name of an environmental variable to
+                      read the value from.
+                    type: string
+                  name:
+                    description: Name of the property.
+                    type: string
+                  secretKeyRef:
+                    description: SecretKeyRef is the reference of a value in a secret
+                      store component.
+                    properties:
+                      key:
+                        description: Field in the secret.
+                        type: string
+                      name:
+                        description: Secret name.
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  value:
+                    description: Value of the property, in plaintext.
+                    x-kubernetes-preserve-unknown-fields: true
+                required:
+                - name
+                type: object
+              tlsClientKey:
+                description: NameValuePair is a name/value pair.
+                properties:
+                  envRef:
+                    description: EnvRef is the name of an environmental variable to
+                      read the value from.
+                    type: string
+                  name:
+                    description: Name of the property.
+                    type: string
+                  secretKeyRef:
+                    description: SecretKeyRef is the reference of a value in a secret
+                      store component.
+                    properties:
+                      key:
+                        description: Field in the secret.
+                        type: string
+                      name:
+                        description: Secret name.
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  value:
+                    description: Value of the property, in plaintext.
+                    x-kubernetes-preserve-unknown-fields: true
+                required:
+                - name
+                type: object
+              tlsRenegotiation:
+                type: string
+              tlsRootCA:
+                description: NameValuePair is a name/value pair.
+                properties:
+                  envRef:
+                    description: EnvRef is the name of an environmental variable to
+                      read the value from.
+                    type: string
+                  name:
+                    description: Name of the property.
+                    type: string
+                  secretKeyRef:
+                    description: SecretKeyRef is the reference of a value in a secret
+                      store component.
+                    properties:
+                      key:
+                        description: Field in the secret.
+                        type: string
+                      name:
+                        description: Secret name.
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  value:
+                    description: Value of the property, in plaintext.
+                    x-kubernetes-preserve-unknown-fields: true
+                required:
+                - name
+                type: object
             required:
             - baseUrl
             type: object
