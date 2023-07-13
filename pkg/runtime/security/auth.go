@@ -82,7 +82,7 @@ func (a *authenticator) CreateSignedWorkloadCert(id, namespace, trustDomain stri
 	if err != nil {
 		return nil, err
 	}
-	certPem := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrb})
+	csrPem := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrb})
 
 	config, err := daprCredentials.TLSConfigFromCertAndKey(a.certChainPem, a.keyPem, TLSServerName, a.trustAnchors)
 	if err != nil {
@@ -116,7 +116,7 @@ func (a *authenticator) CreateSignedWorkloadCert(id, namespace, trustDomain stri
 	}
 	resp, err := c.SignCertificate(context.Background(),
 		&sentryv1pb.SignCertificateRequest{
-			CertificateSigningRequest: certPem,
+			CertificateSigningRequest: csrPem,
 			Id:                        getSentryIdentifier(id),
 			Token:                     token,
 			TokenValidator:            tokenValidator,

@@ -15,6 +15,9 @@ package metadata
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"fmt"
 	"testing"
 	"time"
@@ -52,6 +55,19 @@ func (m *insecureValidator) Setup(t *testing.T) []framework.Option {
 }
 
 func (m *insecureValidator) Run(t *testing.T, parentCtx context.Context) {
+	const (
+		defaultAppID     = "myapp"
+		defaultNamespace = "default"
+	)
+
+	// Generate a private privKey that we'll need for tests
+	privKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err, "failed to generate private key")
+
+	// Get a CSR for the app "myapp"
+	defaultAppCSR, err := generateCSR(defaultAppID, privKey)
+	require.NoError(t, err)
+
 	t.Run("insecure validator", func(t *testing.T) {
 		var client sentrypbv1.CAClient
 
@@ -84,8 +100,8 @@ func (m *insecureValidator) Run(t *testing.T, parentCtx context.Context) {
 			ctx, cancel := context.WithTimeout(parentCtx, 10*time.Second)
 			defer cancel()
 			_, err := client.SignCertificate(ctx, &sentrypbv1.SignCertificateRequest{
-				Id:             "myapp",
-				Namespace:      "default",
+				Id:             defaultAppID,
+				Namespace:      defaultNamespace,
 				TokenValidator: sentrypbv1.SignCertificateRequest_TokenValidator(-1), // -1 is an invalid enum value
 			})
 			require.Error(t, err)
@@ -94,6 +110,83 @@ func (m *insecureValidator) Run(t *testing.T, parentCtx context.Context) {
 			require.True(t, ok)
 			require.Equal(t, codes.InvalidArgument, grpcStatus.Code())
 			require.Contains(t, grpcStatus.Message(), "not enabled")
+		})
+
+		t.Run("issue a certificate with insecure validator", func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(parentCtx, 10*time.Second)
+			defer cancel()
+			res, err := client.SignCertificate(ctx, &sentrypbv1.SignCertificateRequest{
+				Id:                        defaultAppID,
+				Namespace:                 defaultNamespace,
+				CertificateSigningRequest: defaultAppCSR,
+				TokenValidator:            sentrypbv1.SignCertificateRequest_INSECURE,
+			})
+			require.NoError(t, err)
+			require.NotEmpty(t, res.WorkloadCertificate)
+		})
+
+		t.Run("insecure validator is the default", func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(parentCtx, 10*time.Second)
+			defer cancel()
+			res, err := client.SignCertificate(ctx, &sentrypbv1.SignCertificateRequest{
+				Id:                        defaultAppID,
+				Namespace:                 defaultNamespace,
+				CertificateSigningRequest: defaultAppCSR,
+				// TokenValidator:            sentrypbv1.SignCertificateRequest_INSECURE,
+			})
+			require.NoError(t, err)
+			require.NotEmpty(t, res.WorkloadCertificate)
+		})
+
+		t.Run("fails with missing CSR", func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(parentCtx, 10*time.Second)
+			defer cancel()
+			_, err := client.SignCertificate(ctx, &sentrypbv1.SignCertificateRequest{
+				Id:        defaultAppID,
+				Namespace: defaultNamespace,
+				// CertificateSigningRequest: defaultAppCSR,
+				TokenValidator: sentrypbv1.SignCertificateRequest_INSECURE,
+			})
+			require.Error(t, err)
+
+			grpcStatus, ok := status.FromError(err)
+			require.True(t, ok)
+			require.Equal(t, codes.PermissionDenied, grpcStatus.Code())
+			require.Contains(t, grpcStatus.Message(), "CSR is required")
+		})
+
+		t.Run("fails with missing namespace", func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(parentCtx, 10*time.Second)
+			defer cancel()
+			_, err := client.SignCertificate(ctx, &sentrypbv1.SignCertificateRequest{
+				Id: defaultAppID,
+				// Namespace:                 defaultNamespace,
+				CertificateSigningRequest: defaultAppCSR,
+				TokenValidator:            sentrypbv1.SignCertificateRequest_INSECURE,
+			})
+			require.Error(t, err)
+
+			grpcStatus, ok := status.FromError(err)
+			require.True(t, ok)
+			require.Equal(t, codes.PermissionDenied, grpcStatus.Code())
+			require.Contains(t, grpcStatus.Message(), "namespace is required")
+		})
+
+		t.Run("fails with invalid CSR", func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(parentCtx, 10*time.Second)
+			defer cancel()
+			_, err := client.SignCertificate(ctx, &sentrypbv1.SignCertificateRequest{
+				Id:                        defaultAppID,
+				Namespace:                 defaultNamespace,
+				CertificateSigningRequest: []byte("-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIAYIsKL0xkTkAXDhUN6eDheqODEOGyFZ04jsgFNCFxZf\n-----END PRIVATE KEY-----"),
+				TokenValidator:            sentrypbv1.SignCertificateRequest_INSECURE,
+			})
+			require.Error(t, err)
+
+			grpcStatus, ok := status.FromError(err)
+			require.True(t, ok)
+			require.Equal(t, codes.InvalidArgument, grpcStatus.Code())
+			require.Contains(t, grpcStatus.Message(), "invalid certificate signing request")
 		})
 	})
 }
