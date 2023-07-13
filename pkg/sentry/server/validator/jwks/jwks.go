@@ -94,7 +94,7 @@ func (j *jwks) Validate(ctx context.Context, req *sentryv1pb.SignCertificateRequ
 	}
 
 	// Construct the expected value for the subject, which is the SPIFFE ID of the requestor
-	sub, err := spiffeid.FromPathf(td, "/ns/%s/%s", req.Namespace, req.Id)
+	sub, err := spiffeid.FromSegments(td, "ns", req.Namespace, req.Id)
 	if err != nil {
 		return td, fmt.Errorf("failed to construct SPIFFE ID for requestor: %w", err)
 	}
