@@ -40,16 +40,17 @@ func TestDefaultConfigValuesSet(t *testing.T) {
 		Namespace:          Namespace,
 		AppConfig:          appConfig,
 	})
+	coreConfig := config.coreConfig
 
-	assert.Equal(t, HostAddress, config.HostAddress)
-	assert.Equal(t, AppID, config.AppID)
-	assert.Contains(t, config.PlacementAddresses, PlacementAddress)
-	assert.Equal(t, Port, config.Port)
-	assert.Equal(t, Namespace, config.Namespace)
-	assert.NotNil(t, config.ActorIdleTimeout)
-	assert.NotNil(t, config.ActorDeactivationScanInterval)
-	assert.NotNil(t, config.DrainOngoingCallTimeout)
-	assert.NotNil(t, config.DrainRebalancedActors)
+	assert.Equal(t, HostAddress, coreConfig.HostAddress)
+	assert.Equal(t, AppID, coreConfig.AppID)
+	assert.Contains(t, coreConfig.PlacementAddresses, PlacementAddress)
+	assert.Equal(t, Port, coreConfig.Port)
+	assert.Equal(t, Namespace, coreConfig.Namespace)
+	assert.NotNil(t, coreConfig.ActorIdleTimeout)
+	assert.NotNil(t, coreConfig.ActorDeactivationScanInterval)
+	assert.NotNil(t, coreConfig.DrainOngoingCallTimeout)
+	assert.NotNil(t, coreConfig.DrainRebalancedActors)
 }
 
 func TestPerActorTypeConfigurationValues(t *testing.T) {
@@ -87,41 +88,42 @@ func TestPerActorTypeConfigurationValues(t *testing.T) {
 		Namespace:          Namespace,
 		AppConfig:          appConfig,
 	})
+	coreConfig := config.coreConfig
 
 	// Check the base level items.
-	assert.Equal(t, HostAddress, config.HostAddress)
-	assert.Equal(t, AppID, config.AppID)
-	assert.Contains(t, config.PlacementAddresses, PlacementAddress)
-	assert.Equal(t, Port, config.Port)
-	assert.Equal(t, Namespace, config.Namespace)
-	assert.Equal(t, time.Second, config.ActorIdleTimeout)
-	assert.Equal(t, time.Second*2, config.ActorDeactivationScanInterval)
-	assert.Equal(t, time.Second*5, config.DrainOngoingCallTimeout)
-	assert.True(t, config.DrainRebalancedActors)
+	assert.Equal(t, HostAddress, coreConfig.HostAddress)
+	assert.Equal(t, AppID, coreConfig.AppID)
+	assert.Contains(t, coreConfig.PlacementAddresses, PlacementAddress)
+	assert.Equal(t, Port, coreConfig.Port)
+	assert.Equal(t, Namespace, coreConfig.Namespace)
+	assert.Equal(t, time.Second, coreConfig.ActorIdleTimeout)
+	assert.Equal(t, time.Second*2, coreConfig.ActorDeactivationScanInterval)
+	assert.Equal(t, time.Second*5, coreConfig.DrainOngoingCallTimeout)
+	assert.True(t, coreConfig.DrainRebalancedActors)
 
 	// Check the specific actors.
 	assert.Equal(t, time.Second*60, config.GetIdleTimeoutForType("actor1"))
 	assert.Equal(t, time.Second*300, config.GetDrainOngoingTimeoutForType("actor1"))
 	assert.False(t, config.GetDrainRebalancedActorsForType("actor1"))
 	assert.False(t, config.GetReentrancyForType("actor1").Enabled)
-	assert.Equal(t, 0, config.GetRemindersPartitionCountForType("actor1"))
+	assert.Equal(t, 0, coreConfig.GetRemindersPartitionCountForType("actor1"))
 	assert.Equal(t, time.Second*60, config.GetIdleTimeoutForType("actor2"))
 	assert.Equal(t, time.Second*300, config.GetDrainOngoingTimeoutForType("actor2"))
 	assert.False(t, config.GetDrainRebalancedActorsForType("actor2"))
 	assert.False(t, config.GetReentrancyForType("actor2").Enabled)
-	assert.Equal(t, 0, config.GetRemindersPartitionCountForType("actor2"))
+	assert.Equal(t, 0, coreConfig.GetRemindersPartitionCountForType("actor2"))
 
 	assert.Equal(t, time.Second*5, config.GetIdleTimeoutForType("actor3"))
 	assert.Equal(t, time.Second, config.GetDrainOngoingTimeoutForType("actor3"))
 	assert.True(t, config.GetDrainRebalancedActorsForType("actor3"))
 	assert.True(t, config.GetReentrancyForType("actor3").Enabled)
-	assert.Equal(t, 10, config.GetRemindersPartitionCountForType("actor3"))
+	assert.Equal(t, 10, coreConfig.GetRemindersPartitionCountForType("actor3"))
 
 	assert.Equal(t, time.Second, config.GetIdleTimeoutForType("actor4"))
 	assert.Equal(t, time.Second*5, config.GetDrainOngoingTimeoutForType("actor4"))
 	assert.True(t, config.GetDrainRebalancedActorsForType("actor4"))
 	assert.False(t, config.GetReentrancyForType("actor4").Enabled)
-	assert.Equal(t, 1, config.GetRemindersPartitionCountForType("actor4"))
+	assert.Equal(t, 1, coreConfig.GetRemindersPartitionCountForType("actor4"))
 }
 
 func TestOnlyHostedActorTypesAreIncluded(t *testing.T) {
@@ -160,8 +162,9 @@ func TestOnlyHostedActorTypesAreIncluded(t *testing.T) {
 		Namespace:          Namespace,
 		AppConfig:          appConfig,
 	})
+	coreConfig := config.coreConfig
 
-	assert.Contains(t, config.EntityConfigs, "actor1")
-	assert.Contains(t, config.EntityConfigs, "actor2")
-	assert.NotContains(t, config.EntityConfigs, "actor3")
+	assert.Contains(t, coreConfig.EntityConfigs, "actor1")
+	assert.Contains(t, coreConfig.EntityConfigs, "actor2")
+	assert.NotContains(t, coreConfig.EntityConfigs, "actor3")
 }

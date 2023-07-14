@@ -467,8 +467,8 @@ func TestDeactivationTicker(t *testing.T) {
 		actorType, actorID := getTestActorTypeAndID()
 		actorKey := constructCompositeKey(actorType, actorID)
 
-		testActorsRuntime.config.ActorIdleTimeout = time.Second * 2
-		testActorsRuntime.config.ActorDeactivationScanInterval = time.Second * 1
+		testActorsRuntime.config.coreConfig.ActorIdleTimeout = time.Second * 2
+		testActorsRuntime.config.coreConfig.ActorDeactivationScanInterval = time.Second * 1
 
 		ch := deactivateActorWithDuration(testActorsRuntime, actorType, actorID)
 

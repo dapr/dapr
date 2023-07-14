@@ -17,6 +17,8 @@ import (
 	"context"
 	"errors"
 	"io"
+
+	"github.com/dapr/dapr/pkg/resiliency"
 )
 
 // ErrReminderCanceled is returned when the reminder has been canceled.
@@ -33,9 +35,12 @@ type RemindersProvider interface {
 	Init(ctx context.Context) // <- this performs the tasks of "evaluateReminders" too, which are done during init
 	GetReminder(ctx context.Context, req *GetReminderRequest) (*Reminder, error)
 	CreateReminder(ctx context.Context, req *Reminder) error
-	DeleteReminder(ctx context.Context, reminderKey string) error
+	DeleteReminder(ctx context.Context, req DeleteReminderRequest) error
 	RenameReminder(ctx context.Context, req *RenameReminderRequest) error
+	DrainRebalancedReminders(actorType string, actorID string, actorKey string)
 
-	SetExecuteTimerFn(fn ExecuteReminderFn)
-	SetStateStore(store TransactionalStateStore)
+	SetExecuteReminderFn(fn ExecuteReminderFn)
+	SetStateStoreProvider(fn func() (TransactionalStateStore, error))
+	SetResiliencyProvider(resiliency resiliency.Provider)
+	SetLookupActorFn(fn func(string, string) (bool, string))
 }

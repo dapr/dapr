@@ -17,40 +17,45 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/dapr/dapr/pkg/actors/internal"
 	daprAppConfig "github.com/dapr/dapr/pkg/config"
 )
 
 // Config is the actor runtime configuration.
 type Config struct {
-	HostAddress                   string
-	AppID                         string
-	PlacementAddresses            []string
-	HostedActorTypes              []string
-	Port                          int
-	HeartbeatInterval             time.Duration
-	ActorDeactivationScanInterval time.Duration
-	ActorIdleTimeout              time.Duration
-	DrainOngoingCallTimeout       time.Duration
-	DrainRebalancedActors         bool
-	Namespace                     string
-	Reentrancy                    daprAppConfig.ReentrancyConfig
-	RemindersStoragePartitions    int
-	EntityConfigs                 map[string]EntityConfig
-	HealthHTTPClient              *http.Client
-	HealthEndpoint                string
-	AppChannelAddress             string
-	PodName                       string
+	coreConfig internal.Config
 }
 
-// Remap of daprAppConfig.EntityConfig but with more useful types for actors.go.
-type EntityConfig struct {
-	Entities                   []string
-	ActorIdleTimeout           time.Duration
-	DrainOngoingCallTimeout    time.Duration
-	DrainRebalancedActors      bool
-	ReentrancyConfig           daprAppConfig.ReentrancyConfig
-	RemindersStoragePartitions int
-}
+// type Config struct {
+// 	HostAddress                   string
+// 	AppID                         string
+// 	PlacementAddresses            []string
+// 	HostedActorTypes              []string
+// 	Port                          int
+// 	HeartbeatInterval             time.Duration
+// 	ActorDeactivationScanInterval time.Duration
+// 	ActorIdleTimeout              time.Duration
+// 	DrainOngoingCallTimeout       time.Duration
+// 	DrainRebalancedActors         bool
+// 	Namespace                     string
+// 	Reentrancy                    daprAppConfig.ReentrancyConfig
+// 	RemindersStoragePartitions    int
+// 	EntityConfigs                 map[string]EntityConfig
+// 	HealthHTTPClient              *http.Client
+// 	HealthEndpoint                string
+// 	AppChannelAddress             string
+// 	PodName                       string
+// }
+
+// // Remap of daprAppConfig.EntityConfig but with more useful types for actors.go.
+// type EntityConfig struct {
+// 	Entities                   []string
+// 	ActorIdleTimeout           time.Duration
+// 	DrainOngoingCallTimeout    time.Duration
+// 	DrainRebalancedActors      bool
+// 	ReentrancyConfig           daprAppConfig.ReentrancyConfig
+// 	RemindersStoragePartitions int
+// }
 
 const (
 	defaultActorIdleTimeout     = time.Minute * 60
@@ -76,7 +81,7 @@ type ConfigOpts struct {
 
 // NewConfig returns the actor runtime configuration.
 func NewConfig(opts ConfigOpts) Config {
-	c := Config{
+	c := internal.Config{
 		HostAddress:                   opts.HostAddress,
 		AppID:                         opts.AppID,
 		PlacementAddresses:            opts.PlacementAddresses,
@@ -92,7 +97,7 @@ func NewConfig(opts ConfigOpts) Config {
 		ActorDeactivationScanInterval: defaultActorScanInterval,
 		ActorIdleTimeout:              defaultActorIdleTimeout,
 		DrainOngoingCallTimeout:       defaultOngoingCallTimeout,
-		EntityConfigs:                 make(map[string]EntityConfig),
+		EntityConfigs:                 make(map[string]internal.EntityConfig),
 		AppChannelAddress:             opts.AppChannelAddress,
 		PodName:                       opts.PodName,
 	}
@@ -134,46 +139,47 @@ func NewConfig(opts ConfigOpts) Config {
 		}
 	}
 
-	return c
+	conf := Config{coreConfig: c}
+	return conf
 }
 
 func (c *Config) GetIdleTimeoutForType(actorType string) time.Duration {
-	if val, ok := c.EntityConfigs[actorType]; ok {
+	if val, ok := c.coreConfig.EntityConfigs[actorType]; ok {
 		return val.ActorIdleTimeout
 	}
-	return c.ActorIdleTimeout
+	return c.coreConfig.ActorIdleTimeout
 }
 
 func (c *Config) GetDrainOngoingTimeoutForType(actorType string) time.Duration {
-	if val, ok := c.EntityConfigs[actorType]; ok {
+	if val, ok := c.coreConfig.EntityConfigs[actorType]; ok {
 		return val.DrainOngoingCallTimeout
 	}
-	return c.DrainOngoingCallTimeout
+	return c.coreConfig.DrainOngoingCallTimeout
 }
 
 func (c *Config) GetDrainRebalancedActorsForType(actorType string) bool {
-	if val, ok := c.EntityConfigs[actorType]; ok {
+	if val, ok := c.coreConfig.EntityConfigs[actorType]; ok {
 		return val.DrainRebalancedActors
 	}
-	return c.DrainRebalancedActors
+	return c.coreConfig.DrainRebalancedActors
 }
 
 func (c *Config) GetReentrancyForType(actorType string) daprAppConfig.ReentrancyConfig {
-	if val, ok := c.EntityConfigs[actorType]; ok {
+	if val, ok := c.coreConfig.EntityConfigs[actorType]; ok {
 		return val.ReentrancyConfig
 	}
-	return c.Reentrancy
+	return c.coreConfig.Reentrancy
 }
 
-func (c *Config) GetRemindersPartitionCountForType(actorType string) int {
-	if val, ok := c.EntityConfigs[actorType]; ok {
-		return val.RemindersStoragePartitions
-	}
-	return c.RemindersStoragePartitions
-}
+// func (c *Config) GetRemindersPartitionCountForType(actorType string) int {
+// 	if val, ok := c.EntityConfigs[actorType]; ok {
+// 		return val.RemindersStoragePartitions
+// 	}
+// 	return c.RemindersStoragePartitions
+// }
 
-func translateEntityConfig(appConfig daprAppConfig.EntityConfig) EntityConfig {
-	domainConfig := EntityConfig{
+func translateEntityConfig(appConfig daprAppConfig.EntityConfig) internal.EntityConfig {
+	domainConfig := internal.EntityConfig{
 		Entities:                   appConfig.Entities,
 		ActorIdleTimeout:           defaultActorIdleTimeout,
 		DrainOngoingCallTimeout:    defaultOngoingCallTimeout,
