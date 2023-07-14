@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dapr/dapr/pkg/config"
 	appConfig "github.com/dapr/dapr/pkg/config"
 
 	"github.com/stretchr/testify/assert"
@@ -30,6 +31,112 @@ const (
 	Namespace        = "default"
 )
 
+func TestConfig(t *testing.T) {
+	appConfig := config.ApplicationConfig{
+		Entities:                   []string{"1"},
+		ActorScanInterval:          "1s",
+		ActorIdleTimeout:           "2s",
+		DrainOngoingCallTimeout:    "3s",
+		DrainRebalancedActors:      true,
+		Reentrancy:                 config.ReentrancyConfig{},
+		RemindersStoragePartitions: 0,
+	}
+	c := NewConfig(ConfigOpts{
+		HostAddress:        "localhost:5050",
+		AppID:              "app1",
+		PlacementAddresses: []string{"placement:5050"},
+		Port:               3500,
+		Namespace:          "default",
+		AppConfig:          appConfig,
+		PodName:            TestPodName,
+	})
+	assert.Equal(t, "localhost:5050", c.HostAddress)
+	assert.Equal(t, "app1", c.AppID)
+	assert.Equal(t, []string{"placement:5050"}, c.PlacementAddresses)
+	assert.Equal(t, []string{"1"}, c.HostedActorTypes)
+	assert.Equal(t, 3500, c.Port)
+	assert.Equal(t, "1s", c.ActorDeactivationScanInterval.String())
+	assert.Equal(t, "2s", c.ActorIdleTimeout.String())
+	assert.Equal(t, "3s", c.DrainOngoingCallTimeout.String())
+	assert.Equal(t, true, c.DrainRebalancedActors)
+	assert.Equal(t, "default", c.Namespace)
+	assert.Equal(t, TestPodName, c.PodName)
+}
+
+func TestReentrancyConfig(t *testing.T) {
+	t.Run("Test empty reentrancy values", func(t *testing.T) {
+		appConfig := DefaultAppConfig
+		c := NewConfig(ConfigOpts{
+			HostAddress:        "localhost:5050",
+			AppID:              "app1",
+			PlacementAddresses: []string{"placement:5050"},
+			Port:               3500,
+			Namespace:          "default",
+			AppConfig:          appConfig,
+		})
+		assert.False(t, c.Reentrancy.Enabled)
+		assert.NotNil(t, c.Reentrancy.MaxStackDepth)
+		assert.Equal(t, 32, *c.Reentrancy.MaxStackDepth)
+	})
+
+	t.Run("Test per type reentrancy", func(t *testing.T) {
+		appConfig := DefaultAppConfig
+		appConfig.EntityConfigs = []config.EntityConfig{
+			{
+				Entities: []string{"reentrantActor"},
+				Reentrancy: config.ReentrancyConfig{
+					Enabled: true,
+				},
+			},
+		}
+		c := NewConfig(ConfigOpts{
+			HostAddress:        "localhost:5050",
+			AppID:              "app1",
+			PlacementAddresses: []string{"placement:5050"},
+			Port:               3500,
+			Namespace:          "default",
+			AppConfig:          appConfig,
+		})
+		assert.False(t, c.Reentrancy.Enabled)
+		assert.NotNil(t, c.Reentrancy.MaxStackDepth)
+		assert.Equal(t, 32, *c.Reentrancy.MaxStackDepth)
+		assert.True(t, c.EntityConfigs["reentrantActor"].ReentrancyConfig.Enabled)
+	})
+
+	t.Run("Test minimum reentrancy values", func(t *testing.T) {
+		appConfig := DefaultAppConfig
+		appConfig.Reentrancy = config.ReentrancyConfig{Enabled: true}
+		c := NewConfig(ConfigOpts{
+			HostAddress:        "localhost:5050",
+			AppID:              "app1",
+			PlacementAddresses: []string{"placement:5050"},
+			Port:               3500,
+			Namespace:          "default",
+			AppConfig:          appConfig,
+		})
+		assert.True(t, c.Reentrancy.Enabled)
+		assert.NotNil(t, c.Reentrancy.MaxStackDepth)
+		assert.Equal(t, 32, *c.Reentrancy.MaxStackDepth)
+	})
+
+	t.Run("Test full reentrancy values", func(t *testing.T) {
+		appConfig := DefaultAppConfig
+		reentrancyLimit := 64
+		appConfig.Reentrancy = config.ReentrancyConfig{Enabled: true, MaxStackDepth: &reentrancyLimit}
+		c := NewConfig(ConfigOpts{
+			HostAddress:        "localhost:5050",
+			AppID:              "app1",
+			PlacementAddresses: []string{"placement:5050"},
+			Port:               3500,
+			Namespace:          "default",
+			AppConfig:          appConfig,
+		})
+		assert.True(t, c.Reentrancy.Enabled)
+		assert.NotNil(t, c.Reentrancy.MaxStackDepth)
+		assert.Equal(t, 64, *c.Reentrancy.MaxStackDepth)
+	})
+}
+
 func TestDefaultConfigValuesSet(t *testing.T) {
 	appConfig := appConfig.ApplicationConfig{Entities: []string{"actor1"}}
 	config := NewConfig(ConfigOpts{
@@ -40,17 +147,16 @@ func TestDefaultConfigValuesSet(t *testing.T) {
 		Namespace:          Namespace,
 		AppConfig:          appConfig,
 	})
-	coreConfig := config.coreConfig
 
-	assert.Equal(t, HostAddress, coreConfig.HostAddress)
-	assert.Equal(t, AppID, coreConfig.AppID)
-	assert.Contains(t, coreConfig.PlacementAddresses, PlacementAddress)
-	assert.Equal(t, Port, coreConfig.Port)
-	assert.Equal(t, Namespace, coreConfig.Namespace)
-	assert.NotNil(t, coreConfig.ActorIdleTimeout)
-	assert.NotNil(t, coreConfig.ActorDeactivationScanInterval)
-	assert.NotNil(t, coreConfig.DrainOngoingCallTimeout)
-	assert.NotNil(t, coreConfig.DrainRebalancedActors)
+	assert.Equal(t, HostAddress, config.HostAddress)
+	assert.Equal(t, AppID, config.AppID)
+	assert.Contains(t, config.PlacementAddresses, PlacementAddress)
+	assert.Equal(t, Port, config.Port)
+	assert.Equal(t, Namespace, config.Namespace)
+	assert.NotNil(t, config.ActorIdleTimeout)
+	assert.NotNil(t, config.ActorDeactivationScanInterval)
+	assert.NotNil(t, config.DrainOngoingCallTimeout)
+	assert.NotNil(t, config.DrainRebalancedActors)
 }
 
 func TestPerActorTypeConfigurationValues(t *testing.T) {
@@ -88,42 +194,41 @@ func TestPerActorTypeConfigurationValues(t *testing.T) {
 		Namespace:          Namespace,
 		AppConfig:          appConfig,
 	})
-	coreConfig := config.coreConfig
 
 	// Check the base level items.
-	assert.Equal(t, HostAddress, coreConfig.HostAddress)
-	assert.Equal(t, AppID, coreConfig.AppID)
-	assert.Contains(t, coreConfig.PlacementAddresses, PlacementAddress)
-	assert.Equal(t, Port, coreConfig.Port)
-	assert.Equal(t, Namespace, coreConfig.Namespace)
-	assert.Equal(t, time.Second, coreConfig.ActorIdleTimeout)
-	assert.Equal(t, time.Second*2, coreConfig.ActorDeactivationScanInterval)
-	assert.Equal(t, time.Second*5, coreConfig.DrainOngoingCallTimeout)
-	assert.True(t, coreConfig.DrainRebalancedActors)
+	assert.Equal(t, HostAddress, config.HostAddress)
+	assert.Equal(t, AppID, config.AppID)
+	assert.Contains(t, config.PlacementAddresses, PlacementAddress)
+	assert.Equal(t, Port, config.Port)
+	assert.Equal(t, Namespace, config.Namespace)
+	assert.Equal(t, time.Second, config.ActorIdleTimeout)
+	assert.Equal(t, time.Second*2, config.ActorDeactivationScanInterval)
+	assert.Equal(t, time.Second*5, config.DrainOngoingCallTimeout)
+	assert.True(t, config.DrainRebalancedActors)
 
 	// Check the specific actors.
 	assert.Equal(t, time.Second*60, config.GetIdleTimeoutForType("actor1"))
 	assert.Equal(t, time.Second*300, config.GetDrainOngoingTimeoutForType("actor1"))
 	assert.False(t, config.GetDrainRebalancedActorsForType("actor1"))
 	assert.False(t, config.GetReentrancyForType("actor1").Enabled)
-	assert.Equal(t, 0, coreConfig.GetRemindersPartitionCountForType("actor1"))
+	assert.Equal(t, 0, config.GetRemindersPartitionCountForType("actor1"))
 	assert.Equal(t, time.Second*60, config.GetIdleTimeoutForType("actor2"))
 	assert.Equal(t, time.Second*300, config.GetDrainOngoingTimeoutForType("actor2"))
 	assert.False(t, config.GetDrainRebalancedActorsForType("actor2"))
 	assert.False(t, config.GetReentrancyForType("actor2").Enabled)
-	assert.Equal(t, 0, coreConfig.GetRemindersPartitionCountForType("actor2"))
+	assert.Equal(t, 0, config.GetRemindersPartitionCountForType("actor2"))
 
 	assert.Equal(t, time.Second*5, config.GetIdleTimeoutForType("actor3"))
 	assert.Equal(t, time.Second, config.GetDrainOngoingTimeoutForType("actor3"))
 	assert.True(t, config.GetDrainRebalancedActorsForType("actor3"))
 	assert.True(t, config.GetReentrancyForType("actor3").Enabled)
-	assert.Equal(t, 10, coreConfig.GetRemindersPartitionCountForType("actor3"))
+	assert.Equal(t, 10, config.GetRemindersPartitionCountForType("actor3"))
 
 	assert.Equal(t, time.Second, config.GetIdleTimeoutForType("actor4"))
 	assert.Equal(t, time.Second*5, config.GetDrainOngoingTimeoutForType("actor4"))
 	assert.True(t, config.GetDrainRebalancedActorsForType("actor4"))
 	assert.False(t, config.GetReentrancyForType("actor4").Enabled)
-	assert.Equal(t, 1, coreConfig.GetRemindersPartitionCountForType("actor4"))
+	assert.Equal(t, 1, config.GetRemindersPartitionCountForType("actor4"))
 }
 
 func TestOnlyHostedActorTypesAreIncluded(t *testing.T) {
@@ -162,9 +267,8 @@ func TestOnlyHostedActorTypesAreIncluded(t *testing.T) {
 		Namespace:          Namespace,
 		AppConfig:          appConfig,
 	})
-	coreConfig := config.coreConfig
 
-	assert.Contains(t, coreConfig.EntityConfigs, "actor1")
-	assert.Contains(t, coreConfig.EntityConfigs, "actor2")
-	assert.NotContains(t, coreConfig.EntityConfigs, "actor3")
+	assert.Contains(t, config.EntityConfigs, "actor1")
+	assert.Contains(t, config.EntityConfigs, "actor2")
+	assert.NotContains(t, config.EntityConfigs, "actor3")
 }

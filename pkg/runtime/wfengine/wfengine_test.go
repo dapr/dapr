@@ -790,7 +790,7 @@ func getEngine(t *testing.T) *wfengine.WorkflowEngine {
 	compStore.AddStateStore("workflowStore", store)
 	actors := actors.NewActors(actors.ActorsOpts{
 		CompStore:      compStore,
-		Config:         cfg,
+		ActorsConfig:   cfg,
 		StateStoreName: "workflowStore",
 		MockPlacement:  NewMockPlacement(),
 		Resiliency:     resiliency.New(logger.NewLogger("test")),
@@ -816,7 +816,7 @@ func getEngineAndStateStore(t *testing.T) (*wfengine.WorkflowEngine, *daprt.Fake
 
 	actors := actors.NewActors(actors.ActorsOpts{
 		CompStore:      compStore,
-		Config:         cfg,
+		ActorsConfig:   cfg,
 		StateStoreName: "workflowStore",
 		MockPlacement:  NewMockPlacement(),
 		Resiliency:     resiliency.New(logger.NewLogger("test")),

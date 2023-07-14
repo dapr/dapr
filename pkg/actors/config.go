@@ -23,7 +23,7 @@ import (
 
 // Config is the actor runtime configuration.
 type Config struct {
-	coreConfig internal.Config
+	internal.Config
 }
 
 const (
@@ -108,36 +108,36 @@ func NewConfig(opts ConfigOpts) Config {
 		}
 	}
 
-	conf := Config{coreConfig: c}
+	conf := Config{Config: c}
 	return conf
 }
 
 func (c *Config) GetIdleTimeoutForType(actorType string) time.Duration {
-	if val, ok := c.coreConfig.EntityConfigs[actorType]; ok {
+	if val, ok := c.EntityConfigs[actorType]; ok {
 		return val.ActorIdleTimeout
 	}
-	return c.coreConfig.ActorIdleTimeout
+	return c.ActorIdleTimeout
 }
 
 func (c *Config) GetDrainOngoingTimeoutForType(actorType string) time.Duration {
-	if val, ok := c.coreConfig.EntityConfigs[actorType]; ok {
+	if val, ok := c.EntityConfigs[actorType]; ok {
 		return val.DrainOngoingCallTimeout
 	}
-	return c.coreConfig.DrainOngoingCallTimeout
+	return c.DrainOngoingCallTimeout
 }
 
 func (c *Config) GetDrainRebalancedActorsForType(actorType string) bool {
-	if val, ok := c.coreConfig.EntityConfigs[actorType]; ok {
+	if val, ok := c.EntityConfigs[actorType]; ok {
 		return val.DrainRebalancedActors
 	}
-	return c.coreConfig.DrainRebalancedActors
+	return c.DrainRebalancedActors
 }
 
 func (c *Config) GetReentrancyForType(actorType string) daprAppConfig.ReentrancyConfig {
-	if val, ok := c.coreConfig.EntityConfigs[actorType]; ok {
+	if val, ok := c.EntityConfigs[actorType]; ok {
 		return val.ReentrancyConfig
 	}
-	return c.coreConfig.Reentrancy
+	return c.Reentrancy
 }
 
 func translateEntityConfig(appConfig daprAppConfig.EntityConfig) internal.EntityConfig {

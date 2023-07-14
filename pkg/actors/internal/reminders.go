@@ -28,19 +28,31 @@ var ErrReminderCanceled = errors.New("reminder has been canceled")
 // If this method returns false, the reminder is canceled by the actor.
 type ExecuteReminderFn func(reminder *Reminder) bool
 
+// LookupActorFn is the type of a function that returns whether an actor is locally-hosted and the address of its host.
+type LookupActorFn func(actorType string, actorID string) (isLocal bool, actorAddress string)
+
+// StateStoreProviderFn is the type of a function that returns the state store provider.
+type StateStoreProviderFn func() (TransactionalStateStore, error)
+
+// RemindersProviderOpts contains the options for the reminders provider.
+type RemindersProviderOpts struct {
+	StoreName string
+	Config    Config
+}
+
 // RemindersProvider is the interface for the object that provides reminders services.
 type RemindersProvider interface {
 	io.Closer
 
-	Init(ctx context.Context) // <- this performs the tasks of "evaluateReminders" too, which are done during init
+	Init(ctx context.Context)
 	GetReminder(ctx context.Context, req *GetReminderRequest) (*Reminder, error)
 	CreateReminder(ctx context.Context, req *Reminder) error
 	DeleteReminder(ctx context.Context, req DeleteReminderRequest) error
 	RenameReminder(ctx context.Context, req *RenameReminderRequest) error
 	DrainRebalancedReminders(actorType string, actorID string, actorKey string)
 
-	SetExecuteReminderFn(fn ExecuteReminderFn)
-	SetStateStoreProvider(fn func() (TransactionalStateStore, error))
 	SetResiliencyProvider(resiliency resiliency.Provider)
-	SetLookupActorFn(fn func(string, string) (bool, string))
+	SetExecuteReminderFn(fn ExecuteReminderFn)
+	SetStateStoreProviderFn(fn StateStoreProviderFn)
+	SetLookupActorFn(fn LookupActorFn)
 }

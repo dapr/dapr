@@ -221,7 +221,7 @@ func (b *runtimeBuilder) buildActorRuntime() *actorsRuntime {
 	a := newActorsWithClock(ActorsOpts{
 		CompStore:      compStore,
 		AppChannel:     b.appChannel,
-		Config:         *b.config,
+		ActorsConfig:   *b.config,
 		TracingSpec:    config.TracingSpec{SamplingRate: "1"},
 		Resiliency:     resiliency.FromConfigurations(log, testResiliency),
 		StateStoreName: storeName,
@@ -244,7 +244,7 @@ func newTestActorsRuntimeWithMock(appChannel channel.AppChannel) *actorsRuntime 
 	a := newActorsWithClock(ActorsOpts{
 		CompStore:      compStore,
 		AppChannel:     appChannel,
-		Config:         conf,
+		ActorsConfig:   conf,
 		TracingSpec:    config.TracingSpec{SamplingRate: "1"},
 		Resiliency:     resiliency.New(log),
 		StateStoreName: "actorStore",
@@ -265,7 +265,7 @@ func newTestActorsRuntimeWithMockWithoutPlacement(appChannel channel.AppChannel)
 	a := newActorsWithClock(ActorsOpts{
 		CompStore:      compstore.New(),
 		AppChannel:     appChannel,
-		Config:         conf,
+		ActorsConfig:   conf,
 		TracingSpec:    config.TracingSpec{SamplingRate: "1"},
 		Resiliency:     resiliency.New(log),
 		StateStoreName: "actorStore",
@@ -286,7 +286,7 @@ func newTestActorsRuntimeWithMockAndNoStore(appChannel channel.AppChannel) *acto
 	a := newActorsWithClock(ActorsOpts{
 		CompStore:      compstore.New(),
 		AppChannel:     appChannel,
-		Config:         conf,
+		ActorsConfig:   conf,
 		TracingSpec:    config.TracingSpec{SamplingRate: "1"},
 		Resiliency:     resiliency.New(log),
 		StateStoreName: "actorStore",
@@ -319,7 +319,7 @@ func newTestActorsRuntimeWithMockAndActorMetadataPartition(appChannel channel.Ap
 	a := newActorsWithClock(ActorsOpts{
 		CompStore:      compStore,
 		AppChannel:     appChannel,
-		Config:         conf,
+		ActorsConfig:   conf,
 		TracingSpec:    config.TracingSpec{SamplingRate: "1"},
 		Resiliency:     resiliency.New(log),
 		StateStoreName: "actorStore",
@@ -468,8 +468,8 @@ func TestDeactivationTicker(t *testing.T) {
 		actorType, actorID := getTestActorTypeAndID()
 		actorKey := constructCompositeKey(actorType, actorID)
 
-		testActorsRuntime.config.coreConfig.ActorIdleTimeout = time.Second * 2
-		testActorsRuntime.config.coreConfig.ActorDeactivationScanInterval = time.Second * 1
+		testActorsRuntime.config.ActorIdleTimeout = time.Second * 2
+		testActorsRuntime.config.ActorDeactivationScanInterval = time.Second * 1
 
 		ch := deactivateActorWithDuration(testActorsRuntime, actorType, actorID)
 
@@ -492,8 +492,8 @@ func TestDeactivationTicker(t *testing.T) {
 		actorType, actorID := getTestActorTypeAndID()
 		actorKey := constructCompositeKey(actorType, actorID)
 
-		testActorsRuntime.config.coreConfig.ActorIdleTimeout = time.Second * 5
-		testActorsRuntime.config.coreConfig.ActorDeactivationScanInterval = time.Second * 1
+		testActorsRuntime.config.ActorIdleTimeout = time.Second * 5
+		testActorsRuntime.config.ActorDeactivationScanInterval = time.Second * 1
 
 		ch := deactivateActorWithDuration(testActorsRuntime, actorType, actorID)
 
@@ -516,9 +516,9 @@ func TestDeactivationTicker(t *testing.T) {
 		secondType := "b"
 		actorID := "1"
 
-		testActorsRuntime.config.coreConfig.EntityConfigs[firstType] = internal.EntityConfig{Entities: []string{firstType}, ActorIdleTimeout: time.Second * 2}
-		testActorsRuntime.config.coreConfig.EntityConfigs[secondType] = internal.EntityConfig{Entities: []string{secondType}, ActorIdleTimeout: time.Second * 5}
-		testActorsRuntime.config.coreConfig.ActorDeactivationScanInterval = time.Second * 1
+		testActorsRuntime.config.EntityConfigs[firstType] = internal.EntityConfig{Entities: []string{firstType}, ActorIdleTimeout: time.Second * 2}
+		testActorsRuntime.config.EntityConfigs[secondType] = internal.EntityConfig{Entities: []string{secondType}, ActorIdleTimeout: time.Second * 5}
+		testActorsRuntime.config.ActorDeactivationScanInterval = time.Second * 1
 
 		ch1 := deactivateActorWithDuration(testActorsRuntime, firstType, actorID)
 		ch2 := deactivateActorWithDuration(testActorsRuntime, secondType, actorID)
@@ -2803,112 +2803,6 @@ func TestConstructCompositeKeyWithThreeArgs(t *testing.T) {
 	actorKey := constructCompositeKey(appID, actorType, actorID)
 
 	assert.Equal(t, "myapp||TestActor||abc123", actorKey)
-}
-
-func TestConfig(t *testing.T) {
-	appConfig := config.ApplicationConfig{
-		Entities:                   []string{"1"},
-		ActorScanInterval:          "1s",
-		ActorIdleTimeout:           "2s",
-		DrainOngoingCallTimeout:    "3s",
-		DrainRebalancedActors:      true,
-		Reentrancy:                 config.ReentrancyConfig{},
-		RemindersStoragePartitions: 0,
-	}
-	c := NewConfig(ConfigOpts{
-		HostAddress:        "localhost:5050",
-		AppID:              "app1",
-		PlacementAddresses: []string{"placement:5050"},
-		Port:               3500,
-		Namespace:          "default",
-		AppConfig:          appConfig,
-		PodName:            TestPodName,
-	})
-	assert.Equal(t, "localhost:5050", c.HostAddress)
-	assert.Equal(t, "app1", c.AppID)
-	assert.Equal(t, []string{"placement:5050"}, c.PlacementAddresses)
-	assert.Equal(t, []string{"1"}, c.HostedActorTypes)
-	assert.Equal(t, 3500, c.Port)
-	assert.Equal(t, "1s", c.ActorDeactivationScanInterval.String())
-	assert.Equal(t, "2s", c.ActorIdleTimeout.String())
-	assert.Equal(t, "3s", c.DrainOngoingCallTimeout.String())
-	assert.Equal(t, true, c.DrainRebalancedActors)
-	assert.Equal(t, "default", c.Namespace)
-	assert.Equal(t, TestPodName, c.PodName)
-}
-
-func TestReentrancyConfig(t *testing.T) {
-	t.Run("Test empty reentrancy values", func(t *testing.T) {
-		appConfig := DefaultAppConfig
-		c := NewConfig(ConfigOpts{
-			HostAddress:        "localhost:5050",
-			AppID:              "app1",
-			PlacementAddresses: []string{"placement:5050"},
-			Port:               3500,
-			Namespace:          "default",
-			AppConfig:          appConfig,
-		})
-		assert.False(t, c.Reentrancy.Enabled)
-		assert.NotNil(t, c.Reentrancy.MaxStackDepth)
-		assert.Equal(t, 32, *c.Reentrancy.MaxStackDepth)
-	})
-
-	t.Run("Test per type reentrancy", func(t *testing.T) {
-		appConfig := DefaultAppConfig
-		appConfig.EntityConfigs = []config.EntityConfig{
-			{
-				Entities: []string{"reentrantActor"},
-				Reentrancy: config.ReentrancyConfig{
-					Enabled: true,
-				},
-			},
-		}
-		c := NewConfig(ConfigOpts{
-			HostAddress:        "localhost:5050",
-			AppID:              "app1",
-			PlacementAddresses: []string{"placement:5050"},
-			Port:               3500,
-			Namespace:          "default",
-			AppConfig:          appConfig,
-		})
-		assert.False(t, c.Reentrancy.Enabled)
-		assert.NotNil(t, c.Reentrancy.MaxStackDepth)
-		assert.Equal(t, 32, *c.Reentrancy.MaxStackDepth)
-		assert.True(t, c.EntityConfigs["reentrantActor"].ReentrancyConfig.Enabled)
-	})
-
-	t.Run("Test minimum reentrancy values", func(t *testing.T) {
-		appConfig := DefaultAppConfig
-		appConfig.Reentrancy = config.ReentrancyConfig{Enabled: true}
-		c := NewConfig(ConfigOpts{
-			HostAddress:        "localhost:5050",
-			AppID:              "app1",
-			PlacementAddresses: []string{"placement:5050"},
-			Port:               3500,
-			Namespace:          "default",
-			AppConfig:          appConfig,
-		})
-		assert.True(t, c.Reentrancy.Enabled)
-		assert.NotNil(t, c.Reentrancy.MaxStackDepth)
-		assert.Equal(t, 32, *c.Reentrancy.MaxStackDepth)
-	})
-
-	t.Run("Test full reentrancy values", func(t *testing.T) {
-		appConfig := DefaultAppConfig
-		reentrancyLimit := 64
-		appConfig.Reentrancy = config.ReentrancyConfig{Enabled: true, MaxStackDepth: &reentrancyLimit}
-		c := NewConfig(ConfigOpts{
-			HostAddress:        "localhost:5050",
-			AppID:              "app1",
-			PlacementAddresses: []string{"placement:5050"},
-			Port:               3500,
-			Namespace:          "default",
-			AppConfig:          appConfig,
-		})
-		assert.True(t, c.Reentrancy.Enabled)
-		assert.NotNil(t, c.Reentrancy.MaxStackDepth)
-		assert.Equal(t, 64, *c.Reentrancy.MaxStackDepth)
-	})
 }
 
 func TestHostValidation(t *testing.T) {

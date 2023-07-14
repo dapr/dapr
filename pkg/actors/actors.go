@@ -133,7 +133,7 @@ var ErrDaprResponseHeader = errors.New("error indicated via actor header respons
 type ActorsOpts struct {
 	AppChannel       channel.AppChannel
 	GRPCConnectionFn GRPCConnectionFn
-	Config           Config
+	ActorsConfig     Config
 	CertChain        *daprCredentials.CertChain
 	TracingSpec      configuration.TracingSpec
 	Resiliency       resiliency.Provider
@@ -157,18 +157,17 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) Actors {
 	appHealthy.Store(true)
 	ctx, cancel := context.WithCancel(context.Background())
 
-	reminderOpts := reminders.ReminderOpts{
+	remindersProvider := reminders.NewRemindersProvider(clock, internal.RemindersProviderOpts{
 		StoreName: opts.StateStoreName,
-		Config:    opts.Config.coreConfig,
-	}
+		Config:    opts.ActorsConfig.Config,
+	})
 
 	a := &actorsRuntime{
 		appChannel:           opts.AppChannel,
 		grpcConnectionFn:     opts.GRPCConnectionFn,
-		config:               opts.Config,
-		coreConfig:           opts.Config.coreConfig,
+		config:               opts.ActorsConfig,
 		timers:               timers.NewTimersProvider(clock),
-		actorsReminders:      reminders.NewRemindersProvider(clock, reminderOpts),
+		actorsReminders:      remindersProvider,
 		certChain:            opts.CertChain,
 		tracingSpec:          opts.TracingSpec,
 		resiliency:           opts.Resiliency,
@@ -183,6 +182,7 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) Actors {
 		internalActors:       map[string]InternalActor{},
 		internalActorChannel: newInternalActorChannel(),
 		compStore:            opts.CompStore,
+
 		// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 		stateTTLEnabled: opts.StateTTLEnabled,
 	}
@@ -190,7 +190,7 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) Actors {
 	a.timers.SetExecuteTimerFn(a.executeTimer)
 	a.actorsReminders.SetExecuteReminderFn(a.executeReminderWrapper)
 	a.actorsReminders.SetResiliencyProvider(a.resiliency)
-	a.actorsReminders.SetStateStoreProvider(a.stateStore)
+	a.actorsReminders.SetStateStoreProviderFn(a.stateStore)
 	a.actorsReminders.SetLookupActorFn(a.isActorLocallyHosted)
 
 	return a
@@ -330,7 +330,7 @@ func (a *actorsRuntime) getActorTypeAndIDFromKey(key string) (string, string) {
 type deactivateFn = func(actorType string, actorID string) error
 
 func (a *actorsRuntime) deactivationTicker(configuration Config, deactivateFn deactivateFn) {
-	ticker := a.clock.NewTicker(configuration.coreConfig.ActorDeactivationScanInterval)
+	ticker := a.clock.NewTicker(configuration.ActorDeactivationScanInterval)
 	ch := ticker.C()
 	defer ticker.Stop()
 

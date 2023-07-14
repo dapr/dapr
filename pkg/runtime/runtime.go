@@ -2238,7 +2238,7 @@ func (a *DaprRuntime) initActors() error {
 	act := actors.NewActors(actors.ActorsOpts{
 		AppChannel:       a.appChannel,
 		GRPCConnectionFn: a.grpc.GetGRPCConnection,
-		Config:           actorConfig,
+		ActorsConfig:     actorConfig,
 		CertChain:        a.runtimeConfig.certChain,
 		TracingSpec:      a.globalConfig.Spec.TracingSpec,
 		Resiliency:       a.resiliency,

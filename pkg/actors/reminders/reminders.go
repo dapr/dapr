@@ -18,7 +18,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -43,38 +42,31 @@ const (
 // Implements a reminders provider.
 type reminders struct {
 	clock                clock.WithTicker
+	runningCh            chan struct{}
 	executeReminderFn    internal.ExecuteReminderFn
 	remindersLock        sync.RWMutex
 	remindersStoringLock sync.Mutex
 	reminders            map[string][]ActorReminderReference
 	activeReminders      *sync.Map
 	evaluationChan       chan struct{}
-	stateStoreProvider   func() (internal.TransactionalStateStore, error)
+	stateStoreProviderFn internal.StateStoreProviderFn
 	resiliency           resiliency.Provider
 	storeName            string
 	evaluationLock       sync.RWMutex
 	config               internal.Config
-	ctx                  context.Context
-	cancel               context.CancelFunc
-	lookUpActorFn        func(string, string) (bool, string)
-}
-type ReminderOpts struct {
-	StoreName string
-	Config    internal.Config
+	lookUpActorFn        internal.LookupActorFn
 }
 
-// NewRemindersProvider returns a TimerProvider.
-func NewRemindersProvider(clock clock.WithTicker, opts ReminderOpts) internal.RemindersProvider {
-	ctx, cancel := context.WithCancel(context.Background())
+// NewRemindersProvider returns a reminders provider.
+func NewRemindersProvider(clock clock.WithTicker, opts internal.RemindersProviderOpts) internal.RemindersProvider {
 	return &reminders{
 		clock:           clock,
+		runningCh:       make(chan struct{}),
 		reminders:       map[string][]ActorReminderReference{},
 		activeReminders: &sync.Map{},
 		evaluationChan:  make(chan struct{}, 1),
 		storeName:       opts.StoreName,
 		config:          opts.Config,
-		ctx:             ctx,
-		cancel:          cancel,
 	}
 }
 
@@ -82,15 +74,15 @@ func (r *reminders) SetExecuteReminderFn(fn internal.ExecuteReminderFn) {
 	r.executeReminderFn = fn
 }
 
-func (r *reminders) SetStateStoreProvider(fn func() (internal.TransactionalStateStore, error)) {
-	r.stateStoreProvider = fn
+func (r *reminders) SetStateStoreProviderFn(fn internal.StateStoreProviderFn) {
+	r.stateStoreProviderFn = fn
 }
 
 func (r *reminders) SetResiliencyProvider(resiliency resiliency.Provider) {
 	r.resiliency = resiliency
 }
 
-func (r *reminders) SetLookupActorFn(fn func(string, string) (bool, string)) {
+func (r *reminders) SetLookupActorFn(fn internal.LookupActorFn) {
 	r.lookUpActorFn = fn
 }
 
@@ -98,6 +90,7 @@ func (r *reminders) DrainRebalancedReminders(actorType string, actorID string, a
 	r.remindersLock.RLock()
 	reminders := r.reminders[actorType]
 	r.remindersLock.RUnlock()
+
 	for _, rem := range reminders {
 		// r.reminder refers to the actual reminder struct that is saved in the db
 		if rem.Reminder.ActorType == actorType && rem.Reminder.ActorID == "actorID" {
@@ -112,7 +105,7 @@ func (r *reminders) DrainRebalancedReminders(actorType string, actorID string, a
 }
 
 func (r *reminders) CreateReminder(ctx context.Context, reminder *internal.Reminder) error {
-	store, err := r.stateStoreProvider()
+	store, err := r.stateStoreProviderFn()
 	if err != nil {
 		return err
 	}
@@ -126,7 +119,7 @@ func (r *reminders) CreateReminder(ctx context.Context, reminder *internal.Remin
 
 	existing, ok := r.getReminder(reminder.Name, reminder.ActorType, reminder.ActorID)
 	if ok {
-		if r.reminderRequiresUpdate(reminder, existing) {
+		if existing.RequiresUpdating(reminder) {
 			err := r.doDeleteReminder(ctx, reminder.ActorType, reminder.ActorID, reminder.Name)
 			if err != nil {
 				return err
@@ -146,6 +139,8 @@ func (r *reminders) CreateReminder(ctx context.Context, reminder *internal.Remin
 }
 
 func (r *reminders) Close() error {
+	// Close the runningCh
+	close(r.runningCh)
 	return nil
 }
 
@@ -184,7 +179,7 @@ func (r *reminders) DeleteReminder(ctx context.Context, req internal.DeleteRemin
 func (r *reminders) RenameReminder(ctx context.Context, req *internal.RenameReminderRequest) error {
 	log.Warn("[DEPRECATION NOTICE] Currently RenameReminder renames by deleting-then-inserting-again. This implementation is not fault-tolerant, as a failed insert after deletion would result in no reminder")
 
-	store, err := r.stateStoreProvider()
+	store, err := r.stateStoreProviderFn()
 	if err != nil {
 		return err
 	}
@@ -300,8 +295,9 @@ func (r *reminders) evaluateReminders(ctx context.Context) {
 func (r *reminders) waitForEvaluationChan() bool {
 	t := r.clock.NewTimer(5 * time.Second)
 	defer t.Stop()
+
 	select {
-	case <-r.ctx.Done():
+	case <-r.runningCh:
 		return false
 	case <-t.C():
 		return false
@@ -325,23 +321,8 @@ func (r *reminders) getReminder(reminderName string, actorType string, actorID s
 	return nil, false
 }
 
-func (r *reminders) reminderRequiresUpdate(new *internal.Reminder, existing *internal.Reminder) bool {
-	// If the reminder is different, short-circuit
-	if existing.ActorID != new.ActorID ||
-		existing.ActorType != new.ActorType ||
-		existing.Name != new.Name {
-		return false
-	}
-
-	return existing.DueTime != new.DueTime ||
-		existing.Period != new.Period ||
-		!new.ExpirationTime.IsZero() ||
-		(!existing.ExpirationTime.IsZero() && new.ExpirationTime.IsZero()) ||
-		!reflect.DeepEqual(existing.Data, new.Data)
-}
-
 func (r *reminders) doDeleteReminder(ctx context.Context, actorType, actorID, name string) error {
-	store, err := r.stateStoreProvider()
+	store, err := r.stateStoreProviderFn()
 	if err != nil {
 		return err
 	}
@@ -552,7 +533,7 @@ func (a *reminders) saveActorTypeMetadataRequest(actorType string, actorMetadata
 }
 
 func (r *reminders) getRemindersForActorType(ctx context.Context, actorType string, migrate bool) ([]ActorReminderReference, *ActorMetadata, error) {
-	store, err := r.stateStoreProvider()
+	store, err := r.stateStoreProviderFn()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -680,7 +661,7 @@ func (r *reminders) getRemindersForActorType(ctx context.Context, actorType stri
 }
 
 func (r *reminders) getActorTypeMetadata(ctx context.Context, actorType string, migrate bool) (*ActorMetadata, error) {
-	store, err := r.stateStoreProvider()
+	store, err := r.stateStoreProviderFn()
 	if err != nil {
 		return nil, err
 	}
@@ -916,7 +897,7 @@ func (r *reminders) startReminder(reminder *internal.Reminder, stopChannel chan 
 }
 
 func (r *reminders) getReminderTrack(ctx context.Context, key string) (*internal.ReminderTrack, error) {
-	store, err := r.stateStoreProvider()
+	store, err := r.stateStoreProviderFn()
 	if err != nil {
 		return nil, err
 	}
@@ -953,7 +934,7 @@ func (r *reminders) getReminderTrack(ctx context.Context, key string) (*internal
 }
 
 func (r *reminders) updateReminderTrack(ctx context.Context, key string, repetition int, lastInvokeTime time.Time, etag *string) error {
-	store, err := r.stateStoreProvider()
+	store, err := r.stateStoreProviderFn()
 	if err != nil {
 		return err
 	}

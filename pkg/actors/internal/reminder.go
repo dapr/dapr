@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -195,6 +196,21 @@ func (r Reminder) String() string {
 		"name='%s' hasData=%v period='%s' dueTime=%s expirationTime=%s",
 		r.Key(), hasData, r.Period, dueTime, expirationTime,
 	)
+}
+
+func (r *Reminder) RequiresUpdating(new *Reminder) bool {
+	// If the reminder is different, short-circuit
+	if r.ActorID != new.ActorID ||
+		r.ActorType != new.ActorType ||
+		r.Name != new.Name {
+		return false
+	}
+
+	return r.DueTime != new.DueTime ||
+		r.Period != new.Period ||
+		!new.ExpirationTime.IsZero() ||
+		(!r.ExpirationTime.IsZero() && new.ExpirationTime.IsZero()) ||
+		!reflect.DeepEqual(r.Data, new.Data)
 }
 
 // parseTimeTruncateSeconds is a wrapper around timeutils.ParseTime that truncates the time to seconds.

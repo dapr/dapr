@@ -38,13 +38,13 @@ func newTestReminders() *reminders {
 		AppID:              TestAppID,
 		PlacementAddresses: []string{"placement:5050"},
 	}
-	opts := ReminderOpts{
+	opts := internal.RemindersProviderOpts{
 		StoreName: "testStore",
 		Config:    conf,
 	}
 	clock := clocktesting.NewFakeClock(startOfTime)
 	r := NewRemindersProvider(clock, opts)
-	r.SetStateStoreProvider(fakeTStore)
+	r.SetStateStoreProviderFn(fakeTStore)
 	return r.(*reminders)
 }
 
@@ -121,7 +121,7 @@ func TestStoreIsNotInitialized(t *testing.T) {
 func TestReminderCountFiring(t *testing.T) {
 	testReminders := newTestReminders()
 	defer testReminders.Close()
-	testReminders.SetStateStoreProvider(fakeRealTStore)
+	testReminders.SetStateStoreProviderFn(fakeRealTStore)
 	executed := make(chan string, 1)
 	testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
 		executed <- reminder.Key()
