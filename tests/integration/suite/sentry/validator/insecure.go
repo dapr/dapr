@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package metadata
+package validator
 
 import (
 	"context"
@@ -33,15 +33,15 @@ import (
 )
 
 func init() {
-	suite.Register(new(insecureValidator))
+	suite.Register(new(insecure))
 }
 
-// insecureValidator tests Sentry with the insecure validator.
-type insecureValidator struct {
+// insecure tests Sentry with the insecure validator.
+type insecure struct {
 	proc *procsentry.Sentry
 }
 
-func (m *insecureValidator) Setup(t *testing.T) []framework.Option {
+func (m *insecure) Setup(t *testing.T) []framework.Option {
 	m.proc = procsentry.New(t)
 
 	return []framework.Option{
@@ -49,7 +49,7 @@ func (m *insecureValidator) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (m *insecureValidator) Run(t *testing.T, parentCtx context.Context) {
+func (m *insecure) Run(t *testing.T, parentCtx context.Context) {
 	const (
 		defaultAppID     = "myapp"
 		defaultNamespace = "default"

@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package metadata
+package validator
 
 import (
 	"crypto"
@@ -105,7 +105,7 @@ func signJWT(builder *jwt.Builder) ([]byte, error) {
 	return jwt.Sign(token, jwt.WithKey(jwa.ES256, jwtSigningKeyPriv))
 }
 
-func validateCertificateResponse(t *testing.T, res *sentrypbv1.SignCertificateResponse, sentryBundle ca.CABundle, expectSPIFFEID, expectDNSName string) {
+func validateCertificateResponse(t *testing.T, res *sentrypbv1.SignCertificateResponse, sentryBundle ca.Bundle, expectSPIFFEID, expectDNSName string) {
 	t.Helper()
 
 	require.NotEmpty(t, res.WorkloadCertificate)

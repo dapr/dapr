@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package metadata
+package validator
 
 import (
 	"context"
@@ -34,16 +34,16 @@ import (
 )
 
 func init() {
-	suite.Register(new(jwksValidator))
+	suite.Register(new(jwks))
 }
 
-// jwksValidator tests Sentry with the JWKS validator.
-type jwksValidator struct {
+// jwks tests Sentry with the JWKS validator.
+type jwks struct {
 	proc *procsentry.Sentry
 }
 
-func (m *jwksValidator) Setup(t *testing.T) []framework.Option {
-	jwksValidatorConfig := `
+func (m *jwks) Setup(t *testing.T) []framework.Option {
+	jwksConfig := `
 kind: Configuration
 apiVersion: dapr.io/v1alpha1
 metadata:
@@ -60,14 +60,14 @@ spec:
             {"keys":[` + string(jwtSigningKeyPubJSON) + `]}
 `
 
-	m.proc = procsentry.New(t, procsentry.WithConfiguration(jwksValidatorConfig))
+	m.proc = procsentry.New(t, procsentry.WithConfiguration(jwksConfig))
 
 	return []framework.Option{
 		framework.WithProcesses(m.proc),
 	}
 }
 
-func (m *jwksValidator) Run(t *testing.T, parentCtx context.Context) {
+func (m *jwks) Run(t *testing.T, parentCtx context.Context) {
 	const (
 		defaultAppID     = "myapp"
 		defaultNamespace = "default"
