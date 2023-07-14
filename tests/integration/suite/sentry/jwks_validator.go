@@ -151,6 +151,8 @@ func (m *jwksValidator) Run(t *testing.T, parentCtx context.Context) {
 		})
 		require.NoError(t, err)
 		require.NotEmpty(t, res.WorkloadCertificate)
+
+		validateCertificateResponse(t, res, m.proc.CABundle(), fmt.Sprintf("%s.%s.svc.cluster.local", defaultAppID, defaultNamespace))
 	})
 
 	testWithTokenError := func(fn func(builder *jwt.Builder), assertErr func(t *testing.T, grpcStatus *status.Status)) func(t *testing.T) {

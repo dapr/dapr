@@ -152,7 +152,7 @@ func (s *server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 	default:
 		dns = []string{fmt.Sprintf("%s.%s.svc.cluster.local", req.Id, req.Namespace)}
 		log.Debugf("Processing SignCertificate requests for %s (validator: %s)", dns[0], validator.String())
-		log.Warnf("Processing a SignCertificate request for %s using the compatibility method. This will be unsupported in a future version of Sentry. Please upgrade your Dapr sidecars to a more recent release.")
+		log.Warnf("Processing a SignCertificate request for %s using the compatibility method. This will be unsupported in a future version of Sentry. Please upgrade your Dapr sidecars to a more recent release.", dns[0])
 	}
 
 	chain, err := s.ca.SignIdentity(ctx, &ca.SignRequest{

@@ -24,11 +24,17 @@ import (
 	"encoding/pem"
 	"fmt"
 	"log"
+	"testing"
 	"time"
 
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jwt"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	sentrypbv1 "github.com/dapr/dapr/pkg/proto/sentry/v1"
+	"github.com/dapr/dapr/pkg/sentry/server/ca"
 )
 
 const (
@@ -97,4 +103,39 @@ func signJWT(builder *jwt.Builder) ([]byte, error) {
 	}
 
 	return jwt.Sign(token, jwt.WithKey(jwa.ES256, jwtSigningKeyPriv))
+}
+
+func validateCertificateResponse(t *testing.T, res *sentrypbv1.SignCertificateResponse, sentryBundle ca.CABundle, expectDNSName string) {
+	t.Helper()
+
+	require.NotEmpty(t, res.WorkloadCertificate)
+
+	cert := res.WorkloadCertificate
+
+	// First block should contain the issued workload certificate
+	{
+		var block *pem.Block
+		block, cert = pem.Decode(res.WorkloadCertificate)
+		require.NotEmpty(t, block)
+		require.Equal(t, "CERTIFICATE", block.Type)
+
+		cert, err := x509.ParseCertificate(block.Bytes)
+		require.NoError(t, err)
+
+		assert.Equal(t, []string{expectDNSName}, cert.DNSNames)
+	}
+
+	// Second block should contain the Sentry CA certificate
+	{
+		var block *pem.Block
+		block, cert = pem.Decode(cert)
+		require.Empty(t, cert)
+		require.NotEmpty(t, block)
+		require.Equal(t, "CERTIFICATE", block.Type)
+
+		cert, err := x509.ParseCertificate(block.Bytes)
+		require.NoError(t, err)
+
+		assert.Equal(t, []string{"cluster.local"}, cert.DNSNames)
+	}
 }
