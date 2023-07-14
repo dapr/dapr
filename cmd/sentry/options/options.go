@@ -27,7 +27,7 @@ import (
 
 const (
 	//nolint:gosec
-	defaultCredentialsPath = "/var/run/dapr/credentials"
+	defaultCredentialsPath = "/var/run/secrets/dapr.io/credentials"
 
 	// defaultDaprSystemConfigName is the default resource object name for Dapr System Config.
 	defaultDaprSystemConfigName = "daprsystem"
