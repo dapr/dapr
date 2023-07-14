@@ -20,7 +20,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -32,6 +31,7 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -63,19 +63,14 @@ func (c *componentName) Setup(t *testing.T) []framework.Option {
 	})
 
 	c.secretStoreNames = make([]string, numTests)
-	files := make([]string, numTests)
 	for i := 0; i < numTests; i++ {
-		var secretFile string
 		fz.Fuzz(&c.secretStoreNames[i])
-		for len(secretFile) == 0 || strings.Contains(secretFile, "/") ||
-			strings.HasPrefix(secretFile, "..") || secretFile == "." ||
-			takenNames[secretFile] {
-			secretFile = ""
-			fuzz.New().Fuzz(&secretFile)
-		}
-		takenNames[secretFile] = true
-		secretFile = filepath.Join(t.TempDir(), secretFile)
-		require.NoError(t, os.WriteFile(secretFile, []byte("{}"), 0o600))
+	}
+
+	secretFileNames := util.FileNames(t, numTests)
+	files := make([]string, numTests)
+	for i, secretFileName := range secretFileNames {
+		require.NoError(t, os.WriteFile(secretFileName, []byte("{}"), 0o600))
 
 		files[i] = fmt.Sprintf(`
 apiVersion: dapr.io/v1alpha1
@@ -91,7 +86,7 @@ spec:
 `,
 			// Escape single quotes in the store name.
 			strings.ReplaceAll(c.secretStoreNames[i], "'", "''"),
-			strings.ReplaceAll(secretFile, "'", "''"),
+			strings.ReplaceAll(secretFileName, "'", "''"),
 		)
 	}
 
