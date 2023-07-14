@@ -26,7 +26,7 @@ type selfhosted struct {
 	config config.Config
 }
 
-func (s *selfhosted) store(_ context.Context, bundle CABundle) error {
+func (s *selfhosted) store(_ context.Context, bundle Bundle) error {
 	for _, f := range []struct {
 		name string
 		data []byte
@@ -43,34 +43,34 @@ func (s *selfhosted) store(_ context.Context, bundle CABundle) error {
 	return nil
 }
 
-func (s *selfhosted) get(_ context.Context) (CABundle, bool, error) {
+func (s *selfhosted) get(_ context.Context) (Bundle, bool, error) {
 	trustAnchors, err := os.ReadFile(s.config.RootCertPath)
 	if os.IsNotExist(err) {
-		return CABundle{}, false, nil
+		return Bundle{}, false, nil
 	}
 	if err != nil {
-		return CABundle{}, false, err
+		return Bundle{}, false, err
 	}
 
 	issChainPEM, err := os.ReadFile(s.config.IssuerCertPath)
 	if os.IsNotExist(err) {
-		return CABundle{}, false, nil
+		return Bundle{}, false, nil
 	}
 	if err != nil {
-		return CABundle{}, false, err
+		return Bundle{}, false, err
 	}
 
 	issKeyPEM, err := os.ReadFile(s.config.IssuerKeyPath)
 	if os.IsNotExist(err) {
-		return CABundle{}, false, nil
+		return Bundle{}, false, nil
 	}
 	if err != nil {
-		return CABundle{}, false, err
+		return Bundle{}, false, err
 	}
 
 	bundle, err := verifyBundle(trustAnchors, issChainPEM, issKeyPEM)
 	if err != nil {
-		return CABundle{}, false, fmt.Errorf("failed to verify CA bundle: %w", err)
+		return Bundle{}, false, fmt.Errorf("failed to verify CA bundle: %w", err)
 	}
 
 	return bundle, true, nil

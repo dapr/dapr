@@ -14,7 +14,6 @@ limitations under the License.
 package sentry
 
 import (
-	configv1alpha1 "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	"github.com/dapr/dapr/pkg/sentry/server/ca"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 )
@@ -23,10 +22,11 @@ import (
 type options struct {
 	execOpts []exec.Option
 
-	bundle      ca.CABundle
-	port        int
-	healthzPort int
-	metricsPort int
+	bundle        ca.Bundle
+	port          int
+	healthzPort   int
+	metricsPort   int
+	configuration string
 }
 
 // Option is a function that configures the process.
@@ -56,13 +56,13 @@ func WithHealthzPort(port int) Option {
 	}
 }
 
-func WithCABundle(bundle ca.CABundle) Option {
+func WithCABundle(bundle ca.Bundle) Option {
 	return func(o *options) {
 		o.bundle = bundle
 	}
 }
 
-func WithConfiguration(config *configv1alpha1.ConfigurationSpec) Option {
+func WithConfiguration(config string) Option {
 	return func(o *options) {
 		o.configuration = config
 	}

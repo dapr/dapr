@@ -121,7 +121,7 @@ func TestNew(t *testing.T) {
 		assert.Equal(t, issuerFileContents, issuerCert)
 		assert.Equal(t, issuerKeyFileContents, issuerKey)
 
-		assert.Equal(t, CABundle{
+		assert.Equal(t, Bundle{
 			TrustAnchors: rootFileContents,
 			IssChainPEM:  issuerFileContents,
 			IssKeyPEM:    issuerKeyFileContents,

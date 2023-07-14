@@ -18,7 +18,6 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
-	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -32,9 +31,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 
-	configurationv1alpha1 "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	sentrypbv1 "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	procsentry "github.com/dapr/dapr/tests/integration/framework/process/sentry"
@@ -42,11 +39,11 @@ import (
 )
 
 func init() {
-	suite.Register(new(insecureValidator))
+	suite.Register(new(sentryValidators))
 }
 
-// insecureValidator tests Sentry with the insecure validator.
-type insecureValidator struct {
+// sentryValidators tests Sentry validators.
+type sentryValidators struct {
 	// Instance of Sentry that is configured with the insecure validator
 	sentryWithInsecure *procsentry.Sentry
 
@@ -54,36 +51,36 @@ type insecureValidator struct {
 	sentryWithJWKS *procsentry.Sentry
 }
 
-func (m *insecureValidator) Setup(t *testing.T) []framework.Option {
+func (m *sentryValidators) Setup(t *testing.T) []framework.Option {
 	m.sentryWithInsecure = procsentry.New(t)
 
-	jwksValidatorConfig, _ := json.Marshal(map[string]string{
-		"source":             `{"keys":[` + string(jwtSigningKeyPubJSON) + `]}`,
-		"minRefreshInterval": "2m",
-		"requestTimeout":     "1m",
-	})
-	m.sentryWithJWKS = procsentry.New(t, procsentry.WithConfiguration(&configurationv1alpha1.ConfigurationSpec{
-		MTLSSpec: configurationv1alpha1.MTLSSpec{
-			Enabled: true,
-			TokenValidators: []configurationv1alpha1.ValidatorSpec{
-				{
-					Name: "jwks",
-					Options: &configurationv1alpha1.DynamicValue{
-						JSON: apiextensionsv1.JSON{
-							Raw: jwksValidatorConfig,
-						},
-					},
-				},
-			},
-		},
-	}))
+	jwksValidatorConfig := `
+kind: Configuration
+apiVersion: dapr.io/v1alpha1
+metadata:
+  name: sentryconfig
+spec:
+  mtls:
+    enabled: true
+    tokenValidators:
+      - name: jwks
+        options:
+          minRefreshInterval: 2m
+          requestTimeout: 1m
+          source: |
+            {"keys":[` + string(jwtSigningKeyPubJSON) + `]}
+`
+
+	fmt.Println(jwksValidatorConfig)
+
+	m.sentryWithJWKS = procsentry.New(t, procsentry.WithConfiguration(jwksValidatorConfig))
 
 	return []framework.Option{
 		framework.WithProcesses(m.sentryWithInsecure, m.sentryWithJWKS),
 	}
 }
 
-func (m *insecureValidator) Run(t *testing.T, parentCtx context.Context) {
+func (m *sentryValidators) Run(t *testing.T, parentCtx context.Context) {
 	const (
 		defaultAppID     = "myapp"
 		defaultNamespace = "default"

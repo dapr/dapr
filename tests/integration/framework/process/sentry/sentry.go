@@ -15,7 +15,6 @@ package sentry
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -26,9 +25,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	configurationv1alpha1 "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	"github.com/dapr/dapr/pkg/sentry/server/ca"
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/framework/process"
@@ -40,7 +37,7 @@ type Sentry struct {
 	exec     process.Interface
 	freeport *util.FreePort
 
-	bundle      ca.CABundle
+	bundle      ca.Bundle
 	port        int
 	healthzPort int
 	metricsPort int
@@ -49,7 +46,7 @@ type Sentry struct {
 func New(t *testing.T, fopts ...Option) *Sentry {
 	t.Helper()
 
-	bundle, err := ca.GenerateCABundle("integration.test.dapr.io", time.Second*5)
+	bundle, err := ca.GenerateBundle("integration.test.dapr.io", time.Second*5)
 	require.NoError(t, err)
 
 	fp := util.ReservePorts(t, 3)
@@ -64,25 +61,8 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 		fopt(&opts)
 	}
 
-	var configData []byte
-	if opts.configuration != nil {
-		configObj := configurationv1alpha1.Configuration{
-			TypeMeta: metav1.TypeMeta{
-				Kind:       "Configuration",
-				APIVersion: "v1alpha1",
-			},
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "sentryconfig",
-			},
-			Spec: *opts.configuration,
-		}
-
-		configData, err = json.Marshal(configObj)
-		require.NoError(t, err)
-	}
-
 	configPath := filepath.Join(t.TempDir(), "sentry-config.yaml")
-	require.NoError(t, os.WriteFile(configPath, configData, 0o600))
+	require.NoError(t, os.WriteFile(configPath, []byte(opts.configuration), 0o600))
 
 	tmpDir := t.TempDir()
 	caPath := filepath.Join(tmpDir, "ca.crt")
@@ -147,7 +127,7 @@ func (s *Sentry) WaitUntilRunning(t *testing.T, ctx context.Context) {
 	}, time.Second*5, 100*time.Millisecond)
 }
 
-func (s *Sentry) CABundle() *ca.Bundle {
+func (s *Sentry) CABundle() ca.Bundle {
 	return s.bundle
 }
 

@@ -50,7 +50,7 @@ func TestSelhosted_store(t *testing.T) {
 			},
 		}
 
-		assert.NoError(t, s.store(context.Background(), CABundle{
+		assert.NoError(t, s.store(context.Background(), Bundle{
 			TrustAnchors: []byte("root"),
 			IssChainPEM:  []byte("issuer"),
 			IssKeyPEM:    []byte("key"),
@@ -94,7 +94,7 @@ func TestSelfhosted_get(t *testing.T) {
 		rootFile  *[]byte
 		issuer    *[]byte
 		key       *[]byte
-		expBundle CABundle
+		expBundle Bundle
 		expOk     bool
 		expErr    bool
 	}{
@@ -102,7 +102,7 @@ func TestSelfhosted_get(t *testing.T) {
 			rootFile:  nil,
 			issuer:    nil,
 			key:       nil,
-			expBundle: CABundle{},
+			expBundle: Bundle{},
 			expOk:     false,
 			expErr:    false,
 		},
@@ -110,7 +110,7 @@ func TestSelfhosted_get(t *testing.T) {
 			rootFile:  nil,
 			issuer:    &intPEM,
 			key:       &intPKPEM,
-			expBundle: CABundle{},
+			expBundle: Bundle{},
 			expOk:     false,
 			expErr:    false,
 		},
@@ -118,7 +118,7 @@ func TestSelfhosted_get(t *testing.T) {
 			rootFile:  &rootPEM,
 			issuer:    nil,
 			key:       &intPKPEM,
-			expBundle: CABundle{},
+			expBundle: Bundle{},
 			expOk:     false,
 			expErr:    false,
 		},
@@ -126,7 +126,7 @@ func TestSelfhosted_get(t *testing.T) {
 			rootFile:  &rootPEM,
 			issuer:    &intPEM,
 			key:       nil,
-			expBundle: CABundle{},
+			expBundle: Bundle{},
 			expOk:     false,
 			expErr:    false,
 		},
@@ -134,7 +134,7 @@ func TestSelfhosted_get(t *testing.T) {
 			rootFile:  &intPEM,
 			issuer:    &intPEM,
 			key:       &intPKPEM,
-			expBundle: CABundle{},
+			expBundle: Bundle{},
 			expOk:     false,
 			expErr:    true,
 		},
@@ -142,7 +142,7 @@ func TestSelfhosted_get(t *testing.T) {
 			rootFile: &rootPEM,
 			issuer:   &intPEM,
 			key:      &intPKPEM,
-			expBundle: CABundle{
+			expBundle: Bundle{
 				TrustAnchors: rootPEM,
 				IssChainPEM:  intPEM,
 				IssKeyPEM:    intPKPEM,

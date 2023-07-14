@@ -135,7 +135,7 @@ func (s *sentry) Start(parentCtx context.Context) error {
 		},
 	)
 	for name, val := range vals {
-		log.Infof("Using validator %q", strings.ToLower(name.String()))
+		log.Infof("Using validator '%s'", strings.ToLower(name.String()))
 		runners.Add(val.Start)
 	}
 
