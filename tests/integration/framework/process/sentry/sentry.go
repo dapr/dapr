@@ -23,8 +23,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/spiffe/go-spiffe/v2/bundle/x509bundle"
+	"github.com/spiffe/go-spiffe/v2/spiffegrpc/grpccredentials"
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
+	"github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
 
 	"github.com/dapr/dapr/pkg/sentry/server/ca"
 	"github.com/dapr/dapr/tests/integration/framework/binary"
@@ -141,4 +146,33 @@ func (s *Sentry) MetricsPort() int {
 
 func (s *Sentry) HealthzPort() int {
 	return s.healthzPort
+}
+
+// ConnectGrpc returns a connection to the Sentry gRPC server, validating TLS certificates.
+func (s *Sentry) ConnectGrpc(parentCtx context.Context) (*grpc.ClientConn, error) {
+	bundle := s.CABundle()
+	sentrySpiffeID, err := spiffeid.FromString("spiffe://localhost/ns/default/dapr-sentry")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Sentry SPIFFE ID: %w", err)
+	}
+	x509bundle, err := x509bundle.Parse(sentrySpiffeID.TrustDomain(), bundle.TrustAnchors)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create x509 bundle: %w", err)
+	}
+	transportCredentials := grpccredentials.TLSClientCredentials(x509bundle, tlsconfig.AuthorizeID(sentrySpiffeID))
+
+	ctx, cancel := context.WithTimeout(parentCtx, 8*time.Second)
+	defer cancel()
+	conn, err := grpc.DialContext(
+		ctx,
+		fmt.Sprintf("127.0.0.1:%d", s.Port()),
+		grpc.WithTransportCredentials(transportCredentials),
+		grpc.WithReturnConnectionError(),
+		grpc.WithBlock(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to establish gRPC connection: %w", err)
+	}
+
+	return conn, nil
 }

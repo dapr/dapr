@@ -18,16 +18,10 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
-	"fmt"
 	"testing"
 	"time"
 
-	"github.com/spiffe/go-spiffe/v2/bundle/x509bundle"
-	"github.com/spiffe/go-spiffe/v2/spiffegrpc/grpccredentials"
-	"github.com/spiffe/go-spiffe/v2/spiffeid"
-	"github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -60,6 +54,8 @@ func (m *insecureValidator) Run(t *testing.T, parentCtx context.Context) {
 		defaultNamespace = "default"
 	)
 
+	m.proc.WaitUntilRunning(t, parentCtx)
+
 	// Generate a private privKey that we'll need for tests
 	privKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err, "failed to generate private key")
@@ -68,32 +64,10 @@ func (m *insecureValidator) Run(t *testing.T, parentCtx context.Context) {
 	defaultAppCSR, err := generateCSR(defaultAppID, privKey)
 	require.NoError(t, err)
 
-	var client sentrypbv1.CAClient
-
-	t.Run("connect to Sentry", func(t *testing.T) {
-		// We need to set up the TLS configuration to validate the TLS certificate provided by Sentry
-		bundle := m.proc.CABundle()
-		sentrySpiffeID, err := spiffeid.FromString("spiffe://localhost/ns/default/dapr-sentry")
-		require.NoError(t, err, "failed to create Sentry SPIFFE ID")
-		x509bundle, err := x509bundle.Parse(sentrySpiffeID.TrustDomain(), bundle.TrustAnchors)
-		require.NoError(t, err, "failed to create x509 bundle")
-		transportCredentials := grpccredentials.TLSClientCredentials(x509bundle, tlsconfig.AuthorizeID(sentrySpiffeID))
-
-		// Actually establish the connection using gRPC
-		t.Logf("Connecting to Sentry on 127.0.0.1:%d", m.proc.Port())
-		ctx, cancel := context.WithTimeout(parentCtx, 10*time.Second)
-		defer cancel()
-		conn, err := grpc.DialContext(
-			ctx,
-			fmt.Sprintf("127.0.0.1:%d", m.proc.Port()),
-			grpc.WithTransportCredentials(transportCredentials),
-			grpc.WithReturnConnectionError(),
-			grpc.WithBlock(),
-		)
-		require.NoError(t, err)
-
-		client = sentrypbv1.NewCAClient(conn)
-	})
+	// Connect to Sentry
+	conn, err := m.proc.ConnectGrpc(parentCtx)
+	require.NoError(t, err)
+	client := sentrypbv1.NewCAClient(conn)
 
 	t.Run("fails when passing an invalid validator", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(parentCtx, 10*time.Second)
