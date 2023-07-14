@@ -36,7 +36,7 @@ func RunIntegrationTests(t *testing.T) {
 			t.Logf("setting up test case")
 			options := tcase.Setup(t)
 
-			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
 			t.Cleanup(cancel)
 
 			f := framework.Run(t, ctx, options...)

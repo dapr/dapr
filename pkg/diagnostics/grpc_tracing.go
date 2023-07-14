@@ -33,12 +33,17 @@ import (
 )
 
 const (
-	GRPCTraceContextKey     = "grpc-trace-bin"
-	GRPCProxyAppIDKey       = "dapr-app-id"
-	daprInternalPrefix      = "/dapr.proto.internals."
-	daprRuntimePrefix       = "/dapr.proto.runtime."
-	daprInvokeServiceMethod = "/dapr.proto.runtime.v1.Dapr/InvokeService"
-	daprWorkflowPrefix      = "/TaskHubSidecarService"
+	GRPCTraceContextKey       = "grpc-trace-bin"
+	GRPCProxyAppIDKey         = "dapr-app-id"
+	daprInternalPrefix        = "/dapr.proto.internals."
+	daprRuntimePrefix         = "/dapr.proto.runtime."
+	daprInvokeServiceMethod   = "/dapr.proto.runtime.v1.Dapr/InvokeService"
+	daprCallLocalStreamMethod = "/dapr.proto.internals.v1.ServiceInvocation/CallLocalStream"
+	daprWorkflowPrefix        = "/TaskHubSidecarService"
+
+	// Keys used in the context's metadata for streaming calls
+	// Note: these keys must always be all-lowercase
+	DaprCallLocalStreamMethodKey = "__dapr_calllocalstream_method"
 )
 
 // GRPCTraceUnaryServerInterceptor sets the trace context or starts the trace client span based on request.
@@ -106,11 +111,9 @@ func GRPCTraceUnaryServerInterceptor(appID string, spec config.TracingSpec) grpc
 func GRPCTraceStreamServerInterceptor(appID string, spec config.TracingSpec) grpc.StreamServerInterceptor {
 	return func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		var (
-			span             trace.Span
-			spanKind         trace.SpanStartOption
-			prefixedMetadata map[string]string
-			reqSpanAttr      map[string]string
-			isProxied        bool
+			span      trace.Span
+			spanKind  trace.SpanStartOption
+			isProxied bool
 		)
 
 		ctx := ss.Context()
@@ -152,8 +155,14 @@ func GRPCTraceStreamServerInterceptor(appID string, spec config.TracingSpec) grp
 		wrapped := grpcMiddleware.WrapServerStream(ss)
 		wrapped.WrappedContext = ctx
 
-		isSampled := span.SpanContext().IsSampled()
-		if isSampled {
+		err := handler(srv, wrapped)
+
+		if span.SpanContext().IsSampled() {
+			var (
+				prefixedMetadata map[string]string
+				reqSpanAttr      map[string]string
+			)
+
 			// users can add dapr- prefix if they want to see the header values in span attributes.
 			prefixedMetadata = userDefinedMetadata(ctx)
 			if isProxied {
@@ -161,13 +170,9 @@ func GRPCTraceStreamServerInterceptor(appID string, spec config.TracingSpec) grp
 					daprAPISpanNameInternal: info.FullMethod,
 				}
 			} else {
-				reqSpanAttr = spanAttributesMapFromGRPC(appID, nil, info.FullMethod)
+				reqSpanAttr = spanAttributesMapFromGRPC(appID, ss.Context(), info.FullMethod)
 			}
-		}
 
-		err := handler(srv, wrapped)
-
-		if isSampled {
 			// Populates dapr- prefixed header first
 			for key, value := range reqSpanAttr {
 				prefixedMetadata[key] = value
@@ -282,6 +287,25 @@ func spanAttributesMapFromGRPC(appID string, req any, rpcMethod string) map[stri
 
 	var dbType string
 	switch s := req.(type) {
+	// Context from a server stream
+	// This is a special case that is used for streaming requests
+	case context.Context:
+		md, ok := metadata.FromIncomingContext(s)
+		if !ok {
+			break
+		}
+		switch rpcMethod {
+		// Internal service invocation request (with streaming)
+		case daprCallLocalStreamMethod:
+			m[gRPCServiceSpanAttributeKey] = daprGRPCServiceInvocationService
+			var method string
+			if len(md[DaprCallLocalStreamMethodKey]) > 0 {
+				method = md[DaprCallLocalStreamMethodKey][0]
+			}
+			m[daprAPISpanNameInternal] = "CallLocal/" + appID + "/" + method
+			m[daprAPIInvokeMethod] = method
+		}
+
 	// Internal service invocation request
 	case *internalv1pb.InternalInvokeRequest:
 		m[gRPCServiceSpanAttributeKey] = daprGRPCServiceInvocationService
