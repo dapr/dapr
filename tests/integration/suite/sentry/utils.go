@@ -20,14 +20,24 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"fmt"
+	"time"
 
+	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
+	"github.com/lestrrat-go/jwx/v2/jwt"
+)
+
+const (
+	// Trust domain for Sentry
+	sentryTrustDomain = "localhost"
+	// Namespace for sentry
+	sentryNamespace = "default"
 )
 
 // Keys used to sign and verify JWTs
 const (
-	jwtSigningKeyPubJSON  = `{"kty":"EC","crv":"P-256","x":"UMn1c2ioMNi2DqvC8hdBVUERFZ97eVFsNVcQIgR0Hso","y":"uT1a0P3UOLiObve2-pOMFx2BVzLz5rFtU-qmQBPWwd0"}`
-	jwtSigningKeyPrivJSON = `{"kty":"EC","crv":"P-256","d":"5wV7hDpqt1L3uaXa1Xj7X3ieaV9A-Hyj2Kv-qxpwSjM","x":"UMn1c2ioMNi2DqvC8hdBVUERFZ97eVFsNVcQIgR0Hso","y":"uT1a0P3UOLiObve2-pOMFx2BVzLz5rFtU-qmQBPWwd0"}`
+	jwtSigningKeyPubJSON  = `{"kid":"mykey","kty":"EC","crv":"P-256","x":"UMn1c2ioMNi2DqvC8hdBVUERFZ97eVFsNVcQIgR0Hso","y":"uT1a0P3UOLiObve2-pOMFx2BVzLz5rFtU-qmQBPWwd0"}`
+	jwtSigningKeyPrivJSON = `{"kid":"mykey","kty":"EC","crv":"P-256","d":"5wV7hDpqt1L3uaXa1Xj7X3ieaV9A-Hyj2Kv-qxpwSjM","x":"UMn1c2ioMNi2DqvC8hdBVUERFZ97eVFsNVcQIgR0Hso","y":"uT1a0P3UOLiObve2-pOMFx2BVzLz5rFtU-qmQBPWwd0"}`
 )
 
 var jwtSigningKeyPriv jwk.Key
@@ -49,4 +59,22 @@ func generateCSR(id string, privKey crypto.PrivateKey) ([]byte, error) {
 
 	csrPem := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDer})
 	return csrPem, nil
+}
+
+func generateJWT(sub string) *jwt.Builder {
+	now := time.Now()
+	return jwt.NewBuilder().
+		Audience([]string{fmt.Sprintf("spiffe://%s/ns/%s/dapr-sentry", sentryTrustDomain, sentryNamespace)}).
+		Expiration(now.Add(time.Hour)).
+		IssuedAt(now).
+		Subject(sub)
+}
+
+func signJWT(builder *jwt.Builder) ([]byte, error) {
+	token, err := builder.Build()
+	if err != nil {
+		return nil, err
+	}
+
+	return jwt.Sign(token, jwt.WithKey(jwa.ES256, jwtSigningKeyPriv))
 }

@@ -292,5 +292,23 @@ func (m *insecureValidator) Run(t *testing.T, parentCtx context.Context) {
 			require.Equal(t, codes.InvalidArgument, grpcStatus.Code())
 			require.Contains(t, grpcStatus.Message(), "a validator name must be specified in this environment")
 		})
+
+		t.Run("issue a certificate with JWKS validator", func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(parentCtx, 10*time.Second)
+			defer cancel()
+
+			token, err := signJWT(generateJWT(fmt.Sprintf("spiffe://public/ns/%s/%s", defaultNamespace, defaultAppID)))
+			require.NoError(t, err)
+
+			res, err := client.SignCertificate(ctx, &sentrypbv1.SignCertificateRequest{
+				Id:                        defaultAppID,
+				Namespace:                 defaultNamespace,
+				CertificateSigningRequest: defaultAppCSR,
+				TokenValidator:            sentrypbv1.SignCertificateRequest_JWKS,
+				Token:                     string(token),
+			})
+			require.NoError(t, err)
+			require.NotEmpty(t, res.WorkloadCertificate)
+		})
 	})
 }
