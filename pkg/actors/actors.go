@@ -710,20 +710,6 @@ func (a *actorsRuntime) drainRebalancedActors() {
 				// actor has been moved to a different host, deactivate when calls are done cancel any reminders
 				// each item in reminders contain a struct with some metadata + the actual reminder struct
 				a.actorsReminders.DrainRebalancedReminders(actorType, actorID, actorKey)
-				// a.remindersLock.RLock()
-				// reminders := a.reminders[actorType]
-				// a.remindersLock.RUnlock()
-				// for _, r := range reminders {
-				// 	// r.reminder refers to the actual reminder struct that is saved in the db
-				// 	if r.reminder.ActorType == actorType && r.reminder.ActorID == actorID {
-				// 		reminderKey := constructCompositeKey(actorKey, r.reminder.Name)
-				// 		stopChan, exists := a.activeReminders.Load(reminderKey)
-				// 		if exists {
-				// 			close(stopChan.(chan struct{}))
-				// 			a.activeReminders.Delete(reminderKey)
-				// 		}
-				// 	}
-				// }
 
 				actor := value.(*actor)
 				if a.config.GetDrainRebalancedActorsForType(actorType) {
@@ -796,10 +782,6 @@ func (a *actorsRuntime) executeReminderWrapper(reminder *internal.Reminder) bool
 	}
 
 	return true
-}
-
-func (a *actorsRuntime) hostedActorTypes() []string {
-	return a.coreConfig.HostedActorTypes
 }
 
 // Executes a reminder or timer
@@ -897,17 +879,17 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 }
 
 func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderRequest) error {
-	return a.DeleteReminder(ctx, req)
+	return a.actorsReminders.DeleteReminder(ctx, *req)
 }
 
 // Deprecated: Currently RenameReminder renames by deleting-then-inserting-again.
 // This implementation is not fault-tolerant, as a failed insert after deletion would result in no reminder
 func (a *actorsRuntime) RenameReminder(ctx context.Context, req *RenameReminderRequest) error {
-	return a.RenameReminder(ctx, req)
+	return a.actorsReminders.RenameReminder(ctx, req)
 }
 
 func (a *actorsRuntime) GetReminder(ctx context.Context, req *GetReminderRequest) (*internal.Reminder, error) {
-	return a.GetReminder(ctx, req)
+	return a.actorsReminders.GetReminder(ctx, req)
 }
 
 func (a *actorsRuntime) DeleteTimer(ctx context.Context, req *DeleteTimerRequest) error {

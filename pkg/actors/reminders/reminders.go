@@ -69,6 +69,7 @@ func NewRemindersProvider(clock clock.WithTicker, opts ReminderOpts) internal.Re
 	ctx, cancel := context.WithCancel(context.Background())
 	return &reminders{
 		clock:           clock,
+		reminders:       map[string][]ActorReminderReference{},
 		activeReminders: &sync.Map{},
 		evaluationChan:  make(chan struct{}, 1),
 		storeName:       opts.StoreName,
@@ -870,19 +871,6 @@ func (r *reminders) startReminder(reminder *internal.Reminder, stopChannel chan 
 				nextTimer = nil
 				break L
 			}
-
-			// err = r.executeReminderFn(reminder)
-			// diag.DefaultMonitoring.ActorReminderFired(reminder.ActorType, err == nil)
-			// if err != nil {
-			// 	if errors.Is(err, internal.ErrReminderCanceled) {
-			// 		// The handler is explicitly canceling the timer
-			// 		log.Debug("Reminder " + reminderKey + " was canceled by the actor")
-			// 		nextTimer = nil
-			// 		break L
-			// 	} else {
-			// 		log.Errorf("Error while executing reminder %s: %v", reminderKey, err)
-			// 	}
-			// }
 
 			if r.executeReminderFn != nil && !r.executeReminderFn(reminder) {
 				nextTimer = nil
