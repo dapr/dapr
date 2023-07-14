@@ -379,20 +379,20 @@ func deactivateActorWithDuration(testActorsRuntime *actorsRuntime, actorType, ac
 	return ch
 }
 
-// func createReminderData(actorID, actorType, name, period, dueTime, ttl, data string) CreateReminderRequest {
-// 	r := CreateReminderRequest{
-// 		ActorID:   actorID,
-// 		ActorType: actorType,
-// 		Name:      name,
-// 		Period:    period,
-// 		DueTime:   dueTime,
-// 		TTL:       ttl,
-// 	}
-// 	if data != "" {
-// 		r.Data = json.RawMessage(`"` + data + `"`)
-// 	}
-// 	return r
-// }
+func createReminderData(actorID, actorType, name, period, dueTime, ttl, data string) CreateReminderRequest {
+	r := CreateReminderRequest{
+		ActorID:   actorID,
+		ActorType: actorType,
+		Name:      name,
+		Period:    period,
+		DueTime:   dueTime,
+		TTL:       ttl,
+	}
+	if data != "" {
+		r.Data = json.RawMessage(`"` + data + `"`)
+	}
+	return r
+}
 
 // CHECK - timer
 func createTimerData(actorID, actorType, name, period, dueTime, ttl, callback, data string) CreateTimerRequest {
@@ -534,47 +534,6 @@ func TestDeactivationTicker(t *testing.T) {
 		assert.True(t, exists)
 	})
 }
-
-// func TestStoreIsNotInitialized(t *testing.T) {
-// 	testActorsRuntime := newTestActorsRuntime()
-// 	defer testActorsRuntime.Stop()
-// 	for name := range testActorsRuntime.compStore.ListStateStores() {
-// 		testActorsRuntime.compStore.DeleteStateStore(name)
-// 	}
-
-// 	t.Run("getReminderTrack", func(t *testing.T) {
-// 		r, err := testActorsRuntime.getReminderTrack(context.Background(), "foo||bar")
-// 		assert.Error(t, err)
-// 		assert.Nil(t, r)
-// 	})
-
-// 	t.Run("updateReminderTrack", func(t *testing.T) {
-// 		err := testActorsRuntime.updateReminderTrack(context.Background(), "foo||bar", 1, testActorsRuntime.clock.Now(), nil)
-// 		assert.Error(t, err)
-// 	})
-
-// 	t.Run("CreateReminder", func(t *testing.T) {
-// 		err := testActorsRuntime.CreateReminder(context.Background(), &CreateReminderRequest{})
-// 		assert.Error(t, err)
-// 	})
-
-// 	t.Run("getRemindersForActorType", func(t *testing.T) {
-// 		r1, r2, err := testActorsRuntime.getRemindersForActorType(context.Background(), "foo", false)
-// 		assert.Nil(t, r1)
-// 		assert.Nil(t, r2)
-// 		assert.Error(t, err)
-// 	})
-
-// 	t.Run("DeleteReminder", func(t *testing.T) {
-// 		err := testActorsRuntime.DeleteReminder(context.Background(), &DeleteReminderRequest{})
-// 		assert.Error(t, err)
-// 	})
-
-// 	t.Run("RenameReminder", func(t *testing.T) {
-// 		err := testActorsRuntime.RenameReminder(context.Background(), &RenameReminderRequest{})
-// 		assert.Error(t, err)
-// 	})
-// }
 
 func TestTimerExecution(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
