@@ -36,8 +36,8 @@ const (
 
 // Keys used to sign and verify JWTs
 const (
-	jwtSigningKeyPubJSON  = `{"kid":"mykey","kty":"EC","crv":"P-256","x":"UMn1c2ioMNi2DqvC8hdBVUERFZ97eVFsNVcQIgR0Hso","y":"uT1a0P3UOLiObve2-pOMFx2BVzLz5rFtU-qmQBPWwd0"}`
-	jwtSigningKeyPrivJSON = `{"kid":"mykey","kty":"EC","crv":"P-256","d":"5wV7hDpqt1L3uaXa1Xj7X3ieaV9A-Hyj2Kv-qxpwSjM","x":"UMn1c2ioMNi2DqvC8hdBVUERFZ97eVFsNVcQIgR0Hso","y":"uT1a0P3UOLiObve2-pOMFx2BVzLz5rFtU-qmQBPWwd0"}`
+	jwtSigningKeyPubJSON  = `{"kid":"mykey","kty":"EC","alg":"ES256","crv":"P-256","x":"UMn1c2ioMNi2DqvC8hdBVUERFZ97eVFsNVcQIgR0Hso","y":"uT1a0P3UOLiObve2-pOMFx2BVzLz5rFtU-qmQBPWwd0"}`
+	jwtSigningKeyPrivJSON = `{"kid":"mykey","kty":"EC","alg":"ES256","crv":"P-256","d":"5wV7hDpqt1L3uaXa1Xj7X3ieaV9A-Hyj2Kv-qxpwSjM","x":"UMn1c2ioMNi2DqvC8hdBVUERFZ97eVFsNVcQIgR0Hso","y":"uT1a0P3UOLiObve2-pOMFx2BVzLz5rFtU-qmQBPWwd0"}`
 )
 
 var jwtSigningKeyPriv jwk.Key

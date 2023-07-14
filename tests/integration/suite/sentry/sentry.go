@@ -57,7 +57,7 @@ func (m *insecureValidator) Setup(t *testing.T) []framework.Option {
 	m.sentryWithInsecure = procsentry.New(t)
 
 	jwksValidatorConfig, _ := json.Marshal(map[string]string{
-		"source":             jwtSigningKeyPubJSON,
+		"source":             `{"keys":[` + jwtSigningKeyPubJSON + `]}`,
 		"minRefreshInterval": "2m",
 		"requestTimeout":     "1m",
 	})

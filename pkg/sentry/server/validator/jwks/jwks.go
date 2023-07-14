@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/lestrrat-go/jwx/v2/jws"
 	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 
@@ -101,7 +102,7 @@ func (j *jwks) Validate(ctx context.Context, req *sentryv1pb.SignCertificateRequ
 
 	// Validate the authorization token
 	_, err = jwt.Parse([]byte(req.Token),
-		jwt.WithKeySet(j.cache.KeySet()),
+		jwt.WithKeySet(j.cache.KeySet(), jws.WithInferAlgorithmFromKey(true)),
 		jwt.WithAcceptableSkew(5*time.Minute),
 		jwt.WithContext(ctx),
 		jwt.WithAudience(j.sentryAudience),
