@@ -119,7 +119,7 @@ func (a *activityActor) InvokeReminder(ctx context.Context, actorID string, remi
 
 	if err := a.executeActivity(timeoutCtx, actorID, reminderName, state.EventPayload); err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			wfLogger.Warnf("%s: execution of '%s' timed-out and will be retried later", actorID, reminderName)
+			wfLogger.Warnf("%s: execution of '%s' timed-out and will be retried later: %v", actorID, reminderName, err)
 
 			// Returning nil signals that we want the execution to be retried in the next period interval
 			return nil
@@ -168,24 +168,30 @@ func (a *activityActor) executeActivity(ctx context.Context, actorID string, nam
 	wi.Properties[CallbackChannelProperty] = callback
 	if err = a.scheduler.ScheduleActivity(ctx, wi); err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			return newRecoverableError(errors.New(
-				"timed-out trying to schedule an activity execution - this can happen if too many activities are running in parallel or if the workflow engine isn't running"))
+			return newRecoverableError(fmt.Errorf("timed-out trying to schedule an activity execution - this can happen if too many activities are running in parallel or if the workflow engine isn't running: %w", err))
 		}
 		return newRecoverableError(fmt.Errorf("failed to schedule an activity execution: %w", err))
 	}
 
 loop:
 	for {
+		t := time.NewTimer(10 * time.Minute)
 		select {
 		case <-ctx.Done():
+			if !t.Stop() {
+				<-t.C
+			}
 			return ctx.Err()
-		case <-time.After(10 * time.Minute):
+		case <-t.C:
 			if deadline, ok := ctx.Deadline(); ok {
 				wfLogger.Warnf("%s: '%s' is still running - will keep waiting until %v", actorID, name, deadline)
 			} else {
 				wfLogger.Warnf("%s: '%s' is still running - will keep waiting indefinitely", actorID, name)
 			}
 		case completed := <-callback:
+			if !t.Stop() {
+				<-t.C
+			}
 			if completed {
 				break loop
 			} else {
