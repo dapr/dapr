@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/kit/ptr"
 )
 
@@ -76,6 +77,7 @@ func Test_toInternal(t *testing.T) {
 		EnableAPILogging:             ptr.Of(true),
 		DisableBuiltinK8sSecretStore: true,
 		AppChannelAddress:            "1.1.1.1",
+		Registry:                     registry.NewOptions(),
 	}
 
 	intc, err := cfg.toInternal()
