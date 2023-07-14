@@ -117,7 +117,7 @@ func (s *sentry) Start(parentCtx context.Context) error {
 	}
 
 	// Start all background processes
-	runners := []concurrency.Runner{
+	runners := concurrency.NewRunnerManager(
 		provider.Start,
 		func(ctx context.Context) error {
 			sec, err := provider.Handler(ctx)
@@ -135,8 +135,8 @@ func (s *sentry) Start(parentCtx context.Context) error {
 		},
 	}
 	for name, val := range vals {
-		log.Infof("Starting validator %s", strings.ToLower(name.String()))
-		runners = append(runners, val.Start)
+		log.Infof("Using validator %q", strings.ToLower(name.String()))
+		runners.Add(val.Start)
 	}
 
 	mngr := concurrency.NewRunnerManager(runners...)
