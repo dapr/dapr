@@ -66,25 +66,23 @@ type API interface {
 	MarkStatusAsReady()
 	MarkStatusAsOutboundReady()
 	SetAppChannel(appChannel channel.AppChannel)
-	SetHTTPEndpointsAppChannel(appChannel channel.HTTPEndpointAppChannel)
 	SetDirectMessaging(directMessaging messaging.DirectMessaging)
 	SetActorRuntime(actor actors.Actors)
 }
 
 type api struct {
-	universal               *universalapi.UniversalAPI
-	endpoints               []Endpoint
-	publicEndpoints         []Endpoint
-	directMessaging         messaging.DirectMessaging
-	appChannel              channel.AppChannel
-	httpEndpointsAppChannel channel.HTTPEndpointAppChannel
-	resiliency              resiliency.Provider
-	pubsubAdapter           runtimePubsub.Adapter
-	sendToOutputBindingFn   func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
-	readyStatus             bool
-	outboundReadyStatus     bool
-	tracingSpec             config.TracingSpec
-	maxRequestBodySize      int64 // In bytes
+	universal             *universalapi.UniversalAPI
+	endpoints             []Endpoint
+	publicEndpoints       []Endpoint
+	directMessaging       messaging.DirectMessaging
+	appChannel            channel.AppChannel
+	resiliency            resiliency.Provider
+	pubsubAdapter         runtimePubsub.Adapter
+	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	readyStatus           bool
+	outboundReadyStatus   bool
+	tracingSpec           config.TracingSpec
+	maxRequestBodySize    int64 // In bytes
 }
 
 const (
@@ -137,14 +135,13 @@ type APIOpts struct {
 // NewAPI returns a new API.
 func NewAPI(opts APIOpts) API {
 	api := &api{
-		appChannel:              opts.AppChannel,
-		httpEndpointsAppChannel: opts.HTTPEndpointsAppChannel,
-		directMessaging:         opts.DirectMessaging,
-		resiliency:              opts.Resiliency,
-		pubsubAdapter:           opts.PubsubAdapter,
-		sendToOutputBindingFn:   opts.SendToOutputBindingFn,
-		tracingSpec:             opts.TracingSpec,
-		maxRequestBodySize:      opts.MaxRequestBodySize,
+		appChannel:            opts.AppChannel,
+		directMessaging:       opts.DirectMessaging,
+		resiliency:            opts.Resiliency,
+		pubsubAdapter:         opts.PubsubAdapter,
+		sendToOutputBindingFn: opts.SendToOutputBindingFn,
+		tracingSpec:           opts.TracingSpec,
+		maxRequestBodySize:    opts.MaxRequestBodySize,
 		universal: &universalapi.UniversalAPI{
 			AppID:                      opts.AppID,
 			Logger:                     log,
@@ -2258,10 +2255,6 @@ func (a *api) onQueryStateHandler() nethttp.HandlerFunc {
 
 func (a *api) SetAppChannel(appChannel channel.AppChannel) {
 	a.appChannel = appChannel
-}
-
-func (a *api) SetHTTPEndpointsAppChannel(appChannel channel.HTTPEndpointAppChannel) {
-	a.httpEndpointsAppChannel = appChannel
 }
 
 func (a *api) SetDirectMessaging(directMessaging messaging.DirectMessaging) {
