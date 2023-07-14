@@ -105,7 +105,7 @@ func signJWT(builder *jwt.Builder) ([]byte, error) {
 	return jwt.Sign(token, jwt.WithKey(jwa.ES256, jwtSigningKeyPriv))
 }
 
-func validateCertificateResponse(t *testing.T, res *sentrypbv1.SignCertificateResponse, sentryBundle ca.CABundle, expectDNSName string) {
+func validateCertificateResponse(t *testing.T, res *sentrypbv1.SignCertificateResponse, sentryBundle ca.CABundle, expectSpiffeID, expectDNSName string) {
 	t.Helper()
 
 	require.NotEmpty(t, res.WorkloadCertificate)
@@ -122,7 +122,14 @@ func validateCertificateResponse(t *testing.T, res *sentrypbv1.SignCertificateRe
 		cert, err := x509.ParseCertificate(block.Bytes)
 		require.NoError(t, err)
 
+		certURIs := make([]string, len(cert.URIs))
+		for i, v := range cert.URIs {
+			certURIs[i] = v.String()
+		}
+		assert.Equal(t, []string{expectSpiffeID}, certURIs)
 		assert.Equal(t, []string{expectDNSName}, cert.DNSNames)
+		assert.Contains(t, cert.ExtKeyUsage, x509.ExtKeyUsageServerAuth)
+		assert.Contains(t, cert.ExtKeyUsage, x509.ExtKeyUsageClientAuth)
 	}
 
 	// Second block should contain the Sentry CA certificate
