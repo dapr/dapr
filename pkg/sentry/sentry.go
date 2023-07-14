@@ -120,9 +120,9 @@ func (s *sentry) Start(parentCtx context.Context) error {
 	runners := concurrency.NewRunnerManager(
 		provider.Start,
 		func(ctx context.Context) error {
-			sec, err := provider.Handler(ctx)
-			if err != nil {
-				return err
+			sec, secErr := provider.Handler(ctx)
+			if secErr != nil {
+				return secErr
 			}
 
 			return server.Start(ctx, server.Options{

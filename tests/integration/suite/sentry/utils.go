@@ -110,12 +110,12 @@ func validateCertificateResponse(t *testing.T, res *sentrypbv1.SignCertificateRe
 
 	require.NotEmpty(t, res.WorkloadCertificate)
 
-	cert := res.WorkloadCertificate
+	rest := res.WorkloadCertificate
 
 	// First block should contain the issued workload certificate
 	{
 		var block *pem.Block
-		block, cert = pem.Decode(res.WorkloadCertificate)
+		block, rest = pem.Decode(rest)
 		require.NotEmpty(t, block)
 		require.Equal(t, "CERTIFICATE", block.Type)
 
@@ -128,8 +128,8 @@ func validateCertificateResponse(t *testing.T, res *sentrypbv1.SignCertificateRe
 	// Second block should contain the Sentry CA certificate
 	{
 		var block *pem.Block
-		block, cert = pem.Decode(cert)
-		require.Empty(t, cert)
+		block, rest = pem.Decode(rest)
+		require.Empty(t, rest)
 		require.NotEmpty(t, block)
 		require.Equal(t, "CERTIFICATE", block.Type)
 

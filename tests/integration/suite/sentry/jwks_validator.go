@@ -91,7 +91,7 @@ func (m *jwksValidator) Run(t *testing.T, parentCtx context.Context) {
 	t.Run("fails when passing an invalid validator", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(parentCtx, 10*time.Second)
 		defer cancel()
-		_, err := client.SignCertificate(ctx, &sentrypbv1.SignCertificateRequest{
+		_, err = client.SignCertificate(ctx, &sentrypbv1.SignCertificateRequest{
 			Id:             defaultAppID,
 			Namespace:      defaultNamespace,
 			TokenValidator: sentrypbv1.SignCertificateRequest_TokenValidator(-1), // -1 is an invalid enum value
@@ -107,7 +107,7 @@ func (m *jwksValidator) Run(t *testing.T, parentCtx context.Context) {
 	t.Run("fails when passing the insecure validator", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(parentCtx, 10*time.Second)
 		defer cancel()
-		_, err := client.SignCertificate(ctx, &sentrypbv1.SignCertificateRequest{
+		_, err = client.SignCertificate(ctx, &sentrypbv1.SignCertificateRequest{
 			Id:             defaultAppID,
 			Namespace:      defaultNamespace,
 			TokenValidator: sentrypbv1.SignCertificateRequest_INSECURE,
@@ -123,7 +123,7 @@ func (m *jwksValidator) Run(t *testing.T, parentCtx context.Context) {
 	t.Run("fails when no validator is passed", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(parentCtx, 10*time.Second)
 		defer cancel()
-		_, err := client.SignCertificate(ctx, &sentrypbv1.SignCertificateRequest{
+		_, err = client.SignCertificate(ctx, &sentrypbv1.SignCertificateRequest{
 			Id:        defaultAppID,
 			Namespace: defaultNamespace,
 		})
@@ -139,10 +139,12 @@ func (m *jwksValidator) Run(t *testing.T, parentCtx context.Context) {
 		ctx, cancel := context.WithTimeout(parentCtx, 10*time.Second)
 		defer cancel()
 
-		token, err := signJWT(generateJWT(fmt.Sprintf("spiffe://public/ns/%s/%s", defaultNamespace, defaultAppID)))
+		var token []byte
+		token, err = signJWT(generateJWT(fmt.Sprintf("spiffe://public/ns/%s/%s", defaultNamespace, defaultAppID)))
 		require.NoError(t, err)
 
-		res, err := client.SignCertificate(ctx, &sentrypbv1.SignCertificateRequest{
+		var res *sentrypbv1.SignCertificateResponse
+		res, err = client.SignCertificate(ctx, &sentrypbv1.SignCertificateRequest{
 			Id:                        defaultAppID,
 			Namespace:                 defaultNamespace,
 			CertificateSigningRequest: defaultAppCSR,
@@ -160,9 +162,10 @@ func (m *jwksValidator) Run(t *testing.T, parentCtx context.Context) {
 			ctx, cancel := context.WithTimeout(parentCtx, 10*time.Second)
 			defer cancel()
 
+			var token []byte
 			builder := generateJWT(fmt.Sprintf("spiffe://public/ns/%s/%s", defaultNamespace, defaultAppID))
 			fn(builder)
-			token, err := signJWT(builder)
+			token, err = signJWT(builder)
 			require.NoError(t, err)
 
 			_, err = client.SignCertificate(ctx, &sentrypbv1.SignCertificateRequest{
@@ -228,14 +231,15 @@ func (m *jwksValidator) Run(t *testing.T, parentCtx context.Context) {
 		ctx, cancel := context.WithTimeout(parentCtx, 10*time.Second)
 		defer cancel()
 
-		token := `eyJhbGciOiJSUzI1NiIsImtpZCI6Im15a2V5IiwidHlwIjoiSldUIn0.eyJhdWQiOlsic3BpZmZlOi8vbG9jYWxob3N0L25zL2RlZmF1bHQvZGFwci1zZW50cnkiXSwiZXhwIjoxOTg5MzEwMjY1LCJpYXQiOjE2ODkzMDY2NjUsInN1YiI6InNwaWZmZTovL3B1YmxpYy9ucy9kZWZhdWx0L215YXBwIn0.JZ5fIss3IWjdvOoUTGyTgIsXqfwj7GClno1kgTDd5KKKY4Qwe16CMM4fk1sDIkm09FCD8sTGJzx3MEb9Ls3blsuu3VSNjTxJZrGs3M9ZAFlaS7OGod-8DYMnF-dfQzY-li7VvXIZT3h92DKdOTqVpNgETGZi_7Qjdkkpz8elkK957VVZXz1q8wAW4tOD8Qe6nGnys2q-ksfC0zR39YSVAxM2hGUklxBOMNhqocBGVmYqwJC31NwKwjLy-Ryorcjv4-DCLgKpvQd-MFJYrJU7ztCdBiIBR51btzRHVbtlx9CeESwcC8pNBzDXABOWhQ4L4Prt4qA3hBLCxPvsE-vgjA`
+		//nolint:gosec
+		const token = `eyJhbGciOiJSUzI1NiIsImtpZCI6Im15a2V5IiwidHlwIjoiSldUIn0.eyJhdWQiOlsic3BpZmZlOi8vbG9jYWxob3N0L25zL2RlZmF1bHQvZGFwci1zZW50cnkiXSwiZXhwIjoxOTg5MzEwMjY1LCJpYXQiOjE2ODkzMDY2NjUsInN1YiI6InNwaWZmZTovL3B1YmxpYy9ucy9kZWZhdWx0L215YXBwIn0.JZ5fIss3IWjdvOoUTGyTgIsXqfwj7GClno1kgTDd5KKKY4Qwe16CMM4fk1sDIkm09FCD8sTGJzx3MEb9Ls3blsuu3VSNjTxJZrGs3M9ZAFlaS7OGod-8DYMnF-dfQzY-li7VvXIZT3h92DKdOTqVpNgETGZi_7Qjdkkpz8elkK957VVZXz1q8wAW4tOD8Qe6nGnys2q-ksfC0zR39YSVAxM2hGUklxBOMNhqocBGVmYqwJC31NwKwjLy-Ryorcjv4-DCLgKpvQd-MFJYrJU7ztCdBiIBR51btzRHVbtlx9CeESwcC8pNBzDXABOWhQ4L4Prt4qA3hBLCxPvsE-vgjA`
 
 		_, err = client.SignCertificate(ctx, &sentrypbv1.SignCertificateRequest{
 			Id:                        defaultAppID,
 			Namespace:                 defaultNamespace,
 			CertificateSigningRequest: defaultAppCSR,
 			TokenValidator:            sentrypbv1.SignCertificateRequest_JWKS,
-			Token:                     string(token),
+			Token:                     token,
 		})
 		require.Error(t, err)
 
