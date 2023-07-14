@@ -86,20 +86,19 @@ type remoteApp struct {
 
 // NewDirectMessaging contains the options for NewDirectMessaging.
 type NewDirectMessagingOpts struct {
-	AppID                   string
-	Namespace               string
-	Port                    int
-	CompStore               *compstore.ComponentStore
-	Mode                    modes.DaprMode
-	AppChannel              channel.AppChannel
-	HTTPEndpointsAppChannel channel.HTTPEndpointAppChannel
-	ClientConnFn            messageClientConnection
-	Resolver                nr.Resolver
-	MaxRequestBodySize      int
-	Proxy                   Proxy
-	ReadBufferSize          int
-	Resiliency              resiliency.Provider
-	IsStreamingEnabled      bool
+	AppID              string
+	Namespace          string
+	Port               int
+	CompStore          *compstore.ComponentStore
+	Mode               modes.DaprMode
+	AppChannel         channel.AppChannel
+	ClientConnFn       messageClientConnection
+	Resolver           nr.Resolver
+	MaxRequestBodySize int
+	Proxy              Proxy
+	ReadBufferSize     int
+	Resiliency         resiliency.Provider
+	IsStreamingEnabled bool
 }
 
 // NewDirectMessaging returns a new direct messaging api.
@@ -108,22 +107,21 @@ func NewDirectMessaging(opts NewDirectMessagingOpts) DirectMessaging {
 	hName, _ := os.Hostname()
 
 	dm := &directMessaging{
-		appID:                   opts.AppID,
-		namespace:               opts.Namespace,
-		grpcPort:                opts.Port,
-		mode:                    opts.Mode,
-		appChannel:              opts.AppChannel,
-		httpEndpointsAppChannel: opts.HTTPEndpointsAppChannel,
-		connectionCreatorFn:     opts.ClientConnFn,
-		resolver:                opts.Resolver,
-		maxRequestBodySizeMB:    opts.MaxRequestBodySize,
-		proxy:                   opts.Proxy,
-		readBufferSize:          opts.ReadBufferSize,
-		resiliency:              opts.Resiliency,
-		isStreamingEnabled:      opts.IsStreamingEnabled,
-		hostAddress:             hAddr,
-		hostName:                hName,
-		compStore:               opts.CompStore,
+		appID:                opts.AppID,
+		namespace:            opts.Namespace,
+		grpcPort:             opts.Port,
+		mode:                 opts.Mode,
+		appChannel:           opts.AppChannel,
+		connectionCreatorFn:  opts.ClientConnFn,
+		resolver:             opts.Resolver,
+		maxRequestBodySizeMB: opts.MaxRequestBodySize,
+		proxy:                opts.Proxy,
+		readBufferSize:       opts.ReadBufferSize,
+		resiliency:           opts.Resiliency,
+		isStreamingEnabled:   opts.IsStreamingEnabled,
+		hostAddress:          hAddr,
+		hostName:             hName,
+		compStore:            opts.CompStore,
 	}
 
 	if dm.proxy != nil {
@@ -267,7 +265,7 @@ func (d *directMessaging) invokeHTTPEndpoint(ctx context.Context, appID, appName
 	// Set up timers
 	start := time.Now()
 	diag.DefaultMonitoring.ServiceInvocationRequestSent(appID, req.Message().Method)
-	imr, err := d.invokeRemoteUnaryForHTTPEndpoint(ctx, nil, req, nil, appID)
+	imr, err := d.invokeRemoteUnaryForHTTPEndpoint(ctx, req, appID)
 
 	// Diagnostics
 	if imr != nil {
@@ -318,7 +316,7 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, appNamespace,
 	return imr, teardown, err
 }
 
-func (d *directMessaging) invokeRemoteUnaryForHTTPEndpoint(ctx context.Context, clientV1 internalv1pb.ServiceInvocationClient, req *invokev1.InvokeMethodRequest, opts []grpc.CallOption, appID string) (*invokev1.InvokeMethodResponse, error) {
+func (d *directMessaging) invokeRemoteUnaryForHTTPEndpoint(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*invokev1.InvokeMethodResponse, error) {
 	if d.httpEndpointsAppChannel == nil {
 		return nil, errors.New("cannot invoke http endpoint: http endpoints app channel not initialized")
 	}
