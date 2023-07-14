@@ -141,17 +141,19 @@ func (s *server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 	// daprd->daprd connections would fail. This is no longer the case since we
 	// now match with SPIFFE URI SAN, but we need to keep this here for backwards
 	// compatibility. Remove after v1.12.
-	var dns string
+	var dns []string
 	switch {
 	case req.Namespace == security.CurrentNamespace() && req.Id == "dapr-injector":
-		dns = fmt.Sprintf("dapr-sidecar-injector.%s.svc", req.Namespace)
+		dns = []string{fmt.Sprintf("dapr-sidecar-injector.%s.svc", req.Namespace)}
+		log.Debugf("Processing SignCertificate requests for dapr-injector (validator: %s)", validator.String())
 	case req.Namespace == security.CurrentNamespace() && req.Id == "dapr-operator":
-		dns = fmt.Sprintf("dapr-webhook.%s.svc", req.Namespace)
+		dns = []string{fmt.Sprintf("dapr-webhook.%s.svc", req.Namespace)}
+		log.Debugf("Processing SignCertificate requests for dapr-operator (validator: %s)", validator.String())
 	default:
-		dns = fmt.Sprintf("%s.%s.svc.cluster.local", req.Id, req.Namespace)
+		dns = []string{fmt.Sprintf("%s.%s.svc.cluster.local", req.Id, req.Namespace)}
+		log.Debugf("Processing SignCertificate requests for %s (validator: %s)", dns[0], validator.String())
+		log.Warnf("Processing a SignCertificate request for %s using the compatibility method. This will be unsupported in a future version of Sentry. Please upgrade your Dapr sidecars to a more recent release.")
 	}
-
-	log.Debugf("Processing SignCertificate requests for %s (validator: %s)", dns, validator.String())
 
 	chain, err := s.ca.SignIdentity(ctx, &ca.SignRequest{
 		PublicKey:          csr.PublicKey,
@@ -159,7 +161,7 @@ func (s *server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 		TrustDomain:        trustDomain.String(),
 		Namespace:          req.Namespace,
 		AppID:              req.Id,
-		DNS:                []string{dns},
+		DNS:                dns,
 	})
 	if err != nil {
 		log.Errorf("Error signing identity: %v", err)

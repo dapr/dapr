@@ -148,7 +148,7 @@ func (s *sentry) Start(parentCtx context.Context) error {
 }
 
 func (s *sentry) getValidators(ctx context.Context) (map[sentryv1pb.SignCertificateRequest_TokenValidator]validator.Validator, error) {
-	vals := make(map[sentryv1pb.SignCertificateRequest_TokenValidator]validator.Validator, len(s.conf.Validators))
+	validators := make(map[sentryv1pb.SignCertificateRequest_TokenValidator]validator.Validator, len(s.conf.Validators))
 	for validatorID, opts := range s.conf.Validators {
 		switch validatorID {
 		case sentryv1pb.SignCertificateRequest_KUBERNETES:
@@ -169,11 +169,11 @@ func (s *sentry) getValidators(ctx context.Context) (map[sentryv1pb.SignCertific
 				return nil, err
 			}
 			log.Info("Adding validator 'kubernetes' with Sentry ID: " + sentryID.String())
-			vals[validatorID] = val
+			validators[validatorID] = val
 
 		case sentryv1pb.SignCertificateRequest_INSECURE:
 			log.Info("Adding validator 'insecure'")
-			vals[validatorID] = validatorInsecure.New()
+			validators[validatorID] = validatorInsecure.New()
 
 		case sentryv1pb.SignCertificateRequest_JWKS:
 			sentryID, err := security.SentryID(s.conf.TrustDomain, security.CurrentNamespace())
@@ -192,14 +192,14 @@ func (s *sentry) getValidators(ctx context.Context) (map[sentryv1pb.SignCertific
 				return nil, err
 			}
 			log.Info("Adding validator 'jwks' with Sentry ID: " + sentryID.String())
-			vals[validatorID] = val
+			validators[validatorID] = val
 		}
 	}
 
-	if len(vals) == 0 {
+	if len(validators) == 0 {
 		// Should never hit this, as the config is already sanitized
 		return nil, errors.New("invalid validators")
 	}
 
-	return vals, nil
+	return validators, nil
 }

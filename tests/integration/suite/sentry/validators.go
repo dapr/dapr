@@ -204,7 +204,7 @@ func (m *sentryValidators) Run(t *testing.T, parentCtx context.Context) {
 			_, err := client.SignCertificate(ctx, &sentrypbv1.SignCertificateRequest{
 				Id:                        defaultAppID,
 				Namespace:                 defaultNamespace,
-				CertificateSigningRequest: []byte("-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIAYIsKL0xkTkAXDhUN6eDheqODEOGyFZ04jsgFNCFxZf\n-----END PRIVATE KEY-----"),
+				CertificateSigningRequest: []byte("-----BEGIN PRIVATE KEY-----\nMC4CAQBLAHBLAH\n-----END PRIVATE KEY-----"),
 				TokenValidator:            sentrypbv1.SignCertificateRequest_INSECURE,
 			})
 			require.Error(t, err)
