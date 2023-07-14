@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/dapr/dapr/pkg/actors/internal"
-	"github.com/dapr/dapr/pkg/actors/utils"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/diagnostics/diagtestutils"
 	daprt "github.com/dapr/dapr/pkg/testing"
@@ -66,7 +65,7 @@ func newTestReminders() *reminders {
 // }
 
 func fakeTStore() (internal.TransactionalStateStore, error) {
-	return nil, errors.New(utils.ErrStateStoreNotConfigured)
+	return nil, errors.New("state store not configured")
 }
 
 func fakeRealTStore() (internal.TransactionalStateStore, error) {

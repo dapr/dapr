@@ -27,7 +27,6 @@ import (
 
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors/internal"
-	"github.com/dapr/dapr/pkg/actors/utils"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/logger"
@@ -708,7 +707,7 @@ func (r *reminders) getActorTypeMetadata(ctx context.Context, actorType string, 
 			return nil, rErr
 		}
 		actorMetadata := &ActorMetadata{
-			ID: utils.MetadataZeroID,
+			ID: uuid.Nil.String(),
 			RemindersMetadata: ActorRemindersMetadata{
 				PartitionsEtag: nil,
 				PartitionCount: 0,

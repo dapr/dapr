@@ -4,8 +4,9 @@ import (
 	"hash/fnv"
 	"strconv"
 
+	"github.com/google/uuid"
+
 	"github.com/dapr/dapr/pkg/actors/internal"
-	"github.com/dapr/dapr/pkg/actors/utils"
 )
 
 // ActorMetadata represents information about the actor type.
@@ -49,7 +50,7 @@ func (m *ActorMetadata) createReminderReference(reminder internal.Reminder) Acto
 	}
 
 	return ActorReminderReference{
-		ActorMetadataID:           utils.MetadataZeroID,
+		ActorMetadataID:           uuid.Nil.String(),
 		ActorRemindersPartitionID: 0,
 		Reminder:                  reminder,
 	}

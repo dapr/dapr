@@ -58,7 +58,6 @@ import (
 const (
 	daprSeparator        = "||"
 	metadataPartitionKey = "partitionKey"
-	metadataZeroID       = "00000000-0000-0000-0000-000000000000"
 
 	errStateStoreNotFound      = "actors: state store does not exist or incorrectly configured"
 	errStateStoreNotConfigured = `actors: state store does not exist or incorrectly configured. Have you set the property '{"name": "actorStateStore", "value": "true"}' in your state store component file?`
