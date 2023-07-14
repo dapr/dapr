@@ -16,4 +16,4 @@ limitations under the License.
 
 package util
 
-var forbiddenFileChars = []rune{'/'}
+var forbiddenFileChars = []string{"/"}

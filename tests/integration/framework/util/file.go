@@ -33,7 +33,7 @@ func FileNames(t *testing.T, num int) []string {
 
 	forbiddenChars := func(s string) bool {
 		for _, c := range forbiddenFileChars {
-			if strings.ContainsRune(s, c) {
+			if strings.Contains(s, c) {
 				return true
 			}
 		}
