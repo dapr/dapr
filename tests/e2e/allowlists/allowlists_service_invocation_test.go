@@ -98,7 +98,7 @@ func TestMain(m *testing.M) {
 		},
 	}
 
-	tr = runner.NewTestRunner("hellodapr", testApps, nil, nil)
+	tr = runner.NewTestRunner("allowlists", testApps, nil, nil)
 	os.Exit(tr.Start(m))
 }
 
