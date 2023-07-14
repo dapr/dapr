@@ -145,15 +145,13 @@ func (s *server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 	switch {
 	case req.Namespace == security.CurrentNamespace() && req.Id == "dapr-injector":
 		dns = []string{fmt.Sprintf("dapr-sidecar-injector.%s.svc", req.Namespace)}
-		log.Debugf("Processing SignCertificate requests for dapr-injector (validator: %s)", validator.String())
 	case req.Namespace == security.CurrentNamespace() && req.Id == "dapr-operator":
 		dns = []string{fmt.Sprintf("dapr-webhook.%s.svc", req.Namespace)}
-		log.Debugf("Processing SignCertificate requests for dapr-operator (validator: %s)", validator.String())
 	default:
 		dns = []string{fmt.Sprintf("%s.%s.svc.cluster.local", req.Id, req.Namespace)}
-		log.Debugf("Processing SignCertificate requests for %s (validator: %s)", dns[0], validator.String())
-		log.Warnf("Processing a SignCertificate request for %s using the compatibility method. This will be unsupported in a future version of Sentry. Please upgrade your Dapr sidecars to a more recent release.", dns[0])
 	}
+
+	log.Debugf("Processing SignCertificate request for %s/%s (validator: %s)", req.Namespace, req.Id, validator.String())
 
 	chain, err := s.ca.SignIdentity(ctx, &ca.SignRequest{
 		PublicKey:          csr.PublicKey,

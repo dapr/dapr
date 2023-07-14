@@ -72,7 +72,7 @@ func (m *jwksValidator) Run(t *testing.T, parentCtx context.Context) {
 		defaultAppID     = "myapp"
 		defaultNamespace = "default"
 	)
-	defaultAppSpiffeID := fmt.Sprintf("spiffe://public/ns/%s/%s", defaultNamespace, defaultAppID)
+	defaultAppSPIFFEID := fmt.Sprintf("spiffe://public/ns/%s/%s", defaultNamespace, defaultAppID)
 	defaultAppDNSName := fmt.Sprintf("%s.%s.svc.cluster.local", defaultAppID, defaultNamespace)
 
 	m.proc.WaitUntilRunning(t, parentCtx)
@@ -142,7 +142,7 @@ func (m *jwksValidator) Run(t *testing.T, parentCtx context.Context) {
 		defer cancel()
 
 		var token []byte
-		token, err = signJWT(generateJWT(defaultAppSpiffeID))
+		token, err = signJWT(generateJWT(defaultAppSPIFFEID))
 		require.NoError(t, err)
 
 		var res *sentrypbv1.SignCertificateResponse
@@ -156,7 +156,7 @@ func (m *jwksValidator) Run(t *testing.T, parentCtx context.Context) {
 		require.NoError(t, err)
 		require.NotEmpty(t, res.WorkloadCertificate)
 
-		validateCertificateResponse(t, res, m.proc.CABundle(), defaultAppSpiffeID, defaultAppDNSName)
+		validateCertificateResponse(t, res, m.proc.CABundle(), defaultAppSPIFFEID, defaultAppDNSName)
 	})
 
 	testWithTokenError := func(fn func(builder *jwt.Builder), assertErr func(t *testing.T, grpcStatus *status.Status)) func(t *testing.T) {
@@ -165,7 +165,7 @@ func (m *jwksValidator) Run(t *testing.T, parentCtx context.Context) {
 			defer cancel()
 
 			var token []byte
-			builder := generateJWT(defaultAppSpiffeID)
+			builder := generateJWT(defaultAppSPIFFEID)
 			fn(builder)
 			token, err = signJWT(builder)
 			require.NoError(t, err)

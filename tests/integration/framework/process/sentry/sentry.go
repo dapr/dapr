@@ -151,15 +151,15 @@ func (s *Sentry) HealthzPort() int {
 // ConnectGrpc returns a connection to the Sentry gRPC server, validating TLS certificates.
 func (s *Sentry) ConnectGrpc(parentCtx context.Context) (*grpc.ClientConn, error) {
 	bundle := s.CABundle()
-	sentrySpiffeID, err := spiffeid.FromString("spiffe://localhost/ns/default/dapr-sentry")
+	sentrySPIFFEID, err := spiffeid.FromString("spiffe://localhost/ns/default/dapr-sentry")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Sentry SPIFFE ID: %w", err)
 	}
-	x509bundle, err := x509bundle.Parse(sentrySpiffeID.TrustDomain(), bundle.TrustAnchors)
+	x509bundle, err := x509bundle.Parse(sentrySPIFFEID.TrustDomain(), bundle.TrustAnchors)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create x509 bundle: %w", err)
 	}
-	transportCredentials := grpccredentials.TLSClientCredentials(x509bundle, tlsconfig.AuthorizeID(sentrySpiffeID))
+	transportCredentials := grpccredentials.TLSClientCredentials(x509bundle, tlsconfig.AuthorizeID(sentrySPIFFEID))
 
 	ctx, cancel := context.WithTimeout(parentCtx, 8*time.Second)
 	defer cancel()

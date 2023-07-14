@@ -105,7 +105,7 @@ func signJWT(builder *jwt.Builder) ([]byte, error) {
 	return jwt.Sign(token, jwt.WithKey(jwa.ES256, jwtSigningKeyPriv))
 }
 
-func validateCertificateResponse(t *testing.T, res *sentrypbv1.SignCertificateResponse, sentryBundle ca.CABundle, expectSpiffeID, expectDNSName string) {
+func validateCertificateResponse(t *testing.T, res *sentrypbv1.SignCertificateResponse, sentryBundle ca.CABundle, expectSPIFFEID, expectDNSName string) {
 	t.Helper()
 
 	require.NotEmpty(t, res.WorkloadCertificate)
@@ -126,7 +126,7 @@ func validateCertificateResponse(t *testing.T, res *sentrypbv1.SignCertificateRe
 		for i, v := range cert.URIs {
 			certURIs[i] = v.String()
 		}
-		assert.Equal(t, []string{expectSpiffeID}, certURIs)
+		assert.Equal(t, []string{expectSPIFFEID}, certURIs)
 		assert.Equal(t, []string{expectDNSName}, cert.DNSNames)
 		assert.Contains(t, cert.ExtKeyUsage, x509.ExtKeyUsageServerAuth)
 		assert.Contains(t, cert.ExtKeyUsage, x509.ExtKeyUsageClientAuth)
