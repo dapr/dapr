@@ -133,14 +133,13 @@ func (s *sentry) Start(parentCtx context.Context) error {
 				CA:               camngr,
 			})
 		},
-	}
+	)
 	for name, val := range vals {
 		log.Infof("Using validator %q", strings.ToLower(name.String()))
 		runners.Add(val.Start)
 	}
 
-	mngr := concurrency.NewRunnerManager(runners...)
-	err = mngr.Run(ctx)
+	err = runners.Run(ctx)
 	if err != nil {
 		log.Fatalf("Error running Sentry: %v", err)
 	}

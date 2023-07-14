@@ -15,11 +15,15 @@ package metadata
 
 import (
 	"crypto"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/lestrrat-go/jwx/v2/jwa"
@@ -35,15 +39,31 @@ const (
 )
 
 // Keys used to sign and verify JWTs
-const (
-	jwtSigningKeyPubJSON  = `{"kid":"mykey","kty":"EC","alg":"ES256","crv":"P-256","x":"UMn1c2ioMNi2DqvC8hdBVUERFZ97eVFsNVcQIgR0Hso","y":"uT1a0P3UOLiObve2-pOMFx2BVzLz5rFtU-qmQBPWwd0"}`
-	jwtSigningKeyPrivJSON = `{"kid":"mykey","kty":"EC","alg":"ES256","crv":"P-256","d":"5wV7hDpqt1L3uaXa1Xj7X3ieaV9A-Hyj2Kv-qxpwSjM","x":"UMn1c2ioMNi2DqvC8hdBVUERFZ97eVFsNVcQIgR0Hso","y":"uT1a0P3UOLiObve2-pOMFx2BVzLz5rFtU-qmQBPWwd0"}`
+var (
+	jwtSigningKeyPriv    jwk.Key
+	jwtSigningKeyPubJSON []byte
 )
 
-var jwtSigningKeyPriv jwk.Key
-
 func init() {
-	jwtSigningKeyPriv, _ = jwk.ParseKey([]byte(jwtSigningKeyPrivJSON))
+	// Generate a signing key
+	privK, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		log.Fatalf("failed to generate private key: %v", err)
+	}
+	jwtSigningKeyPriv, err = jwk.FromRaw(privK)
+	if err != nil {
+		log.Fatalf("failed to import private key as JWK: %v", err)
+	}
+	jwtSigningKeyPriv.Set("kid", "mykey")
+	jwtSigningKeyPriv.Set("alg", "ES256")
+	jwtSigningKeyPub, err := jwtSigningKeyPriv.PublicKey()
+	if err != nil {
+		log.Fatalf("failed to get public key from JWK: %v", err)
+	}
+	jwtSigningKeyPubJSON, err = json.Marshal(jwtSigningKeyPub)
+	if err != nil {
+		log.Fatalf("failed to marshal public key from JWK: %v", err)
+	}
 }
 
 // Generate a CSR given a private key.
