@@ -16,6 +16,7 @@ package runtime
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -490,11 +491,16 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.appConnectionConfig.Protocol), err)
 	}
 
+	endpointChannels, err := a.createHTTPEndpointsChannels()
+	if err != nil {
+		log.Warnf("failed to open channels for http endpoints: %s", err)
+	}
+
 	a.daprHTTPAPI.SetAppChannel(a.appChannel)
 	a.daprGRPCAPI.SetAppChannel(a.appChannel)
 	a.directMessaging.SetAppChannel(a.appChannel)
 
-	a.directMessaging.SetHTTPEndpointsAppChannel(a.httpEndpointsAppChannel)
+	a.directMessaging.SetHTTPEndpointsAppChannels(a.httpEndpointsAppChannel, endpointChannels)
 
 	a.daprHTTPAPI.SetDirectMessaging(a.directMessaging)
 	a.daprGRPCAPI.SetDirectMessaging(a.directMessaging)
@@ -2888,7 +2894,7 @@ func (a *DaprRuntime) initAppHTTPClient() {
 	}
 }
 
-func (a *DaprRuntime) getAppHTTPChannelConfig(pipeline httpMiddleware.Pipeline, isExternal bool) httpChannel.ChannelConfiguration {
+func (a *DaprRuntime) getAppHTTPChannelConfig(pipeline httpMiddleware.Pipeline) httpChannel.ChannelConfiguration {
 	conf := httpChannel.ChannelConfiguration{
 		CompStore:            a.compStore,
 		MaxConcurrency:       a.runtimeConfig.appConnectionConfig.MaxConcurrency,
@@ -2897,14 +2903,77 @@ func (a *DaprRuntime) getAppHTTPChannelConfig(pipeline httpMiddleware.Pipeline, 
 		MaxRequestBodySizeMB: a.runtimeConfig.maxRequestBodySize,
 	}
 
-	if !isExternal {
-		conf.Endpoint = a.getAppHTTPEndpoint()
-		conf.Client = a.appHTTPClient
-	} else {
-		conf.Client = nethttp.DefaultClient
+	conf.Endpoint = a.getAppHTTPEndpoint()
+	conf.Client = a.appHTTPClient
+	return conf
+}
+
+func (a *DaprRuntime) getHTTPEndpointAppChannel(pipeline httpMiddleware.Pipeline, endpoint httpEndpointV1alpha1.HTTPEndpoint) (httpChannel.ChannelConfiguration, error) {
+	conf := httpChannel.ChannelConfiguration{
+		CompStore:            a.compStore,
+		MaxConcurrency:       a.runtimeConfig.appConnectionConfig.MaxConcurrency,
+		Pipeline:             pipeline,
+		TracingSpec:          a.globalConfig.Spec.TracingSpec,
+		MaxRequestBodySizeMB: a.runtimeConfig.maxRequestBodySize,
 	}
 
-	return conf
+	var tlsConfig *tls.Config
+
+	if endpoint.Spec.TLSRootCA.Value.String() != "" {
+		ca := []byte(endpoint.Spec.TLSRootCA.Value.String())
+		caCertPool := x509.NewCertPool()
+
+		if !caCertPool.AppendCertsFromPEM(ca) {
+			return httpChannel.ChannelConfiguration{}, fmt.Errorf("failed to add root cert to cert pool for http endpoint %s", endpoint.ObjectMeta.Name)
+		}
+
+		tlsConfig = &tls.Config{
+			MinVersion: tls.VersionTLS12,
+			RootCAs:    caCertPool,
+		}
+	}
+
+	if endpoint.Spec.TLSClientKey.Value.String() != "" && endpoint.Spec.TLSClientCert.Value.String() != "" {
+		cert, err := tls.X509KeyPair([]byte(endpoint.Spec.TLSClientCert.Value.String()), []byte(endpoint.Spec.TLSClientKey.Value.String()))
+		if err != nil {
+			return httpChannel.ChannelConfiguration{}, fmt.Errorf("failed to load client certificate for http endpoint %s: %w", endpoint.ObjectMeta.Name, err)
+		}
+
+		if tlsConfig == nil {
+			tlsConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+		}
+		tlsConfig.Certificates = []tls.Certificate{cert}
+	}
+
+	if endpoint.Spec.TLSRenegotiation != "" {
+		switch endpoint.Spec.TLSRenegotiation {
+		case "RenegotiateNever":
+			tlsConfig.Renegotiation = tls.RenegotiateNever
+		case "RenegotiateOnceAsClient":
+			tlsConfig.Renegotiation = tls.RenegotiateOnceAsClient
+		case "RenegotiateFreelyAsClient":
+			tlsConfig.Renegotiation = tls.RenegotiateFreelyAsClient
+		default:
+			return httpChannel.ChannelConfiguration{}, fmt.Errorf("invalid renegotiation value %s for http endpoint %s", endpoint.Spec.TLSRenegotiation, endpoint.ObjectMeta.Name)
+		}
+	}
+
+	dialer := &net.Dialer{
+		Timeout: 15 * time.Second,
+	}
+
+	netTransport := &nethttp.Transport{
+		Dial:                dialer.Dial,
+		TLSHandshakeTimeout: 15 * time.Second,
+		TLSClientConfig:     tlsConfig,
+	}
+
+	conf.Client = &nethttp.Client{
+		Timeout:   0,
+		Transport: netTransport,
+	}
+
+	return conf, nil
 }
 
 func (a *DaprRuntime) appendBuiltinSecretStore() {
@@ -3138,6 +3207,38 @@ func ShutdownSignal() chan os.Signal {
 	return stop
 }
 
+func (a *DaprRuntime) createHTTPEndpointsChannels() (map[string]channel.HTTPEndpointAppChannel, error) {
+	// Create dedicated app channels for known app endpoints
+	endpoints := a.compStore.ListHTTPEndpoints()
+
+	if len(endpoints) > 0 {
+		channels := make(map[string]channel.HTTPEndpointAppChannel, len(endpoints))
+
+		for _, e := range endpoints {
+			pipeline, err := a.buildAppHTTPPipeline()
+			if err != nil {
+				return nil, fmt.Errorf("failed to build app HTTP pipeline: %w", err)
+			}
+
+			conf, err := a.getHTTPEndpointAppChannel(pipeline, e)
+			if err != nil {
+				return nil, err
+			}
+
+			ch, err := httpChannel.CreateHTTPChannel(conf)
+			if err != nil {
+				return nil, err
+			}
+
+			channels[e.ObjectMeta.Name] = ch
+		}
+
+		return channels, nil
+	}
+
+	return nil, nil
+}
+
 func (a *DaprRuntime) createChannels() (err error) {
 	// Create a HTTP channel for external HTTP endpoint invocation
 	pipeline, err := a.buildAppHTTPPipeline()
@@ -3145,7 +3246,7 @@ func (a *DaprRuntime) createChannels() (err error) {
 		return fmt.Errorf("failed to build app HTTP pipeline: %w", err)
 	}
 
-	a.httpEndpointsAppChannel, err = httpChannel.CreateHTTPChannel(a.getAppHTTPChannelConfig(pipeline, false))
+	a.httpEndpointsAppChannel, err = httpChannel.CreateHTTPChannel(a.getAppHTTPChannelConfig(pipeline))
 	if err != nil {
 		return fmt.Errorf("failed to create external HTTP app channel: %w", err)
 	}
@@ -3157,7 +3258,7 @@ func (a *DaprRuntime) createChannels() (err error) {
 
 	if a.runtimeConfig.appConnectionConfig.Protocol.IsHTTP() {
 		// Create a HTTP channel
-		a.appChannel, err = httpChannel.CreateHTTPChannel(a.getAppHTTPChannelConfig(pipeline, false))
+		a.appChannel, err = httpChannel.CreateHTTPChannel(a.getAppHTTPChannelConfig(pipeline))
 		if err != nil {
 			return fmt.Errorf("failed to create HTTP app channel: %w", err)
 		}

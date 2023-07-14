@@ -5221,7 +5221,7 @@ func TestGetAppHTTPChannelConfigWithCustomChannel(t *testing.T) {
 	p, err := rt.buildAppHTTPPipeline()
 	assert.Nil(t, err)
 
-	c := rt.getAppHTTPChannelConfig(p, false)
+	c := rt.getAppHTTPChannelConfig(p)
 	assert.Equal(t, "http://my.app:0", c.Endpoint)
 }
 
