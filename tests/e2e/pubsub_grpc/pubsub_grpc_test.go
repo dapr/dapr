@@ -356,7 +356,7 @@ func testBulkPublishSuccessfully(t *testing.T, publisherExternalURL, subscriberE
 	// set to respond with success
 	setDesiredResponse(t, subscriberAppName, "success", publisherExternalURL, protocol)
 
-	log.Printf("Test bulkPublish and normal subscribe success flow\n")
+	log.Printf("Test bulkPublish and normal subscribe success flow")
 	sentMessages := testPublishBulk(t, publisherExternalURL, protocol)
 
 	time.Sleep(5 * time.Second)
@@ -365,7 +365,7 @@ func testBulkPublishSuccessfully(t *testing.T, publisherExternalURL, subscriberE
 }
 
 func testPublishSubscribeSuccessfully(t *testing.T, publisherExternalURL, subscriberExternalURL, _, subscriberAppName, protocol string) string {
-	log.Printf("Test publish subscribe success flow\n")
+	log.Printf("Test publish subscribe success flow")
 	sentMessages := testPublish(t, publisherExternalURL, protocol)
 
 	validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, sentMessages)
@@ -384,7 +384,7 @@ func testPublishBulkSubscribeSuccessfully(t *testing.T, publisherExternalURL, su
 }
 
 func testPublishWithoutTopic(t *testing.T, publisherExternalURL, subscriberExternalURL, _, _, protocol string) string {
-	log.Printf("Test publish without topic\n")
+	log.Printf("Test publish without topic")
 	commandBody := publishCommand{
 		ReqID:    "c-" + uuid.New().String(),
 		Protocol: protocol,
@@ -821,7 +821,7 @@ func TestPubSubGRPC(t *testing.T) {
 	require.NotEmpty(t, subscriberExternalURL, "subscriberExternalURL must not be empty!")
 
 	// Makes the test wait for the apps and load balancers to be ready
-	err := utils.HealthCheckApps(publisherExternalURL, subscriberExternalURL)
+	err := utils.HealthCheckApps(publisherExternalURL)
 	require.NoError(t, err, "Health checks failed")
 
 	err = publishHealthCheck(publisherExternalURL)
