@@ -18,6 +18,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -30,7 +31,9 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 
+	configurationv1alpha1 "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	sentrypbv1 "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	procsentry "github.com/dapr/dapr/tests/integration/framework/process/sentry"
@@ -45,12 +48,37 @@ func init() {
 type insecureValidator struct {
 	// Instance of Sentry that is configured with the insecure validator
 	sentryWithInsecure *procsentry.Sentry
+
+	// Instance of Sentry that is configured with the JWKS validator
+	sentryWithJWKS *procsentry.Sentry
 }
 
 func (m *insecureValidator) Setup(t *testing.T) []framework.Option {
 	m.sentryWithInsecure = procsentry.New(t)
+
+	jwksValidatorConfig, _ := json.Marshal(map[string]string{
+		"source":             jwtSigningKeyPubJSON,
+		"minRefreshInterval": "2m",
+		"requestTimeout":     "1m",
+	})
+	m.sentryWithJWKS = procsentry.New(t, procsentry.WithConfiguration(&configurationv1alpha1.ConfigurationSpec{
+		MTLSSpec: configurationv1alpha1.MTLSSpec{
+			Enabled: true,
+			TokenValidators: []configurationv1alpha1.ValidatorSpec{
+				{
+					Name: "jwks",
+					Options: &configurationv1alpha1.DynamicValue{
+						JSON: apiextensionsv1.JSON{
+							Raw: jwksValidatorConfig,
+						},
+					},
+				},
+			},
+		},
+	}))
+
 	return []framework.Option{
-		framework.WithProcesses(m.sentryWithInsecure),
+		framework.WithProcesses(m.sentryWithInsecure, m.sentryWithJWKS),
 	}
 }
 
@@ -96,7 +124,7 @@ func (m *insecureValidator) Run(t *testing.T, parentCtx context.Context) {
 			client = sentrypbv1.NewCAClient(conn)
 		})
 
-		t.Run("fails when not passing an invalid validator", func(t *testing.T) {
+		t.Run("fails when passing an invalid validator", func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(parentCtx, 10*time.Second)
 			defer cancel()
 			_, err := client.SignCertificate(ctx, &sentrypbv1.SignCertificateRequest{
@@ -187,6 +215,82 @@ func (m *insecureValidator) Run(t *testing.T, parentCtx context.Context) {
 			require.True(t, ok)
 			require.Equal(t, codes.InvalidArgument, grpcStatus.Code())
 			require.Contains(t, grpcStatus.Message(), "invalid certificate signing request")
+		})
+	})
+
+	t.Run("JWKS validator", func(t *testing.T) {
+		var client sentrypbv1.CAClient
+
+		t.Run("connect to Sentry", func(t *testing.T) {
+			// We need to set up the TLS configuration to validate the TLS certificate provided by Sentry
+			bundle := m.sentryWithJWKS.CABundle()
+			sentrySpiffeID, err := spiffeid.FromString("spiffe://localhost/ns/default/dapr-sentry")
+			require.NoError(t, err, "failed to create Sentry SPIFFE ID")
+			x509bundle, err := x509bundle.Parse(sentrySpiffeID.TrustDomain(), bundle.TrustAnchors)
+			require.NoError(t, err, "failed to create x509 bundle")
+			transportCredentials := grpccredentials.TLSClientCredentials(x509bundle, tlsconfig.AuthorizeID(sentrySpiffeID))
+
+			// Actually establish the connection using gRPC
+			t.Logf("Connecting to Sentry on 127.0.0.1:%d", m.sentryWithJWKS.Port())
+			ctx, cancel := context.WithTimeout(parentCtx, 10*time.Second)
+			defer cancel()
+			conn, err := grpc.DialContext(
+				ctx,
+				fmt.Sprintf("127.0.0.1:%d", m.sentryWithJWKS.Port()),
+				grpc.WithTransportCredentials(transportCredentials),
+				grpc.WithReturnConnectionError(),
+				grpc.WithBlock(),
+			)
+			require.NoError(t, err)
+
+			client = sentrypbv1.NewCAClient(conn)
+		})
+
+		t.Run("fails when passing an invalid validator", func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(parentCtx, 10*time.Second)
+			defer cancel()
+			_, err := client.SignCertificate(ctx, &sentrypbv1.SignCertificateRequest{
+				Id:             defaultAppID,
+				Namespace:      defaultNamespace,
+				TokenValidator: sentrypbv1.SignCertificateRequest_TokenValidator(-1), // -1 is an invalid enum value
+			})
+			require.Error(t, err)
+
+			grpcStatus, ok := status.FromError(err)
+			require.True(t, ok)
+			require.Equal(t, codes.InvalidArgument, grpcStatus.Code())
+			require.Contains(t, grpcStatus.Message(), "not enabled")
+		})
+
+		t.Run("fails when passing the insecure validator", func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(parentCtx, 10*time.Second)
+			defer cancel()
+			_, err := client.SignCertificate(ctx, &sentrypbv1.SignCertificateRequest{
+				Id:             defaultAppID,
+				Namespace:      defaultNamespace,
+				TokenValidator: sentrypbv1.SignCertificateRequest_INSECURE,
+			})
+			require.Error(t, err)
+
+			grpcStatus, ok := status.FromError(err)
+			require.True(t, ok)
+			require.Equal(t, codes.InvalidArgument, grpcStatus.Code())
+			require.Contains(t, grpcStatus.Message(), "not enabled")
+		})
+
+		t.Run("fails when no validator is passed", func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(parentCtx, 10*time.Second)
+			defer cancel()
+			_, err := client.SignCertificate(ctx, &sentrypbv1.SignCertificateRequest{
+				Id:        defaultAppID,
+				Namespace: defaultNamespace,
+			})
+			require.Error(t, err)
+
+			grpcStatus, ok := status.FromError(err)
+			require.True(t, ok)
+			require.Equal(t, codes.InvalidArgument, grpcStatus.Code())
+			require.Contains(t, grpcStatus.Message(), "a validator name must be specified in this environment")
 		})
 	})
 }
