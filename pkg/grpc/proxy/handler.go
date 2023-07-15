@@ -231,6 +231,7 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 			}
 			return nil, err
 		}
+		diagnostics.DefaultMonitoring.ServiceInvocationRequestReceived(v[0], fullMethodName)
 		return nil, nil
 	})
 	if cErr != nil {
