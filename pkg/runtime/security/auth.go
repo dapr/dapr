@@ -18,7 +18,7 @@ import (
 	daprCredentials "github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
-	"github.com/dapr/dapr/pkg/runtime/security/consts"
+	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 )
 
 const (
@@ -167,7 +167,7 @@ func getToken() (token string, validator sentryv1pb.SignCertificateRequest_Token
 	var b []byte
 
 	// Check if we have a token file in the DAPR_SENTRY_TOKEN_FILE env var (for the JWKS validator)
-	if path, ok := os.LookupEnv(consts.SentryTokenFileEnvVar); ok {
+	if path, ok := os.LookupEnv(securityConsts.SentryTokenFileEnvVar); ok {
 		if path == "" {
 			return "", sentryv1pb.SignCertificateRequest_UNKNOWN, errors.New("environmental variable DAPR_SENTRY_TOKEN_FILE is set with an empty value")
 		}
@@ -204,7 +204,7 @@ func getToken() (token string, validator sentryv1pb.SignCertificateRequest_Token
 func getSentryIdentifier(appID string) string {
 	// Return the injected identity
 	// Defaults to app ID if not present
-	localID := os.Getenv(consts.SentryLocalIdentityEnvVar)
+	localID := os.Getenv(securityConsts.SentryLocalIdentityEnvVar)
 	if localID != "" {
 		return localID
 	}

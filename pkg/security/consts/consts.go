@@ -13,21 +13,33 @@ limitations under the License.
 
 package consts
 
-/* #nosec. */
+/* #nosec */
 const (
-	// APITokenEnvVar is the environment variable for the api token.
-	APITokenEnvVar    = "DAPR_API_TOKEN"
+	// APITokenEnvVar is the environment variable for the API token.
+	APITokenEnvVar = "DAPR_API_TOKEN"
+	// AppAPITokenEnvVar is the environment variable for the app API token.
 	AppAPITokenEnvVar = "APP_API_TOKEN"
-	// APITokenHeader is header name for http/gRPC calls to hold the token.
+	// APITokenHeader is header name for HTTP/gRPC calls to hold the token.
 	APITokenHeader = "dapr-api-token"
 
 	// TrustBundleK8sSecretName is the name of the kubernetes secret that holds the trust bundle.
 	TrustBundleK8sSecretName = "dapr-trust-bundle" /* #nosec */
 
+	// ServiceAccountTokenAudience is the audience for the service account token.
 	ServiceAccountTokenAudience = "dapr.io/sentry" /* #nosec */
 
 	// TrustAnchorsEnvVar is the environment variable name for the trust anchors in the sidecar.
 	TrustAnchorsEnvVar = "DAPR_TRUST_ANCHORS"
-	CertChainEnvVar    = "DAPR_CERT_CHAIN"
-	CertKeyEnvVar      = "DAPR_CERT_KEY"
+	// CertChainEnvVar is the environment variable name for the cert chain in the sidecar.
+	CertChainEnvVar = "DAPR_CERT_CHAIN"
+	// CertKeyEnvVar is the environment variable name for the cert key in the sidecar.
+	CertKeyEnvVar = "DAPR_CERT_KEY"
+
+	// EnvKeysEnvVar is the variable injected in the daprd container with the list of injected env vars.
+	EnvKeysEnvVar = "DAPR_ENV_KEYS"
+
+	// SentryLocalIdentityEnvVar is the environment variable for the local identity sent to Sentry.
+	SentryLocalIdentityEnvVar = "SENTRY_LOCAL_IDENTITY"
+	// SentryTokenFileEnvVar is the environment variable for the Sentry token file.
+	SentryTokenFileEnvVar = "DAPR_SENTRY_TOKEN_FILE"
 )

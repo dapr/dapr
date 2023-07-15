@@ -1,5 +1,5 @@
 /*
-Copyright 2023 The Dapr Authors
+Copyright 2022 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -16,7 +16,6 @@ package security
 import (
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/dapr/dapr/pkg/security/consts"
 )
@@ -26,8 +25,6 @@ const (
 )
 
 var (
-	excludedRoutes = []string{"/healthz"}
-
 	// used for testing.
 	rootFS = "/"
 )
@@ -40,16 +37,6 @@ func GetAPIToken() string {
 // GetAppToken returns the value of the app api token from an environment variable.
 func GetAppToken() string {
 	return os.Getenv(consts.AppAPITokenEnvVar)
-}
-
-// ExcludedRoute returns whether a given route should be excluded from a token check.
-func ExcludedRoute(route string) bool {
-	for _, r := range excludedRoutes {
-		if strings.Contains(route, r) {
-			return true
-		}
-	}
-	return false
 }
 
 // getKubernetesIdentityToken returns the value of the Kubernetes identity

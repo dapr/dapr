@@ -25,8 +25,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/components/pluggable"
 	"github.com/dapr/dapr/pkg/injector/annotations"
-	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
-	"github.com/dapr/dapr/pkg/security/consts"
+	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
@@ -274,7 +273,7 @@ func GetSidecarContainer(cfg ContainerConfig) (*corev1.Container, error) {
 	if len(containerEnv) > 0 {
 		container.Env = append(container.Env, containerEnv...)
 		container.Env = append(container.Env, corev1.EnvVar{
-			Name:  authConsts.EnvKeysEnvVar,
+			Name:  securityConsts.EnvKeysEnvVar,
 			Value: strings.Join(containerEnvKeys, " "),
 		})
 	}
@@ -320,19 +319,19 @@ func GetSidecarContainer(cfg ContainerConfig) (*corev1.Container, error) {
 
 	container.Env = append(container.Env,
 		corev1.EnvVar{
-			Name:  consts.TrustAnchorsEnvVar,
+			Name:  securityConsts.TrustAnchorsEnvVar,
 			Value: cfg.TrustAnchors,
 		},
 		corev1.EnvVar{
-			Name:  consts.CertChainEnvVar,
+			Name:  securityConsts.CertChainEnvVar,
 			Value: cfg.CertChain,
 		},
 		corev1.EnvVar{
-			Name:  consts.CertKeyEnvVar,
+			Name:  securityConsts.CertKeyEnvVar,
 			Value: cfg.CertKey,
 		},
 		corev1.EnvVar{
-			Name:  authConsts.SentryLocalIdentityEnvVar,
+			Name:  securityConsts.SentryLocalIdentityEnvVar,
 			Value: cfg.Identity,
 		},
 	)
@@ -347,7 +346,7 @@ func GetSidecarContainer(cfg ContainerConfig) (*corev1.Container, error) {
 
 	if secret := cfg.Annotations.GetString(annotations.KeyAPITokenSecret); secret != "" {
 		container.Env = append(container.Env, corev1.EnvVar{
-			Name: authConsts.APITokenEnvVar,
+			Name: securityConsts.APITokenEnvVar,
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					Key: "token",
@@ -361,7 +360,7 @@ func GetSidecarContainer(cfg ContainerConfig) (*corev1.Container, error) {
 
 	if appSecret := cfg.Annotations.GetString(annotations.KeyAppTokenSecret); appSecret != "" {
 		container.Env = append(container.Env, corev1.EnvVar{
-			Name: authConsts.AppAPITokenEnvVar,
+			Name: securityConsts.AppAPITokenEnvVar,
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					Key: "token",

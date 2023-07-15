@@ -1,5 +1,5 @@
 /*
-Copyright 2023 The Dapr Authors
+Copyright 2022 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -23,7 +23,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/dapr/dapr/pkg/security/consts"
+	"github.com/dapr/dapr/pkg/runtime/security/consts"
 	"github.com/dapr/kit/ptr"
 )
 
@@ -56,20 +56,6 @@ func TestAppToken(t *testing.T) {
 	t.Run("non-existent token", func(t *testing.T) {
 		token := GetAppToken()
 		assert.Equal(t, "", token)
-	})
-}
-
-func TestExcludedRoute(t *testing.T) {
-	t.Run("healthz route is excluded", func(t *testing.T) {
-		route := "v1.0/healthz"
-		excluded := ExcludedRoute(route)
-		assert.True(t, excluded)
-	})
-
-	t.Run("custom route is not excluded", func(t *testing.T) {
-		route := "v1.0/state"
-		excluded := ExcludedRoute(route)
-		assert.False(t, excluded)
 	})
 }
 

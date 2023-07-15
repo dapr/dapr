@@ -69,8 +69,8 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/processor"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/dapr/pkg/runtime/security"
-	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
+	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 
@@ -1480,7 +1480,7 @@ func isEnvVarAllowed(key string) bool {
 	}
 
 	// If we have a `DAPR_ENV_KEYS` env var (which is added by the Dapr Injector in Kubernetes mode), use that as allowlist too
-	allowlist := os.Getenv(authConsts.EnvKeysEnvVar)
+	allowlist := os.Getenv(securityConsts.EnvKeysEnvVar)
 	if allowlist == "" {
 		return true
 	}
