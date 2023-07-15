@@ -28,16 +28,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type testCommandRequest struct {
-	Message string `json:"message,omitempty"`
-}
-
-type appResponse struct {
-	Message   string `json:"message,omitempty"`
-	StartTime int    `json:"start_time,omitempty"`
-	EndTime   int    `json:"end_time,omitempty"`
-}
-
 const numHealthChecks = 60 // Number of times to check for endpoint health per app.
 
 var tr *runner.TestRunner
@@ -283,10 +273,6 @@ func TestWorkflow(t *testing.T) {
 
 			// Sleep so that the workflow engine starts
 			time.Sleep(5 * time.Second)
-
-			// Purge the instance
-			postString := fmt.Sprintf("%s/PurgeWorkflow/dapr/%s", externalURL, tt.instanceID)
-			_, err = utils.HTTPPost(postString, nil)
 
 			result := "false"
 			switch tt.in {

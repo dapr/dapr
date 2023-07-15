@@ -47,7 +47,6 @@ namespace DaprDemoActor
               input: inputItem,
               workflowOptions: workflowOptions);
 
-      Thread.Sleep(TimeSpan.FromSeconds(5));
       var getResponse = await daprClient.GetWorkflowAsync(instanceID, workflowComponent);
 
       return getResponse.InstanceId;
