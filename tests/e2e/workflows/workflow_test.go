@@ -71,16 +71,201 @@ func TestMain(m *testing.M) {
 	os.Exit(tr.Start(m))
 }
 
+// Used for the map created later on
+type TestFunc func(string, string) string
+
+func startTest(url string, instanceID string) string {
+	postString := fmt.Sprintf("%s/StartWorkflow/dapr/placeOrder/%s", url, instanceID)
+	// Start the workflow and check that it is running
+	resp, err := utils.HTTPPost(postString, nil)
+	if err != nil {
+		return fmt.Sprintf("Failure starting workflow: %s", err.Error())
+	}
+
+	getString := fmt.Sprintf("%s/dapr/%s", url, instanceID)
+	resp, err = utils.HTTPGet(getString)
+	if err != nil {
+		return fmt.Sprintf("Failure getting info on workflow: %s", err.Error())
+	}
+	if string(resp) != "Running" {
+		return fmt.Sprintf("Expected workflow to be Running, actual workflow state is: %s", string(resp))
+	}
+
+	return string(resp)
+}
+
+func pauseResumeTest(url string, instanceID string) string {
+	postString := fmt.Sprintf("%s/StartWorkflow/dapr/placeOrder/%s", url, instanceID)
+	// Start the workflow and check that it is running
+	resp, err := utils.HTTPPost(postString, nil)
+	if err != nil {
+		return fmt.Sprintf("Failure starting workflow: %s", err.Error())
+	}
+
+	getString := fmt.Sprintf("%s/dapr/%s", url, instanceID)
+	resp, err = utils.HTTPGet(getString)
+	if err != nil {
+		return fmt.Sprintf("Failure getting info on started workflow: %s", err.Error())
+	}
+	if string(resp) != "Running" {
+		return fmt.Sprintf("Expected workflow to be Running, actual workflow state is: %s", string(resp))
+	}
+
+	postString = fmt.Sprintf("%s/PauseWorkflow/dapr/%s", url, instanceID)
+	resp, err = utils.HTTPPost(postString, nil)
+	if err != nil {
+		return fmt.Sprintf("Failure pausing workflow: %s", err.Error())
+	}
+
+	resp, err = utils.HTTPGet(getString)
+	if err != nil {
+		return fmt.Sprintf("Failure getting info on paused workflow: %s", err.Error())
+	}
+	if string(resp) != "Suspended" {
+		return fmt.Sprintf("Expected workflow to be Suspended, actual workflow state is: %s", string(resp))
+	}
+
+	// Resume the workflow
+	postString = fmt.Sprintf("%s/ResumeWorkflow/dapr/e2eInstanceId", url)
+	resp, err = utils.HTTPPost(postString, nil)
+	if err != nil {
+		return fmt.Sprintf("Failure resuming workflow: %s", err.Error())
+	}
+
+	resp, err = utils.HTTPGet(getString)
+	if err != nil {
+		return fmt.Sprintf("Failure getting info on resumed workflow: %s", err.Error())
+	}
+	if string(resp) != "Running" {
+		return fmt.Sprintf("Expected workflow to be Running, actual workflow state is: %s", string(resp))
+	}
+
+	return "Success"
+}
+
+func raiseEventTest(url string, instanceID string) string {
+	postString := fmt.Sprintf("%s/StartWorkflow/dapr/placeOrder/%s", url, instanceID)
+	// Start the workflow and check that it is running
+	resp, err := utils.HTTPPost(postString, nil)
+	if err != nil {
+		return fmt.Sprintf("Failure starting workflow: %s", err.Error())
+	}
+
+	getString := fmt.Sprintf("%s/dapr/%s", url, instanceID)
+	resp, err = utils.HTTPGet(getString)
+	if err != nil {
+		return fmt.Sprintf("Failure getting info on workflow: %s", err.Error())
+	}
+	if string(resp) != "Running" {
+		return fmt.Sprintf("Expected workflow to be Running, actual workflow state is: %s", string(resp))
+	}
+
+	// Raise an event on the workflow
+	postString = fmt.Sprintf("%s/RaiseWorkflowEvent/dapr/%s/ChangePurchaseItem/1", url, instanceID)
+	resp, err = utils.HTTPPost(postString, nil)
+
+	time.Sleep(1 * time.Second)
+
+	resp, err = utils.HTTPGet(getString)
+	if err != nil {
+		return fmt.Sprintf("Failure getting info on workflow: %s", err.Error())
+	}
+	if string(resp) != "Completed" {
+		return fmt.Sprintf("Expected workflow to be Completed, actual workflow state is: %s", string(resp))
+	}
+
+	return string(resp)
+}
+
+// Functions for each test case
+func purgeTest(url string, instanceID string) string {
+	// Start the workflow and check that it is running
+	postString := fmt.Sprintf("%s/StartWorkflow/dapr/placeOrder/%s", url, instanceID)
+	resp, err := utils.HTTPPost(postString, nil)
+	if err != nil {
+		return fmt.Sprintf("Failure starting workflow: %s", err.Error())
+	}
+
+	getString := fmt.Sprintf("%s/dapr/%s", url, instanceID)
+	resp, err = utils.HTTPGet(getString)
+	if err != nil {
+		return fmt.Sprintf("Failure getting info on newly started workflow: %s", err.Error())
+	}
+	if string(resp) != "Running" {
+		return fmt.Sprintf("Expected workflow to be Running, actual workflow state is: %s", string(resp))
+	}
+
+	// Terminate the workflow
+	postString = fmt.Sprintf("%s/TerminateWorkflow/dapr/%s", url, instanceID)
+	resp, err = utils.HTTPPost(postString, nil)
+	if err != nil {
+		return fmt.Sprintf("Failure terminating workflow: %s", err.Error())
+	}
+	resp, err = utils.HTTPGet(getString)
+	if err != nil {
+		return fmt.Sprintf("Failure getting info on terminated workflow: %s", err.Error())
+	}
+	if string(resp) != "Terminated" {
+		return fmt.Sprintf("Expected workflow to be Terminated, actual workflow state is: %s", string(resp))
+	}
+
+	// Purge the workflow
+	postString = fmt.Sprintf("%s/PurgeWorkflow/dapr/%s", url, instanceID)
+	resp, err = utils.HTTPPost(postString, nil)
+	if err != nil {
+		return fmt.Sprintf("Failure purging workflow: %s", err.Error())
+	}
+
+	// Startup a new workflow with the same instanceID to ensure that it is available
+	postString = fmt.Sprintf("%s/StartWorkflow/dapr/placeOrder/%s", url, instanceID)
+	resp, err = utils.HTTPPost(postString, nil)
+	if err != nil {
+		return fmt.Sprintf("Failure starting workflow: %s", err.Error())
+	}
+
+	instanceID = string(resp)
+	resp, err = utils.HTTPGet(getString)
+	if err != nil {
+		return fmt.Sprintf("Failure getting info on newly started workflow: %s", err.Error())
+	}
+	if string(resp) != "Running" {
+		return fmt.Sprintf("Expected workflow to be Running, actual workflow state is: %s", string(resp))
+	}
+
+	return string(resp)
+}
+
 var workflowAppTests = []struct {
 	in               string
+	instanceID       string
 	app              string
-	testCommand      string
 	expectedResponse string
 }{
 	{
-		"workflow dapr",
-		"workflowsapp",
 		"start",
+		"startID",
+		"workflowsapp",
+		"Running",
+	},
+
+	{
+		"pauseResume",
+		"pauseID",
+		"workflowsapp",
+		"Suspended",
+	},
+
+	{
+		"purge",
+		"purgeID",
+		"workflowsapp",
+		"Running",
+	},
+
+	{
+		"raiseEvent",
+		"raiseEventID",
+		"workflowsapp",
 		"Completed",
 	},
 }
@@ -96,81 +281,28 @@ func TestWorkflow(t *testing.T) {
 			_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
 			require.NoError(t, err)
 
-			postString := fmt.Sprintf("%s/StartWorkflow/dapr/placeOrder/e2eInstanceId", externalURL)
-
 			// Sleep so that the workflow engine starts
-			time.Sleep(20 * time.Second)
-
-			// Start the workflow
-			resp, err := utils.HTTPPost(postString, nil)
-			require.NoError(t, err)
-
-			// Assert that the workflow instanceID is returned
-			require.Equal(t, "e2eInstanceId", string(resp))
-
-			// Start a secpond workflow instance for testing
-			postString = fmt.Sprintf("%s/StartWorkflow/dapr/placeOrder/e2eInstanceId2", externalURL)
-
-			// Start the workflow
-			resp, err = utils.HTTPPost(postString, nil)
-
-			// Sleep so that the workflow starts
 			time.Sleep(5 * time.Second)
 
-			getString := fmt.Sprintf("%s/dapr/e2eInstanceId", externalURL)
-			fmt.Println("RRL getString: ", getString)
-			resp, err = utils.HTTPGet(getString)
+			// Purge the instance
+			postString := fmt.Sprintf("%s/PurgeWorkflow/dapr/%s", externalURL, tt.instanceID)
+			_, err = utils.HTTPPost(postString, nil)
 
-			// Assert that the status returned is Running
-			require.Equal(t, "Running", string(resp))
+			result := "false"
+			switch tt.in {
+			case "purge":
+				result = purgeTest(externalURL, tt.instanceID)
+			case "start":
+				result = startTest(externalURL, tt.instanceID)
+			case "pauseResume":
+				result = pauseResumeTest(externalURL, tt.instanceID)
+			case "raiseEvent":
+				result = raiseEventTest(externalURL, tt.instanceID)
+			default:
 
-			// Pause the workflow
-			postString = fmt.Sprintf("%s/PauseWorkflow/dapr/e2eInstanceId", externalURL)
-			resp, err = utils.HTTPPost(postString, nil)
+			}
 
-			resp, err = utils.HTTPGet(getString)
-			require.Equal(t, "Suspended", string(resp))
-
-			// Resume the workflow
-			postString = fmt.Sprintf("%s/ResumeWorkflow/dapr/e2eInstanceId", externalURL)
-			resp, err = utils.HTTPPost(postString, nil)
-
-			resp, err = utils.HTTPGet(getString)
-			require.Equal(t, "Running", string(resp))
-
-			// Raise an event on the workflow
-			postString = fmt.Sprintf("%s/RaiseWorkflowEvent/dapr/e2eInstanceId/ChangePurchaseItem/1", externalURL)
-			resp, err = utils.HTTPPost(postString, nil)
-
-			time.Sleep(1 * time.Second)
-
-			resp, err = utils.HTTPGet(getString)
-			require.Equal(t, "Completed", string(resp))
-
-			// Purge the workflow
-			postString = fmt.Sprintf("%s/PaurgeWorkflow/dapr/e2eInstanceId", externalURL)
-			resp, err = utils.HTTPPost(postString, nil)
-
-			// Start another workflow with the same instanceID to ensure that the previous one no longer exists
-			// Assert that the workflow instanceID is returned
-			postString = fmt.Sprintf("%s/StartWorkflow/dapr/placeOrder/e2eInstanceId", externalURL)
-			resp, err = utils.HTTPPost(postString, nil)
-			require.NoError(t, err)
-			require.Equal(t, "e2eInstanceId", string(resp))
-
-			// Terminate the workflow
-			postString = fmt.Sprintf("%s/TerminateWorkflow/dapr/e2eInstanceId", externalURL)
-			resp, err = utils.HTTPPost(postString, nil)
-			require.NoError(t, err)
-
-			resp, err = utils.HTTPGet(getString)
-			require.Equal(t, "Terminated", string(resp))
-
-			// Purge the workflow
-			postString = fmt.Sprintf("%s/PaurgeWorkflow/dapr/e2eInstanceId", externalURL)
-			resp, err = utils.HTTPPost(postString, nil)
-			require.NoError(t, err)
-
+			require.Equal(t, tt.expectedResponse, result)
 		})
 	}
 }

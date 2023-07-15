@@ -25,13 +25,12 @@ namespace DaprDemoActor
     static string httpEndpoint = "http://127.0.0.1:" + Environment.GetEnvironmentVariable("DAPR_HTTP_PORT");
     static string grpcEndpoint = "http://127.0.0.1:" + Environment.GetEnvironmentVariable("DAPR_GRPC_PORT");
     public static DaprClient daprClient = new DaprClientBuilder().UseGrpcEndpoint(grpcEndpoint).UseHttpEndpoint(httpEndpoint).Build();
+
     [HttpGet("{workflowComponent}/{instanceID}")]
     public async Task<ActionResult<string>> GetWorkflow([FromRoute] string instanceID, string workflowComponent)
     {
       await daprClient.WaitForSidecarAsync();
-      Console.WriteLine("RRL SideCAr Healthy");
       var getResponse = await daprClient.GetWorkflowAsync(instanceID, workflowComponent);
-      Console.WriteLine("RRL getResponse: ", getResponse.RuntimeStatus.ToString());
       return getResponse.RuntimeStatus.ToString();
     }
 
@@ -50,8 +49,6 @@ namespace DaprDemoActor
 
       Thread.Sleep(TimeSpan.FromSeconds(5));
       var getResponse = await daprClient.GetWorkflowAsync(instanceID, workflowComponent);
-      Console.WriteLine("RRL getResponse: ", getResponse.RuntimeStatus.ToString());
-      // return getResponse.RuntimeStatus.ToString();
 
       return getResponse.InstanceId;
     }
