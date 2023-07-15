@@ -45,6 +45,7 @@ func FileNames(t *testing.T, num int) []string {
 		var fileName string
 		for len(fileName) == 0 ||
 			strings.HasPrefix(fileName, "..") ||
+			strings.HasPrefix(fileName, " ") ||
 			fileName == "." ||
 			forbiddenChars(fileName) ||
 			taken[fileName] {
