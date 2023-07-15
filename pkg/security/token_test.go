@@ -23,7 +23,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/dapr/dapr/pkg/runtime/security/consts"
+	"github.com/dapr/dapr/pkg/security/consts"
 	"github.com/dapr/kit/ptr"
 )
 

@@ -41,6 +41,7 @@ import (
 	"github.com/dapr/dapr/pkg/diagnostics"
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	secpem "github.com/dapr/dapr/pkg/security/pem"
+	sentryToken "github.com/dapr/dapr/pkg/security/token"
 )
 
 const (
@@ -242,13 +243,10 @@ func (x *x509source) requestFromSentry(ctx context.Context, csrDER []byte) ([]*x
 
 	defer conn.Close()
 
-	var token string
-	if x.kubernetesMode {
-		token, err = getKubernetesIdentityToken()
-		if err != nil {
-			diagnostics.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("k8s_token")
-			return nil, fmt.Errorf("error getting service account token: %w", err)
-		}
+	token, tokenValidator, err := sentryToken.GetSentryToken(x.kubernetesMode)
+	if err != nil {
+		diagnostics.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("sentry_token")
+		return nil, fmt.Errorf("error obtaining token: %w", err)
 	}
 
 	resp, err := sentryv1pb.NewCAClient(conn).SignCertificate(ctx,
@@ -256,9 +254,10 @@ func (x *x509source) requestFromSentry(ctx context.Context, csrDER []byte) ([]*x
 			CertificateSigningRequest: pem.EncodeToMemory(&pem.Block{
 				Type: "CERTIFICATE REQUEST", Bytes: csrDER,
 			}),
-			Id:        x.appID,
-			Token:     token,
-			Namespace: x.appNamespace,
+			Id:             x.appID,
+			Token:          token,
+			Namespace:      x.appNamespace,
+			TokenValidator: tokenValidator,
 		})
 	if err != nil {
 		diagnostics.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("sign")

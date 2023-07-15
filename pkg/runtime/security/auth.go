@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/pem"
-	"errors"
 	"fmt"
 	"os"
 	"sync"
@@ -19,13 +18,12 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	securityConsts "github.com/dapr/dapr/pkg/security/consts"
+	securityToken "github.com/dapr/dapr/pkg/security/token"
 )
 
 const (
 	TLSServerName     = "cluster.local"
 	sentrySignTimeout = time.Second * 5
-	kubeTknPath       = "/var/run/secrets/dapr.io/sentrytoken/token"
-	legacyKubeTknPath = "/var/run/secrets/kubernetes.io/serviceaccount/token"
 	sentryMaxRetries  = 100
 )
 
@@ -110,7 +108,7 @@ func (a *authenticator) CreateSignedWorkloadCert(id, namespace, trustDomain stri
 
 	c := sentryv1pb.NewCAClient(conn)
 
-	token, tokenValidator, err := getToken()
+	token, tokenValidator, err := securityToken.GetSentryToken(true)
 	if err != nil {
 		return nil, fmt.Errorf("error obtaining token: %w", err)
 	}
@@ -160,45 +158,6 @@ func (a *authenticator) CreateSignedWorkloadCert(id, namespace, trustDomain stri
 
 	a.currentSignedCert = signedCert
 	return signedCert, nil
-}
-
-// Returns the token for authenticating with Sentry.
-func getToken() (token string, validator sentryv1pb.SignCertificateRequest_TokenValidator, err error) {
-	var b []byte
-
-	// Check if we have a token file in the DAPR_SENTRY_TOKEN_FILE env var (for the JWKS validator)
-	if path, ok := os.LookupEnv(securityConsts.SentryTokenFileEnvVar); ok {
-		if path == "" {
-			return "", sentryv1pb.SignCertificateRequest_UNKNOWN, errors.New("environmental variable DAPR_SENTRY_TOKEN_FILE is set with an empty value")
-		}
-		b, err = os.ReadFile(path)
-		if err != nil {
-			log.Warnf("Failed to read token at path %q: %v", path, err)
-			return "", sentryv1pb.SignCertificateRequest_UNKNOWN, fmt.Errorf("failed to read token at path %q: %w", path, err)
-		}
-		if len(b) == 0 {
-			log.Warnf("Token at path %q is empty", path)
-			return "", sentryv1pb.SignCertificateRequest_UNKNOWN, fmt.Errorf("token at path %q is empty", path)
-		}
-
-		log.Debugf("Loaded token from path %q specified in the DAPR_SENTRY_TOKEN_FILE environmental variable", path)
-		return string(b), sentryv1pb.SignCertificateRequest_JWKS, nil
-	}
-
-	// Try to read a token from Kubernetes (for the default validator)
-	b, err = os.ReadFile(kubeTknPath)
-	if err != nil && os.IsNotExist(err) {
-		// Attempt to use the legacy token if that exists
-		b, _ = os.ReadFile(legacyKubeTknPath)
-		if len(b) > 0 {
-			log.Warn("⚠️ daprd is initializing using the legacy service account token with access to Kubernetes APIs, which is discouraged. This usually happens when daprd is running against an older version of the Dapr control plane.")
-		}
-	}
-	if len(b) > 0 {
-		return string(b), sentryv1pb.SignCertificateRequest_KUBERNETES, nil
-	}
-
-	return "", sentryv1pb.SignCertificateRequest_UNKNOWN, nil
 }
 
 func getSentryIdentifier(appID string) string {
