@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	fuzz "github.com/google/gofuzz"
+	"k8s.io/apimachinery/pkg/api/validation/path"
 )
 
 func FileNames(t *testing.T, num int) []string {
@@ -45,9 +46,9 @@ func FileNames(t *testing.T, num int) []string {
 		var fileName string
 		for len(fileName) == 0 ||
 			strings.HasPrefix(fileName, "..") ||
-			strings.HasPrefix(fileName, " ") ||
 			fileName == "." ||
 			forbiddenChars(fileName) ||
+			len(path.IsValidPathSegmentName(fileName)) > 0 ||
 			taken[fileName] {
 			fileName = ""
 			fz.Fuzz(&fileName)
