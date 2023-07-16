@@ -2089,6 +2089,7 @@ func TestMiddlewareBuildPipeline(t *testing.T) {
 		rt := &DaprRuntime{
 			globalConfig: &config.Configuration{},
 			compStore:    compStore,
+			meta:         meta.New(meta.Options{ID: "test-app-id", Namespace: "namespace"}),
 			runtimeConfig: &internalConfig{
 				registry: registry.New(registry.NewOptions().WithHTTPMiddlewares(
 					httpMiddlewareLoader.NewRegistry(),
