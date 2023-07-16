@@ -242,7 +242,7 @@ var workflowAppTests = []struct {
 		"pauseResume",
 		"pauseID",
 		"workflowsapp",
-		"Suspended",
+		"Success",
 	},
 
 	{
