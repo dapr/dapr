@@ -16,6 +16,7 @@ package meta
 import (
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -95,4 +96,13 @@ func ContainsNamespace(items []common.NameValuePair) bool {
 		}
 	}
 	return false
+}
+
+// AddWasmStrictSandbox adds wasm strict sandbox configuration to metadata.
+func AddWasmStrictSandbox(comp *compapi.Component, enable bool) {
+	sandbox := &common.NameValuePair{
+		Name: "strictSandbox",
+	}
+	sandbox.SetValue([]byte(strconv.FormatBool(enable)))
+	comp.Spec.Metadata = append(comp.Spec.Metadata, *sandbox)
 }

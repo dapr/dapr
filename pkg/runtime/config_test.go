@@ -14,16 +14,12 @@ limitations under the License.
 package runtime
 
 import (
-	"flag"
-	"strconv"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/dapr/dapr/cmd/daprd/options"
-	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/kit/ptr"
 )
@@ -116,14 +112,7 @@ func Test_toInternal(t *testing.T) {
 }
 
 func TestStandaloneWasmStrictSandbox(t *testing.T) {
-	// reset CommandLine to avoid conflicts from other tests
-	flag.CommandLine = flag.NewFlagSet("runtime-flag-test-cmd", flag.ExitOnError)
-
-	opts := options.New([]string{"--app-id", "testapp", "--mode", string(modes.StandaloneMode), "--config", "../config/testdata/wasm_strict_sandbox.yaml", "--metrics-port", strconv.Itoa(10000)})
-	assert.EqualValues(t, "testapp", opts.AppID)
-	assert.EqualValues(t, string(modes.StandaloneMode), opts.Mode)
-
-	cfg, err := FromConfig(&Config{ConfigPath: opts.ConfigPath})
+	cfg, err := FromConfig(&Config{ConfigPath: "../config/testdata/wasm_strict_sandbox.yaml"})
 	assert.Nil(t, err)
 	assert.True(t, cfg.globalConfig.Spec.WasmSpec.StrictSandbox)
 }

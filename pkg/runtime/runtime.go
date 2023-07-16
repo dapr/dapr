@@ -75,7 +75,6 @@ import (
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
 	"github.com/dapr/dapr/pkg/resiliency"
-	contribComponent "github.com/dapr/dapr/pkg/runtime/component"
 	"github.com/dapr/dapr/pkg/runtime/meta"
 	"github.com/dapr/dapr/pkg/runtime/processor"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
@@ -635,9 +634,9 @@ func (a *DaprRuntime) buildHTTPPipelineForSpec(spec config.PipelineSpec, targetP
 					middlewareSpec.Name, middlewareSpec.LogName())
 				continue
 			}
+			// set wasm strict sandbox mode to middleware metadata, overrides the one set in component level.
+			meta.AddWasmStrictSandbox(&component, a.globalConfig.Spec.WasmSpec.StrictSandbox)
 			md := middleware.Metadata{Base: a.meta.ToBaseMetadata(component)}
-			// set wasm strict sandbox mode to binding metadata, overrides the one set in component level.
-			contribComponent.AddWasmStrictSandbox(&md.Base, a.globalConfig.Spec.WasmSpec.StrictSandbox)
 			handler, err := a.runtimeConfig.registry.HTTPMiddlewares().Create(middlewareSpec.Type, middlewareSpec.Version, md, middlewareSpec.LogName())
 			if err != nil {
 				e := fmt.Sprintf("process component %s error: %s", component.Name, err.Error())
@@ -2410,6 +2409,11 @@ func (a *DaprRuntime) processComponentAndDependents(comp componentsV1alpha1.Comp
 	timeout, err := time.ParseDuration(comp.Spec.InitTimeout)
 	if err != nil {
 		timeout = defaultComponentInitTimeout
+	}
+
+	if compCategory == components.CategoryBindings && comp.Spec.Type == string(components.CategoryBindings)+".wasm" {
+		// Add the wasm strict sandbox config to the wasm binding component metadata
+		meta.AddWasmStrictSandbox(&comp, a.globalConfig.Spec.WasmSpec.StrictSandbox)
 	}
 
 	go func() {
