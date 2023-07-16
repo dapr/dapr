@@ -116,7 +116,7 @@ func pauseResumeTest(url string, instanceID string) string {
 	}
 
 	// Resume the workflow
-	postString = fmt.Sprintf("%s/ResumeWorkflow/dapr/e2eInstanceId", url)
+	postString = fmt.Sprintf("%s/ResumeWorkflow/dapr/%s", url, instanceID)
 	resp, err = utils.HTTPPost(postString, nil)
 	if err != nil {
 		return fmt.Sprintf("Failure resuming workflow: %s", err.Error())
@@ -127,7 +127,7 @@ func pauseResumeTest(url string, instanceID string) string {
 		return fmt.Sprintf("Failure getting info on resumed workflow: %s", err.Error())
 	}
 	if string(resp) != "Running" {
-		return fmt.Sprintf("Expected workflow to be Running, actual workflow state is: %s", string(resp))
+		return fmt.Sprintf("Expected resumed workflow to be Running, actual workflow state is: %s", string(resp))
 	}
 
 	return "Success"
