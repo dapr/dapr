@@ -494,8 +494,6 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	a.daprGRPCAPI.SetAppChannel(a.appChannel)
 	a.directMessaging.SetAppChannel(a.appChannel)
 
-	// add another app channel dedicated to external service invocation
-	a.daprHTTPAPI.SetHTTPEndpointsAppChannel(a.httpEndpointsAppChannel)
 	a.directMessaging.SetHTTPEndpointsAppChannel(a.httpEndpointsAppChannel)
 
 	a.daprHTTPAPI.SetDirectMessaging(a.directMessaging)
@@ -948,20 +946,19 @@ func matchRoutingRule(rules []*runtimePubsub.Rule, data map[string]interface{}) 
 
 func (a *DaprRuntime) initDirectMessaging(resolver nr.Resolver) {
 	a.directMessaging = messaging.NewDirectMessaging(messaging.NewDirectMessagingOpts{
-		AppID:                   a.runtimeConfig.id,
-		Namespace:               a.namespace,
-		Port:                    a.runtimeConfig.internalGRPCPort,
-		Mode:                    a.runtimeConfig.mode,
-		AppChannel:              a.appChannel,
-		HTTPEndpointsAppChannel: a.httpEndpointsAppChannel,
-		ClientConnFn:            a.grpc.GetGRPCConnection,
-		Resolver:                resolver,
-		MaxRequestBodySize:      a.runtimeConfig.maxRequestBodySize,
-		Proxy:                   a.proxy,
-		ReadBufferSize:          a.runtimeConfig.readBufferSize,
-		Resiliency:              a.resiliency,
-		IsStreamingEnabled:      a.globalConfig.IsFeatureEnabled(config.ServiceInvocationStreaming),
-		CompStore:               a.compStore,
+		AppID:              a.runtimeConfig.id,
+		Namespace:          a.namespace,
+		Port:               a.runtimeConfig.internalGRPCPort,
+		Mode:               a.runtimeConfig.mode,
+		AppChannel:         a.appChannel,
+		ClientConnFn:       a.grpc.GetGRPCConnection,
+		Resolver:           resolver,
+		MaxRequestBodySize: a.runtimeConfig.maxRequestBodySize,
+		Proxy:              a.proxy,
+		ReadBufferSize:     a.runtimeConfig.readBufferSize,
+		Resiliency:         a.resiliency,
+		IsStreamingEnabled: a.globalConfig.IsFeatureEnabled(config.ServiceInvocationStreaming),
+		CompStore:          a.compStore,
 	})
 }
 
