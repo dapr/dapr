@@ -25,6 +25,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
+	"github.com/dapr/dapr/pkg/config/protocol"
 	"github.com/dapr/dapr/pkg/injector/annotations"
 	"github.com/dapr/dapr/pkg/injector/components"
 	"github.com/dapr/dapr/pkg/injector/patcher"
@@ -183,26 +184,26 @@ func getAppProtocol(an annotations.Map) string {
 	appSSL := an.GetBoolOrDefault(annotations.KeyAppSSL, annotations.DefaultAppSSL)
 
 	switch appProtocol {
-	case string(sidecar.GRPCSProtocol), string(sidecar.HTTPSProtocol), string(sidecar.H2CProtocol):
+	case string(protocol.GRPCSProtocol), string(protocol.HTTPSProtocol), string(protocol.H2CProtocol):
 		return appProtocol
-	case string(sidecar.HTTPProtocol):
+	case string(protocol.HTTPProtocol):
 		// For backwards compatibility, when protocol is HTTP and --app-ssl is set, use "https"
 		// TODO: Remove in a future Dapr version
 		if appSSL {
-			return string(sidecar.HTTPSProtocol)
+			return string(protocol.HTTPSProtocol)
 		} else {
-			return string(sidecar.HTTPProtocol)
+			return string(protocol.HTTPProtocol)
 		}
-	case string(sidecar.GRPCProtocol):
+	case string(protocol.GRPCProtocol):
 		// For backwards compatibility, when protocol is GRPC and --app-ssl is set, use "grpcs"
 		// TODO: Remove in a future Dapr version
 		if appSSL {
-			return string(sidecar.GRPCSProtocol)
+			return string(protocol.GRPCSProtocol)
 		} else {
-			return string(sidecar.GRPCProtocol)
+			return string(protocol.GRPCProtocol)
 		}
 	case "":
-		return string(sidecar.HTTPProtocol)
+		return string(protocol.HTTPProtocol)
 	default:
 		return ""
 	}

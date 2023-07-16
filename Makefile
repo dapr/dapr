@@ -137,7 +137,7 @@ BASE_PACKAGE_NAME := github.com/dapr/dapr
 LOGGER_PACKAGE_NAME := github.com/dapr/kit/logger
 
 # Comma-separated list of features to enable
-ENABLED_FEATURES ?= 
+ENABLED_FEATURES ?= ServiceInvocationStreaming
 
 DEFAULT_LDFLAGS:=-X $(BASE_PACKAGE_NAME)/pkg/buildinfo.gitcommit=$(GIT_COMMIT) \
   -X $(BASE_PACKAGE_NAME)/pkg/buildinfo.gitversion=$(GIT_VERSION) \
@@ -297,7 +297,7 @@ test: test-deps
 	CGO_ENABLED=$(CGO) \
 		gotestsum \
 			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_unit.json \
-			--format standard-quiet \
+			--format pkgname-and-test-fails \
 			-- \
 				./pkg/... ./utils/... ./cmd/... \
 				$(COVERAGE_OPTS) --tags=unit,allcomponents
@@ -348,11 +348,11 @@ test-race:
 ################################################################################
 .PHONY: test-integration
 test-integration: test-deps
-		gotestsum \
+		CGO_ENABLED=1 gotestsum \
 			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json \
-			--format standard-verbose \
+			--format testname \
 			-- \
-			./tests/integration $(COVERAGE_OPTS) -v -race -tags="integration"
+			./tests/integration -count=1 -v -race -tags="integration"
 
 ################################################################################
 # Target: lint                                                                 #

@@ -66,30 +66,24 @@ func CreateLocalChannel(port, maxConcurrency int, conn *grpc.ClientConn, spec co
 }
 
 // GetAppConfig gets application config from user application.
-func (g *Channel) GetAppConfig() (*config.ApplicationConfig, error) {
+func (g *Channel) GetAppConfig(appID string) (*config.ApplicationConfig, error) {
 	return nil, nil
 }
 
 // InvokeMethod invokes user code via gRPC.
-func (g *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+func (g *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest, _ string) (*invokev1.InvokeMethodResponse, error) {
 	if g.appHealth != nil && g.appHealth.GetStatus() != apphealth.AppStatusHealthy {
 		return nil, status.Error(codes.Internal, messages.ErrAppUnhealthy)
 	}
 
-	var rsp *invokev1.InvokeMethodResponse
-	var err error
-
 	switch req.APIVersion() {
 	case internalv1pb.APIVersion_V1: //nolint:nosnakecase
-		rsp, err = g.invokeMethodV1(ctx, req)
+		return g.invokeMethodV1(ctx, req)
 
 	default:
 		// Reject unsupported version
-		rsp = nil
-		err = status.Error(codes.Unimplemented, fmt.Sprintf("Unsupported spec version: %d", req.APIVersion()))
+		return nil, status.Error(codes.Unimplemented, fmt.Sprintf("Unsupported spec version: %d", req.APIVersion()))
 	}
-
-	return rsp, err
 }
 
 // invokeMethodV1 calls user applications using daprclient v1.
@@ -141,6 +135,13 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	rsp.WithHeaders(header).
 		WithTrailers(trailer).
 		WithMessage(resp)
+
+	// If the data has a type_url, set protobuf as content type
+	// This is necessary to support the HTTP->gRPC service invocation path correctly
+	typeURL := resp.GetData().GetTypeUrl()
+	if typeURL != "" {
+		rsp.WithContentType(invokev1.ProtobufContentType)
+	}
 
 	return rsp, nil
 }

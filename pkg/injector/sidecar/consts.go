@@ -37,10 +37,4 @@ const (
 	PatchPathLabels                = "/metadata/labels"
 	TokenVolumeKubernetesMountPath = "/var/run/secrets/dapr.io/sentrytoken" /* #nosec */ // Mount path for the Kubernetes service account volume with the sentry token.
 	TokenVolumeName                = "dapr-identity-token"                  /* #nosec */ // Name of the volume with the service account token for daprd.
-
-	GRPCProtocol  = "grpc"  // GRPCProtocol is the gRPC communication protocol.
-	GRPCSProtocol = "grpcs" // GRPCSProtocol is the gRPC communication protocol with TLS (without validating certificates).
-	HTTPProtocol  = "http"  // HTTPProtocol is the HTTP communication protocol.
-	HTTPSProtocol = "https" // HTTPSProtocol is the HTTPS communication protocol with TLS (without validating certificates).
-	H2CProtocol   = "h2c"   // H2CProtocol is the HTTP/2 Cleartext communication protocol (HTTP/2 without TLS).
 )

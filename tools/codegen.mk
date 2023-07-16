@@ -9,7 +9,9 @@ endif
 # Generate code
 code-generate: controller-gen
 	$(CONTROLLER_GEN) object:headerFile="./tools/boilerplate.go.txt" \
-		crd:trivialVersions=true crd:crdVersions=v1 paths="./pkg/apis/..." output:crd:artifacts:config=config/crd/bases
+		crd:crdVersions=v1 paths="./pkg/apis/..." output:crd:artifacts:config=config/crd/bases
+	$(CONTROLLER_GEN) object:headerFile="./tools/boilerplate.go.txt" \
+		paths="./pkg/apis/..." 
 
 # find or download controller-gen
 # download controller-gen if necessary

@@ -507,8 +507,6 @@ jobs:
         with:
           header: ${{ github.run_id }}-go
           number: ${{ env.PR_NUMBER }}
-          hide: true
-          hide_classify: OUTDATED
           GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
           message: |
             # Dapr SDK Go test
@@ -526,11 +524,20 @@ jobs:
         uses: actions/setup-go@v4
         with:
           go-version-file: "go.mod"
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.9
       - name: Checkout go-sdk repo to run tests.
         uses: actions/checkout@v3
         with:
           repository: dapr/go-sdk
           path: go-sdk
+      - name: Install Mechanical Markdown
+        run: |
+          cd go-sdk
+          python -m pip install --upgrade pip
+          pip install mechanical-markdown
       - name: Set up Dapr CLI
         run: wget -q https://raw.githubusercontent.com/dapr/cli/master/install/install.sh -O - | /bin/bash -s
       - name: Initialize Dapr runtime

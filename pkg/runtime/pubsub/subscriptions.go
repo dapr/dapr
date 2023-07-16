@@ -83,7 +83,7 @@ func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger, r resil
 		},
 	)
 	resp, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
-		return channel.InvokeMethod(ctx, req)
+		return channel.InvokeMethod(ctx, req, "")
 	})
 	if err != nil {
 		return nil, err
@@ -99,8 +99,9 @@ func GetSubscriptionsHTTP(channel channel.AppChannel, log logger.Logger, r resil
 	case http.StatusOK:
 		err = json.NewDecoder(resp.RawData()).Decode(&subscriptionItems)
 		if err != nil {
-			log.Errorf(deserializeTopicsError, err)
-			return nil, fmt.Errorf(deserializeTopicsError, err)
+			err = fmt.Errorf(deserializeTopicsError, err)
+			log.Error(err)
+			return nil, err
 		}
 		subscriptions = make([]Subscription, len(subscriptionItems))
 		for i, si := range subscriptionItems {

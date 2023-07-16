@@ -36,7 +36,7 @@ func GetMetricsEnabled(pod metaV1.ObjectMeta) bool {
 }
 
 // add env-vars from annotations.
-func ParseEnvString(envStr string) []coreV1.EnvVar {
+func ParseEnvString(envStr string) ([]string, []coreV1.EnvVar) {
 	indexes := envRegexp.FindAllStringIndex(envStr, -1)
 	lastEnd := len(envStr)
 	parts := make([]string, len(indexes)+1)
@@ -46,19 +46,21 @@ func ParseEnvString(envStr string) []coreV1.EnvVar {
 	}
 	parts[0] = envStr[0:lastEnd]
 
+	envKeys := make([]string, 0)
 	envVars := make([]coreV1.EnvVar, 0)
 	for _, s := range parts {
 		pairs := strings.Split(strings.TrimSpace(s), "=")
 		if len(pairs) != 2 {
 			continue
 		}
+		envKeys = append(envKeys, pairs[0])
 		envVars = append(envVars, coreV1.EnvVar{
 			Name:  pairs[0],
 			Value: pairs[1],
 		})
 	}
 
-	return envVars
+	return envKeys, envVars
 }
 
 // ParseVolumeMountsString parses the annotation and returns volume mounts.

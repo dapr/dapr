@@ -24,11 +24,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	clocktesting "k8s.io/utils/clock/testing"
+
+	"github.com/dapr/dapr/pkg/config"
 )
 
 func TestAppHealth_setResult(t *testing.T) {
 	var threshold int32 = 3
-	h := New(Config{
+	h := New(config.AppHealthConfig{
 		Threshold: threshold,
 	}, nil)
 
@@ -120,7 +122,7 @@ func TestAppHealth_setResult(t *testing.T) {
 
 func TestAppHealth_ratelimitReports(t *testing.T) {
 	clock := clocktesting.NewFakeClock(time.Now())
-	h := New(Config{}, nil)
+	h := New(config.AppHealthConfig{}, nil)
 	h.clock = clock
 
 	// First run should always succeed
@@ -175,7 +177,7 @@ func Test_StartProbes(t *testing.T) {
 
 		done := make(chan struct{})
 
-		h := New(Config{
+		h := New(config.AppHealthConfig{
 			ProbeInterval: time.Second,
 		}, func(context.Context) (bool, error) {
 			assert.Fail(t, "unexpected probe call")
@@ -204,7 +206,7 @@ func Test_StartProbes(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		t.Cleanup(cancel)
 
-		h := New(Config{
+		h := New(config.AppHealthConfig{
 			ProbeInterval: time.Second,
 		}, func(context.Context) (bool, error) {
 			assert.Fail(t, "unexpected probe call")
@@ -230,7 +232,7 @@ func Test_StartProbes(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		t.Cleanup(cancel)
 
-		h := New(Config{
+		h := New(config.AppHealthConfig{
 			ProbeInterval: time.Second,
 		}, func(context.Context) (bool, error) {
 			assert.Fail(t, "unexpected probe call")
@@ -264,7 +266,7 @@ func Test_StartProbes(t *testing.T) {
 		var probeCalls atomic.Int64
 		var currentStatus atomic.Uint32
 
-		h := New(Config{
+		h := New(config.AppHealthConfig{
 			ProbeInterval: time.Second,
 			Threshold:     1,
 		}, func(context.Context) (bool, error) {

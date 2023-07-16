@@ -55,7 +55,7 @@ func (dl componentDenyList) IsAllowed(component componentsV1alpha1.Component) bo
 	}
 	for _, li := range dl.list {
 		if li.typ == component.Spec.Type && (li.version == "" || li.version == component.Spec.Version) {
-			log.Warnf("component '%s' cannot be loaded because components of type '%s/%s' are not allowed", component.Name, component.Spec.Type, component.Spec.Version)
+			log.Warnf("component '%s' cannot be loaded because components of type '%s' are not allowed", component.Name, component.LogName())
 			return false
 		}
 	}
