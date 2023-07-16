@@ -688,10 +688,10 @@ func (a *DaprRuntime) buildHTTPPipelineForSpec(spec config.PipelineSpec, targetP
 					middlewareSpec.Name, middlewareSpec.Type, middlewareSpec.Version)
 				continue
 			}
-			// set wasm strict sandbox mode to middleware context
-			ctx := contribComponent.WithWasmStrictSandbox(a.ctx, a.globalConfig.Spec.WasmSpec.StrictSandbox)
 			md := middleware.Metadata{Base: a.toBaseMetadata(component)}
-			handler, err := a.httpMiddlewareRegistry.Create(ctx, middlewareSpec.Type, middlewareSpec.Version, md, middlewareSpec.LogName())
+			// set wasm strict sandbox mode to binding metadata, overrides the one set in component level.
+			contribComponent.AddWasmStrictSandbox(&md.Base, a.globalConfig.Spec.WasmSpec.StrictSandbox)
+			handler, err := a.httpMiddlewareRegistry.Create(middlewareSpec.Type, middlewareSpec.Version, md, middlewareSpec.LogName())
 			if err != nil {
 				e := fmt.Sprintf("process component %s error: %s", component.Name, err.Error())
 				if !component.Spec.IgnoreErrors {
@@ -1773,9 +1773,10 @@ func (a *DaprRuntime) initOutputBinding(c componentsV1alpha1.Component) error {
 	}
 
 	if binding != nil {
-		// set wasm strict sandbox mode to binding context
-		ctx := contribComponent.WithWasmStrictSandbox(a.ctx, a.globalConfig.Spec.WasmSpec.StrictSandbox)
-		err := binding.Init(ctx, bindings.Metadata{Base: a.toBaseMetadata(c)})
+		md := bindings.Metadata{Base: a.toBaseMetadata(c)}
+		// set wasm strict sandbox mode to binding metadata
+		contribComponent.AddWasmStrictSandbox(&md.Base, a.globalConfig.Spec.WasmSpec.StrictSandbox)
+		err := binding.Init(a.ctx, md)
 		if err != nil {
 			diag.DefaultMonitoring.ComponentInitFailed(c.Spec.Type, "init", c.ObjectMeta.Name)
 			return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)

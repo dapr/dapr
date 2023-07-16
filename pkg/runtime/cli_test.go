@@ -92,5 +92,5 @@ func TestStandaloneWasmStrictSandbox(t *testing.T) {
 	assert.NoError(t, err)
 	assert.EqualValues(t, testAppID, runtime.runtimeConfig.ID)
 	assert.EqualValues(t, string(modes.StandaloneMode), runtime.runtimeConfig.Mode)
-	assert.True(t, *runtime.globalConfig.Spec.WasmSpec.StrictSandbox)
+	assert.True(t, runtime.globalConfig.Spec.WasmSpec.StrictSandbox)
 }

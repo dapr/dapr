@@ -14,7 +14,6 @@ limitations under the License.
 package http
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
@@ -32,7 +31,7 @@ type (
 	}
 
 	// FactoryMethod is the method creating middleware from metadata.
-	FactoryMethod func(ctx context.Context, metadata middleware.Metadata) (httpMiddleware.Middleware, error)
+	FactoryMethod func(metadata middleware.Metadata) (httpMiddleware.Middleware, error)
 )
 
 // DefaultRegistry is the singleton with the registry.
@@ -57,9 +56,9 @@ func (p *Registry) RegisterComponent(componentFactory func(logger.Logger) Factor
 }
 
 // Create instantiates a HTTP middleware based on `name`.
-func (p *Registry) Create(ctx context.Context, name, version string, metadata middleware.Metadata, logName string) (httpMiddleware.Middleware, error) {
+func (p *Registry) Create(name, version string, metadata middleware.Metadata, logName string) (httpMiddleware.Middleware, error) {
 	if method, ok := p.getMiddleware(name, version, logName); ok {
-		mid, err := method(ctx, metadata)
+		mid, err := method(metadata)
 		if err != nil {
 			return nil, fmt.Errorf("error creating HTTP middleware %s/%s: %w", name, version, err)
 		}

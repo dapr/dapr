@@ -27,8 +27,8 @@ import (
 
 func init() {
 	httpMiddlewareLoader.DefaultRegistry.RegisterComponent(func(log logger.Logger) httpMiddlewareLoader.FactoryMethod {
-		return func(ctx context.Context, metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
-			return routerchecker.NewMiddleware(log).GetHandler(ctx, metadata)
+		return func(metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
+			return routerchecker.NewMiddleware(log).GetHandler(context.TODO(), metadata)
 		}
 	}, "routerchecker")
 }
