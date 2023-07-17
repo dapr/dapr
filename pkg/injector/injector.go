@@ -351,10 +351,10 @@ func (i *injector) allowServiceAccountUser(reviewRequestUserInfo string) (allowe
 		return false
 	}
 
-	if !strings.HasPrefix(reviewRequestUserInfo, serviceAccountUserInfoPrefix) {
+	namespacedName, prefixFound := strings.CutPrefix(reviewRequestUserInfo, serviceAccountUserInfoPrefix)
+	if !prefixFound {
 		return false
 	}
-	namespacedName := strings.TrimPrefix(reviewRequestUserInfo, serviceAccountUserInfoPrefix)
 	namespacedNameParts := strings.Split(namespacedName, ":")
 	if len(namespacedNameParts) <= 1 {
 		return false
