@@ -1161,7 +1161,7 @@ func (a *DaprRuntime) beginHTTPEndpointsUpdates() error {
 
 func (a *DaprRuntime) onHTTPEndpointUpdated(endpoint httpEndpointV1alpha1.HTTPEndpoint) bool {
 	oldEndpoint, exists := a.compStore.GetHTTPEndpoint(endpoint.Name)
-	_, _ = a.processResourceSecrets(&endpoint)
+	a.processHTTPEndpointSecrets(&endpoint)
 
 	if exists && reflect.DeepEqual(oldEndpoint.Spec, endpoint.Spec) {
 		return false
@@ -1169,6 +1169,39 @@ func (a *DaprRuntime) onHTTPEndpointUpdated(endpoint httpEndpointV1alpha1.HTTPEn
 
 	a.pendingHTTPEndpoints <- endpoint
 	return true
+}
+
+func (a *DaprRuntime) processHTTPEndpointSecrets(endpoint *httpEndpointV1alpha1.HTTPEndpoint) {
+	_, _ = a.processResourceSecrets(endpoint)
+
+	if endpoint.Spec.TLSRootCA.SecretKeyRef.Name != "" || endpoint.Spec.TLSClientCert.SecretKeyRef.Name != "" {
+		tlsResource := httpEndpointV1alpha1.GenericNameValueResource{
+			Name:        endpoint.ObjectMeta.Name,
+			Namespace:   endpoint.ObjectMeta.Namespace,
+			SecretStore: endpoint.Auth.SecretStore,
+			Pairs: []commonapi.NameValuePair{
+				{
+					SecretKeyRef: endpoint.Spec.TLSRootCA.SecretKeyRef,
+					Value:        endpoint.Spec.TLSRootCA.Value,
+				},
+				{
+					SecretKeyRef: endpoint.Spec.TLSClientCert.SecretKeyRef,
+					Value:        endpoint.Spec.TLSClientCert.Value,
+				},
+				{
+					SecretKeyRef: endpoint.Spec.TLSClientKey.SecretKeyRef,
+					Value:        endpoint.Spec.TLSClientKey.Value,
+				},
+			},
+		}
+
+		updated, _ := a.processResourceSecrets(&tlsResource)
+		if updated {
+			endpoint.Spec.TLSRootCA.Value = tlsResource.NameValuePairs()[0].Value
+			endpoint.Spec.TLSClientCert.Value = tlsResource.NameValuePairs()[1].Value
+			endpoint.Spec.TLSClientKey.Value = tlsResource.NameValuePairs()[2].Value
+		}
+	}
 }
 
 func (a *DaprRuntime) sendBatchOutputBindingsParallel(to []string, data []byte) {
@@ -2373,7 +2406,7 @@ func (a *DaprRuntime) processHTTPEndpoints() {
 		if endpoint.Name == "" {
 			continue
 		}
-		_, _ = a.processResourceSecrets(&endpoint)
+		a.processHTTPEndpointSecrets(&endpoint)
 		a.compStore.AddHTTPEndpoint(endpoint)
 	}
 }
@@ -2920,10 +2953,10 @@ func (a *DaprRuntime) getHTTPEndpointAppChannel(pipeline httpMiddleware.Pipeline
 	var tlsConfig *tls.Config
 
 	if endpoint.Spec.TLSRootCA.Value.String() != "" {
-		ca := []byte(endpoint.Spec.TLSRootCA.Value.String())
+		ca := endpoint.Spec.TLSRootCA.Value.String()
 		caCertPool := x509.NewCertPool()
 
-		if !caCertPool.AppendCertsFromPEM(ca) {
+		if !caCertPool.AppendCertsFromPEM([]byte(ca)) {
 			return httpChannel.ChannelConfiguration{}, fmt.Errorf("failed to add root cert to cert pool for http endpoint %s", endpoint.ObjectMeta.Name)
 		}
 

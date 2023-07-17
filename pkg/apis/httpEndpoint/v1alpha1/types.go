@@ -36,9 +36,11 @@ type HTTPEndpoint struct {
 	common.Scoped `json:",inline"`
 }
 
+const kind = "HTTPEndpoint"
+
 // Kind returns the component kind.
 func (HTTPEndpoint) Kind() string {
-	return "HTTPEndpoint"
+	return kind
 }
 
 // GetSecretStore returns the name of the secret store.
@@ -51,17 +53,27 @@ func (h HTTPEndpoint) NameValuePairs() []common.NameValuePair {
 	return h.Spec.Headers
 }
 
+// TLSField describes tls specific properties for endpoint authenticatin
+type TLSField struct {
+	// Value of the property, in plaintext.
+	//+optional
+	Value common.DynamicValue `json:"value,omitempty"`
+	// SecretKeyRef is the reference of a value in a secret store component.
+	//+optional
+	SecretKeyRef common.SecretKeyRef `json:"secretKeyRef,omitempty"`
+}
+
 // HTTPEndpointSpec describes an access specification for allowing external service invocations.
 type HTTPEndpointSpec struct {
 	BaseURL string `json:"baseUrl" validate:"required"`
 	//+optional
 	Headers []common.NameValuePair `json:"headers"`
 	//+optional
-	TLSRootCA common.NameValuePair `json:"tlsRootCA"`
+	TLSRootCA TLSField `json:"tlsRootCA"`
 	//+optional
-	TLSClientCert common.NameValuePair `json:"tlsClientCert"`
+	TLSClientCert TLSField `json:"tlsClientCert"`
 	//+optional
-	TLSClientKey common.NameValuePair `json:"tlsClientKey"`
+	TLSClientKey TLSField `json:"tlsClientKey"`
 	//+optional
 	TLSRenegotiation string `json:"tlsRenegotiation"`
 }
@@ -79,4 +91,27 @@ type HTTPEndpointList struct {
 	metav1.ListMeta `json:"metadata"`
 
 	Items []HTTPEndpoint `json:"items"`
+}
+
+type GenericNameValueResource struct {
+	Name        string
+	Namespace   string
+	SecretStore string
+	Pairs       []common.NameValuePair
+}
+
+func (g GenericNameValueResource) Kind() string {
+	return kind
+}
+func (g GenericNameValueResource) GetName() string {
+	return g.Name
+}
+func (g GenericNameValueResource) GetNamespace() string {
+	return g.Namespace
+}
+func (g GenericNameValueResource) GetSecretStore() string {
+	return g.SecretStore
+}
+func (g GenericNameValueResource) NameValuePairs() []common.NameValuePair {
+	return g.Pairs
 }

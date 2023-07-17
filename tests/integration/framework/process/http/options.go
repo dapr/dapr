@@ -14,16 +14,35 @@ limitations under the License.
 package http
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"net/http"
 )
 
 // options contains the options for running a HTTP server in integration tests.
 type options struct {
-	handler http.Handler
+	handler   http.Handler
+	tlsConfig *tls.Config
 }
 
 func WithHandler(handler http.Handler) Option {
 	return func(o *options) {
 		o.handler = handler
+	}
+}
+
+func WithTLS(cert, key string) Option {
+	return func(o *options) {
+		caCertPool := x509.NewCertPool()
+		caCertPool.AppendCertsFromPEM([]byte(cert))
+
+		cert, _ := tls.X509KeyPair([]byte(cert), []byte(key))
+		tlsConfig := &tls.Config{
+			ClientCAs:    caCertPool,
+			ClientAuth:   tls.RequireAndVerifyClientCert,
+			Certificates: []tls.Certificate{cert},
+		}
+
+		o.tlsConfig = tlsConfig
 	}
 }

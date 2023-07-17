@@ -35,6 +35,7 @@ import (
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
+	apiv1 "k8s.io/api/core/v1"
 )
 
 type testCommandRequest struct {
@@ -182,6 +183,20 @@ func TestMain(m *testing.M) {
 			IngressEnabled: true,
 			MetricsEnabled: true,
 			AppProtocol:    "http",
+			Volumes: []apiv1.Volume{
+				{
+					Name: "storage-volume",
+					VolumeSource: apiv1.VolumeSource{
+						EmptyDir: &apiv1.EmptyDirVolumeSource{},
+					},
+				},
+			},
+			AppVolumeMounts: []apiv1.VolumeMount{
+				{
+					Name:      "storage-volume",
+					MountPath: "/tmp/testdata/certs",
+				},
+			},
 		},
 	}
 
@@ -301,24 +316,32 @@ var externalServiceInvocationTests = []struct {
 	remoteApp        string
 	appMethod        string
 	expectedResponse string
-	isHTTPEndpoint   bool // this determines if the corresponding URL will use the HTTPEndpoint name, or external service IP
+	testType         string
 }{
 	// For descriptions, see corresponding methods in dapr/tests/apps/service_invocation/app.go
 	{
-		"Test HTTP to HTTP Externally using HTTP Endpoint CRD",
+		"Test HTTP to HTTP Externally using overwritten URLs",
 		"/httptohttptest_external",
 		"serviceinvocation-callee-external",
 		"externalInvocation",
 		"success",
-		false,
+		"URL",
 	},
 	{
-		"Test HTTP to HTTP Externally",
+		"Test HTTP to HTTP Externally using HTTP Endpoint CRD",
 		"httptohttptest_external",
 		"external-http-endpoint",
 		"externalInvocation",
 		"success",
-		true,
+		"CRD",
+	},
+	{
+		"Test HTTP to HTTPS Externally using HTTP Endpoint CRD",
+		"httptohttptest_external",
+		"external-http-endpoint-tls",
+		"externalInvocation",
+		"success",
+		"TLS",
 	},
 }
 
@@ -519,8 +542,8 @@ func TestServiceInvocationExternally(t *testing.T) {
 					RemoteApp: tt.remoteApp,
 					Method:    tt.appMethod,
 				}
-				switch tt.isHTTPEndpoint {
-				case false:
+				switch tt.testType {
+				case "URL":
 					// test using overwritten URLs
 					t.Run(tt.in, func(t *testing.T) {
 						body, err := json.Marshal(testCommandRequestExternal{
@@ -542,8 +565,28 @@ func TestServiceInvocationExternally(t *testing.T) {
 						require.NoError(t, err)
 						require.Equal(t, tt.expectedResponse, appResp.Message)
 					})
-				default:
+				case "CRD":
 					// invoke via HTTPEndpoint CRD
+					t.Run(tt.in, func(t *testing.T) {
+						body, err := json.Marshal(testCommandRequestExternal{
+							testCommandRequest: testCommandReq,
+						})
+						require.NoError(t, err)
+
+						resp, err := utils.HTTPPost(
+							fmt.Sprintf("http://%s/%s", externalURL, tt.path), body)
+						t.Log("checking err...")
+						require.NoError(t, err)
+
+						var appResp appResponse
+						t.Logf("unmarshalling..%s\n", string(resp))
+						err = json.Unmarshal(resp, &appResp)
+						t.Logf("appResp %s", appResp)
+						require.NoError(t, err)
+						require.Equal(t, tt.expectedResponse, appResp.Message)
+					})
+				case "TLS":
+					// invoke via HTTPEndpoint CRD with TLS
 					t.Run(tt.in, func(t *testing.T) {
 						body, err := json.Marshal(testCommandRequestExternal{
 							testCommandRequest: testCommandReq,

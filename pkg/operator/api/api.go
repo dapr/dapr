@@ -236,11 +236,11 @@ func processComponentSecrets(ctx context.Context, component *componentsapi.Compo
 	return nil
 }
 
-func pairNeedsSecretExtraction(pair commonapi.NameValuePair, auth httpendpointsapi.Auth) bool {
-	return pair.SecretKeyRef.Name != "" && (auth.SecretStore == kubernetesSecretStore || auth.SecretStore == "")
+func pairNeedsSecretExtraction(ref commonapi.SecretKeyRef, auth httpendpointsapi.Auth) bool {
+	return ref.Name != "" && (auth.SecretStore == kubernetesSecretStore || auth.SecretStore == "")
 }
 
-func getSecret(ctx context.Context, name, namespace string, pair commonapi.NameValuePair, kubeClient client.Client) (commonapi.DynamicValue, error) {
+func getSecret(ctx context.Context, name, namespace string, ref commonapi.SecretKeyRef, kubeClient client.Client) (commonapi.DynamicValue, error) {
 	var secret corev1.Secret
 
 	err := kubeClient.Get(ctx, types.NamespacedName{
@@ -251,9 +251,9 @@ func getSecret(ctx context.Context, name, namespace string, pair commonapi.NameV
 		return commonapi.DynamicValue{}, err
 	}
 
-	key := pair.SecretKeyRef.Key
+	key := ref.Key
 	if key == "" {
-		key = pair.SecretKeyRef.Name
+		key = ref.Name
 	}
 
 	val, ok := secret.Data[key]
@@ -276,8 +276,8 @@ func getSecret(ctx context.Context, name, namespace string, pair commonapi.NameV
 
 func processHTTPEndpointSecrets(ctx context.Context, endpoint *httpendpointsapi.HTTPEndpoint, namespace string, kubeClient client.Client) error {
 	for i, header := range endpoint.Spec.Headers {
-		if pairNeedsSecretExtraction(header, endpoint.Auth) {
-			v, err := getSecret(ctx, header.SecretKeyRef.Name, namespace, header, kubeClient)
+		if pairNeedsSecretExtraction(header.SecretKeyRef, endpoint.Auth) {
+			v, err := getSecret(ctx, header.SecretKeyRef.Name, namespace, header.SecretKeyRef, kubeClient)
 			if err != nil {
 				return err
 			}
@@ -286,8 +286,8 @@ func processHTTPEndpointSecrets(ctx context.Context, endpoint *httpendpointsapi.
 		}
 	}
 
-	if pairNeedsSecretExtraction(endpoint.Spec.TLSClientCert, endpoint.Auth) {
-		v, err := getSecret(ctx, endpoint.Spec.TLSClientCert.SecretKeyRef.Name, namespace, endpoint.Spec.TLSClientCert, kubeClient)
+	if pairNeedsSecretExtraction(endpoint.Spec.TLSClientCert.SecretKeyRef, endpoint.Auth) {
+		v, err := getSecret(ctx, endpoint.Spec.TLSClientCert.SecretKeyRef.Name, namespace, endpoint.Spec.TLSClientCert.SecretKeyRef, kubeClient)
 		if err != nil {
 			return err
 		}
@@ -295,8 +295,8 @@ func processHTTPEndpointSecrets(ctx context.Context, endpoint *httpendpointsapi.
 		endpoint.Spec.TLSClientCert.Value = v
 	}
 
-	if pairNeedsSecretExtraction(endpoint.Spec.TLSClientKey, endpoint.Auth) {
-		v, err := getSecret(ctx, endpoint.Spec.TLSClientKey.SecretKeyRef.Name, namespace, endpoint.Spec.TLSClientKey, kubeClient)
+	if pairNeedsSecretExtraction(endpoint.Spec.TLSClientKey.SecretKeyRef, endpoint.Auth) {
+		v, err := getSecret(ctx, endpoint.Spec.TLSClientKey.SecretKeyRef.Name, namespace, endpoint.Spec.TLSClientKey.SecretKeyRef, kubeClient)
 		if err != nil {
 			return err
 		}
@@ -304,8 +304,8 @@ func processHTTPEndpointSecrets(ctx context.Context, endpoint *httpendpointsapi.
 		endpoint.Spec.TLSClientKey.Value = v
 	}
 
-	if pairNeedsSecretExtraction(endpoint.Spec.TLSRootCA, endpoint.Auth) {
-		v, err := getSecret(ctx, endpoint.Spec.TLSRootCA.SecretKeyRef.Name, namespace, endpoint.Spec.TLSRootCA, kubeClient)
+	if pairNeedsSecretExtraction(endpoint.Spec.TLSRootCA.SecretKeyRef, endpoint.Auth) {
+		v, err := getSecret(ctx, endpoint.Spec.TLSRootCA.SecretKeyRef.Name, namespace, endpoint.Spec.TLSRootCA.SecretKeyRef, kubeClient)
 		if err != nil {
 			return err
 		}
@@ -488,6 +488,12 @@ func (a *apiServer) ListHTTPEndpoints(ctx context.Context, in *operatorv1pb.List
 	}
 
 	for _, item := range endpoints.Items {
+		err := processHTTPEndpointSecrets(ctx, &item, item.Namespace, a.Client)
+		if err != nil {
+			log.Warnf("error processing secrets for http endpoint %s", item.Name, item.Namespace, err)
+			return &operatorv1pb.ListHTTPEndpointsResponse{}, err
+		}
+
 		b, err := json.Marshal(item)
 		if err != nil {
 			log.Warnf("Error unmarshalling http endpoints: %s", err)
