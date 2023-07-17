@@ -82,8 +82,9 @@ func (*mockPlacement) WaitUntilPlacementTableIsReady(ctx context.Context) error 
 func TestStartWorkflowEngine(t *testing.T) {
 	ctx := context.Background()
 	engine := getEngine(t)
+	engine.ConfigureGrpcExecutor()
 	grpcServer := grpc.NewServer()
-	engine.ConfigureGrpc(grpcServer)
+	engine.RegisterGrpcServer(grpcServer)
 	err := engine.Start(ctx)
 	assert.NoError(t, err)
 }
@@ -169,7 +170,7 @@ func TestSingleActivityWorkflow(t *testing.T) {
 			return nil, err
 		}
 		var output string
-		err := ctx.CallActivity("SayHello", input).Await(&output)
+		err := ctx.CallActivity("SayHello", task.WithActivityInput(input)).Await(&output)
 		return output, err
 	})
 	r.AddActivityN("SayHello", func(ctx task.ActivityContext) (any, error) {
@@ -203,7 +204,7 @@ func TestActivityChainingWorkflow(t *testing.T) {
 	r.AddOrchestratorN("ActivityChain", func(ctx *task.OrchestrationContext) (any, error) {
 		val := 0
 		for i := 0; i < 10; i++ {
-			if err := ctx.CallActivity("PlusOne", val).Await(&val); err != nil {
+			if err := ctx.CallActivity("PlusOne", task.WithActivityInput(val)).Await(&val); err != nil {
 				return nil, err
 			}
 		}
@@ -218,7 +219,7 @@ func TestActivityChainingWorkflow(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	client, engine := startEngine(ctx, t, r)
+	client, engine, _ := startEngineAndGetStore(ctx, t, r)
 	for _, opt := range GetTestOptions() {
 		t.Run(opt(engine), func(t *testing.T) {
 			id, err := client.ScheduleNewOrchestration(ctx, "ActivityChain")
@@ -240,7 +241,7 @@ func TestConcurrentActivityExecution(t *testing.T) {
 	r.AddOrchestratorN("ActivityFanOut", func(ctx *task.OrchestrationContext) (any, error) {
 		tasks := []task.Task{}
 		for i := 0; i < 10; i++ {
-			tasks = append(tasks, ctx.CallActivity("ToString", i))
+			tasks = append(tasks, ctx.CallActivity("ToString", task.WithActivityInput(i)))
 		}
 		results := []string{}
 		for _, t := range tasks {
@@ -296,7 +297,7 @@ func TestContinueAsNewWorkflow(t *testing.T) {
 				return nil, err
 			}
 			var nextInput int32
-			if err := ctx.CallActivity("PlusOne", input).Await(&nextInput); err != nil {
+			if err := ctx.CallActivity("PlusOne", task.WithActivityInput(input)).Await(&nextInput); err != nil {
 				return nil, err
 			}
 			ctx.ContinueAsNew(nextInput)
@@ -451,7 +452,7 @@ func TestRetryActivityOnTimeout(t *testing.T) {
 	r := task.NewTaskRegistry()
 	r.AddOrchestratorN("FlakyWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
 		var output int
-		err := ctx.CallActivity("FlakyActivity", nil).Await(&output)
+		err := ctx.CallActivity("FlakyActivity").Await(&output)
 		return output, err
 	})
 
@@ -554,7 +555,7 @@ func TestRaiseEvent(t *testing.T) {
 				metadata, err := client.WaitForOrchestrationStart(ctx, id)
 				if assert.NoError(t, err) {
 					assert.Equal(t, id, metadata.InstanceID)
-					client.RaiseEvent(ctx, id, "NameOfEventBeingRaised", api.WithJsonSerializableEventData("NameOfInput"))
+					client.RaiseEvent(ctx, id, "NameOfEventBeingRaised", api.WithEventPayload("NameOfInput"))
 					metadata, _ = client.WaitForOrchestrationCompletion(ctx, id)
 					assert.True(t, metadata.IsComplete())
 					assert.Equal(t, `"Hello, NameOfInput!"`, metadata.SerializedOutput)
@@ -594,9 +595,9 @@ func TestContinueAsNew_WithEvents(t *testing.T) {
 			id, err := client.ScheduleNewOrchestration(ctx, "ContinueAsNewTest", api.WithInput(0))
 			require.NoError(t, err)
 			for i := 0; i < 10; i++ {
-				require.NoError(t, client.RaiseEvent(ctx, id, "MyEvent", api.WithJsonSerializableEventData(false)))
+				require.NoError(t, client.RaiseEvent(ctx, id, "MyEvent", api.WithEventPayload(false)))
 			}
-			require.NoError(t, client.RaiseEvent(ctx, id, "MyEvent", api.WithJsonSerializableEventData(true)))
+			require.NoError(t, client.RaiseEvent(ctx, id, "MyEvent", api.WithEventPayload(true)))
 			metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
 			require.NoError(t, err)
 			assert.True(t, metadata.IsComplete())
@@ -612,7 +613,7 @@ func TestPurge(t *testing.T) {
 	r.AddOrchestratorN("ActivityChainToPurge", func(ctx *task.OrchestrationContext) (any, error) {
 		val := 0
 		for i := 0; i < 10; i++ {
-			if err := ctx.CallActivity("PlusOne", val).Await(&val); err != nil {
+			if err := ctx.CallActivity("PlusOne", task.WithActivityInput(val)).Await(&val); err != nil {
 				return nil, err
 			}
 		}
@@ -627,7 +628,7 @@ func TestPurge(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	client, engine, stateStore := startEngineAndGetStore(ctx, r)
+	client, engine, stateStore := startEngineAndGetStore(ctx, t, r)
 	for _, opt := range GetTestOptions() {
 		t.Run(opt(engine), func(t *testing.T) {
 			id, err := client.ScheduleNewOrchestration(ctx, "ActivityChainToPurge")
@@ -638,7 +639,7 @@ func TestPurge(t *testing.T) {
 
 			// Get the number of keys that were stored from the activity and ensure that at least some keys were stored
 			keyCounter := 0
-			for key := range stateStore.(*daprt.FakeStateStore).Items {
+			for key := range stateStore.Items {
 				if strings.Contains(key, string(id)) {
 					keyCounter += 1
 				}
@@ -650,7 +651,7 @@ func TestPurge(t *testing.T) {
 
 			// Check that no key from the statestore containing the actor id is still present in the statestore
 			keysPostPurge := []string{}
-			for key := range stateStore.(*daprt.FakeStateStore).Items {
+			for key := range stateStore.Items {
 				keysPostPurge = append(keysPostPurge, key)
 			}
 
@@ -676,7 +677,7 @@ func TestPurgeContinueAsNew(t *testing.T) {
 				return nil, err
 			}
 			var nextInput int32
-			if err := ctx.CallActivity("PlusOne", input).Await(&nextInput); err != nil {
+			if err := ctx.CallActivity("PlusOne", task.WithActivityInput(input)).Await(&nextInput); err != nil {
 				return nil, err
 			}
 			ctx.ContinueAsNew(nextInput)
@@ -691,7 +692,7 @@ func TestPurgeContinueAsNew(t *testing.T) {
 		return input + 1, nil
 	})
 	ctx := context.Background()
-	client, engine, stateStore := startEngineAndGetStore(ctx, r)
+	client, engine, stateStore := startEngineAndGetStore(ctx, t, r)
 	for _, opt := range GetTestOptions() {
 		t.Run(opt(engine), func(t *testing.T) {
 			id, err := client.ScheduleNewOrchestration(ctx, "ContinueAsNewTest", api.WithInput(0))
@@ -704,7 +705,7 @@ func TestPurgeContinueAsNew(t *testing.T) {
 			// Purging
 			// Get the number of keys that were stored from the activity and ensure that at least some keys were stored
 			keyCounter := 0
-			for key := range stateStore.(*daprt.FakeStateStore).Items {
+			for key := range stateStore.Items {
 				if strings.Contains(key, string(id)) {
 					keyCounter += 1
 				}
@@ -716,7 +717,7 @@ func TestPurgeContinueAsNew(t *testing.T) {
 
 			// Check that no key from the statestore containing the actor id is still present in the statestore
 			keysPostPurge := []string{}
-			for key := range stateStore.(*daprt.FakeStateStore).Items {
+			for key := range stateStore.Items {
 				keysPostPurge = append(keysPostPurge, key)
 			}
 
@@ -762,28 +763,18 @@ func TestPauseResumeWorkflow(t *testing.T) {
 }
 
 func startEngine(ctx context.Context, t *testing.T, r *task.TaskRegistry) (backend.TaskHubClient, *wfengine.WorkflowEngine) {
-	var client backend.TaskHubClient
-	engine := getEngine(t)
-	engine.ConfigureExecutor(func(be backend.Backend) backend.Executor {
-		client = backend.NewTaskHubClient(be)
-		return task.NewTaskExecutor(r)
-	})
-	if err := engine.Start(ctx); err != nil {
-		require.NoError(t, err)
-	}
+	client, engine, _ := startEngineAndGetStore(ctx, t, r)
 	return client, engine
 }
 
-func startEngineAndGetStore(ctx context.Context, r *task.TaskRegistry) (backend.TaskHubClient, *wfengine.WorkflowEngine, state.Store) {
+func startEngineAndGetStore(ctx context.Context, t *testing.T, r *task.TaskRegistry) (backend.TaskHubClient, *wfengine.WorkflowEngine, *daprt.FakeStateStore) {
 	var client backend.TaskHubClient
-	engine, store := getEngineAndStateStore()
-	engine.ConfigureExecutor(func(be backend.Backend) backend.Executor {
+	engine, store := getEngineAndStateStore(t)
+	engine.SetExecutor(func(be backend.Backend) backend.Executor {
 		client = backend.NewTaskHubClient(be)
 		return task.NewTaskExecutor(r)
 	})
-	if err := engine.Start(ctx); err != nil {
-		panic(err)
-	}
+	require.NoError(t, engine.Start(ctx))
 	return client, engine, store
 }
 
@@ -812,7 +803,7 @@ func getEngine(t *testing.T) *wfengine.WorkflowEngine {
 	return engine
 }
 
-func getEngineAndStateStore() (*wfengine.WorkflowEngine, state.Store) {
+func getEngineAndStateStore(t *testing.T) (*wfengine.WorkflowEngine, *daprt.FakeStateStore) {
 	engine := wfengine.NewWorkflowEngine(wfengine.NewWorkflowConfig(testAppID))
 	store := fakeStore().(*daprt.FakeStateStore)
 	cfg := actors.NewConfig(actors.ConfigOpts{
@@ -831,9 +822,7 @@ func getEngineAndStateStore() (*wfengine.WorkflowEngine, state.Store) {
 		Resiliency:     resiliency.New(logger.NewLogger("test")),
 	})
 
-	if err := actors.Init(); err != nil {
-		panic(err)
-	}
+	require.NoError(t, actors.Init())
 	engine.SetActorRuntime(actors)
 	return engine, store
 }
