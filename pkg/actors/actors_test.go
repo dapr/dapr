@@ -604,6 +604,7 @@ func metricsCleanup() {
 		actorRemindersFiredTotalViewName)
 }
 
+// TD: RM
 func TestReminderCountFiring(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	defer testActorsRuntime.Stop()
@@ -651,6 +652,7 @@ func TestReminderCountFiring(t *testing.T) {
 	diagtestutils.RequireTagNotExist(t, rows, diagtestutils.NewTag("success", strconv.FormatBool(false)))
 }
 
+// TD: RM
 func TestReminderCountFiringBad(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntimeWithBadInvoke()
 	defer testActorsRuntime.Stop()
@@ -695,6 +697,7 @@ func TestReminderCountFiringBad(t *testing.T) {
 	diagtestutils.RequireTagNotExist(t, rows, diagtestutils.NewTag("success", strconv.FormatBool(true)))
 }
 
+// /////////// TD: RM: Block 1 starts
 func TestReminderExecutionZeroDuration(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	defer testActorsRuntime.Stop()
@@ -1664,6 +1667,8 @@ func TestGetReminder(t *testing.T) {
 	assert.Equal(t, "1s", r.DueTime)
 }
 
+///////////// TD: RM: Block 1 ends
+
 func TestCreateTimerDueTimes(t *testing.T) {
 	t.Run("create timer with positive DueTime", func(t *testing.T) {
 		testActorsRuntime := newTestActorsRuntime()
@@ -2173,6 +2178,7 @@ func TestTimerValidation(t *testing.T) {
 	t.Run("timer ttl expired (4)", timerValidation("", "", startOfTime.Add(-1*time.Second).Format(time.RFC3339), "has already expired"))
 }
 
+// TD: RM Block 2 starts
 func TestReminderFires(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	defer testActorsRuntime.Stop()
@@ -2280,6 +2286,8 @@ func TestReminderFiresOnceWithEmptyPeriod(t *testing.T) {
 	track, _ := testActorsRuntime.getReminderTrack(context.Background(), constructCompositeKey(actorKey, "reminder1"))
 	assert.Empty(t, track.LastFiredTime)
 }
+
+// TD: RM Block 2 ends
 
 func TestConstructActorStateKey(t *testing.T) {
 	delim := "||"

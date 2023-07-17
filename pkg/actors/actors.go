@@ -104,7 +104,7 @@ type actorsRuntime struct {
 	placement            PlacementService
 	grpcConnectionFn     GRPCConnectionFn
 	config               Config
-	coreConfig           internal.Config
+	coreConfig           *internal.Config
 	timers               internal.TimersProvider
 	actorsReminders      internal.RemindersProvider
 	actorsTable          *sync.Map
@@ -770,7 +770,7 @@ func (a *actorsRuntime) executeTimer(reminder *internal.Reminder) bool {
 // executeReminderWrapper implements reminder.ExecuteReminderFn.
 func (a *actorsRuntime) executeReminderWrapper(reminder *internal.Reminder) bool {
 	err := a.executeReminder(reminder, false)
-	diag.DefaultMonitoring.ActorTimerFired(reminder.ActorType, err == nil)
+	diag.DefaultMonitoring.ActorReminderFired(reminder.ActorType, err == nil)
 	if err != nil {
 		if errors.Is(err, ErrReminderCanceled) {
 			// The handler is explicitly canceling the timer
