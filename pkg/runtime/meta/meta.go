@@ -27,6 +27,8 @@ import (
 	"github.com/dapr/dapr/pkg/modes"
 )
 
+const WasmStrictSandboxMetadataKey = "strictSandbox"
+
 type Options struct {
 	ID        string
 	PodName   string
@@ -101,7 +103,7 @@ func ContainsNamespace(items []common.NameValuePair) bool {
 // AddWasmStrictSandbox adds wasm strict sandbox configuration to metadata.
 func AddWasmStrictSandbox(comp *compapi.Component, enable bool) {
 	sandbox := &common.NameValuePair{
-		Name: "strictSandbox",
+		Name: WasmStrictSandboxMetadataKey,
 	}
 	sandbox.SetValue([]byte(strconv.FormatBool(enable)))
 	comp.Spec.Metadata = append(comp.Spec.Metadata, *sandbox)

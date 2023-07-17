@@ -131,9 +131,10 @@ func TestMetadataContainsNamespace(t *testing.T) {
 func TestMetadataOverrideWasmStrictSandbox(t *testing.T) {
 	t.Run("original set to false override to true", func(t *testing.T) {
 		meta := New(Options{Mode: modes.StandaloneMode})
+		// component with WasmStrictSandbox set to false
 		items := []common.NameValuePair{
 			{
-				Name: "strictSandbox",
+				Name: WasmStrictSandboxMetadataKey,
 				Value: common.DynamicValue{
 					JSON: v1.JSON{Raw: []byte(`false`)},
 				},
@@ -144,8 +145,12 @@ func TestMetadataOverrideWasmStrictSandbox(t *testing.T) {
 				Metadata: items,
 			},
 		}
+
+		// override WasmStrictSandbox to true
 		AddWasmStrictSandbox(&com, true)
+
+		// check that WasmStrictSandbox is set to true
 		base := meta.ToBaseMetadata(com)
-		assert.Equal(t, "true", base.Properties["strictSandbox"])
+		assert.Equal(t, "true", base.Properties[WasmStrictSandboxMetadataKey])
 	})
 }
