@@ -13,7 +13,11 @@ limitations under the License.
 
 package streams
 
-import "io"
+import (
+	"errors"
+	"io"
+	"net/http"
+)
 
 // NewMultiReaderCloser returns a stream that is like io.MultiReader but that can be closed.
 // When the returned stream is closed, it closes the readable streams too, if they implement io.Closer.
@@ -41,7 +45,13 @@ func (mr *MultiReaderCloser) Read(p []byte) (n int, err error) {
 	for len(mr.readers) > 0 {
 		r := mr.readers[0]
 		n, err = r.Read(p)
-		if err == io.EOF {
+
+		// When reading from a http.Response Body, we may get ErrBodyReadAfterClose if we already read it all
+		// We consider that the same as io.EOF
+		if errors.Is(err, http.ErrBodyReadAfterClose) {
+			err = io.EOF
+			mr.readers = mr.readers[1:]
+		} else if err == io.EOF {
 			if rc, ok := r.(io.Closer); ok {
 				_ = rc.Close()
 			}
