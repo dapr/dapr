@@ -132,13 +132,15 @@ func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
 	client := http.Client{Timeout: time.Second}
 	assert.Eventually(t, func() bool {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/v1.0/healthz", d.httpPort), nil)
-		require.NoError(t, err)
+		if err != nil {
+			return false
+		}
 		resp, err := client.Do(req)
 		if err != nil {
 			return false
 		}
 		defer resp.Body.Close()
-		return resp.StatusCode == http.StatusNoContent
+		return http.StatusNoContent == resp.StatusCode
 	}, time.Second*5, 100*time.Millisecond)
 }
 
