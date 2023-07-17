@@ -51,7 +51,6 @@ import (
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	daprt "github.com/dapr/dapr/pkg/testing"
-	rttesting "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/logger"
 )
 
@@ -81,7 +80,7 @@ func TestInitPubSub(t *testing.T) {
 			Spec: componentsV1alpha1.ComponentSpec{
 				Type:     "pubsub.mockPubSub",
 				Version:  "v1",
-				Metadata: rttesting.GetFakeMetadataItems(),
+				Metadata: daprt.GetFakeMetadataItems(),
 			},
 		}, {
 			ObjectMeta: metav1.ObjectMeta{
@@ -90,7 +89,7 @@ func TestInitPubSub(t *testing.T) {
 			Spec: componentsV1alpha1.ComponentSpec{
 				Type:     "pubsub.mockPubSub2",
 				Version:  "v1",
-				Metadata: rttesting.GetFakeMetadataItems(),
+				Metadata: daprt.GetFakeMetadataItems(),
 			},
 		},
 	}
@@ -110,7 +109,7 @@ func TestInitPubSub(t *testing.T) {
 		expectedMetadata := contribpubsub.Metadata{
 			Base: metadata.Base{
 				Name:       TestPubsubName,
-				Properties: rttesting.GetFakeProperties(),
+				Properties: daprt.GetFakeProperties(),
 			},
 		}
 
@@ -123,7 +122,7 @@ func TestInitPubSub(t *testing.T) {
 		expectedSecondPubsubMetadata := contribpubsub.Metadata{
 			Base: metadata.Base{
 				Name:       TestSecondPubsubName,
-				Properties: rttesting.GetFakeProperties(),
+				Properties: daprt.GetFakeProperties(),
 			},
 		}
 		mockPubSub2.On("Init", expectedSecondPubsubMetadata).Return(nil)
@@ -1306,7 +1305,7 @@ func TestPubsubWithResiliency(t *testing.T) {
 	ps := New(Options{
 		Registry:       registry.New(registry.NewOptions()).PubSubs(),
 		IsHTTP:         true,
-		Resiliency:     resiliency.FromConfigurations(logger.NewLogger("test"), rttesting.TestResiliency),
+		Resiliency:     resiliency.FromConfigurations(logger.NewLogger("test"), daprt.TestResiliency),
 		ComponentStore: compstore.New(),
 		Meta:           meta.New(meta.Options{}),
 		Mode:           modes.StandaloneMode,

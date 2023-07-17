@@ -39,7 +39,6 @@ import (
 	rtmock "github.com/dapr/dapr/pkg/runtime/mock"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	daprt "github.com/dapr/dapr/pkg/testing"
-	rttesting "github.com/dapr/dapr/pkg/testing"
 	testinggrpc "github.com/dapr/dapr/pkg/testing/grpc"
 	"github.com/dapr/kit/logger"
 )
@@ -250,8 +249,8 @@ func TestReadInputBindings(t *testing.T) {
 			WithContentType("application/json")
 		defer fakeResp.Close()
 
-		mockAppChannel.On("InvokeMethod", mock.MatchedBy(rttesting.MatchContextInterface), matchDaprRequestMethod(testInputBindingMethod)).Return(fakeBindingResp, nil)
-		mockAppChannel.On("InvokeMethod", mock.MatchedBy(rttesting.MatchContextInterface), fakeReq).Return(fakeResp, nil)
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(daprt.MatchContextInterface), matchDaprRequestMethod(testInputBindingMethod)).Return(fakeBindingResp, nil)
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(daprt.MatchContextInterface), fakeReq).Return(fakeResp, nil)
 
 		b.compStore.AddInputBindingRoute(testInputBindingName, testInputBindingName)
 
@@ -296,8 +295,8 @@ func TestReadInputBindings(t *testing.T) {
 			WithContentType("application/json")
 		defer fakeResp.Close()
 
-		mockAppChannel.On("InvokeMethod", mock.MatchedBy(rttesting.MatchContextInterface), fakeBindingReq).Return(fakeBindingResp, nil)
-		mockAppChannel.On("InvokeMethod", mock.MatchedBy(rttesting.MatchContextInterface), fakeReq).Return(fakeResp, nil)
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(daprt.MatchContextInterface), fakeBindingReq).Return(fakeBindingResp, nil)
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(daprt.MatchContextInterface), fakeReq).Return(fakeResp, nil)
 
 		b.compStore.AddInputBindingRoute(testInputBindingName, testInputBindingName)
 
@@ -342,8 +341,8 @@ func TestReadInputBindings(t *testing.T) {
 			WithContentType("application/json")
 		defer fakeResp.Close()
 
-		mockAppChannel.On("InvokeMethod", mock.MatchedBy(rttesting.MatchContextInterface), matchDaprRequestMethod(testInputBindingMethod)).Return(fakeBindingResp, nil)
-		mockAppChannel.On("InvokeMethod", mock.MatchedBy(rttesting.MatchContextInterface), fakeReq).Return(fakeResp, nil)
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(daprt.MatchContextInterface), matchDaprRequestMethod(testInputBindingMethod)).Return(fakeBindingResp, nil)
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(daprt.MatchContextInterface), fakeReq).Return(fakeResp, nil)
 
 		b.compStore.AddInputBindingRoute(testInputBindingName, testInputBindingName)
 
@@ -372,7 +371,7 @@ func TestReadInputBindings(t *testing.T) {
 
 		mockBinding := &daprt.MockBinding{}
 		mockBinding.SetOnReadCloseCh(closeCh)
-		mockBinding.On("Read", mock.MatchedBy(rttesting.MatchContextInterface), mock.Anything).Return(nil).Once()
+		mockBinding.On("Read", mock.MatchedBy(daprt.MatchContextInterface), mock.Anything).Return(nil).Once()
 
 		ctx, cancel := context.WithCancel(context.Background())
 		b.readFromBinding(ctx, testInputBindingName, mockBinding)
@@ -495,7 +494,7 @@ func TestBindingTracingHttp(t *testing.T) {
 
 func TestBindingResiliency(t *testing.T) {
 	b := New(Options{
-		Resiliency:     resiliency.FromConfigurations(logger.NewLogger("test"), rttesting.TestResiliency),
+		Resiliency:     resiliency.FromConfigurations(logger.NewLogger("test"), daprt.TestResiliency),
 		Registry:       registry.New(registry.NewOptions()).Bindings(),
 		ComponentStore: compstore.New(),
 		Meta:           meta.New(meta.Options{}),

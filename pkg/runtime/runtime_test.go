@@ -87,7 +87,6 @@ import (
 	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
 	sentryConsts "github.com/dapr/dapr/pkg/sentry/consts"
 	daprt "github.com/dapr/dapr/pkg/testing"
-	rttesting "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
 )
@@ -135,7 +134,7 @@ func TestProcessComponentsAndDependents(t *testing.T) {
 		Spec: componentsV1alpha1.ComponentSpec{
 			Type:     "pubsubs.mockPubSub",
 			Version:  "v1",
-			Metadata: rttesting.GetFakeMetadataItems(),
+			Metadata: daprt.GetFakeMetadataItems(),
 		},
 	}
 
@@ -158,7 +157,7 @@ func TestDoProcessComponent(t *testing.T) {
 		Spec: componentsV1alpha1.ComponentSpec{
 			Type:     "pubsub.mockPubSub",
 			Version:  "v1",
-			Metadata: rttesting.GetFakeMetadataItems(),
+			Metadata: daprt.GetFakeMetadataItems(),
 		},
 	}
 
@@ -280,7 +279,7 @@ func TestDoProcessComponent(t *testing.T) {
 		expectedMetadata := pubsub.Metadata{
 			Base: mdata.Base{
 				Name:       TestPubsubName,
-				Properties: rttesting.GetFakeProperties(),
+				Properties: daprt.GetFakeProperties(),
 			},
 		}
 
@@ -972,7 +971,7 @@ func TestMetadataUUID(t *testing.T) {
 		Spec: componentsV1alpha1.ComponentSpec{
 			Type:     "pubsub.mockPubSub",
 			Version:  "v1",
-			Metadata: rttesting.GetFakeMetadataItems(),
+			Metadata: daprt.GetFakeMetadataItems(),
 		},
 	}
 
@@ -1039,7 +1038,7 @@ func TestMetadataPodName(t *testing.T) {
 		Spec: componentsV1alpha1.ComponentSpec{
 			Type:     "pubsub.mockPubSub",
 			Version:  "v1",
-			Metadata: rttesting.GetFakeMetadataItems(),
+			Metadata: daprt.GetFakeMetadataItems(),
 		},
 	}
 
@@ -1085,7 +1084,7 @@ func TestMetadataNamespace(t *testing.T) {
 		Spec: componentsV1alpha1.ComponentSpec{
 			Type:     "pubsub.mockPubSub",
 			Version:  "v1",
-			Metadata: rttesting.GetFakeMetadataItems(),
+			Metadata: daprt.GetFakeMetadataItems(),
 		},
 	}
 
@@ -1130,7 +1129,7 @@ func TestMetadataAppID(t *testing.T) {
 		Spec: componentsV1alpha1.ComponentSpec{
 			Type:     "pubsub.mockPubSub",
 			Version:  "v1",
-			Metadata: rttesting.GetFakeMetadataItems(),
+			Metadata: daprt.GetFakeMetadataItems(),
 		},
 	}
 
@@ -1145,7 +1144,7 @@ func TestMetadataAppID(t *testing.T) {
 			},
 		})
 	rt, _ := NewTestDaprRuntime(modes.KubernetesMode)
-	rt.runtimeConfig.id = rttesting.TestRuntimeConfigID
+	rt.runtimeConfig.id = daprt.TestRuntimeConfigID
 	defer stopRuntime(t, rt)
 	mockPubSub := new(daprt.MockPubSub)
 
@@ -1162,7 +1161,7 @@ func TestMetadataAppID(t *testing.T) {
 		appIds := strings.Split(clientID, " ")
 		assert.Equal(t, 2, len(appIds))
 		for _, appID := range appIds {
-			assert.Equal(t, rttesting.TestRuntimeConfigID, appID)
+			assert.Equal(t, daprt.TestRuntimeConfigID, appID)
 		}
 	})
 
@@ -1686,7 +1685,7 @@ func NewTestDaprRuntimeWithProtocol(mode modes.DaprMode, protocol string, appPor
 
 func NewTestDaprRuntimeConfig(mode modes.DaprMode, appProtocol string, appPort int) *internalConfig {
 	return &internalConfig{
-		id:                 rttesting.TestRuntimeConfigID,
+		id:                 daprt.TestRuntimeConfigID,
 		placementAddresses: []string{"10.10.10.12"},
 		kubernetes: modeconfig.KubernetesConfig{
 			ControlPlaneAddress: "10.10.10.11",
@@ -1852,7 +1851,7 @@ func TestAuthorizedComponents(t *testing.T) {
 		component := componentsV1alpha1.Component{}
 		component.ObjectMeta.Name = testCompName
 		component.ObjectMeta.Namespace = "a"
-		component.Scopes = []string{rttesting.TestRuntimeConfigID}
+		component.Scopes = []string{daprt.TestRuntimeConfigID}
 
 		componentObj := rt.getAuthorizedObjects([]componentsV1alpha1.Component{component}, rt.isObjectAuthorized)
 		components, ok := componentObj.([]componentsV1alpha1.Component)
@@ -1886,7 +1885,7 @@ func TestAuthorizedComponents(t *testing.T) {
 		component := componentsV1alpha1.Component{}
 		component.ObjectMeta.Name = testCompName
 		component.ObjectMeta.Namespace = "b"
-		component.Scopes = []string{rttesting.TestRuntimeConfigID}
+		component.Scopes = []string{daprt.TestRuntimeConfigID}
 
 		componentObj := rt.getAuthorizedObjects([]componentsV1alpha1.Component{component}, rt.isObjectAuthorized)
 		components, ok := componentObj.([]componentsV1alpha1.Component)
@@ -2005,7 +2004,7 @@ func TestAuthorizedHTTPEndpoints(t *testing.T) {
 	t.Run("in scope, namespace match", func(t *testing.T) {
 		rt.namespace = "a"
 		endpoint.ObjectMeta.Namespace = "a"
-		endpoint.Scopes = []string{rttesting.TestRuntimeConfigID}
+		endpoint.Scopes = []string{daprt.TestRuntimeConfigID}
 
 		endpointObjs := rt.getAuthorizedObjects([]httpEndpointV1alpha1.HTTPEndpoint{endpoint}, rt.isObjectAuthorized)
 		endpoints, ok := endpointObjs.([]httpEndpointV1alpha1.HTTPEndpoint)
@@ -2027,7 +2026,7 @@ func TestAuthorizedHTTPEndpoints(t *testing.T) {
 	t.Run("in scope, namespace mismatch", func(t *testing.T) {
 		rt.namespace = "a"
 		endpoint.ObjectMeta.Namespace = "b"
-		endpoint.Scopes = []string{rttesting.TestRuntimeConfigID}
+		endpoint.Scopes = []string{daprt.TestRuntimeConfigID}
 
 		endpointObjs := rt.getAuthorizedObjects([]httpEndpointV1alpha1.HTTPEndpoint{endpoint}, rt.isObjectAuthorized)
 		endpoints, ok := endpointObjs.([]httpEndpointV1alpha1.HTTPEndpoint)
@@ -2690,7 +2689,7 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 
 	mockAppChannel := new(channelt.MockAppChannel)
 	rt.channels.WithAppChannel(mockAppChannel)
-	mockAppChannel.On("InvokeMethod", mock.MatchedBy(rttesting.MatchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
+	mockAppChannel.On("InvokeMethod", mock.MatchedBy(daprt.MatchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
 	// Create new processor with mocked app channel.
 	rt.processor = processor.New(processor.Options{
 		ID:               rt.runtimeConfig.id,

@@ -46,7 +46,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/meta"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/registry"
-	rttesting "github.com/dapr/dapr/pkg/testing"
+	daprt "github.com/dapr/dapr/pkg/testing"
 	testinggrpc "github.com/dapr/dapr/pkg/testing/grpc"
 	"github.com/dapr/kit/logger"
 )
@@ -134,7 +134,7 @@ func TestBulkSubscribe(t *testing.T) {
 		Spec: componentsV1alpha1.ComponentSpec{
 			Type:     "pubsub.mockPubSub",
 			Version:  "v1",
-			Metadata: rttesting.GetFakeMetadataItems(),
+			Metadata: daprt.GetFakeMetadataItems(),
 		},
 	}
 
@@ -873,7 +873,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		Spec: componentsV1alpha1.ComponentSpec{
 			Type:     "pubsub.mockPubSub",
 			Version:  "v1",
-			Metadata: rttesting.GetFakeMetadataItems(),
+			Metadata: daprt.GetFakeMetadataItems(),
 		},
 	}
 
@@ -1753,7 +1753,7 @@ func TestPubSubDeadLetter(t *testing.T) {
 		Spec: componentsV1alpha1.ComponentSpec{
 			Type:     "pubsub.mockPubSub",
 			Version:  "v1",
-			Metadata: rttesting.GetFakeMetadataItems(),
+			Metadata: daprt.GetFakeMetadataItems(),
 		},
 	}
 
@@ -1820,7 +1820,7 @@ func TestPubSubDeadLetter(t *testing.T) {
 			ComponentStore: compstore.New(),
 			IsHTTP:         true,
 		})
-		ps.resiliency = resiliency.FromConfigurations(logger.NewLogger("test"), rttesting.TestResiliency)
+		ps.resiliency = resiliency.FromConfigurations(logger.NewLogger("test"), daprt.TestResiliency)
 		reg.PubSubs().RegisterComponent(
 			func(_ logger.Logger) contribpubsub.PubSub {
 				return &mockSubscribePubSub{}
