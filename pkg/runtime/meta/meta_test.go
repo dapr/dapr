@@ -21,6 +21,7 @@ import (
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 
 	"github.com/dapr/dapr/pkg/apis/common"
+	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/modes"
 )
 
@@ -124,5 +125,27 @@ func TestMetadataContainsNamespace(t *testing.T) {
 		)
 
 		assert.False(t, r)
+	})
+}
+
+func TestMetadataOverrideWasmStrictSandbox(t *testing.T) {
+	t.Run("original set to false override to true", func(t *testing.T) {
+		meta := New(Options{Mode: modes.StandaloneMode})
+		items := []common.NameValuePair{
+			{
+				Name: "strictSandbox",
+				Value: common.DynamicValue{
+					JSON: v1.JSON{Raw: []byte(`false`)},
+				},
+			},
+		}
+		com := compapi.Component{
+			Spec: compapi.ComponentSpec{
+				Metadata: items,
+			},
+		}
+		AddWasmStrictSandbox(&com, true)
+		base := meta.ToBaseMetadata(com)
+		assert.Equal(t, "true", base.Properties["strictSandbox"])
 	})
 }
