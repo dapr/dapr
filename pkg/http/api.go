@@ -23,6 +23,7 @@ import (
 	"io"
 	nethttp "net/http"
 	"net/url"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -57,6 +58,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/utils"
+	"github.com/dapr/dapr/utils/responsewriter"
 )
 
 // API returns a list of HTTP endpoints for Dapr.
@@ -278,7 +280,7 @@ func (a *api) constructDirectMessagingEndpoints() []Endpoint {
 			IsFallback:            true,
 			Version:               apiVersionV1,
 			KeepWildcardUnescaped: true,
-			FastHTTPHandler:       a.onDirectMessage,
+			Handler:               a.onDirectMessage,
 		},
 	}
 }
@@ -1077,11 +1079,11 @@ func (a *api) getStateStoreName(reqCtx *fasthttp.RequestCtx) string {
 
 type invokeError struct {
 	statusCode int
-	msg        ErrorResponse
+	msg        []byte
 }
 
 func (ie invokeError) Error() string {
-	return fmt.Sprintf("invokeError (statusCode='%d') msg.errorCode='%s' msg.message='%s'", ie.statusCode, ie.msg.ErrorCode, ie.msg.Message)
+	return fmt.Sprintf("invokeError (statusCode='%d') msg='%v'", ie.statusCode, string(ie.msg))
 }
 
 func (a *api) isHTTPEndpoint(appID string) bool {
@@ -1099,22 +1101,21 @@ func (a *api) getBaseURL(targetAppID string) string {
 	return ""
 }
 
-func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
-	targetID, invokeMethodName := findTargetIDAndMethod(string(reqCtx.URI().PathOriginal()), reqCtx.Request.Header.Peek)
+func (a *api) onDirectMessage(w nethttp.ResponseWriter, r *nethttp.Request) {
+	targetID, invokeMethodName := findTargetIDAndMethod(r.URL.String(), r.Header)
 	if targetID == "" {
-		msg := NewErrorResponse("ERR_DIRECT_INVOKE", messages.ErrDirectInvokeNoAppID)
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusNotFound, msg))
+		respondWithError(w, messages.ErrDirectInvokeNoAppID)
 		return
 	}
 
-	// Store target and method as user values so they can be picked up by the tracing library
-	reqCtx.SetUserValue("id", targetID)
-	reqCtx.SetUserValue("method", invokeMethodName)
+	// Store target and method as values in the context so they can be picked up by the tracing library
+	rw := responsewriter.EnsureResponseWriter(w)
+	rw.SetUserValue("id", targetID)
+	rw.SetUserValue("method", invokeMethodName)
 
-	verb := strings.ToUpper(string(reqCtx.Method()))
+	verb := strings.ToUpper(r.Method)
 	if a.directMessaging == nil {
-		msg := NewErrorResponse("ERR_DIRECT_INVOKE", messages.ErrDirectInvokeNotReady)
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
+		respondWithError(w, messages.ErrDirectInvokeNotReady)
 		return
 	}
 
@@ -1134,18 +1135,18 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	req := invokev1.NewInvokeMethodRequest(invokeMethodName).
-		WithHTTPExtension(verb, reqCtx.QueryArgs().String()).
-		WithRawDataBytes(reqCtx.Request.Body()).
-		WithContentType(string(reqCtx.Request.Header.ContentType())).
+		WithHTTPExtension(verb, r.URL.RawQuery).
+		WithRawData(r.Body).
+		WithContentType(r.Header.Get("content-type")).
 		// Save headers to internal metadata
-		WithFastHTTPHeaders(&reqCtx.Request.Header)
+		WithHTTPHeaders(r.Header)
 	if policyDef != nil {
 		req.WithReplay(policyDef.HasRetries())
 	}
 	defer req.Close()
 
 	policyRunner := resiliency.NewRunnerWithOptions(
-		reqCtx, policyDef,
+		r.Context(), policyDef,
 		resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
 			Disposer: resiliency.DisposerCloser[*invokev1.InvokeMethodResponse],
 		},
@@ -1156,9 +1157,10 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 		if rErr != nil {
 			// Allowlist policies that are applied on the callee side can return a Permission Denied error.
 			// For everything else, treat it as a gRPC transport error
+			apiErr := messages.ErrDirectInvoke.WithFormat(targetID, rErr)
 			invokeErr := invokeError{
-				statusCode: nethttp.StatusInternalServerError,
-				msg:        NewErrorResponse("ERR_DIRECT_INVOKE", fmt.Sprintf(messages.ErrDirectInvoke, targetID, rErr)),
+				statusCode: apiErr.HTTPCode(),
+				msg:        apiErr.JSONErrorValue(),
 			}
 
 			if status.Code(rErr) == codes.PermissionDenied {
@@ -1181,7 +1183,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 				if rErr != nil {
 					return rResp, invokeError{
 						statusCode: nethttp.StatusInternalServerError,
-						msg:        NewErrorResponse("ERR_MALFORMED_RESPONSE", rErr.Error()),
+						msg:        NewErrorResponse("ERR_MALFORMED_RESPONSE", rErr.Error()).JSONErrorValue(),
 					}
 				}
 			} else {
@@ -1197,20 +1199,20 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 
 	// Special case for timeouts/circuit breakers since they won't go through the rest of the logic.
 	if errors.Is(err, context.DeadlineExceeded) || breaker.IsErrorPermanent(err) {
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, NewErrorResponse("ERR_DIRECT_INVOKE", err.Error())))
+		respondWithError(w, messages.ErrDirectInvoke.WithFormat(targetID, err))
 		return
 	}
 
 	if resp != nil {
 		headers := resp.Headers()
 		if len(headers) > 0 {
-			invokev1.InternalMetadataToHTTPHeader(reqCtx, headers, reqCtx.Response.Header.Add)
+			invokev1.InternalMetadataToHTTPHeader(r.Context(), headers, w.Header().Add)
 		}
 	}
 
 	invokeErr := invokeError{}
 	if errors.As(err, &invokeErr) {
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(invokeErr.statusCode, invokeErr.msg))
+		respondWithData(w, invokeErr.statusCode, invokeErr.msg)
 		if resp != nil {
 			_ = resp.Close()
 		}
@@ -1218,37 +1220,40 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	if resp == nil {
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, NewErrorResponse("ERR_DIRECT_INVOKE", fmt.Sprintf(messages.ErrDirectInvoke, targetID, "response object is nil"))))
+		respondWithError(w, messages.ErrDirectInvoke.WithFormat(targetID, "response object is nil"))
 		return
 	}
 	defer resp.Close()
 
 	statusCode := int(resp.Status().Code)
 
-	body, err := resp.RawDataFull()
-	if err != nil {
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, NewErrorResponse("ERR_DIRECT_INVOKE", fmt.Sprintf(messages.ErrDirectInvoke, targetID, err))))
-		return
+	if ct := resp.ContentType(); ct != "" {
+		w.Header().Set("content-type", ct)
 	}
 
-	reqCtx.Response.Header.SetContentType(resp.ContentType())
-	fasthttpRespond(reqCtx, fasthttpResponseWith(statusCode, body))
+	w.WriteHeader(statusCode)
+
+	_, err = io.Copy(w, resp.RawData())
+	if err != nil {
+		respondWithError(w, messages.ErrDirectInvoke.WithFormat(targetID, err))
+		return
+	}
 }
 
 // findTargetIDAndMethod finds ID of the target service and method from the following three places:
 // 1. HTTP header 'dapr-app-id' (path is method)
 // 2. Basic auth header: `http://dapr-app-id:<service-id>@localhost:3500/<method>`
 // 3. URL parameter: `http://localhost:3500/v1.0/invoke/<app-id>/method/<method>`
-func findTargetIDAndMethod(path string, peekHeader func(string) []byte) (targetID string, method string) {
-	if appID := peekHeader(daprAppID); len(appID) != 0 {
-		return string(appID), strings.TrimPrefix(path, "/")
+func findTargetIDAndMethod(reqPath string, headers nethttp.Header) (targetID string, method string) {
+	if appID := headers.Get(daprAppID); appID != "" {
+		return appID, strings.TrimPrefix(path.Clean(reqPath), "/")
 	}
 
-	if auth := string(peekHeader(fasthttp.HeaderAuthorization)); strings.HasPrefix(auth, "Basic ") {
+	if auth := headers.Get(fasthttp.HeaderAuthorization); strings.HasPrefix(auth, "Basic ") {
 		if s, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(auth, "Basic ")); err == nil {
 			pair := strings.Split(string(s), ":")
 			if len(pair) == 2 && pair[0] == daprAppID {
-				return pair[1], strings.TrimPrefix(path, "/")
+				return pair[1], strings.TrimPrefix(path.Clean(reqPath), "/")
 			}
 		}
 	}
@@ -1256,8 +1261,8 @@ func findTargetIDAndMethod(path string, peekHeader func(string) []byte) (targetI
 	// If we're here, the handler was probably invoked with /v1.0/invoke/ (or the invocation is invalid, missing the app id provided as header or Basic auth)
 	// However, we are not relying on wildcardParam because the URL may have been sanitized to remove `//``, so `http://` would have been turned into `http:/`
 	// First, check to make sure that the path has the prefix
-	if idx := pathHasPrefix(path, apiVersionV1, "invoke"); idx > 0 {
-		path = path[idx:]
+	if idx := pathHasPrefix(reqPath, apiVersionV1, "invoke"); idx > 0 {
+		reqPath = reqPath[idx:]
 
 		// Scan to find app ID and method
 		// Matches `<appid>/method/<method>`.
@@ -1266,9 +1271,9 @@ func findTargetIDAndMethod(path string, peekHeader func(string) []byte) (targetI
 		// - `http://example.com/method/mymethod`
 		// - `https://example.com/method/mymethod`
 		// - `http%3A%2F%2Fexample.com/method/mymethod`
-		if idx = strings.Index(path, "/method/"); idx > 0 {
-			targetID = path[:idx]
-			method = path[(idx + len("/method/")):]
+		if idx = strings.Index(reqPath, "/method/"); idx > 0 {
+			targetID = reqPath[:idx]
+			method = reqPath[(idx + len("/method/")):]
 			if t, _ := url.QueryUnescape(targetID); t != "" {
 				targetID = t
 			}
