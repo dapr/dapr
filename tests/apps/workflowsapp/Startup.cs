@@ -57,7 +57,6 @@ namespace DaprDemoActor
             services.AddAuthentication().AddDapr();
             services.AddAuthorization(o => o.AddDapr());
             services.AddControllers().AddDapr();
-            // Register a workflow and associated activity
         }
 
         /// <summary>

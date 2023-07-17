@@ -17,7 +17,6 @@ namespace DaprDemoActor
   using System.Threading.Tasks;
   using System.Text.Json;
 
-  // [Actor(TypeName = "WorkflowActor")]
   public class WorkflowActor : Actor, IWorkflowActor
   {
     private int count = 0;

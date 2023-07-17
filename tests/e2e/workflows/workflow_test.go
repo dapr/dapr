@@ -61,9 +61,6 @@ func TestMain(m *testing.M) {
 	os.Exit(tr.Start(m))
 }
 
-// Used for the map created later on
-type TestFunc func(string, string) string
-
 func startTest(url string, instanceID string) string {
 	postString := fmt.Sprintf("%s/StartWorkflow/dapr/placeOrder/%s", url, instanceID)
 	// Start the workflow and check that it is running
@@ -271,9 +268,6 @@ func TestWorkflow(t *testing.T) {
 			_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
 			require.NoError(t, err)
 
-			// Sleep so that the workflow engine starts
-			time.Sleep(5 * time.Second)
-
 			result := "false"
 			switch tt.in {
 			case "purge":
@@ -284,8 +278,6 @@ func TestWorkflow(t *testing.T) {
 				result = pauseResumeTest(externalURL, tt.instanceID)
 			case "raiseEvent":
 				result = raiseEventTest(externalURL, tt.instanceID)
-			default:
-
 			}
 
 			require.Equal(t, tt.expectedResponse, result)
