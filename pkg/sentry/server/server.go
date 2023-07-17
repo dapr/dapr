@@ -118,29 +118,40 @@ func (s *server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 		return nil, status.Error(codes.InvalidArgument, "the requested validator is not enabled")
 	}
 
+	log.Debugf("Processing SignCertificate request for %s/%s (validator: %s)", req.Namespace, req.Id, validator.String())
+
 	trustDomain, err := s.vals[validator].Validate(ctx, req)
 	if err != nil {
 		return nil, status.Error(codes.PermissionDenied, err.Error())
 	}
 
 	der, _ := pem.Decode(req.GetCertificateSigningRequest())
-	if der == nil || der.Type != "CERTIFICATE REQUEST" {
+	if der == nil {
+		log.Debug("Invalid CSR: PEM block is nil")
+		return nil, status.Error(codes.InvalidArgument, "invalid certificate signing request")
+	}
+	// TODO: @joshvanl: Before v1.12, daprd was sending CSRs with the PEM block type "CERTIFICATE"
+	// After 1.14, allow only "CERTIFICATE REQUEST"
+	if der.Type != "CERTIFICATE REQUEST" && der.Type != "CERTIFICATE" {
+		log.Debugf("Invalid CSR: PEM block type is invalid: %q", der.Type)
 		return nil, status.Error(codes.InvalidArgument, "invalid certificate signing request")
 	}
 	csr, err := x509.ParseCertificateRequest(der.Bytes)
 	if err != nil {
+		log.Debugf("Failed to parse CSR: %v", err)
 		return nil, status.Errorf(codes.InvalidArgument, "failed to parse certificate signing request: %v", err)
 	}
 
 	if csr.CheckSignature() != nil {
+		log.Debugf("Invalid CSR: invalid signature")
 		return nil, status.Error(codes.InvalidArgument, "invalid signature")
 	}
 
-	// TODO: @joshvanl: before v1.11, daprd was matching on
+	// TODO: @joshvanl: before v1.12, daprd was matching on
 	// `<app-id>.<namespace>.svc.cluster.local` DNS SAN name so without this,
 	// daprd->daprd connections would fail. This is no longer the case since we
 	// now match with SPIFFE URI SAN, but we need to keep this here for backwards
-	// compatibility. Remove after v1.12.
+	// compatibility. Remove after v1.14.
 	var dns []string
 	switch {
 	case req.Namespace == security.CurrentNamespace() && req.Id == "dapr-injector":
@@ -150,8 +161,6 @@ func (s *server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 	default:
 		dns = []string{fmt.Sprintf("%s.%s.svc.cluster.local", req.Id, req.Namespace)}
 	}
-
-	log.Debugf("Processing SignCertificate request for %s/%s (validator: %s)", req.Namespace, req.Id, validator.String())
 
 	chain, err := s.ca.SignIdentity(ctx, &ca.SignRequest{
 		PublicKey:          csr.PublicKey,
@@ -174,8 +183,8 @@ func (s *server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 
 	return &sentryv1pb.SignCertificateResponse{
 		WorkloadCertificate: chainPEM,
-		// We only populate the trust chain and valid until for clients pre 1.11.
-		// TODO: Remove fields in 1.12.
+		// We only populate the trust chain and valid until for clients pre-1.12.
+		// TODO: Remove fields in 1.14.
 		TrustChainCertificates: [][]byte{s.ca.TrustAnchors()},
 		ValidUntil:             timestamppb.New(chain[0].NotAfter),
 	}, nil
