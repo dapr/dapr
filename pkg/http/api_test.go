@@ -65,6 +65,7 @@ import (
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
+	commonv1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
@@ -1091,7 +1092,16 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 				mock.MatchedBy(func(b string) bool {
 					return b == "http://123.45.67.89:3000"
 				}),
-				mock.AnythingOfType("*v1.InvokeMethodRequest"),
+				mock.MatchedBy(func(req *invokev1.InvokeMethodRequest) bool {
+					msg := req.Message()
+					if msg.Method != "fakeMethod" {
+						return false
+					}
+					if msg.HttpExtension.Verb != commonv1.HTTPExtension_POST {
+						return false
+					}
+					return true
+				}),
 			).
 			Return(fakeDirectMessageResponse, nil).
 			Once()
@@ -1101,12 +1111,12 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
-		assert.Equal(t, 200, resp.StatusCode)
+		assert.Equal(t, gohttp.StatusOK, resp.StatusCode)
 		assert.Equal(t, "fakeDirectMessageResponse", string(resp.RawBody))
 	})
 
 	t.Run("Invoke direct messaging without querystring - 201 Created", func(t *testing.T) {
-		fakeDirectMessageResponse := getFakeDirectMessageResponseWithStatusCode(fasthttp.StatusCreated)
+		fakeDirectMessageResponse := getFakeDirectMessageResponseWithStatusCode(gohttp.StatusCreated)
 		defer fakeDirectMessageResponse.Close()
 
 		apiPath := "v1.0/invoke/fakeAppID/method/fakeMethod"
@@ -1364,7 +1374,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 500, resp.StatusCode)
-		assert.True(t, strings.HasPrefix(string(resp.RawBody), "{\"errorCode\":\"ERR_MALFORMED_RESPONSE\",\"message\":\""))
+		assert.Truef(t, strings.HasPrefix(string(resp.RawBody), "{\"errorCode\":\"ERR_MALFORMED_RESPONSE\",\"message\":\""), "code not found in response: %v", string(resp.RawBody))
 	})
 
 	t.Run("Invoke direct messaging with malformed status response for external invocation", func(t *testing.T) {
@@ -5610,15 +5620,15 @@ func TestFindTargetIDAndMethod(t *testing.T) {
 	tests := []struct {
 		name         string
 		path         string
-		headers      map[string]string
+		headers      gohttp.Header
 		wantTargetID string
 		wantMethod   string
 	}{
-		{name: "dapr-app-id header", path: "/foo/bar", headers: map[string]string{"dapr-app-id": "myapp"}, wantTargetID: "myapp", wantMethod: "foo/bar"},
-		{name: "basic auth", path: "/foo/bar", headers: map[string]string{"Authorization": "Basic ZGFwci1hcHAtaWQ6YXV0aA=="}, wantTargetID: "auth", wantMethod: "foo/bar"},
-		{name: "dapr-app-id header has priority over basic auth", path: "/foo/bar", headers: map[string]string{"dapr-app-id": "myapp", "Authorization": "Basic ZGFwci1hcHAtaWQ6YXV0aA=="}, wantTargetID: "myapp", wantMethod: "foo/bar"},
+		{name: "dapr-app-id header", path: "/foo/bar", headers: gohttp.Header{"Dapr-App-Id": []string{"myapp"}}, wantTargetID: "myapp", wantMethod: "foo/bar"},
+		{name: "basic auth", path: "/foo/bar", headers: gohttp.Header{"Authorization": []string{"Basic ZGFwci1hcHAtaWQ6YXV0aA=="}}, wantTargetID: "auth", wantMethod: "foo/bar"},
+		{name: "dapr-app-id header has priority over basic auth", path: "/foo/bar", headers: gohttp.Header{"Dapr-App-Id": []string{"myapp"}, "Authorization": []string{"Basic ZGFwci1hcHAtaWQ6YXV0aA=="}}, wantTargetID: "myapp", wantMethod: "foo/bar"},
 		{name: "path with internal target", path: "/v1.0/invoke/myapp/method/foo", wantTargetID: "myapp", wantMethod: "foo"},
-		{name: "basic auth has priority over path", path: "/v1.0/invoke/myapp/method/foo", headers: map[string]string{"Authorization": "Basic ZGFwci1hcHAtaWQ6YXV0aA=="}, wantTargetID: "auth", wantMethod: "v1.0/invoke/myapp/method/foo"},
+		{name: "basic auth has priority over path", path: "/v1.0/invoke/myapp/method/foo", headers: gohttp.Header{"Authorization": []string{"Basic ZGFwci1hcHAtaWQ6YXV0aA=="}}, wantTargetID: "auth", wantMethod: "v1.0/invoke/myapp/method/foo"},
 		{name: "path with '/' method", path: "/v1.0/invoke/myapp/method/", wantTargetID: "myapp", wantMethod: ""},
 		{name: "path with missing method", path: "/v1.0/invoke/myapp/method", wantTargetID: "", wantMethod: ""},
 		{name: "path with http target unescaped", path: "/v1.0/invoke/http://example.com/method/foo", wantTargetID: "http://example.com", wantMethod: "foo"},
@@ -5626,17 +5636,11 @@ func TestFindTargetIDAndMethod(t *testing.T) {
 		{name: "path with http target escaped", path: "/v1.0/invoke/http%3A%2F%2Fexample.com/method/foo", wantTargetID: "http://example.com", wantMethod: "foo"},
 		{name: "path with https target escaped", path: "/v1.0/invoke/https%3A%2F%2Fexample.com/method/foo", wantTargetID: "https://example.com", wantMethod: "foo"},
 		{name: "path with https target partly escaped", path: "/v1.0/invoke/https%3A/%2Fexample.com/method/foo", wantTargetID: "https://example.com", wantMethod: "foo"},
+		{name: "extra slashes are removed", path: "///foo//bar", headers: gohttp.Header{"Dapr-App-Id": []string{"myapp"}}, wantTargetID: "myapp", wantMethod: "foo/bar"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			peekHeader := func(k string) []byte {
-				if len(tt.headers) == 0 {
-					return nil
-				}
-				return []byte(tt.headers[k])
-			}
-
-			gotTargetID, gotMethod := findTargetIDAndMethod(tt.path, peekHeader)
+			gotTargetID, gotMethod := findTargetIDAndMethod(tt.path, tt.headers)
 			if gotTargetID != tt.wantTargetID {
 				t.Errorf("findTargetIDAndMethod() gotTargetID = %v, want %v", gotTargetID, tt.wantTargetID)
 			}
