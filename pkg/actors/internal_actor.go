@@ -113,8 +113,7 @@ func (c *internalActorChannel) InvokeMethod(ctx context.Context, req *invokev1.I
 		methodName := methodURL[methodStartIndex+len("/method/"):]
 
 		// Check for well-known method names; otherwise, just call InvokeMethod on the internal actor.
-		if strings.HasPrefix(methodName, "remind/") {
-			reminderName := strings.TrimPrefix(methodName, "remind/")
+		if reminderName, prefixFound := strings.CutPrefix(methodName, "remind/"); prefixFound {
 			reminderInfo, ok := req.GetDataObject().(*ReminderResponse)
 			if !ok {
 				return nil, fmt.Errorf("unexpected type for reminder object: %T", req.GetDataObject())
@@ -133,8 +132,7 @@ func (c *internalActorChannel) InvokeMethod(ctx context.Context, req *invokev1.I
 				return nil, err
 			}
 
-			if strings.HasPrefix(methodName, "timer/") {
-				timerName := strings.TrimPrefix(methodName, "timer/")
+			if timerName, prefixFound := strings.CutPrefix(methodName, "timer/"); prefixFound {
 				err = actor.InvokeTimer(ctx, actorID, timerName, requestData)
 			} else {
 				result, err = actor.InvokeMethod(ctx, actorID, methodName, requestData)
