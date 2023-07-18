@@ -1174,32 +1174,61 @@ func (a *DaprRuntime) onHTTPEndpointUpdated(endpoint httpEndpointV1alpha1.HTTPEn
 func (a *DaprRuntime) processHTTPEndpointSecrets(endpoint *httpEndpointV1alpha1.HTTPEndpoint) {
 	_, _ = a.processResourceSecrets(endpoint)
 
-	if endpoint.Spec.TLSRootCA.SecretKeyRef.Name != "" || endpoint.Spec.TLSClientCert.SecretKeyRef.Name != "" {
-		tlsResource := httpEndpointV1alpha1.GenericNameValueResource{
-			Name:        endpoint.ObjectMeta.Name,
-			Namespace:   endpoint.ObjectMeta.Namespace,
-			SecretStore: endpoint.Auth.SecretStore,
-			Pairs: []commonapi.NameValuePair{
-				{
-					SecretKeyRef: endpoint.Spec.TLSRootCA.SecretKeyRef,
-					Value:        endpoint.Spec.TLSRootCA.Value,
-				},
-				{
-					SecretKeyRef: endpoint.Spec.TLSClientCert.SecretKeyRef,
-					Value:        endpoint.Spec.TLSClientCert.Value,
-				},
-				{
-					SecretKeyRef: endpoint.Spec.TLSClientKey.SecretKeyRef,
-					Value:        endpoint.Spec.TLSClientKey.Value,
-				},
-			},
+	tlsResource := httpEndpointV1alpha1.GenericNameValueResource{
+		Name:        endpoint.ObjectMeta.Name,
+		Namespace:   endpoint.ObjectMeta.Namespace,
+		SecretStore: endpoint.Auth.SecretStore,
+		Pairs:       []commonapi.NameValuePair{},
+	}
+
+	var root, clientCert, clientKey bool
+
+	if endpoint.HasTLSRootCASecret() {
+		ca := commonapi.NameValuePair{
+			SecretKeyRef: *endpoint.Spec.RootCA.SecretKeyRef,
+		}
+		if endpoint.HasTLSRootCA() {
+			ca.Value = *endpoint.Spec.RootCA.Value
 		}
 
-		updated, _ := a.processResourceSecrets(&tlsResource)
-		if updated {
-			endpoint.Spec.TLSRootCA.Value = tlsResource.NameValuePairs()[0].Value
-			endpoint.Spec.TLSClientCert.Value = tlsResource.NameValuePairs()[1].Value
-			endpoint.Spec.TLSClientKey.Value = tlsResource.NameValuePairs()[2].Value
+		tlsResource.Pairs = append(tlsResource.Pairs, ca)
+		root = true
+	}
+
+	if endpoint.HasTLSClientCertSecret() {
+		cCert := commonapi.NameValuePair{
+			SecretKeyRef: *endpoint.Spec.ClientCert.SecretKeyRef,
+		}
+		if endpoint.HasTLSClientCert() {
+			cCert.Value = *endpoint.Spec.ClientCert.Value
+		}
+		tlsResource.Pairs = append(tlsResource.Pairs, cCert)
+		clientCert = true
+	}
+
+	if endpoint.HasTLSClientKeySecret() {
+		cKey := commonapi.NameValuePair{
+			SecretKeyRef: *endpoint.Spec.ClientKey.SecretKeyRef,
+		}
+		if endpoint.HasTLSClientKey() {
+			cKey.Value = *endpoint.Spec.ClientKey.Value
+		}
+		tlsResource.Pairs = append(tlsResource.Pairs, cKey)
+		clientKey = true
+	}
+
+	updated, _ := a.processResourceSecrets(&tlsResource)
+	if updated {
+		if root {
+			endpoint.Spec.RootCA.Value = &tlsResource.NameValuePairs()[0].Value
+		}
+
+		if clientCert {
+			endpoint.Spec.ClientCert.Value = &tlsResource.NameValuePairs()[1].Value
+		}
+
+		if clientKey {
+			endpoint.Spec.ClientKey.Value = &tlsResource.NameValuePairs()[2].Value
 		}
 	}
 }
@@ -2952,8 +2981,8 @@ func (a *DaprRuntime) getHTTPEndpointAppChannel(pipeline httpMiddleware.Pipeline
 
 	var tlsConfig *tls.Config
 
-	if endpoint.Spec.TLSRootCA.Value.String() != "" {
-		ca := endpoint.Spec.TLSRootCA.Value.String()
+	if endpoint.HasTLSRootCA() {
+		ca := endpoint.Spec.RootCA.Value.String()
 		caCertPool := x509.NewCertPool()
 
 		if !caCertPool.AppendCertsFromPEM([]byte(ca)) {
@@ -2966,8 +2995,8 @@ func (a *DaprRuntime) getHTTPEndpointAppChannel(pipeline httpMiddleware.Pipeline
 		}
 	}
 
-	if endpoint.Spec.TLSClientKey.Value.String() != "" && endpoint.Spec.TLSClientCert.Value.String() != "" {
-		cert, err := tls.X509KeyPair([]byte(endpoint.Spec.TLSClientCert.Value.String()), []byte(endpoint.Spec.TLSClientKey.Value.String()))
+	if endpoint.HasTLSClientKey() {
+		cert, err := tls.X509KeyPair([]byte(endpoint.Spec.ClientCert.Value.String()), []byte(endpoint.Spec.ClientKey.Value.String()))
 		if err != nil {
 			return httpChannel.ChannelConfiguration{}, fmt.Errorf("failed to load client certificate for http endpoint %s: %w", endpoint.ObjectMeta.Name, err)
 		}
@@ -2978,16 +3007,16 @@ func (a *DaprRuntime) getHTTPEndpointAppChannel(pipeline httpMiddleware.Pipeline
 		tlsConfig.Certificates = []tls.Certificate{cert}
 	}
 
-	if endpoint.Spec.TLSRenegotiation != "" {
-		switch endpoint.Spec.TLSRenegotiation {
-		case "RenegotiateNever":
+	if endpoint.Spec.Renegotiation != nil {
+		switch *endpoint.Spec.Renegotiation {
+		case httpEndpointV1alpha1.TLSNegotiateNever:
 			tlsConfig.Renegotiation = tls.RenegotiateNever
-		case "RenegotiateOnceAsClient":
+		case httpEndpointV1alpha1.TLSNegotiateOnceAsClient:
 			tlsConfig.Renegotiation = tls.RenegotiateOnceAsClient
-		case "RenegotiateFreelyAsClient":
+		case httpEndpointV1alpha1.TLSNegotiateFreelyAsClient:
 			tlsConfig.Renegotiation = tls.RenegotiateFreelyAsClient
 		default:
-			return httpChannel.ChannelConfiguration{}, fmt.Errorf("invalid renegotiation value %s for http endpoint %s", endpoint.Spec.TLSRenegotiation, endpoint.ObjectMeta.Name)
+			return httpChannel.ChannelConfiguration{}, fmt.Errorf("invalid renegotiation value %s for http endpoint %s", *endpoint.Spec.Renegotiation, endpoint.ObjectMeta.Name)
 		}
 	}
 

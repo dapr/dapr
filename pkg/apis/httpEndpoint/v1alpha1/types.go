@@ -36,7 +36,15 @@ type HTTPEndpoint struct {
 	common.Scoped `json:",inline"`
 }
 
-const kind = "HTTPEndpoint"
+// TLSNegotiation sets the underlying negotiation strategy for an http channel.
+type TLSNegotiation string
+
+const (
+	kind                                      = "HTTPEndpoint"
+	TLSNegotiateNever          TLSNegotiation = "Never"
+	TLSNegotiateOnceAsClient   TLSNegotiation = "OnceAsClient"
+	TLSNegotiateFreelyAsClient TLSNegotiation = "FreelyAsClient"
+)
 
 // Kind returns the component kind.
 func (HTTPEndpoint) Kind() string {
@@ -53,14 +61,44 @@ func (h HTTPEndpoint) NameValuePairs() []common.NameValuePair {
 	return h.Spec.Headers
 }
 
-// TLSField describes tls specific properties for endpoint authenticatin
-type TLSField struct {
+// nil returns a bool indicating if a client key has a secret reference
+func (h HTTPEndpoint) HasTLSClientKeySecret() bool {
+	return h.Spec.ClientKey != nil && h.Spec.ClientKey.SecretKeyRef != nil && h.Spec.ClientKey.SecretKeyRef.Name != ""
+}
+
+// HasTLSClientCertSecret returns a bool indicating if a client cert has a secret reference
+func (h HTTPEndpoint) HasTLSClientCertSecret() bool {
+	return h.Spec.ClientCert != nil && h.Spec.ClientCert.SecretKeyRef != nil && h.Spec.ClientCert.SecretKeyRef.Name != ""
+}
+
+// HasTLSRootCASecret returns a bool indicating if a client cert has a secret reference
+func (h HTTPEndpoint) HasTLSRootCASecret() bool {
+	return h.Spec.RootCA != nil && h.Spec.RootCA.SecretKeyRef != nil && h.Spec.RootCA.SecretKeyRef.Name != ""
+}
+
+// HasTLSRootCA returns a bool indicating if the HTTP endpoint contains a root ca
+func (h HTTPEndpoint) HasTLSRootCA() bool {
+	return h.Spec.RootCA != nil && h.Spec.RootCA.Value != nil
+}
+
+// HasTLSClientCert returns a bool indicating if the HTTP endpoint contains a root ca
+func (h HTTPEndpoint) HasTLSClientCert() bool {
+	return h.Spec.ClientCert != nil && h.Spec.ClientCert.Value != nil
+}
+
+// HasTLSClientKey returns a bool indicating if the HTTP endpoint contains a root ca
+func (h HTTPEndpoint) HasTLSClientKey() bool {
+	return h.Spec.ClientKey != nil && h.Spec.ClientKey.Value != nil
+}
+
+// TLS describes tls specific properties for endpoint authenticatin
+type TLS struct {
 	// Value of the property, in plaintext.
 	//+optional
-	Value common.DynamicValue `json:"value,omitempty"`
+	Value *common.DynamicValue `json:"value,omitempty"`
 	// SecretKeyRef is the reference of a value in a secret store component.
 	//+optional
-	SecretKeyRef common.SecretKeyRef `json:"secretKeyRef,omitempty"`
+	SecretKeyRef *common.SecretKeyRef `json:"secretKeyRef,omitempty"`
 }
 
 // HTTPEndpointSpec describes an access specification for allowing external service invocations.
@@ -69,13 +107,15 @@ type HTTPEndpointSpec struct {
 	//+optional
 	Headers []common.NameValuePair `json:"headers"`
 	//+optional
-	TLSRootCA TLSField `json:"tlsRootCA"`
+	RootCA *TLS `json:"tlsRootCA"`
 	//+optional
-	TLSClientCert TLSField `json:"tlsClientCert"`
+	ClientCert *TLS `json:"tlsClientCert"`
 	//+optional
-	TLSClientKey TLSField `json:"tlsClientKey"`
+	ClientKey *TLS `json:"tlsClientKey"`
 	//+optional
-	TLSRenegotiation string `json:"tlsRenegotiation"`
+	//+kubebuilder:validation:Enum={"Never", "OnceAsClient", "FreelyAsClient"}
+	//+default=Never
+	Renegotiation *TLSNegotiation `json:"tlsRenegotiation"`
 }
 
 // Auth represents authentication details for the component.

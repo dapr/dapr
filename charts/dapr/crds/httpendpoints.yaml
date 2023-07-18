@@ -84,8 +84,7 @@ spec:
                   type: object
                 type: array
               tlsClientCert:
-                description: TLSField describes tls specific properties for endpoint
-                  authenticatin
+                description: TLS describes tls specific properties for endpoint authenticatin
                 properties:
                   secretKeyRef:
                     description: SecretKeyRef is the reference of a value in a secret
@@ -105,8 +104,7 @@ spec:
                     x-kubernetes-preserve-unknown-fields: true
                 type: object
               tlsClientKey:
-                description: TLSField describes tls specific properties for endpoint
-                  authenticatin
+                description: TLS describes tls specific properties for endpoint authenticatin
                 properties:
                   secretKeyRef:
                     description: SecretKeyRef is the reference of a value in a secret
@@ -126,10 +124,15 @@ spec:
                     x-kubernetes-preserve-unknown-fields: true
                 type: object
               tlsRenegotiation:
+                description: TLSNegotiation sets the underlying negotiation strategy
+                  for an http channel.
+                enum:
+                - Never
+                - OnceAsClient
+                - FreelyAsClient
                 type: string
               tlsRootCA:
-                description: TLSField describes tls specific properties for endpoint
-                  authenticatin
+                description: TLS describes tls specific properties for endpoint authenticatin
                 properties:
                   secretKeyRef:
                     description: SecretKeyRef is the reference of a value in a secret

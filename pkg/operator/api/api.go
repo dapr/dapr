@@ -286,31 +286,31 @@ func processHTTPEndpointSecrets(ctx context.Context, endpoint *httpendpointsapi.
 		}
 	}
 
-	if pairNeedsSecretExtraction(endpoint.Spec.TLSClientCert.SecretKeyRef, endpoint.Auth) {
-		v, err := getSecret(ctx, endpoint.Spec.TLSClientCert.SecretKeyRef.Name, namespace, endpoint.Spec.TLSClientCert.SecretKeyRef, kubeClient)
+	if endpoint.HasTLSClientCertSecret() && pairNeedsSecretExtraction(*endpoint.Spec.ClientCert.SecretKeyRef, endpoint.Auth) {
+		v, err := getSecret(ctx, endpoint.Spec.ClientCert.SecretKeyRef.Name, namespace, *endpoint.Spec.ClientCert.SecretKeyRef, kubeClient)
 		if err != nil {
 			return err
 		}
 
-		endpoint.Spec.TLSClientCert.Value = v
+		endpoint.Spec.ClientCert.Value = &v
 	}
 
-	if pairNeedsSecretExtraction(endpoint.Spec.TLSClientKey.SecretKeyRef, endpoint.Auth) {
-		v, err := getSecret(ctx, endpoint.Spec.TLSClientKey.SecretKeyRef.Name, namespace, endpoint.Spec.TLSClientKey.SecretKeyRef, kubeClient)
+	if endpoint.HasTLSClientKeySecret() && pairNeedsSecretExtraction(*endpoint.Spec.ClientKey.SecretKeyRef, endpoint.Auth) {
+		v, err := getSecret(ctx, endpoint.Spec.ClientKey.SecretKeyRef.Name, namespace, *endpoint.Spec.ClientKey.SecretKeyRef, kubeClient)
 		if err != nil {
 			return err
 		}
 
-		endpoint.Spec.TLSClientKey.Value = v
+		endpoint.Spec.ClientKey.Value = &v
 	}
 
-	if pairNeedsSecretExtraction(endpoint.Spec.TLSRootCA.SecretKeyRef, endpoint.Auth) {
-		v, err := getSecret(ctx, endpoint.Spec.TLSRootCA.SecretKeyRef.Name, namespace, endpoint.Spec.TLSRootCA.SecretKeyRef, kubeClient)
+	if endpoint.HasTLSRootCASecret() && pairNeedsSecretExtraction(*endpoint.Spec.RootCA.SecretKeyRef, endpoint.Auth) {
+		v, err := getSecret(ctx, endpoint.Spec.RootCA.SecretKeyRef.Name, namespace, *endpoint.Spec.RootCA.SecretKeyRef, kubeClient)
 		if err != nil {
 			return err
 		}
 
-		endpoint.Spec.TLSRootCA.Value = v
+		endpoint.Spec.RootCA.Value = &v
 	}
 
 	return nil
