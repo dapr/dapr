@@ -63,7 +63,7 @@ func GetConfig() (Config, error) {
 		// auto-detect KubeClusterDomain from resolv.conf file
 		clusterDomain, err := utils.GetKubeClusterDomain()
 		if err != nil {
-			log.Errorf("failed to get clusterDomain err:%s, set default:%s", err, utils.DefaultKubeClusterDomain)
+			log.Errorf("Failed to get clusterDomain err:%s, set default:%s", err, utils.DefaultKubeClusterDomain)
 			c.KubeClusterDomain = utils.DefaultKubeClusterDomain
 		} else {
 			c.KubeClusterDomain = clusterDomain
@@ -127,7 +127,7 @@ func (c *Config) parseTolerationsJSON() {
 	ts := []corev1.Toleration{}
 	err := json.Unmarshal([]byte(c.IgnoreEntrypointTolerations), &ts)
 	if err != nil {
-		log.Warnf("couldn't parse entrypoint tolerations (%s): %v", c.IgnoreEntrypointTolerations, err)
+		log.Warnf("Couldn't parse entrypoint tolerations (%s): %v", c.IgnoreEntrypointTolerations, err)
 		return
 	}
 

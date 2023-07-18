@@ -28,8 +28,8 @@ var log = logger.NewLogger("dapr.injector.components")
 // Injectable parses the container definition from components annotations returning them as a list. Uses the appID to filter
 // only the eligble components for such apps avoiding injecting containers that will not be used.
 func Injectable(appID string, components []componentsapi.Component) []corev1.Container {
-	componentContainers := make([]corev1.Container, 0)
-	componentImages := make(map[string]bool, 0)
+	componentContainers := make([]corev1.Container, 0, len(components))
+	componentImages := make(map[string]bool, len(components))
 
 	for _, component := range components {
 		containerAsStr := component.Annotations[annotations.KeyPluggableComponentContainer]
@@ -38,7 +38,7 @@ func Injectable(appID string, components []componentsapi.Component) []corev1.Con
 		}
 		var container *corev1.Container
 		if err := json.Unmarshal([]byte(containerAsStr), &container); err != nil {
-			log.Warnf("could not unmarshal %s error: %v", component.Name, err)
+			log.Warnf("Could not unmarshal %s error: %v", component.Name, err)
 			continue
 		}
 

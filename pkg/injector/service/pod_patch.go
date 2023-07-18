@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"strings"
 
-	v1 "k8s.io/api/admission/v1"
+	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -38,7 +38,7 @@ const (
 	defaultMtlsEnabled = true
 )
 
-func (i *injector) getPodPatchOperations(ctx context.Context, ar *v1.AdmissionReview,
+func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.AdmissionReview,
 	namespace, image, imagePullPolicy string, kubeClient kubernetes.Interface, daprClient scheme.Interface,
 ) (patchOps []patcher.PatchOperation, err error) {
 	req := ar.Request
