@@ -1,4 +1,4 @@
-# This value is essential in determining whether to build this chart or not based on the usecase. For example this chart should not be included while generating manifest file for dapr which is achieved by overriding this value.
+# This value is essential in determining whether to build this chart or not based on the use case. For example this chart should not be included while generating manifest file for dapr which is achieved by overriding this value.
 dapr_config_chart_included: true
 dapr_default_system_config_name: "daprsystem"
 component: config
