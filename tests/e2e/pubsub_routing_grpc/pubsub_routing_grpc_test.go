@@ -340,8 +340,9 @@ func TestPubSubGRPCRouting(t *testing.T) {
 	subscriberRoutingExternalURL := tr.Platform.AcquireAppExternalURL(subscriberAppName)
 	require.NotEmpty(t, subscriberRoutingExternalURL, "subscriberRoutingExternalURL must not be empty!")
 
-	_, err := utils.HTTPGetNTimes(publisherExternalURL, numHealthChecks)
-	require.NoError(t, err)
+	// Makes the test wait for the apps and load balancers to be ready
+	err := utils.HealthCheckApps(publisherExternalURL)
+	require.NoError(t, err, "Health checks failed")
 
 	testPublishSubscribeRouting(t, publisherExternalURL, subscriberRoutingExternalURL, subscriberAppName, "grpc")
 }
