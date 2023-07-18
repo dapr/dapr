@@ -775,9 +775,9 @@ func (a *actorsRuntime) executeReminderWrapper(reminder *internal.Reminder) bool
 		if errors.Is(err, ErrReminderCanceled) {
 			// The handler is explicitly canceling the timer
 			log.Debug("Reminder " + reminder.ActorKey() + " was canceled by the actor")
+			return false
 		}
-		log.Errorf("error invoking reminder on actor %s: %s", reminder.ActorKey(), err)
-		return false
+		log.Errorf("Error invoking reminder on actor %s: %s", reminder.ActorKey(), err)
 	}
 
 	return true

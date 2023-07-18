@@ -81,6 +81,15 @@ func fakeRealTStore() (internal.TransactionalStateStore, error) {
 	return fakeStor, nil
 }
 
+var fakeStor2 internal.TransactionalStateStore
+
+func fakeRealTStore2() (internal.TransactionalStateStore, error) {
+	if fakeStor2 == nil {
+		fakeStor2 = daprt.NewFakeStateStore()
+	}
+	return fakeStor2, nil
+}
+
 func fakeRealTStoreWithNoLock() (internal.TransactionalStateStore, error) {
 	if fakeStor == nil {
 		fakeStor = daprt.NewFakeStateStore()
@@ -203,14 +212,16 @@ func TestReminderCountFiring(t *testing.T) {
 	diagtestutils.RequireTagNotExist(t, rows, diagtestutils.NewTag("success", strconv.FormatBool(false)))
 }
 
-// TD: FIX
 func TestReminderCountFiringBad(t *testing.T) {
 	testReminders := newTestReminders()
 	defer testReminders.Close()
 
 	fakeStor = nil
 	testReminders.SetStateStoreProviderFn(fakeRealTStore)
+	var executereminderFnCount int64 = 0
 	testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
+		executereminderFnCount++
+		diag.DefaultMonitoring.ActorReminderFired(reminder.ActorType, false)
 		return true
 	})
 	testReminders.SetLookupActorFn(func(string, string) (bool, string) {
@@ -219,7 +230,6 @@ func TestReminderCountFiringBad(t *testing.T) {
 	testReminders.Init(context.TODO())
 
 	actorType, actorID := getTestActorTypeAndID()
-	// fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testReminders.clock)
 
 	// init default service metrics where actor metrics are registered
 	assert.NoError(t, diag.DefaultMonitoring.Init(testReminders.config.AppID))
@@ -257,6 +267,7 @@ func TestReminderCountFiringBad(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(rows))
 	assert.Equal(t, int64(numReminders*numPeriods), rows[0].Data.(*view.CountData).Value)
+	assert.Equal(t, int64(numReminders*numPeriods), executereminderFnCount)
 	diagtestutils.RequireTagExist(t, rows, diagtestutils.NewTag("success", strconv.FormatBool(false)))
 	diagtestutils.RequireTagNotExist(t, rows, diagtestutils.NewTag("success", strconv.FormatBool(true)))
 }
@@ -267,9 +278,7 @@ func TestSetReminderTrack(t *testing.T) {
 
 	fakeStor = nil
 	testReminders.SetStateStoreProviderFn(fakeRealTStore)
-	executed := make(chan string, 1)
 	testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
-		executed <- reminder.Key()
 		return true
 	})
 	testReminders.SetLookupActorFn(func(string, string) (bool, string) {
@@ -348,9 +357,8 @@ func TestCreateReminder(t *testing.T) {
 
 	fakeStor = nil
 	testReminders.SetStateStoreProviderFn(fakeRealTStoreWithNoLock)
-	// executed := make(chan string, 1)
 	testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
-		// executed <- reminder.Key()
+		diag.DefaultMonitoring.ActorReminderFired(reminder.ActorType, true)
 		return false
 	})
 	testReminders.SetLookupActorFn(func(string, string) (bool, string) {
@@ -404,8 +412,8 @@ func TestCreateReminder(t *testing.T) {
 	testRemindersWithPartition := newTestRemindersWithMockAndActorMetadataPartition()
 	defer testRemindersWithPartition.Close()
 
-	fakeStor = nil
-	testRemindersWithPartition.SetStateStoreProviderFn(fakeRealTStore)
+	fakeStor2 = nil
+	testRemindersWithPartition.SetStateStoreProviderFn(fakeRealTStore2)
 	testRemindersWithPartition.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
 		// executed <- reminder.Key()
 		return false
@@ -509,7 +517,7 @@ func newTestRemindersWithMockAndActorMetadataPartition() *reminders {
 	}
 	clock := clocktesting.NewFakeClock(startOfTime)
 	r := NewRemindersProvider(clock, opts)
-	r.SetStateStoreProviderFn(fakeTStore)
+	// r.SetStateStoreProviderFn(fakeTStore)
 	return r.(*reminders)
 }
 
