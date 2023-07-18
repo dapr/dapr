@@ -164,7 +164,7 @@ func parseConfiguration(conf Config, daprConfig *daprGlobalConfig.Configuration)
 		conf.AllowedClockSkew = d
 	}
 
-	if len(daprConfig.Spec.MTLSSpec.ControlPlaneTrustDomain) > 0 {
+	if daprConfig.Spec.MTLSSpec != nil && len(daprConfig.Spec.MTLSSpec.ControlPlaneTrustDomain) > 0 {
 		conf.TrustDomain = daprConfig.Spec.MTLSSpec.ControlPlaneTrustDomain
 	}
 
@@ -174,13 +174,12 @@ func parseConfiguration(conf Config, daprConfig *daprGlobalConfig.Configuration)
 	// In Kubernetes mode, we always allow the built-in "kubernetes" validator
 	// In self-hosted mode, the built-in "insecure" validator is enabled only if no other validator is configured
 	conf.Validators = map[sentryv1pb.SignCertificateRequest_TokenValidator]map[string]string{}
-	tokenValidatorSpec := daprConfig.Spec.MTLSSpec.TokenValidators
 	if IsKubernetesHosted() {
 		conf.DefaultValidator = sentryv1pb.SignCertificateRequest_KUBERNETES
 		conf.Validators[sentryv1pb.SignCertificateRequest_KUBERNETES] = map[string]string{}
 	}
-	if len(tokenValidatorSpec) > 0 {
-		for _, v := range tokenValidatorSpec {
+	if daprConfig.Spec.MTLSSpec != nil && len(daprConfig.Spec.MTLSSpec.TokenValidators) > 0 {
+		for _, v := range daprConfig.Spec.MTLSSpec.TokenValidators {
 			// Check if the name is a valid one
 			// We do not allow re-configuring the built-in validators
 			val, ok := sentryv1pb.SignCertificateRequest_TokenValidator_value[strings.ToUpper(v.Name)]
