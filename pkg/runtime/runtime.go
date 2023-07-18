@@ -2987,8 +2987,11 @@ func (a *DaprRuntime) getHTTPEndpointAppChannel(pipeline httpMiddleware.Pipeline
 		CompStore:            a.compStore,
 		MaxConcurrency:       a.runtimeConfig.appConnectionConfig.MaxConcurrency,
 		Pipeline:             pipeline,
-		TracingSpec:          a.globalConfig.Spec.TracingSpec,
 		MaxRequestBodySizeMB: a.runtimeConfig.maxRequestBodySize,
+	}
+
+	if a.globalConfig.Spec.TracingSpec != nil {
+		conf.TracingSpec = *a.globalConfig.Spec.TracingSpec
 	}
 
 	var tlsConfig *tls.Config
