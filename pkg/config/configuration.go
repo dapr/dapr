@@ -32,6 +32,7 @@ import (
 	"github.com/dapr/dapr/pkg/buildinfo"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/ptr"
 )
 
 // Feature Flags section
@@ -99,35 +100,35 @@ type AccessControlListOperationAction struct {
 }
 
 type ConfigurationSpec struct {
-	HTTPPipelineSpec    PipelineSpec       `json:"httpPipeline,omitempty" yaml:"httpPipeline,omitempty"`
-	AppHTTPPipelineSpec PipelineSpec       `json:"appHttpPipeline,omitempty" yaml:"appHttpPipeline,omitempty"`
-	TracingSpec         TracingSpec        `json:"tracing,omitempty" yaml:"tracing,omitempty"`
-	MTLSSpec            MTLSSpec           `json:"mtls,omitempty" yaml:"mtls,omitempty"`
-	MetricSpec          MetricSpec         `json:"metric,omitempty" yaml:"metric,omitempty"`
-	MetricsSpec         MetricSpec         `json:"metrics,omitempty" yaml:"metrics,omitempty"`
-	Secrets             SecretsSpec        `json:"secrets,omitempty" yaml:"secrets,omitempty"`
-	AccessControlSpec   AccessControlSpec  `json:"accessControl,omitempty" yaml:"accessControl,omitempty"`
-	NameResolutionSpec  NameResolutionSpec `json:"nameResolution,omitempty" yaml:"nameResolution,omitempty"`
-	Features            []FeatureSpec      `json:"features,omitempty" yaml:"features,omitempty"`
-	APISpec             APISpec            `json:"api,omitempty" yaml:"api,omitempty"`
-	ComponentsSpec      ComponentsSpec     `json:"components,omitempty" yaml:"components,omitempty"`
-	LoggingSpec         LoggingSpec        `json:"logging,omitempty" yaml:"logging,omitempty"`
+	HTTPPipelineSpec    *PipelineSpec       `json:"httpPipeline,omitempty" yaml:"httpPipeline,omitempty"`
+	AppHTTPPipelineSpec *PipelineSpec       `json:"appHttpPipeline,omitempty" yaml:"appHttpPipeline,omitempty"`
+	TracingSpec         *TracingSpec        `json:"tracing,omitempty" yaml:"tracing,omitempty"`
+	MTLSSpec            *MTLSSpec           `json:"mtls,omitempty" yaml:"mtls,omitempty"`
+	MetricSpec          *MetricSpec         `json:"metric,omitempty" yaml:"metric,omitempty"`
+	MetricsSpec         *MetricSpec         `json:"metrics,omitempty" yaml:"metrics,omitempty"`
+	Secrets             *SecretsSpec        `json:"secrets,omitempty" yaml:"secrets,omitempty"`
+	AccessControlSpec   *AccessControlSpec  `json:"accessControl,omitempty" yaml:"accessControl,omitempty"`
+	NameResolutionSpec  *NameResolutionSpec `json:"nameResolution,omitempty" yaml:"nameResolution,omitempty"`
+	Features            []FeatureSpec       `json:"features,omitempty" yaml:"features,omitempty"`
+	APISpec             *APISpec            `json:"api,omitempty" yaml:"api,omitempty"`
+	ComponentsSpec      *ComponentsSpec     `json:"components,omitempty" yaml:"components,omitempty"`
+	LoggingSpec         *LoggingSpec        `json:"logging,omitempty" yaml:"logging,omitempty"`
 }
 
 type SecretsSpec struct {
-	Scopes []SecretsScope `json:"scopes"`
+	Scopes []SecretsScope `json:"scopes,omitempty"`
 }
 
 // SecretsScope defines the scope for secrets.
 type SecretsScope struct {
 	DefaultAccess  string   `json:"defaultAccess,omitempty" yaml:"defaultAccess,omitempty"`
-	StoreName      string   `json:"storeName" yaml:"storeName"`
+	StoreName      string   `json:"storeName,omitempty" yaml:"storeName,omitempty"`
 	AllowedSecrets []string `json:"allowedSecrets,omitempty" yaml:"allowedSecrets,omitempty"`
 	DeniedSecrets  []string `json:"deniedSecrets,omitempty" yaml:"deniedSecrets,omitempty"`
 }
 
 type PipelineSpec struct {
-	Handlers []HandlerSpec `json:"handlers" yaml:"handlers"`
+	Handlers []HandlerSpec `json:"handlers,omitempty" yaml:"handlers,omitempty"`
 }
 
 // APISpec describes the configuration for Dapr APIs.
@@ -171,9 +172,9 @@ func (r APIAccessRules) GetRulesByProtocol(protocol APIAccessRuleProtocol) []API
 }
 
 type HandlerSpec struct {
-	Name         string       `json:"name" yaml:"name"`
-	Type         string       `json:"type" yaml:"type"`
-	Version      string       `json:"version" yaml:"version"`
+	Name         string       `json:"name,omitempty" yaml:"name,omitempty"`
+	Type         string       `json:"type,omitempty" yaml:"type,omitempty"`
+	Version      string       `json:"version,omitempty" yaml:"version,omitempty"`
 	SelectorSpec SelectorSpec `json:"selector,omitempty" yaml:"selector,omitempty"`
 }
 
@@ -183,7 +184,7 @@ func (h HandlerSpec) LogName() string {
 }
 
 type SelectorSpec struct {
-	Fields []SelectorField `json:"fields" yaml:"fields"`
+	Fields []SelectorField `json:"fields,omitempty" yaml:"fields,omitempty"`
 }
 
 type SelectorField struct {
@@ -192,75 +193,89 @@ type SelectorField struct {
 }
 
 type TracingSpec struct {
-	SamplingRate string     `json:"samplingRate" yaml:"samplingRate"`
-	Stdout       bool       `json:"stdout" yaml:"stdout"`
-	Zipkin       ZipkinSpec `json:"zipkin" yaml:"zipkin"`
-	Otel         OtelSpec   `json:"otel" yaml:"otel"`
+	SamplingRate string      `json:"samplingRate,omitempty" yaml:"samplingRate,omitempty"`
+	Stdout       bool        `json:"stdout,omitempty" yaml:"stdout,omitempty"`
+	Zipkin       *ZipkinSpec `json:"zipkin,omitempty" yaml:"zipkin,omitempty"`
+	Otel         *OtelSpec   `json:"otel,omitempty" yaml:"otel,omitempty"`
 }
 
 // ZipkinSpec defines Zipkin exporter configurations.
 type ZipkinSpec struct {
-	EndpointAddress string `json:"endpointAddress" yaml:"endpointAddress"`
+	EndpointAddress string `json:"endpointAddress,omitempty" yaml:"endpointAddress,omitempty"`
 }
 
 // OtelSpec defines Otel exporter configurations.
 type OtelSpec struct {
-	Protocol        string `json:"protocol" yaml:"protocol"`
-	EndpointAddress string `json:"endpointAddress" yaml:"endpointAddress"`
-	IsSecure        bool   `json:"isSecure" yaml:"isSecure"`
+	Protocol        string `json:"protocol,omitempty" yaml:"protocol,omitempty"`
+	EndpointAddress string `json:"endpointAddress,omitempty" yaml:"endpointAddress,omitempty"`
+	// Defaults to true
+	IsSecure *bool `json:"isSecure,omitempty" yaml:"isSecure,omitempty"`
+}
+
+// GetIsSecure returns true if the connection should be secured.
+func (o OtelSpec) GetIsSecure() bool {
+	// Defaults to true if nil
+	return o.IsSecure == nil || *o.IsSecure
 }
 
 // MetricSpec configuration for metrics.
 type MetricSpec struct {
-	Enabled bool          `json:"enabled" yaml:"enabled"`
-	Rules   []MetricsRule `json:"rules" yaml:"rules"`
+	// Defaults to true
+	Enabled *bool         `json:"enabled,omitempty" yaml:"enabled,omitempty"`
+	Rules   []MetricsRule `json:"rules,omitempty" yaml:"rules,omitempty"`
+}
+
+// GetEnabled returns true if metrics are enabled.
+func (m MetricSpec) GetEnabled() bool {
+	// Defaults to true if nil
+	return m.Enabled == nil || *m.Enabled
 }
 
 // MetricsRule defines configuration options for a metric.
 type MetricsRule struct {
-	Name   string        `json:"name" yaml:"name"`
-	Labels []MetricLabel `json:"labels" yaml:"labels"`
+	Name   string        `json:"name,omitempty" yaml:"name,omitempty"`
+	Labels []MetricLabel `json:"labels,omitempty" yaml:"labels,omitempty"`
 }
 
 // MetricsLabel defines an object that allows to set regex expressions for a label.
 type MetricLabel struct {
-	Name  string            `json:"name" yaml:"name"`
-	Regex map[string]string `json:"regex" yaml:"regex"`
+	Name  string            `json:"name,omitempty" yaml:"name,omitempty"`
+	Regex map[string]string `json:"regex,omitempty" yaml:"regex,omitempty"`
 }
 
 // AppPolicySpec defines the policy data structure for each app.
 type AppPolicySpec struct {
-	AppName             string         `json:"appId" yaml:"appId"`
-	DefaultAction       string         `json:"defaultAction" yaml:"defaultAction"`
-	TrustDomain         string         `json:"trustDomain" yaml:"trustDomain"`
-	Namespace           string         `json:"namespace" yaml:"namespace"`
-	AppOperationActions []AppOperation `json:"operations" yaml:"operations"`
+	AppName             string         `json:"appId,omitempty" yaml:"appId,omitempty"`
+	DefaultAction       string         `json:"defaultAction,omitempty" yaml:"defaultAction,omitempty"`
+	TrustDomain         string         `json:"trustDomain,omitempty" yaml:"trustDomain,omitempty"`
+	Namespace           string         `json:"namespace,omitempty" yaml:"namespace,omitempty"`
+	AppOperationActions []AppOperation `json:"operations,omitempty" yaml:"operations,omitempty"`
 }
 
 // AppOperation defines the data structure for each app operation.
 type AppOperation struct {
-	Operation string   `json:"name" yaml:"name"`
-	HTTPVerb  []string `json:"httpVerb" yaml:"httpVerb"`
-	Action    string   `json:"action" yaml:"action"`
+	Operation string   `json:"name,omitempty" yaml:"name,omitempty"`
+	HTTPVerb  []string `json:"httpVerb,omitempty" yaml:"httpVerb,omitempty"`
+	Action    string   `json:"action,omitempty" yaml:"action,omitempty"`
 }
 
 // AccessControlSpec is the spec object in ConfigurationSpec.
 type AccessControlSpec struct {
-	DefaultAction string          `json:"defaultAction" yaml:"defaultAction"`
-	TrustDomain   string          `json:"trustDomain" yaml:"trustDomain"`
-	AppPolicies   []AppPolicySpec `json:"policies" yaml:"policies"`
+	DefaultAction string          `json:"defaultAction,omitempty" yaml:"defaultAction,omitempty"`
+	TrustDomain   string          `json:"trustDomain,omitempty" yaml:"trustDomain,omitempty"`
+	AppPolicies   []AppPolicySpec `json:"policies,omitempty" yaml:"policies,omitempty"`
 }
 
 type NameResolutionSpec struct {
-	Component     string      `json:"component" yaml:"component"`
-	Version       string      `json:"version" yaml:"version"`
-	Configuration interface{} `json:"configuration" yaml:"configuration"`
+	Component     string `json:"component,omitempty" yaml:"component,omitempty"`
+	Version       string `json:"version,omitempty" yaml:"version,omitempty"`
+	Configuration any    `json:"configuration,omitempty" yaml:"configuration,omitempty"`
 }
 
 type MTLSSpec struct {
-	Enabled          bool   `json:"enabled" yaml:"enabled"`
-	WorkloadCertTTL  string `json:"workloadCertTTL" yaml:"workloadCertTTL"`
-	AllowedClockSkew string `json:"allowedClockSkew" yaml:"allowedClockSkew"`
+	Enabled          bool   `json:"enabled,omitempty" yaml:"enabled,omitempty"`
+	WorkloadCertTTL  string `json:"workloadCertTTL,omitempty" yaml:"workloadCertTTL,omitempty"`
+	AllowedClockSkew string `json:"allowedClockSkew,omitempty" yaml:"allowedClockSkew,omitempty"`
 }
 
 // SpiffeID represents the separated fields in a spiffe id.
@@ -285,7 +300,7 @@ type ComponentsSpec struct {
 // LoggingSpec defines the configuration for logging.
 type LoggingSpec struct {
 	// Configure API logging.
-	APILogging APILoggingSpec `json:"apiLogging,omitempty" yaml:"apiLogging,omitempty"`
+	APILogging *APILoggingSpec `json:"apiLogging,omitempty" yaml:"apiLogging,omitempty"`
 }
 
 // APILoggingSpec defines the configuration for API logging.
@@ -296,7 +311,7 @@ type APILoggingSpec struct {
 	// When enabled, obfuscates the values of URLs in HTTP API logs, logging the route name rather than the full path being invoked, which could contain PII.
 	// Default: false.
 	// This option has no effect if API logging is disabled.
-	ObfuscateURLs bool `json:"obfuscateURLs" yaml:"obfuscateURLs"`
+	ObfuscateURLs bool `json:"obfuscateURLs,omitempty" yaml:"obfuscateURLs,omitempty"`
 	// If true, health checks are not reported in API logs. Default: false.
 	// This option has no effect if API logging is disabled.
 	OmitHealthChecks bool `json:"omitHealthChecks,omitempty" yaml:"omitHealthChecks,omitempty"`
@@ -306,19 +321,15 @@ type APILoggingSpec struct {
 func LoadDefaultConfiguration() *Configuration {
 	return &Configuration{
 		Spec: ConfigurationSpec{
-			TracingSpec: TracingSpec{
-				SamplingRate: "",
-				Otel: OtelSpec{
-					IsSecure: true,
+			TracingSpec: &TracingSpec{
+				Otel: &OtelSpec{
+					IsSecure: ptr.Of(true),
 				},
 			},
-			MetricSpec: MetricSpec{
-				Enabled: true,
+			MetricSpec: &MetricSpec{
+				Enabled: ptr.Of(true),
 			},
-			MetricsSpec: MetricSpec{
-				Enabled: true,
-			},
-			AccessControlSpec: AccessControlSpec{
+			AccessControlSpec: &AccessControlSpec{
 				DefaultAction: AllowAccess,
 				TrustDomain:   "public",
 			},
@@ -327,36 +338,41 @@ func LoadDefaultConfiguration() *Configuration {
 }
 
 // LoadStandaloneConfiguration gets the path to a config file and loads it into a configuration.
-func LoadStandaloneConfiguration(config string) (*Configuration, string, error) {
-	_, err := os.Stat(config)
-	if err != nil {
-		return nil, "", err
-	}
-
-	b, err := os.ReadFile(config)
-	if err != nil {
-		return nil, "", err
-	}
-
-	// Parse environment variables from yaml
-	b = []byte(os.ExpandEnv(string(b)))
-
+func LoadStandaloneConfiguration(configs ...string) (*Configuration, error) {
 	conf := LoadDefaultConfiguration()
-	err = yaml.Unmarshal(b, conf)
-	if err != nil {
-		return nil, string(b), err
-	}
-	err = sortAndValidateSecretsConfiguration(conf)
-	if err != nil {
-		return nil, string(b), err
+
+	// Load all config files and apply them on top of the default config
+	for _, config := range configs {
+		_, err := os.Stat(config)
+		if err != nil {
+			return nil, err
+		}
+
+		b, err := os.ReadFile(config)
+		if err != nil {
+			return nil, err
+		}
+
+		// Parse environment variables from yaml
+		b = []byte(os.ExpandEnv(string(b)))
+
+		err = yaml.Unmarshal(b, conf)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	sortMetricsSpec(conf)
-	return conf, string(b), nil
+	err := conf.sortAndValidateSecretsConfiguration()
+	if err != nil {
+		return nil, err
+	}
+
+	conf.sortMetricsSpec()
+	return conf, nil
 }
 
 // LoadKubernetesConfiguration gets configuration from the Kubernetes operator with a given name.
-func LoadKubernetesConfiguration(config, namespace string, podName string, operatorClient operatorv1pb.OperatorClient) (*Configuration, error) {
+func LoadKubernetesConfiguration(config string, namespace string, podName string, operatorClient operatorv1pb.OperatorClient) (*Configuration, error) {
 	resp, err := operatorClient.GetConfiguration(context.Background(), &operatorv1pb.GetConfigurationRequest{
 		Name:      config,
 		Namespace: namespace,
@@ -365,21 +381,22 @@ func LoadKubernetesConfiguration(config, namespace string, podName string, opera
 	if err != nil {
 		return nil, err
 	}
-	if resp.GetConfiguration() == nil {
+	b := resp.GetConfiguration()
+	if len(b) == 0 {
 		return nil, fmt.Errorf("configuration %s not found", config)
 	}
 	conf := LoadDefaultConfiguration()
-	err = json.Unmarshal(resp.GetConfiguration(), conf)
+	err = json.Unmarshal(b, conf)
 	if err != nil {
 		return nil, err
 	}
 
-	err = sortAndValidateSecretsConfiguration(conf)
+	err = conf.sortAndValidateSecretsConfiguration()
 	if err != nil {
 		return nil, err
 	}
 
-	sortMetricsSpec(conf)
+	conf.sortMetricsSpec()
 	return conf, nil
 }
 
@@ -410,44 +427,9 @@ func SetTracingSpecFromEnv(conf *Configuration) {
 		}
 
 		if insecure := os.Getenv(env.OtlpExporterInsecure); insecure == "true" {
-			conf.Spec.TracingSpec.Otel.IsSecure = false
+			conf.Spec.TracingSpec.Otel.IsSecure = ptr.Of(false)
 		}
 	}
-}
-
-// Apply .metrics if set. If not, retain .metric.
-func sortMetricsSpec(conf *Configuration) {
-	if !conf.Spec.MetricsSpec.Enabled {
-		conf.Spec.MetricSpec.Enabled = false
-	}
-
-	if len(conf.Spec.MetricsSpec.Rules) > 0 {
-		conf.Spec.MetricSpec.Rules = conf.Spec.MetricsSpec.Rules
-	}
-}
-
-// Validate the secrets configuration and sort to the allowed and denied lists if present.
-func sortAndValidateSecretsConfiguration(conf *Configuration) error {
-	scopes := conf.Spec.Secrets.Scopes
-	set := sets.NewString()
-	for _, scope := range scopes {
-		// validate scope
-		if set.Has(scope.StoreName) {
-			return fmt.Errorf("%q storeName is repeated in secrets configuration", scope.StoreName)
-		}
-		if scope.DefaultAccess != "" &&
-			!strings.EqualFold(scope.DefaultAccess, AllowAccess) &&
-			!strings.EqualFold(scope.DefaultAccess, DenyAccess) {
-			return fmt.Errorf("defaultAccess %q can be either allow or deny", scope.DefaultAccess)
-		}
-		set.Insert(scope.StoreName)
-
-		// modify scope
-		sort.Strings(scope.AllowedSecrets)
-		sort.Strings(scope.DeniedSecrets)
-	}
-
-	return nil
 }
 
 // IsSecretAllowed Check if the secret is allowed to be accessed.
@@ -514,4 +496,134 @@ func (c Configuration) EnabledFeatures() []string {
 		i++
 	}
 	return features[:i]
+}
+
+// GetTracingSpec returns the tracing spec.
+// It's a short-hand that includes nil-checks for safety.
+func (c Configuration) GetTracingSpec() TracingSpec {
+	if c.Spec.TracingSpec == nil {
+		return TracingSpec{}
+	}
+	return *c.Spec.TracingSpec
+}
+
+// GetMTLSSpec returns the mTLS spec.
+// It's a short-hand that includes nil-checks for safety.
+func (c Configuration) GetMTLSSpec() MTLSSpec {
+	if c.Spec.MTLSSpec == nil {
+		return MTLSSpec{}
+	}
+	return *c.Spec.MTLSSpec
+}
+
+// GetMetricsSpec returns the metrics spec.
+// It's a short-hand that includes nil-checks for safety.
+func (c Configuration) GetMetricsSpec() MetricSpec {
+	if c.Spec.MetricSpec == nil {
+		return MetricSpec{}
+	}
+	return *c.Spec.MetricSpec
+}
+
+// GetAPISpec returns the API spec.
+// It's a short-hand that includes nil-checks for safety.
+func (c Configuration) GetAPISpec() APISpec {
+	if c.Spec.APISpec == nil {
+		return APISpec{}
+	}
+	return *c.Spec.APISpec
+}
+
+// GetLoggingSpec returns the Logging spec.
+// It's a short-hand that includes nil-checks for safety.
+func (c Configuration) GetLoggingSpec() LoggingSpec {
+	if c.Spec.LoggingSpec == nil {
+		return LoggingSpec{}
+	}
+	return *c.Spec.LoggingSpec
+}
+
+// GetLoggingSpec returns the Logging.APILogging spec.
+// It's a short-hand that includes nil-checks for safety.
+func (c Configuration) GetAPILoggingSpec() APILoggingSpec {
+	if c.Spec.LoggingSpec == nil || c.Spec.LoggingSpec.APILogging == nil {
+		return APILoggingSpec{}
+	}
+	return *c.Spec.LoggingSpec.APILogging
+}
+
+// ToYAML returns the Configuration represented as YAML.
+func (c *Configuration) ToYAML() (string, error) {
+	b, err := yaml.Marshal(c)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+// String implements fmt.Stringer and is used for debugging. It returns the Configuration object encoded as YAML.
+func (c *Configuration) String() string {
+	enc, err := c.ToYAML()
+	if err != nil {
+		return "Failed to marshal Configuration object to YAML: " + err.Error()
+	}
+	return enc
+}
+
+// Apply .metrics if set. If not, retain .metric.
+func (c *Configuration) sortMetricsSpec() {
+	if c.Spec.MetricsSpec != nil {
+		if c.Spec.MetricsSpec.Enabled != nil {
+			c.Spec.MetricSpec.Enabled = c.Spec.MetricsSpec.Enabled
+		}
+
+		if len(c.Spec.MetricsSpec.Rules) > 0 {
+			c.Spec.MetricSpec.Rules = c.Spec.MetricsSpec.Rules
+		}
+	}
+}
+
+// Validate the secrets configuration and sort to the allowed and denied lists if present.
+func (c *Configuration) sortAndValidateSecretsConfiguration() error {
+	if c.Spec.Secrets == nil {
+		return nil
+	}
+
+	set := sets.NewString()
+	for _, scope := range c.Spec.Secrets.Scopes {
+		// validate scope
+		if set.Has(scope.StoreName) {
+			return fmt.Errorf("%s storeName is repeated in secrets configuration", scope.StoreName)
+		}
+		if scope.DefaultAccess != "" &&
+			!strings.EqualFold(scope.DefaultAccess, AllowAccess) &&
+			!strings.EqualFold(scope.DefaultAccess, DenyAccess) {
+			return fmt.Errorf("defaultAccess %s can be either allow or deny", scope.DefaultAccess)
+		}
+		set.Insert(scope.StoreName)
+
+		// modify scope
+		sort.Strings(scope.AllowedSecrets)
+		sort.Strings(scope.DeniedSecrets)
+	}
+
+	return nil
+}
+
+// ToYAML returns the ConfigurationSpec represented as YAML.
+func (c ConfigurationSpec) ToYAML() (string, error) {
+	b, err := yaml.Marshal(&c)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+// String implements fmt.Stringer and is used for debugging. It returns the Configuration object encoded as YAML.
+func (c ConfigurationSpec) String() string {
+	enc, err := c.ToYAML()
+	if err != nil {
+		return fmt.Sprintf("Failed to marshal ConfigurationSpec object to YAML: %v", err)
+	}
+	return enc
 }
