@@ -854,12 +854,10 @@ func (r *reminders) startReminder(reminder *internal.Reminder, stopChannel chan 
 			}
 
 			if r.executeReminderFn != nil && !r.executeReminderFn(reminder) {
-				diag.DefaultMonitoring.ActorReminderFired(reminder.ActorType, err == nil)
 				log.Infof("Checkpoint 0")
 				nextTimer = nil
 				break L
 			}
-			diag.DefaultMonitoring.ActorReminderFired(reminder.ActorType, err == nil)
 
 			log.Infof("Checkpoint 1")
 			_, exists = r.activeReminders.Load(reminderKey)
