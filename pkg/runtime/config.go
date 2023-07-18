@@ -39,6 +39,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/validation"
 	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/ptr"
 )
 
 const (
@@ -96,7 +97,7 @@ type Config struct {
 	AppHealthThreshold           int
 	EnableAppHealthCheck         bool
 	Mode                         string
-	ConfigPath                   string
+	Config                       []string
 	UnixDomainSocket             string
 	DaprHTTPReadBufferSize       int
 	DisableBuiltinK8sSecretStore bool
@@ -129,7 +130,7 @@ type internalConfig struct {
 	gracefulShutdownDuration     time.Duration
 	enableAPILogging             *bool
 	disableBuiltinK8sSecretStore bool
-	configPath                   string
+	config                       []string
 	certChain                    *credentials.CertChain
 	registry                     *registry.Registry
 }
@@ -169,9 +170,6 @@ func FromConfig(cfg *Config) (*DaprRuntime, error) {
 		return nil, err
 	}
 
-	var globalConfig *config.Configuration
-	var configErr error
-
 	if intc.mTLSEnabled || intc.mode == modes.KubernetesMode {
 		intc.certChain, err = security.GetCertChain()
 		if err != nil {
@@ -191,18 +189,26 @@ func FromConfig(cfg *Config) (*DaprRuntime, error) {
 		operatorClient = client
 	}
 
-	var accessControlList *config.AccessControlList
 	namespace := os.Getenv("NAMESPACE")
 	podName := os.Getenv("POD_NAME")
 
-	if intc.configPath != "" {
+	var (
+		globalConfig *config.Configuration
+		configErr    error
+	)
+
+	if len(intc.config) > 0 {
 		switch intc.mode {
 		case modes.KubernetesMode:
-			log.Debug("Loading Kubernetes config resource: " + intc.configPath)
-			globalConfig, configErr = config.LoadKubernetesConfiguration(intc.configPath, namespace, podName, operatorClient)
+			if len(intc.config) > 1 {
+				// We are not returning an error here because in Kubernetes mode, the injector itself doesn't allow multiple configuration flags to be added, so this should never happen in normal environments
+				log.Warnf("Multiple configurations are not supported in Kubernetes mode; only the first one will be loaded")
+			}
+			log.Debug("Loading Kubernetes config resource: " + intc.config[0])
+			globalConfig, configErr = config.LoadKubernetesConfiguration(intc.config[0], namespace, podName, operatorClient)
 		case modes.StandaloneMode:
-			log.Debug("Loading config from file: " + intc.configPath)
-			globalConfig, _, configErr = config.LoadStandaloneConfiguration(intc.configPath)
+			log.Debug("Loading config from file(s): " + strings.Join(intc.config, ", "))
+			globalConfig, configErr = config.LoadStandaloneConfiguration(intc.config...)
 		}
 	}
 
@@ -221,8 +227,9 @@ func FromConfig(cfg *Config) (*DaprRuntime, error) {
 	}
 
 	// Initialize metrics only if MetricSpec is enabled.
-	if globalConfig.Spec.MetricSpec.Enabled {
-		if mErr := diag.InitMetrics(intc.id, namespace, globalConfig.Spec.MetricSpec.Rules); mErr != nil {
+	metricsSpec := globalConfig.GetMetricsSpec()
+	if metricsSpec.GetEnabled() {
+		if mErr := diag.InitMetrics(intc.id, namespace, metricsSpec.Rules); mErr != nil {
 			log.Errorf(rterrors.NewInit(rterrors.InitFailure, "metrics", mErr).Error())
 		}
 	}
@@ -244,7 +251,7 @@ func FromConfig(cfg *Config) (*DaprRuntime, error) {
 		}
 	}
 
-	accessControlList, err = acl.ParseAccessControlSpec(
+	accessControlList, err := acl.ParseAccessControlSpec(
 		globalConfig.Spec.AccessControlSpec,
 		intc.appConnectionConfig.Protocol.IsHTTP(),
 	)
@@ -254,7 +261,7 @@ func FromConfig(cfg *Config) (*DaprRuntime, error) {
 
 	// API logging can be enabled for this app or for every app, globally in the config
 	if intc.enableAPILogging == nil {
-		intc.enableAPILogging = &globalConfig.Spec.LoggingSpec.APILogging.Enabled
+		intc.enableAPILogging = ptr.Of(globalConfig.GetAPILoggingSpec().Enabled)
 	}
 
 	return newDaprRuntime(intc, globalConfig, accessControlList, resiliencyProvider), nil
@@ -264,7 +271,7 @@ func (c *Config) toInternal() (*internalConfig, error) {
 	intc := &internalConfig{
 		id:                   c.AppID,
 		mode:                 modes.DaprMode(c.Mode),
-		configPath:           c.ConfigPath,
+		config:               c.Config,
 		sentryServiceAddress: c.SentryAddress,
 		allowedOrigins:       c.AllowedOrigins,
 		kubernetes: configmodes.KubernetesConfig{

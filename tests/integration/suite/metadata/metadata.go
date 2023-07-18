@@ -45,32 +45,37 @@ func (m *metadata) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (m *metadata) Run(t *testing.T, ctx context.Context) {
-	m.proc.WaitUntilRunning(t, ctx)
+func (m *metadata) Run(t *testing.T, parentCtx context.Context) {
+	m.proc.WaitUntilRunning(t, parentCtx)
 
-	reqURL := fmt.Sprintf("http://localhost:%d/v1.0/metadata", m.proc.PublicPort())
+	t.Run("test HTTP", func(t *testing.T) {
+		tests := map[string]string{
+			"public endpoint": fmt.Sprintf("http://localhost:%d/v1.0/metadata", m.proc.PublicPort()),
+			"API endpoint":    fmt.Sprintf("http://localhost:%d/v1.0/metadata", m.proc.HTTPPort()),
+		}
+		for testName, reqURL := range tests {
+			t.Run(testName, func(t *testing.T) {
+				ctx, cancel := context.WithTimeout(parentCtx, time.Second*5)
+				defer cancel()
 
-	ctx, cancel := context.WithTimeout(ctx, time.Second*5)
-	defer cancel()
+				req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+				require.NoError(t, err)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
-	require.NoError(t, err)
+				resp, err := http.DefaultClient.Do(req)
+				require.NoError(t, err)
+				defer resp.Body.Close()
 
-	resp, err := http.DefaultClient.Do(req)
-	require.NoError(t, err)
-
-	resBody, err := io.ReadAll(resp.Body)
-	require.NoError(t, err)
-	require.NoError(t, resp.Body.Close())
-
-	validateResponse(t, m.proc.AppID(), m.proc.AppPort(), string(resBody))
+				validateResponse(t, m.proc.AppID(), m.proc.AppPort(), resp.Body)
+			})
+		}
+	})
 }
 
 // validateResponse asserts that the response body is valid JSON
 // and contains the expected fields.
-func validateResponse(t *testing.T, appID string, appPort int, body string) {
+func validateResponse(t *testing.T, appID string, appPort int, body io.Reader) {
 	bodyMap := map[string]interface{}{}
-	err := json.Unmarshal([]byte(body), &bodyMap)
+	err := json.NewDecoder(body).Decode(&bodyMap)
 	require.NoError(t, err)
 
 	require.Equal(t, appID, bodyMap["id"])
