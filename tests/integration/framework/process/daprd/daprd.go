@@ -16,7 +16,7 @@ package daprd
 import (
 	"context"
 	"fmt"
-	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -31,7 +31,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/freeport"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
-	"github.com/dapr/dapr/tests/integration/framework/process/http"
+	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 )
 
 type Daprd struct {
@@ -55,7 +55,7 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	uid, err := uuid.NewRandom()
 	require.NoError(t, err)
 
-	appHTTP := http.New(t)
+	appHTTP := prochttp.New(t)
 
 	fp := freeport.New(t, 6)
 	opts := options{
@@ -134,14 +134,18 @@ func (d *Daprd) Cleanup(t *testing.T) {
 }
 
 func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
-	dialer := &net.Dialer{Timeout: time.Second * 5}
+	client := http.Client{Timeout: time.Second}
 	assert.Eventually(t, func() bool {
-		conn, err := dialer.DialContext(ctx, "tcp", fmt.Sprintf("localhost:%d", d.publicPort))
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/v1.0/healthz", d.httpPort), nil)
 		if err != nil {
 			return false
 		}
-		require.NoError(t, conn.Close())
-		return true
+		resp, err := client.Do(req)
+		if err != nil {
+			return false
+		}
+		defer resp.Body.Close()
+		return http.StatusNoContent == resp.StatusCode
 	}, time.Second*5, 100*time.Millisecond)
 }
 
