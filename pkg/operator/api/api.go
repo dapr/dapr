@@ -487,8 +487,8 @@ func (a *apiServer) ListHTTPEndpoints(ctx context.Context, in *operatorv1pb.List
 		return nil, fmt.Errorf("error listing http endpoints: %w", err)
 	}
 
-	for _, item := range endpoints.Items {
-		err := processHTTPEndpointSecrets(ctx, &item, item.Namespace, a.Client)
+	for i, item := range endpoints.Items {
+		err := processHTTPEndpointSecrets(ctx, &endpoints.Items[i], item.Namespace, a.Client)
 		if err != nil {
 			log.Warnf("error processing secrets for http endpoint %s", item.Name, item.Namespace, err)
 			return &operatorv1pb.ListHTTPEndpointsResponse{}, err

@@ -38,6 +38,7 @@ func WithTLS(cert, key string) Option {
 
 		cert, _ := tls.X509KeyPair([]byte(cert), []byte(key))
 		tlsConfig := &tls.Config{
+			MinVersion:   tls.VersionTLS12,
 			ClientCAs:    caCertPool,
 			ClientAuth:   tls.RequireAndVerifyClientCert,
 			Certificates: []tls.Certificate{cert},

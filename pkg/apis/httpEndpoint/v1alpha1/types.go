@@ -103,15 +103,19 @@ type GenericNameValueResource struct {
 func (g GenericNameValueResource) Kind() string {
 	return kind
 }
+
 func (g GenericNameValueResource) GetName() string {
 	return g.Name
 }
+
 func (g GenericNameValueResource) GetNamespace() string {
 	return g.Namespace
 }
+
 func (g GenericNameValueResource) GetSecretStore() string {
 	return g.SecretStore
 }
+
 func (g GenericNameValueResource) NameValuePairs() []common.NameValuePair {
 	return g.Pairs
 }
