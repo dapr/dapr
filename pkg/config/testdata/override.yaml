@@ -1,10 +1,11 @@
 apiVersion: dapr.io/v1alpha1
 kind: Configuration
 metadata:
-  name: daprConfig
+  name: daprsystem
+  namespace: default
 spec:
+  mtls:
+    enabled: false
   features:
-    - name: Actor.Reentrancy
-      enabled: true
     - name: Test.Feature
-      enabled: false
+      enabled: true

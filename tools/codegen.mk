@@ -21,7 +21,7 @@ ifeq (, $(shell which controller-gen))
 		set -e ;\
 		CONTROLLER_GEN_TMP_DIR="$$(mktemp -d)" ;\
 		cd "$$CONTROLLER_GEN_TMP_DIR" ;\
-		go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.5.0 ; \
+		go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.11.3 ; \
 		rm -rf "$$CONTROLLER_GEN_TMP_DIR" ;\
 	}
 CONTROLLER_GEN=$(GOBIN)/controller-gen
