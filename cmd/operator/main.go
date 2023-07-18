@@ -23,30 +23,30 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.operator")
+var (
+	log  = logger.NewLogger("dapr.operator")
+	opts = options.New()
+)
+
+func init() {
+	// Apply options to all loggers.
+	if err := logger.ApplyOptionsToLoggers(&opts.Logger); err != nil {
+		log.Fatal(err)
+	}
+}
 
 func main() {
-	log.Infof("starting Dapr Operator -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
+	log.Infof("Starting Dapr Operator -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
+	log.Infof("Log level set to: %s", opts.Logger.OutputLevel)
 
-	opts, err := options.New()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	metricsExporter := metrics.NewExporterWithOptions(metrics.DefaultMetricNamespace, opts.Metrics)
-
-	// Apply options to all loggers
-	if err = logger.ApplyOptionsToLoggers(&opts.Logger); err != nil {
-		log.Fatal(err)
-	}
-	log.Infof("log level set to: %s", opts.Logger.OutputLevel)
+	metricsExporter := metrics.NewExporterWithOptions(log, metrics.DefaultMetricNamespace, opts.Metrics)
 
 	// Initialize dapr metrics exporter
-	if err = metricsExporter.Init(); err != nil {
+	if err := metricsExporter.Init(); err != nil {
 		log.Fatal(err)
 	}
 
-	if err = monitoring.InitMetrics(); err != nil {
+	if err := monitoring.InitMetrics(); err != nil {
 		log.Fatal(err)
 	}
 

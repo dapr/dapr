@@ -34,27 +34,29 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.sentry")
+var (
+	log  = logger.NewLogger("dapr.sentry")
+	opts = options.New()
+)
+
+func init() {
+	// Apply options to all loggers
+	if err := logger.ApplyOptionsToLoggers(&opts.Logger); err != nil {
+		log.Fatal(err)
+	}
+}
 
 func main() {
-	log.Infof("starting sentry certificate authority -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
+	log.Infof("Starting Dapr Sentry certificate authority -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
+	log.Infof("Log level set to: %s", opts.Logger.OutputLevel)
 
-	opts := options.New()
-
-	metricsExporter := metrics.NewExporterWithOptions(metrics.DefaultMetricNamespace, opts.Metrics)
+	metricsExporter := metrics.NewExporterWithOptions(log, metrics.DefaultMetricNamespace, opts.Metrics)
 
 	if err := utils.SetEnvVariables(map[string]string{
 		utils.KubeConfigVar: opts.Kubeconfig,
 	}); err != nil {
 		log.Fatalf("error set env failed:  %s", err.Error())
 	}
-
-	// Apply options to all loggers
-	if err := logger.ApplyOptionsToLoggers(&opts.Logger); err != nil {
-		log.Fatal(err)
-	}
-
-	log.Infof("log level set to: %s", opts.Logger.OutputLevel)
 
 	// Initialize dapr metrics exporter
 	if err := metricsExporter.Init(); err != nil {
