@@ -396,7 +396,6 @@ func (m *mockGRPCServerUnary) methods() []grpc.MethodDesc {
 
 type mockGRPCServerStreamI interface {
 	mockGRPCServerUnaryI
-
 	CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStreamServer) error //nolint:nosnakecase
 }
 
@@ -486,8 +485,7 @@ func TestInvokeRemoteUnaryForHTTPEndpoint(t *testing.T) {
 	})
 }
 
-type mockChannel struct {
-}
+type mockChannel struct{}
 
 func (m *mockChannel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*invokev1.InvokeMethodResponse, error) {
 	return nil, nil
