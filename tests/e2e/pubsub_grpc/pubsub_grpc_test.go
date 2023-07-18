@@ -44,9 +44,6 @@ import (
 var tr *runner.TestRunner
 
 const (
-	// Number of get calls before starting tests.
-	numHealthChecks = 60
-
 	// used as the exclusive max of a random number that is used as a suffix to the first message sent.  Each subsequent message gets this number+1.
 	// This is random so the first message name is not the same every time.
 	randomOffsetMax           = 49
@@ -359,7 +356,7 @@ func testBulkPublishSuccessfully(t *testing.T, publisherExternalURL, subscriberE
 	// set to respond with success
 	setDesiredResponse(t, subscriberAppName, "success", publisherExternalURL, protocol)
 
-	log.Printf("Test bulkPublish and normal subscribe success flow\n")
+	log.Printf("Test bulkPublish and normal subscribe success flow")
 	sentMessages := testPublishBulk(t, publisherExternalURL, protocol)
 
 	time.Sleep(5 * time.Second)
@@ -368,7 +365,7 @@ func testBulkPublishSuccessfully(t *testing.T, publisherExternalURL, subscriberE
 }
 
 func testPublishSubscribeSuccessfully(t *testing.T, publisherExternalURL, subscriberExternalURL, _, subscriberAppName, protocol string) string {
-	log.Printf("Test publish subscribe success flow\n")
+	log.Printf("Test publish subscribe success flow")
 	sentMessages := testPublish(t, publisherExternalURL, protocol)
 
 	validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, sentMessages)
@@ -387,7 +384,7 @@ func testPublishBulkSubscribeSuccessfully(t *testing.T, publisherExternalURL, su
 }
 
 func testPublishWithoutTopic(t *testing.T, publisherExternalURL, subscriberExternalURL, _, _, protocol string) string {
-	log.Printf("Test publish without topic\n")
+	log.Printf("Test publish without topic")
 	commandBody := publishCommand{
 		ReqID:    "c-" + uuid.New().String(),
 		Protocol: protocol,
@@ -412,9 +409,9 @@ func testPublishWithoutTopic(t *testing.T, publisherExternalURL, subscriberExter
 func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subscriberExternalURL, subscriberResponse, subscriberAppName, protocol string) string {
 	var err error
 	var code int
-	log.Printf("Validating publisher health...\n")
-	_, err = utils.HTTPGetNTimes(publisherExternalURL, numHealthChecks)
-	require.NoError(t, err)
+	log.Print("Validating publisher health...")
+	err = utils.HealthCheckApps(publisherExternalURL)
+	require.NoError(t, err, "Health checks failed")
 
 	log.Printf("Set subscriber to respond with %s\n", subscriberResponse)
 	if subscriberResponse == "empty-json" {
@@ -463,8 +460,8 @@ func testValidateRedeliveryOrEmptyJSON(t *testing.T, publisherExternalURL, subsc
 	subscriberExternalURL = tr.Platform.AcquireAppExternalURL(subscriberAppName)
 	require.NotEmpty(t, subscriberExternalURL, "subscriberExternalURL must not be empty!")
 	if protocol == "http" {
-		_, err = utils.HTTPGetNTimes(subscriberExternalURL, numHealthChecks)
-		require.NoError(t, err)
+		err = utils.HealthCheckApps(subscriberExternalURL)
+		require.NoError(t, err, "Health checks failed")
 	} else {
 		conn, err := grpc.Dial(subscriberExternalURL, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
@@ -823,10 +820,9 @@ func TestPubSubGRPC(t *testing.T) {
 	subscriberExternalURL := tr.Platform.AcquireAppExternalURL(subscriberAppName)
 	require.NotEmpty(t, subscriberExternalURL, "subscriberExternalURL must not be empty!")
 
-	// This initial probe makes the test wait a little bit longer when needed,
-	// making this test less flaky due to delays in the deployment.
-	_, err := utils.HTTPGetNTimes(publisherExternalURL, numHealthChecks)
-	require.NoError(t, err)
+	// Makes the test wait for the apps and load balancers to be ready
+	err := utils.HealthCheckApps(publisherExternalURL)
+	require.NoError(t, err, "Health checks failed")
 
 	err = publishHealthCheck(publisherExternalURL)
 	require.NoError(t, err)
