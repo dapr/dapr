@@ -250,7 +250,7 @@ func newDaprRuntime(runtimeConfig *internalConfig, globalConfig *config.Configur
 	}
 
 	rt.componentAuthorizers = []ComponentAuthorizer{rt.namespaceComponentAuthorizer}
-	if globalConfig != nil && len(globalConfig.Spec.ComponentsSpec.Deny) > 0 {
+	if globalConfig != nil && globalConfig.Spec.ComponentsSpec != nil && len(globalConfig.Spec.ComponentsSpec.Deny) > 0 {
 		dl := newComponentDenyList(globalConfig.Spec.ComponentsSpec.Deny)
 		rt.componentAuthorizers = append(rt.componentAuthorizers, dl.IsAllowed)
 	}
@@ -309,7 +309,7 @@ func (a *DaprRuntime) getOperatorClient() (operatorv1pb.OperatorClient, error) {
 // setupTracing set up the trace exporters. Technically we don't need to pass `hostAddress` in,
 // but we do so here to explicitly call out the dependency on having `hostAddress` computed.
 func (a *DaprRuntime) setupTracing(hostAddress string, tpStore tracerProviderStore) error {
-	tracingSpec := a.globalConfig.Spec.TracingSpec
+	tracingSpec := a.globalConfig.GetTracingSpec()
 
 	// Register stdout trace exporter if user wants to debug requests or log as Info level.
 	if tracingSpec.Stdout {
@@ -317,7 +317,7 @@ func (a *DaprRuntime) setupTracing(hostAddress string, tpStore tracerProviderSto
 	}
 
 	// Register zipkin trace exporter if ZipkinSpec is specified
-	if tracingSpec.Zipkin.EndpointAddress != "" {
+	if tracingSpec.Zipkin != nil && tracingSpec.Zipkin.EndpointAddress != "" {
 		zipkinExporter, err := zipkin.New(tracingSpec.Zipkin.EndpointAddress)
 		if err != nil {
 			return err
@@ -326,24 +326,23 @@ func (a *DaprRuntime) setupTracing(hostAddress string, tpStore tracerProviderSto
 	}
 
 	// Register otel trace exporter if OtelSpec is specified
-	if tracingSpec.Otel.EndpointAddress != "" && tracingSpec.Otel.Protocol != "" {
+	if tracingSpec.Otel != nil && tracingSpec.Otel.EndpointAddress != "" && tracingSpec.Otel.Protocol != "" {
 		endpoint := tracingSpec.Otel.EndpointAddress
 		protocol := tracingSpec.Otel.Protocol
 		if protocol != "http" && protocol != "grpc" {
 			return fmt.Errorf("invalid protocol %v provided for Otel endpoint", protocol)
 		}
-		isSecure := tracingSpec.Otel.IsSecure
 
 		var client otlptrace.Client
 		if protocol == "http" {
 			clientOptions := []otlptracehttp.Option{otlptracehttp.WithEndpoint(endpoint)}
-			if !isSecure {
+			if !tracingSpec.Otel.GetIsSecure() {
 				clientOptions = append(clientOptions, otlptracehttp.WithInsecure())
 			}
 			client = otlptracehttp.NewClient(clientOptions...)
 		} else {
 			clientOptions := []otlptracegrpc.Option{otlptracegrpc.WithEndpoint(endpoint)}
-			if !isSecure {
+			if !tracingSpec.Otel.GetIsSecure() {
 				clientOptions = append(clientOptions, otlptracegrpc.WithInsecure())
 			}
 			client = otlptracegrpc.NewClient(clientOptions...)
@@ -617,50 +616,58 @@ func (a *DaprRuntime) appHealthChanged(status uint8) {
 
 func (a *DaprRuntime) populateSecretsConfiguration() {
 	// Populate in a map for easy lookup by store name.
+	if a.globalConfig.Spec.Secrets == nil {
+		return
+	}
+
 	for _, scope := range a.globalConfig.Spec.Secrets.Scopes {
 		a.compStore.AddSecretsConfiguration(scope.StoreName, scope)
 	}
 }
 
 func (a *DaprRuntime) buildHTTPPipelineForSpec(spec config.PipelineSpec, targetPipeline string) (pipeline httpMiddleware.Pipeline, err error) {
-	if a.globalConfig != nil {
-		pipeline.Handlers = make([]func(next nethttp.Handler) nethttp.Handler, 0, len(spec.Handlers))
-		for i := 0; i < len(spec.Handlers); i++ {
-			middlewareSpec := spec.Handlers[i]
-			component, exists := a.compStore.GetComponent(middlewareSpec.Type, middlewareSpec.Name)
-			if !exists {
-				// Log the error but continue with initializing the pipeline
-				log.Error("couldn't find middleware component defined in configuration with name %s and type %s",
-					middlewareSpec.Name, middlewareSpec.LogName())
-				continue
-			}
-			md := middleware.Metadata{Base: a.meta.ToBaseMetadata(component)}
-			handler, err := a.runtimeConfig.registry.HTTPMiddlewares().Create(middlewareSpec.Type, middlewareSpec.Version, md, middlewareSpec.LogName())
-			if err != nil {
-				e := fmt.Sprintf("process component %s error: %s", component.Name, err.Error())
-				if !component.Spec.IgnoreErrors {
-					log.Warn("error processing middleware component, daprd process will exit gracefully")
-					a.Shutdown(a.runtimeConfig.gracefulShutdownDuration)
-					log.Fatal(e)
-					// This error is only caught by tests, since during normal execution we panic
-					return pipeline, errors.New("dapr panicked")
-				}
-				log.Error(e)
-				continue
-			}
-			log.Infof("enabled %s/%s %s middleware", middlewareSpec.Type, targetPipeline, middlewareSpec.Version)
-			pipeline.Handlers = append(pipeline.Handlers, handler)
+	pipeline.Handlers = make([]func(next nethttp.Handler) nethttp.Handler, 0, len(spec.Handlers))
+	for i := 0; i < len(spec.Handlers); i++ {
+		middlewareSpec := spec.Handlers[i]
+		component, exists := a.compStore.GetComponent(middlewareSpec.Type, middlewareSpec.Name)
+		if !exists {
+			// Log the error but continue with initializing the pipeline
+			log.Error("couldn't find middleware component defined in configuration with name %s", middlewareSpec.LogName())
+			continue
 		}
+		md := middleware.Metadata{Base: a.meta.ToBaseMetadata(component)}
+		handler, err := a.runtimeConfig.registry.HTTPMiddlewares().Create(middlewareSpec.Type, middlewareSpec.Version, md, middlewareSpec.LogName())
+		if err != nil {
+			e := fmt.Sprintf("process component %s error: %s", component.Name, err.Error())
+			if !component.Spec.IgnoreErrors {
+				log.Warn("error processing middleware component, daprd process will exit gracefully")
+				a.Shutdown(a.runtimeConfig.gracefulShutdownDuration)
+				log.Fatal(e)
+				// This error is only caught by tests, since during normal execution we panic
+				return pipeline, errors.New("dapr panicked")
+			}
+			log.Error(e)
+			continue
+		}
+		log.Infof("enabled %s/%s %s middleware", middlewareSpec.Type, targetPipeline, middlewareSpec.Version)
+		pipeline.Handlers = append(pipeline.Handlers, handler)
 	}
+
 	return pipeline, nil
 }
 
 func (a *DaprRuntime) buildHTTPPipeline() (httpMiddleware.Pipeline, error) {
-	return a.buildHTTPPipelineForSpec(a.globalConfig.Spec.HTTPPipelineSpec, "http")
+	if a.globalConfig == nil || a.globalConfig.Spec.HTTPPipelineSpec == nil {
+		return httpMiddleware.Pipeline{}, nil
+	}
+	return a.buildHTTPPipelineForSpec(*a.globalConfig.Spec.HTTPPipelineSpec, "http")
 }
 
 func (a *DaprRuntime) buildAppHTTPPipeline() (httpMiddleware.Pipeline, error) {
-	return a.buildHTTPPipelineForSpec(a.globalConfig.Spec.AppHTTPPipelineSpec, "app channel")
+	if a.globalConfig == nil || a.globalConfig.Spec.AppHTTPPipelineSpec == nil {
+		return httpMiddleware.Pipeline{}, nil
+	}
+	return a.buildHTTPPipelineForSpec(*a.globalConfig.Spec.AppHTTPPipelineSpec, "app channel")
 }
 
 func (a *DaprRuntime) sendToDeadLetter(name string, msg *pubsub.NewMessage, deadLetterTopic string) (err error) {
@@ -1464,7 +1471,7 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		PubsubAdapter:               a.getPublishAdapter(),
 		Actors:                      a.actor,
 		SendToOutputBindingFn:       a.sendToOutputBinding,
-		TracingSpec:                 a.globalConfig.Spec.TracingSpec,
+		TracingSpec:                 a.globalConfig.GetTracingSpec(),
 		Shutdown:                    a.ShutdownWithWait,
 		GetComponentsCapabilitiesFn: a.getComponentsCapabilitesMap,
 		MaxRequestBodySize:          int64(a.runtimeConfig.maxRequestBodySize) << 20, // Convert from MB to bytes
@@ -1486,17 +1493,17 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		UnixDomainSocket:        a.runtimeConfig.unixDomainSocket,
 		ReadBufferSizeKB:        a.runtimeConfig.readBufferSize,
 		EnableAPILogging:        *a.runtimeConfig.enableAPILogging,
-		APILoggingObfuscateURLs: a.globalConfig.Spec.LoggingSpec.APILogging.ObfuscateURLs,
-		APILogHealthChecks:      !a.globalConfig.Spec.LoggingSpec.APILogging.OmitHealthChecks,
+		APILoggingObfuscateURLs: a.globalConfig.GetAPILoggingSpec().ObfuscateURLs,
+		APILogHealthChecks:      !a.globalConfig.GetAPILoggingSpec().OmitHealthChecks,
 	}
 
 	server := http.NewServer(http.NewServerOpts{
 		API:         a.daprHTTPAPI,
 		Config:      serverConf,
-		TracingSpec: a.globalConfig.Spec.TracingSpec,
-		MetricSpec:  a.globalConfig.Spec.MetricSpec,
+		TracingSpec: a.globalConfig.GetTracingSpec(),
+		MetricSpec:  a.globalConfig.GetMetricsSpec(),
 		Pipeline:    pipeline,
-		APISpec:     a.globalConfig.Spec.APISpec,
+		APISpec:     a.globalConfig.GetAPISpec(),
 	})
 	if err := server.StartNonBlocking(); err != nil {
 		return err
@@ -1509,7 +1516,7 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 func (a *DaprRuntime) startGRPCInternalServer(api grpc.API, port int) error {
 	// Since GRPCInteralServer is encrypted & authenticated, it is safe to listen on *
 	serverConf := a.getNewServerConfig([]string{""}, port)
-	server := grpc.NewInternalServer(api, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, a.authenticator, a.proxy)
+	server := grpc.NewInternalServer(api, serverConf, a.globalConfig.GetTracingSpec(), a.globalConfig.GetMetricsSpec(), a.authenticator, a.proxy)
 	if err := server.StartNonBlocking(); err != nil {
 		return err
 	}
@@ -1520,7 +1527,7 @@ func (a *DaprRuntime) startGRPCInternalServer(api grpc.API, port int) error {
 
 func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int) error {
 	serverConf := a.getNewServerConfig(a.runtimeConfig.apiListenAddresses, port)
-	server := grpc.NewAPIServer(api, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, a.globalConfig.Spec.APISpec, a.proxy, a.workflowEngine)
+	server := grpc.NewAPIServer(api, serverConf, a.globalConfig.GetTracingSpec(), a.globalConfig.GetMetricsSpec(), a.globalConfig.GetAPISpec(), a.proxy, a.workflowEngine)
 	if err := server.StartNonBlocking(); err != nil {
 		return err
 	}
@@ -1559,7 +1566,7 @@ func (a *DaprRuntime) getGRPCAPI() grpc.API {
 		DirectMessaging:             a.directMessaging,
 		Actors:                      a.actor,
 		SendToOutputBindingFn:       a.sendToOutputBinding,
-		TracingSpec:                 a.globalConfig.Spec.TracingSpec,
+		TracingSpec:                 a.globalConfig.GetTracingSpec(),
 		AccessControlList:           a.accessControlList,
 		Shutdown:                    a.ShutdownWithWait,
 		GetComponentsCapabilitiesFn: a.getComponentsCapabilitesMap,
@@ -1899,8 +1906,11 @@ func (a *DaprRuntime) initNameResolution() error {
 	var err error
 	resolverMetadata := nr.Metadata{}
 
-	resolverName := a.globalConfig.Spec.NameResolutionSpec.Component
-	resolverVersion := a.globalConfig.Spec.NameResolutionSpec.Version
+	var resolverName, resolverVersion string
+	if a.globalConfig.Spec.NameResolutionSpec != nil {
+		resolverName = a.globalConfig.Spec.NameResolutionSpec.Component
+		resolverVersion = a.globalConfig.Spec.NameResolutionSpec.Version
+	}
 
 	if resolverName == "" {
 		switch a.runtimeConfig.mode {
@@ -1921,7 +1931,9 @@ func (a *DaprRuntime) initNameResolution() error {
 	fName := utils.ComponentLogName(resolverName, "nameResolution", resolverVersion)
 	resolver, err = a.runtimeConfig.registry.NameResolutions().Create(resolverName, resolverVersion, fName)
 	resolverMetadata.Name = resolverName
-	resolverMetadata.Configuration = a.globalConfig.Spec.NameResolutionSpec.Configuration
+	if a.globalConfig.Spec.NameResolutionSpec != nil {
+		resolverMetadata.Configuration = a.globalConfig.Spec.NameResolutionSpec.Configuration
+	}
 	resolverMetadata.Properties = map[string]string{
 		nr.DaprHTTPPort: strconv.Itoa(a.runtimeConfig.httpPort),
 		nr.DaprPort:     strconv.Itoa(a.runtimeConfig.internalGRPCPort),
@@ -2240,7 +2252,7 @@ func (a *DaprRuntime) initActors() error {
 		GRPCConnectionFn: a.grpc.GetGRPCConnection,
 		Config:           actorConfig,
 		CertChain:        a.runtimeConfig.certChain,
-		TracingSpec:      a.globalConfig.Spec.TracingSpec,
+		TracingSpec:      a.globalConfig.GetTracingSpec(),
 		Resiliency:       a.resiliency,
 		StateStoreName:   actorStateStoreName,
 		CompStore:        a.compStore,
@@ -2893,7 +2905,7 @@ func (a *DaprRuntime) getAppHTTPChannelConfig(pipeline httpMiddleware.Pipeline, 
 		CompStore:            a.compStore,
 		MaxConcurrency:       a.runtimeConfig.appConnectionConfig.MaxConcurrency,
 		Pipeline:             pipeline,
-		TracingSpec:          a.globalConfig.Spec.TracingSpec,
+		TracingSpec:          a.globalConfig.GetTracingSpec(),
 		MaxRequestBodySizeMB: a.runtimeConfig.maxRequestBodySize,
 	}
 
@@ -3096,7 +3108,7 @@ func pubsubTopicKey(componentName, topicName string) string {
 func createGRPCManager(runtimeConfig *internalConfig, globalConfig *config.Configuration) *grpc.Manager {
 	grpcAppChannelConfig := &grpc.AppChannelConfig{}
 	if globalConfig != nil {
-		grpcAppChannelConfig.TracingSpec = globalConfig.Spec.TracingSpec
+		grpcAppChannelConfig.TracingSpec = globalConfig.GetTracingSpec()
 		grpcAppChannelConfig.AllowInsecureTLS = globalConfig.IsFeatureEnabled(config.AppChannelAllowInsecureTLS)
 	}
 	if runtimeConfig != nil {
