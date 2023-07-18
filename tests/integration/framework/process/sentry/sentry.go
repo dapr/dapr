@@ -19,7 +19,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"fmt"
-	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -122,14 +122,18 @@ func (s *Sentry) Cleanup(t *testing.T) {
 }
 
 func (s *Sentry) WaitUntilRunning(t *testing.T, ctx context.Context) {
-	dialer := net.Dialer{Timeout: time.Second * 5}
+	client := http.Client{Timeout: time.Second}
 	assert.Eventually(t, func() bool {
-		conn, err := dialer.DialContext(ctx, "tcp", fmt.Sprintf("localhost:%d", s.port))
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/healthz", s.healthzPort), nil)
 		if err != nil {
 			return false
 		}
-		require.NoError(t, conn.Close())
-		return true
+		resp, err := client.Do(req)
+		if err != nil {
+			return false
+		}
+		defer resp.Body.Close()
+		return http.StatusOK == resp.StatusCode
 	}, time.Second*5, 100*time.Millisecond)
 }
 
