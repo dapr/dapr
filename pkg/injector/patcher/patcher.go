@@ -14,8 +14,10 @@ limitations under the License.
 package patcher
 
 const (
+	// Path for patching containers.
 	PatchPathContainers = "/spec/containers"
-	PatchPathVolumes    = "/spec/volumes"
+	// Path for patching volumes.
+	PatchPathVolumes = "/spec/volumes"
 )
 
 // PatchOperation represents a discreet change to be applied to a Kubernetes resource.

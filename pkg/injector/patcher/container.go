@@ -37,19 +37,18 @@ func GetEnvPatchOperations(envs []corev1.EnvVar, addEnv []corev1.EnvVar, contain
 	// If there are existing env vars, then we are adding to an existing slice of env vars.
 	path += "/-"
 
+	// Get a map with all the existing env var names
+	existing := make(map[string]struct{}, len(envs))
+	for _, e := range envs {
+		existing[e.Name] = struct{}{}
+	}
+
 	patchOps := make([]PatchOperation, len(addEnv))
 	n := 0
 	for _, env := range addEnv {
-		isConflict := false
-		for _, actual := range envs {
-			if actual.Name == env.Name {
-				// Add only env vars that do not conflict with existing user defined/injected env vars.
-				isConflict = true
-				break
-			}
-		}
-
-		if isConflict {
+		// Add only env vars that do not conflict with existing user defined/injected env vars.
+		_, ok := existing[env.Name]
+		if ok {
 			continue
 		}
 
@@ -80,19 +79,23 @@ func GetVolumeMountPatchOperations(volumeMounts []corev1.VolumeMount, addMounts 
 	// If there are existing volume mounts, then we are adding to an existing slice of volume mounts.
 	path += "/-"
 
+	// Get a map with all the existingMounts mount paths
+	existingMounts := make(map[string]struct{}, len(volumeMounts))
+	existingNames := make(map[string]struct{}, len(volumeMounts))
+	for _, m := range volumeMounts {
+		existingMounts[m.MountPath] = struct{}{}
+		existingNames[m.Name] = struct{}{}
+	}
+
 	patchOps := make([]PatchOperation, len(addMounts))
 	n := 0
+	var ok bool
 	for _, addMount := range addMounts {
-		isConflict := false
-		for _, mount := range volumeMounts {
-			// conflict cases
-			if addMount.Name == mount.Name || addMount.MountPath == mount.MountPath {
-				isConflict = true
-				break
-			}
+		// Do not add the mount if a volume is already mounted on the same path or has the same name
+		if _, ok = existingMounts[addMount.MountPath]; ok {
+			continue
 		}
-
-		if isConflict {
+		if _, ok = existingNames[addMount.Name]; ok {
 			continue
 		}
 
