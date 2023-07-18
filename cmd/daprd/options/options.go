@@ -14,7 +14,6 @@ limitations under the License.
 package options
 
 import (
-	"errors"
 	"flag"
 	"strconv"
 	"strings"
@@ -61,7 +60,7 @@ type Options struct {
 	AppHealthThreshold           int
 	EnableAppHealthCheck         bool
 	Mode                         string
-	ConfigPath                   string
+	Config                       stringSliceFlag
 	UnixDomainSocket             string
 	DaprHTTPReadBufferSize       int
 	DisableBuiltinK8sSecretStore bool
@@ -87,7 +86,7 @@ func New(args []string) *Options {
 	flag.StringVar(&opts.AppProtocol, "app-protocol", string(protocol.HTTPProtocol), "Protocol for the application: grpc, grpcs, http, https, h2c")
 	flag.StringVar(&opts.ComponentsPath, "components-path", "", "Alias for --resources-path [Deprecated, use --resources-path]")
 	flag.Var(&opts.ResourcesPath, "resources-path", "Path for resources directory. If not specified, no resources will be loaded. Can be passed multiple times")
-	flag.StringVar(&opts.ConfigPath, "config", "", "Path to config file, or name of a configuration object")
+	flag.Var(&opts.Config, "config", "Path to config file, or name of a configuration object. In standalone mode, can be passed multiple times")
 	flag.StringVar(&opts.AppID, "app-id", "", "A unique ID for Dapr. Used for Service Discovery and state")
 	flag.StringVar(&opts.ControlPlaneAddress, "control-plane-address", "", "Address for a Dapr control plane")
 	flag.StringVar(&opts.SentryAddress, "sentry-address", "", "Address for the Sentry CA service")
@@ -151,7 +150,7 @@ func (f stringSliceFlag) String() string {
 // Set the flag value.
 func (f *stringSliceFlag) Set(value string) error {
 	if value == "" {
-		return errors.New("value is empty")
+		return nil
 	}
 	*f = append(*f, value)
 	return nil

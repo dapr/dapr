@@ -40,5 +40,5 @@ func TestStandaloneGlobalConfig(t *testing.T) {
 	opts := New([]string{"--app-id", "testapp", "--mode", string(modes.StandaloneMode), "--config", "../../../pkg/config/testdata/metric_disabled.yaml", "--metrics-port", strconv.Itoa(10000)})
 	assert.EqualValues(t, "testapp", opts.AppID)
 	assert.EqualValues(t, string(modes.StandaloneMode), opts.Mode)
-	assert.Equal(t, "../../../pkg/config/testdata/metric_disabled.yaml", opts.ConfigPath)
+	assert.Equal(t, []string{"../../../pkg/config/testdata/metric_disabled.yaml"}, []string(opts.Config))
 }
