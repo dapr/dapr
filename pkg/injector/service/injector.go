@@ -44,7 +44,7 @@ const (
 	serviceAccountUserInfoPrefix              = "system:serviceaccount:"
 )
 
-var log = logger.NewLogger("dapr.injector")
+var log = logger.NewLogger("dapr.injector.service")
 
 var AllowedServiceAccountInfos = []string{
 	"kube-system:replicaset-controller",

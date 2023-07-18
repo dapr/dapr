@@ -14,8 +14,6 @@ limitations under the License.
 // Package annotations contains the list of annotations for Dapr deployments.
 package annotations
 
-// Annotation keys
-
 const (
 	KeyEnabled                          = "dapr.io/enabled"
 	KeyAppPort                          = "dapr.io/app-port"
@@ -68,30 +66,4 @@ const (
 	KeyPluggableComponentContainer      = "dapr.io/component-container"
 	KeyPluggableComponentsInjection     = "dapr.io/inject-pluggable-components"
 	KeyAppChannel                       = "dapr.io/app-channel-address"
-)
-
-// Default values
-
-const (
-	DefaultLogLevel                          = "info"
-	DefaultLogAsJSON                         = false
-	DefaultAppSSL                            = false
-	DefaultAppProtocol                       = "http"
-	DefaultEnableMetric                      = true
-	DefaultMetricsPort                       = 9090
-	DefaultEnableDebug                       = false
-	DefaultDebugPort                         = 40000
-	DefaultSidecarListenAddresses            = "[::1],127.0.0.1"
-	DefaultHealthzProbeDelaySeconds          = 3
-	DefaultHealthzProbeTimeoutSeconds        = 3
-	DefaultHealthzProbePeriodSeconds         = 6
-	DefaultHealthzProbeThreshold             = 3
-	DefaultMtlsEnabled                       = true
-	DefaultEnableProfiling                   = false
-	DefaultDisableBuiltinK8sSecretStore      = false
-	DefaultEnableAppHealthCheck              = false
-	DefaultAppCheckPath                      = "/healthz"
-	DefaultAppHealthProbeIntervalSeconds     = 5
-	DefaultAppHealthProbeTimeoutMilliseconds = 500
-	DefaultAppHealthThreshold                = 3
 )

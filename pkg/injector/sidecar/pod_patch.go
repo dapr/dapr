@@ -22,7 +22,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/dapr/dapr/pkg/credentials"
-	"github.com/dapr/dapr/pkg/injector/annotations"
 	"github.com/dapr/dapr/pkg/injector/patcher"
 	sentryConsts "github.com/dapr/dapr/pkg/sentry/consts"
 	"github.com/dapr/kit/ptr"
@@ -170,23 +169,6 @@ func GetVolumesPatchOperations(volumes []corev1.Volume, addVolumes []corev1.Volu
 	return patchOps[:n]
 }
 
-// GetUnixDomainSocketVolumeMount returns a volume mount for the pod to append the UNIX domain socket.
-func GetUnixDomainSocketVolumeMount(pod *corev1.Pod) *corev1.VolumeMount {
-	unixDomainSocket := annotations.New(pod.Annotations).GetString(annotations.KeyUnixDomainSocketPath)
-	if unixDomainSocket == "" {
-		return nil
-	}
-
-	// socketVolume is an EmptyDir
-	socketVolume := &corev1.Volume{
-		Name: UnixDomainSocketVolume,
-	}
-
-	pod.Spec.Volumes = append(pod.Spec.Volumes, *socketVolume)
-
-	return &corev1.VolumeMount{Name: UnixDomainSocketVolume, MountPath: unixDomainSocket}
-}
-
 // GetTokenVolume returns the volume projection for the Kubernetes service account.
 // Requests a new projected volume with a service account token for our specific audience.
 func GetTokenVolume() corev1.Volume {
@@ -209,7 +191,9 @@ func GetTokenVolume() corev1.Volume {
 
 // GetTrustAnchorsAndCertChain returns the trust anchor and certs.
 func GetTrustAnchorsAndCertChain(ctx context.Context, kubeClient kubernetes.Interface, namespace string) (string, string, string) {
-	secret, err := kubeClient.CoreV1().Secrets(namespace).Get(ctx, sentryConsts.TrustBundleK8sSecretName, metav1.GetOptions{})
+	secret, err := kubeClient.CoreV1().
+		Secrets(namespace).
+		Get(ctx, sentryConsts.TrustBundleK8sSecretName, metav1.GetOptions{})
 	if err != nil {
 		return "", "", ""
 	}
@@ -218,34 +202,4 @@ func GetTrustAnchorsAndCertChain(ctx context.Context, kubeClient kubernetes.Inte
 	certChain := secret.Data[credentials.IssuerCertFilename]
 	certKey := secret.Data[credentials.IssuerKeyFilename]
 	return string(rootCert), string(certChain), string(certKey)
-}
-
-// GetVolumeMounts returns the list of VolumeMount's for the sidecar container.
-func GetVolumeMounts(pod corev1.Pod) []corev1.VolumeMount {
-	volumeMounts := []corev1.VolumeMount{}
-
-	an := annotations.New(pod.Annotations)
-	vs := append(
-		ParseVolumeMountsString(an.GetString(annotations.KeyVolumeMountsReadOnly), true),
-		ParseVolumeMountsString(an.GetString(annotations.KeyVolumeMountsReadWrite), false)...,
-	)
-
-	for _, v := range vs {
-		if podContainsVolume(pod, v.Name) {
-			volumeMounts = append(volumeMounts, v)
-		} else {
-			log.Warnf("volume %s is not present in pod %s, skipping.", v.Name, pod.Name)
-		}
-	}
-
-	return volumeMounts
-}
-
-func podContainsVolume(pod corev1.Pod, name string) bool {
-	for _, volume := range pod.Spec.Volumes {
-		if volume.Name == name {
-			return true
-		}
-	}
-	return false
 }

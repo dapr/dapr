@@ -30,12 +30,7 @@ func GetAppID(pod metaV1.ObjectMeta) string {
 	return annotations.New(pod.Annotations).GetStringOrDefault(annotations.KeyAppID, pod.GetName())
 }
 
-// GetMetricsEnabled returns true if metrics have been enabled, or false as fallback.
-func GetMetricsEnabled(pod metaV1.ObjectMeta) bool {
-	return annotations.New(pod.Annotations).GetBoolOrDefault(annotations.KeyEnableMetrics, annotations.DefaultEnableMetric)
-}
-
-// add env-vars from annotations.
+// ParseEnvString returns the EnvVar slice from the Env annotation.
 func ParseEnvString(envStr string) ([]string, []coreV1.EnvVar) {
 	indexes := envRegexp.FindAllStringIndex(envStr, -1)
 	lastEnd := len(envStr)
@@ -46,8 +41,8 @@ func ParseEnvString(envStr string) ([]string, []coreV1.EnvVar) {
 	}
 	parts[0] = envStr[0:lastEnd]
 
-	envKeys := make([]string, 0)
-	envVars := make([]coreV1.EnvVar, 0)
+	envKeys := make([]string, 0, len(parts))
+	envVars := make([]coreV1.EnvVar, 0, len(parts))
 	for _, s := range parts {
 		pairs := strings.Split(strings.TrimSpace(s), "=")
 		if len(pairs) != 2 {
@@ -67,9 +62,8 @@ func ParseEnvString(envStr string) ([]string, []coreV1.EnvVar) {
 // The format of the annotation is: "mountPath1:hostPath1,mountPath2:hostPath2"
 // The readOnly parameter applies to all mounts.
 func ParseVolumeMountsString(volumeMountStr string, readOnly bool) []coreV1.VolumeMount {
-	volumeMounts := make([]coreV1.VolumeMount, 0)
-
 	vs := strings.Split(volumeMountStr, ",")
+	volumeMounts := make([]coreV1.VolumeMount, 0, len(vs))
 	for _, v := range vs {
 		vmount := strings.Split(strings.TrimSpace(v), ":")
 		if len(vmount) != 2 {
