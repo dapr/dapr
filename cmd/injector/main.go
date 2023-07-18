@@ -22,8 +22,8 @@ import (
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/health"
-	"github.com/dapr/dapr/pkg/injector"
 	"github.com/dapr/dapr/pkg/injector/monitoring"
+	"github.com/dapr/dapr/pkg/injector/service"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/signals"
 	"github.com/dapr/dapr/utils"
@@ -61,7 +61,7 @@ func main() {
 	}
 
 	ctx := signals.Context()
-	cfg, err := injector.GetConfig()
+	cfg, err := service.GetConfig()
 	if err != nil {
 		log.Fatalf("error getting config: %s", err)
 	}
@@ -72,12 +72,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("error creating dapr client: %s", err)
 	}
-	uids, err := injector.AllowedControllersServiceAccountUID(ctx, cfg, kubeClient)
+	uids, err := service.AllowedControllersServiceAccountUID(ctx, cfg, kubeClient)
 	if err != nil {
 		log.Fatalf("failed to get authentication uids from services accounts: %s", err)
 	}
 
-	inj, err := injector.NewInjector(uids, cfg, daprClient, kubeClient)
+	inj, err := service.NewInjector(uids, cfg, daprClient, kubeClient)
 	if err != nil {
 		log.Fatalf("error creating injector: %s", err)
 	}

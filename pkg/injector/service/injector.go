@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package injector
+package service
 
 import (
 	"context"
@@ -319,8 +319,6 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 		admissionReview.Response.UID = ar.Request.UID
 		admissionReview.SetGroupVersionKind(*gvk)
 	}
-
-	// log.Debug("ready to write response ...")
 
 	respBytes, err := json.Marshal(admissionReview)
 	if err != nil {
