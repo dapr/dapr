@@ -99,7 +99,12 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		args = append(args, "--app-health-check-path="+opts.appHealthCheckPath)
 	}
 	if len(opts.resourceFiles) > 0 {
-		args = append(args, "-resources-path="+dir)
+		args = append(args, "--resources-path="+dir)
+	}
+	if len(opts.configs) > 0 {
+		for _, c := range opts.configs {
+			args = append(args, "--config="+c)
+		}
 	}
 
 	return &Daprd{
