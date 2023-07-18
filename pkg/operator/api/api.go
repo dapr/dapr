@@ -488,13 +488,14 @@ func (a *apiServer) ListHTTPEndpoints(ctx context.Context, in *operatorv1pb.List
 	}
 
 	for i, item := range endpoints.Items {
-		err := processHTTPEndpointSecrets(ctx, &endpoints.Items[i], item.Namespace, a.Client)
+		e := endpoints.Items[i]
+		err := processHTTPEndpointSecrets(ctx, &e, item.Namespace, a.Client)
 		if err != nil {
 			log.Warnf("error processing secrets for http endpoint %s", item.Name, item.Namespace, err)
 			return &operatorv1pb.ListHTTPEndpointsResponse{}, err
 		}
 
-		b, err := json.Marshal(item)
+		b, err := json.Marshal(e)
 		if err != nil {
 			log.Warnf("Error unmarshalling http endpoints: %s", err)
 			continue
