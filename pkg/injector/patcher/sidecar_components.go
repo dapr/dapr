@@ -21,9 +21,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	"github.com/dapr/dapr/pkg/components/pluggable"
 	"github.com/dapr/dapr/pkg/injector/annotations"
 	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
+	"github.com/dapr/dapr/utils"
 )
 
 // splitContainers split containers between:
@@ -59,7 +59,7 @@ func (c *SidecarConfig) componentsPatchOps(componentContainers map[int]corev1.Co
 
 	mountPath := c.PluggableComponentsSocketsFolder
 	if mountPath == "" {
-		mountPath = pluggable.GetSocketFolderPath()
+		mountPath = utils.GetEnvOrElse(injectorConsts.ComponentsUDSMountPathEnvVar, injectorConsts.ComponentsUDSDefaultFolder)
 	}
 
 	sharedSocketVolume, sharedSocketVolumeMount, volumePatch := c.addSharedSocketVolume(mountPath)

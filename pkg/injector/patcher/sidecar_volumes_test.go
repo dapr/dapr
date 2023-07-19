@@ -199,7 +199,7 @@ func TestGetVolumeMounts(t *testing.T) {
 			c.VolumeMounts = tc.volumeReadOnlyAnnotation
 			c.VolumeMountsRW = tc.volumeReadWriteAnnotation
 
-			volumeMounts := c.GetVolumeMounts()
+			volumeMounts := c.getVolumeMounts()
 			assert.Equal(t, tc.expVolumeMounts, volumeMounts)
 		})
 	}
@@ -237,7 +237,7 @@ func TestGetUnixDomainSocketVolume(t *testing.T) {
 			c := NewSidecarConfig(pod)
 			c.UnixDomainSocketPath = tc.udsPath
 
-			socketMount := c.GetUnixDomainSocketVolumeMount()
+			socketMount := c.getUnixDomainSocketVolumeMount()
 
 			if tc.exportMount == nil {
 				assert.Equal(t, tc.exportMount, socketMount)
@@ -358,7 +358,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.testName, func(t *testing.T) {
-			patchEnv := AddSocketVolumeMountToContainers(map[int]corev1.Container{0: tc.mockContainer}, tc.socketMount)
+			patchEnv := addSocketVolumeMountToContainers(map[int]corev1.Container{0: tc.mockContainer}, tc.socketMount)
 			assert.Equal(t, tc.expOpsLen, len(patchEnv))
 			assert.Equal(t, tc.expOps, patchEnv)
 		})

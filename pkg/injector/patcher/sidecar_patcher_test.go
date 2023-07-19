@@ -145,7 +145,7 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.testName, func(t *testing.T) {
 			c := NewSidecarConfig(&corev1.Pod{})
-			patchEnv := c.AddDaprEnvVarsToContainers(map[int]corev1.Container{0: tc.mockContainer}, tc.appProtocol)
+			patchEnv := c.addDaprEnvVarsToContainers(map[int]corev1.Container{0: tc.mockContainer}, tc.appProtocol)
 			assert.Equal(t, tc.expOpsLen, len(patchEnv))
 			assert.Equal(t, tc.expOps, patchEnv)
 		})
@@ -195,7 +195,7 @@ func TestAddDaprAppIDLabel(t *testing.T) {
 				},
 			})
 			newPod, err := PatchPod(&tc.mockPod, jsonpatch.Patch{
-				c.AddDaprSidecarAppIDLabel(),
+				c.addDaprSidecarAppIDLabel(),
 			})
 			require.NoError(t, err)
 			assert.Equal(t, tc.expLabels, newPod.Labels)
@@ -251,7 +251,7 @@ func TestAddDaprMetricsEnabledLabel(t *testing.T) {
 			})
 			c.EnableMetrics = tc.metricsEnabled
 			newPod, err := PatchPod(&tc.mockPod, jsonpatch.Patch{
-				c.AddDaprSidecarMetricsEnabledLabel(),
+				c.addDaprSidecarMetricsEnabledLabel(),
 			})
 			require.NoError(t, err)
 			assert.Equal(t, tc.expLabels, newPod.Labels)
@@ -301,7 +301,7 @@ func TestAddDaprInjectedLabel(t *testing.T) {
 				},
 			})
 			newPod, err := PatchPod(&tc.mockPod, jsonpatch.Patch{
-				c.AddDaprSidecarInjectedLabel(),
+				c.addDaprSidecarInjectedLabel(),
 			})
 			require.NoError(t, err)
 			assert.Equal(t, tc.expLabels, newPod.Labels)

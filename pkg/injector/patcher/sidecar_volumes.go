@@ -24,8 +24,8 @@ import (
 	"github.com/dapr/kit/ptr"
 )
 
-// GetVolumeMounts returns the list of VolumeMount's for the sidecar container.
-func (c *SidecarConfig) GetVolumeMounts() []corev1.VolumeMount {
+// getVolumeMounts returns the list of VolumeMount's for the sidecar container.
+func (c *SidecarConfig) getVolumeMounts() []corev1.VolumeMount {
 	vs := append(
 		parseVolumeMountsString(c.VolumeMounts, true),
 		parseVolumeMountsString(c.VolumeMountsRW, false)...,
@@ -44,8 +44,8 @@ func (c *SidecarConfig) GetVolumeMounts() []corev1.VolumeMount {
 	return volumeMounts
 }
 
-// GetUnixDomainSocketVolumeMount returns a volume mount for the pod to append the UNIX domain socket.
-func (c *SidecarConfig) GetUnixDomainSocketVolumeMount() *corev1.VolumeMount {
+// getUnixDomainSocketVolumeMount returns a volume mount for the pod to append the UNIX domain socket.
+func (c *SidecarConfig) getUnixDomainSocketVolumeMount() *corev1.VolumeMount {
 	if c.UnixDomainSocketPath == "" {
 		return nil
 	}
@@ -56,9 +56,9 @@ func (c *SidecarConfig) GetUnixDomainSocketVolumeMount() *corev1.VolumeMount {
 	}
 }
 
-// GetTokenVolume returns the volume projection for the Kubernetes service account.
+// getTokenVolume returns the volume projection for the Kubernetes service account.
 // Requests a new projected volume with a service account token for our specific audience.
-func (c *SidecarConfig) GetTokenVolume() corev1.Volume {
+func (c *SidecarConfig) getTokenVolume() corev1.Volume {
 	return corev1.Volume{
 		Name: injectorConsts.TokenVolumeName,
 		VolumeSource: corev1.VolumeSource{
@@ -76,8 +76,8 @@ func (c *SidecarConfig) GetTokenVolume() corev1.Volume {
 	}
 }
 
-// AddSocketVolumeMountToContainers adds the Dapr UNIX domain socket volume to all the containers in any Dapr-enabled pod.
-func AddSocketVolumeMountToContainers(containers map[int]corev1.Container, socketVolumeMount *corev1.VolumeMount) jsonpatch.Patch {
+// addSocketVolumeMountToContainers adds the Dapr UNIX domain socket volume to all the containers in any Dapr-enabled pod.
+func addSocketVolumeMountToContainers(containers map[int]corev1.Container, socketVolumeMount *corev1.VolumeMount) jsonpatch.Patch {
 	if socketVolumeMount == nil {
 		return jsonpatch.Patch{}
 	}
@@ -95,7 +95,7 @@ func addVolumeMountToContainers(containers map[int]corev1.Container, addMounts c
 	return volumeMountPatchOps
 }
 
-func GetVolumesPatchOperations(volumes []corev1.Volume, addVolumes []corev1.Volume, path string) jsonpatch.Patch {
+func getVolumesPatchOperations(volumes []corev1.Volume, addVolumes []corev1.Volume, path string) jsonpatch.Patch {
 	if len(volumes) == 0 {
 		// If there are no volumes defined in the container, we initialize a slice of volumes.
 		return jsonpatch.Patch{
