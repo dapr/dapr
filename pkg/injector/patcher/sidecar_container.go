@@ -72,10 +72,6 @@ func (cfg SidecarConfig) GetSidecarContainer(opts getSidecarContainerOpts) (*cor
 		"--control-plane-address", cfg.OperatorAddress,
 		"--sentry-address", cfg.SentryAddress,
 		"--log-level", cfg.LogLevel,
-		"--app-max-concurrency", strconv.Itoa(cfg.AppMaxConcurrency),
-		"--dapr-http-max-request-size", strconv.Itoa(cfg.HTTPMaxRequestSize),
-		"--dapr-http-read-buffer-size", strconv.Itoa(cfg.HTTPReadBufferSize),
-		"--dapr-graceful-shutdown-seconds", strconv.Itoa(cfg.GracefulShutdownSeconds),
 	}
 
 	if cfg.KubernetesMode {
@@ -141,6 +137,22 @@ func (cfg SidecarConfig) GetSidecarContainer(opts getSidecarContainerOpts) (*cor
 
 	if cfg.AppSSL {
 		args = append(args, "--app-ssl")
+	}
+
+	if cfg.AppMaxConcurrency != nil {
+		args = append(args, "--app-max-concurrency", strconv.Itoa(*cfg.AppMaxConcurrency))
+	}
+
+	if cfg.HTTPMaxRequestSize != nil {
+		args = append(args, "--dapr-http-max-request-size", strconv.Itoa(*cfg.HTTPMaxRequestSize))
+	}
+
+	if cfg.HTTPReadBufferSize != nil {
+		args = append(args, "--dapr-http-read-buffer-size", strconv.Itoa(*cfg.HTTPReadBufferSize))
+	}
+
+	if cfg.GracefulShutdownSeconds != nil {
+		args = append(args, "--dapr-graceful-shutdown-seconds", strconv.Itoa(*cfg.GracefulShutdownSeconds))
 	}
 
 	// When debugging is enabled, we need to override the command and the flags

@@ -63,7 +63,7 @@ type SidecarConfig struct {
 	APITokenSecret                      string `annotation:"dapr.io/api-token-secret"`
 	AppTokenSecret                      string `annotation:"dapr.io/app-token-secret"`
 	LogAsJSON                           bool   `annotation:"dapr.io/log-as-json"`
-	AppMaxConcurrency                   int    `annotation:"dapr.io/app-max-concurrency"`
+	AppMaxConcurrency                   *int   `annotation:"dapr.io/app-max-concurrency"`
 	EnableMetrics                       bool   `annotation:"dapr.io/enable-metrics" default:"true"`
 	SidecarMetricsPort                  int32  `annotation:"dapr.io/metrics-port" default:"9090"`
 	EnableDebug                         bool   `annotation:"dapr.io/enable-debug" default:"false"`
@@ -84,9 +84,9 @@ type SidecarConfig struct {
 	SidecarReadinessProbeThreshold      int32  `annotation:"dapr.io/sidecar-readiness-probe-threshold" default:"3"`
 	SidecarImage                        string `annotation:"dapr.io/sidecar-image"`
 	SidecarSeccompProfileType           string `annotation:"dapr.io/sidecar-seccomp-profile-type"`
-	HTTPMaxRequestSize                  int    `annotation:"dapr.io/http-max-request-size"`
-	HTTPReadBufferSize                  int    `annotation:"dapr.io/http-read-buffer-size"`
-	GracefulShutdownSeconds             int    `annotation:"dapr.io/graceful-shutdown-seconds"`
+	HTTPMaxRequestSize                  *int   `annotation:"dapr.io/http-max-request-size"`
+	HTTPReadBufferSize                  *int   `annotation:"dapr.io/http-read-buffer-size"`
+	GracefulShutdownSeconds             *int   `annotation:"dapr.io/graceful-shutdown-seconds"`
 	EnableAPILogging                    *bool  `annotation:"dapr.io/enable-api-logging"`
 	UnixDomainSocketPath                string `annotation:"dapr.io/unix-domain-socket-path"`
 	VolumeMounts                        string `annotation:"dapr.io/volume-mounts"`

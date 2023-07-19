@@ -22,7 +22,6 @@ import (
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/health"
-	"github.com/dapr/dapr/pkg/injector/monitoring"
 	"github.com/dapr/dapr/pkg/injector/service"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/signals"
@@ -59,7 +58,7 @@ func main() {
 	}
 
 	// Initialize injector service metrics
-	err = monitoring.InitMetrics()
+	err = service.InitMetrics()
 	if err != nil {
 		log.Fatal(err)
 	}
