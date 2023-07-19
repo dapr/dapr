@@ -12,6 +12,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors/internal"
 	"github.com/dapr/dapr/pkg/config"
+	daprAppConfig "github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/diagnostics/diagtestutils"
 	daprt "github.com/dapr/dapr/pkg/testing"
@@ -52,22 +53,6 @@ func newTestReminders() *reminders {
 	return r.(*reminders)
 }
 
-// func fakeStore() (internal.TransactionalStateStore, error) {
-// 	storeS := daprt.NewFakeStateStore()
-// 	storeName := "actorStore"
-
-// 	compStore := compstore.New()
-// 	compStore.AddStateStore(storeName, storeS)
-
-// 	storeS, ok = compStore.GetStateStore(storeName)
-// 	store, ok := storeS.(internal.TransactionalStateStore)
-// 	if !ok || !state.FeatureETag.IsPresent(store.Features()) || !state.FeatureTransactional.IsPresent(store.Features()) {
-// 		return nil, errors.New(errStateStoreNotConfigured)
-// 	}
-
-// 	return store, nil
-// }
-
 func fakeTStore() (internal.TransactionalStateStore, error) {
 	return nil, errors.New(errStateStoreNotConfigured)
 }
@@ -81,13 +66,8 @@ func fakeRealTStore() (internal.TransactionalStateStore, error) {
 	return fakeStor, nil
 }
 
-var fakeStor2 internal.TransactionalStateStore
-
 func fakeRealTStore2() (internal.TransactionalStateStore, error) {
-	if fakeStor2 == nil {
-		fakeStor2 = daprt.NewFakeStateStore()
-	}
-	return fakeStor2, nil
+	return daprt.NewFakeStateStore(), nil
 }
 
 func fakeRealTStoreWithNoLock() (internal.TransactionalStateStore, error) {
@@ -103,14 +83,9 @@ type testRequest struct {
 	Data any `json:"data"`
 }
 
-// daprt.NewFakeStateStore()
-
 func TestStoreIsNotInitialized(t *testing.T) {
 	testReminders := newTestReminders()
 	defer testReminders.Close()
-	// for name := range testReminders.compStore.ListStateStores() {
-	// 	testReminders.compStore.DeleteStateStore(name)
-	// }
 
 	t.Run("getReminderTrack", func(t *testing.T) {
 		r, err := testReminders.getReminderTrack(context.Background(), "foo||bar")
@@ -131,22 +106,22 @@ func TestStoreIsNotInitialized(t *testing.T) {
 		assert.Error(t, err)
 	})
 
-	// t.Run("getRemindersForActorType", func(t *testing.T) {
-	// 	r1, r2, err := testReminders.getRemindersForActorType(context.Background(), "foo", false)
-	// 	assert.Nil(t, r1)
-	// 	assert.Nil(t, r2)
-	// 	assert.Error(t, err)
-	// })
+	t.Run("getRemindersForActorType", func(t *testing.T) {
+		r1, r2, err := testReminders.getRemindersForActorType(context.Background(), "foo", false)
+		assert.Nil(t, r1)
+		assert.Nil(t, r2)
+		assert.Error(t, err)
+	})
 
-	// t.Run("DeleteReminder", func(t *testing.T) {
-	// 	err := testReminders.DeleteReminder(context.Background(), &DeleteReminderRequest{})
-	// 	assert.Error(t, err)
-	// })
+	t.Run("DeleteReminder", func(t *testing.T) {
+		err := testReminders.DeleteReminder(context.Background(), internal.DeleteReminderRequest{})
+		assert.Error(t, err)
+	})
 
-	// t.Run("RenameReminder", func(t *testing.T) {
-	// 	err := testReminders.RenameReminder(context.Background(), &RenameReminderRequest{})
-	// 	assert.Error(t, err)
-	// })
+	t.Run("RenameReminder", func(t *testing.T) {
+		err := testReminders.RenameReminder(context.Background(), &internal.RenameReminderRequest{})
+		assert.Error(t, err)
+	})
 }
 
 func TestReminderCountFiring(t *testing.T) {
@@ -343,23 +318,19 @@ func TestGetReminderTrack(t *testing.T) {
 	})
 }
 
-// TD: FIX
 func TestCreateReminder(t *testing.T) {
 	numReminders := 100
-	// appChannel := new(mockAppChannel)
 	testReminders := newTestReminders()
 	defer testReminders.Close()
 
 	// Set the state store to not use locks when accessing data.
 	// This will cause race conditions to surface when running these tests with `go test -race` if the methods accessing reminders' storage are not safe for concurrent access.
-	// stateStore, _ := testReminders.stateStore()
-	// stateStore.(*daprt.FakeStateStore).NoLock = true
 
 	fakeStor = nil
 	testReminders.SetStateStoreProviderFn(fakeRealTStoreWithNoLock)
 	testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
 		diag.DefaultMonitoring.ActorReminderFired(reminder.ActorType, true)
-		return false
+		return true
 	})
 	testReminders.SetLookupActorFn(func(string, string) (bool, string) {
 		return true, "localhost"
@@ -412,18 +383,14 @@ func TestCreateReminder(t *testing.T) {
 	testRemindersWithPartition := newTestRemindersWithMockAndActorMetadataPartition()
 	defer testRemindersWithPartition.Close()
 
-	fakeStor2 = nil
-	testRemindersWithPartition.SetStateStoreProviderFn(fakeRealTStore2)
+	testRemindersWithPartition.SetStateStoreProviderFn(fakeRealTStore)
 	testRemindersWithPartition.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
-		// executed <- reminder.Key()
-		return false
+		return true
 	})
 	testRemindersWithPartition.SetLookupActorFn(func(string, string) (bool, string) {
 		return true, "localhost"
 	})
-	testRemindersWithPartition.Init(context.TODO())
 
-	// testActorsRuntimeWithPartition.compStore = testReminders.compStore
 	for i := 1; i < numReminders; i++ {
 		for _, reminderActorType := range []string{actorType, secondActorType} {
 			req := internal.CreateReminderRequest{
@@ -510,6 +477,43 @@ func newTestRemindersWithMockAndActorMetadataPartition() *reminders {
 		HostedActorTypes:           appConfig.Entities,
 		Reentrancy:                 appConfig.Reentrancy,
 		RemindersStoragePartitions: appConfig.RemindersStoragePartitions,
+		EntityConfigs:              make(map[string]internal.EntityConfig),
+	}
+	scanDuration, err := time.ParseDuration(appConfig.ActorScanInterval)
+	if err == nil {
+		conf.ActorDeactivationScanInterval = scanDuration
+	}
+
+	idleDuration, err := time.ParseDuration(appConfig.ActorIdleTimeout)
+	if err == nil {
+		conf.ActorIdleTimeout = idleDuration
+	}
+
+	drainCallDuration, err := time.ParseDuration(appConfig.DrainOngoingCallTimeout)
+	if err == nil {
+		conf.DrainOngoingCallTimeout = drainCallDuration
+	}
+
+	if appConfig.Reentrancy.MaxStackDepth == nil {
+		reentrancyLimit := 32
+		conf.Reentrancy.MaxStackDepth = &reentrancyLimit
+	}
+
+	// Make a map of the hosted actors so we can reference it below.
+	hostedTypes := make(map[string]bool, len(appConfig.Entities))
+	for _, hostedType := range appConfig.Entities {
+		hostedTypes[hostedType] = true
+	}
+
+	for _, entityConfg := range appConfig.EntityConfigs {
+		config := translateEntityConfig(entityConfg)
+		for _, entity := range entityConfg.Entities {
+			if _, ok := hostedTypes[entity]; ok {
+				conf.EntityConfigs[entity] = config
+			} else {
+				log.Warnf("Configuration specified for non-hosted actor type: %s", entity)
+			}
+		}
 	}
 	opts := internal.RemindersProviderOpts{
 		StoreName: "testStore",
@@ -519,6 +523,34 @@ func newTestRemindersWithMockAndActorMetadataPartition() *reminders {
 	r := NewRemindersProvider(clock, opts)
 	// r.SetStateStoreProviderFn(fakeTStore)
 	return r.(*reminders)
+}
+
+func translateEntityConfig(appConfig daprAppConfig.EntityConfig) internal.EntityConfig {
+	domainConfig := internal.EntityConfig{
+		Entities:                   appConfig.Entities,
+		ActorIdleTimeout:           time.Minute * 60,
+		DrainOngoingCallTimeout:    time.Second * 60,
+		DrainRebalancedActors:      appConfig.DrainRebalancedActors,
+		ReentrancyConfig:           appConfig.Reentrancy,
+		RemindersStoragePartitions: appConfig.RemindersStoragePartitions,
+	}
+
+	idleDuration, err := time.ParseDuration(appConfig.ActorIdleTimeout)
+	if err == nil {
+		domainConfig.ActorIdleTimeout = idleDuration
+	}
+
+	drainCallDuration, err := time.ParseDuration(appConfig.DrainOngoingCallTimeout)
+	if err == nil {
+		domainConfig.DrainOngoingCallTimeout = drainCallDuration
+	}
+
+	if appConfig.Reentrancy.MaxStackDepth == nil {
+		reentrancyLimit := 32
+		domainConfig.ReentrancyConfig.MaxStackDepth = &reentrancyLimit
+	}
+
+	return domainConfig
 }
 
 func TestRenameReminder(t *testing.T) {
@@ -1108,7 +1140,6 @@ func TestDeleteReminder(t *testing.T) {
 	})
 }
 
-// TD: FIX
 func TestReminderRepeats(t *testing.T) {
 	tests := map[string]struct {
 		dueTimeAny      any
@@ -1213,17 +1244,13 @@ func TestReminderRepeats(t *testing.T) {
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			requestC := make(chan testRequest, 10)
-			// appChannel := mockAppChannel{
-			// 	requestC: requestC,
-			// }
 			testReminders := newTestReminders()
 			defer testReminders.Close()
 
 			fakeStor = nil
-			testReminders.SetStateStoreProviderFn(fakeRealTStore)
-			// executed := make(chan string, 1)
+			testReminders.SetStateStoreProviderFn(fakeRealTStore2)
 			testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
-				// executed <- reminder.Key()
+				requestC <- testRequest{Data: "data"}
 				return true
 			})
 			testReminders.SetLookupActorFn(func(string, string) (bool, string) {
@@ -1231,11 +1258,9 @@ func TestReminderRepeats(t *testing.T) {
 			})
 			testReminders.Init(context.TODO())
 
-			// t.Cleanup(testReminders.Stop)
 			clock := testReminders.clock.(*clocktesting.FakeClock)
 
 			actorType, actorID := getTestActorTypeAndID()
-			// fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, clock)
 
 			var dueTime string
 			switch x := test.dueTimeAny.(type) {
@@ -1265,12 +1290,13 @@ func TestReminderRepeats(t *testing.T) {
 				TTL:       ttl,
 				Data:      json.RawMessage(`"data"`),
 			}
-			reminder, _ := req.NewReminder(testReminders.clock.Now())
-			err := testReminders.CreateReminder(ctx, reminder)
+			reminder, err := req.NewReminder(testReminders.clock.Now())
 			if test.expRepeats == 0 {
 				assert.ErrorContains(t, err, "has zero repetitions")
 				return
 			}
+			require.NoError(t, err)
+			err = testReminders.CreateReminder(ctx, reminder)
 			require.NoError(t, err)
 
 			testReminders.remindersLock.RLock()
@@ -1326,7 +1352,6 @@ func TestReminderRepeats(t *testing.T) {
 	}
 }
 
-// TD: FIX
 func Test_ReminderTTL(t *testing.T) {
 	tests := map[string]struct {
 		dueTime    string
@@ -1369,18 +1394,14 @@ func Test_ReminderTTL(t *testing.T) {
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			requestC := make(chan testRequest)
-			// appChannel := mockAppChannel{
-			// 	requestC: requestC,
-			// }
 			testReminders := newTestReminders()
 			defer testReminders.Close()
 
 			fakeStor = nil
 			testReminders.SetStateStoreProviderFn(fakeRealTStore)
-			// executed := make(chan string, 1)
 			testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
-				// executed <- reminder.Key()
-				return false
+				requestC <- testRequest{Data: "data"}
+				return true
 			})
 			testReminders.SetLookupActorFn(func(string, string) (bool, string) {
 				return true, "localhost"
@@ -1390,7 +1411,6 @@ func Test_ReminderTTL(t *testing.T) {
 			clock := testReminders.clock.(*clocktesting.FakeClock)
 
 			actorType, actorID := getTestActorTypeAndID()
-			// fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, clock)
 
 			var ttl string
 			switch x := test.ttlAny.(type) {
@@ -1412,8 +1432,9 @@ func Test_ReminderTTL(t *testing.T) {
 				TTL:       ttl,
 				Data:      json.RawMessage(`"data"`),
 			}
-			reminder, _ := req.NewReminder(testReminders.clock.Now())
-			err := testReminders.CreateReminder(ctx, reminder)
+			reminder, err := req.NewReminder(testReminders.clock.Now())
+			require.NoError(t, err)
+			err = testReminders.CreateReminder(ctx, reminder)
 			require.NoError(t, err)
 
 			count := 0
@@ -1456,18 +1477,12 @@ func Test_ReminderTTL(t *testing.T) {
 
 func reminderValidation(dueTime, period, ttl, msg string) func(t *testing.T) {
 	return func(t *testing.T) {
-		// requestC := make(chan testRequest, 10)
-		// appChannel := mockAppChannel{
-		// 	requestC: requestC,
-		// }
 		testReminders := newTestReminders()
 		defer testReminders.Close()
 
 		fakeStor = nil
 		testReminders.SetStateStoreProviderFn(fakeRealTStore)
-		executed := make(chan string, 1)
 		testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
-			executed <- reminder.Key()
 			return true
 		})
 		testReminders.SetLookupActorFn(func(string, string) (bool, string) {
@@ -1476,12 +1491,12 @@ func reminderValidation(dueTime, period, ttl, msg string) func(t *testing.T) {
 		testReminders.Init(context.TODO())
 
 		actorType, actorID := getTestActorTypeAndID()
-		// fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testReminders.clock)
 
 		req := createReminderData(actorID, actorType, "reminder4", period, dueTime, ttl, "data")
 		reminder, err := req.NewReminder(testReminders.clock.Now())
-		assert.NoError(t, err)
-		err = testReminders.CreateReminder(context.Background(), reminder)
+		if err == nil {
+			err = testReminders.CreateReminder(context.Background(), reminder)
+		}
 		if len(msg) != 0 {
 			assert.ErrorContains(t, err, msg)
 		} else {
@@ -1490,7 +1505,6 @@ func reminderValidation(dueTime, period, ttl, msg string) func(t *testing.T) {
 	}
 }
 
-// TD: FIX
 func TestReminderValidation(t *testing.T) {
 	t.Run("empty period", reminderValidation("", "", "-2s", ""))
 	t.Run("period is JSON null", reminderValidation("", "null", "-2s", ""))
