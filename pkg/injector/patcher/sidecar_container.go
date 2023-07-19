@@ -24,7 +24,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	"github.com/dapr/dapr/pkg/components/pluggable"
 	"github.com/dapr/dapr/pkg/config/protocol"
 	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
 	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
@@ -275,7 +274,7 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 	if opts.ComponentsSocketsVolumeMount != nil {
 		container.VolumeMounts = append(container.VolumeMounts, *opts.ComponentsSocketsVolumeMount)
 		container.Env = append(container.Env, corev1.EnvVar{
-			Name:  pluggable.SocketFolderEnvVar,
+			Name:  injectorConsts.ComponentsUDSMountPathEnvVar,
 			Value: opts.ComponentsSocketsVolumeMount.MountPath,
 		})
 	}

@@ -21,11 +21,13 @@ import (
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
-	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
+	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/injector/patcher"
-	"github.com/dapr/dapr/pkg/injector/sidecar"
+	sentryConsts "github.com/dapr/dapr/pkg/sentry/consts"
 )
 
 const (
@@ -46,12 +48,12 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 	)
 
 	// Keep DNS resolution outside of GetSidecarContainer for unit testing.
-	placementAddress := sidecar.ServiceAddress(sidecar.ServicePlacement, i.config.Namespace, i.config.KubeClusterDomain)
-	sentryAddress := sidecar.ServiceAddress(sidecar.ServiceSentry, i.config.Namespace, i.config.KubeClusterDomain)
-	apiSvcAddress := sidecar.ServiceAddress(sidecar.ServiceAPI, i.config.Namespace, i.config.KubeClusterDomain)
+	placementAddress := patcher.ServiceAddress(patcher.ServicePlacement, i.config.Namespace, i.config.KubeClusterDomain)
+	sentryAddress := patcher.ServiceAddress(patcher.ServiceSentry, i.config.Namespace, i.config.KubeClusterDomain)
+	operatorAddress := patcher.ServiceAddress(patcher.ServiceAPI, i.config.Namespace, i.config.KubeClusterDomain)
 
 	// Get the TLS credentials
-	trustAnchors, certChain, certKey := sidecar.GetTrustAnchorsAndCertChain(ctx, i.kubeClient, i.config.Namespace)
+	trustAnchors, certChain, certKey := GetTrustAnchorsAndCertChain(ctx, i.kubeClient, i.config.Namespace)
 
 	// Create the sidecar configuration object from the pod
 	sidecar := patcher.NewSidecarConfig(pod)
@@ -65,7 +67,7 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 	sidecar.Identity = ar.Request.Namespace + ":" + pod.Spec.ServiceAccountName
 	sidecar.IgnoreEntrypointTolerations = i.config.GetIgnoreEntrypointTolerations()
 	sidecar.ImagePullPolicy = i.config.GetPullPolicy()
-	sidecar.OperatorAddress = apiSvcAddress
+	sidecar.OperatorAddress = operatorAddress
 	sidecar.SentryAddress = sentryAddress
 	sidecar.RunAsNonRoot = i.config.GetRunAsNonRoot()
 	sidecar.ReadOnlyRootFilesystem = i.config.GetReadOnlyRootFilesystem()
@@ -90,7 +92,7 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 }
 
 func mTLSEnabled(daprClient scheme.Interface) bool {
-	resp, err := daprClient.ConfigurationV1alpha1().Configurations(metaV1.NamespaceAll).List(metaV1.ListOptions{})
+	resp, err := daprClient.ConfigurationV1alpha1().Configurations(metav1.NamespaceAll).List(metav1.ListOptions{})
 	if err != nil {
 		log.Errorf("Failed to load dapr configuration from k8s, use default value %t for mTLSEnabled: %s", defaultMtlsEnabled, err)
 		return defaultMtlsEnabled
@@ -103,4 +105,19 @@ func mTLSEnabled(daprClient scheme.Interface) bool {
 	}
 	log.Infof("Dapr system configuration '%s' does not exist; using default value %t for mTLSEnabled", defaultConfig, defaultMtlsEnabled)
 	return defaultMtlsEnabled
+}
+
+// GetTrustAnchorsAndCertChain returns the trust anchor and certs.
+func GetTrustAnchorsAndCertChain(ctx context.Context, kubeClient kubernetes.Interface, namespace string) (string, string, string) {
+	secret, err := kubeClient.CoreV1().
+		Secrets(namespace).
+		Get(ctx, sentryConsts.TrustBundleK8sSecretName, metav1.GetOptions{})
+	if err != nil {
+		return "", "", ""
+	}
+
+	rootCert := secret.Data[credentials.RootCertFilename]
+	certChain := secret.Data[credentials.IssuerCertFilename]
+	certKey := secret.Data[credentials.IssuerKeyFilename]
+	return string(rootCert), string(certChain), string(certKey)
 }
