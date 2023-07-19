@@ -175,8 +175,14 @@ func TestAddDaprAppIDLabel(t *testing.T) {
 	for _, tc := range testCases {
 		tc := tc // closure copy
 		t.Run(tc.testName, func(t *testing.T) {
+			c := NewSidecarConfig(&corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:   "my-app",
+					Labels: tc.mockPod.Labels,
+				},
+			})
 			newPodJSON := patchObject(t, tc.mockPod, jsonpatch.Patch{
-				AddDaprSidecarAppIDLabel("my-app", tc.mockPod.Labels),
+				c.AddDaprSidecarAppIDLabel(),
 			})
 			newPod := corev1.Pod{}
 			assert.NoError(t, json.Unmarshal(newPodJSON, &newPod))
@@ -226,8 +232,14 @@ func TestAddDaprMetricsEnabledLabel(t *testing.T) {
 	for _, tc := range testCases {
 		tc := tc // closure copy
 		t.Run(tc.testName, func(t *testing.T) {
+			c := NewSidecarConfig(&corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: tc.mockPod.Labels,
+				},
+			})
+			c.EnableMetrics = tc.metricsEnabled
 			newPodJSON := patchObject(t, tc.mockPod, jsonpatch.Patch{
-				AddDaprSidecarMetricsEnabledLabel(tc.metricsEnabled, tc.mockPod.Labels),
+				c.AddDaprSidecarMetricsEnabledLabel(),
 			})
 			newPod := corev1.Pod{}
 			assert.NoError(t, json.Unmarshal(newPodJSON, &newPod))
@@ -272,8 +284,13 @@ func TestAddDaprInjectedLabel(t *testing.T) {
 	for _, tc := range testCases {
 		tc := tc // closure copy
 		t.Run(tc.testName, func(t *testing.T) {
+			c := NewSidecarConfig(&corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: tc.mockPod.Labels,
+				},
+			})
 			newPodJSON := patchObject(t, tc.mockPod, jsonpatch.Patch{
-				AddDaprSidecarInjectedLabel(tc.mockPod.Labels)},
+				c.AddDaprSidecarInjectedLabel()},
 			)
 			newPod := corev1.Pod{}
 			assert.NoError(t, json.Unmarshal(newPodJSON, &newPod))

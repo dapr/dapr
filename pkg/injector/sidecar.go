@@ -43,6 +43,7 @@ type SidecarConfig struct {
 	RunAsNonRoot                bool
 	ReadOnlyRootFilesystem      bool
 	SidecarDropALLCapabilities  bool
+	DisableTokenVolume          bool
 	SidecarHTTPPort             int32 `default:"3500"`
 	SidecarAPIGRPCPort          int32 `default:"50001"`
 	SidecarInternalGRPCPort     int32 `default:"50002"`

@@ -84,10 +84,7 @@ func errorToAdmissionResponse(err error) *admissionv1.AdmissionResponse {
 	}
 }
 
-func getAppIDFromRequest(req *admissionv1.AdmissionRequest) string {
-	// default App ID
-	appID := ""
-
+func getAppIDFromRequest(req *admissionv1.AdmissionRequest) (appID string) {
 	// if req is not given
 	if req == nil {
 		return appID

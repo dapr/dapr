@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"github.com/dapr/dapr/pkg/components/pluggable"
+	"github.com/dapr/dapr/pkg/config/protocol"
 	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
 	securityConsts "github.com/dapr/dapr/pkg/sentry/consts"
 	"github.com/dapr/dapr/utils"
@@ -25,25 +26,6 @@ type getSidecarContainerOpts struct {
 
 // GetSidecarContainer returns the Container object for the sidecar.
 func (cfg SidecarConfig) GetSidecarContainer(opts getSidecarContainerOpts) (*corev1.Container, error) {
-	// TODO: In caller, set defaults for PlacementServiceAddress and SidecarImage
-	// We still include PlacementServiceAddress if explicitly set as annotation
-	/*if cfg.Annotations.Exist(annotations.KeyPlacementHostAddresses) {
-		cfg.PlacementServiceAddress = cfg.Annotations.GetString(annotations.KeyPlacementHostAddresses)
-	} else if cfg.SkipPlacement {
-		cfg.PlacementServiceAddress = ""
-	}
-	if image := cfg.Annotations.GetString(annotations.KeySidecarImage); image != "" {
-		cfg.DaprSidecarImage = image
-	}*/
-	// TODO: If UDS are used, add the volume
-	/*
-		// socketVolume is an EmptyDir
-		socketVolume := &corev1.Volume{
-			Name: UnixDomainSocketVolume,
-		}
-		pod.Spec.Volumes = append(pod.Spec.Volumes, *socketVolume)
-	*/
-
 	// Ports for the daprd container
 	ports := []corev1.ContainerPort{
 		{
@@ -186,17 +168,6 @@ func (cfg SidecarConfig) GetSidecarContainer(opts getSidecarContainerOpts) (*cor
 		}
 	}
 
-	// Get all volume mounts
-	volumeMounts := cfg.GetVolumeMounts()
-	if socketVolumeMount := cfg.GetUnixDomainSocketVolumeMount(); socketVolumeMount != nil {
-		volumeMounts = append(volumeMounts, *socketVolumeMount)
-	}
-	volumeMounts = append(volumeMounts, corev1.VolumeMount{
-		Name:      TokenVolumeName,
-		MountPath: TokenVolumeKubernetesMountPath,
-		ReadOnly:  true,
-	})
-
 	// Create the container object
 	probeHTTPHandler := getProbeHTTPHandler(cfg.SidecarPublicPort, APIVersionV1, SidecarHealthzPath)
 	container := &corev1.Container{
@@ -220,7 +191,7 @@ func (cfg SidecarConfig) GetSidecarContainer(opts getSidecarContainerOpts) (*cor
 				},
 			},
 		},
-		VolumeMounts: volumeMounts,
+		VolumeMounts: opts.VolumeMounts,
 		ReadinessProbe: &corev1.Probe{
 			ProbeHandler:        probeHTTPHandler,
 			InitialDelaySeconds: cfg.SidecarReadinessProbeDelaySeconds,
@@ -425,6 +396,35 @@ func (c *SidecarConfig) GetEnv() (envKeys []string, envVars []corev1.EnvVar) {
 	}
 
 	return envKeys, envVars
+}
+
+func (c *SidecarConfig) GetAppProtocol() string {
+	appProtocol := strings.ToLower(c.AppProtocol)
+
+	switch appProtocol {
+	case string(protocol.GRPCSProtocol), string(protocol.HTTPSProtocol), string(protocol.H2CProtocol):
+		return appProtocol
+	case string(protocol.HTTPProtocol):
+		// For backwards compatibility, when protocol is HTTP and --app-ssl is set, use "https"
+		// TODO: Remove in a future Dapr version
+		if c.AppSSL {
+			return string(protocol.HTTPSProtocol)
+		} else {
+			return string(protocol.HTTPProtocol)
+		}
+	case string(protocol.GRPCProtocol):
+		// For backwards compatibility, when protocol is GRPC and --app-ssl is set, use "grpcs"
+		// TODO: Remove in a future Dapr version
+		if c.AppSSL {
+			return string(protocol.GRPCSProtocol)
+		} else {
+			return string(protocol.GRPCProtocol)
+		}
+	case "":
+		return string(protocol.HTTPProtocol)
+	default:
+		return ""
+	}
 }
 
 func getProbeHTTPHandler(port int32, pathElements ...string) corev1.ProbeHandler {

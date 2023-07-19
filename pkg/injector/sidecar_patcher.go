@@ -13,15 +13,29 @@ import (
 
 // GetPatch returns the patch to apply to a Pod to inject the Dapr sidecar
 func (c *SidecarConfig) GetPatch() (patchOps jsonpatch.Patch, err error) {
+	// TODO: In caller, set defaults for PlacementServiceAddress and SidecarImage
+	// We still include PlacementServiceAddress if explicitly set as annotation
+	/*if cfg.Annotations.Exist(annotations.KeyPlacementHostAddresses) {
+		cfg.PlacementServiceAddress = cfg.Annotations.GetString(annotations.KeyPlacementHostAddresses)
+	} else if cfg.SkipPlacement {
+		cfg.PlacementServiceAddress = ""
+	}
+	if image := cfg.Annotations.GetString(annotations.KeySidecarImage); image != "" {
+		cfg.DaprSidecarImage = image
+	}*/
+
 	// If Dapr is not enabled, or if the daprd container is already present, return
 	if !c.Enabled || c.podContainsSidecarContainer() {
 		return nil, nil
 	}
 
+	// Validate AppID
 	err = validation.ValidateKubernetesAppID(c.GetAppID())
 	if err != nil {
 		return nil, err
 	}
+
+	patchOps = jsonpatch.Patch{}
 
 	// Get volume mounts and add the UDS volume mount if needed
 	volumeMounts := c.GetVolumeMounts()
@@ -35,15 +49,23 @@ func (c *SidecarConfig) GetPatch() (patchOps jsonpatch.Patch, err error) {
 	if err != nil {
 		return nil, err
 	}
-	componentPatchOps, componentsSocketVolumeMount := components.PatchOps(componentContainers, injectedComponentContainers, c.pod)
+	componentPatchOps, componentsSocketVolumeMount := components.ComponentsPatchOps(componentContainers, injectedComponentContainers, c.pod)
 
 	// Projected volume with the token
-	tokenVolume := c.GetTokenVolume()
-	volumeMounts = append(volumeMounts, corev1.VolumeMount{
-		Name:      TokenVolumeName,
-		MountPath: TokenVolumeKubernetesMountPath,
-		ReadOnly:  true,
-	})
+	if !c.DisableTokenVolume {
+		tokenVolume := c.GetTokenVolume()
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      TokenVolumeName,
+			MountPath: TokenVolumeKubernetesMountPath,
+			ReadOnly:  true,
+		})
+
+		patchOps = append(patchOps, GetVolumesPatchOperations(
+			c.pod.Spec.Volumes,
+			[]corev1.Volume{tokenVolume},
+			patcher.PatchPathVolumes,
+		)...)
+	}
 
 	// Get the sidecar container
 	sidecarContainer, err := c.GetSidecarContainer(getSidecarContainerOpts{
@@ -55,7 +77,6 @@ func (c *SidecarConfig) GetPatch() (patchOps jsonpatch.Patch, err error) {
 	}
 
 	// Create the list of patch operations
-	patchOps = jsonpatch.Patch{}
 	if len(c.pod.Spec.Containers) == 0 {
 		// Set to empty to support add operations individually
 		patchOps = append(patchOps,
@@ -65,23 +86,17 @@ func (c *SidecarConfig) GetPatch() (patchOps jsonpatch.Patch, err error) {
 
 	patchOps = append(patchOps,
 		patcher.NewPatchOperation("add", patcher.PatchPathContainers+"/-", sidecarContainer),
-		AddDaprSidecarInjectedLabel(c.pod.Labels),
-		AddDaprSidecarAppIDLabel(c.GetAppID(), c.pod.Labels),
-		AddDaprSidecarMetricsEnabledLabel(c.EnableMetrics, c.pod.Labels),
+		c.AddDaprSidecarInjectedLabel(),
+		c.AddDaprSidecarAppIDLabel(),
+		c.AddDaprSidecarMetricsEnabledLabel(),
 	)
 
 	patchOps = append(patchOps,
-		AddDaprEnvVarsToContainers(appContainers, getAppProtocol(an))...,
+		c.AddDaprEnvVarsToContainers(appContainers, c.GetAppProtocol())...,
 	)
 	patchOps = append(patchOps,
 		AddSocketVolumeMountToContainers(appContainers, socketVolumeMount)...,
 	)
-	volumePatchOps := GetVolumesPatchOperations(
-		c.pod.Spec.Volumes,
-		[]corev1.Volume{tokenVolume},
-		patcher.PatchPathVolumes,
-	)
-	patchOps = append(patchOps, volumePatchOps...)
 	patchOps = append(patchOps, componentPatchOps...)
 
 	return patchOps, nil
@@ -125,8 +140,8 @@ func (c *SidecarConfig) AddDaprEnvVarsToContainers(containers map[int]corev1.Con
 }
 
 // AddDaprSidecarInjectedLabel adds Dapr label to patch pod so list of patched pods can be retrieved more efficiently
-func AddDaprSidecarInjectedLabel(labels map[string]string) jsonpatch.Operation {
-	if len(labels) == 0 { // empty labels
+func (c *SidecarConfig) AddDaprSidecarInjectedLabel() jsonpatch.Operation {
+	if len(c.pod.Labels) == 0 { // empty labels
 		return patcher.NewPatchOperation("add", PatchPathLabels, map[string]string{
 			SidecarInjectedLabel: "true",
 		})
@@ -136,21 +151,21 @@ func AddDaprSidecarInjectedLabel(labels map[string]string) jsonpatch.Operation {
 }
 
 // AddDaprSidecarAppIDLabel adds Dapr app-id label which can be handy for metric labels
-func AddDaprSidecarAppIDLabel(appID string, labels map[string]string) jsonpatch.Operation {
-	if len(labels) == 0 { // empty labels
+func (c *SidecarConfig) AddDaprSidecarAppIDLabel() jsonpatch.Operation {
+	if len(c.pod.Labels) == 0 { // empty labels
 		return patcher.NewPatchOperation("add", PatchPathLabels, map[string]string{
-			SidecarAppIDLabel: appID,
+			SidecarAppIDLabel: c.GetAppID(),
 		})
 	}
-	return patcher.NewPatchOperation("add", PatchPathLabels+"/dapr.io~1app-id", appID)
+	return patcher.NewPatchOperation("add", PatchPathLabels+"/dapr.io~1app-id", c.GetAppID())
 }
 
 // AddDaprSidecarMetricsEnabledLabel adds Dapr metrics-enabled label which can be handy for scraping metrics
-func AddDaprSidecarMetricsEnabledLabel(metricsEnabled bool, labels map[string]string) jsonpatch.Operation {
-	if len(labels) == 0 { // empty labels
+func (c *SidecarConfig) AddDaprSidecarMetricsEnabledLabel() jsonpatch.Operation {
+	if len(c.pod.Labels) == 0 { // empty labels
 		return patcher.NewPatchOperation("add", PatchPathLabels, map[string]string{
-			SidecarMetricsEnabledLabel: strconv.FormatBool(metricsEnabled),
+			SidecarMetricsEnabledLabel: strconv.FormatBool(c.EnableMetrics),
 		})
 	}
-	return patcher.NewPatchOperation("add", PatchPathLabels+"/dapr.io~1metrics-enabled", strconv.FormatBool(metricsEnabled))
+	return patcher.NewPatchOperation("add", PatchPathLabels+"/dapr.io~1metrics-enabled", strconv.FormatBool(c.EnableMetrics))
 }
