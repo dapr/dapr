@@ -67,7 +67,6 @@ func TestAnnotationCompletness(t *testing.T) {
 				}
 				annotationsPkg = append(annotationsPkg, val)
 			}
-
 		}
 	}
 
