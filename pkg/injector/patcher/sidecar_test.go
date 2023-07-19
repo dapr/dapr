@@ -44,23 +44,41 @@ func TestSidecarConfigInit(t *testing.T) {
 }
 
 func TestSidecarConfigSetFromAnnotations(t *testing.T) {
-	c := NewSidecarConfig(&corev1.Pod{})
+	t.Run("set properties", func(t *testing.T) {
+		c := NewSidecarConfig(&corev1.Pod{})
 
-	// Set properties of supported kinds: bools, strings, ints
-	c.setFromAnnotations(map[string]string{
-		annotations.KeyEnabled:          "1", // Will be cast using utils.IsTruthy
-		annotations.KeyAppID:            "myappid",
-		annotations.KeyAppPort:          "9876",
-		annotations.KeyMetricsPort:      "6789",  // Override default value
-		annotations.KeyEnableAPILogging: "false", // Nullable property
+		// Set properties of supported kinds: bools, strings, ints
+		c.setFromAnnotations(map[string]string{
+			annotations.KeyEnabled:          "1", // Will be cast using utils.IsTruthy
+			annotations.KeyAppID:            "myappid",
+			annotations.KeyAppPort:          "9876",
+			annotations.KeyMetricsPort:      "6789",  // Override default value
+			annotations.KeyEnableAPILogging: "false", // Nullable property
+		})
+
+		assert.True(t, c.Enabled)
+		assert.Equal(t, "myappid", c.AppID)
+		assert.Equal(t, int32(9876), c.AppPort)
+		assert.Equal(t, int32(6789), c.SidecarMetricsPort)
+
+		// Nullable properties
+		_ = assert.NotNil(t, c.EnableAPILogging) &&
+			assert.False(t, *c.EnableAPILogging)
+
+		// Should maintain default values
+		assert.Equal(t, "info", c.LogLevel)
 	})
 
-	assert.True(t, c.Enabled)
-	assert.Equal(t, "myappid", c.AppID)
-	assert.Equal(t, int32(9876), c.AppPort)
-	assert.Equal(t, int32(6789), c.SidecarMetricsPort)
+	t.Run("skip invalid properties", func(t *testing.T) {
+		c := NewSidecarConfig(&corev1.Pod{})
 
-	// Nullable properties
-	_ = assert.NotNil(t, c.EnableAPILogging) &&
-		assert.False(t, *c.EnableAPILogging)
+		// Set properties of supported kinds: bools, strings, ints
+		c.setFromAnnotations(map[string]string{
+			annotations.KeyAppPort:            "zorro",
+			annotations.KeyHTTPMaxRequestSize: "batman", // Nullable property
+		})
+
+		assert.Equal(t, int32(0), c.AppPort)
+		assert.Nil(t, c.HTTPMaxRequestSize)
+	})
 }

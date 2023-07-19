@@ -47,7 +47,7 @@ const (
 	KeyReadinessProbeThreshold          = "dapr.io/sidecar-readiness-probe-threshold"
 	KeySidecarImage                     = "dapr.io/sidecar-image"
 	KeySidecarSeccompProfileType        = "dapr.io/sidecar-seccomp-profile-type"
-	KeyHTTPMaxRequestBodySize           = "dapr.io/http-max-request-size"
+	KeyHTTPMaxRequestSize               = "dapr.io/http-max-request-size"
 	KeyHTTPReadBufferSize               = "dapr.io/http-read-buffer-size"
 	KeyGracefulShutdownSeconds          = "dapr.io/graceful-shutdown-seconds"
 	KeyEnableAPILogging                 = "dapr.io/enable-api-logging"

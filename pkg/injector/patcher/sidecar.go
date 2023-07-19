@@ -86,7 +86,7 @@ type SidecarConfig struct {
 	SidecarSeccompProfileType           string `annotation:"dapr.io/sidecar-seccomp-profile-type"`
 	HTTPMaxRequestSize                  *int   `annotation:"dapr.io/http-max-request-size"`
 	HTTPReadBufferSize                  *int   `annotation:"dapr.io/http-read-buffer-size"`
-	GracefulShutdownSeconds             *int   `annotation:"dapr.io/graceful-shutdown-seconds"`
+	GracefulShutdownSeconds             int    `annotation:"dapr.io/graceful-shutdown-seconds" default:"-1"`
 	EnableAPILogging                    *bool  `annotation:"dapr.io/enable-api-logging"`
 	UnixDomainSocketPath                string `annotation:"dapr.io/unix-domain-socket-path"`
 	VolumeMounts                        string `annotation:"dapr.io/volume-mounts"`
@@ -158,13 +158,14 @@ func (c *SidecarConfig) setFromAnnotations(an map[string]string) {
 	}
 }
 
-func setValueFromString(rt reflect.Type, rv reflect.Value, val string, key string) {
+func setValueFromString(rt reflect.Type, rv reflect.Value, val string, key string) bool {
 	switch rt.Kind() {
 	case reflect.Pointer:
 		pt := rt.Elem()
 		pv := reflect.New(rt.Elem()).Elem()
-		setValueFromString(pt, pv, val, key)
-		rv.Set(pv.Addr())
+		if setValueFromString(pt, pv, val, key) {
+			rv.Set(pv.Addr())
+		}
 	case reflect.String:
 		rv.SetString(val)
 	case reflect.Bool:
@@ -175,6 +176,7 @@ func setValueFromString(rt reflect.Type, rv reflect.Value, val string, key strin
 			rv.SetInt(v)
 		} else {
 			log.Warnf("Failed to parse int value from annotation %s (annotation will be ignored): %v", key, err)
+			return false
 		}
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		v, err := strconv.ParseUint(val, 10, 64)
@@ -182,8 +184,11 @@ func setValueFromString(rt reflect.Type, rv reflect.Value, val string, key strin
 			rv.SetUint(v)
 		} else {
 			log.Warnf("Failed to parse uint value from annotation %s (annotation will be ignored): %v", key, err)
+			return false
 		}
 	}
+
+	return true
 }
 
 // String implements fmt.Stringer and is used to print the state of the object, primarily for debugging purposes.

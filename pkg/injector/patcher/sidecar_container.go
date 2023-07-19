@@ -73,6 +73,7 @@ func (cfg SidecarConfig) GetSidecarContainer(opts getSidecarContainerOpts) (*cor
 		"--control-plane-address", cfg.OperatorAddress,
 		"--sentry-address", cfg.SentryAddress,
 		"--log-level", cfg.LogLevel,
+		"--dapr-graceful-shutdown-seconds", strconv.Itoa(cfg.GracefulShutdownSeconds),
 	}
 
 	if cfg.KubernetesMode {
@@ -107,7 +108,7 @@ func (cfg SidecarConfig) GetSidecarContainer(opts getSidecarContainerOpts) (*cor
 	// This is set explicitly even if "false"
 	// This is because if this CLI flag is missing, the default specified in the Config CRD is used
 	if cfg.EnableAPILogging != nil {
-		args = append(args, "--enable-api-logging", strconv.FormatBool(*cfg.EnableAPILogging))
+		args = append(args, "--enable-api-logging="+strconv.FormatBool(*cfg.EnableAPILogging))
 	}
 
 	if cfg.DisableBuiltinK8sSecretStore {
@@ -152,10 +153,6 @@ func (cfg SidecarConfig) GetSidecarContainer(opts getSidecarContainerOpts) (*cor
 		args = append(args, "--dapr-http-read-buffer-size", strconv.Itoa(*cfg.HTTPReadBufferSize))
 	}
 
-	if cfg.GracefulShutdownSeconds != nil {
-		args = append(args, "--dapr-graceful-shutdown-seconds", strconv.Itoa(*cfg.GracefulShutdownSeconds))
-	}
-
 	// When debugging is enabled, we need to override the command and the flags
 	if cfg.EnableDebug {
 		ports = append(ports, corev1.ContainerPort{
@@ -166,7 +163,7 @@ func (cfg SidecarConfig) GetSidecarContainer(opts getSidecarContainerOpts) (*cor
 		cmd = []string{"/dlv"}
 
 		args = append([]string{
-			"--listen", strconv.FormatInt(int64(cfg.SidecarDebugPort), 10),
+			"--listen", ":" + strconv.FormatInt(int64(cfg.SidecarDebugPort), 10),
 			"--accept-multiclient",
 			"--headless=true",
 			"--log",
