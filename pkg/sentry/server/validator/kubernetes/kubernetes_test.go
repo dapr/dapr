@@ -98,7 +98,7 @@ func TestValidate(t *testing.T) {
 					Namespace: "my-ns",
 				},
 				Spec: configapi.ConfigurationSpec{
-					AccessControlSpec: configapi.AccessControlSpec{
+					AccessControlSpec: &configapi.AccessControlSpec{
 						TrustDomain: "",
 					},
 				},
@@ -145,7 +145,7 @@ func TestValidate(t *testing.T) {
 					Namespace: "not-my-ns",
 				},
 				Spec: configapi.ConfigurationSpec{
-					AccessControlSpec: configapi.AccessControlSpec{
+					AccessControlSpec: &configapi.AccessControlSpec{
 						TrustDomain: "",
 					},
 				},
@@ -191,7 +191,7 @@ func TestValidate(t *testing.T) {
 					Namespace: "my-ns",
 				},
 				Spec: configapi.ConfigurationSpec{
-					AccessControlSpec: configapi.AccessControlSpec{
+					AccessControlSpec: &configapi.AccessControlSpec{
 						TrustDomain: "",
 					},
 				},
@@ -237,7 +237,7 @@ func TestValidate(t *testing.T) {
 					Namespace: "my-ns",
 				},
 				Spec: configapi.ConfigurationSpec{
-					AccessControlSpec: configapi.AccessControlSpec{
+					AccessControlSpec: &configapi.AccessControlSpec{
 						TrustDomain: "",
 					},
 				},
@@ -321,7 +321,7 @@ func TestValidate(t *testing.T) {
 					Namespace: "my-ns",
 				},
 				Spec: configapi.ConfigurationSpec{
-					AccessControlSpec: configapi.AccessControlSpec{
+					AccessControlSpec: &configapi.AccessControlSpec{
 						TrustDomain: "",
 					},
 				},
@@ -539,7 +539,7 @@ func TestValidate(t *testing.T) {
 					Namespace: "my-ns",
 				},
 				Spec: configapi.ConfigurationSpec{
-					AccessControlSpec: configapi.AccessControlSpec{
+					AccessControlSpec: &configapi.AccessControlSpec{
 						TrustDomain: "example.test.dapr.io",
 					},
 				},
@@ -585,7 +585,7 @@ func TestValidate(t *testing.T) {
 					Namespace: "my-ns",
 				},
 				Spec: configapi.ConfigurationSpec{
-					AccessControlSpec: configapi.AccessControlSpec{
+					AccessControlSpec: &configapi.AccessControlSpec{
 						TrustDomain: "",
 					},
 				},
@@ -755,7 +755,7 @@ func TestValidate(t *testing.T) {
 					Namespace: "my-ns",
 				},
 				Spec: configapi.ConfigurationSpec{
-					AccessControlSpec: configapi.AccessControlSpec{
+					AccessControlSpec: &configapi.AccessControlSpec{
 						TrustDomain: "example.test.dapr.io",
 					},
 				},
