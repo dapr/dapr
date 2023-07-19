@@ -22,11 +22,11 @@ const (
 	defaultMetricsEnabled = true
 )
 
-// Options defines the sets of options for Dapr logging.
+// Options defines the sets of options for exporting metrics.
 type Options struct {
-	// OutputLevel is the level of logging
+	// MetricsEnabled indicates whether a metrics server should be started.
 	MetricsEnabled bool
-
+	// Port to start metrics server on.
 	Port string
 }
 
