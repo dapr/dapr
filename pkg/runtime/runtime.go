@@ -52,6 +52,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/structpb"
+	apiextensionsV1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 
@@ -1188,54 +1189,65 @@ func (a *DaprRuntime) processHTTPEndpointSecrets(endpoint *httpEndpointV1alpha1.
 		Pairs:       []commonapi.NameValuePair{},
 	}
 
-	var root, clientCert, clientKey bool
+	var root, clientCert, clientKey string = "root", "clientCert", "clientKey"
+
+	ca := commonapi.NameValuePair{
+		Name: root,
+	}
+
+	if endpoint.HasTLSRootCA() {
+		ca.Value = *endpoint.Spec.RootCA.Value
+	}
 
 	if endpoint.HasTLSRootCASecret() {
-		ca := commonapi.NameValuePair{
-			SecretKeyRef: *endpoint.Spec.RootCA.SecretKeyRef,
-		}
-		if endpoint.HasTLSRootCA() {
-			ca.Value = *endpoint.Spec.RootCA.Value
-		}
+		ca.SecretKeyRef = *endpoint.Spec.RootCA.SecretKeyRef
+	}
+	tlsResource.Pairs = append(tlsResource.Pairs, ca)
 
-		tlsResource.Pairs = append(tlsResource.Pairs, ca)
-		root = true
+	cCert := commonapi.NameValuePair{
+		Name: clientCert,
+	}
+
+	if endpoint.HasTLSClientCert() {
+		cCert.Value = *endpoint.Spec.ClientCert.Value
 	}
 
 	if endpoint.HasTLSClientCertSecret() {
-		cCert := commonapi.NameValuePair{
-			SecretKeyRef: *endpoint.Spec.ClientCert.SecretKeyRef,
-		}
-		if endpoint.HasTLSClientCert() {
-			cCert.Value = *endpoint.Spec.ClientCert.Value
-		}
-		tlsResource.Pairs = append(tlsResource.Pairs, cCert)
-		clientCert = true
+		cCert.SecretKeyRef = *endpoint.Spec.ClientCert.SecretKeyRef
+	}
+	tlsResource.Pairs = append(tlsResource.Pairs, cCert)
+
+	cKey := commonapi.NameValuePair{
+		Name: clientKey,
+	}
+
+	if endpoint.HasTLSClientKey() {
+		cKey.Value = *endpoint.Spec.ClientKey.Value
 	}
 
 	if endpoint.HasTLSClientKeySecret() {
-		cKey := commonapi.NameValuePair{
-			SecretKeyRef: *endpoint.Spec.ClientKey.SecretKeyRef,
-		}
-		if endpoint.HasTLSClientKey() {
-			cKey.Value = *endpoint.Spec.ClientKey.Value
-		}
-		tlsResource.Pairs = append(tlsResource.Pairs, cKey)
-		clientKey = true
+		cKey.SecretKeyRef = *endpoint.Spec.ClientKey.SecretKeyRef
 	}
+
+	tlsResource.Pairs = append(tlsResource.Pairs, cKey)
 
 	updated, _ := a.processResourceSecrets(&tlsResource)
 	if updated {
-		if root {
-			endpoint.Spec.RootCA.Value = &tlsResource.NameValuePairs()[0].Value
-		}
+		for _, np := range tlsResource.Pairs {
+			dv := &commonapi.DynamicValue{
+				JSON: apiextensionsV1.JSON{
+					Raw: np.Value.Raw,
+				},
+			}
 
-		if clientCert {
-			endpoint.Spec.ClientCert.Value = &tlsResource.NameValuePairs()[1].Value
-		}
-
-		if clientKey {
-			endpoint.Spec.ClientKey.Value = &tlsResource.NameValuePairs()[2].Value
+			switch np.Name {
+			case root:
+				endpoint.Spec.RootCA.Value = dv
+			case clientCert:
+				endpoint.Spec.ClientCert.Value = dv
+			case clientKey:
+				endpoint.Spec.ClientKey.Value = dv
+			}
 		}
 	}
 }

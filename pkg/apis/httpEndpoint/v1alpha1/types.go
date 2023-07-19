@@ -71,7 +71,7 @@ func (h HTTPEndpoint) HasTLSClientCertSecret() bool {
 	return h.Spec.ClientCert != nil && h.Spec.ClientCert.SecretKeyRef != nil && h.Spec.ClientCert.SecretKeyRef.Name != ""
 }
 
-// HasTLSRootCASecret returns a bool indicating if a client cert has a secret reference
+// HasTLSRootCASecret returns a bool indicating if a root cert has a secret reference
 func (h HTTPEndpoint) HasTLSRootCASecret() bool {
 	return h.Spec.RootCA != nil && h.Spec.RootCA.SecretKeyRef != nil && h.Spec.RootCA.SecretKeyRef.Name != ""
 }
@@ -81,12 +81,12 @@ func (h HTTPEndpoint) HasTLSRootCA() bool {
 	return h.Spec.RootCA != nil && h.Spec.RootCA.Value != nil
 }
 
-// HasTLSClientCert returns a bool indicating if the HTTP endpoint contains a root ca
+// HasTLSClientCert returns a bool indicating if the HTTP endpoint contains a client cert
 func (h HTTPEndpoint) HasTLSClientCert() bool {
 	return h.Spec.ClientCert != nil && h.Spec.ClientCert.Value != nil
 }
 
-// HasTLSClientKey returns a bool indicating if the HTTP endpoint contains a root ca
+// HasTLSClientKey returns a bool indicating if the HTTP endpoint contains a client key
 func (h HTTPEndpoint) HasTLSClientKey() bool {
 	return h.Spec.ClientKey != nil && h.Spec.ClientKey.Value != nil
 }
