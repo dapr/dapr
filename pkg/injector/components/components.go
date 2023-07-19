@@ -14,8 +14,6 @@ limitations under the License.
 package components
 
 import (
-	"strings"
-
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/dapr/dapr/pkg/components/pluggable"
@@ -44,28 +42,6 @@ func sharedComponentsUnixSocketVolumeMount(mountPath string) corev1.VolumeMount 
 		Name:      componentsUnixDomainSocketVolumeName,
 		MountPath: mountPath,
 	}
-}
-
-// SplitContainers split containers between appContainers and componentContainers.
-func SplitContainers(pod corev1.Pod) (appContainers map[int]corev1.Container, componentContainers map[int]corev1.Container) {
-	appContainers = make(map[int]corev1.Container, len(pod.Spec.Containers))
-	componentContainers = make(map[int]corev1.Container, len(pod.Spec.Containers))
-	pluggableComponents := annotations.New(pod.Annotations).GetString(annotations.KeyPluggableComponents)
-	componentsNames := strings.Split(pluggableComponents, ",")
-	isComponent := make(map[string]bool, len(componentsNames))
-	for _, name := range componentsNames {
-		isComponent[name] = true
-	}
-
-	for idx, container := range pod.Spec.Containers {
-		if isComponent[container.Name] {
-			componentContainers[idx] = container
-		} else {
-			appContainers[idx] = container
-		}
-	}
-
-	return appContainers, componentContainers
 }
 
 // PatchOps returns the patch operations required to properly bootstrap the pluggable component and the respective volume mount for the sidecar.

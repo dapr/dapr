@@ -16,21 +16,18 @@ package patcher
 import (
 	"fmt"
 
+	jsonpatch "github.com/evanphx/json-patch/v5"
 	corev1 "k8s.io/api/core/v1"
 )
 
 // GetEnvPatchOperations adds new environment variables only if they do not exist.
 // It does not override existing values for those variables if they have been defined already.
-func GetEnvPatchOperations(envs []corev1.EnvVar, addEnv []corev1.EnvVar, containerIdx int) []PatchOperation {
+func GetEnvPatchOperations(envs []corev1.EnvVar, addEnv []corev1.EnvVar, containerIdx int) jsonpatch.Patch {
 	path := fmt.Sprintf("%s/%d/env", PatchPathContainers, containerIdx)
 	if len(envs) == 0 {
 		// If there are no environment variables defined in the container, we initialize a slice of environment vars.
-		return []PatchOperation{
-			{
-				Op:    "add",
-				Path:  path,
-				Value: addEnv,
-			},
+		return jsonpatch.Patch{
+			NewPatchOperation("add", path, addEnv),
 		}
 	}
 
@@ -43,7 +40,7 @@ func GetEnvPatchOperations(envs []corev1.EnvVar, addEnv []corev1.EnvVar, contain
 		existing[e.Name] = struct{}{}
 	}
 
-	patchOps := make([]PatchOperation, len(addEnv))
+	patchOps := make(jsonpatch.Patch, len(addEnv))
 	n := 0
 	for _, env := range addEnv {
 		// Add only env vars that do not conflict with existing user defined/injected env vars.
@@ -52,27 +49,19 @@ func GetEnvPatchOperations(envs []corev1.EnvVar, addEnv []corev1.EnvVar, contain
 			continue
 		}
 
-		patchOps[n] = PatchOperation{
-			Op:    "add",
-			Path:  path,
-			Value: env,
-		}
+		patchOps[n] = NewPatchOperation("add", path, env)
 		n++
 	}
 	return patchOps[:n]
 }
 
 // GetVolumeMountPatchOperations gets the patch operations for volume mounts
-func GetVolumeMountPatchOperations(volumeMounts []corev1.VolumeMount, addMounts []corev1.VolumeMount, containerIdx int) []PatchOperation {
+func GetVolumeMountPatchOperations(volumeMounts []corev1.VolumeMount, addMounts []corev1.VolumeMount, containerIdx int) jsonpatch.Patch {
 	path := fmt.Sprintf("%s/%d/volumeMounts", PatchPathContainers, containerIdx)
 	if len(volumeMounts) == 0 {
 		// If there are no volume mounts defined in the container, we initialize a slice of volume mounts.
-		return []PatchOperation{
-			{
-				Op:    "add",
-				Path:  path,
-				Value: addMounts,
-			},
+		return jsonpatch.Patch{
+			NewPatchOperation("add", path, addMounts),
 		}
 	}
 
@@ -87,23 +76,19 @@ func GetVolumeMountPatchOperations(volumeMounts []corev1.VolumeMount, addMounts 
 		existingNames[m.Name] = struct{}{}
 	}
 
-	patchOps := make([]PatchOperation, len(addMounts))
+	patchOps := make(jsonpatch.Patch, len(addMounts))
 	n := 0
 	var ok bool
-	for _, addMount := range addMounts {
+	for _, mount := range addMounts {
 		// Do not add the mount if a volume is already mounted on the same path or has the same name
-		if _, ok = existingMounts[addMount.MountPath]; ok {
+		if _, ok = existingMounts[mount.MountPath]; ok {
 			continue
 		}
-		if _, ok = existingNames[addMount.Name]; ok {
+		if _, ok = existingNames[mount.Name]; ok {
 			continue
 		}
 
-		patchOps[n] = PatchOperation{
-			Op:    "add",
-			Path:  path,
-			Value: addMount,
-		}
+		patchOps[n] = NewPatchOperation("add", path, mount)
 		n++
 	}
 

@@ -13,6 +13,14 @@ limitations under the License.
 
 package patcher
 
+import (
+	"encoding/json"
+
+	jsonpatch "github.com/evanphx/json-patch/v5"
+
+	"github.com/dapr/kit/ptr"
+)
+
 const (
 	// Path for patching containers.
 	PatchPathContainers = "/spec/containers"
@@ -20,9 +28,20 @@ const (
 	PatchPathVolumes = "/spec/volumes"
 )
 
-// PatchOperation represents a discreet change to be applied to a Kubernetes resource.
-type PatchOperation struct {
-	Op    string `json:"op"`
-	Path  string `json:"path"`
-	Value any    `json:"value,omitempty"`
+// NewPatchOperation returns a jsonpatch.Operation with the provided properties.
+// This patch represents a discrete change to be applied to a Kubernetes resource.
+func NewPatchOperation(op string, path string, value any) jsonpatch.Operation {
+	patchOp := jsonpatch.Operation{
+		"op":   ptr.Of(json.RawMessage(`"` + op + `"`)),
+		"path": ptr.Of(json.RawMessage(`"` + path + `"`)),
+	}
+
+	if value != nil {
+		val, _ := json.Marshal(value)
+		if len(val) > 0 && string(val) != "null" {
+			patchOp["value"] = ptr.Of[json.RawMessage](val)
+		}
+	}
+
+	return patchOp
 }

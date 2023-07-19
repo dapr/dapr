@@ -77,7 +77,7 @@ func TestParseEnvString(t *testing.T) {
 	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.testName, func(t *testing.T) {
-			c := NewSidecarConfig()
+			c := NewSidecarConfig(&corev1.Pod{})
 			c.Env = tc.envStr
 			envKeys, envVars := c.GetEnv()
 			assert.Equal(t, tc.expLen, len(envVars))
@@ -250,10 +250,6 @@ func TestGetVolumeMounts(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.testName, func(t *testing.T) {
-			c := NewSidecarConfig()
-			c.VolumeMounts = tc.volumeReadOnlyAnnotation
-			c.VolumeMountsRW = tc.volumeReadWriteAnnotation
-
 			pod := &corev1.Pod{
 				Spec: corev1.PodSpec{
 					Volumes: []corev1.Volume{},
@@ -263,7 +259,11 @@ func TestGetVolumeMounts(t *testing.T) {
 				pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{Name: volumeName})
 			}
 
-			volumeMounts := c.GetVolumeMounts(pod)
+			c := NewSidecarConfig(pod)
+			c.VolumeMounts = tc.volumeReadOnlyAnnotation
+			c.VolumeMountsRW = tc.volumeReadWriteAnnotation
+
+			volumeMounts := c.GetVolumeMounts()
 			assert.Equal(t, tc.expVolumeMounts, volumeMounts)
 		})
 	}
@@ -274,7 +274,6 @@ func TestGetUnixDomainSocketVolume(t *testing.T) {
 		testName        string
 		udsPath         string
 		originalVolumes []corev1.Volume
-		expectVolumes   []corev1.Volume
 		exportMount     *corev1.VolumeMount
 	}{
 		{
@@ -282,36 +281,27 @@ func TestGetUnixDomainSocketVolume(t *testing.T) {
 			"",
 			nil,
 			nil,
-			nil,
 		},
 		{
-			"append on empty volumes",
+			"add volume",
 			"/tmp",
 			nil,
-			[]corev1.Volume{{Name: UnixDomainSocketVolume}},
-			&corev1.VolumeMount{Name: UnixDomainSocketVolume, MountPath: "/tmp"},
-		},
-		{
-			"append on existed volumes",
-			"/tmp",
-			[]corev1.Volume{{Name: "mock"}},
-			[]corev1.Volume{{Name: UnixDomainSocketVolume}, {Name: "mock"}},
 			&corev1.VolumeMount{Name: UnixDomainSocketVolume, MountPath: "/tmp"},
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.testName, func(t *testing.T) {
-			c := NewSidecarConfig()
-			c.UnixDomainSocketPath = tc.udsPath
-
-			pod := corev1.Pod{
+			pod := &corev1.Pod{
 				Spec: corev1.PodSpec{
 					Volumes: tc.originalVolumes,
 				},
 			}
 
-			socketMount := c.GetUnixDomainSocketVolumeMount(&pod)
+			c := NewSidecarConfig(pod)
+			c.UnixDomainSocketPath = tc.udsPath
+
+			socketMount := c.GetUnixDomainSocketVolumeMount()
 
 			if tc.exportMount == nil {
 				assert.Equal(t, tc.exportMount, socketMount)
@@ -319,8 +309,6 @@ func TestGetUnixDomainSocketVolume(t *testing.T) {
 				assert.Equal(t, tc.exportMount.Name, socketMount.Name)
 				assert.Equal(t, tc.exportMount.MountPath, socketMount.MountPath)
 			}
-
-			assert.Equal(t, len(tc.expectVolumes), len(pod.Spec.Volumes))
 		})
 	}
 }

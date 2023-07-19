@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"strings"
 
+	jsonpatch "github.com/evanphx/json-patch/v5"
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -40,7 +41,7 @@ const (
 
 func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.AdmissionReview,
 	namespace, image, imagePullPolicy string, kubeClient kubernetes.Interface, daprClient scheme.Interface,
-) (patchOps []patcher.PatchOperation, err error) {
+) (patchOps jsonpatch.Patch, err error) {
 	req := ar.Request
 	var pod corev1.Pod
 	err = json.Unmarshal(req.Object.Raw, &pod)
@@ -129,29 +130,27 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 	}
 
 	// Create the list of patch operations
-	patchOps = []patcher.PatchOperation{}
-	if len(pod.Spec.Containers) == 0 { // set to empty to support add operations individually
-		patchOps = append(patchOps, patcher.PatchOperation{
-			Op:    "add",
-			Path:  patcher.PatchPathContainers,
-			Value: []corev1.Container{},
-		})
+	patchOps = jsonpatch.Patch{}
+	if len(pod.Spec.Containers) == 0 {
+		// Set to empty to support add operations individually
+		patchOps = append(patchOps,
+			patcher.NewPatchOperation("add", patcher.PatchPathContainers, []corev1.Container{}),
+		)
 	}
 
 	patchOps = append(patchOps,
-		patcher.PatchOperation{
-			Op:    "add",
-			Path:  patcher.PatchPathContainers + "/-",
-			Value: sidecarContainer,
-		},
-		sidecar.AddDaprSideCarInjectedLabel(pod.Labels),
-		sidecar.AddDaprSideCarAppIDLabel(appID, pod.Labels),
-		sidecar.AddDaprSideCarMetricsEnabledLabel(metricsEnabled, pod.Labels))
+		patcher.NewPatchOperation("add", patcher.PatchPathContainers+"/-", sidecarContainer),
+		sidecar.AddDaprSidecarInjectedLabel(pod.Labels),
+		sidecar.AddDaprSidecarAppIDLabel(appID, pod.Labels),
+		sidecar.AddDaprSidecarMetricsEnabledLabel(metricsEnabled, pod.Labels),
+	)
 
 	patchOps = append(patchOps,
-		sidecar.AddDaprEnvVarsToContainers(appContainers, getAppProtocol(an))...)
+		sidecar.AddDaprEnvVarsToContainers(appContainers, getAppProtocol(an))...,
+	)
 	patchOps = append(patchOps,
-		sidecar.AddSocketVolumeMountToContainers(appContainers, socketVolumeMount)...)
+		sidecar.AddSocketVolumeMountToContainers(appContainers, socketVolumeMount)...,
+	)
 	volumePatchOps := sidecar.GetVolumesPatchOperations(
 		pod.Spec.Volumes,
 		[]corev1.Volume{tokenVolume},

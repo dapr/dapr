@@ -99,12 +99,19 @@ type SidecarConfig struct {
 	ComponentContainer                  string `annotation:"dapr.io/component-container"`
 	InjectPluggableComponents           bool   `annotation:"dapr.io/inject-pluggable-components"`
 	AppChannelAddress                   string `annotation:"dapr.io/app-channel-address"`
+
+	pod *corev1.Pod
 }
 
-// NewSidecarConfig returns a ContainerConfig object with the default values set.
-func NewSidecarConfig() *SidecarConfig {
-	c := &SidecarConfig{}
+// NewSidecarConfig returns a ContainerConfig object for a pod.
+func NewSidecarConfig(pod *corev1.Pod) *SidecarConfig {
+	c := &SidecarConfig{
+		pod: pod,
+	}
+
 	c.setDefaultValues()
+	c.setFromAnnotations(pod.GetAnnotations())
+
 	return c
 }
 
@@ -124,8 +131,8 @@ func (c *SidecarConfig) setDefaultValues() {
 	}
 }
 
-// SetFromAnnotations updates the object with properties from an annotation map.
-func (c *SidecarConfig) SetFromAnnotations(an map[string]string) {
+// setFromAnnotations updates the object with properties from an annotation map.
+func (c *SidecarConfig) setFromAnnotations(an map[string]string) {
 	// Iterate through the fields using reflection
 	val := reflect.ValueOf(c).Elem()
 	for i := 0; i < val.NumField(); i++ {

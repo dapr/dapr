@@ -18,10 +18,11 @@ import (
 
 	"github.com/dapr/dapr/pkg/injector/annotations"
 	"github.com/stretchr/testify/assert"
+	corev1 "k8s.io/api/core/v1"
 )
 
 func TestSidecarConfigInit(t *testing.T) {
-	c := NewSidecarConfig()
+	c := NewSidecarConfig(&corev1.Pod{})
 
 	// Ensure default values are set (and that those without a default value are zero)
 	// Check properties of supported kinds: bools, strings, ints
@@ -42,10 +43,10 @@ func TestSidecarConfigInit(t *testing.T) {
 }
 
 func TestSidecarConfigSetFromAnnotations(t *testing.T) {
-	c := NewSidecarConfig()
+	c := NewSidecarConfig(&corev1.Pod{})
 
 	// Set properties of supported kinds: bools, strings, ints
-	c.SetFromAnnotations(map[string]string{
+	c.setFromAnnotations(map[string]string{
 		annotations.KeyEnabled:          "1", // Will be cast using utils.IsTruthy
 		annotations.KeyAppID:            "myappid",
 		annotations.KeyAppPort:          "9876",

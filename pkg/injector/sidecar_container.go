@@ -18,8 +18,12 @@ import (
 	"github.com/dapr/kit/ptr"
 )
 
+type getSidecarContainerOpts struct {
+	ComponentsSocketsVolumeMount *corev1.VolumeMount
+}
+
 // GetSidecarContainer returns the Container object for the sidecar.
-func (cfg SidecarConfig) GetSidecarContainer(pod *corev1.Pod) (*corev1.Container, error) {
+func (cfg SidecarConfig) GetSidecarContainer(opts getSidecarContainerOpts) (*corev1.Container, error) {
 	// TODO: In caller, set defaults for PlacementServiceAddress and SidecarImage
 	// We still include PlacementServiceAddress if explicitly set as annotation
 	/*if cfg.Annotations.Exist(annotations.KeyPlacementHostAddresses) {
@@ -30,6 +34,14 @@ func (cfg SidecarConfig) GetSidecarContainer(pod *corev1.Pod) (*corev1.Container
 	if image := cfg.Annotations.GetString(annotations.KeySidecarImage); image != "" {
 		cfg.DaprSidecarImage = image
 	}*/
+	// TODO: If UDS are used, add the volume
+	/*
+		// socketVolume is an EmptyDir
+		socketVolume := &corev1.Volume{
+			Name: UnixDomainSocketVolume,
+		}
+		pod.Spec.Volumes = append(pod.Spec.Volumes, *socketVolume)
+	*/
 
 	// Ports for the daprd container
 	ports := []corev1.ContainerPort{
@@ -59,7 +71,7 @@ func (cfg SidecarConfig) GetSidecarContainer(pod *corev1.Pod) (*corev1.Container
 		"--dapr-internal-grpc-port", strconv.FormatInt(int64(cfg.SidecarInternalGRPCPort), 10),
 		"--dapr-listen-addresses", cfg.SidecarListenAddresses,
 		"--dapr-public-port", strconv.FormatInt(int64(cfg.SidecarPublicPort), 10),
-		"--app-id", cfg.AppID,
+		"--app-id", cfg.GetAppID(),
 		"--app-protocol", cfg.AppProtocol,
 		"--control-plane-address", cfg.OperatorAddress,
 		"--sentry-address", cfg.SentryAddress,
@@ -174,8 +186,8 @@ func (cfg SidecarConfig) GetSidecarContainer(pod *corev1.Pod) (*corev1.Container
 	}
 
 	// Get all volume mounts
-	volumeMounts := cfg.GetVolumeMounts(pod)
-	if socketVolumeMount := cfg.GetUnixDomainSocketVolumeMount(pod); socketVolumeMount != nil {
+	volumeMounts := cfg.GetVolumeMounts()
+	if socketVolumeMount := cfg.GetUnixDomainSocketVolumeMount(); socketVolumeMount != nil {
 		volumeMounts = append(volumeMounts, *socketVolumeMount)
 	}
 	volumeMounts = append(volumeMounts, corev1.VolumeMount{
@@ -265,11 +277,11 @@ func (cfg SidecarConfig) GetSidecarContainer(pod *corev1.Pod) (*corev1.Container
 		}
 	}
 
-	if cfg.ComponentsSocketsVolumeMount != nil {
-		container.VolumeMounts = append(container.VolumeMounts, *cfg.ComponentsSocketsVolumeMount)
+	if opts.ComponentsSocketsVolumeMount != nil {
+		container.VolumeMounts = append(container.VolumeMounts, *opts.ComponentsSocketsVolumeMount)
 		container.Env = append(container.Env, corev1.EnvVar{
 			Name:  pluggable.SocketFolderEnvVar,
-			Value: cfg.ComponentsSocketsVolumeMount.MountPath,
+			Value: opts.ComponentsSocketsVolumeMount.MountPath,
 		})
 	}
 
@@ -371,6 +383,15 @@ func (c *SidecarConfig) getResourceRequirements() (*corev1.ResourceRequirements,
 	return &r, nil
 }
 
+// GetAppID returns the AppID property, fallinb back to the name of the pod.
+func (c *SidecarConfig) GetAppID() string {
+	if c.AppID == "" {
+		return c.pod.GetName()
+	}
+
+	return c.AppID
+}
+
 var envRegexp = regexp.MustCompile(`(?m)(,)\s*[a-zA-Z\_][a-zA-Z0-9\_]*=`)
 
 // GetEnv returns the EnvVar slice from the Env annotation.
@@ -406,7 +427,7 @@ func (c *SidecarConfig) GetEnv() (envKeys []string, envVars []corev1.EnvVar) {
 }
 
 // GetVolumeMounts returns the list of VolumeMount's for the sidecar container.
-func (c *SidecarConfig) GetVolumeMounts(pod *corev1.Pod) []corev1.VolumeMount {
+func (c *SidecarConfig) GetVolumeMounts() []corev1.VolumeMount {
 	vs := append(
 		parseVolumeMountsString(c.VolumeMounts, true),
 		parseVolumeMountsString(c.VolumeMountsRW, false)...,
@@ -415,10 +436,10 @@ func (c *SidecarConfig) GetVolumeMounts(pod *corev1.Pod) []corev1.VolumeMount {
 	// Allocate with an extra 3 capacity because we are appending more volumes later
 	volumeMounts := make([]corev1.VolumeMount, 0, len(vs)+3)
 	for _, v := range vs {
-		if podContainsVolume(pod, v.Name) {
+		if podContainsVolume(c.pod, v.Name) {
 			volumeMounts = append(volumeMounts, v)
 		} else {
-			log.Warnf("Volume %s is not present in pod %s, skipping", v.Name, pod.Name)
+			log.Warnf("Volume %s is not present in pod %s, skipping", v.Name, c.pod.GetName())
 		}
 	}
 
@@ -426,17 +447,10 @@ func (c *SidecarConfig) GetVolumeMounts(pod *corev1.Pod) []corev1.VolumeMount {
 }
 
 // GetUnixDomainSocketVolumeMount returns a volume mount for the pod to append the UNIX domain socket.
-func (c *SidecarConfig) GetUnixDomainSocketVolumeMount(pod *corev1.Pod) *corev1.VolumeMount {
+func (c *SidecarConfig) GetUnixDomainSocketVolumeMount() *corev1.VolumeMount {
 	if c.UnixDomainSocketPath == "" {
 		return nil
 	}
-
-	// socketVolume is an EmptyDir
-	socketVolume := &corev1.Volume{
-		Name: UnixDomainSocketVolume,
-	}
-
-	pod.Spec.Volumes = append(pod.Spec.Volumes, *socketVolume)
 
 	return &corev1.VolumeMount{
 		Name:      UnixDomainSocketVolume,

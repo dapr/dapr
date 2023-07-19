@@ -20,10 +20,10 @@ import (
 
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	coreV1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/dapr/dapr/pkg/injector/annotations"
 	"github.com/dapr/dapr/pkg/injector/patcher"
 )
 
@@ -33,7 +33,7 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 		mockContainer coreV1.Container
 		appProtocol   string
 		expOpsLen     int
-		expOps        []patcher.PatchOperation
+		expOps        jsonpatch.Patch
 	}{
 		{
 			testName: "empty environment vars",
@@ -41,21 +41,17 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 				Name: "MockContainer",
 			},
 			expOpsLen: 1,
-			expOps: []patcher.PatchOperation{
-				{
-					Op:   "add",
-					Path: "/spec/containers/0/env",
-					Value: []coreV1.EnvVar{
-						{
-							Name:  UserContainerDaprHTTPPortName,
-							Value: strconv.Itoa(SidecarHTTPPort),
-						},
-						{
-							Name:  UserContainerDaprGRPCPortName,
-							Value: strconv.Itoa(SidecarAPIGRPCPort),
-						},
+			expOps: jsonpatch.Patch{
+				patcher.NewPatchOperation("add", "/spec/containers/0/env", []coreV1.EnvVar{
+					{
+						Name:  UserContainerDaprHTTPPortName,
+						Value: strconv.Itoa(SidecarHTTPPort),
 					},
-				},
+					{
+						Name:  UserContainerDaprGRPCPortName,
+						Value: strconv.Itoa(SidecarAPIGRPCPort),
+					},
+				}),
 			},
 		},
 		{
@@ -70,23 +66,15 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 				},
 			},
 			expOpsLen: 2,
-			expOps: []patcher.PatchOperation{
-				{
-					Op:   "add",
-					Path: "/spec/containers/0/env/-",
-					Value: coreV1.EnvVar{
-						Name:  UserContainerDaprHTTPPortName,
-						Value: strconv.Itoa(SidecarHTTPPort),
-					},
-				},
-				{
-					Op:   "add",
-					Path: "/spec/containers/0/env/-",
-					Value: coreV1.EnvVar{
-						Name:  UserContainerDaprGRPCPortName,
-						Value: strconv.Itoa(SidecarAPIGRPCPort),
-					},
-				},
+			expOps: jsonpatch.Patch{
+				patcher.NewPatchOperation("add", "/spec/containers/0/env/-", coreV1.EnvVar{
+					Name:  UserContainerDaprHTTPPortName,
+					Value: strconv.Itoa(SidecarHTTPPort),
+				}),
+				patcher.NewPatchOperation("add", "/spec/containers/0/env/-", coreV1.EnvVar{
+					Name:  UserContainerDaprGRPCPortName,
+					Value: strconv.Itoa(SidecarAPIGRPCPort),
+				}),
 			},
 		},
 		{
@@ -105,15 +93,11 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 				},
 			},
 			expOpsLen: 1,
-			expOps: []patcher.PatchOperation{
-				{
-					Op:   "add",
-					Path: "/spec/containers/0/env/-",
-					Value: coreV1.EnvVar{
-						Name:  UserContainerDaprHTTPPortName,
-						Value: strconv.Itoa(SidecarHTTPPort),
-					},
-				},
+			expOps: jsonpatch.Patch{
+				patcher.NewPatchOperation("add", "/spec/containers/0/env/-", coreV1.EnvVar{
+					Name:  UserContainerDaprHTTPPortName,
+					Value: strconv.Itoa(SidecarHTTPPort),
+				}),
 			},
 		},
 		{
@@ -132,7 +116,7 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 				},
 			},
 			expOpsLen: 0,
-			expOps:    []patcher.PatchOperation{},
+			expOps:    jsonpatch.Patch{},
 		},
 		{
 			testName: "with app protocol",
@@ -141,25 +125,21 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 			},
 			expOpsLen:   1,
 			appProtocol: "h2c",
-			expOps: []patcher.PatchOperation{
-				{
-					Op:   "add",
-					Path: "/spec/containers/0/env",
-					Value: []coreV1.EnvVar{
-						{
-							Name:  UserContainerDaprHTTPPortName,
-							Value: strconv.Itoa(SidecarHTTPPort),
-						},
-						{
-							Name:  UserContainerDaprGRPCPortName,
-							Value: strconv.Itoa(SidecarAPIGRPCPort),
-						},
-						{
-							Name:  UserContainerAppProtocolName,
-							Value: "h2c",
-						},
+			expOps: jsonpatch.Patch{
+				patcher.NewPatchOperation("add", "/spec/containers/0/env", []coreV1.EnvVar{
+					{
+						Name:  UserContainerDaprHTTPPortName,
+						Value: strconv.Itoa(SidecarHTTPPort),
 					},
-				},
+					{
+						Name:  UserContainerDaprGRPCPortName,
+						Value: strconv.Itoa(SidecarAPIGRPCPort),
+					},
+					{
+						Name:  UserContainerAppProtocolName,
+						Value: "h2c",
+					},
+				}),
 			},
 		},
 	}
@@ -209,7 +189,9 @@ func TestAddDaprAppIDLabel(t *testing.T) {
 	for _, tc := range testCases {
 		tc := tc // closure copy
 		t.Run(tc.testName, func(t *testing.T) {
-			newPodJSON := patchObject(t, tc.mockPod, []patcher.PatchOperation{AddDaprSideCarAppIDLabel("my-app", tc.mockPod.Labels)})
+			newPodJSON := patchObject(t, tc.mockPod, jsonpatch.Patch{
+				AddDaprSidecarAppIDLabel("my-app", tc.mockPod.Labels),
+			})
 			newPod := coreV1.Pod{}
 			assert.NoError(t, json.Unmarshal(newPodJSON, &newPod))
 			assert.Equal(t, tc.expLabels, newPod.Labels)
@@ -229,8 +211,8 @@ func TestAddDaprMetricsEnabledLabel(t *testing.T) {
 			mockPod: coreV1.Pod{
 				ObjectMeta: metav1.ObjectMeta{},
 			},
-			expLabels:      map[string]string{SidecarMetricsEnabledLabel: strconv.FormatBool(annotations.DefaultEnableMetric)},
-			metricsEnabled: annotations.DefaultEnableMetric,
+			expLabels:      map[string]string{SidecarMetricsEnabledLabel: "false"},
+			metricsEnabled: false,
 		},
 		{
 			testName: "metrics annotation present and explicitly enabled, with existing labels",
@@ -258,7 +240,9 @@ func TestAddDaprMetricsEnabledLabel(t *testing.T) {
 	for _, tc := range testCases {
 		tc := tc // closure copy
 		t.Run(tc.testName, func(t *testing.T) {
-			newPodJSON := patchObject(t, tc.mockPod, []patcher.PatchOperation{AddDaprSideCarMetricsEnabledLabel(tc.metricsEnabled, tc.mockPod.Labels)})
+			newPodJSON := patchObject(t, tc.mockPod, jsonpatch.Patch{
+				AddDaprSidecarMetricsEnabledLabel(tc.metricsEnabled, tc.mockPod.Labels),
+			})
 			newPod := coreV1.Pod{}
 			assert.NoError(t, json.Unmarshal(newPodJSON, &newPod))
 			assert.Equal(t, tc.expLabels, newPod.Labels)
@@ -302,7 +286,9 @@ func TestAddDaprInjectedLabel(t *testing.T) {
 	for _, tc := range testCases {
 		tc := tc // closure copy
 		t.Run(tc.testName, func(t *testing.T) {
-			newPodJSON := patchObject(t, tc.mockPod, []patcher.PatchOperation{AddDaprSideCarInjectedLabel(tc.mockPod.Labels)})
+			newPodJSON := patchObject(t, tc.mockPod, jsonpatch.Patch{
+				AddDaprSidecarInjectedLabel(tc.mockPod.Labels)},
+			)
 			newPod := coreV1.Pod{}
 			assert.NoError(t, json.Unmarshal(newPodJSON, &newPod))
 			assert.Equal(t, tc.expLabels, newPod.Labels)
@@ -311,19 +297,11 @@ func TestAddDaprInjectedLabel(t *testing.T) {
 }
 
 // patchObject executes a jsonpatch action against the object passed
-func patchObject(t *testing.T, origObj interface{}, patchOperations []patcher.PatchOperation) []byte {
-	marshal := func(o interface{}) []byte {
-		objBytes, err := json.Marshal(o)
-		assert.NoError(t, err)
-		return objBytes
-	}
-
-	podJSON := marshal(origObj)
-	patchJSON := marshal(patchOperations)
-	decodedPatch, err := jsonpatch.DecodePatch(patchJSON)
-	assert.NoError(t, err)
-	newJSON, err := decodedPatch.Apply(podJSON)
-	assert.NoError(t, err)
+func patchObject(t *testing.T, origObj interface{}, patch jsonpatch.Patch) []byte {
+	podJSON, err := json.Marshal(origObj)
+	require.NoError(t, err)
+	newJSON, err := patch.Apply(podJSON)
+	require.NoError(t, err)
 	return newJSON
 }
 
@@ -333,7 +311,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 		mockContainer coreV1.Container
 		socketMount   *coreV1.VolumeMount
 		expOpsLen     int
-		expOps        []patcher.PatchOperation
+		expOps        jsonpatch.Patch
 	}{
 		{
 			testName: "empty var, empty volume",
@@ -342,7 +320,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 			},
 			socketMount: nil,
 			expOpsLen:   0,
-			expOps:      []patcher.PatchOperation{},
+			expOps:      jsonpatch.Patch{},
 		},
 		{
 			testName: "existing var, empty volume",
@@ -354,15 +332,11 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 				MountPath: "/tmp",
 			},
 			expOpsLen: 1,
-			expOps: []patcher.PatchOperation{
-				{
-					Op:   "add",
-					Path: "/spec/containers/0/volumeMounts",
-					Value: []coreV1.VolumeMount{{
-						Name:      UnixDomainSocketVolume,
-						MountPath: "/tmp",
-					}},
-				},
+			expOps: jsonpatch.Patch{
+				patcher.NewPatchOperation("add", "/spec/containers/0/volumeMounts", []coreV1.VolumeMount{{
+					Name:      UnixDomainSocketVolume,
+					MountPath: "/tmp",
+				}}),
 			},
 		},
 		{
@@ -378,15 +352,11 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 				MountPath: "/tmp",
 			},
 			expOpsLen: 1,
-			expOps: []patcher.PatchOperation{
-				{
-					Op:   "add",
-					Path: "/spec/containers/0/volumeMounts/-",
-					Value: coreV1.VolumeMount{
-						Name:      UnixDomainSocketVolume,
-						MountPath: "/tmp",
-					},
-				},
+			expOps: jsonpatch.Patch{
+				patcher.NewPatchOperation("add", "/spec/containers/0/volumeMounts/-", coreV1.VolumeMount{
+					Name:      UnixDomainSocketVolume,
+					MountPath: "/tmp",
+				}),
 			},
 		},
 		{
@@ -403,15 +373,11 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 				MountPath: "/tmp",
 			},
 			expOpsLen: 1,
-			expOps: []patcher.PatchOperation{
-				{
-					Op:   "add",
-					Path: "/spec/containers/0/volumeMounts/-",
-					Value: coreV1.VolumeMount{
-						Name:      UnixDomainSocketVolume,
-						MountPath: "/tmp",
-					},
-				},
+			expOps: jsonpatch.Patch{
+				patcher.NewPatchOperation("add", "/spec/containers/0/volumeMounts/-", coreV1.VolumeMount{
+					Name:      UnixDomainSocketVolume,
+					MountPath: "/tmp",
+				}),
 			},
 		},
 		{
@@ -427,7 +393,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 				MountPath: "/tmp",
 			},
 			expOpsLen: 0,
-			expOps:    []patcher.PatchOperation{},
+			expOps:    jsonpatch.Patch{},
 		},
 		{
 			testName: "existing var, conflict volume mount path",
@@ -442,7 +408,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 				MountPath: "/tmp",
 			},
 			expOpsLen: 0,
-			expOps:    []patcher.PatchOperation{},
+			expOps:    jsonpatch.Patch{},
 		},
 	}
 

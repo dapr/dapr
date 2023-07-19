@@ -17,6 +17,7 @@ import (
 	"context"
 	"strconv"
 
+	jsonpatch "github.com/evanphx/json-patch/v5"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -29,8 +30,8 @@ import (
 
 // AddDaprEnvVarsToContainers adds Dapr environment variables to all the containers in any Dapr-enabled pod.
 // The containers can be injected or user-defined.
-func AddDaprEnvVarsToContainers(containers map[int]corev1.Container, appProtocol string) []patcher.PatchOperation {
-	envPatchOps := make([]patcher.PatchOperation, 0, len(containers))
+func AddDaprEnvVarsToContainers(containers map[int]corev1.Container, appProtocol string) jsonpatch.Patch {
+	envPatchOps := make(jsonpatch.Patch, 0, len(containers)*2)
 	envVars := []corev1.EnvVar{
 		{
 			Name:  UserContainerDaprHTTPPortName,
@@ -54,72 +55,49 @@ func AddDaprEnvVarsToContainers(containers map[int]corev1.Container, appProtocol
 	return envPatchOps
 }
 
-// AddDaprSideCarInjectedLabel adds Dapr label to patch pod so list of patched pods can be retrieved more efficiently
-func AddDaprSideCarInjectedLabel(labels map[string]string) patcher.PatchOperation {
+// AddDaprSidecarInjectedLabel adds Dapr label to patch pod so list of patched pods can be retrieved more efficiently
+func AddDaprSidecarInjectedLabel(labels map[string]string) jsonpatch.Operation {
 	if len(labels) == 0 { // empty labels
-		return patcher.PatchOperation{
-			Op:   "add",
-			Path: PatchPathLabels,
-			Value: map[string]string{
-				SidecarInjectedLabel: "true",
-			},
-		}
+		return patcher.NewPatchOperation("add", PatchPathLabels, map[string]string{
+			SidecarInjectedLabel: "true",
+		})
 	}
-	return patcher.PatchOperation{
-		Op:    "add",
-		Path:  PatchPathLabels + "/dapr.io~1sidecar-injected",
-		Value: "true",
-	}
+
+	return patcher.NewPatchOperation("add", PatchPathLabels+"/dapr.io~1sidecar-injected", "true")
 }
 
-// AddDaprSideCarAppIDLabel adds Dapr app-id label which can be handy for metric labels
-func AddDaprSideCarAppIDLabel(appID string, labels map[string]string) patcher.PatchOperation {
+// AddDaprSidecarAppIDLabel adds Dapr app-id label which can be handy for metric labels
+func AddDaprSidecarAppIDLabel(appID string, labels map[string]string) jsonpatch.Operation {
 	if len(labels) == 0 { // empty labels
-		return patcher.PatchOperation{
-			Op:   "add",
-			Path: PatchPathLabels,
-			Value: map[string]string{
-				SidecarAppIDLabel: appID,
-			},
-		}
+		return patcher.NewPatchOperation("add", PatchPathLabels, map[string]string{
+			SidecarAppIDLabel: appID,
+		})
 	}
-	return patcher.PatchOperation{
-		Op:    "add",
-		Path:  PatchPathLabels + "/dapr.io~1app-id",
-		Value: appID,
-	}
+	return patcher.NewPatchOperation("add", PatchPathLabels+"/dapr.io~1app-id", appID)
 }
 
-// AddDaprSideCarMetricsEnabledLabel adds Dapr metrics-enabled label which can be handy for scraping metrics
-func AddDaprSideCarMetricsEnabledLabel(metricsEnabled bool, labels map[string]string) patcher.PatchOperation {
+// AddDaprSidecarMetricsEnabledLabel adds Dapr metrics-enabled label which can be handy for scraping metrics
+func AddDaprSidecarMetricsEnabledLabel(metricsEnabled bool, labels map[string]string) jsonpatch.Operation {
 	if len(labels) == 0 { // empty labels
-		return patcher.PatchOperation{
-			Op:   "add",
-			Path: PatchPathLabels,
-			Value: map[string]string{
-				SidecarMetricsEnabledLabel: strconv.FormatBool(metricsEnabled),
-			},
-		}
+		return patcher.NewPatchOperation("add", PatchPathLabels, map[string]string{
+			SidecarMetricsEnabledLabel: strconv.FormatBool(metricsEnabled),
+		})
 	}
-	return patcher.PatchOperation{
-		Op:    "add",
-		Path:  PatchPathLabels + "/dapr.io~1metrics-enabled",
-		Value: strconv.FormatBool(metricsEnabled),
-	}
+	return patcher.NewPatchOperation("add", PatchPathLabels+"/dapr.io~1metrics-enabled", strconv.FormatBool(metricsEnabled))
 }
 
 // AddSocketVolumeMountToContainers adds the Dapr UNIX domain socket volume to all the containers in any Dapr-enabled pod.
-func AddSocketVolumeMountToContainers(containers map[int]corev1.Container, socketVolumeMount *corev1.VolumeMount) []patcher.PatchOperation {
+func AddSocketVolumeMountToContainers(containers map[int]corev1.Container, socketVolumeMount *corev1.VolumeMount) jsonpatch.Patch {
 	if socketVolumeMount == nil {
-		return []patcher.PatchOperation{}
+		return jsonpatch.Patch{}
 	}
 
 	return addVolumeMountToContainers(containers, *socketVolumeMount)
 }
 
-func addVolumeMountToContainers(containers map[int]corev1.Container, addMounts corev1.VolumeMount) []patcher.PatchOperation {
+func addVolumeMountToContainers(containers map[int]corev1.Container, addMounts corev1.VolumeMount) jsonpatch.Patch {
 	volumeMount := []corev1.VolumeMount{addMounts}
-	volumeMountPatchOps := make([]patcher.PatchOperation, 0, len(containers))
+	volumeMountPatchOps := make(jsonpatch.Patch, 0, len(containers))
 	for i, container := range containers {
 		patchOps := patcher.GetVolumeMountPatchOperations(container.VolumeMounts, volumeMount, i)
 		volumeMountPatchOps = append(volumeMountPatchOps, patchOps...)
@@ -127,22 +105,18 @@ func addVolumeMountToContainers(containers map[int]corev1.Container, addMounts c
 	return volumeMountPatchOps
 }
 
-func GetVolumesPatchOperations(volumes []corev1.Volume, addVolumes []corev1.Volume, path string) []patcher.PatchOperation {
+func GetVolumesPatchOperations(volumes []corev1.Volume, addVolumes []corev1.Volume, path string) jsonpatch.Patch {
 	if len(volumes) == 0 {
 		// If there are no volumes defined in the container, we initialize a slice of volumes.
-		return []patcher.PatchOperation{
-			{
-				Op:    "add",
-				Path:  path,
-				Value: addVolumes,
-			},
+		return jsonpatch.Patch{
+			patcher.NewPatchOperation("add", path, addVolumes),
 		}
 	}
 
 	// If there are existing volumes, then we are adding to an existing slice of volumes.
 	path += "/-"
 
-	patchOps := make([]patcher.PatchOperation, len(addVolumes))
+	patchOps := make(jsonpatch.Patch, len(addVolumes))
 	n := 0
 	for _, addVolume := range addVolumes {
 		isConflict := false
@@ -158,11 +132,7 @@ func GetVolumesPatchOperations(volumes []corev1.Volume, addVolumes []corev1.Volu
 			continue
 		}
 
-		patchOps[n] = patcher.PatchOperation{
-			Op:    "add",
-			Path:  path,
-			Value: addVolume,
-		}
+		patchOps[n] = patcher.NewPatchOperation("add", path, addVolume)
 		n++
 	}
 
