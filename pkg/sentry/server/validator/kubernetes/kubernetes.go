@@ -202,7 +202,7 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 		return spiffeid.TrustDomain{}, errors.New("failed to get configuration")
 	}
 
-	if len(config.Spec.AccessControlSpec.TrustDomain) == 0 {
+	if config.Spec.AccessControlSpec != nil && len(config.Spec.AccessControlSpec.TrustDomain) == 0 {
 		return spiffeid.RequireTrustDomainFromString("public"), nil
 	}
 
