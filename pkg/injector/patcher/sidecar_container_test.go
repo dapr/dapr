@@ -16,9 +16,13 @@ package patcher
 import (
 	"testing"
 
-	corev1 "k8s.io/api/core/v1"
-
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
+
+	"github.com/dapr/dapr/pkg/injector/annotations"
 )
 
 func TestParseEnvString(t *testing.T) {
@@ -84,5 +88,172 @@ func TestParseEnvString(t *testing.T) {
 			assert.Equal(t, tc.expKeys, envKeys)
 			assert.Equal(t, tc.expEnv, envVars)
 		})
+	}
+}
+
+func TestGetResourceRequirements(t *testing.T) {
+	t.Run("no resource requirements", func(t *testing.T) {
+		c := NewSidecarConfig(&corev1.Pod{})
+		c.SetFromPodAnnotations()
+		r, err := c.getResourceRequirements()
+		require.NoError(t, err)
+		assert.Nil(t, r)
+	})
+
+	t.Run("valid resource limits", func(t *testing.T) {
+		c := NewSidecarConfig(&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Annotations: map[string]string{
+					annotations.KeyCPULimit:    "100m",
+					annotations.KeyMemoryLimit: "1Gi",
+				},
+			},
+		})
+		c.SetFromPodAnnotations()
+		r, err := c.getResourceRequirements()
+		require.NoError(t, err)
+		assert.Equal(t, "100m", r.Limits.Cpu().String())
+		assert.Equal(t, "1Gi", r.Limits.Memory().String())
+	})
+
+	t.Run("invalid cpu limit", func(t *testing.T) {
+		c := NewSidecarConfig(&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Annotations: map[string]string{
+					annotations.KeyCPULimit:    "invalid",
+					annotations.KeyMemoryLimit: "1Gi",
+				},
+			},
+		})
+		c.SetFromPodAnnotations()
+		r, err := c.getResourceRequirements()
+		require.Error(t, err)
+		assert.Nil(t, r)
+	})
+
+	t.Run("invalid memory limit", func(t *testing.T) {
+		c := NewSidecarConfig(&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Annotations: map[string]string{
+					annotations.KeyCPULimit:    "100m",
+					annotations.KeyMemoryLimit: "invalid",
+				},
+			},
+		})
+		c.SetFromPodAnnotations()
+		r, err := c.getResourceRequirements()
+		require.Error(t, err)
+		assert.Nil(t, r)
+	})
+
+	t.Run("valid resource requests", func(t *testing.T) {
+		c := NewSidecarConfig(&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Annotations: map[string]string{
+					annotations.KeyCPURequest:    "100m",
+					annotations.KeyMemoryRequest: "1Gi",
+				},
+			},
+		})
+		c.SetFromPodAnnotations()
+		r, err := c.getResourceRequirements()
+		require.NoError(t, err)
+		assert.Equal(t, "100m", r.Requests.Cpu().String())
+		assert.Equal(t, "1Gi", r.Requests.Memory().String())
+	})
+
+	t.Run("invalid cpu request", func(t *testing.T) {
+		c := NewSidecarConfig(&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Annotations: map[string]string{
+					annotations.KeyCPURequest:    "invalid",
+					annotations.KeyMemoryRequest: "1Gi",
+				},
+			},
+		})
+		c.SetFromPodAnnotations()
+		r, err := c.getResourceRequirements()
+		require.Error(t, err)
+		assert.Nil(t, r)
+	})
+
+	t.Run("invalid memory request", func(t *testing.T) {
+		c := NewSidecarConfig(&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Annotations: map[string]string{
+					annotations.KeyCPURequest:    "100m",
+					annotations.KeyMemoryRequest: "invalid",
+				},
+			},
+		})
+		c.SetFromPodAnnotations()
+		r, err := c.getResourceRequirements()
+		require.Error(t, err)
+		assert.Nil(t, r)
+	})
+
+	t.Run("limits and requests", func(t *testing.T) {
+		c := NewSidecarConfig(&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Annotations: map[string]string{
+					annotations.KeyCPULimit:      "200m",
+					annotations.KeyMemoryLimit:   "2Gi",
+					annotations.KeyCPURequest:    "100m",
+					annotations.KeyMemoryRequest: "1Gi",
+				},
+			},
+		})
+		c.SetFromPodAnnotations()
+		r, err := c.getResourceRequirements()
+		require.NoError(t, err)
+		assert.Equal(t, "200m", r.Limits.Cpu().String())
+		assert.Equal(t, "2Gi", r.Limits.Memory().String())
+		assert.Equal(t, "100m", r.Requests.Cpu().String())
+		assert.Equal(t, "1Gi", r.Requests.Memory().String())
+	})
+}
+
+func TestGetProbeHttpHandler(t *testing.T) {
+	pathElements := []string{"api", "v1", "healthz"}
+	expectedPath := "/api/v1/healthz"
+	expectedHandler := corev1.ProbeHandler{
+		HTTPGet: &corev1.HTTPGetAction{
+			Path: expectedPath,
+			Port: intstr.IntOrString{IntVal: 3500},
+		},
+	}
+
+	assert.EqualValues(t, expectedHandler, getProbeHTTPHandler(3500, pathElements...))
+}
+
+func TestFormatProbePath(t *testing.T) {
+	testCases := []struct {
+		given    []string
+		expected string
+	}{
+		{
+			given:    []string{"api", "v1"},
+			expected: "/api/v1",
+		},
+		{
+			given:    []string{"//api", "v1"},
+			expected: "/api/v1",
+		},
+		{
+			given:    []string{"//api", "/v1/"},
+			expected: "/api/v1",
+		},
+		{
+			given:    []string{"//api", "/v1/", "healthz"},
+			expected: "/api/v1/healthz",
+		},
+		{
+			given:    []string{""},
+			expected: "/",
+		},
+	}
+
+	for _, tc := range testCases {
+		assert.Equal(t, tc.expected, formatProbePath(tc.given...))
 	}
 }
