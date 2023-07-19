@@ -19,6 +19,7 @@ import (
 )
 
 type getSidecarContainerOpts struct {
+	VolumeMounts                 []corev1.VolumeMount
 	ComponentsSocketsVolumeMount *corev1.VolumeMount
 }
 
@@ -424,67 +425,6 @@ func (c *SidecarConfig) GetEnv() (envKeys []string, envVars []corev1.EnvVar) {
 	}
 
 	return envKeys, envVars
-}
-
-// GetVolumeMounts returns the list of VolumeMount's for the sidecar container.
-func (c *SidecarConfig) GetVolumeMounts() []corev1.VolumeMount {
-	vs := append(
-		parseVolumeMountsString(c.VolumeMounts, true),
-		parseVolumeMountsString(c.VolumeMountsRW, false)...,
-	)
-
-	// Allocate with an extra 3 capacity because we are appending more volumes later
-	volumeMounts := make([]corev1.VolumeMount, 0, len(vs)+3)
-	for _, v := range vs {
-		if podContainsVolume(c.pod, v.Name) {
-			volumeMounts = append(volumeMounts, v)
-		} else {
-			log.Warnf("Volume %s is not present in pod %s, skipping", v.Name, c.pod.GetName())
-		}
-	}
-
-	return volumeMounts
-}
-
-// GetUnixDomainSocketVolumeMount returns a volume mount for the pod to append the UNIX domain socket.
-func (c *SidecarConfig) GetUnixDomainSocketVolumeMount() *corev1.VolumeMount {
-	if c.UnixDomainSocketPath == "" {
-		return nil
-	}
-
-	return &corev1.VolumeMount{
-		Name:      UnixDomainSocketVolume,
-		MountPath: c.UnixDomainSocketPath,
-	}
-}
-
-func podContainsVolume(pod *corev1.Pod, name string) bool {
-	for _, volume := range pod.Spec.Volumes {
-		if volume.Name == name {
-			return true
-		}
-	}
-	return false
-}
-
-// parseVolumeMountsString parses the annotation and returns volume mounts.
-// The format of the annotation is: "mountPath1:hostPath1,mountPath2:hostPath2"
-// The readOnly parameter applies to all mounts.
-func parseVolumeMountsString(volumeMountStr string, readOnly bool) []corev1.VolumeMount {
-	vs := strings.Split(volumeMountStr, ",")
-	volumeMounts := make([]corev1.VolumeMount, 0, len(vs))
-	for _, v := range vs {
-		vmount := strings.Split(strings.TrimSpace(v), ":")
-		if len(vmount) != 2 {
-			continue
-		}
-		volumeMounts = append(volumeMounts, corev1.VolumeMount{
-			Name:      vmount[0],
-			MountPath: vmount[1],
-			ReadOnly:  readOnly,
-		})
-	}
-	return volumeMounts
 }
 
 func getProbeHTTPHandler(port int32, pathElements ...string) corev1.ProbeHandler {
