@@ -287,12 +287,29 @@ func useAPIAuthentication(next fasthttp.RequestHandler) fasthttp.RequestHandler 
 
 	return func(ctx *fasthttp.RequestCtx) {
 		v := ctx.Request.Header.Peek(authConsts.APITokenHeader)
-		if auth.ExcludedRoute(string(ctx.Request.URI().FullURI())) || string(v) == token {
-			ctx.Request.Header.Del(authConsts.APITokenHeader)
-			next(ctx)
-		} else {
+		if string(v) != token && !isRouteExcludedFromAPITokenAuth(string(ctx.Request.Header.Method()), string(ctx.Request.URI().FullURI())) {
 			ctx.Error("invalid api token", http.StatusUnauthorized)
+			return
 		}
+
+		ctx.Request.Header.Del(authConsts.APITokenHeader)
+		next(ctx)
+	}
+}
+
+func isRouteExcludedFromAPITokenAuth(method string, urlString string) bool {
+	u, err := url.Parse(urlString)
+	if err != nil {
+		return false
+	}
+	path := strings.Trim(u.Path, "/")
+	switch path {
+	case apiVersionV1 + "/healthz":
+		return method == http.MethodGet
+	case apiVersionV1 + "/healthz/outbound":
+		return method == http.MethodGet
+	default:
+		return false
 	}
 }
 
