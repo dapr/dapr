@@ -26,6 +26,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/components/pluggable"
 	"github.com/dapr/dapr/pkg/config/protocol"
+	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
 	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
 	securityConsts "github.com/dapr/dapr/pkg/sentry/consts"
 	"github.com/dapr/dapr/utils"
@@ -43,19 +44,19 @@ func (cfg SidecarConfig) GetSidecarContainer(opts getSidecarContainerOpts) (*cor
 	ports := []corev1.ContainerPort{
 		{
 			ContainerPort: cfg.SidecarHTTPPort,
-			Name:          SidecarHTTPPortName,
+			Name:          injectorConsts.SidecarHTTPPortName,
 		},
 		{
 			ContainerPort: cfg.SidecarAPIGRPCPort,
-			Name:          SidecarGRPCPortName,
+			Name:          injectorConsts.SidecarGRPCPortName,
 		},
 		{
 			ContainerPort: cfg.SidecarInternalGRPCPort,
-			Name:          SidecarInternalGRPCPortName,
+			Name:          injectorConsts.SidecarInternalGRPCPortName,
 		},
 		{
 			ContainerPort: cfg.SidecarMetricsPort,
-			Name:          SidecarMetricsPortName,
+			Name:          injectorConsts.SidecarMetricsPortName,
 		},
 	}
 
@@ -158,7 +159,7 @@ func (cfg SidecarConfig) GetSidecarContainer(opts getSidecarContainerOpts) (*cor
 	// When debugging is enabled, we need to override the command and the flags
 	if cfg.EnableDebug {
 		ports = append(ports, corev1.ContainerPort{
-			Name:          SidecarDebugPortName,
+			Name:          injectorConsts.SidecarDebugPortName,
 			ContainerPort: cfg.SidecarDebugPort,
 		})
 
@@ -194,9 +195,9 @@ func (cfg SidecarConfig) GetSidecarContainer(opts getSidecarContainerOpts) (*cor
 	}
 
 	// Create the container object
-	probeHTTPHandler := getProbeHTTPHandler(cfg.SidecarPublicPort, APIVersionV1, SidecarHealthzPath)
+	probeHTTPHandler := getProbeHTTPHandler(cfg.SidecarPublicPort, injectorConsts.APIVersionV1, injectorConsts.SidecarHealthzPath)
 	container := &corev1.Container{
-		Name:            SidecarContainerName,
+		Name:            injectorConsts.SidecarContainerName,
 		Image:           cfg.SidecarImage,
 		ImagePullPolicy: cfg.ImagePullPolicy,
 		SecurityContext: securityContext,

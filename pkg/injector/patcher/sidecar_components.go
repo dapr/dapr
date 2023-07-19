@@ -23,6 +23,7 @@ import (
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/components/pluggable"
 	"github.com/dapr/dapr/pkg/injector/annotations"
+	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
 )
 
 // SplitContainers split containers between:
@@ -64,7 +65,7 @@ func (c *SidecarConfig) ComponentsPatchOps(componentContainers map[int]corev1.Co
 	sharedSocketVolume, sharedSocketVolumeMount, volumePatch := c.addSharedSocketVolume(mountPath)
 	patches = append(patches, volumePatch)
 	componentsEnvVars := []corev1.EnvVar{{
-		Name:  ComponentsUDSMountPathEnvVar,
+		Name:  injectorConsts.ComponentsUDSMountPathEnvVar,
 		Value: sharedSocketVolumeMount.MountPath,
 	}}
 
@@ -177,7 +178,7 @@ func (c *SidecarConfig) addSharedSocketVolume(mountPath string) (corev1.Volume, 
 // sharedComponentsSocketVolume creates a shared unix socket volume to be used by sidecar.
 func sharedComponentsSocketVolume() corev1.Volume {
 	return corev1.Volume{
-		Name: ComponentsUDSVolumeName,
+		Name: injectorConsts.ComponentsUDSVolumeName,
 		VolumeSource: corev1.VolumeSource{
 			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		},
@@ -187,7 +188,7 @@ func sharedComponentsSocketVolume() corev1.Volume {
 // sharedComponentsUnixSocketVolumeMount creates a shared unix socket volume mount to be used by pluggable component.
 func sharedComponentsUnixSocketVolumeMount(mountPath string) corev1.VolumeMount {
 	return corev1.VolumeMount{
-		Name:      ComponentsUDSVolumeName,
+		Name:      injectorConsts.ComponentsUDSVolumeName,
 		MountPath: mountPath,
 	}
 }

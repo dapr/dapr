@@ -19,6 +19,7 @@ import (
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	corev1 "k8s.io/api/core/v1"
 
+	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
 	"github.com/dapr/dapr/pkg/validation"
 )
 
@@ -67,8 +68,8 @@ func (c *SidecarConfig) GetPatch() (patchOps jsonpatch.Patch, err error) {
 	if !c.DisableTokenVolume {
 		tokenVolume := c.GetTokenVolume()
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{
-			Name:      TokenVolumeName,
-			MountPath: TokenVolumeKubernetesMountPath,
+			Name:      injectorConsts.TokenVolumeName,
+			MountPath: injectorConsts.TokenVolumeKubernetesMountPath,
 			ReadOnly:  true,
 		})
 
@@ -117,7 +118,7 @@ func (c *SidecarConfig) GetPatch() (patchOps jsonpatch.Patch, err error) {
 // podContainsSidecarContainer returns true if the pod contains a sidecar container (i.e. a container named "daprd").
 func (c *SidecarConfig) podContainsSidecarContainer() bool {
 	for _, c := range c.pod.Spec.Containers {
-		if c.Name == SidecarContainerName {
+		if c.Name == injectorConsts.SidecarContainerName {
 			return true
 		}
 	}
@@ -130,17 +131,17 @@ func (c *SidecarConfig) AddDaprEnvVarsToContainers(containers map[int]corev1.Con
 	envPatchOps := make(jsonpatch.Patch, 0, len(containers)*2)
 	envVars := []corev1.EnvVar{
 		{
-			Name:  UserContainerDaprHTTPPortName,
+			Name:  injectorConsts.UserContainerDaprHTTPPortName,
 			Value: strconv.FormatInt(int64(c.SidecarHTTPPort), 10),
 		},
 		{
-			Name:  UserContainerDaprGRPCPortName,
+			Name:  injectorConsts.UserContainerDaprGRPCPortName,
 			Value: strconv.FormatInt(int64(c.SidecarAPIGRPCPort), 10),
 		},
 	}
 	if appProtocol != "" {
 		envVars = append(envVars, corev1.EnvVar{
-			Name:  UserContainerAppProtocolName,
+			Name:  injectorConsts.UserContainerAppProtocolName,
 			Value: appProtocol,
 		})
 	}
@@ -154,30 +155,30 @@ func (c *SidecarConfig) AddDaprEnvVarsToContainers(containers map[int]corev1.Con
 // AddDaprSidecarInjectedLabel adds Dapr label to patch pod so list of patched pods can be retrieved more efficiently
 func (c *SidecarConfig) AddDaprSidecarInjectedLabel() jsonpatch.Operation {
 	if len(c.pod.Labels) == 0 { // empty labels
-		return NewPatchOperation("add", PatchPathLabels, map[string]string{
-			SidecarInjectedLabel: "true",
+		return NewPatchOperation("add", injectorConsts.PatchPathLabels, map[string]string{
+			injectorConsts.SidecarInjectedLabel: "true",
 		})
 	}
 
-	return NewPatchOperation("add", PatchPathLabels+"/dapr.io~1sidecar-injected", "true")
+	return NewPatchOperation("add", injectorConsts.PatchPathLabels+"/dapr.io~1sidecar-injected", "true")
 }
 
 // AddDaprSidecarAppIDLabel adds Dapr app-id label which can be handy for metric labels
 func (c *SidecarConfig) AddDaprSidecarAppIDLabel() jsonpatch.Operation {
 	if len(c.pod.Labels) == 0 { // empty labels
-		return NewPatchOperation("add", PatchPathLabels, map[string]string{
-			SidecarAppIDLabel: c.GetAppID(),
+		return NewPatchOperation("add", injectorConsts.PatchPathLabels, map[string]string{
+			injectorConsts.SidecarAppIDLabel: c.GetAppID(),
 		})
 	}
-	return NewPatchOperation("add", PatchPathLabels+"/dapr.io~1app-id", c.GetAppID())
+	return NewPatchOperation("add", injectorConsts.PatchPathLabels+"/dapr.io~1app-id", c.GetAppID())
 }
 
 // AddDaprSidecarMetricsEnabledLabel adds Dapr metrics-enabled label which can be handy for scraping metrics
 func (c *SidecarConfig) AddDaprSidecarMetricsEnabledLabel() jsonpatch.Operation {
 	if len(c.pod.Labels) == 0 { // empty labels
-		return NewPatchOperation("add", PatchPathLabels, map[string]string{
-			SidecarMetricsEnabledLabel: strconv.FormatBool(c.EnableMetrics),
+		return NewPatchOperation("add", injectorConsts.PatchPathLabels, map[string]string{
+			injectorConsts.SidecarMetricsEnabledLabel: strconv.FormatBool(c.EnableMetrics),
 		})
 	}
-	return NewPatchOperation("add", PatchPathLabels+"/dapr.io~1metrics-enabled", strconv.FormatBool(c.EnableMetrics))
+	return NewPatchOperation("add", injectorConsts.PatchPathLabels+"/dapr.io~1metrics-enabled", strconv.FormatBool(c.EnableMetrics))
 }

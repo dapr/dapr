@@ -23,6 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"github.com/dapr/dapr/pkg/injector/annotations"
+	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
 	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
 )
 
@@ -762,13 +763,13 @@ func TestGetSidecarContainer(t *testing.T) {
 
 		container, err := c.GetSidecarContainer(getSidecarContainerOpts{
 			VolumeMounts: []corev1.VolumeMount{
-				{Name: UnixDomainSocketVolume, MountPath: "/tmp"},
+				{Name: injectorConsts.UnixDomainSocketVolume, MountPath: "/tmp"},
 			},
 		})
 		require.NoError(t, err)
 
 		assert.Len(t, container.VolumeMounts, 1)
-		assert.Equal(t, UnixDomainSocketVolume, container.VolumeMounts[0].Name)
+		assert.Equal(t, injectorConsts.UnixDomainSocketVolume, container.VolumeMounts[0].Name)
 		assert.Equal(t, "/tmp", container.VolumeMounts[0].MountPath)
 	})
 

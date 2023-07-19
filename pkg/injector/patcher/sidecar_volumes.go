@@ -19,6 +19,7 @@ import (
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	corev1 "k8s.io/api/core/v1"
 
+	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
 	sentryConsts "github.com/dapr/dapr/pkg/sentry/consts"
 	"github.com/dapr/kit/ptr"
 )
@@ -50,7 +51,7 @@ func (c *SidecarConfig) GetUnixDomainSocketVolumeMount() *corev1.VolumeMount {
 	}
 
 	return &corev1.VolumeMount{
-		Name:      UnixDomainSocketVolume,
+		Name:      injectorConsts.UnixDomainSocketVolume,
 		MountPath: c.UnixDomainSocketPath,
 	}
 }
@@ -59,7 +60,7 @@ func (c *SidecarConfig) GetUnixDomainSocketVolumeMount() *corev1.VolumeMount {
 // Requests a new projected volume with a service account token for our specific audience.
 func (c *SidecarConfig) GetTokenVolume() corev1.Volume {
 	return corev1.Volume{
-		Name: TokenVolumeName,
+		Name: injectorConsts.TokenVolumeName,
 		VolumeSource: corev1.VolumeSource{
 			Projected: &corev1.ProjectedVolumeSource{
 				DefaultMode: ptr.Of(int32(420)),

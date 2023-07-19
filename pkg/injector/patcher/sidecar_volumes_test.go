@@ -19,6 +19,8 @@ import (
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
+
+	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
 )
 
 func TestParseVolumeMountsString(t *testing.T) {
@@ -220,7 +222,7 @@ func TestGetUnixDomainSocketVolume(t *testing.T) {
 			"add volume",
 			"/tmp",
 			nil,
-			&corev1.VolumeMount{Name: UnixDomainSocketVolume, MountPath: "/tmp"},
+			&corev1.VolumeMount{Name: injectorConsts.UnixDomainSocketVolume, MountPath: "/tmp"},
 		},
 	}
 
@@ -270,13 +272,13 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 				Name: "MockContainer",
 			},
 			socketMount: &corev1.VolumeMount{
-				Name:      UnixDomainSocketVolume,
+				Name:      injectorConsts.UnixDomainSocketVolume,
 				MountPath: "/tmp",
 			},
 			expOpsLen: 1,
 			expOps: jsonpatch.Patch{
 				NewPatchOperation("add", "/spec/containers/0/volumeMounts", []corev1.VolumeMount{{
-					Name:      UnixDomainSocketVolume,
+					Name:      injectorConsts.UnixDomainSocketVolume,
 					MountPath: "/tmp",
 				}}),
 			},
@@ -290,13 +292,13 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 				},
 			},
 			socketMount: &corev1.VolumeMount{
-				Name:      UnixDomainSocketVolume,
+				Name:      injectorConsts.UnixDomainSocketVolume,
 				MountPath: "/tmp",
 			},
 			expOpsLen: 1,
 			expOps: jsonpatch.Patch{
 				NewPatchOperation("add", "/spec/containers/0/volumeMounts/-", corev1.VolumeMount{
-					Name:      UnixDomainSocketVolume,
+					Name:      injectorConsts.UnixDomainSocketVolume,
 					MountPath: "/tmp",
 				}),
 			},
@@ -311,13 +313,13 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 				},
 			},
 			socketMount: &corev1.VolumeMount{
-				Name:      UnixDomainSocketVolume,
+				Name:      injectorConsts.UnixDomainSocketVolume,
 				MountPath: "/tmp",
 			},
 			expOpsLen: 1,
 			expOps: jsonpatch.Patch{
 				NewPatchOperation("add", "/spec/containers/0/volumeMounts/-", corev1.VolumeMount{
-					Name:      UnixDomainSocketVolume,
+					Name:      injectorConsts.UnixDomainSocketVolume,
 					MountPath: "/tmp",
 				}),
 			},
@@ -327,11 +329,11 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 			mockContainer: corev1.Container{
 				Name: "MockContainer",
 				VolumeMounts: []corev1.VolumeMount{
-					{Name: UnixDomainSocketVolume},
+					{Name: injectorConsts.UnixDomainSocketVolume},
 				},
 			},
 			socketMount: &corev1.VolumeMount{
-				Name:      UnixDomainSocketVolume,
+				Name:      injectorConsts.UnixDomainSocketVolume,
 				MountPath: "/tmp",
 			},
 			expOpsLen: 0,
@@ -346,7 +348,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 				},
 			},
 			socketMount: &corev1.VolumeMount{
-				Name:      UnixDomainSocketVolume,
+				Name:      injectorConsts.UnixDomainSocketVolume,
 				MountPath: "/tmp",
 			},
 			expOpsLen: 0,

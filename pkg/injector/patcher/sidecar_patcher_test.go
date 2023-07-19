@@ -21,6 +21,8 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
 )
 
 func TestAddDaprEnvVarsToContainers(t *testing.T) {
@@ -40,11 +42,11 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 			expOps: jsonpatch.Patch{
 				NewPatchOperation("add", PatchPathContainers+"/0/env", []corev1.EnvVar{
 					{
-						Name:  UserContainerDaprHTTPPortName,
+						Name:  injectorConsts.UserContainerDaprHTTPPortName,
 						Value: "3500",
 					},
 					{
-						Name:  UserContainerDaprGRPCPortName,
+						Name:  injectorConsts.UserContainerDaprGRPCPortName,
 						Value: "50001",
 					},
 				}),
@@ -64,11 +66,11 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 			expOpsLen: 2,
 			expOps: jsonpatch.Patch{
 				NewPatchOperation("add", PatchPathContainers+"/0/env/-", corev1.EnvVar{
-					Name:  UserContainerDaprHTTPPortName,
+					Name:  injectorConsts.UserContainerDaprHTTPPortName,
 					Value: "3500",
 				}),
 				NewPatchOperation("add", PatchPathContainers+"/0/env/-", corev1.EnvVar{
-					Name:  UserContainerDaprGRPCPortName,
+					Name:  injectorConsts.UserContainerDaprGRPCPortName,
 					Value: "50001",
 				}),
 			},
@@ -83,7 +85,7 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 						Value: "Existing value",
 					},
 					{
-						Name:  UserContainerDaprGRPCPortName,
+						Name:  injectorConsts.UserContainerDaprGRPCPortName,
 						Value: "550000",
 					},
 				},
@@ -91,7 +93,7 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 			expOpsLen: 1,
 			expOps: jsonpatch.Patch{
 				NewPatchOperation("add", PatchPathContainers+"/0/env/-", corev1.EnvVar{
-					Name:  UserContainerDaprHTTPPortName,
+					Name:  injectorConsts.UserContainerDaprHTTPPortName,
 					Value: "3500",
 				}),
 			},
@@ -102,11 +104,11 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 				Name: "Mock Container",
 				Env: []corev1.EnvVar{
 					{
-						Name:  UserContainerDaprHTTPPortName,
+						Name:  injectorConsts.UserContainerDaprHTTPPortName,
 						Value: "3510",
 					},
 					{
-						Name:  UserContainerDaprGRPCPortName,
+						Name:  injectorConsts.UserContainerDaprGRPCPortName,
 						Value: "550000",
 					},
 				},
@@ -124,15 +126,15 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 			expOps: jsonpatch.Patch{
 				NewPatchOperation("add", PatchPathContainers+"/0/env", []corev1.EnvVar{
 					{
-						Name:  UserContainerDaprHTTPPortName,
+						Name:  injectorConsts.UserContainerDaprHTTPPortName,
 						Value: "3500",
 					},
 					{
-						Name:  UserContainerDaprGRPCPortName,
+						Name:  injectorConsts.UserContainerDaprGRPCPortName,
 						Value: "50001",
 					},
 					{
-						Name:  UserContainerAppProtocolName,
+						Name:  injectorConsts.UserContainerAppProtocolName,
 						Value: "h2c",
 					},
 				}),
@@ -161,7 +163,7 @@ func TestAddDaprAppIDLabel(t *testing.T) {
 			mockPod: corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{},
 			},
-			expLabels: map[string]string{SidecarAppIDLabel: "my-app"},
+			expLabels: map[string]string{injectorConsts.SidecarAppIDLabel: "my-app"},
 		},
 		{
 			testName: "with some previous labels",
@@ -170,16 +172,16 @@ func TestAddDaprAppIDLabel(t *testing.T) {
 					Labels: map[string]string{"app": "my-app"},
 				},
 			},
-			expLabels: map[string]string{SidecarAppIDLabel: "my-app", "app": "my-app"},
+			expLabels: map[string]string{injectorConsts.SidecarAppIDLabel: "my-app", "app": "my-app"},
 		},
 		{
 			testName: "with dapr app-id label already present",
 			mockPod: corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{SidecarAppIDLabel: "my-app", "app": "my-app"},
+					Labels: map[string]string{injectorConsts.SidecarAppIDLabel: "my-app", "app": "my-app"},
 				},
 			},
-			expLabels: map[string]string{SidecarAppIDLabel: "my-app", "app": "my-app"},
+			expLabels: map[string]string{injectorConsts.SidecarAppIDLabel: "my-app", "app": "my-app"},
 		},
 	}
 
@@ -213,28 +215,28 @@ func TestAddDaprMetricsEnabledLabel(t *testing.T) {
 			mockPod: corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{},
 			},
-			expLabels:      map[string]string{SidecarMetricsEnabledLabel: "false"},
+			expLabels:      map[string]string{injectorConsts.SidecarMetricsEnabledLabel: "false"},
 			metricsEnabled: false,
 		},
 		{
 			testName: "metrics annotation present and explicitly enabled, with existing labels",
 			mockPod: corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
-					Annotations: map[string]string{SidecarMetricsEnabledLabel: "true"},
+					Annotations: map[string]string{injectorConsts.SidecarMetricsEnabledLabel: "true"},
 					Labels:      map[string]string{"app": "my-app"},
 				},
 			},
-			expLabels:      map[string]string{SidecarMetricsEnabledLabel: "true", "app": "my-app"},
+			expLabels:      map[string]string{injectorConsts.SidecarMetricsEnabledLabel: "true", "app": "my-app"},
 			metricsEnabled: true,
 		},
 		{
 			testName: "metrics annotation present and explicitly disabled",
 			mockPod: corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
-					Annotations: map[string]string{SidecarMetricsEnabledLabel: "false"},
+					Annotations: map[string]string{injectorConsts.SidecarMetricsEnabledLabel: "false"},
 				},
 			},
-			expLabels:      map[string]string{SidecarMetricsEnabledLabel: "false"},
+			expLabels:      map[string]string{injectorConsts.SidecarMetricsEnabledLabel: "false"},
 			metricsEnabled: false,
 		},
 	}
@@ -268,7 +270,7 @@ func TestAddDaprInjectedLabel(t *testing.T) {
 			mockPod: corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{},
 			},
-			expLabels: map[string]string{SidecarInjectedLabel: "true"},
+			expLabels: map[string]string{injectorConsts.SidecarInjectedLabel: "true"},
 		},
 		{
 			testName: "with some previous labels",
@@ -277,16 +279,16 @@ func TestAddDaprInjectedLabel(t *testing.T) {
 					Labels: map[string]string{"app": "my-app"},
 				},
 			},
-			expLabels: map[string]string{SidecarInjectedLabel: "true", "app": "my-app"},
+			expLabels: map[string]string{injectorConsts.SidecarInjectedLabel: "true", "app": "my-app"},
 		},
 		{
 			testName: "with dapr injected label already present",
 			mockPod: corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{SidecarInjectedLabel: "true", "app": "my-app"},
+					Labels: map[string]string{injectorConsts.SidecarInjectedLabel: "true", "app": "my-app"},
 				},
 			},
-			expLabels: map[string]string{SidecarInjectedLabel: "true", "app": "my-app"},
+			expLabels: map[string]string{injectorConsts.SidecarInjectedLabel: "true", "app": "my-app"},
 		},
 	}
 

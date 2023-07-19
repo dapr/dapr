@@ -26,6 +26,7 @@ import (
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/injector/annotations"
+	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
 )
 
 func TestComponentsPatch(t *testing.T) {
@@ -76,7 +77,7 @@ func TestComponentsPatch(t *testing.T) {
 			jsonpatch.Patch{
 				NewPatchOperation("add", PatchPathVolumes, []corev1.Volume{sharedComponentsSocketVolume()}),
 				NewPatchOperation("add", PatchPathContainers+"/1/env", []corev1.EnvVar{{
-					Name:  ComponentsUDSMountPathEnvVar,
+					Name:  injectorConsts.ComponentsUDSMountPathEnvVar,
 					Value: socketSharedVolumeMount.MountPath,
 				}}),
 				NewPatchOperation("add", PatchPathContainers+"/1/volumeMounts", []corev1.VolumeMount{socketSharedVolumeMount}),
@@ -106,7 +107,7 @@ func TestComponentsPatch(t *testing.T) {
 			jsonpatch.Patch{
 				NewPatchOperation("add", PatchPathVolumes, []corev1.Volume{sharedComponentsSocketVolume()}),
 				NewPatchOperation("add", PatchPathContainers+"/1/env", []corev1.EnvVar{{
-					Name:  ComponentsUDSMountPathEnvVar,
+					Name:  injectorConsts.ComponentsUDSMountPathEnvVar,
 					Value: socketSharedVolumeMount.MountPath,
 				}}),
 				NewPatchOperation("add", PatchPathContainers+"/1/volumeMounts", []corev1.VolumeMount{socketSharedVolumeMount}),
@@ -144,7 +145,7 @@ func TestComponentsPatch(t *testing.T) {
 			jsonpatch.Patch{
 				NewPatchOperation("add", PatchPathVolumes, []corev1.Volume{sharedComponentsSocketVolume()}),
 				NewPatchOperation("add", PatchPathContainers+"/1/env", []corev1.EnvVar{{
-					Name:  ComponentsUDSMountPathEnvVar,
+					Name:  injectorConsts.ComponentsUDSMountPathEnvVar,
 					Value: socketSharedVolumeMount.MountPath,
 				}}),
 				NewPatchOperation("add", PatchPathContainers+"/1/volumeMounts", []corev1.VolumeMount{socketSharedVolumeMount}),
@@ -169,7 +170,7 @@ func TestComponentsPatch(t *testing.T) {
 							Value: "B",
 						},
 						{
-							Name:  ComponentsUDSMountPathEnvVar,
+							Name:  injectorConsts.ComponentsUDSMountPathEnvVar,
 							Value: socketSharedVolumeMount.MountPath,
 						},
 					},
@@ -210,7 +211,7 @@ func TestComponentsPatch(t *testing.T) {
 			jsonpatch.Patch{
 				NewPatchOperation("add", PatchPathVolumes+"/-", []corev1.Volume{sharedComponentsSocketVolume()}),
 				NewPatchOperation("add", PatchPathContainers+"/1/env", []corev1.EnvVar{{
-					Name:  ComponentsUDSMountPathEnvVar,
+					Name:  injectorConsts.ComponentsUDSMountPathEnvVar,
 					Value: socketSharedVolumeMount.MountPath,
 				}}),
 				NewPatchOperation("add", PatchPathContainers+"/1/volumeMounts", []corev1.VolumeMount{socketSharedVolumeMount}),
