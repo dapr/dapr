@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -166,6 +165,7 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) Actors {
 		appChannel:           opts.AppChannel,
 		grpcConnectionFn:     opts.GRPCConnectionFn,
 		config:               opts.ActorsConfig,
+		coreConfig:           &opts.ActorsConfig.Config,
 		timers:               timers.NewTimersProvider(clock),
 		actorsReminders:      remindersProvider,
 		certChain:            opts.CertChain,
@@ -838,23 +838,7 @@ func (a *actorsRuntime) executeReminder(reminder *internal.Reminder, isTimer boo
 	return err
 }
 
-func (a *actorsRuntime) reminderRequiresUpdate(new *internal.Reminder, existing *internal.Reminder) bool {
-	// If the reminder is different, short-circuit
-	if existing.ActorID != new.ActorID ||
-		existing.ActorType != new.ActorType ||
-		existing.Name != new.Name {
-		return false
-	}
-
-	return existing.DueTime != new.DueTime ||
-		existing.Period != new.Period ||
-		!new.ExpirationTime.IsZero() ||
-		(!existing.ExpirationTime.IsZero() && new.ExpirationTime.IsZero()) ||
-		!reflect.DeepEqual(existing.Data, new.Data)
-}
-
 func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderRequest) error {
-
 	// Create the new reminder object
 	reminder, err := req.NewReminder(a.clock.Now())
 	if err != nil {

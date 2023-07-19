@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/dapr/dapr/pkg/config"
-	appConfig "github.com/dapr/dapr/pkg/config"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -32,7 +31,7 @@ const (
 )
 
 func TestConfig(t *testing.T) {
-	appConfig := config.ApplicationConfig{
+	config := config.ApplicationConfig{
 		Entities:                   []string{"1"},
 		ActorScanInterval:          "1s",
 		ActorIdleTimeout:           "2s",
@@ -47,7 +46,7 @@ func TestConfig(t *testing.T) {
 		PlacementAddresses: []string{"placement:5050"},
 		Port:               3500,
 		Namespace:          "default",
-		AppConfig:          appConfig,
+		AppConfig:          config,
 		PodName:            TestPodName,
 	})
 	assert.Equal(t, "localhost:5050", c.HostAddress)
@@ -65,14 +64,14 @@ func TestConfig(t *testing.T) {
 
 func TestReentrancyConfig(t *testing.T) {
 	t.Run("Test empty reentrancy values", func(t *testing.T) {
-		appConfig := DefaultAppConfig
+		config := DefaultAppConfig
 		c := NewConfig(ConfigOpts{
 			HostAddress:        "localhost:5050",
 			AppID:              "app1",
 			PlacementAddresses: []string{"placement:5050"},
 			Port:               3500,
 			Namespace:          "default",
-			AppConfig:          appConfig,
+			AppConfig:          config,
 		})
 		assert.False(t, c.Reentrancy.Enabled)
 		assert.NotNil(t, c.Reentrancy.MaxStackDepth)
@@ -138,7 +137,7 @@ func TestReentrancyConfig(t *testing.T) {
 }
 
 func TestDefaultConfigValuesSet(t *testing.T) {
-	appConfig := appConfig.ApplicationConfig{Entities: []string{"actor1"}}
+	appConfig := config.ApplicationConfig{Entities: []string{"actor1"}}
 	config := NewConfig(ConfigOpts{
 		HostAddress:        HostAddress,
 		AppID:              AppID,
@@ -160,14 +159,14 @@ func TestDefaultConfigValuesSet(t *testing.T) {
 }
 
 func TestPerActorTypeConfigurationValues(t *testing.T) {
-	appConfig := appConfig.ApplicationConfig{
+	appConfig := config.ApplicationConfig{
 		Entities:                   []string{"actor1", "actor2", "actor3", "actor4"},
 		ActorIdleTimeout:           "1s",
 		ActorScanInterval:          "2s",
 		DrainOngoingCallTimeout:    "5s",
 		DrainRebalancedActors:      true,
 		RemindersStoragePartitions: 1,
-		EntityConfigs: []appConfig.EntityConfig{
+		EntityConfigs: []config.EntityConfig{
 			{
 				Entities:                []string{"actor1", "actor2"},
 				ActorIdleTimeout:        "60s",
@@ -179,7 +178,7 @@ func TestPerActorTypeConfigurationValues(t *testing.T) {
 				ActorIdleTimeout:        "5s",
 				DrainOngoingCallTimeout: "1s",
 				DrainRebalancedActors:   true,
-				Reentrancy: appConfig.ReentrancyConfig{
+				Reentrancy: config.ReentrancyConfig{
 					Enabled: true,
 				},
 				RemindersStoragePartitions: 10,
@@ -232,14 +231,14 @@ func TestPerActorTypeConfigurationValues(t *testing.T) {
 }
 
 func TestOnlyHostedActorTypesAreIncluded(t *testing.T) {
-	appConfig := appConfig.ApplicationConfig{
+	appConfig := config.ApplicationConfig{
 		Entities:                   []string{"actor1", "actor2"},
 		ActorIdleTimeout:           "1s",
 		ActorScanInterval:          "2s",
 		DrainOngoingCallTimeout:    "5s",
 		DrainRebalancedActors:      true,
 		RemindersStoragePartitions: 1,
-		EntityConfigs: []appConfig.EntityConfig{
+		EntityConfigs: []config.EntityConfig{
 			{
 				Entities:                []string{"actor1", "actor2"},
 				ActorIdleTimeout:        "60s",
@@ -251,7 +250,7 @@ func TestOnlyHostedActorTypesAreIncluded(t *testing.T) {
 				ActorIdleTimeout:        "5s",
 				DrainOngoingCallTimeout: "1s",
 				DrainRebalancedActors:   true,
-				Reentrancy: appConfig.ReentrancyConfig{
+				Reentrancy: config.ReentrancyConfig{
 					Enabled: true,
 				},
 				RemindersStoragePartitions: 10,

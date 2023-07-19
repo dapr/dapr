@@ -17,7 +17,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"runtime"
 	"strconv"
 	"strings"
@@ -129,23 +128,6 @@ func (m *mockAppChannel) InvokeMethod(ctx context.Context, req *invokev1.InvokeM
 	}
 
 	return invokev1.NewInvokeMethodResponse(200, "OK", nil), nil
-}
-
-type mockAppChannelBadInvoke struct {
-	channel.AppChannel
-	requestC chan testRequest
-}
-
-func (m *mockAppChannelBadInvoke) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*invokev1.InvokeMethodResponse, error) {
-	if m.requestC != nil {
-		var request testRequest
-		err := json.NewDecoder(req.RawData()).Decode(&request)
-		if err == nil {
-			m.requestC <- request
-		}
-	}
-
-	return invokev1.NewInvokeMethodResponse(http.StatusInternalServerError, "problems with server", nil), nil
 }
 
 type reentrantAppChannel struct {
@@ -295,39 +277,6 @@ func newTestActorsRuntimeWithMockAndNoStore(appChannel channel.AppChannel) *acto
 	return a.(*actorsRuntime)
 }
 
-func newTestActorsRuntimeWithMockAndActorMetadataPartition(appChannel channel.AppChannel) *actorsRuntime {
-	appConfig := config.ApplicationConfig{
-		Entities:                   []string{"cat", "actor2"},
-		RemindersStoragePartitions: TestActorMetadataPartitionCount,
-		EntityConfigs: []config.EntityConfig{
-			{
-				Entities:                   []string{"actor2"},
-				RemindersStoragePartitions: 20,
-			},
-		},
-	}
-	conf := NewConfig(ConfigOpts{
-		AppID:              TestAppID,
-		PlacementAddresses: []string{"placement:5050"},
-		AppConfig:          appConfig,
-	})
-
-	clock := clocktesting.NewFakeClock(startOfTime)
-
-	compStore := compstore.New()
-	compStore.AddStateStore("actorStore", fakeStore())
-	a := newActorsWithClock(ActorsOpts{
-		CompStore:      compStore,
-		AppChannel:     appChannel,
-		ActorsConfig:   conf,
-		TracingSpec:    config.TracingSpec{SamplingRate: "1"},
-		Resiliency:     resiliency.New(log),
-		StateStoreName: "actorStore",
-	}, clock)
-
-	return a.(*actorsRuntime)
-}
-
 func newTestActorsRuntimeWithoutStore() *actorsRuntime {
 	appChannel := new(mockAppChannel)
 
@@ -336,12 +285,6 @@ func newTestActorsRuntimeWithoutStore() *actorsRuntime {
 
 func newTestActorsRuntime() *actorsRuntime {
 	appChannel := new(mockAppChannel)
-
-	return newTestActorsRuntimeWithMock(appChannel)
-}
-
-func newTestActorsRuntimeWithBadInvoke() *actorsRuntime {
-	appChannel := new(mockAppChannelBadInvoke)
 
 	return newTestActorsRuntimeWithMock(appChannel)
 }
@@ -377,21 +320,6 @@ func deactivateActorWithDuration(testActorsRuntime *actorsRuntime, actorType, ac
 		return nil
 	})
 	return ch
-}
-
-func createReminderData(actorID, actorType, name, period, dueTime, ttl, data string) CreateReminderRequest {
-	r := CreateReminderRequest{
-		ActorID:   actorID,
-		ActorType: actorType,
-		Name:      name,
-		Period:    period,
-		DueTime:   dueTime,
-		TTL:       ttl,
-	}
-	if data != "" {
-		r.Data = json.RawMessage(`"` + data + `"`)
-	}
-	return r
 }
 
 // CHECK - timer

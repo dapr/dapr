@@ -10,16 +10,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dapr/dapr/pkg/actors/internal"
-	"github.com/dapr/dapr/pkg/config"
-	daprAppConfig "github.com/dapr/dapr/pkg/config"
-	diag "github.com/dapr/dapr/pkg/diagnostics"
-	"github.com/dapr/dapr/pkg/diagnostics/diagtestutils"
-	daprt "github.com/dapr/dapr/pkg/testing"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opencensus.io/stats/view"
 	clocktesting "k8s.io/utils/clock/testing"
+
+	"github.com/dapr/dapr/pkg/actors/internal"
+	"github.com/dapr/dapr/pkg/config"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/diagnostics/diagtestutils"
+	daprt "github.com/dapr/dapr/pkg/testing"
 )
 
 var startOfTime = time.Date(2022, 1, 1, 12, 0, 0, 0, time.UTC)
@@ -35,6 +35,7 @@ const (
 	actorTimersFiredTotalViewName    = "runtime/actor/timers_fired_total"
 	actorRemindersFiredTotalViewName = "runtime/actor/reminders_fired_total"
 	errStateStoreNotConfigured       = `actors: state store does not exist or incorrectly configured. Have you set the property '{"name": "actorStateStore", "value": "true"}' in your state store component file?`
+	localhost                        = "localhost"
 )
 
 func newTestReminders() *reminders {
@@ -137,7 +138,7 @@ func TestReminderCountFiring(t *testing.T) {
 		return true
 	})
 	testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-		return true, "localhost"
+		return true, localhost
 	})
 	testReminders.Init(context.TODO())
 
@@ -200,7 +201,7 @@ func TestReminderCountFiringBad(t *testing.T) {
 		return true
 	})
 	testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-		return true, "localhost"
+		return true, localhost
 	})
 	testReminders.Init(context.TODO())
 
@@ -257,7 +258,7 @@ func TestSetReminderTrack(t *testing.T) {
 		return true
 	})
 	testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-		return true, "localhost"
+		return true, localhost
 	})
 	testReminders.Init(context.TODO())
 
@@ -274,13 +275,12 @@ func TestGetReminderTrack(t *testing.T) {
 
 		fakeStor = nil
 		testReminders.SetStateStoreProviderFn(fakeRealTStore)
-		executed := make(chan string, 1)
+
 		testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
-			executed <- reminder.Key()
 			return true
 		})
 		testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-			return true, "localhost"
+			return true, localhost
 		})
 		testReminders.Init(context.TODO())
 
@@ -296,13 +296,12 @@ func TestGetReminderTrack(t *testing.T) {
 
 		fakeStor = nil
 		testReminders.SetStateStoreProviderFn(fakeRealTStore)
-		executed := make(chan string, 1)
+
 		testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
-			executed <- reminder.Key()
 			return true
 		})
 		testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-			return true, "localhost"
+			return true, localhost
 		})
 		testReminders.Init(context.TODO())
 
@@ -333,7 +332,7 @@ func TestCreateReminder(t *testing.T) {
 		return true
 	})
 	testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-		return true, "localhost"
+		return true, localhost
 	})
 	testReminders.Init(context.TODO())
 
@@ -388,7 +387,7 @@ func TestCreateReminder(t *testing.T) {
 		return true
 	})
 	testRemindersWithPartition.SetLookupActorFn(func(string, string) (bool, string) {
-		return true, "localhost"
+		return true, localhost
 	})
 
 	for i := 1; i < numReminders; i++ {
@@ -525,7 +524,7 @@ func newTestRemindersWithMockAndActorMetadataPartition() *reminders {
 	return r.(*reminders)
 }
 
-func translateEntityConfig(appConfig daprAppConfig.EntityConfig) internal.EntityConfig {
+func translateEntityConfig(appConfig config.EntityConfig) internal.EntityConfig {
 	domainConfig := internal.EntityConfig{
 		Entities:                   appConfig.Entities,
 		ActorIdleTimeout:           time.Minute * 60,
@@ -560,13 +559,12 @@ func TestRenameReminder(t *testing.T) {
 
 	fakeStor = nil
 	testReminders.SetStateStoreProviderFn(fakeRealTStoreWithNoLock)
-	executed := make(chan string, 1)
+
 	testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
-		executed <- reminder.Key()
 		return true
 	})
 	testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-		return true, "localhost"
+		return true, localhost
 	})
 	testReminders.Init(context.TODO())
 
@@ -707,13 +705,12 @@ func TestOverrideReminder(t *testing.T) {
 
 		fakeStor = nil
 		testReminders.SetStateStoreProviderFn(fakeRealTStore)
-		executed := make(chan string, 1)
+
 		testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
-			executed <- reminder.Key()
 			return true
 		})
 		testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-			return true, "localhost"
+			return true, localhost
 		})
 		testReminders.Init(context.TODO())
 
@@ -741,13 +738,12 @@ func TestOverrideReminder(t *testing.T) {
 
 		fakeStor = nil
 		testReminders.SetStateStoreProviderFn(fakeRealTStore)
-		executed := make(chan string, 1)
+
 		testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
-			executed <- reminder.Key()
 			return true
 		})
 		testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-			return true, "localhost"
+			return true, localhost
 		})
 		testReminders.Init(context.TODO())
 
@@ -773,13 +769,12 @@ func TestOverrideReminder(t *testing.T) {
 
 		fakeStor = nil
 		testReminders.SetStateStoreProviderFn(fakeRealTStore)
-		executed := make(chan string, 1)
+
 		testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
-			executed <- reminder.Key()
 			return true
 		})
 		testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-			return true, "localhost"
+			return true, localhost
 		})
 		testReminders.Init(context.TODO())
 
@@ -794,6 +789,7 @@ func TestOverrideReminder(t *testing.T) {
 		reminder2, err := req2.NewReminder(testReminders.clock.Now())
 		assert.NoError(t, err)
 		err = testReminders.CreateReminder(ctx, reminder2)
+		assert.NoError(t, err)
 		reminders, _, err := testReminders.getRemindersForActorType(context.Background(), actorType, false)
 		require.NoError(t, err)
 		assert.Equal(t, "2s", reminders[0].Reminder.Period.String())
@@ -805,13 +801,12 @@ func TestOverrideReminder(t *testing.T) {
 
 		fakeStor = nil
 		testReminders.SetStateStoreProviderFn(fakeRealTStore)
-		executed := make(chan string, 1)
+
 		testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
-			executed <- reminder.Key()
 			return true
 		})
 		testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-			return true, "localhost"
+			return true, localhost
 		})
 		testReminders.Init(context.TODO())
 
@@ -829,6 +824,7 @@ func TestOverrideReminder(t *testing.T) {
 		reminder2, err := req2.NewReminder(testReminders.clock.Now())
 		assert.NoError(t, err)
 		err = testReminders.CreateReminder(ctx, reminder2)
+		assert.NoError(t, err)
 		reminders, _, err := testReminders.getRemindersForActorType(context.Background(), actorType, false)
 		require.NoError(t, err)
 		require.NotEmpty(t, reminders)
@@ -839,23 +835,20 @@ func TestOverrideReminder(t *testing.T) {
 func TestOverrideReminderCancelsActiveReminders(t *testing.T) {
 	ctx := context.Background()
 	t.Run("override data", func(t *testing.T) {
-		// requestC := make(chan testRequest, 10)
-		// appChannel := mockAppChannel{
-		// 	requestC: requestC,
-		// }
+		requestC := make(chan testRequest, 10)
 		testReminders := newTestReminders()
 		defer testReminders.Close()
-		// clock := testReminders.clock.(*clocktesting.FakeClock)
+		clock := testReminders.clock.(*clocktesting.FakeClock)
 
 		fakeStor = nil
 		testReminders.SetStateStoreProviderFn(fakeRealTStore)
-		executed := make(chan string, 1)
 		testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
-			executed <- reminder.Key()
+			requestC <- testRequest{Data: "c"}
+
 			return true
 		})
 		testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-			return true, "localhost"
+			return true, localhost
 		})
 		testReminders.Init(context.TODO())
 
@@ -891,16 +884,16 @@ func TestOverrideReminderCancelsActiveReminders(t *testing.T) {
 		assert.Equal(t, json.RawMessage(`"c"`), reminders[0].Reminder.Data)
 
 		// due time for reminder3 is 2s
-		// advanceTickers(t, clock, time.Second*2)
+		advanceTickers(t, clock, time.Second*2)
 
-		// // The reminder update fires in a goroutine so we need to use the wall clock here
-		// select {
-		// case request := <-requestC:
-		// 	// Test that the last reminder update fired
-		// 	assert.Equal(t, string(reminders[0].Reminder.Data), "\""+request.Data.(string)+"\"")
-		// case <-time.After(1500 * time.Millisecond):
-		// 	assert.Fail(t, "request channel timed out")
-		// }
+		// The reminder update fires in a goroutine so we need to use the wall clock here
+		select {
+		case request := <-requestC:
+			// Test that the last reminder update fired
+			assert.Equal(t, string(reminders[0].Reminder.Data), "\""+request.Data.(string)+"\"")
+		case <-time.After(1500 * time.Millisecond):
+			assert.Fail(t, "request channel timed out")
+		}
 	})
 }
 
@@ -919,22 +912,18 @@ func advanceTickers(t *testing.T, clock *clocktesting.FakeClock, step time.Durat
 func TestOverrideReminderCancelsMultipleActiveReminders(t *testing.T) {
 	ctx := context.Background()
 	t.Run("override data", func(t *testing.T) {
-		// requestC := make(chan testRequest, 10)
-		// appChannel := mockAppChannel{
-		// 	requestC: requestC,
-		// }
+		requestC := make(chan testRequest, 10)
 		testReminders := newTestReminders()
 		defer testReminders.Close()
 
 		fakeStor = nil
 		testReminders.SetStateStoreProviderFn(fakeRealTStore)
-		executed := make(chan string, 1)
 		testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
-			executed <- reminder.Key()
+			requestC <- testRequest{Data: "d"}
 			return true
 		})
 		testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-			return true, "localhost"
+			return true, localhost
 		})
 		testReminders.Init(context.TODO())
 
@@ -983,19 +972,19 @@ func TestOverrideReminderCancelsMultipleActiveReminders(t *testing.T) {
 		advanceTickers(t, clock, time.Second)
 		advanceTickers(t, clock, time.Second)
 
-		// // The reminder update fires in a goroutine so we need to use the wall clock here
-		// select {
-		// case request := <-requestC:
-		// 	// Test that the last reminder update fired
-		// 	assert.Equal(t, string(reminders[0].Reminder.Data), "\""+request.Data.(string)+"\"")
+		// The reminder update fires in a goroutine so we need to use the wall clock here
+		select {
+		case request := <-requestC:
+			// Test that the last reminder update fired
+			assert.Equal(t, string(reminders[0].Reminder.Data), "\""+request.Data.(string)+"\"")
 
-		// 	// Check reminder is updated
-		// 	assert.Equal(t, "7s", reminders[0].Reminder.Period.String())
-		// 	assert.Equal(t, start.Add(4*time.Second), reminders[0].Reminder.RegisteredTime)
-		// 	assert.Equal(t, json.RawMessage(`"d"`), reminders[0].Reminder.Data)
-		// case <-time.After(1500 * time.Millisecond):
-		// 	assert.Fail(t, "request channel timed out")
-		// }
+			// Check reminder is updated
+			assert.Equal(t, "7s", reminders[0].Reminder.Period.String())
+			assert.Equal(t, start.Add(4*time.Second), reminders[0].Reminder.RegisteredTime)
+			assert.Equal(t, json.RawMessage(`"d"`), reminders[0].Reminder.Data)
+		case <-time.After(1500 * time.Millisecond):
+			assert.Fail(t, "request channel timed out")
+		}
 	})
 }
 
@@ -1006,13 +995,12 @@ func TestDeleteReminderWithPartitions(t *testing.T) {
 	// stateStore, _ := testReminders.stateStore()
 	fakeStor = nil
 	testReminders.SetStateStoreProviderFn(fakeRealTStore)
-	executed := make(chan string, 1)
+
 	testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
-		executed <- reminder.Key()
 		return true
 	})
 	testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-		return true, "localhost"
+		return true, localhost
 	})
 	testReminders.Init(context.TODO())
 
@@ -1023,6 +1011,7 @@ func TestDeleteReminderWithPartitions(t *testing.T) {
 		// Create a reminder
 		req := createReminderData(actorID, actorType, "reminder1", "1s", "1s", "", "")
 		reminder, err := req.NewReminder(testReminders.clock.Now())
+		assert.NoError(t, err)
 		err = testReminders.CreateReminder(ctx, reminder)
 		require.NoError(t, err)
 		assert.Equal(t, 1, len(testReminders.reminders[actorType]))
@@ -1067,13 +1056,12 @@ func TestDeleteReminder(t *testing.T) {
 
 	fakeStor = nil
 	testReminders.SetStateStoreProviderFn(fakeRealTStoreWithNoLock)
-	executed := make(chan string, 1)
+
 	testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
-		executed <- reminder.Key()
 		return true
 	})
 	testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-		return true, "localhost"
+		return true, localhost
 	})
 	testReminders.Init(context.TODO())
 
@@ -1254,7 +1242,7 @@ func TestReminderRepeats(t *testing.T) {
 				return true
 			})
 			testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-				return true, "localhost"
+				return true, localhost
 			})
 			testReminders.Init(context.TODO())
 
@@ -1404,7 +1392,7 @@ func Test_ReminderTTL(t *testing.T) {
 				return true
 			})
 			testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-				return true, "localhost"
+				return true, localhost
 			})
 			testReminders.Init(context.TODO())
 
@@ -1486,7 +1474,7 @@ func reminderValidation(dueTime, period, ttl, msg string) func(t *testing.T) {
 			return true
 		})
 		testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-			return true, "localhost"
+			return true, localhost
 		})
 		testReminders.Init(context.TODO())
 
@@ -1526,13 +1514,12 @@ func TestGetReminder(t *testing.T) {
 
 	fakeStor = nil
 	testReminders.SetStateStoreProviderFn(fakeRealTStore)
-	executed := make(chan string, 1)
+
 	testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
-		executed <- reminder.Key()
 		return true
 	})
 	testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-		return true, "localhost"
+		return true, localhost
 	})
 	testReminders.Init(context.TODO())
 
@@ -1560,13 +1547,12 @@ func TestReminderFires(t *testing.T) {
 
 	fakeStor = nil
 	testReminders.SetStateStoreProviderFn(fakeRealTStore)
-	executed := make(chan string, 1)
+
 	testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
-		executed <- reminder.Key()
 		return true
 	})
 	testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-		return true, "localhost"
+		return true, localhost
 	})
 	testReminders.Init(context.TODO())
 
@@ -1597,13 +1583,12 @@ func TestReminderDueDate(t *testing.T) {
 
 	fakeStor = nil
 	testReminders.SetStateStoreProviderFn(fakeRealTStore)
-	executed := make(chan string, 1)
+
 	testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
-		executed <- reminder.Key()
 		return true
 	})
 	testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-		return true, "localhost"
+		return true, localhost
 	})
 	testReminders.Init(context.TODO())
 
@@ -1642,7 +1627,7 @@ func TestReminderPeriod(t *testing.T) {
 		return true
 	})
 	testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-		return true, "localhost"
+		return true, localhost
 	})
 	testReminders.Init(context.TODO())
 
@@ -1700,7 +1685,7 @@ func TestReminderFiresOnceWithEmptyPeriod(t *testing.T) {
 		return true
 	})
 	testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-		return true, "localhost"
+		return true, localhost
 	})
 	testReminders.Init(context.TODO())
 
@@ -1724,6 +1709,7 @@ func TestReminderFiresOnceWithEmptyPeriod(t *testing.T) {
 func getTestActorTypeAndID() (string, string) {
 	return "cat", "e485d5de-de48-45ab-816e-6cc700d18ace"
 }
+
 func createReminderData(actorID, actorType, name, period, dueTime, ttl, data string) internal.CreateReminderRequest {
 	r := internal.CreateReminderRequest{
 		ActorID:   actorID,
@@ -1738,6 +1724,7 @@ func createReminderData(actorID, actorType, name, period, dueTime, ttl, data str
 	}
 	return r
 }
+
 func metricsCleanup() {
 	diagtestutils.CleanupRegisteredViews(
 		actorRemindersLastValueViewName,

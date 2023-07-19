@@ -24,12 +24,13 @@ import (
 
 	"k8s.io/utils/clock"
 
+	"github.com/google/uuid"
+
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors/internal"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/logger"
-	"github.com/google/uuid"
 )
 
 var log = logger.NewLogger("dapr.runtime.actor.reminders")
@@ -40,6 +41,8 @@ const (
 )
 
 // Implements a reminders provider.
+//
+
 type reminders struct {
 	clock                clock.WithTicker
 	runningCh            chan struct{}
@@ -120,7 +123,7 @@ func (r *reminders) CreateReminder(ctx context.Context, reminder *internal.Remin
 	existing, ok := r.getReminder(reminder.Name, reminder.ActorType, reminder.ActorID)
 	if ok {
 		if existing.RequiresUpdating(reminder) {
-			err := r.doDeleteReminder(ctx, reminder.ActorType, reminder.ActorID, reminder.Name)
+			err = r.doDeleteReminder(ctx, reminder.ActorType, reminder.ActorID, reminder.Name)
 			if err != nil {
 				return err
 			}
@@ -165,6 +168,7 @@ func (r *reminders) GetReminder(ctx context.Context, req *internal.GetReminderRe
 	}
 	return nil, nil
 }
+
 func (r *reminders) DeleteReminder(ctx context.Context, req internal.DeleteReminderRequest) error {
 	if !r.waitForEvaluationChan() {
 		return errors.New("error deleting reminder: timed out after 5s")
@@ -174,8 +178,8 @@ func (r *reminders) DeleteReminder(ctx context.Context, req internal.DeleteRemin
 	defer r.remindersStoringLock.Unlock()
 
 	return r.doDeleteReminder(ctx, req.ActorType, req.ActorID, req.Name)
-
 }
+
 func (r *reminders) RenameReminder(ctx context.Context, req *internal.RenameReminderRequest) error {
 	log.Warn("[DEPRECATION NOTICE] Currently RenameReminder renames by deleting-then-inserting-again. This implementation is not fault-tolerant, as a failed insert after deletion would result in no reminder")
 
@@ -520,7 +524,7 @@ func (r *reminders) saveRemindersInPartitionRequest(stateKey string, reminders [
 	}
 }
 
-func (a *reminders) saveActorTypeMetadataRequest(actorType string, actorMetadata *ActorMetadata, stateMetadata map[string]string) state.SetRequest {
+func (r *reminders) saveActorTypeMetadataRequest(actorType string, actorMetadata *ActorMetadata, stateMetadata map[string]string) state.SetRequest {
 	return state.SetRequest{
 		Key:      constructCompositeKey("actors", actorType, "metadata"),
 		Value:    actorMetadata,

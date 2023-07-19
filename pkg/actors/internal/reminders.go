@@ -41,6 +41,8 @@ type RemindersProviderOpts struct {
 }
 
 // RemindersProvider is the interface for the object that provides reminders services.
+//
+//nolint:interfacebloat
 type RemindersProvider interface {
 	io.Closer
 
