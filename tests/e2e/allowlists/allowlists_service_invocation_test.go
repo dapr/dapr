@@ -98,7 +98,7 @@ func TestMain(m *testing.M) {
 		},
 	}
 
-	tr = runner.NewTestRunner("hellodapr", testApps, nil, nil)
+	tr = runner.NewTestRunner("allowlists", testApps, nil, nil)
 	os.Exit(tr.Start(m))
 }
 
@@ -217,7 +217,7 @@ func TestServiceInvocationWithAllowLists(t *testing.T) {
 		t.Logf("configuration name: daprsystem, get failed: %s \n", err.Error())
 		os.Exit(-1)
 	}
-	if !config.Spec.MTLSSpec.Enabled {
+	if !config.Spec.MTLSSpec.GetEnabled() {
 		t.Logf("mtls disabled. can't running unit tests")
 		return
 	}
