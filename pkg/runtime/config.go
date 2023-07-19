@@ -150,7 +150,7 @@ func FromConfig(cfg *Config) (*DaprRuntime, error) {
 	}
 
 	// Initialize dapr metrics exporter
-	metricsExporter := metrics.NewExporterWithOptions(metrics.DefaultMetricNamespace, cfg.Metrics)
+	metricsExporter := metrics.NewExporterWithOptions(log, metrics.DefaultMetricNamespace, cfg.Metrics)
 	if err = metricsExporter.Init(); err != nil {
 		return nil, err
 	}
