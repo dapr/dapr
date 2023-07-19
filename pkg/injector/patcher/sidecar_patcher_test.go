@@ -14,7 +14,6 @@ limitations under the License.
 package patcher
 
 import (
-	"fmt"
 	"testing"
 
 	jsonpatch "github.com/evanphx/json-patch/v5"
@@ -310,7 +309,6 @@ func TestPatching(t *testing.T) {
 				assert.NotNil(t, tokenVolume.Projected)
 
 				// Assertions on added labels
-				fmt.Println(pod.Labels)
 				assert.Equal(t, "true", pod.Labels[injectorConsts.SidecarInjectedLabel])
 				assert.Equal(t, "myapp", pod.Labels[injectorConsts.SidecarAppIDLabel])
 				assert.Equal(t, "true", pod.Labels[injectorConsts.SidecarMetricsEnabledLabel])

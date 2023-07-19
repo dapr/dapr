@@ -1014,7 +1014,7 @@ func TestGetSidecarContainer(t *testing.T) {
 
 	t.Run("app health checks", testSuiteGenerator([]testCase{
 		{
-			name:        "disabled by deafult",
+			name:        "disabled by default",
 			annotations: map[string]string{},
 			assertFn: func(t *testing.T, container *corev1.Container) {
 				assert.NotContains(t, container.Args, "--enable-app-health-check")
@@ -1118,7 +1118,7 @@ func TestGetSidecarContainer(t *testing.T) {
 
 	t.Run("app-max-concurrency", testSuiteGenerator([]testCase{
 		{
-			name:        "not present by deafult",
+			name:        "not present by default",
 			annotations: map[string]string{},
 			assertFn: func(t *testing.T, container *corev1.Container) {
 				args := strings.Join(container.Args, " ")
@@ -1139,7 +1139,7 @@ func TestGetSidecarContainer(t *testing.T) {
 
 	t.Run("dapr-http-max-request-size", testSuiteGenerator([]testCase{
 		{
-			name:        "not present by deafult",
+			name:        "not present by default",
 			annotations: map[string]string{},
 			assertFn: func(t *testing.T, container *corev1.Container) {
 				args := strings.Join(container.Args, " ")
