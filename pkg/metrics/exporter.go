@@ -26,18 +26,18 @@ type Exporter interface {
 }
 
 // NewExporter creates new MetricsExporter instance.
-func NewExporter(namespace string) Exporter {
-	return NewExporterWithOptions(namespace, DefaultMetricOptions())
+func NewExporter(logger logger.Logger, namespace string) Exporter {
+	return NewExporterWithOptions(logger, namespace, DefaultMetricOptions())
 }
 
 // NewExporterWithOptions creates new MetricsExporter instance with options.
-func NewExporterWithOptions(namespace string, options *Options) Exporter {
+func NewExporterWithOptions(logger logger.Logger, namespace string, options *Options) Exporter {
 	// TODO: support multiple exporters
 	return &promMetricsExporter{
 		&exporter{
 			namespace: namespace,
 			options:   options,
-			logger:    logger.NewLogger("dapr.metrics"),
+			logger:    logger,
 		},
 		nil,
 	}

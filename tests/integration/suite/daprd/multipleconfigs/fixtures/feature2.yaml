@@ -1,10 +1,8 @@
 apiVersion: dapr.io/v1alpha1
 kind: Configuration
 metadata:
-  name: daprConfig
+  name: feature2
 spec:
   features:
-    - name: Actor.Reentrancy
+    - name: Feature2
       enabled: true
-    - name: Test.Feature
-      enabled: false
