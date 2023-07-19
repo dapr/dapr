@@ -15,6 +15,7 @@ limitations under the License.
 package patcher
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -729,255 +730,146 @@ func TestGetSidecarContainer(t *testing.T) {
 		assert.Equal(t, "/tmp", container.VolumeMounts[0].MountPath)
 	})
 
-	t.Run("disable Builtin K8s Secret Store", func(t *testing.T) {
-		c := NewSidecarConfig(&corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Annotations: map[string]string{
-					annotations.KeyDisableBuiltinK8sSecretStore: "true",
+	// Allows running multiple test suites in a more DRY way
+	type testCase struct {
+		name                    string
+		annotations             map[string]string
+		podModifierFn           func(pod *corev1.Pod)
+		sidecarConfigModifierFn func(c *SidecarConfig)
+		assertFn                func(t *testing.T, container *corev1.Container)
+	}
+	testCaseFn := func(tc testCase) func(t *testing.T) {
+		return func(t *testing.T) {
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: tc.annotations,
 				},
-			},
-		})
+			}
+			if tc.podModifierFn != nil {
+				tc.podModifierFn(pod)
+			}
 
-		c.AppID = "app_id"
-		c.Namespace = "dapr-system"
-		c.SidecarImage = "daprio/dapr"
-		c.OperatorAddress = "controlplane:9000"
-		c.PlacementAddress = "placement:50000"
-		c.SentryAddress = "sentry:50000"
-		c.MTLSEnabled = true
+			c := NewSidecarConfig(pod)
+			c.AppID = "myapp"
 
-		c.SetFromPodAnnotations()
+			if tc.sidecarConfigModifierFn != nil {
+				tc.sidecarConfigModifierFn(c)
+			}
 
-		container, err := c.getSidecarContainer(getSidecarContainerOpts{})
-		require.NoError(t, err)
+			c.SetFromPodAnnotations()
 
-		expectedArgs := []string{
-			"/daprd",
-			"--dapr-http-port", "3500",
-			"--dapr-grpc-port", "50001",
-			"--dapr-internal-grpc-port", "50002",
-			"--dapr-listen-addresses", "[::1],127.0.0.1",
-			"--dapr-public-port", "3501",
-			"--app-id", "app_id",
-			"--app-protocol", "http",
-			"--control-plane-address", "controlplane:9000",
-			"--sentry-address", "sentry:50000",
-			"--log-level", "info",
-			"--dapr-graceful-shutdown-seconds", "-1",
-			"--mode", "kubernetes",
-			"--enable-metrics",
-			"--metrics-port", "9090",
-			"--placement-host-address", "placement:50000",
-			"--disable-builtin-k8s-secret-store",
-			"--enable-mtls",
+			container, err := c.getSidecarContainer(getSidecarContainerOpts{})
+			require.NoError(t, err)
+
+			tc.assertFn(t, container)
 		}
-
-		assert.EqualValues(t, expectedArgs, container.Args)
-	})
-
-	t.Run("test enable-api-logging", func(t *testing.T) {
-		t.Run("unset", func(t *testing.T) {
-			c := NewSidecarConfig(&corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Annotations: map[string]string{},
-				},
-			})
-
-			c.AppID = "app_id"
-			c.Namespace = "dapr-system"
-			c.SidecarImage = "daprio/dapr"
-			c.OperatorAddress = "controlplane:9000"
-			c.PlacementAddress = "placement:50000"
-			c.SentryAddress = "sentry:50000"
-			c.MTLSEnabled = true
-
-			c.SetFromPodAnnotations()
-
-			container, err := c.getSidecarContainer(getSidecarContainerOpts{})
-			require.NoError(t, err)
-
-			expectedArgs := []string{
-				"/daprd",
-				"--dapr-http-port", "3500",
-				"--dapr-grpc-port", "50001",
-				"--dapr-internal-grpc-port", "50002",
-				"--dapr-listen-addresses", "[::1],127.0.0.1",
-				"--dapr-public-port", "3501",
-				"--app-id", "app_id",
-				"--app-protocol", "http",
-				"--control-plane-address", "controlplane:9000",
-				"--sentry-address", "sentry:50000",
-				"--log-level", "info",
-				"--dapr-graceful-shutdown-seconds", "-1",
-				"--mode", "kubernetes",
-				"--enable-metrics",
-				"--metrics-port", "9090",
-				"--placement-host-address", "placement:50000",
-				"--enable-mtls",
+	}
+	testSuiteGenerator := func(tests []testCase) func(t *testing.T) {
+		return func(t *testing.T) {
+			for _, tc := range tests {
+				t.Run(tc.name, testCaseFn(tc))
 			}
-
-			assert.EqualValues(t, expectedArgs, container.Args)
-		})
-
-		t.Run("explicit true", func(t *testing.T) {
-			c := NewSidecarConfig(&corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Annotations: map[string]string{
-						annotations.KeyEnableAPILogging: "true",
-					},
-				},
-			})
-
-			c.AppID = "app_id"
-			c.Namespace = "dapr-system"
-			c.SidecarImage = "daprio/dapr"
-			c.OperatorAddress = "controlplane:9000"
-			c.PlacementAddress = "placement:50000"
-			c.SentryAddress = "sentry:50000"
-			c.MTLSEnabled = true
-
-			c.SetFromPodAnnotations()
-
-			container, err := c.getSidecarContainer(getSidecarContainerOpts{})
-			require.NoError(t, err)
-
-			expectedArgs := []string{
-				"/daprd",
-				"--dapr-http-port", "3500",
-				"--dapr-grpc-port", "50001",
-				"--dapr-internal-grpc-port", "50002",
-				"--dapr-listen-addresses", "[::1],127.0.0.1",
-				"--dapr-public-port", "3501",
-				"--app-id", "app_id",
-				"--app-protocol", "http",
-				"--control-plane-address", "controlplane:9000",
-				"--sentry-address", "sentry:50000",
-				"--log-level", "info",
-				"--dapr-graceful-shutdown-seconds", "-1",
-				"--mode", "kubernetes",
-				"--enable-metrics",
-				"--metrics-port", "9090",
-				"--placement-host-address", "placement:50000",
-				"--enable-api-logging=true",
-				"--enable-mtls",
-			}
-
-			assert.EqualValues(t, expectedArgs, container.Args)
-		})
-
-		t.Run("explicit false", func(t *testing.T) {
-			c := NewSidecarConfig(&corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Annotations: map[string]string{
-						annotations.KeyEnableAPILogging: "false",
-					},
-				},
-			})
-
-			c.AppID = "app_id"
-			c.Namespace = "dapr-system"
-			c.SidecarImage = "daprio/dapr"
-			c.OperatorAddress = "controlplane:9000"
-			c.PlacementAddress = "placement:50000"
-			c.SentryAddress = "sentry:50000"
-			c.MTLSEnabled = true
-
-			c.SetFromPodAnnotations()
-
-			container, err := c.getSidecarContainer(getSidecarContainerOpts{})
-			require.NoError(t, err)
-
-			expectedArgs := []string{
-				"/daprd",
-				"--dapr-http-port", "3500",
-				"--dapr-grpc-port", "50001",
-				"--dapr-internal-grpc-port", "50002",
-				"--dapr-listen-addresses", "[::1],127.0.0.1",
-				"--dapr-public-port", "3501",
-				"--app-id", "app_id",
-				"--app-protocol", "http",
-				"--control-plane-address", "controlplane:9000",
-				"--sentry-address", "sentry:50000",
-				"--log-level", "info",
-				"--dapr-graceful-shutdown-seconds", "-1",
-				"--mode", "kubernetes",
-				"--enable-metrics",
-				"--metrics-port", "9090",
-				"--placement-host-address", "placement:50000",
-				"--enable-api-logging=false",
-				"--enable-mtls",
-			}
-
-			assert.EqualValues(t, expectedArgs, container.Args)
-		})
-	})
-
-	t.Run("sidecar container should have the correct user configured", func(t *testing.T) {
-		testCases := []struct {
-			envVars string
-			isAdmin bool
-		}{
-			{
-				"SSL_CERT_DIR=/tmp/certificates",
-				true,
-			},
-			{
-				"SSL_CERT_FILE=/tmp/certificates/cert.pem",
-				false,
-			},
 		}
-		for _, tc := range testCases {
-			c := NewSidecarConfig(&corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Annotations: map[string]string{
-						annotations.KeyEnv: tc.envVars,
-					},
-				},
-			})
-			c.SetFromPodAnnotations()
+	}
 
-			container, err := c.getSidecarContainer(getSidecarContainerOpts{})
-			require.NoError(t, err)
+	t.Run("disable builtin K8s Secret Store", testCaseFn(testCase{
+		annotations: map[string]string{
+			annotations.KeyDisableBuiltinK8sSecretStore: "true",
+		},
+		assertFn: func(t *testing.T, container *corev1.Container) {
+			assert.Contains(t, container.Args, "--disable-builtin-k8s-secret-store")
+		},
+	}))
 
-			if tc.isAdmin {
+	t.Run("test enable-api-logging", testSuiteGenerator([]testCase{
+		{
+			name:        "not set by default",
+			annotations: map[string]string{},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				assert.NotContains(t, strings.Join(container.Args, " "), "--enable-api-logging")
+			},
+		},
+		{
+			name: "explicit true",
+			annotations: map[string]string{
+				annotations.KeyEnableAPILogging: "true",
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				assert.Contains(t, container.Args, "--enable-api-logging=true")
+			},
+		},
+		{
+			name: "explicit false",
+			annotations: map[string]string{
+				annotations.KeyEnableAPILogging: "0",
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				assert.Contains(t, container.Args, "--enable-api-logging=false")
+			},
+		},
+		{
+			name: "not set when annotation is empty",
+			annotations: map[string]string{
+				annotations.KeyEnableAPILogging: "",
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				assert.NotContains(t, strings.Join(container.Args, " "), "--enable-api-logging")
+			},
+		},
+	}))
+
+	t.Run("sidecar container should have the correct security context on Windows", testSuiteGenerator([]testCase{
+		{
+			name:        "windows security context is nil by default",
+			annotations: map[string]string{},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				assert.Nil(t, container.SecurityContext.WindowsOptions)
+			},
+		},
+		{
+			name: "setting SSL_CERT_DIR should set security context",
+			annotations: map[string]string{
+				annotations.KeyEnv: "SSL_CERT_DIR=/tmp/certificates",
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
 				assert.NotNil(t, container.SecurityContext.WindowsOptions, "SecurityContext.WindowsOptions should not be nil")
 				assert.Equal(t, "ContainerAdministrator", *container.SecurityContext.WindowsOptions.RunAsUserName, "SecurityContext.WindowsOptions.RunAsUserName should be ContainerAdministrator")
-			} else {
-				assert.Nil(t, container.SecurityContext.WindowsOptions)
-			}
-		}
-	})
-
-	t.Run("sidecar container should have env vars injected", func(t *testing.T) {
-		c := NewSidecarConfig(&corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Annotations: map[string]string{
-					annotations.KeyEnv: `HELLO=world, CIAO=mondo, BONJOUR=monde`,
-				},
 			},
-		})
-		c.SetFromPodAnnotations()
+		},
+		{
+			name: "setting SSL_CERT_FILE should not set security context",
+			annotations: map[string]string{
+				annotations.KeyEnv: "SSL_CERT_FILE=/tmp/certificates/cert.pem",
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				assert.Nil(t, container.SecurityContext.WindowsOptions)
+			},
+		},
+	}))
 
-		container, err := c.getSidecarContainer(getSidecarContainerOpts{})
-		require.NoError(t, err)
-
-		expect := map[string]string{
-			"HELLO":                  "world",
-			"CIAO":                   "mondo",
-			"BONJOUR":                "monde",
-			authConsts.EnvKeysEnvVar: "HELLO CIAO BONJOUR",
-		}
-
-		found := map[string]string{}
-		for _, env := range container.Env {
-			switch env.Name {
-			case "HELLO", "CIAO", "BONJOUR", authConsts.EnvKeysEnvVar:
-				found[env.Name] = env.Value
+	t.Run("sidecar container should have env vars injected", testCaseFn(testCase{
+		annotations: map[string]string{
+			annotations.KeyEnv: `HELLO=world, CIAO=mondo, BONJOUR=monde`,
+		},
+		assertFn: func(t *testing.T, container *corev1.Container) {
+			expect := map[string]string{
+				"HELLO":                  "world",
+				"CIAO":                   "mondo",
+				"BONJOUR":                "monde",
+				authConsts.EnvKeysEnvVar: "HELLO CIAO BONJOUR",
 			}
-		}
 
-		assert.Equal(t, expect, found)
-	})
+			found := map[string]string{}
+			for _, env := range container.Env {
+				switch env.Name {
+				case "HELLO", "CIAO", "BONJOUR", authConsts.EnvKeysEnvVar:
+					found[env.Name] = env.Value
+				}
+			}
+
+			assert.Equal(t, expect, found)
+		},
+	}))
 
 	t.Run("sidecar container should specify commands only when ignoreEntrypointTolerations match with the pod", func(t *testing.T) {
 		testCases := []struct {
@@ -1095,47 +987,187 @@ func TestGetSidecarContainer(t *testing.T) {
 		}
 	})
 
-	t.Run("get sidecar container with appropriate security context", func(t *testing.T) {
-		testCases := []struct {
-			an               map[string]string
-			dropCapabilities bool
-		}{
-			{
-				map[string]string{
-					annotations.KeySidecarSeccompProfileType: "RuntimeDefault",
-				},
-				true,
+	t.Run("get sidecar container with appropriate security context", testSuiteGenerator([]testCase{
+		{
+			name: "set seccomp profile type",
+			annotations: map[string]string{
+				annotations.KeySidecarSeccompProfileType: "RuntimeDefault",
 			},
-			{
-				map[string]string{},
-				false,
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				assert.Nil(t, container.SecurityContext.Capabilities)
+				assert.NotNil(t, container.SecurityContext.SeccompProfile, "SecurityContext.SeccompProfile should not be nil")
+				assert.Equal(t, corev1.SeccompProfile{Type: corev1.SeccompProfileType("RuntimeDefault")}, *container.SecurityContext.SeccompProfile, "SecurityContext.SeccompProfile.Type should be RuntimeDefault")
 			},
-		}
-		for _, tc := range testCases {
-			c := NewSidecarConfig(&corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Annotations: tc.an,
-				},
-			})
-			c.SidecarDropALLCapabilities = tc.dropCapabilities
-			c.SetFromPodAnnotations()
-
-			container, err := c.getSidecarContainer(getSidecarContainerOpts{})
-			require.NoError(t, err)
-
-			if tc.dropCapabilities {
+		},
+		{
+			name: "set drop all capabilities",
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.SidecarDropALLCapabilities = true
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
 				assert.NotNil(t, container.SecurityContext.Capabilities, "SecurityContext.Capabilities should not be nil")
 				assert.Equal(t, corev1.Capabilities{Drop: []corev1.Capability{"ALL"}}, *container.SecurityContext.Capabilities, "SecurityContext.Capabilities should drop all capabilities")
-			} else {
-				assert.Nil(t, container.SecurityContext.Capabilities)
-			}
-
-			if len(tc.an) != 0 {
-				assert.NotNil(t, container.SecurityContext.SeccompProfile, "SecurityContext.SeccompProfile should not be nil")
-				assert.Equal(t, corev1.SeccompProfile{Type: corev1.SeccompProfileType("RuntimeDefault")}, *container.SecurityContext.SeccompProfile, "SecurityContext.SeccompProfile.Type should not be RuntimeDefault")
-			} else {
 				assert.Nil(t, container.SecurityContext.SeccompProfile)
-			}
-		}
-	})
+			},
+		},
+	}))
+
+	t.Run("app health checks", testSuiteGenerator([]testCase{
+		{
+			name:        "disabled by deafult",
+			annotations: map[string]string{},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				assert.NotContains(t, container.Args, "--enable-app-health-check")
+				assert.NotContains(t, container.Args, "--app-health-check-path")
+				assert.NotContains(t, container.Args, "--app-health-probe-interval")
+				assert.NotContains(t, container.Args, "--app-health-probe-timeout")
+				assert.NotContains(t, container.Args, "--app-health-threshold")
+			},
+		},
+		{
+			name: "enabled with default options",
+			annotations: map[string]string{
+				annotations.KeyEnableAppHealthCheck: "1",
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				assert.Contains(t, container.Args, "--enable-app-health-check")
+
+				args := strings.Join(container.Args, " ")
+				assert.Contains(t, args, "--app-health-check-path /healthz")
+				assert.Contains(t, args, "--app-health-probe-interval 5")
+				assert.Contains(t, args, "--app-health-probe-timeout 500")
+				assert.Contains(t, args, "--app-health-threshold 3")
+			},
+		},
+		{
+			name: "enabled with custom options",
+			annotations: map[string]string{
+				annotations.KeyEnableAppHealthCheck:   "1",
+				annotations.KeyAppHealthCheckPath:     "/healthcheck",
+				annotations.KeyAppHealthProbeInterval: "10",
+				annotations.KeyAppHealthProbeTimeout:  "100",
+				annotations.KeyAppHealthThreshold:     "2",
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				assert.Contains(t, container.Args, "--enable-app-health-check")
+
+				args := strings.Join(container.Args, " ")
+				assert.Contains(t, args, "--app-health-check-path /healthcheck")
+				assert.Contains(t, args, "--app-health-probe-interval 10")
+				assert.Contains(t, args, "--app-health-probe-timeout 100")
+				assert.Contains(t, args, "--app-health-threshold 2")
+			},
+		},
+	}))
+
+	t.Run("sidecar container should have env vars injected", testCaseFn(testCase{
+		annotations: map[string]string{
+			annotations.KeyEnableProfiling: "true",
+		},
+		assertFn: func(t *testing.T, container *corev1.Container) {
+			assert.Contains(t, container.Args, "--enable-profiling")
+		},
+	}))
+
+	// This validates the current behavior
+	// TODO: When app-ssl is deprecated, change this test
+	t.Run("app protocol and TLS", testSuiteGenerator([]testCase{
+		{
+			name:        "default to HTTP protocol",
+			annotations: map[string]string{},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.Contains(t, args, "--app-protocol http")
+				assert.NotContains(t, args, "--app-ssl")
+			},
+		},
+		{
+			name: "enable app-ssl",
+			annotations: map[string]string{
+				annotations.KeyAppSSL: "y",
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.Contains(t, args, "--app-protocol http")
+				assert.Contains(t, args, "--app-ssl")
+			},
+		},
+		{
+			name: "protocol is grpc with app-ssl",
+			annotations: map[string]string{
+				annotations.KeyAppProtocol: "grpc",
+				annotations.KeyAppSSL:      "y",
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.Contains(t, args, "--app-protocol grpc")
+				assert.Contains(t, args, "--app-ssl")
+			},
+		},
+		{
+			name: "protocol is h2c",
+			annotations: map[string]string{
+				annotations.KeyAppProtocol: "h2c",
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.Contains(t, args, "--app-protocol h2c")
+			},
+		},
+	}))
+
+	t.Run("app-max-concurrency", testSuiteGenerator([]testCase{
+		{
+			name:        "not present by deafult",
+			annotations: map[string]string{},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.NotContains(t, args, "--app-max-concurrency")
+			},
+		},
+		{
+			name: "set value",
+			annotations: map[string]string{
+				annotations.KeyAppMaxConcurrency: "10",
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.Contains(t, args, "--app-max-concurrency 10")
+			},
+		},
+	}))
+
+	t.Run("dapr-http-max-request-size", testSuiteGenerator([]testCase{
+		{
+			name:        "not present by deafult",
+			annotations: map[string]string{},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.NotContains(t, args, "--dapr-http-max-request-size")
+			},
+		},
+		{
+			name: "set value",
+			annotations: map[string]string{
+				annotations.KeyHTTPMaxRequestSize: "10",
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.Contains(t, args, "--dapr-http-max-request-size 10")
+			},
+		},
+	}))
+
+	t.Run("set resources", testCaseFn(testCase{
+		annotations: map[string]string{
+			annotations.KeyCPURequest:  "100",
+			annotations.KeyMemoryLimit: "100Mi",
+		},
+		assertFn: func(t *testing.T, container *corev1.Container) {
+			assert.Equal(t, "100", container.Resources.Requests.Cpu().String())
+			assert.Equal(t, "0", container.Resources.Requests.Memory().String())
+			assert.Equal(t, "0", container.Resources.Limits.Cpu().String())
+			assert.Equal(t, "100Mi", container.Resources.Limits.Memory().String())
+		},
+	}))
 }

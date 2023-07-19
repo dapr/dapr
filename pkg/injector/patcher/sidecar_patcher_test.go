@@ -16,13 +16,13 @@ package patcher
 import (
 	"testing"
 
+	"github.com/dapr/dapr/pkg/injector/annotations"
+	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
 )
 
 func TestAddDaprEnvVarsToContainers(t *testing.T) {
@@ -305,6 +305,72 @@ func TestAddDaprInjectedLabel(t *testing.T) {
 			})
 			require.NoError(t, err)
 			assert.Equal(t, tc.expLabels, newPod.Labels)
+		})
+	}
+}
+
+func TestPodNeedsPatching(t *testing.T) {
+	tests := []struct {
+		name string
+		want bool
+		pod  *corev1.Pod
+	}{
+		{
+			name: "false if enabled annotation is missing",
+			want: false,
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{},
+				},
+			},
+		},
+		{
+			name: "false if enabled annotation is falsey",
+			want: false,
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						annotations.KeyEnabled: "0",
+					},
+				},
+			},
+		},
+		{
+			name: "true if enabled annotation is truthy",
+			want: false,
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						annotations.KeyEnabled: "yes",
+					},
+				},
+			},
+		},
+		{
+			name: "false if daprd container already exists",
+			want: false,
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						annotations.KeyEnabled: "yes",
+					},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{Name: "daprd"},
+					},
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := NewSidecarConfig(tt.pod)
+
+			got := c.NeedsPatching()
+			if got != tt.want {
+				t.Errorf("SidecarConfig.NeedsPatching() = %v, want %v", got, tt.want)
+			}
 		})
 	}
 }

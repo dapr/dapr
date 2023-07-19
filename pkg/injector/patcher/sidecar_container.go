@@ -136,6 +136,8 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 		args = append(args, "--enable-mtls")
 	}
 
+	// Note: we are still passing --app-ssl as-is, rather than merging it into "app-protocol", for backwards-compatibility (ability to inject Dapr 1.10 and older sidecars).
+	// We will let Daprd "convert" this.
 	if c.AppSSL {
 		args = append(args, "--app-ssl")
 	}

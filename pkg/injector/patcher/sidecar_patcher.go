@@ -154,7 +154,7 @@ func (c *SidecarConfig) addDaprEnvVarsToContainers(containers map[int]corev1.Con
 
 // addDaprSidecarInjectedLabel adds Dapr label to patch pod so list of patched pods can be retrieved more efficiently
 func (c *SidecarConfig) addDaprSidecarInjectedLabel() jsonpatch.Operation {
-	if len(c.pod.Labels) == 0 { // empty labels
+	if len(c.pod.Labels) == 0 {
 		return NewPatchOperation("add", injectorConsts.PatchPathLabels, map[string]string{
 			injectorConsts.SidecarInjectedLabel: "true",
 		})
@@ -165,7 +165,7 @@ func (c *SidecarConfig) addDaprSidecarInjectedLabel() jsonpatch.Operation {
 
 // addDaprSidecarAppIDLabel adds Dapr app-id label which can be handy for metric labels
 func (c *SidecarConfig) addDaprSidecarAppIDLabel() jsonpatch.Operation {
-	if len(c.pod.Labels) == 0 { // empty labels
+	if len(c.pod.Labels) == 0 {
 		return NewPatchOperation("add", injectorConsts.PatchPathLabels, map[string]string{
 			injectorConsts.SidecarAppIDLabel: c.GetAppID(),
 		})
@@ -175,7 +175,7 @@ func (c *SidecarConfig) addDaprSidecarAppIDLabel() jsonpatch.Operation {
 
 // addDaprSidecarMetricsEnabledLabel adds Dapr metrics-enabled label which can be handy for scraping metrics
 func (c *SidecarConfig) addDaprSidecarMetricsEnabledLabel() jsonpatch.Operation {
-	if len(c.pod.Labels) == 0 { // empty labels
+	if len(c.pod.Labels) == 0 {
 		return NewPatchOperation("add", injectorConsts.PatchPathLabels, map[string]string{
 			injectorConsts.SidecarMetricsEnabledLabel: strconv.FormatBool(c.EnableMetrics),
 		})
