@@ -87,8 +87,8 @@ github.com/Azure/azure-sdk-for-go/sdk/data/aztables v1.0.1/go.mod h1:l3wvZkG9oW0
 github.com/Azure/azure-sdk-for-go/sdk/internal v1.0.0/go.mod h1:eWRD7oawr1Mu1sLCawqVc0CUiF43ia3qQMxLscsKQ9w=
 github.com/Azure/azure-sdk-for-go/sdk/internal v1.3.0 h1:sXr+ck84g/ZlZUOZiNELInmMgOsuGwdjjVkEIde0OtY=
 github.com/Azure/azure-sdk-for-go/sdk/internal v1.3.0/go.mod h1:okt5dMMTOFjX/aovMlrjvvXoPMBVSPzk9185BT0+eZM=
-github.com/Azure/azure-sdk-for-go/sdk/messaging/azeventhubs v1.0.0 h1:IQPFvZDfowjuv77a987bsErW+RjE1YbR3mpcYD5K2to=
-github.com/Azure/azure-sdk-for-go/sdk/messaging/azeventhubs v1.0.0/go.mod h1:fswVBSaYFoW4XXp3oXG0vuDVdToLr3kRzgp5oePMq5g=
+github.com/Azure/azure-sdk-for-go/sdk/messaging/azeventhubs v1.0.1 h1:7G4EhZbWFwfgkNfJkNoZmFL8FfWT6P96YVwG71uhNxY=
+github.com/Azure/azure-sdk-for-go/sdk/messaging/azeventhubs v1.0.1/go.mod h1:fswVBSaYFoW4XXp3oXG0vuDVdToLr3kRzgp5oePMq5g=
 github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus v1.3.0 h1:eLqmA+3GXbOOLJVTSqkrFudTbHkfOp5HIy+iShCNM7A=
 github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus v1.3.0/go.mod h1:pXDkeh10bAqElvd+S5Ppncj+DCKvJGXNa8rRT2R7rIw=
 github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/eventgrid/armeventgrid/v2 v2.1.1 h1:q8d6Cw16DrwJ+o82GMEQ+xt65q7w4m7VcI4C+gK/7Jk=
@@ -107,8 +107,8 @@ github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.0.0 h1:u/LLAOFgsMv7HmNL4
 github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.0.0/go.mod h1:2e8rMJtl2+2j+HXbTBwnyGpm5Nou7KhvSfxOq8JpTag=
 github.com/Azure/azure-sdk-for-go/sdk/storage/azqueue v1.0.0 h1:lJwNFV+xYjHREUTHJKx/ZF6CJSt9znxmLw9DqSTvyRU=
 github.com/Azure/azure-sdk-for-go/sdk/storage/azqueue v1.0.0/go.mod h1:GfT0aGew8Qj5yiQVqOO5v7N8fanbJGyUoHqXg56qcVY=
-github.com/Azure/go-amqp v1.0.0 h1:QfCugi1M+4F2JDTRgVnRw7PYXLXZ9hmqk3+9+oJh3OA=
-github.com/Azure/go-amqp v1.0.0/go.mod h1:+bg0x3ce5+Q3ahCEXnCsGG3ETpDQe3MEVnOuT2ywPwc=
+github.com/Azure/go-amqp v1.0.1 h1:Jf8OQCKzRDMZ3pCiH4onM7yrhl5curkRSGkRLTyP35o=
+github.com/Azure/go-amqp v1.0.1/go.mod h1:+bg0x3ce5+Q3ahCEXnCsGG3ETpDQe3MEVnOuT2ywPwc=
 github.com/AzureAD/microsoft-authentication-library-for-go v0.8.1/go.mod h1:4qFor3D/HDsvBME35Xy9rwW9DecL+M2sNw1ybjPtwA0=
 github.com/AzureAD/microsoft-authentication-library-for-go v1.0.0 h1:OBhqkivkhkMqLPymWEppkm7vgPQY2XsHoEkaMQ0AdZY=
 github.com/AzureAD/microsoft-authentication-library-for-go v1.0.0/go.mod h1:kgDmCTgBzIEPFElEF+FK0SdjAor06dRq2Go927dnQ6o=
@@ -398,8 +398,8 @@ github.com/dancannon/gorethink v4.0.0+incompatible h1:KFV7Gha3AuqT+gr0B/eKvGhbjm
 github.com/dancannon/gorethink v4.0.0+incompatible/go.mod h1:BLvkat9KmZc1efyYwhz3WnybhRZtgF1K929FD8z1avU=
 github.com/danieljoos/wincred v1.1.2 h1:QLdCxFs1/Yl4zduvBdcHB8goaYk9RARS2SgLLRuAyr0=
 github.com/danieljoos/wincred v1.1.2/go.mod h1:GijpziifJoIBfYh+S7BbkdUTU4LfM+QnGqR5Vl2tAx0=
-github.com/dapr/components-contrib v1.11.4 h1:gi1eetyl5hcypyHcUPL0cFRBfiJt/V1fuJGNAWbS8pU=
-github.com/dapr/components-contrib v1.11.4/go.mod h1:hTiIBTAn9cPA/HMmJo+Cg1+2A3S8q43BHugf0rFv0Sg=
+github.com/dapr/components-contrib v1.11.5 h1:k301GmSITyV90OpHeozNQnpb+xTdv3HHLqc8QvManms=
+github.com/dapr/components-contrib v1.11.5/go.mod h1:w09Am1dbM/c2nFNtMFwEw+uc8ji5FU7AArFJJuqs2Yk=
 github.com/dapr/kit v0.11.3 h1:u1X92tE8xsrwXIej7nkcI5Z1t1CFznPwlL18tizNEw4=
 github.com/dapr/kit v0.11.3/go.mod h1:hQA6xOhcLAiccXTj7e3/bzpHwvAJCSCp70p2xg3jB40=
 github.com/dave/jennifer v1.4.0/go.mod h1:fIb+770HOpJ2fmN9EPPKOqm1vMGhB+TwXKMZhrIygKg=
