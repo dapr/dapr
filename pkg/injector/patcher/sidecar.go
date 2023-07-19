@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package injector
+package patcher
 
 import (
 	"reflect"
@@ -43,7 +43,6 @@ type SidecarConfig struct {
 	ImagePullPolicy                corev1.PullPolicy
 	OperatorAddress                string
 	SentryAddress                  string
-	Tolerations                    []corev1.Toleration
 	RunAsNonRoot                   bool
 	ReadOnlyRootFilesystem         bool
 	SidecarDropALLCapabilities     bool
@@ -113,11 +112,12 @@ func NewSidecarConfig(pod *corev1.Pod) *SidecarConfig {
 	c := &SidecarConfig{
 		pod: pod,
 	}
-
 	c.setDefaultValues()
-	c.setFromAnnotations(pod.GetAnnotations())
-
 	return c
+}
+
+func (c *SidecarConfig) SetFromPodAnnotations() {
+	c.setFromAnnotations(c.pod.Annotations)
 }
 
 func (c *SidecarConfig) setDefaultValues() {

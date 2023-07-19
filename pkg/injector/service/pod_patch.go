@@ -25,11 +25,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
-	"github.com/dapr/dapr/pkg/injector/annotations"
-	"github.com/dapr/dapr/pkg/injector/components"
 	"github.com/dapr/dapr/pkg/injector/patcher"
 	"github.com/dapr/dapr/pkg/injector/sidecar"
-	"github.com/dapr/dapr/pkg/validation"
 )
 
 const (
@@ -40,124 +37,59 @@ const (
 func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.AdmissionReview,
 	namespace, image, imagePullPolicy string, kubeClient kubernetes.Interface, daprClient scheme.Interface,
 ) (patchOps jsonpatch.Patch, err error) {
-	req := ar.Request
-	var pod corev1.Pod
-	err = json.Unmarshal(req.Object.Raw, &pod)
+	pod := &corev1.Pod{}
+	err = json.Unmarshal(ar.Request.Object.Raw, pod)
 	if err != nil {
 		return nil, fmt.Errorf("could not unmarshal raw object: %w", err)
 	}
 
 	log.Infof(
 		"AdmissionReview for Kind=%v, Namespace=%s Name=%s (%s) UID=%v patchOperation=%v UserInfo=%v",
-		req.Kind,
-		req.Namespace,
-		req.Name,
-		pod.Name,
-		req.UID,
-		req.Operation,
-		req.UserInfo,
+		ar.Request.Kind, ar.Request.Namespace, ar.Request.Name, pod.Name, ar.Request.UID, ar.Request.Operation, ar.Request.UserInfo,
 	)
-
-	an := annotations.New(pod.Annotations)
-	if !an.GetBoolOrDefault(annotations.KeyEnabled, false) || sidecar.PodContainsSidecarContainer(&pod) {
-		return nil, nil
-	}
-
-	appID := sidecar.GetAppID(pod.ObjectMeta)
-	metricsEnabled := sidecar.GetMetricsEnabled(pod.ObjectMeta)
-	err = validation.ValidateKubernetesAppID(appID)
-	if err != nil {
-		return nil, err
-	}
 
 	// Keep DNS resolution outside of GetSidecarContainer for unit testing.
 	placementAddress := sidecar.ServiceAddress(sidecar.ServicePlacement, namespace, i.config.KubeClusterDomain)
 	sentryAddress := sidecar.ServiceAddress(sidecar.ServiceSentry, namespace, i.config.KubeClusterDomain)
 	apiSvcAddress := sidecar.ServiceAddress(sidecar.ServiceAPI, namespace, i.config.KubeClusterDomain)
 
+	// Get the TLS credentials
 	trustAnchors, certChain, certKey := sidecar.GetTrustAnchorsAndCertChain(ctx, kubeClient, namespace)
 
-	// Get all volume mounts
-	volumeMounts := sidecar.GetVolumeMounts(pod)
-	socketVolumeMount := sidecar.GetUnixDomainSocketVolumeMount(&pod)
-	if socketVolumeMount != nil {
-		volumeMounts = append(volumeMounts, *socketVolumeMount)
-	}
-	volumeMounts = append(volumeMounts, corev1.VolumeMount{
-		Name:      sidecar.TokenVolumeName,
-		MountPath: sidecar.TokenVolumeKubernetesMountPath,
-		ReadOnly:  true,
-	})
+	// Create the sidecar configuration object from the pod
+	sidecar := patcher.NewSidecarConfig(pod)
+	sidecar.GetInjectedComponentContainers = i.getInjectedComponentContainers
+	sidecar.KubernetesMode = true
+	sidecar.Namespace = ar.Request.Namespace
+	sidecar.TrustAnchors = trustAnchors
+	sidecar.CertChain = certChain
+	sidecar.CertKey = certKey
+	sidecar.MTLSEnabled = mTLSEnabled(daprClient)
+	sidecar.Identity = ar.Request.Namespace + ":" + pod.Spec.ServiceAccountName
+	sidecar.IgnoreEntrypointTolerations = i.config.GetIgnoreEntrypointTolerations()
+	sidecar.ImagePullPolicy = i.config.GetPullPolicy()
+	sidecar.OperatorAddress = apiSvcAddress
+	sidecar.SentryAddress = sentryAddress
+	sidecar.RunAsNonRoot = i.config.GetRunAsNonRoot()
+	sidecar.ReadOnlyRootFilesystem = i.config.GetReadOnlyRootFilesystem()
+	sidecar.SidecarDropALLCapabilities = i.config.GetDropCapabilities()
 
-	// Pluggable components
-	appContainers, componentContainers, injectedComponentContainers, err := i.splitContainers(pod)
-	if err != nil {
-		return nil, err
-	}
-	componentPatchOps, componentsSocketVolumeMount := components.ComponentsPatchOps(componentContainers, injectedComponentContainers, &pod)
-
-	// Projected volume with the token
-	tokenVolume := sidecar.GetTokenVolume()
-
-	// Get the sidecar container
-	sidecarContainer, err := sidecar.GetSidecarContainer(sidecar.ContainerConfig{
-		AppID:                        appID,
-		Annotations:                  an,
-		CertChain:                    certChain,
-		CertKey:                      certKey,
-		ControlPlaneAddress:          apiSvcAddress,
-		DaprSidecarImage:             image,
-		Identity:                     req.Namespace + ":" + pod.Spec.ServiceAccountName,
-		IgnoreEntrypointTolerations:  i.config.GetIgnoreEntrypointTolerations(),
-		ImagePullPolicy:              i.config.GetPullPolicy(),
-		MTLSEnabled:                  mTLSEnabled(daprClient),
-		Namespace:                    req.Namespace,
-		PlacementServiceAddress:      placementAddress,
-		SentryAddress:                sentryAddress,
-		Tolerations:                  pod.Spec.Tolerations,
-		TrustAnchors:                 trustAnchors,
-		VolumeMounts:                 volumeMounts,
-		ComponentsSocketsVolumeMount: componentsSocketVolumeMount,
-		SkipPlacement:                i.config.GetSkipPlacement(),
-		RunAsNonRoot:                 i.config.GetRunAsNonRoot(),
-		ReadOnlyRootFilesystem:       i.config.GetReadOnlyRootFilesystem(),
-		SidecarDropALLCapabilities:   i.config.GetDropCapabilities(),
-	})
-	if err != nil {
-		return nil, err
+	// Set the placement address unless it's skipped
+	// Even if the placement is skipped, however,the placement address will still be included if explicitly set in the annotations
+	// We still include PlacementServiceAddress if explicitly set as annotation
+	if !i.config.GetSkipPlacement() {
+		sidecar.PlacementAddress = placementAddress
 	}
 
-	// Create the list of patch operations
-	patchOps = jsonpatch.Patch{}
-	if len(pod.Spec.Containers) == 0 {
-		// Set to empty to support add operations individually
-		patchOps = append(patchOps,
-			patcher.NewPatchOperation("add", patcher.PatchPathContainers, []corev1.Container{}),
-		)
-	}
+	// Default value for the sidecar image, which can be overridden by annotations
+	sidecar.SidecarImage = image
 
-	patchOps = append(patchOps,
-		patcher.NewPatchOperation("add", patcher.PatchPathContainers+"/-", sidecarContainer),
-		sidecar.AddDaprSidecarInjectedLabel(pod.Labels),
-		sidecar.AddDaprSidecarAppIDLabel(appID, pod.Labels),
-		sidecar.AddDaprSidecarMetricsEnabledLabel(metricsEnabled, pod.Labels),
-	)
+	// Set the configuration from annotations
+	sidecar.SetFromPodAnnotations()
 
-	patchOps = append(patchOps,
-		sidecar.AddDaprEnvVarsToContainers(appContainers, getAppProtocol(an))...,
-	)
-	patchOps = append(patchOps,
-		sidecar.AddSocketVolumeMountToContainers(appContainers, socketVolumeMount)...,
-	)
-	volumePatchOps := sidecar.GetVolumesPatchOperations(
-		pod.Spec.Volumes,
-		[]corev1.Volume{tokenVolume},
-		patcher.PatchPathVolumes,
-	)
-	patchOps = append(patchOps, volumePatchOps...)
-	patchOps = append(patchOps, componentPatchOps...)
-
-	return patchOps, nil
+	// Get the patch to apply to the pod
+	// Patch may be empty if there's nothing that needs to be done
+	return sidecar.GetPatch()
 }
 
 func mTLSEnabled(daprClient scheme.Interface) bool {
@@ -172,6 +104,6 @@ func mTLSEnabled(daprClient scheme.Interface) bool {
 			return c.Spec.MTLSSpec.GetEnabled()
 		}
 	}
-	log.Infof("Dapr system configuration (%s) is not found, use default value %t for mTLSEnabled", defaultConfig, defaultMtlsEnabled)
+	log.Infof("Dapr system configuration '%s' does not exist; using default value %t for mTLSEnabled", defaultConfig, defaultMtlsEnabled)
 	return defaultMtlsEnabled
 }

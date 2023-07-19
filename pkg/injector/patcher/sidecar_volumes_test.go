@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package injector
+package patcher
 
 import (
 	"testing"
@@ -19,8 +19,6 @@ import (
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
-
-	"github.com/dapr/dapr/pkg/injector/patcher"
 )
 
 func TestParseVolumeMountsString(t *testing.T) {
@@ -277,7 +275,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 			},
 			expOpsLen: 1,
 			expOps: jsonpatch.Patch{
-				patcher.NewPatchOperation("add", "/spec/containers/0/volumeMounts", []corev1.VolumeMount{{
+				NewPatchOperation("add", "/spec/containers/0/volumeMounts", []corev1.VolumeMount{{
 					Name:      UnixDomainSocketVolume,
 					MountPath: "/tmp",
 				}}),
@@ -297,7 +295,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 			},
 			expOpsLen: 1,
 			expOps: jsonpatch.Patch{
-				patcher.NewPatchOperation("add", "/spec/containers/0/volumeMounts/-", corev1.VolumeMount{
+				NewPatchOperation("add", "/spec/containers/0/volumeMounts/-", corev1.VolumeMount{
 					Name:      UnixDomainSocketVolume,
 					MountPath: "/tmp",
 				}),
@@ -318,7 +316,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 			},
 			expOpsLen: 1,
 			expOps: jsonpatch.Patch{
-				patcher.NewPatchOperation("add", "/spec/containers/0/volumeMounts/-", corev1.VolumeMount{
+				NewPatchOperation("add", "/spec/containers/0/volumeMounts/-", corev1.VolumeMount{
 					Name:      UnixDomainSocketVolume,
 					MountPath: "/tmp",
 				}),

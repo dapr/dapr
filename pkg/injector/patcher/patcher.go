@@ -11,6 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package patcher contains utilities to patch a Pod to inject the Dapr sidecar container.
 package patcher
 
 import (
@@ -20,105 +21,31 @@ import (
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	corev1 "k8s.io/api/core/v1"
 
-	"github.com/dapr/kit/ptr"
+	"github.com/dapr/kit/logger"
 )
 
-const (
-	// Path for patching containers.
-	PatchPathContainers = "/spec/containers"
-	// Path for patching volumes.
-	PatchPathVolumes = "/spec/volumes"
+var (
+	log = logger.NewLogger("dapr.injector")
 )
 
-// NewPatchOperation returns a jsonpatch.Operation with the provided properties.
-// This patch represents a discrete change to be applied to a Kubernetes resource.
-func NewPatchOperation(op string, path string, value any) jsonpatch.Operation {
-	patchOp := jsonpatch.Operation{
-		"op":   ptr.Of(json.RawMessage(`"` + op + `"`)),
-		"path": ptr.Of(json.RawMessage(`"` + path + `"`)),
+// PatchPod applies a jsonpatch.Patch to a Pod and returns the modified object.
+func PatchPod(pod *corev1.Pod, patch jsonpatch.Patch) (*corev1.Pod, error) {
+	// Apply the patch
+	podJSON, err := json.Marshal(pod)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal pod to JSON: %w", err)
+	}
+	newJSON, err := patch.Apply(podJSON)
+	if err != nil {
+		return nil, fmt.Errorf("failed to apply patch: %w", err)
 	}
 
-	if value != nil {
-		val, _ := json.Marshal(value)
-		if len(val) > 0 && string(val) != "null" {
-			patchOp["value"] = ptr.Of[json.RawMessage](val)
-		}
+	// Get the Pod object
+	newPod := &corev1.Pod{}
+	err = json.Unmarshal(newJSON, newPod)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal JSON into a Pod: %w", err)
 	}
 
-	return patchOp
-}
-
-// GetEnvPatchOperations adds new environment variables only if they do not exist.
-// It does not override existing values for those variables if they have been defined already.
-func GetEnvPatchOperations(envs []corev1.EnvVar, addEnv []corev1.EnvVar, containerIdx int) jsonpatch.Patch {
-	path := fmt.Sprintf("%s/%d/env", PatchPathContainers, containerIdx)
-	if len(envs) == 0 {
-		// If there are no environment variables defined in the container, we initialize a slice of environment vars.
-		return jsonpatch.Patch{
-			NewPatchOperation("add", path, addEnv),
-		}
-	}
-
-	// If there are existing env vars, then we are adding to an existing slice of env vars.
-	path += "/-"
-
-	// Get a map with all the existing env var names
-	existing := make(map[string]struct{}, len(envs))
-	for _, e := range envs {
-		existing[e.Name] = struct{}{}
-	}
-
-	patchOps := make(jsonpatch.Patch, len(addEnv))
-	n := 0
-	for _, env := range addEnv {
-		// Add only env vars that do not conflict with existing user defined/injected env vars.
-		_, ok := existing[env.Name]
-		if ok {
-			continue
-		}
-
-		patchOps[n] = NewPatchOperation("add", path, env)
-		n++
-	}
-	return patchOps[:n]
-}
-
-// GetVolumeMountPatchOperations gets the patch operations for volume mounts
-func GetVolumeMountPatchOperations(volumeMounts []corev1.VolumeMount, addMounts []corev1.VolumeMount, containerIdx int) jsonpatch.Patch {
-	path := fmt.Sprintf("%s/%d/volumeMounts", PatchPathContainers, containerIdx)
-	if len(volumeMounts) == 0 {
-		// If there are no volume mounts defined in the container, we initialize a slice of volume mounts.
-		return jsonpatch.Patch{
-			NewPatchOperation("add", path, addMounts),
-		}
-	}
-
-	// If there are existing volume mounts, then we are adding to an existing slice of volume mounts.
-	path += "/-"
-
-	// Get a map with all the existingMounts mount paths
-	existingMounts := make(map[string]struct{}, len(volumeMounts))
-	existingNames := make(map[string]struct{}, len(volumeMounts))
-	for _, m := range volumeMounts {
-		existingMounts[m.MountPath] = struct{}{}
-		existingNames[m.Name] = struct{}{}
-	}
-
-	patchOps := make(jsonpatch.Patch, len(addMounts))
-	n := 0
-	var ok bool
-	for _, mount := range addMounts {
-		// Do not add the mount if a volume is already mounted on the same path or has the same name
-		if _, ok = existingMounts[mount.MountPath]; ok {
-			continue
-		}
-		if _, ok = existingNames[mount.Name]; ok {
-			continue
-		}
-
-		patchOps[n] = NewPatchOperation("add", path, mount)
-		n++
-	}
-
-	return patchOps[:n]
+	return newPod, nil
 }

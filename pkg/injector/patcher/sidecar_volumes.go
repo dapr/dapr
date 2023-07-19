@@ -1,4 +1,17 @@
-package injector
+/*
+Copyright 2023 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package patcher
 
 import (
 	"strings"
@@ -6,7 +19,6 @@ import (
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	corev1 "k8s.io/api/core/v1"
 
-	"github.com/dapr/dapr/pkg/injector/patcher"
 	sentryConsts "github.com/dapr/dapr/pkg/sentry/consts"
 	"github.com/dapr/kit/ptr"
 )
@@ -76,7 +88,7 @@ func addVolumeMountToContainers(containers map[int]corev1.Container, addMounts c
 	volumeMount := []corev1.VolumeMount{addMounts}
 	volumeMountPatchOps := make(jsonpatch.Patch, 0, len(containers))
 	for i, container := range containers {
-		patchOps := patcher.GetVolumeMountPatchOperations(container.VolumeMounts, volumeMount, i)
+		patchOps := GetVolumeMountPatchOperations(container.VolumeMounts, volumeMount, i)
 		volumeMountPatchOps = append(volumeMountPatchOps, patchOps...)
 	}
 	return volumeMountPatchOps
@@ -86,7 +98,7 @@ func GetVolumesPatchOperations(volumes []corev1.Volume, addVolumes []corev1.Volu
 	if len(volumes) == 0 {
 		// If there are no volumes defined in the container, we initialize a slice of volumes.
 		return jsonpatch.Patch{
-			patcher.NewPatchOperation("add", path, addVolumes),
+			NewPatchOperation("add", path, addVolumes),
 		}
 	}
 
@@ -109,7 +121,7 @@ func GetVolumesPatchOperations(volumes []corev1.Volume, addVolumes []corev1.Volu
 			continue
 		}
 
-		patchOps[n] = patcher.NewPatchOperation("add", path, addVolume)
+		patchOps[n] = NewPatchOperation("add", path, addVolume)
 		n++
 	}
 

@@ -19,7 +19,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/dapr/dapr/pkg/injector/components"
+	"github.com/dapr/dapr/pkg/injector/patcher"
 )
 
 // getInjectedComponentContainersFn implements GetInjectedComponentContainersFn and returns the list of injected component.
@@ -37,5 +37,5 @@ func (i *injector) getInjectedComponentContainers(appID string, namespace string
 	if err != nil {
 		return nil, fmt.Errorf("error when fetching components: %w", err)
 	}
-	return components.Injectable(appID, componentsList.Items), nil
+	return patcher.Injectable(appID, componentsList.Items), nil
 }

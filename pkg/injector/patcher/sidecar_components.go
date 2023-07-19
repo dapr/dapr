@@ -1,4 +1,17 @@
-package injector
+/*
+Copyright 2023 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package patcher
 
 import (
 	"encoding/json"
@@ -10,7 +23,6 @@ import (
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/components/pluggable"
 	"github.com/dapr/dapr/pkg/injector/annotations"
-	"github.com/dapr/dapr/pkg/injector/patcher"
 )
 
 // SplitContainers split containers between:
@@ -57,8 +69,8 @@ func (c *SidecarConfig) ComponentsPatchOps(componentContainers map[int]corev1.Co
 	}}
 
 	for idx, container := range componentContainers {
-		patches = append(patches, patcher.GetEnvPatchOperations(container.Env, componentsEnvVars, idx)...)
-		patches = append(patches, patcher.GetVolumeMountPatchOperations(container.VolumeMounts, []corev1.VolumeMount{sharedSocketVolumeMount}, idx)...)
+		patches = append(patches, GetEnvPatchOperations(container.Env, componentsEnvVars, idx)...)
+		patches = append(patches, GetVolumeMountPatchOperations(container.VolumeMounts, []corev1.VolumeMount{sharedSocketVolumeMount}, idx)...)
 	}
 
 	podVolumes := make(map[string]bool, len(c.pod.Spec.Volumes)+1)
@@ -75,7 +87,7 @@ func (c *SidecarConfig) ComponentsPatchOps(componentContainers map[int]corev1.Co
 		container.VolumeMounts = append(container.VolumeMounts, sharedSocketVolumeMount)
 
 		patches = append(patches,
-			patcher.NewPatchOperation("add", patcher.PatchPathContainers+"/-", container),
+			NewPatchOperation("add", PatchPathContainers+"/-", container),
 		)
 	}
 
@@ -141,7 +153,7 @@ func emptyVolumePatches(container corev1.Container, podVolumes map[string]bool) 
 		}
 		volumes = append(volumes, emptyDirVolume)
 		volumePatches = append(volumePatches,
-			patcher.NewPatchOperation("add", patcher.PatchPathVolumes+"/-", emptyDirVolume),
+			NewPatchOperation("add", PatchPathVolumes+"/-", emptyDirVolume),
 		)
 	}
 	return volumes, volumePatches
@@ -154,9 +166,9 @@ func (c *SidecarConfig) addSharedSocketVolume(mountPath string) (corev1.Volume, 
 
 	var volumePatch jsonpatch.Operation
 	if len(c.pod.Spec.Volumes) == 0 {
-		volumePatch = patcher.NewPatchOperation("add", patcher.PatchPathVolumes, []corev1.Volume{sharedSocketVolume})
+		volumePatch = NewPatchOperation("add", PatchPathVolumes, []corev1.Volume{sharedSocketVolume})
 	} else {
-		volumePatch = patcher.NewPatchOperation("add", patcher.PatchPathVolumes+"/-", sharedSocketVolume)
+		volumePatch = NewPatchOperation("add", PatchPathVolumes+"/-", sharedSocketVolume)
 	}
 
 	return sharedSocketVolume, sharedSocketVolumeMount, volumePatch

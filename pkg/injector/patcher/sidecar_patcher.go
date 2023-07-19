@@ -1,4 +1,17 @@
-package injector
+/*
+Copyright 2023 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package patcher
 
 import (
 	"strconv"
@@ -6,25 +19,18 @@ import (
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	corev1 "k8s.io/api/core/v1"
 
-	"github.com/dapr/dapr/pkg/injector/patcher"
 	"github.com/dapr/dapr/pkg/validation"
 )
 
+// NeedsPatching returns true if patching is needed.
+func (c *SidecarConfig) NeedsPatching() bool {
+	return c.Enabled && !c.podContainsSidecarContainer()
+}
+
 // GetPatch returns the patch to apply to a Pod to inject the Dapr sidecar
 func (c *SidecarConfig) GetPatch() (patchOps jsonpatch.Patch, err error) {
-	// TODO: In caller, set defaults for PlacementServiceAddress and SidecarImage
-	// We still include PlacementServiceAddress if explicitly set as annotation
-	/*if cfg.Annotations.Exist(annotations.KeyPlacementHostAddresses) {
-		cfg.PlacementServiceAddress = cfg.Annotations.GetString(annotations.KeyPlacementHostAddresses)
-	} else if cfg.SkipPlacement {
-		cfg.PlacementServiceAddress = ""
-	}
-	if image := cfg.Annotations.GetString(annotations.KeySidecarImage); image != "" {
-		cfg.DaprSidecarImage = image
-	}*/
-
 	// If Dapr is not enabled, or if the daprd container is already present, return
-	if !c.Enabled || c.podContainsSidecarContainer() {
+	if !c.NeedsPatching() {
 		return nil, nil
 	}
 
@@ -69,7 +75,7 @@ func (c *SidecarConfig) GetPatch() (patchOps jsonpatch.Patch, err error) {
 		patchOps = append(patchOps, GetVolumesPatchOperations(
 			c.pod.Spec.Volumes,
 			[]corev1.Volume{tokenVolume},
-			patcher.PatchPathVolumes,
+			PatchPathVolumes,
 		)...)
 	}
 
@@ -86,12 +92,12 @@ func (c *SidecarConfig) GetPatch() (patchOps jsonpatch.Patch, err error) {
 	if len(c.pod.Spec.Containers) == 0 {
 		// Set to empty to support add operations individually
 		patchOps = append(patchOps,
-			patcher.NewPatchOperation("add", patcher.PatchPathContainers, []corev1.Container{}),
+			NewPatchOperation("add", PatchPathContainers, []corev1.Container{}),
 		)
 	}
 
 	patchOps = append(patchOps,
-		patcher.NewPatchOperation("add", patcher.PatchPathContainers+"/-", sidecarContainer),
+		NewPatchOperation("add", PatchPathContainers+"/-", sidecarContainer),
 		c.AddDaprSidecarInjectedLabel(),
 		c.AddDaprSidecarAppIDLabel(),
 		c.AddDaprSidecarMetricsEnabledLabel(),
@@ -139,7 +145,7 @@ func (c *SidecarConfig) AddDaprEnvVarsToContainers(containers map[int]corev1.Con
 		})
 	}
 	for i, container := range containers {
-		patchOps := patcher.GetEnvPatchOperations(container.Env, envVars, i)
+		patchOps := GetEnvPatchOperations(container.Env, envVars, i)
 		envPatchOps = append(envPatchOps, patchOps...)
 	}
 	return envPatchOps
@@ -148,30 +154,30 @@ func (c *SidecarConfig) AddDaprEnvVarsToContainers(containers map[int]corev1.Con
 // AddDaprSidecarInjectedLabel adds Dapr label to patch pod so list of patched pods can be retrieved more efficiently
 func (c *SidecarConfig) AddDaprSidecarInjectedLabel() jsonpatch.Operation {
 	if len(c.pod.Labels) == 0 { // empty labels
-		return patcher.NewPatchOperation("add", PatchPathLabels, map[string]string{
+		return NewPatchOperation("add", PatchPathLabels, map[string]string{
 			SidecarInjectedLabel: "true",
 		})
 	}
 
-	return patcher.NewPatchOperation("add", PatchPathLabels+"/dapr.io~1sidecar-injected", "true")
+	return NewPatchOperation("add", PatchPathLabels+"/dapr.io~1sidecar-injected", "true")
 }
 
 // AddDaprSidecarAppIDLabel adds Dapr app-id label which can be handy for metric labels
 func (c *SidecarConfig) AddDaprSidecarAppIDLabel() jsonpatch.Operation {
 	if len(c.pod.Labels) == 0 { // empty labels
-		return patcher.NewPatchOperation("add", PatchPathLabels, map[string]string{
+		return NewPatchOperation("add", PatchPathLabels, map[string]string{
 			SidecarAppIDLabel: c.GetAppID(),
 		})
 	}
-	return patcher.NewPatchOperation("add", PatchPathLabels+"/dapr.io~1app-id", c.GetAppID())
+	return NewPatchOperation("add", PatchPathLabels+"/dapr.io~1app-id", c.GetAppID())
 }
 
 // AddDaprSidecarMetricsEnabledLabel adds Dapr metrics-enabled label which can be handy for scraping metrics
 func (c *SidecarConfig) AddDaprSidecarMetricsEnabledLabel() jsonpatch.Operation {
 	if len(c.pod.Labels) == 0 { // empty labels
-		return patcher.NewPatchOperation("add", PatchPathLabels, map[string]string{
+		return NewPatchOperation("add", PatchPathLabels, map[string]string{
 			SidecarMetricsEnabledLabel: strconv.FormatBool(c.EnableMetrics),
 		})
 	}
-	return patcher.NewPatchOperation("add", PatchPathLabels+"/dapr.io~1metrics-enabled", strconv.FormatBool(c.EnableMetrics))
+	return NewPatchOperation("add", PatchPathLabels+"/dapr.io~1metrics-enabled", strconv.FormatBool(c.EnableMetrics))
 }

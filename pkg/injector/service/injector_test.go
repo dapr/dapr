@@ -28,7 +28,6 @@ import (
 	kubernetesfake "k8s.io/client-go/kubernetes/fake"
 
 	"github.com/dapr/dapr/pkg/injector/namespacednamematcher"
-	"github.com/dapr/dapr/pkg/injector/sidecar"
 )
 
 func TestConfigCorrectValues(t *testing.T) {
@@ -63,48 +62,6 @@ func TestNewInjectorBadAllowedPrefixedServiceAccountConfig(t *testing.T) {
 		AllowedServiceAccountsPrefixNames: "ns*:sa,namespace:sa*sa",
 	}, nil, nil)
 	assert.Error(t, err)
-}
-
-func TestSidecarContainerVolumeMounts(t *testing.T) {
-	t.Run("sidecar contains custom volume mounts", func(t *testing.T) {
-		volumeMounts := []corev1.VolumeMount{
-			{Name: "foo", MountPath: "/foo"},
-			{Name: "bar", MountPath: "/bar"},
-		}
-
-		c, _ := sidecar.GetSidecarContainer(sidecar.ContainerConfig{
-			VolumeMounts: volumeMounts,
-		})
-		assert.Equal(t, 2, len(c.VolumeMounts))
-		assert.Equal(t, volumeMounts[0], c.VolumeMounts[0])
-		assert.Equal(t, volumeMounts[1], c.VolumeMounts[1])
-	})
-
-	t.Run("sidecar contains all volume mounts", func(t *testing.T) {
-		socketVolumeMount := &corev1.VolumeMount{
-			Name:      "socket-mount",
-			MountPath: "/socket/mount",
-		}
-		tokenVolumeMount := &corev1.VolumeMount{
-			Name:      "token-mount",
-			MountPath: "/token/mount",
-		}
-		volumeMounts := []corev1.VolumeMount{
-			*socketVolumeMount,
-			*tokenVolumeMount,
-			{Name: "foo", MountPath: "/foo"},
-			{Name: "bar", MountPath: "/bar"},
-		}
-
-		c, _ := sidecar.GetSidecarContainer(sidecar.ContainerConfig{
-			VolumeMounts: volumeMounts,
-		})
-		assert.Equal(t, 4, len(c.VolumeMounts))
-		assert.Equal(t, *socketVolumeMount, c.VolumeMounts[0])
-		assert.Equal(t, *tokenVolumeMount, c.VolumeMounts[1])
-		assert.Equal(t, volumeMounts[2], c.VolumeMounts[2])
-		assert.Equal(t, volumeMounts[3], c.VolumeMounts[3])
-	})
 }
 
 func TestGetAppIDFromRequest(t *testing.T) {
@@ -186,7 +143,7 @@ func TestAllowedControllersServiceAccountUID(t *testing.T) {
 	})
 }
 
-func Test_Ready(t *testing.T) {
+func TestReady(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 

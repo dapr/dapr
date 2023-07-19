@@ -1,4 +1,17 @@
-package injector
+/*
+Copyright 2023 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package patcher
 
 import (
 	"testing"
@@ -8,8 +21,6 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	"github.com/dapr/dapr/pkg/injector/patcher"
 )
 
 func TestAddDaprEnvVarsToContainers(t *testing.T) {
@@ -27,7 +38,7 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 			},
 			expOpsLen: 1,
 			expOps: jsonpatch.Patch{
-				patcher.NewPatchOperation("add", "/spec/containers/0/env", []corev1.EnvVar{
+				NewPatchOperation("add", PatchPathContainers+"/0/env", []corev1.EnvVar{
 					{
 						Name:  UserContainerDaprHTTPPortName,
 						Value: "3500",
@@ -52,11 +63,11 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 			},
 			expOpsLen: 2,
 			expOps: jsonpatch.Patch{
-				patcher.NewPatchOperation("add", "/spec/containers/0/env/-", corev1.EnvVar{
+				NewPatchOperation("add", PatchPathContainers+"/0/env/-", corev1.EnvVar{
 					Name:  UserContainerDaprHTTPPortName,
 					Value: "3500",
 				}),
-				patcher.NewPatchOperation("add", "/spec/containers/0/env/-", corev1.EnvVar{
+				NewPatchOperation("add", PatchPathContainers+"/0/env/-", corev1.EnvVar{
 					Name:  UserContainerDaprGRPCPortName,
 					Value: "50001",
 				}),
@@ -79,7 +90,7 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 			},
 			expOpsLen: 1,
 			expOps: jsonpatch.Patch{
-				patcher.NewPatchOperation("add", "/spec/containers/0/env/-", corev1.EnvVar{
+				NewPatchOperation("add", PatchPathContainers+"/0/env/-", corev1.EnvVar{
 					Name:  UserContainerDaprHTTPPortName,
 					Value: "3500",
 				}),
@@ -111,7 +122,7 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 			expOpsLen:   1,
 			appProtocol: "h2c",
 			expOps: jsonpatch.Patch{
-				patcher.NewPatchOperation("add", "/spec/containers/0/env", []corev1.EnvVar{
+				NewPatchOperation("add", PatchPathContainers+"/0/env", []corev1.EnvVar{
 					{
 						Name:  UserContainerDaprHTTPPortName,
 						Value: "3500",
