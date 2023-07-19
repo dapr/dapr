@@ -28,6 +28,8 @@ const (
 	PatchPathContainers = "/spec/containers"
 	// Path for patching volumes.
 	PatchPathVolumes = "/spec/volumes"
+	// Path for patching labels.
+	PatchPathLabels = "/metadata/labels"
 )
 
 // NewPatchOperation returns a jsonpatch.Operation with the provided properties.

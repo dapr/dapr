@@ -96,14 +96,19 @@ func (c *SidecarConfig) GetPatch() (patchOps jsonpatch.Patch, err error) {
 			NewPatchOperation("add", PatchPathContainers, []corev1.Container{}),
 		)
 	}
+	if len(c.pod.Labels) == 0 {
+		// Set to empty to support add operations individually
+		patchOps = append(patchOps,
+			NewPatchOperation("add", PatchPathLabels, map[string]string{}),
+		)
+	}
 
 	patchOps = append(patchOps,
 		NewPatchOperation("add", PatchPathContainers+"/-", sidecarContainer),
-		c.addDaprSidecarInjectedLabel(),
-		c.addDaprSidecarAppIDLabel(),
-		c.addDaprSidecarMetricsEnabledLabel(),
+		NewPatchOperation("add", PatchPathLabels+"/dapr.io~1sidecar-injected", "true"),
+		NewPatchOperation("add", PatchPathLabels+"/dapr.io~1app-id", c.GetAppID()),
+		NewPatchOperation("add", PatchPathLabels+"/dapr.io~1metrics-enabled", strconv.FormatBool(c.EnableMetrics)),
 	)
-
 	patchOps = append(patchOps,
 		c.addDaprEnvVarsToContainers(appContainers, c.GetAppProtocol())...,
 	)
@@ -150,35 +155,4 @@ func (c *SidecarConfig) addDaprEnvVarsToContainers(containers map[int]corev1.Con
 		envPatchOps = append(envPatchOps, patchOps...)
 	}
 	return envPatchOps
-}
-
-// addDaprSidecarInjectedLabel adds Dapr label to patch pod so list of patched pods can be retrieved more efficiently
-func (c *SidecarConfig) addDaprSidecarInjectedLabel() jsonpatch.Operation {
-	if len(c.pod.Labels) == 0 {
-		return NewPatchOperation("add", injectorConsts.PatchPathLabels, map[string]string{
-			injectorConsts.SidecarInjectedLabel: "true",
-		})
-	}
-
-	return NewPatchOperation("add", injectorConsts.PatchPathLabels+"/dapr.io~1sidecar-injected", "true")
-}
-
-// addDaprSidecarAppIDLabel adds Dapr app-id label which can be handy for metric labels
-func (c *SidecarConfig) addDaprSidecarAppIDLabel() jsonpatch.Operation {
-	if len(c.pod.Labels) == 0 {
-		return NewPatchOperation("add", injectorConsts.PatchPathLabels, map[string]string{
-			injectorConsts.SidecarAppIDLabel: c.GetAppID(),
-		})
-	}
-	return NewPatchOperation("add", injectorConsts.PatchPathLabels+"/dapr.io~1app-id", c.GetAppID())
-}
-
-// addDaprSidecarMetricsEnabledLabel adds Dapr metrics-enabled label which can be handy for scraping metrics
-func (c *SidecarConfig) addDaprSidecarMetricsEnabledLabel() jsonpatch.Operation {
-	if len(c.pod.Labels) == 0 {
-		return NewPatchOperation("add", injectorConsts.PatchPathLabels, map[string]string{
-			injectorConsts.SidecarMetricsEnabledLabel: strconv.FormatBool(c.EnableMetrics),
-		})
-	}
-	return NewPatchOperation("add", injectorConsts.PatchPathLabels+"/dapr.io~1metrics-enabled", strconv.FormatBool(c.EnableMetrics))
 }

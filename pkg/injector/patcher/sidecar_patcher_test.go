@@ -14,15 +14,17 @@ limitations under the License.
 package patcher
 
 import (
+	"fmt"
 	"testing"
 
-	"github.com/dapr/dapr/pkg/injector/annotations"
-	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/dapr/dapr/pkg/injector/annotations"
+	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
 )
 
 func TestAddDaprEnvVarsToContainers(t *testing.T) {
@@ -152,163 +154,6 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 	}
 }
 
-func TestAddDaprAppIDLabel(t *testing.T) {
-	testCases := []struct {
-		testName  string
-		mockPod   corev1.Pod
-		expLabels map[string]string
-	}{
-		{
-			testName: "empty labels",
-			mockPod: corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{},
-			},
-			expLabels: map[string]string{injectorConsts.SidecarAppIDLabel: "my-app"},
-		},
-		{
-			testName: "with some previous labels",
-			mockPod: corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{"app": "my-app"},
-				},
-			},
-			expLabels: map[string]string{injectorConsts.SidecarAppIDLabel: "my-app", "app": "my-app"},
-		},
-		{
-			testName: "with dapr app-id label already present",
-			mockPod: corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{injectorConsts.SidecarAppIDLabel: "my-app", "app": "my-app"},
-				},
-			},
-			expLabels: map[string]string{injectorConsts.SidecarAppIDLabel: "my-app", "app": "my-app"},
-		},
-	}
-
-	for _, tc := range testCases {
-		tc := tc // closure copy
-		t.Run(tc.testName, func(t *testing.T) {
-			c := NewSidecarConfig(&corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:   "my-app",
-					Labels: tc.mockPod.Labels,
-				},
-			})
-			newPod, err := PatchPod(&tc.mockPod, jsonpatch.Patch{
-				c.addDaprSidecarAppIDLabel(),
-			})
-			require.NoError(t, err)
-			assert.Equal(t, tc.expLabels, newPod.Labels)
-		})
-	}
-}
-
-func TestAddDaprMetricsEnabledLabel(t *testing.T) {
-	testCases := []struct {
-		testName       string
-		mockPod        corev1.Pod
-		expLabels      map[string]string
-		metricsEnabled bool
-	}{
-		{
-			testName: "metrics annotation not present, fallback to default",
-			mockPod: corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{},
-			},
-			expLabels:      map[string]string{injectorConsts.SidecarMetricsEnabledLabel: "false"},
-			metricsEnabled: false,
-		},
-		{
-			testName: "metrics annotation present and explicitly enabled, with existing labels",
-			mockPod: corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Annotations: map[string]string{injectorConsts.SidecarMetricsEnabledLabel: "true"},
-					Labels:      map[string]string{"app": "my-app"},
-				},
-			},
-			expLabels:      map[string]string{injectorConsts.SidecarMetricsEnabledLabel: "true", "app": "my-app"},
-			metricsEnabled: true,
-		},
-		{
-			testName: "metrics annotation present and explicitly disabled",
-			mockPod: corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Annotations: map[string]string{injectorConsts.SidecarMetricsEnabledLabel: "false"},
-				},
-			},
-			expLabels:      map[string]string{injectorConsts.SidecarMetricsEnabledLabel: "false"},
-			metricsEnabled: false,
-		},
-	}
-
-	for _, tc := range testCases {
-		tc := tc // closure copy
-		t.Run(tc.testName, func(t *testing.T) {
-			c := NewSidecarConfig(&corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: tc.mockPod.Labels,
-				},
-			})
-			c.EnableMetrics = tc.metricsEnabled
-			newPod, err := PatchPod(&tc.mockPod, jsonpatch.Patch{
-				c.addDaprSidecarMetricsEnabledLabel(),
-			})
-			require.NoError(t, err)
-			assert.Equal(t, tc.expLabels, newPod.Labels)
-		})
-	}
-}
-
-func TestAddDaprInjectedLabel(t *testing.T) {
-	testCases := []struct {
-		testName  string
-		mockPod   corev1.Pod
-		expLabels map[string]string
-	}{
-		{
-			testName: "empty labels",
-			mockPod: corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{},
-			},
-			expLabels: map[string]string{injectorConsts.SidecarInjectedLabel: "true"},
-		},
-		{
-			testName: "with some previous labels",
-			mockPod: corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{"app": "my-app"},
-				},
-			},
-			expLabels: map[string]string{injectorConsts.SidecarInjectedLabel: "true", "app": "my-app"},
-		},
-		{
-			testName: "with dapr injected label already present",
-			mockPod: corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{injectorConsts.SidecarInjectedLabel: "true", "app": "my-app"},
-				},
-			},
-			expLabels: map[string]string{injectorConsts.SidecarInjectedLabel: "true", "app": "my-app"},
-		},
-	}
-
-	for _, tc := range testCases {
-		tc := tc // closure copy
-		t.Run(tc.testName, func(t *testing.T) {
-			c := NewSidecarConfig(&corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: tc.mockPod.Labels,
-				},
-			})
-			newPod, err := PatchPod(&tc.mockPod, jsonpatch.Patch{
-				c.addDaprSidecarInjectedLabel(),
-			})
-			require.NoError(t, err)
-			assert.Equal(t, tc.expLabels, newPod.Labels)
-		})
-	}
-}
-
 func TestPodNeedsPatching(t *testing.T) {
 	tests := []struct {
 		name string
@@ -337,7 +182,7 @@ func TestPodNeedsPatching(t *testing.T) {
 		},
 		{
 			name: "true if enabled annotation is truthy",
-			want: false,
+			want: true,
 			pod: &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Annotations: map[string]string{
@@ -366,11 +211,123 @@ func TestPodNeedsPatching(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := NewSidecarConfig(tt.pod)
+			c.SetFromPodAnnotations()
 
 			got := c.NeedsPatching()
 			if got != tt.want {
 				t.Errorf("SidecarConfig.NeedsPatching() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestPatching(t *testing.T) {
+	type testCase struct {
+		name                    string
+		podModifierFn           func(pod *corev1.Pod)
+		sidecarConfigModifierFn func(c *SidecarConfig)
+		assertFn                func(t *testing.T, pod *corev1.Pod)
+	}
+	testCaseFn := func(tc testCase) func(t *testing.T) {
+		return func(t *testing.T) {
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "myapp",
+					Annotations: map[string]string{
+						"dapr.io/enabled": "true",
+						"dapr.io/app-id":  "myapp",
+					},
+				},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:  "appcontainer",
+							Image: "container:1.0",
+							Env: []corev1.EnvVar{
+								{Name: "CIAO", Value: "mondo"},
+							},
+						},
+					},
+				},
+			}
+			if tc.podModifierFn != nil {
+				tc.podModifierFn(pod)
+			}
+
+			c := NewSidecarConfig(pod)
+			c.Namespace = "testns"
+			c.Identity = "pod:identity"
+
+			if tc.sidecarConfigModifierFn != nil {
+				tc.sidecarConfigModifierFn(c)
+			}
+
+			c.SetFromPodAnnotations()
+
+			patch, err := c.GetPatch()
+			require.NoError(t, err)
+
+			newPod, err := PatchPod(pod, patch)
+			require.NoError(t, err)
+
+			tc.assertFn(t, newPod)
+		}
+	}
+
+	tests := []testCase{
+		{
+			name: "basic test",
+			assertFn: func(t *testing.T, pod *corev1.Pod) {
+				// daprd container added
+				assert.Len(t, pod.Spec.Containers, 2)
+				assert.Equal(t, "appcontainer", pod.Spec.Containers[0].Name)
+				assert.Equal(t, "daprd", pod.Spec.Containers[1].Name)
+
+				// Assertions around the Daprd container
+				daprdContainer := pod.Spec.Containers[1]
+				assert.Equal(t, "/daprd", daprdContainer.Args[0])
+
+				daprdEnvVars := map[string]string{}
+				for _, env := range daprdContainer.Env {
+					daprdEnvVars[env.Name] = env.Value
+				}
+				assert.Equal(t, "testns", daprdEnvVars["NAMESPACE"])
+				assert.Equal(t, "pod:identity", daprdEnvVars["SENTRY_LOCAL_IDENTITY"])
+
+				assert.Len(t, daprdContainer.VolumeMounts, 1)
+				assert.Equal(t, "dapr-identity-token", daprdContainer.VolumeMounts[0].Name)
+				assert.Equal(t, "/var/run/secrets/dapr.io/sentrytoken", daprdContainer.VolumeMounts[0].MountPath)
+				assert.Equal(t, true, daprdContainer.VolumeMounts[0].ReadOnly)
+
+				assert.NotNil(t, daprdContainer.LivenessProbe)
+				assert.Equal(t, "/v1.0/healthz", daprdContainer.LivenessProbe.HTTPGet.Path)
+				assert.Equal(t, 3501, daprdContainer.LivenessProbe.HTTPGet.Port.IntValue())
+
+				// Assertions on added volumes
+				assert.Len(t, pod.Spec.Volumes, 1)
+				tokenVolume := pod.Spec.Volumes[0]
+				assert.Equal(t, "dapr-identity-token", tokenVolume.Name)
+				assert.NotNil(t, tokenVolume.Projected)
+
+				// Assertions on added labels
+				fmt.Println(pod.Labels)
+				assert.Equal(t, "true", pod.Labels[injectorConsts.SidecarInjectedLabel])
+				assert.Equal(t, "myapp", pod.Labels[injectorConsts.SidecarAppIDLabel])
+				assert.Equal(t, "true", pod.Labels[injectorConsts.SidecarMetricsEnabledLabel])
+
+				// Assertions on added envs
+				appEnvVars := map[string]string{}
+				for _, env := range pod.Spec.Containers[0].Env {
+					appEnvVars[env.Name] = env.Value
+				}
+				assert.Equal(t, "mondo", appEnvVars["CIAO"])
+				assert.Equal(t, "3500", appEnvVars["DAPR_HTTP_PORT"])
+				assert.Equal(t, "50001", appEnvVars["DAPR_GRPC_PORT"])
+				assert.Equal(t, "http", appEnvVars["APP_PROTOCOL"])
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, testCaseFn(tc))
 	}
 }
