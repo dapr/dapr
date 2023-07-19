@@ -548,7 +548,7 @@ func (r *reminders) getRemindersForActorType(ctx context.Context, actorType stri
 	}
 
 	var policyDef *resiliency.PolicyDefinition
-	if r.resiliency != nil && !r.resiliency.PolicyDefined(r.storeName, resiliency.ComponentOutboundPolicy) {
+	if r.resiliency != nil && r.resiliency.ComponentOutboundPolicy(r.storeName, resiliency.Statestore) != nil {
 		policyDef = r.resiliency.ComponentOutboundPolicy(r.storeName, resiliency.Statestore)
 	} else {
 		// Else, we can rely on the underlying operations all being covered by resiliency.
