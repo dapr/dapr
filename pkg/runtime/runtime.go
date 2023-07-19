@@ -51,6 +51,7 @@ import (
 	httpEndpointV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/components"
+	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/config/protocol"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -1352,25 +1353,34 @@ func (a *DaprRuntime) stopWorkflow(ctx context.Context) {
 }
 
 // shutdownOutputComponents allows for a graceful shutdown of all runtime internal operations of components that are not source of more work.
-func (a *DaprRuntime) shutdownOutputComponents() error {
+func (a *DaprRuntime) shutdownOutputComponents(ctx context.Context) error {
 	log.Info("Shutting down all remaining components")
-	var errs []error
+	var closers []concurrency.Runner
 
-	if closer, ok := a.nameResolver.(io.Closer); ok && closer != nil {
-		if err := closer.Close(); err != nil {
-			err = fmt.Errorf("error closing name resolver: %w", err)
-			log.Warn(err)
-			errs = append(errs, err)
+	closers = append(closers, func(ctx context.Context) error {
+		if closer, ok := a.nameResolver.(io.Closer); ok && closer != nil {
+			if err := closer.Close(); err != nil {
+				err = fmt.Errorf("error closing name resolver: %w", err)
+				log.Warn(err)
+				return err
+			}
+		}
+		return nil
+	})
+
+	closeComponent := func(comp componentsV1alpha1.Component) func(context.Context) error {
+		return func(context.Context) error {
+			if err := a.processor.Close(comp); err != nil {
+				return err
+			}
+			return nil
 		}
 	}
-
-	for _, component := range a.compStore.ListComponents() {
-		if err := a.processor.Close(component); err != nil {
-			errs = append(errs, err)
-		}
+	for _, comp := range a.compStore.ListComponents() {
+		closers = append(closers, closeComponent(comp))
 	}
 
-	return errors.Join(errs...)
+	return concurrency.NewRunnerManager(closers...).Run(ctx)
 }
 
 // ShutdownWithWait will gracefully stop runtime and wait outstanding operations.
@@ -1400,8 +1410,19 @@ func (a *DaprRuntime) Shutdown(duration time.Duration) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), duration)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	if duration > 0 {
+		go func() {
+			select {
+			case <-time.After(duration):
+				log.Fatal("Graceful shutdown timeout exceeded")
+			case <-ctx.Done():
+				return
+			}
+		}()
+	}
 
 	// Ensure the Unix socket file is removed if a panic occurs.
 	defer a.cleanSocket()
@@ -1428,7 +1449,9 @@ func (a *DaprRuntime) Shutdown(duration time.Duration) {
 		}
 	}
 	a.stopTrace(ctx)
-	a.shutdownOutputComponents()
+	if err := a.shutdownOutputComponents(ctx); err != nil {
+		log.Warnf("Error shutting down components: %v", err)
+	}
 	a.shutdownC <- nil
 }
 

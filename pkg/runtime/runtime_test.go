@@ -2358,14 +2358,14 @@ func TestStopWithErrors(t *testing.T) {
 	require.NoError(t, rt.processor.Init(context.Background(), mockSecretsComponent))
 	rt.nameResolver = &mockNameResolver{closeErr: testErr}
 
-	err = rt.shutdownOutputComponents()
+	err = rt.shutdownOutputComponents(context.Background())
 	require.Error(t, err)
 	assert.Len(t, strings.Split(err.Error(), "\n"), 5)
 }
 
 func stopRuntime(t *testing.T, rt *DaprRuntime) {
 	rt.stopActor()
-	assert.NoError(t, rt.shutdownOutputComponents())
+	assert.NoError(t, rt.shutdownOutputComponents(context.Background()))
 	time.Sleep(100 * time.Millisecond)
 }
 

@@ -126,19 +126,21 @@ func (p *pubsub) topicRoutes(ctx context.Context) (map[string]compstore.TopicRou
 }
 
 func (p *pubsub) subscriptions(ctx context.Context) ([]rtpubsub.Subscription, error) {
-	if subs := p.compStore.ListSubscriptions(); len(subs) > 0 {
+	// Check nil so that GetSubscriptions is not called twice, even if there is
+	// no subscriptions.
+	if subs := p.compStore.ListSubscriptions(); subs != nil {
 		return subs, nil
+	}
+
+	if p.appChannel == nil {
+		log.Warn("app channel not initialized, make sure -app-port is specified if pubsub subscription is required")
+		return nil, nil
 	}
 
 	var (
 		subscriptions []rtpubsub.Subscription
 		err           error
 	)
-
-	if p.appChannel == nil {
-		log.Warn("app channel not initialized, make sure -app-port is specified if pubsub subscription is required")
-		return subscriptions, nil
-	}
 
 	// handle app subscriptions
 	if p.isHTTP {
@@ -175,6 +177,11 @@ func (p *pubsub) subscriptions(ctx context.Context) ([]rtpubsub.Subscription, er
 		if !skip {
 			subscriptions = append(subscriptions, s)
 		}
+	}
+
+	// If subscriptions is nil, set to empty slice to prevent successive calls.
+	if subscriptions == nil {
+		subscriptions = make([]rtpubsub.Subscription, 0)
 	}
 
 	p.compStore.SetSubscriptions(subscriptions)

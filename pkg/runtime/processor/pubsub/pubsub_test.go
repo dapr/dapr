@@ -230,7 +230,7 @@ func TestInitPubSub(t *testing.T) {
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
 
 		mockPubSub.AssertNumberOfCalls(t, "Subscribe", 0)
-		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 2)
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
 
 	t.Run("get topic routes but app channel is nil", func(t *testing.T) {
