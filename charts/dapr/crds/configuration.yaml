@@ -340,7 +340,7 @@ spec:
                         name:
                           description: Name of the validator
                           enum:
-                          - jwk
+                          - jwks
                           type: string
                         options:
                           description: Options for the validator, if any

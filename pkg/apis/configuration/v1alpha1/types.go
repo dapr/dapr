@@ -129,6 +129,7 @@ type MTLSSpec struct {
 	// Additional token validators to use.
 	// When Dapr is running in Kubernetes mode, this is in addition to the built-in "kubernetes" validator.
 	// In self-hosted mode, enabling a custom validator will disable the built-in "insecure" validator.
+	// +optional
 	TokenValidators []ValidatorSpec `json:"tokenValidators,omitempty"`
 }
 
