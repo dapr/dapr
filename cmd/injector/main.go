@@ -32,23 +32,24 @@ import (
 var log = logger.NewLogger("dapr.injector")
 
 func main() {
-	log.Infof("starting Dapr Sidecar Injector -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
-
 	opts := options.New()
 
-	metricsExporter := metrics.NewExporterWithOptions(metrics.DefaultMetricNamespace, opts.Metrics)
+	// Apply options to all loggers
+	err := logger.ApplyOptionsToLoggers(&opts.Logger)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	err := utils.SetEnvVariables(map[string]string{
+	log.Infof("Starting Dapr Sidecar Injector -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
+	log.Infof("Log level set to: %s", opts.Logger.OutputLevel)
+
+	metricsExporter := metrics.NewExporterWithOptions(log, metrics.DefaultMetricNamespace, opts.Metrics)
+
+	err = utils.SetEnvVariables(map[string]string{
 		utils.KubeConfigVar: opts.Kubeconfig,
 	})
 	if err != nil {
 		log.Fatalf("Error set env: %v", err)
-	}
-
-	// Apply options to all loggers
-	err = logger.ApplyOptionsToLoggers(&opts.Logger)
-	if err != nil {
-		log.Fatal(err)
 	}
 
 	// Initialize dapr metrics exporter
