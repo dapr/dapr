@@ -286,31 +286,31 @@ func processHTTPEndpointSecrets(ctx context.Context, endpoint *httpendpointsapi.
 		}
 	}
 
-	if endpoint.HasTLSClientCertSecret() && pairNeedsSecretExtraction(*endpoint.Spec.ClientCert.SecretKeyRef, endpoint.Auth) {
-		v, err := getSecret(ctx, endpoint.Spec.ClientCert.SecretKeyRef.Name, namespace, *endpoint.Spec.ClientCert.SecretKeyRef, kubeClient)
+	if endpoint.HasTLSClientCertSecret() && pairNeedsSecretExtraction(*endpoint.Spec.ClientTLS.Certificate.SecretKeyRef, endpoint.Auth) {
+		v, err := getSecret(ctx, endpoint.Spec.ClientTLS.Certificate.SecretKeyRef.Name, namespace, *endpoint.Spec.ClientTLS.Certificate.SecretKeyRef, kubeClient)
 		if err != nil {
 			return err
 		}
 
-		endpoint.Spec.ClientCert.Value = &v
+		endpoint.Spec.ClientTLS.Certificate.Value = &v
 	}
 
-	if endpoint.HasTLSClientKeySecret() && pairNeedsSecretExtraction(*endpoint.Spec.ClientKey.SecretKeyRef, endpoint.Auth) {
-		v, err := getSecret(ctx, endpoint.Spec.ClientKey.SecretKeyRef.Name, namespace, *endpoint.Spec.ClientKey.SecretKeyRef, kubeClient)
+	if endpoint.HasTLSPrivateKeySecret() && pairNeedsSecretExtraction(*endpoint.Spec.ClientTLS.PrivateKey.SecretKeyRef, endpoint.Auth) {
+		v, err := getSecret(ctx, endpoint.Spec.ClientTLS.PrivateKey.SecretKeyRef.Name, namespace, *endpoint.Spec.ClientTLS.PrivateKey.SecretKeyRef, kubeClient)
 		if err != nil {
 			return err
 		}
 
-		endpoint.Spec.ClientKey.Value = &v
+		endpoint.Spec.ClientTLS.PrivateKey.Value = &v
 	}
 
-	if endpoint.HasTLSRootCASecret() && pairNeedsSecretExtraction(*endpoint.Spec.RootCA.SecretKeyRef, endpoint.Auth) {
-		v, err := getSecret(ctx, endpoint.Spec.RootCA.SecretKeyRef.Name, namespace, *endpoint.Spec.RootCA.SecretKeyRef, kubeClient)
+	if endpoint.HasTLSRootCASecret() && pairNeedsSecretExtraction(*endpoint.Spec.ClientTLS.RootCA.SecretKeyRef, endpoint.Auth) {
+		v, err := getSecret(ctx, endpoint.Spec.ClientTLS.RootCA.SecretKeyRef.Name, namespace, *endpoint.Spec.ClientTLS.RootCA.SecretKeyRef, kubeClient)
 		if err != nil {
 			return err
 		}
 
-		endpoint.Spec.RootCA.Value = &v
+		endpoint.Spec.ClientTLS.RootCA.Value = &v
 	}
 
 	return nil

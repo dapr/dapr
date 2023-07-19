@@ -71,6 +71,7 @@ import (
 	"github.com/dapr/dapr/pkg/grpc"
 	"github.com/dapr/dapr/pkg/http"
 	"github.com/dapr/dapr/pkg/httpendpoint"
+	"github.com/dapr/dapr/pkg/internal/apis"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
@@ -1182,7 +1183,7 @@ func (a *DaprRuntime) onHTTPEndpointUpdated(endpoint httpEndpointV1alpha1.HTTPEn
 func (a *DaprRuntime) processHTTPEndpointSecrets(endpoint *httpEndpointV1alpha1.HTTPEndpoint) {
 	_, _ = a.processResourceSecrets(endpoint)
 
-	tlsResource := httpEndpointV1alpha1.GenericNameValueResource{
+	tlsResource := apis.GenericNameValueResource{
 		Name:        endpoint.ObjectMeta.Name,
 		Namespace:   endpoint.ObjectMeta.Namespace,
 		SecretStore: endpoint.Auth.SecretStore,
@@ -1196,11 +1197,11 @@ func (a *DaprRuntime) processHTTPEndpointSecrets(endpoint *httpEndpointV1alpha1.
 	}
 
 	if endpoint.HasTLSRootCA() {
-		ca.Value = *endpoint.Spec.RootCA.Value
+		ca.Value = *endpoint.Spec.ClientTLS.RootCA.Value
 	}
 
 	if endpoint.HasTLSRootCASecret() {
-		ca.SecretKeyRef = *endpoint.Spec.RootCA.SecretKeyRef
+		ca.SecretKeyRef = *endpoint.Spec.ClientTLS.RootCA.SecretKeyRef
 	}
 	tlsResource.Pairs = append(tlsResource.Pairs, ca)
 
@@ -1209,11 +1210,11 @@ func (a *DaprRuntime) processHTTPEndpointSecrets(endpoint *httpEndpointV1alpha1.
 	}
 
 	if endpoint.HasTLSClientCert() {
-		cCert.Value = *endpoint.Spec.ClientCert.Value
+		cCert.Value = *endpoint.Spec.ClientTLS.Certificate.Value
 	}
 
 	if endpoint.HasTLSClientCertSecret() {
-		cCert.SecretKeyRef = *endpoint.Spec.ClientCert.SecretKeyRef
+		cCert.SecretKeyRef = *endpoint.Spec.ClientTLS.Certificate.SecretKeyRef
 	}
 	tlsResource.Pairs = append(tlsResource.Pairs, cCert)
 
@@ -1221,12 +1222,12 @@ func (a *DaprRuntime) processHTTPEndpointSecrets(endpoint *httpEndpointV1alpha1.
 		Name: clientKey,
 	}
 
-	if endpoint.HasTLSClientKey() {
-		cKey.Value = *endpoint.Spec.ClientKey.Value
+	if endpoint.HasTLSPrivateKey() {
+		cKey.Value = *endpoint.Spec.ClientTLS.PrivateKey.Value
 	}
 
-	if endpoint.HasTLSClientKeySecret() {
-		cKey.SecretKeyRef = *endpoint.Spec.ClientKey.SecretKeyRef
+	if endpoint.HasTLSPrivateKeySecret() {
+		cKey.SecretKeyRef = *endpoint.Spec.ClientTLS.PrivateKey.SecretKeyRef
 	}
 
 	tlsResource.Pairs = append(tlsResource.Pairs, cKey)
@@ -1242,11 +1243,11 @@ func (a *DaprRuntime) processHTTPEndpointSecrets(endpoint *httpEndpointV1alpha1.
 
 			switch np.Name {
 			case root:
-				endpoint.Spec.RootCA.Value = dv
+				endpoint.Spec.ClientTLS.RootCA.Value = dv
 			case clientCert:
-				endpoint.Spec.ClientCert.Value = dv
+				endpoint.Spec.ClientTLS.Certificate.Value = dv
 			case clientKey:
-				endpoint.Spec.ClientKey.Value = dv
+				endpoint.Spec.ClientTLS.PrivateKey.Value = dv
 			}
 		}
 	}
@@ -3009,7 +3010,7 @@ func (a *DaprRuntime) getHTTPEndpointAppChannel(pipeline httpMiddleware.Pipeline
 	var tlsConfig *tls.Config
 
 	if endpoint.HasTLSRootCA() {
-		ca := endpoint.Spec.RootCA.Value.String()
+		ca := endpoint.Spec.ClientTLS.RootCA.Value.String()
 		caCertPool := x509.NewCertPool()
 
 		if !caCertPool.AppendCertsFromPEM([]byte(ca)) {
@@ -3022,8 +3023,8 @@ func (a *DaprRuntime) getHTTPEndpointAppChannel(pipeline httpMiddleware.Pipeline
 		}
 	}
 
-	if endpoint.HasTLSClientKey() {
-		cert, err := tls.X509KeyPair([]byte(endpoint.Spec.ClientCert.Value.String()), []byte(endpoint.Spec.ClientKey.Value.String()))
+	if endpoint.HasTLSPrivateKey() {
+		cert, err := tls.X509KeyPair([]byte(endpoint.Spec.ClientTLS.Certificate.Value.String()), []byte(endpoint.Spec.ClientTLS.PrivateKey.Value.String()))
 		if err != nil {
 			return httpChannel.ChannelConfiguration{}, fmt.Errorf("failed to load client certificate for http endpoint %s: %w", endpoint.ObjectMeta.Name, err)
 		}
@@ -3034,16 +3035,16 @@ func (a *DaprRuntime) getHTTPEndpointAppChannel(pipeline httpMiddleware.Pipeline
 		tlsConfig.Certificates = []tls.Certificate{cert}
 	}
 
-	if endpoint.Spec.Renegotiation != nil {
-		switch *endpoint.Spec.Renegotiation {
-		case httpEndpointV1alpha1.TLSNegotiateNever:
+	if endpoint.Spec.ClientTLS != nil && endpoint.Spec.ClientTLS.Renegotiation != nil {
+		switch *endpoint.Spec.ClientTLS.Renegotiation {
+		case commonapi.NegotiateNever:
 			tlsConfig.Renegotiation = tls.RenegotiateNever
-		case httpEndpointV1alpha1.TLSNegotiateOnceAsClient:
+		case commonapi.NegotiateOnceAsClient:
 			tlsConfig.Renegotiation = tls.RenegotiateOnceAsClient
-		case httpEndpointV1alpha1.TLSNegotiateFreelyAsClient:
+		case commonapi.NegotiateFreelyAsClient:
 			tlsConfig.Renegotiation = tls.RenegotiateFreelyAsClient
 		default:
-			return httpChannel.ChannelConfiguration{}, fmt.Errorf("invalid renegotiation value %s for http endpoint %s", *endpoint.Spec.Renegotiation, endpoint.ObjectMeta.Name)
+			return httpChannel.ChannelConfiguration{}, fmt.Errorf("invalid renegotiation value %s for http endpoint %s", *endpoint.Spec.ClientTLS.Renegotiation, endpoint.ObjectMeta.Name)
 		}
 	}
 
