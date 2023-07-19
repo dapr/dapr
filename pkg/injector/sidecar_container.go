@@ -369,7 +369,7 @@ var envRegexp = regexp.MustCompile(`(?m)(,)\s*[a-zA-Z\_][a-zA-Z0-9\_]*=`)
 // GetEnv returns the EnvVar slice from the Env annotation.
 func (c *SidecarConfig) GetEnv() (envKeys []string, envVars []corev1.EnvVar) {
 	if c.Env == "" {
-		return nil, nil
+		return []string{}, []corev1.EnvVar{}
 	}
 
 	indexes := envRegexp.FindAllStringIndex(c.Env, -1)

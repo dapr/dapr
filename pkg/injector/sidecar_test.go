@@ -14,12 +14,9 @@ limitations under the License.
 package injector
 
 import (
-	"encoding/json"
 	"testing"
 
-	jsonpatch "github.com/evanphx/json-patch/v5"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/dapr/dapr/pkg/injector/annotations"
@@ -66,13 +63,4 @@ func TestSidecarConfigSetFromAnnotations(t *testing.T) {
 	// Nullable properties
 	_ = assert.NotNil(t, c.EnableAPILogging) &&
 		assert.False(t, *c.EnableAPILogging)
-}
-
-// patchObject executes a jsonpatch action against the object passed
-func patchObject(t *testing.T, origObj interface{}, patch jsonpatch.Patch) []byte {
-	podJSON, err := json.Marshal(origObj)
-	require.NoError(t, err)
-	newJSON, err := patch.Apply(podJSON)
-	require.NoError(t, err)
-	return newJSON
 }

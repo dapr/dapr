@@ -15,9 +15,37 @@ limitations under the License.
 package injector
 
 import (
+	"encoding/json"
+	"fmt"
+
+	jsonpatch "github.com/evanphx/json-patch/v5"
+	corev1 "k8s.io/api/core/v1"
+
 	"github.com/dapr/kit/logger"
 )
 
 var (
 	log = logger.NewLogger("dapr.injector")
 )
+
+// PatchPod applies a jsonpatch.Patch to a Pod and returns the modified object.
+func PatchPod(pod *corev1.Pod, patch jsonpatch.Patch) (*corev1.Pod, error) {
+	// Apply the patch
+	podJSON, err := json.Marshal(pod)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal pod to JSON: %w", err)
+	}
+	newJSON, err := patch.Apply(podJSON)
+	if err != nil {
+		return nil, fmt.Errorf("failed to apply patch: %w", err)
+	}
+
+	// Get the Pod object
+	newPod := &corev1.Pod{}
+	err = json.Unmarshal(newJSON, newPod)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal JSON into a Pod: %w", err)
+	}
+
+	return newPod, nil
+}

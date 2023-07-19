@@ -6,7 +6,6 @@ import (
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	corev1 "k8s.io/api/core/v1"
 
-	"github.com/dapr/dapr/pkg/injector/components"
 	"github.com/dapr/dapr/pkg/injector/patcher"
 	"github.com/dapr/dapr/pkg/validation"
 )
@@ -45,11 +44,18 @@ func (c *SidecarConfig) GetPatch() (patchOps jsonpatch.Patch, err error) {
 	}
 
 	// Pluggable components
-	appContainers, componentContainers, injectedComponentContainers, err := i.splitContainers(pod)
+	appContainers, componentContainers := c.SplitContainers()
 	if err != nil {
 		return nil, err
 	}
-	componentPatchOps, componentsSocketVolumeMount := components.ComponentsPatchOps(componentContainers, injectedComponentContainers, c.pod)
+	var injectedComponentContainers []corev1.Container
+	if c.GetInjectedComponentContainers != nil && c.InjectPluggableComponents {
+		injectedComponentContainers, err = c.GetInjectedComponentContainers(c.GetAppID(), c.Namespace)
+		if err != nil {
+			return nil, err
+		}
+	}
+	componentPatchOps, componentsSocketVolumeMount := c.ComponentsPatchOps(componentContainers, injectedComponentContainers)
 
 	// Projected volume with the token
 	if !c.DisableTokenVolume {

@@ -1,11 +1,11 @@
 package injector
 
 import (
-	"encoding/json"
 	"testing"
 
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -181,11 +181,10 @@ func TestAddDaprAppIDLabel(t *testing.T) {
 					Labels: tc.mockPod.Labels,
 				},
 			})
-			newPodJSON := patchObject(t, tc.mockPod, jsonpatch.Patch{
+			newPod, err := PatchPod(&tc.mockPod, jsonpatch.Patch{
 				c.AddDaprSidecarAppIDLabel(),
 			})
-			newPod := corev1.Pod{}
-			assert.NoError(t, json.Unmarshal(newPodJSON, &newPod))
+			require.NoError(t, err)
 			assert.Equal(t, tc.expLabels, newPod.Labels)
 		})
 	}
@@ -238,11 +237,10 @@ func TestAddDaprMetricsEnabledLabel(t *testing.T) {
 				},
 			})
 			c.EnableMetrics = tc.metricsEnabled
-			newPodJSON := patchObject(t, tc.mockPod, jsonpatch.Patch{
+			newPod, err := PatchPod(&tc.mockPod, jsonpatch.Patch{
 				c.AddDaprSidecarMetricsEnabledLabel(),
 			})
-			newPod := corev1.Pod{}
-			assert.NoError(t, json.Unmarshal(newPodJSON, &newPod))
+			require.NoError(t, err)
 			assert.Equal(t, tc.expLabels, newPod.Labels)
 		})
 	}
@@ -289,11 +287,10 @@ func TestAddDaprInjectedLabel(t *testing.T) {
 					Labels: tc.mockPod.Labels,
 				},
 			})
-			newPodJSON := patchObject(t, tc.mockPod, jsonpatch.Patch{
-				c.AddDaprSidecarInjectedLabel()},
-			)
-			newPod := corev1.Pod{}
-			assert.NoError(t, json.Unmarshal(newPodJSON, &newPod))
+			newPod, err := PatchPod(&tc.mockPod, jsonpatch.Patch{
+				c.AddDaprSidecarInjectedLabel(),
+			})
+			require.NoError(t, err)
 			assert.Equal(t, tc.expLabels, newPod.Labels)
 		})
 	}

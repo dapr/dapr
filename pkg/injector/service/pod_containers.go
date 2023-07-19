@@ -19,34 +19,23 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	"github.com/dapr/dapr/pkg/injector/annotations"
 	"github.com/dapr/dapr/pkg/injector/components"
 )
 
-// SplitContainer takes a Pod and returns the list of containers split based on the kind:
-// - appContainers are containers related to apps.
-// - componentContainers are containers related to pluggable components.
-// - injectedComponentContainers are containers related to pluggable components that are being injected.
-func SplitContainers(pod *corev1.Pod) (appContainers map[int]corev1.Container, componentContainers map[int]corev1.Container, injectedComponentContainers []corev1.Container, err error) {
-	an := annotations.New(pod.Annotations)
-	injectionEnabled := an.GetBoolOrDefault(annotations.KeyPluggableComponentsInjection, false)
-	if injectionEnabled {
-		// FIXME There is a potential issue with the components being fetched from the operator versus at runtime.
-		// This would lead in two possible scenarios:
-		// 1) If the component is not listed here but listed in runtime,
-		// you may encounter runtime errors related to the missing container for the component's bootstrapping process.
-		// However, due to Kubernetes' reconciling approach, this issue should resolve itself over time.
-		// 2) If the component is listed here but not listed in runtime,
-		// the pod will include a redundant container that should be removed when this code is executed again.
-		// To resolve this issue, it is important to ensure that the same component list is used both here and in runtime,
-		// such as by passing it as an environment variable or populating a volume with an init container.
-		componentsList, err, _ := i.daprClient.ComponentsV1alpha1().Components(pod.Namespace).List(metav1.ListOptions{})
-		if err != nil {
-			return nil, nil, nil, fmt.Errorf("error when fetching components: %w", err)
-		}
-		injectedComponentContainers = components.Injectable(an.GetString(annotations.KeyAppID), componentsList.(*v1alpha1.ComponentList).Items)
+// getInjectedComponentContainersFn implements GetInjectedComponentContainersFn and returns the list of injected component.
+func (i *injector) getInjectedComponentContainers(appID string, namespace string) ([]corev1.Container, error) {
+	// FIXME There is a potential issue with the components being fetched from the operator versus at runtime.
+	// This would lead in two possible scenarios:
+	// 1) If the component is not listed here but listed in runtime,
+	// you may encounter runtime errors related to the missing container for the component's bootstrapping process.
+	// However, due to Kubernetes' reconciling approach, this issue should resolve itself over time.
+	// 2) If the component is listed here but not listed in runtime,
+	// the pod will include a redundant container that should be removed when this code is executed again.
+	// To resolve this issue, it is important to ensure that the same component list is used both here and in runtime,
+	// such as by passing it as an environment variable or populating a volume with an init container.
+	componentsList, err := i.daprClient.ComponentsV1alpha1().Components(namespace).List(metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("error when fetching components: %w", err)
 	}
-	appContainers, componentContainers = components.SplitContainers(pod)
-	return
+	return components.Injectable(appID, componentsList.Items), nil
 }
