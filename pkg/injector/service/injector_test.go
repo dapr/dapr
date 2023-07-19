@@ -76,7 +76,7 @@ func TestGetAppIDFromRequest(t *testing.T) {
 		assert.Equal(t, "", appID)
 	})
 
-	t.Run("can get correct appID", func(t *testing.T) {
+	t.Run("get appID from annotations", func(t *testing.T) {
 		fakePod := corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Annotations: map[string]string{
@@ -92,6 +92,22 @@ func TestGetAppIDFromRequest(t *testing.T) {
 		}
 		appID := getAppIDFromRequest(fakeReq)
 		assert.Equal(t, "fakeID", appID)
+	})
+
+	t.Run("fall back to pod name", func(t *testing.T) {
+		fakePod := corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "mypod",
+			},
+		}
+		rawBytes, _ := json.Marshal(fakePod)
+		fakeReq := &admissionv1.AdmissionRequest{
+			Object: runtime.RawExtension{
+				Raw: rawBytes,
+			},
+		}
+		appID := getAppIDFromRequest(fakeReq)
+		assert.Equal(t, "mypod", appID)
 	})
 }
 

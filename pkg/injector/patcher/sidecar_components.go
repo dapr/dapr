@@ -26,10 +26,10 @@ import (
 	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
 )
 
-// SplitContainers split containers between:
+// splitContainers split containers between:
 // - appContainers are containers related to apps.
 // - componentContainers are containers related to pluggable components.
-func (c *SidecarConfig) SplitContainers() (appContainers map[int]corev1.Container, componentContainers map[int]corev1.Container) {
+func (c *SidecarConfig) splitContainers() (appContainers map[int]corev1.Container, componentContainers map[int]corev1.Container) {
 	appContainers = make(map[int]corev1.Container, len(c.pod.Spec.Containers))
 	componentContainers = make(map[int]corev1.Container, len(c.pod.Spec.Containers))
 	componentsNames := strings.Split(c.PluggableComponents, ",")
@@ -49,8 +49,8 @@ func (c *SidecarConfig) SplitContainers() (appContainers map[int]corev1.Containe
 	return appContainers, componentContainers
 }
 
-// ComponentsPatchOps returns the patch operations required to properly bootstrap the pluggable component and the respective volume mount for the sidecar.
-func (c *SidecarConfig) ComponentsPatchOps(componentContainers map[int]corev1.Container, injectedContainers []corev1.Container) (jsonpatch.Patch, *corev1.VolumeMount) {
+// componentsPatchOps returns the patch operations required to properly bootstrap the pluggable component and the respective volume mount for the sidecar.
+func (c *SidecarConfig) componentsPatchOps(componentContainers map[int]corev1.Container, injectedContainers []corev1.Container) (jsonpatch.Patch, *corev1.VolumeMount) {
 	if len(componentContainers) == 0 && len(injectedContainers) == 0 {
 		return jsonpatch.Patch{}, nil
 	}

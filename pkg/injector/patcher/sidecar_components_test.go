@@ -224,8 +224,8 @@ func TestComponentsPatch(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			c := NewSidecarConfig(test.pod)
 			c.SetFromPodAnnotations()
-			_, componentContainers := c.SplitContainers()
-			patch, volumeMount := c.ComponentsPatchOps(componentContainers, Injectable(test.appID, test.componentsList))
+			_, componentContainers := c.splitContainers()
+			patch, volumeMount := c.componentsPatchOps(componentContainers, Injectable(test.appID, test.componentsList))
 			patchJSON, _ := json.Marshal(patch)
 			expPatchJSON, _ := json.Marshal(patch)
 			assert.Equal(t, string(patchJSON), string(expPatchJSON))

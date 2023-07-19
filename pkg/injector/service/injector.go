@@ -32,8 +32,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
+	"github.com/dapr/dapr/pkg/injector/annotations"
 	"github.com/dapr/dapr/pkg/injector/namespacednamematcher"
-	"github.com/dapr/dapr/pkg/injector/sidecar"
 	"github.com/dapr/kit/logger"
 )
 
@@ -84,20 +84,29 @@ func errorToAdmissionResponse(err error) *admissionv1.AdmissionResponse {
 	}
 }
 
+// getAppIDFromRequest returns the app ID for the pod, which is used for diagnostics purposes only
 func getAppIDFromRequest(req *admissionv1.AdmissionRequest) (appID string) {
-	// if req is not given
 	if req == nil {
-		return appID
+		return ""
 	}
 
+	// Parse the request as a pod
 	var pod corev1.Pod
-	if err := json.Unmarshal(req.Object.Raw, &pod); err != nil {
+	err := json.Unmarshal(req.Object.Raw, &pod)
+	if err != nil {
 		log.Warnf("could not unmarshal raw object: %v", err)
-	} else {
-		appID = sidecar.GetAppID(pod.ObjectMeta)
+		return ""
 	}
 
-	return appID
+	// Search for an app-id in the annotations first
+	for k, v := range pod.GetObjectMeta().GetAnnotations() {
+		if k == annotations.KeyAppID {
+			return v
+		}
+	}
+
+	// Fallback to pod name
+	return pod.GetName()
 }
 
 // NewInjector returns a new Injector instance with the given config.

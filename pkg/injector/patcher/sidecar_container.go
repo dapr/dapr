@@ -38,24 +38,24 @@ type getSidecarContainerOpts struct {
 	ComponentsSocketsVolumeMount *corev1.VolumeMount
 }
 
-// GetSidecarContainer returns the Container object for the sidecar.
-func (cfg SidecarConfig) GetSidecarContainer(opts getSidecarContainerOpts) (*corev1.Container, error) {
+// getSidecarContainer returns the Container object for the sidecar.
+func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*corev1.Container, error) {
 	// Ports for the daprd container
 	ports := []corev1.ContainerPort{
 		{
-			ContainerPort: cfg.SidecarHTTPPort,
+			ContainerPort: c.SidecarHTTPPort,
 			Name:          injectorConsts.SidecarHTTPPortName,
 		},
 		{
-			ContainerPort: cfg.SidecarAPIGRPCPort,
+			ContainerPort: c.SidecarAPIGRPCPort,
 			Name:          injectorConsts.SidecarGRPCPortName,
 		},
 		{
-			ContainerPort: cfg.SidecarInternalGRPCPort,
+			ContainerPort: c.SidecarInternalGRPCPort,
 			Name:          injectorConsts.SidecarInternalGRPCPortName,
 		},
 		{
-			ContainerPort: cfg.SidecarMetricsPort,
+			ContainerPort: c.SidecarMetricsPort,
 			Name:          injectorConsts.SidecarMetricsPortName,
 		},
 	}
@@ -63,107 +63,107 @@ func (cfg SidecarConfig) GetSidecarContainer(opts getSidecarContainerOpts) (*cor
 	// Get the command (/daprd) and all CLI flags
 	cmd := []string{"/daprd"}
 	args := []string{
-		"--dapr-http-port", strconv.FormatInt(int64(cfg.SidecarHTTPPort), 10),
-		"--dapr-grpc-port", strconv.FormatInt(int64(cfg.SidecarAPIGRPCPort), 10),
-		"--dapr-internal-grpc-port", strconv.FormatInt(int64(cfg.SidecarInternalGRPCPort), 10),
-		"--dapr-listen-addresses", cfg.SidecarListenAddresses,
-		"--dapr-public-port", strconv.FormatInt(int64(cfg.SidecarPublicPort), 10),
-		"--app-id", cfg.GetAppID(),
-		"--app-protocol", cfg.AppProtocol,
-		"--control-plane-address", cfg.OperatorAddress,
-		"--sentry-address", cfg.SentryAddress,
-		"--log-level", cfg.LogLevel,
-		"--dapr-graceful-shutdown-seconds", strconv.Itoa(cfg.GracefulShutdownSeconds),
+		"--dapr-http-port", strconv.FormatInt(int64(c.SidecarHTTPPort), 10),
+		"--dapr-grpc-port", strconv.FormatInt(int64(c.SidecarAPIGRPCPort), 10),
+		"--dapr-internal-grpc-port", strconv.FormatInt(int64(c.SidecarInternalGRPCPort), 10),
+		"--dapr-listen-addresses", c.SidecarListenAddresses,
+		"--dapr-public-port", strconv.FormatInt(int64(c.SidecarPublicPort), 10),
+		"--app-id", c.GetAppID(),
+		"--app-protocol", c.AppProtocol,
+		"--control-plane-address", c.OperatorAddress,
+		"--sentry-address", c.SentryAddress,
+		"--log-level", c.LogLevel,
+		"--dapr-graceful-shutdown-seconds", strconv.Itoa(c.GracefulShutdownSeconds),
 	}
 
-	if cfg.KubernetesMode {
+	if c.KubernetesMode {
 		args = append(args, "--mode", "kubernetes")
 	}
 
-	if cfg.AppPort > 0 {
-		args = append(args, "--app-port", strconv.FormatInt(int64(cfg.AppPort), 10))
+	if c.AppPort > 0 {
+		args = append(args, "--app-port", strconv.FormatInt(int64(c.AppPort), 10))
 	}
 
-	if cfg.EnableMetrics {
+	if c.EnableMetrics {
 		args = append(args,
 			"--enable-metrics",
-			"--metrics-port", strconv.FormatInt(int64(cfg.SidecarMetricsPort), 10),
+			"--metrics-port", strconv.FormatInt(int64(c.SidecarMetricsPort), 10),
 		)
 	}
 
-	if cfg.Config != "" {
-		args = append(args, "--config", cfg.Config)
+	if c.Config != "" {
+		args = append(args, "--config", c.Config)
 	}
 
-	if cfg.AppChannelAddress != "" {
-		args = append(args, "--app-channel-address", cfg.AppChannelAddress)
+	if c.AppChannelAddress != "" {
+		args = append(args, "--app-channel-address", c.AppChannelAddress)
 	}
 
 	// Placement address could be empty if placement service is disabled
-	if cfg.PlacementAddress != "" {
-		args = append(args, "--placement-host-address", cfg.PlacementAddress)
+	if c.PlacementAddress != "" {
+		args = append(args, "--placement-host-address", c.PlacementAddress)
 	}
 
 	// --enable-api-logging is set if and only if there's an explicit value (true or false) for that
 	// This is set explicitly even if "false"
 	// This is because if this CLI flag is missing, the default specified in the Config CRD is used
-	if cfg.EnableAPILogging != nil {
-		args = append(args, "--enable-api-logging="+strconv.FormatBool(*cfg.EnableAPILogging))
+	if c.EnableAPILogging != nil {
+		args = append(args, "--enable-api-logging="+strconv.FormatBool(*c.EnableAPILogging))
 	}
 
-	if cfg.DisableBuiltinK8sSecretStore {
+	if c.DisableBuiltinK8sSecretStore {
 		args = append(args, "--disable-builtin-k8s-secret-store")
 	}
 
-	if cfg.EnableAppHealthCheck {
+	if c.EnableAppHealthCheck {
 		args = append(args,
 			"--enable-app-health-check",
-			"--app-health-check-path", cfg.AppHealthCheckPath,
-			"--app-health-probe-interval", strconv.FormatInt(int64(cfg.AppHealthProbeInterval), 10),
-			"--app-health-probe-timeout", strconv.FormatInt(int64(cfg.AppHealthProbeTimeout), 10),
-			"--app-health-threshold", strconv.FormatInt(int64(cfg.AppHealthThreshold), 10),
+			"--app-health-check-path", c.AppHealthCheckPath,
+			"--app-health-probe-interval", strconv.FormatInt(int64(c.AppHealthProbeInterval), 10),
+			"--app-health-probe-timeout", strconv.FormatInt(int64(c.AppHealthProbeTimeout), 10),
+			"--app-health-threshold", strconv.FormatInt(int64(c.AppHealthThreshold), 10),
 		)
 	}
 
-	if cfg.LogAsJSON {
+	if c.LogAsJSON {
 		args = append(args, "--log-as-json")
 	}
 
-	if cfg.EnableProfiling {
+	if c.EnableProfiling {
 		args = append(args, "--enable-profiling")
 	}
 
-	if cfg.MTLSEnabled {
+	if c.MTLSEnabled {
 		args = append(args, "--enable-mtls")
 	}
 
-	if cfg.AppSSL {
+	if c.AppSSL {
 		args = append(args, "--app-ssl")
 	}
 
-	if cfg.AppMaxConcurrency != nil {
-		args = append(args, "--app-max-concurrency", strconv.Itoa(*cfg.AppMaxConcurrency))
+	if c.AppMaxConcurrency != nil {
+		args = append(args, "--app-max-concurrency", strconv.Itoa(*c.AppMaxConcurrency))
 	}
 
-	if cfg.HTTPMaxRequestSize != nil {
-		args = append(args, "--dapr-http-max-request-size", strconv.Itoa(*cfg.HTTPMaxRequestSize))
+	if c.HTTPMaxRequestSize != nil {
+		args = append(args, "--dapr-http-max-request-size", strconv.Itoa(*c.HTTPMaxRequestSize))
 	}
 
-	if cfg.HTTPReadBufferSize != nil {
-		args = append(args, "--dapr-http-read-buffer-size", strconv.Itoa(*cfg.HTTPReadBufferSize))
+	if c.HTTPReadBufferSize != nil {
+		args = append(args, "--dapr-http-read-buffer-size", strconv.Itoa(*c.HTTPReadBufferSize))
 	}
 
 	// When debugging is enabled, we need to override the command and the flags
-	if cfg.EnableDebug {
+	if c.EnableDebug {
 		ports = append(ports, corev1.ContainerPort{
 			Name:          injectorConsts.SidecarDebugPortName,
-			ContainerPort: cfg.SidecarDebugPort,
+			ContainerPort: c.SidecarDebugPort,
 		})
 
 		cmd = []string{"/dlv"}
 
 		args = append([]string{
-			"--listen", ":" + strconv.FormatInt(int64(cfg.SidecarDebugPort), 10),
+			"--listen", ":" + strconv.FormatInt(int64(c.SidecarDebugPort), 10),
 			"--accept-multiclient",
 			"--headless=true",
 			"--log",
@@ -177,33 +177,33 @@ func (cfg SidecarConfig) GetSidecarContainer(opts getSidecarContainerOpts) (*cor
 	// Security context
 	securityContext := &corev1.SecurityContext{
 		AllowPrivilegeEscalation: ptr.Of(false),
-		RunAsNonRoot:             ptr.Of(cfg.RunAsNonRoot),
-		ReadOnlyRootFilesystem:   ptr.Of(cfg.ReadOnlyRootFilesystem),
+		RunAsNonRoot:             ptr.Of(c.RunAsNonRoot),
+		ReadOnlyRootFilesystem:   ptr.Of(c.ReadOnlyRootFilesystem),
 	}
-	if cfg.SidecarSeccompProfileType != "" {
+	if c.SidecarSeccompProfileType != "" {
 		securityContext.SeccompProfile = &corev1.SeccompProfile{
-			Type: corev1.SeccompProfileType(cfg.SidecarSeccompProfileType),
+			Type: corev1.SeccompProfileType(c.SidecarSeccompProfileType),
 		}
 	}
-	if cfg.SidecarDropALLCapabilities {
+	if c.SidecarDropALLCapabilities {
 		securityContext.Capabilities = &corev1.Capabilities{
 			Drop: []corev1.Capability{"ALL"},
 		}
 	}
 
 	// Create the container object
-	probeHTTPHandler := getProbeHTTPHandler(cfg.SidecarPublicPort, injectorConsts.APIVersionV1, injectorConsts.SidecarHealthzPath)
+	probeHTTPHandler := getProbeHTTPHandler(c.SidecarPublicPort, injectorConsts.APIVersionV1, injectorConsts.SidecarHealthzPath)
 	container := &corev1.Container{
 		Name:            injectorConsts.SidecarContainerName,
-		Image:           cfg.SidecarImage,
-		ImagePullPolicy: cfg.ImagePullPolicy,
+		Image:           c.SidecarImage,
+		ImagePullPolicy: c.ImagePullPolicy,
 		SecurityContext: securityContext,
 		Ports:           ports,
 		Args:            append(cmd, args...),
 		Env: []corev1.EnvVar{
 			{
 				Name:  "NAMESPACE",
-				Value: cfg.Namespace,
+				Value: c.Namespace,
 			},
 			{
 				Name: "POD_NAME",
@@ -217,17 +217,17 @@ func (cfg SidecarConfig) GetSidecarContainer(opts getSidecarContainerOpts) (*cor
 		VolumeMounts: opts.VolumeMounts,
 		ReadinessProbe: &corev1.Probe{
 			ProbeHandler:        probeHTTPHandler,
-			InitialDelaySeconds: cfg.SidecarReadinessProbeDelaySeconds,
-			TimeoutSeconds:      cfg.SidecarReadinessProbeTimeoutSeconds,
-			PeriodSeconds:       cfg.SidecarReadinessProbePeriodSeconds,
-			FailureThreshold:    cfg.SidecarReadinessProbeThreshold,
+			InitialDelaySeconds: c.SidecarReadinessProbeDelaySeconds,
+			TimeoutSeconds:      c.SidecarReadinessProbeTimeoutSeconds,
+			PeriodSeconds:       c.SidecarReadinessProbePeriodSeconds,
+			FailureThreshold:    c.SidecarReadinessProbeThreshold,
 		},
 		LivenessProbe: &corev1.Probe{
 			ProbeHandler:        probeHTTPHandler,
-			InitialDelaySeconds: cfg.SidecarLivenessProbeDelaySeconds,
-			TimeoutSeconds:      cfg.SidecarLivenessProbeTimeoutSeconds,
-			PeriodSeconds:       cfg.SidecarLivenessProbePeriodSeconds,
-			FailureThreshold:    cfg.SidecarLivenessProbeThreshold,
+			InitialDelaySeconds: c.SidecarLivenessProbeDelaySeconds,
+			TimeoutSeconds:      c.SidecarLivenessProbeTimeoutSeconds,
+			PeriodSeconds:       c.SidecarLivenessProbePeriodSeconds,
+			FailureThreshold:    c.SidecarLivenessProbeThreshold,
 		},
 	}
 
@@ -235,7 +235,7 @@ func (cfg SidecarConfig) GetSidecarContainer(opts getSidecarContainerOpts) (*cor
 	// the Command and Args are passed as is. Otherwise, the Command is passed as a part of Args.
 	// This is to allow the Docker images to specify an ENTRYPOINT
 	// which is otherwise overridden by Command.
-	if podContainsTolerations(cfg.IgnoreEntrypointTolerations, cfg.pod.Spec.Tolerations) {
+	if podContainsTolerations(c.IgnoreEntrypointTolerations, c.pod.Spec.Tolerations) {
 		container.Command = cmd
 		container.Args = args
 	} else {
@@ -244,7 +244,7 @@ func (cfg SidecarConfig) GetSidecarContainer(opts getSidecarContainerOpts) (*cor
 	}
 
 	// Set env vars if needed
-	containerEnvKeys, containerEnv := cfg.GetEnv()
+	containerEnvKeys, containerEnv := c.getEnv()
 	if len(containerEnv) > 0 {
 		container.Env = append(container.Env, containerEnv...)
 		container.Env = append(container.Env, corev1.EnvVar{
@@ -283,44 +283,44 @@ func (cfg SidecarConfig) GetSidecarContainer(opts getSidecarContainerOpts) (*cor
 	container.Env = append(container.Env,
 		corev1.EnvVar{
 			Name:  securityConsts.TrustAnchorsEnvVar,
-			Value: cfg.TrustAnchors,
+			Value: c.TrustAnchors,
 		},
 		corev1.EnvVar{
 			Name:  securityConsts.CertChainEnvVar,
-			Value: cfg.CertChain,
+			Value: c.CertChain,
 		},
 		corev1.EnvVar{
 			Name:  securityConsts.CertKeyEnvVar,
-			Value: cfg.CertKey,
+			Value: c.CertKey,
 		},
 		corev1.EnvVar{
 			Name:  "SENTRY_LOCAL_IDENTITY",
-			Value: cfg.Identity,
+			Value: c.Identity,
 		},
 	)
 
-	if cfg.APITokenSecret != "" {
+	if c.APITokenSecret != "" {
 		container.Env = append(container.Env, corev1.EnvVar{
 			Name: authConsts.APITokenEnvVar,
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					Key: "token",
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: cfg.APITokenSecret,
+						Name: c.APITokenSecret,
 					},
 				},
 			},
 		})
 	}
 
-	if cfg.AppTokenSecret != "" {
+	if c.AppTokenSecret != "" {
 		container.Env = append(container.Env, corev1.EnvVar{
 			Name: authConsts.AppAPITokenEnvVar,
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					Key: "token",
 					LocalObjectReference: corev1.LocalObjectReference{
-						Name: cfg.AppTokenSecret,
+						Name: c.AppTokenSecret,
 					},
 				},
 			},
@@ -328,7 +328,7 @@ func (cfg SidecarConfig) GetSidecarContainer(opts getSidecarContainerOpts) (*cor
 	}
 
 	// Resources for the container
-	resources, err := cfg.getResourceRequirements()
+	resources, err := c.getResourceRequirements()
 	if err != nil {
 		log.Warnf("couldn't set container resource requirements: %s. using defaults", err)
 	} else if resources != nil {
@@ -389,8 +389,8 @@ func (c *SidecarConfig) GetAppID() string {
 
 var envRegexp = regexp.MustCompile(`(?m)(,)\s*[a-zA-Z\_][a-zA-Z0-9\_]*=`)
 
-// GetEnv returns the EnvVar slice from the Env annotation.
-func (c *SidecarConfig) GetEnv() (envKeys []string, envVars []corev1.EnvVar) {
+// getEnv returns the EnvVar slice from the Env annotation.
+func (c *SidecarConfig) getEnv() (envKeys []string, envVars []corev1.EnvVar) {
 	if c.Env == "" {
 		return []string{}, []corev1.EnvVar{}
 	}

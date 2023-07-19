@@ -22,7 +22,6 @@ import (
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"github.com/dapr/dapr/pkg/injector/patcher"
@@ -34,9 +33,7 @@ const (
 	defaultMtlsEnabled = true
 )
 
-func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.AdmissionReview,
-	namespace, image, imagePullPolicy string, kubeClient kubernetes.Interface, daprClient scheme.Interface,
-) (patchOps jsonpatch.Patch, err error) {
+func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.AdmissionReview) (patchOps jsonpatch.Patch, err error) {
 	pod := &corev1.Pod{}
 	err = json.Unmarshal(ar.Request.Object.Raw, pod)
 	if err != nil {
@@ -49,12 +46,12 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 	)
 
 	// Keep DNS resolution outside of GetSidecarContainer for unit testing.
-	placementAddress := sidecar.ServiceAddress(sidecar.ServicePlacement, namespace, i.config.KubeClusterDomain)
-	sentryAddress := sidecar.ServiceAddress(sidecar.ServiceSentry, namespace, i.config.KubeClusterDomain)
-	apiSvcAddress := sidecar.ServiceAddress(sidecar.ServiceAPI, namespace, i.config.KubeClusterDomain)
+	placementAddress := sidecar.ServiceAddress(sidecar.ServicePlacement, i.config.Namespace, i.config.KubeClusterDomain)
+	sentryAddress := sidecar.ServiceAddress(sidecar.ServiceSentry, i.config.Namespace, i.config.KubeClusterDomain)
+	apiSvcAddress := sidecar.ServiceAddress(sidecar.ServiceAPI, i.config.Namespace, i.config.KubeClusterDomain)
 
 	// Get the TLS credentials
-	trustAnchors, certChain, certKey := sidecar.GetTrustAnchorsAndCertChain(ctx, kubeClient, namespace)
+	trustAnchors, certChain, certKey := sidecar.GetTrustAnchorsAndCertChain(ctx, i.kubeClient, i.config.Namespace)
 
 	// Create the sidecar configuration object from the pod
 	sidecar := patcher.NewSidecarConfig(pod)
@@ -64,7 +61,7 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 	sidecar.TrustAnchors = trustAnchors
 	sidecar.CertChain = certChain
 	sidecar.CertKey = certKey
-	sidecar.MTLSEnabled = mTLSEnabled(daprClient)
+	sidecar.MTLSEnabled = mTLSEnabled(i.daprClient)
 	sidecar.Identity = ar.Request.Namespace + ":" + pod.Spec.ServiceAccountName
 	sidecar.IgnoreEntrypointTolerations = i.config.GetIgnoreEntrypointTolerations()
 	sidecar.ImagePullPolicy = i.config.GetPullPolicy()
@@ -82,7 +79,7 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 	}
 
 	// Default value for the sidecar image, which can be overridden by annotations
-	sidecar.SidecarImage = image
+	sidecar.SidecarImage = i.config.SidecarImage
 
 	// Set the configuration from annotations
 	sidecar.SetFromPodAnnotations()

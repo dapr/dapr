@@ -11,6 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+//nolint:goconst
 package patcher
 
 import (
@@ -85,7 +86,7 @@ func TestParseEnvString(t *testing.T) {
 		t.Run(tc.testName, func(t *testing.T) {
 			c := NewSidecarConfig(&corev1.Pod{})
 			c.Env = tc.envStr
-			envKeys, envVars := c.GetEnv()
+			envKeys, envVars := c.getEnv()
 			assert.Equal(t, tc.expLen, len(envVars))
 			assert.Equal(t, tc.expKeys, envKeys)
 			assert.Equal(t, tc.expEnv, envVars)
@@ -285,7 +286,7 @@ func TestGetSidecarContainer(t *testing.T) {
 
 		c.SetFromPodAnnotations()
 
-		container, err := c.GetSidecarContainer(getSidecarContainerOpts{})
+		container, err := c.getSidecarContainer(getSidecarContainerOpts{})
 		require.NoError(t, err)
 
 		expectedArgs := []string{
@@ -353,7 +354,7 @@ func TestGetSidecarContainer(t *testing.T) {
 
 		c.SetFromPodAnnotations()
 
-		container, err := c.GetSidecarContainer(getSidecarContainerOpts{})
+		container, err := c.getSidecarContainer(getSidecarContainerOpts{})
 		require.NoError(t, err)
 
 		expectedArgs := []string{
@@ -427,7 +428,7 @@ func TestGetSidecarContainer(t *testing.T) {
 
 		c.SetFromPodAnnotations()
 
-		container, err := c.GetSidecarContainer(getSidecarContainerOpts{})
+		container, err := c.getSidecarContainer(getSidecarContainerOpts{})
 		require.NoError(t, err)
 
 		expectedArgs := []string{
@@ -491,7 +492,7 @@ func TestGetSidecarContainer(t *testing.T) {
 
 		c.SetFromPodAnnotations()
 
-		container, err := c.GetSidecarContainer(getSidecarContainerOpts{})
+		container, err := c.getSidecarContainer(getSidecarContainerOpts{})
 		require.NoError(t, err)
 
 		expectedArgs := []string{
@@ -550,7 +551,7 @@ func TestGetSidecarContainer(t *testing.T) {
 
 		c.SetFromPodAnnotations()
 
-		container, err := c.GetSidecarContainer(getSidecarContainerOpts{})
+		container, err := c.getSidecarContainer(getSidecarContainerOpts{})
 		require.NoError(t, err)
 
 		expectedArgs := []string{
@@ -595,7 +596,7 @@ func TestGetSidecarContainer(t *testing.T) {
 
 		c.SetFromPodAnnotations()
 
-		container, err := c.GetSidecarContainer(getSidecarContainerOpts{})
+		container, err := c.getSidecarContainer(getSidecarContainerOpts{})
 		require.NoError(t, err)
 
 		expectedArgs := []string{
@@ -639,7 +640,7 @@ func TestGetSidecarContainer(t *testing.T) {
 
 		c.SetFromPodAnnotations()
 
-		container, err := c.GetSidecarContainer(getSidecarContainerOpts{})
+		container, err := c.getSidecarContainer(getSidecarContainerOpts{})
 		require.NoError(t, err)
 
 		expectedArgs := []string{
@@ -684,7 +685,7 @@ func TestGetSidecarContainer(t *testing.T) {
 
 		c.SetFromPodAnnotations()
 
-		container, err := c.GetSidecarContainer(getSidecarContainerOpts{})
+		container, err := c.getSidecarContainer(getSidecarContainerOpts{})
 		require.NoError(t, err)
 
 		assert.Equal(t, "override", container.Image)
@@ -700,7 +701,7 @@ func TestGetSidecarContainer(t *testing.T) {
 		})
 		c.SetFromPodAnnotations()
 
-		container, err := c.GetSidecarContainer(getSidecarContainerOpts{})
+		container, err := c.getSidecarContainer(getSidecarContainerOpts{})
 		require.NoError(t, err)
 
 		assert.Equal(t, 0, len(container.VolumeMounts))
@@ -716,7 +717,7 @@ func TestGetSidecarContainer(t *testing.T) {
 		})
 		c.SetFromPodAnnotations()
 
-		container, err := c.GetSidecarContainer(getSidecarContainerOpts{
+		container, err := c.getSidecarContainer(getSidecarContainerOpts{
 			VolumeMounts: []corev1.VolumeMount{
 				{Name: injectorConsts.UnixDomainSocketVolume, MountPath: "/tmp"},
 			},
@@ -747,7 +748,7 @@ func TestGetSidecarContainer(t *testing.T) {
 
 		c.SetFromPodAnnotations()
 
-		container, err := c.GetSidecarContainer(getSidecarContainerOpts{})
+		container, err := c.getSidecarContainer(getSidecarContainerOpts{})
 		require.NoError(t, err)
 
 		expectedArgs := []string{
@@ -792,7 +793,7 @@ func TestGetSidecarContainer(t *testing.T) {
 
 			c.SetFromPodAnnotations()
 
-			container, err := c.GetSidecarContainer(getSidecarContainerOpts{})
+			container, err := c.getSidecarContainer(getSidecarContainerOpts{})
 			require.NoError(t, err)
 
 			expectedArgs := []string{
@@ -837,7 +838,7 @@ func TestGetSidecarContainer(t *testing.T) {
 
 			c.SetFromPodAnnotations()
 
-			container, err := c.GetSidecarContainer(getSidecarContainerOpts{})
+			container, err := c.getSidecarContainer(getSidecarContainerOpts{})
 			require.NoError(t, err)
 
 			expectedArgs := []string{
@@ -883,7 +884,7 @@ func TestGetSidecarContainer(t *testing.T) {
 
 			c.SetFromPodAnnotations()
 
-			container, err := c.GetSidecarContainer(getSidecarContainerOpts{})
+			container, err := c.getSidecarContainer(getSidecarContainerOpts{})
 			require.NoError(t, err)
 
 			expectedArgs := []string{
@@ -935,7 +936,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			})
 			c.SetFromPodAnnotations()
 
-			container, err := c.GetSidecarContainer(getSidecarContainerOpts{})
+			container, err := c.getSidecarContainer(getSidecarContainerOpts{})
 			require.NoError(t, err)
 
 			if tc.isAdmin {
@@ -957,7 +958,7 @@ func TestGetSidecarContainer(t *testing.T) {
 		})
 		c.SetFromPodAnnotations()
 
-		container, err := c.GetSidecarContainer(getSidecarContainerOpts{})
+		container, err := c.getSidecarContainer(getSidecarContainerOpts{})
 		require.NoError(t, err)
 
 		expect := map[string]string{
@@ -1079,7 +1080,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			})
 			c.IgnoreEntrypointTolerations = tc.ignoreEntrypointTolerations
 
-			container, err := c.GetSidecarContainer(getSidecarContainerOpts{})
+			container, err := c.getSidecarContainer(getSidecarContainerOpts{})
 			require.NoError(t, err)
 
 			t.Run(tc.name, func(t *testing.T) {
@@ -1119,7 +1120,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			c.SidecarDropALLCapabilities = tc.dropCapabilities
 			c.SetFromPodAnnotations()
 
-			container, err := c.GetSidecarContainer(getSidecarContainerOpts{})
+			container, err := c.getSidecarContainer(getSidecarContainerOpts{})
 			require.NoError(t, err)
 
 			if tc.dropCapabilities {

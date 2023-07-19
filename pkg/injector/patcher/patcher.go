@@ -24,9 +24,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var (
-	log = logger.NewLogger("dapr.injector")
-)
+var log = logger.NewLogger("dapr.injector")
 
 // PatchPod applies a jsonpatch.Patch to a Pod and returns the modified object.
 func PatchPod(pod *corev1.Pod, patch jsonpatch.Patch) (*corev1.Pod, error) {

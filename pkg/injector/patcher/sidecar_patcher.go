@@ -51,7 +51,7 @@ func (c *SidecarConfig) GetPatch() (patchOps jsonpatch.Patch, err error) {
 	}
 
 	// Pluggable components
-	appContainers, componentContainers := c.SplitContainers()
+	appContainers, componentContainers := c.splitContainers()
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +62,7 @@ func (c *SidecarConfig) GetPatch() (patchOps jsonpatch.Patch, err error) {
 			return nil, err
 		}
 	}
-	componentPatchOps, componentsSocketVolumeMount := c.ComponentsPatchOps(componentContainers, injectedComponentContainers)
+	componentPatchOps, componentsSocketVolumeMount := c.componentsPatchOps(componentContainers, injectedComponentContainers)
 
 	// Projected volume with the token
 	if !c.DisableTokenVolume {
@@ -81,7 +81,7 @@ func (c *SidecarConfig) GetPatch() (patchOps jsonpatch.Patch, err error) {
 	}
 
 	// Get the sidecar container
-	sidecarContainer, err := c.GetSidecarContainer(getSidecarContainerOpts{
+	sidecarContainer, err := c.getSidecarContainer(getSidecarContainerOpts{
 		ComponentsSocketsVolumeMount: componentsSocketVolumeMount,
 		VolumeMounts:                 volumeMounts,
 	})
