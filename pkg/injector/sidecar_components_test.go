@@ -13,7 +13,6 @@ import (
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/injector/annotations"
-	"github.com/dapr/dapr/pkg/injector/components"
 	"github.com/dapr/dapr/pkg/injector/patcher"
 )
 
@@ -212,7 +211,7 @@ func TestComponentsPatch(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			c := NewSidecarConfig(test.pod)
 			_, componentContainers := c.SplitContainers()
-			patch, volumeMount := c.ComponentsPatchOps(componentContainers, components.Injectable(test.appID, test.componentsList))
+			patch, volumeMount := c.ComponentsPatchOps(componentContainers, Injectable(test.appID, test.componentsList))
 			patchJSON, _ := json.Marshal(patch)
 			expPatchJSON, _ := json.Marshal(patch)
 			assert.Equal(t, string(patchJSON), string(expPatchJSON))

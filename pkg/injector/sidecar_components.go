@@ -1,12 +1,16 @@
 package injector
 
 import (
+	"encoding/json"
 	"strings"
 
-	"github.com/dapr/dapr/pkg/components/pluggable"
-	"github.com/dapr/dapr/pkg/injector/patcher"
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	corev1 "k8s.io/api/core/v1"
+
+	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	"github.com/dapr/dapr/pkg/components/pluggable"
+	"github.com/dapr/dapr/pkg/injector/annotations"
+	"github.com/dapr/dapr/pkg/injector/patcher"
 )
 
 // SplitContainers split containers between:
@@ -76,6 +80,48 @@ func (c *SidecarConfig) ComponentsPatchOps(componentContainers map[int]corev1.Co
 	}
 
 	return patches, &sharedSocketVolumeMount
+}
+
+// Injectable parses the container definition from components annotations returning them as a list. Uses the appID to filter
+// only the eligble components for such apps avoiding injecting containers that will not be used.
+func Injectable(appID string, components []componentsapi.Component) []corev1.Container {
+	componentContainers := make([]corev1.Container, 0, len(components))
+	componentImages := make(map[string]bool, len(components))
+
+	for _, component := range components {
+		containerAsStr := component.Annotations[annotations.KeyPluggableComponentContainer]
+		if containerAsStr == "" {
+			continue
+		}
+		var container *corev1.Container
+		if err := json.Unmarshal([]byte(containerAsStr), &container); err != nil {
+			log.Warnf("Could not unmarshal container %s: %v", component.Name, err)
+			continue
+		}
+
+		if componentImages[container.Image] {
+			continue
+		}
+
+		appScopped := len(component.Scopes) == 0
+		for _, scoppedApp := range component.Scopes {
+			if scoppedApp == appID {
+				appScopped = true
+				break
+			}
+		}
+
+		if appScopped {
+			componentImages[container.Image] = true
+			// if container name is not set, the component name will be used ensuring uniqueness
+			if container.Name == "" {
+				container.Name = component.Name
+			}
+			componentContainers = append(componentContainers, *container)
+		}
+	}
+
+	return componentContainers
 }
 
 // emptyVolumePatches return all patches for pod emptyvolumes (the default value for injected pluggable components)
