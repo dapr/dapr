@@ -3052,15 +3052,14 @@ func (a *DaprRuntime) getHTTPEndpointAppChannel(pipeline httpMiddleware.Pipeline
 		Timeout: 15 * time.Second,
 	}
 
-	netTransport := &nethttp.Transport{
-		Dial:                dialer.Dial,
-		TLSHandshakeTimeout: 15 * time.Second,
-		TLSClientConfig:     tlsConfig,
-	}
+	tr := nethttp.DefaultTransport.(*nethttp.Transport).Clone()
+	tr.TLSHandshakeTimeout = 15 * time.Second
+	tr.TLSClientConfig = tlsConfig
+	tr.DialContext = dialer.DialContext
 
 	conf.Client = &nethttp.Client{
 		Timeout:   0,
-		Transport: netTransport,
+		Transport: tr,
 	}
 
 	return conf, nil
@@ -3304,12 +3303,12 @@ func (a *DaprRuntime) createHTTPEndpointsChannels() (map[string]channel.HTTPEndp
 	if len(endpoints) > 0 {
 		channels := make(map[string]channel.HTTPEndpointAppChannel, len(endpoints))
 
-		for _, e := range endpoints {
-			pipeline, err := a.buildAppHTTPPipeline()
-			if err != nil {
-				return nil, fmt.Errorf("failed to build app HTTP pipeline: %w", err)
-			}
+		pipeline, err := a.buildAppHTTPPipeline()
+		if err != nil {
+			return nil, err
+		}
 
+		for _, e := range endpoints {
 			conf, err := a.getHTTPEndpointAppChannel(pipeline, e)
 			if err != nil {
 				return nil, err
