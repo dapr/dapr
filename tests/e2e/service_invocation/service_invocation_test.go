@@ -185,15 +185,17 @@ func TestMain(m *testing.M) {
 			AppProtocol:    "http",
 			Volumes: []apiv1.Volume{
 				{
-					Name: "storage-volume",
+					Name: "secret-volume",
 					VolumeSource: apiv1.VolumeSource{
-						EmptyDir: &apiv1.EmptyDirVolumeSource{},
+						Secret: &apiv1.SecretVolumeSource{
+							SecretName: "external-tls",
+						},
 					},
 				},
 			},
 			AppVolumeMounts: []apiv1.VolumeMount{
 				{
-					Name:      "storage-volume",
+					Name:      "secret-volume",
 					MountPath: "/tmp/testdata/certs",
 				},
 			},
