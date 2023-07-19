@@ -34,19 +34,16 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var (
-	log  = logger.NewLogger("dapr.sentry")
-	opts = options.New()
-)
+var log = logger.NewLogger("dapr.sentry")
 
-func init() {
+func main() {
+	opts := options.New()
+
 	// Apply options to all loggers
 	if err := logger.ApplyOptionsToLoggers(&opts.Logger); err != nil {
 		log.Fatal(err)
 	}
-}
 
-func main() {
 	log.Infof("Starting Dapr Sentry certificate authority -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
 	log.Infof("Log level set to: %s", opts.Logger.OutputLevel)
 

@@ -22,7 +22,7 @@ import (
 )
 
 func TestMetricsExporter(t *testing.T) {
-	var logger = logger.NewLogger("test.logger")
+	logger := logger.NewLogger("test.logger")
 
 	t.Run("returns default options", func(t *testing.T) {
 		e := NewExporter(logger, "test")
