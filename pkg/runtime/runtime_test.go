@@ -16,12 +16,18 @@ package runtime
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -67,6 +73,7 @@ import (
 	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
 	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
 	"github.com/dapr/dapr/pkg/config/protocol"
+	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
@@ -3037,5 +3044,290 @@ func TestIsEnvVarAllowed(t *testing.T) {
 				}
 			})
 		}
+	})
+}
+
+// helper to populate subscription array for 2 pubsubs.
+// 'topics' are the topics for the first pubsub.
+// 'topics2' are the topics for the second pubsub.
+func getSubscriptionsJSONString(topics []string, topics2 []string) string {
+	s := []runtimePubsub.SubscriptionJSON{}
+	for _, t := range topics {
+		s = append(s, runtimePubsub.SubscriptionJSON{
+			PubsubName: TestPubsubName,
+			Topic:      t,
+			Routes: runtimePubsub.RoutesJSON{
+				Default: t,
+			},
+		})
+	}
+
+	for _, t := range topics2 {
+		s = append(s, runtimePubsub.SubscriptionJSON{
+			PubsubName: TestSecondPubsubName,
+			Topic:      t,
+			Routes: runtimePubsub.RoutesJSON{
+				Default: t,
+			},
+		})
+	}
+	b, _ := json.Marshal(&s)
+
+	return string(b)
+}
+
+func TestIsBindingOfExplicitDirection(t *testing.T) {
+	t.Run("no direction in metadata input binding", func(t *testing.T) {
+		m := map[string]string{}
+		r := isBindingOfExplicitDirection("input", m)
+
+		assert.False(t, r)
+	})
+
+	t.Run("no direction in metadata output binding", func(t *testing.T) {
+		m := map[string]string{}
+		r := isBindingOfExplicitDirection("input", m)
+
+		assert.False(t, r)
+	})
+
+	t.Run("direction is input binding", func(t *testing.T) {
+		m := map[string]string{
+			"direction": "input",
+		}
+		r := isBindingOfExplicitDirection("input", m)
+
+		assert.True(t, r)
+	})
+
+	t.Run("direction is output binding", func(t *testing.T) {
+		m := map[string]string{
+			"direction": "output",
+		}
+		r := isBindingOfExplicitDirection("output", m)
+
+		assert.True(t, r)
+	})
+
+	t.Run("direction is not output binding", func(t *testing.T) {
+		m := map[string]string{
+			"direction": "input",
+		}
+		r := isBindingOfExplicitDirection("output", m)
+
+		assert.False(t, r)
+	})
+
+	t.Run("direction is not input binding", func(t *testing.T) {
+		m := map[string]string{
+			"direction": "output",
+		}
+		r := isBindingOfExplicitDirection("input", m)
+
+		assert.False(t, r)
+	})
+
+	t.Run("direction is both input and output binding", func(t *testing.T) {
+		m := map[string]string{
+			"direction": "output, input",
+		}
+
+		r := isBindingOfExplicitDirection("input", m)
+		assert.True(t, r)
+
+		r2 := isBindingOfExplicitDirection("output", m)
+
+		assert.True(t, r2)
+	})
+}
+
+func TestStartReadingFromBindings(t *testing.T) {
+	t.Run("OPTIONS request when direction is not specified", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.KubernetesMode)
+		mockAppChannel := new(channelt.MockAppChannel)
+
+		mockAppChannel.On("InvokeMethod", mock.Anything, mock.Anything).Return(invokev1.NewInvokeMethodResponse(200, "OK", nil), nil)
+		rt.appChannel = mockAppChannel
+		defer stopRuntime(t, rt)
+
+		m := &mockBinding{}
+
+		rt.compStore.AddInputBinding("test", m)
+		err := rt.startReadingFromBindings()
+
+		assert.NoError(t, err)
+		assert.True(t, mockAppChannel.AssertCalled(t, "InvokeMethod", mock.Anything, mock.Anything))
+	})
+
+	t.Run("No OPTIONS request when direction is specified", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.KubernetesMode)
+		mockAppChannel := new(channelt.MockAppChannel)
+
+		mockAppChannel.On("InvokeMethod", mock.Anything, mock.Anything).Return(invokev1.NewInvokeMethodResponse(200, "OK", nil), nil)
+		rt.appChannel = mockAppChannel
+		defer stopRuntime(t, rt)
+
+		m := &mockBinding{
+			metadata: map[string]string{
+				"direction": "input",
+			},
+		}
+
+		rt.compStore.AddInputBinding("test", m)
+		rt.compStore.AddComponent(componentsV1alpha1.Component{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test",
+			},
+			Spec: componentsV1alpha1.ComponentSpec{
+				Type: "bindings.test",
+				Metadata: []commonapi.NameValuePair{
+					{
+						Name: "direction",
+						Value: commonapi.DynamicValue{
+							JSON: v1.JSON{Raw: []byte("input")},
+						},
+					},
+				},
+			},
+		})
+		err := rt.startReadingFromBindings()
+
+		assert.NoError(t, err)
+		assert.True(t, mockAppChannel.AssertNotCalled(t, "InvokeMethod", mock.Anything, mock.Anything))
+	})
+}
+
+func TestGetHTTPEndpointAppChannel(t *testing.T) {
+	testPK, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+
+	testPKBytes, err := x509.MarshalECPrivateKey(testPK)
+	require.NoError(t, err)
+	testPKPEM := pem.EncodeToMemory(&pem.Block{
+		Type: "EC PRIVATE KEY", Bytes: testPKBytes,
+	})
+
+	cert := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject: pkix.Name{
+			CommonName: "test",
+		},
+		NotBefore: time.Now(),
+		NotAfter:  time.Now().Add(time.Hour),
+	}
+
+	testCertBytes, err := x509.CreateCertificate(rand.Reader, cert, cert, &testPK.PublicKey, testPK)
+	require.NoError(t, err)
+
+	testCertPEM := pem.EncodeToMemory(&pem.Block{
+		Type: "CERTIFICATE", Bytes: testCertBytes,
+	})
+
+	t.Run("no TLS channel", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		defer stopRuntime(t, rt)
+
+		conf, err := rt.getHTTPEndpointAppChannel(httpMiddleware.Pipeline{}, httpEndpointV1alpha1.HTTPEndpoint{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test",
+			},
+			Spec: httpEndpointV1alpha1.HTTPEndpointSpec{},
+		})
+
+		assert.NoError(t, err)
+		assert.Nil(t, conf.Client.Transport.(*http.Transport).TLSClientConfig)
+	})
+
+	t.Run("TLS channel with Root CA", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		defer stopRuntime(t, rt)
+
+		conf, err := rt.getHTTPEndpointAppChannel(httpMiddleware.Pipeline{}, httpEndpointV1alpha1.HTTPEndpoint{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test",
+			},
+			Spec: httpEndpointV1alpha1.HTTPEndpointSpec{
+				ClientTLS: &commonapi.TLS{
+					RootCA: &commonapi.TLSDocument{
+						Value: &commonapi.DynamicValue{
+							JSON: v1.JSON{Raw: testCertPEM},
+						},
+					},
+					Certificate: &commonapi.TLSDocument{
+						Value: &commonapi.DynamicValue{
+							JSON: v1.JSON{Raw: testCertPEM},
+						},
+					},
+					PrivateKey: &commonapi.TLSDocument{
+						Value: &commonapi.DynamicValue{
+							JSON: v1.JSON{Raw: testPKPEM},
+						},
+					},
+				},
+			},
+		})
+
+		require.NoError(t, err)
+		assert.NotNil(t, conf.Client.Transport.(*http.Transport).TLSClientConfig)
+	})
+
+	t.Run("TLS channel without Root CA", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		defer stopRuntime(t, rt)
+
+		conf, err := rt.getHTTPEndpointAppChannel(httpMiddleware.Pipeline{}, httpEndpointV1alpha1.HTTPEndpoint{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test",
+			},
+			Spec: httpEndpointV1alpha1.HTTPEndpointSpec{
+				ClientTLS: &commonapi.TLS{
+					Certificate: &commonapi.TLSDocument{
+						Value: &commonapi.DynamicValue{
+							JSON: v1.JSON{Raw: testCertPEM},
+						},
+					},
+					PrivateKey: &commonapi.TLSDocument{
+						Value: &commonapi.DynamicValue{
+							JSON: v1.JSON{Raw: testPKPEM},
+						},
+					},
+				},
+			},
+		})
+
+		assert.NoError(t, err)
+		assert.NotNil(t, conf.Client.Transport.(*http.Transport).TLSClientConfig)
+	})
+
+	t.Run("TLS channel with invalid Root CA", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		defer stopRuntime(t, rt)
+
+		_, err := rt.getHTTPEndpointAppChannel(httpMiddleware.Pipeline{}, httpEndpointV1alpha1.HTTPEndpoint{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test",
+			},
+			Spec: httpEndpointV1alpha1.HTTPEndpointSpec{
+				ClientTLS: &commonapi.TLS{
+					RootCA: &commonapi.TLSDocument{
+						Value: &commonapi.DynamicValue{
+							JSON: v1.JSON{Raw: []byte("asdsdsdassjkdctewzxabcdef")},
+						},
+					},
+					Certificate: &commonapi.TLSDocument{
+						Value: &commonapi.DynamicValue{
+							JSON: v1.JSON{Raw: testCertPEM},
+						},
+					},
+					PrivateKey: &commonapi.TLSDocument{
+						Value: &commonapi.DynamicValue{
+							JSON: v1.JSON{Raw: testPKPEM},
+						},
+					},
+				},
+			},
+		})
+
+		assert.Error(t, err)
 	})
 }
