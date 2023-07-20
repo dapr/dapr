@@ -58,6 +58,7 @@ func New(t *testing.T, fopts ...Option) *HTTP {
 		server: &http.Server{
 			ReadHeaderTimeout: time.Second,
 			Handler:           opts.handler,
+			TLSConfig:         opts.tlsConfig,
 		},
 	}
 }

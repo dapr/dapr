@@ -16,6 +16,7 @@ package runtime
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -51,6 +52,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/structpb"
+	apiextensionsV1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 
@@ -69,6 +71,7 @@ import (
 	"github.com/dapr/dapr/pkg/grpc"
 	"github.com/dapr/dapr/pkg/http"
 	"github.com/dapr/dapr/pkg/httpendpoint"
+	"github.com/dapr/dapr/pkg/internal/apis"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
@@ -489,11 +492,16 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.appConnectionConfig.Protocol), err)
 	}
 
+	endpointChannels, err := a.createHTTPEndpointsChannels()
+	if err != nil {
+		log.Warnf("failed to open channels for http endpoints: %s", err)
+	}
+
 	a.daprHTTPAPI.SetAppChannel(a.appChannel)
 	a.daprGRPCAPI.SetAppChannel(a.appChannel)
 	a.directMessaging.SetAppChannel(a.appChannel)
 
-	a.directMessaging.SetHTTPEndpointsAppChannel(a.httpEndpointsAppChannel)
+	a.directMessaging.SetHTTPEndpointsAppChannels(a.httpEndpointsAppChannel, endpointChannels)
 
 	a.daprHTTPAPI.SetDirectMessaging(a.directMessaging)
 	a.daprGRPCAPI.SetDirectMessaging(a.directMessaging)
@@ -1162,7 +1170,7 @@ func (a *DaprRuntime) beginHTTPEndpointsUpdates() error {
 
 func (a *DaprRuntime) onHTTPEndpointUpdated(endpoint httpEndpointV1alpha1.HTTPEndpoint) bool {
 	oldEndpoint, exists := a.compStore.GetHTTPEndpoint(endpoint.Name)
-	_, _ = a.processResourceSecrets(&endpoint)
+	a.processHTTPEndpointSecrets(&endpoint)
 
 	if exists && reflect.DeepEqual(oldEndpoint.Spec, endpoint.Spec) {
 		return false
@@ -1170,6 +1178,79 @@ func (a *DaprRuntime) onHTTPEndpointUpdated(endpoint httpEndpointV1alpha1.HTTPEn
 
 	a.pendingHTTPEndpoints <- endpoint
 	return true
+}
+
+func (a *DaprRuntime) processHTTPEndpointSecrets(endpoint *httpEndpointV1alpha1.HTTPEndpoint) {
+	_, _ = a.processResourceSecrets(endpoint)
+
+	tlsResource := apis.GenericNameValueResource{
+		Name:        endpoint.ObjectMeta.Name,
+		Namespace:   endpoint.ObjectMeta.Namespace,
+		SecretStore: endpoint.Auth.SecretStore,
+		Pairs:       []commonapi.NameValuePair{},
+	}
+
+	var root, clientCert, clientKey string = "root", "clientCert", "clientKey"
+
+	ca := commonapi.NameValuePair{
+		Name: root,
+	}
+
+	if endpoint.HasTLSRootCA() {
+		ca.Value = *endpoint.Spec.ClientTLS.RootCA.Value
+	}
+
+	if endpoint.HasTLSRootCASecret() {
+		ca.SecretKeyRef = *endpoint.Spec.ClientTLS.RootCA.SecretKeyRef
+	}
+	tlsResource.Pairs = append(tlsResource.Pairs, ca)
+
+	cCert := commonapi.NameValuePair{
+		Name: clientCert,
+	}
+
+	if endpoint.HasTLSClientCert() {
+		cCert.Value = *endpoint.Spec.ClientTLS.Certificate.Value
+	}
+
+	if endpoint.HasTLSClientCertSecret() {
+		cCert.SecretKeyRef = *endpoint.Spec.ClientTLS.Certificate.SecretKeyRef
+	}
+	tlsResource.Pairs = append(tlsResource.Pairs, cCert)
+
+	cKey := commonapi.NameValuePair{
+		Name: clientKey,
+	}
+
+	if endpoint.HasTLSPrivateKey() {
+		cKey.Value = *endpoint.Spec.ClientTLS.PrivateKey.Value
+	}
+
+	if endpoint.HasTLSPrivateKeySecret() {
+		cKey.SecretKeyRef = *endpoint.Spec.ClientTLS.PrivateKey.SecretKeyRef
+	}
+
+	tlsResource.Pairs = append(tlsResource.Pairs, cKey)
+
+	updated, _ := a.processResourceSecrets(&tlsResource)
+	if updated {
+		for _, np := range tlsResource.Pairs {
+			dv := &commonapi.DynamicValue{
+				JSON: apiextensionsV1.JSON{
+					Raw: np.Value.Raw,
+				},
+			}
+
+			switch np.Name {
+			case root:
+				endpoint.Spec.ClientTLS.RootCA.Value = dv
+			case clientCert:
+				endpoint.Spec.ClientTLS.Certificate.Value = dv
+			case clientKey:
+				endpoint.Spec.ClientTLS.PrivateKey.Value = dv
+			}
+		}
+	}
 }
 
 func (a *DaprRuntime) sendBatchOutputBindingsParallel(to []string, data []byte) {
@@ -2379,7 +2460,7 @@ func (a *DaprRuntime) processHTTPEndpoints() {
 		if endpoint.Name == "" {
 			continue
 		}
-		_, _ = a.processResourceSecrets(&endpoint)
+		a.processHTTPEndpointSecrets(&endpoint)
 		a.compStore.AddHTTPEndpoint(endpoint)
 	}
 }
@@ -2900,7 +2981,7 @@ func (a *DaprRuntime) initAppHTTPClient() {
 	}
 }
 
-func (a *DaprRuntime) getAppHTTPChannelConfig(pipeline httpMiddleware.Pipeline, isExternal bool) httpChannel.ChannelConfiguration {
+func (a *DaprRuntime) getAppHTTPChannelConfig(pipeline httpMiddleware.Pipeline) httpChannel.ChannelConfiguration {
 	conf := httpChannel.ChannelConfiguration{
 		CompStore:            a.compStore,
 		MaxConcurrency:       a.runtimeConfig.appConnectionConfig.MaxConcurrency,
@@ -2909,14 +2990,79 @@ func (a *DaprRuntime) getAppHTTPChannelConfig(pipeline httpMiddleware.Pipeline, 
 		MaxRequestBodySizeMB: a.runtimeConfig.maxRequestBodySize,
 	}
 
-	if !isExternal {
-		conf.Endpoint = a.getAppHTTPEndpoint()
-		conf.Client = a.appHTTPClient
-	} else {
-		conf.Client = nethttp.DefaultClient
+	conf.Endpoint = a.getAppHTTPEndpoint()
+	conf.Client = a.appHTTPClient
+	return conf
+}
+
+func (a *DaprRuntime) getHTTPEndpointAppChannel(pipeline httpMiddleware.Pipeline, endpoint httpEndpointV1alpha1.HTTPEndpoint) (httpChannel.ChannelConfiguration, error) {
+	conf := httpChannel.ChannelConfiguration{
+		CompStore:            a.compStore,
+		MaxConcurrency:       a.runtimeConfig.appConnectionConfig.MaxConcurrency,
+		Pipeline:             pipeline,
+		MaxRequestBodySizeMB: a.runtimeConfig.maxRequestBodySize,
 	}
 
-	return conf
+	if a.globalConfig.Spec.TracingSpec != nil {
+		conf.TracingSpec = *a.globalConfig.Spec.TracingSpec
+	}
+
+	var tlsConfig *tls.Config
+
+	if endpoint.HasTLSRootCA() {
+		ca := endpoint.Spec.ClientTLS.RootCA.Value.String()
+		caCertPool := x509.NewCertPool()
+
+		if !caCertPool.AppendCertsFromPEM([]byte(ca)) {
+			return httpChannel.ChannelConfiguration{}, fmt.Errorf("failed to add root cert to cert pool for http endpoint %s", endpoint.ObjectMeta.Name)
+		}
+
+		tlsConfig = &tls.Config{
+			MinVersion: tls.VersionTLS12,
+			RootCAs:    caCertPool,
+		}
+	}
+
+	if endpoint.HasTLSPrivateKey() {
+		cert, err := tls.X509KeyPair([]byte(endpoint.Spec.ClientTLS.Certificate.Value.String()), []byte(endpoint.Spec.ClientTLS.PrivateKey.Value.String()))
+		if err != nil {
+			return httpChannel.ChannelConfiguration{}, fmt.Errorf("failed to load client certificate for http endpoint %s: %w", endpoint.ObjectMeta.Name, err)
+		}
+
+		if tlsConfig == nil {
+			tlsConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+		}
+		tlsConfig.Certificates = []tls.Certificate{cert}
+	}
+
+	if endpoint.Spec.ClientTLS != nil && endpoint.Spec.ClientTLS.Renegotiation != nil {
+		switch *endpoint.Spec.ClientTLS.Renegotiation {
+		case commonapi.NegotiateNever:
+			tlsConfig.Renegotiation = tls.RenegotiateNever
+		case commonapi.NegotiateOnceAsClient:
+			tlsConfig.Renegotiation = tls.RenegotiateOnceAsClient
+		case commonapi.NegotiateFreelyAsClient:
+			tlsConfig.Renegotiation = tls.RenegotiateFreelyAsClient
+		default:
+			return httpChannel.ChannelConfiguration{}, fmt.Errorf("invalid renegotiation value %s for http endpoint %s", *endpoint.Spec.ClientTLS.Renegotiation, endpoint.ObjectMeta.Name)
+		}
+	}
+
+	dialer := &net.Dialer{
+		Timeout: 15 * time.Second,
+	}
+
+	tr := nethttp.DefaultTransport.(*nethttp.Transport).Clone()
+	tr.TLSHandshakeTimeout = 15 * time.Second
+	tr.TLSClientConfig = tlsConfig
+	tr.DialContext = dialer.DialContext
+
+	conf.Client = &nethttp.Client{
+		Timeout:   0,
+		Transport: tr,
+	}
+
+	return conf, nil
 }
 
 func (a *DaprRuntime) appendBuiltinSecretStore() {
@@ -3150,6 +3296,38 @@ func ShutdownSignal() chan os.Signal {
 	return stop
 }
 
+func (a *DaprRuntime) createHTTPEndpointsChannels() (map[string]channel.HTTPEndpointAppChannel, error) {
+	// Create dedicated app channels for known app endpoints
+	endpoints := a.compStore.ListHTTPEndpoints()
+
+	if len(endpoints) > 0 {
+		channels := make(map[string]channel.HTTPEndpointAppChannel, len(endpoints))
+
+		pipeline, err := a.buildAppHTTPPipeline()
+		if err != nil {
+			return nil, err
+		}
+
+		for _, e := range endpoints {
+			conf, err := a.getHTTPEndpointAppChannel(pipeline, e)
+			if err != nil {
+				return nil, err
+			}
+
+			ch, err := httpChannel.CreateHTTPChannel(conf)
+			if err != nil {
+				return nil, err
+			}
+
+			channels[e.ObjectMeta.Name] = ch
+		}
+
+		return channels, nil
+	}
+
+	return nil, nil
+}
+
 func (a *DaprRuntime) createChannels() (err error) {
 	// Create a HTTP channel for external HTTP endpoint invocation
 	pipeline, err := a.buildAppHTTPPipeline()
@@ -3157,7 +3335,7 @@ func (a *DaprRuntime) createChannels() (err error) {
 		return fmt.Errorf("failed to build app HTTP pipeline: %w", err)
 	}
 
-	a.httpEndpointsAppChannel, err = httpChannel.CreateHTTPChannel(a.getAppHTTPChannelConfig(pipeline, false))
+	a.httpEndpointsAppChannel, err = httpChannel.CreateHTTPChannel(a.getAppHTTPChannelConfig(pipeline))
 	if err != nil {
 		return fmt.Errorf("failed to create external HTTP app channel: %w", err)
 	}
@@ -3169,7 +3347,7 @@ func (a *DaprRuntime) createChannels() (err error) {
 
 	if a.runtimeConfig.appConnectionConfig.Protocol.IsHTTP() {
 		// Create a HTTP channel
-		a.appChannel, err = httpChannel.CreateHTTPChannel(a.getAppHTTPChannelConfig(pipeline, false))
+		a.appChannel, err = httpChannel.CreateHTTPChannel(a.getAppHTTPChannelConfig(pipeline))
 		if err != nil {
 			return fmt.Errorf("failed to create HTTP app channel: %w", err)
 		}
