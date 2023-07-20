@@ -76,6 +76,10 @@ type ChannelConfiguration struct {
 	Pipeline             httpMiddleware.Pipeline
 	TracingSpec          config.TracingSpec
 	MaxRequestBodySizeMB int
+	TLSClientCert        string
+	TLSClientKey         string
+	TLSRootCA            string
+	TLSRenegotiation     string
 }
 
 // CreateHTTPChannel creates an HTTP AppChannel.
