@@ -21,6 +21,7 @@ import (
 	"github.com/spf13/cast"
 	corev1 "k8s.io/api/core/v1"
 
+	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
 	"github.com/dapr/dapr/utils"
 )
 
@@ -32,25 +33,26 @@ type GetInjectedComponentContainersFn = func(appID string, namespace string) ([]
 // Note: make sure that the annotations defined here are in-sync with the constants in the pkg/injector/annotations package.
 type SidecarConfig struct {
 	GetInjectedComponentContainers GetInjectedComponentContainersFn
-	KubernetesMode                 bool `default:"true"`
-	Namespace                      string
-	TrustAnchors                   string
-	CertChain                      string
-	CertKey                        string
-	MTLSEnabled                    bool
-	Identity                       string
-	IgnoreEntrypointTolerations    []corev1.Toleration
-	ImagePullPolicy                corev1.PullPolicy
-	OperatorAddress                string
-	SentryAddress                  string
-	RunAsNonRoot                   bool
-	ReadOnlyRootFilesystem         bool
-	SidecarDropALLCapabilities     bool
-	DisableTokenVolume             bool
-	SidecarHTTPPort                int32 `default:"3500"`
-	SidecarAPIGRPCPort             int32 `default:"50001"`
-	SidecarInternalGRPCPort        int32 `default:"50002"`
-	SidecarPublicPort              int32 `default:"3501"`
+
+	Mode                        injectorConsts.DaprMode `default:"kubernetes"`
+	Namespace                   string
+	TrustAnchors                string
+	CertChain                   string
+	CertKey                     string
+	MTLSEnabled                 bool
+	Identity                    string
+	IgnoreEntrypointTolerations []corev1.Toleration
+	ImagePullPolicy             corev1.PullPolicy
+	OperatorAddress             string
+	SentryAddress               string
+	RunAsNonRoot                bool
+	ReadOnlyRootFilesystem      bool
+	SidecarDropALLCapabilities  bool
+	DisableTokenVolume          bool
+	SidecarHTTPPort             int32 `default:"3500"`
+	SidecarAPIGRPCPort          int32 `default:"50001"`
+	SidecarInternalGRPCPort     int32 `default:"50002"`
+	SidecarPublicPort           int32 `default:"3501"`
 
 	Enabled                             bool   `annotation:"dapr.io/enabled"`
 	AppPort                             int32  `annotation:"dapr.io/app-port"`

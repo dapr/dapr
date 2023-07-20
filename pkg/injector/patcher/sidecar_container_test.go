@@ -299,11 +299,11 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-public-port", "3501",
 			"--app-id", "app_id",
 			"--app-protocol", "http",
-			"--control-plane-address", "controlplane:9000",
-			"--sentry-address", "sentry:50000",
 			"--log-level", "info",
 			"--dapr-graceful-shutdown-seconds", "-1",
 			"--mode", "kubernetes",
+			"--control-plane-address", "controlplane:9000",
+			"--sentry-address", "sentry:50000",
 			"--app-port", "5000",
 			"--enable-metrics",
 			"--metrics-port", "9090",
@@ -375,11 +375,11 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-public-port", "3501",
 			"--app-id", "app_id",
 			"--app-protocol", "http",
-			"--control-plane-address", "controlplane:9000",
-			"--sentry-address", "sentry:50000",
 			"--log-level", "info",
 			"--dapr-graceful-shutdown-seconds", "-1",
 			"--mode", "kubernetes",
+			"--control-plane-address", "controlplane:9000",
+			"--sentry-address", "sentry:50000",
 			"--app-port", "5000",
 			"--enable-metrics",
 			"--metrics-port", "9090",
@@ -441,11 +441,11 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-public-port", "3501",
 			"--app-id", "app_id",
 			"--app-protocol", "http",
-			"--control-plane-address", "controlplane:9000",
-			"--sentry-address", "sentry:50000",
 			"--log-level", "info",
 			"--dapr-graceful-shutdown-seconds", "-1",
 			"--mode", "kubernetes",
+			"--control-plane-address", "controlplane:9000",
+			"--sentry-address", "sentry:50000",
 			"--app-port", "5000",
 			"--enable-metrics",
 			"--metrics-port", "9090",
@@ -505,11 +505,11 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-public-port", "3501",
 			"--app-id", "app_id",
 			"--app-protocol", "http",
-			"--control-plane-address", "controlplane:9000",
-			"--sentry-address", "sentry:50000",
 			"--log-level", "info",
 			"--dapr-graceful-shutdown-seconds", "-1",
 			"--mode", "kubernetes",
+			"--control-plane-address", "controlplane:9000",
+			"--sentry-address", "sentry:50000",
 			"--app-port", "5000",
 			"--enable-metrics",
 			"--metrics-port", "9090",
@@ -564,11 +564,11 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-public-port", "3501",
 			"--app-id", "app_id",
 			"--app-protocol", "http",
-			"--control-plane-address", "controlplane:9000",
-			"--sentry-address", "sentry:50000",
 			"--log-level", "info",
 			"--dapr-graceful-shutdown-seconds", "-1",
 			"--mode", "kubernetes",
+			"--control-plane-address", "controlplane:9000",
+			"--sentry-address", "sentry:50000",
 			"--enable-metrics",
 			"--metrics-port", "9090",
 			"--config", "config",
@@ -609,11 +609,11 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-public-port", "3501",
 			"--app-id", "app_id",
 			"--app-protocol", "http",
-			"--control-plane-address", "controlplane:9000",
-			"--sentry-address", "sentry:50000",
 			"--log-level", "info",
 			"--dapr-graceful-shutdown-seconds", "-1",
 			"--mode", "kubernetes",
+			"--control-plane-address", "controlplane:9000",
+			"--sentry-address", "sentry:50000",
 			"--enable-metrics",
 			"--metrics-port", "9090",
 			"--placement-host-address", "placement:50000",
@@ -653,11 +653,11 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-public-port", "3501",
 			"--app-id", "app_id",
 			"--app-protocol", "http",
-			"--control-plane-address", "controlplane:9000",
-			"--sentry-address", "sentry:50000",
 			"--log-level", "info",
 			"--dapr-graceful-shutdown-seconds", "5",
 			"--mode", "kubernetes",
+			"--control-plane-address", "controlplane:9000",
+			"--sentry-address", "sentry:50000",
 			"--enable-metrics",
 			"--metrics-port", "9090",
 			"--placement-host-address", "placement:50000",
@@ -1168,6 +1168,103 @@ func TestGetSidecarContainer(t *testing.T) {
 			assert.Equal(t, "0", container.Resources.Requests.Memory().String())
 			assert.Equal(t, "0", container.Resources.Limits.Cpu().String())
 			assert.Equal(t, "100Mi", container.Resources.Limits.Memory().String())
+		},
+	}))
+
+	t.Run("modes", testSuiteGenerator([]testCase{
+		{
+			name:                    "default is kubernetes",
+			sidecarConfigModifierFn: func(c *SidecarConfig) {},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.Contains(t, args, "--mode kubernetes")
+			},
+		},
+		{
+			name: "set kubernetes mode explicitly",
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.Mode = injectorConsts.ModeKubernetes
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.Contains(t, args, "--mode kubernetes")
+			},
+		},
+		{
+			name: "set standalone mode explicitly",
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.Mode = injectorConsts.ModeStandalone
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.Contains(t, args, "--mode standalone")
+			},
+		},
+		{
+			name: "omit when value is explicitly empty",
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.Mode = ""
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.NotContains(t, args, "--mode")
+			},
+		},
+		{
+			name: "omit when value is invalid",
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.Mode = "foo"
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.NotContains(t, args, "--mode")
+			},
+		},
+	}))
+
+	t.Run("sentry address", testSuiteGenerator([]testCase{
+		{
+			name: "omitted if empty",
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.SentryAddress = ""
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.NotContains(t, args, "--sentry-address")
+			},
+		},
+		{
+			name: "present when set",
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.SentryAddress = "somewhere:4000"
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.Contains(t, args, "--sentry-address somewhere:4000")
+			},
+		},
+	}))
+
+	t.Run("operator address", testSuiteGenerator([]testCase{
+		{
+			name: "omitted if empty",
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.OperatorAddress = ""
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.NotContains(t, args, "--control-plane-address")
+			},
+		},
+		{
+			name: "present when set",
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.OperatorAddress = "somewhere:4000"
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.Contains(t, args, "--control-plane-address somewhere:4000")
+			},
 		},
 	}))
 }

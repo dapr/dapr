@@ -13,6 +13,13 @@ limitations under the License.
 
 package consts
 
+import (
+	"github.com/dapr/dapr/pkg/modes"
+)
+
+// DaprMode is the runtime mode for Dapr.
+type DaprMode = modes.DaprMode
+
 const (
 	SidecarContainerName           = "daprd" // Name of the Dapr sidecar container
 	SidecarHTTPPortName            = "dapr-http"
@@ -34,4 +41,7 @@ const (
 	ComponentsUDSVolumeName        = "dapr-components-unix-domain-socket"   // Name of the Unix domain socket volume for components.
 	ComponentsUDSMountPathEnvVar   = "DAPR_COMPONENT_SOCKETS_FOLDER"
 	ComponentsUDSDefaultFolder     = "/tmp/dapr-components-sockets"
+
+	ModeKubernetes = modes.KubernetesMode // KubernetesMode is a Kubernetes Dapr mode.
+	ModeStandalone = modes.StandaloneMode // StandaloneMode is a Standalone Dapr mode.
 )

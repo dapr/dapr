@@ -20,6 +20,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/dapr/dapr/pkg/injector/annotations"
+	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
 )
 
 func TestSidecarConfigInit(t *testing.T) {
@@ -35,7 +36,7 @@ func TestSidecarConfigInit(t *testing.T) {
 	assert.True(t, c.EnableMetrics)
 
 	// These properties don't have an annotation but should have a default value anyways
-	assert.True(t, c.KubernetesMode)
+	assert.Equal(t, injectorConsts.ModeKubernetes, c.Mode)
 	assert.Equal(t, int32(3500), c.SidecarHTTPPort)
 	assert.Equal(t, int32(50001), c.SidecarAPIGRPCPort)
 

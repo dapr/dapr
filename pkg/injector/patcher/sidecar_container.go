@@ -69,14 +69,24 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 		"--dapr-public-port", strconv.FormatInt(int64(c.SidecarPublicPort), 10),
 		"--app-id", c.GetAppID(),
 		"--app-protocol", c.AppProtocol,
-		"--control-plane-address", c.OperatorAddress,
-		"--sentry-address", c.SentryAddress,
 		"--log-level", c.LogLevel,
 		"--dapr-graceful-shutdown-seconds", strconv.Itoa(c.GracefulShutdownSeconds),
 	}
 
-	if c.KubernetesMode {
+	// Mode is omitted if it's an unsupported value
+	switch c.Mode {
+	case injectorConsts.ModeKubernetes:
 		args = append(args, "--mode", "kubernetes")
+	case injectorConsts.ModeStandalone:
+		args = append(args, "--mode", "standalone")
+	}
+
+	if c.OperatorAddress != "" {
+		args = append(args, "--control-plane-address", c.OperatorAddress)
+	}
+
+	if c.SentryAddress != "" {
+		args = append(args, "--sentry-address", c.SentryAddress)
 	}
 
 	if c.AppPort > 0 {
