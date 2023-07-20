@@ -22,9 +22,8 @@ import (
 	"sync"
 	"time"
 
-	"k8s.io/utils/clock"
-
 	"github.com/google/uuid"
+	"k8s.io/utils/clock"
 
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors/internal"
@@ -41,8 +40,6 @@ const (
 )
 
 // Implements a reminders provider.
-//
-
 type reminders struct {
 	clock                clock.WithTicker
 	runningCh            chan struct{}
@@ -95,7 +92,7 @@ func (r *reminders) DrainRebalancedReminders(actorType string, actorID string, a
 	r.remindersLock.RUnlock()
 
 	for _, rem := range reminders {
-		// r.reminder refers to the actual reminder struct that is saved in the db
+		// rem.Reminder refers to the actual reminder struct that is saved in the db
 		if rem.Reminder.ActorType == actorType && rem.Reminder.ActorID == "actorID" {
 			reminderKey := constructCompositeKey(actorKey, rem.Reminder.Name)
 			stopChan, exists := r.activeReminders.Load(reminderKey)

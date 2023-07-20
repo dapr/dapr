@@ -102,12 +102,10 @@ type actorsRuntime struct {
 	appChannel           channel.AppChannel
 	placement            PlacementService
 	grpcConnectionFn     GRPCConnectionFn
-	config               Config
-	coreConfig           *internal.Config
+	actorsConfig         Config
 	timers               internal.TimersProvider
 	actorsReminders      internal.RemindersProvider
 	actorsTable          *sync.Map
-	evaluationChan       chan struct{}
 	appHealthy           *atomic.Bool
 	certChain            *daprCredentials.CertChain
 	tracingSpec          configuration.TracingSpec
@@ -164,8 +162,7 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) Actors {
 	a := &actorsRuntime{
 		appChannel:           opts.AppChannel,
 		grpcConnectionFn:     opts.GRPCConnectionFn,
-		config:               opts.ActorsConfig,
-		coreConfig:           &opts.ActorsConfig.Config,
+		actorsConfig:         opts.ActorsConfig,
 		timers:               timers.NewTimersProvider(clock),
 		actorsReminders:      remindersProvider,
 		certChain:            opts.CertChain,
@@ -174,7 +171,6 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) Actors {
 		storeName:            opts.StateStoreName,
 		placement:            opts.MockPlacement,
 		actorsTable:          &sync.Map{},
-		evaluationChan:       make(chan struct{}, 1),
 		appHealthy:           appHealthy,
 		ctx:                  ctx,
 		cancel:               cancel,
@@ -188,7 +184,7 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) Actors {
 	}
 
 	a.timers.SetExecuteTimerFn(a.executeTimer)
-	a.actorsReminders.SetExecuteReminderFn(a.executeReminderWrapper)
+	a.actorsReminders.SetExecuteReminderFn(a.executeReminder)
 	a.actorsReminders.SetResiliencyProvider(a.resiliency)
 	a.actorsReminders.SetStateStoreProviderFn(a.stateStore)
 	a.actorsReminders.SetLookupActorFn(a.isActorLocallyHosted)
@@ -203,7 +199,7 @@ func (a *actorsRuntime) isActorLocallyHosted(actorType string, actorID string) (
 		return false, ""
 	}
 
-	if a.isActorLocal(targetActorAddress, a.coreConfig.HostAddress, a.coreConfig.Port) {
+	if a.isActorLocal(targetActorAddress, a.actorsConfig.Config.HostAddress, a.actorsConfig.Config.Port) {
 		return true, targetActorAddress
 	}
 	return false, targetActorAddress
@@ -221,18 +217,18 @@ func (a *actorsRuntime) haveCompatibleStorage() bool {
 }
 
 func (a *actorsRuntime) Init() error {
-	conf := a.coreConfig
+	conf := a.actorsConfig.Config
 	if len(conf.PlacementAddresses) == 0 {
 		return errors.New("actors: couldn't connect to placement service: address is empty")
 	}
 
-	if len(a.coreConfig.HostedActorTypes) > 0 {
+	if len(a.actorsConfig.Config.HostedActorTypes) > 0 {
 		if !a.haveCompatibleStorage() {
 			return ErrIncompatibleStateStore
 		}
 	}
 
-	hostname := net.JoinHostPort(a.coreConfig.HostAddress, strconv.Itoa(a.coreConfig.Port))
+	hostname := net.JoinHostPort(a.actorsConfig.Config.HostAddress, strconv.Itoa(a.actorsConfig.Config.Port))
 
 	afterTableUpdateFn := func() {
 		a.drainRebalancedActors()
@@ -242,17 +238,17 @@ func (a *actorsRuntime) Init() error {
 
 	if a.placement == nil {
 		a.placement = placement.NewActorPlacement(
-			a.coreConfig.PlacementAddresses, a.certChain,
-			a.coreConfig.AppID, hostname, a.coreConfig.PodName, a.coreConfig.HostedActorTypes,
+			a.actorsConfig.Config.PlacementAddresses, a.certChain,
+			a.actorsConfig.Config.AppID, hostname, a.actorsConfig.Config.PodName, a.actorsConfig.Config.HostedActorTypes,
 			appHealthFn,
 			afterTableUpdateFn)
 	}
 
 	go a.placement.Start()
-	go a.deactivationTicker(a.config, a.deactivateActor)
+	go a.deactivationTicker(a.actorsConfig, a.deactivateActor)
 
 	log.Infof("actor runtime started. actor idle timeout: %v. actor scan interval: %v",
-		a.coreConfig.ActorIdleTimeout, a.coreConfig.ActorDeactivationScanInterval)
+		a.actorsConfig.Config.ActorIdleTimeout, a.actorsConfig.Config.ActorDeactivationScanInterval)
 
 	// Be careful to configure healthz endpoint option. If app healthz returns unhealthy status, Dapr will
 	// disconnect from placement to remove the node from consistent hashing ring.
@@ -262,18 +258,18 @@ func (a *actorsRuntime) Init() error {
 		health.WithFailureThreshold(4),
 		health.WithInterval(5*time.Second),
 		health.WithRequestTimeout(2*time.Second),
-		health.WithHTTPClient(a.coreConfig.HealthHTTPClient),
+		health.WithHTTPClient(a.actorsConfig.Config.HealthHTTPClient),
 	)
 
 	return nil
 }
 
 func (a *actorsRuntime) startAppHealthCheck(opts ...health.Option) {
-	if len(a.coreConfig.HostedActorTypes) == 0 || a.appChannel == nil {
+	if len(a.actorsConfig.Config.HostedActorTypes) == 0 || a.appChannel == nil {
 		return
 	}
 
-	ch := health.StartEndpointHealthCheck(a.ctx, a.coreConfig.HealthEndpoint+"/healthz", opts...)
+	ch := health.StartEndpointHealthCheck(a.ctx, a.actorsConfig.Config.HealthEndpoint+"/healthz", opts...)
 	for {
 		select {
 		case <-a.ctx.Done():
@@ -395,7 +391,7 @@ func (a *actorsRuntime) Call(ctx context.Context, req *invokev1.InvokeMethodRequ
 		lar = &lookupActorRes{}
 	}
 	var resp *invokev1.InvokeMethodResponse
-	if a.isActorLocal(lar.targetActorAddress, a.coreConfig.HostAddress, a.coreConfig.Port) {
+	if a.isActorLocal(lar.targetActorAddress, a.actorsConfig.Config.HostAddress, a.actorsConfig.Config.Port) {
 		resp, err = a.callLocalActor(ctx, req)
 	} else {
 		resp, err = a.callRemoteActorWithRetry(ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, a.callRemoteActor, lar.targetActorAddress, lar.appID, req)
@@ -465,7 +461,7 @@ func (a *actorsRuntime) getOrCreateActor(actorType, actorID string) *actor {
 	// call newActor, but this is trivial.
 	val, ok := a.actorsTable.Load(key)
 	if !ok {
-		val, _ = a.actorsTable.LoadOrStore(key, newActor(actorType, actorID, a.config.GetReentrancyForType(actorType).MaxStackDepth, a.clock))
+		val, _ = a.actorsTable.LoadOrStore(key, newActor(actorType, actorID, a.actorsConfig.GetReentrancyForType(actorType).MaxStackDepth, a.clock))
 	}
 
 	return val.(*actor)
@@ -478,7 +474,7 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 
 	// Reentrancy to determine how we lock.
 	var reentrancyID *string
-	if a.config.GetReentrancyForType(act.actorType).Enabled {
+	if a.actorsConfig.GetReentrancyForType(act.actorType).Enabled {
 		if headerValue, ok := req.Metadata()["Dapr-Reentrancy-Id"]; ok {
 			reentrancyID = &headerValue.GetValues()[0]
 		} else {
@@ -565,7 +561,7 @@ func (a *actorsRuntime) callRemoteActor(
 	targetAddress, targetID string,
 	req *invokev1.InvokeMethodRequest,
 ) (*invokev1.InvokeMethodResponse, func(destroy bool), error) {
-	conn, teardown, err := a.grpcConnectionFn(context.TODO(), targetAddress, targetID, a.coreConfig.Namespace)
+	conn, teardown, err := a.grpcConnectionFn(context.TODO(), targetAddress, targetID, a.actorsConfig.Config.Namespace)
 	if err != nil {
 		return nil, teardown, err
 	}
@@ -608,7 +604,7 @@ func (a *actorsRuntime) GetState(ctx context.Context, req *GetStateRequest) (*St
 	}
 
 	actorKey := req.ActorKey()
-	partitionKey := constructCompositeKey(a.coreConfig.AppID, actorKey)
+	partitionKey := constructCompositeKey(a.actorsConfig.Config.AppID, actorKey)
 	metadata := map[string]string{metadataPartitionKey: partitionKey}
 
 	key := a.constructActorStateKey(actorKey, req.Key)
@@ -643,7 +639,7 @@ func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *Tr
 	}
 
 	operations := make([]state.TransactionalStateOperation, len(req.Operations))
-	baseKey := constructCompositeKey(a.coreConfig.AppID, req.ActorKey())
+	baseKey := constructCompositeKey(a.actorsConfig.Config.AppID, req.ActorKey())
 	metadata := map[string]string{metadataPartitionKey: baseKey}
 	baseKey += daprSeparator
 	for i, o := range req.Operations {
@@ -690,7 +686,7 @@ func (a *actorsRuntime) IsActorHosted(ctx context.Context, req *ActorHostedReque
 }
 
 func (a *actorsRuntime) constructActorStateKey(actorKey, key string) string {
-	return constructCompositeKey(a.coreConfig.AppID, actorKey, key)
+	return constructCompositeKey(a.actorsConfig.Config.AppID, actorKey, key)
 }
 
 func (a *actorsRuntime) drainRebalancedActors() {
@@ -705,17 +701,17 @@ func (a *actorsRuntime) drainRebalancedActors() {
 			actorKey := key.(string)
 			actorType, actorID := a.getActorTypeAndIDFromKey(actorKey)
 			address, _ := a.placement.LookupActor(actorType, actorID)
-			if address != "" && !a.isActorLocal(address, a.coreConfig.HostAddress, a.coreConfig.Port) {
+			if address != "" && !a.isActorLocal(address, a.actorsConfig.Config.HostAddress, a.actorsConfig.Config.Port) {
 				// actor has been moved to a different host, deactivate when calls are done cancel any reminders
 				// each item in reminders contain a struct with some metadata + the actual reminder struct
 				a.actorsReminders.DrainRebalancedReminders(actorType, actorID, actorKey)
 
 				actor := value.(*actor)
-				if a.config.GetDrainRebalancedActorsForType(actorType) {
+				if a.actorsConfig.GetDrainRebalancedActorsForType(actorType) {
 					// wait until actor isn't busy or timeout hits
 					if actor.isBusy() {
 						select {
-						case <-a.clock.After(a.coreConfig.DrainOngoingCallTimeout):
+						case <-a.clock.After(a.actorsConfig.Config.DrainOngoingCallTimeout):
 							break
 						case <-actor.channel():
 							// if a call comes in from the actor for state changes, that's still allowed
@@ -748,7 +744,7 @@ func (a *actorsRuntime) drainRebalancedActors() {
 	wg.Wait()
 }
 
-// executeTimer implements reminder.ExecuteReminderFn.
+// executeTimer implements timers.ExecuteTimerFn.
 func (a *actorsRuntime) executeTimer(reminder *internal.Reminder) bool {
 	_, exists := a.actorsTable.Load(reminder.ActorKey())
 	if !exists {
@@ -756,7 +752,7 @@ func (a *actorsRuntime) executeTimer(reminder *internal.Reminder) bool {
 		return false
 	}
 
-	err := a.executeReminder(reminder, true)
+	err := a.doExecuteReminderOrTimer(reminder, true)
 	diag.DefaultMonitoring.ActorTimerFired(reminder.ActorType, err == nil)
 	if err != nil {
 		log.Errorf("error invoking timer on actor %s: %s", reminder.ActorKey(), err)
@@ -767,9 +763,9 @@ func (a *actorsRuntime) executeTimer(reminder *internal.Reminder) bool {
 	return true
 }
 
-// executeReminderWrapper implements reminder.ExecuteReminderFn.
-func (a *actorsRuntime) executeReminderWrapper(reminder *internal.Reminder) bool {
-	err := a.executeReminder(reminder, false)
+// executeReminder implements reminders.ExecuteReminderFn.
+func (a *actorsRuntime) executeReminder(reminder *internal.Reminder) bool {
+	err := a.doExecuteReminderOrTimer(reminder, false)
 	diag.DefaultMonitoring.ActorReminderFired(reminder.ActorType, err == nil)
 	if err != nil {
 		if errors.Is(err, ErrReminderCanceled) {
@@ -784,7 +780,7 @@ func (a *actorsRuntime) executeReminderWrapper(reminder *internal.Reminder) bool
 }
 
 // Executes a reminder or timer
-func (a *actorsRuntime) executeReminder(reminder *internal.Reminder, isTimer bool) (err error) {
+func (a *actorsRuntime) doExecuteReminderOrTimer(reminder *internal.Reminder, isTimer bool) (err error) {
 	var (
 		data         any
 		logName      string
@@ -894,7 +890,7 @@ func (a *actorsRuntime) RegisterInternalActor(ctx context.Context, actorType str
 
 		log.Debugf("registering internal actor type: %s", actorType)
 		actor.SetActorRuntime(a)
-		a.coreConfig.HostedActorTypes = append(a.coreConfig.HostedActorTypes, actorType)
+		a.actorsConfig.Config.HostedActorTypes = append(a.actorsConfig.Config.HostedActorTypes, actorType)
 		if a.placement != nil {
 			if err := a.placement.AddHostedActorType(actorType); err != nil {
 				return fmt.Errorf("error updating hosted actor types: %s", err)
@@ -905,8 +901,8 @@ func (a *actorsRuntime) RegisterInternalActor(ctx context.Context, actorType str
 }
 
 func (a *actorsRuntime) GetActiveActorsCount(ctx context.Context) []*runtimev1pb.ActiveActorsCount {
-	actorCountMap := make(map[string]int32, len(a.coreConfig.HostedActorTypes))
-	for _, actorType := range a.coreConfig.HostedActorTypes {
+	actorCountMap := make(map[string]int32, len(a.actorsConfig.Config.HostedActorTypes))
+	for _, actorType := range a.actorsConfig.Config.HostedActorTypes {
 		if !isInternalActor(actorType) {
 			actorCountMap[actorType] = 0
 		}

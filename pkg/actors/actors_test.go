@@ -312,7 +312,7 @@ func deactivateActorWithDuration(testActorsRuntime *actorsRuntime, actorType, ac
 	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 
 	ch := make(chan struct{}, 1)
-	go testActorsRuntime.deactivationTicker(testActorsRuntime.config, func(at, aid string) error {
+	go testActorsRuntime.deactivationTicker(testActorsRuntime.actorsConfig, func(at, aid string) error {
 		if actorType == at {
 			testActorsRuntime.removeActorFromTable(at, aid)
 			ch <- struct{}{}
@@ -396,8 +396,8 @@ func TestDeactivationTicker(t *testing.T) {
 		actorType, actorID := getTestActorTypeAndID()
 		actorKey := constructCompositeKey(actorType, actorID)
 
-		testActorsRuntime.config.ActorIdleTimeout = time.Second * 2
-		testActorsRuntime.config.ActorDeactivationScanInterval = time.Second * 1
+		testActorsRuntime.actorsConfig.ActorIdleTimeout = time.Second * 2
+		testActorsRuntime.actorsConfig.ActorDeactivationScanInterval = time.Second * 1
 
 		ch := deactivateActorWithDuration(testActorsRuntime, actorType, actorID)
 
@@ -420,8 +420,8 @@ func TestDeactivationTicker(t *testing.T) {
 		actorType, actorID := getTestActorTypeAndID()
 		actorKey := constructCompositeKey(actorType, actorID)
 
-		testActorsRuntime.config.ActorIdleTimeout = time.Second * 5
-		testActorsRuntime.config.ActorDeactivationScanInterval = time.Second * 1
+		testActorsRuntime.actorsConfig.ActorIdleTimeout = time.Second * 5
+		testActorsRuntime.actorsConfig.ActorDeactivationScanInterval = time.Second * 1
 
 		ch := deactivateActorWithDuration(testActorsRuntime, actorType, actorID)
 
@@ -444,9 +444,9 @@ func TestDeactivationTicker(t *testing.T) {
 		secondType := "b"
 		actorID := "1"
 
-		testActorsRuntime.config.EntityConfigs[firstType] = internal.EntityConfig{Entities: []string{firstType}, ActorIdleTimeout: time.Second * 2}
-		testActorsRuntime.config.EntityConfigs[secondType] = internal.EntityConfig{Entities: []string{secondType}, ActorIdleTimeout: time.Second * 5}
-		testActorsRuntime.config.ActorDeactivationScanInterval = time.Second * 1
+		testActorsRuntime.actorsConfig.EntityConfigs[firstType] = internal.EntityConfig{Entities: []string{firstType}, ActorIdleTimeout: time.Second * 2}
+		testActorsRuntime.actorsConfig.EntityConfigs[secondType] = internal.EntityConfig{Entities: []string{secondType}, ActorIdleTimeout: time.Second * 5}
+		testActorsRuntime.actorsConfig.ActorDeactivationScanInterval = time.Second * 1
 
 		ch1 := deactivateActorWithDuration(testActorsRuntime, firstType, actorID)
 		ch2 := deactivateActorWithDuration(testActorsRuntime, secondType, actorID)
@@ -471,7 +471,7 @@ func TestTimerExecution(t *testing.T) {
 	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 
 	period, _ := internal.NewReminderPeriod("2s")
-	err := testActorsRuntime.executeReminder(&internal.Reminder{
+	err := testActorsRuntime.doExecuteReminderOrTimer(&internal.Reminder{
 		ActorType:      actorType,
 		ActorID:        actorID,
 		Name:           "timer1",
@@ -492,7 +492,7 @@ func TestTimerExecutionZeroDuration(t *testing.T) {
 	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 
 	period, _ := internal.NewReminderPeriod("0ms")
-	err := testActorsRuntime.executeReminder(&internal.Reminder{
+	err := testActorsRuntime.doExecuteReminderOrTimer(&internal.Reminder{
 		ActorType:      actorType,
 		ActorID:        actorID,
 		Name:           "timer1",
@@ -513,7 +513,7 @@ func TestReminderExecution(t *testing.T) {
 	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 
 	period, _ := internal.NewReminderPeriod("2s")
-	err := testActorsRuntime.executeReminder(&internal.Reminder{
+	err := testActorsRuntime.doExecuteReminderOrTimer(&internal.Reminder{
 		ActorType:      actorType,
 		ActorID:        actorID,
 		RegisteredTime: time.Now().Add(2 * time.Second),
@@ -540,7 +540,7 @@ func TestReminderExecutionZeroDuration(t *testing.T) {
 	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 
 	period, _ := internal.NewReminderPeriod("0ms")
-	err := testActorsRuntime.executeReminder(&internal.Reminder{
+	err := testActorsRuntime.doExecuteReminderOrTimer(&internal.Reminder{
 		ActorType: actorType,
 		ActorID:   actorID,
 		Period:    period,
@@ -598,7 +598,7 @@ func TestTimerCounter(t *testing.T) {
 
 	// init default service metrics where actor metrics are registered
 	metricsCleanup()
-	assert.NoError(t, diag.DefaultMonitoring.Init(testActorsRuntime.config.AppID))
+	assert.NoError(t, diag.DefaultMonitoring.Init(testActorsRuntime.actorsConfig.AppID))
 	t.Cleanup(func() {
 		metricsCleanup()
 	})
@@ -1511,7 +1511,7 @@ func TestActorsAppHealthCheck(t *testing.T) {
 
 	clock := testActorsRuntime.clock.(*clocktesting.FakeClock)
 
-	testActorsRuntime.coreConfig.HostedActorTypes = []string{"actor1"}
+	testActorsRuntime.actorsConfig.Config.HostedActorTypes = []string{"actor1"}
 	go testActorsRuntime.startAppHealthCheck(
 		health.WithClock(clock),
 		health.WithFailureThreshold(1),
@@ -1530,7 +1530,7 @@ func TestHostedActorsWithoutStateStore(t *testing.T) {
 	defer testActorsRuntime.Stop()
 	clock := testActorsRuntime.clock.(*clocktesting.FakeClock)
 
-	testActorsRuntime.coreConfig.HostedActorTypes = []string{"actor1"}
+	testActorsRuntime.actorsConfig.Config.HostedActorTypes = []string{"actor1"}
 	go testActorsRuntime.startAppHealthCheck(
 		health.WithClock(clock),
 		health.WithFailureThreshold(1),
@@ -1549,7 +1549,7 @@ func TestNoHostedActorsWithoutStateStore(t *testing.T) {
 	defer testActorsRuntime.Stop()
 	clock := testActorsRuntime.clock.(*clocktesting.FakeClock)
 
-	testActorsRuntime.config.HostedActorTypes = []string{}
+	testActorsRuntime.actorsConfig.HostedActorTypes = []string{}
 	go testActorsRuntime.startAppHealthCheck(
 		health.WithClock(clock),
 		health.WithFailureThreshold(1),

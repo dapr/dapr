@@ -63,11 +63,13 @@ func newTestReminders() *reminders {
 	}
 	clock := clocktesting.NewFakeClock(startOfTime)
 	r := NewRemindersProvider(clock, opts)
-	r.SetStateStoreProviderFn(fakeTStore)
+	r.SetLookupActorFn(func(string, string) (bool, string) {
+		return true, localhost
+	})
 	return r.(*reminders)
 }
 
-func fakeTStore() (internal.TransactionalStateStore, error) {
+func fakeNoStore() (internal.TransactionalStateStore, error) {
 	return nil, errors.New(errStateStoreNotConfigured)
 }
 
@@ -78,10 +80,6 @@ func fakeRealTStore() (internal.TransactionalStateStore, error) {
 		fakeStor = daprt.NewFakeStateStore()
 	}
 	return fakeStor, nil
-}
-
-func fakeRealTStore2() (internal.TransactionalStateStore, error) {
-	return daprt.NewFakeStateStore(), nil
 }
 
 func fakeRealTStoreWithNoLock() (internal.TransactionalStateStore, error) {
@@ -100,6 +98,8 @@ type testRequest struct {
 func TestStoreIsNotInitialized(t *testing.T) {
 	testReminders := newTestReminders()
 	defer testReminders.Close()
+
+	testReminders.SetStateStoreProviderFn(fakeNoStore)
 
 	t.Run("getReminderTrack", func(t *testing.T) {
 		r, err := testReminders.getReminderTrack(context.Background(), "foo||bar")
@@ -150,10 +150,8 @@ func TestReminderCountFiring(t *testing.T) {
 		diag.DefaultMonitoring.ActorReminderFired(reminder.ActorType, true)
 		return true
 	})
-	testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-		return true, localhost
-	})
-	testReminders.Init(context.TODO())
+
+	testReminders.Init(context.Background())
 
 	actorType, actorID := getTestActorTypeAndID()
 
@@ -216,7 +214,7 @@ func TestReminderCountFiringBad(t *testing.T) {
 	testReminders.SetLookupActorFn(func(string, string) (bool, string) {
 		return true, localhost
 	})
-	testReminders.Init(context.TODO())
+	testReminders.Init(context.Background())
 
 	actorType, actorID := getTestActorTypeAndID()
 
@@ -273,7 +271,7 @@ func TestSetReminderTrack(t *testing.T) {
 	testReminders.SetLookupActorFn(func(string, string) (bool, string) {
 		return true, localhost
 	})
-	testReminders.Init(context.TODO())
+	testReminders.Init(context.Background())
 
 	actorType, actorID := getTestActorTypeAndID()
 	noRepetition := -1
@@ -295,7 +293,7 @@ func TestGetReminderTrack(t *testing.T) {
 		testReminders.SetLookupActorFn(func(string, string) (bool, string) {
 			return true, localhost
 		})
-		testReminders.Init(context.TODO())
+		testReminders.Init(context.Background())
 
 		actorType, actorID := getTestActorTypeAndID()
 		r, err := testReminders.getReminderTrack(context.Background(), constructCompositeKey(actorType, actorID))
@@ -316,7 +314,7 @@ func TestGetReminderTrack(t *testing.T) {
 		testReminders.SetLookupActorFn(func(string, string) (bool, string) {
 			return true, localhost
 		})
-		testReminders.Init(context.TODO())
+		testReminders.Init(context.Background())
 
 		actorType, actorID := getTestActorTypeAndID()
 		repetition := 10
@@ -347,7 +345,7 @@ func TestCreateReminder(t *testing.T) {
 	testReminders.SetLookupActorFn(func(string, string) (bool, string) {
 		return true, localhost
 	})
-	testReminders.Init(context.TODO())
+	testReminders.Init(context.Background())
 
 	actorType, actorID := getTestActorTypeAndID()
 	const secondActorType = "actor2"
@@ -579,7 +577,7 @@ func TestRenameReminder(t *testing.T) {
 	testReminders.SetLookupActorFn(func(string, string) (bool, string) {
 		return true, localhost
 	})
-	testReminders.Init(context.TODO())
+	testReminders.Init(context.Background())
 
 	actorType, actorID := getTestActorTypeAndID()
 	ctx := context.Background()
@@ -725,7 +723,7 @@ func TestOverrideReminder(t *testing.T) {
 		testReminders.SetLookupActorFn(func(string, string) (bool, string) {
 			return true, localhost
 		})
-		testReminders.Init(context.TODO())
+		testReminders.Init(context.Background())
 
 		actorType, actorID := getTestActorTypeAndID()
 		req := createReminderData(actorID, actorType, "reminder1", "1s", "1s", "", "a")
@@ -758,7 +756,7 @@ func TestOverrideReminder(t *testing.T) {
 		testReminders.SetLookupActorFn(func(string, string) (bool, string) {
 			return true, localhost
 		})
-		testReminders.Init(context.TODO())
+		testReminders.Init(context.Background())
 
 		actorType, actorID := getTestActorTypeAndID()
 		req := createReminderData(actorID, actorType, "reminder1", "1s", "1s", "", "")
@@ -789,7 +787,7 @@ func TestOverrideReminder(t *testing.T) {
 		testReminders.SetLookupActorFn(func(string, string) (bool, string) {
 			return true, localhost
 		})
-		testReminders.Init(context.TODO())
+		testReminders.Init(context.Background())
 
 		actorType, actorID := getTestActorTypeAndID()
 		req := createReminderData(actorID, actorType, "reminder1", "1s", "1s", "", "")
@@ -821,7 +819,7 @@ func TestOverrideReminder(t *testing.T) {
 		testReminders.SetLookupActorFn(func(string, string) (bool, string) {
 			return true, localhost
 		})
-		testReminders.Init(context.TODO())
+		testReminders.Init(context.Background())
 
 		actorType, actorID := getTestActorTypeAndID()
 		req := createReminderData(actorID, actorType, "reminder1", "2s", "1s", "PT5M", "")
@@ -863,7 +861,7 @@ func TestOverrideReminderCancelsActiveReminders(t *testing.T) {
 		testReminders.SetLookupActorFn(func(string, string) (bool, string) {
 			return true, localhost
 		})
-		testReminders.Init(context.TODO())
+		testReminders.Init(context.Background())
 
 		actorType, actorID := getTestActorTypeAndID()
 		reminderName := "reminder1"
@@ -938,7 +936,7 @@ func TestOverrideReminderCancelsMultipleActiveReminders(t *testing.T) {
 		testReminders.SetLookupActorFn(func(string, string) (bool, string) {
 			return true, localhost
 		})
-		testReminders.Init(context.TODO())
+		testReminders.Init(context.Background())
 
 		start := testReminders.clock.Now()
 		clock := testReminders.clock.(*clocktesting.FakeClock)
@@ -1015,7 +1013,7 @@ func TestDeleteReminderWithPartitions(t *testing.T) {
 	testReminders.SetLookupActorFn(func(string, string) (bool, string) {
 		return true, localhost
 	})
-	testReminders.Init(context.TODO())
+	testReminders.Init(context.Background())
 
 	actorType, actorID := getTestActorTypeAndID()
 	ctx := context.Background()
@@ -1076,7 +1074,7 @@ func TestDeleteReminder(t *testing.T) {
 	testReminders.SetLookupActorFn(func(string, string) (bool, string) {
 		return true, localhost
 	})
-	testReminders.Init(context.TODO())
+	testReminders.Init(context.Background())
 
 	actorType, actorID := getTestActorTypeAndID()
 	ctx := context.Background()
@@ -1249,7 +1247,7 @@ func TestReminderRepeats(t *testing.T) {
 			defer testReminders.Close()
 
 			fakeStor = nil
-			testReminders.SetStateStoreProviderFn(fakeRealTStore2)
+			testReminders.SetStateStoreProviderFn(fakeRealTStore)
 			testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
 				requestC <- testRequest{Data: "data"}
 				return true
@@ -1257,7 +1255,7 @@ func TestReminderRepeats(t *testing.T) {
 			testReminders.SetLookupActorFn(func(string, string) (bool, string) {
 				return true, localhost
 			})
-			testReminders.Init(context.TODO())
+			testReminders.Init(context.Background())
 
 			clock := testReminders.clock.(*clocktesting.FakeClock)
 
@@ -1407,7 +1405,7 @@ func Test_ReminderTTL(t *testing.T) {
 			testReminders.SetLookupActorFn(func(string, string) (bool, string) {
 				return true, localhost
 			})
-			testReminders.Init(context.TODO())
+			testReminders.Init(context.Background())
 
 			clock := testReminders.clock.(*clocktesting.FakeClock)
 
@@ -1489,7 +1487,7 @@ func reminderValidation(dueTime, period, ttl, msg string) func(t *testing.T) {
 		testReminders.SetLookupActorFn(func(string, string) (bool, string) {
 			return true, localhost
 		})
-		testReminders.Init(context.TODO())
+		testReminders.Init(context.Background())
 
 		actorType, actorID := getTestActorTypeAndID()
 
@@ -1534,7 +1532,7 @@ func TestGetReminder(t *testing.T) {
 	testReminders.SetLookupActorFn(func(string, string) (bool, string) {
 		return true, localhost
 	})
-	testReminders.Init(context.TODO())
+	testReminders.Init(context.Background())
 
 	actorType, actorID := getTestActorTypeAndID()
 	ctx := context.Background()
@@ -1567,7 +1565,7 @@ func TestReminderFires(t *testing.T) {
 	testReminders.SetLookupActorFn(func(string, string) (bool, string) {
 		return true, localhost
 	})
-	testReminders.Init(context.TODO())
+	testReminders.Init(context.Background())
 
 	clock := testReminders.clock.(*clocktesting.FakeClock)
 
@@ -1603,7 +1601,7 @@ func TestReminderDueDate(t *testing.T) {
 	testReminders.SetLookupActorFn(func(string, string) (bool, string) {
 		return true, localhost
 	})
-	testReminders.Init(context.TODO())
+	testReminders.Init(context.Background())
 
 	clock := testReminders.clock.(*clocktesting.FakeClock)
 
@@ -1642,7 +1640,7 @@ func TestReminderPeriod(t *testing.T) {
 	testReminders.SetLookupActorFn(func(string, string) (bool, string) {
 		return true, localhost
 	})
-	testReminders.Init(context.TODO())
+	testReminders.Init(context.Background())
 
 	clock := testReminders.clock.(*clocktesting.FakeClock)
 
@@ -1700,7 +1698,7 @@ func TestReminderFiresOnceWithEmptyPeriod(t *testing.T) {
 	testReminders.SetLookupActorFn(func(string, string) (bool, string) {
 		return true, localhost
 	})
-	testReminders.Init(context.TODO())
+	testReminders.Init(context.Background())
 
 	clock := testReminders.clock.(*clocktesting.FakeClock)
 
