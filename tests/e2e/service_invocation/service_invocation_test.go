@@ -1517,7 +1517,7 @@ func TestNegativeCases(t *testing.T) {
 				require.Equal(t, 500, status)
 				// This error could have code either DeadlineExceeded or Internal, depending on where the context timeout was caught
 				// Valid errors are:
-				// - `rpc error: code = Internal desc = fail to invoke, id: serviceinvocation-callee-0, err: rpc error: code = Internal desc = error invoking app channel: Post \"http://127.0.0.1:3000/timeouterror\": context deadline exceeded``
+				// - `rpc error: code = Internal desc = failed to invoke, id: serviceinvocation-callee-0, err: rpc error: code = Internal desc = error invoking app channel: Post \"http://127.0.0.1:3000/timeouterror\": context deadline exceeded``
 				// - `rpc error: code = DeadlineExceeded desc = context deadline exceeded`
 				assert.Contains(t, testResults.RawError, "rpc error:")
 				assert.Contains(t, testResults.RawError, "context deadline exceeded")

@@ -88,7 +88,7 @@ func genLeafCert(rootPK *ecdsa.PrivateKey, rootCert x509.Certificate, dns string
 		return nil, nil, err
 	}
 
-	pkBytes, err := x509.MarshalECPrivateKey(pk)
+	pkBytes, err := x509.MarshalPKCS8PrivateKey(pk)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -108,7 +108,7 @@ func genLeafCert(rootPK *ecdsa.PrivateKey, rootCert x509.Certificate, dns string
 		return nil, nil, err
 	}
 
-	pkPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: pkBytes})
+	pkPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: pkBytes})
 	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certBytes})
 
 	return certPEM, pkPEM, nil

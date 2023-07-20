@@ -3201,10 +3201,10 @@ func TestGetHTTPEndpointAppChannel(t *testing.T) {
 	testPK, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
 
-	testPKBytes, err := x509.MarshalECPrivateKey(testPK)
+	testPKBytes, err := x509.MarshalPKCS8PrivateKey(testPK)
 	require.NoError(t, err)
 	testPKPEM := pem.EncodeToMemory(&pem.Block{
-		Type: "EC PRIVATE KEY", Bytes: testPKBytes,
+		Type: "PRIVATE KEY", Bytes: testPKBytes,
 	})
 
 	cert := &x509.Certificate{
