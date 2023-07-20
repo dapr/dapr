@@ -16,6 +16,8 @@ package timers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"runtime"
 	"testing"
 	"time"
 
@@ -207,6 +209,61 @@ func TestOverrideTimer(t *testing.T) {
 			t.Fatal("Did not receive a signal in time")
 		}
 	})
+}
+
+func TestCreateTimerGoroutineLeak(t *testing.T) {
+	clock := clocktesting.NewFakeClock(startOfTime)
+	provider := NewTimersProvider(clock).(*timers)
+
+	createFn := func(i int, ttl bool) error {
+		req := &internal.CreateTimerRequest{
+			ActorID:   "myactor",
+			ActorType: "mytype",
+			Name:      fmt.Sprintf("timer%d", i),
+			Data:      json.RawMessage(`"data"`),
+			DueTime:   "2s",
+		}
+		if ttl {
+			req.DueTime = "1s"
+			req.Period = "1s"
+			req.TTL = "2s"
+		}
+		r, err := req.NewReminder(clock.Now())
+		if err != nil {
+			return err
+		}
+		return provider.CreateTimer(context.Background(), r)
+	}
+
+	// Get the baseline goroutines
+	initialCount := runtime.NumGoroutine()
+
+	// Create 10 timers with unique names
+	for i := 0; i < 10; i++ {
+		require.NoError(t, createFn(i, false))
+	}
+
+	// Create 5 timers that override the first ones
+	for i := 0; i < 5; i++ {
+		require.NoError(t, createFn(i, false))
+	}
+
+	// Create 5 timers that have TTLs
+	for i := 10; i < 15; i++ {
+		require.NoError(t, createFn(i, true))
+	}
+
+	// Advance the clock to make the timers fire
+	time.Sleep(150 * time.Millisecond)
+	clock.Sleep(5 * time.Second)
+	time.Sleep(150 * time.Millisecond)
+	clock.Sleep(5 * time.Second)
+
+	// Get the number of goroutines again, which should be +/- 2 the initial one (we give it some buffer)
+	require.Eventuallyf(t, func() bool {
+		currentCount := runtime.NumGoroutine()
+		return currentCount < (initialCount+2) && currentCount > (initialCount-2)
+	}, time.Second, 50*time.Millisecond, "Current number of goroutine %[1]d is outside of range [%[2]d-2, %[2]d+2] (current count may be stale)", time.Duration(runtime.NumGoroutine()), initialCount)
 }
 
 func createTimer(t *testing.T, now time.Time, req internal.CreateTimerRequest) *internal.Reminder {

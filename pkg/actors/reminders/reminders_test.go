@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"runtime"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -1214,7 +1215,7 @@ func TestReminderRepeats(t *testing.T) {
 	}
 }
 
-func Test_ReminderTTL(t *testing.T) {
+func TestReminderTTL(t *testing.T) {
 	tests := map[string]struct {
 		dueTime    string
 		period     string
@@ -1518,6 +1519,78 @@ func TestReminderFiresOnceWithEmptyPeriod(t *testing.T) {
 
 	track, _ := testReminders.getReminderTrack(context.Background(), constructCompositeKey(actorKey, "reminder1"))
 	assert.Empty(t, track.LastFiredTime)
+}
+
+func TestCreateReminderGoroutineLeak(t *testing.T) {
+	testReminders := newTestReminders()
+	clock := testReminders.clock.(*clocktesting.FakeClock)
+
+	actorType, actorID := getTestActorTypeAndID()
+
+	createFn := func(i int, ttl bool, dueTime string) error {
+		req := &internal.CreateReminderRequest{
+			ActorType: actorType,
+			ActorID:   actorID,
+			Name:      fmt.Sprintf("reminder%d", i),
+			Data:      json.RawMessage(`"data"`),
+			DueTime:   dueTime,
+		}
+		if ttl {
+			req.DueTime = "1s"
+			req.Period = "1s"
+			req.TTL = "2s"
+		}
+		reminder, err := req.NewReminder(clock.Now())
+		if err != nil {
+			return err
+		}
+		return testReminders.CreateReminder(context.Background(), reminder)
+	}
+
+	// Get the baseline goroutines
+	initialCount := runtime.NumGoroutine()
+
+	// Create 10 reminders with unique names
+	for i := 0; i < 10; i++ {
+		require.NoError(t, createFn(i, false, "2s"))
+	}
+
+	// Create 5 reminders that override the first ones
+	for i := 0; i < 5; i++ {
+		require.NoError(t, createFn(i, false, "2s"))
+	}
+
+	// Create 5 reminders that have TTLs
+	for i := 10; i < 15; i++ {
+		require.NoError(t, createFn(i, true, "2s"))
+	}
+
+	// Create 5 reminders with a long due time
+	for i := 15; i < 20; i++ {
+		require.NoError(t, createFn(i, false, "1h"))
+	}
+
+	// Advance the clock to make the first reminders fire
+	time.Sleep(150 * time.Millisecond)
+	clock.Sleep(5 * time.Second)
+	time.Sleep(150 * time.Millisecond)
+	clock.Sleep(5 * time.Second)
+
+	// Get the number of goroutines again, which should be +/- 2 the initial one (we give it some buffer) plus 5, because we still have 5 active reminders
+	expectCount := initialCount + 5
+	require.Eventuallyf(t, func() bool {
+		currentCount := runtime.NumGoroutine()
+		return currentCount < (expectCount+2) && currentCount > (expectCount-2)
+	}, time.Second, 50*time.Millisecond, "Current number of goroutine %[1]d is outside of range [%[2]d-2, %[2]d+2] (current count may be stale)", time.Duration(runtime.NumGoroutine()), expectCount)
+
+	// Stop the provider
+	require.NoError(t, testReminders.Close())
+
+	// Get the number of goroutines again, which should be +/- 2 the initial one (we give it some buffer)
+	require.Eventuallyf(t, func() bool {
+		currentCount := runtime.NumGoroutine()
+		return currentCount < (initialCount+2) && currentCount > (initialCount-2)
+	}, time.Second, 50*time.Millisecond, "Current number of goroutine %[1]d is outside of range [%[2]d-2, %[2]d+2] (current count may be stale)", time.Duration(runtime.NumGoroutine()), initialCount)
 }
 
 func getTestActorTypeAndID() (string, string) {

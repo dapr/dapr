@@ -634,7 +634,7 @@ func (r *reminders) getRemindersForActorType(ctx context.Context, actorType stri
 	if resp == nil {
 		resp = &state.GetResponse{}
 	}
-	log.Debugf("read reminders from %s without partition", key)
+	log.Debugf("Read reminders from %s without partition", key)
 
 	var reminders []internal.Reminder
 	if len(resp.Data) > 0 {
@@ -742,7 +742,7 @@ func (r *reminders) migrateRemindersForActorType(ctx context.Context, store inte
 		return fmt.Errorf("could not migrate reminders for actor type %s due to race condition in actor metadata", actorType)
 	}
 
-	log.Infof("migrating %d reminders for actor type %s", len(reminderRefs), actorType)
+	log.Infof("Migrating %d reminders for actor type %s", len(reminderRefs), actorType)
 	*actorMetadata = *refreshedActorMetadata
 
 	// Recreate as a new metadata identifier.
@@ -783,7 +783,7 @@ func (r *reminders) migrateRemindersForActorType(ctx context.Context, store inte
 	}
 
 	log.Warnf(
-		"completed actor metadata record migration for actor type %s, new metadata ID = %s",
+		"Completed actor metadata record migration for actor type %s, new metadata ID = %s",
 		actorType, actorMetadata.ID)
 	return nil
 }
@@ -877,7 +877,7 @@ func (r *reminders) startReminder(reminder *internal.Reminder, stopChannel chan 
 					eTag = track.Etag
 				}
 			} else {
-				log.Error("Could not find active reminder with key: " + reminderKey)
+				log.Error("Could not find active reminder with key: %s", reminderKey)
 				nextTimer = nil
 				return
 			}
