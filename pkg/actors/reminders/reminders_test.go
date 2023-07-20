@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -42,13 +43,6 @@ const (
 	TestKeyName                     = "key0"
 	TestPodName                     = "testPodName"
 	TestActorMetadataPartitionCount = 3
-
-	actorTimersLastValueViewName     = "runtime/actor/timers"
-	actorRemindersLastValueViewName  = "runtime/actor/reminders"
-	actorTimersFiredTotalViewName    = "runtime/actor/timers_fired_total"
-	actorRemindersFiredTotalViewName = "runtime/actor/reminders_fired_total"
-	errStateStoreNotConfigured       = `actors: state store does not exist or incorrectly configured. Have you set the property '{"name": "actorStateStore", "value": "true"}' in your state store component file?`
-	localhost                        = "localhost"
 )
 
 func newTestReminders() *reminders {
@@ -63,29 +57,17 @@ func newTestReminders() *reminders {
 	}
 	clock := clocktesting.NewFakeClock(startOfTime)
 	r := NewRemindersProvider(clock, opts)
+	store := daprt.NewFakeStateStore()
+	r.SetStateStoreProviderFn(func() (internal.TransactionalStateStore, error) {
+		return store, nil
+	})
 	r.SetLookupActorFn(func(string, string) (bool, string) {
-		return true, localhost
+		return true, "localhost"
+	})
+	r.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
+		return true
 	})
 	return r.(*reminders)
-}
-
-func fakeNoStore() (internal.TransactionalStateStore, error) {
-	return nil, errors.New(errStateStoreNotConfigured)
-}
-
-var fakeStor internal.TransactionalStateStore
-
-func setFakeStore(store internal.TransactionalStateStore) {
-	fakeStor = store
-}
-
-func fakeRealTStore() (internal.TransactionalStateStore, error) {
-	return fakeStor, nil
-}
-
-func fakeRealTStoreWithNoLock() (internal.TransactionalStateStore, error) {
-	fakeStor.(*daprt.FakeStateStore).NoLock = true
-	return fakeStor, nil
 }
 
 // testRequest is the request object that encapsulates the `data` field of a request.
@@ -97,7 +79,9 @@ func TestStoreIsNotInitialized(t *testing.T) {
 	testReminders := newTestReminders()
 	defer testReminders.Close()
 
-	testReminders.SetStateStoreProviderFn(fakeNoStore)
+	testReminders.SetStateStoreProviderFn(func() (internal.TransactionalStateStore, error) {
+		return nil, errors.New("simulated")
+	})
 
 	t.Run("getReminderTrack", func(t *testing.T) {
 		r, err := testReminders.getReminderTrack(context.Background(), "foo||bar")
@@ -140,11 +124,15 @@ func TestReminderCountFiring(t *testing.T) {
 	testReminders := newTestReminders()
 	defer testReminders.Close()
 
-	setFakeStore(daprt.NewFakeStateStore())
-	testReminders.SetStateStoreProviderFn(fakeRealTStore)
+	// init default service metrics where actor metrics are registered
+	require.NoError(t, diag.DefaultMonitoring.Init(testReminders.config.AppID))
+	t.Cleanup(func() {
+		metricsCleanup()
+	})
+
 	var executereminderFnCount int64 = 0
 	testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
-		executereminderFnCount++
+		atomic.AddInt64(&executereminderFnCount, 1)
 		diag.DefaultMonitoring.ActorReminderFired(reminder.ActorType, true)
 		return true
 	})
@@ -153,14 +141,7 @@ func TestReminderCountFiring(t *testing.T) {
 
 	actorType, actorID := getTestActorTypeAndID()
 
-	// init default service metrics where actor metrics are registered
-	assert.NoError(t, diag.DefaultMonitoring.Init(testReminders.config.AppID))
-	t.Cleanup(func() {
-		metricsCleanup()
-	})
-
-	numReminders := 10
-
+	const numReminders = 10
 	for i := 0; i < numReminders; i++ {
 		req := internal.CreateReminderRequest{
 			ActorType: actorType,
@@ -170,13 +151,70 @@ func TestReminderCountFiring(t *testing.T) {
 			Period:    "10s",
 		}
 		reminder, err := req.NewReminder(testReminders.clock.Now())
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		require.NoError(t, testReminders.CreateReminder(context.Background(), reminder))
 	}
 
 	time.Sleep(200 * time.Millisecond)
 	testReminders.clock.Sleep(500 * time.Millisecond)
-	numPeriods := 20
+	const numPeriods = 20
+	for i := 0; i < numPeriods; i++ {
+		testReminders.clock.Sleep(10 * time.Second)
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	rows, err := view.RetrieveData("runtime/actor/reminders")
+	require.NoError(t, err)
+	require.Equal(t, 1, len(rows))
+	assert.Equal(t, int64(numReminders), int64(rows[0].Data.(*view.LastValueData).Value))
+
+	// check metrics recorded
+	rows, err = view.RetrieveData("runtime/actor/reminders_fired_total")
+	require.NoError(t, err)
+	require.Equal(t, 1, len(rows))
+	assert.Equal(t, int64(numReminders*numPeriods), rows[0].Data.(*view.CountData).Value)
+	assert.Equal(t, int64(numReminders*numPeriods), atomic.LoadInt64(&executereminderFnCount))
+	diagtestutils.RequireTagExist(t, rows, diagtestutils.NewTag("success", strconv.FormatBool(true)))
+	diagtestutils.RequireTagNotExist(t, rows, diagtestutils.NewTag("success", strconv.FormatBool(false)))
+}
+
+func TestReminderCountFiringBad(t *testing.T) {
+	testReminders := newTestReminders()
+	defer testReminders.Close()
+
+	// init default service metrics where actor metrics are registered
+	require.NoError(t, diag.DefaultMonitoring.Init(testReminders.config.AppID))
+	t.Cleanup(func() {
+		metricsCleanup()
+	})
+
+	var executereminderFnCount int64 = 0
+	testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
+		atomic.AddInt64(&executereminderFnCount, 1)
+		diag.DefaultMonitoring.ActorReminderFired(reminder.ActorType, false)
+		return true
+	})
+	testReminders.Init(context.Background())
+
+	actorType, actorID := getTestActorTypeAndID()
+
+	const numReminders = 2
+	for i := 0; i < numReminders; i++ {
+		req := internal.CreateReminderRequest{
+			ActorType: actorType,
+			ActorID:   actorID,
+			Name:      fmt.Sprintf("reminder%d", i),
+			Data:      json.RawMessage(`"data"`),
+			Period:    "10s",
+		}
+		reminder, err := req.NewReminder(testReminders.clock.Now())
+		require.NoError(t, err)
+		require.NoError(t, testReminders.CreateReminder(context.Background(), reminder))
+	}
+
+	time.Sleep(200 * time.Millisecond)
+	testReminders.clock.Sleep(500 * time.Millisecond)
+	const numPeriods = 6
 	for i := 0; i < numPeriods; i++ {
 		testReminders.clock.Sleep(10 * time.Second)
 		time.Sleep(50 * time.Millisecond)
@@ -188,71 +226,11 @@ func TestReminderCountFiring(t *testing.T) {
 	assert.Equal(t, int64(numReminders), int64(rows[0].Data.(*view.LastValueData).Value))
 
 	// check metrics recorded
-	rows, err = view.RetrieveData(actorRemindersFiredTotalViewName)
+	rows, err = view.RetrieveData("runtime/actor/reminders_fired_total")
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(rows))
 	assert.Equal(t, int64(numReminders*numPeriods), rows[0].Data.(*view.CountData).Value)
-	assert.Equal(t, int64(numReminders*numPeriods), executereminderFnCount)
-	diagtestutils.RequireTagExist(t, rows, diagtestutils.NewTag("success", strconv.FormatBool(true)))
-	diagtestutils.RequireTagNotExist(t, rows, diagtestutils.NewTag("success", strconv.FormatBool(false)))
-}
-
-func TestReminderCountFiringBad(t *testing.T) {
-	testReminders := newTestReminders()
-	defer testReminders.Close()
-
-	setFakeStore(daprt.NewFakeStateStore())
-	testReminders.SetStateStoreProviderFn(fakeRealTStore)
-	var executereminderFnCount int64 = 0
-	testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
-		executereminderFnCount++
-		diag.DefaultMonitoring.ActorReminderFired(reminder.ActorType, false)
-		return true
-	})
-	testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-		return true, localhost
-	})
-	testReminders.Init(context.Background())
-
-	actorType, actorID := getTestActorTypeAndID()
-
-	// init default service metrics where actor metrics are registered
-	assert.NoError(t, diag.DefaultMonitoring.Init(testReminders.config.AppID))
-
-	numReminders := 2
-
-	for i := 0; i < numReminders; i++ {
-		req := internal.CreateReminderRequest{
-			ActorType: actorType,
-			ActorID:   actorID,
-			Name:      fmt.Sprintf("reminder%d", i),
-			Data:      json.RawMessage(`"data"`),
-			Period:    "10s",
-		}
-		reminder, err := req.NewReminder(testReminders.clock.Now())
-		assert.NoError(t, err)
-		require.NoError(t, testReminders.CreateReminder(context.Background(), reminder))
-	}
-
-	time.Sleep(200 * time.Millisecond)
-	testReminders.clock.Sleep(500 * time.Millisecond)
-	numPeriods := 5
-	for i := 0; i < numPeriods; i++ {
-		testReminders.clock.Sleep(10 * time.Second)
-		time.Sleep(50 * time.Millisecond)
-	}
-
-	rows, err := view.RetrieveData(actorRemindersLastValueViewName)
-	assert.NoError(t, err)
-	assert.Equal(t, 1, len(rows))
-	assert.Equal(t, int64(numReminders), int64(rows[0].Data.(*view.LastValueData).Value))
-
-	// check metrics recorded
-	rows, err = view.RetrieveData(actorRemindersFiredTotalViewName)
-	assert.NoError(t, err)
-	assert.Equal(t, 1, len(rows))
-	assert.Equal(t, int64(numReminders*numPeriods), rows[0].Data.(*view.CountData).Value)
-	assert.Equal(t, int64(numReminders*numPeriods), executereminderFnCount)
+	assert.Equal(t, int64(numReminders*numPeriods), atomic.LoadInt64(&executereminderFnCount))
 	diagtestutils.RequireTagExist(t, rows, diagtestutils.NewTag("success", strconv.FormatBool(false)))
 	diagtestutils.RequireTagNotExist(t, rows, diagtestutils.NewTag("success", strconv.FormatBool(true)))
 }
@@ -260,15 +238,6 @@ func TestReminderCountFiringBad(t *testing.T) {
 func TestSetReminderTrack(t *testing.T) {
 	testReminders := newTestReminders()
 	defer testReminders.Close()
-
-	setFakeStore(daprt.NewFakeStateStore())
-	testReminders.SetStateStoreProviderFn(fakeRealTStore)
-	testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
-		return true
-	})
-	testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-		return true, localhost
-	})
 	testReminders.Init(context.Background())
 
 	actorType, actorID := getTestActorTypeAndID()
@@ -281,16 +250,6 @@ func TestGetReminderTrack(t *testing.T) {
 	t.Run("reminder doesn't exist", func(t *testing.T) {
 		testReminders := newTestReminders()
 		defer testReminders.Close()
-
-		setFakeStore(daprt.NewFakeStateStore())
-		testReminders.SetStateStoreProviderFn(fakeRealTStore)
-
-		testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
-			return true
-		})
-		testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-			return true, localhost
-		})
 		testReminders.Init(context.Background())
 
 		actorType, actorID := getTestActorTypeAndID()
@@ -302,16 +261,6 @@ func TestGetReminderTrack(t *testing.T) {
 	t.Run("reminder exists", func(t *testing.T) {
 		testReminders := newTestReminders()
 		defer testReminders.Close()
-
-		setFakeStore(daprt.NewFakeStateStore())
-		testReminders.SetStateStoreProviderFn(fakeRealTStore)
-
-		testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
-			return true
-		})
-		testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-			return true, localhost
-		})
 		testReminders.Init(context.Background())
 
 		actorType, actorID := getTestActorTypeAndID()
@@ -333,15 +282,14 @@ func TestCreateReminder(t *testing.T) {
 
 	// Set the state store to not use locks when accessing data.
 	// This will cause race conditions to surface when running these tests with `go test -race` if the methods accessing reminders' storage are not safe for concurrent access.
-
-	setFakeStore(daprt.NewFakeStateStore())
-	testReminders.SetStateStoreProviderFn(fakeRealTStoreWithNoLock)
+	store := daprt.NewFakeStateStore()
+	store.NoLock = true
+	testReminders.SetStateStoreProviderFn(func() (internal.TransactionalStateStore, error) {
+		return store, nil
+	})
 	testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
 		diag.DefaultMonitoring.ActorReminderFired(reminder.ActorType, true)
 		return true
-	})
-	testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-		return true, localhost
 	})
 	testReminders.Init(context.Background())
 
@@ -391,12 +339,8 @@ func TestCreateReminder(t *testing.T) {
 	testRemindersWithPartition := newTestRemindersWithMockAndActorMetadataPartition()
 	defer testRemindersWithPartition.Close()
 
-	testRemindersWithPartition.SetStateStoreProviderFn(fakeRealTStore)
-	testRemindersWithPartition.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
-		return true
-	})
-	testRemindersWithPartition.SetLookupActorFn(func(string, string) (bool, string) {
-		return true, localhost
+	testRemindersWithPartition.SetStateStoreProviderFn(func() (internal.TransactionalStateStore, error) {
+		return store, nil
 	})
 
 	for i := 1; i < numReminders; i++ {
@@ -565,15 +509,12 @@ func TestRenameReminder(t *testing.T) {
 	testReminders := newTestReminders()
 	defer testReminders.Close()
 
-	setFakeStore(daprt.NewFakeStateStore())
-	testReminders.SetStateStoreProviderFn(fakeRealTStoreWithNoLock)
+	store := daprt.NewFakeStateStore()
+	store.NoLock = true
+	testReminders.SetStateStoreProviderFn(func() (internal.TransactionalStateStore, error) {
+		return store, nil
+	})
 
-	testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
-		return true
-	})
-	testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-		return true, localhost
-	})
 	testReminders.Init(context.Background())
 
 	actorType, actorID := getTestActorTypeAndID()
@@ -708,16 +649,6 @@ func TestOverrideReminder(t *testing.T) {
 	t.Run("override data", func(t *testing.T) {
 		testReminders := newTestReminders()
 		defer testReminders.Close()
-
-		setFakeStore(daprt.NewFakeStateStore())
-		testReminders.SetStateStoreProviderFn(fakeRealTStore)
-
-		testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
-			return true
-		})
-		testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-			return true, localhost
-		})
 		testReminders.Init(context.Background())
 
 		actorType, actorID := getTestActorTypeAndID()
@@ -741,16 +672,6 @@ func TestOverrideReminder(t *testing.T) {
 	t.Run("override dueTime", func(t *testing.T) {
 		testReminders := newTestReminders()
 		defer testReminders.Close()
-
-		setFakeStore(daprt.NewFakeStateStore())
-		testReminders.SetStateStoreProviderFn(fakeRealTStore)
-
-		testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
-			return true
-		})
-		testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-			return true, localhost
-		})
 		testReminders.Init(context.Background())
 
 		actorType, actorID := getTestActorTypeAndID()
@@ -772,16 +693,6 @@ func TestOverrideReminder(t *testing.T) {
 	t.Run("override period", func(t *testing.T) {
 		testReminders := newTestReminders()
 		defer testReminders.Close()
-
-		setFakeStore(daprt.NewFakeStateStore())
-		testReminders.SetStateStoreProviderFn(fakeRealTStore)
-
-		testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
-			return true
-		})
-		testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-			return true, localhost
-		})
 		testReminders.Init(context.Background())
 
 		actorType, actorID := getTestActorTypeAndID()
@@ -804,16 +715,6 @@ func TestOverrideReminder(t *testing.T) {
 	t.Run("override TTL", func(t *testing.T) {
 		testReminders := newTestReminders()
 		defer testReminders.Close()
-
-		setFakeStore(daprt.NewFakeStateStore())
-		testReminders.SetStateStoreProviderFn(fakeRealTStore)
-
-		testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
-			return true
-		})
-		testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-			return true, localhost
-		})
 		testReminders.Init(context.Background())
 
 		actorType, actorID := getTestActorTypeAndID()
@@ -845,16 +746,9 @@ func TestOverrideReminderCancelsActiveReminders(t *testing.T) {
 		testReminders := newTestReminders()
 		defer testReminders.Close()
 		clock := testReminders.clock.(*clocktesting.FakeClock)
-
-		setFakeStore(daprt.NewFakeStateStore())
-		testReminders.SetStateStoreProviderFn(fakeRealTStore)
 		testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
 			requestC <- testRequest{Data: "c"}
-
 			return true
-		})
-		testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-			return true, localhost
 		})
 		testReminders.Init(context.Background())
 
@@ -921,15 +815,9 @@ func TestOverrideReminderCancelsMultipleActiveReminders(t *testing.T) {
 		requestC := make(chan testRequest, 10)
 		testReminders := newTestReminders()
 		defer testReminders.Close()
-
-		setFakeStore(daprt.NewFakeStateStore())
-		testReminders.SetStateStoreProviderFn(fakeRealTStore)
 		testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
 			requestC <- testRequest{Data: "d"}
 			return true
-		})
-		testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-			return true, localhost
 		})
 		testReminders.Init(context.Background())
 
@@ -995,17 +883,11 @@ func TestOverrideReminderCancelsMultipleActiveReminders(t *testing.T) {
 }
 
 func TestDeleteReminderWithPartitions(t *testing.T) {
-	// appChannel := new(mockAppChannel)
 	testReminders := newTestRemindersWithMockAndActorMetadataPartition()
 	defer testReminders.Close()
-	setFakeStore(daprt.NewFakeStateStore())
-	testReminders.SetStateStoreProviderFn(fakeRealTStore)
-
-	testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
-		return true
-	})
-	testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-		return true, localhost
+	stateStore := daprt.NewFakeStateStore()
+	testReminders.SetStateStoreProviderFn(func() (internal.TransactionalStateStore, error) {
+		return stateStore, nil
 	})
 	testReminders.Init(context.Background())
 
@@ -1022,7 +904,7 @@ func TestDeleteReminderWithPartitions(t *testing.T) {
 		assert.Equal(t, 1, len(testReminders.reminders[actorType]))
 
 		// Delete the reminder
-		startCount := fakeStor.(*daprt.FakeStateStore).CallCount("Multi")
+		startCount := stateStore.CallCount("Multi")
 		err = testReminders.DeleteReminder(ctx, internal.DeleteReminderRequest{
 			Name:      "reminder1",
 			ActorID:   actorID,
@@ -1032,11 +914,11 @@ func TestDeleteReminderWithPartitions(t *testing.T) {
 		assert.Equal(t, 0, len(testReminders.reminders[actorType]))
 
 		// There should have been 1 Multi operation in the state store
-		require.Equal(t, startCount+1, fakeStor.(*daprt.FakeStateStore).CallCount("Multi"))
+		require.Equal(t, startCount+1, stateStore.CallCount("Multi"))
 	})
 
 	t.Run("Delete a reminder that doesn't exist", func(t *testing.T) {
-		startCount := fakeStor.(*daprt.FakeStateStore).CallCount("Multi")
+		startCount := stateStore.CallCount("Multi")
 		err := testReminders.DeleteReminder(ctx, internal.DeleteReminderRequest{
 			Name:      "does-not-exist",
 			ActorID:   actorID,
@@ -1046,7 +928,7 @@ func TestDeleteReminderWithPartitions(t *testing.T) {
 		assert.Equal(t, 0, len(testReminders.reminders[actorType]))
 
 		// There should have been no Multi operation in the state store
-		require.Equal(t, startCount, fakeStor.(*daprt.FakeStateStore).CallCount("Multi"))
+		require.Equal(t, startCount, stateStore.CallCount("Multi"))
 	})
 }
 
@@ -1056,14 +938,10 @@ func TestDeleteReminder(t *testing.T) {
 
 	// Set the state store to not use locks when accessing data.
 	// This will cause race conditions to surface when running these tests with `go test -race` if the methods accessing reminders' storage are not safe for concurrent access.
-	setFakeStore(daprt.NewFakeStateStore())
-	testReminders.SetStateStoreProviderFn(fakeRealTStoreWithNoLock)
-
-	testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
-		return true
-	})
-	testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-		return true, localhost
+	store := daprt.NewFakeStateStore()
+	store.NoLock = true
+	testReminders.SetStateStoreProviderFn(func() (internal.TransactionalStateStore, error) {
+		return store, nil
 	})
 	testReminders.Init(context.Background())
 
@@ -1091,7 +969,7 @@ func TestDeleteReminder(t *testing.T) {
 		assert.Equal(t, 2, len(testReminders.reminders[actorType]))
 
 		// Delete the reminders (in parallel)
-		startCount := fakeStor.(*daprt.FakeStateStore).CallCount("Multi")
+		startCount := store.CallCount("Multi")
 		go func() {
 			errs <- testReminders.DeleteReminder(ctx, internal.DeleteReminderRequest{
 				Name:      "reminder1",
@@ -1112,11 +990,11 @@ func TestDeleteReminder(t *testing.T) {
 		assert.Equal(t, 0, len(testReminders.reminders[actorType]))
 
 		// There should have been 2 Multi operations in the state store
-		require.Equal(t, startCount+2, fakeStor.(*daprt.FakeStateStore).CallCount("Multi"))
+		require.Equal(t, startCount+2, store.CallCount("Multi"))
 	})
 
 	t.Run("Delete a reminder that doesn't exist", func(t *testing.T) {
-		startCount := fakeStor.(*daprt.FakeStateStore).CallCount("Multi")
+		startCount := store.CallCount("Multi")
 		err := testReminders.DeleteReminder(ctx, internal.DeleteReminderRequest{
 			Name:      "does-not-exist",
 			ActorID:   actorID,
@@ -1126,7 +1004,7 @@ func TestDeleteReminder(t *testing.T) {
 		assert.Equal(t, 0, len(testReminders.reminders[actorType]))
 
 		// There should have been no Multi operation in the state store
-		require.Equal(t, startCount, fakeStor.(*daprt.FakeStateStore).CallCount("Multi"))
+		require.Equal(t, startCount, store.CallCount("Multi"))
 	})
 }
 
@@ -1236,15 +1114,9 @@ func TestReminderRepeats(t *testing.T) {
 			requestC := make(chan testRequest, 10)
 			testReminders := newTestReminders()
 			defer testReminders.Close()
-
-			setFakeStore(daprt.NewFakeStateStore())
-			testReminders.SetStateStoreProviderFn(fakeRealTStore)
 			testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
 				requestC <- testRequest{Data: "data"}
 				return true
-			})
-			testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-				return true, localhost
 			})
 			testReminders.Init(context.Background())
 
@@ -1386,15 +1258,9 @@ func Test_ReminderTTL(t *testing.T) {
 			requestC := make(chan testRequest)
 			testReminders := newTestReminders()
 			defer testReminders.Close()
-
-			setFakeStore(daprt.NewFakeStateStore())
-			testReminders.SetStateStoreProviderFn(fakeRealTStore)
 			testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
 				requestC <- testRequest{Data: "data"}
 				return true
-			})
-			testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-				return true, localhost
 			})
 			testReminders.Init(context.Background())
 
@@ -1469,15 +1335,6 @@ func reminderValidation(dueTime, period, ttl, msg string) func(t *testing.T) {
 	return func(t *testing.T) {
 		testReminders := newTestReminders()
 		defer testReminders.Close()
-
-		setFakeStore(daprt.NewFakeStateStore())
-		testReminders.SetStateStoreProviderFn(fakeRealTStore)
-		testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
-			return true
-		})
-		testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-			return true, localhost
-		})
 		testReminders.Init(context.Background())
 
 		actorType, actorID := getTestActorTypeAndID()
@@ -1513,16 +1370,6 @@ func TestReminderValidation(t *testing.T) {
 func TestGetReminder(t *testing.T) {
 	testReminders := newTestReminders()
 	defer testReminders.Close()
-
-	setFakeStore(daprt.NewFakeStateStore())
-	testReminders.SetStateStoreProviderFn(fakeRealTStore)
-
-	testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
-		return true
-	})
-	testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-		return true, localhost
-	})
 	testReminders.Init(context.Background())
 
 	actorType, actorID := getTestActorTypeAndID()
@@ -1546,16 +1393,6 @@ func TestGetReminder(t *testing.T) {
 func TestReminderFires(t *testing.T) {
 	testReminders := newTestReminders()
 	defer testReminders.Close()
-
-	setFakeStore(daprt.NewFakeStateStore())
-	testReminders.SetStateStoreProviderFn(fakeRealTStore)
-
-	testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
-		return true
-	})
-	testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-		return true, localhost
-	})
 	testReminders.Init(context.Background())
 
 	clock := testReminders.clock.(*clocktesting.FakeClock)
@@ -1582,16 +1419,6 @@ func TestReminderFires(t *testing.T) {
 func TestReminderDueDate(t *testing.T) {
 	testReminders := newTestReminders()
 	defer testReminders.Close()
-
-	setFakeStore(daprt.NewFakeStateStore())
-	testReminders.SetStateStoreProviderFn(fakeRealTStore)
-
-	testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
-		return true
-	})
-	testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-		return true, localhost
-	})
 	testReminders.Init(context.Background())
 
 	clock := testReminders.clock.(*clocktesting.FakeClock)
@@ -1622,15 +1449,6 @@ func TestReminderDueDate(t *testing.T) {
 func TestReminderPeriod(t *testing.T) {
 	testReminders := newTestReminders()
 	defer testReminders.Close()
-
-	setFakeStore(daprt.NewFakeStateStore())
-	testReminders.SetStateStoreProviderFn(fakeRealTStore)
-	testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
-		return true
-	})
-	testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-		return true, localhost
-	})
 	testReminders.Init(context.Background())
 
 	clock := testReminders.clock.(*clocktesting.FakeClock)
@@ -1678,16 +1496,10 @@ func TestReminderPeriod(t *testing.T) {
 func TestReminderFiresOnceWithEmptyPeriod(t *testing.T) {
 	testReminders := newTestReminders()
 	defer testReminders.Close()
-
-	setFakeStore(daprt.NewFakeStateStore())
-	testReminders.SetStateStoreProviderFn(fakeRealTStore)
 	executed := make(chan string, 1)
 	testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
 		executed <- reminder.Key()
 		return true
-	})
-	testReminders.SetLookupActorFn(func(string, string) (bool, string) {
-		return true, localhost
 	})
 	testReminders.Init(context.Background())
 
@@ -1729,8 +1541,9 @@ func createReminderData(actorID, actorType, name, period, dueTime, ttl, data str
 
 func metricsCleanup() {
 	diagtestutils.CleanupRegisteredViews(
-		actorRemindersLastValueViewName,
-		actorTimersLastValueViewName,
-		actorRemindersFiredTotalViewName,
-		actorRemindersFiredTotalViewName)
+		"runtime/actor/reminders",
+		"runtime/actor/reminders_fired_total",
+		"runtime/actor/timers",
+		"runtime/actor/timers_fired_total",
+	)
 }
