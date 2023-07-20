@@ -1227,7 +1227,7 @@ func (a *DaprRuntime) processHTTPEndpoints(ctx context.Context) {
 		if endpoint.Name == "" {
 			continue
 		}
-		_, _ = a.processResourceSecrets(ctx, &endpoint)
+		a.processHTTPEndpointSecrets(ctx, &endpoint)
 		a.compStore.AddHTTPEndpoint(endpoint)
 	}
 }
