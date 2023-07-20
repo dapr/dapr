@@ -704,7 +704,7 @@ func (a *actorsRuntime) drainRebalancedActors() {
 			if address != "" && !a.isActorLocal(address, a.actorsConfig.Config.HostAddress, a.actorsConfig.Config.Port) {
 				// actor has been moved to a different host, deactivate when calls are done cancel any reminders
 				// each item in reminders contain a struct with some metadata + the actual reminder struct
-				a.actorsReminders.DrainRebalancedReminders(actorType, actorID, actorKey)
+				a.actorsReminders.DrainRebalancedReminders(actorType, actorID)
 
 				actor := value.(*actor)
 				if a.actorsConfig.GetDrainRebalancedActorsForType(actorType) {

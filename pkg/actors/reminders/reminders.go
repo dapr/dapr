@@ -86,20 +86,22 @@ func (r *reminders) SetLookupActorFn(fn internal.LookupActorFn) {
 	r.lookUpActorFn = fn
 }
 
-func (r *reminders) DrainRebalancedReminders(actorType string, actorID string, actorKey string) {
+func (r *reminders) DrainRebalancedReminders(actorType string, actorID string) {
 	r.remindersLock.RLock()
 	reminders := r.reminders[actorType]
 	r.remindersLock.RUnlock()
 
 	for _, rem := range reminders {
 		// rem.Reminder refers to the actual reminder struct that is saved in the db
-		if rem.Reminder.ActorType == actorType && rem.Reminder.ActorID == "actorID" {
-			reminderKey := constructCompositeKey(actorKey, rem.Reminder.Name)
-			stopChan, exists := r.activeReminders.Load(reminderKey)
-			if exists {
-				close(stopChan.(chan struct{}))
-				r.activeReminders.Delete(reminderKey)
-			}
+		if rem.Reminder.ActorType != actorType || rem.Reminder.ActorID != actorID {
+			continue
+		}
+
+		reminderKey := rem.Reminder.Key()
+		stopChan, exists := r.activeReminders.Load(reminderKey)
+		if exists {
+			close(stopChan.(chan struct{}))
+			r.activeReminders.Delete(reminderKey)
 		}
 	}
 }
@@ -837,6 +839,9 @@ func (r *reminders) startReminder(reminder *internal.Reminder, stopChannel chan 
 			case <-stopChannel:
 				// reminder has been already deleted
 				log.Infof("Reminder %s with parameters: dueTime: %s, period: %s has been deleted", reminderKey, reminder.DueTime, reminder.Period)
+				return
+			case <-r.runningCh:
+				// Reminders runtime is stopping
 				return
 			}
 

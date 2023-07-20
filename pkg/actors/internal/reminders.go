@@ -51,7 +51,7 @@ type RemindersProvider interface {
 	CreateReminder(ctx context.Context, req *Reminder) error
 	DeleteReminder(ctx context.Context, req DeleteReminderRequest) error
 	RenameReminder(ctx context.Context, req *RenameReminderRequest) error
-	DrainRebalancedReminders(actorType string, actorID string, actorKey string)
+	DrainRebalancedReminders(actorType string, actorID string)
 
 	SetResiliencyProvider(resiliency resiliency.Provider)
 	SetExecuteReminderFn(fn ExecuteReminderFn)
