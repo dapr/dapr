@@ -27,8 +27,8 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/dapr/tests/util"
 )
 
 func init() {
@@ -42,8 +42,8 @@ type httpendpoints struct {
 }
 
 func (h *httpendpoints) Setup(t *testing.T) []framework.Option {
-	pki1 := util.GenPKI(t, "localhost")
-	pki2 := util.GenPKI(t, "localhost")
+	pki1 := util.GenPKIT(t, "localhost")
+	pki2 := util.GenPKIT(t, "localhost")
 
 	newHTTPServer := func() *prochttp.HTTP {
 		handler := http.NewServeMux()

@@ -254,7 +254,7 @@ create-test-namespace:
 delete-test-namespace:
 	kubectl delete namespace $(DAPR_TEST_NAMESPACE)
 
-setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-mongodb setup-test-env-zipkin setup-test-env-cert-manager
+setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-mongodb setup-test-env-zipkin
 
 setup-pubsub-subs-perf-test-components: setup-test-env-rabbitmq setup-test-env-pulsar setup-test-env-mqtt
 
@@ -418,7 +418,6 @@ setup-helm-init:
 	$(HELM) repo add bitnami https://charts.bitnami.com/bitnami
 	$(HELM) repo add stable https://charts.helm.sh/stable
 	$(HELM) repo add incubator https://charts.helm.sh/incubator
-	$(HELM) repo add jetstack https://charts.jetstack.io
 	$(HELM) repo update
 
 # setup tailscale
@@ -481,10 +480,6 @@ setup-test-env-mongodb:
 setup-test-env-postgres:
 	$(HELM) upgrade --install dapr-postgres bitnami/postgresql -f ./tests/config/postgres_override.yaml --namespace $(DAPR_TEST_NAMESPACE) --wait --timeout 5m0s
 
-# install cert-manager to the cluster
-setup-test-env-cert-manager:
-	$(HELM) upgrade --install --create-namespace cert-manager jetstack/cert-manager --namespace cert-manager --timeout 10m0s --set installCRDs=true
-
 # delete postgres from cluster
 delete-test-env-postgres:
 	$(HELM) del dapr-postgres --namespace $(DAPR_TEST_NAMESPACE)
@@ -500,7 +495,7 @@ delete-test-env-zipkin:
 	$(KUBECTL) delete -f ./tests/config/zipkin.yaml -n $(DAPR_TEST_NAMESPACE)
 
 # Setup the test environment by installing components
-setup-test-env: setup-test-env-kafka setup-test-env-redis setup-test-env-mongodb setup-test-env-k6 setup-test-env-zipkin setup-test-env-postgres setup-test-env-cert-manager
+setup-test-env: setup-test-env-kafka setup-test-env-redis setup-test-env-mongodb setup-test-env-k6 setup-test-env-zipkin setup-test-env-postgres
 
 save-dapr-control-plane-k8s-resources:
 	mkdir -p '$(DAPR_CONTAINER_LOG_PATH)'

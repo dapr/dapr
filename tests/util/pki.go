@@ -35,9 +35,17 @@ type PKI struct {
 	ClientPKPEM   []byte
 }
 
-func GenPKI(t *testing.T, leafDNS string) PKI {
-	rootPK, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+func GenPKIT(t *testing.T, leafDNS string) PKI {
+	pki, err := GenPKI(leafDNS)
 	require.NoError(t, err)
+	return pki
+}
+
+func GenPKI(leafDNS string) (PKI, error) {
+	rootPK, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return PKI{}, err
+	}
 
 	rootCert := x509.Certificate{
 		SerialNumber:          big.NewInt(1),
@@ -49,12 +57,21 @@ func GenPKI(t *testing.T, leafDNS string) PKI {
 		BasicConstraintsValid: true,
 	}
 	rootCertBytes, err := x509.CreateCertificate(rand.Reader, &rootCert, &rootCert, &rootPK.PublicKey, rootPK)
-	require.NoError(t, err)
+	if err != nil {
+		return PKI{}, err
+	}
 
 	rootCertPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: rootCertBytes})
 
-	leafCertPEM, leafPKPEM := genLeafCert(t, rootPK, rootCert, leafDNS)
-	clientCertPEM, clientPKPEM := genLeafCert(t, rootPK, rootCert, "client")
+	leafCertPEM, leafPKPEM, err := genLeafCert(rootPK, rootCert, leafDNS)
+	if err != nil {
+		return PKI{}, err
+	}
+
+	clientCertPEM, clientPKPEM, err := genLeafCert(rootPK, rootCert, "client")
+	if err != nil {
+		return PKI{}, err
+	}
 
 	return PKI{
 		RootCertPEM:   rootCertPEM,
@@ -62,14 +79,19 @@ func GenPKI(t *testing.T, leafDNS string) PKI {
 		LeafPKPEM:     leafPKPEM,
 		ClientCertPEM: clientCertPEM,
 		ClientPKPEM:   clientPKPEM,
-	}
+	}, nil
 }
 
-func genLeafCert(t *testing.T, rootPK *ecdsa.PrivateKey, rootCert x509.Certificate, dns string) ([]byte, []byte) {
+func genLeafCert(rootPK *ecdsa.PrivateKey, rootCert x509.Certificate, dns string) ([]byte, []byte, error) {
 	pk, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	require.NoError(t, err)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	pkBytes, err := x509.MarshalECPrivateKey(pk)
-	require.NoError(t, err)
+	if err != nil {
+		return nil, nil, err
+	}
 	cert := x509.Certificate{
 		SerialNumber: big.NewInt(1),
 		DNSNames:     []string{dns},
@@ -82,10 +104,12 @@ func genLeafCert(t *testing.T, rootPK *ecdsa.PrivateKey, rootCert x509.Certifica
 		},
 	}
 	certBytes, err := x509.CreateCertificate(rand.Reader, &cert, &rootCert, &pk.PublicKey, rootPK)
-	require.NoError(t, err)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	pkPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: pkBytes})
 	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certBytes})
 
-	return certPEM, pkPEM
+	return certPEM, pkPEM, nil
 }
