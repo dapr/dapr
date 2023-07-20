@@ -14,6 +14,7 @@ limitations under the License.
 package patcher
 
 import (
+	"strings"
 	"testing"
 
 	jsonpatch "github.com/evanphx/json-patch/v5"
@@ -334,10 +335,36 @@ func TestPatching(t *testing.T) {
 		{
 			name: "with UDS",
 			podModifierFn: func(pod *corev1.Pod) {
-				pod.Annotations[annotations.KeyUnixDomainSocketPath] = "/tmp"
+				pod.Annotations[annotations.KeyUnixDomainSocketPath] = "/tmp/socket"
 			},
 			assertFn: func(t *testing.T, pod *corev1.Pod) {
 				assertDaprdContainerFn(t, pod)
+
+				// Check the presence of the volume
+				assert.Len(t, pod.Spec.Volumes, 2)
+				socketVolume := pod.Spec.Volumes[0]
+				assert.Equal(t, "dapr-unix-domain-socket", socketVolume.Name)
+				assert.NotNil(t, socketVolume.EmptyDir)
+				assert.Equal(t, corev1.StorageMediumMemory, socketVolume.EmptyDir.Medium)
+				tokenVolume := pod.Spec.Volumes[1]
+				assert.Equal(t, "dapr-identity-token", tokenVolume.Name)
+				assert.NotNil(t, tokenVolume.Projected)
+
+				// Check the presence of the volume mount in the app container
+				appContainer := pod.Spec.Containers[0]
+				assert.Len(t, appContainer.VolumeMounts, 1)
+				assert.Equal(t, "dapr-unix-domain-socket", appContainer.VolumeMounts[0].Name)
+				assert.Equal(t, "/tmp/socket", appContainer.VolumeMounts[0].MountPath)
+
+				// Check the presence of the volume mount in the daprd container
+				daprdContainer := pod.Spec.Containers[1]
+				assert.Len(t, daprdContainer.VolumeMounts, 2)
+				assert.Equal(t, "dapr-unix-domain-socket", daprdContainer.VolumeMounts[0].Name)
+				assert.Equal(t, "/var/run/dapr-sockets", daprdContainer.VolumeMounts[0].MountPath)
+
+				// Ensure the CLI flag is set
+				args := strings.Join(daprdContainer.Args, " ")
+				assert.Contains(t, args, "--unix-domain-socket /var/run/dapr-sockets")
 			},
 		},
 	}
