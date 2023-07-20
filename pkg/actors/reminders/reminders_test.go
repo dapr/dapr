@@ -75,17 +75,15 @@ func fakeNoStore() (internal.TransactionalStateStore, error) {
 
 var fakeStor internal.TransactionalStateStore
 
+func setFakeStore(store internal.TransactionalStateStore) {
+	fakeStor = store
+}
+
 func fakeRealTStore() (internal.TransactionalStateStore, error) {
-	if fakeStor == nil {
-		fakeStor = daprt.NewFakeStateStore()
-	}
 	return fakeStor, nil
 }
 
 func fakeRealTStoreWithNoLock() (internal.TransactionalStateStore, error) {
-	if fakeStor == nil {
-		fakeStor = daprt.NewFakeStateStore()
-	}
 	fakeStor.(*daprt.FakeStateStore).NoLock = true
 	return fakeStor, nil
 }
@@ -142,7 +140,7 @@ func TestReminderCountFiring(t *testing.T) {
 	testReminders := newTestReminders()
 	defer testReminders.Close()
 
-	fakeStor = nil
+	setFakeStore(daprt.NewFakeStateStore())
 	testReminders.SetStateStoreProviderFn(fakeRealTStore)
 	var executereminderFnCount int64 = 0
 	testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
@@ -203,7 +201,7 @@ func TestReminderCountFiringBad(t *testing.T) {
 	testReminders := newTestReminders()
 	defer testReminders.Close()
 
-	fakeStor = nil
+	setFakeStore(daprt.NewFakeStateStore())
 	testReminders.SetStateStoreProviderFn(fakeRealTStore)
 	var executereminderFnCount int64 = 0
 	testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
@@ -263,7 +261,7 @@ func TestSetReminderTrack(t *testing.T) {
 	testReminders := newTestReminders()
 	defer testReminders.Close()
 
-	fakeStor = nil
+	setFakeStore(daprt.NewFakeStateStore())
 	testReminders.SetStateStoreProviderFn(fakeRealTStore)
 	testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
 		return true
@@ -284,7 +282,7 @@ func TestGetReminderTrack(t *testing.T) {
 		testReminders := newTestReminders()
 		defer testReminders.Close()
 
-		fakeStor = nil
+		setFakeStore(daprt.NewFakeStateStore())
 		testReminders.SetStateStoreProviderFn(fakeRealTStore)
 
 		testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
@@ -305,7 +303,7 @@ func TestGetReminderTrack(t *testing.T) {
 		testReminders := newTestReminders()
 		defer testReminders.Close()
 
-		fakeStor = nil
+		setFakeStore(daprt.NewFakeStateStore())
 		testReminders.SetStateStoreProviderFn(fakeRealTStore)
 
 		testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
@@ -336,7 +334,7 @@ func TestCreateReminder(t *testing.T) {
 	// Set the state store to not use locks when accessing data.
 	// This will cause race conditions to surface when running these tests with `go test -race` if the methods accessing reminders' storage are not safe for concurrent access.
 
-	fakeStor = nil
+	setFakeStore(daprt.NewFakeStateStore())
 	testReminders.SetStateStoreProviderFn(fakeRealTStoreWithNoLock)
 	testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
 		diag.DefaultMonitoring.ActorReminderFired(reminder.ActorType, true)
@@ -531,7 +529,6 @@ func newTestRemindersWithMockAndActorMetadataPartition() *reminders {
 	}
 	clock := clocktesting.NewFakeClock(startOfTime)
 	r := NewRemindersProvider(clock, opts)
-	// r.SetStateStoreProviderFn(fakeTStore)
 	return r.(*reminders)
 }
 
@@ -568,7 +565,7 @@ func TestRenameReminder(t *testing.T) {
 	testReminders := newTestReminders()
 	defer testReminders.Close()
 
-	fakeStor = nil
+	setFakeStore(daprt.NewFakeStateStore())
 	testReminders.SetStateStoreProviderFn(fakeRealTStoreWithNoLock)
 
 	testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
@@ -586,8 +583,6 @@ func TestRenameReminder(t *testing.T) {
 
 	// Set the state store to not use locks when accessing data.
 	// This will cause race conditions to surface when running these tests with `go test -race` if the methods accessing reminders' storage are not safe for concurrent access.
-	// stateStore, _ := testReminders.stateStore()
-	// stateStore.(*daprt.FakeStateStore).NoLock = true
 
 	// Create 2 reminders in parallel
 	go func() {
@@ -714,7 +709,7 @@ func TestOverrideReminder(t *testing.T) {
 		testReminders := newTestReminders()
 		defer testReminders.Close()
 
-		fakeStor = nil
+		setFakeStore(daprt.NewFakeStateStore())
 		testReminders.SetStateStoreProviderFn(fakeRealTStore)
 
 		testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
@@ -747,7 +742,7 @@ func TestOverrideReminder(t *testing.T) {
 		testReminders := newTestReminders()
 		defer testReminders.Close()
 
-		fakeStor = nil
+		setFakeStore(daprt.NewFakeStateStore())
 		testReminders.SetStateStoreProviderFn(fakeRealTStore)
 
 		testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
@@ -778,7 +773,7 @@ func TestOverrideReminder(t *testing.T) {
 		testReminders := newTestReminders()
 		defer testReminders.Close()
 
-		fakeStor = nil
+		setFakeStore(daprt.NewFakeStateStore())
 		testReminders.SetStateStoreProviderFn(fakeRealTStore)
 
 		testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
@@ -810,7 +805,7 @@ func TestOverrideReminder(t *testing.T) {
 		testReminders := newTestReminders()
 		defer testReminders.Close()
 
-		fakeStor = nil
+		setFakeStore(daprt.NewFakeStateStore())
 		testReminders.SetStateStoreProviderFn(fakeRealTStore)
 
 		testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
@@ -851,7 +846,7 @@ func TestOverrideReminderCancelsActiveReminders(t *testing.T) {
 		defer testReminders.Close()
 		clock := testReminders.clock.(*clocktesting.FakeClock)
 
-		fakeStor = nil
+		setFakeStore(daprt.NewFakeStateStore())
 		testReminders.SetStateStoreProviderFn(fakeRealTStore)
 		testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
 			requestC <- testRequest{Data: "c"}
@@ -927,7 +922,7 @@ func TestOverrideReminderCancelsMultipleActiveReminders(t *testing.T) {
 		testReminders := newTestReminders()
 		defer testReminders.Close()
 
-		fakeStor = nil
+		setFakeStore(daprt.NewFakeStateStore())
 		testReminders.SetStateStoreProviderFn(fakeRealTStore)
 		testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
 			requestC <- testRequest{Data: "d"}
@@ -1003,8 +998,7 @@ func TestDeleteReminderWithPartitions(t *testing.T) {
 	// appChannel := new(mockAppChannel)
 	testReminders := newTestRemindersWithMockAndActorMetadataPartition()
 	defer testReminders.Close()
-	// stateStore, _ := testReminders.stateStore()
-	fakeStor = nil
+	setFakeStore(daprt.NewFakeStateStore())
 	testReminders.SetStateStoreProviderFn(fakeRealTStore)
 
 	testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
@@ -1062,10 +1056,7 @@ func TestDeleteReminder(t *testing.T) {
 
 	// Set the state store to not use locks when accessing data.
 	// This will cause race conditions to surface when running these tests with `go test -race` if the methods accessing reminders' storage are not safe for concurrent access.
-	// stateStore, _ := testReminders.stateStore()
-	// stateStore.(*daprt.FakeStateStore).NoLock = true
-
-	fakeStor = nil
+	setFakeStore(daprt.NewFakeStateStore())
 	testReminders.SetStateStoreProviderFn(fakeRealTStoreWithNoLock)
 
 	testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
@@ -1246,7 +1237,7 @@ func TestReminderRepeats(t *testing.T) {
 			testReminders := newTestReminders()
 			defer testReminders.Close()
 
-			fakeStor = nil
+			setFakeStore(daprt.NewFakeStateStore())
 			testReminders.SetStateStoreProviderFn(fakeRealTStore)
 			testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
 				requestC <- testRequest{Data: "data"}
@@ -1396,7 +1387,7 @@ func Test_ReminderTTL(t *testing.T) {
 			testReminders := newTestReminders()
 			defer testReminders.Close()
 
-			fakeStor = nil
+			setFakeStore(daprt.NewFakeStateStore())
 			testReminders.SetStateStoreProviderFn(fakeRealTStore)
 			testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
 				requestC <- testRequest{Data: "data"}
@@ -1479,7 +1470,7 @@ func reminderValidation(dueTime, period, ttl, msg string) func(t *testing.T) {
 		testReminders := newTestReminders()
 		defer testReminders.Close()
 
-		fakeStor = nil
+		setFakeStore(daprt.NewFakeStateStore())
 		testReminders.SetStateStoreProviderFn(fakeRealTStore)
 		testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
 			return true
@@ -1523,7 +1514,7 @@ func TestGetReminder(t *testing.T) {
 	testReminders := newTestReminders()
 	defer testReminders.Close()
 
-	fakeStor = nil
+	setFakeStore(daprt.NewFakeStateStore())
 	testReminders.SetStateStoreProviderFn(fakeRealTStore)
 
 	testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
@@ -1556,7 +1547,7 @@ func TestReminderFires(t *testing.T) {
 	testReminders := newTestReminders()
 	defer testReminders.Close()
 
-	fakeStor = nil
+	setFakeStore(daprt.NewFakeStateStore())
 	testReminders.SetStateStoreProviderFn(fakeRealTStore)
 
 	testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
@@ -1592,7 +1583,7 @@ func TestReminderDueDate(t *testing.T) {
 	testReminders := newTestReminders()
 	defer testReminders.Close()
 
-	fakeStor = nil
+	setFakeStore(daprt.NewFakeStateStore())
 	testReminders.SetStateStoreProviderFn(fakeRealTStore)
 
 	testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
@@ -1632,7 +1623,7 @@ func TestReminderPeriod(t *testing.T) {
 	testReminders := newTestReminders()
 	defer testReminders.Close()
 
-	fakeStor = nil
+	setFakeStore(daprt.NewFakeStateStore())
 	testReminders.SetStateStoreProviderFn(fakeRealTStore)
 	testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
 		return true
@@ -1688,7 +1679,7 @@ func TestReminderFiresOnceWithEmptyPeriod(t *testing.T) {
 	testReminders := newTestReminders()
 	defer testReminders.Close()
 
-	fakeStor = nil
+	setFakeStore(daprt.NewFakeStateStore())
 	testReminders.SetStateStoreProviderFn(fakeRealTStore)
 	executed := make(chan string, 1)
 	testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {

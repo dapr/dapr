@@ -855,12 +855,10 @@ func (r *reminders) startReminder(reminder *internal.Reminder, stopChannel chan 
 			}
 
 			if r.executeReminderFn != nil && !r.executeReminderFn(reminder) {
-				log.Infof("Checkpoint 0")
 				nextTimer = nil
 				break L
 			}
 
-			log.Infof("Checkpoint 1")
 			_, exists = r.activeReminders.Load(reminderKey)
 			if exists {
 				err = r.updateReminderTrack(context.TODO(), reminderKey, reminder.RepeatsLeft(), reminder.NextTick(), eTag)
@@ -878,7 +876,6 @@ func (r *reminders) startReminder(reminder *internal.Reminder, stopChannel chan 
 				nextTimer = nil
 				return
 			}
-			log.Infof("Checkpoint 2")
 			if reminder.TickExecuted() {
 				nextTimer = nil
 				break L
