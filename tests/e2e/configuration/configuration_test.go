@@ -22,6 +22,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -38,12 +39,13 @@ const (
 	v1                  = "1.0.0"
 	numHealthChecks     = 60              // Number of times to check for endpoint health per app.
 	defaultWaitTime     = 5 * time.Second // Time to wait for app to receive the updates
+	configStore         = "configstore"
 )
 
 var (
 	componentName       string = "redis"
 	subscriptionId      string = ""
-	runID               string = uuid.Must(uuid.NewRandom()).String()
+	runID               string = strings.ReplaceAll(uuid.Must(uuid.NewRandom()).String(), "-", "_")
 	counter             int    = 0
 	tr                  *runner.TestRunner
 	subscribedKeyValues map[string]*Item
@@ -102,7 +104,7 @@ func TestMain(m *testing.M) {
 
 var configurationTests = []struct {
 	name    string
-	handler func(t *testing.T, appExternalUrl string, protocol string, endpointType string)
+	handler func(t *testing.T, appExternalUrl string, protocol string, endpointType string, component componentType)
 }{
 	{
 		name:    "testGet",
@@ -123,8 +125,8 @@ func generateKeyValues(keyCount int, version string) map[string]*Item {
 	m := make(map[string]*Item, keyCount)
 	k := counter
 	for ; k < counter+keyCount; k++ {
-		key := runID + "-key-" + strconv.Itoa(k)
-		val := runID + "-val-" + strconv.Itoa(k)
+		key := runID + "_key_" + strconv.Itoa(k)
+		val := runID + "_val_" + strconv.Itoa(k)
 		m[key] = &Item{
 			Value:    val,
 			Version:  version,
@@ -140,7 +142,7 @@ func updateKeyValues(mymap map[string]*Item, version string) map[string]*Item {
 	m := make(map[string]*Item, len(mymap))
 	k := counter
 	for key := range mymap {
-		updatedVal := runID + "-val-" + strconv.Itoa(k)
+		updatedVal := runID + "_val_" + strconv.Itoa(k)
 		m[key] = &Item{
 			Value:    updatedVal,
 			Version:  version,
@@ -161,8 +163,8 @@ func getKeys(mymap map[string]*Item) []string {
 	return keys
 }
 
-func testGet(t *testing.T, appExternalUrl string, protocol string, endpointType string) {
-	updateUrl := fmt.Sprintf("http://%s/update-key-values", appExternalUrl)
+func testGet(t *testing.T, appExternalUrl string, protocol string, endpointType string, component componentType) {
+	updateUrl := fmt.Sprintf("http://%s/update-key-values/add", appExternalUrl)
 	items := generateKeyValues(10, v1)
 	itemsInBytes, _ := json.Marshal(items)
 	resp, statusCode, err := utils.HTTPPostWithStatus(updateUrl, itemsInBytes)
@@ -171,7 +173,7 @@ func testGet(t *testing.T, appExternalUrl string, protocol string, endpointType 
 
 	keys := getKeys(items)
 	keysInBytes, _ := json.Marshal(keys)
-	url := fmt.Sprintf("http://%s/get-key-values/%s/%s", appExternalUrl, protocol, endpointType)
+	url := fmt.Sprintf("http://%s/get-key-values/%s/%s/%s", appExternalUrl, protocol, endpointType, component.configStore)
 	resp, statusCode, err = utils.HTTPPostWithStatus(url, keysInBytes)
 	require.NoError(t, err, "error getting key values")
 
@@ -184,11 +186,11 @@ func testGet(t *testing.T, appExternalUrl string, protocol string, endpointType 
 	require.Equalf(t, expectedItems, appResp.Message, "expected %s, got %s", expectedItems, appResp.Message)
 }
 
-func testSubscribe(t *testing.T, appExternalUrl string, protocol string, endpointType string) {
+func testSubscribe(t *testing.T, appExternalUrl string, protocol string, endpointType string, component componentType) {
 	items := generateKeyValues(10, v1)
 	keys := getKeys(items)
 	keysInBytes, _ := json.Marshal(keys)
-	url := fmt.Sprintf("http://%s/subscribe/%s/%s", appExternalUrl, protocol, endpointType)
+	url := fmt.Sprintf("http://%s/subscribe/%s/%s/%s/%s", appExternalUrl, protocol, endpointType, component.configStore, component.name)
 	resp, statusCode, err := utils.HTTPPostWithStatus(url, keysInBytes)
 	require.NoError(t, err, "error subscribing to key values")
 	subscribedKeyValues = items
@@ -201,7 +203,7 @@ func testSubscribe(t *testing.T, appExternalUrl string, protocol string, endpoin
 	subscriptionId = appResp.Message
 	time.Sleep(defaultWaitTime) // Waiting for subscribe operation to complete
 
-	updateUrl := fmt.Sprintf("http://%s/update-key-values", appExternalUrl)
+	updateUrl := fmt.Sprintf("http://%s/update-key-values/add", appExternalUrl)
 	itemsInBytes, _ := json.Marshal(items)
 	resp, statusCode, err = utils.HTTPPostWithStatus(updateUrl, itemsInBytes)
 	require.NoError(t, err, "error updating key values")
@@ -227,20 +229,20 @@ func testSubscribe(t *testing.T, appExternalUrl string, protocol string, endpoin
 	require.ElementsMatch(t, expectedUpdates, receivedMessages.ReceivedUpdates, "expected %s, got %s", expectedUpdates, receivedMessages.ReceivedUpdates)
 }
 
-func testUnsubscribe(t *testing.T, appExternalUrl string, protocol string, endpointType string) {
+func testUnsubscribe(t *testing.T, appExternalUrl string, protocol string, endpointType string, component componentType) {
 	// Unsubscribe with incorrect subscriptionId
-	url := fmt.Sprintf("http://%s/unsubscribe/%s/%s/%s", appExternalUrl, "incorrect-id", protocol, endpointType)
+	url := fmt.Sprintf("http://%s/unsubscribe/%s/%s/%s/%s", appExternalUrl, "incorrect-id", protocol, endpointType, component.configStore)
 	resp, err := utils.HTTPGet(url)
 	require.NoError(t, err, "error unsubscribing to key values")
 	require.Contains(t, string(resp), "error subscriptionID not found")
 
 	// Unsubscribe with correct subscriptionId
-	url = fmt.Sprintf("http://%s/unsubscribe/%s/%s/%s", appExternalUrl, subscriptionId, protocol, endpointType)
+	url = fmt.Sprintf("http://%s/unsubscribe/%s/%s/%s/%s", appExternalUrl, subscriptionId, protocol, endpointType, component.configStore)
 	_, err = utils.HTTPGet(url)
 	require.NoError(t, err, "error unsubscribing to key values")
 
 	items := updateKeyValues(subscribedKeyValues, v1)
-	updateUrl := fmt.Sprintf("http://%s/update-key-values", appExternalUrl)
+	updateUrl := fmt.Sprintf("http://%s/update-key-values/update", appExternalUrl)
 	itemsInBytes, _ := json.Marshal(items)
 	resp, statusCode, err := utils.HTTPPostWithStatus(updateUrl, itemsInBytes)
 	require.NoError(t, err, "error updating key values")
@@ -268,6 +270,11 @@ var apps []struct {
 	},
 }
 
+type componentType struct {
+	name        string
+	configStore string
+}
+
 var protocols []string = []string{
 	"http",
 	"grpc",
@@ -288,9 +295,17 @@ func TestConfiguration(t *testing.T) {
 		_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
 		require.NoError(t, err)
 
+		component := componentType{
+			name:        os.Getenv("DAPR_TEST_CONFIG_STORE"),
+			configStore: configStore,
+		}
+		if component.name == "" {
+			component.name = "redis"
+		}
+
 		// Initialize the configuration updater
 		url := fmt.Sprintf("http://%s/initialize-updater", externalURL)
-		componentNameInBytes, _ := json.Marshal(componentName)
+		componentNameInBytes, _ := json.Marshal(component.name)
 		resp, statusCode, err := utils.HTTPPostWithStatus(url, componentNameInBytes)
 		require.NoError(t, err, "error initializing configuration updater")
 		require.Equalf(t, 200, statusCode, "expected statuscode 200, got %d. Error: %s", statusCode, string(resp))
@@ -298,7 +313,7 @@ func TestConfiguration(t *testing.T) {
 			for _, endpointType := range endpointTypes {
 				for _, tt := range configurationTests {
 					t.Run(tt.name, func(t *testing.T) {
-						tt.handler(t, externalURL, protocol, endpointType)
+						tt.handler(t, externalURL, protocol, endpointType, component)
 					})
 				}
 			}
