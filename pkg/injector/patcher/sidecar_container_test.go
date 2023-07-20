@@ -263,6 +263,49 @@ func TestFormatProbePath(t *testing.T) {
 }
 
 func TestGetSidecarContainer(t *testing.T) {
+	// Allows running multiple test suites in a more DRY way
+	type testCase struct {
+		name                    string
+		annotations             map[string]string
+		podModifierFn           func(pod *corev1.Pod)
+		sidecarConfigModifierFn func(c *SidecarConfig)
+		assertFn                func(t *testing.T, container *corev1.Container)
+		getSidecarContainerOpts getSidecarContainerOpts
+	}
+	testCaseFn := func(tc testCase) func(t *testing.T) {
+		return func(t *testing.T) {
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: tc.annotations,
+				},
+			}
+			if tc.podModifierFn != nil {
+				tc.podModifierFn(pod)
+			}
+
+			c := NewSidecarConfig(pod)
+			c.AppID = "myapp"
+
+			if tc.sidecarConfigModifierFn != nil {
+				tc.sidecarConfigModifierFn(c)
+			}
+
+			c.SetFromPodAnnotations()
+
+			container, err := c.getSidecarContainer(tc.getSidecarContainerOpts)
+			require.NoError(t, err)
+
+			tc.assertFn(t, container)
+		}
+	}
+	testSuiteGenerator := func(tests []testCase) func(t *testing.T) {
+		return func(t *testing.T) {
+			for _, tc := range tests {
+				t.Run(tc.name, testCaseFn(tc))
+			}
+		}
+	}
+
 	t.Run("get sidecar container", func(t *testing.T) {
 		c := NewSidecarConfig(&corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
@@ -405,372 +448,157 @@ func TestGetSidecarContainer(t *testing.T) {
 		assert.Equal(t, corev1.PullAlways, container.ImagePullPolicy)
 	})
 
-	t.Run("get sidecar container skipping placement", func(t *testing.T) {
-		c := NewSidecarConfig(&corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Annotations: map[string]string{
-					annotations.KeyAppID:          "app_id",
-					annotations.KeyConfig:         "config",
-					annotations.KeyAppPort:        "5000",
-					annotations.KeyLogAsJSON:      "true",
-					annotations.KeyAPITokenSecret: "secret",
-					annotations.KeyAppTokenSecret: "appsecret",
+	t.Run("placement", testSuiteGenerator([]testCase{
+		{
+			name: "placement is included in options",
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.PlacementAddress = "placement:1234"
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.Contains(t, args, "--placement-host-address placement:1234")
+			},
+		},
+		{
+			name: "placement is skipped in options",
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.PlacementAddress = ""
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.NotContains(t, args, "--placement-host-address")
+			},
+		},
+		{
+			name: "placement is skipped in options but included in annotations",
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.PlacementAddress = ""
+			},
+			annotations: map[string]string{
+				annotations.KeyPlacementHostAddresses: "some-host:50000",
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.Contains(t, args, "--placement-host-address some-host:50000")
+			},
+		},
+		{
+			name: "placement is set in options and overrriden in annotations",
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.PlacementAddress = "placement:1234"
+			},
+			annotations: map[string]string{
+				annotations.KeyPlacementHostAddresses: "some-host:50000",
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.Contains(t, args, "--placement-host-address some-host:50000")
+			},
+		},
+	}))
+
+	t.Run("listen address", testSuiteGenerator([]testCase{
+		{
+			name:        "default listen address",
+			annotations: map[string]string{},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.Contains(t, args, "--dapr-listen-addresses [::1],127.0.0.1")
+			},
+		},
+		{
+			name: "override listen address",
+			annotations: map[string]string{
+				annotations.KeySidecarListenAddresses: "1.2.3.4,[::1]",
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.Contains(t, args, "--dapr-listen-addresses 1.2.3.4,[::1]")
+			},
+		},
+	}))
+
+	t.Run("graceful shutdown seconds", testSuiteGenerator([]testCase{
+		{
+			name:        "default to -1",
+			annotations: map[string]string{},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.Contains(t, args, "--dapr-graceful-shutdown-seconds -1")
+			},
+		},
+		{
+			name: "override the graceful shutdown",
+			annotations: map[string]string{
+				annotations.KeyGracefulShutdownSeconds: "3",
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.Contains(t, args, "--dapr-graceful-shutdown-seconds 3")
+			},
+		},
+		{
+			name: "-1 when value is invalid",
+			annotations: map[string]string{
+				annotations.KeyGracefulShutdownSeconds: "invalid",
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.Contains(t, args, "--dapr-graceful-shutdown-seconds -1")
+			},
+		},
+	}))
+
+	t.Run("sidecar image", testSuiteGenerator([]testCase{
+		{
+			name:        "no annotation",
+			annotations: map[string]string{},
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.SidecarImage = "daprio/dapr"
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				assert.Equal(t, "daprio/dapr", container.Image)
+			},
+		},
+		{
+			name: "override with annotation",
+			annotations: map[string]string{
+				annotations.KeySidecarImage: "override",
+			},
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.SidecarImage = "daprio/dapr"
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				assert.Equal(t, "override", container.Image)
+			},
+		},
+	}))
+
+	t.Run("unix domain socket", testSuiteGenerator([]testCase{
+		{
+			name:        "default does not use UDS",
+			annotations: map[string]string{},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				assert.Equal(t, 0, len(container.VolumeMounts))
+			},
+		},
+		{
+			name: "set UDS path",
+			annotations: map[string]string{
+				annotations.KeyUnixDomainSocketPath: "/tmp",
+			},
+			getSidecarContainerOpts: getSidecarContainerOpts{
+				VolumeMounts: []corev1.VolumeMount{
+					{Name: injectorConsts.UnixDomainSocketVolume, MountPath: "/tmp"},
 				},
 			},
-		})
-		c.PlacementAddress = "" // Set to empty to skip placement
-		c.SidecarImage = "daprio/dapr"
-		c.ImagePullPolicy = "Always"
-		c.Namespace = "dapr-system"
-		c.OperatorAddress = "controlplane:9000"
-		c.SentryAddress = "sentry:50000"
-		c.MTLSEnabled = true
-		c.Identity = "pod_identity"
-
-		c.SetFromPodAnnotations()
-
-		container, err := c.getSidecarContainer(getSidecarContainerOpts{})
-		require.NoError(t, err)
-
-		expectedArgs := []string{
-			"/daprd",
-			"--dapr-http-port", "3500",
-			"--dapr-grpc-port", "50001",
-			"--dapr-internal-grpc-port", "50002",
-			"--dapr-listen-addresses", "[::1],127.0.0.1",
-			"--dapr-public-port", "3501",
-			"--app-id", "app_id",
-			"--app-protocol", "http",
-			"--log-level", "info",
-			"--dapr-graceful-shutdown-seconds", "-1",
-			"--mode", "kubernetes",
-			"--control-plane-address", "controlplane:9000",
-			"--sentry-address", "sentry:50000",
-			"--app-port", "5000",
-			"--enable-metrics",
-			"--metrics-port", "9090",
-			"--config", "config",
-			"--log-as-json",
-			"--enable-mtls",
-		}
-
-		// Command should be empty, image's entrypoint to be used.
-		assert.Equal(t, 0, len(container.Command))
-		// NAMESPACE
-		assert.Equal(t, "dapr-system", container.Env[0].Value)
-		// DAPR_API_TOKEN
-		assert.Equal(t, "secret", container.Env[6].ValueFrom.SecretKeyRef.Name)
-		// DAPR_APP_TOKEN
-		assert.Equal(t, "appsecret", container.Env[7].ValueFrom.SecretKeyRef.Name)
-		// default image
-		assert.Equal(t, "daprio/dapr", container.Image)
-		assert.EqualValues(t, expectedArgs, container.Args)
-		assert.Equal(t, corev1.PullAlways, container.ImagePullPolicy)
-	})
-
-	t.Run("get sidecar container skipping placement and explicit placement address annotation", func(t *testing.T) {
-		c := NewSidecarConfig(&corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Annotations: map[string]string{
-					annotations.KeyAppID:                  "app_id",
-					annotations.KeyConfig:                 "config",
-					annotations.KeyAppPort:                "5000",
-					annotations.KeyLogAsJSON:              "true",
-					annotations.KeyAPITokenSecret:         "secret",
-					annotations.KeyAppTokenSecret:         "appsecret",
-					annotations.KeyPlacementHostAddresses: "some-host:50000",
-				},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				assert.Len(t, container.VolumeMounts, 1)
+				assert.Equal(t, injectorConsts.UnixDomainSocketVolume, container.VolumeMounts[0].Name)
+				assert.Equal(t, "/tmp", container.VolumeMounts[0].MountPath)
 			},
-		})
-		c.PlacementAddress = "" // Set to empty to skip placement; should be overridden
-		c.SidecarImage = "daprio/dapr"
-		c.ImagePullPolicy = "Always"
-		c.Namespace = "dapr-system"
-		c.OperatorAddress = "controlplane:9000"
-		c.SentryAddress = "sentry:50000"
-		c.MTLSEnabled = true
-		c.Identity = "pod_identity"
-
-		c.SetFromPodAnnotations()
-
-		container, err := c.getSidecarContainer(getSidecarContainerOpts{})
-		require.NoError(t, err)
-
-		expectedArgs := []string{
-			"/daprd",
-			"--dapr-http-port", "3500",
-			"--dapr-grpc-port", "50001",
-			"--dapr-internal-grpc-port", "50002",
-			"--dapr-listen-addresses", "[::1],127.0.0.1",
-			"--dapr-public-port", "3501",
-			"--app-id", "app_id",
-			"--app-protocol", "http",
-			"--log-level", "info",
-			"--dapr-graceful-shutdown-seconds", "-1",
-			"--mode", "kubernetes",
-			"--control-plane-address", "controlplane:9000",
-			"--sentry-address", "sentry:50000",
-			"--app-port", "5000",
-			"--enable-metrics",
-			"--metrics-port", "9090",
-			"--config", "config",
-			"--placement-host-address", "some-host:50000",
-			"--log-as-json",
-			"--enable-mtls",
-		}
-
-		// Command should be empty, image's entrypoint to be used.
-		assert.Equal(t, 0, len(container.Command))
-		// NAMESPACE
-		assert.Equal(t, "dapr-system", container.Env[0].Value)
-		// DAPR_API_TOKEN
-		assert.Equal(t, "secret", container.Env[6].ValueFrom.SecretKeyRef.Name)
-		// DAPR_APP_TOKEN
-		assert.Equal(t, "appsecret", container.Env[7].ValueFrom.SecretKeyRef.Name)
-		// default image
-		assert.Equal(t, "daprio/dapr", container.Image)
-		assert.EqualValues(t, expectedArgs, container.Args)
-		assert.Equal(t, corev1.PullAlways, container.ImagePullPolicy)
-	})
-
-	t.Run("get sidecar container override listen address", func(t *testing.T) {
-		c := NewSidecarConfig(&corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Annotations: map[string]string{
-					annotations.KeyConfig:                 "config",
-					annotations.KeySidecarListenAddresses: "1.2.3.4,[::1]",
-				},
-			},
-		})
-
-		c.AppID = "app_id"
-		c.Namespace = "dapr-system"
-		c.OperatorAddress = "controlplane:9000"
-		c.PlacementAddress = "placement:50000"
-		c.SentryAddress = "sentry:50000"
-		c.MTLSEnabled = true
-
-		c.SetFromPodAnnotations()
-
-		container, err := c.getSidecarContainer(getSidecarContainerOpts{})
-		require.NoError(t, err)
-
-		expectedArgs := []string{
-			"/daprd",
-			"--dapr-http-port", "3500",
-			"--dapr-grpc-port", "50001",
-			"--dapr-internal-grpc-port", "50002",
-			"--dapr-listen-addresses", "1.2.3.4,[::1]",
-			"--dapr-public-port", "3501",
-			"--app-id", "app_id",
-			"--app-protocol", "http",
-			"--log-level", "info",
-			"--dapr-graceful-shutdown-seconds", "-1",
-			"--mode", "kubernetes",
-			"--control-plane-address", "controlplane:9000",
-			"--sentry-address", "sentry:50000",
-			"--enable-metrics",
-			"--metrics-port", "9090",
-			"--config", "config",
-			"--placement-host-address", "placement:50000",
-			"--enable-mtls",
-		}
-
-		assert.EqualValues(t, expectedArgs, container.Args)
-	})
-
-	t.Run("invalid graceful shutdown seconds", func(t *testing.T) {
-		c := NewSidecarConfig(&corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Annotations: map[string]string{
-					annotations.KeyGracefulShutdownSeconds: "invalid",
-				},
-			},
-		})
-
-		c.AppID = "app_id"
-		c.Namespace = "dapr-system"
-		c.OperatorAddress = "controlplane:9000"
-		c.PlacementAddress = "placement:50000"
-		c.SentryAddress = "sentry:50000"
-		c.MTLSEnabled = true
-
-		c.SetFromPodAnnotations()
-
-		container, err := c.getSidecarContainer(getSidecarContainerOpts{})
-		require.NoError(t, err)
-
-		expectedArgs := []string{
-			"/daprd",
-			"--dapr-http-port", "3500",
-			"--dapr-grpc-port", "50001",
-			"--dapr-internal-grpc-port", "50002",
-			"--dapr-listen-addresses", "[::1],127.0.0.1",
-			"--dapr-public-port", "3501",
-			"--app-id", "app_id",
-			"--app-protocol", "http",
-			"--log-level", "info",
-			"--dapr-graceful-shutdown-seconds", "-1",
-			"--mode", "kubernetes",
-			"--control-plane-address", "controlplane:9000",
-			"--sentry-address", "sentry:50000",
-			"--enable-metrics",
-			"--metrics-port", "9090",
-			"--placement-host-address", "placement:50000",
-			"--enable-mtls",
-		}
-
-		assert.EqualValues(t, expectedArgs, container.Args)
-	})
-
-	t.Run("valid graceful shutdown seconds", func(t *testing.T) {
-		c := NewSidecarConfig(&corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Annotations: map[string]string{
-					annotations.KeyGracefulShutdownSeconds: "5",
-				},
-			},
-		})
-
-		c.AppID = "app_id"
-		c.Namespace = "dapr-system"
-		c.OperatorAddress = "controlplane:9000"
-		c.PlacementAddress = "placement:50000"
-		c.SentryAddress = "sentry:50000"
-		c.MTLSEnabled = true
-
-		c.SetFromPodAnnotations()
-
-		container, err := c.getSidecarContainer(getSidecarContainerOpts{})
-		require.NoError(t, err)
-
-		expectedArgs := []string{
-			"/daprd",
-			"--dapr-http-port", "3500",
-			"--dapr-grpc-port", "50001",
-			"--dapr-internal-grpc-port", "50002",
-			"--dapr-listen-addresses", "[::1],127.0.0.1",
-			"--dapr-public-port", "3501",
-			"--app-id", "app_id",
-			"--app-protocol", "http",
-			"--log-level", "info",
-			"--dapr-graceful-shutdown-seconds", "5",
-			"--mode", "kubernetes",
-			"--control-plane-address", "controlplane:9000",
-			"--sentry-address", "sentry:50000",
-			"--enable-metrics",
-			"--metrics-port", "9090",
-			"--placement-host-address", "placement:50000",
-			"--enable-mtls",
-		}
-
-		assert.EqualValues(t, expectedArgs, container.Args)
-	})
-
-	t.Run("get sidecar container override image", func(t *testing.T) {
-		c := NewSidecarConfig(&corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Annotations: map[string]string{
-					annotations.KeySidecarImage: "override",
-				},
-			},
-		})
-
-		c.AppID = "app_id"
-		c.Namespace = "dapr-system"
-		c.SidecarImage = "daprio/dapr"
-		c.OperatorAddress = "controlplane:9000"
-		c.PlacementAddress = "placement:50000"
-		c.SentryAddress = "sentry:50000"
-		c.MTLSEnabled = true
-
-		c.SetFromPodAnnotations()
-
-		container, err := c.getSidecarContainer(getSidecarContainerOpts{})
-		require.NoError(t, err)
-
-		assert.Equal(t, "override", container.Image)
-	})
-
-	t.Run("get sidecar container without unix domain socket path", func(t *testing.T) {
-		c := NewSidecarConfig(&corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Annotations: map[string]string{
-					annotations.KeyUnixDomainSocketPath: "",
-				},
-			},
-		})
-		c.SetFromPodAnnotations()
-
-		container, err := c.getSidecarContainer(getSidecarContainerOpts{})
-		require.NoError(t, err)
-
-		assert.Equal(t, 0, len(container.VolumeMounts))
-	})
-
-	t.Run("get sidecar container with unix domain socket path", func(t *testing.T) {
-		c := NewSidecarConfig(&corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Annotations: map[string]string{
-					annotations.KeyUnixDomainSocketPath: "/tmp",
-				},
-			},
-		})
-		c.SetFromPodAnnotations()
-
-		container, err := c.getSidecarContainer(getSidecarContainerOpts{
-			VolumeMounts: []corev1.VolumeMount{
-				{Name: injectorConsts.UnixDomainSocketVolume, MountPath: "/tmp"},
-			},
-		})
-		require.NoError(t, err)
-
-		assert.Len(t, container.VolumeMounts, 1)
-		assert.Equal(t, injectorConsts.UnixDomainSocketVolume, container.VolumeMounts[0].Name)
-		assert.Equal(t, "/tmp", container.VolumeMounts[0].MountPath)
-	})
-
-	// Allows running multiple test suites in a more DRY way
-	type testCase struct {
-		name                    string
-		annotations             map[string]string
-		podModifierFn           func(pod *corev1.Pod)
-		sidecarConfigModifierFn func(c *SidecarConfig)
-		assertFn                func(t *testing.T, container *corev1.Container)
-	}
-	testCaseFn := func(tc testCase) func(t *testing.T) {
-		return func(t *testing.T) {
-			pod := &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Annotations: tc.annotations,
-				},
-			}
-			if tc.podModifierFn != nil {
-				tc.podModifierFn(pod)
-			}
-
-			c := NewSidecarConfig(pod)
-			c.AppID = "myapp"
-
-			if tc.sidecarConfigModifierFn != nil {
-				tc.sidecarConfigModifierFn(c)
-			}
-
-			c.SetFromPodAnnotations()
-
-			container, err := c.getSidecarContainer(getSidecarContainerOpts{})
-			require.NoError(t, err)
-
-			tc.assertFn(t, container)
-		}
-	}
-	testSuiteGenerator := func(tests []testCase) func(t *testing.T) {
-		return func(t *testing.T) {
-			for _, tc := range tests {
-				t.Run(tc.name, testCaseFn(tc))
-			}
-		}
-	}
+		},
+	}))
 
 	t.Run("disable builtin K8s Secret Store", testCaseFn(testCase{
 		annotations: map[string]string{
