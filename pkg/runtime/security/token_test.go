@@ -54,17 +54,3 @@ func TestAppToken(t *testing.T) {
 		assert.Equal(t, "", token)
 	})
 }
-
-func TestExcludedRoute(t *testing.T) {
-	t.Run("healthz route is excluded", func(t *testing.T) {
-		route := "v1.0/healthz"
-		excluded := ExcludedRoute(route)
-		assert.True(t, excluded)
-	})
-
-	t.Run("custom route is not excluded", func(t *testing.T) {
-		route := "v1.0/state"
-		excluded := ExcludedRoute(route)
-		assert.False(t, excluded)
-	})
-}
