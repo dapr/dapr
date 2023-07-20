@@ -209,7 +209,7 @@ func TestComponentsPatch(t *testing.T) {
 				},
 			},
 			jsonpatch.Patch{
-				NewPatchOperation("add", PatchPathVolumes+"/-", []corev1.Volume{sharedComponentsSocketVolume()}),
+				NewPatchOperation("add", PatchPathVolumes+"/-", sharedComponentsSocketVolume()),
 				NewPatchOperation("add", PatchPathContainers+"/1/env", []corev1.EnvVar{{
 					Name:  injectorConsts.ComponentsUDSMountPathEnvVar,
 					Value: socketSharedVolumeMount.MountPath,
@@ -227,9 +227,9 @@ func TestComponentsPatch(t *testing.T) {
 			_, componentContainers := c.splitContainers()
 			patch, volumeMount := c.componentsPatchOps(componentContainers, Injectable(test.appID, test.componentsList))
 			patchJSON, _ := json.Marshal(patch)
-			expPatchJSON, _ := json.Marshal(patch)
-			assert.Equal(t, string(patchJSON), string(expPatchJSON))
-			assert.Equal(t, volumeMount, test.expMount)
+			expPatchJSON, _ := json.Marshal(test.expPatch)
+			assert.Equal(t, string(expPatchJSON), string(patchJSON))
+			assert.Equal(t, test.expMount, volumeMount)
 		})
 	}
 }

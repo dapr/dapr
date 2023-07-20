@@ -22,7 +22,7 @@ import (
 	"github.com/dapr/dapr/pkg/injector/patcher"
 )
 
-// getInjectedComponentContainersFn implements GetInjectedComponentContainersFn and returns the list of injected component.
+// getInjectedComponentContainers implements GetInjectedComponentContainersFn and returns the list of injected component.
 func (i *injector) getInjectedComponentContainers(appID string, namespace string) ([]corev1.Container, error) {
 	// FIXME There is a potential issue with the components being fetched from the operator versus at runtime.
 	// This would lead in two possible scenarios:

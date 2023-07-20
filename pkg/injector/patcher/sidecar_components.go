@@ -137,7 +137,7 @@ func Injectable(appID string, components []componentsapi.Component) []corev1.Con
 	return componentContainers
 }
 
-// emptyVolumePatches return all patches for pod emptyvolumes (the default value for injected pluggable components)
+// emptyVolumePatches return all patches for pod emptyvolumes (the default value for injected pluggable components) and the volumes.
 func emptyVolumePatches(container corev1.Container, podVolumes map[string]bool) ([]corev1.Volume, jsonpatch.Patch) {
 	volumes := make([]corev1.Volume, 0, len(container.VolumeMounts))
 	volumePatches := make(jsonpatch.Patch, 0, len(container.VolumeMounts))
@@ -160,7 +160,7 @@ func emptyVolumePatches(container corev1.Container, podVolumes map[string]bool) 
 	return volumes, volumePatches
 }
 
-// addSharedSocketVolume adds the new volume to the pod and return the patch operation and the mounted volume.
+// addSharedSocketVolume adds the new volume to the pod and return the patch operation, the volume, and the volume mount.
 func (c *SidecarConfig) addSharedSocketVolume(mountPath string) (corev1.Volume, corev1.VolumeMount, jsonpatch.Operation) {
 	sharedSocketVolume := sharedComponentsSocketVolume()
 	sharedSocketVolumeMount := sharedComponentsUnixSocketVolumeMount(mountPath)

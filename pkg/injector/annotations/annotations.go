@@ -14,6 +14,9 @@ limitations under the License.
 // Package annotations contains the list of annotations for Dapr deployments.
 package annotations
 
+// Annotation keys.
+// Name must start with "Key".
+
 const (
 	KeyEnabled                          = "dapr.io/enabled"
 	KeyAppPort                          = "dapr.io/app-port"
