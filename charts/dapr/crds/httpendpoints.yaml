@@ -52,6 +52,82 @@ spec:
             properties:
               baseUrl:
                 type: string
+              clientTLS:
+                description: TLS describes how to build client or server TLS configurations.
+                properties:
+                  certificate:
+                    description: TLSDocument describes and in-line or pointer to a
+                      document to build a TLS configuration.
+                    properties:
+                      secretKeyRef:
+                        description: SecretKeyRef is the reference of a value in a
+                          secret store component.
+                        properties:
+                          key:
+                            description: Field in the secret.
+                            type: string
+                          name:
+                            description: Secret name.
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      value:
+                        description: Value of the property, in plaintext.
+                        x-kubernetes-preserve-unknown-fields: true
+                    type: object
+                  privateKey:
+                    description: TLSDocument describes and in-line or pointer to a
+                      document to build a TLS configuration.
+                    properties:
+                      secretKeyRef:
+                        description: SecretKeyRef is the reference of a value in a
+                          secret store component.
+                        properties:
+                          key:
+                            description: Field in the secret.
+                            type: string
+                          name:
+                            description: Secret name.
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      value:
+                        description: Value of the property, in plaintext.
+                        x-kubernetes-preserve-unknown-fields: true
+                    type: object
+                  renegotiation:
+                    default: Never
+                    description: Renegotiation sets the underlying tls negotiation
+                      strategy for an http channel.
+                    enum:
+                    - Never
+                    - OnceAsClient
+                    - FreelyAsClient
+                    type: string
+                  rootCA:
+                    description: TLSDocument describes and in-line or pointer to a
+                      document to build a TLS configuration.
+                    properties:
+                      secretKeyRef:
+                        description: SecretKeyRef is the reference of a value in a
+                          secret store component.
+                        properties:
+                          key:
+                            description: Field in the secret.
+                            type: string
+                          name:
+                            description: Secret name.
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      value:
+                        description: Value of the property, in plaintext.
+                        x-kubernetes-preserve-unknown-fields: true
+                    type: object
+                type: object
               headers:
                 items:
                   description: NameValuePair is a name/value pair.
