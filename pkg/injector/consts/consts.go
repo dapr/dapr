@@ -33,6 +33,7 @@ const (
 	SidecarMetricsEnabledLabel     = "dapr.io/metrics-enabled"
 	APIVersionV1                   = "v1.0"
 	UnixDomainSocketVolume         = "dapr-unix-domain-socket"              // Name of the UNIX domain socket volume.
+	UnixDomainSocketDaprdPath      = "/var/run/dapr-sockets"                // Path in the daprd container where UNIX domain sockets are mounted.
 	UserContainerAppProtocolName   = "APP_PROTOCOL"                         // Name of the variable exposed to the app containing the app protocol.
 	UserContainerDaprHTTPPortName  = "DAPR_HTTP_PORT"                       // Name of the variable exposed to the app containing the Dapr HTTP port.
 	UserContainerDaprGRPCPortName  = "DAPR_GRPC_PORT"                       // Name of the variable exposed to the app containing the Dapr gRPC port.

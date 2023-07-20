@@ -164,6 +164,12 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 		args = append(args, "--dapr-http-read-buffer-size", strconv.Itoa(*c.HTTPReadBufferSize))
 	}
 
+	if c.UnixDomainSocketPath != "" {
+		// Note this is a constant path
+		// The passed annotation determines where the socket folder is mounted in the app container, but in the daprd container the path is a constant
+		args = append(args, "--unix-domain-socket", injectorConsts.UnixDomainSocketDaprdPath)
+	}
+
 	// When debugging is enabled, we need to override the command and the flags
 	if c.EnableDebug {
 		ports = append(ports, corev1.ContainerPort{

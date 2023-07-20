@@ -89,11 +89,17 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 
 	// Get the patch to apply to the pod
 	// Patch may be empty if there's nothing that needs to be done
-	return sidecar.GetPatch()
+	patch, err := sidecar.GetPatch()
+	if err != nil {
+		return nil, err
+	}
+	return patch, nil
 }
 
 func mTLSEnabled(daprClient scheme.Interface) bool {
-	resp, err := daprClient.ConfigurationV1alpha1().Configurations(metav1.NamespaceAll).List(metav1.ListOptions{})
+	resp, err := daprClient.ConfigurationV1alpha1().
+		Configurations(metav1.NamespaceAll).
+		List(metav1.ListOptions{})
 	if err != nil {
 		log.Errorf("Failed to load dapr configuration from k8s, use default value %t for mTLSEnabled: %s", defaultMtlsEnabled, err)
 		return defaultMtlsEnabled

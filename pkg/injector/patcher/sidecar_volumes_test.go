@@ -206,72 +206,33 @@ func TestGetVolumeMounts(t *testing.T) {
 }
 
 func TestGetUnixDomainSocketVolume(t *testing.T) {
-	testCases := []struct {
-		testName        string
-		udsPath         string
-		originalVolumes []corev1.Volume
-		exportMount     *corev1.VolumeMount
-	}{
-		{
-			"empty value",
-			"",
-			nil,
-			nil,
-		},
-		{
-			"add volume",
-			"/tmp",
-			nil,
-			&corev1.VolumeMount{Name: injectorConsts.UnixDomainSocketVolume, MountPath: "/tmp"},
-		},
-	}
+	c := NewSidecarConfig(&corev1.Pod{})
+	c.UnixDomainSocketPath = "/tmp"
 
-	for _, tc := range testCases {
-		t.Run(tc.testName, func(t *testing.T) {
-			pod := &corev1.Pod{
-				Spec: corev1.PodSpec{
-					Volumes: tc.originalVolumes,
-				},
-			}
+	volume, daprdMount, appMount := c.getUnixDomainSocketVolumeMount()
 
-			c := NewSidecarConfig(pod)
-			c.UnixDomainSocketPath = tc.udsPath
-
-			socketMount := c.getUnixDomainSocketVolumeMount()
-
-			if tc.exportMount == nil {
-				assert.Equal(t, tc.exportMount, socketMount)
-			} else {
-				assert.Equal(t, tc.exportMount.Name, socketMount.Name)
-				assert.Equal(t, tc.exportMount.MountPath, socketMount.MountPath)
-			}
-		})
-	}
+	assert.Equal(t, injectorConsts.UnixDomainSocketVolume, volume.Name)
+	assert.NotNil(t, volume.VolumeSource.EmptyDir)
+	assert.Equal(t, injectorConsts.UnixDomainSocketVolume, daprdMount.Name)
+	assert.Equal(t, injectorConsts.UnixDomainSocketDaprdPath, daprdMount.MountPath)
+	assert.Equal(t, injectorConsts.UnixDomainSocketVolume, appMount.Name)
+	assert.Equal(t, "/tmp", appMount.MountPath)
 }
 
-func TestAddSocketVolumeToContainers(t *testing.T) {
+func TestAddVolumeToContainers(t *testing.T) {
 	testCases := []struct {
 		testName      string
 		mockContainer corev1.Container
-		socketMount   *corev1.VolumeMount
+		socketMount   corev1.VolumeMount
 		expOpsLen     int
 		expOps        jsonpatch.Patch
 	}{
-		{
-			testName: "empty var, empty volume",
-			mockContainer: corev1.Container{
-				Name: "MockContainer",
-			},
-			socketMount: nil,
-			expOpsLen:   0,
-			expOps:      jsonpatch.Patch{},
-		},
 		{
 			testName: "existing var, empty volume",
 			mockContainer: corev1.Container{
 				Name: "MockContainer",
 			},
-			socketMount: &corev1.VolumeMount{
+			socketMount: corev1.VolumeMount{
 				Name:      injectorConsts.UnixDomainSocketVolume,
 				MountPath: "/tmp",
 			},
@@ -291,7 +252,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 					{Name: "mock1"},
 				},
 			},
-			socketMount: &corev1.VolumeMount{
+			socketMount: corev1.VolumeMount{
 				Name:      injectorConsts.UnixDomainSocketVolume,
 				MountPath: "/tmp",
 			},
@@ -312,7 +273,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 					{Name: "mock2"},
 				},
 			},
-			socketMount: &corev1.VolumeMount{
+			socketMount: corev1.VolumeMount{
 				Name:      injectorConsts.UnixDomainSocketVolume,
 				MountPath: "/tmp",
 			},
@@ -332,7 +293,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 					{Name: injectorConsts.UnixDomainSocketVolume},
 				},
 			},
-			socketMount: &corev1.VolumeMount{
+			socketMount: corev1.VolumeMount{
 				Name:      injectorConsts.UnixDomainSocketVolume,
 				MountPath: "/tmp",
 			},
@@ -347,7 +308,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 					{MountPath: "/tmp"},
 				},
 			},
-			socketMount: &corev1.VolumeMount{
+			socketMount: corev1.VolumeMount{
 				Name:      injectorConsts.UnixDomainSocketVolume,
 				MountPath: "/tmp",
 			},
@@ -358,7 +319,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.testName, func(t *testing.T) {
-			patchEnv := addSocketVolumeMountToContainers(map[int]corev1.Container{0: tc.mockContainer}, tc.socketMount)
+			patchEnv := addVolumeMountToContainers(map[int]corev1.Container{0: tc.mockContainer}, tc.socketMount)
 			assert.Equal(t, tc.expOpsLen, len(patchEnv))
 			assert.Equal(t, tc.expOps, patchEnv)
 		})

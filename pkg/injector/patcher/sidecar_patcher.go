@@ -43,18 +43,30 @@ func (c *SidecarConfig) GetPatch() (patchOps jsonpatch.Patch, err error) {
 
 	patchOps = jsonpatch.Patch{}
 
-	// Get volume mounts and add the UDS volume mount if needed
-	volumeMounts := c.getVolumeMounts()
-	socketVolumeMount := c.getUnixDomainSocketVolumeMount()
-	if socketVolumeMount != nil {
-		volumeMounts = append(volumeMounts, *socketVolumeMount)
-	}
-
-	// Pluggable components
+	// Get the list of app and component containers
 	appContainers, componentContainers := c.splitContainers()
 	if err != nil {
 		return nil, err
 	}
+
+	// Get volume mounts and add the UDS volume mount if needed
+	volumeMounts := c.getVolumeMounts()
+	volumes := make([]corev1.Volume, 0, 2)
+	containerVolumeMounts := make([]corev1.VolumeMount, 0, 1)
+	if c.UnixDomainSocketPath != "" {
+		volume, daprdMount, appMount := c.getUnixDomainSocketVolumeMount()
+
+		// Add to volumes so a new volume is created
+		volumes = append(volumes, volume)
+
+		// Add to volumeMounts so it's added to the daprd container
+		volumeMounts = append(volumeMounts, daprdMount)
+
+		// Add to containerVolumeMounts so it's added to the app containers
+		containerVolumeMounts = append(containerVolumeMounts, appMount)
+	}
+
+	// Pluggable components
 	var injectedComponentContainers []corev1.Container
 	if c.GetInjectedComponentContainers != nil && c.InjectPluggableComponents {
 		injectedComponentContainers, err = c.GetInjectedComponentContainers(c.GetAppID(), c.Namespace)
@@ -67,17 +79,16 @@ func (c *SidecarConfig) GetPatch() (patchOps jsonpatch.Patch, err error) {
 	// Projected volume with the token
 	if !c.DisableTokenVolume {
 		tokenVolume := c.getTokenVolume()
+
+		// Add to volumes so a new volume is created
+		volumes = append(volumes, tokenVolume)
+
+		// Add to volumeMounts so it's added to the daprd container
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{
 			Name:      injectorConsts.TokenVolumeName,
 			MountPath: injectorConsts.TokenVolumeKubernetesMountPath,
 			ReadOnly:  true,
 		})
-
-		patchOps = append(patchOps, getVolumesPatchOperations(
-			c.pod.Spec.Volumes,
-			[]corev1.Volume{tokenVolume},
-			PatchPathVolumes,
-		)...)
 	}
 
 	// Get the sidecar container
@@ -103,6 +114,12 @@ func (c *SidecarConfig) GetPatch() (patchOps jsonpatch.Patch, err error) {
 		)
 	}
 
+	// Add all volumes
+	if len(volumes) > 0 {
+		patchOps = append(patchOps, c.getVolumesPatchOperations(volumes, PatchPathVolumes)...)
+	}
+
+	// Other patch operations
 	patchOps = append(patchOps,
 		NewPatchOperation("add", PatchPathContainers+"/-", sidecarContainer),
 		NewPatchOperation("add", PatchPathLabels+"/dapr.io~1sidecar-injected", "true"),
@@ -112,9 +129,11 @@ func (c *SidecarConfig) GetPatch() (patchOps jsonpatch.Patch, err error) {
 	patchOps = append(patchOps,
 		c.addDaprEnvVarsToContainers(appContainers, c.GetAppProtocol())...,
 	)
-	patchOps = append(patchOps,
-		addSocketVolumeMountToContainers(appContainers, socketVolumeMount)...,
-	)
+	for _, vm := range containerVolumeMounts {
+		patchOps = append(patchOps,
+			addVolumeMountToContainers(appContainers, vm)...,
+		)
+	}
 	patchOps = append(patchOps, componentPatchOps...)
 
 	return patchOps, nil

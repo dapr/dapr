@@ -331,6 +331,15 @@ func TestPatching(t *testing.T) {
 				assert.Equal(t, "http", appEnvVars["APP_PROTOCOL"])
 			},
 		},
+		{
+			name: "with UDS",
+			podModifierFn: func(pod *corev1.Pod) {
+				pod.Annotations[annotations.KeyUnixDomainSocketPath] = "/tmp"
+			},
+			assertFn: func(t *testing.T, pod *corev1.Pod) {
+				assertDaprdContainerFn(t, pod)
+			},
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, testCaseFn(tc))

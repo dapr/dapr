@@ -31,7 +31,7 @@ import (
 
 func TestComponentsPatch(t *testing.T) {
 	const appName, componentImage, componentName = "my-app", "my-image", "my-component"
-	socketSharedVolumeMount := sharedComponentsUnixSocketVolumeMount("/tmp/dapr-components-sockets")
+	socketSharedVolumeMount := sharedComponentsUnixSocketVolumeMount(injectorConsts.ComponentsUDSDefaultFolder)
 	appContainer := corev1.Container{
 		Name: "app",
 	}

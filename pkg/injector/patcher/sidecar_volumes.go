@@ -44,16 +44,28 @@ func (c *SidecarConfig) getVolumeMounts() []corev1.VolumeMount {
 	return volumeMounts
 }
 
-// getUnixDomainSocketVolumeMount returns a volume mount for the pod to append the UNIX domain socket.
-func (c *SidecarConfig) getUnixDomainSocketVolumeMount() *corev1.VolumeMount {
-	if c.UnixDomainSocketPath == "" {
-		return nil
+// getUnixDomainSocketVolumeMount returns a volume and mounts for the pod to append the UNIX domain socket.
+func (c *SidecarConfig) getUnixDomainSocketVolumeMount() (vol corev1.Volume, daprdVolMount corev1.VolumeMount, appVolMount corev1.VolumeMount) {
+	vol = corev1.Volume{
+		Name: injectorConsts.UnixDomainSocketVolume,
+		VolumeSource: corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{
+				Medium: corev1.StorageMediumMemory,
+			},
+		},
 	}
 
-	return &corev1.VolumeMount{
+	daprdVolMount = corev1.VolumeMount{
+		Name:      injectorConsts.UnixDomainSocketVolume,
+		MountPath: injectorConsts.UnixDomainSocketDaprdPath,
+	}
+
+	appVolMount = corev1.VolumeMount{
 		Name:      injectorConsts.UnixDomainSocketVolume,
 		MountPath: c.UnixDomainSocketPath,
 	}
+
+	return
 }
 
 // getTokenVolume returns the volume projection for the Kubernetes service account.
@@ -76,15 +88,6 @@ func (c *SidecarConfig) getTokenVolume() corev1.Volume {
 	}
 }
 
-// addSocketVolumeMountToContainers adds the Dapr UNIX domain socket volume to all the containers in any Dapr-enabled pod.
-func addSocketVolumeMountToContainers(containers map[int]corev1.Container, socketVolumeMount *corev1.VolumeMount) jsonpatch.Patch {
-	if socketVolumeMount == nil {
-		return jsonpatch.Patch{}
-	}
-
-	return addVolumeMountToContainers(containers, *socketVolumeMount)
-}
-
 func addVolumeMountToContainers(containers map[int]corev1.Container, addMounts corev1.VolumeMount) jsonpatch.Patch {
 	volumeMount := []corev1.VolumeMount{addMounts}
 	volumeMountPatchOps := make(jsonpatch.Patch, 0, len(containers))
@@ -95,8 +98,8 @@ func addVolumeMountToContainers(containers map[int]corev1.Container, addMounts c
 	return volumeMountPatchOps
 }
 
-func getVolumesPatchOperations(volumes []corev1.Volume, addVolumes []corev1.Volume, path string) jsonpatch.Patch {
-	if len(volumes) == 0 {
+func (c *SidecarConfig) getVolumesPatchOperations(addVolumes []corev1.Volume, path string) jsonpatch.Patch {
+	if len(c.pod.Spec.Volumes) == 0 {
 		// If there are no volumes defined in the container, we initialize a slice of volumes.
 		return jsonpatch.Patch{
 			NewPatchOperation("add", path, addVolumes),
@@ -110,7 +113,7 @@ func getVolumesPatchOperations(volumes []corev1.Volume, addVolumes []corev1.Volu
 	n := 0
 	for _, addVolume := range addVolumes {
 		isConflict := false
-		for _, mount := range volumes {
+		for _, mount := range c.pod.Spec.Volumes {
 			// conflict cases
 			if addVolume.Name == mount.Name {
 				isConflict = true
