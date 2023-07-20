@@ -14,12 +14,13 @@ limitations under the License.
 package utils
 
 import (
+	"context"
 	"net"
 	"net/http"
 	"time"
 )
 
-// NewHTTPClient returns a HTTP client configured
+// NewHTTPClient returns a HTTP client configured for our tests.
 func NewHTTPClient() *http.Client {
 	dialer := &net.Dialer{ //nolint:exhaustivestruct
 		Timeout: 5 * time.Second,
@@ -32,5 +33,16 @@ func NewHTTPClient() *http.Client {
 	return &http.Client{ //nolint:exhaustivestruct
 		Timeout:   30 * time.Second,
 		Transport: netTransport,
+	}
+}
+
+// NewHTTPClientForSocket returns a HTTP client that connects to a Unix Domain Socket.
+func NewHTTPClientForSocket(socketAddr string) *http.Client {
+	return &http.Client{
+		Transport: &http.Transport{
+			DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
+				return net.Dial("unix", socketAddr)
+			},
+		},
 	}
 }

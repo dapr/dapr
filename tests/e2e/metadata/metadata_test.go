@@ -93,17 +93,24 @@ func TestMain(m *testing.M) {
 
 	// These apps will be deployed before starting actual test
 	// and will be cleaned up after all tests are finished automatically
-	testApps := []kube.AppDescription{
-		{
-			AppName:        appName,
-			DaprEnabled:    true,
-			ImageName:      "e2e-metadata",
-			Replicas:       1,
-			IngressEnabled: true,
-			MetricsEnabled: true,
-			Config:         "previewconfig",
-		},
+	testApp := kube.AppDescription{
+		AppName:        appName,
+		DaprEnabled:    true,
+		ImageName:      "e2e-metadata",
+		Replicas:       1,
+		IngressEnabled: true,
+		MetricsEnabled: true,
+		Config:         "previewconfig",
 	}
+	if utils.TestTargetOS() != "windows" {
+		// On Linux, we use Unix Domain Sockets for the servers
+		testApp.UnixDomainSocketPath = "/var/dapr/"
+		testApp.AppEnv = map[string]string{
+			"DAPR_GRPC_SOCKET_ADDR": "/var/dapr/dapr-" + appName + "-grpc.socket",
+			"DAPR_HTTP_SOCKET_ADDR": "/var/dapr/dapr-" + appName + "-http.socket",
+		}
+	}
+	testApps := []kube.AppDescription{testApp}
 
 	log.Printf("Creating TestRunner")
 	tr = runner.NewTestRunner("metadatatest", testApps, nil, nil)

@@ -41,7 +41,7 @@ const (
 )
 
 var (
-	httpClient = utils.NewHTTPClient()
+	httpClient *http.Client
 	grpcClient runtimev1pb.DaprClient
 )
 
@@ -112,8 +112,7 @@ func indexHandler(w http.ResponseWriter, _ *http.Request) {
 
 func setMetadata(r *http.Request) error {
 	var data setMetadataRequest
-	err := json.NewDecoder(r.Body).Decode(&data)
-	if err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
 		return err
 	}
 
@@ -143,7 +142,7 @@ func setMetadata(r *http.Request) error {
 			return fmt.Errorf("invalid status code: %d", res.StatusCode)
 		}
 	case "grpc":
-		_, err = grpcClient.SetMetadata(ctx, &runtimev1pb.SetMetadataRequest{
+		_, err := grpcClient.SetMetadata(ctx, &runtimev1pb.SetMetadataRequest{
 			Key:   data.Key,
 			Value: data.Value,
 		})
@@ -265,10 +264,10 @@ func main() {
 		conn *grpc.ClientConn
 		err  error
 	)
-	socketAddr := os.Getenv("DAPR_SOCKET_ADDR")
-	if socketAddr != "" {
+	grpcSocketAddr := os.Getenv("DAPR_GRPC_SOCKET_ADDR")
+	if grpcSocketAddr != "" {
 		conn, err = grpc.Dial(
-			"unix://"+socketAddr,
+			"unix://"+grpcSocketAddr,
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 		)
 	} else {
@@ -283,8 +282,15 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to establish gRPC connection to Dapr: %v", err)
 	}
-
 	grpcClient = runtimev1pb.NewDaprClient(conn)
+
+	// If using Unix Domain Sockets, we need to change the HTTP client too
+	httpSocketAddr := os.Getenv("DAPR_HTTP_SOCKET_ADDR")
+	if httpSocketAddr != "" {
+		httpClient = utils.NewHTTPClientForSocket(httpSocketAddr)
+	} else {
+		httpClient = utils.NewHTTPClient()
+	}
 
 	// Start app
 	log.Printf("Metadata App - listening on http://:%d", appPort)
