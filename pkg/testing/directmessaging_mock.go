@@ -59,7 +59,7 @@ func (_m *MockDirectMessaging) SetAppChannel(appChannel channel.AppChannel) {
 }
 
 // SetHTTPEndpointsAppChannel provides a mock function with given fields: appChannel
-func (_m *MockDirectMessaging) SetHTTPEndpointsAppChannel(appChannel channel.HTTPEndpointAppChannel) {
+func (_m *MockDirectMessaging) SetHTTPEndpointsAppChannels(nonResourceChannel channel.HTTPEndpointAppChannel, resourceChannels map[string]channel.HTTPEndpointAppChannel) {
 	// nop
 }
 
@@ -96,6 +96,6 @@ func (_m *FailingDirectMessaging) SetAppChannel(appChannel channel.AppChannel) {
 }
 
 // SetHTTPEndpointsAppChannel provides a mock function with given fields: appChannel
-func (_m *FailingDirectMessaging) SetHTTPEndpointsAppChannel(appChannel channel.HTTPEndpointAppChannel) {
+func (_m *FailingDirectMessaging) SetHTTPEndpointsAppChannels(nonResourceChannel channel.HTTPEndpointAppChannel, resourceChannels map[string]channel.HTTPEndpointAppChannel) {
 	// nop
 }
