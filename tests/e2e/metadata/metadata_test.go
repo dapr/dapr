@@ -58,18 +58,18 @@ type mockRegisteredComponent struct {
 	Capabilities []string `json:"capabilities"`
 }
 
-func testSetMetadata(t *testing.T, metadataAppExternalURL string) {
+func testSetMetadata(t *testing.T, protocol, metadataAppExternalURL string) {
 	t.Log("Setting sidecar metadata")
-	url := fmt.Sprintf("%s/test/setMetadata", metadataAppExternalURL)
+	url := fmt.Sprintf("%s/test/%s/set", metadataAppExternalURL, protocol)
 	resp, err := utils.HTTPPost(url, []byte(`{"key":"newkey","value":"newvalue"}`))
 	require.NoError(t, err)
 	require.NotEmpty(t, resp, "response must not be empty!")
 }
 
-func testGetMetadata(t *testing.T, metadataAppExternalURL string) {
+func testGetMetadata(t *testing.T, protocol, metadataAppExternalURL string) {
 	t.Log("Getting sidecar metadata")
-	url := fmt.Sprintf("%s/test/getMetadata", metadataAppExternalURL)
-	resp, err := utils.HTTPGet(url)
+	url := fmt.Sprintf("%s/test/%s/get", metadataAppExternalURL, protocol)
+	resp, err := utils.HTTPPost(url, nil)
 	require.NoError(t, err)
 	require.NotEmpty(t, resp, "response must not be empty!")
 	var metadata mockMetadata
@@ -120,6 +120,13 @@ func TestMetadata(t *testing.T) {
 	_, err := utils.HTTPGetNTimes(metadataAppExternalURL, numHealthChecks)
 	require.NoError(t, err)
 
-	testSetMetadata(t, metadataAppExternalURL)
-	testGetMetadata(t, metadataAppExternalURL)
+	t.Run("HTTP", func(t *testing.T) {
+		testSetMetadata(t, "http", metadataAppExternalURL)
+		testGetMetadata(t, "http", metadataAppExternalURL)
+	})
+
+	t.Run("gRPC", func(t *testing.T) {
+		testSetMetadata(t, "grpc", metadataAppExternalURL)
+		testGetMetadata(t, "grpc", metadataAppExternalURL)
+	})
 }
