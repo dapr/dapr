@@ -26,6 +26,7 @@ import (
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"github.com/dapr/dapr/pkg/credentials"
+	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
 	"github.com/dapr/dapr/pkg/injector/patcher"
 	sentryConsts "github.com/dapr/dapr/pkg/sentry/consts"
 )
@@ -58,7 +59,7 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 	// Create the sidecar configuration object from the pod
 	sidecar := patcher.NewSidecarConfig(pod)
 	sidecar.GetInjectedComponentContainers = i.getInjectedComponentContainers
-	sidecar.KubernetesMode = true
+	sidecar.Mode = injectorConsts.ModeKubernetes
 	sidecar.Namespace = ar.Request.Namespace
 	sidecar.TrustAnchors = trustAnchors
 	sidecar.CertChain = certChain

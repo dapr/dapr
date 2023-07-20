@@ -221,6 +221,16 @@ func TestPodNeedsPatching(t *testing.T) {
 }
 
 func TestPatching(t *testing.T) {
+	assertDaprdContainerFn := func(t *testing.T, pod *corev1.Pod) {
+		t.Helper()
+
+		assert.Len(t, pod.Spec.Containers, 2)
+		assert.Equal(t, "appcontainer", pod.Spec.Containers[0].Name)
+		assert.Equal(t, "daprd", pod.Spec.Containers[1].Name)
+
+		assert.Equal(t, "/daprd", pod.Spec.Containers[1].Args[0])
+	}
+
 	type testCase struct {
 		name                    string
 		podModifierFn           func(pod *corev1.Pod)
@@ -277,10 +287,7 @@ func TestPatching(t *testing.T) {
 		{
 			name: "basic test",
 			assertFn: func(t *testing.T, pod *corev1.Pod) {
-				// daprd container added
-				assert.Len(t, pod.Spec.Containers, 2)
-				assert.Equal(t, "appcontainer", pod.Spec.Containers[0].Name)
-				assert.Equal(t, "daprd", pod.Spec.Containers[1].Name)
+				assertDaprdContainerFn(t, pod)
 
 				// Assertions around the Daprd container
 				daprdContainer := pod.Spec.Containers[1]
