@@ -121,6 +121,9 @@ var (
 	ErrCryptoGetKey                 = APIError{"failed to retrieve key %s: %v", "ERR_CRYPTO_KEY", http.StatusInternalServerError, grpcCodes.Internal}
 	ErrCryptoOperation              = APIError{"failed to perform operation: %v", "ERR_CRYPTO", http.StatusInternalServerError, grpcCodes.Internal}
 
+	// Actor.
+	ErrActorReminderOpActorNotHosted = APIError{"operations on actor reminders are only possible on hosted actor types", "ERR_ACTOR_REMINDER_NON_HOSTED", http.StatusForbidden, grpcCodes.PermissionDenied}
+
 	// Lock.
 	ErrLockStoresNotConfigured    = APIError{"lock store is not configured", "ERR_LOCK_STORE_NOT_CONFIGURED", http.StatusInternalServerError, grpcCodes.FailedPrecondition}
 	ErrResourceIDEmpty            = APIError{"ResourceId is empty in lock store %s", "ERR_MALFORMED_REQUEST", http.StatusBadRequest, grpcCodes.InvalidArgument}
