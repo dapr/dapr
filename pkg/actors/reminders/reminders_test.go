@@ -48,7 +48,7 @@ func newTestReminders() *reminders {
 	conf := internal.Config{
 		AppID:              TestAppID,
 		PlacementAddresses: []string{"placement:5050"},
-		HostedActorTypes:   []string{"cat"},
+		HostedActorTypes:   internal.NewHostedActors([]string{"cat"}),
 	}
 	opts := internal.RemindersProviderOpts{
 		StoreName: "testStore",
@@ -177,21 +177,21 @@ func TestReminderCountFiring(t *testing.T) {
 }
 
 func TestCreateTimerDueTimes(t *testing.T) {
-	provider := newTestReminders()
-	defer provider.Close()
-	clock := provider.clock.(*clocktesting.FakeClock)
-
-	executed := make(chan string, 1)
-	provider.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
-		executed <- reminder.Key()
-		return true
-	})
-
 	t.Run("create reminder with positive DueTime", func(t *testing.T) {
+		provider := newTestReminders()
+		defer provider.Close()
+		clock := provider.clock.(*clocktesting.FakeClock)
+
+		executed := make(chan string, 1)
+		provider.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
+			executed <- reminder.Key()
+			return true
+		})
+
 		req := internal.CreateReminderRequest{
 			ActorID:   "myactor",
 			ActorType: "mytype",
-			Name:      "myreminder1",
+			Name:      "myreminder",
 			DueTime:   "1s",
 		}
 		r := createReminder(t, clock.Now(), req)
@@ -209,10 +209,20 @@ func TestCreateTimerDueTimes(t *testing.T) {
 	})
 
 	t.Run("create reminder with 0 DueTime", func(t *testing.T) {
+		provider := newTestReminders()
+		defer provider.Close()
+		clock := provider.clock.(*clocktesting.FakeClock)
+
+		executed := make(chan string, 1)
+		provider.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
+			executed <- reminder.Key()
+			return true
+		})
+
 		req := internal.CreateReminderRequest{
 			ActorID:   "myactor",
 			ActorType: "mytype",
-			Name:      "myreminder2",
+			Name:      "myreminder",
 			DueTime:   "0",
 		}
 		r := createReminder(t, clock.Now(), req)
@@ -230,10 +240,20 @@ func TestCreateTimerDueTimes(t *testing.T) {
 	})
 
 	t.Run("create reminder with no DueTime", func(t *testing.T) {
+		provider := newTestReminders()
+		defer provider.Close()
+		clock := provider.clock.(*clocktesting.FakeClock)
+
+		executed := make(chan string, 1)
+		provider.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
+			executed <- reminder.Key()
+			return true
+		})
+
 		req := internal.CreateReminderRequest{
 			ActorID:   "myactor",
 			ActorType: "mytype",
-			Name:      "myreminder3",
+			Name:      "myreminder",
 			DueTime:   "",
 		}
 		r := createReminder(t, clock.Now(), req)
@@ -438,11 +458,10 @@ func newTestRemindersWithMockAndActorMetadataPartition() *reminders {
 		},
 	}
 	conf := internal.Config{
-		AppID:              TestAppID,
-		PlacementAddresses: []string{"placement:5050"},
-		// HostedActorTypes:   []string{"cat"},
+		AppID:                      TestAppID,
+		PlacementAddresses:         []string{"placement:5050"},
 		DrainRebalancedActors:      appConfig.DrainRebalancedActors,
-		HostedActorTypes:           appConfig.Entities,
+		HostedActorTypes:           internal.NewHostedActors(appConfig.Entities),
 		Reentrancy:                 appConfig.Reentrancy,
 		RemindersStoragePartitions: appConfig.RemindersStoragePartitions,
 		EntityConfigs:              make(map[string]internal.EntityConfig),

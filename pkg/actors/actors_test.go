@@ -166,8 +166,10 @@ func (b *runtimeBuilder) buildActorRuntime() *actorsRuntime {
 			PlacementAddresses: []string{"placement:5050"},
 			Port:               0,
 			Namespace:          "",
-			AppConfig:          config.ApplicationConfig{},
-			PodName:            TestPodName,
+			AppConfig: config.ApplicationConfig{
+				Entities: []string{"failingActor"},
+			},
+			PodName: TestPodName,
 		})
 		b.config = &config
 	}
@@ -203,7 +205,9 @@ func newTestActorsRuntimeWithMock(appChannel channel.AppChannel) *actorsRuntime 
 	conf := NewConfig(ConfigOpts{
 		AppID:              TestAppID,
 		PlacementAddresses: []string{"placement:5050"},
-		AppConfig:          config.ApplicationConfig{},
+		AppConfig: config.ApplicationConfig{
+			Entities: []string{"cat", "dog", "actor2"},
+		},
 	})
 
 	clock := clocktesting.NewFakeClock(startOfTime)
@@ -898,6 +902,7 @@ func TestActiveActorsCount(t *testing.T) {
 		expectedCounts := []*runtimev1pb.ActiveActorsCount{{Type: "cat", Count: 2}, {Type: "dog", Count: 1}}
 
 		testActorsRuntime := newTestActorsRuntime()
+		testActorsRuntime.actorsConfig.Config.HostedActorTypes = internal.NewHostedActors([]string{"cat", "dog"})
 		defer testActorsRuntime.Stop()
 
 		fakeCallAndActivateActor(testActorsRuntime, "cat", "abcd", testActorsRuntime.clock)
@@ -912,6 +917,7 @@ func TestActiveActorsCount(t *testing.T) {
 		expectedCounts := []*runtimev1pb.ActiveActorsCount{}
 
 		testActorsRuntime := newTestActorsRuntime()
+		testActorsRuntime.actorsConfig.Config.HostedActorTypes = internal.NewHostedActors([]string{})
 		defer testActorsRuntime.Stop()
 
 		actualCounts := testActorsRuntime.GetActiveActorsCount(ctx)
@@ -925,7 +931,7 @@ func TestActorsAppHealthCheck(t *testing.T) {
 
 	clock := testActorsRuntime.clock.(*clocktesting.FakeClock)
 
-	testActorsRuntime.actorsConfig.Config.HostedActorTypes = []string{"actor1"}
+	testActorsRuntime.actorsConfig.Config.HostedActorTypes = internal.NewHostedActors([]string{"actor1"})
 	go testActorsRuntime.startAppHealthCheck(
 		health.WithClock(clock),
 		health.WithFailureThreshold(1),
@@ -944,7 +950,7 @@ func TestHostedActorsWithoutStateStore(t *testing.T) {
 	defer testActorsRuntime.Stop()
 	clock := testActorsRuntime.clock.(*clocktesting.FakeClock)
 
-	testActorsRuntime.actorsConfig.Config.HostedActorTypes = []string{"actor1"}
+	testActorsRuntime.actorsConfig.Config.HostedActorTypes = internal.NewHostedActors([]string{"actor1"})
 	go testActorsRuntime.startAppHealthCheck(
 		health.WithClock(clock),
 		health.WithFailureThreshold(1),
@@ -963,7 +969,7 @@ func TestNoHostedActorsWithoutStateStore(t *testing.T) {
 	defer testActorsRuntime.Stop()
 	clock := testActorsRuntime.clock.(*clocktesting.FakeClock)
 
-	testActorsRuntime.actorsConfig.HostedActorTypes = []string{}
+	testActorsRuntime.actorsConfig.HostedActorTypes = internal.NewHostedActors([]string{})
 	go testActorsRuntime.startAppHealthCheck(
 		health.WithClock(clock),
 		health.WithFailureThreshold(1),

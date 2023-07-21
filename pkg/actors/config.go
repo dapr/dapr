@@ -17,6 +17,8 @@ import (
 	"net/http"
 	"time"
 
+	"golang.org/x/exp/maps"
+
 	"github.com/dapr/dapr/pkg/actors/internal"
 	daprAppConfig "github.com/dapr/dapr/pkg/config"
 )
@@ -57,7 +59,7 @@ func NewConfig(opts ConfigOpts) Config {
 		Port:                          opts.Port,
 		Namespace:                     opts.Namespace,
 		DrainRebalancedActors:         opts.AppConfig.DrainRebalancedActors,
-		HostedActorTypes:              opts.AppConfig.Entities,
+		HostedActorTypes:              internal.NewHostedActors(opts.AppConfig.Entities),
 		Reentrancy:                    opts.AppConfig.Reentrancy,
 		RemindersStoragePartitions:    opts.AppConfig.RemindersStoragePartitions,
 		HealthHTTPClient:              opts.HealthHTTPClient,
@@ -166,4 +168,32 @@ func translateEntityConfig(appConfig daprAppConfig.EntityConfig) internal.Entity
 	}
 
 	return domainConfig
+}
+
+type hostedActors map[string]struct{}
+
+// NewHostedActors creates a new hostedActors from a slice of actor types.
+func NewHostedActors(actorTypes []string) hostedActors {
+	// Add + 1 capacity because there's likely the built-in actor engine
+	ha := make(hostedActors, len(actorTypes)+1)
+	for _, at := range actorTypes {
+		ha[at] = struct{}{}
+	}
+	return ha
+}
+
+// AddActorType adds an actor type.
+func (ha hostedActors) AddActorType(actorType string) {
+	ha[actorType] = struct{}{}
+}
+
+// IsActorTypeHosted returns true if the actor type is hosted.
+func (ha hostedActors) IsActorTypeHosted(actorType string) bool {
+	_, ok := ha[actorType]
+	return ok
+}
+
+// ListActorTypes returns a slice of hosted actor types (in indeterminate order).
+func (ha hostedActors) ListActorTypes() []string {
+	return maps.Keys(ha)
 }

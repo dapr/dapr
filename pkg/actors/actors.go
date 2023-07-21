@@ -62,9 +62,14 @@ const (
 	errStateStoreNotConfigured = `actors: state store does not exist or incorrectly configured. Have you set the property '{"name": "actorStateStore", "value": "true"}' in your state store component file?`
 )
 
-var log = logger.NewLogger("dapr.runtime.actor")
+var (
+	log = logger.NewLogger("dapr.runtime.actor")
 
-var ErrReminderCanceled = internal.ErrReminderCanceled
+	ErrIncompatibleStateStore   = errors.New("actor state store does not exist, or does not support transactions which are required to save state - please see https://docs.dapr.io/operations/components/setup-state-store/supported-state-stores/")
+	ErrDaprResponseHeader       = errors.New("error indicated via actor header response")
+	ErrReminderOpActorNotHosted = errors.New("operations on actor reminders are only possible on hosted actor types")
+	ErrReminderCanceled         = internal.ErrReminderCanceled
+)
 
 // Actors allow calling into virtual actors as well as actor state management.
 //
@@ -121,10 +126,6 @@ type actorsRuntime struct {
 	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 	stateTTLEnabled bool
 }
-
-var ErrIncompatibleStateStore = errors.New("actor state store does not exist, or does not support transactions which are required to save state - please see https://docs.dapr.io/operations/components/setup-state-store/supported-state-stores/")
-
-var ErrDaprResponseHeader = errors.New("error indicated via actor header response")
 
 // ActorsOpts contains options for NewActors.
 type ActorsOpts struct {
@@ -239,9 +240,12 @@ func (a *actorsRuntime) Init() error {
 	if a.placement == nil {
 		a.placement = placement.NewActorPlacement(
 			a.actorsConfig.Config.PlacementAddresses, a.certChain,
-			a.actorsConfig.Config.AppID, hostname, a.actorsConfig.Config.PodName, a.actorsConfig.Config.HostedActorTypes,
+			a.actorsConfig.Config.AppID, hostname,
+			a.actorsConfig.Config.PodName,
+			a.actorsConfig.Config.HostedActorTypes.ListActorTypes(),
 			appHealthFn,
-			afterTableUpdateFn)
+			afterTableUpdateFn,
+		)
 	}
 
 	go a.placement.Start()
@@ -835,6 +839,10 @@ func (a *actorsRuntime) doExecuteReminderOrTimer(reminder *internal.Reminder, is
 }
 
 func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderRequest) error {
+	if !a.actorsConfig.Config.HostedActorTypes.IsActorTypeHosted(req.ActorType) {
+		return ErrReminderOpActorNotHosted
+	}
+
 	// Create the new reminder object
 	reminder, err := req.NewReminder(a.clock.Now())
 	if err != nil {
@@ -858,16 +866,28 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 }
 
 func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderRequest) error {
+	if !a.actorsConfig.Config.HostedActorTypes.IsActorTypeHosted(req.ActorType) {
+		return ErrReminderOpActorNotHosted
+	}
+
 	return a.actorsReminders.DeleteReminder(ctx, *req)
 }
 
 // Deprecated: Currently RenameReminder renames by deleting-then-inserting-again.
 // This implementation is not fault-tolerant, as a failed insert after deletion would result in no reminder
 func (a *actorsRuntime) RenameReminder(ctx context.Context, req *RenameReminderRequest) error {
+	if !a.actorsConfig.Config.HostedActorTypes.IsActorTypeHosted(req.ActorType) {
+		return ErrReminderOpActorNotHosted
+	}
+
 	return a.actorsReminders.RenameReminder(ctx, req)
 }
 
 func (a *actorsRuntime) GetReminder(ctx context.Context, req *GetReminderRequest) (*internal.Reminder, error) {
+	if !a.actorsConfig.Config.HostedActorTypes.IsActorTypeHosted(req.ActorType) {
+		return nil, ErrReminderOpActorNotHosted
+	}
+
 	return a.actorsReminders.GetReminder(ctx, req)
 }
 
@@ -890,7 +910,7 @@ func (a *actorsRuntime) RegisterInternalActor(ctx context.Context, actorType str
 
 		log.Debugf("registering internal actor type: %s", actorType)
 		actor.SetActorRuntime(a)
-		a.actorsConfig.Config.HostedActorTypes = append(a.actorsConfig.Config.HostedActorTypes, actorType)
+		a.actorsConfig.Config.HostedActorTypes.AddActorType(actorType)
 		if a.placement != nil {
 			if err := a.placement.AddHostedActorType(actorType); err != nil {
 				return fmt.Errorf("error updating hosted actor types: %s", err)
@@ -902,7 +922,7 @@ func (a *actorsRuntime) RegisterInternalActor(ctx context.Context, actorType str
 
 func (a *actorsRuntime) GetActiveActorsCount(ctx context.Context) []*runtimev1pb.ActiveActorsCount {
 	actorCountMap := make(map[string]int32, len(a.actorsConfig.Config.HostedActorTypes))
-	for _, actorType := range a.actorsConfig.Config.HostedActorTypes {
+	for actorType := range a.actorsConfig.Config.HostedActorTypes {
 		if !isInternalActor(actorType) {
 			actorCountMap[actorType] = 0
 		}

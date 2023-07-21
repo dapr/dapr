@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dapr/dapr/pkg/actors/internal"
 	"github.com/dapr/dapr/pkg/config"
 
 	"github.com/stretchr/testify/assert"
@@ -52,7 +53,7 @@ func TestConfig(t *testing.T) {
 	assert.Equal(t, "localhost:5050", c.HostAddress)
 	assert.Equal(t, "app1", c.AppID)
 	assert.Equal(t, []string{"placement:5050"}, c.PlacementAddresses)
-	assert.Equal(t, []string{"1"}, c.HostedActorTypes)
+	assert.Equal(t, internal.NewHostedActors([]string{"1"}), c.HostedActorTypes)
 	assert.Equal(t, 3500, c.Port)
 	assert.Equal(t, "1s", c.ActorDeactivationScanInterval.String())
 	assert.Equal(t, "2s", c.ActorIdleTimeout.String())

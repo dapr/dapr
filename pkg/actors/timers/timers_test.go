@@ -49,20 +49,20 @@ type testRequest struct {
 }
 
 func TestCreateTimerDueTimes(t *testing.T) {
-	clock := clocktesting.NewFakeClock(startOfTime)
-	provider := NewTimersProvider(clock).(*timers)
-
-	executed := make(chan string, 1)
-	provider.SetExecuteTimerFn(func(reminder *internal.Reminder) bool {
-		executed <- reminder.Key()
-		return true
-	})
-
 	t.Run("create timer with positive DueTime", func(t *testing.T) {
+		clock := clocktesting.NewFakeClock(startOfTime)
+		provider := NewTimersProvider(clock).(*timers)
+
+		executed := make(chan string, 1)
+		provider.SetExecuteTimerFn(func(reminder *internal.Reminder) bool {
+			executed <- reminder.Key()
+			return true
+		})
+
 		req := internal.CreateTimerRequest{
 			ActorID:   "myactor",
 			ActorType: "mytype",
-			Name:      "mytimer1",
+			Name:      "mytimer",
 			DueTime:   "1s",
 			Callback:  "callback",
 		}
@@ -85,10 +85,19 @@ func TestCreateTimerDueTimes(t *testing.T) {
 	})
 
 	t.Run("create timer with 0 DueTime", func(t *testing.T) {
+		clock := clocktesting.NewFakeClock(startOfTime)
+		provider := NewTimersProvider(clock).(*timers)
+
+		executed := make(chan string, 1)
+		provider.SetExecuteTimerFn(func(reminder *internal.Reminder) bool {
+			executed <- reminder.Key()
+			return true
+		})
+
 		req := internal.CreateTimerRequest{
 			ActorID:   "myactor",
 			ActorType: "mytype",
-			Name:      "mytimer2",
+			Name:      "mytimer",
 			DueTime:   "0",
 			Callback:  "callback",
 		}
@@ -111,10 +120,19 @@ func TestCreateTimerDueTimes(t *testing.T) {
 	})
 
 	t.Run("create timer with no DueTime", func(t *testing.T) {
+		clock := clocktesting.NewFakeClock(startOfTime)
+		provider := NewTimersProvider(clock).(*timers)
+
+		executed := make(chan string, 1)
+		provider.SetExecuteTimerFn(func(reminder *internal.Reminder) bool {
+			executed <- reminder.Key()
+			return true
+		})
+
 		req := internal.CreateTimerRequest{
 			ActorID:   "myactor",
 			ActorType: "mytype",
-			Name:      "mytimer3",
+			Name:      "mytimer",
 			DueTime:   "",
 			Callback:  "callback",
 		}
