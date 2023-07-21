@@ -309,23 +309,6 @@ func deactivateActorWithDuration(testActorsRuntime *actorsRuntime, actorType, ac
 	return ch
 }
 
-// CHECK - timer
-func createTimerData(actorID, actorType, name, period, dueTime, ttl, callback, data string) CreateTimerRequest {
-	r := CreateTimerRequest{
-		ActorID:   actorID,
-		ActorType: actorType,
-		Name:      name,
-		Period:    period,
-		DueTime:   dueTime,
-		TTL:       ttl,
-		Callback:  callback,
-	}
-	if data != "" {
-		r.Data = json.RawMessage(`"` + data + `"`)
-	}
-	return r
-}
-
 func assertTestSignal(t *testing.T, clock *clocktesting.FakeClock, ch <-chan struct{}) {
 	t.Helper()
 

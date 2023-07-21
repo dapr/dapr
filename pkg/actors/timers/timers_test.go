@@ -35,7 +35,6 @@ var startOfTime = time.Date(2022, 1, 1, 12, 0, 0, 0, time.UTC)
 const TestAppID = "fakeAppID"
 
 func newTestTimers() *timers {
-
 	clock := clocktesting.NewFakeClock(startOfTime)
 	r := NewTimersProvider(clock)
 	r.SetExecuteTimerFn(func(reminder *internal.Reminder) bool {
