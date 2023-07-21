@@ -51,10 +51,9 @@ jobs:
       DAPR_TAG: dev
       DAPR_NAMESPACE: dapr-tests
       # Useful for upgrade/downgrade/compatibility tests
-      # 1.9.6 does not work on newest Windows version for E2E tests
-      # Add this env var to Windows runs too once we have an old version that works with latest win version
       # TODO: Make this auto-populated based on GitHub's releases.
-      DAPR_TEST_N_MINUS_2_IMAGE: "ghcr.io/dapr/daprd:1.9.6"
+      DAPR_TEST_N_MINUS_1_IMAGE: "ghcr.io/dapr/daprd:1.11.1"
+      DAPR_TEST_N_MINUS_2_IMAGE: "ghcr.io/dapr/daprd:1.10.8"
       # Container registry where to cache e2e test images
       DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
       PULL_POLICY: IfNotPresent
