@@ -1321,12 +1321,20 @@ func (a *api) onCreateActorReminder(reqCtx *fasthttp.RequestCtx) {
 
 	err = a.universal.Actors.CreateReminder(reqCtx, &req)
 	if err != nil {
+		if errors.Is(err, actors.ErrReminderOpActorNotHosted) {
+			msg := messages.ErrActorReminderOpActorNotHosted
+			universalFastHTTPErrorResponder(reqCtx, msg)
+			log.Debug(msg)
+			return
+		}
+
 		msg := NewErrorResponse("ERR_ACTOR_REMINDER_CREATE", fmt.Sprintf(messages.ErrActorReminderCreate, err))
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
 		log.Debug(msg)
-	} else {
-		fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
+		return
 	}
+
+	fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
 }
 
 func (a *api) onRenameActorReminder(reqCtx *fasthttp.RequestCtx) {
@@ -1355,12 +1363,20 @@ func (a *api) onRenameActorReminder(reqCtx *fasthttp.RequestCtx) {
 
 	err = a.universal.Actors.RenameReminder(reqCtx, &req)
 	if err != nil {
+		if errors.Is(err, actors.ErrReminderOpActorNotHosted) {
+			msg := messages.ErrActorReminderOpActorNotHosted
+			universalFastHTTPErrorResponder(reqCtx, msg)
+			log.Debug(msg)
+			return
+		}
+
 		msg := NewErrorResponse("ERR_ACTOR_REMINDER_RENAME", fmt.Sprintf(messages.ErrActorReminderRename, err))
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
 		log.Debug(msg)
-	} else {
-		fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
+		return
 	}
+
+	fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
 }
 
 func (a *api) onCreateActorTimer(reqCtx *fasthttp.RequestCtx) {
@@ -1418,12 +1434,20 @@ func (a *api) onDeleteActorReminder(reqCtx *fasthttp.RequestCtx) {
 
 	err := a.universal.Actors.DeleteReminder(reqCtx, &req)
 	if err != nil {
+		if errors.Is(err, actors.ErrReminderOpActorNotHosted) {
+			msg := messages.ErrActorReminderOpActorNotHosted
+			universalFastHTTPErrorResponder(reqCtx, msg)
+			log.Debug(msg)
+			return
+		}
+
 		msg := NewErrorResponse("ERR_ACTOR_REMINDER_DELETE", fmt.Sprintf(messages.ErrActorReminderDelete, err))
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
 		log.Debug(msg)
-	} else {
-		fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
+		return
 	}
+
+	fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
 }
 
 func (a *api) onActorStateTransaction(reqCtx *fasthttp.RequestCtx) {
@@ -1493,11 +1517,19 @@ func (a *api) onGetActorReminder(reqCtx *fasthttp.RequestCtx) {
 		Name:      name,
 	})
 	if err != nil {
+		if errors.Is(err, actors.ErrReminderOpActorNotHosted) {
+			msg := messages.ErrActorReminderOpActorNotHosted
+			universalFastHTTPErrorResponder(reqCtx, msg)
+			log.Debug(msg)
+			return
+		}
+
 		msg := NewErrorResponse("ERR_ACTOR_REMINDER_GET", fmt.Sprintf(messages.ErrActorReminderGet, err))
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
 		log.Debug(msg)
 		return
 	}
+
 	b, err := json.Marshal(resp)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_REMINDER_GET", fmt.Sprintf(messages.ErrActorReminderGet, err))

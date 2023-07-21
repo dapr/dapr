@@ -528,3 +528,15 @@ func TestActorReminderTTL(t *testing.T) {
 		require.Equal(t, 5, count)
 	})
 }
+
+func TestActorReminderNonHostedActor(t *testing.T) {
+	externalURL := tr.Platform.AcquireAppExternalURL(appName)
+	require.NotEmpty(t, externalURL, "external URL must not be empty!")
+
+	t.Run("Operations on actor reminders should fail if actor type is not hosted", func(t *testing.T) {
+		// Run the tests
+		res, err := utils.HTTPPost(externalURL+"/test/nonhosted", nil)
+		require.NoError(t, err)
+		require.Equal(t, "OK", string(res))
+	})
+}

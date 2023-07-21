@@ -1017,6 +1017,10 @@ func (a *api) RegisterActorReminder(ctx context.Context, in *runtimev1pb.Registe
 		req.Data = j
 	}
 	err := a.UniversalAPI.Actors.CreateReminder(ctx, req)
+	if err != nil && errors.Is(err, actors.ErrReminderOpActorNotHosted) {
+		apiServerLogger.Debug(messages.ErrActorReminderOpActorNotHosted)
+		return nil, messages.ErrActorReminderOpActorNotHosted
+	}
 	return &emptypb.Empty{}, err
 }
 
@@ -1034,6 +1038,10 @@ func (a *api) UnregisterActorReminder(ctx context.Context, in *runtimev1pb.Unreg
 	}
 
 	err := a.UniversalAPI.Actors.DeleteReminder(ctx, req)
+	if err != nil && errors.Is(err, actors.ErrReminderOpActorNotHosted) {
+		apiServerLogger.Debug(messages.ErrActorReminderOpActorNotHosted)
+		return nil, messages.ErrActorReminderOpActorNotHosted
+	}
 	return &emptypb.Empty{}, err
 }
 
@@ -1052,6 +1060,10 @@ func (a *api) RenameActorReminder(ctx context.Context, in *runtimev1pb.RenameAct
 	}
 
 	err := a.UniversalAPI.Actors.RenameReminder(ctx, req)
+	if err != nil && errors.Is(err, actors.ErrReminderOpActorNotHosted) {
+		apiServerLogger.Debug(messages.ErrActorReminderOpActorNotHosted)
+		return nil, messages.ErrActorReminderOpActorNotHosted
+	}
 	return &emptypb.Empty{}, err
 }
 
