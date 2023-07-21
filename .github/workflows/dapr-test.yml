@@ -62,6 +62,12 @@ env:
   TCP_DUMPS: "false"
   # Additional build tags for Dapr
   DAPR_GO_BUILD_TAGS: "subtlecrypto"
+  # Useful for upgrade/downgrade/compatibility tests
+  # TODO: Make this auto-populated based on GitHub's releases.
+  DAPR_TEST_N_MINUS_1_IMAGE: "ghcr.io/dapr/daprd:1.11.1"
+  # 1.10.x does not work on newest Windows version for E2E tests
+  # Populate this env var once we have an old version that works with latest win version
+  DAPR_TEST_N_MINUS_2_IMAGE: ""
 
 jobs:
   deploy-infrastructure:
