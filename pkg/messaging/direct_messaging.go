@@ -56,26 +56,27 @@ type messageClientConnection func(ctx context.Context, address string, id string
 type DirectMessaging interface {
 	Invoke(ctx context.Context, targetAppID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error)
 	SetAppChannel(appChannel channel.AppChannel)
-	SetHTTPEndpointsAppChannel(appChannel channel.HTTPEndpointAppChannel)
+	SetHTTPEndpointsAppChannels(nonResourceChannel channel.HTTPEndpointAppChannel, resourceChannels map[string]channel.HTTPEndpointAppChannel)
 }
 
 type directMessaging struct {
-	appChannel              channel.AppChannel
-	httpEndpointsAppChannel channel.HTTPEndpointAppChannel
-	connectionCreatorFn     messageClientConnection
-	appID                   string
-	mode                    modes.DaprMode
-	grpcPort                int
-	namespace               string
-	resolver                nr.Resolver
-	hostAddress             string
-	hostName                string
-	maxRequestBodySizeMB    int
-	proxy                   Proxy
-	readBufferSize          int
-	resiliency              resiliency.Provider
-	isStreamingEnabled      bool
-	compStore               *compstore.ComponentStore
+	appChannel                     channel.AppChannel
+	nonResourceHTTPEndpointChannel channel.HTTPEndpointAppChannel
+	resourceHTTPEndpointChannels   map[string]channel.HTTPEndpointAppChannel
+	connectionCreatorFn            messageClientConnection
+	appID                          string
+	mode                           modes.DaprMode
+	grpcPort                       int
+	namespace                      string
+	resolver                       nr.Resolver
+	hostAddress                    string
+	hostName                       string
+	maxRequestBodySizeMB           int
+	proxy                          Proxy
+	readBufferSize                 int
+	resiliency                     resiliency.Provider
+	isStreamingEnabled             bool
+	compStore                      *compstore.ComponentStore
 }
 
 type remoteApp struct {
@@ -86,20 +87,19 @@ type remoteApp struct {
 
 // NewDirectMessaging contains the options for NewDirectMessaging.
 type NewDirectMessagingOpts struct {
-	AppID                   string
-	Namespace               string
-	Port                    int
-	CompStore               *compstore.ComponentStore
-	Mode                    modes.DaprMode
-	AppChannel              channel.AppChannel
-	HTTPEndpointsAppChannel channel.HTTPEndpointAppChannel
-	ClientConnFn            messageClientConnection
-	Resolver                nr.Resolver
-	MaxRequestBodySize      int
-	Proxy                   Proxy
-	ReadBufferSize          int
-	Resiliency              resiliency.Provider
-	IsStreamingEnabled      bool
+	AppID              string
+	Namespace          string
+	Port               int
+	CompStore          *compstore.ComponentStore
+	Mode               modes.DaprMode
+	AppChannel         channel.AppChannel
+	ClientConnFn       messageClientConnection
+	Resolver           nr.Resolver
+	MaxRequestBodySize int
+	Proxy              Proxy
+	ReadBufferSize     int
+	Resiliency         resiliency.Provider
+	IsStreamingEnabled bool
 }
 
 // NewDirectMessaging returns a new direct messaging api.
@@ -108,22 +108,22 @@ func NewDirectMessaging(opts NewDirectMessagingOpts) DirectMessaging {
 	hName, _ := os.Hostname()
 
 	dm := &directMessaging{
-		appID:                   opts.AppID,
-		namespace:               opts.Namespace,
-		grpcPort:                opts.Port,
-		mode:                    opts.Mode,
-		appChannel:              opts.AppChannel,
-		httpEndpointsAppChannel: opts.HTTPEndpointsAppChannel,
-		connectionCreatorFn:     opts.ClientConnFn,
-		resolver:                opts.Resolver,
-		maxRequestBodySizeMB:    opts.MaxRequestBodySize,
-		proxy:                   opts.Proxy,
-		readBufferSize:          opts.ReadBufferSize,
-		resiliency:              opts.Resiliency,
-		isStreamingEnabled:      opts.IsStreamingEnabled,
-		hostAddress:             hAddr,
-		hostName:                hName,
-		compStore:               opts.CompStore,
+		appID:                        opts.AppID,
+		namespace:                    opts.Namespace,
+		grpcPort:                     opts.Port,
+		mode:                         opts.Mode,
+		appChannel:                   opts.AppChannel,
+		connectionCreatorFn:          opts.ClientConnFn,
+		resolver:                     opts.Resolver,
+		maxRequestBodySizeMB:         opts.MaxRequestBodySize,
+		proxy:                        opts.Proxy,
+		readBufferSize:               opts.ReadBufferSize,
+		resiliency:                   opts.Resiliency,
+		isStreamingEnabled:           opts.IsStreamingEnabled,
+		hostAddress:                  hAddr,
+		hostName:                     hName,
+		compStore:                    opts.CompStore,
+		resourceHTTPEndpointChannels: map[string]channel.HTTPEndpointAppChannel{},
 	}
 
 	if dm.proxy != nil {
@@ -158,9 +158,10 @@ func (d *directMessaging) SetAppChannel(appChannel channel.AppChannel) {
 	d.appChannel = appChannel
 }
 
-// SetHTTPEndpointsAppChannel sets the appChannel property in the object.
-func (d *directMessaging) SetHTTPEndpointsAppChannel(appChannel channel.HTTPEndpointAppChannel) {
-	d.httpEndpointsAppChannel = appChannel
+// SetHTTPEndpointsAppChannel sets the app channels for http endpoints.
+func (d *directMessaging) SetHTTPEndpointsAppChannels(nonResourceChannel channel.HTTPEndpointAppChannel, resourceChannels map[string]channel.HTTPEndpointAppChannel) {
+	d.nonResourceHTTPEndpointChannel = nonResourceChannel
+	d.resourceHTTPEndpointChannels = resourceChannels
 }
 
 // requestAppIDAndNamespace takes an app id and returns the app id, namespace and error.
@@ -267,7 +268,7 @@ func (d *directMessaging) invokeHTTPEndpoint(ctx context.Context, appID, appName
 	// Set up timers
 	start := time.Now()
 	diag.DefaultMonitoring.ServiceInvocationRequestSent(appID, req.Message().Method)
-	imr, err := d.invokeRemoteUnaryForHTTPEndpoint(ctx, nil, req, nil, appID)
+	imr, err := d.invokeRemoteUnaryForHTTPEndpoint(ctx, req, appID)
 
 	// Diagnostics
 	if imr != nil {
@@ -318,12 +319,20 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, appNamespace,
 	return imr, teardown, err
 }
 
-func (d *directMessaging) invokeRemoteUnaryForHTTPEndpoint(ctx context.Context, clientV1 internalv1pb.ServiceInvocationClient, req *invokev1.InvokeMethodRequest, opts []grpc.CallOption, appID string) (*invokev1.InvokeMethodResponse, error) {
-	if d.httpEndpointsAppChannel == nil {
-		return nil, errors.New("cannot invoke http endpoint: http endpoints app channel not initialized")
+func (d *directMessaging) invokeRemoteUnaryForHTTPEndpoint(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*invokev1.InvokeMethodResponse, error) {
+	var channel channel.HTTPEndpointAppChannel
+
+	if ch, ok := d.resourceHTTPEndpointChannels[appID]; ok {
+		channel = ch
+	} else {
+		channel = d.nonResourceHTTPEndpointChannel
 	}
 
-	return d.httpEndpointsAppChannel.InvokeMethod(ctx, req, appID)
+	if channel == nil {
+		return nil, fmt.Errorf("cannot invoke http endpoint %s: app channel not initialized", appID)
+	}
+
+	return channel.InvokeMethod(ctx, req, appID)
 }
 
 func (d *directMessaging) invokeRemoteUnary(ctx context.Context, clientV1 internalv1pb.ServiceInvocationClient, req *invokev1.InvokeMethodRequest, opts []grpc.CallOption) (*invokev1.InvokeMethodResponse, error) {

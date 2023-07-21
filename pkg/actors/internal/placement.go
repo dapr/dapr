@@ -58,6 +58,8 @@ type ActorPlacement struct {
 	appID      string
 	// runtimeHostname is the address and port of the runtime
 	runtimeHostName string
+	// name of the pod hosting the actor
+	podName string
 
 	// client is the placement client.
 	client *placementClient
@@ -95,7 +97,7 @@ type ActorPlacement struct {
 // NewActorPlacement initializes ActorPlacement for the actor service.
 func NewActorPlacement(
 	serverAddr []string, clientCert *daprCredentials.CertChain,
-	appID, runtimeHostName string, actorTypes []string,
+	appID, runtimeHostName, podName string, actorTypes []string,
 	appHealthFn func() bool,
 	afterTableUpdateFn func(),
 ) *ActorPlacement {
@@ -104,6 +106,7 @@ func NewActorPlacement(
 		actorTypes:      actorTypes,
 		appID:           appID,
 		runtimeHostName: runtimeHostName,
+		podName:         podName,
 		serverAddr:      servers,
 
 		client: newPlacementClient(getGrpcOptsGetter(servers, clientCert)),
@@ -215,6 +218,7 @@ func (p *ActorPlacement) Start() {
 				Entities: p.actorTypes,
 				Id:       p.appID,
 				Load:     1, // Not used yet
+				Pod:      p.podName,
 				// Port is redundant because Name should include port number
 			}
 

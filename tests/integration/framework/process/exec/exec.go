@@ -22,6 +22,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -102,6 +103,8 @@ func (e *exec) Run(t *testing.T, ctx context.Context) {
 
 	e.cmd.Stdout = e.stdoutpipe
 	e.cmd.Stderr = e.stderrpipe
+	// Wait for a few seconds before killing the process completely.
+	e.cmd.WaitDelay = time.Second * 5
 
 	require.NoError(t, e.cmd.Start())
 }

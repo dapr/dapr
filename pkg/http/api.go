@@ -20,19 +20,20 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	nethttp "net/http"
 	"net/url"
+	"path"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/go-chi/chi/v5"
 	"github.com/mitchellh/mapstructure"
 	"github.com/valyala/fasthttp"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
@@ -57,6 +58,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/utils"
+	"github.com/dapr/dapr/utils/responsewriter"
 )
 
 // API returns a list of HTTP endpoints for Dapr.
@@ -66,25 +68,23 @@ type API interface {
 	MarkStatusAsReady()
 	MarkStatusAsOutboundReady()
 	SetAppChannel(appChannel channel.AppChannel)
-	SetHTTPEndpointsAppChannel(appChannel channel.HTTPEndpointAppChannel)
 	SetDirectMessaging(directMessaging messaging.DirectMessaging)
 	SetActorRuntime(actor actors.Actors)
 }
 
 type api struct {
-	universal               *universalapi.UniversalAPI
-	endpoints               []Endpoint
-	publicEndpoints         []Endpoint
-	directMessaging         messaging.DirectMessaging
-	appChannel              channel.AppChannel
-	httpEndpointsAppChannel channel.HTTPEndpointAppChannel
-	resiliency              resiliency.Provider
-	pubsubAdapter           runtimePubsub.Adapter
-	sendToOutputBindingFn   func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
-	readyStatus             bool
-	outboundReadyStatus     bool
-	tracingSpec             config.TracingSpec
-	maxRequestBodySize      int64 // In bytes
+	universal             *universalapi.UniversalAPI
+	endpoints             []Endpoint
+	publicEndpoints       []Endpoint
+	directMessaging       messaging.DirectMessaging
+	appChannel            channel.AppChannel
+	resiliency            resiliency.Provider
+	pubsubAdapter         runtimePubsub.Adapter
+	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	readyStatus           bool
+	outboundReadyStatus   bool
+	tracingSpec           config.TracingSpec
+	maxRequestBodySize    int64 // In bytes
 }
 
 const (
@@ -137,14 +137,13 @@ type APIOpts struct {
 // NewAPI returns a new API.
 func NewAPI(opts APIOpts) API {
 	api := &api{
-		appChannel:              opts.AppChannel,
-		httpEndpointsAppChannel: opts.HTTPEndpointsAppChannel,
-		directMessaging:         opts.DirectMessaging,
-		resiliency:              opts.Resiliency,
-		pubsubAdapter:           opts.PubsubAdapter,
-		sendToOutputBindingFn:   opts.SendToOutputBindingFn,
-		tracingSpec:             opts.TracingSpec,
-		maxRequestBodySize:      opts.MaxRequestBodySize,
+		appChannel:            opts.AppChannel,
+		directMessaging:       opts.DirectMessaging,
+		resiliency:            opts.Resiliency,
+		pubsubAdapter:         opts.PubsubAdapter,
+		sendToOutputBindingFn: opts.SendToOutputBindingFn,
+		tracingSpec:           opts.TracingSpec,
+		maxRequestBodySize:    opts.MaxRequestBodySize,
 		universal: &universalapi.UniversalAPI{
 			AppID:                      opts.AppID,
 			Logger:                     log,
@@ -202,56 +201,6 @@ func (a *api) MarkStatusAsOutboundReady() {
 	a.outboundReadyStatus = true
 }
 
-// Workflow Component: Component specified in yaml
-// Workflow Name: Name of the workflow to run
-// Instance ID: Identifier of the specific run
-func (a *api) constructWorkflowEndpoints() []Endpoint {
-	return []Endpoint{
-		{
-			Methods:         []string{nethttp.MethodGet},
-			Route:           "workflows/{workflowComponent}/{instanceID}",
-			Version:         apiVersionV1alpha1,
-			FastHTTPHandler: a.onGetWorkflowHandler(),
-		},
-		{
-			Methods:         []string{nethttp.MethodPost},
-			Route:           "workflows/{workflowComponent}/{instanceID}/raiseEvent/{eventName}",
-			Version:         apiVersionV1alpha1,
-			FastHTTPHandler: a.onRaiseEventWorkflowHandler(),
-		},
-		{
-			Methods:         []string{nethttp.MethodPost},
-			Route:           "workflows/{workflowComponent}/{workflowName}/start",
-			Version:         apiVersionV1alpha1,
-			FastHTTPHandler: a.onStartWorkflowHandler(),
-		},
-		{
-			Methods:         []string{nethttp.MethodPost},
-			Route:           "workflows/{workflowComponent}/{instanceID}/pause",
-			Version:         apiVersionV1alpha1,
-			FastHTTPHandler: a.onPauseWorkflowHandler(),
-		},
-		{
-			Methods:         []string{nethttp.MethodPost},
-			Route:           "workflows/{workflowComponent}/{instanceID}/resume",
-			Version:         apiVersionV1alpha1,
-			FastHTTPHandler: a.onResumeWorkflowHandler(),
-		},
-		{
-			Methods:         []string{nethttp.MethodPost},
-			Route:           "workflows/{workflowComponent}/{instanceID}/terminate",
-			Version:         apiVersionV1alpha1,
-			FastHTTPHandler: a.onTerminateWorkflowHandler(),
-		},
-		{
-			Methods:         []string{nethttp.MethodPost},
-			Route:           "workflows/{workflowComponent}/{instanceID}/purge",
-			Version:         apiVersionV1alpha1,
-			FastHTTPHandler: a.onPurgeWorkflowHandler(),
-		},
-	}
-}
-
 func (a *api) constructStateEndpoints() []Endpoint {
 	return []Endpoint{
 		{
@@ -285,10 +234,10 @@ func (a *api) constructStateEndpoints() []Endpoint {
 			FastHTTPHandler: a.onPostStateTransaction,
 		},
 		{
-			Methods:         []string{nethttp.MethodPost, nethttp.MethodPut},
-			Route:           "state/{storeName}/query",
-			Version:         apiVersionV1alpha1,
-			FastHTTPHandler: a.onQueryStateHandler(),
+			Methods: []string{nethttp.MethodPost, nethttp.MethodPut},
+			Route:   "state/{storeName}/query",
+			Version: apiVersionV1alpha1,
+			Handler: a.onQueryStateHandler(),
 		},
 	}
 }
@@ -331,7 +280,7 @@ func (a *api) constructDirectMessagingEndpoints() []Endpoint {
 			IsFallback:            true,
 			Version:               apiVersionV1,
 			KeepWildcardUnescaped: true,
-			FastHTTPHandler:       a.onDirectMessage,
+			Handler:               a.onDirectMessage,
 		},
 	}
 }
@@ -391,27 +340,6 @@ func (a *api) constructActorEndpoints() []Endpoint {
 			Route:           "actors/{actorType}/{actorId}/reminders/{name}",
 			Version:         apiVersionV1,
 			FastHTTPHandler: a.onRenameActorReminder,
-		},
-	}
-}
-
-func (a *api) constructHealthzEndpoints() []Endpoint {
-	return []Endpoint{
-		{
-			Methods:         []string{nethttp.MethodGet},
-			Route:           "healthz",
-			Version:         apiVersionV1,
-			FastHTTPHandler: a.onGetHealthz,
-			AlwaysAllowed:   true,
-			IsHealthCheck:   true,
-		},
-		{
-			Methods:         []string{nethttp.MethodGet},
-			Route:           "healthz/outbound",
-			Version:         apiVersionV1,
-			FastHTTPHandler: a.onGetOutboundHealthz,
-			AlwaysAllowed:   true,
-			IsHealthCheck:   true,
 		},
 	}
 }
@@ -643,129 +571,6 @@ func (a *api) getStateStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (s
 		return nil, "", err
 	}
 	return state, storeName, nil
-}
-
-// Route:   "workflows/{workflowComponent}/{workflowName}/start?instanceID={instanceID}",
-// Workflow Component: Component specified in yaml
-// Workflow Name: Name of the workflow to run
-// Instance ID: Identifier of the specific run
-func (a *api) onStartWorkflowHandler() fasthttp.RequestHandler {
-	return UniversalFastHTTPHandler(
-		a.universal.StartWorkflowAlpha1,
-		UniversalHTTPHandlerOpts[*runtimev1pb.StartWorkflowRequest, *runtimev1pb.StartWorkflowResponse]{
-			// We pass the input body manually rather than parsing it using protojson
-			SkipInputBody: true,
-			InModifierFastHTTP: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.StartWorkflowRequest) (*runtimev1pb.StartWorkflowRequest, error) {
-				in.WorkflowName = reqCtx.UserValue(workflowName).(string)
-				in.WorkflowComponent = reqCtx.UserValue(workflowComponent).(string)
-
-				// The instance ID is optional. If not specified, we generate a random one.
-				instanceID := string(reqCtx.QueryArgs().Peek(instanceID))
-				if instanceID == "" {
-					if randomID, err := uuid.NewRandom(); err == nil {
-						instanceID = randomID.String()
-					} else {
-						return nil, err
-					}
-				}
-				in.InstanceId = instanceID
-
-				// We accept the HTTP request body as the input to the workflow
-				// without making any assumptions about its format.
-				in.Input = reqCtx.PostBody()
-				return in, nil
-			},
-			SuccessStatusCode: nethttp.StatusAccepted,
-		})
-}
-
-// Route: POST "workflows/{workflowComponent}/{instanceID}"
-func (a *api) onGetWorkflowHandler() fasthttp.RequestHandler {
-	return UniversalFastHTTPHandler(
-		a.universal.GetWorkflowAlpha1,
-		UniversalHTTPHandlerOpts[*runtimev1pb.GetWorkflowRequest, *runtimev1pb.GetWorkflowResponse]{
-			InModifierFastHTTP: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.GetWorkflowRequest) (*runtimev1pb.GetWorkflowRequest, error) {
-				in.WorkflowComponent = reqCtx.UserValue(workflowComponent).(string)
-				in.InstanceId = reqCtx.UserValue(instanceID).(string)
-				return in, nil
-			},
-		})
-}
-
-// Route: POST "workflows/{workflowComponent}/{instanceID}/terminate"
-func (a *api) onTerminateWorkflowHandler() fasthttp.RequestHandler {
-	return UniversalFastHTTPHandler(
-		a.universal.TerminateWorkflowAlpha1,
-		UniversalHTTPHandlerOpts[*runtimev1pb.TerminateWorkflowRequest, *emptypb.Empty]{
-			InModifierFastHTTP: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.TerminateWorkflowRequest) (*runtimev1pb.TerminateWorkflowRequest, error) {
-				in.WorkflowComponent = reqCtx.UserValue(workflowComponent).(string)
-				in.InstanceId = reqCtx.UserValue(instanceID).(string)
-				return in, nil
-			},
-			SuccessStatusCode: nethttp.StatusAccepted,
-		})
-}
-
-// Route: POST "workflows/{workflowComponent}/{instanceID}/events/{eventName}"
-func (a *api) onRaiseEventWorkflowHandler() fasthttp.RequestHandler {
-	return UniversalFastHTTPHandler(
-		a.universal.RaiseEventWorkflowAlpha1,
-		UniversalHTTPHandlerOpts[*runtimev1pb.RaiseEventWorkflowRequest, *emptypb.Empty]{
-			// We pass the input body manually rather than parsing it using protojson
-			SkipInputBody: true,
-			InModifierFastHTTP: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.RaiseEventWorkflowRequest) (*runtimev1pb.RaiseEventWorkflowRequest, error) {
-				in.InstanceId = reqCtx.UserValue(instanceID).(string)
-				in.WorkflowComponent = reqCtx.UserValue(workflowComponent).(string)
-				in.EventName = reqCtx.UserValue(eventName).(string)
-
-				// We accept the HTTP request body as the payload of the workflow event
-				// without making any assumptions about its format.
-				in.EventData = reqCtx.PostBody()
-				return in, nil
-			},
-			SuccessStatusCode: nethttp.StatusAccepted,
-		})
-}
-
-// ROUTE: POST "workflows/{workflowComponent}/{instanceID}/pause"
-func (a *api) onPauseWorkflowHandler() fasthttp.RequestHandler {
-	return UniversalFastHTTPHandler(
-		a.universal.PauseWorkflowAlpha1,
-		UniversalHTTPHandlerOpts[*runtimev1pb.PauseWorkflowRequest, *emptypb.Empty]{
-			InModifierFastHTTP: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.PauseWorkflowRequest) (*runtimev1pb.PauseWorkflowRequest, error) {
-				in.WorkflowComponent = reqCtx.UserValue(workflowComponent).(string)
-				in.InstanceId = reqCtx.UserValue(instanceID).(string)
-				return in, nil
-			},
-			SuccessStatusCode: nethttp.StatusAccepted,
-		})
-}
-
-// ROUTE: POST "workflows/{workflowComponent}/{instanceID}/resume"
-func (a *api) onResumeWorkflowHandler() fasthttp.RequestHandler {
-	return UniversalFastHTTPHandler(
-		a.universal.ResumeWorkflowAlpha1,
-		UniversalHTTPHandlerOpts[*runtimev1pb.ResumeWorkflowRequest, *emptypb.Empty]{
-			InModifierFastHTTP: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.ResumeWorkflowRequest) (*runtimev1pb.ResumeWorkflowRequest, error) {
-				in.WorkflowComponent = reqCtx.UserValue(workflowComponent).(string)
-				in.InstanceId = reqCtx.UserValue(instanceID).(string)
-				return in, nil
-			},
-			SuccessStatusCode: nethttp.StatusAccepted,
-		})
-}
-
-func (a *api) onPurgeWorkflowHandler() fasthttp.RequestHandler {
-	return UniversalFastHTTPHandler(
-		a.universal.PurgeWorkflowAlpha1,
-		UniversalHTTPHandlerOpts[*runtimev1pb.PurgeWorkflowRequest, *emptypb.Empty]{
-			InModifierFastHTTP: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.PurgeWorkflowRequest) (*runtimev1pb.PurgeWorkflowRequest, error) {
-				in.WorkflowComponent = reqCtx.UserValue(workflowComponent).(string)
-				in.InstanceId = reqCtx.UserValue(instanceID).(string)
-				return in, nil
-			},
-			SuccessStatusCode: nethttp.StatusAccepted,
-		})
 }
 
 func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
@@ -1253,11 +1058,11 @@ func (a *api) getStateStoreName(reqCtx *fasthttp.RequestCtx) string {
 
 type invokeError struct {
 	statusCode int
-	msg        ErrorResponse
+	msg        []byte
 }
 
 func (ie invokeError) Error() string {
-	return fmt.Sprintf("invokeError (statusCode='%d') msg.errorCode='%s' msg.message='%s'", ie.statusCode, ie.msg.ErrorCode, ie.msg.Message)
+	return fmt.Sprintf("invokeError (statusCode='%d') msg='%v'", ie.statusCode, string(ie.msg))
 }
 
 func (a *api) isHTTPEndpoint(appID string) bool {
@@ -1275,22 +1080,21 @@ func (a *api) getBaseURL(targetAppID string) string {
 	return ""
 }
 
-func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
-	targetID, invokeMethodName := findTargetIDAndMethod(string(reqCtx.URI().PathOriginal()), reqCtx.Request.Header.Peek)
+func (a *api) onDirectMessage(w nethttp.ResponseWriter, r *nethttp.Request) {
+	targetID, invokeMethodName := findTargetIDAndMethod(r.URL.String(), r.Header)
 	if targetID == "" {
-		msg := NewErrorResponse("ERR_DIRECT_INVOKE", messages.ErrDirectInvokeNoAppID)
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusNotFound, msg))
+		respondWithError(w, messages.ErrDirectInvokeNoAppID)
 		return
 	}
 
-	// Store target and method as user values so they can be picked up by the tracing library
-	reqCtx.SetUserValue("id", targetID)
-	reqCtx.SetUserValue("method", invokeMethodName)
+	// Store target and method as values in the context so they can be picked up by the tracing library
+	rw := responsewriter.EnsureResponseWriter(w)
+	rw.SetUserValue("id", targetID)
+	rw.SetUserValue("method", invokeMethodName)
 
-	verb := strings.ToUpper(string(reqCtx.Method()))
+	verb := strings.ToUpper(r.Method)
 	if a.directMessaging == nil {
-		msg := NewErrorResponse("ERR_DIRECT_INVOKE", messages.ErrDirectInvokeNotReady)
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
+		respondWithError(w, messages.ErrDirectInvokeNotReady)
 		return
 	}
 
@@ -1310,18 +1114,18 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	req := invokev1.NewInvokeMethodRequest(invokeMethodName).
-		WithHTTPExtension(verb, reqCtx.QueryArgs().String()).
-		WithRawDataBytes(reqCtx.Request.Body()).
-		WithContentType(string(reqCtx.Request.Header.ContentType())).
+		WithHTTPExtension(verb, r.URL.RawQuery).
+		WithRawData(r.Body).
+		WithContentType(r.Header.Get("content-type")).
 		// Save headers to internal metadata
-		WithFastHTTPHeaders(&reqCtx.Request.Header)
+		WithHTTPHeaders(r.Header)
 	if policyDef != nil {
 		req.WithReplay(policyDef.HasRetries())
 	}
 	defer req.Close()
 
 	policyRunner := resiliency.NewRunnerWithOptions(
-		reqCtx, policyDef,
+		r.Context(), policyDef,
 		resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
 			Disposer: resiliency.DisposerCloser[*invokev1.InvokeMethodResponse],
 		},
@@ -1332,9 +1136,10 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 		if rErr != nil {
 			// Allowlist policies that are applied on the callee side can return a Permission Denied error.
 			// For everything else, treat it as a gRPC transport error
+			apiErr := messages.ErrDirectInvoke.WithFormat(targetID, rErr)
 			invokeErr := invokeError{
-				statusCode: nethttp.StatusInternalServerError,
-				msg:        NewErrorResponse("ERR_DIRECT_INVOKE", fmt.Sprintf(messages.ErrDirectInvoke, targetID, rErr)),
+				statusCode: apiErr.HTTPCode(),
+				msg:        apiErr.JSONErrorValue(),
 			}
 
 			if status.Code(rErr) == codes.PermissionDenied {
@@ -1357,7 +1162,7 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 				if rErr != nil {
 					return rResp, invokeError{
 						statusCode: nethttp.StatusInternalServerError,
-						msg:        NewErrorResponse("ERR_MALFORMED_RESPONSE", rErr.Error()),
+						msg:        NewErrorResponse("ERR_MALFORMED_RESPONSE", rErr.Error()).JSONErrorValue(),
 					}
 				}
 			} else {
@@ -1373,20 +1178,20 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 
 	// Special case for timeouts/circuit breakers since they won't go through the rest of the logic.
 	if errors.Is(err, context.DeadlineExceeded) || breaker.IsErrorPermanent(err) {
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, NewErrorResponse("ERR_DIRECT_INVOKE", err.Error())))
+		respondWithError(w, messages.ErrDirectInvoke.WithFormat(targetID, err))
 		return
 	}
 
 	if resp != nil {
 		headers := resp.Headers()
 		if len(headers) > 0 {
-			invokev1.InternalMetadataToHTTPHeader(reqCtx, headers, reqCtx.Response.Header.Add)
+			invokev1.InternalMetadataToHTTPHeader(r.Context(), headers, w.Header().Add)
 		}
 	}
 
 	invokeErr := invokeError{}
 	if errors.As(err, &invokeErr) {
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(invokeErr.statusCode, invokeErr.msg))
+		respondWithData(w, invokeErr.statusCode, invokeErr.msg)
 		if resp != nil {
 			_ = resp.Close()
 		}
@@ -1394,37 +1199,40 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	if resp == nil {
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, NewErrorResponse("ERR_DIRECT_INVOKE", fmt.Sprintf(messages.ErrDirectInvoke, targetID, "response object is nil"))))
+		respondWithError(w, messages.ErrDirectInvoke.WithFormat(targetID, "response object is nil"))
 		return
 	}
 	defer resp.Close()
 
 	statusCode := int(resp.Status().Code)
 
-	body, err := resp.RawDataFull()
-	if err != nil {
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, NewErrorResponse("ERR_DIRECT_INVOKE", fmt.Sprintf(messages.ErrDirectInvoke, targetID, err))))
-		return
+	if ct := resp.ContentType(); ct != "" {
+		w.Header().Set("content-type", ct)
 	}
 
-	reqCtx.Response.Header.SetContentType(resp.ContentType())
-	fasthttpRespond(reqCtx, fasthttpResponseWith(statusCode, body))
+	w.WriteHeader(statusCode)
+
+	_, err = io.Copy(w, resp.RawData())
+	if err != nil {
+		respondWithError(w, messages.ErrDirectInvoke.WithFormat(targetID, err))
+		return
+	}
 }
 
 // findTargetIDAndMethod finds ID of the target service and method from the following three places:
 // 1. HTTP header 'dapr-app-id' (path is method)
 // 2. Basic auth header: `http://dapr-app-id:<service-id>@localhost:3500/<method>`
 // 3. URL parameter: `http://localhost:3500/v1.0/invoke/<app-id>/method/<method>`
-func findTargetIDAndMethod(path string, peekHeader func(string) []byte) (targetID string, method string) {
-	if appID := peekHeader(daprAppID); len(appID) != 0 {
-		return string(appID), strings.TrimPrefix(path, "/")
+func findTargetIDAndMethod(reqPath string, headers nethttp.Header) (targetID string, method string) {
+	if appID := headers.Get(daprAppID); appID != "" {
+		return appID, strings.TrimPrefix(path.Clean(reqPath), "/")
 	}
 
-	if auth := string(peekHeader(fasthttp.HeaderAuthorization)); strings.HasPrefix(auth, "Basic ") {
+	if auth := headers.Get(fasthttp.HeaderAuthorization); strings.HasPrefix(auth, "Basic ") {
 		if s, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(auth, "Basic ")); err == nil {
 			pair := strings.Split(string(s), ":")
 			if len(pair) == 2 && pair[0] == daprAppID {
-				return pair[1], strings.TrimPrefix(path, "/")
+				return pair[1], strings.TrimPrefix(path.Clean(reqPath), "/")
 			}
 		}
 	}
@@ -1432,8 +1240,8 @@ func findTargetIDAndMethod(path string, peekHeader func(string) []byte) (targetI
 	// If we're here, the handler was probably invoked with /v1.0/invoke/ (or the invocation is invalid, missing the app id provided as header or Basic auth)
 	// However, we are not relying on wildcardParam because the URL may have been sanitized to remove `//``, so `http://` would have been turned into `http:/`
 	// First, check to make sure that the path has the prefix
-	if idx := pathHasPrefix(path, apiVersionV1, "invoke"); idx > 0 {
-		path = path[idx:]
+	if idx := pathHasPrefix(reqPath, apiVersionV1, "invoke"); idx > 0 {
+		reqPath = reqPath[idx:]
 
 		// Scan to find app ID and method
 		// Matches `<appid>/method/<method>`.
@@ -1442,9 +1250,9 @@ func findTargetIDAndMethod(path string, peekHeader func(string) []byte) (targetI
 		// - `http://example.com/method/mymethod`
 		// - `https://example.com/method/mymethod`
 		// - `http%3A%2F%2Fexample.com/method/mymethod`
-		if idx = strings.Index(path, "/method/"); idx > 0 {
-			targetID = path[:idx]
-			method = path[(idx + len("/method/")):]
+		if idx = strings.Index(reqPath, "/method/"); idx > 0 {
+			targetID = reqPath[:idx]
+			method = reqPath[(idx + len("/method/")):]
 			if t, _ := url.QueryUnescape(targetID); t != "" {
 				targetID = t
 			}
@@ -2176,26 +1984,6 @@ func GetStatusCodeFromMetadata(metadata map[string]string) int {
 	return nethttp.StatusOK
 }
 
-func (a *api) onGetHealthz(reqCtx *fasthttp.RequestCtx) {
-	if !a.readyStatus {
-		msg := NewErrorResponse("ERR_HEALTH_NOT_READY", messages.ErrHealthNotReady)
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
-		log.Debug(msg)
-	} else {
-		fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
-	}
-}
-
-func (a *api) onGetOutboundHealthz(reqCtx *fasthttp.RequestCtx) {
-	if !a.outboundReadyStatus {
-		msg := NewErrorResponse("ERR_OUTBOUND_HEALTH_NOT_READY", messages.ErrOutboundHealthNotReady)
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
-		log.Debug(msg)
-	} else {
-		fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
-	}
-}
-
 func getMetadataFromRequest(r *nethttp.Request) map[string]string {
 	pl := len(metadataPrefix)
 	qs := r.URL.Query()
@@ -2374,16 +2162,21 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	}
 }
 
-func (a *api) onQueryStateHandler() fasthttp.RequestHandler {
-	return UniversalFastHTTPHandler(
+func (a *api) onQueryStateHandler() nethttp.HandlerFunc {
+	return UniversalHTTPHandler(
 		a.universal.QueryStateAlpha1,
 		UniversalHTTPHandlerOpts[*runtimev1pb.QueryStateRequest, *runtimev1pb.QueryStateResponse]{
 			// We pass the input body manually rather than parsing it using protojson
 			SkipInputBody: true,
-			InModifierFastHTTP: func(reqCtx *fasthttp.RequestCtx, in *runtimev1pb.QueryStateRequest) (*runtimev1pb.QueryStateRequest, error) {
-				in.StoreName = reqCtx.UserValue(storeNameParam).(string)
-				in.Metadata = getMetadataFromFastHTTPRequest(reqCtx)
-				in.Query = string(reqCtx.PostBody())
+			InModifier: func(r *nethttp.Request, in *runtimev1pb.QueryStateRequest) (*runtimev1pb.QueryStateRequest, error) {
+				in.StoreName = chi.URLParam(r, storeNameParam)
+				in.Metadata = getMetadataFromRequest(r)
+
+				body, err := io.ReadAll(r.Body)
+				if err != nil {
+					return nil, messages.ErrBodyRead.WithFormat(err)
+				}
+				in.Query = string(body)
 				return in, nil
 			},
 			OutModifier: func(out *runtimev1pb.QueryStateResponse) (any, error) {
@@ -2414,10 +2207,6 @@ func (a *api) onQueryStateHandler() fasthttp.RequestHandler {
 
 func (a *api) SetAppChannel(appChannel channel.AppChannel) {
 	a.appChannel = appChannel
-}
-
-func (a *api) SetHTTPEndpointsAppChannel(appChannel channel.HTTPEndpointAppChannel) {
-	a.httpEndpointsAppChannel = appChannel
 }
 
 func (a *api) SetDirectMessaging(directMessaging messaging.DirectMessaging) {

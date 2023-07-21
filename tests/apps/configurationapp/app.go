@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -36,13 +37,17 @@ import (
 
 const (
 	daprGRPCPort               = 50001
-	configStore                = "configstore"
 	daprConfigurationURLStable = "http://localhost:3500/v1.0/configuration/"
 	daprConfigurationURLAlpha1 = "http://localhost:3500/v1.0-alpha1/configuration/"
 	separator                  = "||"
 	redisHost                  = "dapr-redis-master.dapr-tests.svc.cluster.local:6379"
 	writeTimeout               = 5 * time.Second
 	alpha1Endpoint             = "alpha1"
+	postgresComponent          = "postgres"
+	redisComponent             = "redis"
+	postgresChannel            = "config"
+	postgresConnectionString   = "host=dapr-postgres-postgresql.dapr-tests.svc.cluster.local user=postgres password=example port=5432 connect_timeout=10 database=dapr_test"
+	postgresConfigTable        = "configtable"
 )
 
 var (
@@ -82,7 +87,8 @@ type UpdateEvent struct {
 
 type Updater interface {
 	Init() error
-	Update(items map[string]*Item) error
+	AddKey(items map[string]*Item) error
+	UpdateKey(items map[string]*Item) error
 }
 
 type RedisUpdater struct {
@@ -105,12 +111,150 @@ func (r *RedisUpdater) Init() error {
 	return nil
 }
 
-func (r *RedisUpdater) Update(items map[string]*Item) error {
+func (r *RedisUpdater) AddKey(items map[string]*Item) error {
 	timeoutCtx, cancel := context.WithTimeout(context.Background(), writeTimeout)
 	defer cancel()
 	values := getRedisValuesFromItems(items)
 	valuesWithCommand := append([]interface{}{"MSET"}, values...)
 	return r.client.Do(timeoutCtx, valuesWithCommand...).Err()
+}
+
+func (r *RedisUpdater) UpdateKey(items map[string]*Item) error {
+	return r.AddKey(items)
+}
+
+type PostgresUpdater struct {
+	client *pgxpool.Pool
+}
+
+func createAndSetTable(ctx context.Context, client *pgxpool.Pool, configTable string) error {
+	// Creating table if not exists
+	_, err := client.Exec(ctx, "CREATE TABLE IF NOT EXISTS "+configTable+" (KEY VARCHAR NOT NULL, VALUE VARCHAR NOT NULL, VERSION VARCHAR NOT NULL, METADATA JSON)")
+	if err != nil {
+		return fmt.Errorf("error creating table : %w", err)
+	}
+
+	// Deleting existing data
+	_, err = client.Exec(ctx, "TRUNCATE TABLE "+configTable)
+	if err != nil {
+		return fmt.Errorf("error truncating table : %w", err)
+	}
+
+	return nil
+}
+
+func (r *PostgresUpdater) CreateTrigger(channel string) error {
+	ctx := context.Background()
+	procedureName := "configuration_event_" + channel
+	createConfigEventSQL := `CREATE OR REPLACE FUNCTION ` + procedureName + `() RETURNS TRIGGER AS $$
+		DECLARE
+			data json;
+			notification json;
+
+		BEGIN
+
+			IF (TG_OP = 'DELETE') THEN
+				data = row_to_json(OLD);
+			ELSE
+				data = row_to_json(NEW);
+			END IF;
+
+			notification = json_build_object(
+							'table',TG_TABLE_NAME,
+							'action', TG_OP,
+							'data', data);
+
+			PERFORM pg_notify('` + channel + `' ,notification::text);
+			RETURN NULL;
+		END;
+	$$ LANGUAGE plpgsql;
+	`
+	_, err := r.client.Exec(ctx, createConfigEventSQL)
+	if err != nil {
+		return fmt.Errorf("error creating config event function : %w", err)
+	}
+	triggerName := "configTrigger_" + channel
+	createTriggerSQL := "CREATE TRIGGER " + triggerName + " AFTER INSERT OR UPDATE OR DELETE ON " + postgresConfigTable + " FOR EACH ROW EXECUTE PROCEDURE " + procedureName + "();"
+	_, err = r.client.Exec(ctx, createTriggerSQL)
+	if err != nil {
+		return fmt.Errorf("error creating config trigger : %w", err)
+	}
+	return nil
+}
+
+func (r *PostgresUpdater) Init() error {
+	ctx := context.Background()
+	config, err := pgxpool.ParseConfig(postgresConnectionString)
+	if err != nil {
+		return fmt.Errorf("postgres configuration store connection error : %w", err)
+	}
+	pool, err := pgxpool.NewWithConfig(ctx, config)
+	if err != nil {
+		return fmt.Errorf("postgres configuration store connection error : %w", err)
+	}
+	err = pool.Ping(ctx)
+	if err != nil {
+		return fmt.Errorf("postgres configuration store ping error : %w", err)
+	}
+	r.client = pool
+	err = createAndSetTable(ctx, r.client, postgresConfigTable)
+	if err != nil {
+		return fmt.Errorf("postgres configuration store table creation error : %w", err)
+	}
+	err = r.CreateTrigger(postgresChannel)
+	if err != nil {
+		return fmt.Errorf("postgres configuration store trigger creation error : %w", err)
+	}
+	return nil
+}
+
+func buildAddQuery(items map[string]*Item, configTable string) (string, []interface{}, error) {
+	query := ""
+	paramWildcard := make([]string, 0, len(items))
+	params := make([]interface{}, 0, 4*len(items))
+	if len(items) == 0 {
+		return query, params, fmt.Errorf("empty list of items")
+	}
+	var queryBuilder strings.Builder
+	queryBuilder.WriteString("INSERT INTO " + configTable + " (KEY, VALUE, VERSION, METADATA) VALUES ")
+
+	paramPosition := 1
+	for key, item := range items {
+		paramWildcard = append(paramWildcard, "($"+strconv.Itoa(paramPosition)+", $"+strconv.Itoa(paramPosition+1)+", $"+strconv.Itoa(paramPosition+2)+", $"+strconv.Itoa(paramPosition+3)+")")
+		params = append(params, key, item.Value, item.Version, item.Metadata)
+		paramPosition += 4
+	}
+	queryBuilder.WriteString(strings.Join(paramWildcard, " , "))
+	query = queryBuilder.String()
+	return query, params, nil
+}
+
+func (r *PostgresUpdater) AddKey(items map[string]*Item) error {
+	query, params, err := buildAddQuery(items, postgresConfigTable)
+	if err != nil {
+		return err
+	}
+	_, err = r.client.Exec(context.Background(), query, params...)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (r *PostgresUpdater) UpdateKey(items map[string]*Item) error {
+	if len(items) == 0 {
+		return fmt.Errorf("empty list of items")
+	}
+	for key, item := range items {
+		var params []interface{}
+		query := "UPDATE " + postgresConfigTable + " SET VALUE = $1, VERSION = $2, METADATA = $3 WHERE KEY = $4"
+		params = append(params, item.Value, item.Version, item.Metadata, key)
+		_, err := r.client.Exec(context.Background(), query, params...)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func init() {
@@ -145,7 +289,7 @@ func getRedisValuesFromItems(items map[string]*Item) []interface{} {
 	return m
 }
 
-func getHTTP(keys []string, endpointType string) (string, error) {
+func getHTTP(keys []string, endpointType string, configStore string) (string, error) {
 	daprConfigurationURL := daprConfigurationURLStable
 	if endpointType == alpha1Endpoint {
 		daprConfigurationURL = daprConfigurationURLAlpha1
@@ -160,7 +304,7 @@ func getHTTP(keys []string, endpointType string) (string, error) {
 	return string(respInBytes), nil
 }
 
-func getGRPC(keys []string, endpointType string) (string, error) {
+func getGRPC(keys []string, endpointType string, configStore string) (string, error) {
 	getConfigGRPC := grpcClient.GetConfiguration
 	if endpointType == alpha1Endpoint {
 		getConfigGRPC = grpcClient.GetConfigurationAlpha1
@@ -182,6 +326,7 @@ func getKeyValues(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	protocol := vars["protocol"]
 	endpointType := vars["endpointType"]
+	configStore := vars["configStore"]
 	var keys []string
 	err := json.NewDecoder(r.Body).Decode(&keys)
 	if err != nil {
@@ -190,9 +335,9 @@ func getKeyValues(w http.ResponseWriter, r *http.Request) {
 	}
 	var response string
 	if protocol == "http" {
-		response, err = getHTTP(keys, endpointType)
+		response, err = getHTTP(keys, endpointType, configStore)
 	} else if protocol == "grpc" {
-		response, err = getGRPC(keys, endpointType)
+		response, err = getGRPC(keys, endpointType, configStore)
 	} else {
 		err = fmt.Errorf("unknown protocol in Get call: %s", protocol)
 	}
@@ -214,19 +359,22 @@ func buildQueryParams(keys []string) string {
 	return ret
 }
 
-func subscribeGRPC(keys []string, endpointType string) (string, error) {
+func subscribeGRPC(keys []string, endpointType string, configStore string, component string) (string, error) {
 	var client runtimev1pb.Dapr_SubscribeConfigurationClient
 	var err error
+	subscribeConfigurationRequest := &runtimev1pb.SubscribeConfigurationRequest{
+		StoreName: configStore,
+		Keys:      keys,
+	}
+	if component == postgresComponent {
+		subscribeConfigurationRequest.Metadata = map[string]string{
+			"pgNotifyChannel": postgresChannel,
+		}
+	}
 	if endpointType == alpha1Endpoint {
-		client, err = grpcClient.SubscribeConfigurationAlpha1(context.Background(), &runtimev1pb.SubscribeConfigurationRequest{
-			StoreName: configStore,
-			Keys:      keys,
-		})
+		client, err = grpcClient.SubscribeConfigurationAlpha1(context.Background(), subscribeConfigurationRequest)
 	} else {
-		client, err = grpcClient.SubscribeConfiguration(context.Background(), &runtimev1pb.SubscribeConfigurationRequest{
-			StoreName: configStore,
-			Keys:      keys,
-		})
+		client, err = grpcClient.SubscribeConfiguration(context.Background(), subscribeConfigurationRequest)
 	}
 	if err != nil {
 		return "", fmt.Errorf("error subscribing config updates: %w", err)
@@ -275,12 +423,15 @@ func subscribeHandlerGRPC(client runtimev1pb.Dapr_SubscribeConfigurationClient) 
 	}
 }
 
-func subscribeHTTP(keys []string, endpointType string) (string, error) {
+func subscribeHTTP(keys []string, endpointType string, configStore string, component string) (string, error) {
 	daprConfigurationURL := daprConfigurationURLStable
 	if endpointType == alpha1Endpoint {
 		daprConfigurationURL = daprConfigurationURLAlpha1
 	}
 	url := daprConfigurationURL + configStore + "/subscribe" + buildQueryParams(keys)
+	if component == postgresComponent {
+		url = url + "&metadata.pgNotifyChannel=" + postgresChannel
+	}
 	resp, err := httpClient.Get(url)
 	if err != nil {
 		return "", fmt.Errorf("error subscribing config updates: %w", err)
@@ -307,6 +458,8 @@ func startSubscription(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	protocol := vars["protocol"]
 	endpointType := vars["endpointType"]
+	configStore := vars["configStore"]
+	component := vars["component"]
 	var keys []string
 	err := json.NewDecoder(r.Body).Decode(&keys)
 	if err != nil {
@@ -315,9 +468,9 @@ func startSubscription(w http.ResponseWriter, r *http.Request) {
 	}
 	var subscriptionID string
 	if protocol == "http" {
-		subscriptionID, err = subscribeHTTP(keys, endpointType)
+		subscriptionID, err = subscribeHTTP(keys, endpointType, configStore, component)
 	} else if protocol == "grpc" {
-		subscriptionID, err = subscribeGRPC(keys, endpointType)
+		subscriptionID, err = subscribeGRPC(keys, endpointType, configStore, component)
 	} else {
 		err = fmt.Errorf("unknown protocol in Subscribe call: %s", protocol)
 	}
@@ -329,7 +482,7 @@ func startSubscription(w http.ResponseWriter, r *http.Request) {
 	sendResponse(w, http.StatusOK, subscriptionID)
 }
 
-func unsubscribeHTTP(subscriptionID string, endpointType string) (string, error) {
+func unsubscribeHTTP(subscriptionID string, endpointType string, configStore string) (string, error) {
 	daprConfigurationURL := daprConfigurationURLStable
 	if endpointType == alpha1Endpoint {
 		daprConfigurationURL = daprConfigurationURLAlpha1
@@ -352,7 +505,7 @@ func unsubscribeHTTP(subscriptionID string, endpointType string) (string, error)
 	return string(respInBytes), nil
 }
 
-func unsubscribeGRPC(subscriptionID string, endpointType string) (string, error) {
+func unsubscribeGRPC(subscriptionID string, endpointType string, configStore string) (string, error) {
 	unsubscribeConfigGRPC := grpcClient.UnsubscribeConfiguration
 	if endpointType == alpha1Endpoint {
 		unsubscribeConfigGRPC = grpcClient.UnsubscribeConfigurationAlpha1
@@ -376,12 +529,13 @@ func stopSubscription(w http.ResponseWriter, r *http.Request) {
 	subscriptionID := vars["subscriptionID"]
 	protocol := vars["protocol"]
 	endpointType := vars["endpointType"]
+	configStore := vars["configStore"]
 	var response string
 	var err error
 	if protocol == "http" {
-		response, err = unsubscribeHTTP(subscriptionID, endpointType)
+		response, err = unsubscribeHTTP(subscriptionID, endpointType, configStore)
 	} else if protocol == "grpc" {
-		response, err = unsubscribeGRPC(subscriptionID, endpointType)
+		response, err = unsubscribeGRPC(subscriptionID, endpointType, configStore)
 	} else {
 		err = fmt.Errorf("unknown protocol in unsubscribe call: %s", protocol)
 	}
@@ -440,15 +594,22 @@ func initializeUpdater(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("Initializing updater with component: %s\n", component)
 	switch component {
-	case "redis":
+	case redisComponent:
 		updater = &RedisUpdater{}
 		err := updater.Init()
 		if err != nil {
 			sendResponse(w, http.StatusInternalServerError, err.Error())
 			return
 		}
+	case postgresComponent:
+		updater = &PostgresUpdater{}
+		err := updater.Init()
+		if err != nil {
+			sendResponse(w, http.StatusInternalServerError, err.Error())
+			return
+		}
 	default:
-		sendResponse(w, http.StatusBadRequest, "Invalid component:"+component+".Allowed values are 'redis'")
+		sendResponse(w, http.StatusBadRequest, "Invalid component:"+component+".Allowed values are 'redis' and 'postgres'")
 		return
 	}
 	sendResponse(w, http.StatusOK, "OK")
@@ -456,13 +617,22 @@ func initializeUpdater(w http.ResponseWriter, r *http.Request) {
 
 // updateKeyValues is the handler for updating key values in the config store
 func updateKeyValues(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	operation := vars["operation"]
 	items := make(map[string]*Item, 10)
 	err := json.NewDecoder(r.Body).Decode(&items)
 	if err != nil {
 		sendResponse(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	err = updater.Update(items)
+	switch operation {
+	case "add":
+		err = updater.AddKey(items)
+	case "update":
+		err = updater.UpdateKey(items)
+	default:
+		err = fmt.Errorf("unknown operation: %s", operation)
+	}
 	if err != nil {
 		sendResponse(w, http.StatusBadRequest, err.Error())
 		return
@@ -479,12 +649,12 @@ func appRouter() http.Handler {
 
 	router.HandleFunc("/", indexHandler).Methods("GET")
 	router.HandleFunc("/initialize-updater", initializeUpdater).Methods("POST")
-	router.HandleFunc("/get-key-values/{protocol}/{endpointType}", getKeyValues).Methods("POST")
-	router.HandleFunc("/subscribe/{protocol}/{endpointType}", startSubscription).Methods("POST")
-	router.HandleFunc("/unsubscribe/{subscriptionID}/{protocol}/{endpointType}", stopSubscription).Methods("GET")
+	router.HandleFunc("/get-key-values/{protocol}/{endpointType}/{configStore}", getKeyValues).Methods("POST")
+	router.HandleFunc("/subscribe/{protocol}/{endpointType}/{configStore}/{component}", startSubscription).Methods("POST")
+	router.HandleFunc("/unsubscribe/{subscriptionID}/{protocol}/{endpointType}/{configStore}", stopSubscription).Methods("GET")
 	router.HandleFunc("/configuration/{storeName}/{key}", configurationUpdateHandler).Methods("POST")
 	router.HandleFunc("/get-received-updates/{subscriptionID}", getReceivedUpdates).Methods("GET")
-	router.HandleFunc("/update-key-values", updateKeyValues).Methods("POST")
+	router.HandleFunc("/update-key-values/{operation}", updateKeyValues).Methods("POST")
 
 	router.Use(mux.CORSMethodMiddleware(router))
 	return router

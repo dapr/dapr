@@ -15,8 +15,10 @@ package options
 
 import (
 	"flag"
+	"os"
 	"strings"
 
+	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 
 	"github.com/dapr/dapr/pkg/credentials"
@@ -30,6 +32,7 @@ const (
 	defaultHealthzPort       = 8080
 	defaultPlacementPort     = 50005
 	defaultReplicationFactor = 100
+	envMetadataEnabled       = "DAPR_PLACEMENT_METADATA_ENABLED"
 )
 
 type Options struct {
@@ -41,10 +44,11 @@ type Options struct {
 	RaftLogStorePath string
 
 	// Placement server configurations
-	PlacementPort int
-	HealthzPort   int
-	CertChainPath string
-	TLSEnabled    bool
+	PlacementPort   int
+	HealthzPort     int
+	CertChainPath   string
+	TLSEnabled      bool
+	MetadataEnabled bool
 
 	ReplicationFactor int
 
@@ -65,6 +69,7 @@ func New() *Options {
 	flag.IntVar(&opts.HealthzPort, "healthz-port", defaultHealthzPort, "sets the HTTP port for the healthz server")
 	flag.StringVar(&opts.CertChainPath, "certchain", defaultCredentialsPath, "Path to the credentials directory holding the cert chain")
 	flag.BoolVar(&opts.TLSEnabled, "tls-enabled", false, "Should TLS be enabled for the placement gRPC server")
+	flag.BoolVar(&opts.MetadataEnabled, "metadata-enabled", opts.MetadataEnabled, "Expose the placement tables on the healthz server")
 	flag.IntVar(&opts.ReplicationFactor, "replicationFactor", defaultReplicationFactor, "sets the replication factor for actor distribution on vnodes")
 
 	flag.StringVar(&credentials.RootCertFilename, "issuer-ca-filename", credentials.RootCertFilename, "Certificate Authority certificate filename")
@@ -76,6 +81,9 @@ func New() *Options {
 
 	opts.Metrics = metrics.DefaultMetricOptions()
 	opts.Metrics.AttachCmdFlags(flag.StringVar, flag.BoolVar)
+
+	// parse env variables before parsing flags, so the flags takes priority over env variables
+	opts.MetadataEnabled = utils.IsTruthy(os.Getenv(envMetadataEnabled))
 
 	flag.Parse()
 

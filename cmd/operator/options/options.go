@@ -57,7 +57,7 @@ type Options struct {
 	Metrics                            *metrics.Options
 }
 
-func New() (*Options, error) {
+func New() *Options {
 	var opts Options
 
 	// This resets the flags on klog, which will otherwise try to log to the FS.
@@ -107,5 +107,5 @@ func New() (*Options, error) {
 		}
 	}
 
-	return &opts, nil
+	return &opts
 }

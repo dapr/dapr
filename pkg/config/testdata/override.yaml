@@ -1,8 +1,11 @@
 apiVersion: dapr.io/v1alpha1
 kind: Configuration
 metadata:
-  name: pubsubroutingconfig
+  name: daprsystem
+  namespace: default
 spec:
+  mtls:
+    enabled: false
   features:
-    - name: PubSub.Routing
+    - name: Test.Feature
       enabled: true

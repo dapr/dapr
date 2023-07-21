@@ -53,7 +53,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/yaml"
 
 	"github.com/dapr/components-contrib/bindings"
@@ -71,7 +71,6 @@ import (
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subscriptionsapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
-	"github.com/dapr/dapr/pkg/components"
 	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
 	configurationLoader "github.com/dapr/dapr/pkg/components/configuration"
 	lockLoader "github.com/dapr/dapr/pkg/components/lock"
@@ -86,7 +85,6 @@ import (
 	modeconfig "github.com/dapr/dapr/pkg/config/modes"
 	"github.com/dapr/dapr/pkg/cors"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
-	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/expr"
 	pb "github.com/dapr/dapr/pkg/grpc/proxy/testservice"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -97,7 +95,10 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
+	"github.com/dapr/dapr/pkg/runtime/meta"
+	rtmock "github.com/dapr/dapr/pkg/runtime/mock"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
+	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
 	"github.com/dapr/dapr/pkg/scopes"
@@ -176,62 +177,11 @@ var testResiliency = &v1alpha1.Resiliency{
 	},
 }
 
-type MockKubernetesStateStore struct {
-	callback func()
-}
-
-func (m *MockKubernetesStateStore) Init(ctx context.Context, metadata secretstores.Metadata) error {
-	if m.callback != nil {
-		m.callback()
-	}
-	return nil
-}
-
-func (m *MockKubernetesStateStore) GetSecret(ctx context.Context, req secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
-	return secretstores.GetSecretResponse{
-		Data: map[string]string{
-			"key1":   "value1",
-			"_value": "_value_data",
-			"name1":  "value1",
-		},
-	}, nil
-}
-
-func (m *MockKubernetesStateStore) BulkGetSecret(ctx context.Context, req secretstores.BulkGetSecretRequest) (secretstores.BulkGetSecretResponse, error) {
-	response := map[string]map[string]string{}
-	response["k8s-secret"] = map[string]string{
-		"key1":   "value1",
-		"_value": "_value_data",
-		"name1":  "value1",
-	}
-	return secretstores.BulkGetSecretResponse{
-		Data: response,
-	}, nil
-}
-
-func (m *MockKubernetesStateStore) Close() error {
-	return nil
-}
-
-func (m *MockKubernetesStateStore) Features() []secretstores.Feature {
-	return []secretstores.Feature{}
-}
-
-func (m MockKubernetesStateStore) GetComponentMetadata() map[string]string {
-	return nil
-}
-
-func NewMockKubernetesStore() secretstores.SecretStore {
-	return &MockKubernetesStateStore{}
-}
-
-func NewMockKubernetesStoreWithInitCallback(cb func()) secretstores.SecretStore {
-	return &MockKubernetesStateStore{callback: cb}
-}
-
 func TestNewRuntime(t *testing.T) {
 	// act
-	r := newDaprRuntime(&internalConfig{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+	r := newDaprRuntime(&internalConfig{
+		registry: registry.New(registry.NewOptions()),
+	}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 
 	// assert
 	assert.NotNil(t, r, "runtime must be initiated")
@@ -247,35 +197,6 @@ func writeComponentToDisk(content any, fileName string) (cleanup func(), error e
 	return func() {
 		os.Remove(filePath)
 	}, os.WriteFile(filePath, b, 0o600)
-}
-
-// helper to populate subscription array for 2 pubsubs.
-// 'topics' are the topics for the first pubsub.
-// 'topics2' are the topics for the second pubsub.
-func getSubscriptionsJSONString(topics []string, topics2 []string) string {
-	s := []runtimePubsub.SubscriptionJSON{}
-	for _, t := range topics {
-		s = append(s, runtimePubsub.SubscriptionJSON{
-			PubsubName: TestPubsubName,
-			Topic:      t,
-			Routes: runtimePubsub.RoutesJSON{
-				Default: t,
-			},
-		})
-	}
-
-	for _, t := range topics2 {
-		s = append(s, runtimePubsub.SubscriptionJSON{
-			PubsubName: TestSecondPubsubName,
-			Topic:      t,
-			Routes: runtimePubsub.RoutesJSON{
-				Default: t,
-			},
-		})
-	}
-	b, _ := json.Marshal(&s)
-
-	return string(b)
 }
 
 func getSubscriptionCustom(topic, path string) string {
@@ -294,7 +215,7 @@ func getSubscriptionCustom(topic, path string) string {
 
 func testDeclarativeSubscription() subscriptionsapi.Subscription {
 	return subscriptionsapi.Subscription{
-		TypeMeta: metaV1.TypeMeta{
+		TypeMeta: metav1.TypeMeta{
 			Kind:       "Subscription",
 			APIVersion: "v1alpha1",
 		},
@@ -311,7 +232,7 @@ func TestProcessComponentsAndDependents(t *testing.T) {
 	defer stopRuntime(t, rt)
 
 	incorrectComponentType := componentsV1alpha1.Component{
-		ObjectMeta: metaV1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name: TestPubsubName,
 		},
 		Spec: componentsV1alpha1.ComponentSpec{
@@ -333,7 +254,7 @@ func TestDoProcessComponent(t *testing.T) {
 	defer stopRuntime(t, rt)
 
 	pubsubComponent := componentsV1alpha1.Component{
-		ObjectMeta: metaV1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name: TestPubsubName,
 		},
 		Spec: componentsV1alpha1.ComponentSpec{
@@ -344,7 +265,7 @@ func TestDoProcessComponent(t *testing.T) {
 	}
 
 	lockComponent := componentsV1alpha1.Component{
-		ObjectMeta: metaV1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name: TestLockName,
 		},
 		Spec: componentsV1alpha1.ComponentSpec{
@@ -359,7 +280,7 @@ func TestDoProcessComponent(t *testing.T) {
 		mockLockStore := daprt.NewMockStore(ctrl)
 		mockLockStore.EXPECT().InitLockStore(context.Background(), gomock.Any()).Return(assert.AnError)
 
-		rt.lockStoreRegistry.RegisterComponent(
+		rt.runtimeConfig.registry.Locks().RegisterComponent(
 			func(_ logger.Logger) lock.Store {
 				return mockLockStore
 			},
@@ -367,7 +288,7 @@ func TestDoProcessComponent(t *testing.T) {
 		)
 
 		// act
-		err := rt.doProcessOneComponent(components.CategoryLock, lockComponent)
+		err := rt.processor.One(context.TODO(), lockComponent)
 
 		// assert
 		assert.Error(t, err, "expected an error")
@@ -379,7 +300,7 @@ func TestDoProcessComponent(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		mockLockStore := daprt.NewMockStore(ctrl)
 
-		rt.lockStoreRegistry.RegisterComponent(
+		rt.runtimeConfig.registry.Locks().RegisterComponent(
 			func(_ logger.Logger) lock.Store {
 				return mockLockStore
 			},
@@ -390,7 +311,7 @@ func TestDoProcessComponent(t *testing.T) {
 		lockComponentV3.Spec.Version = "v3"
 
 		// act
-		err := rt.doProcessOneComponent(components.CategoryLock, lockComponentV3)
+		err := rt.processor.One(context.TODO(), lockComponentV3)
 
 		// assert
 		assert.Error(t, err, "expected an error")
@@ -403,7 +324,7 @@ func TestDoProcessComponent(t *testing.T) {
 		mockLockStore := daprt.NewMockStore(ctrl)
 		mockLockStore.EXPECT().InitLockStore(context.Background(), gomock.Any()).Return(nil)
 
-		rt.lockStoreRegistry.RegisterComponent(
+		rt.runtimeConfig.registry.Locks().RegisterComponent(
 			func(_ logger.Logger) lock.Store {
 				return mockLockStore
 			},
@@ -420,7 +341,7 @@ func TestDoProcessComponent(t *testing.T) {
 			},
 		}
 		// act
-		err := rt.doProcessOneComponent(components.CategoryLock, lockComponentWithWrongStrategy)
+		err := rt.processor.One(context.TODO(), lockComponentWithWrongStrategy)
 		// assert
 		assert.Error(t, err)
 	})
@@ -431,7 +352,7 @@ func TestDoProcessComponent(t *testing.T) {
 		mockLockStore := daprt.NewMockStore(ctrl)
 		mockLockStore.EXPECT().InitLockStore(context.Background(), gomock.Any()).Return(nil)
 
-		rt.lockStoreRegistry.RegisterComponent(
+		rt.runtimeConfig.registry.Locks().RegisterComponent(
 			func(_ logger.Logger) lock.Store {
 				return mockLockStore
 			},
@@ -439,7 +360,7 @@ func TestDoProcessComponent(t *testing.T) {
 		)
 
 		// act
-		err := rt.doProcessOneComponent(components.CategoryLock, lockComponent)
+		err := rt.processor.One(context.TODO(), lockComponent)
 		// assert
 		assert.Nil(t, err, "unexpected error")
 		// get modified key
@@ -452,7 +373,7 @@ func TestDoProcessComponent(t *testing.T) {
 		// setup
 		mockPubSub := new(daprt.MockPubSub)
 
-		rt.pubSubRegistry.RegisterComponent(
+		rt.runtimeConfig.registry.PubSubs().RegisterComponent(
 			func(_ logger.Logger) pubsub.PubSub {
 				return mockPubSub
 			},
@@ -468,7 +389,7 @@ func TestDoProcessComponent(t *testing.T) {
 		mockPubSub.On("Init", expectedMetadata).Return(assert.AnError)
 
 		// act
-		err := rt.doProcessOneComponent(components.CategoryPubSub, pubsubComponent)
+		err := rt.processor.One(context.TODO(), pubsubComponent)
 
 		// assert
 		assert.Error(t, err, "expected an error")
@@ -477,10 +398,13 @@ func TestDoProcessComponent(t *testing.T) {
 
 	t.Run("test invalid category component", func(t *testing.T) {
 		// act
-		err := rt.doProcessOneComponent(components.Category("invalid"), pubsubComponent)
-
+		err := rt.processor.One(context.TODO(), componentsV1alpha1.Component{
+			Spec: componentsV1alpha1.ComponentSpec{
+				Type: "invalid",
+			},
+		})
 		// assert
-		assert.NoError(t, err, "no error expected")
+		assert.Error(t, err, "error expected")
 	})
 }
 
@@ -722,7 +646,7 @@ func TestComponentsUpdate(t *testing.T) {
 	go rt.beginComponentsUpdates()
 
 	comp1 := &componentsV1alpha1.Component{
-		ObjectMeta: metaV1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name: "mockPubSub1",
 		},
 		Spec: componentsV1alpha1.ComponentSpec{
@@ -731,7 +655,7 @@ func TestComponentsUpdate(t *testing.T) {
 		},
 	}
 	comp2 := &componentsV1alpha1.Component{
-		ObjectMeta: metaV1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name: "mockPubSub2",
 		},
 		Spec: componentsV1alpha1.ComponentSpec{
@@ -740,7 +664,7 @@ func TestComponentsUpdate(t *testing.T) {
 		},
 	}
 	comp3 := &componentsV1alpha1.Component{
-		ObjectMeta: metaV1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name: "mockPubSub3",
 		},
 		Spec: componentsV1alpha1.ComponentSpec{
@@ -812,98 +736,11 @@ func TestComponentsUpdate(t *testing.T) {
 	assert.True(t, exists, fmt.Sprintf("Expect component, type: %s, name: %s", comp3.Spec.Type, comp3.Name))
 }
 
-func TestInitState(t *testing.T) {
-	rt := NewTestDaprRuntime(modes.StandaloneMode)
-	defer stopRuntime(t, rt)
-
-	bytes := make([]byte, 32)
-	rand.Read(bytes)
-
-	primaryKey := hex.EncodeToString(bytes)
-
-	mockStateComponent := componentsV1alpha1.Component{
-		ObjectMeta: metaV1.ObjectMeta{
-			Name: TestPubsubName,
-		},
-		Spec: componentsV1alpha1.ComponentSpec{
-			Type:    "state.mockState",
-			Version: "v1",
-			Metadata: []commonapi.NameValuePair{
-				{
-					Name: actorStateStore,
-					Value: commonapi.DynamicValue{
-						JSON: v1.JSON{Raw: []byte("true")},
-					},
-				},
-				{
-					Name: "primaryEncryptionKey",
-					Value: commonapi.DynamicValue{
-						JSON: v1.JSON{Raw: []byte(primaryKey)},
-					},
-				},
-			},
-		},
-		Auth: componentsV1alpha1.Auth{
-			SecretStore: "mockSecretStore",
-		},
-	}
-
-	t.Run("test init state store", func(t *testing.T) {
-		// setup
-		initMockStateStoreForRuntime(rt, primaryKey, nil)
-
-		// act
-		err := rt.initState(mockStateComponent)
-
-		// assert
-		assert.NoError(t, err, "expected no error")
-	})
-
-	t.Run("test init state store error", func(t *testing.T) {
-		// setup
-		initMockStateStoreForRuntime(rt, primaryKey, assert.AnError)
-
-		// act
-		err := rt.initState(mockStateComponent)
-
-		// assert
-		assert.Error(t, err, "expected error")
-		assert.Equal(t, err.Error(), rterrors.NewInit(rterrors.InitComponentFailure, "testpubsub (state.mockState/v1)", assert.AnError).Error(), "expected error strings to match")
-	})
-
-	t.Run("test init state store, encryption not enabled", func(t *testing.T) {
-		// setup
-		initMockStateStoreForRuntime(rt, primaryKey, nil)
-
-		// act
-		err := rt.initState(mockStateComponent)
-		ok := encryption.EncryptedStateStore("mockState")
-
-		// assert
-		assert.NoError(t, err)
-		assert.False(t, ok)
-	})
-
-	t.Run("test init state store, encryption enabled", func(t *testing.T) {
-		// setup
-		initMockStateStoreForRuntime(rt, primaryKey, nil)
-
-		rt.compStore.AddSecretStore("mockSecretStore", &mockSecretStore{})
-
-		err := rt.initState(mockStateComponent)
-		ok := encryption.EncryptedStateStore("testpubsub")
-
-		// assert
-		assert.NoError(t, err)
-		assert.True(t, ok)
-	})
-}
-
 func TestInitNameResolution(t *testing.T) {
 	initMockResolverForRuntime := func(rt *DaprRuntime, resolverName string, e error) *daprt.MockResolver {
 		mockResolver := new(daprt.MockResolver)
 
-		rt.nameResolutionRegistry.RegisterComponent(
+		rt.runtimeConfig.registry.NameResolutions().RegisterComponent(
 			func(_ logger.Logger) nameresolution.Resolver {
 				return mockResolver
 			},
@@ -931,7 +768,9 @@ func TestInitNameResolution(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 
 		// target resolver
-		rt.globalConfig.Spec.NameResolutionSpec.Component = "targetResolver"
+		rt.globalConfig.Spec.NameResolutionSpec = &config.NameResolutionSpec{
+			Component: "targetResolver",
+		}
 
 		// registered resolver
 		initMockResolverForRuntime(rt, "anotherResolver", nil)
@@ -948,7 +787,9 @@ func TestInitNameResolution(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 
 		// target resolver
-		rt.globalConfig.Spec.NameResolutionSpec.Component = "someResolver"
+		rt.globalConfig.Spec.NameResolutionSpec = &config.NameResolutionSpec{
+			Component: "someResolver",
+		}
 
 		// registered resolver
 		initMockResolverForRuntime(rt, "someResolver", nil)
@@ -965,7 +806,24 @@ func TestInitNameResolution(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 
 		// target resolver
-		rt.globalConfig.Spec.NameResolutionSpec.Component = ""
+		rt.globalConfig.Spec.NameResolutionSpec = &config.NameResolutionSpec{}
+
+		// registered resolver
+		initMockResolverForRuntime(rt, "mdns", nil)
+
+		// act
+		err := rt.initNameResolution()
+
+		// assert
+		assert.NoError(t, err, "expected no error")
+	})
+
+	t.Run("test init nameresolution nil in StandaloneMode", func(t *testing.T) {
+		// given
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+
+		// target resolver
+		rt.globalConfig.Spec.NameResolutionSpec = nil
 
 		// registered resolver
 		initMockResolverForRuntime(rt, "mdns", nil)
@@ -982,7 +840,24 @@ func TestInitNameResolution(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.KubernetesMode)
 
 		// target resolver
-		rt.globalConfig.Spec.NameResolutionSpec.Component = ""
+		rt.globalConfig.Spec.NameResolutionSpec = &config.NameResolutionSpec{}
+
+		// registered resolver
+		initMockResolverForRuntime(rt, "kubernetes", nil)
+
+		// act
+		err := rt.initNameResolution()
+
+		// assert
+		assert.NoError(t, err, "expected no error")
+	})
+
+	t.Run("test init nameresolution nil in KubernetesMode", func(t *testing.T) {
+		// given
+		rt := NewTestDaprRuntime(modes.KubernetesMode)
+
+		// target resolver
+		rt.globalConfig.Spec.NameResolutionSpec = nil
 
 		// registered resolver
 		initMockResolverForRuntime(rt, "kubernetes", nil)
@@ -1014,7 +889,7 @@ func TestSetupTracing(t *testing.T) {
 	}, {
 		name: "bad host address, failing zipkin",
 		tracingConfig: config.TracingSpec{
-			Zipkin: config.ZipkinSpec{
+			Zipkin: &config.ZipkinSpec{
 				EndpointAddress: "localhost",
 			},
 		},
@@ -1022,7 +897,7 @@ func TestSetupTracing(t *testing.T) {
 	}, {
 		name: "zipkin trace exporter",
 		tracingConfig: config.TracingSpec{
-			Zipkin: config.ZipkinSpec{
+			Zipkin: &config.ZipkinSpec{
 				EndpointAddress: "http://foo.bar",
 			},
 		},
@@ -1030,9 +905,9 @@ func TestSetupTracing(t *testing.T) {
 	}, {
 		name: "otel trace http exporter",
 		tracingConfig: config.TracingSpec{
-			Otel: config.OtelSpec{
+			Otel: &config.OtelSpec{
 				EndpointAddress: "foo.bar",
-				IsSecure:        false,
+				IsSecure:        ptr.Of(false),
 				Protocol:        "http",
 			},
 		},
@@ -1040,9 +915,9 @@ func TestSetupTracing(t *testing.T) {
 	}, {
 		name: "invalid otel trace exporter protocol",
 		tracingConfig: config.TracingSpec{
-			Otel: config.OtelSpec{
+			Otel: &config.OtelSpec{
 				EndpointAddress: "foo.bar",
-				IsSecure:        false,
+				IsSecure:        ptr.Of(false),
 				Protocol:        "tcp",
 			},
 		},
@@ -1056,12 +931,12 @@ func TestSetupTracing(t *testing.T) {
 	}, {
 		name: "all trace exporters",
 		tracingConfig: config.TracingSpec{
-			Otel: config.OtelSpec{
+			Otel: &config.OtelSpec{
 				EndpointAddress: "http://foo.bar",
-				IsSecure:        false,
+				IsSecure:        ptr.Of(false),
 				Protocol:        "http",
 			},
-			Zipkin: config.ZipkinSpec{
+			Zipkin: &config.ZipkinSpec{
 				EndpointAddress: "http://foo.bar",
 			},
 			Stdout: true,
@@ -1073,7 +948,7 @@ func TestSetupTracing(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			rt := NewTestDaprRuntime(modes.StandaloneMode)
 			defer stopRuntime(t, rt)
-			rt.globalConfig.Spec.TracingSpec = tc.tracingConfig
+			rt.globalConfig.Spec.TracingSpec = &tc.tracingConfig
 			if tc.hostAddress != "" {
 				rt.hostAddress = tc.hostAddress
 			}
@@ -1105,7 +980,7 @@ func TestSetupTracing(t *testing.T) {
 
 func TestMetadataUUID(t *testing.T) {
 	pubsubComponent := componentsV1alpha1.Component{
-		ObjectMeta: metaV1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name: TestPubsubName,
 		},
 		Spec: componentsV1alpha1.ComponentSpec{
@@ -1136,7 +1011,7 @@ func TestMetadataUUID(t *testing.T) {
 	defer stopRuntime(t, rt)
 	mockPubSub := new(daprt.MockPubSub)
 
-	rt.pubSubRegistry.RegisterComponent(
+	rt.runtimeConfig.registry.PubSubs().RegisterComponent(
 		func(_ logger.Logger) pubsub.PubSub {
 			return mockPubSub
 		},
@@ -1167,8 +1042,10 @@ func TestMetadataUUID(t *testing.T) {
 }
 
 func TestMetadataPodName(t *testing.T) {
+	t.Setenv("POD_NAME", "testPodName")
+
 	pubsubComponent := componentsV1alpha1.Component{
-		ObjectMeta: metaV1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name: TestPubsubName,
 		},
 		Spec: componentsV1alpha1.ComponentSpec{
@@ -1192,14 +1069,12 @@ func TestMetadataPodName(t *testing.T) {
 	defer stopRuntime(t, rt)
 	mockPubSub := new(daprt.MockPubSub)
 
-	rt.pubSubRegistry.RegisterComponent(
+	rt.runtimeConfig.registry.PubSubs().RegisterComponent(
 		func(_ logger.Logger) pubsub.PubSub {
 			return mockPubSub
 		},
 		"mockPubSub",
 	)
-
-	rt.podName = "testPodName"
 
 	mockPubSub.On("Init", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
 		metadata := args.Get(0).(pubsub.Metadata)
@@ -1213,8 +1088,10 @@ func TestMetadataPodName(t *testing.T) {
 }
 
 func TestMetadataNamespace(t *testing.T) {
+	t.Setenv("NAMESPACE", "test")
+
 	pubsubComponent := componentsV1alpha1.Component{
-		ObjectMeta: metaV1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name: TestPubsubName,
 		},
 		Spec: componentsV1alpha1.ComponentSpec{
@@ -1234,14 +1111,12 @@ func TestMetadataNamespace(t *testing.T) {
 				},
 			},
 		})
-	rt := NewTestDaprRuntime(modes.KubernetesMode)
-	rt.namespace = "test"
-	rt.runtimeConfig.id = "app1"
+	rt := NewTestDaprRuntimeWithID(modes.KubernetesMode, "app1")
 
 	defer stopRuntime(t, rt)
 	mockPubSub := new(daprt.MockPubSub)
 
-	rt.pubSubRegistry.RegisterComponent(
+	rt.runtimeConfig.registry.PubSubs().RegisterComponent(
 		func(_ logger.Logger) pubsub.PubSub {
 			return mockPubSub
 		},
@@ -1261,7 +1136,7 @@ func TestMetadataNamespace(t *testing.T) {
 
 func TestMetadataAppID(t *testing.T) {
 	pubsubComponent := componentsV1alpha1.Component{
-		ObjectMeta: metaV1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name: TestPubsubName,
 		},
 		Spec: componentsV1alpha1.ComponentSpec{
@@ -1286,7 +1161,7 @@ func TestMetadataAppID(t *testing.T) {
 	defer stopRuntime(t, rt)
 	mockPubSub := new(daprt.MockPubSub)
 
-	rt.pubSubRegistry.RegisterComponent(
+	rt.runtimeConfig.registry.PubSubs().RegisterComponent(
 		func(_ logger.Logger) pubsub.PubSub {
 			return mockPubSub
 		},
@@ -1311,7 +1186,7 @@ func TestOnComponentUpdated(t *testing.T) {
 	t.Run("component spec changed, component is updated", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.KubernetesMode)
 		rt.compStore.AddComponent(componentsV1alpha1.Component{
-			ObjectMeta: metaV1.ObjectMeta{
+			ObjectMeta: metav1.ObjectMeta{
 				Name: "test",
 			},
 			Spec: componentsV1alpha1.ComponentSpec{
@@ -1335,7 +1210,7 @@ func TestOnComponentUpdated(t *testing.T) {
 		}()
 
 		updated := rt.onComponentUpdated(componentsV1alpha1.Component{
-			ObjectMeta: metaV1.ObjectMeta{
+			ObjectMeta: metav1.ObjectMeta{
 				Name: "test",
 			},
 			Spec: componentsV1alpha1.ComponentSpec{
@@ -1360,7 +1235,7 @@ func TestOnComponentUpdated(t *testing.T) {
 	t.Run("component spec unchanged, component is skipped", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.KubernetesMode)
 		rt.compStore.AddComponent(componentsV1alpha1.Component{
-			ObjectMeta: metaV1.ObjectMeta{
+			ObjectMeta: metav1.ObjectMeta{
 				Name: "test",
 			},
 			Spec: componentsV1alpha1.ComponentSpec{
@@ -1384,7 +1259,7 @@ func TestOnComponentUpdated(t *testing.T) {
 		}()
 
 		updated := rt.onComponentUpdated(componentsV1alpha1.Component{
-			ObjectMeta: metaV1.ObjectMeta{
+			ObjectMeta: metav1.ObjectMeta{
 				Name: "test",
 			},
 			Spec: componentsV1alpha1.ComponentSpec{
@@ -1427,7 +1302,7 @@ func TestConsumerID(t *testing.T) {
 		},
 	}
 	pubsubComponent := componentsV1alpha1.Component{
-		ObjectMeta: metaV1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name: TestPubsubName,
 		},
 		Spec: componentsV1alpha1.ComponentSpec{
@@ -1441,7 +1316,7 @@ func TestConsumerID(t *testing.T) {
 	defer stopRuntime(t, rt)
 	mockPubSub := new(daprt.MockPubSub)
 
-	rt.pubSubRegistry.RegisterComponent(
+	rt.runtimeConfig.registry.PubSubs().RegisterComponent(
 		func(_ logger.Logger) pubsub.PubSub {
 			return mockPubSub
 		},
@@ -1464,7 +1339,7 @@ func TestInitPubSub(t *testing.T) {
 
 	pubsubComponents := []componentsV1alpha1.Component{
 		{
-			ObjectMeta: metaV1.ObjectMeta{
+			ObjectMeta: metav1.ObjectMeta{
 				Name: TestPubsubName,
 			},
 			Spec: componentsV1alpha1.ComponentSpec{
@@ -1473,7 +1348,7 @@ func TestInitPubSub(t *testing.T) {
 				Metadata: getFakeMetadataItems(),
 			},
 		}, {
-			ObjectMeta: metaV1.ObjectMeta{
+			ObjectMeta: metav1.ObjectMeta{
 				Name: TestSecondPubsubName,
 			},
 			Spec: componentsV1alpha1.ComponentSpec{
@@ -1489,10 +1364,10 @@ func TestInitPubSub(t *testing.T) {
 
 		mockPubSub2 := new(daprt.MockPubSub)
 
-		rt.pubSubRegistry.RegisterComponent(func(_ logger.Logger) pubsub.PubSub {
+		rt.runtimeConfig.registry.PubSubs().RegisterComponent(func(_ logger.Logger) pubsub.PubSub {
 			return mockPubSub
 		}, "mockPubSub")
-		rt.pubSubRegistry.RegisterComponent(func(_ logger.Logger) pubsub.PubSub {
+		rt.runtimeConfig.registry.PubSubs().RegisterComponent(func(_ logger.Logger) pubsub.PubSub {
 			return mockPubSub2
 		}, "mockPubSub2")
 
@@ -2100,7 +1975,7 @@ func TestInitSecretStores(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
 		m := NewMockKubernetesStore()
-		rt.secretStoresRegistry.RegisterComponent(
+		rt.runtimeConfig.registry.SecretStores().RegisterComponent(
 			func(_ logger.Logger) secretstores.SecretStore {
 				return m
 			},
@@ -2108,7 +1983,7 @@ func TestInitSecretStores(t *testing.T) {
 		)
 
 		err := rt.processComponentAndDependents(componentsV1alpha1.Component{
-			ObjectMeta: metaV1.ObjectMeta{
+			ObjectMeta: metav1.ObjectMeta{
 				Name: "kubernetesMock",
 			},
 			Spec: componentsV1alpha1.ComponentSpec{
@@ -2123,7 +1998,7 @@ func TestInitSecretStores(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
 		m := NewMockKubernetesStore()
-		rt.secretStoresRegistry.RegisterComponent(
+		rt.runtimeConfig.registry.SecretStores().RegisterComponent(
 			func(_ logger.Logger) secretstores.SecretStore {
 				return m
 			},
@@ -2131,7 +2006,7 @@ func TestInitSecretStores(t *testing.T) {
 		)
 
 		err := rt.processComponentAndDependents(componentsV1alpha1.Component{
-			ObjectMeta: metaV1.ObjectMeta{
+			ObjectMeta: metav1.ObjectMeta{
 				Name: "kubernetesMock",
 			},
 			Spec: componentsV1alpha1.ComponentSpec{
@@ -2149,7 +2024,7 @@ func TestInitSecretStores(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
 		m := NewMockKubernetesStore()
-		rt.secretStoresRegistry.RegisterComponent(
+		rt.runtimeConfig.registry.SecretStores().RegisterComponent(
 			func(_ logger.Logger) secretstores.SecretStore {
 				return m
 			},
@@ -2157,7 +2032,7 @@ func TestInitSecretStores(t *testing.T) {
 		)
 
 		rt.processComponentAndDependents(componentsV1alpha1.Component{
-			ObjectMeta: metaV1.ObjectMeta{
+			ObjectMeta: metav1.ObjectMeta{
 				Name: "kubernetesMock",
 			},
 			Spec: componentsV1alpha1.ComponentSpec{
@@ -2230,7 +2105,7 @@ func TestMiddlewareBuildPipeline(t *testing.T) {
 
 	compStore := compstore.New()
 	compStore.AddComponent(componentsV1alpha1.Component{
-		ObjectMeta: metaV1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name: "mymw1",
 		},
 		Spec: componentsV1alpha1.ComponentSpec{
@@ -2239,7 +2114,7 @@ func TestMiddlewareBuildPipeline(t *testing.T) {
 		},
 	})
 	compStore.AddComponent(componentsV1alpha1.Component{
-		ObjectMeta: metaV1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name: "mymw2",
 		},
 		Spec: componentsV1alpha1.ComponentSpec{
@@ -2250,13 +2125,16 @@ func TestMiddlewareBuildPipeline(t *testing.T) {
 
 	t.Run("all components exists", func(t *testing.T) {
 		rt := &DaprRuntime{
-			globalConfig:           &config.Configuration{},
-			compStore:              compStore,
-			httpMiddlewareRegistry: httpMiddlewareLoader.NewRegistry(),
-			runtimeConfig:          &internalConfig{},
+			globalConfig: &config.Configuration{},
+			compStore:    compStore,
+			runtimeConfig: &internalConfig{
+				registry: registry.New(registry.NewOptions().WithHTTPMiddlewares(
+					httpMiddlewareLoader.NewRegistry(),
+				)),
+			},
 		}
 		called := 0
-		rt.httpMiddlewareRegistry.RegisterComponent(
+		rt.runtimeConfig.registry.HTTPMiddlewares().RegisterComponent(
 			func(_ logger.Logger) httpMiddlewareLoader.FactoryMethod {
 				called++
 				return func(metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
@@ -2290,7 +2168,7 @@ func TestMiddlewareBuildPipeline(t *testing.T) {
 	testInitFail := func(ignoreErrors bool) func(t *testing.T) {
 		compStore := compstore.New()
 		compStore.AddComponent(componentsV1alpha1.Component{
-			ObjectMeta: metaV1.ObjectMeta{
+			ObjectMeta: metav1.ObjectMeta{
 				Name: "mymw",
 			},
 			Spec: componentsV1alpha1.ComponentSpec{
@@ -2300,7 +2178,7 @@ func TestMiddlewareBuildPipeline(t *testing.T) {
 		})
 
 		compStore.AddComponent(componentsV1alpha1.Component{
-			ObjectMeta: metaV1.ObjectMeta{
+			ObjectMeta: metav1.ObjectMeta{
 				Name: "failmw",
 			},
 			Spec: componentsV1alpha1.ComponentSpec{
@@ -2314,13 +2192,17 @@ func TestMiddlewareBuildPipeline(t *testing.T) {
 		})
 		return func(t *testing.T) {
 			rt := &DaprRuntime{
-				compStore:              compStore,
-				globalConfig:           &config.Configuration{},
-				httpMiddlewareRegistry: httpMiddlewareLoader.NewRegistry(),
-				runtimeConfig:          &internalConfig{},
+				compStore:    compStore,
+				globalConfig: &config.Configuration{},
+				meta:         meta.New(meta.Options{}),
+				runtimeConfig: &internalConfig{
+					registry: registry.New(registry.NewOptions().WithHTTPMiddlewares(
+						httpMiddlewareLoader.NewRegistry(),
+					)),
+				},
 			}
 			called := 0
-			rt.httpMiddlewareRegistry.RegisterComponent(
+			rt.runtimeConfig.registry.HTTPMiddlewares().RegisterComponent(
 				func(_ logger.Logger) httpMiddlewareLoader.FactoryMethod {
 					called++
 					return func(metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
@@ -2371,97 +2253,17 @@ func TestMiddlewareBuildPipeline(t *testing.T) {
 	t.Run("one components fails to init but ignoreErrors is true", testInitFail(true))
 }
 
-func TestMetadataItemsToPropertiesConversion(t *testing.T) {
-	t.Run("string", func(t *testing.T) {
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
-		defer stopRuntime(t, rt)
-		items := []commonapi.NameValuePair{
-			{
-				Name: "a",
-				Value: commonapi.DynamicValue{
-					JSON: v1.JSON{Raw: []byte("b")},
-				},
-			},
-		}
-		m := rt.convertMetadataItemsToProperties(items)
-		assert.Equal(t, 1, len(m))
-		assert.Equal(t, "b", m["a"])
-	})
-
-	t.Run("int", func(t *testing.T) {
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
-		defer stopRuntime(t, rt)
-		items := []commonapi.NameValuePair{
-			{
-				Name: "a",
-				Value: commonapi.DynamicValue{
-					JSON: v1.JSON{Raw: []byte(strconv.Itoa(6))},
-				},
-			},
-		}
-		m := rt.convertMetadataItemsToProperties(items)
-		assert.Equal(t, 1, len(m))
-		assert.Equal(t, "6", m["a"])
-	})
-
-	t.Run("bool", func(t *testing.T) {
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
-		defer stopRuntime(t, rt)
-		items := []commonapi.NameValuePair{
-			{
-				Name: "a",
-				Value: commonapi.DynamicValue{
-					JSON: v1.JSON{Raw: []byte("true")},
-				},
-			},
-		}
-		m := rt.convertMetadataItemsToProperties(items)
-		assert.Equal(t, 1, len(m))
-		assert.Equal(t, "true", m["a"])
-	})
-
-	t.Run("float", func(t *testing.T) {
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
-		defer stopRuntime(t, rt)
-		items := []commonapi.NameValuePair{
-			{
-				Name: "a",
-				Value: commonapi.DynamicValue{
-					JSON: v1.JSON{Raw: []byte("5.5")},
-				},
-			},
-		}
-		m := rt.convertMetadataItemsToProperties(items)
-		assert.Equal(t, 1, len(m))
-		assert.Equal(t, "5.5", m["a"])
-	})
-
-	t.Run("JSON string", func(t *testing.T) {
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
-		defer stopRuntime(t, rt)
-		items := []commonapi.NameValuePair{
-			{
-				Name: "a",
-				Value: commonapi.DynamicValue{
-					JSON: v1.JSON{Raw: []byte(`"hello there"`)},
-				},
-			},
-		}
-		m := rt.convertMetadataItemsToProperties(items)
-		assert.Equal(t, 1, len(m))
-		assert.Equal(t, "hello there", m["a"])
-	})
-}
-
 func TestPopulateSecretsConfiguration(t *testing.T) {
 	t.Run("secret store configuration is populated", func(t *testing.T) {
 		// setup
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
-		rt.globalConfig.Spec.Secrets.Scopes = []config.SecretsScope{
-			{
-				StoreName:     "testMock",
-				DefaultAccess: "allow",
+		rt.globalConfig.Spec.Secrets = &config.SecretsSpec{
+			Scopes: []config.SecretsScope{
+				{
+					StoreName:     "testMock",
+					DefaultAccess: "allow",
+				},
 			},
 		}
 
@@ -2480,7 +2282,7 @@ func TestPopulateSecretsConfiguration(t *testing.T) {
 func TestProcessResourceSecrets(t *testing.T) {
 	createMockBinding := func() *componentsV1alpha1.Component {
 		return &componentsV1alpha1.Component{
-			ObjectMeta: metaV1.ObjectMeta{
+			ObjectMeta: metav1.ObjectMeta{
 				Name: "mockBinding",
 			},
 			Spec: componentsV1alpha1.ComponentSpec{
@@ -2505,7 +2307,7 @@ func TestProcessResourceSecrets(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
 		m := NewMockKubernetesStore()
-		rt.secretStoresRegistry.RegisterComponent(
+		rt.runtimeConfig.registry.SecretStores().RegisterComponent(
 			func(_ logger.Logger) secretstores.SecretStore {
 				return m
 			},
@@ -2514,7 +2316,7 @@ func TestProcessResourceSecrets(t *testing.T) {
 
 		// add Kubernetes component manually
 		rt.processComponentAndDependents(componentsV1alpha1.Component{
-			ObjectMeta: metaV1.ObjectMeta{
+			ObjectMeta: metav1.ObjectMeta{
 				Name: secretstoresLoader.BuiltinKubernetesSecretStore,
 			},
 			Spec: componentsV1alpha1.ComponentSpec{
@@ -2542,16 +2344,16 @@ func TestProcessResourceSecrets(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.KubernetesMode)
 		defer stopRuntime(t, rt)
 
-		rt.secretStoresRegistry.RegisterComponent(
+		rt.runtimeConfig.registry.SecretStores().RegisterComponent(
 			func(_ logger.Logger) secretstores.SecretStore {
-				return &mockSecretStore{}
+				return &rtmock.SecretStore{}
 			},
 			"mock",
 		)
 
 		// initSecretStore appends Kubernetes component even if kubernetes component is not added
 		err := rt.processComponentAndDependents(componentsV1alpha1.Component{
-			ObjectMeta: metaV1.ObjectMeta{
+			ObjectMeta: metav1.ObjectMeta{
 				Name: "mock",
 			},
 			Spec: componentsV1alpha1.ComponentSpec{
@@ -2612,38 +2414,6 @@ func TestProcessResourceSecrets(t *testing.T) {
 	})
 }
 
-func TestExtractComponentCategory(t *testing.T) {
-	compCategoryTests := []struct {
-		specType string
-		category string
-	}{
-		{"pubsub.redis", "pubsub"},
-		{"pubsubs.redis", ""},
-		{"secretstores.azure.keyvault", "secretstores"},
-		{"secretstore.azure.keyvault", ""},
-		{"state.redis", "state"},
-		{"states.redis", ""},
-		{"bindings.kafka", "bindings"},
-		{"binding.kafka", ""},
-		{"this.is.invalid.category", ""},
-	}
-
-	rt := NewTestDaprRuntime(modes.StandaloneMode)
-	defer stopRuntime(t, rt)
-
-	for _, tt := range compCategoryTests {
-		t.Run(tt.specType, func(t *testing.T) {
-			fakeComp := componentsV1alpha1.Component{
-				Spec: componentsV1alpha1.ComponentSpec{
-					Type:    tt.specType,
-					Version: "v1",
-				},
-			}
-			assert.Equal(t, string(rt.extractComponentCategory(fakeComp)), tt.category)
-		})
-	}
-}
-
 // Test that flushOutstandingComponents waits for components.
 func TestFlushOutstandingComponent(t *testing.T) {
 	t.Run("We can call flushOustandingComponents more than once", func(t *testing.T) {
@@ -2654,7 +2424,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 			time.Sleep(100 * time.Millisecond)
 			wasCalled = true
 		})
-		rt.secretStoresRegistry.RegisterComponent(
+		rt.runtimeConfig.registry.SecretStores().RegisterComponent(
 			func(_ logger.Logger) secretstores.SecretStore {
 				return m
 			},
@@ -2663,7 +2433,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 
 		go rt.processComponents()
 		rt.pendingComponents <- componentsV1alpha1.Component{
-			ObjectMeta: metaV1.ObjectMeta{
+			ObjectMeta: metav1.ObjectMeta{
 				Name: "kubernetesMock",
 			},
 			Spec: componentsV1alpha1.ComponentSpec{
@@ -2676,7 +2446,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 
 		// Make sure that the goroutine was restarted and can flush a second time
 		wasCalled = false
-		rt.secretStoresRegistry.RegisterComponent(
+		rt.runtimeConfig.registry.SecretStores().RegisterComponent(
 			func(_ logger.Logger) secretstores.SecretStore {
 				return m
 			},
@@ -2684,7 +2454,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 		)
 
 		rt.pendingComponents <- componentsV1alpha1.Component{
-			ObjectMeta: metaV1.ObjectMeta{
+			ObjectMeta: metav1.ObjectMeta{
 				Name: "kubernetesMock2",
 			},
 			Spec: componentsV1alpha1.ComponentSpec{
@@ -2713,19 +2483,19 @@ func TestFlushOutstandingComponent(t *testing.T) {
 			time.Sleep(100 * time.Millisecond)
 			wasCalledGrandChild = true
 		})
-		rt.secretStoresRegistry.RegisterComponent(
+		rt.runtimeConfig.registry.SecretStores().RegisterComponent(
 			func(_ logger.Logger) secretstores.SecretStore {
 				return m
 			},
 			"kubernetesMock",
 		)
-		rt.secretStoresRegistry.RegisterComponent(
+		rt.runtimeConfig.registry.SecretStores().RegisterComponent(
 			func(_ logger.Logger) secretstores.SecretStore {
 				return mc
 			},
 			"kubernetesMockChild",
 		)
-		rt.secretStoresRegistry.RegisterComponent(
+		rt.runtimeConfig.registry.SecretStores().RegisterComponent(
 			func(_ logger.Logger) secretstores.SecretStore {
 				return mgc
 			},
@@ -2734,7 +2504,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 
 		go rt.processComponents()
 		rt.pendingComponents <- componentsV1alpha1.Component{
-			ObjectMeta: metaV1.ObjectMeta{
+			ObjectMeta: metav1.ObjectMeta{
 				Name: "kubernetesMockGrandChild",
 			},
 			Spec: componentsV1alpha1.ComponentSpec{
@@ -2755,7 +2525,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 			},
 		}
 		rt.pendingComponents <- componentsV1alpha1.Component{
-			ObjectMeta: metaV1.ObjectMeta{
+			ObjectMeta: metav1.ObjectMeta{
 				Name: "kubernetesMockChild",
 			},
 			Spec: componentsV1alpha1.ComponentSpec{
@@ -2776,7 +2546,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 			},
 		}
 		rt.pendingComponents <- componentsV1alpha1.Component{
-			ObjectMeta: metaV1.ObjectMeta{
+			ObjectMeta: metav1.ObjectMeta{
 				Name: "kubernetesMock",
 			},
 			Spec: componentsV1alpha1.ComponentSpec{
@@ -2798,7 +2568,7 @@ func TestInitSecretStoresInKubernetesMode(t *testing.T) {
 		defer stopRuntime(t, rt)
 
 		m := NewMockKubernetesStore()
-		rt.secretStoresRegistry.RegisterComponent(
+		rt.runtimeConfig.registry.SecretStores().RegisterComponent(
 			func(_ logger.Logger) secretstores.SecretStore {
 				return m
 			},
@@ -2838,7 +2608,7 @@ func TestInitSecretStoresInKubernetesMode(t *testing.T) {
 		}
 
 		m := NewMockKubernetesStore()
-		rt.secretStoresRegistry.RegisterComponent(
+		rt.runtimeConfig.registry.SecretStores().RegisterComponent(
 			func(_ logger.Logger) secretstores.SecretStore {
 				return m
 			},
@@ -3570,8 +3340,9 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 }
 
 func TestPubsubLifecycle(t *testing.T) {
-	rt := newDaprRuntime(&internalConfig{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
-	rt.pubSubRegistry = pubsubLoader.NewRegistry()
+	rt := newDaprRuntime(&internalConfig{
+		registry: registry.New(registry.NewOptions()),
+	}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 	defer func() {
 		if rt != nil {
 			stopRuntime(t, rt)
@@ -3579,7 +3350,7 @@ func TestPubsubLifecycle(t *testing.T) {
 	}()
 
 	comp1 := componentsV1alpha1.Component{
-		ObjectMeta: metaV1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name: "mockPubSub1",
 		},
 		Spec: componentsV1alpha1.ComponentSpec{
@@ -3589,7 +3360,7 @@ func TestPubsubLifecycle(t *testing.T) {
 		},
 	}
 	comp2 := componentsV1alpha1.Component{
-		ObjectMeta: metaV1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name: "mockPubSub2",
 		},
 		Spec: componentsV1alpha1.ComponentSpec{
@@ -3599,7 +3370,7 @@ func TestPubsubLifecycle(t *testing.T) {
 		},
 	}
 	comp3 := componentsV1alpha1.Component{
-		ObjectMeta: metaV1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name: "mockPubSub3",
 		},
 		Spec: componentsV1alpha1.ComponentSpec{
@@ -3609,12 +3380,12 @@ func TestPubsubLifecycle(t *testing.T) {
 		},
 	}
 
-	rt.pubSubRegistry.RegisterComponent(func(_ logger.Logger) pubsub.PubSub {
+	rt.runtimeConfig.registry.PubSubs().RegisterComponent(func(_ logger.Logger) pubsub.PubSub {
 		c := new(daprt.InMemoryPubsub)
 		c.On("Init", mock.AnythingOfType("pubsub.Metadata")).Return(nil)
 		return c
 	}, "mockPubSubAlpha")
-	rt.pubSubRegistry.RegisterComponent(func(_ logger.Logger) pubsub.PubSub {
+	rt.runtimeConfig.registry.PubSubs().RegisterComponent(func(_ logger.Logger) pubsub.PubSub {
 		c := new(daprt.InMemoryPubsub)
 		c.On("Init", mock.AnythingOfType("pubsub.Metadata")).Return(nil)
 		return c
@@ -3873,8 +3644,9 @@ func TestPubsubLifecycle(t *testing.T) {
 }
 
 func TestPubsubWithResiliency(t *testing.T) {
-	r := newDaprRuntime(&internalConfig{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.FromConfigurations(logger.NewLogger("test"), testResiliency))
-	r.pubSubRegistry = pubsubLoader.NewRegistry()
+	r := newDaprRuntime(&internalConfig{
+		registry: registry.New(registry.NewOptions()),
+	}, &config.Configuration{}, &config.AccessControlList{}, resiliency.FromConfigurations(logger.NewLogger("test"), testResiliency))
 	defer stopRuntime(t, r)
 
 	failingPubsub := daprt.FailingPubsub{
@@ -3908,13 +3680,13 @@ func TestPubsubWithResiliency(t *testing.T) {
 		},
 	}
 
-	r.pubSubRegistry.RegisterComponent(func(_ logger.Logger) pubsub.PubSub { return &failingPubsub }, "failingPubsub")
+	r.runtimeConfig.registry.PubSubs().RegisterComponent(func(_ logger.Logger) pubsub.PubSub { return &failingPubsub }, "failingPubsub")
 
 	component := componentsV1alpha1.Component{}
 	component.ObjectMeta.Name = "failPubsub"
 	component.Spec.Type = "pubsub.failingPubsub"
 
-	err := r.initPubSub(component)
+	err := r.processor.One(context.TODO(), component)
 	assert.NoError(t, err)
 
 	t.Run("pubsub publish retries with resiliency", func(t *testing.T) {
@@ -4117,7 +3889,7 @@ func (m *mockSubscribePubSub) GetBulkResponse() pubsub.BulkSubscribeResponse {
 func TestPubSubDeadLetter(t *testing.T) {
 	testDeadLetterPubsub := "failPubsub"
 	pubsubComponent := componentsV1alpha1.Component{
-		ObjectMeta: metaV1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name: testDeadLetterPubsub,
 		},
 		Spec: componentsV1alpha1.ComponentSpec{
@@ -4130,7 +3902,7 @@ func TestPubSubDeadLetter(t *testing.T) {
 	t.Run("succeeded to publish message to dead letter when send message to app returns error", func(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
-		rt.pubSubRegistry.RegisterComponent(
+		rt.runtimeConfig.registry.PubSubs().RegisterComponent(
 			func(_ logger.Logger) pubsub.PubSub {
 				return &mockSubscribePubSub{}
 			},
@@ -4157,7 +3929,7 @@ func TestPubSubDeadLetter(t *testing.T) {
 			On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).
 			Return(nil, errors.New("failed to send"))
 
-		require.NoError(t, rt.initPubSub(pubsubComponent))
+		require.NoError(t, rt.processor.One(context.TODO(), pubsubComponent))
 		rt.startSubscriptions()
 
 		err := rt.Publish(&pubsub.PublishRequest{
@@ -4179,7 +3951,7 @@ func TestPubSubDeadLetter(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
 		rt.resiliency = resiliency.FromConfigurations(logger.NewLogger("test"), testResiliency)
-		rt.pubSubRegistry.RegisterComponent(
+		rt.runtimeConfig.registry.PubSubs().RegisterComponent(
 			func(_ logger.Logger) pubsub.PubSub {
 				return &mockSubscribePubSub{}
 			},
@@ -4206,7 +3978,7 @@ func TestPubSubDeadLetter(t *testing.T) {
 			On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).
 			Return(nil, errors.New("failed to send"))
 
-		require.NoError(t, rt.initPubSub(pubsubComponent))
+		require.NoError(t, rt.processor.One(context.TODO(), pubsubComponent))
 		rt.startSubscriptions()
 
 		err := rt.Publish(&pubsub.PublishRequest{
@@ -4345,19 +4117,16 @@ func NewTestDaprRuntime(mode modes.DaprMode) *DaprRuntime {
 	return NewTestDaprRuntimeWithProtocol(mode, string(protocol.HTTPProtocol), 1024)
 }
 
+func NewTestDaprRuntimeWithID(mode modes.DaprMode, id string) *DaprRuntime {
+	testRuntimeConfig := NewTestDaprRuntimeConfig(mode, string(protocol.HTTPProtocol), 1024)
+	testRuntimeConfig.id = id
+	rt := newDaprRuntime(testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+	return rt
+}
+
 func NewTestDaprRuntimeWithProtocol(mode modes.DaprMode, protocol string, appPort int) *DaprRuntime {
 	testRuntimeConfig := NewTestDaprRuntimeConfig(mode, protocol, appPort)
-
 	rt := newDaprRuntime(testRuntimeConfig, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
-	rt.stateStoreRegistry = stateLoader.NewRegistry()
-	rt.secretStoresRegistry = secretstoresLoader.NewRegistry()
-	rt.nameResolutionRegistry = nrLoader.NewRegistry()
-	rt.bindingsRegistry = bindingsLoader.NewRegistry()
-	rt.pubSubRegistry = pubsubLoader.NewRegistry()
-	rt.httpMiddlewareRegistry = httpMiddlewareLoader.NewRegistry()
-	rt.configurationStoreRegistry = configurationLoader.NewRegistry()
-	rt.lockStoreRegistry = lockLoader.NewRegistry()
-
 	return rt
 }
 
@@ -4391,6 +4160,15 @@ func NewTestDaprRuntimeConfig(mode modes.DaprMode, appProtocol string, appPort i
 		gracefulShutdownDuration:     time.Second,
 		enableAPILogging:             ptr.Of(true),
 		disableBuiltinK8sSecretStore: false,
+		registry: registry.New(registry.NewOptions().
+			WithStateStores(stateLoader.NewRegistry()).
+			WithSecretStores(secretstoresLoader.NewRegistry()).
+			WithNameResolutions(nrLoader.NewRegistry()).
+			WithBindings(bindingsLoader.NewRegistry()).
+			WithPubSubs(pubsubLoader.NewRegistry()).
+			WithHTTPMiddlewares(httpMiddlewareLoader.NewRegistry()).
+			WithConfigurations(configurationLoader.NewRegistry()).
+			WithLocks(lockLoader.NewRegistry())),
 	}
 }
 
@@ -4652,7 +4430,9 @@ func TestReadInputBindings(t *testing.T) {
 	})
 
 	t.Run("start and stop reading", func(t *testing.T) {
-		rt := newDaprRuntime(&internalConfig{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		rt := newDaprRuntime(&internalConfig{
+			registry: registry.New(registry.NewOptions()),
+		}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		defer stopRuntime(t, rt)
 
 		closeCh := make(chan struct{})
@@ -4679,41 +4459,23 @@ func TestReadInputBindings(t *testing.T) {
 
 func TestNamespace(t *testing.T) {
 	t.Run("empty namespace", func(t *testing.T) {
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
-		defer stopRuntime(t, rt)
-		ns := rt.getNamespace()
-
-		assert.Empty(t, ns)
+		assert.Empty(t, getNamespace())
 	})
 
 	t.Run("non-empty namespace", func(t *testing.T) {
 		t.Setenv("NAMESPACE", "a")
-
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
-		defer stopRuntime(t, rt)
-		ns := rt.getNamespace()
-
-		assert.Equal(t, "a", ns)
+		assert.Equal(t, "a", getNamespace())
 	})
 }
 
 func TestPodName(t *testing.T) {
 	t.Run("empty podName", func(t *testing.T) {
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
-		defer stopRuntime(t, rt)
-		podName := rt.getPodName()
-
-		assert.Empty(t, podName)
+		assert.Empty(t, getPodName())
 	})
 
 	t.Run("non-empty podName", func(t *testing.T) {
 		t.Setenv("POD_NAME", "testPodName")
-
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
-		defer stopRuntime(t, rt)
-		podName := rt.getPodName()
-
-		assert.Equal(t, "testPodName", podName)
+		assert.Equal(t, "testPodName", getPodName())
 	})
 }
 
@@ -5015,7 +4777,10 @@ func (m *mockPublishPubSub) GetComponentMetadata() map[string]string {
 
 func TestInitActors(t *testing.T) {
 	t.Run("missing namespace on kubernetes", func(t *testing.T) {
-		r := newDaprRuntime(&internalConfig{mode: modes.KubernetesMode}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		r := newDaprRuntime(&internalConfig{
+			mode:     modes.KubernetesMode,
+			registry: registry.New(registry.NewOptions()),
+		}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		defer stopRuntime(t, r)
 		r.namespace = ""
 		r.runtimeConfig.mTLSEnabled = true
@@ -5025,7 +4790,10 @@ func TestInitActors(t *testing.T) {
 	})
 
 	t.Run("actors hosted = true", func(t *testing.T) {
-		r := newDaprRuntime(&internalConfig{mode: modes.KubernetesMode}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		r := newDaprRuntime(&internalConfig{
+			mode:     modes.KubernetesMode,
+			registry: registry.New(registry.NewOptions()),
+		}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		defer stopRuntime(t, r)
 		r.appConfig = config.ApplicationConfig{
 			Entities: []string{"actor1"},
@@ -5036,7 +4804,10 @@ func TestInitActors(t *testing.T) {
 	})
 
 	t.Run("actors hosted = false", func(t *testing.T) {
-		r := newDaprRuntime(&internalConfig{mode: modes.KubernetesMode}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		r := newDaprRuntime(&internalConfig{
+			mode:     modes.KubernetesMode,
+			registry: registry.New(registry.NewOptions()),
+		}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		defer stopRuntime(t, r)
 
 		hosted := len(r.appConfig.Entities) > 0
@@ -5044,7 +4815,9 @@ func TestInitActors(t *testing.T) {
 	})
 
 	t.Run("placement enable = false", func(t *testing.T) {
-		r := newDaprRuntime(&internalConfig{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		r := newDaprRuntime(&internalConfig{
+			registry: registry.New(registry.NewOptions()),
+		}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		defer stopRuntime(t, r)
 
 		err := r.initActors()
@@ -5052,7 +4825,9 @@ func TestInitActors(t *testing.T) {
 	})
 
 	t.Run("the state stores can still be initialized normally", func(t *testing.T) {
-		r := newDaprRuntime(&internalConfig{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		r := newDaprRuntime(&internalConfig{
+			registry: registry.New(registry.NewOptions()),
+		}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		defer stopRuntime(t, r)
 
 		assert.Nil(t, r.actor)
@@ -5061,94 +4836,16 @@ func TestInitActors(t *testing.T) {
 	})
 
 	t.Run("the actor store can not be initialized normally", func(t *testing.T) {
-		r := newDaprRuntime(&internalConfig{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+		r := newDaprRuntime(&internalConfig{
+			registry: registry.New(registry.NewOptions()),
+		}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		defer stopRuntime(t, r)
 
-		assert.Equal(t, "", r.actorStateStoreName)
+		name, ok := r.processor.ActorStateStore()
+		assert.False(t, ok)
+		assert.Equal(t, "", name)
 		err := r.initActors()
 		assert.NotNil(t, err)
-	})
-}
-
-func TestInitBindings(t *testing.T) {
-	t.Run("single input binding", func(t *testing.T) {
-		r := newDaprRuntime(&internalConfig{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
-		r.bindingsRegistry = bindingsLoader.NewRegistry()
-		defer stopRuntime(t, r)
-		r.bindingsRegistry.RegisterInputBinding(
-			func(_ logger.Logger) bindings.InputBinding {
-				return &daprt.MockBinding{}
-			},
-			"testInputBinding",
-		)
-
-		c := componentsV1alpha1.Component{}
-		c.ObjectMeta.Name = "testInputBinding"
-		c.Spec.Type = "bindings.testInputBinding"
-		err := r.initBinding(c)
-		assert.NoError(t, err)
-	})
-
-	t.Run("single output binding", func(t *testing.T) {
-		r := newDaprRuntime(&internalConfig{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
-		r.bindingsRegistry = bindingsLoader.NewRegistry()
-		defer stopRuntime(t, r)
-		r.bindingsRegistry.RegisterOutputBinding(
-			func(_ logger.Logger) bindings.OutputBinding {
-				return &daprt.MockBinding{}
-			},
-			"testOutputBinding",
-		)
-
-		c := componentsV1alpha1.Component{}
-		c.ObjectMeta.Name = "testOutputBinding"
-		c.Spec.Type = "bindings.testOutputBinding"
-		err := r.initBinding(c)
-		assert.NoError(t, err)
-	})
-
-	t.Run("one input binding, one output binding", func(t *testing.T) {
-		r := newDaprRuntime(&internalConfig{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
-		r.bindingsRegistry = bindingsLoader.NewRegistry()
-		defer stopRuntime(t, r)
-		r.bindingsRegistry.RegisterInputBinding(
-			func(_ logger.Logger) bindings.InputBinding {
-				return &daprt.MockBinding{}
-			},
-			"testinput",
-		)
-
-		r.bindingsRegistry.RegisterOutputBinding(
-			func(_ logger.Logger) bindings.OutputBinding {
-				return &daprt.MockBinding{}
-			},
-			"testoutput",
-		)
-
-		input := componentsV1alpha1.Component{}
-		input.ObjectMeta.Name = "testinput"
-		input.Spec.Type = "bindings.testinput"
-		err := r.initBinding(input)
-		assert.NoError(t, err)
-
-		output := componentsV1alpha1.Component{}
-		output.ObjectMeta.Name = "testinput"
-		output.Spec.Type = "bindings.testoutput"
-		err = r.initBinding(output)
-		assert.NoError(t, err)
-	})
-
-	t.Run("one not exist binding", func(t *testing.T) {
-		r := newDaprRuntime(&internalConfig{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
-		r.bindingsRegistry = bindingsLoader.NewRegistry()
-		defer stopRuntime(t, r)
-		// no binding registered, just try to init a not exist binding
-
-		c := componentsV1alpha1.Component{}
-		c.ObjectMeta.Name = "testNotExistBinding"
-		c.Spec.Type = "bindings.testNotExistBinding"
-		err := r.initBinding(c)
-		assert.Error(t, err)
 	})
 }
 
@@ -5197,8 +4894,9 @@ func TestBindingTracingHttp(t *testing.T) {
 }
 
 func TestBindingResiliency(t *testing.T) {
-	r := newDaprRuntime(&internalConfig{}, &config.Configuration{}, &config.AccessControlList{}, resiliency.FromConfigurations(logger.NewLogger("test"), testResiliency))
-	r.bindingsRegistry = bindingsLoader.NewRegistry()
+	r := newDaprRuntime(&internalConfig{
+		registry: registry.New(registry.NewOptions()),
+	}, &config.Configuration{}, &config.AccessControlList{}, resiliency.FromConfigurations(logger.NewLogger("test"), testResiliency))
 	defer stopRuntime(t, r)
 
 	failingChannel := daprt.FailingAppChannel{
@@ -5232,7 +4930,7 @@ func TestBindingResiliency(t *testing.T) {
 		),
 	}
 
-	r.bindingsRegistry.RegisterOutputBinding(
+	r.runtimeConfig.registry.Bindings().RegisterOutputBinding(
 		func(_ logger.Logger) bindings.OutputBinding {
 			return &failingBinding
 		},
@@ -5242,7 +4940,7 @@ func TestBindingResiliency(t *testing.T) {
 	output := componentsV1alpha1.Component{}
 	output.ObjectMeta.Name = "failOutput"
 	output.Spec.Type = "bindings.failingoutput"
-	err := r.initBinding(output)
+	err := r.processor.One(context.TODO(), output)
 	assert.NoError(t, err)
 
 	t.Run("output binding retries on failure with resiliency", func(t *testing.T) {
@@ -5349,7 +5047,10 @@ func TestActorReentrancyConfig(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.Name, func(t *testing.T) {
-			r := newDaprRuntime(&internalConfig{mode: modes.KubernetesMode}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+			r := newDaprRuntime(&internalConfig{
+				mode:     modes.KubernetesMode,
+				registry: registry.New(registry.NewOptions()),
+			}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 
 			mockAppChannel := new(channelt.MockAppChannel)
 			r.appChannel = mockAppChannel
@@ -5396,29 +5097,6 @@ func (s *mockStateStore) Close() error {
 	return s.closeErr
 }
 
-type mockSecretStore struct {
-	secretstores.SecretStore
-	closeErr error
-}
-
-func (s *mockSecretStore) GetSecret(ctx context.Context, req secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
-	return secretstores.GetSecretResponse{
-		Data: map[string]string{
-			"key1":   "value1",
-			"_value": "_value_data",
-			"name1":  "value1",
-		},
-	}, nil
-}
-
-func (s *mockSecretStore) Init(ctx context.Context, metadata secretstores.Metadata) error {
-	return nil
-}
-
-func (s *mockSecretStore) Close() error {
-	return s.closeErr
-}
-
 type mockNameResolver struct {
 	nameresolution.Resolver
 	closeErr error
@@ -5437,33 +5115,33 @@ func TestStopWithErrors(t *testing.T) {
 
 	testErr := errors.New("mock close error")
 
-	rt.bindingsRegistry.RegisterOutputBinding(
+	rt.runtimeConfig.registry.Bindings().RegisterOutputBinding(
 		func(_ logger.Logger) bindings.OutputBinding {
 			return &mockBinding{closeErr: testErr}
 		},
 		"output",
 	)
-	rt.pubSubRegistry.RegisterComponent(
+	rt.runtimeConfig.registry.PubSubs().RegisterComponent(
 		func(_ logger.Logger) pubsub.PubSub {
 			return &mockPubSub{closeErr: testErr}
 		},
 		"pubsub",
 	)
-	rt.stateStoreRegistry.RegisterComponent(
+	rt.runtimeConfig.registry.StateStores().RegisterComponent(
 		func(_ logger.Logger) state.Store {
 			return &mockStateStore{closeErr: testErr}
 		},
 		"statestore",
 	)
-	rt.secretStoresRegistry.RegisterComponent(
+	rt.runtimeConfig.registry.SecretStores().RegisterComponent(
 		func(_ logger.Logger) secretstores.SecretStore {
-			return &mockSecretStore{closeErr: testErr}
+			return &rtmock.SecretStore{CloseErr: testErr}
 		},
 		"secretstore",
 	)
 
 	mockOutputBindingComponent := componentsV1alpha1.Component{
-		ObjectMeta: metaV1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name: TestPubsubName,
 		},
 		Spec: componentsV1alpha1.ComponentSpec{
@@ -5480,7 +5158,7 @@ func TestStopWithErrors(t *testing.T) {
 		},
 	}
 	mockPubSubComponent := componentsV1alpha1.Component{
-		ObjectMeta: metaV1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name: TestPubsubName,
 		},
 		Spec: componentsV1alpha1.ComponentSpec{
@@ -5497,7 +5175,7 @@ func TestStopWithErrors(t *testing.T) {
 		},
 	}
 	mockStateComponent := componentsV1alpha1.Component{
-		ObjectMeta: metaV1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name: TestPubsubName,
 		},
 		Spec: componentsV1alpha1.ComponentSpec{
@@ -5514,7 +5192,7 @@ func TestStopWithErrors(t *testing.T) {
 		},
 	}
 	mockSecretsComponent := componentsV1alpha1.Component{
-		ObjectMeta: metaV1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name: TestPubsubName,
 		},
 		Spec: componentsV1alpha1.ComponentSpec{
@@ -5531,10 +5209,10 @@ func TestStopWithErrors(t *testing.T) {
 		},
 	}
 
-	require.NoError(t, rt.initOutputBinding(mockOutputBindingComponent))
-	require.NoError(t, rt.initPubSub(mockPubSubComponent))
-	require.NoError(t, rt.initState(mockStateComponent))
-	require.NoError(t, rt.initSecretStore(mockSecretsComponent))
+	require.NoError(t, rt.processor.One(context.TODO(), mockOutputBindingComponent))
+	require.NoError(t, rt.processor.One(context.TODO(), mockPubSubComponent))
+	require.NoError(t, rt.processor.One(context.TODO(), mockStateComponent))
+	require.NoError(t, rt.processor.One(context.TODO(), mockSecretsComponent))
 	rt.nameResolver = &mockNameResolver{closeErr: testErr}
 
 	err := rt.shutdownOutputComponents()
@@ -5585,7 +5263,7 @@ func TestGetAppHTTPChannelConfigWithCustomChannel(t *testing.T) {
 	p, err := rt.buildAppHTTPPipeline()
 	assert.Nil(t, err)
 
-	c := rt.getAppHTTPChannelConfig(p, false)
+	c := rt.getAppHTTPChannelConfig(p)
 	assert.Equal(t, "http://my.app:0", c.Endpoint)
 }
 
@@ -5598,21 +5276,20 @@ func TestComponentsCallback(t *testing.T) {
 	u, err := url.Parse(srv.URL)
 	require.NoError(t, err)
 	port, _ := strconv.Atoi(u.Port())
-	rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, "http", port)
-	defer stopRuntime(t, rt)
 
 	c := make(chan struct{})
 	callbackInvoked := false
 
-	rt.Run(
-		WithComponentsCallback(func(components ComponentRegistry) error {
-			close(c)
-			callbackInvoked = true
+	cfg := NewTestDaprRuntimeConfig(modes.StandaloneMode, "http", port)
+	rt := newDaprRuntime(cfg, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
+	rt.runtimeConfig.registry = registry.New(registry.NewOptions().WithComponentsCallback(func(components registry.ComponentRegistry) error {
+		close(c)
+		callbackInvoked = true
+		return nil
+	}))
+	defer stopRuntime(t, rt)
 
-			return nil
-		}),
-		WithNameResolutions(nrLoader.NewRegistry()),
-	)
+	assert.NoError(t, rt.Run(context.TODO()))
 	defer rt.Shutdown(0)
 
 	select {
@@ -5630,8 +5307,13 @@ func TestGRPCProxy(t *testing.T) {
 	require.NoError(t, err)
 	defer teardown()
 
-	nr := nrLoader.NewRegistry()
-	nr.RegisterComponent(
+	// setup proxy
+	rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, "grpc", serverPort)
+	internalPort, _ := freeport.GetFreePort()
+	rt.runtimeConfig.internalGRPCPort = internalPort
+	defer stopRuntime(t, rt)
+
+	rt.runtimeConfig.registry.NameResolutions().RegisterComponent(
 		func(_ logger.Logger) nameresolution.Resolver {
 			mockResolver := new(daprt.MockResolver)
 			// proxy to server anytime
@@ -5642,14 +5324,8 @@ func TestGRPCProxy(t *testing.T) {
 		"mdns", // for standalone mode
 	)
 
-	// setup proxy
-	rt := NewTestDaprRuntimeWithProtocol(modes.StandaloneMode, "grpc", serverPort)
-	internalPort, _ := freeport.GetFreePort()
-	rt.runtimeConfig.internalGRPCPort = internalPort
-	defer stopRuntime(t, rt)
-
 	go func() {
-		rt.Run(WithNameResolutions(nr))
+		rt.Run(context.TODO())
 	}()
 	defer rt.Shutdown(0)
 
@@ -5702,7 +5378,7 @@ func TestGetComponentsCapabilitiesMap(t *testing.T) {
 	defer stopRuntime(t, rt)
 
 	mockStateStore := new(daprt.MockStateStore)
-	rt.stateStoreRegistry.RegisterComponent(
+	rt.runtimeConfig.registry.StateStores().RegisterComponent(
 		func(_ logger.Logger) state.Store {
 			return mockStateStore
 		},
@@ -5714,7 +5390,7 @@ func TestGetComponentsCapabilitiesMap(t *testing.T) {
 	cStateStore.Spec.Type = "state.mockState"
 
 	mockPubSub := new(daprt.MockPubSub)
-	rt.pubSubRegistry.RegisterComponent(
+	rt.runtimeConfig.registry.PubSubs().RegisterComponent(
 		func(_ logger.Logger) pubsub.PubSub {
 			return mockPubSub
 		},
@@ -5726,7 +5402,7 @@ func TestGetComponentsCapabilitiesMap(t *testing.T) {
 	cPubSub.ObjectMeta.Name = "mockPubSub"
 	cPubSub.Spec.Type = "pubsub.mockPubSub"
 
-	rt.bindingsRegistry.RegisterInputBinding(
+	rt.runtimeConfig.registry.Bindings().RegisterInputBinding(
 		func(_ logger.Logger) bindings.InputBinding {
 			return &daprt.MockBinding{}
 		},
@@ -5736,7 +5412,7 @@ func TestGetComponentsCapabilitiesMap(t *testing.T) {
 	cin.ObjectMeta.Name = "testInputBinding"
 	cin.Spec.Type = "bindings.testInputBinding"
 
-	rt.bindingsRegistry.RegisterOutputBinding(
+	rt.runtimeConfig.registry.Bindings().RegisterOutputBinding(
 		func(_ logger.Logger) bindings.OutputBinding {
 			return &daprt.MockBinding{}
 		},
@@ -5748,7 +5424,7 @@ func TestGetComponentsCapabilitiesMap(t *testing.T) {
 
 	mockSecretStoreName := "mockSecretStore"
 	mockSecretStore := new(daprt.FakeSecretStore)
-	rt.secretStoresRegistry.RegisterComponent(
+	rt.runtimeConfig.registry.SecretStores().RegisterComponent(
 		func(_ logger.Logger) secretstores.SecretStore {
 			return mockSecretStore
 		},
@@ -5758,11 +5434,11 @@ func TestGetComponentsCapabilitiesMap(t *testing.T) {
 	cSecretStore.ObjectMeta.Name = mockSecretStoreName
 	cSecretStore.Spec.Type = "secretstores.mockSecretStore"
 
-	require.NoError(t, rt.initInputBinding(cin))
-	require.NoError(t, rt.initOutputBinding(cout))
-	require.NoError(t, rt.initPubSub(cPubSub))
-	require.NoError(t, rt.initState(cStateStore))
-	require.NoError(t, rt.initSecretStore(cSecretStore))
+	require.NoError(t, rt.processor.One(context.TODO(), cin))
+	require.NoError(t, rt.processor.One(context.TODO(), cout))
+	require.NoError(t, rt.processor.One(context.TODO(), cPubSub))
+	require.NoError(t, rt.processor.One(context.TODO(), cStateStore))
+	require.NoError(t, rt.processor.One(context.TODO(), cSecretStore))
 
 	capabilities := rt.getComponentsCapabilitesMap()
 	assert.Equal(t, 5, len(capabilities),
@@ -5847,32 +5523,6 @@ func matchDaprRequestMethod(method string) any {
 	})
 }
 
-func TestMetadataContainsNamespace(t *testing.T) {
-	t.Run("namespace field present", func(t *testing.T) {
-		r := metadataContainsNamespace(
-			[]commonapi.NameValuePair{
-				{
-					Value: commonapi.DynamicValue{
-						JSON: v1.JSON{Raw: []byte("{namespace}")},
-					},
-				},
-			},
-		)
-
-		assert.True(t, r)
-	})
-
-	t.Run("namespace field not present", func(t *testing.T) {
-		r := metadataContainsNamespace(
-			[]commonapi.NameValuePair{
-				{},
-			},
-		)
-
-		assert.False(t, r)
-	})
-}
-
 func TestNamespacedPublisher(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	rt.namespace = "ns1"
@@ -5898,7 +5548,7 @@ func TestNamespacedPublisher(t *testing.T) {
 func TestGracefulShutdownPubSub(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	mockPubSub := new(daprt.MockPubSub)
-	rt.pubSubRegistry.RegisterComponent(
+	rt.runtimeConfig.registry.PubSubs().RegisterComponent(
 		func(_ logger.Logger) pubsub.PubSub {
 			return mockPubSub
 		},
@@ -5925,7 +5575,7 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 	mockAppChannel := new(channelt.MockAppChannel)
 	rt.appChannel = mockAppChannel
 	mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
-	require.NoError(t, rt.initPubSub(cPubSub))
+	require.NoError(t, rt.processor.One(context.TODO(), cPubSub))
 	mockPubSub.AssertCalled(t, "Init", mock.Anything)
 	rt.startSubscriptions()
 	mockPubSub.AssertCalled(t, "Subscribe", mock.AnythingOfType("pubsub.SubscribeRequest"), mock.AnythingOfType("pubsub.Handler"))
@@ -5943,7 +5593,7 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 func TestGracefulShutdownBindings(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	rt.runtimeConfig.gracefulShutdownDuration = 3 * time.Second
-	rt.bindingsRegistry.RegisterInputBinding(
+	rt.runtimeConfig.registry.Bindings().RegisterInputBinding(
 		func(_ logger.Logger) bindings.InputBinding {
 			return &daprt.MockBinding{}
 		},
@@ -5953,7 +5603,7 @@ func TestGracefulShutdownBindings(t *testing.T) {
 	cin.ObjectMeta.Name = "testInputBinding"
 	cin.Spec.Type = "bindings.testInputBinding"
 
-	rt.bindingsRegistry.RegisterOutputBinding(
+	rt.runtimeConfig.registry.Bindings().RegisterOutputBinding(
 		func(_ logger.Logger) bindings.OutputBinding {
 			return &daprt.MockBinding{}
 		},
@@ -5962,8 +5612,8 @@ func TestGracefulShutdownBindings(t *testing.T) {
 	cout := componentsV1alpha1.Component{}
 	cout.ObjectMeta.Name = "testOutputBinding"
 	cout.Spec.Type = "bindings.testOutputBinding"
-	require.NoError(t, rt.initInputBinding(cin))
-	require.NoError(t, rt.initOutputBinding(cout))
+	require.NoError(t, rt.processor.One(context.TODO(), cin))
+	require.NoError(t, rt.processor.One(context.TODO(), cout))
 	assert.Equal(t, len(rt.compStore.ListInputBindings()), 1)
 	assert.Equal(t, len(rt.compStore.ListOutputBindings()), 1)
 	rt.running.Store(true)
@@ -5986,7 +5636,7 @@ func TestGracefulShutdownActors(t *testing.T) {
 	encryptKey := hex.EncodeToString(bytes)
 
 	mockStateComponent := componentsV1alpha1.Component{
-		ObjectMeta: metaV1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name: TestPubsubName,
 		},
 		Spec: componentsV1alpha1.ComponentSpec{
@@ -5994,7 +5644,7 @@ func TestGracefulShutdownActors(t *testing.T) {
 			Version: "v1",
 			Metadata: []commonapi.NameValuePair{
 				{
-					Name: strings.ToUpper(actorStateStore),
+					Name: "ACTORSTATESTORE",
 					Value: commonapi.DynamicValue{
 						JSON: v1.JSON{Raw: []byte("true")},
 					},
@@ -6016,7 +5666,7 @@ func TestGracefulShutdownActors(t *testing.T) {
 	initMockStateStoreForRuntime(rt, encryptKey, nil)
 
 	// act
-	err := rt.initState(mockStateComponent)
+	err := rt.processor.One(context.TODO(), mockStateComponent)
 
 	// assert
 	assert.NoError(t, err, "expected no error")
@@ -6040,7 +5690,7 @@ func TestGracefulShutdownActors(t *testing.T) {
 func initMockStateStoreForRuntime(rt *DaprRuntime, encryptKey string, e error) *daprt.MockStateStore {
 	mockStateStore := new(daprt.MockStateStore)
 
-	rt.stateStoreRegistry.RegisterComponent(
+	rt.runtimeConfig.registry.StateStores().RegisterComponent(
 		func(_ logger.Logger) state.Store {
 			return mockStateStore
 		},
@@ -6050,15 +5700,15 @@ func initMockStateStoreForRuntime(rt *DaprRuntime, encryptKey string, e error) *
 	expectedMetadata := state.Metadata{Base: mdata.Base{
 		Name: TestPubsubName,
 		Properties: map[string]string{
-			actorStateStore:        "true",
+			"actorstatestore":      "true",
 			"primaryEncryptionKey": encryptKey,
 		},
 	}}
 	expectedMetadataUppercase := state.Metadata{Base: mdata.Base{
 		Name: TestPubsubName,
 		Properties: map[string]string{
-			strings.ToUpper(actorStateStore): "true",
-			"primaryEncryptionKey":           encryptKey,
+			"ACTORSTATESTORE":      "true",
+			"primaryEncryptionKey": encryptKey,
 		},
 	}}
 
@@ -6071,10 +5721,10 @@ func initMockStateStoreForRuntime(rt *DaprRuntime, encryptKey string, e error) *
 func TestTraceShutdown(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	rt.runtimeConfig.gracefulShutdownDuration = 5 * time.Second
-	rt.globalConfig.Spec.TracingSpec = config.TracingSpec{
-		Otel: config.OtelSpec{
+	rt.globalConfig.Spec.TracingSpec = &config.TracingSpec{
+		Otel: &config.OtelSpec{
 			EndpointAddress: "foo.bar",
-			IsSecure:        false,
+			IsSecure:        ptr.Of(false),
 			Protocol:        "http",
 		},
 	}
@@ -6095,7 +5745,7 @@ func sendSigterm(rt *DaprRuntime) {
 
 func createTestEndpoint(name, baseURL string) httpEndpointV1alpha1.HTTPEndpoint {
 	return httpEndpointV1alpha1.HTTPEndpoint{
-		ObjectMeta: metaV1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 		},
 		Spec: httpEndpointV1alpha1.HTTPEndpointSpec{
@@ -6193,6 +5843,59 @@ func TestHTTPEndpointsUpdate(t *testing.T) {
 	assert.True(t, exists, fmt.Sprintf("expect http endpoint with name: %s", endpoint3.Name))
 }
 
+type MockKubernetesStateStore struct {
+	callback func()
+}
+
+func (m *MockKubernetesStateStore) Init(ctx context.Context, metadata secretstores.Metadata) error {
+	if m.callback != nil {
+		m.callback()
+	}
+	return nil
+}
+
+func (m *MockKubernetesStateStore) GetSecret(ctx context.Context, req secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
+	return secretstores.GetSecretResponse{
+		Data: map[string]string{
+			"key1":   "value1",
+			"_value": "_value_data",
+			"name1":  "value1",
+		},
+	}, nil
+}
+
+func (m *MockKubernetesStateStore) BulkGetSecret(ctx context.Context, req secretstores.BulkGetSecretRequest) (secretstores.BulkGetSecretResponse, error) {
+	response := map[string]map[string]string{}
+	response["k8s-secret"] = map[string]string{
+		"key1":   "value1",
+		"_value": "_value_data",
+		"name1":  "value1",
+	}
+	return secretstores.BulkGetSecretResponse{
+		Data: response,
+	}, nil
+}
+
+func (m *MockKubernetesStateStore) Close() error {
+	return nil
+}
+
+func (m *MockKubernetesStateStore) Features() []secretstores.Feature {
+	return []secretstores.Feature{}
+}
+
+func (m MockKubernetesStateStore) GetComponentMetadata() map[string]string {
+	return nil
+}
+
+func NewMockKubernetesStore() secretstores.SecretStore {
+	return &MockKubernetesStateStore{}
+}
+
+func NewMockKubernetesStoreWithInitCallback(cb func()) secretstores.SecretStore {
+	return &MockKubernetesStateStore{callback: cb}
+}
+
 func TestIsEnvVarAllowed(t *testing.T) {
 	t.Run("no allowlist", func(t *testing.T) {
 		tests := []struct {
@@ -6244,104 +5947,33 @@ func TestIsEnvVarAllowed(t *testing.T) {
 	})
 }
 
-func TestIsBindingOfDirection(t *testing.T) {
-	t.Run("no direction in metadata for input binding", func(t *testing.T) {
-		m := []commonapi.NameValuePair{}
-		r := isBindingOfDirection("input", m)
-
-		assert.True(t, r)
-	})
-
-	t.Run("no direction in metadata for output binding", func(t *testing.T) {
-		m := []commonapi.NameValuePair{}
-		r := isBindingOfDirection("output", m)
-
-		assert.True(t, r)
-	})
-
-	t.Run("input direction in metadata", func(t *testing.T) {
-		m := []commonapi.NameValuePair{
-			{
-				Name: "direction",
-				Value: commonapi.DynamicValue{
-					JSON: v1.JSON{
-						Raw: []byte("input"),
-					},
-				},
+// helper to populate subscription array for 2 pubsubs.
+// 'topics' are the topics for the first pubsub.
+// 'topics2' are the topics for the second pubsub.
+func getSubscriptionsJSONString(topics []string, topics2 []string) string {
+	s := []runtimePubsub.SubscriptionJSON{}
+	for _, t := range topics {
+		s = append(s, runtimePubsub.SubscriptionJSON{
+			PubsubName: TestPubsubName,
+			Topic:      t,
+			Routes: runtimePubsub.RoutesJSON{
+				Default: t,
 			},
-		}
-		r := isBindingOfDirection("input", m)
-		f := isBindingOfDirection("output", m)
+		})
+	}
 
-		assert.True(t, r)
-		assert.False(t, f)
-	})
-
-	t.Run("output direction in metadata", func(t *testing.T) {
-		m := []commonapi.NameValuePair{
-			{
-				Name: "direction",
-				Value: commonapi.DynamicValue{
-					JSON: v1.JSON{
-						Raw: []byte("output"),
-					},
-				},
+	for _, t := range topics2 {
+		s = append(s, runtimePubsub.SubscriptionJSON{
+			PubsubName: TestSecondPubsubName,
+			Topic:      t,
+			Routes: runtimePubsub.RoutesJSON{
+				Default: t,
 			},
-		}
-		r := isBindingOfDirection("output", m)
-		f := isBindingOfDirection("input", m)
+		})
+	}
+	b, _ := json.Marshal(&s)
 
-		assert.True(t, r)
-		assert.False(t, f)
-	})
-
-	t.Run("input and output direction in metadata", func(t *testing.T) {
-		m := []commonapi.NameValuePair{
-			{
-				Name: "direction",
-				Value: commonapi.DynamicValue{
-					JSON: v1.JSON{
-						Raw: []byte("input, output"),
-					},
-				},
-			},
-		}
-		r := isBindingOfDirection("output", m)
-		f := isBindingOfDirection("input", m)
-
-		assert.True(t, r)
-		assert.True(t, f)
-	})
-
-	t.Run("invalid direction for input binding", func(t *testing.T) {
-		m := []commonapi.NameValuePair{
-			{
-				Name: "direction",
-				Value: commonapi.DynamicValue{
-					JSON: v1.JSON{
-						Raw: []byte("aaa"),
-					},
-				},
-			},
-		}
-		f := isBindingOfDirection("input", m)
-		assert.False(t, f)
-	})
-
-	t.Run("invalid direction for output binding", func(t *testing.T) {
-		m := []commonapi.NameValuePair{
-			{
-				Name: "direction",
-				Value: commonapi.DynamicValue{
-					JSON: v1.JSON{
-						Raw: []byte("aaa"),
-					},
-				},
-			},
-		}
-		f := isBindingOfDirection("output", m)
-		assert.False(t, f)
-	})
+	return string(b)
 }
 
 func TestIsBindingOfExplicitDirection(t *testing.T) {
@@ -6424,7 +6056,7 @@ func TestStartReadingFromBindings(t *testing.T) {
 		err := rt.startReadingFromBindings()
 
 		assert.NoError(t, err)
-		assert.Len(t, mockAppChannel.Calls, 1)
+		assert.True(t, mockAppChannel.AssertCalled(t, "InvokeMethod", mock.Anything, mock.Anything))
 	})
 
 	t.Run("No OPTIONS request when direction is specified", func(t *testing.T) {
@@ -6442,9 +6074,135 @@ func TestStartReadingFromBindings(t *testing.T) {
 		}
 
 		rt.compStore.AddInputBinding("test", m)
+		rt.compStore.AddComponent(componentsV1alpha1.Component{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test",
+			},
+			Spec: componentsV1alpha1.ComponentSpec{
+				Type: "bindings.test",
+				Metadata: []commonapi.NameValuePair{
+					{
+						Name: "direction",
+						Value: commonapi.DynamicValue{
+							JSON: v1.JSON{Raw: []byte("input")},
+						},
+					},
+				},
+			},
+		})
 		err := rt.startReadingFromBindings()
 
 		assert.NoError(t, err)
-		assert.Len(t, mockAppChannel.Calls, 0)
+		assert.True(t, mockAppChannel.AssertNotCalled(t, "InvokeMethod", mock.Anything, mock.Anything))
+	})
+}
+
+func TestGetHTTPEndpointAppChannel(t *testing.T) {
+	t.Run("no TLS channel", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		defer stopRuntime(t, rt)
+
+		conf, err := rt.getHTTPEndpointAppChannel(httpMiddleware.Pipeline{}, httpEndpointV1alpha1.HTTPEndpoint{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test",
+			},
+			Spec: httpEndpointV1alpha1.HTTPEndpointSpec{},
+		})
+
+		assert.NoError(t, err)
+		assert.Nil(t, conf.Client.Transport.(*http.Transport).TLSClientConfig)
+	})
+
+	t.Run("TLS channel with Root CA", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		defer stopRuntime(t, rt)
+
+		conf, err := rt.getHTTPEndpointAppChannel(httpMiddleware.Pipeline{}, httpEndpointV1alpha1.HTTPEndpoint{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test",
+			},
+			Spec: httpEndpointV1alpha1.HTTPEndpointSpec{
+				ClientTLS: &commonapi.TLS{
+					RootCA: &commonapi.TLSDocument{
+						Value: &commonapi.DynamicValue{
+							JSON: v1.JSON{Raw: []byte("-----BEGIN CERTIFICATE-----\nMIID8zCCAtugAwIBAgIUSj2XqIQo/xmVVuw1+nmIcdmr48IwDQYJKoZIhvcNAQEL\nBQAwfjELMAkGA1UEBhMCVVMxEzARBgNVBAgMCkNhbGlmb3JuaWExFjAUBgNVBAcM\nDU1vdW50YWluIFZpZXcxGjAYBgNVBAoMEVlvdXIgT3JnYW5pemF0aW9uMRIwEAYD\nVQQLDAlZb3VyIFVuaXQxEjAQBgNVBAMMCWxvY2FsaG9zdDAeFw0yMzA3MTQyMTQ1\nNDRaFw0zMzA3MTEyMTQ1NDRaMH4xCzAJBgNVBAYTAlVTMRMwEQYDVQQIDApDYWxp\nZm9ybmlhMRYwFAYDVQQHDA1Nb3VudGFpbiBWaWV3MRowGAYDVQQKDBFZb3VyIE9y\nZ2FuaXphdGlvbjESMBAGA1UECwwJWW91ciBVbml0MRIwEAYDVQQDDAlsb2NhbGhv\nc3QwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCmWsrT0w4s0g7Ld1g/\nIa0qM2v6tXG8L/150kwM7V/wRSVCx+Tmv+aAMAJzJtXwMAj9jHt+sH5vOm6MJenJ\n0sTyUcCC8FhLa0VWxbajZOn8wKaUuZzLj3Uye/q4z0l6rtu35pjZCjDKphyycKoG\nNG2MwcGNNBUZP0W6Idw0PZaNstnXnTHIWE6axOA9bzB5iKtLTVkQDkuEJWFLfOD6\nZN4ISA+7HvbMgjREeIuNJqNI/746Egza5a4ZPh3KvyIPEdH2SdDy+9obCsdAKe65\nSEIPy1n4zRy3/7K1bVTu18JoWsNtE+5GDWVgFU3AVZ9ic6Jt0N0WNaRuUiiVpvKE\nLzyBAgMBAAGjaTBnMB0GA1UdDgQWBBQj02E1/fJHbm8GnOMNxfSIRI2cqjAfBgNV\nHSMEGDAWgBQj02E1/fJHbm8GnOMNxfSIRI2cqjAPBgNVHRMBAf8EBTADAQH/MBQG\nA1UdEQQNMAuCCWxvY2FsaG9zdDANBgkqhkiG9w0BAQsFAAOCAQEANRqDGWWdaXwg\nhkOz/Y9gkil6WYQ4d7muAAqiEZBqg+yAisGrv+MPeyjsrq1WPbIgcdlSjArG7zGV\n/5SPZwsuTeivdFs0DHbcvoKA8hqN2n4OmtjzdommBWA2618fzByOufECWRmUBxH3\nqmkmQ+aj4wKXm2U22OFxmWPTJbtwi8MDppl+G3AH4VpRi6qhSmLBSAO3AEBr7UJN\nIRHeUzBsFDLE++a3WYRnI0kA9og9F+zbnD+kNMxxTfmZqB6T9iFHIzkxZw7RELey\nz2PxQioHRQtp0rVZWnDt6+qSfrqftZgszrM+06n1MHTPBMusBfG/uyEAc4EAStCC\njXHuph+Ctg==\n-----END CERTIFICATE-----\n")},
+						},
+					},
+					Certificate: &commonapi.TLSDocument{
+						Value: &commonapi.DynamicValue{
+							JSON: v1.JSON{Raw: []byte("-----BEGIN CERTIFICATE-----\nMIID8zCCAtugAwIBAgIUSj2XqIQo/xmVVuw1+nmIcdmr48IwDQYJKoZIhvcNAQEL\nBQAwfjELMAkGA1UEBhMCVVMxEzARBgNVBAgMCkNhbGlmb3JuaWExFjAUBgNVBAcM\nDU1vdW50YWluIFZpZXcxGjAYBgNVBAoMEVlvdXIgT3JnYW5pemF0aW9uMRIwEAYD\nVQQLDAlZb3VyIFVuaXQxEjAQBgNVBAMMCWxvY2FsaG9zdDAeFw0yMzA3MTQyMTQ1\nNDRaFw0zMzA3MTEyMTQ1NDRaMH4xCzAJBgNVBAYTAlVTMRMwEQYDVQQIDApDYWxp\nZm9ybmlhMRYwFAYDVQQHDA1Nb3VudGFpbiBWaWV3MRowGAYDVQQKDBFZb3VyIE9y\nZ2FuaXphdGlvbjESMBAGA1UECwwJWW91ciBVbml0MRIwEAYDVQQDDAlsb2NhbGhv\nc3QwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCmWsrT0w4s0g7Ld1g/\nIa0qM2v6tXG8L/150kwM7V/wRSVCx+Tmv+aAMAJzJtXwMAj9jHt+sH5vOm6MJenJ\n0sTyUcCC8FhLa0VWxbajZOn8wKaUuZzLj3Uye/q4z0l6rtu35pjZCjDKphyycKoG\nNG2MwcGNNBUZP0W6Idw0PZaNstnXnTHIWE6axOA9bzB5iKtLTVkQDkuEJWFLfOD6\nZN4ISA+7HvbMgjREeIuNJqNI/746Egza5a4ZPh3KvyIPEdH2SdDy+9obCsdAKe65\nSEIPy1n4zRy3/7K1bVTu18JoWsNtE+5GDWVgFU3AVZ9ic6Jt0N0WNaRuUiiVpvKE\nLzyBAgMBAAGjaTBnMB0GA1UdDgQWBBQj02E1/fJHbm8GnOMNxfSIRI2cqjAfBgNV\nHSMEGDAWgBQj02E1/fJHbm8GnOMNxfSIRI2cqjAPBgNVHRMBAf8EBTADAQH/MBQG\nA1UdEQQNMAuCCWxvY2FsaG9zdDANBgkqhkiG9w0BAQsFAAOCAQEANRqDGWWdaXwg\nhkOz/Y9gkil6WYQ4d7muAAqiEZBqg+yAisGrv+MPeyjsrq1WPbIgcdlSjArG7zGV\n/5SPZwsuTeivdFs0DHbcvoKA8hqN2n4OmtjzdommBWA2618fzByOufECWRmUBxH3\nqmkmQ+aj4wKXm2U22OFxmWPTJbtwi8MDppl+G3AH4VpRi6qhSmLBSAO3AEBr7UJN\nIRHeUzBsFDLE++a3WYRnI0kA9og9F+zbnD+kNMxxTfmZqB6T9iFHIzkxZw7RELey\nz2PxQioHRQtp0rVZWnDt6+qSfrqftZgszrM+06n1MHTPBMusBfG/uyEAc4EAStCC\njXHuph+Ctg==\n-----END CERTIFICATE-----\n")},
+						},
+					},
+					PrivateKey: &commonapi.TLSDocument{
+						Value: &commonapi.DynamicValue{
+							JSON: v1.JSON{Raw: []byte("-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCmWsrT0w4s0g7L\nd1g/Ia0qM2v6tXG8L/150kwM7V/wRSVCx+Tmv+aAMAJzJtXwMAj9jHt+sH5vOm6M\nJenJ0sTyUcCC8FhLa0VWxbajZOn8wKaUuZzLj3Uye/q4z0l6rtu35pjZCjDKphyy\ncKoGNG2MwcGNNBUZP0W6Idw0PZaNstnXnTHIWE6axOA9bzB5iKtLTVkQDkuEJWFL\nfOD6ZN4ISA+7HvbMgjREeIuNJqNI/746Egza5a4ZPh3KvyIPEdH2SdDy+9obCsdA\nKe65SEIPy1n4zRy3/7K1bVTu18JoWsNtE+5GDWVgFU3AVZ9ic6Jt0N0WNaRuUiiV\npvKELzyBAgMBAAECggEABXHZS5+PyjXB2DT6xW4zvbrbIOSJaXBkqnUQmie2ySVq\nN8pVGpxTTgTEP8KYo/jegnXzoMzkBn3yGlIvWbS1T30PgPme2jETnuhvtt9ZrTUc\n/qcok50JZ/KY3S2jqQlKFbXNcOUdfbR8IfcACZ3zq/S3ggifXCku/g2XqHoPkGmp\nokEjXEJLX9f/ABgik3a5aaSCMYfCU9PzDNCM7vjiWxUvO0V5kjqYae+SpMQCvvTb\n1JEMEsawCEeGI9BBnj4o1x7xGDpFn4Yt6MznaHivANMHqqNKaH3LK6rFZGdnj7d6\nutpJ22QZUBYhZ1+Hz+WNUQD+z+O2NGfMEo0PZvb1MQKBgQDZ6TlehduU0JcgKUI+\nFSq5wAk+Eil158arCU3CWnn69VLUu5lAjkU4dXjmkg/c9nxRpg5kuWr8FGMmzTpx\nWlWZj1b72iTQuWX0fphNif3mljeDNLl5z0fGegHjH+KkGb9y6t06oKrsEZbxn4y0\nzOLfl1t85tPAMP6RuvfawpjBjQKBgQDDbpifamPx/GE1JdKj6M6At42kmDczd5P0\nlgN39BRC6fUS19CPurKVWF501+w52rxg1NWhtQVmW1DUdWpDUwQtRPXo43Ku8MPN\nRMD8Uj+PNgXgWnWdcfGbniB8xHqsE8N7MgKU5IZQOqEIDCVE4RGheTYGNgDZ16Rz\nILmZ14E3xQKBgHtI3fJCXSbmlHnXneit5QxOP2xkrhxM0zN1Ag9RTO3U2dYNhPjn\nBPaaT5pzTJJAybkP79jApmyTxDzxo3z6FK/aTuYSVv3Xxnz7GoPT7FgG6MVMkRr/\nUKZT5LlxErKw9oW3pw5CVDFXCkUNdXfc6waBBXu2xFpZ3czpMM0Nh4sJAoGAEpGo\nmMUQGAcF6XndiMtvC5XlNHVuEUrUWRID5FrhrfXy3kZ5P57apwwNdYaqoFijO4Qd\nhE7h43bbuEQrw5fYtsBtqSIrXGnuAMv+ljruZRoZ9tZBhKM19LZSmehFS6JZGZSH\n4EPSaz8W29/jjqbf+Pq+YlqxPAGcU4ARgoeSdI0CgYACG9WZMbri9Eas1qA3vP86\nVW917u7CKt3O6Gsr4F5BNIH3Qx9BReLB9cDvhyko/JAln0MiNq2nExeuFlhEqVsx\nmn681Xm6yPht1PNeTkrRroXJIVzbBOldFW7evX/g/izeiXH6YhfGKD6B8dBfUftx\nNcs6FFLydFcIdIxebYjYnQ==\n-----END PRIVATE KEY-----\n")},
+						},
+					},
+				},
+			},
+		})
+
+		assert.NoError(t, err)
+		assert.NotNil(t, conf.Client.Transport.(*http.Transport).TLSClientConfig)
+	})
+
+	t.Run("TLS channel without Root CA", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		defer stopRuntime(t, rt)
+
+		conf, err := rt.getHTTPEndpointAppChannel(httpMiddleware.Pipeline{}, httpEndpointV1alpha1.HTTPEndpoint{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test",
+			},
+			Spec: httpEndpointV1alpha1.HTTPEndpointSpec{
+				ClientTLS: &commonapi.TLS{
+					Certificate: &commonapi.TLSDocument{
+						Value: &commonapi.DynamicValue{
+							JSON: v1.JSON{Raw: []byte("-----BEGIN CERTIFICATE-----\nMIID8zCCAtugAwIBAgIUSj2XqIQo/xmVVuw1+nmIcdmr48IwDQYJKoZIhvcNAQEL\nBQAwfjELMAkGA1UEBhMCVVMxEzARBgNVBAgMCkNhbGlmb3JuaWExFjAUBgNVBAcM\nDU1vdW50YWluIFZpZXcxGjAYBgNVBAoMEVlvdXIgT3JnYW5pemF0aW9uMRIwEAYD\nVQQLDAlZb3VyIFVuaXQxEjAQBgNVBAMMCWxvY2FsaG9zdDAeFw0yMzA3MTQyMTQ1\nNDRaFw0zMzA3MTEyMTQ1NDRaMH4xCzAJBgNVBAYTAlVTMRMwEQYDVQQIDApDYWxp\nZm9ybmlhMRYwFAYDVQQHDA1Nb3VudGFpbiBWaWV3MRowGAYDVQQKDBFZb3VyIE9y\nZ2FuaXphdGlvbjESMBAGA1UECwwJWW91ciBVbml0MRIwEAYDVQQDDAlsb2NhbGhv\nc3QwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCmWsrT0w4s0g7Ld1g/\nIa0qM2v6tXG8L/150kwM7V/wRSVCx+Tmv+aAMAJzJtXwMAj9jHt+sH5vOm6MJenJ\n0sTyUcCC8FhLa0VWxbajZOn8wKaUuZzLj3Uye/q4z0l6rtu35pjZCjDKphyycKoG\nNG2MwcGNNBUZP0W6Idw0PZaNstnXnTHIWE6axOA9bzB5iKtLTVkQDkuEJWFLfOD6\nZN4ISA+7HvbMgjREeIuNJqNI/746Egza5a4ZPh3KvyIPEdH2SdDy+9obCsdAKe65\nSEIPy1n4zRy3/7K1bVTu18JoWsNtE+5GDWVgFU3AVZ9ic6Jt0N0WNaRuUiiVpvKE\nLzyBAgMBAAGjaTBnMB0GA1UdDgQWBBQj02E1/fJHbm8GnOMNxfSIRI2cqjAfBgNV\nHSMEGDAWgBQj02E1/fJHbm8GnOMNxfSIRI2cqjAPBgNVHRMBAf8EBTADAQH/MBQG\nA1UdEQQNMAuCCWxvY2FsaG9zdDANBgkqhkiG9w0BAQsFAAOCAQEANRqDGWWdaXwg\nhkOz/Y9gkil6WYQ4d7muAAqiEZBqg+yAisGrv+MPeyjsrq1WPbIgcdlSjArG7zGV\n/5SPZwsuTeivdFs0DHbcvoKA8hqN2n4OmtjzdommBWA2618fzByOufECWRmUBxH3\nqmkmQ+aj4wKXm2U22OFxmWPTJbtwi8MDppl+G3AH4VpRi6qhSmLBSAO3AEBr7UJN\nIRHeUzBsFDLE++a3WYRnI0kA9og9F+zbnD+kNMxxTfmZqB6T9iFHIzkxZw7RELey\nz2PxQioHRQtp0rVZWnDt6+qSfrqftZgszrM+06n1MHTPBMusBfG/uyEAc4EAStCC\njXHuph+Ctg==\n-----END CERTIFICATE-----\n")},
+						},
+					},
+					PrivateKey: &commonapi.TLSDocument{
+						Value: &commonapi.DynamicValue{
+							JSON: v1.JSON{Raw: []byte("-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCmWsrT0w4s0g7L\nd1g/Ia0qM2v6tXG8L/150kwM7V/wRSVCx+Tmv+aAMAJzJtXwMAj9jHt+sH5vOm6M\nJenJ0sTyUcCC8FhLa0VWxbajZOn8wKaUuZzLj3Uye/q4z0l6rtu35pjZCjDKphyy\ncKoGNG2MwcGNNBUZP0W6Idw0PZaNstnXnTHIWE6axOA9bzB5iKtLTVkQDkuEJWFL\nfOD6ZN4ISA+7HvbMgjREeIuNJqNI/746Egza5a4ZPh3KvyIPEdH2SdDy+9obCsdA\nKe65SEIPy1n4zRy3/7K1bVTu18JoWsNtE+5GDWVgFU3AVZ9ic6Jt0N0WNaRuUiiV\npvKELzyBAgMBAAECggEABXHZS5+PyjXB2DT6xW4zvbrbIOSJaXBkqnUQmie2ySVq\nN8pVGpxTTgTEP8KYo/jegnXzoMzkBn3yGlIvWbS1T30PgPme2jETnuhvtt9ZrTUc\n/qcok50JZ/KY3S2jqQlKFbXNcOUdfbR8IfcACZ3zq/S3ggifXCku/g2XqHoPkGmp\nokEjXEJLX9f/ABgik3a5aaSCMYfCU9PzDNCM7vjiWxUvO0V5kjqYae+SpMQCvvTb\n1JEMEsawCEeGI9BBnj4o1x7xGDpFn4Yt6MznaHivANMHqqNKaH3LK6rFZGdnj7d6\nutpJ22QZUBYhZ1+Hz+WNUQD+z+O2NGfMEo0PZvb1MQKBgQDZ6TlehduU0JcgKUI+\nFSq5wAk+Eil158arCU3CWnn69VLUu5lAjkU4dXjmkg/c9nxRpg5kuWr8FGMmzTpx\nWlWZj1b72iTQuWX0fphNif3mljeDNLl5z0fGegHjH+KkGb9y6t06oKrsEZbxn4y0\nzOLfl1t85tPAMP6RuvfawpjBjQKBgQDDbpifamPx/GE1JdKj6M6At42kmDczd5P0\nlgN39BRC6fUS19CPurKVWF501+w52rxg1NWhtQVmW1DUdWpDUwQtRPXo43Ku8MPN\nRMD8Uj+PNgXgWnWdcfGbniB8xHqsE8N7MgKU5IZQOqEIDCVE4RGheTYGNgDZ16Rz\nILmZ14E3xQKBgHtI3fJCXSbmlHnXneit5QxOP2xkrhxM0zN1Ag9RTO3U2dYNhPjn\nBPaaT5pzTJJAybkP79jApmyTxDzxo3z6FK/aTuYSVv3Xxnz7GoPT7FgG6MVMkRr/\nUKZT5LlxErKw9oW3pw5CVDFXCkUNdXfc6waBBXu2xFpZ3czpMM0Nh4sJAoGAEpGo\nmMUQGAcF6XndiMtvC5XlNHVuEUrUWRID5FrhrfXy3kZ5P57apwwNdYaqoFijO4Qd\nhE7h43bbuEQrw5fYtsBtqSIrXGnuAMv+ljruZRoZ9tZBhKM19LZSmehFS6JZGZSH\n4EPSaz8W29/jjqbf+Pq+YlqxPAGcU4ARgoeSdI0CgYACG9WZMbri9Eas1qA3vP86\nVW917u7CKt3O6Gsr4F5BNIH3Qx9BReLB9cDvhyko/JAln0MiNq2nExeuFlhEqVsx\nmn681Xm6yPht1PNeTkrRroXJIVzbBOldFW7evX/g/izeiXH6YhfGKD6B8dBfUftx\nNcs6FFLydFcIdIxebYjYnQ==\n-----END PRIVATE KEY-----\n")},
+						},
+					},
+				},
+			},
+		})
+
+		assert.NoError(t, err)
+		assert.NotNil(t, conf.Client.Transport.(*http.Transport).TLSClientConfig)
+	})
+
+	t.Run("TLS channel with invalid Root CA", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		defer stopRuntime(t, rt)
+
+		_, err := rt.getHTTPEndpointAppChannel(httpMiddleware.Pipeline{}, httpEndpointV1alpha1.HTTPEndpoint{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test",
+			},
+			Spec: httpEndpointV1alpha1.HTTPEndpointSpec{
+				ClientTLS: &commonapi.TLS{
+					RootCA: &commonapi.TLSDocument{
+						Value: &commonapi.DynamicValue{
+							JSON: v1.JSON{Raw: []byte("asdsdsdassjkdctewzxabcdef")},
+						},
+					},
+					Certificate: &commonapi.TLSDocument{
+						Value: &commonapi.DynamicValue{
+							JSON: v1.JSON{Raw: []byte("-----BEGIN CERTIFICATE-----\nMIID8zCCAtugAwIBAgIUSj2XqIQo/xmVVuw1+nmIcdmr48IwDQYJKoZIhvcNAQEL\nBQAwfjELMAkGA1UEBhMCVVMxEzARBgNVBAgMCkNhbGlmb3JuaWExFjAUBgNVBAcM\nDU1vdW50YWluIFZpZXcxGjAYBgNVBAoMEVlvdXIgT3JnYW5pemF0aW9uMRIwEAYD\nVQQLDAlZb3VyIFVuaXQxEjAQBgNVBAMMCWxvY2FsaG9zdDAeFw0yMzA3MTQyMTQ1\nNDRaFw0zMzA3MTEyMTQ1NDRaMH4xCzAJBgNVBAYTAlVTMRMwEQYDVQQIDApDYWxp\nZm9ybmlhMRYwFAYDVQQHDA1Nb3VudGFpbiBWaWV3MRowGAYDVQQKDBFZb3VyIE9y\nZ2FuaXphdGlvbjESMBAGA1UECwwJWW91ciBVbml0MRIwEAYDVQQDDAlsb2NhbGhv\nc3QwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCmWsrT0w4s0g7Ld1g/\nIa0qM2v6tXG8L/150kwM7V/wRSVCx+Tmv+aAMAJzJtXwMAj9jHt+sH5vOm6MJenJ\n0sTyUcCC8FhLa0VWxbajZOn8wKaUuZzLj3Uye/q4z0l6rtu35pjZCjDKphyycKoG\nNG2MwcGNNBUZP0W6Idw0PZaNstnXnTHIWE6axOA9bzB5iKtLTVkQDkuEJWFLfOD6\nZN4ISA+7HvbMgjREeIuNJqNI/746Egza5a4ZPh3KvyIPEdH2SdDy+9obCsdAKe65\nSEIPy1n4zRy3/7K1bVTu18JoWsNtE+5GDWVgFU3AVZ9ic6Jt0N0WNaRuUiiVpvKE\nLzyBAgMBAAGjaTBnMB0GA1UdDgQWBBQj02E1/fJHbm8GnOMNxfSIRI2cqjAfBgNV\nHSMEGDAWgBQj02E1/fJHbm8GnOMNxfSIRI2cqjAPBgNVHRMBAf8EBTADAQH/MBQG\nA1UdEQQNMAuCCWxvY2FsaG9zdDANBgkqhkiG9w0BAQsFAAOCAQEANRqDGWWdaXwg\nhkOz/Y9gkil6WYQ4d7muAAqiEZBqg+yAisGrv+MPeyjsrq1WPbIgcdlSjArG7zGV\n/5SPZwsuTeivdFs0DHbcvoKA8hqN2n4OmtjzdommBWA2618fzByOufECWRmUBxH3\nqmkmQ+aj4wKXm2U22OFxmWPTJbtwi8MDppl+G3AH4VpRi6qhSmLBSAO3AEBr7UJN\nIRHeUzBsFDLE++a3WYRnI0kA9og9F+zbnD+kNMxxTfmZqB6T9iFHIzkxZw7RELey\nz2PxQioHRQtp0rVZWnDt6+qSfrqftZgszrM+06n1MHTPBMusBfG/uyEAc4EAStCC\njXHuph+Ctg==\n-----END CERTIFICATE-----\n")},
+						},
+					},
+					PrivateKey: &commonapi.TLSDocument{
+						Value: &commonapi.DynamicValue{
+							JSON: v1.JSON{Raw: []byte("-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCmWsrT0w4s0g7L\nd1g/Ia0qM2v6tXG8L/150kwM7V/wRSVCx+Tmv+aAMAJzJtXwMAj9jHt+sH5vOm6M\nJenJ0sTyUcCC8FhLa0VWxbajZOn8wKaUuZzLj3Uye/q4z0l6rtu35pjZCjDKphyy\ncKoGNG2MwcGNNBUZP0W6Idw0PZaNstnXnTHIWE6axOA9bzB5iKtLTVkQDkuEJWFL\nfOD6ZN4ISA+7HvbMgjREeIuNJqNI/746Egza5a4ZPh3KvyIPEdH2SdDy+9obCsdA\nKe65SEIPy1n4zRy3/7K1bVTu18JoWsNtE+5GDWVgFU3AVZ9ic6Jt0N0WNaRuUiiV\npvKELzyBAgMBAAECggEABXHZS5+PyjXB2DT6xW4zvbrbIOSJaXBkqnUQmie2ySVq\nN8pVGpxTTgTEP8KYo/jegnXzoMzkBn3yGlIvWbS1T30PgPme2jETnuhvtt9ZrTUc\n/qcok50JZ/KY3S2jqQlKFbXNcOUdfbR8IfcACZ3zq/S3ggifXCku/g2XqHoPkGmp\nokEjXEJLX9f/ABgik3a5aaSCMYfCU9PzDNCM7vjiWxUvO0V5kjqYae+SpMQCvvTb\n1JEMEsawCEeGI9BBnj4o1x7xGDpFn4Yt6MznaHivANMHqqNKaH3LK6rFZGdnj7d6\nutpJ22QZUBYhZ1+Hz+WNUQD+z+O2NGfMEo0PZvb1MQKBgQDZ6TlehduU0JcgKUI+\nFSq5wAk+Eil158arCU3CWnn69VLUu5lAjkU4dXjmkg/c9nxRpg5kuWr8FGMmzTpx\nWlWZj1b72iTQuWX0fphNif3mljeDNLl5z0fGegHjH+KkGb9y6t06oKrsEZbxn4y0\nzOLfl1t85tPAMP6RuvfawpjBjQKBgQDDbpifamPx/GE1JdKj6M6At42kmDczd5P0\nlgN39BRC6fUS19CPurKVWF501+w52rxg1NWhtQVmW1DUdWpDUwQtRPXo43Ku8MPN\nRMD8Uj+PNgXgWnWdcfGbniB8xHqsE8N7MgKU5IZQOqEIDCVE4RGheTYGNgDZ16Rz\nILmZ14E3xQKBgHtI3fJCXSbmlHnXneit5QxOP2xkrhxM0zN1Ag9RTO3U2dYNhPjn\nBPaaT5pzTJJAybkP79jApmyTxDzxo3z6FK/aTuYSVv3Xxnz7GoPT7FgG6MVMkRr/\nUKZT5LlxErKw9oW3pw5CVDFXCkUNdXfc6waBBXu2xFpZ3czpMM0Nh4sJAoGAEpGo\nmMUQGAcF6XndiMtvC5XlNHVuEUrUWRID5FrhrfXy3kZ5P57apwwNdYaqoFijO4Qd\nhE7h43bbuEQrw5fYtsBtqSIrXGnuAMv+ljruZRoZ9tZBhKM19LZSmehFS6JZGZSH\n4EPSaz8W29/jjqbf+Pq+YlqxPAGcU4ARgoeSdI0CgYACG9WZMbri9Eas1qA3vP86\nVW917u7CKt3O6Gsr4F5BNIH3Qx9BReLB9cDvhyko/JAln0MiNq2nExeuFlhEqVsx\nmn681Xm6yPht1PNeTkrRroXJIVzbBOldFW7evX/g/izeiXH6YhfGKD6B8dBfUftx\nNcs6FFLydFcIdIxebYjYnQ==\n-----END PRIVATE KEY-----\n")},
+						},
+					},
+				},
+			},
+		})
+
+		assert.Error(t, err)
 	})
 }
