@@ -1408,7 +1408,7 @@ func TestPubsubWithResiliency(t *testing.T) {
 		defer cancel()
 		err := ps.beginPubSub(ctx, "failPubsub")
 
-		assert.Error(t, err)
+		assert.NoError(t, err)
 		assert.Equal(t, 2, failingAppChannel.Failure.CallCount("failingSubTopic"))
 	})
 

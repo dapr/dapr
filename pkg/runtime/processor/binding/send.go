@@ -431,7 +431,6 @@ func (b *binding) isAppSubscribedToBinding(ctx context.Context, binding string) 
 			WithContentType(invokev1.JSONContentType)
 		defer req.Close()
 
-		// TODO: Propagate Context
 		resp, err := b.appChannel.InvokeMethod(ctx, req, "")
 		if err != nil {
 			log.Fatalf("could not invoke OPTIONS method on input binding subscription endpoint %q: %v", path, err)
