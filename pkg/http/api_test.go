@@ -2249,7 +2249,26 @@ func TestV1ActorEndpoints(t *testing.T) {
 		mockActors.AssertNumberOfCalls(t, "CreateReminder", 1)
 	})
 
-	t.Run("Reminder Rename - 204 when RenameReminderFails", func(t *testing.T) {
+	t.Run("Reminder Create - 403 when actor type is not hosted", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
+
+		mockActors := new(actors.MockActors)
+		mockActors.
+			On("CreateReminder", mock.AnythingOfType("*reminders.CreateReminderRequest")).
+			Return(actors.ErrReminderOpActorNotHosted)
+
+		testAPI.universal.Actors = mockActors
+
+		// act
+		resp := fakeServer.DoRequest("POST", apiPath, []byte("{}"), nil)
+
+		// assert
+		assert.Equal(t, 403, resp.StatusCode)
+		assert.Equal(t, "ERR_ACTOR_REMINDER_NON_HOSTED", resp.ErrorBody["errorCode"])
+		mockActors.AssertNumberOfCalls(t, "CreateReminder", 1)
+	})
+
+	t.Run("Reminder Rename - 204 No Content", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
 
 		reminderRequest := actors.RenameReminderRequest{
@@ -2302,6 +2321,25 @@ func TestV1ActorEndpoints(t *testing.T) {
 		mockActors.AssertNumberOfCalls(t, "RenameReminder", 1)
 	})
 
+	t.Run("Reminder Rename - 403 when actor type is not hosted", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
+
+		mockActors := new(actors.MockActors)
+		mockActors.
+			On("RenameReminder", mock.AnythingOfType("*actors.RenameReminderRequest")).
+			Return(actors.ErrReminderOpActorNotHosted)
+
+		testAPI.universal.Actors = mockActors
+
+		// act
+		resp := fakeServer.DoRequest("PATCH", apiPath, []byte("{}"), nil)
+
+		// assert
+		assert.Equal(t, 403, resp.StatusCode)
+		assert.Equal(t, "ERR_ACTOR_REMINDER_NON_HOSTED", resp.ErrorBody["errorCode"])
+		mockActors.AssertNumberOfCalls(t, "RenameReminder", 1)
+	})
+
 	t.Run("Reminder Delete - 204 No Content", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
 		reminderRequest := actors.DeleteReminderRequest{
@@ -2348,6 +2386,25 @@ func TestV1ActorEndpoints(t *testing.T) {
 		mockActors.AssertNumberOfCalls(t, "DeleteReminder", 1)
 	})
 
+	t.Run("Reminder Delete - 403 when actor type is not hosted", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
+
+		mockActors := new(actors.MockActors)
+		mockActors.
+			On("DeleteReminder", mock.AnythingOfType("*actors.DeleteReminderRequest")).
+			Return(actors.ErrReminderOpActorNotHosted)
+
+		testAPI.universal.Actors = mockActors
+
+		// act
+		resp := fakeServer.DoRequest("DELETE", apiPath, []byte("{}"), nil)
+
+		// assert
+		assert.Equal(t, 403, resp.StatusCode)
+		assert.Equal(t, "ERR_ACTOR_REMINDER_NON_HOSTED", resp.ErrorBody["errorCode"])
+		mockActors.AssertNumberOfCalls(t, "DeleteReminder", 1)
+	})
+
 	t.Run("Reminder Get - 200 OK", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
 		reminderRequest := actors.GetReminderRequest{
@@ -2390,6 +2447,25 @@ func TestV1ActorEndpoints(t *testing.T) {
 		// assert
 		assert.Equal(t, 500, resp.StatusCode)
 		assert.Equal(t, "ERR_ACTOR_REMINDER_GET", resp.ErrorBody["errorCode"])
+		mockActors.AssertNumberOfCalls(t, "GetReminder", 1)
+	})
+
+	t.Run("Reminder Get - 403 when actor type is not hosted", func(t *testing.T) {
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
+
+		mockActors := new(actors.MockActors)
+		mockActors.
+			On("GetReminder", mock.AnythingOfType("*actors.GetReminderRequest")).
+			Return(nil, actors.ErrReminderOpActorNotHosted)
+
+		testAPI.universal.Actors = mockActors
+
+		// act
+		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 403, resp.StatusCode)
+		assert.Equal(t, "ERR_ACTOR_REMINDER_NON_HOSTED", resp.ErrorBody["errorCode"])
 		mockActors.AssertNumberOfCalls(t, "GetReminder", 1)
 	})
 
