@@ -37,7 +37,6 @@ import (
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	"github.com/dapr/dapr/pkg/diagnostics/diagtestutils"
 	"github.com/dapr/dapr/pkg/health"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
@@ -481,27 +480,6 @@ func TestTimerExecution(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestTimerExecutionZeroDuration(t *testing.T) {
-	testActorsRuntime := newTestActorsRuntime()
-	defer testActorsRuntime.Stop()
-
-	actorType, actorID := getTestActorTypeAndID()
-	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
-
-	period, _ := internal.NewReminderPeriod("0ms")
-	err := testActorsRuntime.doExecuteReminderOrTimer(&internal.Reminder{
-		ActorType:      actorType,
-		ActorID:        actorID,
-		Name:           "timer1",
-		Period:         period,
-		RegisteredTime: testActorsRuntime.clock.Now(),
-		DueTime:        "0ms",
-		Callback:       "callback",
-		Data:           json.RawMessage(`"data"`),
-	}, true)
-	assert.NoError(t, err)
-}
-
 func TestReminderExecution(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	defer testActorsRuntime.Stop()
@@ -522,65 +500,12 @@ func TestReminderExecution(t *testing.T) {
 }
 
 func metricsCleanup() {
-	diagtestutils.CleanupRegisteredViews(
+	diag.CleanupRegisteredViews(
 		actorRemindersLastValueViewName,
 		actorTimersLastValueViewName,
 		actorRemindersFiredTotalViewName,
-		actorRemindersFiredTotalViewName)
-}
-
-func TestReminderExecutionZeroDuration(t *testing.T) {
-	testActorsRuntime := newTestActorsRuntime()
-	defer testActorsRuntime.Stop()
-
-	actorType, actorID := getTestActorTypeAndID()
-	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
-
-	period, _ := internal.NewReminderPeriod("0ms")
-	err := testActorsRuntime.doExecuteReminderOrTimer(&internal.Reminder{
-		ActorType: actorType,
-		ActorID:   actorID,
-		Period:    period,
-		Name:      "reminder0",
-		Data:      json.RawMessage(`"data"`),
-	}, false)
-	assert.NoError(t, err)
-}
-
-func TestCreateTimerDueTimes(t *testing.T) {
-	t.Run("create timer with positive DueTime", func(t *testing.T) {
-		testActorsRuntime := newTestActorsRuntime()
-		defer testActorsRuntime.Stop()
-		actorType, actorID := getTestActorTypeAndID()
-		fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
-
-		timer := createTimerData(actorID, actorType, "positiveTimer", "1s", "2s", "", "callback", "testTimer")
-		err := testActorsRuntime.CreateTimer(context.Background(), &timer)
-		assert.NoError(t, err)
-		assert.Equal(t, int64(1), testActorsRuntime.timers.GetActiveTimersCount(actorType))
-	})
-
-	t.Run("create timer with 0 DueTime", func(t *testing.T) {
-		testActorsRuntime := newTestActorsRuntime()
-		defer testActorsRuntime.Stop()
-		actorType, actorID := getTestActorTypeAndID()
-		fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
-
-		timer := createTimerData(actorID, actorType, "positiveTimer", "1s", "0s", "", "callback", "testTimer")
-		err := testActorsRuntime.CreateTimer(context.Background(), &timer)
-		assert.NoError(t, err)
-	})
-
-	t.Run("create timer with no DueTime", func(t *testing.T) {
-		testActorsRuntime := newTestActorsRuntime()
-		defer testActorsRuntime.Stop()
-		actorType, actorID := getTestActorTypeAndID()
-		fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
-
-		timer := createTimerData(actorID, actorType, "positiveTimer", "1s", "", "", "callback", "testTimer")
-		err := testActorsRuntime.CreateTimer(context.Background(), &timer)
-		assert.NoError(t, err)
-	})
+		actorTimersFiredTotalViewName,
+	)
 }
 
 func TestTimerCounter(t *testing.T) {
@@ -594,8 +519,7 @@ func TestTimerCounter(t *testing.T) {
 	numberOfTimersToDelete := 255
 
 	// init default service metrics where actor metrics are registered
-	metricsCleanup()
-	assert.NoError(t, diag.DefaultMonitoring.Init(testActorsRuntime.actorsConfig.AppID))
+	require.NoError(t, diag.DefaultMonitoring.Init(testActorsRuntime.actorsConfig.AppID))
 	t.Cleanup(func() {
 		metricsCleanup()
 	})
@@ -652,8 +576,8 @@ func TestTimerCounter(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 1, len(rows))
 	assert.Equal(t, int64(numberOfLongTimersToCreate+numberOfOneTimeTimersToCreate), rows[0].Data.(*view.CountData).Value)
-	diagtestutils.RequireTagExist(t, rows, diagtestutils.NewTag("success", strconv.FormatBool(true)))
-	diagtestutils.RequireTagNotExist(t, rows, diagtestutils.NewTag("success", strconv.FormatBool(false)))
+	diag.RequireTagExist(t, rows, diag.NewTag("success", strconv.FormatBool(true)))
+	diag.RequireTagNotExist(t, rows, diag.NewTag("success", strconv.FormatBool(false)))
 
 	rows, err = view.RetrieveData(actorTimersLastValueViewName)
 	assert.NoError(t, err)

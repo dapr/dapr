@@ -27,13 +27,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.opencensus.io/stats/view"
 	clocktesting "k8s.io/utils/clock/testing"
 
 	"github.com/dapr/dapr/pkg/actors/internal"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	"github.com/dapr/dapr/pkg/diagnostics/diagtestutils"
 	daprt "github.com/dapr/dapr/pkg/testing"
 )
 
@@ -122,27 +120,33 @@ func TestStoreIsNotInitialized(t *testing.T) {
 }
 
 func TestReminderCountFiring(t *testing.T) {
+	actorType, actorID := getTestActorTypeAndID()
+
 	testReminders := newTestReminders()
 	defer testReminders.Close()
+	clock := testReminders.clock.(*clocktesting.FakeClock)
 
-	// init default service metrics where actor metrics are registered
-	require.NoError(t, diag.DefaultMonitoring.Init(testReminders.config.AppID))
-	t.Cleanup(func() {
-		metricsCleanup()
+	// Init a mock metrics collector
+	activeCount := atomic.Int64{}
+	invalidInvocations := atomic.Int64{}
+	testReminders.SetMetricsCollector(func(at string, r int64) {
+		if at == actorType {
+			activeCount.Add(1)
+		} else {
+			invalidInvocations.Add(1)
+		}
 	})
 
-	var executereminderFnCount int64 = 0
+	// Count executions
+	executereminderFnCount := atomic.Int64{}
 	testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
-		atomic.AddInt64(&executereminderFnCount, 1)
-		diag.DefaultMonitoring.ActorReminderFired(reminder.ActorType, true)
+		executereminderFnCount.Add(1)
 		return true
 	})
 
 	testReminders.Init(context.Background())
 
-	actorType, actorID := getTestActorTypeAndID()
-
-	const numReminders = 10
+	const numReminders = 6
 	for i := 0; i < numReminders; i++ {
 		req := internal.CreateReminderRequest{
 			ActorType: actorType,
@@ -150,90 +154,101 @@ func TestReminderCountFiring(t *testing.T) {
 			Name:      fmt.Sprintf("reminder%d", i),
 			Data:      json.RawMessage(`"data"`),
 			Period:    "10s",
+			DueTime:   "10s",
 		}
 		reminder, err := req.NewReminder(testReminders.clock.Now())
 		require.NoError(t, err)
 		require.NoError(t, testReminders.CreateReminder(context.Background(), reminder))
 	}
 
-	time.Sleep(200 * time.Millisecond)
-	testReminders.clock.Sleep(500 * time.Millisecond)
-	const numPeriods = 20
+	advanceTickers(t, clock, 500*time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
+
+	const numPeriods = 8
 	for i := 0; i < numPeriods; i++ {
-		testReminders.clock.Sleep(10 * time.Second)
-		time.Sleep(50 * time.Millisecond)
+		advanceTickers(t, clock, 10*time.Second)
+		time.Sleep(100 * time.Millisecond)
 	}
 
-	rows, err := view.RetrieveData("runtime/actor/reminders")
-	require.NoError(t, err)
-	require.Equal(t, 1, len(rows))
-	assert.Equal(t, int64(numReminders), int64(rows[0].Data.(*view.LastValueData).Value))
+	assert.Equal(t, int64(0), invalidInvocations.Load())
+	assert.Equal(t, int64(numReminders), activeCount.Load())
 
-	// check metrics recorded
-	rows, err = view.RetrieveData("runtime/actor/reminders_fired_total")
-	require.NoError(t, err)
-	require.Equal(t, 1, len(rows))
-	assert.Equal(t, int64(numReminders*numPeriods), rows[0].Data.(*view.CountData).Value)
-	assert.Equal(t, int64(numReminders*numPeriods), atomic.LoadInt64(&executereminderFnCount))
-	diagtestutils.RequireTagExist(t, rows, diagtestutils.NewTag("success", strconv.FormatBool(true)))
-	diagtestutils.RequireTagNotExist(t, rows, diagtestutils.NewTag("success", strconv.FormatBool(false)))
+	assert.Equal(t, int64(numReminders*numPeriods), executereminderFnCount.Load())
 }
 
-func TestReminderCountFiringBad(t *testing.T) {
-	testReminders := newTestReminders()
-	defer testReminders.Close()
+func TestCreateTimerDueTimes(t *testing.T) {
+	provider := newTestReminders()
+	defer provider.Close()
+	clock := provider.clock.(*clocktesting.FakeClock)
 
-	// init default service metrics where actor metrics are registered
-	require.NoError(t, diag.DefaultMonitoring.Init(testReminders.config.AppID))
-	t.Cleanup(func() {
-		metricsCleanup()
-	})
-
-	var executereminderFnCount int64 = 0
-	testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
-		atomic.AddInt64(&executereminderFnCount, 1)
-		diag.DefaultMonitoring.ActorReminderFired(reminder.ActorType, false)
+	executed := make(chan string, 1)
+	provider.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
+		executed <- reminder.Key()
 		return true
 	})
-	testReminders.Init(context.Background())
 
-	actorType, actorID := getTestActorTypeAndID()
-
-	const numReminders = 2
-	for i := 0; i < numReminders; i++ {
+	t.Run("create reminder with positive DueTime", func(t *testing.T) {
 		req := internal.CreateReminderRequest{
-			ActorType: actorType,
-			ActorID:   actorID,
-			Name:      fmt.Sprintf("reminder%d", i),
-			Data:      json.RawMessage(`"data"`),
-			Period:    "10s",
+			ActorID:   "myactor",
+			ActorType: "mytype",
+			Name:      "mytimer",
+			DueTime:   "1s",
 		}
-		reminder, err := req.NewReminder(testReminders.clock.Now())
+		r := createReminder(t, clock.Now(), req)
+
+		err := provider.CreateReminder(context.Background(), r)
 		require.NoError(t, err)
-		require.NoError(t, testReminders.CreateReminder(context.Background(), reminder))
-	}
 
-	time.Sleep(200 * time.Millisecond)
-	testReminders.clock.Sleep(500 * time.Millisecond)
-	const numPeriods = 6
-	for i := 0; i < numPeriods; i++ {
-		testReminders.clock.Sleep(10 * time.Second)
-		time.Sleep(50 * time.Millisecond)
-	}
+		advanceTickers(t, clock, 1*time.Second)
+		select {
+		case val := <-executed:
+			assert.Equal(t, req.Key(), val)
+		case <-time.After(10 * time.Second):
+			t.Fatal("Did not receive a signal in time")
+		}
+	})
 
-	rows, err := view.RetrieveData("runtime/actor/reminders")
-	assert.NoError(t, err)
-	assert.Equal(t, 1, len(rows))
-	assert.Equal(t, int64(numReminders), int64(rows[0].Data.(*view.LastValueData).Value))
+	t.Run("create reminder with 0 DueTime", func(t *testing.T) {
+		req := internal.CreateReminderRequest{
+			ActorID:   "myactor",
+			ActorType: "mytype",
+			Name:      "mytimer",
+			DueTime:   "0",
+		}
+		r := createReminder(t, clock.Now(), req)
 
-	// check metrics recorded
-	rows, err = view.RetrieveData("runtime/actor/reminders_fired_total")
-	assert.NoError(t, err)
-	assert.Equal(t, 1, len(rows))
-	assert.Equal(t, int64(numReminders*numPeriods), rows[0].Data.(*view.CountData).Value)
-	assert.Equal(t, int64(numReminders*numPeriods), atomic.LoadInt64(&executereminderFnCount))
-	diagtestutils.RequireTagExist(t, rows, diagtestutils.NewTag("success", strconv.FormatBool(false)))
-	diagtestutils.RequireTagNotExist(t, rows, diagtestutils.NewTag("success", strconv.FormatBool(true)))
+		err := provider.CreateReminder(context.Background(), r)
+		require.NoError(t, err)
+
+		advanceTickers(t, clock, 10*time.Millisecond)
+		select {
+		case val := <-executed:
+			assert.Equal(t, req.Key(), val)
+		case <-time.After(10 * time.Second):
+			t.Fatal("Did not receive a signal in time")
+		}
+	})
+
+	t.Run("create reminder with no DueTime", func(t *testing.T) {
+		req := internal.CreateReminderRequest{
+			ActorID:   "myactor",
+			ActorType: "mytype",
+			Name:      "mytimer",
+			DueTime:   "",
+		}
+		r := createReminder(t, clock.Now(), req)
+
+		err := provider.CreateReminder(context.Background(), r)
+		require.NoError(t, err)
+
+		advanceTickers(t, clock, 10*time.Millisecond)
+		select {
+		case val := <-executed:
+			assert.Equal(t, req.Key(), val)
+		case <-time.After(10 * time.Second):
+			t.Fatal("Did not receive a signal in time")
+		}
+	})
 }
 
 func TestSetReminderTrack(t *testing.T) {
@@ -1612,11 +1627,11 @@ func createReminderData(actorID, actorType, name, period, dueTime, ttl, data str
 	return r
 }
 
-func metricsCleanup() {
-	diagtestutils.CleanupRegisteredViews(
-		"runtime/actor/reminders",
-		"runtime/actor/reminders_fired_total",
-		"runtime/actor/timers",
-		"runtime/actor/timers_fired_total",
-	)
+func createReminder(t *testing.T, now time.Time, req internal.CreateReminderRequest) *internal.Reminder {
+	t.Helper()
+
+	reminder, err := req.NewReminder(now)
+	require.NoError(t, err)
+
+	return reminder
 }

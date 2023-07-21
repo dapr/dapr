@@ -66,7 +66,7 @@ func TestCreateTimerDueTimes(t *testing.T) {
 		}
 	})
 
-	t.Run("test create timer with 0 DueTime", func(t *testing.T) {
+	t.Run("create timer with 0 DueTime", func(t *testing.T) {
 		req := internal.CreateTimerRequest{
 			ActorID:   "myactor",
 			ActorType: "mytype",
@@ -90,14 +90,9 @@ func TestCreateTimerDueTimes(t *testing.T) {
 		case <-time.After(10 * time.Second):
 			t.Fatal("Did not receive a signal in time")
 		}
-
-		/*// Should not have waiters even after 200ms (on a wall clock to ensure background goroutines sync)
-		runtime.Gosched()
-		time.Sleep(200 * time.Millisecond)
-		assert.False(t, clock.HasWaiters())*/
 	})
 
-	t.Run("test create timer with no DueTime", func(t *testing.T) {
+	t.Run("create timer with no DueTime", func(t *testing.T) {
 		req := internal.CreateTimerRequest{
 			ActorID:   "myactor",
 			ActorType: "mytype",

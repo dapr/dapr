@@ -39,6 +39,8 @@ const (
 	metadataPartitionKey = "partitionKey"
 )
 
+type remindersMetricsCollector = func(actorType string, reminders int64)
+
 // Implements a reminders provider.
 type reminders struct {
 	clock                clock.WithTicker
@@ -55,18 +57,20 @@ type reminders struct {
 	evaluationLock       sync.RWMutex
 	config               internal.Config
 	lookUpActorFn        internal.LookupActorFn
+	metricsCollector     remindersMetricsCollector
 }
 
 // NewRemindersProvider returns a reminders provider.
 func NewRemindersProvider(clock clock.WithTicker, opts internal.RemindersProviderOpts) internal.RemindersProvider {
 	return &reminders{
-		clock:           clock,
-		runningCh:       make(chan struct{}),
-		reminders:       map[string][]ActorReminderReference{},
-		activeReminders: &sync.Map{},
-		evaluationChan:  make(chan struct{}, 1),
-		storeName:       opts.StoreName,
-		config:          opts.Config,
+		clock:            clock,
+		runningCh:        make(chan struct{}),
+		reminders:        map[string][]ActorReminderReference{},
+		activeReminders:  &sync.Map{},
+		evaluationChan:   make(chan struct{}, 1),
+		storeName:        opts.StoreName,
+		config:           opts.Config,
+		metricsCollector: diag.DefaultMonitoring.ActorReminders,
 	}
 }
 
@@ -84,6 +88,10 @@ func (r *reminders) SetResiliencyProvider(resiliency resiliency.Provider) {
 
 func (r *reminders) SetLookupActorFn(fn internal.LookupActorFn) {
 	r.lookUpActorFn = fn
+}
+
+func (r *reminders) SetMetricsCollector(fn remindersMetricsCollector) {
+	r.metricsCollector = fn
 }
 
 func (r *reminders) DrainRebalancedReminders(actorType string, actorID string) {
@@ -398,7 +406,7 @@ func (r *reminders) doDeleteReminder(ctx context.Context, actorType, actorID, na
 		}
 
 		r.remindersLock.Lock()
-		diag.DefaultMonitoring.ActorReminders(actorType, int64(len(reminders)))
+		r.metricsCollector(actorType, int64(len(reminders)))
 		r.reminders[actorType] = reminders
 		r.remindersLock.Unlock()
 		return true, nil
@@ -480,7 +488,7 @@ func (r *reminders) storeReminder(ctx context.Context, store internal.Transactio
 		}
 
 		r.remindersLock.Lock()
-		diag.DefaultMonitoring.ActorReminders(reminder.ActorType, int64(len(reminders)))
+		r.metricsCollector(reminder.ActorType, int64(len(reminders)))
 		r.reminders[reminder.ActorType] = reminders
 		r.remindersLock.Unlock()
 		return struct{}{}, nil
