@@ -62,7 +62,7 @@ func TestCreateTimerDueTimes(t *testing.T) {
 		req := internal.CreateTimerRequest{
 			ActorID:   "myactor",
 			ActorType: "mytype",
-			Name:      "mytimer",
+			Name:      "mytimer1",
 			DueTime:   "1s",
 			Callback:  "callback",
 		}
@@ -88,7 +88,7 @@ func TestCreateTimerDueTimes(t *testing.T) {
 		req := internal.CreateTimerRequest{
 			ActorID:   "myactor",
 			ActorType: "mytype",
-			Name:      "mytimer",
+			Name:      "mytimer2",
 			DueTime:   "0",
 			Callback:  "callback",
 		}
@@ -114,7 +114,7 @@ func TestCreateTimerDueTimes(t *testing.T) {
 		req := internal.CreateTimerRequest{
 			ActorID:   "myactor",
 			ActorType: "mytype",
-			Name:      "mytimer",
+			Name:      "mytimer3",
 			DueTime:   "",
 			Callback:  "callback",
 		}

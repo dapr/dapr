@@ -191,7 +191,7 @@ func TestCreateTimerDueTimes(t *testing.T) {
 		req := internal.CreateReminderRequest{
 			ActorID:   "myactor",
 			ActorType: "mytype",
-			Name:      "mytimer",
+			Name:      "myreminder1",
 			DueTime:   "1s",
 		}
 		r := createReminder(t, clock.Now(), req)
@@ -212,7 +212,7 @@ func TestCreateTimerDueTimes(t *testing.T) {
 		req := internal.CreateReminderRequest{
 			ActorID:   "myactor",
 			ActorType: "mytype",
-			Name:      "mytimer",
+			Name:      "myreminder2",
 			DueTime:   "0",
 		}
 		r := createReminder(t, clock.Now(), req)
@@ -233,7 +233,7 @@ func TestCreateTimerDueTimes(t *testing.T) {
 		req := internal.CreateReminderRequest{
 			ActorID:   "myactor",
 			ActorType: "mytype",
-			Name:      "mytimer",
+			Name:      "myreminder3",
 			DueTime:   "",
 		}
 		r := createReminder(t, clock.Now(), req)
