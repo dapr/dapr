@@ -26,14 +26,14 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework/binary"
-	"github.com/dapr/dapr/tests/integration/framework/freeport"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+	"github.com/dapr/dapr/tests/integration/framework/util"
 )
 
 type Placement struct {
 	exec     process.Interface
-	freeport *freeport.FreePort
+	freeport *util.FreePort
 
 	id                  string
 	port                int
@@ -49,7 +49,7 @@ func New(t *testing.T, fopts ...Option) *Placement {
 	uid, err := uuid.NewUUID()
 	require.NoError(t, err)
 
-	fp := freeport.New(t, 4)
+	fp := util.ReservePorts(t, 4)
 	opts := options{
 		id:                  uid.String(),
 		port:                fp.Port(t, 0),

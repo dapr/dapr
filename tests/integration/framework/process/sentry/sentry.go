@@ -32,14 +32,14 @@ import (
 	"github.com/dapr/dapr/pkg/sentry/ca"
 	"github.com/dapr/dapr/pkg/sentry/certs"
 	"github.com/dapr/dapr/tests/integration/framework/binary"
-	"github.com/dapr/dapr/tests/integration/framework/freeport"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+	"github.com/dapr/dapr/tests/integration/framework/util"
 )
 
 type Sentry struct {
 	exec     process.Interface
-	freeport *freeport.FreePort
+	freeport *util.FreePort
 
 	ca          *certs.Credentials
 	port        int
@@ -56,7 +56,7 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 	creds, rootPEM, certPEM, issuerKeyPEM, err := ca.GetNewSelfSignedCertificates(caPK, time.Minute, time.Second*5)
 	require.NoError(t, err)
 
-	fp := freeport.New(t, 3)
+	fp := util.ReservePorts(t, 3)
 	opts := options{
 		ca:          creds,
 		rootPEM:     rootPEM,
