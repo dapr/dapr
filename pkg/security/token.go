@@ -24,10 +24,8 @@ const (
 	kubeTknPath = "/var/run/secrets/dapr.io/sentrytoken/token"
 )
 
-var (
-	// used for testing.
-	rootFS = "/"
-)
+// used for testing.
+var rootFS = "/"
 
 // GetAPIToken returns the value of the api token from an environment variable.
 func GetAPIToken() string {
