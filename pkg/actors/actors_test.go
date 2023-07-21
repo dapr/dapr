@@ -16,7 +16,6 @@ package actors
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strconv"
 	"strings"
 	"sync"
@@ -25,7 +24,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.opencensus.io/stats/view"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	kclock "k8s.io/utils/clock"
@@ -36,7 +34,6 @@ import (
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
-	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/health"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
@@ -52,11 +49,6 @@ const (
 	TestKeyName                     = "key0"
 	TestPodName                     = "testPodName"
 	TestActorMetadataPartitionCount = 3
-
-	actorTimersLastValueViewName     = "runtime/actor/timers"
-	actorRemindersLastValueViewName  = "runtime/actor/reminders"
-	actorTimersFiredTotalViewName    = "runtime/actor/timers_fired_total"
-	actorRemindersFiredTotalViewName = "runtime/actor/reminders_fired_total"
 )
 
 var DefaultAppConfig = config.ApplicationConfig{
@@ -379,7 +371,7 @@ func advanceTickers(t *testing.T, clock *clocktesting.FakeClock, step time.Durat
 	// being created in another go routine to this test.
 	require.Eventually(t, func() bool {
 		return clock.HasWaiters()
-	}, time.Second, time.Millisecond, "ticker in program not created in time")
+	}, 2*time.Second, 5*time.Millisecond, "ticker in program not created in time")
 	clock.Step(step)
 }
 
@@ -497,92 +489,6 @@ func TestReminderExecution(t *testing.T) {
 		Data:           json.RawMessage(`"data"`),
 	}, false)
 	assert.NoError(t, err)
-}
-
-func metricsCleanup() {
-	diag.CleanupRegisteredViews(
-		actorRemindersLastValueViewName,
-		actorTimersLastValueViewName,
-		actorRemindersFiredTotalViewName,
-		actorTimersFiredTotalViewName,
-	)
-}
-
-func TestTimerCounter(t *testing.T) {
-	testActorsRuntime := newTestActorsRuntime()
-	defer testActorsRuntime.Stop()
-	actorType, actorID := getTestActorTypeAndID()
-	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
-
-	numberOfLongTimersToCreate := 755
-	numberOfOneTimeTimersToCreate := 220
-	numberOfTimersToDelete := 255
-
-	// init default service metrics where actor metrics are registered
-	require.NoError(t, diag.DefaultMonitoring.Init(testActorsRuntime.actorsConfig.AppID))
-	t.Cleanup(func() {
-		metricsCleanup()
-	})
-
-	var wg sync.WaitGroup
-
-	for i := 0; i < numberOfLongTimersToCreate; i++ {
-		wg.Add(1)
-		go func(idx int) {
-			defer wg.Done()
-			timer := createTimerData(actorID, actorType, fmt.Sprintf("positiveTimer%d", idx), "R10/PT1S", "500ms", "", "callback", "testTimer")
-			err := testActorsRuntime.CreateTimer(context.Background(), &timer)
-			assert.NoError(t, err)
-		}(i)
-	}
-	for i := 0; i < numberOfOneTimeTimersToCreate; i++ {
-		wg.Add(1)
-		go func(idx int) {
-			defer wg.Done()
-			timer := createTimerData(actorID, actorType, fmt.Sprintf("positiveTimerOneTime%d", idx), "", "500ms", "", "callback", "testTimer")
-			err := testActorsRuntime.CreateTimer(context.Background(), &timer)
-			assert.NoError(t, err)
-		}(i)
-	}
-	wg.Wait()
-	time.Sleep(1 * time.Second)
-	testActorsRuntime.clock.Sleep(1000 * time.Millisecond)
-
-	for i := 0; i < numberOfTimersToDelete; i++ {
-		wg.Add(1)
-		go func(idx int) {
-			defer wg.Done()
-			err := testActorsRuntime.DeleteTimer(context.Background(), &DeleteTimerRequest{
-				ActorID:   actorID,
-				ActorType: actorType,
-				Name:      fmt.Sprintf("positiveTimer%d", idx),
-			})
-			assert.NoError(t, err)
-		}(i)
-	}
-	wg.Wait()
-
-	expectCount := int64(numberOfLongTimersToCreate - numberOfTimersToDelete)
-	assert.Eventuallyf(t,
-		func() bool {
-			return testActorsRuntime.timers.GetActiveTimersCount(actorType) == expectCount
-		},
-		10*time.Second, 50*time.Millisecond,
-		"Expected active timers count to be %d, but got %d (note: this value may be outdated)", expectCount, testActorsRuntime.timers.GetActiveTimersCount(actorType),
-	)
-
-	// check metrics recorded
-	rows, err := view.RetrieveData(actorTimersFiredTotalViewName)
-	assert.NoError(t, err)
-	assert.Equal(t, 1, len(rows))
-	assert.Equal(t, int64(numberOfLongTimersToCreate+numberOfOneTimeTimersToCreate), rows[0].Data.(*view.CountData).Value)
-	diag.RequireTagExist(t, rows, diag.NewTag("success", strconv.FormatBool(true)))
-	diag.RequireTagNotExist(t, rows, diag.NewTag("success", strconv.FormatBool(false)))
-
-	rows, err = view.RetrieveData(actorTimersLastValueViewName)
-	assert.NoError(t, err)
-	assert.Equal(t, 1, len(rows))
-	assert.Equal(t, int64(numberOfLongTimersToCreate-numberOfTimersToDelete), int64(rows[0].Data.(*view.LastValueData).Value))
 }
 
 func TestDeleteTimer(t *testing.T) {

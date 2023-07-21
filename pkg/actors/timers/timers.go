@@ -30,6 +30,8 @@ import (
 
 var log = logger.NewLogger("dapr.runtime.actors.timers")
 
+type timersMetricsCollector = func(actorType string, timers int64)
+
 // Implements a timers provider.
 type timers struct {
 	clock                 clock.WithTicker
@@ -37,6 +39,7 @@ type timers struct {
 	activeTimers          *sync.Map
 	activeTimersCount     map[string]*int64
 	activeTimersCountLock sync.RWMutex
+	metricsCollector      timersMetricsCollector
 }
 
 // NewTimersProvider returns a TimerProvider.
@@ -45,11 +48,16 @@ func NewTimersProvider(clock clock.WithTicker) internal.TimersProvider {
 		clock:             clock,
 		activeTimers:      &sync.Map{},
 		activeTimersCount: make(map[string]*int64),
+		metricsCollector:  diag.DefaultMonitoring.ActorTimers,
 	}
 }
 
 func (t *timers) SetExecuteTimerFn(fn internal.ExecuteTimerFn) {
 	t.executeTimerFn = fn
+}
+
+func (r *timers) SetMetricsCollector(fn timersMetricsCollector) {
+	r.metricsCollector = fn
 }
 
 func (t *timers) CreateTimer(ctx context.Context, reminder *internal.Reminder) error {
@@ -171,7 +179,7 @@ func (t *timers) updateActiveTimersCount(actorType string, inc int64) {
 	}
 
 	newVal := atomic.AddInt64(t.activeTimersCount[actorType], inc)
-	diag.DefaultMonitoring.ActorTimers(actorType, newVal)
+	t.metricsCollector(actorType, newVal)
 }
 
 func (t *timers) GetActiveTimersCount(actorKey string) int64 {

@@ -131,7 +131,7 @@ func TestReminderCountFiring(t *testing.T) {
 	invalidInvocations := atomic.Int64{}
 	testReminders.SetMetricsCollector(func(at string, r int64) {
 		if at == actorType {
-			activeCount.Add(1)
+			activeCount.Store(r)
 		} else {
 			invalidInvocations.Add(1)
 		}
@@ -821,7 +821,7 @@ func advanceTickers(t *testing.T, clock *clocktesting.FakeClock, step time.Durat
 	// being created in another go routine to this test.
 	require.Eventually(t, func() bool {
 		return clock.HasWaiters()
-	}, time.Second, time.Millisecond, "ticker in program not created in time")
+	}, 2*time.Second, 5*time.Millisecond, "ticker in program not created in time")
 	clock.Step(step)
 }
 

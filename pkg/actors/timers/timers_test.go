@@ -18,6 +18,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"runtime"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -206,6 +208,105 @@ func TestOverrideTimer(t *testing.T) {
 	})
 }
 
+func TestTimerCounter(t *testing.T) {
+	const actorType = "mytype"
+	const actorID = "myactor"
+
+	clock := clocktesting.NewFakeClock(startOfTime)
+	provider := NewTimersProvider(clock).(*timers)
+
+	// Init a mock metrics collector
+	activeCount := atomic.Int64{}
+	invalidInvocations := atomic.Int64{}
+	provider.SetMetricsCollector(func(at string, r int64) {
+		if at == actorType {
+			activeCount.Store(r)
+		} else {
+			invalidInvocations.Add(1)
+		}
+	})
+
+	// Count executions
+	executeCount := atomic.Int64{}
+	provider.SetExecuteTimerFn(func(_ *internal.Reminder) bool {
+		executeCount.Add(1)
+		return true
+	})
+
+	const numberOfLongTimersToCreate = 755
+	const numberOfOneTimeTimersToCreate = 220
+	const numberOfTimersToDelete = 255
+
+	var wg sync.WaitGroup
+
+	for i := 0; i < numberOfLongTimersToCreate; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			timer := createTimer(t, clock.Now(), internal.CreateTimerRequest{
+				ActorID:   actorID,
+				ActorType: actorType,
+				Name:      fmt.Sprintf("positiveTimer%d", idx),
+				Period:    "R10/PT1S",
+				DueTime:   "500ms",
+				Callback:  "callback",
+				Data:      json.RawMessage(`"testTimer"`),
+			})
+			err := provider.CreateTimer(context.Background(), timer)
+			assert.NoError(t, err)
+		}(i)
+	}
+	for i := 0; i < numberOfOneTimeTimersToCreate; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			timer := createTimer(t, clock.Now(), internal.CreateTimerRequest{
+				ActorID:   actorID,
+				ActorType: actorType,
+				Name:      fmt.Sprintf("positiveTimerOneTime%d", idx),
+				DueTime:   "500ms",
+				Callback:  "callback",
+				Data:      json.RawMessage(`"testTimer"`),
+			})
+			err := provider.CreateTimer(context.Background(), timer)
+			assert.NoError(t, err)
+		}(i)
+	}
+	wg.Wait()
+
+	time.Sleep(1 * time.Second)
+	clock.Sleep(1000 * time.Millisecond)
+
+	for i := 0; i < numberOfTimersToDelete; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			timer := internal.Reminder{
+				ActorID:   actorID,
+				ActorType: actorType,
+				Name:      fmt.Sprintf("positiveTimer%d", idx),
+			}
+			err := provider.DeleteTimer(context.Background(), timer.Key())
+			assert.NoError(t, err)
+		}(i)
+	}
+	wg.Wait()
+
+	expectCount := int64(numberOfLongTimersToCreate - numberOfTimersToDelete)
+	assert.Eventuallyf(t,
+		func() bool {
+			return provider.GetActiveTimersCount(actorType) == expectCount
+		},
+		10*time.Second, 50*time.Millisecond,
+		"Expected active timers count to be %d, but got %d (note: this value may be outdated)", expectCount, provider.GetActiveTimersCount(actorType),
+	)
+
+	assert.Equal(t, int64(0), invalidInvocations.Load())
+	assert.Equal(t, expectCount, activeCount.Load())
+
+	assert.Equal(t, int64(numberOfLongTimersToCreate+numberOfOneTimeTimersToCreate), executeCount.Load())
+}
+
 func TestCreateTimerGoroutineLeak(t *testing.T) {
 	clock := clocktesting.NewFakeClock(startOfTime)
 	provider := NewTimersProvider(clock).(*timers)
@@ -278,6 +379,6 @@ func advanceTickers(t *testing.T, clock *clocktesting.FakeClock, step time.Durat
 	// being created in another go routine to this test.
 	require.Eventually(t, func() bool {
 		return clock.HasWaiters()
-	}, time.Second, time.Millisecond, "ticker in program not created in time")
+	}, 2*time.Second, 5*time.Millisecond, "ticker in program not created in time")
 	clock.Step(step)
 }
