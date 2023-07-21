@@ -4,5 +4,6 @@ FROM golang:1.20
 
 ARG PKG_FILES
 RUN go install github.com/go-delve/delve/cmd/dlv@latest
+RUN mv /go/bin/dlv /
 WORKDIR /
 COPY /$PKG_FILES /

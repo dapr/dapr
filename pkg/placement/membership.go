@@ -15,8 +15,8 @@ package placement
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -40,7 +40,22 @@ const (
 // expected to do, so we must react to changes
 //
 // reference: https://github.com/hashicorp/consul/blob/master/agent/consul/leader.go
-func (p *Service) MonitorLeadership(ctx context.Context) error {
+func (p *Service) MonitorLeadership(parentCtx context.Context) error {
+	if p.closed.Load() {
+		return errors.New("placement is closed")
+	}
+
+	ctx, cancel := context.WithCancel(parentCtx)
+	p.wg.Add(1)
+	go func() {
+		defer p.wg.Done()
+		defer cancel()
+		select {
+		case <-parentCtx.Done():
+		case <-p.closedCh:
+		}
+	}()
+
 	raft, err := p.raftNode.Raft(ctx)
 	if err != nil {
 		return err
@@ -66,7 +81,9 @@ func (p *Service) MonitorLeadership(ctx context.Context) error {
 			if isLeader {
 				oneLeaderLoopRun.Do(func() {
 					loopNotRunning = make(chan struct{})
+					p.wg.Add(1)
 					go func() {
+						defer p.wg.Done()
 						defer close(loopNotRunning)
 						log.Info("Cluster leadership acquired")
 						p.leaderLoop(leaderCtx)
@@ -159,19 +176,16 @@ func (p *Service) cleanupHeartbeats() {
 // membershipChangeWorker is the worker to change the state of membership
 // and update the consistent hashing tables for actors.
 func (p *Service) membershipChangeWorker(ctx context.Context) {
-	faultyHostDetectTimer := time.NewTicker(faultyHostDetectInterval)
+	faultyHostDetectTimer := p.clock.NewTicker(faultyHostDetectInterval)
 	defer faultyHostDetectTimer.Stop()
-	disseminateTimer := time.NewTicker(disseminateTimerInterval)
+	disseminateTimer := p.clock.NewTicker(disseminateTimerInterval)
 	defer disseminateTimer.Stop()
 
 	p.memberUpdateCount.Store(0)
 
-	var wg sync.WaitGroup
-	defer wg.Wait()
-
-	wg.Add(1)
+	p.wg.Add(1)
 	go func() {
-		defer wg.Done()
+		defer p.wg.Done()
 		p.processRaftStateCommand(ctx)
 	}()
 
@@ -180,7 +194,7 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 		case <-ctx.Done():
 			return
 
-		case t := <-disseminateTimer.C:
+		case t := <-disseminateTimer.C():
 			// Earlier stop when leadership is lost.
 			if !p.hasLeadership.Load() {
 				continue
@@ -194,7 +208,7 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 				}
 			}
 
-		case t := <-faultyHostDetectTimer.C:
+		case t := <-faultyHostDetectTimer.C():
 			// Earlier stop when leadership is lost.
 			if !p.hasLeadership.Load() {
 				continue
@@ -217,7 +231,7 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 					// of placement servers.
 					// Before all runtimes connect to the leader of placements, it will record the current
 					// time as heartbeat timestamp.
-					heartbeat, _ := p.lastHeartBeat.LoadOrStore(v.Name, time.Now().UnixNano())
+					heartbeat, _ := p.lastHeartBeat.LoadOrStore(v.Name, p.clock.Now().UnixNano())
 
 					elapsed := t.UnixNano() - heartbeat.(int64)
 					if elapsed < p.faultyHostDetectDuration.Load() {
@@ -242,17 +256,14 @@ func (p *Service) processRaftStateCommand(ctx context.Context) {
 	// of raft apply command.
 	logApplyConcurrency := make(chan struct{}, raftApplyCommandMaxConcurrency)
 
-	processingTicker := time.NewTicker(10 * time.Second)
-
-	var wg sync.WaitGroup
-	defer wg.Wait()
+	processingTicker := p.clock.NewTicker(10 * time.Second)
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
 
-		case <-processingTicker.C:
+		case <-processingTicker.C():
 			log.Debugf("Process Raft state command: nothing happened...")
 			continue
 
@@ -265,9 +276,9 @@ func (p *Service) processRaftStateCommand(ctx context.Context) {
 				// Even if ApplyCommand is failed, both commands will retry
 				// until the state is consistent.
 				logApplyConcurrency <- struct{}{}
-				wg.Add(1)
+				p.wg.Add(1)
 				go func() {
-					defer wg.Done()
+					defer p.wg.Done()
 
 					// We lock dissemination to ensure the updates can complete before the table is disseminated.
 					p.disseminateLock.Lock()
@@ -287,7 +298,7 @@ func (p *Service) processRaftStateCommand(ctx context.Context) {
 							// disseminateNextTime will be updated whenever apply is done, so that
 							// it will keep moving the time to disseminate the table, which will
 							// reduce the unnecessary table dissemination.
-							p.disseminateNextTime.Store(time.Now().Add(disseminateTimeout).UnixNano())
+							p.disseminateNextTime.Store(p.clock.Now().Add(disseminateTimeout).UnixNano())
 						}
 					}
 					<-logApplyConcurrency
@@ -346,21 +357,15 @@ func (p *Service) performTableDissemination(ctx context.Context) error {
 func (p *Service) performTablesUpdate(ctx context.Context, hosts []placementGRPCStream, newTable *v1pb.PlacementTables) error {
 	// TODO: error from disseminationOperation needs to be handle properly.
 	// Otherwise, each Dapr runtime will have inconsistent hashing table.
-	startedAt := time.Now()
+	startedAt := p.clock.Now()
 
-	var (
-		wg   sync.WaitGroup
-		errs []string
-		lock sync.Mutex
-	)
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	wg.Add(len(hosts))
+
+	errCh := make(chan error)
 
 	for _, host := range hosts {
 		go func(h placementGRPCStream) {
-			defer wg.Done()
-
 			for _, s := range []struct {
 				op    string
 				table *v1pb.PlacementTables
@@ -369,21 +374,20 @@ func (p *Service) performTablesUpdate(ctx context.Context, hosts []placementGRPC
 				{"update", newTable},
 				{"unlock", nil},
 			} {
-				if err := p.disseminateOperation(ctx, []placementGRPCStream{h}, s.op, s.table); err != nil {
-					lock.Lock()
-					errs = append(errs, err.Error())
-					lock.Unlock()
-				}
+				errCh <- p.disseminateOperation(ctx, []placementGRPCStream{h}, s.op, s.table)
 			}
 		}(host)
 	}
-	wg.Wait()
 
-	if len(errs) > 0 {
-		return fmt.Errorf("dissemination failed: %s", strings.Join(errs, ", "))
+	var err error
+	for i := 0; i < len(hosts)*3; i++ {
+		err = errors.Join(err, <-errCh)
+	}
+	if err != nil {
+		return fmt.Errorf("dissemination failed: %s", err)
 	}
 
-	log.Debugf("performTablesUpdate succeed %v", time.Since(startedAt))
+	log.Debugf("performTablesUpdate succeed %v", p.clock.Since(startedAt))
 	return nil
 }
 

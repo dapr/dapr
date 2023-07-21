@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	v1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -24,8 +25,10 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
+	"github.com/dapr/dapr/pkg/config/protocol"
 	"github.com/dapr/dapr/pkg/injector/annotations"
 	"github.com/dapr/dapr/pkg/injector/components"
+	"github.com/dapr/dapr/pkg/injector/patcher"
 	"github.com/dapr/dapr/pkg/injector/sidecar"
 	"github.com/dapr/dapr/pkg/validation"
 )
@@ -35,9 +38,9 @@ const (
 	defaultMtlsEnabled = true
 )
 
-func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
+func (i *injector) getPodPatchOperations(ctx context.Context, ar *v1.AdmissionReview,
 	namespace, image, imagePullPolicy string, kubeClient kubernetes.Interface, daprClient scheme.Interface,
-) (patchOps []sidecar.PatchOperation, err error) {
+) (patchOps []patcher.PatchOperation, err error) {
 	req := ar.Request
 	var pod corev1.Pod
 	err = json.Unmarshal(req.Object.Raw, &pod)
@@ -56,12 +59,13 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 		req.UserInfo,
 	)
 
-	an := sidecar.Annotations(pod.Annotations)
+	an := annotations.New(pod.Annotations)
 	if !an.GetBoolOrDefault(annotations.KeyEnabled, false) || sidecar.PodContainsSidecarContainer(&pod) {
 		return nil, nil
 	}
 
 	appID := sidecar.GetAppID(pod.ObjectMeta)
+	metricsEnabled := sidecar.GetMetricsEnabled(pod.ObjectMeta)
 	err = validation.ValidateKubernetesAppID(appID)
 	if err != nil {
 		return nil, err
@@ -72,7 +76,7 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 	sentryAddress := sidecar.ServiceAddress(sidecar.ServiceSentry, namespace, i.config.KubeClusterDomain)
 	apiSvcAddress := sidecar.ServiceAddress(sidecar.ServiceAPI, namespace, i.config.KubeClusterDomain)
 
-	trustAnchors, certChain, certKey := sidecar.GetTrustAnchorsAndCertChain(context.TODO(), kubeClient, namespace)
+	trustAnchors, certChain, certKey := sidecar.GetTrustAnchorsAndCertChain(ctx, kubeClient, namespace)
 
 	// Get all volume mounts
 	volumeMounts := sidecar.GetVolumeMounts(pod)
@@ -87,8 +91,11 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 	})
 
 	// Pluggable components
-	appContainers, componentContainers := components.SplitContainers(pod)
-	componentPatchOps, componentsSocketVolumeMount := components.PatchOps(componentContainers, &pod)
+	appContainers, componentContainers, injectedComponentContainers, err := i.splitContainers(pod)
+	if err != nil {
+		return nil, err
+	}
+	componentPatchOps, componentsSocketVolumeMount := components.PatchOps(componentContainers, injectedComponentContainers, &pod)
 
 	// Projected volume with the token
 	tokenVolume := sidecar.GetTokenVolume()
@@ -112,6 +119,7 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 		TrustAnchors:                 trustAnchors,
 		VolumeMounts:                 volumeMounts,
 		ComponentsSocketsVolumeMount: componentsSocketVolumeMount,
+		SkipPlacement:                i.config.GetSkipPlacement(),
 		RunAsNonRoot:                 i.config.GetRunAsNonRoot(),
 		ReadOnlyRootFilesystem:       i.config.GetReadOnlyRootFilesystem(),
 		SidecarDropALLCapabilities:   i.config.GetDropCapabilities(),
@@ -121,30 +129,33 @@ func (i *injector) getPodPatchOperations(ar *v1.AdmissionReview,
 	}
 
 	// Create the list of patch operations
-	patchOps = []sidecar.PatchOperation{}
+	patchOps = []patcher.PatchOperation{}
 	if len(pod.Spec.Containers) == 0 { // set to empty to support add operations individually
-		patchOps = append(patchOps, sidecar.PatchOperation{
+		patchOps = append(patchOps, patcher.PatchOperation{
 			Op:    "add",
-			Path:  sidecar.PatchPathContainers,
+			Path:  patcher.PatchPathContainers,
 			Value: []corev1.Container{},
 		})
 	}
 
 	patchOps = append(patchOps,
-		sidecar.PatchOperation{
+		patcher.PatchOperation{
 			Op:    "add",
-			Path:  sidecar.PatchPathContainers + "/-",
+			Path:  patcher.PatchPathContainers + "/-",
 			Value: sidecarContainer,
 		},
-		sidecar.AddDaprSideCarInjectedLabel(pod.Labels))
+		sidecar.AddDaprSideCarInjectedLabel(pod.Labels),
+		sidecar.AddDaprSideCarAppIDLabel(appID, pod.Labels),
+		sidecar.AddDaprSideCarMetricsEnabledLabel(metricsEnabled, pod.Labels))
+
 	patchOps = append(patchOps,
-		sidecar.AddDaprEnvVarsToContainers(appContainers)...)
+		sidecar.AddDaprEnvVarsToContainers(appContainers, getAppProtocol(an))...)
 	patchOps = append(patchOps,
 		sidecar.AddSocketVolumeMountToContainers(appContainers, socketVolumeMount)...)
 	volumePatchOps := sidecar.GetVolumesPatchOperations(
 		pod.Spec.Volumes,
 		[]corev1.Volume{tokenVolume},
-		sidecar.PatchPathVolumes,
+		patcher.PatchPathVolumes,
 	)
 	patchOps = append(patchOps, volumePatchOps...)
 	patchOps = append(patchOps, componentPatchOps...)
@@ -161,9 +172,39 @@ func mTLSEnabled(daprClient scheme.Interface) bool {
 
 	for _, c := range resp.Items {
 		if c.GetName() == defaultConfig {
-			return c.Spec.MTLSSpec.Enabled
+			return c.Spec.MTLSSpec.GetEnabled()
 		}
 	}
 	log.Infof("Dapr system configuration (%s) is not found, use default value %t for mTLSEnabled", defaultConfig, defaultMtlsEnabled)
 	return defaultMtlsEnabled
+}
+
+func getAppProtocol(an annotations.Map) string {
+	appProtocol := strings.ToLower(an.GetString(annotations.KeyAppProtocol))
+	appSSL := an.GetBoolOrDefault(annotations.KeyAppSSL, annotations.DefaultAppSSL)
+
+	switch appProtocol {
+	case string(protocol.GRPCSProtocol), string(protocol.HTTPSProtocol), string(protocol.H2CProtocol):
+		return appProtocol
+	case string(protocol.HTTPProtocol):
+		// For backwards compatibility, when protocol is HTTP and --app-ssl is set, use "https"
+		// TODO: Remove in a future Dapr version
+		if appSSL {
+			return string(protocol.HTTPSProtocol)
+		} else {
+			return string(protocol.HTTPProtocol)
+		}
+	case string(protocol.GRPCProtocol):
+		// For backwards compatibility, when protocol is GRPC and --app-ssl is set, use "grpcs"
+		// TODO: Remove in a future Dapr version
+		if appSSL {
+			return string(protocol.GRPCSProtocol)
+		} else {
+			return string(protocol.GRPCProtocol)
+		}
+	case "":
+		return string(protocol.HTTPProtocol)
+	default:
+		return ""
+	}
 }

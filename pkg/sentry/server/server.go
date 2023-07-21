@@ -29,8 +29,7 @@ var log = logger.NewLogger("dapr.sentry.server")
 
 // CAServer is an interface for the Certificate Authority server.
 type CAServer interface {
-	Run(port int, trustBundle ca.TrustRootBundler) error
-	Shutdown()
+	Run(ctx context.Context, port int, trustBundle ca.TrustRootBundler) error
 }
 
 type server struct {
@@ -50,7 +49,7 @@ func NewCAServer(ca ca.CertificateAuthority, validator identity.Validator) CASer
 
 // Run starts a secured gRPC server for the Sentry Certificate Authority.
 // It enforces client side cert validation using the trust root cert.
-func (s *server) Run(port int, trustBundler ca.TrustRootBundler) error {
+func (s *server) Run(ctx context.Context, port int, trustBundler ca.TrustRootBundler) error {
 	addr := fmt.Sprintf(":%d", port)
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -61,16 +60,25 @@ func (s *server) Run(port int, trustBundler ca.TrustRootBundler) error {
 	s.srv = grpc.NewServer(tlsOpt)
 	sentryv1pb.RegisterCAServer(s.srv, s)
 
-	if err := s.srv.Serve(lis); err != nil {
-		return fmt.Errorf("grpc serve error: %w", err)
-	}
-	return nil
+	serveErr := make(chan error, 1)
+	log.Infof("sentry server is listening on %s", lis.Addr())
+	go func() {
+		if err := s.srv.Serve(lis); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
+			serveErr <- fmt.Errorf("grpc serve error: %w", err)
+			return
+		}
+		serveErr <- nil
+	}()
+
+	<-ctx.Done()
+	log.Info("sentry server is shutting down")
+	s.srv.GracefulStop()
+	return <-serveErr
 }
 
 func (s *server) tlsServerOption(trustBundler ca.TrustRootBundler) grpc.ServerOption {
 	cp := trustBundler.GetTrustAnchors()
 
-	//nolint:gosec
 	config := &tls.Config{
 		ClientCAs: cp,
 		// Require cert verification
@@ -87,6 +95,7 @@ func (s *server) tlsServerOption(trustBundler ca.TrustRootBundler) grpc.ServerOp
 			}
 			return s.certificate, nil
 		},
+		MinVersion: tls.VersionTLS12,
 	}
 	return grpc.Creds(credentials.NewTLS(config))
 }
@@ -194,12 +203,6 @@ func (s *server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 	monitoring.CertSignSucceed()
 
 	return resp, nil
-}
-
-func (s *server) Shutdown() {
-	if s.srv != nil {
-		s.srv.GracefulStop()
-	}
 }
 
 func needsRefresh(cert *tls.Certificate, expiryBuffer time.Duration) bool {

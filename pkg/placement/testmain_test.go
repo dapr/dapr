@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	clocktesting "k8s.io/utils/clock/testing"
+
 	"github.com/dapr/dapr/pkg/placement/raft"
 	daprtesting "github.com/dapr/dapr/pkg/testing"
 )
@@ -21,12 +23,21 @@ func TestMain(m *testing.M) {
 		log.Fatalf("failed to get test server port: %v", err)
 		return
 	}
-	testRaftServer = raft.New("testnode", true, []raft.PeerInfo{
-		{
-			ID:      "testnode",
-			Address: fmt.Sprintf("127.0.0.1:%d", ports[0]),
+
+	clock := clocktesting.NewFakeClock(time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC))
+
+	testRaftServer = raft.New(raft.Options{
+		ID:    "testnode",
+		InMem: true,
+		Peers: []raft.PeerInfo{
+			{
+				ID:      "testnode",
+				Address: fmt.Sprintf("127.0.0.1:%d", ports[0]),
+			},
 		},
-	}, "")
+		LogStorePath: "",
+		Clock:        clock,
+	})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	serverStoped := make(chan struct{})
@@ -38,11 +49,20 @@ func TestMain(m *testing.M) {
 	}()
 
 	// Wait until test raft node become a leader.
-	for range time.Tick(50 * time.Millisecond) {
+	for range time.Tick(time.Microsecond) {
+		clock.Step(time.Second * 2)
 		if testRaftServer.IsLeader() {
 			break
 		}
 	}
+
+	// It is painful that we have to include a `time.Sleep` here, but due to the
+	// non-deterministic behaviour of the raft library we are using we will fail
+	// later fail on slower test runner machines. A clock timer wait means we
+	// have a _better_ chance of being in the right spot in the state machine and
+	// the network has died down. Ideally we should move to a different raft
+	// library that is more deterministic and reliable for our use case.
+	time.Sleep(time.Second * 3)
 
 	retVal := m.Run()
 

@@ -17,7 +17,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -25,6 +24,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
+	"github.com/dapr/dapr/pkg/grpc/universalapi"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -32,15 +32,15 @@ import (
 
 func TestCallLocal(t *testing.T) {
 	t.Run("appchannel is not ready", func(t *testing.T) {
-		port, _ := freeport.GetFreePort()
-
 		fakeAPI := &api{
-			id:         "fakeAPI",
+			UniversalAPI: &universalapi.UniversalAPI{
+				AppID: "fakeAPI",
+			},
 			appChannel: nil,
 		}
-		server := startInternalServer(port, fakeAPI)
+		server, lis := startInternalServer(fakeAPI)
 		defer server.Stop()
-		clientConn := createTestClient(port)
+		clientConn := createTestClient(lis)
 		defer clientConn.Close()
 
 		client := internalv1pb.NewServiceInvocationClient(clientConn)
@@ -52,16 +52,16 @@ func TestCallLocal(t *testing.T) {
 	})
 
 	t.Run("parsing InternalInvokeRequest is failed", func(t *testing.T) {
-		port, _ := freeport.GetFreePort()
-
 		mockAppChannel := new(channelt.MockAppChannel)
 		fakeAPI := &api{
-			id:         "fakeAPI",
+			UniversalAPI: &universalapi.UniversalAPI{
+				AppID: "fakeAPI",
+			},
 			appChannel: mockAppChannel,
 		}
-		server := startInternalServer(port, fakeAPI)
+		server, lis := startInternalServer(fakeAPI)
 		defer server.Stop()
-		clientConn := createTestClient(port)
+		clientConn := createTestClient(lis)
 		defer clientConn.Close()
 
 		client := internalv1pb.NewServiceInvocationClient(clientConn)
@@ -74,20 +74,20 @@ func TestCallLocal(t *testing.T) {
 	})
 
 	t.Run("invokemethod returns error", func(t *testing.T) {
-		port, _ := freeport.GetFreePort()
-
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.On("InvokeMethod",
 			mock.MatchedBy(matchContextInterface),
 			mock.AnythingOfType("*v1.InvokeMethodRequest"),
 		).Return(nil, status.Error(codes.Unknown, "unknown error"))
 		fakeAPI := &api{
-			id:         "fakeAPI",
+			UniversalAPI: &universalapi.UniversalAPI{
+				AppID: "fakeAPI",
+			},
 			appChannel: mockAppChannel,
 		}
-		server := startInternalServer(port, fakeAPI)
+		server, lis := startInternalServer(fakeAPI)
 		defer server.Stop()
-		clientConn := createTestClient(port)
+		clientConn := createTestClient(lis)
 		defer clientConn.Close()
 
 		client := internalv1pb.NewServiceInvocationClient(clientConn)
@@ -101,15 +101,15 @@ func TestCallLocal(t *testing.T) {
 
 func TestCallLocalStream(t *testing.T) {
 	t.Run("appchannel is not ready", func(t *testing.T) {
-		port, _ := freeport.GetFreePort()
-
 		fakeAPI := &api{
-			id:         "fakeAPI",
+			UniversalAPI: &universalapi.UniversalAPI{
+				AppID: "fakeAPI",
+			},
 			appChannel: nil,
 		}
-		server := startInternalServer(port, fakeAPI)
+		server, lis := startInternalServer(fakeAPI)
 		defer server.Stop()
-		clientConn := createTestClient(port)
+		clientConn := createTestClient(lis)
 		defer clientConn.Close()
 
 		client := internalv1pb.NewServiceInvocationClient(clientConn)
@@ -130,16 +130,16 @@ func TestCallLocalStream(t *testing.T) {
 	})
 
 	t.Run("parsing InternalInvokeRequest is failed", func(t *testing.T) {
-		port, _ := freeport.GetFreePort()
-
 		mockAppChannel := new(channelt.MockAppChannel)
 		fakeAPI := &api{
-			id:         "fakeAPI",
+			UniversalAPI: &universalapi.UniversalAPI{
+				AppID: "fakeAPI",
+			},
 			appChannel: mockAppChannel,
 		}
-		server := startInternalServer(port, fakeAPI)
+		server, lis := startInternalServer(fakeAPI)
 		defer server.Stop()
-		clientConn := createTestClient(port)
+		clientConn := createTestClient(lis)
 		defer clientConn.Close()
 
 		client := internalv1pb.NewServiceInvocationClient(clientConn)
@@ -160,8 +160,6 @@ func TestCallLocalStream(t *testing.T) {
 	})
 
 	t.Run("invokemethod returns error", func(t *testing.T) {
-		port, _ := freeport.GetFreePort()
-
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.
 			On(
@@ -171,12 +169,14 @@ func TestCallLocalStream(t *testing.T) {
 			).
 			Return(nil, status.Error(codes.Unknown, "unknown error"))
 		fakeAPI := &api{
-			id:         "fakeAPI",
+			UniversalAPI: &universalapi.UniversalAPI{
+				AppID: "fakeAPI",
+			},
 			appChannel: mockAppChannel,
 		}
-		server := startInternalServer(port, fakeAPI)
+		server, lis := startInternalServer(fakeAPI)
 		defer server.Stop()
-		clientConn := createTestClient(port)
+		clientConn := createTestClient(lis)
 		defer clientConn.Close()
 
 		client := internalv1pb.NewServiceInvocationClient(clientConn)
@@ -208,12 +208,10 @@ func TestCallLocalStream(t *testing.T) {
 }
 
 func TestCallRemoteAppWithTracing(t *testing.T) {
-	port, _ := freeport.GetFreePort()
-
-	server, _ := startTestServerWithTracing(port)
+	server, _, lis := startTestServerWithTracing()
 	defer server.Stop()
 
-	clientConn := createTestClient(port)
+	clientConn := createTestClient(lis)
 	defer clientConn.Close()
 
 	client := internalv1pb.NewServiceInvocationClient(clientConn)
@@ -226,12 +224,10 @@ func TestCallRemoteAppWithTracing(t *testing.T) {
 }
 
 func TestCallActorWithTracing(t *testing.T) {
-	port, _ := freeport.GetFreePort()
-
-	server, _ := startTestServerWithTracing(port)
+	server, _, lis := startTestServerWithTracing()
 	defer server.Stop()
 
-	clientConn := createTestClient(port)
+	clientConn := createTestClient(lis)
 	defer clientConn.Close()
 
 	client := internalv1pb.NewServiceInvocationClient(clientConn)

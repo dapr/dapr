@@ -15,8 +15,10 @@ package v1
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"io"
+	"net/http"
 	"strings"
 
 	"github.com/valyala/fasthttp"
@@ -37,7 +39,8 @@ const (
 type InvokeMethodRequest struct {
 	replayableRequest
 
-	r *internalv1pb.InternalInvokeRequest
+	r          *internalv1pb.InternalInvokeRequest
+	dataObject any
 }
 
 // NewInvokeMethodRequest creates InvokeMethodRequest object for method.
@@ -80,22 +83,25 @@ func (imr *InvokeMethodRequest) WithActor(actorType, actorID string) *InvokeMeth
 
 // WithMetadata sets metadata.
 func (imr *InvokeMethodRequest) WithMetadata(md map[string][]string) *InvokeMethodRequest {
-	imr.r.Metadata = MetadataToInternalMetadata(md)
+	imr.r.Metadata = metadataToInternalMetadata(md)
+	return imr
+}
+
+// WithHTTPHeaders sets HTTP request headers.
+func (imr *InvokeMethodRequest) WithHTTPHeaders(header http.Header) *InvokeMethodRequest {
+	imr.r.Metadata = httpHeadersToInternalMetadata(header)
 	return imr
 }
 
 // WithFastHTTPHeaders sets fasthttp request headers.
 func (imr *InvokeMethodRequest) WithFastHTTPHeaders(header *fasthttp.RequestHeader) *InvokeMethodRequest {
-	md := map[string][]string{}
-	header.VisitAll(func(key []byte, value []byte) {
-		md[string(key)] = []string{string(value)}
-	})
-	imr.r.Metadata = MetadataToInternalMetadata(md)
+	imr.r.Metadata = fasthttpHeadersToInternalMetadata(header)
 	return imr
 }
 
 // WithRawData sets message data from a readable stream.
 func (imr *InvokeMethodRequest) WithRawData(data io.Reader) *InvokeMethodRequest {
+	imr.dataObject = nil
 	imr.ResetMessageData()
 	imr.replayableRequest.WithRawData(data)
 	return imr
@@ -109,6 +115,14 @@ func (imr *InvokeMethodRequest) WithRawDataBytes(data []byte) *InvokeMethodReque
 // WithRawDataString sets message data from a string.
 func (imr *InvokeMethodRequest) WithRawDataString(data string) *InvokeMethodRequest {
 	return imr.WithRawData(strings.NewReader(data))
+}
+
+// WithDataObject sets message from an object which will be serialized as JSON
+func (imr *InvokeMethodRequest) WithDataObject(data any) *InvokeMethodRequest {
+	enc, _ := json.Marshal(data)
+	res := imr.WithRawDataBytes(enc)
+	res.dataObject = data
+	return res
 }
 
 // WithContentType sets the content type.
@@ -284,23 +298,22 @@ func (imr *InvokeMethodRequest) RawDataFull() ([]byte, error) {
 	return io.ReadAll(r)
 }
 
-// Adds a new header to the existing set.
-func (imr *InvokeMethodRequest) AddHeaders(header *fasthttp.RequestHeader) {
-	md := map[string][]string{}
-	header.VisitAll(func(key []byte, value []byte) {
-		md[string(key)] = []string{string(value)}
-	})
+// GetDataObject returns the data object stored in the object
+func (imr *InvokeMethodRequest) GetDataObject() any {
+	return imr.dataObject
+}
 
-	internalMd := MetadataToInternalMetadata(md)
-
+// AddMetadata adds new metadata options to the existing set.
+func (imr *InvokeMethodRequest) AddMetadata(md map[string][]string) {
 	if imr.r.Metadata == nil {
-		imr.r.Metadata = internalMd
-	} else {
-		for key, val := range internalMd {
-			// We're only adding new values, not overwriting existing
-			if _, ok := imr.r.Metadata[key]; !ok {
-				imr.r.Metadata[key] = val
-			}
+		imr.WithMetadata(md)
+		return
+	}
+
+	for key, val := range metadataToInternalMetadata(md) {
+		// We're only adding new values, not overwriting existing
+		if _, ok := imr.r.Metadata[key]; !ok {
+			imr.r.Metadata[key] = val
 		}
 	}
 }

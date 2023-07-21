@@ -47,14 +47,13 @@ func (storeMock *TransactionalStoreMock) Close() error {
 
 func (f *FailingStatestore) Multi(ctx context.Context, request *state.TransactionalStateRequest) error {
 	for _, op := range request.Operations {
-		if op.Operation == state.Delete {
-			req := op.Request.(state.DeleteRequest)
+		switch req := op.(type) {
+		case state.DeleteRequest:
 			err := f.Failure.PerformFailure(req.Key)
 			if err != nil {
 				return err
 			}
-		} else if op.Operation == state.Upsert {
-			req := op.Request.(state.SetRequest)
+		case state.SetRequest:
 			err := f.Failure.PerformFailure(req.Key)
 			if err != nil {
 				return err

@@ -270,6 +270,10 @@ func (m *InMemoryPubsub) Features() []pubsub.Feature {
 	return nil
 }
 
+func (m *InMemoryPubsub) GetComponentMetadata() map[string]string {
+	return map[string]string{}
+}
+
 func (m *InMemoryPubsub) SetHandler(h func(topic string, msg *pubsub.NewMessage)) {
 	m.handler = h
 }

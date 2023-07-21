@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -626,6 +627,11 @@ func TestDefaultPoliciesAreUsedIfNoTargetPolicyExists(t *testing.T) {
 						MaxRequests: 1,
 						Timeout:     "60s",
 					},
+					fmt.Sprintf(string(DefaultCircuitBreakerTemplate), "App"): {
+						Trip:        "consecutiveFailures > 15",
+						MaxRequests: 1,
+						Timeout:     "60s",
+					},
 				},
 			},
 			Targets: resiliencyV1alpha.Targets{
@@ -652,26 +658,14 @@ func TestDefaultPoliciesAreUsedIfNoTargetPolicyExists(t *testing.T) {
 	assert.Equal(t, int64(6), count.Load())
 
 	// Generic App
-	policy = NewRunner[any](context.Background(),
-		r.EndpointPolicy("noMatchingTarget", "localhost"),
-	)
-	count.Store(0)
-	policy(func(ctx context.Context) (any, error) {
-		count.Add(1)
-		return nil, errors.New("Forced failure")
-	})
-	assert.Equal(t, int64(11), count.Load())
+	concurrentPolicyExec(t, func(idx int) *PolicyDefinition {
+		return r.EndpointPolicy(fmt.Sprintf("noMatchingTarget-%d", idx), "localhost")
+	}, 11) // App has a CB that trips after 15 failure, so we don't trip it but still do all the 10 default retries
 
-	// Not defined
-	policy = NewRunner[any](context.Background(),
-		r.ActorPreLockPolicy("actorType", "actorID"),
-	)
-	count.Store(0)
-	policy(func(ctx context.Context) (any, error) {
-		count.Add(1)
-		return nil, errors.New("Forced failure")
-	})
-	assert.Equal(t, int64(4), count.Load())
+	// execute concurrent to get coverage
+	concurrentPolicyExec(t, func(idx int) *PolicyDefinition {
+		return r.ActorPreLockPolicy(fmt.Sprintf("actorType-%d", idx), "actorID")
+	}, 2) // actorType is not a known target, so we get 1 retry + original call as default circuit breaker trips (consecutiveFailures > 1)
 
 	// One last one for ActorPostLock which just includes timeouts.
 	policy = NewRunner[any](context.Background(),
@@ -687,4 +681,25 @@ func TestDefaultPoliciesAreUsedIfNoTargetPolicyExists(t *testing.T) {
 	assert.Less(t, time.Since(start), time.Second*5)
 	assert.Equal(t, int64(1), count.Load())           // Post lock policies don't have a retry, only pre lock do.
 	assert.NotEqual(t, "Forced failure", err.Error()) // We should've timed out instead.
+}
+
+func concurrentPolicyExec(t *testing.T, policyDefFn func(idx int) *PolicyDefinition, wantCount int64) {
+	t.Helper()
+	wg := sync.WaitGroup{}
+	wg.Add(10)
+	for i := 0; i < 10; i++ {
+		go func(i int) {
+			defer wg.Done()
+			// Not defined
+			policy := NewRunner[any](context.Background(), policyDefFn(i))
+			count := atomic.Int64{}
+			count.Store(0)
+			policy(func(ctx context.Context) (any, error) {
+				count.Add(1)
+				return nil, errors.New("forced failure")
+			})
+			assert.Equal(t, wantCount, count.Load())
+		}(i)
+	}
+	wg.Wait()
 }

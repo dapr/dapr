@@ -66,19 +66,21 @@ func RegisterService(server *grpc.Server, director StreamDirector, getPolicyFn g
 // backends. It should be used as a `grpc.UnknownServiceHandler`.
 //
 // This can *only* be used if the `server` also uses grpcproxy.CodecForServer() ServerOption.
-func TransparentHandler(director StreamDirector, getPolicyFn getPolicyFn, connFactory DirectorConnectionFactory) grpc.StreamHandler {
+func TransparentHandler(director StreamDirector, getPolicyFn getPolicyFn, connFactory DirectorConnectionFactory, maxMessageBodySizeMB int) grpc.StreamHandler {
 	streamer := &handler{
-		director:    director,
-		getPolicyFn: getPolicyFn,
-		connFactory: connFactory,
+		director:           director,
+		getPolicyFn:        getPolicyFn,
+		connFactory:        connFactory,
+		maxRequestBodySize: maxMessageBodySizeMB,
 	}
 	return streamer.handler
 }
 
 type handler struct {
-	director    StreamDirector
-	getPolicyFn getPolicyFn
-	connFactory DirectorConnectionFactory
+	director           StreamDirector
+	getPolicyFn        getPolicyFn
+	connFactory        DirectorConnectionFactory
+	maxRequestBodySize int
 }
 
 // handler is where the real magic of proxying happens.
@@ -120,7 +122,17 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 		replayBuffer = make(replayBufferCh, 1)
 	}
 
-	clientStreamOptSubtype := grpc.CallContentSubtype((&codec.Proxy{}).Name())
+	clientStreamOptSubtype := make([]grpc.CallOption, 0, 4)
+	clientStreamOptSubtype = append(clientStreamOptSubtype, grpc.CallContentSubtype((&codec.Proxy{}).Name()))
+
+	if s.maxRequestBodySize > 0 {
+		clientStreamOptSubtype = append(clientStreamOptSubtype,
+			grpc.MaxCallRecvMsgSize(s.maxRequestBodySize<<20),
+			grpc.MaxCallSendMsgSize(s.maxRequestBodySize<<20),
+			grpc.MaxRetryRPCBufferSize(s.maxRequestBodySize<<20),
+		)
+	}
+
 	headersSent := &atomic.Bool{}
 	counter := atomic.Int32{}
 
@@ -156,7 +168,7 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 			clientStreamDescForProxying,
 			backendConn,
 			fullMethodName,
-			clientStreamOptSubtype,
+			clientStreamOptSubtype...,
 		)
 		if err != nil {
 			code := status.Code(err)
@@ -181,7 +193,7 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 					return nil, err
 				}
 
-				clientStream, err = grpc.NewClientStream(clientCtx, clientStreamDescForProxying, backendConn, fullMethodName, clientStreamOptSubtype)
+				clientStream, err = grpc.NewClientStream(clientCtx, clientStreamDescForProxying, backendConn, fullMethodName, clientStreamOptSubtype...)
 				if err != nil {
 					teardown(false)
 					clientCancel()

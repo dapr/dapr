@@ -147,7 +147,7 @@ func epoch() int {
 }
 
 // appRouter initializes restful api router
-func appRouter() *mux.Router {
+func appRouter() http.Handler {
 	router := mux.NewRouter().StrictSlash(true)
 
 	// Log requests and their processing time
@@ -161,7 +161,7 @@ func appRouter() *mux.Router {
 	return router
 }
 
-func securedAppRouter() *mux.Router {
+func securedAppRouter() http.Handler {
 	router := mux.NewRouter().StrictSlash(true)
 
 	// Log requests and their processing time

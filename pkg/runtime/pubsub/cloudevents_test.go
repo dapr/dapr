@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -33,7 +34,8 @@ func TestNewCloudEvent(t *testing.T) {
 			Type:            "custom-type",
 		}, map[string]string{})
 		assert.NoError(t, err)
-		assert.NotEmpty(t, ce["id"]) // validates that the ID is generated
+		assert.NotEmpty(t, ce["id"])                 // validates that the ID is generated
+		assert.True(t, validUUID(ce["id"].(string))) // validates that the ID is a UUID
 		assert.Equal(t, "a", ce["source"].(string))
 		assert.Equal(t, "b", ce["topic"].(string))
 		assert.Equal(t, "hello", ce["data"].(string))
@@ -112,10 +114,16 @@ func TestNewCloudEvent(t *testing.T) {
 			Pubsub:          "pubsub",
 		}, map[string]string{})
 		assert.NoError(t, err)
+		assert.Equal(t, "event", ce["id"].(string))
 		assert.Equal(t, "world", ce["data"].(string))
 		assert.Equal(t, "text/plain", ce["datacontenttype"].(string))
 		assert.Equal(t, "topic1", ce["topic"].(string))
 		assert.Equal(t, "trace1", ce["traceid"].(string))
 		assert.Equal(t, "pubsub", ce["pubsubname"].(string))
 	})
+}
+
+func validUUID(u string) bool {
+	_, err := uuid.Parse(u)
+	return err == nil
 }

@@ -1,3 +1,3 @@
-ARG WINDOWS_VERSION=1809
+ARG WINDOWS_VERSION=ltsc2022
 # We are adding a Dockerfile because the building tools expect one, but we do not test this app on Windows
 FROM mcr.microsoft.com/windows/nanoserver:$WINDOWS_VERSION

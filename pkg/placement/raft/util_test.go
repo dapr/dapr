@@ -15,7 +15,6 @@ package raft
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"testing"
 
@@ -43,7 +42,6 @@ func TestEnsureDir(t *testing.T) {
 	t.Run("fails to create dir", func(t *testing.T) {
 		file, err := os.Create(testDir)
 		assert.NoError(t, err)
-		log.Printf("%v", file)
 		file.Close()
 		err = ensureDir(testDir)
 		assert.Error(t, err)

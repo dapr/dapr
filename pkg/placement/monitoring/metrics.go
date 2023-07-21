@@ -15,6 +15,7 @@ package monitoring
 
 import (
 	"context"
+	"time"
 
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
@@ -33,6 +34,17 @@ var (
 		"The total number of actor runtimes reported to placement service.",
 		stats.UnitDimensionless)
 
+	actorHeartbeatTimestamp = stats.Int64(
+		"placement/actor_heartbeat_timestamp",
+		"The actor's heartbeat timestamp (in seconds) was last reported to the placement service.",
+		stats.UnitDimensionless)
+
+	// Metrics tags
+	appIDKey     = tag.MustNewKey("app_id")
+	actorTypeKey = tag.MustNewKey("actor_type")
+	hostNameKey  = tag.MustNewKey("host_name")
+	podNameKey   = tag.MustNewKey("pod_name")
+
 	noKeys = []tag.Key{}
 )
 
@@ -46,11 +58,20 @@ func RecordActorRuntimesCount(count int) {
 	stats.Record(context.Background(), actorRuntimesTotal.M(int64(count)))
 }
 
+// RecordActorHeartbeat records the actor heartbeat, in seconds since epoch, with actor type, host and pod name.
+func RecordActorHeartbeat(appID, actorType, host, pod string, heartbeatTime time.Time) {
+	stats.RecordWithTags(
+		context.Background(),
+		diagUtils.WithTags(actorHeartbeatTimestamp.Name(), appIDKey, appID, actorTypeKey, actorType, hostNameKey, host, podNameKey, pod),
+		actorHeartbeatTimestamp.M(heartbeatTime.Unix()))
+}
+
 // InitMetrics initialize the placement service metrics.
 func InitMetrics() error {
 	err := view.Register(
 		diagUtils.NewMeasureView(runtimesTotal, noKeys, view.LastValue()),
 		diagUtils.NewMeasureView(actorRuntimesTotal, noKeys, view.LastValue()),
+		diagUtils.NewMeasureView(actorHeartbeatTimestamp, []tag.Key{appIDKey, actorTypeKey, hostNameKey, podNameKey}, view.LastValue()),
 	)
 
 	return err

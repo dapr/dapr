@@ -11,7 +11,6 @@ This chart installs Dapr via "child-charts":
 * Dapr Sidecar injector
 * Dapr Sentry
 * Dapr Placement
-* Dapr Dashboard
 
 ## Prerequisites
 
@@ -81,7 +80,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `global.imagePullPolicy`                  | Global Control plane service imagePullPolicy                            | `IfNotPresent`          |
 | `global.imagePullSecrets`                 | Control plane service images pull secrets for docker registry           | `""`                    |
 | `global.ha.enabled`                       | Highly Availability mode enabled for control plane                      | `false`                 |
-| `global.ha.replicaCount`                  | Number of replicas of control plane services in Highly Availability mode  | `3`                   |
+| `global.ha.replicaCount`                  | Number of replicas of control plane services in Highly Availability mode<br>Note that in HA mode, Dapr Placement has 3 replicas and that cannot be configured. | `3`                   |
 | `global.ha.disruption.minimumAvailable`   | Minimum amount of available instances for control plane. This can either be effective count or %. | ``             |
 | `global.ha.disruption.maximumUnavailable` | Maximum amount of instances that are allowed to be unavailable for control plane. This can either be effective count or %. | `25%`             |
 | `global.prometheus.enabled`               | Prometheus metrics enablement for control plane services                | `true`                  |
@@ -99,29 +98,10 @@ The Helm chart has the follow configuration options that can be supplied:
 | `global.issuerFilenames.ca`               | Custom name of the file containing the root CA certificate inside the container    | `ca.crt`     |
 | `global.issuerFilenames.cert`             | Custom name of the file containing the leaf certificate inside the container       | `issuer.crt` |
 | `global.issuerFilenames.key`              | Custom name of the file containing the leaf certificate's key inside the container | `issuer.key` |
+| `global.actors.enabled`                   | Enables the Dapr actors building block. When "false", the Dapr Placement serice is not installed, and attempting to use Dapr actors will fail. | `true` |
+| `global.seccompProfile` | SeccompProfile for Dapr control plane services | `""` |
 | `global.rbac.namespaced`                  | Removes cluster wide permissions where applicable  | `false` |
 | `global.argoRolloutServiceReconciler.enabled` | Enable the service reconciler for Dapr-enabled Argo Rollouts         | `false` |
-
-### Dapr Dashboard options:
-| Parameter                               | Description                                                                                                                                                            | Default            |
-|-----------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------|
-| `dapr_dashboard.enabled`                | Enable the Dapr dashboard                                                                                                                                              | `true`             |
-| `dapr_dashboard.replicaCount`           | Number of replicas                                                                                                                                                     | `1`                |
-| `dapr_dashboard.logLevel`               | service Log level                                                                                                                                                      | `info`             |
-| `dapr_dashboard.image.registry`         | docker registry                                                                                                                                                        | `docker.io/daprio` |
-| `dapr_dashboard.image.imagePullSecrets` | docker images pull secrets for docker registry                                                                                                                         | `docker.io/daprio` |
-| `dapr_dashboard.image.name`             | docker image name                                                                                                                                                      | `dashboard`        |
-| `dapr_dashboard.image.tag`              | docker image tag                                                                                                                                                       | `"0.11.1"`         |
-| `dapr_dashboard.serviceType`            | Type of [Kubernetes service](https://kubernetes.io/docs/concepts/services-networking/service/#publishing-services-service-types) to use for the Dapr Dashboard service | `ClusterIP`        |
-| `dapr_dashboard.runAsNonRoot`           | Boolean value for `securityContext.runAsNonRoot`. You may have to set this to `false` when running in Minikube                                                         | `true`             |
-| `dapr_dashboard.resources`              | Value of `resources` attribute. Can be used to set memory/cpu resources/limits. See the section "Resource configuration" above. Defaults to empty                      | `{}`               |
-| `dapr_dashboard.ingress.enabled`        | Boolean value for enabling the creation of the ingress resource                                                                                                        | `false`            |
-| `dapr_dashboard.ingress.className`      | ingress className of the ingress controller (e.g.nginx)                                                                                                                | ``                 |
-| `dapr_dashboard.ingress.host`           | Fully qualified hostname of the dashboard URL (e.g `dashboard.dapr.local`) | ``                 |
-| `dapr_dashboard.ingress.tls.enabled`    | If true, enables TLS on the ingress for the Dashboard                                                                                                                      | `false`            |
-| `dapr_dashboard.ingress.tls.secretName` | Name of the Kubernetes secret containing the TLS certificate (key/certificate) for the Dashboard. Ignored if `dapr_dashboard.ingress.tls.enabled` is `false`. | ``                 |
-
-
 
 ### Dapr Operator options:
 | Parameter                                 | Description                                                             | Default                 |
@@ -135,17 +115,18 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_operator.resources`                 | Value of `resources` attribute. Can be used to set memory/cpu resources/limits. See the section "Resource configuration" above. Defaults to empty | `{}` |
 | `dapr_operator.debug.enabled`             | Boolean value for enabling debug mode | `{}` |
 | `dapr_operator.serviceReconciler.enabled`| If false, disables the reconciler that creates Services for Dapr-enabled Deployments and StatefulSets.<br>Note: disabling this reconciler could prevent Dapr service invocation from working. | `true` |
-| `dapr_operator.watchNamespace`            | The namespace to watch for annoated Dapr resources in | `""` |
+| `dapr_operator.watchNamespace`            | The namespace to watch for annotated Dapr resources in | `""` |
 
 ### Dapr Placement options:
 | Parameter                                 | Description                                                             | Default                 |
 |-------------------------------------------|-------------------------------------------------------------------------|-------------------------|
+| `dapr_placement.ha` | If set to true, deploys the Placement service with 3 nodes regardless of the value of `global.ha.enabled` | `false` |
 | `dapr_placement.replicationFactor`        | Number of consistent hashing virtual node | `100`   |
 | `dapr_placement.logLevel`                 | Service Log level                                                       | `info`                  |
 | `dapr_placement.image.name`               | Service docker image name (`global.registry/dapr_placement.image.name`) | `dapr`   |
-| `dapr_placement.cluster.forceInMemoryLog` | Use in-memory log store and disable volume attach when `global.ha.enabled` is true | `false`   |
-| `dapr_placement.cluster.logStorePath`     | Mount path for persistent volume for log store in unix-like system when `global.ha.enabled` is true | `/var/run/dapr/raft-log`   |
-| `dapr_placement.cluster.logStoreWinPath`  | Mount path for persistent volume for log store in windows when `global.ha.enabled` is true | `C:\\raft-log`   |
+| `dapr_placement.cluster.forceInMemoryLog` | Use in-memory log store and disable volume attach when HA is true | `false`   |
+| `dapr_placement.cluster.logStorePath`     | Mount path for persistent volume for log store in unix-like system when HA is true | `/var/run/dapr/raft-log`   |
+| `dapr_placement.cluster.logStoreWinPath`  | Mount path for persistent volume for log store in windows when HA is true | `C:\\raft-log`   |
 | `dapr_placement.volumeclaims.storageSize` | Attached volume size | `1Gi`   |
 | `dapr_placement.volumeclaims.storageClassName` | storage class name |    |
 | `dapr_placement.runAsNonRoot`             | Boolean value for `securityContext.runAsNonRoot`. Does not apply unless `forceInMemoryLog` is set to `true`. You may have to set this to `false` when running in Minikube | `false` |

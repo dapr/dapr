@@ -24,7 +24,9 @@ import (
 
 	mock "github.com/stretchr/testify/mock"
 
+	"github.com/dapr/dapr/pkg/actors/reminders"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	daprt "github.com/dapr/dapr/pkg/testing"
 )
 
@@ -201,15 +203,15 @@ func (_m *MockActors) TransactionalStateOperation(ctx context.Context, req *Tran
 }
 
 // GetReminder provides a mock function with given fields: req
-func (_m *MockActors) GetReminder(ctx context.Context, req *GetReminderRequest) (*Reminder, error) {
+func (_m *MockActors) GetReminder(ctx context.Context, req *GetReminderRequest) (*reminders.Reminder, error) {
 	ret := _m.Called(req)
 
-	var r0 *Reminder
-	if rf, ok := ret.Get(0).(func(*GetReminderRequest) *Reminder); ok {
+	var r0 *reminders.Reminder
+	if rf, ok := ret.Get(0).(func(*GetReminderRequest) *reminders.Reminder); ok {
 		r0 = rf(req)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*Reminder)
+			r0 = ret.Get(0).(*reminders.Reminder)
 		}
 	}
 
@@ -224,9 +226,9 @@ func (_m *MockActors) GetReminder(ctx context.Context, req *GetReminderRequest) 
 }
 
 // GetActiveActorsCount provides a mock function
-func (_m *MockActors) GetActiveActorsCount(ctx context.Context) []ActiveActorsCount {
+func (_m *MockActors) GetActiveActorsCount(ctx context.Context) []*runtimev1pb.ActiveActorsCount {
 	_m.Called()
-	return []ActiveActorsCount{
+	return []*runtimev1pb.ActiveActorsCount{
 		{
 			Type:  "abcd",
 			Count: 10,
@@ -281,7 +283,7 @@ func (f *FailingActors) TransactionalStateOperation(ctx context.Context, req *Tr
 	return nil
 }
 
-func (f *FailingActors) GetReminder(ctx context.Context, req *GetReminderRequest) (*Reminder, error) {
+func (f *FailingActors) GetReminder(ctx context.Context, req *GetReminderRequest) (*reminders.Reminder, error) {
 	return nil, nil
 }
 
@@ -309,6 +311,6 @@ func (f *FailingActors) IsActorHosted(ctx context.Context, req *ActorHostedReque
 	return true
 }
 
-func (f *FailingActors) GetActiveActorsCount(ctx context.Context) []ActiveActorsCount {
-	return []ActiveActorsCount{}
+func (f *FailingActors) GetActiveActorsCount(ctx context.Context) []*runtimev1pb.ActiveActorsCount {
+	return []*runtimev1pb.ActiveActorsCount{}
 }

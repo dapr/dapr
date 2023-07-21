@@ -27,11 +27,16 @@ var envRegexp = regexp.MustCompile(`(?m)(,)\s*[a-zA-Z\_][a-zA-Z0-9\_]*=`)
 
 // GetAppID returns the app ID from the pod's annotation, or uses the pod's name as fallback.
 func GetAppID(pod metaV1.ObjectMeta) string {
-	return Annotations(pod.Annotations).GetStringOrDefault(annotations.KeyAppID, pod.GetName())
+	return annotations.New(pod.Annotations).GetStringOrDefault(annotations.KeyAppID, pod.GetName())
+}
+
+// GetMetricsEnabled returns true if metrics have been enabled, or false as fallback.
+func GetMetricsEnabled(pod metaV1.ObjectMeta) bool {
+	return annotations.New(pod.Annotations).GetBoolOrDefault(annotations.KeyEnableMetrics, annotations.DefaultEnableMetric)
 }
 
 // add env-vars from annotations.
-func ParseEnvString(envStr string) []coreV1.EnvVar {
+func ParseEnvString(envStr string) ([]string, []coreV1.EnvVar) {
 	indexes := envRegexp.FindAllStringIndex(envStr, -1)
 	lastEnd := len(envStr)
 	parts := make([]string, len(indexes)+1)
@@ -41,19 +46,21 @@ func ParseEnvString(envStr string) []coreV1.EnvVar {
 	}
 	parts[0] = envStr[0:lastEnd]
 
+	envKeys := make([]string, 0)
 	envVars := make([]coreV1.EnvVar, 0)
 	for _, s := range parts {
 		pairs := strings.Split(strings.TrimSpace(s), "=")
 		if len(pairs) != 2 {
 			continue
 		}
+		envKeys = append(envKeys, pairs[0])
 		envVars = append(envVars, coreV1.EnvVar{
 			Name:  pairs[0],
 			Value: pairs[1],
 		})
 	}
 
-	return envVars
+	return envKeys, envVars
 }
 
 // ParseVolumeMountsString parses the annotation and returns volume mounts.

@@ -38,9 +38,12 @@ scopes:
 - actorreminder
 - actorreminderpartition
 - actorinvocationapp
+- actormetadata-a
+- actormetadata-b
 - actorjava
 - actordotnet
 - actorpython
+- actorstate
 - actorphp
 - resiliencyapp
 - resiliencyappgrpc

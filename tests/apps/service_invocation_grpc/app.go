@@ -100,7 +100,9 @@ func (s *server) retrieveRequestObject(ctx context.Context) ([]byte, error) {
 
 	header := metadata.Pairs(
 		"DaprTest-Response-1", "DaprTest-Response-Value-1",
-		"DaprTest-Response-2", "DaprTest-Response-Value-2")
+		"DaprTest-Response-2", "DaprTest-Response-Value-2",
+	)
+	header.Append("DaprTest-Response-Multi", "DaprTest-Response-Multi-1", "DaprTest-Response-Multi-2")
 
 	// following traceid byte is of expectedTraceID "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
 	scConfig := trace.SpanContextConfig{
@@ -114,7 +116,9 @@ func (s *server) retrieveRequestObject(ctx context.Context) ([]byte, error) {
 	grpc.SendHeader(ctx, header)
 	trailer := metadata.Pairs(
 		"DaprTest-Trailer-1", "DaprTest-Trailer-Value-1",
-		"DaprTest-Trailer-2", "DaprTest-Trailer-Value-2")
+		"DaprTest-Trailer-2", "DaprTest-Trailer-Value-2",
+	)
+	trailer.Append("DaprTest-Trailer-Multi", "DaprTest-Trailer-Multi-1", "DaprTest-Trailer-Multi-2")
 	grpc.SetTrailer(ctx, trailer)
 
 	return json.Marshal(requestMD)

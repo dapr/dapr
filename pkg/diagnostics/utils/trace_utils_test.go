@@ -15,29 +15,29 @@ package utils
 
 import (
 	"context"
+	"net/http"
 	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/valyala/fasthttp"
 
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 )
 
 func TestSpanFromContext(t *testing.T) {
-	t.Run("fasthttp.RequestCtx, not nil span", func(t *testing.T) {
-		ctx := &fasthttp.RequestCtx{}
+	t.Run("not nil span", func(t *testing.T) {
+		r, _ := http.NewRequest(http.MethodGet, "http://test.local/method", nil)
 		var sp trace.Span
-		SpanToFastHTTPContext(ctx, sp)
+		AddSpanToRequest(r, sp)
 
-		assert.NotNil(t, SpanFromContext(ctx))
+		assert.NotNil(t, SpanFromContext(r.Context()))
 	})
 
-	t.Run("fasthttp.RequestCtx, nil span", func(t *testing.T) {
-		ctx := &fasthttp.RequestCtx{}
-		SpanToFastHTTPContext(ctx, nil)
-		sp := SpanFromContext(ctx)
+	t.Run("nil span", func(t *testing.T) {
+		r, _ := http.NewRequest(http.MethodGet, "http://test.local/method", nil)
+		AddSpanToRequest(r, nil)
+		sp := SpanFromContext(r.Context())
 		expectedType := "trace.noopSpan"
 		gotType := reflect.TypeOf(sp).String()
 		assert.Equal(t, expectedType, gotType)

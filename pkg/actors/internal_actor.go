@@ -71,7 +71,7 @@ func (c *internalActorChannel) Contains(actorType string) bool {
 }
 
 // GetAppConfig implements channel.AppChannel
-func (c *internalActorChannel) GetAppConfig() (*config.ApplicationConfig, error) {
+func (c *internalActorChannel) GetAppConfig(appID string) (*config.ApplicationConfig, error) {
 	actorTypes := make([]string, 0, len(c.actors))
 	for actorType := range c.actors {
 		actorTypes = append(actorTypes, actorType)
@@ -82,18 +82,13 @@ func (c *internalActorChannel) GetAppConfig() (*config.ApplicationConfig, error)
 	return config, nil
 }
 
-// GetBaseAddress implements channel.AppChannel
-func (internalActorChannel) GetBaseAddress() string {
-	return ""
-}
-
 // HealthProbe implements channel.AppChannel
 func (internalActorChannel) HealthProbe(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
 // InvokeMethod implements channel.AppChannel
-func (c *internalActorChannel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+func (c *internalActorChannel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest, _ string) (*invokev1.InvokeMethodResponse, error) {
 	actorType := req.Actor().GetActorType()
 	actor, ok := c.actors[actorType]
 	if !ok {
@@ -117,31 +112,31 @@ func (c *internalActorChannel) InvokeMethod(ctx context.Context, req *invokev1.I
 		}
 		methodName := methodURL[methodStartIndex+len("/method/"):]
 
-		var requestData []byte
-		requestData, err = req.RawDataFull()
-		if err != nil {
-			return nil, err
-		}
-
 		// Check for well-known method names; otherwise, just call InvokeMethod on the internal actor.
-		if strings.HasPrefix(methodName, "remind/") {
-			reminderName := strings.TrimPrefix(methodName, "remind/")
-			reminderInfo := new(ReminderResponse)
-			if err = json.Unmarshal(requestData, reminderInfo); err != nil {
-				return nil, fmt.Errorf("unexpected ReminderResponse JSON payload: %s", requestData)
+		if reminderName, prefixFound := strings.CutPrefix(methodName, "remind/"); prefixFound {
+			reminderInfo, ok := req.GetDataObject().(*ReminderResponse)
+			if !ok {
+				return nil, fmt.Errorf("unexpected type for reminder object: %T", req.GetDataObject())
 			}
 
 			// Reminder payloads are always saved as JSON
-			var dataBytes []byte
-			if dataBytes, err = json.Marshal(reminderInfo.Data); err != nil {
-				return nil, fmt.Errorf("failed to convert reminderInfo.Data back to JSON: %w", err)
+			dataBytes, ok := reminderInfo.Data.(json.RawMessage)
+			if !ok {
+				return nil, fmt.Errorf("unexpected type for data object: %T", reminderInfo.Data)
 			}
 			err = actor.InvokeReminder(ctx, actorID, reminderName, dataBytes, reminderInfo.DueTime, reminderInfo.Period)
-		} else if strings.HasPrefix(methodName, "timer/") {
-			timerName := strings.TrimPrefix(methodName, "timer/")
-			err = actor.InvokeTimer(ctx, actorID, timerName, requestData)
 		} else {
-			result, err = actor.InvokeMethod(ctx, actorID, methodName, requestData)
+			var requestData []byte
+			requestData, err = req.RawDataFull()
+			if err != nil {
+				return nil, err
+			}
+
+			if timerName, prefixFound := strings.CutPrefix(methodName, "timer/"); prefixFound {
+				err = actor.InvokeTimer(ctx, actorID, timerName, requestData)
+			} else {
+				result, err = actor.InvokeMethod(ctx, actorID, methodName, requestData)
+			}
 		}
 	}
 
@@ -192,7 +187,7 @@ func DecodeInternalActorData(data []byte, e any) error {
 // DecodeInternalActorReminderData decodes internal actor reminder data payloads and stores the result in e.
 func DecodeInternalActorReminderData(data []byte, e any) error {
 	if err := json.Unmarshal(data, e); err != nil {
-		return fmt.Errorf("unrecognized internal actor reminder payload '%v': %w", data, err)
+		return fmt.Errorf("unrecognized internal actor reminder payload: %w", err)
 	}
 	return nil
 }

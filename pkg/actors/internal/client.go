@@ -71,15 +71,21 @@ func (c *placementClient) connectToServer(serverAddr string) error {
 	client := v1pb.NewPlacementClient(conn)
 	stream, err := client.ReportDaprStatus(ctx)
 	if err != nil {
+		if conn != nil {
+			conn.Close()
+		}
 		cancel()
 		return err
 	}
 
 	c.streamConnectedCond.L.Lock()
-	defer c.streamConnectedCond.L.Unlock()
-	c.ctx, c.cancel, c.clientStream, c.clientConn = ctx, cancel, stream, conn
+	c.ctx = ctx
+	c.cancel = cancel
+	c.clientStream = stream
+	c.clientConn = conn
 	c.streamConnAlive = true
 	c.streamConnectedCond.Broadcast()
+	c.streamConnectedCond.L.Unlock()
 	return nil
 }
 

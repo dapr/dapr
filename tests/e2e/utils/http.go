@@ -19,6 +19,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -59,6 +60,10 @@ func NewHTTPClient(allowHTTP2 bool) *http.Client {
 					return net.Dial(network, addr)
 				},
 			},
+			// disable test app client auto redirect handle
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
 		}
 	}
 	return &http.Client{
@@ -66,6 +71,10 @@ func NewHTTPClient(allowHTTP2 bool) *http.Client {
 		Transport: &http.Transport{
 			MaxIdleConns:        2,
 			MaxIdleConnsPerHost: 1,
+		},
+		// disable test app client auto redirect handle
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
 		},
 	}
 }
@@ -100,6 +109,46 @@ func HTTPGet(url string) ([]byte, error) {
 	defer resp.Body.Close()
 
 	return io.ReadAll(resp.Body)
+}
+
+// HTTPGetWithStatus is a helper to make GET request call to url.
+func HTTPGetWithStatus(url string) ([]byte, int, error) {
+	resp, err := HTTPGetRaw(url)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return body, resp.StatusCode, nil
+}
+
+// HTTPGetWithStatusWithData is a helper to make GET request call to url.
+func HTTPGetWithStatusWithData(surl string, data []byte) ([]byte, int, error) {
+	url, err := url.Parse(SanitizeHTTPURL(surl))
+	if err != nil {
+		return nil, 0, err
+	}
+	resp, err := httpClient.Do(&http.Request{
+		Method: http.MethodGet,
+		URL:    url,
+		Body:   io.NopCloser(bytes.NewReader(data)),
+	})
+	if err != nil {
+		return nil, 0, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return body, resp.StatusCode, nil
 }
 
 // HTTPGetRawNTimes calls the url n times and returns the first
@@ -195,6 +244,27 @@ func HTTPDelete(url string) ([]byte, error) {
 	defer res.Body.Close()
 
 	return io.ReadAll(res.Body)
+}
+
+// HTTPDeleteWithStatus calls a given URL with the HTTP DELETE method.
+func HTTPDeleteWithStatus(url string) ([]byte, int, error) {
+	req, err := http.NewRequest(http.MethodDelete, SanitizeHTTPURL(url), nil)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	res, err := httpClient.Do(req)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer res.Body.Close()
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return body, res.StatusCode, nil
 }
 
 // SanitizeHTTPURL prepends the prefix "http://" to a URL if not present

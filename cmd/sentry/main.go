@@ -14,16 +14,14 @@ limitations under the License.
 package main
 
 import (
-	"flag"
-	"os"
-	"os/signal"
+	"context"
+	"fmt"
 	"path/filepath"
-	"syscall"
 	"time"
 
-	"k8s.io/client-go/util/homedir"
-
+	"github.com/dapr/dapr/cmd/sentry/options"
 	"github.com/dapr/dapr/pkg/buildinfo"
+	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/metrics"
@@ -38,50 +36,24 @@ import (
 
 var log = logger.NewLogger("dapr.sentry")
 
-//nolint:gosec
-const (
-	defaultCredentialsPath = "/var/run/dapr/credentials"
-	// defaultDaprSystemConfigName is the default resource object name for Dapr System Config.
-	defaultDaprSystemConfigName = "daprsystem"
-
-	healthzPort = 8080
-)
-
 func main() {
-	configName := flag.String("config", defaultDaprSystemConfigName, "Path to config file, or name of a configuration object")
-	credsPath := flag.String("issuer-credentials", defaultCredentialsPath, "Path to the credentials directory holding the issuer data")
-	flag.StringVar(&credentials.RootCertFilename, "issuer-ca-filename", credentials.RootCertFilename, "Certificate Authority certificate filename")
-	flag.StringVar(&credentials.IssuerCertFilename, "issuer-certificate-filename", credentials.IssuerCertFilename, "Issuer certificate filename")
-	flag.StringVar(&credentials.IssuerKeyFilename, "issuer-key-filename", credentials.IssuerKeyFilename, "Issuer private key filename")
-	trustDomain := flag.String("trust-domain", "localhost", "The CA trust domain")
-	tokenAudience := flag.String("token-audience", "", "Expected audience for tokens; multiple values can be separated by a comma")
-
-	loggerOptions := logger.DefaultOptions()
-	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
-
-	metricsExporter := metrics.NewExporter(metrics.DefaultMetricNamespace)
-	metricsExporter.Options().AttachCmdFlags(flag.StringVar, flag.BoolVar)
-
-	var kubeconfig *string
-	if home := homedir.HomeDir(); home != "" {
-		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
-	} else {
-		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
-	}
-	flag.Parse()
-	if err := utils.SetEnvVariables(map[string]string{
-		utils.KubeConfigVar: *kubeconfig,
-	}); err != nil {
-		log.Fatalf("error set env failed:  %s", err.Error())
-	}
+	opts := options.New()
 
 	// Apply options to all loggers
-	if err := logger.ApplyOptionsToLoggers(&loggerOptions); err != nil {
+	if err := logger.ApplyOptionsToLoggers(&opts.Logger); err != nil {
 		log.Fatal(err)
 	}
 
-	log.Infof("starting sentry certificate authority -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
-	log.Infof("log level set to: %s", loggerOptions.OutputLevel)
+	log.Infof("Starting Dapr Sentry certificate authority -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
+	log.Infof("Log level set to: %s", opts.Logger.OutputLevel)
+
+	metricsExporter := metrics.NewExporterWithOptions(log, metrics.DefaultMetricNamespace, opts.Metrics)
+
+	if err := utils.SetEnvVariables(map[string]string{
+		utils.KubeConfigVar: opts.Kubeconfig,
+	}); err != nil {
+		log.Fatalf("error set env failed:  %s", err.Error())
+	}
 
 	// Initialize dapr metrics exporter
 	if err := metricsExporter.Init(); err != nil {
@@ -92,78 +64,95 @@ func main() {
 		log.Fatal(err)
 	}
 
-	issuerCertPath := filepath.Join(*credsPath, credentials.IssuerCertFilename)
-	issuerKeyPath := filepath.Join(*credsPath, credentials.IssuerKeyFilename)
-	rootCertPath := filepath.Join(*credsPath, credentials.RootCertFilename)
+	issuerCertPath := filepath.Join(opts.IssuerCredentialsPath, credentials.IssuerCertFilename)
+	issuerKeyPath := filepath.Join(opts.IssuerCredentialsPath, credentials.IssuerKeyFilename)
+	rootCertPath := filepath.Join(opts.IssuerCredentialsPath, credentials.RootCertFilename)
 
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
-
-	runCtx := signals.Context()
-	config, err := config.FromConfigName(*configName)
+	config, err := config.FromConfigName(opts.ConfigName)
 	if err != nil {
-		log.Warn(err)
+		log.Fatal(err)
 	}
+
 	config.IssuerCertPath = issuerCertPath
 	config.IssuerKeyPath = issuerKeyPath
 	config.RootCertPath = rootCertPath
-	config.TrustDomain = *trustDomain
-	if *tokenAudience != "" {
-		config.TokenAudience = tokenAudience
+	config.TrustDomain = opts.TrustDomain
+	config.Port = opts.Port
+	if opts.TokenAudience != "" {
+		config.TokenAudience = &opts.TokenAudience
 	}
 
-	watchDir := filepath.Dir(config.IssuerCertPath)
+	var (
+		watchDir    = filepath.Dir(config.IssuerCertPath)
+		issuerEvent = make(chan struct{})
+		mngr        = concurrency.NewRunnerManager()
+	)
 
-	ca := sentry.NewSentryCA()
+	// We use runner manager inception here since we want the inner manager to be
+	// restarted when the CA server needs to be restarted because of file events.
+	// We don't want to restart the healthz server and file watcher on file
+	// events (as well as wanting to terminate the program on signals).
+	caMngrFactory := func() *concurrency.RunnerManager {
+		return concurrency.NewRunnerManager(
+			func(ctx context.Context) error {
+				return sentry.NewSentryCA().Start(ctx, config)
+			},
+			func(ctx context.Context) error {
+				select {
+				case <-ctx.Done():
+					return nil
 
-	log.Infof("starting watch on filesystem directory: %s", watchDir)
+				case <-issuerEvent:
+					monitoring.IssuerCertChanged()
+					log.Debug("received issuer credentials changed signal")
 
-	issuerEvent := make(chan struct{})
+					select {
+					case <-ctx.Done():
+						return nil
+					// Batch all signals within 2s of each other
+					case <-time.After(2 * time.Second):
+						log.Warn("issuer credentials changed; reloading")
+						return nil
+					}
+				}
+			},
+		)
+	}
 
-	go func() {
-		// Restart the server when the issuer credentials change
-		var restart <-chan time.Time
+	// CA Server
+	mngr.Add(func(ctx context.Context) error {
 		for {
+			if err := caMngrFactory().Run(ctx); err != nil {
+				return err
+			}
+			// Catch outer context cancellation to exit.
 			select {
-			case <-issuerEvent:
-				monitoring.IssuerCertChanged()
-				log.Debug("received issuer credentials changed signal")
-				// Batch all signals within 2s of each other
-				if restart == nil {
-					restart = time.After(2 * time.Second)
-				}
-			case <-restart:
-				log.Warn("issuer credentials changed; reloading")
-				innerErr := ca.Restart(runCtx, config)
-				if innerErr != nil {
-					log.Fatalf("failed to restart sentry server: %s", innerErr)
-				}
-				restart = nil
+			case <-ctx.Done():
+				return nil
+			default:
 			}
 		}
-	}()
-
-	// Start the health server in background
-	go func() {
-		healthzServer := health.NewServer(log)
-		healthzServer.Ready()
-
-		if innerErr := healthzServer.Run(runCtx, healthzPort); innerErr != nil {
-			log.Fatalf("failed to start healthz server: %s", innerErr)
-		}
-	}()
-
-	// Start the server in background
-	err = ca.Start(runCtx, config)
-	if err != nil {
-		log.Fatalf("failed to restart sentry server: %s", err)
-	}
+	})
 
 	// Watch for changes in the watchDir
-	// This also blocks until runCtx is canceled
-	fswatcher.Watch(runCtx, watchDir, issuerEvent)
+	mngr.Add(func(ctx context.Context) error {
+		log.Infof("starting watch on filesystem directory: %s", watchDir)
+		return fswatcher.Watch(ctx, watchDir, issuerEvent)
+	})
 
-	shutdownDuration := 5 * time.Second
-	log.Infof("allowing %s for graceful shutdown to complete", shutdownDuration)
-	<-time.After(shutdownDuration)
+	// Healthz server
+	mngr.Add(func(ctx context.Context) error {
+		healthzServer := health.NewServer(log)
+		healthzServer.Ready()
+		if err := healthzServer.Run(ctx, opts.HealthzPort); err != nil {
+			return fmt.Errorf("failed to start healthz server: %s", err)
+		}
+		return nil
+	})
+
+	// Run the runner manager.
+	if err := mngr.Run(signals.Context()); err != nil {
+		log.Fatal(err)
+	}
+	log.Info("sentry shut down gracefully")
 }

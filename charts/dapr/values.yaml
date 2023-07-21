@@ -22,8 +22,11 @@ global:
     enabled: true
     workloadCertTTL: 24h
     allowedClockSkew: 15m
+  actors:
+    enabled: true
   daprControlPlaneOs: linux
   labels: {}
+  seccompProfile: ""
   k8sLabels:
     app.kubernetes.io/name: "{{ .Release.Name }}"
     app.kubernetes.io/version: "{{ .Values.global.tag }}"
@@ -39,3 +42,6 @@ global:
   #   key: "tls.key"
   argoRolloutServiceReconciler:
     enabled: false
+
+  operator:
+    watchdogCanPatchPodLabels: false

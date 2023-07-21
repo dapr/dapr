@@ -37,4 +37,6 @@ type ComponentDescription struct {
 	MetaData map[string]MetadataValue
 	// Scopes is the list of target apps that should use this component
 	Scopes []string
+	// ContainerAsJSON is used for pluggable components
+	ContainerAsJSON string
 }

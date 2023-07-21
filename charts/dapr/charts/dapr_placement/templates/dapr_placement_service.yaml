@@ -1,7 +1,9 @@
+{{- if eq .Values.global.actors.enabled true }}
 kind: Service
 apiVersion: v1
 metadata:
   name: dapr-placement-server
+  namespace: {{ .Release.Namespace }}
   labels:
     app: dapr-placement-server
     {{- range $key, $value := .Values.global.k8sLabels }}
@@ -19,3 +21,4 @@ spec:
   - name: raft-node
     port: {{ .Values.ports.raftRPCPort }}
   clusterIP: None
+{{- end }}

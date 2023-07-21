@@ -31,6 +31,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/anypb"
 
+	"github.com/dapr/dapr/pkg/channel"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -39,7 +40,7 @@ import (
 
 func TestDestinationHeaders(t *testing.T) {
 	t.Run("destination header present", func(t *testing.T) {
-		appID := "test1"
+		const appID = "test1"
 		req := invokev1.NewInvokeMethodRequest("GET").
 			WithMetadata(map[string][]string{})
 		defer req.Close()
@@ -199,7 +200,7 @@ func TestInvokeRemote(t *testing.T) {
 		pd, err := res.ProtoWithData()
 		require.NoError(t, err)
 
-		assert.Empty(t, pd.Message.Data.Value)
+		assert.True(t, pd.Message.Data == nil || len(pd.Message.Data.Value) == 0)
 	})
 
 	t.Run("streaming with single chunk", func(t *testing.T) {
@@ -395,7 +396,6 @@ func (m *mockGRPCServerUnary) methods() []grpc.MethodDesc {
 
 type mockGRPCServerStreamI interface {
 	mockGRPCServerUnaryI
-
 	CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStreamServer) error //nolint:nosnakecase
 }
 
@@ -411,8 +411,9 @@ func (m *mockGRPCServerStream) CallLocalStream(stream internalv1pb.ServiceInvoca
 		WithHTTPHeaders(map[string][]string{"foo": {"bar"}})
 	defer resp.Close()
 
+	chunksLen := uint64(len(m.chunks))
 	var payload *commonv1pb.StreamPayload
-	if len(m.chunks) > 0 {
+	if chunksLen > 0 {
 		payload = &commonv1pb.StreamPayload{
 			Data: []byte(m.chunks[0]),
 			Seq:  0,
@@ -425,11 +426,11 @@ func (m *mockGRPCServerStream) CallLocalStream(stream internalv1pb.ServiceInvoca
 
 	// Send the next chunks if needed
 	// Note this starts from index 1 on purpose
-	for i := 1; i < len(m.chunks); i++ {
+	for i := uint64(1); i < chunksLen; i++ {
 		stream.Send(&internalv1pb.InternalInvokeResponseStream{
 			Payload: &commonv1pb.StreamPayload{
 				Data: []byte(m.chunks[i]),
-				Seq:  uint32(i),
+				Seq:  i,
 			},
 		})
 	}
@@ -464,4 +465,28 @@ func (x *serviceInvocationCallLocalStreamServer) Recv() (*internalv1pb.InternalI
 		return nil, err
 	}
 	return m, nil
+}
+
+func TestInvokeRemoteUnaryForHTTPEndpoint(t *testing.T) {
+	t.Run("channel found", func(t *testing.T) {
+		d := directMessaging{
+			resourceHTTPEndpointChannels: map[string]channel.HTTPEndpointAppChannel{"abc": &mockChannel{}},
+		}
+
+		_, err := d.invokeRemoteUnaryForHTTPEndpoint(context.Background(), nil, "abc")
+		assert.NoError(t, err)
+	})
+
+	t.Run("channel not found", func(t *testing.T) {
+		d := directMessaging{}
+
+		_, err := d.invokeRemoteUnaryForHTTPEndpoint(context.Background(), nil, "abc")
+		assert.Error(t, err)
+	})
+}
+
+type mockChannel struct{}
+
+func (m *mockChannel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*invokev1.InvokeMethodResponse, error) {
+	return nil, nil
 }

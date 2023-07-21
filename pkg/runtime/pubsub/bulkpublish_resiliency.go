@@ -32,15 +32,17 @@ func ApplyBulkPublishResiliency(ctx context.Context, req *contribPubsub.BulkPubl
 	policyRunner := resiliency.NewRunnerWithOptions(ctx, policyDef,
 		resiliency.RunnerOpts[contribPubsub.BulkPublishResponse]{
 			Accumulator: func(res contribPubsub.BulkPublishResponse) {
-				if len(res.FailedEntries) > 0 {
-					// requestEntries can be modified here as Accumulator is executed synchronously
-					failedEntryIds := extractEntryIds(res.FailedEntries)
-					filteredEntries := utils.Filter(*requestEntries.Load(), func(item contribPubsub.BulkMessageEntry) bool {
-						_, ok := failedEntryIds[item.EntryId]
-						return ok
-					})
-					requestEntries.Store(&filteredEntries)
+				if len(res.FailedEntries) == 0 {
+					return
 				}
+
+				// requestEntries can be modified here as Accumulator is executed synchronously
+				failedEntryIds := extractEntryIds(res.FailedEntries)
+				filteredEntries := utils.Filter(*requestEntries.Load(), func(item contribPubsub.BulkMessageEntry) bool {
+					_, ok := failedEntryIds[item.EntryId]
+					return ok
+				})
+				requestEntries.Store(&filteredEntries)
 			},
 		})
 	res, err := policyRunner(func(ctx context.Context) (contribPubsub.BulkPublishResponse, error) {

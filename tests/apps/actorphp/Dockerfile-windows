@@ -1,4 +1,4 @@
-ARG WINDOWS_VERSION=1809
+ARG WINDOWS_VERSION=ltsc2022
 FROM ghcr.io/dapr/windows-php-base:$WINDOWS_VERSION
 
 WORKDIR /inetpub

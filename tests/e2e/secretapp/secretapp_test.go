@@ -42,6 +42,12 @@ const (
 	nonExistentSecret = "nonexistentsecret"
 	emptySecret       = "emptysecret"
 	testCase1Value    = "admin"
+	redisSecret       = "redissecret"
+)
+
+var (
+	redisSecretValue = map[string]string{"host": "dapr-redis-master:6379"}
+	daprSecretValue  = map[string]string{"username": "admin"}
 )
 
 // daprSecret represents a secret in Dapr.
@@ -49,6 +55,18 @@ type daprSecret struct {
 	Key   string             `json:"key,omitempty"`
 	Value *map[string]string `json:"value,omitempty"`
 	Store string             `json:"store,omitempty"`
+}
+
+// Stringer interface impl for test logging.
+func (d daprSecret) String() string {
+	s := "key: " + d.Key + ", store: " + d.Store + ", value: {"
+	if d.Value != nil {
+		for k, v := range *d.Value {
+			s += k + ": " + v + ", "
+		}
+	}
+	s += "}"
+	return s
 }
 
 // requestResponse represents a request or response for the APIs in the app.
@@ -64,6 +82,7 @@ type testCase struct {
 	errorExpected    bool
 	statusCode       int
 	errorString      string
+	isBulk           bool
 }
 
 func generateDaprSecret(kv utils.SimpleKeyValue, store string) daprSecret {
@@ -76,10 +95,17 @@ func generateDaprSecret(kv utils.SimpleKeyValue, store string) daprSecret {
 		return daprSecret{key, nil, ""}
 	}
 
-	secret := fmt.Sprintf("%v", kv.Value)
 	value := map[string]string{}
-	if secret != "" {
-		value["username"] = secret
+	switch val := kv.Value.(type) {
+	case map[string]string:
+		value = val
+	case string:
+		if val != "" {
+			value["username"] = val
+		}
+	default:
+		// This should not happen in tests
+		panic(fmt.Sprintf("unexpected type %v", reflect.TypeOf(val)))
 	}
 	return daprSecret{key, &value, store}
 }
@@ -122,54 +148,74 @@ func generateTestCases() []testCase {
 			false,
 			200,
 			"", // no error
+			false,
 		},
 		{
 			"empty secret",
-			newRequest(secretStore, utils.SimpleKeyValue{emptySecret, ""}),
-			newResponse(secretStore, utils.SimpleKeyValue{emptySecret, ""}),
+			newRequest(secretStore, utils.SimpleKeyValue{Key: emptySecret, Value: ""}),
+			newResponse(secretStore, utils.SimpleKeyValue{Key: emptySecret, Value: ""}),
 			false,
 			200,
 			"", // no error
+			false,
 		},
 		{
 			"allowed secret",
-			newRequest(secretStore, utils.SimpleKeyValue{allowedSecret, testCase1Value}),
-			newResponse(secretStore, utils.SimpleKeyValue{allowedSecret, testCase1Value}),
+			newRequest(secretStore, utils.SimpleKeyValue{Key: allowedSecret, Value: testCase1Value}),
+			newResponse(secretStore, utils.SimpleKeyValue{Key: allowedSecret, Value: testCase1Value}),
 			false,
 			200,
 			"", // no error
+			false,
 		},
 		{
 			"unallowed secret",
-			newRequest(secretStore, utils.SimpleKeyValue{unallowedSecret, ""}),
-			newResponse("", utils.SimpleKeyValue{unallowedSecret, ""}),
+			newRequest(secretStore, utils.SimpleKeyValue{Key: unallowedSecret, Value: ""}),
+			newResponse("", utils.SimpleKeyValue{Key: unallowedSecret, Value: ""}),
 			true,
 			403,
 			"ERR_PERMISSION_DENIED",
+			false,
 		},
 		{
 			"nonexistent secret",
-			newRequest(secretStore, utils.SimpleKeyValue{nonExistentSecret, ""}),
-			newResponse("", utils.SimpleKeyValue{nonExistentSecret, ""}),
+			newRequest(secretStore, utils.SimpleKeyValue{Key: nonExistentSecret, Value: ""}),
+			newResponse("", utils.SimpleKeyValue{Key: nonExistentSecret, Value: ""}),
 			true,
 			500,
 			"ERR_SECRET_GET",
+			false,
 		},
 		{
 			"secret from nonexistent secret store",
-			newRequest(nonexistentStore, utils.SimpleKeyValue{allowedSecret, ""}),
-			newResponse("", utils.SimpleKeyValue{allowedSecret, ""}),
+			newRequest(nonexistentStore, utils.SimpleKeyValue{Key: allowedSecret, Value: ""}),
+			newResponse("", utils.SimpleKeyValue{Key: allowedSecret, Value: ""}),
 			true,
 			401,
 			"ERR_SECRET_STORE_NOT_FOUND",
+			false,
 		},
 		{
 			"secret from the disabled secret store",
-			newRequest(badSecretStore, utils.SimpleKeyValue{allowedSecret, ""}),
-			newResponse("", utils.SimpleKeyValue{allowedSecret, ""}),
+			newRequest(badSecretStore, utils.SimpleKeyValue{Key: allowedSecret, Value: ""}),
+			newResponse("", utils.SimpleKeyValue{Key: allowedSecret, Value: ""}),
 			true,
 			401,
 			"ERR_SECRET_STORE_NOT_FOUND",
+			false,
+		},
+		{
+			"bulk get secret",
+			// Request does not matter, only the secretStore from request matters.
+			newRequest(secretStore, utils.SimpleKeyValue{Key: allowedSecret, Value: testCase1Value}),
+			newResponse(secretStore,
+				utils.SimpleKeyValue{Key: allowedSecret, Value: daprSecretValue},
+				utils.SimpleKeyValue{Key: emptySecret, Value: ""},
+				utils.SimpleKeyValue{Key: redisSecret, Value: redisSecretValue}),
+			false,
+			200,
+			"",   // no error
+			true, // bulk get
 		},
 	}
 }
@@ -183,6 +229,7 @@ func generateTestCasesForDisabledSecretStore() []testCase {
 			true,
 			500,
 			"ERR_SECRET_STORES_NOT_CONFIGURED",
+			false,
 		},
 	}
 }
@@ -253,7 +300,14 @@ func TestSecretApp(t *testing.T) {
 				// setup
 				body, err := json.Marshal(tc.request)
 				require.NoError(t, err)
-				url := fmt.Sprintf("%s/test/get", externalURL)
+				var url string
+				if !tc.isBulk {
+					t.Log("Single test")
+					url = fmt.Sprintf("%s/test/get", externalURL)
+				} else {
+					t.Log("Bulk test")
+					url = fmt.Sprintf("%s/test/bulk", externalURL)
+				}
 
 				// act
 				resp, statusCode, err := utils.HTTPPostWithStatus(url, body)
@@ -266,7 +320,10 @@ func TestSecretApp(t *testing.T) {
 					err = json.Unmarshal(resp, &appResp)
 					require.NoError(t, err, "Failed to unmarshal. Response (%d) was: %s", statusCode, string(resp))
 
-					require.True(t, reflect.DeepEqual(tc.expectedResponse, appResp))
+					t.Log("App Response", appResp)
+					t.Log("Expected Response", tc.expectedResponse)
+					// For bulk get order does not matter
+					require.ElementsMatch(t, tc.expectedResponse.Secrets, appResp.Secrets, "Expected response to match")
 					require.Equal(t, tc.statusCode, statusCode, "Expected statusCode to be equal")
 				} else {
 					require.Contains(t, string(resp), tc.errorString, "Expected error string to match")

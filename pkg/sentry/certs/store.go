@@ -12,6 +12,7 @@ import (
 	"github.com/dapr/dapr/pkg/sentry/config"
 	"github.com/dapr/dapr/pkg/sentry/consts"
 	"github.com/dapr/dapr/pkg/sentry/kubernetes"
+	"github.com/dapr/dapr/utils"
 )
 
 const (
@@ -19,20 +20,20 @@ const (
 )
 
 // StoreCredentials saves the trust bundle in a Kubernetes secret store or locally on disk, depending on the hosting platform.
-func StoreCredentials(conf config.SentryConfig, rootCertPem, issuerCertPem, issuerKeyPem []byte) error {
+func StoreCredentials(ctx context.Context, conf config.SentryConfig, rootCertPem, issuerCertPem, issuerKeyPem []byte) error {
 	if config.IsKubernetesHosted() {
-		return storeKubernetes(rootCertPem, issuerCertPem, issuerKeyPem)
+		return storeKubernetes(ctx, rootCertPem, issuerCertPem, issuerKeyPem)
 	}
 	return storeSelfhosted(rootCertPem, issuerCertPem, issuerKeyPem, conf.RootCertPath, conf.IssuerCertPath, conf.IssuerKeyPath)
 }
 
-func storeKubernetes(rootCertPem, issuerCertPem, issuerCertKey []byte) error {
+func storeKubernetes(ctx context.Context, rootCertPem, issuerCertPem, issuerCertKey []byte) error {
 	kubeClient, err := kubernetes.GetClient()
 	if err != nil {
 		return err
 	}
 
-	namespace := getNamespace()
+	namespace := utils.GetNamespaceOrDefault(defaultSecretNamespace)
 	secret, err := kubeClient.CoreV1().Secrets(namespace).Get(context.TODO(), consts.TrustBundleK8sSecretName, metav1.GetOptions{})
 	if errors.IsNotFound(err) {
 		return fmt.Errorf("failed to get secret %w", err)
@@ -45,37 +46,40 @@ func storeKubernetes(rootCertPem, issuerCertPem, issuerCertKey []byte) error {
 	}
 
 	// We update and not create because sentry expects a secret to already exist
-	_, err = kubeClient.CoreV1().Secrets(namespace).Update(context.TODO(), secret, metav1.UpdateOptions{})
+	_, err = kubeClient.CoreV1().Secrets(namespace).Update(ctx, secret, metav1.UpdateOptions{})
 	if err != nil {
 		return fmt.Errorf("failed saving secret to kubernetes: %w", err)
 	}
 	return nil
 }
 
-func getNamespace() string {
-	namespace := os.Getenv("NAMESPACE")
-	if namespace == "" {
-		namespace = defaultSecretNamespace
-	}
-	return namespace
-}
-
 // CredentialsExist checks root and issuer credentials exist on a hosting platform.
-func CredentialsExist(conf config.SentryConfig) (bool, error) {
+func CredentialsExist(ctx context.Context, conf config.SentryConfig) (bool, error) {
 	if config.IsKubernetesHosted() {
-		namespace := getNamespace()
+		namespace := utils.GetNamespaceOrDefault(defaultSecretNamespace)
 
 		kubeClient, err := kubernetes.GetClient()
 		if err != nil {
 			return false, err
 		}
-		s, err := kubeClient.CoreV1().Secrets(namespace).Get(context.TODO(), consts.TrustBundleK8sSecretName, metav1.GetOptions{})
+		s, err := kubeClient.CoreV1().Secrets(namespace).Get(ctx, consts.TrustBundleK8sSecretName, metav1.GetOptions{})
 		if err != nil {
 			return false, err
 		}
 		return len(s.Data) > 0, nil
 	}
-	return false, nil
+
+	for _, path := range []string{conf.RootCertPath, conf.IssuerCertPath, conf.IssuerKeyPath} {
+		_, err := os.Stat(path)
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		if err != nil {
+			return false, err
+		}
+	}
+
+	return true, nil
 }
 
 /* #nosec. */

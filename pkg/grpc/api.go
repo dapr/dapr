@@ -33,19 +33,12 @@ import (
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
 	"github.com/dapr/components-contrib/contenttype"
-	"github.com/dapr/components-contrib/lock"
 	contribMetadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/pubsub"
-	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
-	"github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/dapr/pkg/actors"
-	componentsV1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/channel"
-	lockLoader "github.com/dapr/dapr/pkg/components/lock"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
-	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
@@ -60,14 +53,12 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
+	"github.com/dapr/dapr/pkg/runtime/compstore"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/utils"
 )
 
-const (
-	daprHTTPStatusHeader  = "dapr-http-status"
-	daprRuntimeVersionKey = "daprRuntimeVersion"
-)
+const daprHTTPStatusHeader = "dapr-http-status"
 
 // API is the gRPC interface for the Dapr gRPC API. It implements both the internal and external proto definitions.
 type API interface {
@@ -85,158 +76,13 @@ type API interface {
 
 type api struct {
 	*universalapi.UniversalAPI
-	actor                      actors.Actors
-	directMessaging            messaging.DirectMessaging
-	appChannel                 channel.AppChannel
-	resiliency                 resiliency.Provider
-	stateStores                map[string]state.Store
-	workflowComponents         map[string]workflows.Workflow
-	transactionalStateStores   map[string]state.TransactionalStore
-	configurationStores        map[string]configuration.Store
-	configurationSubscribe     map[string]chan struct{} // store map[storeName||key1,key2] -> stopChan
-	configurationSubscribeLock sync.Mutex
-	lockStores                 map[string]lock.Store
-	pubsubAdapter              runtimePubsub.Adapter
-	id                         string
-	sendToOutputBindingFn      func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
-	tracingSpec                config.TracingSpec
-	accessControlList          *config.AccessControlList
-	appProtocol                string
-	extendedMetadata           sync.Map
-	shutdown                   func()
-	getComponentsFn            func() []componentsV1alpha.Component
-	getComponentsCapabilitesFn func() map[string][]string
-	getSubscriptionsFn         func() ([]runtimePubsub.Subscription, error)
-	daprRunTimeVersion         string
-}
-
-func (a *api) TryLockAlpha1(ctx context.Context, req *runtimev1pb.TryLockRequest) (*runtimev1pb.TryLockResponse, error) {
-	// 1. validate
-	if a.lockStores == nil || len(a.lockStores) == 0 {
-		err := status.Error(codes.FailedPrecondition, messages.ErrLockStoresNotConfigured)
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.TryLockResponse{}, err
-	}
-	if req.ResourceId == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrResourceIDEmpty, req.StoreName)
-		return &runtimev1pb.TryLockResponse{}, err
-	}
-	if req.LockOwner == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrLockOwnerEmpty, req.StoreName)
-		return &runtimev1pb.TryLockResponse{}, err
-	}
-	if req.ExpiryInSeconds <= 0 {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrExpiryInSecondsNotPositive, req.StoreName)
-		return &runtimev1pb.TryLockResponse{}, err
-	}
-	// 2. find lock component
-	store, ok := a.lockStores[req.StoreName]
-	if !ok {
-		return &runtimev1pb.TryLockResponse{}, status.Errorf(codes.InvalidArgument, messages.ErrLockStoreNotFound, req.StoreName)
-	}
-	// 3. convert request
-	compReq := TryLockRequestToComponentRequest(req)
-	// modify key
-	var err error
-	compReq.ResourceID, err = lockLoader.GetModifiedLockKey(compReq.ResourceID, req.StoreName, a.id)
-	if err != nil {
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.TryLockResponse{}, err
-	}
-	// 4. delegate to the component
-	compResp, err := store.TryLock(ctx, compReq)
-	if err != nil {
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.TryLockResponse{}, err
-	}
-	// 5. convert response
-	resp := TryLockResponseToGrpcResponse(compResp)
-	return resp, nil
-}
-
-func (a *api) UnlockAlpha1(ctx context.Context, req *runtimev1pb.UnlockRequest) (*runtimev1pb.UnlockResponse, error) {
-	// 1. validate
-	if a.lockStores == nil || len(a.lockStores) == 0 {
-		err := status.Error(codes.FailedPrecondition, messages.ErrLockStoresNotConfigured)
-		apiServerLogger.Debug(err)
-		return newInternalErrorUnlockResponse(), err
-	}
-	if req.ResourceId == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrResourceIDEmpty, req.StoreName)
-		return newInternalErrorUnlockResponse(), err
-	}
-	if req.LockOwner == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrLockOwnerEmpty, req.StoreName)
-		return newInternalErrorUnlockResponse(), err
-	}
-	// 2. find store component
-	store, ok := a.lockStores[req.StoreName]
-	if !ok {
-		return newInternalErrorUnlockResponse(), status.Errorf(codes.InvalidArgument, messages.ErrLockStoreNotFound, req.StoreName)
-	}
-	// 3. convert request
-	compReq := UnlockGrpcToComponentRequest(req)
-	// modify key
-	var err error
-	compReq.ResourceID, err = lockLoader.GetModifiedLockKey(compReq.ResourceID, req.StoreName, a.id)
-	if err != nil {
-		apiServerLogger.Debug(err)
-		return newInternalErrorUnlockResponse(), err
-	}
-	// 4. delegate to the component
-	compResp, err := store.Unlock(ctx, compReq)
-	if err != nil {
-		apiServerLogger.Debug(err)
-		return newInternalErrorUnlockResponse(), err
-	}
-	// 5. convert response
-	resp := UnlockResponseToGrpcResponse(compResp)
-	return resp, nil
-}
-
-func newInternalErrorUnlockResponse() *runtimev1pb.UnlockResponse {
-	return &runtimev1pb.UnlockResponse{
-		Status: runtimev1pb.UnlockResponse_INTERNAL_ERROR, //nolint:nosnakecase
-	}
-}
-
-func TryLockRequestToComponentRequest(req *runtimev1pb.TryLockRequest) *lock.TryLockRequest {
-	result := &lock.TryLockRequest{}
-	if req == nil {
-		return result
-	}
-	result.ResourceID = req.ResourceId
-	result.LockOwner = req.LockOwner
-	result.ExpiryInSeconds = req.ExpiryInSeconds
-	return result
-}
-
-func TryLockResponseToGrpcResponse(compResponse *lock.TryLockResponse) *runtimev1pb.TryLockResponse {
-	result := &runtimev1pb.TryLockResponse{}
-	if compResponse == nil {
-		return result
-	}
-	result.Success = compResponse.Success
-	return result
-}
-
-func UnlockGrpcToComponentRequest(req *runtimev1pb.UnlockRequest) *lock.UnlockRequest {
-	result := &lock.UnlockRequest{}
-	if req == nil {
-		return result
-	}
-	result.ResourceID = req.ResourceId
-	result.LockOwner = req.LockOwner
-	return result
-}
-
-func UnlockResponseToGrpcResponse(compResp *lock.UnlockResponse) *runtimev1pb.UnlockResponse {
-	result := &runtimev1pb.UnlockResponse{}
-	if compResp == nil {
-		return result
-	}
-	result.Status = runtimev1pb.UnlockResponse_Status(compResp.Status) //nolint:nosnakecase
-	return result
+	directMessaging       messaging.DirectMessaging
+	appChannel            channel.AppChannel
+	resiliency            resiliency.Provider
+	pubsubAdapter         runtimePubsub.Adapter
+	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	tracingSpec           config.TracingSpec
+	accessControlList     *config.AccessControlList
 }
 
 // APIOpts contains options for NewAPI.
@@ -244,61 +90,40 @@ type APIOpts struct {
 	AppID                       string
 	AppChannel                  channel.AppChannel
 	Resiliency                  resiliency.Provider
-	StateStores                 map[string]state.Store
-	SecretStores                map[string]secretstores.SecretStore
-	SecretsConfiguration        map[string]config.SecretsScope
-	ConfigurationStores         map[string]configuration.Store
-	WorkflowComponents          map[string]workflows.Workflow
-	LockStores                  map[string]lock.Store
+	CompStore                   *compstore.ComponentStore
 	PubsubAdapter               runtimePubsub.Adapter
 	DirectMessaging             messaging.DirectMessaging
-	Actor                       actors.Actors
+	Actors                      actors.Actors
 	SendToOutputBindingFn       func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	TracingSpec                 config.TracingSpec
 	AccessControlList           *config.AccessControlList
-	AppProtocol                 string
 	Shutdown                    func()
-	GetComponentsFn             func() []componentsV1alpha.Component
 	GetComponentsCapabilitiesFn func() map[string][]string
-	GetSubscriptionsFn          func() ([]runtimePubsub.Subscription, error)
+	AppConnectionConfig         config.AppConnectionConfig
+	GlobalConfig                *config.Configuration
 }
 
 // NewAPI returns a new gRPC API.
 func NewAPI(opts APIOpts) API {
-	transactionalStateStores := map[string]state.TransactionalStore{}
-	for key, store := range opts.StateStores {
-		if state.FeatureTransactional.IsPresent(store.Features()) {
-			transactionalStateStores[key] = store.(state.TransactionalStore)
-		}
-	}
 	return &api{
 		UniversalAPI: &universalapi.UniversalAPI{
-			Logger:               apiServerLogger,
-			Resiliency:           opts.Resiliency,
-			SecretStores:         opts.SecretStores,
-			SecretsConfiguration: opts.SecretsConfiguration,
+			AppID:                      opts.AppID,
+			Logger:                     apiServerLogger,
+			Resiliency:                 opts.Resiliency,
+			Actors:                     opts.Actors,
+			CompStore:                  opts.CompStore,
+			ShutdownFn:                 opts.Shutdown,
+			GetComponentsCapabilitesFn: opts.GetComponentsCapabilitiesFn,
+			AppConnectionConfig:        opts.AppConnectionConfig,
+			GlobalConfig:               opts.GlobalConfig,
 		},
-		directMessaging:            opts.DirectMessaging,
-		actor:                      opts.Actor,
-		id:                         opts.AppID,
-		resiliency:                 opts.Resiliency,
-		appChannel:                 opts.AppChannel,
-		pubsubAdapter:              opts.PubsubAdapter,
-		stateStores:                opts.StateStores,
-		transactionalStateStores:   transactionalStateStores,
-		workflowComponents:         opts.WorkflowComponents,
-		configurationStores:        opts.ConfigurationStores,
-		configurationSubscribe:     make(map[string]chan struct{}),
-		lockStores:                 opts.LockStores,
-		sendToOutputBindingFn:      opts.SendToOutputBindingFn,
-		tracingSpec:                opts.TracingSpec,
-		accessControlList:          opts.AccessControlList,
-		appProtocol:                opts.AppProtocol,
-		shutdown:                   opts.Shutdown,
-		getComponentsFn:            opts.GetComponentsFn,
-		getComponentsCapabilitesFn: opts.GetComponentsCapabilitiesFn,
-		getSubscriptionsFn:         opts.GetSubscriptionsFn,
-		daprRunTimeVersion:         buildinfo.Version(),
+		directMessaging:       opts.DirectMessaging,
+		resiliency:            opts.Resiliency,
+		appChannel:            opts.AppChannel,
+		pubsubAdapter:         opts.PubsubAdapter,
+		sendToOutputBindingFn: opts.SendToOutputBindingFn,
+		tracingSpec:           opts.TracingSpec,
+		accessControlList:     opts.AccessControlList,
 	}
 }
 
@@ -324,7 +149,7 @@ func (a *api) validateAndGetPubsubAndTopic(pubsubName, topic string, reqMeta map
 
 	rawPayload, metaErr := contribMetadata.IsRawPayload(reqMeta)
 	if metaErr != nil {
-		return nil, "", "", false, status.Errorf(codes.InvalidArgument, messages.ErrMetadataGet, metaErr.Error())
+		return nil, "", "", false, messages.ErrPubSubMetadataDeserialize.WithFormat(metaErr)
 	}
 
 	return thepubsub, pubsubName, topic, rawPayload, nil
@@ -352,7 +177,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 
 	if !rawPayload {
 		envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
-			ID:              a.id,
+			Source:          a.UniversalAPI.AppID,
 			Topic:           in.Topic,
 			DataContentType: in.DataContentType,
 			Data:            body,
@@ -424,7 +249,7 @@ var (
 // Deprecated: Use proxy mode service invocation instead.
 func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error) {
 	if a.directMessaging == nil {
-		return nil, status.Errorf(codes.Internal, messages.ErrDirectInvokeNotReady)
+		return nil, messages.ErrDirectInvokeNotReady
 	}
 
 	if invokeServiceDeprecationNoticeShown.CompareAndSwap(false, true) {
@@ -460,7 +285,7 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 			}
 		}
 		if rErr != nil {
-			return rResp, status.Errorf(codes.Internal, messages.ErrDirectInvoke, in.Id, rErr)
+			return rResp, messages.ErrDirectInvoke.WithFormat(in.Id, rErr)
 		}
 
 		rResp.headers = invokev1.InternalMetadataToGrpcMetadata(ctx, imr.Headers(), true)
@@ -560,7 +385,7 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 			spanMap[i] = childSpan
 
 			envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
-				ID:              a.id,
+				Source:          a.UniversalAPI.AppID,
 				Topic:           topic,
 				DataContentType: entries[i].ContentType,
 				Data:            entries[i].Event,
@@ -678,16 +503,11 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 	return r, nil
 }
 
-type bulkGetRes struct {
-	bulkGet   bool
-	responses []state.BulkGetResponse
-}
-
 func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequest) (*runtimev1pb.GetBulkStateResponse, error) {
 	bulkResp := &runtimev1pb.GetBulkStateResponse{}
-	store, err := a.getStateStore(in.StoreName)
+	store, err := a.UniversalAPI.GetStateStore(in.StoreName)
 	if err != nil {
-		apiServerLogger.Debug(err)
+		// Error has already been logged
 		return bulkResp, err
 	}
 
@@ -695,12 +515,12 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 		return bulkResp, nil
 	}
 
-	// try bulk get first
+	var key string
 	reqs := make([]state.GetRequest, len(in.Keys))
 	for i, k := range in.Keys {
-		key, err1 := stateLoader.GetModifiedStateKey(k, in.StoreName, a.id)
-		if err1 != nil {
-			return &runtimev1pb.GetBulkStateResponse{}, err1
+		key, err = stateLoader.GetModifiedStateKey(k, in.StoreName, a.UniversalAPI.AppID)
+		if err != nil {
+			return &runtimev1pb.GetBulkStateResponse{}, err
 		}
 		r := state.GetRequest{
 			Key:      key,
@@ -710,108 +530,62 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 	}
 
 	start := time.Now()
-	policyDef := a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore)
-	bgrPolicyRunner := resiliency.NewRunner[*bulkGetRes](ctx, policyDef)
-	bgr, err := bgrPolicyRunner(func(ctx context.Context) (*bulkGetRes, error) {
-		rBulkGet, rBulkResponse, rErr := store.BulkGet(ctx, reqs)
-		return &bulkGetRes{
-			bulkGet:   rBulkGet,
-			responses: rBulkResponse,
-		}, rErr
+	policyDef := a.UniversalAPI.Resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore)
+	bgrPolicyRunner := resiliency.NewRunner[[]state.BulkGetResponse](ctx, policyDef)
+	responses, err := bgrPolicyRunner(func(ctx context.Context) ([]state.BulkGetResponse, error) {
+		return store.BulkGet(ctx, reqs, state.BulkGetOpts{
+			Parallelism: int(in.Parallelism),
+		})
 	})
-	elapsed := diag.ElapsedSince(start)
 
+	elapsed := diag.ElapsedSince(start)
 	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.StoreName, diag.BulkGet, err == nil, elapsed)
 
-	if bgr == nil {
-		bgr = &bulkGetRes{}
+	if err != nil {
+		return bulkResp, err
 	}
 
-	// if store supports bulk get
-	if bgr.bulkGet {
-		if err != nil {
-			return bulkResp, err
+	bulkResp.Items = make([]*runtimev1pb.BulkStateItem, len(responses))
+	for i := 0; i < len(responses); i++ {
+		item := &runtimev1pb.BulkStateItem{
+			Key:      stateLoader.GetOriginalStateKey(responses[i].Key),
+			Data:     responses[i].Data,
+			Etag:     stringValueOrEmpty(responses[i].ETag),
+			Metadata: responses[i].Metadata,
+			Error:    responses[i].Error,
 		}
-		for i := 0; i < len(bgr.responses); i++ {
-			item := &runtimev1pb.BulkStateItem{
-				Key:      stateLoader.GetOriginalStateKey(bgr.responses[i].Key),
-				Data:     bgr.responses[i].Data,
-				Etag:     stringValueOrEmpty(bgr.responses[i].ETag),
-				Metadata: bgr.responses[i].Metadata,
-				Error:    bgr.responses[i].Error,
-			}
-			bulkResp.Items = append(bulkResp.Items, item)
-		}
-		return bulkResp, nil
+		bulkResp.Items[i] = item
 	}
 
-	// if store doesn't support bulk get, fallback to call get() method one by one
-	limiter := concurrency.NewLimiter(int(in.Parallelism))
-	n := len(reqs)
-	resultCh := make(chan *runtimev1pb.BulkStateItem, n)
-	for i := 0; i < n; i++ {
-		fn := func(param interface{}) {
-			req := param.(*state.GetRequest)
-			policyRunner := resiliency.NewRunner[*state.GetResponse](ctx, policyDef)
-			res, policyErr := policyRunner(func(ctx context.Context) (*state.GetResponse, error) {
-				return store.Get(ctx, req)
-			})
-
-			item := &runtimev1pb.BulkStateItem{
-				Key: stateLoader.GetOriginalStateKey(req.Key),
-			}
-
-			if policyErr != nil {
-				item.Error = policyErr.Error()
-			} else if res != nil {
-				item.Data = res.Data
-				item.Etag = stringValueOrEmpty(res.ETag)
-				item.Metadata = res.Metadata
-			}
-			resultCh <- item
-		}
-		limiter.Execute(fn, &reqs[i])
-	}
-	limiter.Wait()
-	// collect result
-	for i := 0; i < n; i++ {
-		item := <-resultCh
-
-		if encryption.EncryptedStateStore(in.StoreName) {
-			val, err := encryption.TryDecryptValue(in.StoreName, item.Data)
-			if err != nil {
-				item.Error = err.Error()
-				apiServerLogger.Debug(err)
-
+	if encryption.EncryptedStateStore(in.StoreName) {
+		for i := range bulkResp.Items {
+			if bulkResp.Items[i].Error != "" || len(bulkResp.Items[i].Data) == 0 {
+				bulkResp.Items[i].Data = nil
 				continue
 			}
 
-			item.Data = val
-		}
+			val, err := encryption.TryDecryptValue(in.StoreName, bulkResp.Items[i].Data)
+			if err != nil {
+				apiServerLogger.Debugf("Bulk get error: %v", err)
+				bulkResp.Items[i].Data = nil
+				bulkResp.Items[i].Error = err.Error()
+				continue
+			}
 
-		bulkResp.Items = append(bulkResp.Items, item)
+			bulkResp.Items[i].Data = val
+		}
 	}
+
 	return bulkResp, nil
 }
 
-func (a *api) getStateStore(name string) (state.Store, error) {
-	if a.stateStores == nil || len(a.stateStores) == 0 {
-		return nil, status.Error(codes.FailedPrecondition, messages.ErrStateStoresNotConfigured)
-	}
-
-	if a.stateStores[name] == nil {
-		return nil, status.Errorf(codes.InvalidArgument, messages.ErrStateStoreNotFound, name)
-	}
-	return a.stateStores[name], nil
-}
-
 func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*runtimev1pb.GetStateResponse, error) {
-	store, err := a.getStateStore(in.StoreName)
+	store, err := a.UniversalAPI.GetStateStore(in.StoreName)
 	if err != nil {
-		apiServerLogger.Debug(err)
+		// Error has already been logged
 		return &runtimev1pb.GetStateResponse{}, err
 	}
-	key, err := stateLoader.GetModifiedStateKey(in.Key, in.StoreName, a.id)
+	key, err := stateLoader.GetModifiedStateKey(in.Key, in.StoreName, a.UniversalAPI.AppID)
 	if err != nil {
 		return &runtimev1pb.GetStateResponse{}, err
 	}
@@ -825,7 +599,7 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[*state.GetResponse](ctx,
-		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
+		a.UniversalAPI.Resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
 	)
 	getResponse, err := policyRunner(func(ctx context.Context) (*state.GetResponse, error) {
 		return store.Get(ctx, req)
@@ -836,7 +610,7 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrStateGet, in.Key, in.StoreName, err.Error())
-		apiServerLogger.Debug(err)
+		a.UniversalAPI.Logger.Debug(err)
 		return &runtimev1pb.GetStateResponse{}, err
 	}
 
@@ -847,7 +621,7 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 		val, err := encryption.TryDecryptValue(in.StoreName, getResponse.Data)
 		if err != nil {
 			err = status.Errorf(codes.Internal, messages.ErrStateGet, in.Key, in.StoreName, err.Error())
-			apiServerLogger.Debug(err)
+			a.UniversalAPI.Logger.Debug(err)
 			return &runtimev1pb.GetStateResponse{}, err
 		}
 
@@ -866,26 +640,37 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (*emptypb.Empty, error) {
 	empty := &emptypb.Empty{}
 
-	store, err := a.getStateStore(in.StoreName)
+	store, err := a.UniversalAPI.GetStateStore(in.StoreName)
 	if err != nil {
-		apiServerLogger.Debug(err)
+		// Error has already been logged
 		return empty, err
 	}
 
-	reqs := []state.SetRequest{}
-	for _, s := range in.States {
-		key, err1 := stateLoader.GetModifiedStateKey(s.Key, in.StoreName, a.id)
-		if err1 != nil {
-			return empty, err1
+	l := len(in.States)
+	if l == 0 {
+		return empty, nil
+	}
+
+	reqs := make([]state.SetRequest, l)
+	for i, s := range in.States {
+		if len(s.Key) == 0 {
+			return empty, status.Errorf(codes.InvalidArgument, "state key cannot be empty")
+		}
+
+		var key string
+		key, err = stateLoader.GetModifiedStateKey(s.Key, in.StoreName, a.UniversalAPI.AppID)
+		if err != nil {
+			return empty, err
 		}
 		req := state.SetRequest{
 			Key:      key,
 			Metadata: s.Metadata,
 		}
 
-		if contentType, ok := req.Metadata[contribMetadata.ContentType]; ok && contentType == contenttype.JSONContentType {
-			if err1 = json.Unmarshal(s.Value, &req.Value); err1 != nil {
-				return empty, err1
+		if req.Metadata[contribMetadata.ContentType] == contenttype.JSONContentType {
+			err = json.Unmarshal(s.Value, &req.Value)
+			if err != nil {
+				return empty, err
 			}
 		} else {
 			req.Value = s.Value
@@ -903,111 +688,45 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 		if encryption.EncryptedStateStore(in.StoreName) {
 			val, encErr := encryption.TryEncryptValue(in.StoreName, s.Value)
 			if encErr != nil {
-				apiServerLogger.Debug(encErr)
+				a.UniversalAPI.Logger.Debug(encErr)
 				return empty, encErr
 			}
 
 			req.Value = val
 		}
 
-		reqs = append(reqs, req)
+		reqs[i] = req
 	}
 
 	start := time.Now()
-	policyRunner := resiliency.NewRunner[any](ctx,
-		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
+	err = stateLoader.PerformBulkStoreOperation(ctx, reqs,
+		a.UniversalAPI.Resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
+		state.BulkStoreOpts{},
+		store.Set,
+		store.BulkSet,
 	)
-	_, err = policyRunner(func(ctx context.Context) (any, error) {
-		return nil, store.BulkSet(ctx, reqs)
-	})
 	elapsed := diag.ElapsedSince(start)
 
 	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.StoreName, diag.Set, err == nil, elapsed)
 
 	if err != nil {
 		err = a.stateErrorResponse(err, messages.ErrStateSave, in.StoreName, err.Error())
-		apiServerLogger.Debug(err)
+		a.UniversalAPI.Logger.Debug(err)
 		return empty, err
 	}
 	return empty, nil
 }
 
-func (a *api) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryStateRequest) (*runtimev1pb.QueryStateResponse, error) {
-	ret := &runtimev1pb.QueryStateResponse{}
-
-	store, err := a.getStateStore(in.StoreName)
-	if err != nil {
-		apiServerLogger.Debug(err)
-		return ret, err
-	}
-
-	querier, ok := store.(state.Querier)
-	if !ok {
-		err = status.Errorf(codes.Unimplemented, messages.ErrNotFound, "Query")
-		apiServerLogger.Debug(err)
-		return ret, err
-	}
-
-	if encryption.EncryptedStateStore(in.StoreName) {
-		err = status.Errorf(codes.Aborted, messages.ErrStateQuery, in.GetStoreName(), "cannot query encrypted store")
-		apiServerLogger.Debug(err)
-		return ret, err
-	}
-
-	var req state.QueryRequest
-	if err = json.Unmarshal([]byte(in.GetQuery()), &req.Query); err != nil {
-		err = status.Errorf(codes.InvalidArgument, messages.ErrMalformedRequest, err.Error())
-		apiServerLogger.Debug(err)
-		return ret, err
-	}
-	req.Metadata = in.GetMetadata()
-
-	start := time.Now()
-	policyRunner := resiliency.NewRunner[*state.QueryResponse](ctx,
-		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
-	)
-	resp, err := policyRunner(func(ctx context.Context) (*state.QueryResponse, error) {
-		return querier.Query(ctx, &req)
-	})
-	elapsed := diag.ElapsedSince(start)
-
-	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.StoreName, diag.StateQuery, err == nil, elapsed)
-
-	if err != nil {
-		err = status.Errorf(codes.Internal, messages.ErrStateQuery, in.GetStoreName(), err.Error())
-		apiServerLogger.Debug(err)
-		return ret, err
-	}
-
-	if resp == nil || len(resp.Results) == 0 {
-		return ret, nil
-	}
-
-	ret.Results = make([]*runtimev1pb.QueryStateItem, len(resp.Results))
-	ret.Token = resp.Token
-	ret.Metadata = resp.Metadata
-
-	for i := range resp.Results {
-		ret.Results[i] = &runtimev1pb.QueryStateItem{
-			Key:  stateLoader.GetOriginalStateKey(resp.Results[i].Key),
-			Data: resp.Results[i].Data,
-		}
-	}
-
-	return ret, nil
-}
-
 // stateErrorResponse takes a state store error, format and args and returns a status code encoded gRPC error.
 func (a *api) stateErrorResponse(err error, format string, args ...interface{}) error {
-	e, ok := err.(*state.ETagError)
-	if !ok {
-		return status.Errorf(codes.Internal, format, args...)
-	}
-	switch e.Kind() {
-	case state.ETagMismatch:
-		return status.Errorf(codes.Aborted, format, args...)
-	case state.ETagInvalid:
-		return status.Errorf(codes.InvalidArgument, format, args...)
+	var etagErr *state.ETagError
+	if errors.As(err, &etagErr) {
+		switch etagErr.Kind() {
+		case state.ETagMismatch:
+			return status.Errorf(codes.Aborted, format, args...)
+		case state.ETagInvalid:
+			return status.Errorf(codes.InvalidArgument, format, args...)
+		}
 	}
 
 	return status.Errorf(codes.Internal, format, args...)
@@ -1016,13 +735,13 @@ func (a *api) stateErrorResponse(err error, format string, args ...interface{}) 
 func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*emptypb.Empty, error) {
 	empty := &emptypb.Empty{}
 
-	store, err := a.getStateStore(in.StoreName)
+	store, err := a.UniversalAPI.GetStateStore(in.StoreName)
 	if err != nil {
-		apiServerLogger.Debug(err)
+		// Error has already been logged
 		return empty, err
 	}
 
-	key, err := stateLoader.GetModifiedStateKey(in.Key, in.StoreName, a.id)
+	key, err := stateLoader.GetModifiedStateKey(in.Key, in.StoreName, a.UniversalAPI.AppID)
 	if err != nil {
 		return empty, err
 	}
@@ -1042,7 +761,7 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[any](ctx,
-		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
+		a.UniversalAPI.Resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
 	)
 	_, err = policyRunner(func(ctx context.Context) (any, error) {
 		return nil, store.Delete(ctx, &req)
@@ -1053,7 +772,7 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 
 	if err != nil {
 		err = a.stateErrorResponse(err, messages.ErrStateDelete, in.Key, err.Error())
-		apiServerLogger.Debug(err)
+		a.UniversalAPI.Logger.Debug(err)
 		return empty, err
 	}
 	return empty, nil
@@ -1062,15 +781,15 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkStateRequest) (*emptypb.Empty, error) {
 	empty := &emptypb.Empty{}
 
-	store, err := a.getStateStore(in.StoreName)
+	store, err := a.UniversalAPI.GetStateStore(in.StoreName)
 	if err != nil {
-		apiServerLogger.Debug(err)
+		// Error has already been logged
 		return empty, err
 	}
 
-	reqs := make([]state.DeleteRequest, 0, len(in.States))
-	for _, item := range in.States {
-		key, err1 := stateLoader.GetModifiedStateKey(item.Key, in.StoreName, a.id)
+	reqs := make([]state.DeleteRequest, len(in.States))
+	for i, item := range in.States {
+		key, err1 := stateLoader.GetModifiedStateKey(item.Key, in.StoreName, a.UniversalAPI.AppID)
 		if err1 != nil {
 			return empty, err1
 		}
@@ -1087,24 +806,26 @@ func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkSta
 				Consistency: stateConsistencyToString(item.Options.Consistency),
 			}
 		}
-		reqs = append(reqs, req)
+		reqs[i] = req
 	}
 
 	start := time.Now()
-	policyRunner := resiliency.NewRunner[any](ctx,
-		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
+	err = stateLoader.PerformBulkStoreOperation(ctx, reqs,
+		a.UniversalAPI.Resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
+		state.BulkStoreOpts{},
+		store.Delete,
+		store.BulkDelete,
 	)
-	_, err = policyRunner(func(ctx context.Context) (any, error) {
-		return nil, store.BulkDelete(ctx, reqs)
-	})
 	elapsed := diag.ElapsedSince(start)
 
 	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.StoreName, diag.BulkDelete, err == nil, elapsed)
 
 	if err != nil {
-		apiServerLogger.Debug(err)
+		err = a.stateErrorResponse(err, messages.ErrStateDeleteBulk, in.StoreName, err.Error())
+		a.UniversalAPI.Logger.Debug(err)
 		return empty, err
 	}
+
 	return empty, nil
 }
 
@@ -1116,19 +837,13 @@ func extractEtag(req *commonv1pb.StateItem) (bool, string) {
 }
 
 func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteStateTransactionRequest) (*emptypb.Empty, error) {
-	if a.stateStores == nil || len(a.stateStores) == 0 {
-		err := status.Error(codes.FailedPrecondition, messages.ErrStateStoresNotConfigured)
-		apiServerLogger.Debug(err)
-		return &emptypb.Empty{}, err
+	store, storeErr := a.UniversalAPI.GetStateStore(in.StoreName)
+	if storeErr != nil {
+		// Error has already been logged
+		return &emptypb.Empty{}, storeErr
 	}
 
-	if a.stateStores[in.StoreName] == nil {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrStateStoreNotFound, in.StoreName)
-		apiServerLogger.Debug(err)
-		return &emptypb.Empty{}, err
-	}
-
-	transactionalStore, ok := a.transactionalStateStores[in.StoreName]
+	transactionalStore, ok := store.(state.TransactionalStore)
 	if !ok {
 		err := status.Errorf(codes.Unimplemented, messages.ErrStateStoreNotSupported, in.StoreName)
 		apiServerLogger.Debug(err)
@@ -1140,12 +855,12 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 		req := inputReq.Request
 
 		hasEtag, etag := extractEtag(req)
-		key, err := stateLoader.GetModifiedStateKey(req.Key, in.StoreName, a.id)
+		key, err := stateLoader.GetModifiedStateKey(req.Key, in.StoreName, a.UniversalAPI.AppID)
 		if err != nil {
 			return &emptypb.Empty{}, err
 		}
 		switch state.OperationType(inputReq.OperationType) {
-		case state.Upsert:
+		case state.OperationUpsert:
 			setReq := state.SetRequest{
 				Key: key,
 				// Limitation:
@@ -1165,12 +880,9 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 				}
 			}
 
-			operations[i] = state.TransactionalStateOperation{
-				Operation: state.Upsert,
-				Request:   setReq,
-			}
+			operations[i] = setReq
 
-		case state.Delete:
+		case state.OperationDelete:
 			delReq := state.DeleteRequest{
 				Key:      key,
 				Metadata: req.Metadata,
@@ -1186,10 +898,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 				}
 			}
 
-			operations[i] = state.TransactionalStateOperation{
-				Operation: state.Delete,
-				Request:   delReq,
-			}
+			operations[i] = delReq
 
 		default:
 			err := status.Errorf(codes.Unimplemented, messages.ErrNotSupportedStateOperation, inputReq.OperationType)
@@ -1200,8 +909,8 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 
 	if encryption.EncryptedStateStore(in.StoreName) {
 		for i, op := range operations {
-			if op.Operation == state.Upsert {
-				req := op.Request.(*state.SetRequest)
+			switch req := op.(type) {
+			case state.SetRequest:
 				data := []byte(fmt.Sprintf("%v", req.Value))
 				val, err := encryption.TryEncryptValue(in.StoreName, data)
 				if err != nil {
@@ -1211,21 +920,21 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 				}
 
 				req.Value = val
-				operations[i].Request = req
+				operations[i] = req
 			}
 		}
 	}
 
 	start := time.Now()
-	policyRunner := resiliency.NewRunner[any](ctx,
+	policyRunner := resiliency.NewRunner[struct{}](ctx,
 		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
 	)
 	storeReq := &state.TransactionalStateRequest{
 		Operations: operations,
 		Metadata:   in.Metadata,
 	}
-	_, err := policyRunner(func(ctx context.Context) (any, error) {
-		return nil, transactionalStore.Multi(ctx, storeReq)
+	_, err := policyRunner(func(ctx context.Context) (struct{}, error) {
+		return struct{}{}, transactionalStore.Multi(ctx, storeReq)
 	})
 	elapsed := diag.ElapsedSince(start)
 
@@ -1240,7 +949,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 }
 
 func (a *api) RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterActorTimerRequest) (*emptypb.Empty, error) {
-	if a.actor == nil {
+	if a.UniversalAPI.Actors == nil {
 		err := status.Errorf(codes.Internal, messages.ErrActorRuntimeNotFound)
 		apiServerLogger.Debug(err)
 		return &emptypb.Empty{}, err
@@ -1257,14 +966,18 @@ func (a *api) RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterAc
 	}
 
 	if in.Data != nil {
-		req.Data = in.Data
+		j, err := json.Marshal(in.Data)
+		if err != nil {
+			return &emptypb.Empty{}, err
+		}
+		req.Data = j
 	}
-	err := a.actor.CreateTimer(ctx, req)
+	err := a.UniversalAPI.Actors.CreateTimer(ctx, req)
 	return &emptypb.Empty{}, err
 }
 
 func (a *api) UnregisterActorTimer(ctx context.Context, in *runtimev1pb.UnregisterActorTimerRequest) (*emptypb.Empty, error) {
-	if a.actor == nil {
+	if a.UniversalAPI.Actors == nil {
 		err := status.Errorf(codes.Internal, messages.ErrActorRuntimeNotFound)
 		apiServerLogger.Debug(err)
 		return &emptypb.Empty{}, err
@@ -1276,12 +989,12 @@ func (a *api) UnregisterActorTimer(ctx context.Context, in *runtimev1pb.Unregist
 		ActorType: in.ActorType,
 	}
 
-	err := a.actor.DeleteTimer(ctx, req)
+	err := a.UniversalAPI.Actors.DeleteTimer(ctx, req)
 	return &emptypb.Empty{}, err
 }
 
 func (a *api) RegisterActorReminder(ctx context.Context, in *runtimev1pb.RegisterActorReminderRequest) (*emptypb.Empty, error) {
-	if a.actor == nil {
+	if a.UniversalAPI.Actors == nil {
 		err := status.Errorf(codes.Internal, messages.ErrActorRuntimeNotFound)
 		apiServerLogger.Debug(err)
 		return &emptypb.Empty{}, err
@@ -1297,14 +1010,18 @@ func (a *api) RegisterActorReminder(ctx context.Context, in *runtimev1pb.Registe
 	}
 
 	if in.Data != nil {
-		req.Data = in.Data
+		j, err := json.Marshal(in.Data)
+		if err != nil {
+			return &emptypb.Empty{}, err
+		}
+		req.Data = j
 	}
-	err := a.actor.CreateReminder(ctx, req)
+	err := a.UniversalAPI.Actors.CreateReminder(ctx, req)
 	return &emptypb.Empty{}, err
 }
 
 func (a *api) UnregisterActorReminder(ctx context.Context, in *runtimev1pb.UnregisterActorReminderRequest) (*emptypb.Empty, error) {
-	if a.actor == nil {
+	if a.UniversalAPI.Actors == nil {
 		err := status.Errorf(codes.Internal, messages.ErrActorRuntimeNotFound)
 		apiServerLogger.Debug(err)
 		return &emptypb.Empty{}, err
@@ -1316,12 +1033,12 @@ func (a *api) UnregisterActorReminder(ctx context.Context, in *runtimev1pb.Unreg
 		ActorType: in.ActorType,
 	}
 
-	err := a.actor.DeleteReminder(ctx, req)
+	err := a.UniversalAPI.Actors.DeleteReminder(ctx, req)
 	return &emptypb.Empty{}, err
 }
 
 func (a *api) RenameActorReminder(ctx context.Context, in *runtimev1pb.RenameActorReminderRequest) (*emptypb.Empty, error) {
-	if a.actor == nil {
+	if a.UniversalAPI.Actors == nil {
 		err := status.Errorf(codes.Internal, messages.ErrActorRuntimeNotFound)
 		apiServerLogger.Debug(err)
 		return &emptypb.Empty{}, err
@@ -1334,12 +1051,12 @@ func (a *api) RenameActorReminder(ctx context.Context, in *runtimev1pb.RenameAct
 		NewName:   in.NewName,
 	}
 
-	err := a.actor.RenameReminder(ctx, req)
+	err := a.UniversalAPI.Actors.RenameReminder(ctx, req)
 	return &emptypb.Empty{}, err
 }
 
 func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRequest) (*runtimev1pb.GetActorStateResponse, error) {
-	if a.actor == nil {
+	if a.UniversalAPI.Actors == nil {
 		err := status.Errorf(codes.Internal, messages.ErrActorRuntimeNotFound)
 		apiServerLogger.Debug(err)
 		return nil, err
@@ -1349,7 +1066,7 @@ func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRe
 	actorID := in.ActorId
 	key := in.Key
 
-	hosted := a.actor.IsActorHosted(ctx, &actors.ActorHostedRequest{
+	hosted := a.UniversalAPI.Actors.IsActorHosted(ctx, &actors.ActorHostedRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 	})
@@ -1366,7 +1083,7 @@ func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRe
 		Key:       key,
 	}
 
-	resp, err := a.actor.GetState(ctx, &req)
+	resp, err := a.UniversalAPI.Actors.GetState(ctx, &req)
 	if err != nil {
 		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrActorStateGet, err))
 		apiServerLogger.Debug(err)
@@ -1379,7 +1096,7 @@ func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRe
 }
 
 func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteActorStateTransactionRequest) (*emptypb.Empty, error) {
-	if a.actor == nil {
+	if a.UniversalAPI.Actors == nil {
 		err := status.Errorf(codes.Internal, messages.ErrActorRuntimeNotFound)
 		apiServerLogger.Debug(err)
 		return &emptypb.Empty{}, err
@@ -1391,19 +1108,22 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 
 	for _, op := range in.Operations {
 		var actorOp actors.TransactionalOperation
-		switch state.OperationType(op.OperationType) {
-		case state.Upsert:
-			setReq := map[string]interface{}{
+		switch op.OperationType {
+		case string(state.OperationUpsert):
+			setReq := map[string]any{
 				"key":   op.Key,
 				"value": op.Value.Value,
 				// Actor state do not user other attributes from state request.
+			}
+			if meta := op.GetMetadata(); len(meta) > 0 {
+				setReq["metadata"] = meta
 			}
 
 			actorOp = actors.TransactionalOperation{
 				Operation: actors.Upsert,
 				Request:   setReq,
 			}
-		case state.Delete:
+		case string(state.OperationDelete):
 			delReq := map[string]interface{}{
 				"key": op.Key,
 				// Actor state do not user other attributes from state request.
@@ -1423,7 +1143,7 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 		actorOps = append(actorOps, actorOp)
 	}
 
-	hosted := a.actor.IsActorHosted(ctx, &actors.ActorHostedRequest{
+	hosted := a.UniversalAPI.Actors.IsActorHosted(ctx, &actors.ActorHostedRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 	})
@@ -1440,7 +1160,7 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 		Operations: actorOps,
 	}
 
-	err := a.actor.TransactionalStateOperation(ctx, &req)
+	err := a.UniversalAPI.Actors.TransactionalStateOperation(ctx, &req)
 	if err != nil {
 		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrActorStateTransactionSave, err))
 		apiServerLogger.Debug(err)
@@ -1453,7 +1173,7 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorRequest) (*runtimev1pb.InvokeActorResponse, error) {
 	response := &runtimev1pb.InvokeActorResponse{}
 
-	if a.actor == nil {
+	if a.UniversalAPI.Actors == nil {
 		err := status.Errorf(codes.Internal, messages.ErrActorRuntimeNotFound)
 		apiServerLogger.Debug(err)
 		return response, err
@@ -1487,7 +1207,7 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 		},
 	)
 	resp, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
-		return a.actor.Call(ctx, req)
+		return a.UniversalAPI.Actors.Call(ctx, req)
 	})
 	if err != nil && !errors.Is(err, actors.ErrDaprResponseHeader) {
 		err = status.Errorf(codes.Internal, messages.ErrActorInvoke, err)
@@ -1516,232 +1236,7 @@ func (a *api) SetDirectMessaging(directMessaging messaging.DirectMessaging) {
 }
 
 func (a *api) SetActorRuntime(actor actors.Actors) {
-	a.actor = actor
-}
-
-func (a *api) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.GetMetadataResponse, error) {
-	extendedMetadata := make(map[string]string)
-	// Copy synchronously so it can be serialized to JSON.
-	a.extendedMetadata.Range(func(key, value interface{}) bool {
-		extendedMetadata[key.(string)] = value.(string)
-		return true
-	})
-	extendedMetadata[daprRuntimeVersionKey] = a.daprRunTimeVersion
-
-	activeActorsCount := []*runtimev1pb.ActiveActorsCount{}
-	if a.actor != nil {
-		for _, actorTypeCount := range a.actor.GetActiveActorsCount(ctx) {
-			activeActorsCount = append(activeActorsCount, &runtimev1pb.ActiveActorsCount{
-				Type:  actorTypeCount.Type,
-				Count: int32(actorTypeCount.Count),
-			})
-		}
-	}
-
-	components := a.getComponentsFn()
-	registeredComponents := make([]*runtimev1pb.RegisteredComponents, 0, len(components))
-	componentsCapabilities := a.getComponentsCapabilitesFn()
-	for _, comp := range components {
-		registeredComp := &runtimev1pb.RegisteredComponents{
-			Name:         comp.Name,
-			Version:      comp.Spec.Version,
-			Type:         comp.Spec.Type,
-			Capabilities: getOrDefaultCapabilities(componentsCapabilities, comp.Name),
-		}
-		registeredComponents = append(registeredComponents, registeredComp)
-	}
-
-	subscriptions, err := a.getSubscriptionsFn()
-	if err != nil {
-		err = status.Errorf(codes.Internal, messages.ErrPubsubGetSubscriptions, err.Error())
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.GetMetadataResponse{}, err
-	}
-	ps := []*runtimev1pb.PubsubSubscription{}
-	for _, s := range subscriptions {
-		ps = append(ps, &runtimev1pb.PubsubSubscription{
-			PubsubName:      s.PubsubName,
-			Topic:           s.Topic,
-			Metadata:        s.Metadata,
-			DeadLetterTopic: s.DeadLetterTopic,
-			Rules:           convertPubsubSubscriptionRules(s.Rules),
-		})
-	}
-
-	response := &runtimev1pb.GetMetadataResponse{
-		Id:                   a.id,
-		ExtendedMetadata:     extendedMetadata,
-		RegisteredComponents: registeredComponents,
-		ActiveActorsCount:    activeActorsCount,
-		Subscriptions:        ps,
-	}
-
-	return response, nil
-}
-
-func getOrDefaultCapabilities(dict map[string][]string, key string) []string {
-	if val, ok := dict[key]; ok {
-		return val
-	}
-	return make([]string, 0)
-}
-
-func convertPubsubSubscriptionRules(rules []*runtimePubsub.Rule) *runtimev1pb.PubsubSubscriptionRules {
-	out := &runtimev1pb.PubsubSubscriptionRules{
-		Rules: make([]*runtimev1pb.PubsubSubscriptionRule, 0),
-	}
-	for _, r := range rules {
-		out.Rules = append(out.Rules, &runtimev1pb.PubsubSubscriptionRule{
-			Match: fmt.Sprintf("%s", r.Match),
-			Path:  r.Path,
-		})
-	}
-	return out
-}
-
-// SetMetadata Sets value in extended metadata of the sidecar.
-func (a *api) SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadataRequest) (*emptypb.Empty, error) {
-	a.extendedMetadata.Store(in.Key, in.Value)
-	return &emptypb.Empty{}, nil
-}
-
-func (a *api) GetWorkflowAlpha1(ctx context.Context, in *runtimev1pb.GetWorkflowRequest) (*runtimev1pb.GetWorkflowResponse, error) {
-	if in.InstanceId == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrMissingOrEmptyInstance)
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.GetWorkflowResponse{}, err
-	}
-	if in.WorkflowComponent == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrNoOrMissingWorkflowComponent)
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.GetWorkflowResponse{}, err
-	}
-	workflowRun := a.workflowComponents[in.WorkflowComponent]
-	if workflowRun == nil {
-		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErWorkflowrComponentDoesNotExist, in.WorkflowComponent))
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.GetWorkflowResponse{}, err
-	}
-	req := workflows.WorkflowReference{
-		InstanceID: in.InstanceId,
-	}
-	response, err := workflowRun.Get(ctx, &req)
-	if err != nil {
-		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrWorkflowGetResponse, err))
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.GetWorkflowResponse{}, err
-	}
-
-	id := &runtimev1pb.WorkflowReference{
-		InstanceId: response.WFInfo.InstanceID,
-	}
-
-	t, err := time.Parse(time.RFC3339, response.StartTime)
-	if err != nil {
-		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrTimerParse, err))
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.GetWorkflowResponse{}, err
-	}
-
-	res := &runtimev1pb.GetWorkflowResponse{
-		InstanceId: id.InstanceId,
-		StartTime:  t.Unix(),
-		Metadata:   response.Metadata,
-	}
-	return res, nil
-}
-
-func (a *api) StartWorkflowAlpha1(ctx context.Context, in *runtimev1pb.StartWorkflowRequest) (*runtimev1pb.WorkflowReference, error) {
-	if in.WorkflowName == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrWorkflowNameMissing)
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.WorkflowReference{}, err
-	}
-
-	if in.WorkflowComponent == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrNoOrMissingWorkflowComponent)
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.WorkflowReference{}, err
-	}
-
-	if in.InstanceId == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrMissingOrEmptyInstance)
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.WorkflowReference{}, err
-	}
-
-	workflowRun := a.workflowComponents[in.WorkflowComponent]
-	if workflowRun == nil {
-		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErWorkflowrComponentDoesNotExist, in.WorkflowComponent))
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.WorkflowReference{}, err
-	}
-
-	wf := workflows.WorkflowReference{
-		InstanceID: in.InstanceId,
-	}
-
-	var inputMap map[string]interface{}
-	json.Unmarshal(in.Input, &inputMap)
-	req := workflows.StartRequest{
-		WorkflowReference: wf,
-		Options:           in.Options,
-		WorkflowName:      in.WorkflowName,
-		Input:             inputMap,
-	}
-
-	resp, err := workflowRun.Start(ctx, &req)
-	if err != nil {
-		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrStartWorkflow, err))
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.WorkflowReference{}, err
-	}
-	ret := &runtimev1pb.WorkflowReference{
-		InstanceId: resp.InstanceID,
-	}
-	return ret, nil
-}
-
-func (a *api) TerminateWorkflowAlpha1(ctx context.Context, in *runtimev1pb.TerminateWorkflowRequest) (*runtimev1pb.TerminateWorkflowResponse, error) {
-	if in.InstanceId == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrMissingOrEmptyInstance)
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.TerminateWorkflowResponse{}, err
-	}
-
-	if in.WorkflowComponent == "" {
-		err := status.Errorf(codes.InvalidArgument, messages.ErrNoOrMissingWorkflowComponent)
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.TerminateWorkflowResponse{}, err
-	}
-
-	workflowRun := a.workflowComponents[in.WorkflowComponent]
-	if workflowRun == nil {
-		err := status.Errorf(codes.InvalidArgument, fmt.Sprintf(messages.ErWorkflowrComponentDoesNotExist, in.WorkflowComponent))
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.TerminateWorkflowResponse{}, err
-	}
-
-	req := workflows.WorkflowReference{
-		InstanceID: in.InstanceId,
-	}
-
-	err := workflowRun.Terminate(ctx, &req)
-	if err != nil {
-		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrTerminateWorkflow, err))
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.TerminateWorkflowResponse{}, nil
-	}
-	return &runtimev1pb.TerminateWorkflowResponse{}, nil
-}
-
-// Shutdown the sidecar.
-func (a *api) Shutdown(ctx context.Context, in *emptypb.Empty) (*emptypb.Empty, error) {
-	go func() {
-		<-ctx.Done()
-		a.shutdown()
-	}()
-	return &emptypb.Empty{}, nil
+	a.UniversalAPI.Actors = actor
 }
 
 func stringValueOrEmpty(value *string) string {
@@ -1753,17 +1248,18 @@ func stringValueOrEmpty(value *string) string {
 }
 
 func (a *api) getConfigurationStore(name string) (configuration.Store, error) {
-	if a.configurationStores == nil || len(a.configurationStores) == 0 {
+	if a.CompStore.ConfigurationsLen() == 0 {
 		return nil, status.Error(codes.FailedPrecondition, messages.ErrConfigurationStoresNotConfigured)
 	}
 
-	if a.configurationStores[name] == nil {
+	conf, ok := a.CompStore.GetConfiguration(name)
+	if !ok {
 		return nil, status.Errorf(codes.InvalidArgument, messages.ErrConfigurationStoreNotFound, name)
 	}
-	return a.configurationStores[name], nil
+	return conf, nil
 }
 
-func (a *api) GetConfigurationAlpha1(ctx context.Context, in *runtimev1pb.GetConfigurationRequest) (*runtimev1pb.GetConfigurationResponse, error) {
+func (a *api) GetConfiguration(ctx context.Context, in *runtimev1pb.GetConfigurationRequest) (*runtimev1pb.GetConfigurationResponse, error) {
 	response := &runtimev1pb.GetConfigurationResponse{}
 
 	store, err := a.getConfigurationStore(in.StoreName)
@@ -1809,13 +1305,35 @@ func (a *api) GetConfigurationAlpha1(ctx context.Context, in *runtimev1pb.GetCon
 	return response, nil
 }
 
+// TODO: Remove this method when the alpha API is removed.
+func (a *api) GetConfigurationAlpha1(ctx context.Context, in *runtimev1pb.GetConfigurationRequest) (*runtimev1pb.GetConfigurationResponse, error) {
+	return a.GetConfiguration(ctx, in)
+}
+
 type configurationEventHandler struct {
+	readyCh      chan struct{}
+	readyClosed  bool
+	lock         sync.Mutex
 	api          *api
 	storeName    string
 	serverStream runtimev1pb.Dapr_SubscribeConfigurationAlpha1Server //nolint:nosnakecase
 }
 
+func (h *configurationEventHandler) ready() {
+	if !h.readyClosed {
+		close(h.readyCh)
+		h.readyClosed = true
+	}
+}
+
 func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *configuration.UpdateEvent) error {
+	// Blocks until the first message is sent
+	<-h.readyCh
+
+	// Calling Send on a gRPC stream from multiple goroutines at the same time is not supported
+	h.lock.Lock()
+	defer h.lock.Unlock()
+
 	items := make(map[string]*commonv1pb.ConfigurationItem, len(e.Items))
 	for k, v := range e.Items {
 		items[k] = &commonv1pb.ConfigurationItem{
@@ -1825,44 +1343,41 @@ func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *c
 		}
 	}
 
-	if err := h.serverStream.Send(&runtimev1pb.SubscribeConfigurationResponse{
+	err := h.serverStream.Send(&runtimev1pb.SubscribeConfigurationResponse{
 		Items: items,
 		Id:    e.ID,
-	}); err != nil {
+	})
+	if err != nil {
 		apiServerLogger.Debug(err)
 		return err
 	}
 	return nil
 }
 
-func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigurationRequest, configurationServer runtimev1pb.Dapr_SubscribeConfigurationAlpha1Server) error { //nolint:nosnakecase
+func (a *api) SubscribeConfiguration(request *runtimev1pb.SubscribeConfigurationRequest, configurationServer runtimev1pb.Dapr_SubscribeConfigurationServer) error { //nolint:nosnakecase
 	store, err := a.getConfigurationStore(request.StoreName)
 	if err != nil {
 		apiServerLogger.Debug(err)
 		return err
 	}
-	sort.Slice(request.Keys, func(i, j int) bool {
-		return request.Keys[i] < request.Keys[j]
-	})
 
-	subscribeKeys := make([]string, 0)
+	sort.Strings(request.Keys)
 
 	// TODO(@halspang) provide a switch to use just resiliency or this.
 
-	if len(request.Keys) > 0 {
-		subscribeKeys = append(subscribeKeys, request.Keys...)
-	}
-
 	req := &configuration.SubscribeRequest{
-		Keys:     subscribeKeys,
+		Keys:     request.Keys,
 		Metadata: request.GetMetadata(),
 	}
 
 	handler := &configurationEventHandler{
+		readyCh:      make(chan struct{}),
 		api:          a,
 		storeName:    request.StoreName,
 		serverStream: configurationServer,
 	}
+	// Prevents a leak
+	defer handler.ready()
 
 	// TODO(@laurence) deal with failed subscription and retires
 	start := time.Now()
@@ -1881,23 +1396,33 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 		apiServerLogger.Debug(err)
 		return err
 	}
-	if err := handler.serverStream.Send(&runtimev1pb.SubscribeConfigurationResponse{
+
+	err = handler.serverStream.Send(&runtimev1pb.SubscribeConfigurationResponse{
 		Id: subscribeID,
-	}); err != nil {
+	})
+	if err != nil {
 		apiServerLogger.Debug(err)
 		return err
 	}
 
 	stop := make(chan struct{})
-	a.configurationSubscribeLock.Lock()
-	a.configurationSubscribe[subscribeID] = stop
-	a.configurationSubscribeLock.Unlock()
+	a.CompStore.AddConfigurationSubscribe(subscribeID, stop)
+
+	// We have sent the first message, so signal that we're ready to send messages in the stream
+	handler.ready()
+
+	// Wait until the channel is stopped
 	<-stop
 
 	return nil
 }
 
-func (a *api) UnsubscribeConfigurationAlpha1(ctx context.Context, request *runtimev1pb.UnsubscribeConfigurationRequest) (*runtimev1pb.UnsubscribeConfigurationResponse, error) {
+// TODO: Remove this method when the alpha API is removed.
+func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigurationRequest, configurationServer runtimev1pb.Dapr_SubscribeConfigurationAlpha1Server) error { //nolint:nosnakecase
+	return a.SubscribeConfiguration(request, configurationServer.(runtimev1pb.Dapr_SubscribeConfigurationServer))
+}
+
+func (a *api) UnsubscribeConfiguration(ctx context.Context, request *runtimev1pb.UnsubscribeConfigurationRequest) (*runtimev1pb.UnsubscribeConfigurationResponse, error) {
 	store, err := a.getConfigurationStore(request.GetStoreName())
 	if err != nil {
 		apiServerLogger.Debug(err)
@@ -1907,24 +1432,19 @@ func (a *api) UnsubscribeConfigurationAlpha1(ctx context.Context, request *runti
 		}, err
 	}
 
-	a.configurationSubscribeLock.Lock()
-	defer a.configurationSubscribeLock.Unlock()
-
 	subscribeID := request.GetId()
 
-	stop, ok := a.configurationSubscribe[subscribeID]
+	_, ok := a.CompStore.GetConfigurationSubscribe(subscribeID)
 	if !ok {
 		return &runtimev1pb.UnsubscribeConfigurationResponse{
-			Ok: true,
+			Ok:      false,
+			Message: fmt.Sprintf(messages.ErrConfigurationUnsubscribe, subscribeID, "subscription does not exist"),
 		}, nil
 	}
-	delete(a.configurationSubscribe, subscribeID)
-	close(stop)
 
 	policyRunner := resiliency.NewRunner[any](ctx,
 		a.resiliency.ComponentOutboundPolicy(request.StoreName, resiliency.Configuration),
 	)
-
 	start := time.Now()
 	storeReq := &configuration.UnsubscribeRequest{
 		ID: subscribeID,
@@ -1942,19 +1462,20 @@ func (a *api) UnsubscribeConfigurationAlpha1(ctx context.Context, request *runti
 			Message: err.Error(),
 		}, err
 	}
+
+	a.CompStore.DeleteConfigurationSubscribe(subscribeID)
+
 	return &runtimev1pb.UnsubscribeConfigurationResponse{
 		Ok: true,
 	}, nil
 }
 
+// TODO: Remove this method when the alpha API is removed.
+func (a *api) UnsubscribeConfigurationAlpha1(ctx context.Context, request *runtimev1pb.UnsubscribeConfigurationRequest) (*runtimev1pb.UnsubscribeConfigurationResponse, error) {
+	return a.UnsubscribeConfiguration(ctx, request)
+}
+
 func (a *api) Close() error {
-	a.configurationSubscribeLock.Lock()
-	defer a.configurationSubscribeLock.Unlock()
-
-	for k, stop := range a.configurationSubscribe {
-		close(stop)
-		delete(a.configurationSubscribe, k)
-	}
-
+	a.CompStore.DeleteAllConfigurationSubscribe()
 	return nil
 }

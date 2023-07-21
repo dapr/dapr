@@ -832,9 +832,7 @@ func TestActorFeatures(t *testing.T) {
 		time.Sleep(secondsToCheckGetMetadata * time.Second)
 
 		res, err = httpGet(fmt.Sprintf(actorMetadataURLFormat, externalURL))
-		if err != nil {
-			log.Printf("failed to get metadata. Error='%v' Response='%s'", err, string(res))
-		}
+		log.Printf("Got metadata: Error='%v' Response='%s'", err, string(res))
 		require.NoError(t, err, "failed to get metadata")
 
 		var previousMetadata metadata
@@ -857,9 +855,7 @@ func TestActorFeatures(t *testing.T) {
 		time.Sleep(5 * time.Second)
 
 		res, err = httpGet(fmt.Sprintf(actorMetadataURLFormat, externalURL))
-		if err != nil {
-			log.Printf("failed to get metadata. Error='%v' Response='%s'", err, string(res))
-		}
+		log.Printf("Got metadata: Error='%v' Response='%s'", err, string(res))
 		require.NoError(t, err, "failed to get metadata")
 
 		var currentMetadata metadata

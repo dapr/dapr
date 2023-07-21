@@ -163,7 +163,8 @@ func (s *server) StartNonBlocking() error {
 		} else if s.kind == apiServer {
 			runtimev1pb.RegisterDaprServer(server, s.api)
 			if s.workflowEngine != nil {
-				s.workflowEngine.ConfigureGrpc(server)
+				s.logger.Infof("Registering workflow engine for gRPC endpoint: %s", listener.Addr())
+				s.workflowEngine.RegisterGrpcServer(server)
 			}
 		}
 
@@ -216,9 +217,9 @@ func (s *server) getMiddlewareOptions() []grpcGo.ServerOption {
 
 	intr = append(intr, metadata.SetMetadataInContextUnary)
 
-	if len(s.apiSpec.Allowed) > 0 {
+	if len(s.apiSpec.Allowed) > 0 || len(s.apiSpec.Denied) > 0 {
 		s.logger.Info("Enabled API access list on gRPC server")
-		unary, stream := setAPIEndpointsMiddlewares(s.apiSpec.Allowed)
+		unary, stream := setAPIEndpointsMiddlewares(s.apiSpec.Allowed, s.apiSpec.Denied)
 		if unary != nil && stream != nil {
 			intr = append(intr, unary)
 			intrStream = append(intrStream, stream)
@@ -238,7 +239,7 @@ func (s *server) getMiddlewareOptions() []grpcGo.ServerOption {
 		intrStream = append(intrStream, diag.GRPCTraceStreamServerInterceptor(s.config.AppID, s.tracingSpec))
 	}
 
-	if s.metricSpec.Enabled {
+	if s.metricSpec.GetEnabled() {
 		s.logger.Info("Enabled gRPC metrics middleware")
 		intr = append(intr, diag.DefaultGRPCMonitoring.UnaryServerInterceptor())
 

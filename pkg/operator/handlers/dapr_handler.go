@@ -18,6 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
 	"github.com/dapr/dapr/pkg/injector/annotations"
+	"github.com/dapr/dapr/pkg/operator/meta"
 	"github.com/dapr/dapr/pkg/operator/monitoring"
 	"github.com/dapr/dapr/pkg/validation"
 	"github.com/dapr/dapr/utils"
@@ -84,9 +85,9 @@ func NewDaprHandlerWithOptions(mgr ctrl.Manager, opts *Options) *DaprHandler {
 }
 
 // Init allows for various startup tasks.
-func (h *DaprHandler) Init() error {
+func (h *DaprHandler) Init(ctx context.Context) error {
 	err := h.mgr.GetFieldIndexer().IndexField(
-		context.TODO(),
+		ctx,
 		&corev1.Service{},
 		daprServiceOwnerField,
 		func(rawObj client.Object) []string {
@@ -324,12 +325,7 @@ func (h *DaprHandler) getAppID(wrapper ObjectWrapper) string {
 }
 
 func (h *DaprHandler) isAnnotatedForDapr(wrapper ObjectWrapper) bool {
-	annotationsMap := wrapper.GetTemplateAnnotations()
-	val := annotationsMap[annotations.KeyEnabled]
-	if val == "" {
-		return false
-	}
-	return utils.IsTruthy(val)
+	return meta.IsAnnotatedForDapr(wrapper.GetTemplateAnnotations())
 }
 
 func (h *DaprHandler) getEnableMetrics(wrapper ObjectWrapper) bool {

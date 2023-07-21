@@ -57,6 +57,15 @@ var (
 	ErrTooManyRequests = gobreaker.ErrTooManyRequests
 )
 
+type CircuitBreakerState string
+
+const (
+	StateClosed   CircuitBreakerState = "closed"
+	StateOpen     CircuitBreakerState = "open"
+	StateHalfOpen CircuitBreakerState = "half-open"
+	StateUnknown  CircuitBreakerState = "unknown"
+)
+
 // IsErrorPermanent returns true if `err` should be treated as a
 // permanent error that cannot be retried.
 func IsErrorPermanent(err error) bool {
@@ -102,7 +111,7 @@ func (c *CircuitBreaker) Initialize(log logger.Logger) {
 	})
 }
 
-// Execute invokes `oper` if the circuit breaker is in an closed state
+// Execute invokes `oper` if the circuit breaker is in a closed state
 // or for an allowed call in the half-open state. It is a wrapper around the gobreaker
 // library that is used here.
 // The circuit breaker shorts if the connection is in open state or if there are too many
@@ -128,9 +137,26 @@ func (c *CircuitBreaker) Execute(oper func() (any, error)) (any, error) {
 }
 
 // String implements fmt.Stringer and is used for debugging.
-func (c CircuitBreaker) String() string {
+func (c *CircuitBreaker) String() string {
 	return fmt.Sprintf(
 		"name='%s' namRequests='%d' interval='%v' timeout='%v' trip='%v'",
 		c.Name, c.MaxRequests, c.Interval, c.Timeout, c.Trip,
 	)
+}
+
+// State returns the current state of the circuit breaker.
+func (c *CircuitBreaker) State() CircuitBreakerState {
+	if c.breaker == nil {
+		return StateUnknown
+	}
+	switch c.breaker.State() {
+	case gobreaker.StateClosed:
+		return StateClosed
+	case gobreaker.StateOpen:
+		return StateOpen
+	case gobreaker.StateHalfOpen:
+		return StateHalfOpen
+	default:
+		return StateUnknown
+	}
 }

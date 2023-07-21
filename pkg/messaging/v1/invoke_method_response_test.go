@@ -22,7 +22,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/types/known/anypb"
 
@@ -148,7 +147,10 @@ func TestResponseRawData(t *testing.T) {
 			r: &internalv1pb.InternalInvokeResponse{},
 		}
 		r := req.RawData()
-		assert.Nil(t, r)
+		bData, err := io.ReadAll(r)
+
+		assert.NoError(t, err)
+		assert.Empty(t, bData)
 	})
 
 	t.Run("return data from stream", func(t *testing.T) {
@@ -193,7 +195,7 @@ func TestResponseRawDataFull(t *testing.T) {
 		}
 		data, err := req.RawDataFull()
 		assert.NoError(t, err)
-		assert.Nil(t, data)
+		assert.Empty(t, data)
 	})
 
 	t.Run("return data from stream", func(t *testing.T) {
@@ -279,6 +281,19 @@ func TestResponseProto(t *testing.T) {
 }
 
 func TestResponseProtoWithData(t *testing.T) {
+	t.Run("not return error when status exist with empty message", func(t *testing.T) {
+		pb := internalv1pb.InternalInvokeResponse{
+			Status:  &internalv1pb.Status{Code: int32(codes.Unimplemented), Message: "method unimplemented"},
+			Message: &commonv1pb.InvokeResponse{},
+		}
+
+		ir, err := InternalInvokeResponse(&pb)
+		assert.NoError(t, err)
+		defer ir.Close()
+		_, err = ir.ProtoWithData()
+		assert.NoError(t, err)
+	})
+
 	t.Run("byte slice", func(t *testing.T) {
 		m := &commonv1pb.InvokeResponse{
 			Data:        &anypb.Any{Value: []byte("test")},
@@ -338,19 +353,27 @@ func TestResponseHeader(t *testing.T) {
 	})
 
 	t.Run("HTTP headers", func(t *testing.T) {
-		resp := fasthttp.AcquireResponse()
-		resp.Header.Set("Header1", "Value1")
-		resp.Header.Set("Header2", "Value2")
-		resp.Header.Set("Header3", "Value3")
+		headers := http.Header{}
+		headers.Set("Header1", "Value1")
+		headers.Set("Header2", "Value2")
+		headers.Set("Header3", "Value3")
+		headers.Add("Multi", "foo")
+		headers.Add("Multi", "bar")
 
 		imr := NewInvokeMethodResponse(0, "OK", nil).
-			WithFastHTTPHeaders(&resp.Header)
+			WithHTTPHeaders(headers)
 		defer imr.Close()
 		mheader := imr.Headers()
 
+		require.NotEmpty(t, mheader)
+		require.NotEmpty(t, mheader["Header1"])
 		assert.Equal(t, "Value1", mheader["Header1"].GetValues()[0])
+		require.NotEmpty(t, mheader["Header2"])
 		assert.Equal(t, "Value2", mheader["Header2"].GetValues()[0])
+		require.NotEmpty(t, mheader["Header3"])
 		assert.Equal(t, "Value3", mheader["Header3"].GetValues()[0])
+		require.NotEmpty(t, mheader["Multi"])
+		assert.Equal(t, []string{"foo", "bar"}, mheader["Multi"].GetValues())
 	})
 }
 

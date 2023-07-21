@@ -7,4 +7,4 @@ spec:
   topic: pubsub-c-topic-http
   route: /pubsub-c-topic-http
 scopes:
-- pubsub-subscriber
+  - pubsub-subscriber

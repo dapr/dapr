@@ -18,7 +18,7 @@ import (
 	"sync"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/hashicorp/go-msgpack/codec"
+	"github.com/hashicorp/go-msgpack/v2/codec"
 
 	"github.com/dapr/dapr/pkg/placement/hashing"
 )

@@ -10,6 +10,7 @@ This contains end-to-end tests, related test framework, and docs for Dapr:
 * **platforms/** includes test app manager for the specific test platform
 * **runner/** includes test runner to simplify e2e tests
 * **test-infra/** includes tools for test-infra
+* **integration/** includes tests that runs integration tests against the daprd binary
 
 ## End-to-end tests
 

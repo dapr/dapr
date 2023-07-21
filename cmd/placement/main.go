@@ -18,10 +18,12 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/dapr/dapr/cmd/placement/options"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/health"
+	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/placement"
 	"github.com/dapr/dapr/pkg/placement/hashing"
 	"github.com/dapr/dapr/pkg/placement/monitoring"
@@ -33,18 +35,20 @@ import (
 var log = logger.NewLogger("dapr.placement")
 
 func main() {
-	log.Infof("Starting Dapr Placement Service -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
-
-	cfg := newConfig()
+	opts := options.New()
 
 	// Apply options to all loggers.
-	if err := logger.ApplyOptionsToLoggers(&cfg.loggerOptions); err != nil {
+	if err := logger.ApplyOptionsToLoggers(&opts.Logger); err != nil {
 		log.Fatal(err)
 	}
-	log.Infof("Log level set to: %s", cfg.loggerOptions.OutputLevel)
+
+	log.Infof("Starting Dapr Placement Service -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
+	log.Infof("Log level set to: %s", opts.Logger.OutputLevel)
+
+	metricsExporter := metrics.NewExporterWithOptions(log, metrics.DefaultMetricNamespace, opts.Metrics)
 
 	// Initialize dapr metrics for placement.
-	err := cfg.metricsExporter.Init()
+	err := metricsExporter.Init()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -55,18 +59,19 @@ func main() {
 	}
 
 	// Start Raft cluster.
-	raftServer := raft.New(cfg.raftID, cfg.raftInMemEnabled, cfg.raftPeers, cfg.raftLogStorePath)
+	raftServer := raft.New(raft.Options{
+		ID:           opts.RaftID,
+		InMem:        opts.RaftInMemEnabled,
+		Peers:        opts.RaftPeers,
+		LogStorePath: opts.RaftLogStorePath,
+	})
 	if raftServer == nil {
 		log.Fatal("Failed to create raft server.")
 	}
 
-	// Start Placement gRPC server.
-	hashing.SetReplicationFactor(cfg.replicationFactor)
-	apiServer := placement.NewPlacementService(raftServer)
-
 	var certChain *credentials.CertChain
-	if cfg.tlsEnabled {
-		tlsCreds := credentials.NewTLSCredentials(cfg.certChainPath)
+	if opts.TLSEnabled {
+		tlsCreds := credentials.NewTLSCredentials(opts.CertChainPath)
 
 		certChain, err = credentials.LoadFromDisk(tlsCreds.RootCertPath(), tlsCreds.CertPath(), tlsCreds.KeyPath())
 		if err != nil {
@@ -76,21 +81,32 @@ func main() {
 		log.Info("TLS certificates loaded successfully")
 	}
 
+	// Start Placement gRPC server.
+	hashing.SetReplicationFactor(opts.ReplicationFactor)
+	apiServer, err := placement.NewPlacementService(raftServer, certChain)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	err = concurrency.NewRunnerManager(
 		func(ctx context.Context) error {
 			return raftServer.StartRaft(ctx, nil)
 		},
 		apiServer.MonitorLeadership,
 		func(ctx context.Context) error {
-			healthzServer := health.NewServer(log)
+			var metadataOptions []health.RouterOptions
+			if opts.MetadataEnabled {
+				metadataOptions = append(metadataOptions, health.NewJSONDataRouterOptions[*placement.PlacementTables]("/placement/state", apiServer.GetPlacementTables))
+			}
+			healthzServer := health.NewServer(log, metadataOptions...)
 			healthzServer.Ready()
-			if healthzErr := healthzServer.Run(ctx, cfg.healthzPort); healthzErr != nil {
+			if healthzErr := healthzServer.Run(ctx, opts.HealthzPort); healthzErr != nil {
 				return fmt.Errorf("failed to start healthz server: %w", healthzErr)
 			}
 			return nil
 		},
 		func(ctx context.Context) error {
-			return apiServer.Run(ctx, strconv.Itoa(cfg.placementPort), certChain)
+			return apiServer.Run(ctx, strconv.Itoa(opts.PlacementPort))
 		},
 	).Run(signals.Context())
 	if err != nil {

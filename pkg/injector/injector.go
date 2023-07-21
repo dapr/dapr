@@ -15,7 +15,9 @@ package injector
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -33,6 +35,7 @@ import (
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"github.com/dapr/dapr/pkg/injector/monitoring"
 	"github.com/dapr/dapr/pkg/injector/namespacednamematcher"
+	"github.com/dapr/dapr/pkg/injector/patcher"
 	"github.com/dapr/dapr/pkg/injector/sidecar"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
@@ -59,7 +62,8 @@ var AllowedServiceAccountInfos = []string{
 
 // Injector is the interface for the Dapr runtime sidecar injection component.
 type Injector interface {
-	Run(ctx context.Context, onReady func())
+	Run(context.Context) error
+	Ready(context.Context) error
 }
 
 type injector struct {
@@ -71,6 +75,7 @@ type injector struct {
 	authUIDs     []string
 
 	namespaceNameMatcher *namespacednamematcher.EqualPrefixNameNamespaceMatcher
+	ready                chan struct{}
 }
 
 // errorToAdmissionResponse is a helper function to create an AdmissionResponse
@@ -115,10 +120,14 @@ func NewInjector(authUIDs []string, config Config, daprClient scheme.Interface, 
 		server: &http.Server{
 			Addr:    fmt.Sprintf(":%d", port),
 			Handler: mux,
+			TLSConfig: &tls.Config{
+				MinVersion: tls.VersionTLS12,
+			},
 		},
 		kubeClient: kubeClient,
 		daprClient: daprClient,
 		authUIDs:   authUIDs,
+		ready:      make(chan struct{}),
 	}
 
 	matcher, err := createNamespaceNameMatcher(strings.TrimSpace(config.AllowedServiceAccountsPrefixNames))
@@ -183,42 +192,45 @@ func getServiceAccount(ctx context.Context, kubeClient kubernetes.Interface, all
 	return allowedUids, nil
 }
 
-func (i *injector) Run(ctx context.Context, onReady func()) {
-	go func() {
-		select {
-		case <-ctx.Done():
-			log.Info("Sidecar injector is shutting down")
-			shutdownCtx, cancel := context.WithTimeout(
-				context.Background(),
-				time.Second*5,
-			)
-			defer cancel()
-			err := i.server.Shutdown(shutdownCtx)
-			if err != nil {
-				log.Errorf("Error while shutting down injector: %v", err)
-			}
-		}
-	}()
+func (i *injector) Run(ctx context.Context) error {
+	select {
+	case <-i.ready:
+		return errors.New("injector already running")
+	default:
+		// Nop
+	}
 
 	ln, err := net.Listen("tcp", i.server.Addr)
 	if err != nil {
-		log.Fatalf("Eror while creating listener: %v", err)
+		return fmt.Errorf("error while creating listener: %w", err)
 	}
 
 	log.Infof("Sidecar injector is listening on %s, patching Dapr-enabled pods", i.server.Addr)
 
-	if onReady != nil {
-		onReady()
+	errCh := make(chan error, 1)
+	go func() {
+		srverr := i.server.ServeTLS(ln, i.config.TLSCertFile, i.config.TLSKeyFile)
+		if !errors.Is(srverr, http.ErrServerClosed) {
+			errCh <- fmt.Errorf("sidecar injector error: %s", srverr)
+			return
+		}
+		errCh <- nil
+	}()
+
+	close(i.ready)
+
+	select {
+	case <-ctx.Done():
+		log.Info("Sidecar injector is shutting down")
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err = i.server.Shutdown(shutdownCtx); err != nil {
+			return fmt.Errorf("error while shutting down injector: %v; %v", err, <-errCh)
+		}
+		return <-errCh
+	case err = <-errCh:
+		return err
 	}
-
-	err = i.server.ServeTLS(ln, i.config.TLSCertFile, i.config.TLSKeyFile)
-	if err != http.ErrServerClosed {
-		log.Errorf("Sidecar injector error: %s", err)
-	}
-
-	ln.Close()
-
-	log.Info("Sidecar injector stopped")
 }
 
 func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
@@ -247,7 +259,7 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var patchOps []sidecar.PatchOperation
+	var patchOps []patcher.PatchOperation
 	patchedSuccessfully := false
 
 	ar := v1.AdmissionReview{}
@@ -262,7 +274,10 @@ func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
 		} else if ar.Request.Kind.Kind != "Pod" {
 			log.Errorf("invalid kind for review: %s", ar.Kind)
 		} else {
-			patchOps, err = i.getPodPatchOperations(&ar, i.config.Namespace, i.config.SidecarImage, i.config.SidecarImagePullPolicy, i.kubeClient, i.daprClient)
+			patchOps, err = i.getPodPatchOperations(r.Context(), &ar,
+				i.config.Namespace, i.config.SidecarImage, i.config.SidecarImagePullPolicy,
+				i.kubeClient, i.daprClient,
+			)
 			if err == nil {
 				patchedSuccessfully = true
 			}
@@ -336,13 +351,22 @@ func (i *injector) allowServiceAccountUser(reviewRequestUserInfo string) (allowe
 		return false
 	}
 
-	if !strings.HasPrefix(reviewRequestUserInfo, serviceAccountUserInfoPrefix) {
+	namespacedName, prefixFound := strings.CutPrefix(reviewRequestUserInfo, serviceAccountUserInfoPrefix)
+	if !prefixFound {
 		return false
 	}
-	namespacedName := strings.TrimPrefix(reviewRequestUserInfo, serviceAccountUserInfoPrefix)
 	namespacedNameParts := strings.Split(namespacedName, ":")
 	if len(namespacedNameParts) <= 1 {
 		return false
 	}
 	return i.namespaceNameMatcher.MatchesNamespacedName(namespacedNameParts[0], namespacedNameParts[1])
+}
+
+func (i *injector) Ready(ctx context.Context) error {
+	select {
+	case <-i.ready:
+		return nil
+	case <-ctx.Done():
+		return errors.New("timed out waiting for injector to become ready")
+	}
 }
