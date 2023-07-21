@@ -69,8 +69,8 @@ github.com/Azure/azure-sdk-for-go/sdk/azcore v1.7.0 h1:8q4SaHjFsClSvuVne0ID/5Ka8
 github.com/Azure/azure-sdk-for-go/sdk/azcore v1.7.0/go.mod h1:bjGvMhVMb+EEm3VRNQawDMUyMMjo+S5ewNjflkep/0Q=
 github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.3.0 h1:vcYCAze6p19qBW7MhZybIsqD8sMV8js0NyQM8JDnVtg=
 github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.3.0/go.mod h1:OQeznEEkTZ9OrhHJoDD8ZDq51FHgXjqtP9z6bEwBq9U=
-github.com/Azure/azure-sdk-for-go/sdk/cognitiveservices/azopenai v0.0.0-20230715001925-38bc7d361490 h1:uzTmz/rDZ4K8HP0O0rIMR2YADdX1S6wx5i5WiSjHZOk=
-github.com/Azure/azure-sdk-for-go/sdk/cognitiveservices/azopenai v0.0.0-20230715001925-38bc7d361490/go.mod h1:NwVkXm5Ty88Xd7cx6b53fGNeGG3W3ZDXgOXBNHLUy84=
+github.com/Azure/azure-sdk-for-go/sdk/cognitiveservices/azopenai v0.1.0 h1:lkflJSWI6jicmEBImjpliUOWCr1PdJO/GcZj3bWx19Q=
+github.com/Azure/azure-sdk-for-go/sdk/cognitiveservices/azopenai v0.1.0/go.mod h1:NwVkXm5Ty88Xd7cx6b53fGNeGG3W3ZDXgOXBNHLUy84=
 github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig v0.5.0 h1:OrKZybbyagpgJiREiIVzH5mV/z9oS4rXqdX7i31DSF0=
 github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig v0.5.0/go.mod h1:p74+tP95m8830ypJk53L93+BEsjTKY4SKQ75J2NmS5U=
 github.com/Azure/azure-sdk-for-go/sdk/data/azcosmos v0.3.5 h1:qS0Bp4do0cIvnuQgSGeO6ZCu/q/HlRKl4NPfv1eJ2p0=
@@ -386,8 +386,8 @@ github.com/dancannon/gorethink v4.0.0+incompatible h1:KFV7Gha3AuqT+gr0B/eKvGhbjm
 github.com/dancannon/gorethink v4.0.0+incompatible/go.mod h1:BLvkat9KmZc1efyYwhz3WnybhRZtgF1K929FD8z1avU=
 github.com/danieljoos/wincred v1.1.2 h1:QLdCxFs1/Yl4zduvBdcHB8goaYk9RARS2SgLLRuAyr0=
 github.com/danieljoos/wincred v1.1.2/go.mod h1:GijpziifJoIBfYh+S7BbkdUTU4LfM+QnGqR5Vl2tAx0=
-github.com/dapr/components-contrib v1.11.3-0.20230718231053-d067c133509f h1:s11bKVkw0aeLRmEoGi+YZtnWl6+JaiFnnCHQkaoGJMU=
-github.com/dapr/components-contrib v1.11.3-0.20230718231053-d067c133509f/go.mod h1:eMMuWFEybAbRDx6H/2ZlpLTt71A0/Qd/++L366jSv5s=
+github.com/dapr/components-contrib v1.11.3-0.20230721142610-9957d6969dda h1:/mqw0Y7Y+97Miw7dsU+co72asz7AvU8dfxL/NBVH1VU=
+github.com/dapr/components-contrib v1.11.3-0.20230721142610-9957d6969dda/go.mod h1:dNF+ZsfsVwmPFDNkbZgbNv34XszWXCFH3xaSppWSY58=
 github.com/dapr/kit v0.11.3 h1:u1X92tE8xsrwXIej7nkcI5Z1t1CFznPwlL18tizNEw4=
 github.com/dapr/kit v0.11.3/go.mod h1:hQA6xOhcLAiccXTj7e3/bzpHwvAJCSCp70p2xg3jB40=
 github.com/dave/jennifer v1.4.0/go.mod h1:fIb+770HOpJ2fmN9EPPKOqm1vMGhB+TwXKMZhrIygKg=
