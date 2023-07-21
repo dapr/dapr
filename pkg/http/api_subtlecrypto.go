@@ -27,42 +27,77 @@ func (a *api) constructSubtleCryptoEndpoints() []Endpoint {
 			Methods: []string{http.MethodPost},
 			Route:   "subtlecrypto/{name}/getkey",
 			Version: apiVersionV1alpha1,
+			Group: EndpointGroup{
+				Name:    EndpointGroupSubtleCrypto,
+				Version: EndpointGoupVersion1alpha1,
+			},
+			Name:    "SubtleGetKey",
 			Handler: a.onPostSubtleCryptoGetKey(),
 		},
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "subtlecrypto/{name}/encrypt",
 			Version: apiVersionV1alpha1,
+			Group: EndpointGroup{
+				Name:    EndpointGroupSubtleCrypto,
+				Version: EndpointGoupVersion1alpha1,
+			},
+			Name:    "SubtleEncrypt",
 			Handler: a.onPostSubtleCryptoEncrypt(),
 		},
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "subtlecrypto/{name}/decrypt",
 			Version: apiVersionV1alpha1,
+			Group: EndpointGroup{
+				Name:    EndpointGroupSubtleCrypto,
+				Version: EndpointGoupVersion1alpha1,
+			},
+			Name:    "SubtleDecrypt",
 			Handler: a.onPostSubtleCryptoDecrypt(),
 		},
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "subtlecrypto/{name}/wrapkey",
 			Version: apiVersionV1alpha1,
+			Group: EndpointGroup{
+				Name:    EndpointGroupSubtleCrypto,
+				Version: EndpointGoupVersion1alpha1,
+			},
+			Name:    "SubtleWrapKey",
 			Handler: a.onPostSubtleCryptoWrapKey(),
 		},
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "subtlecrypto/{name}/unwrapkey",
 			Version: apiVersionV1alpha1,
+			Group: EndpointGroup{
+				Name:    EndpointGroupSubtleCrypto,
+				Version: EndpointGoupVersion1alpha1,
+			},
+			Name:    "SubtleUnwrapKey",
 			Handler: a.onPostSubtleCryptoUnwrapKey(),
 		},
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "subtlecrypto/{name}/sign",
 			Version: apiVersionV1alpha1,
+			Group: EndpointGroup{
+				Name:    EndpointGroupSubtleCrypto,
+				Version: EndpointGoupVersion1alpha1,
+			},
+			Name:    "SubtleSign",
 			Handler: a.onPostSubtleCryptoSign(),
 		},
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "subtlecrypto/{name}/verify",
 			Version: apiVersionV1alpha1,
+			Group: EndpointGroup{
+				Name:    EndpointGroupSubtleCrypto,
+				Version: EndpointGoupVersion1alpha1,
+			},
+			Name:    "SubtleVerify",
 			Handler: a.onPostSubtleCryptoVerify(),
 		},
 	}

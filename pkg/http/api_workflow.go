@@ -34,42 +34,77 @@ func (a *api) constructWorkflowEndpoints() []Endpoint {
 			Methods: []string{http.MethodGet},
 			Route:   "workflows/{workflowComponent}/{instanceID}",
 			Version: apiVersionV1alpha1,
+			Group: EndpointGroup{
+				Name:    EndpointGroupWorkflow,
+				Version: EndpointGoupVersion1alpha1,
+			},
+			Name:    "GetWorkflow",
 			Handler: a.onGetWorkflowHandler(),
 		},
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "workflows/{workflowComponent}/{instanceID}/raiseEvent/{eventName}",
 			Version: apiVersionV1alpha1,
+			Group: EndpointGroup{
+				Name:    EndpointGroupWorkflow,
+				Version: EndpointGoupVersion1alpha1,
+			},
+			Name:    "RaiseEventWorkflow",
 			Handler: a.onRaiseEventWorkflowHandler(),
 		},
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "workflows/{workflowComponent}/{workflowName}/start",
 			Version: apiVersionV1alpha1,
+			Group: EndpointGroup{
+				Name:    EndpointGroupWorkflow,
+				Version: EndpointGoupVersion1alpha1,
+			},
+			Name:    "StartWorkflow",
 			Handler: a.onStartWorkflowHandler(),
 		},
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "workflows/{workflowComponent}/{instanceID}/pause",
 			Version: apiVersionV1alpha1,
+			Group: EndpointGroup{
+				Name:    EndpointGroupWorkflow,
+				Version: EndpointGoupVersion1alpha1,
+			},
+			Name:    "PauseWorkflow",
 			Handler: a.onPauseWorkflowHandler(),
 		},
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "workflows/{workflowComponent}/{instanceID}/resume",
 			Version: apiVersionV1alpha1,
+			Group: EndpointGroup{
+				Name:    EndpointGroupWorkflow,
+				Version: EndpointGoupVersion1alpha1,
+			},
+			Name:    "esumeWorkflow",
 			Handler: a.onResumeWorkflowHandler(),
 		},
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "workflows/{workflowComponent}/{instanceID}/terminate",
 			Version: apiVersionV1alpha1,
+			Group: EndpointGroup{
+				Name:    EndpointGroupWorkflow,
+				Version: EndpointGoupVersion1alpha1,
+			},
+			Name:    "inateWorkflow",
 			Handler: a.onTerminateWorkflowHandler(),
 		},
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "workflows/{workflowComponent}/{instanceID}/purge",
 			Version: apiVersionV1alpha1,
+			Group: EndpointGroup{
+				Name:    EndpointGroupWorkflow,
+				Version: EndpointGoupVersion1alpha1,
+			},
+			Name:    "PurgeWorkflow",
 			Handler: a.onPurgeWorkflowHandler(),
 		},
 	}

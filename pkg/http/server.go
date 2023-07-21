@@ -264,7 +264,7 @@ func (s *server) useMaxBodySize(r chi.Router) {
 
 func (s *server) apiLoggingInfo(route string, next http.Handler) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fields := make(map[string]any, 2)
+		fields := make(map[string]any, 3)
 		if s.config.APILoggingObfuscateURLs {
 			fields["method"] = r.Method + " " + route
 		} else {
@@ -274,8 +274,13 @@ func (s *server) apiLoggingInfo(route string, next http.Handler) http.HandlerFun
 			fields["useragent"] = userAgent
 		}
 
-		infoLog.WithFields(fields).Info("HTTP API Called")
+		start := time.Now()
+
 		next.ServeHTTP(w, r)
+
+		fields["duration"] = time.Since(start).Milliseconds()
+
+		infoLog.WithFields(fields).Info("HTTP API Called")
 	})
 }
 
@@ -349,6 +354,13 @@ func (s *server) setupRoutes(r chi.Router, endpoints []Endpoint) {
 	// Build the API allowlist and denylist
 	allowedAPIs := s.apiSpec.Allowed.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
 	deniedAPIs := s.apiSpec.Denied.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
+
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+			next.ServeHTTP(w, r)
+		})
+	})
 
 	for _, e := range endpoints {
 		if !e.IsAllowed(allowedAPIs, deniedAPIs) {

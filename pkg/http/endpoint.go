@@ -23,13 +23,50 @@ import (
 	"github.com/dapr/dapr/utils/nethttpadaptor"
 )
 
+// EndpointGroup is a group of endpoints.
+type EndpointGroup struct {
+	Name    EndpointGroupName
+	Version EndpointGroupVersion
+}
+
+// EndpointGroupName is the name of an endpoint group.
+type EndpointGroupName string
+
+const (
+	EndpointGroupServiceInvocation EndpointGroupName = "invoke"
+	EndpointGroupState             EndpointGroupName = "state"
+	EndpointGroupPubsub            EndpointGroupName = "pubsub"
+	EndpointGroupBindings          EndpointGroupName = "bindings"
+	EndpointGroupSecrets           EndpointGroupName = "secrets"
+	EndpointGroupActors            EndpointGroupName = "actors"
+	EndpointGroupMetadata          EndpointGroupName = "metadata"
+	EndpointGroupConfiguration     EndpointGroupName = "configuration"
+	EndpointGroupLock              EndpointGroupName = "lock"
+	EndpointGroupUnlock            EndpointGroupName = "unlock"
+	EndpointGroupCrypto            EndpointGroupName = "crypto"
+	EndpointGroupSubtleCrypto      EndpointGroupName = "subtlecrypto"
+	EndpointGroupWorkflow          EndpointGroupName = "workflows"
+	EndpointGroupHealth            EndpointGroupName = "healthz"
+	EndpointGroupShutdown          EndpointGroupName = "shutdown"
+)
+
+// EndpointGroupVersion is the version of an endpoint group.
+type EndpointGroupVersion string
+
+const (
+	EndpointGoupVersion1       EndpointGroupVersion = "v1"       // Alias: v1.0
+	EndpointGoupVersion1alpha1 EndpointGroupVersion = "v1alpha1" // Alias: v1.0-alpha1
+)
+
 // Endpoint is a collection of route information for an Dapr API.
 type Endpoint struct {
 	Methods               []string
 	Route                 string
 	Version               string
-	IsFallback            bool // Endpoint is used as fallback when the method or URL isn't found
-	KeepWildcardUnescaped bool // Keeps the wildcard param in path unescaped
+	Name                  string        // Method name, used in logging and for other purposes
+	Group                 EndpointGroup // Endpoint group, used for allowlisting
+	IsFallback            bool          // Endpoint is used as fallback when the method or URL isn't found
+	KeepWildcardUnescaped bool          // Keeps the wildcard param in path unescaped
 	FastHTTPHandler       fasthttp.RequestHandler
 	Handler               http.HandlerFunc
 	AlwaysAllowed         bool // Endpoint is always allowed regardless of API access rules

@@ -30,12 +30,22 @@ func (a *api) constructMetadataEndpoints() []Endpoint {
 			Methods: []string{http.MethodGet},
 			Route:   "metadata",
 			Version: apiVersionV1,
+			Group: EndpointGroup{
+				Name:    EndpointGroupMetadata,
+				Version: EndpointGoupVersion1,
+			},
+			Name:    "GetMetadata",
 			Handler: a.onGetMetadata(),
 		},
 		{
 			Methods: []string{http.MethodPut},
 			Route:   "metadata/{key}",
 			Version: apiVersionV1,
+			Group: EndpointGroup{
+				Name:    EndpointGroupMetadata,
+				Version: EndpointGoupVersion1,
+			},
+			Name:    "PutMetadata",
 			Handler: a.onPutMetadata(),
 		},
 	}

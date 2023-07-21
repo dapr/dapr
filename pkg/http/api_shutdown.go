@@ -25,6 +25,11 @@ func (a *api) constructShutdownEndpoints() []Endpoint {
 			Methods: []string{http.MethodPost},
 			Route:   "shutdown",
 			Version: apiVersionV1,
+			Group: EndpointGroup{
+				Name:    EndpointGroupShutdown,
+				Version: EndpointGoupVersion1,
+			},
+			Name: "Shutdown",
 			Handler: UniversalHTTPHandler(
 				a.universal.Shutdown,
 				UniversalHTTPHandlerOpts[*emptypb.Empty, *emptypb.Empty]{

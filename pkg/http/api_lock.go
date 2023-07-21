@@ -30,12 +30,22 @@ func (a *api) constructDistributedLockEndpoints() []Endpoint {
 			Methods: []string{fasthttp.MethodPost},
 			Route:   "lock/{storeName}",
 			Version: apiVersionV1alpha1,
+			Group: EndpointGroup{
+				Name:    EndpointGroupLock,
+				Version: EndpointGoupVersion1alpha1,
+			},
+			Name:    "TrytLock",
 			Handler: a.onTryLockAlpha1(),
 		},
 		{
 			Methods: []string{fasthttp.MethodPost},
 			Route:   "unlock/{storeName}",
 			Version: apiVersionV1alpha1,
+			Group: EndpointGroup{
+				Name:    EndpointGroupUnlock,
+				Version: EndpointGoupVersion1alpha1,
+			},
+			Name:    "Unlock",
 			Handler: a.onUnlockAlpha1(),
 		},
 	}

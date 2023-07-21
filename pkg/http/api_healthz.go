@@ -22,17 +22,27 @@ import (
 func (a *api) constructHealthzEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods:       []string{http.MethodGet},
-			Route:         "healthz",
-			Version:       apiVersionV1,
+			Methods: []string{http.MethodGet},
+			Route:   "healthz",
+			Version: apiVersionV1,
+			Group: EndpointGroup{
+				Name:    EndpointGroupHealth,
+				Version: EndpointGoupVersion1,
+			},
+			Name:          "Healthz",
 			Handler:       a.onGetHealthz,
 			AlwaysAllowed: true,
 			IsHealthCheck: true,
 		},
 		{
-			Methods:       []string{http.MethodGet},
-			Route:         "healthz/outbound",
-			Version:       apiVersionV1,
+			Methods: []string{http.MethodGet},
+			Route:   "healthz/outbound",
+			Version: apiVersionV1,
+			Group: EndpointGroup{
+				Name:    EndpointGroupHealth,
+				Version: EndpointGoupVersion1,
+			},
+			Name:          "HealthzOutbound",
 			Handler:       a.onGetOutboundHealthz,
 			AlwaysAllowed: true,
 			IsHealthCheck: true,

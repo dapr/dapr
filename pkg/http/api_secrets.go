@@ -27,12 +27,22 @@ func (a *api) constructSecretEndpoints() []Endpoint {
 			Methods: []string{http.MethodGet},
 			Route:   "secrets/{secretStoreName}/bulk",
 			Version: apiVersionV1,
+			Group: EndpointGroup{
+				Name:    EndpointGroupSecrets,
+				Version: EndpointGoupVersion1,
+			},
+			Name:    "GetBulkSecret",
 			Handler: a.onBulkGetSecretHandler(),
 		},
 		{
 			Methods: []string{http.MethodGet},
 			Route:   "secrets/{secretStoreName}/{key}",
 			Version: apiVersionV1,
+			Group: EndpointGroup{
+				Name:    EndpointGroupSecrets,
+				Version: EndpointGoupVersion1,
+			},
+			Name:    "GetSecret",
 			Handler: a.onGetSecretHandler(),
 		},
 	}
