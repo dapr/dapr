@@ -70,7 +70,10 @@ func (s *Secret) Name() string {
 func (s *Secret) Dispose(wait bool) error {
 	log.Printf("Delete secret %q ...", s.name)
 	_, err := s.kubeClient.ClientSet.CoreV1().Secrets(s.namespace).Get(context.TODO(), s.name, metav1.GetOptions{})
-	if err != nil && !apierrors.IsNotFound(err) {
+	if apierrors.IsNotFound(err) {
+		return nil
+	}
+	if err != nil {
 		return err
 	}
 	return s.kubeClient.ClientSet.CoreV1().Secrets(s.namespace).Delete(context.TODO(), s.name, metav1.DeleteOptions{})
