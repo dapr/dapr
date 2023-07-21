@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package freeport
+package util
 
 import (
 	"net"
@@ -20,12 +20,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// FreePort reserves a network ports, and then frees them when the test is
+// ready to run.
 type FreePort struct {
 	ports []int
 	lsns  []net.Listener
 }
 
-func New(t *testing.T, count int) *FreePort {
+func ReservePorts(t *testing.T, count int) *FreePort {
 	t.Helper()
 	var ports []int
 	var lsns []net.Listener

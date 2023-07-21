@@ -22,7 +22,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -34,6 +33,7 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -86,13 +86,7 @@ func (f *fuzzsecret) Setup(t *testing.T) []framework.Option {
 		takenNames[key] = true
 	}
 
-	var secretFileName string
-	for len(secretFileName) == 0 || strings.Contains(secretFileName, "/") ||
-		strings.HasPrefix(secretFileName, "..") || secretFileName == "." {
-		secretFileName = ""
-		fuzz.New().Fuzz(&secretFileName)
-	}
-	secretFileName = filepath.Join(t.TempDir(), secretFileName)
+	secretFileName := util.FileNames(t, 1)[0]
 
 	file, err := os.Create(secretFileName)
 	require.NoError(t, err)
