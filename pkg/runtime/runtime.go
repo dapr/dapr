@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	nethttp "net/http"
 	"os"
 	"os/signal"
 	"reflect"
@@ -135,7 +134,6 @@ type DaprRuntime struct {
 	appHealth               *apphealth.AppHealth
 	appHealthReady          func() // Invoked the first time the app health becomes ready
 	appHealthLock           *sync.Mutex
-	appHTTPClient           *nethttp.Client
 	compStore               *compstore.ComponentStore
 	processor               *processor.Processor
 	meta                    *meta.Meta
@@ -1089,7 +1087,7 @@ func (a *DaprRuntime) initActors() error {
 		Port:               a.runtimeConfig.internalGRPCPort,
 		Namespace:          a.namespace,
 		AppConfig:          a.appConfig,
-		HealthHTTPClient:   a.appHTTPClient,
+		HealthHTTPClient:   a.channels.AppHTTPClient(),
 		HealthEndpoint:     a.channels.AppHTTPEndpoint(),
 		AppChannelAddress:  a.runtimeConfig.appConnectionConfig.ChannelAddress,
 		PodName:            getPodName(),
@@ -1354,9 +1352,9 @@ func (a *DaprRuntime) stopWorkflow(ctx context.Context) {
 
 // shutdownOutputComponents allows for a graceful shutdown of all runtime internal operations of components that are not source of more work.
 func (a *DaprRuntime) shutdownOutputComponents(ctx context.Context) error {
-	log.Info("Shutting down all remaining components")
 
 	closers := []concurrency.Runner{func(ctx context.Context) error {
+		log.Info("Shutting down name resolver")
 		if closer, ok := a.nameResolver.(io.Closer); ok && closer != nil {
 			if err := closer.Close(); err != nil {
 				err = fmt.Errorf("error closing name resolver: %w", err)
@@ -1369,6 +1367,7 @@ func (a *DaprRuntime) shutdownOutputComponents(ctx context.Context) error {
 
 	closeComponent := func(comp componentsV1alpha1.Component) func(context.Context) error {
 		return func(context.Context) error {
+			log.Infof("Shutting down component %s", comp.LogName())
 			if err := a.processor.Close(comp); err != nil {
 				return err
 			}
@@ -1426,8 +1425,7 @@ func (a *DaprRuntime) Shutdown(duration time.Duration) {
 	// Ensure the Unix socket file is removed if a panic occurs.
 	defer a.cleanSocket()
 	log.Info("Dapr shutting down")
-	log.Info("Stopping PubSub subscribers and input bindings")
-	a.processor.PubSub().StopSubscriptions()
+	log.Info("Stopping input bindings")
 	a.processor.Binding().StopReadingFromBindings()
 
 	// shutdown workflow if it's running

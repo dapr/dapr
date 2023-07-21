@@ -226,7 +226,7 @@ func TestGetAppHTTPChannelConfigWithCustomChannel(t *testing.T) {
 	p, err := ch.BuildHTTPPipeline(&config.PipelineSpec{})
 	assert.Nil(t, err)
 
-	c := ch.appHTTPChannelConfig(p, false)
+	c := ch.appHTTPChannelConfig(p)
 	assert.Equal(t, "http://my.app:0", c.Endpoint)
 }
 

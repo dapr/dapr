@@ -100,7 +100,7 @@ func New(opts Options) (*Channels, error) {
 		return c, fmt.Errorf("failed to build app HTTP pipeline: %w", err)
 	}
 
-	c.httpEndpChannel, err = channelhttp.CreateHTTPChannel(c.appHTTPChannelConfig(pipeline, false))
+	c.httpEndpChannel, err = channelhttp.CreateHTTPChannel(c.appHTTPChannelConfig(pipeline))
 	if err != nil {
 		return c, fmt.Errorf("failed to create external HTTP app channel: %w", err)
 	}
@@ -115,23 +115,21 @@ func New(opts Options) (*Channels, error) {
 		return c, nil
 	}
 
-	var appChannel channel.AppChannel
 	if c.appConnectionConfig.Protocol.IsHTTP() {
 		// Create a HTTP channel
-		appChannel, err = channelhttp.CreateHTTPChannel(c.appHTTPChannelConfig(pipeline, false))
+		c.appChannel, err = channelhttp.CreateHTTPChannel(c.appHTTPChannelConfig(pipeline))
 		if err != nil {
 			return c, fmt.Errorf("failed to create HTTP app channel: %w", err)
 		}
-		appChannel.(*channelhttp.Channel).SetAppHealthCheckPath(c.appConnectionConfig.HealthCheckHTTPPath)
+		c.appChannel.(*channelhttp.Channel).SetAppHealthCheckPath(c.appConnectionConfig.HealthCheckHTTPPath)
 	} else {
 		// create gRPC app channel
-		appChannel, err = c.grpc.GetAppChannel()
+		c.appChannel, err = c.grpc.GetAppChannel()
 		if err != nil {
 			return c, fmt.Errorf("failed to create gRPC app channel: %w", err)
 		}
 	}
 
-	c.appChannel = appChannel
 	return c, nil
 }
 
@@ -149,6 +147,10 @@ func (c *Channels) HTTPEndpointsAppChannel() channel.HTTPEndpointAppChannel {
 
 func (c *Channels) EndpointChannels() map[string]channel.HTTPEndpointAppChannel {
 	return c.enpChannels
+}
+
+func (c *Channels) AppHTTPClient() *http.Client {
+	return c.httpClient
 }
 
 // AppHTTPEndpoint Returns the HTTP endpoint for the app.
@@ -206,7 +208,7 @@ func (c *Channels) buildHTTPPipelineForSpec(spec *config.PipelineSpec, targetPip
 	return pipeline, nil
 }
 
-func (c *Channels) appHTTPChannelConfig(pipeline middlehttp.Pipeline, isExternal bool) channelhttp.ChannelConfiguration {
+func (c *Channels) appHTTPChannelConfig(pipeline middlehttp.Pipeline) channelhttp.ChannelConfiguration {
 	conf := channelhttp.ChannelConfiguration{
 		CompStore:            c.compStore,
 		MaxConcurrency:       c.appConnectionConfig.MaxConcurrency,
@@ -215,12 +217,8 @@ func (c *Channels) appHTTPChannelConfig(pipeline middlehttp.Pipeline, isExternal
 		MaxRequestBodySizeMB: c.maxRequestBodySize,
 	}
 
-	if !isExternal {
-		conf.Endpoint = c.AppHTTPEndpoint()
-		conf.Client = c.httpClient
-	} else {
-		conf.Client = http.DefaultClient
-	}
+	conf.Endpoint = c.AppHTTPEndpoint()
+	conf.Client = c.httpClient
 
 	return conf
 }
