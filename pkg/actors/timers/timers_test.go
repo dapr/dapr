@@ -32,6 +32,23 @@ import (
 
 var startOfTime = time.Date(2022, 1, 1, 12, 0, 0, 0, time.UTC)
 
+const TestAppID = "fakeAppID"
+
+func newTestTimers() *timers {
+
+	clock := clocktesting.NewFakeClock(startOfTime)
+	r := NewTimersProvider(clock)
+	r.SetExecuteTimerFn(func(reminder *internal.Reminder) bool {
+		return true
+	})
+	return r.(*timers)
+}
+
+// testRequest is the request object that encapsulates the `data` field of a request.
+type testRequest struct {
+	Data any `json:"data"`
+}
+
 func TestCreateTimerDueTimes(t *testing.T) {
 	clock := clocktesting.NewFakeClock(startOfTime)
 	provider := NewTimersProvider(clock).(*timers)
@@ -122,32 +139,407 @@ func TestCreateTimerDueTimes(t *testing.T) {
 }
 
 func TestDeleteTimer(t *testing.T) {
-	clock := clocktesting.NewFakeClock(startOfTime)
-	provider := NewTimersProvider(clock).(*timers)
+	testTimers := newTestTimers()
 
-	req := internal.CreateTimerRequest{
-		ActorID:   "myactor",
-		ActorType: "mytype",
-		Name:      "mytimer",
-		DueTime:   "100ms",
-		Callback:  "callback",
-	}
-	timer := createTimer(t, clock.Now(), req)
+	actorType, actorID := getTestActorTypeAndID()
+	ctx := context.Background()
 
-	err := provider.CreateTimer(context.Background(), timer)
+	req := createTimerData(actorID, actorType, "timer1", "100ms", "100ms", "", "callback", "")
+	reminder, err := req.NewReminder(testTimers.clock.Now())
 	require.NoError(t, err)
-	assert.Equal(t, int64(1), provider.GetActiveTimersCount(req.ActorType))
+	err = testTimers.CreateTimer(ctx, reminder)
+	assert.NoError(t, err)
 
-	err = provider.DeleteTimer(context.Background(), req.Key())
-	require.NoError(t, err)
+	assert.Equal(t, int64(1), testTimers.GetActiveTimersCount(actorType))
+
+	err = testTimers.DeleteTimer(ctx, req.Key())
+	assert.NoError(t, err)
 
 	assert.Eventuallyf(t,
 		func() bool {
-			return provider.GetActiveTimersCount(req.ActorType) == 0
+			return testTimers.GetActiveTimersCount(actorType) == 0
 		},
 		10*time.Second, 50*time.Millisecond,
-		"Expected active timers count to be %d, but got %d (note: this value may be outdated)", 0, provider.GetActiveTimersCount(req.ActorType),
+		"Expected active timers count to be %d, but got %d (note: this value may be outdated)", 0, testTimers.GetActiveTimersCount(actorType),
 	)
+}
+
+func TestOverrideTimerCancelsActiveTimers(t *testing.T) {
+	ctx := context.Background()
+	t.Run("override data", func(t *testing.T) {
+		requestC := make(chan testRequest, 10)
+		testTimers := newTestTimers()
+		testTimers.SetExecuteTimerFn(func(reminder *internal.Reminder) bool {
+			requestC <- testRequest{Data: "c"}
+			return true
+		})
+		clock := testTimers.clock.(*clocktesting.FakeClock)
+
+		actorType, actorID := getTestActorTypeAndID()
+		timerName := "timer1"
+
+		req := createTimerData(actorID, actorType, timerName, "10s", "1s", "0s", "callback1", "a")
+		reminder, err := req.NewReminder(testTimers.clock.Now())
+		require.NoError(t, err)
+		err = testTimers.CreateTimer(ctx, reminder)
+		require.NoError(t, err)
+
+		req2 := createTimerData(actorID, actorType, timerName, "PT9S", "PT1S", "PT0S", "callback2", "b")
+		reminder2, err := req2.NewReminder(testTimers.clock.Now())
+		require.NoError(t, err)
+		testTimers.CreateTimer(ctx, reminder2)
+		require.NoError(t, err)
+
+		req3 := createTimerData(actorID, actorType, timerName, "8s", "2s", "", "callback3", "c")
+		reminder3, err := req3.NewReminder(testTimers.clock.Now())
+		require.NoError(t, err)
+		testTimers.CreateTimer(ctx, reminder3)
+		require.NoError(t, err)
+
+		// due time for timer3 is 2s
+		advanceTickers(t, clock, time.Second)
+		advanceTickers(t, clock, time.Second)
+
+		// The timer update fires in a goroutine so we need to use the wall clock here
+		select {
+		case request := <-requestC:
+			// Test that the last reminder update fired
+			assert.Equal(t, string(req3.Data), "\""+request.Data.(string)+"\"")
+		case <-time.After(1500 * time.Millisecond):
+			assert.Fail(t, "request channel timed out")
+		}
+	})
+}
+
+func TestOverrideTimerCancelsMultipleActiveTimers(t *testing.T) {
+	ctx := context.Background()
+	t.Run("override data", func(t *testing.T) {
+		requestC := make(chan testRequest, 10)
+		testTimers := newTestTimers()
+		testTimers.SetExecuteTimerFn(func(reminder *internal.Reminder) bool {
+			requestC <- testRequest{Data: "d"}
+			return true
+		})
+		clock := testTimers.clock.(*clocktesting.FakeClock)
+
+		actorType, actorID := getTestActorTypeAndID()
+		timerName := "timer1"
+
+		req := createTimerData(actorID, actorType, timerName, "10s", "3s", "", "callback1", "a")
+		reminder, err := req.NewReminder(testTimers.clock.Now())
+		require.NoError(t, err)
+		err = testTimers.CreateTimer(ctx, reminder)
+		require.NoError(t, err)
+
+		req2 := createTimerData(actorID, actorType, timerName, "8s", "4s", "", "callback2", "b")
+		reminder2, err := req2.NewReminder(testTimers.clock.Now())
+		require.NoError(t, err)
+		testTimers.CreateTimer(ctx, reminder2)
+		require.NoError(t, err)
+
+		req3 := createTimerData(actorID, actorType, timerName, "8s", "4s", "", "callback3", "c")
+		reminder3, err := req3.NewReminder(testTimers.clock.Now())
+		require.NoError(t, err)
+		testTimers.CreateTimer(ctx, reminder3)
+		require.NoError(t, err)
+
+		// due time for timer2/timer3 is 4s, advance less
+		advanceTickers(t, clock, time.Second)
+		advanceTickers(t, clock, time.Second)
+
+		req4 := createTimerData(actorID, actorType, timerName, "7s", "2s", "", "callback4", "d")
+		reminder4, err := req4.NewReminder(testTimers.clock.Now())
+		require.NoError(t, err)
+		testTimers.CreateTimer(ctx, reminder4)
+		require.NoError(t, err)
+
+		// due time for timer4 is 2s
+		advanceTickers(t, clock, time.Second*2)
+
+		// The timer update fires in a goroutine so we need to use the wall clock here
+		select {
+		case request := <-requestC:
+			// Test that the last reminder update fired
+			assert.Equal(t, string(req4.Data), "\""+request.Data.(string)+"\"")
+		case <-time.After(1500 * time.Millisecond):
+			assert.Fail(t, "request channel timed out")
+		}
+	})
+}
+
+func TestTimerRepeats(t *testing.T) {
+	tests := map[string]struct {
+		dueTime         string
+		period          string
+		ttl             string
+		expRepeats      int
+		delAfterSeconds float64
+	}{
+		"timer with dueTime is ignored": {
+			dueTime:         "2s",
+			period:          "R0/PT2S",
+			ttl:             "",
+			expRepeats:      0,
+			delAfterSeconds: 0,
+		},
+		"timer without dueTime is ignored": {
+			dueTime:         "",
+			period:          "R0/PT2S",
+			ttl:             "",
+			expRepeats:      0,
+			delAfterSeconds: 0,
+		},
+		"timer with dueTime repeats once": {
+			dueTime:         "2s",
+			period:          "R1/PT2S",
+			ttl:             "",
+			expRepeats:      1,
+			delAfterSeconds: 0,
+		},
+		"timer without dueTime repeats once": {
+			dueTime:         "",
+			period:          "R1/PT2S",
+			ttl:             "",
+			expRepeats:      1,
+			delAfterSeconds: 0,
+		},
+		"timer with dueTime period not set": {
+			dueTime:         "2s",
+			period:          "",
+			ttl:             "",
+			expRepeats:      1,
+			delAfterSeconds: 0,
+		},
+		"timer without dueTime period not set": {
+			dueTime:         "",
+			period:          "",
+			ttl:             "",
+			expRepeats:      1,
+			delAfterSeconds: 0,
+		},
+		"timer with dueTime repeats 3 times": {
+			dueTime:         "2s",
+			period:          "R3/PT2S",
+			ttl:             "",
+			expRepeats:      3,
+			delAfterSeconds: 0,
+		},
+		"timer without dueTime repeats 3 times": {
+			dueTime:         "",
+			period:          "R3/PT2S",
+			ttl:             "",
+			expRepeats:      3,
+			delAfterSeconds: 0,
+		},
+		"timer with dueTime deleted after 1 sec": {
+			dueTime:         startOfTime.Add(2 * time.Second).Format(time.RFC3339),
+			period:          "PT4S",
+			ttl:             "",
+			expRepeats:      1,
+			delAfterSeconds: 3,
+		},
+		"timer without dueTime deleted after 1 sec": {
+			dueTime:         "",
+			period:          "PT2S",
+			ttl:             "",
+			expRepeats:      1,
+			delAfterSeconds: 1,
+		},
+		"timer with dueTime ttl": {
+			dueTime:         startOfTime.Add(2 * time.Second).Format(time.RFC3339),
+			period:          "PT2S",
+			ttl:             "3s",
+			expRepeats:      2,
+			delAfterSeconds: 0,
+		},
+		"timer without dueTime ttl": {
+			dueTime:         "",
+			period:          "4s",
+			ttl:             startOfTime.Add(6 * time.Second).Format(time.RFC3339),
+			expRepeats:      2,
+			delAfterSeconds: 0,
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			requestC := make(chan testRequest, 10)
+			testTimers := newTestTimers()
+			testTimers.SetExecuteTimerFn(func(reminder *internal.Reminder) bool {
+				requestC <- testRequest{Data: "data"}
+				return true
+			})
+
+			clock := testTimers.clock.(*clocktesting.FakeClock)
+			actorType, actorID := getTestActorTypeAndID()
+
+			req := internal.CreateTimerRequest{
+				ActorID:   actorID,
+				ActorType: actorType,
+				Name:      "timer",
+				Period:    test.period,
+				DueTime:   test.dueTime,
+				TTL:       test.ttl,
+				Data:      json.RawMessage(`"data"`),
+				Callback:  "callback",
+			}
+			reminder, err := req.NewReminder(testTimers.clock.Now())
+			if test.expRepeats == 0 {
+				assert.ErrorContains(t, err, "has zero repetitions")
+				return
+			}
+			require.NoError(t, err)
+
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+			t.Cleanup(cancel)
+
+			err = testTimers.CreateTimer(ctx, reminder)
+			assert.NoError(t, err)
+
+			count := 0
+
+			var wg sync.WaitGroup
+			t.Cleanup(wg.Wait)
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				defer cancel()
+
+				start := clock.Now()
+				ticker := clock.NewTicker(time.Second)
+				defer ticker.Stop()
+
+				for i := 0; i < 10; i++ {
+					if test.delAfterSeconds > 0 && clock.Now().Sub(start).Seconds() >= test.delAfterSeconds {
+						require.NoError(t, testTimers.DeleteTimer(ctx, req.Key()))
+					}
+
+					select {
+					case request := <-requestC:
+						// Decrease i since time hasn't increased.
+						i--
+						assert.Equal(t, string(req.Data), "\""+request.Data.(string)+"\"")
+						count++
+					case <-ctx.Done():
+					case <-ticker.C():
+					}
+				}
+			}()
+
+			for {
+				select {
+				case <-ctx.Done():
+					require.Equal(t, test.expRepeats, count)
+					return
+				case <-time.After(time.Millisecond):
+					advanceTickers(t, clock, time.Millisecond*500)
+				}
+			}
+		})
+	}
+}
+
+func TestTimerTTL(t *testing.T) {
+	tests := map[string]struct {
+		iso bool
+	}{
+		"timer ttl": {
+			iso: false,
+		},
+		"timer ttl with ISO 8601": {
+			iso: true,
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			requestC := make(chan testRequest, 10)
+			testTimers := newTestTimers()
+			testTimers.SetExecuteTimerFn(func(reminder *internal.Reminder) bool {
+				requestC <- testRequest{Data: "data"}
+				return true
+			})
+			clock := testTimers.clock.(*clocktesting.FakeClock)
+
+			actorType, actorID := getTestActorTypeAndID()
+
+			ttl := "7s"
+			if test.iso {
+				ttl = "PT7S"
+			}
+			req := createTimerData(actorID, actorType, "timer", "R5/PT2S", "2s", ttl, "callback", "data")
+			reminder, err := req.NewReminder(testTimers.clock.Now())
+			require.NoError(t, err)
+
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+			t.Cleanup(cancel)
+			assert.NoError(t, testTimers.CreateTimer(ctx, reminder))
+
+			count := 0
+
+			ticker := clock.NewTicker(time.Second)
+			defer ticker.Stop()
+
+			advanceTickers(t, clock, 0)
+
+			var wg sync.WaitGroup
+			t.Cleanup(wg.Wait)
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				defer cancel()
+
+				for i := 0; i < 10; i++ {
+					select {
+					case request := <-requestC:
+						// Decrease i since time hasn't increased.
+						i--
+						assert.Equal(t, string(req.Data), "\""+request.Data.(string)+"\"")
+						count++
+					case <-ticker.C():
+						// nop
+					}
+				}
+			}()
+
+			for {
+				select {
+				case <-ctx.Done():
+					assert.Equal(t, 4, count)
+					return
+				case <-time.After(time.Millisecond):
+					advanceTickers(t, clock, time.Millisecond*500)
+				}
+			}
+		})
+	}
+}
+
+func timerValidation(dueTime, period, ttl, msg string) func(t *testing.T) {
+	return func(t *testing.T) {
+		testTimers := newTestTimers()
+
+		actorType, actorID := getTestActorTypeAndID()
+
+		req := createTimerData(actorID, actorType, "timer", period, dueTime, ttl, "callback", "data")
+		reminder, err := req.NewReminder(testTimers.clock.Now())
+		if err == nil {
+			err = testTimers.CreateTimer(context.Background(), reminder)
+		}
+		assert.ErrorContains(t, err, msg)
+	}
+}
+
+func TestTimerValidation(t *testing.T) {
+	t.Run("timer dueTime invalid (1)", timerValidation("invalid", "R5/PT2S", "1h", "unsupported time/duration format: invalid"))
+	t.Run("timer dueTime invalid (2)", timerValidation("R5/PT2S", "R5/PT2S", "1h", "repetitions are not allowed"))
+	t.Run("timer period invalid", timerValidation(startOfTime.Add(time.Minute).Format(time.RFC3339), "invalid", "1h", "unsupported duration format: invalid"))
+	t.Run("timer ttl invalid (1)", timerValidation("", "", "invalid", "unsupported time/duration format: invalid"))
+	t.Run("timer ttl invalid (2)", timerValidation("", "", "R5/PT2S", "repetitions are not allowed"))
+	t.Run("timer ttl expired (1)", timerValidation("2s", "", "-2s", "has already expired"))
+	t.Run("timer ttl expired (2)", timerValidation("", "", "-2s", "has already expired"))
+	t.Run("timer ttl expired (3)", timerValidation(startOfTime.Add(2*time.Second).Format(time.RFC3339), "", startOfTime.Add(time.Second).Format(time.RFC3339), "has already expired"))
+	t.Run("timer ttl expired (4)", timerValidation("", "", startOfTime.Add(-1*time.Second).Format(time.RFC3339), "has already expired"))
 }
 
 func TestOverrideTimer(t *testing.T) {
@@ -381,4 +773,24 @@ func advanceTickers(t *testing.T, clock *clocktesting.FakeClock, step time.Durat
 		return clock.HasWaiters()
 	}, 2*time.Second, 5*time.Millisecond, "ticker in program not created in time")
 	clock.Step(step)
+}
+
+func getTestActorTypeAndID() (string, string) {
+	return "cat", "e485d5de-de48-45ab-816e-6cc700d18ace"
+}
+
+func createTimerData(actorID, actorType, name, period, dueTime, ttl, callback, data string) internal.CreateTimerRequest {
+	r := internal.CreateTimerRequest{
+		ActorID:   actorID,
+		ActorType: actorType,
+		Name:      name,
+		Period:    period,
+		DueTime:   dueTime,
+		TTL:       ttl,
+		Callback:  callback,
+	}
+	if data != "" {
+		r.Data = json.RawMessage(`"` + data + `"`)
+	}
+	return r
 }
