@@ -28,16 +28,16 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework/binary"
-	"github.com/dapr/dapr/tests/integration/framework/freeport"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
+	"github.com/dapr/dapr/tests/integration/framework/util"
 )
 
 type Daprd struct {
 	exec     process.Interface
 	appHTTP  process.Interface
-	freeport *freeport.FreePort
+	freeport *util.FreePort
 
 	appID            string
 	appPort          int
@@ -57,7 +57,7 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 
 	appHTTP := prochttp.New(t)
 
-	fp := freeport.New(t, 6)
+	fp := util.ReservePorts(t, 6)
 	opts := options{
 		appID:            uid.String(),
 		appPort:          appHTTP.Port(),
