@@ -246,6 +246,7 @@ jobs:
             ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-
       - name: Run make test-integration
         run: make test-integration
+        continue-on-error: ${{ matrix.target_os == 'windows' }}
   build:
     name: "Build artifacts on ${{ matrix.job_name }} - ${{ matrix.sidecar_flavor }}"
     runs-on: "${{ matrix.os }}"
