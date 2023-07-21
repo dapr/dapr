@@ -56,8 +56,8 @@ func (t *timers) SetExecuteTimerFn(fn internal.ExecuteTimerFn) {
 	t.executeTimerFn = fn
 }
 
-func (r *timers) SetMetricsCollector(fn timersMetricsCollector) {
-	r.metricsCollector = fn
+func (t *timers) SetMetricsCollector(fn timersMetricsCollector) {
+	t.metricsCollector = fn
 }
 
 func (t *timers) CreateTimer(ctx context.Context, reminder *internal.Reminder) error {
