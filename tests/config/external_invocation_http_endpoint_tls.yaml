@@ -18,5 +18,5 @@ spec:
         key: tls.crt
     privateKey:
       secretKeyRef:
-        name: external-tls
+        name: dapr-tls-client
         key: tls.key
