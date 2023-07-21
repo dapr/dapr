@@ -23,14 +23,15 @@ import (
 
 	"github.com/dapr/dapr/tests/perf"
 	"github.com/dapr/dapr/tests/runner/loadtest"
-
-	"github.com/labstack/gommon/log"
+	"github.com/dapr/kit/logger"
 )
 
 const (
 	// testNameSeparator is the default character used by go test to separate between suitecases under the same test func.
 	testNameSeparator = "/"
 )
+
+var log = logger.NewLogger("tests.runner.summary")
 
 func sanitizeTestName(testName string) string {
 	return strings.ReplaceAll(testName, testNameSeparator, "_")
@@ -205,7 +206,7 @@ func (t *Table) OutputK6(k6results []*loadtest.K6RunnerMetricsSummary) *Table {
 func (t *Table) Flush() error {
 	bts, err := json.Marshal(t)
 	if err != nil {
-		log.Errorf("error when marshalling table %s %v", t.Test, err)
+		log.Errorf("error when marshalling table %s: %v", t.Test, err)
 		return err
 	}
 
@@ -216,7 +217,7 @@ func (t *Table) Flush() error {
 
 	err = os.WriteFile(filePath(filePrefixOutput, t.Test), bts, os.ModePerm)
 	if err != nil {
-		log.Errorf("error when saving table %s %v", t.Test, err)
+		log.Errorf("error when saving table %s: %v", t.Test, err)
 		return err
 	}
 	return nil

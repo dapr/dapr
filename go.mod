@@ -31,7 +31,6 @@ require (
 	github.com/jackc/pgx/v5 v5.3.1
 	github.com/jhump/protoreflect v1.15.1
 	github.com/kelseyhightower/envconfig v1.4.0
-	github.com/labstack/gommon v0.4.0
 	github.com/lestrrat-go/jwx/v2 v2.0.11
 	github.com/microsoft/durabletask-go v0.3.0
 	github.com/minio/blake2b-simd v0.0.0-20160723061019-3f5f724cb5b1
@@ -355,7 +354,6 @@ require (
 	github.com/tklauser/go-sysconf v0.3.10 // indirect
 	github.com/tklauser/numcpus v0.4.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
-	github.com/valyala/fasttemplate v1.2.2 // indirect
 	github.com/vmware/vmware-go-kcl v1.5.0 // indirect
 	github.com/xdg-go/pbkdf2 v1.0.0 // indirect
 	github.com/xdg-go/scram v1.1.2 // indirect
