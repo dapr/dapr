@@ -236,38 +236,81 @@ func processComponentSecrets(ctx context.Context, component *componentsapi.Compo
 	return nil
 }
 
+func pairNeedsSecretExtraction(ref commonapi.SecretKeyRef, auth httpendpointsapi.Auth) bool {
+	return ref.Name != "" && (auth.SecretStore == kubernetesSecretStore || auth.SecretStore == "")
+}
+
+func getSecret(ctx context.Context, name, namespace string, ref commonapi.SecretKeyRef, kubeClient client.Client) (commonapi.DynamicValue, error) {
+	var secret corev1.Secret
+
+	err := kubeClient.Get(ctx, types.NamespacedName{
+		Name:      name,
+		Namespace: namespace,
+	}, &secret)
+	if err != nil {
+		return commonapi.DynamicValue{}, err
+	}
+
+	key := ref.Key
+	if key == "" {
+		key = ref.Name
+	}
+
+	val, ok := secret.Data[key]
+	if ok {
+		enc := b64.StdEncoding.EncodeToString(val)
+		jsonEnc, err := json.Marshal(enc)
+		if err != nil {
+			return commonapi.DynamicValue{}, err
+		}
+
+		return commonapi.DynamicValue{
+			JSON: v1.JSON{
+				Raw: jsonEnc,
+			},
+		}, nil
+	}
+
+	return commonapi.DynamicValue{}, nil
+}
+
 func processHTTPEndpointSecrets(ctx context.Context, endpoint *httpendpointsapi.HTTPEndpoint, namespace string, kubeClient client.Client) error {
 	for i, header := range endpoint.Spec.Headers {
-		if header.SecretKeyRef.Name != "" && (endpoint.Auth.SecretStore == kubernetesSecretStore || endpoint.Auth.SecretStore == "") {
-			var secret corev1.Secret
-
-			err := kubeClient.Get(ctx, types.NamespacedName{
-				Name:      header.SecretKeyRef.Name,
-				Namespace: namespace,
-			}, &secret)
+		if pairNeedsSecretExtraction(header.SecretKeyRef, endpoint.Auth) {
+			v, err := getSecret(ctx, header.SecretKeyRef.Name, namespace, header.SecretKeyRef, kubeClient)
 			if err != nil {
 				return err
 			}
 
-			key := header.SecretKeyRef.Key
-			if key == "" {
-				key = header.SecretKeyRef.Name
-			}
-
-			val, ok := secret.Data[key]
-			if ok {
-				enc := b64.StdEncoding.EncodeToString(val)
-				jsonEnc, err := json.Marshal(enc)
-				if err != nil {
-					return err
-				}
-				endpoint.Spec.Headers[i].Value = commonapi.DynamicValue{
-					JSON: v1.JSON{
-						Raw: jsonEnc,
-					},
-				}
-			}
+			endpoint.Spec.Headers[i].Value = v
 		}
+	}
+
+	if endpoint.HasTLSClientCertSecret() && pairNeedsSecretExtraction(*endpoint.Spec.ClientTLS.Certificate.SecretKeyRef, endpoint.Auth) {
+		v, err := getSecret(ctx, endpoint.Spec.ClientTLS.Certificate.SecretKeyRef.Name, namespace, *endpoint.Spec.ClientTLS.Certificate.SecretKeyRef, kubeClient)
+		if err != nil {
+			return err
+		}
+
+		endpoint.Spec.ClientTLS.Certificate.Value = &v
+	}
+
+	if endpoint.HasTLSPrivateKeySecret() && pairNeedsSecretExtraction(*endpoint.Spec.ClientTLS.PrivateKey.SecretKeyRef, endpoint.Auth) {
+		v, err := getSecret(ctx, endpoint.Spec.ClientTLS.PrivateKey.SecretKeyRef.Name, namespace, *endpoint.Spec.ClientTLS.PrivateKey.SecretKeyRef, kubeClient)
+		if err != nil {
+			return err
+		}
+
+		endpoint.Spec.ClientTLS.PrivateKey.Value = &v
+	}
+
+	if endpoint.HasTLSRootCASecret() && pairNeedsSecretExtraction(*endpoint.Spec.ClientTLS.RootCA.SecretKeyRef, endpoint.Auth) {
+		v, err := getSecret(ctx, endpoint.Spec.ClientTLS.RootCA.SecretKeyRef.Name, namespace, *endpoint.Spec.ClientTLS.RootCA.SecretKeyRef, kubeClient)
+		if err != nil {
+			return err
+		}
+
+		endpoint.Spec.ClientTLS.RootCA.Value = &v
 	}
 
 	return nil
@@ -444,8 +487,15 @@ func (a *apiServer) ListHTTPEndpoints(ctx context.Context, in *operatorv1pb.List
 		return nil, fmt.Errorf("error listing http endpoints: %w", err)
 	}
 
-	for _, item := range endpoints.Items {
-		b, err := json.Marshal(item)
+	for i, item := range endpoints.Items {
+		e := endpoints.Items[i]
+		err := processHTTPEndpointSecrets(ctx, &e, item.Namespace, a.Client)
+		if err != nil {
+			log.Warnf("error processing secrets for http endpoint %s", item.Name, item.Namespace, err)
+			return &operatorv1pb.ListHTTPEndpointsResponse{}, err
+		}
+
+		b, err := json.Marshal(e)
 		if err != nil {
 			log.Warnf("Error unmarshalling http endpoints: %s", err)
 			continue
