@@ -11,13 +11,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+using Microsoft.AspNetCore.Mvc;
+using System.Threading.Tasks;
+using Dapr.Client;
+using System;
+
 namespace DaprDemoActor
 {
-  using Microsoft.AspNetCore.Mvc;
-  using System.Threading.Tasks;
-  using Dapr.Client;
-  using System;
-
   [ApiController]
   [Route("/")]
   public class Controller : ControllerBase
@@ -38,8 +38,8 @@ namespace DaprDemoActor
     public async Task<ActionResult<string>> StartWorkflow([FromRoute] string instanceID, string workflowName, string workflowComponent)
     {
       await daprClient.WaitForSidecarAsync();
-      object inputItem = "paperclips";
-      Dictionary<string, string> workflowOptions = new Dictionary<string, string>();
+      var inputItem = "paperclips";
+      var workflowOptions = new Dictionary<string, string>();
       var startResponse = await daprClient.StartWorkflowAsync(
               instanceId: instanceID, 
               workflowComponent: workflowComponent,

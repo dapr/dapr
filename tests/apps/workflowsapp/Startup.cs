@@ -49,11 +49,29 @@ namespace DaprDemoActor
         /// <param name="services">Service Collection.</param>
         public void ConfigureServices(IServiceCollection services)
         {
-            services.AddActors(options =>
+            services.AddDaprWorkflow(options =>
             {
-                options.Actors.RegisterActor<WorkflowActor>();
+                // Example of registering a "PlaceOrder" workflow function
+                options.RegisterWorkflow<string, string>("PlaceOrder", implementation: async (context, input) =>
+                {
+
+                    var itemToPurchase = input;
+
+                    itemToPurchase = await context.WaitForExternalEventAsync<string>("ChangePurchaseItem");
+
+                    // In real life there are other steps related to placing an order, like reserving
+                    // inventory and charging the customer credit card etc. But let's keep it simple ;)
+                    await context.CallActivityAsync<string>("ShipProduct", itemToPurchase);
+
+                    return itemToPurchase;
+                });
+                // Example of registering a "ShipProduct" workflow activity function
+                options.RegisterActivity<string, string>("ShipProduct", implementation: (context, input) =>
+                {
+                    return Task.FromResult($"We are shipping {input} to the customer using our hoard of drones!");
+                });
+
             });
-            
             services.AddAuthentication().AddDapr();
             services.AddAuthorization(o => o.AddDapr());
             services.AddControllers().AddDapr();
@@ -82,7 +100,6 @@ namespace DaprDemoActor
             app.UseEndpoints(endpoints =>
             {
                 endpoints.MapSubscribeHandler();
-                endpoints.MapActorsHandlers();
                 endpoints.MapControllers();
             });
         }

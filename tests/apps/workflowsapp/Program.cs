@@ -14,7 +14,6 @@ namespace DaprDemoActor
 {
     using Microsoft.AspNetCore.Hosting;
     using Microsoft.Extensions.Hosting;
-    using Dapr.Workflow;
     public class Program
     {
         public static void Main(string[] args)
@@ -27,35 +26,6 @@ namespace DaprDemoActor
                 .ConfigureWebHostDefaults(webBuilder =>
                 {
                     webBuilder.UseStartup<Startup>();
-                }).ConfigureServices(services =>
-                {
-                    services.AddActors(options =>
-                    {
-                        options.Actors.RegisterActor<WorkflowActor>();
-                    });
-                    services.AddDaprWorkflow(options =>
-                    {
-                        // Example of registering a "PlaceOrder" workflow function
-                        options.RegisterWorkflow<string, string>("PlaceOrder", implementation: async (context, input) =>
-                        {
-
-                            var itemToPurchase = input;
-
-                            itemToPurchase = await context.WaitForExternalEventAsync<string>("ChangePurchaseItem");
-
-                            // In real life there are other steps related to placing an order, like reserving
-                            // inventory and charging the customer credit card etc. But let's keep it simple ;)
-                            await context.CallActivityAsync<string>("ShipProduct", itemToPurchase);
-
-                            return itemToPurchase;
-                        });
-                        // Example of registering a "ShipProduct" workflow activity function
-                        options.RegisterActivity<string, string>("ShipProduct", implementation: (context, input) =>
-                        {
-                            return Task.FromResult($"We are shipping {input} to the customer using our hoard of drones!");
-                        });
-
-                    });
                 });
     }
 }
