@@ -409,7 +409,7 @@ func (p *ActorPlacement) updatePlacements(in *v1pb.PlacementTables) {
 	// May call LookupActor inside, so should not do this with placementTableLock locked.
 	p.afterTableUpdateFn()
 
-	log.Infof("placement tables updated, version: %s", in.GetVersion())
+	log.Infof("Placement tables updated, version: %s", in.GetVersion())
 }
 
 // addDNSResolverPrefix add the `dns://` prefix to the given addresses

@@ -231,9 +231,12 @@ func (a *actorsRuntime) Init() error {
 
 	hostname := net.JoinHostPort(a.actorsConfig.Config.HostAddress, strconv.Itoa(a.actorsConfig.Config.Port))
 
+	a.actorsReminders.Init(context.TODO())
+	a.timers.Init(context.TODO())
+
 	afterTableUpdateFn := func() {
 		a.drainRebalancedActors()
-		a.actorsReminders.Init(context.TODO())
+		a.actorsReminders.OnPlacementTablesUpdated(context.TODO())
 	}
 	appHealthFn := func() bool { return a.appHealthy.Load() }
 

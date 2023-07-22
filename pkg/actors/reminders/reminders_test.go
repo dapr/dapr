@@ -129,7 +129,7 @@ func TestReminderCountFiring(t *testing.T) {
 	// Init a mock metrics collector
 	activeCount := atomic.Int64{}
 	invalidInvocations := atomic.Int64{}
-	testReminders.SetMetricsCollector(func(at string, r int64) {
+	testReminders.SetMetricsCollectorFn(func(at string, r int64) {
 		if at == actorType {
 			activeCount.Store(r)
 		} else {

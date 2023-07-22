@@ -46,12 +46,13 @@ type RemindersProviderOpts struct {
 type RemindersProvider interface {
 	io.Closer
 
-	Init(ctx context.Context)
+	Init(ctx context.Context) error
 	GetReminder(ctx context.Context, req *GetReminderRequest) (*Reminder, error)
 	CreateReminder(ctx context.Context, req *Reminder) error
 	DeleteReminder(ctx context.Context, req DeleteReminderRequest) error
 	RenameReminder(ctx context.Context, req *RenameReminderRequest) error
 	DrainRebalancedReminders(actorType string, actorID string)
+	OnPlacementTablesUpdated(ctx context.Context)
 
 	SetResiliencyProvider(resiliency resiliency.Provider)
 	SetExecuteReminderFn(fn ExecuteReminderFn)

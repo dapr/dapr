@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -51,8 +51,10 @@ func (r Reminder) Key() string {
 }
 
 // NextTick returns the time the reminder should tick again next.
-func (r Reminder) NextTick() time.Time {
-	return r.RegisteredTime
+// If the reminder has a TTL and the next tick is beyond the TTL, the second returned value will be false.
+func (r Reminder) NextTick() (time.Time, bool) {
+	active := r.ExpirationTime.IsZero() || r.RegisteredTime.Before(r.ExpirationTime)
+	return r.RegisteredTime, active
 }
 
 // HasRepeats returns true if the reminder has repeats left.

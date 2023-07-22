@@ -15,6 +15,7 @@ package internal
 
 import (
 	"context"
+	"io"
 )
 
 // ExecuteTimerFn is the type of the function invoked when a timer is to be executed.
@@ -23,6 +24,9 @@ type ExecuteTimerFn func(reminder *Reminder) bool
 
 // TimersProvider is the interface for the object that provides timers services.
 type TimersProvider interface {
+	io.Closer
+
+	Init(ctx context.Context) error
 	CreateTimer(ctx context.Context, reminder *Reminder) error
 	DeleteTimer(ctx context.Context, timerKey string) error
 	GetActiveTimersCount(actorKey string) int64

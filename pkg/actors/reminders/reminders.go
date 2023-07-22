@@ -39,7 +39,7 @@ const (
 	metadataPartitionKey = "partitionKey"
 )
 
-type remindersMetricsCollector = func(actorType string, reminders int64)
+type remindersMetricsCollectorFn = func(actorType string, reminders int64)
 
 // Implements a reminders provider.
 type reminders struct {
@@ -57,7 +57,7 @@ type reminders struct {
 	evaluationLock       sync.RWMutex
 	config               internal.Config
 	lookUpActorFn        internal.LookupActorFn
-	metricsCollector     remindersMetricsCollector
+	metricsCollector     remindersMetricsCollectorFn
 }
 
 // NewRemindersProvider returns a reminders provider.
@@ -90,8 +90,13 @@ func (r *reminders) SetLookupActorFn(fn internal.LookupActorFn) {
 	r.lookUpActorFn = fn
 }
 
-func (r *reminders) SetMetricsCollector(fn remindersMetricsCollector) {
+func (r *reminders) SetMetricsCollectorFn(fn remindersMetricsCollectorFn) {
 	r.metricsCollector = fn
+}
+
+// OnPlacementTablesUpdated is invoked when the actors runtime received an updated placement tables.
+func (r *reminders) OnPlacementTablesUpdated(ctx context.Context) {
+	r.evaluateReminders(ctx)
 }
 
 func (r *reminders) DrainRebalancedReminders(actorType string, actorID string) {
@@ -154,8 +159,8 @@ func (r *reminders) Close() error {
 	return nil
 }
 
-func (r *reminders) Init(ctx context.Context) {
-	r.evaluateReminders(ctx)
+func (r *reminders) Init(ctx context.Context) error {
+	return nil
 }
 
 func (r *reminders) GetReminder(ctx context.Context, req *internal.GetReminderRequest) (*internal.Reminder, error) {
@@ -812,38 +817,30 @@ func (r *reminders) startReminder(reminder *internal.Reminder, stopChannel chan 
 
 	go func() {
 		var (
-			ttlTimer, nextTimer clock.Timer
-			ttlTimerC           <-chan time.Time
-			err                 error
+			nextTimer clock.Timer
+			err       error
 		)
 		eTag := track.Etag
 
-		if !reminder.ExpirationTime.IsZero() {
-			ttlTimer = r.clock.NewTimer(reminder.ExpirationTime.Sub(r.clock.Now()))
-			ttlTimerC = ttlTimer.C()
+		nextTick, active := reminder.NextTick()
+		if !active {
+			log.Infof("Reminder %s has expired", reminderKey)
+			goto delete
 		}
 
-		nextTimer = r.clock.NewTimer(reminder.NextTick().Sub(r.clock.Now()))
+		nextTimer = r.clock.NewTimer(nextTick.Sub(r.clock.Now()))
 		defer func() {
 			if nextTimer != nil && !nextTimer.Stop() {
 				<-nextTimer.C()
 			}
-			if ttlTimer != nil && !ttlTimer.Stop() {
-				<-ttlTimer.C()
-			}
 		}()
 
-	L:
+	loop:
 		for {
 			select {
 			case <-nextTimer.C():
 				log.Infof("Reminder %s with parameters: dueTime: %s, period: %s is due", reminderKey, reminder.DueTime, reminder.Period)
 				// noop
-			case <-ttlTimerC:
-				// proceed with reminder deletion
-				log.Infof("Reminder %s with parameters: dueTime: %s, period: %s has expired", reminderKey, reminder.DueTime, reminder.Period)
-				ttlTimer = nil
-				break L
 			case <-stopChannel:
 				// reminder has been already deleted
 				log.Infof("Reminder %s with parameters: dueTime: %s, period: %s has been deleted", reminderKey, reminder.DueTime, reminder.Period)
@@ -864,17 +861,17 @@ func (r *reminders) startReminder(reminder *internal.Reminder, stopChannel chan 
 			if reminder.RepeatsLeft() == 0 {
 				log.Info("Reminder " + reminderKey + " has been completed")
 				nextTimer = nil
-				break L
+				break loop
 			}
 
 			if r.executeReminderFn != nil && !r.executeReminderFn(reminder) {
 				nextTimer = nil
-				break L
+				break loop
 			}
 
 			_, exists = r.activeReminders.Load(reminderKey)
 			if exists {
-				err = r.updateReminderTrack(context.TODO(), reminderKey, reminder.RepeatsLeft(), reminder.NextTick(), eTag)
+				err = r.updateReminderTrack(context.TODO(), reminderKey, reminder.RepeatsLeft(), nextTick, eTag)
 				if err != nil {
 					log.Errorf("Error updating reminder track for reminder %s: %v", reminderKey, err)
 				}
@@ -889,14 +886,23 @@ func (r *reminders) startReminder(reminder *internal.Reminder, stopChannel chan 
 				nextTimer = nil
 				return
 			}
+
 			if reminder.TickExecuted() {
 				nextTimer = nil
-				break L
+				break loop
 			}
 
-			nextTimer.Reset(reminder.NextTick().Sub(r.clock.Now()))
+			nextTick, active = reminder.NextTick()
+			if !active {
+				log.Infof("Reminder %s with parameters: dueTime: %s, period: %s has expired", reminderKey, reminder.DueTime, reminder.Period)
+				nextTimer = nil
+				break loop
+			}
+
+			nextTimer.Reset(nextTick.Sub(r.clock.Now()))
 		}
 
+	delete:
 		err = r.DeleteReminder(context.TODO(), internal.DeleteReminderRequest{
 			Name:      reminder.Name,
 			ActorID:   reminder.ActorID,

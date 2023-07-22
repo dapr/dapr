@@ -40,6 +40,7 @@ type timers struct {
 	activeTimersCount     map[string]*int64
 	activeTimersCountLock sync.RWMutex
 	metricsCollector      timersMetricsCollector
+	runningCh             chan struct{}
 }
 
 // NewTimersProvider returns a TimerProvider.
@@ -49,7 +50,18 @@ func NewTimersProvider(clock clock.WithTicker) internal.TimersProvider {
 		activeTimers:      &sync.Map{},
 		activeTimersCount: make(map[string]*int64),
 		metricsCollector:  diag.DefaultMonitoring.ActorTimers,
+		runningCh:         make(chan struct{}),
 	}
+}
+
+func (t *timers) Init(ctx context.Context) error {
+	return nil
+}
+
+func (t *timers) Close() error {
+	// Close the runningCh
+	close(t.runningCh)
+	return nil
 }
 
 func (t *timers) SetExecuteTimerFn(fn internal.ExecuteTimerFn) {
@@ -93,57 +105,57 @@ func (t *timers) CreateTimer(ctx context.Context, reminder *internal.Reminder) e
 	t.updateActiveTimersCount(reminder.ActorType, 1)
 
 	go func() {
-		var (
-			ttlTimer, nextTimer clock.Timer
-			ttlTimerC           <-chan time.Time
-		)
+		var nextTimer clock.Timer
 
-		if !reminder.ExpirationTime.IsZero() {
-			ttlTimer = t.clock.NewTimer(reminder.ExpirationTime.Sub(t.clock.Now()))
-			ttlTimerC = ttlTimer.C()
+		nextTick, active := reminder.NextTick()
+		if !active {
+			log.Infof("Timer %s has expired", timerKey)
+			goto delete
 		}
 
-		nextTimer = t.clock.NewTimer(reminder.NextTick().Sub(t.clock.Now()))
+		nextTimer = t.clock.NewTimer(nextTick.Sub(t.clock.Now()))
 		defer func() {
 			if nextTimer != nil && !nextTimer.Stop() {
 				<-nextTimer.C()
 			}
-			if ttlTimer != nil && !ttlTimer.Stop() {
-				<-ttlTimer.C()
-			}
 		}()
 
-	L:
+	loop:
 		for {
 			select {
 			case <-nextTimer.C():
 				// noop
-			case <-ttlTimerC:
-				// timer has expired; proceed with deletion
-				log.Infof("Timer has expired: %s", reminder)
-				ttlTimer = nil
-				break L
 			case <-stop:
 				// timer has been already deleted
 				log.Infof("Timer has been deleted: %s", reminder)
-				break L
+				break loop
+			case <-t.runningCh:
+				// Timers runtime is stopping
+				return
 			}
 
 			// If executeTimerFn returns false, it means that the actor was stopped so it should not be fired again
 			if t.executeTimerFn != nil && !t.executeTimerFn(reminder) {
 				nextTimer = nil
-				break L
+				break loop
 			}
 
 			if reminder.TickExecuted() {
 				log.Infof("Timer %s has been completed", timerKey)
 				nextTimer = nil
-				break L
+				break loop
 			}
 
-			nextTimer.Reset(reminder.NextTick().Sub(t.clock.Now()))
+			nextTick, active = reminder.NextTick()
+			if !active {
+				log.Infof("Timer %s has expired", timerKey)
+				nextTimer = nil
+				break loop
+			}
+			nextTimer.Reset(nextTick.Sub(t.clock.Now()))
 		}
 
+	delete:
 		// Delete the timer from the table
 		// We can't just call `DeleteTimer` as that could cause a race condition if the timer is also being replaced
 		exists := t.activeTimers.CompareAndDelete(timerKey, stop)
