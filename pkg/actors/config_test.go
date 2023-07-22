@@ -34,7 +34,6 @@ const (
 func TestConfig(t *testing.T) {
 	config := config.ApplicationConfig{
 		Entities:                   []string{"1"},
-		ActorScanInterval:          "1s",
 		ActorIdleTimeout:           "2s",
 		DrainOngoingCallTimeout:    "3s",
 		DrainRebalancedActors:      true,
@@ -55,7 +54,6 @@ func TestConfig(t *testing.T) {
 	assert.Equal(t, []string{"placement:5050"}, c.PlacementAddresses)
 	assert.Equal(t, internal.NewHostedActors([]string{"1"}), c.HostedActorTypes)
 	assert.Equal(t, 3500, c.Port)
-	assert.Equal(t, "1s", c.ActorDeactivationScanInterval.String())
 	assert.Equal(t, "2s", c.ActorIdleTimeout.String())
 	assert.Equal(t, "3s", c.DrainOngoingCallTimeout.String())
 	assert.Equal(t, true, c.DrainRebalancedActors)
@@ -154,7 +152,6 @@ func TestDefaultConfigValuesSet(t *testing.T) {
 	assert.Equal(t, Port, config.Port)
 	assert.Equal(t, Namespace, config.Namespace)
 	assert.NotNil(t, config.ActorIdleTimeout)
-	assert.NotNil(t, config.ActorDeactivationScanInterval)
 	assert.NotNil(t, config.DrainOngoingCallTimeout)
 	assert.NotNil(t, config.DrainRebalancedActors)
 }
@@ -163,7 +160,6 @@ func TestPerActorTypeConfigurationValues(t *testing.T) {
 	appConfig := config.ApplicationConfig{
 		Entities:                   []string{"actor1", "actor2", "actor3", "actor4"},
 		ActorIdleTimeout:           "1s",
-		ActorScanInterval:          "2s",
 		DrainOngoingCallTimeout:    "5s",
 		DrainRebalancedActors:      true,
 		RemindersStoragePartitions: 1,
@@ -202,7 +198,6 @@ func TestPerActorTypeConfigurationValues(t *testing.T) {
 	assert.Equal(t, Port, config.Port)
 	assert.Equal(t, Namespace, config.Namespace)
 	assert.Equal(t, time.Second, config.ActorIdleTimeout)
-	assert.Equal(t, time.Second*2, config.ActorDeactivationScanInterval)
 	assert.Equal(t, time.Second*5, config.DrainOngoingCallTimeout)
 	assert.True(t, config.DrainRebalancedActors)
 
@@ -235,7 +230,6 @@ func TestOnlyHostedActorTypesAreIncluded(t *testing.T) {
 	appConfig := config.ApplicationConfig{
 		Entities:                   []string{"actor1", "actor2"},
 		ActorIdleTimeout:           "1s",
-		ActorScanInterval:          "2s",
 		DrainOngoingCallTimeout:    "5s",
 		DrainRebalancedActors:      true,
 		RemindersStoragePartitions: 1,

@@ -34,7 +34,6 @@ const (
 	actorMethodURLFormat    = daprV1URL + "/actors/%s/%s/method/%s"
 	defaultActorType        = "reentrantActor"
 	actorIdleTimeout        = "1h"
-	actorScanInterval       = "30s"
 	drainOngoingCallTimeout = "30s"
 	drainRebalancedActors   = true
 	reentrantMethod         = "reentrantMethod"
@@ -51,7 +50,6 @@ type actorLogEntry struct {
 type daprConfig struct {
 	Entities                []string                `json:"entities,omitempty"`
 	ActorIdleTimeout        string                  `json:"actorIdleTimeout,omitempty"`
-	ActorScanInterval       string                  `json:"actorScanInterval,omitempty"`
 	DrainOngoingCallTimeout string                  `json:"drainOngoingCallTimeout,omitempty"`
 	DrainRebalancedActors   bool                    `json:"drainRebalancedActors,omitempty"`
 	Reentrancy              config.ReentrancyConfig `json:"reentrancy,omitempty"`
@@ -79,7 +77,6 @@ var (
 var daprConfigResponse = daprConfig{
 	Entities:                []string{defaultActorType},
 	ActorIdleTimeout:        actorIdleTimeout,
-	ActorScanInterval:       actorScanInterval,
 	DrainOngoingCallTimeout: drainOngoingCallTimeout,
 	DrainRebalancedActors:   drainRebalancedActors,
 	Reentrancy:              config.ReentrancyConfig{Enabled: false},

@@ -26,7 +26,6 @@ public class Application {
 
     public static void main(String[] args) {
         ActorRuntime.getInstance().getConfig().setActorIdleTimeout(Duration.ofSeconds(1));
-        ActorRuntime.getInstance().getConfig().setActorScanInterval(Duration.ofSeconds(1));
         ActorRuntime.getInstance().registerActor(CarActorImpl.class);
         SpringApplication.run(Application.class, args);
     }

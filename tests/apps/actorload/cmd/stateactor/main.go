@@ -104,7 +104,6 @@ func main() {
 	service := serve.NewActorService(*appPort, &rt.DaprConfig{
 		Entities:                actorTypes,
 		ActorIdleTimeout:        "5m",
-		ActorScanInterval:       "10s",
 		DrainOngoingCallTimeout: "10s",
 		DrainRebalancedActors:   true,
 	})

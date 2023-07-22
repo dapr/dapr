@@ -466,10 +466,6 @@ func newTestRemindersWithMockAndActorMetadataPartition() *reminders {
 		RemindersStoragePartitions: appConfig.RemindersStoragePartitions,
 		EntityConfigs:              make(map[string]internal.EntityConfig),
 	}
-	scanDuration, err := time.ParseDuration(appConfig.ActorScanInterval)
-	if err == nil {
-		conf.ActorDeactivationScanInterval = scanDuration
-	}
 
 	idleDuration, err := time.ParseDuration(appConfig.ActorIdleTimeout)
 	if err == nil {

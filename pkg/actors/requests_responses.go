@@ -25,6 +25,11 @@ type ActorHostedRequest struct {
 	ActorType string `json:"actorType"`
 }
 
+// Key returns the key for this unique actor.
+func (req ActorHostedRequest) Key() string {
+	return req.ActorType + daprSeparator + req.ActorID
+}
+
 // CreateReminderRequest is the request object to create a new reminder.
 type CreateReminderRequest = internal.CreateReminderRequest
 

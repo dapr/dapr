@@ -17,7 +17,6 @@ package runtime
 type DaprConfig struct {
 	Entities                []string `json:"entities,omitempty"`
 	ActorIdleTimeout        string   `json:"actorIdleTimeout,omitempty"`
-	ActorScanInterval       string   `json:"actorScanInterval,omitempty"`
 	DrainOngoingCallTimeout string   `json:"drainOngoingCallTimeout,omitempty"`
 	DrainRebalancedActors   bool     `json:"drainRebalancedActors,omitempty"`
 }

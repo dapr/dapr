@@ -24,24 +24,23 @@ import (
 
 // Config is the actor runtime configuration.
 type Config struct {
-	HostAddress                   string
-	AppID                         string
-	PlacementAddresses            []string
-	HostedActorTypes              hostedActors
-	Port                          int
-	HeartbeatInterval             time.Duration
-	ActorDeactivationScanInterval time.Duration
-	ActorIdleTimeout              time.Duration
-	DrainOngoingCallTimeout       time.Duration
-	DrainRebalancedActors         bool
-	Namespace                     string
-	Reentrancy                    daprAppConfig.ReentrancyConfig
-	RemindersStoragePartitions    int
-	EntityConfigs                 map[string]EntityConfig
-	HealthHTTPClient              *http.Client
-	HealthEndpoint                string
-	AppChannelAddress             string
-	PodName                       string
+	HostAddress                string
+	AppID                      string
+	PlacementAddresses         []string
+	HostedActorTypes           hostedActors
+	Port                       int
+	HeartbeatInterval          time.Duration
+	ActorIdleTimeout           time.Duration
+	DrainOngoingCallTimeout    time.Duration
+	DrainRebalancedActors      bool
+	Namespace                  string
+	Reentrancy                 daprAppConfig.ReentrancyConfig
+	RemindersStoragePartitions int
+	EntityConfigs              map[string]EntityConfig
+	HealthHTTPClient           *http.Client
+	HealthEndpoint             string
+	AppChannelAddress          string
+	PodName                    string
 }
 
 // Remap of daprAppConfig.EntityConfig but with more useful types for actors.go.
