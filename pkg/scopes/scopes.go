@@ -8,6 +8,7 @@ const (
 	SubscriptionScopes = "subscriptionScopes"
 	PublishingScopes   = "publishingScopes"
 	AllowedTopics      = "allowedTopics"
+	ProtectedTopics    = "protectedTopics"
 	appsSeparator      = ";"
 	appSeparator       = "="
 	topicSeparator     = ","
@@ -47,14 +48,13 @@ func GetScopedTopics(scope, appID string, metadata map[string]string) []string {
 	return topics
 }
 
-// GetAllowedTopics return the all topics list of params allowedTopics.
-func GetAllowedTopics(metadata map[string]string) []string {
+func getParamTopics(param string, metadata map[string]string) []string {
 	var (
 		existM = map[string]struct{}{}
 		topics = []string{}
 	)
 
-	if val, ok := metadata[AllowedTopics]; ok && val != "" {
+	if val, ok := metadata[param]; ok && val != "" {
 		val = strings.ReplaceAll(val, " ", "")
 		tempTopics := strings.Split(val, topicSeparator)
 		for _, tempTopic := range tempTopics {
@@ -64,5 +64,16 @@ func GetAllowedTopics(metadata map[string]string) []string {
 			}
 		}
 	}
+
 	return topics
+}
+
+// GetAllowedTopics return the all topics list of params allowedTopics.
+func GetAllowedTopics(metadata map[string]string) []string {
+	return getParamTopics(AllowedTopics, metadata)
+}
+
+// GetProtectedTopics returns all topics of param protectedTopics.
+func GetProtectedTopics(metadata map[string]string) []string {
+	return getParamTopics(ProtectedTopics, metadata)
 }

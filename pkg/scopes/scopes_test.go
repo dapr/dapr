@@ -51,6 +51,56 @@ func TestGetAllowedTopics(t *testing.T) {
 	}
 }
 
+func TestGetProtectedTopics(t *testing.T) {
+	protectedTests := []struct {
+		Metadata map[string]string
+		Target   []string
+		Msg      string
+	}{
+		{
+			Metadata: nil,
+			Target:   []string{},
+			Msg:      "pass",
+		},
+		{
+			Metadata: map[string]string{},
+			Target:   []string{},
+			Msg:      "pass",
+		},
+		{
+			Metadata: map[string]string{
+				"protectedTopics": "",
+			},
+			Target: []string{},
+			Msg:    "pass",
+		},
+		{
+			Metadata: map[string]string{
+				"protectedTopics": "topic1,topic2,topic3",
+			},
+			Target: []string{"topic1", "topic2", "topic3"},
+			Msg:    "pass",
+		},
+		{
+			Metadata: map[string]string{
+				"protectedTopics": "topic1, topic2, topic3",
+			},
+			Target: []string{"topic1", "topic2", "topic3"},
+			Msg:    "pass, include whitespace",
+		},
+		{
+			Metadata: map[string]string{
+				"protectedTopics": "topic1, topic1, topic1", //nolint:dupword
+			},
+			Target: []string{"topic1"},
+			Msg:    "pass, include whitespace and repeated topic",
+		},
+	}
+	for _, item := range protectedTests {
+		assert.Equal(t, GetProtectedTopics(item.Metadata), item.Target)
+	}
+}
+
 func TestGetScopedTopics(t *testing.T) {
 	scopedTests := []struct {
 		Scope    string
