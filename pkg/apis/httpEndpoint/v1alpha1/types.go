@@ -36,9 +36,11 @@ type HTTPEndpoint struct {
 	common.Scoped `json:",inline"`
 }
 
+const kind = "HTTPEndpoint"
+
 // Kind returns the component kind.
 func (HTTPEndpoint) Kind() string {
-	return "HTTPEndpoint"
+	return kind
 }
 
 // GetSecretStore returns the name of the secret store.
@@ -51,11 +53,43 @@ func (h HTTPEndpoint) NameValuePairs() []common.NameValuePair {
 	return h.Spec.Headers
 }
 
+// nil returns a bool indicating if a tls private key has a secret reference
+func (h HTTPEndpoint) HasTLSPrivateKeySecret() bool {
+	return h.Spec.ClientTLS != nil && h.Spec.ClientTLS.PrivateKey != nil && h.Spec.ClientTLS.PrivateKey.SecretKeyRef != nil && h.Spec.ClientTLS.PrivateKey.SecretKeyRef.Name != ""
+}
+
+// HasTLSClientCertSecret returns a bool indicating if a tls client cert has a secret reference
+func (h HTTPEndpoint) HasTLSClientCertSecret() bool {
+	return h.Spec.ClientTLS != nil && h.Spec.ClientTLS.Certificate != nil && h.Spec.ClientTLS.Certificate.SecretKeyRef != nil && h.Spec.ClientTLS.Certificate.SecretKeyRef.Name != ""
+}
+
+// HasTLSRootCASecret returns a bool indicating if a tls root cert has a secret reference
+func (h HTTPEndpoint) HasTLSRootCASecret() bool {
+	return h.Spec.ClientTLS != nil && h.Spec.ClientTLS.RootCA != nil && h.Spec.ClientTLS.RootCA.SecretKeyRef != nil && h.Spec.ClientTLS.RootCA.SecretKeyRef.Name != ""
+}
+
+// HasTLSRootCA returns a bool indicating if the HTTP endpoint contains a tls root ca
+func (h HTTPEndpoint) HasTLSRootCA() bool {
+	return h.Spec.ClientTLS != nil && h.Spec.ClientTLS.RootCA != nil && h.Spec.ClientTLS.RootCA.Value != nil
+}
+
+// HasTLSClientCert returns a bool indicating if the HTTP endpoint contains a tls client cert
+func (h HTTPEndpoint) HasTLSClientCert() bool {
+	return h.Spec.ClientTLS != nil && h.Spec.ClientTLS.Certificate != nil && h.Spec.ClientTLS.Certificate.Value != nil
+}
+
+// HasTLSClientKey returns a bool indicating if the HTTP endpoint contains a tls client key
+func (h HTTPEndpoint) HasTLSPrivateKey() bool {
+	return h.Spec.ClientTLS != nil && h.Spec.ClientTLS.PrivateKey != nil && h.Spec.ClientTLS.PrivateKey.Value != nil
+}
+
 // HTTPEndpointSpec describes an access specification for allowing external service invocations.
 type HTTPEndpointSpec struct {
 	BaseURL string `json:"baseUrl" validate:"required"`
 	//+optional
 	Headers []common.NameValuePair `json:"headers"`
+	//+optional
+	ClientTLS *common.TLS `json:"clientTLS,omitempty"`
 }
 
 // Auth represents authentication details for the component.

@@ -1,5 +1,8 @@
+//go:build windows
+// +build windows
+
 /*
-Copyright 2022 The Dapr Authors
+Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,20 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package security
+package util
 
-import (
-	"os"
-
-	"github.com/dapr/dapr/pkg/runtime/security/consts"
-)
-
-// GetAPIToken returns the value of the api token from an environment variable.
-func GetAPIToken() string {
-	return os.Getenv(consts.APITokenEnvVar)
-}
-
-// GetAppToken returns the value of the app api token from an environment variable.
-func GetAppToken() string {
-	return os.Getenv(consts.AppAPITokenEnvVar)
-}
+var forbiddenFileChars = []string{"<", ">", ":", "\"", "/", "\\", "|", "?", "*"}

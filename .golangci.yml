@@ -136,6 +136,15 @@ linters-settings:
       - "github.com/benbjohnson/clock": "must use k8s.io/utils/clock"
       - "github.com/ghodss/yaml": "must use sigs.k8s.io/yaml"
       - "gopkg.in/yaml.v2": "must use gopkg.in/yaml.v3"
+      - "github.com/golang-jwt/jwt": "must use github.com/lestrrat-go/jwx/v2"
+      - "github.com/ghodss/yaml": "must use sigs.k8s.io/yaml"
+      # Commonly auto-completed by gopls
+      - "github.com/gogo/status": "must use google.golang.org/grpc/status"
+      - "github.com/gogo/protobuf": "must use google.golang.org/protobuf"
+      - "github.com/lestrrat-go/jwx/jwa": "must use github.com/lestrrat-go/jwx/v2"
+      - "github.com/lestrrat-go/jwx/jwt": "must use github.com/lestrrat-go/jwx/v2"
+      - "github.com/labstack/gommon/log": "must use github.com/dapr/kit/logger"
+      - "github.com/gobuffalo/logger": "must use github.com/dapr/kit/logger"
   misspell:
     # Correct spellings using locale preferences for US or UK.
     # Default is to use a neutral variety of English.
