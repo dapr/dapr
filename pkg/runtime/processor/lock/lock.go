@@ -11,11 +11,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package processor
+package lock
 
 import (
 	"context"
 	"fmt"
+	"io"
 
 	contriblock "github.com/dapr/components-contrib/lock"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
@@ -26,13 +27,27 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/meta"
 )
 
+type Options struct {
+	Registry       *complock.Registry
+	ComponentStore *compstore.ComponentStore
+	Meta           *meta.Meta
+}
+
 type lock struct {
 	registry  *complock.Registry
 	compStore *compstore.ComponentStore
 	meta      *meta.Meta
 }
 
-func (l *lock) init(ctx context.Context, comp compapi.Component) error {
+func New(opts Options) *lock {
+	return &lock{
+		registry:  opts.Registry,
+		compStore: opts.ComponentStore,
+		meta:      opts.Meta,
+	}
+}
+
+func (l *lock) Init(ctx context.Context, comp compapi.Component) error {
 	// create the component
 	fName := comp.LogName()
 	store, err := l.registry.Create(comp.Spec.Type, comp.Spec.Version, fName)
@@ -66,5 +81,22 @@ func (l *lock) init(ctx context.Context, comp compapi.Component) error {
 
 	diag.DefaultMonitoring.ComponentInitialized(comp.Spec.Type)
 
+	return nil
+}
+
+func (l *lock) Close(comp compapi.Component) error {
+	lock, ok := l.compStore.GetLock(comp.ObjectMeta.Name)
+	if !ok {
+		return nil
+	}
+
+	closer, ok := lock.(io.Closer)
+	if ok && closer != nil {
+		if err := closer.Close(); err != nil {
+			return err
+		}
+	}
+
+	l.compStore.DeleteLock(comp.ObjectMeta.Name)
 	return nil
 }
