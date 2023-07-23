@@ -193,10 +193,16 @@ func (r Reminder) String() string {
 	if !r.ExpirationTime.IsZero() {
 		expirationTime = "'" + r.ExpirationTime.Format(time.RFC3339) + "'"
 	}
+	period := r.Period.String()
+	if period == "" {
+		period = "nil"
+	} else {
+		period = "'" + period + "'"
+	}
 
 	return fmt.Sprintf(
-		"name='%s' hasData=%v period='%s' dueTime=%s expirationTime=%s",
-		r.Key(), hasData, r.Period, dueTime, expirationTime,
+		"name='%s' hasData=%t period=%s dueTime=%s expirationTime=%s",
+		r.Key(), hasData, period, dueTime, expirationTime,
 	)
 }
 

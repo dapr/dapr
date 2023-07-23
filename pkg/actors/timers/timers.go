@@ -75,8 +75,7 @@ func (t *timers) SetMetricsCollector(fn timersMetricsCollector) {
 func (t *timers) CreateTimer(ctx context.Context, reminder *internal.Reminder) error {
 	timerKey := reminder.Key()
 
-	log.Debugf("Create timer '%s' dueTime:'%s' period:'%s' ttl:'%v'",
-		timerKey, reminder.DueTime, reminder.Period, reminder.ExpirationTime)
+	log.Debugf("Create timer: %s", reminder.String())
 
 	// Multiple goroutines could be trying to store this timer, so we need to repeat until we succeed or context is canceled
 	stop := make(chan struct{}, 1)

@@ -568,7 +568,7 @@ func (r *reminders) getRemindersForActorType(ctx context.Context, actorType stri
 	}
 
 	log.Debugf(
-		"starting to read reminders for actor type %s (migrate=%t), with metadata id %s and %d partitions",
+		"Starting to read reminders for actor type %s (migrate=%t), with metadata id %s and %d partitions",
 		actorType, migrate, actorMetadata.ID, actorMetadata.RemindersMetadata.PartitionCount)
 
 	if actorMetadata.RemindersMetadata.PartitionCount >= 1 {
@@ -627,7 +627,7 @@ func (r *reminders) getRemindersForActorType(ctx context.Context, actorType stri
 		}
 
 		log.Debugf(
-			"finished reading reminders for actor type %s (migrate=%t), with metadata id %s and %d partitions: total of %d reminders",
+			"Finished reading reminders for actor type %s (migrate=%t), with metadata id %s and %d partitions: total of %d reminders",
 			actorType, migrate, actorMetadata.ID, actorMetadata.RemindersMetadata.PartitionCount, len(list))
 		return list, actorMetadata, nil
 	}
@@ -670,7 +670,7 @@ func (r *reminders) getRemindersForActorType(ctx context.Context, actorType stri
 	}
 
 	log.Debugf(
-		"finished reading reminders for actor type %s (migrate=%t), with metadata id %s and no partitions: total of %d reminders",
+		"Finished reading reminders for actor type %s (migrate=%t), with metadata id %s and no partitions: total of %d reminders",
 		actorType, migrate, actorMetadata.ID, len(reminderRefs))
 	return reminderRefs, actorMetadata, nil
 }

@@ -635,8 +635,10 @@ func TestOverrideTimer(t *testing.T) {
 }
 
 func TestTimerCounter(t *testing.T) {
-	const actorType = "mytype"
-	const actorID = "myactor"
+	const (
+		actorType = "mytype"
+		actorID   = "myactor"
+	)
 
 	clock := clocktesting.NewFakeClock(startOfTime)
 	provider := NewTimersProvider(clock).(*timers)
@@ -669,16 +671,17 @@ func TestTimerCounter(t *testing.T) {
 
 	var wg sync.WaitGroup
 
+	now := clock.Now()
 	for i := 0; i < numberOfLongTimersToCreate; i++ {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			timer := createTimer(t, clock.Now(), internal.CreateTimerRequest{
+			timer := createTimer(t, now, internal.CreateTimerRequest{
 				ActorID:   actorID,
 				ActorType: actorType,
 				Name:      fmt.Sprintf("positiveTimer%d", idx),
 				Period:    "R10/PT1S",
-				DueTime:   "500ms",
+				DueTime:   "1s",
 				Callback:  "callback",
 				Data:      json.RawMessage(`"testTimer"`),
 			})
@@ -691,11 +694,11 @@ func TestTimerCounter(t *testing.T) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			timer := createTimer(t, clock.Now(), internal.CreateTimerRequest{
+			timer := createTimer(t, now, internal.CreateTimerRequest{
 				ActorID:   actorID,
 				ActorType: actorType,
 				Name:      fmt.Sprintf("positiveTimerOneTime%d", idx),
-				DueTime:   "500ms",
+				DueTime:   "1s",
 				Callback:  "callback",
 				Data:      json.RawMessage(`"testTimer"`),
 			})
@@ -706,7 +709,7 @@ func TestTimerCounter(t *testing.T) {
 	wg.Wait()
 
 	time.Sleep(1 * time.Second)
-	clock.Sleep(1000 * time.Millisecond)
+	clock.Sleep(time.Second)
 
 	for i := 0; i < numberOfTimersToDelete; i++ {
 		wg.Add(1)
