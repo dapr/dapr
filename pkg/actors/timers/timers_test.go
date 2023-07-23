@@ -37,9 +37,6 @@ const TestAppID = "fakeAppID"
 func newTestTimers() *timers {
 	clock := clocktesting.NewFakeClock(startOfTime)
 	r := NewTimersProvider(clock)
-	r.SetExecuteTimerFn(func(reminder *internal.Reminder) bool {
-		return true
-	})
 	return r.(*timers)
 }
 
@@ -52,12 +49,14 @@ func TestCreateTimerDueTimes(t *testing.T) {
 	t.Run("create timer with positive DueTime", func(t *testing.T) {
 		clock := clocktesting.NewFakeClock(startOfTime)
 		provider := NewTimersProvider(clock).(*timers)
+		defer provider.Close()
 
 		executed := make(chan string, 1)
 		provider.SetExecuteTimerFn(func(reminder *internal.Reminder) bool {
 			executed <- reminder.Key()
 			return true
 		})
+		require.NoError(t, provider.Init(context.Background()))
 
 		req := internal.CreateTimerRequest{
 			ActorID:   "myactor",
@@ -87,12 +86,14 @@ func TestCreateTimerDueTimes(t *testing.T) {
 	t.Run("create timer with 0 DueTime", func(t *testing.T) {
 		clock := clocktesting.NewFakeClock(startOfTime)
 		provider := NewTimersProvider(clock).(*timers)
+		defer provider.Close()
 
 		executed := make(chan string, 1)
 		provider.SetExecuteTimerFn(func(reminder *internal.Reminder) bool {
 			executed <- reminder.Key()
 			return true
 		})
+		require.NoError(t, provider.Init(context.Background()))
 
 		req := internal.CreateTimerRequest{
 			ActorID:   "myactor",
@@ -122,12 +123,14 @@ func TestCreateTimerDueTimes(t *testing.T) {
 	t.Run("create timer with no DueTime", func(t *testing.T) {
 		clock := clocktesting.NewFakeClock(startOfTime)
 		provider := NewTimersProvider(clock).(*timers)
+		defer provider.Close()
 
 		executed := make(chan string, 1)
 		provider.SetExecuteTimerFn(func(reminder *internal.Reminder) bool {
 			executed <- reminder.Key()
 			return true
 		})
+		require.NoError(t, provider.Init(context.Background()))
 
 		req := internal.CreateTimerRequest{
 			ActorID:   "myactor",
@@ -157,6 +160,8 @@ func TestCreateTimerDueTimes(t *testing.T) {
 
 func TestDeleteTimer(t *testing.T) {
 	testTimers := newTestTimers()
+	defer testTimers.Close()
+	require.NoError(t, testTimers.Init(context.Background()))
 
 	actorType, actorID := getTestActorTypeAndID()
 	ctx := context.Background()
@@ -186,11 +191,13 @@ func TestOverrideTimerCancelsActiveTimers(t *testing.T) {
 	t.Run("override data", func(t *testing.T) {
 		requestC := make(chan testRequest, 10)
 		testTimers := newTestTimers()
+		defer testTimers.Close()
 		testTimers.SetExecuteTimerFn(func(reminder *internal.Reminder) bool {
 			requestC <- testRequest{Data: "c"}
 			return true
 		})
 		clock := testTimers.clock.(*clocktesting.FakeClock)
+		require.NoError(t, testTimers.Init(context.Background()))
 
 		actorType, actorID := getTestActorTypeAndID()
 		timerName := "timer1"
@@ -233,11 +240,13 @@ func TestOverrideTimerCancelsMultipleActiveTimers(t *testing.T) {
 	t.Run("override data", func(t *testing.T) {
 		requestC := make(chan testRequest, 10)
 		testTimers := newTestTimers()
+		defer testTimers.Close()
 		testTimers.SetExecuteTimerFn(func(reminder *internal.Reminder) bool {
 			requestC <- testRequest{Data: "d"}
 			return true
 		})
 		clock := testTimers.clock.(*clocktesting.FakeClock)
+		require.NoError(t, testTimers.Init(context.Background()))
 
 		actorType, actorID := getTestActorTypeAndID()
 		timerName := "timer1"
@@ -382,10 +391,12 @@ func TestTimerRepeats(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			requestC := make(chan testRequest, 10)
 			testTimers := newTestTimers()
+			defer testTimers.Close()
 			testTimers.SetExecuteTimerFn(func(reminder *internal.Reminder) bool {
 				requestC <- testRequest{Data: "data"}
 				return true
 			})
+			require.NoError(t, testTimers.Init(context.Background()))
 
 			clock := testTimers.clock.(*clocktesting.FakeClock)
 			actorType, actorID := getTestActorTypeAndID()
@@ -472,11 +483,13 @@ func TestTimerTTL(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			requestC := make(chan testRequest, 10)
 			testTimers := newTestTimers()
+			defer testTimers.Close()
 			testTimers.SetExecuteTimerFn(func(reminder *internal.Reminder) bool {
 				requestC <- testRequest{Data: "data"}
 				return true
 			})
 			clock := testTimers.clock.(*clocktesting.FakeClock)
+			require.NoError(t, testTimers.Init(context.Background()))
 
 			actorType, actorID := getTestActorTypeAndID()
 
@@ -535,6 +548,8 @@ func TestTimerTTL(t *testing.T) {
 func timerValidation(dueTime, period, ttl, msg string) func(t *testing.T) {
 	return func(t *testing.T) {
 		testTimers := newTestTimers()
+		defer testTimers.Close()
+		require.NoError(t, testTimers.Init(context.Background()))
 
 		actorType, actorID := getTestActorTypeAndID()
 
@@ -562,12 +577,14 @@ func TestTimerValidation(t *testing.T) {
 func TestOverrideTimer(t *testing.T) {
 	clock := clocktesting.NewFakeClock(startOfTime)
 	provider := NewTimersProvider(clock).(*timers)
+	defer provider.Close()
 
 	executed := make(chan string, 1)
 	provider.SetExecuteTimerFn(func(reminder *internal.Reminder) bool {
 		executed <- string(reminder.Data)
 		return true
 	})
+	require.NoError(t, provider.Init(context.Background()))
 
 	t.Run("override data", func(t *testing.T) {
 		timer1 := createTimer(t, clock.Now(), internal.CreateTimerRequest{
@@ -642,9 +659,13 @@ func TestTimerCounter(t *testing.T) {
 		return true
 	})
 
-	const numberOfLongTimersToCreate = 755
-	const numberOfOneTimeTimersToCreate = 220
-	const numberOfTimersToDelete = 255
+	require.NoError(t, provider.Init(context.Background()))
+
+	const (
+		numberOfLongTimersToCreate    = 755
+		numberOfOneTimeTimersToCreate = 220
+		numberOfTimersToDelete        = 255
+	)
 
 	var wg sync.WaitGroup
 
@@ -665,6 +686,7 @@ func TestTimerCounter(t *testing.T) {
 			assert.NoError(t, err)
 		}(i)
 	}
+
 	for i := 0; i < numberOfOneTimeTimersToCreate; i++ {
 		wg.Add(1)
 		go func(idx int) {
@@ -719,6 +741,8 @@ func TestTimerCounter(t *testing.T) {
 func TestCreateTimerGoroutineLeak(t *testing.T) {
 	clock := clocktesting.NewFakeClock(startOfTime)
 	provider := NewTimersProvider(clock).(*timers)
+	defer provider.Close()
+	require.NoError(t, provider.Init(context.Background()))
 
 	createFn := func(i int, ttl bool) error {
 		req := &internal.CreateTimerRequest{
