@@ -72,14 +72,15 @@ func TestPlacementStream_RoundRobin(t *testing.T) {
 
 	testPlacement := NewActorPlacement(
 		address, nil, "testAppID", "127.0.0.1:1000", "testPodName", []string{"actorOne", "actorTwo"},
-		appHealthFunc, noopTableUpdateFunc)
+		appHealthFunc, noopTableUpdateFunc,
+	).(*ActorPlacement)
 
 	t.Run("found leader placement in a round robin way", func(t *testing.T) {
 		// set leader for leaderServer[0]
 		testSrv[leaderServer[0]].setLeader(true)
 
 		// act
-		testPlacement.Start()
+		require.NoError(t, testPlacement.Start(context.Background()))
 		time.Sleep(statusReportHeartbeatInterval * 3)
 		assert.Equal(t, leaderServer[0], testPlacement.serverIndex.Load())
 		assert.True(t, testSrv[testPlacement.serverIndex.Load()].recvCount.Load() >= 2)
@@ -101,7 +102,7 @@ func TestPlacementStream_RoundRobin(t *testing.T) {
 	})
 
 	// tear down
-	testPlacement.Stop()
+	require.NoError(t, testPlacement.Close())
 	time.Sleep(statusReportHeartbeatInterval)
 	assert.True(t, testSrv[testPlacement.serverIndex.Load()].isGracefulShutdown.Load())
 
@@ -124,10 +125,11 @@ func TestAppHealthyStatus(t *testing.T) {
 	noopTableUpdateFunc := func() {}
 	testPlacement := NewActorPlacement(
 		[]string{address}, nil, "testAppID", "127.0.0.1:1000", "testPodName", []string{"actorOne", "actorTwo"},
-		appHealthFunc, noopTableUpdateFunc)
+		appHealthFunc, noopTableUpdateFunc,
+	).(*ActorPlacement)
 
 	// act
-	testPlacement.Start()
+	require.NoError(t, testPlacement.Start(context.Background()))
 
 	// wait until client sends heartbeat to the test server
 	time.Sleep(statusReportHeartbeatInterval * 3)
@@ -140,7 +142,7 @@ func TestAppHealthyStatus(t *testing.T) {
 	assert.True(t, testSrv.recvCount.Load() <= oldCount+1, "no more +1 heartbeat because app is unhealthy")
 
 	// clean up
-	testPlacement.Stop()
+	require.NoError(t, testPlacement.Close())
 	cleanup()
 }
 
@@ -152,7 +154,8 @@ func TestOnPlacementOrder(t *testing.T) {
 		[]string{}, nil,
 		"testAppID", "127.0.0.1:1000", "testPodName",
 		[]string{"actorOne", "actorTwo"},
-		appHealthFunc, tableUpdateFunc)
+		appHealthFunc, tableUpdateFunc,
+	).(*ActorPlacement)
 
 	t.Run("lock operation", func(t *testing.T) {
 		testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{
@@ -201,7 +204,8 @@ func TestWaitUntilPlacementTableIsReady(t *testing.T) {
 		[]string{}, nil,
 		"testAppID", "127.0.0.1:1000", "testPodName",
 		[]string{"actorOne", "actorTwo"},
-		appHealthFunc, tableUpdateFunc)
+		appHealthFunc, tableUpdateFunc,
+	).(*ActorPlacement)
 
 	t.Run("already unlocked", func(t *testing.T) {
 		require.False(t, testPlacement.tableIsBlocked.Load())
@@ -275,7 +279,8 @@ func TestLookupActor(t *testing.T) {
 		[]string{}, nil,
 		"testAppID", "127.0.0.1:1000", "testPodName",
 		[]string{"actorOne", "actorTwo"},
-		appHealthFunc, tableUpdateFunc)
+		appHealthFunc, tableUpdateFunc,
+	).(*ActorPlacement)
 
 	t.Run("Placementtable is unset", func(t *testing.T) {
 		name, appID := testPlacement.LookupActor("actorOne", "test")
@@ -315,7 +320,8 @@ func TestConcurrentUnblockPlacements(t *testing.T) {
 		[]string{}, nil,
 		"testAppID", "127.0.0.1:1000", "testPodName",
 		[]string{"actorOne", "actorTwo"},
-		appHealthFunc, tableUpdateFunc)
+		appHealthFunc, tableUpdateFunc,
+	).(*ActorPlacement)
 
 	t.Run("concurrent_unlock", func(t *testing.T) {
 		for i := 0; i < 10000; i++ {

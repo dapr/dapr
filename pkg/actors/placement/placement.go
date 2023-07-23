@@ -25,6 +25,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/dapr/dapr/pkg/actors/internal"
 	daprCredentials "github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/placement/hashing"
@@ -100,7 +101,7 @@ func NewActorPlacement(
 	appID, runtimeHostName, podName string, actorTypes []string,
 	appHealthFn func() bool,
 	afterTableUpdateFn func(),
-) *ActorPlacement {
+) internal.PlacementService {
 	servers := addDNSResolverPrefix(serverAddr)
 	return &ActorPlacement{
 		actorTypes:      actorTypes,
@@ -136,12 +137,12 @@ func (p *ActorPlacement) AddHostedActorType(actorType string) error {
 
 // Start connects placement service to register to membership and send heartbeat
 // to report the current member status periodically.
-func (p *ActorPlacement) Start() {
+func (p *ActorPlacement) Start(ctx context.Context) error {
 	p.serverIndex.Store(0)
 	p.shutdown.Store(false)
 
 	if !p.establishStreamConn() {
-		return
+		return nil
 	}
 
 	// establish connection loop, whenever a disconnect occurs it starts to run trying to connect to a new server.
@@ -235,15 +236,18 @@ func (p *ActorPlacement) Start() {
 			}
 		}
 	}()
+
+	return nil
 }
 
-// Stop shuts down server stream gracefully.
-func (p *ActorPlacement) Stop() {
+// Closes shuts down server stream gracefully.
+func (p *ActorPlacement) Close() error {
 	// CAS to avoid stop more than once.
 	if p.shutdown.CompareAndSwap(false, true) {
 		p.client.disconnect()
 	}
 	p.shutdownConnLoop.Wait()
+	return nil
 }
 
 // WaitUntilPlacementTableIsReady waits until placement table is until table lock is unlocked.

@@ -64,13 +64,13 @@ func (*mockPlacement) LookupActor(actorType string, actorID string) (name string
 }
 
 // Start implements internal.PlacementService
-func (*mockPlacement) Start() {
-	// no-op
+func (*mockPlacement) Start(ctx context.Context) error {
+	return nil
 }
 
 // Stop implements internal.PlacementService
-func (*mockPlacement) Stop() {
-	// no-op
+func (*mockPlacement) Close() error {
+	return nil
 }
 
 // WaitUntilPlacementTableIsReady implements internal.PlacementService

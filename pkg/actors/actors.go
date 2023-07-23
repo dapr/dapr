@@ -91,21 +91,12 @@ type Actors interface {
 	RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor) error
 }
 
-// PlacementService allows for interacting with the actor placement service.
-type PlacementService interface {
-	Start()
-	Stop()
-	WaitUntilPlacementTableIsReady(ctx context.Context) error
-	LookupActor(actorType, actorID string) (host string, appID string)
-	AddHostedActorType(actorType string) error
-}
-
 // GRPCConnectionFn is the type of the function that returns a gRPC connection
 type GRPCConnectionFn func(ctx context.Context, address string, id string, namespace string, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(destroy bool), error)
 
 type actorsRuntime struct {
 	appChannel           channel.AppChannel
-	placement            PlacementService
+	placement            internal.PlacementService
 	grpcConnectionFn     GRPCConnectionFn
 	actorsConfig         Config
 	timers               internal.TimersProvider
@@ -142,7 +133,7 @@ type ActorsOpts struct {
 	StateTTLEnabled bool
 
 	// MockPlacement is a placement service implementation used for testing
-	MockPlacement PlacementService
+	MockPlacement internal.PlacementService
 }
 
 // NewActors create a new actors runtime with given config.
@@ -251,7 +242,7 @@ func (a *actorsRuntime) Init() error {
 		)
 	}
 
-	go a.placement.Start()
+	go a.placement.Start(context.TODO())
 	go a.deactivationTicker(a.actorsConfig, a.deactivateActor)
 
 	log.Infof("actor runtime started. actor idle timeout: %v. actor scan interval: %v",
@@ -955,7 +946,10 @@ func isInternalActor(actorType string) bool {
 // Stop closes all network connections and resources used in actor runtime.
 func (a *actorsRuntime) Stop() {
 	if a.placement != nil {
-		a.placement.Stop()
+		err := a.placement.Close()
+		if err != nil {
+			log.Warnf("Failed to close placement service: %v", err)
+		}
 	}
 	if a.cancel != nil {
 		a.cancel()
