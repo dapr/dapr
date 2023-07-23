@@ -45,6 +45,13 @@ func TestGetAllowedTopics(t *testing.T) {
 			Target: []string{"topic1"},
 			Msg:    "pass, include whitespace and repeated topic",
 		},
+		{
+			Metadata: map[string]string{
+				"Allowedtopics": "topic1",
+			},
+			Target: []string{"topic1"},
+			Msg:    "pass, case-insensitive match",
+		},
 	}
 	for _, item := range allowedTests {
 		assert.Equal(t, GetAllowedTopics(item.Metadata), item.Target)
@@ -94,6 +101,13 @@ func TestGetProtectedTopics(t *testing.T) {
 			},
 			Target: []string{"topic1"},
 			Msg:    "pass, include whitespace and repeated topic",
+		},
+		{
+			Metadata: map[string]string{
+				"protectedTOPICS": "topic1",
+			},
+			Target: []string{"topic1"},
+			Msg:    "pass, case-insensitive match",
 		},
 	}
 	for _, item := range protectedTests {
@@ -196,6 +210,15 @@ func TestGetScopedTopics(t *testing.T) {
 			},
 			Target: []string{"topic1"},
 			Msg:    "pass",
+		},
+		{
+			Scope: "subscriptionSCOPES",
+			AppID: "appid1",
+			Metadata: map[string]string{
+				"Subscriptionscopes": "appid1=topic1;appid2",
+			},
+			Target: []string{"topic1"},
+			Msg:    "pass, case-insensitive match",
 		},
 	}
 	for _, item := range scopedTests {
