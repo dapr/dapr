@@ -15,14 +15,147 @@ package http
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/test/bufconn"
+
+	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
 )
+
+func TestAPITokenAuthMiddleware(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "👋")
+	})
+
+	const apiToken = "rosebud"
+
+	assertPass := func(t *testing.T, w *httptest.ResponseRecorder) {
+		t.Helper()
+
+		res := w.Result()
+		defer res.Body.Close()
+		resBody, err := io.ReadAll(res.Body)
+		require.NoError(t, err)
+
+		assert.Equal(t, http.StatusOK, res.StatusCode)
+		assert.Equal(t, "👋", string(resBody))
+	}
+
+	assertFail := func(t *testing.T, w *httptest.ResponseRecorder) {
+		t.Helper()
+
+		res := w.Result()
+		defer res.Body.Close()
+		resBody, err := io.ReadAll(res.Body)
+		require.NoError(t, err)
+
+		assert.Equal(t, http.StatusUnauthorized, res.StatusCode)
+		assert.Equal(t, "invalid api token\n", string(resBody))
+	}
+
+	t.Run("no token required", func(t *testing.T) {
+		mw := APITokenAuthMiddleware("")
+		h := mw(handler)
+
+		r := httptest.NewRequest(http.MethodGet, "/v1.0/foo", nil)
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+
+		assertPass(t, w)
+	})
+
+	t.Run("required token not provided", func(t *testing.T) {
+		mw := APITokenAuthMiddleware(apiToken)
+		h := mw(handler)
+
+		r := httptest.NewRequest(http.MethodGet, "/v1.0/foo", nil)
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+
+		assertFail(t, w)
+	})
+
+	t.Run("with valid token", func(t *testing.T) {
+		mw := APITokenAuthMiddleware(apiToken)
+		h := mw(handler)
+
+		r := httptest.NewRequest(http.MethodGet, "/v1.0/foo", nil)
+		r.Header.Set(authConsts.APITokenHeader, apiToken)
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+
+		assertPass(t, w)
+	})
+
+	t.Run("healthz endpoints are always allowed", func(t *testing.T) {
+		mw := APITokenAuthMiddleware(apiToken)
+		h := mw(handler)
+
+		t.Run("healthz", func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodGet, "/v1.0/healthz", nil)
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, r)
+
+			assertPass(t, w)
+		})
+
+		t.Run("outbound healthz", func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodGet, "/v1.0/healthz/outbound", nil)
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, r)
+
+			assertPass(t, w)
+		})
+
+		t.Run("querystring params are ignored", func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodGet, "/v1.0/healthz?appid=myapp", nil)
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, r)
+
+			assertPass(t, w)
+		})
+
+		t.Run("ending slashes are trimmed", func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodGet, "/v1.0/healthz/", nil)
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, r)
+
+			assertPass(t, w)
+		})
+
+		t.Run("non-get methods fail", func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodPut, "/v1.0/healthz", nil)
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, r)
+
+			assertFail(t, w)
+		})
+
+		t.Run("must match exact path", func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodGet, "/v1.0/invoke/myapp/method/healthz", nil)
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, r)
+
+			assertFail(t, w)
+		})
+
+		t.Run("must not match querystring", func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodGet, "/v1.0/invoke/myapp/method/something?foo=/healthz", nil)
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, r)
+
+			assertFail(t, w)
+		})
+	})
+}
 
 // Below is a modified version of the code from https://github.com/go-chi/chi/blob/v5.0.8/middleware/strip_test.go
 // Original code Copyright (c) 2015-present Peter Kieltyka (https://github.com/pkieltyka), Google Inc.

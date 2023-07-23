@@ -45,9 +45,73 @@ func TestGetAllowedTopics(t *testing.T) {
 			Target: []string{"topic1"},
 			Msg:    "pass, include whitespace and repeated topic",
 		},
+		{
+			Metadata: map[string]string{
+				"Allowedtopics": "topic1",
+			},
+			Target: []string{"topic1"},
+			Msg:    "pass, case-insensitive match",
+		},
 	}
 	for _, item := range allowedTests {
 		assert.Equal(t, GetAllowedTopics(item.Metadata), item.Target)
+	}
+}
+
+func TestGetProtectedTopics(t *testing.T) {
+	protectedTests := []struct {
+		Metadata map[string]string
+		Target   []string
+		Msg      string
+	}{
+		{
+			Metadata: nil,
+			Target:   []string{},
+			Msg:      "pass",
+		},
+		{
+			Metadata: map[string]string{},
+			Target:   []string{},
+			Msg:      "pass",
+		},
+		{
+			Metadata: map[string]string{
+				"protectedTopics": "",
+			},
+			Target: []string{},
+			Msg:    "pass",
+		},
+		{
+			Metadata: map[string]string{
+				"protectedTopics": "topic1,topic2,topic3",
+			},
+			Target: []string{"topic1", "topic2", "topic3"},
+			Msg:    "pass",
+		},
+		{
+			Metadata: map[string]string{
+				"protectedTopics": "topic1, topic2, topic3",
+			},
+			Target: []string{"topic1", "topic2", "topic3"},
+			Msg:    "pass, include whitespace",
+		},
+		{
+			Metadata: map[string]string{
+				"protectedTopics": "topic1, topic1, topic1", //nolint:dupword
+			},
+			Target: []string{"topic1"},
+			Msg:    "pass, include whitespace and repeated topic",
+		},
+		{
+			Metadata: map[string]string{
+				"protectedTOPICS": "topic1",
+			},
+			Target: []string{"topic1"},
+			Msg:    "pass, case-insensitive match",
+		},
+	}
+	for _, item := range protectedTests {
+		assert.Equal(t, GetProtectedTopics(item.Metadata), item.Target)
 	}
 }
 
@@ -146,6 +210,15 @@ func TestGetScopedTopics(t *testing.T) {
 			},
 			Target: []string{"topic1"},
 			Msg:    "pass",
+		},
+		{
+			Scope: "subscriptionSCOPES",
+			AppID: "appid1",
+			Metadata: map[string]string{
+				"Subscriptionscopes": "appid1=topic1;appid2",
+			},
+			Target: []string{"topic1"},
+			Msg:    "pass, case-insensitive match",
 		},
 	}
 	for _, item := range scopedTests {

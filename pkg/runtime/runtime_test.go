@@ -768,7 +768,9 @@ func TestInitNameResolution(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 
 		// target resolver
-		rt.globalConfig.Spec.NameResolutionSpec.Component = "targetResolver"
+		rt.globalConfig.Spec.NameResolutionSpec = &config.NameResolutionSpec{
+			Component: "targetResolver",
+		}
 
 		// registered resolver
 		initMockResolverForRuntime(rt, "anotherResolver", nil)
@@ -785,7 +787,9 @@ func TestInitNameResolution(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 
 		// target resolver
-		rt.globalConfig.Spec.NameResolutionSpec.Component = "someResolver"
+		rt.globalConfig.Spec.NameResolutionSpec = &config.NameResolutionSpec{
+			Component: "someResolver",
+		}
 
 		// registered resolver
 		initMockResolverForRuntime(rt, "someResolver", nil)
@@ -802,7 +806,24 @@ func TestInitNameResolution(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 
 		// target resolver
-		rt.globalConfig.Spec.NameResolutionSpec.Component = ""
+		rt.globalConfig.Spec.NameResolutionSpec = &config.NameResolutionSpec{}
+
+		// registered resolver
+		initMockResolverForRuntime(rt, "mdns", nil)
+
+		// act
+		err := rt.initNameResolution()
+
+		// assert
+		assert.NoError(t, err, "expected no error")
+	})
+
+	t.Run("test init nameresolution nil in StandaloneMode", func(t *testing.T) {
+		// given
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+
+		// target resolver
+		rt.globalConfig.Spec.NameResolutionSpec = nil
 
 		// registered resolver
 		initMockResolverForRuntime(rt, "mdns", nil)
@@ -819,7 +840,24 @@ func TestInitNameResolution(t *testing.T) {
 		rt := NewTestDaprRuntime(modes.KubernetesMode)
 
 		// target resolver
-		rt.globalConfig.Spec.NameResolutionSpec.Component = ""
+		rt.globalConfig.Spec.NameResolutionSpec = &config.NameResolutionSpec{}
+
+		// registered resolver
+		initMockResolverForRuntime(rt, "kubernetes", nil)
+
+		// act
+		err := rt.initNameResolution()
+
+		// assert
+		assert.NoError(t, err, "expected no error")
+	})
+
+	t.Run("test init nameresolution nil in KubernetesMode", func(t *testing.T) {
+		// given
+		rt := NewTestDaprRuntime(modes.KubernetesMode)
+
+		// target resolver
+		rt.globalConfig.Spec.NameResolutionSpec = nil
 
 		// registered resolver
 		initMockResolverForRuntime(rt, "kubernetes", nil)
@@ -851,7 +889,7 @@ func TestSetupTracing(t *testing.T) {
 	}, {
 		name: "bad host address, failing zipkin",
 		tracingConfig: config.TracingSpec{
-			Zipkin: config.ZipkinSpec{
+			Zipkin: &config.ZipkinSpec{
 				EndpointAddress: "localhost",
 			},
 		},
@@ -859,7 +897,7 @@ func TestSetupTracing(t *testing.T) {
 	}, {
 		name: "zipkin trace exporter",
 		tracingConfig: config.TracingSpec{
-			Zipkin: config.ZipkinSpec{
+			Zipkin: &config.ZipkinSpec{
 				EndpointAddress: "http://foo.bar",
 			},
 		},
@@ -867,9 +905,9 @@ func TestSetupTracing(t *testing.T) {
 	}, {
 		name: "otel trace http exporter",
 		tracingConfig: config.TracingSpec{
-			Otel: config.OtelSpec{
+			Otel: &config.OtelSpec{
 				EndpointAddress: "foo.bar",
-				IsSecure:        false,
+				IsSecure:        ptr.Of(false),
 				Protocol:        "http",
 			},
 		},
@@ -877,9 +915,9 @@ func TestSetupTracing(t *testing.T) {
 	}, {
 		name: "invalid otel trace exporter protocol",
 		tracingConfig: config.TracingSpec{
-			Otel: config.OtelSpec{
+			Otel: &config.OtelSpec{
 				EndpointAddress: "foo.bar",
-				IsSecure:        false,
+				IsSecure:        ptr.Of(false),
 				Protocol:        "tcp",
 			},
 		},
@@ -893,12 +931,12 @@ func TestSetupTracing(t *testing.T) {
 	}, {
 		name: "all trace exporters",
 		tracingConfig: config.TracingSpec{
-			Otel: config.OtelSpec{
+			Otel: &config.OtelSpec{
 				EndpointAddress: "http://foo.bar",
-				IsSecure:        false,
+				IsSecure:        ptr.Of(false),
 				Protocol:        "http",
 			},
-			Zipkin: config.ZipkinSpec{
+			Zipkin: &config.ZipkinSpec{
 				EndpointAddress: "http://foo.bar",
 			},
 			Stdout: true,
@@ -910,7 +948,7 @@ func TestSetupTracing(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			rt := NewTestDaprRuntime(modes.StandaloneMode)
 			defer stopRuntime(t, rt)
-			rt.globalConfig.Spec.TracingSpec = tc.tracingConfig
+			rt.globalConfig.Spec.TracingSpec = &tc.tracingConfig
 			if tc.hostAddress != "" {
 				rt.hostAddress = tc.hostAddress
 			}
@@ -1585,6 +1623,36 @@ func TestInitPubSub(t *testing.T) {
 		mockPubSub2.AssertNumberOfCalls(t, "Subscribe", 1)
 	})
 
+	t.Run("test subscribe on protected topic with scopes", func(t *testing.T) {
+		mockPubSub, mockPubSub2 := initMockPubSubForRuntime(rt)
+
+		mockAppChannel := new(channelt.MockAppChannel)
+		rt.appChannel = mockAppChannel
+
+		// User App subscribes 1 topics via http app channel
+		subs := getSubscriptionsJSONString([]string{"topic10"}, []string{"topic11"})
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataString(subs).
+			WithContentType("application/json")
+		defer fakeResp.Close()
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
+
+		// act
+		for _, comp := range pubsubComponents {
+			err := rt.processComponentAndDependents(comp)
+			assert.NoError(t, err)
+		}
+
+		rt.startSubscriptions()
+
+		// assert
+		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
+		mockPubSub2.AssertNumberOfCalls(t, "Init", 1)
+
+		mockPubSub.AssertNumberOfCalls(t, "Subscribe", 1)
+		mockPubSub2.AssertNumberOfCalls(t, "Subscribe", 1)
+	})
+
 	t.Run("test subscribe, app allowed 2 topic", func(t *testing.T) {
 		mockPubSub, mockPubSub2 := initMockPubSubForRuntime(rt)
 
@@ -1593,6 +1661,36 @@ func TestInitPubSub(t *testing.T) {
 
 		// User App subscribes 2 topics via http app channel
 		subs := getSubscriptionsJSONString([]string{"topic0", "topic1"}, []string{"topic0"})
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataString(subs).
+			WithContentType("application/json")
+		defer fakeResp.Close()
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
+
+		// act
+		for _, comp := range pubsubComponents {
+			err := rt.processComponentAndDependents(comp)
+			assert.NoError(t, err)
+		}
+
+		rt.startSubscriptions()
+
+		// assert
+		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
+		mockPubSub2.AssertNumberOfCalls(t, "Init", 1)
+
+		mockPubSub.AssertNumberOfCalls(t, "Subscribe", 2)
+		mockPubSub2.AssertNumberOfCalls(t, "Subscribe", 1)
+	})
+
+	t.Run("test subscribe on 2 protected topics with scopes", func(t *testing.T) {
+		mockPubSub, mockPubSub2 := initMockPubSubForRuntime(rt)
+
+		mockAppChannel := new(channelt.MockAppChannel)
+		rt.appChannel = mockAppChannel
+
+		// User App subscribes 2 topics via http app channel
+		subs := getSubscriptionsJSONString([]string{"topic10", "topic11"}, []string{"topic10"})
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
 			WithRawDataString(subs).
 			WithContentType("application/json")
@@ -1643,6 +1741,34 @@ func TestInitPubSub(t *testing.T) {
 		mockPubSub2.AssertNumberOfCalls(t, "Subscribe", 0)
 	})
 
+	t.Run("test subscribe on protected topic, no scopes", func(t *testing.T) {
+		mockPubSub, mockPubSub2 := initMockPubSubForRuntime(rt)
+
+		mockAppChannel := new(channelt.MockAppChannel)
+		rt.appChannel = mockAppChannel
+
+		// User App subscribes 1 topics via http app channel
+		subs := getSubscriptionsJSONString([]string{"topic12"}, []string{"topic12"})
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataString(subs).
+			WithContentType("application/json")
+		defer fakeResp.Close()
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
+
+		// act
+		for _, comp := range pubsubComponents {
+			err := rt.processComponentAndDependents(comp)
+			assert.NoError(t, err)
+		}
+
+		// assert
+		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
+		mockPubSub.AssertNumberOfCalls(t, "Subscribe", 0)
+
+		mockPubSub2.AssertNumberOfCalls(t, "Init", 1)
+		mockPubSub2.AssertNumberOfCalls(t, "Subscribe", 0)
+	})
+
 	t.Run("test subscribe, app not allowed 1 topic, allowed one topic", func(t *testing.T) {
 		mockPubSub, mockPubSub2 := initMockPubSubForRuntime(rt)
 
@@ -1652,6 +1778,37 @@ func TestInitPubSub(t *testing.T) {
 		// User App subscribes 1 topics via http app channel
 		// topic0 is allowed, topic3 and topic5 are not
 		subs := getSubscriptionsJSONString([]string{"topic0", "topic3"}, []string{"topic0", "topic5"})
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataString(subs).
+			WithContentType("application/json")
+		defer fakeResp.Close()
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
+
+		// act
+		for _, comp := range pubsubComponents {
+			err := rt.processComponentAndDependents(comp)
+			assert.NoError(t, err)
+		}
+
+		rt.startSubscriptions()
+
+		// assert
+		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
+		mockPubSub2.AssertNumberOfCalls(t, "Init", 1)
+
+		mockPubSub.AssertNumberOfCalls(t, "Subscribe", 1)
+		mockPubSub2.AssertNumberOfCalls(t, "Subscribe", 1)
+	})
+
+	t.Run("test subscribe on 2 protected topics, with scopes on 1 topic", func(t *testing.T) {
+		mockPubSub, mockPubSub2 := initMockPubSubForRuntime(rt)
+
+		mockAppChannel := new(channelt.MockAppChannel)
+		rt.appChannel = mockAppChannel
+
+		// User App subscribes 1 topics via http app channel
+		// topic0 is allowed, topic3 and topic5 are not
+		subs := getSubscriptionsJSONString([]string{"topic10", "topic12"}, []string{"topic11", "topic12"})
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
 			WithRawDataString(subs).
 			WithContentType("application/json")
@@ -1705,7 +1862,66 @@ func TestInitPubSub(t *testing.T) {
 
 		rt.compStore.AddPubSub(TestSecondPubsubName, compstore.PubsubItem{Component: &mockPublishPubSub{}})
 		res, err = rt.BulkPublish(&pubsub.BulkPublishRequest{
+			PubsubName: TestSecondPubsubName,
+			Topic:      "topic1",
+			Entries: []pubsub.BulkMessageEntry{
+				{
+					EntryId:     "1",
+					Event:       []byte("test"),
+					ContentType: "text/plain",
+				},
+				{
+					EntryId:     "2",
+					Event:       []byte("test 2"),
+					ContentType: "text/plain",
+				},
+			},
+		})
+
+		assert.NoError(t, err)
+		assert.Empty(t, res.FailedEntries)
+	})
+
+	t.Run("test bulk publish, topic protected, with scopes, publish succeeds", func(t *testing.T) {
+		initMockPubSubForRuntime(rt)
+
+		// act
+		for _, comp := range pubsubComponents {
+			err := rt.processComponentAndDependents(comp)
+			assert.NoError(t, err)
+		}
+
+		rt.compStore.AddPubSub(TestPubsubName, compstore.PubsubItem{
+			Component:         &mockPublishPubSub{},
+			ProtectedTopics:   []string{"topic0"},
+			ScopedPublishings: []string{"topic0"},
+		})
+		md := make(map[string]string, 2)
+		md["key"] = "v3"
+		res, err := rt.BulkPublish(&pubsub.BulkPublishRequest{
 			PubsubName: TestPubsubName,
+			Topic:      "topic0",
+			Metadata:   md,
+			Entries: []pubsub.BulkMessageEntry{
+				{
+					EntryId:     "1",
+					Event:       []byte("test"),
+					Metadata:    md,
+					ContentType: "text/plain",
+				},
+			},
+		})
+
+		assert.NoError(t, err)
+		assert.Empty(t, res.FailedEntries)
+
+		rt.compStore.AddPubSub(TestSecondPubsubName, compstore.PubsubItem{
+			Component:         &mockPublishPubSub{},
+			ProtectedTopics:   []string{"topic1"},
+			ScopedPublishings: []string{"topic1"},
+		})
+		res, err = rt.BulkPublish(&pubsub.BulkPublishRequest{
+			PubsubName: TestSecondPubsubName,
 			Topic:      "topic1",
 			Entries: []pubsub.BulkMessageEntry{
 				{
@@ -1757,13 +1973,66 @@ func TestInitPubSub(t *testing.T) {
 		assert.NotNil(t, err)
 		assert.Empty(t, res)
 
-		rt.compStore.AddPubSub(TestPubsubName, compstore.PubsubItem{
+		rt.compStore.AddPubSub(TestSecondPubsubName, compstore.PubsubItem{
 			Component:     &mockPublishPubSub{},
 			AllowedTopics: []string{"topic1"},
 		})
 		res, err = rt.BulkPublish(&pubsub.BulkPublishRequest{
 			PubsubName: TestSecondPubsubName,
 			Topic:      "topic5",
+			Metadata:   md,
+			Entries: []pubsub.BulkMessageEntry{
+				{
+					EntryId:     "1",
+					Event:       []byte("test"),
+					Metadata:    md,
+					ContentType: "text/plain",
+				},
+			},
+		})
+		assert.NotNil(t, err)
+		assert.Empty(t, res)
+	})
+
+	t.Run("test bulk publish, topic protected, no scopes, publish fails", func(t *testing.T) {
+		initMockPubSubForRuntime(rt)
+
+		// act
+		for _, comp := range pubsubComponents {
+			err := rt.processComponentAndDependents(comp)
+			require.Nil(t, err)
+		}
+
+		rt.compStore.AddPubSub(TestPubsubName, compstore.PubsubItem{
+			Component:       &mockPublishPubSub{},
+			ProtectedTopics: []string{"topic1"},
+		})
+
+		md := make(map[string]string, 2)
+		md["key"] = "v3"
+		res, err := rt.BulkPublish(&pubsub.BulkPublishRequest{
+			PubsubName: TestPubsubName,
+			Topic:      "topic1",
+			Metadata:   md,
+			Entries: []pubsub.BulkMessageEntry{
+				{
+					EntryId:     "1",
+					Event:       []byte("test"),
+					Metadata:    md,
+					ContentType: "text/plain",
+				},
+			},
+		})
+		assert.NotNil(t, err)
+		assert.Empty(t, res)
+
+		rt.compStore.AddPubSub(TestSecondPubsubName, compstore.PubsubItem{
+			Component:       &mockPublishPubSub{},
+			ProtectedTopics: []string{"topic1"},
+		})
+		res, err = rt.BulkPublish(&pubsub.BulkPublishRequest{
+			PubsubName: TestSecondPubsubName,
+			Topic:      "topic1",
 			Metadata:   md,
 			Entries: []pubsub.BulkMessageEntry{
 				{
@@ -1822,6 +2091,54 @@ func TestInitPubSub(t *testing.T) {
 		assert.NoError(t, err)
 	})
 
+	t.Run("test publish, topic protected, with scopes, publish succeeds", func(t *testing.T) {
+		initMockPubSubForRuntime(rt)
+
+		mockAppChannel := new(channelt.MockAppChannel)
+		rt.appChannel = mockAppChannel
+
+		// User App subscribes 1 topics via http app channel
+		subs := getSubscriptionsJSONString([]string{"topic0"}, []string{"topic1"})
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataString(subs).
+			WithContentType("application/json")
+		defer fakeResp.Close()
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
+
+		// act
+		for _, comp := range pubsubComponents {
+			err := rt.processComponentAndDependents(comp)
+			assert.NoError(t, err)
+		}
+
+		rt.compStore.AddPubSub(TestPubsubName, compstore.PubsubItem{
+			Component:         &mockPublishPubSub{},
+			ProtectedTopics:   []string{"topic0"},
+			ScopedPublishings: []string{"topic0"},
+		})
+		md := make(map[string]string, 2)
+		md["key"] = "v3"
+		err := rt.Publish(&pubsub.PublishRequest{
+			PubsubName: TestPubsubName,
+			Topic:      "topic0",
+			Metadata:   md,
+		})
+
+		assert.NoError(t, err)
+
+		rt.compStore.AddPubSub(TestSecondPubsubName, compstore.PubsubItem{
+			Component:         &mockPublishPubSub{},
+			ProtectedTopics:   []string{"topic1"},
+			ScopedPublishings: []string{"topic1"},
+		})
+		err = rt.Publish(&pubsub.PublishRequest{
+			PubsubName: TestSecondPubsubName,
+			Topic:      "topic1",
+		})
+
+		assert.NoError(t, err)
+	})
+
 	t.Run("test publish, topic not allowed", func(t *testing.T) {
 		initMockPubSubForRuntime(rt)
 
@@ -1852,13 +2169,54 @@ func TestInitPubSub(t *testing.T) {
 		})
 		assert.NotNil(t, err)
 
-		rt.compStore.AddPubSub(TestPubsubName, compstore.PubsubItem{
+		rt.compStore.AddPubSub(TestSecondPubsubName, compstore.PubsubItem{
 			Component:     &mockPublishPubSub{},
 			AllowedTopics: []string{"topic1"},
 		})
 		err = rt.Publish(&pubsub.PublishRequest{
 			PubsubName: TestSecondPubsubName,
 			Topic:      "topic5",
+		})
+		assert.NotNil(t, err)
+	})
+
+	t.Run("test publish, topic protected, no scopes, publish fails", func(t *testing.T) {
+		initMockPubSubForRuntime(rt)
+
+		mockAppChannel := new(channelt.MockAppChannel)
+		rt.appChannel = mockAppChannel
+
+		// User App subscribes 1 topics via http app channel
+		subs := getSubscriptionsJSONString([]string{"topic0"}, []string{"topic0"})
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataString(subs).
+			WithContentType("application/json")
+		defer fakeResp.Close()
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
+
+		// act
+		for _, comp := range pubsubComponents {
+			err := rt.processComponentAndDependents(comp)
+			require.Nil(t, err)
+		}
+
+		rt.compStore.AddPubSub(TestPubsubName, compstore.PubsubItem{
+			Component:       &mockPublishPubSub{},
+			ProtectedTopics: []string{"topic1"},
+		})
+		err := rt.Publish(&pubsub.PublishRequest{
+			PubsubName: TestPubsubName,
+			Topic:      "topic1",
+		})
+		assert.NotNil(t, err)
+
+		rt.compStore.AddPubSub(TestSecondPubsubName, compstore.PubsubItem{
+			Component:       &mockPublishPubSub{},
+			ProtectedTopics: []string{"topic1"},
+		})
+		err = rt.Publish(&pubsub.PublishRequest{
+			PubsubName: TestSecondPubsubName,
+			Topic:      "topic1",
 		})
 		assert.NotNil(t, err)
 	})
@@ -1874,6 +2232,17 @@ func TestInitPubSub(t *testing.T) {
 		assert.True(t, a)
 	})
 
+	t.Run("test protected topics, no scopes, operation not allowed", func(t *testing.T) {
+		for name := range rt.compStore.ListPubSubs() {
+			rt.compStore.DeletePubSub(name)
+		}
+		rt.compStore.AddPubSub(TestPubsubName, compstore.PubsubItem{ProtectedTopics: []string{"topic1"}})
+		pubSub, ok := rt.compStore.GetPubSub(TestPubsubName)
+		require.True(t, ok)
+		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic1", pubSub.ScopedPublishings)
+		assert.False(t, a)
+	})
+
 	t.Run("test allowed topics, no scopes, operation not allowed", func(t *testing.T) {
 		for name := range rt.compStore.ListPubSubs() {
 			rt.compStore.DeletePubSub(name)
@@ -1885,11 +2254,33 @@ func TestInitPubSub(t *testing.T) {
 		assert.False(t, a)
 	})
 
+	t.Run("test other protected topics, no allowed topics, no scopes, operation allowed", func(t *testing.T) {
+		for name := range rt.compStore.ListPubSubs() {
+			rt.compStore.DeletePubSub(name)
+		}
+		rt.compStore.AddPubSub(TestPubsubName, compstore.PubsubItem{ProtectedTopics: []string{"topic1"}})
+		pubSub, ok := rt.compStore.GetPubSub(TestPubsubName)
+		require.True(t, ok)
+		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic2", pubSub.ScopedPublishings)
+		assert.True(t, a)
+	})
+
 	t.Run("test allowed topics, with scopes, operation allowed", func(t *testing.T) {
 		for name := range rt.compStore.ListPubSubs() {
 			rt.compStore.DeletePubSub(name)
 		}
 		rt.compStore.AddPubSub(TestPubsubName, compstore.PubsubItem{AllowedTopics: []string{"topic1"}, ScopedPublishings: []string{"topic1"}})
+		pubSub, ok := rt.compStore.GetPubSub(TestPubsubName)
+		require.True(t, ok)
+		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic1", pubSub.ScopedPublishings)
+		assert.True(t, a)
+	})
+
+	t.Run("test protected topics, with scopes, operation allowed", func(t *testing.T) {
+		for name := range rt.compStore.ListPubSubs() {
+			rt.compStore.DeletePubSub(name)
+		}
+		rt.compStore.AddPubSub(TestPubsubName, compstore.PubsubItem{ProtectedTopics: []string{"topic1"}, ScopedPublishings: []string{"topic1"}})
 		pubSub, ok := rt.compStore.GetPubSub(TestPubsubName)
 		require.True(t, ok)
 		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic1", pubSub.ScopedPublishings)
@@ -1907,6 +2298,17 @@ func TestInitPubSub(t *testing.T) {
 		assert.False(t, a)
 	})
 
+	t.Run("topic in protected topics, not in existing publishing scopes, operation not allowed", func(t *testing.T) {
+		for name := range rt.compStore.ListPubSubs() {
+			rt.compStore.DeletePubSub(name)
+		}
+		rt.compStore.AddPubSub(TestPubsubName, compstore.PubsubItem{ProtectedTopics: []string{"topic1"}, ScopedPublishings: []string{"topic2"}})
+		pubSub, ok := rt.compStore.GetPubSub(TestPubsubName)
+		require.True(t, ok)
+		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic1", pubSub.ScopedPublishings)
+		assert.False(t, a)
+	})
+
 	t.Run("topic in allowed topics, not in publishing scopes, operation allowed", func(t *testing.T) {
 		for name := range rt.compStore.ListPubSubs() {
 			rt.compStore.DeletePubSub(name)
@@ -1918,11 +2320,35 @@ func TestInitPubSub(t *testing.T) {
 		assert.True(t, a)
 	})
 
+	t.Run("topic in protected topics, not in publishing scopes, operation not allowed", func(t *testing.T) {
+		for name := range rt.compStore.ListPubSubs() {
+			rt.compStore.DeletePubSub(name)
+		}
+		rt.compStore.AddPubSub(TestPubsubName, compstore.PubsubItem{ProtectedTopics: []string{"topic1"}, ScopedPublishings: []string{}})
+		pubSub, ok := rt.compStore.GetPubSub(TestPubsubName)
+		require.True(t, ok)
+		a := rt.isPubSubOperationAllowed(TestPubsubName, "topic1", pubSub.ScopedPublishings)
+		assert.False(t, a)
+	})
+
 	t.Run("topics A and B in allowed topics, A in publishing scopes, operation allowed for A only", func(t *testing.T) {
 		for name := range rt.compStore.ListPubSubs() {
 			rt.compStore.DeletePubSub(name)
 		}
 		rt.compStore.AddPubSub(TestPubsubName, compstore.PubsubItem{AllowedTopics: []string{"A", "B"}, ScopedPublishings: []string{"A"}})
+		pubSub, ok := rt.compStore.GetPubSub(TestPubsubName)
+		require.True(t, ok)
+		a := rt.isPubSubOperationAllowed(TestPubsubName, "A", pubSub.ScopedPublishings)
+		assert.True(t, a)
+		b := rt.isPubSubOperationAllowed(TestPubsubName, "B", pubSub.ScopedPublishings)
+		assert.False(t, b)
+	})
+
+	t.Run("topics A and B in protected topics, A in publishing scopes, operation allowed for A only", func(t *testing.T) {
+		for name := range rt.compStore.ListPubSubs() {
+			rt.compStore.DeletePubSub(name)
+		}
+		rt.compStore.AddPubSub(TestPubsubName, compstore.PubsubItem{ProtectedTopics: []string{"A", "B"}, ScopedPublishings: []string{"A"}})
 		pubSub, ok := rt.compStore.GetPubSub(TestPubsubName)
 		require.True(t, ok)
 		a := rt.isPubSubOperationAllowed(TestPubsubName, "A", pubSub.ScopedPublishings)
@@ -2220,10 +2646,12 @@ func TestPopulateSecretsConfiguration(t *testing.T) {
 		// setup
 		rt := NewTestDaprRuntime(modes.StandaloneMode)
 		defer stopRuntime(t, rt)
-		rt.globalConfig.Spec.Secrets.Scopes = []config.SecretsScope{
-			{
-				StoreName:     "testMock",
-				DefaultAccess: "allow",
+		rt.globalConfig.Spec.Secrets = &config.SecretsSpec{
+			Scopes: []config.SecretsScope{
+				{
+					StoreName:     "testMock",
+					DefaultAccess: "allow",
+				},
 			},
 		}
 
@@ -4021,8 +4449,9 @@ func getFakeProperties() map[string]string {
 		"host":                    "localhost",
 		"password":                "fakePassword",
 		"consumerID":              TestRuntimeConfigID,
-		scopes.SubscriptionScopes: fmt.Sprintf("%s=topic0,topic1", TestRuntimeConfigID),
-		scopes.PublishingScopes:   fmt.Sprintf("%s=topic0,topic1", TestRuntimeConfigID),
+		scopes.SubscriptionScopes: fmt.Sprintf("%s=topic0,topic1,topic10,topic11", TestRuntimeConfigID),
+		scopes.PublishingScopes:   fmt.Sprintf("%s=topic0,topic1,topic10,topic11", TestRuntimeConfigID),
+		scopes.ProtectedTopics:    "topic10,topic11,topic12",
 	}
 }
 
@@ -4056,7 +4485,7 @@ func getFakeMetadataItems() []commonapi.NameValuePair {
 			Name: scopes.SubscriptionScopes,
 			Value: commonapi.DynamicValue{
 				JSON: v1.JSON{
-					Raw: []byte(fmt.Sprintf("%s=topic0,topic1", TestRuntimeConfigID)),
+					Raw: []byte(fmt.Sprintf("%s=topic0,topic1,topic10,topic11", TestRuntimeConfigID)),
 				},
 			},
 		},
@@ -4064,7 +4493,15 @@ func getFakeMetadataItems() []commonapi.NameValuePair {
 			Name: scopes.PublishingScopes,
 			Value: commonapi.DynamicValue{
 				JSON: v1.JSON{
-					Raw: []byte(fmt.Sprintf("%s=topic0,topic1", TestRuntimeConfigID)),
+					Raw: []byte(fmt.Sprintf("%s=topic0,topic1,topic10,topic11", TestRuntimeConfigID)),
+				},
+			},
+		},
+		{
+			Name: scopes.ProtectedTopics,
+			Value: commonapi.DynamicValue{
+				JSON: v1.JSON{
+					Raw: []byte("topic10,topic11,topic12"),
 				},
 			},
 		},
@@ -5221,7 +5658,7 @@ func TestGetAppHTTPChannelConfigWithCustomChannel(t *testing.T) {
 	p, err := rt.buildAppHTTPPipeline()
 	assert.Nil(t, err)
 
-	c := rt.getAppHTTPChannelConfig(p, false)
+	c := rt.getAppHTTPChannelConfig(p)
 	assert.Equal(t, "http://my.app:0", c.Endpoint)
 }
 
@@ -5679,10 +6116,10 @@ func initMockStateStoreForRuntime(rt *DaprRuntime, encryptKey string, e error) *
 func TestTraceShutdown(t *testing.T) {
 	rt := NewTestDaprRuntime(modes.StandaloneMode)
 	rt.runtimeConfig.gracefulShutdownDuration = 5 * time.Second
-	rt.globalConfig.Spec.TracingSpec = config.TracingSpec{
-		Otel: config.OtelSpec{
+	rt.globalConfig.Spec.TracingSpec = &config.TracingSpec{
+		Otel: &config.OtelSpec{
 			EndpointAddress: "foo.bar",
-			IsSecure:        false,
+			IsSecure:        ptr.Of(false),
 			Protocol:        "http",
 		},
 	}
@@ -6052,5 +6489,115 @@ func TestStartReadingFromBindings(t *testing.T) {
 
 		assert.NoError(t, err)
 		assert.True(t, mockAppChannel.AssertNotCalled(t, "InvokeMethod", mock.Anything, mock.Anything))
+	})
+}
+
+func TestGetHTTPEndpointAppChannel(t *testing.T) {
+	t.Run("no TLS channel", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		defer stopRuntime(t, rt)
+
+		conf, err := rt.getHTTPEndpointAppChannel(httpMiddleware.Pipeline{}, httpEndpointV1alpha1.HTTPEndpoint{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test",
+			},
+			Spec: httpEndpointV1alpha1.HTTPEndpointSpec{},
+		})
+
+		assert.NoError(t, err)
+		assert.Nil(t, conf.Client.Transport.(*http.Transport).TLSClientConfig)
+	})
+
+	t.Run("TLS channel with Root CA", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		defer stopRuntime(t, rt)
+
+		conf, err := rt.getHTTPEndpointAppChannel(httpMiddleware.Pipeline{}, httpEndpointV1alpha1.HTTPEndpoint{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test",
+			},
+			Spec: httpEndpointV1alpha1.HTTPEndpointSpec{
+				ClientTLS: &commonapi.TLS{
+					RootCA: &commonapi.TLSDocument{
+						Value: &commonapi.DynamicValue{
+							JSON: v1.JSON{Raw: []byte("-----BEGIN CERTIFICATE-----\nMIID8zCCAtugAwIBAgIUSj2XqIQo/xmVVuw1+nmIcdmr48IwDQYJKoZIhvcNAQEL\nBQAwfjELMAkGA1UEBhMCVVMxEzARBgNVBAgMCkNhbGlmb3JuaWExFjAUBgNVBAcM\nDU1vdW50YWluIFZpZXcxGjAYBgNVBAoMEVlvdXIgT3JnYW5pemF0aW9uMRIwEAYD\nVQQLDAlZb3VyIFVuaXQxEjAQBgNVBAMMCWxvY2FsaG9zdDAeFw0yMzA3MTQyMTQ1\nNDRaFw0zMzA3MTEyMTQ1NDRaMH4xCzAJBgNVBAYTAlVTMRMwEQYDVQQIDApDYWxp\nZm9ybmlhMRYwFAYDVQQHDA1Nb3VudGFpbiBWaWV3MRowGAYDVQQKDBFZb3VyIE9y\nZ2FuaXphdGlvbjESMBAGA1UECwwJWW91ciBVbml0MRIwEAYDVQQDDAlsb2NhbGhv\nc3QwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCmWsrT0w4s0g7Ld1g/\nIa0qM2v6tXG8L/150kwM7V/wRSVCx+Tmv+aAMAJzJtXwMAj9jHt+sH5vOm6MJenJ\n0sTyUcCC8FhLa0VWxbajZOn8wKaUuZzLj3Uye/q4z0l6rtu35pjZCjDKphyycKoG\nNG2MwcGNNBUZP0W6Idw0PZaNstnXnTHIWE6axOA9bzB5iKtLTVkQDkuEJWFLfOD6\nZN4ISA+7HvbMgjREeIuNJqNI/746Egza5a4ZPh3KvyIPEdH2SdDy+9obCsdAKe65\nSEIPy1n4zRy3/7K1bVTu18JoWsNtE+5GDWVgFU3AVZ9ic6Jt0N0WNaRuUiiVpvKE\nLzyBAgMBAAGjaTBnMB0GA1UdDgQWBBQj02E1/fJHbm8GnOMNxfSIRI2cqjAfBgNV\nHSMEGDAWgBQj02E1/fJHbm8GnOMNxfSIRI2cqjAPBgNVHRMBAf8EBTADAQH/MBQG\nA1UdEQQNMAuCCWxvY2FsaG9zdDANBgkqhkiG9w0BAQsFAAOCAQEANRqDGWWdaXwg\nhkOz/Y9gkil6WYQ4d7muAAqiEZBqg+yAisGrv+MPeyjsrq1WPbIgcdlSjArG7zGV\n/5SPZwsuTeivdFs0DHbcvoKA8hqN2n4OmtjzdommBWA2618fzByOufECWRmUBxH3\nqmkmQ+aj4wKXm2U22OFxmWPTJbtwi8MDppl+G3AH4VpRi6qhSmLBSAO3AEBr7UJN\nIRHeUzBsFDLE++a3WYRnI0kA9og9F+zbnD+kNMxxTfmZqB6T9iFHIzkxZw7RELey\nz2PxQioHRQtp0rVZWnDt6+qSfrqftZgszrM+06n1MHTPBMusBfG/uyEAc4EAStCC\njXHuph+Ctg==\n-----END CERTIFICATE-----\n")},
+						},
+					},
+					Certificate: &commonapi.TLSDocument{
+						Value: &commonapi.DynamicValue{
+							JSON: v1.JSON{Raw: []byte("-----BEGIN CERTIFICATE-----\nMIID8zCCAtugAwIBAgIUSj2XqIQo/xmVVuw1+nmIcdmr48IwDQYJKoZIhvcNAQEL\nBQAwfjELMAkGA1UEBhMCVVMxEzARBgNVBAgMCkNhbGlmb3JuaWExFjAUBgNVBAcM\nDU1vdW50YWluIFZpZXcxGjAYBgNVBAoMEVlvdXIgT3JnYW5pemF0aW9uMRIwEAYD\nVQQLDAlZb3VyIFVuaXQxEjAQBgNVBAMMCWxvY2FsaG9zdDAeFw0yMzA3MTQyMTQ1\nNDRaFw0zMzA3MTEyMTQ1NDRaMH4xCzAJBgNVBAYTAlVTMRMwEQYDVQQIDApDYWxp\nZm9ybmlhMRYwFAYDVQQHDA1Nb3VudGFpbiBWaWV3MRowGAYDVQQKDBFZb3VyIE9y\nZ2FuaXphdGlvbjESMBAGA1UECwwJWW91ciBVbml0MRIwEAYDVQQDDAlsb2NhbGhv\nc3QwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCmWsrT0w4s0g7Ld1g/\nIa0qM2v6tXG8L/150kwM7V/wRSVCx+Tmv+aAMAJzJtXwMAj9jHt+sH5vOm6MJenJ\n0sTyUcCC8FhLa0VWxbajZOn8wKaUuZzLj3Uye/q4z0l6rtu35pjZCjDKphyycKoG\nNG2MwcGNNBUZP0W6Idw0PZaNstnXnTHIWE6axOA9bzB5iKtLTVkQDkuEJWFLfOD6\nZN4ISA+7HvbMgjREeIuNJqNI/746Egza5a4ZPh3KvyIPEdH2SdDy+9obCsdAKe65\nSEIPy1n4zRy3/7K1bVTu18JoWsNtE+5GDWVgFU3AVZ9ic6Jt0N0WNaRuUiiVpvKE\nLzyBAgMBAAGjaTBnMB0GA1UdDgQWBBQj02E1/fJHbm8GnOMNxfSIRI2cqjAfBgNV\nHSMEGDAWgBQj02E1/fJHbm8GnOMNxfSIRI2cqjAPBgNVHRMBAf8EBTADAQH/MBQG\nA1UdEQQNMAuCCWxvY2FsaG9zdDANBgkqhkiG9w0BAQsFAAOCAQEANRqDGWWdaXwg\nhkOz/Y9gkil6WYQ4d7muAAqiEZBqg+yAisGrv+MPeyjsrq1WPbIgcdlSjArG7zGV\n/5SPZwsuTeivdFs0DHbcvoKA8hqN2n4OmtjzdommBWA2618fzByOufECWRmUBxH3\nqmkmQ+aj4wKXm2U22OFxmWPTJbtwi8MDppl+G3AH4VpRi6qhSmLBSAO3AEBr7UJN\nIRHeUzBsFDLE++a3WYRnI0kA9og9F+zbnD+kNMxxTfmZqB6T9iFHIzkxZw7RELey\nz2PxQioHRQtp0rVZWnDt6+qSfrqftZgszrM+06n1MHTPBMusBfG/uyEAc4EAStCC\njXHuph+Ctg==\n-----END CERTIFICATE-----\n")},
+						},
+					},
+					PrivateKey: &commonapi.TLSDocument{
+						Value: &commonapi.DynamicValue{
+							JSON: v1.JSON{Raw: []byte("-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCmWsrT0w4s0g7L\nd1g/Ia0qM2v6tXG8L/150kwM7V/wRSVCx+Tmv+aAMAJzJtXwMAj9jHt+sH5vOm6M\nJenJ0sTyUcCC8FhLa0VWxbajZOn8wKaUuZzLj3Uye/q4z0l6rtu35pjZCjDKphyy\ncKoGNG2MwcGNNBUZP0W6Idw0PZaNstnXnTHIWE6axOA9bzB5iKtLTVkQDkuEJWFL\nfOD6ZN4ISA+7HvbMgjREeIuNJqNI/746Egza5a4ZPh3KvyIPEdH2SdDy+9obCsdA\nKe65SEIPy1n4zRy3/7K1bVTu18JoWsNtE+5GDWVgFU3AVZ9ic6Jt0N0WNaRuUiiV\npvKELzyBAgMBAAECggEABXHZS5+PyjXB2DT6xW4zvbrbIOSJaXBkqnUQmie2ySVq\nN8pVGpxTTgTEP8KYo/jegnXzoMzkBn3yGlIvWbS1T30PgPme2jETnuhvtt9ZrTUc\n/qcok50JZ/KY3S2jqQlKFbXNcOUdfbR8IfcACZ3zq/S3ggifXCku/g2XqHoPkGmp\nokEjXEJLX9f/ABgik3a5aaSCMYfCU9PzDNCM7vjiWxUvO0V5kjqYae+SpMQCvvTb\n1JEMEsawCEeGI9BBnj4o1x7xGDpFn4Yt6MznaHivANMHqqNKaH3LK6rFZGdnj7d6\nutpJ22QZUBYhZ1+Hz+WNUQD+z+O2NGfMEo0PZvb1MQKBgQDZ6TlehduU0JcgKUI+\nFSq5wAk+Eil158arCU3CWnn69VLUu5lAjkU4dXjmkg/c9nxRpg5kuWr8FGMmzTpx\nWlWZj1b72iTQuWX0fphNif3mljeDNLl5z0fGegHjH+KkGb9y6t06oKrsEZbxn4y0\nzOLfl1t85tPAMP6RuvfawpjBjQKBgQDDbpifamPx/GE1JdKj6M6At42kmDczd5P0\nlgN39BRC6fUS19CPurKVWF501+w52rxg1NWhtQVmW1DUdWpDUwQtRPXo43Ku8MPN\nRMD8Uj+PNgXgWnWdcfGbniB8xHqsE8N7MgKU5IZQOqEIDCVE4RGheTYGNgDZ16Rz\nILmZ14E3xQKBgHtI3fJCXSbmlHnXneit5QxOP2xkrhxM0zN1Ag9RTO3U2dYNhPjn\nBPaaT5pzTJJAybkP79jApmyTxDzxo3z6FK/aTuYSVv3Xxnz7GoPT7FgG6MVMkRr/\nUKZT5LlxErKw9oW3pw5CVDFXCkUNdXfc6waBBXu2xFpZ3czpMM0Nh4sJAoGAEpGo\nmMUQGAcF6XndiMtvC5XlNHVuEUrUWRID5FrhrfXy3kZ5P57apwwNdYaqoFijO4Qd\nhE7h43bbuEQrw5fYtsBtqSIrXGnuAMv+ljruZRoZ9tZBhKM19LZSmehFS6JZGZSH\n4EPSaz8W29/jjqbf+Pq+YlqxPAGcU4ARgoeSdI0CgYACG9WZMbri9Eas1qA3vP86\nVW917u7CKt3O6Gsr4F5BNIH3Qx9BReLB9cDvhyko/JAln0MiNq2nExeuFlhEqVsx\nmn681Xm6yPht1PNeTkrRroXJIVzbBOldFW7evX/g/izeiXH6YhfGKD6B8dBfUftx\nNcs6FFLydFcIdIxebYjYnQ==\n-----END PRIVATE KEY-----\n")},
+						},
+					},
+				},
+			},
+		})
+
+		assert.NoError(t, err)
+		assert.NotNil(t, conf.Client.Transport.(*http.Transport).TLSClientConfig)
+	})
+
+	t.Run("TLS channel without Root CA", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		defer stopRuntime(t, rt)
+
+		conf, err := rt.getHTTPEndpointAppChannel(httpMiddleware.Pipeline{}, httpEndpointV1alpha1.HTTPEndpoint{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test",
+			},
+			Spec: httpEndpointV1alpha1.HTTPEndpointSpec{
+				ClientTLS: &commonapi.TLS{
+					Certificate: &commonapi.TLSDocument{
+						Value: &commonapi.DynamicValue{
+							JSON: v1.JSON{Raw: []byte("-----BEGIN CERTIFICATE-----\nMIID8zCCAtugAwIBAgIUSj2XqIQo/xmVVuw1+nmIcdmr48IwDQYJKoZIhvcNAQEL\nBQAwfjELMAkGA1UEBhMCVVMxEzARBgNVBAgMCkNhbGlmb3JuaWExFjAUBgNVBAcM\nDU1vdW50YWluIFZpZXcxGjAYBgNVBAoMEVlvdXIgT3JnYW5pemF0aW9uMRIwEAYD\nVQQLDAlZb3VyIFVuaXQxEjAQBgNVBAMMCWxvY2FsaG9zdDAeFw0yMzA3MTQyMTQ1\nNDRaFw0zMzA3MTEyMTQ1NDRaMH4xCzAJBgNVBAYTAlVTMRMwEQYDVQQIDApDYWxp\nZm9ybmlhMRYwFAYDVQQHDA1Nb3VudGFpbiBWaWV3MRowGAYDVQQKDBFZb3VyIE9y\nZ2FuaXphdGlvbjESMBAGA1UECwwJWW91ciBVbml0MRIwEAYDVQQDDAlsb2NhbGhv\nc3QwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCmWsrT0w4s0g7Ld1g/\nIa0qM2v6tXG8L/150kwM7V/wRSVCx+Tmv+aAMAJzJtXwMAj9jHt+sH5vOm6MJenJ\n0sTyUcCC8FhLa0VWxbajZOn8wKaUuZzLj3Uye/q4z0l6rtu35pjZCjDKphyycKoG\nNG2MwcGNNBUZP0W6Idw0PZaNstnXnTHIWE6axOA9bzB5iKtLTVkQDkuEJWFLfOD6\nZN4ISA+7HvbMgjREeIuNJqNI/746Egza5a4ZPh3KvyIPEdH2SdDy+9obCsdAKe65\nSEIPy1n4zRy3/7K1bVTu18JoWsNtE+5GDWVgFU3AVZ9ic6Jt0N0WNaRuUiiVpvKE\nLzyBAgMBAAGjaTBnMB0GA1UdDgQWBBQj02E1/fJHbm8GnOMNxfSIRI2cqjAfBgNV\nHSMEGDAWgBQj02E1/fJHbm8GnOMNxfSIRI2cqjAPBgNVHRMBAf8EBTADAQH/MBQG\nA1UdEQQNMAuCCWxvY2FsaG9zdDANBgkqhkiG9w0BAQsFAAOCAQEANRqDGWWdaXwg\nhkOz/Y9gkil6WYQ4d7muAAqiEZBqg+yAisGrv+MPeyjsrq1WPbIgcdlSjArG7zGV\n/5SPZwsuTeivdFs0DHbcvoKA8hqN2n4OmtjzdommBWA2618fzByOufECWRmUBxH3\nqmkmQ+aj4wKXm2U22OFxmWPTJbtwi8MDppl+G3AH4VpRi6qhSmLBSAO3AEBr7UJN\nIRHeUzBsFDLE++a3WYRnI0kA9og9F+zbnD+kNMxxTfmZqB6T9iFHIzkxZw7RELey\nz2PxQioHRQtp0rVZWnDt6+qSfrqftZgszrM+06n1MHTPBMusBfG/uyEAc4EAStCC\njXHuph+Ctg==\n-----END CERTIFICATE-----\n")},
+						},
+					},
+					PrivateKey: &commonapi.TLSDocument{
+						Value: &commonapi.DynamicValue{
+							JSON: v1.JSON{Raw: []byte("-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCmWsrT0w4s0g7L\nd1g/Ia0qM2v6tXG8L/150kwM7V/wRSVCx+Tmv+aAMAJzJtXwMAj9jHt+sH5vOm6M\nJenJ0sTyUcCC8FhLa0VWxbajZOn8wKaUuZzLj3Uye/q4z0l6rtu35pjZCjDKphyy\ncKoGNG2MwcGNNBUZP0W6Idw0PZaNstnXnTHIWE6axOA9bzB5iKtLTVkQDkuEJWFL\nfOD6ZN4ISA+7HvbMgjREeIuNJqNI/746Egza5a4ZPh3KvyIPEdH2SdDy+9obCsdA\nKe65SEIPy1n4zRy3/7K1bVTu18JoWsNtE+5GDWVgFU3AVZ9ic6Jt0N0WNaRuUiiV\npvKELzyBAgMBAAECggEABXHZS5+PyjXB2DT6xW4zvbrbIOSJaXBkqnUQmie2ySVq\nN8pVGpxTTgTEP8KYo/jegnXzoMzkBn3yGlIvWbS1T30PgPme2jETnuhvtt9ZrTUc\n/qcok50JZ/KY3S2jqQlKFbXNcOUdfbR8IfcACZ3zq/S3ggifXCku/g2XqHoPkGmp\nokEjXEJLX9f/ABgik3a5aaSCMYfCU9PzDNCM7vjiWxUvO0V5kjqYae+SpMQCvvTb\n1JEMEsawCEeGI9BBnj4o1x7xGDpFn4Yt6MznaHivANMHqqNKaH3LK6rFZGdnj7d6\nutpJ22QZUBYhZ1+Hz+WNUQD+z+O2NGfMEo0PZvb1MQKBgQDZ6TlehduU0JcgKUI+\nFSq5wAk+Eil158arCU3CWnn69VLUu5lAjkU4dXjmkg/c9nxRpg5kuWr8FGMmzTpx\nWlWZj1b72iTQuWX0fphNif3mljeDNLl5z0fGegHjH+KkGb9y6t06oKrsEZbxn4y0\nzOLfl1t85tPAMP6RuvfawpjBjQKBgQDDbpifamPx/GE1JdKj6M6At42kmDczd5P0\nlgN39BRC6fUS19CPurKVWF501+w52rxg1NWhtQVmW1DUdWpDUwQtRPXo43Ku8MPN\nRMD8Uj+PNgXgWnWdcfGbniB8xHqsE8N7MgKU5IZQOqEIDCVE4RGheTYGNgDZ16Rz\nILmZ14E3xQKBgHtI3fJCXSbmlHnXneit5QxOP2xkrhxM0zN1Ag9RTO3U2dYNhPjn\nBPaaT5pzTJJAybkP79jApmyTxDzxo3z6FK/aTuYSVv3Xxnz7GoPT7FgG6MVMkRr/\nUKZT5LlxErKw9oW3pw5CVDFXCkUNdXfc6waBBXu2xFpZ3czpMM0Nh4sJAoGAEpGo\nmMUQGAcF6XndiMtvC5XlNHVuEUrUWRID5FrhrfXy3kZ5P57apwwNdYaqoFijO4Qd\nhE7h43bbuEQrw5fYtsBtqSIrXGnuAMv+ljruZRoZ9tZBhKM19LZSmehFS6JZGZSH\n4EPSaz8W29/jjqbf+Pq+YlqxPAGcU4ARgoeSdI0CgYACG9WZMbri9Eas1qA3vP86\nVW917u7CKt3O6Gsr4F5BNIH3Qx9BReLB9cDvhyko/JAln0MiNq2nExeuFlhEqVsx\nmn681Xm6yPht1PNeTkrRroXJIVzbBOldFW7evX/g/izeiXH6YhfGKD6B8dBfUftx\nNcs6FFLydFcIdIxebYjYnQ==\n-----END PRIVATE KEY-----\n")},
+						},
+					},
+				},
+			},
+		})
+
+		assert.NoError(t, err)
+		assert.NotNil(t, conf.Client.Transport.(*http.Transport).TLSClientConfig)
+	})
+
+	t.Run("TLS channel with invalid Root CA", func(t *testing.T) {
+		rt := NewTestDaprRuntime(modes.StandaloneMode)
+		defer stopRuntime(t, rt)
+
+		_, err := rt.getHTTPEndpointAppChannel(httpMiddleware.Pipeline{}, httpEndpointV1alpha1.HTTPEndpoint{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test",
+			},
+			Spec: httpEndpointV1alpha1.HTTPEndpointSpec{
+				ClientTLS: &commonapi.TLS{
+					RootCA: &commonapi.TLSDocument{
+						Value: &commonapi.DynamicValue{
+							JSON: v1.JSON{Raw: []byte("asdsdsdassjkdctewzxabcdef")},
+						},
+					},
+					Certificate: &commonapi.TLSDocument{
+						Value: &commonapi.DynamicValue{
+							JSON: v1.JSON{Raw: []byte("-----BEGIN CERTIFICATE-----\nMIID8zCCAtugAwIBAgIUSj2XqIQo/xmVVuw1+nmIcdmr48IwDQYJKoZIhvcNAQEL\nBQAwfjELMAkGA1UEBhMCVVMxEzARBgNVBAgMCkNhbGlmb3JuaWExFjAUBgNVBAcM\nDU1vdW50YWluIFZpZXcxGjAYBgNVBAoMEVlvdXIgT3JnYW5pemF0aW9uMRIwEAYD\nVQQLDAlZb3VyIFVuaXQxEjAQBgNVBAMMCWxvY2FsaG9zdDAeFw0yMzA3MTQyMTQ1\nNDRaFw0zMzA3MTEyMTQ1NDRaMH4xCzAJBgNVBAYTAlVTMRMwEQYDVQQIDApDYWxp\nZm9ybmlhMRYwFAYDVQQHDA1Nb3VudGFpbiBWaWV3MRowGAYDVQQKDBFZb3VyIE9y\nZ2FuaXphdGlvbjESMBAGA1UECwwJWW91ciBVbml0MRIwEAYDVQQDDAlsb2NhbGhv\nc3QwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQCmWsrT0w4s0g7Ld1g/\nIa0qM2v6tXG8L/150kwM7V/wRSVCx+Tmv+aAMAJzJtXwMAj9jHt+sH5vOm6MJenJ\n0sTyUcCC8FhLa0VWxbajZOn8wKaUuZzLj3Uye/q4z0l6rtu35pjZCjDKphyycKoG\nNG2MwcGNNBUZP0W6Idw0PZaNstnXnTHIWE6axOA9bzB5iKtLTVkQDkuEJWFLfOD6\nZN4ISA+7HvbMgjREeIuNJqNI/746Egza5a4ZPh3KvyIPEdH2SdDy+9obCsdAKe65\nSEIPy1n4zRy3/7K1bVTu18JoWsNtE+5GDWVgFU3AVZ9ic6Jt0N0WNaRuUiiVpvKE\nLzyBAgMBAAGjaTBnMB0GA1UdDgQWBBQj02E1/fJHbm8GnOMNxfSIRI2cqjAfBgNV\nHSMEGDAWgBQj02E1/fJHbm8GnOMNxfSIRI2cqjAPBgNVHRMBAf8EBTADAQH/MBQG\nA1UdEQQNMAuCCWxvY2FsaG9zdDANBgkqhkiG9w0BAQsFAAOCAQEANRqDGWWdaXwg\nhkOz/Y9gkil6WYQ4d7muAAqiEZBqg+yAisGrv+MPeyjsrq1WPbIgcdlSjArG7zGV\n/5SPZwsuTeivdFs0DHbcvoKA8hqN2n4OmtjzdommBWA2618fzByOufECWRmUBxH3\nqmkmQ+aj4wKXm2U22OFxmWPTJbtwi8MDppl+G3AH4VpRi6qhSmLBSAO3AEBr7UJN\nIRHeUzBsFDLE++a3WYRnI0kA9og9F+zbnD+kNMxxTfmZqB6T9iFHIzkxZw7RELey\nz2PxQioHRQtp0rVZWnDt6+qSfrqftZgszrM+06n1MHTPBMusBfG/uyEAc4EAStCC\njXHuph+Ctg==\n-----END CERTIFICATE-----\n")},
+						},
+					},
+					PrivateKey: &commonapi.TLSDocument{
+						Value: &commonapi.DynamicValue{
+							JSON: v1.JSON{Raw: []byte("-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCmWsrT0w4s0g7L\nd1g/Ia0qM2v6tXG8L/150kwM7V/wRSVCx+Tmv+aAMAJzJtXwMAj9jHt+sH5vOm6M\nJenJ0sTyUcCC8FhLa0VWxbajZOn8wKaUuZzLj3Uye/q4z0l6rtu35pjZCjDKphyy\ncKoGNG2MwcGNNBUZP0W6Idw0PZaNstnXnTHIWE6axOA9bzB5iKtLTVkQDkuEJWFL\nfOD6ZN4ISA+7HvbMgjREeIuNJqNI/746Egza5a4ZPh3KvyIPEdH2SdDy+9obCsdA\nKe65SEIPy1n4zRy3/7K1bVTu18JoWsNtE+5GDWVgFU3AVZ9ic6Jt0N0WNaRuUiiV\npvKELzyBAgMBAAECggEABXHZS5+PyjXB2DT6xW4zvbrbIOSJaXBkqnUQmie2ySVq\nN8pVGpxTTgTEP8KYo/jegnXzoMzkBn3yGlIvWbS1T30PgPme2jETnuhvtt9ZrTUc\n/qcok50JZ/KY3S2jqQlKFbXNcOUdfbR8IfcACZ3zq/S3ggifXCku/g2XqHoPkGmp\nokEjXEJLX9f/ABgik3a5aaSCMYfCU9PzDNCM7vjiWxUvO0V5kjqYae+SpMQCvvTb\n1JEMEsawCEeGI9BBnj4o1x7xGDpFn4Yt6MznaHivANMHqqNKaH3LK6rFZGdnj7d6\nutpJ22QZUBYhZ1+Hz+WNUQD+z+O2NGfMEo0PZvb1MQKBgQDZ6TlehduU0JcgKUI+\nFSq5wAk+Eil158arCU3CWnn69VLUu5lAjkU4dXjmkg/c9nxRpg5kuWr8FGMmzTpx\nWlWZj1b72iTQuWX0fphNif3mljeDNLl5z0fGegHjH+KkGb9y6t06oKrsEZbxn4y0\nzOLfl1t85tPAMP6RuvfawpjBjQKBgQDDbpifamPx/GE1JdKj6M6At42kmDczd5P0\nlgN39BRC6fUS19CPurKVWF501+w52rxg1NWhtQVmW1DUdWpDUwQtRPXo43Ku8MPN\nRMD8Uj+PNgXgWnWdcfGbniB8xHqsE8N7MgKU5IZQOqEIDCVE4RGheTYGNgDZ16Rz\nILmZ14E3xQKBgHtI3fJCXSbmlHnXneit5QxOP2xkrhxM0zN1Ag9RTO3U2dYNhPjn\nBPaaT5pzTJJAybkP79jApmyTxDzxo3z6FK/aTuYSVv3Xxnz7GoPT7FgG6MVMkRr/\nUKZT5LlxErKw9oW3pw5CVDFXCkUNdXfc6waBBXu2xFpZ3czpMM0Nh4sJAoGAEpGo\nmMUQGAcF6XndiMtvC5XlNHVuEUrUWRID5FrhrfXy3kZ5P57apwwNdYaqoFijO4Qd\nhE7h43bbuEQrw5fYtsBtqSIrXGnuAMv+ljruZRoZ9tZBhKM19LZSmehFS6JZGZSH\n4EPSaz8W29/jjqbf+Pq+YlqxPAGcU4ARgoeSdI0CgYACG9WZMbri9Eas1qA3vP86\nVW917u7CKt3O6Gsr4F5BNIH3Qx9BReLB9cDvhyko/JAln0MiNq2nExeuFlhEqVsx\nmn681Xm6yPht1PNeTkrRroXJIVzbBOldFW7evX/g/izeiXH6YhfGKD6B8dBfUftx\nNcs6FFLydFcIdIxebYjYnQ==\n-----END PRIVATE KEY-----\n")},
+						},
+					},
+				},
+			},
+		})
+
+		assert.Error(t, err)
 	})
 }

@@ -15,11 +15,12 @@ package http
 
 import (
 	"net/http"
+	"net/url"
 	"path"
+	"strings"
 
 	chi "github.com/go-chi/chi/v5"
 
-	auth "github.com/dapr/dapr/pkg/runtime/security"
 	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
 	"github.com/dapr/dapr/utils/streams"
 )
@@ -37,15 +38,32 @@ func MaxBodySizeMiddleware(maxSize int64) func(next http.Handler) http.Handler {
 // APITokenAuthMiddleware enforces authentication using the dapr-api-token header.
 func APITokenAuthMiddleware(token string) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
+		if token == "" {
+			return next
+		}
+
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			v := r.Header.Get(authConsts.APITokenHeader)
-			if auth.ExcludedRoute(r.URL.String()) || v == token {
-				r.Header.Del(authConsts.APITokenHeader)
-				next.ServeHTTP(w, r)
-			} else {
+			if v != token && !isRouteExcludedFromAPITokenAuth(r.Method, r.URL) {
 				http.Error(w, "invalid api token", http.StatusUnauthorized)
+				return
 			}
+
+			r.Header.Del(authConsts.APITokenHeader)
+			next.ServeHTTP(w, r)
 		})
+	}
+}
+
+func isRouteExcludedFromAPITokenAuth(method string, u *url.URL) bool {
+	path := strings.Trim(u.Path, "/")
+	switch path {
+	case apiVersionV1 + "/healthz":
+		return method == http.MethodGet
+	case apiVersionV1 + "/healthz/outbound":
+		return method == http.MethodGet
+	default:
+		return false
 	}
 }
 

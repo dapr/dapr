@@ -16,6 +16,7 @@ package runtime
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -51,6 +52,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/structpb"
+	apiextensionsV1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 
@@ -69,6 +71,7 @@ import (
 	"github.com/dapr/dapr/pkg/grpc"
 	"github.com/dapr/dapr/pkg/http"
 	"github.com/dapr/dapr/pkg/httpendpoint"
+	"github.com/dapr/dapr/pkg/internal/apis"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
@@ -250,7 +253,7 @@ func newDaprRuntime(runtimeConfig *internalConfig, globalConfig *config.Configur
 	}
 
 	rt.componentAuthorizers = []ComponentAuthorizer{rt.namespaceComponentAuthorizer}
-	if globalConfig != nil && len(globalConfig.Spec.ComponentsSpec.Deny) > 0 {
+	if globalConfig != nil && globalConfig.Spec.ComponentsSpec != nil && len(globalConfig.Spec.ComponentsSpec.Deny) > 0 {
 		dl := newComponentDenyList(globalConfig.Spec.ComponentsSpec.Deny)
 		rt.componentAuthorizers = append(rt.componentAuthorizers, dl.IsAllowed)
 	}
@@ -309,7 +312,7 @@ func (a *DaprRuntime) getOperatorClient() (operatorv1pb.OperatorClient, error) {
 // setupTracing set up the trace exporters. Technically we don't need to pass `hostAddress` in,
 // but we do so here to explicitly call out the dependency on having `hostAddress` computed.
 func (a *DaprRuntime) setupTracing(hostAddress string, tpStore tracerProviderStore) error {
-	tracingSpec := a.globalConfig.Spec.TracingSpec
+	tracingSpec := a.globalConfig.GetTracingSpec()
 
 	// Register stdout trace exporter if user wants to debug requests or log as Info level.
 	if tracingSpec.Stdout {
@@ -317,7 +320,7 @@ func (a *DaprRuntime) setupTracing(hostAddress string, tpStore tracerProviderSto
 	}
 
 	// Register zipkin trace exporter if ZipkinSpec is specified
-	if tracingSpec.Zipkin.EndpointAddress != "" {
+	if tracingSpec.Zipkin != nil && tracingSpec.Zipkin.EndpointAddress != "" {
 		zipkinExporter, err := zipkin.New(tracingSpec.Zipkin.EndpointAddress)
 		if err != nil {
 			return err
@@ -326,24 +329,23 @@ func (a *DaprRuntime) setupTracing(hostAddress string, tpStore tracerProviderSto
 	}
 
 	// Register otel trace exporter if OtelSpec is specified
-	if tracingSpec.Otel.EndpointAddress != "" && tracingSpec.Otel.Protocol != "" {
+	if tracingSpec.Otel != nil && tracingSpec.Otel.EndpointAddress != "" && tracingSpec.Otel.Protocol != "" {
 		endpoint := tracingSpec.Otel.EndpointAddress
 		protocol := tracingSpec.Otel.Protocol
 		if protocol != "http" && protocol != "grpc" {
 			return fmt.Errorf("invalid protocol %v provided for Otel endpoint", protocol)
 		}
-		isSecure := tracingSpec.Otel.IsSecure
 
 		var client otlptrace.Client
 		if protocol == "http" {
 			clientOptions := []otlptracehttp.Option{otlptracehttp.WithEndpoint(endpoint)}
-			if !isSecure {
+			if !tracingSpec.Otel.GetIsSecure() {
 				clientOptions = append(clientOptions, otlptracehttp.WithInsecure())
 			}
 			client = otlptracehttp.NewClient(clientOptions...)
 		} else {
 			clientOptions := []otlptracegrpc.Option{otlptracegrpc.WithEndpoint(endpoint)}
-			if !isSecure {
+			if !tracingSpec.Otel.GetIsSecure() {
 				clientOptions = append(clientOptions, otlptracegrpc.WithInsecure())
 			}
 			client = otlptracegrpc.NewClient(clientOptions...)
@@ -490,11 +492,16 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.appConnectionConfig.Protocol), err)
 	}
 
+	endpointChannels, err := a.createHTTPEndpointsChannels()
+	if err != nil {
+		log.Warnf("failed to open channels for http endpoints: %s", err)
+	}
+
 	a.daprHTTPAPI.SetAppChannel(a.appChannel)
 	a.daprGRPCAPI.SetAppChannel(a.appChannel)
 	a.directMessaging.SetAppChannel(a.appChannel)
 
-	a.directMessaging.SetHTTPEndpointsAppChannel(a.httpEndpointsAppChannel)
+	a.directMessaging.SetHTTPEndpointsAppChannels(a.httpEndpointsAppChannel, endpointChannels)
 
 	a.daprHTTPAPI.SetDirectMessaging(a.directMessaging)
 	a.daprGRPCAPI.SetDirectMessaging(a.directMessaging)
@@ -617,50 +624,58 @@ func (a *DaprRuntime) appHealthChanged(status uint8) {
 
 func (a *DaprRuntime) populateSecretsConfiguration() {
 	// Populate in a map for easy lookup by store name.
+	if a.globalConfig.Spec.Secrets == nil {
+		return
+	}
+
 	for _, scope := range a.globalConfig.Spec.Secrets.Scopes {
 		a.compStore.AddSecretsConfiguration(scope.StoreName, scope)
 	}
 }
 
 func (a *DaprRuntime) buildHTTPPipelineForSpec(spec config.PipelineSpec, targetPipeline string) (pipeline httpMiddleware.Pipeline, err error) {
-	if a.globalConfig != nil {
-		pipeline.Handlers = make([]func(next nethttp.Handler) nethttp.Handler, 0, len(spec.Handlers))
-		for i := 0; i < len(spec.Handlers); i++ {
-			middlewareSpec := spec.Handlers[i]
-			component, exists := a.compStore.GetComponent(middlewareSpec.Type, middlewareSpec.Name)
-			if !exists {
-				// Log the error but continue with initializing the pipeline
-				log.Error("couldn't find middleware component defined in configuration with name %s and type %s",
-					middlewareSpec.Name, middlewareSpec.LogName())
-				continue
-			}
-			md := middleware.Metadata{Base: a.meta.ToBaseMetadata(component)}
-			handler, err := a.runtimeConfig.registry.HTTPMiddlewares().Create(middlewareSpec.Type, middlewareSpec.Version, md, middlewareSpec.LogName())
-			if err != nil {
-				e := fmt.Sprintf("process component %s error: %s", component.Name, err.Error())
-				if !component.Spec.IgnoreErrors {
-					log.Warn("error processing middleware component, daprd process will exit gracefully")
-					a.Shutdown(a.runtimeConfig.gracefulShutdownDuration)
-					log.Fatal(e)
-					// This error is only caught by tests, since during normal execution we panic
-					return pipeline, errors.New("dapr panicked")
-				}
-				log.Error(e)
-				continue
-			}
-			log.Infof("enabled %s/%s %s middleware", middlewareSpec.Type, targetPipeline, middlewareSpec.Version)
-			pipeline.Handlers = append(pipeline.Handlers, handler)
+	pipeline.Handlers = make([]func(next nethttp.Handler) nethttp.Handler, 0, len(spec.Handlers))
+	for i := 0; i < len(spec.Handlers); i++ {
+		middlewareSpec := spec.Handlers[i]
+		component, exists := a.compStore.GetComponent(middlewareSpec.Type, middlewareSpec.Name)
+		if !exists {
+			// Log the error but continue with initializing the pipeline
+			log.Error("couldn't find middleware component defined in configuration with name %s", middlewareSpec.LogName())
+			continue
 		}
+		md := middleware.Metadata{Base: a.meta.ToBaseMetadata(component)}
+		handler, err := a.runtimeConfig.registry.HTTPMiddlewares().Create(middlewareSpec.Type, middlewareSpec.Version, md, middlewareSpec.LogName())
+		if err != nil {
+			e := fmt.Sprintf("process component %s error: %s", component.Name, err.Error())
+			if !component.Spec.IgnoreErrors {
+				log.Warn("error processing middleware component, daprd process will exit gracefully")
+				a.Shutdown(a.runtimeConfig.gracefulShutdownDuration)
+				log.Fatal(e)
+				// This error is only caught by tests, since during normal execution we panic
+				return pipeline, errors.New("dapr panicked")
+			}
+			log.Error(e)
+			continue
+		}
+		log.Infof("enabled %s/%s %s middleware", middlewareSpec.Type, targetPipeline, middlewareSpec.Version)
+		pipeline.Handlers = append(pipeline.Handlers, handler)
 	}
+
 	return pipeline, nil
 }
 
 func (a *DaprRuntime) buildHTTPPipeline() (httpMiddleware.Pipeline, error) {
-	return a.buildHTTPPipelineForSpec(a.globalConfig.Spec.HTTPPipelineSpec, "http")
+	if a.globalConfig == nil || a.globalConfig.Spec.HTTPPipelineSpec == nil {
+		return httpMiddleware.Pipeline{}, nil
+	}
+	return a.buildHTTPPipelineForSpec(*a.globalConfig.Spec.HTTPPipelineSpec, "http")
 }
 
 func (a *DaprRuntime) buildAppHTTPPipeline() (httpMiddleware.Pipeline, error) {
-	return a.buildHTTPPipelineForSpec(a.globalConfig.Spec.AppHTTPPipelineSpec, "app channel")
+	if a.globalConfig == nil || a.globalConfig.Spec.AppHTTPPipelineSpec == nil {
+		return httpMiddleware.Pipeline{}, nil
+	}
+	return a.buildHTTPPipelineForSpec(*a.globalConfig.Spec.AppHTTPPipelineSpec, "app channel")
 }
 
 func (a *DaprRuntime) sendToDeadLetter(name string, msg *pubsub.NewMessage, deadLetterTopic string) (err error) {
@@ -1155,7 +1170,7 @@ func (a *DaprRuntime) beginHTTPEndpointsUpdates() error {
 
 func (a *DaprRuntime) onHTTPEndpointUpdated(endpoint httpEndpointV1alpha1.HTTPEndpoint) bool {
 	oldEndpoint, exists := a.compStore.GetHTTPEndpoint(endpoint.Name)
-	_, _ = a.processResourceSecrets(&endpoint)
+	a.processHTTPEndpointSecrets(&endpoint)
 
 	if exists && reflect.DeepEqual(oldEndpoint.Spec, endpoint.Spec) {
 		return false
@@ -1163,6 +1178,79 @@ func (a *DaprRuntime) onHTTPEndpointUpdated(endpoint httpEndpointV1alpha1.HTTPEn
 
 	a.pendingHTTPEndpoints <- endpoint
 	return true
+}
+
+func (a *DaprRuntime) processHTTPEndpointSecrets(endpoint *httpEndpointV1alpha1.HTTPEndpoint) {
+	_, _ = a.processResourceSecrets(endpoint)
+
+	tlsResource := apis.GenericNameValueResource{
+		Name:        endpoint.ObjectMeta.Name,
+		Namespace:   endpoint.ObjectMeta.Namespace,
+		SecretStore: endpoint.Auth.SecretStore,
+		Pairs:       []commonapi.NameValuePair{},
+	}
+
+	var root, clientCert, clientKey string = "root", "clientCert", "clientKey"
+
+	ca := commonapi.NameValuePair{
+		Name: root,
+	}
+
+	if endpoint.HasTLSRootCA() {
+		ca.Value = *endpoint.Spec.ClientTLS.RootCA.Value
+	}
+
+	if endpoint.HasTLSRootCASecret() {
+		ca.SecretKeyRef = *endpoint.Spec.ClientTLS.RootCA.SecretKeyRef
+	}
+	tlsResource.Pairs = append(tlsResource.Pairs, ca)
+
+	cCert := commonapi.NameValuePair{
+		Name: clientCert,
+	}
+
+	if endpoint.HasTLSClientCert() {
+		cCert.Value = *endpoint.Spec.ClientTLS.Certificate.Value
+	}
+
+	if endpoint.HasTLSClientCertSecret() {
+		cCert.SecretKeyRef = *endpoint.Spec.ClientTLS.Certificate.SecretKeyRef
+	}
+	tlsResource.Pairs = append(tlsResource.Pairs, cCert)
+
+	cKey := commonapi.NameValuePair{
+		Name: clientKey,
+	}
+
+	if endpoint.HasTLSPrivateKey() {
+		cKey.Value = *endpoint.Spec.ClientTLS.PrivateKey.Value
+	}
+
+	if endpoint.HasTLSPrivateKeySecret() {
+		cKey.SecretKeyRef = *endpoint.Spec.ClientTLS.PrivateKey.SecretKeyRef
+	}
+
+	tlsResource.Pairs = append(tlsResource.Pairs, cKey)
+
+	updated, _ := a.processResourceSecrets(&tlsResource)
+	if updated {
+		for _, np := range tlsResource.Pairs {
+			dv := &commonapi.DynamicValue{
+				JSON: apiextensionsV1.JSON{
+					Raw: np.Value.Raw,
+				},
+			}
+
+			switch np.Name {
+			case root:
+				endpoint.Spec.ClientTLS.RootCA.Value = dv
+			case clientCert:
+				endpoint.Spec.ClientTLS.Certificate.Value = dv
+			case clientKey:
+				endpoint.Spec.ClientTLS.PrivateKey.Value = dv
+			}
+		}
+	}
 }
 
 func (a *DaprRuntime) sendBatchOutputBindingsParallel(to []string, data []byte) {
@@ -1464,7 +1552,7 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		PubsubAdapter:               a.getPublishAdapter(),
 		Actors:                      a.actor,
 		SendToOutputBindingFn:       a.sendToOutputBinding,
-		TracingSpec:                 a.globalConfig.Spec.TracingSpec,
+		TracingSpec:                 a.globalConfig.GetTracingSpec(),
 		Shutdown:                    a.ShutdownWithWait,
 		GetComponentsCapabilitiesFn: a.getComponentsCapabilitesMap,
 		MaxRequestBodySize:          int64(a.runtimeConfig.maxRequestBodySize) << 20, // Convert from MB to bytes
@@ -1486,17 +1574,17 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		UnixDomainSocket:        a.runtimeConfig.unixDomainSocket,
 		ReadBufferSizeKB:        a.runtimeConfig.readBufferSize,
 		EnableAPILogging:        *a.runtimeConfig.enableAPILogging,
-		APILoggingObfuscateURLs: a.globalConfig.Spec.LoggingSpec.APILogging.ObfuscateURLs,
-		APILogHealthChecks:      !a.globalConfig.Spec.LoggingSpec.APILogging.OmitHealthChecks,
+		APILoggingObfuscateURLs: a.globalConfig.GetAPILoggingSpec().ObfuscateURLs,
+		APILogHealthChecks:      !a.globalConfig.GetAPILoggingSpec().OmitHealthChecks,
 	}
 
 	server := http.NewServer(http.NewServerOpts{
 		API:         a.daprHTTPAPI,
 		Config:      serverConf,
-		TracingSpec: a.globalConfig.Spec.TracingSpec,
-		MetricSpec:  a.globalConfig.Spec.MetricSpec,
+		TracingSpec: a.globalConfig.GetTracingSpec(),
+		MetricSpec:  a.globalConfig.GetMetricsSpec(),
 		Pipeline:    pipeline,
-		APISpec:     a.globalConfig.Spec.APISpec,
+		APISpec:     a.globalConfig.GetAPISpec(),
 	})
 	if err := server.StartNonBlocking(); err != nil {
 		return err
@@ -1509,7 +1597,7 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 func (a *DaprRuntime) startGRPCInternalServer(api grpc.API, port int) error {
 	// Since GRPCInteralServer is encrypted & authenticated, it is safe to listen on *
 	serverConf := a.getNewServerConfig([]string{""}, port)
-	server := grpc.NewInternalServer(api, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, a.authenticator, a.proxy)
+	server := grpc.NewInternalServer(api, serverConf, a.globalConfig.GetTracingSpec(), a.globalConfig.GetMetricsSpec(), a.authenticator, a.proxy)
 	if err := server.StartNonBlocking(); err != nil {
 		return err
 	}
@@ -1520,7 +1608,7 @@ func (a *DaprRuntime) startGRPCInternalServer(api grpc.API, port int) error {
 
 func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int) error {
 	serverConf := a.getNewServerConfig(a.runtimeConfig.apiListenAddresses, port)
-	server := grpc.NewAPIServer(api, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, a.globalConfig.Spec.APISpec, a.proxy, a.workflowEngine)
+	server := grpc.NewAPIServer(api, serverConf, a.globalConfig.GetTracingSpec(), a.globalConfig.GetMetricsSpec(), a.globalConfig.GetAPISpec(), a.proxy, a.workflowEngine)
 	if err := server.StartNonBlocking(); err != nil {
 		return err
 	}
@@ -1559,7 +1647,7 @@ func (a *DaprRuntime) getGRPCAPI() grpc.API {
 		DirectMessaging:             a.directMessaging,
 		Actors:                      a.actor,
 		SendToOutputBindingFn:       a.sendToOutputBinding,
-		TracingSpec:                 a.globalConfig.Spec.TracingSpec,
+		TracingSpec:                 a.globalConfig.GetTracingSpec(),
 		AccessControlList:           a.accessControlList,
 		Shutdown:                    a.ShutdownWithWait,
 		GetComponentsCapabilitiesFn: a.getComponentsCapabilitesMap,
@@ -1860,7 +1948,7 @@ func (a *DaprRuntime) GetPubSub(pubsubName string) pubsub.PubSub {
 }
 
 func (a *DaprRuntime) isPubSubOperationAllowed(pubsubName string, topic string, scopedTopics []string) bool {
-	inAllowedTopics := false
+	var inAllowedTopics, inProtectedTopics bool
 
 	pubSub, ok := a.compStore.GetPubSub(pubsubName)
 	if !ok {
@@ -1879,7 +1967,19 @@ func (a *DaprRuntime) isPubSubOperationAllowed(pubsubName string, topic string, 
 			return false
 		}
 	}
-	if len(scopedTopics) == 0 {
+
+	// check if topic is protected
+	if len(pubSub.ProtectedTopics) > 0 {
+		for _, t := range pubSub.ProtectedTopics {
+			if t == topic {
+				inProtectedTopics = true
+				break
+			}
+		}
+	}
+
+	// if topic is protected then a scope must be applied
+	if !inProtectedTopics && len(scopedTopics) == 0 {
 		return true
 	}
 
@@ -1899,8 +1999,11 @@ func (a *DaprRuntime) initNameResolution() error {
 	var err error
 	resolverMetadata := nr.Metadata{}
 
-	resolverName := a.globalConfig.Spec.NameResolutionSpec.Component
-	resolverVersion := a.globalConfig.Spec.NameResolutionSpec.Version
+	var resolverName, resolverVersion string
+	if a.globalConfig.Spec.NameResolutionSpec != nil {
+		resolverName = a.globalConfig.Spec.NameResolutionSpec.Component
+		resolverVersion = a.globalConfig.Spec.NameResolutionSpec.Version
+	}
 
 	if resolverName == "" {
 		switch a.runtimeConfig.mode {
@@ -1921,7 +2024,9 @@ func (a *DaprRuntime) initNameResolution() error {
 	fName := utils.ComponentLogName(resolverName, "nameResolution", resolverVersion)
 	resolver, err = a.runtimeConfig.registry.NameResolutions().Create(resolverName, resolverVersion, fName)
 	resolverMetadata.Name = resolverName
-	resolverMetadata.Configuration = a.globalConfig.Spec.NameResolutionSpec.Configuration
+	if a.globalConfig.Spec.NameResolutionSpec != nil {
+		resolverMetadata.Configuration = a.globalConfig.Spec.NameResolutionSpec.Configuration
+	}
 	resolverMetadata.Properties = map[string]string{
 		nr.DaprHTTPPort: strconv.Itoa(a.runtimeConfig.httpPort),
 		nr.DaprPort:     strconv.Itoa(a.runtimeConfig.internalGRPCPort),
@@ -2240,7 +2345,7 @@ func (a *DaprRuntime) initActors() error {
 		GRPCConnectionFn: a.grpc.GetGRPCConnection,
 		Config:           actorConfig,
 		CertChain:        a.runtimeConfig.certChain,
-		TracingSpec:      a.globalConfig.Spec.TracingSpec,
+		TracingSpec:      a.globalConfig.GetTracingSpec(),
 		Resiliency:       a.resiliency,
 		StateStoreName:   actorStateStoreName,
 		CompStore:        a.compStore,
@@ -2367,7 +2472,7 @@ func (a *DaprRuntime) processHTTPEndpoints() {
 		if endpoint.Name == "" {
 			continue
 		}
-		_, _ = a.processResourceSecrets(&endpoint)
+		a.processHTTPEndpointSecrets(&endpoint)
 		a.compStore.AddHTTPEndpoint(endpoint)
 	}
 }
@@ -2888,23 +2993,88 @@ func (a *DaprRuntime) initAppHTTPClient() {
 	}
 }
 
-func (a *DaprRuntime) getAppHTTPChannelConfig(pipeline httpMiddleware.Pipeline, isExternal bool) httpChannel.ChannelConfiguration {
+func (a *DaprRuntime) getAppHTTPChannelConfig(pipeline httpMiddleware.Pipeline) httpChannel.ChannelConfiguration {
 	conf := httpChannel.ChannelConfiguration{
 		CompStore:            a.compStore,
 		MaxConcurrency:       a.runtimeConfig.appConnectionConfig.MaxConcurrency,
 		Pipeline:             pipeline,
-		TracingSpec:          a.globalConfig.Spec.TracingSpec,
+		TracingSpec:          a.globalConfig.GetTracingSpec(),
 		MaxRequestBodySizeMB: a.runtimeConfig.maxRequestBodySize,
 	}
 
-	if !isExternal {
-		conf.Endpoint = a.getAppHTTPEndpoint()
-		conf.Client = a.appHTTPClient
-	} else {
-		conf.Client = nethttp.DefaultClient
+	conf.Endpoint = a.getAppHTTPEndpoint()
+	conf.Client = a.appHTTPClient
+	return conf
+}
+
+func (a *DaprRuntime) getHTTPEndpointAppChannel(pipeline httpMiddleware.Pipeline, endpoint httpEndpointV1alpha1.HTTPEndpoint) (httpChannel.ChannelConfiguration, error) {
+	conf := httpChannel.ChannelConfiguration{
+		CompStore:            a.compStore,
+		MaxConcurrency:       a.runtimeConfig.appConnectionConfig.MaxConcurrency,
+		Pipeline:             pipeline,
+		MaxRequestBodySizeMB: a.runtimeConfig.maxRequestBodySize,
 	}
 
-	return conf
+	if a.globalConfig.Spec.TracingSpec != nil {
+		conf.TracingSpec = *a.globalConfig.Spec.TracingSpec
+	}
+
+	var tlsConfig *tls.Config
+
+	if endpoint.HasTLSRootCA() {
+		ca := endpoint.Spec.ClientTLS.RootCA.Value.String()
+		caCertPool := x509.NewCertPool()
+
+		if !caCertPool.AppendCertsFromPEM([]byte(ca)) {
+			return httpChannel.ChannelConfiguration{}, fmt.Errorf("failed to add root cert to cert pool for http endpoint %s", endpoint.ObjectMeta.Name)
+		}
+
+		tlsConfig = &tls.Config{
+			MinVersion: tls.VersionTLS12,
+			RootCAs:    caCertPool,
+		}
+	}
+
+	if endpoint.HasTLSPrivateKey() {
+		cert, err := tls.X509KeyPair([]byte(endpoint.Spec.ClientTLS.Certificate.Value.String()), []byte(endpoint.Spec.ClientTLS.PrivateKey.Value.String()))
+		if err != nil {
+			return httpChannel.ChannelConfiguration{}, fmt.Errorf("failed to load client certificate for http endpoint %s: %w", endpoint.ObjectMeta.Name, err)
+		}
+
+		if tlsConfig == nil {
+			tlsConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+		}
+		tlsConfig.Certificates = []tls.Certificate{cert}
+	}
+
+	if endpoint.Spec.ClientTLS != nil && endpoint.Spec.ClientTLS.Renegotiation != nil {
+		switch *endpoint.Spec.ClientTLS.Renegotiation {
+		case commonapi.NegotiateNever:
+			tlsConfig.Renegotiation = tls.RenegotiateNever
+		case commonapi.NegotiateOnceAsClient:
+			tlsConfig.Renegotiation = tls.RenegotiateOnceAsClient
+		case commonapi.NegotiateFreelyAsClient:
+			tlsConfig.Renegotiation = tls.RenegotiateFreelyAsClient
+		default:
+			return httpChannel.ChannelConfiguration{}, fmt.Errorf("invalid renegotiation value %s for http endpoint %s", *endpoint.Spec.ClientTLS.Renegotiation, endpoint.ObjectMeta.Name)
+		}
+	}
+
+	dialer := &net.Dialer{
+		Timeout: 15 * time.Second,
+	}
+
+	tr := nethttp.DefaultTransport.(*nethttp.Transport).Clone()
+	tr.TLSHandshakeTimeout = 15 * time.Second
+	tr.TLSClientConfig = tlsConfig
+	tr.DialContext = dialer.DialContext
+
+	conf.Client = &nethttp.Client{
+		Timeout:   0,
+		Transport: tr,
+	}
+
+	return conf, nil
 }
 
 func (a *DaprRuntime) appendBuiltinSecretStore() {
@@ -3096,7 +3266,7 @@ func pubsubTopicKey(componentName, topicName string) string {
 func createGRPCManager(runtimeConfig *internalConfig, globalConfig *config.Configuration) *grpc.Manager {
 	grpcAppChannelConfig := &grpc.AppChannelConfig{}
 	if globalConfig != nil {
-		grpcAppChannelConfig.TracingSpec = globalConfig.Spec.TracingSpec
+		grpcAppChannelConfig.TracingSpec = globalConfig.GetTracingSpec()
 		grpcAppChannelConfig.AllowInsecureTLS = globalConfig.IsFeatureEnabled(config.AppChannelAllowInsecureTLS)
 	}
 	if runtimeConfig != nil {
@@ -3138,6 +3308,38 @@ func ShutdownSignal() chan os.Signal {
 	return stop
 }
 
+func (a *DaprRuntime) createHTTPEndpointsChannels() (map[string]channel.HTTPEndpointAppChannel, error) {
+	// Create dedicated app channels for known app endpoints
+	endpoints := a.compStore.ListHTTPEndpoints()
+
+	if len(endpoints) > 0 {
+		channels := make(map[string]channel.HTTPEndpointAppChannel, len(endpoints))
+
+		pipeline, err := a.buildAppHTTPPipeline()
+		if err != nil {
+			return nil, err
+		}
+
+		for _, e := range endpoints {
+			conf, err := a.getHTTPEndpointAppChannel(pipeline, e)
+			if err != nil {
+				return nil, err
+			}
+
+			ch, err := httpChannel.CreateHTTPChannel(conf)
+			if err != nil {
+				return nil, err
+			}
+
+			channels[e.ObjectMeta.Name] = ch
+		}
+
+		return channels, nil
+	}
+
+	return nil, nil
+}
+
 func (a *DaprRuntime) createChannels() (err error) {
 	// Create a HTTP channel for external HTTP endpoint invocation
 	pipeline, err := a.buildAppHTTPPipeline()
@@ -3145,7 +3347,7 @@ func (a *DaprRuntime) createChannels() (err error) {
 		return fmt.Errorf("failed to build app HTTP pipeline: %w", err)
 	}
 
-	a.httpEndpointsAppChannel, err = httpChannel.CreateHTTPChannel(a.getAppHTTPChannelConfig(pipeline, false))
+	a.httpEndpointsAppChannel, err = httpChannel.CreateHTTPChannel(a.getAppHTTPChannelConfig(pipeline))
 	if err != nil {
 		return fmt.Errorf("failed to create external HTTP app channel: %w", err)
 	}
@@ -3157,7 +3359,7 @@ func (a *DaprRuntime) createChannels() (err error) {
 
 	if a.runtimeConfig.appConnectionConfig.Protocol.IsHTTP() {
 		// Create a HTTP channel
-		a.appChannel, err = httpChannel.CreateHTTPChannel(a.getAppHTTPChannelConfig(pipeline, false))
+		a.appChannel, err = httpChannel.CreateHTTPChannel(a.getAppHTTPChannelConfig(pipeline))
 		if err != nil {
 			return fmt.Errorf("failed to create HTTP app channel: %w", err)
 		}
