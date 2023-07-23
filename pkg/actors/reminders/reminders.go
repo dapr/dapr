@@ -111,10 +111,9 @@ func (r *reminders) DrainRebalancedReminders(actorType string, actorID string) {
 		}
 
 		reminderKey := rem.Reminder.Key()
-		stopChan, exists := r.activeReminders.Load(reminderKey)
+		stopChan, exists := r.activeReminders.LoadAndDelete(reminderKey)
 		if exists {
 			close(stopChan.(chan struct{}))
-			r.activeReminders.Delete(reminderKey)
 		}
 	}
 }
@@ -279,11 +278,9 @@ func (r *reminders) evaluateReminders(ctx context.Context) {
 				}
 
 				if isLocalActor {
-					_, exists := r.activeReminders.Load(reminderKey)
-
+					stop := make(chan struct{})
+					_, exists := r.activeReminders.LoadOrStore(reminderKey, stop)
 					if !exists {
-						stop := make(chan struct{})
-						r.activeReminders.Store(reminderKey, stop)
 						err := r.startReminder(&rmd, stop)
 						if err != nil {
 							log.Errorf("Error starting reminder %s: %v", reminderKey, err)
@@ -294,11 +291,10 @@ func (r *reminders) evaluateReminders(ctx context.Context) {
 						log.Debug("Reminder " + reminderKey + " already exists")
 					}
 				} else {
-					stopChan, exists := r.activeReminders.Load(reminderKey)
+					stopChan, exists := r.activeReminders.LoadAndDelete(reminderKey)
 					if exists {
 						log.Debugf("Stopping reminder %s on %s as it's active on host %s", reminderKey, r.config.HostAddress, targetActorAddress)
 						close(stopChan.(chan struct{}))
-						r.activeReminders.Delete(reminderKey)
 					}
 				}
 			}
@@ -345,11 +341,10 @@ func (r *reminders) doDeleteReminder(ctx context.Context, actorType, actorID, na
 
 	reminderKey := constructCompositeKey(actorType, actorID, name)
 
-	stop, exists := r.activeReminders.Load(reminderKey)
+	stop, exists := r.activeReminders.LoadAndDelete(reminderKey)
 	if exists {
 		log.Debugf("Found reminder with key: %s. Deleting reminder", reminderKey)
 		close(stop.(chan struct{}))
-		r.activeReminders.Delete(reminderKey)
 	}
 
 	var policyDef *resiliency.PolicyDefinition
@@ -445,7 +440,11 @@ func (r *reminders) storeReminder(ctx context.Context, store internal.Transactio
 	// Store the reminder in active reminders list
 	reminderKey := reminder.Key()
 
-	r.activeReminders.Store(reminderKey, stopChannel)
+	_, loaded := r.activeReminders.LoadOrStore(reminderKey, stopChannel)
+	if loaded {
+		// If the value was loaded, we have a race condition: another goroutine is trying to store the same reminder
+		return fmt.Errorf("failed to store reminder %s: reminder was created concurrently by another goroutine", reminderKey)
+	}
 
 	var policyDef *resiliency.PolicyDefinition
 	if r.resiliency != nil && !r.resiliency.PolicyDefined(r.storeName, resiliency.ComponentOutboundPolicy) {
