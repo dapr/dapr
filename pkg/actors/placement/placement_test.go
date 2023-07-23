@@ -68,12 +68,16 @@ func TestPlacementStream_RoundRobin(t *testing.T) {
 	appHealthFunc := func() bool {
 		return true
 	}
-	noopTableUpdateFunc := func() {}
 
-	testPlacement := NewActorPlacement(
-		address, nil, "testAppID", "127.0.0.1:1000", "testPodName", []string{"actorOne", "actorTwo"},
-		appHealthFunc, noopTableUpdateFunc,
-	).(*ActorPlacement)
+	testPlacement := NewActorPlacement(ActorPlacementOpts{
+		ServerAddrs:        address,
+		AppID:              "testAppID",
+		RuntimeHostname:    "127.0.0.1:1000",
+		PodName:            "testPodName",
+		ActorTypes:         []string{"actorOne", "actorTwo"},
+		AppHealthFn:        appHealthFunc,
+		AfterTableUpdateFn: func() {},
+	}).(*actorPlacement)
 
 	t.Run("found leader placement in a round robin way", func(t *testing.T) {
 		// set leader for leaderServer[0]
@@ -122,11 +126,15 @@ func TestAppHealthyStatus(t *testing.T) {
 	appHealth.Store(true)
 
 	appHealthFunc := appHealth.Load
-	noopTableUpdateFunc := func() {}
-	testPlacement := NewActorPlacement(
-		[]string{address}, nil, "testAppID", "127.0.0.1:1000", "testPodName", []string{"actorOne", "actorTwo"},
-		appHealthFunc, noopTableUpdateFunc,
-	).(*ActorPlacement)
+	testPlacement := NewActorPlacement(ActorPlacementOpts{
+		ServerAddrs:        []string{address},
+		AppID:              "testAppID",
+		RuntimeHostname:    "127.0.0.1:1000",
+		PodName:            "testPodName",
+		ActorTypes:         []string{"actorOne", "actorTwo"},
+		AppHealthFn:        appHealthFunc,
+		AfterTableUpdateFn: func() {},
+	}).(*actorPlacement)
 
 	// act
 	require.NoError(t, testPlacement.Start(context.Background()))
@@ -147,15 +155,18 @@ func TestAppHealthyStatus(t *testing.T) {
 }
 
 func TestOnPlacementOrder(t *testing.T) {
-	tableUpdateCount := 0
+	tableUpdateCount := atomic.Int64{}
 	appHealthFunc := func() bool { return true }
-	tableUpdateFunc := func() { tableUpdateCount++ }
-	testPlacement := NewActorPlacement(
-		[]string{}, nil,
-		"testAppID", "127.0.0.1:1000", "testPodName",
-		[]string{"actorOne", "actorTwo"},
-		appHealthFunc, tableUpdateFunc,
-	).(*ActorPlacement)
+	tableUpdateFunc := func() { tableUpdateCount.Add(1) }
+	testPlacement := NewActorPlacement(ActorPlacementOpts{
+		ServerAddrs:        []string{},
+		AppID:              "testAppID",
+		RuntimeHostname:    "127.0.0.1:1000",
+		PodName:            "testPodName",
+		ActorTypes:         []string{"actorOne", "actorTwo"},
+		AppHealthFn:        appHealthFunc,
+		AfterTableUpdateFn: tableUpdateFunc,
+	}).(*actorPlacement)
 
 	t.Run("lock operation", func(t *testing.T) {
 		testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{
@@ -166,7 +177,7 @@ func TestOnPlacementOrder(t *testing.T) {
 
 	t.Run("update operation", func(t *testing.T) {
 		tableVersion := "1"
-		tableUpdateCount = 0
+		tableUpdateCount.Store(0)
 		testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{
 			Operation: "update",
 			Tables: &placementv1pb.PlacementTables{
@@ -175,7 +186,7 @@ func TestOnPlacementOrder(t *testing.T) {
 			},
 		})
 
-		assert.Equal(t, 1, tableUpdateCount)
+		assert.Equal(t, int64(1), tableUpdateCount.Load())
 
 		// no update with the same table version
 		testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{
@@ -186,7 +197,7 @@ func TestOnPlacementOrder(t *testing.T) {
 			},
 		})
 
-		assert.Equal(t, 1, tableUpdateCount)
+		assert.Equal(t, int64(1), tableUpdateCount.Load())
 	})
 
 	t.Run("unlock operation", func(t *testing.T) {
@@ -199,18 +210,20 @@ func TestOnPlacementOrder(t *testing.T) {
 
 func TestWaitUntilPlacementTableIsReady(t *testing.T) {
 	appHealthFunc := func() bool { return true }
-	tableUpdateFunc := func() {}
-	testPlacement := NewActorPlacement(
-		[]string{}, nil,
-		"testAppID", "127.0.0.1:1000", "testPodName",
-		[]string{"actorOne", "actorTwo"},
-		appHealthFunc, tableUpdateFunc,
-	).(*ActorPlacement)
+	testPlacement := NewActorPlacement(ActorPlacementOpts{
+		ServerAddrs:        []string{},
+		AppID:              "testAppID",
+		RuntimeHostname:    "127.0.0.1:1000",
+		PodName:            "testPodName",
+		ActorTypes:         []string{"actorOne", "actorTwo"},
+		AppHealthFn:        appHealthFunc,
+		AfterTableUpdateFn: func() {},
+	}).(*actorPlacement)
 
 	t.Run("already unlocked", func(t *testing.T) {
 		require.False(t, testPlacement.tableIsBlocked.Load())
 
-		err := testPlacement.WaitUntilPlacementTableIsReady(context.Background())
+		err := testPlacement.WaitUntilReady(context.Background())
 		assert.NoError(t, err)
 	})
 
@@ -219,7 +232,7 @@ func TestWaitUntilPlacementTableIsReady(t *testing.T) {
 
 		testSuccessCh := make(chan struct{})
 		go func() {
-			err := testPlacement.WaitUntilPlacementTableIsReady(context.Background())
+			err := testPlacement.WaitUntilReady(context.Background())
 			if assert.NoError(t, err) {
 				testSuccessCh <- struct{}{}
 			}
@@ -248,7 +261,7 @@ func TestWaitUntilPlacementTableIsReady(t *testing.T) {
 		testSuccessCh := make(chan struct{})
 		ctx, cancel := context.WithCancel(context.Background())
 		go func() {
-			err := testPlacement.WaitUntilPlacementTableIsReady(ctx)
+			err := testPlacement.WaitUntilReady(ctx)
 			if assert.ErrorIs(t, err, context.Canceled) {
 				testSuccessCh <- struct{}{}
 			}
@@ -274,13 +287,15 @@ func TestWaitUntilPlacementTableIsReady(t *testing.T) {
 
 func TestLookupActor(t *testing.T) {
 	appHealthFunc := func() bool { return true }
-	tableUpdateFunc := func() {}
-	testPlacement := NewActorPlacement(
-		[]string{}, nil,
-		"testAppID", "127.0.0.1:1000", "testPodName",
-		[]string{"actorOne", "actorTwo"},
-		appHealthFunc, tableUpdateFunc,
-	).(*ActorPlacement)
+	testPlacement := NewActorPlacement(ActorPlacementOpts{
+		ServerAddrs:        []string{},
+		AppID:              "testAppID",
+		RuntimeHostname:    "127.0.0.1:1000",
+		PodName:            "testPodName",
+		ActorTypes:         []string{"actorOne", "actorTwo"},
+		AppHealthFn:        appHealthFunc,
+		AfterTableUpdateFn: func() {},
+	}).(*actorPlacement)
 
 	t.Run("Placementtable is unset", func(t *testing.T) {
 		name, appID := testPlacement.LookupActor("actorOne", "test")
@@ -315,13 +330,15 @@ func TestLookupActor(t *testing.T) {
 
 func TestConcurrentUnblockPlacements(t *testing.T) {
 	appHealthFunc := func() bool { return true }
-	tableUpdateFunc := func() {}
-	testPlacement := NewActorPlacement(
-		[]string{}, nil,
-		"testAppID", "127.0.0.1:1000", "testPodName",
-		[]string{"actorOne", "actorTwo"},
-		appHealthFunc, tableUpdateFunc,
-	).(*ActorPlacement)
+	testPlacement := NewActorPlacement(ActorPlacementOpts{
+		ServerAddrs:        []string{},
+		AppID:              "testAppID",
+		RuntimeHostname:    "127.0.0.1:1000",
+		PodName:            "testPodName",
+		ActorTypes:         []string{"actorOne", "actorTwo"},
+		AppHealthFn:        appHealthFunc,
+		AfterTableUpdateFn: func() {},
+	}).(*actorPlacement)
 
 	t.Run("concurrent_unlock", func(t *testing.T) {
 		for i := 0; i < 10000; i++ {

@@ -50,11 +50,9 @@ const (
 	grpcServiceConfig = `{"loadBalancingPolicy":"round_robin"}`
 )
 
-// ActorPlacement maintains membership of actor instances and consistent hash
+// actorPlacement maintains membership of actor instances and consistent hash
 // tables to discover the actor while interacting with Placement service.
-//
-//nolint:nosnakecase
-type ActorPlacement struct {
+type actorPlacement struct {
 	actorTypes []string
 	appID      string
 	// runtimeHostname is the address and port of the runtime
@@ -95,36 +93,43 @@ type ActorPlacement struct {
 	shutdownConnLoop sync.WaitGroup
 }
 
+// ActorPlacementOpts contains options for NewActorPlacement.
+type ActorPlacementOpts struct {
+	ServerAddrs        []string // Address(es) for the Placement service
+	CertChain          *daprCredentials.CertChain
+	AppID              string
+	RuntimeHostname    string
+	PodName            string
+	ActorTypes         []string
+	AppHealthFn        func() bool
+	AfterTableUpdateFn func()
+}
+
 // NewActorPlacement initializes ActorPlacement for the actor service.
-func NewActorPlacement(
-	serverAddr []string, clientCert *daprCredentials.CertChain,
-	appID, runtimeHostName, podName string, actorTypes []string,
-	appHealthFn func() bool,
-	afterTableUpdateFn func(),
-) internal.PlacementService {
-	servers := addDNSResolverPrefix(serverAddr)
-	return &ActorPlacement{
-		actorTypes:      actorTypes,
-		appID:           appID,
-		runtimeHostName: runtimeHostName,
-		podName:         podName,
+func NewActorPlacement(opts ActorPlacementOpts) internal.PlacementService {
+	servers := addDNSResolverPrefix(opts.ServerAddrs)
+	return &actorPlacement{
+		actorTypes:      opts.ActorTypes,
+		appID:           opts.AppID,
+		runtimeHostName: opts.RuntimeHostname,
+		podName:         opts.PodName,
 		serverAddr:      servers,
 
-		client: newPlacementClient(getGrpcOptsGetter(servers, clientCert)),
+		client: newPlacementClient(getGrpcOptsGetter(servers, opts.CertChain)),
 
 		placementTableLock: &sync.RWMutex{},
 		placementTables:    &hashing.ConsistentHashTables{Entries: make(map[string]*hashing.Consistent)},
 
 		operationUpdateLock: &sync.Mutex{},
 		tableIsBlocked:      &atomic.Bool{},
-		appHealthFn:         appHealthFn,
-		afterTableUpdateFn:  afterTableUpdateFn,
+		appHealthFn:         opts.AppHealthFn,
+		afterTableUpdateFn:  opts.AfterTableUpdateFn,
 	}
 }
 
 // Register an actor type by adding it to the list of known actor types (if it's not already registered)
 // The placement tables will get updated when the next heartbeat fires
-func (p *ActorPlacement) AddHostedActorType(actorType string) error {
+func (p *actorPlacement) AddHostedActorType(actorType string) error {
 	for _, t := range p.actorTypes {
 		if t == actorType {
 			return fmt.Errorf("actor type %s already registered", actorType)
@@ -137,7 +142,7 @@ func (p *ActorPlacement) AddHostedActorType(actorType string) error {
 
 // Start connects placement service to register to membership and send heartbeat
 // to report the current member status periodically.
-func (p *ActorPlacement) Start(ctx context.Context) error {
+func (p *actorPlacement) Start(ctx context.Context) error {
 	p.serverIndex.Store(0)
 	p.shutdown.Store(false)
 
@@ -241,7 +246,7 @@ func (p *ActorPlacement) Start(ctx context.Context) error {
 }
 
 // Closes shuts down server stream gracefully.
-func (p *ActorPlacement) Close() error {
+func (p *actorPlacement) Close() error {
 	// CAS to avoid stop more than once.
 	if p.shutdown.CompareAndSwap(false, true) {
 		p.client.disconnect()
@@ -250,8 +255,8 @@ func (p *ActorPlacement) Close() error {
 	return nil
 }
 
-// WaitUntilPlacementTableIsReady waits until placement table is until table lock is unlocked.
-func (p *ActorPlacement) WaitUntilPlacementTableIsReady(ctx context.Context) error {
+// WaitUntilReady waits until placement table is until table lock is unlocked.
+func (p *actorPlacement) WaitUntilReady(ctx context.Context) error {
 	if !p.tableIsBlocked.Load() {
 		return nil
 	}
@@ -264,7 +269,7 @@ func (p *ActorPlacement) WaitUntilPlacementTableIsReady(ctx context.Context) err
 }
 
 // LookupActor resolves to actor service instance address using consistent hashing table.
-func (p *ActorPlacement) LookupActor(actorType, actorID string) (string, string) {
+func (p *actorPlacement) LookupActor(actorType, actorID string) (string, string) {
 	p.placementTableLock.RLock()
 	defer p.placementTableLock.RUnlock()
 
@@ -284,7 +289,7 @@ func (p *ActorPlacement) LookupActor(actorType, actorID string) (string, string)
 }
 
 //nolint:nosnakecase
-func (p *ActorPlacement) establishStreamConn() (established bool) {
+func (p *actorPlacement) establishStreamConn() (established bool) {
 	// Backoff for reconnecting in case of errors
 	bo := backoff.NewExponentialBackOff()
 	bo.InitialInterval = placementReconnectMinInterval
@@ -331,7 +336,7 @@ func (p *ActorPlacement) establishStreamConn() (established bool) {
 
 // onPlacementError closes the current placement stream and reestablish the connection again,
 // uses a different placement server depending on the error code
-func (p *ActorPlacement) onPlacementError(err error) {
+func (p *actorPlacement) onPlacementError(err error) {
 	s, ok := status.FromError(err)
 	// If the current server is not leader, then it will try to the next server.
 	if ok && s.Code() == codes.FailedPrecondition {
@@ -341,7 +346,7 @@ func (p *ActorPlacement) onPlacementError(err error) {
 	}
 }
 
-func (p *ActorPlacement) onPlacementOrder(in *v1pb.PlacementOrder) {
+func (p *actorPlacement) onPlacementOrder(in *v1pb.PlacementOrder) {
 	log.Debugf("placement order received: %s", in.Operation)
 	diag.DefaultMonitoring.ActorPlacementTableOperationReceived(in.Operation)
 
@@ -371,18 +376,18 @@ func (p *ActorPlacement) onPlacementOrder(in *v1pb.PlacementOrder) {
 	}
 }
 
-func (p *ActorPlacement) blockPlacements() {
+func (p *actorPlacement) blockPlacements() {
 	p.unblockSignal = make(chan struct{})
 	p.tableIsBlocked.Store(true)
 }
 
-func (p *ActorPlacement) unblockPlacements() {
+func (p *actorPlacement) unblockPlacements() {
 	if p.tableIsBlocked.CompareAndSwap(true, false) {
 		close(p.unblockSignal)
 	}
 }
 
-func (p *ActorPlacement) updatePlacements(in *v1pb.PlacementTables) {
+func (p *actorPlacement) updatePlacements(in *v1pb.PlacementTables) {
 	updated := false
 	func() {
 		p.placementTableLock.Lock()

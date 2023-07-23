@@ -225,27 +225,28 @@ func (a *actorsRuntime) Init() error {
 	a.actorsReminders.Init(context.TODO())
 	a.timers.Init(context.TODO())
 
-	afterTableUpdateFn := func() {
-		a.drainRebalancedActors()
-		a.actorsReminders.OnPlacementTablesUpdated(context.TODO())
-	}
-	appHealthFn := func() bool { return a.appHealthy.Load() }
-
 	if a.placement == nil {
-		a.placement = placement.NewActorPlacement(
-			a.actorsConfig.Config.PlacementAddresses, a.certChain,
-			a.actorsConfig.Config.AppID, hostname,
-			a.actorsConfig.Config.PodName,
-			a.actorsConfig.Config.HostedActorTypes.ListActorTypes(),
-			appHealthFn,
-			afterTableUpdateFn,
-		)
+		a.placement = placement.NewActorPlacement(placement.ActorPlacementOpts{
+			ServerAddrs:     a.actorsConfig.Config.PlacementAddresses,
+			CertChain:       a.certChain,
+			AppID:           a.actorsConfig.Config.AppID,
+			RuntimeHostname: hostname,
+			PodName:         a.actorsConfig.Config.PodName,
+			ActorTypes:      a.actorsConfig.Config.HostedActorTypes.ListActorTypes(),
+			AppHealthFn: func() bool {
+				return a.appHealthy.Load()
+			},
+			AfterTableUpdateFn: func() {
+				a.drainRebalancedActors()
+				a.actorsReminders.OnPlacementTablesUpdated(context.TODO())
+			},
+		})
 	}
 
 	go a.placement.Start(context.TODO())
 	go a.deactivationTicker(a.actorsConfig, a.deactivateActor)
 
-	log.Infof("actor runtime started. actor idle timeout: %v. actor scan interval: %v",
+	log.Infof("Actor runtime started. Actor idle timeout: %v. Actor scan interval: %v",
 		a.actorsConfig.Config.ActorIdleTimeout, a.actorsConfig.Config.ActorDeactivationScanInterval)
 
 	// Be careful to configure healthz endpoint option. If app healthz returns unhealthy status, Dapr will
@@ -307,7 +308,7 @@ func (a *actorsRuntime) deactivateActor(actorType, actorID string) error {
 
 	a.removeActorFromTable(actorType, actorID)
 	diag.DefaultMonitoring.ActorDeactivated(actorType)
-	log.Debugf("deactivated actor type=%s, id=%s\n", actorType, actorID)
+	log.Debugf("Deactivated actor type=%s, id=%s", actorType, actorID)
 
 	return nil
 }
@@ -363,9 +364,9 @@ type lookupActorRes struct {
 }
 
 func (a *actorsRuntime) Call(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
-	err := a.placement.WaitUntilPlacementTableIsReady(ctx)
+	err := a.placement.WaitUntilReady(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to wait for placement table readiness: %w", err)
+		return nil, fmt.Errorf("failed to wait for placement readiness: %w", err)
 	}
 
 	actor := req.Actor()
@@ -902,7 +903,7 @@ func (a *actorsRuntime) RegisterInternalActor(ctx context.Context, actorType str
 		}
 		a.internalActors[actorType] = actor
 
-		log.Debugf("registering internal actor type: %s", actorType)
+		log.Debugf("Registering internal actor type: %s", actorType)
 		actor.SetActorRuntime(a)
 		a.actorsConfig.Config.HostedActorTypes.AddActorType(actorType)
 		if a.placement != nil {

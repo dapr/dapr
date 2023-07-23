@@ -73,8 +73,8 @@ func (*mockPlacement) Close() error {
 	return nil
 }
 
-// WaitUntilPlacementTableIsReady implements internal.PlacementService
-func (*mockPlacement) WaitUntilPlacementTableIsReady(ctx context.Context) error {
+// WaitUntilReady implements internal.PlacementService
+func (*mockPlacement) WaitUntilReady(ctx context.Context) error {
 	return nil
 }
 
