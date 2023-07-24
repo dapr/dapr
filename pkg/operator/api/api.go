@@ -56,29 +56,43 @@ var log = logger.NewLogger("dapr.operator.api")
 type Server interface {
 	Run(context.Context, security.Handler) error
 	Ready(context.Context) error
-	OnComponentUpdated(ctx context.Context, component *componentsapi.Component)
-	OnHTTPEndpointUpdated(ctx context.Context, endpoint *httpendpointsapi.HTTPEndpoint)
+	OnComponentUpdated(context.Context, *ComponentUpdateEvent)
+	OnHTTPEndpointUpdated(context.Context, *HTTPEndpointUpdateEvent)
+}
+
+// ComponentUpdateEvent is the event sent to all Dapr runtimes when a component
+// is updated.
+type ComponentUpdateEvent struct {
+	Component *componentsapi.Component
+	Type      operatorv1pb.ResourceEventType
+}
+
+// HTTPEndpointUpdateEvent is the event sent to all Dapr runtimes when a
+// HTTPEndpoint is updated.
+type HTTPEndpointUpdateEvent struct {
+	Endpoint *httpendpointsapi.HTTPEndpoint
+	Type     operatorv1pb.ResourceEventType
 }
 
 type apiServer struct {
 	operatorv1pb.UnimplementedOperatorServer
 	Client client.Client
 	// notify all dapr runtime
-	connLock               sync.Mutex
-	endpointLock           sync.Mutex
-	allConnUpdateChan      map[string]chan *componentsapi.Component
-	allEndpointsUpdateChan map[string]chan *httpendpointsapi.HTTPEndpoint
-	readyCh                chan struct{}
-	running                atomic.Bool
+	connLock            sync.Mutex
+	endpointLock        sync.Mutex
+	componentUpdateChan map[string]chan *ComponentUpdateEvent
+	endpointsUpdateChan map[string]chan *HTTPEndpointUpdateEvent
+	readyCh             chan struct{}
+	running             atomic.Bool
 }
 
 // NewAPIServer returns a new API server.
 func NewAPIServer(client client.Client) Server {
 	return &apiServer{
-		Client:                 client,
-		allConnUpdateChan:      make(map[string]chan *componentsapi.Component),
-		allEndpointsUpdateChan: make(map[string]chan *httpendpointsapi.HTTPEndpoint),
-		readyCh:                make(chan struct{}),
+		Client:              client,
+		componentUpdateChan: make(map[string]chan *ComponentUpdateEvent),
+		endpointsUpdateChan: make(map[string]chan *HTTPEndpointUpdateEvent),
+		readyCh:             make(chan struct{}),
 	}
 }
 
@@ -123,22 +137,32 @@ func (a *apiServer) Run(ctx context.Context, sec security.Handler) error {
 	return nil
 }
 
-func (a *apiServer) OnComponentUpdated(_ context.Context, component *componentsapi.Component) {
+// TODO: @joshvanl: Authorize pod name and namespace matches the SPIFFE ID of
+// the caller.
+func (a *apiServer) OnComponentUpdated(ctx context.Context, event *ComponentUpdateEvent) {
 	a.connLock.Lock()
-	for _, connUpdateChan := range a.allConnUpdateChan {
-		connUpdateChan <- component
+	defer a.connLock.Unlock()
+	for _, connUpdateChan := range a.componentUpdateChan {
+		select {
+		case connUpdateChan <- event:
+		case <-ctx.Done():
+			return
+		}
 	}
-	a.connLock.Unlock()
 }
 
-func (a *apiServer) OnHTTPEndpointUpdated(_ context.Context, endpoint *httpendpointsapi.HTTPEndpoint) {
+// TODO: @joshvanl: Authorize pod name and namespace matches the SPIFFE ID of
+// the caller.
+func (a *apiServer) OnHTTPEndpointUpdated(ctx context.Context, event *HTTPEndpointUpdateEvent) {
 	a.endpointLock.Lock()
-	for _, endpointUpdateChan := range a.allEndpointsUpdateChan {
-		go func(endpointUpdateChan chan *httpendpointsapi.HTTPEndpoint) {
-			endpointUpdateChan <- endpoint
-		}(endpointUpdateChan)
+	defer a.endpointLock.Unlock()
+	for _, endpointUpdateChan := range a.endpointsUpdateChan {
+		select {
+		case endpointUpdateChan <- event:
+		case <-ctx.Done():
+			return
+		}
 	}
-	a.endpointLock.Unlock()
 }
 
 func (a *apiServer) Ready(ctx context.Context) error {
@@ -397,42 +421,43 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 	key := keyObj.String()
 
 	a.connLock.Lock()
-	a.allConnUpdateChan[key] = make(chan *componentsapi.Component, 1)
-	updateChan := a.allConnUpdateChan[key]
+	a.componentUpdateChan[key] = make(chan *ComponentUpdateEvent, 10)
+	updateChan := a.componentUpdateChan[key]
 	a.connLock.Unlock()
 
 	defer func() {
 		a.connLock.Lock()
 		defer a.connLock.Unlock()
-		delete(a.allConnUpdateChan, key)
+		delete(a.componentUpdateChan, key)
 	}()
 
-	updateComponentFunc := func(ctx context.Context, c *componentsapi.Component) {
-		if c.Namespace != in.Namespace {
+	updateComponentFunc := func(ctx context.Context, event *ComponentUpdateEvent) {
+		if event.Component.Namespace != in.Namespace {
 			return
 		}
 
-		err := processComponentSecrets(ctx, c, in.Namespace, a.Client)
+		err := processComponentSecrets(ctx, event.Component, in.Namespace, a.Client)
 		if err != nil {
-			log.Warnf("error processing component %s secrets from pod %s/%s: %s", c.Name, in.Namespace, in.PodName, err)
+			log.Warnf("(%s) error processing component %s secrets from pod %s/%s: %s", event.Type, event.Component.Name, in.Namespace, in.PodName, err)
 			return
 		}
 
-		b, err := json.Marshal(&c)
+		b, err := json.Marshal(event.Component)
 		if err != nil {
-			log.Warnf("error serializing component %s (%s) from pod %s/%s: %s", c.GetName(), c.Spec.Type, in.Namespace, in.PodName, err)
+			log.Warnf("(%s) error serializing component %s (%s) from pod %s/%s: %s", event.Type, event.Component.GetName(), event.Component.Spec.Type, in.Namespace, in.PodName, err)
 			return
 		}
 
 		err = srv.Send(&operatorv1pb.ComponentUpdateEvent{
 			Component: b,
+			Type:      event.Type,
 		})
 		if err != nil {
-			log.Warnf("error updating sidecar with component %s (%s) from pod %s/%s: %s", c.GetName(), c.Spec.Type, in.Namespace, in.PodName, err)
+			log.Warnf("(%s) error updating sidecar with component %s (%s) from pod %s/%s: %s", event.Type, event.Component.GetName(), event.Component.Spec.Type, in.Namespace, in.PodName, err)
 			return
 		}
 
-		log.Infof("updated sidecar with component %s (%s) from pod %s/%s", c.GetName(), c.Spec.Type, in.Namespace, in.PodName)
+		log.Infof("(%s) updated sidecar with component %s (%s) from pod %s/%s", event.Type, event.Component.GetName(), event.Component.Spec.Type, in.Namespace, in.PodName)
 	}
 
 	var wg sync.WaitGroup
@@ -512,41 +537,42 @@ func (a *apiServer) HTTPEndpointUpdate(in *operatorv1pb.HTTPEndpointUpdateReques
 	key := keyObj.String()
 
 	a.endpointLock.Lock()
-	a.allEndpointsUpdateChan[key] = make(chan *httpendpointsapi.HTTPEndpoint, 1)
-	updateChan := a.allEndpointsUpdateChan[key]
+	a.endpointsUpdateChan[key] = make(chan *HTTPEndpointUpdateEvent, 10)
+	updateChan := a.endpointsUpdateChan[key]
 	a.endpointLock.Unlock()
 
 	defer func() {
 		a.endpointLock.Lock()
 		defer a.endpointLock.Unlock()
-		delete(a.allEndpointsUpdateChan, key)
+		delete(a.endpointsUpdateChan, key)
 	}()
 
-	updateHTTPEndpointFunc := func(ctx context.Context, e *httpendpointsapi.HTTPEndpoint) {
-		if e.Namespace != in.Namespace {
+	updateHTTPEndpointFunc := func(ctx context.Context, event *HTTPEndpointUpdateEvent) {
+		if event.Endpoint.Namespace != in.Namespace {
 			return
 		}
 
-		err := processHTTPEndpointSecrets(ctx, e, in.Namespace, a.Client)
+		err := processHTTPEndpointSecrets(ctx, event.Endpoint, in.Namespace, a.Client)
 		if err != nil {
-			log.Warnf("error processing http endpoint %s secrets from pod %s/%s: %s", e.Name, in.Namespace, in.PodName, err)
+			log.Warnf("(%s) error processing http endpoint %s secrets from pod %s/%s: %s", event.Type, event.Endpoint.Name, in.Namespace, in.PodName, err)
 			return
 		}
-		b, err := json.Marshal(&e)
+		b, err := json.Marshal(event.Endpoint)
 		if err != nil {
-			log.Warnf("error serializing  http endpoint %s from pod %s/%s: %s", e.GetName(), in.Namespace, in.PodName, err)
+			log.Warnf("(%s) error serializing  http endpoint %s from pod %s/%s: %s", event.Type, event.Endpoint.GetName(), in.Namespace, in.PodName, err)
 			return
 		}
 
 		err = srv.Send(&operatorv1pb.HTTPEndpointUpdateEvent{
 			HttpEndpoints: b,
+			Type:          event.Type,
 		})
 		if err != nil {
-			log.Warnf("error updating sidecar with http endpoint %s from pod %s/%s: %s", e.GetName(), in.Namespace, in.PodName, err)
+			log.Warnf("(%s) error updating sidecar with http endpoint %s from pod %s/%s: %s", event.Type, event.Endpoint.GetName(), in.Namespace, in.PodName, err)
 			return
 		}
 
-		log.Infof("updated sidecar with http endpoint %s from pod %s/%s", e.GetName(), in.Namespace, in.PodName)
+		log.Infof("(%s) updated sidecar with http endpoint %s from pod %s/%s", event.Type, event.Endpoint.GetName(), in.Namespace, in.PodName)
 	}
 
 	var wg sync.WaitGroup

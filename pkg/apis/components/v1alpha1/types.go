@@ -41,6 +41,16 @@ func (Component) Kind() string {
 	return "Component"
 }
 
+// Name returns the component name.
+func (c Component) GetName() string {
+	return c.Name
+}
+
+// Namespace returns the component namespace.
+func (c Component) GetNamespace() string {
+	return c.Namespace
+}
+
 // LogName returns the name of the component that can be used in logging.
 func (c Component) LogName() string {
 	return utils.ComponentLogName(c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
@@ -54,6 +64,17 @@ func (c Component) GetSecretStore() string {
 // NameValuePairs returns the component's metadata as name/value pairs
 func (c Component) NameValuePairs() []common.NameValuePair {
 	return c.Spec.Metadata
+}
+
+// Object returns a new instance of the component type with the TypeMeta's Kind
+// and APIVersion fields set
+func (c Component) Object() metav1.Object {
+	n := c.DeepCopy()
+	n.TypeMeta = metav1.TypeMeta{
+		Kind:       "Component",
+		APIVersion: "dapr.io/v1alpha1",
+	}
+	return n
 }
 
 // ComponentSpec is the spec for a component.

@@ -192,7 +192,6 @@ require (
 	github.com/evanphx/json-patch v5.6.0+incompatible // indirect
 	github.com/fasthttp-contrib/sessions v0.0.0-20160905201309-74f6ac73d5d5 // indirect
 	github.com/fatih/color v1.15.0 // indirect
-	github.com/fsnotify/fsnotify v1.6.0 // indirect
 	github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32 // indirect
 	github.com/go-errors/errors v1.4.2 // indirect
 	github.com/go-ini/ini v1.67.0 // indirect
@@ -447,10 +446,13 @@ replace (
 // check for retracted versions: go list -mod=mod -f '{{if .Retracted}}{{.}}{{end}}' -u -m all
 replace github.com/microcosm-cc/bluemonday => github.com/microcosm-cc/bluemonday v1.0.24
 
+replace github.com/dapr/kit => github.com/joshvanl/kit v0.0.0-20230810122209-5f84b8e8f93d
+
 // Uncomment for local development for testing with changes in the components-contrib repository.
 // Don't commit with this uncommented!
 //
-// replace github.com/dapr/components-contrib => ../components-contrib
+//replace github.com/dapr/components-contrib => ../components-contrib
+
 //
 // Then, run `make modtidy` in this repository.
 // This ensures that go.mod and go.sum are up-to-date.

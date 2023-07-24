@@ -17,7 +17,6 @@ package runtime
 import (
 	"context"
 	"crypto/rand"
-	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -72,7 +71,6 @@ import (
 	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
 	"github.com/dapr/dapr/pkg/config/protocol"
 	"github.com/dapr/dapr/pkg/metrics"
-	"github.com/dapr/dapr/pkg/security"
 
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
@@ -89,7 +87,6 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/processor"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/registry"
-	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
@@ -1502,144 +1499,6 @@ func TestPopulateSecretsConfiguration(t *testing.T) {
 		assert.Equal(t, config.AllowAccess, secConf.DefaultAccess, "Expected default access as allow")
 		assert.Empty(t, secConf.DeniedSecrets, "Expected testMock deniedSecrets to not be populated")
 		assert.NotContains(t, secConf.AllowedSecrets, "Expected testMock allowedSecrets to not be populated")
-	})
-}
-
-func TestProcessResourceSecrets(t *testing.T) {
-	createMockBinding := func() *componentsV1alpha1.Component {
-		return &componentsV1alpha1.Component{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "mockBinding",
-			},
-			Spec: componentsV1alpha1.ComponentSpec{
-				Type:     "bindings.mock",
-				Version:  "v1",
-				Metadata: []commonapi.NameValuePair{},
-			},
-		}
-	}
-
-	t.Run("Standalone Mode", func(t *testing.T) {
-		mockBinding := createMockBinding()
-		mockBinding.Spec.Metadata = append(mockBinding.Spec.Metadata, commonapi.NameValuePair{
-			Name: "a",
-			SecretKeyRef: commonapi.SecretKeyRef{
-				Key:  "key1",
-				Name: "name1",
-			},
-		})
-		mockBinding.Auth.SecretStore = secretstoresLoader.BuiltinKubernetesSecretStore
-
-		rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
-		require.NoError(t, err)
-		defer stopRuntime(t, rt)
-		m := NewMockKubernetesStore()
-		rt.runtimeConfig.registry.SecretStores().RegisterComponent(
-			func(_ logger.Logger) secretstores.SecretStore {
-				return m
-			},
-			secretstoresLoader.BuiltinKubernetesSecretStore,
-		)
-
-		// add Kubernetes component manually
-		rt.processComponentAndDependents(context.Background(), componentsV1alpha1.Component{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: secretstoresLoader.BuiltinKubernetesSecretStore,
-			},
-			Spec: componentsV1alpha1.ComponentSpec{
-				Type:    "secretstores.kubernetes",
-				Version: "v1",
-			},
-		})
-
-		updated, unready := rt.processResourceSecrets(context.Background(), mockBinding)
-		assert.True(t, updated)
-		assert.Equal(t, "value1", mockBinding.Spec.Metadata[0].Value.String())
-		assert.Empty(t, unready)
-	})
-
-	t.Run("Look up name only", func(t *testing.T) {
-		mockBinding := createMockBinding()
-		mockBinding.Spec.Metadata = append(mockBinding.Spec.Metadata, commonapi.NameValuePair{
-			Name: "a",
-			SecretKeyRef: commonapi.SecretKeyRef{
-				Name: "name1",
-			},
-		})
-		mockBinding.Auth.SecretStore = "mock"
-
-		rt, _ := NewTestDaprRuntime(t, modes.KubernetesMode)
-		defer stopRuntime(t, rt)
-
-		rt.runtimeConfig.registry.SecretStores().RegisterComponent(
-			func(_ logger.Logger) secretstores.SecretStore {
-				return &rtmock.SecretStore{}
-			},
-			"mock",
-		)
-
-		// initSecretStore appends Kubernetes component even if kubernetes component is not added
-		err := rt.processComponentAndDependents(context.Background(), componentsV1alpha1.Component{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "mock",
-			},
-			Spec: componentsV1alpha1.ComponentSpec{
-				Type:    "secretstores.mock",
-				Version: "v1",
-			},
-		})
-		assert.NoError(t, err)
-
-		updated, unready := rt.processResourceSecrets(context.Background(), mockBinding)
-		assert.True(t, updated)
-		assert.Equal(t, "value1", mockBinding.Spec.Metadata[0].Value.String())
-		assert.Empty(t, unready)
-	})
-
-	t.Run("Secret from env", func(t *testing.T) {
-		t.Setenv("MY_ENV_VAR", "ciao mondo")
-
-		mockBinding := createMockBinding()
-		mockBinding.Spec.Metadata = append(mockBinding.Spec.Metadata, commonapi.NameValuePair{
-			Name:   "a",
-			EnvRef: "MY_ENV_VAR",
-		})
-
-		rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
-		require.NoError(t, err)
-		defer stopRuntime(t, rt)
-
-		updated, unready := rt.processResourceSecrets(context.Background(), mockBinding)
-		assert.True(t, updated)
-		assert.Equal(t, "ciao mondo", mockBinding.Spec.Metadata[0].Value.String())
-		assert.Empty(t, unready)
-	})
-
-	t.Run("Disallowed env var", func(t *testing.T) {
-		t.Setenv("APP_API_TOKEN", "test")
-		t.Setenv("DAPR_KEY", "test")
-
-		mockBinding := createMockBinding()
-		mockBinding.Spec.Metadata = append(mockBinding.Spec.Metadata,
-			commonapi.NameValuePair{
-				Name:   "a",
-				EnvRef: "DAPR_KEY",
-			},
-			commonapi.NameValuePair{
-				Name:   "b",
-				EnvRef: "APP_API_TOKEN",
-			},
-		)
-
-		rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
-		require.NoError(t, err)
-		defer stopRuntime(t, rt)
-
-		updated, unready := rt.processResourceSecrets(context.Background(), mockBinding)
-		assert.True(t, updated)
-		assert.Equal(t, "", mockBinding.Spec.Metadata[0].Value.String())
-		assert.Equal(t, "", mockBinding.Spec.Metadata[1].Value.String())
-		assert.Empty(t, unready)
 	})
 }
 
@@ -3366,131 +3225,4 @@ func TestHTTPEndpointsUpdate(t *testing.T) {
 	}
 	_, exists = rt.compStore.GetHTTPEndpoint(endpoint3.Name)
 	assert.True(t, exists, fmt.Sprintf("expect http endpoint with name: %s", endpoint3.Name))
-}
-
-type MockKubernetesStateStore struct {
-	callback func(context.Context) error
-	closeFn  func() error
-}
-
-func (m *MockKubernetesStateStore) Init(ctx context.Context, metadata secretstores.Metadata) error {
-	if m.callback != nil {
-		return m.callback(ctx)
-	}
-	return nil
-}
-
-func (m *MockKubernetesStateStore) GetSecret(ctx context.Context, req secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
-	return secretstores.GetSecretResponse{
-		Data: map[string]string{
-			"key1":   "value1",
-			"_value": "_value_data",
-			"name1":  "value1",
-		},
-	}, nil
-}
-
-func (m *MockKubernetesStateStore) BulkGetSecret(ctx context.Context, req secretstores.BulkGetSecretRequest) (secretstores.BulkGetSecretResponse, error) {
-	response := map[string]map[string]string{}
-	response["k8s-secret"] = map[string]string{
-		"key1":   "value1",
-		"_value": "_value_data",
-		"name1":  "value1",
-	}
-	return secretstores.BulkGetSecretResponse{
-		Data: response,
-	}, nil
-}
-
-func (m *MockKubernetesStateStore) Close() error {
-	if m.closeFn != nil {
-		return m.closeFn()
-	}
-	return nil
-}
-
-func (m *MockKubernetesStateStore) Features() []secretstores.Feature {
-	return []secretstores.Feature{}
-}
-
-func NewMockKubernetesStore() secretstores.SecretStore {
-	return &MockKubernetesStateStore{}
-}
-
-func NewMockKubernetesStoreWithInitCallback(cb func(context.Context) error) secretstores.SecretStore {
-	return &MockKubernetesStateStore{callback: cb}
-}
-
-func NewMockKubernetesStoreWithClose(closeFn func() error) secretstores.SecretStore {
-	return &MockKubernetesStateStore{closeFn: closeFn}
-}
-
-func TestIsEnvVarAllowed(t *testing.T) {
-	t.Run("no allowlist", func(t *testing.T) {
-		tests := []struct {
-			name string
-			key  string
-			want bool
-		}{
-			{name: "empty string is not allowed", key: "", want: false},
-			{name: "key is allowed", key: "FOO", want: true},
-			{name: "keys starting with DAPR_ are denied", key: "DAPR_TEST", want: false},
-			{name: "APP_API_TOKEN is denied", key: "APP_API_TOKEN", want: false},
-			{name: "keys with a space are denied", key: "FOO BAR", want: false},
-		}
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				if got := isEnvVarAllowed(tt.key); got != tt.want {
-					t.Errorf("isEnvVarAllowed(%q) = %v, want %v", tt.key, got, tt.want)
-				}
-			})
-		}
-	})
-
-	t.Run("with allowlist", func(t *testing.T) {
-		t.Setenv(securityConsts.EnvKeysEnvVar, "FOO BAR TEST")
-
-		tests := []struct {
-			name string
-			key  string
-			want bool
-		}{
-			{name: "FOO is allowed", key: "FOO", want: true},
-			{name: "BAR is allowed", key: "BAR", want: true},
-			{name: "TEST is allowed", key: "TEST", want: true},
-			{name: "FO is not allowed", key: "FO", want: false},
-			{name: "EST is not allowed", key: "EST", want: false},
-			{name: "BA is not allowed", key: "BA", want: false},
-			{name: "AR is not allowed", key: "AR", want: false},
-			{name: "keys starting with DAPR_ are denied", key: "DAPR_TEST", want: false},
-			{name: "APP_API_TOKEN is denied", key: "APP_API_TOKEN", want: false},
-			{name: "keys with a space are denied", key: "FOO BAR", want: false},
-		}
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				if got := isEnvVarAllowed(tt.key); got != tt.want {
-					t.Errorf("isEnvVarAllowed(%q) = %v, want %v", tt.key, got, tt.want)
-				}
-			})
-		}
-	})
-}
-
-func testSecurity(t *testing.T) security.Handler {
-	secP, err := security.New(context.Background(), security.Options{
-		TrustAnchors:            []byte("test"),
-		AppID:                   "test",
-		ControlPlaneTrustDomain: "test.example.com",
-		ControlPlaneNamespace:   "default",
-		MTLSEnabled:             false,
-		OverrideCertRequestSource: func(context.Context, []byte) ([]*x509.Certificate, error) {
-			return []*x509.Certificate{nil}, nil
-		},
-	})
-	require.NoError(t, err)
-	go secP.Run(context.Background())
-	sec, err := secP.Handler(context.Background())
-	require.NoError(t, err)
-
-	return sec
 }

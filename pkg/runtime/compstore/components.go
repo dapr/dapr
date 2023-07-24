@@ -13,7 +13,9 @@ limitations under the License.
 
 package compstore
 
-import compsv1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+import (
+	compsv1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+)
 
 func (c *ComponentStore) GetComponent(componentType, name string) (compsv1alpha1.Component, bool) {
 	c.lock.RLock()

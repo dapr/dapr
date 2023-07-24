@@ -197,7 +197,7 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 // 1. HTTP header 'dapr-app-id' (path is method)
 // 2. Basic auth header: `http://dapr-app-id:<service-id>@localhost:3500/<method>`
 // 3. URL parameter: `http://localhost:3500/v1.0/invoke/<app-id>/method/<method>`
-func findTargetIDAndMethod(reqPath string, headers http.Header) (targetID string, method string) {
+func findTargetIDAndMethod(reqPath string, headers http.Header) (string, string) {
 	if appID := headers.Get(daprAppID); appID != "" {
 		return appID, strings.TrimPrefix(path.Clean(reqPath), "/")
 	}

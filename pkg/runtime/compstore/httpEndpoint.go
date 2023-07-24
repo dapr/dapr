@@ -13,7 +13,9 @@ limitations under the License.
 
 package compstore
 
-import httpEndpointv1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+import (
+	httpEndpointv1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+)
 
 func (c *ComponentStore) GetHTTPEndpoint(name string) (httpEndpointv1alpha1.HTTPEndpoint, bool) {
 	c.lock.RLock()
