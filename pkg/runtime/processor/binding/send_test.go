@@ -113,11 +113,11 @@ func TestStartReadingFromBindings(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		b := New(Options{
 			IsHTTP:         true,
-			AppChannel:     mockAppChannel,
 			Resiliency:     resiliency.New(log),
 			ComponentStore: compstore.New(),
 			Meta:           meta.New(meta.Options{}),
 		})
+		b.SetAppChannel(mockAppChannel)
 
 		mockAppChannel.On("InvokeMethod", mock.Anything, mock.Anything).Return(invokev1.NewInvokeMethodResponse(200, "OK", nil), nil)
 
@@ -134,11 +134,11 @@ func TestStartReadingFromBindings(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		b := New(Options{
 			IsHTTP:         true,
-			AppChannel:     mockAppChannel,
 			Resiliency:     resiliency.New(log),
 			ComponentStore: compstore.New(),
 			Meta:           meta.New(meta.Options{}),
 		})
+		b.SetAppChannel(mockAppChannel)
 
 		mockAppChannel.On("InvokeMethod", mock.Anything, mock.Anything).Return(invokev1.NewInvokeMethodResponse(200, "OK", nil), nil)
 
@@ -227,11 +227,11 @@ func TestReadInputBindings(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		b := New(Options{
 			IsHTTP:         true,
-			AppChannel:     mockAppChannel,
 			Resiliency:     resiliency.New(log),
 			ComponentStore: compstore.New(),
 			Meta:           meta.New(meta.Options{}),
 		})
+		b.SetAppChannel(mockAppChannel)
 
 		fakeBindingResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
 		defer fakeBindingResp.Close()
@@ -268,11 +268,11 @@ func TestReadInputBindings(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		b := New(Options{
 			IsHTTP:         true,
-			AppChannel:     mockAppChannel,
 			Resiliency:     resiliency.New(log),
 			ComponentStore: compstore.New(),
 			Meta:           meta.New(meta.Options{}),
 		})
+		b.SetAppChannel(mockAppChannel)
 
 		fakeBindingReq := invokev1.NewInvokeMethodRequest(testInputBindingMethod).
 			WithHTTPExtension(http.MethodOptions, "").
@@ -314,11 +314,11 @@ func TestReadInputBindings(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		b := New(Options{
 			IsHTTP:         true,
-			AppChannel:     mockAppChannel,
 			Resiliency:     resiliency.New(log),
 			ComponentStore: compstore.New(),
 			Meta:           meta.New(meta.Options{}),
 		})
+		b.SetAppChannel(mockAppChannel)
 
 		fakeBindingReq := invokev1.NewInvokeMethodRequest(testInputBindingMethod).
 			WithHTTPExtension(http.MethodOptions, "").
@@ -360,11 +360,11 @@ func TestReadInputBindings(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		b := New(Options{
 			IsHTTP:         true,
-			AppChannel:     mockAppChannel,
 			Resiliency:     resiliency.New(log),
 			ComponentStore: compstore.New(),
 			Meta:           meta.New(meta.Options{}),
 		})
+		b.SetAppChannel(mockAppChannel)
 
 		closeCh := make(chan struct{})
 		defer close(closeCh)
@@ -393,11 +393,11 @@ func TestInvokeOutputBindings(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		b := New(Options{
 			IsHTTP:         true,
-			AppChannel:     mockAppChannel,
 			Resiliency:     resiliency.New(log),
 			ComponentStore: compstore.New(),
 			Meta:           meta.New(meta.Options{}),
 		})
+		b.SetAppChannel(mockAppChannel)
 
 		_, err := b.SendToOutputBinding(context.Background(), "mockBinding", &bindings.InvokeRequest{
 			Data: []byte(""),
@@ -410,11 +410,12 @@ func TestInvokeOutputBindings(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		b := New(Options{
 			IsHTTP:         true,
-			AppChannel:     mockAppChannel,
 			Resiliency:     resiliency.New(log),
 			ComponentStore: compstore.New(),
 			Meta:           meta.New(meta.Options{}),
 		})
+		b.SetAppChannel(mockAppChannel)
+
 		b.compStore.AddOutputBinding("mockBinding", &rtmock.Binding{})
 
 		_, err := b.SendToOutputBinding(context.Background(), "mockBinding", &bindings.InvokeRequest{
@@ -428,11 +429,12 @@ func TestInvokeOutputBindings(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		b := New(Options{
 			IsHTTP:         true,
-			AppChannel:     mockAppChannel,
 			Resiliency:     resiliency.New(log),
 			ComponentStore: compstore.New(),
 			Meta:           meta.New(meta.Options{}),
 		})
+		b.SetAppChannel(mockAppChannel)
+
 		b.compStore.AddOutputBinding("mockBinding", &rtmock.Binding{})
 
 		_, err := b.SendToOutputBinding(context.Background(), "mockBinding", &bindings.InvokeRequest{

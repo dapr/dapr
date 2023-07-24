@@ -1670,6 +1670,7 @@ func NewTestDaprRuntimeWithID(mode modes.DaprMode, id string) (*DaprRuntime, err
 		return nil, err
 	}
 	rt.runtimeConfig.mode = mode
+	rt.initChannels()
 	return rt, nil
 }
 
@@ -1680,6 +1681,7 @@ func NewTestDaprRuntimeWithProtocol(mode modes.DaprMode, protocol string, appPor
 		return nil, err
 	}
 	rt.runtimeConfig.mode = mode
+	rt.initChannels()
 	return rt, nil
 }
 
@@ -2098,6 +2100,7 @@ func TestInitActors(t *testing.T) {
 		}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		require.NoError(t, err)
 		defer stopRuntime(t, r)
+		r.initChannels()
 
 		err = r.initActors()
 		assert.NotNil(t, err)
@@ -2109,6 +2112,7 @@ func TestInitActors(t *testing.T) {
 		}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		require.NoError(t, err)
 		defer stopRuntime(t, r)
+		r.initChannels()
 
 		assert.Nil(t, r.actor)
 		assert.NotNil(t, r.compStore.ListStateStores())
@@ -2121,6 +2125,7 @@ func TestInitActors(t *testing.T) {
 		}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		require.NoError(t, err)
 		defer stopRuntime(t, r)
+		r.initChannels()
 
 		name, ok := r.processor.State().ActorStateStoreName()
 		assert.False(t, ok)
@@ -2702,9 +2707,9 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 		Resiliency:       rt.resiliency,
 		Mode:             rt.runtimeConfig.mode,
 		Standalone:       rt.runtimeConfig.standalone,
-		AppChannel:       mockAppChannel,
 		GRPC:             rt.grpc,
 	})
+	rt.processor.SetAppChannel(mockAppChannel)
 	require.NoError(t, rt.processor.Init(context.Background(), cPubSub))
 	mockPubSub.AssertCalled(t, "Init", mock.Anything)
 	rt.processor.PubSub().StartSubscriptions(context.Background())

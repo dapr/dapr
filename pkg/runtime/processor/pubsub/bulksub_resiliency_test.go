@@ -220,8 +220,8 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			Registry:   reg.PubSubs(),
 			IsHTTP:     true,
 			Resiliency: resiliency.New(logger.NewLogger("test")),
-			AppChannel: mockAppChannel,
 		})
+		ps.SetAppChannel(mockAppChannel)
 
 		ts := testSettings{
 			entryIdRetryTimes: map[string]int{},

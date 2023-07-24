@@ -82,8 +82,6 @@ type Options struct {
 
 	Resiliency resiliency.Provider
 
-	AppChannel channel.AppChannel
-
 	GRPC *grpc.Manager
 
 	OperatorClient operatorv1.OperatorClient
@@ -103,6 +101,7 @@ type StateManager interface {
 type PubsubManager interface {
 	Publish(context.Context, *contribpubsub.PublishRequest) error
 	BulkPublish(context.Context, *contribpubsub.BulkPublishRequest) (contribpubsub.BulkPublishResponse, error)
+	SetAppChannel(channel.AppChannel)
 
 	StartSubscriptions(context.Context) error
 	StopSubscriptions()
@@ -111,6 +110,7 @@ type PubsubManager interface {
 
 type BindingManager interface {
 	SendToOutputBinding(context.Context, string, *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	SetAppChannel(channel.AppChannel)
 
 	StartReadingFromBindings(context.Context) error
 	StopReadingFromBindings()
@@ -140,7 +140,6 @@ func New(opts Options) *Processor {
 		Meta:           opts.Meta,
 		Resiliency:     opts.Resiliency,
 		TracingSpec:    opts.GlobalConfig.Spec.TracingSpec,
-		AppChannel:     opts.AppChannel,
 		GRPC:           opts.GRPC,
 		OperatorClient: opts.OperatorClient,
 		ResourcesPath:  opts.Standalone.ResourcesPath,
@@ -159,7 +158,6 @@ func New(opts Options) *Processor {
 		Meta:           opts.Meta,
 		IsHTTP:         opts.IsHTTP,
 		Resiliency:     opts.Resiliency,
-		AppChannel:     opts.AppChannel,
 		GRPC:           opts.GRPC,
 		TracingSpec:    opts.GlobalConfig.Spec.TracingSpec,
 	})
@@ -201,6 +199,11 @@ func New(opts Options) *Processor {
 			components.CategoryMiddleware: middleware.New(),
 		},
 	}
+}
+
+func (p *Processor) SetAppChannel(appChannel channel.AppChannel) {
+	p.binding.SetAppChannel(appChannel)
+	p.pubsub.SetAppChannel(appChannel)
 }
 
 // Init initializes a component of a category.

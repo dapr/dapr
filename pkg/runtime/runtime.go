@@ -172,30 +172,15 @@ func newDaprRuntime(ctx context.Context,
 
 	operatorClient, err := getOperatorClient(ctx, runtimeConfig)
 	if err != nil {
-		return nil, fmt.Errorf("error creating operator client: %w", err)
+		return nil, err
 	}
 
 	grpc := createGRPCManager(runtimeConfig, globalConfig)
-
-	channels, err := channels.New(channels.Options{
-		Registry:            runtimeConfig.registry,
-		ComponentStore:      compStore,
-		Meta:                meta,
-		AppConnectionConfig: runtimeConfig.appConnectionConfig,
-		GlobalConfig:        globalConfig,
-		MaxRequestBodySize:  runtimeConfig.maxRequestBodySize,
-		ReadBufferSize:      runtimeConfig.readBufferSize,
-		GRPC:                grpc,
-	})
-	if err != nil {
-		log.Warnf("failed to open %s channel to app: %s", string(runtimeConfig.appConnectionConfig.Protocol), err)
-	}
 
 	wfe := wfengine.NewWorkflowEngine(wfengine.NewWorkflowConfig(runtimeConfig.id))
 	wfe.ConfigureGrpcExecutor()
 
 	rt := &DaprRuntime{
-		channels:                   channels,
 		runtimeConfig:              runtimeConfig,
 		globalConfig:               globalConfig,
 		accessControlList:          accessControlList,
@@ -211,6 +196,7 @@ func newDaprRuntime(ctx context.Context,
 		appHealthLock:              &sync.Mutex{},
 		compStore:                  compStore,
 		meta:                       meta,
+		operatorClient:             operatorClient,
 		processor: processor.New(processor.Options{
 			ID:               runtimeConfig.id,
 			Namespace:        getNamespace(),
@@ -224,7 +210,6 @@ func newDaprRuntime(ctx context.Context,
 			Mode:             runtimeConfig.mode,
 			PodName:          getPodName(),
 			Standalone:       runtimeConfig.standalone,
-			AppChannel:       channels.AppChannel(),
 			OperatorClient:   operatorClient,
 			GRPC:             grpc,
 		}),
@@ -364,10 +349,6 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		return err
 	}
 	a.podName = getPodName()
-	a.operatorClient, err = getOperatorClient(ctx, a.runtimeConfig)
-	if err != nil {
-		return err
-	}
 
 	if a.hostAddress, err = utils.GetHostAddress(); err != nil {
 		return fmt.Errorf("failed to determine host address: %w", err)
@@ -406,16 +387,18 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		log.Warnf("failed to load components: %s", err)
 	}
 
+	err = a.loadHTTPEndpoints()
+	if err != nil {
+		log.Warnf("failed to load HTTP endpoints: %s", err)
+	}
+
+	a.initChannels()
+
 	a.flushOutstandingComponents()
 
 	pipeline, err := a.channels.BuildHTTPPipeline(a.globalConfig.Spec.HTTPPipelineSpec)
 	if err != nil {
 		log.Warnf("failed to build HTTP pipeline: %s", err)
-	}
-
-	err = a.loadHTTPEndpoints()
-	if err != nil {
-		log.Warnf("failed to load HTTP endpoints: %s", err)
 	}
 
 	a.flushOutstandingHTTPEndpoints()
@@ -629,6 +612,24 @@ func (a *DaprRuntime) initProxy() {
 		Resiliency:         a.resiliency,
 		MaxRequestBodySize: a.runtimeConfig.maxRequestBodySize,
 	})
+}
+
+func (a *DaprRuntime) initChannels() {
+	var err error
+	a.channels, err = channels.New(channels.Options{
+		Registry:            a.runtimeConfig.registry,
+		ComponentStore:      a.compStore,
+		Meta:                a.meta,
+		AppConnectionConfig: a.runtimeConfig.appConnectionConfig,
+		GlobalConfig:        a.globalConfig,
+		MaxRequestBodySize:  a.runtimeConfig.maxRequestBodySize,
+		ReadBufferSize:      a.runtimeConfig.readBufferSize,
+		GRPC:                a.grpc,
+	})
+	if err != nil {
+		log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.appConnectionConfig.Protocol), err)
+	}
+	a.processor.SetAppChannel(a.channels.AppChannel())
 }
 
 // begin components updates for kubernetes mode.

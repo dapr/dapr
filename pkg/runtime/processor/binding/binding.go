@@ -55,7 +55,6 @@ type Options struct {
 	ComponentStore *compstore.ComponentStore
 	Meta           *meta.Meta
 	Resiliency     resiliency.Provider
-	AppChannel     channel.AppChannel
 	GRPC           *grpc.Manager
 	TracingSpec    *config.TracingSpec
 }
@@ -84,10 +83,13 @@ func New(opts Options) *binding {
 		meta:        opts.Meta,
 		isHTTP:      opts.IsHTTP,
 		resiliency:  opts.Resiliency,
-		appChannel:  opts.AppChannel,
 		tracingSpec: opts.TracingSpec,
 		grpc:        opts.GRPC,
 	}
+}
+
+func (b *binding) SetAppChannel(appChannel channel.AppChannel) {
+	b.appChannel = appChannel
 }
 
 func (b *binding) Init(ctx context.Context, comp compapi.Component) error {

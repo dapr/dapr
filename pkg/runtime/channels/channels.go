@@ -74,6 +74,7 @@ type Channels struct {
 	appConnectionConfig config.AppConnectionConfig
 	tracingSpec         *config.TracingSpec
 	maxRequestBodySize  int
+	appHTTPPipelineSpec *config.PipelineSpec
 	httpClient          *http.Client
 	grpc                *grpc.Manager
 
@@ -90,12 +91,13 @@ func New(opts Options) (*Channels, error) {
 		appConnectionConfig: opts.AppConnectionConfig,
 		tracingSpec:         opts.GlobalConfig.Spec.TracingSpec,
 		maxRequestBodySize:  opts.MaxRequestBodySize,
+		appHTTPPipelineSpec: opts.GlobalConfig.Spec.AppHTTPPipelineSpec,
 		grpc:                opts.GRPC,
 		httpClient:          appHTTPClient(opts.AppConnectionConfig, opts.GlobalConfig, opts.ReadBufferSize),
 	}
 
 	// Create a HTTP channel for external HTTP endpoint invocation
-	pipeline, err := c.buildHTTPPipelineForSpec(opts.GlobalConfig.Spec.AppHTTPPipelineSpec, "app channel")
+	pipeline, err := c.buildHTTPPipelineForSpec(c.appHTTPPipelineSpec, "app channel")
 	if err != nil {
 		return c, fmt.Errorf("failed to build app HTTP pipeline: %w", err)
 	}
@@ -105,7 +107,7 @@ func New(opts Options) (*Channels, error) {
 		return c, fmt.Errorf("failed to create external HTTP app channel: %w", err)
 	}
 
-	c.enpChannels, err = c.createHTTPEndpointsChannels(opts.GlobalConfig.Spec.AppHTTPPipelineSpec)
+	c.enpChannels, err = c.createHTTPEndpointsChannels(c.appHTTPPipelineSpec)
 	if err != nil {
 		return c, fmt.Errorf("failed to create HTTP endpoints channels: %w", err)
 	}
@@ -185,7 +187,7 @@ func (c *Channels) buildHTTPPipelineForSpec(spec *config.PipelineSpec, targetPip
 		comp, exists := c.compStore.GetComponent(handlerSpec.Type, handlerSpec.Name)
 		if !exists {
 			// Log the error but continue with initializing the pipeline
-			log.Error("couldn't find middleware component defined in configuration with name %s and type %s",
+			log.Errorf("couldn't find middleware component defined in configuration with name %s and type %s",
 				handlerSpec.Name, handlerSpec.LogName())
 			continue
 		}

@@ -74,7 +74,6 @@ type Options struct {
 	Resiliency     resiliency.Provider
 	Meta           *meta.Meta
 	TracingSpec    *config.TracingSpec
-	AppChannel     channel.AppChannel
 	GRPC           *grpc.Manager
 	OperatorClient operatorv1.OperatorClient
 }
@@ -122,7 +121,6 @@ func New(opts Options) *pubsub {
 		resiliency:     opts.Resiliency,
 		compStore:      opts.ComponentStore,
 		meta:           opts.Meta,
-		appChannel:     opts.AppChannel,
 		tracingSpec:    opts.TracingSpec,
 		grpc:           opts.GRPC,
 		operatorClient: opts.OperatorClient,
@@ -168,6 +166,10 @@ func (p *pubsub) Init(ctx context.Context, comp compapi.Component) error {
 	diag.DefaultMonitoring.ComponentInitialized(comp.Spec.Type)
 
 	return nil
+}
+
+func (p *pubsub) SetAppChannel(appChannel channel.AppChannel) {
+	p.appChannel = appChannel
 }
 
 func (p *pubsub) Close(comp compapi.Component) error {
