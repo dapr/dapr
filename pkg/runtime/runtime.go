@@ -1448,6 +1448,7 @@ func (a *DaprRuntime) Shutdown(duration time.Duration) {
 	if err := a.shutdownOutputComponents(ctx); err != nil {
 		log.Warnf("Error shutting down components: %v", err)
 	}
+	log.Info("Dapr runtime stopped successfully")
 	a.shutdownC <- nil
 }
 
