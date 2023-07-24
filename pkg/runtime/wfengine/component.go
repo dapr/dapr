@@ -254,10 +254,6 @@ func (c *workflowEngineComponent) PurgeWorkflow(ctx context.Context, req *workfl
 	return nil
 }
 
-func (c *workflowEngineComponent) GetComponentMetadata() map[string]string {
-	return nil
-}
-
 func getStatusString(status int32) string {
 	if statusStr, ok := statusMap[status]; ok {
 		return statusStr

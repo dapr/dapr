@@ -4864,10 +4864,6 @@ func newFakeStateStore() fakeStateStore {
 	return s
 }
 
-func (c fakeStateStore) GetComponentMetadata() map[string]string {
-	return map[string]string{}
-}
-
 func (c fakeStateStore) Ping() error {
 	return nil
 }
@@ -5257,10 +5253,6 @@ func (c *fakeConfigurationStore) Unsubscribe(ctx context.Context, req *configura
 	return nil
 }
 
-func (c *fakeConfigurationStore) GetComponentMetadata() map[string]string {
-	return map[string]string{}
-}
-
 type fakeLockStore struct{}
 
 func (l fakeLockStore) Ping() error {
@@ -5325,10 +5317,6 @@ func (l *fakeLockStore) Unlock(ctx context.Context, req *lock.UnlockRequest) (*l
 	return &lock.UnlockResponse{
 		Status: 0,
 	}, nil
-}
-
-func (l *fakeLockStore) GetComponentMetadata() map[string]string {
-	return map[string]string{}
 }
 
 func TestV1HealthzEndpoint(t *testing.T) {

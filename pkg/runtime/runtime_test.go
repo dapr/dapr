@@ -3876,10 +3876,6 @@ func (m *mockSubscribePubSub) BulkSubscribe(ctx context.Context, req pubsub.Subs
 	return nil
 }
 
-func (m *mockSubscribePubSub) GetComponentMetadata() map[string]string {
-	return map[string]string{}
-}
-
 func (m *mockSubscribePubSub) GetBulkResponse() pubsub.BulkSubscribeResponse {
 	return m.bulkReponse
 }
@@ -4254,10 +4250,6 @@ func (b *mockBinding) Invoke(ctx context.Context, req *bindings.InvokeRequest) (
 
 func (b *mockBinding) Close() error {
 	return b.closeErr
-}
-
-func (b *mockBinding) GetComponentMetadata() map[string]string {
-	return b.metadata
 }
 
 func TestInvokeOutputBindings(t *testing.T) {
@@ -4767,10 +4759,6 @@ func (m *mockPublishPubSub) Close() error {
 
 func (m *mockPublishPubSub) Features() []pubsub.Feature {
 	return nil
-}
-
-func (m *mockPublishPubSub) GetComponentMetadata() map[string]string {
-	return map[string]string{}
 }
 
 func TestInitActors(t *testing.T) {
@@ -5880,10 +5868,6 @@ func (m *MockKubernetesStateStore) Close() error {
 
 func (m *MockKubernetesStateStore) Features() []secretstores.Feature {
 	return []secretstores.Feature{}
-}
-
-func (m MockKubernetesStateStore) GetComponentMetadata() map[string]string {
-	return nil
 }
 
 func NewMockKubernetesStore() secretstores.SecretStore {

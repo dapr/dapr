@@ -147,10 +147,6 @@ func (f *FakeStateStore) Set(ctx context.Context, req *state.SetRequest) error {
 	return nil
 }
 
-func (f *FakeStateStore) GetComponentMetadata() map[string]string {
-	return map[string]string{}
-}
-
 func (f *FakeStateStore) BulkSet(ctx context.Context, req []state.SetRequest, opts state.BulkStoreOpts) error {
 	f.callCount["BulkSet"].Add(1)
 

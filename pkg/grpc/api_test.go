@@ -40,7 +40,6 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/emptypb"
-
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -3746,10 +3745,6 @@ type mockConfigStore struct{}
 
 func (m *mockConfigStore) Init(ctx context.Context, metadata configuration.Metadata) error {
 	return nil
-}
-
-func (m *mockConfigStore) GetComponentMetadata() map[string]string {
-	return map[string]string{}
 }
 
 func (m *mockConfigStore) Get(ctx context.Context, req *configuration.GetRequest) (*configuration.GetResponse, error) {
