@@ -38,8 +38,10 @@ import (
 	corsDapr "github.com/dapr/dapr/pkg/cors"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"github.com/dapr/dapr/pkg/http/endpoints"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
+	"github.com/dapr/dapr/utils/responsewriter"
 	"github.com/dapr/kit/logger"
 )
 
@@ -348,19 +350,12 @@ func (s *server) unespaceRequestParametersInContext(chiCtx *chi.Context, keepWil
 	return nil
 }
 
-func (s *server) setupRoutes(r chi.Router, endpoints []Endpoint) {
+func (s *server) setupRoutes(r chi.Router, endpoints []endpoints.Endpoint) {
 	parameterFinder, _ := regexp.Compile("/{.*}")
 
 	// Build the API allowlist and denylist
 	allowedAPIs := s.apiSpec.Allowed.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
 	deniedAPIs := s.apiSpec.Denied.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
-
-	r.Use(func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
-			next.ServeHTTP(w, r)
-		})
-	})
 
 	for _, e := range endpoints {
 		if !e.IsAllowed(allowedAPIs, deniedAPIs) {
@@ -376,7 +371,7 @@ func (s *server) setupRoutes(r chi.Router, endpoints []Endpoint) {
 	}
 }
 
-func (s *server) handle(e Endpoint, path string, r chi.Router, unescapeParameters bool, apiLogging bool) {
+func (s *server) handle(e endpoints.Endpoint, path string, r chi.Router, unescapeParameters bool, apiLogging bool) {
 	handler := e.GetHandler()
 
 	if unescapeParameters {
@@ -385,6 +380,19 @@ func (s *server) handle(e Endpoint, path string, r chi.Router, unescapeParameter
 
 	if apiLogging {
 		handler = s.apiLoggingInfo(path, handler)
+	}
+
+	handler = func(w http.ResponseWriter, r *http.Request) {
+		// Ensure that the writer is a ResponseWriter so we can collect the status code and response size too
+		rw := responsewriter.EnsureResponseWriter(w)
+
+		// Add information about the route in the context
+		ctx := r.Context()
+		ctx = context.WithValue(ctx, diag.RouteDataCtxKey, diag.RouteMetadata{
+			Name: e.Name,
+		})
+
+		handler(rw, r)
 	}
 
 	// If no method is defined, match any method

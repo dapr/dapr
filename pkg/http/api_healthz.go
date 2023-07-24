@@ -16,36 +16,41 @@ package http
 import (
 	"net/http"
 
+	"github.com/dapr/dapr/pkg/http/endpoints"
 	"github.com/dapr/dapr/pkg/messages"
 )
 
-func (a *api) constructHealthzEndpoints() []Endpoint {
-	return []Endpoint{
+func (a *api) constructHealthzEndpoints() []endpoints.Endpoint {
+	return []endpoints.Endpoint{
 		{
 			Methods: []string{http.MethodGet},
 			Route:   "healthz",
 			Version: apiVersionV1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupHealth,
-				Version: EndpointGoupVersion1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupHealth,
+				Version:              endpoints.EndpointGroupVersion1,
+				AppendSpanAttributes: nil, // TODO
 			},
-			Name:          "Healthz",
-			Handler:       a.onGetHealthz,
-			AlwaysAllowed: true,
-			IsHealthCheck: true,
+			Name:               "Healthz",
+			Handler:            a.onGetHealthz,
+			AlwaysAllowed:      true,
+			IsHealthCheck:      true,
+			BypassAPITokenAuth: true,
 		},
 		{
 			Methods: []string{http.MethodGet},
 			Route:   "healthz/outbound",
 			Version: apiVersionV1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupHealth,
-				Version: EndpointGoupVersion1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupHealth,
+				Version:              endpoints.EndpointGroupVersion1,
+				AppendSpanAttributes: nil, // TODO
 			},
-			Name:          "HealthzOutbound",
-			Handler:       a.onGetOutboundHealthz,
-			AlwaysAllowed: true,
-			IsHealthCheck: true,
+			Name:               "HealthzOutbound",
+			Handler:            a.onGetOutboundHealthz,
+			AlwaysAllowed:      true,
+			IsHealthCheck:      true,
+			BypassAPITokenAuth: true,
 		},
 	}
 }

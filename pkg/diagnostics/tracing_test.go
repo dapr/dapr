@@ -224,16 +224,16 @@ func runTraces(t *testing.T, testName string, numTraces int, samplingRate string
 // modified in go.opentelemetry.io/otel/semconv library, and thus in
 // the spec.
 func TestOtelConventionStrings(t *testing.T) {
-	assert.Equal(t, "db.system", dbSystemSpanAttributeKey)
-	assert.Equal(t, "db.name", dbNameSpanAttributeKey)
-	assert.Equal(t, "db.statement", dbStatementSpanAttributeKey)
-	assert.Equal(t, "db.connection_string", dbConnectionStringSpanAttributeKey)
-	assert.Equal(t, "topic", messagingDestinationTopicKind)
-	assert.Equal(t, "messaging.system", messagingSystemSpanAttributeKey)
-	assert.Equal(t, "messaging.destination", messagingDestinationSpanAttributeKey)
-	assert.Equal(t, "messaging.destination_kind", messagingDestinationKindSpanAttributeKey)
-	assert.Equal(t, "rpc.service", gRPCServiceSpanAttributeKey)
-	assert.Equal(t, "net.peer.name", netPeerNameSpanAttributeKey)
+	assert.Equal(t, "db.system", DBSystemSpanAttributeKey)
+	assert.Equal(t, "db.name", DBNameSpanAttributeKey)
+	assert.Equal(t, "db.statement", DBStatementSpanAttributeKey)
+	assert.Equal(t, "db.connection_string", DBConnectionStringSpanAttributeKey)
+	assert.Equal(t, "topic", MessagingDestinationTopicKind)
+	assert.Equal(t, "messaging.system", MessagingSystemSpanAttributeKey)
+	assert.Equal(t, "messaging.destination", MessagingDestinationSpanAttributeKey)
+	assert.Equal(t, "messaging.destination_kind", MessagingDestinationKindSpanAttributeKey)
+	assert.Equal(t, "rpc.service", GrpcServiceSpanAttributeKey)
+	assert.Equal(t, "net.peer.name", NetPeerNameSpanAttributeKey)
 }
 
 // Otel Fake Exporter implements an open telemetry span exporter that does nothing.

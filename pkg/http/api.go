@@ -49,6 +49,7 @@ import (
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/grpc/universalapi"
+	"github.com/dapr/dapr/pkg/http/endpoints"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -58,13 +59,12 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/utils"
-	"github.com/dapr/dapr/utils/responsewriter"
 )
 
 // API returns a list of HTTP endpoints for Dapr.
 type API interface {
-	APIEndpoints() []Endpoint
-	PublicEndpoints() []Endpoint
+	APIEndpoints() []endpoints.Endpoint
+	PublicEndpoints() []endpoints.Endpoint
 	MarkStatusAsReady()
 	MarkStatusAsOutboundReady()
 	SetAppChannel(appChannel channel.AppChannel)
@@ -74,8 +74,8 @@ type API interface {
 
 type api struct {
 	universal             *universalapi.UniversalAPI
-	endpoints             []Endpoint
-	publicEndpoints       []Endpoint
+	endpoints             []endpoints.Endpoint
+	publicEndpoints       []endpoints.Endpoint
 	directMessaging       messaging.DirectMessaging
 	appChannel            channel.AppChannel
 	resiliency            resiliency.Provider
@@ -161,7 +161,7 @@ func NewAPI(opts APIOpts) API {
 	healthEndpoints := api.constructHealthzEndpoints()
 
 	api.endpoints = append(api.endpoints, api.constructStateEndpoints()...)
-	api.endpoints = append(api.endpoints, api.constructSecretEndpoints()...)
+	api.endpoints = append(api.endpoints, api.constructSecretsEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructPubSubEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructActorEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructDirectMessagingEndpoints()...)
@@ -182,12 +182,12 @@ func NewAPI(opts APIOpts) API {
 }
 
 // APIEndpoints returns the list of registered endpoints.
-func (a *api) APIEndpoints() []Endpoint {
+func (a *api) APIEndpoints() []endpoints.Endpoint {
 	return a.endpoints
 }
 
 // PublicEndpoints returns the list of registered endpoints.
-func (a *api) PublicEndpoints() []Endpoint {
+func (a *api) PublicEndpoints() []endpoints.Endpoint {
 	return a.publicEndpoints
 }
 
@@ -201,15 +201,23 @@ func (a *api) MarkStatusAsOutboundReady() {
 	a.outboundReadyStatus = true
 }
 
-func (a *api) constructStateEndpoints() []Endpoint {
-	return []Endpoint{
+func appendStateSpanAttributes(r *nethttp.Request, m diag.SpanAttributes) {
+	m[diag.DBSystemSpanAttributeKey] = "state"
+	m[diag.DBConnectionStringSpanAttributeKey] = "state"
+	m[diag.DBStatementSpanAttributeKey] = r.Method + " " + r.URL.Path
+	m[diag.DBNameSpanAttributeKey] = chi.URLParam(r, "storeName")
+}
+
+func (a *api) constructStateEndpoints() []endpoints.Endpoint {
+	return []endpoints.Endpoint{
 		{
 			Methods: []string{nethttp.MethodGet},
 			Route:   "state/{storeName}/{key}",
 			Version: apiVersionV1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupState,
-				Version: EndpointGoupVersion1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupState,
+				Version:              endpoints.EndpointGroupVersion1,
+				AppendSpanAttributes: appendStateSpanAttributes,
 			},
 			Name:            "GetState",
 			FastHTTPHandler: a.onGetState,
@@ -218,9 +226,10 @@ func (a *api) constructStateEndpoints() []Endpoint {
 			Methods: []string{nethttp.MethodPost, nethttp.MethodPut},
 			Route:   "state/{storeName}",
 			Version: apiVersionV1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupState,
-				Version: EndpointGoupVersion1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupState,
+				Version:              endpoints.EndpointGroupVersion1,
+				AppendSpanAttributes: appendStateSpanAttributes,
 			},
 			Name:            "SaveState",
 			FastHTTPHandler: a.onPostState,
@@ -229,9 +238,10 @@ func (a *api) constructStateEndpoints() []Endpoint {
 			Methods: []string{nethttp.MethodDelete},
 			Route:   "state/{storeName}/{key}",
 			Version: apiVersionV1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupState,
-				Version: EndpointGoupVersion1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupState,
+				Version:              endpoints.EndpointGroupVersion1,
+				AppendSpanAttributes: appendStateSpanAttributes,
 			},
 			Name:            "DeleteState",
 			FastHTTPHandler: a.onDeleteState,
@@ -240,9 +250,10 @@ func (a *api) constructStateEndpoints() []Endpoint {
 			Methods: []string{nethttp.MethodPost, nethttp.MethodPut},
 			Route:   "state/{storeName}/bulk",
 			Version: apiVersionV1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupState,
-				Version: EndpointGoupVersion1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupState,
+				Version:              endpoints.EndpointGroupVersion1,
+				AppendSpanAttributes: appendStateSpanAttributes,
 			},
 			Name:            "GetBulkState",
 			FastHTTPHandler: a.onBulkGetState,
@@ -251,9 +262,10 @@ func (a *api) constructStateEndpoints() []Endpoint {
 			Methods: []string{nethttp.MethodPost, nethttp.MethodPut},
 			Route:   "state/{storeName}/transaction",
 			Version: apiVersionV1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupState,
-				Version: EndpointGoupVersion1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupState,
+				Version:              endpoints.EndpointGroupVersion1,
+				AppendSpanAttributes: appendStateSpanAttributes,
 			},
 			Name:            "ExecuteStateTransaction",
 			FastHTTPHandler: a.onPostStateTransaction,
@@ -262,9 +274,10 @@ func (a *api) constructStateEndpoints() []Endpoint {
 			Methods: []string{nethttp.MethodPost, nethttp.MethodPut},
 			Route:   "state/{storeName}/query",
 			Version: apiVersionV1alpha1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupState,
-				Version: EndpointGoupVersion1alpha1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupState,
+				Version:              endpoints.EndpointGroupVersion1alpha1,
+				AppendSpanAttributes: appendStateSpanAttributes,
 			},
 			Name:    "QueryStateAlpha1",
 			Handler: a.onQueryStateHandler(),
@@ -272,15 +285,22 @@ func (a *api) constructStateEndpoints() []Endpoint {
 	}
 }
 
-func (a *api) constructPubSubEndpoints() []Endpoint {
-	return []Endpoint{
+func appendPubSubSpanAttributes(r *nethttp.Request, m diag.SpanAttributes) {
+	m[diag.MessagingSystemSpanAttributeKey] = "pubsub"
+	m[diag.MessagingDestinationSpanAttributeKey] = chi.URLParam(r, "topic")
+	m[diag.MessagingDestinationKindSpanAttributeKey] = diag.MessagingDestinationTopicKind
+}
+
+func (a *api) constructPubSubEndpoints() []endpoints.Endpoint {
+	return []endpoints.Endpoint{
 		{
 			Methods: []string{nethttp.MethodPost, nethttp.MethodPut},
 			Route:   "publish/{pubsubname}/*",
 			Version: apiVersionV1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupPubsub,
-				Version: EndpointGoupVersion1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupPubsub,
+				Version:              endpoints.EndpointGroupVersion1,
+				AppendSpanAttributes: appendPubSubSpanAttributes,
 			},
 			Name:            "PublishEvent",
 			FastHTTPHandler: a.onPublish,
@@ -289,9 +309,10 @@ func (a *api) constructPubSubEndpoints() []Endpoint {
 			Methods: []string{nethttp.MethodPost, nethttp.MethodPut},
 			Route:   "publish/bulk/{pubsubname}/*",
 			Version: apiVersionV1alpha1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupPubsub,
-				Version: EndpointGoupVersion1alpha1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupPubsub,
+				Version:              endpoints.EndpointGroupVersion1alpha1,
+				AppendSpanAttributes: appendPubSubSpanAttributes,
 			},
 			Name:            "BulkPublishEvent",
 			FastHTTPHandler: a.onBulkPublish,
@@ -299,15 +320,23 @@ func (a *api) constructPubSubEndpoints() []Endpoint {
 	}
 }
 
-func (a *api) constructBindingsEndpoints() []Endpoint {
-	return []Endpoint{
+func appendBindingsSpanAttributes(r *nethttp.Request, m diag.SpanAttributes) {
+	m[diag.DBSystemSpanAttributeKey] = "bindings"
+	m[diag.DBConnectionStringSpanAttributeKey] = "bindings"
+	m[diag.DBStatementSpanAttributeKey] = r.Method + " " + r.URL.Path
+	m[diag.DBNameSpanAttributeKey] = chi.URLParam(r, "name")
+}
+
+func (a *api) constructBindingsEndpoints() []endpoints.Endpoint {
+	return []endpoints.Endpoint{
 		{
 			Methods: []string{nethttp.MethodPost, nethttp.MethodPut},
 			Route:   "bindings/{name}",
 			Version: apiVersionV1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupBindings,
-				Version: EndpointGoupVersion1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupBindings,
+				Version:              endpoints.EndpointGroupVersion1,
+				AppendSpanAttributes: appendBindingsSpanAttributes,
 			},
 			Name:            "InvokeBinding",
 			FastHTTPHandler: a.onOutputBindingMessage,
@@ -315,8 +344,26 @@ func (a *api) constructBindingsEndpoints() []Endpoint {
 	}
 }
 
-func (a *api) constructDirectMessagingEndpoints() []Endpoint {
-	return []Endpoint{
+type directMessagingSpanDataCtxKey struct{}
+
+type directMessagingSpanData struct {
+	// Target app ID
+	AppID string
+	// Method invoked
+	Method string
+}
+
+func appendDirectMessagingSpanAttributes(r *nethttp.Request, m diag.SpanAttributes) {
+	spanData, _ := r.Context().Value(directMessagingSpanDataCtxKey{}).(*directMessagingSpanData)
+	if spanData != nil {
+		m[diag.GrpcServiceSpanAttributeKey] = "ServiceInvocation"
+		m[diag.NetPeerNameSpanAttributeKey] = spanData.AppID
+		m[diag.DaprAPISpanNameInternal] = "CallLocal/" + spanData.AppID + "/" + spanData.Method
+	}
+}
+
+func (a *api) constructDirectMessagingEndpoints() []endpoints.Endpoint {
+	return []endpoints.Endpoint{
 		{
 			// No method is defined here to match any method
 			Methods: []string{},
@@ -325,9 +372,10 @@ func (a *api) constructDirectMessagingEndpoints() []Endpoint {
 			IsFallback:            true,
 			Version:               apiVersionV1,
 			KeepWildcardUnescaped: true,
-			Group: EndpointGroup{
-				Name:    EndpointGroupServiceInvocation,
-				Version: EndpointGoupVersion1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupServiceInvocation,
+				Version:              endpoints.EndpointGroupVersion1,
+				AppendSpanAttributes: appendDirectMessagingSpanAttributes,
 			},
 			Name:    "InvokeService",
 			Handler: a.onDirectMessage,
@@ -335,15 +383,33 @@ func (a *api) constructDirectMessagingEndpoints() []Endpoint {
 	}
 }
 
-func (a *api) constructActorEndpoints() []Endpoint {
-	return []Endpoint{
+func appendActorStateSpanAttributesFn(r *nethttp.Request, m diag.SpanAttributes) {
+	m[diag.DaprAPIActorTypeID] = chi.URLParam(r, actorTypeParam) + "." + chi.URLParam(r, actorIDParam)
+	m[diag.DBSystemSpanAttributeKey] = "state"
+	m[diag.DBConnectionStringSpanAttributeKey] = "state"
+	m[diag.DBStatementSpanAttributeKey] = r.Method + " " + r.URL.Path
+	m[diag.DBNameSpanAttributeKey] = "actor"
+}
+
+func appendActorInvocationSpanAttributesFn(r *nethttp.Request, m diag.SpanAttributes) {
+	actorType := chi.URLParam(r, actorTypeParam)
+	actorTypeID := actorType + "." + chi.URLParam(r, actorIDParam)
+	m[diag.DaprAPIActorTypeID] = actorTypeID
+	m[diag.GrpcServiceSpanAttributeKey] = "ServiceInvocation"
+	m[diag.NetPeerNameSpanAttributeKey] = actorTypeID
+	m[diag.DaprAPISpanNameInternal] = "CallActor/" + actorType + "/" + chi.URLParam(r, "method")
+}
+
+func (a *api) constructActorEndpoints() []endpoints.Endpoint {
+	return []endpoints.Endpoint{
 		{
 			Methods: []string{nethttp.MethodPost, nethttp.MethodPut},
 			Route:   "actors/{actorType}/{actorId}/state",
 			Version: apiVersionV1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupActors,
-				Version: EndpointGoupVersion1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupActors,
+				Version:              endpoints.EndpointGroupVersion1,
+				AppendSpanAttributes: appendActorStateSpanAttributesFn,
 			},
 			Name:            "ExecuteActorStateTransaction",
 			FastHTTPHandler: a.onActorStateTransaction,
@@ -352,9 +418,10 @@ func (a *api) constructActorEndpoints() []Endpoint {
 			Methods: []string{nethttp.MethodGet, nethttp.MethodPost, nethttp.MethodDelete, nethttp.MethodPut},
 			Route:   "actors/{actorType}/{actorId}/method/{method}",
 			Version: apiVersionV1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupActors,
-				Version: EndpointGoupVersion1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupActors,
+				Version:              endpoints.EndpointGroupVersion1,
+				AppendSpanAttributes: appendActorInvocationSpanAttributesFn,
 			},
 			Name:            "InvokeActor",
 			FastHTTPHandler: a.onDirectActorMessage,
@@ -363,9 +430,10 @@ func (a *api) constructActorEndpoints() []Endpoint {
 			Methods: []string{nethttp.MethodGet},
 			Route:   "actors/{actorType}/{actorId}/state/{key}",
 			Version: apiVersionV1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupActors,
-				Version: EndpointGoupVersion1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupActors,
+				Version:              endpoints.EndpointGroupVersion1,
+				AppendSpanAttributes: appendActorStateSpanAttributesFn,
 			},
 			Name:            "GetActorState",
 			FastHTTPHandler: a.onGetActorState,
@@ -374,9 +442,10 @@ func (a *api) constructActorEndpoints() []Endpoint {
 			Methods: []string{nethttp.MethodPost, nethttp.MethodPut},
 			Route:   "actors/{actorType}/{actorId}/reminders/{name}",
 			Version: apiVersionV1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupActors,
-				Version: EndpointGoupVersion1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupActors,
+				Version:              endpoints.EndpointGroupVersion1,
+				AppendSpanAttributes: nil, // TODO
 			},
 			Name:            "RegisterActorReminder",
 			FastHTTPHandler: a.onCreateActorReminder,
@@ -385,9 +454,10 @@ func (a *api) constructActorEndpoints() []Endpoint {
 			Methods: []string{nethttp.MethodPost, nethttp.MethodPut},
 			Route:   "actors/{actorType}/{actorId}/timers/{name}",
 			Version: apiVersionV1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupActors,
-				Version: EndpointGoupVersion1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupActors,
+				Version:              endpoints.EndpointGroupVersion1,
+				AppendSpanAttributes: nil, // TODO
 			},
 			Name:            "RegisterActorTimer",
 			FastHTTPHandler: a.onCreateActorTimer,
@@ -396,9 +466,10 @@ func (a *api) constructActorEndpoints() []Endpoint {
 			Methods: []string{nethttp.MethodDelete},
 			Route:   "actors/{actorType}/{actorId}/reminders/{name}",
 			Version: apiVersionV1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupActors,
-				Version: EndpointGoupVersion1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupActors,
+				Version:              endpoints.EndpointGroupVersion1,
+				AppendSpanAttributes: nil, // TODO
 			},
 			Name:            "UnregisterActorReminder",
 			FastHTTPHandler: a.onDeleteActorReminder,
@@ -407,9 +478,10 @@ func (a *api) constructActorEndpoints() []Endpoint {
 			Methods: []string{nethttp.MethodDelete},
 			Route:   "actors/{actorType}/{actorId}/timers/{name}",
 			Version: apiVersionV1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupActors,
-				Version: EndpointGoupVersion1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupActors,
+				Version:              endpoints.EndpointGroupVersion1,
+				AppendSpanAttributes: nil, // TODO
 			},
 			Name:            "UnregisterActorTimer",
 			FastHTTPHandler: a.onDeleteActorTimer,
@@ -418,9 +490,10 @@ func (a *api) constructActorEndpoints() []Endpoint {
 			Methods: []string{nethttp.MethodGet},
 			Route:   "actors/{actorType}/{actorId}/reminders/{name}",
 			Version: apiVersionV1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupActors,
-				Version: EndpointGoupVersion1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupActors,
+				Version:              endpoints.EndpointGroupVersion1,
+				AppendSpanAttributes: nil, // TODO
 			},
 			Name:            "GetActorReminder",
 			FastHTTPHandler: a.onGetActorReminder,
@@ -429,9 +502,10 @@ func (a *api) constructActorEndpoints() []Endpoint {
 			Methods: []string{nethttp.MethodPatch},
 			Route:   "actors/{actorType}/{actorId}/reminders/{name}",
 			Version: apiVersionV1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupActors,
-				Version: EndpointGoupVersion1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupActors,
+				Version:              endpoints.EndpointGroupVersion1,
+				AppendSpanAttributes: nil, // TODO
 			},
 			Name:            "RenameActorReminder",
 			FastHTTPHandler: a.onRenameActorReminder,
@@ -439,15 +513,16 @@ func (a *api) constructActorEndpoints() []Endpoint {
 	}
 }
 
-func (a *api) constructConfigurationEndpoints() []Endpoint {
-	return []Endpoint{
+func (a *api) constructConfigurationEndpoints() []endpoints.Endpoint {
+	return []endpoints.Endpoint{
 		{
 			Methods: []string{nethttp.MethodGet},
 			Route:   "configuration/{storeName}",
 			Version: apiVersionV1alpha1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupConfiguration,
-				Version: EndpointGoupVersion1alpha1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupConfiguration,
+				Version:              endpoints.EndpointGroupVersion1alpha1,
+				AppendSpanAttributes: nil, // TODO
 			},
 			Name:            "GetConfiguration",
 			FastHTTPHandler: a.onGetConfiguration,
@@ -456,9 +531,10 @@ func (a *api) constructConfigurationEndpoints() []Endpoint {
 			Methods: []string{nethttp.MethodGet},
 			Route:   "configuration/{storeName}",
 			Version: apiVersionV1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupConfiguration,
-				Version: EndpointGoupVersion1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupConfiguration,
+				Version:              endpoints.EndpointGroupVersion1,
+				AppendSpanAttributes: nil, // TODO
 			},
 			Name:            "GetConfiguration",
 			FastHTTPHandler: a.onGetConfiguration,
@@ -467,9 +543,10 @@ func (a *api) constructConfigurationEndpoints() []Endpoint {
 			Methods: []string{nethttp.MethodGet},
 			Route:   "configuration/{storeName}/subscribe",
 			Version: apiVersionV1alpha1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupConfiguration,
-				Version: EndpointGoupVersion1alpha1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupConfiguration,
+				Version:              endpoints.EndpointGroupVersion1alpha1,
+				AppendSpanAttributes: nil, // TODO
 			},
 			Name:            "SubscribeConfiguration",
 			FastHTTPHandler: a.onSubscribeConfiguration,
@@ -478,9 +555,10 @@ func (a *api) constructConfigurationEndpoints() []Endpoint {
 			Methods: []string{nethttp.MethodGet},
 			Route:   "configuration/{storeName}/subscribe",
 			Version: apiVersionV1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupConfiguration,
-				Version: EndpointGoupVersion1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupConfiguration,
+				Version:              endpoints.EndpointGroupVersion1,
+				AppendSpanAttributes: nil, // TODO
 			},
 			Name:            "SubscribeConfiguration",
 			FastHTTPHandler: a.onSubscribeConfiguration,
@@ -489,9 +567,10 @@ func (a *api) constructConfigurationEndpoints() []Endpoint {
 			Methods: []string{nethttp.MethodGet},
 			Route:   "configuration/{storeName}/{configurationSubscribeID}/unsubscribe",
 			Version: apiVersionV1alpha1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupConfiguration,
-				Version: EndpointGoupVersion1alpha1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupConfiguration,
+				Version:              endpoints.EndpointGroupVersion1alpha1,
+				AppendSpanAttributes: nil, // TODO
 			},
 			Name:            "UnsubscribeConfiguration",
 			FastHTTPHandler: a.onUnsubscribeConfiguration,
@@ -500,9 +579,10 @@ func (a *api) constructConfigurationEndpoints() []Endpoint {
 			Methods: []string{nethttp.MethodGet},
 			Route:   "configuration/{storeName}/{configurationSubscribeID}/unsubscribe",
 			Version: apiVersionV1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupConfiguration,
-				Version: EndpointGoupVersion1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupConfiguration,
+				Version:              endpoints.EndpointGroupVersion1,
+				AppendSpanAttributes: nil, // TODO
 			},
 			Name:            "UnsubscribeConfiguration",
 			FastHTTPHandler: a.onUnsubscribeConfiguration,
@@ -1213,9 +1293,12 @@ func (a *api) onDirectMessage(w nethttp.ResponseWriter, r *nethttp.Request) {
 	}
 
 	// Store target and method as values in the context so they can be picked up by the tracing library
-	rw := responsewriter.EnsureResponseWriter(w)
-	rw.SetUserValue("id", targetID)
-	rw.SetUserValue("method", invokeMethodName)
+	spanData := &directMessagingSpanData{
+		AppID:  targetID,
+		Method: invokeMethodName,
+	}
+	ctx := context.WithValue(r.Context(), directMessagingSpanDataCtxKey{}, spanData)
+	r = r.WithContext(ctx)
 
 	verb := strings.ToUpper(r.Method)
 	if a.directMessaging == nil {
@@ -1250,7 +1333,7 @@ func (a *api) onDirectMessage(w nethttp.ResponseWriter, r *nethttp.Request) {
 	defer req.Close()
 
 	policyRunner := resiliency.NewRunnerWithOptions(
-		r.Context(), policyDef,
+		ctx, policyDef,
 		resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
 			Disposer: resiliency.DisposerCloser[*invokev1.InvokeMethodResponse],
 		},
@@ -1310,7 +1393,7 @@ func (a *api) onDirectMessage(w nethttp.ResponseWriter, r *nethttp.Request) {
 	if resp != nil {
 		headers := resp.Headers()
 		if len(headers) > 0 {
-			invokev1.InternalMetadataToHTTPHeader(r.Context(), headers, w.Header().Add)
+			invokev1.InternalMetadataToHTTPHeader(ctx, headers, w.Header().Add)
 		}
 	}
 

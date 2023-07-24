@@ -16,18 +16,20 @@ package http
 import (
 	"net/http"
 
+	"github.com/dapr/dapr/pkg/http/endpoints"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-func (a *api) constructShutdownEndpoints() []Endpoint {
-	return []Endpoint{
+func (a *api) constructShutdownEndpoints() []endpoints.Endpoint {
+	return []endpoints.Endpoint{
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "shutdown",
 			Version: apiVersionV1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupShutdown,
-				Version: EndpointGoupVersion1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupShutdown,
+				Version:              endpoints.EndpointGroupVersion1,
+				AppendSpanAttributes: nil, // TODO
 			},
 			Name: "Shutdown",
 			Handler: UniversalHTTPHandler(

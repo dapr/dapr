@@ -60,7 +60,7 @@ func TestSpanAttributesMapFromGRPC(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.rpcMethod, func(t *testing.T) {
 			got := spanAttributesMapFromGRPC("fakeAppID", tt.req, tt.rpcMethod)
-			assert.Equal(t, tt.expectedServiceNameAttribute, got[gRPCServiceSpanAttributeKey], "servicename attribute should be equal")
+			assert.Equal(t, tt.expectedServiceNameAttribute, got[GrpcServiceSpanAttributeKey], "servicename attribute should be equal")
 		})
 	}
 }

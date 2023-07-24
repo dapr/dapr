@@ -62,6 +62,7 @@ import (
 	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/expr"
 	"github.com/dapr/dapr/pkg/grpc/universalapi"
+	"github.com/dapr/dapr/pkg/http/endpoints"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
@@ -4057,7 +4058,7 @@ type fakeHTTPServerOptions struct {
 	apiAuth  bool
 }
 
-func (f *fakeHTTPServer) StartServer(endpoints []Endpoint, opts *fakeHTTPServerOptions) {
+func (f *fakeHTTPServer) StartServer(endpoints []endpoints.Endpoint, opts *fakeHTTPServerOptions) {
 	if opts == nil {
 		opts = &fakeHTTPServerOptions{}
 	}
@@ -4089,7 +4090,7 @@ func (f *fakeHTTPServer) StartServer(endpoints []Endpoint, opts *fakeHTTPServerO
 	}
 }
 
-func (f *fakeHTTPServer) getRouter(endpoints []Endpoint, apiAuth bool) chi.Router {
+func (f *fakeHTTPServer) getRouter(endpoints []endpoints.Endpoint, apiAuth bool) chi.Router {
 	srv := &server{}
 
 	r := srv.getRouter()
@@ -5006,7 +5007,7 @@ func TestV1SecretEndpoints(t *testing.T) {
 			Resiliency: res,
 		},
 	}
-	fakeServer.StartServer(testAPI.constructSecretEndpoints(), nil)
+	fakeServer.StartServer(testAPI.constructSecretsEndpoints(), nil)
 	storeName := "store1"
 	deniedStoreName := "store2"
 	restrictedStore := "store3"

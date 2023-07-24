@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package http
+package endpoints
 
 import (
 	"net/http"
@@ -21,41 +21,6 @@ import (
 
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/utils/nethttpadaptor"
-)
-
-// EndpointGroup is a group of endpoints.
-type EndpointGroup struct {
-	Name    EndpointGroupName
-	Version EndpointGroupVersion
-}
-
-// EndpointGroupName is the name of an endpoint group.
-type EndpointGroupName string
-
-const (
-	EndpointGroupServiceInvocation EndpointGroupName = "invoke"
-	EndpointGroupState             EndpointGroupName = "state"
-	EndpointGroupPubsub            EndpointGroupName = "pubsub"
-	EndpointGroupBindings          EndpointGroupName = "bindings"
-	EndpointGroupSecrets           EndpointGroupName = "secrets"
-	EndpointGroupActors            EndpointGroupName = "actors"
-	EndpointGroupMetadata          EndpointGroupName = "metadata"
-	EndpointGroupConfiguration     EndpointGroupName = "configuration"
-	EndpointGroupLock              EndpointGroupName = "lock"
-	EndpointGroupUnlock            EndpointGroupName = "unlock"
-	EndpointGroupCrypto            EndpointGroupName = "crypto"
-	EndpointGroupSubtleCrypto      EndpointGroupName = "subtlecrypto"
-	EndpointGroupWorkflow          EndpointGroupName = "workflows"
-	EndpointGroupHealth            EndpointGroupName = "healthz"
-	EndpointGroupShutdown          EndpointGroupName = "shutdown"
-)
-
-// EndpointGroupVersion is the version of an endpoint group.
-type EndpointGroupVersion string
-
-const (
-	EndpointGoupVersion1       EndpointGroupVersion = "v1"       // Alias: v1.0
-	EndpointGoupVersion1alpha1 EndpointGroupVersion = "v1alpha1" // Alias: v1.0-alpha1
 )
 
 // Endpoint is a collection of route information for an Dapr API.
@@ -71,6 +36,7 @@ type Endpoint struct {
 	Handler               http.HandlerFunc
 	AlwaysAllowed         bool // Endpoint is always allowed regardless of API access rules
 	IsHealthCheck         bool // Mark endpoint as healthcheck - for API logging purposes
+	BypassAPITokenAuth    bool // Endpoint bypasses API token authentication
 }
 
 // GetHandler returns the handler for the endpoint.

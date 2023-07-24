@@ -21,6 +21,7 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/dapr/dapr/pkg/http/endpoints"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
@@ -28,15 +29,16 @@ import (
 // Workflow Component: Component specified in yaml
 // Workflow Name: Name of the workflow to run
 // Instance ID: Identifier of the specific run
-func (a *api) constructWorkflowEndpoints() []Endpoint {
-	return []Endpoint{
+func (a *api) constructWorkflowEndpoints() []endpoints.Endpoint {
+	return []endpoints.Endpoint{
 		{
 			Methods: []string{http.MethodGet},
 			Route:   "workflows/{workflowComponent}/{instanceID}",
 			Version: apiVersionV1alpha1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupWorkflow,
-				Version: EndpointGoupVersion1alpha1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupWorkflow,
+				Version:              endpoints.EndpointGroupVersion1alpha1,
+				AppendSpanAttributes: nil, // TODO
 			},
 			Name:    "GetWorkflow",
 			Handler: a.onGetWorkflowHandler(),
@@ -45,9 +47,10 @@ func (a *api) constructWorkflowEndpoints() []Endpoint {
 			Methods: []string{http.MethodPost},
 			Route:   "workflows/{workflowComponent}/{instanceID}/raiseEvent/{eventName}",
 			Version: apiVersionV1alpha1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupWorkflow,
-				Version: EndpointGoupVersion1alpha1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupWorkflow,
+				Version:              endpoints.EndpointGroupVersion1alpha1,
+				AppendSpanAttributes: nil, // TODO
 			},
 			Name:    "RaiseEventWorkflow",
 			Handler: a.onRaiseEventWorkflowHandler(),
@@ -56,9 +59,10 @@ func (a *api) constructWorkflowEndpoints() []Endpoint {
 			Methods: []string{http.MethodPost},
 			Route:   "workflows/{workflowComponent}/{workflowName}/start",
 			Version: apiVersionV1alpha1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupWorkflow,
-				Version: EndpointGoupVersion1alpha1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupWorkflow,
+				Version:              endpoints.EndpointGroupVersion1alpha1,
+				AppendSpanAttributes: nil, // TODO
 			},
 			Name:    "StartWorkflow",
 			Handler: a.onStartWorkflowHandler(),
@@ -67,9 +71,10 @@ func (a *api) constructWorkflowEndpoints() []Endpoint {
 			Methods: []string{http.MethodPost},
 			Route:   "workflows/{workflowComponent}/{instanceID}/pause",
 			Version: apiVersionV1alpha1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupWorkflow,
-				Version: EndpointGoupVersion1alpha1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupWorkflow,
+				Version:              endpoints.EndpointGroupVersion1alpha1,
+				AppendSpanAttributes: nil, // TODO
 			},
 			Name:    "PauseWorkflow",
 			Handler: a.onPauseWorkflowHandler(),
@@ -78,9 +83,10 @@ func (a *api) constructWorkflowEndpoints() []Endpoint {
 			Methods: []string{http.MethodPost},
 			Route:   "workflows/{workflowComponent}/{instanceID}/resume",
 			Version: apiVersionV1alpha1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupWorkflow,
-				Version: EndpointGoupVersion1alpha1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupWorkflow,
+				Version:              endpoints.EndpointGroupVersion1alpha1,
+				AppendSpanAttributes: nil, // TODO
 			},
 			Name:    "esumeWorkflow",
 			Handler: a.onResumeWorkflowHandler(),
@@ -89,9 +95,10 @@ func (a *api) constructWorkflowEndpoints() []Endpoint {
 			Methods: []string{http.MethodPost},
 			Route:   "workflows/{workflowComponent}/{instanceID}/terminate",
 			Version: apiVersionV1alpha1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupWorkflow,
-				Version: EndpointGoupVersion1alpha1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupWorkflow,
+				Version:              endpoints.EndpointGroupVersion1alpha1,
+				AppendSpanAttributes: nil, // TODO
 			},
 			Name:    "inateWorkflow",
 			Handler: a.onTerminateWorkflowHandler(),
@@ -100,9 +107,10 @@ func (a *api) constructWorkflowEndpoints() []Endpoint {
 			Methods: []string{http.MethodPost},
 			Route:   "workflows/{workflowComponent}/{instanceID}/purge",
 			Version: apiVersionV1alpha1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupWorkflow,
-				Version: EndpointGoupVersion1alpha1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupWorkflow,
+				Version:              endpoints.EndpointGroupVersion1alpha1,
+				AppendSpanAttributes: nil, // TODO
 			},
 			Name:    "PurgeWorkflow",
 			Handler: a.onPurgeWorkflowHandler(),

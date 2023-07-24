@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/http/endpoints"
 )
 
 const (
@@ -52,13 +53,13 @@ func TestAPIAllowlist(t *testing.T) {
 			assert.True(t, valid)
 		}
 
-		allOtherEndpoints := []Endpoint{}
+		allOtherEndpoints := []endpoints.Endpoint{}
 		allOtherEndpoints = append(allOtherEndpoints, a.constructActorEndpoints()...)
 		allOtherEndpoints = append(allOtherEndpoints, a.constructBindingsEndpoints()...)
 		allOtherEndpoints = append(allOtherEndpoints, a.constructDirectMessagingEndpoints()...)
 		allOtherEndpoints = append(allOtherEndpoints, a.constructMetadataEndpoints()...)
 		allOtherEndpoints = append(allOtherEndpoints, a.constructPubSubEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructSecretEndpoints()...)
+		allOtherEndpoints = append(allOtherEndpoints, a.constructSecretsEndpoints()...)
 		allOtherEndpoints = append(allOtherEndpoints, a.constructShutdownEndpoints()...)
 		allOtherEndpoints = append(allOtherEndpoints, a.constructHealthzEndpoints()...)
 
@@ -96,13 +97,13 @@ func TestAPIAllowlist(t *testing.T) {
 			assert.False(t, valid, e.Route)
 		}
 
-		allOtherEndpoints := []Endpoint{}
+		allOtherEndpoints := []endpoints.Endpoint{}
 		allOtherEndpoints = append(allOtherEndpoints, a.constructActorEndpoints()...)
 		allOtherEndpoints = append(allOtherEndpoints, a.constructBindingsEndpoints()...)
 		allOtherEndpoints = append(allOtherEndpoints, a.constructDirectMessagingEndpoints()...)
 		allOtherEndpoints = append(allOtherEndpoints, a.constructMetadataEndpoints()...)
 		allOtherEndpoints = append(allOtherEndpoints, a.constructPubSubEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructSecretEndpoints()...)
+		allOtherEndpoints = append(allOtherEndpoints, a.constructSecretsEndpoints()...)
 		allOtherEndpoints = append(allOtherEndpoints, a.constructShutdownEndpoints()...)
 		allOtherEndpoints = append(allOtherEndpoints, a.constructHealthzEndpoints()...)
 
@@ -134,13 +135,13 @@ func TestAPIAllowlist(t *testing.T) {
 			assert.True(t, valid)
 		}
 
-		allOtherEndpoints := []Endpoint{}
+		allOtherEndpoints := []endpoints.Endpoint{}
 		allOtherEndpoints = append(allOtherEndpoints, a.constructActorEndpoints()...)
 		allOtherEndpoints = append(allOtherEndpoints, a.constructBindingsEndpoints()...)
 		allOtherEndpoints = append(allOtherEndpoints, a.constructDirectMessagingEndpoints()...)
 		allOtherEndpoints = append(allOtherEndpoints, a.constructMetadataEndpoints()...)
 		allOtherEndpoints = append(allOtherEndpoints, a.constructStateEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructSecretEndpoints()...)
+		allOtherEndpoints = append(allOtherEndpoints, a.constructSecretsEndpoints()...)
 		allOtherEndpoints = append(allOtherEndpoints, a.constructShutdownEndpoints()...)
 		allOtherEndpoints = append(allOtherEndpoints, a.constructHealthzEndpoints()...)
 
@@ -173,13 +174,13 @@ func TestAPIAllowlist(t *testing.T) {
 			assert.True(t, valid)
 		}
 
-		allOtherEndpoints := []Endpoint{}
+		allOtherEndpoints := []endpoints.Endpoint{}
 		allOtherEndpoints = append(allOtherEndpoints, a.constructActorEndpoints()...)
 		allOtherEndpoints = append(allOtherEndpoints, a.constructBindingsEndpoints()...)
 		allOtherEndpoints = append(allOtherEndpoints, a.constructPubSubEndpoints()...)
 		allOtherEndpoints = append(allOtherEndpoints, a.constructMetadataEndpoints()...)
 		allOtherEndpoints = append(allOtherEndpoints, a.constructStateEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructSecretEndpoints()...)
+		allOtherEndpoints = append(allOtherEndpoints, a.constructSecretsEndpoints()...)
 		allOtherEndpoints = append(allOtherEndpoints, a.constructShutdownEndpoints()...)
 		allOtherEndpoints = append(allOtherEndpoints, a.constructHealthzEndpoints()...)
 
@@ -211,13 +212,13 @@ func TestAPIAllowlist(t *testing.T) {
 			assert.True(t, valid)
 		}
 
-		allOtherEndpoints := []Endpoint{}
+		allOtherEndpoints := []endpoints.Endpoint{}
 		allOtherEndpoints = append(allOtherEndpoints, a.constructActorEndpoints()...)
 		allOtherEndpoints = append(allOtherEndpoints, a.constructDirectMessagingEndpoints()...)
 		allOtherEndpoints = append(allOtherEndpoints, a.constructPubSubEndpoints()...)
 		allOtherEndpoints = append(allOtherEndpoints, a.constructMetadataEndpoints()...)
 		allOtherEndpoints = append(allOtherEndpoints, a.constructStateEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructSecretEndpoints()...)
+		allOtherEndpoints = append(allOtherEndpoints, a.constructSecretsEndpoints()...)
 		allOtherEndpoints = append(allOtherEndpoints, a.constructShutdownEndpoints()...)
 		allOtherEndpoints = append(allOtherEndpoints, a.constructHealthzEndpoints()...)
 
@@ -250,13 +251,13 @@ func TestAPIAllowlist(t *testing.T) {
 			assert.True(t, valid)
 		}
 
-		allOtherEndpoints := []Endpoint{}
+		allOtherEndpoints := []endpoints.Endpoint{}
 		allOtherEndpoints = append(allOtherEndpoints, a.constructActorEndpoints()...)
 		allOtherEndpoints = append(allOtherEndpoints, a.constructDirectMessagingEndpoints()...)
 		allOtherEndpoints = append(allOtherEndpoints, a.constructPubSubEndpoints()...)
 		allOtherEndpoints = append(allOtherEndpoints, a.constructBindingsEndpoints()...)
 		allOtherEndpoints = append(allOtherEndpoints, a.constructStateEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructSecretEndpoints()...)
+		allOtherEndpoints = append(allOtherEndpoints, a.constructSecretsEndpoints()...)
 		allOtherEndpoints = append(allOtherEndpoints, a.constructShutdownEndpoints()...)
 		allOtherEndpoints = append(allOtherEndpoints, a.constructHealthzEndpoints()...)
 
@@ -282,14 +283,14 @@ func TestAPIAllowlist(t *testing.T) {
 		}.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
 
 		a := &api{}
-		eps := a.constructSecretEndpoints()
+		eps := a.constructSecretsEndpoints()
 
 		for _, e := range eps {
 			valid := e.IsAllowed(allowed, nil)
 			assert.True(t, valid)
 		}
 
-		allOtherEndpoints := []Endpoint{}
+		allOtherEndpoints := []endpoints.Endpoint{}
 		allOtherEndpoints = append(allOtherEndpoints, a.constructActorEndpoints()...)
 		allOtherEndpoints = append(allOtherEndpoints, a.constructDirectMessagingEndpoints()...)
 		allOtherEndpoints = append(allOtherEndpoints, a.constructPubSubEndpoints()...)
@@ -328,14 +329,14 @@ func TestAPIAllowlist(t *testing.T) {
 			assert.True(t, valid)
 		}
 
-		allOtherEndpoints := []Endpoint{}
+		allOtherEndpoints := []endpoints.Endpoint{}
 		allOtherEndpoints = append(allOtherEndpoints, a.constructActorEndpoints()...)
 		allOtherEndpoints = append(allOtherEndpoints, a.constructDirectMessagingEndpoints()...)
 		allOtherEndpoints = append(allOtherEndpoints, a.constructPubSubEndpoints()...)
 		allOtherEndpoints = append(allOtherEndpoints, a.constructBindingsEndpoints()...)
 		allOtherEndpoints = append(allOtherEndpoints, a.constructStateEndpoints()...)
 		allOtherEndpoints = append(allOtherEndpoints, a.constructMetadataEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructSecretEndpoints()...)
+		allOtherEndpoints = append(allOtherEndpoints, a.constructSecretsEndpoints()...)
 		allOtherEndpoints = append(allOtherEndpoints, a.constructHealthzEndpoints()...)
 
 		for _, e := range allOtherEndpoints {
@@ -373,14 +374,14 @@ func TestAPIAllowlist(t *testing.T) {
 		}.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
 
 		a := &api{}
-		allEndpoints := []Endpoint{}
+		allEndpoints := []endpoints.Endpoint{}
 		allEndpoints = append(allEndpoints, a.constructDirectMessagingEndpoints()...)
 		allEndpoints = append(allEndpoints, a.constructActorEndpoints()...)
 		allEndpoints = append(allEndpoints, a.constructBindingsEndpoints()...)
 		allEndpoints = append(allEndpoints, a.constructStateEndpoints()...)
 		allEndpoints = append(allEndpoints, a.constructMetadataEndpoints()...)
 		allEndpoints = append(allEndpoints, a.constructPubSubEndpoints()...)
-		allEndpoints = append(allEndpoints, a.constructSecretEndpoints()...)
+		allEndpoints = append(allEndpoints, a.constructSecretsEndpoints()...)
 		allEndpoints = append(allEndpoints, a.constructShutdownEndpoints()...)
 		allEndpoints = append(allEndpoints, a.constructHealthzEndpoints()...)
 
@@ -421,14 +422,14 @@ func TestAPIAllowlist(t *testing.T) {
 		}.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
 
 		a := &api{}
-		allEndpoints := []Endpoint{}
+		allEndpoints := []endpoints.Endpoint{}
 		allEndpoints = append(allEndpoints, a.constructDirectMessagingEndpoints()...)
 		allEndpoints = append(allEndpoints, a.constructActorEndpoints()...)
 		allEndpoints = append(allEndpoints, a.constructBindingsEndpoints()...)
 		allEndpoints = append(allEndpoints, a.constructStateEndpoints()...)
 		allEndpoints = append(allEndpoints, a.constructMetadataEndpoints()...)
 		allEndpoints = append(allEndpoints, a.constructPubSubEndpoints()...)
-		allEndpoints = append(allEndpoints, a.constructSecretEndpoints()...)
+		allEndpoints = append(allEndpoints, a.constructSecretsEndpoints()...)
 		allEndpoints = append(allEndpoints, a.constructShutdownEndpoints()...)
 		allEndpoints = append(allEndpoints, a.constructHealthzEndpoints()...)
 

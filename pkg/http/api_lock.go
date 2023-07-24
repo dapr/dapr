@@ -21,18 +21,20 @@ import (
 	"github.com/valyala/fasthttp"
 	"google.golang.org/protobuf/encoding/protojson"
 
+	"github.com/dapr/dapr/pkg/http/endpoints"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
-func (a *api) constructDistributedLockEndpoints() []Endpoint {
-	return []Endpoint{
+func (a *api) constructDistributedLockEndpoints() []endpoints.Endpoint {
+	return []endpoints.Endpoint{
 		{
 			Methods: []string{fasthttp.MethodPost},
 			Route:   "lock/{storeName}",
 			Version: apiVersionV1alpha1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupLock,
-				Version: EndpointGoupVersion1alpha1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupLock,
+				Version:              endpoints.EndpointGroupVersion1alpha1,
+				AppendSpanAttributes: nil, // TODO
 			},
 			Name:    "TrytLock",
 			Handler: a.onTryLockAlpha1(),
@@ -41,9 +43,10 @@ func (a *api) constructDistributedLockEndpoints() []Endpoint {
 			Methods: []string{fasthttp.MethodPost},
 			Route:   "unlock/{storeName}",
 			Version: apiVersionV1alpha1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupUnlock,
-				Version: EndpointGoupVersion1alpha1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupUnlock,
+				Version:              endpoints.EndpointGroupVersion1alpha1,
+				AppendSpanAttributes: nil, // TODO
 			},
 			Name:    "Unlock",
 			Handler: a.onUnlockAlpha1(),

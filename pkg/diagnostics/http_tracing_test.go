@@ -146,32 +146,6 @@ func TestSpanContextToHTTPHeaders(t *testing.T) {
 	})
 }
 
-func TestGetAPIComponent(t *testing.T) {
-	tests := []struct {
-		path    string
-		version string
-		api     string
-	}{
-		{"/v1.0/state/statestore/key", "v1.0", "state"},
-		{"/v1.0/state/statestore", "v1.0", "state"},
-		{"/v1.0/secrets/keyvault/name", "v1.0", "secrets"},
-		{"/v1.0/invoke/fakeApp/method/add", "v1.0", "invoke"},
-		{"/v1/publish/topicA", "v1", "publish"},
-		{"/v1/bindings/kafka", "v1", "bindings"},
-		{"/healthz", "", ""},
-		{"/v1/actors/DemoActor/1/state/key", "v1", "actors"},
-		{"", "", ""},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.path, func(t *testing.T) {
-			ver, api := getAPIComponent(tt.path)
-			assert.Equal(t, tt.version, ver)
-			assert.Equal(t, tt.api, api)
-		})
-	}
-}
-
 func TestGetSpanAttributesMapFromHTTPContext(t *testing.T) {
 	tests := []struct {
 		path string
@@ -180,72 +154,72 @@ func TestGetSpanAttributesMapFromHTTPContext(t *testing.T) {
 		{
 			"/v1.0/state/statestore/key",
 			map[string]string{
-				dbSystemSpanAttributeKey:           "state",
-				dbNameSpanAttributeKey:             "statestore",
-				dbStatementSpanAttributeKey:        "GET /v1.0/state/statestore/key",
-				dbConnectionStringSpanAttributeKey: "state",
+				DBSystemSpanAttributeKey:           "state",
+				DBNameSpanAttributeKey:             "statestore",
+				DBStatementSpanAttributeKey:        "GET /v1.0/state/statestore/key",
+				DBConnectionStringSpanAttributeKey: "state",
 			},
 		},
 		{
 			"/v1.0/state/statestore",
 			map[string]string{
-				dbSystemSpanAttributeKey:           "state",
-				dbNameSpanAttributeKey:             "statestore",
-				dbStatementSpanAttributeKey:        "GET /v1.0/state/statestore",
-				dbConnectionStringSpanAttributeKey: "state",
+				DBSystemSpanAttributeKey:           "state",
+				DBNameSpanAttributeKey:             "statestore",
+				DBStatementSpanAttributeKey:        "GET /v1.0/state/statestore",
+				DBConnectionStringSpanAttributeKey: "state",
 			},
 		},
 		{
 			"/v1.0/secrets/keyvault/name",
 			map[string]string{
-				dbSystemSpanAttributeKey:           secretBuildingBlockType,
-				dbNameSpanAttributeKey:             "keyvault",
-				dbStatementSpanAttributeKey:        "GET /v1.0/secrets/keyvault/name",
-				dbConnectionStringSpanAttributeKey: secretBuildingBlockType,
+				DBSystemSpanAttributeKey:           secretBuildingBlockType,
+				DBNameSpanAttributeKey:             "keyvault",
+				DBStatementSpanAttributeKey:        "GET /v1.0/secrets/keyvault/name",
+				DBConnectionStringSpanAttributeKey: secretBuildingBlockType,
 			},
 		},
 		{
 			"/v1.0/invoke/fakeApp/method/add",
 			map[string]string{
-				gRPCServiceSpanAttributeKey: daprGRPCServiceInvocationService,
-				netPeerNameSpanAttributeKey: "fakeApp",
-				daprAPISpanNameInternal:     "CallLocal/fakeApp/add",
+				GrpcServiceSpanAttributeKey: daprGRPCServiceInvocationService,
+				NetPeerNameSpanAttributeKey: "fakeApp",
+				DaprAPISpanNameInternal:     "CallLocal/fakeApp/add",
 			},
 		},
 		{
 			"/v1/publish/topicA",
 			map[string]string{
-				messagingSystemSpanAttributeKey:          pubsubBuildingBlockType,
-				messagingDestinationSpanAttributeKey:     "topicA",
-				messagingDestinationKindSpanAttributeKey: messagingDestinationTopicKind,
+				MessagingSystemSpanAttributeKey:          pubsubBuildingBlockType,
+				MessagingDestinationSpanAttributeKey:     "topicA",
+				MessagingDestinationKindSpanAttributeKey: MessagingDestinationTopicKind,
 			},
 		},
 		{
 			"/v1/bindings/kafka",
 			map[string]string{
-				dbSystemSpanAttributeKey:           bindingBuildingBlockType,
-				dbNameSpanAttributeKey:             "kafka",
-				dbStatementSpanAttributeKey:        "GET /v1/bindings/kafka",
-				dbConnectionStringSpanAttributeKey: bindingBuildingBlockType,
+				DBSystemSpanAttributeKey:           bindingBuildingBlockType,
+				DBNameSpanAttributeKey:             "kafka",
+				DBStatementSpanAttributeKey:        "GET /v1/bindings/kafka",
+				DBConnectionStringSpanAttributeKey: bindingBuildingBlockType,
 			},
 		},
 		{
 			"/v1.0/actors/demo_actor/1/state/my_data",
 			map[string]string{
-				dbSystemSpanAttributeKey:           stateBuildingBlockType,
-				dbNameSpanAttributeKey:             "actor",
-				dbStatementSpanAttributeKey:        "GET /v1.0/actors/demo_actor/1/state/my_data",
-				dbConnectionStringSpanAttributeKey: stateBuildingBlockType,
-				daprAPIActorTypeID:                 "demo_actor.1",
+				DBSystemSpanAttributeKey:           stateBuildingBlockType,
+				DBNameSpanAttributeKey:             "actor",
+				DBStatementSpanAttributeKey:        "GET /v1.0/actors/demo_actor/1/state/my_data",
+				DBConnectionStringSpanAttributeKey: stateBuildingBlockType,
+				DaprAPIActorTypeID:                 "demo_actor.1",
 			},
 		},
 		{
 			"/v1.0/actors/demo_actor/1/method/method1",
 			map[string]string{
-				gRPCServiceSpanAttributeKey: daprGRPCServiceInvocationService,
-				netPeerNameSpanAttributeKey: "demo_actor.1",
-				daprAPIActorTypeID:          "demo_actor.1",
-				daprAPISpanNameInternal:     "CallActor/demo_actor/add",
+				GrpcServiceSpanAttributeKey: daprGRPCServiceInvocationService,
+				NetPeerNameSpanAttributeKey: "demo_actor.1",
+				DaprAPIActorTypeID:          "demo_actor.1",
+				DaprAPISpanNameInternal:     "CallActor/demo_actor/add",
 			},
 		},
 	}

@@ -18,18 +18,20 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/dapr/dapr/pkg/http/endpoints"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
-func (a *api) constructSubtleCryptoEndpoints() []Endpoint {
-	return []Endpoint{
+func (a *api) constructSubtleCryptoEndpoints() []endpoints.Endpoint {
+	return []endpoints.Endpoint{
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "subtlecrypto/{name}/getkey",
 			Version: apiVersionV1alpha1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupSubtleCrypto,
-				Version: EndpointGoupVersion1alpha1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupSubtleCrypto,
+				Version:              endpoints.EndpointGroupVersion1alpha1,
+				AppendSpanAttributes: nil, // TODO
 			},
 			Name:    "SubtleGetKey",
 			Handler: a.onPostSubtleCryptoGetKey(),
@@ -38,9 +40,10 @@ func (a *api) constructSubtleCryptoEndpoints() []Endpoint {
 			Methods: []string{http.MethodPost},
 			Route:   "subtlecrypto/{name}/encrypt",
 			Version: apiVersionV1alpha1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupSubtleCrypto,
-				Version: EndpointGoupVersion1alpha1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupSubtleCrypto,
+				Version:              endpoints.EndpointGroupVersion1alpha1,
+				AppendSpanAttributes: nil, // TODO
 			},
 			Name:    "SubtleEncrypt",
 			Handler: a.onPostSubtleCryptoEncrypt(),
@@ -49,9 +52,10 @@ func (a *api) constructSubtleCryptoEndpoints() []Endpoint {
 			Methods: []string{http.MethodPost},
 			Route:   "subtlecrypto/{name}/decrypt",
 			Version: apiVersionV1alpha1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupSubtleCrypto,
-				Version: EndpointGoupVersion1alpha1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupSubtleCrypto,
+				Version:              endpoints.EndpointGroupVersion1alpha1,
+				AppendSpanAttributes: nil, // TODO
 			},
 			Name:    "SubtleDecrypt",
 			Handler: a.onPostSubtleCryptoDecrypt(),
@@ -60,9 +64,10 @@ func (a *api) constructSubtleCryptoEndpoints() []Endpoint {
 			Methods: []string{http.MethodPost},
 			Route:   "subtlecrypto/{name}/wrapkey",
 			Version: apiVersionV1alpha1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupSubtleCrypto,
-				Version: EndpointGoupVersion1alpha1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupSubtleCrypto,
+				Version:              endpoints.EndpointGroupVersion1alpha1,
+				AppendSpanAttributes: nil, // TODO
 			},
 			Name:    "SubtleWrapKey",
 			Handler: a.onPostSubtleCryptoWrapKey(),
@@ -71,9 +76,10 @@ func (a *api) constructSubtleCryptoEndpoints() []Endpoint {
 			Methods: []string{http.MethodPost},
 			Route:   "subtlecrypto/{name}/unwrapkey",
 			Version: apiVersionV1alpha1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupSubtleCrypto,
-				Version: EndpointGoupVersion1alpha1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupSubtleCrypto,
+				Version:              endpoints.EndpointGroupVersion1alpha1,
+				AppendSpanAttributes: nil, // TODO
 			},
 			Name:    "SubtleUnwrapKey",
 			Handler: a.onPostSubtleCryptoUnwrapKey(),
@@ -82,9 +88,10 @@ func (a *api) constructSubtleCryptoEndpoints() []Endpoint {
 			Methods: []string{http.MethodPost},
 			Route:   "subtlecrypto/{name}/sign",
 			Version: apiVersionV1alpha1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupSubtleCrypto,
-				Version: EndpointGoupVersion1alpha1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupSubtleCrypto,
+				Version:              endpoints.EndpointGroupVersion1alpha1,
+				AppendSpanAttributes: nil, // TODO
 			},
 			Name:    "SubtleSign",
 			Handler: a.onPostSubtleCryptoSign(),
@@ -93,9 +100,10 @@ func (a *api) constructSubtleCryptoEndpoints() []Endpoint {
 			Methods: []string{http.MethodPost},
 			Route:   "subtlecrypto/{name}/verify",
 			Version: apiVersionV1alpha1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupSubtleCrypto,
-				Version: EndpointGoupVersion1alpha1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupSubtleCrypto,
+				Version:              endpoints.EndpointGroupVersion1alpha1,
+				AppendSpanAttributes: nil, // TODO
 			},
 			Name:    "SubtleVerify",
 			Handler: a.onPostSubtleCryptoVerify(),

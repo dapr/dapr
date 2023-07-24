@@ -31,6 +31,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/cors"
+	"github.com/dapr/dapr/pkg/http/endpoints"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	dapr_testing "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/logger"
@@ -96,7 +97,7 @@ func TestUnescapeRequestParametersHandler(t *testing.T) {
 	}
 
 	t.Run("unescapeRequestParametersHandler is added as middleware if the endpoint includes Parameters in its path", func(t *testing.T) {
-		endpoints := []Endpoint{
+		endpoints := []endpoints.Endpoint{
 			{
 				Methods: []string{http.MethodGet},
 				Route:   "state/{storeName}/{key}",
@@ -145,7 +146,7 @@ func TestUnescapeRequestParametersHandler(t *testing.T) {
 	})
 
 	t.Run("unescapeRequestParameterHandler is not added as middleware if the endpoint does not include Parameters in its path", func(t *testing.T) {
-		endpoints := []Endpoint{
+		endpoints := []endpoints.Endpoint{
 			{
 				Methods: []string{http.MethodGet},
 				Route:   "metadata",
@@ -261,7 +262,7 @@ func TestAPILogging(t *testing.T) {
 
 	body := []byte("👋")
 
-	endpoints := []Endpoint{
+	endpoints := []endpoints.Endpoint{
 		{
 			Methods: []string{http.MethodGet, http.MethodPost},
 			Route:   "state/{storeName}/{key}",
@@ -343,7 +344,7 @@ func TestAPILoggingOmitHealthChecks(t *testing.T) {
 
 	body := []byte("👋")
 
-	endpoints := []Endpoint{
+	endpoints := []endpoints.Endpoint{
 		{
 			Methods: []string{http.MethodGet},
 			Route:   "log",

@@ -15,21 +15,32 @@ package http
 
 import (
 	"net/http"
+	nethttp "net/http"
 
 	"github.com/go-chi/chi/v5"
 
+	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/http/endpoints"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
-func (a *api) constructSecretEndpoints() []Endpoint {
-	return []Endpoint{
+func appendSecretsSpanAttributes(r *nethttp.Request, m diag.SpanAttributes) {
+	m[diag.DBSystemSpanAttributeKey] = "secrets"
+	m[diag.DBConnectionStringSpanAttributeKey] = "secrets"
+	m[diag.DBStatementSpanAttributeKey] = r.Method + " " + r.URL.Path
+	m[diag.DBNameSpanAttributeKey] = chi.URLParam(r, "secretStoreName")
+}
+
+func (a *api) constructSecretsEndpoints() []endpoints.Endpoint {
+	return []endpoints.Endpoint{
 		{
 			Methods: []string{http.MethodGet},
 			Route:   "secrets/{secretStoreName}/bulk",
 			Version: apiVersionV1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupSecrets,
-				Version: EndpointGoupVersion1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupSecrets,
+				Version:              endpoints.EndpointGroupVersion1,
+				AppendSpanAttributes: appendSecretsSpanAttributes,
 			},
 			Name:    "GetBulkSecret",
 			Handler: a.onBulkGetSecretHandler(),
@@ -38,9 +49,10 @@ func (a *api) constructSecretEndpoints() []Endpoint {
 			Methods: []string{http.MethodGet},
 			Route:   "secrets/{secretStoreName}/{key}",
 			Version: apiVersionV1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupSecrets,
-				Version: EndpointGoupVersion1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupSecrets,
+				Version:              endpoints.EndpointGroupVersion1,
+				AppendSpanAttributes: appendSecretsSpanAttributes,
 			},
 			Name:    "GetSecret",
 			Handler: a.onGetSecretHandler(),

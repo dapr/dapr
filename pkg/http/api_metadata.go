@@ -20,19 +20,21 @@ import (
 	"github.com/go-chi/chi/v5"
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/dapr/dapr/pkg/http/endpoints"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
-func (a *api) constructMetadataEndpoints() []Endpoint {
-	return []Endpoint{
+func (a *api) constructMetadataEndpoints() []endpoints.Endpoint {
+	return []endpoints.Endpoint{
 		{
 			Methods: []string{http.MethodGet},
 			Route:   "metadata",
 			Version: apiVersionV1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupMetadata,
-				Version: EndpointGoupVersion1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupMetadata,
+				Version:              endpoints.EndpointGroupVersion1,
+				AppendSpanAttributes: nil, // TODO
 			},
 			Name:    "GetMetadata",
 			Handler: a.onGetMetadata(),
@@ -41,9 +43,10 @@ func (a *api) constructMetadataEndpoints() []Endpoint {
 			Methods: []string{http.MethodPut},
 			Route:   "metadata/{key}",
 			Version: apiVersionV1,
-			Group: EndpointGroup{
-				Name:    EndpointGroupMetadata,
-				Version: EndpointGoupVersion1,
+			Group: endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupMetadata,
+				Version:              endpoints.EndpointGroupVersion1,
+				AppendSpanAttributes: nil, // TODO
 			},
 			Name:    "PutMetadata",
 			Handler: a.onPutMetadata(),
