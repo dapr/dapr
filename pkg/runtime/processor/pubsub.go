@@ -64,6 +64,7 @@ func (p *pubsub) init(ctx context.Context, comp compapi.Component) error {
 		ScopedSubscriptions: scopes.GetScopedTopics(scopes.SubscriptionScopes, p.id, properties),
 		ScopedPublishings:   scopes.GetScopedTopics(scopes.PublishingScopes, p.id, properties),
 		AllowedTopics:       scopes.GetAllowedTopics(properties),
+		ProtectedTopics:     scopes.GetProtectedTopics(properties),
 		NamespaceScoped:     meta.ContainsNamespace(comp.Spec.Metadata),
 	})
 	diag.DefaultMonitoring.ComponentInitialized(comp.Spec.Type)
