@@ -14,11 +14,6 @@ limitations under the License.
 package channels
 
 import (
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
-	"crypto/x509"
-	"encoding/pem"
 	"errors"
 	"net/http"
 	"testing"
@@ -230,18 +225,7 @@ func TestGetAppHTTPChannelConfigWithCustomChannel(t *testing.T) {
 	assert.Equal(t, "http://my.app:0", c.Endpoint)
 }
 
-func TestgetHTTPEndpointAppChannel(t *testing.T) {
-	testPk, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	require.NoError(t, err)
-
-	pkB, err := x509.MarshalECPrivateKey(testPk)
-	require.NoError(t, err)
-
-	pkPEM := pem.EncodeToMemory(&pem.Block{
-		Type:  "EC PRIVATE KEY",
-		Bytes: pkB,
-	})
-
+func TestGetHTTPEndpointAppChannel(t *testing.T) {
 	t.Run("no TLS channel", func(t *testing.T) {
 		ch := &Channels{
 			compStore: compstore.New(),
@@ -299,7 +283,7 @@ func TestgetHTTPEndpointAppChannel(t *testing.T) {
 					},
 					PrivateKey: &commonapi.TLSDocument{
 						Value: &commonapi.DynamicValue{
-							JSON: v1.JSON{Raw: pkPEM},
+							JSON: v1.JSON{Raw: []byte("-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCmWsrT0w4s0g7L\nd1g/Ia0qM2v6tXG8L/150kwM7V/wRSVCx+Tmv+aAMAJzJtXwMAj9jHt+sH5vOm6M\nJenJ0sTyUcCC8FhLa0VWxbajZOn8wKaUuZzLj3Uye/q4z0l6rtu35pjZCjDKphyy\ncKoGNG2MwcGNNBUZP0W6Idw0PZaNstnXnTHIWE6axOA9bzB5iKtLTVkQDkuEJWFL\nfOD6ZN4ISA+7HvbMgjREeIuNJqNI/746Egza5a4ZPh3KvyIPEdH2SdDy+9obCsdA\nKe65SEIPy1n4zRy3/7K1bVTu18JoWsNtE+5GDWVgFU3AVZ9ic6Jt0N0WNaRuUiiV\npvKELzyBAgMBAAECggEABXHZS5+PyjXB2DT6xW4zvbrbIOSJaXBkqnUQmie2ySVq\nN8pVGpxTTgTEP8KYo/jegnXzoMzkBn3yGlIvWbS1T30PgPme2jETnuhvtt9ZrTUc\n/qcok50JZ/KY3S2jqQlKFbXNcOUdfbR8IfcACZ3zq/S3ggifXCku/g2XqHoPkGmp\nokEjXEJLX9f/ABgik3a5aaSCMYfCU9PzDNCM7vjiWxUvO0V5kjqYae+SpMQCvvTb\n1JEMEsawCEeGI9BBnj4o1x7xGDpFn4Yt6MznaHivANMHqqNKaH3LK6rFZGdnj7d6\nutpJ22QZUBYhZ1+Hz+WNUQD+z+O2NGfMEo0PZvb1MQKBgQDZ6TlehduU0JcgKUI+\nFSq5wAk+Eil158arCU3CWnn69VLUu5lAjkU4dXjmkg/c9nxRpg5kuWr8FGMmzTpx\nWlWZj1b72iTQuWX0fphNif3mljeDNLl5z0fGegHjH+KkGb9y6t06oKrsEZbxn4y0\nzOLfl1t85tPAMP6RuvfawpjBjQKBgQDDbpifamPx/GE1JdKj6M6At42kmDczd5P0\nlgN39BRC6fUS19CPurKVWF501+w52rxg1NWhtQVmW1DUdWpDUwQtRPXo43Ku8MPN\nRMD8Uj+PNgXgWnWdcfGbniB8xHqsE8N7MgKU5IZQOqEIDCVE4RGheTYGNgDZ16Rz\nILmZ14E3xQKBgHtI3fJCXSbmlHnXneit5QxOP2xkrhxM0zN1Ag9RTO3U2dYNhPjn\nBPaaT5pzTJJAybkP79jApmyTxDzxo3z6FK/aTuYSVv3Xxnz7GoPT7FgG6MVMkRr/\nUKZT5LlxErKw9oW3pw5CVDFXCkUNdXfc6waBBXu2xFpZ3czpMM0Nh4sJAoGAEpGo\nmMUQGAcF6XndiMtvC5XlNHVuEUrUWRID5FrhrfXy3kZ5P57apwwNdYaqoFijO4Qd\nhE7h43bbuEQrw5fYtsBtqSIrXGnuAMv+ljruZRoZ9tZBhKM19LZSmehFS6JZGZSH\n4EPSaz8W29/jjqbf+Pq+YlqxPAGcU4ARgoeSdI0CgYACG9WZMbri9Eas1qA3vP86\nVW917u7CKt3O6Gsr4F5BNIH3Qx9BReLB9cDvhyko/JAln0MiNq2nExeuFlhEqVsx\nmn681Xm6yPht1PNeTkrRroXJIVzbBOldFW7evX/g/izeiXH6YhfGKD6B8dBfUftx\nNcs6FFLydFcIdIxebYjYnQ==\n-----END PRIVATE KEY-----\n")},
 						},
 					},
 				},
@@ -337,7 +321,7 @@ func TestgetHTTPEndpointAppChannel(t *testing.T) {
 					},
 					PrivateKey: &commonapi.TLSDocument{
 						Value: &commonapi.DynamicValue{
-							JSON: v1.JSON{Raw: pkPEM},
+							JSON: v1.JSON{Raw: []byte("-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCmWsrT0w4s0g7L\nd1g/Ia0qM2v6tXG8L/150kwM7V/wRSVCx+Tmv+aAMAJzJtXwMAj9jHt+sH5vOm6M\nJenJ0sTyUcCC8FhLa0VWxbajZOn8wKaUuZzLj3Uye/q4z0l6rtu35pjZCjDKphyy\ncKoGNG2MwcGNNBUZP0W6Idw0PZaNstnXnTHIWE6axOA9bzB5iKtLTVkQDkuEJWFL\nfOD6ZN4ISA+7HvbMgjREeIuNJqNI/746Egza5a4ZPh3KvyIPEdH2SdDy+9obCsdA\nKe65SEIPy1n4zRy3/7K1bVTu18JoWsNtE+5GDWVgFU3AVZ9ic6Jt0N0WNaRuUiiV\npvKELzyBAgMBAAECggEABXHZS5+PyjXB2DT6xW4zvbrbIOSJaXBkqnUQmie2ySVq\nN8pVGpxTTgTEP8KYo/jegnXzoMzkBn3yGlIvWbS1T30PgPme2jETnuhvtt9ZrTUc\n/qcok50JZ/KY3S2jqQlKFbXNcOUdfbR8IfcACZ3zq/S3ggifXCku/g2XqHoPkGmp\nokEjXEJLX9f/ABgik3a5aaSCMYfCU9PzDNCM7vjiWxUvO0V5kjqYae+SpMQCvvTb\n1JEMEsawCEeGI9BBnj4o1x7xGDpFn4Yt6MznaHivANMHqqNKaH3LK6rFZGdnj7d6\nutpJ22QZUBYhZ1+Hz+WNUQD+z+O2NGfMEo0PZvb1MQKBgQDZ6TlehduU0JcgKUI+\nFSq5wAk+Eil158arCU3CWnn69VLUu5lAjkU4dXjmkg/c9nxRpg5kuWr8FGMmzTpx\nWlWZj1b72iTQuWX0fphNif3mljeDNLl5z0fGegHjH+KkGb9y6t06oKrsEZbxn4y0\nzOLfl1t85tPAMP6RuvfawpjBjQKBgQDDbpifamPx/GE1JdKj6M6At42kmDczd5P0\nlgN39BRC6fUS19CPurKVWF501+w52rxg1NWhtQVmW1DUdWpDUwQtRPXo43Ku8MPN\nRMD8Uj+PNgXgWnWdcfGbniB8xHqsE8N7MgKU5IZQOqEIDCVE4RGheTYGNgDZ16Rz\nILmZ14E3xQKBgHtI3fJCXSbmlHnXneit5QxOP2xkrhxM0zN1Ag9RTO3U2dYNhPjn\nBPaaT5pzTJJAybkP79jApmyTxDzxo3z6FK/aTuYSVv3Xxnz7GoPT7FgG6MVMkRr/\nUKZT5LlxErKw9oW3pw5CVDFXCkUNdXfc6waBBXu2xFpZ3czpMM0Nh4sJAoGAEpGo\nmMUQGAcF6XndiMtvC5XlNHVuEUrUWRID5FrhrfXy3kZ5P57apwwNdYaqoFijO4Qd\nhE7h43bbuEQrw5fYtsBtqSIrXGnuAMv+ljruZRoZ9tZBhKM19LZSmehFS6JZGZSH\n4EPSaz8W29/jjqbf+Pq+YlqxPAGcU4ARgoeSdI0CgYACG9WZMbri9Eas1qA3vP86\nVW917u7CKt3O6Gsr4F5BNIH3Qx9BReLB9cDvhyko/JAln0MiNq2nExeuFlhEqVsx\nmn681Xm6yPht1PNeTkrRroXJIVzbBOldFW7evX/g/izeiXH6YhfGKD6B8dBfUftx\nNcs6FFLydFcIdIxebYjYnQ==\n-----END PRIVATE KEY-----\n")},
 						},
 					},
 				},
@@ -380,7 +364,7 @@ func TestgetHTTPEndpointAppChannel(t *testing.T) {
 					},
 					PrivateKey: &commonapi.TLSDocument{
 						Value: &commonapi.DynamicValue{
-							JSON: v1.JSON{Raw: pkPEM},
+							JSON: v1.JSON{Raw: []byte("-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCmWsrT0w4s0g7L\nd1g/Ia0qM2v6tXG8L/150kwM7V/wRSVCx+Tmv+aAMAJzJtXwMAj9jHt+sH5vOm6M\nJenJ0sTyUcCC8FhLa0VWxbajZOn8wKaUuZzLj3Uye/q4z0l6rtu35pjZCjDKphyy\ncKoGNG2MwcGNNBUZP0W6Idw0PZaNstnXnTHIWE6axOA9bzB5iKtLTVkQDkuEJWFL\nfOD6ZN4ISA+7HvbMgjREeIuNJqNI/746Egza5a4ZPh3KvyIPEdH2SdDy+9obCsdA\nKe65SEIPy1n4zRy3/7K1bVTu18JoWsNtE+5GDWVgFU3AVZ9ic6Jt0N0WNaRuUiiV\npvKELzyBAgMBAAECggEABXHZS5+PyjXB2DT6xW4zvbrbIOSJaXBkqnUQmie2ySVq\nN8pVGpxTTgTEP8KYo/jegnXzoMzkBn3yGlIvWbS1T30PgPme2jETnuhvtt9ZrTUc\n/qcok50JZ/KY3S2jqQlKFbXNcOUdfbR8IfcACZ3zq/S3ggifXCku/g2XqHoPkGmp\nokEjXEJLX9f/ABgik3a5aaSCMYfCU9PzDNCM7vjiWxUvO0V5kjqYae+SpMQCvvTb\n1JEMEsawCEeGI9BBnj4o1x7xGDpFn4Yt6MznaHivANMHqqNKaH3LK6rFZGdnj7d6\nutpJ22QZUBYhZ1+Hz+WNUQD+z+O2NGfMEo0PZvb1MQKBgQDZ6TlehduU0JcgKUI+\nFSq5wAk+Eil158arCU3CWnn69VLUu5lAjkU4dXjmkg/c9nxRpg5kuWr8FGMmzTpx\nWlWZj1b72iTQuWX0fphNif3mljeDNLl5z0fGegHjH+KkGb9y6t06oKrsEZbxn4y0\nzOLfl1t85tPAMP6RuvfawpjBjQKBgQDDbpifamPx/GE1JdKj6M6At42kmDczd5P0\nlgN39BRC6fUS19CPurKVWF501+w52rxg1NWhtQVmW1DUdWpDUwQtRPXo43Ku8MPN\nRMD8Uj+PNgXgWnWdcfGbniB8xHqsE8N7MgKU5IZQOqEIDCVE4RGheTYGNgDZ16Rz\nILmZ14E3xQKBgHtI3fJCXSbmlHnXneit5QxOP2xkrhxM0zN1Ag9RTO3U2dYNhPjn\nBPaaT5pzTJJAybkP79jApmyTxDzxo3z6FK/aTuYSVv3Xxnz7GoPT7FgG6MVMkRr/\nUKZT5LlxErKw9oW3pw5CVDFXCkUNdXfc6waBBXu2xFpZ3czpMM0Nh4sJAoGAEpGo\nmMUQGAcF6XndiMtvC5XlNHVuEUrUWRID5FrhrfXy3kZ5P57apwwNdYaqoFijO4Qd\nhE7h43bbuEQrw5fYtsBtqSIrXGnuAMv+ljruZRoZ9tZBhKM19LZSmehFS6JZGZSH\n4EPSaz8W29/jjqbf+Pq+YlqxPAGcU4ARgoeSdI0CgYACG9WZMbri9Eas1qA3vP86\nVW917u7CKt3O6Gsr4F5BNIH3Qx9BReLB9cDvhyko/JAln0MiNq2nExeuFlhEqVsx\nmn681Xm6yPht1PNeTkrRroXJIVzbBOldFW7evX/g/izeiXH6YhfGKD6B8dBfUftx\nNcs6FFLydFcIdIxebYjYnQ==\n-----END PRIVATE KEY-----\n")},
 						},
 					},
 				},

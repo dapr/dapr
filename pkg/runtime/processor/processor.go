@@ -32,6 +32,7 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/meta"
+
 	"github.com/dapr/dapr/pkg/runtime/processor/binding"
 	"github.com/dapr/dapr/pkg/runtime/processor/configuration"
 	"github.com/dapr/dapr/pkg/runtime/processor/crypto"

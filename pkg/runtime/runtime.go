@@ -1352,7 +1352,6 @@ func (a *DaprRuntime) stopWorkflow(ctx context.Context) {
 
 // shutdownOutputComponents allows for a graceful shutdown of all runtime internal operations of components that are not source of more work.
 func (a *DaprRuntime) shutdownOutputComponents(ctx context.Context) error {
-
 	closers := []concurrency.Runner{func(ctx context.Context) error {
 		log.Info("Shutting down name resolver")
 		if closer, ok := a.nameResolver.(io.Closer); ok && closer != nil {

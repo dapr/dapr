@@ -373,13 +373,13 @@ func (b *binding) sendBindingEventToApp(ctx context.Context, bindingName string,
 }
 
 func (b *binding) readFromBinding(readCtx context.Context, name string, binding bindings.InputBinding) error {
-	return binding.Read(readCtx, func(_ context.Context, resp *bindings.ReadResponse) ([]byte, error) {
+	return binding.Read(readCtx, func(ctx context.Context, resp *bindings.ReadResponse) ([]byte, error) {
 		if resp == nil {
 			return nil, nil
 		}
 
 		start := time.Now()
-		b, err := b.sendBindingEventToApp(readCtx, name, resp.Data, resp.Metadata)
+		b, err := b.sendBindingEventToApp(ctx, name, resp.Data, resp.Metadata)
 		elapsed := diag.ElapsedSince(start)
 
 		diag.DefaultComponentMonitoring.InputBindingEvent(context.Background(), name, err == nil, elapsed)

@@ -154,7 +154,7 @@ func (b *binding) closeOutputBinding(binding bindings.OutputBinding) error {
 }
 
 func (b *binding) initInputBinding(ctx context.Context, comp compapi.Component) error {
-	if !b.isBindingOfDirection(ComponentDirection, comp.Spec.Metadata) {
+	if !b.isBindingOfDirection(ComponentTypeInput, comp.Spec.Metadata) {
 		return nil
 	}
 
