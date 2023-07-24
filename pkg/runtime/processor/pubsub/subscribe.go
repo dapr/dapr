@@ -52,7 +52,6 @@ func (p *pubsub) StopSubscriptions() {
 	for subKey := range p.topicCancels {
 		p.unsubscribeTopic(subKey)
 		p.compStore.DeleteTopicRoute(subKey)
-
 	}
 }
 
