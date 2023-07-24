@@ -43,6 +43,7 @@ type workflowState struct {
 	inboxRemovedCount   int
 	historyAddedCount   int
 	historyRemovedCount int
+	config              wfConfig
 }
 
 type workflowStateMetadata struct {
@@ -51,9 +52,10 @@ type workflowStateMetadata struct {
 	Generation    uint64
 }
 
-func NewWorkflowState() workflowState {
-	return workflowState{
+func NewWorkflowState(config wfConfig) *workflowState {
+	return &workflowState{
 		Generation: 1,
+		config:     config,
 	}
 }
 
@@ -66,6 +68,14 @@ func (s *workflowState) Reset() {
 	s.History = nil
 	s.CustomStatus = ""
 	s.Generation++
+}
+
+// ResetChangeTracking resets the change tracking counters. This should be called after a save request.
+func (s *workflowState) ResetChangeTracking() {
+	s.inboxAddedCount = 0
+	s.inboxRemovedCount = 0
+	s.historyAddedCount = 0
+	s.historyRemovedCount = 0
 }
 
 func (s *workflowState) ApplyRuntimeStateChanges(runtimeState *backend.OrchestrationRuntimeState) {
@@ -94,8 +104,9 @@ func (s *workflowState) ClearInbox() {
 }
 
 func (s *workflowState) GetSaveRequest(actorID string) (*actors.TransactionalRequest, error) {
+	// TODO: Batching up the save requests into smaller chunks to avoid batch size limits in Dapr state stores.
 	req := &actors.TransactionalRequest{
-		ActorType:  WorkflowActorType,
+		ActorType:  s.config.workflowActorType,
 		ActorID:    actorID,
 		Operations: make([]actors.TransactionalOperation, 0, 100),
 	}
@@ -108,11 +119,18 @@ func (s *workflowState) GetSaveRequest(actorID string) (*actors.TransactionalReq
 		return nil, err
 	}
 
-	req.Operations = append(req.Operations, actors.TransactionalOperation{
-		Operation: actors.Upsert,
-		Request:   actors.TransactionalUpsert{Key: customStatusKey, Value: s.CustomStatus},
-	})
+	// We update the custom status only when the workflow itself has been updated, and not when
+	// we're saving changes only to the workflow inbox.
+	// CONSIDER: Only save custom status if it has changed. However, need a way to track this.
+	if s.historyAddedCount > 0 || s.historyRemovedCount > 0 {
+		req.Operations = append(req.Operations, actors.TransactionalOperation{
+			Operation: actors.Upsert,
+			Request:   actors.TransactionalUpsert{Key: customStatusKey, Value: s.CustomStatus},
+		})
+	}
 
+	// Every time we save, we also update the metadata with information about the size of the history and inbox,
+	// as well as the generation of the workflow.
 	metadata := workflowStateMetadata{
 		InboxLength:   len(s.Inbox),
 		HistoryLength: len(s.History),
@@ -150,29 +168,42 @@ func addStateOperations(req *actors.TransactionalRequest, keyPrefix string, even
 	return nil
 }
 
-func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID string) (workflowState, error) {
+func addPurgeStateOperations(req *actors.TransactionalRequest, keyPrefix string, events []*backend.HistoryEvent) error {
+	// TODO: Investigate whether Dapr state stores put limits on batch sizes. It seems some storage
+	//       providers have limits and we need to know if that impacts this algorithm:
+	//       https://learn.microsoft.com/azure/cosmos-db/nosql/transactional-batch#limitations
+	for i := 0; i < len(events); i++ {
+		req.Operations = append(req.Operations, actors.TransactionalOperation{
+			Operation: actors.Delete,
+			Request:   actors.TransactionalDelete{Key: getMultiEntryKeyName(keyPrefix, i)},
+		})
+	}
+	return nil
+}
+
+func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID string, config wfConfig) (*workflowState, error) {
 	loadStartTime := time.Now()
 	loadedRecords := 0
 
 	req := actors.GetStateRequest{
-		ActorType: WorkflowActorType,
+		ActorType: config.workflowActorType,
 		ActorID:   actorID,
 		Key:       metadataKey,
 	}
 	res, err := actorRuntime.GetState(ctx, &req)
 	loadedRecords++
 	if err != nil {
-		return workflowState{}, fmt.Errorf("failed to load workflow metadata: %w", err)
+		return nil, fmt.Errorf("failed to load workflow metadata: %w", err)
 	}
 	if len(res.Data) == 0 {
 		// no state found
-		return workflowState{}, nil
+		return nil, nil
 	}
 	var metadata workflowStateMetadata
 	if err = json.Unmarshal(res.Data, &metadata); err != nil {
-		return workflowState{}, fmt.Errorf("failed to unmarshal workflow metadata: %w", err)
+		return nil, fmt.Errorf("failed to unmarshal workflow metadata: %w", err)
 	}
-	state := NewWorkflowState()
+	state := NewWorkflowState(config)
 	state.Generation = metadata.Generation
 	// CONSIDER: Do some of these loads in parallel
 	for i := 0; i < metadata.InboxLength; i++ {
@@ -180,12 +211,12 @@ func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID 
 		res, err = actorRuntime.GetState(ctx, &req)
 		loadedRecords++
 		if err != nil {
-			return workflowState{}, fmt.Errorf("failed to load workflow inbox state key '%s': %w", req.Key, err)
+			return nil, fmt.Errorf("failed to load workflow inbox state key '%s': %w", req.Key, err)
 		}
 		var e *backend.HistoryEvent
 		e, err = backend.UnmarshalHistoryEvent(res.Data)
 		if err != nil {
-			return workflowState{}, fmt.Errorf("failed to unmarshal history event from inbox state key entry: %w", err)
+			return nil, fmt.Errorf("failed to unmarshal history event from inbox state key entry: %w", err)
 		}
 		state.Inbox = append(state.Inbox, e)
 	}
@@ -194,12 +225,12 @@ func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID 
 		res, err = actorRuntime.GetState(ctx, &req)
 		loadedRecords++
 		if err != nil {
-			return workflowState{}, fmt.Errorf("failed to load workflow history state key '%s': %w", req.Key, err)
+			return nil, fmt.Errorf("failed to load workflow history state key '%s': %w", req.Key, err)
 		}
 		var e *backend.HistoryEvent
 		e, err = backend.UnmarshalHistoryEvent(res.Data)
 		if err != nil {
-			return workflowState{}, fmt.Errorf("failed to unmarshal history event from inbox state key entry: %w", err)
+			return nil, fmt.Errorf("failed to unmarshal history event from inbox state key entry: %w", err)
 		}
 
 		state.History = append(state.History, e)
@@ -209,14 +240,44 @@ func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID 
 	res, err = actorRuntime.GetState(ctx, &req)
 	loadedRecords++
 	if err != nil {
-		return workflowState{}, fmt.Errorf("failed to load workflow custom status key '%s': %w", req.Key, err)
+		return nil, fmt.Errorf("failed to load workflow custom status key '%s': %w", req.Key, err)
 	}
-	if err = json.Unmarshal(res.Data, &state.CustomStatus); err != nil {
-		return workflowState{}, fmt.Errorf("failed to unmarshal JSON from custom status key entry: %w", err)
+	if len(res.Data) > 0 {
+		if err = json.Unmarshal(res.Data, &state.CustomStatus); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal JSON from custom status key entry: %w", err)
+		}
 	}
 
 	wfLogger.Infof("%s: loaded %d state records in %v", actorID, loadedRecords, time.Since(loadStartTime))
 	return state, nil
+}
+
+func (s *workflowState) GetPurgeRequest(actorID string) (*actors.TransactionalRequest, error) {
+	req := &actors.TransactionalRequest{
+		ActorType:  s.config.workflowActorType,
+		ActorID:    actorID,
+		Operations: make([]actors.TransactionalOperation, 0, 100),
+	}
+
+	// Inbox Purging
+	if err := addPurgeStateOperations(req, inboxKeyPrefix, s.Inbox); err != nil {
+		return nil, err
+	}
+
+	// History Purging
+	if err := addPurgeStateOperations(req, historyKeyPrefix, s.History); err != nil {
+		return nil, err
+	}
+
+	req.Operations = append(req.Operations, actors.TransactionalOperation{
+		Operation: actors.Delete,
+		Request:   actors.TransactionalDelete{Key: customStatusKey},
+	}, actors.TransactionalOperation{
+		Operation: actors.Delete,
+		Request:   actors.TransactionalDelete{Key: metadataKey},
+	})
+
+	return req, nil
 }
 
 func getMultiEntryKeyName(prefix string, i int) string {

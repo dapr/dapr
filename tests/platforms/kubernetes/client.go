@@ -76,9 +76,17 @@ func clientConfig(kubeConfigPath string, clusterName string) (*rest.Config, erro
 		overrides.Context.Cluster = clusterName
 	}
 
-	return clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+	config, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
 		&clientcmd.ClientConfigLoadingRules{ExplicitPath: kubeConfigPath},
 		&overrides).ClientConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	// Reduce the QPS to avoid rate-limiting
+	config.QPS = 3
+	config.Burst = 5
+	return config, nil
 }
 
 // GetClientConfig returns client configuration.

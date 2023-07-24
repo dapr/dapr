@@ -24,7 +24,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gorilla/mux"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 )
@@ -35,7 +34,7 @@ const (
 )
 
 // StartServer starts a HTTP or HTTP2 server
-func StartServer(port int, appRouter func() *mux.Router, allowHTTP2 bool, enableTLS bool) {
+func StartServer(port int, appRouter func() http.Handler, allowHTTP2 bool, enableTLS bool) {
 	// HTTP/2 is allowed only if the DAPR_TESTS_HTTP2 env var is set
 	allowHTTP2 = allowHTTP2 && IsTruthy(os.Getenv("DAPR_TESTS_HTTP2"))
 

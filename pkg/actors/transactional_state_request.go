@@ -21,6 +21,7 @@ import (
 	"golang.org/x/exp/maps"
 
 	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/dapr/pkg/config"
 )
 
 // OperationType describes a CRUD operation performed against a state store.
@@ -37,6 +38,9 @@ const (
 type StateOperationOpts struct {
 	Metadata    map[string]string
 	ContentType *string
+
+	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
+	StateTTLEnabled bool
 }
 
 // TransactionalRequest describes a set of stateful operations for a given actor that are performed in a transactional manner.
@@ -134,15 +138,19 @@ func (t TransactionalUpsert) StateOperation(baseKey string, opts StateOperationO
 		maps.Copy(t.Metadata, opts.Metadata)
 	}
 
-	return state.TransactionalStateOperation{
-		Operation: state.Upsert,
-		Request: state.SetRequest{
-			Key:         baseKey + t.Key,
-			Value:       t.Value,
-			Metadata:    t.Metadata,
-			ETag:        t.ETag,
-			ContentType: opts.ContentType,
-		},
+	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
+	if !opts.StateTTLEnabled {
+		if _, ok := t.Metadata["ttlInSeconds"]; ok {
+			return op, fmt.Errorf("ttlInSeconds is not supported without the %q feature enabled", config.ActorStateTTL)
+		}
+	}
+
+	return state.SetRequest{
+		Key:         baseKey + t.Key,
+		Value:       t.Value,
+		Metadata:    t.Metadata,
+		ETag:        t.ETag,
+		ContentType: opts.ContentType,
 	}, nil
 }
 
@@ -158,12 +166,9 @@ func (t TransactionalDelete) StateOperation(baseKey string, opts StateOperationO
 		return op, errors.New("missing key")
 	}
 
-	return state.TransactionalStateOperation{
-		Operation: state.Delete,
-		Request: state.DeleteRequest{
-			Key:      baseKey + t.Key,
-			Metadata: opts.Metadata,
-			ETag:     t.ETag,
-		},
+	return state.DeleteRequest{
+		Key:      baseKey + t.Key,
+		Metadata: opts.Metadata,
+		ETag:     t.ETag,
 	}, nil
 }

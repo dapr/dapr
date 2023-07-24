@@ -28,7 +28,7 @@ import (
 	httpClient "github.com/dapr/dapr/tests/apps/actorload/pkg/actor/client/http"
 	rt "github.com/dapr/dapr/tests/apps/actorload/pkg/actor/runtime"
 
-	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/v5"
 )
 
 type ActorActivationHandler func(actorType, actorID string) error

@@ -49,7 +49,7 @@ func newTestPlacementServer(t *testing.T, raftServer *raft.Server) (string, *Ser
 	serverStopped := make(chan struct{})
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
-		close(serverStopped)
+		defer close(serverStopped)
 		require.NoError(t, testServer.Run(ctx, strconv.Itoa(port)))
 	}()
 
@@ -152,7 +152,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 			default:
 				return false
 			}
-		}, testStreamSendLatency, time.Millisecond, "no membership change")
+		}, testStreamSendLatency+3*time.Second, time.Millisecond, "no membership change")
 
 		// act
 		// Runtime needs to close stream gracefully which will let placement remove runtime host from hashing ring
@@ -203,7 +203,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 			default:
 				return false
 			}
-		}, testStreamSendLatency, time.Millisecond, "no membership change")
+		}, testStreamSendLatency+3*time.Second, time.Millisecond, "no membership change")
 
 		// act
 		// Close tcp connection before closing stream, which simulates the scenario

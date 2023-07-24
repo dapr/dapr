@@ -1,5 +1,5 @@
 /*
-Copyright 2022 The Dapr Authors
+Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -14,6 +14,7 @@ limitations under the License.
 package main
 
 import (
+	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -23,10 +24,10 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-const (
-	pubSubName = "kafka-messagebus"
-	topic      = "perf-test"
-	route      = "perf-test"
+var (
+	pubSubName string
+	topic      string
+	route      string
 )
 
 var numMessages = 100
@@ -88,6 +89,12 @@ func notify(msgRecvCh chan string, notifySendCh chan struct{}) {
 }
 
 func main() {
+	err := readPubsubEnvVar()
+	if err != nil {
+		log.Fatalf("Error reading environment variables : %s", err.Error())
+		return
+	}
+
 	val, ok := os.LookupEnv("TEST_NUM_MESSAGES")
 	if ok {
 		ival, err := strconv.Atoi(val)
@@ -101,10 +108,41 @@ func main() {
 	messagesCh = make(chan string, numMessages)
 
 	go notify(messagesCh, notifyCh)
+	log.Printf("Env variable route is set to %s", route)
 
 	http.HandleFunc("/dapr/subscribe", subscribeHandler)
 	http.HandleFunc("/"+route+"-bulk", bulkMessageHandler)
 	http.HandleFunc("/"+route, messageHandler)
 	http.HandleFunc("/test", testHandler)
 	log.Fatal(http.ListenAndServe(":3000", nil))
+}
+
+func readPubsubEnvVar() error {
+	pubSubName = os.Getenv("PERF_PUBSUB_HTTP_COMPONENT_NAME")
+	topic = os.Getenv("PERF_PUBSUB_HTTP_TOPIC_NAME")
+	route = os.Getenv("PERF_PUBSUB_HTTP_ROUTE_NAME")
+	if !validateEnvVar("PERF_PUBSUB_HTTP_COMPONENT_NAME", pubSubName) {
+		return errors.New("Invalid PERF_PUBSUB_HTTP_COMPONENT_NAME")
+	}
+
+	if !validateEnvVar("PERF_PUBSUB_HTTP_TOPIC_NAME", topic) {
+		return errors.New("Invalid PERF_PUBSUB_HTTP_TOPIC_NAME")
+	}
+
+	if !validateEnvVar("PERF_PUBSUB_HTTP_ROUTE_NAME", route) {
+		return errors.New("Invalid PERF_PUBSUB_HTTP_ROUTE_NAME")
+	}
+
+	return nil
+}
+
+func validateEnvVar(key string, value string) bool {
+	if value == "" {
+		log.Printf("error: Env variable %s is set to empty", key)
+		return false
+	}
+
+	log.Printf("Env variable %s is set to %s", key, value)
+
+	return true
 }

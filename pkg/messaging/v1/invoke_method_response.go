@@ -51,6 +51,9 @@ func InternalInvokeResponse(pb *internalv1pb.InternalInvokeResponse) (*InvokeMet
 	if pb.Message == nil {
 		pb.Message = &commonv1pb.InvokeResponse{Data: nil}
 	}
+	if pb.Headers == nil {
+		pb.Headers = map[string]*internalv1pb.ListStringValue{}
+	}
 
 	return rsp, nil
 }

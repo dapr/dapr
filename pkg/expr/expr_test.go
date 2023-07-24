@@ -37,6 +37,14 @@ func TestJSONMarshal(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestEmptyProgramNoPanic(t *testing.T) {
+	var e expr.Expr
+	r, err := e.Eval(map[string]interface{}{})
+
+	assert.Nil(t, r)
+	assert.NotNil(t, err)
+}
+
 var result interface{}
 
 func BenchmarkEval(b *testing.B) {

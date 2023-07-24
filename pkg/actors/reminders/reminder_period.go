@@ -73,16 +73,21 @@ func (p ReminderPeriod) MarshalJSON() ([]byte, error) {
 }
 
 func (p *ReminderPeriod) UnmarshalJSON(data []byte) error {
-	if len(data) >= 2 && data[0] == '"' && data[len(data)-1] == '"' {
-		data = data[1 : len(data)-1]
-	}
 	*p = ReminderPeriod{
 		value:   string(data),
 		repeats: -1,
 	}
 
-	if p.value == "" {
+	// Handle nulls and other empty values
+	switch p.value {
+	case "", "null", "{}", `""`, `[]`:
+		p.value = ""
 		return nil
+	}
+
+	// Remove quotes if present
+	if len(p.value) >= 2 && p.value[0] == '"' && p.value[len(p.value)-1] == '"' {
+		p.value = p.value[1 : len(p.value)-1]
 	}
 
 	return parseReminderPeriod(p)

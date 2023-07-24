@@ -77,7 +77,9 @@ ifeq ($(MANIFEST_TAG),)
 	MANIFEST_TAG=$(DAPR_TAG)
 endif
 ifeq ($(MANIFEST_LATEST_TAG),)
-	MANIFEST_LATEST_TAG=$(LATEST_TAG)
+    # artursouza: this is intentional - latest manifest tag will point to immutable version tags.
+    # For example: latest -> 1.11.0-linux-amd64 1.11.0-linux-arm 1.11.0-linux-arm64 ...
+	MANIFEST_LATEST_TAG=$(DAPR_TAG)
 endif
 
 LINUX_BINS_OUT_DIR=$(OUT_DIR)/linux_$(GOARCH)

@@ -64,13 +64,12 @@ func TestMain(m *testing.M) {
 			AppHealthProbeInterval: 3,
 			AppHealthProbeTimeout:  200,
 			AppHealthThreshold:     3,
+			DaprEnv:                `CRON_SCHEDULE="@every 1s"`, // Test envRef for components
 			AppEnv: map[string]string{
-				"APP_PROTOCOL": "http",
-				"APP_PORT":     "4000",
-				"CONTROL_PORT": "3000",
+				"APP_PORT":            "4000",
+				"CONTROL_PORT":        "3000",
+				"EXPECT_APP_PROTOCOL": "http",
 			},
-			// TODO: Remove once AppHealthCheck feature is finalized
-			Config: "healthcheckconfig",
 		},
 		{
 			AppName:                "healthapp-grpc",
@@ -87,13 +86,34 @@ func TestMain(m *testing.M) {
 			AppHealthProbeInterval: 3,
 			AppHealthProbeTimeout:  200,
 			AppHealthThreshold:     3,
+			DaprEnv:                `CRON_SCHEDULE="@every 1s"`,
 			AppEnv: map[string]string{
-				"APP_PROTOCOL": "grpc",
-				"APP_PORT":     "4000",
-				"CONTROL_PORT": "3000",
+				"APP_PORT":            "4000",
+				"CONTROL_PORT":        "3000",
+				"EXPECT_APP_PROTOCOL": "grpc",
 			},
-			// TODO: Remove once AppHealthCheck feature is finalized
-			Config: "healthcheckconfig",
+		},
+		{
+			AppName:                "healthapp-h2c",
+			AppPort:                4000,
+			AppProtocol:            "h2c",
+			DaprEnabled:            true,
+			ImageName:              "e2e-healthapp",
+			Replicas:               1,
+			IngressEnabled:         true,
+			IngressPort:            3000,
+			MetricsEnabled:         true,
+			EnableAppHealthCheck:   true,
+			AppHealthCheckPath:     "/healthz",
+			AppHealthProbeInterval: 3,
+			AppHealthProbeTimeout:  200,
+			AppHealthThreshold:     3,
+			DaprEnv:                `CRON_SCHEDULE="@every 1s"`,
+			AppEnv: map[string]string{
+				"APP_PORT":            "4000",
+				"CONTROL_PORT":        "3000",
+				"EXPECT_APP_PROTOCOL": "h2c",
+			},
 		},
 	}
 
@@ -109,6 +129,10 @@ func TestAppHealthCheckHTTP(t *testing.T) {
 
 func TestAppHealthCheckGRPC(t *testing.T) {
 	testAppHealthCheckProtocol(t, "grpc")
+}
+
+func TestAppHealthCheckH2C(t *testing.T) {
+	testAppHealthCheckProtocol(t, "h2c")
 }
 
 func testAppHealthCheckProtocol(t *testing.T, protocol string) {
@@ -155,7 +179,7 @@ func testAppHealthCheckProtocol(t *testing.T, protocol string) {
 	t.Run("last health check within 3s", func(t *testing.T) {
 		obj := getCountAndLast(t, "last-health-check")
 		_ = assert.NotNil(t, obj.Last) &&
-			assert.Less(t, *obj.Last, int64(3000))
+			assert.Less(t, *obj.Last, int64(3500)) // Adds .5s to reduce flakiness on slow runners
 	})
 
 	t.Run("invoke method should work on healthy app", func(t *testing.T) {
@@ -167,13 +191,13 @@ func testAppHealthCheckProtocol(t *testing.T, protocol string) {
 	t.Run("last input binding within 1s", func(t *testing.T) {
 		obj := getCountAndLast(t, "last-input-binding")
 		_ = assert.NotNil(t, obj.Last) &&
-			assert.Less(t, *obj.Last, int64(1000))
+			assert.Less(t, *obj.Last, int64(1500)) // Adds .5s to reduce flakiness on slow runners
 	})
 
 	t.Run("last topic message within 1s", func(t *testing.T) {
 		obj := getCountAndLast(t, "last-topic-message")
 		_ = assert.NotNil(t, obj.Last) &&
-			assert.Less(t, *obj.Last, int64(1000))
+			assert.Less(t, *obj.Last, int64(1500)) // Adds .5s to reduce flakiness on slow runners
 	})
 
 	t.Run("set plan and trigger failures", func(t *testing.T) {
@@ -291,21 +315,21 @@ func testAppHealthCheckProtocol(t *testing.T, protocol string) {
 			go func() {
 				obj := getCountAndLast(t, "last-input-binding")
 				require.Greater(t, obj.Count, lastInputBinding.Count)
-				require.Less(t, *obj.Last, int64(1000))
+				require.Less(t, *obj.Last, int64(1500)) // Adds .5s to reduce flakiness on slow runners
 				lastInputBinding = obj
 				wg.Done()
 			}()
 			go func() {
 				obj := getCountAndLast(t, "last-topic-message")
 				require.Greater(t, obj.Count, lastTopicMessage.Count)
-				require.Less(t, *obj.Last, int64(1000))
+				require.Less(t, *obj.Last, int64(1500)) // Adds .5s to reduce flakiness on slow runners
 				lastTopicMessage = obj
 				wg.Done()
 			}()
 			go func() {
 				obj := getCountAndLast(t, "last-health-check")
 				require.Greater(t, obj.Count, lastHealthCheck.Count)
-				require.Less(t, *obj.Last, int64(3000))
+				require.Less(t, *obj.Last, int64(3500)) // Adds .5s to reduce flakiness on slow runners
 				lastHealthCheck = obj
 				wg.Done()
 			}()

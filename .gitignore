@@ -1,10 +1,14 @@
 /dist
 .idea
 **/.DS_Store
+config/crd/bases
 
 github.com/
 
 .vscode
+
+# Auto-generated CRDs
+config/crd/bases/*.yaml
 
 # Visual Studio 2015/2017/2019 cache/options directory
 .vs/

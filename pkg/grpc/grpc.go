@@ -49,10 +49,11 @@ type AppChannelConfig struct {
 	Port                 int
 	MaxConcurrency       int
 	TracingSpec          config.TracingSpec
-	SSLEnabled           bool
+	EnableTLS            bool
 	MaxRequestBodySizeMB int
 	ReadBufferSizeKB     int
 	AllowInsecureTLS     bool
+	BaseAddress          string
 }
 
 // Manager is a wrapper around gRPC connection pooling.
@@ -99,6 +100,7 @@ func (g *Manager) GetAppChannel() (channel.AppChannel, error) {
 		g.channelConfig.TracingSpec,
 		g.channelConfig.MaxRequestBodySizeMB,
 		g.channelConfig.ReadBufferSizeKB,
+		g.channelConfig.BaseAddress,
 	)
 	return ch, nil
 }
@@ -110,6 +112,11 @@ func (g *Manager) GetAppClient() (grpc.ClientConnInterface, error) {
 		return g.localConn.Get(g.localConnCreateFn)
 	}
 	return g.localConn.Get(g.defaultLocalConnCreateFn)
+}
+
+// ReleaseAppClient decreases the reference counter of a gRPC connection in the connection pool.
+func (g *Manager) ReleaseAppClient(conn grpc.ClientConnInterface) {
+	g.localConn.Release(conn)
 }
 
 // CloseAppClient closes the active app client connections.
@@ -129,14 +136,14 @@ func (g *Manager) SetLocalConnCreateFn(fn ConnCreatorFn) {
 }
 
 func (g *Manager) defaultLocalConnCreateFn() (grpc.ClientConnInterface, error) {
-	conn, err := g.createLocalConnection(context.Background(), g.channelConfig.Port, g.channelConfig.SSLEnabled, g.channelConfig.AllowInsecureTLS)
+	conn, err := g.createLocalConnection(context.Background(), g.channelConfig.Port, g.channelConfig.EnableTLS, g.channelConfig.AllowInsecureTLS)
 	if err != nil {
 		return nil, fmt.Errorf("error establishing a grpc connection to app on port %v: %w", g.channelConfig.Port, err)
 	}
 	return conn, nil
 }
 
-func (g *Manager) createLocalConnection(parentCtx context.Context, port int, sslEnabled bool, allowInsecureTLS bool) (conn *grpc.ClientConn, err error) {
+func (g *Manager) createLocalConnection(parentCtx context.Context, port int, enableTLS bool, allowInsecureTLS bool) (conn *grpc.ClientConn, err error) {
 	opts := make([]grpc.DialOption, 0, 2)
 
 	if diag.DefaultGRPCMonitoring.IsEnabled() {
@@ -145,7 +152,7 @@ func (g *Manager) createLocalConnection(parentCtx context.Context, port int, ssl
 		)
 	}
 
-	if sslEnabled {
+	if enableTLS {
 		//nolint:gosec
 		tlsConfig := &tls.Config{InsecureSkipVerify: true}
 		if !allowInsecureTLS {
@@ -157,7 +164,7 @@ func (g *Manager) createLocalConnection(parentCtx context.Context, port int, ssl
 	}
 
 	dialPrefix := GetDialAddressPrefix(g.mode)
-	address := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
+	address := net.JoinHostPort(g.channelConfig.BaseAddress, strconv.Itoa(port))
 
 	ctx, cancel := context.WithTimeout(parentCtx, dialTimeout)
 	defer cancel()

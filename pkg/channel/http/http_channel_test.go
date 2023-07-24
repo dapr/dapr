@@ -30,6 +30,7 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
+	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/utils"
 )
 
@@ -68,14 +69,14 @@ func (t *testHandlerHeaders) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, string(rsp))
 }
 
-// testHTTPHandler is used for querystring test.
-type testHTTPHandler struct {
+// testQueryStringHandler is used for querystring test.
+type testQueryStringHandler struct {
 	serverURL string
 
 	t *testing.T
 }
 
-func (th *testHTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (th *testQueryStringHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	assert.Equal(th.t, th.serverURL, r.Host)
 	io.WriteString(w, r.URL.RawQuery)
 }
@@ -104,6 +105,15 @@ func (t *testBodyEchoHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	w.Header().Add("content-type", r.Header.Get("content-type"))
 	w.WriteHeader(http.StatusOK)
 	io.Copy(w, r.Body)
+}
+
+// testHeadersHandler sends back the headers it receives
+type testHeadersHandler struct{}
+
+func (t *testHeadersHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("content-type", invokev1.JSONContentType)
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(r.Header)
 }
 
 // testUppercaseHandler responds with "true" if the body contains all-uppercase ASCII characters, or "false" otherwise
@@ -149,7 +159,8 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 		}
 		c := Channel{
 			baseAddress: server.URL,
-			client:      &http.Client{},
+			client:      http.DefaultClient,
+			compStore:   compstore.New(),
 			pipeline:    pipeline,
 		}
 		fakeReq := invokev1.NewInvokeMethodRequest("method").
@@ -157,7 +168,7 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 		defer fakeReq.Close()
 
 		// act
-		resp, err := c.InvokeMethod(ctx, fakeReq)
+		resp, err := c.InvokeMethod(ctx, fakeReq, "")
 
 		// assert
 		require.NoError(t, err)
@@ -181,7 +192,8 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 		}
 		c := Channel{
 			baseAddress: server.URL,
-			client:      &http.Client{},
+			client:      http.DefaultClient,
+			compStore:   compstore.New(),
 			pipeline:    pipeline,
 		}
 		fakeReq := invokev1.NewInvokeMethodRequest("method").
@@ -189,7 +201,7 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 		defer fakeReq.Close()
 
 		// act
-		resp, err := c.InvokeMethod(ctx, fakeReq)
+		resp, err := c.InvokeMethod(ctx, fakeReq, "")
 
 		// assert
 		require.NoError(t, err)
@@ -210,7 +222,8 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 		}
 		c := Channel{
 			baseAddress: server.URL,
-			client:      &http.Client{},
+			client:      http.DefaultClient,
+			compStore:   compstore.New(),
 			pipeline:    pipeline,
 		}
 		fakeReq := invokev1.NewInvokeMethodRequest("method").
@@ -220,7 +233,7 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 		defer fakeReq.Close()
 
 		// act
-		resp, err := c.InvokeMethod(ctx, fakeReq)
+		resp, err := c.InvokeMethod(ctx, fakeReq, "")
 
 		// assert
 		require.NoError(t, err)
@@ -241,7 +254,8 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 		}
 		c := Channel{
 			baseAddress: server.URL,
-			client:      &http.Client{},
+			client:      http.DefaultClient,
+			compStore:   compstore.New(),
 			pipeline:    pipeline,
 		}
 		fakeReq := invokev1.NewInvokeMethodRequest("method").
@@ -251,7 +265,7 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 		defer fakeReq.Close()
 
 		// act
-		resp, err := c.InvokeMethod(ctx, fakeReq)
+		resp, err := c.InvokeMethod(ctx, fakeReq, "")
 
 		// assert
 		require.NoError(t, err)
@@ -272,7 +286,8 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 		}
 		c := Channel{
 			baseAddress: server.URL,
-			client:      &http.Client{},
+			client:      http.DefaultClient,
+			compStore:   compstore.New(),
 			pipeline:    pipeline,
 		}
 		fakeReq := invokev1.NewInvokeMethodRequest("method").
@@ -282,7 +297,7 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 		defer fakeReq.Close()
 
 		// act
-		resp, err := c.InvokeMethod(ctx, fakeReq)
+		resp, err := c.InvokeMethod(ctx, fakeReq, "")
 
 		// assert
 		require.NoError(t, err)
@@ -304,7 +319,8 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 		}
 		c := Channel{
 			baseAddress: server.URL,
-			client:      &http.Client{},
+			client:      http.DefaultClient,
+			compStore:   compstore.New(),
 			pipeline:    pipeline,
 		}
 		fakeReq := invokev1.NewInvokeMethodRequest("method").
@@ -314,7 +330,7 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 		defer fakeReq.Close()
 
 		// act
-		resp, err := c.InvokeMethod(ctx, fakeReq)
+		resp, err := c.InvokeMethod(ctx, fakeReq, "")
 
 		// assert
 		require.NoError(t, err)
@@ -326,15 +342,79 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 	})
 }
 
-func TestInvokeMethod(t *testing.T) {
-	th := &testHTTPHandler{t: t, serverURL: ""}
-	server := httptest.NewServer(th)
+func TestInvokeMethodHeaders(t *testing.T) {
+	th := &testHeadersHandler{}
 	ctx := context.Background()
+	server := httptest.NewServer(th)
+	defer server.Close()
+
+	t.Run("content-type is included", func(t *testing.T) {
+		c := Channel{
+			baseAddress: server.URL,
+			client:      http.DefaultClient,
+			compStore:   compstore.New(),
+			tracingSpec: config.TracingSpec{
+				SamplingRate: "0",
+			},
+		}
+		fakeReq := invokev1.NewInvokeMethodRequest("method").
+			WithHTTPExtension(http.MethodPost, "").
+			WithContentType("test/dapr")
+		defer fakeReq.Close()
+
+		// act
+		resp, err := c.InvokeMethod(ctx, fakeReq, "")
+
+		// assert
+		assert.NoError(t, err)
+		defer resp.Close()
+
+		headers := map[string][]string{}
+		err = json.NewDecoder(resp.RawData()).Decode(&headers)
+		require.NoError(t, err)
+		require.Len(t, headers["Content-Type"], 1)
+		assert.Equal(t, headers["Content-Type"][0], "test/dapr")
+	})
+
+	t.Run("content-type is omitted when empty", func(t *testing.T) {
+		c := Channel{
+			baseAddress: server.URL,
+			client:      http.DefaultClient,
+			compStore:   compstore.New(),
+			tracingSpec: config.TracingSpec{
+				SamplingRate: "0",
+			},
+		}
+		fakeReq := invokev1.NewInvokeMethodRequest("method").
+			WithHTTPExtension(http.MethodPost, "").
+			WithContentType("")
+		defer fakeReq.Close()
+
+		// act
+		resp, err := c.InvokeMethod(ctx, fakeReq, "")
+
+		// assert
+		assert.NoError(t, err)
+		defer resp.Close()
+
+		headers := map[string][]string{}
+		err = json.NewDecoder(resp.RawData()).Decode(&headers)
+		require.NoError(t, err)
+		require.Empty(t, headers["Content-Type"])
+	})
+}
+
+func TestInvokeMethod(t *testing.T) {
+	th := &testQueryStringHandler{t: t, serverURL: ""}
+	ctx := context.Background()
+	server := httptest.NewServer(th)
+	defer server.Close()
 
 	t.Run("query string", func(t *testing.T) {
 		c := Channel{
 			baseAddress: server.URL,
-			client:      &http.Client{},
+			client:      http.DefaultClient,
+			compStore:   compstore.New(),
 			tracingSpec: config.TracingSpec{
 				SamplingRate: "0",
 			},
@@ -345,7 +425,7 @@ func TestInvokeMethod(t *testing.T) {
 		defer fakeReq.Close()
 
 		// act
-		resp, err := c.InvokeMethod(ctx, fakeReq)
+		resp, err := c.InvokeMethod(ctx, fakeReq, "")
 
 		// assert
 		assert.NoError(t, err)
@@ -357,7 +437,8 @@ func TestInvokeMethod(t *testing.T) {
 	t.Run("tracing is enabled", func(t *testing.T) {
 		c := Channel{
 			baseAddress: server.URL,
-			client:      &http.Client{},
+			client:      http.DefaultClient,
+			compStore:   compstore.New(),
 			tracingSpec: config.TracingSpec{
 				SamplingRate: "1",
 			},
@@ -368,7 +449,7 @@ func TestInvokeMethod(t *testing.T) {
 		defer fakeReq.Close()
 
 		// act
-		resp, err := c.InvokeMethod(ctx, fakeReq)
+		resp, err := c.InvokeMethod(ctx, fakeReq, "")
 
 		// assert
 		assert.NoError(t, err)
@@ -376,8 +457,6 @@ func TestInvokeMethod(t *testing.T) {
 		body, _ := resp.RawDataFull()
 		assert.Equal(t, "", string(body))
 	})
-
-	server.Close()
 }
 
 func TestInvokeMethodMaxConcurrency(t *testing.T) {
@@ -390,7 +469,8 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 		server := httptest.NewServer(&handler)
 		c := Channel{
 			baseAddress: server.URL,
-			client:      &http.Client{},
+			client:      http.DefaultClient,
+			compStore:   compstore.New(),
 			ch:          make(chan struct{}, 1),
 		}
 
@@ -403,7 +483,7 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 					NewInvokeMethodRequest("method").
 					WithHTTPExtension("GET", "")
 				defer req.Close()
-				resp, err := c.InvokeMethod(ctx, req)
+				resp, err := c.InvokeMethod(ctx, req, "")
 				assert.NoError(t, err)
 				defer resp.Close()
 				wg.Done()
@@ -424,7 +504,8 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 		server := httptest.NewServer(&handler)
 		c := Channel{
 			baseAddress: server.URL,
-			client:      &http.Client{},
+			client:      http.DefaultClient,
+			compStore:   compstore.New(),
 			ch:          make(chan struct{}, 1),
 		}
 
@@ -437,7 +518,7 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 					NewInvokeMethodRequest("method").
 					WithHTTPExtension("GET", "")
 				defer req.Close()
-				resp, err := c.InvokeMethod(ctx, req)
+				resp, err := c.InvokeMethod(ctx, req, "")
 				assert.NoError(t, err)
 				defer resp.Close()
 				wg.Done()
@@ -459,7 +540,8 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 		c := Channel{
 			// False address to make first calls fail
 			baseAddress: "http://0.0.0.0:0",
-			client:      &http.Client{},
+			client:      http.DefaultClient,
+			compStore:   compstore.New(),
 			ch:          make(chan struct{}, 1),
 		}
 
@@ -472,7 +554,7 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 				NewInvokeMethodRequest("method").
 				WithHTTPExtension("GET", "")
 			defer req.Close()
-			resp, err := c.InvokeMethod(ctx, req)
+			resp, err := c.InvokeMethod(ctx, req, "")
 			if resp != nil {
 				defer resp.Close()
 			}
@@ -492,7 +574,11 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 func TestInvokeWithHeaders(t *testing.T) {
 	ctx := context.Background()
 	testServer := httptest.NewServer(&testHandlerHeaders{})
-	c := Channel{baseAddress: testServer.URL, client: &http.Client{}}
+	c := Channel{
+		baseAddress: testServer.URL,
+		client:      http.DefaultClient,
+		compStore:   compstore.New(),
+	}
 
 	req := invokev1.NewInvokeMethodRequest("method").
 		WithMetadata(map[string][]string{
@@ -503,7 +589,7 @@ func TestInvokeWithHeaders(t *testing.T) {
 	defer req.Close()
 
 	// act
-	resp, err := c.InvokeMethod(ctx, req)
+	resp, err := c.InvokeMethod(ctx, req, "")
 
 	// assert
 	assert.NoError(t, err)
@@ -527,14 +613,15 @@ func TestContentType(t *testing.T) {
 		testServer := httptest.NewServer(handler)
 		c := Channel{
 			baseAddress: testServer.URL,
-			client:      &http.Client{},
+			client:      http.DefaultClient,
+			compStore:   compstore.New(),
 		}
 		req := invokev1.NewInvokeMethodRequest("method").
 			WithHTTPExtension(http.MethodGet, "")
 		defer req.Close()
 
 		// act
-		resp, err := c.InvokeMethod(ctx, req)
+		resp, err := c.InvokeMethod(ctx, req, "")
 
 		// assert
 		assert.NoError(t, err)
@@ -548,14 +635,18 @@ func TestContentType(t *testing.T) {
 	t.Run("application/json", func(t *testing.T) {
 		handler := &testContentTypeHandler{}
 		testServer := httptest.NewServer(handler)
-		c := Channel{baseAddress: testServer.URL, client: &http.Client{}}
+		c := Channel{
+			baseAddress: testServer.URL,
+			client:      http.DefaultClient,
+			compStore:   compstore.New(),
+		}
 		req := invokev1.NewInvokeMethodRequest("method").
 			WithContentType("application/json").
 			WithHTTPExtension(http.MethodPost, "")
 		defer req.Close()
 
 		// act
-		resp, err := c.InvokeMethod(ctx, req)
+		resp, err := c.InvokeMethod(ctx, req, "")
 
 		// assert
 		assert.NoError(t, err)
@@ -569,14 +660,18 @@ func TestContentType(t *testing.T) {
 	t.Run("text/plain", func(t *testing.T) {
 		handler := &testContentTypeHandler{}
 		testServer := httptest.NewServer(handler)
-		c := Channel{baseAddress: testServer.URL, client: &http.Client{}}
+		c := Channel{
+			baseAddress: testServer.URL,
+			client:      http.DefaultClient,
+			compStore:   compstore.New(),
+		}
 		req := invokev1.NewInvokeMethodRequest("method").
 			WithContentType("text/plain").
 			WithHTTPExtension(http.MethodPost, "")
 		defer req.Close()
 
 		// act
-		resp, err := c.InvokeMethod(ctx, req)
+		resp, err := c.InvokeMethod(ctx, req, "")
 
 		// assert
 		assert.NoError(t, err)
@@ -592,14 +687,19 @@ func TestAppToken(t *testing.T) {
 	t.Run("token present", func(t *testing.T) {
 		ctx := context.Background()
 		testServer := httptest.NewServer(&testHandlerHeaders{})
-		c := Channel{baseAddress: testServer.URL, client: &http.Client{}, appHeaderToken: "token1"}
+		c := Channel{
+			baseAddress:    testServer.URL,
+			client:         http.DefaultClient,
+			appHeaderToken: "token1",
+			compStore:      compstore.New(),
+		}
 
 		req := invokev1.NewInvokeMethodRequest("method").
 			WithHTTPExtension(http.MethodPost, "")
 		defer req.Close()
 
 		// act
-		resp, err := c.InvokeMethod(ctx, req)
+		resp, err := c.InvokeMethod(ctx, req, "")
 
 		// assert
 		assert.NoError(t, err)
@@ -618,14 +718,18 @@ func TestAppToken(t *testing.T) {
 	t.Run("token not present", func(t *testing.T) {
 		ctx := context.Background()
 		testServer := httptest.NewServer(&testHandlerHeaders{})
-		c := Channel{baseAddress: testServer.URL, client: &http.Client{}}
+		c := Channel{
+			baseAddress: testServer.URL,
+			client:      http.DefaultClient,
+			compStore:   compstore.New(),
+		}
 
 		req := invokev1.NewInvokeMethodRequest("method").
 			WithHTTPExtension(http.MethodPost, "")
 		defer req.Close()
 
 		// act
-		resp, err := c.InvokeMethod(ctx, req)
+		resp, err := c.InvokeMethod(ctx, req, "")
 
 		// assert
 		assert.NoError(t, err)
@@ -646,7 +750,11 @@ func TestHealthProbe(t *testing.T) {
 	ctx := context.Background()
 	h := &testStatusCodeHandler{}
 	testServer := httptest.NewServer(h)
-	c := Channel{baseAddress: testServer.URL, client: &http.Client{}}
+	c := Channel{
+		baseAddress: testServer.URL,
+		client:      http.DefaultClient,
+		compStore:   compstore.New(),
+	}
 
 	var (
 		success bool

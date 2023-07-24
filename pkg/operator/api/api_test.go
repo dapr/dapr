@@ -21,15 +21,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ghodss/yaml"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/yaml"
 
+	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	httpendpointapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subscriptionsapiV2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/client/clientset/versioned/scheme"
@@ -50,14 +52,28 @@ func (m *mockComponentUpdateServer) Context() context.Context {
 	return context.TODO()
 }
 
+type mockHTTPEndpointUpdateServer struct {
+	grpc.ServerStream
+	Calls atomic.Int64
+}
+
+func (m *mockHTTPEndpointUpdateServer) Send(*operatorv1pb.HTTPEndpointUpdateEvent) error {
+	m.Calls.Add(1)
+	return nil
+}
+
+func (m *mockHTTPEndpointUpdateServer) Context() context.Context {
+	return context.TODO()
+}
+
 func TestProcessComponentSecrets(t *testing.T) {
 	t.Run("secret ref exists, not kubernetes secret store, no error", func(t *testing.T) {
 		c := componentsapi.Component{
 			Spec: componentsapi.ComponentSpec{
-				Metadata: []componentsapi.MetadataItem{
+				Metadata: []commonapi.NameValuePair{
 					{
 						Name: "test1",
-						SecretKeyRef: componentsapi.SecretKeyRef{
+						SecretKeyRef: commonapi.SecretKeyRef{
 							Name: "secret1",
 							Key:  "key1",
 						},
@@ -76,10 +92,10 @@ func TestProcessComponentSecrets(t *testing.T) {
 	t.Run("secret ref exists, kubernetes secret store, secret extracted", func(t *testing.T) {
 		c := componentsapi.Component{
 			Spec: componentsapi.ComponentSpec{
-				Metadata: []componentsapi.MetadataItem{
+				Metadata: []commonapi.NameValuePair{
 					{
 						Name: "test1",
-						SecretKeyRef: componentsapi.SecretKeyRef{
+						SecretKeyRef: commonapi.SecretKeyRef{
 							Name: "secret1",
 							Key:  "key1",
 						},
@@ -123,10 +139,10 @@ func TestProcessComponentSecrets(t *testing.T) {
 	t.Run("secret ref exists, default kubernetes secret store, secret extracted", func(t *testing.T) {
 		c := componentsapi.Component{
 			Spec: componentsapi.ComponentSpec{
-				Metadata: []componentsapi.MetadataItem{
+				Metadata: []commonapi.NameValuePair{
 					{
 						Name: "test1",
-						SecretKeyRef: componentsapi.SecretKeyRef{
+						SecretKeyRef: commonapi.SecretKeyRef{
 							Name: "secret1",
 							Key:  "key1",
 						},
@@ -253,6 +269,75 @@ func TestComponentUpdate(t *testing.T) {
 		api.ComponentUpdate(&operatorv1pb.ComponentUpdateRequest{
 			Namespace: "ns1",
 		}, mockSidecar)
+
+		assert.Equal(t, int64(1), mockSidecar.Calls.Load())
+	})
+}
+
+func TestHTTPEndpointUpdate(t *testing.T) {
+	e := httpendpointapi.HTTPEndpoint{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "ns1",
+		},
+		Spec: httpendpointapi.HTTPEndpointSpec{},
+	}
+
+	s := runtime.NewScheme()
+	err := scheme.AddToScheme(s)
+	assert.NoError(t, err)
+
+	err = corev1.AddToScheme(s)
+	assert.NoError(t, err)
+
+	client := fake.NewClientBuilder().
+		WithScheme(s).Build()
+
+	mockSidecar := &mockHTTPEndpointUpdateServer{}
+	api := NewAPIServer(client).(*apiServer)
+	t.Run("skip sidecar update if namespace doesn't match", func(t *testing.T) {
+		go func() {
+			assert.Eventually(t, func() bool {
+				api.endpointLock.Lock()
+				defer api.endpointLock.Unlock()
+				return len(api.allEndpointsUpdateChan) == 1
+			}, time.Second, 10*time.Millisecond)
+
+			api.endpointLock.Lock()
+			defer api.endpointLock.Unlock()
+			for key := range api.allEndpointsUpdateChan {
+				api.allEndpointsUpdateChan[key] <- &e
+				close(api.allEndpointsUpdateChan[key])
+			}
+		}()
+
+		// Start sidecar update loop
+		assert.NoError(t, api.HTTPEndpointUpdate(&operatorv1pb.HTTPEndpointUpdateRequest{
+			Namespace: "ns2",
+		}, mockSidecar))
+
+		assert.Equal(t, int64(0), mockSidecar.Calls.Load())
+	})
+
+	t.Run("sidecar is updated when endpoint namespace is a match", func(t *testing.T) {
+		go func() {
+			assert.Eventually(t, func() bool {
+				api.endpointLock.Lock()
+				defer api.endpointLock.Unlock()
+				return len(api.allEndpointsUpdateChan) == 1
+			}, time.Second, 10*time.Millisecond)
+
+			api.endpointLock.Lock()
+			defer api.endpointLock.Unlock()
+			for key := range api.allEndpointsUpdateChan {
+				api.allEndpointsUpdateChan[key] <- &e
+				close(api.allEndpointsUpdateChan[key])
+			}
+		}()
+
+		// Start sidecar update loop
+		assert.NoError(t, api.HTTPEndpointUpdate(&operatorv1pb.HTTPEndpointUpdateRequest{
+			Namespace: "ns1",
+		}, mockSidecar))
 
 		assert.Equal(t, int64(1), mockSidecar.Calls.Load())
 	})
@@ -416,6 +501,140 @@ func TestListsNamespaced(t *testing.T) {
 		})
 		assert.Nil(t, err)
 		assert.Equal(t, 0, len(res.GetResiliencies()))
+	})
+	t.Run("list http endpoints namespace scoping", func(t *testing.T) {
+		s := runtime.NewScheme()
+		err := scheme.AddToScheme(s)
+		assert.NoError(t, err)
+
+		err = httpendpointapi.AddToScheme(s)
+		assert.NoError(t, err)
+
+		av, kind := httpendpointapi.SchemeGroupVersion.WithKind("HTTPEndpoint").ToAPIVersionAndKind()
+		typeMeta := metav1.TypeMeta{
+			Kind:       kind,
+			APIVersion: av,
+		}
+		client := fake.NewClientBuilder().
+			WithScheme(s).
+			WithObjects(&httpendpointapi.HTTPEndpoint{
+				TypeMeta: typeMeta,
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "obj1",
+					Namespace: "namespace-a",
+				},
+			}, &httpendpointapi.HTTPEndpoint{
+				TypeMeta: typeMeta,
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "obj2",
+					Namespace: "namespace-b",
+				},
+			}).
+			Build()
+
+		api := NewAPIServer(client).(*apiServer)
+
+		res, err := api.ListHTTPEndpoints(context.TODO(), &operatorv1pb.ListHTTPEndpointsRequest{
+			Namespace: "namespace-a",
+		})
+
+		assert.Nil(t, err)
+		assert.Equal(t, 1, len(res.GetHttpEndpoints()))
+
+		var endpoint httpendpointapi.HTTPEndpoint
+		err = yaml.Unmarshal(res.GetHttpEndpoints()[0], &endpoint)
+		assert.Nil(t, err)
+
+		assert.Equal(t, "obj1", endpoint.Name)
+		assert.Equal(t, "namespace-a", endpoint.Namespace)
+
+		res, err = api.ListHTTPEndpoints(context.TODO(), &operatorv1pb.ListHTTPEndpointsRequest{
+			Namespace: "namespace-c",
+		})
+		assert.Nil(t, err)
+		assert.Equal(t, 0, len(res.GetHttpEndpoints()))
+	})
+}
+
+func TestProcessHTTPEndpointSecrets(t *testing.T) {
+	e := httpendpointapi.HTTPEndpoint{
+		Spec: httpendpointapi.HTTPEndpointSpec{
+			BaseURL: "http://test.com/",
+			Headers: []commonapi.NameValuePair{
+				{
+					Name: "test1",
+					SecretKeyRef: commonapi.SecretKeyRef{
+						Name: "secret1",
+						Key:  "key1",
+					},
+				},
+			},
+		},
+		Auth: httpendpointapi.Auth{
+			SecretStore: "secretstore",
+		},
+	}
+	t.Run("secret ref exists, not kubernetes secret store, no error", func(t *testing.T) {
+		err := processHTTPEndpointSecrets(context.Background(), &e, "default", nil)
+		assert.NoError(t, err)
+	})
+
+	t.Run("secret ref exists, kubernetes secret store, secret extracted", func(t *testing.T) {
+		e.Auth.SecretStore = kubernetesSecretStore
+		s := runtime.NewScheme()
+		err := scheme.AddToScheme(s)
+		assert.NoError(t, err)
+
+		err = corev1.AddToScheme(s)
+		assert.NoError(t, err)
+
+		client := fake.NewClientBuilder().
+			WithScheme(s).
+			WithObjects(&corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "secret1",
+					Namespace: "default",
+				},
+				Data: map[string][]byte{
+					"key1": []byte("value1"),
+				},
+			}).
+			Build()
+		assert.NoError(t, processHTTPEndpointSecrets(context.Background(), &e, "default", client))
+		enc := base64.StdEncoding.EncodeToString([]byte("value1"))
+		jsonEnc, err := json.Marshal(enc)
+		assert.NoError(t, err)
+		assert.Equal(t, jsonEnc, e.Spec.Headers[0].Value.Raw)
+	})
+
+	t.Run("secret ref exists, default kubernetes secret store, secret extracted", func(t *testing.T) {
+		e.Auth.SecretStore = ""
+		s := runtime.NewScheme()
+		err := scheme.AddToScheme(s)
+		assert.NoError(t, err)
+
+		err = corev1.AddToScheme(s)
+		assert.NoError(t, err)
+
+		client := fake.NewClientBuilder().
+			WithScheme(s).
+			WithObjects(&corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "secret1",
+					Namespace: "default",
+				},
+				Data: map[string][]byte{
+					"key1": []byte("value1"),
+				},
+			}).
+			Build()
+
+		assert.NoError(t, processHTTPEndpointSecrets(context.Background(), &e, "default", client))
+
+		enc := base64.StdEncoding.EncodeToString([]byte("value1"))
+		jsonEnc, err := json.Marshal(enc)
+		assert.NoError(t, err)
+		assert.Equal(t, jsonEnc, e.Spec.Headers[0].Value.Raw)
 	})
 }
 

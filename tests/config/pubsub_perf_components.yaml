@@ -1,0 +1,90 @@
+#
+# Copyright 2023 The Dapr Authors
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+#kafka pubsub component
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: dapr-perf-test-kafka-pubsub-subs-http
+spec:
+  type: pubsub.kafka
+  initTimeout: 1m
+  version: v1
+  metadata:
+  # Kafka broker connection setting
+  - name: brokers
+    value: dapr-kafka:9092
+  - name: authRequired
+    value: "false"
+  - name: initialOffset
+    value: newest
+
+---
+
+#rabbit pubsub component
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: dapr-perf-test-rabbitmq-pubsub-subs-http
+spec:
+  type: pubsub.rabbitmq
+  initTimeout: 1m
+  version: v1
+  metadata:
+  # rabbitmq broker connection setting
+  - name: host
+    value: amqp://admin:admin@rabbitmq.dapr-tests.svc.cluster.local:5672
+
+---
+
+#mqtt pubsub component
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: dapr-perf-test-mqtt-pubsub-subs-http
+spec:
+  type: pubsub.mqtt3
+  version: v1
+  metadata:
+    - name: url
+      #value: "tcp://[username][:password]@host.domain[:port]"
+      value: tcp://perf-test-emqx@perf-test-emqx-0.perf-test-emqx-headless.dapr-tests.svc.cluster.local:1883
+
+---
+
+#pulsar pubsub component
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: dapr-perf-test-pulsar-pubsub-subs-http
+spec:
+  type: pubsub.pulsar
+  version: v1
+  metadata:
+  - name: host
+    value: "perf-test-pulsar-broker.dapr-tests.svc.cluster.local:6650"
+
+---
+#redis pubsub component
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: dapr-perf-test-redis-pubsub-subs-http
+spec:
+  type: pubsub.redis
+  version: v1
+  metadata:
+  - name: redisHost
+    value: dapr-redis-master.dapr-tests.svc.cluster.local:6379
+  - name: redisPassword
+    value: ""

@@ -128,7 +128,7 @@ func TestReminderPeriodJSON(t *testing.T) {
 		jsonEqual(t, p, `"R3/P2WT1M"`)
 	})
 
-	t.Run("empty JSON value", func(t *testing.T) {
+	t.Run("no JSON value", func(t *testing.T) {
 		expect := ReminderPeriod{
 			value:   "",
 			repeats: -1,
@@ -139,20 +139,33 @@ func TestReminderPeriodJSON(t *testing.T) {
 		assert.True(t, reflect.DeepEqual(dec, expect), "Got: `%#v`. Expected: `%#v`", dec, expect)
 	})
 
-	t.Run("empty JSON string", func(t *testing.T) {
+	t.Run("empty JSON values", func(t *testing.T) {
+		tests := map[string]string{
+			"empty string": `""`,
+			"null":         "null",
+			"empty array":  "[]",
+			"empty object": "{}",
+		}
+
 		expect := ReminderPeriod{
 			value:   "",
 			repeats: -1,
 		}
-		dec := ReminderPeriod{}
-		err := json.Unmarshal([]byte(`""`), &dec) // Note this is an empty string
-		require.NoError(t, err)
-		assert.True(t, reflect.DeepEqual(dec, expect), "Got: `%#v`. Expected: `%#v`", dec, expect)
+
+		for name, tt := range tests {
+			t.Run(name, func(t *testing.T) {
+				dec := ReminderPeriod{}
+				err := json.Unmarshal([]byte(tt), &dec)
+				require.NoError(t, err)
+				assert.True(t, reflect.DeepEqual(dec, expect), "Got: `%#v`. Expected: `%#v`", dec, expect)
+			})
+		}
 	})
 
-	t.Run("not a JSON string", func(t *testing.T) {
+	t.Run("not a JSON value", func(t *testing.T) {
 		dec := ReminderPeriod{}
-		err := json.Unmarshal([]byte("[]"), &dec)
+		// This is just "foo" and not as a JSON string, so it's invalid
+		err := json.Unmarshal([]byte("foo"), &dec)
 		require.Error(t, err)
 	})
 

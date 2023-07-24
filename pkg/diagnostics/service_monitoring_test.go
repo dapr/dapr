@@ -71,3 +71,11 @@ func TestSerivceMonitoringInit(t *testing.T) {
 	assert.True(t, c.enabled)
 	assert.Equal(t, c.appID, "testAppId")
 }
+
+// export for diagnostics_test package only unexported keys
+var (
+	FlowDirectionKey = flowDirectionKey
+	TargetKey        = targetKey
+	StatusKey        = statusKey
+	PolicyKey        = policyKey
+)

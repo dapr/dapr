@@ -20,6 +20,7 @@ spec:
         dapr.io/enabled: "true"
         dapr.io/app-id: "grpcproxyserver"
         dapr.io/app-port: "50051"
+        dapr.io/http-max-request-size: "6"
     spec:
       containers:
       - name: service-invocation-grpc-proxy-server

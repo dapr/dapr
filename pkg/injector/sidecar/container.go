@@ -35,7 +35,7 @@ import (
 // ContainerConfig contains the configuration for the sidecar container.
 type ContainerConfig struct {
 	AppID                        string
-	Annotations                  Annotations
+	Annotations                  annotations.Map
 	CertChain                    string
 	CertKey                      string
 	ControlPlaneAddress          string
@@ -51,6 +51,7 @@ type ContainerConfig struct {
 	TrustAnchors                 string
 	VolumeMounts                 []corev1.VolumeMount
 	ComponentsSocketsVolumeMount *corev1.VolumeMount
+	SkipPlacement                bool
 	RunAsNonRoot                 bool
 	ReadOnlyRootFilesystem       bool
 	SidecarDropALLCapabilities   bool
@@ -97,8 +98,11 @@ func GetSidecarContainer(cfg ContainerConfig) (*corev1.Container, error) {
 		log.Warn(err)
 	}
 
+	// We still include PlacementServiceAddress if explicitly set as annotation
 	if cfg.Annotations.Exist(annotations.KeyPlacementHostAddresses) {
 		cfg.PlacementServiceAddress = cfg.Annotations.GetString(annotations.KeyPlacementHostAddresses)
+	} else if cfg.SkipPlacement {
+		cfg.PlacementServiceAddress = ""
 	}
 
 	ports := []corev1.ContainerPort{
@@ -134,7 +138,6 @@ func GetSidecarContainer(cfg ContainerConfig) (*corev1.Container, error) {
 		"--control-plane-address", cfg.ControlPlaneAddress,
 		"--app-protocol", cfg.Annotations.GetStringOrDefault(annotations.KeyAppProtocol, annotations.DefaultAppProtocol),
 		"--placement-host-address", cfg.PlacementServiceAddress,
-		"--config", cfg.Annotations.GetString(annotations.KeyConfig),
 		"--log-level", cfg.Annotations.GetStringOrDefault(annotations.KeyLogLevel, annotations.DefaultLogLevel),
 		"--app-max-concurrency", strconv.Itoa(int(maxConcurrency)),
 		"--sentry-address", cfg.SentryAddress,
@@ -144,6 +147,14 @@ func GetSidecarContainer(cfg ContainerConfig) (*corev1.Container, error) {
 		"--dapr-http-read-buffer-size", strconv.Itoa(int(readBufferSize)),
 		"--dapr-graceful-shutdown-seconds", strconv.Itoa(int(gracefulShutdownSeconds)),
 		"--disable-builtin-k8s-secret-store=" + strconv.FormatBool(disableBuiltinK8sSecretStore),
+	}
+
+	if v := cfg.Annotations.GetString(annotations.KeyConfig); v != "" {
+		args = append(args, "--config", v)
+	}
+
+	if v, ok := cfg.Annotations[annotations.KeyAppChannel]; ok && v != "" {
+		args = append(args, "--app-channel-address", v)
 	}
 
 	// --enable-api-logging is set only if there's an explicit annotation (true or false) for that
@@ -259,9 +270,13 @@ func GetSidecarContainer(cfg ContainerConfig) (*corev1.Container, error) {
 		container.Args = append(container.Args, args...)
 	}
 
-	containerEnv := ParseEnvString(cfg.Annotations[annotations.KeyEnv])
+	containerEnvKeys, containerEnv := ParseEnvString(cfg.Annotations[annotations.KeyEnv])
 	if len(containerEnv) > 0 {
 		container.Env = append(container.Env, containerEnv...)
+		container.Env = append(container.Env, corev1.EnvVar{
+			Name:  authConsts.EnvKeysEnvVar,
+			Value: strings.Join(containerEnvKeys, " "),
+		})
 	}
 
 	// This is a special case that requires administrator privileges in Windows containers
@@ -401,7 +416,7 @@ func podContainsTolerations(ts []corev1.Toleration, podTolerations []corev1.Tole
 	return false
 }
 
-func getResourceRequirements(an Annotations) (*corev1.ResourceRequirements, error) {
+func getResourceRequirements(an annotations.Map) (*corev1.ResourceRequirements, error) {
 	r := corev1.ResourceRequirements{
 		Limits:   corev1.ResourceList{},
 		Requests: corev1.ResourceList{},

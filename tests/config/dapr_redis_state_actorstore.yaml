@@ -38,6 +38,8 @@ scopes:
 - actorreminder
 - actorreminderpartition
 - actorinvocationapp
+- actormetadata-a
+- actormetadata-b
 - actorjava
 - actordotnet
 - actorpython

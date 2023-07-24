@@ -75,6 +75,13 @@ func TestPlacementHA(t *testing.T) {
 
 	// Run tests
 	t.Run("elects leader with 3 nodes", func(t *testing.T) {
+		// It is painful that we have to include a `time.Sleep` here, but due to
+		// the non-deterministic behaviour of the raft library we are using we will
+		// later fail on slower test runner machines. A clock timer wait means we
+		// have a _better_ chance of being in the right spot in the state machine
+		// and the network has died down. Ideally we should move to a different
+		// raft library that is more deterministic and reliable for our use case.
+		time.Sleep(time.Second * 3)
 		require.NotEqual(t, -1, findLeader(t, raftServers))
 	})
 
@@ -94,17 +101,27 @@ func TestPlacementHA(t *testing.T) {
 	})
 
 	t.Run("retrieve state in follower", func(t *testing.T) {
-		follower := (findLeader(t, raftServers) + 1) % 3
+		var follower, oldLeader int
+		oldLeader = findLeader(t, raftServers)
+		follower = (oldLeader + 1) % 3
 		retrieveValidState(t, raftServers[follower], testMembers[0])
-	})
 
-	t.Run("new leader after leader fails", func(t *testing.T) {
-		oldLeader := findLeader(t, raftServers)
-		raftServerCancel[oldLeader]()
-		raftServers[oldLeader] = nil
-		require.Eventually(t, func() bool {
-			return oldLeader != findLeader(t, raftServers)
-		}, time.Second*10, time.Millisecond*100)
+		t.Run("new leader after leader fails", func(t *testing.T) {
+			raftServerCancel[oldLeader]()
+			raftServers[oldLeader] = nil
+
+			// It is painful that we have to include a `time.Sleep` here, but due to
+			// the non-deterministic behaviour of the raft library we are using we will
+			// later fail on slower test runner machines. A clock timer wait means we
+			// have a _better_ chance of being in the right spot in the state machine
+			// and the network has died down. Ideally we should move to a different
+			// raft library that is more deterministic and reliable for our use case.
+			time.Sleep(time.Second * 3)
+
+			require.Eventually(t, func() bool {
+				return oldLeader != findLeader(t, raftServers)
+			}, time.Second*10, time.Millisecond*100)
+		})
 	})
 
 	t.Run("set and retrieve state in leader after re-election", func(t *testing.T) {
@@ -122,6 +139,13 @@ func TestPlacementHA(t *testing.T) {
 	})
 
 	t.Run("leave only leader node running", func(t *testing.T) {
+		// It is painful that we have to include a `time.Sleep` here, but due to
+		// the non-deterministic behaviour of the raft library we are using we will
+		// fail in a few lines on slower test runner machines. A clock timer wait
+		// means we have a _better_ chance of being in the right spot in the state
+		// machine. Ideally we should move to a different raft library that is more
+		// deterministic and reliable.
+		time.Sleep(time.Second * 3)
 		leader := findLeader(t, raftServers)
 		for i := range raftServers {
 			if i != leader {
@@ -148,6 +172,14 @@ func TestPlacementHA(t *testing.T) {
 			return true
 		}, time.Second*5, time.Millisecond*100, "leader did not step down")
 	})
+
+	// It is painful that we have to include a `time.Sleep` here, but due to
+	// the non-deterministic behaviour of the raft library we are using we will
+	// fail in a few lines on slower test runner machines. A clock timer wait
+	// means we have a _better_ chance of being in the right spot in the state
+	// machine. Ideally we should move to a different raft library that is more
+	// deterministic and reliable.
+	time.Sleep(time.Second * 3)
 
 	t.Run("leader elected when second node comes up", func(t *testing.T) {
 		var oldSvr int
@@ -211,6 +243,14 @@ func TestPlacementHA(t *testing.T) {
 				raftServerCancel[i]()
 			}
 		}
+
+		// It is painful that we have to include a `time.Sleep` here, but due to
+		// the non-deterministic behaviour of the raft library we are using we will
+		// later fail on slower test runner machines. A clock timer wait means we
+		// have a _better_ chance of being in the right spot in the state machine
+		// and the network has died down. Ideally we should move to a different
+		// raft library that is more deterministic and reliable for our use case.
+		time.Sleep(time.Second * 3)
 
 		// Restart all nodes
 		for i := 0; i < 3; i++ {

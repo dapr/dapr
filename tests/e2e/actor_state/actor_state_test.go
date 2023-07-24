@@ -57,6 +57,8 @@ func TestMain(m *testing.M) {
 			Replicas:       1,
 			IngressEnabled: true,
 			MetricsEnabled: true,
+			// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
+			Config: "actorstatettl",
 		},
 	}
 
@@ -207,8 +209,10 @@ func TestActorState(t *testing.T) {
 			b, err := json.Marshal(&runtimev1.ExecuteActorStateTransactionRequest{
 				ActorType: "grpcMyActorType", ActorId: fmt.Sprintf("%s-myActorID", actuid),
 				Operations: []*runtimev1.TransactionalActorStateOperation{
-					{OperationType: "upsert", Key: "myKey",
-						Value: &anypb.Any{Value: []byte("myData")}},
+					{
+						OperationType: "upsert", Key: "myKey",
+						Value: &anypb.Any{Value: []byte("myData")},
+					},
 				},
 			})
 			require.NoError(t, err)
@@ -239,8 +243,10 @@ func TestActorState(t *testing.T) {
 			b, err = json.Marshal(&runtimev1.ExecuteActorStateTransactionRequest{
 				ActorType: "grpcMyActorType", ActorId: fmt.Sprintf("%s-myActorID", actuid),
 				Operations: []*runtimev1.TransactionalActorStateOperation{
-					{OperationType: "upsert", Key: "myKey",
-						Value: &anypb.Any{Value: []byte("newData")}},
+					{
+						OperationType: "upsert", Key: "myKey",
+						Value: &anypb.Any{Value: []byte("newData")},
+					},
 				},
 			})
 			require.NoError(t, err)

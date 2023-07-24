@@ -1,0 +1,544 @@
+#
+# Copyright 2023 The Dapr Authors
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+# Required secrets:
+# - AZURE_CREDENTIALS: JSON object containing the Azure service principal credentials. Docs: https://github.com/Azure/login#configure-a-service-principal-with-a-secret
+# - PERF_AZURE_STORAGE_ACCOUNT and PERF_AZURE_STORAGE_KEY: Credentials for the Storage Account where to store the result of perf tests
+# - DAPR_BOT_TOKEN: Token for the Dapr bot
+#
+# Optional secrets:
+# - AZURE_DIAG_LOG_ANALYTICS_WORKSPACE_ID: Resource ID of the Log Analytics Workspace where to store certain diagnostic logs (e.g. `/subscriptions/<subscription>/resourcegroups/<resource group>/providers/Microsoft.OperationalInsights/workspaces/<workspace name>`)
+# - AZURE_DIAG_STORAGE_ID: Resource ID of the Azure Storage account where to store certain diagnostic logs (e.g. `/subscriptions/<subscription>/resourcegroups/<resource group>/providers/Microsoft.Storage/storageAccounts/<storage account name>`)
+
+name: dapr-perf-components
+
+on:
+  # Run every Saturday at 4.34am UTC
+  schedule:
+    - cron: "34 4 * * 6"  # Manual trigger
+  workflow_dispatch:
+  # Dispatch on external events
+  repository_dispatch:
+    types: [components-perf-test]
+env:
+  # Configure proxy for Go modules
+  GOPROXY: https://proxy.golang.org
+  # Version of kubectl
+  KUBECTLVER: "v1.25.2"
+  # Version of Helm
+  HELMVER: "v3.10.0"
+  # Kubernetes namespace to use
+  DAPR_NAMESPACE: "dapr-tests"
+  # Timeout for tests
+  MAX_TEST_TIMEOUT: 5400
+  # Space-separated of supported Azure regions: one will be picked randomly for each cluster
+  AZURE_REGIONS: "westus3"
+  # Container registry where to cache perf test images
+  DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
+
+jobs:
+  deploy-infrastructure:
+    name: Deploy test infrastructure
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up for scheduled test
+        if: github.event_name != 'repository_dispatch'
+        run: |
+          echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
+          echo "CHECKOUT_REF=refs/heads/master" >> $GITHUB_ENV
+        shell: bash
+      - name: Parse test payload
+        if: github.event_name == 'repository_dispatch'
+        uses: actions/github-script@v6.2.0
+        with:
+          github-token: ${{secrets.DAPR_BOT_TOKEN}}
+          script: |
+            const testPayload = context.payload.client_payload;
+            if (testPayload && testPayload.command == "ok-to-perf-components") {
+              var fs = require('fs');
+              // Set environment variables
+              fs.appendFileSync(process.env.GITHUB_ENV,
+                `CHECKOUT_REPO=${testPayload.pull_head_repo}\n`+
+                `CHECKOUT_REF=${testPayload.pull_head_ref}\n`+
+                `PR_NUMBER=${testPayload.issue.number}`
+              );
+            }
+      - name: Create PR comment
+        if: env.PR_NUMBER != ''
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
+        with:
+          header: ${{ github.run_id }}
+          number: ${{ env.PR_NUMBER }}
+          hide: true
+          hide_classify: OUTDATED
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            # Dapr perf test
+
+            🔗 **[Link to Action run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})**
+
+            Commit ref: ${{ env.CHECKOUT_REF }}
+      - name: Check out code
+        if: env.CHECKOUT_REPO != ''
+        uses: actions/checkout@v3
+        with:
+          repository: ${{ env.CHECKOUT_REPO }}
+          ref: ${{ env.CHECKOUT_REF }}
+      - name: Login to Azure
+        if: env.CHECKOUT_REPO != ''
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: Build test prefix
+        if: env.CHECKOUT_REPO != ''
+        run: |
+          BASE_STR="PERF|${GITHUB_SHA}|${GITHUB_SERVER_URL}|${GITHUB_REPOSITORY}|${GITHUB_RUN_ID}|${GITHUB_RUN_ATTEMPT}"
+          echo "Base string is ${BASE_STR}"
+          SUFFIX=$(echo $BASE_STR | sha1sum | head -c 10)
+          echo "Suffix is ${SUFFIX}"
+          TEST_PREFIX="daprprf${SUFFIX}"
+          echo "Test prefix is ${TEST_PREFIX}"
+          echo "TEST_PREFIX=${TEST_PREFIX}" >> $GITHUB_ENV
+          echo "TEST_RESOURCE_GROUP=Dapr-Perf-${TEST_PREFIX}" >> $GITHUB_ENV
+        shell: bash
+      - name: Deploy the test cluster
+        if: env.TEST_PREFIX != ''
+        run: |
+          # Select two random Azure regions
+          REGIONS=(${{ env.AZURE_REGIONS }})
+          REGIONS_SIZE=${#REGIONS[@]}
+          REGIONS_IDX=$(($RANDOM % $REGIONS_SIZE))
+          REGION=${REGIONS[$REGIONS_IDX]}
+          echo "AZURE_REGION=${REGION}" >> $GITHUB_ENV
+          echo "Deploying to Azure region: ${REGION}"
+
+           # Tags
+          TAGS="date=$(date --iso-8601=seconds)"
+          echo "Tags: ${TAGS}"
+
+          # Create a resource group
+          az group create \
+            --resource-group "${{ env.TEST_RESOURCE_GROUP }}" \
+            --location ${REGION} \
+            --tags "${TAGS}"
+
+          # Deploy the test cluster, deploying AKS only
+          # Retry the deployment twice in case of transient failures (such as capacity constraints)
+          success=false
+          for i in 1 2 3; do 
+            az deployment group create \
+              --resource-group "${{ env.TEST_RESOURCE_GROUP }}" \
+              --template-file ./tests/test-infra/azure-aks.bicep \
+              --parameters \
+                namePrefix="${{ env.TEST_PREFIX }}" \
+                location=${REGION} \
+                linuxVMSize=Standard_D8s_v4 \
+                diagLogAnalyticsWorkspaceResourceId="${{ secrets.AZURE_DIAG_LOG_ANALYTICS_WORKSPACE_ID }}" \
+                diagStorageResourceId="${{ secrets.AZURE_DIAG_STORAGE_ID }}" \
+              && success=true \
+              && break \
+              || sleep 120
+          done
+          # Exit with error if failed
+          $success || exit 1
+        shell: bash
+      - name: Update PR comment for success
+        if: success() && env.PR_NUMBER != ''
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
+        with:
+          header: ${{ github.run_id }}
+          number: ${{ env.PR_NUMBER }}
+          append: true
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            ## ✅ Infrastructure deployed
+
+            - Resource group name: `Dapr-Perf-${{ env.TEST_PREFIX }}`
+            - Azure region: ${{ env.AZURE_REGION }}
+      - name: Update PR comment for failure
+        if: failure() && env.PR_NUMBER != ''
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
+        with:
+          header: ${{ github.run_id }}
+          number: ${{ env.PR_NUMBER }}
+          append: true
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            ## ❌ Infrastructure deployment failed
+
+            - Resource group name: `Dapr-Perf-${{ env.TEST_PREFIX }}`
+            - Azure region: ${{ env.AZURE_REGION }}
+
+            Please check the logs for details on the failure.
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    env:
+      GOOS: linux
+      GOARCH: amd64
+      TARGET_OS: linux
+      TARGET_ARCH: amd64
+    steps:
+      - name: Set up for scheduled test
+        if: github.event_name != 'repository_dispatch'
+        run: |
+          echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
+          echo "CHECKOUT_REF=refs/heads/master" >> $GITHUB_ENV
+        shell: bash
+      - name: Parse test payload
+        if: github.event_name == 'repository_dispatch'
+        uses: actions/github-script@v6.2.0
+        with:
+          github-token: ${{secrets.DAPR_BOT_TOKEN}}
+          script: |
+            const testPayload = context.payload.client_payload;
+            if (testPayload && testPayload.command == "ok-to-perf-components") {
+              var fs = require('fs');
+              // Set environment variables
+              fs.appendFileSync(process.env.GITHUB_ENV,
+                `CHECKOUT_REPO=${testPayload.pull_head_repo}\n`+
+                `CHECKOUT_REF=${testPayload.pull_head_ref}\n`+
+                `PR_NUMBER=${testPayload.issue.number}`
+              );
+            }
+      - name: Check out code
+        if: env.CHECKOUT_REPO != ''
+        uses: actions/checkout@v3
+        with:
+          repository: ${{ env.CHECKOUT_REPO }}
+          ref: ${{ env.CHECKOUT_REF }}
+      - name: Set up Go
+        id: setup-go
+        uses: actions/setup-go@v3
+        with:
+          go-version-file: 'go.mod'
+      - name: Cache Go modules (perf)
+        if: env.CHECKOUT_REPO != '' && runner.os == 'Linux'
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-perf-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-perf-
+      - name: Login to Azure
+        if: env.CHECKOUT_REPO != ''
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: Login to cache registry
+        if: env.CHECKOUT_REPO != '' && env.DAPR_CACHE_REGISTRY != ''
+        run: |
+          az acr login --name ${{ env.DAPR_CACHE_REGISTRY }}
+        shell: bash
+      - name: Build test prefix and set env vars
+        if: env.CHECKOUT_REPO != ''
+        run: |
+          BASE_STR="PERF|${GITHUB_SHA}|${GITHUB_SERVER_URL}|${GITHUB_REPOSITORY}|${GITHUB_RUN_ID}|${GITHUB_RUN_ATTEMPT}"
+          echo "Base string is ${BASE_STR}"
+          SUFFIX=$(echo $BASE_STR | sha1sum | head -c 10)
+          echo "Suffix is ${SUFFIX}"
+          TEST_PREFIX="daprprf${SUFFIX}"
+          echo "Test prefix is ${TEST_PREFIX}"
+          echo "TEST_PREFIX=${TEST_PREFIX}" >> $GITHUB_ENV
+          echo "DAPR_REGISTRY=${TEST_PREFIX}acr.azurecr.io" >> $GITHUB_ENV
+          echo "TEST_CLUSTER=${TEST_PREFIX}-aks" >> $GITHUB_ENV
+          echo "DAPR_TAG=${TEST_PREFIX}" >> $GITHUB_ENV
+          echo "DAPR_TEST_TAG=${TEST_PREFIX}" >> $GITHUB_ENV
+          echo "TEST_RESOURCE_GROUP=Dapr-Perf-${TEST_PREFIX}" >> $GITHUB_ENV
+        shell: bash
+      - name: Build dapr and its docker image
+        if: env.TEST_PREFIX != ''
+        run: |
+          make build
+          make docker-build
+        shell: bash
+      - name: Wait for Azure Container Registry deployment
+        timeout-minutes: 30
+        if: env.TEST_PREFIX != ''
+        run: |
+          until az acr show --name ${{ env.TEST_PREFIX }}acr --query "id"
+          do
+              echo "Azure Container Registry not ready yet: sleeping for 20 seconds"
+              sleep 20
+          done
+        shell: bash
+      - name: Login to Azure Container Registry
+        if: env.TEST_PREFIX != ''
+        run: |
+          az acr login --name ${{ env.TEST_PREFIX }}acr
+        shell: bash
+      - name: Push Dapr container images
+        if: env.TEST_PREFIX != ''
+        run: |
+          make docker-push
+        shell: bash
+      - name: Build and push perf test apps
+        if: env.TEST_PREFIX != ''
+        run: |
+          make build-push-perf-app-all
+        shell: bash
+      - name: Update PR comment for success
+        if: success() && env.PR_NUMBER != ''
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
+        with:
+          header: ${{ github.run_id }}
+          number: ${{ env.PR_NUMBER }}
+          append: true
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            ## ✅ Build succeeded
+
+            - Image tag: `${{ env.DAPR_TAG }}`
+            - Test image tag: `${{ env.DAPR_TEST_TAG }}`
+      - name: Update PR comment for failure
+        if: failure() && env.PR_NUMBER != ''
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
+        with:
+          header: ${{ github.run_id }}
+          number: ${{ env.PR_NUMBER }}
+          append: true
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            ## ❌ Build failed
+
+            Please check the logs for details on the error.
+
+  test-perf:
+    name: Perf tests
+    needs:
+      - build
+      - deploy-infrastructure
+    runs-on: ubuntu-latest
+    env:
+      GOOS: linux
+      GOARCH: amd64
+      AZURE_STORAGE_ACCOUNT: ${{ secrets.PERF_AZURE_STORAGE_ACCOUNT }}
+      AZURE_STORAGE_ACCESS_KEY: ${{ secrets.PERF_AZURE_STORAGE_KEY }}
+      PULL_POLICY: IfNotPresent
+    steps:
+      - name: Setup test output
+        run: |
+          export TEST_OUTPUT_FILE_PREFIX=$GITHUB_WORKSPACE/test_report
+          echo "TEST_OUTPUT_FILE_PREFIX=$TEST_OUTPUT_FILE_PREFIX" >> $GITHUB_ENV
+        shell: bash
+      - name: Set up log paths
+        run: |
+          echo "DAPR_CONTAINER_LOG_PATH=$GITHUB_WORKSPACE/container_logs/perf_tests" >> $GITHUB_ENV
+          echo "DAPR_TEST_LOG_PATH=$GITHUB_WORKSPACE/test_logs/perf_tests" >> $GITHUB_ENV
+        shell: bash
+      - name: Set up for scheduled test
+        if: github.event_name != 'repository_dispatch'
+        run: |
+          echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
+          echo "CHECKOUT_REF=refs/heads/master" >> $GITHUB_ENV
+        shell: bash
+      - name: Parse test payload
+        if: github.event_name == 'repository_dispatch'
+        uses: actions/github-script@v6.2.0
+        with:
+          github-token: ${{secrets.DAPR_BOT_TOKEN}}
+          script: |
+            const testPayload = context.payload.client_payload;
+            if (testPayload && testPayload.command == "ok-to-perf-components") {
+              let selectedTestsEnvVar = ""
+              if (testPayload?.args) {
+                selectedTestsEnvVar = `DAPR_PERF_TEST=${testPayload.args}\n`
+              }
+              var fs = require('fs');
+              // Set environment variables
+              fs.appendFileSync(process.env.GITHUB_ENV,
+                `${selectedTestsEnvVar}`+
+                `CHECKOUT_REPO=${testPayload.pull_head_repo}\n`+
+                `CHECKOUT_REF=${testPayload.pull_head_ref}\n`+
+                `PR_NUMBER=${testPayload.issue.number}`
+              );
+            }
+      - name: Check out code
+        if: env.CHECKOUT_REPO != ''
+        uses: actions/checkout@v3
+        with:
+          repository: ${{ env.CHECKOUT_REPO }}
+          ref: ${{ env.CHECKOUT_REF }}
+      - name: Set up Go
+        id: setup-go
+        uses: actions/setup-go@v3
+        with:
+          go-version-file: 'go.mod'
+      - name: Cache Go modules (perf-test)
+        if: env.CHECKOUT_REPO != '' && runner.os == 'Linux'
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-perf-test-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-perf-test-
+      - uses: azure/setup-kubectl@v1
+        with:
+          version: ${{ env.KUBECTLVER }}
+        id: install
+      - name: Set up Helm ${{ env.HELMVER }}
+        uses: azure/setup-helm@v1
+        with:
+          version: ${{ env.HELMVER }}
+      - name: Login to Azure
+        if: env.CHECKOUT_REPO != ''
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: Build test prefix and set env vars
+        if: env.CHECKOUT_REPO != ''
+        run: |
+          BASE_STR="PERF|${GITHUB_SHA}|${GITHUB_SERVER_URL}|${GITHUB_REPOSITORY}|${GITHUB_RUN_ID}|${GITHUB_RUN_ATTEMPT}"
+          echo "Base string is ${BASE_STR}"
+          SUFFIX=$(echo $BASE_STR | sha1sum | head -c 10)
+          echo "Suffix is ${SUFFIX}"
+          TEST_PREFIX="daprprf${SUFFIX}"
+          echo "Test prefix is ${TEST_PREFIX}"
+          echo "TEST_PREFIX=${TEST_PREFIX}" >> $GITHUB_ENV
+          echo "DAPR_REGISTRY=${TEST_PREFIX}acr.azurecr.io" >> $GITHUB_ENV
+          echo "TEST_CLUSTER=${TEST_PREFIX}-aks" >> $GITHUB_ENV
+          echo "DAPR_TAG=${TEST_PREFIX}" >> $GITHUB_ENV
+          echo "DAPR_TEST_TAG=${TEST_PREFIX}" >> $GITHUB_ENV
+          echo "TEST_RESOURCE_GROUP=Dapr-Perf-${TEST_PREFIX}" >> $GITHUB_ENV
+        shell: bash
+      - name: Connect to Kubernetes
+        if: env.TEST_PREFIX != ''
+        run: |
+          az aks get-credentials -n "${{ env.TEST_CLUSTER }}" -g "${{ env.TEST_RESOURCE_GROUP }}"
+          kubectl create namespace ${{ env.DAPR_NAMESPACE }}
+        shell: bash
+      - name: Preparing AKS cluster for test
+        if: env.TEST_PREFIX != ''
+        run: |
+          make setup-helm-init
+          make setup-test-env
+          make setup-pubsub-subs-perf-test-components
+          kubectl get pods -n ${{ env.DAPR_NAMESPACE }}
+      - name: Deploy dapr to AKS cluster
+        if: env.TEST_PREFIX != ''
+        env:
+          ADDITIONAL_HELM_SET: "dapr_operator.logLevel=debug,dapr_operator.watchInterval=20s,dapr_dashboard.enabled=false"
+        run: make docker-deploy-k8s
+      - name: Deploy test components
+        if: env.TEST_PREFIX != ''
+        run: |
+          make setup-test-components
+          make setup-components-perf-test
+      - name: Run pub-sub subscribe http components performance tests
+        if: env.TEST_PREFIX != ''
+        run: make test-perf-pubsub-subscribe-http-components
+      - name: Save control plane logs
+        if: always() && env.TEST_PREFIX != ''
+        run: |
+          make save-dapr-control-plane-k8s-logs
+      - name: Upload container logs
+        if: always() && env.TEST_PREFIX != ''
+        uses: actions/upload-artifact@master
+        with:
+          name: perf_container_logs
+          path: ${{ env.DAPR_CONTAINER_LOG_PATH }}
+      - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@master
+        with:
+          name: perf_test_logs
+          path: ${{ env.DAPR_TEST_LOG_PATH }}
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@master
+        with:
+          #TODO: .json suffix can be removed from artifact name after test analytics scripts are updated
+          name: test_perf.json
+          path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_perf*.*
+      - name: Add job test summary
+        if: always()
+        uses: test-summary/action@v2
+        with:
+          paths: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_perf*.xml
+      - name: Add job test outputs
+        if: always()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const script = require('./.github/scripts/dapr_tests_summary.js')
+            await script({core, glob})
+      - name: Update PR comment for success
+        if: success() && env.PR_NUMBER != ''
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
+        with:
+          header: ${{ github.run_id }}
+          number: ${{ env.PR_NUMBER }}
+          append: true
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            ## ✅ Perf tests succeeded
+
+            - Image tag: `${{ env.DAPR_TAG }}`
+            - Test image tag: `${{ env.DAPR_TEST_TAG }}`
+      - name: Update PR comment for failure
+        if: failure() && env.PR_NUMBER != ''
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
+        with:
+          header: ${{ github.run_id }}
+          number: ${{ env.PR_NUMBER }}
+          append: true
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            ## ❌ Perf tests failed
+
+            Please check the logs for details on the error.
+      - name: Update PR comment for cancellation
+        if: cancelled() && env.PR_NUMBER != ''
+        uses: artursouza/sticky-pull-request-comment@v2.2.0
+        with:
+          header: ${{ github.run_id }}
+          number: ${{ env.PR_NUMBER }}
+          append: true
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          message: |
+            ## ⚠️ Perf tests cancelled
+
+            The Action has been canceled
+
+  cleanup:
+    name: Clean up Azure resources
+    runs-on: ubuntu-latest
+    needs:
+      - test-perf
+    if: always()
+    steps:
+      - name: Login to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: Build test prefix
+        run: |
+          BASE_STR="PERF|${GITHUB_SHA}|${GITHUB_SERVER_URL}|${GITHUB_REPOSITORY}|${GITHUB_RUN_ID}|${GITHUB_RUN_ATTEMPT}"
+          echo "Base string is ${BASE_STR}"
+          SUFFIX=$(echo $BASE_STR | sha1sum | head -c 10)
+          echo "Suffix is ${SUFFIX}"
+          TEST_PREFIX="daprprf${SUFFIX}"
+          echo "Test prefix is ${TEST_PREFIX}"
+          echo "TEST_PREFIX=${TEST_PREFIX}" >> $GITHUB_ENV
+        shell: bash
+      - name: Delete cluster
+        run: |
+          # We are not waiting for these commands to complete, and we're ignoring errors
+          echo "Starting removal of resource group Dapr-Perf-${TEST_PREFIX}"
+          az group delete --no-wait --yes --name "Dapr-Perf-${TEST_PREFIX}" || true
+        shell: bash

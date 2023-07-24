@@ -17,4 +17,10 @@ const (
 	AppPort string = "APP_PORT"
 	// AppID is the ID of the application.
 	AppID string = "APP_ID"
+	// OpenTelemetry target URL for OTLP exporter
+	OtlpExporterEndpoint string = "OTEL_EXPORTER_OTLP_ENDPOINT"
+	// OpenTelemetry disables client transport security
+	OtlpExporterInsecure string = "OTEL_EXPORTER_OTLP_INSECURE"
+	// OpenTelemetry transport protocol (grpc, http/protobuf, http/json)
+	OtlpExporterProtocol string = "OTEL_EXPORTER_OTLP_PROTOCOL"
 )

@@ -45,6 +45,17 @@ func TestBuildDeploymentObject(t *testing.T) {
 		assert.Equal(t, "/var/run", obj.Spec.Template.Annotations["dapr.io/unix-domain-socket-path"])
 	})
 
+	t.Run("Inject pluggable components", func(t *testing.T) {
+		// act
+		obj := buildDeploymentObject("testNamespace", AppDescription{
+			InjectPluggableComponents: true,
+		})
+
+		// assert
+		assert.NotNil(t, obj)
+		assert.Equal(t, "true", obj.Spec.Template.Annotations["dapr.io/inject-pluggable-components"])
+	})
+
 	t.Run("Dapr Enabled", func(t *testing.T) {
 		testApp.DaprEnabled = true
 

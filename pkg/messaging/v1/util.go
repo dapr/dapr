@@ -118,13 +118,29 @@ func metadataToInternalMetadata(md map[string][]string) DaprInternalMetadata {
 	return internalMD
 }
 
+// httpHeadersToInternalMetadata converts http headers to Dapr internal metadata map.
+func httpHeadersToInternalMetadata(header http.Header) DaprInternalMetadata {
+	internalMD := make(DaprInternalMetadata, len(header))
+	for key, val := range header {
+		// Note: HTTP headers can never be binary (only gRPC supports binary headers)
+		if internalMD[key] == nil || len(internalMD[key].Values) == 0 {
+			internalMD[key] = &internalv1pb.ListStringValue{
+				Values: val,
+			}
+		} else {
+			internalMD[key].Values = append(internalMD[key].Values, val...)
+		}
+	}
+	return internalMD
+}
+
 // Covers *fasthttp.RequestHeader and *fasthttp.ResponseHeader
 type fasthttpHeaders interface {
 	Len() int
 	VisitAll(f func(key []byte, value []byte))
 }
 
-// fasthttpHeadersToInternalMetadata converts fasthtt headers to Dapr internal metadata map.
+// fasthttpHeadersToInternalMetadata converts fasthttp headers to Dapr internal metadata map.
 func fasthttpHeadersToInternalMetadata(header fasthttpHeaders) DaprInternalMetadata {
 	internalMD := make(DaprInternalMetadata, header.Len())
 	header.VisitAll(func(key []byte, value []byte) {
@@ -139,20 +155,6 @@ func fasthttpHeadersToInternalMetadata(header fasthttpHeaders) DaprInternalMetad
 		}
 	})
 	return internalMD
-}
-
-// Converts a fasthttp.RequestHeader to a map.
-func fasthttpHeadersToMap(header fasthttpHeaders) map[string][]string {
-	md := map[string][]string{}
-	header.VisitAll(func(key []byte, value []byte) {
-		keyStr := string(key)
-		if len(md[keyStr]) == 0 {
-			md[keyStr] = []string{string(value)}
-		} else {
-			md[keyStr] = append(md[keyStr], string(value))
-		}
-	})
-	return md
 }
 
 // isPermanentHTTPHeader checks whether hdr belongs to the list of
@@ -240,7 +242,7 @@ func InternalMetadataToGrpcMetadata(ctx context.Context, internalMD DaprInternal
 	if IsGRPCProtocol(internalMD) {
 		processGRPCToGRPCTraceHeader(ctx, md, grpctracebinValue)
 	} else {
-		// if httpProtocol, then pass HTTP traceparent and HTTP tracestate header values, attach it in grpc-trace-bin header
+		// if HTTP protocol, then pass HTTP traceparent and HTTP tracestate header values, attach it in grpc-trace-bin header
 		processHTTPToGRPCTraceHeader(ctx, md, traceparentValue, tracestateValue)
 	}
 	return md

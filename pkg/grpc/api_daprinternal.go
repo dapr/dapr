@@ -24,8 +24,8 @@ import (
 
 	"github.com/dapr/dapr/pkg/acl"
 	"github.com/dapr/dapr/pkg/actors"
-	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/grpc/metadata"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -60,7 +60,7 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	}()
 
 	// stausCode will be read by the deferred method above
-	res, err := a.appChannel.InvokeMethod(ctx, req)
+	res, err := a.appChannel.InvokeMethod(ctx, req, "")
 	if err != nil {
 		statusCode = int32(codes.Internal)
 		return nil, status.Errorf(codes.Internal, messages.ErrChannelInvoke, err)
@@ -93,6 +93,11 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 		return status.Errorf(codes.InvalidArgument, messages.ErrInternalInvokeRequest, "request does not contain the required fields in the leading chunk")
 	}
 
+	// Append the invoked method to the context's metadata so we can use it for tracing
+	if md, ok := metadata.FromIncomingContext(stream.Context()); ok {
+		md[diag.DaprCallLocalStreamMethodKey] = []string{chunk.Request.Message.Method}
+	}
+
 	// Create the request object
 	// The "rawData" of the object will be a pipe to which content is added chunk-by-chunk
 	pr, pw := io.Pipe()
@@ -121,11 +126,10 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 	// Read the rest of the data in background as we submit the request
 	go func() {
 		var (
-			firstChunk = true
-			lastSeq    uint32
-			readSeq    uint32
-			payload    *commonv1pb.StreamPayload
-			readErr    error
+			expectSeq uint64
+			readSeq   uint64
+			payload   *commonv1pb.StreamPayload
+			readErr   error
 		)
 		for {
 			if ctx.Err() != nil {
@@ -142,13 +146,12 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 					return
 				}
 
-				// Check if the sequence number is greater than the previous (or 0 for the first chunk)
-				if (firstChunk && readSeq != 0) || (!firstChunk && readSeq != lastSeq+1) {
-					pw.CloseWithError(fmt.Errorf("invalid sequence number received: %d", readSeq))
+				// Check if the sequence number is greater than the previous
+				if readSeq != expectSeq {
+					pw.CloseWithError(fmt.Errorf("invalid sequence number received: %d (expected: %d)", readSeq, expectSeq))
 					return
 				}
-				lastSeq = readSeq
-				firstChunk = false
+				expectSeq++
 			}
 
 			// Read the next chunk
@@ -171,11 +174,13 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 	}()
 
 	// Submit the request to the app
-	res, err := a.appChannel.InvokeMethod(ctx, req)
+	res, err := a.appChannel.InvokeMethod(ctx, req, "")
 	if err != nil {
+		statusCode = int32(codes.Internal)
 		return status.Errorf(codes.Internal, messages.ErrChannelInvoke, err)
 	}
 	defer res.Close()
+	statusCode = res.Status().Code
 
 	// Respond to the caller
 	buf := invokev1.BufPool.Get().(*[]byte)
@@ -187,7 +192,7 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 	proto := &internalv1pb.InternalInvokeResponseStream{}
 	var (
 		n    int
-		seq  uint32
+		seq  uint64
 		done bool
 	)
 	for {
@@ -249,7 +254,7 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	defer req.Close()
 
 	// We don't do resiliency here as it is handled in the API layer. See InvokeActor().
-	resp, err := a.actor.Call(ctx, req)
+	resp, err := a.Actors.Call(ctx, req)
 	if err != nil {
 		// We have to remove the error to keep the body, so callers must re-inspect for the header in the actual response.
 		if resp != nil && errors.Is(err, actors.ErrDaprResponseHeader) {
@@ -271,13 +276,14 @@ func (a *api) callLocalValidateACL(ctx context.Context, req *invokev1.InvokeMeth
 		operation := req.Message().Method
 		var httpVerb commonv1pb.HTTPExtension_Verb //nolint:nosnakecase
 		// Get the HTTP verb in case the application protocol is "http"
-		if a.appProtocol == config.HTTPProtocol && req.Metadata() != nil && len(req.Metadata()) > 0 {
+		appProtocolIsHTTP := a.UniversalAPI.AppConnectionConfig.Protocol.IsHTTP()
+		if appProtocolIsHTTP && req.Metadata() != nil && len(req.Metadata()) > 0 {
 			httpExt := req.Message().GetHttpExtension()
 			if httpExt != nil {
 				httpVerb = httpExt.GetVerb()
 			}
 		}
-		callAllowed, errMsg := acl.ApplyAccessControlPolicies(ctx, operation, httpVerb, a.appProtocol, a.accessControlList)
+		callAllowed, errMsg := acl.ApplyAccessControlPolicies(ctx, operation, httpVerb, appProtocolIsHTTP, a.accessControlList)
 
 		if !callAllowed {
 			return status.Errorf(codes.PermissionDenied, errMsg)

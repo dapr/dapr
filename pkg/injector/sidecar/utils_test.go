@@ -14,7 +14,6 @@ limitations under the License.
 package sidecar
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -42,21 +41,24 @@ func TestGetAppID(t *testing.T) {
 
 func TestParseEnvString(t *testing.T) {
 	testCases := []struct {
-		testName  string
-		envStr    string
-		expEnvLen int
-		expEnv    []coreV1.EnvVar
+		testName string
+		envStr   string
+		expLen   int
+		expKeys  []string
+		expEnv   []coreV1.EnvVar
 	}{
 		{
-			testName:  "empty environment string.",
-			envStr:    "",
-			expEnvLen: 0,
-			expEnv:    []coreV1.EnvVar{},
+			testName: "empty environment string",
+			envStr:   "",
+			expLen:   0,
+			expKeys:  []string{},
+			expEnv:   []coreV1.EnvVar{},
 		},
 		{
-			testName:  "common valid environment string.",
-			envStr:    "ENV1=value1,ENV2=value2, ENV3=value3",
-			expEnvLen: 3,
+			testName: "common valid environment string",
+			envStr:   "ENV1=value1,ENV2=value2, ENV3=value3",
+			expLen:   3,
+			expKeys:  []string{"ENV1", "ENV2", "ENV3"},
 			expEnv: []coreV1.EnvVar{
 				{
 					Name:  "ENV1",
@@ -73,9 +75,10 @@ func TestParseEnvString(t *testing.T) {
 			},
 		},
 		{
-			testName:  "special valid environment string.",
-			envStr:    `HTTP_PROXY=http://myproxy.com, NO_PROXY="localhost,127.0.0.1,.amazonaws.com"`,
-			expEnvLen: 2,
+			testName: "environment string with quotes",
+			envStr:   `HTTP_PROXY=http://myproxy.com, NO_PROXY="localhost,127.0.0.1,.amazonaws.com"`,
+			expLen:   2,
+			expKeys:  []string{"HTTP_PROXY", "NO_PROXY"},
 			expEnv: []coreV1.EnvVar{
 				{
 					Name:  "HTTP_PROXY",
@@ -92,9 +95,9 @@ func TestParseEnvString(t *testing.T) {
 	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.testName, func(t *testing.T) {
-			envVars := ParseEnvString(tc.envStr)
-			fmt.Println(tc.testName) //nolint:forbidigo
-			assert.Equal(t, tc.expEnvLen, len(envVars))
+			envKeys, envVars := ParseEnvString(tc.envStr)
+			assert.Equal(t, tc.expLen, len(envVars))
+			assert.Equal(t, tc.expKeys, envKeys)
 			assert.Equal(t, tc.expEnv, envVars)
 		})
 	}

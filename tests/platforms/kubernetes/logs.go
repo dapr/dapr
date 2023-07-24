@@ -38,7 +38,7 @@ func init() {
 
 // StreamContainerLogsToDisk streams all containers logs for the given selector to a given disk directory.
 func StreamContainerLogsToDisk(ctx context.Context, appName string, podClient v1.PodInterface) error {
-	listCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	listCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	podList, err := podClient.List(listCtx, metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, appName),
 	})

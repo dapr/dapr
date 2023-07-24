@@ -24,14 +24,16 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/dapr/dapr/pkg/injector/annotations"
+	"github.com/dapr/dapr/pkg/injector/patcher"
 )
 
 func TestAddDaprEnvVarsToContainers(t *testing.T) {
 	testCases := []struct {
 		testName      string
 		mockContainer coreV1.Container
+		appProtocol   string
 		expOpsLen     int
-		expOps        []PatchOperation
+		expOps        []patcher.PatchOperation
 	}{
 		{
 			testName: "empty environment vars",
@@ -39,7 +41,7 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 				Name: "MockContainer",
 			},
 			expOpsLen: 1,
-			expOps: []PatchOperation{
+			expOps: []patcher.PatchOperation{
 				{
 					Op:   "add",
 					Path: "/spec/containers/0/env",
@@ -68,7 +70,7 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 				},
 			},
 			expOpsLen: 2,
-			expOps: []PatchOperation{
+			expOps: []patcher.PatchOperation{
 				{
 					Op:   "add",
 					Path: "/spec/containers/0/env/-",
@@ -103,7 +105,7 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 				},
 			},
 			expOpsLen: 1,
-			expOps: []PatchOperation{
+			expOps: []patcher.PatchOperation{
 				{
 					Op:   "add",
 					Path: "/spec/containers/0/env/-",
@@ -130,16 +132,136 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 				},
 			},
 			expOpsLen: 0,
-			expOps:    []PatchOperation{},
+			expOps:    []patcher.PatchOperation{},
+		},
+		{
+			testName: "with app protocol",
+			mockContainer: coreV1.Container{
+				Name: "MockContainer",
+			},
+			expOpsLen:   1,
+			appProtocol: "h2c",
+			expOps: []patcher.PatchOperation{
+				{
+					Op:   "add",
+					Path: "/spec/containers/0/env",
+					Value: []coreV1.EnvVar{
+						{
+							Name:  UserContainerDaprHTTPPortName,
+							Value: strconv.Itoa(SidecarHTTPPort),
+						},
+						{
+							Name:  UserContainerDaprGRPCPortName,
+							Value: strconv.Itoa(SidecarAPIGRPCPort),
+						},
+						{
+							Name:  UserContainerAppProtocolName,
+							Value: "h2c",
+						},
+					},
+				},
+			},
 		},
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.testName, func(t *testing.T) {
-			patchEnv := AddDaprEnvVarsToContainers(map[int]coreV1.Container{0: tc.mockContainer})
+			patchEnv := AddDaprEnvVarsToContainers(map[int]coreV1.Container{0: tc.mockContainer}, tc.appProtocol)
 			assert.Equal(t, tc.expOpsLen, len(patchEnv))
 			assert.Equal(t, tc.expOps, patchEnv)
+		})
+	}
+}
+
+func TestAddDaprAppIDLabel(t *testing.T) {
+	testCases := []struct {
+		testName  string
+		mockPod   coreV1.Pod
+		expLabels map[string]string
+	}{
+		{
+			testName: "empty labels",
+			mockPod: coreV1.Pod{
+				ObjectMeta: metav1.ObjectMeta{},
+			},
+			expLabels: map[string]string{SidecarAppIDLabel: "my-app"},
+		},
+		{
+			testName: "with some previous labels",
+			mockPod: coreV1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{"app": "my-app"},
+				},
+			},
+			expLabels: map[string]string{SidecarAppIDLabel: "my-app", "app": "my-app"},
+		},
+		{
+			testName: "with dapr app-id label already present",
+			mockPod: coreV1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{SidecarAppIDLabel: "my-app", "app": "my-app"},
+				},
+			},
+			expLabels: map[string]string{SidecarAppIDLabel: "my-app", "app": "my-app"},
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc // closure copy
+		t.Run(tc.testName, func(t *testing.T) {
+			newPodJSON := patchObject(t, tc.mockPod, []patcher.PatchOperation{AddDaprSideCarAppIDLabel("my-app", tc.mockPod.Labels)})
+			newPod := coreV1.Pod{}
+			assert.NoError(t, json.Unmarshal(newPodJSON, &newPod))
+			assert.Equal(t, tc.expLabels, newPod.Labels)
+		})
+	}
+}
+
+func TestAddDaprMetricsEnabledLabel(t *testing.T) {
+	testCases := []struct {
+		testName       string
+		mockPod        coreV1.Pod
+		expLabels      map[string]string
+		metricsEnabled bool
+	}{
+		{
+			testName: "metrics annotation not present, fallback to default",
+			mockPod: coreV1.Pod{
+				ObjectMeta: metav1.ObjectMeta{},
+			},
+			expLabels:      map[string]string{SidecarMetricsEnabledLabel: strconv.FormatBool(annotations.DefaultEnableMetric)},
+			metricsEnabled: annotations.DefaultEnableMetric,
+		},
+		{
+			testName: "metrics annotation present and explicitly enabled, with existing labels",
+			mockPod: coreV1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{SidecarMetricsEnabledLabel: "true"},
+					Labels:      map[string]string{"app": "my-app"},
+				},
+			},
+			expLabels:      map[string]string{SidecarMetricsEnabledLabel: "true", "app": "my-app"},
+			metricsEnabled: true,
+		},
+		{
+			testName: "metrics annotation present and explicitly disabled",
+			mockPod: coreV1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{SidecarMetricsEnabledLabel: "false"},
+				},
+			},
+			expLabels:      map[string]string{SidecarMetricsEnabledLabel: "false"},
+			metricsEnabled: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc // closure copy
+		t.Run(tc.testName, func(t *testing.T) {
+			newPodJSON := patchObject(t, tc.mockPod, []patcher.PatchOperation{AddDaprSideCarMetricsEnabledLabel(tc.metricsEnabled, tc.mockPod.Labels)})
+			newPod := coreV1.Pod{}
+			assert.NoError(t, json.Unmarshal(newPodJSON, &newPod))
+			assert.Equal(t, tc.expLabels, newPod.Labels)
 		})
 	}
 }
@@ -180,7 +302,7 @@ func TestAddDaprInjectedLabel(t *testing.T) {
 	for _, tc := range testCases {
 		tc := tc // closure copy
 		t.Run(tc.testName, func(t *testing.T) {
-			newPodJSON := patchObject(t, tc.mockPod, []PatchOperation{AddDaprSideCarInjectedLabel(tc.mockPod.Labels)})
+			newPodJSON := patchObject(t, tc.mockPod, []patcher.PatchOperation{AddDaprSideCarInjectedLabel(tc.mockPod.Labels)})
 			newPod := coreV1.Pod{}
 			assert.NoError(t, json.Unmarshal(newPodJSON, &newPod))
 			assert.Equal(t, tc.expLabels, newPod.Labels)
@@ -189,7 +311,7 @@ func TestAddDaprInjectedLabel(t *testing.T) {
 }
 
 // patchObject executes a jsonpatch action against the object passed
-func patchObject(t *testing.T, origObj interface{}, patchOperations []PatchOperation) []byte {
+func patchObject(t *testing.T, origObj interface{}, patchOperations []patcher.PatchOperation) []byte {
 	marshal := func(o interface{}) []byte {
 		objBytes, err := json.Marshal(o)
 		assert.NoError(t, err)
@@ -211,7 +333,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 		mockContainer coreV1.Container
 		socketMount   *coreV1.VolumeMount
 		expOpsLen     int
-		expOps        []PatchOperation
+		expOps        []patcher.PatchOperation
 	}{
 		{
 			testName: "empty var, empty volume",
@@ -220,7 +342,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 			},
 			socketMount: nil,
 			expOpsLen:   0,
-			expOps:      []PatchOperation{},
+			expOps:      []patcher.PatchOperation{},
 		},
 		{
 			testName: "existing var, empty volume",
@@ -232,7 +354,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 				MountPath: "/tmp",
 			},
 			expOpsLen: 1,
-			expOps: []PatchOperation{
+			expOps: []patcher.PatchOperation{
 				{
 					Op:   "add",
 					Path: "/spec/containers/0/volumeMounts",
@@ -256,7 +378,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 				MountPath: "/tmp",
 			},
 			expOpsLen: 1,
-			expOps: []PatchOperation{
+			expOps: []patcher.PatchOperation{
 				{
 					Op:   "add",
 					Path: "/spec/containers/0/volumeMounts/-",
@@ -281,7 +403,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 				MountPath: "/tmp",
 			},
 			expOpsLen: 1,
-			expOps: []PatchOperation{
+			expOps: []patcher.PatchOperation{
 				{
 					Op:   "add",
 					Path: "/spec/containers/0/volumeMounts/-",
@@ -305,7 +427,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 				MountPath: "/tmp",
 			},
 			expOpsLen: 0,
-			expOps:    []PatchOperation{},
+			expOps:    []patcher.PatchOperation{},
 		},
 		{
 			testName: "existing var, conflict volume mount path",
@@ -320,7 +442,7 @@ func TestAddSocketVolumeToContainers(t *testing.T) {
 				MountPath: "/tmp",
 			},
 			expOpsLen: 0,
-			expOps:    []PatchOperation{},
+			expOps:    []patcher.PatchOperation{},
 		},
 	}
 

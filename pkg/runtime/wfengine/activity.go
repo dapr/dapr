@@ -32,6 +32,8 @@ import (
 
 var ErrDuplicateInvocation = errors.New("duplicate invocation")
 
+const activityStateKey = "activityState"
+
 type activityActor struct {
 	actorRuntime     actors.Actors
 	scheduler        workflowScheduler
@@ -39,25 +41,25 @@ type activityActor struct {
 	cachingDisabled  bool
 	defaultTimeout   time.Duration
 	reminderInterval time.Duration
+	config           wfConfig
 }
 
 // ActivityRequest represents a request by a worklow to invoke an activity.
 type ActivityRequest struct {
 	HistoryEvent []byte
-	Generation   uint64
 }
 
 type activityState struct {
 	EventPayload []byte
-	Generation   uint64
 }
 
 // NewActivityActor creates an internal activity actor for executing workflow activity logic.
-func NewActivityActor(scheduler workflowScheduler) *activityActor {
+func NewActivityActor(scheduler workflowScheduler, config wfConfig) *activityActor {
 	return &activityActor{
 		scheduler:        scheduler,
 		defaultTimeout:   1 * time.Hour,
 		reminderInterval: 1 * time.Minute,
+		config:           config,
 	}
 }
 
@@ -78,23 +80,25 @@ func (a *activityActor) InvokeMethod(ctx context.Context, actorID string, method
 	}
 
 	// Try to load activity state. If we find any, that means the activity invocation is a duplicate.
-	if state, err := a.loadActivityState(ctx, actorID, ar.Generation); err != nil {
+	if _, err := a.loadActivityState(ctx, actorID); err != nil {
 		return nil, err
-	} else if state.Generation > 0 {
-		return nil, ErrDuplicateInvocation
+	}
+
+	if methodName == "PurgeWorkflowState" {
+		return nil, a.purgeActivityState(ctx, actorID)
 	}
 
 	// Save the request details to the state store in case we need it after recovering from a failure.
 	state := activityState{
-		Generation:   ar.Generation,
 		EventPayload: ar.HistoryEvent,
 	}
+
 	if err := a.saveActivityState(ctx, actorID, state); err != nil {
 		return nil, err
 	}
 
 	// The actual execution is triggered by a reminder
-	err := a.createReliableReminder(ctx, actorID, ar.Generation)
+	err := a.createReliableReminder(ctx, actorID, nil)
 	return nil, err
 }
 
@@ -107,7 +111,7 @@ func (a *activityActor) InvokeReminder(ctx context.Context, actorID string, remi
 		// Likely the result of an incompatible activity reminder format change. This is non-recoverable.
 		return err
 	}
-	state, _ := a.loadActivityState(ctx, actorID, generation)
+	state, _ := a.loadActivityState(ctx, actorID)
 	// TODO: On error, reply with a failure - this requires support from durabletask-go to produce TaskFailure results
 
 	timeoutCtx, cancelTimeout := context.WithTimeout(ctx, a.defaultTimeout)
@@ -115,7 +119,7 @@ func (a *activityActor) InvokeReminder(ctx context.Context, actorID string, remi
 
 	if err := a.executeActivity(timeoutCtx, actorID, reminderName, state.EventPayload); err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			wfLogger.Warnf("%s: execution of '%s' timed-out and will be retried later", actorID, reminderName)
+			wfLogger.Warnf("%s: execution of '%s' timed-out and will be retried later: %v", actorID, reminderName, err)
 
 			// Returning nil signals that we want the execution to be retried in the next period interval
 			return nil
@@ -142,7 +146,7 @@ func (a *activityActor) executeActivity(ctx context.Context, actorID string, nam
 		return err
 	}
 
-	endIndex := strings.LastIndex(actorID, "#")
+	endIndex := strings.Index(actorID, "::")
 	if endIndex < 0 {
 		return fmt.Errorf("invalid activity actor ID: %s", actorID)
 	}
@@ -164,24 +168,30 @@ func (a *activityActor) executeActivity(ctx context.Context, actorID string, nam
 	wi.Properties[CallbackChannelProperty] = callback
 	if err = a.scheduler.ScheduleActivity(ctx, wi); err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			return newRecoverableError(errors.New(
-				"timed-out trying to schedule an activity execution - this can happen if too many activities are running in parallel or if the workflow engine isn't running"))
+			return newRecoverableError(fmt.Errorf("timed-out trying to schedule an activity execution - this can happen if too many activities are running in parallel or if the workflow engine isn't running: %w", err))
 		}
 		return newRecoverableError(fmt.Errorf("failed to schedule an activity execution: %w", err))
 	}
 
 loop:
 	for {
+		t := time.NewTimer(10 * time.Minute)
 		select {
 		case <-ctx.Done():
+			if !t.Stop() {
+				<-t.C
+			}
 			return ctx.Err()
-		case <-time.After(10 * time.Minute):
+		case <-t.C:
 			if deadline, ok := ctx.Deadline(); ok {
 				wfLogger.Warnf("%s: '%s' is still running - will keep waiting until %v", actorID, name, deadline)
 			} else {
 				wfLogger.Warnf("%s: '%s' is still running - will keep waiting indefinitely", actorID, name)
 			}
 		case completed := <-callback:
+			if !t.Stop() {
+				<-t.C
+			}
 			if completed {
 				break loop
 			} else {
@@ -197,7 +207,7 @@ loop:
 	}
 	req := invokev1.
 		NewInvokeMethodRequest(AddWorkflowEventMethod).
-		WithActor(WorkflowActorType, workflowID).
+		WithActor(a.config.workflowActorType, workflowID).
 		WithRawDataBytes(resultData).
 		WithContentType(invokev1.OctetStreamContentType)
 	defer req.Close()
@@ -222,24 +232,21 @@ func (a *activityActor) DeactivateActor(ctx context.Context, actorID string) err
 	return nil
 }
 
-func (a *activityActor) loadActivityState(ctx context.Context, actorID string, generation uint64) (activityState, error) {
+func (a *activityActor) loadActivityState(ctx context.Context, actorID string) (activityState, error) {
 	// See if the state for this actor is already cached in memory.
 	result, ok := a.statesCache.Load(actorID)
 	if ok {
 		cachedState := result.(activityState)
-
-		// Make sure the cached state is for the same generation of the workflow.
-		if cachedState.Generation == generation {
-			return cachedState, nil
-		}
+		return cachedState, nil
 	}
 
 	// Loading from the state store is only expected in process failure recovery scenarios.
 	wfLogger.Debugf("%s: loading activity state", actorID)
+
 	req := actors.GetStateRequest{
-		ActorType: ActivityActorType,
+		ActorType: a.config.activityActorType,
 		ActorID:   actorID,
-		Key:       getActivityInvocationKey(generation),
+		Key:       activityStateKey,
 	}
 	res, err := a.actorRuntime.GetState(ctx, &req)
 	if err != nil {
@@ -260,12 +267,12 @@ func (a *activityActor) loadActivityState(ctx context.Context, actorID string, g
 
 func (a *activityActor) saveActivityState(ctx context.Context, actorID string, state activityState) error {
 	req := actors.TransactionalRequest{
-		ActorType: ActivityActorType,
+		ActorType: a.config.activityActorType,
 		ActorID:   actorID,
 		Operations: []actors.TransactionalOperation{{
 			Operation: actors.Upsert,
 			Request: actors.TransactionalUpsert{
-				Key:   getActivityInvocationKey(state.Generation),
+				Key:   activityStateKey,
 				Value: state,
 			},
 		}},
@@ -280,8 +287,22 @@ func (a *activityActor) saveActivityState(ctx context.Context, actorID string, s
 	return nil
 }
 
-func getActivityInvocationKey(generation uint64) string {
-	return fmt.Sprintf("activityreq-%d", generation)
+func (a *activityActor) purgeActivityState(ctx context.Context, actorID string) error {
+	req := actors.TransactionalRequest{
+		ActorType: a.config.activityActorType,
+		ActorID:   actorID,
+		Operations: []actors.TransactionalOperation{{
+			Operation: actors.Delete,
+			Request: actors.TransactionalDelete{
+				Key: activityStateKey,
+			},
+		}},
+	}
+	if err := a.actorRuntime.TransactionalStateOperation(ctx, &req); err != nil {
+		return fmt.Errorf("failed to delete activity state with error: %w", err)
+	}
+
+	return nil
 }
 
 func (a *activityActor) createReliableReminder(ctx context.Context, actorID string, data any) error {
@@ -292,7 +313,7 @@ func (a *activityActor) createReliableReminder(ctx context.Context, actorID stri
 		return fmt.Errorf("failed to encode data as JSON: %w", err)
 	}
 	return a.actorRuntime.CreateReminder(ctx, &actors.CreateReminderRequest{
-		ActorType: ActivityActorType,
+		ActorType: a.config.activityActorType,
 		ActorID:   actorID,
 		Data:      dataEnc,
 		DueTime:   "0s",

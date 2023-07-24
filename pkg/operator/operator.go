@@ -36,6 +36,7 @@ import (
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
+	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subscriptionsapiV1alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	subscriptionsapiV2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
@@ -93,6 +94,7 @@ func init() {
 	_ = componentsapi.AddToScheme(scheme)
 	_ = configurationapi.AddToScheme(scheme)
 	_ = resiliencyapi.AddToScheme(scheme)
+	_ = httpendpointsapi.AddToScheme(scheme)
 	_ = subscriptionsapiV1alpha1.AddToScheme(scheme)
 	_ = subscriptionsapiV2alpha1.AddToScheme(scheme)
 }
@@ -171,6 +173,16 @@ func (o *operator) syncComponent(ctx context.Context) func(obj interface{}) {
 		if ok {
 			log.Debugf("Observed component to be synced: %s/%s", c.Namespace, c.Name)
 			o.apiServer.OnComponentUpdated(ctx, c)
+		}
+	}
+}
+
+func (o *operator) syncHTTPEndpoint(ctx context.Context) func(obj interface{}) {
+	return func(obj interface{}) {
+		e, ok := obj.(*httpendpointsapi.HTTPEndpoint)
+		if ok {
+			log.Debugf("Observed http endpoint to be synced: %s/%s", e.Namespace, e.Name)
+			o.apiServer.OnHTTPEndpointUpdated(ctx, e)
 		}
 	}
 }
@@ -315,6 +327,32 @@ func (o *operator) Run(ctx context.Context) error {
 		})
 		if rErr != nil {
 			return fmt.Errorf("unable to add components informer event handler: %w", rErr)
+		}
+		<-ctx.Done()
+		return nil
+	}})
+	if err != nil {
+		return err
+	}
+
+	err = o.mgr.Add(nonLeaderRunnable{func(ctx context.Context) error {
+		if !o.mgr.GetCache().WaitForCacheSync(ctx) {
+			return errors.New("failed to wait for cache sync")
+		}
+
+		httpEndpointInformer, rErr := o.mgr.GetCache().GetInformer(ctx, &httpendpointsapi.HTTPEndpoint{})
+		if rErr != nil {
+			return fmt.Errorf("unable to get http endpoint informer: %w", rErr)
+		}
+
+		_, rErr = httpEndpointInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc: o.syncHTTPEndpoint(ctx),
+			UpdateFunc: func(_, newObj interface{}) {
+				o.syncHTTPEndpoint(ctx)(newObj)
+			},
+		})
+		if rErr != nil {
+			return fmt.Errorf("unable to add http endpoint informer event handler: %w", rErr)
 		}
 		<-ctx.Done()
 		return nil

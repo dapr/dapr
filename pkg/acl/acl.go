@@ -35,25 +35,26 @@ import (
 var log = logger.NewLogger("dapr.acl")
 
 // ParseAccessControlSpec creates an in-memory copy of the Access Control Spec for fast lookup.
-func ParseAccessControlSpec(accessControlSpec config.AccessControlSpec, protocol string) (*config.AccessControlList, error) {
-	if accessControlSpec.TrustDomain == "" &&
-		accessControlSpec.DefaultAction == "" &&
-		(accessControlSpec.AppPolicies == nil || len(accessControlSpec.AppPolicies) == 0) {
+func ParseAccessControlSpec(accessControlSpec *config.AccessControlSpec, isHTTP bool) (*config.AccessControlList, error) {
+	if accessControlSpec == nil ||
+		(accessControlSpec.TrustDomain == "" &&
+			accessControlSpec.DefaultAction == "" &&
+			len(accessControlSpec.AppPolicies) == 0) {
 		// No ACL has been specified
 		log.Debugf("No Access control policy specified")
 		return nil, nil
 	}
 
-	var accessControlList config.AccessControlList
-	accessControlList.PolicySpec = make(map[string]config.AccessControlListPolicySpec)
-	accessControlList.DefaultAction = strings.ToLower(accessControlSpec.DefaultAction)
+	accessControlList := config.AccessControlList{
+		PolicySpec:    make(map[string]config.AccessControlListPolicySpec),
+		DefaultAction: strings.ToLower(accessControlSpec.DefaultAction),
+		TrustDomain:   accessControlSpec.TrustDomain,
+	}
 
-	accessControlList.TrustDomain = accessControlSpec.TrustDomain
 	if accessControlSpec.TrustDomain == "" {
 		accessControlList.TrustDomain = config.DefaultTrustDomain
 	}
 
-	accessControlList.DefaultAction = accessControlSpec.DefaultAction
 	if accessControlSpec.DefaultAction == "" {
 		if accessControlSpec.AppPolicies == nil || len(accessControlSpec.AppPolicies) > 0 {
 			// Some app level policies have been specified but not default global action is set. Default to more secure option - Deny
@@ -100,7 +101,7 @@ func ParseAccessControlSpec(accessControlSpec config.AccessControlSpec, protocol
 				operationName = "/" + operationName
 			}
 
-			if protocol == config.HTTPProtocol {
+			if isHTTP {
 				operationName = strings.ToLower(operationName)
 			}
 
@@ -237,7 +238,7 @@ func normalizeOperation(operation string) (string, error) {
 	return s, nil
 }
 
-func ApplyAccessControlPolicies(ctx context.Context, operation string, httpVerb commonv1pb.HTTPExtension_Verb, appProtocol string, acl *config.AccessControlList) (bool, string) {
+func ApplyAccessControlPolicies(ctx context.Context, operation string, httpVerb commonv1pb.HTTPExtension_Verb, isHTTP bool, acl *config.AccessControlList) (bool, string) {
 	// Apply access control list filter
 	spiffeID, err := GetAndParseSpiffeID(ctx)
 	if err != nil {
@@ -260,7 +261,7 @@ func ApplyAccessControlPolicies(ctx context.Context, operation string, httpVerb 
 		return false, errMessage
 	}
 
-	action, actionPolicy := IsOperationAllowedByAccessControlPolicy(spiffeID, appID, operation, httpVerb, appProtocol, acl)
+	action, actionPolicy := IsOperationAllowedByAccessControlPolicy(spiffeID, appID, operation, httpVerb, isHTTP, acl)
 	emitACLMetrics(actionPolicy, appID, trustDomain, namespace, operation, httpVerb.String(), action)
 
 	if !action {
@@ -290,7 +291,7 @@ func emitACLMetrics(actionPolicy, appID, trustDomain, namespace, operation, verb
 }
 
 // IsOperationAllowedByAccessControlPolicy determines if access control policies allow the operation on the target app.
-func IsOperationAllowedByAccessControlPolicy(spiffeID *config.SpiffeID, srcAppID string, inputOperation string, httpVerb commonv1pb.HTTPExtension_Verb, appProtocol string, accessControlList *config.AccessControlList) (bool, string) {
+func IsOperationAllowedByAccessControlPolicy(spiffeID *config.SpiffeID, srcAppID string, inputOperation string, httpVerb commonv1pb.HTTPExtension_Verb, isHTTP bool, accessControlList *config.AccessControlList) (bool, string) {
 	if accessControlList == nil {
 		// No access control list is provided. Do nothing
 		return isActionAllowed(config.AllowAccess), ""
@@ -342,7 +343,7 @@ func IsOperationAllowedByAccessControlPolicy(spiffeID *config.SpiffeID, srcAppID
 	}
 
 	// If HTTP, make case-insensitive
-	if appProtocol == config.HTTPProtocol {
+	if isHTTP {
 		inputOperation = strings.ToLower(inputOperation)
 	}
 
@@ -350,7 +351,7 @@ func IsOperationAllowedByAccessControlPolicy(spiffeID *config.SpiffeID, srcAppID
 
 	if operationPolicy != nil {
 		// Operation prefix and postfix match. Now check the operation specific policy
-		if appProtocol == config.HTTPProtocol {
+		if isHTTP {
 			if httpVerb != commonv1pb.HTTPExtension_NONE {
 				verbAction, found := operationPolicy.VerbAction[httpVerb.String()]
 				if found {
@@ -367,7 +368,7 @@ func IsOperationAllowedByAccessControlPolicy(spiffeID *config.SpiffeID, srcAppID
 				// No matching verb found in the operation specific policies.
 				action = appPolicy.DefaultAction
 			}
-		} else if appProtocol == config.GRPCProtocol {
+		} else {
 			// No http verb match is needed.
 			action = operationPolicy.OperationAction
 		}

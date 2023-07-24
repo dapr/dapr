@@ -3,6 +3,7 @@ package state
 import (
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 
@@ -15,7 +16,7 @@ func TestMain(m *testing.M) {
 	SaveStateConfiguration("store1", map[string]string{strategyKey: strategyNone})
 	SaveStateConfiguration("store2", map[string]string{strategyKey: strategyAppid})
 	SaveStateConfiguration("store3", map[string]string{strategyKey: strategyDefault})
-	SaveStateConfiguration("store4", map[string]string{strategyKey: strategyStoreName})
+	SaveStateConfiguration("store4", map[string]string{strings.ToUpper(strategyKey): strategyStoreName})
 	SaveStateConfiguration("store5", map[string]string{strategyKey: "other-fixed-prefix"})
 	SaveStateConfiguration("store7", map[string]string{strategyKey: strategyNamespace})
 	// if strategyKey not set
@@ -37,7 +38,7 @@ func TestSaveStateConfiguration(t *testing.T) {
 		err := SaveStateConfiguration(item.storename, map[string]string{
 			strategyKey: item.prefix,
 		})
-		require.NotNil(t, err)
+		require.Error(t, err)
 	}
 }
 

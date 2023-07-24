@@ -28,6 +28,7 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/runtime/compstore"
 )
 
 type mockInternalActor struct {
@@ -106,8 +107,11 @@ func newTestActorsRuntimeWithInternalActors(internalActors map[string]InternalAc
 		AppID:              TestAppID,
 		PlacementAddresses: []string{"placement:5050"},
 	})
+
+	compStore := compstore.New()
+	compStore.AddStateStore("actorStore", store)
 	a := NewActors(ActorsOpts{
-		StateStore:     store,
+		CompStore:      compStore,
 		Config:         config,
 		TracingSpec:    spec,
 		Resiliency:     resiliency.New(log),

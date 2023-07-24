@@ -84,7 +84,7 @@ func testMiddleware(u grpc.UnaryServerInterceptor, s grpc.StreamServerIntercepto
 
 func TestSetAPIEndpointsMiddleware(t *testing.T) {
 	t.Run("state.v1 endpoints allowed", func(t *testing.T) {
-		a := []config.APIAccessRule{
+		allowed := []config.APIAccessRule{
 			{
 				Name:     "state",
 				Version:  "v1",
@@ -92,7 +92,7 @@ func TestSetAPIEndpointsMiddleware(t *testing.T) {
 			},
 		}
 
-		tm := testMiddleware(setAPIEndpointsMiddlewares(a))
+		tm := testMiddleware(setAPIEndpointsMiddlewares(allowed, nil))
 
 		for _, e := range endpoints["state.v1"] {
 			tm(t, e, false)
@@ -107,8 +107,32 @@ func TestSetAPIEndpointsMiddleware(t *testing.T) {
 		}
 	})
 
+	t.Run("state.v1 endpoints denied", func(t *testing.T) {
+		denied := []config.APIAccessRule{
+			{
+				Name:     "state",
+				Version:  "v1",
+				Protocol: "grpc",
+			},
+		}
+
+		tm := testMiddleware(setAPIEndpointsMiddlewares(nil, denied))
+
+		for _, e := range endpoints["state.v1"] {
+			tm(t, e, true)
+		}
+
+		for k, v := range endpoints {
+			if k != "state.v1" {
+				for _, e := range v {
+					tm(t, e, false)
+				}
+			}
+		}
+	})
+
 	t.Run("state.v1alpha1 endpoints allowed", func(t *testing.T) {
-		a := []config.APIAccessRule{
+		allowed := []config.APIAccessRule{
 			{
 				Name:     "state",
 				Version:  "v1alpha1",
@@ -116,7 +140,7 @@ func TestSetAPIEndpointsMiddleware(t *testing.T) {
 			},
 		}
 
-		tm := testMiddleware(setAPIEndpointsMiddlewares(a))
+		tm := testMiddleware(setAPIEndpointsMiddlewares(allowed, nil))
 
 		for _, e := range endpoints["state.v1alpha1"] {
 			tm(t, e, false)
@@ -132,7 +156,7 @@ func TestSetAPIEndpointsMiddleware(t *testing.T) {
 	})
 
 	t.Run("publish endpoints allowed", func(t *testing.T) {
-		a := []config.APIAccessRule{
+		allowed := []config.APIAccessRule{
 			{
 				Name:     "publish",
 				Version:  "v1",
@@ -140,7 +164,7 @@ func TestSetAPIEndpointsMiddleware(t *testing.T) {
 			},
 		}
 
-		tm := testMiddleware(setAPIEndpointsMiddlewares(a))
+		tm := testMiddleware(setAPIEndpointsMiddlewares(allowed, nil))
 
 		for _, e := range endpoints["publish.v1"] {
 			tm(t, e, false)
@@ -156,7 +180,7 @@ func TestSetAPIEndpointsMiddleware(t *testing.T) {
 	})
 
 	t.Run("actors endpoints allowed", func(t *testing.T) {
-		a := []config.APIAccessRule{
+		allowed := []config.APIAccessRule{
 			{
 				Name:     "actors",
 				Version:  "v1",
@@ -164,7 +188,7 @@ func TestSetAPIEndpointsMiddleware(t *testing.T) {
 			},
 		}
 
-		tm := testMiddleware(setAPIEndpointsMiddlewares(a))
+		tm := testMiddleware(setAPIEndpointsMiddlewares(allowed, nil))
 
 		for _, e := range endpoints["actors.v1"] {
 			tm(t, e, false)
@@ -180,7 +204,7 @@ func TestSetAPIEndpointsMiddleware(t *testing.T) {
 	})
 
 	t.Run("bindings endpoints allowed", func(t *testing.T) {
-		a := []config.APIAccessRule{
+		allowed := []config.APIAccessRule{
 			{
 				Name:     "bindings",
 				Version:  "v1",
@@ -188,7 +212,7 @@ func TestSetAPIEndpointsMiddleware(t *testing.T) {
 			},
 		}
 
-		tm := testMiddleware(setAPIEndpointsMiddlewares(a))
+		tm := testMiddleware(setAPIEndpointsMiddlewares(allowed, nil))
 
 		for _, e := range endpoints["bindings.v1"] {
 			tm(t, e, false)
@@ -204,7 +228,7 @@ func TestSetAPIEndpointsMiddleware(t *testing.T) {
 	})
 
 	t.Run("secrets endpoints allowed", func(t *testing.T) {
-		a := []config.APIAccessRule{
+		allowed := []config.APIAccessRule{
 			{
 				Name:     "secrets",
 				Version:  "v1",
@@ -212,7 +236,7 @@ func TestSetAPIEndpointsMiddleware(t *testing.T) {
 			},
 		}
 
-		tm := testMiddleware(setAPIEndpointsMiddlewares(a))
+		tm := testMiddleware(setAPIEndpointsMiddlewares(allowed, nil))
 
 		for _, e := range endpoints["secrets.v1"] {
 			tm(t, e, false)
@@ -228,7 +252,7 @@ func TestSetAPIEndpointsMiddleware(t *testing.T) {
 	})
 
 	t.Run("metadata endpoints allowed", func(t *testing.T) {
-		a := []config.APIAccessRule{
+		allowed := []config.APIAccessRule{
 			{
 				Name:     "metadata",
 				Version:  "v1",
@@ -236,7 +260,7 @@ func TestSetAPIEndpointsMiddleware(t *testing.T) {
 			},
 		}
 
-		tm := testMiddleware(setAPIEndpointsMiddlewares(a))
+		tm := testMiddleware(setAPIEndpointsMiddlewares(allowed, nil))
 
 		for _, e := range endpoints["metadata.v1"] {
 			tm(t, e, false)
@@ -252,7 +276,7 @@ func TestSetAPIEndpointsMiddleware(t *testing.T) {
 	})
 
 	t.Run("shutdown endpoints allowed", func(t *testing.T) {
-		a := []config.APIAccessRule{
+		allowed := []config.APIAccessRule{
 			{
 				Name:     "shutdown",
 				Version:  "v1",
@@ -260,7 +284,7 @@ func TestSetAPIEndpointsMiddleware(t *testing.T) {
 			},
 		}
 
-		tm := testMiddleware(setAPIEndpointsMiddlewares(a))
+		tm := testMiddleware(setAPIEndpointsMiddlewares(allowed, nil))
 
 		for _, e := range endpoints["shutdown.v1"] {
 			tm(t, e, false)
@@ -276,7 +300,7 @@ func TestSetAPIEndpointsMiddleware(t *testing.T) {
 	})
 
 	t.Run("invoke endpoints allowed", func(t *testing.T) {
-		a := []config.APIAccessRule{
+		allowed := []config.APIAccessRule{
 			{
 				Name:     "invoke",
 				Version:  "v1",
@@ -284,7 +308,7 @@ func TestSetAPIEndpointsMiddleware(t *testing.T) {
 			},
 		}
 
-		tm := testMiddleware(setAPIEndpointsMiddlewares(a))
+		tm := testMiddleware(setAPIEndpointsMiddlewares(allowed, nil))
 
 		for _, e := range endpoints["invoke.v1"] {
 			tm(t, e, false)
@@ -308,19 +332,19 @@ func TestSetAPIEndpointsMiddleware(t *testing.T) {
 			},
 		}
 
-		tm := testMiddleware(setAPIEndpointsMiddlewares(a))
+		tm := testMiddleware(setAPIEndpointsMiddlewares(a, nil))
 
 		tm(t, "/myservice/method", false)
 	})
 
 	t.Run("no rules, middlewares are nil", func(t *testing.T) {
-		u, s := setAPIEndpointsMiddlewares(nil)
+		u, s := setAPIEndpointsMiddlewares(nil, nil)
 		assert.Nil(t, u)
 		assert.Nil(t, s)
 	})
 
 	t.Run("protocol mismatch, middlewares are nil", func(t *testing.T) {
-		a := []config.APIAccessRule{
+		list := []config.APIAccessRule{
 			{
 				Name:     "state",
 				Version:  "v1",
@@ -328,8 +352,85 @@ func TestSetAPIEndpointsMiddleware(t *testing.T) {
 			},
 		}
 
-		u, s := setAPIEndpointsMiddlewares(a)
+		// Use as allowlist
+		u, s := setAPIEndpointsMiddlewares(list, nil)
 		assert.Nil(t, u)
 		assert.Nil(t, s)
+
+		// Use as denylist
+		u, s = setAPIEndpointsMiddlewares(nil, list)
+		assert.Nil(t, u)
+		assert.Nil(t, s)
+	})
+
+	t.Run("non-overlapping allowlist and denylist", func(t *testing.T) {
+		allowed := []config.APIAccessRule{
+			{
+				Name:     "invoke",
+				Version:  "v1",
+				Protocol: "grpc",
+			},
+		}
+
+		denied := []config.APIAccessRule{
+			{
+				Name:     "state",
+				Version:  "v1",
+				Protocol: "grpc",
+			},
+		}
+
+		tm := testMiddleware(setAPIEndpointsMiddlewares(allowed, denied))
+
+		for k, v := range endpoints {
+			switch k {
+			case "invoke.v1":
+				for _, e := range v {
+					tm(t, e, false)
+				}
+			default:
+				for _, e := range v {
+					tm(t, e, true)
+				}
+			}
+		}
+	})
+
+	t.Run("overlapping allowlist and denylist", func(t *testing.T) {
+		allowed := []config.APIAccessRule{
+			{
+				Name:     "state",
+				Version:  "v1",
+				Protocol: "grpc",
+			},
+			{
+				Name:     "state",
+				Version:  "v1alpha1",
+				Protocol: "grpc",
+			},
+		}
+
+		denied := []config.APIAccessRule{
+			{
+				Name:     "state",
+				Version:  "v1",
+				Protocol: "grpc",
+			},
+		}
+
+		tm := testMiddleware(setAPIEndpointsMiddlewares(allowed, denied))
+
+		for k, v := range endpoints {
+			switch k {
+			case "state.v1alpha1":
+				for _, e := range v {
+					tm(t, e, false)
+				}
+			default:
+				for _, e := range v {
+					tm(t, e, true)
+				}
+			}
+		}
 	})
 }

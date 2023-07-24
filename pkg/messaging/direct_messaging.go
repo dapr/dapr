@@ -39,6 +39,7 @@ import (
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/retry"
+	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 )
@@ -55,23 +56,27 @@ type messageClientConnection func(ctx context.Context, address string, id string
 type DirectMessaging interface {
 	Invoke(ctx context.Context, targetAppID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error)
 	SetAppChannel(appChannel channel.AppChannel)
+	SetHTTPEndpointsAppChannels(nonResourceChannel channel.HTTPEndpointAppChannel, resourceChannels map[string]channel.HTTPEndpointAppChannel)
 }
 
 type directMessaging struct {
-	appChannel           channel.AppChannel
-	connectionCreatorFn  messageClientConnection
-	appID                string
-	mode                 modes.DaprMode
-	grpcPort             int
-	namespace            string
-	resolver             nr.Resolver
-	hostAddress          string
-	hostName             string
-	maxRequestBodySizeMB int
-	proxy                Proxy
-	readBufferSize       int
-	resiliency           resiliency.Provider
-	isStreamingEnabled   bool
+	appChannel                     channel.AppChannel
+	nonResourceHTTPEndpointChannel channel.HTTPEndpointAppChannel
+	resourceHTTPEndpointChannels   map[string]channel.HTTPEndpointAppChannel
+	connectionCreatorFn            messageClientConnection
+	appID                          string
+	mode                           modes.DaprMode
+	grpcPort                       int
+	namespace                      string
+	resolver                       nr.Resolver
+	hostAddress                    string
+	hostName                       string
+	maxRequestBodySizeMB           int
+	proxy                          Proxy
+	readBufferSize                 int
+	resiliency                     resiliency.Provider
+	isStreamingEnabled             bool
+	compStore                      *compstore.ComponentStore
 }
 
 type remoteApp struct {
@@ -85,6 +90,7 @@ type NewDirectMessagingOpts struct {
 	AppID              string
 	Namespace          string
 	Port               int
+	CompStore          *compstore.ComponentStore
 	Mode               modes.DaprMode
 	AppChannel         channel.AppChannel
 	ClientConnFn       messageClientConnection
@@ -102,20 +108,22 @@ func NewDirectMessaging(opts NewDirectMessagingOpts) DirectMessaging {
 	hName, _ := os.Hostname()
 
 	dm := &directMessaging{
-		appID:                opts.AppID,
-		namespace:            opts.Namespace,
-		grpcPort:             opts.Port,
-		mode:                 opts.Mode,
-		appChannel:           opts.AppChannel,
-		connectionCreatorFn:  opts.ClientConnFn,
-		resolver:             opts.Resolver,
-		maxRequestBodySizeMB: opts.MaxRequestBodySize,
-		proxy:                opts.Proxy,
-		readBufferSize:       opts.ReadBufferSize,
-		resiliency:           opts.Resiliency,
-		isStreamingEnabled:   opts.IsStreamingEnabled,
-		hostAddress:          hAddr,
-		hostName:             hName,
+		appID:                        opts.AppID,
+		namespace:                    opts.Namespace,
+		grpcPort:                     opts.Port,
+		mode:                         opts.Mode,
+		appChannel:                   opts.AppChannel,
+		connectionCreatorFn:          opts.ClientConnFn,
+		resolver:                     opts.Resolver,
+		maxRequestBodySizeMB:         opts.MaxRequestBodySize,
+		proxy:                        opts.Proxy,
+		readBufferSize:               opts.ReadBufferSize,
+		resiliency:                   opts.Resiliency,
+		isStreamingEnabled:           opts.IsStreamingEnabled,
+		hostAddress:                  hAddr,
+		hostName:                     hName,
+		compStore:                    opts.CompStore,
+		resourceHTTPEndpointChannels: map[string]channel.HTTPEndpointAppChannel{},
 	}
 
 	if dm.proxy != nil {
@@ -133,9 +141,15 @@ func (d *directMessaging) Invoke(ctx context.Context, targetAppID string, req *i
 		return nil, err
 	}
 
+	// invoke external calls first if appID matches an httpEndpoint.Name or app.id == baseURL that is overwritten
+	if d.isHTTPEndpoint(app.id) || strings.HasPrefix(app.id, "http://") || strings.HasPrefix(app.id, "https://") {
+		return d.invokeWithRetry(ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, app, d.invokeHTTPEndpoint, req)
+	}
+
 	if app.id == d.appID && app.namespace == d.namespace {
 		return d.invokeLocal(ctx, req)
 	}
+
 	return d.invokeWithRetry(ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, app, d.invokeRemote, req)
 }
 
@@ -144,10 +158,20 @@ func (d *directMessaging) SetAppChannel(appChannel channel.AppChannel) {
 	d.appChannel = appChannel
 }
 
+// SetHTTPEndpointsAppChannel sets the app channels for http endpoints.
+func (d *directMessaging) SetHTTPEndpointsAppChannels(nonResourceChannel channel.HTTPEndpointAppChannel, resourceChannels map[string]channel.HTTPEndpointAppChannel) {
+	d.nonResourceHTTPEndpointChannel = nonResourceChannel
+	d.resourceHTTPEndpointChannels = resourceChannels
+}
+
 // requestAppIDAndNamespace takes an app id and returns the app id, namespace and error.
 func (d *directMessaging) requestAppIDAndNamespace(targetAppID string) (string, string, error) {
 	if targetAppID == "" {
 		return "", "", errors.New("app id is empty")
+	}
+	// external invocation with targetAppID == baseURL
+	if strings.HasPrefix(targetAppID, "http://") || strings.HasPrefix(targetAppID, "https://") {
+		return targetAppID, "", nil
 	}
 	items := strings.Split(targetAppID, ".")
 	switch len(items) {
@@ -158,6 +182,19 @@ func (d *directMessaging) requestAppIDAndNamespace(targetAppID string) (string, 
 	default:
 		return "", "", fmt.Errorf("invalid app id %s", targetAppID)
 	}
+}
+
+// checkHTTPEndpoints takes an app id and checks if the app id is associated with the http endpoint CRDs,
+// and returns the baseURL if an http endpoint is found.
+func (d *directMessaging) checkHTTPEndpoints(targetAppID string) string {
+	endpoint, ok := d.compStore.GetHTTPEndpoint(targetAppID)
+	if ok {
+		if endpoint.Name == targetAppID {
+			return endpoint.Spec.BaseURL
+		}
+	}
+
+	return ""
 }
 
 // invokeWithRetry will call a remote endpoint for the specified number of retries and will only retry in the case of transient failures.
@@ -210,7 +247,7 @@ func (d *directMessaging) invokeLocal(ctx context.Context, req *invokev1.InvokeM
 		return nil, errors.New("cannot invoke local endpoint: app channel not initialized")
 	}
 
-	return d.appChannel.InvokeMethod(ctx, req)
+	return d.appChannel.InvokeMethod(ctx, req, "")
 }
 
 func (d *directMessaging) setContextSpan(ctx context.Context) context.Context {
@@ -220,10 +257,34 @@ func (d *directMessaging) setContextSpan(ctx context.Context) context.Context {
 	return ctx
 }
 
+func (d *directMessaging) isHTTPEndpoint(appID string) bool {
+	_, ok := d.compStore.GetHTTPEndpoint(appID)
+	return ok
+}
+
+func (d *directMessaging) invokeHTTPEndpoint(ctx context.Context, appID, appNamespace, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, func(destroy bool), error) {
+	ctx = d.setContextSpan(ctx)
+
+	// Set up timers
+	start := time.Now()
+	diag.DefaultMonitoring.ServiceInvocationRequestSent(appID, req.Message().Method)
+	imr, err := d.invokeRemoteUnaryForHTTPEndpoint(ctx, req, appID)
+
+	// Diagnostics
+	if imr != nil {
+		diag.DefaultMonitoring.ServiceInvocationResponseReceived(appID, req.Message().Method, imr.Status().Code, start)
+	}
+
+	return imr, nopTeardown, err
+}
+
 func (d *directMessaging) invokeRemote(ctx context.Context, appID, appNamespace, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, func(destroy bool), error) {
 	conn, teardown, err := d.connectionCreatorFn(context.TODO(), appAddress, appID, appNamespace)
 	if err != nil {
-		return nil, nil, err
+		if teardown == nil {
+			teardown = nopTeardown
+		}
+		return nil, teardown, err
 	}
 
 	ctx = d.setContextSpan(ctx)
@@ -258,6 +319,22 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, appNamespace,
 	return imr, teardown, err
 }
 
+func (d *directMessaging) invokeRemoteUnaryForHTTPEndpoint(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*invokev1.InvokeMethodResponse, error) {
+	var channel channel.HTTPEndpointAppChannel
+
+	if ch, ok := d.resourceHTTPEndpointChannels[appID]; ok {
+		channel = ch
+	} else {
+		channel = d.nonResourceHTTPEndpointChannel
+	}
+
+	if channel == nil {
+		return nil, fmt.Errorf("cannot invoke http endpoint %s: app channel not initialized", appID)
+	}
+
+	return channel.InvokeMethod(ctx, req, appID)
+}
+
 func (d *directMessaging) invokeRemoteUnary(ctx context.Context, clientV1 internalv1pb.ServiceInvocationClient, req *invokev1.InvokeMethodRequest, opts []grpc.CallOption) (*invokev1.InvokeMethodResponse, error) {
 	pd, err := req.ProtoWithData()
 	if err != nil {
@@ -268,6 +345,7 @@ func (d *directMessaging) invokeRemoteUnary(ctx context.Context, clientV1 intern
 	if err != nil {
 		return nil, err
 	}
+
 	return invokev1.InternalInvokeResponse(resp)
 }
 
@@ -285,7 +363,7 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 	proto := &internalv1pb.InternalInvokeRequestStream{}
 	var (
 		n    int
-		seq  uint32
+		seq  uint64
 		done bool
 	)
 	for {
@@ -364,7 +442,7 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 		}
 		return nil, err
 	}
-	if chunk.Response == nil || chunk.Response.Status == nil || chunk.Response.Headers == nil {
+	if chunk.Response == nil || chunk.Response.Status == nil {
 		return nil, errors.New("response does not contain the required fields in the leading chunk")
 	}
 	pr, pw := io.Pipe()
@@ -380,11 +458,10 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 	// Read the response into the stream in the background
 	go func() {
 		var (
-			firstChunk = true
-			lastSeq    uint32
-			readSeq    uint32
-			payload    *commonv1pb.StreamPayload
-			readErr    error
+			expectSeq uint64
+			readSeq   uint64
+			payload   *commonv1pb.StreamPayload
+			readErr   error
 		)
 		for {
 			if ctx.Err() != nil {
@@ -401,13 +478,12 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 					return
 				}
 
-				// Check if the sequence number is greater than the previous (or 0 for the first chunk)
-				if (firstChunk && readSeq != 0) || (!firstChunk && readSeq != lastSeq+1) {
-					pw.CloseWithError(fmt.Errorf("invalid sequence number received: %d", readSeq))
+				// Check if the sequence number is greater than the previous
+				if readSeq != expectSeq {
+					pw.CloseWithError(fmt.Errorf("invalid sequence number received: %d (expected: %d)", readSeq, expectSeq))
 					return
 				}
-				lastSeq = readSeq
-				firstChunk = false
+				expectSeq++
 			}
 
 			// Read the next chunk
@@ -490,10 +566,20 @@ func (d *directMessaging) getRemoteApp(appID string) (remoteApp, error) {
 		return remoteApp{}, errors.New("name resolver not initialized")
 	}
 
-	request := nr.ResolveRequest{ID: id, Namespace: namespace, Port: d.grpcPort}
-	address, err := d.resolver.ResolveID(request)
-	if err != nil {
-		return remoteApp{}, err
+	var address string
+	// Note: check for case where URL is overwritten for external service invocation,
+	// or if current app id is associated with an http endpoint CRD.
+	// This will also forgo service discovery.
+	if strings.HasPrefix(id, "http://") || strings.HasPrefix(id, "https://") {
+		address = id
+	} else if d.isHTTPEndpoint(id) {
+		address = d.checkHTTPEndpoints(id)
+	} else {
+		request := nr.ResolveRequest{ID: id, Namespace: namespace, Port: d.grpcPort}
+		address, err = d.resolver.ResolveID(request)
+		if err != nil {
+			return remoteApp{}, err
+		}
 	}
 
 	return remoteApp{
@@ -505,7 +591,7 @@ func (d *directMessaging) getRemoteApp(appID string) (remoteApp, error) {
 
 // ReadChunk reads a chunk of data from a StreamPayload object.
 // The returned value "seq" indicates the sequence number
-func ReadChunk(payload *commonv1pb.StreamPayload, out io.Writer) (seq uint32, err error) {
+func ReadChunk(payload *commonv1pb.StreamPayload, out io.Writer) (seq uint64, err error) {
 	if len(payload.Data) > 0 {
 		var n int
 		n, err = out.Write(payload.Data)

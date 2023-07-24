@@ -11,6 +11,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: dapr-webhook-cert
+  namespace: {{ .Release.Namespace }}
   labels:
     app: dapr-operator
     {{- range $key, $value := .Values.global.k8sLabels }}
@@ -29,6 +30,7 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: dapr-webhook-ca
+  namespace: {{ .Release.Namespace }}
   labels:
     app: dapr-operator
     {{- range $key, $value := .Values.global.k8sLabels }}
@@ -43,6 +45,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: dapr-operator
+  namespace: {{ .Release.Namespace }}
   labels:
     app: dapr-operator
     {{- range $key, $value := .Values.global.k8sLabels }}
@@ -107,11 +110,17 @@ spec:
 {{- if eq .Values.global.daprControlPlaneOs "linux" }}
         securityContext:
           runAsNonRoot: {{ .Values.runAsNonRoot }}
-{{- if eq .Values.debug.enabled true }}
+  {{- if eq .Values.debug.enabled true }}
           capabilities:
-            add:
-            - SYS_PTRACE
-{{- end }}
+            add: ["SYS_PTRACE"]
+  {{- else }}
+          capabilities:
+            drop: ["ALL"]
+  {{- end }}
+  {{- if .Values.global.seccompProfile }}
+          seccompProfile:
+            type: {{ .Values.global.seccompProfile }}
+  {{- end }}
 {{- end }}
         env:
         - name: NAMESPACE

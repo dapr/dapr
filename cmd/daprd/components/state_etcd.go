@@ -1,3 +1,5 @@
+//go:build allcomponents
+
 /*
 Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,10 +16,19 @@ limitations under the License.
 package components
 
 import (
-	etcd "github.com/dapr/components-contrib/state/etcd"
+	"github.com/dapr/components-contrib/state/etcd"
+	"github.com/dapr/dapr/pkg/components"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 )
 
 func init() {
-	stateLoader.DefaultRegistry.RegisterComponent(etcd.NewEtcdStateStore, "etcd")
+	stateLoader.DefaultRegistry.RegisterComponentWithVersions("etcd", components.Versioning{
+		Preferred: components.VersionConstructor{
+			Version: "v2", Constructor: etcd.NewEtcdStateStoreV2,
+		},
+		Deprecated: []components.VersionConstructor{
+			{Version: "v1", Constructor: etcd.NewEtcdStateStoreV1},
+		},
+		Default: "v1",
+	})
 }

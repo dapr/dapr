@@ -19,7 +19,7 @@ import (
 	"github.com/dapr/dapr/pkg/components/pluggable"
 
 	"github.com/dapr/dapr/pkg/injector/annotations"
-	"github.com/dapr/dapr/pkg/injector/sidecar"
+	"github.com/dapr/dapr/pkg/injector/patcher"
 
 	corev1 "k8s.io/api/core/v1"
 )
@@ -51,7 +51,7 @@ func sharedComponentsUnixSocketVolumeMount(mountPath string) corev1.VolumeMount 
 func SplitContainers(pod corev1.Pod) (appContainers map[int]corev1.Container, componentContainers map[int]corev1.Container) {
 	appContainers = make(map[int]corev1.Container, len(pod.Spec.Containers))
 	componentContainers = make(map[int]corev1.Container, len(pod.Spec.Containers))
-	pluggableComponents := sidecar.Annotations(pod.Annotations).GetString(annotations.KeyPluggableComponents)
+	pluggableComponents := annotations.New(pod.Annotations).GetString(annotations.KeyPluggableComponents)
 	componentsNames := strings.Split(pluggableComponents, ",")
 	isComponent := make(map[string]bool, len(componentsNames))
 	for _, name := range componentsNames {
@@ -70,14 +70,14 @@ func SplitContainers(pod corev1.Pod) (appContainers map[int]corev1.Container, co
 }
 
 // PatchOps returns the patch operations required to properly bootstrap the pluggable component and the respective volume mount for the sidecar.
-func PatchOps(componentContainers map[int]corev1.Container, pod *corev1.Pod) ([]sidecar.PatchOperation, *corev1.VolumeMount) {
-	patches := make([]sidecar.PatchOperation, 0)
+func PatchOps(componentContainers map[int]corev1.Container, injectedContainers []corev1.Container, pod *corev1.Pod) ([]patcher.PatchOperation, *corev1.VolumeMount) {
+	patches := make([]patcher.PatchOperation, 0)
 
-	if len(componentContainers) == 0 {
+	if len(componentContainers) == 0 && len(injectedContainers) == 0 {
 		return patches, nil
 	}
 
-	podAnnotations := sidecar.Annotations(pod.Annotations)
+	podAnnotations := annotations.New(pod.Annotations)
 	mountPath := podAnnotations.GetString(annotations.KeyPluggableComponentsSocketsFolder)
 	if mountPath == "" {
 		mountPath = pluggable.GetSocketFolderPath()
@@ -91,30 +91,70 @@ func PatchOps(componentContainers map[int]corev1.Container, pod *corev1.Pod) ([]
 	}}
 
 	for idx, container := range componentContainers {
-		patches = append(patches, sidecar.GetEnvPatchOperations(container.Env, componentsEnvVars, idx)...)
-		patches = append(patches, sidecar.GetVolumeMountPatchOperations(container.VolumeMounts, []corev1.VolumeMount{sharedSocketVolumeMount}, idx)...)
+		patches = append(patches, patcher.GetEnvPatchOperations(container.Env, componentsEnvVars, idx)...)
+		patches = append(patches, patcher.GetVolumeMountPatchOperations(container.VolumeMounts, []corev1.VolumeMount{sharedSocketVolumeMount}, idx)...)
+	}
+
+	podVolumes := make(map[string]bool, len(pod.Spec.Volumes))
+	for _, volume := range pod.Spec.Volumes {
+		podVolumes[volume.Name] = true
+	}
+
+	for _, container := range injectedContainers {
+		container.Env = append(container.Env, componentsEnvVars...)
+		// mount volume as empty dir by default.
+		patches = append(patches, emptyVolumePatches(container, podVolumes, pod)...)
+		container.VolumeMounts = append(container.VolumeMounts, sharedSocketVolumeMount)
+
+		patches = append(patches, patcher.PatchOperation{
+			Op:    "add",
+			Path:  patcher.PatchPathContainers + "/-",
+			Value: container,
+		})
 	}
 
 	return patches, &sharedSocketVolumeMount
 }
 
+// emptyVolumePatches return all patches for pod emptyvolumes (the default value for injected pluggable components)
+func emptyVolumePatches(container corev1.Container, podVolumes map[string]bool, pod *corev1.Pod) []patcher.PatchOperation {
+	volumePatches := make([]patcher.PatchOperation, 0)
+	for _, volumeMount := range container.VolumeMounts {
+		if !podVolumes[volumeMount.Name] {
+			emptyDirVolume := corev1.Volume{
+				Name: volumeMount.Name,
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			}
+			pod.Spec.Volumes = append(pod.Spec.Volumes, emptyDirVolume)
+			volumePatches = append(volumePatches, patcher.PatchOperation{
+				Op:    "add",
+				Path:  patcher.PatchPathVolumes + "/-",
+				Value: emptyDirVolume,
+			})
+		}
+	}
+	return volumePatches
+}
+
 // addSharedSocketVolume adds the new volume to the pod and return the patch operation and the mounted volume.
-func addSharedSocketVolume(mountPath string, pod *corev1.Pod) (sidecar.PatchOperation, corev1.VolumeMount) {
+func addSharedSocketVolume(mountPath string, pod *corev1.Pod) (patcher.PatchOperation, corev1.VolumeMount) {
 	sharedSocketVolume := sharedComponentsSocketVolume()
 	sharedSocketVolumeMount := sharedComponentsUnixSocketVolumeMount(mountPath)
 
-	var volumePatch sidecar.PatchOperation
+	var volumePatch patcher.PatchOperation
 
 	if len(pod.Spec.Volumes) == 0 {
-		volumePatch = sidecar.PatchOperation{
+		volumePatch = patcher.PatchOperation{
 			Op:    "add",
-			Path:  sidecar.PatchPathVolumes,
+			Path:  patcher.PatchPathVolumes,
 			Value: []corev1.Volume{sharedSocketVolume},
 		}
 	} else {
-		volumePatch = sidecar.PatchOperation{
+		volumePatch = patcher.PatchOperation{
 			Op:    "add",
-			Path:  sidecar.PatchPathVolumes + "/-",
+			Path:  patcher.PatchPathVolumes + "/-",
 			Value: sharedSocketVolume,
 		}
 	}

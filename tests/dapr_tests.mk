@@ -22,6 +22,7 @@ hellodapr \
 stateapp \
 secretapp \
 service_invocation \
+service_invocation_external \
 service_invocation_grpc \
 service_invocation_grpc_proxy_client \
 service_invocation_grpc_proxy_server \
@@ -56,7 +57,7 @@ tracingapp \
 configurationapp \
 
 # PERFORMANCE test app list
-PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc actor-activation-locker k6-custom pubsub_subscribe_http
+PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc actor-activation-locker k6-custom pubsub_subscribe_http configuration
 
 # E2E test app root directory
 E2E_TESTAPP_DIR=./tests/apps
@@ -75,10 +76,12 @@ state_get_http \
 pubsub_publish_grpc \
 pubsub_publish_http \
 pubsub_bulk_publish_grpc \
-pubsub_bulk_subscribe_http \
+pubsub_bulk_publish_http \
 actor_double_activation \
 actor_id_scale \
 actor_type_scale \
+configuration \
+pubsub_subscribe_http \
 
 KUBECTL=kubectl
 
@@ -97,8 +100,8 @@ ifeq ($(DAPR_TEST_PUBSUB),)
 DAPR_TEST_PUBSUB=redis
 endif
 
-ifeq ($(DAPR_TEST_CONFIGURATION),)
-DAPR_TEST_CONFIGURATION=redis
+ifeq ($(DAPR_TEST_CONFIG_STORE),)
+DAPR_TEST_CONFIG_STORE=redis
 endif
 
 ifeq ($(DAPR_TEST_NAMESPACE),)
@@ -118,6 +121,11 @@ MINIKUBE_NODE_IP=$(shell minikube ip)
 ifeq ($(MINIKUBE_NODE_IP),)
 $(error cannot find get minikube node ip address. ensure that you have minikube environment.)
 endif
+endif
+
+
+ifeq ($(DAPR_PERF_PUBSUB_SUBS_HTTP_TEST_CONFIG_FILE_NAME),)
+DAPR_PERF_PUBSUB_SUBS_HTTP_TEST_CONFIG_FILE_NAME=test_all.yaml
 endif
 
 ifeq ($(WINDOWS_VERSION),)
@@ -246,6 +254,8 @@ delete-test-namespace:
 	kubectl delete namespace $(DAPR_TEST_NAMESPACE)
 
 setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-mongodb setup-test-env-zipkin
+
+setup-pubsub-subs-perf-test-components: setup-test-env-rabbitmq setup-test-env-pulsar setup-test-env-mqtt
 
 e2e-build-deploy-run: create-test-namespace setup-3rd-party build docker-push docker-deploy-k8s setup-test-components build-e2e-app-all push-e2e-app-all test-e2e-all
 
@@ -384,6 +394,24 @@ else
 	done
 endif
 
+test-perf-pubsub-subscribe-http-components: check-e2e-env test-deps
+	DAPR_CONTAINER_LOG_PATH=$(DAPR_CONTAINER_LOG_PATH) \
+	DAPR_TEST_LOG_PATH=$(DAPR_TEST_LOG_PATH) \
+	GOOS=$(TARGET_OS_LOCAL) \
+	DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) \
+	DAPR_TEST_TAG=$(DAPR_TEST_TAG) \
+	DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) \
+	DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) \
+	DAPR_PERF_PUBSUB_SUBS_HTTP_TEST_CONFIG_FILE_NAME=$(DAPR_PERF_PUBSUB_SUBS_HTTP_TEST_CONFIG_FILE_NAME) \
+	NO_API_LOGGING=true \
+		gotestsum \
+			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_perf_$(1).json \
+			--junitfile $(TEST_OUTPUT_FILE_PREFIX)_perf_$(1).xml \
+			--format standard-quiet \
+			-- \
+				-timeout 3h -p 1 -count=1 -v -tags=perf ./tests/perf/pubsub_subscribe_http/...
+	jq -r .Output $(TEST_OUTPUT_FILE_PREFIX)_perf_$(1).json | strings
+
 # add required helm repo
 setup-helm-init:
 	$(HELM) repo add bitnami https://charts.bitnami.com/bitnami
@@ -423,6 +451,22 @@ delete-test-env-redis:
 setup-test-env-kafka:
 	$(HELM) upgrade --install dapr-kafka bitnami/kafka -f ./tests/config/kafka_override.yaml --namespace $(DAPR_TEST_NAMESPACE) --timeout 10m0s
 
+# install rabbitmq to the cluster
+setup-test-env-rabbitmq:
+	$(HELM) upgrade --install rabbitmq bitnami/rabbitmq --set auth.username='admin' --set auth.password='admin' --namespace $(DAPR_TEST_NAMESPACE) --timeout 10m0s
+
+# install mqtt to the cluster
+setup-test-env-mqtt:
+	$(HELM) repo add emqx https://repos.emqx.io/charts 
+	$(HELM) repo update
+	$(HELM) upgrade --install perf-test-emqx emqx/emqx --namespace $(DAPR_TEST_NAMESPACE) --timeout 10m0s
+
+# install mqtt to the cluster
+setup-test-env-pulsar:
+	$(HELM) repo add apache https://pulsar.apache.org/charts
+	$(HELM) repo update
+	$(HELM) upgrade --install perf-test-pulsar apache/pulsar --namespace $(DAPR_TEST_NAMESPACE) --timeout 10m0s
+
 # delete kafka from cluster
 delete-test-env-kafka:
 	$(HELM) del dapr-kafka --namespace $(DAPR_TEST_NAMESPACE)
@@ -430,6 +474,14 @@ delete-test-env-kafka:
 # install mongodb to the cluster without password
 setup-test-env-mongodb:
 	$(HELM) upgrade --install dapr-mongodb bitnami/mongodb -f ./tests/config/mongodb_override.yaml --namespace $(DAPR_TEST_NAMESPACE) --wait --timeout 5m0s
+
+# install postgres to the cluster
+setup-test-env-postgres:
+	$(HELM) upgrade --install dapr-postgres bitnami/postgresql -f ./tests/config/postgres_override.yaml --namespace $(DAPR_TEST_NAMESPACE) --wait --timeout 5m0s
+
+# delete postgres from cluster
+delete-test-env-postgres:
+	$(HELM) del dapr-postgres --namespace $(DAPR_TEST_NAMESPACE)
 
 # delete mongodb from cluster
 delete-test-env-mongodb:
@@ -441,8 +493,8 @@ setup-test-env-zipkin:
 delete-test-env-zipkin:
 	$(KUBECTL) delete -f ./tests/config/zipkin.yaml -n $(DAPR_TEST_NAMESPACE)
 
-# Install redis and kafka to test cluster
-setup-test-env: setup-test-env-kafka setup-test-env-redis setup-test-env-mongodb setup-test-env-k6 setup-test-env-zipkin
+# Setup the test environment by installing components
+setup-test-env: setup-test-env-kafka setup-test-env-redis setup-test-env-mongodb setup-test-env-k6 setup-test-env-zipkin setup-test-env-postgres
 
 save-dapr-control-plane-k8s-resources:
 	mkdir -p '$(DAPR_CONTAINER_LOG_PATH)'
@@ -472,7 +524,7 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/dapr_redis_pluggable_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_tests_cluster_role_binding.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_PUBSUB)_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_CONFIGURATION)_configuration.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_CONFIG_STORE)_configuration.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/pubsub_no_resiliency.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/kafka_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_kafka_pluggable_bindings.yaml --namespace $(DAPR_TEST_NAMESPACE)
@@ -491,10 +543,9 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/uppercase.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/pipeline.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/pipeline_app.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/app_reentrant_actor.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/preview_configurations.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/app_topic_subscription_routing.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/app_topic_subscription_routing_grpc.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/app_pubsub_routing.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/resiliency.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/resiliency_kafka_bindings.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/resiliency_kafka_bindings_grpc.yaml --namespace $(DAPR_TEST_NAMESPACE)
@@ -503,14 +554,20 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/dapr_in_memory_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_tracing_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_cron_binding.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	# TODO: Remove once AppHealthCheck feature is finalized
-	$(KUBECTL) apply -f ./tests/config/app_healthcheck.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/external_invocation_http_endpoint.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/grpcproxyserverexternal_service.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/externalinvocationcrd.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/omithealthchecks_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/external_invocation_http_endpoint_tls.yaml --namespace $(DAPR_TEST_NAMESPACE)
 
 	# Show the installed components
 	$(KUBECTL) get components --namespace $(DAPR_TEST_NAMESPACE)
 
 	# Show the installed configurations
 	$(KUBECTL) get configurations --namespace $(DAPR_TEST_NAMESPACE)
+
+setup-components-perf-test:
+	$(KUBECTL) apply -f ./tests/config/pubsub_perf_components.yaml --namespace $(DAPR_TEST_NAMESPACE)
 
 # Setup kind
 setup-kind:

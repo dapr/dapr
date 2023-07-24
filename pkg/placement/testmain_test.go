@@ -56,6 +56,14 @@ func TestMain(m *testing.M) {
 		}
 	}
 
+	// It is painful that we have to include a `time.Sleep` here, but due to the
+	// non-deterministic behaviour of the raft library we are using we will fail
+	// later fail on slower test runner machines. A clock timer wait means we
+	// have a _better_ chance of being in the right spot in the state machine and
+	// the network has died down. Ideally we should move to a different raft
+	// library that is more deterministic and reliable for our use case.
+	time.Sleep(time.Second * 3)
+
 	retVal := m.Run()
 
 	cancel()

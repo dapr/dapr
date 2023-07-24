@@ -30,6 +30,7 @@ import (
 	"k8s.io/utils/clock"
 
 	daprCredentials "github.com/dapr/dapr/pkg/credentials"
+	"github.com/dapr/dapr/pkg/placement/monitoring"
 	"github.com/dapr/dapr/pkg/placement/raft"
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/kit/logger"
@@ -215,6 +216,10 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 				continue
 			}
 
+			for _, entity := range req.Entities {
+				monitoring.RecordActorHeartbeat(req.Id, entity, req.Name, req.Pod, p.clock.Now())
+			}
+
 			// Record the heartbeat timestamp. This timestamp will be used to check if the member
 			// state maintained by raft is valid or not. If the member is outdated based the timestamp
 			// the member will be marked as faulty node and removed.
@@ -241,11 +246,12 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 						UpdatedAt: p.clock.Now().UnixNano(),
 					},
 				}
+				log.Debugf("Member changed upserting appid %s with entities %v", req.Id, req.Entities)
 			}
 
 		default:
 			if registeredMemberID == "" {
-				log.Error("Stream is disconnected before member is added")
+				log.Error("Stream is disconnected before member is added ", err)
 				return nil
 			}
 
