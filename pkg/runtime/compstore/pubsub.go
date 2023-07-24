@@ -25,6 +25,7 @@ type PubsubItem struct {
 	ScopedSubscriptions []string
 	ScopedPublishings   []string
 	AllowedTopics       []string
+	ProtectedTopics     []string
 	NamespaceScoped     bool
 }
 
