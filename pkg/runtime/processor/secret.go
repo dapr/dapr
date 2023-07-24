@@ -18,6 +18,7 @@ import (
 
 	"github.com/dapr/components-contrib/secretstores"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	"github.com/dapr/dapr/pkg/cache"
 	compsecret "github.com/dapr/dapr/pkg/components/secretstores"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -39,7 +40,14 @@ func (s *secret) init(ctx context.Context, comp compapi.Component) error {
 		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
 	}
 
-	err = secretStore.Init(ctx, secretstores.Metadata{Base: s.meta.ToBaseMetadata(comp)})
+	bm := s.meta.ToBaseMetadata(comp)
+	err = cache.InitSecretStoreCaches(comp.ObjectMeta.Name, bm.Properties)
+	if err != nil {
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "creation", comp.ObjectMeta.Name)
+		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
+	}
+
+	err = secretStore.Init(ctx, secretstores.Metadata{Base: bm})
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
 		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)

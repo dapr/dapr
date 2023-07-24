@@ -56,11 +56,19 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 
+	"github.com/dapr/components-contrib/middleware"
+	nr "github.com/dapr/components-contrib/nameresolution"
+	"github.com/dapr/components-contrib/pubsub"
+	"github.com/dapr/components-contrib/secretstores"
+	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/kit/logger"
+
 	"github.com/dapr/dapr/pkg/actors"
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpEndpointV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/apphealth"
+
 	"github.com/dapr/dapr/pkg/channel"
 	httpChannel "github.com/dapr/dapr/pkg/channel/http"
 	"github.com/dapr/dapr/pkg/components"
@@ -77,6 +85,8 @@ import (
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
+	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/meta"
 	"github.com/dapr/dapr/pkg/runtime/processor"
@@ -86,10 +96,6 @@ import (
 	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
 	"github.com/dapr/dapr/utils"
-	"github.com/dapr/kit/logger"
-
-	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
-	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 
 	"github.com/dapr/dapr/pkg/components/pluggable"
 	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
@@ -100,11 +106,6 @@ import (
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/contenttype"
 	contribMetadata "github.com/dapr/components-contrib/metadata"
-	"github.com/dapr/components-contrib/middleware"
-	nr "github.com/dapr/components-contrib/nameresolution"
-	"github.com/dapr/components-contrib/pubsub"
-	"github.com/dapr/components-contrib/secretstores"
-	"github.com/dapr/components-contrib/state"
 )
 
 const (

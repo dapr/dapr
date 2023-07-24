@@ -15,13 +15,19 @@ package universalapi
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"github.com/dapr/components-contrib/secretstores"
+	"github.com/dapr/dapr/pkg/cache"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+)
+
+const (
+	refreshCache = "refresh_cache"
 )
 
 func (a *UniversalAPI) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error) {
@@ -41,6 +47,19 @@ func (a *UniversalAPI) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretR
 	req := secretstores.GetSecretRequest{
 		Name:     in.Key,
 		Metadata: in.Metadata,
+	}
+
+	refresh := false
+	if in.Metadata != nil {
+		refresh, _ = strconv.ParseBool(in.Metadata[refreshCache])
+	}
+	if cache.EnabledForSecretStore(in.StoreName) && !refresh {
+		cacheData, geterr := cache.GetValue(in.StoreName, req)
+		if geterr == nil {
+			return &runtimev1pb.GetSecretResponse{
+				Data: cacheData,
+			}, nil
+		}
 	}
 
 	start := time.Now()
@@ -65,6 +84,9 @@ func (a *UniversalAPI) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretR
 		response = &runtimev1pb.GetSecretResponse{
 			Data: getResponse.Data,
 		}
+	}
+	if cache.EnabledForSecretStore(in.StoreName) {
+		cache.SetValueAsync(in.StoreName, req, getResponse.Data)
 	}
 	return response, nil
 }
@@ -106,6 +128,10 @@ func (a *UniversalAPI) GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBul
 	for key, v := range getResponse.Data {
 		if a.isSecretAllowed(in.StoreName, key) {
 			filteredSecrets[key] = v
+			// since we don't know the key, so for bulk get only cache the allowed items
+			if cache.EnabledForSecretStore(in.StoreName) {
+				cache.SetValueAsync(in.StoreName, secretstores.GetSecretRequest{Name: key, Metadata: req.Metadata}, v)
+			}
 		} else {
 			a.Logger.Debugf(messages.ErrSecretPermissionDenied.WithFormat(key, in.StoreName).String())
 		}
