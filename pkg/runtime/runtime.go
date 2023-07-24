@@ -1948,7 +1948,7 @@ func (a *DaprRuntime) GetPubSub(pubsubName string) pubsub.PubSub {
 }
 
 func (a *DaprRuntime) isPubSubOperationAllowed(pubsubName string, topic string, scopedTopics []string) bool {
-	inAllowedTopics := false
+	var inAllowedTopics, inProtectedTopics bool
 
 	pubSub, ok := a.compStore.GetPubSub(pubsubName)
 	if !ok {
@@ -1967,7 +1967,19 @@ func (a *DaprRuntime) isPubSubOperationAllowed(pubsubName string, topic string, 
 			return false
 		}
 	}
-	if len(scopedTopics) == 0 {
+
+	// check if topic is protected
+	if len(pubSub.ProtectedTopics) > 0 {
+		for _, t := range pubSub.ProtectedTopics {
+			if t == topic {
+				inProtectedTopics = true
+				break
+			}
+		}
+	}
+
+	// if topic is protected then a scope must be applied
+	if !inProtectedTopics && len(scopedTopics) == 0 {
 		return true
 	}
 
