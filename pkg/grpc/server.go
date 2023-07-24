@@ -22,6 +22,7 @@ import (
 	"net"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
@@ -76,6 +77,9 @@ type server struct {
 	apiSpec            config.APISpec
 	proxy              messaging.Proxy
 	workflowEngine     *wfengine.WorkflowEngine
+	wg                 sync.WaitGroup
+	closed             atomic.Bool
+	closeCh            chan struct{}
 }
 
 var (
@@ -99,6 +103,7 @@ func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec, 
 		apiSpec:        apiSpec,
 		proxy:          proxy,
 		workflowEngine: workflowEngine,
+		closeCh:        make(chan struct{}),
 	}
 }
 
@@ -114,6 +119,7 @@ func NewInternalServer(api API, config ServerConfig, tracingSpec config.TracingS
 		logger:           internalServerLogger,
 		maxConnectionAge: getDefaultMaxAgeDuration(),
 		proxy:            proxy,
+		closeCh:          make(chan struct{}),
 	}
 }
 
@@ -138,7 +144,7 @@ func (s *server) StartNonBlocking() error {
 			addr := apiListenAddress + ":" + strconv.Itoa(s.config.Port)
 			l, err := net.Listen("tcp", addr)
 			if err != nil {
-				s.logger.Debugf("Failed to listen for gRPC server on TCP address %s with error: %v", addr, err)
+				s.logger.Errorf("Failed to listen for gRPC server on TCP address %s with error: %v", addr, err)
 			} else {
 				s.logger.Infof("gRPC server listening on TCP address: %s", addr)
 				listeners = append(listeners, l)
@@ -169,7 +175,9 @@ func (s *server) StartNonBlocking() error {
 			}
 		}
 
+		s.wg.Add(1)
 		go func(server *grpcGo.Server, l net.Listener) {
+			defer s.wg.Done()
 			if err := server.Serve(l); err != nil {
 				s.logger.Fatalf("gRPC serve error: %v", err)
 			}
@@ -179,18 +187,24 @@ func (s *server) StartNonBlocking() error {
 }
 
 func (s *server) Close() error {
+	defer s.wg.Wait()
+	if s.closed.CompareAndSwap(false, true) {
+		close(s.closeCh)
+	}
+
 	for _, server := range s.servers {
 		// This calls `Close()` on the underlying listener.
 		server.GracefulStop()
 	}
 
+	var errs []error
 	if s.api != nil {
 		if closer, ok := s.api.(io.Closer); ok {
-			closer.Close()
+			errs = append(errs, closer.Close())
 		}
 	}
 
-	return nil
+	return errors.Join(errs...)
 }
 
 func (s *server) generateWorkloadCert() error {
@@ -293,7 +307,11 @@ func (s *server) getGRPCServer() (*grpcGo.Server, error) {
 		ta := credentials.NewTLS(&tlsConfig)
 
 		opts = append(opts, grpcGo.Creds(ta))
-		go s.startWorkloadCertRotation()
+		s.wg.Add(1)
+		go func() {
+			defer s.wg.Done()
+			s.startWorkloadCertRotation()
+		}()
 	}
 
 	opts = append(opts,
@@ -314,21 +332,26 @@ func (s *server) startWorkloadCertRotation() {
 
 	ticker := time.NewTicker(certWatchInterval)
 
-	for range ticker.C {
-		s.renewMutex.Lock()
-		renew := shouldRenewCert(s.signedCert.Expiry, s.signedCertDuration)
-		if renew {
-			s.logger.Info("renewing certificate: requesting new cert and restarting gRPC server")
+	for {
+		select {
+		case <-s.closeCh:
+			return
+		case <-ticker.C:
+			s.renewMutex.Lock()
+			renew := shouldRenewCert(s.signedCert.Expiry, s.signedCertDuration)
+			if renew {
+				s.logger.Info("renewing certificate: requesting new cert and restarting gRPC server")
 
-			err := s.generateWorkloadCert()
-			if err != nil {
-				s.logger.Errorf("error starting server: %s", err)
-				s.renewMutex.Unlock()
-				continue
+				err := s.generateWorkloadCert()
+				if err != nil {
+					s.logger.Errorf("error starting server: %s", err)
+					s.renewMutex.Unlock()
+					continue
+				}
+				diag.DefaultMonitoring.MTLSWorkLoadCertRotationCompleted()
 			}
-			diag.DefaultMonitoring.MTLSWorkLoadCertRotationCompleted()
+			s.renewMutex.Unlock()
 		}
-		s.renewMutex.Unlock()
 	}
 }
 

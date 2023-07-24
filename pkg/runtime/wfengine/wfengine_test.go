@@ -65,8 +65,7 @@ func (*mockPlacement) LookupActor(actorType string, actorID string) (name string
 }
 
 // Start implements internal.PlacementService
-func (*mockPlacement) Start(ctx context.Context) error {
-	return nil
+func (*mockPlacement) Start() {
 }
 
 // Stop implements internal.PlacementService
@@ -797,7 +796,7 @@ func getEngine(t *testing.T) *wfengine.WorkflowEngine {
 		Resiliency:     resiliency.New(logger.NewLogger("test")),
 	})
 
-	if err := actors.Init(); err != nil {
+	if err := actors.Init(context.Background()); err != nil {
 		require.NoError(t, err)
 	}
 	engine.SetActorRuntime(actors)
@@ -823,7 +822,7 @@ func getEngineAndStateStore(t *testing.T) (*wfengine.WorkflowEngine, *daprt.Fake
 		Resiliency:     resiliency.New(logger.NewLogger("test")),
 	})
 
-	require.NoError(t, actors.Init())
+	require.NoError(t, actors.Init(context.Background()))
 	engine.SetActorRuntime(actors)
 	return engine, store
 }

@@ -25,6 +25,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	// Import pprof that automatically registers itself in the default server mux.
@@ -37,6 +38,7 @@ import (
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 
+	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/config"
 	corsDapr "github.com/dapr/dapr/pkg/cors"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -67,6 +69,7 @@ type server struct {
 	apiSpec            config.APISpec
 	servers            []*http.Server
 	profilingListeners []net.Listener
+	wg                 sync.WaitGroup
 }
 
 // NewServerOpts are the options for NewServer.
@@ -148,7 +151,9 @@ func (s *server) StartNonBlocking() error {
 		}
 		s.servers = append(s.servers, srv)
 
+		s.wg.Add(1)
 		go func(l net.Listener) {
+			defer s.wg.Done()
 			if err := srv.Serve(l); err != http.ErrServerClosed {
 				log.Fatal(err)
 			}
@@ -171,7 +176,9 @@ func (s *server) StartNonBlocking() error {
 		}
 		s.servers = append(s.servers, healthServer)
 
+		s.wg.Add(1)
 		go func() {
+			defer s.wg.Done()
 			if err := healthServer.ListenAndServe(); err != http.ErrServerClosed {
 				log.Fatal(err)
 			}
@@ -206,7 +213,9 @@ func (s *server) StartNonBlocking() error {
 			}
 			s.servers = append(s.servers, profServer)
 
+			s.wg.Add(1)
 			go func(l net.Listener) {
+				defer s.wg.Done()
 				if err := profServer.Serve(l); err != http.ErrServerClosed {
 					log.Fatal(err)
 				}
@@ -218,21 +227,29 @@ func (s *server) StartNonBlocking() error {
 }
 
 func (s *server) Close() error {
-	var err error
+	defer s.wg.Wait()
 
-	for _, ln := range s.servers {
-		// This calls `Close()` on the underlying listener.
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-		shutdownErr := ln.Shutdown(ctx)
-		// Error will be ErrServerClosed if everything went well
-		if errors.Is(shutdownErr, http.ErrServerClosed) {
-			shutdownErr = nil
+	closeServer := func(srv *http.Server) func(ctx context.Context) error {
+		return func(ctx context.Context) error {
+			// This calls `Close()` on the underlying listener.
+			err := srv.Shutdown(ctx)
+			// Error will be ErrServerClosed if everything went well
+			if errors.Is(err, http.ErrServerClosed) {
+				return nil
+			}
+			return err
 		}
-		err = errors.Join(err, shutdownErr)
-		cancel()
 	}
 
-	return err
+	closers := make([]concurrency.Runner, 0, len(s.servers))
+	for _, srv := range s.servers {
+		closers = append(closers, closeServer(srv))
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	return concurrency.NewRunnerManager(closers...).Run(ctx)
 }
 
 func (s *server) getRouter() *chi.Mux {

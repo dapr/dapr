@@ -22,7 +22,7 @@ import (
 type PlacementService interface {
 	io.Closer
 
-	Start(ctx context.Context) error
+	Start()
 	WaitUntilReady(ctx context.Context) error
 	LookupActor(actorType, actorID string) (host string, appID string)
 	AddHostedActorType(actorType string) error

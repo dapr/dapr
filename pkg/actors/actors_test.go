@@ -966,7 +966,7 @@ func TestActorsAppHealthCheck(t *testing.T) {
 	clock := testActorsRuntime.clock.(*clocktesting.FakeClock)
 
 	testActorsRuntime.actorsConfig.Config.HostedActorTypes = internal.NewHostedActors([]string{"actor1"})
-	go testActorsRuntime.startAppHealthCheck(
+	go testActorsRuntime.startAppHealthCheck(context.Background(),
 		health.WithClock(clock),
 		health.WithFailureThreshold(1),
 		health.WithInterval(1*time.Second),
@@ -985,7 +985,7 @@ func TestHostedActorsWithoutStateStore(t *testing.T) {
 	clock := testActorsRuntime.clock.(*clocktesting.FakeClock)
 
 	testActorsRuntime.actorsConfig.Config.HostedActorTypes = internal.NewHostedActors([]string{"actor1"})
-	go testActorsRuntime.startAppHealthCheck(
+	go testActorsRuntime.startAppHealthCheck(context.Background(),
 		health.WithClock(clock),
 		health.WithFailureThreshold(1),
 		health.WithInterval(1*time.Second),
@@ -1004,7 +1004,7 @@ func TestNoHostedActorsWithoutStateStore(t *testing.T) {
 	clock := testActorsRuntime.clock.(*clocktesting.FakeClock)
 
 	testActorsRuntime.actorsConfig.HostedActorTypes = internal.NewHostedActors([]string{})
-	go testActorsRuntime.startAppHealthCheck(
+	go testActorsRuntime.startAppHealthCheck(context.Background(),
 		health.WithClock(clock),
 		health.WithFailureThreshold(1),
 		health.WithInterval(1*time.Second),

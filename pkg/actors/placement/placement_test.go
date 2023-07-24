@@ -84,7 +84,7 @@ func TestPlacementStream_RoundRobin(t *testing.T) {
 		testSrv[leaderServer[0]].setLeader(true)
 
 		// act
-		require.NoError(t, testPlacement.Start(context.Background()))
+		testPlacement.Start()
 		time.Sleep(statusReportHeartbeatInterval * 3)
 		assert.Equal(t, leaderServer[0], testPlacement.serverIndex.Load())
 		assert.True(t, testSrv[testPlacement.serverIndex.Load()].recvCount.Load() >= 2)
@@ -137,7 +137,7 @@ func TestAppHealthyStatus(t *testing.T) {
 	}).(*actorPlacement)
 
 	// act
-	require.NoError(t, testPlacement.Start(context.Background()))
+	testPlacement.Start()
 
 	// wait until client sends heartbeat to the test server
 	time.Sleep(statusReportHeartbeatInterval * 3)
