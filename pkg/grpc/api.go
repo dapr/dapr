@@ -249,7 +249,7 @@ var (
 // Deprecated: Use proxy mode service invocation instead.
 func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error) {
 	if a.directMessaging == nil {
-		return nil, status.Errorf(codes.Internal, messages.ErrDirectInvokeNotReady)
+		return nil, messages.ErrDirectInvokeNotReady
 	}
 
 	if invokeServiceDeprecationNoticeShown.CompareAndSwap(false, true) {
@@ -285,7 +285,7 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 			}
 		}
 		if rErr != nil {
-			return rResp, status.Errorf(codes.Internal, messages.ErrDirectInvoke, in.Id, rErr)
+			return rResp, messages.ErrDirectInvoke.WithFormat(in.Id, rErr)
 		}
 
 		rResp.headers = invokev1.InternalMetadataToGrpcMetadata(ctx, imr.Headers(), true)
@@ -1017,6 +1017,10 @@ func (a *api) RegisterActorReminder(ctx context.Context, in *runtimev1pb.Registe
 		req.Data = j
 	}
 	err := a.UniversalAPI.Actors.CreateReminder(ctx, req)
+	if err != nil && errors.Is(err, actors.ErrReminderOpActorNotHosted) {
+		apiServerLogger.Debug(messages.ErrActorReminderOpActorNotHosted)
+		return nil, messages.ErrActorReminderOpActorNotHosted
+	}
 	return &emptypb.Empty{}, err
 }
 
@@ -1034,6 +1038,10 @@ func (a *api) UnregisterActorReminder(ctx context.Context, in *runtimev1pb.Unreg
 	}
 
 	err := a.UniversalAPI.Actors.DeleteReminder(ctx, req)
+	if err != nil && errors.Is(err, actors.ErrReminderOpActorNotHosted) {
+		apiServerLogger.Debug(messages.ErrActorReminderOpActorNotHosted)
+		return nil, messages.ErrActorReminderOpActorNotHosted
+	}
 	return &emptypb.Empty{}, err
 }
 
@@ -1052,6 +1060,10 @@ func (a *api) RenameActorReminder(ctx context.Context, in *runtimev1pb.RenameAct
 	}
 
 	err := a.UniversalAPI.Actors.RenameReminder(ctx, req)
+	if err != nil && errors.Is(err, actors.ErrReminderOpActorNotHosted) {
+		apiServerLogger.Debug(messages.ErrActorReminderOpActorNotHosted)
+		return nil, messages.ErrActorReminderOpActorNotHosted
+	}
 	return &emptypb.Empty{}, err
 }
 

@@ -41,9 +41,6 @@ import (
 var tr *runner.TestRunner
 
 const (
-	// Number of get calls before starting tests.
-	numHealthChecks = 60
-
 	// used as the exclusive max of a random number that is used as a suffix to the first message sent.  Each subsequent message gets this number+1.
 	// This is random so the first message name is not the same every time.
 	randomOffsetMax           = 49
@@ -343,8 +340,9 @@ func TestPubSubHTTPRouting(t *testing.T) {
 	subscriberRoutingExternalURL := tr.Platform.AcquireAppExternalURL(subscriberAppName)
 	require.NotEmpty(t, subscriberRoutingExternalURL, "subscriberRoutingExternalURL must not be empty!")
 
-	_, err := utils.HTTPGetNTimes(subscriberRoutingExternalURL, numHealthChecks)
-	require.NoError(t, err)
+	// Makes the test wait for the apps and load balancers to be ready
+	err := utils.HealthCheckApps(publisherExternalURL, subscriberRoutingExternalURL)
+	require.NoError(t, err, "Health checks failed")
 
 	testPublishSubscribeRouting(t, publisherExternalURL, subscriberRoutingExternalURL, subscriberAppName, "http")
 }

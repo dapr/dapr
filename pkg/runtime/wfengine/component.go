@@ -123,6 +123,10 @@ func (c *workflowEngineComponent) Terminate(ctx context.Context, req *workflows.
 	}
 
 	if err := c.client.TerminateOrchestration(ctx, api.InstanceID(req.InstanceID)); err != nil {
+		if errors.Is(err, api.ErrInstanceNotFound) {
+			c.logger.Infof("No such instance exists: '%s'", req.InstanceID)
+			return err
+		}
 		return fmt.Errorf("failed to terminate workflow %s: %w", req.InstanceID, err)
 	}
 
@@ -136,6 +140,10 @@ func (c *workflowEngineComponent) Purge(ctx context.Context, req *workflows.Purg
 	}
 
 	if err := c.client.PurgeOrchestrationState(ctx, api.InstanceID(req.InstanceID)); err != nil {
+		if errors.Is(err, api.ErrInstanceNotFound) {
+			c.logger.Infof("Unable to purge the instance: '%s', no such instance exists", req.InstanceID)
+			return err
+		}
 		return fmt.Errorf("failed to Purge workflow %s: %w", req.InstanceID, err)
 	}
 
@@ -171,6 +179,10 @@ func (c *workflowEngineComponent) Get(ctx context.Context, req *workflows.GetReq
 	}
 
 	if metadata, err := c.client.FetchOrchestrationMetadata(ctx, api.InstanceID(req.InstanceID)); err != nil {
+		if errors.Is(err, api.ErrInstanceNotFound) {
+			c.logger.Infof("Unable to get data on the instance: %s, no such instance exists", req.InstanceID)
+			return nil, err
+		}
 		return nil, fmt.Errorf("failed to get workflow metadata for '%s': %w", req.InstanceID, err)
 	} else {
 		res := &workflows.StateResponse{
@@ -231,6 +243,10 @@ func (c *workflowEngineComponent) PurgeWorkflow(ctx context.Context, req *workfl
 	}
 
 	if err := c.client.PurgeOrchestrationState(ctx, api.InstanceID(req.InstanceID)); err != nil {
+		if errors.Is(err, api.ErrInstanceNotFound) {
+			c.logger.Infof("The requested instance: '%s' does not exist or has already been purged", req.InstanceID)
+			return err
+		}
 		return fmt.Errorf("failed to purge workflow %s: %w", req.InstanceID, err)
 	}
 

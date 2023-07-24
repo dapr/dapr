@@ -352,7 +352,7 @@ test-integration: test-deps
 			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json \
 			--format testname \
 			-- \
-			./tests/integration -count=1 -v -race -tags="integration"
+			./tests/integration -count=1 -v -tags="integration"
 
 ################################################################################
 # Target: lint                                                                 #

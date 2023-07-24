@@ -30,6 +30,8 @@ import (
 
 const (
 	jsonContentType = "application/json"
+	tlsCertEnvKey   = "DAPR_TESTS_TLS_CERT"
+	tlsKeyEnvKey    = "DAPR_TESTS_TLS_KEY"
 )
 
 type httpTestMethods struct {
@@ -88,7 +90,10 @@ var testMethods = []httpTestMethods{
 	},
 }
 
-var appPort = 3000
+var (
+	appPort        = 3000
+	securedAppPort = 3001
+)
 
 type appResponse struct {
 	Message string `json:"message,omitempty"`
@@ -103,6 +108,13 @@ func init() {
 
 func main() {
 	log.Printf("service_invocation_external - listening on http://localhost:%d", appPort)
+
+	go func() {
+		os.Setenv(tlsCertEnvKey, "/tmp/testdata/certs/tls.crt")
+		os.Setenv(tlsKeyEnvKey, "/tmp/testdata/certs/tls.key")
+		utils.StartServer(securedAppPort, appRouter, true, true)
+	}()
+
 	utils.StartServer(appPort, appRouter, true, false)
 }
 
