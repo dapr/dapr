@@ -28,7 +28,7 @@ import (
 	"github.com/dapr/dapr/pkg/credentials"
 	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
 	"github.com/dapr/dapr/pkg/injector/patcher"
-	sentryConsts "github.com/dapr/dapr/pkg/sentry/consts"
+	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 )
 
 const (
@@ -118,7 +118,7 @@ func mTLSEnabled(daprClient scheme.Interface) bool {
 func GetTrustAnchorsAndCertChain(ctx context.Context, kubeClient kubernetes.Interface, namespace string) (string, string, string) {
 	secret, err := kubeClient.CoreV1().
 		Secrets(namespace).
-		Get(ctx, sentryConsts.TrustBundleK8sSecretName, metav1.GetOptions{})
+		Get(ctx, securityConsts.TrustBundleK8sSecretName, metav1.GetOptions{})
 	if err != nil {
 		return "", "", ""
 	}

@@ -84,7 +84,6 @@ import (
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/dapr/pkg/runtime/security"
-	"github.com/dapr/dapr/pkg/scopes"
 	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/logger"
