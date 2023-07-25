@@ -50,7 +50,6 @@ import (
 	"github.com/dapr/components-contrib/state"
 	workflowContrib "github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/dapr/pkg/actors"
-	"github.com/dapr/dapr/pkg/actors/reminders"
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpEndpointsV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
@@ -2255,7 +2254,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 		mockActors := new(actors.MockActors)
 		mockActors.
-			On("CreateReminder", mock.AnythingOfType("*reminders.CreateReminderRequest")).
+			On("CreateReminder", mock.AnythingOfType("*internal.CreateReminderRequest")).
 			Return(actors.ErrReminderOpActorNotHosted)
 
 		testAPI.universal.Actors = mockActors
@@ -2327,7 +2326,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 		mockActors := new(actors.MockActors)
 		mockActors.
-			On("RenameReminder", mock.AnythingOfType("*actors.RenameReminderRequest")).
+			On("RenameReminder", mock.AnythingOfType("*internal.RenameReminderRequest")).
 			Return(actors.ErrReminderOpActorNotHosted)
 
 		testAPI.universal.Actors = mockActors
@@ -2392,7 +2391,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 		mockActors := new(actors.MockActors)
 		mockActors.
-			On("DeleteReminder", mock.AnythingOfType("*actors.DeleteReminderRequest")).
+			On("DeleteReminder", mock.AnythingOfType("*internal.DeleteReminderRequest")).
 			Return(actors.ErrReminderOpActorNotHosted)
 
 		testAPI.universal.Actors = mockActors
@@ -2456,7 +2455,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 		mockActors := new(actors.MockActors)
 		mockActors.
-			On("GetReminder", mock.AnythingOfType("*actors.GetReminderRequest")).
+			On("GetReminder", mock.AnythingOfType("*internal.GetReminderRequest")).
 			Return(nil, actors.ErrReminderOpActorNotHosted)
 
 		testAPI.universal.Actors = mockActors
@@ -2478,7 +2477,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			ActorID:   "fakeActorID",
 		}
 
-		reminderResponse := reminders.Reminder{
+		reminderResponse := actors.MockReminder{
 			// This is not valid JSON
 			Data: json.RawMessage(`foo`),
 		}

@@ -117,11 +117,11 @@ func (f *fuzzstate) Setup(t *testing.T) []framework.Option {
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
-  name: %s
+  name: '%s'
 spec:
   type: state.in-memory
   version: v1
-`, f.storeName)))
+`, strings.ReplaceAll(f.storeName, "'", "''"))))
 
 	f.getFuzzKeys = make([]string, numTests)
 	f.saveReqBinaries = make([][]saveReqBinary, numTests)

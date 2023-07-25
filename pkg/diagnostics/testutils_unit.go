@@ -1,6 +1,6 @@
 //go:build unit
 
-package diagtestutils
+package diagnostics
 
 import (
 	"fmt"
