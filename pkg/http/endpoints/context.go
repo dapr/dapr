@@ -13,6 +13,10 @@ limitations under the License.
 
 package endpoints
 
+import (
+	"fmt"
+)
+
 // EndpointCtxKey is the key for storing endpoint information in the context of a request.
 type EndpointCtxKey struct{}
 
@@ -20,4 +24,12 @@ type EndpointCtxKey struct{}
 type EndpointCtxData struct {
 	Group    *EndpointGroup
 	Settings EndpointSettings
+}
+
+// String implements fmt.Stringer and is used for debugging.
+func (c *EndpointCtxData) String() string {
+	if c == nil {
+		return "nil"
+	}
+	return fmt.Sprintf("settings='%#v' group='%#v'", c.Settings, c.Group)
 }

@@ -94,6 +94,7 @@ func (s *server) StartNonBlocking() error {
 	// Create a chi router and add middlewares
 	r := s.getRouter()
 	s.useMaxBodySize(r)
+	s.useContextSetup(r)
 	s.useTracing(r)
 	s.useMetrics(r)
 	s.useAPIAuthentication(r)
@@ -264,6 +265,17 @@ func (s *server) useMaxBodySize(r chi.Router) {
 	r.Use(MaxBodySizeMiddleware(maxSize))
 }
 
+func (s *server) useContextSetup(mux chi.Router) {
+	// Adds an empty `endpoints.EndpointCtxData` value to the context so it can be later set by the handler
+	// This context value is used by the logging, tracing, and metrics middlewares
+	mux.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := context.WithValue(r.Context(), endpoints.EndpointCtxKey{}, &endpoints.EndpointCtxData{})
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	})
+}
+
 func (s *server) useApiLogging(mux chi.Router) {
 	if !s.config.EnableAPILogging {
 		return
@@ -380,6 +392,20 @@ func (s *server) setupRoutes(r chi.Router, endpoints []endpoints.Endpoint) {
 	}
 }
 
+// Add information about the route in the context's value.
+func (s *server) addEndpointCtx(e endpoints.Endpoint, next http.Handler) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Here, the context should already have a value in the key which is a nil pointer; we need to populate the value
+		// We do it this way because otherwise previous middlewares cannot get the value from the context
+		endpointData, _ := r.Context().Value(endpoints.EndpointCtxKey{}).(*endpoints.EndpointCtxData)
+		if endpointData != nil {
+			endpointData.Group = e.Group
+			endpointData.Settings = e.Settings
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func (s *server) handle(e endpoints.Endpoint, path string, r chi.Router, unescapeParameters bool) {
 	handler := e.GetHandler()
 
@@ -387,16 +413,7 @@ func (s *server) handle(e endpoints.Endpoint, path string, r chi.Router, unescap
 		handler = s.unescapeRequestParametersHandler(e.Settings.KeepWildcardUnescaped, handler)
 	}
 
-	handler = func(w http.ResponseWriter, r *http.Request) {
-		// Add information about the route in the context
-		ctx := context.WithValue(r.Context(), endpoints.EndpointCtxKey{}, &endpoints.EndpointCtxData{
-			Group:    e.Group,
-			Settings: e.Settings,
-		})
-		r = r.WithContext(ctx)
-
-		handler(w, r)
-	}
+	handler = s.addEndpointCtx(e, handler)
 
 	// If no method is defined, match any method
 	if len(e.Methods) == 0 {

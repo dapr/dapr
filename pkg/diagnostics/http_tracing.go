@@ -189,7 +189,7 @@ func spanAttributesMapFromHTTPContext(rw responsewriter.ResponseWriter, r *http.
 
 	// Check if the context contains an AppendSpanAttributes method
 	endpointData, _ := r.Context().Value(endpoints.EndpointCtxKey{}).(*endpoints.EndpointCtxData)
-	if endpointData != nil && endpointData.Group.AppendSpanAttributes != nil {
+	if endpointData != nil && endpointData.Group != nil && endpointData.Group.AppendSpanAttributes != nil {
 		endpointData.Group.AppendSpanAttributes(r, m)
 	}
 
