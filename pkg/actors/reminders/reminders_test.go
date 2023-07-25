@@ -89,7 +89,7 @@ func TestStoreIsNotInitialized(t *testing.T) {
 	})
 
 	t.Run("updateReminderTrack", func(t *testing.T) {
-		err := testReminders.updateReminderTrack(context.Background(), "foo||bar", 1, testReminders.clock.Now(), nil)
+		err := testReminders.updateReminderTrack(context.Background(), "foo||bar", 1, testReminders.clock.Now(), nil, "")
 		assert.Error(t, err)
 	})
 
@@ -278,7 +278,7 @@ func TestSetReminderTrack(t *testing.T) {
 
 	actorType, actorID := getTestActorTypeAndID()
 	noRepetition := -1
-	err := testReminders.updateReminderTrack(context.Background(), constructCompositeKey(actorType, actorID), noRepetition, testReminders.clock.Now(), nil)
+	err := testReminders.updateReminderTrack(context.Background(), constructCompositeKey(actorType, actorID), noRepetition, testReminders.clock.Now(), nil, "")
 	assert.NoError(t, err)
 }
 
@@ -302,7 +302,7 @@ func TestGetReminderTrack(t *testing.T) {
 		actorType, actorID := getTestActorTypeAndID()
 		repetition := 10
 		now := testReminders.clock.Now()
-		testReminders.updateReminderTrack(context.Background(), constructCompositeKey(actorType, actorID), repetition, now, nil)
+		testReminders.updateReminderTrack(context.Background(), constructCompositeKey(actorType, actorID), repetition, now, nil, "")
 		r, err := testReminders.getReminderTrack(context.Background(), constructCompositeKey(actorType, actorID))
 		require.NoError(t, err)
 		assert.NotEmpty(t, r.LastFiredTime)

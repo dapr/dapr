@@ -24,6 +24,7 @@ type ReminderTrack struct {
 	LastFiredTime  time.Time `json:"lastFiredTime"`
 	RepetitionLeft int       `json:"repetitionLeft"`
 	Etag           *string   `json:",omitempty"`
+	TraceState     string    `json:"traceState,omitempty"`
 }
 
 func (r *ReminderTrack) MarshalJSON() ([]byte, error) {

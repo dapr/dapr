@@ -18,16 +18,20 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/trace"
 	"k8s.io/utils/clock"
 
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors/internal"
+	daprAppConfig "github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/logger"
 )
@@ -56,6 +60,7 @@ type reminders struct {
 	storeName            string
 	evaluationLock       sync.RWMutex
 	config               internal.Config
+	tracingSpec          daprAppConfig.TracingSpec
 	lookUpActorFn        internal.LookupActorFn
 	metricsCollector     remindersMetricsCollectorFn
 }
@@ -71,6 +76,7 @@ func NewRemindersProvider(clock clock.WithTicker, opts internal.RemindersProvide
 		storeName:        opts.StoreName,
 		config:           opts.Config,
 		metricsCollector: diag.DefaultMonitoring.ActorReminders,
+		tracingSpec:      opts.TracingSpec,
 	}
 }
 
@@ -123,6 +129,7 @@ func (r *reminders) CreateReminder(ctx context.Context, reminder *internal.Remin
 	if err != nil {
 		return err
 	}
+	span := diagUtils.SpanFromContext(ctx)
 
 	if !r.waitForEvaluationChan() {
 		return errors.New("error creating reminder: timed out after 5s")
@@ -149,7 +156,12 @@ func (r *reminders) CreateReminder(ctx context.Context, reminder *internal.Remin
 	if err != nil {
 		return fmt.Errorf("error storing reminder: %w", err)
 	}
-	return r.startReminder(reminder, stop)
+	err = r.startReminder(reminder, stop)
+	if err != nil {
+		return err
+	}
+	w3cString := diag.SpanContextToW3CString(span.SpanContext())
+	return r.updateReminderTrack(ctx, reminder.Key(), reminder.RepeatsLeft(), time.Time{}, nil, w3cString)
 }
 
 func (r *reminders) Close() error {
@@ -855,6 +867,15 @@ func (r *reminders) startReminder(reminder *internal.Reminder, stopChannel chan 
 				nextTimer = nil
 				return
 			}
+			track, gErr := r.getReminderTrack(context.TODO(), reminderKey)
+			if gErr != nil {
+				log.Errorf("Error retrieving reminder %s: %v", reminderKey, gErr)
+			}
+			var span trace.Span
+			if track.TraceState != "" {
+				sc, _ := diag.SpanContextFromW3CString(track.TraceState)
+				_, span = diag.StartChildSpanCorrelatedToParent(context.Background(), "actors/"+reminderKey, sc, &r.tracingSpec)
+			}
 
 			// If all repetitions are completed, delete the reminder and do not execute it
 			if reminder.RepeatsLeft() == 0 {
@@ -870,7 +891,7 @@ func (r *reminders) startReminder(reminder *internal.Reminder, stopChannel chan 
 
 			_, exists = r.activeReminders.Load(reminderKey)
 			if exists {
-				err = r.updateReminderTrack(context.TODO(), reminderKey, reminder.RepeatsLeft(), nextTick, eTag)
+				err = r.updateReminderTrack(context.TODO(), reminderKey, reminder.RepeatsLeft(), nextTick, eTag, track.TraceState)
 				if err != nil {
 					log.Errorf("Error updating reminder track for reminder %s: %v", reminderKey, err)
 				}
@@ -899,6 +920,11 @@ func (r *reminders) startReminder(reminder *internal.Reminder, stopChannel chan 
 			}
 
 			nextTimer.Reset(nextTick.Sub(r.clock.Now()))
+			if err != nil {
+				diag.UpdateSpanStatusFromHTTPStatus(span, http.StatusInternalServerError)
+			}
+			diag.UpdateSpanStatusFromHTTPStatus(span, http.StatusOK)
+			span.End()
 		}
 
 	delete:
@@ -952,7 +978,7 @@ func (r *reminders) getReminderTrack(ctx context.Context, key string) (*internal
 	return track, nil
 }
 
-func (r *reminders) updateReminderTrack(ctx context.Context, key string, repetition int, lastInvokeTime time.Time, etag *string) error {
+func (r *reminders) updateReminderTrack(ctx context.Context, key string, repetition int, lastInvokeTime time.Time, etag *string, traceState string) error {
 	store, err := r.stateStoreProviderFn()
 	if err != nil {
 		return err
@@ -961,6 +987,7 @@ func (r *reminders) updateReminderTrack(ctx context.Context, key string, repetit
 	track := internal.ReminderTrack{
 		LastFiredTime:  lastInvokeTime,
 		RepetitionLeft: repetition,
+		TraceState:     traceState,
 	}
 
 	var policyDef *resiliency.PolicyDefinition

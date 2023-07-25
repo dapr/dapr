@@ -215,13 +215,25 @@ func ConstructSubscriptionSpanAttributes(topic string) map[string]string {
 }
 
 // StartInternalCallbackSpan starts trace span for internal callback such as input bindings and pubsub subscription.
-func StartInternalCallbackSpan(ctx context.Context, spanName string, parent trace.SpanContext, spec *config.TracingSpec) (context.Context, trace.Span) {
+func StartInternalCallbackSpan(ctx context.Context, spanName string, parent trace.SpanContext,
+	spec *config.TracingSpec) (context.Context, trace.Span) {
+	return childParentSpanCorrelated(ctx, spanName, parent, spec, trace.WithSpanKind(trace.SpanKindClient))
+}
+
+// StartChildSpanCorrelatedToParent starts trace span for child span correlated to parent span.
+func StartChildSpanCorrelatedToParent(ctx context.Context, spanName string, parent trace.SpanContext,
+	spec *config.TracingSpec) (context.Context, trace.Span) {
+	return childParentSpanCorrelated(ctx, spanName, parent, spec, trace.WithSpanKind(trace.SpanKindInternal))
+}
+
+func childParentSpanCorrelated(ctx context.Context, spanName string, parent trace.SpanContext,
+	spec *config.TracingSpec, spanKind trace.SpanStartOption) (context.Context, trace.Span) {
 	if spec == nil || !diagUtils.IsTracingEnabled(spec.SamplingRate) {
 		return ctx, nil
 	}
 
 	ctx = trace.ContextWithRemoteSpanContext(ctx, parent)
-	ctx, span := tracer.Start(ctx, spanName, trace.WithSpanKind(trace.SpanKindClient))
+	ctx, span := tracer.Start(ctx, spanName, spanKind)
 
 	return ctx, span
 }

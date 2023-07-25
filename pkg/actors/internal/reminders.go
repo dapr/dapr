@@ -18,6 +18,7 @@ import (
 	"errors"
 	"io"
 
+	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/resiliency"
 )
 
@@ -36,8 +37,9 @@ type StateStoreProviderFn func() (TransactionalStateStore, error)
 
 // RemindersProviderOpts contains the options for the reminders provider.
 type RemindersProviderOpts struct {
-	StoreName string
-	Config    Config
+	StoreName   string
+	TracingSpec config.TracingSpec
+	Config      Config
 }
 
 // RemindersProvider is the interface for the object that provides reminders services.
