@@ -15,56 +15,65 @@ spec:
         description: Component describes an Dapr component type.
         properties:
           apiVersion:
-            description: 'APIVersion defines the versioned schema of this representation
-              of an object. Servers should convert recognized schemas to the latest
-              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            description: The version of the Dapr (and Kubernetes if applicable) API you are calling.
             type: string
           auth:
             description: Auth represents authentication details for the component.
             properties:
               secretStore:
+                description: Name of a configured secret store.
                 type: string
             required:
             - secretStore
             type: object
           kind:
-            description: 'Kind is a string value representing the REST resource this
-              object represents. Servers may infer this from the endpoint the client
-              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            description: The type of CRD. For components is must always be Component.
             type: string
           metadata:
+            description: Information about the component registration.
+            properties:
+              name:
+                description: The name of the component.
+                type: string
+              namespace:
+                description: The namespace for the component for hosting environments with namespaces.
+                type: string
+            required:
+            - name
             type: object
           scopes:
+            description: Specific application IDs which can use this component.
             items:
               type: string
             type: array
           spec:
-            description: ComponentSpec is the spec for a component.
+            description: Detailed information on the component resource.
             properties:
               ignoreErrors:
+                description: Tells the Dapr sidecar to continue initialization if the component fails to load. Default is false.
                 type: boolean
               initTimeout:
+                description: The timeout duration for the initialization of the component. Default is 5s.
                 type: string
               metadata:
+                description: Key/value pairs of component specific configuration.
                 items:
-                  description: NameValuePair is a name/value pair.
+                  description: Key/value pair of component specific configuration.
                   properties:
                     envRef:
-                      description: EnvRef is the name of an environmental variable
-                        to read the value from.
+                      description: Reference to an environmental variable from which to read the value.
                       type: string
                     name:
                       description: Name of the property.
                       type: string
                     secretKeyRef:
-                      description: SecretKeyRef is the reference of a value in a secret
-                        store component.
+                      description: Reference to a value in a secret store component.
                       properties:
                         key:
-                          description: Field in the secret.
+                          description: Field within the secret.
                           type: string
                         name:
-                          description: Secret name.
+                          description: Name of the secret.
                           type: string
                       required:
                       - name
@@ -77,14 +86,21 @@ spec:
                   type: object
                 type: array
               type:
+                description: The type of the component.
                 type: string
               version:
+                description: The version of the component.
                 type: string
             required:
             - metadata
             - type
             - version
             type: object
+        required:
+        - apiVersion
+        - kind
+        - metadata
+        - spec
         type: object
     served: true
     storage: true
