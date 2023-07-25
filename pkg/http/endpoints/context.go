@@ -24,6 +24,7 @@ type EndpointCtxKey struct{}
 type EndpointCtxData struct {
 	Group    *EndpointGroup
 	Settings EndpointSettings
+	SpanData any
 }
 
 // String implements fmt.Stringer and is used for debugging.
