@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package processor
+package state_test
 
 import (
 	"context"
@@ -27,14 +27,15 @@ import (
 	contribstate "github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/apis/common"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	"github.com/dapr/dapr/pkg/components"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
+	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	"github.com/dapr/dapr/pkg/runtime/meta"
 	"github.com/dapr/dapr/pkg/runtime/mock"
+	"github.com/dapr/dapr/pkg/runtime/processor"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/logger"
@@ -42,9 +43,11 @@ import (
 
 func TestInitState(t *testing.T) {
 	reg := registry.New(registry.NewOptions().WithStateStores(stateLoader.NewRegistry()))
-	proc := New(Options{
+	compStore := compstore.New()
+	proc := processor.New(processor.Options{
 		Registry:       reg,
-		ComponentStore: compstore.New(),
+		ComponentStore: compStore,
+		GlobalConfig:   new(config.Configuration),
 		Meta:           meta.New(meta.Options{Mode: modes.StandaloneMode}),
 	})
 
@@ -85,7 +88,7 @@ func TestInitState(t *testing.T) {
 		initMockStateStoreForRegistry(reg, primaryKey, nil)
 
 		// act
-		err := proc.One(context.TODO(), mockStateComponent)
+		err := proc.Init(context.TODO(), mockStateComponent)
 
 		// assert
 		assert.NoError(t, err, "expected no error")
@@ -96,7 +99,7 @@ func TestInitState(t *testing.T) {
 		initMockStateStoreForRegistry(reg, primaryKey, assert.AnError)
 
 		// act
-		err := proc.One(context.TODO(), mockStateComponent)
+		err := proc.Init(context.TODO(), mockStateComponent)
 
 		// assert
 		assert.Error(t, err, "expected error")
@@ -108,7 +111,7 @@ func TestInitState(t *testing.T) {
 		initMockStateStoreForRegistry(reg, primaryKey, nil)
 
 		// act
-		err := proc.One(context.TODO(), mockStateComponent)
+		err := proc.Init(context.TODO(), mockStateComponent)
 		ok := encryption.EncryptedStateStore("mockState")
 
 		// assert
@@ -120,9 +123,9 @@ func TestInitState(t *testing.T) {
 		// setup
 		initMockStateStoreForRegistry(reg, primaryKey, nil)
 
-		proc.managers[components.CategorySecretStore].(*secret).compStore.AddSecretStore("mockSecretStore", &mock.SecretStore{})
+		compStore.AddSecretStore("mockSecretStore", &mock.SecretStore{})
 
-		err := proc.One(context.TODO(), mockStateComponent)
+		err := proc.Init(context.TODO(), mockStateComponent)
 		ok := encryption.EncryptedStateStore("testpubsub")
 
 		// assert

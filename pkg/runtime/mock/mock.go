@@ -19,6 +19,7 @@ package mock
 import (
 	"context"
 
+	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/secretstores"
 )
 
@@ -43,4 +44,53 @@ func (s *SecretStore) Init(ctx context.Context, metadata secretstores.Metadata) 
 
 func (s *SecretStore) Close() error {
 	return s.CloseErr
+}
+
+var TestInputBindingData = []byte("fakedata")
+
+type Binding struct {
+	ReadErrorCh chan bool
+	Data        string
+	Metadata    map[string]string
+	CloseErr    error
+}
+
+func (b *Binding) Init(ctx context.Context, metadata bindings.Metadata) error {
+	return nil
+}
+
+func (b *Binding) Read(ctx context.Context, handler bindings.Handler) error {
+	b.Data = string(TestInputBindingData)
+	metadata := map[string]string{}
+	if b.Metadata != nil {
+		metadata = b.Metadata
+	}
+
+	go func() {
+		_, err := handler(context.Background(), &bindings.ReadResponse{
+			Metadata: metadata,
+			Data:     []byte(b.Data),
+		})
+		if b.ReadErrorCh != nil {
+			b.ReadErrorCh <- (err != nil)
+		}
+	}()
+
+	return nil
+}
+
+func (b *Binding) Operations() []bindings.OperationKind {
+	return []bindings.OperationKind{bindings.CreateOperation, bindings.ListOperation}
+}
+
+func (b *Binding) Invoke(ctx context.Context, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) {
+	return nil, nil
+}
+
+func (b *Binding) Close() error {
+	return b.CloseErr
+}
+
+func (b *Binding) GetComponentMetadata() map[string]string {
+	return b.Metadata
 }
