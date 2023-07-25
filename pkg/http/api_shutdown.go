@@ -16,8 +16,9 @@ package http
 import (
 	"net/http"
 
-	"github.com/dapr/dapr/pkg/http/endpoints"
 	"google.golang.org/protobuf/types/known/emptypb"
+
+	"github.com/dapr/dapr/pkg/http/endpoints"
 )
 
 func (a *api) constructShutdownEndpoints() []endpoints.Endpoint {

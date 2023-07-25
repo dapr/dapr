@@ -15,7 +15,6 @@ package http
 
 import (
 	"net/http"
-	nethttp "net/http"
 
 	"github.com/go-chi/chi/v5"
 
@@ -30,7 +29,7 @@ var endpointGroupSecretsV1 = &endpoints.EndpointGroup{
 	AppendSpanAttributes: appendSecretsSpanAttributes,
 }
 
-func appendSecretsSpanAttributes(r *nethttp.Request, m map[string]string) {
+func appendSecretsSpanAttributes(r *http.Request, m map[string]string) {
 	m[diag.DBSystemSpanAttributeKey] = "secrets"
 	m[diag.DBConnectionStringSpanAttributeKey] = "secrets"
 	m[diag.DBStatementSpanAttributeKey] = r.Method + " " + r.URL.Path

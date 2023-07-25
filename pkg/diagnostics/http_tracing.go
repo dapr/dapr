@@ -184,7 +184,7 @@ func tracestateToHeader(sc trace.SpanContext, setHeader func(string, string)) {
 }
 
 func spanAttributesMapFromHTTPContext(rw responsewriter.ResponseWriter, r *http.Request) map[string]string {
-	// Init with a sensible initial default value
+	// Init with a worst-case initial capacity
 	m := make(map[string]string, 7)
 
 	// Check if the context contains an AppendSpanAttributes method

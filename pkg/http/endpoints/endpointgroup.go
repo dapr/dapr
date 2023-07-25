@@ -21,8 +21,10 @@ import (
 type EndpointGroup struct {
 	Name                 EndpointGroupName
 	Version              EndpointGroupVersion
-	AppendSpanAttributes func(r *http.Request, m map[string]string)
+	AppendSpanAttributes AppendSpanAttributesFn
 }
+
+type AppendSpanAttributesFn = func(r *http.Request, m map[string]string)
 
 // EndpointGroupName is the name of an endpoint group.
 type EndpointGroupName string

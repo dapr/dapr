@@ -62,7 +62,6 @@ type responseWriter struct {
 	size           int
 	beforeFuncs    []beforeFunc
 	callingBefores bool
-	userValues     map[any]any
 }
 
 func (rw *responseWriter) WriteHeader(s int) {

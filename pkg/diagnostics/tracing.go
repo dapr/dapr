@@ -21,11 +21,11 @@ import (
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	semconv "go.opentelemetry.io/otel/semconv/v1.10.0"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/dapr/dapr/pkg/config"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
-	semconv "go.opentelemetry.io/otel/semconv/v1.10.0"
 )
 
 const (
@@ -72,7 +72,7 @@ const (
 
 var tracer trace.Tracer = otel.Tracer(tracerName)
 
-// Effectively const, but isn't a const from upstream.
+// MessagingDestinationTopicKind is effectively const, but isn't a const from upstream.
 var MessagingDestinationTopicKind = semconv.MessagingDestinationKindTopic.Value.AsString()
 
 // SpanContextToW3CString returns the SpanContext string representation.

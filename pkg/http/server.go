@@ -101,7 +101,7 @@ func (s *server) StartNonBlocking() error {
 	s.useAPIAuthentication(r)
 	s.useCors(r)
 	s.useComponents(r)
-	s.useApiLogging(r)
+	s.useAPILogging(r)
 
 	// Add all routes
 	s.setupRoutes(r, s.api.APIEndpoints())
@@ -277,7 +277,7 @@ func (s *server) useContextSetup(mux chi.Router) {
 	})
 }
 
-func (s *server) useApiLogging(mux chi.Router) {
+func (s *server) useAPILogging(mux chi.Router) {
 	if !s.config.EnableAPILogging {
 		return
 	}
