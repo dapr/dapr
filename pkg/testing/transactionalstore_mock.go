@@ -20,6 +20,7 @@ import (
 )
 
 type TransactionalStoreMock struct {
+	MaxOperations int
 	MockStateStore
 }
 
@@ -43,6 +44,10 @@ func (storeMock *TransactionalStoreMock) Features() []state.Feature {
 
 func (storeMock *TransactionalStoreMock) Close() error {
 	return nil
+}
+
+func (storeMock *TransactionalStoreMock) MultiMaxSize() int {
+	return storeMock.MaxOperations
 }
 
 func (f *FailingStatestore) Multi(ctx context.Context, request *state.TransactionalStateRequest) error {

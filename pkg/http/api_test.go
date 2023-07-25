@@ -4933,6 +4933,10 @@ type fakeStateStoreQuerier struct {
 	state.TransactionalStore
 }
 
+func (c fakeStateStoreQuerier) MultiMaxSize() int {
+	return 10
+}
+
 func newFakeStateStoreQuerier() fakeStateStoreQuerier {
 	s := newFakeStateStore()
 	return fakeStateStoreQuerier{
@@ -5501,6 +5505,32 @@ func TestV1TransactionEndpoints(t *testing.T) {
 			assert.Equal(t, 400, resp.StatusCode, "Dapr should return 400")
 			assert.Equal(t, "ERR_MALFORMED_REQUEST", resp.ErrorBody["errorCode"], apiPath)
 		}
+	})
+
+	t.Run("Too many transactions for state store - 400 ERR_MALFORMED_REQUEST", func(t *testing.T) {
+		apiPath := fmt.Sprintf("v1.0/state/%s/transaction", storeName)
+
+		testTransactionalOperations := make([]stateTransactionRequestBodyOperation, 20)
+		for i := 0; i < 20; i++ {
+			testTransactionalOperations[i] = stateTransactionRequestBodyOperation{
+				Operation: string(state.OperationUpsert),
+				Request: map[string]any{
+					"key":   fmt.Sprintf("key%d", i),
+					"value": fakeBodyObject,
+				},
+			}
+		}
+
+		inputBodyBytes, err := json.Marshal(stateTransactionRequestBody{
+			Operations: testTransactionalOperations,
+		})
+
+		assert.NoError(t, err)
+		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
+
+		// assert
+		assert.Equal(t, gohttp.StatusBadRequest, resp.StatusCode, "Dapr should return 400")
+		assert.Equal(t, "ERR_STATE_STORE_TOO_MANY_TRANSACTIONS", resp.ErrorBody["errorCode"], apiPath)
 	})
 
 	t.Run("Non Transactional State Store - 500 ERR_STATE_STORE_NOT_SUPPORTED", func(t *testing.T) {

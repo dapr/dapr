@@ -2681,6 +2681,7 @@ func TestTransactionStateStoreNotImplemented(t *testing.T) {
 
 func TestExecuteStateTransaction(t *testing.T) {
 	fakeStore := &daprt.TransactionalStoreMock{}
+	fakeStore.MaxOperations = 10
 	matchKeyFn := func(ctx context.Context, req *state.TransactionalStateRequest, key string) bool {
 		if len(req.Operations) == 1 {
 			if rr, ok := req.Operations[0].(state.SetRequest); ok {
@@ -2724,6 +2725,17 @@ func TestExecuteStateTransaction(t *testing.T) {
 
 	client := runtimev1pb.NewDaprClient(clientConn)
 
+	tooManyOperations := make([]*runtimev1pb.TransactionalStateOperation, 20)
+	for i := 0; i < 20; i++ {
+		tooManyOperations[i] = &runtimev1pb.TransactionalStateOperation{
+			OperationType: string(state.OperationUpsert),
+			Request: &commonv1pb.StateItem{
+				Key:   fmt.Sprintf("op%d", i),
+				Value: []byte("1"),
+			},
+		}
+	}
+
 	stateOptions, _ := GenerateStateOptionsTestCase()
 	testCases := []struct {
 		testName      string
@@ -2731,6 +2743,7 @@ func TestExecuteStateTransaction(t *testing.T) {
 		operation     state.OperationType
 		key           string
 		value         []byte
+		ops           []*runtimev1pb.TransactionalStateOperation
 		options       *commonv1pb.StateOptions
 		errorExcepted bool
 		expectedError codes.Code
@@ -2768,13 +2781,23 @@ func TestExecuteStateTransaction(t *testing.T) {
 			errorExcepted: true,
 			expectedError: codes.Internal,
 		},
+		{
+			testName:      "fails with too many operations",
+			storeName:     "store1",
+			ops:           tooManyOperations,
+			errorExcepted: true,
+			expectedError: codes.InvalidArgument,
+		},
 	}
 
 	for _, tt := range testCases {
 		t.Run(tt.testName, func(t *testing.T) {
 			req := &runtimev1pb.ExecuteStateTransactionRequest{
-				StoreName: tt.storeName,
-				Operations: []*runtimev1pb.TransactionalStateOperation{
+				StoreName:  tt.storeName,
+				Operations: tt.ops,
+			}
+			if tt.ops == nil {
+				req.Operations = []*runtimev1pb.TransactionalStateOperation{
 					{
 						OperationType: string(tt.operation),
 						Request: &commonv1pb.StateItem{
@@ -2783,7 +2806,7 @@ func TestExecuteStateTransaction(t *testing.T) {
 							Options: stateOptions,
 						},
 					},
-				},
+				}
 			}
 
 			_, err := client.ExecuteStateTransaction(context.Background(), req)
