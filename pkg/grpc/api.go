@@ -911,7 +911,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 
 	if maxMulti, ok := store.(state.TransactionalStoreMultiMaxSize); ok {
 		max := maxMulti.MultiMaxSize()
-		if len(operations) > max {
+		if max > 0 && len(operations) > max {
 			err := messages.ErrStateTooManyTransactionalOp.WithFormat(len(operations), max)
 			apiServerLogger.Debug(err)
 			return &emptypb.Empty{}, err

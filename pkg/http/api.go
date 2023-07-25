@@ -2155,7 +2155,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 
 	if maxMulti, ok := store.(state.TransactionalStoreMultiMaxSize); ok {
 		max := maxMulti.MultiMaxSize()
-		if len(operations) > max {
+		if max > 0 && len(operations) > max {
 			err := messages.ErrStateTooManyTransactionalOp.WithFormat(len(operations), max)
 			log.Debug(err)
 			universalFastHTTPErrorResponder(reqCtx, err)

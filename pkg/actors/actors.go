@@ -659,7 +659,7 @@ func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *Tr
 func (a *actorsRuntime) executeStateStoreTransaction(ctx context.Context, store internal.TransactionalStateStore, operations []state.TransactionalStateOperation, metadata map[string]string) error {
 	if maxMulti, ok := store.(state.TransactionalStoreMultiMaxSize); ok {
 		max := maxMulti.MultiMaxSize()
-		if len(operations) > max {
+		if max > 0 && len(operations) > max {
 			return ErrTransactionsTooManyOperations
 		}
 	}
