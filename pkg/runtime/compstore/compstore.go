@@ -67,5 +67,6 @@ func New() *ComponentStore {
 		pubSubs:                 make(map[string]PubsubItem),
 		workflowComponents:      make(map[string]workflows.Workflow),
 		cryptoProviders:         make(map[string]crypto.SubtleCrypto),
+		topicRoutes:             make(map[string]TopicRoutes),
 	}
 }
