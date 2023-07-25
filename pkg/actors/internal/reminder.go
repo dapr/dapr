@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,12 +11,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package reminders
+package internal
 
 import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -50,8 +51,10 @@ func (r Reminder) Key() string {
 }
 
 // NextTick returns the time the reminder should tick again next.
-func (r Reminder) NextTick() time.Time {
-	return r.RegisteredTime
+// If the reminder has a TTL and the next tick is beyond the TTL, the second returned value will be false.
+func (r Reminder) NextTick() (time.Time, bool) {
+	active := r.ExpirationTime.IsZero() || r.RegisteredTime.Before(r.ExpirationTime)
+	return r.RegisteredTime, active
 }
 
 // HasRepeats returns true if the reminder has repeats left.
@@ -190,11 +193,32 @@ func (r Reminder) String() string {
 	if !r.ExpirationTime.IsZero() {
 		expirationTime = "'" + r.ExpirationTime.Format(time.RFC3339) + "'"
 	}
+	period := r.Period.String()
+	if period == "" {
+		period = "nil"
+	} else {
+		period = "'" + period + "'"
+	}
 
 	return fmt.Sprintf(
-		"name='%s' hasData=%v period='%s' dueTime=%s expirationTime=%s",
-		r.Key(), hasData, r.Period, dueTime, expirationTime,
+		"name='%s' hasData=%t period=%s dueTime=%s expirationTime=%s",
+		r.Key(), hasData, period, dueTime, expirationTime,
 	)
+}
+
+func (r *Reminder) RequiresUpdating(new *Reminder) bool {
+	// If the reminder is different, short-circuit
+	if r.ActorID != new.ActorID ||
+		r.ActorType != new.ActorType ||
+		r.Name != new.Name {
+		return false
+	}
+
+	return r.DueTime != new.DueTime ||
+		r.Period != new.Period ||
+		!new.ExpirationTime.IsZero() ||
+		(!r.ExpirationTime.IsZero() && new.ExpirationTime.IsZero()) ||
+		!reflect.DeepEqual(r.Data, new.Data)
 }
 
 // parseTimeTruncateSeconds is a wrapper around timeutils.ParseTime that truncates the time to seconds.
