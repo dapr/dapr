@@ -41,6 +41,7 @@ import (
 	"github.com/dapr/dapr/pkg/http/endpoints"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
+	"github.com/dapr/dapr/utils/responsewriter"
 	"github.com/dapr/kit/logger"
 )
 
@@ -291,7 +292,11 @@ func (s *server) useApiLogging(mux chi.Router) {
 				return
 			}
 
-			fields := make(map[string]any, 3)
+			fields := make(map[string]any, 5)
+
+			// Report duration in milliseconds, with 3 decimals
+			fields["duration"] = float64(time.Since(start).Microseconds()) / 1000
+
 			if s.config.APILoggingObfuscateURLs {
 				fields["method"] = r.Method + " " + endpointData.Settings.Name
 			} else {
@@ -301,7 +306,10 @@ func (s *server) useApiLogging(mux chi.Router) {
 				fields["useragent"] = userAgent
 			}
 
-			fields["duration"] = time.Since(start).Milliseconds()
+			if rw, ok := w.(responsewriter.ResponseWriter); ok {
+				fields["code"] = rw.Status()
+				fields["size"] = rw.Size()
+			}
 
 			infoLog.WithFields(fields).Info("HTTP API Called")
 		})
