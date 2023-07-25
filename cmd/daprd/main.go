@@ -102,7 +102,7 @@ func main() {
 		WithHTTPMiddlewares(httpMiddlewareLoader.DefaultRegistry).
 		WithWorkflows(workflowsLoader.DefaultRegistry)
 
-	rt, err := runtime.FromConfig(&runtime.Config{
+	rt, err := runtime.FromConfig(context.TODO(), &runtime.Config{
 		AppID:                        opts.AppID,
 		PlacementServiceHostAddr:     opts.PlacementServiceHostAddr,
 		AllowedOrigins:               opts.AllowedOrigins,

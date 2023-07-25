@@ -11,10 +11,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package processor
+package crypto
 
 import (
 	"context"
+	"io"
+	"sync"
 
 	contribcrypto "github.com/dapr/components-contrib/crypto"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
@@ -25,13 +27,31 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/meta"
 )
 
+type Options struct {
+	Registry       *compcrypto.Registry
+	ComponentStore *compstore.ComponentStore
+	Meta           *meta.Meta
+}
+
 type crypto struct {
 	registry  *compcrypto.Registry
 	compStore *compstore.ComponentStore
 	meta      *meta.Meta
+	lock      sync.Mutex
 }
 
-func (c *crypto) init(ctx context.Context, comp compapi.Component) error {
+func New(opts Options) *crypto {
+	return &crypto{
+		registry:  opts.Registry,
+		compStore: opts.ComponentStore,
+		meta:      opts.Meta,
+	}
+}
+
+func (c *crypto) Init(ctx context.Context, comp compapi.Component) error {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
 	fName := comp.LogName()
 	component, err := c.registry.Create(comp.Spec.Type, comp.Spec.Version, fName)
 	if err != nil {
@@ -47,5 +67,25 @@ func (c *crypto) init(ctx context.Context, comp compapi.Component) error {
 
 	c.compStore.AddCryptoProvider(comp.ObjectMeta.Name, component)
 	diag.DefaultMonitoring.ComponentInitialized(comp.Spec.Type)
+	return nil
+}
+
+func (c *crypto) Close(comp compapi.Component) error {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	crypto, ok := c.compStore.GetCryptoProvider(comp.ObjectMeta.Name)
+	if !ok {
+		return nil
+	}
+
+	closer, ok := crypto.(io.Closer)
+	if ok && closer != nil {
+		if err := closer.Close(); err != nil {
+			return err
+		}
+	}
+
+	c.compStore.DeleteCryptoProvider(comp.ObjectMeta.Name)
 	return nil
 }

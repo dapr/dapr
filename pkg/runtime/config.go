@@ -136,7 +136,7 @@ type internalConfig struct {
 }
 
 // FromConfig creates a new Dapr Runtime from a configuration.
-func FromConfig(cfg *Config) (*DaprRuntime, error) {
+func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 	intc, err := cfg.toInternal()
 	if err != nil {
 		return nil, err
@@ -264,7 +264,7 @@ func FromConfig(cfg *Config) (*DaprRuntime, error) {
 		intc.enableAPILogging = ptr.Of(globalConfig.GetAPILoggingSpec().Enabled)
 	}
 
-	return newDaprRuntime(intc, globalConfig, accessControlList, resiliencyProvider), nil
+	return newDaprRuntime(ctx, intc, globalConfig, accessControlList, resiliencyProvider)
 }
 
 func (c *Config) toInternal() (*internalConfig, error) {
