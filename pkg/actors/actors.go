@@ -147,8 +147,9 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) Actors {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	remindersProvider := reminders.NewRemindersProvider(clock, internal.RemindersProviderOpts{
-		StoreName: opts.StateStoreName,
-		Config:    opts.Config.Config,
+		StoreName:   opts.StateStoreName,
+		TracingSpec: opts.TracingSpec,
+		Config:      opts.Config.Config,
 	})
 
 	a := &actorsRuntime{
