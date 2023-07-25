@@ -21,6 +21,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
@@ -255,7 +256,7 @@ func TestAPILogging(t *testing.T) {
 	logDest := &bytes.Buffer{}
 	infoLog = logger.NewLogger("test-api-logging")
 	infoLog.EnableJSONOutput(true)
-	infoLog.SetOutput(logDest)
+	infoLog.SetOutput(io.MultiWriter(logDest, os.Stderr))
 	defer func() {
 		infoLog = prev
 	}()
@@ -270,12 +271,17 @@ func TestAPILogging(t *testing.T) {
 			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Write(body)
 			}),
+			Settings: endpoints.EndpointSettings{
+				Name: "GetState",
+			},
 		},
 	}
 	srv := newServer()
 	srv.config.EnableAPILogging = true
 
 	router := chi.NewRouter()
+	srv.useContextSetup(router)
+	srv.useAPILogging(router)
 	srv.setupRoutes(router, endpoints)
 
 	dec := json.NewDecoder(logDest)
@@ -285,7 +291,6 @@ func TestAPILogging(t *testing.T) {
 			srv.config.APILoggingObfuscateURLs = obfuscateURL
 
 			for _, e := range endpoints {
-				routePath := fmt.Sprintf("/%s/%s", e.Version, e.Route)
 				path := fmt.Sprintf("/%s/%s", e.Version, "state/mystate/mykey")
 				for _, m := range e.Methods {
 					req := httptest.NewRequest(m, path, nil)
@@ -301,17 +306,33 @@ func TestAPILogging(t *testing.T) {
 					require.NoError(t, err)
 					assert.Equal(t, body, respBody)
 
-					logData := map[string]string{}
+					logData := map[string]any{}
 					err = dec.Decode(&logData)
 					require.NoError(t, err)
 
 					assert.Equal(t, "test-api-logging", logData["scope"])
 					assert.Equal(t, "HTTP API Called", logData["msg"])
+
 					if obfuscateURL {
-						assert.Equal(t, m+" "+routePath, logData["method"])
+						assert.Equal(t, e.Settings.Name, logData["method"])
 					} else {
 						assert.Equal(t, m+" "+path, logData["method"])
 					}
+
+					timeStr, ok := logData["time"].(string)
+					assert.True(t, ok)
+					tt, err := time.Parse(time.RFC3339Nano, timeStr)
+					assert.NoError(t, err)
+					assert.InDelta(t, time.Now().Unix(), tt.Unix(), 120)
+
+					// In our test the duration better be no more than 10ms!
+					dur, ok := logData["duration"].(float64)
+					assert.True(t, ok)
+					assert.Greater(t, dur, 0.0)
+					assert.Less(t, dur, 10.0)
+
+					assert.Equal(t, logData["size"], float64(len(body)))
+
 					if userAgent != "" {
 						assert.Equal(t, userAgent, logData["useragent"])
 					} else {
@@ -337,7 +358,7 @@ func TestAPILoggingOmitHealthChecks(t *testing.T) {
 	logDest := &bytes.Buffer{}
 	infoLog = logger.NewLogger("test-api-logging")
 	infoLog.EnableJSONOutput(true)
-	infoLog.SetOutput(logDest)
+	infoLog.SetOutput(io.MultiWriter(logDest, os.Stderr))
 	defer func() {
 		infoLog = prev
 	}()
@@ -373,6 +394,8 @@ func TestAPILoggingOmitHealthChecks(t *testing.T) {
 	srv.config.APILogHealthChecks = false
 
 	router := chi.NewRouter()
+	srv.useContextSetup(router)
+	srv.useAPILogging(router)
 	srv.setupRoutes(router, endpoints)
 
 	dec := json.NewDecoder(logDest)
@@ -393,7 +416,7 @@ func TestAPILoggingOmitHealthChecks(t *testing.T) {
 		assert.Equal(t, body, respBody)
 
 		if e.Route == "log" {
-			logData := map[string]string{}
+			logData := map[string]any{}
 			err := dec.Decode(&logData)
 			require.NoError(t, err)
 

@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.opencensus.io/tag"
 
 	"github.com/dapr/dapr/pkg/config"
@@ -26,14 +27,14 @@ func TestWithTags(t *testing.T) {
 	t.Run("one tag", func(t *testing.T) {
 		appKey := tag.MustNewKey("app_id")
 		mutators := WithTags("", appKey, "test")
-		assert.Equal(t, 1, len(mutators))
+		assert.Len(t, mutators, 1)
 	})
 
 	t.Run("two tags", func(t *testing.T) {
 		appKey := tag.MustNewKey("app_id")
 		operationKey := tag.MustNewKey("operation")
 		mutators := WithTags("", appKey, "test", operationKey, "op")
-		assert.Equal(t, 2, len(mutators))
+		assert.Len(t, mutators, 2)
 	})
 
 	t.Run("three tags", func(t *testing.T) {
@@ -41,14 +42,14 @@ func TestWithTags(t *testing.T) {
 		operationKey := tag.MustNewKey("operation")
 		methodKey := tag.MustNewKey("method")
 		mutators := WithTags("", appKey, "test", operationKey, "op", methodKey, "method")
-		assert.Equal(t, 3, len(mutators))
+		assert.Len(t, mutators, 3)
 	})
 
 	t.Run("two tags with wrong value type", func(t *testing.T) {
 		appKey := tag.MustNewKey("app_id")
 		operationKey := tag.MustNewKey("operation")
 		mutators := WithTags("", appKey, "test", operationKey, 1)
-		assert.Equal(t, 1, len(mutators))
+		assert.Len(t, mutators, 1)
 	})
 
 	t.Run("skip empty value key", func(t *testing.T) {
@@ -56,7 +57,7 @@ func TestWithTags(t *testing.T) {
 		operationKey := tag.MustNewKey("operation")
 		methodKey := tag.MustNewKey("method")
 		mutators := WithTags("", appKey, "", operationKey, "op", methodKey, "method")
-		assert.Equal(t, 2, len(mutators))
+		assert.Len(t, mutators, 2)
 	})
 }
 
@@ -93,7 +94,7 @@ func TestCreateRulesMap(t *testing.T) {
 			},
 		})
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotNil(t, metricsRules)
 		assert.Len(t, metricsRules, 1)
 		assert.Len(t, metricsRules["testlabel"], 1)

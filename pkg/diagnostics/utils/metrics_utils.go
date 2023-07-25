@@ -58,17 +58,19 @@ func WithTags(name string, opts ...interface{}) []tag.Mutator {
 			break
 		}
 		// skip if value is empty
-		if value != "" {
-			if len(metricsRules) > 0 {
-				pairs := metricsRules[strings.ReplaceAll(name, "_", "/")+key.Name()]
-
-				for _, p := range pairs {
-					value = p.regex.ReplaceAllString(value, p.replace)
-				}
-			}
-
-			tagMutators = append(tagMutators, tag.Upsert(key, value))
+		if value == "" {
+			continue
 		}
+
+		if len(metricsRules) > 0 {
+			pairs := metricsRules[strings.ReplaceAll(name, "_", "/")+key.Name()]
+
+			for _, p := range pairs {
+				value = p.regex.ReplaceAllString(value, p.replace)
+			}
+		}
+
+		tagMutators = append(tagMutators, tag.Upsert(key, value))
 	}
 	return tagMutators
 }
@@ -106,6 +108,7 @@ func CreateRulesMap(rules []config.MetricsRule) error {
 					regex:   regex,
 					replace: k,
 				}
+				i++
 			}
 		}
 	}

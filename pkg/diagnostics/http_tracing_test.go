@@ -162,22 +162,29 @@ func TestGetSpanAttributesMapFromHTTPContext(t *testing.T) {
 			},
 			map[string]string{
 				DaprAPIProtocolSpanAttributeKey:    "http",
+				DaprAPISpanAttributeKey:            "GET /v1.0/state/statestore/key",
 				DBSystemSpanAttributeKey:           "state",
 				DBNameSpanAttributeKey:             "statestore",
-				DBStatementSpanAttributeKey:        "GET /v1.0/state/statestore/key",
 				DBConnectionStringSpanAttributeKey: "state",
 			},
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.path, func(t *testing.T) {
+	for i, tt := range tests {
+		t.Run(fmt.Sprintf("test %d", i), func(t *testing.T) {
 			var err error
 			req := getTestHTTPRequest()
 			resp := responsewriter.EnsureResponseWriter(httptest.NewRecorder())
 			resp.WriteHeader(http.StatusOK)
 			req.URL, err = url.Parse("http://test.local" + tt.path)
 			require.NoError(t, err)
+
+			ctx := context.WithValue(req.Context(), endpoints.EndpointCtxKey{}, &endpoints.EndpointCtxData{
+				Group: &endpoints.EndpointGroup{
+					AppendSpanAttributes: tt.appendAttributesFn,
+				},
+			})
+			req = req.WithContext(ctx)
 
 			got := spanAttributesMapFromHTTPContext(responsewriter.EnsureResponseWriter(resp), req)
 			for k, v := range tt.out {

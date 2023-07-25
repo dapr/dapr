@@ -284,6 +284,9 @@ func (s *server) useAPILogging(mux chi.Router) {
 
 	mux.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Wrap the writer in a ResponseWriter so we can collect stats such as status code and size
+			w = responsewriter.EnsureResponseWriter(w)
+
 			start := time.Now()
 			next.ServeHTTP(w, r)
 
@@ -298,7 +301,7 @@ func (s *server) useAPILogging(mux chi.Router) {
 			fields["duration"] = float64(time.Since(start).Microseconds()) / 1000
 
 			if s.config.APILoggingObfuscateURLs {
-				fields["method"] = r.Method + " " + endpointData.Settings.Name
+				fields["method"] = endpointData.Settings.Name
 			} else {
 				fields["method"] = r.Method + " " + r.URL.Path
 			}
