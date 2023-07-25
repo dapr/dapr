@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"strconv"
 
+	chi "github.com/go-chi/chi/v5"
 	"github.com/valyala/fasthttp"
 
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
@@ -72,6 +73,20 @@ func NewNetHTTPHandlerFunc(h fasthttp.RequestHandler) http.HandlerFunc {
 		for k, v := range r.Header {
 			for _, i := range v {
 				c.Request.Header.Add(k, i)
+			}
+		}
+
+		// Ensure user values are propagated if the context is a fasthttp.RequestCtx already
+		if reqCtx, ok := r.Context().(*fasthttp.RequestCtx); ok {
+			reqCtx.VisitUserValuesAll(func(k any, v any) {
+				c.SetUserValue(k, v)
+			})
+		}
+
+		// Likewise, if the context is a chi context, propagate the values
+		if chiCtx := chi.RouteContext(r.Context()); chiCtx != nil {
+			for i, k := range chiCtx.URLParams.Keys {
+				c.SetUserValueBytes([]byte(k), chiCtx.URLParams.Values[i])
 			}
 		}
 
