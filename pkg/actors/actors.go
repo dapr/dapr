@@ -122,7 +122,7 @@ type actorsRuntime struct {
 type ActorsOpts struct {
 	AppChannel       channel.AppChannel
 	GRPCConnectionFn GRPCConnectionFn
-	ActorsConfig     Config
+	Config           Config
 	CertChain        *daprCredentials.CertChain
 	TracingSpec      configuration.TracingSpec
 	Resiliency       resiliency.Provider
@@ -148,13 +148,13 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) Actors {
 
 	remindersProvider := reminders.NewRemindersProvider(clock, internal.RemindersProviderOpts{
 		StoreName: opts.StateStoreName,
-		Config:    opts.ActorsConfig.Config,
+		Config:    opts.Config.Config,
 	})
 
 	a := &actorsRuntime{
 		appChannel:           opts.AppChannel,
 		grpcConnectionFn:     opts.GRPCConnectionFn,
-		actorsConfig:         opts.ActorsConfig,
+		actorsConfig:         opts.Config,
 		timers:               timers.NewTimersProvider(clock),
 		actorsReminders:      remindersProvider,
 		certChain:            opts.CertChain,

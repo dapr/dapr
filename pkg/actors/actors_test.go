@@ -192,7 +192,7 @@ func (b *runtimeBuilder) buildActorRuntime() *actorsRuntime {
 	a := newActorsWithClock(ActorsOpts{
 		CompStore:      compStore,
 		AppChannel:     b.appChannel,
-		ActorsConfig:   *b.config,
+		Config:         *b.config,
 		TracingSpec:    config.TracingSpec{SamplingRate: "1"},
 		Resiliency:     resiliency.FromConfigurations(log, testResiliency),
 		StateStoreName: storeName,
@@ -217,7 +217,7 @@ func newTestActorsRuntimeWithMock(appChannel channel.AppChannel) *actorsRuntime 
 	a := newActorsWithClock(ActorsOpts{
 		CompStore:      compStore,
 		AppChannel:     appChannel,
-		ActorsConfig:   conf,
+		Config:         conf,
 		TracingSpec:    config.TracingSpec{SamplingRate: "1"},
 		Resiliency:     resiliency.New(log),
 		StateStoreName: "actorStore",
@@ -238,7 +238,7 @@ func newTestActorsRuntimeWithMockWithoutPlacement(appChannel channel.AppChannel)
 	a := newActorsWithClock(ActorsOpts{
 		CompStore:      compstore.New(),
 		AppChannel:     appChannel,
-		ActorsConfig:   conf,
+		Config:         conf,
 		TracingSpec:    config.TracingSpec{SamplingRate: "1"},
 		Resiliency:     resiliency.New(log),
 		StateStoreName: "actorStore",
@@ -259,7 +259,7 @@ func newTestActorsRuntimeWithMockAndNoStore(appChannel channel.AppChannel) *acto
 	a := newActorsWithClock(ActorsOpts{
 		CompStore:      compstore.New(),
 		AppChannel:     appChannel,
-		ActorsConfig:   conf,
+		Config:         conf,
 		TracingSpec:    config.TracingSpec{SamplingRate: "1"},
 		Resiliency:     resiliency.New(log),
 		StateStoreName: "actorStore",
