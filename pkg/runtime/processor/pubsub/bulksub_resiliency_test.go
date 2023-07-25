@@ -1,5 +1,17 @@
-//nolint:nosnakecase
-package runtime
+/*
+Copyright 2023 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package pubsub
 
 import (
 	"context"
@@ -10,22 +22,26 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	"github.com/dapr/components-contrib/pubsub"
+	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
+	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
+)
+
+const (
+	pubsubName = "pubsubName"
 )
 
 var testLogger = logger.NewLogger("dapr.runtime.test")
 
 type input struct {
-	pbsm     pubsubBulkSubscribedMessage
+	pbsm     bulkSubscribedMessage
 	bscData  bulkSubscribeCallData
 	envelope map[string]interface{}
 }
@@ -37,19 +53,19 @@ type testSettings struct {
 	failCount         int
 }
 
-func getBulkMessageEntriesForResiliency(len int) []pubsub.BulkMessageEntry {
-	bulkEntries := make([]pubsub.BulkMessageEntry, 10)
+func getBulkMessageEntriesForResiliency(len int) []contribpubsub.BulkMessageEntry {
+	bulkEntries := make([]contribpubsub.BulkMessageEntry, 10)
 
-	bulkEntries[0] = pubsub.BulkMessageEntry{EntryId: "1111111a", Event: []byte(order1)}
-	bulkEntries[1] = pubsub.BulkMessageEntry{EntryId: "2222222b", Event: []byte(order2)}
-	bulkEntries[2] = pubsub.BulkMessageEntry{EntryId: "333333c", Event: []byte(order3)}
-	bulkEntries[3] = pubsub.BulkMessageEntry{EntryId: "4444444d", Event: []byte(order4)}
-	bulkEntries[4] = pubsub.BulkMessageEntry{EntryId: "5555555e", Event: []byte(order5)}
-	bulkEntries[5] = pubsub.BulkMessageEntry{EntryId: "66666666f", Event: []byte(order6)}
-	bulkEntries[6] = pubsub.BulkMessageEntry{EntryId: "7777777g", Event: []byte(order7)}
-	bulkEntries[7] = pubsub.BulkMessageEntry{EntryId: "8888888h", Event: []byte(order8)}
-	bulkEntries[8] = pubsub.BulkMessageEntry{EntryId: "9999999i", Event: []byte(order9)}
-	bulkEntries[9] = pubsub.BulkMessageEntry{EntryId: "10101010j", Event: []byte(order10)}
+	bulkEntries[0] = contribpubsub.BulkMessageEntry{EntryId: "1111111a", Event: []byte(order1)}
+	bulkEntries[1] = contribpubsub.BulkMessageEntry{EntryId: "2222222b", Event: []byte(order2)}
+	bulkEntries[2] = contribpubsub.BulkMessageEntry{EntryId: "333333c", Event: []byte(order3)}
+	bulkEntries[3] = contribpubsub.BulkMessageEntry{EntryId: "4444444d", Event: []byte(order4)}
+	bulkEntries[4] = contribpubsub.BulkMessageEntry{EntryId: "5555555e", Event: []byte(order5)}
+	bulkEntries[5] = contribpubsub.BulkMessageEntry{EntryId: "66666666f", Event: []byte(order6)}
+	bulkEntries[6] = contribpubsub.BulkMessageEntry{EntryId: "7777777g", Event: []byte(order7)}
+	bulkEntries[7] = contribpubsub.BulkMessageEntry{EntryId: "8888888h", Event: []byte(order8)}
+	bulkEntries[8] = contribpubsub.BulkMessageEntry{EntryId: "9999999i", Event: []byte(order9)}
+	bulkEntries[9] = contribpubsub.BulkMessageEntry{EntryId: "10101010j", Event: []byte(order10)}
 
 	return bulkEntries[:len]
 }
@@ -71,8 +87,8 @@ var (
 
 var orders []string = []string{order1, order2, order3, order4, order5, order6, order7, order8, order9, order10}
 
-func getPubSubMessages() []pubSubMessage {
-	pubSubMessages := make([]pubSubMessage, 10)
+func getPubSubMessages() []message {
+	pubSubMessages := make([]message, 10)
 
 	bulkEntries := getBulkMessageEntriesForResiliency(10)
 	i := 0
@@ -129,12 +145,12 @@ func getResponse(req *invokev1.InvokeMethodRequest, ts *testSettings) *invokev1.
 	var data map[string]any
 	v, _ := req.RawDataFull()
 	e := json.Unmarshal(v, &data)
-	appResponses := []pubsub.AppBulkResponseEntry{}
+	appResponses := []contribpubsub.AppBulkResponseEntry{}
 	if e == nil {
 		entries, _ := data["entries"].([]any)
 		for j := 1; j <= len(entries); j++ {
 			entryId, _ := entries[j-1].(map[string]any)["entryId"].(string) //nolint:stylecheck
-			abre := pubsub.AppBulkResponseEntry{
+			abre := contribpubsub.AppBulkResponseEntry{
 				EntryId: entryId,
 			}
 			if ts.failCount > 0 && (ts.failAllEntries || (ts.failEvenOnes && j%2 == 0)) {
@@ -153,7 +169,7 @@ func getResponse(req *invokev1.InvokeMethodRequest, ts *testSettings) *invokev1.
 		}
 		ts.failCount--
 	}
-	re := pubsub.AppBulkResponse{
+	re := contribpubsub.AppBulkResponse{
 		AppResponses: appResponses,
 	}
 	v, _ = json.Marshal(re)
@@ -168,7 +184,7 @@ func getInput() input {
 	testBulkSubscribePubsub := "bulkSubscribePubSub"
 	msgArr := getBulkMessageEntriesForResiliency(10)
 	psMessages := getPubSubMessages()
-	in.pbsm = pubsubBulkSubscribedMessage{
+	in.pbsm = bulkSubscribedMessage{
 		pubSubMessages: psMessages,
 		topic:          "topic0",
 		pubsub:         testBulkSubscribePubsub,
@@ -176,7 +192,7 @@ func getInput() input {
 		length:         len(psMessages),
 	}
 
-	bulkResponses := make([]pubsub.BulkSubscribeResponseEntry, 10)
+	bulkResponses := make([]contribpubsub.BulkSubscribeResponseEntry, 10)
 	in.bscData.bulkResponses = &bulkResponses
 	entryIdIndexMap := make(map[string]int) //nolint:stylecheck
 	in.bscData.entryIdIndexMap = &entryIdIndexMap
@@ -197,11 +213,15 @@ func getInput() input {
 
 func TestBulkSubscribeResiliency(t *testing.T) {
 	t.Run("verify Responses when few entries fail even after retries", func(t *testing.T) {
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
-		defer stopRuntime(t, rt)
+		reg := registry.New(registry.NewOptions())
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		rt.appChannel = mockAppChannel
+		ps := New(Options{
+			Registry:   reg.PubSubs(),
+			IsHTTP:     true,
+			Resiliency: resiliency.New(logger.NewLogger("test")),
+		})
+		ps.SetAppChannel(mockAppChannel)
 
 		ts := testSettings{
 			entryIdRetryTimes: map[string]int{},
@@ -227,7 +247,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
 		in := getInput()
-		b, e := rt.ApplyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
+		b, e := ps.applyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 3)
 		assert.Equal(t, 10, len(*b))
@@ -263,11 +283,14 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 	})
 
 	t.Run("verify Responses when ALL entries fail even after retries", func(t *testing.T) {
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
-		defer stopRuntime(t, rt)
+		reg := registry.New(registry.NewOptions())
+		ps := New(Options{
+			Registry: reg.PubSubs(),
+			IsHTTP:   true,
+		})
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		rt.appChannel = mockAppChannel
+		ps.appChannel = mockAppChannel
 
 		ts := testSettings{
 			entryIdRetryTimes: map[string]int{},
@@ -293,7 +316,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
 		in := getInput()
-		b, e := rt.ApplyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
+		b, e := ps.applyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 3)
 		assert.Equal(t, 10, len(*b))
@@ -329,11 +352,14 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 	})
 
 	t.Run("pass ALL entries in second attempt", func(t *testing.T) {
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
-		defer stopRuntime(t, rt)
+		reg := registry.New(registry.NewOptions())
+		ps := New(Options{
+			Registry: reg.PubSubs(),
+			IsHTTP:   true,
+		})
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		rt.appChannel = mockAppChannel
+		ps.appChannel = mockAppChannel
 
 		ts := testSettings{
 			entryIdRetryTimes: map[string]int{},
@@ -359,7 +385,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
 		in := getInput()
-		b, e := rt.ApplyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
+		b, e := ps.applyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 2)
 		assert.Equal(t, 10, len(*b))
@@ -395,11 +421,14 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 	})
 
 	t.Run("pass ALL entries in first attempt", func(t *testing.T) {
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
-		defer stopRuntime(t, rt)
+		reg := registry.New(registry.NewOptions())
+		ps := New(Options{
+			Registry: reg.PubSubs(),
+			IsHTTP:   true,
+		})
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		rt.appChannel = mockAppChannel
+		ps.appChannel = mockAppChannel
 
 		ts := testSettings{
 			entryIdRetryTimes: map[string]int{},
@@ -425,7 +454,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
 		in := getInput()
-		b, e := rt.ApplyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
+		b, e := ps.applyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 		assert.Equal(t, 10, len(*b))
@@ -461,11 +490,14 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 	})
 
 	t.Run("fail ALL entries due to timeout", func(t *testing.T) {
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
-		defer stopRuntime(t, rt)
+		reg := registry.New(registry.NewOptions())
+		ps := New(Options{
+			Registry: reg.PubSubs(),
+			IsHTTP:   true,
+		})
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		rt.appChannel = mockAppChannel
+		ps.appChannel = mockAppChannel
 
 		ts := testSettings{
 			entryIdRetryTimes: map[string]int{},
@@ -492,7 +524,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		policyProvider := createResPolicyProvider(resiliencyV1alpha.CircuitBreaker{}, shortTimeout, shortRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
 		in := getInput()
-		b, e := rt.ApplyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
+		b, e := ps.applyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		assert.Equal(t, 10, len(*b))
 
@@ -516,11 +548,14 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 	})
 
 	t.Run("verify Responses when ALL entries fail with Circuitbreaker and exhaust retries", func(t *testing.T) {
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
-		defer stopRuntime(t, rt)
+		reg := registry.New(registry.NewOptions())
+		ps := New(Options{
+			Registry: reg.PubSubs(),
+			IsHTTP:   true,
+		})
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		rt.appChannel = mockAppChannel
+		ps.appChannel = mockAppChannel
 
 		ts := testSettings{
 			entryIdRetryTimes: map[string]int{},
@@ -552,7 +587,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
 		in := getInput()
-		b, e := rt.ApplyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
+		b, e := ps.applyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		expectedResponse := BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{
@@ -587,7 +622,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		assert.Equal(t, breaker.ErrOpenState, e)
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, *b))
 
-		b, e = rt.ApplyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
+		b, e = ps.applyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 2)
 		assert.Equal(t, 10, len(*b))
@@ -598,11 +633,14 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 	})
 
 	t.Run("verify Responses when Partial entries fail with Circuitbreaker and exhaust retries", func(t *testing.T) {
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
-		defer stopRuntime(t, rt)
+		reg := registry.New(registry.NewOptions())
+		ps := New(Options{
+			Registry: reg.PubSubs(),
+			IsHTTP:   true,
+		})
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		rt.appChannel = mockAppChannel
+		ps.appChannel = mockAppChannel
 
 		ts := testSettings{
 			entryIdRetryTimes: map[string]int{},
@@ -634,7 +672,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
 		in := getInput()
-		b, e := rt.ApplyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
+		b, e := ps.applyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		expectedResponse := BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{
@@ -669,7 +707,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		assert.Equal(t, breaker.ErrOpenState, e)
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, *b))
 
-		b, e = rt.ApplyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
+		b, e = ps.applyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 2)
 		assert.Equal(t, 10, len(*b))
@@ -680,11 +718,14 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 	})
 
 	t.Run("verify Responses when Partial entries Pass with Circuitbreaker half open timeout", func(t *testing.T) {
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
-		defer stopRuntime(t, rt)
+		reg := registry.New(registry.NewOptions())
+		ps := New(Options{
+			Registry: reg.PubSubs(),
+			IsHTTP:   true,
+		})
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		rt.appChannel = mockAppChannel
+		ps.appChannel = mockAppChannel
 
 		ts := testSettings{
 			entryIdRetryTimes: map[string]int{},
@@ -716,7 +757,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
 		in := getInput()
-		b, e := rt.ApplyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
+		b, e := ps.applyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		expectedResponse := BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{
@@ -753,11 +794,14 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 	})
 
 	t.Run("Partial success with CB and exhaust retries, then act with short half open timeout", func(t *testing.T) {
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
-		defer stopRuntime(t, rt)
+		reg := registry.New(registry.NewOptions())
+		ps := New(Options{
+			Registry: reg.PubSubs(),
+			IsHTTP:   true,
+		})
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		rt.appChannel = mockAppChannel
+		ps.appChannel = mockAppChannel
 
 		ts := testSettings{
 			entryIdRetryTimes: map[string]int{},
@@ -789,7 +833,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		policyProvider := createResPolicyProvider(cb, longTimeout, shortRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
 		in := getInput()
-		b, e := rt.ApplyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
+		b, e := ps.applyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		expectedResponse := BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{
@@ -826,7 +870,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 
 		time.Sleep(5 * time.Second)
 
-		b, e = rt.ApplyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
+		b, e = ps.applyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		expectedResponse = BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{
@@ -863,11 +907,14 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 	})
 
 	t.Run("Fail all events with timeout and then Open CB - short retries", func(t *testing.T) {
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
-		defer stopRuntime(t, rt)
+		reg := registry.New(registry.NewOptions())
+		ps := New(Options{
+			Registry: reg.PubSubs(),
+			IsHTTP:   true,
+		})
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		rt.appChannel = mockAppChannel
+		ps.appChannel = mockAppChannel
 
 		ts := testSettings{
 			entryIdRetryTimes: map[string]int{},
@@ -901,7 +948,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		policyProvider := createResPolicyProvider(cb, shortTimeout, shortRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
 		in := getInput()
-		b, e := rt.ApplyBulkSubscribeResiliency(context.Background(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
+		b, e := ps.applyBulkSubscribeResiliency(context.Background(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		expectedResponse := BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{
@@ -922,7 +969,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		assert.Equal(t, breaker.ErrOpenState, e)
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, *b))
 
-		b, e = rt.ApplyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
+		b, e = ps.applyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		assert.Equal(t, 10, len(*b))
 		assert.NotNil(t, e)
@@ -933,11 +980,14 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 
 func TestBulkSubscribeResiliencyStateConversionsFromHalfOpen(t *testing.T) {
 	t.Run("verify Responses when Circuitbreaker half open state changes happen", func(t *testing.T) {
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
-		defer stopRuntime(t, rt)
+		reg := registry.New(registry.NewOptions())
+		ps := New(Options{
+			Registry: reg.PubSubs(),
+			IsHTTP:   true,
+		})
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		rt.appChannel = mockAppChannel
+		ps.appChannel = mockAppChannel
 
 		ts := testSettings{
 			entryIdRetryTimes: map[string]int{},
@@ -970,7 +1020,7 @@ func TestBulkSubscribeResiliencyStateConversionsFromHalfOpen(t *testing.T) {
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
 		in := getInput()
 
-		b, e := rt.ApplyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
+		b, e := ps.applyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		expectedResponse := BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{
@@ -1008,7 +1058,7 @@ func TestBulkSubscribeResiliencyStateConversionsFromHalfOpen(t *testing.T) {
 
 		time.Sleep(5 * time.Second)
 		// after this time, circuit breaker should be half-open
-		b, e = rt.ApplyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
+		b, e = ps.applyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		expectedResponse = BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{
@@ -1046,7 +1096,7 @@ func TestBulkSubscribeResiliencyStateConversionsFromHalfOpen(t *testing.T) {
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, *b))
 
 		// circuit breaker is open, so no call should go through
-		b, e = rt.ApplyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
+		b, e = ps.applyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 3)
 		assert.Equal(t, 10, len(*b))
@@ -1057,7 +1107,7 @@ func TestBulkSubscribeResiliencyStateConversionsFromHalfOpen(t *testing.T) {
 
 		time.Sleep(5 * time.Second)
 		// after this time, circuit breaker should be half-open
-		b, e = rt.ApplyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
+		b, e = ps.applyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		expectedResponse = BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{
@@ -1097,11 +1147,14 @@ func TestBulkSubscribeResiliencyStateConversionsFromHalfOpen(t *testing.T) {
 
 func TestBulkSubscribeResiliencyWithLongRetries(t *testing.T) {
 	t.Run("Fail all events with timeout and then Open CB - long retries", func(t *testing.T) {
-		rt := NewTestDaprRuntime(modes.StandaloneMode)
-		defer stopRuntime(t, rt)
+		reg := registry.New(registry.NewOptions())
+		ps := New(Options{
+			Registry: reg.PubSubs(),
+			IsHTTP:   true,
+		})
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		rt.appChannel = mockAppChannel
+		ps.appChannel = mockAppChannel
 
 		ts := testSettings{
 			entryIdRetryTimes: map[string]int{},
@@ -1135,7 +1188,7 @@ func TestBulkSubscribeResiliencyWithLongRetries(t *testing.T) {
 		policyProvider := createResPolicyProvider(cb, shortTimeout, longRetry)
 		policyDef := policyProvider.ComponentInboundPolicy(pubsubName, resiliency.Pubsub)
 		in := getInput()
-		b, e := rt.ApplyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
+		b, e := ps.applyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		expectedResponse := BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{
@@ -1156,7 +1209,7 @@ func TestBulkSubscribeResiliencyWithLongRetries(t *testing.T) {
 		assert.Equal(t, breaker.ErrOpenState, e)
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, *b))
 
-		b, e = rt.ApplyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
+		b, e = ps.applyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		assert.Equal(t, 10, len(*b))
 		assert.NotNil(t, e)
