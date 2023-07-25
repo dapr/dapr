@@ -104,57 +104,20 @@ func TestAPITokenAuthMiddleware(t *testing.T) {
 		allowBypass.Settings.BypassAPITokenAuth = true
 
 		noBypass := new(endpoints.EndpointCtxData)
+		noBypass.Settings.BypassAPITokenAuth = false
 
-		t.Run("healthz", func(t *testing.T) {
-			r := httptest.NewRequest(http.MethodGet, "/v1.0/healthz", nil)
+		t.Run("BypassAPITokenAuth true", func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodGet, "/foo", nil)
+			r = r.WithContext(context.WithValue(r.Context(), endpoints.EndpointCtxKey{}, allowBypass))
 			w := httptest.NewRecorder()
 			h.ServeHTTP(w, r)
 
 			assertPass(t, w)
 		})
 
-		t.Run("outbound healthz", func(t *testing.T) {
-			r := httptest.NewRequest(http.MethodGet, "/v1.0/healthz/outbound", nil)
-			w := httptest.NewRecorder()
-			h.ServeHTTP(w, r)
-
-			assertPass(t, w)
-		})
-
-		t.Run("querystring params are ignored", func(t *testing.T) {
-			r := httptest.NewRequest(http.MethodGet, "/v1.0/healthz?appid=myapp", nil)
-			w := httptest.NewRecorder()
-			h.ServeHTTP(w, r)
-
-			assertPass(t, w)
-		})
-
-		t.Run("ending slashes are trimmed", func(t *testing.T) {
-			r := httptest.NewRequest(http.MethodGet, "/v1.0/healthz/", nil)
-			w := httptest.NewRecorder()
-			h.ServeHTTP(w, r)
-
-			assertPass(t, w)
-		})
-
-		t.Run("non-get methods fail", func(t *testing.T) {
-			r := httptest.NewRequest(http.MethodPut, "/v1.0/healthz", nil)
-			w := httptest.NewRecorder()
-			h.ServeHTTP(w, r)
-
-			assertFail(t, w)
-		})
-
-		t.Run("must match exact path", func(t *testing.T) {
-			r := httptest.NewRequest(http.MethodGet, "/v1.0/invoke/myapp/method/healthz", nil)
-			w := httptest.NewRecorder()
-			h.ServeHTTP(w, r)
-
-			assertFail(t, w)
-		})
-
-		t.Run("must not match querystring", func(t *testing.T) {
-			r := httptest.NewRequest(http.MethodGet, "/v1.0/invoke/myapp/method/something?foo=/healthz", nil)
+		t.Run("BypassAPITokenAuth false", func(t *testing.T) {
+			r := httptest.NewRequest(http.MethodGet, "/foo", nil)
+			r = r.WithContext(context.WithValue(r.Context(), endpoints.EndpointCtxKey{}, noBypass))
 			w := httptest.NewRecorder()
 			h.ServeHTTP(w, r)
 

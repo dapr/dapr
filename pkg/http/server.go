@@ -99,6 +99,7 @@ func (s *server) StartNonBlocking() error {
 	s.useAPIAuthentication(r)
 	s.useCors(r)
 	s.useComponents(r)
+	s.useApiLogging(r)
 
 	// Add all routes
 	s.setupRoutes(r, s.api.APIEndpoints())
@@ -263,25 +264,35 @@ func (s *server) useMaxBodySize(r chi.Router) {
 	r.Use(MaxBodySizeMiddleware(maxSize))
 }
 
-func (s *server) apiLoggingInfo(route string, next http.Handler) http.HandlerFunc {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fields := make(map[string]any, 3)
-		if s.config.APILoggingObfuscateURLs {
-			fields["method"] = r.Method + " " + route
-		} else {
-			fields["method"] = r.Method + " " + r.URL.Path
-		}
-		if userAgent := r.Header.Get("User-Agent"); userAgent != "" {
-			fields["useragent"] = userAgent
-		}
+func (s *server) useApiLogging(mux chi.Router) {
+	if !s.config.EnableAPILogging {
+		return
+	}
 
-		start := time.Now()
+	mux.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			start := time.Now()
+			next.ServeHTTP(w, r)
 
-		next.ServeHTTP(w, r)
+			endpointData, _ := r.Context().Value(endpoints.EndpointCtxKey{}).(*endpoints.EndpointCtxData)
+			if endpointData == nil || (endpointData.Settings.IsHealthCheck && !s.config.APILogHealthChecks) {
+				return
+			}
 
-		fields["duration"] = time.Since(start).Milliseconds()
+			fields := make(map[string]any, 3)
+			if s.config.APILoggingObfuscateURLs {
+				fields["method"] = r.Method + " " + endpointData.Settings.Name
+			} else {
+				fields["method"] = r.Method + " " + r.URL.Path
+			}
+			if userAgent := r.Header.Get("User-Agent"); userAgent != "" {
+				fields["useragent"] = userAgent
+			}
 
-		infoLog.WithFields(fields).Info("HTTP API Called")
+			fields["duration"] = time.Since(start).Milliseconds()
+
+			infoLog.WithFields(fields).Info("HTTP API Called")
+		})
 	})
 }
 
@@ -365,20 +376,15 @@ func (s *server) setupRoutes(r chi.Router, endpoints []endpoints.Endpoint) {
 		s.handle(
 			e, path, r,
 			parameterFinder.MatchString(path),
-			s.config.EnableAPILogging && (!e.Settings.IsHealthCheck || s.config.APILogHealthChecks),
 		)
 	}
 }
 
-func (s *server) handle(e endpoints.Endpoint, path string, r chi.Router, unescapeParameters bool, apiLogging bool) {
+func (s *server) handle(e endpoints.Endpoint, path string, r chi.Router, unescapeParameters bool) {
 	handler := e.GetHandler()
 
 	if unescapeParameters {
 		handler = s.unescapeRequestParametersHandler(e.Settings.KeepWildcardUnescaped, handler)
-	}
-
-	if apiLogging {
-		handler = s.apiLoggingInfo(path, handler)
 	}
 
 	handler = func(w http.ResponseWriter, r *http.Request) {

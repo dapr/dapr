@@ -4102,7 +4102,7 @@ func (f *fakeHTTPServer) getRouter(endpoints []endpoints.Endpoint, apiAuth bool)
 	for _, e := range endpoints {
 		path := fmt.Sprintf("/%s/%s", e.Version, e.Route)
 
-		srv.handle(e, path, r, false, false)
+		srv.handle(e, path, r, false)
 	}
 	return r
 }
