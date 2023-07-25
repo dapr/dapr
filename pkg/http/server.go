@@ -41,7 +41,6 @@ import (
 	"github.com/dapr/dapr/pkg/http/endpoints"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	auth "github.com/dapr/dapr/pkg/runtime/security"
-	"github.com/dapr/dapr/utils/responsewriter"
 	"github.com/dapr/kit/logger"
 )
 
@@ -366,7 +365,7 @@ func (s *server) setupRoutes(r chi.Router, endpoints []endpoints.Endpoint) {
 		s.handle(
 			e, path, r,
 			parameterFinder.MatchString(path),
-			s.config.EnableAPILogging && (!e.IsHealthCheck || s.config.APILogHealthChecks),
+			s.config.EnableAPILogging && (!e.Settings.IsHealthCheck || s.config.APILogHealthChecks),
 		)
 	}
 }
@@ -375,7 +374,7 @@ func (s *server) handle(e endpoints.Endpoint, path string, r chi.Router, unescap
 	handler := e.GetHandler()
 
 	if unescapeParameters {
-		handler = s.unescapeRequestParametersHandler(e.KeepWildcardUnescaped, handler)
+		handler = s.unescapeRequestParametersHandler(e.Settings.KeepWildcardUnescaped, handler)
 	}
 
 	if apiLogging {
@@ -383,16 +382,14 @@ func (s *server) handle(e endpoints.Endpoint, path string, r chi.Router, unescap
 	}
 
 	handler = func(w http.ResponseWriter, r *http.Request) {
-		// Ensure that the writer is a ResponseWriter so we can collect the status code and response size too
-		rw := responsewriter.EnsureResponseWriter(w)
-
 		// Add information about the route in the context
-		ctx := r.Context()
-		ctx = context.WithValue(ctx, diag.RouteDataCtxKey, diag.RouteMetadata{
-			Name: e.Name,
+		ctx := context.WithValue(r.Context(), endpoints.EndpointCtxKey{}, &endpoints.EndpointCtxData{
+			Group:    e.Group,
+			Settings: e.Settings,
 		})
+		r = r.WithContext(ctx)
 
-		handler(rw, r)
+		handler(w, r)
 	}
 
 	// If no method is defined, match any method
@@ -405,7 +402,7 @@ func (s *server) handle(e endpoints.Endpoint, path string, r chi.Router, unescap
 	}
 
 	// Set as fallback method
-	if e.IsFallback {
+	if e.Settings.IsFallback {
 		fallbackHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Populate the wildcard path with the full path
 			chiCtx := chi.RouteContext(r.Context())

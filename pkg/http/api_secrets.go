@@ -24,7 +24,13 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
-func appendSecretsSpanAttributes(r *nethttp.Request, m diag.SpanAttributes) {
+var endpointGroupSecretsV1 = &endpoints.EndpointGroup{
+	Name:                 endpoints.EndpointGroupSecrets,
+	Version:              endpoints.EndpointGroupVersion1,
+	AppendSpanAttributes: appendSecretsSpanAttributes,
+}
+
+func appendSecretsSpanAttributes(r *nethttp.Request, m map[string]string) {
 	m[diag.DBSystemSpanAttributeKey] = "secrets"
 	m[diag.DBConnectionStringSpanAttributeKey] = "secrets"
 	m[diag.DBStatementSpanAttributeKey] = r.Method + " " + r.URL.Path
@@ -37,25 +43,21 @@ func (a *api) constructSecretsEndpoints() []endpoints.Endpoint {
 			Methods: []string{http.MethodGet},
 			Route:   "secrets/{secretStoreName}/bulk",
 			Version: apiVersionV1,
-			Group: endpoints.EndpointGroup{
-				Name:                 endpoints.EndpointGroupSecrets,
-				Version:              endpoints.EndpointGroupVersion1,
-				AppendSpanAttributes: appendSecretsSpanAttributes,
-			},
-			Name:    "GetBulkSecret",
+			Group:   endpointGroupSecretsV1,
 			Handler: a.onBulkGetSecretHandler(),
+			Settings: endpoints.EndpointSettings{
+				Name: "GetBulkSecret",
+			},
 		},
 		{
 			Methods: []string{http.MethodGet},
 			Route:   "secrets/{secretStoreName}/{key}",
 			Version: apiVersionV1,
-			Group: endpoints.EndpointGroup{
-				Name:                 endpoints.EndpointGroupSecrets,
-				Version:              endpoints.EndpointGroupVersion1,
-				AppendSpanAttributes: appendSecretsSpanAttributes,
-			},
-			Name:    "GetSecret",
+			Group:   endpointGroupSecretsV1,
 			Handler: a.onGetSecretHandler(),
+			Settings: endpoints.EndpointSettings{
+				Name: "GetSecret",
+			},
 		},
 	}
 }

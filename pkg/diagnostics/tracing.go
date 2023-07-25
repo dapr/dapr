@@ -70,8 +70,6 @@ const (
 	tracerName = "dapr-diagnostics"
 )
 
-type SpanAttributes map[string]string
-
 var tracer trace.Tracer = otel.Tracer(tracerName)
 
 // Effectively const, but isn't a const from upstream.

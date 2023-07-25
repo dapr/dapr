@@ -25,31 +25,33 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
+var endpointGroupMetadataV1 = &endpoints.EndpointGroup{
+	Name:                 endpoints.EndpointGroupMetadata,
+	Version:              endpoints.EndpointGroupVersion1,
+	AppendSpanAttributes: nil, // TODO
+}
+
 func (a *api) constructMetadataEndpoints() []endpoints.Endpoint {
 	return []endpoints.Endpoint{
 		{
 			Methods: []string{http.MethodGet},
 			Route:   "metadata",
 			Version: apiVersionV1,
-			Group: endpoints.EndpointGroup{
-				Name:                 endpoints.EndpointGroupMetadata,
-				Version:              endpoints.EndpointGroupVersion1,
-				AppendSpanAttributes: nil, // TODO
-			},
-			Name:    "GetMetadata",
+			Group:   endpointGroupMetadataV1,
 			Handler: a.onGetMetadata(),
+			Settings: endpoints.EndpointSettings{
+				Name: "GetMetadata",
+			},
 		},
 		{
 			Methods: []string{http.MethodPut},
 			Route:   "metadata/{key}",
 			Version: apiVersionV1,
-			Group: endpoints.EndpointGroup{
-				Name:                 endpoints.EndpointGroupMetadata,
-				Version:              endpoints.EndpointGroupVersion1,
-				AppendSpanAttributes: nil, // TODO
-			},
-			Name:    "PutMetadata",
+			Group:   endpointGroupMetadataV1,
 			Handler: a.onPutMetadata(),
+			Settings: endpoints.EndpointSettings{
+				Name: "PutMetadata",
+			},
 		},
 	}
 }

@@ -25,18 +25,23 @@ import (
 
 // Endpoint is a collection of route information for an Dapr API.
 type Endpoint struct {
-	Methods               []string
-	Route                 string
-	Version               string
-	Name                  string        // Method name, used in logging and for other purposes
-	Group                 EndpointGroup // Endpoint group, used for allowlisting
-	IsFallback            bool          // Endpoint is used as fallback when the method or URL isn't found
-	KeepWildcardUnescaped bool          // Keeps the wildcard param in path unescaped
-	FastHTTPHandler       fasthttp.RequestHandler
-	Handler               http.HandlerFunc
-	AlwaysAllowed         bool // Endpoint is always allowed regardless of API access rules
-	IsHealthCheck         bool // Mark endpoint as healthcheck - for API logging purposes
-	BypassAPITokenAuth    bool // Endpoint bypasses API token authentication
+	Methods         []string
+	Route           string
+	Version         string
+	Group           *EndpointGroup // Endpoint group, used for allowlisting
+	FastHTTPHandler fasthttp.RequestHandler
+	Handler         http.HandlerFunc
+	Settings        EndpointSettings
+}
+
+// EndpointSettings contains settings for the endpoint.
+type EndpointSettings struct {
+	Name                  string // Method name, used in logging and for other purposes
+	IsFallback            bool   // Endpoint is used as fallback when the method or URL isn't found
+	KeepWildcardUnescaped bool   // Keeps the wildcard param in path unescaped
+	AlwaysAllowed         bool   // Endpoint is always allowed regardless of API access rules
+	IsHealthCheck         bool   // Mark endpoint as healthcheck - for API logging purposes
+	BypassAPITokenAuth    bool   // Endpoint bypasses API token authentication
 }
 
 // GetHandler returns the handler for the endpoint.
@@ -57,7 +62,7 @@ func (endpoint Endpoint) GetHandler() http.HandlerFunc {
 // IsAllowed returns true if the endpoint is allowed given the API allowlist/denylist.
 func (endpoint Endpoint) IsAllowed(allowedAPIs []config.APIAccessRule, deniedAPIs []config.APIAccessRule) bool {
 	// If the endpoint is always allowed, return true
-	if endpoint.AlwaysAllowed {
+	if endpoint.Settings.AlwaysAllowed {
 		return true
 	}
 

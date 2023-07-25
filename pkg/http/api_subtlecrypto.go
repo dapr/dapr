@@ -22,91 +22,83 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
+var endpointGroupSubtleCryptoV1Alpha1 = &endpoints.EndpointGroup{
+	Name:                 endpoints.EndpointGroupSubtleCrypto,
+	Version:              endpoints.EndpointGroupVersion1alpha1,
+	AppendSpanAttributes: nil, // TODO
+}
+
 func (a *api) constructSubtleCryptoEndpoints() []endpoints.Endpoint {
 	return []endpoints.Endpoint{
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "subtlecrypto/{name}/getkey",
 			Version: apiVersionV1alpha1,
-			Group: endpoints.EndpointGroup{
-				Name:                 endpoints.EndpointGroupSubtleCrypto,
-				Version:              endpoints.EndpointGroupVersion1alpha1,
-				AppendSpanAttributes: nil, // TODO
-			},
-			Name:    "SubtleGetKey",
+			Group:   endpointGroupSubtleCryptoV1Alpha1,
 			Handler: a.onPostSubtleCryptoGetKey(),
+			Settings: endpoints.EndpointSettings{
+				Name: "SubtleGetKey",
+			},
 		},
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "subtlecrypto/{name}/encrypt",
 			Version: apiVersionV1alpha1,
-			Group: endpoints.EndpointGroup{
-				Name:                 endpoints.EndpointGroupSubtleCrypto,
-				Version:              endpoints.EndpointGroupVersion1alpha1,
-				AppendSpanAttributes: nil, // TODO
-			},
-			Name:    "SubtleEncrypt",
+			Group:   endpointGroupSubtleCryptoV1Alpha1,
 			Handler: a.onPostSubtleCryptoEncrypt(),
+			Settings: endpoints.EndpointSettings{
+				Name: "SubtleEncrypt",
+			},
 		},
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "subtlecrypto/{name}/decrypt",
 			Version: apiVersionV1alpha1,
-			Group: endpoints.EndpointGroup{
-				Name:                 endpoints.EndpointGroupSubtleCrypto,
-				Version:              endpoints.EndpointGroupVersion1alpha1,
-				AppendSpanAttributes: nil, // TODO
-			},
-			Name:    "SubtleDecrypt",
+			Group:   endpointGroupSubtleCryptoV1Alpha1,
 			Handler: a.onPostSubtleCryptoDecrypt(),
+			Settings: endpoints.EndpointSettings{
+				Name: "SubtleDecrypt",
+			},
 		},
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "subtlecrypto/{name}/wrapkey",
 			Version: apiVersionV1alpha1,
-			Group: endpoints.EndpointGroup{
-				Name:                 endpoints.EndpointGroupSubtleCrypto,
-				Version:              endpoints.EndpointGroupVersion1alpha1,
-				AppendSpanAttributes: nil, // TODO
-			},
-			Name:    "SubtleWrapKey",
+			Group:   endpointGroupSubtleCryptoV1Alpha1,
 			Handler: a.onPostSubtleCryptoWrapKey(),
+			Settings: endpoints.EndpointSettings{
+				Name: "SubtleWrapKey",
+			},
 		},
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "subtlecrypto/{name}/unwrapkey",
 			Version: apiVersionV1alpha1,
-			Group: endpoints.EndpointGroup{
-				Name:                 endpoints.EndpointGroupSubtleCrypto,
-				Version:              endpoints.EndpointGroupVersion1alpha1,
-				AppendSpanAttributes: nil, // TODO
-			},
-			Name:    "SubtleUnwrapKey",
+			Group:   endpointGroupSubtleCryptoV1Alpha1,
 			Handler: a.onPostSubtleCryptoUnwrapKey(),
+			Settings: endpoints.EndpointSettings{
+				Name: "SubtleUnwrapKey",
+			},
 		},
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "subtlecrypto/{name}/sign",
 			Version: apiVersionV1alpha1,
-			Group: endpoints.EndpointGroup{
-				Name:                 endpoints.EndpointGroupSubtleCrypto,
-				Version:              endpoints.EndpointGroupVersion1alpha1,
-				AppendSpanAttributes: nil, // TODO
-			},
-			Name:    "SubtleSign",
+			Group:   endpointGroupSubtleCryptoV1Alpha1,
 			Handler: a.onPostSubtleCryptoSign(),
+			Settings: endpoints.EndpointSettings{
+				Name: "SubtleSign",
+			},
 		},
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "subtlecrypto/{name}/verify",
 			Version: apiVersionV1alpha1,
-			Group: endpoints.EndpointGroup{
-				Name:                 endpoints.EndpointGroupSubtleCrypto,
-				Version:              endpoints.EndpointGroupVersion1alpha1,
-				AppendSpanAttributes: nil, // TODO
-			},
-			Name:    "SubtleVerify",
+			Group:   endpointGroupSubtleCryptoV1Alpha1,
 			Handler: a.onPostSubtleCryptoVerify(),
+			Settings: endpoints.EndpointSettings{
+				Name: "SubtleVerify",
+			},
 		},
 	}
 }

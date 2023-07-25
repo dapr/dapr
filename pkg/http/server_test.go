@@ -352,7 +352,9 @@ func TestAPILoggingOmitHealthChecks(t *testing.T) {
 			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Write(body)
 			}),
-			IsHealthCheck: false,
+			Settings: endpoints.EndpointSettings{
+				IsHealthCheck: false,
+			},
 		},
 		{
 			Methods: []string{http.MethodGet},
@@ -361,7 +363,9 @@ func TestAPILoggingOmitHealthChecks(t *testing.T) {
 			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Write(body)
 			}),
-			IsHealthCheck: true,
+			Settings: endpoints.EndpointSettings{
+				IsHealthCheck: true,
+			},
 		},
 	}
 	srv := newServer()

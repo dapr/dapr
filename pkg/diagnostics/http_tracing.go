@@ -24,6 +24,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/config"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"github.com/dapr/dapr/pkg/http/endpoints"
 	"github.com/dapr/dapr/utils/responsewriter"
 )
 
@@ -183,19 +184,19 @@ func tracestateToHeader(sc trace.SpanContext, setHeader func(string, string)) {
 }
 
 func spanAttributesMapFromHTTPContext(rw responsewriter.ResponseWriter, r *http.Request) map[string]string {
-	// Span Attribute reference https://github.com/open-telemetry/opentelemetry-specification/tree/master/specification/trace/semantic_conventions
-	path := r.URL.Path
-	method := r.Method
-	statusCode := rw.Status()
+	// Init with a sensible initial default value
+	m := make(map[string]string, 7)
 
-	m := map[string]string{}
-
-	// TODO HERE
+	// Check if the context contains an AppendSpanAttributes method
+	endpointData, _ := r.Context().Value(endpoints.EndpointCtxKey{}).(*endpoints.EndpointCtxData)
+	if endpointData != nil && endpointData.Group.AppendSpanAttributes != nil {
+		endpointData.Group.AppendSpanAttributes(r, m)
+	}
 
 	// Populate dapr original api attributes.
 	m[DaprAPIProtocolSpanAttributeKey] = DaprAPIHTTPSpanAttrValue
-	m[DaprAPISpanAttributeKey] = method + " " + path
-	m[DaprAPIStatusCodeSpanAttributeKey] = strconv.Itoa(statusCode)
+	m[DaprAPISpanAttributeKey] = r.Method + " " + r.URL.Path
+	m[DaprAPIStatusCodeSpanAttributeKey] = strconv.Itoa(rw.Status())
 
 	return m
 }

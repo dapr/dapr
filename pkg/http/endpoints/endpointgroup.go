@@ -15,15 +15,13 @@ package endpoints
 
 import (
 	"net/http"
-
-	diag "github.com/dapr/dapr/pkg/diagnostics"
 )
 
 // EndpointGroup is a group of endpoints.
 type EndpointGroup struct {
 	Name                 EndpointGroupName
 	Version              EndpointGroupVersion
-	AppendSpanAttributes func(r *http.Request, m diag.SpanAttributes)
+	AppendSpanAttributes func(r *http.Request, m map[string]string)
 }
 
 // EndpointGroupName is the name of an endpoint group.

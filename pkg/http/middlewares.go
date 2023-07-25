@@ -15,12 +15,11 @@ package http
 
 import (
 	"net/http"
-	"net/url"
 	"path"
-	"strings"
 
 	chi "github.com/go-chi/chi/v5"
 
+	"github.com/dapr/dapr/pkg/http/endpoints"
 	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
 	"github.com/dapr/dapr/utils/streams"
 )
@@ -43,8 +42,12 @@ func APITokenAuthMiddleware(token string) func(next http.Handler) http.Handler {
 		}
 
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Check if the route is excluded from API token auth
+			endpointData, _ := r.Context().Value(endpoints.EndpointCtxKey{}).(*endpoints.EndpointCtxData)
+			excluded := endpointData != nil && endpointData.Settings.BypassAPITokenAuth
+
 			v := r.Header.Get(authConsts.APITokenHeader)
-			if v != token && !isRouteExcludedFromAPITokenAuth(r.Method, r.URL) {
+			if v != token && !excluded {
 				http.Error(w, "invalid api token", http.StatusUnauthorized)
 				return
 			}
@@ -52,18 +55,6 @@ func APITokenAuthMiddleware(token string) func(next http.Handler) http.Handler {
 			r.Header.Del(authConsts.APITokenHeader)
 			next.ServeHTTP(w, r)
 		})
-	}
-}
-
-func isRouteExcludedFromAPITokenAuth(method string, u *url.URL) bool {
-	path := strings.Trim(u.Path, "/")
-	switch path {
-	case apiVersionV1 + "/healthz":
-		return method == http.MethodGet
-	case apiVersionV1 + "/healthz/outbound":
-		return method == http.MethodGet
-	default:
-		return false
 	}
 }
 
