@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package reminders
+package internal
 
 import (
 	"bytes"
@@ -43,7 +43,9 @@ func TestReminderProperties(t *testing.T) {
 	})
 
 	t.Run("NextTick", func(t *testing.T) {
-		require.Equal(t, time1, r.NextTick())
+		nextTick, active := r.NextTick()
+		require.Equal(t, time1, nextTick)
+		require.True(t, active)
 	})
 
 	t.Run("without repeats", func(t *testing.T) {
@@ -63,12 +65,18 @@ func TestReminderProperties(t *testing.T) {
 		require.True(t, r.HasRepeats())
 		require.Equal(t, -1, r.RepeatsLeft())
 		require.Equal(t, -1, r.Period.repeats)
-		require.Equal(t, time1, r.NextTick())
+
+		nextTick, active := r.NextTick()
+		require.Equal(t, time1, nextTick)
+		require.True(t, active)
 
 		// Execute the tick
 		require.False(t, r.TickExecuted()) // Will repeat
 		require.Equal(t, -1, r.Period.repeats)
-		require.Equal(t, time1.Add(2*time.Second), r.NextTick())
+
+		nextTick, active = r.NextTick()
+		require.Equal(t, time1.Add(2*time.Second), nextTick)
+		require.True(t, active)
 	})
 
 	// Update the object to add limited repeats
@@ -83,13 +91,40 @@ func TestReminderProperties(t *testing.T) {
 		for i := 4; i > 0; i-- {
 			require.Equal(t, i, r.RepeatsLeft())
 			require.Equal(t, i, r.Period.repeats)
-			require.Equal(t, time1.Add(2*time.Second*time.Duration(4-i)), r.NextTick())
+			nextTick, active := r.NextTick()
+			require.Equal(t, time1.Add(2*time.Second*time.Duration(4-i)), nextTick)
+			require.True(t, active)
 
 			if i == 1 {
 				require.True(t, r.TickExecuted()) // Done, won't repeat
 			} else {
 				require.False(t, r.TickExecuted()) // Will repeat
 			}
+		}
+	})
+
+	// Update the object to set an expiration
+	r.RegisteredTime = time1
+	r.ExpirationTime = time1.Add(6 * time.Second)
+	r.Period, err = NewReminderPeriod("2s")
+	require.NoError(t, err)
+
+	t.Run("with expiration time", func(t *testing.T) {
+		require.True(t, r.HasRepeats())
+		require.Equal(t, -1, r.RepeatsLeft())
+		require.Equal(t, -1, r.Period.repeats)
+
+		for i := 0; i <= 3; i++ {
+			nextTick, active := r.NextTick()
+			require.Equal(t, time1.Add((2*time.Second)*time.Duration(i)), nextTick)
+
+			if i == 3 {
+				require.False(t, active)
+			} else {
+				require.True(t, active)
+			}
+
+			require.False(t, r.TickExecuted())
 		}
 	})
 }
@@ -222,8 +257,8 @@ func TestReminderString(t *testing.T) {
 		fields fields
 		want   string
 	}{
-		{name: "base test", fields: fields{ActorID: "id", ActorType: "type", Name: "name"}, want: `name='type||id||name' hasData=false period='' dueTime=nil expirationTime=nil`},
-		{name: "with data", fields: fields{ActorID: "id", ActorType: "type", Name: "name", Data: json.RawMessage(`"hi"`)}, want: `name='type||id||name' hasData=true period='' dueTime=nil expirationTime=nil`},
+		{name: "base test", fields: fields{ActorID: "id", ActorType: "type", Name: "name"}, want: `name='type||id||name' hasData=false period=nil dueTime=nil expirationTime=nil`},
+		{name: "with data", fields: fields{ActorID: "id", ActorType: "type", Name: "name", Data: json.RawMessage(`"hi"`)}, want: `name='type||id||name' hasData=true period=nil dueTime=nil expirationTime=nil`},
 		{name: "with period", fields: fields{ActorID: "id", ActorType: "type", Name: "name", Period: "2s"}, want: `name='type||id||name' hasData=false period='2s' dueTime=nil expirationTime=nil`},
 		{name: "with due time", fields: fields{ActorID: "id", ActorType: "type", Name: "name", Period: "2s", DueTimeReq: "2m", DueTime: time1}, want: `name='type||id||name' hasData=false period='2s' dueTime='2023-03-07T18:29:04Z' expirationTime=nil`},
 		{name: "with expiration time", fields: fields{ActorID: "id", ActorType: "type", Name: "name", Period: "2s", ExpirationTime: time2}, want: `name='type||id||name' hasData=false period='2s' dueTime=nil expirationTime='2023-02-01T11:02:01Z'`},

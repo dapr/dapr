@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package reminders
+package internal
 
 import (
 	"bytes"
@@ -19,6 +19,13 @@ import (
 	"fmt"
 	"time"
 )
+
+// GetReminderRequest is the request object to get an existing reminder.
+type GetReminderRequest struct {
+	Name      string
+	ActorType string
+	ActorID   string
+}
 
 // CreateReminderRequest is the request object to create a new reminder.
 type CreateReminderRequest struct {
@@ -31,20 +38,18 @@ type CreateReminderRequest struct {
 	TTL       string          `json:"ttl"`
 }
 
-// CreateTimerRequest is the request object to create a new timer.
-type CreateTimerRequest struct {
-	Name      string
-	ActorType string
-	ActorID   string
-	DueTime   string          `json:"dueTime"`
-	Period    string          `json:"period"`
-	TTL       string          `json:"ttl"`
-	Callback  string          `json:"callback"`
-	Data      json.RawMessage `json:"data"`
+// ActorKey returns the key of the actor for this reminder.
+func (req CreateReminderRequest) ActorKey() string {
+	return req.ActorType + daprSeparator + req.ActorID
 }
 
-// NewReminderFromCreateReminderRequest returns a new Reminder from a CreateReminderRequest object.
-func NewReminderFromCreateReminderRequest(req *CreateReminderRequest, now time.Time) (reminder *Reminder, err error) {
+// Key returns the key for this unique reminder.
+func (req CreateReminderRequest) Key() string {
+	return req.ActorType + daprSeparator + req.ActorID + daprSeparator + req.Name
+}
+
+// NewReminder returns a new Reminder from a CreateReminderRequest object.
+func (req CreateReminderRequest) NewReminder(now time.Time) (reminder *Reminder, err error) {
 	reminder = &Reminder{
 		ActorID:   req.ActorID,
 		ActorType: req.ActorType,
@@ -64,8 +69,30 @@ func NewReminderFromCreateReminderRequest(req *CreateReminderRequest, now time.T
 	return reminder, nil
 }
 
-// NewReminderFromCreateTimerRequest returns a new Timer from a CreateTimerRequest object.
-func NewReminderFromCreateTimerRequest(req *CreateTimerRequest, now time.Time) (reminder *Reminder, err error) {
+// CreateTimerRequest is the request object to create a new timer.
+type CreateTimerRequest struct {
+	Name      string
+	ActorType string
+	ActorID   string
+	DueTime   string          `json:"dueTime"`
+	Period    string          `json:"period"`
+	TTL       string          `json:"ttl"`
+	Callback  string          `json:"callback"`
+	Data      json.RawMessage `json:"data"`
+}
+
+// ActorKey returns the key of the actor for this timer.
+func (req CreateTimerRequest) ActorKey() string {
+	return req.ActorType + daprSeparator + req.ActorID
+}
+
+// Key returns the key for this unique timer.
+func (req CreateTimerRequest) Key() string {
+	return req.ActorType + daprSeparator + req.ActorID + daprSeparator + req.Name
+}
+
+// NewReminder returns a new Timer from a CreateTimerRequest object.
+func (req CreateTimerRequest) NewReminder(now time.Time) (reminder *Reminder, err error) {
 	reminder = &Reminder{
 		ActorID:   req.ActorID,
 		ActorType: req.ActorType,
@@ -136,4 +163,46 @@ func setReminderTimes(reminder *Reminder, dueTime string, period string, ttl str
 	}
 
 	return nil
+}
+
+// DeleteReminderRequest is the request object for deleting a reminder.
+type DeleteReminderRequest struct {
+	Name      string
+	ActorType string
+	ActorID   string
+}
+
+// ActorKey returns the key of the actor for this reminder.
+func (req DeleteReminderRequest) ActorKey() string {
+	return req.ActorType + daprSeparator + req.ActorID
+}
+
+// Key returns the key for this unique reminder.
+func (req DeleteReminderRequest) Key() string {
+	return req.ActorType + daprSeparator + req.ActorID + daprSeparator + req.Name
+}
+
+// DeleteTimerRequest is a request object for deleting a timer.
+type DeleteTimerRequest struct {
+	Name      string
+	ActorType string
+	ActorID   string
+}
+
+// ActorKey returns the key of the actor for this timer.
+func (req DeleteTimerRequest) ActorKey() string {
+	return req.ActorType + daprSeparator + req.ActorID
+}
+
+// Key returns the key for this unique timer.
+func (req DeleteTimerRequest) Key() string {
+	return req.ActorType + daprSeparator + req.ActorID + daprSeparator + req.Name
+}
+
+// RenameReminderRequest is the request object for rename a reminder.
+type RenameReminderRequest struct {
+	OldName   string
+	ActorType string
+	ActorID   string
+	NewName   string
 }
