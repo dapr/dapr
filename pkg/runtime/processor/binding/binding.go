@@ -11,36 +11,91 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package processor
+package binding
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"strings"
+	"sync"
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/dapr/pkg/apis/common"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	"github.com/dapr/dapr/pkg/channel"
 	compbindings "github.com/dapr/dapr/pkg/components/bindings"
+	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/grpc"
+	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	"github.com/dapr/dapr/pkg/runtime/meta"
+	"github.com/dapr/kit/logger"
 )
 
 const (
-	BindingDirection  = "direction"
-	BindingTypeInput  = "input"
-	BindingTypeOutput = "output"
+	ComponentDirection  = "direction"
+	ComponentTypeInput  = "input"
+	ComponentTypeOutput = "output"
+
+	// output bindings concurrency.
+	ConcurrencyParallel   = "parallel"
+	ConcurrencySequential = "sequential"
 )
 
-type binding struct {
-	registry  *compbindings.Registry
-	compStore *compstore.ComponentStore
-	meta      *meta.Meta
+var log = logger.NewLogger("dapr.runtime.processor.binding")
+
+type Options struct {
+	IsHTTP bool
+
+	Registry       *compbindings.Registry
+	ComponentStore *compstore.ComponentStore
+	Meta           *meta.Meta
+	Resiliency     resiliency.Provider
+	GRPC           *grpc.Manager
+	TracingSpec    *config.TracingSpec
 }
 
-func (b *binding) init(ctx context.Context, comp compapi.Component) error {
+type binding struct {
+	isHTTP bool
+
+	registry    *compbindings.Registry
+	resiliency  resiliency.Provider
+	compStore   *compstore.ComponentStore
+	meta        *meta.Meta
+	appChannel  channel.AppChannel
+	tracingSpec *config.TracingSpec
+	grpc        *grpc.Manager
+
+	lock sync.Mutex
+
+	subscribeBindingList []string
+	inputCancel          context.CancelFunc
+}
+
+func New(opts Options) *binding {
+	return &binding{
+		registry:    opts.Registry,
+		compStore:   opts.ComponentStore,
+		meta:        opts.Meta,
+		isHTTP:      opts.IsHTTP,
+		resiliency:  opts.Resiliency,
+		tracingSpec: opts.TracingSpec,
+		grpc:        opts.GRPC,
+	}
+}
+
+func (b *binding) SetAppChannel(appChannel channel.AppChannel) {
+	b.appChannel = appChannel
+}
+
+func (b *binding) Init(ctx context.Context, comp compapi.Component) error {
+	b.lock.Lock()
+	defer b.lock.Unlock()
+
 	var found bool
 
 	if b.registry.HasInputBinding(comp.Spec.Type, comp.Spec.Version) {
@@ -65,8 +120,43 @@ func (b *binding) init(ctx context.Context, comp compapi.Component) error {
 	return nil
 }
 
+func (b *binding) Close(comp compapi.Component) error {
+	b.lock.Lock()
+	defer b.lock.Unlock()
+
+	var errs []error
+
+	inbinding, ok := b.compStore.GetInputBinding(comp.Name)
+	if ok {
+		if err := inbinding.Close(); err != nil {
+			errs = append(errs, err)
+		} else {
+			b.compStore.DeleteInputBinding(comp.Name)
+		}
+	}
+
+	outbinding, ok := b.compStore.GetOutputBinding(comp.Name)
+	if ok {
+		if err := b.closeOutputBinding(outbinding); err != nil {
+			errs = append(errs, err)
+		} else {
+			b.compStore.DeleteOutputBinding(comp.Name)
+		}
+	}
+
+	return errors.Join(errs...)
+}
+
+func (b *binding) closeOutputBinding(binding bindings.OutputBinding) error {
+	closer, ok := binding.(io.Closer)
+	if ok && closer != nil {
+		return closer.Close()
+	}
+	return nil
+}
+
 func (b *binding) initInputBinding(ctx context.Context, comp compapi.Component) error {
-	if !b.isBindingOfDirection(BindingTypeInput, comp.Spec.Metadata) {
+	if !b.isBindingOfDirection(ComponentTypeInput, comp.Spec.Metadata) {
 		return nil
 	}
 
@@ -96,7 +186,7 @@ func (b *binding) initInputBinding(ctx context.Context, comp compapi.Component) 
 }
 
 func (b *binding) initOutputBinding(ctx context.Context, comp compapi.Component) error {
-	if !b.isBindingOfDirection(BindingTypeOutput, comp.Spec.Metadata) {
+	if !b.isBindingOfDirection(ComponentTypeOutput, comp.Spec.Metadata) {
 		return nil
 	}
 
@@ -108,7 +198,7 @@ func (b *binding) initOutputBinding(ctx context.Context, comp compapi.Component)
 	}
 
 	if binding != nil {
-		err := binding.Init(context.TODO(), bindings.Metadata{Base: b.meta.ToBaseMetadata(comp)})
+		err := binding.Init(ctx, bindings.Metadata{Base: b.meta.ToBaseMetadata(comp)})
 		if err != nil {
 			diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
 			return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
@@ -124,7 +214,7 @@ func (b *binding) isBindingOfDirection(direction string, metadata []common.NameV
 	directionFound := false
 
 	for _, m := range metadata {
-		if strings.EqualFold(m.Name, BindingDirection) {
+		if strings.EqualFold(m.Name, ComponentDirection) {
 			directionFound = true
 
 			directions := strings.Split(m.Value.String(), ",")

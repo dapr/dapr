@@ -69,16 +69,16 @@ func (c *ComponentStore) DeletePubSub(name string) {
 	delete(c.pubSubs, name)
 }
 
-func (c *ComponentStore) TopicRoutesIsNil() bool {
-	c.lock.RLock()
-	defer c.lock.RUnlock()
-	return c.topicRoutes == nil
-}
-
 func (c *ComponentStore) SetTopicRoutes(topicRoutes map[string]TopicRoutes) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	c.topicRoutes = topicRoutes
+}
+
+func (c *ComponentStore) DeleteTopicRoute(name string) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	delete(c.topicRoutes, name)
 }
 
 func (c *ComponentStore) GetTopicRoutes() map[string]TopicRoutes {
