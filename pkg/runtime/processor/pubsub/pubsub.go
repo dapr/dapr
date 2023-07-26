@@ -95,7 +95,7 @@ type pubsub struct {
 	grpc           *grpc.Manager
 	operatorClient operatorv1.OperatorClient
 
-	lock sync.Mutex
+	lock sync.RWMutex
 
 	topicCancels map[string]context.CancelFunc
 }
