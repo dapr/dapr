@@ -206,10 +206,10 @@ var endpointGroupStateV1 = &endpoints.EndpointGroup{
 }
 
 func appendStateSpanAttributes(r *nethttp.Request, m map[string]string) {
-	m[diagConsts.DBSystemSpanAttributeKey] = "state"
-	m[diagConsts.DBConnectionStringSpanAttributeKey] = "state"
+	m[diagConsts.DBSystemSpanAttributeKey] = diagConsts.StateBuildingBlockType
+	m[diagConsts.DBConnectionStringSpanAttributeKey] = diagConsts.StateBuildingBlockType
 	m[diagConsts.DBStatementSpanAttributeKey] = r.Method + " " + r.URL.Path
-	m[diagConsts.DBNameSpanAttributeKey] = chi.URLParam(r, "storeName")
+	m[diagConsts.DBNameSpanAttributeKey] = chi.URLParam(r, storeNameParam)
 }
 
 func (a *api) constructStateEndpoints() []endpoints.Endpoint {
@@ -321,10 +321,10 @@ func (a *api) constructPubSubEndpoints() []endpoints.Endpoint {
 }
 
 func appendBindingsSpanAttributes(r *nethttp.Request, m map[string]string) {
-	m[diagConsts.DBSystemSpanAttributeKey] = "bindings"
-	m[diagConsts.DBConnectionStringSpanAttributeKey] = "bindings"
+	m[diagConsts.DBSystemSpanAttributeKey] = diagConsts.BindingBuildingBlockType
+	m[diagConsts.DBConnectionStringSpanAttributeKey] = diagConsts.BindingBuildingBlockType
 	m[diagConsts.DBStatementSpanAttributeKey] = r.Method + " " + r.URL.Path
-	m[diagConsts.DBNameSpanAttributeKey] = chi.URLParam(r, "name")
+	m[diagConsts.DBNameSpanAttributeKey] = chi.URLParam(r, nameParam)
 }
 
 func (a *api) constructBindingsEndpoints() []endpoints.Endpoint {
@@ -361,8 +361,8 @@ var endpointGroupActorV1Misc = &endpoints.EndpointGroup{
 
 func appendActorStateSpanAttributesFn(r *nethttp.Request, m map[string]string) {
 	m[diagConsts.DaprAPIActorTypeID] = chi.URLParam(r, actorTypeParam) + "." + chi.URLParam(r, actorIDParam)
-	m[diagConsts.DBSystemSpanAttributeKey] = "state"
-	m[diagConsts.DBConnectionStringSpanAttributeKey] = "state"
+	m[diagConsts.DBSystemSpanAttributeKey] = diagConsts.StateBuildingBlockType
+	m[diagConsts.DBConnectionStringSpanAttributeKey] = diagConsts.StateBuildingBlockType
 	m[diagConsts.DBStatementSpanAttributeKey] = r.Method + " " + r.URL.Path
 	m[diagConsts.DBNameSpanAttributeKey] = "actor"
 }

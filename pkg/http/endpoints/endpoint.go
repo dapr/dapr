@@ -19,7 +19,6 @@ import (
 
 	"github.com/valyala/fasthttp"
 
-	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/utils/nethttpadaptor"
 )
 
@@ -60,19 +59,15 @@ func (endpoint Endpoint) GetHandler() http.HandlerFunc {
 }
 
 // IsAllowed returns true if the endpoint is allowed given the API allowlist/denylist.
-func (endpoint Endpoint) IsAllowed(allowedAPIs []config.APIAccessRule, deniedAPIs []config.APIAccessRule) bool {
+func (endpoint Endpoint) IsAllowed(allowedAPIs map[string]struct{}, deniedAPIs map[string]struct{}) bool {
 	// If the endpoint is always allowed, return true
 	if endpoint.Settings.AlwaysAllowed {
 		return true
 	}
 
 	// First, check the denylist
-	if len(deniedAPIs) > 0 {
-		for _, rule := range deniedAPIs {
-			if endpointMatchesAPIAccessRule(endpoint, rule) {
-				return false
-			}
-		}
+	if len(deniedAPIs) > 0 && endpointMatchesAPIAccessRule(endpoint, deniedAPIs) {
+		return false
 	}
 
 	// Now check the allowlist if present
@@ -80,15 +75,27 @@ func (endpoint Endpoint) IsAllowed(allowedAPIs []config.APIAccessRule, deniedAPI
 		return true
 	}
 
-	for _, rule := range allowedAPIs {
-		if endpointMatchesAPIAccessRule(endpoint, rule) {
+	return endpointMatchesAPIAccessRule(endpoint, allowedAPIs)
+}
+
+func endpointMatchesAPIAccessRule(endpoint Endpoint, rules map[string]struct{}) (ok bool) {
+	var key string
+
+	// First, check using the "new method", where we use the endpoint's group configuration
+	if endpoint.Group != nil {
+		key = string(endpoint.Group.Version) + "/" + string(endpoint.Group.Name)
+		_, ok = rules[key]
+		if ok {
+			return true
+		}
+	}
+
+	// Try with the "legacy" method, where we matched the path
+	for k := range rules {
+		if strings.HasPrefix(endpoint.Version+"/"+endpoint.Route, k) {
 			return true
 		}
 	}
 
 	return false
-}
-
-func endpointMatchesAPIAccessRule(endpoint Endpoint, rule config.APIAccessRule) bool {
-	return endpoint.Version == rule.Version && strings.HasPrefix(endpoint.Route, rule.Name)
 }

@@ -32,7 +32,7 @@ type EndpointGroupName string
 const (
 	EndpointGroupServiceInvocation EndpointGroupName = "invoke"
 	EndpointGroupState             EndpointGroupName = "state"
-	EndpointGroupPubsub            EndpointGroupName = "pubsub"
+	EndpointGroupPubsub            EndpointGroupName = "publish"
 	EndpointGroupBindings          EndpointGroupName = "bindings"
 	EndpointGroupSecrets           EndpointGroupName = "secrets"
 	EndpointGroupActors            EndpointGroupName = "actors"

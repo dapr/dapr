@@ -30,10 +30,10 @@ var endpointGroupSecretsV1 = &endpoints.EndpointGroup{
 }
 
 func appendSecretsSpanAttributes(r *http.Request, m map[string]string) {
-	m[diagConsts.DBSystemSpanAttributeKey] = "secrets"
-	m[diagConsts.DBConnectionStringSpanAttributeKey] = "secrets"
+	m[diagConsts.DBSystemSpanAttributeKey] = diagConsts.SecretBuildingBlockType
+	m[diagConsts.DBConnectionStringSpanAttributeKey] = diagConsts.SecretBuildingBlockType
 	m[diagConsts.DBStatementSpanAttributeKey] = r.Method + " " + r.URL.Path
-	m[diagConsts.DBNameSpanAttributeKey] = chi.URLParam(r, "secretStoreName")
+	m[diagConsts.DBNameSpanAttributeKey] = chi.URLParam(r, secretStoreNameParam)
 }
 
 func (a *api) constructSecretsEndpoints() []endpoints.Endpoint {
