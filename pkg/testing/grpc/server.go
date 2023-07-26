@@ -15,16 +15,25 @@ package grpc
 
 import (
 	"context"
+	"fmt"
 	"net"
+	"testing"
+	"time"
 
-	"github.com/dapr/kit/logger"
-
+	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
+
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/dapr/kit/logger"
 )
 
-const bufSize = 1024 * 1024
+const (
+	bufSize = 1024 * 1024
+
+	MaxGRPCServerUptime = 200 * time.Millisecond
+)
 
 // TestServerFor returns a grpcServer factory that bootstraps a grpcserver backed by a buf connection (in memory), and returns the given clientFactory instance to communicate with it.
 // it also provides cleanup function for close the grpcserver and client connection.
@@ -86,4 +95,20 @@ func TestServerWithDialer[TServer any](logger logger.Logger, registersvc func(*g
 				lis.Close()
 			}, nil
 	}
+}
+
+func StartTestAppCallbackGRPCServer(t *testing.T, port int, mockServer runtimev1pb.AppCallbackServer) *grpc.Server {
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	assert.NoError(t, err)
+	grpcServer := grpc.NewServer()
+	go func() {
+		runtimev1pb.RegisterAppCallbackServer(grpcServer, mockServer)
+		if err := grpcServer.Serve(lis); err != nil {
+			panic(err)
+		}
+	}()
+	// wait until server starts
+	time.Sleep(MaxGRPCServerUptime)
+
+	return grpcServer
 }

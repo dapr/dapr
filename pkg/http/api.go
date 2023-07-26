@@ -73,18 +73,20 @@ type API interface {
 }
 
 type api struct {
-	universal             *universalapi.UniversalAPI
-	endpoints             []Endpoint
-	publicEndpoints       []Endpoint
-	directMessaging       messaging.DirectMessaging
-	appChannel            channel.AppChannel
-	resiliency            resiliency.Provider
-	pubsubAdapter         runtimePubsub.Adapter
-	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
-	readyStatus           bool
-	outboundReadyStatus   bool
-	tracingSpec           config.TracingSpec
-	maxRequestBodySize    int64 // In bytes
+	universal               *universalapi.UniversalAPI
+	endpoints               []Endpoint
+	publicEndpoints         []Endpoint
+	directMessaging         messaging.DirectMessaging
+	appChannel              channel.AppChannel
+	httpEndpointsAppChannel channel.HTTPEndpointAppChannel
+	resiliency              resiliency.Provider
+	pubsubAdapter           runtimePubsub.Adapter
+	sendToOutputBindingFn   func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	readyStatus             bool
+	outboundReadyStatus     bool
+	tracingSpec             config.TracingSpec
+	maxRequestBodySize      int64 // In bytes
+	compStore               *compstore.ComponentStore
 }
 
 const (
@@ -125,7 +127,7 @@ type APIOpts struct {
 	CompStore                   *compstore.ComponentStore
 	PubsubAdapter               runtimePubsub.Adapter
 	Actors                      actors.Actors
-	SendToOutputBindingFn       func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	SendToOutputBindingFn       func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	TracingSpec                 config.TracingSpec
 	Shutdown                    func()
 	GetComponentsCapabilitiesFn func() map[string][]string
@@ -137,13 +139,15 @@ type APIOpts struct {
 // NewAPI returns a new API.
 func NewAPI(opts APIOpts) API {
 	api := &api{
-		appChannel:            opts.AppChannel,
-		directMessaging:       opts.DirectMessaging,
-		resiliency:            opts.Resiliency,
-		pubsubAdapter:         opts.PubsubAdapter,
-		sendToOutputBindingFn: opts.SendToOutputBindingFn,
-		tracingSpec:           opts.TracingSpec,
-		maxRequestBodySize:    opts.MaxRequestBodySize,
+		appChannel:              opts.AppChannel,
+		httpEndpointsAppChannel: opts.HTTPEndpointsAppChannel,
+		directMessaging:         opts.DirectMessaging,
+		resiliency:              opts.Resiliency,
+		pubsubAdapter:           opts.PubsubAdapter,
+		sendToOutputBindingFn:   opts.SendToOutputBindingFn,
+		tracingSpec:             opts.TracingSpec,
+		maxRequestBodySize:      opts.MaxRequestBodySize,
+		compStore:               opts.CompStore,
 		universal: &universalapi.UniversalAPI{
 			AppID:                      opts.AppID,
 			Logger:                     log,
@@ -422,7 +426,7 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	start := time.Now()
-	resp, err := a.sendToOutputBindingFn(name, &bindings.InvokeRequest{
+	resp, err := a.sendToOutputBindingFn(reqCtx, name, &bindings.InvokeRequest{
 		Metadata:  req.Metadata,
 		Data:      b,
 		Operation: bindings.OperationKind(req.Operation),
@@ -1757,7 +1761,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	start := time.Now()
-	err := a.pubsubAdapter.Publish(&req)
+	err := a.pubsubAdapter.Publish(reqCtx, &req)
 	elapsed := diag.ElapsedSince(start)
 
 	diag.DefaultComponentMonitoring.PubsubEgressEvent(context.Background(), pubsubName, topic, err == nil, elapsed)
@@ -1918,7 +1922,7 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	start := time.Now()
-	res, err := a.pubsubAdapter.BulkPublish(&req)
+	res, err := a.pubsubAdapter.BulkPublish(reqCtx, &req)
 	elapsed := diag.ElapsedSince(start)
 
 	// BulkPublishResponse contains all failed entries from the request.
@@ -1987,8 +1991,8 @@ func (a *api) validateAndGetPubsubAndTopic(reqCtx *fasthttp.RequestCtx) (pubsub.
 		return nil, "", "", nethttp.StatusNotFound, &msg
 	}
 
-	thepubsub := a.pubsubAdapter.GetPubSub(pubsubName)
-	if thepubsub == nil {
+	thepubsub, ok := a.compStore.GetPubSub(pubsubName)
+	if !ok {
 		msg := NewErrorResponse("ERR_PUBSUB_NOT_FOUND", fmt.Sprintf(messages.ErrPubsubNotFound, pubsubName))
 
 		return nil, "", "", nethttp.StatusNotFound, &msg
@@ -2000,7 +2004,7 @@ func (a *api) validateAndGetPubsubAndTopic(reqCtx *fasthttp.RequestCtx) (pubsub.
 
 		return nil, "", "", nethttp.StatusNotFound, &msg
 	}
-	return thepubsub, pubsubName, topic, nethttp.StatusOK, nil
+	return thepubsub.Component, pubsubName, topic, nethttp.StatusOK, nil
 }
 
 // GetStatusCodeFromMetadata extracts the http status code from the metadata if it exists.
