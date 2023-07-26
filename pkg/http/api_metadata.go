@@ -59,7 +59,7 @@ func (a *api) constructMetadataEndpoints() []endpoints.Endpoint {
 func (a *api) onGetMetadata() http.HandlerFunc {
 	return UniversalHTTPHandler(
 		a.universal.GetMetadata,
-		UniversalHTTPHandlerOpts[*emptypb.Empty, *runtimev1pb.GetMetadataResponse]{
+		UniversalHTTPHandlerOpts[*runtimev1pb.GetMetadataRequest, *runtimev1pb.GetMetadataResponse]{
 			OutModifier: func(out *runtimev1pb.GetMetadataResponse) (any, error) {
 				// In the protos, the property subscriptions[*].rules is serialized as subscriptions[*].rules.rules
 				// To maintain backwards-compatibility, we need to copy into a custom struct and marshal that instead

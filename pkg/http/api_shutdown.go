@@ -19,6 +19,7 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/dapr/dapr/pkg/http/endpoints"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
 func (a *api) constructShutdownEndpoints() []endpoints.Endpoint {
@@ -34,7 +35,7 @@ func (a *api) constructShutdownEndpoints() []endpoints.Endpoint {
 			},
 			Handler: UniversalHTTPHandler(
 				a.universal.Shutdown,
-				UniversalHTTPHandlerOpts[*emptypb.Empty, *emptypb.Empty]{
+				UniversalHTTPHandlerOpts[*runtimev1pb.ShutdownRequest, *emptypb.Empty]{
 					OutModifier: func(out *emptypb.Empty) (any, error) {
 						// Nullify the response so status code is 204
 						return nil, nil
