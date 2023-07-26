@@ -77,7 +77,10 @@ type APISpec struct {
 
 // WasmSpec describes the security profile for all Dapr Wasm components.
 type WasmSpec struct {
-	StrictSandbox bool `json:"strictSandbox,omitempty"`
+	// Force enabling strict sandbox mode for all WASM components.
+	// When this is enabled, WASM components always run in strict mode regardless of their configuration.
+	// Strict mode enhances security of the WASM sandbox by limiting access to certain capabilities such as real-time clocks and random number generators.
+	StrictSandbox bool `json:"strictSandbox"`
 }
 
 // APIAccessRule describes an access rule for allowing or denying a Dapr API.

@@ -192,6 +192,7 @@ func (c *Channels) buildHTTPPipelineForSpec(spec *config.PipelineSpec, targetPip
 			continue
 		}
 
+		c.meta.AddWasmStrictSandbox(&comp)
 		md := contribmiddle.Metadata{Base: c.meta.ToBaseMetadata(comp)}
 		handler, err := c.registry.Create(handlerSpec.Type, handlerSpec.Version, md, handlerSpec.LogName())
 		if err != nil {

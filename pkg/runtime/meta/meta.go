@@ -30,24 +30,27 @@ import (
 const WasmStrictSandboxMetadataKey = "strictSandbox"
 
 type Options struct {
-	ID        string
-	PodName   string
-	Namespace string
-	Mode      modes.DaprMode
+	ID            string
+	PodName       string
+	Namespace     string
+	StrictSandbox *bool
+	Mode          modes.DaprMode
 }
 
 type Meta struct {
-	id        string
-	podName   string
-	namespace string
-	mode      modes.DaprMode
+	id            string
+	podName       string
+	namespace     string
+	strictSandbox *bool
+	mode          modes.DaprMode
 }
 
 func New(options Options) *Meta {
 	return &Meta{
-		podName:   options.PodName,
-		namespace: options.Namespace,
-		id:        options.ID,
+		podName:       options.PodName,
+		namespace:     options.Namespace,
+		strictSandbox: options.StrictSandbox,
+		id:            options.ID,
 	}
 }
 
@@ -101,10 +104,24 @@ func ContainsNamespace(items []common.NameValuePair) bool {
 }
 
 // AddWasmStrictSandbox adds wasm strict sandbox configuration to metadata.
-func AddWasmStrictSandbox(comp *compapi.Component, enable bool) {
-	sandbox := &common.NameValuePair{
+func (m *Meta) AddWasmStrictSandbox(comp *compapi.Component) {
+	// If the global strict sandbox is not set, do nothing.
+	if m.strictSandbox == nil {
+		return
+	}
+
+	// If the metadata already contains the strict sandbox key, update the value to global strict sandbox config.
+	for _, c := range comp.Spec.Metadata {
+		if strings.EqualFold(c.Name, WasmStrictSandboxMetadataKey) {
+			c.SetValue([]byte(strconv.FormatBool(*m.strictSandbox)))
+			return
+		}
+	}
+
+	// If the metadata does not contain the strict sandbox key, add it.
+	sandbox := common.NameValuePair{
 		Name: WasmStrictSandboxMetadataKey,
 	}
-	sandbox.SetValue([]byte(strconv.FormatBool(enable)))
-	comp.Spec.Metadata = append(comp.Spec.Metadata, *sandbox)
+	sandbox.SetValue([]byte(strconv.FormatBool(*m.strictSandbox)))
+	comp.Spec.Metadata = append(comp.Spec.Metadata, sandbox)
 }

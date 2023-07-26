@@ -73,6 +73,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 
@@ -163,11 +164,16 @@ func newDaprRuntime(ctx context.Context,
 	resiliencyProvider resiliency.Provider,
 ) (*DaprRuntime, error) {
 	compStore := compstore.New()
+	wasmStrictSandbox := (*bool)(nil)
+	if globalConfig.Spec.WasmSpec != nil {
+		wasmStrictSandbox = ptr.Of(globalConfig.Spec.WasmSpec.StrictSandbox)
+	}
 	meta := meta.New(meta.Options{
-		ID:        runtimeConfig.id,
-		PodName:   getPodName(),
-		Namespace: getNamespace(),
-		Mode:      runtimeConfig.mode,
+		ID:            runtimeConfig.id,
+		PodName:       getPodName(),
+		Namespace:     getNamespace(),
+		StrictSandbox: wasmStrictSandbox,
+		Mode:          runtimeConfig.mode,
 	})
 
 	operatorClient, err := getOperatorClient(ctx, runtimeConfig)
@@ -1270,7 +1276,7 @@ func (a *DaprRuntime) processComponentAndDependents(ctx context.Context, comp co
 
 	if compCategory == components.CategoryBindings && comp.Spec.Type == string(components.CategoryBindings)+".wasm" {
 		// Add the wasm strict sandbox config to the wasm binding component metadata
-		meta.AddWasmStrictSandbox(&comp, a.globalConfig.Spec.WasmSpec.StrictSandbox)
+		a.meta.AddWasmStrictSandbox(&comp)
 	}
 
 	go func() {

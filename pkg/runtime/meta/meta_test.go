@@ -23,6 +23,7 @@ import (
 	"github.com/dapr/dapr/pkg/apis/common"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/modes"
+	"github.com/dapr/kit/ptr"
 )
 
 func TestMetadataItemsToPropertiesConversion(t *testing.T) {
@@ -130,7 +131,7 @@ func TestMetadataContainsNamespace(t *testing.T) {
 
 func TestMetadataOverrideWasmStrictSandbox(t *testing.T) {
 	t.Run("original set to false override to true", func(t *testing.T) {
-		meta := New(Options{Mode: modes.StandaloneMode})
+		meta := New(Options{Mode: modes.StandaloneMode, StrictSandbox: ptr.Of(true)})
 		// component with WasmStrictSandbox set to false
 		items := []common.NameValuePair{
 			{
@@ -147,7 +148,32 @@ func TestMetadataOverrideWasmStrictSandbox(t *testing.T) {
 		}
 
 		// override WasmStrictSandbox to true
-		AddWasmStrictSandbox(&com, true)
+		meta.AddWasmStrictSandbox(&com)
+
+		// check that WasmStrictSandbox is set to true
+		base := meta.ToBaseMetadata(com)
+		assert.Equal(t, "true", base.Properties[WasmStrictSandboxMetadataKey])
+	})
+
+	t.Run("global strict sandbox config not set", func(t *testing.T) {
+		meta := New(Options{Mode: modes.StandaloneMode})
+		// component with WasmStrictSandbox set to false
+		items := []common.NameValuePair{
+			{
+				Name: WasmStrictSandboxMetadataKey,
+				Value: common.DynamicValue{
+					JSON: v1.JSON{Raw: []byte(`true`)},
+				},
+			},
+		}
+		com := compapi.Component{
+			Spec: compapi.ComponentSpec{
+				Metadata: items,
+			},
+		}
+
+		// set global strictSandbox config
+		meta.AddWasmStrictSandbox(&com)
 
 		// check that WasmStrictSandbox is set to true
 		base := meta.ToBaseMetadata(com)

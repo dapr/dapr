@@ -14,6 +14,7 @@ limitations under the License.
 package runtime
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -87,10 +88,10 @@ func Test_toInternal(t *testing.T) {
 
 func TestStandaloneWasmStrictSandbox(t *testing.T) {
 	c := defaultTestConfig()
-	c.ConfigPath = "../config/testdata/wasm_strict_sandbox.yaml"
+	c.Config = []string{"../config/testdata/wasm_strict_sandbox.yaml"}
 	c.Mode = "standalone"
 	c.EnableMTLS = false
-	cfg, err := FromConfig(&c)
+	cfg, err := FromConfig(context.Background(), &c)
 	assert.Nil(t, err)
 	assert.True(t, cfg.globalConfig.Spec.WasmSpec.StrictSandbox)
 }
