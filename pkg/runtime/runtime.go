@@ -1274,11 +1274,6 @@ func (a *DaprRuntime) processComponentAndDependents(ctx context.Context, comp co
 		timeout = defaultComponentInitTimeout
 	}
 
-	if compCategory == components.CategoryBindings && comp.Spec.Type == string(components.CategoryBindings)+".wasm" {
-		// Add the wasm strict sandbox config to the wasm binding component metadata
-		a.meta.AddWasmStrictSandbox(&comp)
-	}
-
 	go func() {
 		ch <- a.processor.Init(ctx, comp)
 	}()

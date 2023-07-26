@@ -22,6 +22,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/apis/common"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/kit/ptr"
 )
@@ -178,5 +179,39 @@ func TestMetadataOverrideWasmStrictSandbox(t *testing.T) {
 		// check that WasmStrictSandbox is set to true
 		base := meta.ToBaseMetadata(com)
 		assert.Equal(t, "true", base.Properties[WasmStrictSandboxMetadataKey])
+	})
+
+	t.Run("auto set strict sandbox to wasm components", func(t *testing.T) {
+		// register test wasm component
+		components.RegisterWasmComponentType(components.CategoryMiddleware, "test")
+		meta := New(Options{Mode: modes.StandaloneMode, StrictSandbox: ptr.Of(true)})
+		// component with WasmStrictSandbox set to false
+		items := []common.NameValuePair{
+			{
+				Name: WasmStrictSandboxMetadataKey,
+				Value: common.DynamicValue{
+					JSON: v1.JSON{Raw: []byte(`false`)},
+				},
+			},
+		}
+		com := compapi.Component{
+			Spec: compapi.ComponentSpec{
+				Type:     "middleware.test",
+				Metadata: items,
+			},
+		}
+
+		// component that is not registered as a wasm component
+		noneWasmComp := compapi.Component{
+			Spec: compapi.ComponentSpec{
+				Type:     "middleware.none",
+				Metadata: []common.NameValuePair{},
+			},
+		}
+
+		wasm := meta.ToBaseMetadata(com)
+		noneWasm := meta.ToBaseMetadata(noneWasmComp)
+		assert.Equal(t, "true", wasm.Properties[WasmStrictSandboxMetadataKey])
+		assert.Equal(t, "", noneWasm.Properties[WasmStrictSandboxMetadataKey])
 	})
 }

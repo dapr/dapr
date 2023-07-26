@@ -24,6 +24,7 @@ import (
 	"github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/dapr/pkg/apis/common"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/modes"
 )
 
@@ -55,6 +56,11 @@ func New(options Options) *Meta {
 }
 
 func (m *Meta) ToBaseMetadata(comp compapi.Component) metadata.Base {
+	// Add global wasm strict sandbox config to the wasm component metadata
+	if components.IsWasmComponentType(comp.Spec.Type) {
+		m.AddWasmStrictSandbox(&comp)
+	}
+
 	return metadata.Base{
 		Properties: m.convertItemsToProps(comp.Spec.Metadata),
 		Name:       comp.Name,
@@ -111,9 +117,9 @@ func (m *Meta) AddWasmStrictSandbox(comp *compapi.Component) {
 	}
 
 	// If the metadata already contains the strict sandbox key, update the value to global strict sandbox config.
-	for _, c := range comp.Spec.Metadata {
+	for i, c := range comp.Spec.Metadata {
 		if strings.EqualFold(c.Name, WasmStrictSandboxMetadataKey) {
-			c.SetValue([]byte(strconv.FormatBool(*m.strictSandbox)))
+			comp.Spec.Metadata[i].SetValue([]byte(strconv.FormatBool(*m.strictSandbox)))
 			return
 		}
 	}
