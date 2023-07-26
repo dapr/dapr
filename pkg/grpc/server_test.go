@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"os"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -13,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	grpcGo "google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	grpcMetadata "google.golang.org/grpc/metadata"
 
 	"github.com/dapr/dapr/pkg/config"
@@ -139,11 +142,11 @@ func TestClose(t *testing.T) {
 	})
 }
 
-func Test_server_getGRPCAPILoggingMiddlewares(t *testing.T) {
+func TestGrpcAPILoggingMiddlewares(t *testing.T) {
 	logDest := &bytes.Buffer{}
 	infoLog := logger.NewLogger("test-api-logging")
 	infoLog.EnableJSONOutput(true)
-	infoLog.SetOutput(logDest)
+	infoLog.SetOutput(io.MultiWriter(logDest, os.Stderr))
 
 	s := &server{
 		infoLogger: infoLog,
@@ -173,19 +176,34 @@ func Test_server_getGRPCAPILoggingMiddlewares(t *testing.T) {
 				return logInterceptor(ctx, req, info, handler)
 			})
 
-			logData := map[string]string{}
+			logData := map[string]any{}
 			err := dec.Decode(&logData)
 			require.NoError(t, err)
 
 			assert.Equal(t, "test-api-logging", logData["scope"])
 			assert.Equal(t, "gRPC API Called", logData["msg"])
+
 			assert.Equal(t, "/dapr.proto.runtime.v1.Dapr/GetState", logData["method"])
+
 			if userAgent != "" {
 				assert.Equal(t, userAgent, logData["useragent"])
 			} else {
 				_, found := logData["useragent"]
 				assert.False(t, found)
 			}
+
+			timeStr, ok := logData["time"].(string)
+			assert.True(t, ok)
+			tt, err := time.Parse(time.RFC3339Nano, timeStr)
+			assert.NoError(t, err)
+			assert.InDelta(t, time.Now().Unix(), tt.Unix(), 120)
+
+			// In our test the duration better be no more than 10ms!
+			dur, ok := logData["duration"].(float64)
+			assert.True(t, ok)
+			assert.Less(t, dur, 10.0)
+
+			assert.Equal(t, float64(codes.OK), logData["code"])
 		}
 	}
 

@@ -26,8 +26,10 @@ import (
 
 	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpcGo "google.golang.org/grpc"
+	grpcCodes "google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
+	grpcStatus "google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -344,27 +346,45 @@ func (s *server) getGRPCAPILoggingMiddlewares() (grpcGo.UnaryServerInterceptor, 
 	if s.infoLogger == nil {
 		return nil, nil
 	}
+
 	return func(ctx context.Context, req any, info *grpcGo.UnaryServerInfo, handler grpcGo.UnaryHandler) (any, error) {
+			// Invoke the handler
+			start := time.Now()
+			res, err := handler(ctx, req)
+
+			// Print the API logs
 			if info != nil {
-				s.printAPILog(ctx, info.FullMethod)
+				s.printAPILog(ctx, info.FullMethod, time.Since(start), grpcStatus.Code(err))
 			}
-			return handler(ctx, req)
+
+			// Return the response
+			return res, err
 		},
 		func(srv any, stream grpcGo.ServerStream, info *grpcGo.StreamServerInfo, handler grpcGo.StreamHandler) error {
+			// Invoke the handler
+			start := time.Now()
+			err := handler(srv, stream)
+
+			// Print the API logs
 			if info != nil {
-				s.printAPILog(stream.Context(), info.FullMethod)
+				s.printAPILog(stream.Context(), info.FullMethod, time.Since(start), grpcStatus.Code(err))
 			}
-			return handler(srv, stream)
+
+			// Return the response
+			return err
 		}
 }
 
-func (s *server) printAPILog(ctx context.Context, method string) {
-	fields := make(map[string]any, 2)
+func (s *server) printAPILog(ctx context.Context, method string, duration time.Duration, code grpcCodes.Code) {
+	fields := make(map[string]any, 4)
 	fields["method"] = method
 	if meta, ok := metadata.FromIncomingContext(ctx); ok {
 		if val, ok := meta["user-agent"]; ok && len(val) > 0 {
 			fields["useragent"] = val[0]
 		}
 	}
+	// Report duration in milliseconds, with 3 decimals
+	fields["duration"] = float64(duration.Microseconds()) / 1000
+	fields["code"] = int32(code)
 	s.infoLogger.WithFields(fields).Info("gRPC API Called")
 }

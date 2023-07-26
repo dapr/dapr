@@ -328,10 +328,10 @@ func TestAPILogging(t *testing.T) {
 					// In our test the duration better be no more than 10ms!
 					dur, ok := logData["duration"].(float64)
 					assert.True(t, ok)
-					assert.Greater(t, dur, 0.0)
 					assert.Less(t, dur, 10.0)
 
-					assert.Equal(t, logData["size"], float64(len(body)))
+					assert.Equal(t, float64(len(body)), logData["size"])
+					assert.Equal(t, float64(http.StatusOK), logData["code"])
 
 					if userAgent != "" {
 						assert.Equal(t, userAgent, logData["useragent"])
