@@ -76,8 +76,8 @@ func main() {
 		log.Fatal(err)
 	}
 
-	log.Infof("starting Dapr Runtime -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
-	log.Infof("log level set to: %s", opts.Logger.OutputLevel)
+	log.Infof("Starting Dapr Runtime -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
+	log.Infof("Log level set to: %s", opts.Logger.OutputLevel)
 
 	secretstoresLoader.DefaultRegistry.Logger = logContrib
 	stateLoader.DefaultRegistry.Logger = logContrib
@@ -102,7 +102,7 @@ func main() {
 		WithHTTPMiddlewares(httpMiddlewareLoader.DefaultRegistry).
 		WithWorkflows(workflowsLoader.DefaultRegistry)
 
-	rt, err := runtime.FromConfig(&runtime.Config{
+	rt, err := runtime.FromConfig(context.TODO(), &runtime.Config{
 		AppID:                        opts.AppID,
 		PlacementServiceHostAddr:     opts.PlacementServiceHostAddr,
 		AllowedOrigins:               opts.AllowedOrigins,
@@ -133,7 +133,7 @@ func main() {
 		AppHealthThreshold:           opts.AppHealthThreshold,
 		AppChannelAddress:            opts.AppChannelAddress,
 		EnableAPILogging:             opts.EnableAPILogging,
-		ConfigPath:                   opts.ConfigPath,
+		Config:                       opts.Config,
 		Metrics:                      opts.Metrics,
 		AppSSL:                       opts.AppSSL,
 		ComponentsPath:               opts.ComponentsPath,

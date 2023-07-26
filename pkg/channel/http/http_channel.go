@@ -59,7 +59,7 @@ type Channel struct {
 	baseAddress           string
 	ch                    chan struct{}
 	compStore             *compstore.ComponentStore
-	tracingSpec           config.TracingSpec
+	tracingSpec           *config.TracingSpec
 	appHeaderToken        string
 	maxResponseBodySizeMB int
 	appHealthCheckPath    string
@@ -74,8 +74,12 @@ type ChannelConfiguration struct {
 	Endpoint             string
 	MaxConcurrency       int
 	Pipeline             httpMiddleware.Pipeline
-	TracingSpec          config.TracingSpec
+	TracingSpec          *config.TracingSpec
 	MaxRequestBodySizeMB int
+	TLSClientCert        string
+	TLSClientKey         string
+	TLSRootCA            string
+	TLSRenegotiation     string
 }
 
 // CreateHTTPChannel creates an HTTP AppChannel.

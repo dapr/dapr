@@ -17,6 +17,7 @@ package v1
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -344,7 +345,7 @@ func TestRequestProto(t *testing.T) {
 		ir, err := InternalInvokeRequest(&pb)
 		assert.NoError(t, err)
 		defer ir.Close()
-		ir.data = io.NopCloser(strings.NewReader("test"))
+		ir.data = newReaderCloser(strings.NewReader("test"))
 		req2 := ir.Proto()
 
 		assert.Equal(t, "application/json", req2.GetMessage().ContentType)
@@ -391,7 +392,7 @@ func TestRequestProtoWithData(t *testing.T) {
 		ir, err := InternalInvokeRequest(&pb)
 		assert.NoError(t, err)
 		defer ir.Close()
-		ir.data = io.NopCloser(strings.NewReader("test"))
+		ir.data = newReaderCloser(strings.NewReader("test"))
 		req2, err := ir.ProtoWithData()
 		assert.NoError(t, err)
 
@@ -499,7 +500,7 @@ func TestRequestReplayable(t *testing.T) {
 	const message = "Nel mezzo del cammin di nostra vita mi ritrovai per una selva oscura, che' la diritta via era smarrita."
 	newReplayable := func() *InvokeMethodRequest {
 		return NewInvokeMethodRequest("test_method").
-			WithRawDataString(message).
+			WithRawData(newReaderCloser(strings.NewReader(message))).
 			WithReplay(true)
 	}
 
@@ -519,7 +520,7 @@ func TestRequestReplayable(t *testing.T) {
 			buf := make([]byte, 9)
 			n, err := io.ReadFull(req.data, buf)
 			assert.Equal(t, 0, n)
-			assert.ErrorIs(t, err, io.EOF)
+			assert.Truef(t, errors.Is(err, io.EOF) || errors.Is(err, http.ErrBodyReadAfterClose), "unexpected error: %v", err)
 		})
 
 		t.Run("replay buffer is full", func(t *testing.T) {
@@ -551,7 +552,7 @@ func TestRequestReplayable(t *testing.T) {
 			buf := make([]byte, 9)
 			n, err := io.ReadFull(req.data, buf)
 			assert.Equal(t, 0, n)
-			assert.ErrorIs(t, err, io.EOF)
+			assert.Truef(t, errors.Is(err, io.EOF) || errors.Is(err, http.ErrBodyReadAfterClose), "unexpected error: %v", err)
 		})
 
 		t.Run("replay buffer is full", func(t *testing.T) {
@@ -652,7 +653,7 @@ func TestRequestReplayable(t *testing.T) {
 			buf := make([]byte, 9)
 			n, err := io.ReadFull(req.data, buf)
 			assert.Equal(t, 0, n)
-			assert.ErrorIs(t, err, io.EOF)
+			assert.Truef(t, errors.Is(err, io.EOF) || errors.Is(err, http.ErrBodyReadAfterClose), "unexpected error: %v", err)
 		})
 
 		t.Run("replay buffer is full", func(t *testing.T) {

@@ -239,7 +239,7 @@ func (s *server) getMiddlewareOptions() []grpcGo.ServerOption {
 		intrStream = append(intrStream, diag.GRPCTraceStreamServerInterceptor(s.config.AppID, s.tracingSpec))
 	}
 
-	if s.metricSpec.Enabled {
+	if s.metricSpec.GetEnabled() {
 		s.logger.Info("Enabled gRPC metrics middleware")
 		intr = append(intr, diag.DefaultGRPCMonitoring.UnaryServerInterceptor())
 

@@ -18,7 +18,6 @@ package middleware_e2e
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"testing"
@@ -28,8 +27,6 @@ import (
 	"github.com/dapr/dapr/tests/runner"
 	"github.com/stretchr/testify/require"
 )
-
-const numHealthChecks = 60 // Number of get calls before starting tests.
 
 type testResponse struct {
 	Input  string `json:"input"`
@@ -88,29 +85,13 @@ func TestSimpleMiddleware(t *testing.T) {
 	appMiddlewareURL := getExternalURL(t, "app-channel-middleware")
 	noMiddlewareURL := getExternalURL(t, "no-middleware")
 
-	// This initial probe makes the test wait a little bit longer when needed,
-	// making this test less flaky due to delays in the deployment.
-	errCh := make(chan error, 3)
-	go func() {
-		_, err := utils.HTTPGetNTimes(middlewareURL, numHealthChecks)
-		errCh <- err
-	}()
-	go func() {
-		_, err := utils.HTTPGetNTimes(noMiddlewareURL, numHealthChecks)
-		errCh <- err
-	}()
-	go func() {
-		_, err := utils.HTTPGetNTimes(appMiddlewareURL, numHealthChecks)
-		errCh <- err
-	}()
-	errs := make([]error, 3)
-	for i := 0; i < 3; i++ {
-		errs[i] = <-errCh
-	}
-	require.NoError(t, errors.Join(errs...), "Health checks failed")
+	// Makes the test wait for the apps and load balancers to be ready
+	err := utils.HealthCheckApps(middlewareURL, noMiddlewareURL, appMiddlewareURL)
+	require.NoError(t, err, "Health checks failed")
 
-	t.Logf("middlewareURL is '%s'\n", middlewareURL)
-	t.Logf("noMiddlewareURL is '%s'\n", noMiddlewareURL)
+	t.Logf("middlewareURL is '%s'", middlewareURL)
+	t.Logf("appMiddlewareURL is '%s'", appMiddlewareURL)
+	t.Logf("noMiddlewareURL is '%s'", noMiddlewareURL)
 
 	t.Run("test_basicMiddleware", func(t *testing.T) {
 		resp, status, err := utils.HTTPPostWithStatus(fmt.Sprintf("http://%s/test/logCall/%s", middlewareURL, "middlewareapp"), []byte{})

@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 )
 
@@ -39,7 +40,8 @@ func TestExtractComponentCategory(t *testing.T) {
 	}
 
 	p := New(Options{
-		Registry: registry.New(registry.NewOptions()),
+		Registry:     registry.New(registry.NewOptions()),
+		GlobalConfig: new(config.Configuration),
 	})
 
 	for _, tt := range compCategoryTests {

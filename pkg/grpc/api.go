@@ -80,9 +80,10 @@ type api struct {
 	appChannel            channel.AppChannel
 	resiliency            resiliency.Provider
 	pubsubAdapter         runtimePubsub.Adapter
-	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	sendToOutputBindingFn func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	tracingSpec           config.TracingSpec
 	accessControlList     *config.AccessControlList
+	compStore             *compstore.ComponentStore
 }
 
 // APIOpts contains options for NewAPI.
@@ -94,7 +95,7 @@ type APIOpts struct {
 	PubsubAdapter               runtimePubsub.Adapter
 	DirectMessaging             messaging.DirectMessaging
 	Actors                      actors.Actors
-	SendToOutputBindingFn       func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	SendToOutputBindingFn       func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	TracingSpec                 config.TracingSpec
 	AccessControlList           *config.AccessControlList
 	Shutdown                    func()
@@ -124,6 +125,7 @@ func NewAPI(opts APIOpts) API {
 		sendToOutputBindingFn: opts.SendToOutputBindingFn,
 		tracingSpec:           opts.TracingSpec,
 		accessControlList:     opts.AccessControlList,
+		compStore:             opts.CompStore,
 	}
 }
 
@@ -138,8 +140,8 @@ func (a *api) validateAndGetPubsubAndTopic(pubsubName, topic string, reqMeta map
 		return nil, "", "", false, status.Error(codes.InvalidArgument, messages.ErrPubsubEmpty)
 	}
 
-	thepubsub := a.pubsubAdapter.GetPubSub(pubsubName)
-	if thepubsub == nil {
+	thepubsub, ok := a.compStore.GetPubSub(pubsubName)
+	if !ok {
 		return nil, "", "", false, status.Errorf(codes.InvalidArgument, messages.ErrPubsubNotFound, pubsubName)
 	}
 
@@ -152,7 +154,7 @@ func (a *api) validateAndGetPubsubAndTopic(pubsubName, topic string, reqMeta map
 		return nil, "", "", false, messages.ErrPubSubMetadataDeserialize.WithFormat(metaErr)
 	}
 
-	return thepubsub, pubsubName, topic, rawPayload, nil
+	return thepubsub.Component, pubsubName, topic, rawPayload, nil
 }
 
 func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*emptypb.Empty, error) {
@@ -210,7 +212,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	}
 
 	start := time.Now()
-	err := a.pubsubAdapter.Publish(&req)
+	err := a.pubsubAdapter.Publish(ctx, &req)
 	elapsed := diag.ElapsedSince(start)
 
 	diag.DefaultComponentMonitoring.PubsubEgressEvent(context.Background(), pubsubName, topic, err == nil, elapsed)
@@ -249,7 +251,7 @@ var (
 // Deprecated: Use proxy mode service invocation instead.
 func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error) {
 	if a.directMessaging == nil {
-		return nil, status.Errorf(codes.Internal, messages.ErrDirectInvokeNotReady)
+		return nil, messages.ErrDirectInvokeNotReady
 	}
 
 	if invokeServiceDeprecationNoticeShown.CompareAndSwap(false, true) {
@@ -285,7 +287,7 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 			}
 		}
 		if rErr != nil {
-			return rResp, status.Errorf(codes.Internal, messages.ErrDirectInvoke, in.Id, rErr)
+			return rResp, messages.ErrDirectInvoke.WithFormat(in.Id, rErr)
 		}
 
 		rResp.headers = invokev1.InternalMetadataToGrpcMetadata(ctx, imr.Headers(), true)
@@ -422,7 +424,7 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 	start := time.Now()
 	// err is only nil if all entries are successfully published.
 	// For partial success, err is not nil and res contains the failed entries.
-	res, err := a.pubsubAdapter.BulkPublish(&req)
+	res, err := a.pubsubAdapter.BulkPublish(ctx, &req)
 
 	elapsed := diag.ElapsedSince(start)
 	eventsPublished := int64(len(req.Entries))
@@ -485,7 +487,7 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 
 	r := &runtimev1pb.InvokeBindingResponse{}
 	start := time.Now()
-	resp, err := a.sendToOutputBindingFn(in.Name, req)
+	resp, err := a.sendToOutputBindingFn(ctx, in.Name, req)
 	elapsed := diag.ElapsedSince(start)
 
 	diag.DefaultComponentMonitoring.OutputBindingEvent(context.Background(), in.Name, in.Operation, err == nil, elapsed)
@@ -1017,6 +1019,10 @@ func (a *api) RegisterActorReminder(ctx context.Context, in *runtimev1pb.Registe
 		req.Data = j
 	}
 	err := a.UniversalAPI.Actors.CreateReminder(ctx, req)
+	if err != nil && errors.Is(err, actors.ErrReminderOpActorNotHosted) {
+		apiServerLogger.Debug(messages.ErrActorReminderOpActorNotHosted)
+		return nil, messages.ErrActorReminderOpActorNotHosted
+	}
 	return &emptypb.Empty{}, err
 }
 
@@ -1034,6 +1040,10 @@ func (a *api) UnregisterActorReminder(ctx context.Context, in *runtimev1pb.Unreg
 	}
 
 	err := a.UniversalAPI.Actors.DeleteReminder(ctx, req)
+	if err != nil && errors.Is(err, actors.ErrReminderOpActorNotHosted) {
+		apiServerLogger.Debug(messages.ErrActorReminderOpActorNotHosted)
+		return nil, messages.ErrActorReminderOpActorNotHosted
+	}
 	return &emptypb.Empty{}, err
 }
 
@@ -1052,6 +1062,10 @@ func (a *api) RenameActorReminder(ctx context.Context, in *runtimev1pb.RenameAct
 	}
 
 	err := a.UniversalAPI.Actors.RenameReminder(ctx, req)
+	if err != nil && errors.Is(err, actors.ErrReminderOpActorNotHosted) {
+		apiServerLogger.Debug(messages.ErrActorReminderOpActorNotHosted)
+		return nil, messages.ErrActorReminderOpActorNotHosted
+	}
 	return &emptypb.Empty{}, err
 }
 
