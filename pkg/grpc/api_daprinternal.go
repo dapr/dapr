@@ -25,6 +25,7 @@ import (
 	"github.com/dapr/dapr/pkg/acl"
 	"github.com/dapr/dapr/pkg/actors"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	"github.com/dapr/dapr/pkg/grpc/metadata"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messaging"
@@ -95,7 +96,7 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 
 	// Append the invoked method to the context's metadata so we can use it for tracing
 	if md, ok := metadata.FromIncomingContext(stream.Context()); ok {
-		md[diag.DaprCallLocalStreamMethodKey] = []string{chunk.Request.Message.Method}
+		md[diagConsts.DaprCallLocalStreamMethodKey] = []string{chunk.Request.Message.Method}
 	}
 
 	// Create the request object

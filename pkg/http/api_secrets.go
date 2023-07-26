@@ -18,7 +18,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	diag "github.com/dapr/dapr/pkg/diagnostics"
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	"github.com/dapr/dapr/pkg/http/endpoints"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
@@ -30,10 +30,10 @@ var endpointGroupSecretsV1 = &endpoints.EndpointGroup{
 }
 
 func appendSecretsSpanAttributes(r *http.Request, m map[string]string) {
-	m[diag.DBSystemSpanAttributeKey] = "secrets"
-	m[diag.DBConnectionStringSpanAttributeKey] = "secrets"
-	m[diag.DBStatementSpanAttributeKey] = r.Method + " " + r.URL.Path
-	m[diag.DBNameSpanAttributeKey] = chi.URLParam(r, "secretStoreName")
+	m[diagConsts.DBSystemSpanAttributeKey] = "secrets"
+	m[diagConsts.DBConnectionStringSpanAttributeKey] = "secrets"
+	m[diagConsts.DBStatementSpanAttributeKey] = r.Method + " " + r.URL.Path
+	m[diagConsts.DBNameSpanAttributeKey] = chi.URLParam(r, "secretStoreName")
 }
 
 func (a *api) constructSecretsEndpoints() []endpoints.Endpoint {

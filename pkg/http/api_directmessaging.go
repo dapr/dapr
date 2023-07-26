@@ -28,7 +28,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	diag "github.com/dapr/dapr/pkg/diagnostics"
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	"github.com/dapr/dapr/pkg/http/endpoints"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -49,9 +49,9 @@ func appendDirectMessagingSpanAttributes(r *http.Request, m map[string]string) {
 	if endpointData != nil && endpointData.SpanData != nil {
 		spanData, _ := endpointData.SpanData.(*directMessagingSpanData)
 		if spanData != nil {
-			m[diag.GrpcServiceSpanAttributeKey] = "ServiceInvocation"
-			m[diag.NetPeerNameSpanAttributeKey] = spanData.AppID
-			m[diag.DaprAPISpanNameInternal] = "CallLocal/" + spanData.AppID + "/" + spanData.Method
+			m[diagConsts.GrpcServiceSpanAttributeKey] = "ServiceInvocation"
+			m[diagConsts.NetPeerNameSpanAttributeKey] = spanData.AppID
+			m[diagConsts.DaprAPISpanNameInternal] = "CallLocal/" + spanData.AppID + "/" + spanData.Method
 		}
 	}
 }

@@ -42,6 +42,7 @@ import (
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/grpc/universalapi"
@@ -205,10 +206,10 @@ var endpointGroupStateV1 = &endpoints.EndpointGroup{
 }
 
 func appendStateSpanAttributes(r *nethttp.Request, m map[string]string) {
-	m[diag.DBSystemSpanAttributeKey] = "state"
-	m[diag.DBConnectionStringSpanAttributeKey] = "state"
-	m[diag.DBStatementSpanAttributeKey] = r.Method + " " + r.URL.Path
-	m[diag.DBNameSpanAttributeKey] = chi.URLParam(r, "storeName")
+	m[diagConsts.DBSystemSpanAttributeKey] = "state"
+	m[diagConsts.DBConnectionStringSpanAttributeKey] = "state"
+	m[diagConsts.DBStatementSpanAttributeKey] = r.Method + " " + r.URL.Path
+	m[diagConsts.DBNameSpanAttributeKey] = chi.URLParam(r, "storeName")
 }
 
 func (a *api) constructStateEndpoints() []endpoints.Endpoint {
@@ -281,9 +282,9 @@ func (a *api) constructStateEndpoints() []endpoints.Endpoint {
 }
 
 func appendPubSubSpanAttributes(r *nethttp.Request, m map[string]string) {
-	m[diag.MessagingSystemSpanAttributeKey] = "pubsub"
-	m[diag.MessagingDestinationSpanAttributeKey] = chi.URLParam(r, "topic")
-	m[diag.MessagingDestinationKindSpanAttributeKey] = diag.MessagingDestinationTopicKind
+	m[diagConsts.MessagingSystemSpanAttributeKey] = "pubsub"
+	m[diagConsts.MessagingDestinationSpanAttributeKey] = chi.URLParam(r, "topic")
+	m[diagConsts.MessagingDestinationKindSpanAttributeKey] = diagConsts.MessagingDestinationTopicKind
 }
 
 func (a *api) constructPubSubEndpoints() []endpoints.Endpoint {
@@ -320,10 +321,10 @@ func (a *api) constructPubSubEndpoints() []endpoints.Endpoint {
 }
 
 func appendBindingsSpanAttributes(r *nethttp.Request, m map[string]string) {
-	m[diag.DBSystemSpanAttributeKey] = "bindings"
-	m[diag.DBConnectionStringSpanAttributeKey] = "bindings"
-	m[diag.DBStatementSpanAttributeKey] = r.Method + " " + r.URL.Path
-	m[diag.DBNameSpanAttributeKey] = chi.URLParam(r, "name")
+	m[diagConsts.DBSystemSpanAttributeKey] = "bindings"
+	m[diagConsts.DBConnectionStringSpanAttributeKey] = "bindings"
+	m[diagConsts.DBStatementSpanAttributeKey] = r.Method + " " + r.URL.Path
+	m[diagConsts.DBNameSpanAttributeKey] = chi.URLParam(r, "name")
 }
 
 func (a *api) constructBindingsEndpoints() []endpoints.Endpoint {
@@ -359,20 +360,20 @@ var endpointGroupActorV1Misc = &endpoints.EndpointGroup{
 }
 
 func appendActorStateSpanAttributesFn(r *nethttp.Request, m map[string]string) {
-	m[diag.DaprAPIActorTypeID] = chi.URLParam(r, actorTypeParam) + "." + chi.URLParam(r, actorIDParam)
-	m[diag.DBSystemSpanAttributeKey] = "state"
-	m[diag.DBConnectionStringSpanAttributeKey] = "state"
-	m[diag.DBStatementSpanAttributeKey] = r.Method + " " + r.URL.Path
-	m[diag.DBNameSpanAttributeKey] = "actor"
+	m[diagConsts.DaprAPIActorTypeID] = chi.URLParam(r, actorTypeParam) + "." + chi.URLParam(r, actorIDParam)
+	m[diagConsts.DBSystemSpanAttributeKey] = "state"
+	m[diagConsts.DBConnectionStringSpanAttributeKey] = "state"
+	m[diagConsts.DBStatementSpanAttributeKey] = r.Method + " " + r.URL.Path
+	m[diagConsts.DBNameSpanAttributeKey] = "actor"
 }
 
 func appendActorInvocationSpanAttributesFn(r *nethttp.Request, m map[string]string) {
 	actorType := chi.URLParam(r, actorTypeParam)
 	actorTypeID := actorType + "." + chi.URLParam(r, actorIDParam)
-	m[diag.DaprAPIActorTypeID] = actorTypeID
-	m[diag.GrpcServiceSpanAttributeKey] = "ServiceInvocation"
-	m[diag.NetPeerNameSpanAttributeKey] = actorTypeID
-	m[diag.DaprAPISpanNameInternal] = "CallActor/" + actorType + "/" + chi.URLParam(r, "method")
+	m[diagConsts.DaprAPIActorTypeID] = actorTypeID
+	m[diagConsts.GrpcServiceSpanAttributeKey] = "ServiceInvocation"
+	m[diagConsts.NetPeerNameSpanAttributeKey] = actorTypeID
+	m[diagConsts.DaprAPISpanNameInternal] = "CallActor/" + actorType + "/" + chi.URLParam(r, "method")
 }
 
 func (a *api) constructActorEndpoints() []endpoints.Endpoint {

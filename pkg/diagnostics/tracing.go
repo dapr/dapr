@@ -21,59 +21,20 @@ import (
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	semconv "go.opentelemetry.io/otel/semconv/v1.10.0"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/dapr/dapr/pkg/config"
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
 const (
 	daprHeaderPrefix    = "dapr-"
 	daprHeaderBinSuffix = "-bin"
-
-	// DaprInternalSpanAttrPrefix is the internal span attribution prefix.
-	// Middleware will not populate it if the span key starts with this prefix.
-	DaprInternalSpanAttrPrefix = "__dapr."
-	// DaprAPISpanNameInternal is the internal attribution, but not populated to span attribution.
-	DaprAPISpanNameInternal = DaprInternalSpanAttrPrefix + "spanname"
-
-	// Span attribute keys
-	// Reference trace semantics https://github.com/open-telemetry/opentelemetry-specification/tree/master/specification/trace/semantic_conventions
-	DBSystemSpanAttributeKey                 = string(semconv.DBSystemKey)
-	DBNameSpanAttributeKey                   = string(semconv.DBNameKey)
-	DBStatementSpanAttributeKey              = string(semconv.DBStatementKey)
-	DBConnectionStringSpanAttributeKey       = string(semconv.DBConnectionStringKey)
-	MessagingSystemSpanAttributeKey          = string(semconv.MessagingSystemKey)
-	MessagingDestinationSpanAttributeKey     = string(semconv.MessagingDestinationKey)
-	MessagingDestinationKindSpanAttributeKey = string(semconv.MessagingDestinationKindKey)
-	GrpcServiceSpanAttributeKey              = string(semconv.RPCServiceKey)
-	NetPeerNameSpanAttributeKey              = string(semconv.NetPeerNameKey)
-
-	DaprAPISpanAttributeKey           = "dapr.api"
-	DaprAPIStatusCodeSpanAttributeKey = "dapr.status_code"
-	DaprAPIProtocolSpanAttributeKey   = "dapr.protocol"
-	DaprAPIInvokeMethod               = "dapr.invoke_method"
-	DaprAPIActorTypeID                = "dapr.actor"
-
-	DaprAPIHTTPSpanAttrValue = "http"
-	DaprAPIGRPCSpanAttrValue = "grpc"
-
-	stateBuildingBlockType   = "state"
-	secretBuildingBlockType  = "secrets"
-	bindingBuildingBlockType = "bindings"
-	pubsubBuildingBlockType  = "pubsub"
-
-	daprGRPCServiceInvocationService = "ServiceInvocation"
-	daprGRPCDaprService              = "Dapr"
-
-	tracerName = "dapr-diagnostics"
+	tracerName          = "dapr-diagnostics"
 )
 
 var tracer trace.Tracer = otel.Tracer(tracerName)
-
-// MessagingDestinationTopicKind is effectively const, but isn't a const from upstream.
-var MessagingDestinationTopicKind = semconv.MessagingDestinationKindTopic.Value.AsString()
 
 // SpanContextToW3CString returns the SpanContext string representation.
 func SpanContextToW3CString(sc trace.SpanContext) string {
@@ -174,7 +135,7 @@ func AddAttributesToSpan(span trace.Span, attributes map[string]string) {
 	var attrs []attribute.KeyValue
 	for k, v := range attributes {
 		// Skip if key is for internal use.
-		if !strings.HasPrefix(k, DaprInternalSpanAttrPrefix) && v != "" {
+		if !strings.HasPrefix(k, diagConsts.DaprInternalSpanAttrPrefix) && v != "" {
 			attrs = append(attrs, attribute.String(k, v))
 		}
 	}
@@ -187,19 +148,19 @@ func AddAttributesToSpan(span trace.Span, attributes map[string]string) {
 // ConstructInputBindingSpanAttributes creates span attributes for InputBindings.
 func ConstructInputBindingSpanAttributes(bindingName, url string) map[string]string {
 	return map[string]string{
-		DBNameSpanAttributeKey:             bindingName,
-		GrpcServiceSpanAttributeKey:        daprGRPCDaprService,
-		DBSystemSpanAttributeKey:           bindingBuildingBlockType,
-		DBConnectionStringSpanAttributeKey: url,
+		diagConsts.DBNameSpanAttributeKey:             bindingName,
+		diagConsts.GrpcServiceSpanAttributeKey:        diagConsts.DaprGRPCDaprService,
+		diagConsts.DBSystemSpanAttributeKey:           diagConsts.BindingBuildingBlockType,
+		diagConsts.DBConnectionStringSpanAttributeKey: url,
 	}
 }
 
 // ConstructSubscriptionSpanAttributes creates span attributes for Pubsub subscription.
 func ConstructSubscriptionSpanAttributes(topic string) map[string]string {
 	return map[string]string{
-		MessagingSystemSpanAttributeKey:          pubsubBuildingBlockType,
-		MessagingDestinationSpanAttributeKey:     topic,
-		MessagingDestinationKindSpanAttributeKey: MessagingDestinationTopicKind,
+		diagConsts.MessagingSystemSpanAttributeKey:          diagConsts.PubsubBuildingBlockType,
+		diagConsts.MessagingDestinationSpanAttributeKey:     topic,
+		diagConsts.MessagingDestinationKindSpanAttributeKey: diagConsts.MessagingDestinationTopicKind,
 	}
 }
 

@@ -33,6 +33,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/dapr/dapr/pkg/config"
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/http/endpoints"
 	"github.com/dapr/dapr/utils/responsewriter"
@@ -156,16 +157,16 @@ func TestGetSpanAttributesMapFromHTTPContext(t *testing.T) {
 		{
 			"/v1.0/state/statestore/key",
 			func(r *http.Request, m map[string]string) {
-				m[DBSystemSpanAttributeKey] = "state"
-				m[DBNameSpanAttributeKey] = "statestore"
-				m[DBConnectionStringSpanAttributeKey] = "state"
+				m[diagConsts.DBSystemSpanAttributeKey] = "state"
+				m[diagConsts.DBNameSpanAttributeKey] = "statestore"
+				m[diagConsts.DBConnectionStringSpanAttributeKey] = "state"
 			},
 			map[string]string{
-				DaprAPIProtocolSpanAttributeKey:    "http",
-				DaprAPISpanAttributeKey:            "GET /v1.0/state/statestore/key",
-				DBSystemSpanAttributeKey:           "state",
-				DBNameSpanAttributeKey:             "statestore",
-				DBConnectionStringSpanAttributeKey: "state",
+				diagConsts.DaprAPIProtocolSpanAttributeKey:    "http",
+				diagConsts.DaprAPISpanAttributeKey:            "GET /v1.0/state/statestore/key",
+				diagConsts.DBSystemSpanAttributeKey:           "state",
+				diagConsts.DBNameSpanAttributeKey:             "statestore",
+				diagConsts.DBConnectionStringSpanAttributeKey: "state",
 			},
 		},
 	}

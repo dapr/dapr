@@ -26,6 +26,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/config"
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/grpc/metadata"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -40,10 +41,6 @@ const (
 	daprInvokeServiceMethod   = "/dapr.proto.runtime.v1.Dapr/InvokeService"
 	daprCallLocalStreamMethod = "/dapr.proto.internals.v1.ServiceInvocation/CallLocalStream"
 	daprWorkflowPrefix        = "/TaskHubSidecarService"
-
-	// Keys used in the context's metadata for streaming calls
-	// Note: these keys must always be all-lowercase
-	DaprCallLocalStreamMethodKey = "__dapr_calllocalstream_method"
 )
 
 // GRPCTraceUnaryServerInterceptor sets the trace context or starts the trace client span based on request.
@@ -85,7 +82,7 @@ func GRPCTraceUnaryServerInterceptor(appID string, spec config.TracingSpec) grpc
 			AddAttributesToSpan(span, prefixedMetadata)
 
 			// Correct the span name based on API.
-			if sname, ok := reqSpanAttr[DaprAPISpanNameInternal]; ok {
+			if sname, ok := reqSpanAttr[diagConsts.DaprAPISpanNameInternal]; ok {
 				span.SetName(sname)
 			}
 		}
@@ -164,7 +161,7 @@ func GRPCTraceStreamServerInterceptor(appID string, spec config.TracingSpec) grp
 			prefixedMetadata = userDefinedMetadata(ctx)
 			if isProxied {
 				reqSpanAttr = map[string]string{
-					DaprAPISpanNameInternal: info.FullMethod,
+					diagConsts.DaprAPISpanNameInternal: info.FullMethod,
 				}
 			} else {
 				reqSpanAttr = spanAttributesMapFromGRPC(appID, ss.Context(), info.FullMethod)
@@ -177,7 +174,7 @@ func GRPCTraceStreamServerInterceptor(appID string, spec config.TracingSpec) grp
 			AddAttributesToSpan(span, prefixedMetadata)
 
 			// Correct the span name based on API.
-			if sname, ok := reqSpanAttr[DaprAPISpanNameInternal]; ok {
+			if sname, ok := reqSpanAttr[diagConsts.DaprAPISpanNameInternal]; ok {
 				span.SetName(sname)
 			}
 		}
@@ -294,76 +291,76 @@ func spanAttributesMapFromGRPC(appID string, req any, rpcMethod string) map[stri
 		switch rpcMethod {
 		// Internal service invocation request (with streaming)
 		case daprCallLocalStreamMethod:
-			m[GrpcServiceSpanAttributeKey] = daprGRPCServiceInvocationService
+			m[diagConsts.GrpcServiceSpanAttributeKey] = diagConsts.DaprGRPCServiceInvocationService
 			var method string
-			if len(md[DaprCallLocalStreamMethodKey]) > 0 {
-				method = md[DaprCallLocalStreamMethodKey][0]
+			if len(md[diagConsts.DaprCallLocalStreamMethodKey]) > 0 {
+				method = md[diagConsts.DaprCallLocalStreamMethodKey][0]
 			}
-			m[DaprAPISpanNameInternal] = "CallLocal/" + appID + "/" + method
-			m[DaprAPIInvokeMethod] = method
+			m[diagConsts.DaprAPISpanNameInternal] = "CallLocal/" + appID + "/" + method
+			m[diagConsts.DaprAPIInvokeMethod] = method
 		}
 
 	// Internal service invocation request
 	case *internalv1pb.InternalInvokeRequest:
-		m[GrpcServiceSpanAttributeKey] = daprGRPCServiceInvocationService
+		m[diagConsts.GrpcServiceSpanAttributeKey] = diagConsts.DaprGRPCServiceInvocationService
 
 		// Rename spanname
 		if s.GetActor() == nil {
-			m[DaprAPISpanNameInternal] = "CallLocal/" + appID + "/" + s.Message.Method
-			m[DaprAPIInvokeMethod] = s.Message.Method
+			m[diagConsts.DaprAPISpanNameInternal] = "CallLocal/" + appID + "/" + s.Message.Method
+			m[diagConsts.DaprAPIInvokeMethod] = s.Message.Method
 		} else {
-			m[DaprAPISpanNameInternal] = "CallActor/" + s.Actor.ActorType + "/" + s.Message.Method
-			m[DaprAPIActorTypeID] = s.Actor.ActorType + "." + s.Actor.ActorId
+			m[diagConsts.DaprAPISpanNameInternal] = "CallActor/" + s.Actor.ActorType + "/" + s.Message.Method
+			m[diagConsts.DaprAPIActorTypeID] = s.Actor.ActorType + "." + s.Actor.ActorId
 		}
 
 	// Dapr APIs
 	case *runtimev1pb.InvokeServiceRequest:
-		m[GrpcServiceSpanAttributeKey] = daprGRPCServiceInvocationService
-		m[NetPeerNameSpanAttributeKey] = s.Id
-		m[DaprAPISpanNameInternal] = "CallLocal/" + s.Id + "/" + s.Message.Method
+		m[diagConsts.GrpcServiceSpanAttributeKey] = diagConsts.DaprGRPCServiceInvocationService
+		m[diagConsts.NetPeerNameSpanAttributeKey] = s.Id
+		m[diagConsts.DaprAPISpanNameInternal] = "CallLocal/" + s.Id + "/" + s.Message.Method
 
 	case *runtimev1pb.PublishEventRequest:
-		m[GrpcServiceSpanAttributeKey] = daprGRPCDaprService
-		m[MessagingSystemSpanAttributeKey] = pubsubBuildingBlockType
-		m[MessagingDestinationSpanAttributeKey] = s.Topic
-		m[MessagingDestinationKindSpanAttributeKey] = MessagingDestinationTopicKind
+		m[diagConsts.GrpcServiceSpanAttributeKey] = diagConsts.DaprGRPCDaprService
+		m[diagConsts.MessagingSystemSpanAttributeKey] = diagConsts.PubsubBuildingBlockType
+		m[diagConsts.MessagingDestinationSpanAttributeKey] = s.Topic
+		m[diagConsts.MessagingDestinationKindSpanAttributeKey] = diagConsts.MessagingDestinationTopicKind
 
 	case *runtimev1pb.BulkPublishRequest:
-		m[GrpcServiceSpanAttributeKey] = daprGRPCDaprService
-		m[MessagingSystemSpanAttributeKey] = pubsubBuildingBlockType
-		m[MessagingDestinationSpanAttributeKey] = s.Topic
-		m[MessagingDestinationKindSpanAttributeKey] = MessagingDestinationTopicKind
+		m[diagConsts.GrpcServiceSpanAttributeKey] = diagConsts.DaprGRPCDaprService
+		m[diagConsts.MessagingSystemSpanAttributeKey] = diagConsts.PubsubBuildingBlockType
+		m[diagConsts.MessagingDestinationSpanAttributeKey] = s.Topic
+		m[diagConsts.MessagingDestinationKindSpanAttributeKey] = diagConsts.MessagingDestinationTopicKind
 
 	case *runtimev1pb.InvokeBindingRequest:
-		dbType = bindingBuildingBlockType
-		m[DBNameSpanAttributeKey] = s.Name
+		dbType = diagConsts.BindingBuildingBlockType
+		m[diagConsts.DBNameSpanAttributeKey] = s.Name
 
 	case *runtimev1pb.GetStateRequest:
-		dbType = stateBuildingBlockType
-		m[DBNameSpanAttributeKey] = s.StoreName
+		dbType = diagConsts.StateBuildingBlockType
+		m[diagConsts.DBNameSpanAttributeKey] = s.StoreName
 
 	case *runtimev1pb.SaveStateRequest:
-		dbType = stateBuildingBlockType
-		m[DBNameSpanAttributeKey] = s.StoreName
+		dbType = diagConsts.StateBuildingBlockType
+		m[diagConsts.DBNameSpanAttributeKey] = s.StoreName
 
 	case *runtimev1pb.DeleteStateRequest:
-		dbType = stateBuildingBlockType
-		m[DBNameSpanAttributeKey] = s.StoreName
+		dbType = diagConsts.StateBuildingBlockType
+		m[diagConsts.DBNameSpanAttributeKey] = s.StoreName
 
 	case *runtimev1pb.GetSecretRequest:
-		dbType = secretBuildingBlockType
-		m[DBNameSpanAttributeKey] = s.StoreName
+		dbType = diagConsts.SecretBuildingBlockType
+		m[diagConsts.DBNameSpanAttributeKey] = s.StoreName
 	}
 
-	if _, ok := m[DBNameSpanAttributeKey]; ok {
-		m[GrpcServiceSpanAttributeKey] = daprGRPCDaprService
-		m[DBSystemSpanAttributeKey] = dbType
-		m[DBStatementSpanAttributeKey] = rpcMethod
-		m[DBConnectionStringSpanAttributeKey] = dbType
+	if _, ok := m[diagConsts.DBNameSpanAttributeKey]; ok {
+		m[diagConsts.GrpcServiceSpanAttributeKey] = diagConsts.DaprGRPCDaprService
+		m[diagConsts.DBSystemSpanAttributeKey] = dbType
+		m[diagConsts.DBStatementSpanAttributeKey] = rpcMethod
+		m[diagConsts.DBConnectionStringSpanAttributeKey] = dbType
 	}
 
-	m[DaprAPIProtocolSpanAttributeKey] = DaprAPIGRPCSpanAttrValue
-	m[DaprAPISpanAttributeKey] = rpcMethod
+	m[diagConsts.DaprAPIProtocolSpanAttributeKey] = diagConsts.DaprAPIGRPCSpanAttrValue
+	m[diagConsts.DaprAPISpanAttributeKey] = rpcMethod
 
 	return m
 }

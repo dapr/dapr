@@ -23,6 +23,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/dapr/dapr/pkg/config"
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/http/endpoints"
 	"github.com/dapr/dapr/utils/responsewriter"
@@ -61,7 +62,7 @@ func HTTPTraceMiddleware(next http.Handler, appID string, spec config.TracingSpe
 				AddAttributesToSpan(span, spanAttr)
 
 				// Correct the span name based on API.
-				if sname, ok := spanAttr[DaprAPISpanNameInternal]; ok {
+				if sname, ok := spanAttr[diagConsts.DaprAPISpanNameInternal]; ok {
 					span.SetName(sname)
 				}
 			}
@@ -194,9 +195,9 @@ func spanAttributesMapFromHTTPContext(rw responsewriter.ResponseWriter, r *http.
 	}
 
 	// Populate dapr original api attributes.
-	m[DaprAPIProtocolSpanAttributeKey] = DaprAPIHTTPSpanAttrValue
-	m[DaprAPISpanAttributeKey] = r.Method + " " + r.URL.Path
-	m[DaprAPIStatusCodeSpanAttributeKey] = strconv.Itoa(rw.Status())
+	m[diagConsts.DaprAPIProtocolSpanAttributeKey] = diagConsts.DaprAPIHTTPSpanAttrValue
+	m[diagConsts.DaprAPISpanAttributeKey] = r.Method + " " + r.URL.Path
+	m[diagConsts.DaprAPIStatusCodeSpanAttributeKey] = strconv.Itoa(rw.Status())
 
 	return m
 }
