@@ -71,16 +71,13 @@ func GRPCTraceUnaryServerInterceptor(appID string, spec config.TracingSpec) grpc
 		ctx = trace.ContextWithRemoteSpanContext(ctx, sc)
 		ctx, span = tracer.Start(ctx, info.FullMethod, spanKind)
 
-		isSampled := span.SpanContext().IsSampled()
-		if isSampled {
+		resp, err := handler(ctx, req)
+
+		if span.SpanContext().IsSampled() {
 			// users can add dapr- prefix if they want to see the header values in span attributes.
 			prefixedMetadata = userDefinedMetadata(ctx)
 			reqSpanAttr = spanAttributesMapFromGRPC(appID, req, info.FullMethod)
-		}
 
-		resp, err := handler(ctx, req)
-
-		if isSampled {
 			// Populates dapr- prefixed header first
 			for key, value := range reqSpanAttr {
 				prefixedMetadata[key] = value
