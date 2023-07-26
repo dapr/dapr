@@ -137,7 +137,7 @@ func getKubernetesConfig(configName string) (SentryConfig, error) {
 
 func getSelfhostedConfig(configName string) (SentryConfig, error) {
 	defaultConfig := getDefaultConfig()
-	daprConfig, _, err := daprGlobalConfig.LoadStandaloneConfiguration(configName)
+	daprConfig, err := daprGlobalConfig.LoadStandaloneConfiguration(configName)
 	if err != nil {
 		return defaultConfig, err
 	}
@@ -149,8 +149,9 @@ func getSelfhostedConfig(configName string) (SentryConfig, error) {
 }
 
 func parseConfiguration(conf SentryConfig, daprConfig *daprGlobalConfig.Configuration) (SentryConfig, error) {
-	if daprConfig.Spec.MTLSSpec.WorkloadCertTTL != "" {
-		d, err := time.ParseDuration(daprConfig.Spec.MTLSSpec.WorkloadCertTTL)
+	mtlsSpec := daprConfig.GetMTLSSpec()
+	if mtlsSpec.WorkloadCertTTL != "" {
+		d, err := time.ParseDuration(mtlsSpec.WorkloadCertTTL)
 		if err != nil {
 			return conf, fmt.Errorf("error parsing WorkloadCertTTL duration: %w", err)
 		}
@@ -158,8 +159,8 @@ func parseConfiguration(conf SentryConfig, daprConfig *daprGlobalConfig.Configur
 		conf.WorkloadCertTTL = d
 	}
 
-	if daprConfig.Spec.MTLSSpec.AllowedClockSkew != "" {
-		d, err := time.ParseDuration(daprConfig.Spec.MTLSSpec.AllowedClockSkew)
+	if mtlsSpec.AllowedClockSkew != "" {
+		d, err := time.ParseDuration(mtlsSpec.AllowedClockSkew)
 		if err != nil {
 			return conf, fmt.Errorf("error parsing AllowedClockSkew duration: %w", err)
 		}

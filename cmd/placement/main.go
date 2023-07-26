@@ -35,17 +35,17 @@ import (
 var log = logger.NewLogger("dapr.placement")
 
 func main() {
-	log.Infof("Starting Dapr Placement Service -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
-
 	opts := options.New()
-
-	metricsExporter := metrics.NewExporterWithOptions(metrics.DefaultMetricNamespace, opts.Metrics)
 
 	// Apply options to all loggers.
 	if err := logger.ApplyOptionsToLoggers(&opts.Logger); err != nil {
 		log.Fatal(err)
 	}
+
+	log.Infof("Starting Dapr Placement Service -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
 	log.Infof("Log level set to: %s", opts.Logger.OutputLevel)
+
+	metricsExporter := metrics.NewExporterWithOptions(log, metrics.DefaultMetricNamespace, opts.Metrics)
 
 	// Initialize dapr metrics for placement.
 	err := metricsExporter.Init()
@@ -94,7 +94,11 @@ func main() {
 		},
 		apiServer.MonitorLeadership,
 		func(ctx context.Context) error {
-			healthzServer := health.NewServer(log)
+			var metadataOptions []health.RouterOptions
+			if opts.MetadataEnabled {
+				metadataOptions = append(metadataOptions, health.NewJSONDataRouterOptions[*placement.PlacementTables]("/placement/state", apiServer.GetPlacementTables))
+			}
+			healthzServer := health.NewServer(log, metadataOptions...)
 			healthzServer.Ready()
 			if healthzErr := healthzServer.Run(ctx, opts.HealthzPort); healthzErr != nil {
 				return fmt.Errorf("failed to start healthz server: %w", healthzErr)

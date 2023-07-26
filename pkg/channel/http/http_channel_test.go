@@ -353,7 +353,7 @@ func TestInvokeMethodHeaders(t *testing.T) {
 			baseAddress: server.URL,
 			client:      http.DefaultClient,
 			compStore:   compstore.New(),
-			tracingSpec: config.TracingSpec{
+			tracingSpec: &config.TracingSpec{
 				SamplingRate: "0",
 			},
 		}
@@ -381,7 +381,7 @@ func TestInvokeMethodHeaders(t *testing.T) {
 			baseAddress: server.URL,
 			client:      http.DefaultClient,
 			compStore:   compstore.New(),
-			tracingSpec: config.TracingSpec{
+			tracingSpec: &config.TracingSpec{
 				SamplingRate: "0",
 			},
 		}
@@ -415,7 +415,7 @@ func TestInvokeMethod(t *testing.T) {
 			baseAddress: server.URL,
 			client:      http.DefaultClient,
 			compStore:   compstore.New(),
-			tracingSpec: config.TracingSpec{
+			tracingSpec: &config.TracingSpec{
 				SamplingRate: "0",
 			},
 		}
@@ -439,7 +439,7 @@ func TestInvokeMethod(t *testing.T) {
 			baseAddress: server.URL,
 			client:      http.DefaultClient,
 			compStore:   compstore.New(),
-			tracingSpec: config.TracingSpec{
+			tracingSpec: &config.TracingSpec{
 				SamplingRate: "1",
 			},
 		}

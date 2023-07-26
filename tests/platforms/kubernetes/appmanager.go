@@ -43,7 +43,7 @@ const (
 	// PollInterval is how frequently e2e tests will poll for updates.
 	PollInterval = 1 * time.Second
 	// PollTimeout is how long e2e tests will wait for resource updates when polling.
-	PollTimeout = 10 * time.Minute
+	PollTimeout = 8 * time.Minute
 
 	// maxReplicas is the maximum replicas of replica sets.
 	maxReplicas = 10
@@ -249,7 +249,11 @@ func (m *AppManager) WaitUntilJobState(isState func(*batchv1.Job, error) bool) (
 	})
 
 	if waitErr != nil {
-		return nil, fmt.Errorf("job %q is not in desired state, received: %+v: %s", m.app.AppName, lastJob, waitErr)
+		// Try to get the logs from the containers that aren't starting, if we can get anything
+		// We ignore errors here
+		_ = m.StreamContainerLogs()
+
+		return nil, fmt.Errorf("job %q is not in desired state, received: %#v: %s", m.app.AppName, lastJob, waitErr)
 	}
 
 	return lastJob, nil
@@ -325,7 +329,11 @@ func (m *AppManager) WaitUntilDeploymentState(isState func(*appsv1.Deployment, e
 			log.Printf("Error list pod for deployment %s. Error was %s", m.app.AppName, err)
 		}
 
-		return nil, fmt.Errorf("deployment %q is not in desired state, received: %+v pod status: %+v error: %s", m.app.AppName, lastDeployment, podStatus, waitErr)
+		// Try to get the logs from the containers that aren't starting, if we can get anything
+		// We ignore errors here
+		_ = m.StreamContainerLogs()
+
+		return nil, fmt.Errorf("deployment %q is not in desired state, received: %#v pod status: %#v error: %s", m.app.AppName, lastDeployment, podStatus, waitErr)
 	}
 
 	return lastDeployment, nil
@@ -609,7 +617,7 @@ func (m *AppManager) WaitUntilServiceState(isState func(*apiv1.Service, error) b
 	})
 
 	if waitErr != nil {
-		return lastService, fmt.Errorf("service %q is not in desired state, received: %+v: %s", m.app.AppName, lastService, waitErr)
+		return lastService, fmt.Errorf("service %q is not in desired state, received: %#v: %s", m.app.AppName, lastService, waitErr)
 	}
 
 	return lastService, nil

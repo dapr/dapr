@@ -31,6 +31,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/anypb"
 
+	"github.com/dapr/dapr/pkg/channel"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -395,7 +396,6 @@ func (m *mockGRPCServerUnary) methods() []grpc.MethodDesc {
 
 type mockGRPCServerStreamI interface {
 	mockGRPCServerUnaryI
-
 	CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStreamServer) error //nolint:nosnakecase
 }
 
@@ -465,4 +465,28 @@ func (x *serviceInvocationCallLocalStreamServer) Recv() (*internalv1pb.InternalI
 		return nil, err
 	}
 	return m, nil
+}
+
+func TestInvokeRemoteUnaryForHTTPEndpoint(t *testing.T) {
+	t.Run("channel found", func(t *testing.T) {
+		d := directMessaging{
+			resourceHTTPEndpointChannels: map[string]channel.HTTPEndpointAppChannel{"abc": &mockChannel{}},
+		}
+
+		_, err := d.invokeRemoteUnaryForHTTPEndpoint(context.Background(), nil, "abc")
+		assert.NoError(t, err)
+	})
+
+	t.Run("channel not found", func(t *testing.T) {
+		d := directMessaging{}
+
+		_, err := d.invokeRemoteUnaryForHTTPEndpoint(context.Background(), nil, "abc")
+		assert.Error(t, err)
+	})
+}
+
+type mockChannel struct{}
+
+func (m *mockChannel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*invokev1.InvokeMethodResponse, error) {
+	return nil, nil
 }

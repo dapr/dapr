@@ -14,6 +14,7 @@ limitations under the License.
 package utils
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"runtime"
@@ -26,6 +27,9 @@ import (
 const (
 	// Environment variable for setting the target OS where tests are running on.
 	TargetOsEnvVar = "TARGET_OS"
+
+	// Max number of healthcheck calls before starting tests.
+	numHealthChecks = 60
 )
 
 // SimpleKeyValue can be used to simplify code, providing simple key-value pairs.
@@ -98,4 +102,30 @@ func IsTruthy(val string) bool {
 	default:
 		return false
 	}
+}
+
+// HealthCheckApps performs healthchecks for multiple apps, waiting for them to be ready.
+func HealthCheckApps(urls ...string) error {
+	count := len(urls)
+	if count == 0 {
+		return nil
+	}
+
+	// Run the checks in parallel
+	errCh := make(chan error, count)
+	for _, u := range urls {
+		go func(u string) {
+			_, err := HTTPGetNTimes(u, numHealthChecks)
+			errCh <- err
+		}(u)
+	}
+
+	// Collect all errors
+	errs := make([]error, count)
+	for i := 0; i < count; i++ {
+		errs[i] = <-errCh
+	}
+
+	// Will be nil if no error
+	return errors.Join(errs...)
 }

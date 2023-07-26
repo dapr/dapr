@@ -34,6 +34,8 @@ import (
 
 const numHealthChecks = 60 // Number of times to check for endpoint health per app.
 
+const testLabel = "state_get_http"
+
 var tr *runner.TestRunner
 
 func TestMain(m *testing.M) {
@@ -151,6 +153,19 @@ func TestStateGetGrpcPerformance(t *testing.T) {
 	t.Logf("baseline latency avg: %sms", fmt.Sprintf("%.2f", baselineLatency))
 	t.Logf("dapr latency avg: %sms", fmt.Sprintf("%.2f", daprLatency))
 	t.Logf("added latency avg: %sms", fmt.Sprintf("%.2f", avg))
+
+	daprMetrics := utils.DaprMetrics{
+		BaselineLatency:       baselineLatency,
+		DaprLatency:           daprLatency,
+		AddedLatency:          avg,
+		SidecarCPU:            sidecarUsage.CPUm,
+		AppCPU:                appUsage.CPUm,
+		SidecarMemory:         sidecarUsage.MemoryMb,
+		AppMemory:             appUsage.MemoryMb,
+		ApplicationThroughput: daprResult.ActualQPS,
+	}
+
+	utils.PushPrometheusMetrics(daprMetrics, testLabel,"inmemory")
 
 	summary.ForTest(t).
 		Service("tester").
