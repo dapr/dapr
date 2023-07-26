@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -30,7 +30,6 @@ import (
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/grpc/metadata"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
-	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
 const (
@@ -279,7 +278,6 @@ func spanAttributesMapFromGRPC(appID string, req any, rpcMethod string) map[stri
 	// Using an explicit capacity reduces the risk the map will need to be re-allocated multiple times.
 	m := make(map[string]string, 8)
 
-	var dbType string
 	switch s := req.(type) {
 	// Context from a server stream
 	// This is a special case that is used for streaming requests
@@ -314,49 +312,8 @@ func spanAttributesMapFromGRPC(appID string, req any, rpcMethod string) map[stri
 		}
 
 	// Dapr APIs
-	case *runtimev1pb.InvokeServiceRequest:
-		m[diagConsts.GrpcServiceSpanAttributeKey] = diagConsts.DaprGRPCServiceInvocationService
-		m[diagConsts.NetPeerNameSpanAttributeKey] = s.Id
-		m[diagConsts.DaprAPISpanNameInternal] = "CallLocal/" + s.Id + "/" + s.Message.Method
-
-	case *runtimev1pb.PublishEventRequest:
-		m[diagConsts.GrpcServiceSpanAttributeKey] = diagConsts.DaprGRPCDaprService
-		m[diagConsts.MessagingSystemSpanAttributeKey] = diagConsts.PubsubBuildingBlockType
-		m[diagConsts.MessagingDestinationSpanAttributeKey] = s.Topic
-		m[diagConsts.MessagingDestinationKindSpanAttributeKey] = diagConsts.MessagingDestinationTopicKind
-
-	case *runtimev1pb.BulkPublishRequest:
-		m[diagConsts.GrpcServiceSpanAttributeKey] = diagConsts.DaprGRPCDaprService
-		m[diagConsts.MessagingSystemSpanAttributeKey] = diagConsts.PubsubBuildingBlockType
-		m[diagConsts.MessagingDestinationSpanAttributeKey] = s.Topic
-		m[diagConsts.MessagingDestinationKindSpanAttributeKey] = diagConsts.MessagingDestinationTopicKind
-
-	case *runtimev1pb.InvokeBindingRequest:
-		dbType = diagConsts.BindingBuildingBlockType
-		m[diagConsts.DBNameSpanAttributeKey] = s.Name
-
-	case *runtimev1pb.GetStateRequest:
-		dbType = diagConsts.StateBuildingBlockType
-		m[diagConsts.DBNameSpanAttributeKey] = s.StoreName
-
-	case *runtimev1pb.SaveStateRequest:
-		dbType = diagConsts.StateBuildingBlockType
-		m[diagConsts.DBNameSpanAttributeKey] = s.StoreName
-
-	case *runtimev1pb.DeleteStateRequest:
-		dbType = diagConsts.StateBuildingBlockType
-		m[diagConsts.DBNameSpanAttributeKey] = s.StoreName
-
-	case *runtimev1pb.GetSecretRequest:
-		dbType = diagConsts.SecretBuildingBlockType
-		m[diagConsts.DBNameSpanAttributeKey] = s.StoreName
-	}
-
-	if _, ok := m[diagConsts.DBNameSpanAttributeKey]; ok {
-		m[diagConsts.GrpcServiceSpanAttributeKey] = diagConsts.DaprGRPCDaprService
-		m[diagConsts.DBSystemSpanAttributeKey] = dbType
-		m[diagConsts.DBStatementSpanAttributeKey] = rpcMethod
-		m[diagConsts.DBConnectionStringSpanAttributeKey] = dbType
+	case diagConsts.GrpcAppendSpanAttributesFn:
+		s.AppendSpanAttributes(rpcMethod, m)
 	}
 
 	m[diagConsts.DaprAPIProtocolSpanAttributeKey] = diagConsts.DaprAPIGRPCSpanAttrValue

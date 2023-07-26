@@ -60,3 +60,9 @@ const (
 
 // MessagingDestinationTopicKind is effectively const, but isn't a const from upstream.
 var MessagingDestinationTopicKind = semconv.MessagingDestinationKindTopic.Value.AsString()
+
+// GrpcAppendSpanAttributesFn is the interface that applies to gRPC requests that add span attributes.
+type GrpcAppendSpanAttributesFn interface {
+	// AppendSpanAttributes appends attributes to the map used for the span in tracing for the gRPC method.
+	AppendSpanAttributes(rpcMethod string, m map[string]string)
+}
