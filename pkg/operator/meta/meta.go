@@ -2,7 +2,7 @@ package meta
 
 import (
 	"github.com/dapr/dapr/pkg/injector/annotations"
-	"github.com/dapr/dapr/pkg/injector/sidecar"
+	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
 	"github.com/dapr/dapr/utils"
 )
 
@@ -13,7 +13,7 @@ func IsAnnotatedForDapr(a map[string]string) bool {
 
 // IsSidecarPresent whether the daprd sidecar is present, either because injector added it or because the user did.
 func IsSidecarPresent(labels map[string]string) bool {
-	if _, ok := labels[sidecar.SidecarInjectedLabel]; ok {
+	if _, ok := labels[injectorConsts.SidecarInjectedLabel]; ok {
 		return true
 	}
 	if _, ok := labels[WatchdogPatchedLabel]; ok {

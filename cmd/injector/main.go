@@ -22,8 +22,7 @@ import (
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/health"
-	"github.com/dapr/dapr/pkg/injector"
-	"github.com/dapr/dapr/pkg/injector/monitoring"
+	"github.com/dapr/dapr/pkg/injector/service"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/signals"
 	"github.com/dapr/dapr/utils"
@@ -36,7 +35,8 @@ func main() {
 	opts := options.New()
 
 	// Apply options to all loggers
-	if err := logger.ApplyOptionsToLoggers(&opts.Logger); err != nil {
+	err := logger.ApplyOptionsToLoggers(&opts.Logger)
+	if err != nil {
 		log.Fatal(err)
 	}
 
@@ -45,65 +45,71 @@ func main() {
 
 	metricsExporter := metrics.NewExporterWithOptions(log, metrics.DefaultMetricNamespace, opts.Metrics)
 
-	if err := utils.SetEnvVariables(map[string]string{
+	err = utils.SetEnvVariables(map[string]string{
 		utils.KubeConfigVar: opts.Kubeconfig,
-	}); err != nil {
-		log.Fatalf("error set env failed:  %s", err.Error())
+	})
+	if err != nil {
+		log.Fatalf("Error set env: %v", err)
 	}
 
 	// Initialize dapr metrics exporter
-	if err := metricsExporter.Init(); err != nil {
+	err = metricsExporter.Init()
+	if err != nil {
 		log.Fatal(err)
 	}
 
 	// Initialize injector service metrics
-	if err := monitoring.InitMetrics(); err != nil {
+	err = service.InitMetrics()
+	if err != nil {
 		log.Fatal(err)
 	}
 
 	ctx := signals.Context()
-	cfg, err := injector.GetConfig()
+	cfg, err := service.GetConfig()
 	if err != nil {
-		log.Fatalf("error getting config: %s", err)
+		log.Fatalf("Error getting config: %v", err)
 	}
 
 	kubeClient := utils.GetKubeClient()
 	conf := utils.GetConfig()
 	daprClient, err := scheme.NewForConfig(conf)
 	if err != nil {
-		log.Fatalf("error creating dapr client: %s", err)
+		log.Fatalf("Error creating Dapr client: %v", err)
 	}
-	uids, err := injector.AllowedControllersServiceAccountUID(ctx, cfg, kubeClient)
+	uids, err := service.AllowedControllersServiceAccountUID(ctx, cfg, kubeClient)
 	if err != nil {
-		log.Fatalf("failed to get authentication uids from services accounts: %s", err)
+		log.Fatalf("Failed to get authentication uids from services accounts: %s", err)
 	}
 
-	inj, err := injector.NewInjector(uids, cfg, daprClient, kubeClient)
+	inj, err := service.NewInjector(uids, cfg, daprClient, kubeClient)
 	if err != nil {
-		log.Fatalf("error creating injector: %s", err)
+		log.Fatalf("Error creating injector: %v", err)
 	}
 
 	healthzServer := health.NewServer(log)
 	mngr := concurrency.NewRunnerManager(
 		inj.Run,
 		func(ctx context.Context) error {
-			if err := inj.Ready(ctx); err != nil {
-				return err
+			readyErr := inj.Ready(ctx)
+			if readyErr != nil {
+				return readyErr
 			}
 			healthzServer.Ready()
 			<-ctx.Done()
 			return nil
 		},
 		func(ctx context.Context) error {
-			if err := healthzServer.Run(ctx, opts.HealthzPort); err != nil {
-				return fmt.Errorf("failed to start healthz server: %w", err)
+			healhtzErr := healthzServer.Run(ctx, opts.HealthzPort)
+			if healhtzErr != nil {
+				return fmt.Errorf("failed to start healthz server: %w", healhtzErr)
 			}
 			return nil
 		},
 	)
 
-	if err := mngr.Run(ctx); err != nil {
-		log.Fatalf("error running injector: %s", err)
+	err = mngr.Run(ctx)
+	if err != nil {
+		log.Fatalf("Error running injector: %v", err)
 	}
 
 	log.Infof("Dapr sidecar injector shut down gracefully")

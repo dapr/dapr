@@ -1,5 +1,5 @@
 /*
-Copyright 2022 The Dapr Authors
+Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package injector
+package service
 
 import (
 	"context"
@@ -19,13 +19,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"strings"
 	"time"
 
-	v1 "k8s.io/api/admission/v1"
+	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -33,11 +32,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
-	"github.com/dapr/dapr/pkg/injector/monitoring"
+	"github.com/dapr/dapr/pkg/injector/annotations"
 	"github.com/dapr/dapr/pkg/injector/namespacednamematcher"
-	"github.com/dapr/dapr/pkg/injector/patcher"
-	"github.com/dapr/dapr/pkg/injector/sidecar"
-	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 )
 
@@ -48,7 +44,7 @@ const (
 	serviceAccountUserInfoPrefix              = "system:serviceaccount:"
 )
 
-var log = logger.NewLogger("dapr.injector")
+var log = logger.NewLogger("dapr.injector.service")
 
 var AllowedServiceAccountInfos = []string{
 	"kube-system:replicaset-controller",
@@ -80,31 +76,37 @@ type injector struct {
 
 // errorToAdmissionResponse is a helper function to create an AdmissionResponse
 // with an embedded error.
-func errorToAdmissionResponse(err error) *v1.AdmissionResponse {
-	return &v1.AdmissionResponse{
+func errorToAdmissionResponse(err error) *admissionv1.AdmissionResponse {
+	return &admissionv1.AdmissionResponse{
 		Result: &metav1.Status{
 			Message: err.Error(),
 		},
 	}
 }
 
-func getAppIDFromRequest(req *v1.AdmissionRequest) string {
-	// default App ID
-	appID := ""
-
-	// if req is not given
+// getAppIDFromRequest returns the app ID for the pod, which is used for diagnostics purposes only
+func getAppIDFromRequest(req *admissionv1.AdmissionRequest) (appID string) {
 	if req == nil {
-		return appID
+		return ""
 	}
 
+	// Parse the request as a pod
 	var pod corev1.Pod
-	if err := json.Unmarshal(req.Object.Raw, &pod); err != nil {
+	err := json.Unmarshal(req.Object.Raw, &pod)
+	if err != nil {
 		log.Warnf("could not unmarshal raw object: %v", err)
-	} else {
-		appID = sidecar.GetAppID(pod.ObjectMeta)
+		return ""
 	}
 
-	return appID
+	// Search for an app-id in the annotations first
+	for k, v := range pod.GetObjectMeta().GetAnnotations() {
+		if k == annotations.KeyAppID {
+			return v
+		}
+	}
+
+	// Fallback to pod name
+	return pod.GetName()
 }
 
 // NewInjector returns a new Injector instance with the given config.
@@ -116,13 +118,13 @@ func NewInjector(authUIDs []string, config Config, daprClient scheme.Interface, 
 		deserializer: serializer.NewCodecFactory(
 			runtime.NewScheme(),
 		).UniversalDeserializer(),
-		//nolint:gosec
 		server: &http.Server{
 			Addr:    fmt.Sprintf(":%d", port),
 			Handler: mux,
 			TLSConfig: &tls.Config{
 				MinVersion: tls.VersionTLS12,
 			},
+			ReadHeaderTimeout: 10 * time.Second,
 		},
 		kubeClient: kubeClient,
 		daprClient: daprClient,
@@ -130,7 +132,7 @@ func NewInjector(authUIDs []string, config Config, daprClient scheme.Interface, 
 		ready:      make(chan struct{}),
 	}
 
-	matcher, err := createNamespaceNameMatcher(strings.TrimSpace(config.AllowedServiceAccountsPrefixNames))
+	matcher, err := createNamespaceNameMatcher(config.AllowedServiceAccountsPrefixNames)
 	if err != nil {
 		return nil, err
 	}
@@ -141,6 +143,7 @@ func NewInjector(authUIDs []string, config Config, daprClient scheme.Interface, 
 }
 
 func createNamespaceNameMatcher(allowedPrefix string) (matcher *namespacednamematcher.EqualPrefixNameNamespaceMatcher, err error) {
+	allowedPrefix = strings.TrimSpace(allowedPrefix)
 	if allowedPrefix != "" {
 		matcher, err = namespacednamematcher.CreateFromString(allowedPrefix)
 		if err != nil {
@@ -231,135 +234,6 @@ func (i *injector) Run(ctx context.Context) error {
 	case err = <-errCh:
 		return err
 	}
-}
-
-func (i *injector) handleRequest(w http.ResponseWriter, r *http.Request) {
-	monitoring.RecordSidecarInjectionRequestsCount()
-
-	var body []byte
-	var err error
-	if r.Body != nil {
-		defer r.Body.Close()
-		body, err = io.ReadAll(r.Body)
-		if err != nil {
-			body = nil
-		}
-	}
-	if len(body) == 0 {
-		log.Error("empty body")
-		http.Error(w, "empty body", http.StatusBadRequest)
-		return
-	}
-
-	contentType := r.Header.Get("Content-Type")
-	if contentType != runtime.ContentTypeJSON {
-		log.Errorf("Content-Type=%s, expect %s", contentType, runtime.ContentTypeJSON)
-		errStr := fmt.Sprintf("invalid Content-Type, expected `%s`", runtime.ContentTypeJSON)
-		http.Error(w, errStr, http.StatusUnsupportedMediaType)
-		return
-	}
-
-	var patchOps []patcher.PatchOperation
-	patchedSuccessfully := false
-
-	ar := v1.AdmissionReview{}
-	_, gvk, err := i.deserializer.Decode(body, nil, &ar)
-	if err != nil {
-		log.Errorf("Can't decode body: %v", err)
-	} else {
-		allowServiceAccountUser := i.allowServiceAccountUser(ar.Request.UserInfo.Username)
-
-		if !(allowServiceAccountUser || utils.Contains(i.authUIDs, ar.Request.UserInfo.UID) || utils.Contains(ar.Request.UserInfo.Groups, systemGroup)) {
-			log.Errorf("service account '%s' not on the list of allowed controller accounts", ar.Request.UserInfo.Username)
-		} else if ar.Request.Kind.Kind != "Pod" {
-			log.Errorf("invalid kind for review: %s", ar.Kind)
-		} else {
-			patchOps, err = i.getPodPatchOperations(r.Context(), &ar,
-				i.config.Namespace, i.config.SidecarImage, i.config.SidecarImagePullPolicy,
-				i.kubeClient, i.daprClient,
-			)
-			if err == nil {
-				patchedSuccessfully = true
-			}
-		}
-	}
-
-	diagAppID := getAppIDFromRequest(ar.Request)
-
-	var admissionResponse *v1.AdmissionResponse
-	if err != nil {
-		admissionResponse = errorToAdmissionResponse(err)
-		log.Errorf("Sidecar injector failed to inject for app '%s'. Error: %s", diagAppID, err)
-		monitoring.RecordFailedSidecarInjectionCount(diagAppID, "patch")
-	} else if len(patchOps) == 0 {
-		admissionResponse = &v1.AdmissionResponse{
-			Allowed: true,
-		}
-	} else {
-		var patchBytes []byte
-		patchBytes, err = json.Marshal(patchOps)
-		if err != nil {
-			admissionResponse = errorToAdmissionResponse(err)
-		} else {
-			admissionResponse = &v1.AdmissionResponse{
-				Allowed: true,
-				Patch:   patchBytes,
-				PatchType: func() *v1.PatchType {
-					pt := v1.PatchTypeJSONPatch
-					return &pt
-				}(),
-			}
-		}
-	}
-
-	admissionReview := v1.AdmissionReview{
-		Response: admissionResponse,
-	}
-	if admissionResponse != nil && ar.Request != nil {
-		admissionReview.Response.UID = ar.Request.UID
-		admissionReview.SetGroupVersionKind(*gvk)
-	}
-
-	// log.Debug("ready to write response ...")
-
-	respBytes, err := json.Marshal(admissionReview)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		log.Errorf("Sidecar injector failed to inject for app '%s'. Can't serialize response: %s", diagAppID, err)
-		monitoring.RecordFailedSidecarInjectionCount(diagAppID, "response")
-		return
-	}
-	w.Header().Set("Content-Type", runtime.ContentTypeJSON)
-	_, err = w.Write(respBytes)
-	if err != nil {
-		log.Errorf("Sidecar injector failed to inject for app '%s'. Failed to write response: %v", diagAppID, err)
-		monitoring.RecordFailedSidecarInjectionCount(diagAppID, "write_response")
-		return
-	}
-
-	if patchedSuccessfully {
-		log.Infof("Sidecar injector succeeded injection for app '%s'", diagAppID)
-		monitoring.RecordSuccessfulSidecarInjectionCount(diagAppID)
-	} else {
-		log.Errorf("Admission succeeded, but pod was not patched. No sidecar injected for '%s'", diagAppID)
-		monitoring.RecordFailedSidecarInjectionCount(diagAppID, "pod_patch")
-	}
-}
-
-func (i *injector) allowServiceAccountUser(reviewRequestUserInfo string) (allowedUID bool) {
-	if i.namespaceNameMatcher == nil {
-		return false
-	}
-
-	namespacedName, prefixFound := strings.CutPrefix(reviewRequestUserInfo, serviceAccountUserInfoPrefix)
-	if !prefixFound {
-		return false
-	}
-	namespacedNameParts := strings.Split(namespacedName, ":")
-	if len(namespacedNameParts) <= 1 {
-		return false
-	}
-	return i.namespaceNameMatcher.MatchesNamespacedName(namespacedNameParts[0], namespacedNameParts[1])
 }
 
 func (i *injector) Ready(ctx context.Context) error {
