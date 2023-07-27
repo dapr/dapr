@@ -90,7 +90,3 @@ func (b *Binding) Invoke(ctx context.Context, req *bindings.InvokeRequest) (*bin
 func (b *Binding) Close() error {
 	return b.CloseErr
 }
-
-func (b *Binding) GetComponentMetadata() map[string]string {
-	return b.Metadata
-}

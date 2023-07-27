@@ -2153,6 +2153,16 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 		}
 	}
 
+	if maxMulti, ok := store.(state.TransactionalStoreMultiMaxSize); ok {
+		max := maxMulti.MultiMaxSize()
+		if max > 0 && len(operations) > max {
+			err := messages.ErrStateTooManyTransactionalOp.WithFormat(len(operations), max)
+			log.Debug(err)
+			universalFastHTTPErrorResponder(reqCtx, err)
+			return
+		}
+	}
+
 	if encryption.EncryptedStateStore(storeName) {
 		for i, op := range operations {
 			switch req := op.(type) {
