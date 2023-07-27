@@ -14,17 +14,23 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
-	"github.com/gorilla/mux"
+	chi "github.com/go-chi/chi/v5"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/types/known/emptypb"
 
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/apps/utils"
 )
 
@@ -34,7 +40,10 @@ const (
 	metadataURL = "http://localhost:3500/v1.0/metadata"
 )
 
-var httpClient = utils.NewHTTPClient()
+var (
+	httpClient *http.Client
+	grpcClient runtimev1pb.DaprClient
+)
 
 // requestResponse represents a request or response for the APIs in this app.
 type requestResponse struct {
@@ -68,6 +77,34 @@ type mockRegisteredComponent struct {
 	Capabilities []string `json:"capabilities"`
 }
 
+func newMockMetadataFromGrpc(res *runtimev1pb.GetMetadataResponse) mockMetadata {
+	metadata := mockMetadata{
+		ID:                   res.GetId(),
+		ActiveActorsCount:    make([]activeActorsCount, len(res.GetActiveActorsCount())),
+		Extended:             res.GetExtendedMetadata(),
+		RegisteredComponents: make([]mockRegisteredComponent, len(res.GetRegisteredComponents())),
+		EnabledFeatures:      res.GetEnabledFeatures(),
+	}
+
+	for i, v := range res.GetActiveActorsCount() {
+		metadata.ActiveActorsCount[i] = activeActorsCount{
+			Type:  v.GetType(),
+			Count: int(v.GetCount()),
+		}
+	}
+
+	for i, v := range res.GetRegisteredComponents() {
+		metadata.RegisteredComponents[i] = mockRegisteredComponent{
+			Name:         v.GetName(),
+			Type:         v.GetType(),
+			Version:      v.GetVersion(),
+			Capabilities: v.GetCapabilities(),
+		}
+	}
+
+	return metadata
+}
+
 func indexHandler(w http.ResponseWriter, _ *http.Request) {
 	log.Println("indexHandler is called")
 	w.WriteHeader(http.StatusOK)
@@ -75,8 +112,7 @@ func indexHandler(w http.ResponseWriter, _ *http.Request) {
 
 func setMetadata(r *http.Request) error {
 	var data setMetadataRequest
-	err := json.NewDecoder(r.Body).Decode(&data)
-	if err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
 		return err
 	}
 
@@ -84,30 +120,46 @@ func setMetadata(r *http.Request) error {
 		return errors.New("key or value in request must be set")
 	}
 
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodPut,
-		metadataURL+"/"+data.Key,
-		strings.NewReader(data.Value),
-	)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("content-type", "text/plain")
-	res, err := httpClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer res.Body.Close()
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	switch chi.URLParam(r, "protocol") {
+	case "http":
+		req, err := http.NewRequestWithContext(ctx, http.MethodPut,
+			metadataURL+"/"+data.Key,
+			strings.NewReader(data.Value),
+		)
+		if err != nil {
+			return err
+		}
+		req.Header.Set("content-type", "text/plain")
+		res, err := httpClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer res.Body.Close()
 
-	if res.StatusCode != http.StatusNoContent {
-		return fmt.Errorf("invalid status code: %d", res.StatusCode)
+		if res.StatusCode != http.StatusNoContent {
+			return fmt.Errorf("invalid status code: %d", res.StatusCode)
+		}
+	case "grpc":
+		_, err := grpcClient.SetMetadata(ctx, &runtimev1pb.SetMetadataRequest{
+			Key:   data.Key,
+			Value: data.Value,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to set metadata using gRPC: %w", err)
+		}
 	}
 
 	return nil
 }
 
-func getMetadata() (data mockMetadata, err error) {
-	var metadata mockMetadata
-	res, err := httpClient.Get(metadataURL)
+func getMetadataHTTP(ctx context.Context) (metadata mockMetadata, err error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, metadataURL, nil)
+	if err != nil {
+		return metadata, err
+	}
+	res, err := httpClient.Do(req)
 	if err != nil {
 		return metadata, fmt.Errorf("could not get sidecar metadata %s", err.Error())
 	}
@@ -118,45 +170,65 @@ func getMetadata() (data mockMetadata, err error) {
 		return metadata, fmt.Errorf("could not load value for Metadata: %s", err.Error())
 	}
 	if res.StatusCode != http.StatusOK {
-		log.Printf("Non 200 StatusCode: %d\n", res.StatusCode)
-
+		log.Printf("Non 200 StatusCode: %d", res.StatusCode)
 		return metadata, fmt.Errorf("got err response for get Metadata: %s", body)
 	}
 	err = json.Unmarshal(body, &metadata)
 	return metadata, nil
 }
 
-// handles all APIs
-func handler(w http.ResponseWriter, r *http.Request) {
+func getMetadataGRPC(ctx context.Context) (metadata mockMetadata, err error) {
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	res, err := grpcClient.GetMetadata(ctx, &emptypb.Empty{})
+	if err != nil {
+		return metadata, fmt.Errorf("failed to get sidecar metadata from gRPC: %w", err)
+	}
+	return newMockMetadataFromGrpc(res), nil
+}
+
+// Handles tests
+func testHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Processing request for %s", r.URL.RequestURI())
 
-	var metadata mockMetadata
-	var err error
-	res := requestResponse{}
-	uri := r.URL.RequestURI()
+	var (
+		metadata mockMetadata
+		err      error
+		res      requestResponse
+	)
 	statusCode := http.StatusOK
 
 	res.StartTime = time.Now()
 
-	cmd := mux.Vars(r)["command"]
-	switch cmd {
-	case "setMetadata":
-		err = setMetadata(r)
-		if err != nil {
-			statusCode = http.StatusInternalServerError
-			res.Message = err.Error()
-		}
-		res.Message = "ok"
-	case "getMetadata":
-		metadata, err = getMetadata()
-		if err != nil {
-			statusCode = http.StatusInternalServerError
-			res.Message = err.Error()
-		}
-	default:
-		err = fmt.Errorf("invalid URI: %s", uri)
+	protocol := chi.URLParam(r, "protocol")
+	if protocol != "http" && protocol != "grpc" {
+		err = fmt.Errorf("invalid URI: %s", r.URL.RequestURI())
 		statusCode = http.StatusBadRequest
 		res.Message = err.Error()
+	} else {
+		switch chi.URLParam(r, "command") {
+		case "set":
+			err = setMetadata(r)
+			if err != nil {
+				statusCode = http.StatusInternalServerError
+				res.Message = err.Error()
+			}
+			res.Message = "ok"
+		case "get":
+			if protocol == "http" {
+				metadata, err = getMetadataHTTP(r.Context())
+			} else {
+				metadata, err = getMetadataGRPC(r.Context())
+			}
+			if err != nil {
+				statusCode = http.StatusInternalServerError
+				res.Message = err.Error()
+			}
+		default:
+			err = fmt.Errorf("invalid URI: %s", r.URL.RequestURI())
+			statusCode = http.StatusBadRequest
+			res.Message = err.Error()
+		}
 	}
 
 	res.EndTime = time.Now()
@@ -176,18 +248,51 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 // appRouter initializes restful api router
 func appRouter() http.Handler {
-	router := mux.NewRouter().StrictSlash(true)
+	router := chi.NewRouter()
 
 	router.Use(utils.LoggerMiddleware)
 
-	router.HandleFunc("/", indexHandler).Methods("GET")
-	router.HandleFunc("/test/{command}", handler)
+	router.Get("/", indexHandler)
+	router.Post("/test/{protocol}/{command}", testHandler)
 
 	return router
 }
 
 func main() {
-	log.Printf("Metadata App - listening on http://localhost:%d", appPort)
-	log.Printf("Metadata endpoint - to be served at %s", metadataURL)
+	// Connect to gRPC
+	var (
+		conn *grpc.ClientConn
+		err  error
+	)
+	grpcSocketAddr := os.Getenv("DAPR_GRPC_SOCKET_ADDR")
+	if grpcSocketAddr != "" {
+		conn, err = grpc.Dial(
+			"unix://"+grpcSocketAddr,
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+		)
+	} else {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+
+		conn, err = grpc.DialContext(ctx, "localhost:50001",
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithBlock(),
+		)
+	}
+	if err != nil {
+		log.Fatalf("Failed to establish gRPC connection to Dapr: %v", err)
+	}
+	grpcClient = runtimev1pb.NewDaprClient(conn)
+
+	// If using Unix Domain Sockets, we need to change the HTTP client too
+	httpSocketAddr := os.Getenv("DAPR_HTTP_SOCKET_ADDR")
+	if httpSocketAddr != "" {
+		httpClient = utils.NewHTTPClientForSocket(httpSocketAddr)
+	} else {
+		httpClient = utils.NewHTTPClient()
+	}
+
+	// Start app
+	log.Printf("Metadata App - listening on http://:%d", appPort)
 	utils.StartServer(appPort, appRouter, true, false)
 }

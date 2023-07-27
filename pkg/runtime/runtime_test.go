@@ -2982,10 +2982,6 @@ func (m *MockKubernetesStateStore) Features() []secretstores.Feature {
 	return []secretstores.Feature{}
 }
 
-func (m MockKubernetesStateStore) GetComponentMetadata() map[string]string {
-	return nil
-}
-
 func NewMockKubernetesStore() secretstores.SecretStore {
 	return &MockKubernetesStateStore{}
 }
