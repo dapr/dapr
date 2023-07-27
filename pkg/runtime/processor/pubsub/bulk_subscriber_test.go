@@ -1736,10 +1736,6 @@ func (m *mockSubscribePubSub) BulkSubscribe(ctx context.Context, req contribpubs
 	return nil
 }
 
-func (m *mockSubscribePubSub) GetComponentMetadata() map[string]string {
-	return map[string]string{}
-}
-
 func (m *mockSubscribePubSub) GetBulkResponse() contribpubsub.BulkSubscribeResponse {
 	return m.bulkReponse
 }

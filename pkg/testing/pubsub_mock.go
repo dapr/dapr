@@ -20,10 +20,6 @@ func (m *MockPubSub) Init(ctx context.Context, metadata pubsub.Metadata) error {
 	return args.Error(0)
 }
 
-func (m *MockPubSub) GetComponentMetadata() map[string]string {
-	return map[string]string{}
-}
-
 // Publish is a mock publish method.
 func (m *MockPubSub) Publish(ctx context.Context, req *pubsub.PublishRequest) error {
 	args := m.Called(req)
@@ -61,10 +57,6 @@ func (m *MockPubSub) Features() []pubsub.Feature {
 // FailingPubsub is a mock pubsub component object that simulates failures.
 type FailingPubsub struct {
 	Failure Failure
-}
-
-func (f *FailingPubsub) GetComponentMetadata() map[string]string {
-	return map[string]string{}
 }
 
 func (f *FailingPubsub) Init(ctx context.Context, metadata pubsub.Metadata) error {
@@ -268,10 +260,6 @@ func (m *InMemoryPubsub) Close() error {
 
 func (m *InMemoryPubsub) Features() []pubsub.Feature {
 	return nil
-}
-
-func (m *InMemoryPubsub) GetComponentMetadata() map[string]string {
-	return map[string]string{}
 }
 
 func (m *InMemoryPubsub) SetHandler(h func(topic string, msg *pubsub.NewMessage)) {
