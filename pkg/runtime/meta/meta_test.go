@@ -24,7 +24,6 @@ import (
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/modes"
-	"github.com/dapr/kit/ptr"
 )
 
 func TestMetadataItemsToPropertiesConversion(t *testing.T) {
@@ -132,7 +131,7 @@ func TestMetadataContainsNamespace(t *testing.T) {
 
 func TestMetadataOverrideWasmStrictSandbox(t *testing.T) {
 	t.Run("original set to false override to true", func(t *testing.T) {
-		meta := New(Options{Mode: modes.StandaloneMode, StrictSandbox: ptr.Of(true)})
+		meta := New(Options{Mode: modes.StandaloneMode, StrictSandbox: true})
 		// component with WasmStrictSandbox set to false
 		items := []common.NameValuePair{
 			{
@@ -184,7 +183,7 @@ func TestMetadataOverrideWasmStrictSandbox(t *testing.T) {
 	t.Run("auto set strict sandbox to wasm components", func(t *testing.T) {
 		// register test wasm component
 		components.RegisterWasmComponentType(components.CategoryMiddleware, "test")
-		meta := New(Options{Mode: modes.StandaloneMode, StrictSandbox: ptr.Of(true)})
+		meta := New(Options{Mode: modes.StandaloneMode, StrictSandbox: true})
 		// component with WasmStrictSandbox set to false
 		items := []common.NameValuePair{
 			{

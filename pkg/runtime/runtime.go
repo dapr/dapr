@@ -63,6 +63,7 @@ import (
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
+	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/meta"
@@ -73,9 +74,6 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
-
-	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 
 	"github.com/dapr/dapr/pkg/components/pluggable"
 	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
@@ -164,9 +162,9 @@ func newDaprRuntime(ctx context.Context,
 	resiliencyProvider resiliency.Provider,
 ) (*DaprRuntime, error) {
 	compStore := compstore.New()
-	wasmStrictSandbox := (*bool)(nil)
-	if globalConfig.Spec.WasmSpec != nil {
-		wasmStrictSandbox = ptr.Of(globalConfig.Spec.WasmSpec.StrictSandbox)
+	wasmStrictSandbox := false
+	if globalConfig.Spec.WasmSpec != nil && globalConfig.Spec.WasmSpec.StrictSandbox {
+		wasmStrictSandbox = true
 	}
 	meta := meta.New(meta.Options{
 		ID:            runtimeConfig.id,
