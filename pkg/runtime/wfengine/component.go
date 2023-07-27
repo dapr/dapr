@@ -25,6 +25,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/dapr/components-contrib/workflows"
+	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1" // This will be removed
 	"github.com/dapr/kit/logger"
 )
@@ -39,7 +40,7 @@ var ComponentDefinition = componentsV1alpha1.Component{
 	Spec: componentsV1alpha1.ComponentSpec{
 		Type:     "workflow.dapr",
 		Version:  "v1",
-		Metadata: []componentsV1alpha1.MetadataItem{},
+		Metadata: []commonapi.NameValuePair{},
 	},
 }
 
@@ -121,7 +122,11 @@ func (c *workflowEngineComponent) Terminate(ctx context.Context, req *workflows.
 		return errors.New("a workflow instance ID is required")
 	}
 
-	if err := c.client.TerminateOrchestration(ctx, api.InstanceID(req.InstanceID), ""); err != nil {
+	if err := c.client.TerminateOrchestration(ctx, api.InstanceID(req.InstanceID)); err != nil {
+		if errors.Is(err, api.ErrInstanceNotFound) {
+			c.logger.Infof("No such instance exists: '%s'", req.InstanceID)
+			return err
+		}
 		return fmt.Errorf("failed to terminate workflow %s: %w", req.InstanceID, err)
 	}
 
@@ -135,6 +140,10 @@ func (c *workflowEngineComponent) Purge(ctx context.Context, req *workflows.Purg
 	}
 
 	if err := c.client.PurgeOrchestrationState(ctx, api.InstanceID(req.InstanceID)); err != nil {
+		if errors.Is(err, api.ErrInstanceNotFound) {
+			c.logger.Infof("Unable to purge the instance: '%s', no such instance exists", req.InstanceID)
+			return err
+		}
 		return fmt.Errorf("failed to Purge workflow %s: %w", req.InstanceID, err)
 	}
 
@@ -170,6 +179,10 @@ func (c *workflowEngineComponent) Get(ctx context.Context, req *workflows.GetReq
 	}
 
 	if metadata, err := c.client.FetchOrchestrationMetadata(ctx, api.InstanceID(req.InstanceID)); err != nil {
+		if errors.Is(err, api.ErrInstanceNotFound) {
+			c.logger.Infof("Unable to get data on the instance: %s, no such instance exists", req.InstanceID)
+			return nil, err
+		}
 		return nil, fmt.Errorf("failed to get workflow metadata for '%s': %w", req.InstanceID, err)
 	} else {
 		res := &workflows.StateResponse{
@@ -230,6 +243,10 @@ func (c *workflowEngineComponent) PurgeWorkflow(ctx context.Context, req *workfl
 	}
 
 	if err := c.client.PurgeOrchestrationState(ctx, api.InstanceID(req.InstanceID)); err != nil {
+		if errors.Is(err, api.ErrInstanceNotFound) {
+			c.logger.Infof("The requested instance: '%s' does not exist or has already been purged", req.InstanceID)
+			return err
+		}
 		return fmt.Errorf("failed to purge workflow %s: %w", req.InstanceID, err)
 	}
 

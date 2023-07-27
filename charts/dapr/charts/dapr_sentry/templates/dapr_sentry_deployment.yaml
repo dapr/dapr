@@ -92,8 +92,14 @@ spec:
           runAsNonRoot: {{ .Values.runAsNonRoot }}
   {{- if eq .Values.debug.enabled true }}
           capabilities:
-            add:
-              - SYS_PTRACE
+            add: ["SYS_PTRACE"]
+  {{- else }}
+          capabilities:
+            drop: ["ALL"]
+  {{- end }}
+  {{- if .Values.global.seccompProfile }}
+          seccompProfile:
+            type: {{ .Values.global.seccompProfile }}
   {{- end }}
 {{- end }}
         env:

@@ -163,7 +163,8 @@ func (s *server) StartNonBlocking() error {
 		} else if s.kind == apiServer {
 			runtimev1pb.RegisterDaprServer(server, s.api)
 			if s.workflowEngine != nil {
-				s.workflowEngine.ConfigureGrpc(server)
+				s.logger.Infof("Registering workflow engine for gRPC endpoint: %s", listener.Addr())
+				s.workflowEngine.RegisterGrpcServer(server)
 			}
 		}
 
@@ -238,7 +239,7 @@ func (s *server) getMiddlewareOptions() []grpcGo.ServerOption {
 		intrStream = append(intrStream, diag.GRPCTraceStreamServerInterceptor(s.config.AppID, s.tracingSpec))
 	}
 
-	if s.metricSpec.Enabled {
+	if s.metricSpec.GetEnabled() {
 		s.logger.Info("Enabled gRPC metrics middleware")
 		intr = append(intr, diag.DefaultGRPCMonitoring.UnaryServerInterceptor())
 

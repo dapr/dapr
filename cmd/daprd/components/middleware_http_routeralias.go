@@ -1,4 +1,4 @@
-//go:build all_components
+//go:build allcomponents
 
 /*
 Copyright 2021 The Dapr Authors

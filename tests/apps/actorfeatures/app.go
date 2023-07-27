@@ -36,7 +36,7 @@ const (
 	actorMethodURLFormat            = daprBaseURLFormat + "/actors/%s/%s/%s/%s"
 	actorSaveStateURLFormat         = daprBaseURLFormat + "/actors/%s/%s/state/"
 	actorGetStateURLFormat          = daprBaseURLFormat + "/actors/%s/%s/state/%s/"
-	actorDeleteReminderURLFormat    = daprBaseURLFormat + "/actors/%s/%s/%s/%s"
+	actorReminderURLFormat          = daprBaseURLFormat + "/actors/%s/%s/%s/%s"
 	defaultActorType                = "testactorfeatures"                   // Actor type must be unique per test app.
 	actorTypeEnvName                = "TEST_APP_ACTOR_TYPE"                 // To set to change actor type.
 	actorRemindersPartitionsEnvName = "TEST_APP_ACTOR_REMINDERS_PARTITIONS" // To set actor type partition count.
@@ -272,7 +272,7 @@ func actorMethodHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Specific case to test reminder that deletes itself in its callback
 	if id == "1001e" {
-		url := fmt.Sprintf(actorDeleteReminderURLFormat, daprHTTPPort, actorType, id, "reminders", method)
+		url := fmt.Sprintf(actorReminderURLFormat, daprHTTPPort, actorType, id, "reminders", method)
 		_, e := httpCall("DELETE", url, nil, 204)
 		if e != nil {
 			return
@@ -605,6 +605,35 @@ func actorStateTest(testName string, w http.ResponseWriter, actorType string, id
 	return nil
 }
 
+func nonHostedTestHandler(w http.ResponseWriter, r *http.Request) {
+	log.Print("Testing non-hosted actor reminders")
+
+	url := fmt.Sprintf(actorReminderURLFormat, daprHTTPPort, "nonhosted", "id0", "reminders", "myreminder")
+	tests := map[string]struct {
+		Method string
+		Body   any
+	}{
+		"GetReminder":    {"GET", nil},
+		"CreateReminder": {"PUT", struct{}{}},
+		"DeleteReminder": {"DELETE", struct{}{}},
+		"RenameReminder": {"PATCH", struct{}{}},
+	}
+	for op, t := range tests {
+		body, err := httpCall(t.Method, url, t.Body, http.StatusForbidden)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Error performing %s request: %v", op, err), http.StatusInternalServerError)
+			return
+		}
+		if !bytes.Contains(body, []byte("ERR_ACTOR_REMINDER_NON_HOSTED")) {
+			http.Error(w, fmt.Sprintf("Response from %s doesn't contain the required error message: %s", op, string(body)), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprint(w, "OK")
+}
+
 func httpCall(method string, url string, requestBody interface{}, expectedHTTPStatusCode int) ([]byte, error) {
 	var body []byte
 	var err error
@@ -632,12 +661,10 @@ func httpCall(method string, url string, requestBody interface{}, expectedHTTPSt
 		var errBody []byte
 		errBody, err = io.ReadAll(res.Body)
 		if err == nil {
-			t := fmt.Errorf("Expected http status %d, received %d, payload ='%s'", expectedHTTPStatusCode, res.StatusCode, string(errBody)) //nolint:stylecheck
-			return nil, t
+			return nil, fmt.Errorf("Expected http status %d, received %d, payload ='%s'", expectedHTTPStatusCode, res.StatusCode, string(errBody)) //nolint:stylecheck
 		}
 
-		t := fmt.Errorf("Expected http status %d, received %d", expectedHTTPStatusCode, res.StatusCode) //nolint:stylecheck
-		return nil, t
+		return nil, fmt.Errorf("Expected http status %d, received %d", expectedHTTPStatusCode, res.StatusCode) //nolint:stylecheck
 	}
 
 	resBody, err := io.ReadAll(res.Body)
@@ -678,6 +705,8 @@ func appRouter() http.Handler {
 	router.HandleFunc("/actors/{actorType}/{id}/method/{reminderOrTimer}/{method}", actorMethodHandler).Methods("PUT")
 
 	router.HandleFunc("/actors/{actorType}/{id}", deactivateActorHandler).Methods("POST", "DELETE")
+
+	router.HandleFunc("/test/nonhosted", nonHostedTestHandler).Methods("POST")
 
 	router.HandleFunc("/test/logs", logsHandler).Methods("GET")
 	router.HandleFunc("/test/metadata", testCallMetadataHandler).Methods("GET")

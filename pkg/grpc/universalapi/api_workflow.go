@@ -15,8 +15,10 @@ package universalapi
 
 import (
 	"context"
+	"errors"
 	"unicode"
 
+	"github.com/microsoft/durabletask-go/api"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -42,7 +44,11 @@ func (a *UniversalAPI) GetWorkflowAlpha1(ctx context.Context, in *runtimev1pb.Ge
 	}
 	response, err := workflowComponent.Get(ctx, &req)
 	if err != nil {
-		err := messages.ErrWorkflowGetResponse.WithFormat(in.InstanceId, err)
+		if errors.Is(err, api.ErrInstanceNotFound) {
+			err = messages.ErrWorkflowInstanceNotFound.WithFormat(in.InstanceId, err)
+		} else {
+			err = messages.ErrWorkflowGetResponse.WithFormat(in.InstanceId, err)
+		}
 		a.Logger.Debug(err)
 		return &runtimev1pb.GetWorkflowResponse{}, err
 	}
@@ -113,7 +119,11 @@ func (a *UniversalAPI) TerminateWorkflowAlpha1(ctx context.Context, in *runtimev
 		InstanceID: in.InstanceId,
 	}
 	if err := workflowComponent.Terminate(ctx, req); err != nil {
-		err = messages.ErrTerminateWorkflow.WithFormat(in.InstanceId, err)
+		if errors.Is(err, api.ErrInstanceNotFound) {
+			err = messages.ErrWorkflowInstanceNotFound.WithFormat(in.InstanceId, err)
+		} else {
+			err = messages.ErrTerminateWorkflow.WithFormat(in.InstanceId, err)
+		}
 		a.Logger.Debug(err)
 		return emptyResponse, err
 	}
@@ -223,7 +233,11 @@ func (a *UniversalAPI) PurgeWorkflowAlpha1(ctx context.Context, in *runtimev1pb.
 
 	err = workflowComponent.Purge(ctx, &req)
 	if err != nil {
-		err = messages.ErrPurgeWorkflow.WithFormat(in.InstanceId)
+		if errors.Is(err, api.ErrInstanceNotFound) {
+			err = messages.ErrWorkflowInstanceNotFound.WithFormat(in.InstanceId, err)
+		} else {
+			err = messages.ErrPurgeWorkflow.WithFormat(in.InstanceId, err)
+		}
 		a.Logger.Debug(err)
 		return emptyResponse, err
 	}

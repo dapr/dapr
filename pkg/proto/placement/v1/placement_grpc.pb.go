@@ -11,7 +11,6 @@ import (
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
-	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -23,8 +22,6 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type PlacementClient interface {
-	// Returns current placement tables.
-	GetPlacementTables(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetPlacementTablesResponse, error)
 	// Reports Dapr actor status and retrieves actor placement table.
 	ReportDaprStatus(ctx context.Context, opts ...grpc.CallOption) (Placement_ReportDaprStatusClient, error)
 }
@@ -35,15 +32,6 @@ type placementClient struct {
 
 func NewPlacementClient(cc grpc.ClientConnInterface) PlacementClient {
 	return &placementClient{cc}
-}
-
-func (c *placementClient) GetPlacementTables(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetPlacementTablesResponse, error) {
-	out := new(GetPlacementTablesResponse)
-	err := c.cc.Invoke(ctx, "/dapr.proto.placement.v1.Placement/GetPlacementTables", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
 }
 
 func (c *placementClient) ReportDaprStatus(ctx context.Context, opts ...grpc.CallOption) (Placement_ReportDaprStatusClient, error) {
@@ -81,8 +69,6 @@ func (x *placementReportDaprStatusClient) Recv() (*PlacementOrder, error) {
 // All implementations should embed UnimplementedPlacementServer
 // for forward compatibility
 type PlacementServer interface {
-	// Returns current placement tables.
-	GetPlacementTables(context.Context, *emptypb.Empty) (*GetPlacementTablesResponse, error)
 	// Reports Dapr actor status and retrieves actor placement table.
 	ReportDaprStatus(Placement_ReportDaprStatusServer) error
 }
@@ -91,9 +77,6 @@ type PlacementServer interface {
 type UnimplementedPlacementServer struct {
 }
 
-func (UnimplementedPlacementServer) GetPlacementTables(context.Context, *emptypb.Empty) (*GetPlacementTablesResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetPlacementTables not implemented")
-}
 func (UnimplementedPlacementServer) ReportDaprStatus(Placement_ReportDaprStatusServer) error {
 	return status.Errorf(codes.Unimplemented, "method ReportDaprStatus not implemented")
 }
@@ -107,24 +90,6 @@ type UnsafePlacementServer interface {
 
 func RegisterPlacementServer(s grpc.ServiceRegistrar, srv PlacementServer) {
 	s.RegisterService(&Placement_ServiceDesc, srv)
-}
-
-func _Placement_GetPlacementTables_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(emptypb.Empty)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(PlacementServer).GetPlacementTables(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/dapr.proto.placement.v1.Placement/GetPlacementTables",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(PlacementServer).GetPlacementTables(ctx, req.(*emptypb.Empty))
-	}
-	return interceptor(ctx, in, info, handler)
 }
 
 func _Placement_ReportDaprStatus_Handler(srv interface{}, stream grpc.ServerStream) error {
@@ -159,12 +124,7 @@ func (x *placementReportDaprStatusServer) Recv() (*Host, error) {
 var Placement_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "dapr.proto.placement.v1.Placement",
 	HandlerType: (*PlacementServer)(nil),
-	Methods: []grpc.MethodDesc{
-		{
-			MethodName: "GetPlacementTables",
-			Handler:    _Placement_GetPlacementTables_Handler,
-		},
-	},
+	Methods:     []grpc.MethodDesc{},
 	Streams: []grpc.StreamDesc{
 		{
 			StreamName:    "ReportDaprStatus",

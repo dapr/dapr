@@ -10,7 +10,7 @@ metadata:
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
 spec:
-{{- if eq .Values.global.ha.enabled true }}
+{{- if or (eq .Values.global.ha.enabled true) (eq .Values.ha true) }}
   replicas: 3
 {{- else }}
   replicas: 1
@@ -73,7 +73,7 @@ spec:
           - name: credentials
             mountPath: /var/run/dapr/credentials
             readOnly: true
-{{- if eq .Values.global.ha.enabled true }}
+{{- if or (eq .Values.global.ha.enabled true) (eq .Values.ha true) }}
   {{- if eq .Values.cluster.forceInMemoryLog false }}
           - name: raft-log
     {{- if eq .Values.global.daprControlPlaneOs "windows" }}
@@ -110,7 +110,7 @@ spec:
         - "/placement"
         - "--"
 {{- end }}
-{{- if eq .Values.global.ha.enabled true }}
+{{- if or (eq .Values.global.ha.enabled true) (eq .Values.ha true) }}
         - "--id"
         - "$(PLACEMENT_ID)"
         - "--initial-cluster"
@@ -118,9 +118,9 @@ spec:
   {{- if eq .Values.cluster.forceInMemoryLog false }}
         - "--raft-logstore-path"
     {{- if eq .Values.global.daprControlPlaneOs "windows" }}
-        - "{{ .Values.cluster.logStoreWinPath }}\\$(PLACEMENT_ID)"
+        - "{{ .Values.cluster.logStoreWinPath }}\\cluster-v2-$(PLACEMENT_ID)"
     {{- else }}
-        - "{{ .Values.cluster.logStorePath }}/$(PLACEMENT_ID)"
+        - "{{ .Values.cluster.logStorePath }}/cluster-v2-$(PLACEMENT_ID)"
     {{- end }}
   {{- end }}
 {{- end }}
@@ -154,11 +154,17 @@ spec:
 {{- else }}
           runAsUser: 0
 {{- end }}
-{{- if eq .Values.debug.enabled true }}
+  {{- if eq .Values.debug.enabled true }}
           capabilities:
-            add:
-              - SYS_PTRACE
-{{- end }}
+            add: ["SYS_PTRACE"]
+  {{- else }}
+          capabilities:
+            drop: ["ALL"]
+  {{- end }}
+  {{- if .Values.global.seccompProfile }}
+          seccompProfile:
+            type: {{ .Values.global.seccompProfile }}
+  {{- end }}
 {{- end }}
         env:
           - name: PLACEMENT_ID
@@ -214,7 +220,7 @@ spec:
       tolerations:
 {{ toYaml .Values.global.tolerations | indent 8 }}
 {{- end }}
-{{- if eq .Values.global.ha.enabled true }}
+{{- if or (eq .Values.global.ha.enabled true) (eq .Values.ha true) }}
   {{- if eq .Values.cluster.forceInMemoryLog false }}
   volumeClaimTemplates:
   - metadata:

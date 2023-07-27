@@ -105,7 +105,7 @@ func TestInvokeMethod(t *testing.T) {
 		req := invokev1.NewInvokeMethodRequest("method").
 			WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2")
 		defer req.Close()
-		response, err := c.InvokeMethod(ctx, req)
+		response, err := c.InvokeMethod(ctx, req, "")
 		assert.NoError(t, err)
 		defer response.Close()
 
@@ -127,7 +127,7 @@ func TestInvokeMethod(t *testing.T) {
 			WithRawData(&streams.ErrorReader{})
 		defer req.Close()
 
-		response, err := c.InvokeMethod(ctx, req)
+		response, err := c.InvokeMethod(ctx, req, "")
 		require.Error(t, err)
 		assert.ErrorIs(t, err, io.ErrClosedPipe)
 		if response != nil {

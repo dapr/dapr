@@ -72,6 +72,11 @@ func main() {
 
 	appProtocol = os.Getenv("APP_PROTOCOL")
 
+	expectAppProtocol := os.Getenv("EXPECT_APP_PROTOCOL")
+	if expectAppProtocol != "" && appProtocol != expectAppProtocol {
+		log.Fatalf("Expected injected APP_PROTOCOL to be %q, but got %q", expectAppProtocol, appProtocol)
+	}
+
 	controlPort = os.Getenv("CONTROL_PORT")
 	if controlPort == "" {
 		controlPort = "3000"

@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net/http"
 	"strings"
 
 	"github.com/valyala/fasthttp"
@@ -83,6 +84,12 @@ func (imr *InvokeMethodRequest) WithActor(actorType, actorID string) *InvokeMeth
 // WithMetadata sets metadata.
 func (imr *InvokeMethodRequest) WithMetadata(md map[string][]string) *InvokeMethodRequest {
 	imr.r.Metadata = metadataToInternalMetadata(md)
+	return imr
+}
+
+// WithHTTPHeaders sets HTTP request headers.
+func (imr *InvokeMethodRequest) WithHTTPHeaders(header http.Header) *InvokeMethodRequest {
+	imr.r.Metadata = httpHeadersToInternalMetadata(header)
 	return imr
 }
 
@@ -296,18 +303,17 @@ func (imr *InvokeMethodRequest) GetDataObject() any {
 	return imr.dataObject
 }
 
-// Adds a new header to the existing set.
-func (imr *InvokeMethodRequest) AddHeaders(header *fasthttp.RequestHeader) {
-	internalMd := fasthttpHeadersToInternalMetadata(header)
-
+// AddMetadata adds new metadata options to the existing set.
+func (imr *InvokeMethodRequest) AddMetadata(md map[string][]string) {
 	if imr.r.Metadata == nil {
-		imr.r.Metadata = internalMd
-	} else {
-		for key, val := range internalMd {
-			// We're only adding new values, not overwriting existing
-			if _, ok := imr.r.Metadata[key]; !ok {
-				imr.r.Metadata[key] = val
-			}
+		imr.WithMetadata(md)
+		return
+	}
+
+	for key, val := range metadataToInternalMetadata(md) {
+		// We're only adding new values, not overwriting existing
+		if _, ok := imr.r.Metadata[key]; !ok {
+			imr.r.Metadata[key] = val
 		}
 	}
 }
