@@ -16,6 +16,7 @@ package actors
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 	"testing"
@@ -835,6 +836,39 @@ func TestTransactionalState(t *testing.T) {
 			},
 		})
 		assert.NoError(t, err)
+	})
+
+	t.Run("Too many requests fail", func(t *testing.T) {
+		testActorsRuntime := newTestActorsRuntime()
+		defer testActorsRuntime.Stop()
+
+		store, err := testActorsRuntime.stateStore()
+		require.NoError(t, err)
+		fakeStore, ok := store.(*daprt.FakeStateStore)
+		require.True(t, ok)
+		fakeStore.MaxOperations = 10
+
+		actorType, actorID := getTestActorTypeAndID()
+
+		fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
+
+		ops := make([]TransactionalOperation, 20)
+		for i := 0; i < 20; i++ {
+			ops[i] = TransactionalOperation{
+				Operation: Upsert,
+				Request: TransactionalUpsert{
+					Key:   fmt.Sprintf("key%d", i),
+					Value: "hello",
+				},
+			}
+		}
+		err = testActorsRuntime.TransactionalStateOperation(ctx, &TransactionalRequest{
+			ActorType:  actorType,
+			ActorID:    actorID,
+			Operations: ops,
+		})
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrTransactionsTooManyOperations)
 	})
 
 	t.Run("Wrong request body - should fail", func(t *testing.T) {
