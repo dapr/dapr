@@ -27,16 +27,16 @@ import (
 
 // UniversalAPI contains the implementation of gRPC APIs that are also used by the HTTP server.
 type UniversalAPI struct {
-	AppID                      string
-	Logger                     logger.Logger
-	Resiliency                 resiliency.Provider
-	Actors                     actors.Actors
-	CompStore                  *compstore.ComponentStore
-	ShutdownFn                 func()
-	GetComponentsCapabilitesFn func() map[string][]string
-	ExtendedMetadata           map[string]string
-	AppConnectionConfig        config.AppConnectionConfig
-	GlobalConfig               *config.Configuration
+	AppID                       string
+	Logger                      logger.Logger
+	Resiliency                  resiliency.Provider
+	Actors                      actors.Actors
+	CompStore                   *compstore.ComponentStore
+	ShutdownFn                  func()
+	GetComponentsCapabilitiesFn func() map[string][]string
+	ExtendedMetadata            map[string]string
+	AppConnectionConfig         config.AppConnectionConfig
+	GlobalConfig                *config.Configuration
 
 	extendedMetadataLock sync.RWMutex
 }

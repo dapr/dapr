@@ -96,7 +96,7 @@ func TestGetMetadata(t *testing.T) {
 				AppID:     "fakeAPI",
 				Actors:    mockActors,
 				CompStore: compStore,
-				GetComponentsCapabilitesFn: func() map[string][]string {
+				GetComponentsCapabilitiesFn: func() map[string][]string {
 					capsMap := make(map[string][]string)
 					capsMap["testComponent"] = []string{"mock.feat.testComponent"}
 					return capsMap
