@@ -15,12 +15,9 @@ package security
 
 import (
 	"os"
-	"strings"
 
 	"github.com/dapr/dapr/pkg/runtime/security/consts"
 )
-
-var excludedRoutes = []string{"/healthz"}
 
 // GetAPIToken returns the value of the api token from an environment variable.
 func GetAPIToken() string {
@@ -30,14 +27,4 @@ func GetAPIToken() string {
 // GetAppToken returns the value of the app api token from an environment variable.
 func GetAppToken() string {
 	return os.Getenv(consts.AppAPITokenEnvVar)
-}
-
-// ExcludedRoute returns whether a given route should be excluded from a token check.
-func ExcludedRoute(route string) bool {
-	for _, r := range excludedRoutes {
-		if strings.Contains(route, r) {
-			return true
-		}
-	}
-	return false
 }
