@@ -91,7 +91,3 @@ func (w *MockWorkflow) Purge(ctx context.Context, req *workflowContrib.PurgeRequ
 	}
 	return nil
 }
-
-func (w *MockWorkflow) GetComponentMetadata() map[string]string {
-	return map[string]string{}
-}

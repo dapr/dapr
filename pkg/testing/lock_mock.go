@@ -71,10 +71,6 @@ func (m *MockStore) Unlock(ctx context.Context, req *lock.UnlockRequest) (*lock.
 	return ret0, ret1
 }
 
-func (m *MockStore) GetComponentMetadata() map[string]string {
-	return map[string]string{}
-}
-
 // Unlock indicates an expected call of Unlock.
 func (mr *MockStoreMockRecorder) Unlock(ctx context.Context, req interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
