@@ -923,8 +923,10 @@ func (r *reminders) startReminder(reminder *internal.Reminder, stopChannel chan 
 			if err != nil {
 				diag.UpdateSpanStatusFromHTTPStatus(span, http.StatusInternalServerError)
 			}
-			diag.UpdateSpanStatusFromHTTPStatus(span, http.StatusOK)
-			span.End()
+			if span != nil {
+				diag.UpdateSpanStatusFromHTTPStatus(span, http.StatusOK)
+				span.End()
+			}
 		}
 
 	delete:
