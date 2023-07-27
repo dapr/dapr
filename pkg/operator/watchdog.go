@@ -13,8 +13,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/dapr/dapr/pkg/injector/sidecar"
-	operatorconsts "github.com/dapr/dapr/pkg/operator/meta"
+	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
+	operatorConsts "github.com/dapr/dapr/pkg/operator/meta"
 	"github.com/dapr/dapr/utils"
 )
 
@@ -146,12 +146,12 @@ forloop:
 // getSideCarInjectedNotExistsSelector creates a selector that matches pod without the injector patched label
 func getSideCarInjectedNotExistsSelector() labels.Selector {
 	sel := labels.NewSelector()
-	req, err := labels.NewRequirement(sidecar.SidecarInjectedLabel, selection.DoesNotExist, []string{})
+	req, err := labels.NewRequirement(injectorConsts.SidecarInjectedLabel, selection.DoesNotExist, []string{})
 	if err != nil {
 		log.Fatalf("Unable to add label requirement to find pods with Injector created label , err: %s", err)
 	}
 	sel = sel.Add(*req)
-	req, err = labels.NewRequirement(operatorconsts.WatchdogPatchedLabel, selection.DoesNotExist, []string{})
+	req, err = labels.NewRequirement(operatorConsts.WatchdogPatchedLabel, selection.DoesNotExist, []string{})
 	if err != nil {
 		log.Fatalf("Unable to add label requirement to find pods with Watchdog created label , err: %s", err)
 	}
@@ -167,7 +167,7 @@ func (dw *DaprWatchdog) listPods(ctx context.Context) bool {
 
 	err := dw.client.List(ctx, deployment, &client.ListOptions{
 		LabelSelector: labels.SelectorFromSet(
-			map[string]string{"app": operatorconsts.SidecarInjectorDeploymentName},
+			map[string]string{"app": operatorConsts.SidecarInjectorDeploymentName},
 		),
 	})
 	if err != nil {
@@ -254,9 +254,9 @@ func (dw *DaprWatchdog) listPods(ctx context.Context) bool {
 
 func patchPodLabel(ctx context.Context, cl client.Client, pod *corev1.Pod) error {
 	// in case this has been already patched just return
-	if _, ok := pod.GetLabels()[operatorconsts.WatchdogPatchedLabel]; ok {
+	if _, ok := pod.GetLabels()[operatorConsts.WatchdogPatchedLabel]; ok {
 		return nil
 	}
-	mergePatch := []byte(fmt.Sprintf(`{"metadata":{"labels":{"%s":"true"}}}`, operatorconsts.WatchdogPatchedLabel))
+	mergePatch := []byte(fmt.Sprintf(`{"metadata":{"labels":{"%s":"true"}}}`, operatorConsts.WatchdogPatchedLabel))
 	return cl.Patch(ctx, pod, client.RawPatch(types.MergePatchType, mergePatch))
 }
