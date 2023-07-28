@@ -40,17 +40,21 @@ echo "Resident memory: $RESIDENT_MEM KB compared to baseline of $BASELINE_RESIDE
 echo "Virtual memory: $VIRT_MEM KB compared to baseline of $BASELINE_VIRT_MEM KB ($DELTA_VIRT_MEM KB)"
 echo "Number of Go routines: $GO_ROUTINES compared to baseline of $BASELINE_GO_ROUTINES ($DELTA_GO_ROUTINES)"
 
+EXIT_CODE=0
+
 if [[ $DELTA_BINARY_SIZE -gt $LIMIT_DELTA_BINARY_SIZE ]]; then
    echo "New version's binary size is too large: $DELTA_BINARY_SIZE KB"
-   exit 1
+   EXIT_CODE=1
 fi
 
 if [[ $DELTA_VIRT_MEM -gt $LIMIT_DELTA_VIRT_MEM ]]; then
    echo "New version is consuming too much virtual memory: $DELTA_VIRT_MEM KB"
-   exit 1
+   EXIT_CODE=1
 fi
 
 if [[ $DELTA_GO_ROUTINES -gt $LIMIT_DELTA_GO_ROUTINES ]]; then
    echo "New version is spawning an additional $DELTA_GO_ROUTINES Go routines"
-   exit 1
+   EXIT_CODE=1
 fi
+
+exit $EXIT_CODE
