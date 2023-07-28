@@ -16,7 +16,6 @@ package meta
 import (
 	"fmt"
 	"log"
-	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -113,15 +112,15 @@ func ContainsNamespace(items []common.NameValuePair) bool {
 // When strict sandbox is enabled, WASM components always run in strict mode regardless of their configuration.
 // When strict sandbox is disabled or unset, keep the original component configuration.
 func (m *Meta) AddWasmStrictSandbox(comp *compapi.Component) {
-	// If the global strict sandbox is disabled(or unset), do nothing.
-	if m.strictSandbox == false {
+	// If the global strict sandbox is disabled (or unset), it is not enforced.
+	if !m.strictSandbox {
 		return
 	}
 
 	// If the metadata already contains the strict sandbox key, update the value to global strict sandbox config.
 	for i, c := range comp.Spec.Metadata {
 		if strings.EqualFold(c.Name, WasmStrictSandboxMetadataKey) {
-			comp.Spec.Metadata[i].SetValue([]byte(strconv.FormatBool(m.strictSandbox)))
+			comp.Spec.Metadata[i].SetValue([]byte("true"))
 			return
 		}
 	}
@@ -130,6 +129,6 @@ func (m *Meta) AddWasmStrictSandbox(comp *compapi.Component) {
 	sandbox := common.NameValuePair{
 		Name: WasmStrictSandboxMetadataKey,
 	}
-	sandbox.SetValue([]byte(strconv.FormatBool(m.strictSandbox)))
+	sandbox.SetValue([]byte("true"))
 	comp.Spec.Metadata = append(comp.Spec.Metadata, sandbox)
 }
