@@ -331,6 +331,7 @@ func (s *server) startWorkloadCertRotation() {
 	s.logger.Infof("starting workload cert expiry watcher. current cert expires on: %s", s.signedCert.Expiry.String())
 
 	ticker := time.NewTicker(certWatchInterval)
+	defer ticker.Stop()
 
 	for {
 		select {
