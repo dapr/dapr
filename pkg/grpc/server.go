@@ -194,17 +194,16 @@ func (s *server) Close() error {
 
 	for _, server := range s.servers {
 		// This calls `Close()` on the underlying listener.
-		server.GracefulStop()
+		go server.GracefulStop()
 	}
 
-	var errs []error
 	if s.api != nil {
 		if closer, ok := s.api.(io.Closer); ok {
-			errs = append(errs, closer.Close())
+			return closer.Close()
 		}
 	}
 
-	return errors.Join(errs...)
+	return nil
 }
 
 func (s *server) generateWorkloadCert() error {

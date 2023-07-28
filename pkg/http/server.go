@@ -38,7 +38,6 @@ import (
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 
-	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/config"
 	corsDapr "github.com/dapr/dapr/pkg/cors"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -227,29 +226,35 @@ func (s *server) StartNonBlocking() error {
 }
 
 func (s *server) Close() error {
-	defer s.wg.Wait()
-
-	closeServer := func(srv *http.Server) func(ctx context.Context) error {
-		return func(ctx context.Context) error {
-			// This calls `Close()` on the underlying listener.
-			err := srv.Shutdown(ctx)
-			// Error will be ErrServerClosed if everything went well
-			if errors.Is(err, http.ErrServerClosed) {
-				return nil
-			}
-			return err
+	closeServer := func(ctx context.Context, srv *http.Server) error {
+		// This calls `Close()` on the underlying listener.
+		err := srv.Shutdown(ctx)
+		// Error will be ErrServerClosed if everything went well
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
 		}
+		return err
 	}
 
-	closers := make([]concurrency.Runner, 0, len(s.servers))
-	for _, srv := range s.servers {
-		closers = append(closers, closeServer(srv))
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	// We don't want to use a concurrency.RunnerManager here because the context
+	// would be canceled as soon as the first server is closed and returns.
+	// Rather, we want the context to cancel after the timeout.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	return concurrency.NewRunnerManager(closers...).Run(ctx)
+	s.wg.Add(len(s.servers))
+	errs := make([]error, len(s.servers))
+	for i, server := range s.servers {
+		go func(i int, srv *http.Server) {
+			defer s.wg.Done()
+			log.Infof("Closing HTTP server %s…", srv.Addr)
+			errs[i] = closeServer(ctx, srv)
+		}(i, server)
+	}
+
+	s.wg.Wait()
+
+	return errors.Join(errs...)
 }
 
 func (s *server) getRouter() *chi.Mux {

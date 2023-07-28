@@ -94,6 +94,7 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		"--enable-app-health-check=" + strconv.FormatBool(opts.appHealthCheck),
 		"--app-health-probe-interval=" + strconv.Itoa(opts.appHealthProbeInterval),
 		"--app-health-threshold=" + strconv.Itoa(opts.appHealthProbeThreshold),
+		"--dapr-graceful-shutdown-seconds=10",
 	}
 	if opts.appHealthCheckPath != "" {
 		args = append(args, "--app-health-check-path="+opts.appHealthCheckPath)

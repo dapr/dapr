@@ -328,13 +328,19 @@ func (a *DaprRuntime) shutdown() error {
 			return nil
 		},
 		func(ctx context.Context) error {
-			var errs []error
 			log.Info("Stopping Dapr APIs")
-			for _, closer := range a.apiClosers {
-				if err := closer.Close(); err != nil {
-					errs = append(errs, fmt.Errorf("error closing API: %v", err))
-				}
+			errs := make([]error, len(a.apiClosers))
+			var wg sync.WaitGroup
+			wg.Add(len(a.apiClosers))
+			for i, closer := range a.apiClosers {
+				go func(i int, c io.Closer) {
+					defer wg.Done()
+					if err := closer.Close(); err != nil {
+						errs[i] = fmt.Errorf("error closing API: %v", err)
+					}
+				}(i, closer)
 			}
+			wg.Wait()
 			return errors.Join(errs...)
 		},
 		func(ctx context.Context) error {
