@@ -50,6 +50,7 @@ type reminders struct {
 	reminders            map[string][]ActorReminderReference
 	activeReminders      *sync.Map
 	evaluationChan       chan struct{}
+	evaluationQueue      chan struct{}
 	stateStoreProviderFn internal.StateStoreProviderFn
 	resiliency           resiliency.Provider
 	storeName            string
@@ -66,6 +67,7 @@ func NewRemindersProvider(clock clock.WithTicker, opts internal.RemindersProvide
 		reminders:        map[string][]ActorReminderReference{},
 		activeReminders:  &sync.Map{},
 		evaluationChan:   make(chan struct{}, 1),
+		evaluationQueue:  make(chan struct{}, 1),
 		storeName:        opts.StoreName,
 		config:           opts.Config,
 		metricsCollector: diag.DefaultMonitoring.ActorReminders,
@@ -94,7 +96,19 @@ func (r *reminders) SetMetricsCollectorFn(fn remindersMetricsCollectorFn) {
 
 // OnPlacementTablesUpdated is invoked when the actors runtime received an updated placement tables.
 func (r *reminders) OnPlacementTablesUpdated(ctx context.Context) {
-	r.evaluateReminders(ctx)
+	go func() {
+		// To handle bursts, use a queue so no more than one evaluation can be queued up at the same time, since they'd all fetch the same data anyways
+		select {
+		case r.evaluationQueue <- struct{}{}:
+			// Queue isn't full
+		default:
+			// There's already one invocation in the queue so no need to queue up another one
+			return
+		}
+
+		// r.evaluationQueue is released in the handler after obtaining the evaluationChan lock
+		r.evaluateReminders(ctx)
+	}()
 }
 
 func (r *reminders) DrainRebalancedReminders(actorType string, actorID string) {
@@ -122,6 +136,7 @@ func (r *reminders) CreateReminder(ctx context.Context, reminder *internal.Remin
 		return err
 	}
 
+	// Wait for the evaluation chan lock
 	if !r.waitForEvaluationChan() {
 		return errors.New("error creating reminder: timed out after 5s")
 	}
@@ -148,6 +163,8 @@ func (r *reminders) CreateReminder(ctx context.Context, reminder *internal.Remin
 	if err != nil {
 		return fmt.Errorf("error storing reminder: %w", err)
 	}
+
+	// Start the reminder
 	return r.startReminder(reminder, stop)
 }
 
@@ -199,6 +216,7 @@ func (r *reminders) RenameReminder(ctx context.Context, req *internal.RenameRemi
 		return err
 	}
 
+	// Wait for the evaluation chan lock
 	if !r.waitForEvaluationChan() {
 		return errors.New("error renaming reminder: timed out after 5s")
 	}
@@ -236,6 +254,7 @@ func (r *reminders) RenameReminder(ctx context.Context, req *internal.RenameRemi
 		return err
 	}
 
+	// Start the new reminder
 	return r.startReminder(reminder, stop)
 }
 
@@ -246,12 +265,16 @@ func (r *reminders) evaluateReminders(ctx context.Context) {
 		// All good, continue
 	case <-r.runningCh:
 		// Processor is shutting down
+		<-r.evaluationQueue
 		return
 	}
 	defer func() {
 		// Release the evaluation chan lock
 		<-r.evaluationChan
 	}()
+
+	// Allow another evaluation operation to get queued up
+	<-r.evaluationQueue
 
 	var wg sync.WaitGroup
 
