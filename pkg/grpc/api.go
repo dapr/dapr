@@ -25,6 +25,7 @@ import (
 	"time"
 
 	otelTrace "go.opentelemetry.io/otel/trace"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -84,6 +85,7 @@ type api struct {
 	tracingSpec           config.TracingSpec
 	accessControlList     *config.AccessControlList
 	compStore             *compstore.ComponentStore
+	isErrorCodesEnabled    bool
 }
 
 // APIOpts contains options for NewAPI.
@@ -102,6 +104,7 @@ type APIOpts struct {
 	GetComponentsCapabilitiesFn func() map[string][]string
 	AppConnectionConfig         config.AppConnectionConfig
 	GlobalConfig                *config.Configuration
+	IsErrorCodesEnabled         bool
 }
 
 // NewAPI returns a new gRPC API.
@@ -126,6 +129,7 @@ func NewAPI(opts APIOpts) API {
 		tracingSpec:           opts.TracingSpec,
 		accessControlList:     opts.AccessControlList,
 		compStore:             opts.CompStore,
+		isErrorCodesEnabled:   opts.IsErrorCodesEnabled,
 	}
 }
 
@@ -725,6 +729,19 @@ func (a *api) stateErrorResponse(err error, format string, args ...interface{}) 
 	if errors.As(err, &etagErr) {
 		switch etagErr.Kind() {
 		case state.ETagMismatch:
+			if a.isErrorCodesEnabled {
+				ste := status.Newf(codes.Aborted, format, args...)
+				ei := errdetails.ErrorInfo{
+					Domain: "dapr.io",
+					Reason: "DAPR_STATE_ETAG_MISMATCH",
+					Metadata: map[string]string{},
+				}
+				ste, err2 := ste.WithDetails(&ei)
+				if err2 != nil {
+					return status.Errorf(codes.Aborted, format, args...)
+				}
+				return ste.Err()
+			}
 			return status.Errorf(codes.Aborted, format, args...)
 		case state.ETagInvalid:
 			return status.Errorf(codes.InvalidArgument, format, args...)
