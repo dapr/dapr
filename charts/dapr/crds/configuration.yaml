@@ -402,8 +402,6 @@ spec:
                 properties:
                   strictSandbox:
                     type: boolean
-                required:
-                  - strictSandbox
                 type: object
             type: object
         type: object
