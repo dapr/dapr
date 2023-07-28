@@ -47,14 +47,12 @@ type reminders struct {
 	runningCh            chan struct{}
 	executeReminderFn    internal.ExecuteReminderFn
 	remindersLock        sync.RWMutex
-	remindersStoringLock sync.Mutex
 	reminders            map[string][]ActorReminderReference
 	activeReminders      *sync.Map
 	evaluationChan       chan struct{}
 	stateStoreProviderFn internal.StateStoreProviderFn
 	resiliency           resiliency.Provider
 	storeName            string
-	evaluationLock       sync.RWMutex
 	config               internal.Config
 	lookUpActorFn        internal.LookupActorFn
 	metricsCollector     remindersMetricsCollectorFn
@@ -127,9 +125,10 @@ func (r *reminders) CreateReminder(ctx context.Context, reminder *internal.Remin
 	if !r.waitForEvaluationChan() {
 		return errors.New("error creating reminder: timed out after 5s")
 	}
-
-	r.remindersStoringLock.Lock()
-	defer r.remindersStoringLock.Unlock()
+	defer func() {
+		// Release the evaluation chan lock
+		<-r.evaluationChan
+	}()
 
 	existing, ok := r.getReminder(reminder.Name, reminder.ActorType, reminder.ActorID)
 	if ok {
@@ -184,9 +183,10 @@ func (r *reminders) DeleteReminder(ctx context.Context, req internal.DeleteRemin
 	if !r.waitForEvaluationChan() {
 		return errors.New("error deleting reminder: timed out after 5s")
 	}
-
-	r.remindersStoringLock.Lock()
-	defer r.remindersStoringLock.Unlock()
+	defer func() {
+		// Release the evaluation chan lock
+		<-r.evaluationChan
+	}()
 
 	return r.doDeleteReminder(ctx, req.ActorType, req.ActorID, req.Name)
 }
@@ -202,9 +202,10 @@ func (r *reminders) RenameReminder(ctx context.Context, req *internal.RenameRemi
 	if !r.waitForEvaluationChan() {
 		return errors.New("error renaming reminder: timed out after 5s")
 	}
-
-	r.remindersStoringLock.Lock()
-	defer r.remindersStoringLock.Unlock()
+	defer func() {
+		// Release the evaluation chan lock
+		<-r.evaluationChan
+	}()
 
 	oldReminder, exists := r.getReminder(req.OldName, req.ActorType, req.ActorID)
 	if !exists {
@@ -239,16 +240,23 @@ func (r *reminders) RenameReminder(ctx context.Context, req *internal.RenameRemi
 }
 
 func (r *reminders) evaluateReminders(ctx context.Context) {
-	r.evaluationLock.Lock()
-	defer r.evaluationLock.Unlock()
-
-	r.evaluationChan <- struct{}{}
+	// Wait for the evaluation channel
+	select {
+	case r.evaluationChan <- struct{}{}:
+		// All good, continue
+	case <-r.runningCh:
+		// Processor is shutting down
+		return
+	}
+	defer func() {
+		// Release the evaluation chan lock
+		<-r.evaluationChan
+	}()
 
 	var wg sync.WaitGroup
 
 	if r.config.HostedActorTypes == nil {
 		log.Warn("hostedActorTypes is nil, skipping reminder evaluation")
-		<-r.evaluationChan
 		return
 	}
 
@@ -301,22 +309,30 @@ func (r *reminders) evaluateReminders(ctx context.Context) {
 		}()
 	}
 	wg.Wait()
-	<-r.evaluationChan
 }
 
 func (r *reminders) waitForEvaluationChan() bool {
 	t := r.clock.NewTimer(5 * time.Second)
-	defer t.Stop()
 
 	select {
-	case <-r.runningCh:
-		return false
+	// Evaluation channel was not freed up in time
 	case <-t.C():
 		return false
+
+	// The provider is shutting down
+	case <-r.runningCh:
+		if !t.Stop() {
+			<-t.C()
+		}
+		return false
+
+	// Evaluation chan is available
 	case r.evaluationChan <- struct{}{}:
-		<-r.evaluationChan
+		if !t.Stop() {
+			<-t.C()
+		}
+		return true
 	}
-	return true
 }
 
 func (r *reminders) getReminder(reminderName string, actorType string, actorID string) (*internal.Reminder, bool) {
@@ -736,14 +752,24 @@ func (r *reminders) migrateRemindersForActorType(ctx context.Context, store inte
 	}
 
 	if actorMetadata.RemindersMetadata.PartitionCount > reminderPartitionCount {
-		log.Warnf("cannot decrease number of partitions for reminders of actor type %s", actorType)
+		log.Errorf("Cannot decrease number of partitions for reminders of actor type %s", actorType)
 		return nil
 	}
 
-	r.remindersStoringLock.Lock()
-	defer r.remindersStoringLock.Unlock()
+	// Wait for the evaluation channel
+	select {
+	case r.evaluationChan <- struct{}{}:
+		// All good, continue
+	case <-r.runningCh:
+		// Processor is shutting down
+		return nil
+	}
+	defer func() {
+		// Release the evaluation chan lock
+		<-r.evaluationChan
+	}()
 
-	log.Warnf("migrating actor metadata record for actor type %s", actorType)
+	log.Warnf("Migrating actor metadata record for actor type %s", actorType)
 
 	// Fetch all reminders for actor type.
 	reminderRefs, refreshedActorMetadata, err := r.getRemindersForActorType(ctx, actorType, false)
