@@ -914,6 +914,7 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		CompStore:                   a.compStore,
 		AppConnectionConfig:         a.runtimeConfig.appConnectionConfig,
 		GlobalConfig:                a.globalConfig,
+		IsErrorCodesEnabled:         a.globalConfig.IsFeatureEnabled(config.ErrorCodes),
 	})
 
 	serverConf := http.ServerConfig{
@@ -1009,6 +1010,7 @@ func (a *DaprRuntime) getGRPCAPI() grpc.API {
 		CompStore:                   a.compStore,
 		AppConnectionConfig:         a.runtimeConfig.appConnectionConfig,
 		GlobalConfig:                a.globalConfig,
+		IsErrorCodesEnabled:         a.globalConfig.IsFeatureEnabled(config.ErrorCodes),
 	})
 }
 

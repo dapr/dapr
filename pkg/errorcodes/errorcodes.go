@@ -14,11 +14,9 @@ limitations under the License.
 package errorcodes
 
 import (
-	"bytes"
-
 	"fmt"
 
-	"github.com/gogo/protobuf/jsonpb"
+	"google.golang.org/protobuf/encoding/protojson"
 
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
@@ -47,15 +45,5 @@ func Newf(c codes.Code, format string, a ...interface{}) (*status.Status, error)
 }
 
 func StatusErrorJSON(st *status.Status) ([]byte, error) {
-	marshaler := jsonpb.Marshaler{
-		EmitDefaults: true,
-		OrigName:     true,
-	}
-	b := new(bytes.Buffer)
-	err := marshaler.Marshal(b, st.Proto())
-	if err != nil {
-		return nil, err
-	}
-
-	return b.Bytes(), nil
+	return protojson.Marshal(st.Proto())
 }
