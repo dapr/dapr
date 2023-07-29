@@ -90,7 +90,7 @@ type api struct {
 	tracingSpec             config.TracingSpec
 	maxRequestBodySize      int64 // In bytes
 	compStore               *compstore.ComponentStore
-	isErrorCodesEnabled    bool
+	isErrorCodesEnabled     bool
 }
 
 const (
@@ -164,7 +164,7 @@ func NewAPI(opts APIOpts) API {
 			AppConnectionConfig:        opts.AppConnectionConfig,
 			GlobalConfig:               opts.GlobalConfig,
 		},
-		isErrorCodesEnabled:           opts.IsErrorCodesEnabled,
+		isErrorCodesEnabled: opts.IsErrorCodesEnabled,
 	}
 
 	metadataEndpoints := api.constructMetadataEndpoints()
@@ -937,7 +937,7 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 
 	if err != nil {
 		if a.isErrorCodesEnabled {
-            if sdeErr := a.stateDaprErrorResponse(reqCtx, err); sdeErr == nil {
+			if sdeErr := a.stateDaprErrorResponse(reqCtx, err); sdeErr == nil {
 				return
 			}
 		}
@@ -1030,7 +1030,7 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 		if a.isErrorCodesEnabled {
 			derErr := a.stateDaprErrorResponse(reqCtx, err)
 			if derErr == nil {
-		    	return
+				return
 			}
 		}
 
@@ -1062,24 +1062,24 @@ func (a *api) stateErrorResponse(err error, errorCode string) (int, string, Erro
 
 // stateDaprErrorResponse takes a state store error and sends the response with JSON Status Error.
 // Returns original state error if processing fails or not Etag.
-func (a *api) stateDaprErrorResponse(reqCtx *fasthttp.RequestCtx, stateErr error) (error) {
+func (a *api) stateDaprErrorResponse(reqCtx *fasthttp.RequestCtx, stateErr error) error {
 	etag, code, message := a.etagError(stateErr)
 
 	if etag {
 		ste := status.Newf(codes.Aborted, message)
 		ei := errdetails.ErrorInfo{
-			Domain: "dapr.io",
-			Reason: "DAPR_STATE_ETAG_MISMATCH",
+			Domain:   "dapr.io",
+			Reason:   "DAPR_STATE_ETAG_MISMATCH",
 			Metadata: map[string]string{},
 		}
-		
+
 		if st, wdErr := ste.WithDetails(&ei); wdErr == nil {
-		  if resp, sejErr := statusErrorJSON(st); sejErr == nil {
-			fasthttpRespond(reqCtx, fasthttpResponseWithJSON(code, resp))
-			log.Debug(resp)
-			return nil
-		  }
-	    }
+			if resp, sejErr := statusErrorJSON(st); sejErr == nil {
+				fasthttpRespond(reqCtx, fasthttpResponseWithJSON(code, resp))
+				log.Debug(resp)
+				return nil
+			}
+		}
 	}
 
 	return stateErr
@@ -1098,7 +1098,6 @@ func statusErrorJSON(st *status.Status) ([]byte, error) {
 
 	return b.Bytes(), nil
 }
-
 
 // etagError checks if the error from the state store is an etag error and returns a bool for indication,
 // an status code and an error message.

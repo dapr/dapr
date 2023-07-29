@@ -85,7 +85,7 @@ type api struct {
 	tracingSpec           config.TracingSpec
 	accessControlList     *config.AccessControlList
 	compStore             *compstore.ComponentStore
-	isErrorCodesEnabled    bool
+	isErrorCodesEnabled   bool
 }
 
 // APIOpts contains options for NewAPI.
@@ -732,13 +732,13 @@ func (a *api) stateErrorResponse(err error, format string, args ...interface{}) 
 			if a.isErrorCodesEnabled {
 				ste := status.Newf(codes.Aborted, format, args...)
 				ei := errdetails.ErrorInfo{
-					Domain: "dapr.io",
-					Reason: "DAPR_STATE_ETAG_MISMATCH",
+					Domain:   "dapr.io",
+					Reason:   "DAPR_STATE_ETAG_MISMATCH",
 					Metadata: map[string]string{},
 				}
-				if ste, wdErr := ste.WithDetails(&ei);wdErr == nil {
+				if ste, wdErr := ste.WithDetails(&ei); wdErr == nil {
 					return ste.Err()
-				}	
+				}
 			}
 
 			return status.Errorf(codes.Aborted, format, args...)
