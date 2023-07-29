@@ -25,7 +25,6 @@ import (
 	"time"
 
 	otelTrace "go.opentelemetry.io/otel/trace"
-	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -44,6 +43,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
+	"github.com/dapr/dapr/pkg/errorcodes"
 	"github.com/dapr/dapr/pkg/grpc/metadata"
 	"github.com/dapr/dapr/pkg/grpc/universalapi"
 	"github.com/dapr/dapr/pkg/messages"
@@ -730,13 +730,7 @@ func (a *api) stateErrorResponse(err error, format string, args ...interface{}) 
 		switch etagErr.Kind() {
 		case state.ETagMismatch:
 			if a.isErrorCodesEnabled {
-				ste := status.Newf(codes.Aborted, format, args...)
-				ei := errdetails.ErrorInfo{
-					Domain:   "dapr.io",
-					Reason:   "DAPR_STATE_ETAG_MISMATCH",
-					Metadata: map[string]string{},
-				}
-				if ste, wdErr := ste.WithDetails(&ei); wdErr == nil {
+				if ste, wdErr := errorcodes.Newf(codes.Aborted, format, args...); wdErr == nil {
 					return ste.Err()
 				}
 			}

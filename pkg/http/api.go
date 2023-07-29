@@ -28,13 +28,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang/protobuf/jsonpb"
-
 	"github.com/go-chi/chi/v5"
 	"github.com/mitchellh/mapstructure"
 	"github.com/valyala/fasthttp"
 	"go.opentelemetry.io/otel/trace"
-	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -51,6 +48,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
+	"github.com/dapr/dapr/pkg/errorcodes"
 	"github.com/dapr/dapr/pkg/grpc/universalapi"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messaging"
@@ -1066,15 +1064,8 @@ func (a *api) stateDaprErrorResponse(reqCtx *fasthttp.RequestCtx, stateErr error
 	etag, code, message := a.etagError(stateErr)
 
 	if etag {
-		ste := status.Newf(codes.Aborted, message)
-		ei := errdetails.ErrorInfo{
-			Domain:   "dapr.io",
-			Reason:   "DAPR_STATE_ETAG_MISMATCH",
-			Metadata: map[string]string{},
-		}
-
-		if st, wdErr := ste.WithDetails(&ei); wdErr == nil {
-			if resp, sejErr := statusErrorJSON(st); sejErr == nil {
+		if st, wdErr := errorcodes.New(codes.Aborted, message); wdErr == nil {
+			if resp, sejErr := errorcodes.StatusErrorJSON(st); sejErr == nil {
 				fasthttpRespond(reqCtx, fasthttpResponseWithJSON(code, resp))
 				log.Debug(resp)
 				return nil
@@ -1083,20 +1074,6 @@ func (a *api) stateDaprErrorResponse(reqCtx *fasthttp.RequestCtx, stateErr error
 	}
 
 	return stateErr
-}
-
-func statusErrorJSON(st *status.Status) ([]byte, error) {
-	marshaler := jsonpb.Marshaler{
-		EmitDefaults: true,
-		OrigName:     true,
-	}
-	b := new(bytes.Buffer)
-	err := marshaler.Marshal(b, st.Proto())
-	if err != nil {
-		return nil, err
-	}
-
-	return b.Bytes(), nil
 }
 
 // etagError checks if the error from the state store is an etag error and returns a bool for indication,
