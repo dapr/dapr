@@ -28,10 +28,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/golang/protobuf/jsonpb"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/mitchellh/mapstructure"
 	"github.com/valyala/fasthttp"
 	"go.opentelemetry.io/otel/trace"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -87,6 +90,7 @@ type api struct {
 	tracingSpec             config.TracingSpec
 	maxRequestBodySize      int64 // In bytes
 	compStore               *compstore.ComponentStore
+	isErrorCodesEnabled    bool
 }
 
 const (
@@ -134,6 +138,7 @@ type APIOpts struct {
 	MaxRequestBodySize          int64 // In bytes
 	AppConnectionConfig         config.AppConnectionConfig
 	GlobalConfig                *config.Configuration
+	IsErrorCodesEnabled         bool
 }
 
 // NewAPI returns a new API.
@@ -159,6 +164,7 @@ func NewAPI(opts APIOpts) API {
 			AppConnectionConfig:        opts.AppConnectionConfig,
 			GlobalConfig:               opts.GlobalConfig,
 		},
+		isErrorCodesEnabled:           opts.IsErrorCodesEnabled,
 	}
 
 	metadataEndpoints := api.constructMetadataEndpoints()
@@ -930,6 +936,12 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 	diag.DefaultComponentMonitoring.StateInvoked(reqCtx, storeName, diag.Delete, err == nil, elapsed)
 
 	if err != nil {
+		if a.isErrorCodesEnabled {
+            if sdeErr := a.stateDaprErrorResponse(reqCtx, err); sdeErr == nil {
+				return
+			}
+		}
+
 		statusCode, errMsg, resp := a.stateErrorResponse(err, "ERR_STATE_DELETE")
 		resp.Message = fmt.Sprintf(messages.ErrStateDelete, key, errMsg)
 
@@ -1015,6 +1027,13 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 	diag.DefaultComponentMonitoring.StateInvoked(reqCtx, storeName, diag.Set, err == nil, elapsed)
 
 	if err != nil {
+		if a.isErrorCodesEnabled {
+			derErr := a.stateDaprErrorResponse(reqCtx, err)
+			if derErr == nil {
+		    	return
+			}
+		}
+
 		statusCode, errMsg, resp := a.stateErrorResponse(err, "ERR_STATE_SAVE")
 		resp.Message = fmt.Sprintf(messages.ErrStateSave, storeName, errMsg)
 
@@ -1040,6 +1059,46 @@ func (a *api) stateErrorResponse(err error, errorCode string) (int, string, Erro
 
 	return nethttp.StatusInternalServerError, message, r
 }
+
+// stateDaprErrorResponse takes a state store error and sends the response with JSON Status Error.
+// Returns original state error if processing fails or not Etag.
+func (a *api) stateDaprErrorResponse(reqCtx *fasthttp.RequestCtx, stateErr error) (error) {
+	etag, code, message := a.etagError(stateErr)
+
+	if etag {
+		ste := status.Newf(codes.Aborted, message)
+		ei := errdetails.ErrorInfo{
+			Domain: "dapr.io",
+			Reason: "DAPR_STATE_ETAG_MISMATCH",
+			Metadata: map[string]string{},
+		}
+		
+		if st, wdErr := ste.WithDetails(&ei); wdErr == nil {
+		  if resp, sejErr := statusErrorJSON(st); sejErr == nil {
+			fasthttpRespond(reqCtx, fasthttpResponseWithJSON(code, resp))
+			log.Debug(resp)
+			return nil
+		  }
+	    }
+	}
+
+	return stateErr
+}
+
+func statusErrorJSON(st *status.Status) ([]byte, error) {
+	marshaler := jsonpb.Marshaler{
+		EmitDefaults: true,
+		OrigName:     true,
+	}
+	b := new(bytes.Buffer)
+	err := marshaler.Marshal(b, st.Proto())
+	if err != nil {
+		return nil, err
+	}
+
+	return b.Bytes(), nil
+}
+
 
 // etagError checks if the error from the state store is an etag error and returns a bool for indication,
 // an status code and an error message.

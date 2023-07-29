@@ -736,12 +736,11 @@ func (a *api) stateErrorResponse(err error, format string, args ...interface{}) 
 					Reason: "DAPR_STATE_ETAG_MISMATCH",
 					Metadata: map[string]string{},
 				}
-				ste, err2 := ste.WithDetails(&ei)
-				if err2 != nil {
-					return status.Errorf(codes.Aborted, format, args...)
-				}
-				return ste.Err()
+				if ste, wdErr := ste.WithDetails(&ei);wdErr == nil {
+					return ste.Err()
+				}	
 			}
+
 			return status.Errorf(codes.Aborted, format, args...)
 		case state.ETagInvalid:
 			return status.Errorf(codes.InvalidArgument, format, args...)
