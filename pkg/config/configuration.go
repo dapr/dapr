@@ -303,7 +303,7 @@ type WasmSpec struct {
 	// Force enabling strict sandbox mode for all WASM components.
 	// When this is enabled, WASM components always run in strict mode regardless of their configuration.
 	// Strict mode enhances security of the WASM sandbox by limiting access to certain capabilities such as real-time clocks and random number generators.
-	StrictSandbox bool `json:"strictSandbox,omitEmpty" yaml:"strictSandbox,omitEmpty"`
+	StrictSandbox bool `json:"strictSandbox,omitempty" yaml:"strictSandbox,omitempty"`
 }
 
 // LoggingSpec defines the configuration for logging.
