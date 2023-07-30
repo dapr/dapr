@@ -2829,6 +2829,19 @@ func TestStateStoreErrors(t *testing.T) {
 		assert.Equal(t, "rpc error: code = Aborted desc = failed saving state in state store a: possible etag mismatch. error from state store: error", err2.Error())
 	})
 
+	t.Run("save etag mismatch errors code enabled", func(t *testing.T) {
+		a := &api{
+			isErrorCodesEnabled: true,
+		}
+		err := state.NewETagError(state.ETagMismatch, errors.New("error"))
+		err2 := a.stateErrorResponse(err, messages.ErrStateSave, "a", err.Error())
+
+		assert.Equal(t, "rpc error: code = Aborted desc = failed saving state in state store a: possible etag mismatch. error from state store: error", err2.Error())
+		errStatus := status.Convert(err2)
+		assert.NotEmpty(t, errStatus)
+		assert.Equal(t, errStatus.Code(), codes.Aborted, fmt.Sprintf("unexpected 'Aborted' Code, got %s", errStatus.Code()))
+	})
+
 	t.Run("save etag invalid", func(t *testing.T) {
 		a := &api{}
 		err := state.NewETagError(state.ETagInvalid, errors.New("error"))
