@@ -30,7 +30,7 @@ const (
 
 // New returns a Status representing c and msg.
 func New(c codes.Code, msg string) (*status.Status, error) {
-	ste := status.Newf(c, msg)
+	ste := status.New(c, msg)
 	ei := errdetails.ErrorInfo{
 		Domain:   domain,
 		Reason:   daprETagMismatch,
