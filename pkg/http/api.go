@@ -936,9 +936,12 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 	if err != nil {
 		if a.isErrorCodesEnabled {
 			md := map[string]string{
-				"op": "ERR_STATE_DELETE",
+				"operation": "ERR_STATE_DELETE",
 			}
-			if sdeErr := a.stateDaprErrorResponse(reqCtx, err, md); sdeErr == nil {
+			code, resp, derErr := a.stateDaprErrorResponse(err, md)
+			if derErr == nil {
+				fasthttpRespond(reqCtx, fasthttpResponseWithJSON(code, resp))
+				log.Debug(resp)
 				return
 			}
 		}
@@ -1030,10 +1033,12 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 	if err != nil {
 		if a.isErrorCodesEnabled {
 			md := map[string]string{
-				"op": "ERR_STATE_SAVE",
+				"operation": "ERR_STATE_SAVE",
 			}
-			derErr := a.stateDaprErrorResponse(reqCtx, err, md)
+			code, resp, derErr := a.stateDaprErrorResponse(err, md)
 			if derErr == nil {
+				fasthttpRespond(reqCtx, fasthttpResponseWithJSON(code, resp))
+				log.Debug(resp)
 				return
 			}
 		}
@@ -1065,21 +1070,18 @@ func (a *api) stateErrorResponse(err error, errorCode string) (int, string, Erro
 }
 
 // stateDaprErrorResponse takes a state store error and sends the response with JSON Status Error.
-// Returns original state error if processing fails or not Etag.
-func (a *api) stateDaprErrorResponse(reqCtx *fasthttp.RequestCtx, stateErr error, md map[string]string) error {
-	etag, code, message := a.etagError(stateErr)
+// Returns original state error if not Etag or processing fails.
+func (a *api) stateDaprErrorResponse(stateErr error, md map[string]string) (int, []byte, error) {
 
-	if etag {
+	if etag, code, message := a.etagError(stateErr); etag && (code == nethttp.StatusConflict) {
 		if st, wdErr := errorcodes.New(codes.Aborted, message, md); wdErr == nil {
 			if resp, sejErr := errorcodes.StatusErrorJSON(st); sejErr == nil {
-				fasthttpRespond(reqCtx, fasthttpResponseWithJSON(code, resp))
-				log.Debug(resp)
-				return nil
+				return code, resp, nil
 			}
 		}
 	}
 
-	return stateErr
+	return 0, nil, stateErr
 }
 
 // etagError checks if the error from the state store is an etag error and returns a bool for indication,

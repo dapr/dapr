@@ -5644,6 +5644,30 @@ func TestStateStoreErrors(t *testing.T) {
 		assert.Equal(t, 400, c)
 		assert.Equal(t, "invalid etag value: error", m)
 	})
+
+	t.Run("error codes etag mismatch error", func(t *testing.T) {
+		a := &api{}
+		err := state.NewETagError(state.ETagMismatch, errors.New("error"))
+		md := map[string]string{
+			"operation": "ERR_STATE_SAVE",
+		}
+		c, m, err2 := a.stateDaprErrorResponse(err, md)
+
+		assert.Nil(t, err2)
+		assert.Equal(t, 409, c)
+		expectedJSON := `{"code":10,"message":"possible etag mismatch. error from state store: error","details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"DAPR_STATE_ETAG_MISMATCH","domain":"dapr.io","metadata":{"operation":"ERR_STATE_SAVE"}}]}`
+		assert.Equal(t, expectedJSON, string(m))
+	})
+
+	t.Run("error codes etag invalid error", func(t *testing.T) {
+		a := &api{}
+		err := state.NewETagError(state.ETagInvalid, errors.New("error"))
+		c, m, err2 := a.stateDaprErrorResponse(err, nil)
+
+		assert.Equal(t, err, err2)
+		assert.Equal(t, 0, c)
+		assert.Empty(t, m)
+	})
 }
 
 func TestExtractEtag(t *testing.T) {
