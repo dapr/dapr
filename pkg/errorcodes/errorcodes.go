@@ -29,19 +29,22 @@ const (
 )
 
 // New returns a Status representing c and msg.
-func New(c codes.Code, msg string) (*status.Status, error) {
+func New(c codes.Code, msg string, md map[string]string) (*status.Status, error) {
 	ste := status.New(c, msg)
+	if md == nil {
+		md = map[string]string{}
+	}
 	ei := errdetails.ErrorInfo{
 		Domain:   domain,
 		Reason:   daprETagMismatch,
-		Metadata: map[string]string{},
+		Metadata: md,
 	}
 	return ste.WithDetails(&ei)
 }
 
 // Newf returns New(c, fmt.Sprintf(format, a...)).
-func Newf(c codes.Code, format string, a ...interface{}) (*status.Status, error) {
-	return New(c, fmt.Sprintf(format, a...))
+func Newf(c codes.Code, md map[string]string, format string, a ...interface{}) (*status.Status, error) {
+	return New(c, fmt.Sprintf(format, a...), md)
 }
 
 func StatusErrorJSON(st *status.Status) ([]byte, error) {

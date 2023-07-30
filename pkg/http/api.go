@@ -935,7 +935,10 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 
 	if err != nil {
 		if a.isErrorCodesEnabled {
-			if sdeErr := a.stateDaprErrorResponse(reqCtx, err); sdeErr == nil {
+			md := map[string]string{
+				"op": "ERR_STATE_DELETE",
+			}
+			if sdeErr := a.stateDaprErrorResponse(reqCtx, err, md); sdeErr == nil {
 				return
 			}
 		}
@@ -1026,7 +1029,10 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 
 	if err != nil {
 		if a.isErrorCodesEnabled {
-			derErr := a.stateDaprErrorResponse(reqCtx, err)
+			md := map[string]string{
+				"op": "ERR_STATE_SAVE",
+			}
+			derErr := a.stateDaprErrorResponse(reqCtx, err, md)
 			if derErr == nil {
 				return
 			}
@@ -1060,11 +1066,11 @@ func (a *api) stateErrorResponse(err error, errorCode string) (int, string, Erro
 
 // stateDaprErrorResponse takes a state store error and sends the response with JSON Status Error.
 // Returns original state error if processing fails or not Etag.
-func (a *api) stateDaprErrorResponse(reqCtx *fasthttp.RequestCtx, stateErr error) error {
+func (a *api) stateDaprErrorResponse(reqCtx *fasthttp.RequestCtx, stateErr error, md map[string]string) error {
 	etag, code, message := a.etagError(stateErr)
 
 	if etag {
-		if st, wdErr := errorcodes.New(codes.Aborted, message); wdErr == nil {
+		if st, wdErr := errorcodes.New(codes.Aborted, message, md); wdErr == nil {
 			if resp, sejErr := errorcodes.StatusErrorJSON(st); sejErr == nil {
 				fasthttpRespond(reqCtx, fasthttpResponseWithJSON(code, resp))
 				log.Debug(resp)
