@@ -5655,8 +5655,28 @@ func TestStateStoreErrors(t *testing.T) {
 
 		assert.Nil(t, err2)
 		assert.Equal(t, 409, c)
-		expectedJSON := `{"code":10,"message":"possible etag mismatch. error from state store: error","details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"DAPR_STATE_ETAG_MISMATCH","domain":"dapr.io","metadata":{"operation":"ERR_STATE_SAVE"}}]}`
-		assert.Equal(t, expectedJSON, string(m))
+		// expectedJSON := `{"code":10,"message":"possible etag mismatch. error from state store: error","details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"DAPR_STATE_ETAG_MISMATCH","domain":"dapr.io","metadata":{"operation":"ERR_STATE_SAVE"}}]}`
+		// assert.Equal(t, expectedJSON, string(m))
+		got := struct {
+			Code    int
+			Message string
+			Details []epb.ErrorInfo
+		}{}
+		je := json.Unmarshal(m, &got)
+		assert.Nil(t, je)
+		assert.Equal(t, int(codes.Aborted), got.Code)
+		em := "possible etag mismatch. error from state store: error"
+		assert.Equal(t, em, got.Message)
+		assert.NotNil(t, got.Details)
+		assert.Equal(t, 1, len(got.Details))
+		eei := &epb.ErrorInfo{
+			Domain: "dapr.io",
+			Reason: "DAPR_STATE_ETAG_MISMATCH",
+			Metadata: map[string]string{
+				"operation": "ERR_STATE_SAVE",
+			},
+		}
+		assert.Equal(t, eei, &got.Details[0])
 	})
 
 	t.Run("error codes etag invalid error", func(t *testing.T) {
