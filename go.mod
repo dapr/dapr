@@ -11,7 +11,7 @@ require (
 	github.com/dapr/components-contrib v1.11.3-0.20230725200615-9ca07d9bca9d
 	github.com/dapr/kit v0.11.3
 	github.com/evanphx/json-patch/v5 v5.6.0
-	github.com/go-chi/chi/v5 v5.0.8
+	github.com/go-chi/chi/v5 v5.0.10
 	github.com/go-chi/cors v1.2.1
 	github.com/go-logr/logr v1.2.4
 	github.com/golang/mock v1.6.0
