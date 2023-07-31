@@ -276,13 +276,12 @@ func (r *reminders) evaluateReminders(ctx context.Context) {
 	// Allow another evaluation operation to get queued up
 	<-r.evaluationQueue
 
-	var wg sync.WaitGroup
-
 	if r.config.HostedActorTypes == nil {
-		log.Warn("hostedActorTypes is nil, skipping reminder evaluation")
+		log.Info("hostedActorTypes is nil, skipping reminder evaluation")
 		return
 	}
 
+	var wg sync.WaitGroup
 	for t := range r.config.HostedActorTypes {
 		vals, _, err := r.getRemindersForActorType(ctx, t, true)
 		if err != nil {
@@ -714,6 +713,8 @@ func (r *reminders) getRemindersForActorType(ctx context.Context, actorType stri
 	return reminderRefs, actorMetadata, nil
 }
 
+// getActorMetadata gets the metadata object for the given actor type.
+// If "migrate" is true, it also performs migration of reminders if needed. Note that this should be set to "true" only by a caller who owns a lock via evaluationChan.
 func (r *reminders) getActorTypeMetadata(ctx context.Context, actorType string, migrate bool) (*ActorMetadata, error) {
 	store, err := r.stateStoreProviderFn()
 	if err != nil {
@@ -768,6 +769,8 @@ func (r *reminders) getActorTypeMetadata(ctx context.Context, actorType string, 
 	})
 }
 
+// migrateRemindersForActorType migrates reminders for actors of a given type.
+// Note that this method should be invoked by a caller that owns the evaluationChan lock.
 func (r *reminders) migrateRemindersForActorType(ctx context.Context, store internal.TransactionalStateStore, actorType string, actorMetadata *ActorMetadata) error {
 	reminderPartitionCount := r.config.GetRemindersPartitionCountForType(actorType)
 	if actorMetadata.RemindersMetadata.PartitionCount == reminderPartitionCount {
@@ -778,19 +781,6 @@ func (r *reminders) migrateRemindersForActorType(ctx context.Context, store inte
 		log.Errorf("Cannot decrease number of partitions for reminders of actor type %s", actorType)
 		return nil
 	}
-
-	// Wait for the evaluation channel
-	select {
-	case r.evaluationChan <- struct{}{}:
-		// All good, continue
-	case <-r.runningCh:
-		// Processor is shutting down
-		return nil
-	}
-	defer func() {
-		// Release the evaluation chan lock
-		<-r.evaluationChan
-	}()
 
 	log.Warnf("Migrating actor metadata record for actor type %s", actorType)
 
@@ -843,9 +833,7 @@ func (r *reminders) migrateRemindersForActorType(ctx context.Context, store inte
 		return fmt.Errorf("failed to perform transaction to migrate records for actor type %s: %w", actorType, err)
 	}
 
-	log.Warnf(
-		"Completed actor metadata record migration for actor type %s, new metadata ID = %s",
-		actorType, actorMetadata.ID)
+	log.Warnf("Completed actor metadata record migration for actor type %s, new metadata ID = %s", actorType, actorMetadata.ID)
 	return nil
 }
 
