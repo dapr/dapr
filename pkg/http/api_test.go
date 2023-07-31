@@ -5655,8 +5655,6 @@ func TestStateStoreErrors(t *testing.T) {
 
 		assert.Nil(t, err2)
 		assert.Equal(t, 409, c)
-		// expectedJSON := `{"code":10,"message":"possible etag mismatch. error from state store: error","details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"DAPR_STATE_ETAG_MISMATCH","domain":"dapr.io","metadata":{"operation":"ERR_STATE_SAVE"}}]}`
-		// assert.Equal(t, expectedJSON, string(m))
 		got := struct {
 			Code    int
 			Message string
