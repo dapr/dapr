@@ -229,6 +229,13 @@ func buildPodTemplate(appDesc AppDescription) apiv1.PodTemplateSpec {
 		},
 	)
 
+	imagePullSecrets := make([]apiv1.LocalObjectReference, 0, 1)
+	if appDesc.ImageSecret != "" {
+		imagePullSecrets = append(imagePullSecrets, apiv1.LocalObjectReference{
+			Name: appDesc.ImageSecret,
+		})
+	}
+
 	return apiv1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels:      labels,
@@ -249,13 +256,9 @@ func buildPodTemplate(appDesc AppDescription) apiv1.PodTemplateSpec {
 				},
 				PodAffinity: podAffinity,
 			},
-			ImagePullSecrets: []apiv1.LocalObjectReference{
-				{
-					Name: appDesc.ImageSecret,
-				},
-			},
-			Volumes:     appDesc.Volumes,
-			Tolerations: appDesc.Tolerations,
+			ImagePullSecrets: imagePullSecrets,
+			Volumes:          appDesc.Volumes,
+			Tolerations:      appDesc.Tolerations,
 		},
 	}
 }
