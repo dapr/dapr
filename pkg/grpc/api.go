@@ -84,6 +84,7 @@ type api struct {
 	tracingSpec           config.TracingSpec
 	accessControlList     *config.AccessControlList
 	compStore             *compstore.ComponentStore
+	isErrorCodesEnabled   bool
 }
 
 // APIOpts contains options for NewAPI.
@@ -102,6 +103,7 @@ type APIOpts struct {
 	GetComponentsCapabilitiesFn func() map[string][]string
 	AppConnectionConfig         config.AppConnectionConfig
 	GlobalConfig                *config.Configuration
+	IsErrorCodesEnabled         bool
 }
 
 // NewAPI returns a new gRPC API.
@@ -126,6 +128,7 @@ func NewAPI(opts APIOpts) API {
 		tracingSpec:           opts.TracingSpec,
 		accessControlList:     opts.AccessControlList,
 		compStore:             opts.CompStore,
+		isErrorCodesEnabled:   opts.IsErrorCodesEnabled,
 	}
 }
 

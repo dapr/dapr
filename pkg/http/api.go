@@ -87,6 +87,7 @@ type api struct {
 	tracingSpec             config.TracingSpec
 	maxRequestBodySize      int64 // In bytes
 	compStore               *compstore.ComponentStore
+	isErrorCodesEnabled     bool
 }
 
 const (
@@ -134,6 +135,7 @@ type APIOpts struct {
 	MaxRequestBodySize          int64 // In bytes
 	AppConnectionConfig         config.AppConnectionConfig
 	GlobalConfig                *config.Configuration
+	IsErrorCodesEnabled         bool
 }
 
 // NewAPI returns a new API.
@@ -159,6 +161,7 @@ func NewAPI(opts APIOpts) API {
 			AppConnectionConfig:        opts.AppConnectionConfig,
 			GlobalConfig:               opts.GlobalConfig,
 		},
+		isErrorCodesEnabled: opts.IsErrorCodesEnabled,
 	}
 
 	metadataEndpoints := api.constructMetadataEndpoints()
