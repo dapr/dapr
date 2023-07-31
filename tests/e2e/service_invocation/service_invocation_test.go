@@ -416,7 +416,7 @@ func TestServiceInvocation(t *testing.T) {
 			_, err = utils.HTTPGetNTimes(externalURL, numHealthChecks)
 			require.NoError(t, err)
 
-			t.Logf("externalURL is '%s'\n", externalURL)
+			t.Logf("externalURL is '%s'", externalURL)
 
 			for _, tt := range serviceinvocationTests {
 				t.Run(tt.in, func(t *testing.T) {

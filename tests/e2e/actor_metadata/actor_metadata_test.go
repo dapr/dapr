@@ -164,12 +164,9 @@ func TestActorMetadataEtagRace(t *testing.T) {
 
 	// This initial probe makes the test wait a little bit longer when needed,
 	// making this test less flaky due to delays in the deployment.
-	t.Logf("Checking if app #1 is healthy ...")
-	_, err := utils.HTTPGetNTimes(externalURLOne, numHealthChecks)
-	require.NoError(t, err)
-	t.Logf("Checking if app #2 is healthy ...")
-	_, err = utils.HTTPGetNTimes(externalURLTwo, numHealthChecks)
-	require.NoError(t, err)
+	t.Log("Checking if apps are healthy")
+	err := utils.HealthCheckApps(externalURLOne, externalURLTwo)
+	require.NoError(t, err, "Health checks failed")
 
 	// Set reminder
 	reminder := actorReminder{
