@@ -5661,7 +5661,7 @@ func TestStateStoreErrors(t *testing.T) {
 			Details []epb.ErrorInfo
 		}{}
 		je := json.Unmarshal(m, &got)
-		assert.Nil(t, je)
+		assert.NoError(t, je)
 		assert.Equal(t, int(codes.Aborted), got.Code)
 		em := "possible etag mismatch. error from state store: error"
 		assert.Equal(t, em, got.Message)
