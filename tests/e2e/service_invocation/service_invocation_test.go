@@ -331,7 +331,7 @@ var externalServiceInvocationTests = []struct {
 	},
 	{
 		"Test HTTP to HTTP Externally using HTTP Endpoint CRD",
-		"httptohttptest_external",
+		"/httptohttptest_external",
 		"external-http-endpoint",
 		"externalInvocation",
 		"success",
@@ -339,7 +339,7 @@ var externalServiceInvocationTests = []struct {
 	},
 	{
 		"Test HTTP to HTTPS Externally using HTTP Endpoint CRD",
-		"httptohttptest_external",
+		"/httptohttptest_external",
 		"external-http-endpoint-tls",
 		"externalInvocation",
 		"success",
@@ -432,7 +432,7 @@ func TestServiceInvocation(t *testing.T) {
 					require.NoError(t, err)
 
 					var appResp appResponse
-					t.Logf("unmarshalling..%s\n", string(resp))
+					t.Logf("unmarshalling..%s", string(resp))
 					err = json.Unmarshal(resp, &appResp)
 					require.NoError(t, err)
 					require.Equal(t, tt.expectedResponse, appResp.Message)
@@ -449,7 +449,7 @@ func TestServiceInvocation(t *testing.T) {
 
 					url := fmt.Sprintf("http://%s/%s", externalURL, tt.path)
 
-					t.Logf("url is '%s'\n", url)
+					t.Logf("url is '%s'", url)
 					resp, err := utils.HTTPPost(
 						url,
 						body)
@@ -458,7 +458,7 @@ func TestServiceInvocation(t *testing.T) {
 					require.NoError(t, err)
 
 					var appResp appResponse
-					t.Logf("unmarshalling..%s\n", string(resp))
+					t.Logf("unmarshalling..%s", string(resp))
 					err = json.Unmarshal(resp, &appResp)
 					require.NoError(t, err)
 					require.Equal(t, tt.expectedResponse, appResp.Message)
@@ -475,7 +475,7 @@ func TestServiceInvocation(t *testing.T) {
 					require.NoError(t, err)
 
 					url := fmt.Sprintf("http://%s/%s", externalURL, tt.appMethod)
-					t.Logf("url is '%s'\n", url)
+					t.Logf("url is '%s'", url)
 					resp, err := utils.HTTPPost(
 						url,
 						body)
@@ -483,7 +483,7 @@ func TestServiceInvocation(t *testing.T) {
 					require.NoError(t, err)
 
 					var appResp appResponse
-					t.Logf("unmarshalling..%s\n", string(resp))
+					t.Logf("unmarshalling..%s", string(resp))
 					err = json.Unmarshal(resp, &appResp)
 					require.NoError(t, err)
 					require.Equal(t, tt.expectedResponse, appResp.Message)
@@ -500,7 +500,7 @@ func TestServiceInvocation(t *testing.T) {
 					require.NoError(t, err)
 
 					url := fmt.Sprintf("http://%s/%s", externalURL, tt.appMethod)
-					t.Logf("url is '%s'\n", url)
+					t.Logf("url is '%s'", url)
 					resp, code, err := utils.HTTPPostWithStatus(
 						url,
 						body)
@@ -508,7 +508,7 @@ func TestServiceInvocation(t *testing.T) {
 					require.NoError(t, err)
 
 					var appResp appResponse
-					t.Logf("unmarshalling..%s\n", string(resp))
+					t.Logf("unmarshalling..%s", string(resp))
 					err = json.Unmarshal(resp, &appResp)
 					require.NoError(t, err)
 					require.Equal(t, tt.expectedResponse, appResp.Message)
@@ -530,13 +530,12 @@ func TestServiceInvocationExternally(t *testing.T) {
 			invokeExternalServiceIP := "http://service-invocation-external:80"
 			require.NotEmpty(t, externalURL, "external URL must not be empty!")
 			require.NotEmpty(t, invokeExternalServiceIP, "external service URL must not be empty!")
-			var err error
 			// This initial probe makes the test wait a little bit longer when needed,
 			// making this test less flaky due to delays in the deployment.
-			_, err = utils.HTTPGetNTimes(externalURL, numHealthChecks)
+			err := utils.HealthCheckApps(externalURL)
 			require.NoError(t, err)
 
-			t.Logf("externalURL is '%s'\n", externalURL)
+			t.Logf("externalURL is '%s'", externalURL)
 
 			// invoke via overwritten URL to non-Daprized service
 			for _, tt := range externalServiceInvocationTests {
@@ -561,7 +560,7 @@ func TestServiceInvocationExternally(t *testing.T) {
 						require.NoError(t, err)
 
 						var appResp appResponse
-						t.Logf("unmarshalling..%s\n", string(resp))
+						t.Logf("unmarshalling..%s", string(resp))
 						err = json.Unmarshal(resp, &appResp)
 						t.Logf("appResp %s", appResp)
 						require.NoError(t, err)
@@ -576,12 +575,12 @@ func TestServiceInvocationExternally(t *testing.T) {
 						require.NoError(t, err)
 
 						resp, err := utils.HTTPPost(
-							fmt.Sprintf("http://%s/%s", externalURL, tt.path), body)
+							fmt.Sprintf("http://%s%s", externalURL, tt.path), body)
 						t.Log("checking err...")
 						require.NoError(t, err)
 
 						var appResp appResponse
-						t.Logf("unmarshalling..%s\n", string(resp))
+						t.Logf("unmarshalling..%s", string(resp))
 						err = json.Unmarshal(resp, &appResp)
 						t.Logf("appResp %s", appResp)
 						require.NoError(t, err)
@@ -596,12 +595,12 @@ func TestServiceInvocationExternally(t *testing.T) {
 						require.NoError(t, err)
 
 						resp, err := utils.HTTPPost(
-							fmt.Sprintf("http://%s/%s", externalURL, tt.path), body)
+							fmt.Sprintf("http://%s%s", externalURL, tt.path), body)
 						t.Log("checking err...")
 						require.NoError(t, err)
 
 						var appResp appResponse
-						t.Logf("unmarshalling..%s\n", string(resp))
+						t.Logf("unmarshalling..%s", string(resp))
 						err = json.Unmarshal(resp, &appResp)
 						t.Logf("appResp %s", appResp)
 						require.NoError(t, err)

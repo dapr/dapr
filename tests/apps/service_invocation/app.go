@@ -1016,8 +1016,8 @@ func httpTohttpTestExternal(w http.ResponseWriter, r *http.Request) {
 	}
 	daprAddress := fmt.Sprintf("localhost:%d", daprHTTPPort)
 
-	log.Printf("dapr address is %s\n", daprAddress)
-	log.Printf("httpTohttpTestExternal calling with method %s\n", commandBody.Method)
+	log.Printf("dapr address is %s", daprAddress)
+	log.Printf("httpTohttpTestExternal calling with method %s", commandBody.Method)
 
 	for _, test := range testMethods {
 		testMessage := "success"
@@ -1042,23 +1042,23 @@ func httpTohttpTestExternal(w http.ResponseWriter, r *http.Request) {
 				commandBody.Method)
 		}
 
-		log.Printf("%s invoke url is %s\n", test.Verb, url)
+		log.Printf("%s invoke url is %s", test.Verb, url)
 		var b []byte
 
 		if test.SendBody {
 			var err error
 			b, err = json.Marshal(testMessage)
 			if err != nil {
-				log.Printf("marshal had error %s\n", err)
+				log.Printf("marshal had error %s", err)
 				onSerializationFailed(w, err)
 				return
 			}
-			log.Printf("sending body: %s\n", string(b))
+			log.Printf("sending body: %s", string(b))
 		}
 
 		resp, err := httpWrapper(test.Verb, url, b)
 		if err != nil {
-			log.Printf("response had error %s\n", err)
+			log.Printf("response had error %s", err)
 			onHTTPCallFailed(w, 0, err)
 			return
 		}
@@ -1069,7 +1069,7 @@ func httpTohttpTestExternal(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		log.Printf("httpTohttpTestExternal - %s test successful\n", test.Verb)
+		log.Printf("httpTohttpTestExternal - %s test successful", test.Verb)
 	}
 
 	logAndSetResponse(w, http.StatusOK, "success")
