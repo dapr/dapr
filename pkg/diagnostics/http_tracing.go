@@ -15,17 +15,16 @@ package diagnostics
 
 import (
 	"net/http"
-	"net/textproto"
 	"strconv"
 	"strings"
 
 	"github.com/valyala/fasthttp"
-
 	otelcodes "go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/dapr/dapr/pkg/config"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"github.com/dapr/dapr/utils/responsewriter"
 )
 
 // We have leveraged the code from opencensus-go plugin to adhere the w3c trace context.
@@ -39,67 +38,76 @@ const (
 )
 
 // HTTPTraceMiddleware sets the trace context or starts the trace client span based on request.
-func HTTPTraceMiddleware(next fasthttp.RequestHandler, appID string, spec config.TracingSpec) fasthttp.RequestHandler {
-	return func(ctx *fasthttp.RequestCtx) {
-		path := string(ctx.Request.URI().Path())
+func HTTPTraceMiddleware(next http.Handler, appID string, spec config.TracingSpec) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
 		if isHealthzRequest(path) {
-			next(ctx)
+			next.ServeHTTP(w, r)
 			return
 		}
 
-		ctx, span := startTracingClientSpanFromHTTPContext(ctx, path, spec)
+		span := startTracingClientSpanFromHTTPRequest(r, path, spec)
 
-		next(ctx)
+		// Wrap the writer in a ResponseWriter so we can collect stats such as status code and size
+		rw := responsewriter.EnsureResponseWriter(w)
 
-		// Add span attributes only if it is sampled, which reduced the perf impact.
-		if span.SpanContext().IsSampled() {
-			AddAttributesToSpan(span, userDefinedHTTPHeaders(ctx))
-			spanAttr := spanAttributesMapFromHTTPContext(ctx)
-			AddAttributesToSpan(span, spanAttr)
+		// Before the response is written, we need to add the tracing headers
+		rw.Before(func(rw responsewriter.ResponseWriter) {
+			// Add span attributes only if it is sampled, which reduced the perf impact.
+			if span.SpanContext().IsSampled() {
+				AddAttributesToSpan(span, userDefinedHTTPHeaders(r))
+				spanAttr := spanAttributesMapFromHTTPContext(rw, r)
+				AddAttributesToSpan(span, spanAttr)
 
-			// Correct the span name based on API.
-			if sname, ok := spanAttr[daprAPISpanNameInternal]; ok {
-				span.SetName(sname)
+				// Correct the span name based on API.
+				if sname, ok := spanAttr[daprAPISpanNameInternal]; ok {
+					span.SetName(sname)
+				}
 			}
-		}
 
-		// Check if response has traceparent header and add if absent
-		if ctx.Response.Header.Peek(TraceparentHeader) == nil {
-			span = diagUtils.SpanFromContext(ctx)
-			// Using Header.Set here because we want to overwrite any header that may exist
-			SpanContextToHTTPHeaders(span.SpanContext(), ctx.Response.Header.Set)
-		}
+			// Check if response has traceparent header and add if absent
+			if rw.Header().Get(TraceparentHeader) == "" {
+				span = diagUtils.SpanFromContext(r.Context())
+				// Using Header.Set here because we know the traceparent header isn't set
+				SpanContextToHTTPHeaders(span.SpanContext(), rw.Header().Set)
+			}
 
-		UpdateSpanStatusFromHTTPStatus(span, ctx.Response.StatusCode())
-		span.End()
-	}
+			UpdateSpanStatusFromHTTPStatus(span, rw.Status())
+			span.End()
+		})
+
+		next.ServeHTTP(rw, r)
+	})
 }
 
 // userDefinedHTTPHeaders returns dapr- prefixed header from incoming metadata.
 // Users can add dapr- prefixed headers that they want to see in span attributes.
-func userDefinedHTTPHeaders(reqCtx *fasthttp.RequestCtx) map[string]string {
-	m := map[string]string{}
+func userDefinedHTTPHeaders(r *http.Request) map[string]string {
+	// Allocate this with enough memory for a pessimistic case
+	m := make(map[string]string, len(r.Header))
 
-	reqCtx.Request.Header.VisitAll(func(key []byte, value []byte) {
-		if len(key) < (len(daprHeaderPrefix) + 1) {
-			return
+	for key, vSlice := range r.Header {
+		if len(vSlice) < 1 || len(key) < (len(daprHeaderBinSuffix)+1) {
+			continue
 		}
-		ks := strings.ToLower(string(key))
-		if ks[0:len(daprHeaderPrefix)] == daprHeaderPrefix {
-			m[ks] = string(value)
+
+		key = strings.ToLower(key)
+		if strings.HasPrefix(key, daprHeaderPrefix) {
+			// Get the last value for each key
+			m[key] = vSlice[len(vSlice)-1]
 		}
-	})
+	}
 
 	return m
 }
 
-func startTracingClientSpanFromHTTPContext(ctx *fasthttp.RequestCtx, spanName string, spec config.TracingSpec) (*fasthttp.RequestCtx, trace.Span) {
-	sc, _ := SpanContextFromRequest(&ctx.Request)
-	netCtx := trace.ContextWithRemoteSpanContext(ctx, sc)
+func startTracingClientSpanFromHTTPRequest(r *http.Request, spanName string, spec config.TracingSpec) trace.Span {
+	sc := SpanContextFromRequest(r)
+	ctx := trace.ContextWithRemoteSpanContext(r.Context(), sc)
 	kindOption := trace.WithSpanKind(trace.SpanKindClient)
-	_, span := tracer.Start(netCtx, spanName, kindOption)
-	diagUtils.SpanToFastHTTPContext(ctx, span)
-	return ctx, span
+	_, span := tracer.Start(ctx, spanName, kindOption)
+	diagUtils.AddSpanToRequest(r, span)
+	return span
 }
 
 func StartProducerSpanChildFromParent(ctx *fasthttp.RequestCtx, parentSpan trace.Span) trace.Span {
@@ -111,17 +119,17 @@ func StartProducerSpanChildFromParent(ctx *fasthttp.RequestCtx, parentSpan trace
 }
 
 // SpanContextFromRequest extracts a span context from incoming requests.
-func SpanContextFromRequest(req *fasthttp.Request) (sc trace.SpanContext, ok bool) {
-	h, ok := getRequestHeader(req, TraceparentHeader)
-	if !ok {
-		return trace.SpanContext{}, false
+func SpanContextFromRequest(r *http.Request) (sc trace.SpanContext) {
+	h := r.Header.Get(TraceparentHeader)
+	if h == "" {
+		return trace.SpanContext{}
 	}
-	sc, ok = SpanContextFromW3CString(h)
+	sc, ok := SpanContextFromW3CString(h)
 	if ok {
-		ts := tracestateFromRequest(req)
+		ts := tracestateFromRequest(r)
 		sc = sc.WithTraceState(*ts)
 	}
-	return sc, ok
+	return sc
 }
 
 func isHealthzRequest(name string) bool {
@@ -152,17 +160,8 @@ func traceStatusFromHTTPCode(httpCode int) (otelcodes.Code, string) {
 	return code, ""
 }
 
-func getRequestHeader(req *fasthttp.Request, name string) (string, bool) {
-	s := string(req.Header.Peek(textproto.CanonicalMIMEHeaderKey(name)))
-	if s == "" {
-		return "", false
-	}
-
-	return s, true
-}
-
-func tracestateFromRequest(req *fasthttp.Request) *trace.TraceState {
-	h, _ := getRequestHeader(req, TracestateHeader)
+func tracestateFromRequest(r *http.Request) *trace.TraceState {
+	h := r.Header.Get(TracestateHeader)
 	return TraceStateFromW3CString(h)
 }
 
@@ -183,11 +182,6 @@ func tracestateToHeader(sc trace.SpanContext, setHeader func(string, string)) {
 	}
 }
 
-func getContextValue(ctx *fasthttp.RequestCtx, key string) string {
-	v, _ := ctx.UserValue(key).(string)
-	return v
-}
-
 func getAPIComponent(apiPath string) (string, string) {
 	// Dapr API reference : https://docs.dapr.io/reference/api/
 	// example : apiPath /v1.0/state/statestore
@@ -205,11 +199,11 @@ func getAPIComponent(apiPath string) (string, string) {
 	return tokens[1], tokens[2]
 }
 
-func spanAttributesMapFromHTTPContext(ctx *fasthttp.RequestCtx) map[string]string {
+func spanAttributesMapFromHTTPContext(rw responsewriter.ResponseWriter, r *http.Request) map[string]string {
 	// Span Attribute reference https://github.com/open-telemetry/opentelemetry-specification/tree/master/specification/trace/semantic_conventions
-	path := string(ctx.Request.URI().Path())
-	method := string(ctx.Request.Header.Method())
-	statusCode := ctx.Response.StatusCode()
+	path := r.URL.Path
+	method := r.Method
+	statusCode := rw.Status()
 
 	m := map[string]string{}
 	_, componentType := getAPIComponent(path)
@@ -218,29 +212,29 @@ func spanAttributesMapFromHTTPContext(ctx *fasthttp.RequestCtx) map[string]strin
 	switch componentType {
 	case "state":
 		dbType = stateBuildingBlockType
-		m[dbNameSpanAttributeKey] = getContextValue(ctx, "storeName")
+		m[dbNameSpanAttributeKey] = rw.UserValueString("storeName")
 
 	case "secrets":
 		dbType = secretBuildingBlockType
-		m[dbNameSpanAttributeKey] = getContextValue(ctx, "secretStoreName")
+		m[dbNameSpanAttributeKey] = rw.UserValueString("secretStoreName")
 
 	case "bindings":
 		dbType = bindingBuildingBlockType
-		m[dbNameSpanAttributeKey] = getContextValue(ctx, "name")
+		m[dbNameSpanAttributeKey] = rw.UserValueString("name")
 
 	case "invoke":
 		m[gRPCServiceSpanAttributeKey] = daprGRPCServiceInvocationService
-		targetID := getContextValue(ctx, "id")
+		targetID := rw.UserValueString("id")
 		m[netPeerNameSpanAttributeKey] = targetID
-		m[daprAPISpanNameInternal] = "CallLocal/" + targetID + "/" + getContextValue(ctx, "method")
+		m[daprAPISpanNameInternal] = "CallLocal/" + targetID + "/" + rw.UserValueString("method")
 
 	case "publish":
 		m[messagingSystemSpanAttributeKey] = pubsubBuildingBlockType
-		m[messagingDestinationSpanAttributeKey] = getContextValue(ctx, "topic")
+		m[messagingDestinationSpanAttributeKey] = rw.UserValueString("topic")
 		m[messagingDestinationKindSpanAttributeKey] = messagingDestinationTopicKind
 
 	case "actors":
-		dbType = populateActorParams(ctx, m)
+		dbType = populateActorParams(rw, r, m)
 	}
 
 	// Populate the rest of database attributes.
@@ -258,14 +252,14 @@ func spanAttributesMapFromHTTPContext(ctx *fasthttp.RequestCtx) map[string]strin
 	return m
 }
 
-func populateActorParams(ctx *fasthttp.RequestCtx, m map[string]string) string {
-	actorType := getContextValue(ctx, "actorType")
-	actorID := getContextValue(ctx, "actorId")
+func populateActorParams(rw responsewriter.ResponseWriter, r *http.Request, m map[string]string) string {
+	actorType := rw.UserValueString("actorType")
+	actorID := rw.UserValueString("actorId")
 	if actorType == "" || actorID == "" {
 		return ""
 	}
 
-	path := string(ctx.Request.URI().Path())
+	path := r.URL.Path
 	// Split up to 7 delimiters in '/v1.0/actors/{actorType}/{actorId}/method/{method}'
 	// to get component api type and value
 	tokens := strings.SplitN(path, "/", 7)
@@ -280,7 +274,7 @@ func populateActorParams(ctx *fasthttp.RequestCtx, m map[string]string) string {
 	case "method":
 		m[gRPCServiceSpanAttributeKey] = daprGRPCServiceInvocationService
 		m[netPeerNameSpanAttributeKey] = m[daprAPIActorTypeID]
-		m[daprAPISpanNameInternal] = "CallActor/" + actorType + "/" + getContextValue(ctx, "method")
+		m[daprAPISpanNameInternal] = "CallActor/" + actorType + "/" + rw.UserValueString("method")
 
 	case "state":
 		dbType = stateBuildingBlockType

@@ -14,7 +14,9 @@ limitations under the License.
 package http
 
 import (
-	"github.com/valyala/fasthttp"
+	"net/http"
+
+	"github.com/go-chi/chi/v5"
 
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
@@ -22,43 +24,43 @@ import (
 func (a *api) constructSubtleCryptoEndpoints() []Endpoint {
 	return []Endpoint{
 		{
-			Methods: []string{fasthttp.MethodPost},
+			Methods: []string{http.MethodPost},
 			Route:   "subtlecrypto/{name}/getkey",
 			Version: apiVersionV1alpha1,
 			Handler: a.onPostSubtleCryptoGetKey(),
 		},
 		{
-			Methods: []string{fasthttp.MethodPost},
+			Methods: []string{http.MethodPost},
 			Route:   "subtlecrypto/{name}/encrypt",
 			Version: apiVersionV1alpha1,
 			Handler: a.onPostSubtleCryptoEncrypt(),
 		},
 		{
-			Methods: []string{fasthttp.MethodPost},
+			Methods: []string{http.MethodPost},
 			Route:   "subtlecrypto/{name}/decrypt",
 			Version: apiVersionV1alpha1,
 			Handler: a.onPostSubtleCryptoDecrypt(),
 		},
 		{
-			Methods: []string{fasthttp.MethodPost},
+			Methods: []string{http.MethodPost},
 			Route:   "subtlecrypto/{name}/wrapkey",
 			Version: apiVersionV1alpha1,
 			Handler: a.onPostSubtleCryptoWrapKey(),
 		},
 		{
-			Methods: []string{fasthttp.MethodPost},
+			Methods: []string{http.MethodPost},
 			Route:   "subtlecrypto/{name}/unwrapkey",
 			Version: apiVersionV1alpha1,
 			Handler: a.onPostSubtleCryptoUnwrapKey(),
 		},
 		{
-			Methods: []string{fasthttp.MethodPost},
+			Methods: []string{http.MethodPost},
 			Route:   "subtlecrypto/{name}/sign",
 			Version: apiVersionV1alpha1,
 			Handler: a.onPostSubtleCryptoSign(),
 		},
 		{
-			Methods: []string{fasthttp.MethodPost},
+			Methods: []string{http.MethodPost},
 			Route:   "subtlecrypto/{name}/verify",
 			Version: apiVersionV1alpha1,
 			Handler: a.onPostSubtleCryptoVerify(),
@@ -66,71 +68,71 @@ func (a *api) constructSubtleCryptoEndpoints() []Endpoint {
 	}
 }
 
-func (a *api) onPostSubtleCryptoGetKey() fasthttp.RequestHandler {
-	return UniversalFastHTTPHandler(
+func (a *api) onPostSubtleCryptoGetKey() http.HandlerFunc {
+	return UniversalHTTPHandler(
 		a.universal.SubtleGetKeyAlpha1,
-		UniversalFastHTTPHandlerOpts[*runtimev1pb.SubtleGetKeyRequest, *runtimev1pb.SubtleGetKeyResponse]{
+		UniversalHTTPHandlerOpts[*runtimev1pb.SubtleGetKeyRequest, *runtimev1pb.SubtleGetKeyResponse]{
 			InModifier: subtleCryptoInModifier[*runtimev1pb.SubtleGetKeyRequest],
 		},
 	)
 }
 
-func (a *api) onPostSubtleCryptoEncrypt() fasthttp.RequestHandler {
-	return UniversalFastHTTPHandler(
+func (a *api) onPostSubtleCryptoEncrypt() http.HandlerFunc {
+	return UniversalHTTPHandler(
 		a.universal.SubtleEncryptAlpha1,
-		UniversalFastHTTPHandlerOpts[*runtimev1pb.SubtleEncryptRequest, *runtimev1pb.SubtleEncryptResponse]{
+		UniversalHTTPHandlerOpts[*runtimev1pb.SubtleEncryptRequest, *runtimev1pb.SubtleEncryptResponse]{
 			InModifier: subtleCryptoInModifier[*runtimev1pb.SubtleEncryptRequest],
 		},
 	)
 }
 
-func (a *api) onPostSubtleCryptoDecrypt() fasthttp.RequestHandler {
-	return UniversalFastHTTPHandler(
+func (a *api) onPostSubtleCryptoDecrypt() http.HandlerFunc {
+	return UniversalHTTPHandler(
 		a.universal.SubtleDecryptAlpha1,
-		UniversalFastHTTPHandlerOpts[*runtimev1pb.SubtleDecryptRequest, *runtimev1pb.SubtleDecryptResponse]{
+		UniversalHTTPHandlerOpts[*runtimev1pb.SubtleDecryptRequest, *runtimev1pb.SubtleDecryptResponse]{
 			InModifier: subtleCryptoInModifier[*runtimev1pb.SubtleDecryptRequest],
 		},
 	)
 }
 
-func (a *api) onPostSubtleCryptoWrapKey() fasthttp.RequestHandler {
-	return UniversalFastHTTPHandler(
+func (a *api) onPostSubtleCryptoWrapKey() http.HandlerFunc {
+	return UniversalHTTPHandler(
 		a.universal.SubtleWrapKeyAlpha1,
-		UniversalFastHTTPHandlerOpts[*runtimev1pb.SubtleWrapKeyRequest, *runtimev1pb.SubtleWrapKeyResponse]{
+		UniversalHTTPHandlerOpts[*runtimev1pb.SubtleWrapKeyRequest, *runtimev1pb.SubtleWrapKeyResponse]{
 			InModifier: subtleCryptoInModifier[*runtimev1pb.SubtleWrapKeyRequest],
 		},
 	)
 }
 
-func (a *api) onPostSubtleCryptoUnwrapKey() fasthttp.RequestHandler {
-	return UniversalFastHTTPHandler(
+func (a *api) onPostSubtleCryptoUnwrapKey() http.HandlerFunc {
+	return UniversalHTTPHandler(
 		a.universal.SubtleUnwrapKeyAlpha1,
-		UniversalFastHTTPHandlerOpts[*runtimev1pb.SubtleUnwrapKeyRequest, *runtimev1pb.SubtleUnwrapKeyResponse]{
+		UniversalHTTPHandlerOpts[*runtimev1pb.SubtleUnwrapKeyRequest, *runtimev1pb.SubtleUnwrapKeyResponse]{
 			InModifier: subtleCryptoInModifier[*runtimev1pb.SubtleUnwrapKeyRequest],
 		},
 	)
 }
 
-func (a *api) onPostSubtleCryptoSign() fasthttp.RequestHandler {
-	return UniversalFastHTTPHandler(
+func (a *api) onPostSubtleCryptoSign() http.HandlerFunc {
+	return UniversalHTTPHandler(
 		a.universal.SubtleSignAlpha1,
-		UniversalFastHTTPHandlerOpts[*runtimev1pb.SubtleSignRequest, *runtimev1pb.SubtleSignResponse]{
+		UniversalHTTPHandlerOpts[*runtimev1pb.SubtleSignRequest, *runtimev1pb.SubtleSignResponse]{
 			InModifier: subtleCryptoInModifier[*runtimev1pb.SubtleSignRequest],
 		},
 	)
 }
 
-func (a *api) onPostSubtleCryptoVerify() fasthttp.RequestHandler {
-	return UniversalFastHTTPHandler(
+func (a *api) onPostSubtleCryptoVerify() http.HandlerFunc {
+	return UniversalHTTPHandler(
 		a.universal.SubtleVerifyAlpha1,
-		UniversalFastHTTPHandlerOpts[*runtimev1pb.SubtleVerifyRequest, *runtimev1pb.SubtleVerifyResponse]{
+		UniversalHTTPHandlerOpts[*runtimev1pb.SubtleVerifyRequest, *runtimev1pb.SubtleVerifyResponse]{
 			InModifier: subtleCryptoInModifier[*runtimev1pb.SubtleVerifyRequest],
 		},
 	)
 }
 
 // Shared InModifier method for all universal handlers for subtle crypto that adds the "ComponentName" property
-func subtleCryptoInModifier[T runtimev1pb.SubtleCryptoRequests](reqCtx *fasthttp.RequestCtx, in T) (T, error) {
-	in.SetComponentName(reqCtx.UserValue(nameParam).(string))
+func subtleCryptoInModifier[T runtimev1pb.SubtleCryptoRequests](r *http.Request, in T) (T, error) {
+	in.SetComponentName(chi.URLParam(r, nameParam))
 	return in, nil
 }

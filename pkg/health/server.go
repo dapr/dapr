@@ -15,6 +15,7 @@ package health
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -33,16 +34,55 @@ type Server interface {
 }
 
 type server struct {
-	ready *atomic.Bool
-	log   logger.Logger
+	ready  *atomic.Bool
+	router http.Handler
+	log    logger.Logger
+}
+
+type RouterOptions func(log logger.Logger) (string, http.Handler)
+
+func NewRouterOptions(path string, handler http.Handler) RouterOptions {
+	return func(log logger.Logger) (string, http.Handler) {
+		return path, handler
+	}
+}
+
+func NewJSONDataRouterOptions[T any](path string, getter func() (T, error)) RouterOptions {
+	return func(log logger.Logger) (string, http.Handler) {
+		return path, http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			data, err := getter()
+			if err != nil {
+				writer.WriteHeader(http.StatusInternalServerError)
+				writer.Write([]byte(err.Error()))
+				return
+			}
+			writer.Header().Set("Content-Type", "application/json")
+			err = json.NewEncoder(writer).Encode(data)
+			if err != nil {
+				log.Warnf("failed to encode json to response writer: %s", err.Error())
+				writer.WriteHeader(http.StatusInternalServerError)
+				writer.Write([]byte(err.Error()))
+				return
+			}
+		})
+	}
 }
 
 // NewServer returns a new healthz server.
-func NewServer(log logger.Logger) Server {
-	return &server{
+func NewServer(log logger.Logger, options ...RouterOptions) Server {
+	s := &server{
 		log:   log,
 		ready: &atomic.Bool{},
 	}
+	router := http.NewServeMux()
+	router.Handle("/healthz", s.healthz())
+	// add public handlers to the router
+	for _, option := range options {
+		path, handler := option(log)
+		router.Handle(path, handler)
+	}
+	s.router = router
+	return s
 }
 
 // Ready sets a ready state for the endpoint handlers.
@@ -57,13 +97,10 @@ func (s *server) NotReady() {
 
 // Run starts a net/http server with a healthz endpoint.
 func (s *server) Run(ctx context.Context, port int) error {
-	router := http.NewServeMux()
-	router.Handle("/healthz", s.healthz())
-
 	//nolint:gosec
 	srv := &http.Server{
 		Addr:        fmt.Sprintf(":%d", port),
-		Handler:     router,
+		Handler:     s.router,
 		BaseContext: func(_ net.Listener) context.Context { return ctx },
 	}
 

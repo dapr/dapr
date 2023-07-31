@@ -25,6 +25,7 @@ import (
 	"github.com/dapr/dapr/pkg/acl"
 	"github.com/dapr/dapr/pkg/actors"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/grpc/metadata"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -59,7 +60,7 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	}()
 
 	// stausCode will be read by the deferred method above
-	res, err := a.appChannel.InvokeMethod(ctx, req)
+	res, err := a.appChannel.InvokeMethod(ctx, req, "")
 	if err != nil {
 		statusCode = int32(codes.Internal)
 		return nil, status.Errorf(codes.Internal, messages.ErrChannelInvoke, err)
@@ -90,6 +91,11 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 	}
 	if chunk.Request == nil || chunk.Request.Metadata == nil || chunk.Request.Message == nil {
 		return status.Errorf(codes.InvalidArgument, messages.ErrInternalInvokeRequest, "request does not contain the required fields in the leading chunk")
+	}
+
+	// Append the invoked method to the context's metadata so we can use it for tracing
+	if md, ok := metadata.FromIncomingContext(stream.Context()); ok {
+		md[diag.DaprCallLocalStreamMethodKey] = []string{chunk.Request.Message.Method}
 	}
 
 	// Create the request object
@@ -168,11 +174,13 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 	}()
 
 	// Submit the request to the app
-	res, err := a.appChannel.InvokeMethod(ctx, req)
+	res, err := a.appChannel.InvokeMethod(ctx, req, "")
 	if err != nil {
+		statusCode = int32(codes.Internal)
 		return status.Errorf(codes.Internal, messages.ErrChannelInvoke, err)
 	}
 	defer res.Close()
+	statusCode = res.Status().Code
 
 	// Respond to the caller
 	buf := invokev1.BufPool.Get().(*[]byte)
@@ -268,13 +276,14 @@ func (a *api) callLocalValidateACL(ctx context.Context, req *invokev1.InvokeMeth
 		operation := req.Message().Method
 		var httpVerb commonv1pb.HTTPExtension_Verb //nolint:nosnakecase
 		// Get the HTTP verb in case the application protocol is "http"
-		if a.appProtocolIsHTTP && req.Metadata() != nil && len(req.Metadata()) > 0 {
+		appProtocolIsHTTP := a.UniversalAPI.AppConnectionConfig.Protocol.IsHTTP()
+		if appProtocolIsHTTP && req.Metadata() != nil && len(req.Metadata()) > 0 {
 			httpExt := req.Message().GetHttpExtension()
 			if httpExt != nil {
 				httpVerb = httpExt.GetVerb()
 			}
 		}
-		callAllowed, errMsg := acl.ApplyAccessControlPolicies(ctx, operation, httpVerb, a.appProtocolIsHTTP, a.accessControlList)
+		callAllowed, errMsg := acl.ApplyAccessControlPolicies(ctx, operation, httpVerb, appProtocolIsHTTP, a.accessControlList)
 
 		if !callAllowed {
 			return status.Errorf(codes.PermissionDenied, errMsg)

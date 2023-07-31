@@ -22,3 +22,6 @@ spec:
   metadata:
   - name: host
     value: dapr-mongodb.dapr-tests.svc.cluster.local:27017
+scopes:
+  - stateapp
+  - stateapp-pluggable

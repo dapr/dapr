@@ -43,7 +43,7 @@ const (
 	// PollInterval is how frequently e2e tests will poll for updates.
 	PollInterval = 1 * time.Second
 	// PollTimeout is how long e2e tests will wait for resource updates when polling.
-	PollTimeout = 10 * time.Minute
+	PollTimeout = 8 * time.Minute
 
 	// maxReplicas is the maximum replicas of replica sets.
 	maxReplicas = 10
@@ -72,9 +72,9 @@ type PodInfo struct {
 }
 
 // NewAppManager creates AppManager instance.
-func NewAppManager(kubeClients *KubeClient, namespace string, app AppDescription) *AppManager {
+func NewAppManager(client *KubeClient, namespace string, app AppDescription) *AppManager {
 	return &AppManager{
-		client:    kubeClients,
+		client:    client,
 		namespace: namespace,
 		app:       app,
 		ctx:       context.Background(),
@@ -94,11 +94,6 @@ func (m *AppManager) App() AppDescription {
 // Init installs app by AppDescription.
 func (m *AppManager) Init(runCtx context.Context) error {
 	m.ctx = runCtx
-
-	// Get or create test namespaces
-	if _, err := m.GetOrCreateNamespace(); err != nil {
-		return err
-	}
 
 	// TODO: Dispose app if option is required
 	if err := m.Dispose(true); err != nil {
@@ -225,7 +220,7 @@ func (m *AppManager) ScheduleJob() (*batchv1.Job, error) {
 	jobsClient := m.client.Jobs(m.namespace)
 	obj := buildJobObject(m.namespace, m.app)
 
-	ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
+	ctx, cancel := context.WithTimeout(m.ctx, time.Minute)
 	result, err := jobsClient.Create(ctx, obj, metav1.CreateOptions{})
 	cancel()
 	if err != nil {
@@ -243,7 +238,7 @@ func (m *AppManager) WaitUntilJobState(isState func(*batchv1.Job, error) bool) (
 
 	waitErr := wait.PollImmediate(PollInterval, PollTimeout, func() (bool, error) {
 		var err error
-		ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
+		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 		lastJob, err = jobsClient.Get(ctx, m.app.AppName, metav1.GetOptions{})
 		cancel()
 		done := isState(lastJob, err)
@@ -254,7 +249,11 @@ func (m *AppManager) WaitUntilJobState(isState func(*batchv1.Job, error) bool) (
 	})
 
 	if waitErr != nil {
-		return nil, fmt.Errorf("job %q is not in desired state, received: %+v: %s", m.app.AppName, lastJob, waitErr)
+		// Try to get the logs from the containers that aren't starting, if we can get anything
+		// We ignore errors here
+		_ = m.StreamContainerLogs()
+
+		return nil, fmt.Errorf("job %q is not in desired state, received: %#v: %s", m.app.AppName, lastJob, waitErr)
 	}
 
 	return lastJob, nil
@@ -265,7 +264,7 @@ func (m *AppManager) Deploy() (*appsv1.Deployment, error) {
 	deploymentsClient := m.client.Deployments(m.namespace)
 	obj := buildDeploymentObject(m.namespace, m.app)
 
-	ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
+	ctx, cancel := context.WithTimeout(m.ctx, time.Minute)
 	result, err := deploymentsClient.Create(ctx, obj, metav1.CreateOptions{})
 	cancel()
 	if err != nil {
@@ -283,7 +282,7 @@ func (m *AppManager) WaitUntilDeploymentState(isState func(*appsv1.Deployment, e
 
 	waitErr := wait.PollImmediate(PollInterval, PollTimeout, func() (bool, error) {
 		var err error
-		ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
+		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 		defer cancel()
 		lastDeployment, err = deploymentsClient.Get(ctx, m.app.AppName, metav1.GetOptions{})
 		done := isState(lastDeployment, err)
@@ -297,7 +296,7 @@ func (m *AppManager) WaitUntilDeploymentState(isState func(*appsv1.Deployment, e
 		// get deployment's Pods detail status info
 		podClient := m.client.Pods(m.namespace)
 		// Filter only 'testapp=appName' labeled Pods
-		ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
+		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 		defer cancel()
 		podList, err := podClient.List(ctx, metav1.ListOptions{
 			LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
@@ -330,7 +329,11 @@ func (m *AppManager) WaitUntilDeploymentState(isState func(*appsv1.Deployment, e
 			log.Printf("Error list pod for deployment %s. Error was %s", m.app.AppName, err)
 		}
 
-		return nil, fmt.Errorf("deployment %q is not in desired state, received: %+v pod status: %+v error: %s", m.app.AppName, lastDeployment, podStatus, waitErr)
+		// Try to get the logs from the containers that aren't starting, if we can get anything
+		// We ignore errors here
+		_ = m.StreamContainerLogs()
+
+		return nil, fmt.Errorf("deployment %q is not in desired state, received: %#v pod status: %#v error: %s", m.app.AppName, lastDeployment, podStatus, waitErr)
 	}
 
 	return lastDeployment, nil
@@ -388,7 +391,7 @@ func (m *AppManager) ValidateSidecar() error {
 
 	podClient := m.client.Pods(m.namespace)
 	// Filter only 'testapp=appName' labeled Pods
-	ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
+	ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 	podList, err := podClient.List(ctx, metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
 	})
@@ -429,7 +432,7 @@ func (m *AppManager) getContainerInfo() (bool, int, int, error) {
 	podClient := m.client.Pods(m.namespace)
 
 	// Filter only 'testapp=appName' labeled Pods
-	ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
+	ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 	podList, err := podClient.List(ctx, metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
 	})
@@ -474,7 +477,7 @@ func (m *AppManager) getContainerInfo() (bool, int, int, error) {
 func (m *AppManager) DoPortForwarding(podName string, targetPorts ...int) ([]int, error) {
 	podClient := m.client.Pods(m.namespace)
 	// Filter only 'testapp=appName' labeled Pods
-	ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
+	ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 	podList, err := podClient.List(ctx, metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
 	})
@@ -504,7 +507,7 @@ func (m *AppManager) ScaleDeploymentReplica(replicas int32) error {
 
 	deploymentsClient := m.client.Deployments(m.namespace)
 
-	ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
+	ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 	scale, err := deploymentsClient.GetScale(ctx, m.app.AppName, metav1.GetOptions{})
 	cancel()
 	if err != nil {
@@ -518,7 +521,7 @@ func (m *AppManager) ScaleDeploymentReplica(replicas int32) error {
 	scale.Spec.Replicas = replicas
 	m.app.Replicas = replicas
 
-	ctx, cancel = context.WithTimeout(m.ctx, 15*time.Second)
+	ctx, cancel = context.WithTimeout(m.ctx, 30*time.Second)
 	_, err = deploymentsClient.UpdateScale(ctx, m.app.AppName, scale, metav1.UpdateOptions{})
 	cancel()
 
@@ -529,7 +532,7 @@ func (m *AppManager) ScaleDeploymentReplica(replicas int32) error {
 func (m *AppManager) SetAppEnv(key, value string) error {
 	deploymentsClient := m.client.Deployments(m.namespace)
 
-	ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
+	ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 	deployment, err := deploymentsClient.Get(ctx, m.app.AppName, metav1.GetOptions{})
 	cancel()
 	if err != nil {
@@ -560,7 +563,7 @@ func (m *AppManager) SetAppEnv(key, value string) error {
 		}
 	}
 
-	ctx, cancel = context.WithTimeout(m.ctx, 15*time.Second)
+	ctx, cancel = context.WithTimeout(m.ctx, 30*time.Second)
 	_, err = deploymentsClient.Update(ctx, deployment, metav1.UpdateOptions{})
 	cancel()
 
@@ -571,7 +574,7 @@ func (m *AppManager) SetAppEnv(key, value string) error {
 func (m *AppManager) CreateIngressService() (*apiv1.Service, error) {
 	serviceClient := m.client.Services(m.namespace)
 	obj := buildServiceObject(m.namespace, m.app)
-	ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
+	ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 	result, err := serviceClient.Create(ctx, obj, metav1.CreateOptions{})
 	cancel()
 	if err != nil {
@@ -601,7 +604,7 @@ func (m *AppManager) WaitUntilServiceState(isState func(*apiv1.Service, error) b
 
 	waitErr := wait.PollImmediate(PollInterval, PollTimeout, func() (bool, error) {
 		var err error
-		ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
+		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 		lastService, err = serviceClient.Get(ctx, m.app.AppName, metav1.GetOptions{})
 		cancel()
 		done := isState(lastService, err)
@@ -614,7 +617,7 @@ func (m *AppManager) WaitUntilServiceState(isState func(*apiv1.Service, error) b
 	})
 
 	if waitErr != nil {
-		return lastService, fmt.Errorf("service %q is not in desired state, received: %+v: %s", m.app.AppName, lastService, waitErr)
+		return lastService, fmt.Errorf("service %q is not in desired state, received: %#v: %s", m.app.AppName, lastService, waitErr)
 	}
 
 	return lastService, nil
@@ -680,7 +683,7 @@ func (m *AppManager) DeleteJob(ignoreNotFound bool) error {
 	jobsClient := m.client.Jobs(m.namespace)
 	deletePolicy := metav1.DeletePropagationForeground
 
-	ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
+	ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 	defer cancel()
 	if err := jobsClient.Delete(ctx, m.app.AppName, metav1.DeleteOptions{
 		PropagationPolicy: &deletePolicy,
@@ -696,7 +699,7 @@ func (m *AppManager) DeleteDeployment(ignoreNotFound bool) error {
 	deploymentsClient := m.client.Deployments(m.namespace)
 	deletePolicy := metav1.DeletePropagationForeground
 
-	ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
+	ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 	defer cancel()
 	if err := deploymentsClient.Delete(ctx, m.app.AppName, metav1.DeleteOptions{
 		PropagationPolicy: &deletePolicy,
@@ -712,7 +715,7 @@ func (m *AppManager) DeleteService(ignoreNotFound bool) error {
 	serviceClient := m.client.Services(m.namespace)
 	deletePolicy := metav1.DeletePropagationForeground
 
-	ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
+	ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 	defer cancel()
 	if err := serviceClient.Delete(ctx, m.app.AppName, metav1.DeleteOptions{
 		PropagationPolicy: &deletePolicy,
@@ -721,24 +724,6 @@ func (m *AppManager) DeleteService(ignoreNotFound bool) error {
 	}
 
 	return nil
-}
-
-// GetOrCreateNamespace gets or creates namespace unless namespace exists.
-func (m *AppManager) GetOrCreateNamespace() (*apiv1.Namespace, error) {
-	namespaceClient := m.client.Namespaces()
-	ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
-	ns, err := namespaceClient.Get(ctx, m.namespace, metav1.GetOptions{})
-	cancel()
-
-	if err != nil && errors.IsNotFound(err) {
-		obj := buildNamespaceObject(m.namespace)
-		ctx, cancel = context.WithTimeout(m.ctx, 15*time.Second)
-		ns, err = namespaceClient.Create(ctx, obj, metav1.CreateOptions{})
-		cancel()
-		return ns, err
-	}
-
-	return ns, err
 }
 
 // GetHostDetails returns the name and IP address of the pods running the app.
@@ -750,7 +735,7 @@ func (m *AppManager) GetHostDetails() ([]PodInfo, error) {
 	podClient := m.client.Pods(m.namespace)
 
 	// Filter only 'testapp=appName' labeled Pods
-	ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
+	ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 	podList, err := podClient.List(ctx, metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
 	})
@@ -790,7 +775,7 @@ func (m *AppManager) GetCPUAndMemory(sidecar bool) (int64, float64, error) {
 	var maxMemory float64 = -1
 	for _, pod := range pods {
 		podName := pod.Name
-		ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
+		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 		metrics, err := m.client.MetricsClient.MetricsV1beta1().PodMetricses(m.namespace).Get(ctx, podName, metav1.GetOptions{})
 		cancel()
 		if err != nil {
@@ -831,7 +816,7 @@ func (m *AppManager) GetTotalRestarts() (int, error) {
 	podClient := m.client.Pods(m.namespace)
 
 	// Filter only 'testapp=appName' labeled Pods
-	ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
+	ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 	podList, err := podClient.List(ctx, metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
 	})
@@ -842,7 +827,7 @@ func (m *AppManager) GetTotalRestarts() (int, error) {
 
 	restartCount := 0
 	for _, pod := range podList.Items {
-		ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
+		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 		pod, err := podClient.Get(ctx, pod.GetName(), metav1.GetOptions{})
 		cancel()
 		if err != nil {

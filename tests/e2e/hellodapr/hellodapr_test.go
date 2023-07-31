@@ -25,7 +25,6 @@ import (
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
-	runtime_utils "github.com/dapr/dapr/utils"
 	"github.com/stretchr/testify/require"
 )
 
@@ -57,10 +56,8 @@ func TestMain(m *testing.M) {
 			AppName:           "hellobluedapr",
 			DaprEnabled:       true,
 			ImageName:         "e2e-hellodapr",
-			SidecarImage:      runtime_utils.GetEnvOrElse("DAPR_TEST_N_MINUS_2_IMAGE", ""), // old image to avoid regression in injector.
 			Replicas:          1,
 			IngressEnabled:    true,
-			MetricsEnabled:    true,
 			DaprMemoryLimit:   "200Mi",
 			DaprMemoryRequest: "100Mi",
 			AppMemoryLimit:    "200Mi",
@@ -72,7 +69,6 @@ func TestMain(m *testing.M) {
 			ImageName:         "e2e-hellodapr",
 			Replicas:          1,
 			IngressEnabled:    true,
-			MetricsEnabled:    true,
 			DaprMemoryLimit:   "200Mi",
 			DaprMemoryRequest: "100Mi",
 			AppMemoryLimit:    "200Mi",
@@ -84,7 +80,6 @@ func TestMain(m *testing.M) {
 			ImageName:         "e2e-hellodapr",
 			Replicas:          1,
 			IngressEnabled:    true,
-			MetricsEnabled:    true,
 			DaprMemoryLimit:   "200Mi",
 			DaprMemoryRequest: "100Mi",
 			AppMemoryLimit:    "200Mi",
@@ -92,39 +87,92 @@ func TestMain(m *testing.M) {
 		},
 	}
 
+	// Append test apps for Dapr versions N-2 and N-1 if present
+	// These are used to detect regressions in the control plane
+	if os.Getenv("DAPR_TEST_N_MINUS_2_IMAGE") != "" {
+		testApps = append(testApps, kube.AppDescription{
+			AppName:           "hellon2dapr",
+			DaprEnabled:       true,
+			ImageName:         "e2e-hellodapr",
+			SidecarImage:      os.Getenv("DAPR_TEST_N_MINUS_2_IMAGE"),
+			Replicas:          1,
+			IngressEnabled:    true,
+			DaprMemoryLimit:   "200Mi",
+			DaprMemoryRequest: "100Mi",
+			AppMemoryLimit:    "200Mi",
+			AppMemoryRequest:  "100Mi",
+		})
+	}
+	if os.Getenv("DAPR_TEST_N_MINUS_1_IMAGE") != "" {
+		testApps = append(testApps, kube.AppDescription{
+			AppName:           "hellon1dapr",
+			DaprEnabled:       true,
+			ImageName:         "e2e-hellodapr",
+			SidecarImage:      os.Getenv("DAPR_TEST_N_MINUS_1_IMAGE"),
+			Replicas:          1,
+			IngressEnabled:    true,
+			DaprMemoryLimit:   "200Mi",
+			DaprMemoryRequest: "100Mi",
+			AppMemoryLimit:    "200Mi",
+			AppMemoryRequest:  "100Mi",
+		})
+	}
+
 	tr = runner.NewTestRunner("hellodapr", testApps, nil, nil)
 	os.Exit(tr.Start(m))
 }
 
-var helloAppTests = []struct {
-	in               string
-	app              string
-	testCommand      string
-	expectedResponse string
-}{
-	{
-		"green dapr",
-		"hellogreendapr",
-		"green",
-		"Hello green dapr!",
-	},
-	{
-		"blue dapr",
-		"hellobluedapr",
-		"blue",
-		"Hello blue dapr!",
-	},
-	{
-		"envTest dapr",
-		"helloenvtestdapr",
-		"envTest",
-		"3500 50001",
-	},
-}
-
 func TestHelloDapr(t *testing.T) {
+	helloAppTests := []struct {
+		testName         string
+		app              string
+		testCommand      string
+		expectedResponse string
+		condition        bool
+	}{
+		{
+			"green dapr",
+			"hellogreendapr",
+			"green",
+			"Hello green dapr!",
+			true,
+		},
+		{
+			"blue dapr",
+			"hellobluedapr",
+			"blue",
+			"Hello blue dapr!",
+			true,
+		},
+		{
+			"n minus 2",
+			"hellon2dapr",
+			"blue",
+			"Hello blue dapr!",
+			os.Getenv("DAPR_TEST_N_MINUS_2_IMAGE") != "",
+		},
+		{
+			"n minus 1",
+			"hellon1dapr",
+			"blue",
+			"Hello blue dapr!",
+			os.Getenv("DAPR_TEST_N_MINUS_1_IMAGE") != "",
+		},
+		{
+			"envTest dapr",
+			"helloenvtestdapr",
+			"envTest",
+			"3500 50001",
+			true,
+		},
+	}
+
 	for _, tt := range helloAppTests {
-		t.Run(tt.in, func(t *testing.T) {
+		t.Run(tt.testName, func(t *testing.T) {
+			if !tt.condition {
+				t.Skip("Skipped because condition is false")
+			}
+
 			// Get the ingress external url of test app
 			externalURL := tr.Platform.AcquireAppExternalURL(tt.app)
 			require.NotEmpty(t, externalURL, "external URL must not be empty")

@@ -15,9 +15,11 @@ package consts
 
 /* #nosec. */
 const (
-	// APITokenEnvVar is the environment variable for the api token.
+	// Env var for the API token.
 	APITokenEnvVar    = "DAPR_API_TOKEN"
 	AppAPITokenEnvVar = "APP_API_TOKEN"
-	// APITokenHeader is header name for http/gRPC calls to hold the token.
+	// Header name for HTTP/gRPC calls to hold the token.
 	APITokenHeader = "dapr-api-token"
+	// Name of the variable injected in the daprd container with the list of injected env vars.
+	EnvKeysEnvVar = "DAPR_ENV_KEYS"
 )

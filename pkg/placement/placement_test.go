@@ -20,7 +20,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -75,7 +74,7 @@ func newTestPlacementServer(t *testing.T, raftServer *raft.Server) (string, *Ser
 	return serverAddress, testServer, clock, cleanUpFn
 }
 
-func newTestClient(t *testing.T, serverAddress string) (*grpc.ClientConn, v1pb.PlacementClient, v1pb.Placement_ReportDaprStatusClient) { //nolint:nosnakecase
+func newTestClient(t *testing.T, serverAddress string) (*grpc.ClientConn, v1pb.Placement_ReportDaprStatusClient) { //nolint:nosnakecase
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 	conn, err := grpc.DialContext(ctx, serverAddress, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
@@ -85,7 +84,7 @@ func newTestClient(t *testing.T, serverAddress string) (*grpc.ClientConn, v1pb.P
 	stream, err := client.ReportDaprStatus(context.Background())
 	require.NoError(t, err)
 
-	return conn, client, stream
+	return conn, stream
 }
 
 func TestMemberRegistration_NoLeadership(t *testing.T) {
@@ -95,7 +94,7 @@ func TestMemberRegistration_NoLeadership(t *testing.T) {
 	testServer.hasLeadership.Store(false)
 
 	// arrange
-	conn, _, stream := newTestClient(t, serverAddress)
+	conn, stream := newTestClient(t, serverAddress)
 
 	host := &v1pb.Host{
 		Name:     "127.0.0.1:50102",
@@ -126,7 +125,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 
 	t.Run("Connect server and disconnect it gracefully", func(t *testing.T) {
 		// arrange
-		conn, _, stream := newTestClient(t, serverAddress)
+		conn, stream := newTestClient(t, serverAddress)
 
 		host := &v1pb.Host{
 			Name:     "127.0.0.1:50102",
@@ -175,7 +174,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 
 	t.Run("Connect server and disconnect it forcefully", func(t *testing.T) {
 		// arrange
-		conn, _, stream := newTestClient(t, serverAddress)
+		conn, stream := newTestClient(t, serverAddress)
 
 		// act
 		host := &v1pb.Host{
@@ -226,7 +225,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 
 	t.Run("non actor host", func(t *testing.T) {
 		// arrange
-		conn, _, stream := newTestClient(t, serverAddress)
+		conn, stream := newTestClient(t, serverAddress)
 
 		// act
 		host := &v1pb.Host{
@@ -251,65 +250,5 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 		// Close tcp connection before closing stream, which simulates the scenario
 		// where dapr runtime disconnects the connection from placement service unexpectedly.
 		assert.NoError(t, conn.Close())
-	})
-}
-
-func TestGetPlacementTables(t *testing.T) {
-	serverAddress, testServer, _, cleanup := newTestPlacementServer(t, testRaftServer)
-	t.Cleanup(cleanup)
-	testServer.hasLeadership.Store(true)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go func() {
-		testServer.processRaftStateCommand(ctx)
-	}()
-	// wait for goroutine starts
-	time.Sleep(10 * time.Millisecond)
-
-	t.Run("empty actor host", func(t *testing.T) {
-		// arrange
-		conn, client, _ := newTestClient(t, serverAddress)
-		tables, err := client.GetPlacementTables(context.Background(), &empty.Empty{})
-
-		// retrieve the empty placement tables
-		assert.NoError(t, err)
-		assert.Empty(t, tables.HostMap)
-		conn.Close()
-	})
-
-	t.Run("Get placement tables", func(t *testing.T) {
-		// arrange
-		conn, client, stream := newTestClient(t, serverAddress)
-		testAppID := "testAppID"
-		testActorType := "DogActor"
-		testName := "127.0.0.1:50102"
-
-		host := &v1pb.Host{
-			Name:     testName,
-			Entities: []string{testActorType},
-			Id:       testAppID,
-			Load:     1, // Not used yet
-			// Port is redundant because Name should include port number
-		}
-
-		// add a host to the placement table
-		require.NoError(t, stream.Send(host))
-
-		// wait until host member change requests are flushed
-		assert.Eventually(t, func() bool {
-			return len(testServer.raftNode.FSM().State().Members()) == 1
-		}, time.Second*10, 50*time.Millisecond,
-			"placement failed apply host registration")
-
-		// get placement tables
-		tables, err := client.GetPlacementTables(context.Background(), &empty.Empty{})
-
-		// assert
-		require.NoError(t, err)
-		require.Equal(t, 1, len(tables.HostMap))
-		require.Equal(t, []string{testActorType}, tables.HostMap[testName].Entities)
-		require.Equal(t, testAppID, tables.HostMap[testName].AppId)
-		require.Equal(t, testName, tables.HostMap[testName].Name)
-		conn.Close()
 	})
 }

@@ -28,11 +28,11 @@ type FailingAppChannel struct {
 	KeyFunc func(req *invokev1.InvokeMethodRequest) string
 }
 
-func (f *FailingAppChannel) GetAppConfig() (*config.ApplicationConfig, error) {
+func (f *FailingAppChannel) GetAppConfig(appID string) (*config.ApplicationConfig, error) {
 	return nil, nil
 }
 
-func (f *FailingAppChannel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+func (f *FailingAppChannel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*invokev1.InvokeMethodResponse, error) {
 	err := f.Failure.PerformFailure(f.KeyFunc(req))
 	if err != nil {
 		return invokev1.NewInvokeMethodResponse(500, "Failure!", []*anypb.Any{}), err

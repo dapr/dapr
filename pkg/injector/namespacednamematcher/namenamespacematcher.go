@@ -14,6 +14,7 @@ limitations under the License.
 package namespacednamematcher
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -48,13 +49,13 @@ func CreateFromString(s string) (*EqualPrefixNameNamespaceMatcher, error) {
 	for _, nameNamespace := range strings.Split(s, ",") {
 		saNs := strings.Split(nameNamespace, ":")
 		if len(saNs) != 2 {
-			return nil, fmt.Errorf("service account namespace pair not following expected format 'namespace:serviceaccountname'")
+			return nil, errors.New("service account namespace pair not following expected format 'namespace:serviceaccountname'")
 		}
 		ns := strings.TrimSpace(saNs[0])
 		sa := strings.TrimSpace(saNs[1])
 
 		if len(ns) == 0 && len(sa) == 0 {
-			return nil, fmt.Errorf("service account name and namespace cannot both be empty")
+			return nil, errors.New("service account name and namespace cannot both be empty")
 		}
 		nsPrefix, prefixFound, err := getPrefix(ns)
 		if err != nil {
@@ -72,7 +73,7 @@ func CreateFromString(s string) (*EqualPrefixNameNamespaceMatcher, error) {
 				return nil, prefixErr
 			}
 			if saPrefixFound && saPrefix == "" && nsPrefix == "" {
-				return nil, fmt.Errorf("service account name and namespace prefixes cannot both be empty (ie '*:*'")
+				return nil, errors.New("service account name and namespace prefixes cannot both be empty (ie '*:*'")
 			}
 		} else {
 			if matcher.equal == nil {
@@ -116,7 +117,7 @@ func getPrefix(s string) (string, bool, error) {
 		return "", false, nil
 	}
 	if wildcardIndex != (len(s) - 1) {
-		return "", false, fmt.Errorf("we only allow a single wildcard at the end of the string to indicate prefix matching for allowed servicename or namespace, and we were provided with %s", s)
+		return "", false, fmt.Errorf("we only allow a single wildcard at the end of the string to indicate prefix matching for allowed servicename or namespace, and we were provided with: %s", s)
 	}
 	return s[:len(s)-1], true, nil
 }

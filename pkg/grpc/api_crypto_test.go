@@ -525,11 +525,10 @@ func TestCryptoAlpha1(t *testing.T) {
 }
 
 func cryptoSendRequest(stream grpc.ClientStream, send []runtimev1pb.CryptoRequests, recv runtimev1pb.CryptoResponses) ([]byte, error) {
-	var err error
-
 	// Send messages in a background goroutine
 	sendErrCh := make(chan error)
 	go func() {
+		var err error
 		for _, msg := range send {
 			err = stream.SendMsg(msg)
 			if err != nil {
@@ -551,6 +550,7 @@ func cryptoSendRequest(stream grpc.ClientStream, send []runtimev1pb.CryptoReques
 	var (
 		done bool
 		seq  uint64
+		err  error
 	)
 	res := &bytes.Buffer{}
 	for !done {

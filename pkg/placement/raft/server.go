@@ -28,7 +28,8 @@ import (
 )
 
 const (
-	logStorePrefix    = "log-"
+	// Bump version number of the log prefix if there are breaking changes to Raft logs' schema.
+	logStorePrefix    = "log-v2-"
 	snapshotsRetained = 2
 
 	// raftLogCacheSize is the maximum number of logs to cache in-memory.

@@ -14,6 +14,7 @@ limitations under the License.
 package messages
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -84,6 +85,18 @@ func (e APIError) GRPCStatus() *grpcStatus.Status {
 // Error implements the error interface.
 func (e APIError) Error() string {
 	return e.String()
+}
+
+// JSONErrorValue implements the errorResponseValue interface.
+func (e APIError) JSONErrorValue() []byte {
+	b, _ := json.Marshal(struct {
+		ErrorCode string `json:"errorCode"`
+		Message   string `json:"message"`
+	}{
+		ErrorCode: e.Tag(),
+		Message:   e.Message(),
+	})
+	return b
 }
 
 // Is implements the interface that checks if the error matches the given one.

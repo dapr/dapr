@@ -43,6 +43,7 @@ type mockMetadata struct {
 	ActiveActorsCount    []activeActorsCount       `json:"actors"`
 	Extended             map[string]string         `json:"extended"`
 	RegisteredComponents []mockRegisteredComponent `json:"components"`
+	EnabledFeatures      []string                  `json:"enabledFeatures"`
 }
 
 type activeActorsCount struct {
@@ -57,18 +58,18 @@ type mockRegisteredComponent struct {
 	Capabilities []string `json:"capabilities"`
 }
 
-func testSetMetadata(t *testing.T, metadataAppExternalURL string) {
+func testSetMetadata(t *testing.T, protocol, metadataAppExternalURL string) {
 	t.Log("Setting sidecar metadata")
-	url := fmt.Sprintf("%s/test/setMetadata", metadataAppExternalURL)
+	url := fmt.Sprintf("%s/test/%s/set", metadataAppExternalURL, protocol)
 	resp, err := utils.HTTPPost(url, []byte(`{"key":"newkey","value":"newvalue"}`))
 	require.NoError(t, err)
 	require.NotEmpty(t, resp, "response must not be empty!")
 }
 
-func testGetMetadata(t *testing.T, metadataAppExternalURL string) {
+func testGetMetadata(t *testing.T, protocol, metadataAppExternalURL string) {
 	t.Log("Getting sidecar metadata")
-	url := fmt.Sprintf("%s/test/getMetadata", metadataAppExternalURL)
-	resp, err := utils.HTTPGet(url)
+	url := fmt.Sprintf("%s/test/%s/get", metadataAppExternalURL, protocol)
+	resp, err := utils.HTTPPost(url, nil)
 	require.NoError(t, err)
 	require.NotEmpty(t, resp, "response must not be empty!")
 	var metadata mockMetadata
@@ -82,6 +83,8 @@ func testGetMetadata(t *testing.T, metadataAppExternalURL string) {
 	require.NotEmpty(t, metadata.Extended)
 	require.NotEmpty(t, metadata.Extended["daprRuntimeVersion"])
 	require.Equal(t, "newvalue", metadata.Extended["newkey"])
+	require.Contains(t, metadata.EnabledFeatures, "IsEnabled")
+	require.NotContains(t, metadata.EnabledFeatures, "NotEnabled")
 }
 
 func TestMain(m *testing.M) {
@@ -90,25 +93,32 @@ func TestMain(m *testing.M) {
 
 	// These apps will be deployed before starting actual test
 	// and will be cleaned up after all tests are finished automatically
-	testApps := []kube.AppDescription{
-		{
-			AppName:        appName,
-			DaprEnabled:    true,
-			ImageName:      "e2e-metadata",
-			Replicas:       1,
-			IngressEnabled: true,
-			MetricsEnabled: true,
-		},
+	testApp := kube.AppDescription{
+		AppName:        appName,
+		DaprEnabled:    true,
+		ImageName:      "e2e-metadata",
+		Replicas:       1,
+		IngressEnabled: true,
+		MetricsEnabled: true,
+		Config:         "previewconfig",
 	}
+	if utils.TestTargetOS() != "windows" {
+		// On Linux, we use Unix Domain Sockets for the servers
+		testApp.UnixDomainSocketPath = "/var/dapr/"
+		testApp.AppEnv = map[string]string{
+			"DAPR_GRPC_SOCKET_ADDR": "/var/dapr/dapr-" + appName + "-grpc.socket",
+			"DAPR_HTTP_SOCKET_ADDR": "/var/dapr/dapr-" + appName + "-http.socket",
+		}
+	}
+	testApps := []kube.AppDescription{testApp}
 
-	log.Printf("Creating TestRunner\n")
+	log.Printf("Creating TestRunner")
 	tr = runner.NewTestRunner("metadatatest", testApps, nil, nil)
-	log.Printf("Starting TestRunner\n")
+	log.Printf("Starting TestRunner")
 	os.Exit(tr.Start(m))
 }
 
 func TestMetadata(t *testing.T) {
-	t.Log("Enter TestMetadataHTTP")
 	metadataAppExternalURL := tr.Platform.AcquireAppExternalURL(appName)
 	require.NotEmpty(t, metadataAppExternalURL, "metadataAppExternalURL must not be empty!")
 
@@ -117,6 +127,13 @@ func TestMetadata(t *testing.T) {
 	_, err := utils.HTTPGetNTimes(metadataAppExternalURL, numHealthChecks)
 	require.NoError(t, err)
 
-	testSetMetadata(t, metadataAppExternalURL)
-	testGetMetadata(t, metadataAppExternalURL)
+	t.Run("HTTP", func(t *testing.T) {
+		testSetMetadata(t, "http", metadataAppExternalURL)
+		testGetMetadata(t, "http", metadataAppExternalURL)
+	})
+
+	t.Run("gRPC", func(t *testing.T) {
+		testSetMetadata(t, "grpc", metadataAppExternalURL)
+		testGetMetadata(t, "grpc", metadataAppExternalURL)
+	})
 }

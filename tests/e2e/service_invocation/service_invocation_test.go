@@ -35,6 +35,7 @@ import (
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
+	apiv1 "k8s.io/api/core/v1"
 )
 
 type testCommandRequest struct {
@@ -182,6 +183,22 @@ func TestMain(m *testing.M) {
 			IngressEnabled: true,
 			MetricsEnabled: true,
 			AppProtocol:    "http",
+			Volumes: []apiv1.Volume{
+				{
+					Name: "secret-volume",
+					VolumeSource: apiv1.VolumeSource{
+						Secret: &apiv1.SecretVolumeSource{
+							SecretName: "external-tls",
+						},
+					},
+				},
+			},
+			AppVolumeMounts: []apiv1.VolumeMount{
+				{
+					Name:      "secret-volume",
+					MountPath: "/tmp/testdata/certs",
+				},
+			},
 		},
 	}
 
@@ -301,24 +318,32 @@ var externalServiceInvocationTests = []struct {
 	remoteApp        string
 	appMethod        string
 	expectedResponse string
-	isHTTPEndpoint   bool // this determines if the corresponding URL will use the HTTPEndpoint name, or external service IP
+	testType         string
 }{
 	// For descriptions, see corresponding methods in dapr/tests/apps/service_invocation/app.go
 	{
-		"Test HTTP to HTTP Externally using HTTP Endpoint CRD",
+		"Test HTTP to HTTP Externally using overwritten URLs",
 		"/httptohttptest_external",
 		"serviceinvocation-callee-external",
 		"externalInvocation",
 		"success",
-		false,
+		"URL",
 	},
 	{
-		"Test HTTP to HTTP Externally",
+		"Test HTTP to HTTP Externally using HTTP Endpoint CRD",
 		"httptohttptest_external",
 		"external-http-endpoint",
 		"externalInvocation",
 		"success",
-		true,
+		"CRD",
+	},
+	{
+		"Test HTTP to HTTPS Externally using HTTP Endpoint CRD",
+		"httptohttptest_external",
+		"external-http-endpoint-tls",
+		"externalInvocation",
+		"success",
+		"TLS",
 	},
 }
 
@@ -519,8 +544,8 @@ func TestServiceInvocationExternally(t *testing.T) {
 					RemoteApp: tt.remoteApp,
 					Method:    tt.appMethod,
 				}
-				switch tt.isHTTPEndpoint {
-				case false:
+				switch tt.testType {
+				case "URL":
 					// test using overwritten URLs
 					t.Run(tt.in, func(t *testing.T) {
 						body, err := json.Marshal(testCommandRequestExternal{
@@ -542,8 +567,28 @@ func TestServiceInvocationExternally(t *testing.T) {
 						require.NoError(t, err)
 						require.Equal(t, tt.expectedResponse, appResp.Message)
 					})
-				default:
+				case "CRD":
 					// invoke via HTTPEndpoint CRD
+					t.Run(tt.in, func(t *testing.T) {
+						body, err := json.Marshal(testCommandRequestExternal{
+							testCommandRequest: testCommandReq,
+						})
+						require.NoError(t, err)
+
+						resp, err := utils.HTTPPost(
+							fmt.Sprintf("http://%s/%s", externalURL, tt.path), body)
+						t.Log("checking err...")
+						require.NoError(t, err)
+
+						var appResp appResponse
+						t.Logf("unmarshalling..%s\n", string(resp))
+						err = json.Unmarshal(resp, &appResp)
+						t.Logf("appResp %s", appResp)
+						require.NoError(t, err)
+						require.Equal(t, tt.expectedResponse, appResp.Message)
+					})
+				case "TLS":
+					// invoke via HTTPEndpoint CRD with TLS
 					t.Run(tt.in, func(t *testing.T) {
 						body, err := json.Marshal(testCommandRequestExternal{
 							testCommandRequest: testCommandReq,
@@ -854,8 +899,6 @@ func TestHeaders(t *testing.T) {
 
 				require.NoError(t, err)
 
-				_ = assert.NotEmpty(t, requestHeaders["dapr-host"]) &&
-					assert.True(t, strings.HasPrefix(requestHeaders["dapr-host"][0], "localhost:"))
 				_ = assert.NotEmpty(t, requestHeaders["content-type"]) &&
 					assert.Equal(t, "application/grpc", requestHeaders["content-type"][0])
 				_ = assert.NotEmpty(t, requestHeaders[":authority"]) &&
@@ -1491,20 +1534,20 @@ func TestNegativeCases(t *testing.T) {
 				var testResults negativeTestResult
 				json.Unmarshal(resp, &testResults)
 
-				require.Nil(t, err)
+				require.NoError(t, err)
 				require.True(t, testResults.MainCallSuccessful)
 				require.Len(t, testResults.Results, 4)
 
 				for _, result := range testResults.Results {
 					switch result.TestCase {
 					case "1MB":
-						require.True(t, result.CallSuccessful)
+						assert.True(t, result.CallSuccessful)
 					case "4MB":
-						require.True(t, result.CallSuccessful)
+						assert.True(t, result.CallSuccessful)
 					case "4MB+":
-						require.False(t, result.CallSuccessful)
+						assert.False(t, result.CallSuccessful)
 					case "8MB":
-						require.False(t, result.CallSuccessful)
+						assert.False(t, result.CallSuccessful)
 					}
 				}
 			})
@@ -1522,20 +1565,20 @@ func TestNegativeCases(t *testing.T) {
 				var testResults negativeTestResult
 				json.Unmarshal(resp, &testResults)
 
-				require.Nil(t, err)
+				require.NoError(t, err)
 				require.True(t, testResults.MainCallSuccessful)
 				require.Len(t, testResults.Results, 4)
 
 				for _, result := range testResults.Results {
 					switch result.TestCase {
 					case "1MB":
-						require.True(t, result.CallSuccessful)
+						assert.True(t, result.CallSuccessful)
 					case "4MB":
-						require.True(t, result.CallSuccessful)
+						assert.True(t, result.CallSuccessful)
 					case "4MB+":
-						require.False(t, result.CallSuccessful)
+						assert.False(t, result.CallSuccessful)
 					case "8MB":
-						require.False(t, result.CallSuccessful)
+						assert.False(t, result.CallSuccessful)
 					}
 				}
 			})
@@ -1653,4 +1696,41 @@ func TestCrossNamespaceCases(t *testing.T) {
 
 	t.Run("serviceinvocation-caller", testFn("serviceinvocation-caller"))
 	t.Run("serviceinvocation-caller-stream", testFn("serviceinvocation-caller-stream"))
+}
+
+func TestPathURLNormalization(t *testing.T) {
+	t.Parallel()
+
+	externalURL := tr.Platform.AcquireAppExternalURL("serviceinvocation-caller")
+	require.NotEmpty(t, externalURL, "external URL must not be empty!")
+
+	// This initial probe makes the test wait a little bit longer when needed,
+	// making this test less flaky due to delays in the deployment.
+	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
+	require.NoError(t, err)
+
+	t.Logf("externalURL is '%s'\n", externalURL)
+
+	for path, exp := range map[string]string{
+		`/foo/%2Fbbb%2F%2E`:     `/foo/%2Fbbb%2F%2E`,
+		`//foo/%2Fb/bb%2F%2E`:   `/foo/%2Fb/bb%2F%2E`,
+		`//foo/%2Fb///bb%2F%2E`: `/foo/%2Fb/bb%2F%2E`,
+		`/foo/%2E`:              `/foo/%2E`,
+		`///foo///%2E`:          `/foo/%2E`,
+	} {
+		t.Run(path, func(t *testing.T) {
+			body, err := json.Marshal(testCommandRequest{
+				RemoteApp: "serviceinvocation-callee-0",
+				Method:    "normalization",
+			})
+			require.NoError(t, err)
+
+			url := fmt.Sprintf("http://%s/%s", externalURL, path)
+			resp, err := utils.HTTPPost(url, body)
+			require.NoError(t, err)
+
+			t.Logf("checking piped path..%s\n", string(resp))
+			assert.Contains(t, exp, string(resp))
+		})
+	}
 }

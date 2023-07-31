@@ -22,18 +22,20 @@ import (
 )
 
 func TestMetricsExporter(t *testing.T) {
+	logger := logger.NewLogger("test.logger")
+
 	t.Run("returns default options", func(t *testing.T) {
-		e := NewExporter("test")
+		e := NewExporter(logger, "test")
 		op := e.Options()
-		assert.Equal(t, defaultMetricOptions(), op)
+		assert.Equal(t, DefaultMetricOptions(), op)
 	})
 
 	t.Run("return error if exporter is not initialized", func(t *testing.T) {
 		e := &promMetricsExporter{
 			&exporter{
 				namespace: "test",
-				options:   defaultMetricOptions(),
-				logger:    logger.NewLogger("dapr.metrics"),
+				options:   DefaultMetricOptions(),
+				logger:    logger,
 			},
 			nil,
 		}
@@ -41,7 +43,7 @@ func TestMetricsExporter(t *testing.T) {
 	})
 
 	t.Run("skip starting metric server", func(t *testing.T) {
-		e := NewExporter("test")
+		e := NewExporter(logger, "test")
 		e.Options().MetricsEnabled = false
 		err := e.Init()
 		assert.NoError(t, err)
