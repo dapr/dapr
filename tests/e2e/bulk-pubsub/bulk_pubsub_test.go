@@ -390,10 +390,7 @@ func TestBulkPubSubHTTP(t *testing.T) {
 
 		// This initial probe makes the test wait a little bit longer when needed,
 		// making this test less flaky due to delays in the deployment.
-		_, err := utils.HTTPGetNTimes(publisherExternalURL, numHealthChecks)
-		require.NoError(t, err)
-
-		_, err = utils.HTTPGetNTimes(subscriberExternalURL, numHealthChecks)
+		err := utils.HealthCheckApps(publisherExternalURL, subscriberExternalURL)
 		require.NoError(t, err)
 
 		err = publishHealthCheck(publisherExternalURL)

@@ -55,5 +55,7 @@ scopes:
   - pubsub-subscriber-routing
   - pubsub-publisher-routing-grpc
   - pubsub-subscriber-routing-grpc
+  - pubsub-publisher-bulk-subscribe
+  - pubsub-bulk-subscriber
   - job-publisher
   - job-subscriber
