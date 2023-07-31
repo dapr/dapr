@@ -335,8 +335,8 @@ func (a *DaprRuntime) shutdown() error {
 			for i, closer := range a.apiClosers {
 				go func(i int, c io.Closer) {
 					defer wg.Done()
-					if err := closer.Close(); err != nil {
-						errs[i] = fmt.Errorf("error closing API: %v", err)
+					if err := c.Close(); err != nil {
+						errs[i] = fmt.Errorf("error closing API: %w", err)
 					}
 				}(i, closer)
 			}
@@ -538,7 +538,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 
 	err = a.startGRPCAPIServer(a.daprGRPCAPI, a.runtimeConfig.apiGRPCPort)
 	if err != nil {
-		return fmt.Errorf("failed to start API gRPC server: %s", err)
+		return fmt.Errorf("failed to start API gRPC server: %w", err)
 	}
 	if a.runtimeConfig.unixDomainSocket != "" {
 		log.Info("API gRPC server is running on a Unix Domain Socket")
@@ -549,7 +549,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	// Start HTTP Server
 	err = a.startHTTPServer(a.runtimeConfig.httpPort, a.runtimeConfig.publicPort, a.runtimeConfig.profilePort, a.runtimeConfig.allowedOrigins, pipeline, univAPI)
 	if err != nil {
-		return fmt.Errorf("failed to start HTTP server: %s", err)
+		return fmt.Errorf("failed to start HTTP server: %w", err)
 	}
 	if a.runtimeConfig.unixDomainSocket != "" {
 		log.Info("HTTP server is running on a Unix Domain Socket")
@@ -561,7 +561,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	// Start internal gRPC server (used for sidecar-to-sidecar communication)
 	err = a.startGRPCInternalServer(a.daprGRPCAPI, a.runtimeConfig.internalGRPCPort)
 	if err != nil {
-		return fmt.Errorf("failed to start internal gRPC server: %s", err)
+		return fmt.Errorf("failed to start internal gRPC server: %w", err)
 	}
 	log.Infof("Internal gRPC server is running on port %v", a.runtimeConfig.internalGRPCPort)
 
@@ -636,7 +636,7 @@ func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) error {
 			DirectMessaging: a.directMessaging,
 			CompStore:       a.compStore,
 		}); err != nil {
-			return fmt.Errorf("failed to register components with callback: %s", err)
+			return fmt.Errorf("failed to register components with callback: %w", err)
 		}
 	}
 
@@ -683,7 +683,7 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status uint8) {
 		// First time the app becomes healthy, complete the init process
 		if a.appHealthReady != nil {
 			if err := a.appHealthReady(ctx); err != nil {
-				log.Warnf("failed to complete app init: %s ", err)
+				log.Warnf("Failed to complete app init: %s ", err)
 			}
 			a.appHealthReady = nil
 		}
@@ -1418,10 +1418,10 @@ func (a *DaprRuntime) processComponentAndDependents(ctx context.Context, comp co
 	err = a.processor.Init(ctx, comp)
 	// If the context is canceled, we want  to return an init error.
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-		err = fmt.Errorf("init timeout for component %s exceeded after %s", comp.Name, timeout.String())
+		err = fmt.Errorf("init timeout for component %s exceeded after %s", comp.LogName(), timeout.String())
 	}
 	if err != nil {
-		log.Errorf("failed to init component %s: %s", comp.Name, err)
+		log.Errorf("Failed to init component %s: %s", comp.Name, err)
 		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
 		return rterrors.NewInit(rterrors.InitComponentFailure, comp.LogName(), err)
 	}
@@ -1483,7 +1483,6 @@ func (a *DaprRuntime) loadHTTPEndpoints(ctx context.Context) error {
 }
 
 func (a *DaprRuntime) stopActor(_ context.Context) error {
-	log.Info("Initiating actor shutdown")
 	if a.actor != nil {
 		log.Info("Shutting down actor")
 		return a.actor.Stop()
@@ -1521,7 +1520,7 @@ func (a *DaprRuntime) cleanSockets() error {
 		for _, s := range []string{"http", "grpc"} {
 			err := os.Remove(fmt.Sprintf("%s/dapr-%s-%s.socket", a.runtimeConfig.unixDomainSocket, a.runtimeConfig.id, s))
 			if err != nil {
-				errs = append(errs, fmt.Errorf("error removing socket file: %s", err))
+				errs = append(errs, fmt.Errorf("error removing socket file: %w", err))
 			}
 		}
 	}
@@ -1666,10 +1665,10 @@ func (a *DaprRuntime) blockUntilAppIsReady(ctx context.Context) error {
 
 	for {
 		select {
+		// Return
 		case <-ctx.Done():
-			// Return
 			return ctx.Err()
-			// prevents overwhelming the OS with open connections
+		// prevents overwhelming the OS with open connections
 		case <-time.After(time.Millisecond * 100):
 		}
 
@@ -1849,11 +1848,11 @@ func (a *DaprRuntime) stopTrace(ctx context.Context) error {
 	}
 	// Flush and shutdown the tracing provider.
 	if err := a.tracerProvider.ForceFlush(ctx); err != nil && !errors.Is(err, context.Canceled) {
-		log.Warnf("error flushing tracing provider: %v", err)
+		log.Warnf("Error flushing tracing provider: %v", err)
 	}
 
 	if err := a.tracerProvider.Shutdown(ctx); err != nil && !errors.Is(err, context.Canceled) {
-		return fmt.Errorf("error shutting down tracing provider: %v", err)
+		return fmt.Errorf("error shutting down tracing provider: %w", err)
 	} else {
 		a.tracerProvider = nil
 	}
