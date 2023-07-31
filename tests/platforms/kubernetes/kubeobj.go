@@ -95,7 +95,7 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 			"dapr.io/enable-api-logging":                strconv.FormatBool(EnableAPILogging),
 			"dapr.io/disable-builtin-k8s-secret-store":  strconv.FormatBool(appDesc.SecretStoreDisable),
 		}
-		if EnableDebugLogging {
+		if EnableDebugLogging || appDesc.DebugLoggingEnabled {
 			annotationObject["dapr.io/log-level"] = "debug"
 		}
 		if !appDesc.IsJob {

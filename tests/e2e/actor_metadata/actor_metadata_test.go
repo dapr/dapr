@@ -116,32 +116,34 @@ func TestMain(m *testing.M) {
 	// and will be cleaned up after all tests are finished automatically
 	testApps := []kube.AppDescription{
 		{
-			AppName:        appNameOne,
-			DaprEnabled:    true,
-			ImageName:      "e2e-actorfeatures",
-			Replicas:       1,
-			IngressEnabled: true,
-			Config:         "omithealthchecksconfig",
-			DaprCPULimit:   "2.0",
-			DaprCPURequest: "0.1",
-			AppCPULimit:    "2.0",
-			AppCPURequest:  "0.1",
+			AppName:             appNameOne,
+			DaprEnabled:         true,
+			ImageName:           "e2e-actorfeatures",
+			Replicas:            1,
+			IngressEnabled:      true,
+			Config:              "omithealthchecksconfig",
+			DebugLoggingEnabled: true,
+			DaprCPULimit:        "2.0",
+			DaprCPURequest:      "0.1",
+			AppCPULimit:         "2.0",
+			AppCPURequest:       "0.1",
 			AppEnv: map[string]string{
 				"TEST_APP_ACTOR_REMINDERS_PARTITIONS": "0",
 				"TEST_APP_ACTOR_TYPE":                 actorName,
 			},
 		},
 		{
-			AppName:        appNameTwo,
-			DaprEnabled:    true,
-			ImageName:      "e2e-actorfeatures",
-			Replicas:       1,
-			IngressEnabled: true,
-			Config:         "omithealthchecksconfig",
-			DaprCPULimit:   "2.0",
-			DaprCPURequest: "0.1",
-			AppCPULimit:    "2.0",
-			AppCPURequest:  "0.1",
+			AppName:             appNameTwo,
+			DaprEnabled:         true,
+			ImageName:           "e2e-actorfeatures",
+			Replicas:            1,
+			IngressEnabled:      true,
+			Config:              "omithealthchecksconfig",
+			DebugLoggingEnabled: true,
+			DaprCPULimit:        "2.0",
+			DaprCPURequest:      "0.1",
+			AppCPULimit:         "2.0",
+			AppCPURequest:       "0.1",
 			AppEnv: map[string]string{
 				"TEST_APP_ACTOR_REMINDERS_PARTITIONS": "0",
 				"TEST_APP_ACTOR_TYPE":                 actorName,
@@ -219,11 +221,7 @@ func TestActorMetadataEtagRace(t *testing.T) {
 
 			err = backoff.RetryNotify(
 				func() error {
-					_, rerr := utils.HTTPGetNTimes(externalURLOne, numHealthChecks)
-					if rerr != nil {
-						return rerr
-					}
-					_, rerr = utils.HTTPGetNTimes(externalURLTwo, numHealthChecks)
+					rerr := utils.HealthCheckApps(externalURLOne, externalURLTwo)
 					if rerr != nil {
 						return rerr
 					}
