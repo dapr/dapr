@@ -43,6 +43,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
+	"github.com/dapr/dapr/pkg/errorcodes"
 	"github.com/dapr/dapr/pkg/grpc/metadata"
 	"github.com/dapr/dapr/pkg/grpc/universalapi"
 	"github.com/dapr/dapr/pkg/messages"
@@ -227,7 +228,16 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 		}
 
 		if errors.As(err, &runtimePubsub.NotFoundError{}) {
-			nerr = status.Errorf(codes.NotFound, err.Error())
+			if a.isErrorCodesEnabled {
+				ste, wdErr := errorcodes.Newf(codes.NotFound, nil, err.Error())
+				if wdErr == nil {
+					nerr = ste.Err()
+				} else {
+					nerr = status.Errorf(codes.NotFound, err.Error())
+				}
+			} else {
+				nerr = status.Errorf(codes.NotFound, err.Error())
+			}
 		}
 		apiServerLogger.Debug(nerr)
 		return &emptypb.Empty{}, nerr

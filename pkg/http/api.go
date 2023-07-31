@@ -48,6 +48,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
+	"github.com/dapr/dapr/pkg/errorcodes"
 	"github.com/dapr/dapr/pkg/grpc/universalapi"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messaging"
@@ -1780,8 +1781,19 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 		}
 
 		if errors.As(err, &runtimePubsub.NotFoundError{}) {
-			msg = NewErrorResponse("ERR_PUBSUB_NOT_FOUND", err.Error())
 			status = nethttp.StatusBadRequest
+			if a.isErrorCodesEnabled {
+				ste, wdErr := errorcodes.Newf(codes.NotFound, nil, err.Error())
+				if wdErr == nil {
+					if resp, derErr := errorcodes.StatusErrorJSON(ste); derErr == nil {
+						fmt.Printf("@@@ JSON_ERR: %s", resp)
+						fasthttpRespond(reqCtx, fasthttpResponseWithJSON(status, resp))
+						log.Debug(resp)
+						return
+					}
+				}
+			}
+			msg = NewErrorResponse("ERR_PUBSUB_NOT_FOUND", err.Error())
 		}
 
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(status, msg))
