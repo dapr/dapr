@@ -26,8 +26,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/config/protocol"
 	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
-	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
-	securityConsts "github.com/dapr/dapr/pkg/sentry/consts"
+	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/ptr"
 )
@@ -265,7 +264,7 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 	if len(containerEnv) > 0 {
 		container.Env = append(container.Env, containerEnv...)
 		container.Env = append(container.Env, corev1.EnvVar{
-			Name:  authConsts.EnvKeysEnvVar,
+			Name:  securityConsts.EnvKeysEnvVar,
 			Value: strings.Join(containerEnvKeys, " "),
 		})
 	}
@@ -318,7 +317,7 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 
 	if c.APITokenSecret != "" {
 		container.Env = append(container.Env, corev1.EnvVar{
-			Name: authConsts.APITokenEnvVar,
+			Name: securityConsts.APITokenEnvVar,
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					Key: "token",
@@ -332,7 +331,7 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 
 	if c.AppTokenSecret != "" {
 		container.Env = append(container.Env, corev1.EnvVar{
-			Name: authConsts.AppAPITokenEnvVar,
+			Name: securityConsts.AppAPITokenEnvVar,
 			ValueFrom: &corev1.EnvVarSource{
 				SecretKeyRef: &corev1.SecretKeySelector{
 					Key: "token",
