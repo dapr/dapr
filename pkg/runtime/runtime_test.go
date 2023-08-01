@@ -60,6 +60,7 @@ import (
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpEndpointV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	"github.com/dapr/dapr/pkg/apphealth"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
 	configurationLoader "github.com/dapr/dapr/pkg/components/configuration"
@@ -3096,15 +3097,17 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 	})
 	rt.processor.SetAppChannel(mockAppChannel)
 
+	require.NoError(t, rt.processor.Init(context.Background(), cPubSub))
+
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error)
 	go func() {
 		errCh <- rt.Run(ctx)
 	}()
 
-	require.NoError(t, rt.processor.Init(context.Background(), cPubSub))
+	rt.appHealthChanged(context.Background(), apphealth.AppStatusHealthy)
+
 	mockPubSub.AssertCalled(t, "Init", mock.Anything)
-	rt.processor.PubSub().StartSubscriptions(context.Background())
 	mockPubSub.AssertCalled(t, "Subscribe", mock.AnythingOfType("pubsub.SubscribeRequest"), mock.AnythingOfType("pubsub.Handler"))
 
 	cancel()
