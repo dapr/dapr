@@ -39,3 +39,4 @@ scopes:
   - pubsub-perf-bulk-grpc
   - kafka-test-app-normal
   - kafka-test-app-bulk
+  - k6-tester-pubsub-subscribe-http

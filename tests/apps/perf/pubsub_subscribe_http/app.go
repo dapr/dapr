@@ -99,7 +99,7 @@ func main() {
 	if ok {
 		ival, err := strconv.Atoi(val)
 		if err != nil {
-			log.Printf("warning: error parsing TEST_NUM_MESSAGES: %s, falling back to: %d", err, numMessages)
+			log.Printf("WARNING: error parsing TEST_NUM_MESSAGES: %s, falling back to: %d", err, numMessages)
 		} else {
 			numMessages = ival
 		}

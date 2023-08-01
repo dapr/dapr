@@ -31,6 +31,7 @@ spec:
 scopes:
   - kafka-test-app-normal
   - kafka-test-app-bulk
+  - k6-tester-pubsub-subscribe-http
 
 ---
 
@@ -50,6 +51,7 @@ spec:
 scopes:
   - rabbitmq-test-app-normal
   - rabbitmq-test-app-bulk
+  - k6-tester-pubsub-subscribe-http
 
 ---
 
@@ -68,6 +70,7 @@ spec:
 scopes:
   - mqtt-test-app-normal
   - mqtt-test-app-bulk
+  - k6-tester-pubsub-subscribe-http
 
 ---
 
@@ -85,6 +88,7 @@ spec:
 scopes:
   - pulsar-test-app-normal
   - pulsar-test-app-bulk
+  - k6-tester-pubsub-subscribe-http
 
 ---
 #redis pubsub component
@@ -103,3 +107,4 @@ spec:
 scopes:
   - redis-test-app-normal
   - redis-test-app-bulk
+  - k6-tester-pubsub-subscribe-http
