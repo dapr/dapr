@@ -131,10 +131,10 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 		LeaderElectionReleaseOnCancel: true,
 		TLSOpts: []func(*tls.Config){
 			func(tlsConfig *tls.Config) {
-				sec, err := secProvider.Handler(ctx)
+				sec, sErr := secProvider.Handler(ctx)
 				// Error here means that the context has been cancelled before security
 				// is ready.
-				if err != nil {
+				if sErr != nil {
 					return
 				}
 				*tlsConfig = *sec.TLSServerConfigBasicTLS()

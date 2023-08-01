@@ -157,8 +157,8 @@ func (s *server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 	case req.Namespace == security.CurrentNamespace() && req.Id == "dapr-injector":
 		dns = []string{fmt.Sprintf("dapr-sidecar-injector.%s.svc", req.Namespace)}
 	case req.Namespace == security.CurrentNamespace() && req.Id == "dapr-operator":
-		// TODO: @joshvanl: before v1.11, daprd was matching on the operator server
-		// having `cluster.local` as a DNS SAN name. Remove after v1.12.
+		// TODO: @joshvanl: before v1.12, daprd was matching on the operator server
+		// having `cluster.local` as a DNS SAN name. Remove after v1.13.
 		dns = []string{"cluster.local", fmt.Sprintf("dapr-webhook.%s.svc", req.Namespace)}
 	case req.Namespace == security.CurrentNamespace() && req.Id == "dapr-placement":
 		dns = []string{"cluster.local"}

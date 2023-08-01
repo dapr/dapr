@@ -43,7 +43,7 @@ func New() *Fake {
 			return grpc.Creds(insecure.NewCredentials())
 		},
 		tlsServerConfigBasicTLSFn: func() *tls.Config {
-			return &tls.Config{}
+			return &tls.Config{MinVersion: tls.VersionTLS12}
 		},
 		currentTrustAnchorsFn: func() ([]byte, error) {
 			return []byte{}, nil

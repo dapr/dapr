@@ -19,8 +19,7 @@ import (
 )
 
 const (
-	//dialTimeout = 30 * time.Second
-	dialTimeout = 1 * time.Second
+	dialTimeout = 30 * time.Second
 )
 
 // GetOperatorClient returns a new k8s operator client and the underlying connection.
@@ -55,7 +54,6 @@ func GetOperatorClient(ctx context.Context,
 		return nil, nil, fmt.Errorf("failed to create tls config from cert and key: %w", err)
 	}
 	// block for connection
-	//opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(config)), grpc.WithBlock())
 	opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(config)), grpc.WithBlock(), grpc.WithReturnConnectionError())
 
 	ctx, cancelFunc := context.WithTimeout(ctx, dialTimeout)
