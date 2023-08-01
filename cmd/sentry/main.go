@@ -37,6 +37,8 @@ import (
 var log = logger.NewLogger("dapr.sentry")
 
 func main() {
+	log.Infof("Starting sentry certificate authority -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
+
 	opts := options.New()
 
 	// Apply options to all loggers
@@ -48,6 +50,10 @@ func main() {
 	log.Infof("Log level set to: %s", opts.Logger.OutputLevel)
 
 	metricsExporter := metrics.NewExporterWithOptions(log, metrics.DefaultMetricNamespace, opts.Metrics)
+
+	if len(opts.TokenAudience) > 0 {
+		log.Warn("--token-audience is deprecated and will be removed in Dapr v1.14")
+	}
 
 	if err := utils.SetEnvVariables(map[string]string{
 		utils.KubeConfigVar: opts.Kubeconfig,
@@ -68,22 +74,19 @@ func main() {
 	issuerKeyPath := filepath.Join(opts.IssuerCredentialsPath, credentials.IssuerKeyFilename)
 	rootCertPath := filepath.Join(opts.IssuerCredentialsPath, credentials.RootCertFilename)
 
-	config, err := config.FromConfigName(opts.ConfigName)
+	cfg, err := config.FromConfigName(opts.ConfigName)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	config.IssuerCertPath = issuerCertPath
-	config.IssuerKeyPath = issuerKeyPath
-	config.RootCertPath = rootCertPath
-	config.TrustDomain = opts.TrustDomain
-	config.Port = opts.Port
-	if opts.TokenAudience != "" {
-		config.TokenAudience = &opts.TokenAudience
-	}
+	cfg.IssuerCertPath = issuerCertPath
+	cfg.IssuerKeyPath = issuerKeyPath
+	cfg.RootCertPath = rootCertPath
+	cfg.TrustDomain = opts.TrustDomain
+	cfg.Port = opts.Port
 
 	var (
-		watchDir    = filepath.Dir(config.IssuerCertPath)
+		watchDir    = filepath.Dir(cfg.IssuerCertPath)
 		issuerEvent = make(chan struct{})
 		mngr        = concurrency.NewRunnerManager()
 	)
@@ -94,9 +97,7 @@ func main() {
 	// events (as well as wanting to terminate the program on signals).
 	caMngrFactory := func() *concurrency.RunnerManager {
 		return concurrency.NewRunnerManager(
-			func(ctx context.Context) error {
-				return sentry.NewSentryCA().Start(ctx, config)
-			},
+			sentry.New(cfg).Start,
 			func(ctx context.Context) error {
 				select {
 				case <-ctx.Done():
@@ -120,10 +121,11 @@ func main() {
 	}
 
 	// CA Server
-	mngr.Add(func(ctx context.Context) error {
+	err = mngr.Add(func(ctx context.Context) error {
 		for {
-			if err := caMngrFactory().Run(ctx); err != nil {
-				return err
+			runErr := caMngrFactory().Run(ctx)
+			if runErr != nil {
+				return runErr
 			}
 			// Catch outer context cancellation to exit.
 			select {
@@ -133,26 +135,36 @@ func main() {
 			}
 		}
 	})
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	// Watch for changes in the watchDir
-	mngr.Add(func(ctx context.Context) error {
-		log.Infof("starting watch on filesystem directory: %s", watchDir)
+	err = mngr.Add(func(ctx context.Context) error {
+		log.Infof("Starting watch on filesystem directory: %s", watchDir)
 		return fswatcher.Watch(ctx, watchDir, issuerEvent)
 	})
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	// Healthz server
-	mngr.Add(func(ctx context.Context) error {
+	err = mngr.Add(func(ctx context.Context) error {
 		healthzServer := health.NewServer(log)
 		healthzServer.Ready()
-		if err := healthzServer.Run(ctx, opts.HealthzPort); err != nil {
-			return fmt.Errorf("failed to start healthz server: %s", err)
+		runErr := healthzServer.Run(ctx, opts.HealthzPort)
+		if runErr != nil {
+			return fmt.Errorf("failed to start healthz server: %s", runErr)
 		}
 		return nil
 	})
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	// Run the runner manager.
 	if err := mngr.Run(signals.Context()); err != nil {
 		log.Fatal(err)
 	}
-	log.Info("sentry shut down gracefully")
+	log.Info("Sentry shut down gracefully")
 }

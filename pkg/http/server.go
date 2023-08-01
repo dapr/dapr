@@ -39,7 +39,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
-	auth "github.com/dapr/dapr/pkg/runtime/security"
+	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/logger"
 )
 
@@ -302,7 +302,7 @@ func (s *server) useCors(r chi.Router) {
 }
 
 func (s *server) useAPIAuthentication(r chi.Router) {
-	token := auth.GetAPIToken()
+	token := security.GetAPIToken()
 	if token == "" {
 		return
 	}
@@ -386,21 +386,7 @@ func (s *server) handle(e Endpoint, path string, r chi.Router, unescapeParameter
 
 	// Set as fallback method
 	if e.IsFallback {
-		fallbackHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Populate the wildcard path with the full path
-			chiCtx := chi.RouteContext(r.Context())
-			if chiCtx != nil {
-				// r.URL.RawPath could be empty
-				path := r.URL.RawPath
-				if path == "" {
-					path = r.URL.Path
-				}
-				chiCtx.URLParams.Add("*", strings.TrimPrefix(path, "/"))
-			}
-
-			handler(w, r)
-		})
-		r.NotFound(fallbackHandler)
-		r.MethodNotAllowed(fallbackHandler)
+		r.NotFound(handler)
+		r.MethodNotAllowed(handler)
 	}
 }
