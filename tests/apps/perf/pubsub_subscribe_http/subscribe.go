@@ -64,21 +64,21 @@ func bulkMessageHandler(w http.ResponseWriter, r *http.Request) {
 		log.Fatalf("Error reading request body: %v", err)
 	}
 
-	var bulkSubscribeMessage bulkSubscribeMessage
-	err = json.Unmarshal(postBody, &bulkSubscribeMessage)
+	var bsm bulkSubscribeMessage
+	err = json.Unmarshal(postBody, &bsm)
 	if err != nil {
 		log.Fatalf("Error unmarshalling request body: %v", err)
 	}
 
-	//log.Printf("Received %d messages", len(bulkSubscribeMessage.Entries))
+	// log.Printf("Received %d messages", len(bsm.Entries))
 
-	var bulkSubscribeResponseStatuses []bulkSubscribeResponseStatus
-	for _, entry := range bulkSubscribeMessage.Entries {
-		messagesCh <- entry.EntryId
-		bulkSubscribeResponseStatuses = append(bulkSubscribeResponseStatuses, bulkSubscribeResponseStatus{
-			EntryID: entry.EntryId,
+	bulkSubscribeResponseStatuses := make([]bulkSubscribeResponseStatus, len(bsm.Entries))
+	for i, entry := range bsm.Entries {
+		messagesCh <- entry.EntryID
+		bulkSubscribeResponseStatuses[i] = bulkSubscribeResponseStatus{
+			EntryID: entry.EntryID,
 			Status:  "SUCCESS",
-		})
+		}
 	}
 
 	resp := bulkSubscribeResponse{Statuses: bulkSubscribeResponseStatuses}
@@ -100,7 +100,7 @@ func messageHandler(w http.ResponseWriter, r *http.Request) {
 		log.Fatalf("Error reading request body: %v", err)
 	}
 
-	//log.Printf("received 1 message")
+	// log.Printf("received 1 message")
 	uuid, err := uuid.NewUUID()
 	if err != nil {
 		log.Fatalf("Error generating uuid: %v", err)

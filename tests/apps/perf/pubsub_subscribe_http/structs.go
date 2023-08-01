@@ -39,7 +39,7 @@ type bulkSubscribeMessage struct {
 }
 
 type bulkSubscribeMessageEntry struct {
-	EntryId  string            `json:"entryId"`
+	EntryID  string            `json:"entryId"`
 	Event    cloudevents.Event `json:"event"`
 	Metadata map[string]string `json:"metadata,omitempty"`
 }
