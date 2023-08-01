@@ -1904,7 +1904,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	if encryption.EncryptedStateStore(storeName) {
-		for _, op := range operations {
+		for i, op := range operations {
 			switch req := op.(type) {
 			case state.SetRequest:
 				data := []byte(fmt.Sprintf("%v", req.Value))
@@ -1919,7 +1919,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 				}
 
 				req.Value = val
-				operations = append(operations, req)
+				operations[i] = req
 			}
 		}
 	}

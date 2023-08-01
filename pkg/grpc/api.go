@@ -919,7 +919,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 	}
 
 	if encryption.EncryptedStateStore(in.StoreName) {
-		for _, op := range operations {
+		for i, op := range operations {
 			switch req := op.(type) {
 			case state.SetRequest:
 				data := []byte(fmt.Sprintf("%v", req.Value))
@@ -931,7 +931,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 				}
 
 				req.Value = val
-				operations = append(operations, req)
+				operations[i] = req
 			}
 		}
 	}
