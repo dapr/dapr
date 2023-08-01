@@ -720,8 +720,6 @@ func appRouter() http.Handler {
 	router.HandleFunc("/test/shutdownsidecar", shutdownSidecarHandler).Methods("POST")
 	router.HandleFunc("/healthz", healthzHandler).Methods("GET")
 
-	router.Use(mux.CORSMethodMiddleware(router))
-
 	return router
 }
 

@@ -74,14 +74,14 @@ type renameReminderRequest struct {
 }
 
 type reminderResponse struct {
-	ActorID        string      `json:"actorID,omitempty"`
-	ActorType      string      `json:"actorType,omitempty"`
-	Name           string      `json:"name,omitempty"`
-	Data           interface{} `json:"data"`
-	Period         string      `json:"period"`
-	DueTime        string      `json:"dueTime"`
-	RegisteredTime string      `json:"registeredTime,omitempty"`
-	ExpirationTime string      `json:"expirationTime,omitempty"`
+	ActorID        string `json:"actorID,omitempty"`
+	ActorType      string `json:"actorType,omitempty"`
+	Name           string `json:"name,omitempty"`
+	Data           any    `json:"data"`
+	Period         string `json:"period"`
+	DueTime        string `json:"dueTime"`
+	RegisteredTime string `json:"registeredTime,omitempty"`
+	ExpirationTime string `json:"expirationTime,omitempty"`
 }
 
 func parseLogEntries(resp []byte) []actorLogEntry {
@@ -179,7 +179,7 @@ func TestActorMetadataEtagRace(t *testing.T) {
 	reminderBody, err := json.Marshal(reminder)
 	require.NoError(t, err)
 
-	t.Run("Triggers rebalance of reminders multiple times to validate eTag race on metadata record.", func(t *testing.T) {
+	t.Run("Triggers rebalance of reminders multiple times to validate eTag race on metadata record", func(t *testing.T) {
 		for actorIDint := 0; actorIDint < numActors; actorIDint++ {
 			actorID := strconv.Itoa(actorIDint)
 			t.Logf("Registering reminder: %s %s ...", actorID, reminderName)
@@ -194,24 +194,30 @@ func TestActorMetadataEtagRace(t *testing.T) {
 		}
 
 		for newPartitionCount := 2; newPartitionCount <= maxNumPartitions; newPartitionCount++ {
+			npc := strconv.Itoa(newPartitionCount)
+
+			// The added querystrings serve no purpose besides acting as bookmark in logs
+			qs := "?partitionCount=" + npc
+
 			_, err = utils.HTTPPost(
-				fmt.Sprintf(envURLFormat, externalURLOne, "TEST_APP_ACTOR_REMINDERS_PARTITIONS"),
-				[]byte(strconv.Itoa(newPartitionCount)))
+				fmt.Sprintf(envURLFormat, externalURLOne, "TEST_APP_ACTOR_REMINDERS_PARTITIONS")+qs,
+				[]byte(npc))
 			require.NoError(t, err)
 			_, err = utils.HTTPPost(
-				fmt.Sprintf(envURLFormat, externalURLTwo, "TEST_APP_ACTOR_REMINDERS_PARTITIONS"),
-				[]byte(strconv.Itoa(newPartitionCount)))
+				fmt.Sprintf(envURLFormat, externalURLTwo, "TEST_APP_ACTOR_REMINDERS_PARTITIONS")+qs,
+				[]byte(npc))
 			require.NoError(t, err)
 
 			// Shutdown the sidecar to load the new partition config
-			_, err = utils.HTTPPost(fmt.Sprintf(shutdownSidecarURLFormat, externalURLOne), []byte(""))
+			_, err = utils.HTTPPost(fmt.Sprintf(shutdownSidecarURLFormat, externalURLOne)+qs, nil)
 			require.NoError(t, err)
-			_, err = utils.HTTPPost(fmt.Sprintf(shutdownSidecarURLFormat, externalURLTwo), []byte(""))
+			_, err = utils.HTTPPost(fmt.Sprintf(shutdownSidecarURLFormat, externalURLTwo)+qs, nil)
 			require.NoError(t, err)
+
 			// Reset logs
-			_, err = utils.HTTPDelete(logsURLOne)
+			_, err = utils.HTTPDelete(logsURLOne + qs)
 			require.NoError(t, err)
-			_, err = utils.HTTPDelete(logsURLTwo)
+			_, err = utils.HTTPDelete(logsURLTwo + qs)
 			require.NoError(t, err)
 
 			log.Printf("Waiting for sidecars %s & %s to restart ...", appNameOne, appNameTwo)
@@ -227,12 +233,12 @@ func TestActorMetadataEtagRace(t *testing.T) {
 					}
 
 					t.Logf("Getting logs from %s to see if reminders did trigger ...", logsURLOne)
-					respOne, rerr := utils.HTTPGet(logsURLOne)
+					respOne, rerr := utils.HTTPGet(logsURLOne + qs)
 					if rerr != nil {
 						return rerr
 					}
 					t.Logf("Getting logs from %s to see if reminders did trigger ...", logsURLTwo)
-					respTwo, rerr := utils.HTTPGet(logsURLTwo)
+					respTwo, rerr := utils.HTTPGet(logsURLTwo + qs)
 					if rerr != nil {
 						return rerr
 					}
