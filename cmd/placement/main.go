@@ -99,9 +99,9 @@ func main() {
 			return nil
 		},
 		func(ctx context.Context) error {
-			sec, err := secProvider.Handler(ctx)
-			if err != nil {
-				return err
+			sec, sErr := secProvider.Handler(ctx)
+			if sErr != nil {
+				return sErr
 			}
 			return apiServer.Run(ctx, strconv.Itoa(opts.PlacementPort), sec)
 		},
