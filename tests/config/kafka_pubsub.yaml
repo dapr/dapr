@@ -37,3 +37,5 @@ scopes:
   - pubsub-publisher-pluggable
   - pubsub-subscriber-pluggable
   - pubsub-perf-bulk-grpc
+  - kafka-test-app-normal
+  - kafka-test-app-bulk

@@ -72,7 +72,7 @@ func TestActorDoubleActivation(t *testing.T) {
 	require.NotEmpty(t, testServiceAppURL, "test app external URL must not be empty")
 
 	// Check if test app endpoint is available
-	t.Logf("Test app url: %s", testServiceAppURL+"/health")
+	t.Logf("Test app url: %s", testServiceAppURL)
 	err := utils.HealthCheckApps(testServiceAppURL + "/health")
 	require.NoError(t, err, "Health checks failed")
 
@@ -82,6 +82,7 @@ func TestActorDoubleActivation(t *testing.T) {
 		loadtest.WithRunnerEnvVar("TEST_APP_NAME", serviceApplicationName),
 	)
 	defer k6Test.Dispose()
+
 	t.Log("Running the k6 load test...")
 	require.NoError(t, tr.Platform.LoadTest(k6Test))
 	sm, err := loadtest.K6ResultDefault(k6Test)
@@ -89,6 +90,7 @@ func TestActorDoubleActivation(t *testing.T) {
 	require.NotNil(t, sm)
 	bts, err := json.MarshalIndent(sm, "", " ")
 	require.NoError(t, err)
+
 	appUsage, err := tr.Platform.GetAppUsage(serviceApplicationName)
 	require.NoError(t, err)
 

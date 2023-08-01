@@ -19,7 +19,6 @@ package pubsub_subscribe_http
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strconv"
 	"testing"
@@ -89,7 +88,7 @@ func TestMain(m *testing.M) {
 	}
 
 	//Read the config file for individual components
-	data, err := ioutil.ReadFile(pubsubTestConfigFileName)
+	data, err := os.ReadFile(pubsubTestConfigFileName)
 	if err != nil {
 		fmt.Printf("error reading %v: %v\n", pubsubTestConfigFileName, err)
 		return
