@@ -11,16 +11,39 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package patcher contains utilities to patch a Pod to inject the Dapr sidecar container.
 package patcher
 
-const (
-	PatchPathContainers = "/spec/containers"
-	PatchPathVolumes    = "/spec/volumes"
+import (
+	"encoding/json"
+	"fmt"
+
+	jsonpatch "github.com/evanphx/json-patch/v5"
+	corev1 "k8s.io/api/core/v1"
+
+	"github.com/dapr/kit/logger"
 )
 
-// PatchOperation represents a discreet change to be applied to a Kubernetes resource.
-type PatchOperation struct {
-	Op    string      `json:"op"`
-	Path  string      `json:"path"`
-	Value interface{} `json:"value,omitempty"`
+var log = logger.NewLogger("dapr.injector")
+
+// PatchPod applies a jsonpatch.Patch to a Pod and returns the modified object.
+func PatchPod(pod *corev1.Pod, patch jsonpatch.Patch) (*corev1.Pod, error) {
+	// Apply the patch
+	podJSON, err := json.Marshal(pod)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal pod to JSON: %w", err)
+	}
+	newJSON, err := patch.Apply(podJSON)
+	if err != nil {
+		return nil, fmt.Errorf("failed to apply patch: %w", err)
+	}
+
+	// Get the Pod object
+	newPod := &corev1.Pod{}
+	err = json.Unmarshal(newJSON, newPod)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal JSON into a Pod: %w", err)
+	}
+
+	return newPod, nil
 }
