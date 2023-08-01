@@ -40,9 +40,7 @@ const (
 	defaultStateScanDelay   = "5s"
 )
 
-var (
-	outboxLogger = logger.NewLogger("dapr.outbox")
-)
+var outboxLogger = logger.NewLogger("dapr.outbox")
 
 type outboxConfig struct {
 	publishPubSub  string
@@ -235,11 +233,11 @@ func (o *outboxImpl) SubscribeToInternalTopics(ctx context.Context, appID string
 			)
 
 			_, err = policyRunner(func(ctx context.Context) (any, error) {
-				resp, err := store.Get(ctx, &state.GetRequest{
+				resp, sErr := store.Get(ctx, &state.GetRequest{
 					Key: stateKey,
 				})
-				if err != nil {
-					return nil, err
+				if sErr != nil {
+					return nil, sErr
 				}
 
 				if resp != nil && len(resp.Data) > 0 {

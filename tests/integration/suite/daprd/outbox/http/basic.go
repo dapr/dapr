@@ -23,9 +23,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dapr/components-contrib/state"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/dapr/components-contrib/state"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -54,12 +55,12 @@ func (o *basic) Setup(t *testing.T) []framework.Option {
 			}
 
 			msg = b
-			w.WriteHeader(200)
+			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("ok"))
 		})
 
 		handler.HandleFunc("/getValue", func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(200)
+			w.WriteHeader(http.StatusOK)
 			w.Write(msg)
 		})
 

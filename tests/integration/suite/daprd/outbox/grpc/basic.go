@@ -42,7 +42,7 @@ var msg []byte
 
 func (o *basic) Setup(t *testing.T) []framework.Option {
 	onTopicEvent := func(ctx context.Context, in *runtimev1pb.TopicEventRequest) (*runtimev1pb.TopicEventResponse, error) {
-		msg = []byte(in.Data)
+		msg = in.Data
 		return &runtimev1pb.TopicEventResponse{
 			Status: runtimev1pb.TopicEventResponse_SUCCESS,
 		}, nil
