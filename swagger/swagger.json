@@ -93,9 +93,6 @@
                                 "arg2": 23,
                                 "operator": "+"
                             },
-                            "description": "any app arguments",
-                            "type": "object",
-                            "properties": "",
                             "x-rc-meta": {
                                 "x-rc-comments": {}
                             }
