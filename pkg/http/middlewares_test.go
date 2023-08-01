@@ -27,7 +27,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/test/bufconn"
 
-	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
+	"github.com/dapr/dapr/pkg/security/consts"
 )
 
 func TestAPITokenAuthMiddleware(t *testing.T) {
@@ -88,7 +88,7 @@ func TestAPITokenAuthMiddleware(t *testing.T) {
 		h := mw(handler)
 
 		r := httptest.NewRequest(http.MethodGet, "/v1.0/foo", nil)
-		r.Header.Set(authConsts.APITokenHeader, apiToken)
+		r.Header.Set(consts.APITokenHeader, apiToken)
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, r)
 
