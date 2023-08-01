@@ -68,5 +68,11 @@ func InitMetrics(appID, namespace string, rules []config.MetricsRule) error {
 
 	// Set reporting period of views
 	view.SetReportingPeriod(DefaultReportingPeriod)
-	return utils.CreateRulesMap(rules)
+
+	// Creates a rules map
+	err := utils.CreateRulesMap(rules)
+	if err != nil {
+		return err
+	}
+	return nil
 }

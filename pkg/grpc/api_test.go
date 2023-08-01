@@ -2308,7 +2308,8 @@ func TestDeleteBulkState(t *testing.T) {
 func TestPublishTopic(t *testing.T) {
 	srv := &api{
 		UniversalAPI: &universalapi.UniversalAPI{
-			AppID: "fakeAPI",
+			AppID:     "fakeAPI",
+			CompStore: compstore.New(),
 		},
 		pubsubAdapter: &daprt.MockPubSubAdapter{
 			PublishFn: func(ctx context.Context, req *pubsub.PublishRequest) error {
@@ -2340,12 +2341,11 @@ func TestPublishTopic(t *testing.T) {
 				return pubsub.BulkPublishResponse{}, nil
 			},
 		},
-		compStore: compstore.New(),
 	}
 
 	mock := daprt.MockPubSub{}
 	mock.On("Features").Return([]pubsub.Feature{})
-	srv.compStore.AddPubSub("pubsub", compstore.PubsubItem{Component: &mock})
+	srv.UniversalAPI.CompStore.AddPubSub("pubsub", compstore.PubsubItem{Component: &mock})
 
 	server, lis := startTestServerAPI(srv)
 	defer server.Stop()
@@ -2506,7 +2506,8 @@ func TestPublishTopic(t *testing.T) {
 func TestBulkPublish(t *testing.T) {
 	fakeAPI := &api{
 		UniversalAPI: &universalapi.UniversalAPI{
-			AppID: "fakeAPI",
+			AppID:     "fakeAPI",
+			CompStore: compstore.New(),
 		},
 		pubsubAdapter: &daprt.MockPubSubAdapter{
 			BulkPublishFn: func(ctx context.Context, req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
@@ -2535,12 +2536,11 @@ func TestBulkPublish(t *testing.T) {
 				return pubsub.BulkPublishResponse{FailedEntries: entries}, nil
 			},
 		},
-		compStore: compstore.New(),
 	}
 
 	mock := daprt.MockPubSub{}
 	mock.On("Features").Return([]pubsub.Feature{})
-	fakeAPI.compStore.AddPubSub("pubsub", compstore.PubsubItem{Component: &mock})
+	fakeAPI.UniversalAPI.CompStore.AddPubSub("pubsub", compstore.PubsubItem{Component: &mock})
 
 	server, lis := startDaprAPIServer(fakeAPI, "")
 	defer server.Stop()

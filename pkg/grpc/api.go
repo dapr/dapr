@@ -83,7 +83,6 @@ type api struct {
 	sendToOutputBindingFn func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	tracingSpec           config.TracingSpec
 	accessControlList     *config.AccessControlList
-	compStore             *compstore.ComponentStore
 }
 
 // APIOpts contains options for NewAPI.
@@ -125,7 +124,6 @@ func NewAPI(opts APIOpts) API {
 		sendToOutputBindingFn: opts.SendToOutputBindingFn,
 		tracingSpec:           opts.TracingSpec,
 		accessControlList:     opts.AccessControlList,
-		compStore:             opts.CompStore,
 	}
 }
 
@@ -140,7 +138,7 @@ func (a *api) validateAndGetPubsubAndTopic(pubsubName, topic string, reqMeta map
 		return nil, "", "", false, status.Error(codes.InvalidArgument, messages.ErrPubsubEmpty)
 	}
 
-	thepubsub, ok := a.compStore.GetPubSub(pubsubName)
+	thepubsub, ok := a.UniversalAPI.CompStore.GetPubSub(pubsubName)
 	if !ok {
 		return nil, "", "", false, status.Errorf(codes.InvalidArgument, messages.ErrPubsubNotFound, pubsubName)
 	}

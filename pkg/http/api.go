@@ -80,7 +80,6 @@ type api struct {
 	outboundReadyStatus     bool
 	tracingSpec             config.TracingSpec
 	maxRequestBodySize      int64 // In bytes
-	compStore               *compstore.ComponentStore
 }
 
 const (
@@ -141,7 +140,6 @@ func NewAPI(opts APIOpts) API {
 		sendToOutputBindingFn:   opts.SendToOutputBindingFn,
 		tracingSpec:             opts.TracingSpec,
 		maxRequestBodySize:      opts.MaxRequestBodySize,
-		compStore:               opts.CompStore,
 		universal: &universalapi.UniversalAPI{
 			AppID:                      opts.AppID,
 			Logger:                     log,
@@ -1731,7 +1729,7 @@ func (a *api) validateAndGetPubsubAndTopic(reqCtx *fasthttp.RequestCtx) (pubsub.
 		return nil, "", "", nethttp.StatusNotFound, &msg
 	}
 
-	thepubsub, ok := a.compStore.GetPubSub(pubsubName)
+	thepubsub, ok := a.universal.CompStore.GetPubSub(pubsubName)
 	if !ok {
 		msg := NewErrorResponse("ERR_PUBSUB_NOT_FOUND", fmt.Sprintf(messages.ErrPubsubNotFound, pubsubName))
 
