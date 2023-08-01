@@ -35,7 +35,7 @@ import (
 	"github.com/dapr/dapr/pkg/grpc/metadata"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
-	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
+	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 	"github.com/dapr/dapr/utils/streams"
 )
 
@@ -117,7 +117,7 @@ func TestInvokeMethod(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "POST", actual["httpverb"])
 		assert.Equal(t, "method", actual["method"])
-		assert.Equal(t, "token1", actual[authConsts.APITokenHeader])
+		assert.Equal(t, "token1", actual[securityConsts.APITokenHeader])
 		assert.Equal(t, "param1=val1&param2=val2", actual["querystring"])
 	})
 

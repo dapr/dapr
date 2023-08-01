@@ -39,7 +39,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
-	auth "github.com/dapr/dapr/pkg/runtime/security"
+	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/logger"
 )
 
@@ -302,7 +302,7 @@ func (s *server) useCors(r chi.Router) {
 }
 
 func (s *server) useAPIAuthentication(r chi.Router) {
-	token := auth.GetAPIToken()
+	token := security.GetAPIToken()
 	if token == "" {
 		return
 	}

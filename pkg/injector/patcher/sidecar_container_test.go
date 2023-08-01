@@ -25,7 +25,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/injector/annotations"
 	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
-	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
+	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 )
 
 func TestParseEnvString(t *testing.T) {
@@ -680,16 +680,16 @@ func TestGetSidecarContainer(t *testing.T) {
 		},
 		assertFn: func(t *testing.T, container *corev1.Container) {
 			expect := map[string]string{
-				"HELLO":                  "world",
-				"CIAO":                   "mondo",
-				"BONJOUR":                "monde",
-				authConsts.EnvKeysEnvVar: "HELLO CIAO BONJOUR",
+				"HELLO":                      "world",
+				"CIAO":                       "mondo",
+				"BONJOUR":                    "monde",
+				securityConsts.EnvKeysEnvVar: "HELLO CIAO BONJOUR",
 			}
 
 			found := map[string]string{}
 			for _, env := range container.Env {
 				switch env.Name {
-				case "HELLO", "CIAO", "BONJOUR", authConsts.EnvKeysEnvVar:
+				case "HELLO", "CIAO", "BONJOUR", securityConsts.EnvKeysEnvVar:
 					found[env.Name] = env.Value
 				}
 			}
