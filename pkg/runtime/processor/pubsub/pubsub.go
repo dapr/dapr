@@ -32,6 +32,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/grpc"
 	"github.com/dapr/dapr/pkg/modes"
+	"github.com/dapr/dapr/pkg/outbox"
 	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -98,6 +99,7 @@ type pubsub struct {
 	lock sync.Mutex
 
 	topicCancels map[string]context.CancelFunc
+	outbox       outbox.Outbox
 }
 
 type subscribedMessage struct {
@@ -168,6 +170,14 @@ func (p *pubsub) Init(ctx context.Context, comp compapi.Component) error {
 	return nil
 }
 
+func (p *pubsub) SetOutbox(outbox outbox.Outbox) {
+	p.outbox = outbox
+}
+
+func (p *pubsub) Outbox() outbox.Outbox {
+	return p.outbox
+}
+
 func (p *pubsub) SetAppChannel(appChannel channel.AppChannel) {
 	p.appChannel = appChannel
 }
@@ -236,6 +246,10 @@ func matchRoutingRule(rules []*rtpubsub.Rule, data map[string]interface{}) (*rtp
 	}
 
 	return nil, nil
+}
+
+func ExtractCloudEventProperty(cloudEvent map[string]any, property string) string {
+	return extractCloudEventProperty(cloudEvent, property)
 }
 
 func extractCloudEventProperty(cloudEvent map[string]any, property string) string {

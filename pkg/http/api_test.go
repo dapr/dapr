@@ -4231,6 +4231,7 @@ func TestV1StateEndpoints(t *testing.T) {
 			CompStore:  compStore,
 			Resiliency: rc,
 		},
+		pubsubAdapter: &daprt.MockPubSubAdapter{},
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints(), nil)
 
@@ -5396,7 +5397,8 @@ func TestV1TransactionEndpoints(t *testing.T) {
 		universal: &universalapi.UniversalAPI{
 			CompStore: compStore,
 		},
-		resiliency: resiliency.New(nil),
+		resiliency:    resiliency.New(nil),
+		pubsubAdapter: &daprt.MockPubSubAdapter{},
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints(), nil)
 	fakeBodyObject := map[string]interface{}{"data": "fakeData"}

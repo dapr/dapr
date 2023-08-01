@@ -2174,6 +2174,21 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 		}
 	}
 
+	outboxEnabled := a.pubsubAdapter.Outbox().Enabled(storeName)
+	if outboxEnabled {
+		trs, err := a.pubsubAdapter.Outbox().PublishInternal(reqCtx, storeName, operations, a.universal.AppID)
+		if err != nil {
+			msg := NewErrorResponse(
+				"ERR_PUBLISH_OUTBOX",
+				fmt.Sprintf(messages.ErrPublishOutbox, err.Error()))
+			fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
+			log.Debug(msg)
+			return
+		}
+
+		operations = append(operations, trs...)
+	}
+
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[any](reqCtx,
 		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Statestore),
