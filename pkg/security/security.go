@@ -170,7 +170,7 @@ func (p *provider) Start(ctx context.Context) error {
 
 		err = mngr.Add(
 			func(ctx context.Context) error {
-				log.Infof("watching trust anchors file %q for changes", p.trustAnchorsFile)
+				log.Infof("Watching trust anchors file %q for changes", p.trustAnchorsFile)
 				return fswatcher.Watch(ctx, p.trustAnchorsFile, caEvent)
 			},
 			func(ctx context.Context) error {
@@ -179,11 +179,11 @@ func (p *provider) Start(ctx context.Context) error {
 					case <-ctx.Done():
 						return nil
 					case <-caEvent:
-						log.Info("trust anchors file changed, reloading trust anchors")
+						log.Info("Trust anchors file changed, reloading trust anchors")
 
 						p.sec.source.lock.Lock()
 						if uErr := p.sec.source.updateTrustAnchorFromFile(p.trustAnchorsFile); uErr != nil {
-							log.Errorf("failed to read trust anchors file %q: %s", p.trustAnchorsFile, uErr)
+							log.Errorf("Failed to read trust anchors file %q: %v", p.trustAnchorsFile, uErr)
 						}
 						p.sec.source.lock.Unlock()
 					}
@@ -268,7 +268,7 @@ func (x *x509source) updateTrustAnchorFromFile(filepath string) error {
 
 	trustAnchorCerts, err := secpem.DecodePEMCertificates(rootPEMs)
 	if err != nil {
-		return fmt.Errorf("failed to decode trust anchors: %s", err)
+		return fmt.Errorf("failed to decode trust anchors: %w", err)
 	}
 
 	x.trustAnchors.SetX509Authorities(trustAnchorCerts)

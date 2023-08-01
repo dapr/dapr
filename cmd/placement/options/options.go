@@ -98,7 +98,7 @@ func New() *Options {
 	flag.Parse()
 
 	if len(*depRCF) > 0 || len(*depICF) > 0 || len(*depIKF) > 0 || len(*depCC) > 0 {
-		log.Warn("--certchain, --issuer-ca-filename, --issuer-certificate-filename and --issuer-key-filename are deprecated and will be removed in v1.12.")
+		log.Warn("--certchain, --issuer-ca-filename, --issuer-certificate-filename and --issuer-key-filename are deprecated and will be removed in v1.14.")
 	}
 
 	opts.RaftPeers = parsePeersFromFlag(opts.RaftPeerString)
