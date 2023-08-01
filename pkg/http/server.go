@@ -386,21 +386,7 @@ func (s *server) handle(e Endpoint, path string, r chi.Router, unescapeParameter
 
 	// Set as fallback method
 	if e.IsFallback {
-		fallbackHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Populate the wildcard path with the full path
-			chiCtx := chi.RouteContext(r.Context())
-			if chiCtx != nil {
-				// r.URL.RawPath could be empty
-				path := r.URL.RawPath
-				if path == "" {
-					path = r.URL.Path
-				}
-				chiCtx.URLParams.Add("*", strings.TrimPrefix(path, "/"))
-			}
-
-			handler(w, r)
-		})
-		r.NotFound(fallbackHandler)
-		r.MethodNotAllowed(fallbackHandler)
+		r.NotFound(handler)
+		r.MethodNotAllowed(handler)
 	}
 }
