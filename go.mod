@@ -8,6 +8,7 @@ require (
 	github.com/PuerkitoBio/purell v1.2.0
 	github.com/argoproj/argo-rollouts v1.4.1
 	github.com/cenkalti/backoff/v4 v4.2.1
+	github.com/cloudevents/sdk-go/v2 v2.14.0
 	github.com/dapr/components-contrib v1.11.3-0.20230725200615-9ca07d9bca9d
 	github.com/dapr/kit v0.11.3
 	github.com/evanphx/json-patch/v5 v5.6.0
@@ -21,6 +22,7 @@ require (
 	github.com/google/gofuzz v1.2.0
 	github.com/google/uuid v1.3.0
 	github.com/gorilla/mux v1.8.0
+	github.com/gorilla/websocket v1.5.0
 	github.com/grafana/k6-operator v0.0.8
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0
 	github.com/hashicorp/go-hclog v1.5.0
@@ -161,7 +163,6 @@ require (
 	github.com/choleraehyq/pid v0.0.16 // indirect
 	github.com/clbanning/mxj/v2 v2.5.6 // indirect
 	github.com/cloudevents/sdk-go/binding/format/protobuf/v2 v2.14.0 // indirect
-	github.com/cloudevents/sdk-go/v2 v2.14.0 // indirect
 	github.com/cloudwego/fastpb v0.0.4-0.20230131074846-6fc453d58b96 // indirect
 	github.com/cloudwego/frugal v0.1.6 // indirect
 	github.com/cloudwego/kitex v0.5.0 // indirect
@@ -232,7 +233,6 @@ require (
 	github.com/googleapis/enterprise-certificate-proxy v0.2.4 // indirect
 	github.com/googleapis/gax-go/v2 v2.12.0 // indirect
 	github.com/gorilla/css v1.0.0 // indirect
-	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/grandcat/zeroconf v1.0.0 // indirect
 	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.15.2 // indirect

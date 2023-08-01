@@ -13,7 +13,9 @@ limitations under the License.
 
 package main
 
-import cloudevents "github.com/cloudevents/sdk-go"
+import (
+	cloudevents "github.com/cloudevents/sdk-go/v2"
+)
 
 type subscription struct {
 	PubsubName    string            `json:"pubsubName"`
