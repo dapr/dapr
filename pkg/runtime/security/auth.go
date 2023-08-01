@@ -17,14 +17,13 @@ import (
 	daprCredentials "github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
+	securityConsts "github.com/dapr/dapr/pkg/security/consts"
+	securityToken "github.com/dapr/dapr/pkg/security/token"
 )
 
 const (
 	TLSServerName     = "cluster.local"
 	sentrySignTimeout = time.Second * 5
-	certType          = "CERTIFICATE"
-	kubeTknPath       = "/var/run/secrets/dapr.io/sentrytoken/token"
-	legacyKubeTknPath = "/var/run/secrets/kubernetes.io/serviceaccount/token"
 	sentryMaxRetries  = 100
 )
 
@@ -81,7 +80,7 @@ func (a *authenticator) CreateSignedWorkloadCert(id, namespace, trustDomain stri
 	if err != nil {
 		return nil, err
 	}
-	certPem := pem.EncodeToMemory(&pem.Block{Type: certType, Bytes: csrb})
+	csrPem := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrb})
 
 	config, err := daprCredentials.TLSConfigFromCertAndKey(a.certChainPem, a.keyPem, TLSServerName, a.trustAnchors)
 	if err != nil {
@@ -109,14 +108,22 @@ func (a *authenticator) CreateSignedWorkloadCert(id, namespace, trustDomain stri
 
 	c := sentryv1pb.NewCAClient(conn)
 
+	token, tokenValidator, err := securityToken.GetSentryToken(true)
+	if err != nil {
+		return nil, fmt.Errorf("error obtaining token: %w", err)
+	}
 	resp, err := c.SignCertificate(context.Background(),
 		&sentryv1pb.SignCertificateRequest{
-			CertificateSigningRequest: certPem,
+			CertificateSigningRequest: csrPem,
 			Id:                        getSentryIdentifier(id),
-			Token:                     getToken(),
+			Token:                     token,
+			TokenValidator:            tokenValidator,
 			TrustDomain:               trustDomain,
 			Namespace:                 namespace,
-		}, grpcRetry.WithMax(sentryMaxRetries), grpcRetry.WithPerRetryTimeout(sentrySignTimeout))
+		},
+		grpcRetry.WithMax(sentryMaxRetries),
+		grpcRetry.WithPerRetryTimeout(sentrySignTimeout),
+	)
 	if err != nil {
 		diag.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("sign")
 		return nil, fmt.Errorf("error from sentry SignCertificate: %w", err)
@@ -153,22 +160,10 @@ func (a *authenticator) CreateSignedWorkloadCert(id, namespace, trustDomain stri
 	return signedCert, nil
 }
 
-// currently we support Kubernetes identities.
-func getToken() string {
-	b, err := os.ReadFile(kubeTknPath)
-	if err != nil && os.IsNotExist(err) {
-		// Attempt to use the legacy token if that exists
-		b, _ = os.ReadFile(legacyKubeTknPath)
-		if len(b) > 0 {
-			log.Warn("⚠️ daprd is initializing using the legacy service account token with access to Kubernetes APIs, which is discouraged. This usually happens when daprd is running against an older version of the Dapr control plane.")
-		}
-	}
-	return string(b)
-}
-
 func getSentryIdentifier(appID string) string {
-	// return injected identity, default id if not present
-	localID := os.Getenv("SENTRY_LOCAL_IDENTITY")
+	// Return the injected identity
+	// Defaults to app ID if not present
+	localID := os.Getenv(securityConsts.SentryLocalIdentityEnvVar)
 	if localID != "" {
 		return localID
 	}

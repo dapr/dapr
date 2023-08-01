@@ -26,6 +26,7 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/healthz"
 	_ "github.com/dapr/dapr/tests/integration/suite/metadata"
 	_ "github.com/dapr/dapr/tests/integration/suite/ports"
+	_ "github.com/dapr/dapr/tests/integration/suite/sentry"
 )
 
 func RunIntegrationTests(t *testing.T) {
