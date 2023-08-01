@@ -852,8 +852,8 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 		return &emptypb.Empty{}, err
 	}
 
-	operations := make([]state.TransactionalStateOperation, len(in.Operations))
-	for i, inputReq := range in.Operations {
+	operations := make([]state.TransactionalStateOperation, 0, len(in.Operations))
+	for _, inputReq := range in.Operations {
 		req := inputReq.Request
 
 		hasEtag, etag := extractEtag(req)
@@ -882,7 +882,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 				}
 			}
 
-			operations[i] = setReq
+			operations = append(operations, setReq)
 
 		case state.OperationDelete:
 			delReq := state.DeleteRequest{
@@ -900,7 +900,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 				}
 			}
 
-			operations[i] = delReq
+			operations = append(operations, delReq)
 
 		default:
 			err := status.Errorf(codes.Unimplemented, messages.ErrNotSupportedStateOperation, inputReq.OperationType)
@@ -919,7 +919,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 	}
 
 	if encryption.EncryptedStateStore(in.StoreName) {
-		for i, op := range operations {
+		for _, op := range operations {
 			switch req := op.(type) {
 			case state.SetRequest:
 				data := []byte(fmt.Sprintf("%v", req.Value))
@@ -931,7 +931,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 				}
 
 				req.Value = val
-				operations[i] = req
+				operations = append(operations, req)
 			}
 		}
 	}
