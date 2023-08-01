@@ -117,11 +117,16 @@ func (o *outboxImpl) Enabled(stateStore string) bool {
 	return ok
 }
 
-func transaction() state.TransactionalStateOperation {
-	return state.SetRequest{
-		Key:   outboxStatePrefix + "-" + uuid.New().String(),
-		Value: "0",
+func transaction() (state.TransactionalStateOperation, error) {
+	uid, err := uuid.NewRandom()
+	if err != nil {
+		return nil, err
 	}
+
+	return state.SetRequest{
+		Key:   outboxStatePrefix + "-" + uid.String(),
+		Value: "0",
+	}, nil
 }
 
 // PublishInternal publishes the state to an internal topic for outbox processing
@@ -138,7 +143,10 @@ func (o *outboxImpl) PublishInternal(ctx context.Context, stateStore string, ope
 	for _, op := range operations {
 		sr, ok := op.(state.SetRequest)
 		if ok {
-			tr := transaction()
+			tr, err := transaction()
+			if err != nil {
+				return nil, err
+			}
 
 			var ceData []byte
 			bt, ok := sr.Value.([]byte)
@@ -224,7 +232,7 @@ func (o *outboxImpl) SubscribeToInternalTopics(ctx context.Context, appID string
 			}
 
 			time.Sleep(d)
-			policyRunner := resiliency.NewRunner[any](ctx,
+			policyRunner := resiliency.NewRunner[struct{}](ctx,
 				resiliency.NewPolicyDefinition(outboxLogger, "outbox", d, &retry.Config{
 					Policy:      retry.PolicyExponential,
 					MaxInterval: time.Second * 15,
@@ -232,19 +240,19 @@ func (o *outboxImpl) SubscribeToInternalTopics(ctx context.Context, appID string
 				}, nil),
 			)
 
-			_, err = policyRunner(func(ctx context.Context) (any, error) {
+			_, err = policyRunner(func(ctx context.Context) (struct{}, error) {
 				resp, sErr := store.Get(ctx, &state.GetRequest{
 					Key: stateKey,
 				})
 				if sErr != nil {
-					return nil, sErr
+					return struct{}{}, sErr
 				}
 
 				if resp != nil && len(resp.Data) > 0 {
-					return nil, nil
+					return struct{}{}, nil
 				}
 
-				return nil, fmt.Errorf("cannot publish outbox message to topic %s with pubsub %s: state not found", c.publishTopic, c.publishPubSub)
+				return struct{}{}, fmt.Errorf("cannot publish outbox message to topic %s with pubsub %s: state not found", c.publishTopic, c.publishPubSub)
 			})
 			if err != nil {
 				outboxLogger.Errorf("failed to publish outbox topic to pubsub %s: %s, dropping message", c.publishPubSub, err)
