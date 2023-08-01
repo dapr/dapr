@@ -15,7 +15,7 @@ tokenAudience: ""
 
 ports:
   protocol: TCP
-  port: 443
+  port: 80
   targetPort: 50001
 
 tls:
