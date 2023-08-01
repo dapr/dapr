@@ -24,6 +24,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"sync"
 	"time"
@@ -45,8 +46,8 @@ import (
 )
 
 const (
-	sentrySignTimeout = time.Second * 5
-	sentryMaxRetries  = 10
+	sentrySignTimeout = time.Second * 3
+	sentryMaxRetries  = 5
 )
 
 type renewFn func(context.Context) (*x509.Certificate, error)
@@ -92,8 +93,10 @@ func newX509Source(ctx context.Context, clock clock.Clock, opts Options) (*x509s
 	rootPEMs := opts.TrustAnchors
 
 	if len(rootPEMs) == 0 {
+		var err error
+		var f *os.File
 		for {
-			_, err := os.Open(opts.TrustAnchorsFile)
+			f, err = os.Open(opts.TrustAnchorsFile)
 			if err == nil {
 				break
 			}
@@ -106,11 +109,12 @@ func newX509Source(ctx context.Context, clock clock.Clock, opts Options) (*x509s
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			case <-clock.After(time.Second):
+				log.Warnf("trust anchors file '%s' not found, waiting...", opts.TrustAnchorsFile)
 			}
 		}
 
-		var err error
-		rootPEMs, err = os.ReadFile(opts.TrustAnchorsFile)
+		defer f.Close()
+		rootPEMs, err = io.ReadAll(f)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read trust anchors file %q: %w", opts.TrustAnchorsFile, err)
 		}

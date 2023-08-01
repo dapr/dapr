@@ -152,7 +152,7 @@ func (p *provider) Start(ctx context.Context) error {
 
 	if p.sec.source.requestFn == nil {
 		p.sec.source.requestFn = p.sec.source.requestFromSentry
-		log.Infof("fetching initial identity certificate from %s", p.sec.source.sentryAddress)
+		log.Infof("Fetching initial identity certificate from %s", p.sec.source.sentryAddress)
 	}
 
 	initialCert, err := p.sec.source.renewIdentityCertificate(ctx)
@@ -170,7 +170,7 @@ func (p *provider) Start(ctx context.Context) error {
 
 		err = mngr.Add(
 			func(ctx context.Context) error {
-				log.Infof("Watching trust anchors file %q for changes", p.trustAnchorsFile)
+				log.Infof("Watching trust anchors file '%s' for changes", p.trustAnchorsFile)
 				return fswatcher.Watch(ctx, p.trustAnchorsFile, caEvent)
 			},
 			func(ctx context.Context) error {
@@ -183,7 +183,7 @@ func (p *provider) Start(ctx context.Context) error {
 
 						p.sec.source.lock.Lock()
 						if uErr := p.sec.source.updateTrustAnchorFromFile(p.trustAnchorsFile); uErr != nil {
-							log.Errorf("Failed to read trust anchors file %q: %v", p.trustAnchorsFile, uErr)
+							log.Errorf("Failed to read trust anchors file '%s': %v", p.trustAnchorsFile, uErr)
 						}
 						p.sec.source.lock.Unlock()
 					}
@@ -263,7 +263,7 @@ func SentryID(sentryTrustDomain, sentryNamespace string) (spiffeid.ID, error) {
 func (x *x509source) updateTrustAnchorFromFile(filepath string) error {
 	rootPEMs, err := os.ReadFile(filepath)
 	if err != nil {
-		return fmt.Errorf("failed to read trust anchors file %q: %s", filepath, err)
+		return fmt.Errorf("failed to read trust anchors file '%s': %w", filepath, err)
 	}
 
 	trustAnchorCerts, err := secpem.DecodePEMCertificates(rootPEMs)
