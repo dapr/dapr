@@ -32,6 +32,10 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 )
 
+const (
+	SpiffeIDPrefix = "spiffe://"
+)
+
 var log = logger.NewLogger("dapr.acl")
 
 // ParseAccessControlSpec creates an in-memory copy of the Access Control Spec for fast lookup.
@@ -145,7 +149,7 @@ func ParseAccessControlSpec(accessControlSpec *config.AccessControlSpec, isHTTP 
 }
 
 // GetAndParseSpiffeID retrieves the SPIFFE Id from the cert and parses it.
-func GetAndParseSpiffeID(ctx context.Context) (*config.SpiffeID, error) {
+func GetAndParseSpiffeID(ctx context.Context) (*SpiffeID, error) {
 	spiffeID, err := getSpiffeID(ctx)
 	if err != nil {
 		return nil, err
@@ -155,12 +159,12 @@ func GetAndParseSpiffeID(ctx context.Context) (*config.SpiffeID, error) {
 	return id, err
 }
 
-func parseSpiffeID(spiffeID string) (*config.SpiffeID, error) {
+func parseSpiffeID(spiffeID string) (*SpiffeID, error) {
 	if spiffeID == "" {
 		return nil, errors.New("input spiffe id string is empty")
 	}
 
-	if !strings.HasPrefix(spiffeID, config.SpiffeIDPrefix) {
+	if !strings.HasPrefix(spiffeID, SpiffeIDPrefix) {
 		return nil, fmt.Errorf("input spiffe id: %s is invalid", spiffeID)
 	}
 
@@ -170,7 +174,7 @@ func parseSpiffeID(spiffeID string) (*config.SpiffeID, error) {
 		return nil, fmt.Errorf("input spiffe id: %s is invalid", spiffeID)
 	}
 
-	var id config.SpiffeID
+	var id SpiffeID
 	id.TrustDomain = parts[2]
 	id.Namespace = parts[4]
 	id.AppID = parts[5]
@@ -218,7 +222,7 @@ func getSpiffeID(ctx context.Context) (string, error) {
 						}
 
 						spiffeID = string(rawValue.Bytes)
-						if strings.HasPrefix(spiffeID, config.SpiffeIDPrefix) {
+						if strings.HasPrefix(spiffeID, SpiffeIDPrefix) {
 							return spiffeID, nil
 						}
 					}
@@ -291,7 +295,7 @@ func emitACLMetrics(actionPolicy, appID, trustDomain, namespace, operation, verb
 }
 
 // IsOperationAllowedByAccessControlPolicy determines if access control policies allow the operation on the target app.
-func IsOperationAllowedByAccessControlPolicy(spiffeID *config.SpiffeID, srcAppID string, inputOperation string, httpVerb commonv1pb.HTTPExtension_Verb, isHTTP bool, accessControlList *config.AccessControlList) (bool, string) {
+func IsOperationAllowedByAccessControlPolicy(spiffeID *SpiffeID, srcAppID string, inputOperation string, httpVerb commonv1pb.HTTPExtension_Verb, isHTTP bool, accessControlList *config.AccessControlList) (bool, string) {
 	if accessControlList == nil {
 		// No access control list is provided. Do nothing
 		return isActionAllowed(config.AllowAccess), ""
@@ -384,4 +388,11 @@ func isActionAllowed(action string) bool {
 func getKeyForAppID(appID, namespace string) string {
 	key := appID + "||" + namespace
 	return key
+}
+
+// SpiffeID represents the separated fields in a spiffe id.
+type SpiffeID struct {
+	TrustDomain string
+	Namespace   string
+	AppID       string
 }

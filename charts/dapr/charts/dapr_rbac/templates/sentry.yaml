@@ -23,7 +23,10 @@ rules:
 {{- if not .Values.global.rbac.namespaced }}
   - apiGroups: ["dapr.io"]
     resources: ["configurations"]
-    verbs: ["list"]
+    verbs: ["list", "get", "watch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["list", "get", "watch"]
 {{- end }}
 ---
 kind: ClusterRoleBinding
@@ -56,6 +59,10 @@ rules:
   - apiGroups: [""]
     resources: ["secrets"]
     verbs: ["get", "update","delete"]
+    resourceNames: ["dapr-trust-bundle"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "update", "watch", "list"]
     resourceNames: ["dapr-trust-bundle"]
 {{- if eq .Values.global.rbac.namespaced true }}
   - apiGroups: ["dapr.io"]
