@@ -215,5 +215,4 @@ func TestComponentCalls(t *testing.T) {
 		assert.NotNil(t, err)
 		assert.Equal(t, int64(1), svc.pingCalled.Load())
 	})
-
 }
