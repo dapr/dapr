@@ -285,14 +285,18 @@ func (o *outboxImpl) SubscribeToInternalTopics(ctx context.Context, appID string
 				return err
 			}
 
-			err = store.Delete(ctx, &state.DeleteRequest{
-				Key: stateKey,
-			})
-			if err != nil {
-				return err
-			}
+			_, err = policyRunner(func(ctx context.Context) (struct{}, error) {
+				err = store.Delete(ctx, &state.DeleteRequest{
+					Key: stateKey,
+				})
+				if err != nil {
+					return struct{}{}, err
+				}
 
-			return nil
+				return struct{}{}, nil
+			})
+
+			return err
 		})
 	}
 
