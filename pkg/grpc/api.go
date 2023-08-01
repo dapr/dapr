@@ -730,7 +730,7 @@ func (a *api) stateErrorResponse(err error, format string, args ...interface{}) 
 		switch etagErr.Kind() {
 		case state.ETagMismatch:
 			if a.isErrorCodesEnabled {
-				if ste, wdErr := errorcodes.Newf(codes.Aborted, nil, format, args...); wdErr == nil {
+				if ste, wdErr := errorcodes.Newf(codes.Aborted, errorcodes.EtagMismatch, nil, format, args...); wdErr == nil {
 					return ste.Err()
 				}
 			}

@@ -23,28 +23,30 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+type errorCodesReason string
+
 const (
-	domain           = "dapr.io"
-	daprETagMismatch = "DAPR_STATE_ETAG_MISMATCH"
+	domain       = "dapr.io"
+	EtagMismatch = errorCodesReason("DAPR_STATE_ETAG_MISMATCH")
 )
 
 // New returns a Status representing c and msg.
-func New(c codes.Code, msg string, md map[string]string) (*status.Status, error) {
+func New(c codes.Code, reason errorCodesReason, msg string, md map[string]string) (*status.Status, error) {
 	ste := status.New(c, msg)
 	if md == nil {
 		md = map[string]string{}
 	}
 	ei := errdetails.ErrorInfo{
 		Domain:   domain,
-		Reason:   daprETagMismatch,
+		Reason:   string(reason),
 		Metadata: md,
 	}
 	return ste.WithDetails(&ei)
 }
 
 // Newf returns New(c, fmt.Sprintf(format, a...)).
-func Newf(c codes.Code, md map[string]string, format string, a ...interface{}) (*status.Status, error) {
-	return New(c, fmt.Sprintf(format, a...), md)
+func Newf(c codes.Code, reason errorCodesReason, md map[string]string, format string, a ...interface{}) (*status.Status, error) {
+	return New(c, reason, fmt.Sprintf(format, a...), md)
 }
 
 func StatusErrorJSON(st *status.Status) ([]byte, error) {

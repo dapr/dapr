@@ -1052,7 +1052,7 @@ func (a *api) stateErrorResponse(err error, errorCode string) (int, string, Erro
 // Returns original state error if not Etag or processing fails.
 func (a *api) stateDaprErrorResponse(stateErr error, md map[string]string) (int, []byte, error) {
 	if etag, code, message := a.etagError(stateErr); etag && (code == nethttp.StatusConflict) {
-		if st, wdErr := errorcodes.New(codes.Aborted, message, md); wdErr == nil {
+		if st, wdErr := errorcodes.New(codes.Aborted, errorcodes.EtagMismatch, message, md); wdErr == nil {
 			if resp, sejErr := errorcodes.StatusErrorJSON(st); sejErr == nil {
 				return code, resp, nil
 			}
