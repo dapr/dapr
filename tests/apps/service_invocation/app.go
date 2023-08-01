@@ -190,7 +190,7 @@ func multihopHandler(w http.ResponseWriter, r *http.Request) {
 
 // Handles a request with a JSON body.  Extracts s string from the input json and returns in it an appResponse.
 func withBodyHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Printf("withBodyHandler called. HTTP Verb: %s\n", r.Method)
+	log.Printf("withBodyHandler called. HTTP Verb: %s\n", r.Method)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		onBadRequest(w, err)
@@ -198,9 +198,9 @@ func withBodyHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(body) > 100 {
-		fmt.Printf("withBodyHandler body (first 100 bytes): %s\n", string(body[:100]))
+		log.Printf("withBodyHandler body (first 100 bytes): %s\n", string(body[:100]))
 	} else {
-		fmt.Printf("withBodyHandler body: %s\n", string(body))
+		log.Printf("withBodyHandler body: %s\n", string(body))
 	}
 	var s string
 	err = json.Unmarshal(body, &s)
@@ -243,7 +243,7 @@ func opRedirectHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func testHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Enter testHandler")
+	log.Println("Enter testHandler")
 	var commandBody testCommandRequest
 	err := json.NewDecoder(r.Body).Decode(&commandBody)
 	if err != nil {
@@ -251,7 +251,7 @@ func testHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Printf("  testHandler invoking %s with method %s\n", commandBody.RemoteApp, commandBody.Method)
+	log.Printf("  testHandler invoking %s with method %s\n", commandBody.RemoteApp, commandBody.Method)
 	response, statusCode, err := invokeService(commandBody.RemoteApp, commandBody.Method)
 	if err != nil {
 		w.WriteHeader(statusCode)

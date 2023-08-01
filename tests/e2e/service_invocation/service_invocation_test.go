@@ -526,16 +526,30 @@ func TestServiceInvocationExternally(t *testing.T) {
 	testFn := func(targetApp string) func(t *testing.T) {
 		return func(t *testing.T) {
 			externalURL := tr.Platform.AcquireAppExternalURL(targetApp)
-			//serviceIP := tr.Platform.AcquireAppExternalURL("serviceinvocation-callee-external")
-			invokeExternalServiceIP := "http://service-invocation-external:80"
 			require.NotEmpty(t, externalURL, "external URL must not be empty!")
-			require.NotEmpty(t, invokeExternalServiceIP, "external service URL must not be empty!")
-			// This initial probe makes the test wait a little bit longer when needed,
-			// making this test less flaky due to delays in the deployment.
-			err := utils.HealthCheckApps(externalURL)
-			require.NoError(t, err)
+			t.Logf("ExternalURL is '%s'", externalURL)
 
-			t.Logf("externalURL is '%s'", externalURL)
+			healthCheckURLs := []string{externalURL}
+
+			// External address is hardcoded
+			invokeExternalServiceAddress := "http://service-invocation-external:80"
+			if kubePlatform, ok := tr.Platform.(*runner.KubeTestPlatform); ok {
+				// To perform healthchecks, we need to first get the Load Balancer address
+				// Our tests will still use the hostname within the cluster for reliability reasons
+				app := kubePlatform.AppResources.FindActiveResource("serviceinvocation-callee-external").(*kube.AppManager)
+				svc, err := app.WaitUntilServiceState("service-invocation-external", app.IsServiceIngressReady)
+				require.NoError(t, err)
+
+				extURL := app.AcquireExternalURLFromService(svc)
+				if extURL != "" {
+					t.Logf("External service's load balancer is '%s'", extURL)
+					healthCheckURLs = append(healthCheckURLs, extURL)
+				}
+			}
+
+			// Perform healthchecks to ensure apps are ready
+			err := utils.HealthCheckApps(healthCheckURLs...)
+			require.NoError(t, err)
 
 			// invoke via overwritten URL to non-Daprized service
 			for _, tt := range externalServiceInvocationTests {
@@ -549,7 +563,7 @@ func TestServiceInvocationExternally(t *testing.T) {
 					t.Run(tt.in, func(t *testing.T) {
 						body, err := json.Marshal(testCommandRequestExternal{
 							testCommandRequest: testCommandReq,
-							ExternalIP:         invokeExternalServiceIP,
+							ExternalIP:         invokeExternalServiceAddress,
 						})
 						require.NoError(t, err)
 						t.Logf("invoking post to http://%s%s", externalURL, tt.path)
