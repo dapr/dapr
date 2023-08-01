@@ -27,7 +27,7 @@ import (
 
 const (
 	//nolint:gosec
-	defaultCredentialsPath = "/var/run/dapr/credentials"
+	defaultCredentialsPath = "/var/run/secrets/dapr.io/credentials"
 
 	// defaultDaprSystemConfigName is the default resource object name for Dapr System Config.
 	defaultDaprSystemConfigName = "daprsystem"
@@ -54,7 +54,7 @@ func New() *Options {
 	flag.StringVar(&credentials.IssuerCertFilename, "issuer-certificate-filename", credentials.IssuerCertFilename, "Issuer certificate filename")
 	flag.StringVar(&credentials.IssuerKeyFilename, "issuer-key-filename", credentials.IssuerKeyFilename, "Issuer private key filename")
 	flag.StringVar(&opts.TrustDomain, "trust-domain", "localhost", "The CA trust domain")
-	flag.StringVar(&opts.TokenAudience, "token-audience", "", "Expected audience for tokens; multiple values can be separated by a comma")
+	flag.StringVar(&opts.TokenAudience, "token-audience", "", "DEPRECATED, flag has no effect.")
 	flag.IntVar(&opts.Port, "port", config.DefaultPort, "The port for the sentry server to listen on")
 	flag.IntVar(&opts.HealthzPort, "healthz-port", 8080, "The port for the healthz server to listen on")
 
