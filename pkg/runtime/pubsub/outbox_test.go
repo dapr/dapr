@@ -21,14 +21,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	contribPubsub "github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/apis/common"
 	"github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/outbox"
-	"github.com/stretchr/testify/assert"
-	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func newTestOutbox() outbox.Outbox {
@@ -483,14 +484,14 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 		assert.NoError(t, err)
 
 		go func() {
-			trs, err := o.PublishInternal(context.TODO(), "test", []state.TransactionalStateOperation{
+			trs, pErr := o.PublishInternal(context.TODO(), "test", []state.TransactionalStateOperation{
 				state.SetRequest{
 					Key:   "1",
 					Value: "hello",
 				},
 			}, appID)
 
-			assert.NoError(t, err)
+			assert.NoError(t, pErr)
 			assert.Len(t, trs, 1)
 
 			stateMock.expectedKey = trs[0].GetKey()
@@ -535,14 +536,14 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 		err := o.SubscribeToInternalTopics(context.TODO(), appID)
 		assert.NoError(t, err)
 
-		trs, err := o.PublishInternal(context.TODO(), "test", []state.TransactionalStateOperation{
+		trs, pErr := o.PublishInternal(context.TODO(), "test", []state.TransactionalStateOperation{
 			state.SetRequest{
 				Key:   "1",
 				Value: "hello",
 			},
 		}, appID)
 
-		assert.Error(t, err)
+		assert.Error(t, pErr)
 		assert.Len(t, trs, 0)
 	})
 
@@ -614,14 +615,14 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 		assert.NoError(t, err)
 
 		go func() {
-			trs, err := o.PublishInternal(context.TODO(), "test", []state.TransactionalStateOperation{
+			trs, pErr := o.PublishInternal(context.TODO(), "test", []state.TransactionalStateOperation{
 				state.SetRequest{
 					Key:   "1",
 					Value: "hello",
 				},
 			}, appID)
 
-			assert.NoError(t, err)
+			assert.NoError(t, pErr)
 			assert.Len(t, trs, 1)
 		}()
 
