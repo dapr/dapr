@@ -36,3 +36,4 @@ scopes:
   - pubsub-bulk-subscriber
   - pubsub-publisher-pluggable
   - pubsub-subscriber-pluggable
+  - pubsub-perf-bulk-grpc
