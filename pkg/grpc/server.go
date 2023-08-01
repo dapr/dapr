@@ -36,9 +36,10 @@ import (
 	"github.com/dapr/dapr/pkg/messaging"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
-	auth "github.com/dapr/dapr/pkg/runtime/security"
-	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
+	rtSecurity "github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
+	"github.com/dapr/dapr/pkg/security"
+	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 	"github.com/dapr/kit/logger"
 )
 
@@ -61,10 +62,10 @@ type server struct {
 	config             ServerConfig
 	tracingSpec        config.TracingSpec
 	metricSpec         config.MetricSpec
-	authenticator      auth.Authenticator
+	authenticator      rtSecurity.Authenticator
 	servers            []*grpcGo.Server
 	renewMutex         sync.Mutex
-	signedCert         *auth.SignedCertificate
+	signedCert         *rtSecurity.SignedCertificate
 	tlsCert            tls.Certificate
 	signedCertDuration time.Duration
 	kind               string
@@ -94,7 +95,7 @@ func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec, 
 		kind:           apiServer,
 		logger:         apiServerLogger,
 		infoLogger:     apiServerInfoLogger,
-		authToken:      auth.GetAPIToken(),
+		authToken:      security.GetAPIToken(),
 		apiSpec:        apiSpec,
 		proxy:          proxy,
 		workflowEngine: workflowEngine,
@@ -102,7 +103,7 @@ func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec, 
 }
 
 // NewInternalServer returns a new gRPC server for Dapr to Dapr communications.
-func NewInternalServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricSpec config.MetricSpec, authenticator auth.Authenticator, proxy messaging.Proxy) Server {
+func NewInternalServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricSpec config.MetricSpec, authenticator rtSecurity.Authenticator, proxy messaging.Proxy) Server {
 	return &server{
 		api:              api,
 		config:           config,
@@ -228,7 +229,7 @@ func (s *server) getMiddlewareOptions() []grpcGo.ServerOption {
 
 	if s.authToken != "" {
 		s.logger.Info("Enabled token authentication on gRPC server")
-		unary, stream := getAPIAuthenticationMiddlewares(s.authToken, authConsts.APITokenHeader)
+		unary, stream := getAPIAuthenticationMiddlewares(s.authToken, securityConsts.APITokenHeader)
 		intr = append(intr, unary)
 		intrStream = append(intrStream, stream)
 	}

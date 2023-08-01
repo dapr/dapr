@@ -88,6 +88,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `global.mtls.enabled`                     | Mutual TLS enablement                                                   | `true`                  |
 | `global.mtls.workloadCertTTL`             | TTL for workload cert                                                   | `24h`                   |
 | `global.mtls.allowedClockSkew`            | Allowed clock skew for workload cert rotation                           | `15m`                   |
+| `global.mtls.controlPlaneTrustDomain `    | Trust domain for control plane                                          | `cluster.local`         |
 | `global.dnsSuffix`                        | Kuberentes DNS suffix                                                   | `.cluster.local`        |
 | `global.daprControlPlaneOs`               | Operating System for Dapr control plane                                 | `linux`                 |
 | `global.daprControlPlaneArch`             | CPU Architecture for Dapr control plane                                 | `amd64`                 |
@@ -149,7 +150,6 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_sentry.tls.issuer.keyPEM`           | Issuer Private Key cert                                                 | `""`                    |
 | `dapr_sentry.tls.root.certPEM`            | Root Certificate cert                                                   | `""`                    |
 | `dapr_sentry.tokenAudience`               | Expected audience for tokens; multiple values can be separated by a comma. Defaults to the audience expected by the Kubernetes control plane if not set | `""` |
-| `dapr_sentry.trustDomain`                 | Trust domain (logical group to manage app trust relationship) for access control list | `cluster.local`  |
 | `dapr_sentry.runAsNonRoot`                | Boolean value for `securityContext.runAsNonRoot`. You may have to set this to `false` when running in Minikube | `true` |
 | `dapr_sentry.resources`                   | Value of `resources` attribute. Can be used to set memory/cpu resources/limits. See the section "Resource configuration" above. Defaults to empty | `{}` |
 | `dapr_sentry.debug.enabled`               | Boolean value for enabling debug mode | `{}` |
