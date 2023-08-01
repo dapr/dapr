@@ -256,6 +256,7 @@ func (o *outboxImpl) SubscribeToInternalTopics(ctx context.Context, appID string
 			})
 			if err != nil {
 				outboxLogger.Errorf("failed to publish outbox topic to pubsub %s: %s, dropping message", c.publishPubSub, err)
+				//lint:ignore nilerr dropping message
 				return nil
 			}
 
