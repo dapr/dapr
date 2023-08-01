@@ -137,7 +137,7 @@
                 "operationId": "invoke_put",
                 "summary": "This endpoint lets you invoke a method in another Dapr enabled app.",
                 "externalDocs": {
-                    "url": ""
+                    "url": "https://docs.dapr.io/reference/api/service_invocation_api/"
                 }
             },
             "post": {
