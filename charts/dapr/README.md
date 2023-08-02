@@ -119,20 +119,21 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_operator.watchNamespace`            | The namespace to watch for annotated Dapr resources in | `""` |
 
 ### Dapr Placement options:
-| Parameter                                 | Description                                                             | Default                 |
-|-------------------------------------------|-------------------------------------------------------------------------|-------------------------|
-| `dapr_placement.ha` | If set to true, deploys the Placement service with 3 nodes regardless of the value of `global.ha.enabled` | `false` |
-| `dapr_placement.replicationFactor`        | Number of consistent hashing virtual node | `100`   |
-| `dapr_placement.logLevel`                 | Service Log level                                                       | `info`                  |
-| `dapr_placement.image.name`               | Service docker image name (`global.registry/dapr_placement.image.name`) | `dapr`   |
-| `dapr_placement.cluster.forceInMemoryLog` | Use in-memory log store and disable volume attach when HA is true | `false`   |
-| `dapr_placement.cluster.logStorePath`     | Mount path for persistent volume for log store in unix-like system when HA is true | `/var/run/dapr/raft-log`   |
-| `dapr_placement.cluster.logStoreWinPath`  | Mount path for persistent volume for log store in windows when HA is true | `C:\\raft-log`   |
-| `dapr_placement.volumeclaims.storageSize` | Attached volume size | `1Gi`   |
-| `dapr_placement.volumeclaims.storageClassName` | storage class name |    |
-| `dapr_placement.runAsNonRoot`             | Boolean value for `securityContext.runAsNonRoot`. Does not apply unless `forceInMemoryLog` is set to `true`. You may have to set this to `false` when running in Minikube | `false` |
-| `dapr_placement.resources`                | Value of `resources` attribute. Can be used to set memory/cpu resources/limits. See the section "Resource configuration" above. Defaults to empty | `{}` |
-| `dapr_placement.debug.enabled`            | Boolean value for enabling debug mode | `{}` |
+| Parameter                                      | Description                                                                                                                                                               | Default                 |
+|------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------|
+| `dapr_placement.ha`                            | If set to true, deploys the Placement service with 3 nodes regardless of the value of `global.ha.enabled`                                                                 | `false`                 |
+| `dapr_placement.replicationFactor`             | Number of consistent hashing virtual node                                                                                                                                 | `100`                   |
+| `dapr_placement.logLevel`                      | Service Log level                                                                                                                                                         | `info`                  |
+| `dapr_placement.image.name`                    | Service docker image name (`global.registry/dapr_placement.image.name`)                                                                                                   | `dapr`                  |
+| `dapr_placement.cluster.forceInMemoryLog`      | Use in-memory log store and disable volume attach when HA is true                                                                                                         | `false`                 |
+| `dapr_placement.cluster.logStorePath`          | Mount path for persistent volume for log store in unix-like system when HA is true                                                                                        | `/var/run/dapr/raft-log` |
+| `dapr_placement.cluster.logStoreWinPath`       | Mount path for persistent volume for log store in windows when HA is true                                                                                                 | `C:\\raft-log`          |
+| `dapr_placement.volumeclaims.storageSize`      | Attached volume size                                                                                                                                                      | `1Gi`                   |
+| `dapr_placement.volumeclaims.storageClassName` | storage class name                                                                                                                                                        |                         |
+| `dapr_placement.runAsNonRoot`                  | Boolean value for `securityContext.runAsNonRoot`. Does not apply unless `forceInMemoryLog` is set to `true`. You may have to set this to `false` when running in Minikube | `false`                 |
+| `dapr_placement.resources`                     | Value of `resources` attribute. Can be used to set memory/cpu resources/limits. See the section "Resource configuration" above. Defaults to empty                         | `{}`                    |
+| `dapr_placement.debug.enabled`                 | Boolean value for enabling debug mode                                                                                                                                     | `{}`                    |
+| `dapr_placement.metadataEnabled`               | Boolean value for enabling placement tables metadata HTTP API                                                                                                             | `false`                 |
 
 ### Dapr RBAC options:
 | Parameter                                 | Description                                                             | Default                 |
