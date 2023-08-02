@@ -15,6 +15,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -44,71 +45,71 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	log.Printf("Sending subscriptions: %v", subscriptions)
+	log.Printf("Sending subscriptions: %#v", subscriptions)
 
 	jsonBytes, err := json.Marshal(subscriptions)
 	if err != nil {
-		log.Fatalf("error marshalling subscriptions: %s", err)
+		log.Fatalf("Error marshalling subscriptions: %v", err)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_, err = w.Write(jsonBytes)
 	if err != nil {
-		log.Fatalf("error writing response: %s", err)
+		log.Fatalf("Error writing response: %v", err)
 	}
 }
 
 func bulkMessageHandler(w http.ResponseWriter, r *http.Request) {
 	postBody, err := io.ReadAll(r.Body)
 	if err != nil {
-		log.Fatalf("error reading request body: %s", err)
+		log.Fatalf("Error reading request body: %v", err)
 	}
 
-	var bulkSubscribeMessage bulkSubscribeMessage
-	err = json.Unmarshal(postBody, &bulkSubscribeMessage)
+	var bsm bulkSubscribeMessage
+	err = json.Unmarshal(postBody, &bsm)
 	if err != nil {
-		log.Fatalf("error unmarshalling request body: %s", err)
+		log.Fatalf("Error unmarshalling request body: %v", err)
 	}
 
-	log.Printf("received %d messages", len(bulkSubscribeMessage.Entries))
+	// log.Printf("Received %d messages", len(bsm.Entries))
 
-	var bulkSubscribeResponseStatuses []bulkSubscribeResponseStatus
-	for _, entry := range bulkSubscribeMessage.Entries {
-		messagesCh <- entry.EntryId
-		bulkSubscribeResponseStatuses = append(bulkSubscribeResponseStatuses, bulkSubscribeResponseStatus{
-			EntryID: entry.EntryId,
+	bulkSubscribeResponseStatuses := make([]bulkSubscribeResponseStatus, len(bsm.Entries))
+	for i, entry := range bsm.Entries {
+		messagesCh <- entry.EntryID
+		bulkSubscribeResponseStatuses[i] = bulkSubscribeResponseStatus{
+			EntryID: entry.EntryID,
 			Status:  "SUCCESS",
-		})
+		}
 	}
 
 	resp := bulkSubscribeResponse{Statuses: bulkSubscribeResponseStatuses}
 	jsonBytes, err := json.Marshal(resp)
 	if err != nil {
-		log.Fatalf("error marshalling response: %s", err)
+		log.Fatalf("Error marshalling response: %v", err)
 	}
 	w.WriteHeader(http.StatusOK)
 	w.Header().Set("Content-Type", "application/json")
 	_, err = w.Write(jsonBytes)
 	if err != nil {
-		log.Fatalf("error writing response: %s", err)
+		log.Fatalf("Error writing response: %v", err)
 	}
 }
 
 func messageHandler(w http.ResponseWriter, r *http.Request) {
 	_, err := io.ReadAll(r.Body)
 	if err != nil {
-		log.Fatalf("error reading request body: %s", err)
+		log.Fatalf("Error reading request body: %v", err)
 	}
 
-	log.Printf("received 1 message\n")
+	// log.Printf("received 1 message")
 	uuid, err := uuid.NewUUID()
 	if err != nil {
-		log.Fatalf("error generating uuid: %s", err)
+		log.Fatalf("Error generating uuid: %v", err)
 	}
 	messagesCh <- uuid.String()
 
 	w.WriteHeader(http.StatusOK)
-	_, err = w.Write([]byte("SUCCESS"))
+	_, err = fmt.Fprint(w, "SUCCESS")
 	if err != nil {
-		log.Fatalf("error writing response: %s", err)
+		log.Fatalf("Error writing response: %v", err)
 	}
 }

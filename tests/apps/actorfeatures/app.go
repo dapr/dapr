@@ -119,13 +119,13 @@ type response struct {
 
 // copied from actors.go for test purposes
 type TempTransactionalOperation struct {
-	Operation string      `json:"operation"`
-	Request   interface{} `json:"request"`
+	Operation string `json:"operation"`
+	Request   any    `json:"request"`
 }
 
 type TempTransactionalUpsert struct {
-	Key   string      `json:"key"`
-	Value interface{} `json:"value"`
+	Key   string `json:"key"`
+	Value any    `json:"value"`
 }
 
 type TempTransactionalDelete struct {
@@ -154,7 +154,8 @@ func resetLogs() {
 	actorLogsMutex.Lock()
 	defer actorLogsMutex.Unlock()
 
-	actorLogs = []actorLogEntry{}
+	// Reset the slice without clearing the memory
+	actorLogs = actorLogs[:0]
 }
 
 func getActorType() string {
@@ -218,11 +219,15 @@ func logsHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Processing dapr %s request for %s", r.Method, r.URL.RequestURI())
 	if r.Method == http.MethodDelete {
 		resetLogs()
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(getLogs())
+
+	log.Print("Responding with logs:")
+	json.NewEncoder(io.MultiWriter(w, os.Stdout)).
+		Encode(getLogs())
 }
 
 func configHandler(w http.ResponseWriter, r *http.Request) {
@@ -235,7 +240,7 @@ func configHandler(w http.ResponseWriter, r *http.Request) {
 		getActorRemindersPartitions(),
 	}
 
-	log.Printf("Processing dapr request for %s, responding with %v", r.URL.RequestURI(), daprConfigResponse)
+	log.Printf("Processing dapr request for %s, responding with %#v", r.URL.RequestURI(), daprConfigResponse)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -708,15 +713,12 @@ func appRouter() http.Handler {
 
 	router.HandleFunc("/test/nonhosted", nonHostedTestHandler).Methods("POST")
 
-	router.HandleFunc("/test/logs", logsHandler).Methods("GET")
+	router.HandleFunc("/test/logs", logsHandler).Methods("GET", "DELETE")
 	router.HandleFunc("/test/metadata", testCallMetadataHandler).Methods("GET")
 	router.HandleFunc("/test/env/{envName}", testEnvHandler).Methods("GET", "POST")
-	router.HandleFunc("/test/logs", logsHandler).Methods("DELETE")
 	router.HandleFunc("/test/shutdown", shutdownHandler).Methods("POST")
 	router.HandleFunc("/test/shutdownsidecar", shutdownSidecarHandler).Methods("POST")
 	router.HandleFunc("/healthz", healthzHandler).Methods("GET")
-
-	router.Use(mux.CORSMethodMiddleware(router))
 
 	return router
 }
