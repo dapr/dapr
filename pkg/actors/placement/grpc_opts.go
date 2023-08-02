@@ -59,6 +59,11 @@ func getGrpcOptsGetter(servers []string, clientCert *daprCredentials.CertChain) 
 			)
 		}
 
+		opts = append(opts,
+			grpc.WithBlock(),
+			grpc.WithReturnConnectionError(),
+		)
+
 		if len(servers) == 1 && strings.HasPrefix(servers[0], "dns:///") {
 			// In Kubernetes environment, dapr-placement headless service resolves multiple IP addresses.
 			// With round robin load balancer, Dapr can find the leader automatically.
