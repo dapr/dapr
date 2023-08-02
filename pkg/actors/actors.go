@@ -65,10 +65,11 @@ const (
 var (
 	log = logger.NewLogger("dapr.runtime.actor")
 
-	ErrIncompatibleStateStore   = errors.New("actor state store does not exist, or does not support transactions which are required to save state - please see https://docs.dapr.io/operations/components/setup-state-store/supported-state-stores/")
-	ErrDaprResponseHeader       = errors.New("error indicated via actor header response")
-	ErrReminderOpActorNotHosted = errors.New("operations on actor reminders are only possible on hosted actor types")
-	ErrReminderCanceled         = internal.ErrReminderCanceled
+	ErrIncompatibleStateStore        = errors.New("actor state store does not exist, or does not support transactions which are required to save state - please see https://docs.dapr.io/operations/components/setup-state-store/supported-state-stores/")
+	ErrDaprResponseHeader            = errors.New("error indicated via actor header response")
+	ErrReminderOpActorNotHosted      = errors.New("operations on actor reminders are only possible on hosted actor types")
+	ErrTransactionsTooManyOperations = errors.New("the transaction contains more operations than supported by the state store")
+	ErrReminderCanceled              = internal.ErrReminderCanceled
 )
 
 // Actors allow calling into virtual actors as well as actor state management.
@@ -656,13 +657,19 @@ func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *Tr
 }
 
 func (a *actorsRuntime) executeStateStoreTransaction(ctx context.Context, store internal.TransactionalStateStore, operations []state.TransactionalStateOperation, metadata map[string]string) error {
-	policyRunner := resiliency.NewRunner[struct{}](ctx,
-		a.resiliency.ComponentOutboundPolicy(a.storeName, resiliency.Statestore),
-	)
+	if maxMulti, ok := store.(state.TransactionalStoreMultiMaxSize); ok {
+		max := maxMulti.MultiMaxSize()
+		if max > 0 && len(operations) > max {
+			return ErrTransactionsTooManyOperations
+		}
+	}
 	stateReq := &state.TransactionalStateRequest{
 		Operations: operations,
 		Metadata:   metadata,
 	}
+	policyRunner := resiliency.NewRunner[struct{}](ctx,
+		a.resiliency.ComponentOutboundPolicy(a.storeName, resiliency.Statestore),
+	)
 	_, err := policyRunner(func(ctx context.Context) (struct{}, error) {
 		return struct{}{}, store.Multi(ctx, stateReq)
 	})

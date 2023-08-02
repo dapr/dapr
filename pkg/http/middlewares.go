@@ -21,7 +21,7 @@ import (
 
 	chi "github.com/go-chi/chi/v5"
 
-	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
+	"github.com/dapr/dapr/pkg/security/consts"
 	"github.com/dapr/dapr/utils/streams"
 )
 
@@ -43,13 +43,13 @@ func APITokenAuthMiddleware(token string) func(next http.Handler) http.Handler {
 		}
 
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			v := r.Header.Get(authConsts.APITokenHeader)
+			v := r.Header.Get(consts.APITokenHeader)
 			if v != token && !isRouteExcludedFromAPITokenAuth(r.Method, r.URL) {
 				http.Error(w, "invalid api token", http.StatusUnauthorized)
 				return
 			}
 
-			r.Header.Del(authConsts.APITokenHeader)
+			r.Header.Del(consts.APITokenHeader)
 			next.ServeHTTP(w, r)
 		})
 	}

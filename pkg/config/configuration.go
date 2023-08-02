@@ -25,6 +25,7 @@ import (
 	env "github.com/dapr/dapr/pkg/config/env"
 
 	grpcRetry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
+	"github.com/spf13/cast"
 	yaml "gopkg.in/yaml.v3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -61,7 +62,6 @@ const (
 	DefaultNamespace    = "default"
 	ActionPolicyApp     = "app"
 	ActionPolicyGlobal  = "global"
-	SpiffeIDPrefix      = "spiffe://"
 )
 
 // Configuration is an internal (and duplicate) representation of Dapr's Configuration CRD.
@@ -272,17 +272,35 @@ type NameResolutionSpec struct {
 	Configuration any    `json:"configuration,omitempty" yaml:"configuration,omitempty"`
 }
 
+// MTLSSpec defines mTLS configuration.
 type MTLSSpec struct {
-	Enabled          bool   `json:"enabled,omitempty" yaml:"enabled,omitempty"`
-	WorkloadCertTTL  string `json:"workloadCertTTL,omitempty" yaml:"workloadCertTTL,omitempty"`
-	AllowedClockSkew string `json:"allowedClockSkew,omitempty" yaml:"allowedClockSkew,omitempty"`
+	Enabled                 bool   `json:"enabled,omitempty" yaml:"enabled,omitempty"`
+	WorkloadCertTTL         string `json:"workloadCertTTL,omitempty" yaml:"workloadCertTTL,omitempty"`
+	AllowedClockSkew        string `json:"allowedClockSkew,omitempty" yaml:"allowedClockSkew,omitempty"`
+	SentryAddress           string `json:"sentryAddress,omitempty" yaml:"sentryAddress,omitempty"`
+	ControlPlaneTrustDomain string `json:"controlPlaneTrustDomain,omitempty" yaml:"controlPlaneTrustDomain,omitempty"`
+	// Additional token validators to use.
+	// When Dapr is running in Kubernetes mode, this is in addition to the built-in "kubernetes" validator.
+	// In self-hosted mode, enabling a custom validator will disable the built-in "insecure" validator.
+	TokenValidators []ValidatorSpec `json:"tokenValidators,omitempty" yaml:"tokenValidators,omitempty"`
 }
 
-// SpiffeID represents the separated fields in a spiffe id.
-type SpiffeID struct {
-	TrustDomain string
-	Namespace   string
-	AppID       string
+// ValidatorSpec contains additional token validators to use.
+type ValidatorSpec struct {
+	// Name of the validator
+	Name string `json:"name"`
+	// Options for the validator, if any
+	Options any `json:"options,omitempty"`
+}
+
+// OptionsMap returns the validator options as a map[string]string.
+// If the options are empty, or if the conversion fails, returns nil.
+func (v ValidatorSpec) OptionsMap() map[string]string {
+	if v.Options == nil {
+		return nil
+	}
+
+	return cast.ToStringMapString(v.Options)
 }
 
 // FeatureSpec defines which preview features are enabled.

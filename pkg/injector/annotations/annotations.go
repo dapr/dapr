@@ -14,13 +14,15 @@ limitations under the License.
 // Package annotations contains the list of annotations for Dapr deployments.
 package annotations
 
-// Annotation keys
+// Annotation keys.
+// Name must start with "Key".
 
 const (
 	KeyEnabled                          = "dapr.io/enabled"
 	KeyAppPort                          = "dapr.io/app-port"
 	KeyConfig                           = "dapr.io/config"
 	KeyAppProtocol                      = "dapr.io/app-protocol"
+	KeyAppSSL                           = "dapr.io/app-ssl" // Deprecated. Remove in a future Dapr version. Use "app-protocol" with "https" or "grpcs"
 	KeyAppID                            = "dapr.io/app-id"
 	KeyEnableProfiling                  = "dapr.io/enable-profiling"
 	KeyLogLevel                         = "dapr.io/log-level"
@@ -33,10 +35,10 @@ const (
 	KeyEnableDebug                      = "dapr.io/enable-debug"
 	KeyDebugPort                        = "dapr.io/debug-port"
 	KeyEnv                              = "dapr.io/env"
-	KeyCPULimit                         = "dapr.io/sidecar-cpu-limit"
-	KeyMemoryLimit                      = "dapr.io/sidecar-memory-limit"
 	KeyCPURequest                       = "dapr.io/sidecar-cpu-request"
+	KeyCPULimit                         = "dapr.io/sidecar-cpu-limit"
 	KeyMemoryRequest                    = "dapr.io/sidecar-memory-request"
+	KeyMemoryLimit                      = "dapr.io/sidecar-memory-limit"
 	KeySidecarListenAddresses           = "dapr.io/sidecar-listen-addresses"
 	KeyLivenessProbeDelaySeconds        = "dapr.io/sidecar-liveness-probe-delay-seconds"
 	KeyLivenessProbeTimeoutSeconds      = "dapr.io/sidecar-liveness-probe-timeout-seconds"
@@ -48,8 +50,7 @@ const (
 	KeyReadinessProbeThreshold          = "dapr.io/sidecar-readiness-probe-threshold"
 	KeySidecarImage                     = "dapr.io/sidecar-image"
 	KeySidecarSeccompProfileType        = "dapr.io/sidecar-seccomp-profile-type"
-	KeyAppSSL                           = "dapr.io/app-ssl"
-	KeyHTTPMaxRequestBodySize           = "dapr.io/http-max-request-size"
+	KeyHTTPMaxRequestSize               = "dapr.io/http-max-request-size"
 	KeyHTTPReadBufferSize               = "dapr.io/http-read-buffer-size"
 	KeyGracefulShutdownSeconds          = "dapr.io/graceful-shutdown-seconds"
 	KeyEnableAPILogging                 = "dapr.io/enable-api-logging"
@@ -68,30 +69,4 @@ const (
 	KeyPluggableComponentContainer      = "dapr.io/component-container"
 	KeyPluggableComponentsInjection     = "dapr.io/inject-pluggable-components"
 	KeyAppChannel                       = "dapr.io/app-channel-address"
-)
-
-// Default values
-
-const (
-	DefaultLogLevel                          = "info"
-	DefaultLogAsJSON                         = false
-	DefaultAppSSL                            = false
-	DefaultAppProtocol                       = "http"
-	DefaultEnableMetric                      = true
-	DefaultMetricsPort                       = 9090
-	DefaultEnableDebug                       = false
-	DefaultDebugPort                         = 40000
-	DefaultSidecarListenAddresses            = "[::1],127.0.0.1"
-	DefaultHealthzProbeDelaySeconds          = 3
-	DefaultHealthzProbeTimeoutSeconds        = 3
-	DefaultHealthzProbePeriodSeconds         = 6
-	DefaultHealthzProbeThreshold             = 3
-	DefaultMtlsEnabled                       = true
-	DefaultEnableProfiling                   = false
-	DefaultDisableBuiltinK8sSecretStore      = false
-	DefaultEnableAppHealthCheck              = false
-	DefaultAppCheckPath                      = "/healthz"
-	DefaultAppHealthProbeIntervalSeconds     = 5
-	DefaultAppHealthProbeTimeoutMilliseconds = 500
-	DefaultAppHealthThreshold                = 3
 )
