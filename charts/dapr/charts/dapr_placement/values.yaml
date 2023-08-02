@@ -28,6 +28,8 @@ volumeclaims:
 
 replicationFactor: 100
 
+metadataEnabled: false
+
 livenessProbe:
   initialDelaySeconds: 10
   periodSeconds: 3
