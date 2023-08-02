@@ -7,10 +7,11 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/dapr/dapr/utils"
 	"github.com/stretchr/testify/require"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
+
+	"github.com/dapr/dapr/utils"
 )
 
 // NewTag is a helper to create an opencensus tag that can be used in the different helpers here

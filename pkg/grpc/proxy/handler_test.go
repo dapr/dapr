@@ -703,7 +703,8 @@ func (s *proxyTestSuite) TestResiliencyStreaming() {
 		assert.Equal(t, diag.GetValueForObservationWithTagSet(rows,
 			map[tag.Tag]bool{
 				diag.NewTag("type", "streaming"):                            true,
-				diag.NewTag("status", strconv.Itoa(int(codes.Unavailable))): true},
+				diag.NewTag("status", strconv.Itoa(int(codes.Unavailable))): true,
+			},
 		), int64(1))
 	})
 }
