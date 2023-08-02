@@ -44,11 +44,6 @@ type placementClient struct {
 	// streamConnectedCond is the condition variable for goroutines waiting for or announcing
 	// that the stream between runtime and placement is connected.
 	streamConnectedCond *sync.Cond
-
-	// ctx is the stream context
-	ctx context.Context
-	// cancel is the cancel func for context
-	cancel context.CancelFunc
 }
 
 // connectToServer initializes a new connection to the target server and if it succeeds replace the current
@@ -59,7 +54,7 @@ func (c *placementClient) connectToServer(ctx context.Context, serverAddr string
 		return err
 	}
 
-	conn, err := grpc.Dial(serverAddr, opts...)
+	conn, err := grpc.DialContext(ctx, serverAddr, opts...)
 	if err != nil {
 		if conn != nil {
 			conn.Close()
@@ -67,20 +62,16 @@ func (c *placementClient) connectToServer(ctx context.Context, serverAddr string
 		return err
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
 	client := v1pb.NewPlacementClient(conn)
 	stream, err := client.ReportDaprStatus(ctx)
 	if err != nil {
 		if conn != nil {
 			conn.Close()
 		}
-		cancel()
 		return err
 	}
 
 	c.streamConnectedCond.L.Lock()
-	c.ctx = ctx
-	c.cancel = cancel
 	c.clientStream = stream
 	c.clientConn = conn
 	c.streamConnAlive = true
@@ -91,12 +82,11 @@ func (c *placementClient) connectToServer(ctx context.Context, serverAddr string
 
 // drain the grpc stream as described in the documentation
 // https://github.com/grpc/grpc-go/blob/be1fb4f27549f736b9b4ec26104c7c6b29845ad0/stream.go#L109
-func (c *placementClient) drain(stream grpc.ClientStream, conn *grpc.ClientConn, cancelFunc context.CancelFunc) {
+func (c *placementClient) drain(stream grpc.ClientStream, conn *grpc.ClientConn) {
 	c.sendLock.Lock()
 	stream.CloseSend() // CloseSend cannot be invoked concurrently with Send()
 	c.sendLock.Unlock()
 	conn.Close()
-	cancelFunc()
 
 	c.recvLock.Lock()
 	defer c.recvLock.Unlock()
@@ -124,7 +114,7 @@ func (c *placementClient) disconnectFn(insideLockFn func()) {
 		return
 	}
 
-	c.drain(c.clientStream, c.clientConn, c.cancel)
+	c.drain(c.clientStream, c.clientConn)
 
 	c.streamConnAlive = false
 	c.streamConnectedCond.Broadcast()
