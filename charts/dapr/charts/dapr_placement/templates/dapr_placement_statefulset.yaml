@@ -129,6 +129,9 @@ spec:
 {{- if eq .Values.global.logAsJson true }}
         - "--log-as-json"
 {{- end }}
+{{- if eq .Values.metadataEnabled true }}
+        - "--metadata-enabled"
+{{- end }}
 {{- if eq .Values.global.prometheus.enabled true }}
         - "--enable-metrics"
         - "--replicationFactor"
