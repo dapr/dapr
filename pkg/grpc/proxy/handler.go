@@ -100,12 +100,12 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 
 	// The app id check is handled in the StreamDirector. If we don't have it here, we just use a NoOp policy since we know the request is impossible.
 	var policyDef *resiliency.PolicyDefinition
-	var grpcDestinationAppId string
+	var grpcDestinationAppID string
 	if len(v) == 0 || s.getPolicyFn == nil {
 		policyDef = resiliency.NoOp{}.EndpointPolicy("", "")
 	} else {
 		policyDef = s.getPolicyFn(v[0], fullMethodName)
-		grpcDestinationAppId = v[0]
+		grpcDestinationAppID = v[0]
 	}
 
 	// When using resiliency, we need to put special care in handling proxied gRPC requests that are streams, because these can be long-lived.
@@ -168,11 +168,11 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 		// should we count each retry as a new request from client for metrics?? is so we'll need to move this inside the
 		// resiliency loop, as well as the response metric code
 		requestStartedAt = time.Now()
-		if grpcDestinationAppId != "" {
+		if grpcDestinationAppID != "" {
 			if isStream {
-				diagnostics.DefaultMonitoring.ServiceInvocationStreamingRequestSent(grpcDestinationAppId, fullMethodName)
+				diagnostics.DefaultMonitoring.ServiceInvocationStreamingRequestSent(grpcDestinationAppID, fullMethodName)
 			} else {
-				diagnostics.DefaultMonitoring.ServiceInvocationRequestSent(grpcDestinationAppId, fullMethodName)
+				diagnostics.DefaultMonitoring.ServiceInvocationRequestSent(grpcDestinationAppID, fullMethodName)
 			}
 		}
 
@@ -190,12 +190,11 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 			code := status.Code(err)
 			defer func() {
 				// if we could not reconnect just create the response metrics for the connection error
-				if !reconnectionSucceeded && grpcDestinationAppId != "" {
+				if !reconnectionSucceeded && grpcDestinationAppID != "" {
 					if !isStream {
-						//grpcStatus := getGrpcStatusFromError(err)
-						diagnostics.DefaultMonitoring.ServiceInvocationResponseReceived(grpcDestinationAppId, fullMethodName, int32(code), requestStartedAt)
+						diagnostics.DefaultMonitoring.ServiceInvocationResponseReceived(grpcDestinationAppID, fullMethodName, int32(code), requestStartedAt)
 					} else {
-						diagnostics.DefaultMonitoring.ServiceInvocationStreamingResponseReceived(grpcDestinationAppId, fullMethodName, int32(code))
+						diagnostics.DefaultMonitoring.ServiceInvocationStreamingResponseReceived(grpcDestinationAppID, fullMethodName, int32(code))
 					}
 				}
 			}()
@@ -253,9 +252,9 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 		}
 
 		err = pr.run()
-		if grpcDestinationAppId != "" {
+		if grpcDestinationAppID != "" {
 			code := status.Code(err)
-			diagnostics.DefaultMonitoring.ServiceInvocationResponseReceived(grpcDestinationAppId, fullMethodName, int32(code), requestStartedAt)
+			diagnostics.DefaultMonitoring.ServiceInvocationResponseReceived(grpcDestinationAppID, fullMethodName, int32(code), requestStartedAt)
 		}
 
 		if err != nil {
