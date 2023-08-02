@@ -16,6 +16,7 @@ package kubernetes
 import (
 	"context"
 	"log"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -52,7 +53,9 @@ func (s *Secret) Init(ctx context.Context) error {
 		return err
 	}
 
-	_, err := s.kubeClient.ClientSet.CoreV1().Secrets(s.namespace).Create(context.TODO(), &corev1.Secret{
+	ctx, cancel := context.WithTimeout(ctx, time.Second*10)
+	defer cancel()
+	_, err := s.kubeClient.ClientSet.CoreV1().Secrets(s.namespace).Create(ctx, &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      s.name,
 			Namespace: s.namespace,
@@ -69,7 +72,9 @@ func (s *Secret) Name() string {
 
 func (s *Secret) Dispose(wait bool) error {
 	log.Printf("Delete secret %q ...", s.name)
-	_, err := s.kubeClient.ClientSet.CoreV1().Secrets(s.namespace).Get(context.TODO(), s.name, metav1.GetOptions{})
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	_, err := s.kubeClient.ClientSet.CoreV1().Secrets(s.namespace).Get(ctx, s.name, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
 		return nil
 	}
