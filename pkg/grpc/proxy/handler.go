@@ -261,7 +261,6 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 		if err != nil {
 			// If the error is errRetryOnStreamingRPC, then that's permanent and should not cause the policy to retry
 			if errors.Is(err, errRetryOnStreamingRPC) {
-				isStream = true // mark as stream for diagnostics. By this time the request metric was already created as unary though but the response would be set as streaming??
 				err = backoff.Permanent(errRetryOnStreamingRPC)
 			}
 			return nil, err
