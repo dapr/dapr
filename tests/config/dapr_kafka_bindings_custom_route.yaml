@@ -38,3 +38,7 @@ spec:
     value: /custom-path
   - name: initialOffset
     value: oldest
+scopes:
+  - bindinginput
+  - bindingoutput
+  - bindinginputgrpc

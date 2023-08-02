@@ -38,6 +38,7 @@ spec:
 scopes:
   - pluggable-bindinginput
   - pluggable-bindingoutput
+
 ---
 apiVersion: dapr.io/v1alpha1
 kind: Component
