@@ -40,12 +40,15 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	"github.com/dapr/dapr/pkg/diagnostics"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	codec "github.com/dapr/dapr/pkg/grpc/proxy/codec"
 	pb "github.com/dapr/dapr/pkg/grpc/proxy/testservice"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/retry"
+
+	"go.opencensus.io/stats/view"
+	"go.opencensus.io/tag"
 )
 
 const (
@@ -58,6 +61,19 @@ const (
 
 	countListResponses = 20
 )
+
+const (
+	serviceInvocationRequestSentName  = "runtime/service_invocation/req_sent_total"
+	serviceInvocationResponseRecvName = "runtime/service_invocation/res_recv_total"
+)
+
+func metricsCleanup() {
+	diag.CleanupRegisteredViews(
+		serviceInvocationRequestSentName,
+		serviceInvocationResponseRecvName,
+		"runtime/actor/timers",
+		"runtime/actor/reminders")
+}
 
 var testLogger = logger.NewLogger("proxy-test")
 
@@ -344,6 +360,7 @@ func (s *proxyTestSuite) sendPing(stream pb.TestService_PingStreamClient, i int)
 func (s *proxyTestSuite) TestStreamConnectionInterrupted() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
+
 	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(
 		StreamMetadataKey, "true",
 		"dapr-test", s.T().Name(),
@@ -414,9 +431,13 @@ func (s *proxyTestSuite) TestResiliencyUnary() {
 			s.service.simulatePingFailures.Store(0)
 		}()
 
+		appID := "test"
+		metricsCleanup()
+		assert.NoError(s.T(), diag.DefaultMonitoring.Init(appID))
+
 		ctx, cancel := s.ctx()
 		defer cancel()
-		ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(diagnostics.GRPCProxyAppIDKey, "test"))
+		ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(diag.GRPCProxyAppIDKey, appID))
 
 		// Reset callCount before this test
 		s.service.pingCallCount.Store(0)
@@ -426,6 +447,23 @@ func (s *proxyTestSuite) TestResiliencyUnary() {
 		require.NotNil(t, res, "Response should not be nil")
 		require.Equal(t, int32(3), s.service.pingCallCount.Load())
 		require.Equal(t, message, res.Value)
+
+		rows, err := view.RetrieveData(serviceInvocationRequestSentName)
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(rows))
+		requestsSent := diag.GetValueForObservationWithTagSet(
+			rows, map[tag.Tag]bool{diag.NewTag("type", "unary"): true})
+		assert.Equal(t, int64(3), requestsSent)
+
+		rows, err = view.RetrieveData(serviceInvocationResponseRecvName)
+		assert.NoError(t, err)
+		assert.Equal(t, 2, len(rows))
+		// 2 Ping failures
+		assert.Equal(t, diag.GetValueForObservationWithTagSet(
+			rows, map[tag.Tag]bool{diag.NewTag("status", strconv.Itoa(int(codes.Internal))): true}), int64(2))
+		// 1 success
+		assert.Equal(t, diag.GetValueForObservationWithTagSet(
+			rows, map[tag.Tag]bool{diag.NewTag("status", strconv.Itoa(int(codes.OK))): true}), int64(1))
 	})
 
 	s.T().Run("timeouts", func(t *testing.T) {
@@ -438,7 +476,11 @@ func (s *proxyTestSuite) TestResiliencyUnary() {
 		// Reset callCount before this test
 		s.service.pingCallCount.Store(0)
 
-		ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs(diagnostics.GRPCProxyAppIDKey, "test"))
+		appID := "test"
+		metricsCleanup()
+		assert.NoError(s.T(), diag.DefaultMonitoring.Init(appID))
+
+		ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs(diag.GRPCProxyAppIDKey, appID))
 
 		_, err := s.testClient.Ping(ctx, &pb.PingRequest{Value: message})
 		require.Error(t, err, "Ping should fail due to timeouts")
@@ -450,6 +492,18 @@ func (s *proxyTestSuite) TestResiliencyUnary() {
 
 		// Sleep for 500ms before returning to allow all timed-out goroutines to catch up with the timeouts
 		time.Sleep(500 * time.Millisecond)
+
+		rows, err := view.RetrieveData(serviceInvocationRequestSentName)
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(rows))
+		diag.RequireTagExist(t, rows, diag.NewTag("type", "unary"))
+
+		rows, err = view.RetrieveData(serviceInvocationResponseRecvName)
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(rows))
+		timeoutExceededCount := diag.GetValueForObservationWithTagSet(
+			rows, map[tag.Tag]bool{diag.NewTag("status", strconv.Itoa(int(codes.DeadlineExceeded))): true})
+		assert.Equal(t, int64(4), timeoutExceededCount)
 	})
 
 	s.T().Run("multiple threads", func(t *testing.T) {
@@ -463,13 +517,20 @@ func (s *proxyTestSuite) TestResiliencyUnary() {
 			s.service.simulateRandomFailures.Store(false)
 		}()
 
+		appID := "test"
+		metricsCleanup()
+		assert.NoError(s.T(), diag.DefaultMonitoring.Init(appID))
+
+		numGoroutines := 10
+		numOperations := 10
+
 		wg := sync.WaitGroup{}
-		for i := 0; i < 10; i++ {
+		for i := 0; i < numGoroutines; i++ {
 			wg.Add(1)
 			go func(i int) {
-				for j := 0; j < 10; j++ {
+				for j := 0; j < numOperations; j++ {
 					pingMsg := fmt.Sprintf("%d:%d", i, j)
-					ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs(diagnostics.GRPCProxyAppIDKey, "test"))
+					ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs(diag.GRPCProxyAppIDKey, appID))
 					res, err := s.testClient.Ping(ctx, &pb.PingRequest{Value: pingMsg})
 					require.NoErrorf(t, err, "Ping should succeed for operation %d:%d", i, j)
 					require.NotNilf(t, res, "Response should not be nil for operation %d:%d", i, j)
@@ -488,11 +549,19 @@ func (s *proxyTestSuite) TestResiliencyUnary() {
 		case <-time.After(time.Second * 10):
 			assert.Fail(s.T(), "Timed out waiting for proxy to return.")
 		case <-ch:
-			return
 		}
 
 		// Sleep for 500ms before returning to allow all timed-out goroutines to catch up with the timeouts
 		time.Sleep(500 * time.Millisecond)
+
+		rows, err := view.RetrieveData(serviceInvocationRequestSentName)
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(rows))
+		diag.RequireTagExist(t, rows, diag.NewTag("type", "unary"))
+
+		// as we are simulating random failures, we can't assert the exact number of calls but
+		// we can assert that it's greater than the number of goroutines * number of operations
+		assert.Greater(t, rows[0].Data.(*view.CountData).Value, int64(numGoroutines*numOperations))
 	})
 }
 
@@ -508,7 +577,7 @@ func (s *proxyTestSuite) TestResiliencyStreaming() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
 		ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(
-			diagnostics.GRPCProxyAppIDKey, "test",
+			diag.GRPCProxyAppIDKey, "test",
 			"dapr-test", t.Name(),
 		))
 
@@ -542,8 +611,13 @@ func (s *proxyTestSuite) TestResiliencyStreaming() {
 	s.T().Run("timeouts do not apply after initial handshake", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
+
+		appID := "test"
+		metricsCleanup()
+		assert.NoError(s.T(), diag.DefaultMonitoring.Init(appID))
+
 		ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(
-			diagnostics.GRPCProxyAppIDKey, "test",
+			diag.GRPCProxyAppIDKey, appID,
 			StreamMetadataKey, "1",
 			"dapr-test", t.Name(),
 		))
@@ -574,6 +648,14 @@ func (s *proxyTestSuite) TestResiliencyStreaming() {
 		require.NoError(s.T(), stream.CloseSend(), "no error on close send")
 		_, err = stream.Recv()
 		require.ErrorIs(s.T(), err, io.EOF, "stream should close with io.EOF, meaining OK")
+
+		rows, err := view.RetrieveData(serviceInvocationRequestSentName)
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(rows))
+		diag.RequireTagExist(t, rows, diag.NewTag("type", "streaming"))
+		rows, err = view.RetrieveData(serviceInvocationResponseRecvName)
+		assert.NoError(t, err)
+		assert.Equal(t, 0, len(rows)) // no error so no response metric
 	})
 }
 

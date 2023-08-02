@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"sync/atomic"
+	"time"
 
 	"github.com/cenkalti/backoff/v4"
 	"google.golang.org/grpc"
@@ -99,10 +100,12 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 
 	// The app id check is handled in the StreamDirector. If we don't have it here, we just use a NoOp policy since we know the request is impossible.
 	var policyDef *resiliency.PolicyDefinition
+	var grpcDestinationAppId string
 	if len(v) == 0 || s.getPolicyFn == nil {
 		policyDef = resiliency.NoOp{}.EndpointPolicy("", "")
 	} else {
 		policyDef = s.getPolicyFn(v[0], fullMethodName)
+		grpcDestinationAppId = v[0]
 	}
 
 	// When using resiliency, we need to put special care in handling proxied gRPC requests that are streams, because these can be long-lived.
@@ -112,9 +115,9 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 	// Because Dapr doesn't have the protos that are used for gRPC proxying, we cannot determine if a RPC is stream-based or "unary", so we can't do what the gRPC library does.
 	// Instead, we're going to rely on the "dapr-stream" boolean header: if set, we consider the RPC as stream-based and apply Resiliency features (timeouts and retries) only to the initial handshake.
 	var isStream bool
-	v = md[StreamMetadataKey]
-	if len(v) > 0 {
-		isStream = utils.IsTruthy(v[0])
+	streamCheckValue := md[StreamMetadataKey]
+	if len(streamCheckValue) > 0 {
+		isStream = utils.IsTruthy(streamCheckValue[0])
 	}
 
 	var replayBuffer replayBufferCh
@@ -141,6 +144,7 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 			pr.dispose()
 		},
 	})
+	var requestStartedAt time.Time
 	pr, cErr := policyRunner(func(ctx context.Context) (*proxyRunner, error) {
 		// Get the current iteration count
 		iter := counter.Add(1)
@@ -161,6 +165,17 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 		// Do not "defer clientCancel()" yet, in case we need to proxy a stream
 		clientCtx, clientCancel := context.WithCancel(outgoingCtx)
 
+		// should we count each retry as a new request from client for metrics?? is so we'll need to move this inside the
+		// resiliency loop, as well as the response metric code
+		requestStartedAt = time.Now()
+		if grpcDestinationAppId != "" {
+			if isStream {
+				diagnostics.DefaultMonitoring.ServiceInvocationStreamingRequestSent(grpcDestinationAppId, fullMethodName)
+			} else {
+				diagnostics.DefaultMonitoring.ServiceInvocationRequestSent(grpcDestinationAppId, fullMethodName)
+			}
+		}
+
 		// (The next TODO comes from the original author of the library we adapted - leaving it here in case we want to do that for our own reasons)
 		// TODO(mwitkow): Add a `forwarded` header to metadata, https://en.wikipedia.org/wiki/X-Forwarded-For.
 		clientStream, err := grpc.NewClientStream(
@@ -171,7 +186,20 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 			clientStreamOptSubtype...,
 		)
 		if err != nil {
+			var reconnectionSucceeded bool
 			code := status.Code(err)
+			defer func() {
+				// if we could not reconnect just create the response metrics for the connection error
+				if !reconnectionSucceeded && grpcDestinationAppId != "" {
+					if !isStream {
+						//grpcStatus := getGrpcStatusFromError(err)
+						diagnostics.DefaultMonitoring.ServiceInvocationResponseReceived(grpcDestinationAppId, fullMethodName, int32(code), requestStartedAt)
+					} else {
+						diagnostics.DefaultMonitoring.ServiceInvocationStreamingResponseReceived(grpcDestinationAppId, fullMethodName, int32(code))
+					}
+				}
+			}()
+
 			if target != nil && (code == codes.Unavailable || code == codes.Unauthenticated) {
 				// It's possible that we get to this point while another goroutine is executing the same policy function.
 				// For example, this could happen if this iteration has timed out and "policyRunner" has triggered a new execution already.
@@ -195,6 +223,7 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 
 				clientStream, err = grpc.NewClientStream(clientCtx, clientStreamDescForProxying, backendConn, fullMethodName, clientStreamOptSubtype...)
 				if err != nil {
+					code = status.Code(err)
 					teardown(false)
 					clientCancel()
 					return nil, err
@@ -224,16 +253,22 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 		}
 
 		err = pr.run()
+		if grpcDestinationAppId != "" {
+			code := status.Code(err)
+			diagnostics.DefaultMonitoring.ServiceInvocationResponseReceived(grpcDestinationAppId, fullMethodName, int32(code), requestStartedAt)
+		}
+
 		if err != nil {
 			// If the error is errRetryOnStreamingRPC, then that's permanent and should not cause the policy to retry
 			if errors.Is(err, errRetryOnStreamingRPC) {
+				isStream = true // mark as stream for diagnostics. By this time the request metric was already created as unary though but the response would be set as streaming??
 				err = backoff.Permanent(errRetryOnStreamingRPC)
 			}
 			return nil, err
 		}
-		diagnostics.DefaultMonitoring.ServiceInvocationRequestReceived(v[0], fullMethodName)
 		return nil, nil
 	})
+
 	if cErr != nil {
 		return cErr
 	}

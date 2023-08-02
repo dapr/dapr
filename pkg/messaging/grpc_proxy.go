@@ -127,7 +127,6 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 		if err != nil {
 			return ctx, nil, nil, nopTeardown, err
 		}
-		diagnostics.DefaultMonitoring.ServiceInvocationRequestSent(appID, fullName)
 		return outCtx, appClient.(*grpc.ClientConn), nil, nopTeardown, nil
 	}
 
