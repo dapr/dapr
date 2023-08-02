@@ -1,158 +1,205 @@
+/*
+Copyright 2023 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package sentry
 
 import (
 	"context"
+	"crypto"
 	"crypto/x509"
-	"encoding/pem"
 	"errors"
 	"fmt"
-	"sync"
-	"time"
+	"strings"
+	"sync/atomic"
 
-	"github.com/dapr/dapr/pkg/sentry/ca"
+	"k8s.io/client-go/rest"
+
+	"github.com/dapr/dapr/pkg/concurrency"
+	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
+	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/pkg/sentry/config"
-	"github.com/dapr/dapr/pkg/sentry/identity"
-	"github.com/dapr/dapr/pkg/sentry/identity/kubernetes"
-	"github.com/dapr/dapr/pkg/sentry/identity/selfhosted"
-	k8s "github.com/dapr/dapr/pkg/sentry/kubernetes"
 	"github.com/dapr/dapr/pkg/sentry/monitoring"
 	"github.com/dapr/dapr/pkg/sentry/server"
+	"github.com/dapr/dapr/pkg/sentry/server/ca"
+	"github.com/dapr/dapr/pkg/sentry/server/validator"
+	validatorInsecure "github.com/dapr/dapr/pkg/sentry/server/validator/insecure"
+	validatorJWKS "github.com/dapr/dapr/pkg/sentry/server/validator/jwks"
+	validatorKube "github.com/dapr/dapr/pkg/sentry/server/validator/kubernetes"
 	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.sentry")
 
+// CertificateAuthority is the interface for the Sentry Certificate Authority.
+// Starts the Sentry gRPC server and signs workload certificates.
 type CertificateAuthority interface {
-	Start(context.Context, config.SentryConfig) error
+	Start(context.Context) error
 }
 
 type sentry struct {
-	conf    config.SentryConfig
-	server  server.CAServer
-	running chan bool
+	conf    config.Config
+	running atomic.Bool
 }
 
-// NewSentryCA returns a new Sentry Certificate Authority instance.
-func NewSentryCA() CertificateAuthority {
+// New returns a new Sentry Certificate Authority instance.
+func New(conf config.Config) CertificateAuthority {
 	return &sentry{
-		running: make(chan bool, 1),
+		conf: conf,
 	}
 }
 
 // Start the server in background.
-func (s *sentry) Start(ctx context.Context, conf config.SentryConfig) error {
+func (s *sentry) Start(parentCtx context.Context) error {
+	ctx, cancel := context.WithCancel(parentCtx)
+	defer cancel()
+
 	// If the server is already running, return an error
-	select {
-	case s.running <- true:
-	default:
+	if !s.running.CompareAndSwap(false, true) {
 		return errors.New("CertificateAuthority server is already running")
 	}
 
-	// Create the CA server
-	s.conf = conf
-	certAuth, v := s.createCAServer(ctx)
+	ns := security.CurrentNamespace()
 
-	return s.run(ctx, certAuth, v)
-}
-
-// Loads the trust anchors and issuer certs, then creates a new CA.
-func (s *sentry) createCAServer(ctx context.Context) (ca.CertificateAuthority, identity.Validator) {
-	// Create CA
-	certAuth, authorityErr := ca.NewCertificateAuthority(s.conf)
-	if authorityErr != nil {
-		log.Fatalf("error getting certificate authority: %s", authorityErr)
+	camngr, err := ca.New(ctx, s.conf)
+	if err != nil {
+		return fmt.Errorf("error creating CA: %w", err)
 	}
-	log.Info("certificate authority loaded")
+	log.Info("CA certificate key pair ready")
 
-	// Load the trust bundle
-	trustStoreErr := certAuth.LoadOrStoreTrustBundle(ctx)
-	if trustStoreErr != nil {
-		log.Fatalf("error loading trust root bundle: %s", trustStoreErr)
+	provider, err := security.New(ctx, security.Options{
+		ControlPlaneTrustDomain: s.conf.TrustDomain,
+		ControlPlaneNamespace:   ns,
+		AppID:                   "dapr-sentry",
+		TrustAnchors:            camngr.TrustAnchors(),
+		MTLSEnabled:             true,
+		// Override the request source to our in memory CA since _we_ are sentry!
+		OverrideCertRequestSource: func(ctx context.Context, csrDER []byte) ([]*x509.Certificate, error) {
+			csr, csrErr := x509.ParseCertificateRequest(csrDER)
+			if csrErr != nil {
+				monitoring.ServerCertIssueFailed("invalid_csr")
+				return nil, csrErr
+			}
+			certs, csrErr := camngr.SignIdentity(ctx, &ca.SignRequest{
+				PublicKey:          csr.PublicKey.(crypto.PublicKey),
+				SignatureAlgorithm: csr.SignatureAlgorithm,
+				TrustDomain:        s.conf.TrustDomain,
+				Namespace:          ns,
+				AppID:              "dapr-sentry",
+				// TODO: @joshvanl: Remove in 1.12. Before 1.11, clients where not
+				// authorizing the server based on the correct SPIFFE ID, and instead
+				// matched on the DNS SAN `cluster.local`(!).
+				DNS: []string{"cluster.local"},
+			})
+			if csrErr != nil {
+				monitoring.ServerCertIssueFailed("ca_error")
+				return nil, csrErr
+			}
+			return certs, nil
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("error creating security: %s", err)
 	}
-	certExpiry := certAuth.GetCACertBundle().GetIssuerCertExpiry()
-	if certExpiry == nil {
-		log.Fatalf("error loading trust root bundle: missing certificate expiry")
-	} else {
-		// Need to be in an else block for the linter
-		log.Infof("trust root bundle loaded. issuer cert expiry: %s", certExpiry.String())
+
+	vals, err := s.getValidators(ctx)
+	if err != nil {
+		return err
 	}
-	monitoring.IssuerCertExpiry(certExpiry)
 
-	// Create identity validator
-	v, validatorErr := s.createValidator()
-	if validatorErr != nil {
-		log.Fatalf("error creating validator: %s", validatorErr)
+	// Start all background processes
+	runners := concurrency.NewRunnerManager(
+		provider.Start,
+		func(ctx context.Context) error {
+			sec, secErr := provider.Handler(ctx)
+			if secErr != nil {
+				return secErr
+			}
+
+			return server.Start(ctx, server.Options{
+				Port:             s.conf.Port,
+				Security:         sec,
+				Validators:       vals,
+				DefaultValidator: s.conf.DefaultValidator,
+				CA:               camngr,
+			})
+		},
+	)
+	for name, val := range vals {
+		log.Infof("Using validator '%s'", strings.ToLower(name.String()))
+		runners.Add(val.Start)
 	}
-	log.Info("validator created")
 
-	return certAuth, v
-}
-
-// Runs the CA server.
-// This method blocks until the server is shut down.
-func (s *sentry) run(ctx context.Context, certAuth ca.CertificateAuthority, v identity.Validator) error {
-	s.server = server.NewCAServer(certAuth, v)
-
-	// In background, watch for the root certificate's expiration
-	var wg sync.WaitGroup
-	wg.Add(1)
-	defer wg.Wait()
-	go func() {
-		defer wg.Done()
-		watchCertExpiry(ctx, certAuth)
-	}()
-
-	// Start the server; this is a blocking call
-	log.Infof("sentry certificate authority is running, protecting y'all")
-	if err := s.server.Run(ctx, s.conf.Port, certAuth.GetCACertBundle()); err != nil {
-		return fmt.Errorf("error starting gRPC server: %s", err)
+	err = runners.Run(ctx)
+	if err != nil {
+		log.Fatalf("Error running Sentry: %v", err)
 	}
+
 	return nil
 }
 
-// Watches certificates' expiry and shows an error message when they're nearing expiration time.
-// This is a blocking method that should be run in its own goroutine.
-func watchCertExpiry(ctx context.Context, certAuth ca.CertificateAuthority) {
-	log.Debug("Starting root certificate expiration watcher")
-	certExpiryCheckTicker := time.NewTicker(time.Hour)
-	for {
-		select {
-		case <-certExpiryCheckTicker.C:
-			caCrt := certAuth.GetCACertBundle().GetRootCertPem()
-			block, _ := pem.Decode(caCrt)
-			cert, certParseErr := x509.ParseCertificate(block.Bytes)
-			if certParseErr != nil {
-				log.Warn("Could not determine Dapr root certificate expiration time")
-				break
+func (s *sentry) getValidators(ctx context.Context) (map[sentryv1pb.SignCertificateRequest_TokenValidator]validator.Validator, error) {
+	validators := make(map[sentryv1pb.SignCertificateRequest_TokenValidator]validator.Validator, len(s.conf.Validators))
+	for validatorID, opts := range s.conf.Validators {
+		switch validatorID {
+		case sentryv1pb.SignCertificateRequest_KUBERNETES:
+			config, err := rest.InClusterConfig()
+			if err != nil {
+				return nil, err
 			}
-			if cert.NotAfter.Before(time.Now().UTC()) {
-				log.Warn("Dapr root certificate expiration warning: certificate has expired.")
-				break
+			sentryID, err := security.SentryID(s.conf.TrustDomain, security.CurrentNamespace())
+			if err != nil {
+				return nil, err
 			}
-			if (cert.NotAfter.Add(-30 * 24 * time.Hour)).Before(time.Now().UTC()) {
-				expiryDurationHours := int(cert.NotAfter.Sub(time.Now().UTC()).Hours())
-				log.Warnf("Dapr root certificate expiration warning: certificate expires in %d days and %d hours", expiryDurationHours/24, expiryDurationHours%24)
-			} else {
-				validity := cert.NotAfter.Sub(time.Now().UTC())
-				log.Debugf("Dapr root certificate is still valid for %s", validity.String())
+			val, err := validatorKube.New(ctx, validatorKube.Options{
+				RestConfig:     config,
+				SentryID:       sentryID,
+				ControlPlaneNS: security.CurrentNamespace(),
+			})
+			if err != nil {
+				return nil, err
 			}
-		case <-ctx.Done():
-			log.Debug("Terminating root certificate expiration watcher")
-			certExpiryCheckTicker.Stop()
-			return
+			log.Info("Adding validator 'kubernetes' with Sentry ID: " + sentryID.String())
+			validators[validatorID] = val
+
+		case sentryv1pb.SignCertificateRequest_INSECURE:
+			log.Info("Adding validator 'insecure'")
+			validators[validatorID] = validatorInsecure.New()
+
+		case sentryv1pb.SignCertificateRequest_JWKS:
+			sentryID, err := security.SentryID(s.conf.TrustDomain, security.CurrentNamespace())
+			if err != nil {
+				return nil, err
+			}
+			obj := validatorJWKS.Options{
+				SentryID: sentryID,
+			}
+			err = decodeOptions(&obj, opts)
+			if err != nil {
+				return nil, fmt.Errorf("failed to decode validator options: %w", err)
+			}
+			val, err := validatorJWKS.New(ctx, obj)
+			if err != nil {
+				return nil, err
+			}
+			log.Info("Adding validator 'jwks' with Sentry ID: " + sentryID.String())
+			validators[validatorID] = val
 		}
 	}
-}
 
-func (s *sentry) createValidator() (identity.Validator, error) {
-	if config.IsKubernetesHosted() {
-		// we're in Kubernetes, create client and init a new serviceaccount token validator
-		kubeClient, err := k8s.GetClient()
-		if err != nil {
-			return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
-		}
-
-		return kubernetes.NewValidator(kubeClient, s.conf.GetTokenAudiences()), nil
+	if len(validators) == 0 {
+		// Should never hit this, as the config is already sanitized
+		return nil, errors.New("invalid validators")
 	}
-	return selfhosted.NewValidator(), nil
+
+	return validators, nil
 }

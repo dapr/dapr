@@ -3,7 +3,7 @@ package meta
 import (
 	"testing"
 
-	"github.com/dapr/dapr/pkg/injector/sidecar"
+	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
 )
 
 func TestIsSidecarPresent(t *testing.T) {
@@ -23,7 +23,7 @@ func TestIsSidecarPresent(t *testing.T) {
 		},
 		{
 			name:   "presentInjected",
-			labels: map[string]string{sidecar.SidecarInjectedLabel: "yes"},
+			labels: map[string]string{injectorConsts.SidecarInjectedLabel: "yes"},
 			want:   true,
 		},
 		{

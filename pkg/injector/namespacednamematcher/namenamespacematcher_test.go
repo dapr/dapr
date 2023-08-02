@@ -21,7 +21,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func Test_getNameNamespaces(t *testing.T) {
+func TestGetNameNamespaces(t *testing.T) {
 	tests := []struct {
 		name         string
 		s            string
@@ -167,7 +167,7 @@ func Test_getNameNamespaces(t *testing.T) {
 	}
 }
 
-func TestEqualPrefixNameNamespaceMatcher_MatchesObject(t *testing.T) {
+func TestEqualPrefixNameNamespaceMatcherMatchesObject(t *testing.T) {
 	tests := []struct {
 		name           string
 		namespaceNames string

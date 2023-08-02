@@ -31,8 +31,9 @@ type FakeStateStoreItem struct {
 }
 
 type FakeStateStore struct {
-	NoLock bool
-	Items  map[string]*FakeStateStoreItem
+	MaxOperations int
+	NoLock        bool
+	Items         map[string]*FakeStateStoreItem
 
 	lock      sync.RWMutex
 	callCount map[string]*atomic.Uint64
@@ -147,10 +148,6 @@ func (f *FakeStateStore) Set(ctx context.Context, req *state.SetRequest) error {
 	return nil
 }
 
-func (f *FakeStateStore) GetComponentMetadata() map[string]string {
-	return map[string]string{}
-}
-
 func (f *FakeStateStore) BulkSet(ctx context.Context, req []state.SetRequest, opts state.BulkStoreOpts) error {
 	f.callCount["BulkSet"].Add(1)
 
@@ -207,6 +204,10 @@ func (f *FakeStateStore) CallCount(op string) uint64 {
 		return 0
 	}
 	return f.callCount[op].Load()
+}
+
+func (f *FakeStateStore) MultiMaxSize() int {
+	return f.MaxOperations
 }
 
 // Adapted from https://github.com/dapr/components-contrib/blob/a4b27ae49b7c99820c6e921d3891f03334692714/state/utils/utils.go#L16

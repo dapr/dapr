@@ -43,6 +43,9 @@ import (
 // And then forward them to the Pub/Sub component.
 // This method is used by the HTTP and gRPC APIs.
 func (p *pubsub) Publish(ctx context.Context, req *contribpubsub.PublishRequest) error {
+	p.lock.RLock()
+	defer p.lock.RUnlock()
+
 	ps, ok := p.compStore.GetPubSub(req.PubsubName)
 	if !ok {
 		return rtpubsub.NotFoundError{PubsubName: req.PubsubName}
@@ -66,6 +69,9 @@ func (p *pubsub) Publish(ctx context.Context, req *contribpubsub.PublishRequest)
 }
 
 func (p *pubsub) BulkPublish(ctx context.Context, req *contribpubsub.BulkPublishRequest) (contribpubsub.BulkPublishResponse, error) {
+	p.lock.RLock()
+	defer p.lock.RUnlock()
+
 	ps, ok := p.compStore.GetPubSub(req.PubsubName)
 	if !ok {
 		return contribpubsub.BulkPublishResponse{}, rtpubsub.NotFoundError{PubsubName: req.PubsubName}

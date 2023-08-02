@@ -838,7 +838,6 @@ func (r *reminders) startReminder(reminder *internal.Reminder, stopChannel chan 
 		for {
 			select {
 			case <-nextTimer.C():
-				log.Infof("Reminder %s with parameters: dueTime: %s, period: %s is due", reminderKey, reminder.DueTime, reminder.Period)
 				// noop
 			case <-stopChannel:
 				// reminder has been already deleted

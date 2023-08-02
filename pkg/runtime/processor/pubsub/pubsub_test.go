@@ -1296,10 +1296,6 @@ func (m *mockPublishPubSub) Features() []contribpubsub.Feature {
 	return nil
 }
 
-func (m *mockPublishPubSub) GetComponentMetadata() map[string]string {
-	return map[string]string{}
-}
-
 func TestPubsubWithResiliency(t *testing.T) {
 	ps := New(Options{
 		Registry:       registry.New(registry.NewOptions()).PubSubs(),
