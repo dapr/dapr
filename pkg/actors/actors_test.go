@@ -42,6 +42,7 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	daprt "github.com/dapr/dapr/pkg/testing"
+	"github.com/dapr/kit/eventqueue"
 	"github.com/dapr/kit/ptr"
 )
 
@@ -306,7 +307,7 @@ func deactivateActorsCh(testActorsRuntime *actorsRuntime) <-chan string {
 	ch := make(chan string, 2)
 
 	// Replace the processor with a mock one that returns deactivated actors in a channel
-	testActorsRuntime.idleActorProcessor = internal.NewProcessor[*actor](func(act *actor) {
+	testActorsRuntime.idleActorProcessor = eventqueue.NewProcessor[*actor](func(act *actor) {
 		if !testActorsRuntime.idleActorBusyCheck(act) {
 			return
 		}

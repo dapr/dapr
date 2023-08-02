@@ -9,7 +9,7 @@ require (
 	github.com/argoproj/argo-rollouts v1.4.1
 	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/dapr/components-contrib v1.11.3-0.20230725200615-9ca07d9bca9d
-	github.com/dapr/kit v0.11.3
+	github.com/dapr/kit v0.11.4-0.20230802200247-90b1d0d906e0
 	github.com/evanphx/json-patch/v5 v5.6.0
 	github.com/go-chi/chi/v5 v5.0.8
 	github.com/go-chi/cors v1.2.1
@@ -72,7 +72,7 @@ require (
 	k8s.io/code-generator v0.26.3
 	k8s.io/klog v1.0.0
 	k8s.io/metrics v0.26.3
-	k8s.io/utils v0.0.0-20230406110748-d93618cff8a2
+	k8s.io/utils v0.0.0-20230726121419-3b25d923346b
 	sigs.k8s.io/controller-runtime v0.14.6
 	sigs.k8s.io/yaml v1.3.0
 )

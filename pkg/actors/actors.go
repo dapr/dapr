@@ -51,6 +51,7 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/retry"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	"github.com/dapr/kit/eventqueue"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
 )
@@ -118,7 +119,7 @@ type actorsRuntime struct {
 	clock                clock.WithTicker
 	internalActors       map[string]InternalActor
 	internalActorChannel *internalActorChannel
-	idleActorProcessor   *internal.Processor[*actor]
+	idleActorProcessor   *eventqueue.Processor[*actor]
 
 	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 	stateTTLEnabled bool
@@ -187,7 +188,7 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) Actors {
 	a.actorsReminders.SetStateStoreProviderFn(a.stateStore)
 	a.actorsReminders.SetLookupActorFn(a.isActorLocallyHosted)
 
-	a.idleActorProcessor = internal.NewProcessor[*actor](a.idleProcessorExecuteFn, clock)
+	a.idleActorProcessor = eventqueue.NewProcessor[*actor](a.idleProcessorExecuteFn, clock)
 
 	return a
 }
