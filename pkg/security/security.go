@@ -25,11 +25,13 @@ import (
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"k8s.io/utils/clock"
 
 	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/security/legacy"
 	secpem "github.com/dapr/dapr/pkg/security/pem"
 	"github.com/dapr/kit/fswatcher"
 	"github.com/dapr/kit/logger"
@@ -220,10 +222,10 @@ func (s *security) GRPCServerOption() grpc.ServerOption {
 		return grpc.Creds(insecure.NewCredentials())
 	}
 
+	// TODO: It would be better if we could give a subset of trust domains in
+	// which this server authorizes.
 	return grpc.Creds(
-		// TODO: It would be better if we could give a subset of trust domains in
-		// which this server authorizes.
-		grpccredentials.MTLSServerCredentials(s.source, s.source, tlsconfig.AuthorizeAny()),
+		credentials.NewTLS(legacy.NewServer(s.source, s.source, tlsconfig.AuthorizeAny())),
 	)
 }
 
