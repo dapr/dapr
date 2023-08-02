@@ -34,3 +34,16 @@ spec:
     value: 1s
   - name: readTimeout
     value: 1s
+scopes:
+  - pubsub-publisher
+  - pubsub-subscriber
+  - pubsub-publisher-grpc
+  - pubsub-subscriber-grpc
+  - pubsub-publisher-routing
+  - pubsub-subscriber-routing
+  - pubsub-publisher-routing-grpc
+  - pubsub-subscriber-routing-grpc
+  - pubsub-publisher-bulk-subscribe
+  - pubsub-bulk-subscriber
+  - job-publisher
+  - job-subscriber
