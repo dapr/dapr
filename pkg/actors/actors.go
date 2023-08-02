@@ -249,7 +249,7 @@ func (a *actorsRuntime) Init(ctx context.Context) error {
 	a.wg.Add(3)
 	go func() {
 		defer a.wg.Done()
-		a.placement.Start()
+		a.placement.Start(ctx)
 	}()
 	go func() {
 		defer a.wg.Done()

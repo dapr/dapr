@@ -142,11 +142,11 @@ func (p *actorPlacement) AddHostedActorType(actorType string) error {
 
 // Start connects placement service to register to membership and send heartbeat
 // to report the current member status periodically.
-func (p *actorPlacement) Start() {
+func (p *actorPlacement) Start(ctx context.Context) {
 	p.serverIndex.Store(0)
 	p.shutdown.Store(false)
 
-	if !p.establishStreamConn() {
+	if !p.establishStreamConn(ctx) {
 		return
 	}
 
@@ -163,7 +163,7 @@ func (p *actorPlacement) Start() {
 			if p.shutdown.Load() {
 				break
 			}
-			p.establishStreamConn()
+			p.establishStreamConn(ctx)
 		}
 	}()
 
@@ -287,7 +287,7 @@ func (p *actorPlacement) LookupActor(actorType, actorID string) (string, string)
 }
 
 //nolint:nosnakecase
-func (p *actorPlacement) establishStreamConn() (established bool) {
+func (p *actorPlacement) establishStreamConn(ctx context.Context) (established bool) {
 	// Backoff for reconnecting in case of errors
 	bo := backoff.NewExponentialBackOff()
 	bo.InitialInterval = placementReconnectMinInterval
@@ -309,7 +309,7 @@ func (p *actorPlacement) establishStreamConn() (established bool) {
 			log.Debug("try to connect to placement service: " + serverAddr)
 		}
 
-		err := p.client.connectToServer(serverAddr)
+		err := p.client.connectToServer(ctx, serverAddr)
 		if err == errEstablishingTLSConn {
 			return false
 		}

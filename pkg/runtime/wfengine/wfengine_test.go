@@ -65,7 +65,7 @@ func (*mockPlacement) LookupActor(actorType string, actorID string) (name string
 }
 
 // Start implements internal.PlacementService
-func (*mockPlacement) Start() {
+func (*mockPlacement) Start(context.Context) {
 }
 
 // Stop implements internal.PlacementService

@@ -53,7 +53,7 @@ type placementClient struct {
 
 // connectToServer initializes a new connection to the target server and if it succeeds replace the current
 // stream with the connected stream.
-func (c *placementClient) connectToServer(serverAddr string) error {
+func (c *placementClient) connectToServer(ctx context.Context, serverAddr string) error {
 	opts, err := c.getGrpcOpts()
 	if err != nil {
 		return err
@@ -67,7 +67,7 @@ func (c *placementClient) connectToServer(serverAddr string) error {
 		return err
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ctx)
 	client := v1pb.NewPlacementClient(conn)
 	stream, err := client.ReportDaprStatus(ctx)
 	if err != nil {
