@@ -13,7 +13,9 @@ limitations under the License.
 
 package main
 
-import cloudevents "github.com/cloudevents/sdk-go"
+import (
+	cloudevents "github.com/cloudevents/sdk-go/v2"
+)
 
 type subscription struct {
 	PubsubName    string            `json:"pubsubName"`
@@ -37,7 +39,7 @@ type bulkSubscribeMessage struct {
 }
 
 type bulkSubscribeMessageEntry struct {
-	EntryId  string            `json:"entryId"`
+	EntryID  string            `json:"entryId"`
 	Event    cloudevents.Event `json:"event"`
 	Metadata map[string]string `json:"metadata,omitempty"`
 }

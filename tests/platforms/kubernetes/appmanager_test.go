@@ -421,7 +421,7 @@ func TestWaitUntilServiceStateAndGetExternalURL(t *testing.T) {
 			})
 
 		appManager := NewAppManager(client, testNamespace, testApp)
-		svcObj, err := appManager.WaitUntilServiceState(appManager.IsServiceIngressReady)
+		svcObj, err := appManager.WaitUntilServiceState(appManager.app.AppName, appManager.IsServiceIngressReady)
 		assert.NoError(t, err)
 
 		externalURL := appManager.AcquireExternalURLFromService(svcObj)
@@ -472,7 +472,7 @@ func TestWaitUntilServiceStateAndGetExternalURL(t *testing.T) {
 			})
 
 		appManager := NewAppManager(client, testNamespace, testApp)
-		svcObj, err := appManager.WaitUntilServiceState(appManager.IsServiceIngressReady)
+		svcObj, err := appManager.WaitUntilServiceState(appManager.app.AppName, appManager.IsServiceIngressReady)
 		assert.NoError(t, err)
 
 		externalURL := appManager.AcquireExternalURLFromService(svcObj)
@@ -503,7 +503,7 @@ func TestWaitUntilServiceStateDeleted(t *testing.T) {
 		})
 
 	appManager := NewAppManager(client, testNamespace, testApp)
-	svcObj, err := appManager.WaitUntilServiceState(appManager.IsServiceDeleted)
+	svcObj, err := appManager.WaitUntilServiceState(appManager.app.AppName, appManager.IsServiceDeleted)
 	assert.NoError(t, err)
 	assert.Nil(t, svcObj)
 }
