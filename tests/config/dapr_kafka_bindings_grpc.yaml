@@ -37,3 +37,7 @@ spec:
     value: oldest
   - name: direction
     value: input, output
+scopes:
+  - bindinginput
+  - bindingoutput
+  - bindinginputgrpc
