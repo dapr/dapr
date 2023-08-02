@@ -6,6 +6,10 @@ spec:
   type: pubsub.in-memory
   version: v1
   initTimeout: 1m
-  metadata:
-    - name: spacehold
-      value: metadata-is-required
+  metadata: []
+scopes:
+  - pubsub-perf-bulk-grpc
+  - pubsub-perf-grpc
+  - healthapp-http
+  - healthapp-grpc
+  - healthapp-h2c
