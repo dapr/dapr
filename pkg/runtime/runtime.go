@@ -162,15 +162,11 @@ func newDaprRuntime(ctx context.Context,
 	resiliencyProvider resiliency.Provider,
 ) (*DaprRuntime, error) {
 	compStore := compstore.New()
-	wasmStrictSandbox := false
-	if globalConfig.Spec.WasmSpec != nil && globalConfig.Spec.WasmSpec.StrictSandbox {
-		wasmStrictSandbox = true
-	}
 	meta := meta.New(meta.Options{
 		ID:            runtimeConfig.id,
 		PodName:       getPodName(),
 		Namespace:     getNamespace(),
-		StrictSandbox: wasmStrictSandbox,
+		StrictSandbox: globalConfig.Spec.WasmSpec.GetStrictSandbox(),
 		Mode:          runtimeConfig.mode,
 	})
 

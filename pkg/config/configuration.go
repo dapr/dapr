@@ -324,6 +324,11 @@ type WasmSpec struct {
 	StrictSandbox bool `json:"strictSandbox,omitempty" yaml:"strictSandbox,omitempty"`
 }
 
+// GetStrictSandbox returns the value of StrictSandbox, with nil-checks.
+func (w *WasmSpec) GetStrictSandbox() bool {
+	return w != nil && w.StrictSandbox
+}
+
 // LoggingSpec defines the configuration for logging.
 type LoggingSpec struct {
 	// Configure API logging.
