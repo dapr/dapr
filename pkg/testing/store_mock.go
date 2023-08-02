@@ -61,10 +61,6 @@ func (_m *MockConfigurationStore) Init(ctx context.Context, metadata configurati
 	return r0
 }
 
-func (_m *MockConfigurationStore) GetComponentMetadata() map[string]string {
-	return map[string]string{}
-}
-
 // Subscribe provides a mock function with given fields: ctx, req, handler
 func (_m *MockConfigurationStore) Subscribe(ctx context.Context, req *configuration.SubscribeRequest, handler configuration.UpdateHandler) (string, error) {
 	ret := _m.Called(ctx, req, handler)
@@ -113,10 +109,6 @@ func (f *FailingConfigurationStore) Get(ctx context.Context, req *configuration.
 
 func (f *FailingConfigurationStore) Init(ctx context.Context, metadata configuration.Metadata) error {
 	return nil
-}
-
-func (f *FailingConfigurationStore) GetComponentMetadata() map[string]string {
-	return map[string]string{}
 }
 
 func (f *FailingConfigurationStore) Subscribe(ctx context.Context, req *configuration.SubscribeRequest, handler configuration.UpdateHandler) (string, error) {

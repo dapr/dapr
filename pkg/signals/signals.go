@@ -43,11 +43,11 @@ func Context() context.Context {
 
 	go func() {
 		sig := <-sigCh
-		log.Infof(`Received signal "%s"; beginning shutdown`, sig)
+		log.Infof(`Received signal '%s'; beginning shutdown`, sig)
 		cancel()
 		sig = <-sigCh
 		log.Fatalf(
-			`Received signal "%s" during shutdown; exiting immediately`,
+			`Received signal '%s' during shutdown; exiting immediately`,
 			sig,
 		)
 	}()

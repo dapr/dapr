@@ -90,12 +90,6 @@ func (b *grpcOutputBinding) Invoke(ctx context.Context, req *bindings.InvokeRequ
 	}, nil
 }
 
-// Returns the component metadata options
-func (b *grpcOutputBinding) GetComponentMetadata() map[string]string {
-	// GetComponentMetadata does not apply to pluggable components as there is no standard metadata to return
-	return map[string]string{}
-}
-
 // outputFromConnector creates a new GRPC outputbinding using the given underlying connector.
 func outputFromConnector(_ logger.Logger, connector *pluggable.GRPCConnector[proto.OutputBindingClient]) *grpcOutputBinding {
 	return &grpcOutputBinding{

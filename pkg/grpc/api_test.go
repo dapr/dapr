@@ -40,7 +40,6 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/emptypb"
-
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -2312,7 +2311,7 @@ func TestPublishTopic(t *testing.T) {
 			AppID: "fakeAPI",
 		},
 		pubsubAdapter: &daprt.MockPubSubAdapter{
-			PublishFn: func(req *pubsub.PublishRequest) error {
+			PublishFn: func(ctx context.Context, req *pubsub.PublishRequest) error {
 				if req.Topic == "error-topic" {
 					return errors.New("error when publish")
 				}
@@ -2327,12 +2326,7 @@ func TestPublishTopic(t *testing.T) {
 
 				return nil
 			},
-			GetPubSubFn: func(pubsubName string) pubsub.PubSub {
-				mock := daprt.MockPubSub{}
-				mock.On("Features").Return([]pubsub.Feature{})
-				return &mock
-			},
-			BulkPublishFn: func(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+			BulkPublishFn: func(ctx context.Context, req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
 				switch req.Topic {
 				case "error-topic":
 					return pubsub.BulkPublishResponse{}, errors.New("error when publish")
@@ -2346,7 +2340,13 @@ func TestPublishTopic(t *testing.T) {
 				return pubsub.BulkPublishResponse{}, nil
 			},
 		},
+		compStore: compstore.New(),
 	}
+
+	mock := daprt.MockPubSub{}
+	mock.On("Features").Return([]pubsub.Feature{})
+	srv.compStore.AddPubSub("pubsub", compstore.PubsubItem{Component: &mock})
+
 	server, lis := startTestServerAPI(srv)
 	defer server.Stop()
 
@@ -2509,12 +2509,7 @@ func TestBulkPublish(t *testing.T) {
 			AppID: "fakeAPI",
 		},
 		pubsubAdapter: &daprt.MockPubSubAdapter{
-			GetPubSubFn: func(pubsubName string) pubsub.PubSub {
-				mock := daprt.MockPubSub{}
-				mock.On("Features").Return([]pubsub.Feature{})
-				return &mock
-			},
-			BulkPublishFn: func(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+			BulkPublishFn: func(ctx context.Context, req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
 				entries := []pubsub.BulkPublishResponseFailedEntry{}
 				// Construct sample response from the broker.
 				if req.Topic == "error-topic" {
@@ -2540,7 +2535,12 @@ func TestBulkPublish(t *testing.T) {
 				return pubsub.BulkPublishResponse{FailedEntries: entries}, nil
 			},
 		},
+		compStore: compstore.New(),
 	}
+
+	mock := daprt.MockPubSub{}
+	mock.On("Features").Return([]pubsub.Feature{})
+	fakeAPI.compStore.AddPubSub("pubsub", compstore.PubsubItem{Component: &mock})
 
 	server, lis := startDaprAPIServer(fakeAPI, "")
 	defer server.Stop()
@@ -2610,7 +2610,7 @@ func TestBulkPublish(t *testing.T) {
 
 func TestInvokeBinding(t *testing.T) {
 	srv := &api{
-		sendToOutputBindingFn: func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) {
+		sendToOutputBindingFn: func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) {
 			if name == "error-binding" {
 				return nil, errors.New("error invoking binding")
 			}
@@ -2681,6 +2681,7 @@ func TestTransactionStateStoreNotImplemented(t *testing.T) {
 
 func TestExecuteStateTransaction(t *testing.T) {
 	fakeStore := &daprt.TransactionalStoreMock{}
+	fakeStore.MaxOperations = 10
 	matchKeyFn := func(ctx context.Context, req *state.TransactionalStateRequest, key string) bool {
 		if len(req.Operations) == 1 {
 			if rr, ok := req.Operations[0].(state.SetRequest); ok {
@@ -2724,6 +2725,17 @@ func TestExecuteStateTransaction(t *testing.T) {
 
 	client := runtimev1pb.NewDaprClient(clientConn)
 
+	tooManyOperations := make([]*runtimev1pb.TransactionalStateOperation, 20)
+	for i := 0; i < 20; i++ {
+		tooManyOperations[i] = &runtimev1pb.TransactionalStateOperation{
+			OperationType: string(state.OperationUpsert),
+			Request: &commonv1pb.StateItem{
+				Key:   fmt.Sprintf("op%d", i),
+				Value: []byte("1"),
+			},
+		}
+	}
+
 	stateOptions, _ := GenerateStateOptionsTestCase()
 	testCases := []struct {
 		testName      string
@@ -2731,6 +2743,7 @@ func TestExecuteStateTransaction(t *testing.T) {
 		operation     state.OperationType
 		key           string
 		value         []byte
+		ops           []*runtimev1pb.TransactionalStateOperation
 		options       *commonv1pb.StateOptions
 		errorExcepted bool
 		expectedError codes.Code
@@ -2768,13 +2781,23 @@ func TestExecuteStateTransaction(t *testing.T) {
 			errorExcepted: true,
 			expectedError: codes.Internal,
 		},
+		{
+			testName:      "fails with too many operations",
+			storeName:     "store1",
+			ops:           tooManyOperations,
+			errorExcepted: true,
+			expectedError: codes.InvalidArgument,
+		},
 	}
 
 	for _, tt := range testCases {
 		t.Run(tt.testName, func(t *testing.T) {
 			req := &runtimev1pb.ExecuteStateTransactionRequest{
-				StoreName: tt.storeName,
-				Operations: []*runtimev1pb.TransactionalStateOperation{
+				StoreName:  tt.storeName,
+				Operations: tt.ops,
+			}
+			if tt.ops == nil {
+				req.Operations = []*runtimev1pb.TransactionalStateOperation{
 					{
 						OperationType: string(tt.operation),
 						Request: &commonv1pb.StateItem{
@@ -2783,7 +2806,7 @@ func TestExecuteStateTransaction(t *testing.T) {
 							Options: stateOptions,
 						},
 					},
-				},
+				}
 			}
 
 			_, err := client.ExecuteStateTransaction(context.Background(), req)
@@ -3746,10 +3769,6 @@ type mockConfigStore struct{}
 
 func (m *mockConfigStore) Init(ctx context.Context, metadata configuration.Metadata) error {
 	return nil
-}
-
-func (m *mockConfigStore) GetComponentMetadata() map[string]string {
-	return map[string]string{}
 }
 
 func (m *mockConfigStore) Get(ctx context.Context, req *configuration.GetRequest) (*configuration.GetResponse, error) {

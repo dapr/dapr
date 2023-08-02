@@ -17,10 +17,6 @@ func (m *MockResolver) Init(metadata nr.Metadata) error {
 	return args.Error(0)
 }
 
-func (m *MockResolver) GetComponentMetadata() map[string]string {
-	return map[string]string{}
-}
-
 // ResolveID is a mock resolve method.
 func (m *MockResolver) ResolveID(req nr.ResolveRequest) (string, error) {
 	args := m.Called(req)

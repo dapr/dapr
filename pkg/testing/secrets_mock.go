@@ -57,10 +57,6 @@ func (c FakeSecretStore) Features() []secretstores.Feature {
 	return []secretstores.Feature{secretstores.FeatureMultipleKeyValuesPerSecret}
 }
 
-func (c FakeSecretStore) GetComponentMetadata() map[string]string {
-	return nil
-}
-
 type FailingSecretStore struct {
 	Failure Failure
 }
@@ -98,8 +94,4 @@ func (c FailingSecretStore) Close() error {
 
 func (c FailingSecretStore) Features() []secretstores.Feature {
 	return []secretstores.Feature{}
-}
-
-func (c FailingSecretStore) GetComponentMetadata() map[string]string {
-	return nil
 }
