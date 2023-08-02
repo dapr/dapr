@@ -27,3 +27,16 @@ spec:
     value: "false"
   - name: initialOffset
     value: oldest
+scopes:
+  - pubsub-publisher
+  - pubsub-subscriber
+  - pubsub-publisher-grpc
+  - pubsub-subscriber-grpc
+  - pubsub-publisher-bulk-subscribe
+  - pubsub-bulk-subscriber
+  - pubsub-publisher-pluggable
+  - pubsub-subscriber-pluggable
+  - pubsub-perf-bulk-grpc
+  - kafka-test-app-normal
+  - kafka-test-app-bulk
+  - k6-tester-pubsub-subscribe-http

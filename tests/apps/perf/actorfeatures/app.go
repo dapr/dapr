@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -21,7 +21,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/gorilla/mux"
+	chi "github.com/go-chi/chi/v5"
 )
 
 const (
@@ -78,7 +78,7 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func configHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Processing dapr request for %s, responding with %v", r.URL.RequestURI(), daprConfigResponse)
+	log.Printf("Processing Dapr request for %s, responding with %#v", r.URL.RequestURI(), daprConfigResponse)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(daprConfigResponse)
@@ -92,7 +92,7 @@ func actorMethodHandler(w http.ResponseWriter, r *http.Request) {
 
 func deactivateActorHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Processing %s actor request for %s", r.Method, r.URL.RequestURI())
-	actorType := mux.Vars(r)["actorType"]
+	actorType := chi.URLParam(r, "actorType")
 
 	if !registeredActorType[actorType] {
 		log.Printf("Unknown actor type: %s", actorType)
@@ -111,19 +111,20 @@ func healthzHandler(w http.ResponseWriter, r *http.Request) {
 
 // appRouter initializes restful api router
 func appRouter() http.Handler {
-	router := mux.NewRouter().StrictSlash(true)
+	router := chi.NewRouter()
 
-	router.HandleFunc("/", indexHandler).Methods("GET")
-	router.HandleFunc("/dapr/config", configHandler).Methods("GET")
+	router.Get("/", indexHandler)
+	router.Get("/dapr/config", configHandler)
 
-	router.HandleFunc("/actors/{actorType}/{id}/method/{method}", actorMethodHandler).Methods("PUT")
-	router.HandleFunc("/actors/{actorType}/{id}/method/{reminderOrTimer}/{method}", actorMethodHandler).Methods("PUT")
+	router.Put("/actors/{actorType}/{id}/method/{method}", actorMethodHandler)
+	router.Put("/actors/{actorType}/{id}/method/{reminderOrTimer}/{method}", actorMethodHandler)
 
-	router.HandleFunc("/actors/{actorType}/{id}", deactivateActorHandler).Methods("POST", "DELETE")
+	router.Post("/actors/{actorType}/{id}", deactivateActorHandler)
+	router.Delete("/actors/{actorType}/{id}", deactivateActorHandler)
 
-	router.HandleFunc("/healthz", healthzHandler).Methods("GET")
+	router.Get("/healthz", healthzHandler)
 
-	router.Use(mux.CORSMethodMiddleware(router))
+	router.HandleFunc("/test", fortioTestHandler)
 
 	return router
 }
