@@ -28,7 +28,7 @@ type SecretStoreClient interface {
 	Features(ctx context.Context, in *FeaturesRequest, opts ...grpc.CallOption) (*FeaturesResponse, error)
 	// Get an individual secret from the store.
 	Get(ctx context.Context, in *GetSecretRequest, opts ...grpc.CallOption) (*GetSecretResponse, error)
-	// Get all secrets in the store.
+	// Get all secrets from the store.
 	BulkGet(ctx context.Context, in *BulkGetSecretRequest, opts ...grpc.CallOption) (*BulkGetSecretResponse, error)
 	// Ping the pubsub. Used for liveness porpuses.
 	Ping(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (*PingResponse, error)
@@ -97,7 +97,7 @@ type SecretStoreServer interface {
 	Features(context.Context, *FeaturesRequest) (*FeaturesResponse, error)
 	// Get an individual secret from the store.
 	Get(context.Context, *GetSecretRequest) (*GetSecretResponse, error)
-	// Get all secrets in the store.
+	// Get all secrets from the store.
 	BulkGet(context.Context, *BulkGetSecretRequest) (*BulkGetSecretResponse, error)
 	// Ping the pubsub. Used for liveness porpuses.
 	Ping(context.Context, *PingRequest) (*PingResponse, error)
