@@ -70,9 +70,7 @@ const (
 func metricsCleanup() {
 	diag.CleanupRegisteredViews(
 		serviceInvocationRequestSentName,
-		serviceInvocationResponseRecvName,
-		"runtime/actor/timers",
-		"runtime/actor/reminders")
+		serviceInvocationResponseRecvName)
 }
 
 var testLogger = logger.NewLogger("proxy-test")
@@ -80,12 +78,13 @@ var testLogger = logger.NewLogger("proxy-test")
 // asserting service is implemented on the server side and serves as a handler for stuff.
 type assertingService struct {
 	pb.UnimplementedTestServiceServer
-	t                      *testing.T
-	expectPingStreamError  *atomic.Bool
-	simulatePingFailures   *atomic.Int32
-	pingCallCount          *atomic.Int32
-	simulateDelay          *atomic.Int32
-	simulateRandomFailures *atomic.Bool
+	t                          *testing.T
+	expectPingStreamError      *atomic.Bool
+	simulatePingFailures       *atomic.Int32
+	pingCallCount              *atomic.Int32
+	simulateDelay              *atomic.Int32
+	simulateRandomFailures     *atomic.Bool
+	simulateConnectionFailures *atomic.Int32
 }
 
 func (s *assertingService) PingEmpty(ctx context.Context, _ *pb.Empty) (*pb.PingResponse, error) {
@@ -560,8 +559,8 @@ func (s *proxyTestSuite) TestResiliencyUnary() {
 		diag.RequireTagExist(t, rows, diag.NewTag("type", "unary"))
 
 		// as we are simulating random failures, we can't assert the exact number of calls but
-		// we can assert that it's greater than the number of goroutines * number of operations
-		assert.Greater(t, rows[0].Data.(*view.CountData).Value, int64(numGoroutines*numOperations))
+		// we can assert that it's >= than the number of goroutines * number of operations
+		assert.GreaterOrEqual(t, rows[0].Data.(*view.CountData).Value, int64(numGoroutines*numOperations))
 	})
 }
 
@@ -657,6 +656,56 @@ func (s *proxyTestSuite) TestResiliencyStreaming() {
 		assert.NoError(t, err)
 		assert.Equal(t, 0, len(rows)) // no error so no response metric
 	})
+
+	s.T().Run("simulate connection failures with retry", func(t *testing.T) {
+		// using 3 connection failures as each connection retry actually executes 2 connection attempts
+		s.service.simulateConnectionFailures.Store(3)
+		defer func() {
+			s.service.simulateConnectionFailures.Store(0)
+		}()
+
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+
+		appID := "test"
+		metricsCleanup()
+		assert.NoError(s.T(), diag.DefaultMonitoring.Init(appID))
+
+		ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(
+			diag.GRPCProxyAppIDKey, appID,
+			StreamMetadataKey, "1",
+			"dapr-test", t.Name(),
+		))
+		// Invoke the stream
+		stream, err := s.testClient.PingStream(ctx)
+		require.NoError(t, err, "PingStream request should be successful")
+
+		// Send and receive 2 messages
+		for i := 0; i < 2; i++ {
+			innerErr := stream.Send(&pb.PingRequest{Value: strconv.Itoa(i)})
+			require.NoError(t, innerErr, "Message should be sent")
+			res, innerErr := stream.Recv()
+			require.NoError(t, innerErr, "Response should be received")
+			require.NotNil(t, res)
+		}
+
+		require.NoError(s.T(), stream.CloseSend(), "no error on close send")
+		_, err = stream.Recv()
+		require.ErrorIs(s.T(), err, io.EOF, "stream should close with io.EOF, meaining OK")
+
+		rows, err := view.RetrieveData(serviceInvocationRequestSentName)
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(rows))
+		diag.RequireTagExist(t, rows, diag.NewTag("type", "streaming"))
+		rows, err = view.RetrieveData(serviceInvocationResponseRecvName)
+		assert.NoError(t, err)
+		assert.Equal(t, 1, len(rows)) // err
+		assert.Equal(t, diag.GetValueForObservationWithTagSet(rows,
+			map[tag.Tag]bool{
+				diag.NewTag("type", "streaming"):                            true,
+				diag.NewTag("status", strconv.Itoa(int(codes.Unavailable))): true},
+		), int64(1))
+	})
 }
 
 func (s *proxyTestSuite) initServer() {
@@ -708,6 +757,7 @@ func (s *proxyTestSuite) getServerClientConn() (conn *grpc.ClientConn, teardown 
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 			grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())),
 			grpc.WithBlock(),
+			grpc.WithStreamInterceptor(createGrpcStreamingChaosInterceptor(s.service.simulateConnectionFailures, codes.Unavailable)),
 		)
 		if err != nil {
 			return nil, teardown, err
@@ -734,12 +784,13 @@ func (s *proxyTestSuite) SetupSuite() {
 	grpclog.SetLoggerV2(testingLog{s.T()})
 
 	s.service = &assertingService{
-		t:                      s.T(),
-		expectPingStreamError:  &atomic.Bool{},
-		simulatePingFailures:   &atomic.Int32{},
-		pingCallCount:          &atomic.Int32{},
-		simulateDelay:          &atomic.Int32{},
-		simulateRandomFailures: &atomic.Bool{},
+		t:                          s.T(),
+		expectPingStreamError:      &atomic.Bool{},
+		simulatePingFailures:       &atomic.Int32{},
+		simulateConnectionFailures: &atomic.Int32{},
+		pingCallCount:              &atomic.Int32{},
+		simulateDelay:              &atomic.Int32{},
+		simulateRandomFailures:     &atomic.Bool{},
 	}
 
 	s.initServer()
@@ -888,4 +939,16 @@ func (t testingLog) Fatalf(format string, args ...interface{}) {
 // V reports whether verbosity level l is at least the requested verbose level.
 func (t testingLog) V(l int) bool {
 	return true
+}
+
+// createGrpcStreamingChaosInterceptor creates a gRPC interceptor that will return the given error code
+// it does not do any post-processing chaos
+func createGrpcStreamingChaosInterceptor(interruptionsCounter *atomic.Int32, code codes.Code) grpc.StreamClientInterceptor {
+	return func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+		if interruptionsCounter.Load() > 0 {
+			interruptionsCounter.Add(-1)
+			return nil, status.Errorf(code, "chaos monkey strikes again")
+		}
+		return streamer(ctx, desc, cc, method, opts...)
+	}
 }

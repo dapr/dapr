@@ -227,6 +227,7 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 					clientCancel()
 					return nil, err
 				}
+				reconnectionSucceeded = true
 			} else {
 				teardown(false)
 				clientCancel()
