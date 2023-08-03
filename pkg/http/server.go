@@ -267,7 +267,7 @@ func (s *server) useMaxBodySize(r chi.Router) {
 	}
 
 	maxSize := int64(s.config.MaxRequestBodySizeMB) << 20 // To bytes
-	log.Infof("Enabled max body size HTTP middleware with size %d bytes", maxSize)
+	log.Infof("Enabled max body size HTTP middleware with size %d MB", s.config.MaxRequestBodySizeMB)
 
 	r.Use(MaxBodySizeMiddleware(maxSize))
 }
