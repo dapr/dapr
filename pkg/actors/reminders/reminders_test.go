@@ -32,12 +32,13 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	clocktesting "k8s.io/utils/clock/testing"
 
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+
 	"github.com/dapr/dapr/pkg/actors/internal"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	daprt "github.com/dapr/dapr/pkg/testing"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
 var startOfTime = time.Date(2022, 1, 1, 12, 0, 0, 0, time.UTC)
@@ -452,7 +453,6 @@ func TestCreateReminder(t *testing.T) {
 }
 
 func setSpanContextInContext(ctx context.Context) (context.Context, string) {
-
 	exp := newOtelFakeExporter()
 
 	tp := sdktrace.NewTracerProvider(
