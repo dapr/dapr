@@ -18,7 +18,6 @@ package actor_double_activation
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"testing"
 
@@ -73,9 +72,9 @@ func TestActorDoubleActivation(t *testing.T) {
 	require.NotEmpty(t, testServiceAppURL, "test app external URL must not be empty")
 
 	// Check if test app endpoint is available
-	t.Logf("test app url: %s", testServiceAppURL+"/health")
-	_, err := utils.HTTPGetNTimes(testServiceAppURL+"/health", numHealthChecks)
-	require.NoError(t, err)
+	t.Logf("Test app url: %s", testServiceAppURL)
+	err := utils.HealthCheckApps(testServiceAppURL + "/health")
+	require.NoError(t, err, "Health checks failed")
 
 	k6Test := loadtest.NewK6(
 		"./test.js",
@@ -83,13 +82,15 @@ func TestActorDoubleActivation(t *testing.T) {
 		loadtest.WithRunnerEnvVar("TEST_APP_NAME", serviceApplicationName),
 	)
 	defer k6Test.Dispose()
-	t.Log("running the k6 load test...")
+
+	t.Log("Running the k6 load test...")
 	require.NoError(t, tr.Platform.LoadTest(k6Test))
 	sm, err := loadtest.K6ResultDefault(k6Test)
 	require.NoError(t, err)
 	require.NotNil(t, sm)
 	bts, err := json.MarshalIndent(sm, "", " ")
 	require.NoError(t, err)
+
 	appUsage, err := tr.Platform.GetAppUsage(serviceApplicationName)
 	require.NoError(t, err)
 
@@ -109,7 +110,6 @@ func TestActorDoubleActivation(t *testing.T) {
 		OutputK6(sm.RunnersResults).
 		Flush()
 
-	require.True(t, sm.Pass, fmt.Sprintf("test has not passed, results %s", string(bts)))
-	t.Logf("test summary `%s`", string(bts))
-
+	require.Truef(t, sm.Pass, "test has not passed, results: %s", string(bts))
+	t.Logf("Test summary `%s`", string(bts))
 }

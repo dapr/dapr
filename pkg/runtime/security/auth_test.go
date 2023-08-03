@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 )
 
 func mockGenCSR(id string) ([]byte, []byte, error) {
@@ -31,7 +33,7 @@ func TestGetCurrentSignedCert(t *testing.T) {
 func TestGetSentryIdentifier(t *testing.T) {
 	t.Run("with identity in env", func(t *testing.T) {
 		envID := "cluster.local"
-		t.Setenv("SENTRY_LOCAL_IDENTITY", envID)
+		t.Setenv(securityConsts.SentryLocalIdentityEnvVar, envID)
 
 		id := getSentryIdentifier("app1")
 		assert.Equal(t, envID, id)

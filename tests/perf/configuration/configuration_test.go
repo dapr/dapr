@@ -39,7 +39,7 @@ const (
 	numHealthChecks                   = 60 // Number of times to check for endpoint health per app.
 	defaultConfigGetThresholdMs       = 60
 	defaultConfigSubscribeThresholdMs = 350
-	testAppName                       = "testapp"
+	testAppName                       = "configurationapp"
 )
 
 type Item struct {

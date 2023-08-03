@@ -28,12 +28,24 @@ service CA {
 }
 
 message SignCertificateRequest {
+  enum TokenValidator {
+    // Not specified - use the default value.
+    UNKNOWN = 0;
+    // Insecure validator (default on self-hosted).
+    INSECURE = 1;
+    // Kubernetes validator (default on Kubernetes).
+    KUBERNETES = 2;
+    // JWKS validator.
+    JWKS = 3;
+  }
   string id = 1;
   string token = 2;
   string trust_domain = 3;
   string namespace = 4;
   // A PEM-encoded x509 CSR.
   bytes certificate_signing_request = 5;
+  // Name of the validator to use, if not the default for the environemtn. 
+  TokenValidator token_validator = 6;
 }
 
 message SignCertificateResponse {
