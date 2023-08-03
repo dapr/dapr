@@ -165,8 +165,6 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 		// Do not "defer clientCancel()" yet, in case we need to proxy a stream
 		clientCtx, clientCancel := context.WithCancel(outgoingCtx)
 
-		// should we count each retry as a new request from client for metrics?? is so we'll need to move this inside the
-		// resiliency loop, as well as the response metric code
 		requestStartedAt = time.Now()
 		if grpcDestinationAppID != "" {
 			if isStream {
