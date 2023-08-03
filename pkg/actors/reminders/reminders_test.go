@@ -497,7 +497,6 @@ func TestCreateReminderForReminderTrackUpdation(t *testing.T) {
 
 	ctx, ts := setSpanContextInContext(ctx)
 
-	// Create the reminders in parallel, which would surface race conditions if present
 	wg := &sync.WaitGroup{}
 	wg.Add(2)
 	go func() {
