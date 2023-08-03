@@ -200,7 +200,7 @@ func (m *AppManager) Dispose(wait bool) error {
 			}
 		}
 
-		if _, err := m.WaitUntilServiceState(m.IsServiceDeleted); err != nil {
+		if _, err := m.WaitUntilServiceState(m.app.AppName, m.IsServiceDeleted); err != nil {
 			return err
 		}
 	} else {
@@ -587,7 +587,7 @@ func (m *AppManager) CreateIngressService() (*apiv1.Service, error) {
 // AcquireExternalURL gets external ingress endpoint from service when it is ready.
 func (m *AppManager) AcquireExternalURL() string {
 	log.Printf("Waiting until service ingress is ready for %s...\n", m.app.AppName)
-	svc, err := m.WaitUntilServiceState(m.IsServiceIngressReady)
+	svc, err := m.WaitUntilServiceState(m.app.AppName, m.IsServiceIngressReady)
 	if err != nil {
 		return ""
 	}
@@ -598,18 +598,18 @@ func (m *AppManager) AcquireExternalURL() string {
 }
 
 // WaitUntilServiceState waits until isState returns true.
-func (m *AppManager) WaitUntilServiceState(isState func(*apiv1.Service, error) bool) (*apiv1.Service, error) {
+func (m *AppManager) WaitUntilServiceState(svcName string, isState func(*apiv1.Service, error) bool) (*apiv1.Service, error) {
 	serviceClient := m.client.Services(m.namespace)
 	var lastService *apiv1.Service
 
 	waitErr := wait.PollImmediate(PollInterval, PollTimeout, func() (bool, error) {
 		var err error
 		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
-		lastService, err = serviceClient.Get(ctx, m.app.AppName, metav1.GetOptions{})
+		lastService, err = serviceClient.Get(ctx, svcName, metav1.GetOptions{})
 		cancel()
 		done := isState(lastService, err)
 		if !done && err != nil {
-			log.Printf("wait for %s: %s", m.app.AppName, err)
+			log.Printf("wait for %s: %s", svcName, err)
 			return true, err
 		}
 
