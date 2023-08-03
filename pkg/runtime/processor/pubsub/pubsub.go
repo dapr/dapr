@@ -26,16 +26,16 @@ import (
 	"github.com/dapr/components-contrib/contenttype"
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	"github.com/dapr/dapr/pkg/channel"
 	comppubsub "github.com/dapr/dapr/pkg/components/pubsub"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	"github.com/dapr/dapr/pkg/grpc"
+	"github.com/dapr/dapr/pkg/grpc/manager"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/outbox"
 	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	"github.com/dapr/dapr/pkg/runtime/meta"
@@ -75,8 +75,10 @@ type Options struct {
 	Resiliency     resiliency.Provider
 	Meta           *meta.Meta
 	TracingSpec    *config.TracingSpec
-	GRPC           *grpc.Manager
+	GRPC           *manager.Manager
+	Channels       *channels.Channels
 	OperatorClient operatorv1.OperatorClient
+	Outbox         outbox.Outbox
 }
 
 type pubsub struct {
@@ -92,8 +94,8 @@ type pubsub struct {
 	resiliency     resiliency.Provider
 	compStore      *compstore.ComponentStore
 	meta           *meta.Meta
-	appChannel     channel.AppChannel
-	grpc           *grpc.Manager
+	grpc           *manager.Manager
+	channels       *channels.Channels
 	operatorClient operatorv1.OperatorClient
 
 	lock sync.RWMutex
@@ -125,7 +127,9 @@ func New(opts Options) *pubsub {
 		meta:           opts.Meta,
 		tracingSpec:    opts.TracingSpec,
 		grpc:           opts.GRPC,
+		channels:       opts.Channels,
 		operatorClient: opts.OperatorClient,
+		outbox:         opts.Outbox,
 		topicCancels:   make(map[string]context.CancelFunc),
 	}
 }
@@ -173,18 +177,6 @@ func (p *pubsub) Init(ctx context.Context, comp compapi.Component) error {
 	diag.DefaultMonitoring.ComponentInitialized(comp.Spec.Type)
 
 	return nil
-}
-
-func (p *pubsub) SetOutbox(outbox outbox.Outbox) {
-	p.outbox = outbox
-}
-
-func (p *pubsub) Outbox() outbox.Outbox {
-	return p.outbox
-}
-
-func (p *pubsub) SetAppChannel(appChannel channel.AppChannel) {
-	p.appChannel = appChannel
 }
 
 func (p *pubsub) Close(comp compapi.Component) error {
