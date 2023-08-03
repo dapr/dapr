@@ -222,7 +222,7 @@ func Test_atomicWrite(t *testing.T) {
 
 			require.NoError(t, atomicWrite(clock, dir, test.data))
 
-			newDir := filepath.Join(tDir, "my-dir-"+clock.Now().Format(time.RFC3339))
+			newDir := filepath.Join(tDir, "my-dir-2023-04-04T00-00-00Z")
 			f, err := os.Stat(newDir)
 			require.NoError(t, err)
 			assert.True(t, f.IsDir())

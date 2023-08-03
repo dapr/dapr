@@ -27,6 +27,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -384,7 +385,9 @@ func atomicWrite(clock clock.Clock, dir string, data map[string][]byte) error {
 		return err
 	}
 
-	newDir := dir + "-" + clock.Now().Format(time.RFC3339)
+	// Replace ':' with '-' in the timestamp to avoid issues with Windows
+	// filesystems.
+	newDir := dir + "-" + strings.ReplaceAll(clock.Now().Format(time.RFC3339), ":", "-")
 	if err := os.MkdirAll(newDir, 0o700); err != nil {
 		return err
 	}
