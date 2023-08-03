@@ -35,6 +35,7 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/kit/logger"
 )
 
@@ -469,7 +470,7 @@ func (x *serviceInvocationCallLocalStreamServer) Recv() (*internalv1pb.InternalI
 func TestInvokeRemoteUnaryForHTTPEndpoint(t *testing.T) {
 	t.Run("channel found", func(t *testing.T) {
 		d := directMessaging{
-			resourceHTTPEndpointChannels: map[string]channel.HTTPEndpointAppChannel{"abc": &mockChannel{}},
+			channels: (new(channels.Channels)).WithEndpointChannels(map[string]channel.HTTPEndpointAppChannel{"abc": &mockChannel{}}),
 		}
 
 		_, err := d.invokeRemoteUnaryForHTTPEndpoint(context.Background(), nil, "abc")
@@ -477,7 +478,9 @@ func TestInvokeRemoteUnaryForHTTPEndpoint(t *testing.T) {
 	})
 
 	t.Run("channel not found", func(t *testing.T) {
-		d := directMessaging{}
+		d := directMessaging{
+			channels: new(channels.Channels),
+		}
 
 		_, err := d.invokeRemoteUnaryForHTTPEndpoint(context.Background(), nil, "abc")
 		assert.Error(t, err)

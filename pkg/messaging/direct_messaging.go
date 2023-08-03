@@ -39,6 +39,7 @@ import (
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/retry"
+	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
@@ -52,15 +53,8 @@ const streamingUnsupportedErr = "streaming-based service invocation is enabled, 
 // applications to send the message using service invocation.
 type messageClientConnection func(ctx context.Context, address string, id string, namespace string, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(destroy bool), error)
 
-// DirectMessaging is the API interface for invoking a remote app.
-type DirectMessaging interface {
-	Invoke(ctx context.Context, targetAppID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error)
-	SetAppChannel(appChannel channel.AppChannel)
-	SetHTTPEndpointsAppChannels(nonResourceChannel channel.HTTPEndpointAppChannel, resourceChannels map[string]channel.HTTPEndpointAppChannel)
-}
-
 type directMessaging struct {
-	appChannel                     channel.AppChannel
+	channels                       *channels.Channels
 	nonResourceHTTPEndpointChannel channel.HTTPEndpointAppChannel
 	resourceHTTPEndpointChannels   map[string]channel.HTTPEndpointAppChannel
 	connectionCreatorFn            messageClientConnection
@@ -91,7 +85,7 @@ type NewDirectMessagingOpts struct {
 	Port               int
 	CompStore          *compstore.ComponentStore
 	Mode               modes.DaprMode
-	AppChannel         channel.AppChannel
+	Channels           *channels.Channels
 	ClientConnFn       messageClientConnection
 	Resolver           nr.Resolver
 	MaxRequestBodySize int
@@ -101,7 +95,7 @@ type NewDirectMessagingOpts struct {
 }
 
 // NewDirectMessaging returns a new direct messaging api.
-func NewDirectMessaging(opts NewDirectMessagingOpts) DirectMessaging {
+func NewDirectMessaging(opts NewDirectMessagingOpts) invokev1.DirectMessaging {
 	hAddr, _ := utils.GetHostAddress()
 	hName, _ := os.Hostname()
 
@@ -110,7 +104,7 @@ func NewDirectMessaging(opts NewDirectMessagingOpts) DirectMessaging {
 		namespace:                    opts.Namespace,
 		grpcPort:                     opts.Port,
 		mode:                         opts.Mode,
-		appChannel:                   opts.AppChannel,
+		channels:                     opts.Channels,
 		connectionCreatorFn:          opts.ClientConnFn,
 		resolver:                     opts.Resolver,
 		maxRequestBodySizeMB:         opts.MaxRequestBodySize,
@@ -148,17 +142,6 @@ func (d *directMessaging) Invoke(ctx context.Context, targetAppID string, req *i
 	}
 
 	return d.invokeWithRetry(ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, app, d.invokeRemote, req)
-}
-
-// SetAppChannel sets the appChannel property in the object.
-func (d *directMessaging) SetAppChannel(appChannel channel.AppChannel) {
-	d.appChannel = appChannel
-}
-
-// SetHTTPEndpointsAppChannel sets the app channels for http endpoints.
-func (d *directMessaging) SetHTTPEndpointsAppChannels(nonResourceChannel channel.HTTPEndpointAppChannel, resourceChannels map[string]channel.HTTPEndpointAppChannel) {
-	d.nonResourceHTTPEndpointChannel = nonResourceChannel
-	d.resourceHTTPEndpointChannels = resourceChannels
 }
 
 // requestAppIDAndNamespace takes an app id and returns the app id, namespace and error.
@@ -240,11 +223,12 @@ func (d *directMessaging) invokeWithRetry(
 }
 
 func (d *directMessaging) invokeLocal(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
-	if d.appChannel == nil {
+	appChannel := d.channels.AppChannel()
+	if appChannel == nil {
 		return nil, errors.New("cannot invoke local endpoint: app channel not initialized")
 	}
 
-	return d.appChannel.InvokeMethod(ctx, req, "")
+	return appChannel.InvokeMethod(ctx, req, "")
 }
 
 func (d *directMessaging) setContextSpan(ctx context.Context) context.Context {
@@ -315,10 +299,10 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, appNamespace,
 func (d *directMessaging) invokeRemoteUnaryForHTTPEndpoint(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*invokev1.InvokeMethodResponse, error) {
 	var channel channel.HTTPEndpointAppChannel
 
-	if ch, ok := d.resourceHTTPEndpointChannels[appID]; ok {
+	if ch, ok := d.channels.EndpointChannels()[appID]; ok {
 		channel = ch
 	} else {
-		channel = d.nonResourceHTTPEndpointChannel
+		channel = d.channels.HTTPEndpointsAppChannel()
 	}
 
 	if channel == nil {

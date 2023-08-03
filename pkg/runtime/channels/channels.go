@@ -20,19 +20,20 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"golang.org/x/net/http2"
 
 	contribmiddle "github.com/dapr/components-contrib/middleware"
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
-	httpenpapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	httpendpapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
 	channelhttp "github.com/dapr/dapr/pkg/channel/http"
 	compmiddlehttp "github.com/dapr/dapr/pkg/components/middleware/http"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/config/protocol"
-	"github.com/dapr/dapr/pkg/grpc"
+	"github.com/dapr/dapr/pkg/grpc/manager"
 	middlehttp "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/meta"
@@ -64,7 +65,7 @@ type Options struct {
 	// ReadBufferSize is the read buffer size.
 	ReadBufferSize int
 
-	GRPC *grpc.Manager
+	GRPC *manager.Manager
 }
 
 type Channels struct {
@@ -76,15 +77,16 @@ type Channels struct {
 	maxRequestBodySize  int
 	appHTTPPipelineSpec *config.PipelineSpec
 	httpClient          *http.Client
-	grpc                *grpc.Manager
+	grpc                *manager.Manager
 
 	appChannel      channel.AppChannel
-	enpChannels     map[string]channel.HTTPEndpointAppChannel
+	endpChannels    map[string]channel.HTTPEndpointAppChannel
 	httpEndpChannel channel.AppChannel
+	lock            sync.RWMutex
 }
 
-func New(opts Options) (*Channels, error) {
-	c := &Channels{
+func New(opts Options) *Channels {
+	return &Channels{
 		registry:            opts.Registry.HTTPMiddlewares(),
 		compStore:           opts.ComponentStore,
 		meta:                opts.Meta,
@@ -94,61 +96,88 @@ func New(opts Options) (*Channels, error) {
 		appHTTPPipelineSpec: opts.GlobalConfig.Spec.AppHTTPPipelineSpec,
 		grpc:                opts.GRPC,
 		httpClient:          appHTTPClient(opts.AppConnectionConfig, opts.GlobalConfig, opts.ReadBufferSize),
+		endpChannels:        make(map[string]channel.HTTPEndpointAppChannel),
 	}
+}
+
+func (c *Channels) Refresh() error {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	log.Debug("Refreshing channels")
 
 	// Create a HTTP channel for external HTTP endpoint invocation
 	pipeline, err := c.buildHTTPPipelineForSpec(c.appHTTPPipelineSpec, "app channel")
 	if err != nil {
-		return c, fmt.Errorf("failed to build app HTTP pipeline: %w", err)
+		return fmt.Errorf("failed to build app HTTP pipeline: %w", err)
 	}
 
-	c.httpEndpChannel, err = channelhttp.CreateHTTPChannel(c.appHTTPChannelConfig(pipeline))
+	httpEndpChannel, err := channelhttp.CreateHTTPChannel(c.appHTTPChannelConfig(pipeline))
 	if err != nil {
-		return c, fmt.Errorf("failed to create external HTTP app channel: %w", err)
+		return fmt.Errorf("failed to create external HTTP app channel: %w", err)
 	}
 
-	c.enpChannels, err = c.createHTTPEndpointsChannels(c.appHTTPPipelineSpec)
+	endpChannels, err := c.initEndpointChannels()
 	if err != nil {
-		return c, fmt.Errorf("failed to create HTTP endpoints channels: %w", err)
+		return fmt.Errorf("failed to create HTTP endpoints channels: %w", err)
 	}
 
 	if c.appConnectionConfig.Port == 0 {
 		log.Warn("App channel is not initialized. Did you configure an app-port?")
-		return c, nil
+		return nil
 	}
 
+	var appChannel channel.AppChannel
 	if c.appConnectionConfig.Protocol.IsHTTP() {
 		// Create a HTTP channel
-		c.appChannel, err = channelhttp.CreateHTTPChannel(c.appHTTPChannelConfig(pipeline))
+		appChannel, err = channelhttp.CreateHTTPChannel(c.appHTTPChannelConfig(pipeline))
 		if err != nil {
-			return c, fmt.Errorf("failed to create HTTP app channel: %w", err)
+			return fmt.Errorf("failed to create HTTP app channel: %w", err)
 		}
-		c.appChannel.(*channelhttp.Channel).SetAppHealthCheckPath(c.appConnectionConfig.HealthCheckHTTPPath)
+		appChannel.(*channelhttp.Channel).SetAppHealthCheckPath(c.appConnectionConfig.HealthCheckHTTPPath)
 	} else {
 		// create gRPC app channel
-		c.appChannel, err = c.grpc.GetAppChannel()
+		appChannel, err = c.grpc.GetAppChannel()
 		if err != nil {
-			return c, fmt.Errorf("failed to create gRPC app channel: %w", err)
+			return fmt.Errorf("failed to create gRPC app channel: %w", err)
 		}
 	}
 
-	return c, nil
+	c.appChannel = appChannel
+	c.httpEndpChannel = httpEndpChannel
+	c.endpChannels = endpChannels
+
+	log.Debug("Channels refreshed")
+
+	return nil
 }
 
 func (c *Channels) BuildHTTPPipeline(spec *config.PipelineSpec) (middlehttp.Pipeline, error) {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+	return c.buildHTTPPipeline(spec)
+}
+
+func (c *Channels) buildHTTPPipeline(spec *config.PipelineSpec) (middlehttp.Pipeline, error) {
 	return c.buildHTTPPipelineForSpec(spec, "http")
 }
 
 func (c *Channels) AppChannel() channel.AppChannel {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
 	return c.appChannel
 }
 
 func (c *Channels) HTTPEndpointsAppChannel() channel.HTTPEndpointAppChannel {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
 	return c.httpEndpChannel
 }
 
 func (c *Channels) EndpointChannels() map[string]channel.HTTPEndpointAppChannel {
-	return c.enpChannels
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+	return c.endpChannels
 }
 
 func (c *Channels) AppHTTPClient() *http.Client {
@@ -167,11 +196,6 @@ func (c *Channels) AppHTTPEndpoint() string {
 	default:
 		return ""
 	}
-}
-
-// WithAppChannel is used for testing to override the underlying app channel.
-func (c *Channels) WithAppChannel(appChannel channel.AppChannel) {
-	c.appChannel = appChannel
 }
 
 func (c *Channels) buildHTTPPipelineForSpec(spec *config.PipelineSpec, targetPipeline string) (middlehttp.Pipeline, error) {
@@ -229,14 +253,14 @@ func (c *Channels) appHTTPChannelConfig(pipeline middlehttp.Pipeline) channelhtt
 	return conf
 }
 
-func (c *Channels) createHTTPEndpointsChannels(spec *config.PipelineSpec) (map[string]channel.HTTPEndpointAppChannel, error) {
+func (c *Channels) initEndpointChannels() (map[string]channel.HTTPEndpointAppChannel, error) {
 	// Create dedicated app channels for known app endpoints
 	endpoints := c.compStore.ListHTTPEndpoints()
 
+	channels := make(map[string]channel.HTTPEndpointAppChannel, len(endpoints))
 	if len(endpoints) > 0 {
-		channels := make(map[string]channel.HTTPEndpointAppChannel, len(endpoints))
 
-		pipeline, err := c.BuildHTTPPipeline(spec)
+		pipeline, err := c.buildHTTPPipeline(c.appHTTPPipelineSpec)
 		if err != nil {
 			return nil, err
 		}
@@ -254,14 +278,12 @@ func (c *Channels) createHTTPEndpointsChannels(spec *config.PipelineSpec) (map[s
 
 			channels[e.ObjectMeta.Name] = ch
 		}
-
-		return channels, nil
 	}
 
-	return nil, nil
+	return channels, nil
 }
 
-func (c *Channels) getHTTPEndpointAppChannel(pipeline middlehttp.Pipeline, endpoint httpenpapi.HTTPEndpoint) (channelhttp.ChannelConfiguration, error) {
+func (c *Channels) getHTTPEndpointAppChannel(pipeline middlehttp.Pipeline, endpoint httpendpapi.HTTPEndpoint) (channelhttp.ChannelConfiguration, error) {
 	conf := channelhttp.ChannelConfiguration{
 		CompStore:            c.compStore,
 		MaxConcurrency:       c.appConnectionConfig.MaxConcurrency,
