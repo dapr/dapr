@@ -9,7 +9,7 @@ require (
 	github.com/argoproj/argo-rollouts v1.4.1
 	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/cloudevents/sdk-go/v2 v2.14.0
-	github.com/dapr/components-contrib v1.11.3-0.20230725200615-9ca07d9bca9d
+	github.com/dapr/components-contrib v1.11.3-0.20230803143722-8b6156f4f722
 	github.com/dapr/kit v0.11.3
 	github.com/evanphx/json-patch/v5 v5.6.0
 	github.com/go-chi/chi/v5 v5.0.10
@@ -44,7 +44,7 @@ require (
 	github.com/redis/go-redis/v9 v9.0.5
 	github.com/sony/gobreaker v0.5.0
 	github.com/spf13/cast v1.5.1
-	github.com/spiffe/go-spiffe/v2 v2.1.4
+	github.com/spiffe/go-spiffe/v2 v2.1.6
 	github.com/stretchr/testify v1.8.4
 	github.com/tidwall/transform v0.0.0-20201103190739-32f242e2dbde
 	github.com/valyala/fasthttp v1.47.0
@@ -57,10 +57,10 @@ require (
 	go.opentelemetry.io/otel/exporters/zipkin v1.16.0
 	go.opentelemetry.io/otel/sdk v1.16.0
 	go.opentelemetry.io/otel/trace v1.16.0
-	go.uber.org/automaxprocs v1.5.2
+	go.uber.org/automaxprocs v1.5.3
 	go.uber.org/ratelimit v0.3.0
-	golang.org/x/exp v0.0.0-20230711153332-06a737ee72cb
-	golang.org/x/net v0.12.0
+	golang.org/x/exp v0.0.0-20230801115018-d63ba01acd4b
+	golang.org/x/net v0.13.0
 	golang.org/x/sync v0.3.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20230629202037-9506855d4529
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20230711160842-782d3b101e98
@@ -75,7 +75,7 @@ require (
 	k8s.io/code-generator v0.26.3
 	k8s.io/klog v1.0.0
 	k8s.io/metrics v0.26.3
-	k8s.io/utils v0.0.0-20230406110748-d93618cff8a2
+	k8s.io/utils v0.0.0-20230726121419-3b25d923346b
 	sigs.k8s.io/controller-runtime v0.14.6
 	sigs.k8s.io/yaml v1.3.0
 )
@@ -344,6 +344,7 @@ require (
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/spf13/cobra v1.7.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
+	github.com/stealthrocket/wasi-go v0.7.6-0.20230718231108-c3d30af59057 // indirect
 	github.com/stoewer/go-strcase v1.2.0 // indirect
 	github.com/stretchr/objx v0.5.0 // indirect
 	github.com/supplyon/gremcos v0.1.40 // indirect
