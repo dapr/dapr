@@ -1,6 +1,8 @@
 package security
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -11,8 +13,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	"github.com/dapr/dapr/pkg/sentry/certs"
-	sentryConsts "github.com/dapr/dapr/pkg/sentry/consts"
+	"github.com/dapr/dapr/pkg/security/consts"
 	"github.com/dapr/kit/logger"
 )
 
@@ -32,17 +33,17 @@ func CertPool(certPem []byte) (*x509.CertPool, error) {
 }
 
 func GetCertChain() (*credentials.CertChain, error) {
-	trustAnchors := os.Getenv(sentryConsts.TrustAnchorsEnvVar)
+	trustAnchors := os.Getenv(consts.TrustAnchorsEnvVar)
 	if trustAnchors == "" {
-		return nil, fmt.Errorf("couldn't find trust anchors in environment variable %s", sentryConsts.TrustAnchorsEnvVar)
+		return nil, fmt.Errorf("couldn't find trust anchors in environment variable %s", consts.TrustAnchorsEnvVar)
 	}
-	cert := os.Getenv(sentryConsts.CertChainEnvVar)
+	cert := os.Getenv(consts.CertChainEnvVar)
 	if cert == "" {
-		return nil, fmt.Errorf("couldn't find cert chain in environment variable %s", sentryConsts.CertChainEnvVar)
+		return nil, fmt.Errorf("couldn't find cert chain in environment variable %s", consts.CertChainEnvVar)
 	}
-	key := os.Getenv(sentryConsts.CertKeyEnvVar)
+	key := os.Getenv(consts.CertKeyEnvVar)
 	if cert == "" {
-		return nil, fmt.Errorf("couldn't find cert key in environment variable %s", sentryConsts.CertKeyEnvVar)
+		return nil, fmt.Errorf("couldn't find cert key in environment variable %s", consts.CertKeyEnvVar)
 	}
 	return &credentials.CertChain{
 		RootCA: []byte(trustAnchors),
@@ -57,7 +58,7 @@ func GetSidecarAuthenticator(sentryAddress string, certChain *credentials.CertCh
 	if err != nil {
 		return nil, err
 	}
-	log.Info("trust anchors and cert chain extracted successfully")
+	log.Info("Trust anchors and cert chain extracted successfully")
 
 	return newAuthenticator(sentryAddress, trustAnchors, certChain.Cert, certChain.Key, generateCSRAndPrivateKey), nil
 }
@@ -67,7 +68,7 @@ func generateCSRAndPrivateKey(id string) ([]byte, []byte, error) {
 		return nil, nil, errors.New("id must not be empty")
 	}
 
-	key, err := certs.GenerateECPrivateKey()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		diag.DefaultMonitoring.MTLSInitFailed("prikeygen")
 		return nil, nil, fmt.Errorf("failed to generate private key: %w", err)

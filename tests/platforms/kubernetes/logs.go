@@ -15,10 +15,13 @@ package kubernetes
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	apiv1 "k8s.io/api/core/v1"
@@ -50,45 +53,53 @@ func StreamContainerLogsToDisk(ctx context.Context, appName string, podClient v1
 	for _, pod := range podList.Items {
 		for _, container := range pod.Spec.Containers {
 			go func(pod, container string) {
-				filename := fmt.Sprintf("%s/%s.%s.log", logPrefix, pod, container)
-				log.Printf("Streaming Kubernetes logs to %s", filename)
-				req := podClient.GetLogs(pod, &apiv1.PodLogOptions{
-					Container: container,
-					Follow:    true,
-				})
-				stream, err := req.Stream(ctx)
-				if err != nil {
-					if err != context.Canceled {
-						log.Printf("Error reading log stream for %s. Error was %s", filename, err)
-					} else {
-						log.Printf("Saved container logs to %s", filename)
+			loop:
+				for {
+					filename := filepath.Join(logPrefix, fmt.Sprintf("%s.%s.log", pod, container))
+					log.Printf("Streaming Kubernetes logs to %s", filename)
+					req := podClient.GetLogs(pod, &apiv1.PodLogOptions{
+						Container: container,
+						Follow:    true,
+					})
+					stream, err := req.Stream(ctx)
+					if err != nil {
+						switch {
+						case errors.Is(err, context.Canceled):
+							log.Printf("Saved container logs to %s", filename)
+							return
+						case strings.Contains(err.Error(), "ContainerCreating"):
+							// Retry after a delay
+							time.Sleep(100 * time.Millisecond)
+							continue loop
+						default:
+							log.Printf("Error starting log stream for %s. Error was %v", filename, err)
+							return
+						}
 					}
-					return
-				}
-				defer stream.Close()
+					defer stream.Close()
 
-				fh, err := os.Create(filename)
-				if err != nil {
-					if err != context.Canceled {
+					fh, err := os.Create(filename)
+					if err != nil {
 						log.Printf("Error creating %s. Error was %s", filename, err)
-					} else {
-						log.Printf("Saved container logs to %s", filename)
+						return
 					}
+					defer fh.Close()
+
+					_, err = io.Copy(fh, stream)
+					if err != nil {
+						switch {
+						case errors.Is(err, context.Canceled):
+							log.Printf("Saved container logs to %s", filename)
+							return
+						default:
+							log.Printf("Error copying log stream for %s. Error was %v", filename, err)
+							return
+						}
+					}
+
+					log.Printf("Saved container logs to %s", filename)
 					return
 				}
-				defer fh.Close()
-
-				_, err = io.Copy(fh, stream)
-				if err != nil {
-					if err != context.Canceled {
-						log.Printf("Error reading log stream for %s. Error was %s", filename, err)
-					} else {
-						log.Printf("Saved container logs to %s", filename)
-					}
-					return
-				}
-
-				log.Printf("Saved container logs to %s", filename)
 			}(pod.GetName(), container.Name)
 		}
 	}

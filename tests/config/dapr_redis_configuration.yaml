@@ -25,3 +25,5 @@ spec:
     value: ""
   - name: redisDB
     value: "0"
+scopes:
+  - configurationapp

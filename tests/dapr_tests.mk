@@ -641,5 +641,6 @@ delete-minikube:
 test-clean:
 	-rm -rv ./tests/e2e/*/dist
 	-rm -rv ./tests/perf/*/dist
+	-rm -rv ./tests/perf/*/test_report_summary_table_*.json
 	-rm test_report_*.json
 	-rm test_report_*.xml

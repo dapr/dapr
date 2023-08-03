@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	sentryConsts "github.com/dapr/dapr/pkg/sentry/consts"
+	"github.com/dapr/dapr/pkg/security/consts"
 )
 
 var testRootCert = `-----BEGIN CERTIFICATE-----
@@ -23,9 +23,9 @@ Iklq0JnMgJU7nS+VpVvlgBN8
 
 func TestGetTrustAnchors(t *testing.T) {
 	t.Run("invalid root cert", func(t *testing.T) {
-		t.Setenv(sentryConsts.TrustAnchorsEnvVar, "111")
-		t.Setenv(sentryConsts.CertChainEnvVar, "111")
-		t.Setenv(sentryConsts.CertKeyEnvVar, "111")
+		t.Setenv(consts.TrustAnchorsEnvVar, "111")
+		t.Setenv(consts.CertChainEnvVar, "111")
+		t.Setenv(consts.CertKeyEnvVar, "111")
 
 		certChain, _ := GetCertChain()
 		caPool, err := CertPool(certChain.Cert)
@@ -34,9 +34,9 @@ func TestGetTrustAnchors(t *testing.T) {
 	})
 
 	t.Run("valid root cert", func(t *testing.T) {
-		t.Setenv(sentryConsts.TrustAnchorsEnvVar, testRootCert)
-		t.Setenv(sentryConsts.CertChainEnvVar, "111")
-		t.Setenv(sentryConsts.CertKeyEnvVar, "111")
+		t.Setenv(consts.TrustAnchorsEnvVar, testRootCert)
+		t.Setenv(consts.CertChainEnvVar, "111")
+		t.Setenv(consts.CertKeyEnvVar, "111")
 
 		certChain, err := GetCertChain()
 		assert.Nil(t, err)
@@ -66,9 +66,9 @@ func TestGenerateSidecarCSR(t *testing.T) {
 }
 
 func TestInitSidecarAuthenticator(t *testing.T) {
-	t.Setenv(sentryConsts.TrustAnchorsEnvVar, testRootCert)
-	t.Setenv(sentryConsts.CertChainEnvVar, "111")
-	t.Setenv(sentryConsts.CertKeyEnvVar, "111")
+	t.Setenv(consts.TrustAnchorsEnvVar, testRootCert)
+	t.Setenv(consts.CertChainEnvVar, "111")
+	t.Setenv(consts.CertKeyEnvVar, "111")
 
 	certChain, _ := GetCertChain()
 	_, err := GetSidecarAuthenticator("localhost:5050", certChain)
