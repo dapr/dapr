@@ -26,7 +26,7 @@ import (
 )
 
 type FakeStateStoreItem struct {
-	data []byte
+	Data []byte
 	etag *string
 }
 
@@ -58,7 +58,7 @@ func (f *FakeStateStore) NewItem(data []byte) *FakeStateStoreItem {
 	etag, _ := uuid.NewRandom()
 	etagString := etag.String()
 	return &FakeStateStoreItem{
-		data: data,
+		Data: data,
 		etag: &etagString,
 	}
 }
@@ -107,7 +107,7 @@ func (f *FakeStateStore) Get(ctx context.Context, req *state.GetRequest) (*state
 		return &state.GetResponse{Data: nil, ETag: nil}, nil
 	}
 
-	return &state.GetResponse{Data: item.data, ETag: item.etag}, nil
+	return &state.GetResponse{Data: item.Data, ETag: item.etag}, nil
 }
 
 func (f *FakeStateStore) BulkGet(ctx context.Context, req []state.GetRequest, opts state.BulkGetOpts) ([]state.BulkGetResponse, error) {

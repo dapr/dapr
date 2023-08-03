@@ -27,12 +27,17 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/valyala/fasthttp"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 	clocktesting "k8s.io/utils/clock/testing"
 
 	"github.com/dapr/dapr/pkg/actors/internal"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	daprt "github.com/dapr/dapr/pkg/testing"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
 var startOfTime = time.Date(2022, 1, 1, 12, 0, 0, 0, time.UTC)
@@ -444,6 +449,118 @@ func TestCreateReminder(t *testing.T) {
 	assert.Equal(t, 20, len(partitions))
 	assert.Equal(t, numReminders, len(secondReminderReferences))
 	assert.Equal(t, numReminders, len(reminders))
+}
+
+func setSpanContextInContext(ctx context.Context) (context.Context, string) {
+
+	exp := newOtelFakeExporter()
+
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithBatcher(exp),
+	)
+	defer func() { _ = tp.Shutdown(ctx) }()
+	otel.SetTracerProvider(tp)
+	traceSpec := &config.TracingSpec{SamplingRate: "1"}
+
+	scConfig := trace.SpanContextConfig{
+		TraceID:    trace.TraceID{75, 249, 47, 53, 119, 179, 77, 166, 163, 206, 146, 157, 14, 14, 71, 54},
+		SpanID:     trace.SpanID{0, 240, 103, 170, 11, 169, 2, 183},
+		TraceFlags: trace.TraceFlags(1),
+	}
+	sc := trace.NewSpanContext(scConfig)
+	ctx, span := diag.StartInternalCallbackSpan(ctx, "span", sc, traceSpec)
+
+	rCtx := &fasthttp.RequestCtx{}
+	rCtx.Init(&fasthttp.Request{}, nil, nil)
+	diagUtils.AddSpanToFasthttpContext(rCtx, span)
+	return rCtx, diag.SpanContextToW3CString(span.SpanContext())
+}
+
+func TestCreateReminderForReminderTrackUpdation(t *testing.T) {
+	testReminders := newTestReminders()
+	clock := testReminders.clock.(*clocktesting.FakeClock)
+	defer testReminders.Close()
+
+	store := daprt.NewFakeStateStore()
+	store.NoLock = true
+	testReminders.SetStateStoreProviderFn(func() (internal.TransactionalStateStore, error) {
+		return store, nil
+	})
+	testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
+		diag.DefaultMonitoring.ActorReminderFired(reminder.ActorType, true)
+		return true
+	})
+	testReminders.Init(context.Background())
+
+	actorType, actorID := getTestActorTypeAndID()
+	ctx := context.Background()
+
+	ctx, ts := setSpanContextInContext(ctx)
+
+	// Create the reminders in parallel, which would surface race conditions if present
+	wg := &sync.WaitGroup{}
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+
+		req := internal.CreateReminderRequest{
+			ActorID:   actorID,
+			ActorType: actorType,
+			Name:      "reminder0",
+			Period:    "1s",
+			DueTime:   "3s",
+			TTL:       "PT10M",
+			Data:      nil,
+		}
+		reminder, err := req.NewReminder(clock.Now())
+		assert.NoError(t, err)
+		err = testReminders.CreateReminder(ctx, reminder)
+		require.NoError(t, err)
+	}()
+	go func() {
+		defer wg.Done()
+		req := internal.CreateReminderRequest{
+			ActorID:   actorID,
+			ActorType: actorType,
+			Name:      "reminder1",
+			Period:    "1s",
+			DueTime:   "3s",
+			TTL:       "PT10M",
+			Data:      nil,
+		}
+		reminder, err := req.NewReminder(clock.Now())
+		assert.NoError(t, err)
+		err = testReminders.CreateReminder(ctx, reminder)
+		require.NoError(t, err)
+	}()
+	wg.Wait()
+
+	assert.Equal(t, len(store.Items), 4)
+	key0 := "cat||e485d5de-de48-45ab-816e-6cc700d18ace||reminder0"
+	key1 := "cat||e485d5de-de48-45ab-816e-6cc700d18ace||reminder1"
+
+	assert.Contains(t, store.Items, key0)
+	assert.Contains(t, store.Items, key1)
+	val := store.Items[key0]
+	track := internal.ReminderTrack{}
+	err := track.UnmarshalJSON(val.Data)
+	assert.NoError(t, err)
+	assert.Equal(t, track.TraceState, ts)
+	assert.Equal(t, track.LastFiredTime, time.Time{})
+	assert.Equal(t, track.RepetitionLeft, -1)
+
+	time.Sleep(150 * time.Millisecond)
+	clock.Sleep(3 * time.Second)
+	time.Sleep(150 * time.Millisecond)
+
+	assert.Contains(t, store.Items, key0)
+	assert.Contains(t, store.Items, key1)
+	val = store.Items[key0]
+	err = track.UnmarshalJSON(val.Data)
+	assert.NoError(t, err)
+	assert.Equal(t, ts, track.TraceState)
+	assert.Equal(t, startOfTime.Add(3*time.Second), track.LastFiredTime)
+	assert.Equal(t, -1, track.RepetitionLeft)
 }
 
 func newTestRemindersWithMockAndActorMetadataPartition() *reminders {
@@ -1653,4 +1770,23 @@ func createReminder(t *testing.T, now time.Time, req internal.CreateReminderRequ
 	require.NoError(t, err)
 
 	return reminder
+}
+
+// Otel Fake Exporter implements an open telemetry span exporter that does nothing.
+type otelFakeExporter struct{}
+
+// newOtelFakeExporter returns an Open Telemetry Fake Span Exporter
+
+func newOtelFakeExporter() *otelFakeExporter {
+	return &otelFakeExporter{}
+}
+
+// ExportSpans implements the open telemetry span exporter interface.
+func (e *otelFakeExporter) ExportSpans(ctx context.Context, spans []sdktrace.ReadOnlySpan) error {
+	return nil
+}
+
+// Shutdown implements the open telemetry span exporter interface.
+func (e *otelFakeExporter) Shutdown(ctx context.Context) error {
+	return nil
 }

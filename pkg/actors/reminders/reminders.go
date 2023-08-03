@@ -156,12 +156,12 @@ func (r *reminders) CreateReminder(ctx context.Context, reminder *internal.Remin
 	if err != nil {
 		return fmt.Errorf("error storing reminder: %w", err)
 	}
-	err = r.startReminder(reminder, stop)
-	if err != nil {
-		return err
-	}
 	w3cString := diag.SpanContextToW3CString(span.SpanContext())
-	return r.updateReminderTrack(ctx, reminder.Key(), reminder.RepeatsLeft(), time.Time{}, nil, w3cString)
+	err = r.updateReminderTrack(ctx, reminder.Key(), reminder.RepeatsLeft(), time.Time{}, nil, w3cString)
+	if err != nil {
+		log.Errorf("Error updating reminder track for reminder %s: %v", reminder.Key(), err)
+	}
+	return r.startReminder(reminder, stop)
 }
 
 func (r *reminders) Close() error {
@@ -919,7 +919,7 @@ func (r *reminders) startReminder(reminder *internal.Reminder, stopChannel chan 
 			}
 
 			nextTimer.Reset(nextTick.Sub(r.clock.Now()))
-			if err != nil {
+			if err != nil && span != nil {
 				diag.UpdateSpanStatusFromHTTPStatus(span, http.StatusInternalServerError)
 			}
 			if span != nil {
