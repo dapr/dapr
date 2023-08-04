@@ -157,9 +157,11 @@ func (o *basic) Run(t *testing.T, ctx context.Context) {
 		require.NoError(c, err)
 		resp, err = http.DefaultClient.Do(req)
 		require.NoError(c, err)
+		t.Cleanup(func() {
+			require.NoError(t, resp.Body.Close())
+		})
 		body, err = io.ReadAll(resp.Body)
 		require.NoError(c, err)
-		require.NoError(c, resp.Body.Close())
 
 		var ce map[string]string
 		err = json.Unmarshal(body, &ce)
