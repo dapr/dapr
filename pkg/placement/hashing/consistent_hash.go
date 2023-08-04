@@ -30,7 +30,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	blake2b "github.com/minio/blake2b-simd"
+	"golang.org/x/crypto/blake2b"
 )
 
 var replicationFactor int
