@@ -58,14 +58,13 @@ type AppChannelConfig struct {
 
 // Manager is a wrapper around gRPC connection pooling.
 type Manager struct {
-	remoteConns       *RemoteConnectionPool
-	auth              security.Authenticator
-	mode              modes.DaprMode
-	channelConfig     *AppChannelConfig
-	localConn         *ConnectionPool
-	localConnCreateFn ConnCreatorFn
-	localConnLock     sync.RWMutex
-	appClientConn     grpc.ClientConnInterface
+	remoteConns   *RemoteConnectionPool
+	auth          security.Authenticator
+	mode          modes.DaprMode
+	channelConfig *AppChannelConfig
+	localConn     *ConnectionPool
+	localConnLock sync.RWMutex
+	appClientConn grpc.ClientConnInterface
 }
 
 // NewGRPCManager returns a new grpc manager.
