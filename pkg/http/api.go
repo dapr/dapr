@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/google/martian/log"
 	"github.com/mitchellh/mapstructure"
 	"github.com/valyala/fasthttp"
 	"go.opentelemetry.io/otel/trace"
@@ -67,7 +66,7 @@ type api struct {
 	universal             *universalapi.UniversalAPI
 	endpoints             []Endpoint
 	publicEndpoints       []Endpoint
-	directMessaging       messaging.DirectMessaging
+	directMessaging       invokev1.DirectMessaging
 	channels              *channels.Channels
 	pubsubAdapter         runtimePubsub.Adapter
 	sendToOutputBindingFn func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)

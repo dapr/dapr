@@ -43,7 +43,6 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/processor/secret"
 	"github.com/dapr/dapr/pkg/runtime/processor/state"
 	"github.com/dapr/dapr/pkg/runtime/processor/workflow"
-	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 )
 
@@ -149,15 +148,12 @@ func New(opts Options) *Processor {
 		ResourcesPath:  opts.Standalone.ResourcesPath,
 	})
 
-	outbox := runtimePubsub.NewOutbox(ps.Publish, opts.ComponentStore.GetPubSubComponent, opts.ComponentStore.GetStateStore, pubsub.ExtractCloudEventProperty, opts.Namespace)
-	ps.SetOutbox(outbox)
-
 	state := state.New(state.Options{
 		PlacementEnabled: opts.PlacementEnabled,
 		Registry:         opts.Registry.StateStores(),
 		ComponentStore:   opts.ComponentStore,
 		Meta:             opts.Meta,
-		Outbox:           outbox,
+		Outbox:           ps.Outbox(),
 	})
 
 	binding := binding.New(binding.Options{
