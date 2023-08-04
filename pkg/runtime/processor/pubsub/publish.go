@@ -259,7 +259,6 @@ func (p *pubsub) publishMessageGRPC(ctx context.Context, msg *subscribedMessage)
 	ctx = invokev1.WithCustomGRPCMetadata(ctx, msg.metadata)
 
 	conn, err := p.grpc.GetAppClient()
-	defer p.grpc.ReleaseAppClient(conn)
 	if err != nil {
 		return fmt.Errorf("error while getting app client: %w", err)
 	}
