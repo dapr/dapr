@@ -160,14 +160,13 @@ func TestHealthProbe(t *testing.T) {
 	// Non-2xx status code
 	mockServer.Error = errors.New("test failure")
 	success, err = c.HealthProbe(ctx)
-	assert.NoError(t, err)
+	assert.Error(t, err)
 	assert.False(t, success)
 
 	// Closed connection
-	// Should still return no error, but a failed probe
 	closeConnection(t, conn)
 	success, err = c.HealthProbe(ctx)
-	assert.NoError(t, err)
+	assert.Error(t, err)
 	assert.False(t, success)
 }
 
