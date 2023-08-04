@@ -161,9 +161,7 @@ func (g *Channel) HealthProbe(ctx context.Context) (bool, error) {
 	defer emptyPbPool.Put(out)
 	err := g.conn.Invoke(ctx, "/dapr.proto.runtime.v1.AppCallbackHealthCheck/HealthCheck", in, out)
 
-	// Errors here are network-level errors, so we are not returning them as errors
-	// Instead, we just return a failed probe
-	return err == nil, nil
+	return err == nil, err
 }
 
 // SetAppHealth sets the apphealth.AppHealth object.
