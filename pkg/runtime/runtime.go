@@ -570,6 +570,11 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status uint8) {
 		if err != nil {
 			log.Warnf("failed to read from bindings: %s ", err)
 		}
+
+		// Start subscribing to outbox topics
+		if err := a.processor.PubSub().Outbox().SubscribeToInternalTopics(ctx, a.runtimeConfig.id); err != nil {
+			log.Warnf("failed to subscribe to outbox topics: %s", err)
+		}
 	case apphealth.AppStatusUnhealthy:
 		// Stop topic subscriptions and input bindings
 		a.processor.PubSub().StopSubscriptions()

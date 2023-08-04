@@ -2715,6 +2715,7 @@ func TestExecuteStateTransaction(t *testing.T) {
 			CompStore:  compStore,
 			Resiliency: resiliency.New(nil),
 		},
+		pubsubAdapter: &daprt.MockPubSubAdapter{},
 	}
 	server, lis := startDaprAPIServer(fakeAPI, "")
 	defer server.Stop()
@@ -3267,6 +3268,7 @@ func TestStateAPIWithResiliency(t *testing.T) {
 			CompStore:  compStore,
 			Resiliency: res,
 		},
+		pubsubAdapter: &daprt.MockPubSubAdapter{},
 	}
 	server, lis := startDaprAPIServer(fakeAPI, "")
 	defer server.Stop()
