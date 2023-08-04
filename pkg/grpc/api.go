@@ -852,8 +852,8 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 		return &emptypb.Empty{}, err
 	}
 
-	operations := make([]state.TransactionalStateOperation, len(in.Operations))
-	for i, inputReq := range in.Operations {
+	operations := make([]state.TransactionalStateOperation, 0, len(in.Operations))
+	for _, inputReq := range in.Operations {
 		req := inputReq.Request
 
 		hasEtag, etag := extractEtag(req)
@@ -882,7 +882,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 				}
 			}
 
-			operations[i] = setReq
+			operations = append(operations, setReq)
 
 		case state.OperationDelete:
 			delReq := state.DeleteRequest{
@@ -900,7 +900,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 				}
 			}
 
-			operations[i] = delReq
+			operations = append(operations, delReq)
 
 		default:
 			err := status.Errorf(codes.Unimplemented, messages.ErrNotSupportedStateOperation, inputReq.OperationType)
@@ -934,6 +934,18 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 				operations[i] = req
 			}
 		}
+	}
+
+	outboxEnabled := a.pubsubAdapter.Outbox().Enabled(in.StoreName)
+	if outboxEnabled {
+		trs, err := a.pubsubAdapter.Outbox().PublishInternal(ctx, in.StoreName, operations, a.UniversalAPI.AppID)
+		if err != nil {
+			err = status.Errorf(codes.Internal, messages.ErrPublishOutbox, err.Error())
+			apiServerLogger.Debug(err)
+			return &emptypb.Empty{}, err
+		}
+
+		operations = append(operations, trs...)
 	}
 
 	start := time.Now()

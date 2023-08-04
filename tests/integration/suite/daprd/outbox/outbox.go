@@ -11,14 +11,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package daprd
+package outbox
 
 import (
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/multipleconfigs"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/outbox"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/pubsub"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/resources"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/secret"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/serviceinvocation"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/state"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/outbox/grpc"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/outbox/http"
 )

@@ -32,6 +32,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/grpc"
 	"github.com/dapr/dapr/pkg/modes"
+	"github.com/dapr/dapr/pkg/outbox"
 	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -98,6 +99,7 @@ type pubsub struct {
 	lock sync.RWMutex
 
 	topicCancels map[string]context.CancelFunc
+	outbox       outbox.Outbox
 }
 
 type subscribedMessage struct {
@@ -166,6 +168,14 @@ func (p *pubsub) Init(ctx context.Context, comp compapi.Component) error {
 	diag.DefaultMonitoring.ComponentInitialized(comp.Spec.Type)
 
 	return nil
+}
+
+func (p *pubsub) SetOutbox(outbox outbox.Outbox) {
+	p.outbox = outbox
+}
+
+func (p *pubsub) Outbox() outbox.Outbox {
+	return p.outbox
 }
 
 func (p *pubsub) SetAppChannel(appChannel channel.AppChannel) {
@@ -238,7 +248,7 @@ func matchRoutingRule(rules []*rtpubsub.Rule, data map[string]interface{}) (*rtp
 	return nil, nil
 }
 
-func extractCloudEventProperty(cloudEvent map[string]any, property string) string {
+func ExtractCloudEventProperty(cloudEvent map[string]any, property string) string {
 	if cloudEvent == nil {
 		return ""
 	}
@@ -254,11 +264,11 @@ func extractCloudEventProperty(cloudEvent map[string]any, property string) strin
 
 func extractCloudEvent(event map[string]interface{}) (runtimev1pb.TopicEventBulkRequestEntry_CloudEvent, error) { //nolint:nosnakecase
 	envelope := &runtimev1pb.TopicEventCERequest{
-		Id:              extractCloudEventProperty(event, contribpubsub.IDField),
-		Source:          extractCloudEventProperty(event, contribpubsub.SourceField),
-		DataContentType: extractCloudEventProperty(event, contribpubsub.DataContentTypeField),
-		Type:            extractCloudEventProperty(event, contribpubsub.TypeField),
-		SpecVersion:     extractCloudEventProperty(event, contribpubsub.SpecVersionField),
+		Id:              ExtractCloudEventProperty(event, contribpubsub.IDField),
+		Source:          ExtractCloudEventProperty(event, contribpubsub.SourceField),
+		DataContentType: ExtractCloudEventProperty(event, contribpubsub.DataContentTypeField),
+		Type:            ExtractCloudEventProperty(event, contribpubsub.TypeField),
+		SpecVersion:     ExtractCloudEventProperty(event, contribpubsub.SpecVersionField),
 	}
 
 	if data, ok := event[contribpubsub.DataField]; ok && data != nil {
