@@ -16,9 +16,11 @@ package grpc
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -36,13 +38,15 @@ func init() {
 
 type basic struct {
 	daprd *procdaprd.Daprd
+	lock  sync.Mutex
+	msg   []byte
 }
-
-var msg []byte
 
 func (o *basic) Setup(t *testing.T) []framework.Option {
 	onTopicEvent := func(ctx context.Context, in *runtimev1pb.TopicEventRequest) (*runtimev1pb.TopicEventResponse, error) {
-		msg = in.Data
+		o.lock.Lock()
+		defer o.lock.Unlock()
+		o.msg = in.Data
 		return &runtimev1pb.TopicEventResponse{
 			Status: runtimev1pb.TopicEventResponse_SUCCESS,
 		}, nil
@@ -113,7 +117,10 @@ func (o *basic) Run(t *testing.T, ctx context.Context) {
 		},
 	})
 	require.NoError(t, err)
-	time.Sleep(time.Second * 3)
 
-	require.Equal(t, "2", string(msg))
+	assert.Eventually(t, func() bool {
+		o.lock.Lock()
+		defer o.lock.Unlock()
+		return string(o.msg) == "2"
+	}, time.Second*5, time.Millisecond*100, "failed to receive message in time")
 }
