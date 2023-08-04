@@ -266,9 +266,7 @@ func TestErrorPublishedNonCloudEventGRPC(t *testing.T) {
 					return nil
 				},
 			}
-			ps.grpc.SetLocalConnCreateFn(func() (grpc.ClientConnInterface, error) {
-				return &mockClientConn, nil
-			})
+			ps.grpc.SetAppClientConn(&mockClientConn)
 
 			err := ps.publishMessageGRPC(context.Background(), testPubSubMessage)
 			if tc.ExpectError {
@@ -781,9 +779,6 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			require.NoError(t, err)
 			ps.appChannel = ch.AppChannel()
 			ps.grpc = grpc
-
-			// properly close the app channel created
-			defer ps.grpc.CloseAppClient()
 
 			// act
 			err = ps.publishMessageGRPC(context.Background(), tc.message)
