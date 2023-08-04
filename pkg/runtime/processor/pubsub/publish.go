@@ -185,11 +185,11 @@ func (p *pubsub) publishMessageGRPC(ctx context.Context, msg *subscribedMessage)
 	cloudEvent := msg.cloudEvent
 
 	envelope := &runtimev1.TopicEventRequest{
-		Id:              extractCloudEventProperty(cloudEvent, contribpubsub.IDField),
-		Source:          extractCloudEventProperty(cloudEvent, contribpubsub.SourceField),
-		DataContentType: extractCloudEventProperty(cloudEvent, contribpubsub.DataContentTypeField),
-		Type:            extractCloudEventProperty(cloudEvent, contribpubsub.TypeField),
-		SpecVersion:     extractCloudEventProperty(cloudEvent, contribpubsub.SpecVersionField),
+		Id:              ExtractCloudEventProperty(cloudEvent, contribpubsub.IDField),
+		Source:          ExtractCloudEventProperty(cloudEvent, contribpubsub.SourceField),
+		DataContentType: ExtractCloudEventProperty(cloudEvent, contribpubsub.DataContentTypeField),
+		Type:            ExtractCloudEventProperty(cloudEvent, contribpubsub.TypeField),
+		SpecVersion:     ExtractCloudEventProperty(cloudEvent, contribpubsub.SpecVersionField),
 		Topic:           msg.topic,
 		PubsubName:      msg.metadata[metadataKeyPubSub],
 		Path:            msg.path,
