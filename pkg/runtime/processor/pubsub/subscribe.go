@@ -148,7 +148,6 @@ func (p *pubsub) subscriptions(ctx context.Context) ([]rtpubsub.Subscription, er
 	} else {
 		var conn grpc.ClientConnInterface
 		conn, err = p.grpc.GetAppClient()
-		defer p.grpc.ReleaseAppClient(conn)
 		if err != nil {
 			return nil, fmt.Errorf("error while getting app client: %w", err)
 		}
