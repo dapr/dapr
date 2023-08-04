@@ -99,16 +99,17 @@ func TestMain(m *testing.M) {
 	// and will be cleaned up after all tests are finished automatically
 	testApps := []kube.AppDescription{
 		{
-			AppName:        appName,
-			DaprEnabled:    true,
-			ImageName:      "e2e-actorfeatures",
-			Replicas:       1,
-			IngressEnabled: true,
-			MetricsEnabled: true,
-			DaprCPULimit:   "2.0",
-			DaprCPURequest: "0.1",
-			AppCPULimit:    "2.0",
-			AppCPURequest:  "0.1",
+			AppName:             appName,
+			DaprEnabled:         true,
+			DebugLoggingEnabled: true,
+			ImageName:           "e2e-actorfeatures",
+			Replicas:            1,
+			IngressEnabled:      true,
+			Config:              "omithealthchecksconfig",
+			DaprCPULimit:        "2.0",
+			DaprCPURequest:      "0.1",
+			AppCPULimit:         "2.0",
+			AppCPURequest:       "0.1",
 			AppEnv: map[string]string{
 				"TEST_APP_ACTOR_REMINDERS_PARTITIONS": "0",
 				"TEST_APP_ACTOR_TYPE":                 actorName,

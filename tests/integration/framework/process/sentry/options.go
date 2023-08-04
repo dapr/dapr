@@ -14,7 +14,7 @@ limitations under the License.
 package sentry
 
 import (
-	"github.com/dapr/dapr/pkg/sentry/certs"
+	"github.com/dapr/dapr/pkg/sentry/server/ca"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 )
 
@@ -22,13 +22,11 @@ import (
 type options struct {
 	execOpts []exec.Option
 
-	ca          *certs.Credentials
-	rootPEM     []byte
-	certPEM     []byte
-	keyPEM      []byte
-	port        int
-	healthzPort int
-	metricsPort int
+	bundle        ca.Bundle
+	port          int
+	healthzPort   int
+	metricsPort   int
+	configuration string
 }
 
 // Option is a function that configures the process.
@@ -58,11 +56,14 @@ func WithHealthzPort(port int) Option {
 	}
 }
 
-func WithCA(ca *certs.Credentials, rootPEM, certPEM, keyPEM []byte) Option {
+func WithCABundle(bundle ca.Bundle) Option {
 	return func(o *options) {
-		o.ca = ca
-		o.rootPEM = rootPEM
-		o.certPEM = certPEM
-		o.keyPEM = keyPEM
+		o.bundle = bundle
+	}
+}
+
+func WithConfiguration(config string) Option {
+	return func(o *options) {
+		o.configuration = config
 	}
 }
