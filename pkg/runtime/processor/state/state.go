@@ -25,6 +25,7 @@ import (
 	compstate "github.com/dapr/dapr/pkg/components/state"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/encryption"
+	"github.com/dapr/dapr/pkg/outbox"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	"github.com/dapr/dapr/pkg/runtime/meta"
@@ -43,6 +44,7 @@ type Options struct {
 	ComponentStore   *compstore.ComponentStore
 	Meta             *meta.Meta
 	PlacementEnabled bool
+	Outbox           outbox.Outbox
 }
 
 type state struct {
@@ -53,6 +55,7 @@ type state struct {
 
 	actorStateStoreName *string
 	placementEnabled    bool
+	outbox              outbox.Outbox
 }
 
 func New(opts Options) *state {
@@ -61,6 +64,7 @@ func New(opts Options) *state {
 		compStore:        opts.ComponentStore,
 		meta:             opts.Meta,
 		placementEnabled: opts.PlacementEnabled,
+		outbox:           opts.Outbox,
 	}
 }
 
@@ -107,6 +111,8 @@ func (s *state) Init(ctx context.Context, comp compapi.Component) error {
 			wrapError := fmt.Errorf("failed to save lock keyprefix: %s", err.Error())
 			return rterrors.NewInit(rterrors.InitComponentFailure, fName, wrapError)
 		}
+
+		s.outbox.AddOrUpdateOutbox(comp)
 
 		// when placement address list is not empty, set specified actor store.
 		if s.placementEnabled {
