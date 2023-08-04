@@ -404,7 +404,7 @@ func atomicWrite(clock clock.Clock, dir string, data map[string][]byte) error {
 	}
 
 	if runtime.GOOS == "windows" {
-		if err := os.Remove(dir); err != nil {
+		if err := os.Remove(dir); err != nil && !os.IsNotExist(err) {
 			return err
 		}
 		if err := os.Symlink(newDir, dir); err != nil {
