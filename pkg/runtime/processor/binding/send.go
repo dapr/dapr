@@ -243,7 +243,6 @@ func (b *binding) sendBindingEventToApp(ctx context.Context, bindingName string,
 		}
 
 		conn, err := b.grpc.GetAppClient()
-		defer b.grpc.ReleaseAppClient(conn)
 		if err != nil {
 			return nil, fmt.Errorf("error while getting app client: %w", err)
 		}
@@ -394,7 +393,6 @@ func (b *binding) readFromBinding(readCtx context.Context, name string, binding 
 
 func (b *binding) getSubscribedBindingsGRPC(ctx context.Context) ([]string, error) {
 	conn, err := b.grpc.GetAppClient()
-	defer b.grpc.ReleaseAppClient(conn)
 	if err != nil {
 		return nil, fmt.Errorf("error while getting app client: %w", err)
 	}
