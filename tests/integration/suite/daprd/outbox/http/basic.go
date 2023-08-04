@@ -27,7 +27,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/components-contrib/state"
-
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
@@ -153,18 +152,20 @@ func (o *basic) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, resp.Body.Close())
 	assert.Empty(t, string(body))
 
-	time.Sleep(time.Second * 5)
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		req, err = http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%v/getValue", o.daprd.AppPort()), nil)
+		require.NoError(c, err)
+		resp, err = http.DefaultClient.Do(req)
+		require.NoError(c, err)
+		t.Cleanup(func() {
+			require.NoError(t, resp.Body.Close())
+		})
+		body, err = io.ReadAll(resp.Body)
+		require.NoError(c, err)
 
-	req, err = http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%v/getValue", o.daprd.AppPort()), nil)
-	require.NoError(t, err)
-	resp, err = http.DefaultClient.Do(req)
-	require.NoError(t, err)
-	body, err = io.ReadAll(resp.Body)
-	require.NoError(t, err)
-	require.NoError(t, resp.Body.Close())
-
-	var ce map[string]string
-	err = json.Unmarshal(body, &ce)
-	require.NoError(t, err)
-	require.Equal(t, "2", ce["data"])
+		var ce map[string]string
+		err = json.Unmarshal(body, &ce)
+		assert.NoError(c, err)
+		assert.Equal(c, "2", ce["data"])
+	}, time.Second*10, time.Millisecond*100)
 }
