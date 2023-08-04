@@ -78,7 +78,6 @@ type Options struct {
 	GRPC           *manager.Manager
 	Channels       *channels.Channels
 	OperatorClient operatorv1.OperatorClient
-	Outbox         outbox.Outbox
 }
 
 type pubsub struct {
@@ -114,7 +113,7 @@ type subscribedMessage struct {
 }
 
 func New(opts Options) *pubsub {
-	return &pubsub{
+	ps := &pubsub{
 		id:             opts.ID,
 		namespace:      opts.Namespace,
 		isHTTP:         opts.IsHTTP,
@@ -129,9 +128,11 @@ func New(opts Options) *pubsub {
 		grpc:           opts.GRPC,
 		channels:       opts.Channels,
 		operatorClient: opts.OperatorClient,
-		outbox:         opts.Outbox,
 		topicCancels:   make(map[string]context.CancelFunc),
 	}
+
+	ps.outbox = rtpubsub.NewOutbox(ps.Publish, opts.ComponentStore.GetPubSubComponent, opts.ComponentStore.GetStateStore, ExtractCloudEventProperty)
+	return ps
 }
 
 func (p *pubsub) Init(ctx context.Context, comp compapi.Component) error {
@@ -201,6 +202,10 @@ func (p *pubsub) Close(comp compapi.Component) error {
 	p.compStore.DeletePubSub(comp.Name)
 
 	return nil
+}
+
+func (p *pubsub) Outbox() outbox.Outbox {
+	return p.outbox
 }
 
 // findMatchingRoute selects the path based on routing rules. If there are

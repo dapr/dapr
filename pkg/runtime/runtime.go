@@ -486,7 +486,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	// Create and start internal and external gRPC servers
 	a.daprGRPCAPI = grpc.NewAPI(grpc.APIOpts{
 		UniversalAPI:          univAPI,
-		AppChannel:            a.channels.AppChannel(),
+		Channels:              a.channels,
 		PubsubAdapter:         a.processor.PubSub(),
 		DirectMessaging:       a.directMessaging,
 		SendToOutputBindingFn: a.processor.Binding().SendToOutputBinding,

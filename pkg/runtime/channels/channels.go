@@ -259,7 +259,6 @@ func (c *Channels) initEndpointChannels() (map[string]channel.HTTPEndpointAppCha
 
 	channels := make(map[string]channel.HTTPEndpointAppChannel, len(endpoints))
 	if len(endpoints) > 0 {
-
 		pipeline, err := c.buildHTTPPipeline(c.appHTTPPipelineSpec)
 		if err != nil {
 			return nil, err
