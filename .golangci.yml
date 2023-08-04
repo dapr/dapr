@@ -147,6 +147,8 @@ linters-settings:
       - "github.com/lestrrat-go/jwx/jwt": "must use github.com/lestrrat-go/jwx/v2"
       - "github.com/labstack/gommon/log": "must use github.com/dapr/kit/logger"
       - "github.com/gobuffalo/logger": "must use github.com/dapr/kit/logger"
+      - "k8s.io/utils/pointer": "must use github.com/dapr/kit/ptr"
+      - "k8s.io/utils/ptr": "must use github.com/dapr/kit/ptr"
   misspell:
     # Correct spellings using locale preferences for US or UK.
     # Default is to use a neutral variety of English.
