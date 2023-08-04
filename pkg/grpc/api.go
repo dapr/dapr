@@ -1406,8 +1406,10 @@ func (a *api) SubscribeConfiguration(request *runtimev1pb.SubscribeConfiguration
 	defer handler.ready()
 
 	// Subscribe
+	subscribeCtx, subscribeCancel := context.WithCancel(stream.Context())
+	defer subscribeCancel()
 	slices.Sort(request.Keys)
-	subscribeID, err := a.subscribeConfiguration(stream.Context(), request, handler, store)
+	subscribeID, err := a.subscribeConfiguration(subscribeCtx, request, handler, store)
 	if err != nil {
 		// Error has already been logged
 		return err
@@ -1434,6 +1436,9 @@ func (a *api) SubscribeConfiguration(request *runtimev1pb.SubscribeConfiguration
 	case <-stream.Context().Done():
 	case <-stop:
 	}
+
+	// Cancel the context here to immediately stop sending messages while we unsubscribe
+	subscribeCancel()
 
 	// Unsubscribe
 	// We must use a background context here because stream.Context is likely canceled already
