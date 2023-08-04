@@ -50,6 +50,7 @@ const (
 	ErrPubsubUnmarshal          = "error when unmarshaling the request for topic %s pubsub %s: %s"
 	ErrPubsubMarshal            = "error marshaling events to bytes for topic %s pubsub %s: %s"
 	ErrPubsubGetSubscriptions   = "unable to get app subscriptions %s"
+	ErrPublishOutbox            = "error while publishing outbox message: %s"
 
 	// AppChannel.
 	ErrChannelNotFound       = "app channel is not initialized"
