@@ -14,10 +14,12 @@ limitations under the License.
 package options
 
 import (
-	"flag"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/spf13/pflag"
 
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/config/protocol"
@@ -26,7 +28,6 @@ import (
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/runtime"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 )
 
 type Options struct {
@@ -40,7 +41,7 @@ type Options struct {
 	EnableMTLS                   bool
 	AppSSL                       bool
 	DaprHTTPMaxRequestSize       int
-	ResourcesPath                stringSliceFlag
+	ResourcesPath                []string
 	AppProtocol                  string
 	EnableAPILogging             *bool
 	RuntimeVersion               bool
@@ -60,7 +61,7 @@ type Options struct {
 	AppHealthThreshold           int
 	EnableAppHealthCheck         bool
 	Mode                         string
-	Config                       stringSliceFlag
+	Config                       []string
 	UnixDomainSocket             string
 	DaprHTTPReadBufferSize       int
 	DisableBuiltinK8sSecretStore bool
@@ -70,88 +71,107 @@ type Options struct {
 	Metrics                      *metrics.Options
 }
 
-func New(args []string) *Options {
+func New(origArgs []string) *Options {
 	opts := Options{
 		EnableAPILogging: new(bool),
 	}
 
-	flag.StringVar(&opts.Mode, "mode", string(modes.StandaloneMode), "Runtime mode for Dapr")
-	flag.StringVar(&opts.DaprHTTPPort, "dapr-http-port", strconv.Itoa(runtime.DefaultDaprHTTPPort), "HTTP port for Dapr API to listen on")
-	flag.StringVar(&opts.DaprAPIListenAddresses, "dapr-listen-addresses", runtime.DefaultAPIListenAddress, "One or more addresses for the Dapr API to listen on, CSV limited")
-	flag.StringVar(&opts.DaprPublicPort, "dapr-public-port", "", "Public port for Dapr Health and Metadata to listen on")
-	flag.StringVar(&opts.DaprAPIGRPCPort, "dapr-grpc-port", strconv.Itoa(runtime.DefaultDaprAPIGRPCPort), "gRPC port for the Dapr API to listen on")
-	flag.StringVar(&opts.DaprInternalGRPCPort, "dapr-internal-grpc-port", "", "gRPC port for the Dapr Internal API to listen on")
-	flag.StringVar(&opts.AppPort, "app-port", "", "The port the application is listening on")
-	flag.StringVar(&opts.ProfilePort, "profile-port", strconv.Itoa(runtime.DefaultProfilePort), "The port for the profile server")
-	flag.StringVar(&opts.AppProtocol, "app-protocol", string(protocol.HTTPProtocol), "Protocol for the application: grpc, grpcs, http, https, h2c")
-	flag.StringVar(&opts.ComponentsPath, "components-path", "", "Alias for --resources-path [Deprecated, use --resources-path]")
-	flag.Var(&opts.ResourcesPath, "resources-path", "Path for resources directory. If not specified, no resources will be loaded. Can be passed multiple times")
-	flag.Var(&opts.Config, "config", "Path to config file, or name of a configuration object. In standalone mode, can be passed multiple times")
-	flag.StringVar(&opts.AppID, "app-id", "", "A unique ID for Dapr. Used for Service Discovery and state")
-	flag.StringVar(&opts.ControlPlaneAddress, "control-plane-address", "", "Address for a Dapr control plane")
-	flag.StringVar(&opts.SentryAddress, "sentry-address", "", "Address for the Sentry CA service")
-	flag.StringVar(&opts.PlacementServiceHostAddr, "placement-host-address", "", "Addresses for Dapr Actor Placement servers")
-	flag.StringVar(&opts.AllowedOrigins, "allowed-origins", cors.DefaultAllowedOrigins, "Allowed HTTP origins")
-	flag.BoolVar(&opts.EnableProfiling, "enable-profiling", false, "Enable profiling")
-	flag.BoolVar(&opts.RuntimeVersion, "version", false, "Prints the runtime version")
-	flag.BoolVar(&opts.BuildInfo, "build-info", false, "Prints the build info")
-	flag.BoolVar(&opts.WaitCommand, "wait", false, "wait for Dapr outbound ready")
-	flag.IntVar(&opts.AppMaxConcurrency, "app-max-concurrency", -1, "Controls the concurrency level when forwarding requests to user code; set to -1 for no limits")
-	flag.BoolVar(&opts.EnableMTLS, "enable-mtls", false, "Enables automatic mTLS for daprd to daprd communication channels")
-	flag.BoolVar(&opts.AppSSL, "app-ssl", false, "Sets the URI scheme of the app to https and attempts a TLS connection [Deprecated, use '--app-protocol https|grpcs']")
-	flag.IntVar(&opts.DaprHTTPMaxRequestSize, "dapr-http-max-request-size", runtime.DefaultMaxRequestBodySize, "Increasing max size of request body in MB to handle uploading of big files")
-	flag.StringVar(&opts.UnixDomainSocket, "unix-domain-socket", "", "Path to a unix domain socket dir mount. If specified, Dapr API servers will use Unix Domain Sockets")
-	flag.IntVar(&opts.DaprHTTPReadBufferSize, "dapr-http-read-buffer-size", runtime.DefaultReadBufferSize, "Increasing max size of read buffer in KB to handle sending multi-KB headers")
-	flag.IntVar(&opts.DaprGracefulShutdownSeconds, "dapr-graceful-shutdown-seconds", int(runtime.DefaultGracefulShutdownDuration/time.Second), "Graceful shutdown time in seconds")
-	flag.BoolVar(opts.EnableAPILogging, "enable-api-logging", false, "Enable API logging for API calls")
-	flag.BoolVar(&opts.DisableBuiltinK8sSecretStore, "disable-builtin-k8s-secret-store", false, "Disable the built-in Kubernetes Secret Store")
-	flag.BoolVar(&opts.EnableAppHealthCheck, "enable-app-health-check", false, "Enable health checks for the application using the protocol defined with app-protocol")
-	flag.StringVar(&opts.AppHealthCheckPath, "app-health-check-path", runtime.DefaultAppHealthCheckPath, "Path used for health checks; HTTP only")
-	flag.IntVar(&opts.AppHealthProbeInterval, "app-health-probe-interval", int(config.AppHealthConfigDefaultProbeInterval/time.Second), "Interval to probe for the health of the app in seconds")
-	flag.IntVar(&opts.AppHealthProbeTimeout, "app-health-probe-timeout", int(config.AppHealthConfigDefaultProbeTimeout/time.Millisecond), "Timeout for app health probes in milliseconds")
-	flag.IntVar(&opts.AppHealthThreshold, "app-health-threshold", int(config.AppHealthConfigDefaultThreshold), "Number of consecutive failures for the app to be considered unhealthy")
-	flag.StringVar(&opts.AppChannelAddress, "app-channel-address", runtime.DefaultChannelAddress, "The network address the application listens on")
-
-	opts.Logger = logger.DefaultOptions()
-	opts.Logger.AttachCmdFlags(flag.StringVar, flag.BoolVar)
-
-	opts.Metrics = metrics.DefaultMetricOptions()
-	opts.Metrics.AttachCmdFlags(flag.StringVar, flag.BoolVar)
-
-	// Ignore errors; CommandLine is set for ExitOnError.
-	flag.CommandLine.Parse(args)
-
-	// flag.Parse() will always set a value to "enableAPILogging", and it will be false whether it's explicitly set to false or unset
-	// For this flag, we need the third state (unset) so we need to do a bit more work here to check if it's unset, then mark "enableAPILogging" as nil
-	// It's not the prettiest approach, but…
-	if !*opts.EnableAPILogging {
-		opts.EnableAPILogging = nil
-		for _, v := range args {
-			if strings.HasPrefix(v, "--enable-api-logging") || strings.HasPrefix(v, "-enable-api-logging") {
-				// This means that enable-api-logging was explicitly set to false
-				opts.EnableAPILogging = ptr.Of(false)
-				break
-			}
+	// We need to use pflag to be able to better handle errors such as unknown flags
+	// pflag is a drop-in replacement for the standard library's "flag" package, however…
+	// There's one key difference: with the stdlib's "flag" package, there are no short-hand options so options can be defined with a single slash (such as "daprd -mode").
+	// With pflag, single slashes are reserved for shorthands.
+	// So, we are doing this thing where we iterate through all args and double-up the slash if it's single
+	// This works *as long as* we don't start using shorthand flags (which haven't been in use so far).
+	args := make([]string, len(origArgs))
+	for i, a := range origArgs {
+		if len(a) > 2 && a[0] == '-' && a[1] != '-' {
+			args[i] = "-" + a
+		} else {
+			args[i] = a
 		}
 	}
 
-	return &opts
-}
+	// Create a flag set that allows unknown flags
+	fs := pflag.NewFlagSet("daprd", pflag.ExitOnError)
+	fs.SortFlags = true
+	fs.ParseErrorsWhitelist.UnknownFlags = true
 
-// Flag type. Allows passing a flag multiple times to get a slice of strings.
-// It implements the flag.Value interface.
-type stringSliceFlag []string
+	fs.StringVar(&opts.Mode, "mode", string(modes.StandaloneMode), "Runtime mode for Dapr")
+	fs.StringVar(&opts.DaprHTTPPort, "dapr-http-port", strconv.Itoa(runtime.DefaultDaprHTTPPort), "HTTP port for Dapr API to listen on")
+	fs.StringVar(&opts.DaprAPIListenAddresses, "dapr-listen-addresses", runtime.DefaultAPIListenAddress, "One or more addresses for the Dapr API to listen on, CSV limited")
+	fs.StringVar(&opts.DaprPublicPort, "dapr-public-port", "", "Public port for Dapr Health and Metadata to listen on")
+	fs.StringVar(&opts.DaprAPIGRPCPort, "dapr-grpc-port", strconv.Itoa(runtime.DefaultDaprAPIGRPCPort), "gRPC port for the Dapr API to listen on")
+	fs.StringVar(&opts.DaprInternalGRPCPort, "dapr-internal-grpc-port", "", "gRPC port for the Dapr Internal API to listen on")
+	fs.StringVar(&opts.AppPort, "app-port", "", "The port the application is listening on")
+	fs.StringVar(&opts.ProfilePort, "profile-port", strconv.Itoa(runtime.DefaultProfilePort), "The port for the profile server")
+	fs.StringVar(&opts.AppProtocol, "app-protocol", string(protocol.HTTPProtocol), "Protocol for the application: grpc, grpcs, http, https, h2c")
+	fs.StringVar(&opts.ComponentsPath, "components-path", "", "Alias for --resources-path")
+	fs.StringSliceVar(&opts.ResourcesPath, "resources-path", nil, "Path for resources directory. If not specified, no resources will be loaded. Can be passed multiple times")
+	fs.StringSliceVar(&opts.Config, "config", nil, "Path to config file, or name of a configuration object. In standalone mode, can be passed multiple times")
+	fs.StringVar(&opts.AppID, "app-id", "", "A unique ID for Dapr. Used for Service Discovery and state")
+	fs.StringVar(&opts.ControlPlaneAddress, "control-plane-address", "", "Address for a Dapr control plane")
+	fs.StringVar(&opts.SentryAddress, "sentry-address", "", "Address for the Sentry CA service")
+	fs.StringVar(&opts.PlacementServiceHostAddr, "placement-host-address", "", "Addresses for Dapr Actor Placement servers")
+	fs.StringVar(&opts.AllowedOrigins, "allowed-origins", cors.DefaultAllowedOrigins, "Allowed HTTP origins")
+	fs.BoolVar(&opts.EnableProfiling, "enable-profiling", false, "Enable profiling")
+	fs.BoolVar(&opts.RuntimeVersion, "version", false, "Prints the runtime version")
+	fs.BoolVar(&opts.BuildInfo, "build-info", false, "Prints the build info")
+	fs.BoolVar(&opts.WaitCommand, "wait", false, "wait for Dapr outbound ready")
+	fs.IntVar(&opts.AppMaxConcurrency, "app-max-concurrency", -1, "Controls the concurrency level when forwarding requests to user code; set to -1 for no limits")
+	fs.BoolVar(&opts.EnableMTLS, "enable-mtls", false, "Enables automatic mTLS for daprd to daprd communication channels")
+	fs.BoolVar(&opts.AppSSL, "app-ssl", false, "Sets the URI scheme of the app to https and attempts a TLS connection")
+	fs.IntVar(&opts.DaprHTTPMaxRequestSize, "dapr-http-max-request-size", runtime.DefaultMaxRequestBodySize, "Increasing max size of request body in MB to handle uploading of big files")
+	fs.StringVar(&opts.UnixDomainSocket, "unix-domain-socket", "", "Path to a unix domain socket dir mount. If specified, Dapr API servers will use Unix Domain Sockets")
+	fs.IntVar(&opts.DaprHTTPReadBufferSize, "dapr-http-read-buffer-size", runtime.DefaultReadBufferSize, "Increasing max size of read buffer in KB to handle sending multi-KB headers")
+	fs.IntVar(&opts.DaprGracefulShutdownSeconds, "dapr-graceful-shutdown-seconds", int(runtime.DefaultGracefulShutdownDuration/time.Second), "Graceful shutdown time in seconds")
+	fs.BoolVar(opts.EnableAPILogging, "enable-api-logging", false, "Enable API logging for API calls")
+	fs.BoolVar(&opts.DisableBuiltinK8sSecretStore, "disable-builtin-k8s-secret-store", false, "Disable the built-in Kubernetes Secret Store")
+	fs.BoolVar(&opts.EnableAppHealthCheck, "enable-app-health-check", false, "Enable health checks for the application using the protocol defined with app-protocol")
+	fs.StringVar(&opts.AppHealthCheckPath, "app-health-check-path", runtime.DefaultAppHealthCheckPath, "Path used for health checks; HTTP only")
+	fs.IntVar(&opts.AppHealthProbeInterval, "app-health-probe-interval", int(config.AppHealthConfigDefaultProbeInterval/time.Second), "Interval to probe for the health of the app in seconds")
+	fs.IntVar(&opts.AppHealthProbeTimeout, "app-health-probe-timeout", int(config.AppHealthConfigDefaultProbeTimeout/time.Millisecond), "Timeout for app health probes in milliseconds")
+	fs.IntVar(&opts.AppHealthThreshold, "app-health-threshold", int(config.AppHealthConfigDefaultThreshold), "Number of consecutive failures for the app to be considered unhealthy")
+	fs.StringVar(&opts.AppChannelAddress, "app-channel-address", runtime.DefaultChannelAddress, "The network address the application listens on")
 
-// String formats the flag value.
-func (f stringSliceFlag) String() string {
-	return strings.Join(f, ",")
-}
+	// Add flags for logger and metrics
+	opts.Logger = logger.DefaultOptions()
+	opts.Logger.AttachCmdFlags(fs.StringVar, fs.BoolVar)
 
-// Set the flag value.
-func (f *stringSliceFlag) Set(value string) error {
-	if value == "" {
-		return nil
+	opts.Metrics = metrics.DefaultMetricOptions()
+	opts.Metrics.AttachCmdFlags(fs.StringVar, fs.BoolVar)
+
+	// Mark deprecated flags as hidden
+	fs.MarkDeprecated("app-ssl", "use '--app-protocol https|grpcs'")
+	fs.MarkDeprecated("components-path", "use --resources-path")
+
+	// Look for unknown flags
+	for _, a := range args {
+		// Skip things that don't begin with "--", which aren't flags
+		if len(a) < 3 || a[0:2] != "--" {
+			continue
+		}
+
+		end := strings.IndexRune(a, '=')
+		if end == -1 {
+			end = len(a)
+		}
+
+		// Lookup the flag
+		// If this returns nil, it means that the flag was not defined
+		f := fs.Lookup(a[2:end])
+		if f == nil {
+			fmt.Printf("WARN: flag --%s does not exist and will be ignored\n", a[2:end])
+		}
 	}
-	*f = append(*f, value)
-	return nil
+
+	// Ignore errors; flagset is set for ExitOnError (but unknown flags won't cause errors)
+	_ = fs.Parse(args)
+
+	// flag.Parse() will always set a value to "enableAPILogging", and it will be false whether it's explicitly set to false or unset
+	// For this flag, we need the third state (unset) so we need to do a bit more work here to check if it's unset, then mark "enableAPILogging" as nil
+	if !*opts.EnableAPILogging && !fs.Changed("enable-api-logging") {
+		opts.EnableAPILogging = nil
+	}
+
+	return &opts
 }
