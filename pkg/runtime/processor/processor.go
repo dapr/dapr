@@ -28,6 +28,7 @@ import (
 	configmodes "github.com/dapr/dapr/pkg/config/modes"
 	"github.com/dapr/dapr/pkg/grpc"
 	"github.com/dapr/dapr/pkg/modes"
+	"github.com/dapr/dapr/pkg/outbox"
 	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -42,6 +43,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/processor/secret"
 	"github.com/dapr/dapr/pkg/runtime/processor/state"
 	"github.com/dapr/dapr/pkg/runtime/processor/workflow"
+	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 )
 
@@ -102,16 +104,15 @@ type PubsubManager interface {
 	Publish(context.Context, *contribpubsub.PublishRequest) error
 	BulkPublish(context.Context, *contribpubsub.BulkPublishRequest) (contribpubsub.BulkPublishResponse, error)
 	SetAppChannel(channel.AppChannel)
-
 	StartSubscriptions(context.Context) error
 	StopSubscriptions()
+	Outbox() outbox.Outbox
 	manager
 }
 
 type BindingManager interface {
 	SendToOutputBinding(context.Context, string, *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	SetAppChannel(channel.AppChannel)
-
 	StartReadingFromBindings(context.Context) error
 	StopReadingFromBindings()
 	manager
@@ -129,7 +130,7 @@ type Processor struct {
 }
 
 func New(opts Options) *Processor {
-	pubsub := pubsub.New(pubsub.Options{
+	ps := pubsub.New(pubsub.Options{
 		ID:             opts.ID,
 		Namespace:      opts.Namespace,
 		Mode:           opts.Mode,
@@ -145,11 +146,15 @@ func New(opts Options) *Processor {
 		ResourcesPath:  opts.Standalone.ResourcesPath,
 	})
 
+	outbox := runtimePubsub.NewOutbox(ps.Publish, opts.ComponentStore.GetPubSubComponent, opts.ComponentStore.GetStateStore, pubsub.ExtractCloudEventProperty)
+	ps.SetOutbox(outbox)
+
 	state := state.New(state.Options{
 		PlacementEnabled: opts.PlacementEnabled,
 		Registry:         opts.Registry.StateStores(),
 		ComponentStore:   opts.ComponentStore,
 		Meta:             opts.Meta,
+		Outbox:           outbox,
 	})
 
 	binding := binding.New(binding.Options{
@@ -165,7 +170,7 @@ func New(opts Options) *Processor {
 	return &Processor{
 		compStore: opts.ComponentStore,
 		state:     state,
-		pubsub:    pubsub,
+		pubsub:    ps,
 		binding:   binding,
 		managers: map[components.Category]manager{
 			components.CategoryBindings: binding,
@@ -184,7 +189,7 @@ func New(opts Options) *Processor {
 				ComponentStore: opts.ComponentStore,
 				Meta:           opts.Meta,
 			}),
-			components.CategoryPubSub: pubsub,
+			components.CategoryPubSub: ps,
 			components.CategorySecretStore: secret.New(secret.Options{
 				Registry:       opts.Registry.SecretStores(),
 				ComponentStore: opts.ComponentStore,
