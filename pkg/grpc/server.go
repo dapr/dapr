@@ -26,7 +26,7 @@ import (
 	"time"
 
 	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
-	grpcGo "google.golang.org/grpc"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
 
@@ -64,7 +64,7 @@ type server struct {
 	tracingSpec        config.TracingSpec
 	metricSpec         config.MetricSpec
 	authenticator      rtSecurity.Authenticator
-	servers            []*grpcGo.Server
+	servers            []*grpc.Server
 	renewMutex         sync.Mutex
 	signedCert         *rtSecurity.SignedCertificate
 	tlsCert            tls.Certificate
@@ -176,9 +176,9 @@ func (s *server) StartNonBlocking() error {
 		}
 
 		s.wg.Add(1)
-		go func(server *grpcGo.Server, l net.Listener) {
+		go func(server *grpc.Server, l net.Listener) {
 			defer s.wg.Done()
-			if err := server.Serve(l); err != nil {
+			if err := server.Serve(l); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
 				s.logger.Fatalf("gRPC serve error: %v", err)
 			}
 		}(server, listener)
@@ -225,9 +225,9 @@ func (s *server) generateWorkloadCert() error {
 	return nil
 }
 
-func (s *server) getMiddlewareOptions() []grpcGo.ServerOption {
-	intr := make([]grpcGo.UnaryServerInterceptor, 0, 6)
-	intrStream := make([]grpcGo.StreamServerInterceptor, 0, 5)
+func (s *server) getMiddlewareOptions() []grpc.ServerOption {
+	intr := make([]grpc.UnaryServerInterceptor, 0, 6)
+	intrStream := make([]grpc.StreamServerInterceptor, 0, 5)
 
 	intr = append(intr, metadata.SetMetadataInContextUnary)
 
@@ -270,17 +270,17 @@ func (s *server) getMiddlewareOptions() []grpcGo.ServerOption {
 		intrStream = append(intrStream, stream)
 	}
 
-	return []grpcGo.ServerOption{
-		grpcGo.UnaryInterceptor(grpcMiddleware.ChainUnaryServer(intr...)),
-		grpcGo.StreamInterceptor(grpcMiddleware.ChainStreamServer(intrStream...)),
-		grpcGo.InTapHandle(metadata.SetMetadataInTapHandle),
+	return []grpc.ServerOption{
+		grpc.UnaryInterceptor(grpcMiddleware.ChainUnaryServer(intr...)),
+		grpc.StreamInterceptor(grpcMiddleware.ChainStreamServer(intrStream...)),
+		grpc.InTapHandle(metadata.SetMetadataInTapHandle),
 	}
 }
 
-func (s *server) getGRPCServer() (*grpcGo.Server, error) {
+func (s *server) getGRPCServer() (*grpc.Server, error) {
 	opts := s.getMiddlewareOptions()
 	if s.maxConnectionAge != nil {
-		opts = append(opts, grpcGo.KeepaliveParams(keepalive.ServerParameters{MaxConnectionAge: *s.maxConnectionAge}))
+		opts = append(opts, grpc.KeepaliveParams(keepalive.ServerParameters{MaxConnectionAge: *s.maxConnectionAge}))
 	}
 
 	if s.authenticator != nil {
@@ -305,7 +305,7 @@ func (s *server) getGRPCServer() (*grpcGo.Server, error) {
 
 		ta := credentials.NewTLS(&tlsConfig)
 
-		opts = append(opts, grpcGo.Creds(ta))
+		opts = append(opts, grpc.Creds(ta))
 		s.wg.Add(1)
 		go func() {
 			defer s.wg.Done()
@@ -314,16 +314,16 @@ func (s *server) getGRPCServer() (*grpcGo.Server, error) {
 	}
 
 	opts = append(opts,
-		grpcGo.MaxRecvMsgSize(s.config.MaxRequestBodySizeMB<<20),
-		grpcGo.MaxSendMsgSize(s.config.MaxRequestBodySizeMB<<20),
-		grpcGo.MaxHeaderListSize(uint32(s.config.ReadBufferSizeKB<<10)),
+		grpc.MaxRecvMsgSize(s.config.MaxRequestBodySizeMB<<20),
+		grpc.MaxSendMsgSize(s.config.MaxRequestBodySizeMB<<20),
+		grpc.MaxHeaderListSize(uint32(s.config.ReadBufferSizeKB<<10)),
 	)
 
 	if s.proxy != nil {
-		opts = append(opts, grpcGo.UnknownServiceHandler(s.proxy.Handler()))
+		opts = append(opts, grpc.UnknownServiceHandler(s.proxy.Handler()))
 	}
 
-	return grpcGo.NewServer(opts...), nil
+	return grpc.NewServer(opts...), nil
 }
 
 func (s *server) startWorkloadCertRotation() {
@@ -364,17 +364,17 @@ func shouldRenewCert(certExpiryDate time.Time, certDuration time.Duration) bool 
 	return percentagePassed >= renewWhenPercentagePassed
 }
 
-func (s *server) getGRPCAPILoggingMiddlewares() (grpcGo.UnaryServerInterceptor, grpcGo.StreamServerInterceptor) {
+func (s *server) getGRPCAPILoggingMiddlewares() (grpc.UnaryServerInterceptor, grpc.StreamServerInterceptor) {
 	if s.infoLogger == nil {
 		return nil, nil
 	}
-	return func(ctx context.Context, req any, info *grpcGo.UnaryServerInfo, handler grpcGo.UnaryHandler) (any, error) {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 			if info != nil {
 				s.printAPILog(ctx, info.FullMethod)
 			}
 			return handler(ctx, req)
 		},
-		func(srv any, stream grpcGo.ServerStream, info *grpcGo.StreamServerInfo, handler grpcGo.StreamHandler) error {
+		func(srv any, stream grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 			if info != nil {
 				s.printAPILog(stream.Context(), info.FullMethod)
 			}

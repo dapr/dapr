@@ -14,7 +14,7 @@ import (
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	grpcGo "google.golang.org/grpc"
+	"google.golang.org/grpc"
 	grpcMetadata "google.golang.org/grpc/metadata"
 
 	"github.com/dapr/dapr/pkg/config"
@@ -167,7 +167,7 @@ func TestGrpcAPILoggingMiddlewares(t *testing.T) {
 		}
 		ctx := grpcMetadata.NewIncomingContext(context.Background(), md)
 
-		info := &grpcGo.UnaryServerInfo{
+		info := &grpc.UnaryServerInfo{
 			FullMethod: "/dapr.proto.runtime.v1.Dapr/GetState",
 		}
 		return func(t *testing.T) {
