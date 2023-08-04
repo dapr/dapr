@@ -27,6 +27,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -402,8 +403,20 @@ func atomicWrite(clock clock.Clock, dir string, data map[string][]byte) error {
 		return err
 	}
 
-	if err := os.Rename(dir+"-new", dir); err != nil {
-		return err
+	if runtime.GOOS == "windows" {
+		if err := os.Remove(dir); err != nil {
+			return err
+		}
+		if err := os.Symlink(newDir, dir); err != nil {
+			return err
+		}
+		if err := os.Remove(dir + "-new"); err != nil {
+			return err
+		}
+	} else {
+		if err := os.Rename(dir+"-new", dir); err != nil {
+			return err
+		}
 	}
 
 	return nil
