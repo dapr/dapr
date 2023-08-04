@@ -195,7 +195,6 @@ func (h *AppHealth) doProbe(parentCtx context.Context) {
 	defer cancel()
 
 	successful, err := h.probeFn(ctx)
-	// In case of errors, we do not record the failed probe because this is generally an internal error
 	if err != nil {
 		h.setResult(parentCtx, false)
 		log.Errorf("App health probe could not complete with error: %v", err)
