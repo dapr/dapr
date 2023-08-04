@@ -49,7 +49,7 @@ func TestStandaloneGlobalConfig(t *testing.T) {
 	})
 	assert.EqualValues(t, "testapp", opts.AppID)
 	assert.EqualValues(t, string(modes.StandaloneMode), opts.Mode)
-	assert.Equal(t, []string{"../../../pkg/config/testdata/metric_disabled.yaml"}, []string(opts.Config))
+	assert.Equal(t, []string{"../../../pkg/config/testdata/metric_disabled.yaml"}, opts.Config)
 }
 
 func TestEnableAPILogging(t *testing.T) {

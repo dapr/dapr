@@ -160,6 +160,7 @@ func New(origArgs []string) *Options {
 		// If this returns nil, it means that the flag was not defined
 		f := fs.Lookup(a[2:end])
 		if f == nil {
+			//nolint:forbidigo
 			fmt.Printf("WARN: flag --%s does not exist and will be ignored\n", a[2:end])
 		}
 	}
