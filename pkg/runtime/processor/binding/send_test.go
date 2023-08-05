@@ -206,10 +206,6 @@ func TestGetSubscribedBindingsGRPC(t *testing.T) {
 				Bindings: tc.responseFromApp,
 			})
 			defer grpcServer.Stop()
-
-			// properly close the app channel created
-			defer b.grpc.CloseAppClient()
-
 			// act
 			resp, _ := b.getSubscribedBindingsGRPC(context.Background())
 
