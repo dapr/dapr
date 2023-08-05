@@ -195,10 +195,10 @@ func (s *server) Close() error {
 	s.wg.Add(len(s.servers))
 	for _, server := range s.servers {
 		// This calls `Close()` on the underlying listener.
-		go func() {
+		go func(server *grpc.Server) {
 			defer s.wg.Done()
 			server.GracefulStop()
-		}()
+		}(server)
 	}
 
 	if s.api != nil {

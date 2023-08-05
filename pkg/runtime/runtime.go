@@ -28,7 +28,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -125,7 +124,6 @@ type DaprRuntime struct {
 	daprHTTPAPI             http.API
 	daprGRPCAPI             grpc.API
 	operatorClient          operatorv1pb.OperatorClient
-	apiClosers              []io.Closer
 	componentAuthorizers    []ComponentAuthorizer
 	httpEndpointAuthorizers []HTTPEndpointAuthorizer
 	appHealth               *apphealth.AppHealth
@@ -134,6 +132,7 @@ type DaprRuntime struct {
 	compStore               *compstore.ComponentStore
 	processor               *processor.Processor
 	meta                    *meta.Meta
+	runnerCloser            *concurrency.RunnerCloserManager
 
 	pendingHTTPEndpoints       chan httpEndpointV1alpha1.HTTPEndpoint
 	pendingComponents          chan componentsV1alpha1.Component
@@ -147,12 +146,7 @@ type DaprRuntime struct {
 
 	workflowEngine *wfengine.WorkflowEngine
 
-	running         atomic.Bool
-	closing         atomic.Bool
-	stopped         chan struct{}
-	closeCh         chan struct{}
-	wg              sync.WaitGroup
-	fatalShutdownFn func()
+	wg sync.WaitGroup
 }
 
 type componentPreprocessRes struct {
@@ -185,8 +179,6 @@ func newDaprRuntime(ctx context.Context,
 	wfe.ConfigureGrpcExecutor()
 
 	rt := &DaprRuntime{
-		closeCh:                    make(chan struct{}),
-		stopped:                    make(chan struct{}),
 		runtimeConfig:              runtimeConfig,
 		globalConfig:               globalConfig,
 		accessControlList:          accessControlList,
@@ -217,9 +209,6 @@ func newDaprRuntime(ctx context.Context,
 			OperatorClient:   operatorClient,
 			GRPC:             grpc,
 		}),
-		fatalShutdownFn: func() {
-			log.Fatal("Graceful shutdown timeout exceeded")
-		},
 	}
 
 	rt.componentAuthorizers = []ComponentAuthorizer{rt.namespaceComponentAuthorizer}
@@ -230,149 +219,79 @@ func newDaprRuntime(ctx context.Context,
 
 	rt.httpEndpointAuthorizers = []HTTPEndpointAuthorizer{rt.namespaceHTTPEndpointAuthorizer}
 
-	return rt, nil
-}
-
-// Run performs initialization of the runtime with the runtime and global configurations.
-func (a *DaprRuntime) Run(ctx context.Context) error {
-	if !a.running.CompareAndSwap(false, true) {
-		return errors.New("dapr runtime has already been started")
+	var gracePeriod *time.Duration
+	if duration := runtimeConfig.gracefulShutdownDuration; duration > 0 {
+		gracePeriod = &duration
 	}
 
-	defer close(a.stopped)
-
-	runtimeCh := make(chan struct{})
-	return concurrency.NewRunnerManager(
-		a.runtimeConfig.metricsExporter.Run,
-		a.processComponents,
-		a.processHTTPEndpoints,
+	rt.runnerCloser = concurrency.NewRunnerCloserManager(gracePeriod,
+		rt.runtimeConfig.metricsExporter.Run,
+		rt.processComponents,
+		rt.processHTTPEndpoints,
 		func(ctx context.Context) error {
-			defer close(runtimeCh)
+			defer func() {
+				close(rt.pendingComponents)
+				close(rt.pendingHTTPEndpoints)
+			}()
 
 			start := time.Now()
-			log.Infof("%s mode configured", a.runtimeConfig.mode)
-			log.Infof("app id: %s", a.runtimeConfig.id)
+			log.Infof("%s mode configured", rt.runtimeConfig.mode)
+			log.Infof("app id: %s", rt.runtimeConfig.id)
 
-			if err := a.initRuntime(ctx); err != nil {
+			if err := rt.initRuntime(ctx); err != nil {
 				return err
 			}
 
 			d := time.Since(start).Milliseconds()
 			log.Infof("dapr initialized. Status: Running. Init Elapsed %vms", d)
 
-			if a.daprHTTPAPI != nil {
+			if rt.daprHTTPAPI != nil {
 				// Setting the status only when runtime is initialized.
-				a.daprHTTPAPI.MarkStatusAsReady()
+				rt.daprHTTPAPI.MarkStatusAsReady()
 			}
 
 			<-ctx.Done()
+
 			return nil
 		},
-		func(ctx context.Context) error {
-			// Wait for shutdown signal to cancel the runner context. This means that
-			// is `ShutdownWithWait()` is called, the runtime context will be closed
-			// and daprd with gracefully shutdown.
-			<-a.closeCh
-			return nil
-		},
-		func(ctx context.Context) error {
-			// Wait for main runtime to return then shutdown, wait for all goroutines
-			// to exit and mark the runtime as stopped. We wait for `runtimeCh` to
-			// close to ensure that the runtime has returned from `initRuntime`,
-			// whether that was successful or not.
-			<-runtimeCh
-			err := a.shutdown()
-			a.wg.Wait()
+	)
+
+	if err := rt.runnerCloser.AddCloser(
+		func() error {
+			log.Info("Dapr is shutting down")
+			comps := rt.compStore.ListComponents()
+			errCh := make(chan error)
+			for _, comp := range comps {
+				go func(comp componentsV1alpha1.Component) {
+					log.Infof("Shutting down component %s", comp.LogName())
+					errCh <- rt.processor.Close(comp)
+				}(comp)
+			}
+
+			errs := make([]error, len(comps)+1)
+			for i := range comps {
+				errs[i] = <-errCh
+			}
+
+			rt.wg.Wait()
 			log.Info("Dapr runtime stopped")
-			return err
-		},
-	).Run(ctx)
-}
-
-func (a *DaprRuntime) shutdown() error {
-	log.Info("Dapr is shutting down")
-	a.close()
-
-	// Use background context since the incoming context would be canceled.
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	if duration := a.runtimeConfig.gracefulShutdownDuration; duration > 0 {
-		log.Debugf("Graceful shutdown timeout: %s", duration)
-		a.wg.Add(1)
-		go func() {
-			defer a.wg.Done()
-			select {
-			case <-time.After(duration):
-				a.fatalShutdownFn()
-			case <-ctx.Done():
-				return
-			}
-		}()
-	}
-
-	close(a.pendingComponents)
-	close(a.pendingHTTPEndpoints)
-
-	closers := []concurrency.Runner{
-		func(ctx context.Context) error {
-			log.Info("Stopping input bindings")
-			a.processor.Binding().StopReadingFromBindings()
-			return nil
-		},
-		func(ctx context.Context) error {
-			if a.appHealth != nil {
-				log.Info("Closing App Health")
-				a.appHealth.Close()
-			}
-			return nil
-		},
-		func(ctx context.Context) error {
-			log.Info("Stopping Dapr APIs")
-			errs := make([]error, len(a.apiClosers))
-			var wg sync.WaitGroup
-			wg.Add(len(a.apiClosers))
-			for i, closer := range a.apiClosers {
-				go func(i int, c io.Closer) {
-					defer wg.Done()
-					if err := c.Close(); err != nil {
-						errs[i] = fmt.Errorf("error closing API: %w", err)
-					}
-				}(i, closer)
-			}
-			wg.Wait()
+			errs[len(comps)] = rt.cleanSockets()
 			return errors.Join(errs...)
 		},
-		func(ctx context.Context) error {
-			log.Info("Shutting down name resolver")
-			if closer, ok := a.nameResolver.(io.Closer); ok && closer != nil {
-				if err := closer.Close(); err != nil {
-					err = fmt.Errorf("error closing name resolver: %w", err)
-					log.Warn(err)
-					return err
-				}
-			}
-			return nil
-		},
-		a.stopWorkflow,
-		a.stopActor,
-		a.stopTrace,
-		func(ctx context.Context) error {
-			a.grpc.Close()
-			return nil
-		},
+		rt.stopWorkflow,
+		rt.stopActor,
+		rt.stopTrace,
+		rt.grpc,
+	); err != nil {
+		return nil, err
 	}
 
-	for _, comp := range a.compStore.ListComponents() {
-		closers = append(closers, func(comp componentsV1alpha1.Component) func(context.Context) error {
-			return func(context.Context) error {
-				log.Infof("Shutting down component %s", comp.LogName())
-				return a.processor.Close(comp)
-			}
-		}(comp))
-	}
+	return rt, nil
+}
 
-	return errors.Join(concurrency.NewRunnerManager(closers...).Run(ctx), a.cleanSockets())
+// Run performs initialization of the runtime with the runtime and global configurations.
+func (a *DaprRuntime) Run(ctx context.Context) error {
+	return a.runnerCloser.Run(ctx)
 }
 
 func getNamespace() string {
@@ -533,8 +452,32 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	a.initProxy()
 
 	// Create and start the external gRPC server
-	univAPI := a.getUniversalAPI()
-	a.daprGRPCAPI = a.getGRPCAPI(univAPI)
+	univAPI := &universalapi.UniversalAPI{
+		AppID:                       a.runtimeConfig.id,
+		Logger:                      logger.NewLogger("dapr.api"),
+		CompStore:                   a.compStore,
+		Resiliency:                  a.resiliency,
+		Actors:                      a.actor,
+		GetComponentsCapabilitiesFn: a.getComponentsCapabilitesMap,
+		ShutdownFn:                  a.ShutdownWithWait,
+		AppConnectionConfig:         a.runtimeConfig.appConnectionConfig,
+		GlobalConfig:                a.globalConfig,
+	}
+
+	// Create and start internal and external gRPC servers
+	a.daprGRPCAPI = grpc.NewAPI(grpc.APIOpts{
+		UniversalAPI:          univAPI,
+		AppChannel:            a.channels.AppChannel(),
+		PubsubAdapter:         a.processor.PubSub(),
+		DirectMessaging:       a.directMessaging,
+		SendToOutputBindingFn: a.processor.Binding().SendToOutputBinding,
+		TracingSpec:           a.globalConfig.GetTracingSpec(),
+		AccessControlList:     a.accessControlList,
+	})
+
+	if err = a.runnerCloser.AddCloser(a.daprGRPCAPI); err != nil {
+		return err
+	}
 
 	err = a.startGRPCAPIServer(a.daprGRPCAPI, a.runtimeConfig.apiGRPCPort)
 	if err != nil {
@@ -593,6 +536,9 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		a.appHealth = apphealth.New(*a.runtimeConfig.appConnectionConfig.HealthCheck, func(ctx context.Context) (bool, error) {
 			return a.channels.AppChannel().HealthProbe(ctx)
 		})
+		if err := a.runnerCloser.AddCloser(a.appHealth); err != nil {
+			return err
+		}
 		a.appHealth.OnHealthChange(a.appHealthChanged)
 		a.appHealth.StartProbes(ctx)
 
@@ -1074,7 +1020,9 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 	if err := server.StartNonBlocking(); err != nil {
 		return err
 	}
-	a.apiClosers = append(a.apiClosers, server)
+	if err := a.runnerCloser.AddCloser(server); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -1086,7 +1034,9 @@ func (a *DaprRuntime) startGRPCInternalServer(api grpc.API, port int) error {
 	if err := server.StartNonBlocking(); err != nil {
 		return err
 	}
-	a.apiClosers = append(a.apiClosers, server)
+	if err := a.runnerCloser.AddCloser(server); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -1097,7 +1047,9 @@ func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int) error {
 	if err := server.StartNonBlocking(); err != nil {
 		return err
 	}
-	a.apiClosers = append(a.apiClosers, server)
+	if err := a.runnerCloser.AddCloser(server); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -1121,32 +1073,6 @@ func (a *DaprRuntime) getNewServerConfig(apiListenAddresses []string, port int) 
 		ReadBufferSizeKB:     a.runtimeConfig.readBufferSize,
 		EnableAPILogging:     *a.runtimeConfig.enableAPILogging,
 	}
-}
-
-func (a *DaprRuntime) getUniversalAPI() *universalapi.UniversalAPI {
-	return &universalapi.UniversalAPI{
-		AppID:                       a.runtimeConfig.id,
-		Logger:                      logger.NewLogger("dapr.api"),
-		CompStore:                   a.compStore,
-		Resiliency:                  a.resiliency,
-		Actors:                      a.actor,
-		GetComponentsCapabilitiesFn: a.getComponentsCapabilitesMap,
-		ShutdownFn:                  a.ShutdownWithWait,
-		AppConnectionConfig:         a.runtimeConfig.appConnectionConfig,
-		GlobalConfig:                a.globalConfig,
-	}
-}
-
-func (a *DaprRuntime) getGRPCAPI(univAPI *universalapi.UniversalAPI) grpc.API {
-	return grpc.NewAPI(grpc.APIOpts{
-		UniversalAPI:          univAPI,
-		AppChannel:            a.channels.AppChannel(),
-		PubsubAdapter:         a.processor.PubSub(),
-		DirectMessaging:       a.directMessaging,
-		SendToOutputBindingFn: a.processor.Binding().SendToOutputBinding,
-		TracingSpec:           a.globalConfig.GetTracingSpec(),
-		AccessControlList:     a.accessControlList,
-	})
 }
 
 func (a *DaprRuntime) initNameResolution() error {
@@ -1201,6 +1127,11 @@ func (a *DaprRuntime) initNameResolution() error {
 	}
 
 	a.nameResolver = resolver
+	if nrCloser, ok := resolver.(io.Closer); ok {
+		if err := a.runnerCloser.AddCloser(nrCloser); err != nil {
+			return err
+		}
+	}
 
 	log.Infof("Initialized name resolution to %s", resolverName)
 	return nil
@@ -1482,10 +1413,10 @@ func (a *DaprRuntime) loadHTTPEndpoints(ctx context.Context) error {
 	return nil
 }
 
-func (a *DaprRuntime) stopActor(_ context.Context) error {
+func (a *DaprRuntime) stopActor() error {
 	if a.actor != nil {
 		log.Info("Shutting down actor")
-		return a.actor.Stop()
+		return a.actor.Close()
 	}
 	return nil
 }
@@ -1493,25 +1424,18 @@ func (a *DaprRuntime) stopActor(_ context.Context) error {
 func (a *DaprRuntime) stopWorkflow(ctx context.Context) error {
 	if a.workflowEngine != nil {
 		log.Info("Shutting down workflow engine")
-		return a.workflowEngine.Stop(ctx)
+		return a.workflowEngine.Close(ctx)
 	}
 	return nil
 }
 
 // ShutdownWithWait will gracefully stop runtime and wait outstanding operations.
 func (a *DaprRuntime) ShutdownWithWait() {
-	a.close()
-	a.WaitUntilShutdown()
-}
-
-func (a *DaprRuntime) close() {
-	if a.closing.CompareAndSwap(false, true) {
-		close(a.closeCh)
-	}
+	a.runnerCloser.Close()
 }
 
 func (a *DaprRuntime) WaitUntilShutdown() {
-	<-a.stopped
+	a.runnerCloser.WaitUntilShutdown()
 }
 
 func (a *DaprRuntime) cleanSockets() error {

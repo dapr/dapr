@@ -38,7 +38,7 @@ const cryptoFirstChunkTimeout = 5 * time.Second
 func (a *api) EncryptAlpha1(stream runtimev1pb.Dapr_EncryptAlpha1Server) (err error) { //nolint:nosnakecase
 	// Get the first message from the caller containing the options
 	reqProto := &runtimev1pb.EncryptRequest{}
-	err = cryptoGetFirstChunk(stream, reqProto)
+	err = a.cryptoGetFirstChunk(stream, reqProto)
 	if err != nil {
 		// This is already an APIError object.
 		a.Logger.Debug(err)
@@ -93,7 +93,7 @@ func (a *api) EncryptAlpha1(stream runtimev1pb.Dapr_EncryptAlpha1Server) (err er
 func (a *api) DecryptAlpha1(stream runtimev1pb.Dapr_DecryptAlpha1Server) (err error) { //nolint:nosnakecase
 	// Get the first message from the caller containing the options
 	reqProto := &runtimev1pb.DecryptRequest{}
-	err = cryptoGetFirstChunk(stream, reqProto)
+	err = a.cryptoGetFirstChunk(stream, reqProto)
 	if err != nil {
 		// This is already an APIError object.
 		a.Logger.Debug(err)
@@ -133,9 +133,23 @@ func (a *api) cryptoProcessStream(stream grpc.ServerStream, reqProto runtimev1pb
 	// Create a pipe to send the data to encrypt
 	inReader, inWriter := io.Pipe()
 
-	// Process the data coming from the stream
-	ctx := stream.Context()
+	ctx, cancel := context.WithCancel(stream.Context())
+	defer cancel()
+
+	a.wg.Add(1)
 	go func() {
+		defer a.wg.Done()
+		select {
+		case <-ctx.Done():
+		case <-a.closeCh:
+			cancel()
+		}
+	}()
+
+	// Process the data coming from the stream
+	a.wg.Add(1)
+	go func() {
+		defer a.wg.Done()
 		var (
 			readSeq   uint64
 			expectSeq uint64
@@ -268,16 +282,22 @@ func (a *api) cryptoProcessStream(stream grpc.ServerStream, reqProto runtimev1pb
 	return nil
 }
 
-func cryptoGetFirstChunk(stream grpc.ServerStream, reqProto any) error {
+func (a *api) cryptoGetFirstChunk(stream grpc.ServerStream, reqProto any) error {
 	// Wait for the first message from the caller containing the options
 	// We put a timeout of 5 seconds on receiving the first message
-	firstMsgCh := make(chan error, 1)
-	go func() {
-		firstMsgCh <- stream.RecvMsg(reqProto)
-	}()
 
 	firstChunkCtx, cancel := context.WithTimeout(stream.Context(), cryptoFirstChunkTimeout)
 	defer cancel()
+
+	firstMsgCh := make(chan error, 1)
+	a.wg.Add(1)
+	go func() {
+		defer a.wg.Done()
+		select {
+		case firstMsgCh <- stream.RecvMsg(reqProto):
+		case <-firstChunkCtx.Done():
+		}
+	}()
 
 	select {
 	case <-firstChunkCtx.Done():

@@ -189,8 +189,8 @@ func (_m *MockActors) Init(_ context.Context) error {
 	return r0
 }
 
-// Stop provides a mock function with given fields:
-func (_m *MockActors) Stop() error {
+// Close provides a mock function with given fields:
+func (_m *MockActors) Close() error {
 	_m.Called()
 	return nil
 }
@@ -279,7 +279,7 @@ func (f *FailingActors) Init(_ context.Context) error {
 	return nil
 }
 
-func (f *FailingActors) Stop() error {
+func (f *FailingActors) Close() error {
 	return nil
 }
 

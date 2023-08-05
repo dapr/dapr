@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"strconv"
@@ -76,9 +77,9 @@ var (
 //
 //nolint:interfacebloat
 type Actors interface {
+	io.Closer
 	Call(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error)
 	Init(context.Context) error
-	Stop() error
 	GetState(ctx context.Context, req *GetStateRequest) (*StateResponse, error)
 	TransactionalStateOperation(ctx context.Context, req *TransactionalRequest) error
 	GetReminder(ctx context.Context, req *GetReminderRequest) (*internal.Reminder, error)
@@ -969,7 +970,7 @@ func isInternalActor(actorType string) bool {
 }
 
 // Stop closes all network connections and resources used in actor runtime.
-func (a *actorsRuntime) Stop() error {
+func (a *actorsRuntime) Close() error {
 	defer a.wg.Wait()
 
 	if a.closed.CompareAndSwap(false, true) {
@@ -978,6 +979,7 @@ func (a *actorsRuntime) Stop() error {
 			return a.placement.Close()
 		}
 	}
+
 	return nil
 }
 

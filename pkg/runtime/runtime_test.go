@@ -117,7 +117,8 @@ Iklq0JnMgJU7nS+VpVvlgBN8
 func TestNewRuntime(t *testing.T) {
 	// act
 	r, err := newDaprRuntime(context.Background(), &internalConfig{
-		registry: registry.New(registry.NewOptions()),
+		metricsExporter: metrics.NewExporter(log, metrics.DefaultMetricNamespace),
+		registry:        registry.New(registry.NewOptions()),
 	}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 
 	// assert
@@ -1648,6 +1649,7 @@ func TestInitSecretStoresInKubernetesMode(t *testing.T) {
 
 func assertBuiltInSecretStore(t *testing.T, rt *DaprRuntime) {
 	wg := sync.WaitGroup{}
+	wg.Add(1)
 	go func() {
 		for comp := range rt.pendingComponents {
 			err := rt.processComponentAndDependents(context.Background(), comp)
@@ -1657,10 +1659,9 @@ func assertBuiltInSecretStore(t *testing.T, rt *DaprRuntime) {
 			}
 		}
 	}()
-	wg.Add(1)
 	rt.appendBuiltinSecretStore(context.Background())
 	wg.Wait()
-	assert.NoError(t, rt.shutdown())
+	assert.NoError(t, rt.runnerCloser.Close())
 }
 
 func NewTestDaprRuntime(mode modes.DaprMode) (*DaprRuntime, error) {
@@ -2102,7 +2103,8 @@ func TestInitActors(t *testing.T) {
 
 	t.Run("placement enable = false", func(t *testing.T) {
 		r, err := newDaprRuntime(context.Background(), &internalConfig{
-			registry: registry.New(registry.NewOptions()),
+			metricsExporter: metrics.NewExporter(log, metrics.DefaultMetricNamespace),
+			registry:        registry.New(registry.NewOptions()),
 		}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		require.NoError(t, err)
 		defer stopRuntime(t, r)
@@ -2114,7 +2116,8 @@ func TestInitActors(t *testing.T) {
 
 	t.Run("the state stores can still be initialized normally", func(t *testing.T) {
 		r, err := newDaprRuntime(context.Background(), &internalConfig{
-			registry: registry.New(registry.NewOptions()),
+			metricsExporter: metrics.NewExporter(log, metrics.DefaultMetricNamespace),
+			registry:        registry.New(registry.NewOptions()),
 		}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		require.NoError(t, err)
 		defer stopRuntime(t, r)
@@ -2127,7 +2130,8 @@ func TestInitActors(t *testing.T) {
 
 	t.Run("the actor store can not be initialized normally", func(t *testing.T) {
 		r, err := newDaprRuntime(context.Background(), &internalConfig{
-			registry: registry.New(registry.NewOptions()),
+			metricsExporter: metrics.NewExporter(log, metrics.DefaultMetricNamespace),
+			registry:        registry.New(registry.NewOptions()),
 		}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		require.NoError(t, err)
 		defer stopRuntime(t, r)
@@ -2250,20 +2254,7 @@ func (s *mockStateStore) Close() error {
 	return s.closeErr
 }
 
-type mockNameResolver struct {
-	nameresolution.Resolver
-	closeErr error
-}
-
-func (n *mockNameResolver) Init(metadata nameresolution.Metadata) error {
-	return nil
-}
-
-func (n *mockNameResolver) Close() error {
-	return n.closeErr
-}
-
-func TestStopWithErrors(t *testing.T) {
+func TestCloseWithErrors(t *testing.T) {
 	rt, err := NewTestDaprRuntime(modes.StandaloneMode)
 	require.NoError(t, err)
 
@@ -2363,19 +2354,29 @@ func TestStopWithErrors(t *testing.T) {
 		},
 	}
 
-	require.NoError(t, rt.processor.Init(context.Background(), mockOutputBindingComponent))
-	require.NoError(t, rt.processor.Init(context.Background(), mockPubSubComponent))
-	require.NoError(t, rt.processor.Init(context.Background(), mockStateComponent))
-	require.NoError(t, rt.processor.Init(context.Background(), mockSecretsComponent))
-	rt.nameResolver = &mockNameResolver{closeErr: testErr}
+	errCh := make(chan error)
+	go func() {
+		errCh <- rt.Run(context.Background())
+	}()
 
-	err = rt.shutdown()
+	rt.addPendingComponent(context.Background(), mockOutputBindingComponent)
+	rt.addPendingComponent(context.Background(), mockPubSubComponent)
+	rt.addPendingComponent(context.Background(), mockStateComponent)
+	rt.addPendingComponent(context.Background(), mockSecretsComponent)
+
+	err = rt.runnerCloser.Close()
 	require.Error(t, err)
-	assert.Len(t, strings.Split(err.Error(), "\n"), 5)
+	assert.Len(t, strings.Split(err.Error(), "\n"), 4)
+	select {
+	case rErr := <-errCh:
+		assert.Equal(t, err, rErr)
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for runtime to stop")
+	}
 }
 
 func stopRuntime(t *testing.T, rt *DaprRuntime) {
-	assert.NoError(t, rt.shutdown())
+	assert.NoError(t, rt.runnerCloser.Close())
 }
 
 func TestComponentsCallback(t *testing.T) {
@@ -2579,12 +2580,6 @@ spec:
 		}
 
 		select {
-		case <-rt.stopped:
-		case <-time.After(5 * time.Second):
-			t.Error("timed out waiting for runtime to be marked as stopped")
-		}
-
-		select {
 		case err := <-errCh:
 			assert.NoError(t, err)
 		case <-time.After(5 * time.Second):
@@ -2639,8 +2634,6 @@ spec:
 		select {
 		case <-errCh:
 			t.Fatal("runtime returned stopped before secret Close() returned")
-		case <-rt.closeCh:
-			t.Fatal("close channels closed before secret Close() returned")
 		default:
 		}
 
@@ -2666,7 +2659,7 @@ spec:
 		}
 
 		select {
-		case <-rt.stopped:
+		case <-shutdownCh:
 		case <-time.After(5 * time.Second):
 			t.Error("timed out waiting for runtime to be marked as stopped")
 		}
@@ -2676,7 +2669,9 @@ spec:
 		rt, err := NewTestDaprRuntime(modes.StandaloneMode)
 		require.NoError(t, err)
 
+		secretInited := make(chan struct{})
 		m := NewMockKubernetesStoreWithInitCallback(func(ctx context.Context) error {
+			close(secretInited)
 			return errors.New("this is an error")
 		})
 
@@ -2702,7 +2697,7 @@ metadata:
 spec:
   type: secretstores.kubernetesMock
   version: v1
-	ignoreErrors: true
+  ignoreErrors: true
 `), 0o600))
 
 		// Use a background context since this is not closed by the test.
@@ -2711,6 +2706,12 @@ spec:
 		go func() {
 			errCh <- rt.Run(ctx)
 		}()
+
+		select {
+		case <-secretInited:
+		case <-time.After(3 * time.Second):
+			t.Fatal("timed out waiting for secret store to be inited")
+		}
 
 		shutdownCh := make(chan struct{})
 		go func() {
@@ -2815,9 +2816,9 @@ spec:
 		rt.runtimeConfig.gracefulShutdownDuration = time.Millisecond * 10
 
 		fatalShutdownCalled := make(chan struct{})
-		rt.fatalShutdownFn = func() {
+		rt.runnerCloser.WithFatalShutdown(func() {
 			close(fatalShutdownCalled)
-		}
+		})
 
 		rt.runtimeConfig.registry.SecretStores().RegisterComponent(
 			func(_ logger.Logger) secretstores.SecretStore {
