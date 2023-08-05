@@ -64,7 +64,7 @@ func (c *Config) GetRemindersPartitionCountForType(actorType string) int {
 
 type hostedActors struct {
 	actors map[string]struct{}
-	lock   sync.Mutex
+	lock   sync.RWMutex
 }
 
 // NewHostedActors creates a new hostedActors from a slice of actor types.
@@ -88,15 +88,15 @@ func (ha *hostedActors) AddActorType(actorType string) {
 
 // IsActorTypeHosted returns true if the actor type is hosted.
 func (ha *hostedActors) IsActorTypeHosted(actorType string) bool {
-	ha.lock.Lock()
-	defer ha.lock.Unlock()
+	ha.lock.RLock()
+	defer ha.lock.RUnlock()
 	_, ok := ha.actors[actorType]
 	return ok
 }
 
 // ListActorTypes returns a slice of hosted actor types (in indeterminate order).
 func (ha *hostedActors) ListActorTypes() []string {
-	ha.lock.Lock()
-	defer ha.lock.Unlock()
+	ha.lock.RLock()
+	defer ha.lock.RUnlock()
 	return maps.Keys(ha.actors)
 }
