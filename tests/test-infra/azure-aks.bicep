@@ -43,7 +43,7 @@ param diagStorageResourceId string = ''
 var osDiskSizeGB = 0
 
 // Version of Kubernetes
-var kubernetesVersion = '1.25.5'
+var kubernetesVersion = '1.26'
 
 resource containerRegistry 'Microsoft.ContainerRegistry/registries@2019-05-01' = {
   name: '${namePrefix}acr'
@@ -82,7 +82,7 @@ var networkProfileLinux = {
   networkPlugin: 'kubenet'
 }
 
-resource aks 'Microsoft.ContainerService/managedClusters@2021-07-01' = {
+resource aks 'Microsoft.ContainerService/managedClusters@2023-05-01' = {
   location: location
   name: '${namePrefix}-aks'
   properties: {
@@ -184,8 +184,8 @@ resource aks 'Microsoft.ContainerService/managedClusters@2021-07-01' = {
   }
   tags: {}
   sku: {
-    name: 'Basic'
-    tier: 'Paid'
+    name: 'Base'
+    tier: 'Standard'
   }
   identity: {
     type: 'SystemAssigned'
