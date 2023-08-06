@@ -99,7 +99,7 @@ func main() {
 	if ok {
 		ival, err := strconv.Atoi(val)
 		if err != nil {
-			log.Printf("warning: error parsing TEST_NUM_MESSAGES: %s, falling back to: %d", err, numMessages)
+			log.Printf("WARNING: error parsing TEST_NUM_MESSAGES: %s, falling back to: %d", err, numMessages)
 		} else {
 			numMessages = ival
 		}
@@ -114,7 +114,7 @@ func main() {
 	http.HandleFunc("/"+route+"-bulk", bulkMessageHandler)
 	http.HandleFunc("/"+route, messageHandler)
 	http.HandleFunc("/test", testHandler)
-	log.Fatal(http.ListenAndServe(":3000", nil))
+	log.Fatal(http.ListenAndServe(":3000", nil)) //nolint:gosec
 }
 
 func readPubsubEnvVar() error {
@@ -122,15 +122,15 @@ func readPubsubEnvVar() error {
 	topic = os.Getenv("PERF_PUBSUB_HTTP_TOPIC_NAME")
 	route = os.Getenv("PERF_PUBSUB_HTTP_ROUTE_NAME")
 	if !validateEnvVar("PERF_PUBSUB_HTTP_COMPONENT_NAME", pubSubName) {
-		return errors.New("Invalid PERF_PUBSUB_HTTP_COMPONENT_NAME")
+		return errors.New("invalid PERF_PUBSUB_HTTP_COMPONENT_NAME")
 	}
 
 	if !validateEnvVar("PERF_PUBSUB_HTTP_TOPIC_NAME", topic) {
-		return errors.New("Invalid PERF_PUBSUB_HTTP_TOPIC_NAME")
+		return errors.New("invalid PERF_PUBSUB_HTTP_TOPIC_NAME")
 	}
 
 	if !validateEnvVar("PERF_PUBSUB_HTTP_ROUTE_NAME", route) {
-		return errors.New("Invalid PERF_PUBSUB_HTTP_ROUTE_NAME")
+		return errors.New("invalid PERF_PUBSUB_HTTP_ROUTE_NAME")
 	}
 
 	return nil

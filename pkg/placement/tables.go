@@ -18,10 +18,10 @@ type PlacementTables struct {
 	TableVersion uint64     `json:"tableVersion,omitempty"`
 }
 type HostInfo struct {
-	Name      string   `json:"name,omitempty"`
-	AppID     string   `json:"appId,omitempty"`
-	Entities  []string `json:"entities,omitempty"`
-	UpdatedAt int64    `json:"updatedAt,omitempty"`
+	Name       string   `json:"name,omitempty"`
+	AppID      string   `json:"appId,omitempty"`
+	ActorTypes []string `json:"actorTypes,omitempty"`
+	UpdatedAt  int64    `json:"updatedAt,omitempty"`
 }
 
 // GetPlacementTables returns the current placement host infos.
@@ -35,10 +35,10 @@ func (p *Service) GetPlacementTables() (*PlacementTables, error) {
 	// the key of the member map is the host name, so we can just ignore it.
 	for _, v := range m {
 		members = append(members, HostInfo{
-			Name:      v.Name,
-			AppID:     v.AppID,
-			Entities:  v.Entities,
-			UpdatedAt: v.UpdatedAt,
+			Name:       v.Name,
+			AppID:      v.AppID,
+			ActorTypes: v.Entities,
+			UpdatedAt:  v.UpdatedAt,
 		})
 	}
 	response.HostList = members

@@ -51,6 +51,17 @@ func (c *ComponentStore) GetPubSub(name string) (PubsubItem, bool) {
 	return pubsub, ok
 }
 
+func (c *ComponentStore) GetPubSubComponent(name string) (pubsub.PubSub, bool) {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+	pubsub, ok := c.pubSubs[name]
+	if !ok {
+		return nil, false
+	}
+
+	return pubsub.Component, ok
+}
+
 func (c *ComponentStore) ListPubSubs() map[string]PubsubItem {
 	c.lock.RLock()
 	defer c.lock.RUnlock()

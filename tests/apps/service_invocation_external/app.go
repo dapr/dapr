@@ -11,17 +11,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-//nolint:forbidigo
 package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
-	"strconv"
 
 	"github.com/gorilla/mux"
 
@@ -99,15 +96,10 @@ type appResponse struct {
 	Message string `json:"message,omitempty"`
 }
 
-func init() {
-	p := os.Getenv("PORT")
-	if p != "" && p != "0" {
-		appPort, _ = strconv.Atoi(p)
-	}
-}
-
 func main() {
-	log.Printf("service_invocation_external - listening on http://localhost:%d", appPort)
+	log.Print("Service_invocation_external started")
+	log.Printf("HTTP Listening on http://localhost:%d ", appPort)
+	log.Printf("HTTPS Listening on https://localhost:%d ", securedAppPort)
 
 	go func() {
 		os.Setenv(tlsCertEnvKey, "/tmp/testdata/certs/tls.crt")
@@ -192,13 +184,13 @@ func logAndSetResponse(w http.ResponseWriter, statusCode int, message string) {
 
 // Handles a request with a JSON body.  Extracts s string from the input json and returns in it an appResponse.
 func withBodyHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Printf("withBodyHandler called. HTTP Verb: %s\n", r.Method)
+	log.Printf("withBodyHandler called. HTTP Verb: %s", r.Method)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		onBadRequest(w, err)
 		return
 	}
-	fmt.Printf("withBodyHandler body: %s\n", string(body))
+	log.Printf("withBodyHandler body: %s", string(body))
 	var s string
 	err = json.Unmarshal(body, &s)
 	if err != nil {
@@ -214,7 +206,7 @@ func withBodyHandler(w http.ResponseWriter, r *http.Request) {
 
 // Handles a request with no body.  Returns an appResponse with appResponse.Message "ok", which caller validates.
 func noBodyHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Printf("noBodyHandler called. HTTP Verb: %s \n", r.Method)
+	log.Printf("noBodyHandler called. HTTP Verb: %s", r.Method)
 	w.Header().Add("x-dapr-tests-request-method", r.Method)
 
 	logAndSetResponse(w, http.StatusOK, "success")

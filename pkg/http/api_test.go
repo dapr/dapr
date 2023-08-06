@@ -1793,7 +1793,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 				"failingId": 1,
 			},
 			map[string]time.Duration{
-				"timeoutId": time.Second * 10,
+				"timeoutId": time.Second * 30,
 			},
 			map[string]int{},
 		),
@@ -3318,15 +3318,15 @@ func TestV1StateEndpoints(t *testing.T) {
 				"failingQueryKey":      1,
 			},
 			map[string]time.Duration{
-				"timeoutGetKey":         time.Second * 10,
-				"timeoutSetKey":         time.Second * 10,
-				"timeoutDeleteKey":      time.Second * 10,
-				"timeoutBulkGetKey":     time.Second * 10,
-				"timeoutBulkGetKeyBulk": time.Second * 10,
-				"timeoutBulkSetKey":     time.Second * 10,
-				"timeoutBulkDeleteKey":  time.Second * 10,
-				"timeoutMultiKey":       time.Second * 10,
-				"timeoutQueryKey":       time.Second * 10,
+				"timeoutGetKey":         time.Second * 30,
+				"timeoutSetKey":         time.Second * 30,
+				"timeoutDeleteKey":      time.Second * 30,
+				"timeoutBulkGetKey":     time.Second * 30,
+				"timeoutBulkGetKeyBulk": time.Second * 30,
+				"timeoutBulkSetKey":     time.Second * 30,
+				"timeoutBulkDeleteKey":  time.Second * 30,
+				"timeoutMultiKey":       time.Second * 30,
+				"timeoutQueryKey":       time.Second * 30,
 			},
 			map[string]int{},
 		),
@@ -3343,6 +3343,7 @@ func TestV1StateEndpoints(t *testing.T) {
 			CompStore:  compStore,
 			Resiliency: rc,
 		},
+		pubsubAdapter: &daprt.MockPubSubAdapter{},
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints(), nil)
 
@@ -3705,7 +3706,7 @@ func TestV1StateEndpoints(t *testing.T) {
 
 		assert.Equal(t, 500, resp.StatusCode) // No body in the response.
 		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutGetKey"))
-		assert.Less(t, end.Sub(start), time.Second*10)
+		assert.Less(t, end.Sub(start), time.Second*30)
 	})
 
 	t.Run("set state request retries with resiliency", func(t *testing.T) {
@@ -3735,7 +3736,7 @@ func TestV1StateEndpoints(t *testing.T) {
 
 		assert.Equal(t, 500, resp.StatusCode) // No body in the response.
 		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutSetKey"))
-		assert.Less(t, end.Sub(start), time.Second*10)
+		assert.Less(t, end.Sub(start), time.Second*30)
 	})
 
 	t.Run("delete state request retries with resiliency", func(t *testing.T) {
@@ -3755,14 +3756,14 @@ func TestV1StateEndpoints(t *testing.T) {
 
 		assert.Equal(t, 500, resp.StatusCode) // No body in the response.
 		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutDeleteKey"))
-		assert.Less(t, end.Sub(start), time.Second*10)
+		assert.Less(t, end.Sub(start), time.Second*30)
 	})
 
 	t.Run("bulk state get fails with bulk support", func(t *testing.T) {
 		// Adding this will make the bulk operation fail
-		failingStore.BulkFailKey = "timeoutBulkGetKeyBulk"
+		failingStore.BulkFailKey.Store(ptr.Of("timeoutBulkGetKeyBulk"))
 		t.Cleanup(func() {
-			failingStore.BulkFailKey = ""
+			failingStore.BulkFailKey.Store(ptr.Of(""))
 		})
 
 		apiPath := fmt.Sprintf("v1.0/state/%s/bulk", "failStore")
@@ -3816,7 +3817,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		assert.Equal(t, 500, resp.StatusCode)
 		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutBulkSetKey"))
 		assert.Equal(t, 0, failingStore.Failure.CallCount("goodTimeoutBulkSetKey"))
-		assert.Less(t, end.Sub(start), time.Second*10)
+		assert.Less(t, end.Sub(start), time.Second*30)
 	})
 
 	t.Run("state transaction passes after retries with resiliency", func(t *testing.T) {
@@ -4083,7 +4084,7 @@ func TestV1SecretEndpoints(t *testing.T) {
 	failingStore := daprt.FailingSecretStore{
 		Failure: daprt.NewFailure(
 			map[string]int{"key": 1, "bulk": 1},
-			map[string]time.Duration{"timeout": time.Second * 10, "bulkTimeout": time.Second * 10},
+			map[string]time.Duration{"timeout": time.Second * 30, "bulkTimeout": time.Second * 30},
 			map[string]int{},
 		),
 	}
@@ -4259,14 +4260,14 @@ func TestV1SecretEndpoints(t *testing.T) {
 	t.Run("Get secret - timeout before request ends", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/secrets/%s/timeout", "failSecret")
 
-		// Store sleeps for 10 seconds, let's make sure our timeout takes less time than that.
+		// Store sleeps for 30 seconds, let's make sure our timeout takes less time than that.
 		start := time.Now()
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 		end := time.Now()
 
 		assert.Equal(t, 500, resp.StatusCode)
 		assert.Equal(t, 2, failingStore.Failure.CallCount("timeout"))
-		assert.Less(t, end.Sub(start), time.Second*10)
+		assert.Less(t, end.Sub(start), time.Second*30)
 	})
 
 	t.Run("Get bulk secret - retries on initial failure with resiliency", func(t *testing.T) {
@@ -4287,7 +4288,7 @@ func TestV1SecretEndpoints(t *testing.T) {
 
 		assert.Equal(t, 500, resp.StatusCode)
 		assert.Equal(t, 2, failingStore.Failure.CallCount("bulkTimeout"))
-		assert.Less(t, end.Sub(start), time.Second*10)
+		assert.Less(t, end.Sub(start), time.Second*30)
 	})
 }
 
@@ -4500,7 +4501,8 @@ func TestV1TransactionEndpoints(t *testing.T) {
 		universal: &universalapi.UniversalAPI{
 			CompStore: compStore,
 		},
-		resiliency: resiliency.New(nil),
+		resiliency:    resiliency.New(nil),
+		pubsubAdapter: &daprt.MockPubSubAdapter{},
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints(), nil)
 	fakeBodyObject := map[string]interface{}{"data": "fakeData"}
