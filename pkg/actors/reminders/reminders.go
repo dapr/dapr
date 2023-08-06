@@ -252,7 +252,8 @@ func (r *reminders) evaluateReminders(ctx context.Context) {
 		return
 	}
 
-	for t := range r.config.HostedActorTypes {
+	ats := r.config.HostedActorTypes.ListActorTypes()
+	for _, t := range ats {
 		vals, _, err := r.getRemindersForActorType(ctx, t, true)
 		if err != nil {
 			log.Errorf("Error getting reminders for actor type %s: %s", t, err)
