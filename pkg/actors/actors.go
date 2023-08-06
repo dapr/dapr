@@ -215,7 +215,7 @@ func (a *actorsRuntime) Init() error {
 		return errors.New("actors: couldn't connect to placement service: address is empty")
 	}
 
-	if len(a.actorsConfig.Config.HostedActorTypes) > 0 {
+	if len(a.actorsConfig.Config.HostedActorTypes.ListActorTypes()) > 0 {
 		if !a.haveCompatibleStorage() {
 			return ErrIncompatibleStateStore
 		}
@@ -265,7 +265,7 @@ func (a *actorsRuntime) Init() error {
 }
 
 func (a *actorsRuntime) startAppHealthCheck(opts ...health.Option) {
-	if len(a.actorsConfig.Config.HostedActorTypes) == 0 || a.appChannel == nil {
+	if len(a.actorsConfig.Config.HostedActorTypes.ListActorTypes()) == 0 || a.appChannel == nil {
 		return
 	}
 
@@ -923,8 +923,9 @@ func (a *actorsRuntime) RegisterInternalActor(ctx context.Context, actorType str
 }
 
 func (a *actorsRuntime) GetActiveActorsCount(ctx context.Context) []*runtimev1pb.ActiveActorsCount {
-	actorCountMap := make(map[string]int32, len(a.actorsConfig.Config.HostedActorTypes))
-	for actorType := range a.actorsConfig.Config.HostedActorTypes {
+	actorTypes := a.actorsConfig.Config.HostedActorTypes.ListActorTypes()
+	actorCountMap := make(map[string]int32, len(actorTypes))
+	for _, actorType := range actorTypes {
 		if !isInternalActor(actorType) {
 			actorCountMap[actorType] = 0
 		}
