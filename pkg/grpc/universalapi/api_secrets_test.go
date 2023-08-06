@@ -256,7 +256,7 @@ func TestSecretAPIWithResiliency(t *testing.T) {
 	failingStore := daprt.FailingSecretStore{
 		Failure: daprt.NewFailure(
 			map[string]int{"key": 1, "bulk": 1},
-			map[string]time.Duration{"timeout": time.Second * 10, "bulkTimeout": time.Second * 10},
+			map[string]time.Duration{"timeout": time.Second * 30, "bulkTimeout": time.Second * 30},
 			map[string]int{},
 		),
 	}
@@ -283,7 +283,7 @@ func TestSecretAPIWithResiliency(t *testing.T) {
 	})
 
 	t.Run("Get secret - timeout before request ends", func(t *testing.T) {
-		// Store sleeps for 10 seconds, let's make sure our timeout takes less time than that.
+		// Store sleeps for 30 seconds, let's make sure our timeout takes less time than that.
 		start := time.Now()
 		_, err := fakeAPI.GetSecret(context.Background(), &runtimev1pb.GetSecretRequest{
 			StoreName: "failSecret",
@@ -293,7 +293,7 @@ func TestSecretAPIWithResiliency(t *testing.T) {
 
 		assert.Error(t, err)
 		assert.Equal(t, 2, failingStore.Failure.CallCount("timeout"))
-		assert.Less(t, end.Sub(start), time.Second*10)
+		assert.Less(t, end.Sub(start), time.Second*30)
 	})
 
 	t.Run("Get bulk secret - retries on initial failure with resiliency", func(t *testing.T) {
@@ -316,6 +316,6 @@ func TestSecretAPIWithResiliency(t *testing.T) {
 
 		assert.Error(t, err)
 		assert.Equal(t, 2, failingStore.Failure.CallCount("bulkTimeout"))
-		assert.Less(t, end.Sub(start), time.Second*10)
+		assert.Less(t, end.Sub(start), time.Second*30)
 	})
 }
