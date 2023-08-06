@@ -15,6 +15,7 @@ package internal
 
 import (
 	"net/http"
+	"sync"
 	"time"
 
 	"golang.org/x/exp/maps"
@@ -27,7 +28,7 @@ type Config struct {
 	HostAddress                   string
 	AppID                         string
 	PlacementAddresses            []string
-	HostedActorTypes              hostedActors
+	HostedActorTypes              *hostedActors
 	Port                          int
 	HeartbeatInterval             time.Duration
 	ActorDeactivationScanInterval time.Duration
@@ -61,30 +62,41 @@ func (c *Config) GetRemindersPartitionCountForType(actorType string) int {
 	return c.RemindersStoragePartitions
 }
 
-type hostedActors map[string]struct{}
+type hostedActors struct {
+	actors map[string]struct{}
+	lock   sync.RWMutex
+}
 
 // NewHostedActors creates a new hostedActors from a slice of actor types.
-func NewHostedActors(actorTypes []string) hostedActors {
+func NewHostedActors(actorTypes []string) *hostedActors {
 	// Add + 1 capacity because there's likely the built-in actor engine
-	ha := make(hostedActors, len(actorTypes)+1)
+	ha := make(map[string]struct{}, len(actorTypes)+1)
 	for _, at := range actorTypes {
 		ha[at] = struct{}{}
 	}
-	return ha
+	return &hostedActors{
+		actors: ha,
+	}
 }
 
 // AddActorType adds an actor type.
-func (ha hostedActors) AddActorType(actorType string) {
-	ha[actorType] = struct{}{}
+func (ha *hostedActors) AddActorType(actorType string) {
+	ha.lock.Lock()
+	ha.actors[actorType] = struct{}{}
+	ha.lock.Unlock()
 }
 
 // IsActorTypeHosted returns true if the actor type is hosted.
-func (ha hostedActors) IsActorTypeHosted(actorType string) bool {
-	_, ok := ha[actorType]
+func (ha *hostedActors) IsActorTypeHosted(actorType string) bool {
+	ha.lock.RLock()
+	defer ha.lock.RUnlock()
+	_, ok := ha.actors[actorType]
 	return ok
 }
 
 // ListActorTypes returns a slice of hosted actor types (in indeterminate order).
-func (ha hostedActors) ListActorTypes() []string {
-	return maps.Keys(ha)
+func (ha *hostedActors) ListActorTypes() []string {
+	ha.lock.RLock()
+	defer ha.lock.RUnlock()
+	return maps.Keys(ha.actors)
 }
