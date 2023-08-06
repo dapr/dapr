@@ -682,6 +682,9 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 			req.Value = s.Value
 		}
 
+		if a.isErrorCodesEnabled {
+			req.Metadata[errorcodes.ErrorCodesFeatureMetadataKey] = "true"
+		}
 		if s.Etag != nil {
 			req.ETag = &s.Etag.Value
 		}
@@ -725,16 +728,15 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 
 // stateErrorResponse takes a state store error, format and args and returns a status code encoded gRPC error.
 func (a *api) stateErrorResponse(err error, format string, args ...interface{}) error {
+	if a.isErrorCodesEnabled {
+		if ste := status.Convert(err); ste != nil {
+			return ste.Err()
+		}
+	}
 	var etagErr *state.ETagError
 	if errors.As(err, &etagErr) {
 		switch etagErr.Kind() {
 		case state.ETagMismatch:
-			if a.isErrorCodesEnabled {
-				if ste, wdErr := errorcodes.Newf(codes.Aborted, errorcodes.EtagMismatch, nil, format, args...); wdErr == nil {
-					return ste.Err()
-				}
-			}
-
 			return status.Errorf(codes.Aborted, format, args...)
 		case state.ETagInvalid:
 			return status.Errorf(codes.InvalidArgument, format, args...)
@@ -760,6 +762,9 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 	req := state.DeleteRequest{
 		Key:      key,
 		Metadata: in.Metadata,
+	}
+	if a.isErrorCodesEnabled {
+		req.Metadata[errorcodes.ErrorCodesFeatureMetadataKey] = "true"
 	}
 	if in.Etag != nil {
 		req.ETag = &in.Etag.Value
@@ -808,6 +813,9 @@ func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkSta
 		req := state.DeleteRequest{
 			Key:      key,
 			Metadata: item.Metadata,
+		}
+		if a.isErrorCodesEnabled {
+			req.Metadata[errorcodes.ErrorCodesFeatureMetadataKey] = "true"
 		}
 		if item.Etag != nil {
 			req.ETag = &item.Etag.Value

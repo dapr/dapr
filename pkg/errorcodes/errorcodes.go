@@ -26,8 +26,9 @@ import (
 type errorCodesReason string
 
 const (
-	domain       = "dapr.io"
-	EtagMismatch = errorCodesReason("DAPR_STATE_ETAG_MISMATCH")
+	domain                       = "dapr.io"
+	EtagMismatch                 = errorCodesReason("DAPR_STATE_ETAG_MISMATCH")
+	ErrorCodesFeatureMetadataKey = "error_codes_feature"
 )
 
 // New returns a Status representing c and msg.
