@@ -21,6 +21,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -33,13 +34,16 @@ import (
 
 	chi "github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 
 	"github.com/dapr/dapr/pkg/config"
 	corsDapr "github.com/dapr/dapr/pkg/cors"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
-	auth "github.com/dapr/dapr/pkg/runtime/security"
+	"github.com/dapr/dapr/pkg/security"
+	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 )
 
@@ -128,11 +132,17 @@ func (s *server) StartNonBlocking() error {
 		return errors.New("could not listen on any endpoint")
 	}
 
+	// Create a handler with support for HTTP/2 Cleartext
+	var handler http.Handler = r
+	if !utils.IsTruthy(os.Getenv("DAPR_HTTP_DISABLE_H2C")) {
+		handler = h2c.NewHandler(r, &http2.Server{})
+	}
+
 	for _, listener := range listeners {
 		// srv is created in a loop because each instance
 		// has a handle on the underlying listener.
 		srv := &http.Server{
-			Handler:           r,
+			Handler:           handler,
 			ReadHeaderTimeout: 10 * time.Second,
 			MaxHeaderBytes:    s.config.ReadBufferSizeKB << 10, // To bytes
 		}
@@ -302,7 +312,7 @@ func (s *server) useCors(r chi.Router) {
 }
 
 func (s *server) useAPIAuthentication(r chi.Router) {
-	token := auth.GetAPIToken()
+	token := security.GetAPIToken()
 	if token == "" {
 		return
 	}
@@ -386,21 +396,7 @@ func (s *server) handle(e Endpoint, path string, r chi.Router, unescapeParameter
 
 	// Set as fallback method
 	if e.IsFallback {
-		fallbackHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Populate the wildcard path with the full path
-			chiCtx := chi.RouteContext(r.Context())
-			if chiCtx != nil {
-				// r.URL.RawPath could be empty
-				path := r.URL.RawPath
-				if path == "" {
-					path = r.URL.Path
-				}
-				chiCtx.URLParams.Add("*", strings.TrimPrefix(path, "/"))
-			}
-
-			handler(w, r)
-		})
-		r.NotFound(fallbackHandler)
-		r.MethodNotAllowed(fallbackHandler)
+		r.NotFound(handler)
+		r.MethodNotAllowed(handler)
 	}
 }

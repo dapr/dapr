@@ -17,10 +17,12 @@ import (
 	"context"
 
 	contribPubsub "github.com/dapr/components-contrib/pubsub"
+	"github.com/dapr/dapr/pkg/outbox"
 )
 
 // Adapter is the interface for message buses.
 type Adapter interface {
 	Publish(context.Context, *contribPubsub.PublishRequest) error
 	BulkPublish(context.Context, *contribPubsub.BulkPublishRequest) (contribPubsub.BulkPublishResponse, error)
+	Outbox() outbox.Outbox
 }

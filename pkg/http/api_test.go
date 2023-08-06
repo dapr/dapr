@@ -23,7 +23,6 @@ import (
 	"io"
 	"net"
 	gohttp "net/http"
-	"strings"
 	"testing"
 	"time"
 
@@ -33,11 +32,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
-	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
-	"google.golang.org/protobuf/types/known/anypb"
 	apiextensionsV1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -64,7 +59,6 @@ import (
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
-	commonv1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
@@ -1000,890 +994,6 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 	fakeServer.Shutdown()
 }
 
-func getFakeDirectMessageResponse() *invokev1.InvokeMethodResponse {
-	return getFakeDirectMessageResponseWithStatusCode(fasthttp.StatusOK)
-}
-
-func getFakeDirectMessageResponseWithStatusCode(code int) *invokev1.InvokeMethodResponse {
-	return invokev1.NewInvokeMethodResponse(int32(code), fasthttp.StatusMessage(code), nil).
-		WithRawDataString("fakeDirectMessageResponse").
-		WithContentType("application/json")
-}
-
-func TestV1DirectMessagingEndpoints(t *testing.T) {
-	mockDirectMessaging := new(daprt.MockDirectMessaging)
-
-	compStore := compstore.New()
-	fakeServer := newFakeHTTPServer()
-	testAPI := &api{
-		directMessaging: mockDirectMessaging,
-		universal: &universalapi.UniversalAPI{
-			CompStore:  compStore,
-			Resiliency: resiliency.New(nil),
-		},
-	}
-	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints(), nil)
-
-	t.Run("Invoke direct messaging without querystring - 200 OK", func(t *testing.T) {
-		fakeDirectMessageResponse := getFakeDirectMessageResponse()
-		defer fakeDirectMessageResponse.Close()
-
-		apiPath := "v1.0/invoke/fakeAppID/method/fakeMethod"
-		fakeData := []byte("fakeData")
-
-		mockDirectMessaging.Calls = nil // reset call count
-
-		mockDirectMessaging.
-			On(
-				"Invoke",
-				mock.MatchedBy(matchContextInterface),
-				mock.MatchedBy(func(b string) bool {
-					return b == "fakeAppID"
-				}),
-				mock.AnythingOfType("*v1.InvokeMethodRequest"),
-			).
-			Return(fakeDirectMessageResponse, nil).
-			Once()
-
-		// act
-		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
-
-		// assert
-		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
-		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, "fakeDirectMessageResponse", string(resp.RawBody))
-	})
-
-	t.Run("Invoke direct messaging without querystring for external invocation - 200 OK", func(t *testing.T) {
-		fakeDirectMessageResponse := getFakeDirectMessageResponse()
-		defer fakeDirectMessageResponse.Close()
-
-		// Double slash added on purpose
-		apiPath := "v1.0//invoke/http://api.github.com/method/fakeMethod"
-		fakeData := []byte("fakeData")
-
-		mockDirectMessaging.Calls = nil // reset call count
-
-		mockDirectMessaging.
-			On(
-				"Invoke",
-				mock.MatchedBy(matchContextInterface),
-				mock.MatchedBy(func(b string) bool {
-					return b == "http://api.github.com"
-				}),
-				mock.AnythingOfType("*v1.InvokeMethodRequest"),
-			).
-			Return(fakeDirectMessageResponse, nil).
-			Once()
-
-		// act
-		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
-
-		// assert
-		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
-		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, "fakeDirectMessageResponse", string(resp.RawBody))
-	})
-
-	t.Run("Invoke direct messaging without querystring for external invocation again - 200 OK", func(t *testing.T) {
-		fakeDirectMessageResponse := getFakeDirectMessageResponse()
-		defer fakeDirectMessageResponse.Close()
-
-		apiPath := "v1.0/invoke/http://123.45.67.89:3000/method/fakeMethod"
-		fakeData := []byte("fakeData")
-
-		mockDirectMessaging.Calls = nil // reset call count
-
-		mockDirectMessaging.
-			On(
-				"Invoke",
-				mock.MatchedBy(matchContextInterface),
-				mock.MatchedBy(func(b string) bool {
-					return b == "http://123.45.67.89:3000"
-				}),
-				mock.MatchedBy(func(req *invokev1.InvokeMethodRequest) bool {
-					msg := req.Message()
-					if msg.Method != "fakeMethod" {
-						return false
-					}
-					if msg.HttpExtension.Verb != commonv1.HTTPExtension_POST {
-						return false
-					}
-					return true
-				}),
-			).
-			Return(fakeDirectMessageResponse, nil).
-			Once()
-
-		// act
-		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
-
-		// assert
-		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
-		assert.Equal(t, gohttp.StatusOK, resp.StatusCode)
-		assert.Equal(t, "fakeDirectMessageResponse", string(resp.RawBody))
-	})
-
-	t.Run("Invoke direct messaging without querystring - 201 Created", func(t *testing.T) {
-		fakeDirectMessageResponse := getFakeDirectMessageResponseWithStatusCode(gohttp.StatusCreated)
-		defer fakeDirectMessageResponse.Close()
-
-		apiPath := "v1.0/invoke/fakeAppID/method/fakeMethod"
-		fakeData := []byte("fakeData")
-
-		mockDirectMessaging.Calls = nil // reset call count
-
-		mockDirectMessaging.
-			On(
-				"Invoke",
-				mock.MatchedBy(matchContextInterface),
-				mock.MatchedBy(func(b string) bool {
-					return b == "fakeAppID"
-				}),
-				mock.AnythingOfType("*v1.InvokeMethodRequest"),
-			).
-			Return(fakeDirectMessageResponse, nil).
-			Once()
-
-		// act
-		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
-
-		// assert
-		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
-		assert.Equal(t, 201, resp.StatusCode)
-		assert.Equal(t, "fakeDirectMessageResponse", string(resp.RawBody))
-	})
-
-	t.Run("Invoke direct messaging without querystring for external invocation - 201 Created", func(t *testing.T) {
-		fakeDirectMessageResponse := getFakeDirectMessageResponseWithStatusCode(fasthttp.StatusCreated)
-		defer fakeDirectMessageResponse.Close()
-
-		apiPath := "v1.0/invoke/http://api.github.com/method/fakeMethod"
-		fakeData := []byte("fakeData")
-
-		mockDirectMessaging.Calls = nil // reset call count
-
-		mockDirectMessaging.
-			On(
-				"Invoke",
-				mock.MatchedBy(matchContextInterface),
-				mock.MatchedBy(func(b string) bool {
-					return b == "http://api.github.com"
-				}),
-				mock.AnythingOfType("*v1.InvokeMethodRequest"),
-			).
-			Return(fakeDirectMessageResponse, nil).
-			Once()
-
-		// act
-		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
-
-		// assert
-		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
-		assert.Equal(t, 201, resp.StatusCode)
-		assert.Equal(t, "fakeDirectMessageResponse", string(resp.RawBody))
-	})
-
-	t.Run("Invoke direct messaging with dapr-app-id in header - 200 OK", func(t *testing.T) {
-		fakeDirectMessageResponse := getFakeDirectMessageResponse()
-		defer fakeDirectMessageResponse.Close()
-
-		apiPath := "fakeMethod"
-		fakeData := []byte("fakeData")
-
-		mockDirectMessaging.Calls = nil // reset call count
-
-		mockDirectMessaging.
-			On(
-				"Invoke",
-				mock.MatchedBy(matchContextInterface),
-				mock.MatchedBy(func(b string) bool {
-					return b == "fakeAppID"
-				}),
-				mock.AnythingOfType("*v1.InvokeMethodRequest"),
-			).
-			Return(fakeDirectMessageResponse, nil).
-			Once()
-
-		// act
-		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil, "dapr-app-id", "fakeAppID")
-
-		// assert
-		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
-		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, "fakeDirectMessageResponse", string(resp.RawBody))
-	})
-
-	t.Run("Invoke direct messaging with headers for external invocation - 200 OK", func(t *testing.T) {
-		fakeDirectMessageResponse := getFakeDirectMessageResponse()
-		defer fakeDirectMessageResponse.Close()
-
-		apiPath := "v1.0/invoke/http://api.github.com/method/fakeMethod"
-		fakeData := []byte("fakeData")
-
-		mockDirectMessaging.Calls = nil // reset call count
-
-		mockDirectMessaging.
-			On(
-				"Invoke",
-				mock.MatchedBy(matchContextInterface),
-				mock.MatchedBy(func(b string) bool {
-					return b == "http://api.github.com"
-				}),
-				mock.AnythingOfType("*v1.InvokeMethodRequest"),
-			).
-			Return(fakeDirectMessageResponse, nil).
-			Once()
-
-		// act
-		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil, "Authorization", "token sometoken", "Accept-Language", "en-US")
-
-		// assert
-		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
-		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, "fakeDirectMessageResponse", string(resp.RawBody))
-	})
-
-	t.Run("Invoke direct messaging with dapr-app-id in basic auth - 200 OK", func(t *testing.T) {
-		fakeDirectMessageResponse := getFakeDirectMessageResponse()
-		defer fakeDirectMessageResponse.Close()
-
-		apiPath := "fakeMethod"
-		fakeData := []byte("fakeData")
-
-		mockDirectMessaging.Calls = nil // reset call count
-
-		mockDirectMessaging.
-			On(
-				"Invoke",
-				mock.MatchedBy(matchContextInterface),
-				mock.MatchedBy(func(b string) bool {
-					return b == "fakeAppID"
-				}),
-				mock.AnythingOfType("*v1.InvokeMethodRequest"),
-			).
-			Return(fakeDirectMessageResponse, nil).
-			Once()
-
-		// act
-		resp := fakeServer.doRequest("dapr-app-id:fakeAppID", "POST", apiPath, fakeData, nil)
-
-		// assert
-		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
-		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, "fakeDirectMessageResponse", string(resp.RawBody))
-	})
-
-	t.Run("Invoke direct messaging with InvalidArgument Response - 400 Bad request", func(t *testing.T) {
-		d := &epb.ErrorInfo{
-			Reason: "fakeReason",
-		}
-		details, _ := anypb.New(d)
-
-		fakeInternalErrorResponse := invokev1.NewInvokeMethodResponse(
-			int32(codes.InvalidArgument),
-			"InvalidArgument",
-			[]*anypb.Any{details},
-		)
-		apiPath := "v1.0/invoke/fakeAppID/method/fakeMethod"
-		fakeData := []byte("fakeData")
-		defer fakeInternalErrorResponse.Close()
-
-		mockDirectMessaging.Calls = nil // reset call count
-
-		mockDirectMessaging.
-			On(
-				"Invoke",
-				mock.MatchedBy(matchContextInterface),
-				"fakeAppID",
-				mock.AnythingOfType("*v1.InvokeMethodRequest"),
-			).
-			Return(fakeInternalErrorResponse, nil).
-			Once()
-
-		// act
-		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
-
-		// assert
-		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
-		assert.Equal(t, 400, resp.StatusCode)
-
-		// protojson produces different indentation space based on OS
-		// For linux
-		comp1 := string(resp.RawBody) == `{"code":3,"message":"InvalidArgument","details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"fakeReason"}]}`
-		// For mac and windows
-		comp2 := string(resp.RawBody) == `{"code":3, "message":"InvalidArgument", "details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo", "reason":"fakeReason"}]}`
-		assert.True(t, comp1 || comp2)
-	})
-
-	t.Run("Invoke direct messaging with InvalidArgument Response for external invocation - 400 Bad request", func(t *testing.T) {
-		d := &epb.ErrorInfo{
-			Reason: "fakeReason",
-		}
-		details, _ := anypb.New(d)
-
-		fakeInternalErrorResponse := invokev1.NewInvokeMethodResponse(
-			int32(codes.InvalidArgument),
-			"InvalidArgument",
-			[]*anypb.Any{details},
-		)
-		apiPath := "v1.0/invoke/http://api.github.com/method/fakeMethod"
-		fakeData := []byte("fakeData")
-		defer fakeInternalErrorResponse.Close()
-
-		mockDirectMessaging.Calls = nil // reset call count
-
-		mockDirectMessaging.
-			On(
-				"Invoke",
-				mock.MatchedBy(matchContextInterface),
-				"http://api.github.com",
-				mock.AnythingOfType("*v1.InvokeMethodRequest"),
-			).
-			Return(fakeInternalErrorResponse, nil).
-			Once()
-
-		// act
-		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
-
-		// assert
-		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
-		assert.Equal(t, 400, resp.StatusCode)
-
-		// protojson produces different indentation space based on OS
-		// For linux
-		comp1 := string(resp.RawBody) == `{"code":3,"message":"InvalidArgument","details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"fakeReason"}]}`
-		// For mac and windows
-		comp2 := string(resp.RawBody) == `{"code":3, "message":"InvalidArgument", "details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo", "reason":"fakeReason"}]}`
-		assert.True(t, comp1 || comp2)
-	})
-
-	t.Run("Invoke direct messaging with malformed status response", func(t *testing.T) {
-		malformedDetails := &anypb.Any{TypeUrl: "malformed"}
-		fakeInternalErrorResponse := invokev1.NewInvokeMethodResponse(int32(codes.Internal), "InternalError", []*anypb.Any{malformedDetails})
-		apiPath := "v1.0/invoke/fakeAppID/method/fakeMethod"
-		fakeData := []byte("fakeData")
-		defer fakeInternalErrorResponse.Close()
-
-		mockDirectMessaging.Calls = nil // reset call count
-
-		mockDirectMessaging.
-			On(
-				"Invoke",
-				mock.MatchedBy(matchContextInterface),
-				"fakeAppID",
-				mock.AnythingOfType("*v1.InvokeMethodRequest"),
-			).
-			Return(fakeInternalErrorResponse, nil).
-			Once()
-
-		// act
-		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
-
-		// assert
-		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
-		assert.Equal(t, 500, resp.StatusCode)
-		assert.Truef(t, strings.HasPrefix(string(resp.RawBody), "{\"errorCode\":\"ERR_MALFORMED_RESPONSE\",\"message\":\""), "code not found in response: %v", string(resp.RawBody))
-	})
-
-	t.Run("Invoke direct messaging with malformed status response for external invocation", func(t *testing.T) {
-		malformedDetails := &anypb.Any{TypeUrl: "malformed"}
-		fakeInternalErrorResponse := invokev1.NewInvokeMethodResponse(int32(codes.Internal), "InternalError", []*anypb.Any{malformedDetails})
-		apiPath := "v1.0/invoke/http://api.github.com/method/fakeMethod"
-		fakeData := []byte("fakeData")
-		defer fakeInternalErrorResponse.Close()
-
-		mockDirectMessaging.Calls = nil // reset call count
-
-		mockDirectMessaging.
-			On(
-				"Invoke",
-				mock.MatchedBy(matchContextInterface),
-				"http://api.github.com",
-				mock.AnythingOfType("*v1.InvokeMethodRequest"),
-			).
-			Return(fakeInternalErrorResponse, nil).
-			Once()
-
-		// act
-		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
-
-		// assert
-		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
-		assert.Equal(t, 500, resp.StatusCode)
-		assert.True(t, strings.HasPrefix(string(resp.RawBody), "{\"errorCode\":\"ERR_MALFORMED_RESPONSE\",\"message\":\""))
-	})
-
-	t.Run("Invoke direct messaging with querystring - 200 OK", func(t *testing.T) {
-		fakeDirectMessageResponse := getFakeDirectMessageResponse()
-		defer fakeDirectMessageResponse.Close()
-
-		apiPath := "v1.0/invoke/fakeAppID/method/fakeMethod?param1=val1&param2=val2"
-		fakeData := []byte("fakeData")
-
-		mockDirectMessaging.Calls = nil // reset call count
-
-		mockDirectMessaging.
-			On(
-				"Invoke",
-				mock.MatchedBy(matchContextInterface),
-				mock.MatchedBy(func(b string) bool {
-					return b == "fakeAppID"
-				}),
-				mock.AnythingOfType("*v1.InvokeMethodRequest"),
-			).
-			Return(fakeDirectMessageResponse, nil).
-			Once()
-
-		// act
-		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
-
-		// assert
-		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
-		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, "fakeDirectMessageResponse", string(resp.RawBody))
-	})
-
-	t.Run("Invoke direct messaging with querystring for external invocation - 200 OK", func(t *testing.T) {
-		fakeDirectMessageResponse := getFakeDirectMessageResponse()
-		defer fakeDirectMessageResponse.Close()
-
-		apiPath := "v1.0/invoke/http://api.github.com/method/fakeMethod?param1=val1&param2=val2"
-		fakeData := []byte("fakeData")
-
-		mockDirectMessaging.Calls = nil // reset call count
-
-		mockDirectMessaging.
-			On(
-				"Invoke",
-				mock.MatchedBy(matchContextInterface),
-				mock.MatchedBy(func(b string) bool {
-					return b == "http://api.github.com"
-				}),
-				mock.AnythingOfType("*v1.InvokeMethodRequest"),
-			).
-			Return(fakeDirectMessageResponse, nil).
-			Once()
-
-		// act
-		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
-
-		// assert
-		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
-		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, "fakeDirectMessageResponse", string(resp.RawBody))
-	})
-
-	t.Run("Invoke direct messaging - HEAD - 200 OK", func(t *testing.T) {
-		fakeDirectMessageResponse := getFakeDirectMessageResponse()
-		defer fakeDirectMessageResponse.Close()
-
-		apiPath := "v1.0/invoke/fakeAppID/method/fakeMethod?param1=val1&param2=val2"
-
-		mockDirectMessaging.Calls = nil // reset call count
-
-		mockDirectMessaging.
-			On(
-				"Invoke",
-				mock.MatchedBy(matchContextInterface),
-				mock.MatchedBy(func(b string) bool {
-					return b == "fakeAppID"
-				}),
-				mock.AnythingOfType("*v1.InvokeMethodRequest"),
-			).
-			Return(fakeDirectMessageResponse, nil).
-			Once()
-
-		// act
-		resp := fakeServer.DoRequest("HEAD", apiPath, nil, nil)
-
-		// assert
-		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
-		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, []byte{}, resp.RawBody) // Empty body for HEAD
-	})
-
-	t.Run("Invoke direct messaging route '/' - 200 OK", func(t *testing.T) {
-		fakeDirectMessageResponse := getFakeDirectMessageResponse()
-		defer fakeDirectMessageResponse.Close()
-
-		apiPath := "v1.0/invoke/fakeAppID/method/"
-
-		mockDirectMessaging.Calls = nil // reset call count
-
-		mockDirectMessaging.
-			On(
-				"Invoke",
-				mock.MatchedBy(matchContextInterface),
-				mock.MatchedBy(func(b string) bool {
-					return b == "fakeAppID"
-				}),
-				mock.AnythingOfType("*v1.InvokeMethodRequest"),
-			).
-			Return(fakeDirectMessageResponse, nil).
-			Once()
-
-		// act
-		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
-
-		// assert
-		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
-		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, "fakeDirectMessageResponse", string(resp.RawBody))
-	})
-
-	t.Run("Invoke direct messaging route '/' for external invocation - 200 OK", func(t *testing.T) {
-		fakeDirectMessageResponse := getFakeDirectMessageResponse()
-		defer fakeDirectMessageResponse.Close()
-
-		apiPath := "v1.0/invoke/http://api.github.com/method/"
-
-		mockDirectMessaging.Calls = nil // reset call count
-
-		mockDirectMessaging.
-			On(
-				"Invoke",
-				mock.MatchedBy(matchContextInterface),
-				mock.MatchedBy(func(b string) bool {
-					return b == "http://api.github.com"
-				}),
-				mock.AnythingOfType("*v1.InvokeMethodRequest"),
-			).
-			Return(fakeDirectMessageResponse, nil).
-			Once()
-
-		// act
-		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
-
-		// assert
-		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
-		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, "fakeDirectMessageResponse", string(resp.RawBody))
-	})
-
-	t.Run("Invoke returns error - 500 ERR_DIRECT_INVOKE", func(t *testing.T) {
-		apiPath := "v1.0/invoke/fakeAppID/method/fakeMethod?param1=val1&param2=val2"
-		fakeData := []byte("fakeData")
-
-		mockDirectMessaging.Calls = nil // reset call count
-
-		mockDirectMessaging.
-			On(
-				"Invoke",
-				mock.MatchedBy(matchContextInterface),
-				mock.MatchedBy(func(b string) bool {
-					return b == "fakeAppID"
-				}),
-				mock.AnythingOfType("*v1.InvokeMethodRequest"),
-			).
-			Return(nil, errors.New("UPSTREAM_ERROR")).
-			Once()
-
-		// act
-		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
-
-		// assert
-		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
-		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, "ERR_DIRECT_INVOKE", resp.ErrorBody["errorCode"])
-	})
-
-	t.Run("Invoke returns error - 500 ERR_DIRECT_INVOKE for external invocation", func(t *testing.T) {
-		apiPath := "v1.0/invoke/http://api.github.com/method/fakeMethod?param1=val1&param2=val2"
-		fakeData := []byte("fakeData")
-
-		mockDirectMessaging.Calls = nil // reset call count
-
-		mockDirectMessaging.
-			On(
-				"Invoke",
-				mock.MatchedBy(matchContextInterface),
-				mock.MatchedBy(func(b string) bool {
-					return b == "http://api.github.com"
-				}),
-				mock.AnythingOfType("*v1.InvokeMethodRequest"),
-			).
-			Return(nil, errors.New("UPSTREAM_ERROR")).
-			Once()
-
-		// act
-		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
-
-		// assert
-		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
-		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, "ERR_DIRECT_INVOKE", resp.ErrorBody["errorCode"])
-	})
-
-	t.Run("Invoke returns error - 403 ERR_DIRECT_INVOKE", func(t *testing.T) {
-		apiPath := "v1.0/invoke/fakeAppID/method/fakeMethod?param1=val1&param2=val2"
-		fakeData := []byte("fakeData")
-
-		mockDirectMessaging.Calls = nil // reset call count
-
-		mockDirectMessaging.
-			On(
-				"Invoke",
-				mock.MatchedBy(matchContextInterface),
-				mock.MatchedBy(func(b string) bool {
-					return b == "fakeAppID"
-				}),
-				mock.AnythingOfType("*v1.InvokeMethodRequest"),
-			).
-			Return(nil, status.Errorf(codes.PermissionDenied, "Permission Denied")).
-			Once()
-
-		// act
-		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
-
-		// assert
-		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
-		assert.Equal(t, 403, resp.StatusCode)
-		assert.Equal(t, "ERR_DIRECT_INVOKE", resp.ErrorBody["errorCode"])
-	})
-
-	t.Run("Invoke returns error - 403 ERR_DIRECT_INVOKE for external invocation", func(t *testing.T) {
-		apiPath := "v1.0/invoke/http://api.github.com/method/fakeMethod?param1=val1&param2=val2"
-		fakeData := []byte("fakeData")
-
-		mockDirectMessaging.Calls = nil // reset call count
-
-		mockDirectMessaging.
-			On(
-				"Invoke",
-				mock.MatchedBy(matchContextInterface),
-				mock.MatchedBy(func(b string) bool {
-					return b == "http://api.github.com"
-				}),
-				mock.AnythingOfType("*v1.InvokeMethodRequest"),
-			).
-			Return(nil, status.Errorf(codes.PermissionDenied, "Permission Denied")).
-			Once()
-
-		// act
-		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
-
-		// assert
-		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
-		assert.Equal(t, 403, resp.StatusCode)
-		assert.Equal(t, "ERR_DIRECT_INVOKE", resp.ErrorBody["errorCode"])
-	})
-
-	fakeServer.Shutdown()
-}
-
-func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
-	mockDirectMessaging := new(daprt.MockDirectMessaging)
-
-	fakeServer := newFakeHTTPServer()
-
-	var buffer string
-	spec := config.TracingSpec{SamplingRate: "1"}
-
-	createExporters(&buffer)
-
-	compStore := compstore.New()
-	testAPI := &api{
-		directMessaging: mockDirectMessaging,
-		tracingSpec:     spec,
-		universal: &universalapi.UniversalAPI{
-			CompStore:  compStore,
-			Resiliency: resiliency.New(nil),
-		},
-	}
-	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints(), &fakeHTTPServerOptions{
-		spec: &spec,
-	})
-
-	t.Run("Invoke direct messaging without querystring - 200 OK", func(t *testing.T) {
-		fakeDirectMessageResponse := getFakeDirectMessageResponse()
-		defer fakeDirectMessageResponse.Close()
-
-		buffer = ""
-		apiPath := "v1.0/invoke/fakeAppID/method/fakeMethod"
-		fakeData := []byte("fakeData")
-
-		mockDirectMessaging.Calls = nil // reset call count
-		mockDirectMessaging.On(
-			"Invoke",
-			mock.MatchedBy(matchContextInterface),
-			mock.MatchedBy(func(b string) bool {
-				return b == "fakeAppID"
-			}),
-			mock.AnythingOfType("*v1.InvokeMethodRequest"),
-		).Return(fakeDirectMessageResponse, nil).Once()
-
-		// act
-		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
-
-		// assert
-		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
-		assert.Equal(t, 200, resp.StatusCode)
-	})
-
-	t.Run("Invoke direct messaging with dapr-app-id - 200 OK", func(t *testing.T) {
-		fakeDirectMessageResponse := getFakeDirectMessageResponse()
-		defer fakeDirectMessageResponse.Close()
-
-		buffer = ""
-		apiPath := "fakeMethod"
-		fakeData := []byte("fakeData")
-
-		mockDirectMessaging.Calls = nil // reset call count
-		mockDirectMessaging.On(
-			"Invoke",
-			mock.MatchedBy(matchContextInterface),
-			mock.MatchedBy(func(b string) bool {
-				return b == "fakeAppID"
-			}),
-			mock.AnythingOfType("*v1.InvokeMethodRequest"),
-		).Return(fakeDirectMessageResponse, nil).Once()
-
-		// act
-		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil, "dapr-app-id", "fakeAppID")
-
-		// assert
-		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
-		assert.Equal(t, 200, resp.StatusCode)
-	})
-
-	t.Run("Invoke direct messaging with querystring - 200 OK", func(t *testing.T) {
-		fakeDirectMessageResponse := getFakeDirectMessageResponse()
-		defer fakeDirectMessageResponse.Close()
-
-		buffer = ""
-		apiPath := "v1.0/invoke/fakeAppID/method/fakeMethod?param1=val1&param2=val2"
-		fakeData := []byte("fakeData")
-
-		mockDirectMessaging.Calls = nil // reset call count
-		mockDirectMessaging.On(
-			"Invoke",
-			mock.MatchedBy(matchContextInterface),
-			mock.MatchedBy(func(b string) bool {
-				return b == "fakeAppID"
-			}),
-			mock.AnythingOfType("*v1.InvokeMethodRequest"),
-		).Return(fakeDirectMessageResponse, nil).Once()
-
-		// act
-		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
-
-		// assert
-		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
-		assert.Equal(t, 200, resp.StatusCode)
-	})
-
-	fakeServer.Shutdown()
-}
-
-func TestV1DirectMessagingEndpointsWithResiliency(t *testing.T) {
-	failingDirectMessaging := &daprt.FailingDirectMessaging{
-		Failure: daprt.NewFailure(
-			map[string]int{
-				"failingKey":        1,
-				"extraFailingKey":   3,
-				"circuitBreakerKey": 10,
-			},
-			map[string]time.Duration{
-				"timeoutKey": time.Second * 10,
-			},
-			map[string]int{},
-		),
-	}
-
-	fakeServer := newFakeHTTPServer()
-	compStore := compstore.New()
-	testAPI := &api{
-		directMessaging: failingDirectMessaging,
-		universal: &universalapi.UniversalAPI{
-			CompStore:  compStore,
-			Resiliency: resiliency.FromConfigurations(logger.NewLogger("messaging.test"), testResiliency),
-		},
-	}
-	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints(), nil)
-
-	t.Run("Test invoke direct message does not retry on 200", func(t *testing.T) {
-		apiPath := "v1.0/invoke/failingApp/method/fakeMethod"
-		fakeData := []byte("allgood")
-
-		// act
-		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
-
-		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, 1, failingDirectMessaging.Failure.CallCount("allgood"))
-	})
-
-	t.Run("Test invoke direct message does not retry on 2xx", func(t *testing.T) {
-		failingDirectMessaging.SuccessStatusCode = 201
-		defer func() {
-			failingDirectMessaging.SuccessStatusCode = 0
-		}()
-
-		apiPath := "v1.0/invoke/failingApp/method/fakeMethod"
-		fakeData := []byte("allgood2")
-
-		// act
-		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
-
-		assert.Equal(t, 201, resp.StatusCode)
-		assert.Equal(t, 1, failingDirectMessaging.Failure.CallCount("allgood2"))
-	})
-
-	t.Run("Test invoke direct message retries with resiliency", func(t *testing.T) {
-		apiPath := "v1.0/invoke/failingApp/method/fakeMethod"
-		fakeData := []byte("failingKey")
-
-		// act
-		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
-
-		assert.Equal(t, 200, resp.StatusCode)
-		assert.Equal(t, 2, failingDirectMessaging.Failure.CallCount("failingKey"))
-	})
-
-	t.Run("Test invoke direct message fails with timeout", func(t *testing.T) {
-		apiPath := "v1.0/invoke/failingApp/method/fakeMethod"
-		fakeData := []byte("timeoutKey")
-
-		// act
-		start := time.Now()
-		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
-		end := time.Now()
-
-		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, 2, failingDirectMessaging.Failure.CallCount("timeoutKey"))
-		assert.Less(t, end.Sub(start), time.Second*10)
-	})
-
-	t.Run("Test invoke direct messages fails after exhausting retries", func(t *testing.T) {
-		apiPath := "v1.0/invoke/failingApp/method/fakeMethod"
-		fakeData := []byte("extraFailingKey")
-
-		// act
-		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
-
-		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, 2, failingDirectMessaging.Failure.CallCount("extraFailingKey"))
-	})
-
-	t.Run("Test invoke direct messages can trip circuit breaker", func(t *testing.T) {
-		apiPath := "v1.0/invoke/circuitBreakerApp/method/fakeMethod"
-		fakeData := []byte("circuitBreakerKey")
-
-		// Circuit Breaker trips on the 5th failure, stopping retries.
-		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
-		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, 5, failingDirectMessaging.Failure.CallCount("circuitBreakerKey"))
-
-		// Request occurs when the circuit breaker is open, which shouldn't even hit the app.
-		resp = fakeServer.DoRequest("POST", apiPath, fakeData, nil)
-		assert.Equal(t, 500, resp.StatusCode)
-		assert.Contains(t, string(resp.RawBody), "circuit breaker is open", "Should have received a circuit breaker open error.")
-		assert.Equal(t, 5, failingDirectMessaging.Failure.CallCount("circuitBreakerKey"))
-	})
-
-	fakeServer.Shutdown()
-}
-
 func TestV1ActorEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	rc := resiliency.FromConfigurations(logger.NewLogger("test.api.http.actors"), testResiliency)
@@ -2681,7 +1791,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 				"failingId": 1,
 			},
 			map[string]time.Duration{
-				"timeoutId": time.Second * 10,
+				"timeoutId": time.Second * 30,
 			},
 			map[string]int{},
 		),
@@ -4206,15 +3316,15 @@ func TestV1StateEndpoints(t *testing.T) {
 				"failingQueryKey":      1,
 			},
 			map[string]time.Duration{
-				"timeoutGetKey":         time.Second * 10,
-				"timeoutSetKey":         time.Second * 10,
-				"timeoutDeleteKey":      time.Second * 10,
-				"timeoutBulkGetKey":     time.Second * 10,
-				"timeoutBulkGetKeyBulk": time.Second * 10,
-				"timeoutBulkSetKey":     time.Second * 10,
-				"timeoutBulkDeleteKey":  time.Second * 10,
-				"timeoutMultiKey":       time.Second * 10,
-				"timeoutQueryKey":       time.Second * 10,
+				"timeoutGetKey":         time.Second * 30,
+				"timeoutSetKey":         time.Second * 30,
+				"timeoutDeleteKey":      time.Second * 30,
+				"timeoutBulkGetKey":     time.Second * 30,
+				"timeoutBulkGetKeyBulk": time.Second * 30,
+				"timeoutBulkSetKey":     time.Second * 30,
+				"timeoutBulkDeleteKey":  time.Second * 30,
+				"timeoutMultiKey":       time.Second * 30,
+				"timeoutQueryKey":       time.Second * 30,
 			},
 			map[string]int{},
 		),
@@ -4231,6 +3341,7 @@ func TestV1StateEndpoints(t *testing.T) {
 			CompStore:  compStore,
 			Resiliency: rc,
 		},
+		pubsubAdapter: &daprt.MockPubSubAdapter{},
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints(), nil)
 
@@ -4593,7 +3704,7 @@ func TestV1StateEndpoints(t *testing.T) {
 
 		assert.Equal(t, 500, resp.StatusCode) // No body in the response.
 		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutGetKey"))
-		assert.Less(t, end.Sub(start), time.Second*10)
+		assert.Less(t, end.Sub(start), time.Second*30)
 	})
 
 	t.Run("set state request retries with resiliency", func(t *testing.T) {
@@ -4623,7 +3734,7 @@ func TestV1StateEndpoints(t *testing.T) {
 
 		assert.Equal(t, 500, resp.StatusCode) // No body in the response.
 		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutSetKey"))
-		assert.Less(t, end.Sub(start), time.Second*10)
+		assert.Less(t, end.Sub(start), time.Second*30)
 	})
 
 	t.Run("delete state request retries with resiliency", func(t *testing.T) {
@@ -4643,14 +3754,14 @@ func TestV1StateEndpoints(t *testing.T) {
 
 		assert.Equal(t, 500, resp.StatusCode) // No body in the response.
 		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutDeleteKey"))
-		assert.Less(t, end.Sub(start), time.Second*10)
+		assert.Less(t, end.Sub(start), time.Second*30)
 	})
 
 	t.Run("bulk state get fails with bulk support", func(t *testing.T) {
 		// Adding this will make the bulk operation fail
-		failingStore.BulkFailKey = "timeoutBulkGetKeyBulk"
+		failingStore.BulkFailKey.Store(ptr.Of("timeoutBulkGetKeyBulk"))
 		t.Cleanup(func() {
-			failingStore.BulkFailKey = ""
+			failingStore.BulkFailKey.Store(ptr.Of(""))
 		})
 
 		apiPath := fmt.Sprintf("v1.0/state/%s/bulk", "failStore")
@@ -4704,7 +3815,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		assert.Equal(t, 500, resp.StatusCode)
 		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutBulkSetKey"))
 		assert.Equal(t, 0, failingStore.Failure.CallCount("goodTimeoutBulkSetKey"))
-		assert.Less(t, end.Sub(start), time.Second*10)
+		assert.Less(t, end.Sub(start), time.Second*30)
 	})
 
 	t.Run("state transaction passes after retries with resiliency", func(t *testing.T) {
@@ -4971,7 +4082,7 @@ func TestV1SecretEndpoints(t *testing.T) {
 	failingStore := daprt.FailingSecretStore{
 		Failure: daprt.NewFailure(
 			map[string]int{"key": 1, "bulk": 1},
-			map[string]time.Duration{"timeout": time.Second * 10, "bulkTimeout": time.Second * 10},
+			map[string]time.Duration{"timeout": time.Second * 30, "bulkTimeout": time.Second * 30},
 			map[string]int{},
 		),
 	}
@@ -5147,14 +4258,14 @@ func TestV1SecretEndpoints(t *testing.T) {
 	t.Run("Get secret - timeout before request ends", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/secrets/%s/timeout", "failSecret")
 
-		// Store sleeps for 10 seconds, let's make sure our timeout takes less time than that.
+		// Store sleeps for 30 seconds, let's make sure our timeout takes less time than that.
 		start := time.Now()
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 		end := time.Now()
 
 		assert.Equal(t, 500, resp.StatusCode)
 		assert.Equal(t, 2, failingStore.Failure.CallCount("timeout"))
-		assert.Less(t, end.Sub(start), time.Second*10)
+		assert.Less(t, end.Sub(start), time.Second*30)
 	})
 
 	t.Run("Get bulk secret - retries on initial failure with resiliency", func(t *testing.T) {
@@ -5175,7 +4286,7 @@ func TestV1SecretEndpoints(t *testing.T) {
 
 		assert.Equal(t, 500, resp.StatusCode)
 		assert.Equal(t, 2, failingStore.Failure.CallCount("bulkTimeout"))
-		assert.Less(t, end.Sub(start), time.Second*10)
+		assert.Less(t, end.Sub(start), time.Second*30)
 	})
 }
 
@@ -5388,7 +4499,8 @@ func TestV1TransactionEndpoints(t *testing.T) {
 		universal: &universalapi.UniversalAPI{
 			CompStore: compStore,
 		},
-		resiliency: resiliency.New(nil),
+		resiliency:    resiliency.New(nil),
+		pubsubAdapter: &daprt.MockPubSubAdapter{},
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints(), nil)
 	fakeBodyObject := map[string]interface{}{"data": "fakeData"}
@@ -5683,73 +4795,4 @@ func TestExtractEtag(t *testing.T) {
 func matchContextInterface(v any) bool {
 	_, ok := v.(context.Context)
 	return ok
-}
-
-func TestPathHasPrefix(t *testing.T) {
-	tests := []struct {
-		name         string
-		path         string
-		prefixParts  []string
-		want         int
-		wantTrailing string
-	}{
-		{name: "match one prefix", path: "/v1.0/invoke/foo", prefixParts: []string{"v1.0"}, want: 6, wantTrailing: "invoke/foo"},
-		{name: "match two prefixes", path: "/v1.0/invoke/foo", prefixParts: []string{"v1.0", "invoke"}, want: 13, wantTrailing: "foo"},
-		{name: "ignore extra slashes", path: "//v1.0///invoke//foo", prefixParts: []string{"v1.0", "invoke"}, want: 17, wantTrailing: "foo"},
-		{name: "extra slashes after match", path: "//v1.0///invoke//foo//bar", prefixParts: []string{"v1.0", "invoke"}, want: 17, wantTrailing: "foo//bar"},
-		{name: "no slash at beginning", path: "v1.0//invoke//foo", prefixParts: []string{"v1.0", "invoke"}, want: 14, wantTrailing: "foo"},
-		{name: "empty prefix", path: "/foo/bar", prefixParts: []string{}, want: 1, wantTrailing: "foo/bar"},
-		{name: "empty path", path: "", prefixParts: []string{"v1.0", "invoke"}, want: -1},
-		{name: "no match", path: "/foo/bar", prefixParts: []string{"v1.0", "invoke"}, want: -1},
-		{name: "path is slash only", path: "/", prefixParts: []string{"v1.0", "invoke"}, want: -1},
-		{name: "empty prefix skips multiple slashes", path: "///", prefixParts: []string{}, want: 3, wantTrailing: ""},
-		{name: "missing initial part", path: "/foo/bar", prefixParts: []string{"bar"}, want: -1},
-		{name: "match incomplete", path: "/v1.0", prefixParts: []string{"v1.0", "invoke"}, want: -1},
-		{name: "trailing slash is required", path: "v1.0//invoke", prefixParts: []string{"v1.0", "invoke"}, want: -1},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := pathHasPrefix(tt.path, tt.prefixParts...)
-			if got != tt.want {
-				t.Errorf("pathHasPrefix() = %v, want %v", got, tt.want)
-			} else if got >= 0 && tt.path[got:] != tt.wantTrailing {
-				t.Errorf("trailing = %q, want %q", tt.path[got:], tt.wantTrailing)
-			}
-		})
-	}
-}
-
-func TestFindTargetIDAndMethod(t *testing.T) {
-	tests := []struct {
-		name         string
-		path         string
-		headers      gohttp.Header
-		wantTargetID string
-		wantMethod   string
-	}{
-		{name: "dapr-app-id header", path: "/foo/bar", headers: gohttp.Header{"Dapr-App-Id": []string{"myapp"}}, wantTargetID: "myapp", wantMethod: "foo/bar"},
-		{name: "basic auth", path: "/foo/bar", headers: gohttp.Header{"Authorization": []string{"Basic ZGFwci1hcHAtaWQ6YXV0aA=="}}, wantTargetID: "auth", wantMethod: "foo/bar"},
-		{name: "dapr-app-id header has priority over basic auth", path: "/foo/bar", headers: gohttp.Header{"Dapr-App-Id": []string{"myapp"}, "Authorization": []string{"Basic ZGFwci1hcHAtaWQ6YXV0aA=="}}, wantTargetID: "myapp", wantMethod: "foo/bar"},
-		{name: "path with internal target", path: "/v1.0/invoke/myapp/method/foo", wantTargetID: "myapp", wantMethod: "foo"},
-		{name: "basic auth has priority over path", path: "/v1.0/invoke/myapp/method/foo", headers: gohttp.Header{"Authorization": []string{"Basic ZGFwci1hcHAtaWQ6YXV0aA=="}}, wantTargetID: "auth", wantMethod: "v1.0/invoke/myapp/method/foo"},
-		{name: "path with '/' method", path: "/v1.0/invoke/myapp/method/", wantTargetID: "myapp", wantMethod: ""},
-		{name: "path with missing method", path: "/v1.0/invoke/myapp/method", wantTargetID: "", wantMethod: ""},
-		{name: "path with http target unescaped", path: "/v1.0/invoke/http://example.com/method/foo", wantTargetID: "http://example.com", wantMethod: "foo"},
-		{name: "path with https target unescaped", path: "/v1.0/invoke/https://example.com/method/foo", wantTargetID: "https://example.com", wantMethod: "foo"},
-		{name: "path with http target escaped", path: "/v1.0/invoke/http%3A%2F%2Fexample.com/method/foo", wantTargetID: "http://example.com", wantMethod: "foo"},
-		{name: "path with https target escaped", path: "/v1.0/invoke/https%3A%2F%2Fexample.com/method/foo", wantTargetID: "https://example.com", wantMethod: "foo"},
-		{name: "path with https target partly escaped", path: "/v1.0/invoke/https%3A/%2Fexample.com/method/foo", wantTargetID: "https://example.com", wantMethod: "foo"},
-		{name: "extra slashes are removed", path: "///foo//bar", headers: gohttp.Header{"Dapr-App-Id": []string{"myapp"}}, wantTargetID: "myapp", wantMethod: "foo/bar"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			gotTargetID, gotMethod := findTargetIDAndMethod(tt.path, tt.headers)
-			if gotTargetID != tt.wantTargetID {
-				t.Errorf("findTargetIDAndMethod() gotTargetID = %v, want %v", gotTargetID, tt.wantTargetID)
-			}
-			if gotMethod != tt.wantMethod {
-				t.Errorf("findTargetIDAndMethod() gotMethod = %v, want %v", gotMethod, tt.wantMethod)
-			}
-		})
-	}
 }
