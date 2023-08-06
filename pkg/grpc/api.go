@@ -682,7 +682,7 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 			req.Value = s.Value
 		}
 
-		if a.isErrorCodesEnabled {
+		if a.isErrorCodesEnabled && req.Metadata != nil {
 			req.Metadata[errorcodes.ErrorCodesFeatureMetadataKey] = "true"
 		}
 		if s.Etag != nil {
@@ -763,7 +763,7 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 		Key:      key,
 		Metadata: in.Metadata,
 	}
-	if a.isErrorCodesEnabled {
+	if a.isErrorCodesEnabled && req.Metadata != nil {
 		req.Metadata[errorcodes.ErrorCodesFeatureMetadataKey] = "true"
 	}
 	if in.Etag != nil {
@@ -814,7 +814,7 @@ func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkSta
 			Key:      key,
 			Metadata: item.Metadata,
 		}
-		if a.isErrorCodesEnabled {
+		if a.isErrorCodesEnabled && req.Metadata != nil {
 			req.Metadata[errorcodes.ErrorCodesFeatureMetadataKey] = "true"
 		}
 		if item.Etag != nil {

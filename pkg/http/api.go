@@ -30,6 +30,7 @@ import (
 	"github.com/valyala/fasthttp"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
@@ -901,6 +902,10 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 		req.ETag = &etag
 	}
 
+	if a.isErrorCodesEnabled {
+		req.Metadata[errorcodes.ErrorCodesFeatureMetadataKey] = "true"
+	}
+
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[any](reqCtx,
 		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Statestore),
@@ -972,6 +977,9 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 			for k, v := range metadata {
 				reqs[i].Metadata[k] = v
 			}
+		}
+		if a.isErrorCodesEnabled {
+			reqs[i].Metadata[errorcodes.ErrorCodesFeatureMetadataKey] = "true"
 		}
 
 		reqs[i].Key, err = stateLoader.GetModifiedStateKey(r.Key, storeName, a.universal.AppID)
@@ -1048,11 +1056,28 @@ func (a *api) stateErrorResponse(err error, errorCode string) (int, string, Erro
 	return nethttp.StatusInternalServerError, message, r
 }
 
-// stateDaprErrorResponse takes a state store error and sends the response with JSON Status Error.
-// Returns original state error if not Etag or processing fails.
+// stateDaprErrorResponse currently only supports ETag Mismatch errors.
+// It will evolve as ErrorCodes is supported by Components.
+// It takes a gRPC status Error or ETagError depending on the component support at the moment
+// of invocation, and sends the response with JSON Status Error.
+// Returns original error processing fails.
 func (a *api) stateDaprErrorResponse(stateErr error, md map[string]string) (int, []byte, error) {
+
+	// this condition assumes both:
+	//   - ErrorCodes is enable at the component level
+	//   - The component added support for ErrorCodes
+	//   - The component returned the error wrapped in a gRPC Status error
+	if ste := status.Convert(stateErr); ste != nil {
+		if resp, sejErr := errorcodes.StatusErrorJSON(ste); sejErr == nil {
+			return nethttp.StatusConflict, resp, nil
+		}
+	}
+
+	// this condition assumes both:
+	//   - ErrorCodes is enable at the component level
+	//   - The component does not support for ErrorCodes
 	if etag, code, message := a.etagError(stateErr); etag && (code == nethttp.StatusConflict) {
-		if st, wdErr := errorcodes.New(codes.Aborted, errorcodes.EtagMismatch, message, md); wdErr == nil {
+		if st, wdErr := errorcodes.NewStatusError(codes.Aborted, errorcodes.EtagMismatch, message, md); wdErr == nil {
 			if resp, sejErr := errorcodes.StatusErrorJSON(st); sejErr == nil {
 				return code, resp, nil
 			}

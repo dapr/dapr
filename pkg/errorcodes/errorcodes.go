@@ -14,8 +14,6 @@ limitations under the License.
 package errorcodes
 
 import (
-	"fmt"
-
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
@@ -31,9 +29,11 @@ const (
 	ErrorCodesFeatureMetadataKey = "error_codes_feature"
 )
 
-// New returns a Status representing c and msg.
-func New(c codes.Code, reason errorCodesReason, msg string, md map[string]string) (*status.Status, error) {
+// NewStatusError returns a Status representing Code, error Reason, Message and optional Metadata.
+// When successful, it returns a Status with Details. Otherwise, nil with error.
+func NewStatusError(c codes.Code, reason errorCodesReason, msg string, metadata map[string]string) (*status.Status, error) {
 	ste := status.New(c, msg)
+	md := metadata
 	if md == nil {
 		md = map[string]string{}
 	}
@@ -43,11 +43,6 @@ func New(c codes.Code, reason errorCodesReason, msg string, md map[string]string
 		Metadata: md,
 	}
 	return ste.WithDetails(&ei)
-}
-
-// Newf returns New(c, fmt.Sprintf(format, a...)).
-func Newf(c codes.Code, reason errorCodesReason, md map[string]string, format string, a ...interface{}) (*status.Status, error) {
-	return New(c, reason, fmt.Sprintf(format, a...), md)
 }
 
 func StatusErrorJSON(st *status.Status) ([]byte, error) {
