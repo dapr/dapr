@@ -57,6 +57,7 @@ var (
 	updater         Updater
 	httpClient      = utils.NewHTTPClient()
 	grpcClient      runtimev1pb.DaprClient
+	grpcSubs        = make(map[string]context.CancelFunc)
 )
 
 type UnsubscribeConfigurationResponse struct {
@@ -359,9 +360,8 @@ func buildQueryParams(keys []string) string {
 	return ret
 }
 
-func subscribeGRPC(keys []string, endpointType string, configStore string, component string) (string, error) {
+func subscribeGRPC(keys []string, endpointType string, configStore string, component string) (subscriptionID string, err error) {
 	var client runtimev1pb.Dapr_SubscribeConfigurationClient
-	var err error
 	subscribeConfigurationRequest := &runtimev1pb.SubscribeConfigurationRequest{
 		StoreName: configStore,
 		Keys:      keys,
@@ -371,24 +371,33 @@ func subscribeGRPC(keys []string, endpointType string, configStore string, compo
 			"pgNotifyChannel": postgresChannel,
 		}
 	}
+	ctx, cancel := context.WithCancel(context.Background())
 	if endpointType == alpha1Endpoint {
-		client, err = grpcClient.SubscribeConfigurationAlpha1(context.Background(), subscribeConfigurationRequest)
+		client, err = grpcClient.SubscribeConfigurationAlpha1(ctx, subscribeConfigurationRequest)
 	} else {
-		client, err = grpcClient.SubscribeConfiguration(context.Background(), subscribeConfigurationRequest)
+		client, err = grpcClient.SubscribeConfiguration(ctx, subscribeConfigurationRequest)
 	}
 	if err != nil {
+		cancel()
 		return "", fmt.Errorf("error subscribing config updates: %w", err)
 	}
 	res, err := client.Recv()
 	if errors.Is(err, io.EOF) {
+		cancel()
 		return "", fmt.Errorf("error subscribe: stream closed before receiving ID")
 	}
 	if err != nil {
+		cancel()
 		return "", fmt.Errorf("error subscribe: %w", err)
 	}
-	subscriptionID := res.GetId()
+	subscriptionID = res.GetId()
 	go subscribeHandlerGRPC(client)
 	log.Printf("App subscribed to config changes with subscription id: %s", subscriptionID)
+
+	lock.Lock()
+	grpcSubs[subscriptionID] = cancel
+	lock.Unlock()
+
 	return subscriptionID, nil
 }
 
@@ -505,22 +514,18 @@ func unsubscribeHTTP(subscriptionID string, endpointType string, configStore str
 	return string(respInBytes), nil
 }
 
-func unsubscribeGRPC(subscriptionID string, endpointType string, configStore string) (string, error) {
-	unsubscribeConfigGRPC := grpcClient.UnsubscribeConfiguration
-	if endpointType == alpha1Endpoint {
-		unsubscribeConfigGRPC = grpcClient.UnsubscribeConfigurationAlpha1
+func unsubscribeGRPC(subscriptionID string) error {
+	lock.Lock()
+	cancel := grpcSubs[subscriptionID]
+	delete(grpcSubs, subscriptionID)
+	lock.Unlock()
+
+	if cancel == nil {
+		return errors.New("error subscriptionID not found")
 	}
-	resp, err := unsubscribeConfigGRPC(context.Background(), &runtimev1pb.UnsubscribeConfigurationRequest{
-		StoreName: configStore,
-		Id:        subscriptionID,
-	})
-	if err != nil {
-		return "", fmt.Errorf("error unsubscribing config updates: %w", err)
-	}
-	if !resp.Ok {
-		return "", fmt.Errorf("error subscriptionID not found: %s", resp.GetMessage())
-	}
-	return resp.GetMessage(), nil
+	cancel()
+
+	return nil
 }
 
 // stopSubscription is the handler for unsubscribing from config store
@@ -530,12 +535,12 @@ func stopSubscription(w http.ResponseWriter, r *http.Request) {
 	protocol := vars["protocol"]
 	endpointType := vars["endpointType"]
 	configStore := vars["configStore"]
-	var response string
+	response := "OK"
 	var err error
 	if protocol == "http" {
 		response, err = unsubscribeHTTP(subscriptionID, endpointType, configStore)
 	} else if protocol == "grpc" {
-		response, err = unsubscribeGRPC(subscriptionID, endpointType, configStore)
+		err = unsubscribeGRPC(subscriptionID)
 	} else {
 		err = fmt.Errorf("unknown protocol in unsubscribe call: %s", protocol)
 	}
