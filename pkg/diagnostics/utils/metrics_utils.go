@@ -14,6 +14,7 @@ limitations under the License.
 package utils
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 
@@ -57,17 +58,19 @@ func WithTags(name string, opts ...interface{}) []tag.Mutator {
 			break
 		}
 		// skip if value is empty
-		if value != "" {
-			if len(metricsRules) > 0 {
-				pairs := metricsRules[strings.ReplaceAll(name, "_", "/")+key.Name()]
-
-				for _, p := range pairs {
-					value = p.regex.ReplaceAllString(value, p.replace)
-				}
-			}
-
-			tagMutators = append(tagMutators, tag.Upsert(key, value))
+		if value == "" {
+			continue
 		}
+
+		if len(metricsRules) > 0 {
+			pairs := metricsRules[strings.ReplaceAll(name, "_", "/")+key.Name()]
+
+			for _, p := range pairs {
+				value = p.regex.ReplaceAllString(value, p.replace)
+			}
+		}
+
+		tagMutators = append(tagMutators, tag.Upsert(key, value))
 	}
 	return tagMutators
 }
@@ -83,7 +86,7 @@ func AddNewTagKey(views []*view.View, key *tag.Key) []*view.View {
 
 // CreateRulesMap generates a fast lookup map for metrics regex.
 func CreateRulesMap(rules []config.MetricsRule) error {
-	metricsRules = map[string][]regexPair{}
+	newMetricsRules := make(map[string][]regexPair, len(rules))
 
 	for _, r := range rules {
 		// strip the metric name of known runtime prefixes and mutate them to fit stat names
@@ -91,21 +94,25 @@ func CreateRulesMap(rules []config.MetricsRule) error {
 		r.Name = strings.ReplaceAll(r.Name, "_", "/")
 
 		for _, l := range r.Labels {
-			metricsRules[r.Name+l.Name] = make([]regexPair, 0, len(l.Regex))
+			key := r.Name + l.Name
+			newMetricsRules[key] = make([]regexPair, len(l.Regex))
 
+			i := 0
 			for k, v := range l.Regex {
 				regex, err := regexp.Compile(v)
 				if err != nil {
-					return err
+					return fmt.Errorf("failed to compile regex for rule %s/%s: %w", key, k, err)
 				}
 
-				metricsRules[r.Name+l.Name] = append(metricsRules[r.Name+l.Name], regexPair{
+				newMetricsRules[key][i] = regexPair{
 					regex:   regex,
 					replace: k,
-				})
+				}
+				i++
 			}
 		}
 	}
 
+	metricsRules = newMetricsRules
 	return nil
 }

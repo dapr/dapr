@@ -267,7 +267,7 @@ func (s *server) useMaxBodySize(r chi.Router) {
 	}
 
 	maxSize := int64(s.config.MaxRequestBodySizeMB) << 20 // To bytes
-	log.Infof("Enabled max body size HTTP middleware with size %d MB", maxSize)
+	log.Infof("Enabled max body size HTTP middleware with size %d MB", s.config.MaxRequestBodySizeMB)
 
 	r.Use(MaxBodySizeMiddleware(maxSize))
 }
@@ -321,11 +321,11 @@ func (s *server) useAPIAuthentication(r chi.Router) {
 	r.Use(APITokenAuthMiddleware(token))
 }
 
-func (s *server) unescapeRequestParametersHandler(keepWildcardUnescaped bool, next http.Handler) http.HandlerFunc {
+func (s *server) unescapeRequestParametersHandler(next http.Handler) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		chiCtx := chi.RouteContext(r.Context())
 		if chiCtx != nil {
-			err := s.unespaceRequestParametersInContext(chiCtx, keepWildcardUnescaped)
+			err := s.unespaceRequestParametersInContext(chiCtx)
 			if err != nil {
 				errMsg := err.Error()
 				log.Debug(errMsg)
@@ -338,12 +338,8 @@ func (s *server) unescapeRequestParametersHandler(keepWildcardUnescaped bool, ne
 	})
 }
 
-func (s *server) unespaceRequestParametersInContext(chiCtx *chi.Context, keepWildcardUnescaped bool) (err error) {
+func (s *server) unespaceRequestParametersInContext(chiCtx *chi.Context) (err error) {
 	for i, key := range chiCtx.URLParams.Keys {
-		if keepWildcardUnescaped && key == "*" {
-			continue
-		}
-
 		chiCtx.URLParams.Values[i], err = url.QueryUnescape(chiCtx.URLParams.Values[i])
 		if err != nil {
 			return fmt.Errorf("failed to unescape request parameter %q. Error: %w", key, err)
@@ -378,7 +374,7 @@ func (s *server) handle(e Endpoint, path string, r chi.Router, unescapeParameter
 	handler := e.GetHandler()
 
 	if unescapeParameters {
-		handler = s.unescapeRequestParametersHandler(e.KeepWildcardUnescaped, handler)
+		handler = s.unescapeRequestParametersHandler(handler)
 	}
 
 	if apiLogging {
