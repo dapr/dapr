@@ -65,8 +65,8 @@ func (c *ComponentStore) GetConfigurationSubscribe(name string) (chan struct{}, 
 func (c *ComponentStore) DeleteConfigurationSubscribe(name string) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	stop, ok := c.configurationSubscribes[name]
-	if ok {
+	stop := c.configurationSubscribes[name]
+	if stop != nil {
 		close(stop)
 	}
 	delete(c.configurationSubscribes, name)
