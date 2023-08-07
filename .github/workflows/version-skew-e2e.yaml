@@ -216,10 +216,7 @@ jobs:
       run: |
         cd latest-release
 
-        make setup-test-env-redis
-        make setup-test-env-kafka
-        make setup-test-env-mongodb
-        make setup-test-env-zipkin
+        make setup-test-env
         make setup-test-components
 
     - name: Free up some diskspace
