@@ -53,7 +53,6 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
-	"github.com/dapr/dapr/pkg/runtime/compstore"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/utils"
 )
@@ -78,7 +77,6 @@ type api struct {
 	*universalapi.UniversalAPI
 	directMessaging       messaging.DirectMessaging
 	appChannel            channel.AppChannel
-	resiliency            resiliency.Provider
 	pubsubAdapter         runtimePubsub.Adapter
 	sendToOutputBindingFn func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	tracingSpec           config.TracingSpec
@@ -87,38 +85,20 @@ type api struct {
 
 // APIOpts contains options for NewAPI.
 type APIOpts struct {
-	AppID                       string
-	AppChannel                  channel.AppChannel
-	Resiliency                  resiliency.Provider
-	CompStore                   *compstore.ComponentStore
-	PubsubAdapter               runtimePubsub.Adapter
-	DirectMessaging             messaging.DirectMessaging
-	Actors                      actors.Actors
-	SendToOutputBindingFn       func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
-	TracingSpec                 config.TracingSpec
-	AccessControlList           *config.AccessControlList
-	Shutdown                    func()
-	GetComponentsCapabilitiesFn func() map[string][]string
-	AppConnectionConfig         config.AppConnectionConfig
-	GlobalConfig                *config.Configuration
+	UniversalAPI          *universalapi.UniversalAPI
+	AppChannel            channel.AppChannel
+	PubsubAdapter         runtimePubsub.Adapter
+	DirectMessaging       messaging.DirectMessaging
+	SendToOutputBindingFn func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	TracingSpec           config.TracingSpec
+	AccessControlList     *config.AccessControlList
 }
 
 // NewAPI returns a new gRPC API.
 func NewAPI(opts APIOpts) API {
 	return &api{
-		UniversalAPI: &universalapi.UniversalAPI{
-			AppID:                      opts.AppID,
-			Logger:                     apiServerLogger,
-			Resiliency:                 opts.Resiliency,
-			Actors:                     opts.Actors,
-			CompStore:                  opts.CompStore,
-			ShutdownFn:                 opts.Shutdown,
-			GetComponentsCapabilitesFn: opts.GetComponentsCapabilitiesFn,
-			AppConnectionConfig:        opts.AppConnectionConfig,
-			GlobalConfig:               opts.GlobalConfig,
-		},
+		UniversalAPI:          opts.UniversalAPI,
 		directMessaging:       opts.DirectMessaging,
-		resiliency:            opts.Resiliency,
 		appChannel:            opts.AppChannel,
 		pubsubAdapter:         opts.PubsubAdapter,
 		sendToOutputBindingFn: opts.SendToOutputBindingFn,
@@ -255,7 +235,7 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 	if invokeServiceDeprecationNoticeShown.CompareAndSwap(false, true) {
 		apiServerLogger.Warn("[DEPRECATION NOTICE] InvokeService is deprecated and will be removed in the future, please use proxy mode instead.")
 	}
-	policyDef := a.resiliency.EndpointPolicy(in.Id, in.Id+":"+in.Message.Method)
+	policyDef := a.UniversalAPI.Resiliency.EndpointPolicy(in.Id, in.Id+":"+in.Message.Method)
 
 	req := invokev1.FromInvokeRequestMessage(in.GetMessage())
 	if policyDef != nil {
@@ -948,7 +928,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[struct{}](ctx,
-		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
+		a.UniversalAPI.Resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
 	)
 	storeReq := &state.TransactionalStateRequest{
 		Operations: operations,
@@ -1212,7 +1192,7 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 		return response, err
 	}
 
-	policyDef := a.resiliency.ActorPreLockPolicy(in.ActorType, in.ActorId)
+	policyDef := a.UniversalAPI.Resiliency.ActorPreLockPolicy(in.ActorType, in.ActorId)
 
 	reqMetadata := make(map[string][]string, len(in.Metadata))
 	for k, v := range in.Metadata {
@@ -1308,7 +1288,7 @@ func (a *api) GetConfiguration(ctx context.Context, in *runtimev1pb.GetConfigura
 
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[*configuration.GetResponse](ctx,
-		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Configuration),
+		a.UniversalAPI.Resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Configuration),
 	)
 	getResponse, err := policyRunner(func(ctx context.Context) (*configuration.GetResponse, error) {
 		return store.Get(ctx, &req)
@@ -1461,7 +1441,7 @@ func (a *api) subscribeConfiguration(ctx context.Context, request *runtimev1pb.S
 	// TODO(@laurence) deal with failed subscription and retires
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[string](ctx,
-		a.resiliency.ComponentOutboundPolicy(request.StoreName, resiliency.Configuration),
+		a.UniversalAPI.Resiliency.ComponentOutboundPolicy(request.StoreName, resiliency.Configuration),
 	)
 	subscribeID, err = policyRunner(func(ctx context.Context) (string, error) {
 		return store.Subscribe(ctx, componentReq, handler.updateEventHandler)
@@ -1481,7 +1461,7 @@ func (a *api) subscribeConfiguration(ctx context.Context, request *runtimev1pb.S
 
 func (a *api) unsubscribeConfiguration(ctx context.Context, subscribeID string, storeName string, store configuration.Store) error {
 	policyRunner := resiliency.NewRunner[struct{}](ctx,
-		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Configuration),
+		a.UniversalAPI.Resiliency.ComponentOutboundPolicy(storeName, resiliency.Configuration),
 	)
 	start := time.Now()
 	storeReq := &configuration.UnsubscribeRequest{

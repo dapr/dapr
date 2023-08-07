@@ -69,7 +69,7 @@ func (a *UniversalAPI) GetMetadata(ctx context.Context, in *emptypb.Empty) (*run
 	// Components
 	components := a.CompStore.ListComponents()
 	registeredComponents := make([]*runtimev1pb.RegisteredComponents, len(components))
-	componentsCapabilities := a.GetComponentsCapabilitesFn()
+	componentsCapabilities := a.GetComponentsCapabilitiesFn()
 	for i, comp := range components {
 		registeredComponents[i] = &runtimev1pb.RegisteredComponents{
 			Name:         comp.Name,
