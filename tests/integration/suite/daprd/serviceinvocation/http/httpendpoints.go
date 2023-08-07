@@ -136,6 +136,8 @@ func (h *httpendpoints) Run(t *testing.T, ctx context.Context) {
 	h.daprd1.WaitUntilRunning(t, ctx)
 	h.daprd2.WaitUntilRunning(t, ctx)
 
+	httpClient := util.HTTPClient(t)
+
 	invokeTests := func(t *testing.T, expTLSCode int, assertBody func(t *testing.T, body string), daprd *procdaprd.Daprd) {
 		t.Run("invoke http endpoint", func(t *testing.T) {
 			doReq := func(method, url string, headers map[string]string) (int, string) {

@@ -540,7 +540,9 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 			return err
 		}
 		a.appHealth.OnHealthChange(a.appHealthChanged)
-		a.appHealth.StartProbes(ctx)
+		if err := a.appHealth.StartProbes(ctx); err != nil {
+			return err
+		}
 
 		// Set the appHealth object in the channel so it's aware of the app's health status
 		a.channels.AppChannel().SetAppHealth(a.appHealth)
@@ -1608,7 +1610,7 @@ func (a *DaprRuntime) blockUntilAppIsReady(ctx context.Context) error {
 				InsecureSkipVerify: true, //nolint:gosec
 			})
 		} else {
-			conn, err = dialer.Dial("tcp", dialAddr)
+			conn, err = dialer.DialContext(ctx, "tcp", dialAddr)
 		}
 		if err == nil && conn != nil {
 			conn.Close()

@@ -30,6 +30,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
+	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -142,9 +143,11 @@ func (o *basic) Run(t *testing.T, ctx context.Context) {
 	b, err := json.Marshal(&tr)
 	require.NoError(t, err)
 
+	httpClient := util.HTTPClient(t)
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, bytes.NewReader(b))
 	require.NoError(t, err)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
 	body, err := io.ReadAll(resp.Body)
@@ -155,7 +158,7 @@ func (o *basic) Run(t *testing.T, ctx context.Context) {
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		req, err = http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%v/getValue", o.daprd.AppPort()), nil)
 		require.NoError(c, err)
-		resp, err = http.DefaultClient.Do(req)
+		resp, err = httpClient.Do(req)
 		require.NoError(c, err)
 		t.Cleanup(func() {
 			require.NoError(t, resp.Body.Close())

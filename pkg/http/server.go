@@ -147,6 +147,7 @@ func (s *server) StartNonBlocking() error {
 			Handler:           handler,
 			ReadHeaderTimeout: 10 * time.Second,
 			MaxHeaderBytes:    s.config.ReadBufferSizeKB << 10, // To bytes
+			Addr:              listener.Addr().String(),
 		}
 		s.servers = append(s.servers, srv)
 
