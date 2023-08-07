@@ -13,11 +13,14 @@ limitations under the License.
 
 package apis
 
-import "github.com/dapr/dapr/pkg/apis/common"
+import (
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/dapr/dapr/pkg/apis/common"
+)
 
 type GenericNameValueResource struct {
-	Name         string
-	Namespace    string
+	metav1.ObjectMeta
 	SecretStore  string
 	ResourceKind string
 	Pairs        []common.NameValuePair
@@ -41,4 +44,12 @@ func (g GenericNameValueResource) GetSecretStore() string {
 
 func (g GenericNameValueResource) NameValuePairs() []common.NameValuePair {
 	return g.Pairs
+}
+
+func (g GenericNameValueResource) LogName() string {
+	return g.Name + " (" + g.ResourceKind + ")"
+}
+
+func (g GenericNameValueResource) Object() metav1.Object {
+	return g.DeepCopy()
 }

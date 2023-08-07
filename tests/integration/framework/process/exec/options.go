@@ -18,6 +18,18 @@ import (
 	"testing"
 )
 
+type options struct {
+	stdout io.WriteCloser
+	stderr io.WriteCloser
+
+	envVars map[string]string
+
+	runErrorFn func(*testing.T, error)
+	exitCode   int
+}
+
+type Option func(*options)
+
 func WithStdout(stdout io.WriteCloser) Option {
 	return func(o *options) {
 		o.stdout = stdout
@@ -39,5 +51,20 @@ func WithRunError(ferr func(*testing.T, error)) Option {
 func WithExitCode(code int) Option {
 	return func(o *options) {
 		o.exitCode = code
+	}
+}
+
+func WithEnvVars(keyValues ...string) Option {
+	return func(o *options) {
+		if len(keyValues)%2 != 0 {
+			panic("keyValues must be a list of key=value pairs")
+		}
+		if o.envVars == nil {
+			o.envVars = make(map[string]string)
+		}
+		for i := 0; i < len(keyValues); i++ {
+			o.envVars[keyValues[i]] = keyValues[i+1]
+			i++
+		}
 	}
 }

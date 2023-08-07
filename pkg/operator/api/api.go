@@ -32,13 +32,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
-	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
-	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	httpendapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subscriptionsapiV2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	daprCredentials "github.com/dapr/dapr/pkg/credentials"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
+	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
 	"github.com/dapr/kit/logger"
 )
 
@@ -56,29 +57,29 @@ var log = logger.NewLogger("dapr.operator.api")
 type Server interface {
 	Run(ctx context.Context, certChain *daprCredentials.CertChain) error
 	Ready(context.Context) error
-	OnComponentUpdated(ctx context.Context, component *componentsapi.Component)
-	OnHTTPEndpointUpdated(ctx context.Context, endpoint *httpendpointsapi.HTTPEndpoint)
+	OnComponentUpdated(context.Context, *loader.Event[compapi.Component])
+	OnHTTPEndpointUpdated(context.Context, *loader.Event[httpendapi.HTTPEndpoint])
 }
 
 type apiServer struct {
 	operatorv1pb.UnimplementedOperatorServer
 	Client client.Client
 	// notify all dapr runtime
-	connLock               sync.Mutex
-	endpointLock           sync.Mutex
-	allConnUpdateChan      map[string]chan *componentsapi.Component
-	allEndpointsUpdateChan map[string]chan *httpendpointsapi.HTTPEndpoint
-	readyCh                chan struct{}
-	running                atomic.Bool
+	connLock            sync.Mutex
+	endpointLock        sync.Mutex
+	componentUpdateChan map[string]chan *loader.Event[compapi.Component]
+	endpointsUpdateChan map[string]chan *loader.Event[httpendapi.HTTPEndpoint]
+	readyCh             chan struct{}
+	running             atomic.Bool
 }
 
 // NewAPIServer returns a new API server.
 func NewAPIServer(client client.Client) Server {
 	return &apiServer{
-		Client:                 client,
-		allConnUpdateChan:      make(map[string]chan *componentsapi.Component),
-		allEndpointsUpdateChan: make(map[string]chan *httpendpointsapi.HTTPEndpoint),
-		readyCh:                make(chan struct{}),
+		Client:              client,
+		componentUpdateChan: make(map[string]chan *loader.Event[compapi.Component]),
+		endpointsUpdateChan: make(map[string]chan *loader.Event[httpendapi.HTTPEndpoint]),
+		readyCh:             make(chan struct{}),
 	}
 }
 
@@ -127,22 +128,32 @@ func (a *apiServer) Run(ctx context.Context, certChain *daprCredentials.CertChai
 	return nil
 }
 
-func (a *apiServer) OnComponentUpdated(_ context.Context, component *componentsapi.Component) {
+// TODO: @joshvanl: Authorize pod name and namespace matches the SPIFFE ID of
+// the caller.
+func (a *apiServer) OnComponentUpdated(ctx context.Context, event *loader.Event[compapi.Component]) {
 	a.connLock.Lock()
-	for _, connUpdateChan := range a.allConnUpdateChan {
-		connUpdateChan <- component
+	defer a.connLock.Unlock()
+	for _, connUpdateChan := range a.componentUpdateChan {
+		select {
+		case connUpdateChan <- event:
+		case <-ctx.Done():
+			return
+		}
 	}
-	a.connLock.Unlock()
 }
 
-func (a *apiServer) OnHTTPEndpointUpdated(_ context.Context, endpoint *httpendpointsapi.HTTPEndpoint) {
+// TODO: @joshvanl: Authorize pod name and namespace matches the SPIFFE ID of
+// the caller.
+func (a *apiServer) OnHTTPEndpointUpdated(ctx context.Context, event *loader.Event[httpendapi.HTTPEndpoint]) {
 	a.endpointLock.Lock()
-	for _, endpointUpdateChan := range a.allEndpointsUpdateChan {
-		go func(endpointUpdateChan chan *httpendpointsapi.HTTPEndpoint) {
-			endpointUpdateChan <- endpoint
-		}(endpointUpdateChan)
+	defer a.endpointLock.Unlock()
+	for _, endpointUpdateChan := range a.endpointsUpdateChan {
+		select {
+		case endpointUpdateChan <- event:
+		case <-ctx.Done():
+			return
+		}
 	}
-	a.endpointLock.Unlock()
 }
 
 func (a *apiServer) Ready(ctx context.Context) error {
@@ -172,7 +183,7 @@ func (a *apiServer) GetConfiguration(ctx context.Context, in *operatorv1pb.GetCo
 
 // ListComponents returns a list of Dapr components.
 func (a *apiServer) ListComponents(ctx context.Context, in *operatorv1pb.ListComponentsRequest) (*operatorv1pb.ListComponentResponse, error) {
-	var components componentsapi.ComponentList
+	var components compapi.ComponentList
 	if err := a.Client.List(ctx, &components, &client.ListOptions{
 		Namespace: in.Namespace,
 	}); err != nil {
@@ -199,7 +210,7 @@ func (a *apiServer) ListComponents(ctx context.Context, in *operatorv1pb.ListCom
 	return resp, nil
 }
 
-func processComponentSecrets(ctx context.Context, component *componentsapi.Component, namespace string, kubeClient client.Client) error {
+func processComponentSecrets(ctx context.Context, component *compapi.Component, namespace string, kubeClient client.Client) error {
 	for i, m := range component.Spec.Metadata {
 		if m.SecretKeyRef.Name != "" && (component.Auth.SecretStore == kubernetesSecretStore || component.Auth.SecretStore == "") {
 			var secret corev1.Secret
@@ -236,7 +247,7 @@ func processComponentSecrets(ctx context.Context, component *componentsapi.Compo
 	return nil
 }
 
-func pairNeedsSecretExtraction(ref commonapi.SecretKeyRef, auth httpendpointsapi.Auth) bool {
+func pairNeedsSecretExtraction(ref commonapi.SecretKeyRef, auth httpendapi.Auth) bool {
 	return ref.Name != "" && (auth.SecretStore == kubernetesSecretStore || auth.SecretStore == "")
 }
 
@@ -274,7 +285,7 @@ func getSecret(ctx context.Context, name, namespace string, ref commonapi.Secret
 	return commonapi.DynamicValue{}, nil
 }
 
-func processHTTPEndpointSecrets(ctx context.Context, endpoint *httpendpointsapi.HTTPEndpoint, namespace string, kubeClient client.Client) error {
+func processHTTPEndpointSecrets(ctx context.Context, endpoint *httpendapi.HTTPEndpoint, namespace string, kubeClient client.Client) error {
 	for i, header := range endpoint.Spec.Headers {
 		if pairNeedsSecretExtraction(header.SecretKeyRef, endpoint.Auth) {
 			v, err := getSecret(ctx, header.SecretKeyRef.Name, namespace, header.SecretKeyRef, kubeClient)
@@ -401,42 +412,43 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 	key := keyObj.String()
 
 	a.connLock.Lock()
-	a.allConnUpdateChan[key] = make(chan *componentsapi.Component, 1)
-	updateChan := a.allConnUpdateChan[key]
+	a.componentUpdateChan[key] = make(chan *loader.Event[compapi.Component], 10)
+	updateChan := a.componentUpdateChan[key]
 	a.connLock.Unlock()
 
 	defer func() {
 		a.connLock.Lock()
 		defer a.connLock.Unlock()
-		delete(a.allConnUpdateChan, key)
+		delete(a.componentUpdateChan, key)
 	}()
 
-	updateComponentFunc := func(ctx context.Context, c *componentsapi.Component) {
-		if c.Namespace != in.Namespace {
+	updateComponentFunc := func(ctx context.Context, event *loader.Event[compapi.Component]) {
+		if event.Resource.GetNamespace() != in.Namespace {
 			return
 		}
 
-		err := processComponentSecrets(ctx, c, in.Namespace, a.Client)
+		err := processComponentSecrets(ctx, &event.Resource, in.Namespace, a.Client)
 		if err != nil {
-			log.Warnf("error processing component %s secrets from pod %s/%s: %s", c.Name, in.Namespace, in.PodName, err)
+			log.Warnf("(%s) error processing component %s secrets from pod %s/%s: %s", event.Type, event.Resource.GetName(), in.Namespace, in.PodName, err)
 			return
 		}
 
-		b, err := json.Marshal(&c)
+		b, err := json.Marshal(event.Resource)
 		if err != nil {
-			log.Warnf("error serializing component %s (%s) from pod %s/%s: %s", c.GetName(), c.Spec.Type, in.Namespace, in.PodName, err)
+			log.Warnf("(%s) error serializing component %s (%s) from pod %s/%s: %s", event.Type, event.Resource.GetName(), event.Resource.Spec.Type, in.Namespace, in.PodName, err)
 			return
 		}
 
 		err = srv.Send(&operatorv1pb.ComponentUpdateEvent{
 			Component: b,
+			Type:      event.Type,
 		})
 		if err != nil {
-			log.Warnf("error updating sidecar with component %s (%s) from pod %s/%s: %s", c.GetName(), c.Spec.Type, in.Namespace, in.PodName, err)
+			log.Warnf("(%s) error updating sidecar with component %s (%s) from pod %s/%s: %s", event.Type, event.Resource.GetName(), event.Resource.Spec.Type, in.Namespace, in.PodName, err)
 			return
 		}
 
-		log.Infof("updated sidecar with component %s (%s) from pod %s/%s", c.GetName(), c.Spec.Type, in.Namespace, in.PodName)
+		log.Infof("(%s) updated sidecar with component %s (%s) from pod %s/%s", event.Type, event.Resource.GetName(), event.Resource.Spec.Type, in.Namespace, in.PodName)
 	}
 
 	var wg sync.WaitGroup
@@ -461,7 +473,7 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 // GetHTTPEndpoint returns a specified http endpoint object.
 func (a *apiServer) GetHTTPEndpoint(ctx context.Context, in *operatorv1pb.GetResiliencyRequest) (*operatorv1pb.GetHTTPEndpointResponse, error) {
 	key := types.NamespacedName{Namespace: in.Namespace, Name: in.Name}
-	var endpointConfig httpendpointsapi.HTTPEndpoint
+	var endpointConfig httpendapi.HTTPEndpoint
 	if err := a.Client.Get(ctx, key, &endpointConfig); err != nil {
 		return nil, fmt.Errorf("error getting http endpoint: %w", err)
 	}
@@ -480,7 +492,7 @@ func (a *apiServer) ListHTTPEndpoints(ctx context.Context, in *operatorv1pb.List
 		HttpEndpoints: [][]byte{},
 	}
 
-	var endpoints httpendpointsapi.HTTPEndpointList
+	var endpoints httpendapi.HTTPEndpointList
 	if err := a.Client.List(ctx, &endpoints, &client.ListOptions{
 		Namespace: in.Namespace,
 	}); err != nil {
@@ -516,41 +528,42 @@ func (a *apiServer) HTTPEndpointUpdate(in *operatorv1pb.HTTPEndpointUpdateReques
 	key := keyObj.String()
 
 	a.endpointLock.Lock()
-	a.allEndpointsUpdateChan[key] = make(chan *httpendpointsapi.HTTPEndpoint, 1)
-	updateChan := a.allEndpointsUpdateChan[key]
+	a.endpointsUpdateChan[key] = make(chan *loader.Event[httpendapi.HTTPEndpoint], 10)
+	updateChan := a.endpointsUpdateChan[key]
 	a.endpointLock.Unlock()
 
 	defer func() {
 		a.endpointLock.Lock()
 		defer a.endpointLock.Unlock()
-		delete(a.allEndpointsUpdateChan, key)
+		delete(a.endpointsUpdateChan, key)
 	}()
 
-	updateHTTPEndpointFunc := func(ctx context.Context, e *httpendpointsapi.HTTPEndpoint) {
-		if e.Namespace != in.Namespace {
+	updateHTTPEndpointFunc := func(ctx context.Context, event *loader.Event[httpendapi.HTTPEndpoint]) {
+		if event.Resource.GetNamespace() != in.Namespace {
 			return
 		}
 
-		err := processHTTPEndpointSecrets(ctx, e, in.Namespace, a.Client)
+		err := processHTTPEndpointSecrets(ctx, &event.Resource, in.Namespace, a.Client)
 		if err != nil {
-			log.Warnf("error processing http endpoint %s secrets from pod %s/%s: %s", e.Name, in.Namespace, in.PodName, err)
+			log.Warnf("(%s) error processing http endpoint %s secrets from pod %s/%s: %s", event.Type, event.Resource.GetName(), in.Namespace, in.PodName, err)
 			return
 		}
-		b, err := json.Marshal(&e)
+		b, err := json.Marshal(event.Resource)
 		if err != nil {
-			log.Warnf("error serializing  http endpoint %s from pod %s/%s: %s", e.GetName(), in.Namespace, in.PodName, err)
+			log.Warnf("(%s) error serializing  http endpoint %s from pod %s/%s: %s", event.Type, event.Resource.GetName(), in.Namespace, in.PodName, err)
 			return
 		}
 
 		err = srv.Send(&operatorv1pb.HTTPEndpointUpdateEvent{
 			HttpEndpoints: b,
+			Type:          event.Type,
 		})
 		if err != nil {
-			log.Warnf("error updating sidecar with http endpoint %s from pod %s/%s: %s", e.GetName(), in.Namespace, in.PodName, err)
+			log.Warnf("(%s) error updating sidecar with http endpoint %s from pod %s/%s: %s", event.Type, event.Resource.GetName(), in.Namespace, in.PodName, err)
 			return
 		}
 
-		log.Infof("updated sidecar with http endpoint %s from pod %s/%s", e.GetName(), in.Namespace, in.PodName)
+		log.Infof("(%s) updated sidecar with http endpoint %s from pod %s/%s", event.Type, event.Resource.GetName(), in.Namespace, in.PodName)
 	}
 
 	var wg sync.WaitGroup

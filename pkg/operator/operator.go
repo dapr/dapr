@@ -34,9 +34,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
-	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	httpendapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subscriptionsapiV1alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	subscriptionsapiV2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
@@ -45,6 +45,8 @@ import (
 	"github.com/dapr/dapr/pkg/operator/api"
 	operatorcache "github.com/dapr/dapr/pkg/operator/cache"
 	"github.com/dapr/dapr/pkg/operator/handlers"
+	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
+	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
 	"github.com/dapr/kit/fswatcher"
 	"github.com/dapr/kit/logger"
 )
@@ -91,10 +93,10 @@ var scheme = runtime.NewScheme()
 func init() {
 	_ = clientgoscheme.AddToScheme(scheme)
 
-	_ = componentsapi.AddToScheme(scheme)
+	_ = compapi.AddToScheme(scheme)
 	_ = configurationapi.AddToScheme(scheme)
 	_ = resiliencyapi.AddToScheme(scheme)
-	_ = httpendpointsapi.AddToScheme(scheme)
+	_ = httpendapi.AddToScheme(scheme)
 	_ = subscriptionsapiV1alpha1.AddToScheme(scheme)
 	_ = subscriptionsapiV2alpha1.AddToScheme(scheme)
 }
@@ -167,22 +169,28 @@ func (o *operator) prepareConfig() error {
 	return nil
 }
 
-func (o *operator) syncComponent(ctx context.Context) func(obj interface{}) {
+func (o *operator) syncComponent(ctx context.Context, eventType operatorv1pb.ResourceEventType) func(obj interface{}) {
 	return func(obj interface{}) {
-		c, ok := obj.(*componentsapi.Component)
+		c, ok := obj.(*compapi.Component)
 		if ok {
-			log.Debugf("Observed component to be synced: %s/%s", c.Namespace, c.Name)
-			o.apiServer.OnComponentUpdated(ctx, c)
+			log.Debugf("Observed component to be synced: (%s) %s/%s", eventType, c.Namespace, c.Name)
+			o.apiServer.OnComponentUpdated(ctx, &loader.Event[compapi.Component]{
+				Resource: *c,
+				Type:     eventType,
+			})
 		}
 	}
 }
 
-func (o *operator) syncHTTPEndpoint(ctx context.Context) func(obj interface{}) {
+func (o *operator) syncHTTPEndpoint(ctx context.Context, eventType operatorv1pb.ResourceEventType) func(obj interface{}) {
 	return func(obj interface{}) {
-		e, ok := obj.(*httpendpointsapi.HTTPEndpoint)
+		e, ok := obj.(*httpendapi.HTTPEndpoint)
 		if ok {
 			log.Debugf("Observed http endpoint to be synced: %s/%s", e.Namespace, e.Name)
-			o.apiServer.OnHTTPEndpointUpdated(ctx, e)
+			o.apiServer.OnHTTPEndpointUpdated(ctx, &loader.Event[httpendapi.HTTPEndpoint]{
+				Resource: *e,
+				Type:     eventType,
+			})
 		}
 	}
 }
@@ -314,16 +322,17 @@ func (o *operator) Run(ctx context.Context) error {
 			return errors.New("failed to wait for cache sync")
 		}
 
-		componentInformer, rErr := o.mgr.GetCache().GetInformer(ctx, &componentsapi.Component{})
+		componentInformer, rErr := o.mgr.GetCache().GetInformer(ctx, &compapi.Component{})
 		if rErr != nil {
 			return fmt.Errorf("unable to get setup components informer: %w", rErr)
 		}
 
 		_, rErr = componentInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-			AddFunc: o.syncComponent(ctx),
+			AddFunc: o.syncComponent(ctx, operatorv1pb.ResourceEventType_CREATED),
 			UpdateFunc: func(_, newObj interface{}) {
-				o.syncComponent(ctx)(newObj)
+				o.syncComponent(ctx, operatorv1pb.ResourceEventType_UPDATED)(newObj)
 			},
+			DeleteFunc: o.syncComponent(ctx, operatorv1pb.ResourceEventType_DELETED),
 		})
 		if rErr != nil {
 			return fmt.Errorf("unable to add components informer event handler: %w", rErr)
@@ -340,16 +349,17 @@ func (o *operator) Run(ctx context.Context) error {
 			return errors.New("failed to wait for cache sync")
 		}
 
-		httpEndpointInformer, rErr := o.mgr.GetCache().GetInformer(ctx, &httpendpointsapi.HTTPEndpoint{})
+		httpEndpointInformer, rErr := o.mgr.GetCache().GetInformer(ctx, &httpendapi.HTTPEndpoint{})
 		if rErr != nil {
 			return fmt.Errorf("unable to get http endpoint informer: %w", rErr)
 		}
 
 		_, rErr = httpEndpointInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-			AddFunc: o.syncHTTPEndpoint(ctx),
+			AddFunc: o.syncHTTPEndpoint(ctx, operatorv1pb.ResourceEventType_CREATED),
 			UpdateFunc: func(_, newObj interface{}) {
-				o.syncHTTPEndpoint(ctx)(newObj)
+				o.syncHTTPEndpoint(ctx, operatorv1pb.ResourceEventType_UPDATED)(newObj)
 			},
+			DeleteFunc: o.syncHTTPEndpoint(ctx, operatorv1pb.ResourceEventType_DELETED),
 		})
 		if rErr != nil {
 			return fmt.Errorf("unable to add http endpoint informer event handler: %w", rErr)

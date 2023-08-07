@@ -16,13 +16,13 @@ package exec
 import (
 	"context"
 	"io"
+	"os"
 	oexec "os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -31,21 +31,12 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/exec/kill"
 )
 
-type options struct {
-	stdout io.WriteCloser
-	stderr io.WriteCloser
-
-	runErrorFn func(*testing.T, error)
-	exitCode   int
-}
-
-type Option func(*options)
-
 type exec struct {
 	lock sync.Mutex
 	cmd  *oexec.Cmd
 
 	args       []string
+	envVars    map[string]string
 	binPath    string
 	runErrorFn func(*testing.T, error)
 	exitCode   int
@@ -83,6 +74,7 @@ func New(t *testing.T, binPath string, args []string, fopts ...Option) *exec {
 
 	return &exec{
 		binPath:    binPath,
+		envVars:    opts.envVars,
 		args:       args,
 		stdoutpipe: opts.stdout,
 		stderrpipe: opts.stderr,
@@ -101,10 +93,13 @@ func (e *exec) Run(t *testing.T, ctx context.Context) {
 	//nolint:gosec
 	e.cmd = oexec.CommandContext(ctx, e.binPath, e.args...)
 
+	e.cmd.Env = os.Environ()
+	for k, v := range e.envVars {
+		e.cmd.Env = append(e.cmd.Env, k+"="+v)
+	}
+
 	e.cmd.Stdout = e.stdoutpipe
 	e.cmd.Stderr = e.stderrpipe
-	// Wait for a few seconds before killing the process completely.
-	e.cmd.WaitDelay = time.Second * 5
 
 	require.NoError(t, e.cmd.Start())
 }
