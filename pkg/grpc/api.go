@@ -18,13 +18,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sort"
 	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	otelTrace "go.opentelemetry.io/otel/trace"
+	"golang.org/x/exp/slices"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -1387,49 +1387,34 @@ func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *c
 	return nil
 }
 
-func (a *api) SubscribeConfiguration(request *runtimev1pb.SubscribeConfigurationRequest, configurationServer runtimev1pb.Dapr_SubscribeConfigurationServer) error { //nolint:nosnakecase
+func (a *api) SubscribeConfiguration(request *runtimev1pb.SubscribeConfigurationRequest, stream runtimev1pb.Dapr_SubscribeConfigurationServer) error { //nolint:nosnakecase
 	store, err := a.getConfigurationStore(request.StoreName)
 	if err != nil {
 		apiServerLogger.Debug(err)
 		return err
 	}
 
-	sort.Strings(request.Keys)
-
-	// TODO(@halspang) provide a switch to use just resiliency or this.
-
-	req := &configuration.SubscribeRequest{
-		Keys:     request.Keys,
-		Metadata: request.GetMetadata(),
-	}
-
 	handler := &configurationEventHandler{
 		readyCh:      make(chan struct{}),
 		api:          a,
 		storeName:    request.StoreName,
-		serverStream: configurationServer,
+		serverStream: stream,
 	}
-	// Prevents a leak
+	// Prevents a leak if we return with an error
 	defer handler.ready()
 
-	// TODO(@laurence) deal with failed subscription and retires
-	start := time.Now()
-	policyRunner := resiliency.NewRunner[string](configurationServer.Context(),
-		a.resiliency.ComponentOutboundPolicy(request.StoreName, resiliency.Configuration),
-	)
-	subscribeID, err := policyRunner(func(ctx context.Context) (string, error) {
-		return store.Subscribe(ctx, req, handler.updateEventHandler)
-	})
-	elapsed := diag.ElapsedSince(start)
-
-	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), request.StoreName, diag.ConfigurationSubscribe, err == nil, elapsed)
-
+	// Subscribe
+	subscribeCtx, subscribeCancel := context.WithCancel(stream.Context())
+	defer subscribeCancel()
+	slices.Sort(request.Keys)
+	subscribeID, err := a.subscribeConfiguration(subscribeCtx, request, handler, store)
 	if err != nil {
-		err = status.Errorf(codes.InvalidArgument, messages.ErrConfigurationSubscribe, req.Keys, request.StoreName, err.Error())
-		apiServerLogger.Debug(err)
+		// Error has already been logged
 		return err
 	}
 
+	// Send subscription ID
+	// This is primarily meant for backwards-compatibility with using the Unsubscribe method
 	err = handler.serverStream.Send(&runtimev1pb.SubscribeConfigurationResponse{
 		Id: subscribeID,
 	})
@@ -1444,10 +1429,72 @@ func (a *api) SubscribeConfiguration(request *runtimev1pb.SubscribeConfiguration
 	// We have sent the first message, so signal that we're ready to send messages in the stream
 	handler.ready()
 
-	// Wait until the channel is stopped
-	<-stop
+	// Wait until the channel is stopped or until the client disconnects
+	select {
+	case <-stream.Context().Done():
+	case <-stop:
+	}
+
+	// Cancel the context here to immediately stop sending messages while we unsubscribe
+	subscribeCancel()
+
+	// Unsubscribe
+	// We must use a background context here because stream.Context is likely canceled already
+	err = a.unsubscribeConfiguration(context.Background(), subscribeID, request.StoreName, store)
+	if err != nil {
+		// Error has already been logged
+		return err
+	}
+
+	// Delete the subscription ID (and the stop channel) if we got here because of the context being canceled
+	a.CompStore.DeleteConfigurationSubscribe(subscribeID)
 
 	return nil
+}
+
+func (a *api) subscribeConfiguration(ctx context.Context, request *runtimev1pb.SubscribeConfigurationRequest, handler *configurationEventHandler, store configuration.Store) (subscribeID string, err error) {
+	componentReq := &configuration.SubscribeRequest{
+		Keys:     request.Keys,
+		Metadata: request.GetMetadata(),
+	}
+
+	// TODO(@laurence) deal with failed subscription and retires
+	start := time.Now()
+	policyRunner := resiliency.NewRunner[string](ctx,
+		a.resiliency.ComponentOutboundPolicy(request.StoreName, resiliency.Configuration),
+	)
+	subscribeID, err = policyRunner(func(ctx context.Context) (string, error) {
+		return store.Subscribe(ctx, componentReq, handler.updateEventHandler)
+	})
+	elapsed := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), request.StoreName, diag.ConfigurationSubscribe, err == nil, elapsed)
+
+	if err != nil {
+		err = status.Errorf(codes.InvalidArgument, messages.ErrConfigurationSubscribe, componentReq.Keys, request.StoreName, err)
+		apiServerLogger.Debug(err)
+		return "", err
+	}
+
+	return subscribeID, nil
+}
+
+func (a *api) unsubscribeConfiguration(ctx context.Context, subscribeID string, storeName string, store configuration.Store) error {
+	policyRunner := resiliency.NewRunner[struct{}](ctx,
+		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Configuration),
+	)
+	start := time.Now()
+	storeReq := &configuration.UnsubscribeRequest{
+		ID: subscribeID,
+	}
+	_, err := policyRunner(func(ctx context.Context) (struct{}, error) {
+		return struct{}{}, store.Unsubscribe(ctx, storeReq)
+	})
+	elapsed := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), storeName, diag.ConfigurationUnsubscribe, err == nil, elapsed)
+
+	return err
 }
 
 // TODO: Remove this method when the alpha API is removed.
@@ -1455,18 +1502,10 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 	return a.SubscribeConfiguration(request, configurationServer.(runtimev1pb.Dapr_SubscribeConfigurationServer))
 }
 
+// This method is deprecated and exists for backwards-compatibility only.
+// It causes an active SubscribeConfiguration RPC for the given subscription ID to be stopped if active
 func (a *api) UnsubscribeConfiguration(ctx context.Context, request *runtimev1pb.UnsubscribeConfigurationRequest) (*runtimev1pb.UnsubscribeConfigurationResponse, error) {
-	store, err := a.getConfigurationStore(request.GetStoreName())
-	if err != nil {
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.UnsubscribeConfigurationResponse{
-			Ok:      false,
-			Message: err.Error(),
-		}, err
-	}
-
 	subscribeID := request.GetId()
-
 	_, ok := a.CompStore.GetConfigurationSubscribe(subscribeID)
 	if !ok {
 		return &runtimev1pb.UnsubscribeConfigurationResponse{
@@ -1475,27 +1514,9 @@ func (a *api) UnsubscribeConfiguration(ctx context.Context, request *runtimev1pb
 		}, nil
 	}
 
-	policyRunner := resiliency.NewRunner[any](ctx,
-		a.resiliency.ComponentOutboundPolicy(request.StoreName, resiliency.Configuration),
-	)
-	start := time.Now()
-	storeReq := &configuration.UnsubscribeRequest{
-		ID: subscribeID,
-	}
-	_, err = policyRunner(func(ctx context.Context) (any, error) {
-		return nil, store.Unsubscribe(ctx, storeReq)
-	})
-	elapsed := diag.ElapsedSince(start)
+	a.Logger.Warn("Unsubscribing using UnsubscribeConfiguration is deprecated. Disconnect from the SubscribeConfiguration RPC instead.")
 
-	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), request.StoreName, diag.ConfigurationUnsubscribe, err == nil, elapsed)
-
-	if err != nil {
-		return &runtimev1pb.UnsubscribeConfigurationResponse{
-			Ok:      false,
-			Message: err.Error(),
-		}, err
-	}
-
+	// This causes the subscription with the given ID to be stopped and that stream to be aborted, if active
 	a.CompStore.DeleteConfigurationSubscribe(subscribeID)
 
 	return &runtimev1pb.UnsubscribeConfigurationResponse{
