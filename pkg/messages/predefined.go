@@ -76,9 +76,9 @@ const (
 	// Configuration.
 	ErrConfigurationStoresNotConfigured = "configuration stores not configured"
 	ErrConfigurationStoreNotFound       = "configuration store %s not found"
-	ErrConfigurationGet                 = "failed to get %s from Configuration store %s: %s"
-	ErrConfigurationSubscribe           = "failed to subscribe %s from Configuration store %s: %s"
-	ErrConfigurationUnsubscribe         = "failed to unsubscribe to configuration request %s: %s"
+	ErrConfigurationGet                 = "failed to get %s from Configuration store %s: %v"
+	ErrConfigurationSubscribe           = "failed to subscribe %s from Configuration store %s: %v"
+	ErrConfigurationUnsubscribe         = "failed to unsubscribe to configuration request %s: %v"
 )
 
 var (

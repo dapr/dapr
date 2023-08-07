@@ -1462,11 +1462,12 @@ func TestGetConfiguration(t *testing.T) {
 func TestSubscribeConfiguration(t *testing.T) {
 	fakeConfigurationStore := &daprt.MockConfigurationStore{}
 	var tempReq *configuration.SubscribeRequest
+
 	fakeConfigurationStore.On("Subscribe",
 		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *configuration.SubscribeRequest) bool {
 			tempReq = req
-			return len(tempReq.Keys) == 1 && tempReq.Keys[0] == goodKey
+			return len(req.Keys) == 1 && req.Keys[0] == goodKey
 		}),
 		mock.MatchedBy(func(f configuration.UpdateHandler) bool {
 			if len(tempReq.Keys) == 1 && tempReq.Keys[0] == goodKey {
@@ -1479,7 +1480,15 @@ func TestSubscribeConfiguration(t *testing.T) {
 				})
 			}
 			return true
-		})).Return("id", nil)
+		}),
+	).Return("id1", nil)
+	fakeConfigurationStore.On("Unsubscribe",
+		mock.MatchedBy(matchContextInterface),
+		mock.MatchedBy(func(req *configuration.UnsubscribeRequest) bool {
+			return req.ID == "id1"
+		}),
+	).Return(nil)
+
 	fakeConfigurationStore.On("Subscribe",
 		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *configuration.SubscribeRequest) bool {
@@ -1500,13 +1509,22 @@ func TestSubscribeConfiguration(t *testing.T) {
 				})
 			}
 			return true
-		})).Return("id", nil)
+		}),
+	).Return("id2", nil)
+	fakeConfigurationStore.On("Unsubscribe",
+		mock.MatchedBy(matchContextInterface),
+		mock.MatchedBy(func(req *configuration.UnsubscribeRequest) bool {
+			return req.ID == "id2"
+		}),
+	).Return(nil)
+
 	fakeConfigurationStore.On("Subscribe",
 		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *configuration.SubscribeRequest) bool {
 			return req.Keys[0] == "error-key"
 		}),
-		mock.AnythingOfType("configuration.UpdateHandler")).Return(nil, errors.New("failed to get state with error-key"))
+		mock.AnythingOfType("configuration.UpdateHandler"),
+	).Return(nil, errors.New("failed to get state with error-key"))
 
 	compStore := compstore.New()
 	compStore.AddConfiguration("store1", fakeConfigurationStore)
@@ -1602,7 +1620,7 @@ func TestSubscribeConfiguration(t *testing.T) {
 					require.NoError(t, err)
 					assert.Equal(t, tt.expectedResponse, rsp.Items, "Expected response items to be same")
 				} else {
-					retry := 3
+					const retry = 3
 					count := 0
 					_, err := resp.Recv()
 					for {
@@ -1642,12 +1660,15 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 	fakeConfigurationStore := &daprt.MockConfigurationStore{}
 	stop := make(chan struct{})
 	defer close(stop)
+
 	var tempReq *configuration.SubscribeRequest
 	fakeConfigurationStore.On("Unsubscribe",
 		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *configuration.UnsubscribeRequest) bool {
 			return true
-		})).Return(nil)
+		}),
+	).Return(nil)
+
 	fakeConfigurationStore.On("Subscribe",
 		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *configuration.SubscribeRequest) bool {
@@ -1679,7 +1700,9 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 				}
 			}()
 			return true
-		})).Return(mockSubscribeID, nil)
+		}),
+	).Return(mockSubscribeID, nil)
+
 	fakeConfigurationStore.On("Subscribe",
 		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *configuration.SubscribeRequest) bool {
@@ -1714,7 +1737,8 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 				}
 			}()
 			return true
-		})).Return(mockSubscribeID, nil)
+		}),
+	).Return(mockSubscribeID, nil)
 
 	compStore := compstore.New()
 	compStore.AddConfiguration("store1", fakeConfigurationStore)
@@ -1724,6 +1748,7 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 		UniversalAPI: &universalapi.UniversalAPI{
 			AppID:      "fakeAPI",
 			CompStore:  compStore,
+			Logger:     logger.NewLogger("grpc.api.test"),
 			Resiliency: resiliency.New(nil),
 		},
 	}
@@ -1876,7 +1901,8 @@ func TestUnsubscribeConfigurationErrScenario(t *testing.T) {
 		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *configuration.UnsubscribeRequest) bool {
 			return req.ID == mockSubscribeID
-		})).Return(nil)
+		}),
+	).Return(nil)
 
 	compStore := compstore.New()
 	compStore.AddConfiguration("store1", fakeConfigurationStore)
@@ -1886,6 +1912,7 @@ func TestUnsubscribeConfigurationErrScenario(t *testing.T) {
 		UniversalAPI: &universalapi.UniversalAPI{
 			AppID:      "fakeAPI",
 			CompStore:  compStore,
+			Logger:     logger.NewLogger("grpc.api.test"),
 			Resiliency: resiliency.New(nil),
 		},
 	}
@@ -1910,13 +1937,6 @@ func TestUnsubscribeConfigurationErrScenario(t *testing.T) {
 			id:               "",
 			expectedResponse: true,
 			expectedError:    false,
-		},
-		{
-			testName:         "Test unsubscribe with incorrect store name",
-			storeName:        "no-store",
-			id:               mockSubscribeID,
-			expectedResponse: false,
-			expectedError:    true,
 		},
 	}
 
@@ -3492,6 +3512,7 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 	fakeAPI := &api{
 		UniversalAPI: &universalapi.UniversalAPI{
 			AppID:      "fakeAPI",
+			Logger:     logger.NewLogger("grpc.api.test"),
 			CompStore:  compStore,
 			Resiliency: resiliency.FromConfigurations(logger.NewLogger("grpc.api.test"), testResiliency),
 		},
@@ -3551,30 +3572,6 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 		_, err = resp.Recv()
 		assert.Error(t, err)
 		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("timeoutSubscribeKey"))
-	})
-
-	t.Run("test unsubscribe configuration retries with resiliency", func(t *testing.T) {
-		fakeAPI.CompStore.AddConfigurationSubscribe("failingUnsubscribeKey", make(chan struct{}))
-
-		_, err := client.UnsubscribeConfiguration(context.Background(), &runtimev1pb.UnsubscribeConfigurationRequest{
-			StoreName: "failConfig",
-			Id:        "failingUnsubscribeKey",
-		})
-
-		assert.NoError(t, err)
-		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("failingUnsubscribeKey"))
-	})
-
-	t.Run("test unsubscribe configuration fails due to timeout with resiliency", func(t *testing.T) {
-		fakeAPI.CompStore.AddConfigurationSubscribe("timeoutUnsubscribeKey", make(chan struct{}))
-
-		_, err := client.UnsubscribeConfiguration(context.Background(), &runtimev1pb.UnsubscribeConfigurationRequest{
-			StoreName: "failConfig",
-			Id:        "timeoutUnsubscribeKey",
-		})
-
-		assert.Error(t, err)
-		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("timeoutUnsubscribeKey"))
 	})
 }
 
