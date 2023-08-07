@@ -1463,10 +1463,12 @@ func TestSubscribeConfiguration(t *testing.T) {
 	fakeConfigurationStore := &daprt.MockConfigurationStore{}
 	var tempReq *configuration.SubscribeRequest
 
+
 	fakeConfigurationStore.On("Subscribe",
 		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *configuration.SubscribeRequest) bool {
 			tempReq = req
+			return len(req.Keys) == 1 && req.Keys[0] == goodKey
 			return len(req.Keys) == 1 && req.Keys[0] == goodKey
 		}),
 		mock.MatchedBy(func(f configuration.UpdateHandler) bool {
@@ -1480,6 +1482,15 @@ func TestSubscribeConfiguration(t *testing.T) {
 				})
 			}
 			return true
+		}),
+	).Return("id1", nil)
+	fakeConfigurationStore.On("Unsubscribe",
+		mock.MatchedBy(matchContextInterface),
+		mock.MatchedBy(func(req *configuration.UnsubscribeRequest) bool {
+			return req.ID == "id1"
+		}),
+	).Return(nil)
+
 		}),
 	).Return("id1", nil)
 	fakeConfigurationStore.On("Unsubscribe",
@@ -1746,10 +1757,9 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 	// Setup dapr api server
 	fakeAPI := &api{
 		UniversalAPI: &universalapi.UniversalAPI{
-			AppID:      "fakeAPI",
-			CompStore:  compStore,
-			Logger:     logger.NewLogger("grpc.api.test"),
-			Resiliency: resiliency.New(nil),
+			AppID:     "fakeAPI",
+			Logger:    logger.NewLogger("grpc.api.test"),
+			CompStore: compStore,
 		},
 	}
 	server, lis := startDaprAPIServer(fakeAPI, "")
@@ -1910,10 +1920,9 @@ func TestUnsubscribeConfigurationErrScenario(t *testing.T) {
 	// Setup dapr api server
 	fakeAPI := &api{
 		UniversalAPI: &universalapi.UniversalAPI{
-			AppID:      "fakeAPI",
-			CompStore:  compStore,
-			Logger:     logger.NewLogger("grpc.api.test"),
-			Resiliency: resiliency.New(nil),
+			AppID:     "fakeAPI",
+			Logger:    logger.NewLogger("grpc.api.test"),
+			CompStore: compStore,
 		},
 	}
 	server, lis := startDaprAPIServer(fakeAPI, "")
@@ -3511,10 +3520,9 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 
 	fakeAPI := &api{
 		UniversalAPI: &universalapi.UniversalAPI{
-			AppID:      "fakeAPI",
-			Logger:     logger.NewLogger("grpc.api.test"),
-			CompStore:  compStore,
-			Resiliency: resiliency.FromConfigurations(logger.NewLogger("grpc.api.test"), testResiliency),
+			AppID:     "fakeAPI",
+			Logger:    logger.NewLogger("grpc.api.test"),
+			CompStore: compStore,
 		},
 	}
 	server, lis := startDaprAPIServer(fakeAPI, "")

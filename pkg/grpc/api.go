@@ -1445,7 +1445,7 @@ func (a *api) subscribeConfiguration(ctx context.Context, request *runtimev1pb.S
 	// TODO(@laurence) deal with failed subscription and retires
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[string](ctx,
-		a.UniversalAPI.Resiliency.ComponentOutboundPolicy(request.StoreName, resiliency.Configuration),
+		a.resiliency.ComponentOutboundPolicy(request.StoreName, resiliency.Configuration),
 	)
 	subscribeID, err = policyRunner(func(ctx context.Context) (string, error) {
 		return store.Subscribe(ctx, componentReq, handler.updateEventHandler)
@@ -1465,7 +1465,7 @@ func (a *api) subscribeConfiguration(ctx context.Context, request *runtimev1pb.S
 
 func (a *api) unsubscribeConfiguration(ctx context.Context, subscribeID string, storeName string, store configuration.Store) error {
 	policyRunner := resiliency.NewRunner[struct{}](ctx,
-		a.UniversalAPI.Resiliency.ComponentOutboundPolicy(storeName, resiliency.Configuration),
+		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Configuration),
 	)
 	start := time.Now()
 	storeReq := &configuration.UnsubscribeRequest{
