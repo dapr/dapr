@@ -141,7 +141,8 @@ func TestPubSubEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
 		universal: &universalapi.UniversalAPI{
-			AppID: "fakeAPI",
+			AppID:     "fakeAPI",
+			CompStore: compstore.New(),
 		},
 		pubsubAdapter: &daprt.MockPubSubAdapter{
 			PublishFn: func(ctx context.Context, req *pubsub.PublishRequest) error {
@@ -160,15 +161,14 @@ func TestPubSubEndpoints(t *testing.T) {
 				return nil
 			},
 		},
-		compStore: compstore.New(),
 	}
 
 	mock := daprt.MockPubSub{}
 	mock.On("Features").Return([]pubsub.Feature{})
-	testAPI.compStore.AddPubSub("pubsubname", compstore.PubsubItem{Component: &mock})
-	testAPI.compStore.AddPubSub("errorpubsub", compstore.PubsubItem{Component: &mock})
-	testAPI.compStore.AddPubSub("errnotfound", compstore.PubsubItem{Component: &mock})
-	testAPI.compStore.AddPubSub("errnotallowed", compstore.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore.AddPubSub("pubsubname", compstore.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore.AddPubSub("errorpubsub", compstore.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore.AddPubSub("errnotfound", compstore.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore.AddPubSub("errnotallowed", compstore.PubsubItem{Component: &mock})
 
 	fakeServer.StartServer(testAPI.constructPubSubEndpoints(), nil)
 
@@ -311,7 +311,8 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
 		universal: &universalapi.UniversalAPI{
-			AppID: "fakeAPI",
+			AppID:     "fakeAPI",
+			CompStore: compstore.New(),
 		},
 		pubsubAdapter: &daprt.MockPubSubAdapter{
 			BulkPublishFn: func(ctx context.Context, req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
@@ -338,15 +339,14 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 				}
 			},
 		},
-		compStore: compstore.New(),
 	}
 
 	mock := daprt.MockPubSub{}
 	mock.On("Features").Return([]pubsub.Feature{})
-	testAPI.compStore.AddPubSub("pubsubname", compstore.PubsubItem{Component: &mock})
-	testAPI.compStore.AddPubSub("errorpubsub", compstore.PubsubItem{Component: &mock})
-	testAPI.compStore.AddPubSub("errnotfound", compstore.PubsubItem{Component: &mock})
-	testAPI.compStore.AddPubSub("errnotallowed", compstore.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore.AddPubSub("pubsubname", compstore.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore.AddPubSub("errorpubsub", compstore.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore.AddPubSub("errnotfound", compstore.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore.AddPubSub("errnotallowed", compstore.PubsubItem{Component: &mock})
 
 	fakeServer.StartServer(testAPI.constructPubSubEndpoints(), nil)
 

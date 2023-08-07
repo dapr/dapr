@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"os"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -139,11 +141,11 @@ func TestClose(t *testing.T) {
 	})
 }
 
-func Test_server_getGRPCAPILoggingMiddlewares(t *testing.T) {
+func TestGrpcAPILoggingMiddlewares(t *testing.T) {
 	logDest := &bytes.Buffer{}
 	infoLog := logger.NewLogger("test-api-logging")
 	infoLog.EnableJSONOutput(true)
-	infoLog.SetOutput(logDest)
+	infoLog.SetOutput(io.MultiWriter(logDest, os.Stderr))
 
 	s := &server{
 		infoLogger: infoLog,

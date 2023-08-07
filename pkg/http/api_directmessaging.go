@@ -41,10 +41,9 @@ func (a *api) constructDirectMessagingEndpoints() []Endpoint {
 			Methods: []string{},
 			Route:   "invoke/*",
 			// This is the fallback route for when no other method is matched by the router
-			IsFallback:            true,
-			Version:               apiVersionV1,
-			KeepWildcardUnescaped: true,
-			Handler:               a.onDirectMessage,
+			IsFallback: true,
+			Version:    apiVersionV1,
+			Handler:    a.onDirectMessage,
 		},
 	}
 }
