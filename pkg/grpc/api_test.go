@@ -1536,8 +1536,6 @@ func TestSubscribeConfiguration(t *testing.T) {
 		}),
 		mock.AnythingOfType("configuration.UpdateHandler"),
 	).Return(nil, errors.New("failed to get state with error-key"))
-		mock.AnythingOfType("configuration.UpdateHandler"),
-	).Return(nil, errors.New("failed to get state with error-key"))
 
 	compStore := compstore.New()
 	compStore.AddConfiguration("store1", fakeConfigurationStore)
@@ -1634,7 +1632,6 @@ func TestSubscribeConfiguration(t *testing.T) {
 					assert.Equal(t, tt.expectedResponse, rsp.Items, "Expected response items to be same")
 				} else {
 					const retry = 3
-					const retry = 3
 					count := 0
 					_, err := resp.Recv()
 					for {
@@ -1675,15 +1672,11 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 	stop := make(chan struct{})
 	defer close(stop)
 
-
 	var tempReq *configuration.SubscribeRequest
 	fakeConfigurationStore.On("Unsubscribe",
 		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *configuration.UnsubscribeRequest) bool {
 			return true
-		}),
-	).Return(nil)
-
 		}),
 	).Return(nil)
 
@@ -1718,9 +1711,6 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 				}
 			}()
 			return true
-		}),
-	).Return(mockSubscribeID, nil)
-
 		}),
 	).Return(mockSubscribeID, nil)
 
@@ -1760,8 +1750,6 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 			return true
 		}),
 	).Return(mockSubscribeID, nil)
-		}),
-	).Return(mockSubscribeID, nil)
 
 	compStore := compstore.New()
 	compStore.AddConfiguration("store1", fakeConfigurationStore)
@@ -1769,10 +1757,9 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 	// Setup dapr api server
 	fakeAPI := &api{
 		UniversalAPI: &universalapi.UniversalAPI{
-			AppID:      "fakeAPI",
-			CompStore:  compStore,
-			Logger:     logger.NewLogger("grpc.api.test"),
-			Resiliency: resiliency.New(nil),
+			AppID:     "fakeAPI",
+			Logger:    logger.NewLogger("grpc.api.test"),
+			CompStore: compStore,
 		},
 	}
 	server, lis := startDaprAPIServer(fakeAPI, "")
@@ -1926,8 +1913,6 @@ func TestUnsubscribeConfigurationErrScenario(t *testing.T) {
 			return req.ID == mockSubscribeID
 		}),
 	).Return(nil)
-		}),
-	).Return(nil)
 
 	compStore := compstore.New()
 	compStore.AddConfiguration("store1", fakeConfigurationStore)
@@ -1935,10 +1920,9 @@ func TestUnsubscribeConfigurationErrScenario(t *testing.T) {
 	// Setup dapr api server
 	fakeAPI := &api{
 		UniversalAPI: &universalapi.UniversalAPI{
-			AppID:      "fakeAPI",
-			CompStore:  compStore,
-			Logger:     logger.NewLogger("grpc.api.test"),
-			Resiliency: resiliency.New(nil),
+			AppID:     "fakeAPI",
+			Logger:    logger.NewLogger("grpc.api.test"),
+			CompStore: compStore,
 		},
 	}
 	server, lis := startDaprAPIServer(fakeAPI, "")
@@ -3536,10 +3520,9 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 
 	fakeAPI := &api{
 		UniversalAPI: &universalapi.UniversalAPI{
-			AppID:      "fakeAPI",
-			Logger:     logger.NewLogger("grpc.api.test"),
-			CompStore:  compStore,
-			Resiliency: resiliency.FromConfigurations(logger.NewLogger("grpc.api.test"), testResiliency),
+			AppID:     "fakeAPI",
+			Logger:    logger.NewLogger("grpc.api.test"),
+			CompStore: compStore,
 		},
 	}
 	server, lis := startDaprAPIServer(fakeAPI, "")
