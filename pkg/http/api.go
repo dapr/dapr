@@ -48,6 +48,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
+	"github.com/dapr/dapr/pkg/errorcodes"
 	"github.com/dapr/dapr/pkg/grpc/universalapi"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messaging"
@@ -1706,6 +1707,9 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	body := reqCtx.PostBody()
 	contentType := string(reqCtx.Request.Header.Peek("Content-Type"))
 	metadata := getMetadataFromFastHTTPRequest(reqCtx)
+	if a.isErrorCodesEnabled {
+		metadata[errorcodes.ErrorCodesFeatureMetadataKey] = "true"
+	}
 	rawPayload, metaErr := contribMetadata.IsRawPayload(metadata)
 	if metaErr != nil {
 		msg := messages.ErrPubSubMetadataDeserialize.WithFormat(metaErr)
@@ -1770,21 +1774,53 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	diag.DefaultComponentMonitoring.PubsubEgressEvent(context.Background(), pubsubName, topic, err == nil, elapsed)
 
 	if err != nil {
-		status := nethttp.StatusInternalServerError
+		st := nethttp.StatusInternalServerError
 		msg := NewErrorResponse("ERR_PUBSUB_PUBLISH_MESSAGE",
 			fmt.Sprintf(messages.ErrPubsubPublishMessage, topic, pubsubName, err.Error()))
 
+		if a.isErrorCodesEnabled {
+			if ste := status.Convert(err); ste != nil {
+				// If this point is reached, there is a good
+				// chance Error Codes has been implemented
+				// at the component used
+				if resp, ej := errorcodes.StatusErrorJSON(ste); ej == nil {
+					fasthttpRespond(reqCtx, fasthttpResponseWithJSON(st, resp))
+					log.Debug(resp)
+					return
+				} else {
+					log.Debug(fmt.Sprintf("onPublish - error converting Status to JSON: %v", ej))
+				}
+			}
+
+			// It appears the component is not supporting Error Codes.
+			// Try one more time to return a Error Codes like type of Status error
+			message := fmt.Sprintf(messages.ErrPubsubPublishMessage, topic, pubsubName, err.Error())
+			md := map[string]string{
+				"pubsubName": pubsubName,
+				"topic":      topic,
+			}
+			if ste, wdErr := errorcodes.NewStatusError(codes.Internal, errorcodes.PubSubTopicNotFound, message, md); wdErr == nil {
+				if resp, ej := errorcodes.StatusErrorJSON(ste); ej == nil {
+					fasthttpRespond(reqCtx, fasthttpResponseWithJSON(st, resp))
+					log.Debug(resp)
+					return
+				} else {
+					log.Debug(fmt.Sprintf("onPublish - error converting Status to JSON: %v", ej))
+				}
+			}
+		}
+
 		if errors.As(err, &runtimePubsub.NotAllowedError{}) {
 			msg = NewErrorResponse("ERR_PUBSUB_FORBIDDEN", err.Error())
-			status = nethttp.StatusForbidden
+			st = nethttp.StatusForbidden
 		}
 
 		if errors.As(err, &runtimePubsub.NotFoundError{}) {
 			msg = NewErrorResponse("ERR_PUBSUB_NOT_FOUND", err.Error())
-			status = nethttp.StatusBadRequest
+			st = nethttp.StatusBadRequest
 		}
 
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(status, msg))
+		fasthttpRespond(reqCtx, fasthttpResponseWithError(st, msg))
 		log.Debug(msg)
 	} else {
 		fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
@@ -1808,6 +1844,9 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 
 	body := reqCtx.PostBody()
 	metadata := getMetadataFromFastHTTPRequest(reqCtx)
+	if a.isErrorCodesEnabled {
+		metadata[errorcodes.ErrorCodesFeatureMetadataKey] = "true"
+	}
 	rawPayload, metaErr := contribMetadata.IsRawPayload(metadata)
 	if metaErr != nil {
 		msg := messages.ErrPubSubMetadataDeserialize.WithFormat(metaErr)

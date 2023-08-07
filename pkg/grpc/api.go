@@ -43,6 +43,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
+	"github.com/dapr/dapr/pkg/errorcodes"
 	"github.com/dapr/dapr/pkg/grpc/metadata"
 	"github.com/dapr/dapr/pkg/grpc/universalapi"
 	"github.com/dapr/dapr/pkg/messages"
@@ -161,6 +162,9 @@ func (a *api) validateAndGetPubsubAndTopic(pubsubName, topic string, reqMeta map
 }
 
 func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*emptypb.Empty, error) {
+	if a.isErrorCodesEnabled && in.Metadata != nil {
+		in.Metadata[errorcodes.ErrorCodesFeatureMetadataKey] = "true"
+	}
 	thepubsub, pubsubName, topic, rawPayload, validationErr := a.validateAndGetPubsubAndTopic(in.PubsubName, in.Topic, in.Metadata)
 	if validationErr != nil {
 		apiServerLogger.Debug(validationErr)
@@ -222,6 +226,30 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 
 	if err != nil {
 		nerr := status.Errorf(codes.Internal, messages.ErrPubsubPublishMessage, topic, pubsubName, err.Error())
+
+		if a.isErrorCodesEnabled {
+			if ste := status.Convert(err); ste != nil {
+				// If this point is reached, there is a good
+				// chance Error Codes has been implemented
+				// at the component used
+				nerr = ste.Err()
+				apiServerLogger.Debug(nerr)
+				return &emptypb.Empty{}, nerr
+			}
+
+			// It appears the component is not supporting Error Codes.
+			// Try one more time to return a Error Codes like type of Status error
+			message := fmt.Sprintf(messages.ErrPubsubPublishMessage, topic, pubsubName, err.Error())
+			md := map[string]string{
+				"pubsubName": pubsubName,
+				"topic":      topic,
+			}
+			if ste, wdErr := errorcodes.NewStatusError(codes.Internal, errorcodes.PubSubTopicNotFound, message, md); wdErr == nil {
+				apiServerLogger.Debug(ste.Err())
+				return &emptypb.Empty{}, ste.Err()
+			}
+		}
+
 		if errors.As(err, &runtimePubsub.NotAllowedError{}) {
 			nerr = status.Errorf(codes.PermissionDenied, err.Error())
 		}
@@ -229,6 +257,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 		if errors.As(err, &runtimePubsub.NotFoundError{}) {
 			nerr = status.Errorf(codes.NotFound, err.Error())
 		}
+
 		apiServerLogger.Debug(nerr)
 		return &emptypb.Empty{}, nerr
 	}
