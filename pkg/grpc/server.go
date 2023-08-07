@@ -203,7 +203,9 @@ func (s *server) Close() error {
 
 	if s.api != nil {
 		if closer, ok := s.api.(io.Closer); ok {
-			return closer.Close()
+			if err := closer.Close(); err != nil {
+				return err
+			}
 		}
 	}
 

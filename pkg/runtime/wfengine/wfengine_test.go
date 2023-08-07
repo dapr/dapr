@@ -65,7 +65,8 @@ func (*mockPlacement) LookupActor(actorType string, actorID string) (name string
 }
 
 // Start implements internal.PlacementService
-func (*mockPlacement) Start(context.Context) {
+func (*mockPlacement) Start(context.Context) error {
+	return nil
 }
 
 // Stop implements internal.PlacementService

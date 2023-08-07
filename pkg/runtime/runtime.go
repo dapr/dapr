@@ -429,7 +429,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		log.Warnf("failed to load components: %s", err)
 	}
 
-	a.flushOutstandingComponents()
+	a.flushOutstandingComponents(ctx)
 
 	err = a.loadHTTPEndpoints(ctx)
 	if err != nil {
@@ -1590,14 +1590,6 @@ func (a *DaprRuntime) blockUntilAppIsReady(ctx context.Context) error {
 	dialAddr := a.runtimeConfig.appConnectionConfig.ChannelAddress + ":" + strconv.Itoa(a.runtimeConfig.appConnectionConfig.Port)
 
 	for {
-		select {
-		// Return
-		case <-ctx.Done():
-			return ctx.Err()
-		// prevents overwhelming the OS with open connections
-		case <-time.After(time.Millisecond * 100):
-		}
-
 		var (
 			conn net.Conn
 			err  error
@@ -1615,6 +1607,14 @@ func (a *DaprRuntime) blockUntilAppIsReady(ctx context.Context) error {
 		if err == nil && conn != nil {
 			conn.Close()
 			break
+		}
+
+		select {
+		// Return
+		case <-ctx.Done():
+			return ctx.Err()
+		// prevents overwhelming the OS with open connections
+		case <-time.After(time.Millisecond * 100):
 		}
 	}
 
