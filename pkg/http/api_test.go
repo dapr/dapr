@@ -141,7 +141,8 @@ func TestPubSubEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
 		universal: &universalapi.UniversalAPI{
-			AppID: "fakeAPI",
+			AppID:     "fakeAPI",
+			CompStore: compstore.New(),
 		},
 		pubsubAdapter: &daprt.MockPubSubAdapter{
 			PublishFn: func(ctx context.Context, req *pubsub.PublishRequest) error {
@@ -160,15 +161,14 @@ func TestPubSubEndpoints(t *testing.T) {
 				return nil
 			},
 		},
-		compStore: compstore.New(),
 	}
 
 	mock := daprt.MockPubSub{}
 	mock.On("Features").Return([]pubsub.Feature{})
-	testAPI.compStore.AddPubSub("pubsubname", compstore.PubsubItem{Component: &mock})
-	testAPI.compStore.AddPubSub("errorpubsub", compstore.PubsubItem{Component: &mock})
-	testAPI.compStore.AddPubSub("errnotfound", compstore.PubsubItem{Component: &mock})
-	testAPI.compStore.AddPubSub("errnotallowed", compstore.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore.AddPubSub("pubsubname", compstore.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore.AddPubSub("errorpubsub", compstore.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore.AddPubSub("errnotfound", compstore.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore.AddPubSub("errnotallowed", compstore.PubsubItem{Component: &mock})
 
 	fakeServer.StartServer(testAPI.constructPubSubEndpoints(), nil)
 
@@ -311,7 +311,8 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
 		universal: &universalapi.UniversalAPI{
-			AppID: "fakeAPI",
+			AppID:     "fakeAPI",
+			CompStore: compstore.New(),
 		},
 		pubsubAdapter: &daprt.MockPubSubAdapter{
 			BulkPublishFn: func(ctx context.Context, req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
@@ -338,15 +339,14 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 				}
 			},
 		},
-		compStore: compstore.New(),
 	}
 
 	mock := daprt.MockPubSub{}
 	mock.On("Features").Return([]pubsub.Feature{})
-	testAPI.compStore.AddPubSub("pubsubname", compstore.PubsubItem{Component: &mock})
-	testAPI.compStore.AddPubSub("errorpubsub", compstore.PubsubItem{Component: &mock})
-	testAPI.compStore.AddPubSub("errnotfound", compstore.PubsubItem{Component: &mock})
-	testAPI.compStore.AddPubSub("errnotallowed", compstore.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore.AddPubSub("pubsubname", compstore.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore.AddPubSub("errorpubsub", compstore.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore.AddPubSub("errnotfound", compstore.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore.AddPubSub("errnotallowed", compstore.PubsubItem{Component: &mock})
 
 	fakeServer.StartServer(testAPI.constructPubSubEndpoints(), nil)
 
@@ -998,7 +998,6 @@ func TestV1ActorEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	rc := resiliency.FromConfigurations(logger.NewLogger("test.api.http.actors"), testResiliency)
 	testAPI := &api{
-		resiliency: rc,
 		universal: &universalapi.UniversalAPI{
 			AppID:      "fakeAPI",
 			Resiliency: rc,
@@ -1903,7 +1902,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 			AppID:     "xyz",
 			Actors:    mockActors,
 			CompStore: compStore,
-			GetComponentsCapabilitesFn: func() map[string][]string {
+			GetComponentsCapabilitiesFn: func() map[string][]string {
 				capsMap := make(map[string][]string)
 				capsMap["MockComponent1Name"] = []string{"mock.feat.MockComponent1Name"}
 				capsMap["MockComponent2Name"] = []string{"mock.feat.MockComponent2Name"}
@@ -1966,13 +1965,12 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 	createExporters(&buffer)
 
-	rc := resiliency.New(nil)
 	testAPI := &api{
 		universal: &universalapi.UniversalAPI{
-			Actors: nil,
+			Actors:     nil,
+			Resiliency: resiliency.New(nil),
 		},
 		tracingSpec: spec,
-		resiliency:  rc,
 	}
 
 	fakeServer.StartServer(testAPI.constructActorEndpoints(), &fakeHTTPServerOptions{
@@ -2261,9 +2259,9 @@ func TestConfigurationGet(t *testing.T) {
 	compStore := compstore.New()
 	compStore.AddConfiguration(storeName, fakeConfigurationStore)
 	testAPI := &api{
-		resiliency: resiliency.New(nil),
 		universal: &universalapi.UniversalAPI{
-			CompStore: compStore,
+			Resiliency: resiliency.New(nil),
+			CompStore:  compStore,
 		},
 	}
 	fakeServer.StartServer(testAPI.constructConfigurationEndpoints(), nil)
@@ -2463,9 +2461,9 @@ func TestV1Alpha1ConfigurationUnsubscribe(t *testing.T) {
 	compStore := compstore.New()
 	compStore.AddConfiguration(storeName, fakeConfigurationStore)
 	testAPI := &api{
-		resiliency: resiliency.New(nil),
 		universal: &universalapi.UniversalAPI{
-			CompStore: compStore,
+			Resiliency: resiliency.New(nil),
+			CompStore:  compStore,
 		},
 	}
 	fakeServer.StartServer(testAPI.constructConfigurationEndpoints(), nil)
@@ -2733,7 +2731,6 @@ func TestV1Alpha1Workflow(t *testing.T) {
 	compStore := compstore.New()
 	compStore.AddWorkflow(componentName, fakeWorkflowComponent)
 	testAPI := &api{
-		resiliency: resiliencyConfig,
 		universal: &universalapi.UniversalAPI{
 			Logger:     logger.NewLogger("fakeLogger"),
 			CompStore:  compStore,
@@ -3335,7 +3332,6 @@ func TestV1StateEndpoints(t *testing.T) {
 	compStore.AddStateStore("failStore", failingStore)
 	rc := resiliency.FromConfigurations(logger.NewLogger("state.test"), testResiliency)
 	testAPI := &api{
-		resiliency: rc,
 		universal: &universalapi.UniversalAPI{
 			Logger:     logger.NewLogger("fakeLogger"),
 			CompStore:  compStore,
@@ -4119,7 +4115,6 @@ func TestV1SecretEndpoints(t *testing.T) {
 		compStore.AddSecretStore(name, store)
 	}
 	testAPI := &api{
-		resiliency: res,
 		universal: &universalapi.UniversalAPI{
 			Logger:     l,
 			CompStore:  compStore,
@@ -4497,9 +4492,9 @@ func TestV1TransactionEndpoints(t *testing.T) {
 
 	testAPI := &api{
 		universal: &universalapi.UniversalAPI{
-			CompStore: compStore,
+			CompStore:  compStore,
+			Resiliency: resiliency.New(nil),
 		},
-		resiliency:    resiliency.New(nil),
 		pubsubAdapter: &daprt.MockPubSubAdapter{},
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints(), nil)

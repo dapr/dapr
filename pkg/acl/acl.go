@@ -247,7 +247,7 @@ func ApplyAccessControlPolicies(ctx context.Context, operation string, httpVerb 
 	spiffeID, err := GetAndParseSpiffeID(ctx)
 	if err != nil {
 		// Apply the default action
-		log.Debugf("error while reading spiffe id from client cert: %v. applying default global policy action", err.Error())
+		log.Debugf("Error while reading spiffe id from client cert: %v. applying default global policy action", err)
 	}
 	var appID, trustDomain, namespace string
 	if spiffeID != nil {
@@ -260,7 +260,7 @@ func ApplyAccessControlPolicies(ctx context.Context, operation string, httpVerb 
 	var errMessage string
 
 	if err != nil {
-		errMessage = fmt.Sprintf("error in method normalization: %s", err)
+		errMessage = fmt.Sprintf("error in method normalization: %v", err)
 		log.Debugf(errMessage)
 		return false, errMessage
 	}

@@ -25,15 +25,14 @@ import (
 
 // Endpoint is a collection of route information for an Dapr API.
 type Endpoint struct {
-	Methods               []string
-	Route                 string
-	Version               string
-	IsFallback            bool // Endpoint is used as fallback when the method or URL isn't found
-	KeepWildcardUnescaped bool // Keeps the wildcard param in path unescaped
-	FastHTTPHandler       fasthttp.RequestHandler
-	Handler               http.HandlerFunc
-	AlwaysAllowed         bool // Endpoint is always allowed regardless of API access rules
-	IsHealthCheck         bool // Mark endpoint as healthcheck - for API logging purposes
+	Methods         []string
+	Route           string
+	Version         string
+	IsFallback      bool // Endpoint is used as fallback when the method or URL isn't found
+	FastHTTPHandler fasthttp.RequestHandler
+	Handler         http.HandlerFunc
+	AlwaysAllowed   bool // Endpoint is always allowed regardless of API access rules
+	IsHealthCheck   bool // Mark endpoint as healthcheck - for API logging purposes
 }
 
 // GetHandler returns the handler for the endpoint.
