@@ -56,6 +56,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/grpc"
+	"github.com/dapr/dapr/pkg/grpc/universalapi"
 	"github.com/dapr/dapr/pkg/http"
 	"github.com/dapr/dapr/pkg/httpendpoint"
 	"github.com/dapr/dapr/pkg/internal/apis"
@@ -409,38 +410,40 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	// Start proxy
 	a.initProxy()
 
-	// Create and start internal and external gRPC servers
-	a.daprGRPCAPI = a.getGRPCAPI()
+	// Create and start the external gRPC server
+	univAPI := a.getUniversalAPI()
+	a.daprGRPCAPI = a.getGRPCAPI(univAPI)
 
 	err = a.startGRPCAPIServer(a.daprGRPCAPI, a.runtimeConfig.apiGRPCPort)
 	if err != nil {
 		log.Fatalf("failed to start API gRPC server: %s", err)
 	}
 	if a.runtimeConfig.unixDomainSocket != "" {
-		log.Info("API gRPC server is running on a unix domain socket")
+		log.Info("API gRPC server is running on a Unix Domain Socket")
 	} else {
 		log.Infof("API gRPC server is running on port %v", a.runtimeConfig.apiGRPCPort)
 	}
 
-	a.initDirectMessaging(a.nameResolver)
-
 	// Start HTTP Server
-	err = a.startHTTPServer(a.runtimeConfig.httpPort, a.runtimeConfig.publicPort, a.runtimeConfig.profilePort, a.runtimeConfig.allowedOrigins, pipeline)
+	err = a.startHTTPServer(a.runtimeConfig.httpPort, a.runtimeConfig.publicPort, a.runtimeConfig.profilePort, a.runtimeConfig.allowedOrigins, pipeline, univAPI)
 	if err != nil {
 		log.Fatalf("failed to start HTTP server: %s", err)
 	}
 	if a.runtimeConfig.unixDomainSocket != "" {
-		log.Info("http server is running on a unix domain socket")
+		log.Info("HTTP server is running on a Unix Domain Socket")
 	} else {
-		log.Infof("http server is running on port %v", a.runtimeConfig.httpPort)
+		log.Infof("HTTP server is running on port %v", a.runtimeConfig.httpPort)
 	}
 	log.Infof("The request body size parameter is: %v", a.runtimeConfig.maxRequestBodySize)
 
+	// Start internal gRPC server (used for sidecar-to-sidecar communication)
 	err = a.startGRPCInternalServer(a.daprGRPCAPI, a.runtimeConfig.internalGRPCPort)
 	if err != nil {
 		log.Fatalf("failed to start internal gRPC server: %s", err)
 	}
-	log.Infof("internal gRPC server is running on port %v", a.runtimeConfig.internalGRPCPort)
+	log.Infof("Internal gRPC server is running on port %v", a.runtimeConfig.internalGRPCPort)
+
+	a.initDirectMessaging(a.nameResolver)
 
 	if a.daprHTTPAPI != nil {
 		a.daprHTTPAPI.MarkStatusAsOutboundReady()
@@ -902,23 +905,15 @@ func (a *DaprRuntime) processHTTPEndpointSecrets(ctx context.Context, endpoint *
 	}
 }
 
-func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int, allowedOrigins string, pipeline httpMiddleware.Pipeline) error {
+func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int, allowedOrigins string, pipeline httpMiddleware.Pipeline, univAPI *universalapi.UniversalAPI) error {
 	a.daprHTTPAPI = http.NewAPI(http.APIOpts{
-		AppID:                       a.runtimeConfig.id,
-		AppChannel:                  a.channels.AppChannel(),
-		HTTPEndpointsAppChannel:     a.channels.HTTPEndpointsAppChannel(),
-		DirectMessaging:             a.directMessaging,
-		Resiliency:                  a.resiliency,
-		PubsubAdapter:               a.processor.PubSub(),
-		Actors:                      a.actor,
-		SendToOutputBindingFn:       a.processor.Binding().SendToOutputBinding,
-		TracingSpec:                 a.globalConfig.GetTracingSpec(),
-		Shutdown:                    a.ShutdownWithWait,
-		GetComponentsCapabilitiesFn: a.getComponentsCapabilitesMap,
-		MaxRequestBodySize:          int64(a.runtimeConfig.maxRequestBodySize) << 20, // Convert from MB to bytes
-		CompStore:                   a.compStore,
-		AppConnectionConfig:         a.runtimeConfig.appConnectionConfig,
-		GlobalConfig:                a.globalConfig,
+		UniversalAPI:          univAPI,
+		AppChannel:            a.channels.AppChannel(),
+		DirectMessaging:       a.directMessaging,
+		PubsubAdapter:         a.processor.PubSub(),
+		SendToOutputBindingFn: a.processor.Binding().SendToOutputBinding,
+		TracingSpec:           a.globalConfig.GetTracingSpec(),
+		MaxRequestBodySize:    int64(a.runtimeConfig.maxRequestBodySize) << 20, // Convert from MB to bytes
 	})
 
 	serverConf := http.ServerConfig{
@@ -998,22 +993,29 @@ func (a *DaprRuntime) getNewServerConfig(apiListenAddresses []string, port int) 
 	}
 }
 
-func (a *DaprRuntime) getGRPCAPI() grpc.API {
-	return grpc.NewAPI(grpc.APIOpts{
+func (a *DaprRuntime) getUniversalAPI() *universalapi.UniversalAPI {
+	return &universalapi.UniversalAPI{
 		AppID:                       a.runtimeConfig.id,
-		AppChannel:                  a.channels.AppChannel(),
-		Resiliency:                  a.resiliency,
-		PubsubAdapter:               a.processor.PubSub(),
-		DirectMessaging:             a.directMessaging,
-		Actors:                      a.actor,
-		SendToOutputBindingFn:       a.processor.Binding().SendToOutputBinding,
-		TracingSpec:                 a.globalConfig.GetTracingSpec(),
-		AccessControlList:           a.accessControlList,
-		Shutdown:                    a.ShutdownWithWait,
-		GetComponentsCapabilitiesFn: a.getComponentsCapabilitesMap,
+		Logger:                      logger.NewLogger("dapr.api"),
 		CompStore:                   a.compStore,
+		Resiliency:                  a.resiliency,
+		Actors:                      a.actor,
+		GetComponentsCapabilitiesFn: a.getComponentsCapabilitesMap,
+		ShutdownFn:                  a.ShutdownWithWait,
 		AppConnectionConfig:         a.runtimeConfig.appConnectionConfig,
 		GlobalConfig:                a.globalConfig,
+	}
+}
+
+func (a *DaprRuntime) getGRPCAPI(univAPI *universalapi.UniversalAPI) grpc.API {
+	return grpc.NewAPI(grpc.APIOpts{
+		UniversalAPI:          univAPI,
+		AppChannel:            a.channels.AppChannel(),
+		PubsubAdapter:         a.processor.PubSub(),
+		DirectMessaging:       a.directMessaging,
+		SendToOutputBindingFn: a.processor.Binding().SendToOutputBinding,
+		TracingSpec:           a.globalConfig.GetTracingSpec(),
+		AccessControlList:     a.accessControlList,
 	})
 }
 
