@@ -67,30 +67,6 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		panic(err)
 	}
 
-	// t.Run("bad json", func(t *testing.T) {
-	// 	for _, body := range []string{
-	// 		"",
-	// 		"{}",
-	// 		`foobar`,
-	// 		"[{}]",
-	// 		`[{"key": "ke||y1", "value": "value1"}]`,
-	// 		`[{"key": "key1", "value": "value1"},]`,
-	// 		`[{"key": "key1", "value": "value1"},{"key": "key2", "value": "value1"},]`,
-	// 		`[{"key": "key1", "value": "value1", "etag": 123}]`,
-	// 		`[{"ey": "key0", "value": "value1"}]`,
-	// 	} {
-	// 		t.Run(body, func(t *testing.T) {
-	// 			resp, err := client.PostStoreStateWithBody(ctx, statestoreName, "application/json", strings.NewReader(body))
-	// 			require.NoError(t, err)
-	// 			assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
-	// 			body, err := io.ReadAll(resp.Body)
-	// 			require.NoError(t, err)
-	// 			require.NoError(t, resp.Body.Close())
-	// 			assert.Contains(t, string(body), "ERR_MALFORMED_REQUEST")
-	// 		})
-	// 	}
-	// })
-
 	t.Run("good json", func(t *testing.T) {
 		for _, body := range []string{
 			"[]",
@@ -111,15 +87,5 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			})
 		}
 	})
-
-	// t.Run(pubsubName, func(t *testing.T) {
-	// 	resp, err := client.PostPublishMessageWithBody(ctx, pubsubName, topicName, "application/json", strings.NewReader(`{"status": "completed"}`))
-	// 	require.NoError(t, err)
-	// 	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
-	// 	respBody, err := io.ReadAll(resp.Body)
-	// 	require.NoError(t, err)
-	// 	require.NoError(t, resp.Body.Close())
-	// 	assert.Empty(t, string(respBody))
-	// })
 
 }
