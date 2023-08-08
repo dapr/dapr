@@ -24,7 +24,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	statestore "github.com/dapr/dapr/pkg/api/clients/statestore"
+	pubsub "github.com/dapr/dapr/pkg/api/clients/pubsub"
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -36,6 +36,9 @@ func init() {
 
 type basic struct {
 	daprd *procdaprd.Daprd
+
+	pubsubNames []string
+	topicNames  []string
 }
 
 func (b *basic) Setup(t *testing.T) []framework.Option {
@@ -43,9 +46,9 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
-  name: mystore
+  name: mypubsub
 spec:
-  type: state.in-memory
+  type: pubsub.in-memory
   version: v1
 `))
 
@@ -57,35 +60,36 @@ spec:
 func (b *basic) Run(t *testing.T, ctx context.Context) {
 	b.daprd.WaitUntilRunning(t, ctx)
 	daprdHTTPURL := fmt.Sprintf("http://localhost:%d/", b.daprd.HTTPPort())
-	statestoreName := "mystore"
-	client, err := statestore.NewClient(daprdHTTPURL)
+	client, err := pubsub.NewClient(daprdHTTPURL)
+	pubsubName := "mypubsub"
+	topicName := "mytopic"
 	if err != nil {
 		panic(err)
 	}
 
-	t.Run("bad json", func(t *testing.T) {
-		for _, body := range []string{
-			"",
-			"{}",
-			`foobar`,
-			"[{}]",
-			`[{"key": "ke||y1", "value": "value1"}]`,
-			`[{"key": "key1", "value": "value1"},]`,
-			`[{"key": "key1", "value": "value1"},{"key": "key2", "value": "value1"},]`,
-			`[{"key": "key1", "value": "value1", "etag": 123}]`,
-			`[{"ey": "key0", "value": "value1"}]`,
-		} {
-			t.Run(body, func(t *testing.T) {
-				resp, err := client.PostStoreStateWithBody(ctx, statestoreName, "application/json", strings.NewReader(body))
-				require.NoError(t, err)
-				assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
-				body, err := io.ReadAll(resp.Body)
-				require.NoError(t, err)
-				require.NoError(t, resp.Body.Close())
-				assert.Contains(t, string(body), "ERR_MALFORMED_REQUEST")
-			})
-		}
-	})
+	// t.Run("bad json", func(t *testing.T) {
+	// 	for _, body := range []string{
+	// 		"",
+	// 		"{}",
+	// 		`foobar`,
+	// 		"[{}]",
+	// 		`[{"key": "ke||y1", "value": "value1"}]`,
+	// 		`[{"key": "key1", "value": "value1"},]`,
+	// 		`[{"key": "key1", "value": "value1"},{"key": "key2", "value": "value1"},]`,
+	// 		`[{"key": "key1", "value": "value1", "etag": 123}]`,
+	// 		`[{"ey": "key0", "value": "value1"}]`,
+	// 	} {
+	// 		t.Run(body, func(t *testing.T) {
+	// 			resp, err := client.PostStoreStateWithBody(ctx, statestoreName, "application/json", strings.NewReader(body))
+	// 			require.NoError(t, err)
+	// 			assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	// 			body, err := io.ReadAll(resp.Body)
+	// 			require.NoError(t, err)
+	// 			require.NoError(t, resp.Body.Close())
+	// 			assert.Contains(t, string(body), "ERR_MALFORMED_REQUEST")
+	// 		})
+	// 	}
+	// })
 
 	t.Run("good json", func(t *testing.T) {
 		for _, body := range []string{
@@ -96,15 +100,26 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			`[{"key": "key1", "value": "value1"},{"key": "key2", "value": "value1"},  {"key": "key1", "value": "value1"},{"key": "key2", "value": "value1"}]`,
 		} {
 			t.Run(body, func(t *testing.T) {
-				resp, err := client.PostStoreStateWithBody(ctx, statestoreName, "application/json", strings.NewReader(body))
+				resp, err := client.PostPublishMessageWithBody(ctx, pubsubName, topicName, "application/json", strings.NewReader(body))
 				require.NoError(t, err)
 				assert.Equal(t, http.StatusNoContent, resp.StatusCode)
-				body, err := io.ReadAll(resp.Body)
+				respBody, err := io.ReadAll(resp.Body)
 				require.NoError(t, err)
 				require.NoError(t, resp.Body.Close())
-				assert.Empty(t, string(body))
+				assert.Empty(t, string(respBody))
 
 			})
 		}
 	})
+
+	// t.Run(pubsubName, func(t *testing.T) {
+	// 	resp, err := client.PostPublishMessageWithBody(ctx, pubsubName, topicName, "application/json", strings.NewReader(`{"status": "completed"}`))
+	// 	require.NoError(t, err)
+	// 	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
+	// 	respBody, err := io.ReadAll(resp.Body)
+	// 	require.NoError(t, err)
+	// 	require.NoError(t, resp.Body.Close())
+	// 	assert.Empty(t, string(respBody))
+	// })
+
 }
