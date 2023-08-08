@@ -317,6 +317,7 @@ func TestGetSidecarContainer(t *testing.T) {
 					annotations.KeyLogAsJSON:      "true",
 					annotations.KeyAPITokenSecret: "secret",
 					annotations.KeyAppTokenSecret: "appsecret",
+					annotations.KeyMemoryLimit:    "1Gi",
 				},
 			},
 		})
@@ -367,6 +368,9 @@ func TestGetSidecarContainer(t *testing.T) {
 		assert.Equal(t, "secret", container.Env[6].ValueFrom.SecretKeyRef.Name)
 		// DAPR_APP_TOKEN
 		assert.Equal(t, "appsecret", container.Env[7].ValueFrom.SecretKeyRef.Name)
+		// GOMEMLIMIT
+		assert.Equal(t, "GOMEMLIMIT", container.Env[8].Name)
+		assert.Equal(t, "838860KiB", container.Env[8].Value)
 		// default image
 		assert.Equal(t, "daprio/dapr", container.Image)
 		assert.EqualValues(t, expectedArgs, container.Args)
@@ -443,6 +447,7 @@ func TestGetSidecarContainer(t *testing.T) {
 		assert.Equal(t, "secret", container.Env[6].ValueFrom.SecretKeyRef.Name)
 		// DAPR_APP_TOKEN
 		assert.Equal(t, "appsecret", container.Env[7].ValueFrom.SecretKeyRef.Name)
+		assert.Len(t, container.Env, 8, "expected 8 env vars only as we don't have GOMEMLIMIT")
 		// default image
 		assert.Equal(t, "daprio/dapr", container.Image)
 		assert.EqualValues(t, expectedArgs, container.Args)
@@ -1215,6 +1220,59 @@ func TestSidecarConfig_getGoMemLimitForSidecarResources(t *testing.T) {
 			},
 			want:    "45MiB",
 			wantErr: assert.NoError,
+		},
+		{
+			name: "resource limit with soft limit bigger than resource limit, expect error",
+			fields: fields{
+				SidecarSoftMemoryLimit:           "125Mi",
+				SidecarSoftMemoryLimitPercentage: 50,
+			},
+			resourceRequirements: &corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					corev1.ResourceMemory: resource.MustParse("101Mi"),
+				},
+			},
+			want:    "",
+			wantErr: assert.Error,
+		},
+		{
+			name: "resource limit with soft limit bigger than max percentage limit, expect error",
+			fields: fields{
+				SidecarSoftMemoryLimit: "95Mi",
+			},
+			resourceRequirements: &corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					corev1.ResourceMemory: resource.MustParse("100Mi"),
+				},
+			},
+			want:    "",
+			wantErr: assert.Error,
+		},
+		{
+			name: "resource limit with soft limit smaller than min percentage limit, expect error",
+			fields: fields{
+				SidecarSoftMemoryLimit: "25Mi",
+			},
+			resourceRequirements: &corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					corev1.ResourceMemory: resource.MustParse("100Mi"),
+				},
+			},
+			want:    "",
+			wantErr: assert.Error,
+		},
+		{
+			name: "resource limit with soft limit percentage bigger than max",
+			fields: fields{
+				SidecarSoftMemoryLimitPercentage: 99,
+			},
+			resourceRequirements: &corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					corev1.ResourceMemory: resource.MustParse("101Mi"),
+				},
+			},
+			want:    "",
+			wantErr: assert.Error,
 		},
 	}
 	for _, tt := range tests {

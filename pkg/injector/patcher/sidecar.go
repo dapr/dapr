@@ -26,9 +26,9 @@ import (
 )
 
 const (
-	defaultSoftLimitPercentage    = 80
-	defaultSoftLimitPercentageMin = 20
-	defaultSoftLimitPercentageMax = 95
+	defaultSoftLimitPercentage   = 80 // when memory limit is set by the user but no soft memory limit is set, use this percentage
+	softMemoryLimitPercentageMin = 30 // if a soft memory limit is set, it must be at least this percentage of the hard limit
+	softMemoryLimitPercentageMax = 90 // if a soft memory limit is set, it must be at most this percentage of the hard limit
 )
 
 // GetInjectedComponentContainersFn is a function that returns the list of component containers for a given appID and namespace.

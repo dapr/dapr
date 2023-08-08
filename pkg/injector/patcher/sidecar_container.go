@@ -366,43 +366,35 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 	return container, nil
 }
 
+// getKiBFromQuantity returns the value of the quantity in KiB.
 func getKiBFromQuantity(v int64) string {
 	return strconv.FormatInt(v/1024, 10) + "KiB"
 }
 
+// getGoMemLimitForSidecarResources returns the value of the soft memory limit for the sidecar container.
 func (c *SidecarConfig) getGoMemLimitForSidecarResources(r *corev1.ResourceRequirements) (string, error) {
-	if r == nil {
+	if r == nil || r.Limits.Memory().IsZero() {
 		if c.SidecarSoftMemoryLimit != "" {
-			return getSoftMemoryLimitValue(c)
+			return getSoftMemoryLimitStringValue(c, r)
 		}
 		return "", nil
 	}
-	limitMemory := r.Limits.Memory()
 
-	if !limitMemory.IsZero() {
-		if c.SidecarSoftMemoryLimit != "" {
-			return getSoftMemoryLimitValue(c)
-		}
-		percentage := defaultSoftLimitPercentage
-		if c.SidecarSoftMemoryLimitPercentage != 0 {
-			if c.SidecarSoftMemoryLimitPercentage < defaultSoftLimitPercentageMin || c.SidecarSoftMemoryLimitPercentage > defaultSoftLimitPercentageMax {
-				return "", fmt.Errorf("sidecar soft memory limit percentage must be between %d and %d", defaultSoftLimitPercentageMin, defaultSoftLimitPercentageMax)
-			}
-			percentage = int(c.SidecarSoftMemoryLimitPercentage)
-		}
-		limMem := limitMemory.Value() * int64(percentage) / 100
-		return getKiBFromQuantity(limMem), nil
-	}
-
-	// limit is not set, check if soft limit is set and use it
 	if c.SidecarSoftMemoryLimit != "" {
-		return getSoftMemoryLimitValue(c)
+		return getSoftMemoryLimitStringValue(c, r)
 	}
-
-	return "", nil
+	percentage := defaultSoftLimitPercentage
+	if c.SidecarSoftMemoryLimitPercentage != 0 {
+		if c.SidecarSoftMemoryLimitPercentage < softMemoryLimitPercentageMin || c.SidecarSoftMemoryLimitPercentage > softMemoryLimitPercentageMax {
+			return "", fmt.Errorf("sidecar soft memory limit percentage must be between %d and %d", softMemoryLimitPercentageMin, softMemoryLimitPercentageMax)
+		}
+		percentage = int(c.SidecarSoftMemoryLimitPercentage)
+	}
+	limMem := r.Limits.Memory().Value() * int64(percentage) / 100
+	return getKiBFromQuantity(limMem), nil
 }
 
-func getSoftMemoryLimitValue(c *SidecarConfig) (string, error) {
+func getSoftMemoryLimitStringValue(c *SidecarConfig, r *corev1.ResourceRequirements) (string, error) {
 	// GOMEMLIMIT (https://pkg.go.dev/runtime) expects a number of bytes or a values
 	// suffixed with a B (ie B, KiB, MiB, GiB, TiB), where kubernetes does not use a B suffix for memory.
 	// so here we just remove the B suffix if it exists to avoid regex errors in ParseQuantity
@@ -411,16 +403,27 @@ func getSoftMemoryLimitValue(c *SidecarConfig) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("error parsing sidecar soft memory limit: %w", err)
 	}
-	if !q.IsZero() {
-		// check if the value is a plain number
-		if _, err := strconv.Atoi(c.SidecarSoftMemoryLimit); err == nil || suffixFound {
-			// they passed a number or they passed a value with correct suffix just returned as is
-			return c.SidecarSoftMemoryLimit, nil
-		}
-		// no suffix found and not a number, add it
-		return c.SidecarSoftMemoryLimit + "B", nil
+
+	if q.IsZero() {
+		return "", nil
 	}
-	return "", nil
+
+	if r != nil {
+		limitMemory := r.Limits.Memory().Value()
+		if v := q.Value(); v*100/softMemoryLimitPercentageMax > limitMemory {
+			return "", fmt.Errorf("sidecar soft memory limit cannot be greater than %d%% of the memory limit", softMemoryLimitPercentageMax)
+		} else if v*100/softMemoryLimitPercentageMin < limitMemory {
+			return "", fmt.Errorf("sidecar soft memory limit cannot be less than %d%% of the memory limit", softMemoryLimitPercentageMin)
+		}
+	}
+
+	// check if the value is a plain number
+	if _, err := strconv.Atoi(c.SidecarSoftMemoryLimit); err == nil || suffixFound {
+		// they passed a number or they passed a value with correct suffix just returned as is
+		return c.SidecarSoftMemoryLimit, nil
+	}
+	// no suffix found and not a number, add it
+	return c.SidecarSoftMemoryLimit + "B", nil
 }
 
 func (c *SidecarConfig) getResourceRequirements() (*corev1.ResourceRequirements, error) {
