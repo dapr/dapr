@@ -91,7 +91,7 @@ var (
 	ErrMalformedRequest = APIError{"failed deserializing HTTP body: %v", "ERR_MALFORMED_REQUEST", http.StatusBadRequest, grpcCodes.InvalidArgument}
 
 	// DirectMessaging.
-	ErrDirectInvoke         = APIError{"fail to invoke, id: %s, err: %v", "ERR_DIRECT_INVOKE", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrDirectInvoke         = APIError{"failed to invoke, id: %s, err: %v", "ERR_DIRECT_INVOKE", http.StatusInternalServerError, grpcCodes.Internal}
 	ErrDirectInvokeNoAppID  = APIError{"failed getting app id either from the URL path or the header dapr-app-id", "ERR_DIRECT_INVOKE", http.StatusNotFound, grpcCodes.NotFound}
 	ErrDirectInvokeNotReady = APIError{"invoke API is not ready", "ERR_DIRECT_INVOKE", http.StatusInternalServerError, grpcCodes.Internal}
 

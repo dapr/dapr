@@ -45,6 +45,7 @@ type PlatformInterface interface {
 
 	AddComponents(comps []kube.ComponentDescription) error
 	AddApps(apps []kube.AppDescription) error
+	AddSecrets(secrets []kube.SecretDescription) error
 	AcquireAppExternalURL(name string) string
 	GetAppHostDetails(name string) (string, string, error)
 	Restart(name string) error
@@ -79,6 +80,9 @@ type TestRunner struct {
 	// TODO: Needs to define kube.AppDescription more general struct for Dapr app
 	testApps []kube.AppDescription
 
+	// secrets is the list of secrets to be created in the cluster
+	secrets []kube.SecretDescription
+
 	// Platform is the testing platform instances
 	Platform PlatformInterface
 }
@@ -97,6 +101,10 @@ func NewTestRunner(id string, apps []kube.AppDescription,
 	}
 }
 
+func (tr *TestRunner) AddSecrets(secrets []kube.SecretDescription) {
+	tr.secrets = secrets
+}
+
 // Start is the entry point of Dapr test runner.
 func (tr *TestRunner) Start(m runnable) int {
 	// TODO: Add logging and reporting initialization
@@ -111,6 +119,13 @@ func (tr *TestRunner) Start(m runnable) int {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed Platform.setup(), %s", err.Error())
 		return runnerFailExitCode
+	}
+
+	if tr.secrets != nil && len(tr.secrets) > 0 {
+		if err := tr.Platform.AddSecrets(tr.secrets); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed Platform.addSecrets(), %s", err.Error())
+			return runnerFailExitCode
+		}
 	}
 
 	// Install components.
