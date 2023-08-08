@@ -351,7 +351,76 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 		container.Resources = *resources
 	}
 
+	// Set the soft memory limit if specified
+	gomemLimit, err := c.getGoMemLimitForSidecarResources(resources)
+	if err != nil {
+		return nil, err
+	}
+	if gomemLimit != "" {
+		container.Env = append(container.Env, corev1.EnvVar{
+			Name:  "GOMEMLIMIT",
+			Value: gomemLimit,
+		})
+	}
+
 	return container, nil
+}
+
+func getKiBFromQuantity(v int64) string {
+	return strconv.FormatInt(v/1024, 10) + "KiB"
+}
+
+func (c *SidecarConfig) getGoMemLimitForSidecarResources(r *corev1.ResourceRequirements) (string, error) {
+	if r == nil {
+		if c.SidecarSoftMemoryLimit != "" {
+			return getSoftMemoryLimitValue(c)
+		}
+		return "", nil
+	}
+	limitMemory := r.Limits.Memory()
+
+	if !limitMemory.IsZero() {
+		if c.SidecarSoftMemoryLimit != "" {
+			return getSoftMemoryLimitValue(c)
+		}
+		percentage := defaultSoftLimitPercentage
+		if c.SidecarSoftMemoryLimitPercentage != 0 {
+			if c.SidecarSoftMemoryLimitPercentage < defaultSoftLimitPercentageMin || c.SidecarSoftMemoryLimitPercentage > defaultSoftLimitPercentageMax {
+				return "", fmt.Errorf("sidecar soft memory limit percentage must be between %d and %d", defaultSoftLimitPercentageMin, defaultSoftLimitPercentageMax)
+			}
+			percentage = int(c.SidecarSoftMemoryLimitPercentage)
+		}
+		limMem := limitMemory.Value() * int64(percentage) / 100
+		return getKiBFromQuantity(limMem), nil
+	}
+
+	// limit is not set, check if soft limit is set and use it
+	if c.SidecarSoftMemoryLimit != "" {
+		return getSoftMemoryLimitValue(c)
+	}
+
+	return "", nil
+}
+
+func getSoftMemoryLimitValue(c *SidecarConfig) (string, error) {
+	// GOMEMLIMIT (https://pkg.go.dev/runtime) expects a number of bytes or a values
+	// suffixed with a B (ie B, KiB, MiB, GiB, TiB), where kubernetes does not use a B suffix for memory.
+	// so here we just remove the B suffix if it exists to avoid regex errors in ParseQuantity
+	softLimitWithoutByteSuffix, suffixFound := strings.CutSuffix(c.SidecarSoftMemoryLimit, "B")
+	q, err := resource.ParseQuantity(softLimitWithoutByteSuffix)
+	if err != nil {
+		return "", fmt.Errorf("error parsing sidecar soft memory limit: %w", err)
+	}
+	if !q.IsZero() {
+		// check if the value is a plain number
+		if _, err := strconv.Atoi(c.SidecarSoftMemoryLimit); err == nil || suffixFound {
+			// they passed a number or they passed a value with correct suffix just returned as is
+			return c.SidecarSoftMemoryLimit, nil
+		}
+		// no suffix found and not a number, add it
+		return c.SidecarSoftMemoryLimit + "B", nil
+	}
+	return "", nil
 }
 
 func (c *SidecarConfig) getResourceRequirements() (*corev1.ResourceRequirements, error) {

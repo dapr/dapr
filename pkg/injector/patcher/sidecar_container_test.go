@@ -14,6 +14,8 @@ limitations under the License.
 package patcher
 
 import (
+	"fmt"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"strings"
 	"testing"
 
@@ -1094,4 +1096,138 @@ func TestGetSidecarContainer(t *testing.T) {
 			},
 		},
 	}))
+}
+
+func TestSidecarConfig_getGoMemLimitForSidecarResources(t *testing.T) {
+	type fields struct {
+		SidecarSoftMemoryLimit           string
+		SidecarSoftMemoryLimitPercentage int32
+	}
+	tests := []struct {
+		name                 string
+		fields               fields
+		resourceRequirements *corev1.ResourceRequirements
+		want                 string
+		wantErr              assert.ErrorAssertionFunc
+	}{
+		{
+			name: "no resource requirements",
+			fields: fields{
+				SidecarSoftMemoryLimit:           "",
+				SidecarSoftMemoryLimitPercentage: 0,
+			},
+			want:    "",
+			wantErr: assert.NoError,
+		},
+		{
+			name: "no resource limit",
+			fields: fields{
+				SidecarSoftMemoryLimit:           "",
+				SidecarSoftMemoryLimitPercentage: 0,
+			},
+			resourceRequirements: &corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceMemory: resource.MustParse("100Mi"),
+				},
+			},
+			want:    "",
+			wantErr: assert.NoError,
+		},
+		{
+			name: "resource limit but no soft limit, expect default",
+			fields: fields{
+				SidecarSoftMemoryLimit:           "",
+				SidecarSoftMemoryLimitPercentage: 0,
+			},
+			resourceRequirements: &corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					corev1.ResourceMemory: resource.MustParse("100Mi"),
+				},
+			},
+			want:    "81920KiB",
+			wantErr: assert.NoError,
+		},
+		{
+			name: "resource limit decimal but no soft limit, expect default percentage",
+			fields: fields{
+				SidecarSoftMemoryLimit:           "",
+				SidecarSoftMemoryLimitPercentage: 0,
+			},
+			resourceRequirements: &corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					corev1.ResourceMemory: resource.MustParse("100.5Mi"),
+				},
+			},
+			want:    "82329KiB",
+			wantErr: assert.NoError,
+		},
+		{
+			name: "resource limit but no soft limit, expect default",
+			fields: fields{
+				SidecarSoftMemoryLimit:           "",
+				SidecarSoftMemoryLimitPercentage: 0,
+			},
+			resourceRequirements: &corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					corev1.ResourceMemory: resource.MustParse("101Mi"),
+				},
+			},
+			want:    "82739KiB",
+			wantErr: assert.NoError,
+		},
+		{
+			name: "no resource limit but soft limit percentage, expect nothing",
+			fields: fields{
+				SidecarSoftMemoryLimit:           "",
+				SidecarSoftMemoryLimitPercentage: 80,
+			},
+			want:    "",
+			wantErr: assert.NoError,
+		},
+		{
+			name: "no resource limit but soft limit value with suffix set, expect soft limit value",
+			fields: fields{
+				SidecarSoftMemoryLimit:           "80Mi",
+				SidecarSoftMemoryLimitPercentage: 80,
+			},
+			want:    "80MiB",
+			wantErr: assert.NoError,
+		},
+		{
+			name: "no resource limit but soft limit value without suffix set, expect soft limit value",
+			fields: fields{
+				SidecarSoftMemoryLimit:           "80000000",
+				SidecarSoftMemoryLimitPercentage: 80,
+			},
+			want:    "80000000",
+			wantErr: assert.NoError,
+		},
+		{
+			name: "resource limit with soft limit, give priority to value instead of percentage",
+			fields: fields{
+				SidecarSoftMemoryLimit:           "45Mi",
+				SidecarSoftMemoryLimitPercentage: 50,
+			},
+			resourceRequirements: &corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					corev1.ResourceMemory: resource.MustParse("101Mi"),
+				},
+			},
+			want:    "45MiB",
+			wantErr: assert.NoError,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &SidecarConfig{
+				SidecarSoftMemoryLimit:           tt.fields.SidecarSoftMemoryLimit,
+				SidecarSoftMemoryLimitPercentage: tt.fields.SidecarSoftMemoryLimitPercentage,
+			}
+			got, err := c.getGoMemLimitForSidecarResources(tt.resourceRequirements)
+			if !tt.wantErr(t, err, fmt.Sprintf("getGoMemLimitForSidecarResources(%v)", tt.resourceRequirements)) {
+				return
+			}
+			assert.Equalf(t, tt.want, got, "getGoMemLimitForSidecarResources(%v)", tt.resourceRequirements)
+		})
+	}
 }

@@ -39,6 +39,8 @@ const (
 	KeyCPULimit                         = "dapr.io/sidecar-cpu-limit"
 	KeyMemoryRequest                    = "dapr.io/sidecar-memory-request"
 	KeyMemoryLimit                      = "dapr.io/sidecar-memory-limit"
+	KeySoftMemoryLimit                  = "dapr.io/sidecar-soft-memory-limit"
+	KeySoftMemoryLimitPercentage        = "dapr.io/sidecar-soft-memory-limit-percentage"
 	KeySidecarListenAddresses           = "dapr.io/sidecar-listen-addresses"
 	KeyLivenessProbeDelaySeconds        = "dapr.io/sidecar-liveness-probe-delay-seconds"
 	KeyLivenessProbeTimeoutSeconds      = "dapr.io/sidecar-liveness-probe-timeout-seconds"

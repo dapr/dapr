@@ -25,6 +25,12 @@ import (
 	"github.com/dapr/dapr/utils"
 )
 
+const (
+	defaultSoftLimitPercentage    = 80
+	defaultSoftLimitPercentageMin = 20
+	defaultSoftLimitPercentageMax = 95
+)
+
 // GetInjectedComponentContainersFn is a function that returns the list of component containers for a given appID and namespace.
 type GetInjectedComponentContainersFn = func(appID string, namespace string) ([]corev1.Container, error)
 
@@ -75,6 +81,8 @@ type SidecarConfig struct {
 	SidecarCPULimit                     string `annotation:"dapr.io/sidecar-cpu-limit"`
 	SidecarMemoryRequest                string `annotation:"dapr.io/sidecar-memory-request"`
 	SidecarMemoryLimit                  string `annotation:"dapr.io/sidecar-memory-limit"`
+	SidecarSoftMemoryLimit              string `annotation:"dapr.io/sidecar-soft-memory-limit"`
+	SidecarSoftMemoryLimitPercentage    int32  `annotation:"dapr.io/sidecar-soft-memory-limit-percentage"`
 	SidecarListenAddresses              string `annotation:"dapr.io/sidecar-listen-addresses" default:"[::1],127.0.0.1"`
 	SidecarLivenessProbeDelaySeconds    int32  `annotation:"dapr.io/sidecar-liveness-probe-delay-seconds" default:"3"`
 	SidecarLivenessProbeTimeoutSeconds  int32  `annotation:"dapr.io/sidecar-liveness-probe-timeout-seconds" default:"3"`
