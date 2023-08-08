@@ -1558,6 +1558,16 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 		if errors.As(err, &runtimePubsub.NotFoundError{}) {
 			msg = NewErrorResponse("ERR_PUBSUB_NOT_FOUND", err.Error())
 			st = nethttp.StatusBadRequest
+			if a.isErrorCodesEnabled {
+				ste, wdErr := errorcodes.NewStatusError(codes.NotFound, errorcodes.PubSubTopicNotFound, err.Error(), nil)
+				if wdErr == nil {
+					if resp, derErr := errorcodes.StatusErrorJSON(ste); derErr == nil {
+						fasthttpRespond(reqCtx, fasthttpResponseWithJSON(st, resp))
+						log.Debug(resp)
+						return
+					}
+				}
+			}
 		}
 
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(st, msg))
