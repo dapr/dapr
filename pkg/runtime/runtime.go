@@ -438,7 +438,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 
 	a.initChannels()
 
-	a.flushOutstandingHTTPEndpoints(ctx)
+	a.flushOutstandingHTTPEndpoints()
 
 	pipeline, err := a.channels.BuildHTTPPipeline(a.globalConfig.Spec.HTTPPipelineSpec)
 	if err != nil {
