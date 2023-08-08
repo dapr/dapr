@@ -201,7 +201,6 @@ jobs:
         make setup-test-env-zipkin
 
     - name: Setup postgres
-      if: matrix.dapr-test-config-store == 'postgres'
       run: |
         make setup-test-env-postgres
 

@@ -315,16 +315,21 @@ TEST_WITH_RACE=./pkg/acl/... \
 ./pkg/actors \
 ./pkg/apis/... \
 ./pkg/apphealth/... \
+./pkg/buildinfo/... \
 ./pkg/channel/... \
 ./pkg/client/... \
 ./pkg/components/... \
 ./pkg/concurrency/... \
+./pkg/config/... \
+./pkg/cors/... \
+./pkg/credentials/... \
 ./pkg/diagnostics/... \
 ./pkg/encryption/... \
 ./pkg/expr/... \
 ./pkg/grpc/... \
 ./pkg/health/... \
 ./pkg/http/... \
+./pkg/httpendpoint/... \
 ./pkg/injector/... \
 ./pkg/messages/... \
 ./pkg/messaging/... \
@@ -332,15 +337,22 @@ TEST_WITH_RACE=./pkg/acl/... \
 ./pkg/middleware/... \
 ./pkg/modes/... \
 ./pkg/operator/... \
+./pkg/outbox/... \
 ./pkg/placement/... \
 ./pkg/proto/... \
+./pkg/retry/... \
 ./pkg/resiliency/... \
 ./pkg/runtime/... \
-./pkg/signals/...
+./pkg/scopes/... \
+./pkg/security/... \
+./pkg/sentry/... \
+./pkg/signals/... \
+./pkg/validation/... \
+./utils/...
 
 .PHONY: test-race
 test-race:
-	echo "$(TEST_WITH_RACE)" | xargs \
+	CGO_ENABLED=1 echo "$(TEST_WITH_RACE)" | xargs \
 		go test -tags="allcomponents unit" -race
 
 ################################################################################

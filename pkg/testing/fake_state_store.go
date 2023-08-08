@@ -21,6 +21,7 @@ import (
 	"sync/atomic"
 
 	"github.com/google/uuid"
+	"golang.org/x/exp/maps"
 
 	state "github.com/dapr/components-contrib/state"
 )
@@ -33,7 +34,7 @@ type FakeStateStoreItem struct {
 type FakeStateStore struct {
 	MaxOperations int
 	NoLock        bool
-	Items         map[string]*FakeStateStoreItem
+	items         map[string]*FakeStateStoreItem
 
 	lock      sync.RWMutex
 	callCount map[string]*atomic.Uint64
@@ -41,7 +42,7 @@ type FakeStateStore struct {
 
 func NewFakeStateStore() *FakeStateStore {
 	return &FakeStateStore{
-		Items: map[string]*FakeStateStoreItem{},
+		items: map[string]*FakeStateStoreItem{},
 		callCount: map[string]*atomic.Uint64{
 			"Delete":     {},
 			"BulkDelete": {},
@@ -83,7 +84,7 @@ func (f *FakeStateStore) Delete(ctx context.Context, req *state.DeleteRequest) e
 		defer f.lock.Unlock()
 	}
 
-	delete(f.Items, req.Key)
+	delete(f.items, req.Key)
 
 	return nil
 }
@@ -102,7 +103,7 @@ func (f *FakeStateStore) Get(ctx context.Context, req *state.GetRequest) (*state
 		defer f.lock.RUnlock()
 	}
 
-	item := f.Items[req.Key]
+	item := f.items[req.Key]
 	if item == nil {
 		return &state.GetResponse{Data: nil, ETag: nil}, nil
 	}
@@ -143,7 +144,7 @@ func (f *FakeStateStore) Set(ctx context.Context, req *state.SetRequest) error {
 	}
 
 	b, _ := marshal(&req.Value)
-	f.Items[req.Key] = f.NewItem(b)
+	f.items[req.Key] = f.NewItem(b)
 
 	return nil
 }
@@ -174,7 +175,7 @@ func (f *FakeStateStore) Multi(ctx context.Context, request *state.Transactional
 			key = req.Key
 			eTag = req.ETag
 		}
-		item := f.Items[key]
+		item := f.items[key]
 		if eTag != nil && item != nil {
 			if *eTag != *item.etag {
 				return fmt.Errorf("etag does not match for key %v", key)
@@ -190,13 +191,22 @@ func (f *FakeStateStore) Multi(ctx context.Context, request *state.Transactional
 		switch req := o.(type) {
 		case state.SetRequest:
 			b, _ := marshal(req.Value)
-			f.Items[req.Key] = f.NewItem(b)
+			f.items[req.Key] = f.NewItem(b)
 		case state.DeleteRequest:
-			delete(f.Items, req.Key)
+			delete(f.items, req.Key)
 		}
 	}
 
 	return nil
+}
+
+func (f *FakeStateStore) GetItems() map[string]*FakeStateStoreItem {
+	if !f.NoLock {
+		f.lock.Lock()
+		defer f.lock.Unlock()
+	}
+
+	return maps.Clone(f.items)
 }
 
 func (f *FakeStateStore) CallCount(op string) uint64 {

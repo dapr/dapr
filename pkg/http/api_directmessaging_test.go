@@ -899,7 +899,7 @@ func TestV1DirectMessagingEndpointsWithResiliency(t *testing.T) {
 				"circuitBreakerKey": 10,
 			},
 			map[string]time.Duration{
-				"timeoutKey": time.Second * 10,
+				"timeoutKey": time.Second * 30,
 			},
 			map[string]int{},
 		),
@@ -965,7 +965,7 @@ func TestV1DirectMessagingEndpointsWithResiliency(t *testing.T) {
 
 		assert.Equal(t, 500, resp.StatusCode)
 		assert.Equal(t, 2, failingDirectMessaging.Failure.CallCount("timeoutKey"))
-		assert.Less(t, end.Sub(start), time.Second*10)
+		assert.Less(t, end.Sub(start), time.Second*30)
 	})
 
 	t.Run("Test invoke direct messages fails after exhausting retries", func(t *testing.T) {

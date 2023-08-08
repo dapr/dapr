@@ -310,13 +310,17 @@ func TestConfiguration(t *testing.T) {
 		require.NoError(t, err, "error initializing configuration updater")
 		require.Equalf(t, 200, statusCode, "expected statuscode 200, got %d. Error: %s", statusCode, string(resp))
 		for _, protocol := range protocols {
-			for _, endpointType := range endpointTypes {
-				for _, tt := range configurationTests {
-					t.Run(tt.name, func(t *testing.T) {
-						tt.handler(t, externalURL, protocol, endpointType, component)
+			t.Run(protocol, func(t *testing.T) {
+				for _, endpointType := range endpointTypes {
+					t.Run(endpointType, func(t *testing.T) {
+						for _, tt := range configurationTests {
+							t.Run(tt.name, func(t *testing.T) {
+								tt.handler(t, externalURL, protocol, endpointType, component)
+							})
+						}
 					})
 				}
-			}
+			})
 		}
 	}
 }
