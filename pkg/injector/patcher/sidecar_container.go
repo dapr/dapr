@@ -422,8 +422,15 @@ func getSoftMemoryLimitStringValue(c *SidecarConfig, r *corev1.ResourceRequireme
 		// they passed a number or they passed a value with correct suffix just returned as is
 		return c.SidecarSoftMemoryLimit, nil
 	}
+	// check if using base 1024 or base 1000 suffix
+	if v, suffixFound := strings.CutSuffix(c.SidecarSoftMemoryLimit, "i"); suffixFound {
+		// base 1024 suffix
+		return v + "iB", nil
+	} else {
+		return strconv.FormatInt(q.Value(), 10), nil
+	}
 	// no suffix found and not a number, add it
-	return c.SidecarSoftMemoryLimit + "B", nil
+
 }
 
 func (c *SidecarConfig) getResourceRequirements() (*corev1.ResourceRequirements, error) {

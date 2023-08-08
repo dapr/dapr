@@ -1200,6 +1200,15 @@ func TestSidecarConfig_getGoMemLimitForSidecarResources(t *testing.T) {
 			wantErr: assert.NoError,
 		},
 		{
+			name: "no resource limit but soft limit value with k8s style suffix set but not power of 2, expect soft limit value as number of bytes",
+			fields: fields{
+				SidecarSoftMemoryLimit:           "80M",
+				SidecarSoftMemoryLimitPercentage: 80,
+			},
+			want:    "80000000",
+			wantErr: assert.NoError,
+		},
+		{
 			name: "no resource limit but soft limit value with GOMEMLIMIT style suffix set, expect soft limit value",
 			fields: fields{
 				SidecarSoftMemoryLimit:           "80MiB",
