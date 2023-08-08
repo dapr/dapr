@@ -1191,7 +1191,7 @@ func TestSidecarConfig_getGoMemLimitForSidecarResources(t *testing.T) {
 			wantErr: assert.NoError,
 		},
 		{
-			name: "no resource limit but soft limit value with suffix set, expect soft limit value",
+			name: "no resource limit but soft limit value with k8s style suffix set, expect soft limit value",
 			fields: fields{
 				SidecarSoftMemoryLimit:           "80Mi",
 				SidecarSoftMemoryLimitPercentage: 80,
@@ -1200,12 +1200,43 @@ func TestSidecarConfig_getGoMemLimitForSidecarResources(t *testing.T) {
 			wantErr: assert.NoError,
 		},
 		{
+			name: "no resource limit but soft limit value with GOMEMLIMIT style suffix set, expect soft limit value",
+			fields: fields{
+				SidecarSoftMemoryLimit:           "80MiB",
+				SidecarSoftMemoryLimitPercentage: 80,
+			},
+			want:    "80MiB",
+			wantErr: assert.NoError,
+		},
+		{
+			name: "no resource limit but soft limit value with GOMEMLIMIT style suffix set not properly written, expect error",
+			fields: fields{
+				SidecarSoftMemoryLimit:           "80MIB",
+				SidecarSoftMemoryLimitPercentage: 80,
+			},
+			want:    "",
+			wantErr: assert.Error,
+		},
+		{
 			name: "no resource limit but soft limit value without suffix set, expect soft limit value",
 			fields: fields{
 				SidecarSoftMemoryLimit:           "80000000",
 				SidecarSoftMemoryLimitPercentage: 80,
 			},
 			want:    "80000000",
+			wantErr: assert.NoError,
+		},
+		{
+			name: "no resource limit but soft limit perc value set, expect soft limit value",
+			fields: fields{
+				SidecarSoftMemoryLimitPercentage: 80,
+			},
+			resourceRequirements: &corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					corev1.ResourceMemory: resource.MustParse("100Mi"),
+				},
+			},
+			want:    "81920KiB",
 			wantErr: assert.NoError,
 		},
 		{
