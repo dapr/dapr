@@ -371,7 +371,7 @@ func TestGetSidecarContainer(t *testing.T) {
 		assert.Equal(t, "appsecret", container.Env[7].ValueFrom.SecretKeyRef.Name)
 		// GOMEMLIMIT
 		assert.Equal(t, "GOMEMLIMIT", container.Env[8].Name)
-		assert.Equal(t, "838860KiB", container.Env[8].Value)
+		assert.Equal(t, "943718KiB", container.Env[8].Value)
 		// default image
 		assert.Equal(t, "daprio/dapr", container.Image)
 		assert.EqualValues(t, expectedArgs, container.Args)
@@ -1150,7 +1150,7 @@ func TestSidecarConfig_getGoMemLimitForSidecarResources(t *testing.T) {
 					corev1.ResourceMemory: resource.MustParse("100Mi"),
 				},
 			},
-			want:    "81920KiB",
+			want:    "92160KiB",
 			wantErr: assert.NoError,
 		},
 		{
@@ -1164,7 +1164,7 @@ func TestSidecarConfig_getGoMemLimitForSidecarResources(t *testing.T) {
 					corev1.ResourceMemory: resource.MustParse("100.5Mi"),
 				},
 			},
-			want:    "82329KiB",
+			want:    "92620KiB",
 			wantErr: assert.NoError,
 		},
 		{
@@ -1178,7 +1178,7 @@ func TestSidecarConfig_getGoMemLimitForSidecarResources(t *testing.T) {
 					corev1.ResourceMemory: resource.MustParse("101Mi"),
 				},
 			},
-			want:    "82739KiB",
+			want:    "93081KiB",
 			wantErr: assert.NoError,
 		},
 		{

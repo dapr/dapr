@@ -383,7 +383,7 @@ func (c *SidecarConfig) getGoMemLimitForSidecarResources(r *corev1.ResourceRequi
 	if c.SidecarSoftMemoryLimit != "" {
 		return getSoftMemoryLimitStringValue(c, r)
 	}
-	percentage := defaultSoftLimitPercentage
+	percentage := softMemoryLimitPercentageMax
 	if c.SidecarSoftMemoryLimitPercentage != 0 {
 		if c.SidecarSoftMemoryLimitPercentage < softMemoryLimitPercentageMin || c.SidecarSoftMemoryLimitPercentage > softMemoryLimitPercentageMax {
 			return "", fmt.Errorf("sidecar soft memory limit percentage must be between %d and %d", softMemoryLimitPercentageMin, softMemoryLimitPercentageMax)
