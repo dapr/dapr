@@ -112,5 +112,5 @@ func main() {
 		log.Fatalf("Error running injector: %v", err)
 	}
 
-	log.Infof("Dapr sidecar injector shut down gracefully")
+	log.Info("Dapr sidecar injector shut down gracefully")
 }

@@ -39,8 +39,8 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
-	auth "github.com/dapr/dapr/pkg/runtime/security"
-	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
+	"github.com/dapr/dapr/pkg/security"
+	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 	streamutils "github.com/dapr/dapr/utils/streams"
 )
 
@@ -90,7 +90,7 @@ func CreateHTTPChannel(config ChannelConfiguration) (channel.AppChannel, error) 
 		compStore:             config.CompStore,
 		baseAddress:           config.Endpoint,
 		tracingSpec:           config.TracingSpec,
-		appHeaderToken:        auth.GetAppToken(),
+		appHeaderToken:        security.GetAppToken(),
 		maxResponseBodySizeMB: config.MaxRequestBodySizeMB,
 	}
 
@@ -349,7 +349,7 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 	}
 
 	if h.appHeaderToken != "" {
-		channelReq.Header.Set(authConsts.APITokenHeader, h.appHeaderToken)
+		channelReq.Header.Set(securityConsts.APITokenHeader, h.appHeaderToken)
 	}
 
 	return channelReq, nil

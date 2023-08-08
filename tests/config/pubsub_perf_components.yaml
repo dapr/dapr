@@ -28,6 +28,10 @@ spec:
     value: "false"
   - name: initialOffset
     value: newest
+scopes:
+  - kafka-test-app-normal
+  - kafka-test-app-bulk
+  - k6-tester-pubsub-subscribe-http
 
 ---
 
@@ -44,6 +48,10 @@ spec:
   # rabbitmq broker connection setting
   - name: host
     value: amqp://admin:admin@rabbitmq.dapr-tests.svc.cluster.local:5672
+scopes:
+  - rabbitmq-test-app-normal
+  - rabbitmq-test-app-bulk
+  - k6-tester-pubsub-subscribe-http
 
 ---
 
@@ -59,6 +67,10 @@ spec:
     - name: url
       #value: "tcp://[username][:password]@host.domain[:port]"
       value: tcp://perf-test-emqx@perf-test-emqx-0.perf-test-emqx-headless.dapr-tests.svc.cluster.local:1883
+scopes:
+  - mqtt-test-app-normal
+  - mqtt-test-app-bulk
+  - k6-tester-pubsub-subscribe-http
 
 ---
 
@@ -73,6 +85,10 @@ spec:
   metadata:
   - name: host
     value: "perf-test-pulsar-broker.dapr-tests.svc.cluster.local:6650"
+scopes:
+  - pulsar-test-app-normal
+  - pulsar-test-app-bulk
+  - k6-tester-pubsub-subscribe-http
 
 ---
 #redis pubsub component
@@ -88,3 +104,7 @@ spec:
     value: dapr-redis-master.dapr-tests.svc.cluster.local:6379
   - name: redisPassword
     value: ""
+scopes:
+  - redis-test-app-normal
+  - redis-test-app-bulk
+  - k6-tester-pubsub-subscribe-http

@@ -21,6 +21,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -33,13 +34,16 @@ import (
 
 	chi "github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 
 	"github.com/dapr/dapr/pkg/config"
 	corsDapr "github.com/dapr/dapr/pkg/cors"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
-	auth "github.com/dapr/dapr/pkg/runtime/security"
+	"github.com/dapr/dapr/pkg/security"
+	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 )
 
@@ -128,11 +132,17 @@ func (s *server) StartNonBlocking() error {
 		return errors.New("could not listen on any endpoint")
 	}
 
+	// Create a handler with support for HTTP/2 Cleartext
+	var handler http.Handler = r
+	if !utils.IsTruthy(os.Getenv("DAPR_HTTP_DISABLE_H2C")) {
+		handler = h2c.NewHandler(r, &http2.Server{})
+	}
+
 	for _, listener := range listeners {
 		// srv is created in a loop because each instance
 		// has a handle on the underlying listener.
 		srv := &http.Server{
-			Handler:           r,
+			Handler:           handler,
 			ReadHeaderTimeout: 10 * time.Second,
 			MaxHeaderBytes:    s.config.ReadBufferSizeKB << 10, // To bytes
 		}
@@ -257,7 +267,7 @@ func (s *server) useMaxBodySize(r chi.Router) {
 	}
 
 	maxSize := int64(s.config.MaxRequestBodySizeMB) << 20 // To bytes
-	log.Infof("Enabled max body size HTTP middleware with size %d MB", maxSize)
+	log.Infof("Enabled max body size HTTP middleware with size %d MB", s.config.MaxRequestBodySizeMB)
 
 	r.Use(MaxBodySizeMiddleware(maxSize))
 }
@@ -302,7 +312,7 @@ func (s *server) useCors(r chi.Router) {
 }
 
 func (s *server) useAPIAuthentication(r chi.Router) {
-	token := auth.GetAPIToken()
+	token := security.GetAPIToken()
 	if token == "" {
 		return
 	}
@@ -311,11 +321,11 @@ func (s *server) useAPIAuthentication(r chi.Router) {
 	r.Use(APITokenAuthMiddleware(token))
 }
 
-func (s *server) unescapeRequestParametersHandler(keepWildcardUnescaped bool, next http.Handler) http.HandlerFunc {
+func (s *server) unescapeRequestParametersHandler(next http.Handler) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		chiCtx := chi.RouteContext(r.Context())
 		if chiCtx != nil {
-			err := s.unespaceRequestParametersInContext(chiCtx, keepWildcardUnescaped)
+			err := s.unespaceRequestParametersInContext(chiCtx)
 			if err != nil {
 				errMsg := err.Error()
 				log.Debug(errMsg)
@@ -328,12 +338,8 @@ func (s *server) unescapeRequestParametersHandler(keepWildcardUnescaped bool, ne
 	})
 }
 
-func (s *server) unespaceRequestParametersInContext(chiCtx *chi.Context, keepWildcardUnescaped bool) (err error) {
+func (s *server) unespaceRequestParametersInContext(chiCtx *chi.Context) (err error) {
 	for i, key := range chiCtx.URLParams.Keys {
-		if keepWildcardUnescaped && key == "*" {
-			continue
-		}
-
 		chiCtx.URLParams.Values[i], err = url.QueryUnescape(chiCtx.URLParams.Values[i])
 		if err != nil {
 			return fmt.Errorf("failed to unescape request parameter %q. Error: %w", key, err)
@@ -368,7 +374,7 @@ func (s *server) handle(e Endpoint, path string, r chi.Router, unescapeParameter
 	handler := e.GetHandler()
 
 	if unescapeParameters {
-		handler = s.unescapeRequestParametersHandler(e.KeepWildcardUnescaped, handler)
+		handler = s.unescapeRequestParametersHandler(handler)
 	}
 
 	if apiLogging {
@@ -386,21 +392,7 @@ func (s *server) handle(e Endpoint, path string, r chi.Router, unescapeParameter
 
 	// Set as fallback method
 	if e.IsFallback {
-		fallbackHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Populate the wildcard path with the full path
-			chiCtx := chi.RouteContext(r.Context())
-			if chiCtx != nil {
-				// r.URL.RawPath could be empty
-				path := r.URL.RawPath
-				if path == "" {
-					path = r.URL.Path
-				}
-				chiCtx.URLParams.Add("*", strings.TrimPrefix(path, "/"))
-			}
-
-			handler(w, r)
-		})
-		r.NotFound(fallbackHandler)
-		r.MethodNotAllowed(fallbackHandler)
+		r.NotFound(handler)
+		r.MethodNotAllowed(handler)
 	}
 }

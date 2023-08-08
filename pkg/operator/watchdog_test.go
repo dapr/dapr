@@ -12,13 +12,13 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/dapr/dapr/pkg/injector/annotations"
 	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
 	operatorconsts "github.com/dapr/dapr/pkg/operator/meta"
+	"github.com/dapr/kit/ptr"
 )
 
 func createMockInjectorDeployment(replicas int32) *appsv1.Deployment {
@@ -29,7 +29,7 @@ func createMockInjectorDeployment(replicas int32) *appsv1.Deployment {
 			Labels:    map[string]string{"app": operatorconsts.SidecarInjectorDeploymentName},
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: pointer.Int32(replicas),
+			Replicas: ptr.Of(replicas),
 		},
 		Status: appsv1.DeploymentStatus{
 			ReadyReplicas: replicas,
@@ -49,7 +49,7 @@ func createMockPods(n, daprized, injected, daprdPresent int) (pods []*corev1.Pod
 			},
 			Spec: corev1.PodSpec{
 				Containers:                    []corev1.Container{{Name: "my-app", Image: "quay.io/prometheus/busybox-linux-arm64", Args: []string{"sh", "-c", "sleep 3600"}}},
-				TerminationGracePeriodSeconds: pointer.Int64(0),
+				TerminationGracePeriodSeconds: ptr.Of(int64(0)),
 				Tolerations: []corev1.Toleration{
 					{
 						Key:      "kwok.x-k8s.io/node",

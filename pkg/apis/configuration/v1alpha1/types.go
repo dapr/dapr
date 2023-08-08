@@ -123,13 +123,29 @@ type MTLSSpec struct {
 	// +optional
 	WorkloadCertTTL *string `json:"workloadCertTTL,omitempty"`
 	// +optional
-	AllowedClockSkew *string `json:"allowedClockSkew,omitempty"`
+	AllowedClockSkew        *string `json:"allowedClockSkew,omitempty"`
+	SentryAddress           string  `json:"sentryAddress"`
+	ControlPlaneTrustDomain string  `json:"controlPlaneTrustDomain"`
+	// Additional token validators to use.
+	// When Dapr is running in Kubernetes mode, this is in addition to the built-in "kubernetes" validator.
+	// In self-hosted mode, enabling a custom validator will disable the built-in "insecure" validator.
+	// +optional
+	TokenValidators []ValidatorSpec `json:"tokenValidators,omitempty"`
 }
 
 // GetEnabled returns true if mTLS is enabled.
 func (m *MTLSSpec) GetEnabled() bool {
 	// Defaults to true if unset
 	return m == nil || m.Enabled == nil || *m.Enabled
+}
+
+// ValidatorSpec contains additional token validators to use.
+type ValidatorSpec struct {
+	// Name of the validator
+	// +kubebuilder:validation:Enum={"jwks"}
+	Name string `json:"name"`
+	// Options for the validator, if any
+	Options *DynamicValue `json:"options,omitempty"`
 }
 
 // SelectorSpec selects target services to which the handler is to be applied.
