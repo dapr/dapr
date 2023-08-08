@@ -35,6 +35,7 @@ import (
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
+	"github.com/dapr/dapr/tests/util"
 	apiv1 "k8s.io/api/core/v1"
 )
 
@@ -78,6 +79,33 @@ var (
 func TestMain(m *testing.M) {
 	utils.SetupLogs("service_invocation")
 	utils.InitHTTPClient(false)
+
+	pki, err := util.GenPKI("service-invocation-external")
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(-1)
+	}
+
+	secrets := []kube.SecretDescription{
+		{
+			Name:      "external-tls",
+			Namespace: kube.DaprTestNamespace,
+			Data: map[string][]byte{
+				"ca.crt":  pki.RootCertPEM,
+				"tls.crt": pki.LeafCertPEM,
+				"tls.key": pki.LeafPKPEM,
+			},
+		},
+		{
+			Name:      "dapr-tls-client",
+			Namespace: kube.DaprTestNamespace,
+			Data: map[string][]byte{
+				"ca.crt":  pki.RootCertPEM,
+				"tls.crt": pki.ClientCertPEM,
+				"tls.key": pki.ClientPKPEM,
+			},
+		},
+	}
 
 	// These apps will be deployed for hellodapr test before starting actual test
 	// and will be cleaned up after all tests are finished automatically
@@ -203,6 +231,7 @@ func TestMain(m *testing.M) {
 	}
 
 	tr = runner.NewTestRunner("hellodapr", testApps, nil, nil)
+	tr.AddSecrets(secrets)
 	os.Exit(tr.Start(m))
 }
 
@@ -1488,7 +1517,7 @@ func TestNegativeCases(t *testing.T) {
 				require.Equal(t, 500, status)
 				// This error could have code either DeadlineExceeded or Internal, depending on where the context timeout was caught
 				// Valid errors are:
-				// - `rpc error: code = Internal desc = fail to invoke, id: serviceinvocation-callee-0, err: rpc error: code = Internal desc = error invoking app channel: Post \"http://127.0.0.1:3000/timeouterror\": context deadline exceeded``
+				// - `rpc error: code = Internal desc = failed to invoke, id: serviceinvocation-callee-0, err: rpc error: code = Internal desc = error invoking app channel: Post \"http://127.0.0.1:3000/timeouterror\": context deadline exceeded``
 				// - `rpc error: code = DeadlineExceeded desc = context deadline exceeded`
 				assert.Contains(t, testResults.RawError, "rpc error:")
 				assert.Contains(t, testResults.RawError, "context deadline exceeded")
