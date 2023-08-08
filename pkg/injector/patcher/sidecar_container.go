@@ -429,8 +429,6 @@ func getSoftMemoryLimitStringValue(c *SidecarConfig, r *corev1.ResourceRequireme
 	} else {
 		return strconv.FormatInt(q.Value(), 10), nil
 	}
-	// no suffix found and not a number, add it
-
 }
 
 func (c *SidecarConfig) getResourceRequirements() (*corev1.ResourceRequirements, error) {
