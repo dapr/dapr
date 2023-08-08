@@ -15,9 +15,10 @@ package patcher
 
 import (
 	"fmt"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"strings"
 	"testing"
+
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
