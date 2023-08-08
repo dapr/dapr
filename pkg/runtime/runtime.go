@@ -388,6 +388,8 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		log.Warnf("failed to load components: %s", err)
 	}
 
+	a.flushOutstandingComponents()
+
 	err = a.loadHTTPEndpoints()
 	if err != nil {
 		log.Warnf("failed to load HTTP endpoints: %s", err)
@@ -395,14 +397,12 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 
 	a.initChannels()
 
-	a.flushOutstandingComponents()
+	a.flushOutstandingHTTPEndpoints()
 
 	pipeline, err := a.channels.BuildHTTPPipeline(a.globalConfig.Spec.HTTPPipelineSpec)
 	if err != nil {
 		log.Warnf("failed to build HTTP pipeline: %s", err)
 	}
-
-	a.flushOutstandingHTTPEndpoints()
 
 	// Setup allow/deny list for secrets
 	a.populateSecretsConfiguration()

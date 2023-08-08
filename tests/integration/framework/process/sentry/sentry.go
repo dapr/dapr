@@ -35,7 +35,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
-	"github.com/dapr/dapr/tests/integration/framework/util"
+	"github.com/dapr/dapr/tests/util"
 )
 
 type Sentry struct {
