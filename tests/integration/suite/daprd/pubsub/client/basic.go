@@ -36,9 +36,6 @@ func init() {
 
 type basic struct {
 	daprd *procdaprd.Daprd
-
-	pubsubNames []string
-	topicNames  []string
 }
 
 func (b *basic) Setup(t *testing.T) []framework.Option {
