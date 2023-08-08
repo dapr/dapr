@@ -1757,9 +1757,10 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 	// Setup dapr api server
 	fakeAPI := &api{
 		UniversalAPI: &universalapi.UniversalAPI{
-			AppID:     "fakeAPI",
-			Logger:    logger.NewLogger("grpc.api.test"),
-			CompStore: compStore,
+			AppID:      "fakeAPI",
+			CompStore:  compStore,
+			Logger:     logger.NewLogger("grpc.api.test"),
+			Resiliency: resiliency.New(nil),
 		},
 	}
 	server, lis := startDaprAPIServer(fakeAPI, "")
@@ -1920,9 +1921,10 @@ func TestUnsubscribeConfigurationErrScenario(t *testing.T) {
 	// Setup dapr api server
 	fakeAPI := &api{
 		UniversalAPI: &universalapi.UniversalAPI{
-			AppID:     "fakeAPI",
-			Logger:    logger.NewLogger("grpc.api.test"),
-			CompStore: compStore,
+			AppID:      "fakeAPI",
+			CompStore:  compStore,
+			Logger:     logger.NewLogger("grpc.api.test"),
+			Resiliency: resiliency.New(nil),
 		},
 	}
 	server, lis := startDaprAPIServer(fakeAPI, "")
@@ -3520,9 +3522,10 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 
 	fakeAPI := &api{
 		UniversalAPI: &universalapi.UniversalAPI{
-			AppID:     "fakeAPI",
-			Logger:    logger.NewLogger("grpc.api.test"),
-			CompStore: compStore,
+			AppID:      "fakeAPI",
+			Logger:     logger.NewLogger("grpc.api.test"),
+			CompStore:  compStore,
+			Resiliency: resiliency.FromConfigurations(logger.NewLogger("grpc.api.test"), testResiliency),
 		},
 	}
 	server, lis := startDaprAPIServer(fakeAPI, "")
