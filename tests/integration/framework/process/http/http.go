@@ -73,7 +73,12 @@ func (h *HTTP) Run(t *testing.T, ctx context.Context) {
 	}
 
 	go func() {
-		err := h.server.Serve(h.listener)
+		var err error
+		if h.server.TLSConfig != nil {
+			err = h.server.ServeTLS(h.listener, "", "")
+		} else {
+			err = h.server.Serve(h.listener)
+		}
 		if !errors.Is(err, http.ErrServerClosed) {
 			h.srvErrCh <- err
 		} else {
