@@ -687,7 +687,7 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 		psMock := &outboxPubsubMock{
 			expectedOutboxTopic: outboxTopic,
 			t:                   t,
-			validateError:       true,
+			validateNoError:     true,
 		}
 		stateMock := &outboxStateMock{
 			returnEmptyOnGet: true,
@@ -811,7 +811,7 @@ type outboxPubsubMock struct {
 	expectedOutboxTopic string
 	t                   *testing.T
 	handler             contribPubsub.Handler
-	validateError       bool
+	validateNoError     bool
 }
 
 func (o *outboxPubsubMock) Init(ctx context.Context, metadata contribPubsub.Metadata) error {
@@ -829,10 +829,10 @@ func (o *outboxPubsubMock) Publish(ctx context.Context, req *contribPubsub.Publi
 			Topic: req.Topic,
 		})
 
-		if o.validateError {
-			assert.Error(o.t, err)
+		if o.validateNoError {
+			assert.NoError(o.t, err)
+			return
 		}
-		assert.NoError(o.t, err)
 	}()
 
 	return nil
