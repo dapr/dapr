@@ -371,7 +371,7 @@ func TestGetSidecarContainer(t *testing.T) {
 		assert.Equal(t, "appsecret", container.Env[7].ValueFrom.SecretKeyRef.Name)
 		// GOMEMLIMIT
 		assert.Equal(t, "GOMEMLIMIT", container.Env[8].Name)
-		assert.Equal(t, "943718KiB", container.Env[8].Value)
+		assert.Equal(t, "966367641", container.Env[8].Value)
 		// default image
 		assert.Equal(t, "daprio/dapr", container.Image)
 		assert.EqualValues(t, expectedArgs, container.Args)
@@ -1150,7 +1150,7 @@ func TestSidecarConfig_getGoMemLimitForSidecarResources(t *testing.T) {
 					corev1.ResourceMemory: resource.MustParse("100Mi"),
 				},
 			},
-			want:    "92160KiB",
+			want:    "94371840",
 			wantErr: assert.NoError,
 		},
 		{
@@ -1164,7 +1164,7 @@ func TestSidecarConfig_getGoMemLimitForSidecarResources(t *testing.T) {
 					corev1.ResourceMemory: resource.MustParse("100.5Mi"),
 				},
 			},
-			want:    "92620KiB",
+			want:    "94843699",
 			wantErr: assert.NoError,
 		},
 		{
@@ -1178,7 +1178,7 @@ func TestSidecarConfig_getGoMemLimitForSidecarResources(t *testing.T) {
 					corev1.ResourceMemory: resource.MustParse("101Mi"),
 				},
 			},
-			want:    "93081KiB",
+			want:    "95315558",
 			wantErr: assert.NoError,
 		},
 		{
@@ -1196,7 +1196,7 @@ func TestSidecarConfig_getGoMemLimitForSidecarResources(t *testing.T) {
 				SidecarSoftMemoryLimit:           "80Mi",
 				SidecarSoftMemoryLimitPercentage: 80,
 			},
-			want:    "80MiB",
+			want:    "83886080",
 			wantErr: assert.NoError,
 		},
 		{
@@ -1214,7 +1214,7 @@ func TestSidecarConfig_getGoMemLimitForSidecarResources(t *testing.T) {
 				SidecarSoftMemoryLimit:           "80MiB",
 				SidecarSoftMemoryLimitPercentage: 80,
 			},
-			want:    "80MiB",
+			want:    "83886080",
 			wantErr: assert.NoError,
 		},
 		{
@@ -1245,7 +1245,7 @@ func TestSidecarConfig_getGoMemLimitForSidecarResources(t *testing.T) {
 					corev1.ResourceMemory: resource.MustParse("100Mi"),
 				},
 			},
-			want:    "81920KiB",
+			want:    "83886080",
 			wantErr: assert.NoError,
 		},
 		{
@@ -1259,7 +1259,7 @@ func TestSidecarConfig_getGoMemLimitForSidecarResources(t *testing.T) {
 					corev1.ResourceMemory: resource.MustParse("101Mi"),
 				},
 			},
-			want:    "45MiB",
+			want:    "47185920",
 			wantErr: assert.NoError,
 		},
 		{
