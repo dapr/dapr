@@ -104,8 +104,9 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 		ControlPlaneNamespace:   security.CurrentNamespace(),
 		TrustAnchorsFile:        opts.TrustAnchorsFile,
 		AppID:                   "dapr-operator",
-		MTLSEnabled:             config.MTLSEnabled,
-		WriteSVIDToDir:          ptr.Of(filepath.Join(os.TempDir(), "/var/run/secrets/dapr.io/webhook/tls")),
+		// mTLS is always enabled for the operator.
+		MTLSEnabled:    true,
+		WriteSVIDToDir: ptr.Of(filepath.Join(os.TempDir(), "/var/run/secrets/dapr.io/webhook/tls")),
 	})
 	if err != nil {
 		return nil, err
