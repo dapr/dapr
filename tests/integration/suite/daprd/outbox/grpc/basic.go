@@ -66,8 +66,6 @@ spec:
     value: "mypubsub"
   - name: outboxPublishTopic
     value: "test"
-  - name: outboxStateScanDelay
-    value: "2s"
 `,
 		`
 apiVersion: dapr.io/v1alpha1
