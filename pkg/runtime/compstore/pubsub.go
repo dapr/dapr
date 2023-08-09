@@ -36,6 +36,7 @@ type TopicRouteElem struct {
 	Rules           []*rtpubsub.Rule
 	DeadLetterTopic string
 	BulkSubscribe   *rtpubsub.BulkSubscribe
+	Canary          bool
 }
 
 func (c *ComponentStore) AddPubSub(name string, item PubsubItem) {

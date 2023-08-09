@@ -46,7 +46,11 @@ func (p *pubsub) subscribeTopic(name, topic string, route compstore.TopicRouteEl
 		return fmt.Errorf("subscription to topic '%s' on pubsub '%s' is not allowed", topic, name)
 	}
 
-	log.Debugf("subscribing to topic='%s' on pubsub='%s'", topic, name)
+	if route.Canary {
+		log.Debugf("subscribing to canary topic='%s' on pubsub='%s'", topic, name)
+	} else {
+		log.Debugf("subscribing to topic='%s' on pubsub='%s'", topic, name)
+	}
 
 	if _, ok := p.topicCancels[subKey]; ok {
 		return fmt.Errorf("cannot subscribe to topic '%s' on pubsub '%s': the subscription already exists", topic, name)
@@ -80,7 +84,6 @@ func (p *pubsub) subscribeTopic(name, topic string, route compstore.TopicRouteEl
 		if msg.Metadata == nil {
 			msg.Metadata = make(map[string]string, 1)
 		}
-
 		msg.Metadata[metadataKeyPubSub] = name
 
 		msgTopic := msg.Topic
@@ -166,6 +169,17 @@ func (p *pubsub) subscribeTopic(name, topic string, route compstore.TopicRouteEl
 				_ = p.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic)
 			}
 			return nil
+		}
+
+		if route.Canary {
+			if t, ok := cloudEvent[contribpubsub.TypeField]; ok && t == "dapr.canary" {
+				log.Infof("🐦 Canary received! -- CloudEvent ID %s", cloudEvent[contribpubsub.IDField])
+				return nil
+			}
+			if p.channels.AppChannel() == nil {
+				log.Infof("dropping pub/sub event, app channel not established. Did you intend to publish a canary message?")
+				return nil
+			}
 		}
 
 		sm := &subscribedMessage{

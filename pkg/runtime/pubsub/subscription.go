@@ -10,6 +10,7 @@ type Subscription struct {
 	Rules           []*Rule           `json:"rules,omitempty"`
 	Scopes          []string          `json:"scopes"`
 	BulkSubscribe   *BulkSubscribe    `json:"bulkSubscribe"`
+	Canary          bool              `json:"canary"`
 }
 
 type BulkSubscribe struct {

@@ -40,6 +40,7 @@ type SubscriptionSpec struct {
 	Route           string            `json:"route"`
 	BulkSubscribe   BulkSubscribe     `json:"bulkSubscribe,omitempty"`
 	DeadLetterTopic string            `json:"deadLetterTopic,omitempty"`
+	Canary          bool              `json:"canary"`
 }
 
 // BulkSubscribe encapsulates the bulk subscription configuration for a topic.

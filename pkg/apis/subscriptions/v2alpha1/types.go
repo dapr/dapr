@@ -47,6 +47,8 @@ type SubscriptionSpec struct {
 	DeadLetterTopic string `json:"deadLetterTopic,omitempty"`
 	// The option to enable bulk subscription for this topic.
 	BulkSubscribe BulkSubscribe `json:"bulkSubscribe,omitempty"`
+	// The option to enable a canary subscriber
+	Canary bool `json:"canary"`
 }
 
 // BulkSubscribe encapsulates the bulk subscription configuration for a topic.

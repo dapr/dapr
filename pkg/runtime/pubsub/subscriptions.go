@@ -332,6 +332,7 @@ func unmarshalSubscription(b []byte, namespace string) (*Subscription, error) {
 				MaxMessagesCount:   sub.Spec.BulkSubscribe.MaxMessagesCount,
 				MaxAwaitDurationMs: sub.Spec.BulkSubscribe.MaxAwaitDurationMs,
 			},
+			Canary: sub.Spec.Canary,
 		}, nil
 
 	default:
@@ -361,6 +362,7 @@ func unmarshalSubscription(b []byte, namespace string) (*Subscription, error) {
 				MaxMessagesCount:   sub.Spec.BulkSubscribe.MaxMessagesCount,
 				MaxAwaitDurationMs: sub.Spec.BulkSubscribe.MaxAwaitDurationMs,
 			},
+			Canary: sub.Spec.Canary,
 		}, nil
 	}
 }

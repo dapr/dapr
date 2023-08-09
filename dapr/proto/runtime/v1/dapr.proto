@@ -665,6 +665,7 @@ message PubsubSubscription {
   map<string,string> metadata = 3 [json_name = "metadata"];
   PubsubSubscriptionRules rules = 4 [json_name = "rules"];
   string dead_letter_topic = 5 [json_name = "deadLetterTopic"];
+  bool canary = 6 [json_name = "canary"];
 }
 
 message PubsubSubscriptionRules {
