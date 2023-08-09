@@ -20,33 +20,33 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cenkalti/backoff"
 	contribPubsub "github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/outbox"
-	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/retry"
 
 	"github.com/google/uuid"
 )
 
 const (
-	outboxPublishPubsubKey  = "outboxPublishPubsub"
-	outboxPublishTopicKey   = "outboxPublishTopic"
-	outboxPubsubKey         = "outboxPubsub"
-	outboxStateScanDelayKey = "outboxStateScanDelay"
-	outboxStatePrefix       = "outbox"
-	defaultStateScanDelay   = "5s"
+	outboxPublishPubsubKey           = "outboxPublishPubsub"
+	outboxPublishTopicKey            = "outboxPublishTopic"
+	outboxPubsubKey                  = "outboxPubsub"
+	outboxDiscardWhenMissingStateKey = "outboxDiscardWhenMissingState"
+	outboxStatePrefix                = "outbox"
+	defaultStateScanDelay            = time.Second * 1
 )
 
 var outboxLogger = logger.NewLogger("dapr.outbox")
 
 type outboxConfig struct {
-	publishPubSub  string
-	publishTopic   string
-	outboxPubsub   string
-	stateScanDelay string
+	publishPubSub                 string
+	publishTopic                  string
+	outboxPubsub                  string
+	outboxDiscardWhenMissingState bool
 }
 
 type outboxImpl struct {
@@ -72,7 +72,8 @@ func NewOutbox(publishFn func(context.Context, *contribPubsub.PublishRequest) er
 
 // AddOrUpdateOutbox examines a statestore for outbox properties and saves it for later usage in outbox operations.
 func (o *outboxImpl) AddOrUpdateOutbox(stateStore v1alpha1.Component) {
-	var publishPubSub, publishTopicKey, outboxPubsub, stateScanDelay string
+	var publishPubSub, publishTopicKey, outboxPubsub string
+	var outboxDiscardWhenMissingState bool
 
 	for _, v := range stateStore.Spec.Metadata {
 		switch v.Name {
@@ -82,8 +83,8 @@ func (o *outboxImpl) AddOrUpdateOutbox(stateStore v1alpha1.Component) {
 			publishTopicKey = v.Value.String()
 		case outboxPubsubKey:
 			outboxPubsub = v.Value.String()
-		case outboxStateScanDelayKey:
-			stateScanDelay = v.Value.String()
+		case outboxDiscardWhenMissingStateKey:
+			outboxDiscardWhenMissingState = utils.IsTruthy(v.Value.String())
 		}
 	}
 
@@ -95,15 +96,11 @@ func (o *outboxImpl) AddOrUpdateOutbox(stateStore v1alpha1.Component) {
 			outboxPubsub = publishPubSub
 		}
 
-		if stateScanDelay == "" {
-			stateScanDelay = defaultStateScanDelay
-		}
-
 		o.outboxStores[stateStore.Name] = outboxConfig{
-			publishPubSub:  publishPubSub,
-			publishTopic:   publishTopicKey,
-			outboxPubsub:   outboxPubsub,
-			stateScanDelay: stateScanDelay,
+			publishPubSub:                 publishPubSub,
+			publishTopic:                  publishTopicKey,
+			outboxPubsub:                  outboxPubsub,
+			outboxDiscardWhenMissingState: outboxDiscardWhenMissingState,
 		}
 	}
 }
@@ -221,43 +218,46 @@ func (o *outboxImpl) SubscribeToInternalTopics(ctx context.Context, appID string
 			stateKey := o.cloudEventExtractorFn(cloudEvent, contribPubsub.IDField)
 			data := []byte(o.cloudEventExtractorFn(cloudEvent, contribPubsub.DataField))
 			contentType := o.cloudEventExtractorFn(cloudEvent, contribPubsub.DataContentTypeField)
-			d, err := time.ParseDuration(c.stateScanDelay)
-			if err != nil {
-				d, _ = time.ParseDuration(defaultStateScanDelay)
-			}
 
 			store, ok := o.getStateFn(stateStore)
 			if !ok {
 				return fmt.Errorf("cannot get outbox state: state store %s not found", stateStore)
 			}
 
-			time.Sleep(d)
-			policyRunner := resiliency.NewRunner[struct{}](ctx,
-				resiliency.NewPolicyDefinition(outboxLogger, "outbox", d, &retry.Config{
-					Policy:      retry.PolicyExponential,
-					MaxInterval: time.Second * 15,
-					MaxRetries:  3,
-				}, nil),
-			)
+			time.Sleep(defaultStateScanDelay)
 
-			_, err = policyRunner(func(ctx context.Context) (struct{}, error) {
+			bo := &backoff.ExponentialBackOff{
+				InitialInterval:     time.Millisecond * 500,
+				MaxInterval:         time.Second * 3,
+				MaxElapsedTime:      time.Second * 10,
+				Multiplier:          3,
+				Clock:               backoff.SystemClock,
+				RandomizationFactor: 0.1,
+			}
+
+			err = backoff.Retry(func() error {
 				resp, sErr := store.Get(ctx, &state.GetRequest{
 					Key: stateKey,
 				})
 				if sErr != nil {
-					return struct{}{}, sErr
+					return sErr
 				}
 
 				if resp != nil && len(resp.Data) > 0 {
-					return struct{}{}, nil
+					return nil
 				}
 
-				return struct{}{}, fmt.Errorf("cannot publish outbox message to topic %s with pubsub %s: state not found", c.publishTopic, c.publishPubSub)
-			})
+				return fmt.Errorf("cannot publish outbox message to topic %s with pubsub %s: outbox state not found", c.publishTopic, c.publishPubSub)
+			}, bo)
 			if err != nil {
-				outboxLogger.Errorf("failed to publish outbox topic to pubsub %s: %s, dropping message", c.publishPubSub, err)
-				//lint:ignore nilerr dropping message
-				return nil
+				if c.outboxDiscardWhenMissingState {
+					outboxLogger.Errorf("failed to publish outbox topic to pubsub %s: %s, discarding message", c.publishPubSub, err)
+					//lint:ignore nilerr dropping message
+					return nil
+				}
+
+				outboxLogger.Errorf("failed to publish outbox topic to pubsub %s: %s, rejecting for later processing", c.publishPubSub, err)
+				return err
 			}
 
 			ce, err := NewCloudEvent(&CloudEvent{
@@ -286,17 +286,16 @@ func (o *outboxImpl) SubscribeToInternalTopics(ctx context.Context, appID string
 				return err
 			}
 
-			_, err = policyRunner(func(ctx context.Context) (struct{}, error) {
+			err = backoff.Retry(func() error {
 				err = store.Delete(ctx, &state.DeleteRequest{
 					Key: stateKey,
 				})
 				if err != nil {
-					return struct{}{}, err
+					return err
 				}
 
-				return struct{}{}, nil
-			})
-
+				return nil
+			}, bo)
 			return err
 		})
 	}

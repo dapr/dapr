@@ -153,14 +153,6 @@ func TestAddOrUpdateOutbox(t *testing.T) {
 						},
 					},
 					{
-						Name: outboxStateScanDelayKey,
-						Value: common.DynamicValue{
-							JSON: v1.JSON{
-								Raw: []byte("8s"),
-							},
-						},
-					},
-					{
 						Name: outboxPubsubKey,
 						Value: common.DynamicValue{
 							JSON: v1.JSON{
@@ -174,7 +166,6 @@ func TestAddOrUpdateOutbox(t *testing.T) {
 
 		c := o.outboxStores["test"]
 		assert.Equal(t, c.outboxPubsub, "2")
-		assert.Equal(t, c.stateScanDelay, "8s")
 		assert.Equal(t, c.publishPubSub, "a")
 		assert.Equal(t, c.publishTopic, "1")
 	})
@@ -209,7 +200,6 @@ func TestAddOrUpdateOutbox(t *testing.T) {
 
 		c := o.outboxStores["test"]
 		assert.Equal(t, c.outboxPubsub, "a")
-		assert.Equal(t, c.stateScanDelay, defaultStateScanDelay)
 		assert.Equal(t, c.publishPubSub, "a")
 		assert.Equal(t, c.publishTopic, "1")
 	})
@@ -451,7 +441,7 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 			return stateMock, true
 		}
 
-		stateScan := "100ms"
+		stateScan := "1s"
 
 		o.AddOrUpdateOutbox(v1alpha1.Component{
 			ObjectMeta: metav1.ObjectMeta{
@@ -472,14 +462,6 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 						Value: common.DynamicValue{
 							JSON: v1.JSON{
 								Raw: []byte("1"),
-							},
-						},
-					},
-					{
-						Name: outboxStateScanDelayKey,
-						Value: common.DynamicValue{
-							JSON: v1.JSON{
-								Raw: []byte(stateScan),
 							},
 						},
 					},
@@ -613,7 +595,7 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 			return stateMock, true
 		}
 
-		const stateScan = "100ms"
+		const stateScan = "1s"
 
 		o.AddOrUpdateOutbox(v1alpha1.Component{
 			ObjectMeta: metav1.ObjectMeta{
@@ -634,14 +616,6 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 						Value: common.DynamicValue{
 							JSON: v1.JSON{
 								Raw: []byte("1"),
-							},
-						},
-					},
-					{
-						Name: outboxStateScanDelayKey,
-						Value: common.DynamicValue{
-							JSON: v1.JSON{
-								Raw: []byte(stateScan),
 							},
 						},
 					},
@@ -704,12 +678,140 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 		// Publishing should not have errored
 		require.NoError(t, <-errCh)
 	})
+
+	t.Run("outbox state not present with discard", func(t *testing.T) {
+		o := newTestOutbox().(*outboxImpl)
+
+		const outboxTopic = "test1outbox"
+
+		psMock := &outboxPubsubMock{
+			expectedOutboxTopic: outboxTopic,
+			t:                   t,
+			validateError:       true,
+		}
+		stateMock := &outboxStateMock{
+			returnEmptyOnGet: true,
+		}
+
+		internalCalledCh := make(chan struct{})
+		externalCalledCh := make(chan struct{})
+
+		o.publishFn = func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
+			if pr.Topic == outboxTopic {
+				close(internalCalledCh)
+			} else if pr.Topic == "1" {
+				close(externalCalledCh)
+			}
+
+			return psMock.Publish(ctx, pr)
+		}
+		o.getPubsubFn = func(s string) (contribPubsub.PubSub, bool) {
+			return psMock, true
+		}
+		o.getStateFn = func(s string) (state.Store, bool) {
+			return stateMock, true
+		}
+
+		const stateScan = "1s"
+
+		o.AddOrUpdateOutbox(v1alpha1.Component{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test",
+			},
+			Spec: v1alpha1.ComponentSpec{
+				Metadata: []common.NameValuePair{
+					{
+						Name: outboxPublishPubsubKey,
+						Value: common.DynamicValue{
+							JSON: v1.JSON{
+								Raw: []byte("a"),
+							},
+						},
+					},
+					{
+						Name: outboxPublishTopicKey,
+						Value: common.DynamicValue{
+							JSON: v1.JSON{
+								Raw: []byte("1"),
+							},
+						},
+					},
+					{
+						Name: outboxDiscardWhenMissingStateKey,
+						Value: common.DynamicValue{
+							JSON: v1.JSON{
+								Raw: []byte("true"),
+							},
+						},
+					},
+				},
+			},
+		})
+
+		const appID = "test"
+		err := o.SubscribeToInternalTopics(context.Background(), appID)
+		require.NoError(t, err)
+
+		errCh := make(chan error, 1)
+		go func() {
+			trs, pErr := o.PublishInternal(context.Background(), "test", []state.TransactionalStateOperation{
+				state.SetRequest{
+					Key:   "1",
+					Value: "hello",
+				},
+			}, appID)
+
+			if pErr != nil {
+				errCh <- pErr
+				return
+			}
+			if len(trs) != 1 {
+				errCh <- fmt.Errorf("expected trs to have len(1), but got: %d", len(trs))
+				return
+			}
+			errCh <- nil
+		}()
+
+		d, err := time.ParseDuration(stateScan)
+		assert.NoError(t, err)
+
+		start := time.Now()
+		doneCh := make(chan error, 2)
+
+		// account for max retry time
+		timeout := time.After(11 * time.Second)
+		go func() {
+			select {
+			case <-internalCalledCh:
+				doneCh <- nil
+			case <-timeout:
+				doneCh <- errors.New("timeout waiting for internalCalledCh")
+			}
+		}()
+		go func() {
+			// Here we expect no signal
+			select {
+			case <-externalCalledCh:
+				doneCh <- errors.New("received unexpected signal on externalCalledCh")
+			case <-timeout:
+				doneCh <- nil
+			}
+		}()
+		for i := 0; i < 2; i++ {
+			require.NoError(t, <-doneCh)
+		}
+		require.GreaterOrEqual(t, time.Since(start), d)
+
+		// Publishing should not have errored
+		require.NoError(t, <-errCh)
+	})
 }
 
 type outboxPubsubMock struct {
 	expectedOutboxTopic string
 	t                   *testing.T
 	handler             contribPubsub.Handler
+	validateError       bool
 }
 
 func (o *outboxPubsubMock) Init(ctx context.Context, metadata contribPubsub.Metadata) error {
@@ -726,6 +828,10 @@ func (o *outboxPubsubMock) Publish(ctx context.Context, req *contribPubsub.Publi
 			Data:  req.Data,
 			Topic: req.Topic,
 		})
+
+		if o.validateError {
+			assert.Error(o.t, err)
+		}
 		assert.NoError(o.t, err)
 	}()
 
@@ -746,8 +852,9 @@ func (o *outboxPubsubMock) Close() error {
 }
 
 type outboxStateMock struct {
-	expectedKey atomic.Pointer[string]
-	receivedKey chan string
+	expectedKey      atomic.Pointer[string]
+	receivedKey      chan string
+	returnEmptyOnGet bool
 }
 
 func (o *outboxStateMock) Init(ctx context.Context, metadata state.Metadata) error {
@@ -763,6 +870,10 @@ func (o *outboxStateMock) Delete(ctx context.Context, req *state.DeleteRequest) 
 }
 
 func (o *outboxStateMock) Get(ctx context.Context, req *state.GetRequest) (*state.GetResponse, error) {
+	if o.returnEmptyOnGet {
+		return &state.GetResponse{}, nil
+	}
+
 	if o.receivedKey != nil {
 		o.receivedKey <- req.Key
 	}
