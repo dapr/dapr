@@ -14,7 +14,6 @@ limitations under the License.
 package main
 
 import (
-	"context"
 	"fmt"
 	"os"
 
@@ -36,6 +35,7 @@ import (
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	workflowsLoader "github.com/dapr/dapr/pkg/components/workflows"
 	"github.com/dapr/dapr/pkg/runtime/registry"
+	"github.com/dapr/dapr/pkg/signals"
 
 	"github.com/dapr/dapr/pkg/runtime"
 	"github.com/dapr/kit/logger"
@@ -102,7 +102,9 @@ func main() {
 		WithHTTPMiddlewares(httpMiddlewareLoader.DefaultRegistry).
 		WithWorkflows(workflowsLoader.DefaultRegistry)
 
-	rt, err := runtime.FromConfig(context.TODO(), &runtime.Config{
+	ctx := signals.Context()
+
+	rt, err := runtime.FromConfig(ctx, &runtime.Config{
 		AppID:                        opts.AppID,
 		PlacementServiceHostAddr:     opts.PlacementServiceHostAddr,
 		AllowedOrigins:               opts.AllowedOrigins,
@@ -143,13 +145,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	stopCh := runtime.ShutdownSignal()
-
-	err = rt.Run(context.TODO())
-	if err != nil {
+	if err := rt.Run(ctx); err != nil {
 		log.Fatalf("fatal error from runtime: %s", err)
 	}
-
-	<-stopCh
-	rt.ShutdownWithWait()
 }

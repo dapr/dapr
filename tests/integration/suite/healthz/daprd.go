@@ -25,6 +25,7 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -48,12 +49,13 @@ func (d *daprd) Run(t *testing.T, ctx context.Context) {
 	d.proc.WaitUntilRunning(t, ctx)
 
 	reqURL := fmt.Sprintf("http://localhost:%d/v1.0/healthz", d.proc.PublicPort())
+	httpClient := util.HTTPClient(t)
 
 	assert.Eventually(t, func() bool {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 		require.NoError(t, err)
 
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := httpClient.Do(req)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 		return resp.StatusCode == http.StatusNoContent
