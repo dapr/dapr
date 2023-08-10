@@ -10,6 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
+
+	"github.com/dapr/dapr/utils"
 )
 
 // NewTag is a helper to create an opencensus tag that can be used in the different helpers here
@@ -72,6 +74,19 @@ outerLoop:
 // CleanupRegisteredViews is a safe method to removed registered views to avoid errors when running tests on the same metrics
 func CleanupRegisteredViews(viewNames ...string) {
 	var views []*view.View
+
+	defaultViewsToClean := []string{
+		"runtime/actor/timers",
+		"runtime/actor/reminders",
+	}
+
+	// append default views to clean if not already present
+	for _, v := range defaultViewsToClean {
+		if !utils.Contains(viewNames, v) {
+			viewNames = append(viewNames, v)
+		}
+	}
+
 	for _, v := range viewNames {
 		if v := view.Find(v); v != nil {
 			views = append(views, v)
