@@ -25,9 +25,22 @@ func TestServiceInvocation(t *testing.T) {
 		v := view.Find("runtime/service_invocation/req_sent_total")
 
 		allTagsPresent(t, v, viewData[0].Tags)
+		RequireTagExist(t, viewData, NewTag(typeKey.Name(), typeUnary))
 	})
 
-	t.Run("record service invoation request received", func(t *testing.T) {
+	t.Run("record service invocation streaming request sent", func(t *testing.T) {
+		s := servicesMetrics()
+
+		s.ServiceInvocationStreamingRequestSent("testAppId2", "testMethod")
+
+		viewData, _ := view.RetrieveData("runtime/service_invocation/req_sent_total")
+		v := view.Find("runtime/service_invocation/req_sent_total")
+
+		allTagsPresent(t, v, viewData[0].Tags)
+		RequireTagExist(t, viewData, NewTag(typeKey.Name(), typeStreaming))
+	})
+
+	t.Run("record service invocation request received", func(t *testing.T) {
 		s := servicesMetrics()
 
 		s.ServiceInvocationRequestReceived("testAppId", "testMethod")
