@@ -16,7 +16,7 @@ package metadata
 import (
 	"context"
 
-	grpcGo "google.golang.org/grpc"
+	"google.golang.org/grpc"
 	grpcMetadata "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/tap"
 )
@@ -37,7 +37,7 @@ func FromIncomingContext(ctx context.Context) (MD, bool) {
 }
 
 // SetMetadataInContextUnary sets the metadata in the context for an unary gRPC invocation.
-func SetMetadataInContextUnary(ctx context.Context, req any, _ *grpcGo.UnaryServerInfo, handler grpcGo.UnaryHandler) (any, error) {
+func SetMetadataInContextUnary(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 	// Because metadata.FromIncomingContext re-allocates the entire map every time to ensure the keys are lowercased, we can do it once and re-use that after
 	meta, ok := grpcMetadata.FromIncomingContext(ctx)
 	if ok && len(meta) > 0 {

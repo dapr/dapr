@@ -25,6 +25,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	// Import pprof that automatically registers itself in the default server mux.
@@ -67,6 +68,7 @@ type server struct {
 	apiSpec            config.APISpec
 	servers            []*http.Server
 	profilingListeners []net.Listener
+	wg                 sync.WaitGroup
 }
 
 // NewServerOpts are the options for NewServer.
@@ -145,10 +147,13 @@ func (s *server) StartNonBlocking() error {
 			Handler:           handler,
 			ReadHeaderTimeout: 10 * time.Second,
 			MaxHeaderBytes:    s.config.ReadBufferSizeKB << 10, // To bytes
+			Addr:              listener.Addr().String(),
 		}
 		s.servers = append(s.servers, srv)
 
+		s.wg.Add(1)
 		go func(l net.Listener) {
+			defer s.wg.Done()
 			if err := srv.Serve(l); err != http.ErrServerClosed {
 				log.Fatal(err)
 			}
@@ -171,7 +176,9 @@ func (s *server) StartNonBlocking() error {
 		}
 		s.servers = append(s.servers, healthServer)
 
+		s.wg.Add(1)
 		go func() {
+			defer s.wg.Done()
 			if err := healthServer.ListenAndServe(); err != http.ErrServerClosed {
 				log.Fatal(err)
 			}
@@ -206,7 +213,9 @@ func (s *server) StartNonBlocking() error {
 			}
 			s.servers = append(s.servers, profServer)
 
+			s.wg.Add(1)
 			go func(l net.Listener) {
+				defer s.wg.Done()
 				if err := profServer.Serve(l); err != http.ErrServerClosed {
 					log.Fatal(err)
 				}
@@ -218,21 +227,35 @@ func (s *server) StartNonBlocking() error {
 }
 
 func (s *server) Close() error {
-	var err error
-
-	for _, ln := range s.servers {
+	closeServer := func(ctx context.Context, srv *http.Server) error {
 		// This calls `Close()` on the underlying listener.
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-		shutdownErr := ln.Shutdown(ctx)
+		err := srv.Shutdown(ctx)
 		// Error will be ErrServerClosed if everything went well
-		if errors.Is(shutdownErr, http.ErrServerClosed) {
-			shutdownErr = nil
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
 		}
-		err = errors.Join(err, shutdownErr)
-		cancel()
+		return err
 	}
 
-	return err
+	// We don't want to use a concurrency.RunnerManager here because the context
+	// would be canceled as soon as the first server is closed and returns.
+	// Rather, we want the context to cancel after the timeout.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	s.wg.Add(len(s.servers))
+	errs := make([]error, len(s.servers))
+	for i, server := range s.servers {
+		go func(i int, srv *http.Server) {
+			defer s.wg.Done()
+			log.Infof("Closing HTTP server %s…", srv.Addr)
+			errs[i] = closeServer(ctx, srv)
+		}(i, server)
+	}
+
+	s.wg.Wait()
+
+	return errors.Join(errs...)
 }
 
 func (s *server) getRouter() *chi.Mux {
