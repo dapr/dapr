@@ -42,4 +42,8 @@ const (
 	SentryLocalIdentityEnvVar = "SENTRY_LOCAL_IDENTITY"
 	// SentryTokenFileEnvVar is the environment variable for the Sentry token file.
 	SentryTokenFileEnvVar = "DAPR_SENTRY_TOKEN_FILE"
+
+	// AnnotationKeyControlPlane is the annotation to mark a control plane
+	// component. The value is the name of the control plane service.
+	AnnotationKeyControlPlane = "dapr.io/control-plane"
 )
