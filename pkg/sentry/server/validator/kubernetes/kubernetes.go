@@ -35,6 +35,7 @@ import (
 	configv1alpha1 "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	"github.com/dapr/dapr/pkg/injector/annotations"
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
+	"github.com/dapr/dapr/pkg/security/consts"
 	"github.com/dapr/dapr/pkg/sentry/server/validator"
 	"github.com/dapr/dapr/pkg/sentry/server/validator/internal"
 	"github.com/dapr/kit/logger"
@@ -163,20 +164,22 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 		log.Errorf("Failed to get pod %s/%s for requested identity: %s", req.Namespace, claims.Pod.Name, err)
 		return spiffeid.TrustDomain{}, errors.New("failed to get pod of identity")
 	}
-	expID, ok := pod.GetAnnotations()[annotations.KeyAppID]
-	if !ok {
-		expID = pod.GetName()
-	}
 
 	if pod.Spec.ServiceAccountName != prts[3] {
 		log.Errorf("Service account on pod %s/%s does not match token", req.Namespace, claims.Pod.Name)
 		return spiffeid.TrustDomain{}, errors.New("pod service account mismatch")
 	}
 
-	// TODO: @joshvanl: Before v1.11, the injector instructed daprd to request
+	expID, isControlPlane, err := k.expectedID(&pod)
+	if err != nil {
+		log.Errorf("Failed to get expected ID for pod %s/%s: %s", req.Namespace, claims.Pod.Name, err)
+		return spiffeid.TrustDomain{}, err
+	}
+
+	// TODO: @joshvanl: Before v1.12, the injector instructed daprd to request
 	// for the ID containing their namespace and service account (ns:sa). This
 	// is wrong- dapr identities are based on daprd namespace + _app ID_.
-	// Remove this allowance in v1.12.
+	// Remove this allowance in v1.13.
 	if req.Namespace+":"+pod.Spec.ServiceAccountName == req.Id {
 		req.Id = expID
 	}
@@ -185,12 +188,12 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 		return spiffeid.TrustDomain{}, fmt.Errorf("app-id mismatch. expected: %s, received: %s", expID, req.Id)
 	}
 
+	if isControlPlane {
+		return k.controlPlaneTD, nil
+	}
+
 	configName, ok := pod.GetAnnotations()[annotations.KeyConfig]
 	if !ok {
-		if req.Namespace == k.controlPlaneNS && internal.IsControlPlaneService(req.Id) {
-			return k.controlPlaneTD, nil
-		}
-
 		// Return early with default trust domain if no config annotation is found.
 		return spiffeid.RequireTrustDomainFromString("public"), nil
 	}
@@ -207,6 +210,37 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 	}
 
 	return spiffeid.TrustDomainFromString(config.Spec.AccessControlSpec.TrustDomain)
+}
+
+// expectedID returns the expected ID for the pod. If the pod is a control
+// plane service (has the dapr.io/control-plane annotation), the ID will be the
+// control plane service name prefixed with "dapr-". Otherwise, the ID will be
+// `dapr.io/app-id` annotation or the pod name.
+func (k *kubernetes) expectedID(pod *corev1.Pod) (string, bool, error) {
+	ctrlPlane, ctrlOK := pod.Annotations[consts.AnnotationKeyControlPlane]
+	appID, appOK := pod.Annotations[annotations.KeyAppID]
+
+	if ctrlOK {
+		if pod.Namespace != k.controlPlaneNS {
+			return "", false, fmt.Errorf("control plane service in namespace '%s' is not allowed", pod.Namespace)
+		}
+
+		if !isControlPlaneService(ctrlPlane) {
+			return "", false, fmt.Errorf("unknown control plane service '%s'", pod.Name)
+		}
+
+		if appOK {
+			return "", false, fmt.Errorf("control plane service '%s' cannot have annotation '%s'", pod.Name, annotations.KeyAppID)
+		}
+
+		return "dapr-" + ctrlPlane, true, nil
+	}
+
+	if !appOK {
+		return pod.Name, false, nil
+	}
+
+	return appID, false, nil
 }
 
 // Executes a tokenReview, returning an error if the token is invalid or if
@@ -238,4 +272,18 @@ type k8sClaims struct {
 	Pod struct {
 		Name string `json:"name"`
 	} `json:"pod"`
+}
+
+// IsControlPlaneService returns true if the app ID corresponds to a Dapr control plane service.
+// Note: callers must additionally validate the namespace to ensure it matches the one of the Dapr control plane.
+func isControlPlaneService(id string) bool {
+	switch id {
+	case "operator",
+		"placement",
+		"injector",
+		"sentry":
+		return true
+	default:
+		return false
+	}
 }
