@@ -84,6 +84,9 @@ type api struct {
 	sendToOutputBindingFn func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	tracingSpec           config.TracingSpec
 	accessControlList     *config.AccessControlList
+	closed                atomic.Bool
+	closeCh               chan struct{}
+	wg                    sync.WaitGroup
 }
 
 // APIOpts contains options for NewAPI.
@@ -107,6 +110,7 @@ func NewAPI(opts APIOpts) API {
 		sendToOutputBindingFn: opts.SendToOutputBindingFn,
 		tracingSpec:           opts.TracingSpec,
 		accessControlList:     opts.AccessControlList,
+		closeCh:               make(chan struct{}),
 	}
 }
 

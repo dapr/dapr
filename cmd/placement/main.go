@@ -48,6 +48,7 @@ func main() {
 	metricsExporter := metrics.NewExporterWithOptions(log, metrics.DefaultMetricNamespace, opts.Metrics)
 
 	err := monitoring.InitMetrics()
+	err := monitoring.InitMetrics()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -84,7 +85,6 @@ func main() {
 			return raftServer.StartRaft(ctx, nil)
 		},
 		metricsExporter.Run,
-		secProvider.Start,
 		apiServer.MonitorLeadership,
 		func(ctx context.Context) error {
 			var metadataOptions []health.RouterOptions

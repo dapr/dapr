@@ -31,7 +31,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
-	"github.com/dapr/dapr/tests/util"
+	"github.com/dapr/dapr/tests/integration/framework/util"
 )
 
 type Daprd struct {

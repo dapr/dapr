@@ -438,7 +438,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 
 	a.initChannels()
 
-	a.flushOutstandingHTTPEndpoints()
+	a.flushOutstandingHTTPEndpoints(ctx)
 
 	pipeline, err := a.channels.BuildHTTPPipeline(a.globalConfig.Spec.HTTPPipelineSpec)
 	if err != nil {
@@ -464,9 +464,20 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		GlobalConfig:                a.globalConfig,
 	}
 
-	// Create and start the external gRPC server
-	univAPI := a.getUniversalAPI()
-	a.daprGRPCAPI = a.getGRPCAPI(univAPI)
+	// Create and start internal and external gRPC servers
+	a.daprGRPCAPI = grpc.NewAPI(grpc.APIOpts{
+		UniversalAPI:          univAPI,
+		AppChannel:            a.channels.AppChannel(),
+		PubsubAdapter:         a.processor.PubSub(),
+		DirectMessaging:       a.directMessaging,
+		SendToOutputBindingFn: a.processor.Binding().SendToOutputBinding,
+		TracingSpec:           a.globalConfig.GetTracingSpec(),
+		AccessControlList:     a.accessControlList,
+	})
+
+	if err = a.runnerCloser.AddCloser(a.daprGRPCAPI); err != nil {
+		return err
+	}
 
 	err = a.startGRPCAPIServer(a.daprGRPCAPI, a.runtimeConfig.apiGRPCPort)
 	if err != nil {
@@ -1063,32 +1074,6 @@ func (a *DaprRuntime) getNewServerConfig(apiListenAddresses []string, port int) 
 		ReadBufferSizeKB:     a.runtimeConfig.readBufferSize,
 		EnableAPILogging:     *a.runtimeConfig.enableAPILogging,
 	}
-}
-
-func (a *DaprRuntime) getUniversalAPI() *universalapi.UniversalAPI {
-	return &universalapi.UniversalAPI{
-		AppID:                       a.runtimeConfig.id,
-		Logger:                      logger.NewLogger("dapr.api"),
-		CompStore:                   a.compStore,
-		Resiliency:                  a.resiliency,
-		Actors:                      a.actor,
-		GetComponentsCapabilitiesFn: a.getComponentsCapabilitesMap,
-		ShutdownFn:                  a.ShutdownWithWait,
-		AppConnectionConfig:         a.runtimeConfig.appConnectionConfig,
-		GlobalConfig:                a.globalConfig,
-	}
-}
-
-func (a *DaprRuntime) getGRPCAPI(univAPI *universalapi.UniversalAPI) grpc.API {
-	return grpc.NewAPI(grpc.APIOpts{
-		UniversalAPI:          univAPI,
-		AppChannel:            a.channels.AppChannel(),
-		PubsubAdapter:         a.processor.PubSub(),
-		DirectMessaging:       a.directMessaging,
-		SendToOutputBindingFn: a.processor.Binding().SendToOutputBinding,
-		TracingSpec:           a.globalConfig.GetTracingSpec(),
-		AccessControlList:     a.accessControlList,
-	})
 }
 
 func (a *DaprRuntime) initNameResolution() error {

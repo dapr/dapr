@@ -29,7 +29,7 @@ import (
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/dapr/tests/util"
+	testsutil "github.com/dapr/dapr/tests/util"
 )
 
 func init() {
@@ -43,8 +43,8 @@ type httpendpoints struct {
 }
 
 func (h *httpendpoints) Setup(t *testing.T) []framework.Option {
-	pki1 := util.GenPKIT(t, "localhost")
-	pki2 := util.GenPKIT(t, "localhost")
+	pki1 := testsutil.GenPKIT(t, "localhost")
+	pki2 := testsutil.GenPKIT(t, "localhost")
 
 	newHTTPServer := func() *prochttp.HTTP {
 		handler := http.NewServeMux()
@@ -137,6 +137,8 @@ func (h *httpendpoints) Run(t *testing.T, ctx context.Context) {
 	h.daprd1.WaitUntilRunning(t, ctx)
 	h.daprd2.WaitUntilRunning(t, ctx)
 
+	httpClient := util.HTTPClient(t)
+
 	invokeTests := func(t *testing.T, expTLSCode int, assertBody func(t *testing.T, body string), daprd *procdaprd.Daprd) {
 		t.Run("invoke http endpoint", func(t *testing.T) {
 			doReq := func(method, url string, headers map[string]string) (int, string) {
@@ -145,7 +147,7 @@ func (h *httpendpoints) Run(t *testing.T, ctx context.Context) {
 				for k, v := range headers {
 					req.Header.Set(k, v)
 				}
-				resp, err := http.DefaultClient.Do(req)
+				resp, err := httpClient.Do(req)
 				require.NoError(t, err)
 				body, err := io.ReadAll(resp.Body)
 				require.NoError(t, err)
@@ -175,7 +177,7 @@ func (h *httpendpoints) Run(t *testing.T, ctx context.Context) {
 				for k, v := range headers {
 					req.Header.Set(k, v)
 				}
-				resp, err := http.DefaultClient.Do(req)
+				resp, err := httpClient.Do(req)
 				require.NoError(t, err)
 				body, err := io.ReadAll(resp.Body)
 				require.NoError(t, err)
