@@ -45,6 +45,7 @@ const (
 type KubeTestPlatform struct {
 	AppResources       *TestResources
 	ComponentResources *TestResources
+	Secrets            *TestResources
 	KubeClient         *kube.KubeClient
 }
 
@@ -53,6 +54,7 @@ func NewKubeTestPlatform() *KubeTestPlatform {
 	return &KubeTestPlatform{
 		AppResources:       new(TestResources),
 		ComponentResources: new(TestResources),
+		Secrets:            new(TestResources),
 	}
 }
 
@@ -72,6 +74,10 @@ func (c *KubeTestPlatform) TearDown() error {
 		fmt.Fprintf(os.Stderr, "failed to tear down ComponentResources. got: %q", err)
 	}
 
+	if err := c.Secrets.tearDown(); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to tear down Secrets. got: %q", err)
+	}
+
 	// TODO: clean up kube cluster
 
 	return nil
@@ -89,6 +95,24 @@ func (c *KubeTestPlatform) AddComponents(comps []kube.ComponentDescription) erro
 
 	// setup component resources
 	if err := c.ComponentResources.setup(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// AddSecrets adds secrets to disposable Resource queues.
+func (c *KubeTestPlatform) AddSecrets(secrets []kube.SecretDescription) error {
+	if c.KubeClient == nil {
+		return fmt.Errorf("kubernetes cluster needs to be setup")
+	}
+
+	for _, secret := range secrets {
+		c.Secrets.Add(kube.NewSecret(c.KubeClient, secret.Namespace, secret.Name, secret.Data))
+	}
+
+	// setup secret resources
+	if err := c.Secrets.setup(); err != nil {
 		return err
 	}
 

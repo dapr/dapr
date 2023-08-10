@@ -128,7 +128,7 @@ func (g *grpcMetrics) Init(appID string) error {
 }
 
 func (g *grpcMetrics) IsEnabled() bool {
-	return g.enabled
+	return g != nil && g.enabled
 }
 
 func (g *grpcMetrics) ServerRequestReceived(ctx context.Context, method string, contentSize int64) time.Time {

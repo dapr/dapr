@@ -116,6 +116,11 @@ func (m *MockPlatform) LoadTest(loadtester LoadTester) error {
 	return args.Error(0)
 }
 
+func (m *MockPlatform) AddSecrets(secrets []kube.SecretDescription) error {
+	args := m.Called(secrets)
+	return args.Error(0)
+}
+
 func TestStartRunner(t *testing.T) {
 	fakeTestApps := []kube.AppDescription{
 		{

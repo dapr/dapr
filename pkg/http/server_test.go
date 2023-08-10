@@ -21,6 +21,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
@@ -214,7 +215,7 @@ func TestUnescapeRequestParametersHandler(t *testing.T) {
 		for _, parameter := range parameters {
 			chiCtx := chi.NewRouteContext()
 			chiCtx.URLParams.Add(parameter["parameterName"], parameter["parameterValue"])
-			err := srv.unespaceRequestParametersInContext(chiCtx, false)
+			err := srv.unespaceRequestParametersInContext(chiCtx)
 			require.NoError(t, err)
 			assert.Equal(t, parameter["expectedParameterValue"], chiCtx.URLParam(parameter["parameterName"]))
 		}
@@ -241,7 +242,7 @@ func TestUnescapeRequestParametersHandler(t *testing.T) {
 		for _, parameter := range parameters {
 			chiCtx := chi.NewRouteContext()
 			chiCtx.URLParams.Add(parameter["parameterName"], parameter["parameterValue"])
-			err := srv.unespaceRequestParametersInContext(chiCtx, false)
+			err := srv.unespaceRequestParametersInContext(chiCtx)
 			require.Error(t, err)
 			assert.ErrorContains(t, err, "failed to unescape request parameter")
 		}
@@ -254,7 +255,7 @@ func TestAPILogging(t *testing.T) {
 	logDest := &bytes.Buffer{}
 	infoLog = logger.NewLogger("test-api-logging")
 	infoLog.EnableJSONOutput(true)
-	infoLog.SetOutput(logDest)
+	infoLog.SetOutput(io.MultiWriter(logDest, os.Stderr))
 	defer func() {
 		infoLog = prev
 	}()
@@ -336,7 +337,7 @@ func TestAPILoggingOmitHealthChecks(t *testing.T) {
 	logDest := &bytes.Buffer{}
 	infoLog = logger.NewLogger("test-api-logging")
 	infoLog.EnableJSONOutput(true)
-	infoLog.SetOutput(logDest)
+	infoLog.SetOutput(io.MultiWriter(logDest, os.Stderr))
 	defer func() {
 		infoLog = prev
 	}()

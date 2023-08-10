@@ -19,7 +19,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // options contains the options for running a HTTP server in integration tests.
@@ -34,13 +34,13 @@ func WithHandler(handler http.Handler) Option {
 	}
 }
 
-func WithTLS(cert, key string, t *testing.T) Option {
+func WithTLS(t *testing.T, ca, cert, key []byte) Option {
 	return func(o *options) {
 		caCertPool := x509.NewCertPool()
-		caCertPool.AppendCertsFromPEM([]byte(cert))
+		require.True(t, caCertPool.AppendCertsFromPEM(ca))
 
-		cert, err := tls.X509KeyPair([]byte(cert), []byte(key))
-		assert.NoError(t, err)
+		cert, err := tls.X509KeyPair(cert, key)
+		require.NoError(t, err)
 
 		tlsConfig := &tls.Config{
 			MinVersion:   tls.VersionTLS12,
