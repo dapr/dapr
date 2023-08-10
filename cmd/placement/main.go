@@ -47,13 +47,7 @@ func main() {
 
 	metricsExporter := metrics.NewExporterWithOptions(log, metrics.DefaultMetricNamespace, opts.Metrics)
 
-	// Initialize dapr metrics for placement.
-	err := metricsExporter.Init()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	err = monitoring.InitMetrics()
+	err := monitoring.InitMetrics()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -92,6 +86,7 @@ func main() {
 		func(ctx context.Context) error {
 			return raftServer.StartRaft(ctx, nil)
 		},
+		metricsExporter.Run,
 		apiServer.MonitorLeadership,
 		func(ctx context.Context) error {
 			var metadataOptions []health.RouterOptions

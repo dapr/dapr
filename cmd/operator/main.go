@@ -16,6 +16,7 @@ package main
 import (
 	"github.com/dapr/dapr/cmd/operator/options"
 	"github.com/dapr/dapr/pkg/buildinfo"
+	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/operator"
 	"github.com/dapr/dapr/pkg/operator/monitoring"
@@ -37,11 +38,6 @@ func main() {
 	log.Infof("Log level set to: %s", opts.Logger.OutputLevel)
 
 	metricsExporter := metrics.NewExporterWithOptions(log, metrics.DefaultMetricNamespace, opts.Metrics)
-
-	// Initialize dapr metrics exporter
-	if err := metricsExporter.Init(); err != nil {
-		log.Fatal(err)
-	}
 
 	if err := monitoring.InitMetrics(); err != nil {
 		log.Fatal(err)
@@ -67,9 +63,13 @@ func main() {
 		log.Fatalf("error creating operator: %v", err)
 	}
 
-	err = op.Run(ctx)
+	err = concurrency.NewRunnerManager(
+		metricsExporter.Run,
+		op.Run,
+	).Run(ctx)
 	if err != nil {
 		log.Fatalf("error running operator: %v", err)
 	}
+
 	log.Info("operator shut down gracefully")
 }

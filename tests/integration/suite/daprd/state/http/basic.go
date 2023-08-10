@@ -26,6 +26,7 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -58,6 +59,8 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 	postURL := fmt.Sprintf("http://localhost:%d/v1.0/state/mystore", b.daprd.HTTPPort())
 
+	httpClient := util.HTTPClient(t)
+
 	t.Run("bad json", func(t *testing.T) {
 		for _, body := range []string{
 			"",
@@ -73,7 +76,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			t.Run(body, func(t *testing.T) {
 				req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(body))
 				require.NoError(t, err)
-				resp, err := http.DefaultClient.Do(req)
+				resp, err := httpClient.Do(req)
 				require.NoError(t, err)
 				assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 				body, err := io.ReadAll(resp.Body)
@@ -95,7 +98,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			t.Run(body, func(t *testing.T) {
 				req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(body))
 				require.NoError(t, err)
-				resp, err := http.DefaultClient.Do(req)
+				resp, err := httpClient.Do(req)
 				require.NoError(t, err)
 				assert.Equal(t, http.StatusNoContent, resp.StatusCode)
 				body, err := io.ReadAll(resp.Body)

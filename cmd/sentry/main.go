@@ -61,11 +61,6 @@ func main() {
 		log.Fatalf("error set env failed:  %s", err.Error())
 	}
 
-	// Initialize dapr metrics exporter
-	if err := metricsExporter.Init(); err != nil {
-		log.Fatal(err)
-	}
-
 	if err := monitoring.InitMetrics(); err != nil {
 		log.Fatal(err)
 	}
@@ -161,6 +156,8 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	mngr.Add(metricsExporter.Run)
 
 	// Run the runner manager.
 	if err := mngr.Run(signals.Context()); err != nil {
