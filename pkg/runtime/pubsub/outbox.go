@@ -57,10 +57,11 @@ type outboxImpl struct {
 	publishFn             func(context.Context, *contribPubsub.PublishRequest) error
 	outboxStores          map[string]outboxConfig
 	lock                  sync.RWMutex
+	namespace             string
 }
 
 // NewOutbox returns an instance of an Outbox.
-func NewOutbox(publishFn func(context.Context, *contribPubsub.PublishRequest) error, getPubsubFn func(string) (contribPubsub.PubSub, bool), getStateFn func(string) (state.Store, bool), cloudEventExtractorFn func(map[string]any, string) string) outbox.Outbox {
+func NewOutbox(publishFn func(context.Context, *contribPubsub.PublishRequest) error, getPubsubFn func(string) (contribPubsub.PubSub, bool), getStateFn func(string) (state.Store, bool), cloudEventExtractorFn func(map[string]any, string) string, namespace string) outbox.Outbox {
 	return &outboxImpl{
 		cloudEventExtractorFn: cloudEventExtractorFn,
 		getPubsubFn:           getPubsubFn,
@@ -68,6 +69,7 @@ func NewOutbox(publishFn func(context.Context, *contribPubsub.PublishRequest) er
 		publishFn:             publishFn,
 		lock:                  sync.RWMutex{},
 		outboxStores:          map[string]outboxConfig{},
+		namespace:             namespace,
 	}
 }
 
@@ -178,7 +180,7 @@ func (o *outboxImpl) PublishInternal(ctx context.Context, stateStore string, ope
 			err = o.publishFn(ctx, &contribPubsub.PublishRequest{
 				PubsubName: c.outboxPubsub,
 				Data:       data,
-				Topic:      outboxTopic(source, c.publishTopic),
+				Topic:      outboxTopic(source, c.publishTopic, o.namespace),
 			})
 			if err != nil {
 				return nil, err
@@ -191,8 +193,8 @@ func (o *outboxImpl) PublishInternal(ctx context.Context, stateStore string, ope
 	return trs, nil
 }
 
-func outboxTopic(appID string, topic string) string {
-	return appID + topic + "outbox"
+func outboxTopic(appID, topic, namespace string) string {
+	return namespace + appID + topic + "outbox"
 }
 
 func (o *outboxImpl) SubscribeToInternalTopics(ctx context.Context, appID string) error {
@@ -207,7 +209,7 @@ func (o *outboxImpl) SubscribeToInternalTopics(ctx context.Context, appID string
 		}
 
 		outboxPubsub.Subscribe(ctx, contribPubsub.SubscribeRequest{
-			Topic: outboxTopic(appID, c.publishTopic),
+			Topic: outboxTopic(appID, c.publishTopic, o.namespace),
 		}, func(ctx context.Context, msg *contribPubsub.NewMessage) error {
 			var cloudEvent map[string]interface{}
 
