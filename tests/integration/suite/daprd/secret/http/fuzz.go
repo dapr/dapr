@@ -33,8 +33,8 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/dapr/tests/util"
 )
 
 func init() {
@@ -125,7 +125,7 @@ func (f *fuzzsecret) Run(t *testing.T, ctx context.Context) {
 			getURL := fmt.Sprintf("http://localhost:%d/v1.0/secrets/%s/%s", f.daprd.HTTPPort(), url.QueryEscape(f.secretStoreName), url.QueryEscape(key))
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, getURL, nil)
 			require.NoError(t, err)
-			resp, err := http.DefaultClient.Do(req)
+			resp, err := util.HTTPClient(t).Do(req)
 			require.NoError(t, err)
 			assert.Equal(t, http.StatusOK, resp.StatusCode)
 			respBody, err := io.ReadAll(resp.Body)

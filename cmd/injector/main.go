@@ -52,12 +52,6 @@ func main() {
 		log.Fatalf("Error set env: %v", err)
 	}
 
-	// Initialize dapr metrics exporter
-	err = metricsExporter.Init()
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	// Initialize injector service metrics
 	err = service.InitMetrics()
 	if err != nil {
@@ -89,6 +83,7 @@ func main() {
 	healthzServer := health.NewServer(log)
 	mngr := concurrency.NewRunnerManager(
 		inj.Run,
+		metricsExporter.Run,
 		func(ctx context.Context) error {
 			readyErr := inj.Ready(ctx)
 			if readyErr != nil {

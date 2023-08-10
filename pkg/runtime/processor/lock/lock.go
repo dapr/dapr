@@ -61,10 +61,14 @@ func (l *lock) Init(ctx context.Context, comp compapi.Component) error {
 	}
 
 	// initialization
-	baseMetadata := l.meta.ToBaseMetadata(comp)
-	props := baseMetadata.Properties
+	meta, err := l.meta.ToBaseMetadata(comp)
+	if err != nil {
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
+		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
+	}
+	props := meta.Properties
 
-	err = store.InitLockStore(ctx, contriblock.Metadata{Base: baseMetadata})
+	err = store.InitLockStore(ctx, contriblock.Metadata{Base: meta})
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
 		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)

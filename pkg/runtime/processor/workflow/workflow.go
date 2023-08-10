@@ -68,7 +68,11 @@ func (w *workflow) Init(ctx context.Context, comp compapi.Component) error {
 	}
 
 	// initialization
-	baseMetadata := w.meta.ToBaseMetadata(comp)
+	baseMetadata, err := w.meta.ToBaseMetadata(comp)
+	if err != nil {
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
+		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
+	}
 	err = workflowComp.Init(workflows.Metadata{Base: baseMetadata})
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
