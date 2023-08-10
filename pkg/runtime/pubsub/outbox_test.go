@@ -36,7 +36,7 @@ import (
 )
 
 func newTestOutbox() outbox.Outbox {
-	o := NewOutbox(func(ctx context.Context, req *contribPubsub.PublishRequest) error { return nil }, func(s string) (contribPubsub.PubSub, bool) { return nil, false }, func(s string) (state.Store, bool) { return nil, false }, func(m map[string]any, s string) string { return "" })
+	o := NewOutbox(func(ctx context.Context, req *contribPubsub.PublishRequest) error { return nil }, func(s string) (contribPubsub.PubSub, bool) { return nil, false }, func(s string) (state.Store, bool) { return nil, false }, func(m map[string]any, s string) string { return "" }, "")
 	return o
 }
 
@@ -887,6 +887,24 @@ func (o *outboxStateMock) Get(ctx context.Context, req *state.GetRequest) (*stat
 	}
 
 	return nil, nil
+}
+
+func TestOutboxTopic(t *testing.T) {
+	t.Run("not namespaced", func(t *testing.T) {
+		o := newTestOutbox().(*outboxImpl)
+		topic := outboxTopic("a", "b", o.namespace)
+
+		assert.Equal(t, "aboutbox", topic)
+	})
+
+	t.Run("namespaced", func(t *testing.T) {
+		o := newTestOutbox().(*outboxImpl)
+		o.namespace = "default"
+
+		topic := outboxTopic("a", "b", o.namespace)
+
+		assert.Equal(t, "defaultaboutbox", topic)
+	})
 }
 
 func (o *outboxStateMock) Set(ctx context.Context, req *state.SetRequest) error {
