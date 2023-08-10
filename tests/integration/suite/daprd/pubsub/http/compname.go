@@ -30,6 +30,7 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -91,6 +92,8 @@ spec:
 func (c *componentName) Run(t *testing.T, ctx context.Context) {
 	c.daprd.WaitUntilRunning(t, ctx)
 
+	httpClient := util.HTTPClient(t)
+
 	for i := range c.pubsubNames {
 		pubsubName := c.pubsubNames[i]
 		topicName := c.topicNames[i]
@@ -101,7 +104,7 @@ func (c *componentName) Run(t *testing.T, ctx context.Context) {
 			req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, strings.NewReader(`{"status": "completed"}`))
 			require.NoError(t, err)
 			req.Header.Set("Content-Type", "application/json")
-			resp, err := http.DefaultClient.Do(req)
+			resp, err := httpClient.Do(req)
 			require.NoError(t, err)
 			assert.Equal(t, http.StatusNoContent, resp.StatusCode, reqURL)
 			respBody, err := io.ReadAll(resp.Body)
