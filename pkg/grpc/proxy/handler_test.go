@@ -40,12 +40,15 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
-	"github.com/dapr/dapr/pkg/diagnostics"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	codec "github.com/dapr/dapr/pkg/grpc/proxy/codec"
 	pb "github.com/dapr/dapr/pkg/grpc/proxy/testservice"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/retry"
+
+	"go.opencensus.io/stats/view"
+	"go.opencensus.io/tag"
 )
 
 const (
@@ -57,19 +60,33 @@ const (
 	rejectingMdKey = "test-reject-rpc-if-in-context"
 
 	countListResponses = 20
+
+	testAppID = "test"
 )
+
+const (
+	serviceInvocationRequestSentName  = "runtime/service_invocation/req_sent_total"
+	serviceInvocationResponseRecvName = "runtime/service_invocation/res_recv_total"
+)
+
+func metricsCleanup() {
+	diag.CleanupRegisteredViews(
+		serviceInvocationRequestSentName,
+		serviceInvocationResponseRecvName)
+}
 
 var testLogger = logger.NewLogger("proxy-test")
 
 // asserting service is implemented on the server side and serves as a handler for stuff.
 type assertingService struct {
 	pb.UnimplementedTestServiceServer
-	t                      *testing.T
-	expectPingStreamError  *atomic.Bool
-	simulatePingFailures   *atomic.Int32
-	pingCallCount          *atomic.Int32
-	simulateDelay          *atomic.Int32
-	simulateRandomFailures *atomic.Bool
+	t                          *testing.T
+	expectPingStreamError      *atomic.Bool
+	simulatePingFailures       *atomic.Int32
+	pingCallCount              *atomic.Int32
+	simulateDelay              *atomic.Int32
+	simulateRandomFailures     *atomic.Bool
+	simulateConnectionFailures *atomic.Int32
 }
 
 func (s *assertingService) PingEmpty(ctx context.Context, _ *pb.Empty) (*pb.PingResponse, error) {
@@ -344,6 +361,7 @@ func (s *proxyTestSuite) sendPing(stream pb.TestService_PingStreamClient, i int)
 func (s *proxyTestSuite) TestStreamConnectionInterrupted() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
+
 	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(
 		StreamMetadataKey, "true",
 		"dapr-test", s.T().Name(),
@@ -414,9 +432,11 @@ func (s *proxyTestSuite) TestResiliencyUnary() {
 			s.service.simulatePingFailures.Store(0)
 		}()
 
+		setupMetrics(s)
+
 		ctx, cancel := s.ctx()
 		defer cancel()
-		ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(diagnostics.GRPCProxyAppIDKey, "test"))
+		ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(diag.GRPCProxyAppIDKey, testAppID))
 
 		// Reset callCount before this test
 		s.service.pingCallCount.Store(0)
@@ -426,6 +446,18 @@ func (s *proxyTestSuite) TestResiliencyUnary() {
 		require.NotNil(t, res, "Response should not be nil")
 		require.Equal(t, int32(3), s.service.pingCallCount.Load())
 		require.Equal(t, message, res.Value)
+
+		assertRequestSentMetrics(t, "unary", 3, nil)
+
+		rows, err := view.RetrieveData(serviceInvocationResponseRecvName)
+		assert.NoError(t, err)
+		assert.Equal(t, 2, len(rows))
+		// 2 Ping failures
+		assert.Equal(t, diag.GetValueForObservationWithTagSet(
+			rows, map[tag.Tag]bool{diag.NewTag("status", strconv.Itoa(int(codes.Internal))): true}), int64(2))
+		// 1 success
+		assert.Equal(t, diag.GetValueForObservationWithTagSet(
+			rows, map[tag.Tag]bool{diag.NewTag("status", strconv.Itoa(int(codes.OK))): true}), int64(1))
 	})
 
 	s.T().Run("timeouts", func(t *testing.T) {
@@ -438,7 +470,9 @@ func (s *proxyTestSuite) TestResiliencyUnary() {
 		// Reset callCount before this test
 		s.service.pingCallCount.Store(0)
 
-		ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs(diagnostics.GRPCProxyAppIDKey, "test"))
+		setupMetrics(s)
+
+		ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs(diag.GRPCProxyAppIDKey, testAppID))
 
 		_, err := s.testClient.Ping(ctx, &pb.PingRequest{Value: message})
 		require.Error(t, err, "Ping should fail due to timeouts")
@@ -450,6 +484,9 @@ func (s *proxyTestSuite) TestResiliencyUnary() {
 
 		// Sleep for 500ms before returning to allow all timed-out goroutines to catch up with the timeouts
 		time.Sleep(500 * time.Millisecond)
+
+		assertRequestSentMetrics(t, "unary", 4, nil)
+		assertResponseReceiveMetricsSameCode(t, "unary", codes.DeadlineExceeded, 4)
 	})
 
 	s.T().Run("multiple threads", func(t *testing.T) {
@@ -463,13 +500,18 @@ func (s *proxyTestSuite) TestResiliencyUnary() {
 			s.service.simulateRandomFailures.Store(false)
 		}()
 
+		setupMetrics(s)
+
+		numGoroutines := 10
+		numOperations := 10
+
 		wg := sync.WaitGroup{}
-		for i := 0; i < 10; i++ {
+		for i := 0; i < numGoroutines; i++ {
 			wg.Add(1)
 			go func(i int) {
-				for j := 0; j < 10; j++ {
+				for j := 0; j < numOperations; j++ {
 					pingMsg := fmt.Sprintf("%d:%d", i, j)
-					ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs(diagnostics.GRPCProxyAppIDKey, "test"))
+					ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs(diag.GRPCProxyAppIDKey, testAppID))
 					res, err := s.testClient.Ping(ctx, &pb.PingRequest{Value: pingMsg})
 					require.NoErrorf(t, err, "Ping should succeed for operation %d:%d", i, j)
 					require.NotNilf(t, res, "Response should not be nil for operation %d:%d", i, j)
@@ -488,12 +530,42 @@ func (s *proxyTestSuite) TestResiliencyUnary() {
 		case <-time.After(time.Second * 10):
 			assert.Fail(s.T(), "Timed out waiting for proxy to return.")
 		case <-ch:
-			return
 		}
 
 		// Sleep for 500ms before returning to allow all timed-out goroutines to catch up with the timeouts
 		time.Sleep(500 * time.Millisecond)
+
+		assertRequestSentMetrics(t, "unary", int64(numGoroutines*numOperations), assert.GreaterOrEqual)
 	})
+}
+
+func assertResponseReceiveMetricsSameCode(t *testing.T, requestType string, code codes.Code, expected int64) []*view.Row {
+	t.Helper()
+	rows, err := view.RetrieveData(serviceInvocationResponseRecvName)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(rows))
+	count := diag.GetValueForObservationWithTagSet(
+		rows, map[tag.Tag]bool{
+			diag.NewTag("status", strconv.Itoa(int(code))): true,
+			diag.NewTag("type", requestType):               true,
+		})
+	assert.Equal(t, expected, count)
+	return rows
+}
+
+func assertRequestSentMetrics(t *testing.T, requestType string, requestsSentExpected int64, assertEqualFn func(t assert.TestingT, e1 interface{}, e2 interface{}, msgAndArgs ...interface{}) bool) []*view.Row {
+	t.Helper()
+	rows, err := view.RetrieveData(serviceInvocationRequestSentName)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(rows))
+	requestsSent := diag.GetValueForObservationWithTagSet(
+		rows, map[tag.Tag]bool{diag.NewTag("type", requestType): true})
+
+	if assertEqualFn == nil {
+		assertEqualFn = assert.Equal
+	}
+	assertEqualFn(t, requestsSent, requestsSentExpected)
+	return rows
 }
 
 func (s *proxyTestSuite) TestResiliencyStreaming() {
@@ -508,7 +580,7 @@ func (s *proxyTestSuite) TestResiliencyStreaming() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
 		ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(
-			diagnostics.GRPCProxyAppIDKey, "test",
+			diag.GRPCProxyAppIDKey, "test",
 			"dapr-test", t.Name(),
 		))
 
@@ -542,8 +614,11 @@ func (s *proxyTestSuite) TestResiliencyStreaming() {
 	s.T().Run("timeouts do not apply after initial handshake", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
+
+		setupMetrics(s)
+
 		ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(
-			diagnostics.GRPCProxyAppIDKey, "test",
+			diag.GRPCProxyAppIDKey, testAppID,
 			StreamMetadataKey, "1",
 			"dapr-test", t.Name(),
 		))
@@ -574,7 +649,56 @@ func (s *proxyTestSuite) TestResiliencyStreaming() {
 		require.NoError(s.T(), stream.CloseSend(), "no error on close send")
 		_, err = stream.Recv()
 		require.ErrorIs(s.T(), err, io.EOF, "stream should close with io.EOF, meaining OK")
+
+		assertRequestSentMetrics(t, "streaming", 1, nil)
+		rows, err := view.RetrieveData(serviceInvocationResponseRecvName)
+		assert.NoError(t, err)
+		assert.Equal(t, 0, len(rows)) // no error so no response metric
 	})
+
+	s.T().Run("simulate connection failures with retry", func(t *testing.T) {
+		// using 3 connection failures as each connection retry actually executes 2 connection attempts
+		s.service.simulateConnectionFailures.Store(3)
+		defer func() {
+			s.service.simulateConnectionFailures.Store(0)
+		}()
+
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+
+		setupMetrics(s)
+
+		ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(
+			diag.GRPCProxyAppIDKey, testAppID,
+			StreamMetadataKey, "1",
+			"dapr-test", t.Name(),
+		))
+		// Invoke the stream
+		stream, err := s.testClient.PingStream(ctx)
+		require.NoError(t, err, "PingStream request should be successful")
+
+		// Send and receive 2 messages
+		for i := 0; i < 2; i++ {
+			innerErr := stream.Send(&pb.PingRequest{Value: strconv.Itoa(i)})
+			require.NoError(t, innerErr, "Message should be sent")
+			res, innerErr := stream.Recv()
+			require.NoError(t, innerErr, "Response should be received")
+			require.NotNil(t, res)
+		}
+
+		require.NoError(s.T(), stream.CloseSend(), "no error on close send")
+		_, err = stream.Recv()
+		require.ErrorIs(s.T(), err, io.EOF, "stream should close with io.EOF, meaining OK")
+
+		assertRequestSentMetrics(t, "streaming", 2, nil)
+		assertResponseReceiveMetricsSameCode(t, "streaming", codes.Unavailable, 1)
+	})
+}
+
+func setupMetrics(s *proxyTestSuite) {
+	s.T().Helper()
+	metricsCleanup()
+	assert.NoError(s.T(), diag.DefaultMonitoring.Init(testAppID))
 }
 
 func (s *proxyTestSuite) initServer() {
@@ -626,6 +750,7 @@ func (s *proxyTestSuite) getServerClientConn() (conn *grpc.ClientConn, teardown 
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 			grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())),
 			grpc.WithBlock(),
+			grpc.WithStreamInterceptor(createGrpcStreamingChaosInterceptor(s.service.simulateConnectionFailures, codes.Unavailable)),
 		)
 		if err != nil {
 			return nil, teardown, err
@@ -652,12 +777,13 @@ func (s *proxyTestSuite) SetupSuite() {
 	grpclog.SetLoggerV2(testingLog{s.T()})
 
 	s.service = &assertingService{
-		t:                      s.T(),
-		expectPingStreamError:  &atomic.Bool{},
-		simulatePingFailures:   &atomic.Int32{},
-		pingCallCount:          &atomic.Int32{},
-		simulateDelay:          &atomic.Int32{},
-		simulateRandomFailures: &atomic.Bool{},
+		t:                          s.T(),
+		expectPingStreamError:      &atomic.Bool{},
+		simulatePingFailures:       &atomic.Int32{},
+		simulateConnectionFailures: &atomic.Int32{},
+		pingCallCount:              &atomic.Int32{},
+		simulateDelay:              &atomic.Int32{},
+		simulateRandomFailures:     &atomic.Bool{},
 	}
 
 	s.initServer()
@@ -806,4 +932,16 @@ func (t testingLog) Fatalf(format string, args ...interface{}) {
 // V reports whether verbosity level l is at least the requested verbose level.
 func (t testingLog) V(l int) bool {
 	return true
+}
+
+// createGrpcStreamingChaosInterceptor creates a gRPC interceptor that will return the given error code
+// it does not do any post-processing chaos
+func createGrpcStreamingChaosInterceptor(interruptionsCounter *atomic.Int32, code codes.Code) grpc.StreamClientInterceptor {
+	return func(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+		if interruptionsCounter.Load() > 0 {
+			interruptionsCounter.Add(-1)
+			return nil, status.Errorf(code, "chaos monkey strikes again")
+		}
+		return streamer(ctx, desc, cc, method, opts...)
+	}
 }
