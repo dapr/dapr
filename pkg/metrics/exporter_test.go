@@ -16,7 +16,6 @@ package metrics
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -46,19 +45,7 @@ func TestMetricsExporter(t *testing.T) {
 	t.Run("skip starting metric server but wait for context cancellation", func(t *testing.T) {
 		e := NewExporter(logger, "test")
 		e.Options().MetricsEnabled = false
-		ctx, cancel := context.WithCancel(context.Background())
-		errCh := make(chan error)
-		go func() {
-			errCh <- e.Run(ctx)
-		}()
-
-		cancel()
-
-		select {
-		case err := <-errCh:
-			assert.NoError(t, err)
-		case <-time.After(time.Second):
-			t.Error("expected metrics Run() to return in time when context is cancelled")
-		}
+		err := e.Run(context.Background())
+		assert.NoError(t, err)
 	})
 }
