@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -61,6 +62,8 @@ const daprHTTPStatusHeader = "dapr-http-status"
 
 // API is the gRPC interface for the Dapr gRPC API. It implements both the internal and external proto definitions.
 type API interface {
+	io.Closer
+
 	// DaprInternal Service methods
 	internalv1pb.ServiceInvocationServer
 
@@ -81,6 +84,9 @@ type api struct {
 	sendToOutputBindingFn func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	tracingSpec           config.TracingSpec
 	accessControlList     *config.AccessControlList
+	closed                atomic.Bool
+	closeCh               chan struct{}
+	wg                    sync.WaitGroup
 }
 
 // APIOpts contains options for NewAPI.
@@ -104,6 +110,7 @@ func NewAPI(opts APIOpts) API {
 		sendToOutputBindingFn: opts.SendToOutputBindingFn,
 		tracingSpec:           opts.TracingSpec,
 		accessControlList:     opts.AccessControlList,
+		closeCh:               make(chan struct{}),
 	}
 }
 
@@ -1510,6 +1517,12 @@ func (a *api) UnsubscribeConfigurationAlpha1(ctx context.Context, request *runti
 }
 
 func (a *api) Close() error {
+	defer a.wg.Wait()
+	if a.closed.CompareAndSwap(false, true) {
+		close(a.closeCh)
+	}
+
 	a.CompStore.DeleteAllConfigurationSubscribe()
+
 	return nil
 }

@@ -38,6 +38,7 @@ import (
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -186,6 +187,8 @@ func (f *fuzzstate) Run(t *testing.T, ctx context.Context) {
 		}
 	})
 
+	httpClient := util.HTTPClient(t)
+
 	for i := 0; i < len(f.getFuzzKeys); i++ {
 		i := i
 		t.Run("save "+strconv.Itoa(i), func(t *testing.T) {
@@ -203,7 +206,7 @@ func (f *fuzzstate) Run(t *testing.T, ctx context.Context) {
 			require.NoError(t, json.NewEncoder(b).Encode(f.saveReqBinariesHTTP[i]))
 			req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, b)
 			require.NoError(t, err)
-			resp, err := http.DefaultClient.Do(req)
+			resp, err := httpClient.Do(req)
 			require.NoError(t, err)
 			assert.Equalf(t, http.StatusNoContent, resp.StatusCode, "key: %s", url.QueryEscape(f.storeName))
 			respBody, err := io.ReadAll(resp.Body)

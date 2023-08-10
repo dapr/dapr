@@ -25,6 +25,7 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	procplace "github.com/dapr/dapr/tests/integration/framework/process/placement"
+	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -49,10 +50,12 @@ func (p *placement) Run(t *testing.T, ctx context.Context) {
 
 	reqURL := fmt.Sprintf("http://127.0.0.1:%d/healthz", p.proc.HealthzPort())
 
+	httpClient := util.HTTPClient(t)
+
 	assert.Eventually(t, func() bool {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 		require.NoError(t, err)
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := httpClient.Do(req)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 		return http.StatusOK == resp.StatusCode

@@ -59,7 +59,13 @@ func (s *secret) Init(ctx context.Context, comp compapi.Component) error {
 		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
 	}
 
-	err = secretStore.Init(ctx, secretstores.Metadata{Base: s.meta.ToBaseMetadata(comp)})
+	meta, err := s.meta.ToBaseMetadata(comp)
+	if err != nil {
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
+		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
+	}
+
+	err = secretStore.Init(ctx, secretstores.Metadata{Base: meta})
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
 		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
