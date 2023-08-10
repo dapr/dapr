@@ -867,6 +867,51 @@ func TestValidate(t *testing.T) {
 			expErr: true,
 			expTD:  spiffeid.TrustDomain{},
 		},
+		"should error if the control plane component is not known": {
+			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
+			reactor: func(t *testing.T) core.ReactionFunc {
+				return func(action core.Action) (bool, runtime.Object, error) {
+					obj := action.(core.CreateAction).GetObject().(*kauthapi.TokenReview)
+					assert.Equal(t, []string{"dapr.io/sentry", "spiffe://cluster.local/ns/dapr-test/dapr-sentry"}, obj.Spec.Audiences)
+					return true, &kauthapi.TokenReview{Status: kauthapi.TokenReviewStatus{
+						Authenticated: true,
+						User: kauthapi.UserInfo{
+							Username: "system:serviceaccount:dapr-test:my-sa",
+						},
+					}}, nil
+				}
+			},
+			req: &sentryv1pb.SignCertificateRequest{
+				CertificateSigningRequest: []byte("csr"),
+				Namespace:                 "dapr-test",
+				Token:                     newToken(t, "my-pod"),
+				TrustDomain:               "example.test.dapr.io",
+				Id:                        "dapr-test:my-sa",
+			},
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-pod",
+					Namespace: "dapr-test",
+					Annotations: map[string]string{
+						"dapr.io/control-plane": "foo",
+					},
+				},
+				Spec: corev1.PodSpec{ServiceAccountName: "my-sa"},
+			},
+			config: &configapi.Configuration{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-config",
+					Namespace: "dapr-test",
+				},
+				Spec: configapi.ConfigurationSpec{
+					AccessControlSpec: &configapi.AccessControlSpec{
+						TrustDomain: "example.test.dapr.io",
+					},
+				},
+			},
+			expErr: true,
+			expTD:  spiffeid.TrustDomain{},
+		},
 		"should always use the control plane trust domain even in config is configured": {
 			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
 			reactor: func(t *testing.T) core.ReactionFunc {
