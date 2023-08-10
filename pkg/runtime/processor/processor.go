@@ -146,7 +146,7 @@ func New(opts Options) *Processor {
 		ResourcesPath:  opts.Standalone.ResourcesPath,
 	})
 
-	outbox := runtimePubsub.NewOutbox(ps.Publish, opts.ComponentStore.GetPubSubComponent, opts.ComponentStore.GetStateStore, pubsub.ExtractCloudEventProperty)
+	outbox := runtimePubsub.NewOutbox(ps.Publish, opts.ComponentStore.GetPubSubComponent, opts.ComponentStore.GetStateStore, pubsub.ExtractCloudEventProperty, opts.Namespace)
 	ps.SetOutbox(outbox)
 
 	state := state.New(state.Options{
