@@ -79,9 +79,6 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 		return status.Error(codes.Internal, messages.ErrChannelNotFound)
 	}
 
-	ctx, cancel := context.WithCancel(stream.Context())
-	defer cancel()
-
 	// Read the first chunk of the incoming request
 	// This contains the metadata of the request
 	chunk := &internalv1pb.InternalInvokeRequestStream{}
@@ -109,6 +106,19 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 		WithContentType(chunk.Request.Message.ContentType)
 	defer req.Close()
 
+	ctx, cancel := context.WithCancel(stream.Context())
+	defer cancel()
+
+	a.wg.Add(1)
+	go func() {
+		defer a.wg.Done()
+		select {
+		case <-ctx.Done():
+		case <-a.closeCh:
+			cancel()
+		}
+	}()
+
 	// Check the ACL
 	err = a.callLocalValidateACL(ctx, req)
 	if err != nil {
@@ -124,7 +134,10 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 	}()
 
 	// Read the rest of the data in background as we submit the request
+	a.wg.Add(1)
 	go func() {
+		defer a.wg.Done()
+
 		var (
 			expectSeq uint64
 			readSeq   uint64

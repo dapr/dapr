@@ -74,6 +74,7 @@ type binding struct {
 
 	subscribeBindingList []string
 	inputCancel          context.CancelFunc
+	wg                   sync.WaitGroup
 }
 
 func New(opts Options) *binding {
@@ -166,7 +167,14 @@ func (b *binding) initInputBinding(ctx context.Context, comp compapi.Component) 
 		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "creation", comp.ObjectMeta.Name)
 		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
 	}
-	err = binding.Init(ctx, bindings.Metadata{Base: b.meta.ToBaseMetadata(comp)})
+
+	meta, err := b.meta.ToBaseMetadata(comp)
+	if err != nil {
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
+		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
+	}
+
+	err = binding.Init(ctx, bindings.Metadata{Base: meta})
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
 		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
@@ -198,7 +206,13 @@ func (b *binding) initOutputBinding(ctx context.Context, comp compapi.Component)
 	}
 
 	if binding != nil {
-		err := binding.Init(ctx, bindings.Metadata{Base: b.meta.ToBaseMetadata(comp)})
+		meta, err := b.meta.ToBaseMetadata(comp)
+		if err != nil {
+			diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
+			return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
+		}
+
+		err = binding.Init(ctx, bindings.Metadata{Base: meta})
 		if err != nil {
 			diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
 			return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)

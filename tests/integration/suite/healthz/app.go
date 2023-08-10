@@ -29,6 +29,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
+	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -84,11 +85,13 @@ func (a *app) Run(t *testing.T, ctx context.Context) {
 
 	a.healthy.Store(true)
 
+	httpClient := util.HTTPClient(t)
+
 	assert.Eventually(t, func() bool {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 		require.NoError(t, err)
 
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := httpClient.Do(req)
 		require.NoError(t, err)
 
 		body, err := io.ReadAll(resp.Body)
@@ -103,7 +106,7 @@ func (a *app) Run(t *testing.T, ctx context.Context) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 		require.NoError(t, err)
 
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := httpClient.Do(req)
 		require.NoError(t, err)
 
 		body, err := io.ReadAll(resp.Body)
