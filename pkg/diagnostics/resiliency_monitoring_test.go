@@ -20,24 +20,20 @@ import (
 )
 
 const (
-	resiliencyCountViewName         = "resiliency/count"
-	resiliencyActivationViewName    = "resiliency/activations_total"
-	resiliencyLoadedViewName        = "resiliency/loaded"
-	actorTimersLastValueViewName    = "runtime/actor/timers"
-	actorRemindersLastValueViewName = "runtime/actor/reminders"
-	testAppID                       = "fakeID"
-	testResiliencyName              = "testResiliency"
-	testResiliencyNamespace         = "testNamespace"
-	testStateStoreName              = "testStateStore"
+	resiliencyCountViewName      = "resiliency/count"
+	resiliencyActivationViewName = "resiliency/activations_total"
+	resiliencyLoadedViewName     = "resiliency/loaded"
+	testAppID                    = "fakeID"
+	testResiliencyName           = "testResiliency"
+	testResiliencyNamespace      = "testNamespace"
+	testStateStoreName           = "testStateStore"
 )
 
 func cleanupRegisteredViews() {
 	diag.CleanupRegisteredViews(
 		resiliencyCountViewName,
 		resiliencyLoadedViewName,
-		resiliencyActivationViewName,
-		actorTimersLastValueViewName,
-		actorRemindersLastValueViewName)
+		resiliencyActivationViewName)
 }
 
 func TestResiliencyCountMonitoring(t *testing.T) {
