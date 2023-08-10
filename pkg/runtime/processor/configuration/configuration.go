@@ -59,7 +59,12 @@ func (c *configuration) Init(ctx context.Context, comp compapi.Component) error 
 		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
 	}
 	if config != nil {
-		err := config.Init(ctx, contribconfig.Metadata{Base: c.meta.ToBaseMetadata(comp)})
+		meta, err := c.meta.ToBaseMetadata(comp)
+		if err != nil {
+			diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
+			return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
+		}
+		err = config.Init(ctx, contribconfig.Metadata{Base: meta})
 		if err != nil {
 			diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
 			return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)

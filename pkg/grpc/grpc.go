@@ -20,6 +20,7 @@ import (
 	"net"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"google.golang.org/grpc"
@@ -65,6 +66,9 @@ type Manager struct {
 	localConn     *ConnectionPool
 	localConnLock sync.RWMutex
 	appClientConn grpc.ClientConnInterface
+	wg            sync.WaitGroup
+	closed        atomic.Bool
+	closeCh       chan struct{}
 }
 
 // NewGRPCManager returns a new grpc manager.
@@ -74,6 +78,7 @@ func NewGRPCManager(mode modes.DaprMode, channelConfig *AppChannelConfig) *Manag
 		mode:          mode,
 		channelConfig: channelConfig,
 		localConn:     NewConnectionPool(maxConnIdle, 1),
+		closeCh:       make(chan struct{}),
 	}
 }
 
@@ -226,8 +231,8 @@ func (g *Manager) connectRemote(
 	dialPrefix := GetDialAddressPrefix(g.mode)
 
 	ctx, cancel := context.WithTimeout(parentCtx, dialTimeout)
+	defer cancel()
 	conn, err = grpc.DialContext(ctx, dialPrefix+address, opts...)
-	cancel()
 	if err != nil {
 		return nil, err
 	}
@@ -247,14 +252,32 @@ func (g *Manager) connTeardownFactory(address string, conn *grpc.ClientConn) fun
 
 // StartCollector starts a background goroutine that periodically watches for expired connections and purges them.
 func (g *Manager) StartCollector() {
+	g.wg.Add(1)
 	go func() {
+		defer g.wg.Done()
+
 		t := time.NewTicker(45 * time.Second)
 		defer t.Stop()
-		for range t.C {
-			g.localConn.Purge()
-			g.remoteConns.Purge()
+
+		for {
+			select {
+			case <-g.closeCh:
+				return
+			case <-t.C:
+				g.localConn.Purge()
+				g.remoteConns.Purge()
+			}
 		}
 	}()
+}
+
+func (g *Manager) Close() error {
+	defer g.wg.Wait()
+	if g.closed.CompareAndSwap(false, true) {
+		close(g.closeCh)
+	}
+
+	return nil
 }
 
 func nopTeardown(destroy bool) {

@@ -192,7 +192,11 @@ func (c *Channels) buildHTTPPipelineForSpec(spec *config.PipelineSpec, targetPip
 			continue
 		}
 
-		md := contribmiddle.Metadata{Base: c.meta.ToBaseMetadata(comp)}
+		meta, err := c.meta.ToBaseMetadata(comp)
+		if err != nil {
+			return middlehttp.Pipeline{}, err
+		}
+		md := contribmiddle.Metadata{Base: meta}
 		handler, err := c.registry.Create(handlerSpec.Type, handlerSpec.Version, md, handlerSpec.LogName())
 		if err != nil {
 			err = fmt.Errorf("process component %s error: %w", comp.Name, err)

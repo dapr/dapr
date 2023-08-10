@@ -124,7 +124,7 @@ func newTestActorsRuntimeWithInternalActors(internalActors map[string]InternalAc
 		}
 	}
 
-	if err := a.Init(); err != nil {
+	if err := a.Init(context.Background()); err != nil {
 		return nil, err
 	}
 

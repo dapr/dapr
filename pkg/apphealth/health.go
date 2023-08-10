@@ -271,9 +271,11 @@ func (h *AppHealth) setResult(ctx context.Context, successful bool) {
 	}
 }
 
-func (h *AppHealth) Close() {
+func (h *AppHealth) Close() error {
 	defer h.wg.Wait()
 	if h.closed.CompareAndSwap(false, true) {
 		close(h.closeCh)
 	}
+
+	return nil
 }
