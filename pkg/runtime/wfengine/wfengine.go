@@ -211,7 +211,7 @@ func (wfe *WorkflowEngine) Start(ctx context.Context) (err error) {
 	return nil
 }
 
-func (wfe *WorkflowEngine) Stop(ctx context.Context) error {
+func (wfe *WorkflowEngine) Close(ctx context.Context) error {
 	wfe.startMutex.Lock()
 	defer wfe.startMutex.Unlock()
 

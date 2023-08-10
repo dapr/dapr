@@ -1,9 +1,11 @@
 package metrics
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	ocprom "contrib.go.opencensus.io/exporter/prometheus"
 	prom "github.com/prometheus/client_golang/prometheus"
@@ -19,8 +21,8 @@ const (
 
 // Exporter is the interface for metrics exporters.
 type Exporter interface {
-	// Init initializes metrics exporter
-	Init() error
+	// Run initializes metrics exporter
+	Run(context.Context) error
 	// Options returns Exporter options
 	Options() *Options
 }
@@ -34,12 +36,11 @@ func NewExporter(logger logger.Logger, namespace string) Exporter {
 func NewExporterWithOptions(logger logger.Logger, namespace string, options *Options) Exporter {
 	// TODO: support multiple exporters
 	return &promMetricsExporter{
-		&exporter{
+		exporter: &exporter{
 			namespace: namespace,
 			options:   options,
 			logger:    logger,
 		},
-		nil,
 	}
 }
 
@@ -59,10 +60,11 @@ func (m *exporter) Options() *Options {
 type promMetricsExporter struct {
 	*exporter
 	ocExporter *ocprom.Exporter
+	server     *http.Server
 }
 
-// Init initializes opencensus exporter.
-func (m *promMetricsExporter) Init() error {
+// Run initializes and runs the opencensus exporter.
+func (m *promMetricsExporter) Run(ctx context.Context) error {
 	if !m.exporter.Options().MetricsEnabled {
 		return nil
 	}
@@ -76,11 +78,11 @@ func (m *promMetricsExporter) Init() error {
 	}
 
 	// start metrics server
-	return m.startMetricServer()
+	return m.startMetricServer(ctx)
 }
 
 // startMetricServer starts metrics server.
-func (m *promMetricsExporter) startMetricServer() error {
+func (m *promMetricsExporter) startMetricServer(ctx context.Context) error {
 	if !m.exporter.Options().MetricsEnabled {
 		// skip if metrics is not enabled
 		return nil
@@ -93,15 +95,28 @@ func (m *promMetricsExporter) startMetricServer() error {
 	}
 
 	m.exporter.logger.Infof("metrics server started on %s%s", addr, defaultMetricsPath)
-	go func() {
-		mux := http.NewServeMux()
-		mux.Handle(defaultMetricsPath, m.ocExporter)
+	mux := http.NewServeMux()
+	mux.Handle(defaultMetricsPath, m.ocExporter)
 
-		//nolint:gosec
-		if err := http.ListenAndServe(addr, mux); err != nil {
-			m.exporter.logger.Fatalf("failed to start metrics server: %v", err)
+	m.server = &http.Server{
+		Addr:        addr,
+		Handler:     mux,
+		ReadTimeout: time.Second * 10,
+	}
+
+	errCh := make(chan error)
+
+	go func() {
+		if err := m.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			errCh <- fmt.Errorf("failed to run metrics server: %v", err)
+			return
 		}
+		errCh <- nil
 	}()
 
-	return nil
+	<-ctx.Done()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	return errors.Join(m.server.Shutdown(ctx), <-errCh)
 }

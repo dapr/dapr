@@ -26,11 +26,17 @@ import (
 )
 
 func Test_RunnerManager(t *testing.T) {
+	t.Parallel()
+
 	t.Run("runner with no tasks should return nil", func(t *testing.T) {
+		t.Parallel()
+
 		assert.NoError(t, NewRunnerManager().Run(context.Background()))
 	})
 
 	t.Run("runner with a task that completes should return nil", func(t *testing.T) {
+		t.Parallel()
+
 		var i int32
 		assert.NoError(t, NewRunnerManager(func(ctx context.Context) error {
 			atomic.AddInt32(&i, 1)
@@ -40,6 +46,8 @@ func Test_RunnerManager(t *testing.T) {
 	})
 
 	t.Run("runner with multiple tasks that complete should return nil", func(t *testing.T) {
+		t.Parallel()
+
 		var i int32
 		assert.NoError(t, NewRunnerManager(
 			func(ctx context.Context) error {
@@ -59,6 +67,8 @@ func Test_RunnerManager(t *testing.T) {
 	})
 
 	t.Run("a runner that errors should error", func(t *testing.T) {
+		t.Parallel()
+
 		var i int32
 		assert.Error(t, NewRunnerManager(
 			func(ctx context.Context) error {
@@ -78,6 +88,8 @@ func Test_RunnerManager(t *testing.T) {
 	})
 
 	t.Run("a runner with multiple errors should collect all errors (string match)", func(t *testing.T) {
+		t.Parallel()
+
 		var i int32
 		err := NewRunnerManager(
 			func(ctx context.Context) error {
@@ -99,6 +111,8 @@ func Test_RunnerManager(t *testing.T) {
 	})
 
 	t.Run("a runner with multiple errors should collect all errors (unique)", func(t *testing.T) {
+		t.Parallel()
+
 		var i int32
 		err := NewRunnerManager(
 			func(ctx context.Context) error {
@@ -120,6 +134,8 @@ func Test_RunnerManager(t *testing.T) {
 	})
 
 	t.Run("should be able to add runner with both New and Add", func(t *testing.T) {
+		t.Parallel()
+
 		var i int32
 		mngr := NewRunnerManager(
 			func(ctx context.Context) error {
@@ -144,6 +160,8 @@ func Test_RunnerManager(t *testing.T) {
 	})
 
 	t.Run("when a runner returns, expect context to be cancelled for other runners", func(t *testing.T) {
+		t.Parallel()
+
 		var i int32
 		assert.NoError(t, NewRunnerManager(
 			func(ctx context.Context) error {
@@ -173,6 +191,8 @@ func Test_RunnerManager(t *testing.T) {
 	})
 
 	t.Run("when a runner errors, expect context to be cancelled for other runners", func(t *testing.T) {
+		t.Parallel()
+
 		var i int32
 		err := NewRunnerManager(
 			func(ctx context.Context) error {
@@ -204,6 +224,8 @@ func Test_RunnerManager(t *testing.T) {
 	})
 
 	t.Run("a manger started twice should error", func(t *testing.T) {
+		t.Parallel()
+
 		var i int32
 		m := NewRunnerManager(func(ctx context.Context) error {
 			atomic.AddInt32(&i, 1)
@@ -216,6 +238,8 @@ func Test_RunnerManager(t *testing.T) {
 	})
 
 	t.Run("adding a task to a started manager should error", func(t *testing.T) {
+		t.Parallel()
+
 		var i int32
 		m := NewRunnerManager(func(ctx context.Context) error {
 			atomic.AddInt32(&i, 1)
