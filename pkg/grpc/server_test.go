@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"os"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -12,7 +14,7 @@ import (
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	grpcGo "google.golang.org/grpc"
+	"google.golang.org/grpc"
 	grpcMetadata "google.golang.org/grpc/metadata"
 
 	"github.com/dapr/dapr/pkg/config"
@@ -110,7 +112,7 @@ func TestClose(t *testing.T) {
 			ReadBufferSizeKB:     4,
 			EnableAPILogging:     true,
 		}
-		a := &api{UniversalAPI: &universalapi.UniversalAPI{CompStore: compstore.New()}}
+		a := &api{UniversalAPI: &universalapi.UniversalAPI{CompStore: compstore.New()}, closeCh: make(chan struct{})}
 		server := NewAPIServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, config.APISpec{}, nil, nil)
 		require.NoError(t, server.StartNonBlocking())
 		dapr_testing.WaitForListeningAddress(t, 5*time.Second, fmt.Sprintf("127.0.0.1:%d", port))
@@ -131,7 +133,7 @@ func TestClose(t *testing.T) {
 			ReadBufferSizeKB:     4,
 			EnableAPILogging:     false,
 		}
-		a := &api{UniversalAPI: &universalapi.UniversalAPI{CompStore: compstore.New()}}
+		a := &api{UniversalAPI: &universalapi.UniversalAPI{CompStore: compstore.New()}, closeCh: make(chan struct{})}
 		server := NewAPIServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, config.APISpec{}, nil, nil)
 		require.NoError(t, server.StartNonBlocking())
 		dapr_testing.WaitForListeningAddress(t, 5*time.Second, fmt.Sprintf("127.0.0.1:%d", port))
@@ -139,11 +141,11 @@ func TestClose(t *testing.T) {
 	})
 }
 
-func Test_server_getGRPCAPILoggingMiddlewares(t *testing.T) {
+func TestGrpcAPILoggingMiddlewares(t *testing.T) {
 	logDest := &bytes.Buffer{}
 	infoLog := logger.NewLogger("test-api-logging")
 	infoLog.EnableJSONOutput(true)
-	infoLog.SetOutput(logDest)
+	infoLog.SetOutput(io.MultiWriter(logDest, os.Stderr))
 
 	s := &server{
 		infoLogger: infoLog,
@@ -165,7 +167,7 @@ func Test_server_getGRPCAPILoggingMiddlewares(t *testing.T) {
 		}
 		ctx := grpcMetadata.NewIncomingContext(context.Background(), md)
 
-		info := &grpcGo.UnaryServerInfo{
+		info := &grpc.UnaryServerInfo{
 			FullMethod: "/dapr.proto.runtime.v1.Dapr/GetState",
 		}
 		return func(t *testing.T) {

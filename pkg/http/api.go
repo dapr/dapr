@@ -50,7 +50,6 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
-	"github.com/dapr/dapr/pkg/runtime/compstore"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/utils"
 )
@@ -67,20 +66,17 @@ type API interface {
 }
 
 type api struct {
-	universal               *universalapi.UniversalAPI
-	endpoints               []Endpoint
-	publicEndpoints         []Endpoint
-	directMessaging         messaging.DirectMessaging
-	appChannel              channel.AppChannel
-	httpEndpointsAppChannel channel.HTTPEndpointAppChannel
-	resiliency              resiliency.Provider
-	pubsubAdapter           runtimePubsub.Adapter
-	sendToOutputBindingFn   func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
-	readyStatus             bool
-	outboundReadyStatus     bool
-	tracingSpec             config.TracingSpec
-	maxRequestBodySize      int64 // In bytes
-	compStore               *compstore.ComponentStore
+	universal             *universalapi.UniversalAPI
+	endpoints             []Endpoint
+	publicEndpoints       []Endpoint
+	directMessaging       messaging.DirectMessaging
+	appChannel            channel.AppChannel
+	pubsubAdapter         runtimePubsub.Adapter
+	sendToOutputBindingFn func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	readyStatus           bool
+	outboundReadyStatus   bool
+	tracingSpec           config.TracingSpec
+	maxRequestBodySize    int64 // In bytes
 }
 
 const (
@@ -113,46 +109,25 @@ const (
 
 // APIOpts contains the options for NewAPI.
 type APIOpts struct {
-	AppID                       string
-	AppChannel                  channel.AppChannel
-	HTTPEndpointsAppChannel     channel.HTTPEndpointAppChannel
-	DirectMessaging             messaging.DirectMessaging
-	Resiliency                  resiliency.Provider
-	CompStore                   *compstore.ComponentStore
-	PubsubAdapter               runtimePubsub.Adapter
-	Actors                      actors.Actors
-	SendToOutputBindingFn       func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
-	TracingSpec                 config.TracingSpec
-	Shutdown                    func()
-	GetComponentsCapabilitiesFn func() map[string][]string
-	MaxRequestBodySize          int64 // In bytes
-	AppConnectionConfig         config.AppConnectionConfig
-	GlobalConfig                *config.Configuration
+	UniversalAPI          *universalapi.UniversalAPI
+	AppChannel            channel.AppChannel
+	DirectMessaging       messaging.DirectMessaging
+	PubsubAdapter         runtimePubsub.Adapter
+	SendToOutputBindingFn func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	TracingSpec           config.TracingSpec
+	MaxRequestBodySize    int64 // In bytes
 }
 
 // NewAPI returns a new API.
 func NewAPI(opts APIOpts) API {
 	api := &api{
-		appChannel:              opts.AppChannel,
-		httpEndpointsAppChannel: opts.HTTPEndpointsAppChannel,
-		directMessaging:         opts.DirectMessaging,
-		resiliency:              opts.Resiliency,
-		pubsubAdapter:           opts.PubsubAdapter,
-		sendToOutputBindingFn:   opts.SendToOutputBindingFn,
-		tracingSpec:             opts.TracingSpec,
-		maxRequestBodySize:      opts.MaxRequestBodySize,
-		compStore:               opts.CompStore,
-		universal: &universalapi.UniversalAPI{
-			AppID:                      opts.AppID,
-			Logger:                     log,
-			Resiliency:                 opts.Resiliency,
-			Actors:                     opts.Actors,
-			CompStore:                  opts.CompStore,
-			ShutdownFn:                 opts.Shutdown,
-			GetComponentsCapabilitesFn: opts.GetComponentsCapabilitiesFn,
-			AppConnectionConfig:        opts.AppConnectionConfig,
-			GlobalConfig:               opts.GlobalConfig,
-		},
+		universal:             opts.UniversalAPI,
+		appChannel:            opts.AppChannel,
+		directMessaging:       opts.DirectMessaging,
+		pubsubAdapter:         opts.PubsubAdapter,
+		sendToOutputBindingFn: opts.SendToOutputBindingFn,
+		tracingSpec:           opts.TracingSpec,
+		maxRequestBodySize:    opts.MaxRequestBodySize,
 	}
 
 	metadataEndpoints := api.constructMetadataEndpoints()
@@ -483,7 +458,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[[]state.BulkGetResponse](reqCtx,
-		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Statestore),
+		a.universal.Resiliency.ComponentOutboundPolicy(storeName, resiliency.Statestore),
 	)
 	responses, err := policyRunner(func(ctx context.Context) ([]state.BulkGetResponse, error) {
 		return store.BulkGet(ctx, reqs, state.BulkGetOpts{
@@ -584,7 +559,7 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[*state.GetResponse](reqCtx,
-		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Statestore),
+		a.universal.Resiliency.ComponentOutboundPolicy(storeName, resiliency.Statestore),
 	)
 	resp, err := policyRunner(func(ctx context.Context) (*state.GetResponse, error) {
 		return store.Get(ctx, req)
@@ -741,12 +716,12 @@ func (a *api) onSubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
 		api:        a,
 		storeName:  storeName,
 		appChannel: a.appChannel,
-		res:        a.resiliency,
+		res:        a.universal.Resiliency,
 	}
 
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[string](reqCtx,
-		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Configuration),
+		a.universal.Resiliency.ComponentOutboundPolicy(storeName, resiliency.Configuration),
 	)
 	subscribeID, err := policyRunner(func(ctx context.Context) (string, error) {
 		return store.Subscribe(ctx, req, handler.updateEventHandler)
@@ -780,7 +755,7 @@ func (a *api) onUnsubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
 	}
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[any](reqCtx,
-		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Configuration),
+		a.universal.Resiliency.ComponentOutboundPolicy(storeName, resiliency.Configuration),
 	)
 	_, err = policyRunner(func(ctx context.Context) (any, error) {
 		return nil, store.Unsubscribe(ctx, &req)
@@ -825,7 +800,7 @@ func (a *api) onGetConfiguration(reqCtx *fasthttp.RequestCtx) {
 
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[*configuration.GetResponse](reqCtx,
-		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Configuration),
+		a.universal.Resiliency.ComponentOutboundPolicy(storeName, resiliency.Configuration),
 	)
 	getResponse, err := policyRunner(func(ctx context.Context) (*configuration.GetResponse, error) {
 		return store.Get(ctx, req)
@@ -899,7 +874,7 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[any](reqCtx,
-		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Statestore),
+		a.universal.Resiliency.ComponentOutboundPolicy(storeName, resiliency.Statestore),
 	)
 	_, err = policyRunner(func(ctx context.Context) (any, error) {
 		return nil, store.Delete(ctx, &req)
@@ -984,7 +959,7 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 
 	start := time.Now()
 	err = stateLoader.PerformBulkStoreOperation(reqCtx, reqs,
-		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Statestore),
+		a.universal.Resiliency.ComponentOutboundPolicy(storeName, resiliency.Statestore),
 		state.BulkStoreOpts{},
 		store.Set,
 		store.BulkSet,
@@ -1325,7 +1300,7 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 	verb := strings.ToUpper(string(reqCtx.Method()))
 	method := reqCtx.UserValue(methodParam).(string)
 
-	policyDef := a.resiliency.ActorPreLockPolicy(actorType, actorID)
+	policyDef := a.universal.Resiliency.ActorPreLockPolicy(actorType, actorID)
 
 	req := invokev1.NewInvokeMethodRequest(method).
 		WithActor(actorType, actorID).
@@ -1731,7 +1706,7 @@ func (a *api) validateAndGetPubsubAndTopic(reqCtx *fasthttp.RequestCtx) (pubsub.
 		return nil, "", "", nethttp.StatusNotFound, &msg
 	}
 
-	thepubsub, ok := a.compStore.GetPubSub(pubsubName)
+	thepubsub, ok := a.universal.CompStore.GetPubSub(pubsubName)
 	if !ok {
 		msg := NewErrorResponse("ERR_PUBSUB_NOT_FOUND", fmt.Sprintf(messages.ErrPubsubNotFound, pubsubName))
 
@@ -1941,7 +1916,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[any](reqCtx,
-		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Statestore),
+		a.universal.Resiliency.ComponentOutboundPolicy(storeName, resiliency.Statestore),
 	)
 	storeReq := &state.TransactionalStateRequest{
 		Operations: operations,

@@ -15,10 +15,7 @@ package kill
 
 import (
 	"os/exec"
-	"path/filepath"
-	"runtime"
 	"testing"
-	"time"
 )
 
 func Kill(t *testing.T, cmd *exec.Cmd) {
@@ -31,13 +28,4 @@ func Kill(t *testing.T, cmd *exec.Cmd) {
 	t.Log("interrupting daprd process")
 
 	interrupt(t, cmd)
-
-	if filepath.Base(cmd.Path) == "daprd" && runtime.GOOS != "windows" {
-		// TODO: daprd does not currently gracefully exit on a single interrupt
-		// signal. Remove once fixed.
-		// We use taskkill on Windows to ensure that the process is killed, so we
-		// don't need to run it again.
-		time.Sleep(time.Millisecond * 300)
-		interrupt(t, cmd)
-	}
 }

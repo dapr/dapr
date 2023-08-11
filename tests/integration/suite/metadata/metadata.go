@@ -26,6 +26,7 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -48,6 +49,8 @@ func (m *metadata) Setup(t *testing.T) []framework.Option {
 func (m *metadata) Run(t *testing.T, parentCtx context.Context) {
 	m.proc.WaitUntilRunning(t, parentCtx)
 
+	httpClient := util.HTTPClient(t)
+
 	t.Run("test HTTP", func(t *testing.T) {
 		tests := map[string]string{
 			"public endpoint": fmt.Sprintf("http://localhost:%d/v1.0/metadata", m.proc.PublicPort()),
@@ -61,7 +64,7 @@ func (m *metadata) Run(t *testing.T, parentCtx context.Context) {
 				req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 				require.NoError(t, err)
 
-				resp, err := http.DefaultClient.Do(req)
+				resp, err := httpClient.Do(req)
 				require.NoError(t, err)
 				defer resp.Body.Close()
 
