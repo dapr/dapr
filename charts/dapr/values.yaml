@@ -19,7 +19,7 @@ global:
   #   imagePullSecrets:
   #   - pullSecret1
   #   - pullSecret2
-  imagePullSecrets: []
+  imagePullSecrets: ""
 
   nodeSelector: {}
   tolerations: []
