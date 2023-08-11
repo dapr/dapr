@@ -5,6 +5,7 @@ import (
 	configurationLoader "github.com/dapr/dapr/pkg/components/configuration"
 	cryptoLoader "github.com/dapr/dapr/pkg/components/crypto"
 	lockLoader "github.com/dapr/dapr/pkg/components/lock"
+	grpcMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/grpc"
 	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
 	nrLoader "github.com/dapr/dapr/pkg/components/nameresolution"
 	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
@@ -16,17 +17,18 @@ import (
 type (
 	// runtimeOpts encapsulates the components to include in the runtime.
 	runtimeOpts struct {
-		secretStoreRegistry       *secretstoresLoader.Registry
-		stateRegistry             *stateLoader.Registry
-		configurationRegistry     *configurationLoader.Registry
-		lockRegistry              *lockLoader.Registry
-		pubsubRegistry            *pubsubLoader.Registry
-		nameResolutionRegistry    *nrLoader.Registry
-		bindingRegistry           *bindingsLoader.Registry
-		httpMiddlewareRegistry    *httpMiddlewareLoader.Registry
-		workflowComponentRegistry *workflowsLoader.Registry
-		cryptoProviderRegistry    *cryptoLoader.Registry
-		componentsCallback        ComponentsCallback
+		secretStoreRegistry         *secretstoresLoader.Registry
+		stateRegistry               *stateLoader.Registry
+		configurationRegistry       *configurationLoader.Registry
+		lockRegistry                *lockLoader.Registry
+		pubsubRegistry              *pubsubLoader.Registry
+		nameResolutionRegistry      *nrLoader.Registry
+		bindingRegistry             *bindingsLoader.Registry
+		httpMiddlewareRegistry      *httpMiddlewareLoader.Registry
+		grpcUnaryMiddlewareRegistry *grpcMiddlewareLoader.UnaryRegistry
+		workflowComponentRegistry   *workflowsLoader.Registry
+		cryptoProviderRegistry      *cryptoLoader.Registry
+		componentsCallback          ComponentsCallback
 	}
 
 	// Option is a function that customizes the runtime.
@@ -93,6 +95,13 @@ func WithBindings(registry *bindingsLoader.Registry) Option {
 func WithHTTPMiddlewares(registry *httpMiddlewareLoader.Registry) Option {
 	return func(o *runtimeOpts) {
 		o.httpMiddlewareRegistry = registry
+	}
+}
+
+// WithGrpcUnaryMiddlewares adds gRPC unary  middleware components to the runtime.
+func WithGrpcUnaryMiddlewares(registry *grpcMiddlewareLoader.UnaryRegistry) Option {
+	return func(o *runtimeOpts) {
+		o.grpcUnaryMiddlewareRegistry = registry
 	}
 }
 

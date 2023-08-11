@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	grpcMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/grpc"
 	"io"
 	"net"
 	nethttp "net/http"
@@ -73,6 +74,7 @@ import (
 	"github.com/dapr/dapr/pkg/httpendpoint"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	grpcMiddleware "github.com/dapr/dapr/pkg/middleware/grpc"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
@@ -201,17 +203,18 @@ type DaprRuntime struct {
 	appHTTPClient           *nethttp.Client
 	compStore               *compstore.ComponentStore
 
-	stateStoreRegistry         *stateLoader.Registry
-	secretStoresRegistry       *secretstoresLoader.Registry
-	nameResolutionRegistry     *nrLoader.Registry
-	workflowComponentRegistry  *workflowsLoader.Registry
-	bindingsRegistry           *bindingsLoader.Registry
-	pubSubRegistry             *pubsubLoader.Registry
-	httpMiddlewareRegistry     *httpMiddlewareLoader.Registry
-	configurationStoreRegistry *configurationLoader.Registry
-	lockStoreRegistry          *lockLoader.Registry
-	inputBindingsCtx           context.Context
-	inputBindingsCancel        context.CancelFunc
+	stateStoreRegistry          *stateLoader.Registry
+	secretStoresRegistry        *secretstoresLoader.Registry
+	nameResolutionRegistry      *nrLoader.Registry
+	workflowComponentRegistry   *workflowsLoader.Registry
+	bindingsRegistry            *bindingsLoader.Registry
+	pubSubRegistry              *pubsubLoader.Registry
+	httpMiddlewareRegistry      *httpMiddlewareLoader.Registry
+	grpcUnaryMiddlewareRegistry *grpcMiddlewareLoader.UnaryRegistry
+	configurationStoreRegistry  *configurationLoader.Registry
+	lockStoreRegistry           *lockLoader.Registry
+	inputBindingsCtx            context.Context
+	inputBindingsCancel         context.CancelFunc
 
 	cryptoProviderRegistry *cryptoLoader.Registry
 
@@ -444,6 +447,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	a.bindingsRegistry = opts.bindingRegistry
 	a.cryptoProviderRegistry = opts.cryptoProviderRegistry
 	a.httpMiddlewareRegistry = opts.httpMiddlewareRegistry
+	a.grpcUnaryMiddlewareRegistry = opts.grpcUnaryMiddlewareRegistry
 	a.lockStoreRegistry = opts.lockRegistry
 	a.workflowComponentRegistry = opts.workflowComponentRegistry
 
@@ -486,6 +490,12 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 
 	a.flushOutstandingHTTPEndpoints()
 
+	// Setup grpc unary middlewares
+	grpcUnaryPipeline, err := a.buildGrpcUnaryPipeline()
+	if err != nil {
+		log.Warnf("failed to build gRPC Unary pipeline: %s", err)
+	}
+
 	// Setup allow/deny list for secrets
 	a.populateSecretsConfiguration()
 
@@ -495,7 +505,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	// Create and start internal and external gRPC servers
 	a.daprGRPCAPI = a.getGRPCAPI()
 
-	err = a.startGRPCAPIServer(a.daprGRPCAPI, a.runtimeConfig.APIGRPCPort)
+	err = a.startGRPCAPIServer(a.daprGRPCAPI, a.runtimeConfig.APIGRPCPort, grpcUnaryPipeline)
 	if err != nil {
 		log.Fatalf("failed to start API gRPC server: %s", err)
 	}
@@ -519,7 +529,7 @@ func (a *DaprRuntime) initRuntime(opts *runtimeOpts) error {
 	}
 	log.Infof("The request body size parameter is: %v", a.runtimeConfig.MaxRequestBodySize)
 
-	err = a.startGRPCInternalServer(a.daprGRPCAPI, a.runtimeConfig.InternalGRPCPort)
+	err = a.startGRPCInternalServer(a.daprGRPCAPI, a.runtimeConfig.InternalGRPCPort, grpcUnaryPipeline)
 	if err != nil {
 		log.Fatalf("failed to start internal gRPC server: %s", err)
 	}
@@ -713,6 +723,44 @@ func (a *DaprRuntime) buildHTTPPipeline() (httpMiddleware.Pipeline, error) {
 
 func (a *DaprRuntime) buildAppHTTPPipeline() (httpMiddleware.Pipeline, error) {
 	return a.buildHTTPPipelineForSpec(a.globalConfig.Spec.AppHTTPPipelineSpec, "app channel")
+}
+
+func (a *DaprRuntime) buildGRPCUnaryPipelineForSpec(spec config.GRPCPipelineSpec, targetPipeline string) (pipeline grpcMiddleware.Pipeline, err error) {
+	if a.globalConfig != nil {
+		pipeline.Handlers = make([]grpcMiddleware.Middleware, 0, len(spec.UnaryServerMiddleware))
+		for i := 0; i < len(spec.UnaryServerMiddleware); i++ {
+			middlewareSpec := spec.UnaryServerMiddleware[i]
+			component, exists := a.compStore.GetComponent(middlewareSpec.Type, middlewareSpec.Name)
+			if !exists {
+				// Log the error but continue with initializing the pipeline
+				log.Error("couldn't find middleware component defined in configuration with name %s and type %s/%s",
+					middlewareSpec.Name, middlewareSpec.Type, middlewareSpec.Version)
+				continue
+			}
+			md := middleware.Metadata{Base: a.toBaseMetadata(component)}
+			handler, err := a.grpcUnaryMiddlewareRegistry.Create(middlewareSpec.Type, middlewareSpec.Version, md, middlewareSpec.LogName())
+			if err != nil {
+				e := fmt.Sprintf("process component %s error: %s", component.Name, err.Error())
+				if !component.Spec.IgnoreErrors {
+					log.Warn("error processing middleware component, daprd process will exit gracefully")
+					a.Shutdown(a.runtimeConfig.GracefulShutdownDuration)
+					log.Fatal(e)
+					// This error is only caught by tests, since during normal execution we panic
+					return pipeline, errors.New("dapr panicked")
+				}
+				log.Error(e)
+				continue
+			}
+			log.Infof("enabled %s/%s %s middleware", middlewareSpec.Type, targetPipeline, middlewareSpec.Version)
+			pipeline.Handlers = append(pipeline.Handlers, handler)
+		}
+	}
+
+	return pipeline, nil
+}
+
+func (a *DaprRuntime) buildGrpcUnaryPipeline() (grpcMiddleware.Pipeline, error) {
+	return a.buildGRPCUnaryPipelineForSpec(a.globalConfig.Spec.GRPCPipelineSpec, "grpc unary")
 }
 
 func (a *DaprRuntime) initBinding(c componentsV1alpha1.Component) error {
@@ -1585,9 +1633,9 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 	return nil
 }
 
-func (a *DaprRuntime) startGRPCInternalServer(api grpc.API, port int) error {
+func (a *DaprRuntime) startGRPCInternalServer(api grpc.API, port int, pipeline grpcMiddleware.Pipeline) error {
 	// Since GRPCInteralServer is encrypted & authenticated, it is safe to listen on *
-	serverConf := a.getNewServerConfig([]string{""}, port)
+	serverConf := a.getNewServerConfig([]string{""}, port, pipeline)
 	server := grpc.NewInternalServer(api, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, a.authenticator, a.proxy)
 	if err := server.StartNonBlocking(); err != nil {
 		return err
@@ -1597,8 +1645,8 @@ func (a *DaprRuntime) startGRPCInternalServer(api grpc.API, port int) error {
 	return nil
 }
 
-func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int) error {
-	serverConf := a.getNewServerConfig(a.runtimeConfig.APIListenAddresses, port)
+func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int, pipeline grpcMiddleware.Pipeline) error {
+	serverConf := a.getNewServerConfig(a.runtimeConfig.APIListenAddresses, port, pipeline)
 	server := grpc.NewAPIServer(api, serverConf, a.globalConfig.Spec.TracingSpec, a.globalConfig.Spec.MetricSpec, a.globalConfig.Spec.APISpec, a.proxy, a.workflowEngine)
 	if err := server.StartNonBlocking(); err != nil {
 		return err
@@ -1608,7 +1656,7 @@ func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int) error {
 	return nil
 }
 
-func (a *DaprRuntime) getNewServerConfig(apiListenAddresses []string, port int) grpc.ServerConfig {
+func (a *DaprRuntime) getNewServerConfig(apiListenAddresses []string, port int, pipeline grpcMiddleware.Pipeline) grpc.ServerConfig {
 	// Use the trust domain value from the access control policy spec to generate the cert
 	// If no access control policy has been specified, use a default value
 	trustDomain := config.DefaultTrustDomain
@@ -1626,6 +1674,7 @@ func (a *DaprRuntime) getNewServerConfig(apiListenAddresses []string, port int) 
 		UnixDomainSocket:     a.runtimeConfig.UnixDomainSocket,
 		ReadBufferSizeKB:     a.runtimeConfig.ReadBufferSize,
 		EnableAPILogging:     a.runtimeConfig.EnableAPILogging,
+		UnaryPipeline:        pipeline,
 	}
 }
 

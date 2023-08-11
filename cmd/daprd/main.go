@@ -23,6 +23,7 @@ import (
 	configurationLoader "github.com/dapr/dapr/pkg/components/configuration"
 	cryptoLoader "github.com/dapr/dapr/pkg/components/crypto"
 	lockLoader "github.com/dapr/dapr/pkg/components/lock"
+	grpcMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/grpc"
 	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
 	nrLoader "github.com/dapr/dapr/pkg/components/nameresolution"
 	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
@@ -57,7 +58,8 @@ func main() {
 	nrLoader.DefaultRegistry.Logger = logContrib
 	bindingsLoader.DefaultRegistry.Logger = logContrib
 	workflowsLoader.DefaultRegistry.Logger = logContrib
-	httpMiddlewareLoader.DefaultRegistry.Logger = log // Note this uses log on purpose
+	httpMiddlewareLoader.DefaultRegistry.Logger = log      // Note this uses log on purpose
+	grpcMiddlewareLoader.DefaultUnaryRegistry.Logger = log // Note this uses log on purpose
 
 	stopCh := runtime.ShutdownSignal()
 
@@ -71,6 +73,7 @@ func main() {
 		runtime.WithBindings(bindingsLoader.DefaultRegistry),
 		runtime.WithCryptoProviders(cryptoLoader.DefaultRegistry),
 		runtime.WithHTTPMiddlewares(httpMiddlewareLoader.DefaultRegistry),
+		runtime.WithGrpcUnaryMiddlewares(grpcMiddlewareLoader.DefaultUnaryRegistry),
 		runtime.WithWorkflowComponents(workflowsLoader.DefaultRegistry),
 	)
 	if err != nil {

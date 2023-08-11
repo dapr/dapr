@@ -13,6 +13,8 @@ limitations under the License.
 
 package grpc
 
+import "github.com/dapr/dapr/pkg/middleware/grpc"
+
 // ServerConfig is the config object for a grpc server.
 type ServerConfig struct {
 	AppID                string
@@ -25,4 +27,5 @@ type ServerConfig struct {
 	UnixDomainSocket     string
 	ReadBufferSizeKB     int
 	EnableAPILogging     bool
+	UnaryPipeline        grpc.Pipeline
 }

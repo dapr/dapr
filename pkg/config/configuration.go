@@ -101,6 +101,7 @@ type AccessControlListOperationAction struct {
 type ConfigurationSpec struct {
 	HTTPPipelineSpec    PipelineSpec       `json:"httpPipeline,omitempty" yaml:"httpPipeline,omitempty"`
 	AppHTTPPipelineSpec PipelineSpec       `json:"appHttpPipeline,omitempty" yaml:"appHttpPipeline,omitempty"`
+	GRPCPipelineSpec    GRPCPipelineSpec   `json:"grpcPipeline,omitempty" yaml:"grpcPipeline,omitempty"`
 	TracingSpec         TracingSpec        `json:"tracing,omitempty" yaml:"tracing,omitempty"`
 	MTLSSpec            MTLSSpec           `json:"mtls,omitempty" yaml:"mtls,omitempty"`
 	MetricSpec          MetricSpec         `json:"metric,omitempty" yaml:"metric,omitempty"`
@@ -128,6 +129,22 @@ type SecretsScope struct {
 
 type PipelineSpec struct {
 	Handlers []HandlerSpec `json:"handlers" yaml:"handlers"`
+}
+
+type GRPCPipelineSpec struct {
+	UnaryServerMiddleware []UnaryServerSpec `json:"unary" yaml:"unary"`
+}
+
+type UnaryServerSpec struct {
+	Name         string       `json:"name" yaml:"name"`
+	Type         string       `json:"type" yaml:"type"`
+	Version      string       `json:"version" yaml:"version"`
+	SelectorSpec SelectorSpec `json:"selector,omitempty" yaml:"selector,omitempty"`
+}
+
+// LogName returns the name of the handler that can be used in logging.
+func (h UnaryServerSpec) LogName() string {
+	return utils.ComponentLogName(h.Name, h.Type, h.Version)
 }
 
 // APISpec describes the configuration for Dapr APIs.

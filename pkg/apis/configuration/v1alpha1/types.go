@@ -33,12 +33,14 @@ type Configuration struct {
 	Spec ConfigurationSpec `json:"spec,omitempty"`
 }
 
-// ConfigurationSpec is the spec for an configuration.
+// ConfigurationSpec is the spec for a configuration.
 type ConfigurationSpec struct {
 	// +optional
 	AppHTTPPipelineSpec PipelineSpec `json:"appHttpPipeline,omitempty"`
 	// +optional
 	HTTPPipelineSpec PipelineSpec `json:"httpPipeline,omitempty"`
+	// +optional
+	GRPCPipelineSpec GRPCPipelineSpec `json:"grpcPipeline,omitempty"`
 	// +optional
 	TracingSpec TracingSpec `json:"tracing,omitempty"`
 	// +kubebuilder:default={enabled:true}
@@ -107,6 +109,19 @@ type SecretsScope struct {
 // PipelineSpec defines the middleware pipeline.
 type PipelineSpec struct {
 	Handlers []HandlerSpec `json:"handlers"`
+}
+
+// GRPCPipelineSpec defines a GRPC middleware pipeline.
+type GRPCPipelineSpec struct {
+	UnaryServerInterceptors []UnaryServerSpec `json:"unary"`
+}
+
+// UnaryServerSpec defines a gRPC unary server middleware.
+type UnaryServerSpec struct {
+	Name         string       `json:"name"`
+	Type         string       `json:"type"`
+	Version      string       `json:"version"`
+	SelectorSpec SelectorSpec `json:"selector,omitempty"`
 }
 
 // HandlerSpec defines a request handlers.

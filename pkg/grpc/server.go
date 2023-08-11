@@ -217,6 +217,10 @@ func (s *server) getMiddlewareOptions() []grpcGo.ServerOption {
 
 	intr = append(intr, metadata.SetMetadataInContextUnary)
 
+	for _, middleware := range s.config.UnaryPipeline.Handlers {
+		intr = append(intr, middleware)
+	}
+
 	if len(s.apiSpec.Allowed) > 0 || len(s.apiSpec.Denied) > 0 {
 		s.logger.Info("Enabled API access list on gRPC server")
 		unary, stream := setAPIEndpointsMiddlewares(s.apiSpec.Allowed, s.apiSpec.Denied)
