@@ -59,7 +59,13 @@ func (c *crypto) Init(ctx context.Context, comp compapi.Component) error {
 		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
 	}
 
-	err = component.Init(ctx, contribcrypto.Metadata{Base: c.meta.ToBaseMetadata(comp)})
+	meta, err := c.meta.ToBaseMetadata(comp)
+	if err != nil {
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
+		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
+	}
+
+	err = component.Init(ctx, contribcrypto.Metadata{Base: meta})
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
 		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
