@@ -54,7 +54,9 @@ func getGrpcOptsGetter(servers []string, clientCert *daprCredentials.CertChain) 
 		if diag.DefaultGRPCMonitoring.IsEnabled() {
 			opts = append(
 				opts,
-				grpc.WithUnaryInterceptor(diag.DefaultGRPCMonitoring.UnaryClientInterceptor()))
+				grpc.WithUnaryInterceptor(diag.DefaultGRPCMonitoring.UnaryClientInterceptor()),
+				grpc.WithBlock(),
+			)
 		}
 
 		if len(servers) == 1 && strings.HasPrefix(servers[0], "dns:///") {

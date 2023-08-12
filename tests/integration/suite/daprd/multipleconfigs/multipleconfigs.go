@@ -28,6 +28,7 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -76,7 +77,7 @@ func (m *multipleconfigs) loadFeatures(t *testing.T, ctx context.Context) []stri
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/v1.0/metadata", m.proc.HTTPPort()), nil)
 	require.NoError(t, err)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := util.HTTPClient(t).Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 

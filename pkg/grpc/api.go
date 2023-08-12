@@ -18,11 +18,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	kitErrorCodes "github.com/dapr/kit/errorcodes"
 	otelTrace "go.opentelemetry.io/otel/trace"
 	"golang.org/x/exp/slices"
 	"google.golang.org/grpc"
@@ -43,7 +45,6 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
-	"github.com/dapr/dapr/pkg/errorcodes"
 	"github.com/dapr/dapr/pkg/grpc/metadata"
 	"github.com/dapr/dapr/pkg/grpc/universalapi"
 	"github.com/dapr/dapr/pkg/messages"
@@ -54,7 +55,6 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
-	"github.com/dapr/dapr/pkg/runtime/compstore"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/utils"
 )
@@ -63,6 +63,8 @@ const daprHTTPStatusHeader = "dapr-http-status"
 
 // API is the gRPC interface for the Dapr gRPC API. It implements both the internal and external proto definitions.
 type API interface {
+	io.Closer
+
 	// DaprInternal Service methods
 	internalv1pb.ServiceInvocationServer
 
@@ -79,56 +81,39 @@ type api struct {
 	*universalapi.UniversalAPI
 	directMessaging       messaging.DirectMessaging
 	appChannel            channel.AppChannel
-	resiliency            resiliency.Provider
 	pubsubAdapter         runtimePubsub.Adapter
 	sendToOutputBindingFn func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	tracingSpec           config.TracingSpec
 	accessControlList     *config.AccessControlList
-	compStore             *compstore.ComponentStore
+	closed                atomic.Bool
+	closeCh               chan struct{}
+	wg                    sync.WaitGroup
 	isErrorCodesEnabled   bool
 }
 
 // APIOpts contains options for NewAPI.
 type APIOpts struct {
-	AppID                       string
-	AppChannel                  channel.AppChannel
-	Resiliency                  resiliency.Provider
-	CompStore                   *compstore.ComponentStore
-	PubsubAdapter               runtimePubsub.Adapter
-	DirectMessaging             messaging.DirectMessaging
-	Actors                      actors.Actors
-	SendToOutputBindingFn       func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
-	TracingSpec                 config.TracingSpec
-	AccessControlList           *config.AccessControlList
-	Shutdown                    func()
-	GetComponentsCapabilitiesFn func() map[string][]string
-	AppConnectionConfig         config.AppConnectionConfig
-	GlobalConfig                *config.Configuration
-	IsErrorCodesEnabled         bool
+	UniversalAPI          *universalapi.UniversalAPI
+	AppChannel            channel.AppChannel
+	PubsubAdapter         runtimePubsub.Adapter
+	DirectMessaging       messaging.DirectMessaging
+	SendToOutputBindingFn func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	TracingSpec           config.TracingSpec
+	AccessControlList     *config.AccessControlList
+	IsErrorCodesEnabled   bool
 }
 
 // NewAPI returns a new gRPC API.
 func NewAPI(opts APIOpts) API {
 	return &api{
-		UniversalAPI: &universalapi.UniversalAPI{
-			AppID:                      opts.AppID,
-			Logger:                     apiServerLogger,
-			Resiliency:                 opts.Resiliency,
-			Actors:                     opts.Actors,
-			CompStore:                  opts.CompStore,
-			ShutdownFn:                 opts.Shutdown,
-			GetComponentsCapabilitesFn: opts.GetComponentsCapabilitiesFn,
-			AppConnectionConfig:        opts.AppConnectionConfig,
-			GlobalConfig:               opts.GlobalConfig,
-		},
+		UniversalAPI:          opts.UniversalAPI,
 		directMessaging:       opts.DirectMessaging,
-		resiliency:            opts.Resiliency,
 		appChannel:            opts.AppChannel,
 		pubsubAdapter:         opts.PubsubAdapter,
 		sendToOutputBindingFn: opts.SendToOutputBindingFn,
 		tracingSpec:           opts.TracingSpec,
 		accessControlList:     opts.AccessControlList,
-		compStore:             opts.CompStore,
+		closeCh:               make(chan struct{}),
 		isErrorCodesEnabled:   opts.IsErrorCodesEnabled,
 	}
 }
@@ -162,8 +147,8 @@ func (a *api) validateAndGetPubsubAndTopic(pubsubName, topic string, reqMeta map
 }
 
 func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*emptypb.Empty, error) {
-	if a.isErrorCodesEnabled && in.Metadata != nil {
-		in.Metadata[errorcodes.ErrorCodesFeatureMetadataKey] = "true"
+	if a.isErrorCodesEnabled {
+		kitErrorCodes.EnableComponentErrorCode(in.Metadata)
 	}
 	thepubsub, pubsubName, topic, rawPayload, validationErr := a.validateAndGetPubsubAndTopic(in.PubsubName, in.Topic, in.Metadata)
 	if validationErr != nil {
@@ -227,43 +212,22 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	if err != nil {
 		nerr := status.Errorf(codes.Internal, messages.ErrPubsubPublishMessage, topic, pubsubName, err.Error())
 
-		if a.isErrorCodesEnabled {
-			if ste := status.Convert(err); ste != nil {
-				// If this point is reached, there is a good
-				// chance Error Codes has been implemented
-				// at the component used
-				nerr = ste.Err()
-				apiServerLogger.Debug(nerr)
-				return &emptypb.Empty{}, nerr
-			}
-
-			// It appears the component is not supporting Error Codes.
-			// Try one more time to return a Error Codes like type of Status error
-			message := fmt.Sprintf(messages.ErrPubsubPublishMessage, topic, pubsubName, err.Error())
-			md := map[string]string{
-				"pubsubName": pubsubName,
-				"topic":      topic,
-			}
-			if ste, wdErr := errorcodes.NewStatusError(codes.Internal, errorcodes.PubSubTopicNotFound, message, md); wdErr == nil {
-				apiServerLogger.Debug(ste.Err())
-				return &emptypb.Empty{}, ste.Err()
-			}
-		}
-
 		if errors.As(err, &runtimePubsub.NotAllowedError{}) {
 			nerr = status.Errorf(codes.PermissionDenied, err.Error())
 		}
 
 		if errors.As(err, &runtimePubsub.NotFoundError{}) {
-			if a.isErrorCodesEnabled {
-				ste, wdErr := errorcodes.Newf(codes.NotFound, nil, err.Error())
-				if wdErr == nil {
+			nerr = status.Errorf(codes.NotFound, err.Error())
+		}
+
+		if a.isErrorCodesEnabled {
+			de := &kitErrorCodes.DaprError{}
+			if errors.As(err, &de) {
+				if ste, fdtge := kitErrorCodes.FromDaprErrorToGRPC(de); fdtge == nil {
 					nerr = ste.Err()
 				} else {
-					nerr = status.Errorf(codes.NotFound, err.Error())
+					apiServerLogger.Debug(fdtge)
 				}
-			} else {
-				nerr = status.Errorf(codes.NotFound, err.Error())
 			}
 		}
 
@@ -298,7 +262,7 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 	if invokeServiceDeprecationNoticeShown.CompareAndSwap(false, true) {
 		apiServerLogger.Warn("[DEPRECATION NOTICE] InvokeService is deprecated and will be removed in the future, please use proxy mode instead.")
 	}
-	policyDef := a.resiliency.EndpointPolicy(in.Id, in.Id+":"+in.Message.Method)
+	policyDef := a.UniversalAPI.Resiliency.EndpointPolicy(in.Id, in.Id+":"+in.Message.Method)
 
 	req := invokev1.FromInvokeRequestMessage(in.GetMessage())
 	if policyDef != nil {
@@ -489,6 +453,17 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 
 		if errors.As(err, &runtimePubsub.NotFoundError{}) {
 			nerr = status.Errorf(codes.NotFound, err.Error())
+		}
+
+		if a.isErrorCodesEnabled {
+			de := &kitErrorCodes.DaprError{}
+			if errors.As(err, &de) {
+				if ste, fdtge := kitErrorCodes.FromDaprErrorToGRPC(de); fdtge == nil {
+					nerr = ste.Err()
+				} else {
+					apiServerLogger.Debug(fdtge)
+				}
+			}
 		}
 		apiServerLogger.Debug(nerr)
 		closeChildSpans(ctx, nerr)
@@ -722,6 +697,11 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 		if s.Etag != nil {
 			req.ETag = &s.Etag.Value
 		}
+
+		if a.isErrorCodesEnabled {
+			kitErrorCodes.EnableComponentErrorCode(req.Metadata)
+		}
+
 		if s.Options != nil {
 			req.Options = state.SetStateOption{
 				Consistency: stateConsistencyToString(s.Options.Consistency),
@@ -991,7 +971,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[struct{}](ctx,
-		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
+		a.UniversalAPI.Resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
 	)
 	storeReq := &state.TransactionalStateRequest{
 		Operations: operations,
@@ -1255,7 +1235,7 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 		return response, err
 	}
 
-	policyDef := a.resiliency.ActorPreLockPolicy(in.ActorType, in.ActorId)
+	policyDef := a.UniversalAPI.Resiliency.ActorPreLockPolicy(in.ActorType, in.ActorId)
 
 	reqMetadata := make(map[string][]string, len(in.Metadata))
 	for k, v := range in.Metadata {
@@ -1351,7 +1331,7 @@ func (a *api) GetConfiguration(ctx context.Context, in *runtimev1pb.GetConfigura
 
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[*configuration.GetResponse](ctx,
-		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Configuration),
+		a.UniversalAPI.Resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Configuration),
 	)
 	getResponse, err := policyRunner(func(ctx context.Context) (*configuration.GetResponse, error) {
 		return store.Get(ctx, &req)
@@ -1504,7 +1484,7 @@ func (a *api) subscribeConfiguration(ctx context.Context, request *runtimev1pb.S
 	// TODO(@laurence) deal with failed subscription and retires
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[string](ctx,
-		a.resiliency.ComponentOutboundPolicy(request.StoreName, resiliency.Configuration),
+		a.UniversalAPI.Resiliency.ComponentOutboundPolicy(request.StoreName, resiliency.Configuration),
 	)
 	subscribeID, err = policyRunner(func(ctx context.Context) (string, error) {
 		return store.Subscribe(ctx, componentReq, handler.updateEventHandler)
@@ -1524,7 +1504,7 @@ func (a *api) subscribeConfiguration(ctx context.Context, request *runtimev1pb.S
 
 func (a *api) unsubscribeConfiguration(ctx context.Context, subscribeID string, storeName string, store configuration.Store) error {
 	policyRunner := resiliency.NewRunner[struct{}](ctx,
-		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Configuration),
+		a.UniversalAPI.Resiliency.ComponentOutboundPolicy(storeName, resiliency.Configuration),
 	)
 	start := time.Now()
 	storeReq := &configuration.UnsubscribeRequest{
@@ -1573,6 +1553,12 @@ func (a *api) UnsubscribeConfigurationAlpha1(ctx context.Context, request *runti
 }
 
 func (a *api) Close() error {
+	defer a.wg.Wait()
+	if a.closed.CompareAndSwap(false, true) {
+		close(a.closeCh)
+	}
+
 	a.CompStore.DeleteAllConfigurationSubscribe()
+
 	return nil
 }

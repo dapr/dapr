@@ -20,7 +20,7 @@ import (
 	"sync/atomic"
 )
 
-var ErrManagerAlreadyStarted = errors.New("manager already started")
+var ErrManagerAlreadyStarted = errors.New("runner manager already started")
 
 // Runner is a function that runs a task.
 type Runner func(context.Context) error
@@ -55,7 +55,7 @@ func (r *RunnerManager) Add(runner ...Runner) error {
 // Run runs all runners in parallel and waits for all runners to finish. If any
 // runner returns, the RunnerManager will stop all other runners and return any
 // error.
-func (r *RunnerManager) Run(ctx context.Context) (err error) {
+func (r *RunnerManager) Run(ctx context.Context) error {
 	if !r.running.CompareAndSwap(false, true) {
 		return ErrManagerAlreadyStarted
 	}

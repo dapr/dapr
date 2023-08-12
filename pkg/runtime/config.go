@@ -133,6 +133,7 @@ type internalConfig struct {
 	config                       []string
 	certChain                    *credentials.CertChain
 	registry                     *registry.Registry
+	metricsExporter              metrics.Exporter
 }
 
 // FromConfig creates a new Dapr Runtime from a configuration.
@@ -149,12 +150,6 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 		log.Warnf("failed to get host address, env variable %s will not be set", env.HostAddress)
 	}
 
-	// Initialize dapr metrics exporter
-	metricsExporter := metrics.NewExporterWithOptions(log, metrics.DefaultMetricNamespace, cfg.Metrics)
-	if err = metricsExporter.Init(); err != nil {
-		return nil, err
-	}
-
 	variables := map[string]string{
 		env.AppID:           intc.id,
 		env.AppPort:         strconv.Itoa(intc.appConnectionConfig.Port),
@@ -162,7 +157,7 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 		env.DaprPort:        strconv.Itoa(intc.internalGRPCPort),
 		env.DaprGRPCPort:    strconv.Itoa(intc.apiGRPCPort),
 		env.DaprHTTPPort:    strconv.Itoa(intc.httpPort),
-		env.DaprMetricsPort: metricsExporter.Options().Port,
+		env.DaprMetricsPort: intc.metricsExporter.Options().Port,
 		env.DaprProfilePort: strconv.Itoa(intc.profilePort),
 	}
 
@@ -181,7 +176,7 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 	var operatorClient operatorV1.OperatorClient
 	if intc.mode == modes.KubernetesMode {
 		log.Info("Initializing the operator client")
-		client, conn, clientErr := client.GetOperatorClient(context.TODO(), intc.kubernetes.ControlPlaneAddress, security.TLSServerName, intc.certChain)
+		client, conn, clientErr := client.GetOperatorClient(ctx, intc.kubernetes.ControlPlaneAddress, security.TLSServerName, intc.certChain)
 		if clientErr != nil {
 			return nil, clientErr
 		}
@@ -292,7 +287,8 @@ func (c *Config) toInternal() (*internalConfig, error) {
 			HealthCheckHTTPPath: c.AppHealthCheckPath,
 			MaxConcurrency:      c.AppMaxConcurrency,
 		},
-		registry: registry.New(c.Registry),
+		registry:        registry.New(c.Registry),
+		metricsExporter: metrics.NewExporterWithOptions(log, metrics.DefaultMetricNamespace, c.Metrics),
 	}
 
 	if len(intc.standalone.ResourcesPath) == 0 && c.ComponentsPath != "" {

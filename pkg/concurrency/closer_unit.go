@@ -1,5 +1,8 @@
+//go:build unit
+// +build unit
+
 /*
-Copyright 2023 The Dapr Authors
+Copyright 2021 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,21 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package kill
+package concurrency
 
-import (
-	"os/exec"
-	"testing"
-)
-
-func Kill(t *testing.T, cmd *exec.Cmd) {
-	t.Helper()
-
-	if cmd == nil || cmd.ProcessState != nil {
-		return
-	}
-
-	t.Log("interrupting daprd process")
-
-	interrupt(t, cmd)
+// WithFatalShutdown sets the fatal shutdown function for the closer manager.
+// Used for testing.
+func (c *RunnerCloserManager) WithFatalShutdown(fn func()) {
+	c.fatalShutdownFn = fn
 }

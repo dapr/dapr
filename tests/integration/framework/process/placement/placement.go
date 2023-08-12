@@ -94,7 +94,7 @@ func (p *Placement) Cleanup(t *testing.T) {
 }
 
 func (p *Placement) WaitUntilRunning(t *testing.T, ctx context.Context) {
-	client := http.Client{Timeout: time.Second}
+	client := util.HTTPClient(t)
 	assert.Eventually(t, func() bool {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/healthz", p.healthzPort), nil)
 		if err != nil {
