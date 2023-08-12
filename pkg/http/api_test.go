@@ -26,6 +26,7 @@ import (
 	"testing"
 	"time"
 
+	kitErrorCodes "github.com/dapr/kit/errorcodes"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -4724,6 +4725,37 @@ func TestStateStoreErrors(t *testing.T) {
 		assert.Equal(t, "ERR_STATE_SAVE", r.ErrorCode)
 	})
 
+	t.Run("error codes etag mismatch error", func(t *testing.T) {
+		a := &api{
+			isErrorCodesEnabled: true,
+		}
+		md := map[string]string{
+			kitErrorCodes.ErrorCodesFeatureMetadataKey: "true",
+		}
+		err := kitErrorCodes.NewDaprError(fmt.Errorf("possible etag mismatch. error from state store: error"), md, kitErrorCodes.WithReason(kitErrorCodes.StateETagMismatchReason))
+		c, m, err2 := a.stateDaprErrorResponse(err)
+
+		assert.Nil(t, err2)
+		assert.Equal(t, 409, c)
+		got := struct {
+			Code    int
+			Message string
+			Details []epb.ErrorInfo
+		}{}
+		je := json.Unmarshal(m, &got)
+		assert.NoError(t, je)
+		assert.Equal(t, int(codes.Aborted), got.Code)
+		em := "possible etag mismatch. error from state store: error"
+		assert.Equal(t, em, got.Message)
+		assert.NotNil(t, got.Details)
+		assert.Equal(t, 1, len(got.Details))
+		eei := &epb.ErrorInfo{
+			Domain: "dapr.io",
+			Reason: "DAPR_STATE_ETAG_MISMATCH",
+		}
+		assert.Equal(t, eei, &got.Details[0])
+	})
+
 	t.Run("etag invalid error", func(t *testing.T) {
 		a := &api{}
 		err := state.NewETagError(state.ETagInvalid, errors.New("error"))
@@ -4755,12 +4787,14 @@ func TestStateStoreErrors(t *testing.T) {
 	})
 
 	t.Run("error codes etag mismatch error", func(t *testing.T) {
-		a := &api{}
-		err := state.NewETagError(state.ETagMismatch, errors.New("error"))
-		md := map[string]string{
-			"operation": "ERR_STATE_SAVE",
+		a := &api{
+			isErrorCodesEnabled: true,
 		}
-		c, m, err2 := a.stateDaprErrorResponse(err, md)
+		md := map[string]string{
+			kitErrorCodes.ErrorCodesFeatureMetadataKey: "true",
+		}
+		err := kitErrorCodes.NewDaprError(fmt.Errorf("possible etag mismatch. error from state store: error"), md, kitErrorCodes.WithReason(kitErrorCodes.StateETagMismatchReason))
+		c, m, err2 := a.stateDaprErrorResponse(err)
 
 		assert.Nil(t, err2)
 		assert.Equal(t, 409, c)
@@ -4779,19 +4813,18 @@ func TestStateStoreErrors(t *testing.T) {
 		eei := &epb.ErrorInfo{
 			Domain: "dapr.io",
 			Reason: "DAPR_STATE_ETAG_MISMATCH",
-			Metadata: map[string]string{
-				"operation": "ERR_STATE_SAVE",
-			},
 		}
 		assert.Equal(t, eei, &got.Details[0])
 	})
 
 	t.Run("error codes etag invalid error", func(t *testing.T) {
-		a := &api{}
+		a := &api{
+			isErrorCodesEnabled: true,
+		}
 		err := state.NewETagError(state.ETagInvalid, errors.New("error"))
-		c, m, err2 := a.stateDaprErrorResponse(err, nil)
+		c, m, err2 := a.stateDaprErrorResponse(err)
 
-		assert.Equal(t, err, err2)
+		assert.NotNil(t, err2)
 		assert.Equal(t, 0, c)
 		assert.Empty(t, m)
 	})

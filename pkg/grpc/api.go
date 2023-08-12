@@ -24,6 +24,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	kitErrorCodes "github.com/dapr/kit/errorcodes"
 	otelTrace "go.opentelemetry.io/otel/trace"
 	"golang.org/x/exp/slices"
 	"google.golang.org/grpc"
@@ -88,6 +89,7 @@ type api struct {
 	closed                atomic.Bool
 	closeCh               chan struct{}
 	wg                    sync.WaitGroup
+	isErrorCodesEnabled   bool
 }
 
 // APIOpts contains options for NewAPI.
@@ -99,6 +101,7 @@ type APIOpts struct {
 	SendToOutputBindingFn func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	TracingSpec           config.TracingSpec
 	AccessControlList     *config.AccessControlList
+	IsErrorCodesEnabled   bool
 }
 
 // NewAPI returns a new gRPC API.
@@ -112,6 +115,7 @@ func NewAPI(opts APIOpts) API {
 		tracingSpec:           opts.TracingSpec,
 		accessControlList:     opts.AccessControlList,
 		closeCh:               make(chan struct{}),
+		isErrorCodesEnabled:   opts.IsErrorCodesEnabled,
 	}
 }
 
@@ -670,6 +674,11 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 		if s.Etag != nil {
 			req.ETag = &s.Etag.Value
 		}
+
+		if a.isErrorCodesEnabled {
+			kitErrorCodes.EnableComponentErrorCode(req.Metadata)
+		}
+
 		if s.Options != nil {
 			req.Options = state.SetStateOption{
 				Consistency: stateConsistencyToString(s.Options.Consistency),
@@ -711,10 +720,11 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 // stateErrorResponse takes a state store error, format and args and returns a status code encoded gRPC error.
 func (a *api) stateErrorResponse(err error, format string, args ...interface{}) error {
 	if a.isErrorCodesEnabled {
-		if ste := status.Convert(err); ste != nil {
+		if ste, fe := kitErrorCodes.FromDaprErrorToGRPC(err); fe == nil {
 			return ste.Err()
 		}
 	}
+
 	var etagErr *state.ETagError
 	if errors.As(err, &etagErr) {
 		switch etagErr.Kind() {
@@ -750,6 +760,9 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 	}
 	if in.Etag != nil {
 		req.ETag = &in.Etag.Value
+	}
+	if a.isErrorCodesEnabled {
+		kitErrorCodes.EnableComponentErrorCode(req.Metadata)
 	}
 	if in.Options != nil {
 		req.Options = state.DeleteStateOption{
