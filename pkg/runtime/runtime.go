@@ -473,6 +473,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		SendToOutputBindingFn: a.processor.Binding().SendToOutputBinding,
 		TracingSpec:           a.globalConfig.GetTracingSpec(),
 		AccessControlList:     a.accessControlList,
+		IsErrorCodesEnabled:   a.globalConfig.IsFeatureEnabled(config.ErrorCodes),
 	})
 
 	if err = a.runnerCloser.AddCloser(a.daprGRPCAPI); err != nil {
@@ -992,6 +993,7 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		SendToOutputBindingFn: a.processor.Binding().SendToOutputBinding,
 		TracingSpec:           a.globalConfig.GetTracingSpec(),
 		MaxRequestBodySize:    int64(a.runtimeConfig.maxRequestBodySize) << 20, // Convert from MB to bytes
+		IsErrorCodesEnabled:   a.globalConfig.IsFeatureEnabled(config.ErrorCodes),
 	})
 
 	serverConf := http.ServerConfig{

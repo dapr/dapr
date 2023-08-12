@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	kitErrorCodes "github.com/dapr/kit/errorcodes"
 	"github.com/golang/mock/gomock"
 	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"github.com/stretchr/testify/assert"
@@ -2849,6 +2850,22 @@ func TestStateStoreErrors(t *testing.T) {
 		assert.Equal(t, "rpc error: code = Aborted desc = failed saving state in state store a: possible etag mismatch. error from state store: error", err2.Error())
 	})
 
+	t.Run("save etag mismatch errors code enabled", func(t *testing.T) {
+		a := &api{
+			isErrorCodesEnabled: true,
+		}
+		md := map[string]string{
+			kitErrorCodes.ErrorCodesFeatureMetadataKey: "true",
+		}
+		err := kitErrorCodes.NewDaprError(errors.New("failed saving state in state store a: possible etag mismatch. error from state store: error"), md, kitErrorCodes.WithReason(kitErrorCodes.StateETagMismatchReason))
+		err2 := a.stateErrorResponse(err, messages.ErrStateSave, "a", err.Error())
+
+		assert.Equal(t, "rpc error: code = Aborted desc = failed saving state in state store a: possible etag mismatch. error from state store: error", err2.Error())
+		errStatus := status.Convert(err2)
+		assert.NotEmpty(t, errStatus)
+		assert.Equal(t, errStatus.Code(), codes.Aborted, fmt.Sprintf("unexpected 'Aborted' Code, got %s", errStatus.Code()))
+	})
+
 	t.Run("save etag invalid", func(t *testing.T) {
 		a := &api{}
 		err := state.NewETagError(state.ETagInvalid, errors.New("error"))
@@ -2871,6 +2888,21 @@ func TestStateStoreErrors(t *testing.T) {
 		err2 := a.stateErrorResponse(err, messages.ErrStateDelete, "a", err.Error())
 
 		assert.Equal(t, "rpc error: code = Aborted desc = failed deleting state with key a: possible etag mismatch. error from state store: error", err2.Error())
+	})
+
+	t.Run("delete etag mismatch  errors code enabled", func(t *testing.T) {
+		a := &api{
+			isErrorCodesEnabled: true,
+		}
+		md := map[string]string{
+			kitErrorCodes.ErrorCodesFeatureMetadataKey: "true",
+		}
+		err := kitErrorCodes.NewDaprError(fmt.Errorf("possible etag mismatch. error from state store: error"), md, kitErrorCodes.WithReason(kitErrorCodes.StateETagMismatchReason))
+
+		err2 := a.stateErrorResponse(err, messages.ErrStateDelete, "a", err.Error())
+		errStatus := status.Convert(err2)
+		assert.NotEmpty(t, errStatus)
+		assert.Equal(t, "rpc error: code = Aborted desc = possible etag mismatch. error from state store: error", err2.Error())
 	})
 
 	t.Run("delete etag invalid", func(t *testing.T) {

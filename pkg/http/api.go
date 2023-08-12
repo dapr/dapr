@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	kitErrorCodes "github.com/dapr/kit/errorcodes"
 	"github.com/go-chi/chi/v5"
 	"github.com/mitchellh/mapstructure"
 	"github.com/valyala/fasthttp"
@@ -77,6 +78,7 @@ type api struct {
 	outboundReadyStatus   bool
 	tracingSpec           config.TracingSpec
 	maxRequestBodySize    int64 // In bytes
+	isErrorCodesEnabled   bool
 }
 
 const (
@@ -116,6 +118,7 @@ type APIOpts struct {
 	SendToOutputBindingFn func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	TracingSpec           config.TracingSpec
 	MaxRequestBodySize    int64 // In bytes
+	IsErrorCodesEnabled   bool
 }
 
 // NewAPI returns a new API.
@@ -870,6 +873,9 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 	exists, etag := extractEtag(reqCtx)
 	if exists {
 		req.ETag = &etag
+		if a.isErrorCodesEnabled {
+			kitErrorCodes.EnableComponentErrorCode(req.Metadata)
+		}
 	}
 
 	start := time.Now()
@@ -884,6 +890,16 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 	diag.DefaultComponentMonitoring.StateInvoked(reqCtx, storeName, diag.Delete, err == nil, elapsed)
 
 	if err != nil {
+		if a.isErrorCodesEnabled {
+			if code, resp, feh := kitErrorCodes.FromDaprErrorToHTTP(err); feh != nil {
+				fasthttpRespond(reqCtx, fasthttpResponseWithJSON(code, resp))
+				log.Debug(resp)
+				return
+			} else {
+				log.Debug(feh)
+			}
+		}
+
 		statusCode, errMsg, resp := a.stateErrorResponse(err, "ERR_STATE_DELETE")
 		resp.Message = fmt.Sprintf(messages.ErrStateDelete, key, errMsg)
 
@@ -969,6 +985,16 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 	diag.DefaultComponentMonitoring.StateInvoked(reqCtx, storeName, diag.Set, err == nil, elapsed)
 
 	if err != nil {
+		if a.isErrorCodesEnabled {
+			if code, resp, feh := a.stateDaprErrorResponse(err); feh == nil {
+				fasthttpRespond(reqCtx, fasthttpResponseWithJSON(code, resp))
+				log.Debug(resp)
+				return
+			} else {
+				log.Debug(feh)
+			}
+		}
+
 		statusCode, errMsg, resp := a.stateErrorResponse(err, "ERR_STATE_SAVE")
 		resp.Message = fmt.Sprintf(messages.ErrStateSave, storeName, errMsg)
 
@@ -993,6 +1019,12 @@ func (a *api) stateErrorResponse(err error, errorCode string) (int, string, Erro
 	message = err.Error()
 
 	return nethttp.StatusInternalServerError, message, r
+}
+
+// stateDaprErrorResponse takes an DaprError error and returns the corresponding status code, Status JSON payload.
+// Otherwise, an error.
+func (a *api) stateDaprErrorResponse(err error) (int, []byte, error) {
+	return kitErrorCodes.FromDaprErrorToHTTP(err)
 }
 
 // etagError checks if the error from the state store is an etag error and returns a bool for indication,
