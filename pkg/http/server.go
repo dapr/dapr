@@ -25,6 +25,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	// Import pprof that automatically registers itself in the default server mux.
@@ -67,6 +68,7 @@ type server struct {
 	apiSpec            config.APISpec
 	servers            []*http.Server
 	profilingListeners []net.Listener
+	wg                 sync.WaitGroup
 }
 
 // NewServerOpts are the options for NewServer.
@@ -145,10 +147,13 @@ func (s *server) StartNonBlocking() error {
 			Handler:           handler,
 			ReadHeaderTimeout: 10 * time.Second,
 			MaxHeaderBytes:    s.config.ReadBufferSizeKB << 10, // To bytes
+			Addr:              listener.Addr().String(),
 		}
 		s.servers = append(s.servers, srv)
 
+		s.wg.Add(1)
 		go func(l net.Listener) {
+			defer s.wg.Done()
 			if err := srv.Serve(l); err != http.ErrServerClosed {
 				log.Fatal(err)
 			}
@@ -171,7 +176,9 @@ func (s *server) StartNonBlocking() error {
 		}
 		s.servers = append(s.servers, healthServer)
 
+		s.wg.Add(1)
 		go func() {
+			defer s.wg.Done()
 			if err := healthServer.ListenAndServe(); err != http.ErrServerClosed {
 				log.Fatal(err)
 			}
@@ -206,7 +213,9 @@ func (s *server) StartNonBlocking() error {
 			}
 			s.servers = append(s.servers, profServer)
 
+			s.wg.Add(1)
 			go func(l net.Listener) {
+				defer s.wg.Done()
 				if err := profServer.Serve(l); err != http.ErrServerClosed {
 					log.Fatal(err)
 				}
@@ -218,21 +227,35 @@ func (s *server) StartNonBlocking() error {
 }
 
 func (s *server) Close() error {
-	var err error
-
-	for _, ln := range s.servers {
+	closeServer := func(ctx context.Context, srv *http.Server) error {
 		// This calls `Close()` on the underlying listener.
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-		shutdownErr := ln.Shutdown(ctx)
+		err := srv.Shutdown(ctx)
 		// Error will be ErrServerClosed if everything went well
-		if errors.Is(shutdownErr, http.ErrServerClosed) {
-			shutdownErr = nil
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
 		}
-		err = errors.Join(err, shutdownErr)
-		cancel()
+		return err
 	}
 
-	return err
+	// We don't want to use a concurrency.RunnerManager here because the context
+	// would be canceled as soon as the first server is closed and returns.
+	// Rather, we want the context to cancel after the timeout.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	s.wg.Add(len(s.servers))
+	errs := make([]error, len(s.servers))
+	for i, server := range s.servers {
+		go func(i int, srv *http.Server) {
+			defer s.wg.Done()
+			log.Infof("Closing HTTP server %s…", srv.Addr)
+			errs[i] = closeServer(ctx, srv)
+		}(i, server)
+	}
+
+	s.wg.Wait()
+
+	return errors.Join(errs...)
 }
 
 func (s *server) getRouter() *chi.Mux {
@@ -267,7 +290,7 @@ func (s *server) useMaxBodySize(r chi.Router) {
 	}
 
 	maxSize := int64(s.config.MaxRequestBodySizeMB) << 20 // To bytes
-	log.Infof("Enabled max body size HTTP middleware with size %d MB", maxSize)
+	log.Infof("Enabled max body size HTTP middleware with size %d MB", s.config.MaxRequestBodySizeMB)
 
 	r.Use(MaxBodySizeMiddleware(maxSize))
 }
@@ -321,11 +344,11 @@ func (s *server) useAPIAuthentication(r chi.Router) {
 	r.Use(APITokenAuthMiddleware(token))
 }
 
-func (s *server) unescapeRequestParametersHandler(keepWildcardUnescaped bool, next http.Handler) http.HandlerFunc {
+func (s *server) unescapeRequestParametersHandler(next http.Handler) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		chiCtx := chi.RouteContext(r.Context())
 		if chiCtx != nil {
-			err := s.unespaceRequestParametersInContext(chiCtx, keepWildcardUnescaped)
+			err := s.unespaceRequestParametersInContext(chiCtx)
 			if err != nil {
 				errMsg := err.Error()
 				log.Debug(errMsg)
@@ -338,12 +361,8 @@ func (s *server) unescapeRequestParametersHandler(keepWildcardUnescaped bool, ne
 	})
 }
 
-func (s *server) unespaceRequestParametersInContext(chiCtx *chi.Context, keepWildcardUnescaped bool) (err error) {
+func (s *server) unespaceRequestParametersInContext(chiCtx *chi.Context) (err error) {
 	for i, key := range chiCtx.URLParams.Keys {
-		if keepWildcardUnescaped && key == "*" {
-			continue
-		}
-
 		chiCtx.URLParams.Values[i], err = url.QueryUnescape(chiCtx.URLParams.Values[i])
 		if err != nil {
 			return fmt.Errorf("failed to unescape request parameter %q. Error: %w", key, err)
@@ -378,7 +397,7 @@ func (s *server) handle(e Endpoint, path string, r chi.Router, unescapeParameter
 	handler := e.GetHandler()
 
 	if unescapeParameters {
-		handler = s.unescapeRequestParametersHandler(e.KeepWildcardUnescaped, handler)
+		handler = s.unescapeRequestParametersHandler(handler)
 	}
 
 	if apiLogging {

@@ -1,21 +1,29 @@
 package diagnostics
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
+	"go.opencensus.io/tag"
 
 	"github.com/dapr/dapr/pkg/config"
+	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
 func TestRegexRulesSingle(t *testing.T) {
+	const statName = "test_stat_regex"
+	methodKey := tag.MustNewKey("method")
+	testStat := stats.Int64(statName, "Stat used in unit test", stats.UnitDimensionless)
+
 	InitMetrics("testAppId2", "", []config.MetricsRule{
 		{
-			Name: "dapr_runtime_service_invocation_req_sent_total",
+			Name: statName,
 			Labels: []config.MetricLabel{
 				{
-					Name: "method",
+					Name: methodKey.Name(),
 					Regex: map[string]string{
 						"/orders/TEST":      "/orders/.+",
 						"/lightsabers/TEST": "/lightsabers/.+",
@@ -26,58 +34,75 @@ func TestRegexRulesSingle(t *testing.T) {
 	})
 
 	t.Run("single regex rule applied", func(t *testing.T) {
+		view.Register(
+			diagUtils.NewMeasureView(testStat, []tag.Key{methodKey}, defaultSizeDistribution),
+		)
 		t.Cleanup(func() {
-			view.Unregister(view.Find("runtime/service_invocation/req_sent_total"))
+			view.Unregister(view.Find(statName))
 		})
 
-		s := servicesMetrics()
+		stats.RecordWithTags(context.Background(),
+			diagUtils.WithTags(testStat.Name(), methodKey, "/orders/123"),
+			testStat.M(1))
 
-		s.ServiceInvocationRequestSent("testAppId2", "/orders/123")
-
-		viewData, _ := view.RetrieveData("runtime/service_invocation/req_sent_total")
-		v := view.Find("runtime/service_invocation/req_sent_total")
+		viewData, _ := view.RetrieveData(statName)
+		v := view.Find(statName)
 
 		allTagsPresent(t, v, viewData[0].Tags)
 
-		assert.Equal(t, "/orders/TEST", viewData[0].Tags[2].Value)
+		assert.Equal(t, "/orders/TEST", viewData[0].Tags[0].Value)
 	})
 
 	t.Run("single regex rule not applied", func(t *testing.T) {
+		view.Register(
+			diagUtils.NewMeasureView(testStat, []tag.Key{methodKey}, defaultSizeDistribution),
+		)
 		t.Cleanup(func() {
-			view.Unregister(view.Find("runtime/service_invocation/req_sent_total"))
+			view.Unregister(view.Find(statName))
 		})
 
-		s := servicesMetrics()
+		s := newGRPCMetrics()
+		s.Init("test")
 
-		s.ServiceInvocationRequestSent("testAppId2", "/siths/123")
+		stats.RecordWithTags(context.Background(),
+			diagUtils.WithTags(testStat.Name(), methodKey, "/siths/123"),
+			testStat.M(1))
 
-		viewData, _ := view.RetrieveData("runtime/service_invocation/req_sent_total")
-		v := view.Find("runtime/service_invocation/req_sent_total")
+		viewData, _ := view.RetrieveData(statName)
+		v := view.Find(statName)
 
 		allTagsPresent(t, v, viewData[0].Tags)
 
-		assert.Equal(t, "/siths/123", viewData[0].Tags[2].Value)
+		assert.Equal(t, "/siths/123", viewData[0].Tags[0].Value)
 	})
 
 	t.Run("correct regex rules applied", func(t *testing.T) {
+		view.Register(
+			diagUtils.NewMeasureView(testStat, []tag.Key{methodKey}, defaultSizeDistribution),
+		)
 		t.Cleanup(func() {
-			view.Unregister(view.Find("runtime/service_invocation/req_sent_total"))
+			view.Unregister(view.Find(statName))
 		})
 
-		s := servicesMetrics()
+		s := newGRPCMetrics()
+		s.Init("test")
 
-		s.ServiceInvocationRequestSent("testAppId2", "/orders/123")
-		s.ServiceInvocationRequestSent("testAppId3", "/lightsabers/123")
+		stats.RecordWithTags(context.Background(),
+			diagUtils.WithTags(testStat.Name(), methodKey, "/orders/123"),
+			testStat.M(1))
+		stats.RecordWithTags(context.Background(),
+			diagUtils.WithTags(testStat.Name(), methodKey, "/lightsabers/123"),
+			testStat.M(1))
 
-		viewData, _ := view.RetrieveData("runtime/service_invocation/req_sent_total")
+		viewData, _ := view.RetrieveData(statName)
 
 		orders := false
 		lightsabers := false
 
 		for _, v := range viewData {
-			if v.Tags[1].Value == "testAppId2" && v.Tags[2].Value == "/orders/TEST" {
+			if v.Tags[0].Value == "/orders/TEST" {
 				orders = true
-			} else if v.Tags[1].Value == "testAppId3" && v.Tags[2].Value == "/lightsabers/TEST" {
+			} else if v.Tags[0].Value == "/lightsabers/TEST" {
 				lightsabers = true
 			}
 		}
