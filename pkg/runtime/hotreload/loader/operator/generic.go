@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -22,6 +22,7 @@ import (
 	"sync/atomic"
 
 	"github.com/cenkalti/backoff/v4"
+
 	operatorpb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
@@ -100,12 +101,12 @@ func (g *generic[T]) Stream(ctx context.Context) (<-chan *loader.Event[T], error
 	ctx, cancel := context.WithCancel(ctx)
 	g.wg.Add(2)
 	go func() {
+		defer g.wg.Done()
 		select {
 		case <-g.closeCh:
 		case <-ctx.Done():
 		}
 		cancel()
-		g.wg.Done()
 	}()
 	go func() {
 		defer g.wg.Done()
@@ -134,6 +135,12 @@ func (g *generic[T]) stream(ctx context.Context, eventCh chan<- *loader.Event[T]
 		}
 
 		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
 			if err := backoffFn(ctx, func(ctx context.Context) error {
 				berr := g.streamer.establish(ctx, g.opClient, g.namespace, g.podName)
 				if berr != nil {

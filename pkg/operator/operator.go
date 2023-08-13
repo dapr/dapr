@@ -47,6 +47,7 @@ import (
 	operatorcache "github.com/dapr/dapr/pkg/operator/cache"
 	"github.com/dapr/dapr/pkg/operator/handlers"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
+	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/logger"
 )
@@ -188,12 +189,12 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 
 func (o *operator) syncComponent(ctx context.Context, eventType operatorv1pb.ResourceEventType) func(obj interface{}) {
 	return func(obj interface{}) {
-		c, ok := obj.(*componentsapi.Component)
+		c, ok := obj.(*compapi.Component)
 		if ok {
 			log.Debugf("Observed component to be synced: (%s) %s/%s", eventType, c.Namespace, c.Name)
-			o.apiServer.OnComponentUpdated(ctx, &api.ComponentUpdateEvent{
-				Component: c,
-				Type:      eventType,
+			o.apiServer.OnComponentUpdated(ctx, &loader.Event[compapi.Component]{
+				Resource: *c,
+				Type:     eventType,
 			})
 		}
 	}
@@ -201,11 +202,11 @@ func (o *operator) syncComponent(ctx context.Context, eventType operatorv1pb.Res
 
 func (o *operator) syncHTTPEndpoint(ctx context.Context, eventType operatorv1pb.ResourceEventType) func(obj interface{}) {
 	return func(obj interface{}) {
-		e, ok := obj.(*httpendpointsapi.HTTPEndpoint)
+		e, ok := obj.(*httpendapi.HTTPEndpoint)
 		if ok {
 			log.Debugf("Observed http endpoint to be synced: %s/%s", e.Namespace, e.Name)
-			o.apiServer.OnHTTPEndpointUpdated(ctx, &api.HTTPEndpointUpdateEvent{
-				Endpoint: e,
+			o.apiServer.OnHTTPEndpointUpdated(ctx, &loader.Event[httpendapi.HTTPEndpoint]{
+				Resource: *e,
 				Type:     eventType,
 			})
 		}

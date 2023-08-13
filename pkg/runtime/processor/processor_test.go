@@ -14,14 +14,41 @@ limitations under the License.
 package processor
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 )
+
+func TestProcessComponentsAndDependents(t *testing.T) {
+	rt, err := NewTestDaprRuntime(modes.StandaloneMode)
+	require.NoError(t, err)
+	defer stopRuntime(t, rt)
+
+	incorrectComponentType := componentsV1alpha1.Component{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: TestPubsubName,
+		},
+		Spec: componentsV1alpha1.ComponentSpec{
+			Type:     "pubsubs.mockPubSub",
+			Version:  "v1",
+			Metadata: daprt.GetFakeMetadataItems(),
+		},
+	}
+
+	t.Run("test incorrect type", func(t *testing.T) {
+		err := rt.processComponentAndDependents(context.Background(), incorrectComponentType)
+		assert.Error(t, err, "expected an error")
+		assert.Equal(t, "incorrect type pubsubs.mockPubSub", err.Error(), "expected error strings to match")
+	})
+}
 
 func TestExtractComponentCategory(t *testing.T) {
 	compCategoryTests := []struct {
@@ -52,7 +79,7 @@ func TestExtractComponentCategory(t *testing.T) {
 					Version: "v1",
 				},
 			}
-			assert.Equal(t, string(p.Category(fakeComp)), tt.category)
+			assert.Equal(t, string(p.category(fakeComp)), tt.category)
 		})
 	}
 }

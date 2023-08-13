@@ -62,7 +62,7 @@ func Test_toComparableObj(t *testing.T) {
 	}
 }
 
-func Test_areSame(t *testing.T) {
+func Test_AreSame(t *testing.T) {
 	t.Parallel()
 
 	const numCases = 250
@@ -84,12 +84,12 @@ func Test_areSame(t *testing.T) {
 			t.Run("Component", func(t *testing.T) {
 				comp1 := components[i]
 				comp2 := comp1.DeepCopy()
-				assert.True(t, areSame[compapi.Component](comp1, *comp2))
+				assert.True(t, AreSame[compapi.Component](comp1, *comp2))
 			})
 			t.Run("HTTPEndpoint", func(t *testing.T) {
 				endpoint1 := endpoints[i]
 				endpoint2 := endpoint1.DeepCopy()
-				assert.True(t, areSame[httpendapi.HTTPEndpoint](endpoint1, *endpoint2))
+				assert.True(t, AreSame[httpendapi.HTTPEndpoint](endpoint1, *endpoint2))
 			})
 		})
 
@@ -100,7 +100,7 @@ func Test_areSame(t *testing.T) {
 				fz.Fuzz(&comp2.ObjectMeta)
 				fz.Fuzz(&comp2.TypeMeta)
 				comp2.Name = comp1.Name
-				assert.True(t, areSame[compapi.Component](comp1, *comp2))
+				assert.True(t, AreSame[compapi.Component](comp1, *comp2))
 			})
 			t.Run("HTTPEndpoint", func(t *testing.T) {
 				endpoint1 := endpoints[i]
@@ -108,7 +108,7 @@ func Test_areSame(t *testing.T) {
 				fz.Fuzz(&endpoint2.ObjectMeta)
 				fz.Fuzz(&endpoint2.TypeMeta)
 				endpoint2.Name = endpoint1.Name
-				assert.True(t, areSame[httpendapi.HTTPEndpoint](endpoint1, *endpoint2))
+				assert.True(t, AreSame[httpendapi.HTTPEndpoint](endpoint1, *endpoint2))
 			})
 		})
 
@@ -116,12 +116,12 @@ func Test_areSame(t *testing.T) {
 			t.Run("Component", func(t *testing.T) {
 				comp1 := components[i]
 				comp2 := componentsDiff[i]
-				assert.False(t, areSame[compapi.Component](comp1, comp2))
+				assert.False(t, AreSame[compapi.Component](comp1, comp2))
 			})
 			t.Run("HTTPEndpoint", func(t *testing.T) {
 				endpoint1 := endpoints[i]
 				endpoint2 := endpointsDiff[i]
-				assert.False(t, areSame[httpendapi.HTTPEndpoint](endpoint1, endpoint2))
+				assert.False(t, AreSame[httpendapi.HTTPEndpoint](endpoint1, endpoint2))
 			})
 		})
 	}

@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -28,7 +28,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
 	loadercompstore "github.com/dapr/dapr/pkg/runtime/hotreload/loader/compstore"
-	"github.com/dapr/kit/batcher"
+	"github.com/dapr/kit/events/batcher"
 	"github.com/dapr/kit/logger"
 )
 
@@ -68,12 +68,12 @@ func New(opts Options) (loader.Interface, error) {
 	d := &disk{
 		closeCh:   make(chan struct{}),
 		component: newGeneric[compapi.Component](opts, batcher, loadercompstore.NewComponent(opts.ComponentStore)),
-		endpoint:  newGeneric[httpendapi.HTTPEndpoint](opts, batcher, loadercompstore.NewEndpoint(opts.ComponentStore)),
+		endpoint:  newGeneric[httpendapi.HTTPEndpoint](opts, batcher, loadercompstore.NewHTTPEndpoint(opts.ComponentStore)),
 	}
 
 	d.wg.Add(1)
-	defer d.wg.Done()
 	go func() {
+		defer d.wg.Done()
 		for {
 			select {
 			case <-d.closeCh:

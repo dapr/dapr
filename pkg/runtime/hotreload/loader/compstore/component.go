@@ -38,7 +38,7 @@ func NewComponent(compStore *compstore.ComponentStore) ComponentStore[compapi.Co
 	}
 }
 
-func NewEndpoint(compStore *compstore.ComponentStore) ComponentStore[httpendapi.HTTPEndpoint] {
+func NewHTTPEndpoint(compStore *compstore.ComponentStore) ComponentStore[httpendapi.HTTPEndpoint] {
 	return &endpoint{
 		compStore: compStore,
 	}

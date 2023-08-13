@@ -32,10 +32,6 @@ type component struct {
 }
 
 func (c *component) update(ctx context.Context, comp compapi.Component) {
-	if !c.auth.IsObjectAuthorized(comp) {
-		log.Debugf("Received unauthorized component update, ignored. %s", comp.LogName())
-	}
-
 	oldComp, exists := c.store.GetComponent(comp.Spec.Type, comp.Name)
 	_, _ = c.proc.Secret().ProcessResource(ctx, comp)
 
@@ -51,6 +47,10 @@ func (c *component) update(ctx context.Context, comp compapi.Component) {
 			log.Errorf("Error closing component: %s", err)
 			return
 		}
+	}
+
+	if !c.auth.IsObjectAuthorized(comp) {
+		log.Warnf("Received unauthorized component update, ignored. %s", comp.LogName())
 	}
 
 	log.Infof("Adding Component for processing: %s", comp.LogName())

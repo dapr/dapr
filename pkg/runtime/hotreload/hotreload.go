@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -16,11 +16,11 @@ package hotreload
 import (
 	"context"
 	"errors"
-	"os"
 
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpendapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/concurrency"
+	"github.com/dapr/dapr/pkg/config"
 	operatorpb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/authorizer"
 	"github.com/dapr/dapr/pkg/runtime/channels"
@@ -32,16 +32,10 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-const (
-	// hot reloading is currently unsupported, but
-	// setting this environment variable restores the
-	// partial hot reloading support for k8s.
-	hotReloadingEnvVar = "DAPR_ENABLE_HOT_RELOADING"
-)
-
 var log = logger.NewLogger("dapr.runtime.hotreload")
 
 type OptionsDisk struct {
+	Config         *config.Configuration
 	Dirs           []string
 	ComponentStore *compstore.ComponentStore
 	Authorizer     *authorizer.Authorizer
@@ -50,6 +44,7 @@ type OptionsDisk struct {
 }
 
 type OptionsOperator struct {
+	Config         *config.Configuration
 	PodName        string
 	Namespace      string
 	OperatorClient operatorpb.OperatorClient
@@ -60,6 +55,7 @@ type OptionsOperator struct {
 }
 
 type Reloader struct {
+	isEnabled  bool
 	components *reconciler.Reconciler[compapi.Component]
 	endpoints  *reconciler.Reconciler[httpendapi.HTTPEndpoint]
 }
@@ -74,6 +70,7 @@ func NewDisk(opts OptionsDisk) (*Reloader, error) {
 	}
 
 	return &Reloader{
+		isEnabled: opts.Config.IsFeatureEnabled(config.HotReload),
 		components: reconciler.NewComponent(reconciler.Options[compapi.Component]{
 			Loader:    loader,
 			CompStore: opts.ComponentStore,
@@ -96,6 +93,7 @@ func NewOperator(opts OptionsOperator) *Reloader {
 	})
 
 	return &Reloader{
+		isEnabled: opts.Config.IsFeatureEnabled(config.HotReload),
 		components: reconciler.NewComponent(reconciler.Options[compapi.Component]{
 			Loader:    loader,
 			CompStore: opts.ComponentStore,
@@ -110,7 +108,7 @@ func NewOperator(opts OptionsOperator) *Reloader {
 }
 
 func (r *Reloader) Run(ctx context.Context) error {
-	if env, ok := os.LookupEnv(hotReloadingEnvVar); !ok || (env != "true" && env != `"true"`) {
+	if !r.isEnabled {
 		log.Debug("Hot reloading disabled")
 		<-ctx.Done()
 		return nil

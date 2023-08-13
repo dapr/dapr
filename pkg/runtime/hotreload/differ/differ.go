@@ -112,7 +112,7 @@ func detectDiff[T Resource](base, target []T, skipTarget func(T) bool) map[strin
 
 		found := false
 		for _, tt := range base {
-			if areSame(target[i], tt) {
+			if AreSame(target[i], tt) {
 				found = true
 				break
 			}
@@ -125,8 +125,8 @@ func detectDiff[T Resource](base, target []T, skipTarget func(T) bool) map[strin
 	return notExist
 }
 
-// areSame returns true if the resources have the same functional spec.
-func areSame[T Resource](r1, r2 T) bool {
+// AreSame returns true if the resources have the same functional spec.
+func AreSame[T Resource](r1, r2 T) bool {
 	return reflect.DeepEqual(toComparableObj(r1), toComparableObj(r2))
 }
 

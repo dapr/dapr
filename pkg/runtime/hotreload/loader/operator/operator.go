@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -42,7 +42,7 @@ type operator struct {
 func New(opts Options) loader.Interface {
 	return &operator{
 		component: newGeneric[compapi.Component](opts, loadercompstore.NewComponent(opts.ComponentStore), new(component)),
-		endpoint:  newGeneric[httpendapi.HTTPEndpoint](opts, loadercompstore.NewEndpoint(opts.ComponentStore), new(endpoint)),
+		endpoint:  newGeneric[httpendapi.HTTPEndpoint](opts, loadercompstore.NewHTTPEndpoint(opts.ComponentStore), new(endpoint)),
 	}
 }
 

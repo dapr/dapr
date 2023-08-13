@@ -20,6 +20,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"k8s.io/utils/clock"
+
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpendapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	operatorpb "github.com/dapr/dapr/pkg/proto/operator/v1"
@@ -49,6 +51,7 @@ type Reconciler[T differ.Resource] struct {
 	closeCh chan struct{}
 	closed  atomic.Bool
 	wg      sync.WaitGroup
+	clock   clock.WithTicker
 }
 
 type manager[T differ.Resource] interface {
@@ -59,6 +62,7 @@ type manager[T differ.Resource] interface {
 
 func NewComponent(opts Options[compapi.Component], authz *authorizer.Authorizer) *Reconciler[compapi.Component] {
 	return &Reconciler[compapi.Component]{
+		clock:   clock.RealClock{},
 		closeCh: make(chan struct{}),
 		kind:    "Component",
 		manager: &component{
@@ -72,6 +76,7 @@ func NewComponent(opts Options[compapi.Component], authz *authorizer.Authorizer)
 
 func NewHTTPEndpoint(opts Options[httpendapi.HTTPEndpoint], channels *channels.Channels) *Reconciler[httpendapi.HTTPEndpoint] {
 	return &Reconciler[httpendapi.HTTPEndpoint]{
+		clock:    clock.RealClock{},
 		closeCh:  make(chan struct{}),
 		channels: channels,
 		kind:     "HTTPEndpoint",
@@ -109,7 +114,7 @@ func (r *Reconciler[T]) Close() error {
 func (r *Reconciler[T]) watchForEvents(ctx context.Context, stream <-chan *loader.Event[T]) {
 	log.Infof("Starting to watch %s updates", r.kind)
 
-	ticker := time.NewTicker(time.Second * 60)
+	ticker := r.clock.NewTicker(time.Second * 60)
 	defer ticker.Stop()
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -121,7 +126,7 @@ func (r *Reconciler[T]) watchForEvents(ctx context.Context, stream <-chan *loade
 			return
 		case <-r.closeCh:
 			return
-		case <-ticker.C:
+		case <-ticker.C():
 			log.Debugf("Running scheduled %s reconcile", r.kind)
 			resources, err := r.manager.List(ctx)
 			if err != nil {

@@ -14,40 +14,54 @@ limitations under the License.
 package compstore
 
 import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpendapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
-	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
 )
 
-type ComponentStore[T differ.Resource] interface {
-	List() []T
-}
-
-type component struct {
-	compStore *compstore.ComponentStore
-}
-
-type endpoint struct {
-	compStore *compstore.ComponentStore
-}
-
-func NewComponent(compStore *compstore.ComponentStore) ComponentStore[compapi.Component] {
-	return &component{
-		compStore: compStore,
+func Test_component(t *testing.T) {
+	var comp ComponentStore[compapi.Component]
+	store := compstore.New()
+	comp = NewComponent(store)
+	comp1, comp2 := compapi.Component{
+		ObjectMeta: metav1.ObjectMeta{Name: "1"},
+	}, compapi.Component{
+		ObjectMeta: metav1.ObjectMeta{Name: "2"},
 	}
+
+	store.AddComponent(comp1)
+	store.AddComponent(comp2)
+	assert.ElementsMatch(t, []compapi.Component{comp1, comp2}, comp.List())
+
+	store.DeleteComponent("", "1")
+	assert.ElementsMatch(t, []compapi.Component{comp2}, comp.List())
+
+	store.DeleteComponent("", "2")
+	assert.ElementsMatch(t, []compapi.Component{}, comp.List())
 }
 
-func NewEndpoint(compStore *compstore.ComponentStore) ComponentStore[httpendapi.HTTPEndpoint] {
-	return &endpoint{
-		compStore: compStore,
+func Test_endpoint(t *testing.T) {
+	var endpoint ComponentStore[httpendapi.HTTPEndpoint]
+	store := compstore.New()
+	endpoint = NewHTTPEndpoint(store)
+	endpoint1, endpoint2 := httpendapi.HTTPEndpoint{
+		ObjectMeta: metav1.ObjectMeta{Name: "1"},
+	}, httpendapi.HTTPEndpoint{
+		ObjectMeta: metav1.ObjectMeta{Name: "2"},
 	}
-}
 
-func (c *component) List() []compapi.Component {
-	return c.compStore.ListComponents()
-}
+	store.AddHTTPEndpoint(endpoint1)
+	store.AddHTTPEndpoint(endpoint2)
+	assert.ElementsMatch(t, []httpendapi.HTTPEndpoint{endpoint1, endpoint2}, endpoint.List())
 
-func (e *endpoint) List() []httpendapi.HTTPEndpoint {
-	return e.compStore.ListHTTPEndpoints()
+	store.DeleteHTTPEndpoint("1")
+	assert.ElementsMatch(t, []httpendapi.HTTPEndpoint{endpoint2}, endpoint.List())
+
+	store.DeleteHTTPEndpoint("2")
+	assert.ElementsMatch(t, []httpendapi.HTTPEndpoint{}, endpoint.List())
 }
