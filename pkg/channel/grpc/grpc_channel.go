@@ -32,8 +32,8 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
-	auth "github.com/dapr/dapr/pkg/runtime/security"
-	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
+	"github.com/dapr/dapr/pkg/security"
+	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 )
 
 // Channel is a concrete AppChannel implementation for interacting with gRPC based user code.
@@ -56,7 +56,7 @@ func CreateLocalChannel(port, maxConcurrency int, conn *grpc.ClientConn, spec co
 		conn:                 conn,
 		baseAddress:          net.JoinHostPort(baseAddress, strconv.Itoa(port)),
 		tracingSpec:          spec,
-		appMetadataToken:     auth.GetAppToken(),
+		appMetadataToken:     security.GetAppToken(),
 		maxRequestBodySizeMB: maxRequestBodySize,
 	}
 	if maxConcurrency > 0 {
@@ -101,7 +101,7 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	md := invokev1.InternalMetadataToGrpcMetadata(ctx, pd.Metadata, true)
 
 	if g.appMetadataToken != "" {
-		md.Set(authConsts.APITokenHeader, g.appMetadataToken)
+		md.Set(securityConsts.APITokenHeader, g.appMetadataToken)
 	}
 
 	// Prepare gRPC Metadata
@@ -161,9 +161,7 @@ func (g *Channel) HealthProbe(ctx context.Context) (bool, error) {
 	defer emptyPbPool.Put(out)
 	err := g.conn.Invoke(ctx, "/dapr.proto.runtime.v1.AppCallbackHealthCheck/HealthCheck", in, out)
 
-	// Errors here are network-level errors, so we are not returning them as errors
-	// Instead, we just return a failed probe
-	return err == nil, nil
+	return err == nil, err
 }
 
 // SetAppHealth sets the apphealth.AppHealth object.

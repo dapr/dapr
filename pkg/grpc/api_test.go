@@ -369,10 +369,10 @@ func TestAPIToken(t *testing.T) {
 	// Setup Dapr API server
 	fakeAPI := &api{
 		UniversalAPI: &universalapi.UniversalAPI{
-			AppID: "fakeAPI",
+			AppID:      "fakeAPI",
+			Resiliency: resiliency.New(nil),
 		},
 		directMessaging: mockDirectMessaging,
-		resiliency:      resiliency.New(nil),
 	}
 
 	t.Run("valid token", func(t *testing.T) {
@@ -580,10 +580,10 @@ func TestInvokeServiceFromHTTPResponse(t *testing.T) {
 	// Setup Dapr API server
 	fakeAPI := &api{
 		UniversalAPI: &universalapi.UniversalAPI{
-			AppID: "fakeAPI",
+			AppID:      "fakeAPI",
+			Resiliency: resiliency.New(nil),
 		},
 		directMessaging: mockDirectMessaging,
-		resiliency:      resiliency.New(nil),
 	}
 
 	httpResponseTests := []struct {
@@ -687,10 +687,10 @@ func TestInvokeServiceFromGRPCResponse(t *testing.T) {
 	// Setup Dapr API server
 	fakeAPI := &api{
 		UniversalAPI: &universalapi.UniversalAPI{
-			AppID: "fakeAPI",
+			AppID:      "fakeAPI",
+			Resiliency: resiliency.New(nil),
 		},
 		directMessaging: mockDirectMessaging,
-		resiliency:      resiliency.New(nil),
 	}
 
 	t.Run("handle grpc response code", func(t *testing.T) {
@@ -998,7 +998,6 @@ func TestGetStateWhenStoreNotConfigured(t *testing.T) {
 			CompStore:  compstore.New(),
 			Resiliency: resiliency.New(nil),
 		},
-		resiliency: resiliency.New(nil),
 	}, "")
 	defer server.Stop()
 
@@ -1470,10 +1469,10 @@ func TestGetConfiguration(t *testing.T) {
 	compStore.AddConfiguration("store1", fakeConfigurationStore)
 	fakeAPI := &api{
 		UniversalAPI: &universalapi.UniversalAPI{
-			AppID:     "fakeAPI",
-			CompStore: compStore,
+			AppID:      "fakeAPI",
+			CompStore:  compStore,
+			Resiliency: resiliency.New(nil),
 		},
-		resiliency: resiliency.New(nil),
 	}
 	server, lis := startDaprAPIServer(fakeAPI, "")
 	defer server.Stop()
@@ -1582,11 +1581,12 @@ func TestGetConfiguration(t *testing.T) {
 func TestSubscribeConfiguration(t *testing.T) {
 	fakeConfigurationStore := &daprt.MockConfigurationStore{}
 	var tempReq *configuration.SubscribeRequest
+
 	fakeConfigurationStore.On("Subscribe",
 		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *configuration.SubscribeRequest) bool {
 			tempReq = req
-			return len(tempReq.Keys) == 1 && tempReq.Keys[0] == goodKey
+			return len(req.Keys) == 1 && req.Keys[0] == goodKey
 		}),
 		mock.MatchedBy(func(f configuration.UpdateHandler) bool {
 			if len(tempReq.Keys) == 1 && tempReq.Keys[0] == goodKey {
@@ -1599,7 +1599,15 @@ func TestSubscribeConfiguration(t *testing.T) {
 				})
 			}
 			return true
-		})).Return("id", nil)
+		}),
+	).Return("id1", nil)
+	fakeConfigurationStore.On("Unsubscribe",
+		mock.MatchedBy(matchContextInterface),
+		mock.MatchedBy(func(req *configuration.UnsubscribeRequest) bool {
+			return req.ID == "id1"
+		}),
+	).Return(nil)
+
 	fakeConfigurationStore.On("Subscribe",
 		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *configuration.SubscribeRequest) bool {
@@ -1620,13 +1628,22 @@ func TestSubscribeConfiguration(t *testing.T) {
 				})
 			}
 			return true
-		})).Return("id", nil)
+		}),
+	).Return("id2", nil)
+	fakeConfigurationStore.On("Unsubscribe",
+		mock.MatchedBy(matchContextInterface),
+		mock.MatchedBy(func(req *configuration.UnsubscribeRequest) bool {
+			return req.ID == "id2"
+		}),
+	).Return(nil)
+
 	fakeConfigurationStore.On("Subscribe",
 		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *configuration.SubscribeRequest) bool {
 			return req.Keys[0] == "error-key"
 		}),
-		mock.AnythingOfType("configuration.UpdateHandler")).Return(nil, errors.New("failed to get state with error-key"))
+		mock.AnythingOfType("configuration.UpdateHandler"),
+	).Return(nil, errors.New("failed to get state with error-key"))
 
 	compStore := compstore.New()
 	compStore.AddConfiguration("store1", fakeConfigurationStore)
@@ -1634,10 +1651,10 @@ func TestSubscribeConfiguration(t *testing.T) {
 	// Setup dapr api server
 	fakeAPI := &api{
 		UniversalAPI: &universalapi.UniversalAPI{
-			AppID:     "fakeAPI",
-			CompStore: compStore,
+			AppID:      "fakeAPI",
+			CompStore:  compStore,
+			Resiliency: resiliency.New(nil),
 		},
-		resiliency: resiliency.New(nil),
 	}
 	server, lis := startDaprAPIServer(fakeAPI, "")
 	defer server.Stop()
@@ -1722,7 +1739,7 @@ func TestSubscribeConfiguration(t *testing.T) {
 					require.NoError(t, err)
 					assert.Equal(t, tt.expectedResponse, rsp.Items, "Expected response items to be same")
 				} else {
-					retry := 3
+					const retry = 3
 					count := 0
 					_, err := resp.Recv()
 					for {
@@ -1762,12 +1779,15 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 	fakeConfigurationStore := &daprt.MockConfigurationStore{}
 	stop := make(chan struct{})
 	defer close(stop)
+
 	var tempReq *configuration.SubscribeRequest
 	fakeConfigurationStore.On("Unsubscribe",
 		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *configuration.UnsubscribeRequest) bool {
 			return true
-		})).Return(nil)
+		}),
+	).Return(nil)
+
 	fakeConfigurationStore.On("Subscribe",
 		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *configuration.SubscribeRequest) bool {
@@ -1799,7 +1819,9 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 				}
 			}()
 			return true
-		})).Return(mockSubscribeID, nil)
+		}),
+	).Return(mockSubscribeID, nil)
+
 	fakeConfigurationStore.On("Subscribe",
 		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *configuration.SubscribeRequest) bool {
@@ -1834,7 +1856,8 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 				}
 			}()
 			return true
-		})).Return(mockSubscribeID, nil)
+		}),
+	).Return(mockSubscribeID, nil)
 
 	compStore := compstore.New()
 	compStore.AddConfiguration("store1", fakeConfigurationStore)
@@ -1842,10 +1865,11 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 	// Setup dapr api server
 	fakeAPI := &api{
 		UniversalAPI: &universalapi.UniversalAPI{
-			AppID:     "fakeAPI",
-			CompStore: compStore,
+			AppID:      "fakeAPI",
+			CompStore:  compStore,
+			Logger:     logger.NewLogger("grpc.api.test"),
+			Resiliency: resiliency.New(nil),
 		},
-		resiliency: resiliency.New(nil),
 	}
 	server, lis := startDaprAPIServer(fakeAPI, "")
 	defer server.Stop()
@@ -1996,7 +2020,8 @@ func TestUnsubscribeConfigurationErrScenario(t *testing.T) {
 		mock.MatchedBy(matchContextInterface),
 		mock.MatchedBy(func(req *configuration.UnsubscribeRequest) bool {
 			return req.ID == mockSubscribeID
-		})).Return(nil)
+		}),
+	).Return(nil)
 
 	compStore := compstore.New()
 	compStore.AddConfiguration("store1", fakeConfigurationStore)
@@ -2004,10 +2029,11 @@ func TestUnsubscribeConfigurationErrScenario(t *testing.T) {
 	// Setup dapr api server
 	fakeAPI := &api{
 		UniversalAPI: &universalapi.UniversalAPI{
-			AppID:     "fakeAPI",
-			CompStore: compStore,
+			AppID:      "fakeAPI",
+			CompStore:  compStore,
+			Logger:     logger.NewLogger("grpc.api.test"),
+			Resiliency: resiliency.New(nil),
 		},
-		resiliency: resiliency.New(nil),
 	}
 	server, lis := startDaprAPIServer(fakeAPI, "")
 	defer server.Stop()
@@ -2030,13 +2056,6 @@ func TestUnsubscribeConfigurationErrScenario(t *testing.T) {
 			id:               "",
 			expectedResponse: true,
 			expectedError:    false,
-		},
-		{
-			testName:         "Test unsubscribe with incorrect store name",
-			storeName:        "no-store",
-			id:               mockSubscribeID,
-			expectedResponse: false,
-			expectedError:    true,
 		},
 	}
 
@@ -2427,7 +2446,8 @@ func TestDeleteBulkState(t *testing.T) {
 func TestPublishTopic(t *testing.T) {
 	srv := &api{
 		UniversalAPI: &universalapi.UniversalAPI{
-			AppID: "fakeAPI",
+			AppID:     "fakeAPI",
+			CompStore: compstore.New(),
 		},
 		pubsubAdapter: &daprt.MockPubSubAdapter{
 			PublishFn: func(ctx context.Context, req *pubsub.PublishRequest) error {
@@ -2459,12 +2479,11 @@ func TestPublishTopic(t *testing.T) {
 				return pubsub.BulkPublishResponse{}, nil
 			},
 		},
-		compStore: compstore.New(),
 	}
 
 	mock := daprt.MockPubSub{}
 	mock.On("Features").Return([]pubsub.Feature{})
-	srv.compStore.AddPubSub("pubsub", compstore.PubsubItem{Component: &mock})
+	srv.UniversalAPI.CompStore.AddPubSub("pubsub", compstore.PubsubItem{Component: &mock})
 
 	server, lis := startTestServerAPI(srv)
 	defer server.Stop()
@@ -2625,7 +2644,8 @@ func TestPublishTopic(t *testing.T) {
 func TestBulkPublish(t *testing.T) {
 	fakeAPI := &api{
 		UniversalAPI: &universalapi.UniversalAPI{
-			AppID: "fakeAPI",
+			AppID:     "fakeAPI",
+			CompStore: compstore.New(),
 		},
 		pubsubAdapter: &daprt.MockPubSubAdapter{
 			BulkPublishFn: func(ctx context.Context, req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
@@ -2654,12 +2674,11 @@ func TestBulkPublish(t *testing.T) {
 				return pubsub.BulkPublishResponse{FailedEntries: entries}, nil
 			},
 		},
-		compStore: compstore.New(),
 	}
 
 	mock := daprt.MockPubSub{}
 	mock.On("Features").Return([]pubsub.Feature{})
-	fakeAPI.compStore.AddPubSub("pubsub", compstore.PubsubItem{Component: &mock})
+	fakeAPI.UniversalAPI.CompStore.AddPubSub("pubsub", compstore.PubsubItem{Component: &mock})
 
 	server, lis := startDaprAPIServer(fakeAPI, "")
 	defer server.Stop()
@@ -2830,11 +2849,12 @@ func TestExecuteStateTransaction(t *testing.T) {
 	// Setup dapr api server
 	fakeAPI := &api{
 		UniversalAPI: &universalapi.UniversalAPI{
-			Logger:    logger.NewLogger("grpc.api.test"),
-			AppID:     "fakeAPI",
-			CompStore: compStore,
+			Logger:     logger.NewLogger("grpc.api.test"),
+			AppID:      "fakeAPI",
+			CompStore:  compStore,
+			Resiliency: resiliency.New(nil),
 		},
-		resiliency: resiliency.New(nil),
+		pubsubAdapter: &daprt.MockPubSubAdapter{},
 	}
 	server, lis := startDaprAPIServer(fakeAPI, "")
 	defer server.Stop()
@@ -3207,10 +3227,10 @@ func TestGetConfigurationAPI(t *testing.T) {
 	compStore.AddConfiguration("store1", &mockConfigStore{})
 	server, lis := startDaprAPIServer(&api{
 		UniversalAPI: &universalapi.UniversalAPI{
-			AppID:     "fakeAPI",
-			CompStore: compStore,
+			AppID:      "fakeAPI",
+			CompStore:  compStore,
+			Resiliency: resiliency.New(nil),
 		},
-		resiliency: resiliency.New(nil),
 	}, "")
 	defer server.Stop()
 
@@ -3246,10 +3266,10 @@ func TestSubscribeConfigurationAPI(t *testing.T) {
 
 	server, lis := startDaprAPIServer(&api{
 		UniversalAPI: &universalapi.UniversalAPI{
-			AppID:     "fakeAPI",
-			CompStore: compStore,
+			AppID:      "fakeAPI",
+			CompStore:  compStore,
+			Resiliency: resiliency.New(nil),
 		},
-		resiliency: resiliency.New(nil),
 	}, "")
 	defer server.Stop()
 
@@ -3360,15 +3380,15 @@ func TestStateAPIWithResiliency(t *testing.T) {
 				"failingQueryKey":      1,
 			},
 			map[string]time.Duration{
-				"timeoutGetKey":         time.Second * 10,
-				"timeoutSetKey":         time.Second * 10,
-				"timeoutDeleteKey":      time.Second * 10,
-				"timeoutBulkGetKey":     time.Second * 10,
-				"timeoutBulkGetKeyBulk": time.Second * 10,
-				"timeoutBulkSetKey":     time.Second * 10,
-				"timeoutBulkDeleteKey":  time.Second * 10,
-				"timeoutMultiKey":       time.Second * 10,
-				"timeoutQueryKey":       time.Second * 10,
+				"timeoutGetKey":         time.Second * 30,
+				"timeoutSetKey":         time.Second * 30,
+				"timeoutDeleteKey":      time.Second * 30,
+				"timeoutBulkGetKey":     time.Second * 30,
+				"timeoutBulkGetKeyBulk": time.Second * 30,
+				"timeoutBulkSetKey":     time.Second * 30,
+				"timeoutBulkDeleteKey":  time.Second * 30,
+				"timeoutMultiKey":       time.Second * 30,
+				"timeoutQueryKey":       time.Second * 30,
 			},
 			map[string]int{},
 		),
@@ -3387,7 +3407,7 @@ func TestStateAPIWithResiliency(t *testing.T) {
 			CompStore:  compStore,
 			Resiliency: res,
 		},
-		resiliency: res,
+		pubsubAdapter: &daprt.MockPubSubAdapter{},
 	}
 	server, lis := startDaprAPIServer(fakeAPI, "")
 	defer server.Stop()
@@ -3416,7 +3436,7 @@ func TestStateAPIWithResiliency(t *testing.T) {
 
 		assert.Error(t, err)
 		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutGetKey"))
-		assert.Less(t, end.Sub(start), time.Second*10)
+		assert.Less(t, end.Sub(start), time.Second*30)
 	})
 
 	t.Run("set state request retries with resiliency", func(t *testing.T) {
@@ -3448,7 +3468,7 @@ func TestStateAPIWithResiliency(t *testing.T) {
 
 		assert.Error(t, err)
 		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutSetKey"))
-		assert.Less(t, end.Sub(start), time.Second*10)
+		assert.Less(t, end.Sub(start), time.Second*30)
 	})
 
 	t.Run("delete state request retries with resiliency", func(t *testing.T) {
@@ -3470,14 +3490,14 @@ func TestStateAPIWithResiliency(t *testing.T) {
 
 		assert.Error(t, err)
 		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutDeleteKey"))
-		assert.Less(t, end.Sub(start), time.Second*10)
+		assert.Less(t, end.Sub(start), time.Second*30)
 	})
 
 	t.Run("bulk state get fails with bulk support", func(t *testing.T) {
 		// Adding this will make the bulk operation fail
-		failingStore.BulkFailKey = "timeoutBulkGetKeyBulk"
+		failingStore.BulkFailKey.Store(ptr.Of("timeoutBulkGetKeyBulk"))
 		t.Cleanup(func() {
-			failingStore.BulkFailKey = ""
+			failingStore.BulkFailKey.Store(ptr.Of(""))
 		})
 
 		_, err := client.GetBulkState(context.Background(), &runtimev1pb.GetBulkStateRequest{
@@ -3528,7 +3548,7 @@ func TestStateAPIWithResiliency(t *testing.T) {
 		assert.Error(t, err)
 		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutBulkSetKey"))
 		assert.Equal(t, 0, failingStore.Failure.CallCount("goodTimeoutBulkSetKey"))
-		assert.Less(t, end.Sub(start), time.Second*10)
+		assert.Less(t, end.Sub(start), time.Second*30)
 	})
 
 	t.Run("state transaction passes after retries with resiliency", func(t *testing.T) {
@@ -3597,9 +3617,9 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 				"failingUnsubscribeKey": 1,
 			},
 			map[string]time.Duration{
-				"timeoutGetKey":         time.Second * 10,
-				"timeoutSubscribeKey":   time.Second * 10,
-				"timeoutUnsubscribeKey": time.Second * 10,
+				"timeoutGetKey":         time.Second * 30,
+				"timeoutSubscribeKey":   time.Second * 30,
+				"timeoutUnsubscribeKey": time.Second * 30,
 			},
 			map[string]int{},
 		),
@@ -3610,10 +3630,11 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 
 	fakeAPI := &api{
 		UniversalAPI: &universalapi.UniversalAPI{
-			AppID:     "fakeAPI",
-			CompStore: compStore,
+			AppID:      "fakeAPI",
+			Logger:     logger.NewLogger("grpc.api.test"),
+			CompStore:  compStore,
+			Resiliency: resiliency.FromConfigurations(logger.NewLogger("grpc.api.test"), testResiliency),
 		},
-		resiliency: resiliency.FromConfigurations(logger.NewLogger("grpc.api.test"), testResiliency),
 	}
 	server, lis := startDaprAPIServer(fakeAPI, "")
 	defer server.Stop()
@@ -3671,37 +3692,13 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 		assert.Error(t, err)
 		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("timeoutSubscribeKey"))
 	})
-
-	t.Run("test unsubscribe configuration retries with resiliency", func(t *testing.T) {
-		fakeAPI.CompStore.AddConfigurationSubscribe("failingUnsubscribeKey", make(chan struct{}))
-
-		_, err := client.UnsubscribeConfiguration(context.Background(), &runtimev1pb.UnsubscribeConfigurationRequest{
-			StoreName: "failConfig",
-			Id:        "failingUnsubscribeKey",
-		})
-
-		assert.NoError(t, err)
-		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("failingUnsubscribeKey"))
-	})
-
-	t.Run("test unsubscribe configuration fails due to timeout with resiliency", func(t *testing.T) {
-		fakeAPI.CompStore.AddConfigurationSubscribe("timeoutUnsubscribeKey", make(chan struct{}))
-
-		_, err := client.UnsubscribeConfiguration(context.Background(), &runtimev1pb.UnsubscribeConfigurationRequest{
-			StoreName: "failConfig",
-			Id:        "timeoutUnsubscribeKey",
-		})
-
-		assert.Error(t, err)
-		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("timeoutUnsubscribeKey"))
-	})
 }
 
 func TestSecretAPIWithResiliency(t *testing.T) {
 	failingStore := daprt.FailingSecretStore{
 		Failure: daprt.NewFailure(
 			map[string]int{"key": 1, "bulk": 1},
-			map[string]time.Duration{"timeout": time.Second * 10, "bulkTimeout": time.Second * 10},
+			map[string]time.Duration{"timeout": time.Second * 30, "bulkTimeout": time.Second * 30},
 			map[string]int{},
 		),
 	}
@@ -3740,7 +3737,7 @@ func TestSecretAPIWithResiliency(t *testing.T) {
 	})
 
 	t.Run("Get secret - timeout before request ends", func(t *testing.T) {
-		// Store sleeps for 10 seconds, let's make sure our timeout takes less time than that.
+		// Store sleeps for 30 seconds, let's make sure our timeout takes less time than that.
 		start := time.Now()
 		_, err := client.GetSecret(context.Background(), &runtimev1pb.GetSecretRequest{
 			StoreName: "failSecret",
@@ -3750,7 +3747,7 @@ func TestSecretAPIWithResiliency(t *testing.T) {
 
 		assert.Error(t, err)
 		assert.Equal(t, 2, failingStore.Failure.CallCount("timeout"))
-		assert.Less(t, end.Sub(start), time.Second*10)
+		assert.Less(t, end.Sub(start), time.Second*30)
 	})
 
 	t.Run("Get bulk secret - retries on initial failure with resiliency", func(t *testing.T) {
@@ -3773,7 +3770,7 @@ func TestSecretAPIWithResiliency(t *testing.T) {
 
 		assert.Error(t, err)
 		assert.Equal(t, 2, failingStore.Failure.CallCount("bulkTimeout"))
-		assert.Less(t, end.Sub(start), time.Second*10)
+		assert.Less(t, end.Sub(start), time.Second*30)
 	})
 }
 
@@ -3786,7 +3783,7 @@ func TestServiceInvocationWithResiliency(t *testing.T) {
 				"circuitBreakerKey": 10,
 			},
 			map[string]time.Duration{
-				"timeoutKey": time.Second * 10,
+				"timeoutKey": time.Second * 30,
 			},
 			map[string]int{},
 		),
@@ -3795,10 +3792,10 @@ func TestServiceInvocationWithResiliency(t *testing.T) {
 	// Setup Dapr API server
 	fakeAPI := &api{
 		UniversalAPI: &universalapi.UniversalAPI{
-			AppID: "fakeAPI",
+			AppID:      "fakeAPI",
+			Resiliency: resiliency.FromConfigurations(logger.NewLogger("grpc.api.test"), testResiliency),
 		},
 		directMessaging: failingDirectMessaging,
-		resiliency:      resiliency.FromConfigurations(logger.NewLogger("grpc.api.test"), testResiliency),
 	}
 
 	// Run test server
@@ -3842,7 +3839,7 @@ func TestServiceInvocationWithResiliency(t *testing.T) {
 
 		assert.Error(t, err)
 		assert.Equal(t, 2, failingDirectMessaging.Failure.CallCount("timeoutKey"))
-		assert.Less(t, end.Sub(start), time.Second*10)
+		assert.Less(t, end.Sub(start), time.Second*30)
 	})
 
 	t.Run("Test invoke direct messages fails after exhausting retries", func(t *testing.T) {
@@ -3948,8 +3945,11 @@ func TestTryLock(t *testing.T) {
 
 	t.Run("error when lock store not configured", func(t *testing.T) {
 		api := NewAPI(APIOpts{
-			Resiliency: resiliencyConfig,
-			CompStore:  compstore.New(),
+			UniversalAPI: &universalapi.UniversalAPI{
+				Resiliency: resiliencyConfig,
+				Logger:     l,
+				CompStore:  compstore.New(),
+			},
 		})
 		req := &runtimev1pb.TryLockRequest{
 			StoreName:       "abc",
@@ -3966,8 +3966,11 @@ func TestTryLock(t *testing.T) {
 		compStore := compstore.New()
 		compStore.AddLock("mock", daprt.NewMockStore(ctl))
 		api := NewAPI(APIOpts{
-			Resiliency: resiliencyConfig,
-			CompStore:  compStore,
+			UniversalAPI: &universalapi.UniversalAPI{
+				Resiliency: resiliencyConfig,
+				Logger:     l,
+				CompStore:  compStore,
+			},
 		})
 		req := &runtimev1pb.TryLockRequest{
 			StoreName:       "mock",
@@ -3984,8 +3987,11 @@ func TestTryLock(t *testing.T) {
 		compStore := compstore.New()
 		compStore.AddLock("mock", daprt.NewMockStore(ctl))
 		api := NewAPI(APIOpts{
-			Resiliency:  resiliencyConfig,
-			CompStore:   compStore,
+			UniversalAPI: &universalapi.UniversalAPI{
+				Resiliency: resiliencyConfig,
+				Logger:     l,
+				CompStore:  compStore,
+			},
 			TracingSpec: config.TracingSpec{},
 		})
 		req := &runtimev1pb.TryLockRequest{
@@ -4004,8 +4010,11 @@ func TestTryLock(t *testing.T) {
 		compStore := compstore.New()
 		compStore.AddLock("mock", daprt.NewMockStore(ctl))
 		api := NewAPI(APIOpts{
-			Resiliency:  resiliencyConfig,
-			CompStore:   compStore,
+			UniversalAPI: &universalapi.UniversalAPI{
+				Resiliency: resiliencyConfig,
+				Logger:     l,
+				CompStore:  compStore,
+			},
 			TracingSpec: config.TracingSpec{},
 		})
 
@@ -4026,8 +4035,11 @@ func TestTryLock(t *testing.T) {
 		compStore := compstore.New()
 		compStore.AddLock("mock", daprt.NewMockStore(ctl))
 		api := NewAPI(APIOpts{
-			Resiliency:  resiliencyConfig,
-			CompStore:   compStore,
+			UniversalAPI: &universalapi.UniversalAPI{
+				Resiliency: resiliencyConfig,
+				Logger:     l,
+				CompStore:  compStore,
+			},
 			TracingSpec: config.TracingSpec{},
 		})
 
@@ -4058,8 +4070,11 @@ func TestTryLock(t *testing.T) {
 		compStore := compstore.New()
 		compStore.AddLock("mock", mockLockStore)
 		api := NewAPI(APIOpts{
-			Resiliency:  resiliencyConfig,
-			CompStore:   compStore,
+			UniversalAPI: &universalapi.UniversalAPI{
+				Resiliency: resiliencyConfig,
+				Logger:     l,
+				CompStore:  compStore,
+			},
 			TracingSpec: config.TracingSpec{},
 		})
 		req := &runtimev1pb.TryLockRequest{
@@ -4080,9 +4095,12 @@ func TestUnlock(t *testing.T) {
 
 	t.Run("error when lock store not configured", func(t *testing.T) {
 		api := NewAPI(APIOpts{
-			Resiliency:  resiliencyConfig,
+			UniversalAPI: &universalapi.UniversalAPI{
+				Resiliency: resiliencyConfig,
+				Logger:     l,
+				CompStore:  compstore.New(),
+			},
 			TracingSpec: config.TracingSpec{},
-			CompStore:   compstore.New(),
 		})
 
 		req := &runtimev1pb.UnlockRequest{
@@ -4099,8 +4117,11 @@ func TestUnlock(t *testing.T) {
 		compStore := compstore.New()
 		compStore.AddLock("mock", daprt.NewMockStore(ctl))
 		api := NewAPI(APIOpts{
-			Resiliency: resiliencyConfig,
-			CompStore:  compStore,
+			UniversalAPI: &universalapi.UniversalAPI{
+				Resiliency: resiliencyConfig,
+				Logger:     l,
+				CompStore:  compStore,
+			},
 		})
 
 		req := &runtimev1pb.UnlockRequest{
@@ -4117,8 +4138,11 @@ func TestUnlock(t *testing.T) {
 		compStore := compstore.New()
 		compStore.AddLock("mock", daprt.NewMockStore(ctl))
 		api := NewAPI(APIOpts{
-			Resiliency: resiliencyConfig,
-			CompStore:  compStore,
+			UniversalAPI: &universalapi.UniversalAPI{
+				Resiliency: resiliencyConfig,
+				Logger:     l,
+				CompStore:  compStore,
+			},
 		})
 		req := &runtimev1pb.UnlockRequest{
 			StoreName:  "abc",
@@ -4135,8 +4159,11 @@ func TestUnlock(t *testing.T) {
 		compStore := compstore.New()
 		compStore.AddLock("mock", daprt.NewMockStore(ctl))
 		api := NewAPI(APIOpts{
-			Resiliency: resiliencyConfig,
-			CompStore:  compStore,
+			UniversalAPI: &universalapi.UniversalAPI{
+				Resiliency: resiliencyConfig,
+				Logger:     l,
+				CompStore:  compStore,
+			},
 		})
 
 		req := &runtimev1pb.UnlockRequest{
@@ -4164,8 +4191,11 @@ func TestUnlock(t *testing.T) {
 		compStore := compstore.New()
 		compStore.AddLock("mock", mockLockStore)
 		api := NewAPI(APIOpts{
-			Resiliency: resiliencyConfig,
-			CompStore:  compStore,
+			UniversalAPI: &universalapi.UniversalAPI{
+				Resiliency: resiliencyConfig,
+				Logger:     l,
+				CompStore:  compStore,
+			},
 		})
 		req := &runtimev1pb.UnlockRequest{
 			StoreName:  "mock",
@@ -4268,7 +4298,7 @@ func TestMetadata(t *testing.T) {
 			Actors:    mockActors,
 			Logger:    logger.NewLogger("grpc.api.test"),
 			CompStore: compStore,
-			GetComponentsCapabilitesFn: func() map[string][]string {
+			GetComponentsCapabilitiesFn: func() map[string][]string {
 				capsMap := make(map[string][]string)
 				capsMap["MockComponent1Name"] = []string{"mock.feat.MockComponent1Name"}
 				capsMap["MockComponent2Name"] = []string{"mock.feat.MockComponent2Name"}

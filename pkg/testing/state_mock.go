@@ -15,6 +15,7 @@ package testing
 
 import (
 	"context"
+	"sync/atomic"
 
 	mock "github.com/stretchr/testify/mock"
 
@@ -135,7 +136,7 @@ func (_m *MockStateStore) Close() error {
 
 type FailingStatestore struct {
 	Failure     Failure
-	BulkFailKey string
+	BulkFailKey atomic.Pointer[string]
 }
 
 func (f *FailingStatestore) BulkDelete(ctx context.Context, req []state.DeleteRequest, opts state.BulkStoreOpts) error {
@@ -177,8 +178,9 @@ func (f *FailingStatestore) Get(ctx context.Context, req *state.GetRequest) (*st
 }
 
 func (f *FailingStatestore) BulkGet(ctx context.Context, req []state.GetRequest, opts state.BulkGetOpts) ([]state.BulkGetResponse, error) {
-	if f.BulkFailKey != "" {
-		err := f.Failure.PerformFailure(f.BulkFailKey)
+	bfk := f.BulkFailKey.Load()
+	if bfk != nil && *bfk != "" {
+		err := f.Failure.PerformFailure(*bfk)
 		if err != nil {
 			return nil, err
 		}

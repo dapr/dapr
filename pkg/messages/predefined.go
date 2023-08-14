@@ -50,6 +50,7 @@ const (
 	ErrPubsubUnmarshal          = "error when unmarshaling the request for topic %s pubsub %s: %s"
 	ErrPubsubMarshal            = "error marshaling events to bytes for topic %s pubsub %s: %s"
 	ErrPubsubGetSubscriptions   = "unable to get app subscriptions %s"
+	ErrPublishOutbox            = "error while publishing outbox message: %s"
 
 	// AppChannel.
 	ErrChannelNotFound       = "app channel is not initialized"
@@ -75,9 +76,9 @@ const (
 	// Configuration.
 	ErrConfigurationStoresNotConfigured = "configuration stores not configured"
 	ErrConfigurationStoreNotFound       = "configuration store %s not found"
-	ErrConfigurationGet                 = "failed to get %s from Configuration store %s: %s"
-	ErrConfigurationSubscribe           = "failed to subscribe %s from Configuration store %s: %s"
-	ErrConfigurationUnsubscribe         = "failed to unsubscribe to configuration request %s: %s"
+	ErrConfigurationGet                 = "failed to get %s from Configuration store %s: %v"
+	ErrConfigurationSubscribe           = "failed to subscribe %s from Configuration store %s: %v"
+	ErrConfigurationUnsubscribe         = "failed to unsubscribe to configuration request %s: %v"
 )
 
 var (
@@ -90,7 +91,7 @@ var (
 	ErrMalformedRequest = APIError{"failed deserializing HTTP body: %v", "ERR_MALFORMED_REQUEST", http.StatusBadRequest, grpcCodes.InvalidArgument}
 
 	// DirectMessaging.
-	ErrDirectInvoke         = APIError{"fail to invoke, id: %s, err: %v", "ERR_DIRECT_INVOKE", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrDirectInvoke         = APIError{"failed to invoke, id: %s, err: %v", "ERR_DIRECT_INVOKE", http.StatusInternalServerError, grpcCodes.Internal}
 	ErrDirectInvokeNoAppID  = APIError{"failed getting app id either from the URL path or the header dapr-app-id", "ERR_DIRECT_INVOKE", http.StatusNotFound, grpcCodes.NotFound}
 	ErrDirectInvokeNotReady = APIError{"invoke API is not ready", "ERR_DIRECT_INVOKE", http.StatusInternalServerError, grpcCodes.Internal}
 

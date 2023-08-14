@@ -28,9 +28,9 @@ import (
 	redis "github.com/go-redis/redis/v9"
 )
 
-func testActorFactory(client dapr.Client, redisClient *redis.Client) func() actor.Server {
+func testActorFactory(client dapr.Client, redisClient *redis.Client) func() actor.ServerContext {
 	lockClient := redislock.New(redisClient)
-	return func() actor.Server {
+	return func() actor.ServerContext {
 		return &TestActor{
 			daprClient: client,
 			locker:     lockClient,
@@ -39,7 +39,7 @@ func testActorFactory(client dapr.Client, redisClient *redis.Client) func() acto
 }
 
 type TestActor struct {
-	actor.ServerImplBase
+	actor.ServerImplBaseCtx
 	daprClient dapr.Client
 	locker     *redislock.Client
 }
@@ -59,7 +59,7 @@ func (t *TestActor) Lock(ctx context.Context, req any) (any, error) {
 
 	if err == nil {
 		if releaseErr := lock.Release(ctx); releaseErr != nil {
-			time.Sleep(lockTimeout) // sleep to make sure that the lock will be automatically released
+			time.Sleep(lockTimeout * 2) // sleep to make sure that the lock will be automatically released
 		}
 	}
 	return "succeed", nil
@@ -87,9 +87,9 @@ func main() {
 	defer client.Close()
 
 	s := daprd.NewService(":3000")
-	s.RegisterActorImplFactory(testActorFactory(client, redisClient))
-	log.Println("started")
+	s.RegisterActorImplFactoryContext(testActorFactory(client, redisClient))
+	log.Println("Started")
 	if err := s.Start(); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("error listenning: %v", err)
+		log.Fatalf("Error listenning: %v", err)
 	}
 }

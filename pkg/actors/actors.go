@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"strconv"
@@ -76,9 +77,9 @@ var (
 //
 //nolint:interfacebloat
 type Actors interface {
+	io.Closer
 	Call(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error)
-	Init() error
-	Stop()
+	Init(context.Context) error
 	GetState(ctx context.Context, req *GetStateRequest) (*StateResponse, error)
 	TransactionalStateOperation(ctx context.Context, req *TransactionalRequest) error
 	GetReminder(ctx context.Context, req *GetReminderRequest) (*internal.Reminder, error)
@@ -109,11 +110,12 @@ type actorsRuntime struct {
 	resiliency           resiliency.Provider
 	storeName            string
 	compStore            *compstore.ComponentStore
-	ctx                  context.Context
-	cancel               context.CancelFunc
 	clock                clock.WithTicker
 	internalActors       map[string]InternalActor
 	internalActorChannel *internalActorChannel
+	wg                   sync.WaitGroup
+	closed               atomic.Bool
+	closeCh              chan struct{}
 
 	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 	stateTTLEnabled bool
@@ -145,7 +147,6 @@ func NewActors(opts ActorsOpts) Actors {
 func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) Actors {
 	appHealthy := &atomic.Bool{}
 	appHealthy.Store(true)
-	ctx, cancel := context.WithCancel(context.Background())
 
 	remindersProvider := reminders.NewRemindersProvider(clock, internal.RemindersProviderOpts{
 		StoreName: opts.StateStoreName,
@@ -165,8 +166,6 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) Actors {
 		placement:            opts.MockPlacement,
 		actorsTable:          &sync.Map{},
 		appHealthy:           appHealthy,
-		ctx:                  ctx,
-		cancel:               cancel,
 		clock:                clock,
 		internalActors:       map[string]InternalActor{},
 		internalActorChannel: newInternalActorChannel(),
@@ -174,6 +173,7 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) Actors {
 
 		// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 		stateTTLEnabled: opts.StateTTLEnabled,
+		closeCh:         make(chan struct{}),
 	}
 
 	a.timers.SetExecuteTimerFn(a.executeTimer)
@@ -209,13 +209,16 @@ func (a *actorsRuntime) haveCompatibleStorage() bool {
 	return state.FeatureETag.IsPresent(features) && state.FeatureTransactional.IsPresent(features)
 }
 
-func (a *actorsRuntime) Init() error {
-	conf := a.actorsConfig.Config
-	if len(conf.PlacementAddresses) == 0 {
+func (a *actorsRuntime) Init(ctx context.Context) error {
+	if a.closed.Load() {
+		return errors.New("actors runtime has already been closed")
+	}
+
+	if len(a.actorsConfig.PlacementAddresses) == 0 {
 		return errors.New("actors: couldn't connect to placement service: address is empty")
 	}
 
-	if len(a.actorsConfig.Config.HostedActorTypes) > 0 {
+	if len(a.actorsConfig.Config.HostedActorTypes.ListActorTypes()) > 0 {
 		if !a.haveCompatibleStorage() {
 			return ErrIncompatibleStateStore
 		}
@@ -223,8 +226,8 @@ func (a *actorsRuntime) Init() error {
 
 	hostname := net.JoinHostPort(a.actorsConfig.Config.HostAddress, strconv.Itoa(a.actorsConfig.Config.Port))
 
-	a.actorsReminders.Init(context.TODO())
-	a.timers.Init(context.TODO())
+	a.actorsReminders.Init(ctx)
+	a.timers.Init(ctx)
 
 	if a.placement == nil {
 		a.placement = placement.NewActorPlacement(placement.ActorPlacementOpts{
@@ -239,13 +242,20 @@ func (a *actorsRuntime) Init() error {
 			},
 			AfterTableUpdateFn: func() {
 				a.drainRebalancedActors()
-				a.actorsReminders.OnPlacementTablesUpdated(context.TODO())
+				a.actorsReminders.OnPlacementTablesUpdated(ctx)
 			},
 		})
 	}
 
-	go a.placement.Start(context.TODO())
-	go a.deactivationTicker(a.actorsConfig, a.deactivateActor)
+	a.wg.Add(3)
+	go func() {
+		defer a.wg.Done()
+		a.placement.Start(ctx)
+	}()
+	go func() {
+		defer a.wg.Done()
+		a.deactivationTicker(a.actorsConfig, a.deactivateActor)
+	}()
 
 	log.Infof("Actor runtime started. Actor idle timeout: %v. Actor scan interval: %v",
 		a.actorsConfig.Config.ActorIdleTimeout, a.actorsConfig.Config.ActorDeactivationScanInterval)
@@ -254,25 +264,30 @@ func (a *actorsRuntime) Init() error {
 	// disconnect from placement to remove the node from consistent hashing ring.
 	// i.e if app is busy state, the healthz status would be flaky, which leads to frequent
 	// actor rebalancing. It will impact the entire service.
-	go a.startAppHealthCheck(
-		health.WithFailureThreshold(4),
-		health.WithInterval(5*time.Second),
-		health.WithRequestTimeout(2*time.Second),
-		health.WithHTTPClient(a.actorsConfig.Config.HealthHTTPClient),
-	)
+	go func() {
+		defer a.wg.Done()
+		a.startAppHealthCheck(ctx,
+			health.WithFailureThreshold(4),
+			health.WithInterval(5*time.Second),
+			health.WithRequestTimeout(2*time.Second),
+			health.WithHTTPClient(a.actorsConfig.HealthHTTPClient),
+		)
+	}()
 
 	return nil
 }
 
-func (a *actorsRuntime) startAppHealthCheck(opts ...health.Option) {
-	if len(a.actorsConfig.Config.HostedActorTypes) == 0 || a.appChannel == nil {
+func (a *actorsRuntime) startAppHealthCheck(ctx context.Context, opts ...health.Option) {
+	if len(a.actorsConfig.Config.HostedActorTypes.ListActorTypes()) == 0 || a.appChannel == nil {
 		return
 	}
 
-	ch := health.StartEndpointHealthCheck(a.ctx, a.actorsConfig.Config.HealthEndpoint+"/healthz", opts...)
+	ch := health.StartEndpointHealthCheck(ctx, a.actorsConfig.HealthEndpoint+"/healthz", opts...)
 	for {
 		select {
-		case <-a.ctx.Done():
+		case <-ctx.Done():
+			break
+		case <-a.closeCh:
 			break
 		case appHealthy := <-ch:
 			a.appHealthy.Store(appHealthy)
@@ -342,7 +357,9 @@ func (a *actorsRuntime) deactivationTicker(configuration Config, deactivateFn de
 
 				durationPassed := t.Sub(actorInstance.lastUsedTime)
 				if durationPassed >= configuration.GetIdleTimeoutForType(actorInstance.actorType) {
+					a.wg.Add(1)
 					go func(actorKey string) {
+						defer a.wg.Done()
 						actorType, actorID := a.getActorTypeAndIDFromKey(actorKey)
 						err := deactivateFn(actorType, actorID)
 						if err != nil {
@@ -353,7 +370,7 @@ func (a *actorsRuntime) deactivationTicker(configuration Config, deactivateFn de
 
 				return true
 			})
-		case <-a.ctx.Done():
+		case <-a.closeCh:
 			return
 		}
 	}
@@ -923,8 +940,9 @@ func (a *actorsRuntime) RegisterInternalActor(ctx context.Context, actorType str
 }
 
 func (a *actorsRuntime) GetActiveActorsCount(ctx context.Context) []*runtimev1pb.ActiveActorsCount {
-	actorCountMap := make(map[string]int32, len(a.actorsConfig.Config.HostedActorTypes))
-	for actorType := range a.actorsConfig.Config.HostedActorTypes {
+	actorTypes := a.actorsConfig.Config.HostedActorTypes.ListActorTypes()
+	actorCountMap := make(map[string]int32, len(actorTypes))
+	for _, actorType := range actorTypes {
 		if !isInternalActor(actorType) {
 			actorCountMap[actorType] = 0
 		}
@@ -952,17 +970,17 @@ func isInternalActor(actorType string) bool {
 }
 
 // Stop closes all network connections and resources used in actor runtime.
-func (a *actorsRuntime) Stop() {
-	if a.placement != nil {
-		err := a.placement.Close()
-		if err != nil {
-			log.Warnf("Failed to close placement service: %v", err)
+func (a *actorsRuntime) Close() error {
+	defer a.wg.Wait()
+
+	if a.closed.CompareAndSwap(false, true) {
+		defer close(a.closeCh)
+		if a.placement != nil {
+			return a.placement.Close()
 		}
 	}
-	if a.cancel != nil {
-		a.cancel()
-		a.cancel = nil
-	}
+
+	return nil
 }
 
 // ValidateHostEnvironment validates that actors can be initialized properly given a set of parameters

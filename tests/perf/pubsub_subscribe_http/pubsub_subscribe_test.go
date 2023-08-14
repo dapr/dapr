@@ -19,19 +19,19 @@ package pubsub_subscribe_http
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strconv"
 	"testing"
+
+	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/slices"
+	"gopkg.in/yaml.v3"
 
 	"github.com/dapr/dapr/tests/perf/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
 	"github.com/dapr/dapr/tests/runner/loadtest"
 	"github.com/dapr/dapr/tests/runner/summary"
-	"github.com/stretchr/testify/require"
-	"golang.org/x/exp/slices"
-	"gopkg.in/yaml.v3"
 )
 
 var (
@@ -63,7 +63,7 @@ func getAppDescription(pubsubComponent Component, pubsubType string) kube.AppDes
 		AppCPULimit:       "4.0",
 		AppCPURequest:     "0.1",
 		AppMemoryLimit:    "800Mi",
-		AppMemoryRequest:  "2500Mi",
+		AppMemoryRequest:  "250Mi",
 		Labels: map[string]string{
 			"daprtest": pubsubComponent.TestLabel + "-" + pubsubType,
 		},
@@ -89,7 +89,7 @@ func TestMain(m *testing.M) {
 	}
 
 	//Read the config file for individual components
-	data, err := ioutil.ReadFile(pubsubTestConfigFileName)
+	data, err := os.ReadFile(pubsubTestConfigFileName)
 	if err != nil {
 		fmt.Printf("error reading %v: %v\n", pubsubTestConfigFileName, err)
 		return
@@ -125,6 +125,7 @@ func runTest(t *testing.T, testAppURL, publishType, subscribeType, httpReqDurati
 
 	k6Test := loadtest.NewK6("./test.js",
 		loadtest.WithParallelism(1),
+		loadtest.WithAppID("k6-tester-pubsub-subscribe-http"),
 		//loadtest.EnableLog(), // uncomment this to enable k6 logs, this however breaks reporting, only for debugging.
 		loadtest.WithRunnerEnvVar("TARGET_URL", testAppURL),
 		loadtest.WithRunnerEnvVar("PUBSUB_NAME", component.Name),
@@ -191,7 +192,7 @@ func TestPubsubBulkPublishSubscribeHttpPerformance(t *testing.T) {
 			require.NotEmpty(t, testAppURL, "test app external URL must not be empty")
 
 			// Check if test app endpoint is available
-			t.Logf("test app url: %s", testAppURL+"/health")
+			t.Logf("test app: '%s' url: '%s'", component.TestAppName+"-"+normalPubsubType, testAppURL)
 			_, err := utils.HTTPGetNTimes(testAppURL+"/health", component.NumHealthChecks)
 			require.NoError(t, err)
 
@@ -206,7 +207,6 @@ func TestPubsubBulkPublishSubscribeHttpPerformance(t *testing.T) {
 }
 
 func TestPubsubBulkPublishBulkSubscribeHttpPerformance(t *testing.T) {
-
 	for _, component := range configs.Components {
 		if !slices.Contains(component.Operations, bulkPubsubType) {
 			t.Logf("Bulk pubsub test is not added in operations, skipping %s test for bulk pubsub", component.Name)
@@ -219,7 +219,7 @@ func TestPubsubBulkPublishBulkSubscribeHttpPerformance(t *testing.T) {
 			require.NotEmpty(t, bulkTestAppURL, "test app external URL must not be empty")
 
 			// Check if test app endpoint is available
-			t.Logf("bulk test app url: %s", bulkTestAppURL+"/health")
+			t.Logf("bulk test app: '%s' url: %s", component.TestAppName+"-"+bulkPubsubType, bulkTestAppURL)
 			_, err := utils.HTTPGetNTimes(bulkTestAppURL+"/health", component.NumHealthChecks)
 			require.NoError(t, err)
 

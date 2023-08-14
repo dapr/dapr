@@ -474,7 +474,7 @@ async function cmdTestVersionSkew(
     }
 
     // Get pull request
-    const pull = await github.pulls.get({
+    const pull = await github.rest.pulls.get({
         owner: issue.owner,
         repo: issue.repo,
         pull_number: issue.number,
@@ -492,7 +492,7 @@ async function cmdTestVersionSkew(
         }
 
         // Fire repository_dispatch event to trigger e2e test
-        await github.repos.createDispatchEvent({
+        await github.rest.repos.createDispatchEvent({
             owner: issue.owner,
             repo: issue.repo,
             event_type: command.substring(1),

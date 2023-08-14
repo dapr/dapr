@@ -16,10 +16,17 @@ package pubsub
 import (
 	"context"
 
+	"golang.org/x/exp/maps"
+
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/utils"
 )
+
+type bulkSubscribeResiliencyRes struct {
+	entries  []contribpubsub.BulkSubscribeResponseEntry
+	envelope map[string]interface{}
+}
 
 // applyBulkSubscribeResiliency applies resiliency support to bulk subscribe. It tries to filter
 // out the messages that have been successfully processed and only retries the ones that have failed
@@ -29,9 +36,9 @@ func (p *pubsub) applyBulkSubscribeResiliency(ctx context.Context, bulkSubCallDa
 ) (*[]contribpubsub.BulkSubscribeResponseEntry, error) {
 	bscData := *bulkSubCallData
 	policyRunner := resiliency.NewRunnerWithOptions(
-		ctx, policyDef, resiliency.RunnerOpts[*[]contribpubsub.BulkSubscribeResponseEntry]{
-			Accumulator: func(bsre *[]contribpubsub.BulkSubscribeResponseEntry) {
-				for _, v := range *bsre {
+		ctx, policyDef, resiliency.RunnerOpts[*bulkSubscribeResiliencyRes]{
+			Accumulator: func(bsrr *bulkSubscribeResiliencyRes) {
+				for _, v := range bsrr.entries {
 					// add to main bulkResponses
 					if index, ok := (*bscData.entryIdIndexMap)[v.EntryId]; ok {
 						(*bscData.bulkResponses)[index].EntryId = v.EntryId
@@ -48,15 +55,18 @@ func (p *pubsub) applyBulkSubscribeResiliency(ctx context.Context, bulkSubCallDa
 				psm.length = len(filteredPubSubMsgs)
 			},
 		})
-	_, err := policyRunner(func(ctx context.Context) (*[]contribpubsub.BulkSubscribeResponseEntry, error) {
+	_, err := policyRunner(func(ctx context.Context) (*bulkSubscribeResiliencyRes, error) {
 		var pErr error
-		bsre := []contribpubsub.BulkSubscribeResponseEntry{}
-		if p.isHTTP {
-			pErr = p.publishBulkMessageHTTP(ctx, &bscData, &psm, &bsre, envelope, deadLetterTopic)
-		} else {
-			pErr = p.publishBulkMessageGRPC(ctx, &bscData, &psm, &bsre, rawPayload)
+		bsrr := &bulkSubscribeResiliencyRes{
+			entries:  make([]contribpubsub.BulkSubscribeResponseEntry, 0, len(psm.pubSubMessages)),
+			envelope: maps.Clone(envelope),
 		}
-		return &bsre, pErr
+		if p.isHTTP {
+			pErr = p.publishBulkMessageHTTP(ctx, &bscData, &psm, bsrr, deadLetterTopic)
+		} else {
+			pErr = p.publishBulkMessageGRPC(ctx, &bscData, &psm, &bsrr.entries, rawPayload)
+		}
+		return bsrr, pErr
 	})
 	// setting error if any entry has not been yet touched - only use case that seems possible is of timeout
 	for eId, ind := range *bscData.entryIdIndexMap { //nolint:stylecheck

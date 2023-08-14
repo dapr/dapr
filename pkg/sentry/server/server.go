@@ -1,216 +1,191 @@
+/*
+Copyright 2023 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package server
 
 import (
 	"context"
-	"crypto/tls"
-	"errors"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"net"
-	"time"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
-	"github.com/dapr/dapr/pkg/sentry/ca"
-	"github.com/dapr/dapr/pkg/sentry/certs"
-	"github.com/dapr/dapr/pkg/sentry/csr"
-	"github.com/dapr/dapr/pkg/sentry/identity"
+	"github.com/dapr/dapr/pkg/security"
+	secpem "github.com/dapr/dapr/pkg/security/pem"
 	"github.com/dapr/dapr/pkg/sentry/monitoring"
+	"github.com/dapr/dapr/pkg/sentry/server/ca"
+	"github.com/dapr/dapr/pkg/sentry/server/validator"
 	"github.com/dapr/kit/logger"
-)
-
-const (
-	serverCertExpiryBuffer = time.Minute * 15
 )
 
 var log = logger.NewLogger("dapr.sentry.server")
 
-// CAServer is an interface for the Certificate Authority server.
-type CAServer interface {
-	Run(ctx context.Context, port int, trustBundle ca.TrustRootBundler) error
+// Options is the configuration for the server.
+type Options struct {
+	// Port is the port that the server will listen on.
+	Port int
+
+	// Security is the security handler for the server.
+	Security security.Handler
+
+	// Validator are the client authentication validator.
+	Validators map[sentryv1pb.SignCertificateRequest_TokenValidator]validator.Validator
+
+	// Name of the default validator to use if the request doesn't specify one.
+	DefaultValidator sentryv1pb.SignCertificateRequest_TokenValidator
+
+	// CA is the certificate authority which signs client certificates.
+	CA ca.Signer
 }
 
+// server is the gRPC server for the Sentry service.
 type server struct {
-	certificate *tls.Certificate
-	certAuth    ca.CertificateAuthority
-	srv         *grpc.Server
-	validator   identity.Validator
+	vals             map[sentryv1pb.SignCertificateRequest_TokenValidator]validator.Validator
+	defaultValidator sentryv1pb.SignCertificateRequest_TokenValidator
+	ca               ca.Signer
 }
 
-// NewCAServer returns a new CA Server running a gRPC server.
-func NewCAServer(ca ca.CertificateAuthority, validator identity.Validator) CAServer {
-	return &server{
-		certAuth:  ca,
-		validator: validator,
-	}
-}
-
-// Run starts a secured gRPC server for the Sentry Certificate Authority.
-// It enforces client side cert validation using the trust root cert.
-func (s *server) Run(ctx context.Context, port int, trustBundler ca.TrustRootBundler) error {
-	addr := fmt.Sprintf(":%d", port)
-	lis, err := net.Listen("tcp", addr)
+// Start starts the server. Blocks until the context is cancelled.
+func Start(ctx context.Context, opts Options) error {
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", opts.Port))
 	if err != nil {
-		return fmt.Errorf("could not listen on %s: %w", addr, err)
+		return fmt.Errorf("could not listen on port %d: %w", opts.Port, err)
 	}
 
-	tlsOpt := s.tlsServerOption(trustBundler)
-	s.srv = grpc.NewServer(tlsOpt)
-	sentryv1pb.RegisterCAServer(s.srv, s)
+	// No client auth because we auth based on the client SignCertificateRequest.
+	srv := grpc.NewServer(opts.Security.GRPCServerOptionNoClientAuth())
 
-	serveErr := make(chan error, 1)
-	log.Infof("sentry server is listening on %s", lis.Addr())
+	s := &server{
+		vals:             opts.Validators,
+		defaultValidator: opts.DefaultValidator,
+		ca:               opts.CA,
+	}
+	sentryv1pb.RegisterCAServer(srv, s)
+
+	errCh := make(chan error, 1)
 	go func() {
-		if err := s.srv.Serve(lis); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
-			serveErr <- fmt.Errorf("grpc serve error: %w", err)
+		log.Infof("Running gRPC server on port %d", opts.Port)
+		if err := srv.Serve(lis); err != nil {
+			errCh <- fmt.Errorf("failed to serve: %w", err)
 			return
 		}
-		serveErr <- nil
+		errCh <- nil
 	}()
 
 	<-ctx.Done()
-	log.Info("sentry server is shutting down")
-	s.srv.GracefulStop()
-	return <-serveErr
+	log.Info("Shutting down gRPC server")
+	srv.GracefulStop()
+	return <-errCh
 }
 
-func (s *server) tlsServerOption(trustBundler ca.TrustRootBundler) grpc.ServerOption {
-	cp := trustBundler.GetTrustAnchors()
-
-	config := &tls.Config{
-		ClientCAs: cp,
-		// Require cert verification
-		ClientAuth: tls.RequireAndVerifyClientCert,
-		GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
-			if s.certificate == nil || needsRefresh(s.certificate, serverCertExpiryBuffer) {
-				cert, err := s.getServerCertificate()
-				if err != nil {
-					monitoring.ServerCertIssueFailed("server_cert")
-					log.Error(err)
-					return nil, fmt.Errorf("failed to get TLS server certificate: %w", err)
-				}
-				s.certificate = cert
-			}
-			return s.certificate, nil
-		},
-		MinVersion: tls.VersionTLS12,
-	}
-	return grpc.Creds(credentials.NewTLS(config))
-}
-
-func (s *server) getServerCertificate() (*tls.Certificate, error) {
-	csrPem, pkPem, err := csr.GenerateCSR("", false)
-	if err != nil {
-		return nil, err
-	}
-
-	now := time.Now().UTC()
-	issuerExp := s.certAuth.GetCACertBundle().GetIssuerCertExpiry()
-	if issuerExp == nil {
-		return nil, errors.New("could not find expiration in issuer certificate")
-	}
-	serverCertTTL := issuerExp.Sub(now)
-
-	resp, err := s.certAuth.SignCSR(csrPem, s.certAuth.GetCACertBundle().GetTrustDomain(), nil, serverCertTTL, false)
-	if err != nil {
-		return nil, err
-	}
-
-	certPem := resp.CertPEM
-	certPem = append(certPem, s.certAuth.GetCACertBundle().GetIssuerCertPem()...)
-	if rootCertPem := s.certAuth.GetCACertBundle().GetRootCertPem(); len(rootCertPem) > 0 {
-		certPem = append(certPem, rootCertPem...)
-	}
-
-	cert, err := tls.X509KeyPair(certPem, pkPem)
-	if err != nil {
-		return nil, err
-	}
-
-	return &cert, nil
-}
-
-// SignCertificate handles CSR requests originating from Dapr sidecars.
-// The method receives a request with an identity and initial cert and returns
-// A signed certificate including the trust chain to the caller along with an expiry date.
+// SignCertificate implements the SignCertificate gRPC method.
 func (s *server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (*sentryv1pb.SignCertificateResponse, error) {
 	monitoring.CertSignRequestReceived()
-
-	csrPem := req.GetCertificateSigningRequest()
-
-	csr, err := certs.ParsePemCSR(csrPem)
+	resp, err := s.signCertificate(ctx, req)
 	if err != nil {
-		err = fmt.Errorf("cannot parse certificate signing request pem: %w", err)
-		log.Error(err)
-		monitoring.CertSignFailed("cert_parse")
+		monitoring.CertSignFailed("sign")
 		return nil, err
 	}
-
-	err = s.certAuth.ValidateCSR(csr)
-	if err != nil {
-		err = fmt.Errorf("error validating csr: %w", err)
-		log.Error(err)
-		monitoring.CertSignFailed("cert_validation")
-		return nil, err
-	}
-
-	err = s.validator.Validate(req.GetId(), req.GetToken(), req.GetNamespace())
-	if err != nil {
-		err = fmt.Errorf("error validating requester identity: %w", err)
-		log.Error(err)
-		monitoring.CertSignFailed("req_id_validation")
-		return nil, err
-	}
-
-	identity := identity.NewBundle(csr.Subject.CommonName, req.GetNamespace(), req.GetTrustDomain())
-	signed, err := s.certAuth.SignCSR(csrPem, csr.Subject.CommonName, identity, -1, false)
-	if err != nil {
-		err = fmt.Errorf("error signing csr: %w", err)
-		log.Error(err)
-		monitoring.CertSignFailed("cert_sign")
-		return nil, err
-	}
-
-	certPem := signed.CertPEM
-	issuerCert := s.certAuth.GetCACertBundle().GetIssuerCertPem()
-	rootCert := s.certAuth.GetCACertBundle().GetRootCertPem()
-
-	certPem = append(certPem, issuerCert...)
-	if len(rootCert) > 0 {
-		certPem = append(certPem, rootCert...)
-	}
-
-	if len(certPem) == 0 {
-		err = errors.New("insufficient data in certificate signing request, no certs signed")
-		log.Error(err)
-		monitoring.CertSignFailed("insufficient_data")
-		return nil, err
-	}
-
-	expiry := timestamppb.New(signed.Certificate.NotAfter)
-	if err = expiry.CheckValid(); err != nil {
-		return nil, fmt.Errorf("could not validate certificate validity: %w", err)
-	}
-
-	resp := &sentryv1pb.SignCertificateResponse{
-		WorkloadCertificate:    certPem,
-		TrustChainCertificates: [][]byte{issuerCert, rootCert},
-		ValidUntil:             expiry,
-	}
-
 	monitoring.CertSignSucceed()
-
 	return resp, nil
 }
 
-func needsRefresh(cert *tls.Certificate, expiryBuffer time.Duration) bool {
-	leaf := cert.Leaf
-	if leaf == nil {
-		return true
+func (s *server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (*sentryv1pb.SignCertificateResponse, error) {
+	validator := s.defaultValidator
+	if req.TokenValidator != sentryv1pb.SignCertificateRequest_UNKNOWN && req.TokenValidator.String() != "" {
+		validator = req.TokenValidator
+	}
+	if validator == sentryv1pb.SignCertificateRequest_UNKNOWN {
+		return nil, status.Error(codes.InvalidArgument, "a validator name must be specified in this environment")
+	}
+	if _, ok := s.vals[validator]; !ok {
+		return nil, status.Error(codes.InvalidArgument, "the requested validator is not enabled")
 	}
 
-	// Check if the leaf certificate is about to expire.
-	return leaf.NotAfter.Add(-serverCertExpiryBuffer).Before(time.Now().UTC())
+	log.Debugf("Processing SignCertificate request for %s/%s (validator: %s)", req.Namespace, req.Id, validator.String())
+
+	trustDomain, err := s.vals[validator].Validate(ctx, req)
+	if err != nil {
+		return nil, status.Error(codes.PermissionDenied, err.Error())
+	}
+
+	der, _ := pem.Decode(req.GetCertificateSigningRequest())
+	if der == nil {
+		log.Debug("Invalid CSR: PEM block is nil")
+		return nil, status.Error(codes.InvalidArgument, "invalid certificate signing request")
+	}
+	// TODO: @joshvanl: Before v1.12, daprd was sending CSRs with the PEM block type "CERTIFICATE"
+	// After 1.14, allow only "CERTIFICATE REQUEST"
+	if der.Type != "CERTIFICATE REQUEST" && der.Type != "CERTIFICATE" {
+		log.Debugf("Invalid CSR: PEM block type is invalid: %q", der.Type)
+		return nil, status.Error(codes.InvalidArgument, "invalid certificate signing request")
+	}
+	csr, err := x509.ParseCertificateRequest(der.Bytes)
+	if err != nil {
+		log.Debugf("Failed to parse CSR: %v", err)
+		return nil, status.Errorf(codes.InvalidArgument, "failed to parse certificate signing request: %v", err)
+	}
+
+	if csr.CheckSignature() != nil {
+		log.Debugf("Invalid CSR: invalid signature")
+		return nil, status.Error(codes.InvalidArgument, "invalid signature")
+	}
+
+	// TODO: @joshvanl: before v1.12, daprd was matching on
+	// `<app-id>.<namespace>.svc.cluster.local` DNS SAN name so without this,
+	// daprd->daprd connections would fail. This is no longer the case since we
+	// now match with SPIFFE URI SAN, but we need to keep this here for backwards
+	// compatibility. Remove after v1.14.
+	var dns []string
+	switch {
+	case req.Namespace == security.CurrentNamespace() && req.Id == "dapr-injector":
+		dns = []string{fmt.Sprintf("dapr-sidecar-injector.%s.svc", req.Namespace)}
+	case req.Namespace == security.CurrentNamespace() && req.Id == "dapr-operator":
+		dns = []string{fmt.Sprintf("dapr-webhook.%s.svc", req.Namespace)}
+	default:
+		dns = []string{fmt.Sprintf("%s.%s.svc.cluster.local", req.Id, req.Namespace)}
+	}
+
+	chain, err := s.ca.SignIdentity(ctx, &ca.SignRequest{
+		PublicKey:          csr.PublicKey,
+		SignatureAlgorithm: csr.SignatureAlgorithm,
+		TrustDomain:        trustDomain.String(),
+		Namespace:          req.Namespace,
+		AppID:              req.Id,
+		DNS:                dns,
+	})
+	if err != nil {
+		log.Errorf("Error signing identity: %v", err)
+		return nil, status.Error(codes.Internal, "failed to sign certificate")
+	}
+
+	chainPEM, err := secpem.EncodeX509Chain(chain)
+	if err != nil {
+		log.Errorf("Error encoding certificate chain: %v", err)
+		return nil, status.Error(codes.Internal, "failed to encode certificate chain")
+	}
+
+	return &sentryv1pb.SignCertificateResponse{
+		WorkloadCertificate: chainPEM,
+		// We only populate the trust chain and valid until for clients pre-1.12.
+		// TODO: Remove fields in 1.14.
+		TrustChainCertificates: [][]byte{s.ca.TrustAnchors()},
+		ValidUntil:             timestamppb.New(chain[0].NotAfter),
+	}, nil
 }

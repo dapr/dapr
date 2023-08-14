@@ -20,6 +20,7 @@ import (
 	"net"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"google.golang.org/grpc"
@@ -58,13 +59,16 @@ type AppChannelConfig struct {
 
 // Manager is a wrapper around gRPC connection pooling.
 type Manager struct {
-	remoteConns       *RemoteConnectionPool
-	auth              security.Authenticator
-	mode              modes.DaprMode
-	channelConfig     *AppChannelConfig
-	localConn         *ConnectionPool
-	localConnCreateFn ConnCreatorFn
-	localConnLock     sync.RWMutex
+	remoteConns   *RemoteConnectionPool
+	auth          security.Authenticator
+	mode          modes.DaprMode
+	channelConfig *AppChannelConfig
+	localConn     *ConnectionPool
+	localConnLock sync.RWMutex
+	appClientConn grpc.ClientConnInterface
+	wg            sync.WaitGroup
+	closed        atomic.Bool
+	closeCh       chan struct{}
 }
 
 // NewGRPCManager returns a new grpc manager.
@@ -74,6 +78,7 @@ func NewGRPCManager(mode modes.DaprMode, channelConfig *AppChannelConfig) *Manag
 		mode:          mode,
 		channelConfig: channelConfig,
 		localConn:     NewConnectionPool(maxConnIdle, 1),
+		closeCh:       make(chan struct{}),
 	}
 }
 
@@ -108,31 +113,21 @@ func (g *Manager) GetAppChannel() (channel.AppChannel, error) {
 // GetAppClient returns the gRPC connection to the local app.
 // If there's no active connection to the app, it creates one.
 func (g *Manager) GetAppClient() (grpc.ClientConnInterface, error) {
-	if g.localConnCreateFn != nil {
-		return g.localConn.Get(g.localConnCreateFn)
+	if g.appClientConn == nil {
+		c, err := g.defaultLocalConnCreateFn()
+		if err != nil {
+			return nil, err
+		}
+
+		g.appClientConn = c
 	}
-	return g.localConn.Get(g.defaultLocalConnCreateFn)
+
+	return g.appClientConn, nil
 }
 
-// ReleaseAppClient decreases the reference counter of a gRPC connection in the connection pool.
-func (g *Manager) ReleaseAppClient(conn grpc.ClientConnInterface) {
-	g.localConn.Release(conn)
-}
-
-// CloseAppClient closes the active app client connections.
-func (g *Manager) CloseAppClient() {
-	g.localConn.DestroyAll()
-}
-
-// SetLocalConnCreateFn sets the function used to create local connections.
-// It also destroys all existing local channel connections.
-// Set fn to nil to reset to the built-in function.
-func (g *Manager) SetLocalConnCreateFn(fn ConnCreatorFn) {
-	g.localConnLock.Lock()
-	defer g.localConnLock.Unlock()
-
-	g.localConn.DestroyAll()
-	g.localConnCreateFn = fn
+// SetAppClientConn is used by tests to override the default connection
+func (g *Manager) SetAppClientConn(conn grpc.ClientConnInterface) {
+	g.appClientConn = conn
 }
 
 func (g *Manager) defaultLocalConnCreateFn() (grpc.ClientConnInterface, error) {
@@ -236,8 +231,8 @@ func (g *Manager) connectRemote(
 	dialPrefix := GetDialAddressPrefix(g.mode)
 
 	ctx, cancel := context.WithTimeout(parentCtx, dialTimeout)
+	defer cancel()
 	conn, err = grpc.DialContext(ctx, dialPrefix+address, opts...)
-	cancel()
 	if err != nil {
 		return nil, err
 	}
@@ -257,14 +252,32 @@ func (g *Manager) connTeardownFactory(address string, conn *grpc.ClientConn) fun
 
 // StartCollector starts a background goroutine that periodically watches for expired connections and purges them.
 func (g *Manager) StartCollector() {
+	g.wg.Add(1)
 	go func() {
+		defer g.wg.Done()
+
 		t := time.NewTicker(45 * time.Second)
 		defer t.Stop()
-		for range t.C {
-			g.localConn.Purge()
-			g.remoteConns.Purge()
+
+		for {
+			select {
+			case <-g.closeCh:
+				return
+			case <-t.C:
+				g.localConn.Purge()
+				g.remoteConns.Purge()
+			}
 		}
 	}()
+}
+
+func (g *Manager) Close() error {
+	defer g.wg.Wait()
+	if g.closed.CompareAndSwap(false, true) {
+		close(g.closeCh)
+	}
+
+	return nil
 }
 
 func nopTeardown(destroy bool) {

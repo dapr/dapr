@@ -107,7 +107,7 @@ func (c *componentName) Run(t *testing.T, ctx context.Context) {
 			getURL := fmt.Sprintf("http://localhost:%d/v1.0/secrets/%s/key1", c.daprd.HTTPPort(), url.QueryEscape(secretStoreName))
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, getURL, nil)
 			require.NoError(t, err)
-			resp, err := http.DefaultClient.Do(req)
+			resp, err := util.HTTPClient(t).Do(req)
 			require.NoError(t, err)
 			// TODO: @joshvanl: 500 is obviously the wrong status code here and
 			// should be changed.

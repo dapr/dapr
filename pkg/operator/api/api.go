@@ -491,7 +491,7 @@ func (a *apiServer) ListHTTPEndpoints(ctx context.Context, in *operatorv1pb.List
 		e := endpoints.Items[i]
 		err := processHTTPEndpointSecrets(ctx, &e, item.Namespace, a.Client)
 		if err != nil {
-			log.Warnf("error processing secrets for http endpoint %s", item.Name, item.Namespace, err)
+			log.Warnf("error processing secrets for http endpoint '%s/%s': %s", item.Namespace, item.Name, err)
 			return &operatorv1pb.ListHTTPEndpointsResponse{}, err
 		}
 

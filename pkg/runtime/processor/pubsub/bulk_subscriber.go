@@ -319,7 +319,7 @@ func (p *pubsub) createEnvelopeAndInvokeSubscriber(ctx context.Context, bulkSubC
 
 // publishBulkMessageHTTP publishes bulk message to a subscriber using HTTP and takes care of corresponding responses.
 func (p *pubsub) publishBulkMessageHTTP(ctx context.Context, bulkSubCallData *bulkSubscribeCallData, psm *bulkSubscribedMessage,
-	bulkResponses *[]contribpubsub.BulkSubscribeResponseEntry, envelope map[string]any, deadLetterTopic string,
+	bsrr *bulkSubscribeResiliencyRes, deadLetterTopic string,
 ) error {
 	bscData := *bulkSubCallData
 	rawMsgEntries := make([]*runtimePubsub.BulkSubscribeMessageItem, len(psm.pubSubMessages))
@@ -328,8 +328,8 @@ func (p *pubsub) publishBulkMessageHTTP(ctx context.Context, bulkSubCallData *bu
 		rawMsgEntries[i] = pubSubMsg.rawData
 	}
 
-	envelope[runtimePubsub.Entries] = rawMsgEntries
-	da, marshalErr := json.Marshal(&envelope)
+	bsrr.envelope[runtimePubsub.Entries] = rawMsgEntries
+	da, marshalErr := json.Marshal(&bsrr.envelope)
 
 	if marshalErr != nil {
 		log.Errorf("Error serializing bulk cloud event in pubsub %s and topic %s: %s", psm.pubsub, psm.topic, marshalErr)
@@ -346,7 +346,7 @@ func (p *pubsub) publishBulkMessageHTTP(ctx context.Context, bulkSubCallData *bu
 			if dlqErr := p.sendBulkToDeadLetter(ctx, bulkSubCallData, &bulkMsg, deadLetterTopic, true); dlqErr == nil {
 				// dlq has been configured and message is successfully sent to dlq.
 				for _, item := range rawMsgEntries {
-					addBulkResponseEntry(bulkResponses, item.EntryId, nil)
+					addBulkResponseEntry(&bsrr.entries, item.EntryId, nil)
 				}
 				return nil
 			}
@@ -354,7 +354,7 @@ func (p *pubsub) publishBulkMessageHTTP(ctx context.Context, bulkSubCallData *bu
 		bscData.bulkSubDiag.statusWiseDiag[string(contribpubsub.Retry)] += int64(len(rawMsgEntries))
 
 		for _, item := range rawMsgEntries {
-			addBulkResponseEntry(bulkResponses, item.EntryId, marshalErr)
+			addBulkResponseEntry(&bsrr.entries, item.EntryId, marshalErr)
 		}
 		return marshalErr
 	}
@@ -394,7 +394,7 @@ func (p *pubsub) publishBulkMessageHTTP(ctx context.Context, bulkSubCallData *bu
 	if err != nil {
 		bscData.bulkSubDiag.statusWiseDiag[string(contribpubsub.Retry)] += int64(len(rawMsgEntries))
 		bscData.bulkSubDiag.elapsed = elapsed
-		populateBulkSubscribeResponsesWithError(psm, bulkResponses, err)
+		populateBulkSubscribeResponsesWithError(psm, &bsrr.entries, err)
 		return fmt.Errorf("error from app channel while sending pub/sub event to app: %w", err)
 	}
 	defer resp.Close()
@@ -414,7 +414,7 @@ func (p *pubsub) publishBulkMessageHTTP(ctx context.Context, bulkSubCallData *bu
 		if err != nil {
 			bscData.bulkSubDiag.statusWiseDiag[string(contribpubsub.Retry)] += int64(len(rawMsgEntries))
 			bscData.bulkSubDiag.elapsed = elapsed
-			populateBulkSubscribeResponsesWithError(psm, bulkResponses, err)
+			populateBulkSubscribeResponsesWithError(psm, &bsrr.entries, err)
 			return fmt.Errorf("failed unmarshalling app response for bulk subscribe: %w", err)
 		}
 
@@ -428,23 +428,23 @@ func (p *pubsub) publishBulkMessageHTTP(ctx context.Context, bulkSubCallData *bu
 				case contribpubsub.Retry:
 					bscData.bulkSubDiag.statusWiseDiag[string(contribpubsub.Retry)]++
 					entryRespReceived[response.EntryId] = true
-					addBulkResponseEntry(bulkResponses, response.EntryId,
+					addBulkResponseEntry(&bsrr.entries, response.EntryId,
 						fmt.Errorf("RETRY required while processing bulk subscribe event for entry id: %v", response.EntryId))
 					hasAnyError = true
 				case contribpubsub.Success:
 					bscData.bulkSubDiag.statusWiseDiag[string(contribpubsub.Success)]++
 					entryRespReceived[response.EntryId] = true
-					addBulkResponseEntry(bulkResponses, response.EntryId, nil)
+					addBulkResponseEntry(&bsrr.entries, response.EntryId, nil)
 				case contribpubsub.Drop:
 					bscData.bulkSubDiag.statusWiseDiag[string(contribpubsub.Drop)]++
 					entryRespReceived[response.EntryId] = true
 					log.Warnf("DROP status returned from app while processing pub/sub event %v", response.EntryId)
-					addBulkResponseEntry(bulkResponses, response.EntryId, nil)
+					addBulkResponseEntry(&bsrr.entries, response.EntryId, nil)
 				default:
 					// Consider unknown status field as error and retry
 					bscData.bulkSubDiag.statusWiseDiag[string(contribpubsub.Retry)]++
 					entryRespReceived[response.EntryId] = true
-					addBulkResponseEntry(bulkResponses, response.EntryId,
+					addBulkResponseEntry(&bsrr.entries, response.EntryId,
 						fmt.Errorf("unknown status returned from app while processing bulk subscribe event %v: %v", response.EntryId, response.Status))
 					hasAnyError = true
 				}
@@ -455,7 +455,7 @@ func (p *pubsub) publishBulkMessageHTTP(ctx context.Context, bulkSubCallData *bu
 		}
 		for _, item := range rawMsgEntries {
 			if !entryRespReceived[item.EntryId] {
-				addBulkResponseEntry(bulkResponses, item.EntryId,
+				addBulkResponseEntry(&bsrr.entries, item.EntryId,
 					fmt.Errorf("Response not received, RETRY required while processing bulk subscribe event for entry id: %v", item.EntryId), //nolint:stylecheck
 				)
 				hasAnyError = true
@@ -478,7 +478,7 @@ func (p *pubsub) publishBulkMessageHTTP(ctx context.Context, bulkSubCallData *bu
 		log.Errorf("Non-retriable error returned from app while processing bulk pub/sub event. status code returned: %v", statusCode)
 		bscData.bulkSubDiag.statusWiseDiag[string(contribpubsub.Drop)] += int64(len(rawMsgEntries))
 		bscData.bulkSubDiag.elapsed = elapsed
-		populateBulkSubscribeResponsesWithError(psm, bulkResponses, nil)
+		populateBulkSubscribeResponsesWithError(psm, &bsrr.entries, nil)
 		return nil
 	}
 
@@ -488,7 +488,7 @@ func (p *pubsub) publishBulkMessageHTTP(ctx context.Context, bulkSubCallData *bu
 	log.Warn(retriableErrorStr)
 	bscData.bulkSubDiag.statusWiseDiag[string(contribpubsub.Retry)] += int64(len(rawMsgEntries))
 	bscData.bulkSubDiag.elapsed = elapsed
-	populateBulkSubscribeResponsesWithError(psm, bulkResponses, retriableError)
+	populateBulkSubscribeResponsesWithError(psm, &bsrr.entries, retriableError)
 	return retriableError
 }
 
@@ -554,7 +554,6 @@ func (p *pubsub) publishBulkMessageGRPC(ctx context.Context, bulkSubCallData *bu
 	ctx = invokev1.WithCustomGRPCMetadata(ctx, psm.metadata)
 
 	conn, err := p.grpc.GetAppClient()
-	defer p.grpc.ReleaseAppClient(conn)
 	if err != nil {
 		return fmt.Errorf("error while getting app client: %w", err)
 	}

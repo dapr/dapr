@@ -19,6 +19,9 @@ import (
 	"context"
 
 	"github.com/dapr/components-contrib/pubsub"
+	state "github.com/dapr/components-contrib/state"
+	"github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	"github.com/dapr/dapr/pkg/outbox"
 )
 
 // MockPubSubAdapter is mock for PubSubAdapter
@@ -39,4 +42,24 @@ func (a *MockPubSubAdapter) Publish(ctx context.Context, req *pubsub.PublishRequ
 // This method is used by the HTTP and gRPC APIs.
 func (a *MockPubSubAdapter) BulkPublish(ctx context.Context, req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
 	return a.BulkPublishFn(ctx, req)
+}
+
+func (a *MockPubSubAdapter) Outbox() outbox.Outbox {
+	return &outboxMock{}
+}
+
+type outboxMock struct{}
+
+func (o *outboxMock) AddOrUpdateOutbox(stateStore v1alpha1.Component) {}
+
+func (o *outboxMock) Enabled(stateStore string) bool {
+	return false
+}
+
+func (o *outboxMock) PublishInternal(ctx context.Context, stateStore string, states []state.TransactionalStateOperation, source string) ([]state.TransactionalStateOperation, error) {
+	return nil, nil
+}
+
+func (o *outboxMock) SubscribeToInternalTopics(ctx context.Context, appID string) error {
+	return nil
 }

@@ -84,7 +84,7 @@ func (p *pubsub) BulkPublish(ctx context.Context, req *contribpubsub.BulkPublish
 	policyDef := p.resiliency.ComponentOutboundPolicy(req.PubsubName, resiliency.Pubsub)
 
 	if contribpubsub.FeatureBulkPublish.IsPresent(ps.Component.Features()) {
-		return rtpubsub.ApplyBulkPublishResiliency(context.TODO(), req, policyDef, ps.Component.(contribpubsub.BulkPublisher))
+		return rtpubsub.ApplyBulkPublishResiliency(ctx, req, policyDef, ps.Component.(contribpubsub.BulkPublisher))
 	}
 
 	log.Debugf("pubsub %s does not implement the BulkPublish API; falling back to publishing messages individually", req.PubsubName)
@@ -185,11 +185,11 @@ func (p *pubsub) publishMessageGRPC(ctx context.Context, msg *subscribedMessage)
 	cloudEvent := msg.cloudEvent
 
 	envelope := &runtimev1.TopicEventRequest{
-		Id:              extractCloudEventProperty(cloudEvent, contribpubsub.IDField),
-		Source:          extractCloudEventProperty(cloudEvent, contribpubsub.SourceField),
-		DataContentType: extractCloudEventProperty(cloudEvent, contribpubsub.DataContentTypeField),
-		Type:            extractCloudEventProperty(cloudEvent, contribpubsub.TypeField),
-		SpecVersion:     extractCloudEventProperty(cloudEvent, contribpubsub.SpecVersionField),
+		Id:              ExtractCloudEventProperty(cloudEvent, contribpubsub.IDField),
+		Source:          ExtractCloudEventProperty(cloudEvent, contribpubsub.SourceField),
+		DataContentType: ExtractCloudEventProperty(cloudEvent, contribpubsub.DataContentTypeField),
+		Type:            ExtractCloudEventProperty(cloudEvent, contribpubsub.TypeField),
+		SpecVersion:     ExtractCloudEventProperty(cloudEvent, contribpubsub.SpecVersionField),
 		Topic:           msg.topic,
 		PubsubName:      msg.metadata[metadataKeyPubSub],
 		Path:            msg.path,
@@ -259,7 +259,6 @@ func (p *pubsub) publishMessageGRPC(ctx context.Context, msg *subscribedMessage)
 	ctx = invokev1.WithCustomGRPCMetadata(ctx, msg.metadata)
 
 	conn, err := p.grpc.GetAppClient()
-	defer p.grpc.ReleaseAppClient(conn)
 	if err != nil {
 		return fmt.Errorf("error while getting app client: %w", err)
 	}
