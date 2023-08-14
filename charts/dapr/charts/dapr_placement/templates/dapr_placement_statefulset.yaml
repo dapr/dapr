@@ -30,11 +30,14 @@ spec:
         {{- with .Values.global.labels }}
           {{- toYaml . | nindent 8 }}
         {{- end }}
-{{- if eq .Values.global.prometheus.enabled true }}
       annotations:
+{{- if eq .Values.global.prometheus.enabled true }}
         prometheus.io/scrape: "{{ .Values.global.prometheus.enabled }}"
         prometheus.io/port: "{{ .Values.global.prometheus.port }}"
         prometheus.io/path: "/"
+{{- end }}
+{{- if .Values.statefulsetAnnotations }}
+{{ toYaml .Values.statefulsetAnnotations | indent 4}}
 {{- end }}
     spec:
       containers:
