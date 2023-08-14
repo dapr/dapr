@@ -23,10 +23,7 @@ import (
 	"github.com/dapr/dapr/pkg/components/secretstores"
 	"github.com/dapr/dapr/pkg/runtime/meta"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
-	"github.com/dapr/kit/logger"
 )
-
-var log = logger.NewLogger("dapr.runtime.hotreload.differ")
 
 type Resource interface {
 	compapi.Component | httpendapi.HTTPEndpoint
@@ -80,17 +77,14 @@ func Diff[T Resource](resources *LocalRemoteResources[T]) *Result[T] {
 	for i := range deleted {
 		if _, ok := missing[deleted[i].GetName()]; !ok {
 			result.Deleted = append(result.Deleted, deleted[i])
-			log.Infof("Detected %s has been deleted: %s", deleted[i].Kind(), deleted[i].GetName())
 		}
 	}
 
 	for i := range missing {
 		if _, ok := deleted[missing[i].GetName()]; ok {
 			result.Updated = append(result.Updated, missing[i])
-			log.Infof("Detected %s has been updated: %s", missing[i].Kind(), missing[i].GetName())
 		} else {
 			result.Created = append(result.Created, missing[i])
-			log.Infof("Detected %s has been created: %s", missing[i].Kind(), missing[i].GetName())
 		}
 	}
 

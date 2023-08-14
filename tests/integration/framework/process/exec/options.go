@@ -24,8 +24,10 @@ type options struct {
 
 	runErrorFn func(*testing.T, error)
 	exitCode   int
-	envs       map[string]string
+	envVars map[string]string
 }
+
+type Option func(*options)
 
 func WithStdout(stdout io.WriteCloser) Option {
 	return func(o *options) {
@@ -53,16 +55,17 @@ func WithExitCode(code int) Option {
 
 // WithEnvVars sets the environment variables for the command. Expects a list
 // of key value pairs.
-func WithEnvVars(envs ...string) Option {
+func WithEnvVars(keyValues ...string) Option {
 	return func(o *options) {
-		if len(envs)%2 != 0 {
-			panic("envs must be a list of key value pairs")
+		if len(keyValues)%2 != 0 {
+			panic("keyValues must be a list of key value pairs")
 		}
-		if o.envs == nil {
-			o.envs = make(map[string]string)
+		if o.envVars == nil {
+			o.envVars = make(map[string]string)
 		}
-		for i := 0; i < len(envs); i += 2 {
-			o.envs[envs[i]] = envs[i+1]
+		for i := 0; i < len(keyValues); i++ {
+			o.envVars[keyValues[i]] = keyValues[i+1]
+			i++
 		}
 	}
 }

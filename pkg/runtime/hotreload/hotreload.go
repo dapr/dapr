@@ -114,7 +114,7 @@ func (r *Reloader) Run(ctx context.Context) error {
 		return nil
 	}
 
-	log.Info("Hot reloading enabled")
+	log.Info("Hot reloading enabled. Daprd will reload resources on change.")
 
 	return concurrency.NewRunnerManager(
 		r.components.Run,

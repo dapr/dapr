@@ -27,6 +27,7 @@ type endpoint struct {
 	operatorpb.Operator_HTTPEndpointUpdateClient
 }
 
+//nolint:unused
 func (e *endpoint) list(ctx context.Context, opclient operatorpb.OperatorClient, ns, podName string) ([][]byte, error) {
 	resp, err := opclient.ListHTTPEndpoints(ctx, &operatorpb.ListHTTPEndpointsRequest{
 		Namespace: ns,
@@ -38,6 +39,7 @@ func (e *endpoint) list(ctx context.Context, opclient operatorpb.OperatorClient,
 	return resp.GetHttpEndpoints(), nil
 }
 
+//nolint:unused
 func (e *endpoint) close() error {
 	if e.Operator_HTTPEndpointUpdateClient != nil {
 		return e.Operator_HTTPEndpointUpdateClient.CloseSend()
@@ -45,6 +47,7 @@ func (e *endpoint) close() error {
 	return nil
 }
 
+//nolint:unused
 func (e *endpoint) recv() (*loader.Event[httpendapi.HTTPEndpoint], error) {
 	event, err := e.Operator_HTTPEndpointUpdateClient.Recv()
 	if err != nil {
@@ -62,6 +65,7 @@ func (e *endpoint) recv() (*loader.Event[httpendapi.HTTPEndpoint], error) {
 	}, nil
 }
 
+//nolint:unused
 func (e *endpoint) establish(ctx context.Context, opclient operatorpb.OperatorClient, ns, podName string) error {
 	stream, err := opclient.HTTPEndpointUpdate(ctx, &operatorpb.HTTPEndpointUpdateRequest{
 		Namespace: ns,

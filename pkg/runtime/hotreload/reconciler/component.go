@@ -31,8 +31,9 @@ type component struct {
 	loader.Loader[compapi.Component]
 }
 
+//nolint:unused
 func (c *component) update(ctx context.Context, comp compapi.Component) {
-	oldComp, exists := c.store.GetComponent(comp.Spec.Type, comp.Name)
+	oldComp, exists := c.store.GetComponent(comp.Name)
 	_, _ = c.proc.Secret().ProcessResource(ctx, comp)
 
 	if exists {
@@ -57,6 +58,7 @@ func (c *component) update(ctx context.Context, comp compapi.Component) {
 	c.proc.AddPendingComponent(ctx, comp)
 }
 
+//nolint:unused
 func (c *component) delete(comp compapi.Component) {
 	if err := c.proc.Close(comp); err != nil {
 		log.Errorf("Error closing deleted component: %s", err)

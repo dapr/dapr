@@ -122,6 +122,7 @@ type Processor struct {
 	chlock   sync.RWMutex
 	running  atomic.Bool
 	shutdown atomic.Bool
+	closedCh chan struct{}
 }
 
 func New(opts Options) *Processor {
@@ -173,6 +174,7 @@ func New(opts Options) *Processor {
 		pendingHTTPEndpoints:       make(chan httpendapi.HTTPEndpoint),
 		pendingComponents:          make(chan compapi.Component),
 		pendingComponentDependents: make(map[string][]compapi.Component),
+		closedCh:                   make(chan struct{}),
 		compStore:                  opts.ComponentStore,
 		state:                      state,
 		pubsub:                     ps,
@@ -209,6 +211,7 @@ func New(opts Options) *Processor {
 }
 
 // Init initializes a component of a category.
+// TODO: @joshvanl: make private
 func (p *Processor) Init(ctx context.Context, comp compapi.Component) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
@@ -241,7 +244,7 @@ func (p *Processor) Close(comp compapi.Component) error {
 		return err
 	}
 
-	p.compStore.DeleteComponent(comp.Spec.Type, comp.Name)
+	p.compStore.DeleteComponent(comp.Name)
 
 	return nil
 }
@@ -260,6 +263,7 @@ func (p *Processor) Process(ctx context.Context) error {
 		p.processHTTPEndpoints,
 		func(ctx context.Context) error {
 			<-ctx.Done()
+			close(p.closedCh)
 			p.chlock.Lock()
 			defer p.chlock.Unlock()
 			p.shutdown.Store(true)
@@ -280,6 +284,8 @@ func (p *Processor) AddPendingComponent(ctx context.Context, comp compapi.Compon
 	select {
 	case <-ctx.Done():
 		return false
+	case <-p.closedCh:
+		return false
 	case p.pendingComponents <- comp:
 		return true
 	}
@@ -294,6 +300,8 @@ func (p *Processor) AddPendingEndpoint(ctx context.Context, endpoint httpendapi.
 
 	select {
 	case <-ctx.Done():
+		return false
+	case <-p.closedCh:
 		return false
 	case p.pendingHTTPEndpoints <- endpoint:
 		return true
@@ -310,7 +318,7 @@ func (p *Processor) processComponents(ctx context.Context) error {
 		if err != nil {
 			err = fmt.Errorf("process component %s error: %s", comp.Name, err)
 			if !comp.Spec.IgnoreErrors {
-				log.Warnf("Error processing component, daprd process will exit gracefully")
+				log.Warnf("Error processing component, daprd will exit gracefully")
 				return err
 			}
 			log.Error(err)

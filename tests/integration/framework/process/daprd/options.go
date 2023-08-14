@@ -36,6 +36,7 @@ type options struct {
 	appHealthProbeInterval  int
 	appHealthProbeThreshold int
 	resourceFiles           []string
+	resourceDirs            []string
 	configs                 []string
 	placementAddresses      []string
 	logLevel                string
@@ -140,6 +141,12 @@ func WithConfigs(configs ...string) Option {
 func WithPlacementAddresses(addresses ...string) Option {
 	return func(o *options) {
 		o.placementAddresses = addresses
+	}
+}
+
+func WithResourcesDir(dirs ...string) Option {
+	return func(o *options) {
+		o.resourceDirs = dirs
 	}
 }
 

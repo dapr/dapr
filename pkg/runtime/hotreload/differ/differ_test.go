@@ -11,6 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+//nolint:makezero
 package differ
 
 import (
@@ -545,6 +546,30 @@ func Test_Diff(t *testing.T) {
 			assert.ElementsMatch(t, endpoints[len(endpoints)/2:], resp.Deleted)
 			assert.ElementsMatch(t, remote, resp.Updated)
 			assert.ElementsMatch(t, endpointsDiff2, resp.Created)
+		})
+	})
+
+	t.Run("a component which changes spec type should be in updated", func(t *testing.T) {
+		t.Parallel()
+
+		t.Run("Component", func(t *testing.T) {
+			resp := Diff[compapi.Component](&LocalRemoteResources[compapi.Component]{
+				Local: []compapi.Component{{
+					ObjectMeta: metav1.ObjectMeta{Name: "foo"},
+					Spec:       compapi.ComponentSpec{Type: "secretstores.in-memory"},
+				}},
+				Remote: []compapi.Component{{
+					ObjectMeta: metav1.ObjectMeta{Name: "foo"},
+					Spec:       compapi.ComponentSpec{Type: "secretstores.sqlite"},
+				}},
+			})
+
+			assert.ElementsMatch(t, nil, resp.Deleted)
+			assert.ElementsMatch(t, []compapi.Component{{
+				ObjectMeta: metav1.ObjectMeta{Name: "foo"},
+				Spec:       compapi.ComponentSpec{Type: "secretstores.sqlite"},
+			}}, resp.Updated)
+			assert.ElementsMatch(t, nil, resp.Created)
 		})
 	})
 }

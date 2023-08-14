@@ -17,11 +17,11 @@ import (
 	compsv1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 )
 
-func (c *ComponentStore) GetComponent(componentType, name string) (compsv1alpha1.Component, bool) {
+func (c *ComponentStore) GetComponent(name string) (compsv1alpha1.Component, bool) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 	for i, comp := range c.components {
-		if comp.Spec.Type == componentType && comp.ObjectMeta.Name == name {
+		if comp.ObjectMeta.Name == name {
 			return c.components[i], true
 		}
 	}
@@ -50,12 +50,12 @@ func (c *ComponentStore) ListComponents() []compsv1alpha1.Component {
 	return comps
 }
 
-func (c *ComponentStore) DeleteComponent(compType, name string) {
+func (c *ComponentStore) DeleteComponent(name string) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
 	for i, comp := range c.components {
-		if comp.Spec.Type == compType && comp.ObjectMeta.Name == name {
+		if comp.ObjectMeta.Name == name {
 			c.components = append(c.components[:i], c.components[i+1:]...)
 			return
 		}

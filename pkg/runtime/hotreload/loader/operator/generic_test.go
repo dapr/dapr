@@ -201,18 +201,22 @@ func newFakeStreamer() *fakeStreamer[compapi.Component] {
 	}
 }
 
+//nolint:unused
 func (f *fakeStreamer[T]) list(ctx context.Context, opclient operatorpb.OperatorClient, ns, podName string) ([][]byte, error) {
 	return f.listFn(ctx, opclient, ns, podName)
 }
 
+//nolint:unused
 func (f *fakeStreamer[T]) close() error {
 	return f.closeFn()
 }
 
+//nolint:unused
 func (f *fakeStreamer[T]) recv() (*loader.Event[T], error) {
 	return f.recvFn()
 }
 
+//nolint:unused
 func (f *fakeStreamer[T]) establish(ctx context.Context, opclient operatorpb.OperatorClient, ns, podName string) error {
 	return f.establishFn(ctx, opclient, ns, podName)
 }

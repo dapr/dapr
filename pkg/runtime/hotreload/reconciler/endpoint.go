@@ -29,6 +29,7 @@ type endpoint struct {
 	loader.Loader[httpendapi.HTTPEndpoint]
 }
 
+//nolint:unused
 func (e *endpoint) update(ctx context.Context, endpoint httpendapi.HTTPEndpoint) {
 	oldEndpoint, exists := e.store.GetHTTPEndpoint(endpoint.Name)
 	_, _ = e.proc.Secret().ProcessResource(ctx, endpoint)
@@ -48,6 +49,7 @@ func (e *endpoint) update(ctx context.Context, endpoint httpendapi.HTTPEndpoint)
 	}
 }
 
+//nolint:unused
 func (e *endpoint) delete(endpoint httpendapi.HTTPEndpoint) {
 	e.store.DeleteHTTPEndpoint(endpoint.Name)
 }

@@ -117,7 +117,7 @@ func (s *secret) Close(comp compapi.Component) error {
 func (s *secret) ProcessResource(ctx context.Context, resource meta.Resource) (updated bool, secretStoreName string) {
 	cache := map[string]secretstores.GetSecretResponse{}
 
-	secretStoreName = s.authSecretStoreOrDefault(resource)
+	secretStoreName = s.meta.AuthSecretStoreOrDefault(resource)
 
 	metadata := resource.NameValuePairs()
 	for i, m := range metadata {
@@ -196,17 +196,6 @@ func (s *secret) ProcessResource(ctx context.Context, resource meta.Resource) (u
 		cache[m.SecretKeyRef.Name] = resp
 	}
 	return updated, ""
-}
-
-func (s *secret) authSecretStoreOrDefault(resource meta.Resource) string {
-	secretStore := resource.GetSecretStore()
-	if secretStore == "" {
-		switch s.mode {
-		case modes.KubernetesMode:
-			return "kubernetes"
-		}
-	}
-	return secretStore
 }
 
 func isEnvVarAllowed(key string) bool {

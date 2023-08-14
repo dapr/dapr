@@ -27,6 +27,7 @@ type component struct {
 	operatorpb.Operator_ComponentUpdateClient
 }
 
+//nolint:unused
 func (c *component) list(ctx context.Context, opclient operatorpb.OperatorClient, ns, podName string) ([][]byte, error) {
 	resp, err := opclient.ListComponents(ctx, &operatorpb.ListComponentsRequest{
 		Namespace: ns,
@@ -39,6 +40,7 @@ func (c *component) list(ctx context.Context, opclient operatorpb.OperatorClient
 	return resp.GetComponents(), nil
 }
 
+//nolint:unused
 func (c *component) close() error {
 	if c.Operator_ComponentUpdateClient != nil {
 		return c.Operator_ComponentUpdateClient.CloseSend()
@@ -46,6 +48,7 @@ func (c *component) close() error {
 	return nil
 }
 
+//nolint:unused
 func (c *component) recv() (*loader.Event[compapi.Component], error) {
 	event, err := c.Operator_ComponentUpdateClient.Recv()
 	if err != nil {
@@ -63,6 +66,7 @@ func (c *component) recv() (*loader.Event[compapi.Component], error) {
 	}, nil
 }
 
+//nolint:unused
 func (c *component) establish(ctx context.Context, opclient operatorpb.OperatorClient, ns, podName string) error {
 	stream, err := opclient.ComponentUpdate(ctx, &operatorpb.ComponentUpdateRequest{
 		Namespace: ns,

@@ -38,10 +38,10 @@ func Test_component(t *testing.T) {
 	store.AddComponent(comp2)
 	assert.ElementsMatch(t, []compapi.Component{comp1, comp2}, comp.List())
 
-	store.DeleteComponent("", "1")
+	store.DeleteComponent("1")
 	assert.ElementsMatch(t, []compapi.Component{comp2}, comp.List())
 
-	store.DeleteComponent("", "2")
+	store.DeleteComponent("2")
 	assert.ElementsMatch(t, []compapi.Component{}, comp.List())
 }
 

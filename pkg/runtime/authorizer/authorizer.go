@@ -111,7 +111,3 @@ func (a *Authorizer) namespaceComponentAuthorizer(comp compapi.Component) bool {
 
 	return false
 }
-
-func (a *Authorizer) WithComponentAuthorizers(authorizers []ComponentAuthorizer) {
-	a.componentAuthorizers = authorizers
-}

@@ -30,12 +30,15 @@ import (
 	"sigs.k8s.io/yaml"
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
+	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	httpendapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	httpendpointapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subscriptionsapiV2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/client/clientset/versioned/scheme"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
+	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
 )
 
 type mockComponentUpdateServer struct {
@@ -210,14 +213,17 @@ func TestComponentUpdate(t *testing.T) {
 			assert.Eventually(t, func() bool {
 				api.connLock.Lock()
 				defer api.connLock.Unlock()
-				return len(api.allConnUpdateChan) == 1
+				return len(api.componentUpdateChan) == 1
 			}, time.Second, 10*time.Millisecond)
 
 			api.connLock.Lock()
 			defer api.connLock.Unlock()
-			for key := range api.allConnUpdateChan {
-				api.allConnUpdateChan[key] <- &c
-				close(api.allConnUpdateChan[key])
+			for key := range api.componentUpdateChan {
+				api.componentUpdateChan[key] <- &loader.Event[compapi.Component]{
+					Type:     operatorv1pb.ResourceEventType_CREATED,
+					Resource: c,
+				}
+				close(api.componentUpdateChan[key])
 			}
 		}()
 
@@ -254,14 +260,17 @@ func TestComponentUpdate(t *testing.T) {
 			assert.Eventually(t, func() bool {
 				api.connLock.Lock()
 				defer api.connLock.Unlock()
-				return len(api.allConnUpdateChan) == 1
+				return len(api.componentUpdateChan) == 1
 			}, time.Second, 10*time.Millisecond)
 
 			api.connLock.Lock()
 			defer api.connLock.Unlock()
-			for key := range api.allConnUpdateChan {
-				api.allConnUpdateChan[key] <- &c
-				close(api.allConnUpdateChan[key])
+			for key := range api.componentUpdateChan {
+				api.componentUpdateChan[key] <- &loader.Event[compapi.Component]{
+					Type:     operatorv1pb.ResourceEventType_CREATED,
+					Resource: c,
+				}
+				close(api.componentUpdateChan[key])
 			}
 		}()
 
@@ -299,14 +308,17 @@ func TestHTTPEndpointUpdate(t *testing.T) {
 			assert.Eventually(t, func() bool {
 				api.endpointLock.Lock()
 				defer api.endpointLock.Unlock()
-				return len(api.allEndpointsUpdateChan) == 1
+				return len(api.endpointsUpdateChan) == 1
 			}, time.Second, 10*time.Millisecond)
 
 			api.endpointLock.Lock()
 			defer api.endpointLock.Unlock()
-			for key := range api.allEndpointsUpdateChan {
-				api.allEndpointsUpdateChan[key] <- &e
-				close(api.allEndpointsUpdateChan[key])
+			for key := range api.endpointsUpdateChan {
+				api.endpointsUpdateChan[key] <- &loader.Event[httpendapi.HTTPEndpoint]{
+					Type:     operatorv1pb.ResourceEventType_CREATED,
+					Resource: e,
+				}
+				close(api.endpointsUpdateChan[key])
 			}
 		}()
 
@@ -323,14 +335,17 @@ func TestHTTPEndpointUpdate(t *testing.T) {
 			assert.Eventually(t, func() bool {
 				api.endpointLock.Lock()
 				defer api.endpointLock.Unlock()
-				return len(api.allEndpointsUpdateChan) == 1
+				return len(api.endpointsUpdateChan) == 1
 			}, time.Second, 10*time.Millisecond)
 
 			api.endpointLock.Lock()
 			defer api.endpointLock.Unlock()
-			for key := range api.allEndpointsUpdateChan {
-				api.allEndpointsUpdateChan[key] <- &e
-				close(api.allEndpointsUpdateChan[key])
+			for key := range api.endpointsUpdateChan {
+				api.endpointsUpdateChan[key] <- &loader.Event[httpendapi.HTTPEndpoint]{
+					Type:     operatorv1pb.ResourceEventType_CREATED,
+					Resource: e,
+				}
+				close(api.endpointsUpdateChan[key])
 			}
 		}()
 

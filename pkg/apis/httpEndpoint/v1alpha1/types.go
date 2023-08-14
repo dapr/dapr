@@ -107,7 +107,6 @@ func (h HTTPEndpoint) Object() metav1.Object {
 		APIVersion: "dapr.io/v1alpha1",
 	}
 	return n
-
 }
 
 // HTTPEndpointSpec describes an access specification for allowing external service invocations.

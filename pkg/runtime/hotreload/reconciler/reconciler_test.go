@@ -299,10 +299,12 @@ func newFakeManager() *fakeManager {
 	}
 }
 
+//nolint:unused
 func (f *fakeManager) update(ctx context.Context, comp compapi.Component) {
 	f.updateFn(ctx, comp)
 }
 
+//nolint:unused
 func (f *fakeManager) delete(comp compapi.Component) {
 	f.deleteFn(comp)
 }
