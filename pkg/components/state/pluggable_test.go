@@ -450,7 +450,8 @@ func TestComponentCalls(t *testing.T) {
 	})
 
 	t.Run("set should indicate JSON content if passed non-binary with no content-type", func(t *testing.T) {
-		const fakeKey, fakeData = "fakeKey", "fakeData"
+		const fakeKey = "fakeKey"
+		const fakeData = "fakeData"
 
 		svc := &server{
 			onSetCalled: func(req *proto.SetRequest) {

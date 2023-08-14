@@ -962,6 +962,8 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 
 	metadata := getMetadataFromFastHTTPRequest(reqCtx)
 
+	hasShownWarning := false
+
 	for i, r := range reqs {
 		if len(reqs[i].Key) == 0 {
 			msg := NewErrorResponse("ERR_MALFORMED_REQUEST", `"key" is a required field`)
@@ -981,8 +983,6 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 
 		contentType := reqs[i].ContentType
 		metadataContentType, ok := reqs[i].Metadata[contribMetadata.ContentType]
-
-		hasShownWarning := false
 
 		if contentType != nil && !ok {
 			reqs[i].Metadata[contribMetadata.ContentType] = *contentType

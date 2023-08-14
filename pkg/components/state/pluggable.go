@@ -28,7 +28,6 @@ import (
 	"github.com/dapr/kit/logger"
 
 	"golang.org/x/exp/maps"
-
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
