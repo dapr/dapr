@@ -1199,6 +1199,383 @@ func etagTestGRPC(statestore string) error {
 	return nil
 }
 
+// Etag ErrorCodes test for HTTP
+func etagErrorCodesTestHTTP(statestore string) error {
+	pkMetadata := map[string]string{metadataPartitionKey: partitionKey}
+
+	// Use two random keys for testing
+	var etags [2]string
+	keys := [2]string{
+		uuid.NewString(),
+		uuid.NewString(),
+	}
+
+	type retrieveStateOpts struct {
+		expectNotFound     bool
+		expectValue        string
+		expectEtagEqual    string
+		expectEtagNotEqual string
+	}
+	retrieveState := func(stateId int, opts retrieveStateOpts) (string, error) {
+		value, etag, err := get(keys[stateId], statestore, pkMetadata)
+		if err != nil {
+			return "", fmt.Errorf("failed to retrieve value %d: %w", stateId, err)
+		}
+
+		if opts.expectNotFound {
+			if value != nil && len(value.Data) != 0 {
+				return "", fmt.Errorf("invalid value for state %d: %#v (expected empty)", stateId, value)
+			}
+			return "", nil
+		}
+		if value == nil || string(value.Data) != opts.expectValue {
+			return "", fmt.Errorf("invalid value for state %d: %#v (expected: %q)", stateId, value, opts.expectValue)
+		}
+		if etag == "" {
+			return "", fmt.Errorf("etag is empty for state %d", stateId)
+		}
+		if opts.expectEtagEqual != "" && etag != opts.expectEtagEqual {
+			return "", fmt.Errorf("etag is invalid for state %d: %q (expected: %q)", stateId, etag, opts.expectEtagEqual)
+		}
+		if opts.expectEtagNotEqual != "" && etag == opts.expectEtagNotEqual {
+			return "", fmt.Errorf("etag is invalid for state %d: %q (expected different value)", stateId, etag)
+		}
+		return etag, nil
+	}
+
+	// First, write two values
+	_, err := save([]daprState{
+		{Key: keys[0], Value: &appState{Data: []byte("1")}, Metadata: pkMetadata},
+		{Key: keys[1], Value: &appState{Data: []byte("1")}, Metadata: pkMetadata},
+	}, statestore, pkMetadata)
+	if err != nil {
+		return fmt.Errorf("failed to store initial values: %w", err)
+	}
+
+	// Retrieve the two values to get the etag
+	etags[0], err = retrieveState(0, retrieveStateOpts{expectValue: "1"})
+	if err != nil {
+		return fmt.Errorf("failed to check initial value for state 0: %w", err)
+	}
+	etags[1], err = retrieveState(1, retrieveStateOpts{expectValue: "1"})
+	if err != nil {
+		return fmt.Errorf("failed to check initial value for state 1: %w", err)
+	}
+
+	// Update the first state using the correct etag
+	_, err = save([]daprState{
+		{Key: keys[0], Value: &appState{Data: []byte("2")}, Metadata: pkMetadata, Etag: etags[0]},
+	}, statestore, pkMetadata)
+	if err != nil {
+		return fmt.Errorf("failed to update value 0: %w", err)
+	}
+
+	// Check the first state
+	etags[0], err = retrieveState(0, retrieveStateOpts{expectValue: "2", expectEtagNotEqual: etags[0]})
+	if err != nil {
+		return fmt.Errorf("failed to check initial value for state 0: %w", err)
+	}
+
+	// Updating with wrong etag should fail with 409 status code
+	statusCode, _ := save([]daprState{
+		{Key: keys[1], Value: &appState{Data: []byte("2")}, Metadata: pkMetadata, Etag: badEtag},
+	}, statestore, pkMetadata)
+	if statusCode != http.StatusConflict {
+		return fmt.Errorf("expected update with invalid etag to fail with status code 409, but got: %d", statusCode)
+	}
+
+	// Value should not have changed
+	_, err = retrieveState(1, retrieveStateOpts{expectValue: "1", expectEtagEqual: etags[1]})
+	if err != nil {
+		return fmt.Errorf("failed to check updated value for state 1: %w", err)
+	}
+
+	// Bulk update with all valid etags
+	_, err = save([]daprState{
+		{Key: keys[0], Value: &appState{Data: []byte("3")}, Metadata: pkMetadata, Etag: etags[0]},
+		{Key: keys[1], Value: &appState{Data: []byte("3")}, Metadata: pkMetadata, Etag: etags[1]},
+	}, statestore, pkMetadata)
+	if err != nil {
+		return fmt.Errorf("failed to update bulk values: %w", err)
+	}
+
+	// Retrieve the two values to confirm they're updated
+	etags[0], err = retrieveState(0, retrieveStateOpts{expectValue: "3", expectEtagNotEqual: etags[0]})
+	if err != nil {
+		return fmt.Errorf("failed to check updated value for state 0: %w", err)
+	}
+	etags[1], err = retrieveState(1, retrieveStateOpts{expectValue: "3", expectEtagNotEqual: etags[1]})
+	if err != nil {
+		return fmt.Errorf("failed to check updated value for state 1: %w", err)
+	}
+
+	// Bulk update with one etag incorrect
+	statusCode, _ = save([]daprState{
+		{Key: keys[0], Value: &appState{Data: []byte("4")}, Metadata: pkMetadata, Etag: badEtag},
+		{Key: keys[1], Value: &appState{Data: []byte("4")}, Metadata: pkMetadata, Etag: etags[1]},
+	}, statestore, pkMetadata)
+	if statusCode != http.StatusConflict {
+		return fmt.Errorf("expected update with invalid etag to fail with status code 409, but got: %d", statusCode)
+	}
+
+	// Retrieve the two values to confirm only the second is updated
+	_, err = retrieveState(0, retrieveStateOpts{expectValue: "3", expectEtagEqual: etags[0]})
+	if err != nil {
+		return fmt.Errorf("failed to check updated value for state 0: %w", err)
+	}
+	etags[1], err = retrieveState(1, retrieveStateOpts{expectValue: "4", expectEtagNotEqual: etags[1]})
+	if err != nil {
+		return fmt.Errorf("failed to check updated value for state 1: %w", err)
+	}
+
+	// Delete single item with incorrect etag
+	statusCode, _ = delete(keys[0], statestore, pkMetadata, badEtag)
+	if statusCode != http.StatusConflict {
+		return fmt.Errorf("expected delete with invalid etag to fail with status code 409, but got: %d", statusCode)
+	}
+
+	// Value should not have changed
+	_, err = retrieveState(0, retrieveStateOpts{expectValue: "3", expectEtagEqual: etags[0]})
+	if err != nil {
+		return fmt.Errorf("failed to check updated value for state 0: %w", err)
+	}
+
+	// TODO: There's no "Bulk Delete" API in HTTP right now, so we can't test that
+	// Create a test here when the API is implemented
+	err = deleteAll([]daprState{
+		{Key: keys[0], Metadata: pkMetadata},
+		{Key: keys[1], Metadata: pkMetadata},
+	}, statestore, pkMetadata)
+	if err != nil {
+		return fmt.Errorf("failed to delete all data at the end of the test: %w", err)
+	}
+
+	return nil
+}
+
+// Etag ErrorCodes test for gRPC
+func etagErrorCodesTestGRPC(statestore string) error {
+	pkMetadata := map[string]string{metadataPartitionKey: partitionKey}
+
+	// Use three random keys for testing
+	var etags [3]string
+	keys := [3]string{
+		uuid.NewString(),
+		uuid.NewString(),
+		uuid.NewString(),
+	}
+
+	type retrieveStateOpts struct {
+		expectNotFound     bool
+		expectValue        string
+		expectEtagEqual    string
+		expectEtagNotEqual string
+	}
+	retrieveState := func(stateId int, opts retrieveStateOpts) (string, error) {
+		res, err := grpcClient.GetState(context.Background(), &runtimev1pb.GetStateRequest{
+			StoreName: statestore,
+			Key:       keys[stateId],
+			Metadata:  pkMetadata,
+		})
+		if err != nil {
+			return "", fmt.Errorf("failed to retrieve value %d: %w", stateId, err)
+		}
+
+		if opts.expectNotFound {
+			if len(res.Data) != 0 {
+				return "", fmt.Errorf("invalid value for state %d: %q (expected empty)", stateId, string(res.Data))
+			}
+			return "", nil
+		}
+		if len(res.Data) == 0 || string(res.Data) != opts.expectValue {
+			return "", fmt.Errorf("invalid value for state %d: %q (expected: %q)", stateId, string(res.Data), opts.expectValue)
+		}
+		if res.Etag == "" {
+			return "", fmt.Errorf("etag is empty for state %d", stateId)
+		}
+		if opts.expectEtagEqual != "" && res.Etag != opts.expectEtagEqual {
+			return "", fmt.Errorf("etag is invalid for state %d: %q (expected: %q)", stateId, res.Etag, opts.expectEtagEqual)
+		}
+		if opts.expectEtagNotEqual != "" && res.Etag == opts.expectEtagNotEqual {
+			return "", fmt.Errorf("etag is invalid for state %d: %q (expected different value)", stateId, res.Etag)
+		}
+		return res.Etag, nil
+	}
+
+	// First, write three values
+	_, err := grpcClient.SaveState(context.Background(), &runtimev1pb.SaveStateRequest{
+		StoreName: statestore,
+		States: []*commonv1pb.StateItem{
+			{Key: keys[0], Value: []byte("1"), Metadata: pkMetadata},
+			{Key: keys[1], Value: []byte("1"), Metadata: pkMetadata},
+			{Key: keys[2], Value: []byte("1"), Metadata: pkMetadata},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to store initial values: %w", err)
+	}
+
+	// Retrieve the two values to get the etag
+	etags[0], err = retrieveState(0, retrieveStateOpts{expectValue: "1"})
+	if err != nil {
+		return fmt.Errorf("failed to check initial value for state 0: %w", err)
+	}
+	etags[1], err = retrieveState(1, retrieveStateOpts{expectValue: "1"})
+	if err != nil {
+		return fmt.Errorf("failed to check initial value for state 1: %w", err)
+	}
+	etags[2], err = retrieveState(2, retrieveStateOpts{expectValue: "1"})
+	if err != nil {
+		return fmt.Errorf("failed to check initial value for state 2: %w", err)
+	}
+
+	// Update the first state using the correct etag
+	_, err = grpcClient.SaveState(context.Background(), &runtimev1pb.SaveStateRequest{
+		StoreName: statestore,
+		States: []*commonv1pb.StateItem{
+			{Key: keys[0], Value: []byte("2"), Metadata: pkMetadata, Etag: &commonv1pb.Etag{Value: etags[0]}},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to update value 0: %w", err)
+	}
+
+	// Check the first state
+	etags[0], err = retrieveState(0, retrieveStateOpts{expectValue: "2", expectEtagNotEqual: etags[0]})
+	if err != nil {
+		return fmt.Errorf("failed to check updated value for state 0: %w", err)
+	}
+
+	// Updating with wrong etag should fail with 409 status code
+	_, err = grpcClient.SaveState(context.Background(), &runtimev1pb.SaveStateRequest{
+		StoreName: statestore,
+		States: []*commonv1pb.StateItem{
+			{Key: keys[1], Value: []byte("2"), Metadata: pkMetadata, Etag: &commonv1pb.Etag{Value: badEtag}},
+		},
+	})
+	if status.Code(err) != codes.Aborted {
+		return fmt.Errorf("expected gRPC error with code Aborted, but got err: %v", err)
+	}
+
+	// Value should not have changed
+	_, err = retrieveState(1, retrieveStateOpts{expectValue: "1", expectEtagEqual: etags[1]})
+	if err != nil {
+		return fmt.Errorf("failed to check updated value for state 1: %w", err)
+	}
+
+	// Bulk update with all valid etags
+	_, err = grpcClient.SaveState(context.Background(), &runtimev1pb.SaveStateRequest{
+		StoreName: statestore,
+		States: []*commonv1pb.StateItem{
+			{Key: keys[0], Value: []byte("3"), Metadata: pkMetadata, Etag: &commonv1pb.Etag{Value: etags[0]}},
+			{Key: keys[1], Value: []byte("3"), Metadata: pkMetadata, Etag: &commonv1pb.Etag{Value: etags[1]}},
+			{Key: keys[2], Value: []byte("3"), Metadata: pkMetadata, Etag: &commonv1pb.Etag{Value: etags[2]}},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to update bulk values: %w", err)
+	}
+
+	// Retrieve the three values to confirm they're updated
+	etags[0], err = retrieveState(0, retrieveStateOpts{expectValue: "3", expectEtagNotEqual: etags[0]})
+	if err != nil {
+		return fmt.Errorf("failed to check updated value for state 0: %w", err)
+	}
+	etags[1], err = retrieveState(1, retrieveStateOpts{expectValue: "3", expectEtagNotEqual: etags[1]})
+	if err != nil {
+		return fmt.Errorf("failed to check updated value for state 1: %w", err)
+	}
+	etags[2], err = retrieveState(2, retrieveStateOpts{expectValue: "3", expectEtagNotEqual: etags[2]})
+	if err != nil {
+		return fmt.Errorf("failed to check updated value for state 2: %w", err)
+	}
+
+	// Bulk update with one etag incorrect
+	_, err = grpcClient.SaveState(context.Background(), &runtimev1pb.SaveStateRequest{
+		StoreName: statestore,
+		States: []*commonv1pb.StateItem{
+			{Key: keys[0], Value: []byte("4"), Metadata: pkMetadata, Etag: &commonv1pb.Etag{Value: badEtag}},
+			{Key: keys[1], Value: []byte("4"), Metadata: pkMetadata, Etag: &commonv1pb.Etag{Value: etags[1]}},
+			{Key: keys[2], Value: []byte("4"), Metadata: pkMetadata, Etag: &commonv1pb.Etag{Value: etags[2]}},
+		},
+	})
+	if status.Code(err) != codes.Aborted {
+		return fmt.Errorf("expected gRPC error with code Aborted, but got err: %v", err)
+	}
+
+	// Retrieve the three values to confirm only the last two are updated
+	_, err = retrieveState(0, retrieveStateOpts{expectValue: "3", expectEtagEqual: etags[0]})
+	if err != nil {
+		return fmt.Errorf("failed to check updated value for state 0: %w", err)
+	}
+	etags[1], err = retrieveState(1, retrieveStateOpts{expectValue: "4", expectEtagNotEqual: etags[1]})
+	if err != nil {
+		return fmt.Errorf("failed to check updated value for state 1: %w", err)
+	}
+	etags[2], err = retrieveState(2, retrieveStateOpts{expectValue: "4", expectEtagNotEqual: etags[2]})
+	if err != nil {
+		return fmt.Errorf("failed to check updated value for state 2: %w", err)
+	}
+
+	// Delete single item with incorrect etag
+	_, err = grpcClient.DeleteState(context.Background(), &runtimev1pb.DeleteStateRequest{
+		StoreName: statestore,
+		Key:       keys[0],
+		Metadata:  pkMetadata,
+		Etag:      &commonv1pb.Etag{Value: badEtag},
+	})
+	if status.Code(err) != codes.Aborted {
+		return fmt.Errorf("expected gRPC error with code Aborted, but got err: %v", err)
+	}
+
+	// Value should not have changed
+	_, err = retrieveState(0, retrieveStateOpts{expectValue: "3", expectEtagEqual: etags[0]})
+	if err != nil {
+		return fmt.Errorf("failed to check updated value for state 0: %w", err)
+	}
+
+	// Bulk delete with two etags incorrect
+	_, err = grpcClient.DeleteBulkState(context.Background(), &runtimev1pb.DeleteBulkStateRequest{
+		StoreName: statestore,
+		States: []*commonv1pb.StateItem{
+			{Key: keys[0], Metadata: pkMetadata, Etag: &commonv1pb.Etag{Value: badEtag}},
+			{Key: keys[1], Metadata: pkMetadata, Etag: &commonv1pb.Etag{Value: badEtag}},
+			{Key: keys[2], Metadata: pkMetadata, Etag: &commonv1pb.Etag{Value: etags[2]}},
+		},
+	})
+	if status.Code(err) != codes.Aborted {
+		return fmt.Errorf("expected gRPC error with code Aborted, but got err: %v", err)
+	}
+
+	// Validate items 0 and 1 are the only ones still existing
+	_, err = retrieveState(0, retrieveStateOpts{expectValue: "3", expectEtagEqual: etags[0]})
+	if err != nil {
+		return fmt.Errorf("failed to check value for state 0 after not deleting it: %w", err)
+	}
+	_, err = retrieveState(1, retrieveStateOpts{expectValue: "4", expectEtagEqual: etags[1]})
+	if err != nil {
+		return fmt.Errorf("failed to check value for state 1 after not deleting it: %w", err)
+	}
+	_, err = retrieveState(2, retrieveStateOpts{expectNotFound: true})
+	if err != nil {
+		return fmt.Errorf("failed to check value for state 2 after deleting it: %w", err)
+	}
+
+	// Delete the remaining items
+	_, err = grpcClient.DeleteBulkState(context.Background(), &runtimev1pb.DeleteBulkStateRequest{
+		StoreName: statestore,
+		States: []*commonv1pb.StateItem{
+			{Key: keys[0], Metadata: pkMetadata, Etag: &commonv1pb.Etag{Value: etags[0]}},
+			{Key: keys[1], Metadata: pkMetadata, Etag: &commonv1pb.Etag{Value: etags[1]}},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to delete bulk values: %w", err)
+	}
+
+	return nil
+}
+
 // Returns a HTTP handler for functions that return an error
 func testFnHandler(testFn func(statestore string) error) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -1230,6 +1607,8 @@ func appRouter() http.Handler {
 	router.HandleFunc("/test/grpc/{command}/{statestore}", grpcHandler).Methods("POST")
 	router.HandleFunc("/test-etag/http/{statestore}", testFnHandler(etagTestHTTP)).Methods("POST")
 	router.HandleFunc("/test-etag/grpc/{statestore}", testFnHandler(etagTestGRPC)).Methods("POST")
+	router.HandleFunc("/test-etag-errorcodes/http/{statestore}", testFnHandler(etagErrorCodesTestHTTP)).Methods("POST")
+	router.HandleFunc("/test-etag-errorcodes/grpc/{statestore}", testFnHandler(etagErrorCodesTestGRPC)).Methods("POST")
 	router.Use(mux.CORSMethodMiddleware(router))
 
 	return router

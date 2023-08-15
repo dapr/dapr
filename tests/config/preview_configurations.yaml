@@ -33,6 +33,15 @@ spec:
     - name: ActorStateTTL
       enabled: true
 
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: errorcodes
+spec:
+  features:
+    - name: ErrorCodes
+      enabled: true
+
 ---
 # This is used in tests to validate that the features are loaded
 # It is not an actual "preview configuration"
