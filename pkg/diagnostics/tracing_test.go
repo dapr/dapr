@@ -190,7 +190,7 @@ func runTraces(t *testing.T, testName string, numTraces int, samplingRate string
 
 	tracerName := fmt.Sprintf("%s_%s", testName, samplingRate)
 	otel.SetTracerProvider(tp)
-	tracer := otel.Tracer(tracerName)
+	testTracer := otel.Tracer(tracerName)
 
 	// This is taken from otel's tests for the ratio sampler so we can generate IDs
 	idg := defaultIDGenerator()
@@ -208,7 +208,7 @@ func runTraces(t *testing.T, testName string, numTraces int, samplingRate string
 
 		ctx := context.Background()
 		ctx = trace.ContextWithRemoteSpanContext(ctx, parent)
-		ctx, span := tracer.Start(ctx, "testTraceSpan", trace.WithSpanKind(trace.SpanKindClient))
+		ctx, span := testTracer.Start(ctx, "testTraceSpan", trace.WithSpanKind(trace.SpanKindClient))
 		assert.NotNil(t, span)
 		assert.NotNil(t, ctx)
 
