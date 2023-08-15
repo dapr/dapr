@@ -20,7 +20,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cenkalti/backoff"
+	"github.com/cenkalti/backoff/v4"
+	"github.com/google/uuid"
 
 	contribPubsub "github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/state"
@@ -28,8 +29,6 @@ import (
 	"github.com/dapr/dapr/pkg/outbox"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
-
-	"github.com/google/uuid"
 )
 
 const (
