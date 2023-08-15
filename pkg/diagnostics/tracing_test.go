@@ -360,7 +360,7 @@ func TestTraceIDAndStateFromSpan(t *testing.T) {
 
 		ctx := context.Background()
 		ctx = trace.ContextWithRemoteSpanContext(ctx, parent)
-		ctx, span := tracer.Start(ctx, "testTraceSpan", trace.WithSpanKind(trace.SpanKindClient))
+		_, span := tracer.Start(ctx, "testTraceSpan", trace.WithSpanKind(trace.SpanKindClient))
 
 		id, state := TraceIDAndStateFromSpan(span)
 		assert.NotEmpty(t, id)
