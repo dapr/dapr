@@ -31,6 +31,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/placement/raft"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+	securityfake "github.com/dapr/dapr/pkg/security/fake"
 )
 
 const testStreamSendLatency = time.Second
@@ -38,8 +39,7 @@ const testStreamSendLatency = time.Second
 func newTestPlacementServer(t *testing.T, raftServer *raft.Server) (string, *Service, *clocktesting.FakeClock, context.CancelFunc) {
 	t.Helper()
 
-	testServer, err := NewPlacementService(raftServer, nil)
-	require.NoError(t, err)
+	testServer := NewPlacementService(raftServer)
 	clock := clocktesting.NewFakeClock(time.Now())
 	testServer.clock = clock
 
@@ -50,7 +50,7 @@ func newTestPlacementServer(t *testing.T, raftServer *raft.Server) (string, *Ser
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
 		defer close(serverStopped)
-		require.NoError(t, testServer.Run(ctx, strconv.Itoa(port)))
+		require.NoError(t, testServer.Run(ctx, strconv.Itoa(port), securityfake.New()))
 	}()
 
 	assert.Eventually(t, func() bool {

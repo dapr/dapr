@@ -15,15 +15,16 @@ package options
 
 import (
 	"flag"
+	"fmt"
 	"os"
 	"strings"
 
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 
-	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/placement/raft"
+	"github.com/dapr/dapr/pkg/security"
 )
 
 const (
@@ -46,9 +47,12 @@ type Options struct {
 	// Placement server configurations
 	PlacementPort   int
 	HealthzPort     int
-	CertChainPath   string
-	TLSEnabled      bool
 	MetadataEnabled bool
+
+	TLSEnabled       bool
+	TrustDomain      string
+	TrustAnchorsFile string
+	SentryAddress    string
 
 	ReplicationFactor int
 
@@ -56,6 +60,8 @@ type Options struct {
 	Logger  logger.Options
 	Metrics *metrics.Options
 }
+
+var log = logger.NewLogger("dapr.placement.options")
 
 func New() *Options {
 	// Default options
@@ -67,14 +73,18 @@ func New() *Options {
 	flag.StringVar(&opts.RaftLogStorePath, "raft-logstore-path", "", "raft log store path.")
 	flag.IntVar(&opts.PlacementPort, "port", defaultPlacementPort, "sets the gRPC port for the placement service")
 	flag.IntVar(&opts.HealthzPort, "healthz-port", defaultHealthzPort, "sets the HTTP port for the healthz server")
-	flag.StringVar(&opts.CertChainPath, "certchain", defaultCredentialsPath, "Path to the credentials directory holding the cert chain")
 	flag.BoolVar(&opts.TLSEnabled, "tls-enabled", false, "Should TLS be enabled for the placement gRPC server")
 	flag.BoolVar(&opts.MetadataEnabled, "metadata-enabled", opts.MetadataEnabled, "Expose the placement tables on the healthz server")
 	flag.IntVar(&opts.ReplicationFactor, "replicationFactor", defaultReplicationFactor, "sets the replication factor for actor distribution on vnodes")
 
-	flag.StringVar(&credentials.RootCertFilename, "issuer-ca-filename", credentials.RootCertFilename, "Certificate Authority certificate filename")
-	flag.StringVar(&credentials.IssuerCertFilename, "issuer-certificate-filename", credentials.IssuerCertFilename, "Issuer certificate filename")
-	flag.StringVar(&credentials.IssuerKeyFilename, "issuer-key-filename", credentials.IssuerKeyFilename, "Issuer private key filename")
+	flag.StringVar(&opts.TrustDomain, "trust-domain", "cluster.local", "Trust domain for the Dapr control plane")
+	flag.StringVar(&opts.TrustAnchorsFile, "trust-anchors-file", "/var/run/secrets/dapr.io/tls/ca.crt", "Filepath to the trust anchors for the Dapr control plane")
+	flag.StringVar(&opts.SentryAddress, "sentry-address", fmt.Sprintf("dapr-sentry.%s.svc:80", security.CurrentNamespace()), "Filepath to the trust anchors for the Dapr control plane")
+
+	depCC := flag.String("certchain", "", "DEPRECATED")
+	depRCF := flag.String("issuer-ca-filename", "", "DEPRECATED")
+	depICF := flag.String("issuer-certificate-filename", "", "DEPRECATED")
+	depIKF := flag.String("issuer-key-filename", "", "DEPRECATED")
 
 	opts.Logger = logger.DefaultOptions()
 	opts.Logger.AttachCmdFlags(flag.StringVar, flag.BoolVar)
@@ -86,6 +96,10 @@ func New() *Options {
 	opts.MetadataEnabled = utils.IsTruthy(os.Getenv(envMetadataEnabled))
 
 	flag.Parse()
+
+	if len(*depRCF) > 0 || len(*depICF) > 0 || len(*depIKF) > 0 || len(*depCC) > 0 {
+		log.Warn("--certchain, --issuer-ca-filename, --issuer-certificate-filename and --issuer-key-filename are deprecated and will be removed in v1.14.")
+	}
 
 	opts.RaftPeers = parsePeersFromFlag(opts.RaftPeerString)
 	if opts.RaftLogStorePath != "" {
