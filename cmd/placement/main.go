@@ -21,13 +21,13 @@ import (
 	"github.com/dapr/dapr/cmd/placement/options"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/concurrency"
-	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/placement"
 	"github.com/dapr/dapr/pkg/placement/hashing"
 	"github.com/dapr/dapr/pkg/placement/monitoring"
 	"github.com/dapr/dapr/pkg/placement/raft"
+	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/pkg/signals"
 	"github.com/dapr/kit/logger"
 )
@@ -63,30 +63,28 @@ func main() {
 		log.Fatal("Failed to create raft server.")
 	}
 
-	var certChain *credentials.CertChain
-	if opts.TLSEnabled {
-		tlsCreds := credentials.NewTLSCredentials(opts.CertChainPath)
-
-		certChain, err = credentials.LoadFromDisk(tlsCreds.RootCertPath(), tlsCreds.CertPath(), tlsCreds.KeyPath())
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		log.Info("TLS certificates loaded successfully")
-	}
-
-	// Start Placement gRPC server.
-	hashing.SetReplicationFactor(opts.ReplicationFactor)
-	apiServer, err := placement.NewPlacementService(raftServer, certChain)
+	ctx := signals.Context()
+	secProvider, err := security.New(ctx, security.Options{
+		SentryAddress:           opts.SentryAddress,
+		ControlPlaneTrustDomain: opts.TrustDomain,
+		ControlPlaneNamespace:   security.CurrentNamespace(),
+		TrustAnchorsFile:        opts.TrustAnchorsFile,
+		AppID:                   "dapr-placement",
+		MTLSEnabled:             opts.TLSEnabled,
+	})
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	hashing.SetReplicationFactor(opts.ReplicationFactor)
+	apiServer := placement.NewPlacementService(raftServer)
 
 	err = concurrency.NewRunnerManager(
 		func(ctx context.Context) error {
 			return raftServer.StartRaft(ctx, nil)
 		},
 		metricsExporter.Run,
+		secProvider.Start,
 		apiServer.MonitorLeadership,
 		func(ctx context.Context) error {
 			var metadataOptions []health.RouterOptions
@@ -101,9 +99,13 @@ func main() {
 			return nil
 		},
 		func(ctx context.Context) error {
-			return apiServer.Run(ctx, strconv.Itoa(opts.PlacementPort))
+			sec, sErr := secProvider.Handler(ctx)
+			if sErr != nil {
+				return sErr
+			}
+			return apiServer.Run(ctx, strconv.Itoa(opts.PlacementPort), sec)
 		},
-	).Run(signals.Context())
+	).Run(ctx)
 	if err != nil {
 		log.Fatal(err)
 	}

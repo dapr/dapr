@@ -101,7 +101,7 @@ func generateIssuerCert(trustDomain string, skew time.Duration) (*x509.Certifica
 	cert.BasicConstraintsValid = true
 	cert.SignatureAlgorithm = x509.ECDSAWithSHA256
 
-	// TODO: @joshvanl: remove in v1.12, once placement and operator are no
+	// TODO: @joshvanl: remove in v1.13, once placement and operator are no
 	// longer using the issuer cert for serving(!).
 	cert.DNSNames = append(cert.DNSNames, "cluster.local")
 
