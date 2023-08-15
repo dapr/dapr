@@ -342,3 +342,41 @@ func defaultIDGenerator() IDGenerator {
 	}
 	return gen
 }
+
+func TestTraceIDAndStateFromSpan(t *testing.T) {
+	t.Run("non-empty span, id and state are not empty", func(t *testing.T) {
+		idg := defaultIDGenerator()
+		traceID, _ := idg.NewIDs(context.Background())
+		scConfig := trace.SpanContextConfig{
+			TraceID:    traceID,
+			SpanID:     trace.SpanID{0, 240, 103, 170, 11, 169, 2, 183},
+			TraceFlags: 1,
+		}
+		ts := trace.TraceState{}
+		ts, _ = ts.Insert("key", "value")
+
+		scConfig.TraceState = ts
+		parent := trace.NewSpanContext(scConfig)
+
+		ctx := context.Background()
+		ctx = trace.ContextWithRemoteSpanContext(ctx, parent)
+		ctx, span := tracer.Start(ctx, "testTraceSpan", trace.WithSpanKind(trace.SpanKindClient))
+
+		id, state := TraceIDAndStateFromSpan(span)
+		assert.NotEmpty(t, id)
+		assert.NotEmpty(t, state)
+	})
+
+	t.Run("empty span, id and state are empty", func(t *testing.T) {
+		span := trace.SpanFromContext(context.Background())
+		id, state := TraceIDAndStateFromSpan(span)
+		assert.Empty(t, id)
+		assert.Empty(t, state)
+	})
+
+	t.Run("nil span, id and state are empty", func(t *testing.T) {
+		id, state := TraceIDAndStateFromSpan(nil)
+		assert.Empty(t, id)
+		assert.Empty(t, state)
+	})
+}

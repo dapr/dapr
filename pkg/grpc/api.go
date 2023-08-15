@@ -157,20 +157,8 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	data := body
 
 	if !rawPayload {
-		var corID, traceState string
-
-		// Extract trace context from context.
 		span := diagUtils.SpanFromContext(ctx)
-		if span != nil {
-			sc := span.SpanContext()
-
-			if !sc.Equal(otelTrace.SpanContext{}) {
-				corID = diag.SpanContextToW3CString(sc)
-			}
-			if sc.TraceState().Len() > 0 {
-				traceState = diag.TraceStateToW3CString(sc)
-			}
-		}
+		corID, traceState := diag.TraceIDAndStateFromSpan(span)
 
 		envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
 			Source:          a.UniversalAPI.AppID,
@@ -372,20 +360,9 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 		}
 
 		if !rawPayload {
-			var corID, traceState string
-
 			// Extract trace context from context.
 			_, childSpan := diag.StartGRPCProducerSpanChildFromParent(ctx, span, "/dapr.proto.runtime.v1.Dapr/BulkPublishEventAlpha1/")
-			if childSpan != nil {
-				sc := childSpan.SpanContext()
-
-				if !sc.Equal(otelTrace.SpanContext{}) {
-					corID = diag.SpanContextToW3CString(sc)
-				}
-				if sc.TraceState().Len() > 0 {
-					traceState = diag.TraceStateToW3CString(sc)
-				}
-			}
+			corID, traceState := diag.TraceIDAndStateFromSpan(childSpan)
 
 			// For multiple events in a single bulk call traceParent is different for each event.
 			// Populate W3C traceparent to cloudevent envelope
