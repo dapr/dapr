@@ -124,7 +124,7 @@ func Test_Start(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, root1, td)
 
-		caBundleCh := make(chan []byte)
+		caBundleCh := make(chan []byte, 2)
 		watcherStopped := make(chan struct{})
 		go func() {
 			defer close(watcherStopped)

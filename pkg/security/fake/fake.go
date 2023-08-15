@@ -27,8 +27,7 @@ import (
 type Fake struct {
 	grpcServerOptionFn             func() grpc.ServerOption
 	grpcServerOptionNoClientAuthFn func() grpc.ServerOption
-
-	tlsServerConfigBasicTLSFn func() *tls.Config
+	tlsServerConfigNoClientAuth    func() *tls.Config
 
 	currentTrustAnchorsFn func() ([]byte, error)
 	watchTrustAnchorsFn   func(context.Context, chan<- []byte)
@@ -39,11 +38,11 @@ func New() *Fake {
 		grpcServerOptionFn: func() grpc.ServerOption {
 			return grpc.Creds(insecure.NewCredentials())
 		},
+		tlsServerConfigNoClientAuth: func() *tls.Config {
+			return new(tls.Config)
+		},
 		grpcServerOptionNoClientAuthFn: func() grpc.ServerOption {
 			return grpc.Creds(insecure.NewCredentials())
-		},
-		tlsServerConfigBasicTLSFn: func() *tls.Config {
-			return &tls.Config{MinVersion: tls.VersionTLS12}
 		},
 		currentTrustAnchorsFn: func() ([]byte, error) {
 			return []byte{}, nil
@@ -64,6 +63,11 @@ func (f *Fake) WithGRPCServerOptionFn(fn func() grpc.ServerOption) *Fake {
 	return f
 }
 
+func (f *Fake) WithTLSServerConfigNoClientAuthFn(fn func() *tls.Config) *Fake {
+	f.tlsServerConfigNoClientAuth = fn
+	return f
+}
+
 func (f *Fake) WithCurrentTrustAnchorsFn(fn func() ([]byte, error)) *Fake {
 	f.currentTrustAnchorsFn = fn
 	return f
@@ -80,6 +84,10 @@ func (f *Fake) GRPCServerOptionNoClientAuth() grpc.ServerOption {
 
 func (f *Fake) GRPCServerOption() grpc.ServerOption {
 	return f.grpcServerOptionFn()
+}
+
+func (f *Fake) TLSServerConfigNoClientAuth() *tls.Config {
+	return f.tlsServerConfigNoClientAuth()
 }
 
 func (f *Fake) CurrentTrustAnchors() ([]byte, error) {

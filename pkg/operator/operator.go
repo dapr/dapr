@@ -138,7 +138,7 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 				if sErr != nil {
 					return
 				}
-				*tlsConfig = *sec.TLSServerConfigBasicTLS()
+				*tlsConfig = *sec.TLSServerConfigNoClientAuth()
 			},
 		},
 	})

@@ -353,7 +353,7 @@ func (x *x509source) maybeWriteSVIDToDir() error {
 	return nil
 }
 
-func (x *x509source) updateTrustAnchorFromFile(filepath string) error {
+func (x *x509source) updateTrustAnchorFromFile(ctx context.Context, filepath string) error {
 	x.lock.RLock()
 	defer x.lock.RUnlock()
 
@@ -373,8 +373,18 @@ func (x *x509source) updateTrustAnchorFromFile(filepath string) error {
 		return err
 	}
 
+	var wg sync.WaitGroup
+	defer wg.Wait()
+
+	wg.Add(len(x.trustAnchorSubscribers))
 	for _, ch := range x.trustAnchorSubscribers {
-		go func(chi chan<- struct{}) { chi <- struct{}{} }(ch)
+		go func(chi chan<- struct{}) {
+			defer wg.Done()
+			select {
+			case chi <- struct{}{}:
+			case <-ctx.Done():
+			}
+		}(ch)
 	}
 
 	return nil
