@@ -95,7 +95,7 @@ func (s *sentry) Start(parentCtx context.Context) error {
 				TrustDomain:        s.conf.TrustDomain,
 				Namespace:          ns,
 				AppID:              "dapr-sentry",
-				// TODO: @joshvanl: Remove in 1.12. Before 1.11, clients where not
+				// TODO: @joshvanl: Remove in 1.13. Before 1.12, clients where not
 				// authorizing the server based on the correct SPIFFE ID, and instead
 				// matched on the DNS SAN `cluster.local`(!).
 				DNS: []string{"cluster.local"},
