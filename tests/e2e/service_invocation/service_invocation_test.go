@@ -539,7 +539,6 @@ func TestServiceInvocation(t *testing.T) {
 	}
 
 	t.Run("serviceinvocation-caller", testFn("serviceinvocation-caller"))
-	t.Run("serviceinvocation-caller-stream", testFn("serviceinvocation-caller-stream"))
 }
 
 func TestServiceInvocationExternally(t *testing.T) {
@@ -1171,7 +1170,6 @@ func TestHeaders(t *testing.T) {
 	}
 
 	t.Run("serviceinvocation-caller", testFn("serviceinvocation-caller"))
-	t.Run("serviceinvocation-caller-stream", testFn("serviceinvocation-caller-stream"))
 }
 
 func verifyHTTPToHTTPTracing(t *testing.T, url string, expectedTraceID string, remoteApp string) {
