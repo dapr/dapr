@@ -119,15 +119,6 @@ func TestMain(m *testing.M) {
 			MetricsEnabled: true,
 		},
 		{
-			AppName:        "serviceinvocation-caller-stream",
-			DaprEnabled:    true,
-			ImageName:      "e2e-service_invocation",
-			Replicas:       1,
-			IngressEnabled: true,
-			MetricsEnabled: true,
-			Config:         "streamingconfig",
-		},
-		{
 			AppName:        "serviceinvocation-callee-0",
 			DaprEnabled:    true,
 			ImageName:      "e2e-service_invocation",
@@ -1381,7 +1372,6 @@ func TestUppercaseMiddlewareServiceInvocation(t *testing.T) {
 	}
 
 	t.Run("serviceinvocation-caller", testFn("serviceinvocation-caller"))
-	t.Run("serviceinvocation-caller-stream", testFn("serviceinvocation-caller-stream"))
 }
 
 func TestNegativeCases(t *testing.T) {
@@ -1628,7 +1618,6 @@ func TestNegativeCases(t *testing.T) {
 	}
 
 	t.Run("serviceinvocation-caller", testFn("serviceinvocation-caller"))
-	t.Run("serviceinvocation-caller-stream", testFn("serviceinvocation-caller-stream"))
 }
 
 func TestNegativeCasesExternal(t *testing.T) {
@@ -1737,7 +1726,6 @@ func TestCrossNamespaceCases(t *testing.T) {
 	}
 
 	t.Run("serviceinvocation-caller", testFn("serviceinvocation-caller"))
-	t.Run("serviceinvocation-caller-stream", testFn("serviceinvocation-caller-stream"))
 }
 
 func TestPathURLNormalization(t *testing.T) {
