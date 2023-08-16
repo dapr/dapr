@@ -172,9 +172,9 @@ spec:
 		require.Len(t, resp, 3)
 
 		assert.ElementsMatch(t, []*runtimev1pb.RegisteredComponents{
-			&runtimev1pb.RegisteredComponents{Name: "123", Type: "secretstores.local.env", Version: "v1"},
-			&runtimev1pb.RegisteredComponents{Name: "abc", Type: "secretstores.local.file", Version: "v1"},
-			&runtimev1pb.RegisteredComponents{Name: "xyz", Type: "secretstores.local.env", Version: "v1"},
+			{Name: "123", Type: "secretstores.local.env", Version: "v1"},
+			{Name: "abc", Type: "secretstores.local.file", Version: "v1"},
+			{Name: "xyz", Type: "secretstores.local.env", Version: "v1"},
 		}, resp)
 
 		s.read(t, ctx, "123", "SEC_1", "bar1")
@@ -204,9 +204,9 @@ spec:
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := s.getMetaResponse(c, ctx)
 			assert.ElementsMatch(c, []*runtimev1pb.RegisteredComponents{
-				&runtimev1pb.RegisteredComponents{Name: "123", Type: "secretstores.local.env", Version: "v1"},
-				&runtimev1pb.RegisteredComponents{Name: "abc", Type: "secretstores.local.env", Version: "v1"},
-				&runtimev1pb.RegisteredComponents{Name: "xyz", Type: "secretstores.local.env", Version: "v1"},
+				{Name: "123", Type: "secretstores.local.env", Version: "v1"},
+				{Name: "abc", Type: "secretstores.local.env", Version: "v1"},
+				{Name: "xyz", Type: "secretstores.local.env", Version: "v1"},
 			}, resp)
 		}, time.Second*5, time.Millisecond*100)
 
@@ -270,10 +270,10 @@ spec:
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := s.getMetaResponse(c, ctx)
 			assert.ElementsMatch(c, []*runtimev1pb.RegisteredComponents{
-				&runtimev1pb.RegisteredComponents{Name: "123", Type: "secretstores.local.file", Version: "v1"},
-				&runtimev1pb.RegisteredComponents{Name: "abc", Type: "secretstores.local.file", Version: "v1"},
-				&runtimev1pb.RegisteredComponents{Name: "xyz", Type: "secretstores.local.env", Version: "v1"},
-				&runtimev1pb.RegisteredComponents{Name: "foo", Type: "secretstores.local.env", Version: "v1"},
+				{Name: "123", Type: "secretstores.local.file", Version: "v1"},
+				{Name: "abc", Type: "secretstores.local.file", Version: "v1"},
+				{Name: "xyz", Type: "secretstores.local.env", Version: "v1"},
+				{Name: "foo", Type: "secretstores.local.env", Version: "v1"},
 			}, resp)
 		}, time.Second*5, time.Millisecond*100)
 
@@ -308,10 +308,10 @@ spec:
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := s.getMetaResponse(c, ctx)
 			assert.ElementsMatch(c, []*runtimev1pb.RegisteredComponents{
-				&runtimev1pb.RegisteredComponents{Name: "123", Type: "secretstores.local.file", Version: "v1"},
-				&runtimev1pb.RegisteredComponents{Name: "bar", Type: "secretstores.local.file", Version: "v1"},
-				&runtimev1pb.RegisteredComponents{Name: "xyz", Type: "secretstores.local.env", Version: "v1"},
-				&runtimev1pb.RegisteredComponents{Name: "foo", Type: "secretstores.local.env", Version: "v1"},
+				{Name: "123", Type: "secretstores.local.file", Version: "v1"},
+				{Name: "bar", Type: "secretstores.local.file", Version: "v1"},
+				{Name: "xyz", Type: "secretstores.local.env", Version: "v1"},
+				{Name: "foo", Type: "secretstores.local.env", Version: "v1"},
 			}, resp)
 		}, time.Second*5, time.Millisecond*100)
 
@@ -335,9 +335,9 @@ spec:
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := s.getMetaResponse(c, ctx)
 			assert.ElementsMatch(c, []*runtimev1pb.RegisteredComponents{
-				&runtimev1pb.RegisteredComponents{Name: "123", Type: "secretstores.local.file", Version: "v1"},
-				&runtimev1pb.RegisteredComponents{Name: "xyz", Type: "secretstores.local.env", Version: "v1"},
-				&runtimev1pb.RegisteredComponents{Name: "foo", Type: "secretstores.local.env", Version: "v1"},
+				{Name: "123", Type: "secretstores.local.file", Version: "v1"},
+				{Name: "xyz", Type: "secretstores.local.env", Version: "v1"},
+				{Name: "foo", Type: "secretstores.local.env", Version: "v1"},
 			}, resp)
 		}, time.Second*5, time.Millisecond*100)
 
@@ -381,6 +381,7 @@ func (s *secret) getMetaResponse(t require.TestingT, ctx context.Context) []*run
 	require.NoError(t, err)
 	resp, err := s.client.Do(req)
 	require.NoError(t, err)
+	defer resp.Body.Close()
 
 	var meta metaResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&meta))
@@ -389,6 +390,8 @@ func (s *secret) getMetaResponse(t require.TestingT, ctx context.Context) []*run
 }
 
 func (s *secret) readExpectError(t *testing.T, ctx context.Context, compName, key string, expCode int) {
+	t.Helper()
+
 	getURL := fmt.Sprintf("http://localhost:%d/v1.0/secrets/%s/%s",
 		s.daprd.HTTPPort(), url.QueryEscape(compName), url.QueryEscape(key))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, getURL, nil)
@@ -399,6 +402,8 @@ func (s *secret) readExpectError(t *testing.T, ctx context.Context, compName, ke
 }
 
 func (s *secret) read(t *testing.T, ctx context.Context, compName, key, expValue string) {
+	t.Helper()
+
 	getURL := fmt.Sprintf("http://localhost:%d/v1.0/secrets/%s/%s", s.daprd.HTTPPort(), url.QueryEscape(compName), url.QueryEscape(key))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, getURL, nil)
@@ -407,6 +412,8 @@ func (s *secret) read(t *testing.T, ctx context.Context, compName, key, expValue
 }
 
 func (s *secret) doReq(t *testing.T, req *http.Request, expCode int, expBody string) {
+	t.Helper()
+
 	resp, err := s.client.Do(req)
 	require.NoError(t, err)
 	assert.Equal(t, expCode, resp.StatusCode)
