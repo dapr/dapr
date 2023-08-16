@@ -177,7 +177,7 @@ func TestStartRotation(t *testing.T) {
 }
 
 func Test_atomicWrite(t *testing.T) {
-	clock := clocktesting.NewFakeClock(time.Date(2023, time.April, 4, 0, 0, 0, 0, time.UTC))
+	clock := clocktesting.NewFakeClock(time.Date(2023, time.April, 5, 1, 2, 3, 4, time.UTC))
 
 	tests := map[string]struct {
 		before func(t *testing.T, dir string)
@@ -222,7 +222,7 @@ func Test_atomicWrite(t *testing.T) {
 
 			require.NoError(t, atomicWrite(clock, dir, test.data))
 
-			newDir := filepath.Join(tDir, "my-dir-2023-04-04T00-00-00Z")
+			newDir := filepath.Join(tDir, "my-dir-20230405-010203")
 			f, err := os.Stat(newDir)
 			require.NoError(t, err)
 			assert.True(t, f.IsDir())

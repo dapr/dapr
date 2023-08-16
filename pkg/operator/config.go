@@ -23,7 +23,7 @@ type Config struct {
 func LoadConfiguration(ctx context.Context, name string, restConfig *rest.Config) (*Config, error) {
 	client, err := client.New(restConfig, client.Options{Scheme: scheme})
 	if err != nil {
-		return nil, fmt.Errorf("could not get Kubernetes API client: %v", err)
+		return nil, fmt.Errorf("could not get Kubernetes API client: %w", err)
 	}
 
 	var conf v1alpha1.Configuration

@@ -28,7 +28,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"sync"
 	"time"
 
@@ -348,7 +347,7 @@ func (x *x509source) maybeWriteSVIDToDir() error {
 		return fmt.Errorf("unable to write SVID to disk: %w", err)
 	}
 
-	log.Infof("Wrote SVID to %q", *x.writeToDiskDir)
+	log.Infof("Wrote SVID to '%s'", *x.writeToDiskDir)
 
 	return nil
 }
@@ -359,12 +358,12 @@ func (x *x509source) updateTrustAnchorFromFile(ctx context.Context, filepath str
 
 	rootPEMs, err := os.ReadFile(filepath)
 	if err != nil {
-		return fmt.Errorf("failed to read trust anchors file %q: %s", filepath, err)
+		return fmt.Errorf("failed to read trust anchors file '%s': %w", filepath, err)
 	}
 
 	trustAnchorCerts, err := secpem.DecodePEMCertificates(rootPEMs)
 	if err != nil {
-		return fmt.Errorf("failed to decode trust anchors: %s", err)
+		return fmt.Errorf("failed to decode trust anchors: %w", err)
 	}
 
 	x.trustAnchors.SetX509Authorities(trustAnchorCerts)
@@ -396,9 +395,7 @@ func atomicWrite(clock clock.Clock, dir string, data map[string][]byte) error {
 		return err
 	}
 
-	// Replace ':' with '-' in the timestamp to avoid issues with Windows
-	// filesystems.
-	newDir := dir + "-" + strings.ReplaceAll(clock.Now().Format(time.RFC3339), ":", "-")
+	newDir := dir + "-" + clock.Now().Format("20060102-150405")
 	if err := os.MkdirAll(newDir, 0o700); err != nil {
 		return err
 	}

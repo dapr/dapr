@@ -288,7 +288,7 @@ func (o *operator) Run(ctx context.Context) error {
 				return rErr
 			}
 
-			log.Info("Starting api server")
+			log.Info("Starting API server")
 			rErr = o.apiServer.Run(ctx, sec)
 			if rErr != nil {
 				return fmt.Errorf("failed to start API server: %w", rErr)
@@ -393,7 +393,7 @@ func (o *operator) patchCRDs(ctx context.Context, caBundle []byte, conf *rest.Co
 
 		payloadJSON, err := json.Marshal(payload)
 		if err != nil {
-			return fmt.Errorf("could not marshal webhook spec: %v", err)
+			return fmt.Errorf("could not marshal webhook spec: %w", err)
 		}
 		if _, err := crdClient.Patch(ctx, crdName, types.JSONPatchType, payloadJSON, v1.PatchOptions{}); err != nil {
 			return fmt.Errorf("failed to patch webhook in CRD %q: %v", crdName, err)
