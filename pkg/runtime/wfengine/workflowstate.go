@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/microsoft/durabletask-go/backend"
@@ -142,6 +143,36 @@ func (s *workflowState) GetSaveRequest(actorID string) (*actors.TransactionalReq
 	})
 
 	return req, nil
+}
+
+// String implements fmt.Stringer and is primarily used for debugging purposes.
+func (s *workflowState) String() string {
+	if s == nil {
+		return "(nil)"
+	}
+
+	inbox := make([]string, len(s.Inbox))
+	for i, v := range s.Inbox {
+		if v == nil {
+			inbox[i] = "[(nil)]"
+		} else {
+			inbox[i] = "[" + v.String() + "]"
+		}
+	}
+	history := make([]string, len(s.History))
+	for i, v := range s.History {
+		if v == nil {
+			history[i] = "[(nil)]"
+		} else {
+			history[i] = "[" + v.String() + "]"
+		}
+	}
+	return fmt.Sprintf("Inbox:%s\nHistory:%s\nCustomStatus:%s\nGeneration:%d\ninboxAddedCount:%d\ninboxRemovedCount:%d\nhistoryAddedCount:%d\nhistoryRemovedCount:%d\nconfig:%s",
+		strings.Join(inbox, ", "), strings.Join(history, ", "),
+		s.CustomStatus, s.Generation,
+		s.inboxAddedCount, s.inboxRemovedCount,
+		s.historyAddedCount, s.historyRemovedCount,
+		s.config.String())
 }
 
 func addStateOperations(req *actors.TransactionalRequest, keyPrefix string, events []*backend.HistoryEvent, addedCount int, removedCount int) error {
