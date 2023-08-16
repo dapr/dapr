@@ -63,3 +63,14 @@ func GitVersion() string {
 func Features() []string {
 	return featuresSlice
 }
+
+// AddFeature adds a new feature to the featuresSlice. It's primarily meant for testing purposes.
+// This should only be called as part of an init() method.
+func AddFeature(feature string) {
+	if featuresSlice == nil {
+		// If featuresSlice is nil, it means the caller's init() was executed before this package's
+		features += "," + feature
+	} else {
+		featuresSlice = append(featuresSlice, feature)
+	}
+}
