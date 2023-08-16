@@ -17,7 +17,10 @@ limitations under the License.
 package workflows_e2e
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"testing"
 	"time"
@@ -240,20 +243,26 @@ func TestWorkflow(t *testing.T) {
 	// Check if test app endpoint is available
 	require.NoError(t, utils.HealthCheckApps(externalURL))
 
+	// Generate a unique test suffix for this test
+	suffixBytes := make([]byte, 7)
+	_, err := io.ReadFull(rand.Reader, suffixBytes)
+	require.NoError(t, err)
+	suffix := hex.EncodeToString(suffixBytes)
+
 	// Run tests
 	t.Run("Start", func(t *testing.T) {
-		require.NoError(t, startTest(externalURL, "startID"))
+		require.NoError(t, startTest(externalURL, "start-"+suffix))
 	})
 
 	t.Run("Pause and Resume", func(t *testing.T) {
-		require.NoError(t, pauseResumeTest(externalURL, "pauseID"))
+		require.NoError(t, pauseResumeTest(externalURL, "pause-"+suffix))
 	})
 
 	t.Run("Purge", func(t *testing.T) {
-		require.NoError(t, purgeTest(externalURL, "purgeID"))
+		require.NoError(t, purgeTest(externalURL, "purge-"+suffix))
 	})
 
 	t.Run("Raise event", func(t *testing.T) {
-		require.NoError(t, raiseEventTest(externalURL, "raiseEventID"))
+		require.NoError(t, raiseEventTest(externalURL, "raiseEvent-"+suffix))
 	})
 }
