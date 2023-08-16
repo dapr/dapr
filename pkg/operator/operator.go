@@ -48,7 +48,6 @@ import (
 	"github.com/dapr/dapr/pkg/operator/handlers"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 )
 
 var log = logger.NewLogger("dapr.operator")
@@ -98,6 +97,12 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 		return nil, fmt.Errorf("unable to load configuration, config: %s, err: %w", opts.Config, err)
 	}
 
+	certDir, err := os.MkdirTemp("", "dapr-operator")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create operator SVID directory: %w", err)
+	}
+	certDir = filepath.Join(certDir, "/var/run/secrets/dapr.io/webhook/tls")
+
 	secProvider, err := security.New(ctx, security.Options{
 		SentryAddress:           config.SentryAddress,
 		ControlPlaneTrustDomain: config.ControlPlaneTrustDomain,
@@ -106,7 +111,7 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 		AppID:                   "dapr-operator",
 		// mTLS is always enabled for the operator.
 		MTLSEnabled:    true,
-		WriteSVIDToDir: ptr.Of(filepath.Join(os.TempDir(), "/var/run/secrets/dapr.io/webhook/tls")),
+		WriteSVIDToDir: &certDir,
 	})
 	if err != nil {
 		return nil, err
@@ -128,7 +133,7 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 		LeaderElectionID:              "operator.dapr.io",
 		Namespace:                     opts.WatchNamespace,
 		NewCache:                      operatorcache.GetFilteredCache(watchdogPodSelector),
-		CertDir:                       filepath.Join(os.TempDir(), "/var/run/secrets/dapr.io/webhook/tls"),
+		CertDir:                       certDir,
 		LeaderElectionReleaseOnCancel: true,
 		TLSOpts: []func(*tls.Config){
 			func(tlsConfig *tls.Config) {
