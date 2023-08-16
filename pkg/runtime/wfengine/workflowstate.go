@@ -289,7 +289,7 @@ func (s *workflowState) GetPurgeRequest(actorID string) (*actors.TransactionalRe
 	req := &actors.TransactionalRequest{
 		ActorType:  s.config.workflowActorType,
 		ActorID:    actorID,
-		Operations: make([]actors.TransactionalOperation, 0, 100),
+		Operations: make([]actors.TransactionalOperation, 0, len(s.Inbox)+len(s.History)+2),
 	}
 
 	// Inbox Purging
@@ -302,13 +302,16 @@ func (s *workflowState) GetPurgeRequest(actorID string) (*actors.TransactionalRe
 		return nil, err
 	}
 
-	req.Operations = append(req.Operations, actors.TransactionalOperation{
-		Operation: actors.Delete,
-		Request:   actors.TransactionalDelete{Key: customStatusKey},
-	}, actors.TransactionalOperation{
-		Operation: actors.Delete,
-		Request:   actors.TransactionalDelete{Key: metadataKey},
-	})
+	req.Operations = append(req.Operations,
+		actors.TransactionalOperation{
+			Operation: actors.Delete,
+			Request:   actors.TransactionalDelete{Key: customStatusKey},
+		},
+		actors.TransactionalOperation{
+			Operation: actors.Delete,
+			Request:   actors.TransactionalDelete{Key: metadataKey},
+		},
+	)
 
 	return req, nil
 }
