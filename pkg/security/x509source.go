@@ -24,6 +24,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"sync"
 	"time"
@@ -45,8 +46,8 @@ import (
 )
 
 const (
-	sentrySignTimeout = time.Second * 5
-	sentryMaxRetries  = 100
+	sentrySignTimeout = time.Second * 3
+	sentryMaxRetries  = 5
 )
 
 type renewFn func(context.Context) (*x509.Certificate, error)
@@ -89,7 +90,37 @@ type x509source struct {
 }
 
 func newX509Source(ctx context.Context, clock clock.Clock, opts Options) (*x509source, error) {
-	trustAnchorCerts, err := secpem.DecodePEMCertificates(opts.TrustAnchors)
+	rootPEMs := opts.TrustAnchors
+
+	if len(rootPEMs) == 0 {
+		var err error
+		var f *os.File
+		for {
+			f, err = os.Open(opts.TrustAnchorsFile)
+			if err == nil {
+				break
+			}
+			if !errors.Is(err, os.ErrNotExist) {
+				return nil, err
+			}
+
+			// Trust anchors file not be provided yet, wait.
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-clock.After(time.Second):
+				log.Warnf("trust anchors file '%s' not found, waiting...", opts.TrustAnchorsFile)
+			}
+		}
+
+		defer f.Close()
+		rootPEMs, err = io.ReadAll(f)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read trust anchors file %q: %w", opts.TrustAnchorsFile, err)
+		}
+	}
+
+	trustAnchorCerts, err := secpem.DecodePEMCertificates(rootPEMs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode trust anchors: %w", err)
 	}
@@ -173,6 +204,10 @@ func (x *x509source) renewIdentityCertificate(ctx context.Context) (*x509.Certif
 	workloadcert, err := x.requestFn(ctx, csrDER)
 	if err != nil {
 		return nil, err
+	}
+
+	if len(workloadcert) == 0 {
+		return nil, errors.New("no certificates received from sentry")
 	}
 
 	spiffeID, err := x509svid.IDFromCert(workloadcert[0])

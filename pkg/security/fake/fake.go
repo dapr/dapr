@@ -18,16 +18,21 @@ package fake
 
 import (
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 type Fake struct {
+	grpcServerOptionFn             func() grpc.ServerOption
 	grpcServerOptionNoClientAuthFn func() grpc.ServerOption
 }
 
 func New() *Fake {
 	return &Fake{
+		grpcServerOptionFn: func() grpc.ServerOption {
+			return grpc.Creds(insecure.NewCredentials())
+		},
 		grpcServerOptionNoClientAuthFn: func() grpc.ServerOption {
-			return grpc.Creds(nil)
+			return grpc.Creds(insecure.NewCredentials())
 		},
 	}
 }
@@ -37,6 +42,15 @@ func (f *Fake) WithGRPCServerOptionNoClientAuthFn(fn func() grpc.ServerOption) *
 	return f
 }
 
+func (f *Fake) WithGRPCServerOptionFn(fn func() grpc.ServerOption) *Fake {
+	f.grpcServerOptionFn = fn
+	return f
+}
+
 func (f *Fake) GRPCServerOptionNoClientAuth() grpc.ServerOption {
 	return f.grpcServerOptionNoClientAuthFn()
+}
+
+func (f *Fake) GRPCServerOption() grpc.ServerOption {
+	return f.grpcServerOptionFn()
 }
