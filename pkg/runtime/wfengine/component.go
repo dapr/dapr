@@ -71,7 +71,7 @@ type workflowEngineComponent struct {
 }
 
 func (c *workflowEngineComponent) Init(metadata workflows.Metadata) error {
-	c.logger.Info("initializing Dapr workflow component")
+	c.logger.Info("Initializing Dapr workflow component")
 	return nil
 }
 
@@ -95,22 +95,19 @@ func (c *workflowEngineComponent) Start(ctx context.Context, req *workflows.Star
 	if req.Options != nil {
 		if startTimeRFC3339, ok := req.Options["dapr.workflow.start_time"]; ok {
 			if startTime, err := time.Parse(time.RFC3339, startTimeRFC3339); err != nil {
-				return nil, fmt.Errorf("start times must be in RFC3339 format (e.g. \"2009-11-10T23:00:00Z\")")
+				return nil, errors.New(`start times must be in RFC3339 format (e.g. "2009-11-10T23:00:00Z")`)
 			} else {
 				opts = append(opts, api.WithStartTime(startTime))
 			}
 		}
 	}
 
-	var workflowID api.InstanceID
-	var err error
-
-	workflowID, err = c.client.ScheduleNewOrchestration(ctx, req.WorkflowName, opts...)
+	workflowID, err := c.client.ScheduleNewOrchestration(ctx, req.WorkflowName, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("unable to start workflow: %w", err)
 	}
 
-	c.logger.Infof("created new workflow instance with ID '%s'", workflowID)
+	c.logger.Debugf("Created new workflow instance with ID '%s'", workflowID)
 	res := &workflows.StartResponse{
 		InstanceID: string(workflowID),
 	}
@@ -130,7 +127,7 @@ func (c *workflowEngineComponent) Terminate(ctx context.Context, req *workflows.
 		return fmt.Errorf("failed to terminate workflow %s: %w", req.InstanceID, err)
 	}
 
-	c.logger.Infof("scheduled termination for workflow instance '%s'", req.InstanceID)
+	c.logger.Debugf("Scheduled termination for workflow instance '%s'", req.InstanceID)
 	return nil
 }
 
@@ -141,7 +138,7 @@ func (c *workflowEngineComponent) Purge(ctx context.Context, req *workflows.Purg
 
 	if err := c.client.PurgeOrchestrationState(ctx, api.InstanceID(req.InstanceID)); err != nil {
 		if errors.Is(err, api.ErrInstanceNotFound) {
-			c.logger.Infof("Unable to purge the instance: '%s', no such instance exists", req.InstanceID)
+			c.logger.Errorf("Unable to purge the instance: '%s', no such instance exists", req.InstanceID)
 			return err
 		}
 		return fmt.Errorf("failed to Purge workflow %s: %w", req.InstanceID, err)
@@ -169,7 +166,7 @@ func (c *workflowEngineComponent) RaiseEvent(ctx context.Context, req *workflows
 		return fmt.Errorf("failed to raise event %s on workflow %s: %w", req.EventName, req.InstanceID, err)
 	}
 
-	c.logger.Infof("Raised event %s on workflow instance '%s'", req.EventName, req.InstanceID)
+	c.logger.Debugf("Raised event %s on workflow instance '%s'", req.EventName, req.InstanceID)
 	return nil
 }
 
@@ -180,7 +177,7 @@ func (c *workflowEngineComponent) Get(ctx context.Context, req *workflows.GetReq
 
 	if metadata, err := c.client.FetchOrchestrationMetadata(ctx, api.InstanceID(req.InstanceID)); err != nil {
 		if errors.Is(err, api.ErrInstanceNotFound) {
-			c.logger.Infof("Unable to get data on the instance: %s, no such instance exists", req.InstanceID)
+			c.logger.Errorf("Unable to get data on the instance: %s, no such instance exists", req.InstanceID)
 			return nil, err
 		}
 		return nil, fmt.Errorf("failed to get workflow metadata for '%s': %w", req.InstanceID, err)
@@ -220,7 +217,7 @@ func (c *workflowEngineComponent) Pause(ctx context.Context, req *workflows.Paus
 		return fmt.Errorf("failed to pause workflow %s: %w", req.InstanceID, err)
 	}
 
-	c.logger.Infof("pausing workflow instance '%s'", req.InstanceID)
+	c.logger.Debugf("Pausing workflow instance '%s'", req.InstanceID)
 	return nil
 }
 
@@ -233,7 +230,7 @@ func (c *workflowEngineComponent) Resume(ctx context.Context, req *workflows.Res
 		return fmt.Errorf("failed to resume workflow %s: %w", req.InstanceID, err)
 	}
 
-	c.logger.Infof("resuming workflow instance '%s'", req.InstanceID)
+	c.logger.Debugf("Resuming workflow instance '%s'", req.InstanceID)
 	return nil
 }
 
@@ -244,13 +241,13 @@ func (c *workflowEngineComponent) PurgeWorkflow(ctx context.Context, req *workfl
 
 	if err := c.client.PurgeOrchestrationState(ctx, api.InstanceID(req.InstanceID)); err != nil {
 		if errors.Is(err, api.ErrInstanceNotFound) {
-			c.logger.Infof("The requested instance: '%s' does not exist or has already been purged", req.InstanceID)
+			c.logger.Errorf("The requested instance: '%s' does not exist or has already been purged", req.InstanceID)
 			return err
 		}
 		return fmt.Errorf("failed to purge workflow %s: %w", req.InstanceID, err)
 	}
 
-	c.logger.Infof("purging workflow instance '%s'", req.InstanceID)
+	c.logger.Debugf("Purging workflow instance '%s'", req.InstanceID)
 	return nil
 }
 
