@@ -236,6 +236,7 @@ func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID 
 	}
 	state := NewWorkflowState(config)
 	state.Generation = metadata.Generation
+	state.Inbox = make([]*backend.HistoryEvent, 0, metadata.InboxLength)
 	// CONSIDER: Do some of these loads in parallel
 	for i := 0; i < metadata.InboxLength; i++ {
 		req.Key = getMultiEntryKeyName(inboxKeyPrefix, i)
@@ -251,6 +252,7 @@ func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID 
 		}
 		state.Inbox = append(state.Inbox, e)
 	}
+	state.History = make([]*backend.HistoryEvent, 0, metadata.HistoryLength)
 	for i := 0; i < metadata.HistoryLength; i++ {
 		req.Key = getMultiEntryKeyName(historyKeyPrefix, i)
 		res, err = actorRuntime.GetState(ctx, &req)
