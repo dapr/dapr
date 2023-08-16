@@ -23,10 +23,17 @@ import (
 
 	"github.com/spiffe/go-spiffe/v2/spiffegrpc/grpccredentials"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
+	"github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/insecure"
 	"k8s.io/utils/clock"
 
+	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/security/legacy"
+	secpem "github.com/dapr/dapr/pkg/security/pem"
+	"github.com/dapr/kit/fswatcher"
 	"github.com/dapr/kit/logger"
 )
 
@@ -36,6 +43,7 @@ type RequestFn func(ctx context.Context, der []byte) ([]*x509.Certificate, error
 
 // Handler implements middleware for client and server connection security.
 type Handler interface {
+	GRPCServerOption() grpc.ServerOption
 	GRPCServerOptionNoClientAuth() grpc.ServerOption
 }
 
@@ -63,6 +71,11 @@ type Options struct {
 	// preferred so changes to the file are automatically picked up.
 	TrustAnchors []byte
 
+	// TrustAnchorsFile is the path to the X.509 PEM encoded CA certificates for
+	// this Dapr installation. Prefer this over TrustAnchors so changes to the
+	// file are automatically picked up. Cannot be used with TrustAnchors.
+	TrustAnchorsFile string
+
 	// AppID is the application ID of this workload.
 	AppID string
 
@@ -72,18 +85,14 @@ type Options struct {
 	// OverrideCertRequestSource is used to override where certificates are requested
 	// from. Default to an implementation requesting from Sentry.
 	OverrideCertRequestSource RequestFn
-
-	// WriteSVIDoDir is the directory to write the X.509 SVID certificate private
-	// key pair to. This is highly discouraged since it results in the private
-	// key being written to file.
-	WriteSVIDToDir *string
 }
 
 type provider struct {
 	sec *security
 
-	running atomic.Bool
-	readyCh chan struct{}
+	running          atomic.Bool
+	readyCh          chan struct{}
+	trustAnchorsFile string
 }
 
 // security implements the Security interface.
@@ -102,7 +111,11 @@ func New(ctx context.Context, opts Options) (Provider, error) {
 	var source *x509source
 
 	if opts.MTLSEnabled {
-		if len(opts.TrustAnchors) == 0 {
+		if len(opts.TrustAnchors) > 0 && len(opts.TrustAnchorsFile) > 0 {
+			return nil, errors.New("trust anchors cannot be specified in both TrustAnchors and TrustAnchorsFile")
+		}
+
+		if len(opts.TrustAnchors) == 0 && len(opts.TrustAnchorsFile) == 0 {
 			return nil, errors.New("trust anchors are required")
 		}
 
@@ -116,7 +129,8 @@ func New(ctx context.Context, opts Options) (Provider, error) {
 	}
 
 	return &provider{
-		readyCh: make(chan struct{}),
+		readyCh:          make(chan struct{}),
+		trustAnchorsFile: opts.TrustAnchorsFile,
 		sec: &security{
 			source:                source,
 			mtls:                  opts.MTLSEnabled,
@@ -140,7 +154,7 @@ func (p *provider) Start(ctx context.Context) error {
 
 	if p.sec.source.requestFn == nil {
 		p.sec.source.requestFn = p.sec.source.requestFromSentry
-		log.Infof("fetching initial identity certificate from %s", p.sec.source.sentryAddress)
+		log.Infof("Fetching initial identity certificate from %s", p.sec.source.sentryAddress)
 	}
 
 	initialCert, err := p.sec.source.renewIdentityCertificate(ctx)
@@ -148,12 +162,46 @@ func (p *provider) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to retrieve the initial identity certificate: %w", err)
 	}
 
+	mngr := concurrency.NewRunnerManager(func(ctx context.Context) error {
+		p.sec.source.startRotation(ctx, p.sec.source.renewIdentityCertificate, initialCert)
+		return nil
+	})
+
+	if len(p.trustAnchorsFile) > 0 {
+		caEvent := make(chan struct{})
+
+		err = mngr.Add(
+			func(ctx context.Context) error {
+				log.Infof("Watching trust anchors file '%s' for changes", p.trustAnchorsFile)
+				return fswatcher.Watch(ctx, p.trustAnchorsFile, caEvent)
+			},
+			func(ctx context.Context) error {
+				for {
+					select {
+					case <-ctx.Done():
+						return nil
+					case <-caEvent:
+						log.Info("Trust anchors file changed, reloading trust anchors")
+
+						p.sec.source.lock.Lock()
+						if uErr := p.sec.source.updateTrustAnchorFromFile(p.trustAnchorsFile); uErr != nil {
+							log.Errorf("Failed to read trust anchors file '%s': %v", p.trustAnchorsFile, uErr)
+						}
+						p.sec.source.lock.Unlock()
+					}
+				}
+			},
+		)
+		if err != nil {
+			return err
+		}
+	}
+
 	diagnostics.DefaultMonitoring.MTLSInitCompleted()
 	close(p.readyCh)
 	log.Infof("Security is initialized successfully")
-	p.sec.source.startRotation(ctx, p.sec.source.renewIdentityCertificate, initialCert)
 
-	return nil
+	return mngr.Run(ctx)
 }
 
 // Handler returns a ready handler from the security provider. Blocks until
@@ -167,6 +215,20 @@ func (p *provider) Handler(ctx context.Context) (Handler, error) {
 	}
 }
 
+// GRPCServerOption returns a gRPC server option which instruments
+// authentication of clients using the current trust anchors.
+func (s *security) GRPCServerOption() grpc.ServerOption {
+	if !s.mtls {
+		return grpc.Creds(insecure.NewCredentials())
+	}
+
+	// TODO: It would be better if we could give a subset of trust domains in
+	// which this server authorizes.
+	return grpc.Creds(
+		credentials.NewTLS(legacy.NewServer(s.source, s.source, tlsconfig.AuthorizeAny())),
+	)
+}
+
 // GRPCServerOptionNoClientAuth returns a gRPC server option which instruments
 // authentication of clients using the current trust anchors. Doesn't require
 // clients to present a certificate.
@@ -174,12 +236,6 @@ func (s *security) GRPCServerOptionNoClientAuth() grpc.ServerOption {
 	return grpc.Creds(
 		grpccredentials.TLSServerCredentials(s.source),
 	)
-}
-
-// CurrentTrustAnchors returns the current trust anchors for this Dapr
-// installation.
-func (s *security) CurrentTrustAnchors() ([]byte, error) {
-	return s.source.trustAnchors.Marshal()
 }
 
 // CurrentNamespace returns the namespace of this workload.
@@ -204,4 +260,20 @@ func SentryID(sentryTrustDomain, sentryNamespace string) (spiffeid.ID, error) {
 	}
 
 	return sentryID, nil
+}
+
+func (x *x509source) updateTrustAnchorFromFile(filepath string) error {
+	rootPEMs, err := os.ReadFile(filepath)
+	if err != nil {
+		return fmt.Errorf("failed to read trust anchors file '%s': %w", filepath, err)
+	}
+
+	trustAnchorCerts, err := secpem.DecodePEMCertificates(rootPEMs)
+	if err != nil {
+		return fmt.Errorf("failed to decode trust anchors: %w", err)
+	}
+
+	x.trustAnchors.SetX509Authorities(trustAnchorCerts)
+
+	return nil
 }

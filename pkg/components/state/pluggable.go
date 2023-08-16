@@ -147,7 +147,7 @@ var (
 // grpcStateStore is a implementation of a state store over a gRPC Protocol.
 type grpcStateStore struct {
 	*pluggable.GRPCConnector[stateStoreClient]
-	// features the list of state store implemented features features.
+	// features is the list of state store implemented features.
 	features []state.Feature
 }
 
