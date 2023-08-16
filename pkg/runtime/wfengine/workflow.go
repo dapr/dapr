@@ -321,7 +321,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 	}
 
 	// The logic/for loop below purges/removes any leftover state from a completed or failed activity
-	// TODO: for optimization make multiple go routines and run them in parallel
+	transactionalRequests := make(map[string][]actors.TransactionalOperation)
 	for _, e := range state.Inbox {
 		var taskID int32
 		if ts := e.GetTaskCompleted(); ts != nil {
@@ -331,20 +331,28 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 		} else {
 			continue
 		}
-		// TODO: Why are we using a transaction with a single operation within the loop?
-		req := actors.TransactionalRequest{
-			ActorType: wf.config.activityActorType,
-			ActorID:   getActivityActorID(actorID, taskID, state.Generation),
-			Operations: []actors.TransactionalOperation{{
-				Operation: actors.Delete,
-				Request: actors.TransactionalDelete{
-					Key: activityStateKey,
-				},
-			}},
+		op := actors.TransactionalOperation{
+			Operation: actors.Delete,
+			Request: actors.TransactionalDelete{
+				Key: activityStateKey,
+			},
 		}
-		err = wf.actors.TransactionalStateOperation(ctx, &req)
+		activityActorID := getActivityActorID(actorID, taskID, state.Generation)
+		if transactionalRequests[activityActorID] == nil {
+			transactionalRequests[activityActorID] = []actors.TransactionalOperation{op}
+		} else {
+			transactionalRequests[activityActorID] = append(transactionalRequests[activityActorID], op)
+		}
+	}
+	// TODO: for optimization make multiple go routines and run them in parallel
+	for activityActorID, operations := range transactionalRequests {
+		err = wf.actors.TransactionalStateOperation(ctx, &actors.TransactionalRequest{
+			ActorType:  wf.config.activityActorType,
+			ActorID:    activityActorID,
+			Operations: operations,
+		})
 		if err != nil {
-			return fmt.Errorf("failed to delete activity state with error: %w", err)
+			return fmt.Errorf("failed to delete activity state for activity actor '%s' with error: %w", activityActorID, err)
 		}
 	}
 
@@ -419,40 +427,43 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 		}
 	}
 
-	// Schedule activities (TODO: Parallelism)
+	// Schedule activities
+	// TODO: Parallelism
 	for _, e := range runtimeState.PendingTasks() {
-		if ts := e.GetTaskScheduled(); ts != nil {
-			eventData, err := backend.MarshalHistoryEvent(e)
-			if err != nil {
-				return err
-			}
-			activityRequestBytes, err := actors.EncodeInternalActorData(ActivityRequest{
-				HistoryEvent: eventData,
-			})
-			if err != nil {
-				return err
-			}
-			targetActorID := getActivityActorID(actorID, e.EventId, state.Generation)
-
-			req := invokev1.
-				NewInvokeMethodRequest("Execute").
-				WithActor(wf.config.activityActorType, targetActorID).
-				WithRawDataBytes(activityRequestBytes).
-				WithContentType(invokev1.OctetStreamContentType)
-			defer req.Close()
-
-			resp, err := wf.actors.Call(ctx, req)
-			if err != nil {
-				if errors.Is(err, ErrDuplicateInvocation) {
-					wfLogger.Warnf("%s: activity invocation %s::%d was flagged as a duplicate and will be skipped", actorID, ts.Name, e.EventId)
-					continue
-				}
-				return newRecoverableError(fmt.Errorf("failed to invoke activity actor '%s' to execute '%s': %w", targetActorID, ts.Name, err))
-			}
-			resp.Close()
-		} else {
+		ts := e.GetTaskScheduled()
+		if ts == nil {
 			wfLogger.Warn("don't know how to process task %v", e)
+			continue
 		}
+
+		eventData, err := backend.MarshalHistoryEvent(e)
+		if err != nil {
+			return err
+		}
+		activityRequestBytes, err := actors.EncodeInternalActorData(ActivityRequest{
+			HistoryEvent: eventData,
+		})
+		if err != nil {
+			return err
+		}
+		targetActorID := getActivityActorID(actorID, e.EventId, state.Generation)
+
+		req := invokev1.
+			NewInvokeMethodRequest("Execute").
+			WithActor(wf.config.activityActorType, targetActorID).
+			WithRawDataBytes(activityRequestBytes).
+			WithContentType(invokev1.OctetStreamContentType)
+		defer req.Close()
+
+		resp, err := wf.actors.Call(ctx, req)
+		if err != nil {
+			if errors.Is(err, ErrDuplicateInvocation) {
+				wfLogger.Warnf("%s: activity invocation %s::%d was flagged as a duplicate and will be skipped", actorID, ts.Name, e.EventId)
+				continue
+			}
+			return newRecoverableError(fmt.Errorf("failed to invoke activity actor '%s' to execute '%s': %w", targetActorID, ts.Name, err))
+		}
+		resp.Close()
 	}
 
 	// TODO: Do these in parallel?
