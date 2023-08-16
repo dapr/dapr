@@ -54,22 +54,21 @@ const streamingUnsupportedErr = "streaming-based service invocation is enabled, 
 type messageClientConnection func(ctx context.Context, address string, id string, namespace string, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(destroy bool), error)
 
 type directMessaging struct {
-	channels                       *channels.Channels
-	nonResourceHTTPEndpointChannel channel.HTTPEndpointAppChannel
-	resourceHTTPEndpointChannels   map[string]channel.HTTPEndpointAppChannel
-	connectionCreatorFn            messageClientConnection
-	appID                          string
-	mode                           modes.DaprMode
-	grpcPort                       int
-	namespace                      string
-	resolver                       nr.Resolver
-	hostAddress                    string
-	hostName                       string
-	maxRequestBodySizeMB           int
-	proxy                          Proxy
-	readBufferSize                 int
-	resiliency                     resiliency.Provider
-	compStore                      *compstore.ComponentStore
+	channels                     *channels.Channels
+	resourceHTTPEndpointChannels map[string]channel.HTTPEndpointAppChannel
+	connectionCreatorFn          messageClientConnection
+	appID                        string
+	mode                         modes.DaprMode
+	grpcPort                     int
+	namespace                    string
+	resolver                     nr.Resolver
+	hostAddress                  string
+	hostName                     string
+	maxRequestBodySizeMB         int
+	proxy                        Proxy
+	readBufferSize               int
+	resiliency                   resiliency.Provider
+	compStore                    *compstore.ComponentStore
 }
 
 type remoteApp struct {
