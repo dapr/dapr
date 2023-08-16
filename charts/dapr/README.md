@@ -78,7 +78,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `global.tag`                              | Docker image version tag                                                | latest release          |
 | `global.logAsJson`                        | Json log format for control plane services                              | `false`                 |
 | `global.imagePullPolicy`                  | Global Control plane service imagePullPolicy                            | `IfNotPresent`          |
-| `global.imagePullSecrets`                 | Control plane service images pull secrets for docker registry. Its value can be a string with single imagePullSecret,  or an array of `{name: pullSecret}` maps (k8s-style) or an array of strings | `[]`               |
+| `global.imagePullSecrets`                 | Control plane service images pull secrets for docker registry. Its value can be: a string with single imagePullSecret, an array of `{name: pullSecret}` maps (Kubernetes-style), or an array of strings | `[]` |
 | `global.ha.enabled`                       | Highly Availability mode enabled for control plane                      | `false`                 |
 | `global.ha.replicaCount`                  | Number of replicas of control plane services in Highly Availability mode<br>Note that in HA mode, Dapr Placement has 3 replicas and that cannot be configured. | `3`                   |
 | `global.ha.disruption.minimumAvailable`   | Minimum amount of available instances for control plane. This can either be effective count or %. | ``             |
