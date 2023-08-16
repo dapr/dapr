@@ -394,7 +394,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 			if err != nil {
 				return fmt.Errorf("failed to marshal pending timer data: %w", err)
 			}
-			delay := tf.FireAt.AsTime().Sub(time.Now().UTC())
+			delay := tf.FireAt.AsTime().Sub(time.Now())
 			if delay < 0 {
 				delay = 0
 			}
