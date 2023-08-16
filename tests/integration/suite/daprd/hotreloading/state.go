@@ -109,7 +109,8 @@ spec:
 				"TRANSACTIONAL",
 				"TTL",
 				"ACTOR",
-			}}, resp[0])
+			},
+		}, resp[0])
 
 		s.writeRead(t, ctx, "123")
 	})
@@ -150,15 +151,18 @@ spec:
 		require.Len(t, resp, 3)
 
 		assert.ElementsMatch(t, []*runtimev1pb.RegisteredComponents{
-			&runtimev1pb.RegisteredComponents{
+			{
 				Name: "123", Type: "state.in-memory", Version: "v1",
-				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"}},
-			&runtimev1pb.RegisteredComponents{
+				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+			},
+			{
 				Name: "abc", Type: "state.in-memory", Version: "v1",
-				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"}},
-			&runtimev1pb.RegisteredComponents{
+				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+			},
+			{
 				Name: "xyz", Type: "state.in-memory", Version: "v1",
-				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"}},
+				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+			},
 		}, resp)
 
 		s.writeRead(t, ctx, "123")
@@ -187,15 +191,18 @@ spec:
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := s.getMetaResponse(c, ctx)
 			assert.ElementsMatch(c, []*runtimev1pb.RegisteredComponents{
-				&runtimev1pb.RegisteredComponents{
+				{
 					Name: "123", Type: "state.in-memory", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"}},
-				&runtimev1pb.RegisteredComponents{
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+				},
+				{
 					Name: "abc", Type: "state.sqlite", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"}},
-				&runtimev1pb.RegisteredComponents{
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+				},
+				{
 					Name: "xyz", Type: "state.in-memory", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"}},
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+				},
 			}, resp)
 		}, time.Second*5, time.Millisecond*100)
 
@@ -245,18 +252,22 @@ spec:
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := s.getMetaResponse(c, ctx)
 			assert.ElementsMatch(c, []*runtimev1pb.RegisteredComponents{
-				&runtimev1pb.RegisteredComponents{
+				{
 					Name: "123", Type: "state.sqlite", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"}},
-				&runtimev1pb.RegisteredComponents{
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+				},
+				{
 					Name: "abc", Type: "state.in-memory", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"}},
-				&runtimev1pb.RegisteredComponents{
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+				},
+				{
 					Name: "xyz", Type: "state.in-memory", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"}},
-				&runtimev1pb.RegisteredComponents{
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+				},
+				{
 					Name: "foo", Type: "state.in-memory", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"}},
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+				},
 			}, resp)
 		}, time.Second*5, time.Millisecond*100)
 
@@ -286,18 +297,22 @@ spec:
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := s.getMetaResponse(c, ctx)
 			assert.ElementsMatch(c, []*runtimev1pb.RegisteredComponents{
-				&runtimev1pb.RegisteredComponents{
+				{
 					Name: "123", Type: "state.sqlite", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"}},
-				&runtimev1pb.RegisteredComponents{
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+				},
+				{
 					Name: "bar", Type: "state.in-memory", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"}},
-				&runtimev1pb.RegisteredComponents{
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+				},
+				{
 					Name: "xyz", Type: "state.in-memory", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"}},
-				&runtimev1pb.RegisteredComponents{
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+				},
+				{
 					Name: "foo", Type: "state.in-memory", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"}},
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+				},
 			}, resp)
 		}, time.Second*5, time.Millisecond*100)
 
@@ -318,15 +333,18 @@ spec:
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := s.getMetaResponse(c, ctx)
 			assert.ElementsMatch(c, []*runtimev1pb.RegisteredComponents{
-				&runtimev1pb.RegisteredComponents{
+				{
 					Name: "123", Type: "state.sqlite", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"}},
-				&runtimev1pb.RegisteredComponents{
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+				},
+				{
 					Name: "xyz", Type: "state.in-memory", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"}},
-				&runtimev1pb.RegisteredComponents{
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+				},
+				{
 					Name: "foo", Type: "state.in-memory", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"}},
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+				},
 			}, resp)
 		}, time.Second*5, time.Millisecond*100)
 
@@ -367,6 +385,7 @@ func (s *state) getMetaResponse(t require.TestingT, ctx context.Context) []*runt
 	require.NoError(t, err)
 	resp, err := s.client.Do(req)
 	require.NoError(t, err)
+	defer resp.Body.Close()
 
 	var meta metaResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&meta))
@@ -375,6 +394,8 @@ func (s *state) getMetaResponse(t require.TestingT, ctx context.Context) []*runt
 }
 
 func (s *state) writeExpectError(t *testing.T, ctx context.Context, compName string, expCode int) {
+	t.Helper()
+
 	postURL := fmt.Sprintf("http://localhost:%d/v1.0/state/%s", s.daprd.HTTPPort(), compName)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, nil)
 	require.NoError(t, err)
@@ -384,6 +405,8 @@ func (s *state) writeExpectError(t *testing.T, ctx context.Context, compName str
 }
 
 func (s *state) writeRead(t *testing.T, ctx context.Context, compName string) {
+	t.Helper()
+
 	postURL := fmt.Sprintf("http://localhost:%d/v1.0/state/%s", s.daprd.HTTPPort(), url.QueryEscape(compName))
 	getURL := fmt.Sprintf("%s/foo", postURL)
 
@@ -398,8 +421,12 @@ func (s *state) writeRead(t *testing.T, ctx context.Context, compName string) {
 }
 
 func (s *state) doReq(t *testing.T, req *http.Request, expCode int, expBody string) {
+	t.Helper()
+
 	resp, err := s.client.Do(req)
 	require.NoError(t, err)
+	defer resp.Body.Close()
+
 	assert.Equal(t, expCode, resp.StatusCode)
 	body, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
