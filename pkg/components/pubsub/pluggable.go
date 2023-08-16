@@ -29,7 +29,7 @@ import (
 // grpcPubSub is a implementation of a pubsub over a gRPC Protocol.
 type grpcPubSub struct {
 	*pluggable.GRPCConnector[proto.PubSubClient]
-	// features the list of state store implemented features features.
+	// features is the list of pubsub implemented features.
 	features []pubsub.Feature
 	logger   logger.Logger
 }
