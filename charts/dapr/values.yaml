@@ -23,6 +23,8 @@ global:
     workloadCertTTL: 24h
     allowedClockSkew: 15m
     controlPlaneTrustDomain: "cluster.local"
+    # Used to override `dapr-sentry.{{ .Release.Namespace }}.svc:80`
+    #sentryAddress:
   actors:
     enabled: true
   daprControlPlaneOs: linux
