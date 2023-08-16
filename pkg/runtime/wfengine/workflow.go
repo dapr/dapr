@@ -331,6 +331,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 		} else {
 			continue
 		}
+		// TODO: Why are we using a transaction with a single operation within the loop?
 		req := actors.TransactionalRequest{
 			ActorType: wf.config.activityActorType,
 			ActorID:   getActivityActorID(actorID, taskID, state.Generation),
