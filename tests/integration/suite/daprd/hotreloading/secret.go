@@ -74,6 +74,9 @@ spec:
 			"BAR_SEC_1", "baz1",
 			"BAR_SEC_2", "baz2",
 			"BAR_SEC_3", "baz3",
+			"BAZ_SEC_1", "foo1",
+			"BAZ_SEC_2", "foo2",
+			"BAZ_SEC_3", "foo3",
 		)),
 	)
 
@@ -87,7 +90,7 @@ func (s *secret) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("expect no components to be loaded yet", func(t *testing.T) {
 		assert.Len(t, s.getMetaResponse(t, ctx), 0)
-		s.readExpectError(t, ctx, "123", "foo", http.StatusInternalServerError)
+		s.readExpectError(t, ctx, "123", "SEC_1", http.StatusInternalServerError)
 	})
 
 	t.Run("adding a component should become available", func(t *testing.T) {
@@ -121,256 +124,251 @@ spec:
 		s.read(t, ctx, "123", "SEC_3", "bar3")
 	})
 
-	//	t.Run("adding a second and third component should also become available", func(t *testing.T) {
-	//		// After a single secret store exists, Dapr returns a Bad Request response
-	//		// rather than an Internal Server Error when writing to a non-existent
-	//		// secret store.
-	//		s.writeExpectError(t, ctx, "abc", http.StatusBadRequest)
-	//		s.writeExpectError(t, ctx, "xyz", http.StatusBadRequest)
-	//
-	//		require.NoError(t, os.WriteFile(filepath.Join(s.resDir2, "2.yaml"), []byte(`
-	//
-	// apiVersion: dapr.io/v1alpha1
-	// kind: Component
-	// metadata:
-	// name: 'abc'
-	// spec:
-	// type: secret.in-memory
-	// version: v1
-	// metadata: []
-	// `), 0o600))
-	//
-	//	require.NoError(t, os.WriteFile(filepath.Join(s.resDir3, "3.yaml"), []byte(`
-	//
-	// apiVersion: dapr.io/v1alpha1
-	// kind: Component
-	// metadata:
-	// name: 'xyz'
-	// spec:
-	// type: secret.in-memory
-	// version: v1
-	// metadata: []
-	// `), 0o600))
-	//
-	//		require.EventuallyWithT(t, func(c *assert.CollectT) {
-	//			assert.Len(c, s.getMetaResponse(t, ctx), 3)
-	//		}, time.Second*5, time.Millisecond*100)
-	//		resp := s.getMetaResponse(t, ctx)
-	//		require.Len(t, resp, 3)
-	//
-	//		assert.ElementsMatch(t, []*runtimev1pb.RegisteredComponents{
-	//			&runtimev1pb.RegisteredComponents{
-	//				Name: "123", Type: "secret.in-memory", Version: "v1",
-	//				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"}},
-	//			&runtimev1pb.RegisteredComponents{
-	//				Name: "abc", Type: "secret.in-memory", Version: "v1",
-	//				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"}},
-	//			&runtimev1pb.RegisteredComponents{
-	//				Name: "xyz", Type: "secret.in-memory", Version: "v1",
-	//				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"}},
-	//		}, resp)
-	//
-	//		s.writeRead(t, ctx, "123")
-	//		s.writeRead(t, ctx, "abc")
-	//		s.writeRead(t, ctx, "xyz")
-	//	})
-	//
-	//	t.Run("changing the type of a secret store should update the component and still be available", func(t *testing.T) {
-	//		s.writeRead(t, ctx, "123")
-	//		s.writeRead(t, ctx, "abc")
-	//		s.writeRead(t, ctx, "xyz")
-	//
-	//		require.NoError(t, os.WriteFile(filepath.Join(s.resDir2, "2.yaml"), []byte(fmt.Sprintf(`
-	//
-	// apiVersion: dapr.io/v1alpha1
-	// kind: Component
-	// metadata:
-	// name: 'abc'
-	// spec:
-	// type: secret.sqlite
-	// version: v1
-	// metadata:
-	//   - name: connectionString
-	//     value: %s/db.sqlite
-	//
-	// `, s.resDir2)), 0o600))
-	//
-	//		require.EventuallyWithT(t, func(c *assert.CollectT) {
-	//			resp := s.getMetaResponse(c, ctx)
-	//			assert.ElementsMatch(c, []*runtimev1pb.RegisteredComponents{
-	//				&runtimev1pb.RegisteredComponents{
-	//					Name: "123", Type: "secret.in-memory", Version: "v1",
-	//					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"}},
-	//				&runtimev1pb.RegisteredComponents{
-	//					Name: "abc", Type: "secret.sqlite", Version: "v1",
-	//					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"}},
-	//				&runtimev1pb.RegisteredComponents{
-	//					Name: "xyz", Type: "secret.in-memory", Version: "v1",
-	//					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"}},
-	//			}, resp)
-	//		}, time.Second*5, time.Millisecond*100)
-	//
-	//		s.writeRead(t, ctx, "123")
-	//		s.writeRead(t, ctx, "abc")
-	//		s.writeRead(t, ctx, "xyz")
-	//	})
-	//
-	//	t.Run("updating multiple secret stores should be updated, and multiple components in a single file", func(t *testing.T) {
-	//		s.writeRead(t, ctx, "123")
-	//		s.writeRead(t, ctx, "abc")
-	//		s.writeRead(t, ctx, "xyz")
-	//		s.writeExpectError(t, ctx, "foo", http.StatusBadRequest)
-	//
-	//		require.NoError(t, os.WriteFile(filepath.Join(s.resDir1, "1.yaml"), []byte(fmt.Sprintf(`
-	//
-	// apiVersion: dapr.io/v1alpha1
-	// kind: Component
-	// metadata:
-	// name: '123'
-	// spec:
-	// type: secret.sqlite
-	// version: v1
-	// metadata:
-	//   - name: connectionString
-	//     value: %s/db.sqlite
-	//
-	// ---
-	// apiVersion: dapr.io/v1alpha1
-	// kind: Component
-	// metadata:
-	// name: 'foo'
-	// spec:
-	// type: secret.in-memory
-	// version: v1
-	// metadata: []
-	// `, s.resDir1)), 0o600))
-	//
-	//	require.NoError(t, os.WriteFile(filepath.Join(s.resDir2, "2.yaml"), []byte(`
-	//
-	// apiVersion: dapr.io/v1alpha1
-	// kind: Component
-	// metadata:
-	// name: 'abc'
-	// spec:
-	// type: secret.in-memory
-	// version: v1
-	// metadata: []
-	// `), 0o600))
-	//
-	//		require.EventuallyWithT(t, func(c *assert.CollectT) {
-	//			resp := s.getMetaResponse(c, ctx)
-	//			assert.ElementsMatch(c, []*runtimev1pb.RegisteredComponents{
-	//				&runtimev1pb.RegisteredComponents{
-	//					Name: "123", Type: "secret.sqlite", Version: "v1",
-	//					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"}},
-	//				&runtimev1pb.RegisteredComponents{
-	//					Name: "abc", Type: "secret.in-memory", Version: "v1",
-	//					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"}},
-	//				&runtimev1pb.RegisteredComponents{
-	//					Name: "xyz", Type: "secret.in-memory", Version: "v1",
-	//					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"}},
-	//				&runtimev1pb.RegisteredComponents{
-	//					Name: "foo", Type: "secret.in-memory", Version: "v1",
-	//					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"}},
-	//			}, resp)
-	//		}, time.Second*5, time.Millisecond*100)
-	//
-	//		s.writeRead(t, ctx, "123")
-	//		s.writeRead(t, ctx, "abc")
-	//		s.writeRead(t, ctx, "xyz")
-	//		s.writeRead(t, ctx, "foo")
-	//	})
-	//
-	//	t.Run("renaming a component should close the old name, and open the new one", func(t *testing.T) {
-	//		s.writeRead(t, ctx, "123")
-	//		s.writeRead(t, ctx, "abc")
-	//		s.writeRead(t, ctx, "xyz")
-	//		s.writeRead(t, ctx, "foo")
-	//
-	//		require.NoError(t, os.WriteFile(filepath.Join(s.resDir2, "2.yaml"), []byte(`
-	//
-	// apiVersion: dapr.io/v1alpha1
-	// kind: Component
-	// metadata:
-	// name: 'bar'
-	// spec:
-	// type: secret.in-memory
-	// version: v1
-	// metadata: []
-	// `), 0o600))
-	//
-	//		require.EventuallyWithT(t, func(c *assert.CollectT) {
-	//			resp := s.getMetaResponse(c, ctx)
-	//			assert.ElementsMatch(c, []*runtimev1pb.RegisteredComponents{
-	//				&runtimev1pb.RegisteredComponents{
-	//					Name: "123", Type: "secret.sqlite", Version: "v1",
-	//					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"}},
-	//				&runtimev1pb.RegisteredComponents{
-	//					Name: "bar", Type: "secret.in-memory", Version: "v1",
-	//					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"}},
-	//				&runtimev1pb.RegisteredComponents{
-	//					Name: "xyz", Type: "secret.in-memory", Version: "v1",
-	//					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"}},
-	//				&runtimev1pb.RegisteredComponents{
-	//					Name: "foo", Type: "secret.in-memory", Version: "v1",
-	//					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"}},
-	//			}, resp)
-	//		}, time.Second*5, time.Millisecond*100)
-	//
-	//		s.writeRead(t, ctx, "123")
-	//		s.writeRead(t, ctx, "bar")
-	//		s.writeRead(t, ctx, "xyz")
-	//		s.writeRead(t, ctx, "foo")
-	//	})
-	//
-	//	t.Run("deleting a component file should delete the components", func(t *testing.T) {
-	//		s.writeRead(t, ctx, "123")
-	//		s.writeRead(t, ctx, "bar")
-	//		s.writeRead(t, ctx, "xyz")
-	//		s.writeRead(t, ctx, "foo")
-	//
-	//		require.NoError(t, os.Remove(filepath.Join(s.resDir2, "2.yaml")))
-	//
-	//		require.EventuallyWithT(t, func(c *assert.CollectT) {
-	//			resp := s.getMetaResponse(c, ctx)
-	//			assert.ElementsMatch(c, []*runtimev1pb.RegisteredComponents{
-	//				&runtimev1pb.RegisteredComponents{
-	//					Name: "123", Type: "secret.sqlite", Version: "v1",
-	//					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"}},
-	//				&runtimev1pb.RegisteredComponents{
-	//					Name: "xyz", Type: "secret.in-memory", Version: "v1",
-	//					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"}},
-	//				&runtimev1pb.RegisteredComponents{
-	//					Name: "foo", Type: "secret.in-memory", Version: "v1",
-	//					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"}},
-	//			}, resp)
-	//		}, time.Second*5, time.Millisecond*100)
-	//
-	//		s.writeRead(t, ctx, "123")
-	//		s.writeExpectError(t, ctx, "bar", http.StatusBadRequest)
-	//		s.writeRead(t, ctx, "xyz")
-	//		s.writeRead(t, ctx, "foo")
-	//	})
-	//
-	//	t.Run("deleting all components should result in no components remaining", func(t *testing.T) {
-	//		s.writeRead(t, ctx, "123")
-	//		s.writeExpectError(t, ctx, "bar", http.StatusBadRequest)
-	//		s.writeRead(t, ctx, "xyz")
-	//		s.writeRead(t, ctx, "foo")
-	//
-	//		require.NoError(t, os.Remove(filepath.Join(s.resDir1, "1.yaml")))
-	//		require.NoError(t, os.Remove(filepath.Join(s.resDir3, "3.yaml")))
-	//
-	//		require.EventuallyWithT(t, func(c *assert.CollectT) {
-	//			resp := s.getMetaResponse(c, ctx)
-	//			assert.ElementsMatch(c, []*runtimev1pb.RegisteredComponents{}, resp)
-	//		}, time.Second*5, time.Millisecond*100)
-	//
-	//		s.writeExpectError(t, ctx, "123", http.StatusInternalServerError)
-	//		s.writeExpectError(t, ctx, "bar", http.StatusInternalServerError)
-	//		s.writeExpectError(t, ctx, "xyz", http.StatusInternalServerError)
-	//		s.writeExpectError(t, ctx, "foo", http.StatusInternalServerError)
-	//	})
+	t.Run("adding a second and third component should also become available", func(t *testing.T) {
+		// After a single secret store exists, Dapr returns a Unauthorized response
+		// rather than an Internal Server Error when writing to a non-existent
+		// secret store.
+		s.readExpectError(t, ctx, "abc", "2-sec-1", http.StatusUnauthorized)
+		s.readExpectError(t, ctx, "xyz", "SEC_1", http.StatusUnauthorized)
+
+		require.NoError(t, os.WriteFile(filepath.Join(s.resDir2, "2-sec.json"), []byte(`
+{
+"2-sec-1": "foo",
+"2-sec-2": "bar",
+"2-sec-3": "xxx"
+}
+`), 0o600))
+
+		require.NoError(t, os.WriteFile(filepath.Join(s.resDir2, "2.yaml"), []byte(fmt.Sprintf(`
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+ name: 'abc'
+spec:
+ type: secretstores.local.file
+ version: v1
+ metadata:
+ - name: secretsFile
+   value: '%s'
+`, filepath.Join(s.resDir2, "2-sec.json"))), 0o600))
+
+		require.NoError(t, os.WriteFile(filepath.Join(s.resDir3, "3.yaml"), []byte(`
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+ name: 'xyz'
+spec:
+ type: secretstores.local.env
+ version: v1
+ metadata:
+ - name: prefix
+   value: BAR_
+`), 0o600))
+
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			assert.Len(c, s.getMetaResponse(t, ctx), 3)
+		}, time.Second*5, time.Millisecond*100)
+		resp := s.getMetaResponse(t, ctx)
+		require.Len(t, resp, 3)
+
+		assert.ElementsMatch(t, []*runtimev1pb.RegisteredComponents{
+			&runtimev1pb.RegisteredComponents{Name: "123", Type: "secretstores.local.env", Version: "v1"},
+			&runtimev1pb.RegisteredComponents{Name: "abc", Type: "secretstores.local.file", Version: "v1"},
+			&runtimev1pb.RegisteredComponents{Name: "xyz", Type: "secretstores.local.env", Version: "v1"},
+		}, resp)
+
+		s.read(t, ctx, "123", "SEC_1", "bar1")
+		s.read(t, ctx, "123", "SEC_2", "bar2")
+		s.read(t, ctx, "123", "SEC_3", "bar3")
+		s.read(t, ctx, "abc", "2-sec-1", "foo")
+		s.read(t, ctx, "abc", "2-sec-2", "bar")
+		s.read(t, ctx, "abc", "2-sec-3", "xxx")
+		s.read(t, ctx, "xyz", "SEC_1", "baz1")
+		s.read(t, ctx, "xyz", "SEC_2", "baz2")
+		s.read(t, ctx, "xyz", "SEC_3", "baz3")
+	})
+
+	t.Run("changing the type of a secret store should update the component and still be available", func(t *testing.T) {
+		require.NoError(t, os.WriteFile(filepath.Join(s.resDir2, "2.yaml"), []byte(`
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+ name: 'abc'
+spec:
+ type: secretstores.local.env
+ version: v1
+ metadata:
+ - name: prefix
+   value: BAZ_
+`), 0o600))
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			resp := s.getMetaResponse(c, ctx)
+			assert.ElementsMatch(c, []*runtimev1pb.RegisteredComponents{
+				&runtimev1pb.RegisteredComponents{Name: "123", Type: "secretstores.local.env", Version: "v1"},
+				&runtimev1pb.RegisteredComponents{Name: "abc", Type: "secretstores.local.env", Version: "v1"},
+				&runtimev1pb.RegisteredComponents{Name: "xyz", Type: "secretstores.local.env", Version: "v1"},
+			}, resp)
+		}, time.Second*5, time.Millisecond*100)
+
+		s.read(t, ctx, "123", "SEC_1", "bar1")
+		s.read(t, ctx, "123", "SEC_2", "bar2")
+		s.read(t, ctx, "123", "SEC_3", "bar3")
+		s.read(t, ctx, "abc", "SEC_1", "foo1")
+		s.read(t, ctx, "abc", "SEC_2", "foo2")
+		s.read(t, ctx, "abc", "SEC_3", "foo3")
+		s.read(t, ctx, "xyz", "SEC_1", "baz1")
+		s.read(t, ctx, "xyz", "SEC_2", "baz2")
+		s.read(t, ctx, "xyz", "SEC_3", "baz3")
+	})
+
+	t.Run("updating multiple secret stores should be updated, and multiple components in a single file", func(t *testing.T) {
+		require.NoError(t, os.WriteFile(filepath.Join(s.resDir1, "1-sec.json"), []byte(`
+{
+"1-sec-1": "foo",
+"1-sec-2": "bar",
+"1-sec-3": "xxx"
+}
+`), 0o600))
+
+		require.NoError(t, os.WriteFile(filepath.Join(s.resDir1, "1.yaml"), []byte(fmt.Sprintf(`
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+ name: '123'
+spec:
+ type: secretstores.local.file
+ version: v1
+ metadata:
+ - name: secretsFile
+   value: '%s'
+---
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+ name: 'foo'
+spec:
+ type: secretstores.local.env
+ version: v1
+ metadata:
+ - name: prefix
+   value: BAZ_
+`, filepath.Join(s.resDir1, "1-sec.json"))), 0o600))
+
+		require.NoError(t, os.WriteFile(filepath.Join(s.resDir2, "2.yaml"), []byte(fmt.Sprintf(`
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+ name: 'abc'
+spec:
+ type: secretstores.local.file
+ version: v1
+ metadata:
+ - name: secretsFile
+   value: '%s'
+`, filepath.Join(s.resDir2, "2-sec.json"))), 0o600))
+
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			resp := s.getMetaResponse(c, ctx)
+			assert.ElementsMatch(c, []*runtimev1pb.RegisteredComponents{
+				&runtimev1pb.RegisteredComponents{Name: "123", Type: "secretstores.local.file", Version: "v1"},
+				&runtimev1pb.RegisteredComponents{Name: "abc", Type: "secretstores.local.file", Version: "v1"},
+				&runtimev1pb.RegisteredComponents{Name: "xyz", Type: "secretstores.local.env", Version: "v1"},
+				&runtimev1pb.RegisteredComponents{Name: "foo", Type: "secretstores.local.env", Version: "v1"},
+			}, resp)
+		}, time.Second*5, time.Millisecond*100)
+
+		s.read(t, ctx, "123", "1-sec-1", "foo")
+		s.read(t, ctx, "123", "1-sec-2", "bar")
+		s.read(t, ctx, "123", "1-sec-3", "xxx")
+		s.read(t, ctx, "abc", "2-sec-1", "foo")
+		s.read(t, ctx, "abc", "2-sec-2", "bar")
+		s.read(t, ctx, "abc", "2-sec-3", "xxx")
+		s.read(t, ctx, "xyz", "SEC_1", "baz1")
+		s.read(t, ctx, "xyz", "SEC_2", "baz2")
+		s.read(t, ctx, "xyz", "SEC_3", "baz3")
+		s.read(t, ctx, "foo", "SEC_1", "foo1")
+		s.read(t, ctx, "foo", "SEC_2", "foo2")
+		s.read(t, ctx, "foo", "SEC_3", "foo3")
+	})
+
+	t.Run("renaming a component should close the old name, and open the new one", func(t *testing.T) {
+		require.NoError(t, os.WriteFile(filepath.Join(s.resDir2, "2.yaml"), []byte(fmt.Sprintf(`
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+ name: 'bar'
+spec:
+ type: secretstores.local.file
+ version: v1
+ metadata:
+ - name: secretsFile
+   value: '%s'
+ `, filepath.Join(s.resDir2, "2-sec.json"))), 0o600))
+
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			resp := s.getMetaResponse(c, ctx)
+			assert.ElementsMatch(c, []*runtimev1pb.RegisteredComponents{
+				&runtimev1pb.RegisteredComponents{Name: "123", Type: "secretstores.local.file", Version: "v1"},
+				&runtimev1pb.RegisteredComponents{Name: "bar", Type: "secretstores.local.file", Version: "v1"},
+				&runtimev1pb.RegisteredComponents{Name: "xyz", Type: "secretstores.local.env", Version: "v1"},
+				&runtimev1pb.RegisteredComponents{Name: "foo", Type: "secretstores.local.env", Version: "v1"},
+			}, resp)
+		}, time.Second*5, time.Millisecond*100)
+
+		s.read(t, ctx, "123", "1-sec-1", "foo")
+		s.read(t, ctx, "123", "1-sec-2", "bar")
+		s.read(t, ctx, "123", "1-sec-3", "xxx")
+		s.read(t, ctx, "bar", "2-sec-1", "foo")
+		s.read(t, ctx, "bar", "2-sec-2", "bar")
+		s.read(t, ctx, "bar", "2-sec-3", "xxx")
+		s.read(t, ctx, "xyz", "SEC_1", "baz1")
+		s.read(t, ctx, "xyz", "SEC_2", "baz2")
+		s.read(t, ctx, "xyz", "SEC_3", "baz3")
+		s.read(t, ctx, "foo", "SEC_1", "foo1")
+		s.read(t, ctx, "foo", "SEC_2", "foo2")
+		s.read(t, ctx, "foo", "SEC_3", "foo3")
+	})
+
+	t.Run("deleting a component file should delete the components", func(t *testing.T) {
+		require.NoError(t, os.Remove(filepath.Join(s.resDir2, "2.yaml")))
+
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			resp := s.getMetaResponse(c, ctx)
+			assert.ElementsMatch(c, []*runtimev1pb.RegisteredComponents{
+				&runtimev1pb.RegisteredComponents{Name: "123", Type: "secretstores.local.file", Version: "v1"},
+				&runtimev1pb.RegisteredComponents{Name: "xyz", Type: "secretstores.local.env", Version: "v1"},
+				&runtimev1pb.RegisteredComponents{Name: "foo", Type: "secretstores.local.env", Version: "v1"},
+			}, resp)
+		}, time.Second*5, time.Millisecond*100)
+
+		s.read(t, ctx, "123", "1-sec-1", "foo")
+		s.read(t, ctx, "123", "1-sec-2", "bar")
+		s.read(t, ctx, "123", "1-sec-3", "xxx")
+		s.read(t, ctx, "xyz", "SEC_1", "baz1")
+		s.read(t, ctx, "xyz", "SEC_2", "baz2")
+		s.read(t, ctx, "xyz", "SEC_3", "baz3")
+		s.read(t, ctx, "foo", "SEC_1", "foo1")
+		s.read(t, ctx, "foo", "SEC_2", "foo2")
+		s.read(t, ctx, "foo", "SEC_3", "foo3")
+		s.readExpectError(t, ctx, "bar", "2-sec-1", http.StatusUnauthorized)
+		s.readExpectError(t, ctx, "bar", "2-sec-2", http.StatusUnauthorized)
+		s.readExpectError(t, ctx, "bar", "2-sec-3", http.StatusUnauthorized)
+	})
+
+	t.Run("deleting all components should result in no components remaining", func(t *testing.T) {
+		require.NoError(t, os.Remove(filepath.Join(s.resDir1, "1.yaml")))
+		require.NoError(t, os.Remove(filepath.Join(s.resDir3, "3.yaml")))
+
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			resp := s.getMetaResponse(c, ctx)
+			assert.ElementsMatch(c, []*runtimev1pb.RegisteredComponents{}, resp)
+		}, time.Second*5, time.Millisecond*100)
+
+		s.readExpectError(t, ctx, "123", "1-sec-1", http.StatusInternalServerError)
+		s.readExpectError(t, ctx, "xyz", "SEC_1", http.StatusInternalServerError)
+		s.readExpectError(t, ctx, "bar", "2-sec-1", http.StatusInternalServerError)
+		s.readExpectError(t, ctx, "foo", "SEC_1", http.StatusInternalServerError)
+	})
 }
 
 func (s *secret) getMetaResponse(t require.TestingT, ctx context.Context) []*runtimev1pb.RegisteredComponents {
@@ -393,16 +391,15 @@ func (s *secret) getMetaResponse(t require.TestingT, ctx context.Context) []*run
 func (s *secret) readExpectError(t *testing.T, ctx context.Context, compName, key string, expCode int) {
 	getURL := fmt.Sprintf("http://localhost:%d/v1.0/secrets/%s/%s",
 		s.daprd.HTTPPort(), url.QueryEscape(compName), url.QueryEscape(key))
-	fmt.Printf(">>%s\n", getURL)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, getURL, nil)
 	require.NoError(t, err)
 	s.doReq(t, req, expCode, fmt.Sprintf(
-		`\{"errorCode":"(ERR_SECRET_STORES_NOT_CONFIGURED|ERR_SECRET_STORES_NOT_FOUND)","message":"secret store (is not configured|%s is not found)"\}`,
+		`\{"errorCode":"(ERR_SECRET_STORES_NOT_CONFIGURED|ERR_SECRET_STORE_NOT_FOUND)","message":"(secret store is not configured|failed finding secret store with key %s)"\}`,
 		compName))
 }
 
 func (s *secret) read(t *testing.T, ctx context.Context, compName, key, expValue string) {
-	getURL := fmt.Sprintf("http://localhost:%d/v1.0/secret/%s/%s", s.daprd.HTTPPort(), url.QueryEscape(compName), url.QueryEscape(key))
+	getURL := fmt.Sprintf("http://localhost:%d/v1.0/secrets/%s/%s", s.daprd.HTTPPort(), url.QueryEscape(compName), url.QueryEscape(key))
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, getURL, nil)
 	require.NoError(t, err)
