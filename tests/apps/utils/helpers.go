@@ -14,6 +14,8 @@ limitations under the License.
 package utils
 
 import (
+	"os"
+	"strconv"
 	"strings"
 )
 
@@ -26,4 +28,16 @@ func IsTruthy(val string) bool {
 	default:
 		return false
 	}
+}
+
+// PortFromEnv returns a port from an env var, or the default value.
+func PortFromEnv(envName string, defaultPort int) (res int) {
+	p := os.Getenv(envName)
+	if p != "" && p != "0" {
+		res, _ = strconv.Atoi(p)
+	}
+	if res <= 0 {
+		res = defaultPort
+	}
+	return
 }
