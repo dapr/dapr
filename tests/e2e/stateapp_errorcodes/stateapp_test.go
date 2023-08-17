@@ -26,7 +26,6 @@ import (
 	guuid "github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	apiv1 "k8s.io/api/core/v1"
 
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
@@ -386,7 +385,7 @@ var (
 	}{
 		{
 			name:       appName,
-			stateStore: "statestore-errorcodes",
+			stateStore: "statestore",
 		},
 	}
 )
@@ -401,37 +400,12 @@ func TestMain(m *testing.M) {
 		{
 			AppName:        appName,
 			DaprEnabled:    true,
-			ImageName:      "e2e-stateapp-errorcodes",
+			ImageName:      "e2e-stateapp",
 			Replicas:       1,
 			IngressEnabled: true,
 			MetricsEnabled: true,
 			Config:         "errorcodes",
 		},
-	}
-
-	if utils.TestTargetOS() != "windows" { // pluggable components feature requires unix socket to work
-		testApps = append(testApps, kube.AppDescription{
-			AppName:        appNamePluggable,
-			DaprEnabled:    true,
-			ImageName:      "e2e-stateapp-errorcodes",
-			Replicas:       1,
-			IngressEnabled: true,
-			MetricsEnabled: true,
-			PluggableComponents: []apiv1.Container{
-				{
-					Name:  "redis-pluggable-errorcodes", // e2e-pluggable_redis
-					Image: runner.BuildTestImageName(redisPluggableApp),
-				},
-			},
-			Config: "errorcodes",
-		})
-		stateStoreApps = append(stateStoreApps, struct {
-			name       string
-			stateStore string
-		}{
-			name:       appNamePluggable,
-			stateStore: "pluggable-statestore-errorcodes",
-		})
 	}
 
 	tr = runner.NewTestRunner(appName, testApps, nil, nil)
