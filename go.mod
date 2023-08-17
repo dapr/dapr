@@ -446,12 +446,11 @@ replace (
 // check for retracted versions: go list -mod=mod -f '{{if .Retracted}}{{.}}{{end}}' -u -m all
 replace github.com/microcosm-cc/bluemonday => github.com/microcosm-cc/bluemonday v1.0.24
 
-replace github.com/dapr/kit => github.com/joshvanl/kit v0.0.0-20230810122209-5f84b8e8f93d
-
 // Uncomment for local development for testing with changes in the components-contrib repository.
 // Don't commit with this uncommented!
 //
 //replace github.com/dapr/components-contrib => ../components-contrib
+replace github.com/dapr/kit => github.com/joshvanl/kit v0.0.0-20230816151812-765fa3d3d75d
 
 //
 // Then, run `make modtidy` in this repository.

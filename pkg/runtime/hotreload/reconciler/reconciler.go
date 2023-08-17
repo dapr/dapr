@@ -139,6 +139,14 @@ func (r *Reconciler[T]) watchForEvents(ctx context.Context, stream <-chan *loade
 			}
 		case event := <-stream:
 			r.handleEvent(ctx, event)
+			if r.channels != nil {
+				if err := r.channels.Refresh(); err != nil {
+					log.Error(err)
+					continue
+				} else {
+					log.Info("Channels refreshed")
+				}
+			}
 		}
 	}
 }
