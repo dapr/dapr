@@ -14,7 +14,7 @@ limitations under the License.
 package state
 
 import (
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/pubsub/client"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/pubsub/grpc"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/pubsub/http"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/pubsub/openapi"
 )
