@@ -15,7 +15,6 @@ package hotreloading
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -78,7 +77,7 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 	s.daprd.WaitUntilRunning(t, ctx)
 
 	t.Run("expect no components to be loaded yet", func(t *testing.T) {
-		assert.Len(t, s.getMetaResponse(t, ctx), 0)
+		assert.Len(t, getMetaComponents(t, ctx, s.client, s.daprd.HTTPPort()), 0)
 		s.writeExpectError(t, ctx, "123", http.StatusInternalServerError)
 	})
 
@@ -95,9 +94,9 @@ spec:
 `), 0o600))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, s.getMetaResponse(t, ctx), 1)
+			assert.Len(c, getMetaComponents(t, ctx, s.client, s.daprd.HTTPPort()), 1)
 		}, time.Second*5, time.Millisecond*100)
-		resp := s.getMetaResponse(t, ctx)
+		resp := getMetaComponents(t, ctx, s.client, s.daprd.HTTPPort())
 		require.Len(t, resp, 1)
 
 		assert.Equal(t, &runtimev1pb.RegisteredComponents{
@@ -145,9 +144,9 @@ spec:
  `), 0o600))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, s.getMetaResponse(t, ctx), 3)
+			assert.Len(c, getMetaComponents(t, ctx, s.client, s.daprd.HTTPPort()), 3)
 		}, time.Second*5, time.Millisecond*100)
-		resp := s.getMetaResponse(t, ctx)
+		resp := getMetaComponents(t, ctx, s.client, s.daprd.HTTPPort())
 		require.Len(t, resp, 3)
 
 		assert.ElementsMatch(t, []*runtimev1pb.RegisteredComponents{
@@ -189,7 +188,7 @@ spec:
 `, s.resDir2)), 0o600))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			resp := s.getMetaResponse(c, ctx)
+			resp := getMetaComponents(c, ctx, s.client, s.daprd.HTTPPort())
 			assert.ElementsMatch(c, []*runtimev1pb.RegisteredComponents{
 				{
 					Name: "123", Type: "state.in-memory", Version: "v1",
@@ -250,7 +249,7 @@ spec:
 `), 0o600))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			resp := s.getMetaResponse(c, ctx)
+			resp := getMetaComponents(c, ctx, s.client, s.daprd.HTTPPort())
 			assert.ElementsMatch(c, []*runtimev1pb.RegisteredComponents{
 				{
 					Name: "123", Type: "state.sqlite", Version: "v1",
@@ -295,7 +294,7 @@ spec:
 `), 0o600))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			resp := s.getMetaResponse(c, ctx)
+			resp := getMetaComponents(c, ctx, s.client, s.daprd.HTTPPort())
 			assert.ElementsMatch(c, []*runtimev1pb.RegisteredComponents{
 				{
 					Name: "123", Type: "state.sqlite", Version: "v1",
@@ -331,7 +330,7 @@ spec:
 		require.NoError(t, os.Remove(filepath.Join(s.resDir2, "2.yaml")))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			resp := s.getMetaResponse(c, ctx)
+			resp := getMetaComponents(c, ctx, s.client, s.daprd.HTTPPort())
 			assert.ElementsMatch(c, []*runtimev1pb.RegisteredComponents{
 				{
 					Name: "123", Type: "state.sqlite", Version: "v1",
@@ -364,7 +363,7 @@ spec:
 		require.NoError(t, os.Remove(filepath.Join(s.resDir3, "3.yaml")))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			resp := s.getMetaResponse(c, ctx)
+			resp := getMetaComponents(c, ctx, s.client, s.daprd.HTTPPort())
 			assert.ElementsMatch(c, []*runtimev1pb.RegisteredComponents{}, resp)
 		}, time.Second*5, time.Millisecond*100)
 
@@ -373,24 +372,6 @@ spec:
 		s.writeExpectError(t, ctx, "xyz", http.StatusInternalServerError)
 		s.writeExpectError(t, ctx, "foo", http.StatusInternalServerError)
 	})
-}
-
-func (s *state) getMetaResponse(t require.TestingT, ctx context.Context) []*runtimev1pb.RegisteredComponents {
-	metaURL := fmt.Sprintf("http://localhost:%d/v1.0/metadata", s.daprd.HTTPPort())
-	type metaResponse struct {
-		Comps []*runtimev1pb.RegisteredComponents `json:"components,omitempty"`
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, metaURL, nil)
-	require.NoError(t, err)
-	resp, err := s.client.Do(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	var meta metaResponse
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&meta))
-
-	return meta.Comps
 }
 
 func (s *state) writeExpectError(t *testing.T, ctx context.Context, compName string, expCode int) {
