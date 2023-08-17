@@ -95,6 +95,12 @@ func (r *Reminder) UpdateFromTrack(track *ReminderTrack) {
 	r.RegisteredTime = r.Period.GetFollowing(track.LastFiredTime)
 }
 
+// ScheduledTime returns the time the reminder is scheduled to be executed at.
+// This is implemented to comply with the queueable interface.
+func (r *Reminder) ScheduledTime() time.Time {
+	return r.RegisteredTime
+}
+
 func (r *Reminder) MarshalJSON() ([]byte, error) {
 	type reminderAlias Reminder
 
