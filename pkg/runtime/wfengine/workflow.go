@@ -432,7 +432,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 	for _, e := range runtimeState.PendingTasks() {
 		ts := e.GetTaskScheduled()
 		if ts == nil {
-			wfLogger.Warn("don't know how to process task %v", e)
+			wfLogger.Warn("Unable to process task %v", e)
 			continue
 		}
 
