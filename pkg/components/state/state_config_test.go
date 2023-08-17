@@ -164,6 +164,12 @@ func TestPrefix_StoreNotInitial(t *testing.T) {
 	require.Equal(t, key, originalStateKey)
 }
 
+func TestActorKey(t *testing.T) {
+	const actorKey = "actorType||actorID||stateKey"
+	originalStateKey := GetOriginalStateKey("appid1||" + actorKey)
+	require.Equal(t, actorKey, originalStateKey)
+}
+
 func TestStateConfigRace(t *testing.T) {
 	t.Run("data race between SaveStateConfiguration and GetModifiedStateKey", func(t *testing.T) {
 		var wg sync.WaitGroup

@@ -216,6 +216,7 @@ func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID 
 	loadStartTime := time.Now()
 	loadedRecords := 0
 
+	// Load metadata
 	req := actors.GetStateRequest{
 		ActorType: config.workflowActorType,
 		ActorID:   actorID,
@@ -234,49 +235,64 @@ func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID 
 	if err = json.Unmarshal(res.Data, &metadata); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal workflow metadata: %w", err)
 	}
+
+	// Load inbox, history, and custom status using a bulk request
 	state := NewWorkflowState(config)
 	state.Generation = metadata.Generation
-	state.Inbox = make([]*backend.HistoryEvent, 0, metadata.InboxLength)
-	// CONSIDER: Do some of these loads in parallel
+	state.Inbox = make([]*backend.HistoryEvent, metadata.InboxLength)
+	state.History = make([]*backend.HistoryEvent, metadata.HistoryLength)
+
+	bulkReq := &actors.GetBulkStateRequest{
+		ActorType: config.workflowActorType,
+		ActorID:   actorID,
+		Keys:      make([]string, metadata.InboxLength+metadata.HistoryLength+1),
+	}
+
+	var n int
+	bulkReq.Keys[n] = customStatusKey
+	n++
 	for i := 0; i < metadata.InboxLength; i++ {
-		req.Key = getMultiEntryKeyName(inboxKeyPrefix, i)
-		res, err = actorRuntime.GetState(ctx, &req)
-		loadedRecords++
-		if err != nil {
-			return nil, fmt.Errorf("failed to load workflow inbox state key '%s': %w", req.Key, err)
-		}
-		var e *backend.HistoryEvent
-		e, err = backend.UnmarshalHistoryEvent(res.Data)
-		if err != nil {
-			return nil, fmt.Errorf("failed to unmarshal history event from inbox state key entry: %w", err)
-		}
-		state.Inbox = append(state.Inbox, e)
+		bulkReq.Keys[n] = getMultiEntryKeyName(inboxKeyPrefix, i)
+		n++
 	}
-	state.History = make([]*backend.HistoryEvent, 0, metadata.HistoryLength)
 	for i := 0; i < metadata.HistoryLength; i++ {
-		req.Key = getMultiEntryKeyName(historyKeyPrefix, i)
-		res, err = actorRuntime.GetState(ctx, &req)
-		loadedRecords++
-		if err != nil {
-			return nil, fmt.Errorf("failed to load workflow history state key '%s': %w", req.Key, err)
-		}
-		var e *backend.HistoryEvent
-		e, err = backend.UnmarshalHistoryEvent(res.Data)
-		if err != nil {
-			return nil, fmt.Errorf("failed to unmarshal history event from inbox state key entry: %w", err)
-		}
-
-		state.History = append(state.History, e)
+		bulkReq.Keys[n] = getMultiEntryKeyName(historyKeyPrefix, i)
+		n++
 	}
 
-	req.Key = customStatusKey
-	res, err = actorRuntime.GetState(ctx, &req)
-	loadedRecords++
+	// Perform the request
+	bulkRes, err := actorRuntime.GetBulkState(ctx, bulkReq)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load workflow custom status key '%s': %w", req.Key, err)
+		return nil, fmt.Errorf("failed to load workflow state: %w", err)
 	}
-	if len(res.Data) > 0 {
-		if err = json.Unmarshal(res.Data, &state.CustomStatus); err != nil {
+
+	// Parse responses
+	loadedRecords += len(bulkRes)
+	var key string
+	for i := 0; i < metadata.InboxLength; i++ {
+		key = getMultiEntryKeyName(inboxKeyPrefix, i)
+		if bulkRes[key] == nil {
+			return nil, fmt.Errorf("failed to load inbox state key '%s': not found", key)
+		}
+		state.Inbox[i], err = backend.UnmarshalHistoryEvent(bulkRes[key])
+		if err != nil {
+			return nil, fmt.Errorf("failed to unmarshal history event from inbox state key '%s': %w", key, err)
+		}
+	}
+	for i := 0; i < metadata.HistoryLength; i++ {
+		key = getMultiEntryKeyName(historyKeyPrefix, i)
+		if bulkRes[key] == nil {
+			return nil, fmt.Errorf("failed to load history state key '%s': not found", key)
+		}
+		state.History[i], err = backend.UnmarshalHistoryEvent(bulkRes[key])
+		if err != nil {
+			return nil, fmt.Errorf("failed to unmarshal history event from history state key '%s': %w", key, err)
+		}
+	}
+
+	if len(bulkRes[customStatusKey]) > 0 {
+		err = json.Unmarshal(bulkRes[customStatusKey], &state.CustomStatus)
+		if err != nil {
 			return nil, fmt.Errorf("failed to unmarshal JSON from custom status key entry: %w", err)
 		}
 	}

@@ -93,7 +93,7 @@ func GetModifiedStateKey(key, storeName, appID string) (string, error) {
 }
 
 func GetOriginalStateKey(modifiedStateKey string) string {
-	splits := strings.Split(modifiedStateKey, daprSeparator)
+	splits := strings.SplitN(modifiedStateKey, daprSeparator, 2)
 	if len(splits) <= 1 {
 		return modifiedStateKey
 	}
