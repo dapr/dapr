@@ -374,7 +374,7 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 		if !sc.Equal(trace.SpanContext{}) {
 			req.Metadata[traceparentHeader] = diag.SpanContextToW3CString(sc)
 		}
-		if sc.TraceState().Len() == 0 {
+		if sc.TraceState().Len() > 0 {
 			req.Metadata[tracestateHeader] = diag.TraceStateToW3CString(sc)
 		}
 	}
@@ -1427,16 +1427,11 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	// Extract trace context from context.
-	span := diagUtils.SpanFromContext(reqCtx)
-	// Populate W3C traceparent to cloudevent envelope
-	corID := diag.SpanContextToW3CString(span.SpanContext())
-	// Populate W3C tracestate to cloudevent envelope
-	traceState := diag.TraceStateToW3CString(span.SpanContext())
-
 	data := body
 
 	if !rawPayload {
+		span := diagUtils.SpanFromContext(reqCtx)
+		corID, traceState := diag.TraceIDAndStateFromSpan(span)
 		envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
 			Source:          a.universal.AppID,
 			Topic:           topic,
@@ -1531,8 +1526,6 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 
 	// Extract trace context from context.
 	span := diagUtils.SpanFromContext(reqCtx)
-	// Populate W3C tracestate to cloudevent envelope
-	traceState := diag.TraceStateToW3CString(span.SpanContext())
 
 	incomingEntries := make([]bulkPublishMessageEntry, 0)
 	err := json.Unmarshal(body, &incomingEntries)
@@ -1590,10 +1583,10 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 	features := thepubsub.Features()
 	if !rawPayload {
 		for i := range entries {
-			// For multiple events in a single bulk call traceParent is different for each event.
 			childSpan := diag.StartProducerSpanChildFromParent(reqCtx, span)
+			corID, traceState := diag.TraceIDAndStateFromSpan(childSpan)
+			// For multiple events in a single bulk call traceParent is different for each event.
 			// Populate W3C traceparent to cloudevent envelope
-			corID := diag.SpanContextToW3CString(childSpan.SpanContext())
 			spanMap[i] = childSpan
 
 			var envelope map[string]interface{}
