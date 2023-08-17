@@ -32,11 +32,7 @@ type Registry struct {
 }
 
 // DefaultRegistry is the singleton with the registry.
-var DefaultRegistry *Registry
-
-func init() {
-	DefaultRegistry = NewRegistry()
-}
+var DefaultRegistry *Registry = NewRegistry()
 
 // NewRegistry returns a new secret store registry.
 func NewRegistry() *Registry {

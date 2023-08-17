@@ -28,7 +28,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
-	"github.com/dapr/dapr/tests/util"
+	"github.com/dapr/dapr/tests/integration/framework/util"
 )
 
 type Placement struct {
@@ -94,7 +94,7 @@ func (p *Placement) Cleanup(t *testing.T) {
 }
 
 func (p *Placement) WaitUntilRunning(t *testing.T, ctx context.Context) {
-	client := http.Client{Timeout: time.Second}
+	client := util.HTTPClient(t)
 	assert.Eventually(t, func() bool {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/healthz", p.healthzPort), nil)
 		if err != nil {
