@@ -322,13 +322,31 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 
 	// The logic/for loop below purges/removes any leftover state from a completed or failed activity
 	// TODO: for optimization make multiple go routines and run them in parallel
-	for _, e := range state.Inbox {
+	for num, e := range state.Inbox {
 		var taskID int32
 		if ts := e.GetTaskCompleted(); ts != nil {
 			taskID = ts.TaskScheduledId
 		} else if tf := e.GetTaskFailed(); tf != nil {
 			taskID = tf.TaskScheduledId
 		} else {
+			if strings.Contains(e.String(), "timerFired") {
+				numZero := 6 - len(fmt.Sprint(num))
+				req := actors.TransactionalRequest{
+					ActorType: wf.config.workflowActorType,
+					ActorID:   actorID,
+					Operations: []actors.TransactionalOperation{{
+						Operation: actors.Upsert,
+						Request: actors.TransactionalUpsert{
+							Key: inboxKeyPrefix + "-" + strings.Repeat("0", numZero) + fmt.Sprint(num),
+						},
+					}},
+				}
+				err = wf.actors.TransactionalStateOperation(ctx, &req)
+				if err != nil {
+					wfLogger.Infof("RRL failed to save timer with error: %w, and req: %v", err, req)
+					return fmt.Errorf("failed to save timer with error: %w", err)
+				}
+			}
 			continue
 		}
 		req := actors.TransactionalRequest{
@@ -528,8 +546,13 @@ func (wf *workflowActor) saveInternalState(ctx context.Context, actorID string, 
 
 func (wf *workflowActor) createReliableReminder(ctx context.Context, actorID string, namePrefix string, data any, delay time.Duration) (string, error) {
 	// Reminders need to have unique names or else they may not fire in certain race conditions.
-	reminderName := fmt.Sprintf("%s-%s", namePrefix, uuid.NewString()[:8])
-	wfLogger.Debugf("%s: creating '%s' reminder with DueTime = %s", actorID, reminderName, delay)
+	var reminderName string
+	if strings.Contains(namePrefix, "timer") {
+		reminderName = fmt.Sprintf("timer-%s", uuid.NewString()[:8])
+	} else {
+		reminderName = fmt.Sprintf("%s-%s", namePrefix, uuid.NewString()[:8])
+	}
+
 	dataEnc, err := json.Marshal(data)
 	if err != nil {
 		return reminderName, fmt.Errorf("failed to encode data as JSON: %w", err)
