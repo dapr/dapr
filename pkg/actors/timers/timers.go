@@ -25,6 +25,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors/internal"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/kit/eventqueue"
 	"github.com/dapr/kit/logger"
 )
 
@@ -41,17 +42,20 @@ type timers struct {
 	activeTimersCountLock sync.RWMutex
 	metricsCollector      timersMetricsCollector
 	runningCh             chan struct{}
+	processor             *eventqueue.Processor[*internal.Reminder]
 }
 
 // NewTimersProvider returns a TimerProvider.
 func NewTimersProvider(clock clock.WithTicker) internal.TimersProvider {
-	return &timers{
+	t := &timers{
 		clock:             clock,
 		activeTimers:      &sync.Map{},
 		activeTimersCount: make(map[string]*int64),
 		metricsCollector:  diag.DefaultMonitoring.ActorTimers,
 		runningCh:         make(chan struct{}),
 	}
+	t.processor = eventqueue.NewProcessor[*internal.Reminder](t.processorExecuteFn, t.clock)
+	return t
 }
 
 func (t *timers) Init(ctx context.Context) error {
@@ -59,9 +63,9 @@ func (t *timers) Init(ctx context.Context) error {
 }
 
 func (t *timers) Close() error {
-	// Close the runningCh
+	// Close the runningCh and stop the processor
 	close(t.runningCh)
-	return nil
+	return t.processor.Close()
 }
 
 func (t *timers) SetExecuteTimerFn(fn internal.ExecuteTimerFn) {
@@ -72,15 +76,46 @@ func (t *timers) SetMetricsCollector(fn timersMetricsCollector) {
 	t.metricsCollector = fn
 }
 
+// processorExecuteFn is invoked when the processor executes a reminder.
+func (t *timers) processorExecuteFn(reminder *internal.Reminder) {
+	// If executeTimerFn returns false, it means that the actor was stopped so it should not be fired again
+	if t.executeTimerFn != nil && !t.executeTimerFn(reminder) {
+		if t.activeTimers.CompareAndDelete(reminder.Key(), reminder) {
+			t.updateActiveTimersCount(reminder.ActorType, -1)
+		}
+		return
+	}
+
+	// If TickExecuted returns true, it means the timer has no more repetitions left
+	if reminder.TickExecuted() {
+		log.Infof("Timer %s has been completed", reminder.Key())
+		if t.activeTimers.CompareAndDelete(reminder.Key(), reminder) {
+			t.updateActiveTimersCount(reminder.ActorType, -1)
+		}
+		return
+	}
+
+	// If active is false, then the timer has expired
+	if _, active := reminder.NextTick(); !active {
+		log.Infof("Timer %s has expired", reminder.Key())
+		if t.activeTimers.CompareAndDelete(reminder.Key(), reminder) {
+			t.updateActiveTimersCount(reminder.ActorType, -1)
+		}
+		return
+	}
+
+	// Re-enqueue the timer for its next repetition
+	t.processor.Enqueue(reminder)
+}
+
 func (t *timers) CreateTimer(ctx context.Context, reminder *internal.Reminder) error {
 	timerKey := reminder.Key()
 
 	log.Debugf("Create timer: %s", reminder.String())
 
 	// Multiple goroutines could be trying to store this timer, so we need to repeat until we succeed or context is canceled
-	stop := make(chan struct{}, 1)
 	for {
-		_, loaded := t.activeTimers.LoadOrStore(timerKey, stop)
+		_, loaded := t.activeTimers.LoadOrStore(timerKey, reminder)
 		if !loaded {
 			// If we stored the value, all good - let's continue
 			break
@@ -89,7 +124,8 @@ func (t *timers) CreateTimer(ctx context.Context, reminder *internal.Reminder) e
 		// If there's already a timer with the same key, stop it so we can replace it
 		prev, loaded := t.activeTimers.LoadAndDelete(timerKey)
 		if loaded && prev != nil {
-			close(prev.(chan struct{}))
+			t.processor.Dequeue(prev.(*internal.Reminder).Key())
+			t.updateActiveTimersCount(reminder.ActorType, -1)
 		}
 
 		// Wait a bit (with some jitter) and re-try
@@ -101,79 +137,47 @@ func (t *timers) CreateTimer(ctx context.Context, reminder *internal.Reminder) e
 		}
 	}
 
+	// Check if the reminder hasn't expired, then enqueue it
+	_, active := reminder.NextTick()
+	if !active {
+		log.Infof("Timer %s has expired", timerKey)
+		t.removeTimerMatching(reminder)
+		return nil
+	}
+
+	err := t.processor.Enqueue(reminder)
+	if err != nil {
+		t.removeTimerMatching(reminder)
+		return fmt.Errorf("failed to enqueue timer: %w", err)
+	}
+
 	t.updateActiveTimersCount(reminder.ActorType, 1)
 
-	go func() {
-		var nextTimer clock.Timer
-
-		nextTick, active := reminder.NextTick()
-		if !active {
-			log.Infof("Timer %s has expired", timerKey)
-			goto delete
-		}
-
-		nextTimer = t.clock.NewTimer(nextTick.Sub(t.clock.Now()))
-		defer func() {
-			if nextTimer != nil && !nextTimer.Stop() {
-				<-nextTimer.C()
-			}
-		}()
-
-	loop:
-		for {
-			select {
-			case <-nextTimer.C():
-				// noop
-			case <-stop:
-				// timer has been already deleted
-				log.Infof("Timer has been deleted: %s", reminder)
-				break loop
-			case <-t.runningCh:
-				// Timers runtime is stopping
-				return
-			}
-
-			// If executeTimerFn returns false, it means that the actor was stopped so it should not be fired again
-			if t.executeTimerFn != nil && !t.executeTimerFn(reminder) {
-				nextTimer = nil
-				break loop
-			}
-
-			if reminder.TickExecuted() {
-				log.Infof("Timer %s has been completed", timerKey)
-				nextTimer = nil
-				break loop
-			}
-
-			nextTick, active = reminder.NextTick()
-			if !active {
-				log.Infof("Timer %s has expired", timerKey)
-				nextTimer = nil
-				break loop
-			}
-			nextTimer.Reset(nextTick.Sub(t.clock.Now()))
-		}
-
-	delete:
-		// Delete the timer from the table
-		// We can't just call `DeleteTimer` as that could cause a race condition if the timer is also being replaced
-		exists := t.activeTimers.CompareAndDelete(timerKey, stop)
-		if exists {
-			// We close the stop channel only if it was still in the map
-			// If it isn't in the map, it means that someone else called DeleteTimer already, so the channel is already closed
-			close(stop)
-		}
-		t.updateActiveTimersCount(reminder.ActorType, -1)
-	}()
 	return nil
 }
 
-func (t *timers) DeleteTimer(ctx context.Context, timerKey string) error {
-	stopChan, exists := t.activeTimers.LoadAndDelete(timerKey)
-	if exists {
-		close(stopChan.(chan struct{}))
+// removeTimerMatching removes a timer from the processor by removing a Reminder object.
+// This is different from DeleteTimer as it removes the timer only if it's the same object.
+// It is used by CreateTimer.
+func (t *timers) removeTimerMatching(reminder *internal.Reminder) {
+	// Delete the timer from the table
+	// We can't just call `DeleteTimer` as that could cause a race condition if the timer is also being replaced
+	key := reminder.Key()
+	if t.activeTimers.CompareAndDelete(key, reminder) {
+		t.processor.Dequeue(key)
 	}
+}
 
+func (t *timers) DeleteTimer(_ context.Context, timerKey string) error {
+	reminderAny, exists := t.activeTimers.LoadAndDelete(timerKey)
+	if exists {
+		reminder := reminderAny.(*internal.Reminder)
+		t.updateActiveTimersCount(reminder.ActorType, -1)
+		err := t.processor.Dequeue(reminder.Key())
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
