@@ -107,11 +107,6 @@ func (a *activityActor) InvokeMethod(ctx context.Context, actorID string, method
 func (a *activityActor) InvokeReminder(ctx context.Context, actorID string, reminderName string, data []byte, dueTime string, period string) error {
 	wfLogger.Debugf("Invoking reminder '%s' on activity actor '%s'", reminderName, actorID)
 
-	var generation uint64
-	if err := actors.DecodeInternalActorReminderData(data, &generation); err != nil {
-		// Likely the result of an incompatible activity reminder format change. This is non-recoverable.
-		return err
-	}
 	state, _ := a.loadActivityState(ctx, actorID)
 	// TODO: On error, reply with a failure - this requires support from durabletask-go to produce TaskFailure results
 
