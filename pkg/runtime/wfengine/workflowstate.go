@@ -245,6 +245,7 @@ func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID 
 	bulkReq := &actors.GetBulkStateRequest{
 		ActorType: config.workflowActorType,
 		ActorID:   actorID,
+		// Initializing with size for all the inbox, history, and custom status
 		Keys:      make([]string, metadata.InboxLength+metadata.HistoryLength+1),
 	}
 
@@ -305,6 +306,7 @@ func (s *workflowState) GetPurgeRequest(actorID string) (*actors.TransactionalRe
 	req := &actors.TransactionalRequest{
 		ActorType:  s.config.workflowActorType,
 		ActorID:    actorID,
+		// Initial capacity should be enough to contain the entire inbox, history, and custom status + metadata
 		Operations: make([]actors.TransactionalOperation, 0, len(s.Inbox)+len(s.History)+2),
 	}
 
