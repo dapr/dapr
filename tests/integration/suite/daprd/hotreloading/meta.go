@@ -19,8 +19,9 @@ import (
 	"fmt"
 	"net/http"
 
-	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/stretchr/testify/require"
+
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
 type metaResponse struct {

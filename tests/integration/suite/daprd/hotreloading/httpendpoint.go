@@ -327,7 +327,6 @@ spec:
 			500,
 		)
 	})
-
 }
 
 func (h *httpendpoint) doReq(t require.TestingT, ctx context.Context, name, route, expBody string, expCode int) {

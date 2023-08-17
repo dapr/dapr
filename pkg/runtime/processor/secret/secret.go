@@ -51,7 +51,6 @@ type secret struct {
 	compStore      *compstore.ComponentStore
 	meta           *meta.Meta
 	operatorClient operatorv1pb.OperatorClient
-	mode           modes.DaprMode
 	lock           sync.Mutex
 }
 
