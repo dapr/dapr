@@ -402,7 +402,7 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 		for k, v := range resp.Metadata {
 			reqCtx.Response.Header.Add(metadataPrefix+k, v)
 		}
-		fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, resp.Data))
+		fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, resp.Data, resp.Metadata))
 	}
 }
 
@@ -435,7 +435,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 	bulkResp := make([]BulkGetResponse, len(req.Keys))
 	if len(req.Keys) == 0 {
 		b, _ := json.Marshal(bulkResp)
-		fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, b))
+		fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, b, nil))
 		return
 	}
 
@@ -508,7 +508,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	b, _ := json.Marshal(bulkResp)
-	fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, b))
+	fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, b, nil))
 }
 
 func (a *api) getStateStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (state.Store, string, error) {
@@ -599,7 +599,7 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 	for k, v := range resp.Metadata {
 		reqCtx.Response.Header.Add(metadataPrefix+k, v)
 	}
-	fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, resp.Data))
+	fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, resp.Data, resp.Metadata))
 }
 
 func (a *api) getConfigurationStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (configuration.Store, string, error) {
@@ -739,7 +739,7 @@ func (a *api) onSubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
 	respBytes, _ := json.Marshal(&subscribeConfigurationResponse{
 		ID: subscribeID,
 	})
-	fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, respBytes))
+	fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, respBytes, nil))
 }
 
 func (a *api) onUnsubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
@@ -769,14 +769,14 @@ func (a *api) onUnsubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
 			Ok:      false,
 			Message: msg.Message,
 		})
-		fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusInternalServerError, errRespBytes))
+		fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusInternalServerError, errRespBytes, nil))
 		log.Debug(msg)
 		return
 	}
 	respBytes, _ := json.Marshal(&UnsubscribeConfigurationResponse{
 		Ok: true,
 	})
-	fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, respBytes))
+	fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, respBytes, nil))
 }
 
 func (a *api) onGetConfiguration(reqCtx *fasthttp.RequestCtx) {
@@ -823,7 +823,7 @@ func (a *api) onGetConfiguration(reqCtx *fasthttp.RequestCtx) {
 
 	respBytes, _ := json.Marshal(getResponse.Items)
 
-	fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, respBytes))
+	fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, respBytes, nil))
 }
 
 func extractEtag(reqCtx *fasthttp.RequestCtx) (hasEtag bool, etag string) {
@@ -1257,7 +1257,7 @@ func (a *api) onGetActorReminder(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, b))
+	fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, b, nil))
 }
 
 func (a *api) onDeleteActorTimer(reqCtx *fasthttp.RequestCtx) {
@@ -1403,7 +1403,7 @@ func (a *api) onGetActorState(reqCtx *fasthttp.RequestCtx) {
 			fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
 			return
 		}
-		fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, resp.Data))
+		fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, resp.Data, resp.Metadata))
 	}
 }
 
@@ -1675,7 +1675,7 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 
 		// Return the error along with the list of failed entries.
 		resData, _ := json.Marshal(bulkRes)
-		fasthttpRespond(reqCtx, fasthttpResponseWithJSON(status, resData), closeChildSpans)
+		fasthttpRespond(reqCtx, fasthttpResponseWithJSON(status, resData, nil), closeChildSpans)
 		return
 	}
 

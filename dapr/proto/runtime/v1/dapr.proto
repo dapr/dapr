@@ -542,6 +542,9 @@ message GetActorStateRequest {
 // GetActorStateResponse is the response conveying the actor's state value.
 message GetActorStateResponse {
   bytes data = 1;
+
+  // The metadata which will be sent to app.
+  map<string, string> metadata = 2;
 }
 
 // ExecuteActorStateTransactionRequest is the message to execute multiple operations on a specified actor.

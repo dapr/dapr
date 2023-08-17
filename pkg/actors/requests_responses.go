@@ -103,7 +103,8 @@ type SaveStateRequest struct {
 
 // StateResponse is the response returned from getting an actor state.
 type StateResponse struct {
-	Data []byte `json:"data"`
+	Data     []byte            `json:"data"`
+	Metadata map[string]string `json:"metadata"`
 }
 
 // TimerResponse is the response object send to an Actor SDK API when a timer fires.
