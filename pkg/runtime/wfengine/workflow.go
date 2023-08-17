@@ -86,11 +86,8 @@ func (wf *workflowActor) SetActorRuntime(actorRuntime actors.Actors) {
 }
 
 // InvokeMethod implements actors.InternalActor
-func (wf *workflowActor) InvokeMethod(ctx context.Context, actorID string, methodName string, request []byte) (interface{}, error) {
+func (wf *workflowActor) InvokeMethod(ctx context.Context, actorID string, methodName string, request []byte) (result any, err error) {
 	wfLogger.Debugf("invoking method '%s' on workflow actor '%s'", methodName, actorID)
-
-	var result interface{}
-	var err error
 
 	switch methodName {
 	case CreateWorkflowInstanceMethod:
