@@ -39,7 +39,6 @@ import (
 	"github.com/dapr/dapr/pkg/actors/reminders"
 	"github.com/dapr/dapr/pkg/actors/timers"
 	"github.com/dapr/dapr/pkg/channel"
-	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	configuration "github.com/dapr/dapr/pkg/config"
 	daprCredentials "github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -658,8 +657,8 @@ func (a *actorsRuntime) GetBulkState(ctx context.Context, req *GetBulkStateReque
 	}
 
 	actorKey := req.ActorKey()
-	partitionKey := constructCompositeKey(a.actorsConfig.Config.AppID, actorKey)
-	metadata := map[string]string{metadataPartitionKey: partitionKey}
+	baseKey := constructCompositeKey(a.actorsConfig.Config.AppID, actorKey)
+	metadata := map[string]string{metadataPartitionKey: baseKey}
 
 	bulkReqs := make([]state.GetRequest, len(req.Keys))
 	for i, key := range req.Keys {
@@ -679,8 +678,8 @@ func (a *actorsRuntime) GetBulkState(ctx context.Context, req *GetBulkStateReque
 		return nil, err
 	}
 
-	// Add the dapr separator to actorKey
-	actorKey += daprSeparator
+	// Add the dapr separator to baseKey
+	baseKey += daprSeparator
 
 	bulkRes := make(BulkStateResponse, len(res))
 	for _, r := range res {
@@ -689,8 +688,7 @@ func (a *actorsRuntime) GetBulkState(ctx context.Context, req *GetBulkStateReque
 		}
 
 		// Trim the prefix from the key
-		key := stateLoader.GetOriginalStateKey(r.Key)
-		bulkRes[strings.TrimPrefix(key, actorKey)] = r.Data
+		bulkRes[strings.TrimPrefix(r.Key, baseKey)] = r.Data
 	}
 
 	return bulkRes, nil
