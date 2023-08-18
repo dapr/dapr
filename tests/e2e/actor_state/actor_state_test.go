@@ -318,6 +318,9 @@ func TestActorState(t *testing.T) {
 			assert.NoError(t, err)
 			assert.Equal(t, http.StatusOK, code)
 
+			b, err = json.Marshal(&runtimev1.GetActorStateRequest{
+				ActorType: "grpcMyActorType", ActorId: fmt.Sprintf("%s-myActorIDTTL", actuid), Key: "myTTLKey",
+			})
 			resp, code, err := utils.HTTPGetWithStatusWithData(grpcURL, b)
 			assert.NoError(t, err)
 			assert.Equal(t, http.StatusOK, code)
