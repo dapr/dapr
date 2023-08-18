@@ -72,20 +72,24 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 	})
 	require.NoError(t, err)
 
-	resp, err := client.GetState(ctx, &rtv1.GetStateRequest{
-		StoreName: "mystore", Key: "key1",
-	})
-	require.NoError(t, err)
-	assert.Equal(t, "value1", string(resp.Data))
-	ttlExpireTime, err := time.Parse(time.RFC3339, resp.GetMetadata()["ttlExpireTime"])
-	require.NoError(t, err)
-	assert.InDelta(t, now.Add(3*time.Second).Unix(), ttlExpireTime.Unix(), 1)
-
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+	t.Run("ensure key returns ttlExpireTime", func(t *testing.T) {
 		resp, err := client.GetState(ctx, &rtv1.GetStateRequest{
 			StoreName: "mystore", Key: "key1",
 		})
-		require.NoError(c, err)
-		assert.Empty(c, resp.Data)
-	}, 5*time.Second, 100*time.Millisecond)
+		require.NoError(t, err)
+		assert.Equal(t, "value1", string(resp.Data))
+		ttlExpireTime, err := time.Parse(time.RFC3339, resp.GetMetadata()["ttlExpireTime"])
+		require.NoError(t, err)
+		assert.InDelta(t, now.Add(3*time.Second).Unix(), ttlExpireTime.Unix(), 1)
+	})
+
+	t.Run("ensure key is deleted after ttl", func(t *testing.T) {
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			resp, err := client.GetState(ctx, &rtv1.GetStateRequest{
+				StoreName: "mystore", Key: "key1",
+			})
+			require.NoError(c, err)
+			assert.Empty(c, resp.Data)
+		}, 5*time.Second, 100*time.Millisecond)
+	})
 }

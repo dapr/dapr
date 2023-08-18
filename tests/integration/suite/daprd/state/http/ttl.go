@@ -64,35 +64,42 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 
 	now := time.Now()
 
-	reqBody := `[{"key": "key1", "value": "value1", "metadata": {"ttlInSeconds": "3"}}]`
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(reqBody))
-	require.NoError(t, err)
-	resp, err := client.Do(req)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
+	t.Run("set key with ttl", func(t *testing.T) {
+		reqBody := `[{"key": "key1", "value": "value1", "metadata": {"ttlInSeconds": "3"}}]`
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(reqBody))
+		require.NoError(t, err)
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		assert.NoError(t, resp.Body.Close())
+		assert.Equal(t, http.StatusNoContent, resp.StatusCode)
+	})
 
-	req, err = http.NewRequestWithContext(ctx, http.MethodGet, postURL+"/key1", nil)
-	require.NoError(t, err)
-	resp, err = client.Do(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
-	body, err := io.ReadAll(resp.Body)
-	require.NoError(t, err)
-	assert.Equal(t, `"value1"`, string(body))
+	t.Run("ensure key return ttlExpireTime", func(t *testing.T) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, postURL+"/key1", nil)
+		require.NoError(t, err)
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		assert.NoError(t, resp.Body.Close())
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		assert.Equal(t, `"value1"`, string(body))
 
-	ttlExpireTimeStr := resp.Header.Get("metadata.ttlExpireTime")
-	require.NotEmpty(t, ttlExpireTimeStr)
-	ttlExpireTime, err := time.Parse(time.RFC3339, ttlExpireTimeStr)
-	require.NoError(t, err)
-	assert.InDelta(t, now.Add(3*time.Second).Unix(), ttlExpireTime.Unix(), 1)
+		ttlExpireTimeStr := resp.Header.Get("metadata.ttlExpireTime")
+		require.NotEmpty(t, ttlExpireTimeStr)
+		ttlExpireTime, err := time.Parse(time.RFC3339, ttlExpireTimeStr)
+		require.NoError(t, err)
+		assert.InDelta(t, now.Add(3*time.Second).Unix(), ttlExpireTime.Unix(), 1)
+	})
 
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		req, err = http.NewRequestWithContext(ctx, http.MethodGet, postURL+"/key1", nil)
-		require.NoError(c, err)
-		resp, err = client.Do(req)
-		require.NoError(c, err)
-		resp.Body.Close()
-		assert.Equal(c, http.StatusNoContent, resp.StatusCode)
-	}, 5*time.Second, 100*time.Millisecond)
+	t.Run("ensure key is deleted after ttl", func(t *testing.T) {
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, postURL+"/key1", nil)
+			require.NoError(c, err)
+			resp, err := client.Do(req)
+			require.NoError(c, err)
+			assert.NoError(t, resp.Body.Close())
+			assert.Equal(c, http.StatusNoContent, resp.StatusCode)
+		}, 5*time.Second, 100*time.Millisecond)
+	})
 }

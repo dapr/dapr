@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -32,7 +33,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/stretchr/testify/require"
 )
 
 func init() {
@@ -115,11 +115,11 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 	t.Run("ensure the state key returns a ttlExpireTime header", func(t *testing.T) {
 		req, err = http.NewRequest(http.MethodGet, daprdURL+"/v1.0/actors/myactortype/myactorid/state/key1", nil)
 		require.NoError(t, err)
-		resp, err = client.Do(req)
-		require.NoError(t, err)
-		body, err := io.ReadAll(resp.Body)
+		resp, err := client.Do(req)
 		require.NoError(t, err)
 		assert.NoError(t, resp.Body.Close())
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		assert.Equal(t, `"value1"`, string(body))
 		ttlExpireTimeStr := resp.Header.Get("metadata.ttlExpireTime")
