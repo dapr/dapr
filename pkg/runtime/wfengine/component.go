@@ -138,7 +138,7 @@ func (c *workflowEngineComponent) Purge(ctx context.Context, req *workflows.Purg
 
 	if err := c.client.PurgeOrchestrationState(ctx, api.InstanceID(req.InstanceID)); err != nil {
 		if errors.Is(err, api.ErrInstanceNotFound) {
-			c.logger.Errorf("Unable to purge the instance: '%s', no such instance exists", req.InstanceID)
+			c.logger.Warnf("Unable to purge the instance: '%s', no such instance exists", req.InstanceID)
 			return err
 		}
 		return fmt.Errorf("failed to Purge workflow %s: %w", req.InstanceID, err)
@@ -241,7 +241,7 @@ func (c *workflowEngineComponent) PurgeWorkflow(ctx context.Context, req *workfl
 
 	if err := c.client.PurgeOrchestrationState(ctx, api.InstanceID(req.InstanceID)); err != nil {
 		if errors.Is(err, api.ErrInstanceNotFound) {
-			c.logger.Errorf("The requested instance: '%s' does not exist or has already been purged", req.InstanceID)
+			c.logger.Warnf("The requested instance: '%s' does not exist or has already been purged", req.InstanceID)
 			return err
 		}
 		return fmt.Errorf("failed to purge workflow %s: %w", req.InstanceID, err)
