@@ -27,11 +27,17 @@ BINARIES    ?= daprd placement operator injector sentry
 HA_MODE     ?= false
 # Force in-memory log for placement
 FORCE_INMEM ?= true
-# Go's build tags:
+# Dapr sidecar "flavor" build tag:
 # allcomponents - (default) includes all components in Dapr sidecar
 # stablecomponents - includes all stable components in Dapr sidecar
 DAPR_SIDECAR_FLAVOR ?= allcomponents
-DAPR_GO_BUILD_TAGS = $(DAPR_SIDECAR_FLAVOR)
+# Additional build tags
+DAPR_GO_BUILD_TAGS ?=
+ifneq ($(DAPR_GO_BUILD_TAGS),)
+	DAPR_GO_BUILD_TAGS := $(DAPR_GO_BUILD_TAGS),$(DAPR_SIDECAR_FLAVOR)
+else
+	DAPR_GO_BUILD_TAGS := $(DAPR_SIDECAR_FLAVOR)
+endif
 
 # Add latest tag if LATEST_RELEASE is true
 LATEST_RELEASE ?=
@@ -137,7 +143,7 @@ BASE_PACKAGE_NAME := github.com/dapr/dapr
 LOGGER_PACKAGE_NAME := github.com/dapr/kit/logger
 
 # Comma-separated list of features to enable
-ENABLED_FEATURES ?= ServiceInvocationStreaming
+ENABLED_FEATURES ?= 
 
 DEFAULT_LDFLAGS:=-X $(BASE_PACKAGE_NAME)/pkg/buildinfo.gitcommit=$(GIT_COMMIT) \
   -X $(BASE_PACKAGE_NAME)/pkg/buildinfo.gitversion=$(GIT_VERSION) \

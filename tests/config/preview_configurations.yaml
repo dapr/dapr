@@ -11,16 +11,6 @@
 # limitations under the License.
 #
 
-# TODO: Remove once ServiceInvocationStreaming feature is finalized
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: streamingconfig
-spec:
-  features:
-    - name: ServiceInvocationStreaming
-      enabled: true
-
 ---
 # TODO: @joshvanl: Remove once ActorStateTTL feature is finalized (probably in
 # v1.12 release).
