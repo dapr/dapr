@@ -37,16 +37,23 @@ import (
 func TestHandleRequest(t *testing.T) {
 	authID := "test-auth-id"
 
-	i, err := NewInjector([]string{authID}, Config{
-		TLSCertFile:                       "test-cert",
-		TLSKeyFile:                        "test-key",
-		SidecarImage:                      "test-image",
-		Namespace:                         "test-ns",
-		AllowedServiceAccountsPrefixNames: "vc-proj*:sa-dev*,vc-all-allowed*:*",
-	}, fake.NewSimpleClientset(), kubernetesfake.NewSimpleClientset())
+	i, err := NewInjector(Options{
+		AuthUIDs: []string{authID},
+		Config: Config{
+			SidecarImage:                      "test-image",
+			Namespace:                         "test-ns",
+			ControlPlaneTrustDomain:           "test-trust-domain",
+			AllowedServiceAccountsPrefixNames: "vc-proj*:sa-dev*,vc-all-allowed*:*",
+		},
+		DaprClient: fake.NewSimpleClientset(),
+		KubeClient: kubernetesfake.NewSimpleClientset(),
+	})
 
 	assert.NoError(t, err)
 	injector := i.(*injector)
+	injector.currentTrustAnchorsFn = func() ([]byte, error) {
+		return nil, nil
+	}
 
 	podBytes, _ := json.Marshal(corev1.Pod{
 		TypeMeta: metav1.TypeMeta{

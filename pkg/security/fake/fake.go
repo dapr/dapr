@@ -25,31 +25,60 @@ import (
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
 )
 
 type Fake struct {
-	grpcServerOptionFn             func() grpc.ServerOption
-	grpcServerOptionNoClientAuthFn func() grpc.ServerOption
-	grpcDialOptionFn               func(spiffeid.ID) grpc.DialOption
+	controlPlaneTrustDomainFn func() spiffeid.TrustDomain
+	controlPlaneNamespaceFn   func() string
+	currentTrustAnchorsFn     func() ([]byte, error)
+	watchTrustAnchorsFn       func(context.Context, chan<- []byte)
 
-	tlsServerConfigNoClientAuth func() *tls.Config
-	netListenerIDFn             func(net.Listener, spiffeid.ID) net.Listener
-	netDialerIDFn               func(context.Context, spiffeid.ID, time.Duration) func(network, addr string) (net.Conn, error)
+	tlsServerConfigMTLSFn               func(spiffeid.TrustDomain) (*tls.Config, error)
+	tlsServerConfigNoClientAuthFn       func() *tls.Config
+	tlsServerConfigNoClientAuthOptionFn func(*tls.Config)
+	netListenerIDFn                     func(net.Listener, spiffeid.ID) net.Listener
+	netDialerIDFn                       func(context.Context, spiffeid.ID, time.Duration) func(network, addr string) (net.Conn, error)
 
-	currentTrustAnchorsFn func() ([]byte, error)
-	watchTrustAnchorsFn   func(context.Context, chan<- []byte)
+	grpcDialOptionFn                   func(spiffeid.ID) grpc.DialOption
+	grpcDialOptionUnknownTrustDomainFn func(ns, appID string) grpc.DialOption
+	grpcServerOptionMTLSFn             func() grpc.ServerOption
+	grpcServerOptionNoClientAuthFn     func() grpc.ServerOption
 }
 
 func New() *Fake {
 	return &Fake{
-		grpcServerOptionFn: func() grpc.ServerOption {
-			return grpc.Creds(insecure.NewCredentials())
+		controlPlaneTrustDomainFn: func() spiffeid.TrustDomain {
+			return spiffeid.TrustDomain{}
+		},
+		controlPlaneNamespaceFn: func() string {
+			return ""
+		},
+		trustAnchorsFn: func() ([]byte, error) {
+			return nil, nil
+		},
+		tlsServerConfigMTLSFn: func(spiffeid.TrustDomain) (*tls.Config, error) {
+			return new(tls.Config), nil
+		},
+		tlsServerConfigNoClientAuthFn: func() *tls.Config {
+			return new(tls.Config)
+		},
+		tlsServerConfigNoClientAuthOptionFn: func(*tls.Config) {},
+		grpcDialOptionFn: func(spiffeid.ID) grpc.DialOption {
+			return grpc.WithTransportCredentials(insecure.NewCredentials())
+		},
+		grpcDialOptionUnknownTrustDomainFn: func(ns, appID string) grpc.DialOption {
+			return grpc.WithTransportCredentials(insecure.NewCredentials())
+		},
+		grpcServerOptionMTLSFn: func() grpc.ServerOption {
+			return grpc.Creds(nil)
 		},
 		tlsServerConfigNoClientAuth: func() *tls.Config {
 			return new(tls.Config)
 		},
 		grpcServerOptionNoClientAuthFn: func() grpc.ServerOption {
-			return grpc.Creds(insecure.NewCredentials())
+			return grpc.Creds(nil)
 		},
 		currentTrustAnchorsFn: func() ([]byte, error) {
 			return []byte{}, nil
@@ -69,14 +98,90 @@ func New() *Fake {
 	}
 }
 
+func (f *Fake) WithControlPlaneTrustDomainFn(fn func() spiffeid.TrustDomain) *Fake {
+	f.controlPlaneTrustDomainFn = fn
+	return f
+}
+
+func (f *Fake) WithControlPlaneNamespaceFn(fn func() string) *Fake {
+	f.controlPlaneNamespaceFn = fn
+	return f
+}
+
+func (f *Fake) WithTrustAnchorsFn(fn func() ([]byte, error)) *Fake {
+	f.trustAnchorsFn = fn
+	return f
+}
+
+func (f *Fake) WithTLSServerConfigMTLSFn(fn func(spiffeid.TrustDomain) (*tls.Config, error)) *Fake {
+	f.tlsServerConfigMTLSFn = fn
+	return f
+}
+
+func (f *Fake) WithTLSServerConfigNoClientAuthFn(fn func() *tls.Config) *Fake {
+	f.tlsServerConfigNoClientAuthFn = fn
+	return f
+}
+
+func (f *Fake) WithTLSServerConfigNoClientAuthOptionFn(fn func(*tls.Config)) *Fake {
+	f.tlsServerConfigNoClientAuthOptionFn = fn
+	return f
+}
+
+func (f *Fake) WithGRPCDialOptionFn(fn func(spiffeid.ID) grpc.DialOption) *Fake {
+	f.grpcDialOptionFn = fn
+	return f
+}
+
+func (f *Fake) WithGRPCDialOptionUnknownTrustDomainFn(fn func(ns, appID string) grpc.DialOption) *Fake {
+	f.grpcDialOptionUnknownTrustDomainFn = fn
+	return f
+}
+
+func (f *Fake) WithGRPCServerOptionMTLSFn(fn func() grpc.ServerOption) *Fake {
+	f.grpcServerOptionMTLSFn = fn
+	return f
+}
+
 func (f *Fake) WithGRPCServerOptionNoClientAuthFn(fn func() grpc.ServerOption) *Fake {
 	f.grpcServerOptionNoClientAuthFn = fn
 	return f
 }
 
-func (f *Fake) WithGRPCServerOptionFn(fn func() grpc.ServerOption) *Fake {
-	f.grpcServerOptionFn = fn
-	return f
+func (f *Fake) ControlPlaneTrustDomain() spiffeid.TrustDomain {
+	return f.controlPlaneTrustDomainFn()
+}
+
+func (f *Fake) ControlPlaneNamespace() string {
+	return f.controlPlaneNamespaceFn()
+}
+
+func (f *Fake) CurrentTrustAnchors() ([]byte, error) {
+	return f.trustAnchorsFn()
+}
+
+func (f *Fake) TLSServerConfigMTLS(td spiffeid.TrustDomain) (*tls.Config, error) {
+	return f.tlsServerConfigMTLSFn(td)
+}
+
+func (f *Fake) TLSServerConfigNoClientAuth() *tls.Config {
+	return f.tlsServerConfigNoClientAuthFn()
+}
+
+func (f *Fake) TLSServerConfigNoClientAuthOption(cfg *tls.Config) {
+	f.tlsServerConfigNoClientAuthOptionFn(cfg)
+}
+
+func (f *Fake) GRPCDialOption(id spiffeid.ID) grpc.DialOption {
+	return f.grpcDialOptionFn(id)
+}
+
+func (f *Fake) GRPCDialOptionUnknownTrustDomain(ns, appID string) grpc.DialOption {
+	return f.grpcDialOptionUnknownTrustDomainFn(ns, appID)
+}
+
+func (f *Fake) GRPCServerOptionMTLS() grpc.ServerOption {
+	return f.grpcServerOptionMTLSFn()
 }
 
 func (f *Fake) WithTLSServerConfigNoClientAuthFn(fn func() *tls.Config) *Fake {
@@ -113,8 +218,8 @@ func (f *Fake) GRPCServerOptionNoClientAuth() grpc.ServerOption {
 	return f.grpcServerOptionNoClientAuthFn()
 }
 
-func (f *Fake) GRPCServerOption() grpc.ServerOption {
-	return f.grpcServerOptionFn()
+func (f *Fake) WatchTrustAnchors(context.Context, chan<- []byte) {
+	return
 }
 
 func (f *Fake) TLSServerConfigNoClientAuth() *tls.Config {

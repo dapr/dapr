@@ -74,11 +74,9 @@ spec:
         resources:
 {{ toYaml .Values.resources | indent 10 }}
         volumeMounts:
-          - name: dapr-trust-bundle
-            mountPath: /var/run/secrets/dapr.io/tls
+          - name: credentials
+            mountPath: /var/run/dapr/credentials
             readOnly: true
-          - name: dapr-identity-token
-            mountPath: /var/run/secrets/dapr.io/sentrytoken
 {{- if or (eq .Values.global.ha.enabled true) (eq .Values.ha true) }}
   {{- if eq .Values.cluster.forceInMemoryLog false }}
           - name: raft-log
@@ -181,16 +179,9 @@ spec:
                 fieldPath: metadata.namespace
       serviceAccountName: dapr-placement
       volumes:
-      - name: dapr-trust-bundle
-        configMap:
-          name: dapr-trust-bundle
-      - name: dapr-identity-token
-        projected:
-          sources:
-          - serviceAccountToken:
-              path: token
-              expirationSeconds: 600
-              audience: "spiffe://{{ .Values.global.mtls.controlPlaneTrustDomain }}/ns/{{ .Release.Namespace }}/dapr-sentry"
+        - name: credentials
+          secret:
+            secretName: dapr-trust-bundle
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:

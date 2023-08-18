@@ -26,10 +26,10 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/actors/internal"
-	daprCredentials "github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/placement/hashing"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/logger"
 )
 
@@ -96,7 +96,7 @@ type actorPlacement struct {
 // ActorPlacementOpts contains options for NewActorPlacement.
 type ActorPlacementOpts struct {
 	ServerAddrs        []string // Address(es) for the Placement service
-	CertChain          *daprCredentials.CertChain
+	Security           security.Handler
 	AppID              string
 	RuntimeHostname    string
 	PodName            string
@@ -115,7 +115,7 @@ func NewActorPlacement(opts ActorPlacementOpts) internal.PlacementService {
 		podName:         opts.PodName,
 		serverAddr:      servers,
 
-		client: newPlacementClient(getGrpcOptsGetter(servers, opts.CertChain)),
+		client: newPlacementClient(getGrpcOptsGetter(servers, opts.Security)),
 
 		placementTableLock: &sync.RWMutex{},
 		placementTables:    &hashing.ConsistentHashTables{Entries: make(map[string]*hashing.Consistent)},

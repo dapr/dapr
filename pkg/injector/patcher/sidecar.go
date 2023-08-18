@@ -36,9 +36,6 @@ type SidecarConfig struct {
 
 	Mode                        injectorConsts.DaprMode `default:"kubernetes"`
 	Namespace                   string
-	TrustAnchors                string
-	CertChain                   string
-	CertKey                     string
 	MTLSEnabled                 bool
 	Identity                    string
 	IgnoreEntrypointTolerations []corev1.Toleration
@@ -49,6 +46,7 @@ type SidecarConfig struct {
 	ReadOnlyRootFilesystem      bool
 	SidecarDropALLCapabilities  bool
 	DisableTokenVolume          bool
+	CurrentTrustAnchors         []byte
 	SidecarHTTPPort             int32 `default:"3500"`
 	SidecarAPIGRPCPort          int32 `default:"50001"`
 	SidecarInternalGRPCPort     int32 `default:"50002"`
@@ -105,6 +103,8 @@ type SidecarConfig struct {
 	ComponentContainer                  string `annotation:"dapr.io/component-container"`
 	InjectPluggableComponents           bool   `annotation:"dapr.io/inject-pluggable-components"`
 	AppChannelAddress                   string `annotation:"dapr.io/app-channel-address"`
+	ControlPlaneNamespace               string
+	ControlPlaneTrustDomain             string
 
 	pod *corev1.Pod
 }

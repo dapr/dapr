@@ -31,8 +31,71 @@ import (
 // TODO: @joshvanl: This package should be removed in v1.13.
 func NewServer(svid x509svid.Source, bundle x509bundle.Source, authorizer tlsconfig.Authorizer) *tls.Config {
 	spiffeVerify := tlsconfig.VerifyPeerCertificate(bundle, authorizer)
+	dnsVerify := dnsVerifyFn(svid, bundle)
 
-	dnsVerify := func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
+	return &tls.Config{
+		ClientAuth:     tls.RequireAnyClientCert,
+		GetCertificate: tlsconfig.GetCertificate(svid),
+		MinVersion:     tls.VersionTLS12,
+		VerifyPeerCertificate: func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
+			// If SPIFFE verification fails, also attempt `cluster.local` DNS
+			// verification.
+			sErr := spiffeVerify(rawCerts, nil)
+			if sErr != nil {
+				dErr := dnsVerify(rawCerts, nil)
+				if dErr != nil {
+					return errors.Join(sErr, dErr)
+				}
+			}
+			return nil
+		},
+	}
+}
+
+// NewDialClient returns a `tls.Config` intended for network clients. Because pre
+// v1.12 Dapr servers will be using the issuing CA key pair (!!) for serving
+// and client auth, we need to fallback the `VerifyPeerCertificate` method to
+// match on `cluster.local` DNS if and when the SPIFFE mTLS handshake fails.
+// TODO: @joshvanl: This package should be removed in v1.13.
+func NewDialClient(svid x509svid.Source, bundle x509bundle.Source, authorizer tlsconfig.Authorizer) *tls.Config {
+	spiffeVerify := tlsconfig.VerifyPeerCertificate(bundle, authorizer)
+	dnsVerify := dnsVerifyFn(svid, bundle)
+
+	return &tls.Config{
+		GetClientCertificate: tlsconfig.GetClientCertificate(svid),
+		MinVersion:           tls.VersionTLS12,
+		// Yep! We need to set this option because we are performing our own TLS
+		// handshake verification, namely the SPIFFE ID validation, and then
+		// falling back to the DNS verification `cluster.local`. See:
+		// https://pkg.go.dev/crypto/tls#Config
+		// This is not insecure (bar the poor DNS verification which is needed for
+		// backwards compatibility).
+		InsecureSkipVerify: true, //nolint:gosec
+		VerifyPeerCertificate: func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
+			// If SPIFFE verification fails, also attempt `cluster.local` DNS
+			// verification.
+			sErr := spiffeVerify(rawCerts, nil)
+			if sErr != nil {
+				dErr := dnsVerify(rawCerts, nil)
+				if dErr != nil {
+					return errors.Join(sErr, dErr)
+				}
+			}
+			return nil
+		},
+	}
+}
+
+func newCertPool(certs []*x509.Certificate) *x509.CertPool {
+	pool := x509.NewCertPool()
+	for _, cert := range certs {
+		pool.AddCert(cert)
+	}
+	return pool
+}
+
+func dnsVerifyFn(svid x509svid.Source, bundle x509bundle.Source) func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
+	return func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
 		var certs []*x509.Certificate
 		for _, rawCert := range rawCerts {
 			cert, err := x509.ParseCertificate(rawCert)
@@ -62,30 +125,4 @@ func NewServer(svid x509svid.Source, bundle x509bundle.Source, authorizer tlscon
 		})
 		return err
 	}
-
-	return &tls.Config{
-		ClientAuth:     tls.RequireAnyClientCert,
-		GetCertificate: tlsconfig.GetCertificate(svid),
-		MinVersion:     tls.VersionTLS12,
-		VerifyPeerCertificate: func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
-			// If SPIFFE verification fails, also attempt `cluster.local` DNS
-			// verification.
-			sErr := spiffeVerify(rawCerts, nil)
-			if sErr != nil {
-				dErr := dnsVerify(rawCerts, nil)
-				if dErr != nil {
-					return errors.Join(sErr, dErr)
-				}
-			}
-			return nil
-		},
-	}
-}
-
-func newCertPool(certs []*x509.Certificate) *x509.CertPool {
-	pool := x509.NewCertPool()
-	for _, cert := range certs {
-		pool.AddCert(cert)
-	}
-	return pool
 }

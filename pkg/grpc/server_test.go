@@ -21,28 +21,10 @@ import (
 	"github.com/dapr/dapr/pkg/grpc/metadata"
 	"github.com/dapr/dapr/pkg/grpc/universalapi"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	"github.com/dapr/dapr/pkg/security/fake"
 	dapr_testing "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/logger"
 )
-
-func TestCertRenewal(t *testing.T) {
-	t.Run("shouldn't renew", func(t *testing.T) {
-		certExpiry := time.Now().Add(time.Hour * 2).UTC()
-		certDuration := certExpiry.Sub(time.Now().UTC())
-
-		renew := shouldRenewCert(certExpiry, certDuration)
-		assert.False(t, renew)
-	})
-
-	t.Run("should renew", func(t *testing.T) {
-		certExpiry := time.Now().Add(time.Second * 3).UTC()
-		certDuration := certExpiry.Sub(time.Now().UTC())
-
-		time.Sleep(time.Millisecond * 2200)
-		renew := shouldRenewCert(certExpiry, certDuration)
-		assert.True(t, renew)
-	})
-}
 
 func TestGetMiddlewareOptions(t *testing.T) {
 	t.Run("should enable unary interceptor if tracing and metrics are enabled", func(t *testing.T) {
@@ -113,7 +95,7 @@ func TestClose(t *testing.T) {
 			EnableAPILogging:     true,
 		}
 		a := &api{UniversalAPI: &universalapi.UniversalAPI{CompStore: compstore.New()}, closeCh: make(chan struct{})}
-		server := NewAPIServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, config.APISpec{}, nil, nil)
+		server := NewAPIServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, config.APISpec{}, nil, nil, fake.New())
 		require.NoError(t, server.StartNonBlocking())
 		dapr_testing.WaitForListeningAddress(t, 5*time.Second, fmt.Sprintf("127.0.0.1:%d", port))
 		assert.NoError(t, server.Close())
@@ -134,7 +116,7 @@ func TestClose(t *testing.T) {
 			EnableAPILogging:     false,
 		}
 		a := &api{UniversalAPI: &universalapi.UniversalAPI{CompStore: compstore.New()}, closeCh: make(chan struct{})}
-		server := NewAPIServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, config.APISpec{}, nil, nil)
+		server := NewAPIServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, config.APISpec{}, nil, nil, fake.New())
 		require.NoError(t, server.StartNonBlocking())
 		dapr_testing.WaitForListeningAddress(t, 5*time.Second, fmt.Sprintf("127.0.0.1:%d", port))
 		assert.NoError(t, server.Close())

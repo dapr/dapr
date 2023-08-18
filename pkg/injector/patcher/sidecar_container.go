@@ -229,6 +229,19 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 					},
 				},
 			},
+			{
+				Name:  securityConsts.TrustAnchorsEnvVar,
+				Value: string(c.CurrentTrustAnchors),
+			},
+			// TODO: @joshvanl: In v1.14, this two env vars should be moved to flags.
+			{
+				Name:  securityConsts.ControlPlaneNamespaceEnvVar,
+				Value: c.ControlPlaneNamespace,
+			},
+			{
+				Name:  securityConsts.ControlPlaneTrustDomainEnvVar,
+				Value: c.ControlPlaneTrustDomain,
+			},
 		},
 		VolumeMounts: opts.VolumeMounts,
 		ReadinessProbe: &corev1.Probe{
@@ -295,25 +308,6 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 			Value: opts.ComponentsSocketsVolumeMount.MountPath,
 		})
 	}
-
-	container.Env = append(container.Env,
-		corev1.EnvVar{
-			Name:  securityConsts.TrustAnchorsEnvVar,
-			Value: c.TrustAnchors,
-		},
-		corev1.EnvVar{
-			Name:  securityConsts.CertChainEnvVar,
-			Value: c.CertChain,
-		},
-		corev1.EnvVar{
-			Name:  securityConsts.CertKeyEnvVar,
-			Value: c.CertKey,
-		},
-		corev1.EnvVar{
-			Name:  "SENTRY_LOCAL_IDENTITY",
-			Value: c.Identity,
-		},
-	)
 
 	if c.APITokenSecret != "" {
 		container.Env = append(container.Env, corev1.EnvVar{

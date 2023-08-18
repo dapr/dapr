@@ -299,7 +299,7 @@ func TestPatching(t *testing.T) {
 					daprdEnvVars[env.Name] = env.Value
 				}
 				assert.Equal(t, "testns", daprdEnvVars["NAMESPACE"])
-				assert.Equal(t, "pod:identity", daprdEnvVars["SENTRY_LOCAL_IDENTITY"])
+				assert.Empty(t, daprdEnvVars["SENTRY_LOCAL_IDENTITY"])
 
 				assert.Len(t, daprdContainer.VolumeMounts, 1)
 				assert.Equal(t, "dapr-identity-token", daprdContainer.VolumeMounts[0].Name)

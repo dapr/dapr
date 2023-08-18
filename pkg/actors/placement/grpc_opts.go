@@ -20,17 +20,17 @@ import (
 
 	"google.golang.org/grpc"
 
-	daprCredentials "github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	"github.com/dapr/dapr/pkg/runtime/security"
+	"github.com/dapr/dapr/pkg/security"
 )
 
 var errEstablishingTLSConn = errors.New("failed to establish TLS credentials for actor placement service")
 
 // getGrpcOptsGetter returns a function that provides the grpc options and once defined, a cached version will be returned.
-func getGrpcOptsGetter(servers []string, clientCert *daprCredentials.CertChain) func() ([]grpc.DialOption, error) {
+func getGrpcOptsGetter(servers []string, sec security.Handler) func() ([]grpc.DialOption, error) {
 	mu := sync.RWMutex{}
 	var cached []grpc.DialOption
+
 	return func() ([]grpc.DialOption, error) {
 		mu.RLock()
 		if cached != nil {
@@ -45,11 +45,13 @@ func getGrpcOptsGetter(servers []string, clientCert *daprCredentials.CertChain) 
 			return cached, nil
 		}
 
-		opts, err := daprCredentials.GetClientOptions(clientCert, security.TLSServerName)
+		var opts []grpc.DialOption
+		sentryID, err := security.SentryID(sec.ControlPlaneTrustDomain(), sec.ControlPlaneNamespace())
 		if err != nil {
-			log.Errorf("%s: %v", errEstablishingTLSConn, err)
-			return nil, errEstablishingTLSConn
+			return nil, err
 		}
+
+		opts = append(opts, sec.GRPCDialOption(sentryID))
 
 		if diag.DefaultGRPCMonitoring.IsEnabled() {
 			opts = append(
