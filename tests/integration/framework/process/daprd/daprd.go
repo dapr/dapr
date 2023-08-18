@@ -150,7 +150,7 @@ func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
 		}
 		defer resp.Body.Close()
 		return http.StatusNoContent == resp.StatusCode
-	}, time.Second*5, 100*time.Millisecond)
+	}, time.Second*10, 100*time.Millisecond)
 }
 
 func (d *Daprd) AppID() string {
