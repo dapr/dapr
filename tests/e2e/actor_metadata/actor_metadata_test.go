@@ -268,6 +268,7 @@ func TestActorMetadataEtagRace(t *testing.T) {
 				backoff.WithMaxRetries(bo, maxRetries),
 				func(err error, d time.Duration) {
 					log.Printf("Error while invoking actor: '%v' - retrying in %s", err, d)
+					log.Printf("Will retry in %d times", maxRetries)
 				},
 			)
 			require.NoError(t, err)
