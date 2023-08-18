@@ -228,6 +228,9 @@ func TestActorMetadataEtagRace(t *testing.T) {
 			// Define the backoff strategy
 			bo := backoff.NewExponentialBackOff()
 			bo.InitialInterval = 2 * time.Second
+			bo.Multiplier = 2
+			bo.MaxInterval = 3 * time.Minute
+			bo.MaxElapsedTime = 30 * time.Minute
 			const maxRetries = 20
 
 			err = backoff.RetryNotify(
@@ -268,7 +271,6 @@ func TestActorMetadataEtagRace(t *testing.T) {
 				backoff.WithMaxRetries(bo, maxRetries),
 				func(err error, d time.Duration) {
 					log.Printf("Error while invoking actor: '%v' - retrying in %s", err, d)
-					log.Printf("Will retry in %d times", maxRetries)
 				},
 			)
 			require.NoError(t, err)
