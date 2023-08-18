@@ -90,7 +90,7 @@ DAPR_CONTAINER_LOG_PATH?=./dist/container_logs
 DAPR_TEST_LOG_PATH?=./dist/logs
 
 ifeq ($(DAPR_TEST_STATE_STORE),)
-DAPR_TEST_STATE_STORE=redis
+DAPR_TEST_STATE_STORE=postgres
 endif
 
 ifeq ($(DAPR_TEST_QUERY_STATE_STORE),)
