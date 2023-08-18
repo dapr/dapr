@@ -79,10 +79,10 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		resp, err := client.Do(req)
 		require.NoError(t, err)
-		assert.NoError(t, resp.Body.Close())
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		body, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
+		assert.NoError(t, resp.Body.Close())
 		assert.Equal(t, `"value1"`, string(body))
 
 		ttlExpireTimeStr := resp.Header.Get("metadata.ttlExpireTime")
