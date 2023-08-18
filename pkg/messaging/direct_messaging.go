@@ -75,7 +75,6 @@ type directMessaging struct {
 	proxy                          Proxy
 	readBufferSize                 int
 	resiliency                     resiliency.Provider
-	isStreamingEnabled             bool
 	compStore                      *compstore.ComponentStore
 }
 
@@ -99,7 +98,6 @@ type NewDirectMessagingOpts struct {
 	Proxy              Proxy
 	ReadBufferSize     int
 	Resiliency         resiliency.Provider
-	IsStreamingEnabled bool
 }
 
 // NewDirectMessaging returns a new direct messaging api.
@@ -119,7 +117,6 @@ func NewDirectMessaging(opts NewDirectMessagingOpts) DirectMessaging {
 		proxy:                        opts.Proxy,
 		readBufferSize:               opts.ReadBufferSize,
 		resiliency:                   opts.Resiliency,
-		isStreamingEnabled:           opts.IsStreamingEnabled,
 		hostAddress:                  hAddr,
 		hostName:                     hName,
 		compStore:                    opts.CompStore,
@@ -304,12 +301,8 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, appNamespace,
 	start := time.Now()
 	diag.DefaultMonitoring.ServiceInvocationRequestSent(appID, req.Message().Method)
 
-	var imr *invokev1.InvokeMethodResponse
-	if !d.isStreamingEnabled {
-		imr, err = d.invokeRemoteUnary(ctx, clientV1, req, opts)
-	} else {
-		imr, err = d.invokeRemoteStream(ctx, clientV1, req, appID, opts)
-	}
+	// Do invoke
+	imr, err := d.invokeRemoteStream(ctx, clientV1, req, appID, opts)
 
 	// Diagnostics
 	if imr != nil {
