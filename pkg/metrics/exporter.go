@@ -66,6 +66,8 @@ type promMetricsExporter struct {
 // Run initializes and runs the opencensus exporter.
 func (m *promMetricsExporter) Run(ctx context.Context) error {
 	if !m.exporter.Options().MetricsEnabled {
+		// Block until context is cancelled.
+		<-ctx.Done()
 		return nil
 	}
 
