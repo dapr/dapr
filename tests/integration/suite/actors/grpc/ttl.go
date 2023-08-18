@@ -101,12 +101,14 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
 	client := rtv1.NewDaprClient(conn)
 
-	_, err = client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
-		ActorType: "myactortype",
-		ActorId:   "myactorid",
-		Method:    "foo",
-	})
-	require.NoError(t, err)
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		_, err = client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
+			ActorType: "myactortype",
+			ActorId:   "myactorid",
+			Method:    "foo",
+		})
+		assert.NoError(c, err)
+	}, time.Second*10, time.Millisecond*100, "actor not ready")
 
 	now := time.Now()
 
