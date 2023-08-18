@@ -136,10 +136,10 @@ func actorStateHandlerHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	w.WriteHeader(status)
 	for k, v := range header {
-		w.Header().Add(k, v[0])
+		w.Header().Set(k, v[0])
 	}
+	w.WriteHeader(status)
 	w.Write(resp)
 }
 
