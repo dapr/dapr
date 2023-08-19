@@ -124,11 +124,11 @@ spec:
         - "--healthz-port"
         - "{{ .Values.healthzPort }}"
         env:
-        - name: DAPR_PLACEMENT_TRUST_ANCHORS_FILE
+        - name: DAPR_TRUST_ANCHORS_FILE
           value: /var/run/secrets/dapr.io/tls/ca.crt
-        - name: DAPR_PLACEMENT_CONTROL_PLANE_TRUST_DOMAIN
+        - name: DAPR_CONTROL_PLANE_TRUST_DOMAIN
           value: {{ .Values.global.mtls.controlPlaneTrustDomain }}
-        - name: DAPR_PLACEMENT_SENTRY_ADDRESS
+        - name: DAPR_SENTRY_ADDRESS
           value: {{ if .Values.global.mtls.sentryAddress }}{{ .Values.global.mtls.sentryAddress }}{{ else }}dapr-sentry.{{ .Release.Namespace }}.svc:80{{ end }}
 {{- if .Values.kubeClusterDomain }}
         - name: KUBE_CLUSTER_DOMAIN

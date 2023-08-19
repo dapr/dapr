@@ -36,9 +36,9 @@ type Config struct {
 	ReadOnlyRootFilesystem            string `envconfig:"SIDECAR_READ_ONLY_ROOT_FILESYSTEM"`
 	SidecarDropALLCapabilities        string `envconfig:"SIDECAR_DROP_ALL_CAPABILITIES"`
 
-	TrustAnchorsFile        string `envconfig:"DAPR_PLACEMENT_TRUST_ANCHORS_FILE"`
-	ControlPlaneTrustDomain string `envconfig:"DAPR_PLACEMENT_CONTROL_PLANE_TRUST_DOMAIN"`
-	SentryAddress           string `envconfig:"DAPR_PLACEMENT_SENTRY_ADDRESS"`
+	TrustAnchorsFile        string `envconfig:"DAPR_TRUST_ANCHORS_FILE"`
+	ControlPlaneTrustDomain string `envconfig:"DAPR_CONTROL_PLANE_TRUST_DOMAIN"`
+	SentryAddress           string `envconfig:"DAPR_SENTRY_ADDRESS"`
 
 	parsedEntrypointTolerations []corev1.Toleration
 }
