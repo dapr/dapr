@@ -45,7 +45,6 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
-	"github.com/dapr/dapr/pkg/errorcodes"
 	"github.com/dapr/dapr/pkg/grpc/metadata"
 	"github.com/dapr/dapr/pkg/grpc/universalapi"
 	"github.com/dapr/dapr/pkg/messages"
@@ -665,9 +664,6 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 			req.Value = s.Value
 		}
 
-		if a.isErrorCodesEnabled && req.Metadata != nil {
-			req.Metadata[errorcodes.ErrorCodesFeatureMetadataKey] = "true"
-		}
 		if s.Etag != nil {
 			req.ETag = &s.Etag.Value
 		}
@@ -752,9 +748,7 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 		Key:      key,
 		Metadata: in.Metadata,
 	}
-	if a.isErrorCodesEnabled && req.Metadata != nil {
-		req.Metadata[errorcodes.ErrorCodesFeatureMetadataKey] = "true"
-	}
+
 	if in.Etag != nil {
 		req.ETag = &in.Etag.Value
 	}
@@ -807,7 +801,7 @@ func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkSta
 			Metadata: item.Metadata,
 		}
 		if a.isErrorCodesEnabled && req.Metadata != nil {
-			req.Metadata[errorcodes.ErrorCodesFeatureMetadataKey] = "true"
+			kitErrorCodes.EnableComponentErrorCode(req.Metadata)
 		}
 		if item.Etag != nil {
 			req.ETag = &item.Etag.Value

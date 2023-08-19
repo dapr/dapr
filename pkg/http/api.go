@@ -45,7 +45,6 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
-	"github.com/dapr/dapr/pkg/errorcodes"
 	"github.com/dapr/dapr/pkg/grpc/universalapi"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messaging"
@@ -880,7 +879,7 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	if a.isErrorCodesEnabled {
-		req.Metadata[errorcodes.ErrorCodesFeatureMetadataKey] = "true"
+		kitErrorCodes.EnableComponentErrorCode(req.Metadata)
 	}
 
 	start := time.Now()
@@ -954,7 +953,7 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 			}
 		}
 		if a.isErrorCodesEnabled {
-			reqs[i].Metadata[errorcodes.ErrorCodesFeatureMetadataKey] = "true"
+			kitErrorCodes.EnableComponentErrorCode(reqs[i].Metadata)
 		}
 
 		reqs[i].Key, err = stateLoader.GetModifiedStateKey(r.Key, storeName, a.universal.AppID)

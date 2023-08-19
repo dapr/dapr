@@ -1201,6 +1201,10 @@ func etagTestGRPC(statestore string) error {
 
 // Etag ErrorCodes test for HTTP
 func etagErrorCodesTestHTTP(statestore string) error {
+	fmt.Printf("@@@ etagErrorCodesTestHTTP starting...1\n")
+	defer func() {
+		fmt.Printf("@@@ etagErrorCodesTestHTTP ends \n")
+	}()
 	pkMetadata := map[string]string{metadataPartitionKey: partitionKey}
 
 	// Use two random keys for testing
@@ -1216,6 +1220,7 @@ func etagErrorCodesTestHTTP(statestore string) error {
 		expectEtagEqual    string
 		expectEtagNotEqual string
 	}
+
 	retrieveState := func(stateId int, opts retrieveStateOpts) (string, error) {
 		value, etag, err := get(keys[stateId], statestore, pkMetadata)
 		if err != nil {
@@ -1249,7 +1254,7 @@ func etagErrorCodesTestHTTP(statestore string) error {
 		{Key: keys[1], Value: &appState{Data: []byte("1")}, Metadata: pkMetadata},
 	}, statestore, pkMetadata)
 	if err != nil {
-		return fmt.Errorf("failed to store initial values: %w", err)
+		return fmt.Errorf("etagErrorCodesTestHTTP - failed to store initial values statestore %q error: %w", statestore, err)
 	}
 
 	// Retrieve the two values to get the etag
@@ -1355,6 +1360,10 @@ func etagErrorCodesTestHTTP(statestore string) error {
 
 // Etag ErrorCodes test for gRPC
 func etagErrorCodesTestGRPC(statestore string) error {
+	fmt.Printf("@@@ etagErrorCodesTestGRPC starting...\n")
+	defer func() {
+		fmt.Printf("@@@ etagErrorCodesTestGRPC ends \n")
+	}()
 	pkMetadata := map[string]string{metadataPartitionKey: partitionKey}
 
 	// Use three random keys for testing

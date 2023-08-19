@@ -28,6 +28,7 @@ spec:
     value: ""
 scopes:
   - stateapp
+  - stateapp-errorcodes
   - stateapp-pluggable
   - httpmetrics
   - grpcmetrics
