@@ -18,6 +18,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"google.golang.org/grpc"
 
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -46,18 +47,17 @@ func getGrpcOptsGetter(servers []string, sec security.Handler) func() ([]grpc.Di
 		}
 
 		var opts []grpc.DialOption
-		sentryID, err := security.SentryID(sec.ControlPlaneTrustDomain(), sec.ControlPlaneNamespace())
+		placementID, err := spiffeid.FromSegments(sec.ControlPlaneTrustDomain(), "ns", sec.ControlPlaneNamespace(), "dapr-placement")
 		if err != nil {
 			return nil, err
 		}
 
-		opts = append(opts, sec.GRPCDialOption(sentryID))
+		opts = append(opts, sec.GRPCDialOption(placementID), grpc.WithReturnConnectionError())
 
 		if diag.DefaultGRPCMonitoring.IsEnabled() {
 			opts = append(
 				opts,
 				grpc.WithUnaryInterceptor(diag.DefaultGRPCMonitoring.UnaryClientInterceptor()),
-				grpc.WithBlock(),
 			)
 		}
 
