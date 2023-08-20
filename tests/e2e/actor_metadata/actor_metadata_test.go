@@ -227,11 +227,8 @@ func TestActorMetadataEtagRace(t *testing.T) {
 
 			// Define the backoff strategy
 			bo := backoff.NewExponentialBackOff()
-			bo.InitialInterval = 2 * time.Second
-			bo.Multiplier = 2
-			bo.MaxInterval = 5 * time.Minute
-			bo.MaxElapsedTime = 60 * time.Minute
-			const maxRetries = 25
+			bo.InitialInterval = 1 * time.Second
+			const maxRetries = 20
 
 			err = backoff.RetryNotify(
 				func() error {
