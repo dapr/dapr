@@ -70,7 +70,7 @@ func main() {
 		ControlPlaneNamespace:   security.CurrentNamespace(),
 		TrustAnchorsFile:        opts.TrustAnchorsFile,
 		AppID:                   "dapr-placement",
-		MTLSEnabled:             opts.TLSEnabled,
+		MTLSEnabled:             true,
 	})
 	if err != nil {
 		log.Fatal(err)
