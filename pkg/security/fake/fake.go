@@ -30,12 +30,14 @@ import (
 type Fake struct {
 	grpcServerOptionFn             func() grpc.ServerOption
 	grpcServerOptionNoClientAuthFn func() grpc.ServerOption
-	tlsServerConfigNoClientAuth    func() *tls.Config
+	grpcDialOptionFn               func(spiffeid.ID) grpc.DialOption
+
+	tlsServerConfigNoClientAuth func() *tls.Config
+	netListenerIDFn             func(net.Listener, spiffeid.ID) net.Listener
+	netDialerIDFn               func(context.Context, spiffeid.ID, time.Duration) func(network, addr string) (net.Conn, error)
 
 	currentTrustAnchorsFn func() ([]byte, error)
 	watchTrustAnchorsFn   func(context.Context, chan<- []byte)
-	netListenerIDFn       func(net.Listener, spiffeid.ID) net.Listener
-	netDialerIDFn         func(context.Context, spiffeid.ID, time.Duration) func(network, addr string) (net.Conn, error)
 }
 
 func New() *Fake {
@@ -54,6 +56,9 @@ func New() *Fake {
 		},
 		watchTrustAnchorsFn: func(context.Context, chan<- []byte) {
 			return
+		},
+		grpcDialOptionFn: func(id spiffeid.ID) grpc.DialOption {
+			return grpc.WithTransportCredentials(insecure.NewCredentials())
 		},
 		netListenerIDFn: func(l net.Listener, _ spiffeid.ID) net.Listener {
 			return l
@@ -89,6 +94,11 @@ func (f *Fake) WithWatchTrustAnchorsFn(fn func(context.Context, chan<- []byte)) 
 	return f
 }
 
+func (f *Fake) WithGRPCDialOptionFn(fn func(spiffeid.ID) grpc.DialOption) *Fake {
+	f.grpcDialOptionFn = fn
+	return f
+}
+
 func (f *Fake) WithNetListenerIDFn(fn func(net.Listener, spiffeid.ID) net.Listener) *Fake {
 	f.netListenerIDFn = fn
 	return f
@@ -117,6 +127,11 @@ func (f *Fake) CurrentTrustAnchors() ([]byte, error) {
 
 func (f *Fake) WatchTrustAnchors(ctx context.Context, ch chan<- []byte) {
 	f.watchTrustAnchorsFn(ctx, ch)
+	return f
+}
+
+func (f *Fake) GRPCDialOption(id spiffeid.ID) grpc.DialOption {
+	return f.grpcDialOptionFn(id)
 }
 
 func (f *Fake) NetListenerID(l net.Listener, id spiffeid.ID) net.Listener {

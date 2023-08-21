@@ -47,6 +47,7 @@ type RequestFn func(ctx context.Context, der []byte) ([]*x509.Certificate, error
 type Handler interface {
 	GRPCServerOption() grpc.ServerOption
 	GRPCServerOptionNoClientAuth() grpc.ServerOption
+	GRPCDialOption(spiffeid.ID) grpc.DialOption
 
 	TLSServerConfigNoClientAuth() *tls.Config
 	NetListenerID(net.Listener, spiffeid.ID) net.Listener
@@ -299,6 +300,17 @@ func (s *security) TLSServerConfigNoClientAuth() *tls.Config {
 // installation.
 func (s *security) CurrentTrustAnchors() ([]byte, error) {
 	return s.source.trustAnchors.Marshal()
+}
+
+// GRPCDialOption returns a gRPC dial option which instruments client
+// authentication using the current signed client certificate.
+func (s *security) GRPCDialOption(appID spiffeid.ID) grpc.DialOption {
+	if !s.mtls {
+		return grpc.WithTransportCredentials(insecure.NewCredentials())
+	}
+	return grpc.WithTransportCredentials(
+		grpccredentials.MTLSClientCredentials(s.source, s.source, tlsconfig.AuthorizeID(appID)),
+	)
 }
 
 // NetListenerID returns a mTLS net listener which instruments using the

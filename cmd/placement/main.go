@@ -81,9 +81,9 @@ func main() {
 
 	err = concurrency.NewRunnerManager(
 		func(ctx context.Context) error {
-			sec, err := secProvider.Handler(ctx)
-			if err != nil {
-				return err
+			sec, serr := secProvider.Handler(ctx)
+			if serr != nil {
+				return serr
 			}
 			return raftServer.StartRaft(ctx, sec, nil)
 		},
