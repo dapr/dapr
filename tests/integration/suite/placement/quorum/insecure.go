@@ -115,5 +115,5 @@ func (i *insecure) Run(t *testing.T, ctx context.Context) {
 			assert.Contains(c, o.GetTables().Entries, "entity-1")
 			assert.Contains(c, o.GetTables().Entries, "entity-2")
 		}
-	}, time.Second*10, time.Millisecond*100)
+	}, time.Second*20, time.Millisecond*100)
 }

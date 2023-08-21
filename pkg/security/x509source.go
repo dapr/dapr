@@ -114,9 +114,11 @@ func newX509Source(ctx context.Context, clock clock.Clock, cptd spiffeid.TrustDo
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			case <-clock.After(time.Second):
-				log.Warnf("trust anchors file '%s' not found, waiting...", opts.TrustAnchorsFile)
+				log.Warnf("Trust anchors file '%s' not found, waiting...", opts.TrustAnchorsFile)
 			}
 		}
+
+		log.Infof("Trust anchors file '%s' found", opts.TrustAnchorsFile)
 
 		defer f.Close()
 		rootPEMs, err = io.ReadAll(f)
@@ -273,7 +275,6 @@ func (x *x509source) requestFromSentry(ctx context.Context, csrDER []byte) ([]*x
 			grpccredentials.TLSClientCredentials(x, tlsconfig.AuthorizeID(x.sentryID)),
 		),
 		grpc.WithUnaryInterceptor(unaryClientInterceptor),
-		grpc.WithBlock(),
 		grpc.WithReturnConnectionError(),
 	)
 	if err != nil {
