@@ -27,6 +27,7 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/healthz"
 	_ "github.com/dapr/dapr/tests/integration/suite/httpserver"
 	_ "github.com/dapr/dapr/tests/integration/suite/metadata"
+	_ "github.com/dapr/dapr/tests/integration/suite/placement"
 	_ "github.com/dapr/dapr/tests/integration/suite/ports"
 	_ "github.com/dapr/dapr/tests/integration/suite/sentry"
 )

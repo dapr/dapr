@@ -70,6 +70,13 @@ func New(t *testing.T, fopts ...Option) *Placement {
 		"--healthz-port=" + strconv.Itoa(opts.healthzPort),
 		"--metrics-port=" + strconv.Itoa(opts.metricsPort),
 		"--initial-cluster=" + opts.initialCluster,
+		"--tls-enabled=" + strconv.FormatBool(opts.tlsEnabled),
+	}
+	if opts.sentryAddress != nil {
+		args = append(args, "--sentry-address="+*opts.sentryAddress)
+	}
+	if opts.trustAnchorsFile != nil {
+		args = append(args, "--trust-anchors-file="+*opts.trustAnchorsFile)
 	}
 
 	return &Placement{
