@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -48,7 +49,7 @@ type workflowActor struct {
 	defaultTimeout        time.Duration
 	reminderInterval      time.Duration
 	config                wfConfig
-	activityResultAwaited bool
+	activityResultAwaited atomic.Bool
 }
 
 type durableTimer struct {
@@ -180,16 +181,14 @@ func (wf *workflowActor) createWorkflowInstance(ctx context.Context, actorID str
 	// Or if they still have any pending activity result awaited.
 	if !created {
 		runtimeState := getRuntimeState(actorID, state)
-		if runtimeState.IsCompleted() {
-			if wf.activityResultAwaited {
-				return fmt.Errorf("a terminated workflow with ID '%s' is already awaiting an activity result", actorID)
-			} else {
-				wfLogger.Infof("%s: workflow was previously completed and is being recreated", actorID)
-				state.Reset()
-			}
-		} else {
+		if !runtimeState.IsCompleted() {
 			return fmt.Errorf("an active workflow with ID '%s' already exists", actorID)
 		}
+		if wf.activityResultAwaited.Load() {
+			return fmt.Errorf("a terminated workflow with ID '%s' is already awaiting an activity result", actorID)
+		}
+		wfLogger.Infof("%s: workflow was previously completed and is being recreated", actorID)
+		state.Reset()
 	}
 
 	// Schedule a reminder to execute immediately after this operation. The reminder will trigger the actual
@@ -280,7 +279,7 @@ func (wf *workflowActor) addWorkflowEvent(ctx context.Context, actorID string, h
 
 	e, err := backend.UnmarshalHistoryEvent(historyEventBytes)
 	if e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil {
-		wf.activityResultAwaited = false
+		wf.activityResultAwaited.CompareAndSwap(true, false)
 	}
 	if err != nil {
 		return err
@@ -449,7 +448,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 				WithContentType(invokev1.OctetStreamContentType)
 			defer req.Close()
 
-			wf.activityResultAwaited = true
+			wf.activityResultAwaited.Store(true)
 
 			resp, err := wf.actors.Call(ctx, req)
 			if err != nil {
