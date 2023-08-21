@@ -22,6 +22,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"k8s.io/client-go/rest"
 
 	"github.com/dapr/dapr/pkg/concurrency"
@@ -156,7 +157,11 @@ func (s *sentry) getValidators(ctx context.Context) (map[sentryv1pb.SignCertific
 			if err != nil {
 				return nil, err
 			}
-			sentryID, err := security.SentryID(s.conf.TrustDomain, security.CurrentNamespace())
+			td, err := spiffeid.TrustDomainFromString(s.conf.TrustDomain)
+			if err != nil {
+				return nil, err
+			}
+			sentryID, err := security.SentryID(td, security.CurrentNamespace())
 			if err != nil {
 				return nil, err
 			}
@@ -176,7 +181,11 @@ func (s *sentry) getValidators(ctx context.Context) (map[sentryv1pb.SignCertific
 			validators[validatorID] = validatorInsecure.New()
 
 		case sentryv1pb.SignCertificateRequest_JWKS:
-			sentryID, err := security.SentryID(s.conf.TrustDomain, security.CurrentNamespace())
+			td, err := spiffeid.TrustDomainFromString(s.conf.TrustDomain)
+			if err != nil {
+				return nil, err
+			}
+			sentryID, err := security.SentryID(td, security.CurrentNamespace())
 			if err != nil {
 				return nil, err
 			}

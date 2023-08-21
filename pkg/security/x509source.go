@@ -63,10 +63,6 @@ type x509source struct {
 	// sentryAddress is the network address of the sentry server.
 	sentryAddress string
 
-	// controlPlaneTrustDomain is the trust domain of the sentry server. Used to
-	// validate the connection to sentry.
-	controlPlaneTrustDomain string
-
 	// sentryID is the SPIFFE ID of the sentry server which is validated when
 	// request the identity document.
 	sentryID spiffeid.ID
@@ -98,7 +94,7 @@ type x509source struct {
 	clock clock.Clock
 }
 
-func newX509Source(ctx context.Context, clock clock.Clock, opts Options) (*x509source, error) {
+func newX509Source(ctx context.Context, clock clock.Clock, cptd spiffeid.TrustDomain, opts Options) (*x509source, error) {
 	rootPEMs := opts.TrustAnchors
 
 	if len(rootPEMs) == 0 {
@@ -134,22 +130,21 @@ func newX509Source(ctx context.Context, clock clock.Clock, opts Options) (*x509s
 		return nil, fmt.Errorf("failed to decode trust anchors: %w", err)
 	}
 
-	sentryID, err := SentryID(opts.ControlPlaneTrustDomain, opts.ControlPlaneNamespace)
+	sentryID, err := SentryID(cptd, opts.ControlPlaneNamespace)
 	if err != nil {
 		return nil, err
 	}
 
 	return &x509source{
-		sentryAddress:           opts.SentryAddress,
-		controlPlaneTrustDomain: opts.ControlPlaneTrustDomain,
-		sentryID:                sentryID,
-		trustAnchors:            x509bundle.FromX509Authorities(sentryID.TrustDomain(), trustAnchorCerts),
-		appID:                   opts.AppID,
-		appNamespace:            CurrentNamespace(),
-		kubernetesMode:          os.Getenv("KUBERNETES_SERVICE_HOST") != "",
-		requestFn:               opts.OverrideCertRequestSource,
-		writeToDiskDir:          opts.WriteSVIDToDir,
-		clock:                   clock,
+		sentryAddress:  opts.SentryAddress,
+		sentryID:       sentryID,
+		trustAnchors:   x509bundle.FromX509Authorities(sentryID.TrustDomain(), trustAnchorCerts),
+		appID:          opts.AppID,
+		appNamespace:   CurrentNamespace(),
+		kubernetesMode: os.Getenv("KUBERNETES_SERVICE_HOST") != "",
+		requestFn:      opts.OverrideCertRequestSource,
+		writeToDiskDir: opts.WriteSVIDToDir,
+		clock:          clock,
 	}, nil
 }
 

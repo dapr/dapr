@@ -70,7 +70,7 @@ func main() {
 		ControlPlaneNamespace:   security.CurrentNamespace(),
 		TrustAnchorsFile:        opts.TrustAnchorsFile,
 		AppID:                   "dapr-placement",
-		MTLSEnabled:             true,
+		MTLSEnabled:             opts.TLSEnabled,
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -81,7 +81,11 @@ func main() {
 
 	err = concurrency.NewRunnerManager(
 		func(ctx context.Context) error {
-			return raftServer.StartRaft(ctx, nil)
+			sec, err := secProvider.Handler(ctx)
+			if err != nil {
+				return err
+			}
+			return raftServer.StartRaft(ctx, sec, nil)
 		},
 		metricsExporter.Run,
 		secProvider.Start,

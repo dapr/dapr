@@ -19,7 +19,10 @@ package fake
 import (
 	"context"
 	"crypto/tls"
+	"net"
+	"time"
 
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -31,6 +34,8 @@ type Fake struct {
 
 	currentTrustAnchorsFn func() ([]byte, error)
 	watchTrustAnchorsFn   func(context.Context, chan<- []byte)
+	netListenerIDFn       func(net.Listener, spiffeid.ID) net.Listener
+	netDialerIDFn         func(context.Context, spiffeid.ID, time.Duration) func(network, addr string) (net.Conn, error)
 }
 
 func New() *Fake {
@@ -49,6 +54,12 @@ func New() *Fake {
 		},
 		watchTrustAnchorsFn: func(context.Context, chan<- []byte) {
 			return
+		},
+		netListenerIDFn: func(l net.Listener, _ spiffeid.ID) net.Listener {
+			return l
+		},
+		netDialerIDFn: func(context.Context, spiffeid.ID, time.Duration) func(network, addr string) (net.Conn, error) {
+			return net.Dial
 		},
 	}
 }
@@ -78,6 +89,16 @@ func (f *Fake) WithWatchTrustAnchorsFn(fn func(context.Context, chan<- []byte)) 
 	return f
 }
 
+func (f *Fake) WithNetListenerIDFn(fn func(net.Listener, spiffeid.ID) net.Listener) *Fake {
+	f.netListenerIDFn = fn
+	return f
+}
+
+func (f *Fake) WithNetDialerIDFn(fn func(context.Context, spiffeid.ID, time.Duration) func(network, addr string) (net.Conn, error)) *Fake {
+	f.netDialerIDFn = fn
+	return f
+}
+
 func (f *Fake) GRPCServerOptionNoClientAuth() grpc.ServerOption {
 	return f.grpcServerOptionNoClientAuthFn()
 }
@@ -96,4 +117,20 @@ func (f *Fake) CurrentTrustAnchors() ([]byte, error) {
 
 func (f *Fake) WatchTrustAnchors(ctx context.Context, ch chan<- []byte) {
 	f.watchTrustAnchorsFn(ctx, ch)
+}
+
+func (f *Fake) NetListenerID(l net.Listener, id spiffeid.ID) net.Listener {
+	return f.netListenerIDFn(l, id)
+}
+
+func (f *Fake) NetDialerID(ctx context.Context, id spiffeid.ID, timeout time.Duration) func(network, addr string) (net.Conn, error) {
+	return f.netDialerIDFn(ctx, id, timeout)
+}
+
+func (f *Fake) ControlPlaneNamespace() string {
+	return "dapr-test"
+}
+
+func (f *Fake) ControlPlaneTrustDomain() spiffeid.TrustDomain {
+	return spiffeid.RequireTrustDomainFromString("example.com")
 }
