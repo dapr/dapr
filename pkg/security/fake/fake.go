@@ -127,7 +127,6 @@ func (f *Fake) CurrentTrustAnchors() ([]byte, error) {
 
 func (f *Fake) WatchTrustAnchors(ctx context.Context, ch chan<- []byte) {
 	f.watchTrustAnchorsFn(ctx, ch)
-	return f
 }
 
 func (f *Fake) GRPCDialOption(id spiffeid.ID) grpc.DialOption {
