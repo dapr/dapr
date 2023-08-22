@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package client
+package openapi
 
 import (
 	"context"
@@ -24,10 +24,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	statestore "github.com/dapr/dapr/pkg/api/clients/statestore"
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/suite"
+	statestore "github.com/dapr/dapr/tests/integration/suite/daprd/api/clients/statestore"
 )
 
 func init() {

@@ -24,10 +24,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	pubsub "github.com/dapr/dapr/pkg/api/clients/pubsub"
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/suite"
+	pubsub "github.com/dapr/dapr/tests/integration/suite/daprd/api/clients/pubsub"
 )
 
 func init() {
