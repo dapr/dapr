@@ -1,0 +1,17 @@
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: badpass-store
+spec:
+  type: state.postgres
+  initTimeout: 1m
+  version: v1
+  ignoreErrors: true
+  metadata:
+  - name: connectionString
+    value: "host=dapr-postgres-postgresql.dapr-tests.svc.cluster.local user=postgres password=badpass port=5432 connect_timeout=10 database=dapr_test"
+  - name: table
+    value: baddpasstable
+scopes:
+  - stateapp
+  - stateapp-pluggable
