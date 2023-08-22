@@ -517,6 +517,12 @@ setup-test-env-postgres:
 	  --wait \
 	  --timeout 5m0s
 
+# generate openapi clients using oapi-codegen
+generate-openapi-clients: 
+    go install github.com/deepmap/oapi-codegen/cmd/oapi-codegen@latest
+	oapi-codegen -generate types,client,spec -package statestore https://raw.githubusercontent.com/dapr/sig-api/main/statestore-api/statestore.yaml > integration/suite/daprd/api/generated-clients/statestore/statestore.gen.go
+	oapi-codegen -generate types,client,spec -package pubsub https://raw.githubusercontent.com/dapr/sig-api/main/pubsub-api/pubsub.yaml > integration/suite/daprd/api/generated-clients/pubsub/pubsub.gen.go
+
 # delete postgres from cluster
 delete-test-env-postgres:
 	$(HELM) del dapr-postgres --namespace $(DAPR_TEST_NAMESPACE)
