@@ -27,7 +27,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/suite"
-	statestore "github.com/dapr/dapr/tests/integration/suite/daprd/api/clients/statestore"
+	statestore "github.com/dapr/dapr/tests/integration/suite/daprd/api/generated-clients/statestore"
 )
 
 func init() {
