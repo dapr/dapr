@@ -99,6 +99,13 @@ func (s *workflowState) AddToInbox(e *backend.HistoryEvent) {
 
 func (s *workflowState) ClearInbox() {
 	s.inboxRemovedCount += len(s.Inbox)
+	for _, e := range s.Inbox {
+		if tf := e.GetTimerFired(); tf != nil {
+			// ignore timer events since those aren't saved into the state store
+			continue
+		}
+		s.inboxRemovedCount++
+	}
 	s.Inbox = nil
 	s.inboxAddedCount = 0
 }
