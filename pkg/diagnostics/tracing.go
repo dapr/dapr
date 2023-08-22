@@ -240,3 +240,20 @@ func childParentSpanCorrelated(ctx context.Context, spanName string, parent trac
 
 	return ctx, span
 }
+
+func TraceIDAndStateFromSpan(span trace.Span) (string, string) {
+	var corID, traceState string
+
+	if span != nil {
+		sc := span.SpanContext()
+
+		if !sc.Equal(trace.SpanContext{}) {
+			corID = SpanContextToW3CString(sc)
+		}
+		if sc.TraceState().Len() > 0 {
+			traceState = TraceStateToW3CString(sc)
+		}
+	}
+
+	return corID, traceState
+}

@@ -30,6 +30,12 @@ var (
 	statusKey           = tag.MustNewKey("status")
 	flowDirectionKey    = tag.MustNewKey("flow_direction")
 	targetKey           = tag.MustNewKey("target")
+	typeKey             = tag.MustNewKey("type")
+)
+
+const (
+	typeUnary     = "unary"
+	typeStreaming = "streaming"
 )
 
 // serviceMetrics holds dapr runtime metric monitoring methods.
@@ -234,10 +240,10 @@ func (s *serviceMetrics) Init(appID string) error {
 		diagUtils.NewMeasureView(s.appPolicyActionBlocked, []tag.Key{appIDKey, trustDomainKey, namespaceKey, operationKey, httpMethodKey, policyActionKey}, view.Count()),
 		diagUtils.NewMeasureView(s.globalPolicyActionBlocked, []tag.Key{appIDKey, trustDomainKey, namespaceKey, operationKey, httpMethodKey, policyActionKey}, view.Count()),
 
-		diagUtils.NewMeasureView(s.serviceInvocationRequestSentTotal, []tag.Key{appIDKey, destinationAppIDKey, methodKey}, view.Count()),
+		diagUtils.NewMeasureView(s.serviceInvocationRequestSentTotal, []tag.Key{appIDKey, destinationAppIDKey, methodKey, typeKey}, view.Count()),
 		diagUtils.NewMeasureView(s.serviceInvocationRequestReceivedTotal, []tag.Key{appIDKey, sourceAppIDKey, methodKey}, view.Count()),
 		diagUtils.NewMeasureView(s.serviceInvocationResponseSentTotal, []tag.Key{appIDKey, destinationAppIDKey, methodKey, statusKey}, view.Count()),
-		diagUtils.NewMeasureView(s.serviceInvocationResponseReceivedTotal, []tag.Key{appIDKey, sourceAppIDKey, methodKey, statusKey}, view.Count()),
+		diagUtils.NewMeasureView(s.serviceInvocationResponseReceivedTotal, []tag.Key{appIDKey, sourceAppIDKey, methodKey, statusKey, typeKey}, view.Count()),
 		diagUtils.NewMeasureView(s.serviceInvocationResponseReceivedLatency, []tag.Key{appIDKey, sourceAppIDKey, methodKey, statusKey}, defaultLatencyDistribution),
 	)
 }
@@ -485,7 +491,24 @@ func (s *serviceMetrics) ServiceInvocationRequestSent(destinationAppID, method s
 				s.serviceInvocationRequestSentTotal.Name(),
 				appIDKey, s.appID,
 				destinationAppIDKey, destinationAppID,
-				methodKey, method),
+				methodKey, method,
+				typeKey, typeUnary,
+			),
+			s.serviceInvocationRequestSentTotal.M(1))
+	}
+}
+
+// ServiceInvocationRequestSent records the number of service invocation requests sent.
+func (s *serviceMetrics) ServiceInvocationStreamingRequestSent(destinationAppID, method string) {
+	if s.enabled {
+		stats.RecordWithTags(
+			s.ctx,
+			diagUtils.WithTags(
+				s.serviceInvocationRequestSentTotal.Name(),
+				appIDKey, s.appID,
+				destinationAppIDKey, destinationAppID,
+				methodKey, method,
+				typeKey, typeStreaming),
 			s.serviceInvocationRequestSentTotal.M(1))
 	}
 }
@@ -531,7 +554,8 @@ func (s *serviceMetrics) ServiceInvocationResponseReceived(sourceAppID, method s
 				appIDKey, s.appID,
 				sourceAppIDKey, sourceAppID,
 				methodKey, method,
-				statusKey, statusCode),
+				statusKey, statusCode,
+				typeKey, typeUnary),
 			s.serviceInvocationResponseReceivedTotal.M(1))
 		stats.RecordWithTags(
 			s.ctx,
@@ -542,5 +566,23 @@ func (s *serviceMetrics) ServiceInvocationResponseReceived(sourceAppID, method s
 				methodKey, method,
 				statusKey, statusCode),
 			s.serviceInvocationResponseReceivedLatency.M(ElapsedSince(start)))
+	}
+}
+
+// ServiceInvocationStreamingResponseReceived records the number of service invocation responses received for streaming operations.
+// this is mainly targeted to recording errors for proxying gRPC streaming calls
+func (s *serviceMetrics) ServiceInvocationStreamingResponseReceived(sourceAppID, method string, status int32) {
+	if s.enabled {
+		statusCode := strconv.Itoa(int(status))
+		stats.RecordWithTags(
+			s.ctx,
+			diagUtils.WithTags(
+				s.serviceInvocationResponseReceivedTotal.Name(),
+				appIDKey, s.appID,
+				sourceAppIDKey, sourceAppID,
+				methodKey, method,
+				statusKey, statusCode,
+				typeKey, typeStreaming),
+			s.serviceInvocationResponseReceivedTotal.M(1))
 	}
 }

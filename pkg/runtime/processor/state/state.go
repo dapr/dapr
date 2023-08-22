@@ -96,9 +96,14 @@ func (s *state) Init(ctx context.Context, comp compapi.Component) error {
 			}
 		}
 
-		baseMetadata := s.meta.ToBaseMetadata(comp)
-		props := baseMetadata.Properties
-		err = store.Init(ctx, contribstate.Metadata{Base: baseMetadata})
+		meta, err := s.meta.ToBaseMetadata(comp)
+		if err != nil {
+			diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
+			return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
+		}
+
+		props := meta.Properties
+		err = store.Init(ctx, contribstate.Metadata{Base: meta})
 		if err != nil {
 			diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
 			return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
