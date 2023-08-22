@@ -16,7 +16,7 @@ package acl
 import (
 	"testing"
 
-	fuzz "github.com/AdamKorcz/go-fuzz-headers-1"
+	fuzz "github.com/AdaLogics/go-fuzz-headers"
 
 	"github.com/dapr/kit/logger"
 

@@ -28,7 +28,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/client/clientset/versioned/fake"
 
-	fuzz "github.com/AdamKorcz/go-fuzz-headers-1"
+	fuzz "github.com/AdaLogics/go-fuzz-headers"
 )
 
 var des = serializer.NewCodecFactory(

@@ -18,7 +18,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	fuzz "github.com/AdamKorcz/go-fuzz-headers-1"
+	fuzz "github.com/AdaLogics/go-fuzz-headers"
 
 	"github.com/dapr/components-contrib/pubsub"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
