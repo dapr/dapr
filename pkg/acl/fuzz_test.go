@@ -37,14 +37,14 @@ func FuzzParseAccessControlSpec(f *testing.F) {
 		if err != nil {
 			return
 		}
-		_, _ = ParseAccessControlSpec(*s, b)
+		_, _ = ParseAccessControlSpec(s, b)
 	})
 }
 
 func FuzzIsOperationAllowedByAccessControlPolicy(f *testing.F) {
 	f.Fuzz(func(t *testing.T, data []byte) {
 		ff := fuzz.NewConsumer(data)
-		spiffeID := &config.SpiffeID{}
+		spiffeID := &SpiffeID{}
 		ff.GenerateStruct(spiffeID)
 		srcAppID, err := ff.GetString()
 		if err != nil {

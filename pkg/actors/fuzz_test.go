@@ -30,7 +30,7 @@ var testActorsRuntime *actorsRuntime
 
 func init() {
 	testActorsRuntime = newTestActorsRuntime()
-	err := testActorsRuntime.Init()
+	err := testActorsRuntime.Init(context.Background())
 	if err != nil {
 		panic(err)
 	}
