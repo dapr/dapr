@@ -48,7 +48,6 @@ func main() {
 	metricsExporter := metrics.NewExporterWithOptions(log, metrics.DefaultMetricNamespace, opts.Metrics)
 
 	err := monitoring.InitMetrics()
-	err := monitoring.InitMetrics()
 	if err != nil {
 		log.Fatal(err)
 	}
