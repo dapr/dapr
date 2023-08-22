@@ -413,6 +413,9 @@ func appRouter() http.Handler {
 	router.HandleFunc("/httptohttptest_external", httpTohttpTestExternal).Methods("POST")
 	router.HandleFunc("/tests/v1_httptohttptest_external", testV1RequestHTTPToHTTPExternal).Methods("POST") // headers
 
+	router.HandleFunc("/simple-endpint-call", simpleEndpointCall).Methods("GET")
+	router.HandleFunc("/return-http-headers", returnHTTPHeaders).Methods("GET")
+
 	router.Use(mux.CORSMethodMiddleware(router))
 
 	return router
@@ -1417,6 +1420,26 @@ func largeDataErrorServiceCall(w http.ResponseWriter, r *http.Request, isHTTP bo
 	}
 
 	json.NewEncoder(w).Encode(results)
+}
+
+func simpleEndpointCall(w http.ResponseWriter, r *http.Request) {
+	endpoint := r.Header.Get("Endpoint")
+	url := fmt.Sprintf("http://localhost:%s/invoke/%s/method/return-http-headers", strconv.Itoa(daprHTTPPort), endpoint)
+	fmt.Printf("invoke url is %s\n", url)
+	httpClient.Get(url)
+	resp, _ := httpClient.Get(url)
+	w.WriteHeader(resp.StatusCode)
+	for k, v := range resp.Header {
+		w.Header().Set(k, v[0])
+	}
+	io.Copy(w, resp.Body)
+}
+
+func returnHTTPHeaders(w http.ResponseWriter, r *http.Request) {
+	for k, v := range r.Header {
+		w.Header().Set(k, v[0])
+	}
+	io.Copy(w, r.Body)
 }
 
 // testPathHTTPCall return the path received form request.
