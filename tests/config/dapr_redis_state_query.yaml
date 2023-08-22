@@ -16,14 +16,33 @@ kind: Component
 metadata:
   name: querystatestore2
 spec:
-  type: state.postgres
+  type: state.redis
   version: v1
   initTimeout: 1m
   metadata:
-  - name: connectionString
-    value: "host=dapr-postgres-postgresql.dapr-tests.svc.cluster.local user=postgres password=example port=5432 connect_timeout=10 database=dapr_test"
-  - name: table
-    value: querystatetable
+  - name: redisHost
+    secretKeyRef:
+      name: redissecret
+      key: host
+  - name: redisPassword
+    value: ""
+  - name: queryIndexes
+    value: |
+      [
+        {
+          "name": "orgIndx",
+          "indexes": [
+            {
+              "key": "person.org",
+              "type": "TEXT"
+            },
+            {
+              "key": "state",
+              "type": "TEXT"
+            }
+          ]
+        }
+      ]
 scopes:
   - stateapp
   - stateapp-pluggable
