@@ -122,6 +122,7 @@ func (s *server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 
 	trustDomain, err := s.vals[validator].Validate(ctx, req)
 	if err != nil {
+		log.Debugf("Failed to validate request: %v", err)
 		return nil, status.Error(codes.PermissionDenied, err.Error())
 	}
 

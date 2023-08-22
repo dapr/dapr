@@ -25,16 +25,10 @@ import (
 
 // insecure implements the validator.Interface. It doesn't perform any authentication on requests.
 // It is meant to be used in self-hosted scenarios where Dapr is running on a trusted environment.
-type insecure struct {
-	cpTrustDomain spiffeid.TrustDomain
-	cpNamespace   string
-}
+type insecure struct{}
 
-func New(controlPlaneTrustDomain spiffeid.TrustDomain, controlPlaneNamespace string) validator.Validator {
-	return &insecure{
-		cpTrustDomain: controlPlaneTrustDomain,
-		cpNamespace:   controlPlaneNamespace,
-	}
+func New() validator.Validator {
+	return new(insecure)
 }
 
 func (s *insecure) Start(ctx context.Context) error {
@@ -43,34 +37,5 @@ func (s *insecure) Start(ctx context.Context) error {
 }
 
 func (s *insecure) Validate(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (spiffeid.TrustDomain, error) {
-	return internal.Validate(ctx, s.maybeSetTrustDomain(req))
-}
-
-func (s *insecure) maybeSetTrustDomain(req *sentryv1pb.SignCertificateRequest) *sentryv1pb.SignCertificateRequest {
-	newReq := &sentryv1pb.SignCertificateRequest{
-		Id:                        req.Id,
-		TrustDomain:               req.TrustDomain,
-		Namespace:                 req.Namespace,
-		Token:                     req.Token,
-		CertificateSigningRequest: req.CertificateSigningRequest,
-		TokenValidator:            req.TokenValidator,
-	}
-	if isControlPlaneService(req.Id) && req.TrustDomain == "" && req.Namespace == s.cpNamespace {
-		newReq.TrustDomain = s.cpTrustDomain.String()
-	}
-	return newReq
-}
-
-// IsControlPlaneService returns true if the app ID corresponds to a Dapr
-// control plane service.
-func isControlPlaneService(id string) bool {
-	switch id {
-	case "dapr-operator",
-		"dapr-placement",
-		"dapr-injector",
-		"dapr-sentry":
-		return true
-	default:
-		return false
-	}
+	return internal.Validate(ctx, req)
 }

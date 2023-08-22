@@ -151,14 +151,13 @@ func (s *sentry) Start(parentCtx context.Context) error {
 func (s *sentry) getValidators(ctx context.Context) (map[sentryv1pb.SignCertificateRequest_TokenValidator]validator.Validator, error) {
 	validators := make(map[sentryv1pb.SignCertificateRequest_TokenValidator]validator.Validator, len(s.conf.Validators))
 
-	td, err := spiffeid.TrustDomainFromString(s.conf.TrustDomain)
-	if err != nil {
-		return nil, err
-	}
-
 	for validatorID, opts := range s.conf.Validators {
 		switch validatorID {
 		case sentryv1pb.SignCertificateRequest_KUBERNETES:
+			td, err := spiffeid.TrustDomainFromString(s.conf.TrustDomain)
+			if err != nil {
+				return nil, err
+			}
 			config, err := rest.InClusterConfig()
 			if err != nil {
 				return nil, err
@@ -180,9 +179,13 @@ func (s *sentry) getValidators(ctx context.Context) (map[sentryv1pb.SignCertific
 
 		case sentryv1pb.SignCertificateRequest_INSECURE:
 			log.Info("Adding validator 'insecure'")
-			validators[validatorID] = validatorInsecure.New(td, security.CurrentNamespace())
+			validators[validatorID] = validatorInsecure.New()
 
 		case sentryv1pb.SignCertificateRequest_JWKS:
+			td, err := spiffeid.TrustDomainFromString(s.conf.TrustDomain)
+			if err != nil {
+				return nil, err
+			}
 			sentryID, err := security.SentryID(td, security.CurrentNamespace())
 			if err != nil {
 				return nil, err

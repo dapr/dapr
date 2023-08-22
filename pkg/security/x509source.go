@@ -89,6 +89,11 @@ type x509source struct {
 	// anchors are updated.
 	trustAnchorSubscribers []chan<- struct{}
 
+	// trustDomain is the optional trust domain which will be set when requesting
+	// the identity certificate. Used by control plane services to request for
+	// the control plane trust domain.
+	trustDomain *string
+
 	lock  sync.RWMutex
 	clock clock.Clock
 }
@@ -134,12 +139,22 @@ func newX509Source(ctx context.Context, clock clock.Clock, cptd spiffeid.TrustDo
 		return nil, err
 	}
 
+	var trustDomain *string
+	ns := CurrentNamespace()
+
+	// If the service is a control plane service, set the trust domain to the
+	// control plane trust domain.
+	if isControlPlaneService(opts.AppID) && opts.ControlPlaneNamespace == ns {
+		trustDomain = &opts.ControlPlaneTrustDomain
+	}
+
 	return &x509source{
 		sentryAddress:  opts.SentryAddress,
 		sentryID:       sentryID,
 		trustAnchors:   x509bundle.FromX509Authorities(sentryID.TrustDomain(), trustAnchorCerts),
 		appID:          opts.AppID,
-		appNamespace:   CurrentNamespace(),
+		appNamespace:   ns,
+		trustDomain:    trustDomain,
 		kubernetesMode: os.Getenv("KUBERNETES_SERVICE_HOST") != "",
 		requestFn:      opts.OverrideCertRequestSource,
 		writeToDiskDir: opts.WriteSVIDToDir,
@@ -287,16 +302,21 @@ func (x *x509source) requestFromSentry(ctx context.Context, csrDER []byte) ([]*x
 		return nil, fmt.Errorf("error obtaining token: %w", err)
 	}
 
-	resp, err := sentryv1pb.NewCAClient(conn).SignCertificate(ctx,
-		&sentryv1pb.SignCertificateRequest{
-			CertificateSigningRequest: pem.EncodeToMemory(&pem.Block{
-				Type: "CERTIFICATE REQUEST", Bytes: csrDER,
-			}),
-			Id:             x.appID,
-			Token:          token,
-			Namespace:      x.appNamespace,
-			TokenValidator: tokenValidator,
-		})
+	req := &sentryv1pb.SignCertificateRequest{
+		CertificateSigningRequest: pem.EncodeToMemory(&pem.Block{
+			Type: "CERTIFICATE REQUEST", Bytes: csrDER,
+		}),
+		Id:             x.appID,
+		Token:          token,
+		Namespace:      x.appNamespace,
+		TokenValidator: tokenValidator,
+	}
+
+	if x.trustDomain != nil {
+		req.TrustDomain = *x.trustDomain
+	}
+
+	resp, err := sentryv1pb.NewCAClient(conn).SignCertificate(ctx, req)
 	if err != nil {
 		diagnostics.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("sign")
 		return nil, fmt.Errorf("error from sentry SignCertificate: %w", err)
@@ -425,4 +445,18 @@ func atomicWrite(clock clock.Clock, dir string, data map[string][]byte) error {
 // renewalTime is 70% through the certificate validity period.
 func renewalTime(notBefore, notAfter time.Time) time.Time {
 	return notBefore.Add(notAfter.Sub(notBefore) * 7 / 10)
+}
+
+// isControlPlaneService returns true if the app ID corresponds to a Dapr
+// control plane service.
+func isControlPlaneService(id string) bool {
+	switch id {
+	case "dapr-operator",
+		"dapr-placement",
+		"dapr-injector",
+		"dapr-sentry":
+		return true
+	default:
+		return false
+	}
 }
