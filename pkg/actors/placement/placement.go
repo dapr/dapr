@@ -26,7 +26,6 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/actors/internal"
-	"github.com/dapr/dapr/pkg/buildinfo"
 	daprCredentials "github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/placement/hashing"
@@ -228,7 +227,7 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 				Pod:      p.podName,
 				// Port is redundant because Name should include port number
 				// Port: 0,
-				DaprVersion: buildinfo.Version(),
+				ApiLevel: internal.ActorAPILevel,
 			}
 
 			err := p.client.send(&host)
