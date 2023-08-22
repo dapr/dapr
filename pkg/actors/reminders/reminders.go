@@ -902,10 +902,6 @@ func (r *reminders) startReminder(reminder *internal.Reminder, stopChannel chan 
 				nextTimer = nil
 				return
 			}
-			track, gErr := r.getReminderTrack(context.TODO(), reminderKey)
-			if gErr != nil {
-				log.Errorf("Error retrieving reminder %s: %v", reminderKey, gErr)
-			}
 			var span trace.Span
 			if track.TraceState != "" {
 				sc, _ := diag.SpanContextFromW3CString(track.TraceState)

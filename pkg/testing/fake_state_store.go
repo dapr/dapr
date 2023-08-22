@@ -34,7 +34,7 @@ type FakeStateStoreItem struct {
 type FakeStateStore struct {
 	MaxOperations int
 	NoLock        bool
-	items         map[string]*FakeStateStoreItem
+	Items         map[string]*FakeStateStoreItem
 
 	lock      sync.RWMutex
 	callCount map[string]*atomic.Uint64
@@ -42,7 +42,7 @@ type FakeStateStore struct {
 
 func NewFakeStateStore() *FakeStateStore {
 	return &FakeStateStore{
-		items: map[string]*FakeStateStoreItem{},
+		Items: map[string]*FakeStateStoreItem{},
 		callCount: map[string]*atomic.Uint64{
 			"Delete":     {},
 			"BulkDelete": {},
@@ -84,7 +84,7 @@ func (f *FakeStateStore) Delete(ctx context.Context, req *state.DeleteRequest) e
 		defer f.lock.Unlock()
 	}
 
-	delete(f.items, req.Key)
+	delete(f.Items, req.Key)
 
 	return nil
 }
@@ -103,7 +103,7 @@ func (f *FakeStateStore) Get(ctx context.Context, req *state.GetRequest) (*state
 		defer f.lock.RUnlock()
 	}
 
-	item := f.items[req.Key]
+	item := f.Items[req.Key]
 	if item == nil {
 		return &state.GetResponse{Data: nil, ETag: nil}, nil
 	}
@@ -144,7 +144,7 @@ func (f *FakeStateStore) Set(ctx context.Context, req *state.SetRequest) error {
 	}
 
 	b, _ := marshal(&req.Value)
-	f.items[req.Key] = f.NewItem(b)
+	f.Items[req.Key] = f.NewItem(b)
 
 	return nil
 }
@@ -175,7 +175,7 @@ func (f *FakeStateStore) Multi(ctx context.Context, request *state.Transactional
 			key = req.Key
 			eTag = req.ETag
 		}
-		item := f.items[key]
+		item := f.Items[key]
 		if eTag != nil && item != nil {
 			if *eTag != *item.etag {
 				return fmt.Errorf("etag does not match for key %v", key)
@@ -191,9 +191,9 @@ func (f *FakeStateStore) Multi(ctx context.Context, request *state.Transactional
 		switch req := o.(type) {
 		case state.SetRequest:
 			b, _ := marshal(req.Value)
-			f.items[req.Key] = f.NewItem(b)
+			f.Items[req.Key] = f.NewItem(b)
 		case state.DeleteRequest:
-			delete(f.items, req.Key)
+			delete(f.Items, req.Key)
 		}
 	}
 
@@ -206,7 +206,7 @@ func (f *FakeStateStore) GetItems() map[string]*FakeStateStoreItem {
 		defer f.lock.Unlock()
 	}
 
-	return maps.Clone(f.items)
+	return maps.Clone(f.Items)
 }
 
 func (f *FakeStateStore) CallCount(op string) uint64 {
