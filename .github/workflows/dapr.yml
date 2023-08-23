@@ -775,3 +775,11 @@ jobs:
             echo "::error::There is no change for ${daprVersion} Helm chart. Did you forget to update the chart version before tagging?"
             exit -1
           fi
+      - name: Push to OCI registry
+        env:
+          DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
+          DAPR_REGISTRY: ${{ env.DOCKER_REGISTRY }}
+        run: 
+          daprVersion=`cat ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}/${{ env.DAPR_VERSION_ARTIFACT }}`
+          cd ${{ env.ARTIFACT_DIR }}/${{ env.HELM_PACKAGE_DIR }}
+          helm push dapr-${daprVersion}.tgz oci://${{env.DOCKER_REGISTRY}}/${{env.DAPR_REGISTRY}}
