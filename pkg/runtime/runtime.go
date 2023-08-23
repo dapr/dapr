@@ -53,11 +53,13 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/grpc"
+	"github.com/dapr/dapr/pkg/grpc/manager"
 	"github.com/dapr/dapr/pkg/grpc/universalapi"
 	"github.com/dapr/dapr/pkg/http"
 	"github.com/dapr/dapr/pkg/httpendpoint"
 	"github.com/dapr/dapr/pkg/internal/apis"
 	"github.com/dapr/dapr/pkg/messaging"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
@@ -109,10 +111,10 @@ type DaprRuntime struct {
 	runtimeConfig     *internalConfig
 	globalConfig      *config.Configuration
 	accessControlList *config.AccessControlList
-	grpc              *grpc.Manager
+	grpc              *manager.Manager
 	channels          *channels.Channels
 	appConfig         config.ApplicationConfig
-	directMessaging   messaging.DirectMessaging
+	directMessaging   invokev1.DirectMessaging
 	actor             actors.Actors
 
 	nameResolver            nr.Resolver
@@ -178,6 +180,17 @@ func newDaprRuntime(ctx context.Context,
 	wfe := wfengine.NewWorkflowEngine(wfengine.NewWorkflowConfig(runtimeConfig.id))
 	wfe.ConfigureGrpcExecutor()
 
+	channels := channels.New(channels.Options{
+		Registry:            runtimeConfig.registry,
+		ComponentStore:      compStore,
+		Meta:                meta,
+		AppConnectionConfig: runtimeConfig.appConnectionConfig,
+		GlobalConfig:        globalConfig,
+		MaxRequestBodySize:  runtimeConfig.maxRequestBodySize,
+		ReadBufferSize:      runtimeConfig.readBufferSize,
+		GRPC:                grpc,
+	})
+
 	rt := &DaprRuntime{
 		runtimeConfig:              runtimeConfig,
 		globalConfig:               globalConfig,
@@ -193,6 +206,7 @@ func newDaprRuntime(ctx context.Context,
 		compStore:                  compStore,
 		meta:                       meta,
 		operatorClient:             operatorClient,
+		channels:                   channels,
 		processor: processor.New(processor.Options{
 			ID:               runtimeConfig.id,
 			Namespace:        getNamespace(),
@@ -208,6 +222,7 @@ func newDaprRuntime(ctx context.Context,
 			Standalone:       runtimeConfig.standalone,
 			OperatorClient:   operatorClient,
 			GRPC:             grpc,
+			Channels:         channels,
 		}),
 	}
 
@@ -407,6 +422,11 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		log.Errorf(err.Error())
 	}
 
+	// Start proxy
+	a.initProxy()
+
+	a.initDirectMessaging(a.nameResolver)
+
 	a.initPluggableComponents(ctx)
 
 	if _, ok := os.LookupEnv(hotReloadingEnvVar); ok {
@@ -436,9 +456,11 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		log.Warnf("failed to load HTTP endpoints: %s", err)
 	}
 
-	a.initChannels()
-
 	a.flushOutstandingHTTPEndpoints(ctx)
+
+	if err = a.channels.Refresh(); err != nil {
+		log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.appConnectionConfig.Protocol), err)
+	}
 
 	pipeline, err := a.channels.BuildHTTPPipeline(a.globalConfig.Spec.HTTPPipelineSpec)
 	if err != nil {
@@ -447,9 +469,6 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 
 	// Setup allow/deny list for secrets
 	a.populateSecretsConfiguration()
-
-	// Start proxy
-	a.initProxy()
 
 	// Create and start the external gRPC server
 	univAPI := &universalapi.UniversalAPI{
@@ -467,7 +486,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	// Create and start internal and external gRPC servers
 	a.daprGRPCAPI = grpc.NewAPI(grpc.APIOpts{
 		UniversalAPI:          univAPI,
-		AppChannel:            a.channels.AppChannel(),
+		Channels:              a.channels,
 		PubsubAdapter:         a.processor.PubSub(),
 		DirectMessaging:       a.directMessaging,
 		SendToOutputBindingFn: a.processor.Binding().SendToOutputBinding,
@@ -516,15 +535,6 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	if err := a.blockUntilAppIsReady(ctx); err != nil {
 		return err
 	}
-
-	a.daprHTTPAPI.SetAppChannel(a.channels.AppChannel())
-	a.daprGRPCAPI.SetAppChannel(a.channels.AppChannel())
-	a.directMessaging.SetAppChannel(a.channels.AppChannel())
-
-	a.directMessaging.SetHTTPEndpointsAppChannels(a.channels.HTTPEndpointsAppChannel(), a.channels.EndpointChannels())
-
-	a.daprHTTPAPI.SetDirectMessaging(a.directMessaging)
-	a.daprGRPCAPI.SetDirectMessaging(a.directMessaging)
 
 	if a.runtimeConfig.appConnectionConfig.MaxConcurrency > 0 {
 		log.Infof("app max concurrency set to %v", a.runtimeConfig.appConnectionConfig.MaxConcurrency)
@@ -673,7 +683,7 @@ func (a *DaprRuntime) initDirectMessaging(resolver nr.Resolver) {
 		Namespace:          a.namespace,
 		Port:               a.runtimeConfig.internalGRPCPort,
 		Mode:               a.runtimeConfig.mode,
-		AppChannel:         a.channels.AppChannel(),
+		Channels:           a.channels,
 		ClientConnFn:       a.grpc.GetGRPCConnection,
 		Resolver:           resolver,
 		MaxRequestBodySize: a.runtimeConfig.maxRequestBodySize,
@@ -693,24 +703,6 @@ func (a *DaprRuntime) initProxy() {
 		Resiliency:         a.resiliency,
 		MaxRequestBodySize: a.runtimeConfig.maxRequestBodySize,
 	})
-}
-
-func (a *DaprRuntime) initChannels() {
-	var err error
-	a.channels, err = channels.New(channels.Options{
-		Registry:            a.runtimeConfig.registry,
-		ComponentStore:      a.compStore,
-		Meta:                a.meta,
-		AppConnectionConfig: a.runtimeConfig.appConnectionConfig,
-		GlobalConfig:        a.globalConfig,
-		MaxRequestBodySize:  a.runtimeConfig.maxRequestBodySize,
-		ReadBufferSize:      a.runtimeConfig.readBufferSize,
-		GRPC:                a.grpc,
-	})
-	if err != nil {
-		log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.appConnectionConfig.Protocol), err)
-	}
-	a.processor.SetAppChannel(a.channels.AppChannel())
 }
 
 // begin components updates for kubernetes mode.
@@ -985,7 +977,7 @@ func (a *DaprRuntime) processHTTPEndpointSecrets(ctx context.Context, endpoint *
 func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int, allowedOrigins string, pipeline httpMiddleware.Pipeline, univAPI *universalapi.UniversalAPI) error {
 	a.daprHTTPAPI = http.NewAPI(http.APIOpts{
 		UniversalAPI:          univAPI,
-		AppChannel:            a.channels.AppChannel(),
+		Channels:              a.channels,
 		DirectMessaging:       a.directMessaging,
 		PubsubAdapter:         a.processor.PubSub(),
 		SendToOutputBindingFn: a.processor.Binding().SendToOutputBinding,
@@ -1747,8 +1739,8 @@ func componentDependency(compCategory components.Category, name string) string {
 	return fmt.Sprintf("%s:%s", compCategory, name)
 }
 
-func createGRPCManager(runtimeConfig *internalConfig, globalConfig *config.Configuration) *grpc.Manager {
-	grpcAppChannelConfig := &grpc.AppChannelConfig{}
+func createGRPCManager(runtimeConfig *internalConfig, globalConfig *config.Configuration) *manager.Manager {
+	grpcAppChannelConfig := &manager.AppChannelConfig{}
 	if globalConfig != nil {
 		grpcAppChannelConfig.TracingSpec = globalConfig.GetTracingSpec()
 		grpcAppChannelConfig.AllowInsecureTLS = globalConfig.IsFeatureEnabled(config.AppChannelAllowInsecureTLS)
@@ -1762,7 +1754,7 @@ func createGRPCManager(runtimeConfig *internalConfig, globalConfig *config.Confi
 		grpcAppChannelConfig.BaseAddress = runtimeConfig.appConnectionConfig.ChannelAddress
 	}
 
-	m := grpc.NewGRPCManager(runtimeConfig.mode, grpcAppChannelConfig)
+	m := manager.NewManager(runtimeConfig.mode, grpcAppChannelConfig)
 	m.StartCollector()
 	return m
 }
