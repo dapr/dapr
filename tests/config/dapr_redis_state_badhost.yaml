@@ -1,0 +1,17 @@
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: badhost-store
+spec:
+  type: state.redis
+  initTimeout: 1m
+  ignoreErrors: true
+  version: v1
+  metadata:
+  - name: redisHost
+    value: badhost:6379
+  - name: redisPassword
+    value: ""
+scopes:
+  - stateapp
+  - stateapp-pluggable
