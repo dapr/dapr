@@ -14,7 +14,7 @@
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
-  name: querystatestore
+  name: statestore
 spec:
   type: state.postgres
   version: v1
