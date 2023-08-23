@@ -1,6 +1,3 @@
-//go:build !windows
-// +build !windows
-
 /*
 Copyright 2021 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,19 +11,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package grpc
+package v1
 
 import (
-	"github.com/dapr/dapr/pkg/modes"
+	"context"
 )
 
-// GetDialAddressPrefix returns a dial prefix for a gRPC client connections for a given DaprMode.
-// This is used on non-Windows hosts.
-func GetDialAddressPrefix(mode modes.DaprMode) string {
-	switch mode {
-	case modes.KubernetesMode:
-		return "dns:///"
-	default:
-		return ""
-	}
+// DirectMessaging is the API interface for invoking a remote app.
+type DirectMessaging interface {
+	Invoke(ctx context.Context, targetAppID string, req *InvokeMethodRequest) (*InvokeMethodResponse, error)
 }
