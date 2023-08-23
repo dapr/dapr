@@ -27,3 +27,6 @@ spec:
 scopes:
   - stateapp
   - stateapp-pluggable
+  - httpmetrics
+  - grpcmetrics
+  - disabledmetric
