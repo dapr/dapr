@@ -639,12 +639,12 @@ func TestSetupTracing(t *testing.T) {
 		expectedExporters: []sdktrace.SpanExporter{&diagUtils.StdoutExporter{}, &zipkin.Exporter{}, &otlptrace.Exporter{}},
 	}}
 
-	for _, tc := range testcases {
+	for i, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
 			rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
 			require.NoError(t, err)
 			defer stopRuntime(t, rt)
-			rt.globalConfig.Spec.TracingSpec = &tc.tracingConfig
+			rt.globalConfig.Spec.TracingSpec = &testcases[i].tracingConfig
 			if tc.hostAddress != "" {
 				rt.hostAddress = tc.hostAddress
 			}

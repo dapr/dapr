@@ -62,8 +62,10 @@ func TestProcessResourceSecrets(t *testing.T) {
 		sec := New(Options{
 			Registry:       registry.New(registry.NewOptions()).SecretStores(),
 			ComponentStore: compstore.New(),
-			Mode:           modes.StandaloneMode,
-			Meta:           meta.New(meta.Options{}),
+			Meta: meta.New(meta.Options{
+				ID:   "test",
+				Mode: modes.StandaloneMode,
+			}),
 		})
 
 		m := mock.NewMockKubernetesStore()
@@ -104,8 +106,10 @@ func TestProcessResourceSecrets(t *testing.T) {
 		sec := New(Options{
 			Registry:       registry.New(registry.NewOptions()).SecretStores(),
 			ComponentStore: compstore.New(),
-			Mode:           modes.KubernetesMode,
-			Meta:           meta.New(meta.Options{}),
+			Meta: meta.New(meta.Options{
+				ID:   "test",
+				Mode: modes.KubernetesMode,
+			}),
 		})
 
 		sec.registry.RegisterComponent(
@@ -145,8 +149,10 @@ func TestProcessResourceSecrets(t *testing.T) {
 		sec := New(Options{
 			Registry:       registry.New(registry.NewOptions()).SecretStores(),
 			ComponentStore: compstore.New(),
-			Mode:           modes.StandaloneMode,
-			Meta:           meta.New(meta.Options{}),
+			Meta: meta.New(meta.Options{
+				ID:   "test",
+				Mode: modes.StandaloneMode,
+			}),
 		})
 
 		updated, unready := sec.ProcessResource(context.Background(), mockBinding)
@@ -174,8 +180,10 @@ func TestProcessResourceSecrets(t *testing.T) {
 		sec := New(Options{
 			Registry:       registry.New(registry.NewOptions()).SecretStores(),
 			ComponentStore: compstore.New(),
-			Mode:           modes.StandaloneMode,
-			Meta:           meta.New(meta.Options{}),
+			Meta: meta.New(meta.Options{
+				ID:   "test",
+				Mode: modes.StandaloneMode,
+			}),
 		})
 
 		updated, unready := sec.ProcessResource(context.Background(), mockBinding)

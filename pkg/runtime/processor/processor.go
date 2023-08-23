@@ -155,7 +155,6 @@ func New(opts Options) *Processor {
 		Registry:       opts.Registry.SecretStores(),
 		ComponentStore: opts.ComponentStore,
 		Meta:           opts.Meta,
-		Mode:           opts.Mode,
 		OperatorClient: opts.OperatorClient,
 	})
 

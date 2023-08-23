@@ -27,7 +27,6 @@ import (
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	compsecret "github.com/dapr/dapr/pkg/components/secretstores"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	"github.com/dapr/dapr/pkg/modes"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
@@ -43,7 +42,6 @@ type Options struct {
 	ComponentStore *compstore.ComponentStore
 	Meta           *meta.Meta
 	OperatorClient operatorv1pb.OperatorClient
-	Mode           modes.DaprMode
 }
 
 type secret struct {
@@ -51,7 +49,6 @@ type secret struct {
 	compStore      *compstore.ComponentStore
 	meta           *meta.Meta
 	operatorClient operatorv1pb.OperatorClient
-	mode           modes.DaprMode
 	lock           sync.Mutex
 }
 

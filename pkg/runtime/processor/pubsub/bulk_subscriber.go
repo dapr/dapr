@@ -190,7 +190,7 @@ func (p *pubsub) bulkSubscribeTopic(ctx context.Context, policyDef *resiliency.P
 							Data:        message.Event,
 							Topic:       topic,
 							Metadata:    message.Metadata,
-							ContentType: &message.ContentType,
+							ContentType: &msg.Entries[i].ContentType,
 						}, route.DeadLetterTopic)
 					}
 					bulkResponses[i].EntryId = message.EntryId

@@ -154,9 +154,9 @@ func (p *ConnectionPool) Release(conn grpc.ClientConnInterface) {
 	p.lock.RLock()
 	defer p.lock.RUnlock()
 
-	for _, el := range p.connections {
+	for i, el := range p.connections {
 		if el.conn == conn {
-			count := atomic.AddInt32(&el.referenceCount, -1)
+			count := atomic.AddInt32(&p.connections[i].referenceCount, -1)
 			if count <= 0 {
 				el.MarkIdle()
 			}

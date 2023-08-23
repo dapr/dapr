@@ -658,7 +658,7 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 		}
 
 		if s.Etag != nil {
-			req.ETag = &s.Etag.Value
+			req.ETag = &in.States[i].Etag.Value
 		}
 		if s.Options != nil {
 			req.Options = state.SetStateOption{
@@ -779,7 +779,7 @@ func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkSta
 			Metadata: item.Metadata,
 		}
 		if item.Etag != nil {
-			req.ETag = &item.Etag.Value
+			req.ETag = &in.States[i].Etag.Value
 		}
 		if item.Options != nil {
 			req.Options = state.DeleteStateOption{
