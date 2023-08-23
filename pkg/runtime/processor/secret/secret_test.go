@@ -28,7 +28,6 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/meta"
 	"github.com/dapr/dapr/pkg/runtime/mock"
-	rtmock "github.com/dapr/dapr/pkg/runtime/mock"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/dapr/pkg/security/consts"
 	"github.com/dapr/kit/logger"
@@ -114,7 +113,7 @@ func TestProcessResourceSecrets(t *testing.T) {
 
 		sec.registry.RegisterComponent(
 			func(_ logger.Logger) secretstores.SecretStore {
-				return &rtmock.SecretStore{}
+				return &mock.SecretStore{}
 			},
 			"mock",
 		)

@@ -25,7 +25,6 @@ import (
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpendapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	operatorpb "github.com/dapr/dapr/pkg/proto/operator/v1"
-	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/authorizer"
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -194,13 +193,13 @@ func (r *Reconciler[T]) handleEvent(ctx context.Context, event *loader.Event[T])
 	log.Debugf("Received %s event %s: %s", event.Resource.Kind(), event.Type, event.Resource.LogName())
 
 	switch event.Type {
-	case operatorv1pb.ResourceEventType_CREATED:
+	case operatorpb.ResourceEventType_CREATED:
 		log.Infof("Received %s creation: %s", r.kind, event.Resource.LogName())
 		r.manager.update(ctx, event.Resource)
-	case operatorv1pb.ResourceEventType_UPDATED:
+	case operatorpb.ResourceEventType_UPDATED:
 		log.Infof("Received %s update: %s", r.kind, event.Resource.LogName())
 		r.manager.update(ctx, event.Resource)
-	case operatorv1pb.ResourceEventType_DELETED:
+	case operatorpb.ResourceEventType_DELETED:
 		log.Infof("Received %s deletion, closing: %s", r.kind, event.Resource.LogName())
 		r.manager.delete(event.Resource)
 	}

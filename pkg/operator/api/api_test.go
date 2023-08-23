@@ -31,9 +31,7 @@ import (
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpendapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
-	httpendpointapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subscriptionsapiV2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/client/clientset/versioned/scheme"
@@ -71,8 +69,8 @@ func (m *mockHTTPEndpointUpdateServer) Context() context.Context {
 
 func TestProcessComponentSecrets(t *testing.T) {
 	t.Run("secret ref exists, not kubernetes secret store, no error", func(t *testing.T) {
-		c := componentsapi.Component{
-			Spec: componentsapi.ComponentSpec{
+		c := compapi.Component{
+			Spec: compapi.ComponentSpec{
 				Metadata: []commonapi.NameValuePair{
 					{
 						Name: "test1",
@@ -83,7 +81,7 @@ func TestProcessComponentSecrets(t *testing.T) {
 					},
 				},
 			},
-			Auth: componentsapi.Auth{
+			Auth: compapi.Auth{
 				SecretStore: "secretstore",
 			},
 		}
@@ -93,8 +91,8 @@ func TestProcessComponentSecrets(t *testing.T) {
 	})
 
 	t.Run("secret ref exists, kubernetes secret store, secret extracted", func(t *testing.T) {
-		c := componentsapi.Component{
-			Spec: componentsapi.ComponentSpec{
+		c := compapi.Component{
+			Spec: compapi.ComponentSpec{
 				Metadata: []commonapi.NameValuePair{
 					{
 						Name: "test1",
@@ -105,7 +103,7 @@ func TestProcessComponentSecrets(t *testing.T) {
 					},
 				},
 			},
-			Auth: componentsapi.Auth{
+			Auth: compapi.Auth{
 				SecretStore: kubernetesSecretStore,
 			},
 		}
@@ -140,8 +138,8 @@ func TestProcessComponentSecrets(t *testing.T) {
 	})
 
 	t.Run("secret ref exists, default kubernetes secret store, secret extracted", func(t *testing.T) {
-		c := componentsapi.Component{
-			Spec: componentsapi.ComponentSpec{
+		c := compapi.Component{
+			Spec: compapi.ComponentSpec{
 				Metadata: []commonapi.NameValuePair{
 					{
 						Name: "test1",
@@ -152,7 +150,7 @@ func TestProcessComponentSecrets(t *testing.T) {
 					},
 				},
 			},
-			Auth: componentsapi.Auth{
+			Auth: compapi.Auth{
 				SecretStore: "",
 			},
 		}
@@ -189,11 +187,11 @@ func TestProcessComponentSecrets(t *testing.T) {
 
 func TestComponentUpdate(t *testing.T) {
 	t.Run("skip sidecar update if namespace doesn't match", func(t *testing.T) {
-		c := componentsapi.Component{
+		c := compapi.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: "ns1",
 			},
-			Spec: componentsapi.ComponentSpec{},
+			Spec: compapi.ComponentSpec{},
 		}
 
 		s := runtime.NewScheme()
@@ -236,11 +234,11 @@ func TestComponentUpdate(t *testing.T) {
 	})
 
 	t.Run("sidecar is updated when component namespace is a match", func(t *testing.T) {
-		c := componentsapi.Component{
+		c := compapi.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: "ns1",
 			},
-			Spec: componentsapi.ComponentSpec{},
+			Spec: compapi.ComponentSpec{},
 		}
 
 		s := runtime.NewScheme()
@@ -284,11 +282,11 @@ func TestComponentUpdate(t *testing.T) {
 }
 
 func TestHTTPEndpointUpdate(t *testing.T) {
-	e := httpendpointapi.HTTPEndpoint{
+	e := httpendapi.HTTPEndpoint{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "ns1",
 		},
-		Spec: httpendpointapi.HTTPEndpointSpec{},
+		Spec: httpendapi.HTTPEndpointSpec{},
 	}
 
 	s := runtime.NewScheme()
@@ -364,23 +362,23 @@ func TestListsNamespaced(t *testing.T) {
 		err := scheme.AddToScheme(s)
 		assert.NoError(t, err)
 
-		err = componentsapi.AddToScheme(s)
+		err = compapi.AddToScheme(s)
 		assert.NoError(t, err)
 
-		av, kind := componentsapi.SchemeGroupVersion.WithKind("Component").ToAPIVersionAndKind()
+		av, kind := compapi.SchemeGroupVersion.WithKind("Component").ToAPIVersionAndKind()
 		typeMeta := metav1.TypeMeta{
 			Kind:       kind,
 			APIVersion: av,
 		}
 		client := fake.NewClientBuilder().
 			WithScheme(s).
-			WithObjects(&componentsapi.Component{
+			WithObjects(&compapi.Component{
 				TypeMeta: typeMeta,
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "obj1",
 					Namespace: "namespace-a",
 				},
-			}, &componentsapi.Component{
+			}, &compapi.Component{
 				TypeMeta: typeMeta,
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "obj2",
@@ -522,23 +520,23 @@ func TestListsNamespaced(t *testing.T) {
 		err := scheme.AddToScheme(s)
 		assert.NoError(t, err)
 
-		err = httpendpointapi.AddToScheme(s)
+		err = httpendapi.AddToScheme(s)
 		assert.NoError(t, err)
 
-		av, kind := httpendpointapi.SchemeGroupVersion.WithKind("HTTPEndpoint").ToAPIVersionAndKind()
+		av, kind := httpendapi.SchemeGroupVersion.WithKind("HTTPEndpoint").ToAPIVersionAndKind()
 		typeMeta := metav1.TypeMeta{
 			Kind:       kind,
 			APIVersion: av,
 		}
 		client := fake.NewClientBuilder().
 			WithScheme(s).
-			WithObjects(&httpendpointapi.HTTPEndpoint{
+			WithObjects(&httpendapi.HTTPEndpoint{
 				TypeMeta: typeMeta,
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "obj1",
 					Namespace: "namespace-a",
 				},
-			}, &httpendpointapi.HTTPEndpoint{
+			}, &httpendapi.HTTPEndpoint{
 				TypeMeta: typeMeta,
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "obj2",
@@ -556,7 +554,7 @@ func TestListsNamespaced(t *testing.T) {
 		assert.Nil(t, err)
 		assert.Equal(t, 1, len(res.GetHttpEndpoints()))
 
-		var endpoint httpendpointapi.HTTPEndpoint
+		var endpoint httpendapi.HTTPEndpoint
 		err = yaml.Unmarshal(res.GetHttpEndpoints()[0], &endpoint)
 		assert.Nil(t, err)
 
@@ -572,8 +570,8 @@ func TestListsNamespaced(t *testing.T) {
 }
 
 func TestProcessHTTPEndpointSecrets(t *testing.T) {
-	e := httpendpointapi.HTTPEndpoint{
-		Spec: httpendpointapi.HTTPEndpointSpec{
+	e := httpendapi.HTTPEndpoint{
+		Spec: httpendapi.HTTPEndpointSpec{
 			BaseURL: "http://test.com/",
 			Headers: []commonapi.NameValuePair{
 				{
@@ -585,7 +583,7 @@ func TestProcessHTTPEndpointSecrets(t *testing.T) {
 				},
 			},
 		},
-		Auth: httpendpointapi.Auth{
+		Auth: httpendapi.Auth{
 			SecretStore: "secretstore",
 		},
 	}
