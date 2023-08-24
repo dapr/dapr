@@ -22,18 +22,18 @@ import (
 	"github.com/dapr/components-contrib/bindings"
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/config"
 	configmodes "github.com/dapr/dapr/pkg/config/modes"
-	"github.com/dapr/dapr/pkg/grpc"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/outbox"
 	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/meta"
 
+	grpcmanager "github.com/dapr/dapr/pkg/grpc/manager"
 	"github.com/dapr/dapr/pkg/runtime/processor/binding"
 	"github.com/dapr/dapr/pkg/runtime/processor/configuration"
 	"github.com/dapr/dapr/pkg/runtime/processor/crypto"
@@ -43,7 +43,6 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/processor/secret"
 	"github.com/dapr/dapr/pkg/runtime/processor/state"
 	"github.com/dapr/dapr/pkg/runtime/processor/workflow"
-	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 )
 
@@ -84,7 +83,9 @@ type Options struct {
 
 	Resiliency resiliency.Provider
 
-	GRPC *grpc.Manager
+	GRPC *grpcmanager.Manager
+
+	Channels *channels.Channels
 
 	OperatorClient operatorv1.OperatorClient
 }
@@ -103,7 +104,7 @@ type StateManager interface {
 type PubsubManager interface {
 	Publish(context.Context, *contribpubsub.PublishRequest) error
 	BulkPublish(context.Context, *contribpubsub.BulkPublishRequest) (contribpubsub.BulkPublishResponse, error)
-	SetAppChannel(channel.AppChannel)
+
 	StartSubscriptions(context.Context) error
 	StopSubscriptions()
 	Outbox() outbox.Outbox
@@ -112,7 +113,7 @@ type PubsubManager interface {
 
 type BindingManager interface {
 	SendToOutputBinding(context.Context, string, *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
-	SetAppChannel(channel.AppChannel)
+
 	StartReadingFromBindings(context.Context) error
 	StopReadingFromBindings()
 	manager
@@ -142,19 +143,17 @@ func New(opts Options) *Processor {
 		Resiliency:     opts.Resiliency,
 		TracingSpec:    opts.GlobalConfig.Spec.TracingSpec,
 		GRPC:           opts.GRPC,
+		Channels:       opts.Channels,
 		OperatorClient: opts.OperatorClient,
 		ResourcesPath:  opts.Standalone.ResourcesPath,
 	})
-
-	outbox := runtimePubsub.NewOutbox(ps.Publish, opts.ComponentStore.GetPubSubComponent, opts.ComponentStore.GetStateStore, pubsub.ExtractCloudEventProperty, opts.Namespace)
-	ps.SetOutbox(outbox)
 
 	state := state.New(state.Options{
 		PlacementEnabled: opts.PlacementEnabled,
 		Registry:         opts.Registry.StateStores(),
 		ComponentStore:   opts.ComponentStore,
 		Meta:             opts.Meta,
-		Outbox:           outbox,
+		Outbox:           ps.Outbox(),
 	})
 
 	binding := binding.New(binding.Options{
@@ -165,6 +164,7 @@ func New(opts Options) *Processor {
 		Resiliency:     opts.Resiliency,
 		GRPC:           opts.GRPC,
 		TracingSpec:    opts.GlobalConfig.Spec.TracingSpec,
+		Channels:       opts.Channels,
 	})
 
 	return &Processor{
@@ -204,11 +204,6 @@ func New(opts Options) *Processor {
 			components.CategoryMiddleware: middleware.New(),
 		},
 	}
-}
-
-func (p *Processor) SetAppChannel(appChannel channel.AppChannel) {
-	p.binding.SetAppChannel(appChannel)
-	p.pubsub.SetAppChannel(appChannel)
 }
 
 // Init initializes a component of a category.

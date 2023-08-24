@@ -45,6 +45,7 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/meta"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
@@ -131,7 +132,7 @@ func TestInitPubSub(t *testing.T) {
 			mock.AnythingOfType("pubsub.Handler")).Return(nil)
 
 		mockAppChannel := new(channelt.MockAppChannel)
-		ps.appChannel = mockAppChannel
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 		ps.StopSubscriptions()
 		ps.compStore.SetTopicRoutes(nil)
 		ps.compStore.SetSubscriptions(nil)
@@ -146,7 +147,7 @@ func TestInitPubSub(t *testing.T) {
 		mockPubSub, mockPubSub2 := initMockPubSubForRuntime(ps)
 
 		mockAppChannel := new(channelt.MockAppChannel)
-		ps.appChannel = mockAppChannel
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 		// User App subscribes 2 topics via http app channel
 		subs := getSubscriptionsJSONString(
 			[]string{"topic0", "topic1"}, // first pubsub
@@ -180,7 +181,7 @@ func TestInitPubSub(t *testing.T) {
 		mockPubSub, _ := initMockPubSubForRuntime(ps)
 
 		mockAppChannel := new(channelt.MockAppChannel)
-		ps.appChannel = mockAppChannel
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		// User App subscribes to a topic via http app channel
 		sub := getSubscriptionCustom("topic0", "customroute/topic0")
@@ -210,7 +211,7 @@ func TestInitPubSub(t *testing.T) {
 		mockPubSub, _ := initMockPubSubForRuntime(ps)
 
 		mockAppChannel := new(channelt.MockAppChannel)
-		ps.appChannel = mockAppChannel
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		fakeResp := invokev1.NewInvokeMethodResponse(404, "Not Found", nil)
 		defer fakeResp.Close()
@@ -242,6 +243,7 @@ func TestInitPubSub(t *testing.T) {
 			Mode:           modes.StandaloneMode,
 			Namespace:      "ns1",
 			ID:             TestRuntimeConfigID,
+			Channels:       new(channels.Channels),
 		})
 		routes, err := pst.topicRoutes(context.Background())
 		assert.NoError(t, err)
@@ -257,6 +259,7 @@ func TestInitPubSub(t *testing.T) {
 			Mode:       modes.StandaloneMode,
 			Namespace:  "ns1",
 			ID:         TestRuntimeConfigID,
+			Channels:   new(channels.Channels),
 		})
 
 		require.NoError(t, os.Mkdir(resourcesDir, 0o777))
@@ -288,6 +291,7 @@ func TestInitPubSub(t *testing.T) {
 			Mode:       modes.StandaloneMode,
 			Namespace:  "ns1",
 			ID:         TestRuntimeConfigID,
+			Channels:   new(channels.Channels),
 		})
 
 		require.NoError(t, os.Mkdir(resourcesDir, 0o777))
@@ -320,6 +324,7 @@ func TestInitPubSub(t *testing.T) {
 			Resiliency: resiliency.New(logger.NewLogger("test")),
 			Namespace:  "ns1",
 			ID:         TestRuntimeConfigID,
+			Channels:   new(channels.Channels),
 		})
 
 		require.NoError(t, os.Mkdir(resourcesDir, 0o777))
@@ -341,7 +346,7 @@ func TestInitPubSub(t *testing.T) {
 		mockPubSub, mockPubSub2 := initMockPubSubForRuntime(ps)
 
 		mockAppChannel := new(channelt.MockAppChannel)
-		ps.appChannel = mockAppChannel
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		// User App subscribes 1 topics via http app channel
 		subs := getSubscriptionsJSONString([]string{"topic0"}, []string{"topic1"})
@@ -371,7 +376,7 @@ func TestInitPubSub(t *testing.T) {
 		mockPubSub, mockPubSub2 := initMockPubSubForRuntime(ps)
 
 		mockAppChannel := new(channelt.MockAppChannel)
-		ps.appChannel = mockAppChannel
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		// User App subscribes 1 topics via http app channel
 		subs := getSubscriptionsJSONString([]string{"topic10"}, []string{"topic11"})
@@ -401,7 +406,7 @@ func TestInitPubSub(t *testing.T) {
 		mockPubSub, mockPubSub2 := initMockPubSubForRuntime(ps)
 
 		mockAppChannel := new(channelt.MockAppChannel)
-		ps.appChannel = mockAppChannel
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		// User App subscribes 2 topics via http app channel
 		subs := getSubscriptionsJSONString([]string{"topic0", "topic1"}, []string{"topic0"})
@@ -431,7 +436,7 @@ func TestInitPubSub(t *testing.T) {
 		mockPubSub, mockPubSub2 := initMockPubSubForRuntime(ps)
 
 		mockAppChannel := new(channelt.MockAppChannel)
-		ps.appChannel = mockAppChannel
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		// User App subscribes 2 topics via http app channel
 		subs := getSubscriptionsJSONString([]string{"topic10", "topic11"}, []string{"topic10"})
@@ -461,7 +466,7 @@ func TestInitPubSub(t *testing.T) {
 		mockPubSub, mockPubSub2 := initMockPubSubForRuntime(ps)
 
 		mockAppChannel := new(channelt.MockAppChannel)
-		ps.appChannel = mockAppChannel
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		// User App subscribes 1 topics via http app channel
 		subs := getSubscriptionsJSONString([]string{"topic3"}, []string{"topic5"})
@@ -489,7 +494,7 @@ func TestInitPubSub(t *testing.T) {
 		mockPubSub, mockPubSub2 := initMockPubSubForRuntime(ps)
 
 		mockAppChannel := new(channelt.MockAppChannel)
-		ps.appChannel = mockAppChannel
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		// User App subscribes 1 topics via http app channel
 		subs := getSubscriptionsJSONString([]string{"topic12"}, []string{"topic12"})
@@ -517,7 +522,7 @@ func TestInitPubSub(t *testing.T) {
 		mockPubSub, mockPubSub2 := initMockPubSubForRuntime(ps)
 
 		mockAppChannel := new(channelt.MockAppChannel)
-		ps.appChannel = mockAppChannel
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		// User App subscribes 1 topics via http app channel
 		// topic0 is allowed, topic3 and topic5 are not
@@ -548,7 +553,7 @@ func TestInitPubSub(t *testing.T) {
 		mockPubSub, mockPubSub2 := initMockPubSubForRuntime(ps)
 
 		mockAppChannel := new(channelt.MockAppChannel)
-		ps.appChannel = mockAppChannel
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		// User App subscribes 1 topics via http app channel
 		// topic0 is allowed, topic3 and topic5 are not
@@ -795,7 +800,7 @@ func TestInitPubSub(t *testing.T) {
 		initMockPubSubForRuntime(ps)
 
 		mockAppChannel := new(channelt.MockAppChannel)
-		ps.appChannel = mockAppChannel
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		// User App subscribes 1 topics via http app channel
 		subs := getSubscriptionsJSONString([]string{"topic0"}, []string{"topic1"})
@@ -839,7 +844,7 @@ func TestInitPubSub(t *testing.T) {
 		initMockPubSubForRuntime(ps)
 
 		mockAppChannel := new(channelt.MockAppChannel)
-		ps.appChannel = mockAppChannel
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		// User App subscribes 1 topics via http app channel
 		subs := getSubscriptionsJSONString([]string{"topic0"}, []string{"topic1"})
@@ -887,7 +892,7 @@ func TestInitPubSub(t *testing.T) {
 		initMockPubSubForRuntime(ps)
 
 		mockAppChannel := new(channelt.MockAppChannel)
-		ps.appChannel = mockAppChannel
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		// User App subscribes 1 topics via http app channel
 		subs := getSubscriptionsJSONString([]string{"topic0"}, []string{"topic0"})
@@ -928,7 +933,7 @@ func TestInitPubSub(t *testing.T) {
 		initMockPubSubForRuntime(ps)
 
 		mockAppChannel := new(channelt.MockAppChannel)
-		ps.appChannel = mockAppChannel
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		// User App subscribes 1 topics via http app channel
 		subs := getSubscriptionsJSONString([]string{"topic0"}, []string{"topic0"})
@@ -1375,7 +1380,7 @@ func TestPubsubWithResiliency(t *testing.T) {
 	})
 
 	ps.isHTTP = true
-	ps.appChannel = &failingAppChannel
+	ps.channels = new(channels.Channels).WithAppChannel(&failingAppChannel)
 
 	t.Run("pubsub retries subscription event with resiliency", func(t *testing.T) {
 		ps.compStore.SetTopicRoutes(map[string]compstore.TopicRoutes{

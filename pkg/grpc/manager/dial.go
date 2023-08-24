@@ -1,5 +1,5 @@
-//go:build windows
-// +build windows
+//go:build !windows
+// +build !windows
 
 /*
 Copyright 2021 The Dapr Authors
@@ -14,14 +14,19 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package grpc
+package manager
 
 import (
 	"github.com/dapr/dapr/pkg/modes"
 )
 
 // GetDialAddressPrefix returns a dial prefix for a gRPC client connections for a given DaprMode.
-// This is used on Windows hosts.
+// This is used on non-Windows hosts.
 func GetDialAddressPrefix(mode modes.DaprMode) string {
-	return ""
+	switch mode {
+	case modes.KubernetesMode:
+		return "dns:///"
+	default:
+		return ""
+	}
 }
