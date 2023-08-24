@@ -251,18 +251,10 @@ resource aksDiagnosticStorage 'Microsoft.Insights/diagnosticSettings@2021-05-01-
       {
         category: 'kube-apiserver'
         enabled: true
-        retentionPolicy: {
-          days: 15
-          enabled: true
-        }
       }
       {
         category: 'kube-audit'
         enabled: true
-        retentionPolicy: {
-          days: 15
-          enabled: true
-        }
       }
     ]
     storageAccountId: diagStorageResourceId
