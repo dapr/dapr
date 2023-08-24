@@ -54,7 +54,8 @@ env:
   AZURE_REGIONS: "westus3"
   AZURE_ARM_REGIONS: "eastus"
   # Container registry where to cache e2e test images
-  DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
+  #DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
+  DAPR_CACHE_REGISTRY: "acatestacr.azurecr.io"
   # Whether to collect TCP dumps
   TCP_DUMPS: "false"
   # Useful for upgrade/downgrade/compatibility tests
