@@ -43,7 +43,7 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	utils.SetupLogs("service_invocation")
+	utils.SetupLogs("hotreloading")
 	utils.InitHTTPClient(false)
 
 	testApps := []kube.AppDescription{

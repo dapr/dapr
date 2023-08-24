@@ -24,6 +24,16 @@ spec:
       enabled: true
 
 ---
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: hotreloading
+spec:
+  features:
+    - name: HotReloading
+      enabled: true
+
+---
 # This is used in tests to validate that the features are loaded
 # It is not an actual "preview configuration"
 apiVersion: dapr.io/v1alpha1
