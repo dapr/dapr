@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -41,13 +42,14 @@ const (
 )
 
 type workflowActor struct {
-	actors           actors.Actors
-	states           sync.Map
-	scheduler        workflowScheduler
-	cachingDisabled  bool
-	defaultTimeout   time.Duration
-	reminderInterval time.Duration
-	config           wfConfig
+	actors                actors.Actors
+	states                sync.Map
+	scheduler             workflowScheduler
+	cachingDisabled       bool
+	defaultTimeout        time.Duration
+	reminderInterval      time.Duration
+	config                wfConfig
+	activityResultAwaited atomic.Bool
 }
 
 type durableTimer struct {
@@ -175,15 +177,18 @@ func (wf *workflowActor) createWorkflowInstance(ctx context.Context, actorID str
 		return errors.New("invalid execution start event")
 	}
 
-	// We block (re)creation of existing workflows unless they are in a completed state.
+	// We block (re)creation of existing workflows unless they are in a completed state
+	// Or if they still have any pending activity result awaited.
 	if !created {
 		runtimeState := getRuntimeState(actorID, state)
-		if runtimeState.IsCompleted() {
-			wfLogger.Infof("%s: workflow was previously completed and is being recreated", actorID)
-			state.Reset()
-		} else {
+		if !runtimeState.IsCompleted() {
 			return fmt.Errorf("an active workflow with ID '%s' already exists", actorID)
 		}
+		if wf.activityResultAwaited.Load() {
+			return fmt.Errorf("a terminated workflow with ID '%s' is already awaiting an activity result", actorID)
+		}
+		wfLogger.Infof("%s: workflow was previously completed and is being recreated", actorID)
+		state.Reset()
 	}
 
 	// Schedule a reminder to execute immediately after this operation. The reminder will trigger the actual
@@ -273,6 +278,9 @@ func (wf *workflowActor) addWorkflowEvent(ctx context.Context, actorID string, h
 	}
 
 	e, err := backend.UnmarshalHistoryEvent(historyEventBytes)
+	if e.GetTaskCompleted() != nil || e.GetTaskFailed() != nil {
+		wf.activityResultAwaited.CompareAndSwap(true, false)
+	}
 	if err != nil {
 		return err
 	}
@@ -440,6 +448,8 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 				WithContentType(invokev1.OctetStreamContentType)
 			defer req.Close()
 
+			wf.activityResultAwaited.Store(true)
+
 			resp, err := wf.actors.Call(ctx, req)
 			if err != nil {
 				if errors.Is(err, ErrDuplicateInvocation) {
@@ -530,6 +540,7 @@ func (wf *workflowActor) createReliableReminder(ctx context.Context, actorID str
 	// Reminders need to have unique names or else they may not fire in certain race conditions.
 	reminderName := fmt.Sprintf("%s-%s", namePrefix, uuid.NewString()[:8])
 	wfLogger.Debugf("%s: creating '%s' reminder with DueTime = %s", actorID, reminderName, delay)
+
 	dataEnc, err := json.Marshal(data)
 	if err != nil {
 		return reminderName, fmt.Errorf("failed to encode data as JSON: %w", err)

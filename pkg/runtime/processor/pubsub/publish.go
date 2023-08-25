@@ -116,7 +116,7 @@ func (p *pubsub) publishMessageHTTP(ctx context.Context, msg *subscribedMessage)
 	}
 
 	start := time.Now()
-	resp, err := p.appChannel.InvokeMethod(ctx, req, "")
+	resp, err := p.channels.AppChannel().InvokeMethod(ctx, req, "")
 	elapsed := diag.ElapsedSince(start)
 
 	if err != nil {
