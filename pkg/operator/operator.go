@@ -23,6 +23,7 @@ import (
 	"strings"
 	"time"
 
+	argov1alpha1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -86,19 +87,6 @@ type operator struct {
 	client client.Client
 }
 
-var scheme = runtime.NewScheme()
-
-func init() {
-	_ = clientgoscheme.AddToScheme(scheme)
-
-	_ = componentsapi.AddToScheme(scheme)
-	_ = configurationapi.AddToScheme(scheme)
-	_ = resiliencyapi.AddToScheme(scheme)
-	_ = httpendpointsapi.AddToScheme(scheme)
-	_ = subscriptionsapiV1alpha1.AddToScheme(scheme)
-	_ = subscriptionsapiV2alpha1.AddToScheme(scheme)
-}
-
 // NewOperator returns a new Dapr Operator.
 func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 	conf, err := ctrl.GetConfig()
@@ -106,6 +94,12 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 		return nil, fmt.Errorf("unable to get controller runtime configuration, err: %s", err)
 	}
 	watchdogPodSelector := getSideCarInjectedNotExistsSelector()
+
+	scheme, err := buildScheme(opts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build operator scheme: %w", err)
+	}
+
 	mgr, err := ctrl.NewManager(conf, ctrl.Options{
 		Scheme:                 scheme,
 		Port:                   19443,
@@ -461,4 +455,28 @@ func (r nonLeaderRunnable) Start(ctx context.Context) error {
 
 func (r nonLeaderRunnable) NeedLeaderElection() bool {
 	return false
+}
+
+func buildScheme(opts Options) (*runtime.Scheme, error) {
+	builders := []func(*runtime.Scheme) error{
+		clientgoscheme.AddToScheme,
+		componentsapi.AddToScheme,
+		configurationapi.AddToScheme,
+		resiliencyapi.AddToScheme,
+		httpendpointsapi.AddToScheme,
+		subscriptionsapiV1alpha1.AddToScheme,
+		subscriptionsapiV2alpha1.AddToScheme,
+	}
+
+	if opts.ArgoRolloutServiceReconcilerEnabled {
+		builders = append(builders, argov1alpha1.AddToScheme)
+	}
+
+	errs := make([]error, len(builders))
+	scheme := runtime.NewScheme()
+	for i, builder := range builders {
+		errs[i] = builder(scheme)
+	}
+
+	return scheme, errors.Join(errs...)
 }
