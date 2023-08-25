@@ -12,5 +12,12 @@ spec:
     app: dapr-sentry
   ports:
   - protocol: TCP
-    port: {{ .Values.ports.port }} 
-    targetPort: {{ .Values.ports.targetPort }}  
+    port: {{ .Values.ports.port }}
+    targetPort: {{ .Values.ports.targetPort }}
+# Added for backwards compatibility where previous clients will attempt to
+# connect on port 80.
+{{ if neq .Values.ports.port 80 }}
+  - protocol: TCP
+    port: 80
+    targetPort: {{ .Values.ports.targetPort }}
+{{ end }}
