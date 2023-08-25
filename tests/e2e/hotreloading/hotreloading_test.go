@@ -26,6 +26,7 @@ import (
 
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
@@ -85,7 +86,11 @@ func TestHTTPEndpoints(t *testing.T) {
 		t.Skip("skipping test; only supported on kubernetes")
 	}
 
-	cl, err := client.New(platform.KubeClient.GetClientConfig(), client.Options{})
+	scheme := runtime.NewScheme()
+	assert.NoError(t, compapi.AddToScheme(scheme))
+	assert.NoError(t, httpendapi.AddToScheme(scheme))
+
+	cl, err := client.New(platform.KubeClient.GetClientConfig(), client.Options{Scheme: scheme})
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -174,7 +179,11 @@ func TestState(t *testing.T) {
 		t.Skip("skipping test; only supported on kubernetes")
 	}
 
-	cl, err := client.New(platform.KubeClient.GetClientConfig(), client.Options{})
+	scheme := runtime.NewScheme()
+	assert.NoError(t, compapi.AddToScheme(scheme))
+	assert.NoError(t, httpendapi.AddToScheme(scheme))
+
+	cl, err := client.New(platform.KubeClient.GetClientConfig(), client.Options{Scheme: scheme})
 	require.NoError(t, err)
 
 	ctx := context.Background()
