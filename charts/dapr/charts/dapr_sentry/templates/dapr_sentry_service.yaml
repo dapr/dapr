@@ -20,6 +20,6 @@ spec:
 {{ if (ne (int .Values.ports.port) 80) }}
   - protocol: TCP
     port: 80
-    targetPort: {{ .Values.ports.targetPort }
+    targetPort: {{ .Values.ports.targetPort }}
     name: legacy
 {{ end }}
