@@ -54,7 +54,6 @@ namespace DaprDemoActor
                 // Example of registering a "PlaceOrder" workflow function
                 options.RegisterWorkflow<string, string>("PlaceOrder", implementation: async (context, input) =>
                 {
-
                     var itemToPurchase = input;
 
                     itemToPurchase = await context.WaitForExternalEventAsync<string>("ChangePurchaseItem");
@@ -65,6 +64,7 @@ namespace DaprDemoActor
 
                     return itemToPurchase;
                 });
+
                 // Example of registering a "ShipProduct" workflow activity function
                 options.RegisterActivity<string, string>("ShipProduct", implementation: (context, input) =>
                 {
@@ -90,11 +90,8 @@ namespace DaprDemoActor
             }
 
             app.UseRouting();
-
             app.UseAuthentication();
-
             app.UseAuthorization();
-
             app.UseCloudEvents();
 
             app.UseEndpoints(endpoints =>
