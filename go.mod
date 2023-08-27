@@ -113,10 +113,10 @@ require (
 	github.com/Azure/go-amqp v1.0.1 // indirect
 	github.com/AzureAD/microsoft-authentication-library-for-go v1.1.1 // indirect
 	github.com/DataDog/zstd v1.5.2 // indirect
+	github.com/IBM/sarama v1.41.1 // indirect
 	github.com/OneOfOne/xxhash v1.2.8 // indirect
 	github.com/PaesslerAG/gval v1.0.0 // indirect
 	github.com/RoaringBitmap/roaring v1.1.0 // indirect
-	github.com/Shopify/sarama v1.37.2 // indirect
 	github.com/Workiva/go-datastructures v1.0.53 // indirect
 	github.com/aerospike/aerospike-client-go/v6 v6.12.0 // indirect
 	github.com/afex/hystrix-go v0.0.0-20180502004556-fa1af6a1f4f5 // indirect
@@ -445,8 +445,6 @@ replace (
 // update retracted indirect dependencies if necessary
 // check for retracted versions: go list -mod=mod -f '{{if .Retracted}}{{.}}{{end}}' -u -m all
 replace github.com/microcosm-cc/bluemonday => github.com/microcosm-cc/bluemonday v1.0.24
-
-replace github.com/dapr/components-contrib => github.com/joshvanl/components-contrib v0.0.0-20230823221256-714760f02ee3
 
 // Uncomment for local development for testing with changes in the components-contrib repository.
 // Don't commit with this uncommented!

@@ -422,10 +422,10 @@ func (o *operator) patchCRDs(ctx context.Context, caBundle []byte, conf *rest.Co
 func buildScheme(opts Options) (*runtime.Scheme, error) {
 	builders := []func(*runtime.Scheme) error{
 		clientgoscheme.AddToScheme,
-		componentsapi.AddToScheme,
+		compapi.AddToScheme,
 		configurationapi.AddToScheme,
 		resiliencyapi.AddToScheme,
-		httpendpointsapi.AddToScheme,
+		httpendapi.AddToScheme,
 		subscriptionsapiV1alpha1.AddToScheme,
 		subscriptionsapiV2alpha1.AddToScheme,
 	}

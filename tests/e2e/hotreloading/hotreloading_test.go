@@ -27,6 +27,7 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
@@ -87,6 +88,7 @@ func TestHTTPEndpoints(t *testing.T) {
 	}
 
 	scheme := runtime.NewScheme()
+	assert.NoError(t, clientgoscheme.AddToScheme(scheme))
 	assert.NoError(t, compapi.AddToScheme(scheme))
 	assert.NoError(t, httpendapi.AddToScheme(scheme))
 
@@ -99,10 +101,7 @@ func TestHTTPEndpoints(t *testing.T) {
 
 	t.Run("Create HTTPEndpoint for callee and wait until reachable", func(t *testing.T) {
 		cl.Delete(ctx, &httpendapi.HTTPEndpoint{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "hotreloading",
-				Namespace: kube.DaprTestNamespace,
-			},
+			ObjectMeta: metav1.ObjectMeta{Name: "hotreloading", Namespace: kube.DaprTestNamespace},
 		}, &client.DeleteOptions{})
 
 		require.NoError(t, cl.Create(ctx, &httpendapi.HTTPEndpoint{
@@ -113,46 +112,43 @@ func TestHTTPEndpoints(t *testing.T) {
 			Spec: httpendapi.HTTPEndpointSpec{
 				BaseURL: "http://hotreloading-callee:3000",
 				Headers: []commonapi.NameValuePair{
-					{Name: "foo", Value: commonapi.DynamicValue{JSON: apiextensionsv1.JSON{Raw: []byte("bar")}}},
-					{Name: "bar", Value: commonapi.DynamicValue{JSON: apiextensionsv1.JSON{Raw: []byte("baz")}}},
+					{Name: "foo", Value: commonapi.DynamicValue{JSON: apiextensionsv1.JSON{Raw: []byte(`"bar"`)}}},
+					{Name: "bar", Value: commonapi.DynamicValue{JSON: apiextensionsv1.JSON{Raw: []byte(`"baz"`)}}},
 				},
 			},
 		}, &client.CreateOptions{}))
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			url := fmt.Sprintf("http://%s/simple-endpoint-call", externalURL)
-			resp, err := utils.HTTPGetRaw(url)
+
+			resp, err := utils.HTTPGetRawWithHeaders(url, http.Header{"Endpoint": []string{"hotreloading"}})
 			assert.NoError(c, err)
 			if resp != nil {
+				resp.Body.Close()
+				t.Logf("Response: %s", resp.Header)
 				assert.Equal(c, http.StatusOK, resp.StatusCode)
-				assert.Equal(c, "bar", resp.Header.Get("foo"))
-				assert.Equal(c, "baz", resp.Header.Get("bar"))
+				assert.Equal(c, "bar", resp.Header.Get("Foo"))
+				assert.Equal(c, "baz", resp.Header.Get("Bar"))
 			}
 		}, 15*time.Second, 500*time.Millisecond)
 	})
 
 	t.Run("Update HTTPEndpoint and expect new headers to be returned", func(t *testing.T) {
-		require.NoError(t, cl.Update(ctx, &httpendapi.HTTPEndpoint{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "hotreloading",
-				Namespace: kube.DaprTestNamespace,
-			},
-			Spec: httpendapi.HTTPEndpointSpec{
-				BaseURL: "http://hotreloading-callee:3000",
-				Headers: []commonapi.NameValuePair{
-					{Name: "123", Value: commonapi.DynamicValue{JSON: apiextensionsv1.JSON{Raw: []byte("abc")}}},
-					{Name: "456", Value: commonapi.DynamicValue{JSON: apiextensionsv1.JSON{Raw: []byte("def")}}},
-				},
-			},
-		}, &client.UpdateOptions{}))
+		var he httpendapi.HTTPEndpoint
+		require.NoError(t, cl.Get(ctx, client.ObjectKey{Name: "hotreloading", Namespace: kube.DaprTestNamespace}, &he))
+		he.Spec.Headers = []commonapi.NameValuePair{
+			{Name: "123", Value: commonapi.DynamicValue{JSON: apiextensionsv1.JSON{Raw: []byte(`"abc"`)}}},
+			{Name: "456", Value: commonapi.DynamicValue{JSON: apiextensionsv1.JSON{Raw: []byte(`"def"`)}}},
+		}
+		require.NoError(t, cl.Update(ctx, &he, &client.UpdateOptions{}))
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			url := fmt.Sprintf("http://%s/simple-endpoint-call", externalURL)
-			resp, err := utils.HTTPGetRaw(url)
+			resp, err := utils.HTTPGetRawWithHeaders(url, http.Header{"Endpoint": []string{"hotreloading"}})
 			assert.NoError(c, err)
 			assert.Equal(t, http.StatusOK, resp.StatusCode)
-			assert.Equal(c, "123", resp.Header.Get("abc"))
-			assert.Equal(c, "456", resp.Header.Get("def"))
+			assert.Equal(c, "abc", resp.Header.Get("123"))
+			assert.Equal(c, "def", resp.Header.Get("456"))
 		}, 15*time.Second, 500*time.Millisecond)
 	})
 
@@ -166,7 +162,7 @@ func TestHTTPEndpoints(t *testing.T) {
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			url := fmt.Sprintf("http://%s/simple-endpoint-call", externalURL)
-			resp, err := utils.HTTPGetRaw(url)
+			resp, err := utils.HTTPGetRawWithHeaders(url, http.Header{"Endpoint": []string{"hotreloading"}})
 			assert.NoError(c, err)
 			assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 		}, 15*time.Second, 500*time.Millisecond)
@@ -190,7 +186,7 @@ func TestState(t *testing.T) {
 
 	externalURL := tr.Platform.AcquireAppExternalURL("hotreloading-caller")
 
-	const connectionString = "host=dapr-postgres-postgresql.dapr-tests.svc.cluster.local user=postgres password=example port=5432 connect_timeout=10 database=dapr_test"
+	const connectionString = `"host=dapr-postgres-postgresql.dapr-tests.svc.cluster.local user=postgres password=example port=5432 connect_timeout=10 database=dapr_test"`
 
 	t.Run("Create state Component and save/get state", func(t *testing.T) {
 		cl.Delete(ctx, &compapi.Component{
@@ -221,14 +217,14 @@ func TestState(t *testing.T) {
 		}, &client.CreateOptions{}))
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			url := fmt.Sprintf("http://%s/http/save/hotreloading-state", externalURL)
-			_, status, err := utils.HTTPPostWithStatus(url, []byte(`{"key": "foo", "value": "bar"}`))
+			url := fmt.Sprintf("http://%s/save/hotreloading-state/foo/bar", externalURL)
+			_, status, err := utils.HTTPPostWithStatus(url, nil)
 			assert.NoError(c, err)
 			assert.Equal(c, http.StatusNoContent, status)
 		}, 15*time.Second, 500*time.Millisecond)
 
-		url := fmt.Sprintf("http://%s/http/get/hotreloading-state", externalURL)
-		resp, code, err := utils.HTTPGetWithStatusWithData(url, []byte(`{"key": "foo"}`))
+		url := fmt.Sprintf("http://%s/get/hotreloading-state/foo", externalURL)
+		resp, code, err := utils.HTTPGetWithStatusWithData(url, nil)
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusOK, code)
 		assert.Equal(t, "bar", string(resp))
@@ -243,8 +239,8 @@ func TestState(t *testing.T) {
 		}, &client.DeleteOptions{})
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			url := fmt.Sprintf("http://%s/http/save/hotreloading-state", externalURL)
-			_, code, err := utils.HTTPPostWithStatus(url, []byte(`{"key": "foo", "value": "bar"}`))
+			url := fmt.Sprintf("http://%s/save/hotreloading-state/foo/bar", externalURL)
+			_, code, err := utils.HTTPPostWithStatus(url, nil)
 			assert.NoError(c, err)
 			assert.Equal(c, http.StatusInternalServerError, code)
 		}, 15*time.Second, 500*time.Millisecond)

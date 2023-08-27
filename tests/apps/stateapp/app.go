@@ -473,6 +473,46 @@ func metadata2RawQuery(meta map[string]string) string {
 	return strings.Join(arr, "&")
 }
 
+func saveHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Processing save request for %s", r.URL.RequestURI())
+	statestore := mux.Vars(r)["statestore"]
+	key := mux.Vars(r)["key"]
+	value := mux.Vars(r)["value"]
+
+	_, err := save([]daprState{
+		{Key: key, Value: &appState{Data: []byte(value)}},
+	}, statestore, nil)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func getHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Processing get request for %s", r.URL.RequestURI())
+	statestore := mux.Vars(r)["statestore"]
+	key := mux.Vars(r)["key"]
+
+	resp, err := getAll([]daprState{{Key: key}}, statestore, nil)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(err.Error()))
+		return
+	}
+
+	if len(resp) != 1 {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(fmt.Sprintf("Expected 1 result, got %d", len(resp))))
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(resp[0].Value.Data))
+}
+
 // handles all APIs for HTTP calls
 func httpHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Processing request for %s", r.URL.RequestURI())
@@ -1245,6 +1285,9 @@ func appRouter() http.Handler {
 	router.HandleFunc("/test-etag/http/{statestore}", testFnHandler(etagTestHTTP)).Methods("POST")
 	router.HandleFunc("/test-etag/grpc/{statestore}", testFnHandler(etagTestGRPC)).Methods("POST")
 	router.Use(mux.CORSMethodMiddleware(router))
+
+	router.HandleFunc("/save/{statestore}/{key}/{value}", saveHandler).Methods("POST")
+	router.HandleFunc("/get/{statestore}/{key}", getHandler).Methods("GET")
 
 	return router
 }
