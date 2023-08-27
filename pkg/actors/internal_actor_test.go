@@ -18,6 +18,7 @@ package actors
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"testing"
 	"time"
 
@@ -159,11 +160,10 @@ func TestInternalActorCall(t *testing.T) {
 		// Verify the response metadata matches what we expect
 		assert.Equal(t, int32(200), resp.Status().Code)
 		contentType := resp.ContentType()
-		data, _ := resp.RawDataFull()
 		assert.Equal(t, invokev1.OctetStreamContentType, contentType)
 
 		// Verify the actor got all the expected inputs (which are echoed back to us)
-		info, err := decodeTestResponse(data)
+		info, err := decodeTestResponse(resp.RawData())
 		require.NoError(t, err)
 		require.NotNil(t, info)
 		assert.Equal(t, testActorID, info.ActorID)
@@ -245,7 +245,7 @@ func TestInternalActorDeactivation(t *testing.T) {
 	}
 }
 
-func decodeTestResponse(data []byte) (*invokeMethodCallInfo, error) {
+func decodeTestResponse(data io.Reader) (*invokeMethodCallInfo, error) {
 	info := new(invokeMethodCallInfo)
 	err := DecodeInternalActorData(data, info)
 	if err != nil {
