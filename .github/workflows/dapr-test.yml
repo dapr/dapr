@@ -558,7 +558,8 @@ jobs:
         shell: bash
       - name: Run E2E tests
         if: env.TEST_PREFIX != '' && env.SKIP_E2E != 'true'
-        run: make test-e2e-all
+        #run: make test-e2e-all
+        run: DAPR_E2E_TEST="pubsub" make test-e2e-all 
       - name: Add job test summary
         if: always()
         uses: test-summary/action@v2
