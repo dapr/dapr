@@ -759,6 +759,8 @@ var pubsubTests = []struct {
 }
 
 func TestPubSubHTTP(t *testing.T) {
+	start := time.Now()
+	log.Printf("Time start")
 	for _, app := range apps {
 		t.Log("Enter TestPubSubHTTP")
 		publisherExternalURL := tr.Platform.AcquireAppExternalURL(app.publisher)
@@ -784,4 +786,6 @@ func TestPubSubHTTP(t *testing.T) {
 			})
 		}
 	}
+	elapsed := time.Since(start)
+	log.Printf("Time taken: %s", elapsed)
 }
