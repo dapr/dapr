@@ -20,6 +20,7 @@ import (
 	"encoding/gob"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/dapr/dapr/pkg/apphealth"
@@ -174,10 +175,9 @@ func EncodeInternalActorData(result any) ([]byte, error) {
 }
 
 // DecodeInternalActorData decodes encoding/gob data and stores the result in e.
-func DecodeInternalActorData(data []byte, e any) error {
+func DecodeInternalActorData(data io.Reader, e any) error {
 	// Decode the data using encoding/gob (https://go.dev/blog/gob)
-	buffer := bytes.NewBuffer(data)
-	dec := gob.NewDecoder(buffer)
+	dec := gob.NewDecoder(data)
 	if err := dec.Decode(e); err != nil {
 		return err
 	}
