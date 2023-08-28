@@ -114,8 +114,8 @@ func (f *FakeStateStore) Get(ctx context.Context, req *state.GetRequest) (*state
 func (f *FakeStateStore) BulkGet(ctx context.Context, req []state.GetRequest, opts state.BulkGetOpts) ([]state.BulkGetResponse, error) {
 	f.callCount["BulkGet"].Add(1)
 
-	res := []state.BulkGetResponse{}
-	for _, oneRequest := range req {
+	res := make([]state.BulkGetResponse, len(req))
+	for i, oneRequest := range req {
 		oneResponse, err := f.Get(ctx, &state.GetRequest{
 			Key:      oneRequest.Key,
 			Metadata: oneRequest.Metadata,
@@ -125,11 +125,11 @@ func (f *FakeStateStore) BulkGet(ctx context.Context, req []state.GetRequest, op
 			return nil, err
 		}
 
-		res = append(res, state.BulkGetResponse{
+		res[i] = state.BulkGetResponse{
 			Key:  oneRequest.Key,
 			Data: oneResponse.Data,
 			ETag: oneResponse.ETag,
-		})
+		}
 	}
 
 	return res, nil
