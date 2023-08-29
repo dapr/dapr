@@ -317,7 +317,7 @@ test-deps:
 # start all e2e tests
 test-e2e-all: check-e2e-env test-deps
 	# Note: we can set -p 2 to run two tests apps at a time, because today we do not share state between
-	# tests. In the future, if we add any tests that modify global state (such as dapr config), we'll 
+	# tests. In the future, if we add any tests that modify global state (such as dapr config), we'll
 	# have to be sure and run them after the main test suite, so as not to alter the state of a running
 	# test
 	# Note2: use env variable DAPR_E2E_TEST to pick one e2e test to run.
@@ -441,7 +441,13 @@ delete-test-env-k6:
 
 # install redis to the cluster without password
 setup-test-env-redis:
-	$(HELM) upgrade --install dapr-redis bitnami/redis --wait --timeout 5m0s --namespace $(DAPR_TEST_NAMESPACE) -f ./tests/config/redis_override.yaml
+	$(HELM) upgrade \
+	  --install dapr-redis bitnami/redis \
+	  --version 17.14.5 \
+	  --wait \
+	  --timeout 5m0s \
+	  --namespace $(DAPR_TEST_NAMESPACE) \
+	  -f ./tests/config/redis_override.yaml
 
 delete-test-env-redis:
 	${HELM} del dapr-redis --namespace ${DAPR_TEST_NAMESPACE}
@@ -456,7 +462,7 @@ setup-test-env-rabbitmq:
 
 # install mqtt to the cluster
 setup-test-env-mqtt:
-	$(HELM) repo add emqx https://repos.emqx.io/charts 
+	$(HELM) repo add emqx https://repos.emqx.io/charts
 	$(HELM) repo update
 	$(HELM) upgrade --install perf-test-emqx emqx/emqx --namespace $(DAPR_TEST_NAMESPACE) --timeout 10m0s
 
@@ -580,13 +586,13 @@ describe-kind-env:
 	export DAPR_TEST_REGISTRY=$${DAPR_TEST_REGISTRY:-localhost:5000/dapr}\n\
 	export DAPR_TAG=dev\n\
 	export DAPR_NAMESPACE=dapr-tests"
-	
+
 
 delete-kind:
 	docker stop kind-registry && docker rm kind-registry || echo "Could not delete registry."
 	kind delete cluster --name kind
 
-ifeq ($(OS),Windows_NT) 
+ifeq ($(OS),Windows_NT)
     detected_OS := windows
 else
     detected_OS := $(shell sh -c 'uname 2>/dev/null || echo Unknown' |  tr '[:upper:]' '[:lower:]')
