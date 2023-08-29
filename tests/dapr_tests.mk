@@ -454,23 +454,42 @@ delete-test-env-redis:
 
 # install kafka to the cluster
 setup-test-env-kafka:
-	$(HELM) upgrade --install dapr-kafka bitnami/kafka -f ./tests/config/kafka_override.yaml --namespace $(DAPR_TEST_NAMESPACE) --timeout 10m0s
+	$(HELM) upgrade \
+	  --install dapr-kafka bitnami/kafka \
+	  --version 23.0.7 \
+	  -f ./tests/config/kafka_override.yaml \
+	  --namespace $(DAPR_TEST_NAMESPACE) \
+	  --timeout 10m0s
 
 # install rabbitmq to the cluster
 setup-test-env-rabbitmq:
-	$(HELM) upgrade --install rabbitmq bitnami/rabbitmq --set auth.username='admin' --set auth.password='admin' --namespace $(DAPR_TEST_NAMESPACE) --timeout 10m0s
+	$(HELM) upgrade \
+	  --install rabbitmq bitnami/rabbitmq \
+	  --version 12.0.9 \
+	  --set auth.username='admin' \
+	  --set auth.password='admin' \
+	  --namespace $(DAPR_TEST_NAMESPACE) \
+	  --timeout 10m0s
 
 # install mqtt to the cluster
 setup-test-env-mqtt:
 	$(HELM) repo add emqx https://repos.emqx.io/charts
 	$(HELM) repo update
-	$(HELM) upgrade --install perf-test-emqx emqx/emqx --namespace $(DAPR_TEST_NAMESPACE) --timeout 10m0s
+	$(HELM) upgrade \
+	  --install perf-test-emqx emqx/emqx \
+	  --version 5.1.4 \
+	  --namespace $(DAPR_TEST_NAMESPACE) \
+	  --timeout 10m0s
 
 # install mqtt to the cluster
 setup-test-env-pulsar:
 	$(HELM) repo add apache https://pulsar.apache.org/charts
 	$(HELM) repo update
-	$(HELM) upgrade --install perf-test-pulsar apache/pulsar --namespace $(DAPR_TEST_NAMESPACE) --timeout 10m0s
+	$(HELM) upgrade \
+	  --install perf-test-pulsar apache/pulsar \
+	  --version 3.0.0 \
+	  --namespace $(DAPR_TEST_NAMESPACE) \
+	  --timeout 10m0s
 
 # delete kafka from cluster
 delete-test-env-kafka:
@@ -482,7 +501,13 @@ setup-test-env-mongodb:
 
 # delete mongodb from cluster
 delete-test-env-mongodb:
-	${HELM} del dapr-mongodb --namespace ${DAPR_TEST_NAMESPACE}
+	$(HELM) upgrade \
+	  --install dapr-mongodb bitnami/mongodb \
+	  --version 13.16.2 \
+	  -f ./tests/config/mongodb_override.yaml \
+	  --namespace $(DAPR_TEST_NAMESPACE) \
+	  --wait \
+	  --timeout 5m0s
 
 # install zipkin to the cluster
 setup-test-env-zipkin:
