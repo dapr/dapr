@@ -497,10 +497,6 @@ delete-test-env-kafka:
 
 # install mongodb to the cluster without password
 setup-test-env-mongodb:
-	$(HELM) upgrade --install dapr-mongodb bitnami/mongodb -f ./tests/config/mongodb_override.yaml --namespace $(DAPR_TEST_NAMESPACE) --wait --timeout 5m0s
-
-# delete mongodb from cluster
-delete-test-env-mongodb:
 	$(HELM) upgrade \
 	  --install dapr-mongodb bitnami/mongodb \
 	  --version 13.16.2 \
@@ -508,6 +504,10 @@ delete-test-env-mongodb:
 	  --namespace $(DAPR_TEST_NAMESPACE) \
 	  --wait \
 	  --timeout 5m0s
+
+# delete mongodb from cluster
+delete-test-env-mongodb:
+	${HELM} del dapr-mongodb --namespace ${DAPR_TEST_NAMESPACE}
 
 # install zipkin to the cluster
 setup-test-env-zipkin:
