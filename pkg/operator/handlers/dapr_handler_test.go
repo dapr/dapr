@@ -240,6 +240,7 @@ func TestInit(t *testing.T) {
 	mgr := dapr_testing.NewMockManager()
 
 	_ = scheme.AddToScheme(mgr.GetScheme())
+	_ = argov1alpha1.AddToScheme(mgr.GetScheme())
 
 	handler := NewDaprHandlerWithOptions(mgr, &Options{
 		ArgoRolloutServiceReconcilerEnabled: true,
