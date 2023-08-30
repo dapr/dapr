@@ -252,7 +252,7 @@ create-test-namespace:
 delete-test-namespace:
 	kubectl delete namespace $(DAPR_TEST_NAMESPACE)
 
-setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-mongodb setup-test-env-zipkin
+setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-mongodb setup-test-env-zipkin setup-test-env-postgres
 
 setup-pubsub-subs-perf-test-components: setup-test-env-rabbitmq setup-test-env-pulsar setup-test-env-mqtt
 
@@ -317,7 +317,7 @@ test-deps:
 # start all e2e tests
 test-e2e-all: check-e2e-env test-deps
 	# Note: we can set -p 2 to run two tests apps at a time, because today we do not share state between
-	# tests. In the future, if we add any tests that modify global state (such as dapr config), we'll 
+	# tests. In the future, if we add any tests that modify global state (such as dapr config), we'll
 	# have to be sure and run them after the main test suite, so as not to alter the state of a running
 	# test
 	# Note2: use env variable DAPR_E2E_TEST to pick one e2e test to run.
@@ -441,30 +441,55 @@ delete-test-env-k6:
 
 # install redis to the cluster without password
 setup-test-env-redis:
-	$(HELM) upgrade --install dapr-redis bitnami/redis --wait --timeout 5m0s --namespace $(DAPR_TEST_NAMESPACE) -f ./tests/config/redis_override.yaml
+	$(HELM) upgrade \
+	  --install dapr-redis bitnami/redis \
+	  --version 17.14.5 \
+	  --wait \
+	  --timeout 5m0s \
+	  --namespace $(DAPR_TEST_NAMESPACE) \
+	  -f ./tests/config/redis_override.yaml
 
 delete-test-env-redis:
 	${HELM} del dapr-redis --namespace ${DAPR_TEST_NAMESPACE}
 
 # install kafka to the cluster
 setup-test-env-kafka:
-	$(HELM) upgrade --install dapr-kafka bitnami/kafka -f ./tests/config/kafka_override.yaml --namespace $(DAPR_TEST_NAMESPACE) --timeout 10m0s
+	$(HELM) upgrade \
+	  --install dapr-kafka bitnami/kafka \
+	  --version 23.0.7 \
+	  -f ./tests/config/kafka_override.yaml \
+	  --namespace $(DAPR_TEST_NAMESPACE) \
+	  --timeout 10m0s
 
 # install rabbitmq to the cluster
 setup-test-env-rabbitmq:
-	$(HELM) upgrade --install rabbitmq bitnami/rabbitmq --set auth.username='admin' --set auth.password='admin' --namespace $(DAPR_TEST_NAMESPACE) --timeout 10m0s
+	$(HELM) upgrade \
+	  --install rabbitmq bitnami/rabbitmq \
+	  --version 12.0.9 \
+	  --set auth.username='admin' \
+	  --set auth.password='admin' \
+	  --namespace $(DAPR_TEST_NAMESPACE) \
+	  --timeout 10m0s
 
 # install mqtt to the cluster
 setup-test-env-mqtt:
-	$(HELM) repo add emqx https://repos.emqx.io/charts 
+	$(HELM) repo add emqx https://repos.emqx.io/charts
 	$(HELM) repo update
-	$(HELM) upgrade --install perf-test-emqx emqx/emqx --namespace $(DAPR_TEST_NAMESPACE) --timeout 10m0s
+	$(HELM) upgrade \
+	  --install perf-test-emqx emqx/emqx \
+	  --version 5.1.4 \
+	  --namespace $(DAPR_TEST_NAMESPACE) \
+	  --timeout 10m0s
 
 # install mqtt to the cluster
 setup-test-env-pulsar:
 	$(HELM) repo add apache https://pulsar.apache.org/charts
 	$(HELM) repo update
-	$(HELM) upgrade --install perf-test-pulsar apache/pulsar --namespace $(DAPR_TEST_NAMESPACE) --timeout 10m0s
+	$(HELM) upgrade \
+	  --install perf-test-pulsar apache/pulsar \
+	  --version 3.0.0 \
+	  --namespace $(DAPR_TEST_NAMESPACE) \
+	  --timeout 10m0s
 
 # delete kafka from cluster
 delete-test-env-kafka:
@@ -472,7 +497,27 @@ delete-test-env-kafka:
 
 # install mongodb to the cluster without password
 setup-test-env-mongodb:
-	$(HELM) upgrade --install dapr-mongodb bitnami/mongodb -f ./tests/config/mongodb_override.yaml --namespace $(DAPR_TEST_NAMESPACE) --wait --timeout 5m0s
+	$(HELM) upgrade \
+	  --install dapr-mongodb bitnami/mongodb \
+	  --version 13.16.2 \
+	  -f ./tests/config/mongodb_override.yaml \
+	  --namespace $(DAPR_TEST_NAMESPACE) \
+	  --wait \
+	  --timeout 5m0s
+
+# install postgres to the cluster
+setup-test-env-postgres:
+	$(HELM) upgrade \
+	  --install dapr-postgres bitnami/postgresql \
+	  --version 12.8.0 \
+	  -f ./tests/config/postgres_override.yaml \
+	  --namespace $(DAPR_TEST_NAMESPACE) \
+	  --wait \
+	  --timeout 5m0s
+
+# delete postgres from cluster
+delete-test-env-postgres:
+	$(HELM) del dapr-postgres --namespace $(DAPR_TEST_NAMESPACE)
 
 # delete mongodb from cluster
 delete-test-env-mongodb:
@@ -485,7 +530,7 @@ delete-test-env-zipkin:
 	$(KUBECTL) delete -f ./tests/config/zipkin.yaml -n $(DAPR_TEST_NAMESPACE)
 
 # Setup the test environment by installing components
-setup-test-env: setup-test-env-kafka setup-test-env-redis setup-test-env-mongodb setup-test-env-k6 setup-test-env-zipkin
+setup-test-env: setup-test-env-kafka setup-test-env-redis setup-test-env-mongodb setup-test-env-postgres setup-test-env-k6 setup-test-env-zipkin
 
 save-dapr-control-plane-k8s-resources:
 	mkdir -p '$(DAPR_CONTAINER_LOG_PATH)'
@@ -580,13 +625,13 @@ describe-kind-env:
 	export DAPR_TEST_REGISTRY=$${DAPR_TEST_REGISTRY:-localhost:5000/dapr}\n\
 	export DAPR_TAG=dev\n\
 	export DAPR_NAMESPACE=dapr-tests"
-	
+
 
 delete-kind:
 	docker stop kind-registry && docker rm kind-registry || echo "Could not delete registry."
 	kind delete cluster --name kind
 
-ifeq ($(OS),Windows_NT) 
+ifeq ($(OS),Windows_NT)
     detected_OS := windows
 else
     detected_OS := $(shell sh -c 'uname 2>/dev/null || echo Unknown' |  tr '[:upper:]' '[:lower:]')
