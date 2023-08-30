@@ -389,7 +389,7 @@ func (p *pubsub) publishBulkMessageHTTP(ctx context.Context, bulkSubCallData *bu
 	spans = spans[:n]
 	defer endSpans(spans)
 	start := time.Now()
-	resp, err := p.appChannel.InvokeMethod(ctx, req, "")
+	resp, err := p.channels.AppChannel().InvokeMethod(ctx, req, "")
 	elapsed := diag.ElapsedSince(start)
 	if err != nil {
 		bscData.bulkSubDiag.statusWiseDiag[string(contribpubsub.Retry)] += int64(len(rawMsgEntries))

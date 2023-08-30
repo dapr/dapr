@@ -43,7 +43,7 @@ func (b *binding) StartReadingFromBindings(ctx context.Context) error {
 	b.lock.Lock()
 	defer b.lock.Unlock()
 
-	if b.appChannel == nil {
+	if b.channels.AppChannel() == nil {
 		return errors.New("app channel not initialized")
 	}
 
@@ -334,7 +334,7 @@ func (b *binding) sendBindingEventToApp(ctx context.Context, bindingName string,
 			},
 		)
 		resp, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
-			rResp, rErr := b.appChannel.InvokeMethod(ctx, req, "")
+			rResp, rErr := b.channels.AppChannel().InvokeMethod(ctx, req, "")
 			if rErr != nil {
 				return rResp, rErr
 			}
@@ -441,7 +441,7 @@ func (b *binding) isAppSubscribedToBinding(ctx context.Context, binding string) 
 			WithContentType(invokev1.JSONContentType)
 		defer req.Close()
 
-		resp, err := b.appChannel.InvokeMethod(ctx, req, "")
+		resp, err := b.channels.AppChannel().InvokeMethod(ctx, req, "")
 		if err != nil {
 			log.Fatalf("could not invoke OPTIONS method on input binding subscription endpoint %q: %v", path, err)
 		}
