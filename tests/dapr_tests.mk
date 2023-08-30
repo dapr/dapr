@@ -235,7 +235,7 @@ create-test-namespace:
 delete-test-namespace:
 	kubectl delete namespace $(DAPR_TEST_NAMESPACE)
 
-setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-mongodb setup-test-env-zipkin
+setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-mongodb setup-test-env-zipkin setup-test-env-postgres
 
 e2e-build-deploy-run: create-test-namespace setup-3rd-party build docker-push docker-deploy-k8s setup-test-components build-e2e-app-all push-e2e-app-all test-e2e-all
 
@@ -438,6 +438,20 @@ setup-test-env-mongodb:
 	  --wait \
 	  --timeout 5m0s
 
+# install postgres to the cluster
+setup-test-env-postgres:
+	$(HELM) upgrade \
+	  --install dapr-postgres bitnami/postgresql \
+	  --version 12.8.0 \
+	  -f ./tests/config/postgres_override.yaml \
+	  --namespace $(DAPR_TEST_NAMESPACE) \
+	  --wait \
+	  --timeout 5m0s
+
+# delete postgres from cluster
+delete-test-env-postgres:
+	$(HELM) del dapr-postgres --namespace $(DAPR_TEST_NAMESPACE)
+
 # delete mongodb from cluster
 delete-test-env-mongodb:
 	${HELM} del dapr-mongodb --namespace ${DAPR_TEST_NAMESPACE}
@@ -448,8 +462,8 @@ setup-test-env-zipkin:
 delete-test-env-zipkin:
 	$(KUBECTL) delete -f ./tests/config/zipkin.yaml -n $(DAPR_TEST_NAMESPACE)
 
-# Install redis and kafka to test cluster
-setup-test-env: setup-test-env-kafka setup-test-env-redis setup-test-env-mongodb setup-test-env-k6 setup-test-env-zipkin
+# Setup the test environment by installing components
+setup-test-env: setup-test-env-kafka setup-test-env-redis setup-test-env-mongodb setup-test-env-postgres setup-test-env-k6 setup-test-env-zipkin
 
 save-dapr-control-plane-k8s-resources:
 	mkdir -p '$(DAPR_CONTAINER_LOG_PATH)'
