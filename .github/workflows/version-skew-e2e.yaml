@@ -217,7 +217,7 @@ jobs:
         cd latest-release
 
         make setup-helm-init
-        make setup-test-env-redis
+        helm upgrade --install dapr-redis bitnami/redis --version 17.14.5 --wait --timeout 5m0s --namespace ${{ env.DAPR_NAMESPACE }} -f ./tests/config/redis_override.yaml
         make setup-test-env-kafka
         make setup-test-env-mongodb
         make setup-test-env-zipkin
