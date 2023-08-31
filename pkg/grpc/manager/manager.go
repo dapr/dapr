@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package grpc
+package manager
 
 import (
 	"context"
@@ -71,8 +71,8 @@ type Manager struct {
 	closeCh       chan struct{}
 }
 
-// NewGRPCManager returns a new grpc manager.
-func NewGRPCManager(mode modes.DaprMode, channelConfig *AppChannelConfig) *Manager {
+// NewManager returns a new grpc manager.
+func NewManager(mode modes.DaprMode, channelConfig *AppChannelConfig) *Manager {
 	return &Manager{
 		remoteConns:   NewRemoteConnectionPool(),
 		mode:          mode,

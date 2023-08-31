@@ -85,7 +85,7 @@ func (p *pubsub) topicRoutes(ctx context.Context) (map[string]compstore.TopicRou
 
 	topicRoutes := make(map[string]compstore.TopicRoutes)
 
-	if p.appChannel == nil {
+	if p.channels.AppChannel() == nil {
 		log.Warn("app channel not initialized, make sure -app-port is specified if pubsub subscription is required")
 		return topicRoutes, nil
 	}
@@ -132,7 +132,8 @@ func (p *pubsub) subscriptions(ctx context.Context) ([]rtpubsub.Subscription, er
 		return subs, nil
 	}
 
-	if p.appChannel == nil {
+	appChannel := p.channels.AppChannel()
+	if appChannel == nil {
 		log.Warn("app channel not initialized, make sure -app-port is specified if pubsub subscription is required")
 		return nil, nil
 	}
@@ -144,7 +145,7 @@ func (p *pubsub) subscriptions(ctx context.Context) ([]rtpubsub.Subscription, er
 
 	// handle app subscriptions
 	if p.isHTTP {
-		subscriptions, err = rtpubsub.GetSubscriptionsHTTP(ctx, p.appChannel, log, p.resiliency)
+		subscriptions, err = rtpubsub.GetSubscriptionsHTTP(ctx, appChannel, log, p.resiliency)
 	} else {
 		var conn grpc.ClientConnInterface
 		conn, err = p.grpc.GetAppClient()

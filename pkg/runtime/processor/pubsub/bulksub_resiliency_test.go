@@ -28,6 +28,7 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
+	"github.com/dapr/dapr/pkg/runtime/channels"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/kit/logger"
@@ -221,7 +222,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			IsHTTP:     true,
 			Resiliency: resiliency.New(logger.NewLogger("test")),
 		})
-		ps.SetAppChannel(mockAppChannel)
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		ts := testSettings{
 			entryIdRetryTimes: map[string]int{},
@@ -290,7 +291,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		})
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		ps.appChannel = mockAppChannel
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		ts := testSettings{
 			entryIdRetryTimes: map[string]int{},
@@ -359,7 +360,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		})
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		ps.appChannel = mockAppChannel
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		ts := testSettings{
 			entryIdRetryTimes: map[string]int{},
@@ -428,7 +429,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		})
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		ps.appChannel = mockAppChannel
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		ts := testSettings{
 			entryIdRetryTimes: map[string]int{},
@@ -497,7 +498,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		})
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		ps.appChannel = mockAppChannel
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		ts := testSettings{
 			entryIdRetryTimes: map[string]int{},
@@ -555,7 +556,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		})
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		ps.appChannel = mockAppChannel
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		ts := testSettings{
 			entryIdRetryTimes: map[string]int{},
@@ -640,7 +641,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		})
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		ps.appChannel = mockAppChannel
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		ts := testSettings{
 			entryIdRetryTimes: map[string]int{},
@@ -725,7 +726,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		})
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		ps.appChannel = mockAppChannel
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		ts := testSettings{
 			entryIdRetryTimes: map[string]int{},
@@ -801,7 +802,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		})
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		ps.appChannel = mockAppChannel
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		ts := testSettings{
 			entryIdRetryTimes: map[string]int{},
@@ -914,7 +915,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		})
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		ps.appChannel = mockAppChannel
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		ts := testSettings{
 			entryIdRetryTimes: map[string]int{},
@@ -987,7 +988,7 @@ func TestBulkSubscribeResiliencyStateConversionsFromHalfOpen(t *testing.T) {
 		})
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		ps.appChannel = mockAppChannel
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		ts := testSettings{
 			entryIdRetryTimes: map[string]int{},
@@ -1154,7 +1155,7 @@ func TestBulkSubscribeResiliencyWithLongRetries(t *testing.T) {
 		})
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		ps.appChannel = mockAppChannel
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		ts := testSettings{
 			entryIdRetryTimes: map[string]int{},
