@@ -138,7 +138,7 @@ func (r *reminders) CreateReminder(ctx context.Context, reminder *internal.Remin
 
 	// Wait for the evaluation chan lock
 	if !r.waitForEvaluationChan() {
-		return errors.New("error creating reminder: timed out after 5s")
+		return errors.New("error creating reminder: timed out after 30s")
 	}
 	defer func() {
 		// Release the evaluation chan lock
@@ -198,7 +198,7 @@ func (r *reminders) GetReminder(ctx context.Context, req *internal.GetReminderRe
 
 func (r *reminders) DeleteReminder(ctx context.Context, req internal.DeleteReminderRequest) error {
 	if !r.waitForEvaluationChan() {
-		return errors.New("error deleting reminder: timed out after 5s")
+		return errors.New("error deleting reminder: timed out after 30s")
 	}
 	defer func() {
 		// Release the evaluation chan lock
@@ -218,7 +218,7 @@ func (r *reminders) RenameReminder(ctx context.Context, req *internal.RenameRemi
 
 	// Wait for the evaluation chan lock
 	if !r.waitForEvaluationChan() {
-		return errors.New("error renaming reminder: timed out after 5s")
+		return errors.New("error renaming reminder: timed out after 30s")
 	}
 	defer func() {
 		// Release the evaluation chan lock
