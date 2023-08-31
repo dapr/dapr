@@ -60,6 +60,7 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	daprt "github.com/dapr/dapr/pkg/testing"
@@ -2465,6 +2466,7 @@ func TestV1Alpha1ConfigurationUnsubscribe(t *testing.T) {
 			Resiliency: resiliency.New(nil),
 			CompStore:  compStore,
 		},
+		channels: new(channels.Channels),
 	}
 	fakeServer.StartServer(testAPI.constructConfigurationEndpoints(), nil)
 

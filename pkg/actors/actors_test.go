@@ -541,6 +541,55 @@ func TestGetState(t *testing.T) {
 	assert.Equal(t, fakeData, string(response.Data))
 }
 
+func TestGetBulkState(t *testing.T) {
+	testActorsRuntime := newTestActorsRuntime()
+	defer testActorsRuntime.Close()
+
+	actorType, actorID := getTestActorTypeAndID()
+	ctx := context.Background()
+	fakeData := strconv.Quote("fakeData")
+
+	var val any
+	json.Unmarshal([]byte(fakeData), &val)
+
+	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
+
+	err := testActorsRuntime.TransactionalStateOperation(ctx, &TransactionalRequest{
+		ActorType: actorType,
+		ActorID:   actorID,
+		Operations: []TransactionalOperation{
+			{
+				Operation: Upsert,
+				Request: TransactionalUpsert{
+					Key:   "key1",
+					Value: val,
+				},
+			},
+			{
+				Operation: Upsert,
+				Request: TransactionalUpsert{
+					Key:   "key2",
+					Value: val,
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	// act
+	response, err := testActorsRuntime.GetBulkState(ctx, &GetBulkStateRequest{
+		ActorID:   actorID,
+		ActorType: actorType,
+		Keys:      []string{"key1", "key2"},
+	})
+
+	// assert
+	require.NoError(t, err)
+	require.Len(t, response, 2)
+	assert.Equal(t, fakeData, string(response["key1"]))
+	assert.Equal(t, fakeData, string(response["key2"]))
+}
+
 func TestDeleteState(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
 	defer testActorsRuntime.Close()
