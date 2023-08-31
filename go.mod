@@ -9,7 +9,7 @@ require (
 	github.com/argoproj/argo-rollouts v1.4.1
 	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/cloudevents/sdk-go/v2 v2.14.0
-	github.com/dapr/components-contrib v1.11.3-0.20230830004725-1c657f7b5b3e
+	github.com/dapr/components-contrib v1.11.3-0.20230830212031-75ac7518038b
 	github.com/dapr/kit v0.11.4-0.20230807225040-b6b141aa3e32
 	github.com/evanphx/json-patch/v5 v5.6.0
 	github.com/go-chi/chi/v5 v5.0.10
@@ -113,7 +113,7 @@ require (
 	github.com/Azure/go-amqp v1.0.1 // indirect
 	github.com/AzureAD/microsoft-authentication-library-for-go v1.1.1 // indirect
 	github.com/DataDog/zstd v1.5.2 // indirect
-	github.com/IBM/sarama v1.41.0 // indirect
+	github.com/IBM/sarama v1.41.1 // indirect
 	github.com/OneOfOne/xxhash v1.2.8 // indirect
 	github.com/PaesslerAG/gval v1.0.0 // indirect
 	github.com/RoaringBitmap/roaring v1.1.0 // indirect
