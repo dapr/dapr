@@ -335,7 +335,7 @@ func (r *reminders) evaluateReminders(ctx context.Context) {
 }
 
 func (r *reminders) waitForEvaluationChan() bool {
-	t := r.clock.NewTimer(5 * time.Second)
+	t := r.clock.NewTimer(30 * time.Second)
 
 	select {
 	// Evaluation channel was not freed up in time
