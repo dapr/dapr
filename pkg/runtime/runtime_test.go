@@ -1676,7 +1676,7 @@ func NewTestDaprRuntimeWithID(mode modes.DaprMode, id string) (*DaprRuntime, err
 		return nil, err
 	}
 	rt.runtimeConfig.mode = mode
-	rt.initChannels()
+	rt.channels.Refresh()
 	return rt, nil
 }
 
@@ -1687,7 +1687,7 @@ func NewTestDaprRuntimeWithProtocol(mode modes.DaprMode, protocol string, appPor
 		return nil, err
 	}
 	rt.runtimeConfig.mode = mode
-	rt.initChannels()
+	rt.channels.Refresh()
 	return rt, nil
 }
 
@@ -2108,7 +2108,7 @@ func TestInitActors(t *testing.T) {
 		}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		require.NoError(t, err)
 		defer stopRuntime(t, r)
-		r.initChannels()
+		r.channels.Refresh()
 
 		err = r.initActors(context.TODO())
 		assert.NotNil(t, err)
@@ -2121,7 +2121,7 @@ func TestInitActors(t *testing.T) {
 		}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		require.NoError(t, err)
 		defer stopRuntime(t, r)
-		r.initChannels()
+		r.channels.Refresh()
 
 		assert.Nil(t, r.actor)
 		assert.NotNil(t, r.compStore.ListStateStores())
@@ -2135,7 +2135,7 @@ func TestInitActors(t *testing.T) {
 		}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		require.NoError(t, err)
 		defer stopRuntime(t, r)
-		r.initChannels()
+		r.channels.Refresh()
 
 		name, ok := r.processor.State().ActorStateStoreName()
 		assert.False(t, ok)
@@ -3094,9 +3094,9 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 		Resiliency:       rt.resiliency,
 		Mode:             rt.runtimeConfig.mode,
 		Standalone:       rt.runtimeConfig.standalone,
+		Channels:         rt.channels,
 		GRPC:             rt.grpc,
 	})
-	rt.processor.SetAppChannel(mockAppChannel)
 
 	require.NoError(t, rt.processor.Init(context.Background(), cPubSub))
 
@@ -3425,6 +3425,8 @@ func TestIsEnvVarAllowed(t *testing.T) {
 			{name: "keys starting with DAPR_ are denied", key: "DAPR_TEST", want: false},
 			{name: "APP_API_TOKEN is denied", key: "APP_API_TOKEN", want: false},
 			{name: "keys with a space are denied", key: "FOO BAR", want: false},
+			{name: "case insensitive app_api_token", key: "app_api_token", want: false},
+			{name: "case insensitive dapr_foo", key: "dapr_foo", want: false},
 		}
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
@@ -3453,6 +3455,7 @@ func TestIsEnvVarAllowed(t *testing.T) {
 			{name: "keys starting with DAPR_ are denied", key: "DAPR_TEST", want: false},
 			{name: "APP_API_TOKEN is denied", key: "APP_API_TOKEN", want: false},
 			{name: "keys with a space are denied", key: "FOO BAR", want: false},
+			{name: "case insensitive allowlist", key: "foo", want: true},
 		}
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {

@@ -12,6 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
+
 package wfengine_test
 
 import (
@@ -21,6 +22,7 @@ import (
 	"github.com/microsoft/durabletask-go/api"
 	"github.com/microsoft/durabletask-go/backend"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/config"
@@ -54,14 +56,14 @@ func TestAddingToInbox(t *testing.T) {
 	}
 
 	req, err := state.GetSaveRequest("wf1")
-	if assert.NoError(t, err) {
-		assert.Equal(t, "wf1", req.ActorID)
-		assert.Equal(t, workflowActorType, req.ActorType)
+	require.NoError(t, err)
 
-		upsertCount, deleteCount := countOperations(t, req)
-		assert.Equal(t, 11, upsertCount) // 10x inbox + metadata
-		assert.Equal(t, 0, deleteCount)
-	}
+	assert.Equal(t, "wf1", req.ActorID)
+	assert.Equal(t, workflowActorType, req.ActorType)
+
+	upsertCount, deleteCount := countOperations(t, req)
+	assert.Equal(t, 11, upsertCount) // 10x inbox + metadata
+	assert.Equal(t, 0, deleteCount)
 }
 
 func TestClearingInbox(t *testing.T) {
@@ -73,35 +75,34 @@ func TestClearingInbox(t *testing.T) {
 	state.ClearInbox()
 
 	req, err := state.GetSaveRequest("wf1")
-	if assert.NoError(t, err) {
-		assert.Equal(t, "wf1", req.ActorID)
-		assert.Equal(t, workflowActorType, req.ActorType)
+	require.NoError(t, err)
 
-		upsertCount, deleteCount := countOperations(t, req)
-		assert.Equal(t, 1, upsertCount)  // metadata only
-		assert.Equal(t, 10, deleteCount) // the 10 inbox messages should get deleted
-	}
+	assert.Equal(t, "wf1", req.ActorID)
+	assert.Equal(t, workflowActorType, req.ActorType)
+
+	upsertCount, deleteCount := countOperations(t, req)
+	assert.Equal(t, 1, upsertCount)  // metadata only
+	assert.Equal(t, 10, deleteCount) // the 10 inbox messages should get deleted
 }
 
 func TestAddingToHistory(t *testing.T) {
 	wfstate := wfengine.NewWorkflowState(wfengine.NewWorkflowConfig(testAppID))
 	runtimeState := backend.NewOrchestrationRuntimeState(api.InstanceID("wf1"), nil)
 	for i := 0; i < 10; i++ {
-		if err := runtimeState.AddEvent(&backend.HistoryEvent{}); !assert.NoError(t, err) {
-			return
-		}
+		err := runtimeState.AddEvent(&backend.HistoryEvent{})
+		require.NoError(t, err)
 	}
 	wfstate.ApplyRuntimeStateChanges(runtimeState)
 
 	req, err := wfstate.GetSaveRequest("wf1")
-	if assert.NoError(t, err) {
-		assert.Equal(t, "wf1", req.ActorID)
-		assert.Equal(t, workflowActorType, req.ActorType)
+	require.NoError(t, err)
 
-		upsertCount, deleteCount := countOperations(t, req)
-		assert.Equal(t, 12, upsertCount) // 10x history + metadata + customStatus
-		assert.Equal(t, 0, deleteCount)
-	}
+	assert.Equal(t, "wf1", req.ActorID)
+	assert.Equal(t, workflowActorType, req.ActorType)
+
+	upsertCount, deleteCount := countOperations(t, req)
+	assert.Equal(t, 12, upsertCount) // 10x history + metadata + customStatus
+	assert.Equal(t, 0, deleteCount)
 }
 
 func TestLoadSavedState(t *testing.T) {
@@ -109,9 +110,8 @@ func TestLoadSavedState(t *testing.T) {
 
 	runtimeState := backend.NewOrchestrationRuntimeState(api.InstanceID("wf1"), nil)
 	for i := 0; i < 10; i++ {
-		if err := runtimeState.AddEvent(&backend.HistoryEvent{EventId: int32(i)}); !assert.NoError(t, err) {
-			return
-		}
+		err := runtimeState.AddEvent(&backend.HistoryEvent{EventId: int32(i)})
+		require.NoError(t, err)
 	}
 	wfstate.ApplyRuntimeStateChanges(runtimeState)
 	wfstate.CustomStatus = "my custom status"
@@ -121,33 +121,30 @@ func TestLoadSavedState(t *testing.T) {
 	}
 
 	req, err := wfstate.GetSaveRequest("wf1")
-	if !assert.NoError(t, err) {
-		return
-	}
+	require.NoError(t, err)
 
 	upsertCount, deleteCount := countOperations(t, req)
 	assert.Equal(t, 17, upsertCount) // 10x history, 5x inbox, 1 metadata, 1 customStatus
 	assert.Equal(t, 0, deleteCount)
 
 	actors := getActorRuntime()
-	if err = actors.TransactionalStateOperation(context.Background(), req); !assert.NoError(t, err) {
-		return
-	}
+
+	err = actors.TransactionalStateOperation(context.Background(), req)
+	require.NoError(t, err)
 
 	wfstate, err = wfengine.LoadWorkflowState(context.Background(), actors, "wf1", wfengine.NewWorkflowConfig(testAppID))
-	if assert.NoError(t, err) && assert.NotNil(t, wfstate) {
-		assert.Equal(t, "my custom status", wfstate.CustomStatus)
-		assert.Equal(t, uint64(1), wfstate.Generation)
-		if assert.Equal(t, 10, len(wfstate.History)) {
-			for i, e := range wfstate.History {
-				assert.Equal(t, int32(i), e.EventId)
-			}
-		}
-		if assert.Equal(t, 5, len(wfstate.Inbox)) {
-			for i, e := range wfstate.Inbox {
-				assert.Equal(t, int32(i), e.EventId)
-			}
-		}
+	require.NoError(t, err)
+	require.NotNil(t, wfstate)
+
+	assert.Equal(t, "my custom status", wfstate.CustomStatus)
+	assert.Equal(t, uint64(1), wfstate.Generation)
+	require.Len(t, wfstate.History, 10)
+	for i, e := range wfstate.History {
+		assert.Equal(t, int32(i), e.EventId)
+	}
+	require.Len(t, wfstate.Inbox, 5)
+	for i, e := range wfstate.Inbox {
+		assert.Equal(t, int32(i), e.EventId)
 	}
 }
 
@@ -167,28 +164,27 @@ func TestResetLoadedState(t *testing.T) {
 	}
 
 	req, err := wfstate.GetSaveRequest("wf1")
-	if !assert.NoError(t, err) {
-		return
-	}
+	require.NoError(t, err)
 
 	actorRuntime := getActorRuntime()
-	if err = actorRuntime.TransactionalStateOperation(context.Background(), req); !assert.NoError(t, err) {
-		return
-	}
+	err = actorRuntime.TransactionalStateOperation(context.Background(), req)
+	require.NoError(t, err)
 
 	wfstate, err = wfengine.LoadWorkflowState(context.Background(), actorRuntime, "wf1", wfengine.NewWorkflowConfig(testAppID))
-	if assert.NoError(t, err) && assert.NotNil(t, wfstate) {
-		assert.Equal(t, uint64(1), wfstate.Generation)
-		wfstate.Reset()
-		assert.Equal(t, uint64(2), wfstate.Generation)
-		req, err := wfstate.GetSaveRequest("wf1")
-		if assert.NoError(t, err) {
-			assert.Equal(t, 17, len(req.Operations)) // history x10 + inbox x5 + metadata + customStatus
-			upsertCount, deleteCount := countOperations(t, req)
-			assert.Equal(t, 2, upsertCount)  // metadata + customStatus
-			assert.Equal(t, 15, deleteCount) // all history and inbox records are deleted
-		}
-	}
+	require.NoError(t, err)
+	require.NotNil(t, wfstate)
+
+	assert.Equal(t, uint64(1), wfstate.Generation)
+	wfstate.Reset()
+	assert.Equal(t, uint64(2), wfstate.Generation)
+
+	req, err = wfstate.GetSaveRequest("wf1")
+	require.NoError(t, err)
+
+	assert.Equal(t, 17, len(req.Operations)) // history x10 + inbox x5 + metadata + customStatus
+	upsertCount, deleteCount := countOperations(t, req)
+	assert.Equal(t, 2, upsertCount)  // metadata + customStatus
+	assert.Equal(t, 15, deleteCount) // all history and inbox records are deleted
 }
 
 func getActorRuntime() actors.Actors {
@@ -210,16 +206,14 @@ func getActorRuntime() actors.Actors {
 	return actors
 }
 
-func countOperations(t *testing.T, req *actors.TransactionalRequest) (int, int) {
-	upsertCount := 0
-	deleteCount := 0
+func countOperations(t *testing.T, req *actors.TransactionalRequest) (upsertCount, deleteCount int) {
 	for _, op := range req.Operations {
 		if op.Operation == actors.Upsert {
 			upsertCount++
 		} else if op.Operation == actors.Delete {
 			deleteCount++
 		} else {
-			assert.Fail(t, "unexpected operation type", op.Operation)
+			t.Fatalf("unexpected operation type: %v", op.Operation)
 		}
 	}
 	return upsertCount, deleteCount

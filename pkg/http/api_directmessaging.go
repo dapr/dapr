@@ -225,12 +225,12 @@ func findTargetIDAndMethod(reqPath string, headers http.Header) (targetID string
 		// - `https://example.com/method/mymethod`
 		// - `http%3A%2F%2Fexample.com/method/mymethod`
 		if idx = strings.Index(reqPath, "/method/"); idx > 0 {
-			targetID = reqPath[:idx]
-			method = reqPath[(idx + len("/method/")):]
+			targetID := reqPath[:idx]
+			method := reqPath[(idx + len("/method/")):]
 			if t, _ := url.QueryUnescape(targetID); t != "" {
 				targetID = t
 			}
-			return
+			return targetID, method
 		}
 	}
 

@@ -22,10 +22,11 @@ import (
 	"time"
 
 	"github.com/bsm/redislock"
+	redis "github.com/go-redis/redis/v9"
+
 	"github.com/dapr/go-sdk/actor"
 	dapr "github.com/dapr/go-sdk/client"
 	daprd "github.com/dapr/go-sdk/service/http"
-	redis "github.com/go-redis/redis/v9"
 )
 
 func testActorFactory(client dapr.Client, redisClient *redis.Client) func() actor.ServerContext {
