@@ -135,7 +135,7 @@ const possibleScenarios = {
     vu_350: {
         executor: 'shared-iterations',
         vus: 350,
-        iterations: 3500,
+        iterations: 3000,
         maxDuration: '1500s',     
     },      
     vu_400: {
