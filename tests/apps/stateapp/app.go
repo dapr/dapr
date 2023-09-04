@@ -505,7 +505,7 @@ func getHandler(w http.ResponseWriter, r *http.Request) {
 
 	if len(resp) != 1 {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(fmt.Sprintf("Expected 1 result, got %d", len(resp))))
+		fmt.Fprintf(w, "Expected 1 result, got %d", len(resp))
 		return
 	}
 
