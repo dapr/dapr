@@ -1,5 +1,3 @@
-//go:build allcomponents
-
 /*
 Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,13 +13,13 @@ limitations under the License.
 
 package components
 
-import (
-	"github.com/dapr/components-contrib/bindings/wasm"
-	"github.com/dapr/dapr/pkg/components"
-	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
-)
+var wasmComponentsMap = map[string]struct{}{}
 
-func init() {
-	bindingsLoader.DefaultRegistry.RegisterOutputBinding(wasm.NewWasmOutput, "wasm")
-	components.RegisterWasmComponentType(components.CategoryBindings, "wasm")
+func RegisterWasmComponentType(category Category, typeName string) {
+	wasmComponentsMap[string(category)+"."+typeName] = struct{}{}
+}
+
+func IsWasmComponentType(componentType string) bool {
+	_, ok := wasmComponentsMap[componentType]
+	return ok
 }
