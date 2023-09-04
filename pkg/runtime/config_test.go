@@ -14,13 +14,13 @@ limitations under the License.
 package runtime
 
 import (
-	"context"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/kit/ptr"
@@ -87,13 +87,10 @@ func Test_toInternal(t *testing.T) {
 }
 
 func TestStandaloneWasmStrictSandbox(t *testing.T) {
-	c := defaultTestConfig()
-	c.Config = []string{"../config/testdata/wasm_strict_sandbox.yaml"}
-	c.Mode = "standalone"
-	c.EnableMTLS = false
-	cfg, err := FromConfig(context.Background(), &c)
+	global, err := config.LoadStandaloneConfiguration("../config/testdata/wasm_strict_sandbox.yaml")
+
 	assert.Nil(t, err)
-	assert.True(t, cfg.globalConfig.Spec.WasmSpec.StrictSandbox)
+	assert.True(t, global.Spec.WasmSpec.StrictSandbox)
 }
 
 func defaultTestConfig() Config {
