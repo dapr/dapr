@@ -45,12 +45,11 @@ const (
 var testAppNames = []string{"perf-workflowsapp"}
 
 type K6RunConfig struct {
-	HTTP_REQ_DURATION_THRESHOLD int
-	TARGET_URL                  string
-	SCENARIO                    string
-	WORKFLOW_NAME               string
-	WORKFLOW_INPUT              string
-	RATE_CHECK                  string
+	TARGET_URL     string
+	SCENARIO       string
+	WORKFLOW_NAME  string
+	WORKFLOW_INPUT string
+	RATE_CHECK     string
 }
 
 func TestMain(m *testing.M) {
@@ -81,7 +80,6 @@ func runk6test(t *testing.T, config K6RunConfig) *loadtest.K6RunnerMetricsSummar
 		"./test.js",
 		loadtest.WithParallelism(1),
 		// loadtest.EnableLog(), // uncomment this to enable k6 logs, this however breaks reporting, only for debugging.
-		loadtest.WithRunnerEnvVar("HTTP_REQ_DURATION_THRESHOLD", strconv.Itoa(config.HTTP_REQ_DURATION_THRESHOLD)),
 		loadtest.WithRunnerEnvVar("TARGET_URL", config.TARGET_URL),
 		loadtest.WithRunnerEnvVar("SCENARIO", config.SCENARIO),
 		loadtest.WithRunnerEnvVar("WORKFLOW_NAME", config.WORKFLOW_NAME),
@@ -147,11 +145,11 @@ func addTestResults(t *testing.T, testName string, testAppName string, result *l
 // inputs are the different workflow inputs/payload_sizes for which workflows are run
 // scnearios are the different combinations of {VU,iterations} for which tests are run
 // rateChecks[index1][index2] represents the check required for the run with input=inputs[index1] and scenario=scenarios[index2]
-func testWorkflow(t *testing.T, workflowName string, testAppName string, threshold int, inputs []string, scenarios []string, rateChecks [][]string, restart bool, payloadTest bool) {
+func testWorkflow(t *testing.T, workflowName string, testAppName string, inputs []string, scenarios []string, rateChecks [][]string, restart bool, payloadTest bool) {
 	table := summary.ForTest(t)
 	for index1, input := range inputs {
 		for index2, scenario := range scenarios {
-			subTestName := "[" + strings.ReplaceAll(strings.ToUpper(scenario), "_", " ") + "]: "
+			subTestName := "[" + strings.ToUpper(scenario) + "]: "
 			t.Run(subTestName, func(t *testing.T) {
 				//re-starting the app to clear previous runs memory
 				if restart {
@@ -177,12 +175,11 @@ func testWorkflow(t *testing.T, workflowName string, testAppName string, thresho
 				targetURL := fmt.Sprintf("http://%s/run-workflow", externalURL)
 
 				config := K6RunConfig{
-					TARGET_URL:                  targetURL,
-					HTTP_REQ_DURATION_THRESHOLD: threshold,
-					SCENARIO:                    scenario,
-					WORKFLOW_NAME:               workflowName,
-					WORKFLOW_INPUT:              input,
-					RATE_CHECK:                  rateChecks[index1][index2],
+					TARGET_URL:     targetURL,
+					SCENARIO:       scenario,
+					WORKFLOW_NAME:  workflowName,
+					WORKFLOW_INPUT: input,
+					RATE_CHECK:     rateChecks[index1][index2],
 				}
 
 				testResult := runk6test(t, config)
@@ -219,38 +216,42 @@ func testWorkflow(t *testing.T, workflowName string, testAppName string, thresho
 func TestWorkflowWithConstantVUs(t *testing.T) {
 	workflowName := "sum_series_wf"
 	inputs := []string{"100"}
-	scenarios := []string{"vu_50", "vu_50", "vu_50"}
+	scenarios := []string{"t_50_500", "t_50_500", "t_50_500"}
 	rateChecks := [][]string{{"rate==1", "rate==1", "rate==1"}}
-	threshold := 7000
-	testWorkflow(t, workflowName, testAppNames[0], threshold, inputs, scenarios, rateChecks, false, false)
+	testWorkflow(t, workflowName, testAppNames[0], inputs, scenarios, rateChecks, false, false)
 }
 
-// Runs tests for `sum_series_wf` with different VUs
-func TestSeriesWorkflowWithDifferentVUs(t *testing.T) {
+func TestWorkflowWithConstantIterations(t *testing.T) {
 	workflowName := "sum_series_wf"
 	inputs := []string{"100"}
-	scenarios := []string{"vu_350"}
-	rateChecks := [][]string{{"rate==1"}}
-	threshold := 7000
-	testWorkflow(t, workflowName, testAppNames[0], threshold, inputs, scenarios, rateChecks, true, false)
+	scenarios := []string{"t_50_500", "t_100_500", "t_150_500"}
+	rateChecks := [][]string{{"rate==1", "rate==1", "rate==1"}}
+	testWorkflow(t, workflowName, testAppNames[0], inputs, scenarios, rateChecks, true, false)
 }
 
-// Runs tests for `sum_parallel_wf` with different VUs
-func TestParallelWorkflowWithDifferentVUs(t *testing.T) {
+// Runs tests for `sum_series_wf` with Max VUs
+func TestSeriesWorkflowWithMaxVUs(t *testing.T) {
+	workflowName := "sum_series_wf"
+	inputs := []string{"100"}
+	scenarios := []string{"t_350_3000"}
+	rateChecks := [][]string{{"rate==1"}}
+	testWorkflow(t, workflowName, testAppNames[0], inputs, scenarios, rateChecks, true, false)
+}
+
+// // Runs tests for `sum_parallel_wf` with Max VUs
+func TestParallelWorkflowWithMaxVUs(t *testing.T) {
 	workflowName := "sum_parallel_wf"
 	inputs := []string{"100"}
-	scenarios := []string{"vu_120"}
+	scenarios := []string{"t_110_1100"}
 	rateChecks := [][]string{{"rate==1"}}
-	threshold := 8500
-	testWorkflow(t, workflowName, testAppNames[0], threshold, inputs, scenarios, rateChecks, true, false)
+	testWorkflow(t, workflowName, testAppNames[0], inputs, scenarios, rateChecks, true, false)
 }
 
 // Runs tests for `state_wf` with different Payload
 func TestWorkflowWithDifferentPayloads(t *testing.T) {
 	workflowName := "state_wf"
-	scenarios := []string{"vu_50"}
+	scenarios := []string{"t_50_500"}
 	inputs := []string{"10000", "50000", "100000"}
 	rateChecks := [][]string{{"rate==1"}, {"rate==1"}, {"rate==1"}}
-	threshold := 4200
-	testWorkflow(t, workflowName, testAppNames[0], threshold, inputs, scenarios, rateChecks, true, true)
+	testWorkflow(t, workflowName, testAppNames[0], inputs, scenarios, rateChecks, true, true)
 }
