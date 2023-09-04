@@ -197,14 +197,6 @@ func testWorkflow(t *testing.T, workflowName string, testAppName string, inputs 
 				_, err = utils.HTTPGet(url)
 				require.NoError(t, err, "error shutdown workflow runtime")
 
-				url = fmt.Sprintf("http://%s/delete-actors", externalURL)
-				payload, _ := json.Marshal(map[string]string{
-					"dapr_namespace": "dapr-tests",
-					"app_id":         testAppName,
-				})
-				_, err = utils.HTTPPost(url, payload)
-				require.NoError(t, err, "error deleting actors from statestore")
-
 			})
 		}
 	}

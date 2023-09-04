@@ -75,20 +75,6 @@ def state_delete_act(ctx:WorkflowActivityContext,input):
                        key= key)
         sleep(1)
 
-# delete_actors_from_statestore deletes workflow actors from actor statestore
-@api.route('/delete-actors', methods=['POST'])
-def delete_actors_from_statestore():
-    request_data = request.get_json()
-    dapr_namespace = request_data["dapr_namespace"]
-    app_id = request_data["app_id"]
-    with DaprClient() as d:
-        workflowActorsKey = "actors||dapr.internal." + dapr_namespace + "." + app_id + ".workflow"
-        activityActorsKey = "actors||dapr.internal." + dapr_namespace + "." + app_id + ".activity"
-        print("deleting workflow actors from actor statestore. key:",workflowActorsKey)
-        d.delete_state(actor_statestore_name,workflowActorsKey)
-        print("deleting workflow actors from actor statestore. key:",activityActorsKey)
-        d.delete_state(actor_statestore_name,activityActorsKey)
-
 # sum_series_wf calculates sum of numbers {1..input} by dividing the workload among 5 activties running in series
 def sum_series_wf(ctx:DaprWorkflowContext, input):
     num = int(input)
