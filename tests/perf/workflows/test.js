@@ -34,17 +34,17 @@ const possibleScenarios = {
         iterations: 500,
         maxDuration: '450s',     
     },      
-    t_350_2500: {
+    t_350_1750: {
         executor: 'shared-iterations',
         vus: 350,
-        iterations: 2500,
-        maxDuration: '1500s',     
+        iterations: 1750,
+        maxDuration: '800s',     
     },         
-    t_110_1100: {
+    t_110_550: {
         executor: 'shared-iterations',
         vus: 110,
-        iterations: 1100,
-        maxDuration: '1000s',     
+        iterations: 550,
+        maxDuration: '500s',     
     },   
 }
 
