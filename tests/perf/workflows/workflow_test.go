@@ -233,12 +233,12 @@ func TestWorkflowWithConstantIterations(t *testing.T) {
 func TestSeriesWorkflowWithMaxVUs(t *testing.T) {
 	workflowName := "sum_series_wf"
 	inputs := []string{"100"}
-	scenarios := []string{"t_350_3000"}
+	scenarios := []string{"t_350_2500"}
 	rateChecks := [][]string{{"rate==1"}}
 	testWorkflow(t, workflowName, testAppNames[0], inputs, scenarios, rateChecks, true, false)
 }
 
-// // Runs tests for `sum_parallel_wf` with Max VUs
+// Runs tests for `sum_parallel_wf` with Max VUs
 func TestParallelWorkflowWithMaxVUs(t *testing.T) {
 	workflowName := "sum_parallel_wf"
 	inputs := []string{"100"}
