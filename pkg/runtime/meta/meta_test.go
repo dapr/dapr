@@ -156,7 +156,8 @@ func TestMetadataOverrideWasmStrictSandbox(t *testing.T) {
 		meta.AddWasmStrictSandbox(&com)
 
 		// check that WasmStrictSandbox is set to true
-		base := meta.ToBaseMetadata(com)
+		base, err := meta.ToBaseMetadata(com)
+		assert.NoError(t, err)
 		assert.Equal(t, "true", base.Properties[WasmStrictSandboxMetadataKey])
 	})
 
@@ -181,7 +182,8 @@ func TestMetadataOverrideWasmStrictSandbox(t *testing.T) {
 		meta.AddWasmStrictSandbox(&com)
 
 		// check that WasmStrictSandbox is set to true
-		base := meta.ToBaseMetadata(com)
+		base, err := meta.ToBaseMetadata(com)
+		assert.NoError(t, err)
 		assert.Equal(t, "true", base.Properties[WasmStrictSandboxMetadataKey])
 	})
 
@@ -213,8 +215,10 @@ func TestMetadataOverrideWasmStrictSandbox(t *testing.T) {
 			},
 		}
 
-		wasm := meta.ToBaseMetadata(com)
-		noneWasm := meta.ToBaseMetadata(noneWasmComp)
+		wasm, err := meta.ToBaseMetadata(com)
+		noneWasm, err2 := meta.ToBaseMetadata(noneWasmComp)
+		assert.NoError(t, err)
+		assert.NoError(t, err2)
 		assert.Equal(t, "true", wasm.Properties[WasmStrictSandboxMetadataKey])
 		assert.Equal(t, "", noneWasm.Properties[WasmStrictSandboxMetadataKey])
 	})
