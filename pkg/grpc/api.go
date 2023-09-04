@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -37,7 +38,6 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
-	"github.com/dapr/dapr/pkg/channel"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -46,13 +46,13 @@ import (
 	"github.com/dapr/dapr/pkg/grpc/metadata"
 	"github.com/dapr/dapr/pkg/grpc/universalapi"
 	"github.com/dapr/dapr/pkg/messages"
-	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
+	"github.com/dapr/dapr/pkg/runtime/channels"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/utils"
 )
@@ -61,6 +61,8 @@ const daprHTTPStatusHeader = "dapr-http-status"
 
 // API is the gRPC interface for the Dapr gRPC API. It implements both the internal and external proto definitions.
 type API interface {
+	io.Closer
+
 	// DaprInternal Service methods
 	internalv1pb.ServiceInvocationServer
 
@@ -68,27 +70,28 @@ type API interface {
 	runtimev1pb.DaprServer
 
 	// Methods internal to the object
-	SetAppChannel(appChannel channel.AppChannel)
-	SetDirectMessaging(directMessaging messaging.DirectMessaging)
 	SetActorRuntime(actor actors.Actors)
 }
 
 type api struct {
 	*universalapi.UniversalAPI
-	directMessaging       messaging.DirectMessaging
-	appChannel            channel.AppChannel
+	directMessaging       invokev1.DirectMessaging
+	channels              *channels.Channels
 	pubsubAdapter         runtimePubsub.Adapter
 	sendToOutputBindingFn func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	tracingSpec           config.TracingSpec
 	accessControlList     *config.AccessControlList
+	closed                atomic.Bool
+	closeCh               chan struct{}
+	wg                    sync.WaitGroup
 }
 
 // APIOpts contains options for NewAPI.
 type APIOpts struct {
 	UniversalAPI          *universalapi.UniversalAPI
-	AppChannel            channel.AppChannel
+	Channels              *channels.Channels
 	PubsubAdapter         runtimePubsub.Adapter
-	DirectMessaging       messaging.DirectMessaging
+	DirectMessaging       invokev1.DirectMessaging
 	SendToOutputBindingFn func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	TracingSpec           config.TracingSpec
 	AccessControlList     *config.AccessControlList
@@ -99,11 +102,12 @@ func NewAPI(opts APIOpts) API {
 	return &api{
 		UniversalAPI:          opts.UniversalAPI,
 		directMessaging:       opts.DirectMessaging,
-		appChannel:            opts.AppChannel,
+		channels:              opts.Channels,
 		pubsubAdapter:         opts.PubsubAdapter,
 		sendToOutputBindingFn: opts.SendToOutputBindingFn,
 		tracingSpec:           opts.TracingSpec,
 		accessControlList:     opts.AccessControlList,
+		closeCh:               make(chan struct{}),
 	}
 }
 
@@ -142,12 +146,6 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 		return &emptypb.Empty{}, validationErr
 	}
 
-	span := diagUtils.SpanFromContext(ctx)
-	// Populate W3C traceparent to cloudevent envelope
-	corID := diag.SpanContextToW3CString(span.SpanContext())
-	// Populate W3C tracestate to cloudevent envelope
-	traceState := diag.TraceStateToW3CString(span.SpanContext())
-
 	body := []byte{}
 	if in.Data != nil {
 		body = in.Data
@@ -156,6 +154,9 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	data := body
 
 	if !rawPayload {
+		span := diagUtils.SpanFromContext(ctx)
+		corID, traceState := diag.TraceIDAndStateFromSpan(span)
+
 		envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
 			Source:          a.UniversalAPI.AppID,
 			Topic:           in.Topic,
@@ -324,8 +325,6 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 	}
 
 	span := diagUtils.SpanFromContext(ctx)
-	// Populate W3C tracestate to cloudevent envelope
-	traceState := diag.TraceStateToW3CString(span.SpanContext())
 
 	spanMap := map[int]otelTrace.Span{}
 	// closeChildSpans method is called on every respond() call in all return paths in the following block of code.
@@ -358,10 +357,12 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 		}
 
 		if !rawPayload {
-			// For multiple events in a single bulk call traceParent is different for each event.
+			// Extract trace context from context.
 			_, childSpan := diag.StartGRPCProducerSpanChildFromParent(ctx, span, "/dapr.proto.runtime.v1.Dapr/BulkPublishEventAlpha1/")
+			corID, traceState := diag.TraceIDAndStateFromSpan(childSpan)
+
+			// For multiple events in a single bulk call traceParent is different for each event.
 			// Populate W3C traceparent to cloudevent envelope
-			corID := diag.SpanContextToW3CString(childSpan.SpanContext())
 			spanMap[i] = childSpan
 
 			envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
@@ -1240,14 +1241,6 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 	return response, nil
 }
 
-func (a *api) SetAppChannel(appChannel channel.AppChannel) {
-	a.appChannel = appChannel
-}
-
-func (a *api) SetDirectMessaging(directMessaging messaging.DirectMessaging) {
-	a.directMessaging = directMessaging
-}
-
 func (a *api) SetActorRuntime(actor actors.Actors) {
 	a.UniversalAPI.Actors = actor
 }
@@ -1510,6 +1503,12 @@ func (a *api) UnsubscribeConfigurationAlpha1(ctx context.Context, request *runti
 }
 
 func (a *api) Close() error {
+	defer a.wg.Wait()
+	if a.closed.CompareAndSwap(false, true) {
+		close(a.closeCh)
+	}
+
 	a.CompStore.DeleteAllConfigurationSubscribe()
+
 	return nil
 }

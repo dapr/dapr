@@ -37,7 +37,8 @@ func TestMetadataItemsToPropertiesConversion(t *testing.T) {
 				},
 			},
 		}
-		m := meta.convertItemsToProps(items)
+		m, err := meta.convertItemsToProps(items)
+		assert.NoError(t, err)
 		assert.Equal(t, 1, len(m))
 		assert.Equal(t, "b", m["a"])
 	})
@@ -52,7 +53,8 @@ func TestMetadataItemsToPropertiesConversion(t *testing.T) {
 				},
 			},
 		}
-		m := meta.convertItemsToProps(items)
+		m, err := meta.convertItemsToProps(items)
+		assert.NoError(t, err)
 		assert.Equal(t, 1, len(m))
 		assert.Equal(t, "6", m["a"])
 	})
@@ -67,7 +69,8 @@ func TestMetadataItemsToPropertiesConversion(t *testing.T) {
 				},
 			},
 		}
-		m := meta.convertItemsToProps(items)
+		m, err := meta.convertItemsToProps(items)
+		assert.NoError(t, err)
 		assert.Equal(t, 1, len(m))
 		assert.Equal(t, "true", m["a"])
 	})
@@ -82,7 +85,8 @@ func TestMetadataItemsToPropertiesConversion(t *testing.T) {
 				},
 			},
 		}
-		m := meta.convertItemsToProps(items)
+		m, err := meta.convertItemsToProps(items)
+		assert.NoError(t, err)
 		assert.Equal(t, 1, len(m))
 		assert.Equal(t, "5.5", m["a"])
 	})
@@ -97,7 +101,8 @@ func TestMetadataItemsToPropertiesConversion(t *testing.T) {
 				},
 			},
 		}
-		m := meta.convertItemsToProps(items)
+		m, err := meta.convertItemsToProps(items)
+		assert.NoError(t, err)
 		assert.Equal(t, 1, len(m))
 		assert.Equal(t, "hello there", m["a"])
 	})

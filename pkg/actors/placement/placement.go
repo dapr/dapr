@@ -146,7 +146,7 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 	p.serverIndex.Store(0)
 	p.shutdown.Store(false)
 
-	if !p.establishStreamConn() {
+	if !p.establishStreamConn(ctx) {
 		return nil
 	}
 
@@ -163,7 +163,7 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 			if p.shutdown.Load() {
 				break
 			}
-			p.establishStreamConn()
+			p.establishStreamConn(ctx)
 		}
 	}()
 
@@ -289,7 +289,7 @@ func (p *actorPlacement) LookupActor(actorType, actorID string) (string, string)
 }
 
 //nolint:nosnakecase
-func (p *actorPlacement) establishStreamConn() (established bool) {
+func (p *actorPlacement) establishStreamConn(ctx context.Context) (established bool) {
 	// Backoff for reconnecting in case of errors
 	bo := backoff.NewExponentialBackOff()
 	bo.InitialInterval = placementReconnectMinInterval
@@ -311,7 +311,7 @@ func (p *actorPlacement) establishStreamConn() (established bool) {
 			log.Debug("try to connect to placement service: " + serverAddr)
 		}
 
-		err := p.client.connectToServer(serverAddr)
+		err := p.client.connectToServer(ctx, serverAddr)
 		if err == errEstablishingTLSConn {
 			return false
 		}

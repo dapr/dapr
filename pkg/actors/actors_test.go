@@ -365,7 +365,7 @@ func advanceTickers(t *testing.T, clock *clocktesting.FakeClock, step time.Durat
 func TestDeactivationTicker(t *testing.T) {
 	t.Run("actor is deactivated", func(t *testing.T) {
 		testActorsRuntime := newTestActorsRuntime()
-		defer testActorsRuntime.Stop()
+		defer testActorsRuntime.Close()
 		clock := testActorsRuntime.clock.(*clocktesting.FakeClock)
 
 		actorType, actorID := getTestActorTypeAndID()
@@ -389,7 +389,7 @@ func TestDeactivationTicker(t *testing.T) {
 
 	t.Run("actor is not deactivated", func(t *testing.T) {
 		testActorsRuntime := newTestActorsRuntime()
-		defer testActorsRuntime.Stop()
+		defer testActorsRuntime.Close()
 		clock := testActorsRuntime.clock.(*clocktesting.FakeClock)
 
 		actorType, actorID := getTestActorTypeAndID()
@@ -412,7 +412,7 @@ func TestDeactivationTicker(t *testing.T) {
 
 	t.Run("per-actor timeout", func(t *testing.T) {
 		testActorsRuntime := newTestActorsRuntime()
-		defer testActorsRuntime.Stop()
+		defer testActorsRuntime.Close()
 		clock := testActorsRuntime.clock.(*clocktesting.FakeClock)
 
 		firstType := "a"
@@ -440,7 +440,7 @@ func TestDeactivationTicker(t *testing.T) {
 
 func TestTimerExecution(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
-	defer testActorsRuntime.Stop()
+	defer testActorsRuntime.Close()
 
 	actorType, actorID := getTestActorTypeAndID()
 	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
@@ -461,7 +461,7 @@ func TestTimerExecution(t *testing.T) {
 
 func TestReminderExecution(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
-	defer testActorsRuntime.Stop()
+	defer testActorsRuntime.Close()
 
 	actorType, actorID := getTestActorTypeAndID()
 	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
@@ -481,7 +481,7 @@ func TestReminderExecution(t *testing.T) {
 func TestConstructActorStateKey(t *testing.T) {
 	delim := "||"
 	testActorsRuntime := newTestActorsRuntime()
-	defer testActorsRuntime.Stop()
+	defer testActorsRuntime.Close()
 
 	actorType, actorID := getTestActorTypeAndID()
 	expected := strings.Join([]string{TestAppID, actorType, actorID, TestKeyName}, delim)
@@ -503,7 +503,7 @@ func TestConstructActorStateKey(t *testing.T) {
 
 func TestGetState(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
-	defer testActorsRuntime.Stop()
+	defer testActorsRuntime.Close()
 
 	actorType, actorID := getTestActorTypeAndID()
 	ctx := context.Background()
@@ -541,9 +541,58 @@ func TestGetState(t *testing.T) {
 	assert.Equal(t, fakeData, string(response.Data))
 }
 
+func TestGetBulkState(t *testing.T) {
+	testActorsRuntime := newTestActorsRuntime()
+	defer testActorsRuntime.Close()
+
+	actorType, actorID := getTestActorTypeAndID()
+	ctx := context.Background()
+	fakeData := strconv.Quote("fakeData")
+
+	var val any
+	json.Unmarshal([]byte(fakeData), &val)
+
+	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
+
+	err := testActorsRuntime.TransactionalStateOperation(ctx, &TransactionalRequest{
+		ActorType: actorType,
+		ActorID:   actorID,
+		Operations: []TransactionalOperation{
+			{
+				Operation: Upsert,
+				Request: TransactionalUpsert{
+					Key:   "key1",
+					Value: val,
+				},
+			},
+			{
+				Operation: Upsert,
+				Request: TransactionalUpsert{
+					Key:   "key2",
+					Value: val,
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	// act
+	response, err := testActorsRuntime.GetBulkState(ctx, &GetBulkStateRequest{
+		ActorID:   actorID,
+		ActorType: actorType,
+		Keys:      []string{"key1", "key2"},
+	})
+
+	// assert
+	require.NoError(t, err)
+	require.Len(t, response, 2)
+	assert.Equal(t, fakeData, string(response["key1"]))
+	assert.Equal(t, fakeData, string(response["key2"]))
+}
+
 func TestDeleteState(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
-	defer testActorsRuntime.Stop()
+	defer testActorsRuntime.Close()
 
 	actorType, actorID := getTestActorTypeAndID()
 	ctx := context.Background()
@@ -744,7 +793,7 @@ func TestCallLocalActor(t *testing.T) {
 
 	t.Run("invoke actor successfully", func(t *testing.T) {
 		testActorsRuntime := newTestActorsRuntime()
-		defer testActorsRuntime.Stop()
+		defer testActorsRuntime.Close()
 
 		resp, err := testActorsRuntime.callLocalActor(context.Background(), req)
 		assert.NoError(t, err)
@@ -755,7 +804,7 @@ func TestCallLocalActor(t *testing.T) {
 	t.Run("actor is already disposed", func(t *testing.T) {
 		// arrange
 		testActorsRuntime := newTestActorsRuntime()
-		defer testActorsRuntime.Stop()
+		defer testActorsRuntime.Close()
 
 		actorKey := constructCompositeKey(testActorType, testActorID)
 		act := newActor(testActorType, testActorID, &reentrancyStackDepth, testActorsRuntime.clock)
@@ -786,7 +835,7 @@ func TestTransactionalState(t *testing.T) {
 	ctx := context.Background()
 	t.Run("Single set request succeeds", func(t *testing.T) {
 		testActorsRuntime := newTestActorsRuntime()
-		defer testActorsRuntime.Stop()
+		defer testActorsRuntime.Close()
 
 		actorType, actorID := getTestActorTypeAndID()
 
@@ -810,7 +859,7 @@ func TestTransactionalState(t *testing.T) {
 
 	t.Run("Multiple requests succeeds", func(t *testing.T) {
 		testActorsRuntime := newTestActorsRuntime()
-		defer testActorsRuntime.Stop()
+		defer testActorsRuntime.Close()
 
 		actorType, actorID := getTestActorTypeAndID()
 
@@ -840,7 +889,7 @@ func TestTransactionalState(t *testing.T) {
 
 	t.Run("Too many requests fail", func(t *testing.T) {
 		testActorsRuntime := newTestActorsRuntime()
-		defer testActorsRuntime.Stop()
+		defer testActorsRuntime.Close()
 
 		store, err := testActorsRuntime.stateStore()
 		require.NoError(t, err)
@@ -873,7 +922,7 @@ func TestTransactionalState(t *testing.T) {
 
 	t.Run("Wrong request body - should fail", func(t *testing.T) {
 		testActorsRuntime := newTestActorsRuntime()
-		defer testActorsRuntime.Stop()
+		defer testActorsRuntime.Close()
 
 		actorType, actorID := getTestActorTypeAndID()
 
@@ -915,7 +964,7 @@ func TestTransactionalState(t *testing.T) {
 func TestGetOrCreateActor(t *testing.T) {
 	const testActorType = "fakeActor"
 	testActorsRuntime := newTestActorsRuntime()
-	defer testActorsRuntime.Stop()
+	defer testActorsRuntime.Close()
 
 	t.Run("create new key", func(t *testing.T) {
 		act := testActorsRuntime.getOrCreateActor(testActorType, "id-1")
@@ -937,7 +986,7 @@ func TestActiveActorsCount(t *testing.T) {
 
 		testActorsRuntime := newTestActorsRuntime()
 		testActorsRuntime.actorsConfig.Config.HostedActorTypes = internal.NewHostedActors([]string{"cat", "dog"})
-		defer testActorsRuntime.Stop()
+		defer testActorsRuntime.Close()
 
 		fakeCallAndActivateActor(testActorsRuntime, "cat", "abcd", testActorsRuntime.clock)
 		fakeCallAndActivateActor(testActorsRuntime, "cat", "xyz", testActorsRuntime.clock)
@@ -952,7 +1001,7 @@ func TestActiveActorsCount(t *testing.T) {
 
 		testActorsRuntime := newTestActorsRuntime()
 		testActorsRuntime.actorsConfig.Config.HostedActorTypes = internal.NewHostedActors([]string{})
-		defer testActorsRuntime.Stop()
+		defer testActorsRuntime.Close()
 
 		actualCounts := testActorsRuntime.GetActiveActorsCount(ctx)
 		assert.Equal(t, expectedCounts, actualCounts)
@@ -961,12 +1010,14 @@ func TestActiveActorsCount(t *testing.T) {
 
 func TestActorsAppHealthCheck(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntime()
-	defer testActorsRuntime.Stop()
+	defer testActorsRuntime.Close()
 
 	clock := testActorsRuntime.clock.(*clocktesting.FakeClock)
 
 	testActorsRuntime.actorsConfig.Config.HostedActorTypes = internal.NewHostedActors([]string{"actor1"})
-	go testActorsRuntime.startAppHealthCheck(
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	go testActorsRuntime.startAppHealthCheck(ctx,
 		health.WithClock(clock),
 		health.WithFailureThreshold(1),
 		health.WithInterval(1*time.Second),
@@ -981,11 +1032,13 @@ func TestActorsAppHealthCheck(t *testing.T) {
 
 func TestHostedActorsWithoutStateStore(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntimeWithoutStore()
-	defer testActorsRuntime.Stop()
+	defer testActorsRuntime.Close()
 	clock := testActorsRuntime.clock.(*clocktesting.FakeClock)
 
 	testActorsRuntime.actorsConfig.Config.HostedActorTypes = internal.NewHostedActors([]string{"actor1"})
-	go testActorsRuntime.startAppHealthCheck(
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	go testActorsRuntime.startAppHealthCheck(ctx,
 		health.WithClock(clock),
 		health.WithFailureThreshold(1),
 		health.WithInterval(1*time.Second),
@@ -1000,11 +1053,13 @@ func TestHostedActorsWithoutStateStore(t *testing.T) {
 
 func TestNoHostedActorsWithoutStateStore(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntimeWithoutStore()
-	defer testActorsRuntime.Stop()
+	defer testActorsRuntime.Close()
 	clock := testActorsRuntime.clock.(*clocktesting.FakeClock)
 
 	testActorsRuntime.actorsConfig.HostedActorTypes = internal.NewHostedActors([]string{})
-	go testActorsRuntime.startAppHealthCheck(
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	go testActorsRuntime.startAppHealthCheck(ctx,
 		health.WithClock(clock),
 		health.WithFailureThreshold(1),
 		health.WithInterval(1*time.Second),
@@ -1023,7 +1078,7 @@ func TestShutdown(t *testing.T) {
 
 	t.Run("no panic when placement is nil", func(t *testing.T) {
 		testActorsRuntime.placement = nil
-		testActorsRuntime.Stop()
+		testActorsRuntime.Close()
 		// No panic
 	})
 }
@@ -1394,7 +1449,7 @@ func TestActorsRuntimeResiliency(t *testing.T) {
 
 func TestPlacementSwitchIsNotTurnedOn(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntimeWithoutPlacement()
-	defer testActorsRuntime.Stop()
+	defer testActorsRuntime.Close()
 
 	t.Run("placement is empty", func(t *testing.T) {
 		assert.Nil(t, testActorsRuntime.placement)

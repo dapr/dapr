@@ -41,8 +41,6 @@ import (
 type Feature string
 
 const (
-	// Enable support for streaming in HTTP service invocation
-	ServiceInvocationStreaming Feature = "ServiceInvocationStreaming"
 	// Disables enforcing minimum TLS version 1.2 in AppChannel, which is insecure.
 	// TODO: Remove this feature flag in Dapr 1.13.
 	AppChannelAllowInsecureTLS Feature = "AppChannelAllowInsecureTLS"

@@ -15,7 +15,6 @@ package meta
 
 import (
 	"fmt"
-	"log"
 	"strings"
 
 	"github.com/google/uuid"
@@ -54,19 +53,24 @@ func New(options Options) *Meta {
 	}
 }
 
-func (m *Meta) ToBaseMetadata(comp compapi.Component) metadata.Base {
+func (m *Meta) ToBaseMetadata(comp compapi.Component) (metadata.Base, error) {
 	// Add global wasm strict sandbox config to the wasm component metadata
 	if components.IsWasmComponentType(comp.Spec.Type) {
 		m.AddWasmStrictSandbox(&comp)
 	}
 
-	return metadata.Base{
-		Properties: m.convertItemsToProps(comp.Spec.Metadata),
-		Name:       comp.Name,
+	props, err := m.convertItemsToProps(comp.Spec.Metadata)
+	if err != nil {
+		return metadata.Base{}, err
 	}
+
+	return metadata.Base{
+		Properties: props,
+		Name:       comp.Name,
+	}, nil
 }
 
-func (m *Meta) convertItemsToProps(items []common.NameValuePair) map[string]string {
+func (m *Meta) convertItemsToProps(items []common.NameValuePair) (map[string]string, error) {
 	properties := map[string]string{}
 	for _, c := range items {
 		val := c.Value.String()
@@ -75,8 +79,7 @@ func (m *Meta) convertItemsToProps(items []common.NameValuePair) map[string]stri
 		}
 		if strings.Contains(val, "{podName}") {
 			if m.podName == "" {
-				// TODO: @joshvanl: return error here rather than panicing.
-				log.Fatalf("failed to parse metadata: property %s refers to {podName} but podName is not set", c.Name)
+				return nil, fmt.Errorf("failed to parse metadata: property %s refers to {podName} but podName is not set", c.Name)
 			}
 			val = strings.ReplaceAll(val, "{podName}", m.podName)
 		}
@@ -84,7 +87,7 @@ func (m *Meta) convertItemsToProps(items []common.NameValuePair) map[string]stri
 		val = strings.ReplaceAll(val, "{appID}", m.id)
 		properties[c.Name] = val
 	}
-	return properties
+	return properties, nil
 }
 
 func (m *Meta) AuthSecretStoreOrDefault(resource Resource) string {

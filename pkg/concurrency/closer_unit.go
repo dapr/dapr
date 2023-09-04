@@ -1,5 +1,5 @@
-//go:build windows
-// +build windows
+//go:build unit
+// +build unit
 
 /*
 Copyright 2021 The Dapr Authors
@@ -14,14 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package grpc
+package concurrency
 
-import (
-	"github.com/dapr/dapr/pkg/modes"
-)
-
-// GetDialAddressPrefix returns a dial prefix for a gRPC client connections for a given DaprMode.
-// This is used on Windows hosts.
-func GetDialAddressPrefix(mode modes.DaprMode) string {
-	return ""
+// WithFatalShutdown sets the fatal shutdown function for the closer manager.
+// Used for testing.
+func (c *RunnerCloserManager) WithFatalShutdown(fn func()) {
+	c.fatalShutdownFn = fn
 }

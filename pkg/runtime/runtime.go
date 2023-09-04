@@ -23,14 +23,11 @@ import (
 	"io"
 	"net"
 	"os"
-	"os/signal"
 	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -56,11 +53,13 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/grpc"
+	"github.com/dapr/dapr/pkg/grpc/manager"
 	"github.com/dapr/dapr/pkg/grpc/universalapi"
 	"github.com/dapr/dapr/pkg/http"
 	"github.com/dapr/dapr/pkg/httpendpoint"
 	"github.com/dapr/dapr/pkg/internal/apis"
 	"github.com/dapr/dapr/pkg/messaging"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
@@ -111,10 +110,10 @@ type DaprRuntime struct {
 	runtimeConfig     *internalConfig
 	globalConfig      *config.Configuration
 	accessControlList *config.AccessControlList
-	grpc              *grpc.Manager
+	grpc              *manager.Manager
 	channels          *channels.Channels
 	appConfig         config.ApplicationConfig
-	directMessaging   messaging.DirectMessaging
+	directMessaging   invokev1.DirectMessaging
 	actor             actors.Actors
 
 	nameResolver            nr.Resolver
@@ -126,17 +125,15 @@ type DaprRuntime struct {
 	daprHTTPAPI             http.API
 	daprGRPCAPI             grpc.API
 	operatorClient          operatorv1pb.OperatorClient
-	shutdownC               chan error
-	running                 atomic.Bool
-	apiClosers              []io.Closer
 	componentAuthorizers    []ComponentAuthorizer
 	httpEndpointAuthorizers []HTTPEndpointAuthorizer
 	appHealth               *apphealth.AppHealth
-	appHealthReady          func() // Invoked the first time the app health becomes ready
-	appHealthLock           *sync.Mutex
+	appHealthReady          func(context.Context) error // Invoked the first time the app health becomes ready
+	appHealthLock           sync.Mutex
 	compStore               *compstore.ComponentStore
 	processor               *processor.Processor
 	meta                    *meta.Meta
+	runnerCloser            *concurrency.RunnerCloserManager
 
 	pendingHTTPEndpoints       chan httpEndpointV1alpha1.HTTPEndpoint
 	pendingComponents          chan componentsV1alpha1.Component
@@ -149,6 +146,8 @@ type DaprRuntime struct {
 	tracerProvider *sdktrace.TracerProvider
 
 	workflowEngine *wfengine.WorkflowEngine
+
+	wg sync.WaitGroup
 }
 
 type componentPreprocessRes struct {
@@ -181,6 +180,17 @@ func newDaprRuntime(ctx context.Context,
 	wfe := wfengine.NewWorkflowEngine(wfengine.NewWorkflowConfig(runtimeConfig.id))
 	wfe.ConfigureGrpcExecutor()
 
+	channels := channels.New(channels.Options{
+		Registry:            runtimeConfig.registry,
+		ComponentStore:      compStore,
+		Meta:                meta,
+		AppConnectionConfig: runtimeConfig.appConnectionConfig,
+		GlobalConfig:        globalConfig,
+		MaxRequestBodySize:  runtimeConfig.maxRequestBodySize,
+		ReadBufferSize:      runtimeConfig.readBufferSize,
+		GRPC:                grpc,
+	})
+
 	rt := &DaprRuntime{
 		runtimeConfig:              runtimeConfig,
 		globalConfig:               globalConfig,
@@ -189,15 +199,14 @@ func newDaprRuntime(ctx context.Context,
 		pendingHTTPEndpoints:       make(chan httpEndpointV1alpha1.HTTPEndpoint),
 		pendingComponents:          make(chan componentsV1alpha1.Component),
 		pendingComponentDependents: map[string][]componentsV1alpha1.Component{},
-		shutdownC:                  make(chan error, 1),
 		tracerProvider:             nil,
 		resiliency:                 resiliencyProvider,
 		workflowEngine:             wfe,
 		appHealthReady:             nil,
-		appHealthLock:              &sync.Mutex{},
 		compStore:                  compStore,
 		meta:                       meta,
 		operatorClient:             operatorClient,
+		channels:                   channels,
 		processor: processor.New(processor.Options{
 			ID:               runtimeConfig.id,
 			Namespace:        getNamespace(),
@@ -213,6 +222,7 @@ func newDaprRuntime(ctx context.Context,
 			Standalone:       runtimeConfig.standalone,
 			OperatorClient:   operatorClient,
 			GRPC:             grpc,
+			Channels:         channels,
 		}),
 	}
 
@@ -224,30 +234,79 @@ func newDaprRuntime(ctx context.Context,
 
 	rt.httpEndpointAuthorizers = []HTTPEndpointAuthorizer{rt.namespaceHTTPEndpointAuthorizer}
 
+	var gracePeriod *time.Duration
+	if duration := runtimeConfig.gracefulShutdownDuration; duration > 0 {
+		gracePeriod = &duration
+	}
+
+	rt.runnerCloser = concurrency.NewRunnerCloserManager(gracePeriod,
+		rt.runtimeConfig.metricsExporter.Run,
+		rt.processComponents,
+		rt.processHTTPEndpoints,
+		func(ctx context.Context) error {
+			defer func() {
+				close(rt.pendingComponents)
+				close(rt.pendingHTTPEndpoints)
+			}()
+
+			start := time.Now()
+			log.Infof("%s mode configured", rt.runtimeConfig.mode)
+			log.Infof("app id: %s", rt.runtimeConfig.id)
+
+			if err := rt.initRuntime(ctx); err != nil {
+				return err
+			}
+
+			d := time.Since(start).Milliseconds()
+			log.Infof("dapr initialized. Status: Running. Init Elapsed %vms", d)
+
+			if rt.daprHTTPAPI != nil {
+				// Setting the status only when runtime is initialized.
+				rt.daprHTTPAPI.MarkStatusAsReady()
+			}
+
+			<-ctx.Done()
+
+			return nil
+		},
+	)
+
+	if err := rt.runnerCloser.AddCloser(
+		func() error {
+			log.Info("Dapr is shutting down")
+			comps := rt.compStore.ListComponents()
+			errCh := make(chan error)
+			for _, comp := range comps {
+				go func(comp componentsV1alpha1.Component) {
+					log.Infof("Shutting down component %s", comp.LogName())
+					errCh <- rt.processor.Close(comp)
+				}(comp)
+			}
+
+			errs := make([]error, len(comps)+1)
+			for i := range comps {
+				errs[i] = <-errCh
+			}
+
+			rt.wg.Wait()
+			log.Info("Dapr runtime stopped")
+			errs[len(comps)] = rt.cleanSockets()
+			return errors.Join(errs...)
+		},
+		rt.stopWorkflow,
+		rt.stopActor,
+		rt.stopTrace,
+		rt.grpc,
+	); err != nil {
+		return nil, err
+	}
+
 	return rt, nil
 }
 
 // Run performs initialization of the runtime with the runtime and global configurations.
 func (a *DaprRuntime) Run(ctx context.Context) error {
-	start := time.Now()
-	log.Infof("%s mode configured", a.runtimeConfig.mode)
-	log.Infof("app id: %s", a.runtimeConfig.id)
-
-	if err := a.initRuntime(ctx); err != nil {
-		return err
-	}
-
-	a.running.Store(true)
-
-	d := time.Since(start).Milliseconds()
-	log.Infof("dapr initialized. Status: Running. Init Elapsed %vms", d)
-
-	if a.daprHTTPAPI != nil {
-		// gRPC server start failure is logged as Fatal in initRuntime method. Setting the status only when runtime is initialized.
-		a.daprHTTPAPI.MarkStatusAsReady()
-	}
-
-	return nil
+	return a.runnerCloser.Run(ctx)
 }
 
 func getNamespace() string {
@@ -363,10 +422,12 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		log.Errorf(err.Error())
 	}
 
-	a.initPluggableComponents(ctx)
+	// Start proxy
+	a.initProxy()
 
-	go a.processComponents(ctx)
-	go a.processHTTPEndpoints(ctx)
+	a.initDirectMessaging(a.nameResolver)
+
+	a.initPluggableComponents(ctx)
 
 	if _, ok := os.LookupEnv(hotReloadingEnvVar); ok {
 		log.Debug("starting to watch component updates")
@@ -382,22 +443,24 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		}
 	}
 
-	a.appendBuiltinSecretStore()
-	err = a.loadComponents()
+	a.appendBuiltinSecretStore(ctx)
+	err = a.loadComponents(ctx)
 	if err != nil {
 		log.Warnf("failed to load components: %s", err)
 	}
 
-	a.flushOutstandingComponents()
+	a.flushOutstandingComponents(ctx)
 
-	err = a.loadHTTPEndpoints()
+	err = a.loadHTTPEndpoints(ctx)
 	if err != nil {
 		log.Warnf("failed to load HTTP endpoints: %s", err)
 	}
 
-	a.initChannels()
+	a.flushOutstandingHTTPEndpoints(ctx)
 
-	a.flushOutstandingHTTPEndpoints()
+	if err = a.channels.Refresh(); err != nil {
+		log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.appConnectionConfig.Protocol), err)
+	}
 
 	pipeline, err := a.channels.BuildHTTPPipeline(a.globalConfig.Spec.HTTPPipelineSpec)
 	if err != nil {
@@ -407,16 +470,37 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	// Setup allow/deny list for secrets
 	a.populateSecretsConfiguration()
 
-	// Start proxy
-	a.initProxy()
-
 	// Create and start the external gRPC server
-	univAPI := a.getUniversalAPI()
-	a.daprGRPCAPI = a.getGRPCAPI(univAPI)
+	univAPI := &universalapi.UniversalAPI{
+		AppID:                       a.runtimeConfig.id,
+		Logger:                      logger.NewLogger("dapr.api"),
+		CompStore:                   a.compStore,
+		Resiliency:                  a.resiliency,
+		Actors:                      a.actor,
+		GetComponentsCapabilitiesFn: a.getComponentsCapabilitesMap,
+		ShutdownFn:                  a.ShutdownWithWait,
+		AppConnectionConfig:         a.runtimeConfig.appConnectionConfig,
+		GlobalConfig:                a.globalConfig,
+	}
+
+	// Create and start internal and external gRPC servers
+	a.daprGRPCAPI = grpc.NewAPI(grpc.APIOpts{
+		UniversalAPI:          univAPI,
+		Channels:              a.channels,
+		PubsubAdapter:         a.processor.PubSub(),
+		DirectMessaging:       a.directMessaging,
+		SendToOutputBindingFn: a.processor.Binding().SendToOutputBinding,
+		TracingSpec:           a.globalConfig.GetTracingSpec(),
+		AccessControlList:     a.accessControlList,
+	})
+
+	if err = a.runnerCloser.AddCloser(a.daprGRPCAPI); err != nil {
+		return err
+	}
 
 	err = a.startGRPCAPIServer(a.daprGRPCAPI, a.runtimeConfig.apiGRPCPort)
 	if err != nil {
-		log.Fatalf("failed to start API gRPC server: %s", err)
+		return fmt.Errorf("failed to start API gRPC server: %w", err)
 	}
 	if a.runtimeConfig.unixDomainSocket != "" {
 		log.Info("API gRPC server is running on a Unix Domain Socket")
@@ -427,7 +511,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	// Start HTTP Server
 	err = a.startHTTPServer(a.runtimeConfig.httpPort, a.runtimeConfig.publicPort, a.runtimeConfig.profilePort, a.runtimeConfig.allowedOrigins, pipeline, univAPI)
 	if err != nil {
-		log.Fatalf("failed to start HTTP server: %s", err)
+		return fmt.Errorf("failed to start HTTP server: %w", err)
 	}
 	if a.runtimeConfig.unixDomainSocket != "" {
 		log.Info("HTTP server is running on a Unix Domain Socket")
@@ -439,7 +523,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	// Start internal gRPC server (used for sidecar-to-sidecar communication)
 	err = a.startGRPCInternalServer(a.daprGRPCAPI, a.runtimeConfig.internalGRPCPort)
 	if err != nil {
-		log.Fatalf("failed to start internal gRPC server: %s", err)
+		return fmt.Errorf("failed to start internal gRPC server: %w", err)
 	}
 	log.Infof("Internal gRPC server is running on port %v", a.runtimeConfig.internalGRPCPort)
 
@@ -448,31 +532,27 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	if a.daprHTTPAPI != nil {
 		a.daprHTTPAPI.MarkStatusAsOutboundReady()
 	}
-	a.blockUntilAppIsReady(ctx)
-
-	a.daprHTTPAPI.SetAppChannel(a.channels.AppChannel())
-	a.daprGRPCAPI.SetAppChannel(a.channels.AppChannel())
-	a.directMessaging.SetAppChannel(a.channels.AppChannel())
-
-	a.directMessaging.SetHTTPEndpointsAppChannels(a.channels.HTTPEndpointsAppChannel(), a.channels.EndpointChannels())
-
-	a.daprHTTPAPI.SetDirectMessaging(a.directMessaging)
-	a.daprGRPCAPI.SetDirectMessaging(a.directMessaging)
+	if err := a.blockUntilAppIsReady(ctx); err != nil {
+		return err
+	}
 
 	if a.runtimeConfig.appConnectionConfig.MaxConcurrency > 0 {
 		log.Infof("app max concurrency set to %v", a.runtimeConfig.appConnectionConfig.MaxConcurrency)
 	}
 
-	a.appHealthReady = func() {
-		a.appHealthReadyInit(ctx)
-	}
+	a.appHealthReady = a.appHealthReadyInit
 	if a.runtimeConfig.appConnectionConfig.HealthCheck != nil && a.channels.AppChannel() != nil {
 		// We can't just pass "a.channels.HealthProbe" because appChannel may be re-created
 		a.appHealth = apphealth.New(*a.runtimeConfig.appConnectionConfig.HealthCheck, func(ctx context.Context) (bool, error) {
 			return a.channels.AppChannel().HealthProbe(ctx)
 		})
+		if err := a.runnerCloser.AddCloser(a.appHealth); err != nil {
+			return err
+		}
 		a.appHealth.OnHealthChange(a.appHealthChanged)
-		a.appHealth.StartProbes(ctx)
+		if err := a.appHealth.StartProbes(ctx); err != nil {
+			return err
+		}
 
 		// Set the appHealth object in the channel so it's aware of the app's health status
 		a.channels.AppChannel().SetAppHealth(a.appHealth)
@@ -489,14 +569,14 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 }
 
 // appHealthReadyInit completes the initialization phase and is invoked after the app is healthy
-func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) {
+func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) error {
 	var err error
 
 	// Load app configuration (for actors) and init actors
 	a.loadAppConfiguration()
 
 	if len(a.runtimeConfig.placementAddresses) != 0 {
-		err = a.initActors()
+		err = a.initActors(ctx)
 		if err != nil {
 			log.Warn(err)
 		} else {
@@ -514,9 +594,11 @@ func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) {
 			DirectMessaging: a.directMessaging,
 			CompStore:       a.compStore,
 		}); err != nil {
-			log.Fatalf("failed to register components with callback: %s", err)
+			return fmt.Errorf("failed to register components with callback: %w", err)
 		}
 	}
+
+	return nil
 }
 
 func (a *DaprRuntime) initWorkflowEngine(ctx context.Context) {
@@ -558,7 +640,9 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status uint8) {
 	case apphealth.AppStatusHealthy:
 		// First time the app becomes healthy, complete the init process
 		if a.appHealthReady != nil {
-			a.appHealthReady()
+			if err := a.appHealthReady(ctx); err != nil {
+				log.Warnf("Failed to complete app init: %s ", err)
+			}
 			a.appHealthReady = nil
 		}
 
@@ -599,14 +683,13 @@ func (a *DaprRuntime) initDirectMessaging(resolver nr.Resolver) {
 		Namespace:          a.namespace,
 		Port:               a.runtimeConfig.internalGRPCPort,
 		Mode:               a.runtimeConfig.mode,
-		AppChannel:         a.channels.AppChannel(),
+		Channels:           a.channels,
 		ClientConnFn:       a.grpc.GetGRPCConnection,
 		Resolver:           resolver,
 		MaxRequestBodySize: a.runtimeConfig.maxRequestBodySize,
 		Proxy:              a.proxy,
 		ReadBufferSize:     a.runtimeConfig.readBufferSize,
 		Resiliency:         a.resiliency,
-		IsStreamingEnabled: a.globalConfig.IsFeatureEnabled(config.ServiceInvocationStreaming),
 		CompStore:          a.compStore,
 	})
 }
@@ -622,31 +705,15 @@ func (a *DaprRuntime) initProxy() {
 	})
 }
 
-func (a *DaprRuntime) initChannels() {
-	var err error
-	a.channels, err = channels.New(channels.Options{
-		Registry:            a.runtimeConfig.registry,
-		ComponentStore:      a.compStore,
-		Meta:                a.meta,
-		AppConnectionConfig: a.runtimeConfig.appConnectionConfig,
-		GlobalConfig:        a.globalConfig,
-		MaxRequestBodySize:  a.runtimeConfig.maxRequestBodySize,
-		ReadBufferSize:      a.runtimeConfig.readBufferSize,
-		GRPC:                a.grpc,
-	})
-	if err != nil {
-		log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.appConnectionConfig.Protocol), err)
-	}
-	a.processor.SetAppChannel(a.channels.AppChannel())
-}
-
 // begin components updates for kubernetes mode.
 func (a *DaprRuntime) beginComponentsUpdates(ctx context.Context) error {
 	if a.operatorClient == nil {
 		return nil
 	}
 
+	a.wg.Add(1)
 	go func() {
+		defer a.wg.Done()
 		parseAndUpdate := func(compRaw []byte) {
 			var component componentsV1alpha1.Component
 			if err := json.Unmarshal(compRaw, &component); err != nil {
@@ -673,7 +740,7 @@ func (a *DaprRuntime) beginComponentsUpdates(ctx context.Context) error {
 			// Retry on stream error.
 			backoff.Retry(func() error {
 				var err error
-				stream, err = a.operatorClient.ComponentUpdate(context.Background(), &operatorv1pb.ComponentUpdateRequest{
+				stream, err = a.operatorClient.ComponentUpdate(ctx, &operatorv1pb.ComponentUpdateRequest{
 					Namespace: a.namespace,
 					PodName:   a.podName,
 				})
@@ -682,12 +749,12 @@ func (a *DaprRuntime) beginComponentsUpdates(ctx context.Context) error {
 					return err
 				}
 				return nil
-			}, backoff.NewExponentialBackOff())
+			}, backoff.WithContext(backoff.NewExponentialBackOff(), ctx))
 
 			if needList {
 				// We should get all components again to avoid missing any updates during the failure time.
 				backoff.Retry(func() error {
-					resp, err := a.operatorClient.ListComponents(context.Background(), &operatorv1pb.ListComponentsRequest{
+					resp, err := a.operatorClient.ListComponents(ctx, &operatorv1pb.ListComponentsRequest{
 						Namespace: a.namespace,
 					})
 					if err != nil {
@@ -696,15 +763,17 @@ func (a *DaprRuntime) beginComponentsUpdates(ctx context.Context) error {
 					}
 
 					comps := resp.GetComponents()
+					a.wg.Add(len(comps))
 					for i := 0; i < len(comps); i++ {
 						// avoid missing any updates during the init component time.
 						go func(comp []byte) {
+							defer a.wg.Done()
 							parseAndUpdate(comp)
 						}(comps[i])
 					}
 
 					return nil
-				}, backoff.NewExponentialBackOff())
+				}, backoff.WithContext(backoff.NewExponentialBackOff(), ctx))
 			}
 
 			for {
@@ -731,8 +800,7 @@ func (a *DaprRuntime) onComponentUpdated(ctx context.Context, component componen
 		return false
 	}
 
-	a.pendingComponents <- component
-	return true
+	return a.addPendingComponent(ctx, component)
 }
 
 // begin http endpoint updates for kubernetes mode.
@@ -741,7 +809,9 @@ func (a *DaprRuntime) beginHTTPEndpointsUpdates(ctx context.Context) error {
 		return nil
 	}
 
+	a.wg.Add(1)
 	go func() {
+		defer a.wg.Done()
 		parseAndUpdate := func(endpointRaw []byte) {
 			var endpoint httpEndpointV1alpha1.HTTPEndpoint
 			if err := json.Unmarshal(endpointRaw, &endpoint); err != nil {
@@ -761,7 +831,7 @@ func (a *DaprRuntime) beginHTTPEndpointsUpdates(ctx context.Context) error {
 			var stream operatorv1pb.Operator_HTTPEndpointUpdateClient //nolint:nosnakecase
 			streamData, err := backoff.RetryWithData(func() (interface{}, error) {
 				var err error
-				stream, err = a.operatorClient.HTTPEndpointUpdate(context.Background(), &operatorv1pb.HTTPEndpointUpdateRequest{
+				stream, err = a.operatorClient.HTTPEndpointUpdate(ctx, &operatorv1pb.HTTPEndpointUpdateRequest{
 					Namespace: a.namespace,
 					PodName:   a.podName,
 				})
@@ -770,7 +840,7 @@ func (a *DaprRuntime) beginHTTPEndpointsUpdates(ctx context.Context) error {
 					return nil, err
 				}
 				return stream, nil
-			}, backoff.NewExponentialBackOff())
+			}, backoff.WithContext(backoff.NewExponentialBackOff(), ctx))
 			if err != nil {
 				// Retry on stream error.
 				needList = true
@@ -782,7 +852,7 @@ func (a *DaprRuntime) beginHTTPEndpointsUpdates(ctx context.Context) error {
 			if needList {
 				// We should get all http endpoints again to avoid missing any updates during the failure time.
 				streamData, err := backoff.RetryWithData(func() (interface{}, error) {
-					resp, err := a.operatorClient.ListHTTPEndpoints(context.Background(), &operatorv1pb.ListHTTPEndpointsRequest{
+					resp, err := a.operatorClient.ListHTTPEndpoints(ctx, &operatorv1pb.ListHTTPEndpointsRequest{
 						Namespace: a.namespace,
 					})
 					if err != nil {
@@ -791,7 +861,7 @@ func (a *DaprRuntime) beginHTTPEndpointsUpdates(ctx context.Context) error {
 					}
 
 					return resp.GetHttpEndpoints(), nil
-				}, backoff.NewExponentialBackOff())
+				}, backoff.WithContext(backoff.NewExponentialBackOff(), ctx))
 				if err != nil {
 					// Retry on stream error.
 					log.Errorf("persistent error from operator stream: %s", err)
@@ -828,8 +898,7 @@ func (a *DaprRuntime) onHTTPEndpointUpdated(ctx context.Context, endpoint httpEn
 		return false
 	}
 
-	a.pendingHTTPEndpoints <- endpoint
-	return true
+	return a.addPendingEndpoint(ctx, endpoint)
 }
 
 func (a *DaprRuntime) processHTTPEndpointSecrets(ctx context.Context, endpoint *httpEndpointV1alpha1.HTTPEndpoint) {
@@ -842,7 +911,7 @@ func (a *DaprRuntime) processHTTPEndpointSecrets(ctx context.Context, endpoint *
 		Pairs:       []commonapi.NameValuePair{},
 	}
 
-	var root, clientCert, clientKey string = "root", "clientCert", "clientKey"
+	root, clientCert, clientKey := "root", "clientCert", "clientKey"
 
 	ca := commonapi.NameValuePair{
 		Name: root,
@@ -908,7 +977,7 @@ func (a *DaprRuntime) processHTTPEndpointSecrets(ctx context.Context, endpoint *
 func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int, allowedOrigins string, pipeline httpMiddleware.Pipeline, univAPI *universalapi.UniversalAPI) error {
 	a.daprHTTPAPI = http.NewAPI(http.APIOpts{
 		UniversalAPI:          univAPI,
-		AppChannel:            a.channels.AppChannel(),
+		Channels:              a.channels,
 		DirectMessaging:       a.directMessaging,
 		PubsubAdapter:         a.processor.PubSub(),
 		SendToOutputBindingFn: a.processor.Binding().SendToOutputBinding,
@@ -944,7 +1013,9 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 	if err := server.StartNonBlocking(); err != nil {
 		return err
 	}
-	a.apiClosers = append(a.apiClosers, server)
+	if err := a.runnerCloser.AddCloser(server); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -956,7 +1027,9 @@ func (a *DaprRuntime) startGRPCInternalServer(api grpc.API, port int) error {
 	if err := server.StartNonBlocking(); err != nil {
 		return err
 	}
-	a.apiClosers = append(a.apiClosers, server)
+	if err := a.runnerCloser.AddCloser(server); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -967,7 +1040,9 @@ func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int) error {
 	if err := server.StartNonBlocking(); err != nil {
 		return err
 	}
-	a.apiClosers = append(a.apiClosers, server)
+	if err := a.runnerCloser.AddCloser(server); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -991,32 +1066,6 @@ func (a *DaprRuntime) getNewServerConfig(apiListenAddresses []string, port int) 
 		ReadBufferSizeKB:     a.runtimeConfig.readBufferSize,
 		EnableAPILogging:     *a.runtimeConfig.enableAPILogging,
 	}
-}
-
-func (a *DaprRuntime) getUniversalAPI() *universalapi.UniversalAPI {
-	return &universalapi.UniversalAPI{
-		AppID:                       a.runtimeConfig.id,
-		Logger:                      logger.NewLogger("dapr.api"),
-		CompStore:                   a.compStore,
-		Resiliency:                  a.resiliency,
-		Actors:                      a.actor,
-		GetComponentsCapabilitiesFn: a.getComponentsCapabilitesMap,
-		ShutdownFn:                  a.ShutdownWithWait,
-		AppConnectionConfig:         a.runtimeConfig.appConnectionConfig,
-		GlobalConfig:                a.globalConfig,
-	}
-}
-
-func (a *DaprRuntime) getGRPCAPI(univAPI *universalapi.UniversalAPI) grpc.API {
-	return grpc.NewAPI(grpc.APIOpts{
-		UniversalAPI:          univAPI,
-		AppChannel:            a.channels.AppChannel(),
-		PubsubAdapter:         a.processor.PubSub(),
-		DirectMessaging:       a.directMessaging,
-		SendToOutputBindingFn: a.processor.Binding().SendToOutputBinding,
-		TracingSpec:           a.globalConfig.GetTracingSpec(),
-		AccessControlList:     a.accessControlList,
-	})
 }
 
 func (a *DaprRuntime) initNameResolution() error {
@@ -1071,12 +1120,17 @@ func (a *DaprRuntime) initNameResolution() error {
 	}
 
 	a.nameResolver = resolver
+	if nrCloser, ok := resolver.(io.Closer); ok {
+		if err := a.runnerCloser.AddCloser(nrCloser); err != nil {
+			return err
+		}
+	}
 
 	log.Infof("Initialized name resolution to %s", resolverName)
 	return nil
 }
 
-func (a *DaprRuntime) initActors() error {
+func (a *DaprRuntime) initActors(ctx context.Context) error {
 	err := actors.ValidateHostEnvironment(a.runtimeConfig.mTLSEnabled, a.runtimeConfig.mode, a.namespace)
 	if err != nil {
 		return rterrors.NewInit(rterrors.InitFailure, "actors", err)
@@ -1113,7 +1167,7 @@ func (a *DaprRuntime) initActors() error {
 		// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 		StateTTLEnabled: a.globalConfig.IsFeatureEnabled(config.ActorStateTTL),
 	})
-	err = act.Init()
+	err = act.Init(ctx)
 	if err == nil {
 		a.actor = act
 		return nil
@@ -1170,7 +1224,7 @@ func (a *DaprRuntime) namespaceHTTPEndpointAuthorizer(endpoint httpEndpointV1alp
 	}
 }
 
-func (a *DaprRuntime) loadComponents() error {
+func (a *DaprRuntime) loadComponents(ctx context.Context) error {
 	var loader components.ComponentLoader
 
 	switch a.runtimeConfig.mode {
@@ -1196,20 +1250,24 @@ func (a *DaprRuntime) loadComponents() error {
 	for _, comp := range authorizedComps {
 		if strings.HasPrefix(comp.Spec.Type, string(components.CategorySecretStore)+".") {
 			log.Debug("Found component: " + comp.LogName())
-			a.pendingComponents <- comp
+			if !a.addPendingComponent(ctx, comp) {
+				return nil
+			}
 		}
 	}
 	for _, comp := range authorizedComps {
 		if !strings.HasPrefix(comp.Spec.Type, string(components.CategorySecretStore)+".") {
 			log.Debug("Found component: " + comp.LogName())
-			a.pendingComponents <- comp
+			if !a.addPendingComponent(ctx, comp) {
+				return nil
+			}
 		}
 	}
 
 	return nil
 }
 
-func (a *DaprRuntime) processComponents(ctx context.Context) {
+func (a *DaprRuntime) processComponents(ctx context.Context) error {
 	for comp := range a.pendingComponents {
 		if comp.Name == "" {
 			continue
@@ -1217,18 +1275,19 @@ func (a *DaprRuntime) processComponents(ctx context.Context) {
 
 		err := a.processComponentAndDependents(ctx, comp)
 		if err != nil {
-			e := fmt.Sprintf("process component %s error: %s", comp.Name, err.Error())
+			err = fmt.Errorf("process component %s error: %s", comp.Name, err)
 			if !comp.Spec.IgnoreErrors {
 				log.Warnf("Error processing component, daprd process will exit gracefully")
-				a.Shutdown(a.runtimeConfig.gracefulShutdownDuration)
-				log.Fatalf(e)
+				return err
 			}
-			log.Errorf(e)
+			log.Error(err)
 		}
 	}
+
+	return nil
 }
 
-func (a *DaprRuntime) processHTTPEndpoints(ctx context.Context) {
+func (a *DaprRuntime) processHTTPEndpoints(ctx context.Context) error {
 	for endpoint := range a.pendingHTTPEndpoints {
 		if endpoint.Name == "" {
 			continue
@@ -1236,22 +1295,26 @@ func (a *DaprRuntime) processHTTPEndpoints(ctx context.Context) {
 		a.processHTTPEndpointSecrets(ctx, &endpoint)
 		a.compStore.AddHTTPEndpoint(endpoint)
 	}
+
+	return nil
 }
 
-func (a *DaprRuntime) flushOutstandingHTTPEndpoints() {
-	log.Info("Waiting for all outstanding http endpoints to be processed")
+func (a *DaprRuntime) flushOutstandingHTTPEndpoints(ctx context.Context) {
+	log.Info("Waiting for all outstanding http endpoints to be processed…")
 	// We flush by sending a no-op http endpoint. Since the processHTTPEndpoints goroutine only reads one http endpoint at a time,
 	// We know that once the no-op http endpoint is read from the channel, all previous http endpoints will have been fully processed.
-	a.pendingHTTPEndpoints <- httpEndpointV1alpha1.HTTPEndpoint{}
-	log.Info("All outstanding http endpoints processed")
+	if a.addPendingEndpoint(ctx, httpEndpointV1alpha1.HTTPEndpoint{}) {
+		log.Info("All outstanding http endpoints processed")
+	}
 }
 
-func (a *DaprRuntime) flushOutstandingComponents() {
-	log.Info("Waiting for all outstanding components to be processed")
+func (a *DaprRuntime) flushOutstandingComponents(ctx context.Context) {
+	log.Info("Waiting for all outstanding components to be processed…")
 	// We flush by sending a no-op component. Since the processComponents goroutine only reads one component at a time,
 	// We know that once the no-op component is read from the channel, all previous components will have been fully processed.
-	a.pendingComponents <- componentsV1alpha1.Component{}
-	log.Info("All outstanding components processed")
+	if a.addPendingComponent(ctx, componentsV1alpha1.Component{}) {
+		log.Info("All outstanding components processed")
+	}
 }
 
 func (a *DaprRuntime) processComponentAndDependents(ctx context.Context, comp componentsV1alpha1.Component) error {
@@ -1268,25 +1331,22 @@ func (a *DaprRuntime) processComponentAndDependents(ctx context.Context, comp co
 		return fmt.Errorf("incorrect type %s", comp.Spec.Type)
 	}
 
-	ch := make(chan error, 1)
-
 	timeout, err := time.ParseDuration(comp.Spec.InitTimeout)
 	if err != nil {
 		timeout = defaultComponentInitTimeout
 	}
 
-	go func() {
-		ch <- a.processor.Init(ctx, comp)
-	}()
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 
-	select {
-	case err := <-ch:
-		if err != nil {
-			return err
-		}
-	case <-time.After(timeout):
+	err = a.processor.Init(ctx, comp)
+	// If the context is canceled, we want  to return an init error.
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		err = fmt.Errorf("init timeout for component %s exceeded after %s", comp.LogName(), timeout.String())
+	}
+	if err != nil {
+		log.Errorf("Failed to init component %s: %s", comp.Name, err)
 		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
-		err := fmt.Errorf("init timeout for component %s exceeded after %s", comp.Name, timeout.String())
 		return rterrors.NewInit(rterrors.InitComponentFailure, comp.LogName(), err)
 	}
 
@@ -1316,7 +1376,7 @@ func (a *DaprRuntime) preprocessOneComponent(ctx context.Context, comp *componen
 	return componentPreprocessRes{}
 }
 
-func (a *DaprRuntime) loadHTTPEndpoints() error {
+func (a *DaprRuntime) loadHTTPEndpoints(ctx context.Context) error {
 	var loader httpendpoint.EndpointsLoader
 
 	switch a.runtimeConfig.mode {
@@ -1328,7 +1388,7 @@ func (a *DaprRuntime) loadHTTPEndpoints() error {
 		return nil
 	}
 
-	log.Info("Loading endpoints")
+	log.Info("Loading endpoints…")
 	endpoints, err := loader.LoadHTTPEndpoints()
 	if err != nil {
 		return err
@@ -1338,138 +1398,50 @@ func (a *DaprRuntime) loadHTTPEndpoints() error {
 
 	for _, e := range authorizedHTTPEndpoints {
 		log.Infof("Found http endpoint: %s", e.Name)
-		a.pendingHTTPEndpoints <- e
+		if !a.addPendingEndpoint(ctx, e) {
+			return nil
+		}
 	}
 
 	return nil
 }
 
-func (a *DaprRuntime) stopActor() {
+func (a *DaprRuntime) stopActor() error {
 	if a.actor != nil {
 		log.Info("Shutting down actor")
-		a.actor.Stop()
+		return a.actor.Close()
 	}
+	return nil
 }
 
-func (a *DaprRuntime) stopWorkflow(ctx context.Context) {
+func (a *DaprRuntime) stopWorkflow(ctx context.Context) error {
 	if a.workflowEngine != nil {
 		log.Info("Shutting down workflow engine")
-		a.workflowEngine.Stop(ctx)
+		return a.workflowEngine.Close(ctx)
 	}
-}
-
-// shutdownOutputComponents allows for a graceful shutdown of all runtime internal operations of components that are not source of more work.
-func (a *DaprRuntime) shutdownOutputComponents(ctx context.Context) error {
-	closers := []concurrency.Runner{func(ctx context.Context) error {
-		log.Info("Shutting down name resolver")
-		if closer, ok := a.nameResolver.(io.Closer); ok && closer != nil {
-			if err := closer.Close(); err != nil {
-				err = fmt.Errorf("error closing name resolver: %w", err)
-				log.Warn(err)
-				return err
-			}
-		}
-		return nil
-	}}
-
-	closeComponent := func(comp componentsV1alpha1.Component) func(context.Context) error {
-		return func(context.Context) error {
-			log.Infof("Shutting down component %s", comp.LogName())
-			if err := a.processor.Close(comp); err != nil {
-				return err
-			}
-			return nil
-		}
-	}
-	for _, comp := range a.compStore.ListComponents() {
-		closers = append(closers, closeComponent(comp))
-	}
-
-	return concurrency.NewRunnerManager(closers...).Run(ctx)
+	return nil
 }
 
 // ShutdownWithWait will gracefully stop runtime and wait outstanding operations.
 func (a *DaprRuntime) ShutdownWithWait() {
-	// Another shutdown signal causes an instant shutdown and interrupts the graceful shutdown
-	go func() {
-		<-ShutdownSignal()
-		log.Warn("Received another shutdown signal - shutting down right away")
-		os.Exit(0)
-	}()
-
-	a.Shutdown(a.runtimeConfig.gracefulShutdownDuration)
-	os.Exit(0)
+	a.runnerCloser.Close()
 }
 
-func (a *DaprRuntime) cleanSocket() {
+func (a *DaprRuntime) WaitUntilShutdown() {
+	a.runnerCloser.WaitUntilShutdown()
+}
+
+func (a *DaprRuntime) cleanSockets() error {
+	var errs []error
 	if a.runtimeConfig.unixDomainSocket != "" {
 		for _, s := range []string{"http", "grpc"} {
-			os.Remove(fmt.Sprintf("%s/dapr-%s-%s.socket", a.runtimeConfig.unixDomainSocket, a.runtimeConfig.id, s))
-		}
-	}
-}
-
-func (a *DaprRuntime) Shutdown(duration time.Duration) {
-	// If the shutdown has already been invoked, do nothing
-	if !a.running.CompareAndSwap(true, false) {
-		return
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	if duration > 0 {
-		go func() {
-			select {
-			case <-time.After(duration):
-				log.Fatal("Graceful shutdown timeout exceeded")
-			case <-ctx.Done():
-				return
+			err := os.Remove(fmt.Sprintf("%s/dapr-%s-%s.socket", a.runtimeConfig.unixDomainSocket, a.runtimeConfig.id, s))
+			if err != nil {
+				errs = append(errs, fmt.Errorf("error removing socket file: %w", err))
 			}
-		}()
-	}
-
-	// Ensure the Unix socket file is removed if a panic occurs.
-	defer a.cleanSocket()
-	log.Info("Dapr shutting down")
-	log.Info("Stopping input bindings")
-	a.processor.Binding().StopReadingFromBindings()
-
-	// shutdown workflow if it's running
-	a.stopWorkflow(ctx)
-
-	log.Info("Initiating actor shutdown")
-	a.stopActor()
-
-	if a.appHealth != nil {
-		log.Info("Closing App Health")
-		a.appHealth.Close()
-	}
-
-	log.Info("Stopping Dapr APIs")
-	for _, closer := range a.apiClosers {
-		if err := closer.Close(); err != nil {
-			log.Warnf("Error closing API: %v", err)
 		}
 	}
-	a.stopTrace(ctx)
-	if err := a.shutdownOutputComponents(ctx); err != nil {
-		log.Warnf("Error shutting down components: %v", err)
-	}
-	log.Info("Dapr runtime stopped successfully")
-	a.shutdownC <- nil
-}
-
-// SetRunning updates the value of the running flag.
-// This method is used by tests in dapr/components-contrib.
-func (a *DaprRuntime) SetRunning(val bool) {
-	a.running.Store(val)
-}
-
-// WaitUntilShutdown waits until the Shutdown() method is done.
-// This method is used by tests in dapr/components-contrib.
-func (a *DaprRuntime) WaitUntilShutdown() error {
-	return <-a.shutdownC
+	return errors.Join(errs...)
 }
 
 func isEnvVarAllowed(key string) bool {
@@ -1487,7 +1459,7 @@ func isEnvVarAllowed(key string) bool {
 	}
 
 	// If we have a `DAPR_ENV_KEYS` env var (which is added by the Dapr Injector in Kubernetes mode), use that as allowlist too
-	allowlist := os.Getenv(securityConsts.EnvKeysEnvVar)
+	allowlist := strings.ToUpper(os.Getenv(securityConsts.EnvKeysEnvVar))
 	if allowlist == "" {
 		return true
 	}
@@ -1599,30 +1571,16 @@ func (a *DaprRuntime) authSecretStoreOrDefault(resource meta.Resource) string {
 	return secretStore
 }
 
-func (a *DaprRuntime) blockUntilAppIsReady(ctx context.Context) {
+func (a *DaprRuntime) blockUntilAppIsReady(ctx context.Context) error {
 	if a.runtimeConfig.appConnectionConfig.Port <= 0 {
-		return
+		return nil
 	}
 
 	log.Infof("application protocol: %s. waiting on port %v.  This will block until the app is listening on that port.", string(a.runtimeConfig.appConnectionConfig.Protocol), a.runtimeConfig.appConnectionConfig.Port)
 
 	dialAddr := a.runtimeConfig.appConnectionConfig.ChannelAddress + ":" + strconv.Itoa(a.runtimeConfig.appConnectionConfig.Port)
 
-	stopCh := ShutdownSignal()
-	defer signal.Stop(stopCh)
 	for {
-		select {
-		case <-stopCh:
-			// Cause a shutdown
-			a.ShutdownWithWait()
-			return
-		case <-ctx.Done():
-			// Return
-			return
-		default:
-			// nop - continue execution
-		}
-
 		var (
 			conn net.Conn
 			err  error
@@ -1635,17 +1593,25 @@ func (a *DaprRuntime) blockUntilAppIsReady(ctx context.Context) {
 				InsecureSkipVerify: true, //nolint:gosec
 			})
 		} else {
-			conn, err = dialer.Dial("tcp", dialAddr)
+			conn, err = dialer.DialContext(ctx, "tcp", dialAddr)
 		}
 		if err == nil && conn != nil {
 			conn.Close()
 			break
 		}
+
+		select {
+		// Return
+		case <-ctx.Done():
+			return ctx.Err()
 		// prevents overwhelming the OS with open connections
-		time.Sleep(time.Millisecond * 100)
+		case <-time.After(time.Millisecond * 100):
+		}
 	}
 
 	log.Infof("application discovered on port %v", a.runtimeConfig.appConnectionConfig.Port)
+
+	return nil
 }
 
 func (a *DaprRuntime) loadAppConfiguration() {
@@ -1664,7 +1630,7 @@ func (a *DaprRuntime) loadAppConfiguration() {
 	}
 }
 
-func (a *DaprRuntime) appendBuiltinSecretStore() {
+func (a *DaprRuntime) appendBuiltinSecretStore(ctx context.Context) {
 	if a.runtimeConfig.disableBuiltinK8sSecretStore {
 		return
 	}
@@ -1672,7 +1638,7 @@ func (a *DaprRuntime) appendBuiltinSecretStore() {
 	switch a.runtimeConfig.mode {
 	case modes.KubernetesMode:
 		// Preload Kubernetes secretstore
-		a.pendingComponents <- componentsV1alpha1.Component{
+		a.addPendingComponent(ctx, componentsV1alpha1.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: secretstoresLoader.BuiltinKubernetesSecretStore,
 			},
@@ -1680,7 +1646,25 @@ func (a *DaprRuntime) appendBuiltinSecretStore() {
 				Type:    "secretstores.kubernetes",
 				Version: components.FirstStableVersion,
 			},
-		}
+		})
+	}
+}
+
+func (a *DaprRuntime) addPendingComponent(ctx context.Context, comp componentsV1alpha1.Component) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case a.pendingComponents <- comp:
+		return true
+	}
+}
+
+func (a *DaprRuntime) addPendingEndpoint(ctx context.Context, endpoint httpEndpointV1alpha1.HTTPEndpoint) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case a.pendingHTTPEndpoints <- endpoint:
+		return true
 	}
 }
 
@@ -1755,8 +1739,8 @@ func componentDependency(compCategory components.Category, name string) string {
 	return fmt.Sprintf("%s:%s", compCategory, name)
 }
 
-func createGRPCManager(runtimeConfig *internalConfig, globalConfig *config.Configuration) *grpc.Manager {
-	grpcAppChannelConfig := &grpc.AppChannelConfig{}
+func createGRPCManager(runtimeConfig *internalConfig, globalConfig *config.Configuration) *manager.Manager {
+	grpcAppChannelConfig := &manager.AppChannelConfig{}
 	if globalConfig != nil {
 		grpcAppChannelConfig.TracingSpec = globalConfig.GetTracingSpec()
 		grpcAppChannelConfig.AllowInsecureTLS = globalConfig.IsFeatureEnabled(config.AppChannelAllowInsecureTLS)
@@ -1770,30 +1754,24 @@ func createGRPCManager(runtimeConfig *internalConfig, globalConfig *config.Confi
 		grpcAppChannelConfig.BaseAddress = runtimeConfig.appConnectionConfig.ChannelAddress
 	}
 
-	m := grpc.NewGRPCManager(runtimeConfig.mode, grpcAppChannelConfig)
+	m := manager.NewManager(runtimeConfig.mode, grpcAppChannelConfig)
 	m.StartCollector()
 	return m
 }
 
-func (a *DaprRuntime) stopTrace(ctx context.Context) {
+func (a *DaprRuntime) stopTrace(ctx context.Context) error {
 	if a.tracerProvider == nil {
-		return
+		return nil
 	}
 	// Flush and shutdown the tracing provider.
 	if err := a.tracerProvider.ForceFlush(ctx); err != nil && !errors.Is(err, context.Canceled) {
-		log.Warnf("error flushing tracing provider: %v", err)
+		log.Warnf("Error flushing tracing provider: %v", err)
 	}
 
 	if err := a.tracerProvider.Shutdown(ctx); err != nil && !errors.Is(err, context.Canceled) {
-		log.Warnf("error shutting down tracing provider: %v", err)
+		return fmt.Errorf("error shutting down tracing provider: %w", err)
 	} else {
 		a.tracerProvider = nil
 	}
-}
-
-// ShutdownSignal returns a signal that receives a message when the app needs to shut down
-func ShutdownSignal() chan os.Signal {
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, syscall.SIGTERM, os.Interrupt)
-	return stop
+	return nil
 }

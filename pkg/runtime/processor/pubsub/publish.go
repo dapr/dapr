@@ -84,7 +84,7 @@ func (p *pubsub) BulkPublish(ctx context.Context, req *contribpubsub.BulkPublish
 	policyDef := p.resiliency.ComponentOutboundPolicy(req.PubsubName, resiliency.Pubsub)
 
 	if contribpubsub.FeatureBulkPublish.IsPresent(ps.Component.Features()) {
-		return rtpubsub.ApplyBulkPublishResiliency(context.TODO(), req, policyDef, ps.Component.(contribpubsub.BulkPublisher))
+		return rtpubsub.ApplyBulkPublishResiliency(ctx, req, policyDef, ps.Component.(contribpubsub.BulkPublisher))
 	}
 
 	log.Debugf("pubsub %s does not implement the BulkPublish API; falling back to publishing messages individually", req.PubsubName)
@@ -116,7 +116,7 @@ func (p *pubsub) publishMessageHTTP(ctx context.Context, msg *subscribedMessage)
 	}
 
 	start := time.Now()
-	resp, err := p.appChannel.InvokeMethod(ctx, req, "")
+	resp, err := p.channels.AppChannel().InvokeMethod(ctx, req, "")
 	elapsed := diag.ElapsedSince(start)
 
 	if err != nil {

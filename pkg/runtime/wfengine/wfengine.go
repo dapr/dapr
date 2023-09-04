@@ -74,6 +74,14 @@ func NewWorkflowConfig(appID string) wfConfig {
 	}
 }
 
+// String implements fmt.Stringer and is primarily used for debugging purposes.
+func (c *wfConfig) String() string {
+	if c == nil {
+		return "(nil)"
+	}
+	return fmt.Sprintf("AppID:'%s', workflowActorType:'%s', activityActorType:'%s'", c.AppID, c.workflowActorType, c.activityActorType)
+}
+
 func IsWorkflowRequest(path string) bool {
 	return backend.IsDurableTaskGrpcRequest(path)
 }
@@ -211,7 +219,7 @@ func (wfe *WorkflowEngine) Start(ctx context.Context) (err error) {
 	return nil
 }
 
-func (wfe *WorkflowEngine) Stop(ctx context.Context) error {
+func (wfe *WorkflowEngine) Close(ctx context.Context) error {
 	wfe.startMutex.Lock()
 	defer wfe.startMutex.Unlock()
 

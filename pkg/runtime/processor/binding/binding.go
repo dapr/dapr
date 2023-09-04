@@ -24,12 +24,12 @@ import (
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/dapr/pkg/apis/common"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	"github.com/dapr/dapr/pkg/channel"
 	compbindings "github.com/dapr/dapr/pkg/components/bindings"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	"github.com/dapr/dapr/pkg/grpc"
+	"github.com/dapr/dapr/pkg/grpc/manager"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	"github.com/dapr/dapr/pkg/runtime/meta"
@@ -55,8 +55,9 @@ type Options struct {
 	ComponentStore *compstore.ComponentStore
 	Meta           *meta.Meta
 	Resiliency     resiliency.Provider
-	GRPC           *grpc.Manager
+	GRPC           *manager.Manager
 	TracingSpec    *config.TracingSpec
+	Channels       *channels.Channels
 }
 
 type binding struct {
@@ -66,14 +67,15 @@ type binding struct {
 	resiliency  resiliency.Provider
 	compStore   *compstore.ComponentStore
 	meta        *meta.Meta
-	appChannel  channel.AppChannel
+	channels    *channels.Channels
 	tracingSpec *config.TracingSpec
-	grpc        *grpc.Manager
+	grpc        *manager.Manager
 
 	lock sync.Mutex
 
 	subscribeBindingList []string
 	inputCancel          context.CancelFunc
+	wg                   sync.WaitGroup
 }
 
 func New(opts Options) *binding {
@@ -85,11 +87,8 @@ func New(opts Options) *binding {
 		resiliency:  opts.Resiliency,
 		tracingSpec: opts.TracingSpec,
 		grpc:        opts.GRPC,
+		channels:    opts.Channels,
 	}
-}
-
-func (b *binding) SetAppChannel(appChannel channel.AppChannel) {
-	b.appChannel = appChannel
 }
 
 func (b *binding) Init(ctx context.Context, comp compapi.Component) error {
@@ -166,7 +165,14 @@ func (b *binding) initInputBinding(ctx context.Context, comp compapi.Component) 
 		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "creation", comp.ObjectMeta.Name)
 		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
 	}
-	err = binding.Init(ctx, bindings.Metadata{Base: b.meta.ToBaseMetadata(comp)})
+
+	meta, err := b.meta.ToBaseMetadata(comp)
+	if err != nil {
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
+		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
+	}
+
+	err = binding.Init(ctx, bindings.Metadata{Base: meta})
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
 		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
@@ -198,7 +204,13 @@ func (b *binding) initOutputBinding(ctx context.Context, comp compapi.Component)
 	}
 
 	if binding != nil {
-		err := binding.Init(ctx, bindings.Metadata{Base: b.meta.ToBaseMetadata(comp)})
+		meta, err := b.meta.ToBaseMetadata(comp)
+		if err != nil {
+			diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
+			return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
+		}
+
+		err = binding.Init(ctx, bindings.Metadata{Base: meta})
 		if err != nil {
 			diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
 			return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)

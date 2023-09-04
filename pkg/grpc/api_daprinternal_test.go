@@ -28,6 +28,7 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	"github.com/dapr/dapr/pkg/runtime/channels"
 )
 
 func TestCallLocal(t *testing.T) {
@@ -36,7 +37,7 @@ func TestCallLocal(t *testing.T) {
 			UniversalAPI: &universalapi.UniversalAPI{
 				AppID: "fakeAPI",
 			},
-			appChannel: nil,
+			channels: new(channels.Channels),
 		}
 		server, lis := startInternalServer(fakeAPI)
 		defer server.Stop()
@@ -57,7 +58,7 @@ func TestCallLocal(t *testing.T) {
 			UniversalAPI: &universalapi.UniversalAPI{
 				AppID: "fakeAPI",
 			},
-			appChannel: mockAppChannel,
+			channels: (new(channels.Channels)).WithAppChannel(mockAppChannel),
 		}
 		server, lis := startInternalServer(fakeAPI)
 		defer server.Stop()
@@ -83,7 +84,7 @@ func TestCallLocal(t *testing.T) {
 			UniversalAPI: &universalapi.UniversalAPI{
 				AppID: "fakeAPI",
 			},
-			appChannel: mockAppChannel,
+			channels: (new(channels.Channels)).WithAppChannel(mockAppChannel),
 		}
 		server, lis := startInternalServer(fakeAPI)
 		defer server.Stop()
@@ -105,7 +106,7 @@ func TestCallLocalStream(t *testing.T) {
 			UniversalAPI: &universalapi.UniversalAPI{
 				AppID: "fakeAPI",
 			},
-			appChannel: nil,
+			channels: new(channels.Channels),
 		}
 		server, lis := startInternalServer(fakeAPI)
 		defer server.Stop()
@@ -135,7 +136,7 @@ func TestCallLocalStream(t *testing.T) {
 			UniversalAPI: &universalapi.UniversalAPI{
 				AppID: "fakeAPI",
 			},
-			appChannel: mockAppChannel,
+			channels: (new(channels.Channels)).WithAppChannel(mockAppChannel),
 		}
 		server, lis := startInternalServer(fakeAPI)
 		defer server.Stop()
@@ -172,7 +173,7 @@ func TestCallLocalStream(t *testing.T) {
 			UniversalAPI: &universalapi.UniversalAPI{
 				AppID: "fakeAPI",
 			},
-			appChannel: mockAppChannel,
+			channels: (new(channels.Channels)).WithAppChannel(mockAppChannel),
 		}
 		server, lis := startInternalServer(fakeAPI)
 		defer server.Stop()

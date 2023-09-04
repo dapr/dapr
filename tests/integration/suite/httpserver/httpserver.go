@@ -29,6 +29,7 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -49,7 +50,7 @@ func (h *httpServer) Setup(t *testing.T) []framework.Option {
 }
 
 func (h *httpServer) Run(t *testing.T, ctx context.Context) {
-	h1Client := http.Client{Transport: &http.Transport{}}
+	h1Client := util.HTTPClient(t)
 	h2cClient := &http.Client{
 		Transport: &http2.Transport{
 			// Allow http2.Transport to use protocol "http"
@@ -60,6 +61,7 @@ func (h *httpServer) Run(t *testing.T, ctx context.Context) {
 			},
 		},
 	}
+	t.Cleanup(h2cClient.CloseIdleConnections)
 
 	// Wait for daprd to be up
 	assert.Eventually(t, func() bool {

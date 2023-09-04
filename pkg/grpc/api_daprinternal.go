@@ -35,7 +35,8 @@ import (
 
 // CallLocal is used for internal dapr to dapr calls. It is invoked by another Dapr instance with a request to the local app.
 func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-	if a.appChannel == nil {
+	appChannel := a.channels.AppChannel()
+	if appChannel == nil {
 		return nil, status.Error(codes.Internal, messages.ErrChannelNotFound)
 	}
 
@@ -60,7 +61,7 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	}()
 
 	// stausCode will be read by the deferred method above
-	res, err := a.appChannel.InvokeMethod(ctx, req, "")
+	res, err := appChannel.InvokeMethod(ctx, req, "")
 	if err != nil {
 		statusCode = int32(codes.Internal)
 		return nil, status.Errorf(codes.Internal, messages.ErrChannelInvoke, err)
@@ -75,12 +76,10 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 // CallLocalStream is a variant of CallLocal that uses gRPC streams to send data in chunks, rather than in an unary RPC.
 // It is invoked by another Dapr instance with a request to the local app.
 func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStreamServer) error { //nolint:nosnakecase
-	if a.appChannel == nil {
+	appChannel := a.channels.AppChannel()
+	if appChannel == nil {
 		return status.Error(codes.Internal, messages.ErrChannelNotFound)
 	}
-
-	ctx, cancel := context.WithCancel(stream.Context())
-	defer cancel()
 
 	// Read the first chunk of the incoming request
 	// This contains the metadata of the request
@@ -109,6 +108,19 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 		WithContentType(chunk.Request.Message.ContentType)
 	defer req.Close()
 
+	ctx, cancel := context.WithCancel(stream.Context())
+	defer cancel()
+
+	a.wg.Add(1)
+	go func() {
+		defer a.wg.Done()
+		select {
+		case <-ctx.Done():
+		case <-a.closeCh:
+			cancel()
+		}
+	}()
+
 	// Check the ACL
 	err = a.callLocalValidateACL(ctx, req)
 	if err != nil {
@@ -124,7 +136,10 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 	}()
 
 	// Read the rest of the data in background as we submit the request
+	a.wg.Add(1)
 	go func() {
+		defer a.wg.Done()
+
 		var (
 			expectSeq uint64
 			readSeq   uint64
@@ -174,7 +189,7 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 	}()
 
 	// Submit the request to the app
-	res, err := a.appChannel.InvokeMethod(ctx, req, "")
+	res, err := appChannel.InvokeMethod(ctx, req, "")
 	if err != nil {
 		statusCode = int32(codes.Internal)
 		return status.Errorf(codes.Internal, messages.ErrChannelInvoke, err)

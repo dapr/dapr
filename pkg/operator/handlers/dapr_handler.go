@@ -136,7 +136,6 @@ func (h *DaprHandler) Init(ctx context.Context) error {
 	}
 
 	if h.argoRolloutServiceReconcilerEnabled {
-		_ = argov1alpha1.AddToScheme(h.Scheme)
 		err = ctrl.NewControllerManagedBy(h.mgr).
 			For(&argov1alpha1.Rollout{}).
 			Owns(&corev1.Service{}).

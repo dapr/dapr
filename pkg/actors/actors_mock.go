@@ -175,8 +175,31 @@ func (_m *MockActors) GetState(ctx context.Context, req *GetStateRequest) (*Stat
 	return r0, r1
 }
 
+// BulkGetState provides a mock function with given fields: req
+func (_m *MockActors) GetBulkState(ctx context.Context, req *GetBulkStateRequest) (BulkStateResponse, error) {
+	ret := _m.Called(req)
+
+	var r0 BulkStateResponse
+	if rf, ok := ret.Get(0).(func(*GetBulkStateRequest) BulkStateResponse); ok {
+		r0 = rf(req)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(BulkStateResponse)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(*GetBulkStateRequest) error); ok {
+		r1 = rf(req)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // Init provides a mock function with given fields:
-func (_m *MockActors) Init() error {
+func (_m *MockActors) Init(_ context.Context) error {
 	ret := _m.Called()
 
 	var r0 error
@@ -189,9 +212,10 @@ func (_m *MockActors) Init() error {
 	return r0
 }
 
-// Stop provides a mock function with given fields:
-func (_m *MockActors) Stop() {
+// Close provides a mock function with given fields:
+func (_m *MockActors) Close() error {
 	_m.Called()
+	return nil
 }
 
 // TransactionalStateOperation provides a mock function with given fields: req
@@ -274,14 +298,19 @@ func (f *FailingActors) Call(ctx context.Context, req *invokev1.InvokeMethodRequ
 	return resp, nil
 }
 
-func (f *FailingActors) Init() error {
+func (f *FailingActors) Init(_ context.Context) error {
 	return nil
 }
 
-func (f *FailingActors) Stop() {
+func (f *FailingActors) Close() error {
+	return nil
 }
 
 func (f *FailingActors) GetState(ctx context.Context, req *GetStateRequest) (*StateResponse, error) {
+	return nil, nil
+}
+
+func (f *FailingActors) GetBulkState(ctx context.Context, req *GetBulkStateRequest) (BulkStateResponse, error) {
 	return nil, nil
 }
 

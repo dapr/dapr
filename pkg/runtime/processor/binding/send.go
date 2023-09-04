@@ -43,7 +43,7 @@ func (b *binding) StartReadingFromBindings(ctx context.Context) error {
 	b.lock.Lock()
 	defer b.lock.Unlock()
 
-	if b.appChannel == nil {
+	if b.channels.AppChannel() == nil {
 		return errors.New("app channel not initialized")
 	}
 
@@ -66,7 +66,12 @@ func (b *binding) StartReadingFromBindings(ctx context.Context) error {
 	for name, bind := range b.compStore.ListInputBindings() {
 		var isSubscribed bool
 
-		m := b.meta.ToBaseMetadata(bindings[name]).Properties
+		meta, err := b.meta.ToBaseMetadata(bindings[name])
+		if err != nil {
+			return err
+		}
+
+		m := meta.Properties
 
 		if isBindingOfExplicitDirection(ComponentTypeInput, m) {
 			isSubscribed = true
@@ -95,6 +100,7 @@ func (b *binding) StartReadingFromBindings(ctx context.Context) error {
 func (b *binding) StopReadingFromBindings() {
 	b.lock.Lock()
 	defer b.lock.Unlock()
+	defer b.wg.Wait()
 
 	if b.inputCancel != nil {
 		b.inputCancel()
@@ -104,8 +110,11 @@ func (b *binding) StopReadingFromBindings() {
 }
 
 func (b *binding) sendBatchOutputBindingsParallel(ctx context.Context, to []string, data []byte) {
+	b.wg.Add(len(to))
 	for _, dst := range to {
 		go func(name string) {
+			defer b.wg.Done()
+
 			_, err := b.SendToOutputBinding(ctx, name, &bindings.InvokeRequest{
 				Data:      data,
 				Operation: bindings.CreateOperation,
@@ -158,7 +167,10 @@ func (b *binding) SendToOutputBinding(ctx context.Context, name string, req *bin
 
 func (b *binding) onAppResponse(ctx context.Context, response *bindings.AppResponse) error {
 	if len(response.State) > 0 {
+		b.wg.Add(1)
 		go func(reqs []state.SetRequest) {
+			defer b.wg.Done()
+
 			store, ok := b.compStore.GetStateStore(response.StoreName)
 			if !ok {
 				return
@@ -322,7 +334,7 @@ func (b *binding) sendBindingEventToApp(ctx context.Context, bindingName string,
 			},
 		)
 		resp, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
-			rResp, rErr := b.appChannel.InvokeMethod(ctx, req, "")
+			rResp, rErr := b.channels.AppChannel().InvokeMethod(ctx, req, "")
 			if rErr != nil {
 				return rResp, rErr
 			}
@@ -429,7 +441,7 @@ func (b *binding) isAppSubscribedToBinding(ctx context.Context, binding string) 
 			WithContentType(invokev1.JSONContentType)
 		defer req.Close()
 
-		resp, err := b.appChannel.InvokeMethod(ctx, req, "")
+		resp, err := b.channels.AppChannel().InvokeMethod(ctx, req, "")
 		if err != nil {
 			log.Fatalf("could not invoke OPTIONS method on input binding subscription endpoint %q: %v", path, err)
 		}
