@@ -430,6 +430,12 @@ spec:
                 required:
                 - samplingRate
                 type: object
+              wasm:
+                description: WasmSpec describes the security profile for all Dapr Wasm components.
+                properties:
+                  strictSandbox:
+                    type: boolean
+                type: object
             type: object
         type: object
     served: true

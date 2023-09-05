@@ -1,5 +1,3 @@
-//go:build allcomponents
-
 /*
 Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,15 +11,29 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package components
+package manager
 
 import (
-	"github.com/dapr/components-contrib/bindings/wasm"
-	"github.com/dapr/dapr/pkg/components"
-	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
+	"runtime"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+
+	"github.com/dapr/dapr/pkg/modes"
 )
 
-func init() {
-	bindingsLoader.DefaultRegistry.RegisterOutputBinding(wasm.NewWasmOutput, "wasm")
-	components.RegisterWasmComponentType(components.CategoryBindings, "wasm")
+func TestGetDialAddress(t *testing.T) {
+	t.Run("kubernetes mode", func(t *testing.T) {
+		m := GetDialAddressPrefix(modes.KubernetesMode)
+		if runtime.GOOS != "windows" {
+			assert.Equal(t, "dns:///", m)
+		} else {
+			assert.Equal(t, "", m)
+		}
+	})
+
+	t.Run("self hosted mode", func(t *testing.T) {
+		m := GetDialAddressPrefix(modes.StandaloneMode)
+		assert.Equal(t, "", m)
+	})
 }

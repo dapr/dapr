@@ -81,6 +81,7 @@ type Actors interface {
 	Call(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error)
 	Init(context.Context) error
 	GetState(ctx context.Context, req *GetStateRequest) (*StateResponse, error)
+	GetBulkState(ctx context.Context, req *GetBulkStateRequest) (BulkStateResponse, error)
 	TransactionalStateOperation(ctx context.Context, req *TransactionalRequest) error
 	GetReminder(ctx context.Context, req *GetReminderRequest) (*internal.Reminder, error)
 	CreateReminder(ctx context.Context, req *CreateReminderRequest) error
@@ -648,6 +649,50 @@ func (a *actorsRuntime) GetState(ctx context.Context, req *GetStateRequest) (*St
 		Data:     resp.Data,
 		Metadata: resp.Metadata,
 	}, nil
+}
+
+func (a *actorsRuntime) GetBulkState(ctx context.Context, req *GetBulkStateRequest) (BulkStateResponse, error) {
+	store, err := a.stateStore()
+	if err != nil {
+		return nil, err
+	}
+
+	actorKey := req.ActorKey()
+	baseKey := constructCompositeKey(a.actorsConfig.Config.AppID, actorKey)
+	metadata := map[string]string{metadataPartitionKey: baseKey}
+
+	bulkReqs := make([]state.GetRequest, len(req.Keys))
+	for i, key := range req.Keys {
+		bulkReqs[i] = state.GetRequest{
+			Key:      a.constructActorStateKey(actorKey, key),
+			Metadata: metadata,
+		}
+	}
+
+	policyRunner := resiliency.NewRunner[[]state.BulkGetResponse](ctx,
+		a.resiliency.ComponentOutboundPolicy(a.storeName, resiliency.Statestore),
+	)
+	res, err := policyRunner(func(ctx context.Context) ([]state.BulkGetResponse, error) {
+		return store.BulkGet(ctx, bulkReqs, state.BulkGetOpts{})
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Add the dapr separator to baseKey
+	baseKey += daprSeparator
+
+	bulkRes := make(BulkStateResponse, len(res))
+	for _, r := range res {
+		if r.Error != "" {
+			return nil, fmt.Errorf("failed to retrieve key '%s': %s", r.Key, r.Error)
+		}
+
+		// Trim the prefix from the key
+		bulkRes[strings.TrimPrefix(r.Key, baseKey)] = r.Data
+	}
+
+	return bulkRes, nil
 }
 
 func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *TransactionalRequest) error {

@@ -30,10 +30,11 @@ import (
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
-	daprgrpc "github.com/dapr/dapr/pkg/grpc"
+	"github.com/dapr/dapr/pkg/grpc/manager"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/meta"
 	rtmock "github.com/dapr/dapr/pkg/runtime/mock"
@@ -117,7 +118,7 @@ func TestStartReadingFromBindings(t *testing.T) {
 			ComponentStore: compstore.New(),
 			Meta:           meta.New(meta.Options{}),
 		})
-		b.SetAppChannel(mockAppChannel)
+		b.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		mockAppChannel.On("InvokeMethod", mock.Anything, mock.Anything).Return(invokev1.NewInvokeMethodResponse(200, "OK", nil), nil)
 
@@ -138,7 +139,7 @@ func TestStartReadingFromBindings(t *testing.T) {
 			ComponentStore: compstore.New(),
 			Meta:           meta.New(meta.Options{}),
 		})
-		b.SetAppChannel(mockAppChannel)
+		b.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		mockAppChannel.On("InvokeMethod", mock.Anything, mock.Anything).Return(invokev1.NewInvokeMethodResponse(200, "OK", nil), nil)
 
@@ -198,7 +199,7 @@ func TestGetSubscribedBindingsGRPC(t *testing.T) {
 				Resiliency:     resiliency.New(log),
 				ComponentStore: compstore.New(),
 				Meta:           meta.New(meta.Options{}),
-				GRPC:           daprgrpc.NewGRPCManager(modes.StandaloneMode, &daprgrpc.AppChannelConfig{Port: port}),
+				GRPC:           manager.NewManager(modes.StandaloneMode, &manager.AppChannelConfig{Port: port}),
 			})
 			// create mock application server first
 			grpcServer := testinggrpc.StartTestAppCallbackGRPCServer(t, port, &channelt.MockServer{
@@ -227,7 +228,7 @@ func TestReadInputBindings(t *testing.T) {
 			ComponentStore: compstore.New(),
 			Meta:           meta.New(meta.Options{}),
 		})
-		b.SetAppChannel(mockAppChannel)
+		b.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		fakeBindingResp := invokev1.NewInvokeMethodResponse(200, "OK", nil)
 		defer fakeBindingResp.Close()
@@ -268,7 +269,7 @@ func TestReadInputBindings(t *testing.T) {
 			ComponentStore: compstore.New(),
 			Meta:           meta.New(meta.Options{}),
 		})
-		b.SetAppChannel(mockAppChannel)
+		b.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		fakeBindingReq := invokev1.NewInvokeMethodRequest(testInputBindingMethod).
 			WithHTTPExtension(http.MethodOptions, "").
@@ -314,7 +315,7 @@ func TestReadInputBindings(t *testing.T) {
 			ComponentStore: compstore.New(),
 			Meta:           meta.New(meta.Options{}),
 		})
-		b.SetAppChannel(mockAppChannel)
+		b.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		fakeBindingReq := invokev1.NewInvokeMethodRequest(testInputBindingMethod).
 			WithHTTPExtension(http.MethodOptions, "").
@@ -360,7 +361,7 @@ func TestReadInputBindings(t *testing.T) {
 			ComponentStore: compstore.New(),
 			Meta:           meta.New(meta.Options{}),
 		})
-		b.SetAppChannel(mockAppChannel)
+		b.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		closeCh := make(chan struct{})
 		defer close(closeCh)
@@ -393,7 +394,7 @@ func TestInvokeOutputBindings(t *testing.T) {
 			ComponentStore: compstore.New(),
 			Meta:           meta.New(meta.Options{}),
 		})
-		b.SetAppChannel(mockAppChannel)
+		b.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		_, err := b.SendToOutputBinding(context.Background(), "mockBinding", &bindings.InvokeRequest{
 			Data: []byte(""),
@@ -410,7 +411,7 @@ func TestInvokeOutputBindings(t *testing.T) {
 			ComponentStore: compstore.New(),
 			Meta:           meta.New(meta.Options{}),
 		})
-		b.SetAppChannel(mockAppChannel)
+		b.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		b.compStore.AddOutputBinding("mockBinding", &rtmock.Binding{})
 
@@ -429,7 +430,7 @@ func TestInvokeOutputBindings(t *testing.T) {
 			ComponentStore: compstore.New(),
 			Meta:           meta.New(meta.Options{}),
 		})
-		b.SetAppChannel(mockAppChannel)
+		b.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		b.compStore.AddOutputBinding("mockBinding", &rtmock.Binding{})
 
@@ -453,7 +454,7 @@ func TestBindingTracingHttp(t *testing.T) {
 	t.Run("traceparent passed through with response status code 200", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.On("InvokeMethod", mock.Anything, mock.Anything).Return(invokev1.NewInvokeMethodResponse(200, "OK", nil), nil)
-		b.appChannel = mockAppChannel
+		b.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		_, err := b.sendBindingEventToApp(context.Background(), "mockBinding", []byte(""), map[string]string{"traceparent": "00-d97eeaf10b4d00dc6ba794f3a41c5268-09462d216dd14deb-01"})
 		assert.NoError(t, err)
@@ -467,7 +468,7 @@ func TestBindingTracingHttp(t *testing.T) {
 	t.Run("traceparent passed through with response status code 204", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.On("InvokeMethod", mock.Anything, mock.Anything).Return(invokev1.NewInvokeMethodResponse(204, "OK", nil), nil)
-		b.appChannel = mockAppChannel
+		b.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		_, err := b.sendBindingEventToApp(context.Background(), "mockBinding", []byte(""), map[string]string{"traceparent": "00-d97eeaf10b4d00dc6ba794f3a41c5268-09462d216dd14deb-01"})
 		assert.NoError(t, err)
@@ -481,7 +482,7 @@ func TestBindingTracingHttp(t *testing.T) {
 	t.Run("bad traceparent does not fail request", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.On("InvokeMethod", mock.Anything, mock.Anything).Return(invokev1.NewInvokeMethodResponse(200, "OK", nil), nil)
-		b.appChannel = mockAppChannel
+		b.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		_, err := b.sendBindingEventToApp(context.Background(), "mockBinding", []byte(""), map[string]string{"traceparent": "I am not a traceparent"})
 		assert.NoError(t, err)
@@ -514,7 +515,7 @@ func TestBindingResiliency(t *testing.T) {
 		},
 	}
 
-	b.appChannel = &failingChannel
+	b.channels = new(channels.Channels).WithAppChannel(&failingChannel)
 	b.isHTTP = true
 
 	failingBinding := daprt.FailingBinding{
