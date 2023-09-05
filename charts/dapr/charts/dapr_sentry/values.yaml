@@ -13,6 +13,8 @@ fullnameOverride: ""
 
 tokenAudience: ""
 
+deploymentAnnotations: {}
+
 ports:
   protocol: TCP
   port: 443
