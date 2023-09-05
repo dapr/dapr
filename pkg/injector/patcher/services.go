@@ -29,7 +29,7 @@ var (
 	// Dapr placement service.
 	ServicePlacement = Service{"dapr-placement-server", 50005}
 	// Dapr sentry service.
-	ServiceSentry = Service{"dapr-sentry", 80}
+	ServiceSentry = Service{"dapr-sentry", 443}
 )
 
 // ServiceAddress returns the address of a Dapr control plane service.
