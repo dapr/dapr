@@ -30,6 +30,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/retry"
 )
 
 var log = logger.NewLogger("dapr.runtime.actor.reminders")
@@ -159,9 +160,19 @@ func (r *reminders) CreateReminder(ctx context.Context, reminder *internal.Remin
 
 	stop := make(chan struct{})
 
-	err = r.storeReminder(ctx, store, reminder, stop)
+	config := retry.DefaultConfig()
+	config.Multiplier = 1.0
+	b := config.NewBackOffWithContext(ctx)
+
+	err = retry.NotifyRecover(func() error {
+		return r.storeReminder(ctx, store, reminder, stop)
+	}, b, func(err error, d time.Duration) {
+		log.Debugf("Attempting to store reminder again after error: %v", err)
+	},
+		func() { log.Debug("Storing of reminder successful") })
+
 	if err != nil {
-		return fmt.Errorf("error storing reminder: %w", err)
+		return err
 	}
 
 	// Start the reminder
@@ -205,7 +216,22 @@ func (r *reminders) DeleteReminder(ctx context.Context, req internal.DeleteRemin
 		<-r.evaluationChan
 	}()
 
-	return r.doDeleteReminder(ctx, req.ActorType, req.ActorID, req.Name)
+	config := retry.DefaultConfig()
+	config.Multiplier = 1.0
+	b := config.NewBackOffWithContext(ctx)
+
+	err := retry.NotifyRecover(func() error {
+		return r.doDeleteReminder(ctx, req.ActorType, req.ActorID, req.Name)
+	}, b, func(err error, d time.Duration) {
+		log.Debugf("Attempting to delete reminder again after error: %v", err)
+	},
+		func() { log.Debug("Deletion of reminder successful") })
+
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (r *reminders) RenameReminder(ctx context.Context, req *internal.RenameReminderRequest) error {
