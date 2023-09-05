@@ -3,7 +3,7 @@ module github.com/dapr/dapr/tests/apps/service_invocation_grpc_proxy_client
 go 1.20
 
 require (
-	github.com/dapr/dapr v0.0.0-00010101000000-000000000000
+	github.com/dapr/dapr v1.11.2
 	github.com/gorilla/mux v1.8.0
 	google.golang.org/grpc v1.56.2
 	google.golang.org/grpc/examples v0.0.0-20210610163306-6351a55c3895
