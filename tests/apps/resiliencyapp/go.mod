@@ -3,7 +3,7 @@ module github.com/dapr/dapr/tests/apps/resiliencyapp
 go 1.20
 
 require (
-	github.com/dapr/dapr v1.7.4
+	github.com/dapr/dapr v1.11.2
 	github.com/gorilla/mux v1.8.0
 	google.golang.org/grpc v1.56.2
 	google.golang.org/grpc/examples v0.0.0-20220818173707-97cb7b1653d7
