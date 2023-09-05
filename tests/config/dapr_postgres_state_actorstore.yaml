@@ -1,0 +1,44 @@
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: statestore-actors
+spec:
+  type: state.postgres
+  version: v1
+  metadata:
+    - name: connectionString
+      value: "host=dapr-postgres-postgresql.dapr-tests.svc.cluster.local user=postgres password=example port=5432 connect_timeout=10 database=dapr_test"
+    - name: table
+      value: actortable
+    - name: actorStateStore
+      value: true
+scopes:
+# actortestclient is deliberately omitted to ensure that `actor_features_test` works without a state store
+- actor1
+- actor2
+- actorapp
+- actorfeatures
+- reentrantactor
+- actorreminder
+- actorreminderpartition
+- actorinvocationapp
+- actormetadata-a
+- actormetadata-b
+- actorjava
+- actordotnet
+- actorpython
+- actorstate
+- actorphp
+- resiliencyapp
+- resiliencyappgrpc
+- perf-actor-activation-service
+- perf-actor-activation-client
+- perf-actor-reminder-service
+- perf-actor-reminder-client
+- perf-actor-timer-service
+- perf-actor-timer-client
+- perf-actor-double-activation
+- perf-actorfeatures
+- perf-actor-id
+- perf-actor-type
+- workflowsapp
