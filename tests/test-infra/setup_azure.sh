@@ -31,7 +31,7 @@ if $USE_COSMOSDB ; then
 
   # Set environmental variables to use Cosmos DB as state store
   export DAPR_TEST_STATE_STORE=cosmosdb
-  export DAPR_TEST_QUERY_STATE_STORE=cosmosdb_query
+  export DAPR_TEST_QUERY_STATE_STORE=cosmosdb
 
   # Write into the GitHub Actions environment
   if [ -n "$GITHUB_ENV" ]; then
