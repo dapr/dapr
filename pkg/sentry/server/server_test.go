@@ -239,7 +239,7 @@ func TestRun(t *testing.T) {
 				return spiffeid.RequireTrustDomainFromString("my-trust-domain"), nil
 			}),
 			ca: cafake.New().WithSignIdentity(func(ctx context.Context, req *ca.SignRequest) ([]*x509.Certificate, error) {
-				assert.Equal(t, []string{"dapr-webhook.default.svc"}, req.DNS)
+				assert.Equal(t, []string{"cluster.local", "dapr-webhook.default.svc"}, req.DNS)
 				return []*x509.Certificate{crtX509}, nil
 			}).WithTrustAnchors(func() []byte {
 				return []byte("my-trust-anchors")

@@ -17,6 +17,9 @@ limitations under the License.
 package fake
 
 import (
+	"context"
+	"crypto/tls"
+
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -24,6 +27,10 @@ import (
 type Fake struct {
 	grpcServerOptionFn             func() grpc.ServerOption
 	grpcServerOptionNoClientAuthFn func() grpc.ServerOption
+	tlsServerConfigNoClientAuth    func() *tls.Config
+
+	currentTrustAnchorsFn func() ([]byte, error)
+	watchTrustAnchorsFn   func(context.Context, chan<- []byte)
 }
 
 func New() *Fake {
@@ -31,8 +38,17 @@ func New() *Fake {
 		grpcServerOptionFn: func() grpc.ServerOption {
 			return grpc.Creds(insecure.NewCredentials())
 		},
+		tlsServerConfigNoClientAuth: func() *tls.Config {
+			return new(tls.Config)
+		},
 		grpcServerOptionNoClientAuthFn: func() grpc.ServerOption {
 			return grpc.Creds(insecure.NewCredentials())
+		},
+		currentTrustAnchorsFn: func() ([]byte, error) {
+			return []byte{}, nil
+		},
+		watchTrustAnchorsFn: func(context.Context, chan<- []byte) {
+			return
 		},
 	}
 }
@@ -47,10 +63,37 @@ func (f *Fake) WithGRPCServerOptionFn(fn func() grpc.ServerOption) *Fake {
 	return f
 }
 
+func (f *Fake) WithTLSServerConfigNoClientAuthFn(fn func() *tls.Config) *Fake {
+	f.tlsServerConfigNoClientAuth = fn
+	return f
+}
+
+func (f *Fake) WithCurrentTrustAnchorsFn(fn func() ([]byte, error)) *Fake {
+	f.currentTrustAnchorsFn = fn
+	return f
+}
+
+func (f *Fake) WithWatchTrustAnchorsFn(fn func(context.Context, chan<- []byte)) *Fake {
+	f.watchTrustAnchorsFn = fn
+	return f
+}
+
 func (f *Fake) GRPCServerOptionNoClientAuth() grpc.ServerOption {
 	return f.grpcServerOptionNoClientAuthFn()
 }
 
 func (f *Fake) GRPCServerOption() grpc.ServerOption {
 	return f.grpcServerOptionFn()
+}
+
+func (f *Fake) TLSServerConfigNoClientAuth() *tls.Config {
+	return f.tlsServerConfigNoClientAuth()
+}
+
+func (f *Fake) CurrentTrustAnchors() ([]byte, error) {
+	return f.currentTrustAnchorsFn()
+}
+
+func (f *Fake) WatchTrustAnchors(ctx context.Context, ch chan<- []byte) {
+	f.watchTrustAnchorsFn(ctx, ch)
 }
