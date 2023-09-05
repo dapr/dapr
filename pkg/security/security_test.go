@@ -102,6 +102,7 @@ func Test_Start(t *testing.T) {
 		require.NoError(t, err)
 
 		ctx, cancel := context.WithCancel(context.Background())
+
 		providerStopped := make(chan struct{})
 		go func() {
 			defer close(providerStopped)
@@ -116,6 +117,26 @@ func Test_Start(t *testing.T) {
 			require.FailNow(t, "provider is not ready")
 		}
 
+		sec, err := p.Handler(ctx)
+		require.NoError(t, err)
+
+		td, err := sec.CurrentTrustAnchors()
+		require.NoError(t, err)
+		assert.Equal(t, root1, td)
+
+		caBundleCh := make(chan []byte, 2)
+		watcherStopped := make(chan struct{})
+		go func() {
+			defer close(watcherStopped)
+			sec.WatchTrustAnchors(ctx, caBundleCh)
+		}()
+
+		assert.Eventually(t, func() bool {
+			prov.sec.source.lock.RLock()
+			defer prov.sec.source.lock.RUnlock()
+			return len(prov.sec.source.trustAnchorSubscribers) > 0
+		}, time.Second, time.Millisecond)
+
 		curr, err := prov.sec.source.trustAnchors.Marshal()
 		require.NoError(t, err)
 		require.Equal(t, root1, curr)
@@ -129,6 +150,15 @@ func Test_Start(t *testing.T) {
 			require.NoError(t, err)
 			return bytes.Equal(root2, curr)
 		}, time.Second*5, time.Millisecond)
+
+		t.Run("should expect that the trust bundle watch is updated", func(t *testing.T) {
+			select {
+			case got := <-caBundleCh:
+				assert.Equal(t, root2, got)
+			case <-time.After(time.Second * 3):
+				require.FailNow(t, "trust bundle watch is not updated in time")
+			}
+		})
 
 		cancel()
 

@@ -37,8 +37,8 @@ import (
 	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subscriptionsapiV2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
-	daprCredentials "github.com/dapr/dapr/pkg/credentials"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
+	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/logger"
 )
 
@@ -54,7 +54,7 @@ var log = logger.NewLogger("dapr.operator.api")
 
 // Server runs the Dapr API server for components and configurations.
 type Server interface {
-	Run(ctx context.Context, certChain *daprCredentials.CertChain) error
+	Run(context.Context, security.Handler) error
 	Ready(context.Context) error
 	OnComponentUpdated(ctx context.Context, component *componentsapi.Component)
 	OnHTTPEndpointUpdated(ctx context.Context, endpoint *httpendpointsapi.HTTPEndpoint)
@@ -83,18 +83,14 @@ func NewAPIServer(client client.Client) Server {
 }
 
 // Run starts a new gRPC server.
-func (a *apiServer) Run(ctx context.Context, certChain *daprCredentials.CertChain) error {
+func (a *apiServer) Run(ctx context.Context, sec security.Handler) error {
 	if !a.running.CompareAndSwap(false, true) {
 		return errors.New("api server already running")
 	}
 
 	log.Infof("starting gRPC server on port %d", serverPort)
 
-	opts, err := daprCredentials.GetServerOptions(certChain)
-	if err != nil {
-		return fmt.Errorf("error getting gRPC server options: %w", err)
-	}
-	s := grpc.NewServer(opts...)
+	s := grpc.NewServer(sec.GRPCServerOption())
 	operatorv1pb.RegisterOperatorServer(s, a)
 
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%v", serverPort))
