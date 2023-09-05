@@ -79,7 +79,7 @@ func New() *Options {
 
 	flag.StringVar(&opts.TrustDomain, "trust-domain", "cluster.local", "Trust domain for the Dapr control plane")
 	flag.StringVar(&opts.TrustAnchorsFile, "trust-anchors-file", "/var/run/secrets/dapr.io/tls/ca.crt", "Filepath to the trust anchors for the Dapr control plane")
-	flag.StringVar(&opts.SentryAddress, "sentry-address", fmt.Sprintf("dapr-sentry.%s.svc:80", security.CurrentNamespace()), "Filepath to the trust anchors for the Dapr control plane")
+	flag.StringVar(&opts.SentryAddress, "sentry-address", fmt.Sprintf("dapr-sentry.%s.svc:443", security.CurrentNamespace()), "Filepath to the trust anchors for the Dapr control plane")
 
 	depCC := flag.String("certchain", "", "DEPRECATED")
 	depRCF := flag.String("issuer-ca-filename", "", "DEPRECATED")
