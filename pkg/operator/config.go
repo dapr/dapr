@@ -21,6 +21,11 @@ type Config struct {
 
 // LoadConfiguration loads the Kubernetes configuration and returns an Operator Config.
 func LoadConfiguration(ctx context.Context, name string, restConfig *rest.Config) (*Config, error) {
+	scheme, err := buildScheme(Options{})
+	if err != nil {
+		return nil, err
+	}
+
 	client, err := client.New(restConfig, client.Options{Scheme: scheme})
 	if err != nil {
 		return nil, fmt.Errorf("could not get Kubernetes API client: %w", err)
