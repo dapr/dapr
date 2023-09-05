@@ -2,37 +2,46 @@ package operator
 
 import (
 	"context"
-	"os"
+	"fmt"
 
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
-	"github.com/dapr/dapr/pkg/credentials"
+	"github.com/dapr/dapr/pkg/security"
 )
 
 // Config returns an operator config options.
 type Config struct {
-	MTLSEnabled bool
-	Credentials credentials.TLSCredentials
-}
-
-// GetNamespace returns the namespace for Dapr.
-func GetNamespace() string {
-	return os.Getenv("NAMESPACE")
+	MTLSEnabled             bool
+	ControlPlaneTrustDomain string
+	SentryAddress           string
 }
 
 // LoadConfiguration loads the Kubernetes configuration and returns an Operator Config.
-func LoadConfiguration(name string, client client.Client) (*Config, error) {
+func LoadConfiguration(ctx context.Context, name string, restConfig *rest.Config) (*Config, error) {
+	scheme, err := buildScheme(Options{})
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := client.New(restConfig, client.Options{Scheme: scheme})
+	if err != nil {
+		return nil, fmt.Errorf("could not get Kubernetes API client: %w", err)
+	}
+
 	var conf v1alpha1.Configuration
 	key := types.NamespacedName{
-		Namespace: GetNamespace(),
+		Namespace: security.CurrentNamespace(),
 		Name:      name,
 	}
-	if err := client.Get(context.Background(), key, &conf); err != nil {
+	if err := client.Get(ctx, key, &conf); err != nil {
 		return nil, err
 	}
 	return &Config{
-		MTLSEnabled: conf.Spec.MTLSSpec.GetEnabled(),
+		MTLSEnabled:             conf.Spec.MTLSSpec.GetEnabled(),
+		ControlPlaneTrustDomain: conf.Spec.MTLSSpec.ControlPlaneTrustDomain,
+		SentryAddress:           conf.Spec.MTLSSpec.SentryAddress,
 	}, nil
 }
