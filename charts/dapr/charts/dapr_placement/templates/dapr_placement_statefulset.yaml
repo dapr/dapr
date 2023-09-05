@@ -37,6 +37,9 @@ spec:
         prometheus.io/port: "{{ .Values.global.prometheus.port }}"
         prometheus.io/path: "/"
 {{- end }}
+{{- if .Values.statefulsetAnnotations }}
+{{ toYaml .Values.statefulsetAnnotations | indent 4}}
+{{- end }}
     spec:
       containers:
       - name: dapr-placement-server

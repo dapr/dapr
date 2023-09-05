@@ -48,9 +48,9 @@ Dapr uses pluggable component state stores and message buses such as Redis as we
 
 ## Why Dapr?
 
-Writing high performance, scalable and reliable distributed application is hard. Dapr brings proven patterns and practices to you. It unifies event-driven and actors semantics into a simple, consistent programming model. It supports all programming languages without framework lock-in. You are not exposed to low-level primitives such as threading, concurrency control, partitioning and scaling. Instead, you can write your code by implementing a simple web server using familiar web frameworks of your choice.
+Writing highly performant, scalable and reliable distributed application is hard. Dapr brings proven patterns and practices to you. It unifies event-driven and actors semantics into a simple, consistent programming model. It supports all programming languages without framework lock-in. You are not exposed to low-level primitives such as threading, concurrency control, partitioning and scaling. Instead, you can write your code by implementing a simple web server using familiar web frameworks of your choice.
 
-Dapr is flexible in threading and state consistency models. You can leverage multi-threading if you choose to, and you can choose among different consistency models. This flexibility enables to implement advanced scenarios without artificial constraints. Dapr is unique because you can transition seamlessly between platforms and underlying implementations without rewriting your code.
+Dapr is flexible in threading and state consistency models. You can leverage multi-threading if you choose to, and you can choose among different consistency models. This flexibility enables you to implement advanced scenarios without artificial constraints. Dapr is unique because you can transition seamlessly between platforms and underlying implementations without rewriting your code.
 
 ## Features
 
@@ -60,7 +60,7 @@ Dapr is flexible in threading and state consistency models. You can leverage mul
 * Consistent service-to-service discovery and invocation
 * Opt-in stateful models: Strong/Eventual consistency, First-write/Last-write wins
 * Cross platform virtual actors
-* Secrets management to retrieve secrets from secure key vaults
+* Secret management to retrieve secrets from secure key vaults
 * Rate limiting
 * Built-in [Observability](https://docs.dapr.io/concepts/observability-concept/) support
 * Runs natively on Kubernetes using a dedicated Operator and CRDs
@@ -83,7 +83,7 @@ See our [Getting Started](https://docs.dapr.io/getting-started/) guide over in o
 
 ## Community
 We want your contributions and suggestions! One of the easiest ways to contribute is to participate in discussions on the mailing list, chat on IM or the bi-weekly community calls.
-For more information on the community engagement, developer and contributing guidelines and more, head over to the [Dapr community repo](https://github.com/dapr/community#dapr-community)
+For more information on the community engagement, developer and contributing guidelines and more, head over to the [Dapr community repo](https://github.com/dapr/community#dapr-community).
 
 ### Contact Us
 
@@ -118,7 +118,7 @@ See the [Development Guide](https://docs.dapr.io/contributing/) to get started w
 | [Dapr](https://github.com/dapr/dapr) | The main repository that you are currently in. Contains the Dapr runtime code and overview documentation.
 | [CLI](https://github.com/dapr/cli) | The Dapr CLI allows you to setup Dapr on your local dev machine or on a Kubernetes cluster, provides debugging support, launches and manages Dapr instances.
 | [Docs](https://docs.dapr.io) | The documentation for Dapr.
-| [Quickstarts](https://github.com/dapr/quickstarts) | This repository contains a series of simple code samples that highlight the main Dapr capabilities
+| [Quickstarts](https://github.com/dapr/quickstarts) | This repository contains a series of simple code samples that highlight the main Dapr capabilities.
 | [Samples](https://github.com/dapr/samples) | This repository holds community maintained samples for various Dapr use cases.
 | [Components-contrib ](https://github.com/dapr/components-contrib) | The purpose of components contrib is to provide open, community driven reusable components for building distributed applications.
 | [Dashboard ](https://github.com/dapr/dashboard) | General purpose dashboard for Dapr

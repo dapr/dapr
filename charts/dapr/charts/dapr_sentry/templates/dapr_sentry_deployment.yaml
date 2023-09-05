@@ -65,6 +65,9 @@ spec:
         prometheus.io/port: "{{ .Values.global.prometheus.port }}"
         prometheus.io/path: "/"
 {{- end }}
+{{- if .Values.deploymentAnnotations }}
+{{ toYaml .Values.deploymentAnnotations | indent 4}}
+{{- end }}
     spec:
       containers:
       - name: dapr-sentry
