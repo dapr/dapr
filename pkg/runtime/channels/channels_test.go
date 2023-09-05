@@ -96,6 +96,7 @@ func TestMiddlewareBuildPipeline(t *testing.T) {
 	t.Run("all components exists", func(t *testing.T) {
 		ch := &Channels{
 			compStore: compStore,
+			meta:      meta.New(meta.Options{Mode: modes.StandaloneMode}),
 			registry: registry.New(registry.NewOptions().WithHTTPMiddlewares(
 				httpMiddlewareLoader.NewRegistry(),
 			)).HTTPMiddlewares(),
