@@ -42,7 +42,7 @@ func TestGetServiceAddress(t *testing.T) {
 			svc:           ServiceSentry,
 			namespace:     "foo",
 			clusterDomain: "selfdefine.domain",
-			expect:        "dapr-sentry.foo.svc.selfdefine.domain:80",
+			expect:        "dapr-sentry.foo.svc.selfdefine.domain:443",
 		},
 	}
 	for _, tc := range testCases {
