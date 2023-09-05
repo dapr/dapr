@@ -63,6 +63,7 @@ import (
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
+	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/meta"
@@ -73,8 +74,6 @@ import (
 	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
-
-	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 
 	"github.com/dapr/dapr/pkg/components/pluggable"
 	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
@@ -164,10 +163,11 @@ func newDaprRuntime(ctx context.Context,
 ) (*DaprRuntime, error) {
 	compStore := compstore.New()
 	meta := meta.New(meta.Options{
-		ID:        runtimeConfig.id,
-		PodName:   getPodName(),
-		Namespace: getNamespace(),
-		Mode:      runtimeConfig.mode,
+		ID:            runtimeConfig.id,
+		PodName:       getPodName(),
+		Namespace:     getNamespace(),
+		StrictSandbox: globalConfig.Spec.WasmSpec.GetStrictSandbox(),
+		Mode:          runtimeConfig.mode,
 	})
 
 	operatorClient, err := getOperatorClient(ctx, runtimeConfig)
