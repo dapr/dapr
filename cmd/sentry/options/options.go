@@ -19,7 +19,6 @@ import (
 
 	"k8s.io/client-go/util/homedir"
 
-	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/sentry/config"
 	"github.com/dapr/kit/logger"
@@ -43,6 +42,10 @@ type Options struct {
 	Kubeconfig            string
 	Logger                logger.Options
 	Metrics               *metrics.Options
+
+	RootCAFilename     string
+	IssuerCertFilename string
+	IssuerKeyFilename  string
 }
 
 func New() *Options {
@@ -50,9 +53,9 @@ func New() *Options {
 
 	flag.StringVar(&opts.ConfigName, "config", defaultDaprSystemConfigName, "Path to config file, or name of a configuration object")
 	flag.StringVar(&opts.IssuerCredentialsPath, "issuer-credentials", defaultCredentialsPath, "Path to the credentials directory holding the issuer data")
-	flag.StringVar(&credentials.RootCertFilename, "issuer-ca-filename", credentials.RootCertFilename, "Certificate Authority certificate filename")
-	flag.StringVar(&credentials.IssuerCertFilename, "issuer-certificate-filename", credentials.IssuerCertFilename, "Issuer certificate filename")
-	flag.StringVar(&credentials.IssuerKeyFilename, "issuer-key-filename", credentials.IssuerKeyFilename, "Issuer private key filename")
+	flag.StringVar(&opts.RootCAFilename, "issuer-ca-filename", config.DefaultRootCertFilename, "Certificate Authority certificate filename")
+	flag.StringVar(&opts.IssuerCertFilename, "issuer-certificate-filename", config.DefaultIssuerCertFilename, "Issuer certificate filename")
+	flag.StringVar(&opts.IssuerKeyFilename, "issuer-key-filename", config.DefaultIssuerKeyFilename, "Issuer private key filename")
 	flag.StringVar(&opts.TrustDomain, "trust-domain", "localhost", "The CA trust domain")
 	flag.StringVar(&opts.TokenAudience, "token-audience", "", "DEPRECATED, flag has no effect.")
 	flag.IntVar(&opts.Port, "port", config.DefaultPort, "The port for the sentry server to listen on")
