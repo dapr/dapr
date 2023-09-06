@@ -165,27 +165,28 @@ func (r *reminders) CreateReminder(ctx context.Context, reminder *internal.Remin
 	config.Multiplier = 1.0
 	b := config.NewBackOffWithContext(ctx)
 
-	var etagErr *state.ETagError
-	err = retry.NotifyRecover(func() error {
-		innerErr := r.storeReminder(ctx, store, reminder, stop)
-		if innerErr != nil {
-			if errors.As(innerErr, &etagErr) {
-				switch etagErr.Kind() {
-				case state.ETagMismatch:
-					// If the etag is mismatched, we can retry the operation.
+	err = retry.NotifyRecover(
+		func() error {
+			innerErr := r.storeReminder(ctx, store, reminder, stop)
+			if innerErr != nil {
+				// If the etag is mismatched, we can retry the operation.
+				if isEtagMismatchError(innerErr) {
 					return innerErr
-				default:
-					log.Errorf("error storing reminder: %w", innerErr)
-					return backoff.Permanent(innerErr)
 				}
-			}
-		}
-		return nil
-	}, b, func(err error, d time.Duration) {
-		log.Debugf("Attempting to store reminder again after error: %v", err)
-	},
-		func() { log.Debug("Storing of reminder successful") })
 
+				log.Errorf("Error storing reminder: %v", innerErr)
+				return backoff.Permanent(innerErr)
+			}
+			return nil
+		},
+		b,
+		func(err error, d time.Duration) {
+			log.Debugf("Attempting to store reminder again after error: %v", err)
+		},
+		func() {
+			log.Debug("Storing of reminder successful")
+		},
+	)
 	if err != nil {
 		return err
 	}
@@ -234,26 +235,29 @@ func (r *reminders) DeleteReminder(ctx context.Context, req internal.DeleteRemin
 	config := retry.DefaultConfig()
 	config.Multiplier = 1.0
 	b := config.NewBackOffWithContext(ctx)
-	var etagErr *state.ETagError
-	err := retry.NotifyRecover(func() error {
-		innerErr := r.doDeleteReminder(ctx, req.ActorType, req.ActorID, req.Name)
-		if innerErr != nil {
-			if errors.As(innerErr, &etagErr) {
-				switch etagErr.Kind() {
-				case state.ETagMismatch:
-					// If the etag is mismatched, we can retry the operation.
+
+	err := retry.NotifyRecover(
+		func() error {
+			innerErr := r.doDeleteReminder(ctx, req.ActorType, req.ActorID, req.Name)
+			if innerErr != nil {
+				// If the etag is mismatched, we can retry the operation.
+				if isEtagMismatchError(innerErr) {
 					return innerErr
-				default:
-					log.Errorf("error deleting reminder: %w", innerErr)
-					return backoff.Permanent(innerErr)
 				}
+
+				log.Errorf("Error deleting reminder: %v", innerErr)
+				return backoff.Permanent(innerErr)
 			}
-		}
-		return nil
-	}, b, func(err error, d time.Duration) {
-		log.Debugf("Attempting to delete reminder again after error: %v", err)
-	},
-		func() { log.Debug("Deletion of reminder successful") })
+			return nil
+		},
+		b,
+		func(err error, d time.Duration) {
+			log.Debugf("Attempting to delete reminder again after error: %v", err)
+		},
+		func() {
+			log.Debug("Deletion of reminder successful")
+		},
+	)
 	if err != nil {
 		return err
 	}
@@ -1076,4 +1080,15 @@ func (r *reminders) updateReminderTrack(ctx context.Context, key string, repetit
 		return nil, store.Set(ctx, setReq)
 	})
 	return err
+}
+
+func isEtagMismatchError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var etagErr *state.ETagError
+	if errors.As(err, &etagErr) {
+		return etagErr.Kind() == state.ETagMismatch
+	}
+	return false
 }
