@@ -15,6 +15,7 @@ package security
 
 import (
 	"context"
+	"crypto/tls"
 	"crypto/x509"
 	"errors"
 	"fmt"
@@ -32,7 +33,6 @@ import (
 	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/security/legacy"
-	secpem "github.com/dapr/dapr/pkg/security/pem"
 	"github.com/dapr/kit/fswatcher"
 	"github.com/dapr/kit/logger"
 )
@@ -45,6 +45,11 @@ type RequestFn func(ctx context.Context, der []byte) ([]*x509.Certificate, error
 type Handler interface {
 	GRPCServerOption() grpc.ServerOption
 	GRPCServerOptionNoClientAuth() grpc.ServerOption
+
+	TLSServerConfigNoClientAuth() *tls.Config
+
+	CurrentTrustAnchors() ([]byte, error)
+	WatchTrustAnchors(context.Context, chan<- []byte)
 }
 
 // Provider is the security provider.
@@ -85,6 +90,11 @@ type Options struct {
 	// OverrideCertRequestSource is used to override where certificates are requested
 	// from. Default to an implementation requesting from Sentry.
 	OverrideCertRequestSource RequestFn
+
+	// WriteSVIDoDir is the directory to write the X.509 SVID certificate private
+	// key pair to. This is highly discouraged since it results in the private
+	// key being written to file.
+	WriteSVIDToDir *string
 }
 
 type provider struct {
@@ -183,11 +193,9 @@ func (p *provider) Start(ctx context.Context) error {
 					case <-caEvent:
 						log.Info("Trust anchors file changed, reloading trust anchors")
 
-						p.sec.source.lock.Lock()
-						if uErr := p.sec.source.updateTrustAnchorFromFile(p.trustAnchorsFile); uErr != nil {
+						if uErr := p.sec.source.updateTrustAnchorFromFile(ctx, p.trustAnchorsFile); uErr != nil {
 							log.Errorf("Failed to read trust anchors file '%s': %v", p.trustAnchorsFile, uErr)
 						}
-						p.sec.source.lock.Unlock()
 					}
 				}
 			},
@@ -238,6 +246,47 @@ func (s *security) GRPCServerOptionNoClientAuth() grpc.ServerOption {
 	)
 }
 
+// WatchTrustAnchors watches for changes to the trust domains and returns the
+// PEM encoded trust domain roots.
+// Returns when the given context is canceled.
+func (s *security) WatchTrustAnchors(ctx context.Context, trustAnchors chan<- []byte) {
+	sub := make(chan struct{})
+	s.source.lock.Lock()
+	s.source.trustAnchorSubscribers = append(s.source.trustAnchorSubscribers, sub)
+	s.source.lock.Unlock()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-sub:
+			caBundle, err := s.CurrentTrustAnchors()
+			if err != nil {
+				log.Errorf("failed to marshal trust anchors: %s", err)
+				continue
+			}
+
+			select {
+			case trustAnchors <- caBundle:
+			case <-ctx.Done():
+			}
+		}
+	}
+}
+
+// TLSServerConfigNoClientAuth returns a TLS server config which instruments
+// using the current signed server certificate. Authorizes client certificate
+// chains against the trust anchors.
+func (s *security) TLSServerConfigNoClientAuth() *tls.Config {
+	return tlsconfig.TLSServerConfig(s.source)
+}
+
+// CurrentTrustAnchors returns the current trust anchors for this Dapr
+// installation.
+func (s *security) CurrentTrustAnchors() ([]byte, error) {
+	return s.source.trustAnchors.Marshal()
+}
+
 // CurrentNamespace returns the namespace of this workload.
 func CurrentNamespace() string {
 	namespace, ok := os.LookupEnv("NAMESPACE")
@@ -260,20 +309,4 @@ func SentryID(sentryTrustDomain, sentryNamespace string) (spiffeid.ID, error) {
 	}
 
 	return sentryID, nil
-}
-
-func (x *x509source) updateTrustAnchorFromFile(filepath string) error {
-	rootPEMs, err := os.ReadFile(filepath)
-	if err != nil {
-		return fmt.Errorf("failed to read trust anchors file '%s': %w", filepath, err)
-	}
-
-	trustAnchorCerts, err := secpem.DecodePEMCertificates(rootPEMs)
-	if err != nil {
-		return fmt.Errorf("failed to decode trust anchors: %w", err)
-	}
-
-	x.trustAnchors.SetX509Authorities(trustAnchorCerts)
-
-	return nil
 }

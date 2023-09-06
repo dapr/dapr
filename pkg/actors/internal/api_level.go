@@ -1,5 +1,3 @@
-//go:build allcomponents
-
 /*
 Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,15 +11,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package components
+package internal
 
-import (
-	"github.com/dapr/components-contrib/bindings/wasm"
-	"github.com/dapr/dapr/pkg/components"
-	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
-)
-
-func init() {
-	bindingsLoader.DefaultRegistry.RegisterOutputBinding(wasm.NewWasmOutput, "wasm")
-	components.RegisterWasmComponentType(components.CategoryBindings, "wasm")
-}
+// ActorAPILevel is the level of the Actor APIs supported by this runtime.
+// It is sent to the Placement service and disseminated to all other Dapr runtimes.
+// The Dapr runtime can use this value, as well as the minimum API level observed in the cluster (as disseminated by Placement) to make decisions on feature availability across the cluster.
+const ActorAPILevel = 10

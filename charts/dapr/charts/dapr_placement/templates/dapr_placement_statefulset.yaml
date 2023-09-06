@@ -37,6 +37,9 @@ spec:
         prometheus.io/port: "{{ .Values.global.prometheus.port }}"
         prometheus.io/path: "/"
 {{- end }}
+{{- if .Values.statefulsetAnnotations }}
+{{ toYaml .Values.statefulsetAnnotations | indent 4}}
+{{- end }}
     spec:
       containers:
       - name: dapr-placement-server
@@ -147,7 +150,7 @@ spec:
         - "--tls-enabled"
         - "--trust-domain={{ .Values.global.mtls.controlPlaneTrustDomain }}"
         - "--trust-anchors-file=/var/run/secrets/dapr.io/tls/ca.crt"
-        - "--sentry-address={{ if .Values.global.mtls.sentryAddress }}{{ .Values.global.mtls.sentryAddress }}{{ else }}dapr-sentry.{{ .Release.Namespace }}.svc:80{{ end }}"
+        - "--sentry-address={{ if .Values.global.mtls.sentryAddress }}{{ .Values.global.mtls.sentryAddress }}{{ else }}dapr-sentry.{{ .Release.Namespace }}.svc.cluster.local:443{{ end }}"
 {{- if eq .Values.global.daprControlPlaneOs "linux" }}
         securityContext:
 {{- if eq .Values.cluster.forceInMemoryLog true }}
@@ -218,7 +221,7 @@ spec:
 {{- end }}
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:
-        - name: {{ .Values.global.imagePullSecrets }}
+        {{- include "dapr.imagePullSecrets" (dict "imagePullSecrets" .Values.global.imagePullSecrets) | nindent 8 }}
 {{- end }}
 {{- if .Values.global.nodeSelector }}
       nodeSelector:

@@ -28,11 +28,14 @@ spec:
         {{- with .Values.global.labels }}
           {{- toYaml . | nindent 8 }}
         {{- end }}
-{{- if eq .Values.global.prometheus.enabled true }}
       annotations:
+{{- if eq .Values.global.prometheus.enabled true }}
         prometheus.io/scrape: "{{ .Values.global.prometheus.enabled }}"
         prometheus.io/port: "{{ .Values.global.prometheus.port }}"
         prometheus.io/path: "/"
+{{- end }}
+{{- if .Values.deploymentAnnotations }}
+{{ toYaml .Values.deploymentAnnotations | indent 4}}
 {{- end }}
     spec:
       {{- if .Values.hostNetwork }}
@@ -228,7 +231,7 @@ spec:
 {{- end }}
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:
-        - name: {{ .Values.global.imagePullSecrets }}
+        {{- include "dapr.imagePullSecrets" (dict "imagePullSecrets" .Values.global.imagePullSecrets) | nindent 8 }}
 {{- end }}
 {{- if .Values.global.nodeSelector }}
       nodeSelector:

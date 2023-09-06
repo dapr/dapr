@@ -26,6 +26,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 
@@ -85,6 +87,13 @@ type x509source struct {
 	// remote server. Used for overriding requesting from Sentry.
 	requestFn RequestFn
 
+	// writeToDiskDir is the directory to write the identity document to.
+	writeToDiskDir *string
+
+	// trustAnchorSubscribers is a list of channels to notify when the trust
+	// anchors are updated.
+	trustAnchorSubscribers []chan<- struct{}
+
 	lock  sync.RWMutex
 	clock clock.Clock
 }
@@ -139,6 +148,7 @@ func newX509Source(ctx context.Context, clock clock.Clock, opts Options) (*x509s
 		appNamespace:            CurrentNamespace(),
 		kubernetesMode:          os.Getenv("KUBERNETES_SERVICE_HOST") != "",
 		requestFn:               opts.OverrideCertRequestSource,
+		writeToDiskDir:          opts.WriteSVIDToDir,
 		clock:                   clock,
 	}, nil
 }
@@ -223,7 +233,7 @@ func (x *x509source) renewIdentityCertificate(ctx context.Context) (*x509.Certif
 		PrivateKey:   pk,
 	}
 
-	return workloadcert[0], nil
+	return workloadcert[0], x.maybeWriteSVIDToDir()
 }
 
 func generateCSRAndPrivateKey(id string) ([]byte, crypto.Signer, error) {
@@ -310,6 +320,113 @@ func (x *x509source) requestFromSentry(ctx context.Context, csrDER []byte) ([]*x
 	}
 
 	return workloadcert, nil
+}
+
+// maybeWriteSVIDToDir writes the current SVID to the configured directory if
+// configured. Does this atomically using unix symlinks.
+func (x *x509source) maybeWriteSVIDToDir() error {
+	if x.writeToDiskDir == nil || x.currentSVID == nil || x.trustAnchors == nil {
+		return nil
+	}
+
+	certs, pk, err := x.currentSVID.Marshal()
+	if err != nil {
+		return err
+	}
+
+	ta, err := x.trustAnchors.Marshal()
+	if err != nil {
+		return err
+	}
+
+	if err := atomicWrite(x.clock, *x.writeToDiskDir, map[string][]byte{
+		"tls.crt": certs,
+		"tls.key": pk,
+		"ca.crt":  ta,
+	}); err != nil {
+		return fmt.Errorf("unable to write SVID to disk: %w", err)
+	}
+
+	log.Infof("Wrote SVID to '%s'", *x.writeToDiskDir)
+
+	return nil
+}
+
+func (x *x509source) updateTrustAnchorFromFile(ctx context.Context, filepath string) error {
+	x.lock.RLock()
+	defer x.lock.RUnlock()
+
+	rootPEMs, err := os.ReadFile(filepath)
+	if err != nil {
+		return fmt.Errorf("failed to read trust anchors file '%s': %w", filepath, err)
+	}
+
+	trustAnchorCerts, err := secpem.DecodePEMCertificates(rootPEMs)
+	if err != nil {
+		return fmt.Errorf("failed to decode trust anchors: %w", err)
+	}
+
+	x.trustAnchors.SetX509Authorities(trustAnchorCerts)
+
+	if err := x.maybeWriteSVIDToDir(); err != nil {
+		return err
+	}
+
+	var wg sync.WaitGroup
+	defer wg.Wait()
+
+	wg.Add(len(x.trustAnchorSubscribers))
+	for _, ch := range x.trustAnchorSubscribers {
+		go func(chi chan<- struct{}) {
+			defer wg.Done()
+			select {
+			case chi <- struct{}{}:
+			case <-ctx.Done():
+			}
+		}(ch)
+	}
+
+	return nil
+}
+
+func atomicWrite(clock clock.Clock, dir string, data map[string][]byte) error {
+	dir = filepath.Clean(dir)
+	if err := os.MkdirAll(filepath.Dir(dir), 0o700); err != nil {
+		return err
+	}
+
+	newDir := dir + "-" + clock.Now().Format("20060102-150405")
+	if err := os.MkdirAll(newDir, 0o700); err != nil {
+		return err
+	}
+
+	for file, contents := range data {
+		if err := os.WriteFile(filepath.Join(newDir, file), contents, 0o600); err != nil {
+			return err
+		}
+	}
+
+	if err := os.Symlink(newDir, dir+"-new"); err != nil {
+		return err
+	}
+
+	if runtime.GOOS == "windows" {
+		if err := os.Remove(dir); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		if err := os.Symlink(newDir, dir); err != nil {
+			return err
+		}
+		if err := os.Remove(dir + "-new"); err != nil {
+			return err
+		}
+	} else {
+		if err := os.Rename(dir+"-new", dir); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // renewalTime is 70% through the certificate validity period.
