@@ -198,7 +198,7 @@ func (g *Manager) connectRemote(
 		)
 	}
 
-	opts = append(opts, g.sec.GRPCDialOptionUnknownTrustDomain(namespace, id))
+	opts = append(opts, g.sec.GRPCDialOptionMTLSUnknownTrustDomain(namespace, id))
 
 	opts = append(opts, customOpts...)
 

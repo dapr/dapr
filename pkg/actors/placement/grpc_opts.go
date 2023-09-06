@@ -18,11 +18,11 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"google.golang.org/grpc"
 
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/security"
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
 )
 
 var errEstablishingTLSConn = errors.New("failed to establish TLS credentials for actor placement service")
@@ -49,10 +49,11 @@ func getGrpcOptsGetter(servers []string, sec security.Handler) func() ([]grpc.Di
 		var opts []grpc.DialOption
 		placementID, err := spiffeid.FromSegments(sec.ControlPlaneTrustDomain(), "ns", sec.ControlPlaneNamespace(), "dapr-placement")
 		if err != nil {
-			return nil, err
+			log.Errorf("%s: %v", errEstablishingTLSConn, err)
+			return nil, errEstablishingTLSConn
 		}
 
-		opts = append(opts, sec.GRPCDialOption(placementID), grpc.WithReturnConnectionError())
+		opts = append(opts, sec.GRPCDialOptionMTLS(placementID))
 
 		if diag.DefaultGRPCMonitoring.IsEnabled() {
 			opts = append(

@@ -22,13 +22,10 @@ import (
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
-	"github.com/dapr/dapr/pkg/credentials"
 	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
 	"github.com/dapr/dapr/pkg/injector/patcher"
-	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 )
 
 const (
@@ -114,19 +111,4 @@ func mTLSEnabled(daprClient scheme.Interface) bool {
 	}
 	log.Infof("Dapr system configuration '%s' does not exist; using default value %t for mTLSEnabled", defaultConfig, defaultMtlsEnabled)
 	return defaultMtlsEnabled
-}
-
-// GetTrustAnchorsAndCertChain returns the trust anchor and certs.
-func GetTrustAnchorsAndCertChain(ctx context.Context, kubeClient kubernetes.Interface, namespace string) (string, string, string) {
-	secret, err := kubeClient.CoreV1().
-		Secrets(namespace).
-		Get(ctx, securityConsts.TrustBundleK8sSecretName, metav1.GetOptions{})
-	if err != nil {
-		return "", "", ""
-	}
-
-	rootCert := secret.Data[credentials.RootCertFilename]
-	certChain := secret.Data[credentials.IssuerCertFilename]
-	certKey := secret.Data[credentials.IssuerKeyFilename]
-	return string(rootCert), string(certChain), string(certKey)
 }

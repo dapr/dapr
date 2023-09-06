@@ -47,8 +47,8 @@ type RequestFn func(ctx context.Context, der []byte) ([]*x509.Certificate, error
 type Handler interface {
 	GRPCServerOptionMTLS() grpc.ServerOption
 	GRPCServerOptionNoClientAuth() grpc.ServerOption
-	GRPCDialOptionUnknownTrustDomain(ns, appID string) grpc.DialOption
-	GRPCDialOption(spiffeid.ID) grpc.DialOption
+	GRPCDialOptionMTLSUnknownTrustDomain(ns, appID string) grpc.DialOption
+	GRPCDialOptionMTLS(spiffeid.ID) grpc.DialOption
 
 	TLSServerConfigNoClientAuth() *tls.Config
 	NetListenerID(net.Listener, spiffeid.ID) net.Listener
@@ -238,15 +238,9 @@ func (p *provider) Handler(ctx context.Context) (Handler, error) {
 	}
 }
 
-// TLSServerConfigNoClientAuth returns a TLS server config which instruments
-// using the current signed server certificate. Does no client authentication.
-func (s *security) TLSServerConfigNoClientAuth() *tls.Config {
-	return tlsconfig.TLSServerConfig(s.source)
-}
-
-// GRPCDialOption returns a gRPC dial option which instruments client
+// GRPCDialOptionMTLS returns a gRPC dial option which instruments client
 // authentication using the current signed client certificate.
-func (s *security) GRPCDialOption(appID spiffeid.ID) grpc.DialOption {
+func (s *security) GRPCDialOptionMTLS(appID spiffeid.ID) grpc.DialOption {
 	if !s.mtls {
 		return grpc.WithTransportCredentials(insecure.NewCredentials())
 	}
@@ -276,12 +270,12 @@ func (s *security) GRPCServerOptionNoClientAuth() grpc.ServerOption {
 	return grpc.Creds(grpccredentials.TLSServerCredentials(s.source))
 }
 
-// GRPCDialOptionUnknownTrustDomain returns a gRPC dial option which
+// GRPCDialOptionMTLSUnknownTrustDomain returns a gRPC dial option which
 // instruments client authentication using the current signed client
 // certificate. Doesn't verify the servers trust domain, but does authorize the
 // SPIFFE ID path.
 // Used for clients which don't know the servers Trust Domain.
-func (s *security) GRPCDialOptionUnknownTrustDomain(ns, appID string) grpc.DialOption {
+func (s *security) GRPCDialOptionMTLSUnknownTrustDomain(ns, appID string) grpc.DialOption {
 	if !s.mtls {
 		return grpc.WithTransportCredentials(insecure.NewCredentials())
 	}
@@ -297,34 +291,6 @@ func (s *security) GRPCDialOptionUnknownTrustDomain(ns, appID string) grpc.DialO
 	return grpc.WithTransportCredentials(credentials.NewTLS(
 		legacy.NewDialClient(s.source, s.source, tlsconfig.AdaptMatcher(matcher)),
 	))
-}
-
-// WatchTrustAnchors watches for changes to the trust domains and returns the
-// PEM encoded trust domain roots.
-// Returns when the given context is canceled.
-func (s *security) WatchTrustAnchors(ctx context.Context, trustAnchors chan<- []byte) {
-	sub := make(chan struct{})
-	s.source.lock.Lock()
-	s.source.trustAnchorSubscribers = append(s.source.trustAnchorSubscribers, sub)
-	s.source.lock.Unlock()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-sub:
-			caBundle, err := s.CurrentTrustAnchors()
-			if err != nil {
-				log.Errorf("Failed to get current trust anchors: %s", err)
-				continue
-			}
-
-			select {
-			case trustAnchors <- caBundle:
-			case <-ctx.Done():
-			}
-		}
-	}
 }
 
 // CurrentTrustAnchors returns the current trust anchors for this Dapr

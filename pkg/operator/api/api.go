@@ -90,7 +90,7 @@ func (a *apiServer) Run(ctx context.Context, sec security.Handler) error {
 
 	log.Infof("starting gRPC server on port %d", serverPort)
 
-	s := grpc.NewServer(sec.GRPCServerOption())
+	s := grpc.NewServer(sec.GRPCServerOptionMTLS())
 	operatorv1pb.RegisterOperatorServer(s, a)
 
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%v", serverPort))
