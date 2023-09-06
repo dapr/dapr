@@ -22,7 +22,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cenkalti/backoff"
+	"github.com/cenkalti/backoff/v4"
 	"github.com/google/uuid"
 	"k8s.io/utils/clock"
 
