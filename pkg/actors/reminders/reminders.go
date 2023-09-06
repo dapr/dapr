@@ -254,7 +254,6 @@ func (r *reminders) DeleteReminder(ctx context.Context, req internal.DeleteRemin
 		log.Debugf("Attempting to delete reminder again after error: %v", err)
 	},
 		func() { log.Debug("Deletion of reminder successful") })
-
 	if err != nil {
 		return err
 	}
