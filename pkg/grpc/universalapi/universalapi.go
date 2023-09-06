@@ -30,7 +30,7 @@ type UniversalAPI struct {
 	AppID                       string
 	Logger                      logger.Logger
 	Resiliency                  resiliency.Provider
-	Actors                      actors.Actors
+	Actors                      actors.ActorRuntime
 	CompStore                   *compstore.ComponentStore
 	ShutdownFn                  func()
 	GetComponentsCapabilitiesFn func() map[string][]string
