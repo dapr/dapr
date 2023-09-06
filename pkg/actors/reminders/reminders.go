@@ -541,7 +541,7 @@ func (r *reminders) storeReminder(ctx context.Context, store internal.Transactio
 	// Store the reminder in active reminders list
 	reminderKey := reminder.Key()
 
-	_, loaded := r.activeReminders.LoadOrStore(reminderKey, stopChannel)
+	stored, loaded := r.activeReminders.LoadOrStore(reminderKey, stopChannel)
 	if loaded {
 		// If the value was loaded, we have a race condition: another goroutine is trying to store the same reminder
 		return fmt.Errorf("failed to store reminder %s: reminder was created concurrently by another goroutine", reminderKey)
@@ -599,6 +599,8 @@ func (r *reminders) storeReminder(ctx context.Context, store internal.Transactio
 		return struct{}{}, nil
 	})
 	if err != nil {
+		// Remove the value from the in-memory cache
+		r.activeReminders.CompareAndDelete(reminderKey, stored)
 		return err
 	}
 	return nil
