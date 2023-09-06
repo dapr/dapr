@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cenkalti/backoff"
 	"github.com/google/uuid"
 	"k8s.io/utils/clock"
 
@@ -175,14 +176,10 @@ func (r *reminders) CreateReminder(ctx context.Context, reminder *internal.Remin
 					return innerErr
 				default:
 					log.Errorf("error storing reminder: %w", innerErr)
-					err = innerErr
-					// we can't retry the operation.
-					return nil
+					return backoff.Permanent(innerErr)
 				}
 			}
 		}
-		log.Errorf("error storing reminder: %w", err)
-		err = innerErr
 		return nil
 	}, b, func(err error, d time.Duration) {
 		log.Debugf("Attempting to store reminder again after error: %v", err)
@@ -238,8 +235,7 @@ func (r *reminders) DeleteReminder(ctx context.Context, req internal.DeleteRemin
 	config.Multiplier = 1.0
 	b := config.NewBackOffWithContext(ctx)
 	var etagErr *state.ETagError
-	var err error
-	err = retry.NotifyRecover(func() error {
+	err := retry.NotifyRecover(func() error {
 		innerErr := r.doDeleteReminder(ctx, req.ActorType, req.ActorID, req.Name)
 		if innerErr != nil {
 			if errors.As(innerErr, &etagErr) {
@@ -248,15 +244,11 @@ func (r *reminders) DeleteReminder(ctx context.Context, req internal.DeleteRemin
 					// If the etag is mismatched, we can retry the operation.
 					return innerErr
 				default:
-					log.Errorf("error storing reminder: %w", innerErr)
-					err = innerErr
-					// we can't retry the operation.
-					return nil
+					log.Errorf("error deleting reminder: %w", innerErr)
+					return backoff.Permanent(innerErr)
 				}
 			}
 		}
-		log.Errorf("error storing reminder: %w", err)
-		err = innerErr
 		return nil
 	}, b, func(err error, d time.Duration) {
 		log.Debugf("Attempting to delete reminder again after error: %v", err)
