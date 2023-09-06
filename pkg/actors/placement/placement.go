@@ -15,7 +15,6 @@ package placement
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"sync"
@@ -315,7 +314,7 @@ func (p *actorPlacement) establishStreamConn(ctx context.Context) (established b
 		}
 
 		err := p.client.connectToServer(ctx, serverAddr)
-		if err == errEstablishingTLSConn || errors.Is(err, context.Canceled) {
+		if err == errEstablishingTLSConn {
 			return false
 		}
 
@@ -326,11 +325,7 @@ func (p *actorPlacement) establishStreamConn(ctx context.Context) (established b
 				logFailureShown = true
 			}
 			p.serverIndex.Store((p.serverIndex.Load() + 1) % int32(len(p.serverAddr)))
-			select {
-			case <-time.After(bo.NextBackOff()):
-			case <-ctx.Done():
-				return false
-			}
+			time.Sleep(bo.NextBackOff())
 			continue
 		}
 
