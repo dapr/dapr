@@ -18,11 +18,11 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"google.golang.org/grpc"
 
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/security"
-	"github.com/spiffe/go-spiffe/v2/spiffeid"
 )
 
 var errEstablishingTLSConn = errors.New("failed to establish TLS credentials for actor placement service")
