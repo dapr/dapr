@@ -18,6 +18,7 @@ import (
 	"crypto/x509"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -229,12 +230,14 @@ func Test_atomicWrite(t *testing.T) {
 
 			f, err = os.Lstat(dir)
 			require.NoError(t, err)
-			assert.False(t, f.IsDir())
-			assert.Equal(t, os.ModeSymlink.Type().String(), f.Mode().Type().String())
-
-			target, err := os.Readlink(dir)
-			require.NoError(t, err)
-			assert.Equal(t, newDir, target)
+			if runtime.GOOS == "windows" {
+				assert.Equal(t, os.ModeDir.Type().String(), f.Mode().Type().String())
+			} else {
+				assert.Equal(t, os.ModeSymlink.Type().String(), f.Mode().Type().String())
+				target, lerr := os.Readlink(dir)
+				require.NoError(t, lerr)
+				assert.Equal(t, newDir, target)
+			}
 
 			walkDir, err := os.ReadDir(newDir)
 			require.NoError(t, err)
