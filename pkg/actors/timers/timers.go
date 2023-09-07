@@ -25,7 +25,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors/internal"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	"github.com/dapr/kit/eventqueue"
+	"github.com/dapr/kit/events/queue"
 	"github.com/dapr/kit/logger"
 )
 
@@ -42,7 +42,7 @@ type timers struct {
 	activeTimersCountLock sync.RWMutex
 	metricsCollector      timersMetricsCollector
 	runningCh             chan struct{}
-	processor             *eventqueue.Processor[*internal.Reminder]
+	processor             *queue.Processor[*internal.Reminder]
 }
 
 // NewTimersProvider returns a TimerProvider.
@@ -54,7 +54,7 @@ func NewTimersProvider(clock clock.WithTicker) internal.TimersProvider {
 		metricsCollector:  diag.DefaultMonitoring.ActorTimers,
 		runningCh:         make(chan struct{}),
 	}
-	t.processor = eventqueue.NewProcessor[*internal.Reminder](t.processorExecuteFn, t.clock)
+	t.processor = queue.NewProcessor[*internal.Reminder](t.processorExecuteFn)
 	return t
 }
 
