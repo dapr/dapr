@@ -1456,7 +1456,7 @@ func isEnvVarAllowed(key string) bool {
 	}
 
 	// If we have a `DAPR_ENV_KEYS` env var (which is added by the Dapr Injector in Kubernetes mode), use that as allowlist too
-	allowlist := os.Getenv(securityConsts.EnvKeysEnvVar)
+	allowlist := strings.ToUpper(os.Getenv(securityConsts.EnvKeysEnvVar))
 	if allowlist == "" {
 		return true
 	}

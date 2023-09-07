@@ -226,7 +226,7 @@ func (i *injector) Run(ctx context.Context, tlsConfig *tls.Config, currentTrustA
 	go func() {
 		err := i.server.ListenAndServeTLS("", "")
 		if !errors.Is(err, http.ErrServerClosed) {
-			errCh <- fmt.Errorf("sidecar injector error: %s", err)
+			errCh <- fmt.Errorf("sidecar injector error: %w", err)
 			return
 		}
 		errCh <- nil

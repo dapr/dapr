@@ -47,6 +47,8 @@ type SidecarConfig struct {
 	SidecarDropALLCapabilities  bool
 	DisableTokenVolume          bool
 	CurrentTrustAnchors         []byte
+	ControlPlaneNamespace       string
+	ControlPlaneTrustDomain     string
 	SidecarHTTPPort             int32 `default:"3500"`
 	SidecarAPIGRPCPort          int32 `default:"50001"`
 	SidecarInternalGRPCPort     int32 `default:"50002"`
@@ -103,8 +105,6 @@ type SidecarConfig struct {
 	ComponentContainer                  string `annotation:"dapr.io/component-container"`
 	InjectPluggableComponents           bool   `annotation:"dapr.io/inject-pluggable-components"`
 	AppChannelAddress                   string `annotation:"dapr.io/app-channel-address"`
-	ControlPlaneNamespace               string
-	ControlPlaneTrustDomain             string
 
 	pod *corev1.Pod
 }

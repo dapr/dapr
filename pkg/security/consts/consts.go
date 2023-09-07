@@ -49,9 +49,7 @@ const (
 	// AnnotationKeyControlPlane is the annotation to mark a control plane
 	// component. The value is the name of the control plane service.
 	AnnotationKeyControlPlane = "dapr.io/control-plane"
-)
 
-const (
 	// ControlPlaneAddressEnvVar is the daprd environment variable for
 	// configuring the control plane namespace.
 	ControlPlaneNamespaceEnvVar = "DAPR_CONTROLPLANE_NAMESPACE"
