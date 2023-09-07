@@ -470,40 +470,6 @@ func TestValidate(t *testing.T) {
 			expErr: true,
 			expTD:  spiffeid.TrustDomain{},
 		},
-		"if pod namespace is empty in kube token, expect error": {
-			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
-			reactor: func(t *testing.T) core.ReactionFunc {
-				return func(action core.Action) (bool, runtime.Object, error) {
-					obj := action.(core.CreateAction).GetObject().(*kauthapi.TokenReview)
-					assert.Equal(t, []string{"dapr.io/sentry", "spiffe://cluster.local/ns/dapr-test/dapr-sentry"}, obj.Spec.Audiences)
-					return true, &kauthapi.TokenReview{Status: kauthapi.TokenReviewStatus{
-						Authenticated: true,
-						User: kauthapi.UserInfo{
-							Username: "system:serviceaccount:my-ns:my-sa",
-						},
-					}}, nil
-				}
-			},
-			req: &sentryv1pb.SignCertificateRequest{
-				CertificateSigningRequest: []byte("csr"),
-				Namespace:                 "my-ns",
-				Token:                     newToken(t, "", "my-pod"),
-				TrustDomain:               "example.test.dapr.io",
-				Id:                        "my-app-id",
-			},
-			pod: &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-pod",
-					Namespace: "my-ns",
-					Annotations: map[string]string{
-						"dapr.io/app-id": "my-app-id",
-					},
-				},
-				Spec: corev1.PodSpec{ServiceAccountName: "my-sa"},
-			},
-			expErr: true,
-			expTD:  spiffeid.TrustDomain{},
-		},
 		"valid authentication, no config annotation should be default trust domain": {
 			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
 			reactor: func(t *testing.T) core.ReactionFunc {

@@ -137,6 +137,8 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 		return spiffeid.TrustDomain{}, false, errors.New("provided token is not a properly structured service account token")
 	}
 
+	saNamespace := prts[2]
+
 	// We have already validated to the token against Kubernetes API server, so
 	// we do not need to supply a key.
 	ptoken, err := jwt.ParseInsecure([]byte(req.GetToken()), jwt.WithTypedClaim("kubernetes.io", new(k8sClaims)))
@@ -148,14 +150,14 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 		return spiffeid.TrustDomain{}, false, errMissingPodClaim
 	}
 	claims, ok := claimsT.(*k8sClaims)
-	if !ok || len(claims.Pod.Name) == 0 || len(claims.Pod.Namespace) == 0 {
+	if !ok || len(claims.Pod.Name) == 0 {
 		return spiffeid.TrustDomain{}, false, errMissingPodClaim
 	}
 
 	var pod corev1.Pod
-	err = k.client.Get(ctx, types.NamespacedName{Namespace: claims.Pod.Namespace, Name: claims.Pod.Name}, &pod)
+	err = k.client.Get(ctx, types.NamespacedName{Namespace: saNamespace, Name: claims.Pod.Name}, &pod)
 	if err != nil {
-		log.Errorf("Failed to get pod %s/%s for requested identity: %s", claims.Pod.Namespace, claims.Pod.Name, err)
+		log.Errorf("Failed to get pod %s/%s for requested identity: %s", saNamespace, claims.Pod.Name, err)
 		return spiffeid.TrustDomain{}, false, errors.New("failed to get pod of identity")
 	}
 
@@ -167,7 +169,7 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 		injectorRequesting = pod.Namespace == k.controlPlaneNS
 	}
 
-	if prts[2] != req.Namespace || claims.Pod.Namespace != req.Namespace {
+	if saNamespace != req.Namespace {
 		if injectorRequesting {
 			overrideDuration = true
 		} else {
@@ -290,8 +292,7 @@ func (k *kubernetes) executeTokenReview(ctx context.Context, token string, audie
 // containing the name of the Pod that the token was issued for.
 type k8sClaims struct {
 	Pod struct {
-		Name      string `json:"name"`
-		Namespace string `json:"namespace"`
+		Name string `json:"name"`
 	} `json:"pod"`
 }
 
