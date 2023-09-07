@@ -20,7 +20,8 @@ import (
 )
 
 type GenericNameValueResource struct {
-	metav1.ObjectMeta
+	Name         string
+	Namespace    string
 	SecretStore  string
 	ResourceKind string
 	Pairs        []common.NameValuePair
@@ -51,5 +52,8 @@ func (g GenericNameValueResource) LogName() string {
 }
 
 func (g GenericNameValueResource) Object() metav1.Object {
-	return g.DeepCopy()
+	return &metav1.ObjectMeta{
+		Name:      g.Name,
+		Namespace: g.Namespace,
+	}
 }

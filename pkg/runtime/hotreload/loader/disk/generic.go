@@ -22,13 +22,13 @@ import (
 	operatorpb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
-	loadercompstore "github.com/dapr/dapr/pkg/runtime/hotreload/loader/compstore"
+	"github.com/dapr/dapr/pkg/runtime/hotreload/loader/store"
 	"github.com/dapr/kit/events/batcher"
 )
 
 type generic[T differ.Resource] struct {
 	batcher    *batcher.Batcher[string]
-	store      loadercompstore.ComponentStore[T]
+	store      store.Store[T]
 	diskLoader components.ManifestLoader[T]
 
 	wg      sync.WaitGroup
@@ -36,7 +36,7 @@ type generic[T differ.Resource] struct {
 	closed  atomic.Bool
 }
 
-func newGeneric[T differ.Resource](opts Options, batcher *batcher.Batcher[string], store loadercompstore.ComponentStore[T]) *generic[T] {
+func newGeneric[T differ.Resource](opts Options, batcher *batcher.Batcher[string], store store.Store[T]) *generic[T] {
 	return &generic[T]{
 		batcher:    batcher,
 		store:      store,

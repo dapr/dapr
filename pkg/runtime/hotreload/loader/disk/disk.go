@@ -27,7 +27,7 @@ import (
 	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
-	loadercompstore "github.com/dapr/dapr/pkg/runtime/hotreload/loader/compstore"
+	loadercompstore "github.com/dapr/dapr/pkg/runtime/hotreload/loader/store"
 	"github.com/dapr/kit/events/batcher"
 	"github.com/dapr/kit/logger"
 )

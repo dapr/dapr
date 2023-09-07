@@ -23,7 +23,6 @@ import (
 	"time"
 
 	apiextapi "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
@@ -392,10 +391,8 @@ func (p *Processor) processHTTPEndpointSecrets(ctx context.Context, endpoint *ht
 	_, _ = p.secret.ProcessResource(ctx, endpoint)
 
 	tlsResource := apis.GenericNameValueResource{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      endpoint.ObjectMeta.Name,
-			Namespace: endpoint.ObjectMeta.Namespace,
-		},
+		Name:        endpoint.ObjectMeta.Name,
+		Namespace:   endpoint.ObjectMeta.Namespace,
 		SecretStore: endpoint.Auth.SecretStore,
 		Pairs:       []commonapi.NameValuePair{},
 	}

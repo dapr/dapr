@@ -26,7 +26,7 @@ import (
 	operatorpb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
-	loadercompstore "github.com/dapr/dapr/pkg/runtime/hotreload/loader/compstore"
+	"github.com/dapr/dapr/pkg/runtime/hotreload/loader/store"
 )
 
 type generic[T differ.Resource] struct {
@@ -35,7 +35,7 @@ type generic[T differ.Resource] struct {
 	namespace string
 
 	streamer streamer[T]
-	store    loadercompstore.ComponentStore[T]
+	store    store.Store[T]
 
 	wg      sync.WaitGroup
 	closeCh chan struct{}
@@ -49,7 +49,7 @@ type streamer[T differ.Resource] interface {
 	establish(context.Context, operatorpb.OperatorClient, string, string) error
 }
 
-func newGeneric[T differ.Resource](opts Options, store loadercompstore.ComponentStore[T], streamer streamer[T]) *generic[T] {
+func newGeneric[T differ.Resource](opts Options, store store.Store[T], streamer streamer[T]) *generic[T] {
 	return &generic[T]{
 		opClient:  opts.OperatorClient,
 		podName:   opts.PodName,
