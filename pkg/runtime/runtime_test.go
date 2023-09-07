@@ -1290,7 +1290,7 @@ func TestMetadataClientID(t *testing.T) {
 		},
 	}
 
-	// ClientID should be namespace for k8s
+	// ClientID should be namespace.AppID for Kubernetes
 	t.Run("Kubernetes Mode AppID", func(t *testing.T) {
 		t.Setenv("NAMESPACE", "test")
 		pubsubComponent.Spec.Metadata = append(
@@ -1318,17 +1318,26 @@ func TestMetadataClientID(t *testing.T) {
 			"mockPubSub",
 		)
 
+		var k8sClientID string
+		clientIDChan := make(chan string, 1)
 		mockPubSub.On("Init", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
 			metadata := args.Get(0).(pubsub.Metadata)
-			clientID := metadata.Properties["clientID"]
-			assert.Equal(t, "test.myApp", clientID)
+			k8sClientID = metadata.Properties["clientID"]
+			clientIDChan <- k8sClientID
 		})
 
 		err = rt.processComponentAndDependents(context.Background(), pubsubComponent)
 		assert.NoError(t, err)
+
+		select {
+		case clientID := <-clientIDChan:
+			assert.Equal(t, "test.myApp", clientID)
+		case <-time.After(2 * time.Second):
+			t.Error("Timed out waiting for clientID for Kubernetes Mode test")
+		}
 	})
 
-	// ClientID should be AppID for self hosted
+	// ClientID should be AppID for Self-Hosted
 	t.Run("Standalone Mode AppID", func(t *testing.T) {
 		pubsubComponent.Spec.Metadata = append(
 			pubsubComponent.Spec.Metadata,
@@ -1355,18 +1364,28 @@ func TestMetadataClientID(t *testing.T) {
 			"mockPubSub",
 		)
 
+		var standAloneClientID string
+		clientIDChan := make(chan string, 1)
 		mockPubSub.On("Init", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
 			metadata := args.Get(0).(pubsub.Metadata)
-			clientID := metadata.Properties["clientID"]
-			appIds := strings.Split(clientID, " ")
-			assert.Equal(t, 2, len(appIds))
-			for _, appID := range appIds {
-				assert.Equal(t, daprt.TestRuntimeConfigID, appID)
-			}
+			standAloneClientID = metadata.Properties["clientID"]
+			clientIDChan <- standAloneClientID
 		})
 
 		err = rt.processComponentAndDependents(context.Background(), pubsubComponent)
 		assert.NoError(t, err)
+		appIds := strings.Split(standAloneClientID, " ")
+		assert.Equal(t, 2, len(appIds))
+		for _, appID := range appIds {
+			assert.Equal(t, daprt.TestRuntimeConfigID, appID)
+		}
+
+		select {
+		case clientID := <-clientIDChan:
+			assert.Equal(t, standAloneClientID, clientID)
+		case <-time.After(2 * time.Second):
+			t.Error("Timed out waiting for clientID for Standalone Mode test")
+		}
 	})
 }
 
