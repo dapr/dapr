@@ -16,7 +16,7 @@ package middleware
 import (
 	"context"
 
-	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 )
 
 // middleware is a component that implements the middleware interface. It's
@@ -27,10 +27,10 @@ func New() *middleware {
 	return new(middleware)
 }
 
-func (m *middleware) Init(_ context.Context, _ compapi.Component) error {
+func (m *middleware) Init(_ context.Context, _ componentsapi.Component) error {
 	return nil
 }
 
-func (m *middleware) Close(_ compapi.Component) error {
+func (m *middleware) Close(_ componentsapi.Component) error {
 	return nil
 }

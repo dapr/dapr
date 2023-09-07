@@ -22,7 +22,7 @@ import (
 
 	"github.com/dapr/components-contrib/secretstores"
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
-	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	compsecret "github.com/dapr/dapr/pkg/components/secretstores"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -34,12 +34,12 @@ import (
 )
 
 func TestProcessResourceSecrets(t *testing.T) {
-	createMockBinding := func() *compapi.Component {
-		return &compapi.Component{
+	createMockBinding := func() *componentsapi.Component {
+		return &componentsapi.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "mockBinding",
 			},
-			Spec: compapi.ComponentSpec{
+			Spec: componentsapi.ComponentSpec{
 				Type:     "bindings.mock",
 				Version:  "v1",
 				Metadata: []commonapi.NameValuePair{},
@@ -76,11 +76,11 @@ func TestProcessResourceSecrets(t *testing.T) {
 		)
 
 		// add Kubernetes component manually
-		assert.NoError(t, sec.Init(context.Background(), compapi.Component{
+		assert.NoError(t, sec.Init(context.Background(), componentsapi.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: compsecret.BuiltinKubernetesSecretStore,
 			},
-			Spec: compapi.ComponentSpec{
+			Spec: componentsapi.ComponentSpec{
 				Type:    "secretstores.kubernetes",
 				Version: "v1",
 			},
@@ -119,11 +119,11 @@ func TestProcessResourceSecrets(t *testing.T) {
 		)
 
 		// initSecretStore appends Kubernetes component even if kubernetes component is not added
-		err := sec.Init(context.Background(), compapi.Component{
+		err := sec.Init(context.Background(), componentsapi.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "mock",
 			},
-			Spec: compapi.ComponentSpec{
+			Spec: componentsapi.ComponentSpec{
 				Type:    "secretstores.mock",
 				Version: "v1",
 			},

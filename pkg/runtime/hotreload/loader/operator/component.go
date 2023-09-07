@@ -18,7 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	operatorpb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
 )
@@ -49,18 +49,18 @@ func (c *component) close() error {
 }
 
 //nolint:unused
-func (c *component) recv() (*loader.Event[compapi.Component], error) {
+func (c *component) recv() (*loader.Event[componentsapi.Component], error) {
 	event, err := c.Operator_ComponentUpdateClient.Recv()
 	if err != nil {
 		return nil, err
 	}
 
-	var component compapi.Component
+	var component componentsapi.Component
 	if err := json.Unmarshal(event.Component, &component); err != nil {
 		return nil, fmt.Errorf("failed to deserializing component: %s", err)
 	}
 
-	return &loader.Event[compapi.Component]{
+	return &loader.Event[componentsapi.Component]{
 		Resource: component,
 		Type:     event.Type,
 	}, nil

@@ -18,7 +18,7 @@ import (
 	"sync"
 
 	"github.com/dapr/components-contrib/workflows"
-	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	compworkflow "github.com/dapr/dapr/pkg/components/workflows"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -50,7 +50,7 @@ func New(opts Options) *workflow {
 	}
 }
 
-func (w *workflow) Init(ctx context.Context, comp compapi.Component) error {
+func (w *workflow) Init(ctx context.Context, comp componentsapi.Component) error {
 	w.lock.Lock()
 	defer w.lock.Unlock()
 
@@ -86,7 +86,7 @@ func (w *workflow) Init(ctx context.Context, comp compapi.Component) error {
 	return nil
 }
 
-func (w *workflow) Close(comp compapi.Component) error {
+func (w *workflow) Close(comp componentsapi.Component) error {
 	w.lock.Lock()
 	defer w.lock.Unlock()
 

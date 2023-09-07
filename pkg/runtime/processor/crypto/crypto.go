@@ -19,7 +19,7 @@ import (
 	"sync"
 
 	contribcrypto "github.com/dapr/components-contrib/crypto"
-	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	compcrypto "github.com/dapr/dapr/pkg/components/crypto"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -48,7 +48,7 @@ func New(opts Options) *crypto {
 	}
 }
 
-func (c *crypto) Init(ctx context.Context, comp compapi.Component) error {
+func (c *crypto) Init(ctx context.Context, comp componentsapi.Component) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -76,7 +76,7 @@ func (c *crypto) Init(ctx context.Context, comp compapi.Component) error {
 	return nil
 }
 
-func (c *crypto) Close(comp compapi.Component) error {
+func (c *crypto) Close(comp componentsapi.Component) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 

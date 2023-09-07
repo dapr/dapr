@@ -18,15 +18,15 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	httpendapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/components/secretstores"
 	"github.com/dapr/dapr/pkg/runtime/meta"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
 )
 
 type Resource interface {
-	compapi.Component | httpendapi.HTTPEndpoint
+	componentsapi.Component | httpendpointsapi.HTTPEndpoint
 	meta.Resource
 }
 
@@ -56,7 +56,7 @@ func Diff[T Resource](resources *LocalRemoteResources[T]) *Result[T] {
 	// deleted are the resources which exist locally but which don't exist
 	// remotely or have changed.
 	deleted := detectDiff(resources.Remote, resources.Local, func(r T) bool {
-		if comp, ok := any(r).(compapi.Component); ok {
+		if comp, ok := any(r).(componentsapi.Component); ok {
 			// Ignore the built-in Kubernetes secret store and workflow engine.
 			if comp.Name == secretstores.BuiltinKubernetesSecretStore &&
 				comp.Spec.Type == "secretstores.kubernetes" {

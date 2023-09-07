@@ -16,8 +16,8 @@ package authorizer
 import (
 	"reflect"
 
-	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	httpendapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/kit/logger"
 )
@@ -26,11 +26,11 @@ var log = logger.NewLogger("dapr.runtime.authorizer")
 
 // Type of function that determines if a component is authorized.
 // The function receives the component and must return true if the component is authorized.
-type ComponentAuthorizer func(component compapi.Component) bool
+type ComponentAuthorizer func(component componentsapi.Component) bool
 
 // Type of function that determines if an http endpoint is authorized.
 // The function receives the http endpoint and must return true if the http endpoint is authorized.
-type HTTPEndpointAuthorizer func(endpoint httpendapi.HTTPEndpoint) bool
+type HTTPEndpointAuthorizer func(endpoint httpendpointsapi.HTTPEndpoint) bool
 
 type Options struct {
 	ID           string
@@ -77,13 +77,13 @@ func (a *Authorizer) GetAuthorizedObjects(objects interface{}, authorizer func(i
 
 func (a *Authorizer) IsObjectAuthorized(object interface{}) bool {
 	switch obj := object.(type) {
-	case httpendapi.HTTPEndpoint:
+	case httpendpointsapi.HTTPEndpoint:
 		for _, auth := range a.httpEndpointAuthorizers {
 			if !auth(obj) {
 				return false
 			}
 		}
-	case compapi.Component:
+	case componentsapi.Component:
 		for _, auth := range a.componentAuthorizers {
 			if !auth(obj) {
 				return false
@@ -93,7 +93,7 @@ func (a *Authorizer) IsObjectAuthorized(object interface{}) bool {
 	return true
 }
 
-func (a *Authorizer) namespaceHTTPEndpointAuthorizer(endpoint httpendapi.HTTPEndpoint) bool {
+func (a *Authorizer) namespaceHTTPEndpointAuthorizer(endpoint httpendpointsapi.HTTPEndpoint) bool {
 	switch {
 	case a.namespace == "",
 		endpoint.ObjectMeta.Namespace == "",
@@ -104,7 +104,7 @@ func (a *Authorizer) namespaceHTTPEndpointAuthorizer(endpoint httpendapi.HTTPEnd
 	}
 }
 
-func (a *Authorizer) namespaceComponentAuthorizer(comp compapi.Component) bool {
+func (a *Authorizer) namespaceComponentAuthorizer(comp componentsapi.Component) bool {
 	if a.namespace == "" || comp.ObjectMeta.Namespace == "" || (a.namespace != "" && comp.ObjectMeta.Namespace == a.namespace) {
 		return comp.IsAppScoped(a.id)
 	}

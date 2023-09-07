@@ -20,7 +20,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/dapr/components-contrib/bindings"
-	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/meta"
@@ -46,7 +46,7 @@ func TestInitBindings(t *testing.T) {
 			Meta:           meta.New(meta.Options{}),
 		})
 
-		c := compapi.Component{}
+		c := componentsapi.Component{}
 		c.ObjectMeta.Name = "testInputBinding"
 		c.Spec.Type = "bindings.testInputBinding"
 		err := proc.Init(context.TODO(), c)
@@ -68,7 +68,7 @@ func TestInitBindings(t *testing.T) {
 			Meta:           meta.New(meta.Options{}),
 		})
 
-		c := compapi.Component{}
+		c := componentsapi.Component{}
 		c.ObjectMeta.Name = "testOutputBinding"
 		c.Spec.Type = "bindings.testOutputBinding"
 		err := proc.Init(context.TODO(), c)
@@ -97,13 +97,13 @@ func TestInitBindings(t *testing.T) {
 			Meta:           meta.New(meta.Options{}),
 		})
 
-		input := compapi.Component{}
+		input := componentsapi.Component{}
 		input.ObjectMeta.Name = "testinput"
 		input.Spec.Type = "bindings.testinput"
 		err := proc.Init(context.TODO(), input)
 		assert.NoError(t, err)
 
-		output := compapi.Component{}
+		output := componentsapi.Component{}
 		output.ObjectMeta.Name = "testinput"
 		output.Spec.Type = "bindings.testoutput"
 		err = proc.Init(context.TODO(), output)
@@ -121,7 +121,7 @@ func TestInitBindings(t *testing.T) {
 			Meta:           meta.New(meta.Options{}),
 		})
 
-		c := compapi.Component{}
+		c := componentsapi.Component{}
 		c.ObjectMeta.Name = "testNotExistBinding"
 		c.Spec.Type = "bindings.testNotExistBinding"
 		err := proc.Init(context.TODO(), c)

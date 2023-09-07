@@ -14,8 +14,8 @@ limitations under the License.
 package compstore
 
 import (
-	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	httpendapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
 )
@@ -32,22 +32,22 @@ type endpoint struct {
 	compStore *compstore.ComponentStore
 }
 
-func NewComponent(compStore *compstore.ComponentStore) ComponentStore[compapi.Component] {
+func NewComponent(compStore *compstore.ComponentStore) ComponentStore[componentsapi.Component] {
 	return &component{
 		compStore: compStore,
 	}
 }
 
-func NewHTTPEndpoint(compStore *compstore.ComponentStore) ComponentStore[httpendapi.HTTPEndpoint] {
+func NewHTTPEndpoint(compStore *compstore.ComponentStore) ComponentStore[httpendpointsapi.HTTPEndpoint] {
 	return &endpoint{
 		compStore: compStore,
 	}
 }
 
-func (c *component) List() []compapi.Component {
+func (c *component) List() []componentsapi.Component {
 	return c.compStore.ListComponents()
 }
 
-func (e *endpoint) List() []httpendapi.HTTPEndpoint {
+func (e *endpoint) List() []httpendpointsapi.HTTPEndpoint {
 	return e.compStore.ListHTTPEndpoints()
 }

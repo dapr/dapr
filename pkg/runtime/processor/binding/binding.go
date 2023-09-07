@@ -23,7 +23,7 @@ import (
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/dapr/pkg/apis/common"
-	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	compbindings "github.com/dapr/dapr/pkg/components/bindings"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -91,7 +91,7 @@ func New(opts Options) *binding {
 	}
 }
 
-func (b *binding) Init(ctx context.Context, comp compapi.Component) error {
+func (b *binding) Init(ctx context.Context, comp componentsapi.Component) error {
 	b.lock.Lock()
 	defer b.lock.Unlock()
 
@@ -119,7 +119,7 @@ func (b *binding) Init(ctx context.Context, comp compapi.Component) error {
 	return nil
 }
 
-func (b *binding) Close(comp compapi.Component) error {
+func (b *binding) Close(comp componentsapi.Component) error {
 	b.lock.Lock()
 	defer b.lock.Unlock()
 
@@ -154,7 +154,7 @@ func (b *binding) closeOutputBinding(binding bindings.OutputBinding) error {
 	return nil
 }
 
-func (b *binding) initInputBinding(ctx context.Context, comp compapi.Component) error {
+func (b *binding) initInputBinding(ctx context.Context, comp componentsapi.Component) error {
 	if !b.isBindingOfDirection(ComponentTypeInput, comp.Spec.Metadata) {
 		return nil
 	}
@@ -191,7 +191,7 @@ func (b *binding) initInputBinding(ctx context.Context, comp compapi.Component) 
 	return nil
 }
 
-func (b *binding) initOutputBinding(ctx context.Context, comp compapi.Component) error {
+func (b *binding) initOutputBinding(ctx context.Context, comp componentsapi.Component) error {
 	if !b.isBindingOfDirection(ComponentTypeOutput, comp.Spec.Metadata) {
 		return nil
 	}

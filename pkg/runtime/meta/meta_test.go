@@ -21,7 +21,7 @@ import (
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 
 	"github.com/dapr/dapr/pkg/apis/common"
-	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/modes"
 )
@@ -146,8 +146,8 @@ func TestMetadataOverrideWasmStrictSandbox(t *testing.T) {
 				},
 			},
 		}
-		com := compapi.Component{
-			Spec: compapi.ComponentSpec{
+		com := componentsapi.Component{
+			Spec: componentsapi.ComponentSpec{
 				Metadata: items,
 			},
 		}
@@ -172,8 +172,8 @@ func TestMetadataOverrideWasmStrictSandbox(t *testing.T) {
 				},
 			},
 		}
-		com := compapi.Component{
-			Spec: compapi.ComponentSpec{
+		com := componentsapi.Component{
+			Spec: componentsapi.ComponentSpec{
 				Metadata: items,
 			},
 		}
@@ -200,16 +200,16 @@ func TestMetadataOverrideWasmStrictSandbox(t *testing.T) {
 				},
 			},
 		}
-		com := compapi.Component{
-			Spec: compapi.ComponentSpec{
+		com := componentsapi.Component{
+			Spec: componentsapi.ComponentSpec{
 				Type:     "middleware.test",
 				Metadata: items,
 			},
 		}
 
 		// component that is not registered as a wasm component
-		noneWasmComp := compapi.Component{
-			Spec: compapi.ComponentSpec{
+		noneWasmComp := componentsapi.Component{
+			Spec: componentsapi.ComponentSpec{
 				Type:     "middleware.none",
 				Metadata: []common.NameValuePair{},
 			},

@@ -16,13 +16,13 @@ package fake
 import (
 	"testing"
 
-	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	httpendapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
 )
 
 func Test_Fake(t *testing.T) {
 	var _ loader.Interface = New()
-	var _ loader.Loader[compapi.Component] = NewFake[compapi.Component]()
-	var _ loader.Loader[httpendapi.HTTPEndpoint] = NewFake[httpendapi.HTTPEndpoint]()
+	var _ loader.Loader[componentsapi.Component] = NewFake[componentsapi.Component]()
+	var _ loader.Loader[httpendpointsapi.HTTPEndpoint] = NewFake[httpendpointsapi.HTTPEndpoint]()
 }

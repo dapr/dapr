@@ -19,7 +19,7 @@ import (
 	"sync"
 
 	contribconfig "github.com/dapr/components-contrib/configuration"
-	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	compconfig "github.com/dapr/dapr/pkg/components/configuration"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -48,7 +48,7 @@ func New(opts Options) *configuration {
 	}
 }
 
-func (c *configuration) Init(ctx context.Context, comp compapi.Component) error {
+func (c *configuration) Init(ctx context.Context, comp componentsapi.Component) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -77,7 +77,7 @@ func (c *configuration) Init(ctx context.Context, comp compapi.Component) error 
 	return nil
 }
 
-func (c *configuration) Close(comp compapi.Component) error {
+func (c *configuration) Close(comp componentsapi.Component) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 

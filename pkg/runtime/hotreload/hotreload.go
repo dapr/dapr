@@ -17,8 +17,8 @@ import (
 	"context"
 	"errors"
 
-	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	httpendapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/config"
 	operatorpb "github.com/dapr/dapr/pkg/proto/operator/v1"
@@ -56,8 +56,8 @@ type OptionsOperator struct {
 
 type Reloader struct {
 	isEnabled  bool
-	components *reconciler.Reconciler[compapi.Component]
-	endpoints  *reconciler.Reconciler[httpendapi.HTTPEndpoint]
+	components *reconciler.Reconciler[componentsapi.Component]
+	endpoints  *reconciler.Reconciler[httpendpointsapi.HTTPEndpoint]
 }
 
 func NewDisk(opts OptionsDisk) (*Reloader, error) {
@@ -71,12 +71,12 @@ func NewDisk(opts OptionsDisk) (*Reloader, error) {
 
 	return &Reloader{
 		isEnabled: opts.Config.IsFeatureEnabled(config.HotReload),
-		components: reconciler.NewComponent(reconciler.Options[compapi.Component]{
+		components: reconciler.NewComponent(reconciler.Options[componentsapi.Component]{
 			Loader:    loader,
 			CompStore: opts.ComponentStore,
 			Processor: opts.Processor,
 		}, opts.Authorizer),
-		endpoints: reconciler.NewHTTPEndpoint(reconciler.Options[httpendapi.HTTPEndpoint]{
+		endpoints: reconciler.NewHTTPEndpoint(reconciler.Options[httpendpointsapi.HTTPEndpoint]{
 			Loader:    loader,
 			CompStore: opts.ComponentStore,
 			Processor: opts.Processor,
@@ -94,12 +94,12 @@ func NewOperator(opts OptionsOperator) *Reloader {
 
 	return &Reloader{
 		isEnabled: opts.Config.IsFeatureEnabled(config.HotReload),
-		components: reconciler.NewComponent(reconciler.Options[compapi.Component]{
+		components: reconciler.NewComponent(reconciler.Options[componentsapi.Component]{
 			Loader:    loader,
 			CompStore: opts.ComponentStore,
 			Processor: opts.Processor,
 		}, opts.Authorizer),
-		endpoints: reconciler.NewHTTPEndpoint(reconciler.Options[httpendapi.HTTPEndpoint]{
+		endpoints: reconciler.NewHTTPEndpoint(reconciler.Options[httpendpointsapi.HTTPEndpoint]{
 			Loader:    loader,
 			CompStore: opts.ComponentStore,
 			Processor: opts.Processor,

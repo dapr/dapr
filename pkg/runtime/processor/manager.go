@@ -19,15 +19,15 @@ import (
 
 	"github.com/dapr/components-contrib/bindings"
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
-	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/outbox"
 	"github.com/dapr/dapr/pkg/runtime/meta"
 )
 
 // manager implements the life cycle events of a component category.
 type manager interface {
-	Init(context.Context, compapi.Component) error
-	Close(compapi.Component) error
+	Init(context.Context, componentsapi.Component) error
+	Close(componentsapi.Component) error
 }
 
 type StateManager interface {
@@ -58,7 +58,7 @@ type BindingManager interface {
 	manager
 }
 
-func (p *Processor) managerFromComp(comp compapi.Component) (manager, error) {
+func (p *Processor) managerFromComp(comp componentsapi.Component) (manager, error) {
 	category := p.category(comp)
 	m, ok := p.managers[category]
 	if !ok {

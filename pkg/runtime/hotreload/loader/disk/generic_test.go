@@ -26,7 +26,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
-	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	operatorpb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
@@ -87,7 +87,7 @@ func Test_Disk(t *testing.T) {
 	err = os.WriteFile(filepath.Join(dir, "f.yaml"), []byte(strings.Join([]string{comp1, comp2, comp3}, "\n---\n")), 0o600)
 	require.NoError(t, err)
 
-	var events []*loader.Event[compapi.Component]
+	var events []*loader.Event[componentsapi.Component]
 	for i := 0; i < 3; i++ {
 		select {
 		case event := <-ch:
@@ -97,29 +97,29 @@ func Test_Disk(t *testing.T) {
 		}
 	}
 
-	assert.ElementsMatch(t, []*loader.Event[compapi.Component]{
+	assert.ElementsMatch(t, []*loader.Event[componentsapi.Component]{
 		{
 			Type: operatorpb.ResourceEventType_CREATED,
-			Resource: compapi.Component{
+			Resource: componentsapi.Component{
 				ObjectMeta: metav1.ObjectMeta{Name: "comp1"},
 				TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Component"},
-				Spec:       compapi.ComponentSpec{Type: "state.in-memory", Version: "v1"},
+				Spec:       componentsapi.ComponentSpec{Type: "state.in-memory", Version: "v1"},
 			},
 		},
 		{
 			Type: operatorpb.ResourceEventType_CREATED,
-			Resource: compapi.Component{
+			Resource: componentsapi.Component{
 				ObjectMeta: metav1.ObjectMeta{Name: "comp2"},
 				TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Component"},
-				Spec:       compapi.ComponentSpec{Type: "state.in-memory", Version: "v1"},
+				Spec:       componentsapi.ComponentSpec{Type: "state.in-memory", Version: "v1"},
 			},
 		},
 		{
 			Type: operatorpb.ResourceEventType_CREATED,
-			Resource: compapi.Component{
+			Resource: componentsapi.Component{
 				ObjectMeta: metav1.ObjectMeta{Name: "comp3"},
 				TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Component"},
-				Spec:       compapi.ComponentSpec{Type: "state.in-memory", Version: "v1"},
+				Spec:       componentsapi.ComponentSpec{Type: "state.in-memory", Version: "v1"},
 			},
 		},
 	}, events)
@@ -138,7 +138,7 @@ func Test_Stream(t *testing.T) {
 		batcher := batcher.New[string](0)
 		store := compstore.New()
 
-		g := newGeneric[compapi.Component](
+		g := newGeneric[componentsapi.Component](
 			Options{Dirs: []string{dir}},
 			batcher,
 			loadercompstore.NewComponent(store),
@@ -149,7 +149,7 @@ func Test_Stream(t *testing.T) {
 		ch, err := g.Stream(context.Background())
 		assert.NoError(t, err)
 
-		var events []*loader.Event[compapi.Component]
+		var events []*loader.Event[componentsapi.Component]
 		for i := 0; i < 3; i++ {
 			select {
 			case event := <-ch:
@@ -159,29 +159,29 @@ func Test_Stream(t *testing.T) {
 			}
 		}
 
-		assert.ElementsMatch(t, []*loader.Event[compapi.Component]{
+		assert.ElementsMatch(t, []*loader.Event[componentsapi.Component]{
 			{
 				Type: operatorpb.ResourceEventType_CREATED,
-				Resource: compapi.Component{
+				Resource: componentsapi.Component{
 					ObjectMeta: metav1.ObjectMeta{Name: "comp1"},
 					TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Component"},
-					Spec:       compapi.ComponentSpec{Type: "state.in-memory", Version: "v1"},
+					Spec:       componentsapi.ComponentSpec{Type: "state.in-memory", Version: "v1"},
 				},
 			},
 			{
 				Type: operatorpb.ResourceEventType_CREATED,
-				Resource: compapi.Component{
+				Resource: componentsapi.Component{
 					ObjectMeta: metav1.ObjectMeta{Name: "comp2"},
 					TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Component"},
-					Spec:       compapi.ComponentSpec{Type: "state.in-memory", Version: "v1"},
+					Spec:       componentsapi.ComponentSpec{Type: "state.in-memory", Version: "v1"},
 				},
 			},
 			{
 				Type: operatorpb.ResourceEventType_CREATED,
-				Resource: compapi.Component{
+				Resource: componentsapi.Component{
 					ObjectMeta: metav1.ObjectMeta{Name: "comp3"},
 					TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Component"},
-					Spec:       compapi.ComponentSpec{Type: "state.in-memory", Version: "v1"},
+					Spec:       componentsapi.ComponentSpec{Type: "state.in-memory", Version: "v1"},
 				},
 			},
 		}, events)
@@ -198,13 +198,13 @@ func Test_Stream(t *testing.T) {
 
 		batcher := batcher.New[string](0)
 		store := compstore.New()
-		store.AddComponent(compapi.Component{
+		store.AddComponent(componentsapi.Component{
 			ObjectMeta: metav1.ObjectMeta{Name: "comp1"},
 			TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Component"},
-			Spec:       compapi.ComponentSpec{Type: "state.in-memory", Version: "v1"},
+			Spec:       componentsapi.ComponentSpec{Type: "state.in-memory", Version: "v1"},
 		})
 
-		g := newGeneric[compapi.Component](
+		g := newGeneric[componentsapi.Component](
 			Options{Dirs: []string{dir}},
 			batcher,
 			loadercompstore.NewComponent(store),
@@ -215,7 +215,7 @@ func Test_Stream(t *testing.T) {
 		ch, err := g.Stream(context.Background())
 		assert.NoError(t, err)
 
-		var events []*loader.Event[compapi.Component]
+		var events []*loader.Event[componentsapi.Component]
 		for i := 0; i < 2; i++ {
 			select {
 			case event := <-ch:
@@ -225,21 +225,21 @@ func Test_Stream(t *testing.T) {
 			}
 		}
 
-		assert.ElementsMatch(t, []*loader.Event[compapi.Component]{
+		assert.ElementsMatch(t, []*loader.Event[componentsapi.Component]{
 			{
 				Type: operatorpb.ResourceEventType_CREATED,
-				Resource: compapi.Component{
+				Resource: componentsapi.Component{
 					ObjectMeta: metav1.ObjectMeta{Name: "comp2"},
 					TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Component"},
-					Spec:       compapi.ComponentSpec{Type: "state.in-memory", Version: "v1"},
+					Spec:       componentsapi.ComponentSpec{Type: "state.in-memory", Version: "v1"},
 				},
 			},
 			{
 				Type: operatorpb.ResourceEventType_CREATED,
-				Resource: compapi.Component{
+				Resource: componentsapi.Component{
 					ObjectMeta: metav1.ObjectMeta{Name: "comp3"},
 					TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Component"},
-					Spec:       compapi.ComponentSpec{Type: "state.in-memory", Version: "v1"},
+					Spec:       componentsapi.ComponentSpec{Type: "state.in-memory", Version: "v1"},
 				},
 			},
 		}, events)
@@ -256,21 +256,21 @@ func Test_Stream(t *testing.T) {
 
 		batcher := batcher.New[string](0)
 		store := compstore.New()
-		store.AddComponent(compapi.Component{
+		store.AddComponent(componentsapi.Component{
 			ObjectMeta: metav1.ObjectMeta{Name: "comp1"},
 			TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Component"},
-			Spec:       compapi.ComponentSpec{Type: "state.in-memory", Version: "v1"},
+			Spec:       componentsapi.ComponentSpec{Type: "state.in-memory", Version: "v1"},
 		})
-		store.AddComponent(compapi.Component{
+		store.AddComponent(componentsapi.Component{
 			ObjectMeta: metav1.ObjectMeta{Name: "comp2"},
 			TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Component"},
-			Spec: compapi.ComponentSpec{
+			Spec: componentsapi.ComponentSpec{
 				Type: "state.in-memory", Version: "v1",
 				Metadata: []commonapi.NameValuePair{{Name: "foo", EnvRef: "bar"}},
 			},
 		})
 
-		g := newGeneric[compapi.Component](
+		g := newGeneric[componentsapi.Component](
 			Options{Dirs: []string{dir}},
 			batcher,
 			loadercompstore.NewComponent(store),
@@ -281,7 +281,7 @@ func Test_Stream(t *testing.T) {
 		ch, err := g.Stream(context.Background())
 		assert.NoError(t, err)
 
-		var events []*loader.Event[compapi.Component]
+		var events []*loader.Event[componentsapi.Component]
 		for i := 0; i < 3; i++ {
 			select {
 			case event := <-ch:
@@ -291,29 +291,29 @@ func Test_Stream(t *testing.T) {
 			}
 		}
 
-		assert.ElementsMatch(t, []*loader.Event[compapi.Component]{
+		assert.ElementsMatch(t, []*loader.Event[componentsapi.Component]{
 			{
 				Type: operatorpb.ResourceEventType_DELETED,
-				Resource: compapi.Component{
+				Resource: componentsapi.Component{
 					ObjectMeta: metav1.ObjectMeta{Name: "comp1"},
 					TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Component"},
-					Spec:       compapi.ComponentSpec{Type: "state.in-memory", Version: "v1"},
+					Spec:       componentsapi.ComponentSpec{Type: "state.in-memory", Version: "v1"},
 				},
 			},
 			{
 				Type: operatorpb.ResourceEventType_UPDATED,
-				Resource: compapi.Component{
+				Resource: componentsapi.Component{
 					ObjectMeta: metav1.ObjectMeta{Name: "comp2"},
 					TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Component"},
-					Spec:       compapi.ComponentSpec{Type: "state.in-memory", Version: "v1"},
+					Spec:       componentsapi.ComponentSpec{Type: "state.in-memory", Version: "v1"},
 				},
 			},
 			{
 				Type: operatorpb.ResourceEventType_CREATED,
-				Resource: compapi.Component{
+				Resource: componentsapi.Component{
 					ObjectMeta: metav1.ObjectMeta{Name: "comp3"},
 					TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Component"},
-					Spec:       compapi.ComponentSpec{Type: "state.in-memory", Version: "v1"},
+					Spec:       componentsapi.ComponentSpec{Type: "state.in-memory", Version: "v1"},
 				},
 			},
 		}, events)

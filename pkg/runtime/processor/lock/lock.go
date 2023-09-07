@@ -19,7 +19,7 @@ import (
 	"io"
 
 	contriblock "github.com/dapr/components-contrib/lock"
-	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	complock "github.com/dapr/dapr/pkg/components/lock"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -47,7 +47,7 @@ func New(opts Options) *lock {
 	}
 }
 
-func (l *lock) Init(ctx context.Context, comp compapi.Component) error {
+func (l *lock) Init(ctx context.Context, comp componentsapi.Component) error {
 	// create the component
 	fName := comp.LogName()
 	store, err := l.registry.Create(comp.Spec.Type, comp.Spec.Version, fName)
@@ -88,7 +88,7 @@ func (l *lock) Init(ctx context.Context, comp compapi.Component) error {
 	return nil
 }
 
-func (l *lock) Close(comp compapi.Component) error {
+func (l *lock) Close(comp componentsapi.Component) error {
 	lock, ok := l.compStore.GetLock(comp.ObjectMeta.Name)
 	if !ok {
 		return nil

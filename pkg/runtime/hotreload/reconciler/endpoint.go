@@ -16,7 +16,7 @@ package reconciler
 import (
 	"context"
 
-	httpendapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
@@ -26,11 +26,11 @@ import (
 type endpoint struct {
 	store *compstore.ComponentStore
 	proc  *processor.Processor
-	loader.Loader[httpendapi.HTTPEndpoint]
+	loader.Loader[httpendpointsapi.HTTPEndpoint]
 }
 
 //nolint:unused
-func (e *endpoint) update(ctx context.Context, endpoint httpendapi.HTTPEndpoint) {
+func (e *endpoint) update(ctx context.Context, endpoint httpendpointsapi.HTTPEndpoint) {
 	oldEndpoint, exists := e.store.GetHTTPEndpoint(endpoint.Name)
 	_, _ = e.proc.Secret().ProcessResource(ctx, endpoint)
 
@@ -50,6 +50,6 @@ func (e *endpoint) update(ctx context.Context, endpoint httpendapi.HTTPEndpoint)
 }
 
 //nolint:unused
-func (e *endpoint) delete(endpoint httpendapi.HTTPEndpoint) {
+func (e *endpoint) delete(endpoint httpendpointsapi.HTTPEndpoint) {
 	e.store.DeleteHTTPEndpoint(endpoint.Name)
 }

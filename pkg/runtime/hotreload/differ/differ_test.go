@@ -21,16 +21,16 @@ import (
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	httpendapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 )
 
 func Test_toComparableObj(t *testing.T) {
 	t.Parallel()
 
 	const numCases = 500
-	components := make([]compapi.Component, numCases)
-	endpoints := make([]httpendapi.HTTPEndpoint, numCases)
+	components := make([]componentsapi.Component, numCases)
+	endpoints := make([]httpendpointsapi.HTTPEndpoint, numCases)
 
 	fz := fuzz.New()
 	for i := 0; i < numCases; i++ {
@@ -47,7 +47,7 @@ func Test_toComparableObj(t *testing.T) {
 			compWithoutObject.TypeMeta = metav1.TypeMeta{
 				Kind: "Component", APIVersion: "dapr.io/v1alpha1",
 			}
-			assert.Equal(t, compWithoutObject, toComparableObj[compapi.Component](components[i]))
+			assert.Equal(t, compWithoutObject, toComparableObj[componentsapi.Component](components[i]))
 		})
 
 		t.Run("HTTPEndpoint", func(t *testing.T) {
@@ -58,7 +58,7 @@ func Test_toComparableObj(t *testing.T) {
 			endpointWithoutObject.TypeMeta = metav1.TypeMeta{
 				Kind: "HTTPEndpoint", APIVersion: "dapr.io/v1alpha1",
 			}
-			assert.Equal(t, endpointWithoutObject, toComparableObj[httpendapi.HTTPEndpoint](endpoints[i]))
+			assert.Equal(t, endpointWithoutObject, toComparableObj[httpendpointsapi.HTTPEndpoint](endpoints[i]))
 		})
 	}
 }
@@ -67,10 +67,10 @@ func Test_AreSame(t *testing.T) {
 	t.Parallel()
 
 	const numCases = 250
-	components := make([]compapi.Component, numCases)
-	endpoints := make([]httpendapi.HTTPEndpoint, numCases)
-	componentsDiff := make([]compapi.Component, numCases)
-	endpointsDiff := make([]httpendapi.HTTPEndpoint, numCases)
+	components := make([]componentsapi.Component, numCases)
+	endpoints := make([]httpendpointsapi.HTTPEndpoint, numCases)
+	componentsDiff := make([]componentsapi.Component, numCases)
+	endpointsDiff := make([]httpendpointsapi.HTTPEndpoint, numCases)
 
 	fz := fuzz.New()
 	for i := 0; i < numCases; i++ {
@@ -85,12 +85,12 @@ func Test_AreSame(t *testing.T) {
 			t.Run("Component", func(t *testing.T) {
 				comp1 := components[i]
 				comp2 := comp1.DeepCopy()
-				assert.True(t, AreSame[compapi.Component](comp1, *comp2))
+				assert.True(t, AreSame[componentsapi.Component](comp1, *comp2))
 			})
 			t.Run("HTTPEndpoint", func(t *testing.T) {
 				endpoint1 := endpoints[i]
 				endpoint2 := endpoint1.DeepCopy()
-				assert.True(t, AreSame[httpendapi.HTTPEndpoint](endpoint1, *endpoint2))
+				assert.True(t, AreSame[httpendpointsapi.HTTPEndpoint](endpoint1, *endpoint2))
 			})
 		})
 
@@ -101,7 +101,7 @@ func Test_AreSame(t *testing.T) {
 				fz.Fuzz(&comp2.ObjectMeta)
 				fz.Fuzz(&comp2.TypeMeta)
 				comp2.Name = comp1.Name
-				assert.True(t, AreSame[compapi.Component](comp1, *comp2))
+				assert.True(t, AreSame[componentsapi.Component](comp1, *comp2))
 			})
 			t.Run("HTTPEndpoint", func(t *testing.T) {
 				endpoint1 := endpoints[i]
@@ -109,7 +109,7 @@ func Test_AreSame(t *testing.T) {
 				fz.Fuzz(&endpoint2.ObjectMeta)
 				fz.Fuzz(&endpoint2.TypeMeta)
 				endpoint2.Name = endpoint1.Name
-				assert.True(t, AreSame[httpendapi.HTTPEndpoint](endpoint1, *endpoint2))
+				assert.True(t, AreSame[httpendpointsapi.HTTPEndpoint](endpoint1, *endpoint2))
 			})
 		})
 
@@ -117,12 +117,12 @@ func Test_AreSame(t *testing.T) {
 			t.Run("Component", func(t *testing.T) {
 				comp1 := components[i]
 				comp2 := componentsDiff[i]
-				assert.False(t, AreSame[compapi.Component](comp1, comp2))
+				assert.False(t, AreSame[componentsapi.Component](comp1, comp2))
 			})
 			t.Run("HTTPEndpoint", func(t *testing.T) {
 				endpoint1 := endpoints[i]
 				endpoint2 := endpointsDiff[i]
-				assert.False(t, AreSame[httpendapi.HTTPEndpoint](endpoint1, endpoint2))
+				assert.False(t, AreSame[httpendpointsapi.HTTPEndpoint](endpoint1, endpoint2))
 			})
 		})
 	}
@@ -132,10 +132,10 @@ func Test_detectDiff(t *testing.T) {
 	t.Parallel()
 
 	const numCases = 100
-	components := make([]compapi.Component, numCases)
-	endpoints := make([]httpendapi.HTTPEndpoint, numCases)
-	componentsDiff := make([]compapi.Component, numCases)
-	endpointsDiff := make([]httpendapi.HTTPEndpoint, numCases)
+	components := make([]componentsapi.Component, numCases)
+	endpoints := make([]httpendpointsapi.HTTPEndpoint, numCases)
+	componentsDiff := make([]componentsapi.Component, numCases)
+	endpointsDiff := make([]httpendpointsapi.HTTPEndpoint, numCases)
 
 	fz := fuzz.New()
 	for i := 0; i < numCases; i++ {
@@ -149,13 +149,13 @@ func Test_detectDiff(t *testing.T) {
 		t.Parallel()
 
 		t.Run("Component", func(t *testing.T) {
-			expSameComponents := make(map[string]compapi.Component)
-			assert.Equal(t, expSameComponents, detectDiff[compapi.Component](components, components, nil))
+			expSameComponents := make(map[string]componentsapi.Component)
+			assert.Equal(t, expSameComponents, detectDiff[componentsapi.Component](components, components, nil))
 		})
 
 		t.Run("HTTPEndpoint", func(t *testing.T) {
-			expSameEndpoints := make(map[string]httpendapi.HTTPEndpoint)
-			assert.Equal(t, expSameEndpoints, detectDiff[httpendapi.HTTPEndpoint](endpoints, endpoints, nil))
+			expSameEndpoints := make(map[string]httpendpointsapi.HTTPEndpoint)
+			assert.Equal(t, expSameEndpoints, detectDiff[httpendpointsapi.HTTPEndpoint](endpoints, endpoints, nil))
 		})
 	})
 
@@ -163,13 +163,13 @@ func Test_detectDiff(t *testing.T) {
 		t.Parallel()
 
 		t.Run("Component", func(t *testing.T) {
-			expSameComponents := make(map[string]compapi.Component)
-			assert.Equal(t, expSameComponents, detectDiff[compapi.Component](components, components, func(compapi.Component) bool { return false }))
+			expSameComponents := make(map[string]componentsapi.Component)
+			assert.Equal(t, expSameComponents, detectDiff[componentsapi.Component](components, components, func(componentsapi.Component) bool { return false }))
 		})
 
 		t.Run("HTTPEndpoint", func(t *testing.T) {
-			expSameEndpoints := make(map[string]httpendapi.HTTPEndpoint)
-			assert.Equal(t, expSameEndpoints, detectDiff[httpendapi.HTTPEndpoint](endpoints, endpoints, func(httpendapi.HTTPEndpoint) bool { return false }))
+			expSameEndpoints := make(map[string]httpendpointsapi.HTTPEndpoint)
+			assert.Equal(t, expSameEndpoints, detectDiff[httpendpointsapi.HTTPEndpoint](endpoints, endpoints, func(httpendpointsapi.HTTPEndpoint) bool { return false }))
 		})
 	})
 
@@ -177,13 +177,13 @@ func Test_detectDiff(t *testing.T) {
 		t.Parallel()
 
 		t.Run("Component", func(t *testing.T) {
-			expSameComponents := make(map[string]compapi.Component)
-			assert.Equal(t, expSameComponents, detectDiff[compapi.Component](components, components, func(compapi.Component) bool { return true }))
+			expSameComponents := make(map[string]componentsapi.Component)
+			assert.Equal(t, expSameComponents, detectDiff[componentsapi.Component](components, components, func(componentsapi.Component) bool { return true }))
 		})
 
 		t.Run("HTTPEndpoint", func(t *testing.T) {
-			expSameEndpoints := make(map[string]httpendapi.HTTPEndpoint)
-			assert.Equal(t, expSameEndpoints, detectDiff[httpendapi.HTTPEndpoint](endpoints, endpoints, func(httpendapi.HTTPEndpoint) bool { return true }))
+			expSameEndpoints := make(map[string]httpendpointsapi.HTTPEndpoint)
+			assert.Equal(t, expSameEndpoints, detectDiff[httpendpointsapi.HTTPEndpoint](endpoints, endpoints, func(httpendpointsapi.HTTPEndpoint) bool { return true }))
 		})
 	})
 
@@ -191,21 +191,21 @@ func Test_detectDiff(t *testing.T) {
 		t.Parallel()
 
 		t.Run("Component", func(t *testing.T) {
-			expDiffComponents := make(map[string]compapi.Component)
+			expDiffComponents := make(map[string]componentsapi.Component)
 			for i := 0; i < numCases; i++ {
 				expDiffComponents[componentsDiff[i].Name] = componentsDiff[i]
 			}
-			assert.Equal(t, expDiffComponents, detectDiff[compapi.Component](components, append(components, componentsDiff...), nil))
-			assert.Equal(t, expDiffComponents, detectDiff[compapi.Component](components, append(componentsDiff, components...), nil))
+			assert.Equal(t, expDiffComponents, detectDiff[componentsapi.Component](components, append(components, componentsDiff...), nil))
+			assert.Equal(t, expDiffComponents, detectDiff[componentsapi.Component](components, append(componentsDiff, components...), nil))
 		})
 
 		t.Run("HTTPEndpoint", func(t *testing.T) {
-			expDiffEndpoints := make(map[string]httpendapi.HTTPEndpoint)
+			expDiffEndpoints := make(map[string]httpendpointsapi.HTTPEndpoint)
 			for i := 0; i < numCases; i++ {
 				expDiffEndpoints[endpointsDiff[i].Name] = endpointsDiff[i]
 			}
-			assert.Equal(t, expDiffEndpoints, detectDiff[httpendapi.HTTPEndpoint](endpoints, append(endpoints, endpointsDiff...), nil))
-			assert.Equal(t, expDiffEndpoints, detectDiff[httpendapi.HTTPEndpoint](endpoints, append(endpointsDiff, endpoints...), nil))
+			assert.Equal(t, expDiffEndpoints, detectDiff[httpendpointsapi.HTTPEndpoint](endpoints, append(endpoints, endpointsDiff...), nil))
+			assert.Equal(t, expDiffEndpoints, detectDiff[httpendpointsapi.HTTPEndpoint](endpoints, append(endpointsDiff, endpoints...), nil))
 		})
 	})
 
@@ -213,15 +213,15 @@ func Test_detectDiff(t *testing.T) {
 		t.Parallel()
 
 		t.Run("Component", func(t *testing.T) {
-			expDiffComponents := make(map[string]compapi.Component)
-			assert.Equal(t, expDiffComponents, detectDiff[compapi.Component](append(components, componentsDiff...), components, nil))
-			assert.Equal(t, expDiffComponents, detectDiff[compapi.Component](append(componentsDiff, components...), components, nil))
+			expDiffComponents := make(map[string]componentsapi.Component)
+			assert.Equal(t, expDiffComponents, detectDiff[componentsapi.Component](append(components, componentsDiff...), components, nil))
+			assert.Equal(t, expDiffComponents, detectDiff[componentsapi.Component](append(componentsDiff, components...), components, nil))
 		})
 
 		t.Run("HTTPEndpoint", func(t *testing.T) {
-			expDiffEndpoints := make(map[string]httpendapi.HTTPEndpoint)
-			assert.Equal(t, expDiffEndpoints, detectDiff[httpendapi.HTTPEndpoint](append(endpoints, endpointsDiff...), endpoints, nil))
-			assert.Equal(t, expDiffEndpoints, detectDiff[httpendapi.HTTPEndpoint](append(endpointsDiff, endpoints...), endpoints, nil))
+			expDiffEndpoints := make(map[string]httpendpointsapi.HTTPEndpoint)
+			assert.Equal(t, expDiffEndpoints, detectDiff[httpendpointsapi.HTTPEndpoint](append(endpoints, endpointsDiff...), endpoints, nil))
+			assert.Equal(t, expDiffEndpoints, detectDiff[httpendpointsapi.HTTPEndpoint](append(endpointsDiff, endpoints...), endpoints, nil))
 		})
 	})
 
@@ -231,9 +231,9 @@ func Test_detectDiff(t *testing.T) {
 		t.Run("Component", func(t *testing.T) {
 			t.Parallel()
 
-			expDiffComponents := make(map[string]compapi.Component)
+			expDiffComponents := make(map[string]componentsapi.Component)
 			var j int
-			assert.Equal(t, expDiffComponents, detectDiff[compapi.Component](components, append(components, componentsDiff...), func(c compapi.Component) bool {
+			assert.Equal(t, expDiffComponents, detectDiff[componentsapi.Component](components, append(components, componentsDiff...), func(c componentsapi.Component) bool {
 				if j < len(components) {
 					assert.Equal(t, components[j], c)
 				} else {
@@ -243,7 +243,7 @@ func Test_detectDiff(t *testing.T) {
 				return true
 			}))
 			j = 0
-			assert.Equal(t, expDiffComponents, detectDiff[compapi.Component](components, append(componentsDiff, components...), func(c compapi.Component) bool {
+			assert.Equal(t, expDiffComponents, detectDiff[componentsapi.Component](components, append(componentsDiff, components...), func(c componentsapi.Component) bool {
 				if j < len(components) {
 					assert.Equal(t, componentsDiff[j], c)
 				} else {
@@ -257,9 +257,9 @@ func Test_detectDiff(t *testing.T) {
 		t.Run("HTTPEndpoint", func(t *testing.T) {
 			t.Parallel()
 
-			expDiffEndpoints := make(map[string]httpendapi.HTTPEndpoint)
+			expDiffEndpoints := make(map[string]httpendpointsapi.HTTPEndpoint)
 			var j int
-			assert.Equal(t, expDiffEndpoints, detectDiff[httpendapi.HTTPEndpoint](endpoints, append(endpoints, endpointsDiff...), func(e httpendapi.HTTPEndpoint) bool {
+			assert.Equal(t, expDiffEndpoints, detectDiff[httpendpointsapi.HTTPEndpoint](endpoints, append(endpoints, endpointsDiff...), func(e httpendpointsapi.HTTPEndpoint) bool {
 				if j < len(endpoints) {
 					assert.Equal(t, endpoints[j], e)
 				} else {
@@ -269,7 +269,7 @@ func Test_detectDiff(t *testing.T) {
 				return true
 			}))
 			j = 0
-			assert.Equal(t, expDiffEndpoints, detectDiff[httpendapi.HTTPEndpoint](endpoints, append(endpointsDiff, endpoints...), func(e httpendapi.HTTPEndpoint) bool {
+			assert.Equal(t, expDiffEndpoints, detectDiff[httpendpointsapi.HTTPEndpoint](endpoints, append(endpointsDiff, endpoints...), func(e httpendpointsapi.HTTPEndpoint) bool {
 				if j < len(endpoints) {
 					assert.Equal(t, endpointsDiff[j], e)
 				} else {
@@ -287,13 +287,13 @@ func Test_Diff(t *testing.T) {
 
 	const numCases = 100
 
-	components := make([]compapi.Component, numCases)
-	componentsDiff1 := make([]compapi.Component, numCases)
-	componentsDiff2 := make([]compapi.Component, numCases)
+	components := make([]componentsapi.Component, numCases)
+	componentsDiff1 := make([]componentsapi.Component, numCases)
+	componentsDiff2 := make([]componentsapi.Component, numCases)
 
-	endpoints := make([]httpendapi.HTTPEndpoint, numCases)
-	endpointsDiff1 := make([]httpendapi.HTTPEndpoint, numCases)
-	endpointsDiff2 := make([]httpendapi.HTTPEndpoint, numCases)
+	endpoints := make([]httpendpointsapi.HTTPEndpoint, numCases)
+	endpointsDiff1 := make([]httpendpointsapi.HTTPEndpoint, numCases)
+	endpointsDiff2 := make([]httpendpointsapi.HTTPEndpoint, numCases)
 
 	takenNames := make(map[string]bool)
 	forCh := func(name string) bool {
@@ -328,16 +328,16 @@ func Test_Diff(t *testing.T) {
 		t.Parallel()
 
 		t.Run("Component", func(t *testing.T) {
-			assert.Nil(t, Diff[compapi.Component](nil))
-			assert.Nil(t, Diff[compapi.Component](&LocalRemoteResources[compapi.Component]{
+			assert.Nil(t, Diff[componentsapi.Component](nil))
+			assert.Nil(t, Diff[componentsapi.Component](&LocalRemoteResources[componentsapi.Component]{
 				Local:  nil,
 				Remote: nil,
 			}))
 		})
 
 		t.Run("HTTPEndpoint", func(t *testing.T) {
-			assert.Nil(t, Diff[httpendapi.HTTPEndpoint](nil))
-			assert.Nil(t, Diff[httpendapi.HTTPEndpoint](&LocalRemoteResources[httpendapi.HTTPEndpoint]{
+			assert.Nil(t, Diff[httpendpointsapi.HTTPEndpoint](nil))
+			assert.Nil(t, Diff[httpendpointsapi.HTTPEndpoint](&LocalRemoteResources[httpendpointsapi.HTTPEndpoint]{
 				Local:  nil,
 				Remote: nil,
 			}))
@@ -348,7 +348,7 @@ func Test_Diff(t *testing.T) {
 		t.Parallel()
 
 		t.Run("Component", func(t *testing.T) {
-			resp := Diff[compapi.Component](&LocalRemoteResources[compapi.Component]{
+			resp := Diff[componentsapi.Component](&LocalRemoteResources[componentsapi.Component]{
 				Local:  components,
 				Remote: nil,
 			})
@@ -358,7 +358,7 @@ func Test_Diff(t *testing.T) {
 			assert.ElementsMatch(t, nil, resp.Created)
 		})
 		t.Run("HTTPEndpoint", func(t *testing.T) {
-			resp := Diff[httpendapi.HTTPEndpoint](&LocalRemoteResources[httpendapi.HTTPEndpoint]{
+			resp := Diff[httpendpointsapi.HTTPEndpoint](&LocalRemoteResources[httpendpointsapi.HTTPEndpoint]{
 				Local:  endpoints,
 				Remote: nil,
 			})
@@ -372,7 +372,7 @@ func Test_Diff(t *testing.T) {
 		t.Parallel()
 
 		t.Run("Component", func(t *testing.T) {
-			resp := Diff[compapi.Component](&LocalRemoteResources[compapi.Component]{
+			resp := Diff[componentsapi.Component](&LocalRemoteResources[componentsapi.Component]{
 				Local:  nil,
 				Remote: components,
 			})
@@ -382,7 +382,7 @@ func Test_Diff(t *testing.T) {
 			assert.ElementsMatch(t, components, resp.Created)
 		})
 		t.Run("HTTPEndpoint", func(t *testing.T) {
-			resp := Diff[httpendapi.HTTPEndpoint](&LocalRemoteResources[httpendapi.HTTPEndpoint]{
+			resp := Diff[httpendpointsapi.HTTPEndpoint](&LocalRemoteResources[httpendpointsapi.HTTPEndpoint]{
 				Local:  nil,
 				Remote: endpoints,
 			})
@@ -396,7 +396,7 @@ func Test_Diff(t *testing.T) {
 		t.Parallel()
 
 		t.Run("Component", func(t *testing.T) {
-			resp := Diff[compapi.Component](&LocalRemoteResources[compapi.Component]{
+			resp := Diff[componentsapi.Component](&LocalRemoteResources[componentsapi.Component]{
 				Local:  componentsDiff1,
 				Remote: components,
 			})
@@ -406,7 +406,7 @@ func Test_Diff(t *testing.T) {
 			assert.ElementsMatch(t, components, resp.Created)
 		})
 		t.Run("HTTPEndpoint", func(t *testing.T) {
-			resp := Diff[httpendapi.HTTPEndpoint](&LocalRemoteResources[httpendapi.HTTPEndpoint]{
+			resp := Diff[httpendpointsapi.HTTPEndpoint](&LocalRemoteResources[httpendpointsapi.HTTPEndpoint]{
 				Local:  endpointsDiff1,
 				Remote: endpoints,
 			})
@@ -420,7 +420,7 @@ func Test_Diff(t *testing.T) {
 		t.Parallel()
 
 		t.Run("Component", func(t *testing.T) {
-			resp := Diff[compapi.Component](&LocalRemoteResources[compapi.Component]{
+			resp := Diff[componentsapi.Component](&LocalRemoteResources[componentsapi.Component]{
 				Local:  append(componentsDiff2, componentsDiff1...),
 				Remote: append(components, componentsDiff2...),
 			})
@@ -430,7 +430,7 @@ func Test_Diff(t *testing.T) {
 			assert.ElementsMatch(t, components, resp.Created)
 		})
 		t.Run("HTTPEndpoint", func(t *testing.T) {
-			resp := Diff[httpendapi.HTTPEndpoint](&LocalRemoteResources[httpendapi.HTTPEndpoint]{
+			resp := Diff[httpendpointsapi.HTTPEndpoint](&LocalRemoteResources[httpendpointsapi.HTTPEndpoint]{
 				Local:  append(endpointsDiff2, endpointsDiff1...),
 				Remote: append(endpoints, endpointsDiff2...),
 			})
@@ -444,15 +444,15 @@ func Test_Diff(t *testing.T) {
 		t.Parallel()
 
 		t.Run("Component", func(t *testing.T) {
-			resp := Diff[compapi.Component](&LocalRemoteResources[compapi.Component]{
-				Local: append(append(componentsDiff2, componentsDiff1...), []compapi.Component{
+			resp := Diff[componentsapi.Component](&LocalRemoteResources[componentsapi.Component]{
+				Local: append(append(componentsDiff2, componentsDiff1...), []componentsapi.Component{
 					{
 						ObjectMeta: metav1.ObjectMeta{Name: "kubernetes"},
-						Spec:       compapi.ComponentSpec{Type: "secretstores.kubernetes"},
+						Spec:       componentsapi.ComponentSpec{Type: "secretstores.kubernetes"},
 					},
 					{
 						ObjectMeta: metav1.ObjectMeta{Name: "dapr"},
-						Spec:       compapi.ComponentSpec{Type: "workflow.dapr"},
+						Spec:       componentsapi.ComponentSpec{Type: "workflow.dapr"},
 					},
 				}...),
 				Remote: append(components, componentsDiff2...),
@@ -468,14 +468,14 @@ func Test_Diff(t *testing.T) {
 		t.Parallel()
 
 		t.Run("Component", func(t *testing.T) {
-			remote := make([]compapi.Component, len(components))
+			remote := make([]componentsapi.Component, len(components))
 			for i := 0; i < len(components); i++ {
 				comp := componentsDiff1[i].DeepCopy()
 				comp.Name = components[i].Name
 				remote[i] = *comp
 			}
 
-			resp := Diff[compapi.Component](&LocalRemoteResources[compapi.Component]{
+			resp := Diff[componentsapi.Component](&LocalRemoteResources[componentsapi.Component]{
 				Local:  components,
 				Remote: remote,
 			})
@@ -485,14 +485,14 @@ func Test_Diff(t *testing.T) {
 			assert.ElementsMatch(t, nil, resp.Created)
 		})
 		t.Run("HTTPEndpoint", func(t *testing.T) {
-			remote := make([]httpendapi.HTTPEndpoint, len(endpoints))
+			remote := make([]httpendpointsapi.HTTPEndpoint, len(endpoints))
 			for i := 0; i < len(endpoints); i++ {
 				end := endpointsDiff1[i].DeepCopy()
 				end.Name = endpoints[i].Name
 				remote[i] = *end
 			}
 
-			resp := Diff[httpendapi.HTTPEndpoint](&LocalRemoteResources[httpendapi.HTTPEndpoint]{
+			resp := Diff[httpendpointsapi.HTTPEndpoint](&LocalRemoteResources[httpendpointsapi.HTTPEndpoint]{
 				Local:  endpoints,
 				Remote: remote,
 			})
@@ -506,22 +506,22 @@ func Test_Diff(t *testing.T) {
 		t.Parallel()
 
 		t.Run("Component", func(t *testing.T) {
-			remote := make([]compapi.Component, len(components)/2)
+			remote := make([]componentsapi.Component, len(components)/2)
 			for i := 0; i < len(components)/2; i++ {
 				comp := componentsDiff1[i].DeepCopy()
 				comp.Name = components[i].Name
 				remote[i] = *comp
 			}
 
-			resp := Diff[compapi.Component](&LocalRemoteResources[compapi.Component]{
-				Local: append(components, []compapi.Component{
+			resp := Diff[componentsapi.Component](&LocalRemoteResources[componentsapi.Component]{
+				Local: append(components, []componentsapi.Component{
 					{
 						ObjectMeta: metav1.ObjectMeta{Name: "kubernetes"},
-						Spec:       compapi.ComponentSpec{Type: "secretstores.kubernetes"},
+						Spec:       componentsapi.ComponentSpec{Type: "secretstores.kubernetes"},
 					},
 					{
 						ObjectMeta: metav1.ObjectMeta{Name: "dapr"},
-						Spec:       compapi.ComponentSpec{Type: "workflow.dapr"},
+						Spec:       componentsapi.ComponentSpec{Type: "workflow.dapr"},
 					},
 				}...),
 				Remote: append(remote, componentsDiff2...),
@@ -532,14 +532,14 @@ func Test_Diff(t *testing.T) {
 			assert.ElementsMatch(t, componentsDiff2, resp.Created)
 		})
 		t.Run("HTTPEndpoint", func(t *testing.T) {
-			remote := make([]httpendapi.HTTPEndpoint, len(endpoints)/2)
+			remote := make([]httpendpointsapi.HTTPEndpoint, len(endpoints)/2)
 			for i := 0; i < len(endpoints)/2; i++ {
 				end := endpointsDiff1[i].DeepCopy()
 				end.Name = endpoints[i].Name
 				remote[i] = *end
 			}
 
-			resp := Diff[httpendapi.HTTPEndpoint](&LocalRemoteResources[httpendapi.HTTPEndpoint]{
+			resp := Diff[httpendpointsapi.HTTPEndpoint](&LocalRemoteResources[httpendpointsapi.HTTPEndpoint]{
 				Local:  endpoints,
 				Remote: append(remote, endpointsDiff2...),
 			})
@@ -553,21 +553,21 @@ func Test_Diff(t *testing.T) {
 		t.Parallel()
 
 		t.Run("Component", func(t *testing.T) {
-			resp := Diff[compapi.Component](&LocalRemoteResources[compapi.Component]{
-				Local: []compapi.Component{{
+			resp := Diff[componentsapi.Component](&LocalRemoteResources[componentsapi.Component]{
+				Local: []componentsapi.Component{{
 					ObjectMeta: metav1.ObjectMeta{Name: "foo"},
-					Spec:       compapi.ComponentSpec{Type: "secretstores.in-memory"},
+					Spec:       componentsapi.ComponentSpec{Type: "secretstores.in-memory"},
 				}},
-				Remote: []compapi.Component{{
+				Remote: []componentsapi.Component{{
 					ObjectMeta: metav1.ObjectMeta{Name: "foo"},
-					Spec:       compapi.ComponentSpec{Type: "secretstores.sqlite"},
+					Spec:       componentsapi.ComponentSpec{Type: "secretstores.sqlite"},
 				}},
 			})
 
 			assert.ElementsMatch(t, nil, resp.Deleted)
-			assert.ElementsMatch(t, []compapi.Component{{
+			assert.ElementsMatch(t, []componentsapi.Component{{
 				ObjectMeta: metav1.ObjectMeta{Name: "foo"},
-				Spec:       compapi.ComponentSpec{Type: "secretstores.sqlite"},
+				Spec:       componentsapi.ComponentSpec{Type: "secretstores.sqlite"},
 			}}, resp.Updated)
 			assert.ElementsMatch(t, nil, resp.Created)
 		})

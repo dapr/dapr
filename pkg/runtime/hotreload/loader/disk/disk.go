@@ -23,8 +23,8 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 
-	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	httpendapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
 	loadercompstore "github.com/dapr/dapr/pkg/runtime/hotreload/loader/compstore"
@@ -40,8 +40,8 @@ type Options struct {
 }
 
 type disk struct {
-	component *generic[compapi.Component]
-	endpoint  *generic[httpendapi.HTTPEndpoint]
+	component *generic[componentsapi.Component]
+	endpoint  *generic[httpendpointsapi.HTTPEndpoint]
 
 	wg      sync.WaitGroup
 	closeCh chan struct{}
@@ -67,8 +67,8 @@ func New(opts Options) (loader.Interface, error) {
 
 	d := &disk{
 		closeCh:   make(chan struct{}),
-		component: newGeneric[compapi.Component](opts, batcher, loadercompstore.NewComponent(opts.ComponentStore)),
-		endpoint:  newGeneric[httpendapi.HTTPEndpoint](opts, batcher, loadercompstore.NewHTTPEndpoint(opts.ComponentStore)),
+		component: newGeneric[componentsapi.Component](opts, batcher, loadercompstore.NewComponent(opts.ComponentStore)),
+		endpoint:  newGeneric[httpendpointsapi.HTTPEndpoint](opts, batcher, loadercompstore.NewHTTPEndpoint(opts.ComponentStore)),
 	}
 
 	d.wg.Add(1)
@@ -110,10 +110,10 @@ func (d *disk) Close() error {
 	return errors.Join(errs...)
 }
 
-func (d *disk) Components() loader.Loader[compapi.Component] {
+func (d *disk) Components() loader.Loader[componentsapi.Component] {
 	return d.component
 }
 
-func (d *disk) HTTPEndpoints() loader.Loader[httpendapi.HTTPEndpoint] {
+func (d *disk) HTTPEndpoints() loader.Loader[httpendpointsapi.HTTPEndpoint] {
 	return d.endpoint
 }

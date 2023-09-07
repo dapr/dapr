@@ -25,7 +25,7 @@ import (
 
 	"github.com/dapr/components-contrib/contenttype"
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
-	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	comppubsub "github.com/dapr/dapr/pkg/components/pubsub"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -135,7 +135,7 @@ func New(opts Options) *pubsub {
 	return ps
 }
 
-func (p *pubsub) Init(ctx context.Context, comp compapi.Component) error {
+func (p *pubsub) Init(ctx context.Context, comp componentsapi.Component) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -180,7 +180,7 @@ func (p *pubsub) Init(ctx context.Context, comp compapi.Component) error {
 	return nil
 }
 
-func (p *pubsub) Close(comp compapi.Component) error {
+func (p *pubsub) Close(comp componentsapi.Component) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 

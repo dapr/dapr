@@ -24,7 +24,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clocktesting "k8s.io/utils/clock/testing"
 
-	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
@@ -34,16 +34,16 @@ import (
 
 func Test_Run(t *testing.T) {
 	t.Run("should reconcile when ticker reaches 60 seconds", func(t *testing.T) {
-		compLoader := fake.NewFake[compapi.Component]()
+		compLoader := fake.NewFake[componentsapi.Component]()
 		loader := fake.New().WithComponent(compLoader)
 
 		var listCalled atomic.Int32
-		compLoader.WithList(func(context.Context) (*differ.LocalRemoteResources[compapi.Component], error) {
+		compLoader.WithList(func(context.Context) (*differ.LocalRemoteResources[componentsapi.Component], error) {
 			listCalled.Add(1)
 			return nil, nil
 		})
 
-		r := NewComponent(Options[compapi.Component]{
+		r := NewComponent(Options[componentsapi.Component]{
 			Loader:    loader,
 			CompStore: compstore.New(),
 		}, nil)
@@ -76,14 +76,14 @@ func Test_Run(t *testing.T) {
 	})
 
 	t.Run("should reconcile when ticker reaches 60 seconds", func(t *testing.T) {
-		compLoader := fake.NewFake[compapi.Component]()
+		compLoader := fake.NewFake[componentsapi.Component]()
 
-		compCh := make(chan *loader.Event[compapi.Component])
-		compLoader.WithStream(func(context.Context) (<-chan *loader.Event[compapi.Component], error) {
+		compCh := make(chan *loader.Event[componentsapi.Component])
+		compLoader.WithStream(func(context.Context) (<-chan *loader.Event[componentsapi.Component], error) {
 			return compCh, nil
 		})
 
-		r := NewComponent(Options[compapi.Component]{
+		r := NewComponent(Options[componentsapi.Component]{
 			Loader:    fake.New().WithComponent(compLoader),
 			CompStore: compstore.New(),
 		}, nil)
@@ -92,12 +92,12 @@ func Test_Run(t *testing.T) {
 
 		mngr := newFakeManager()
 		mngr.Loader = compLoader
-		updateCh := make(chan compapi.Component)
-		deleteCh := make(chan compapi.Component)
-		mngr.deleteFn = func(c compapi.Component) {
+		updateCh := make(chan componentsapi.Component)
+		deleteCh := make(chan componentsapi.Component)
+		mngr.deleteFn = func(c componentsapi.Component) {
 			deleteCh <- c
 		}
-		mngr.updateFn = func(_ context.Context, c compapi.Component) {
+		mngr.updateFn = func(_ context.Context, c componentsapi.Component) {
 			updateCh <- c
 		}
 
@@ -108,10 +108,10 @@ func Test_Run(t *testing.T) {
 			errCh <- r.Run(context.Background())
 		}()
 
-		comp1 := compapi.Component{ObjectMeta: metav1.ObjectMeta{Name: "foo"}}
+		comp1 := componentsapi.Component{ObjectMeta: metav1.ObjectMeta{Name: "foo"}}
 
 		select {
-		case compCh <- &loader.Event[compapi.Component]{
+		case compCh <- &loader.Event[componentsapi.Component]{
 			Type:     operator.ResourceEventType_CREATED,
 			Resource: comp1,
 		}:
@@ -127,7 +127,7 @@ func Test_Run(t *testing.T) {
 		}
 
 		select {
-		case compCh <- &loader.Event[compapi.Component]{
+		case compCh <- &loader.Event[componentsapi.Component]{
 			Type:     operator.ResourceEventType_UPDATED,
 			Resource: comp1,
 		}:
@@ -143,7 +143,7 @@ func Test_Run(t *testing.T) {
 		}
 
 		select {
-		case compCh <- &loader.Event[compapi.Component]{
+		case compCh <- &loader.Event[componentsapi.Component]{
 			Type:     operator.ResourceEventType_DELETED,
 			Resource: comp1,
 		}:
@@ -166,9 +166,9 @@ func Test_Run(t *testing.T) {
 func Test_reconcile(t *testing.T) {
 	const caseNum = 100
 
-	deleted := make([]compapi.Component, caseNum)
-	updated := make([]compapi.Component, caseNum)
-	created := make([]compapi.Component, caseNum)
+	deleted := make([]componentsapi.Component, caseNum)
+	updated := make([]componentsapi.Component, caseNum)
+	created := make([]componentsapi.Component, caseNum)
 
 	fz := fuzz.New()
 	for i := 0; i < caseNum; i++ {
@@ -177,30 +177,30 @@ func Test_reconcile(t *testing.T) {
 		fz.Fuzz(&created[i])
 	}
 
-	eventCh := make(chan compapi.Component)
+	eventCh := make(chan componentsapi.Component)
 	mngr := newFakeManager()
-	mngr.deleteFn = func(c compapi.Component) {
+	mngr.deleteFn = func(c componentsapi.Component) {
 		eventCh <- c
 	}
-	mngr.updateFn = func(_ context.Context, c compapi.Component) {
+	mngr.updateFn = func(_ context.Context, c componentsapi.Component) {
 		eventCh <- c
 	}
 
-	r := &Reconciler[compapi.Component]{
+	r := &Reconciler[componentsapi.Component]{
 		manager: mngr,
 	}
 
 	t.Run("events should be sent in the correct grouped order", func(t *testing.T) {
 		errCh := make(chan error)
 		go func() {
-			errCh <- r.reconcile(context.Background(), &differ.Result[compapi.Component]{
+			errCh <- r.reconcile(context.Background(), &differ.Result[componentsapi.Component]{
 				Deleted: deleted,
 				Updated: updated,
 				Created: created,
 			})
 		}()
 
-		var got []compapi.Component
+		var got []componentsapi.Component
 		for i := 0; i < caseNum; i++ {
 			select {
 			case e := <-eventCh:
@@ -211,7 +211,7 @@ func Test_reconcile(t *testing.T) {
 		}
 		assert.ElementsMatch(t, deleted, got)
 
-		got = []compapi.Component{}
+		got = []componentsapi.Component{}
 		for i := 0; i < caseNum; i++ {
 			select {
 			case e := <-eventCh:
@@ -222,7 +222,7 @@ func Test_reconcile(t *testing.T) {
 		}
 		assert.ElementsMatch(t, updated, got)
 
-		got = []compapi.Component{}
+		got = []componentsapi.Component{}
 		for i := 0; i < caseNum; i++ {
 			select {
 			case e := <-eventCh:
@@ -246,37 +246,37 @@ func Test_handleEvent(t *testing.T) {
 	mngr := newFakeManager()
 
 	updateCalled, deleteCalled := 0, 0
-	comp1 := compapi.Component{ObjectMeta: metav1.ObjectMeta{Name: "foo"}}
+	comp1 := componentsapi.Component{ObjectMeta: metav1.ObjectMeta{Name: "foo"}}
 
-	mngr.deleteFn = func(c compapi.Component) {
+	mngr.deleteFn = func(c componentsapi.Component) {
 		assert.Equal(t, comp1, c)
 		deleteCalled++
 	}
-	mngr.updateFn = func(_ context.Context, c compapi.Component) {
+	mngr.updateFn = func(_ context.Context, c componentsapi.Component) {
 		assert.Equal(t, comp1, c)
 		updateCalled++
 	}
 
-	r := &Reconciler[compapi.Component]{manager: mngr}
+	r := &Reconciler[componentsapi.Component]{manager: mngr}
 
 	assert.Equal(t, 0, updateCalled)
 	assert.Equal(t, 0, deleteCalled)
 
-	r.handleEvent(context.Background(), &loader.Event[compapi.Component]{
+	r.handleEvent(context.Background(), &loader.Event[componentsapi.Component]{
 		Type:     operator.ResourceEventType_CREATED,
 		Resource: comp1,
 	})
 	assert.Equal(t, 1, updateCalled)
 	assert.Equal(t, 0, deleteCalled)
 
-	r.handleEvent(context.Background(), &loader.Event[compapi.Component]{
+	r.handleEvent(context.Background(), &loader.Event[componentsapi.Component]{
 		Type:     operator.ResourceEventType_UPDATED,
 		Resource: comp1,
 	})
 	assert.Equal(t, 2, updateCalled)
 	assert.Equal(t, 0, deleteCalled)
 
-	r.handleEvent(context.Background(), &loader.Event[compapi.Component]{
+	r.handleEvent(context.Background(), &loader.Event[componentsapi.Component]{
 		Type:     operator.ResourceEventType_DELETED,
 		Resource: comp1,
 	})
@@ -285,26 +285,26 @@ func Test_handleEvent(t *testing.T) {
 }
 
 type fakeManager struct {
-	loader.Loader[compapi.Component]
-	updateFn func(context.Context, compapi.Component)
-	deleteFn func(compapi.Component)
+	loader.Loader[componentsapi.Component]
+	updateFn func(context.Context, componentsapi.Component)
+	deleteFn func(componentsapi.Component)
 }
 
 func newFakeManager() *fakeManager {
 	return &fakeManager{
-		updateFn: func(context.Context, compapi.Component) {
+		updateFn: func(context.Context, componentsapi.Component) {
 		},
-		deleteFn: func(compapi.Component) {
+		deleteFn: func(componentsapi.Component) {
 		},
 	}
 }
 
 //nolint:unused
-func (f *fakeManager) update(ctx context.Context, comp compapi.Component) {
+func (f *fakeManager) update(ctx context.Context, comp componentsapi.Component) {
 	f.updateFn(ctx, comp)
 }
 
 //nolint:unused
-func (f *fakeManager) delete(comp compapi.Component) {
+func (f *fakeManager) delete(comp componentsapi.Component) {
 	f.deleteFn(comp)
 }

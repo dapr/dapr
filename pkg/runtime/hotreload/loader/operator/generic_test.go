@@ -21,7 +21,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	operatorpb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
@@ -32,7 +32,7 @@ import (
 func Test_generic(t *testing.T) {
 	t.Run("Stream should return error on stream when already closed", func(t *testing.T) {
 		streamer := newFakeStreamer()
-		g := newGeneric[compapi.Component](
+		g := newGeneric[componentsapi.Component](
 			Options{},
 			loadercompstore.NewComponent(compstore.New()),
 			streamer,
@@ -46,7 +46,7 @@ func Test_generic(t *testing.T) {
 
 	t.Run("Stream should return error on stream and context cancelled", func(t *testing.T) {
 		streamer := newFakeStreamer()
-		g := newGeneric[compapi.Component](
+		g := newGeneric[componentsapi.Component](
 			Options{},
 			loadercompstore.NewComponent(compstore.New()),
 			streamer,
@@ -66,14 +66,14 @@ func Test_generic(t *testing.T) {
 
 	t.Run("Should send event to Stream channel on Recv", func(t *testing.T) {
 		streamer := newFakeStreamer()
-		g := newGeneric[compapi.Component](
+		g := newGeneric[componentsapi.Component](
 			Options{},
 			loadercompstore.NewComponent(compstore.New()),
 			streamer,
 		)
 
-		recCh := make(chan *loader.Event[compapi.Component], 1)
-		streamer.recvFn = func() (*loader.Event[compapi.Component], error) {
+		recCh := make(chan *loader.Event[componentsapi.Component], 1)
+		streamer.recvFn = func() (*loader.Event[componentsapi.Component], error) {
 			return <-recCh, nil
 		}
 
@@ -82,7 +82,7 @@ func Test_generic(t *testing.T) {
 		assert.NoError(t, err)
 
 		for i := 0; i < 5; i++ {
-			comp := new(loader.Event[compapi.Component])
+			comp := new(loader.Event[componentsapi.Component])
 			select {
 			case recCh <- comp:
 			case <-time.After(time.Second):
@@ -104,7 +104,7 @@ func Test_generic(t *testing.T) {
 
 	t.Run("Should attempt to re-establish after the stream fails", func(t *testing.T) {
 		streamer := newFakeStreamer()
-		g := newGeneric[compapi.Component](
+		g := newGeneric[componentsapi.Component](
 			Options{},
 			loadercompstore.NewComponent(compstore.New()),
 			streamer,
@@ -126,7 +126,7 @@ func Test_generic(t *testing.T) {
 			return errors.New("test error")
 		}
 
-		streamer.recvFn = func() (*loader.Event[compapi.Component], error) {
+		streamer.recvFn = func() (*loader.Event[componentsapi.Component], error) {
 			return nil, errors.New("recv error")
 		}
 
@@ -145,7 +145,7 @@ func Test_generic(t *testing.T) {
 
 	t.Run("close waits for streamer to close", func(t *testing.T) {
 		streamer := newFakeStreamer()
-		g := newGeneric[compapi.Component](
+		g := newGeneric[componentsapi.Component](
 			Options{},
 			loadercompstore.NewComponent(compstore.New()),
 			streamer,
@@ -184,15 +184,15 @@ type fakeStreamer[T differ.Resource] struct {
 	establishFn func(context.Context, operatorpb.OperatorClient, string, string) error
 }
 
-func newFakeStreamer() *fakeStreamer[compapi.Component] {
-	return &fakeStreamer[compapi.Component]{
+func newFakeStreamer() *fakeStreamer[componentsapi.Component] {
+	return &fakeStreamer[componentsapi.Component]{
 		listFn: func(context.Context, operatorpb.OperatorClient, string, string) ([][]byte, error) {
 			return nil, nil
 		},
 		closeFn: func() error {
 			return nil
 		},
-		recvFn: func() (*loader.Event[compapi.Component], error) {
+		recvFn: func() (*loader.Event[componentsapi.Component], error) {
 			return nil, nil
 		},
 		establishFn: func(context.Context, operatorpb.OperatorClient, string, string) error {

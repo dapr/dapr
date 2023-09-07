@@ -21,7 +21,7 @@ import (
 	"sync"
 
 	contribstate "github.com/dapr/components-contrib/state"
-	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	compstate "github.com/dapr/dapr/pkg/components/state"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/encryption"
@@ -68,7 +68,7 @@ func New(opts Options) *state {
 	}
 }
 
-func (s *state) Init(ctx context.Context, comp compapi.Component) error {
+func (s *state) Init(ctx context.Context, comp componentsapi.Component) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -147,7 +147,7 @@ func (s *state) Init(ctx context.Context, comp compapi.Component) error {
 	return nil
 }
 
-func (s *state) Close(comp compapi.Component) error {
+func (s *state) Close(comp componentsapi.Component) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 

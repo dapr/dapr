@@ -21,7 +21,7 @@ import (
 
 	"github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/dapr/pkg/apis/common"
-	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/modes"
 )
@@ -53,7 +53,7 @@ func New(options Options) *Meta {
 	}
 }
 
-func (m *Meta) ToBaseMetadata(comp compapi.Component) (metadata.Base, error) {
+func (m *Meta) ToBaseMetadata(comp componentsapi.Component) (metadata.Base, error) {
 	// Add global wasm strict sandbox config to the wasm component metadata
 	if components.IsWasmComponentType(comp.Spec.Type) {
 		m.AddWasmStrictSandbox(&comp)
@@ -114,7 +114,7 @@ func ContainsNamespace(items []common.NameValuePair) bool {
 // AddWasmStrictSandbox adds global wasm strict sandbox configuration to component metadata.
 // When strict sandbox is enabled, WASM components always run in strict mode regardless of their configuration.
 // When strict sandbox is disabled or unset, keep the original component configuration.
-func (m *Meta) AddWasmStrictSandbox(comp *compapi.Component) {
+func (m *Meta) AddWasmStrictSandbox(comp *componentsapi.Component) {
 	// If the global strict sandbox is disabled (or unset), it is not enforced.
 	if !m.strictSandbox {
 		return

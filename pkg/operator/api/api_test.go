@@ -30,8 +30,8 @@ import (
 	"sigs.k8s.io/yaml"
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
-	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	httpendapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subscriptionsapiV2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/client/clientset/versioned/scheme"
@@ -69,8 +69,8 @@ func (m *mockHTTPEndpointUpdateServer) Context() context.Context {
 
 func TestProcessComponentSecrets(t *testing.T) {
 	t.Run("secret ref exists, not kubernetes secret store, no error", func(t *testing.T) {
-		c := compapi.Component{
-			Spec: compapi.ComponentSpec{
+		c := componentsapi.Component{
+			Spec: componentsapi.ComponentSpec{
 				Metadata: []commonapi.NameValuePair{
 					{
 						Name: "test1",
@@ -81,7 +81,7 @@ func TestProcessComponentSecrets(t *testing.T) {
 					},
 				},
 			},
-			Auth: compapi.Auth{
+			Auth: componentsapi.Auth{
 				SecretStore: "secretstore",
 			},
 		}
@@ -91,8 +91,8 @@ func TestProcessComponentSecrets(t *testing.T) {
 	})
 
 	t.Run("secret ref exists, kubernetes secret store, secret extracted", func(t *testing.T) {
-		c := compapi.Component{
-			Spec: compapi.ComponentSpec{
+		c := componentsapi.Component{
+			Spec: componentsapi.ComponentSpec{
 				Metadata: []commonapi.NameValuePair{
 					{
 						Name: "test1",
@@ -103,7 +103,7 @@ func TestProcessComponentSecrets(t *testing.T) {
 					},
 				},
 			},
-			Auth: compapi.Auth{
+			Auth: componentsapi.Auth{
 				SecretStore: kubernetesSecretStore,
 			},
 		}
@@ -138,8 +138,8 @@ func TestProcessComponentSecrets(t *testing.T) {
 	})
 
 	t.Run("secret ref exists, default kubernetes secret store, secret extracted", func(t *testing.T) {
-		c := compapi.Component{
-			Spec: compapi.ComponentSpec{
+		c := componentsapi.Component{
+			Spec: componentsapi.ComponentSpec{
 				Metadata: []commonapi.NameValuePair{
 					{
 						Name: "test1",
@@ -150,7 +150,7 @@ func TestProcessComponentSecrets(t *testing.T) {
 					},
 				},
 			},
-			Auth: compapi.Auth{
+			Auth: componentsapi.Auth{
 				SecretStore: "",
 			},
 		}
@@ -187,11 +187,11 @@ func TestProcessComponentSecrets(t *testing.T) {
 
 func TestComponentUpdate(t *testing.T) {
 	t.Run("skip sidecar update if namespace doesn't match", func(t *testing.T) {
-		c := compapi.Component{
+		c := componentsapi.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: "ns1",
 			},
-			Spec: compapi.ComponentSpec{},
+			Spec: componentsapi.ComponentSpec{},
 		}
 
 		s := runtime.NewScheme()
@@ -217,7 +217,7 @@ func TestComponentUpdate(t *testing.T) {
 			api.connLock.Lock()
 			defer api.connLock.Unlock()
 			for key := range api.componentUpdateChan {
-				api.componentUpdateChan[key] <- &loader.Event[compapi.Component]{
+				api.componentUpdateChan[key] <- &loader.Event[componentsapi.Component]{
 					Type:     operatorv1pb.ResourceEventType_CREATED,
 					Resource: c,
 				}
@@ -234,11 +234,11 @@ func TestComponentUpdate(t *testing.T) {
 	})
 
 	t.Run("sidecar is updated when component namespace is a match", func(t *testing.T) {
-		c := compapi.Component{
+		c := componentsapi.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: "ns1",
 			},
-			Spec: compapi.ComponentSpec{},
+			Spec: componentsapi.ComponentSpec{},
 		}
 
 		s := runtime.NewScheme()
@@ -264,7 +264,7 @@ func TestComponentUpdate(t *testing.T) {
 			api.connLock.Lock()
 			defer api.connLock.Unlock()
 			for key := range api.componentUpdateChan {
-				api.componentUpdateChan[key] <- &loader.Event[compapi.Component]{
+				api.componentUpdateChan[key] <- &loader.Event[componentsapi.Component]{
 					Type:     operatorv1pb.ResourceEventType_CREATED,
 					Resource: c,
 				}
@@ -282,11 +282,11 @@ func TestComponentUpdate(t *testing.T) {
 }
 
 func TestHTTPEndpointUpdate(t *testing.T) {
-	e := httpendapi.HTTPEndpoint{
+	e := httpendpointsapi.HTTPEndpoint{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "ns1",
 		},
-		Spec: httpendapi.HTTPEndpointSpec{},
+		Spec: httpendpointsapi.HTTPEndpointSpec{},
 	}
 
 	s := runtime.NewScheme()
@@ -312,7 +312,7 @@ func TestHTTPEndpointUpdate(t *testing.T) {
 			api.endpointLock.Lock()
 			defer api.endpointLock.Unlock()
 			for key := range api.endpointsUpdateChan {
-				api.endpointsUpdateChan[key] <- &loader.Event[httpendapi.HTTPEndpoint]{
+				api.endpointsUpdateChan[key] <- &loader.Event[httpendpointsapi.HTTPEndpoint]{
 					Type:     operatorv1pb.ResourceEventType_CREATED,
 					Resource: e,
 				}
@@ -339,7 +339,7 @@ func TestHTTPEndpointUpdate(t *testing.T) {
 			api.endpointLock.Lock()
 			defer api.endpointLock.Unlock()
 			for key := range api.endpointsUpdateChan {
-				api.endpointsUpdateChan[key] <- &loader.Event[httpendapi.HTTPEndpoint]{
+				api.endpointsUpdateChan[key] <- &loader.Event[httpendpointsapi.HTTPEndpoint]{
 					Type:     operatorv1pb.ResourceEventType_CREATED,
 					Resource: e,
 				}
@@ -362,23 +362,23 @@ func TestListsNamespaced(t *testing.T) {
 		err := scheme.AddToScheme(s)
 		assert.NoError(t, err)
 
-		err = compapi.AddToScheme(s)
+		err = componentsapi.AddToScheme(s)
 		assert.NoError(t, err)
 
-		av, kind := compapi.SchemeGroupVersion.WithKind("Component").ToAPIVersionAndKind()
+		av, kind := componentsapi.SchemeGroupVersion.WithKind("Component").ToAPIVersionAndKind()
 		typeMeta := metav1.TypeMeta{
 			Kind:       kind,
 			APIVersion: av,
 		}
 		client := fake.NewClientBuilder().
 			WithScheme(s).
-			WithObjects(&compapi.Component{
+			WithObjects(&componentsapi.Component{
 				TypeMeta: typeMeta,
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "obj1",
 					Namespace: "namespace-a",
 				},
-			}, &compapi.Component{
+			}, &componentsapi.Component{
 				TypeMeta: typeMeta,
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "obj2",
@@ -520,23 +520,23 @@ func TestListsNamespaced(t *testing.T) {
 		err := scheme.AddToScheme(s)
 		assert.NoError(t, err)
 
-		err = httpendapi.AddToScheme(s)
+		err = httpendpointsapi.AddToScheme(s)
 		assert.NoError(t, err)
 
-		av, kind := httpendapi.SchemeGroupVersion.WithKind("HTTPEndpoint").ToAPIVersionAndKind()
+		av, kind := httpendpointsapi.SchemeGroupVersion.WithKind("HTTPEndpoint").ToAPIVersionAndKind()
 		typeMeta := metav1.TypeMeta{
 			Kind:       kind,
 			APIVersion: av,
 		}
 		client := fake.NewClientBuilder().
 			WithScheme(s).
-			WithObjects(&httpendapi.HTTPEndpoint{
+			WithObjects(&httpendpointsapi.HTTPEndpoint{
 				TypeMeta: typeMeta,
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "obj1",
 					Namespace: "namespace-a",
 				},
-			}, &httpendapi.HTTPEndpoint{
+			}, &httpendpointsapi.HTTPEndpoint{
 				TypeMeta: typeMeta,
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "obj2",
@@ -554,7 +554,7 @@ func TestListsNamespaced(t *testing.T) {
 		assert.Nil(t, err)
 		assert.Equal(t, 1, len(res.GetHttpEndpoints()))
 
-		var endpoint httpendapi.HTTPEndpoint
+		var endpoint httpendpointsapi.HTTPEndpoint
 		err = yaml.Unmarshal(res.GetHttpEndpoints()[0], &endpoint)
 		assert.Nil(t, err)
 
@@ -570,8 +570,8 @@ func TestListsNamespaced(t *testing.T) {
 }
 
 func TestProcessHTTPEndpointSecrets(t *testing.T) {
-	e := httpendapi.HTTPEndpoint{
-		Spec: httpendapi.HTTPEndpointSpec{
+	e := httpendpointsapi.HTTPEndpoint{
+		Spec: httpendpointsapi.HTTPEndpointSpec{
 			BaseURL: "http://test.com/",
 			Headers: []commonapi.NameValuePair{
 				{
@@ -583,7 +583,7 @@ func TestProcessHTTPEndpointSecrets(t *testing.T) {
 				},
 			},
 		},
-		Auth: httpendapi.Auth{
+		Auth: httpendpointsapi.Auth{
 			SecretStore: "secretstore",
 		},
 	}

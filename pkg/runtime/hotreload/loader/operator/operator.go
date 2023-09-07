@@ -16,8 +16,8 @@ package operator
 import (
 	"errors"
 
-	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	httpendapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	operatorpb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
@@ -35,14 +35,14 @@ type Options struct {
 }
 
 type operator struct {
-	component *generic[compapi.Component]
-	endpoint  *generic[httpendapi.HTTPEndpoint]
+	component *generic[componentsapi.Component]
+	endpoint  *generic[httpendpointsapi.HTTPEndpoint]
 }
 
 func New(opts Options) loader.Interface {
 	return &operator{
-		component: newGeneric[compapi.Component](opts, loadercompstore.NewComponent(opts.ComponentStore), new(component)),
-		endpoint:  newGeneric[httpendapi.HTTPEndpoint](opts, loadercompstore.NewHTTPEndpoint(opts.ComponentStore), new(endpoint)),
+		component: newGeneric[componentsapi.Component](opts, loadercompstore.NewComponent(opts.ComponentStore), new(component)),
+		endpoint:  newGeneric[httpendpointsapi.HTTPEndpoint](opts, loadercompstore.NewHTTPEndpoint(opts.ComponentStore), new(endpoint)),
 	}
 }
 
@@ -59,10 +59,10 @@ func (o *operator) Close() error {
 	return errors.Join(errs...)
 }
 
-func (o *operator) Components() loader.Loader[compapi.Component] {
+func (o *operator) Components() loader.Loader[componentsapi.Component] {
 	return o.component
 }
 
-func (o *operator) HTTPEndpoints() loader.Loader[httpendapi.HTTPEndpoint] {
+func (o *operator) HTTPEndpoints() loader.Loader[httpendpointsapi.HTTPEndpoint] {
 	return o.endpoint
 }

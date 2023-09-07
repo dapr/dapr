@@ -26,7 +26,7 @@ import (
 	"github.com/dapr/components-contrib/metadata"
 	contribstate "github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/apis/common"
-	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/encryption"
@@ -56,11 +56,11 @@ func TestInitState(t *testing.T) {
 
 	primaryKey := hex.EncodeToString(bytes)
 
-	mockStateComponent := compapi.Component{
+	mockStateComponent := componentsapi.Component{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "testpubsub",
 		},
-		Spec: compapi.ComponentSpec{
+		Spec: componentsapi.ComponentSpec{
 			Type:    "state.mockState",
 			Version: "v1",
 			Metadata: []common.NameValuePair{
@@ -78,7 +78,7 @@ func TestInitState(t *testing.T) {
 				},
 			},
 		},
-		Auth: compapi.Auth{
+		Auth: componentsapi.Auth{
 			SecretStore: "mockSecretStore",
 		},
 	}

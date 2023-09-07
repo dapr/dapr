@@ -16,21 +16,21 @@ package fake
 import (
 	"context"
 
-	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	httpendapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
 )
 
 type FakeT struct {
-	component *Fake[compapi.Component]
-	endpoint  *Fake[httpendapi.HTTPEndpoint]
+	component *Fake[componentsapi.Component]
+	endpoint  *Fake[httpendpointsapi.HTTPEndpoint]
 }
 
 func New() *FakeT {
 	return &FakeT{
-		component: NewFake[compapi.Component](),
-		endpoint:  NewFake[httpendapi.HTTPEndpoint](),
+		component: NewFake[componentsapi.Component](),
+		endpoint:  NewFake[httpendpointsapi.HTTPEndpoint](),
 	}
 }
 
@@ -38,20 +38,20 @@ func (f *FakeT) Close() error {
 	return nil
 }
 
-func (f *FakeT) Components() loader.Loader[compapi.Component] {
+func (f *FakeT) Components() loader.Loader[componentsapi.Component] {
 	return f.component
 }
 
-func (f *FakeT) HTTPEndpoints() loader.Loader[httpendapi.HTTPEndpoint] {
+func (f *FakeT) HTTPEndpoints() loader.Loader[httpendpointsapi.HTTPEndpoint] {
 	return f.endpoint
 }
 
-func (f *FakeT) WithComponent(fake *Fake[compapi.Component]) *FakeT {
+func (f *FakeT) WithComponent(fake *Fake[componentsapi.Component]) *FakeT {
 	f.component = fake
 	return f
 }
 
-func (f *FakeT) WithHTTPEndpoint(fake *Fake[httpendapi.HTTPEndpoint]) *FakeT {
+func (f *FakeT) WithHTTPEndpoint(fake *Fake[httpendpointsapi.HTTPEndpoint]) *FakeT {
 	f.endpoint = fake
 	return f
 }

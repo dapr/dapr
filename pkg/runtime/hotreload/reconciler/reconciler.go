@@ -22,8 +22,8 @@ import (
 
 	"k8s.io/utils/clock"
 
-	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	httpendapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	operatorpb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/authorizer"
 	"github.com/dapr/dapr/pkg/runtime/channels"
@@ -59,8 +59,8 @@ type manager[T differ.Resource] interface {
 	delete(T)
 }
 
-func NewComponent(opts Options[compapi.Component], authz *authorizer.Authorizer) *Reconciler[compapi.Component] {
-	return &Reconciler[compapi.Component]{
+func NewComponent(opts Options[componentsapi.Component], authz *authorizer.Authorizer) *Reconciler[componentsapi.Component] {
+	return &Reconciler[componentsapi.Component]{
 		clock:   clock.RealClock{},
 		closeCh: make(chan struct{}),
 		kind:    "Component",
@@ -73,8 +73,8 @@ func NewComponent(opts Options[compapi.Component], authz *authorizer.Authorizer)
 	}
 }
 
-func NewHTTPEndpoint(opts Options[httpendapi.HTTPEndpoint], channels *channels.Channels) *Reconciler[httpendapi.HTTPEndpoint] {
-	return &Reconciler[httpendapi.HTTPEndpoint]{
+func NewHTTPEndpoint(opts Options[httpendpointsapi.HTTPEndpoint], channels *channels.Channels) *Reconciler[httpendpointsapi.HTTPEndpoint] {
+	return &Reconciler[httpendpointsapi.HTTPEndpoint]{
 		clock:    clock.RealClock{},
 		closeCh:  make(chan struct{}),
 		channels: channels,

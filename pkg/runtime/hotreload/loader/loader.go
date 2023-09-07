@@ -17,8 +17,8 @@ import (
 	"context"
 	"io"
 
-	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	httpendapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
 )
@@ -27,8 +27,8 @@ import (
 // and http endpoints from a source.
 type Interface interface {
 	io.Closer
-	Components() Loader[compapi.Component]
-	HTTPEndpoints() Loader[httpendapi.HTTPEndpoint]
+	Components() Loader[componentsapi.Component]
+	HTTPEndpoints() Loader[httpendpointsapi.HTTPEndpoint]
 }
 
 // Loader is an interface for loading and watching for changes to a resource

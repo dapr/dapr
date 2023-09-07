@@ -16,7 +16,7 @@ package reconciler
 import (
 	"context"
 
-	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/runtime/authorizer"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
@@ -28,11 +28,11 @@ type component struct {
 	store *compstore.ComponentStore
 	proc  *processor.Processor
 	auth  *authorizer.Authorizer
-	loader.Loader[compapi.Component]
+	loader.Loader[componentsapi.Component]
 }
 
 //nolint:unused
-func (c *component) update(ctx context.Context, comp compapi.Component) {
+func (c *component) update(ctx context.Context, comp componentsapi.Component) {
 	oldComp, exists := c.store.GetComponent(comp.Name)
 	_, _ = c.proc.Secret().ProcessResource(ctx, comp)
 
@@ -59,7 +59,7 @@ func (c *component) update(ctx context.Context, comp compapi.Component) {
 }
 
 //nolint:unused
-func (c *component) delete(comp compapi.Component) {
+func (c *component) delete(comp componentsapi.Component) {
 	if err := c.proc.Close(comp); err != nil {
 		log.Errorf("Error closing deleted component: %s", err)
 	}

@@ -19,8 +19,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	httpendapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	daprt "github.com/dapr/dapr/pkg/testing"
 )
 
@@ -32,11 +32,11 @@ func TestAuthorizedComponents(t *testing.T) {
 			ID:        daprt.TestRuntimeConfigID,
 			Namespace: "test",
 		})
-		component := compapi.Component{}
+		component := componentsapi.Component{}
 		component.ObjectMeta.Name = testCompName
 
-		componentObj := auth.GetAuthorizedObjects([]compapi.Component{component}, auth.IsObjectAuthorized)
-		components, ok := componentObj.([]compapi.Component)
+		componentObj := auth.GetAuthorizedObjects([]componentsapi.Component{component}, auth.IsObjectAuthorized)
+		components, ok := componentObj.([]componentsapi.Component)
 		assert.True(t, ok)
 		assert.Equal(t, 1, len(components))
 		assert.Equal(t, testCompName, components[0].Name)
@@ -48,12 +48,12 @@ func TestAuthorizedComponents(t *testing.T) {
 			Namespace: "a",
 		})
 
-		component := compapi.Component{}
+		component := componentsapi.Component{}
 		component.ObjectMeta.Name = testCompName
 		component.ObjectMeta.Namespace = "b"
 
-		componentObj := auth.GetAuthorizedObjects([]compapi.Component{component}, auth.IsObjectAuthorized)
-		components, ok := componentObj.([]compapi.Component)
+		componentObj := auth.GetAuthorizedObjects([]componentsapi.Component{component}, auth.IsObjectAuthorized)
+		components, ok := componentObj.([]componentsapi.Component)
 		assert.True(t, ok)
 		assert.Equal(t, 0, len(components))
 	})
@@ -64,12 +64,12 @@ func TestAuthorizedComponents(t *testing.T) {
 			Namespace: "a",
 		})
 
-		component := compapi.Component{}
+		component := componentsapi.Component{}
 		component.ObjectMeta.Name = testCompName
 		component.ObjectMeta.Namespace = "a"
 
-		componentObj := auth.GetAuthorizedObjects([]compapi.Component{component}, auth.IsObjectAuthorized)
-		components, ok := componentObj.([]compapi.Component)
+		componentObj := auth.GetAuthorizedObjects([]componentsapi.Component{component}, auth.IsObjectAuthorized)
+		components, ok := componentObj.([]componentsapi.Component)
 		assert.True(t, ok)
 		assert.Equal(t, 1, len(components))
 	})
@@ -80,13 +80,13 @@ func TestAuthorizedComponents(t *testing.T) {
 			Namespace: "a",
 		})
 
-		component := compapi.Component{}
+		component := componentsapi.Component{}
 		component.ObjectMeta.Name = testCompName
 		component.ObjectMeta.Namespace = "a"
 		component.Scopes = []string{daprt.TestRuntimeConfigID}
 
-		componentObj := auth.GetAuthorizedObjects([]compapi.Component{component}, auth.IsObjectAuthorized)
-		components, ok := componentObj.([]compapi.Component)
+		componentObj := auth.GetAuthorizedObjects([]componentsapi.Component{component}, auth.IsObjectAuthorized)
+		components, ok := componentObj.([]componentsapi.Component)
 		assert.True(t, ok)
 		assert.Equal(t, 1, len(components))
 	})
@@ -97,13 +97,13 @@ func TestAuthorizedComponents(t *testing.T) {
 			Namespace: "a",
 		})
 
-		component := compapi.Component{}
+		component := componentsapi.Component{}
 		component.ObjectMeta.Name = testCompName
 		component.ObjectMeta.Namespace = "a"
 		component.Scopes = []string{"other"}
 
-		componentObj := auth.GetAuthorizedObjects([]compapi.Component{component}, auth.IsObjectAuthorized)
-		components, ok := componentObj.([]compapi.Component)
+		componentObj := auth.GetAuthorizedObjects([]componentsapi.Component{component}, auth.IsObjectAuthorized)
+		components, ok := componentObj.([]componentsapi.Component)
 		assert.True(t, ok)
 		assert.Equal(t, 0, len(components))
 	})
@@ -114,13 +114,13 @@ func TestAuthorizedComponents(t *testing.T) {
 			Namespace: "a",
 		})
 
-		component := compapi.Component{}
+		component := componentsapi.Component{}
 		component.ObjectMeta.Name = testCompName
 		component.ObjectMeta.Namespace = "b"
 		component.Scopes = []string{daprt.TestRuntimeConfigID}
 
-		componentObj := auth.GetAuthorizedObjects([]compapi.Component{component}, auth.IsObjectAuthorized)
-		components, ok := componentObj.([]compapi.Component)
+		componentObj := auth.GetAuthorizedObjects([]componentsapi.Component{component}, auth.IsObjectAuthorized)
+		components, ok := componentObj.([]componentsapi.Component)
 		assert.True(t, ok)
 		assert.Equal(t, 0, len(components))
 	})
@@ -131,13 +131,13 @@ func TestAuthorizedComponents(t *testing.T) {
 			Namespace: "a",
 		})
 
-		component := compapi.Component{}
+		component := componentsapi.Component{}
 		component.ObjectMeta.Name = testCompName
 		component.ObjectMeta.Namespace = "b"
 		component.Scopes = []string{"other"}
 
-		componentObj := auth.GetAuthorizedObjects([]compapi.Component{component}, auth.IsObjectAuthorized)
-		components, ok := componentObj.([]compapi.Component)
+		componentObj := auth.GetAuthorizedObjects([]componentsapi.Component{component}, auth.IsObjectAuthorized)
+		components, ok := componentObj.([]componentsapi.Component)
 		assert.True(t, ok)
 		assert.Equal(t, 0, len(components))
 	})
@@ -150,12 +150,12 @@ func TestAuthorizedComponents(t *testing.T) {
 		})
 		auth.componentAuthorizers = []ComponentAuthorizer{}
 
-		component := compapi.Component{}
+		component := componentsapi.Component{}
 		component.ObjectMeta.Name = testCompName
 		component.ObjectMeta.Namespace = "b"
 
-		componentObj := auth.GetAuthorizedObjects([]compapi.Component{component}, auth.IsObjectAuthorized)
-		components, ok := componentObj.([]compapi.Component)
+		componentObj := auth.GetAuthorizedObjects([]componentsapi.Component{component}, auth.IsObjectAuthorized)
+		components, ok := componentObj.([]componentsapi.Component)
 		assert.True(t, ok)
 		assert.Equal(t, 1, len(components))
 		assert.Equal(t, testCompName, components[0].Name)
@@ -167,16 +167,16 @@ func TestAuthorizedComponents(t *testing.T) {
 			Namespace: "a",
 		})
 		auth.componentAuthorizers = []ComponentAuthorizer{
-			func(component compapi.Component) bool {
+			func(component componentsapi.Component) bool {
 				return false
 			},
 		}
 
-		component := compapi.Component{}
+		component := componentsapi.Component{}
 		component.ObjectMeta.Name = testCompName
 
-		componentObj := auth.GetAuthorizedObjects([]compapi.Component{component}, auth.IsObjectAuthorized)
-		components, ok := componentObj.([]compapi.Component)
+		componentObj := auth.GetAuthorizedObjects([]componentsapi.Component{component}, auth.IsObjectAuthorized)
+		components, ok := componentObj.([]componentsapi.Component)
 		assert.True(t, ok)
 		assert.Equal(t, 0, len(components))
 	})
@@ -186,15 +186,15 @@ func TestAuthorizedComponents(t *testing.T) {
 			ID:        daprt.TestRuntimeConfigID,
 			Namespace: "a",
 		})
-		auth.componentAuthorizers = append(auth.componentAuthorizers, func(component compapi.Component) bool {
+		auth.componentAuthorizers = append(auth.componentAuthorizers, func(component componentsapi.Component) bool {
 			return false
 		})
 
-		component := compapi.Component{}
+		component := componentsapi.Component{}
 		component.ObjectMeta.Name = testCompName
 
-		componentObj := auth.GetAuthorizedObjects([]compapi.Component{component}, auth.IsObjectAuthorized)
-		components, ok := componentObj.([]compapi.Component)
+		componentObj := auth.GetAuthorizedObjects([]componentsapi.Component{component}, auth.IsObjectAuthorized)
+		components, ok := componentObj.([]componentsapi.Component)
 		assert.True(t, ok)
 		assert.Equal(t, 0, len(components))
 	})
@@ -205,18 +205,18 @@ func TestAuthorizedHTTPEndpoints(t *testing.T) {
 		ID:        daprt.TestRuntimeConfigID,
 		Namespace: "a",
 	})
-	endpoint := httpendapi.HTTPEndpoint{
+	endpoint := httpendpointsapi.HTTPEndpoint{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "testEndpoint",
 		},
-		Spec: httpendapi.HTTPEndpointSpec{
+		Spec: httpendpointsapi.HTTPEndpointSpec{
 			BaseURL: "http://api.test.com",
 		},
 	}
 
 	t.Run("standalone mode, no namespace", func(t *testing.T) {
-		endpointObjs := auth.GetAuthorizedObjects([]httpendapi.HTTPEndpoint{endpoint}, auth.IsObjectAuthorized)
-		endpoints, ok := endpointObjs.([]httpendapi.HTTPEndpoint)
+		endpointObjs := auth.GetAuthorizedObjects([]httpendpointsapi.HTTPEndpoint{endpoint}, auth.IsObjectAuthorized)
+		endpoints, ok := endpointObjs.([]httpendpointsapi.HTTPEndpoint)
 		assert.True(t, ok)
 		assert.Equal(t, 1, len(endpoints))
 		assert.Equal(t, endpoint.Name, endpoints[0].Name)
@@ -226,8 +226,8 @@ func TestAuthorizedHTTPEndpoints(t *testing.T) {
 		auth.namespace = "a"
 		endpoint.ObjectMeta.Namespace = "b"
 
-		endpointObjs := auth.GetAuthorizedObjects([]httpendapi.HTTPEndpoint{endpoint}, auth.IsObjectAuthorized)
-		endpoints, ok := endpointObjs.([]httpendapi.HTTPEndpoint)
+		endpointObjs := auth.GetAuthorizedObjects([]httpendpointsapi.HTTPEndpoint{endpoint}, auth.IsObjectAuthorized)
+		endpoints, ok := endpointObjs.([]httpendpointsapi.HTTPEndpoint)
 		assert.True(t, ok)
 		assert.Equal(t, 0, len(endpoints))
 	})
@@ -236,8 +236,8 @@ func TestAuthorizedHTTPEndpoints(t *testing.T) {
 		auth.namespace = "a"
 		endpoint.ObjectMeta.Namespace = "a"
 
-		endpointObjs := auth.GetAuthorizedObjects([]httpendapi.HTTPEndpoint{endpoint}, auth.IsObjectAuthorized)
-		endpoints, ok := endpointObjs.([]httpendapi.HTTPEndpoint)
+		endpointObjs := auth.GetAuthorizedObjects([]httpendpointsapi.HTTPEndpoint{endpoint}, auth.IsObjectAuthorized)
+		endpoints, ok := endpointObjs.([]httpendpointsapi.HTTPEndpoint)
 		assert.True(t, ok)
 		assert.Equal(t, 1, len(endpoints))
 	})
@@ -247,8 +247,8 @@ func TestAuthorizedHTTPEndpoints(t *testing.T) {
 		endpoint.ObjectMeta.Namespace = "a"
 		endpoint.Scopes = []string{daprt.TestRuntimeConfigID}
 
-		endpointObjs := auth.GetAuthorizedObjects([]httpendapi.HTTPEndpoint{endpoint}, auth.IsObjectAuthorized)
-		endpoints, ok := endpointObjs.([]httpendapi.HTTPEndpoint)
+		endpointObjs := auth.GetAuthorizedObjects([]httpendpointsapi.HTTPEndpoint{endpoint}, auth.IsObjectAuthorized)
+		endpoints, ok := endpointObjs.([]httpendpointsapi.HTTPEndpoint)
 		assert.True(t, ok)
 		assert.Equal(t, 1, len(endpoints))
 	})
@@ -258,8 +258,8 @@ func TestAuthorizedHTTPEndpoints(t *testing.T) {
 		endpoint.ObjectMeta.Namespace = "a"
 		endpoint.Scopes = []string{"other"}
 
-		endpointObjs := auth.GetAuthorizedObjects([]httpendapi.HTTPEndpoint{endpoint}, auth.IsObjectAuthorized)
-		endpoints, ok := endpointObjs.([]httpendapi.HTTPEndpoint)
+		endpointObjs := auth.GetAuthorizedObjects([]httpendpointsapi.HTTPEndpoint{endpoint}, auth.IsObjectAuthorized)
+		endpoints, ok := endpointObjs.([]httpendpointsapi.HTTPEndpoint)
 		assert.True(t, ok)
 		assert.Equal(t, 0, len(endpoints))
 	})
@@ -269,8 +269,8 @@ func TestAuthorizedHTTPEndpoints(t *testing.T) {
 		endpoint.ObjectMeta.Namespace = "b"
 		endpoint.Scopes = []string{daprt.TestRuntimeConfigID}
 
-		endpointObjs := auth.GetAuthorizedObjects([]httpendapi.HTTPEndpoint{endpoint}, auth.IsObjectAuthorized)
-		endpoints, ok := endpointObjs.([]httpendapi.HTTPEndpoint)
+		endpointObjs := auth.GetAuthorizedObjects([]httpendpointsapi.HTTPEndpoint{endpoint}, auth.IsObjectAuthorized)
+		endpoints, ok := endpointObjs.([]httpendpointsapi.HTTPEndpoint)
 		assert.True(t, ok)
 		assert.Equal(t, 0, len(endpoints))
 	})
@@ -280,8 +280,8 @@ func TestAuthorizedHTTPEndpoints(t *testing.T) {
 		endpoint.ObjectMeta.Namespace = "b"
 		endpoint.Scopes = []string{"other"}
 
-		endpointObjs := auth.GetAuthorizedObjects([]httpendapi.HTTPEndpoint{endpoint}, auth.IsObjectAuthorized)
-		endpoints, ok := endpointObjs.([]httpendapi.HTTPEndpoint)
+		endpointObjs := auth.GetAuthorizedObjects([]httpendpointsapi.HTTPEndpoint{endpoint}, auth.IsObjectAuthorized)
+		endpoints, ok := endpointObjs.([]httpendpointsapi.HTTPEndpoint)
 		assert.True(t, ok)
 		assert.Equal(t, 0, len(endpoints))
 	})
@@ -292,8 +292,8 @@ func TestAuthorizedHTTPEndpoints(t *testing.T) {
 		auth.namespace = "a"
 		endpoint.ObjectMeta.Namespace = "b"
 
-		endpointObjs := auth.GetAuthorizedObjects([]httpendapi.HTTPEndpoint{endpoint}, auth.IsObjectAuthorized)
-		endpoints, ok := endpointObjs.([]httpendapi.HTTPEndpoint)
+		endpointObjs := auth.GetAuthorizedObjects([]httpendpointsapi.HTTPEndpoint{endpoint}, auth.IsObjectAuthorized)
+		endpoints, ok := endpointObjs.([]httpendpointsapi.HTTPEndpoint)
 		assert.True(t, ok)
 		assert.Equal(t, 1, len(endpoints))
 		assert.Equal(t, endpoint.Name, endpoints[0].ObjectMeta.Name)

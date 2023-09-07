@@ -18,7 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	httpendapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	operatorpb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
 )
@@ -48,18 +48,18 @@ func (e *endpoint) close() error {
 }
 
 //nolint:unused
-func (e *endpoint) recv() (*loader.Event[httpendapi.HTTPEndpoint], error) {
+func (e *endpoint) recv() (*loader.Event[httpendpointsapi.HTTPEndpoint], error) {
 	event, err := e.Operator_HTTPEndpointUpdateClient.Recv()
 	if err != nil {
 		return nil, err
 	}
 
-	var endpoint httpendapi.HTTPEndpoint
+	var endpoint httpendpointsapi.HTTPEndpoint
 	if err := json.Unmarshal(event.HttpEndpoints, &endpoint); err != nil {
 		return nil, fmt.Errorf("failed to deserializing httpendpoint: %s", err)
 	}
 
-	return &loader.Event[httpendapi.HTTPEndpoint]{
+	return &loader.Event[httpendpointsapi.HTTPEndpoint]{
 		Resource: endpoint,
 		Type:     event.Type,
 	}, nil

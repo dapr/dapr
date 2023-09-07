@@ -24,7 +24,7 @@ import (
 
 	"github.com/dapr/components-contrib/secretstores"
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
-	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	compsecret "github.com/dapr/dapr/pkg/components/secretstores"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
@@ -60,7 +60,7 @@ func New(opts Options) *secret {
 	}
 }
 
-func (s *secret) Init(ctx context.Context, comp compapi.Component) error {
+func (s *secret) Init(ctx context.Context, comp componentsapi.Component) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -89,7 +89,7 @@ func (s *secret) Init(ctx context.Context, comp compapi.Component) error {
 	return nil
 }
 
-func (s *secret) Close(comp compapi.Component) error {
+func (s *secret) Close(comp componentsapi.Component) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
