@@ -510,7 +510,7 @@ func getHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(resp[0].Value.Data))
+	w.Write(resp[0].Value.Data)
 }
 
 // handles all APIs for HTTP calls
