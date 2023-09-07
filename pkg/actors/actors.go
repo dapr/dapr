@@ -374,7 +374,6 @@ func (a *actorsRuntime) deactivationTicker(configuration Config, deactivateFn de
 				}
 
 				durationPassed := t.Sub(actorInstance.lastUsedTime)
-				log.Infof("Actor type=%s, idleTimeout:%d", actorInstance.actorType, configuration.GetIdleTimeoutForType(actorInstance.actorType))
 				if durationPassed >= configuration.GetIdleTimeoutForType(actorInstance.actorType) {
 					a.wg.Add(1)
 					go func(actorKey string) {
