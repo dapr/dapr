@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package compstore
+package store
 
 import (
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
@@ -20,7 +20,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
 )
 
-type ComponentStore[T differ.Resource] interface {
+type Store[T differ.Resource] interface {
 	List() []T
 }
 
@@ -32,13 +32,13 @@ type endpoint struct {
 	compStore *compstore.ComponentStore
 }
 
-func NewComponent(compStore *compstore.ComponentStore) ComponentStore[componentsapi.Component] {
+func NewComponent(compStore *compstore.ComponentStore) Store[componentsapi.Component] {
 	return &component{
 		compStore: compStore,
 	}
 }
 
-func NewHTTPEndpoint(compStore *compstore.ComponentStore) ComponentStore[httpendpointsapi.HTTPEndpoint] {
+func NewHTTPEndpoint(compStore *compstore.ComponentStore) Store[httpendpointsapi.HTTPEndpoint] {
 	return &endpoint{
 		compStore: compStore,
 	}

@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package compstore
+package store
 
 import (
 	"testing"
@@ -25,43 +25,43 @@ import (
 )
 
 func Test_component(t *testing.T) {
-	var comp ComponentStore[componentsapi.Component]
-	store := compstore.New()
-	comp = NewComponent(store)
+	var store Store[componentsapi.Component]
+	compStore := compstore.New()
+	store = NewComponent(compStore)
 	comp1, comp2 := componentsapi.Component{
 		ObjectMeta: metav1.ObjectMeta{Name: "1"},
 	}, componentsapi.Component{
 		ObjectMeta: metav1.ObjectMeta{Name: "2"},
 	}
 
-	store.AddComponent(comp1)
-	store.AddComponent(comp2)
-	assert.ElementsMatch(t, []componentsapi.Component{comp1, comp2}, comp.List())
+	compStore.AddComponent(comp1)
+	compStore.AddComponent(comp2)
+	assert.ElementsMatch(t, []componentsapi.Component{comp1, comp2}, store.List())
 
-	store.DeleteComponent("1")
-	assert.ElementsMatch(t, []componentsapi.Component{comp2}, comp.List())
+	compStore.DeleteComponent("1")
+	assert.ElementsMatch(t, []componentsapi.Component{comp2}, store.List())
 
-	store.DeleteComponent("2")
-	assert.ElementsMatch(t, []componentsapi.Component{}, comp.List())
+	compStore.DeleteComponent("2")
+	assert.ElementsMatch(t, []componentsapi.Component{}, store.List())
 }
 
 func Test_endpoint(t *testing.T) {
-	var endpoint ComponentStore[httpendpointsapi.HTTPEndpoint]
-	store := compstore.New()
-	endpoint = NewHTTPEndpoint(store)
+	var store Store[httpendpointsapi.HTTPEndpoint]
+	compStore := compstore.New()
+	store = NewHTTPEndpoint(compStore)
 	endpoint1, endpoint2 := httpendpointsapi.HTTPEndpoint{
 		ObjectMeta: metav1.ObjectMeta{Name: "1"},
 	}, httpendpointsapi.HTTPEndpoint{
 		ObjectMeta: metav1.ObjectMeta{Name: "2"},
 	}
 
-	store.AddHTTPEndpoint(endpoint1)
-	store.AddHTTPEndpoint(endpoint2)
-	assert.ElementsMatch(t, []httpendpointsapi.HTTPEndpoint{endpoint1, endpoint2}, endpoint.List())
+	compStore.AddHTTPEndpoint(endpoint1)
+	compStore.AddHTTPEndpoint(endpoint2)
+	assert.ElementsMatch(t, []httpendpointsapi.HTTPEndpoint{endpoint1, endpoint2}, store.List())
 
-	store.DeleteHTTPEndpoint("1")
-	assert.ElementsMatch(t, []httpendpointsapi.HTTPEndpoint{endpoint2}, endpoint.List())
+	compStore.DeleteHTTPEndpoint("1")
+	assert.ElementsMatch(t, []httpendpointsapi.HTTPEndpoint{endpoint2}, store.List())
 
-	store.DeleteHTTPEndpoint("2")
-	assert.ElementsMatch(t, []httpendpointsapi.HTTPEndpoint{}, endpoint.List())
+	compStore.DeleteHTTPEndpoint("2")
+	assert.ElementsMatch(t, []httpendpointsapi.HTTPEndpoint{}, store.List())
 }
