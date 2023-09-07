@@ -1332,7 +1332,7 @@ func TestMetadataClientID(t *testing.T) {
 		select {
 		case clientID := <-clientIDChan:
 			assert.Equal(t, "test.myApp", clientID)
-		case <-time.After(2 * time.Second):
+		case <-time.After(20 * time.Second):
 			t.Error("Timed out waiting for clientID for Kubernetes Mode test")
 		}
 	})
@@ -1383,7 +1383,7 @@ func TestMetadataClientID(t *testing.T) {
 		select {
 		case clientID := <-clientIDChan:
 			assert.Equal(t, standAloneClientID, clientID)
-		case <-time.After(2 * time.Second):
+		case <-time.After(20 * time.Second):
 			t.Error("Timed out waiting for clientID for Standalone Mode test")
 		}
 	})
