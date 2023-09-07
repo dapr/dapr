@@ -31,6 +31,7 @@ import (
 	clientfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
+	configv1alpha1 "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 )
 
@@ -58,8 +59,9 @@ func TestValidate(t *testing.T) {
 
 		sentryAudience string
 
-		expTD  spiffeid.TrustDomain
-		expErr bool
+		expTD               spiffeid.TrustDomain
+		expOverrideDuration bool
+		expErr              bool
 	}{
 		"if pod in different namespace, expect error": {
 			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
@@ -993,7 +995,77 @@ func TestValidate(t *testing.T) {
 			expErr: false,
 			expTD:  spiffeid.RequireTrustDomainFromString("cluster.local"),
 		},
-		"injector is able to request for whatever identity it wants": {
+		"injector is able to request for whatever identity it wants (name)": {
+			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
+			reactor: func(t *testing.T) core.ReactionFunc {
+				return func(action core.Action) (bool, runtime.Object, error) {
+					obj := action.(core.CreateAction).GetObject().(*kauthapi.TokenReview)
+					assert.Equal(t, []string{"dapr.io/sentry", "spiffe://cluster.local/ns/dapr-test/dapr-sentry"}, obj.Spec.Audiences)
+					return true, &kauthapi.TokenReview{Status: kauthapi.TokenReviewStatus{
+						Authenticated: true,
+						User: kauthapi.UserInfo{
+							Username: "system:serviceaccount:dapr-test:my-sa",
+						},
+					}}, nil
+				}
+			},
+			req: &sentryv1pb.SignCertificateRequest{
+				CertificateSigningRequest: []byte("csr"),
+				Namespace:                 "dapr-test",
+				Token:                     newToken(t, "dapr-test", "my-pod"),
+				TrustDomain:               "example.test.dapr.io",
+				Id:                        "bar",
+			},
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-pod",
+					Namespace: "dapr-test",
+					Annotations: map[string]string{
+						"dapr.io/control-plane": "injector",
+					},
+				},
+				Spec: corev1.PodSpec{ServiceAccountName: "my-sa"},
+			},
+			expErr:              false,
+			expOverrideDuration: true,
+			expTD:               spiffeid.RequireTrustDomainFromString("cluster.local"),
+		},
+		"injector is able to request for whatever identity it wants (namespace)": {
+			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
+			reactor: func(t *testing.T) core.ReactionFunc {
+				return func(action core.Action) (bool, runtime.Object, error) {
+					obj := action.(core.CreateAction).GetObject().(*kauthapi.TokenReview)
+					assert.Equal(t, []string{"dapr.io/sentry", "spiffe://cluster.local/ns/dapr-test/dapr-sentry"}, obj.Spec.Audiences)
+					return true, &kauthapi.TokenReview{Status: kauthapi.TokenReviewStatus{
+						Authenticated: true,
+						User: kauthapi.UserInfo{
+							Username: "system:serviceaccount:dapr-test:my-sa",
+						},
+					}}, nil
+				}
+			},
+			req: &sentryv1pb.SignCertificateRequest{
+				CertificateSigningRequest: []byte("csr"),
+				Namespace:                 "foo",
+				Token:                     newToken(t, "dapr-test", "my-pod"),
+				TrustDomain:               "example.test.dapr.io",
+				Id:                        "my-pod",
+			},
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-pod",
+					Namespace: "dapr-test",
+					Annotations: map[string]string{
+						"dapr.io/control-plane": "injector",
+					},
+				},
+				Spec: corev1.PodSpec{ServiceAccountName: "my-sa"},
+			},
+			expErr:              false,
+			expOverrideDuration: true,
+			expTD:               spiffeid.RequireTrustDomainFromString("cluster.local"),
+		},
+		"injector is able to request for whatever identity it wants (namespace + name)": {
 			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
 			reactor: func(t *testing.T) core.ReactionFunc {
 				return func(action core.Action) (bool, runtime.Object, error) {
@@ -1024,8 +1096,9 @@ func TestValidate(t *testing.T) {
 				},
 				Spec: corev1.PodSpec{ServiceAccountName: "my-sa"},
 			},
-			expErr: false,
-			expTD:  spiffeid.RequireTrustDomainFromString("cluster.local"),
+			expErr:              false,
+			expOverrideDuration: true,
+			expTD:               spiffeid.RequireTrustDomainFromString("cluster.local"),
 		},
 		"injector is not able to request for whatever identity it wants if not in control plane namespace": {
 			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
@@ -1072,6 +1145,9 @@ func TestValidate(t *testing.T) {
 
 			kubeCl := kubefake.NewSimpleClientset(kobjs...)
 			kubeCl.Fake.PrependReactor("create", "tokenreviews", test.reactor(t))
+			scheme := runtime.NewScheme()
+			require.NoError(t, configv1alpha1.AddToScheme(scheme))
+			require.NoError(t, corev1.AddToScheme(scheme))
 			client := clientfake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(kobjs...).Build()
 
 			if test.config != nil {
@@ -1087,9 +1163,10 @@ func TestValidate(t *testing.T) {
 				ready:          func(_ context.Context) bool { return true },
 			}
 
-			td, err := k.Validate(context.Background(), test.req)
+			td, overrideDuration, err := k.Validate(context.Background(), test.req)
 			assert.Equal(t, test.expErr, err != nil, "%v", err)
 			assert.Equal(t, test.expTD, td)
+			assert.Equal(t, test.expOverrideDuration, overrideDuration)
 		})
 	}
 }

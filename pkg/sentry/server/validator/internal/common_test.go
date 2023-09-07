@@ -93,9 +93,10 @@ func TestValidate(t *testing.T) {
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			td, err := Validate(context.Background(), test.req)
+			td, overrideDuration, err := Validate(context.Background(), test.req)
 			assert.Equal(t, test.expTD, td)
 			assert.Equal(t, test.expErr, err)
+			assert.False(t, overrideDuration)
 		})
 	}
 }

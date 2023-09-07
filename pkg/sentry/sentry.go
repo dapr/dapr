@@ -99,7 +99,7 @@ func (s *sentry) Start(parentCtx context.Context) error {
 				// authorizing the server based on the correct SPIFFE ID, and instead
 				// matched on the DNS SAN `cluster.local`(!).
 				DNS: []string{"cluster.local"},
-			})
+			}, false)
 			if csrErr != nil {
 				monitoring.ServerCertIssueFailed("ca_error")
 				return nil, csrErr
