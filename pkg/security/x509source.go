@@ -406,10 +406,28 @@ func atomicWrite(clock clock.Clock, dir string, data map[string][]byte) error {
 		}
 	}
 
-	// Symlinks are typically not available on Windows, so we use a rename
-	// instead and don't save history.
+	// Symlinks are typically not available on Windows containers, so we use a
+	// copy and rename instead.
 	if runtime.GOOS == "windows" {
-		if err := os.Rename(newDir, dir); err != nil {
+		os.RemoveAll(dir + "-new")
+		if err := os.MkdirAll(dir+"-new", 0o700); err != nil {
+			return err
+		}
+
+		entries, err := os.ReadDir(newDir)
+		if err != nil {
+			return err
+		}
+		for _, entry := range entries {
+			b, err := os.ReadFile(filepath.Join(newDir, entry.Name()))
+			if err != nil {
+				return err
+			}
+			if err := os.WriteFile(filepath.Join(dir+"-new", entry.Name()), b, 0o600); err != nil {
+				return err
+			}
+		}
+		if err := os.Rename(dir+"-new", dir); err != nil {
 			return err
 		}
 	} else {
