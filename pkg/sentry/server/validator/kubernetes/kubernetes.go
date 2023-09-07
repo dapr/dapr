@@ -139,10 +139,6 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 		return spiffeid.TrustDomain{}, errors.New("provided token is not a properly structured service account token")
 	}
 
-	if prts[2] != req.Namespace {
-		return spiffeid.TrustDomain{}, fmt.Errorf("namespace mismatch; received namespace: %s", req.Namespace)
-	}
-
 	// We have already validated to the token against Kubernetes API server, so
 	// we do not need to supply a key.
 	ptoken, err := jwt.ParseInsecure([]byte(req.GetToken()), jwt.WithTypedClaim("kubernetes.io", new(k8sClaims)))
@@ -154,15 +150,26 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 		return spiffeid.TrustDomain{}, errMissingPodClaim
 	}
 	claims, ok := claimsT.(*k8sClaims)
-	if !ok || len(claims.Pod.Name) == 0 {
+	if !ok || len(claims.Pod.Name) == 0 || len(claims.Pod.Namespace) == 0 {
 		return spiffeid.TrustDomain{}, errMissingPodClaim
 	}
 
 	var pod corev1.Pod
-	err = k.client.Get(ctx, types.NamespacedName{Namespace: req.Namespace, Name: claims.Pod.Name}, &pod)
+	err = k.client.Get(ctx, types.NamespacedName{Namespace: claims.Pod.Namespace, Name: claims.Pod.Name}, &pod)
 	if err != nil {
-		log.Errorf("Failed to get pod %s/%s for requested identity: %s", req.Namespace, claims.Pod.Name, err)
+		log.Errorf("Failed to get pod %s/%s for requested identity: %s", claims.Pod.Namespace, claims.Pod.Name, err)
 		return spiffeid.TrustDomain{}, errors.New("failed to get pod of identity")
+	}
+
+	// TODO: @joshvanl: Remove is v1.13 when injector no longer needs to request
+	// daprd identities.
+	var injectorRequesting bool
+	if ctrlPlane, oka := pod.Annotations[consts.AnnotationKeyControlPlane]; oka && ctrlPlane == "injector" {
+		injectorRequesting = pod.Namespace == k.controlPlaneNS
+	}
+
+	if (prts[2] != req.Namespace || claims.Pod.Namespace != req.Namespace) && !injectorRequesting {
+		return spiffeid.TrustDomain{}, fmt.Errorf("namespace mismatch; received namespace: %s", req.Namespace)
 	}
 
 	if pod.Spec.ServiceAccountName != prts[3] {
@@ -182,6 +189,12 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 	// Remove this allowance in v1.13.
 	if req.Namespace+":"+pod.Spec.ServiceAccountName == req.Id {
 		req.Id = expID
+	}
+
+	// TODO: @joshvanl: Remove is v1.13 when injector no longer needs to request
+	// daprd identities.
+	if injectorRequesting {
+		expID = req.Id
 	}
 
 	if expID != req.Id {
@@ -270,7 +283,8 @@ func (k *kubernetes) executeTokenReview(ctx context.Context, token string, audie
 // containing the name of the Pod that the token was issued for.
 type k8sClaims struct {
 	Pod struct {
-		Name string `json:"name"`
+		Name      string `json:"name"`
+		Namespace string `json:"namespace"`
 	} `json:"pod"`
 }
 
