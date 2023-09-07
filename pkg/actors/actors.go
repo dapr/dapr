@@ -78,6 +78,9 @@ type ActorRuntime interface {
 	Actors
 	io.Closer
 	Init(context.Context) error
+	IsActorHosted(ctx context.Context, req *ActorHostedRequest) bool
+	GetActiveActorsCount(ctx context.Context) []*runtimev1pb.ActiveActorsCount
+	RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor, actorIdleTimeout time.Duration) error
 }
 
 // Actors allow calling into virtual actors as well as actor state management.
@@ -103,9 +106,6 @@ type Actors interface {
 	CreateTimer(ctx context.Context, req *CreateTimerRequest) error
 	// DeleteTimer deletes an actor timer.
 	DeleteTimer(ctx context.Context, req *DeleteTimerRequest) error
-	IsActorHosted(ctx context.Context, req *ActorHostedRequest) bool
-	GetActiveActorsCount(ctx context.Context) []*runtimev1pb.ActiveActorsCount
-	RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor, actorIdleTimeout time.Duration) error
 }
 
 // GRPCConnectionFn is the type of the function that returns a gRPC connection
