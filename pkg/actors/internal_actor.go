@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/config"
@@ -30,6 +31,7 @@ import (
 )
 
 const InternalActorTypePrefix = "dapr.internal."
+const InternalActorIdleTimeout = time.Minute * 1
 
 // InternalActor represents the interface for invoking an "internal" actor (one which is built into daprd directly).
 type InternalActor interface {
