@@ -175,7 +175,7 @@ func ApplyAccessControlPolicies(ctx context.Context, operation string, httpVerb 
 	emitACLMetrics(spiffeID, actionPolicy, operation, httpVerb.String(), action)
 
 	if !action {
-		errMessage = fmt.Sprintf("access control policy has denied access to appid: %s operation: %s verb: %s", spiffeID.URL(), operation, httpVerb)
+		errMessage = fmt.Sprintf("access control policy has denied access to id: %s operation: %s verb: %s", spiffeID.URL(), operation, httpVerb)
 		log.Debugf(errMessage)
 	}
 
