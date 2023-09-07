@@ -14,7 +14,6 @@ limitations under the License.
 package registry
 
 import (
-	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/components/bindings"
 	"github.com/dapr/dapr/pkg/components/configuration"
 	"github.com/dapr/dapr/pkg/components/crypto"
@@ -32,7 +31,6 @@ import (
 type ComponentsCallback func(components ComponentRegistry) error
 
 type ComponentRegistry struct {
-	Actors          actors.Actors
 	DirectMessaging messagingv1.DirectMessaging
 	CompStore       *compstore.ComponentStore
 }
