@@ -1278,7 +1278,7 @@ func TestMetadataNamespace(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestMetadataAppID(t *testing.T) {
+func TestMetadataClientID(t *testing.T) {
 	pubsubComponent := componentsV1alpha1.Component{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: TestPubsubName,
@@ -1290,40 +1290,103 @@ func TestMetadataAppID(t *testing.T) {
 		},
 	}
 
-	pubsubComponent.Spec.Metadata = append(
-		pubsubComponent.Spec.Metadata,
-		commonapi.NameValuePair{
-			Name: "clientID",
-			Value: commonapi.DynamicValue{
-				JSON: v1.JSON{
-					Raw: []byte("{appID} {appID}"),
+	// ClientID should be namespace.AppID for Kubernetes
+	t.Run("Kubernetes Mode AppID", func(t *testing.T) {
+		t.Setenv("NAMESPACE", "test")
+		pubsubComponent.Spec.Metadata = append(
+			pubsubComponent.Spec.Metadata,
+			commonapi.NameValuePair{
+				Name: "clientID",
+				Value: commonapi.DynamicValue{
+					JSON: v1.JSON{
+						Raw: []byte("{namespace}"),
+					},
 				},
+			})
+
+		rt, err := NewTestDaprRuntimeWithID(modes.KubernetesMode, "myApp")
+		require.NoError(t, err)
+
+		rt.runtimeConfig.id = daprt.TestRuntimeConfigID
+		defer stopRuntime(t, rt)
+		mockPubSub := new(daprt.MockPubSub)
+
+		rt.runtimeConfig.registry.PubSubs().RegisterComponent(
+			func(_ logger.Logger) pubsub.PubSub {
+				return mockPubSub
 			},
+			"mockPubSub",
+		)
+
+		var k8sClientID string
+		clientIDChan := make(chan string, 1)
+		mockPubSub.On("Init", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
+			metadata := args.Get(0).(pubsub.Metadata)
+			k8sClientID = metadata.Properties["clientID"]
+			clientIDChan <- k8sClientID
 		})
-	rt, _ := NewTestDaprRuntime(modes.KubernetesMode)
-	rt.runtimeConfig.id = daprt.TestRuntimeConfigID
-	defer stopRuntime(t, rt)
-	mockPubSub := new(daprt.MockPubSub)
 
-	rt.runtimeConfig.registry.PubSubs().RegisterComponent(
-		func(_ logger.Logger) pubsub.PubSub {
-			return mockPubSub
-		},
-		"mockPubSub",
-	)
+		err = rt.processComponentAndDependents(context.Background(), pubsubComponent)
+		assert.NoError(t, err)
 
-	mockPubSub.On("Init", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
-		metadata := args.Get(0).(pubsub.Metadata)
-		clientID := metadata.Properties["clientID"]
-		appIds := strings.Split(clientID, " ")
+		select {
+		case clientID := <-clientIDChan:
+			assert.Equal(t, "test.myApp", clientID)
+		case <-time.After(20 * time.Second):
+			t.Error("Timed out waiting for clientID for Kubernetes Mode test")
+		}
+	})
+
+	// ClientID should be AppID for Self-Hosted
+	t.Run("Standalone Mode AppID", func(t *testing.T) {
+		pubsubComponent.Spec.Metadata = append(
+			pubsubComponent.Spec.Metadata,
+			commonapi.NameValuePair{
+				Name: "clientID",
+				Value: commonapi.DynamicValue{
+					JSON: v1.JSON{
+						Raw: []byte("{appID} {appID}"),
+					},
+				},
+			})
+
+		rt, err := NewTestDaprRuntime(modes.StandaloneMode)
+		require.NoError(t, err)
+
+		rt.runtimeConfig.id = daprt.TestRuntimeConfigID
+		defer stopRuntime(t, rt)
+		mockPubSub := new(daprt.MockPubSub)
+
+		rt.runtimeConfig.registry.PubSubs().RegisterComponent(
+			func(_ logger.Logger) pubsub.PubSub {
+				return mockPubSub
+			},
+			"mockPubSub",
+		)
+
+		var standAloneClientID string
+		clientIDChan := make(chan string, 1)
+		mockPubSub.On("Init", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
+			metadata := args.Get(0).(pubsub.Metadata)
+			standAloneClientID = metadata.Properties["clientID"]
+			clientIDChan <- standAloneClientID
+		})
+
+		err = rt.processComponentAndDependents(context.Background(), pubsubComponent)
+		assert.NoError(t, err)
+		appIds := strings.Split(standAloneClientID, " ")
 		assert.Equal(t, 2, len(appIds))
 		for _, appID := range appIds {
 			assert.Equal(t, daprt.TestRuntimeConfigID, appID)
 		}
-	})
 
-	err := rt.processComponentAndDependents(context.Background(), pubsubComponent)
-	assert.NoError(t, err)
+		select {
+		case clientID := <-clientIDChan:
+			assert.Equal(t, standAloneClientID, clientID)
+		case <-time.After(20 * time.Second):
+			t.Error("Timed out waiting for clientID for Standalone Mode test")
+		}
+	})
 }
 
 func TestOnComponentUpdated(t *testing.T) {
