@@ -31,7 +31,6 @@ import (
 	clientfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
-	configv1alpha1 "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 )
 
@@ -1112,7 +1111,7 @@ func TestValidate(t *testing.T) {
 			kubeCl := kubefake.NewSimpleClientset(kobjs...)
 			kubeCl.Fake.PrependReactor("create", "tokenreviews", test.reactor(t))
 			scheme := runtime.NewScheme()
-			require.NoError(t, configv1alpha1.AddToScheme(scheme))
+			require.NoError(t, configapi.AddToScheme(scheme))
 			require.NoError(t, corev1.AddToScheme(scheme))
 			client := clientfake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(kobjs...).Build()
 
