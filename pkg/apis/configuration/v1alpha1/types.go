@@ -33,7 +33,7 @@ type Configuration struct {
 	Spec ConfigurationSpec `json:"spec,omitempty"`
 }
 
-// ConfigurationSpec is the spec for an configuration.
+// ConfigurationSpec is the spec for a configuration.
 type ConfigurationSpec struct {
 	// +optional
 	AppHTTPPipelineSpec *PipelineSpec `json:"appHttpPipeline,omitempty"`
@@ -61,6 +61,8 @@ type ConfigurationSpec struct {
 	ComponentsSpec *ComponentsSpec `json:"components,omitempty"`
 	// +optional
 	LoggingSpec *LoggingSpec `json:"logging,omitempty"`
+	// +optional
+	WasmSpec *WasmSpec `json:"wasm,omitempty"`
 }
 
 // APISpec describes the configuration for Dapr APIs.
@@ -71,6 +73,14 @@ type APISpec struct {
 	// List of denied APIs. Can be used in conjunction with allowed.
 	// +optional
 	Denied []APIAccessRule `json:"denied,omitempty"`
+}
+
+// WasmSpec describes the security profile for all Dapr Wasm components.
+type WasmSpec struct {
+	// Force enabling strict sandbox mode for all WASM components.
+	// When this is enabled, WASM components always run in strict mode regardless of their configuration.
+	// Strict mode enhances security of the WASM sandbox by limiting access to certain capabilities such as real-time clocks and random number generators.
+	StrictSandbox bool `json:"strictSandbox,omitempty"`
 }
 
 // APIAccessRule describes an access rule for allowing or denying a Dapr API.

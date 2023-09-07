@@ -73,24 +73,39 @@ var (
 	ErrReminderCanceled              = internal.ErrReminderCanceled
 )
 
-// Actors allow calling into virtual actors as well as actor state management.
-//
-//nolint:interfacebloat
-type Actors interface {
+// ActorRuntime is the main runtime for the actors subsystem.
+type ActorRuntime interface {
+	Actors
 	io.Closer
-	Call(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error)
 	Init(context.Context) error
-	GetState(ctx context.Context, req *GetStateRequest) (*StateResponse, error)
-	TransactionalStateOperation(ctx context.Context, req *TransactionalRequest) error
-	GetReminder(ctx context.Context, req *GetReminderRequest) (*internal.Reminder, error)
-	CreateReminder(ctx context.Context, req *CreateReminderRequest) error
-	DeleteReminder(ctx context.Context, req *DeleteReminderRequest) error
-	RenameReminder(ctx context.Context, req *RenameReminderRequest) error
-	CreateTimer(ctx context.Context, req *CreateTimerRequest) error
-	DeleteTimer(ctx context.Context, req *DeleteTimerRequest) error
 	IsActorHosted(ctx context.Context, req *ActorHostedRequest) bool
 	GetActiveActorsCount(ctx context.Context) []*runtimev1pb.ActiveActorsCount
 	RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor) error
+}
+
+// Actors allow calling into virtual actors as well as actor state management.
+type Actors interface {
+	// Call an actor.
+	Call(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error)
+	// GetState retrieves actor state.
+	GetState(ctx context.Context, req *GetStateRequest) (*StateResponse, error)
+	// GetBulkState retrieves actor state in bulk.
+	GetBulkState(ctx context.Context, req *GetBulkStateRequest) (BulkStateResponse, error)
+	// TransactionalStateOperation performs a transactional state operation with the actor state store.
+	TransactionalStateOperation(ctx context.Context, req *TransactionalRequest) error
+	// GetReminder retrieves an actor reminder.
+	GetReminder(ctx context.Context, req *GetReminderRequest) (*internal.Reminder, error)
+	// CreateReminder creates an actor reminder.
+	CreateReminder(ctx context.Context, req *CreateReminderRequest) error
+	// DeleteReminder deletes an actor reminder.
+	DeleteReminder(ctx context.Context, req *DeleteReminderRequest) error
+	// RenameReminder renames a reminder.
+	// TODO: remove in Dapr 1.13.
+	RenameReminder(ctx context.Context, req *RenameReminderRequest) error
+	// CreateTimer creates an actor timer.
+	CreateTimer(ctx context.Context, req *CreateTimerRequest) error
+	// DeleteTimer deletes an actor timer.
+	DeleteTimer(ctx context.Context, req *DeleteTimerRequest) error
 }
 
 // GRPCConnectionFn is the type of the function that returns a gRPC connection
@@ -140,11 +155,11 @@ type ActorsOpts struct {
 }
 
 // NewActors create a new actors runtime with given config.
-func NewActors(opts ActorsOpts) Actors {
+func NewActors(opts ActorsOpts) ActorRuntime {
 	return newActorsWithClock(opts, &clock.RealClock{})
 }
 
-func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) Actors {
+func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) ActorRuntime {
 	appHealthy := &atomic.Bool{}
 	appHealthy.Store(true)
 
@@ -647,6 +662,50 @@ func (a *actorsRuntime) GetState(ctx context.Context, req *GetStateRequest) (*St
 	return &StateResponse{
 		Data: resp.Data,
 	}, nil
+}
+
+func (a *actorsRuntime) GetBulkState(ctx context.Context, req *GetBulkStateRequest) (BulkStateResponse, error) {
+	store, err := a.stateStore()
+	if err != nil {
+		return nil, err
+	}
+
+	actorKey := req.ActorKey()
+	baseKey := constructCompositeKey(a.actorsConfig.Config.AppID, actorKey)
+	metadata := map[string]string{metadataPartitionKey: baseKey}
+
+	bulkReqs := make([]state.GetRequest, len(req.Keys))
+	for i, key := range req.Keys {
+		bulkReqs[i] = state.GetRequest{
+			Key:      a.constructActorStateKey(actorKey, key),
+			Metadata: metadata,
+		}
+	}
+
+	policyRunner := resiliency.NewRunner[[]state.BulkGetResponse](ctx,
+		a.resiliency.ComponentOutboundPolicy(a.storeName, resiliency.Statestore),
+	)
+	res, err := policyRunner(func(ctx context.Context) ([]state.BulkGetResponse, error) {
+		return store.BulkGet(ctx, bulkReqs, state.BulkGetOpts{})
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Add the dapr separator to baseKey
+	baseKey += daprSeparator
+
+	bulkRes := make(BulkStateResponse, len(res))
+	for _, r := range res {
+		if r.Error != "" {
+			return nil, fmt.Errorf("failed to retrieve key '%s': %s", r.Key, r.Error)
+		}
+
+		// Trim the prefix from the key
+		bulkRes[strings.TrimPrefix(r.Key, baseKey)] = r.Data
+	}
+
+	return bulkRes, nil
 }
 
 func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *TransactionalRequest) error {

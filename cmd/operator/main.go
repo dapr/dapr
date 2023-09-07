@@ -43,9 +43,10 @@ func main() {
 		log.Fatal(err)
 	}
 
-	operatorOpts := operator.Options{
+	ctx := signals.Context()
+	op, err := operator.NewOperator(ctx, operator.Options{
 		Config:                              opts.Config,
-		CertChainPath:                       opts.CertChainPath,
+		TrustAnchorsFile:                    opts.TrustAnchorsFile,
 		LeaderElection:                      !opts.DisableLeaderElection,
 		WatchdogMaxRestartsPerMin:           opts.MaxPodRestartsPerMinute,
 		WatchNamespace:                      opts.WatchNamespace,
@@ -54,11 +55,7 @@ func main() {
 		WatchdogEnabled:                     opts.WatchdogEnabled,
 		WatchdogInterval:                    opts.WatchdogInterval,
 		WatchdogCanPatchPodLabels:           opts.WatchdogCanPatchPodLabels,
-	}
-
-	ctx := signals.Context()
-
-	op, err := operator.NewOperator(ctx, operatorOpts)
+	})
 	if err != nil {
 		log.Fatalf("error creating operator: %v", err)
 	}
