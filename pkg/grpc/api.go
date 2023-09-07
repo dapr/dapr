@@ -70,7 +70,7 @@ type API interface {
 	runtimev1pb.DaprServer
 
 	// Methods internal to the object
-	SetActorRuntime(actor actors.Actors)
+	SetActorRuntime(actor actors.ActorRuntime)
 }
 
 type api struct {
@@ -1241,7 +1241,7 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 	return response, nil
 }
 
-func (a *api) SetActorRuntime(actor actors.Actors) {
+func (a *api) SetActorRuntime(actor actors.ActorRuntime) {
 	a.UniversalAPI.Actors = actor
 }
 
