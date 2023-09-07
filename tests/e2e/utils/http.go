@@ -275,3 +275,8 @@ func SanitizeHTTPURL(url string) string {
 
 	return url
 }
+
+// GetHTTPClient returns the shared httpClient object.
+func GetHTTPClient() *http.Client {
+	return httpClient
+}

@@ -1293,7 +1293,7 @@ func TestMetadataClientID(t *testing.T) {
 				},
 			})
 
-		rt, err := NewTestDaprRuntimeWithID(modes.KubernetesMode, "myApp")
+		rt, err := NewTestDaprRuntimeWithID(t, modes.KubernetesMode, "myApp")
 		require.NoError(t, err)
 
 		rt.runtimeConfig.id = daprt.TestRuntimeConfigID
@@ -1339,7 +1339,7 @@ func TestMetadataClientID(t *testing.T) {
 				},
 			})
 
-		rt, err := NewTestDaprRuntime(modes.StandaloneMode)
+		rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
 		require.NoError(t, err)
 
 		rt.runtimeConfig.id = daprt.TestRuntimeConfigID
