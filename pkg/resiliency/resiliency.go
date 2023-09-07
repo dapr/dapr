@@ -292,7 +292,7 @@ func FromConfigurations(log logger.Logger, c ...*resiliencyV1alpha.Resiliency) *
 		log.Infof("Loading Resiliency configuration: %s", config.Name)
 		log.Debugf("Resiliency configuration (%s): %+v", config.Name, config)
 		if err := r.DecodeConfiguration(config); err != nil {
-			log.Errorf("Could not read resiliency policy %s: %w", config.ObjectMeta.Name, err)
+			log.Errorf("Could not read resiliency policy %s: %w", &config.ObjectMeta.Name, err)
 			continue
 		}
 		diag.DefaultResiliencyMonitoring.PolicyLoaded(config.Name, config.Namespace)
