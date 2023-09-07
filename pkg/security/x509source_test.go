@@ -234,8 +234,8 @@ func Test_atomicWrite(t *testing.T) {
 				assert.Equal(t, os.ModeDir.Type().String(), f.Mode().Type().String())
 			} else {
 				assert.Equal(t, os.ModeSymlink.Type().String(), f.Mode().Type().String())
-				target, err := os.Readlink(dir)
-				require.NoError(t, err)
+				target, lerr := os.Readlink(dir)
+				require.NoError(t, lerr)
 				assert.Equal(t, newDir, target)
 			}
 
