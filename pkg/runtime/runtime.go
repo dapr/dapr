@@ -114,7 +114,7 @@ type DaprRuntime struct {
 	channels          *channels.Channels
 	appConfig         config.ApplicationConfig
 	directMessaging   invokev1.DirectMessaging
-	actor             actors.Actors
+	actor             actors.ActorRuntime
 
 	nameResolver            nr.Resolver
 	hostAddress             string
@@ -590,7 +590,6 @@ func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) error {
 
 	if cb := a.runtimeConfig.registry.ComponentsCallback(); cb != nil {
 		if err = cb(registry.ComponentRegistry{
-			Actors:          a.actor,
 			DirectMessaging: a.directMessaging,
 			CompStore:       a.compStore,
 		}); err != nil {
