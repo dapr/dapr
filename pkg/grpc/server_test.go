@@ -21,7 +21,6 @@ import (
 	"github.com/dapr/dapr/pkg/grpc/metadata"
 	"github.com/dapr/dapr/pkg/grpc/universalapi"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
-	"github.com/dapr/dapr/pkg/security/fake"
 	dapr_testing "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/logger"
 )
@@ -95,7 +94,7 @@ func TestClose(t *testing.T) {
 			EnableAPILogging:     true,
 		}
 		a := &api{UniversalAPI: &universalapi.UniversalAPI{CompStore: compstore.New()}, closeCh: make(chan struct{})}
-		server := NewAPIServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, config.APISpec{}, nil, nil, fake.New())
+		server := NewAPIServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, config.APISpec{}, nil, nil)
 		require.NoError(t, server.StartNonBlocking())
 		dapr_testing.WaitForListeningAddress(t, 5*time.Second, fmt.Sprintf("127.0.0.1:%d", port))
 		assert.NoError(t, server.Close())
@@ -116,7 +115,7 @@ func TestClose(t *testing.T) {
 			EnableAPILogging:     false,
 		}
 		a := &api{UniversalAPI: &universalapi.UniversalAPI{CompStore: compstore.New()}, closeCh: make(chan struct{})}
-		server := NewAPIServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, config.APISpec{}, nil, nil, fake.New())
+		server := NewAPIServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, config.APISpec{}, nil, nil)
 		require.NoError(t, server.StartNonBlocking())
 		dapr_testing.WaitForListeningAddress(t, 5*time.Second, fmt.Sprintf("127.0.0.1:%d", port))
 		assert.NoError(t, server.Close())

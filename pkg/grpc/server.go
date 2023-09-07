@@ -26,6 +26,7 @@ import (
 
 	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
 
 	"github.com/dapr/dapr/pkg/config"
@@ -82,7 +83,7 @@ var (
 )
 
 // NewAPIServer returns a new user facing gRPC API server.
-func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricSpec config.MetricSpec, apiSpec config.APISpec, proxy messaging.Proxy, workflowEngine *wfengine.WorkflowEngine, sec security.Handler) Server {
+func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricSpec config.MetricSpec, apiSpec config.APISpec, proxy messaging.Proxy, workflowEngine *wfengine.WorkflowEngine) Server {
 	apiServerInfoLogger.SetOutputLevel(logger.LogLevel("info"))
 	return &server{
 		api:            api,
@@ -96,7 +97,6 @@ func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec, 
 		apiSpec:        apiSpec,
 		proxy:          proxy,
 		workflowEngine: workflowEngine,
-		sec:            sec,
 		closeCh:        make(chan struct{}),
 	}
 }
@@ -265,11 +265,16 @@ func (s *server) getGRPCServer() (*grpc.Server, error) {
 	}
 
 	opts = append(opts,
-		s.sec.GRPCServerOptionMTLS(),
 		grpc.MaxRecvMsgSize(s.config.MaxRequestBodySizeMB<<20),
 		grpc.MaxSendMsgSize(s.config.MaxRequestBodySizeMB<<20),
 		grpc.MaxHeaderListSize(uint32(s.config.ReadBufferSizeKB<<10)),
 	)
+
+	if s.sec == nil {
+		opts = append(opts, grpc.Creds(insecure.NewCredentials()))
+	} else {
+		opts = append(opts, s.sec.GRPCServerOptionMTLS())
+	}
 
 	if s.proxy != nil {
 		opts = append(opts, grpc.UnknownServiceHandler(s.proxy.Handler()))

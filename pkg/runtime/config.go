@@ -113,7 +113,6 @@ type internalConfig struct {
 	publicPort                   *int
 	profilePort                  int
 	enableProfiling              bool
-	mTLSEnabled                  bool
 	apiGRPCPort                  int
 	internalGRPCPort             int
 	apiListenAddresses           []string
@@ -123,6 +122,7 @@ type internalConfig struct {
 	allowedOrigins               string
 	standalone                   configmodes.StandaloneConfig
 	kubernetes                   configmodes.KubernetesConfig
+	mTLSEnabled                  bool
 	sentryServiceAddress         string
 	maxRequestBodySize           int
 	unixDomainSocket             string

@@ -1033,7 +1033,7 @@ func (a *DaprRuntime) startGRPCInternalServer(api grpc.API, port int) error {
 
 func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int) error {
 	serverConf := a.getNewServerConfig(a.runtimeConfig.apiListenAddresses, port)
-	server := grpc.NewAPIServer(api, serverConf, a.globalConfig.GetTracingSpec(), a.globalConfig.GetMetricsSpec(), a.globalConfig.GetAPISpec(), a.proxy, a.workflowEngine, a.sec)
+	server := grpc.NewAPIServer(api, serverConf, a.globalConfig.GetTracingSpec(), a.globalConfig.GetMetricsSpec(), a.globalConfig.GetAPISpec(), a.proxy, a.workflowEngine)
 	if err := server.StartNonBlocking(); err != nil {
 		return err
 	}
