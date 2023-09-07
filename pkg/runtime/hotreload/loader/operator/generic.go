@@ -144,11 +144,11 @@ func (g *generic[T]) stream(ctx context.Context, eventCh chan<- *loader.Event[T]
 			if err := backoffFn(ctx, func(ctx context.Context) error {
 				berr := g.streamer.establish(ctx, g.opClient, g.namespace, g.podName)
 				if berr != nil {
-					log.Errorf("failed to establish stream: %s", berr)
+					log.Errorf("Failed to establish stream: %s", berr)
 				}
 				return berr
 			}); err != nil {
-				log.Errorf("stream retry failed: %s", err)
+				log.Errorf("Stream retry failed: %s", err)
 				return
 			}
 		}
