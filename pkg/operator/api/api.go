@@ -129,9 +129,9 @@ func (a *apiServer) Run(ctx context.Context, sec security.Handler) error {
 func (a *apiServer) OnComponentUpdated(ctx context.Context, event *loader.Event[componentsapi.Component]) {
 	a.connLock.Lock()
 	defer a.connLock.Unlock()
-	for _, connUpdateChan := range a.componentUpdateChan {
+	for _, componentUpdateChan := range a.componentUpdateChan {
 		select {
-		case connUpdateChan <- event:
+		case componentUpdateChan <- event:
 		case <-ctx.Done():
 			return
 		}
