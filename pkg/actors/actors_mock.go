@@ -43,7 +43,8 @@ type MockActors struct {
 }
 
 func (_m *MockActors) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor,
-	actorIdleTimeout time.Duration) error {
+	actorIdleTimeout time.Duration,
+) error {
 	return nil
 }
 
@@ -277,7 +278,8 @@ type FailingActors struct {
 }
 
 func (f *FailingActors) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor,
-	actorIdleTimeout time.Duration) error {
+	actorIdleTimeout time.Duration,
+) error {
 	return nil
 }
 

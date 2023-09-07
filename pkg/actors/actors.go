@@ -974,7 +974,8 @@ func (a *actorsRuntime) DeleteTimer(ctx context.Context, req *DeleteTimerRequest
 }
 
 func (a *actorsRuntime) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor,
-	actorIdleTimeout time.Duration) error {
+	actorIdleTimeout time.Duration,
+) error {
 	if !a.haveCompatibleStorage() {
 		return fmt.Errorf("unable to register internal actor '%s': %w", actorType, ErrIncompatibleStateStore)
 	}
