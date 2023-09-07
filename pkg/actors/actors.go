@@ -80,7 +80,7 @@ type ActorRuntime interface {
 	Init(context.Context) error
 	IsActorHosted(ctx context.Context, req *ActorHostedRequest) bool
 	GetActiveActorsCount(ctx context.Context) []*runtimev1pb.ActiveActorsCount
-	RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor) error
+	RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor, actorIdleTimeout time.Duration) error
 }
 
 // Actors allow calling into virtual actors as well as actor state management.
@@ -106,6 +106,9 @@ type Actors interface {
 	CreateTimer(ctx context.Context, req *CreateTimerRequest) error
 	// DeleteTimer deletes an actor timer.
 	DeleteTimer(ctx context.Context, req *DeleteTimerRequest) error
+	IsActorHosted(ctx context.Context, req *ActorHostedRequest) bool
+	GetActiveActorsCount(ctx context.Context) []*runtimev1pb.ActiveActorsCount
+	RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor, actorIdleTimeout time.Duration) error
 }
 
 // GRPCConnectionFn is the type of the function that returns a gRPC connection
@@ -371,6 +374,7 @@ func (a *actorsRuntime) deactivationTicker(configuration Config, deactivateFn de
 				}
 
 				durationPassed := t.Sub(actorInstance.lastUsedTime)
+				log.Infof("Actor type=%s, idleTimeout:%d", actorInstance.actorType, configuration.GetIdleTimeoutForType(actorInstance.actorType))
 				if durationPassed >= configuration.GetIdleTimeoutForType(actorInstance.actorType) {
 					a.wg.Add(1)
 					go func(actorKey string) {
@@ -973,7 +977,8 @@ func (a *actorsRuntime) DeleteTimer(ctx context.Context, req *DeleteTimerRequest
 	return a.timers.DeleteTimer(ctx, req.Key())
 }
 
-func (a *actorsRuntime) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor) error {
+func (a *actorsRuntime) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor,
+	actorIdleTimeout time.Duration) error {
 	if !a.haveCompatibleStorage() {
 		return fmt.Errorf("unable to register internal actor '%s': %w", actorType, ErrIncompatibleStateStore)
 	}
@@ -988,7 +993,7 @@ func (a *actorsRuntime) RegisterInternalActor(ctx context.Context, actorType str
 
 		log.Debugf("Registering internal actor type: %s", actorType)
 		actor.SetActorRuntime(a)
-		a.actorsConfig.Config.HostedActorTypes.AddActorType(actorType)
+		a.actorsConfig.Config.HostedActorTypes.AddActorType(actorType, actorIdleTimeout)
 		if a.placement != nil {
 			if err := a.placement.AddHostedActorType(actorType); err != nil {
 				return fmt.Errorf("error updating hosted actor types: %s", err)

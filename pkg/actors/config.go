@@ -15,7 +15,6 @@ package actors
 
 import (
 	"net/http"
-	"strings"
 	"time"
 
 	"golang.org/x/exp/maps"
@@ -116,11 +115,12 @@ func NewConfig(opts ConfigOpts) Config {
 }
 
 func (c *Config) GetIdleTimeoutForType(actorType string) time.Duration {
-	if strings.HasPrefix(actorType, InternalActorTypePrefix) {
-		return InternalActorIdleTimeout
-	}
 	if val, ok := c.EntityConfigs[actorType]; ok {
 		return val.ActorIdleTimeout
+	}
+	actorIdleTimeout := c.HostedActorTypes.GetActorIdleTimeout(actorType)
+	if actorIdleTimeout != 0 {
+		return actorIdleTimeout
 	}
 	return c.ActorIdleTimeout
 }
