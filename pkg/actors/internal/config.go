@@ -106,7 +106,7 @@ func (ha *hostedActors) ListActorTypes() []string {
 
 // GetActorIdleTimeout fetches idle timeout stored against an actor type.
 func (ha *hostedActors) GetActorIdleTimeout(actorType string) time.Duration {
-	ha.lock.Lock()
-	defer ha.lock.Unlock()
+	ha.lock.RLock()
+	defer ha.lock.RUnlock()
 	return ha.actors[actorType]
 }
