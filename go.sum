@@ -395,8 +395,8 @@ github.com/danieljoos/wincred v1.1.2 h1:QLdCxFs1/Yl4zduvBdcHB8goaYk9RARS2SgLLRuA
 github.com/danieljoos/wincred v1.1.2/go.mod h1:GijpziifJoIBfYh+S7BbkdUTU4LfM+QnGqR5Vl2tAx0=
 github.com/dapr/components-contrib v1.11.3-0.20230905221417-0c2ce324b2bf h1:dszfRm7WTZuLz0/lfEqvfJjstZEbTx2GgL9Re38UY7M=
 github.com/dapr/components-contrib v1.11.3-0.20230905221417-0c2ce324b2bf/go.mod h1:jgo1jGXsi+ikW/g/qDXZMMRTUYz8+i3+HmvVVhMqcIU=
-github.com/dapr/kit v0.11.4-0.20230807225040-b6b141aa3e32 h1:ctqg12Eqd9SE88pwlJTupsIJowtaQcyH4s5xRMoweUU=
-github.com/dapr/kit v0.11.4-0.20230807225040-b6b141aa3e32/go.mod h1:bRyy09hwD03VEJ6b4weVNZWDjC5K3XY1+oGI5JCdZnU=
+github.com/dapr/kit v0.11.4-0.20230907165049-f08dc3ff1671 h1:G+bO4jojjphyGgPWwDlgXCROSMk4U+yfDCMHGshduck=
+github.com/dapr/kit v0.11.4-0.20230907165049-f08dc3ff1671/go.mod h1:eNYjsudq3Ij0x8CLWsPturHor56sZRNu5tk2hUiJT80=
 github.com/dave/jennifer v1.4.0/go.mod h1:fIb+770HOpJ2fmN9EPPKOqm1vMGhB+TwXKMZhrIygKg=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
