@@ -98,14 +98,15 @@ func (h HTTPEndpoint) HasTLSPrivateKey() bool {
 	return h.Spec.ClientTLS != nil && h.Spec.ClientTLS.PrivateKey != nil && h.Spec.ClientTLS.PrivateKey.Value != nil
 }
 
-// Object returns a new instance of the component type with the TypeMeta's Kind
-// and APIVersion fields set
-func (h HTTPEndpoint) Object() metav1.Object {
+// EmptyMetaDeepCopy returns a new instance of the component type with the
+// TypeMeta's Kind and APIVersion fields set.
+func (h HTTPEndpoint) EmptyMetaDeepCopy() metav1.Object {
 	n := h.DeepCopy()
 	n.TypeMeta = metav1.TypeMeta{
 		Kind:       "HTTPEndpoint",
 		APIVersion: "dapr.io/v1alpha1",
 	}
+	n.ObjectMeta = metav1.ObjectMeta{Name: h.Name}
 	return n
 }
 

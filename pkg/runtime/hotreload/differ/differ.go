@@ -127,20 +127,5 @@ func AreSame[T Resource](r1, r2 T) bool {
 // toComparableObj returns the object but which strips out values which should
 // not be compared as they don't change the spec of the resource.
 func toComparableObj[T Resource](r T) metav1.Object {
-	obj := r.Object()
-	obj.SetNamespace("")
-	obj.SetGenerateName("")
-	obj.SetUID("")
-	obj.SetResourceVersion("")
-	obj.SetGeneration(0)
-	obj.SetSelfLink("")
-	obj.SetCreationTimestamp(metav1.Time{})
-	obj.SetDeletionTimestamp(nil)
-	obj.SetDeletionGracePeriodSeconds(nil)
-	obj.SetLabels(nil)
-	obj.SetAnnotations(nil)
-	obj.SetFinalizers(nil)
-	obj.SetOwnerReferences(nil)
-	obj.SetManagedFields(nil)
-	return obj
+	return r.EmptyMetaDeepCopy()
 }

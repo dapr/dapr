@@ -66,14 +66,15 @@ func (c Component) NameValuePairs() []common.NameValuePair {
 	return c.Spec.Metadata
 }
 
-// Object returns a new instance of the component type with the TypeMeta's Kind
-// and APIVersion fields set
-func (c Component) Object() metav1.Object {
+// EmptyMetaDeepCopy returns a new instance of the component type with the
+// TypeMeta's Kind and APIVersion fields set.
+func (c Component) EmptyMetaDeepCopy() metav1.Object {
 	n := c.DeepCopy()
 	n.TypeMeta = metav1.TypeMeta{
 		Kind:       "Component",
 		APIVersion: "dapr.io/v1alpha1",
 	}
+	n.ObjectMeta = metav1.ObjectMeta{Name: c.Name}
 	return n
 }
 

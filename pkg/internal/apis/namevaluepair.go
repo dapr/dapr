@@ -51,9 +51,6 @@ func (g GenericNameValueResource) LogName() string {
 	return g.Name + " (" + g.ResourceKind + ")"
 }
 
-func (g GenericNameValueResource) Object() metav1.Object {
-	return &metav1.ObjectMeta{
-		Name:      g.Name,
-		Namespace: g.Namespace,
-	}
+func (g GenericNameValueResource) EmptyMetaDeepCopy() metav1.Object {
+	return &metav1.ObjectMeta{Name: g.Name}
 }

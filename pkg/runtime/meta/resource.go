@@ -28,5 +28,8 @@ type Resource interface {
 	LogName() string
 	GetSecretStore() string
 	NameValuePairs() []common.NameValuePair
-	Object() metav1.Object
+
+	// Returns a deep copy of the resource, with the object meta set only with
+	// Name and Namespace.
+	EmptyMetaDeepCopy() metav1.Object
 }
