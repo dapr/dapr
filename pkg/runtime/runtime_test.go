@@ -1278,7 +1278,7 @@ func TestMetadataNamespace(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestMetadataAppID(t *testing.T) {
+func TestMetadataClientID(t *testing.T) {
 	pubsubComponent := componentsV1alpha1.Component{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: TestPubsubName,
@@ -1290,40 +1290,84 @@ func TestMetadataAppID(t *testing.T) {
 		},
 	}
 
-	pubsubComponent.Spec.Metadata = append(
-		pubsubComponent.Spec.Metadata,
-		commonapi.NameValuePair{
-			Name: "clientID",
-			Value: commonapi.DynamicValue{
-				JSON: v1.JSON{
-					Raw: []byte("{appID} {appID}"),
+	// ClientID should be namespace for k8s
+	t.Run("Kubernetes Mode AppID", func(t *testing.T) {
+		t.Setenv("NAMESPACE", "test")
+		pubsubComponent.Spec.Metadata = append(
+			pubsubComponent.Spec.Metadata,
+			commonapi.NameValuePair{
+				Name: "clientID",
+				Value: commonapi.DynamicValue{
+					JSON: v1.JSON{
+						Raw: []byte("{namespace}"),
+					},
 				},
+			})
+
+		rt, err := NewTestDaprRuntimeWithID(modes.KubernetesMode, "myApp")
+		require.NoError(t, err)
+
+		rt.runtimeConfig.id = daprt.TestRuntimeConfigID
+		defer stopRuntime(t, rt)
+		mockPubSub := new(daprt.MockPubSub)
+
+		rt.runtimeConfig.registry.PubSubs().RegisterComponent(
+			func(_ logger.Logger) pubsub.PubSub {
+				return mockPubSub
 			},
+			"mockPubSub",
+		)
+
+		mockPubSub.On("Init", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
+			metadata := args.Get(0).(pubsub.Metadata)
+			clientID := metadata.Properties["clientID"]
+			assert.Equal(t, "test.myApp", clientID)
 		})
-	rt, _ := NewTestDaprRuntime(modes.KubernetesMode)
-	rt.runtimeConfig.id = daprt.TestRuntimeConfigID
-	defer stopRuntime(t, rt)
-	mockPubSub := new(daprt.MockPubSub)
 
-	rt.runtimeConfig.registry.PubSubs().RegisterComponent(
-		func(_ logger.Logger) pubsub.PubSub {
-			return mockPubSub
-		},
-		"mockPubSub",
-	)
-
-	mockPubSub.On("Init", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
-		metadata := args.Get(0).(pubsub.Metadata)
-		clientID := metadata.Properties["clientID"]
-		appIds := strings.Split(clientID, " ")
-		assert.Equal(t, 2, len(appIds))
-		for _, appID := range appIds {
-			assert.Equal(t, daprt.TestRuntimeConfigID, appID)
-		}
+		err = rt.processComponentAndDependents(context.Background(), pubsubComponent)
+		assert.NoError(t, err)
 	})
 
-	err := rt.processComponentAndDependents(context.Background(), pubsubComponent)
-	assert.NoError(t, err)
+	// ClientID should be AppID for self hosted
+	t.Run("Standalone Mode AppID", func(t *testing.T) {
+		pubsubComponent.Spec.Metadata = append(
+			pubsubComponent.Spec.Metadata,
+			commonapi.NameValuePair{
+				Name: "clientID",
+				Value: commonapi.DynamicValue{
+					JSON: v1.JSON{
+						Raw: []byte("{appID} {appID}"),
+					},
+				},
+			})
+
+		rt, err := NewTestDaprRuntime(modes.StandaloneMode)
+		require.NoError(t, err)
+
+		rt.runtimeConfig.id = daprt.TestRuntimeConfigID
+		defer stopRuntime(t, rt)
+		mockPubSub := new(daprt.MockPubSub)
+
+		rt.runtimeConfig.registry.PubSubs().RegisterComponent(
+			func(_ logger.Logger) pubsub.PubSub {
+				return mockPubSub
+			},
+			"mockPubSub",
+		)
+
+		mockPubSub.On("Init", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
+			metadata := args.Get(0).(pubsub.Metadata)
+			clientID := metadata.Properties["clientID"]
+			appIds := strings.Split(clientID, " ")
+			assert.Equal(t, 2, len(appIds))
+			for _, appID := range appIds {
+				assert.Equal(t, daprt.TestRuntimeConfigID, appID)
+			}
+		})
+
+		err = rt.processComponentAndDependents(context.Background(), pubsubComponent)
+		assert.NoError(t, err)
+	})
 }
 
 func TestOnComponentUpdated(t *testing.T) {
