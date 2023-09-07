@@ -427,8 +427,10 @@ func atomicWrite(clock clock.Clock, dir string, data map[string][]byte) error {
 				return err
 			}
 		}
+		// You can't rename a directory over an existing directory.
+		os.RemoveAll(dir)
 		if err := os.Rename(dir+"-new", dir); err != nil {
-			return err
+			return fmt.Errorf("failed to rename %s to %s: %w", dir+"-new", dir, err)
 		}
 	} else {
 		if err := os.Symlink(newDir, dir+"-new"); err != nil {
