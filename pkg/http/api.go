@@ -59,7 +59,7 @@ type API interface {
 	PublicEndpoints() []Endpoint
 	MarkStatusAsReady()
 	MarkStatusAsOutboundReady()
-	SetActorRuntime(actor actors.Actors)
+	SetActorRuntime(actor actors.ActorRuntime)
 }
 
 type api struct {
@@ -1972,6 +1972,6 @@ func (a *api) onQueryStateHandler() nethttp.HandlerFunc {
 	)
 }
 
-func (a *api) SetActorRuntime(actor actors.Actors) {
+func (a *api) SetActorRuntime(actor actors.ActorRuntime) {
 	a.universal.Actors = actor
 }
