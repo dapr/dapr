@@ -50,7 +50,11 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 	sentryAddress := patcher.ServiceAddress(patcher.ServiceSentry, i.config.Namespace, i.config.KubeClusterDomain)
 	operatorAddress := patcher.ServiceAddress(patcher.ServiceAPI, i.config.Namespace, i.config.KubeClusterDomain)
 
-	trustAnchors, err := i.currentTrustAnchorsFn()
+	trustAnchors, err := i.currentTrustAnchors()
+	if err != nil {
+		return nil, err
+	}
+	daprdCert, daprdPrivateKey, err := i.signDaprdCertificate(ctx, pod.Namespace)
 	if err != nil {
 		return nil, err
 	}
@@ -72,6 +76,8 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 	sidecar.ControlPlaneNamespace = i.controlPlaneNamespace
 	sidecar.ControlPlaneTrustDomain = i.controlPlaneTrustDomain
 	sidecar.CurrentTrustAnchors = trustAnchors
+	sidecar.CertChain = string(daprdCert)
+	sidecar.CertKey = string(daprdPrivateKey)
 
 	// Set the placement address unless it's skipped
 	// Even if the placement is skipped, however,the placement address will still be included if explicitly set in the annotations

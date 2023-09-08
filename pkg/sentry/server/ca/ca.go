@@ -20,6 +20,7 @@ import (
 	"crypto/x509"
 	"time"
 
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 
@@ -138,11 +139,12 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 }
 
 func (c *ca) SignIdentity(ctx context.Context, req *SignRequest, overrideDuration bool) ([]*x509.Certificate, error) {
-	spiffeID, err := (spiffe.Parsed{
-		TrustDomain: req.TrustDomain,
-		Namespace:   req.Namespace,
-		AppID:       req.AppID,
-	}).ToID()
+	td, err := spiffeid.TrustDomainFromString(req.TrustDomain)
+	if err != nil {
+		return nil, err
+	}
+
+	spiffeID, err := spiffe.FromStrings(td, req.Namespace, req.AppID)
 	if err != nil {
 		return nil, err
 	}

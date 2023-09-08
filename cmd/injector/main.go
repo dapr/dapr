@@ -26,6 +26,7 @@ import (
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/health"
+	"github.com/dapr/dapr/pkg/injector/sentry"
 	"github.com/dapr/dapr/pkg/injector/service"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/security"
@@ -114,7 +115,20 @@ func main() {
 			if rErr != nil {
 				return rErr
 			}
-			return inj.Run(ctx, sec.TLSServerConfigNoClientAuth(), sec.CurrentTrustAnchors)
+			sentryID, err := security.SentryID(sec.ControlPlaneTrustDomain(), security.CurrentNamespace())
+			if err != nil {
+				return err
+			}
+			requester := sentry.New(sentry.Options{
+				SentryAddress: cfg.SentryAddress,
+				SentryID:      sentryID,
+				Security:      sec,
+			})
+			return inj.Run(ctx,
+				sec.TLSServerConfigNoClientAuth(),
+				requester.RequestCertificateFromSentry,
+				sec.CurrentTrustAnchors,
+			)
 		},
 		func(ctx context.Context) error {
 			readyErr := inj.Ready(ctx)

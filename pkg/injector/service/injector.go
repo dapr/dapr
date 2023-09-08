@@ -55,11 +55,14 @@ var AllowedServiceAccountInfos = []string{
 	"tekton-pipelines:tekton-pipelines-controller",
 }
 
-type currentTrustAnchorsFn func() ([]byte, error)
+type (
+	signDaprdCertificateFn func(context.Context, string) ([]byte, []byte, error)
+	currentTrustAnchorsFn  func() ([]byte, error)
+)
 
 // Injector is the interface for the Dapr runtime sidecar injection component.
 type Injector interface {
-	Run(context.Context, *tls.Config, currentTrustAnchorsFn) error
+	Run(context.Context, *tls.Config, signDaprdCertificateFn, currentTrustAnchorsFn) error
 	Ready(context.Context) error
 }
 
@@ -83,7 +86,8 @@ type injector struct {
 
 	controlPlaneNamespace   string
 	controlPlaneTrustDomain string
-	currentTrustAnchorsFn   currentTrustAnchorsFn
+	currentTrustAnchors     currentTrustAnchorsFn
+	signDaprdCertificate    signDaprdCertificateFn
 
 	namespaceNameMatcher *namespacednamematcher.EqualPrefixNameNamespaceMatcher
 	ready                chan struct{}
@@ -209,7 +213,7 @@ func getServiceAccount(ctx context.Context, kubeClient kubernetes.Interface, all
 	return allowedUids, nil
 }
 
-func (i *injector) Run(ctx context.Context, tlsConfig *tls.Config, currentTrustAnchorsFn currentTrustAnchorsFn) error {
+func (i *injector) Run(ctx context.Context, tlsConfig *tls.Config, signDaprdFn signDaprdCertificateFn, currentTrustAnchors currentTrustAnchorsFn) error {
 	select {
 	case <-i.ready:
 		return errors.New("injector already running")
@@ -219,7 +223,8 @@ func (i *injector) Run(ctx context.Context, tlsConfig *tls.Config, currentTrustA
 
 	log.Infof("Sidecar injector is listening on %s, patching Dapr-enabled pods", i.server.Addr)
 
-	i.currentTrustAnchorsFn = currentTrustAnchorsFn
+	i.currentTrustAnchors = currentTrustAnchors
+	i.signDaprdCertificate = signDaprdFn
 	i.server.TLSConfig = tlsConfig
 
 	errCh := make(chan error, 1)

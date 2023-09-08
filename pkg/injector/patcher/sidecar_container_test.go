@@ -328,6 +328,8 @@ func TestGetSidecarContainer(t *testing.T) {
 		c.Identity = "pod_identity"
 		c.ControlPlaneNamespace = "my-namespace"
 		c.ControlPlaneTrustDomain = "test.example.com"
+		c.CertChain = "my-cert-chain"
+		c.CertKey = "my-cert-key"
 
 		c.SetFromPodAnnotations()
 
@@ -367,10 +369,16 @@ func TestGetSidecarContainer(t *testing.T) {
 		assert.Equal(t, "my-namespace", container.Env[3].Value)
 		// DAPR_CONTROLPLANE_TRUST_DOMAIN
 		assert.Equal(t, "test.example.com", container.Env[4].Value)
+		// DAPR_CERT_CHAIN
+		assert.Equal(t, "my-cert-chain", container.Env[5].Value)
+		// DAPR_CERT_KEY
+		assert.Equal(t, "my-cert-key", container.Env[6].Value)
+		// SENTRY_LOCAL_IDENTITY
+		assert.Equal(t, "pod_identity", container.Env[7].Value)
 		// DAPR_API_TOKEN
-		assert.Equal(t, "secret", container.Env[5].ValueFrom.SecretKeyRef.Name)
+		assert.Equal(t, "secret", container.Env[8].ValueFrom.SecretKeyRef.Name)
 		// DAPR_APP_TOKEN
-		assert.Equal(t, "appsecret", container.Env[6].ValueFrom.SecretKeyRef.Name)
+		assert.Equal(t, "appsecret", container.Env[9].ValueFrom.SecretKeyRef.Name)
 		// default image
 		assert.Equal(t, "daprio/dapr", container.Image)
 		assert.EqualValues(t, expectedArgs, container.Args)
@@ -402,6 +410,8 @@ func TestGetSidecarContainer(t *testing.T) {
 		c.Identity = "pod_identity"
 		c.ControlPlaneNamespace = "my-namespace"
 		c.ControlPlaneTrustDomain = "test.example.com"
+		c.CertChain = "my-cert-chain"
+		c.CertKey = "my-cert-key"
 
 		c.SetFromPodAnnotations()
 
@@ -449,10 +459,16 @@ func TestGetSidecarContainer(t *testing.T) {
 		assert.Equal(t, "my-namespace", container.Env[3].Value)
 		// DAPR_CONTROLPLANE_TRUST_DOMAIN
 		assert.Equal(t, "test.example.com", container.Env[4].Value)
+		// DAPR_CERT_CHAIN
+		assert.Equal(t, "my-cert-chain", container.Env[5].Value)
+		// DAPR_CERT_KEY
+		assert.Equal(t, "my-cert-key", container.Env[6].Value)
+		// SENTRY_LOCAL_IDENTITY
+		assert.Equal(t, "pod_identity", container.Env[7].Value)
 		// DAPR_API_TOKEN
-		assert.Equal(t, "secret", container.Env[5].ValueFrom.SecretKeyRef.Name)
+		assert.Equal(t, "secret", container.Env[8].ValueFrom.SecretKeyRef.Name)
 		// DAPR_APP_TOKEN
-		assert.Equal(t, "appsecret", container.Env[6].ValueFrom.SecretKeyRef.Name)
+		assert.Equal(t, "appsecret", container.Env[9].ValueFrom.SecretKeyRef.Name)
 		// default image
 		assert.Equal(t, "daprio/dapr", container.Image)
 		assert.EqualValues(t, expectedArgs, container.Args)

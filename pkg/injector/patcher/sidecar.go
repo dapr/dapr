@@ -36,6 +36,8 @@ type SidecarConfig struct {
 
 	Mode                        injectorConsts.DaprMode `default:"kubernetes"`
 	Namespace                   string
+	CertChain                   string
+	CertKey                     string
 	MTLSEnabled                 bool
 	Identity                    string
 	IgnoreEntrypointTolerations []corev1.Toleration
