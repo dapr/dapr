@@ -27,6 +27,8 @@ type component struct {
 	operatorpb.Operator_ComponentUpdateClient
 }
 
+// The go linter does not yet understand that these functions are being used by the generic operator.
+//
 //nolint:unused
 func (c *component) list(ctx context.Context, opclient operatorpb.OperatorClient, ns, podName string) ([][]byte, error) {
 	resp, err := opclient.ListComponents(ctx, &operatorpb.ListComponentsRequest{
@@ -57,7 +59,7 @@ func (c *component) recv() (*loader.Event[componentsapi.Component], error) {
 
 	var component componentsapi.Component
 	if err := json.Unmarshal(event.Component, &component); err != nil {
-		return nil, fmt.Errorf("failed to deserializing component: %s", err)
+		return nil, fmt.Errorf("failed to deserializing component: %w", err)
 	}
 
 	return &loader.Event[componentsapi.Component]{

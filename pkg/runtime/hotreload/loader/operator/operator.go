@@ -47,7 +47,7 @@ func New(opts Options) loader.Interface {
 }
 
 func (o *operator) Close() error {
-	var errs []error
+	errs := make([]error, 0, 2)
 	if err := o.component.close(); err != nil {
 		errs = append(errs, err)
 	}

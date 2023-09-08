@@ -27,6 +27,8 @@ type endpoint struct {
 	operatorpb.Operator_HTTPEndpointUpdateClient
 }
 
+// The go linter does not yet understand that these functions are being used by the generic operator.
+//
 //nolint:unused
 func (e *endpoint) list(ctx context.Context, opclient operatorpb.OperatorClient, ns, podName string) ([][]byte, error) {
 	resp, err := opclient.ListHTTPEndpoints(ctx, &operatorpb.ListHTTPEndpointsRequest{
@@ -56,7 +58,7 @@ func (e *endpoint) recv() (*loader.Event[httpendpointsapi.HTTPEndpoint], error) 
 
 	var endpoint httpendpointsapi.HTTPEndpoint
 	if err := json.Unmarshal(event.HttpEndpoints, &endpoint); err != nil {
-		return nil, fmt.Errorf("failed to deserializing httpendpoint: %s", err)
+		return nil, fmt.Errorf("failed to deserializing httpendpoint: %w", err)
 	}
 
 	return &loader.Event[httpendpointsapi.HTTPEndpoint]{

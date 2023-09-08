@@ -63,7 +63,7 @@ func New(opts Options) *Authorizer {
 	return r
 }
 
-func (a *Authorizer) GetAuthorizedObjects(objects interface{}, authorizer func(interface{}) bool) interface{} {
+func (a *Authorizer) GetAuthorizedObjects(objects any, authorizer func(any) bool) any {
 	reflectValue := reflect.ValueOf(objects)
 	authorized := reflect.MakeSlice(reflectValue.Type(), 0, reflectValue.Len())
 	for i := 0; i < reflectValue.Len(); i++ {
@@ -75,7 +75,7 @@ func (a *Authorizer) GetAuthorizedObjects(objects interface{}, authorizer func(i
 	return authorized.Interface()
 }
 
-func (a *Authorizer) IsObjectAuthorized(object interface{}) bool {
+func (a *Authorizer) IsObjectAuthorized(object any) bool {
 	switch obj := object.(type) {
 	case httpendpointsapi.HTTPEndpoint:
 		for _, auth := range a.httpEndpointAuthorizers {

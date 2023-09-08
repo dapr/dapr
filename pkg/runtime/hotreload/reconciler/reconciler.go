@@ -95,7 +95,7 @@ func (r *Reconciler[T]) Run(ctx context.Context) error {
 
 	stream, err := r.manager.Stream(ctx)
 	if err != nil {
-		return fmt.Errorf("error starting component stream: %s", err)
+		return fmt.Errorf("error starting component stream: %w", err)
 	}
 
 	r.watchForEvents(ctx, stream)
@@ -145,7 +145,7 @@ func (r *Reconciler[T]) watchForEvents(ctx context.Context, stream <-chan *loade
 					log.Error(err)
 					continue
 				} else {
-					log.Info("Channels refreshed")
+					log.Debug("Channels refreshed")
 				}
 			}
 		}
@@ -182,10 +182,10 @@ func (r *Reconciler[T]) reconcile(ctx context.Context, result *differ.Result[T])
 	if r.channels != nil &&
 		(len(result.Created) > 0 || len(result.Updated) > 0 || len(result.Deleted) > 0) {
 		if err := r.channels.Refresh(); err != nil {
-			return fmt.Errorf("error refreshing channels after update: %s", err)
+			return fmt.Errorf("error refreshing channels after update: %w", err)
 		}
 
-		log.Info("Channels refreshed")
+		log.Debug("Channels refreshed")
 	}
 
 	return nil

@@ -38,7 +38,7 @@ func (e *endpoint) update(ctx context.Context, endpoint httpendpointsapi.HTTPEnd
 
 	if exists {
 		if differ.AreSame(oldEndpoint, endpoint) {
-			log.Info("HTTPEndpoint update skipped, no changes detected: %s", endpoint.LogName())
+			log.Debugf("HTTPEndpoint update skipped, no changes detected: %s", endpoint.LogName())
 			return
 		}
 
@@ -46,7 +46,7 @@ func (e *endpoint) update(ctx context.Context, endpoint httpendpointsapi.HTTPEnd
 	}
 
 	if !e.auth.IsObjectAuthorized(endpoint) {
-		log.Warnf("Received unauthorized httpendpoint update, ignored. %s", endpoint.LogName())
+		log.Warnf("Received unauthorized httpendpoint update, ignored: %s", endpoint.LogName())
 		return
 	}
 

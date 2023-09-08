@@ -47,7 +47,7 @@ const (
 	// Enables support for setting TTL on Actor state keys. Remove this flag in
 	// Dapr 1.12.
 	ActorStateTTL Feature = "ActorStateTTL"
-	// Enables support for hot reloading of Daprd configuration.
+	// Enables support for hot reloading of Daprd Components and HTTPEndpoints.
 	HotReload Feature = "HotReload"
 )
 
