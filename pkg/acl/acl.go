@@ -153,7 +153,7 @@ func ApplyAccessControlPolicies(ctx context.Context, operation string, httpVerb 
 	// Apply access control list filter
 	spiffeID, ok, err := spiffe.FromGRPCContext(ctx)
 	if err != nil {
-		log.Debugf(err.Error())
+		log.Debugf("failed to get SPIFFE ID from gRPC connection context: %v", err)
 		return false, err.Error()
 	}
 
