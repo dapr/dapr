@@ -25,7 +25,7 @@ import (
 )
 
 // Validate validates the common rules for all requests.
-func Validate(_ context.Context, req *sentryv1pb.SignCertificateRequest) (spiffeid.TrustDomain, error) {
+func Validate(_ context.Context, req *sentryv1pb.SignCertificateRequest) (spiffeid.TrustDomain, bool, error) {
 	err := errors.Join(
 		validation.ValidateSelfHostedAppID(req.Id),
 		appIDLessOrEqualTo64Characters(req.Id),
@@ -33,15 +33,18 @@ func Validate(_ context.Context, req *sentryv1pb.SignCertificateRequest) (spiffe
 		namespaceIsRequired(req.Namespace),
 	)
 	if err != nil {
-		return spiffeid.TrustDomain{}, fmt.Errorf("invalid request: %w", err)
+		return spiffeid.TrustDomain{}, false, fmt.Errorf("invalid request: %w", err)
 	}
 
+	var td spiffeid.TrustDomain
 	if req.GetTrustDomain() == "" {
 		// Default to public trust domain if not specified.
-		return spiffeid.TrustDomainFromString("public")
+		td, err = spiffeid.TrustDomainFromString("public")
+		return td, false, err
 	}
 
-	return spiffeid.TrustDomainFromString(req.GetTrustDomain())
+	td, err = spiffeid.TrustDomainFromString(req.GetTrustDomain())
+	return td, false, err
 }
 
 func appIDLessOrEqualTo64Characters(appID string) error {
