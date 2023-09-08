@@ -77,7 +77,7 @@ spec:
           - name: dapr-trust-bundle
             mountPath: /var/run/secrets/dapr.io/tls
             readOnly: true
-        {{- if .Values.global.mtls.mountSentryToken }}
+        {{- if .Values.global.mtls.mountSentryVolume }}
           - name: dapr-identity-token
             mountPath: /var/run/secrets/dapr.io/sentrytoken
         {{- end }}
@@ -186,7 +186,7 @@ spec:
       - name: dapr-trust-bundle
         configMap:
           name: dapr-trust-bundle
-    {{- if .Values.global.mtls.mountSentryToken }}
+    {{- if .Values.global.mtls.mountSentryVolume }}
       - name: dapr-identity-token
         projected:
           sources:

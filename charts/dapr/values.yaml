@@ -42,7 +42,7 @@ global:
     # If set to true, a bound service account token will be mounted and used to
     # authenticate to Sentry.
     mountSentryVolume: true
-    # Used to override `dapr-sentry.{{ .Release.Namespace }}.svc:443`
+    # Used to override `dapr-sentry.{{ .Release.Namespace }}.svc.cluster.local:443`
     #sentryAddress:
   actors:
     enabled: true
