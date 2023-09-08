@@ -118,6 +118,10 @@ func (c *Config) GetIdleTimeoutForType(actorType string) time.Duration {
 	if val, ok := c.EntityConfigs[actorType]; ok {
 		return val.ActorIdleTimeout
 	}
+	actorIdleTimeout := c.HostedActorTypes.GetActorIdleTimeout(actorType)
+	if actorIdleTimeout > 0 {
+		return actorIdleTimeout
+	}
 	return c.ActorIdleTimeout
 }
 
