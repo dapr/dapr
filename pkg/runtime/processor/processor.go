@@ -480,5 +480,5 @@ func (p *Processor) category(comp componentsapi.Component) components.Category {
 }
 
 func componentDependency(compCategory components.Category, name string) string {
-	return fmt.Sprintf("%s:%s", compCategory, name)
+	return string(compCategory) + ":" + name
 }

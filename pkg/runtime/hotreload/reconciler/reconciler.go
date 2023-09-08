@@ -64,7 +64,7 @@ func NewComponent(opts Options[componentsapi.Component]) *Reconciler[componentsa
 	return &Reconciler[componentsapi.Component]{
 		clock:   clock.RealClock{},
 		closeCh: make(chan struct{}),
-		kind:    "Component",
+		kind:    componentsapi.Kind,
 		manager: &component{
 			Loader: opts.Loader.Components(),
 			store:  opts.CompStore,
@@ -79,7 +79,7 @@ func NewHTTPEndpoint(opts Options[httpendpointsapi.HTTPEndpoint], channels *chan
 		clock:    clock.RealClock{},
 		closeCh:  make(chan struct{}),
 		channels: channels,
-		kind:     "HTTPEndpoint",
+		kind:     httpendpointsapi.Kind,
 		manager: &endpoint{
 			Loader: opts.Loader.HTTPEndpoints(),
 			store:  opts.CompStore,
@@ -168,13 +168,13 @@ func (r *Reconciler[T]) reconcile(ctx context.Context, result *differ.Result[T])
 	} {
 		wg.Add(len(group.resources))
 		for _, resource := range group.resources {
-			go func(resource T) {
+			go func(resource T, eventType operatorpb.ResourceEventType) {
 				defer wg.Done()
 				r.handleEvent(ctx, &loader.Event[T]{
-					Type:     group.eventType,
+					Type:     eventType,
 					Resource: resource,
 				})
-			}(resource)
+			}(resource, group.eventType)
 		}
 		wg.Wait()
 	}
