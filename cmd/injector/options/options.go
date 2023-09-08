@@ -37,10 +37,6 @@ func New() *Options {
 
 	flag.IntVar(&opts.HealthzPort, "healthz-port", 8080, "The port used for health checks")
 
-	depCAFlag := flag.String("issuer-ca-secret-key", "", "DEPRECATED; Certificate Authority certificate secret key")
-	depCertFlag := flag.String("issuer-certificate-secret-key", "", "DEPRECATED; Issuer certificate secret key")
-	depKeyFlag := flag.String("issuer-key-secret-key", "", "DEPRECATED; Issuer private key secret key")
-
 	if home := homedir.HomeDir(); home != "" {
 		flag.StringVar(&opts.Kubeconfig, "kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
 	} else {
@@ -54,10 +50,6 @@ func New() *Options {
 	opts.Metrics.AttachCmdFlags(flag.StringVar, flag.BoolVar)
 
 	flag.Parse()
-
-	if len(*depCAFlag) > 0 || len(*depCertFlag) > 0 || len(*depKeyFlag) > 0 {
-		log.Warn("--issuer-ca-secret-key, --issuer-certificate-secret-key and --issuer-key-secret-key are deprecated and will be removed in v1.14.")
-	}
 
 	return &opts
 }
