@@ -11,8 +11,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package sentry
+package placement
 
 import (
-	_ "github.com/dapr/dapr/tests/integration/suite/sentry/validator"
+	_ "github.com/dapr/dapr/tests/integration/suite/placement/quorum"
 )
