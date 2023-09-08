@@ -21,6 +21,7 @@ package actors
 import (
 	"context"
 	"errors"
+	"time"
 
 	mock "github.com/stretchr/testify/mock"
 
@@ -41,7 +42,9 @@ type MockActors struct {
 	mock.Mock
 }
 
-func (_m *MockActors) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor) error {
+func (_m *MockActors) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor,
+	actorIdleTimeout time.Duration,
+) error {
 	return nil
 }
 
@@ -274,7 +277,9 @@ type FailingActors struct {
 	Failure daprt.Failure
 }
 
-func (f *FailingActors) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor) error {
+func (f *FailingActors) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor,
+	actorIdleTimeout time.Duration,
+) error {
 	return nil
 }
 

@@ -197,7 +197,7 @@ func (wfe *WorkflowEngine) Start(ctx context.Context) (err error) {
 	}
 
 	for actorType, actor := range wfe.InternalActors() {
-		err = wfe.actorRuntime.RegisterInternalActor(ctx, actorType, actor)
+		err = wfe.actorRuntime.RegisterInternalActor(ctx, actorType, actor, time.Minute*1)
 		if err != nil {
 			return fmt.Errorf("failed to register workflow actor %s: %w", actorType, err)
 		}
