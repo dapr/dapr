@@ -198,15 +198,12 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 
 	// TODO: @joshvanl: Remove is v1.13 when injector no longer needs to request
 	// daprd identities.
-	if injectorRequesting {
-		if expID != req.Id {
-			overrideDuration = true
-		}
-		expID = req.Id
-	}
-
 	if expID != req.Id {
-		return spiffeid.TrustDomain{}, false, fmt.Errorf("app-id mismatch. expected: %s, received: %s", expID, req.Id)
+		if injectorRequesting {
+			overrideDuration = true
+		} else {
+			return spiffeid.TrustDomain{}, false, fmt.Errorf("app-id mismatch. expected: %s, received: %s", expID, req.Id)
+		}
 	}
 
 	if isControlPlane {
