@@ -107,6 +107,14 @@ func TestConvertPathToMethodName(t *testing.T) {
 		{"actors/DemoActor/1/method/method1", "actors/DemoActor/{id}/method/method1"},
 		{"actors/DemoActor/1/method/timer/timer1", "actors/DemoActor/{id}/method/timer/timer1"},
 		{"actors/DemoActor/1/method/remind/reminder1", "actors/DemoActor/{id}/method/remind/reminder1"},
+		{"/v1.0-alpha1/workflows/dapr/mywf/start?instanceID=1234", "/v1.0-alpha1/workflows/dapr/mywf/start"},
+		{"/v1.0-alpha1/workflows/dapr/mywf/start", "/v1.0-alpha1/workflows/dapr/mywf/start"},
+		{"/v1.0-alpha1/workflows/dapr/1234/terminate", "/v1.0-alpha1/workflows/dapr/{instanceId}/terminate"},
+		{"/v1.0-alpha1/workflows/dapr/1234/raiseEvent/foobaz", "/v1.0-alpha1/workflows/dapr/{instanceId}/raiseEvent/{eventName}"},
+		{"/v1.0-alpha1/workflows/dapr/1234/pause", "/v1.0-alpha1/workflows/dapr/{instanceId}/pause"},
+		{"/v1.0-alpha1/workflows/dapr/1234/resume", "/v1.0-alpha1/workflows/dapr/{instanceId}/resume"},
+		{"/v1.0-alpha1/workflows/dapr/1234/purge", "/v1.0-alpha1/workflows/dapr/{instanceId}/purge"},
+		{"/v1.0-alpha1/workflows/dapr/1234", "/v1.0-alpha1/workflows/dapr/{instanceId}"},
 		{"", ""},
 	}
 
