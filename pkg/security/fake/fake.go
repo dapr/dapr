@@ -48,10 +48,10 @@ type Fake struct {
 func New() *Fake {
 	return &Fake{
 		controlPlaneTrustDomainFn: func() spiffeid.TrustDomain {
-			return spiffeid.TrustDomain{}
+			return spiffeid.RequireTrustDomainFromString("example.org")
 		},
 		controlPlaneNamespaceFn: func() string {
-			return ""
+			return "dapr-test"
 		},
 		tlsServerConfigMTLSFn: func(spiffeid.TrustDomain) (*tls.Config, error) {
 			return new(tls.Config), nil
