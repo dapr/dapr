@@ -30,8 +30,6 @@ type Options struct {
 	Metrics     *metrics.Options
 }
 
-var log = logger.NewLogger("dapr.injector.options")
-
 func New() *Options {
 	var opts Options
 
