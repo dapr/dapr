@@ -44,6 +44,8 @@ var log = logger.NewLogger("dapr.runtime.security")
 type RequestFn func(ctx context.Context, der []byte) ([]*x509.Certificate, error)
 
 // Handler implements middleware for client and server connection security.
+//
+//nolint:interfacebloat
 type Handler interface {
 	GRPCServerOptionMTLS() grpc.ServerOption
 	GRPCServerOptionNoClientAuth() grpc.ServerOption
@@ -352,12 +354,6 @@ func (s *security) TLSServerConfigNoClientAuth() *tls.Config {
 	return tlsconfig.TLSServerConfig(s.source)
 }
 
-// CurrentTrustAnchors returns the current trust anchors for this Dapr
-// installation.
-func (s *security) CurrentTrustAnchors() ([]byte, error) {
-	return s.source.trustAnchors.Marshal()
-}
-
 // GRPCDialOption returns a gRPC dial option which instruments client
 // authentication using the current signed client certificate.
 func (s *security) GRPCDialOption(appID spiffeid.ID) grpc.DialOption {
@@ -392,14 +388,6 @@ func (s *security) NetDialerID(ctx context.Context, spiffeID spiffeid.ID, timeou
 		NetDialer: (&net.Dialer{Timeout: timeout, Cancel: ctx.Done()}),
 		Config:    tlsconfig.MTLSClientConfig(s.source, s.source, tlsconfig.AuthorizeID(spiffeID)),
 	}).Dial
-}
-
-func (s *security) ControlPlaneTrustDomain() spiffeid.TrustDomain {
-	return s.controlPlaneTrustDomain
-}
-
-func (s *security) ControlPlaneNamespace() string {
-	return s.controlPlaneNamespace
 }
 
 // CurrentNamespace returns the namespace of this workload.

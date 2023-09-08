@@ -25,8 +25,6 @@ import (
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-
-	"github.com/spiffe/go-spiffe/v2/spiffeid"
 )
 
 type Fake struct {
@@ -79,9 +77,6 @@ func New() *Fake {
 		},
 		watchTrustAnchorsFn: func(context.Context, chan<- []byte) {
 			return
-		},
-		grpcDialOptionFn: func(id spiffeid.ID) grpc.DialOption {
-			return grpc.WithTransportCredentials(insecure.NewCredentials())
 		},
 		netListenerIDFn: func(l net.Listener, _ spiffeid.ID) net.Listener {
 			return l
@@ -198,10 +193,6 @@ func (f *Fake) GRPCServerOptionNoClientAuth() grpc.ServerOption {
 	return f.grpcServerOptionNoClientAuthFn()
 }
 
-func (f *Fake) WatchTrustAnchors(context.Context, chan<- []byte) {
-	return
-}
-
 func (f *Fake) CurrentTrustAnchors() ([]byte, error) {
 	return f.currentTrustAnchorsFn()
 }
@@ -220,12 +211,4 @@ func (f *Fake) NetListenerID(l net.Listener, id spiffeid.ID) net.Listener {
 
 func (f *Fake) NetDialerID(ctx context.Context, id spiffeid.ID, timeout time.Duration) func(network, addr string) (net.Conn, error) {
 	return f.netDialerIDFn(ctx, id, timeout)
-}
-
-func (f *Fake) ControlPlaneNamespace() string {
-	return "dapr-test"
-}
-
-func (f *Fake) ControlPlaneTrustDomain() spiffeid.TrustDomain {
-	return spiffeid.RequireTrustDomainFromString("example.com")
 }
