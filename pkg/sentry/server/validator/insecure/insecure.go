@@ -28,7 +28,7 @@ import (
 type insecure struct{}
 
 func New() validator.Validator {
-	return &insecure{}
+	return new(insecure)
 }
 
 func (s *insecure) Start(ctx context.Context) error {
