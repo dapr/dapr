@@ -37,9 +37,9 @@ func New() *Options {
 
 	flag.IntVar(&opts.HealthzPort, "healthz-port", 8080, "The port used for health checks")
 
-	depCAFlag := flag.String("issuer-ca-secret-key", "", "DEPRECATED")
-	depCertFlag := flag.String("issuer-certificate-secret-key", "", "DEPRECATED")
-	depKeyFlag := flag.String("issuer-key-secret-key", "", "DEPRECATED")
+	depCAFlag := flag.String("issuer-ca-secret-key", "", "DEPRECATED; Certificate Authority certificate secret key")
+	depCertFlag := flag.String("issuer-certificate-secret-key", "", "DEPRECATED; Issuer certificate secret key")
+	depKeyFlag := flag.String("issuer-key-secret-key", "", "DEPRECATED; Issuer private key secret key")
 
 	if home := homedir.HomeDir(); home != "" {
 		flag.StringVar(&opts.Kubeconfig, "kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
