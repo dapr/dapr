@@ -72,14 +72,16 @@ func NewDisk(opts OptionsDisk) (*Reloader, error) {
 	return &Reloader{
 		isEnabled: opts.Config.IsFeatureEnabled(config.HotReload),
 		components: reconciler.NewComponent(reconciler.Options[componentsapi.Component]{
-			Loader:    loader,
-			CompStore: opts.ComponentStore,
-			Processor: opts.Processor,
-		}, opts.Authorizer),
+			Loader:     loader,
+			CompStore:  opts.ComponentStore,
+			Processor:  opts.Processor,
+			Authorizer: opts.Authorizer,
+		}),
 		endpoints: reconciler.NewHTTPEndpoint(reconciler.Options[httpendpointsapi.HTTPEndpoint]{
-			Loader:    loader,
-			CompStore: opts.ComponentStore,
-			Processor: opts.Processor,
+			Loader:     loader,
+			CompStore:  opts.ComponentStore,
+			Processor:  opts.Processor,
+			Authorizer: opts.Authorizer,
 		}, opts.Channels),
 	}, nil
 }
@@ -95,14 +97,16 @@ func NewOperator(opts OptionsOperator) *Reloader {
 	return &Reloader{
 		isEnabled: opts.Config.IsFeatureEnabled(config.HotReload),
 		components: reconciler.NewComponent(reconciler.Options[componentsapi.Component]{
-			Loader:    loader,
-			CompStore: opts.ComponentStore,
-			Processor: opts.Processor,
-		}, opts.Authorizer),
+			Loader:     loader,
+			CompStore:  opts.ComponentStore,
+			Processor:  opts.Processor,
+			Authorizer: opts.Authorizer,
+		}),
 		endpoints: reconciler.NewHTTPEndpoint(reconciler.Options[httpendpointsapi.HTTPEndpoint]{
-			Loader:    loader,
-			CompStore: opts.ComponentStore,
-			Processor: opts.Processor,
+			Loader:     loader,
+			CompStore:  opts.ComponentStore,
+			Processor:  opts.Processor,
+			Authorizer: opts.Authorizer,
 		}, opts.Channels),
 	}
 }

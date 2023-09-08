@@ -17,6 +17,7 @@ import (
 	"context"
 
 	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	"github.com/dapr/dapr/pkg/runtime/authorizer"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
@@ -26,6 +27,7 @@ import (
 type endpoint struct {
 	store *compstore.ComponentStore
 	proc  *processor.Processor
+	auth  *authorizer.Authorizer
 	loader.Loader[httpendpointsapi.HTTPEndpoint]
 }
 
@@ -41,6 +43,11 @@ func (e *endpoint) update(ctx context.Context, endpoint httpendpointsapi.HTTPEnd
 		}
 
 		e.store.DeleteHTTPEndpoint(endpoint.Name)
+	}
+
+	if !e.auth.IsObjectAuthorized(endpoint) {
+		log.Warnf("Received unauthorized httpendpoint update, ignored. %s", endpoint.LogName())
+		return
 	}
 
 	log.Infof("Adding HTTPEndpoint for processing: %s", endpoint.LogName())

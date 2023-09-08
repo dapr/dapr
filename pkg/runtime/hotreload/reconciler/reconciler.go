@@ -37,9 +37,10 @@ import (
 var log = logger.NewLogger("dapr.runtime.hotreload.reconciler")
 
 type Options[T differ.Resource] struct {
-	Loader    loader.Interface
-	CompStore *compstore.ComponentStore
-	Processor *processor.Processor
+	Loader     loader.Interface
+	CompStore  *compstore.ComponentStore
+	Processor  *processor.Processor
+	Authorizer *authorizer.Authorizer
 }
 
 type Reconciler[T differ.Resource] struct {
@@ -59,7 +60,7 @@ type manager[T differ.Resource] interface {
 	delete(T)
 }
 
-func NewComponent(opts Options[componentsapi.Component], authz *authorizer.Authorizer) *Reconciler[componentsapi.Component] {
+func NewComponent(opts Options[componentsapi.Component]) *Reconciler[componentsapi.Component] {
 	return &Reconciler[componentsapi.Component]{
 		clock:   clock.RealClock{},
 		closeCh: make(chan struct{}),
@@ -68,7 +69,7 @@ func NewComponent(opts Options[componentsapi.Component], authz *authorizer.Autho
 			Loader: opts.Loader.Components(),
 			store:  opts.CompStore,
 			proc:   opts.Processor,
-			auth:   authz,
+			auth:   opts.Authorizer,
 		},
 	}
 }
@@ -83,6 +84,7 @@ func NewHTTPEndpoint(opts Options[httpendpointsapi.HTTPEndpoint], channels *chan
 			Loader: opts.Loader.HTTPEndpoints(),
 			store:  opts.CompStore,
 			proc:   opts.Processor,
+			auth:   opts.Authorizer,
 		},
 	}
 }
