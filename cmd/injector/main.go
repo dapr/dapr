@@ -111,13 +111,13 @@ func main() {
 		metricsExporter.Run,
 		secProvider.Run,
 		func(ctx context.Context) error {
-			sec, rErr := secProvider.Handler(ctx)
-			if rErr != nil {
-				return rErr
+			sec, rerr := secProvider.Handler(ctx)
+			if rerr != nil {
+				return rerr
 			}
-			sentryID, err := security.SentryID(sec.ControlPlaneTrustDomain(), security.CurrentNamespace())
+			sentryID, rerr := security.SentryID(sec.ControlPlaneTrustDomain(), security.CurrentNamespace())
 			if err != nil {
-				return err
+				return rerr
 			}
 			requester := sentry.New(sentry.Options{
 				SentryAddress: cfg.SentryAddress,
