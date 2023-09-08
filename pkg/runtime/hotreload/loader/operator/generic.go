@@ -61,12 +61,9 @@ func newGeneric[T differ.Resource](opts Options, store store.Store[T], streamer 
 }
 
 func (g *generic[T]) List(ctx context.Context) (*differ.LocalRemoteResources[T], error) {
-	var resp [][]byte
-	err := backoffFn(ctx, func(ctx context.Context) error {
-		var berr error
-		resp, berr = g.streamer.list(ctx, g.opClient, g.namespace, g.podName)
-		return berr
-	})
+	resp, err := backoff.RetryWithData(func() ([][]byte, error) {
+		return g.streamer.list(ctx, g.opClient, g.namespace, g.podName)
+	}, backoff.WithContext(backoff.NewExponentialBackOff(), ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -141,13 +138,13 @@ func (g *generic[T]) stream(ctx context.Context, eventCh chan<- *loader.Event[T]
 			default:
 			}
 
-			if err := backoffFn(ctx, func(ctx context.Context) error {
+			if err := backoff.Retry(func() error {
 				berr := g.streamer.establish(ctx, g.opClient, g.namespace, g.podName)
 				if berr != nil {
 					log.Errorf("Failed to establish stream: %s", berr)
 				}
 				return berr
-			}); err != nil {
+			}, backoff.WithContext(backoff.NewExponentialBackOff(), ctx)); err != nil {
 				log.Errorf("Stream retry failed: %s", err)
 				return
 			}
@@ -162,15 +159,4 @@ func (g *generic[T]) close() error {
 	}
 
 	return g.streamer.close()
-}
-
-func backoffFn(ctx context.Context, fn func(context.Context) error) error {
-	err := backoff.Retry(func() error {
-		return fn(ctx)
-	}, backoff.WithContext(backoff.NewExponentialBackOff(), ctx))
-	if err != nil {
-		return err
-	}
-
-	return nil
 }

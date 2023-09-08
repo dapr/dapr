@@ -52,6 +52,7 @@ func (c *component) update(ctx context.Context, comp componentsapi.Component) {
 
 	if !c.auth.IsObjectAuthorized(comp) {
 		log.Warnf("Received unauthorized component update, ignored. %s", comp.LogName())
+		return
 	}
 
 	log.Infof("Adding Component for processing: %s", comp.LogName())
