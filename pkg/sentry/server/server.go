@@ -122,7 +122,7 @@ func (s *server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 
 	log.Debugf("Processing SignCertificate request for %s/%s (validator: %s)", req.Namespace, req.Id, validator.String())
 
-	trustDomain, err := s.vals[validator].Validate(ctx, req)
+	trustDomain, overrideDuration, err := s.vals[validator].Validate(ctx, req)
 	if err != nil {
 		log.Debugf("Failed to validate request for %s/%s: %s", req.Namespace, req.Id, err)
 		return nil, status.Error(codes.PermissionDenied, err.Error())
@@ -176,7 +176,7 @@ func (s *server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 		Namespace:          req.Namespace,
 		AppID:              req.Id,
 		DNS:                dns,
-	})
+	}, overrideDuration)
 	if err != nil {
 		log.Errorf("Error signing identity: %v", err)
 		return nil, status.Error(codes.Internal, "failed to sign certificate")
