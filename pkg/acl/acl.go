@@ -159,7 +159,7 @@ func ApplyAccessControlPolicies(ctx context.Context, operation string, httpVerb 
 
 	if !ok {
 		// Apply the default action
-		log.Debugf("error while reading spiffe id from client cert. applying default global policy action")
+		log.Debugf("Error while reading spiffe id from client cert. applying default global policy action")
 	}
 
 	operation, err = normalizeOperation(operation)
@@ -176,7 +176,7 @@ func ApplyAccessControlPolicies(ctx context.Context, operation string, httpVerb 
 
 	if !action {
 		errMessage = fmt.Sprintf("access control policy has denied access to id: %s operation: %s verb: %s", spiffeID.URL(), operation, httpVerb)
-		log.Debugf(errMessage)
+		log.Debug(errMessage)
 	}
 
 	return action, errMessage
