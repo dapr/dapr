@@ -196,14 +196,13 @@ func getActorRuntime() actors.Actors {
 	})
 	compStore := compstore.New()
 	compStore.AddStateStore("workflowStore", store)
-	actors := actors.NewActors(actors.ActorsOpts{
+	return actors.NewActors(actors.ActorsOpts{
 		CompStore:      compStore,
 		Config:         cfg,
 		StateStoreName: "workflowStore",
 		MockPlacement:  NewMockPlacement(),
 		Resiliency:     resiliency.New(logger.NewLogger("test")),
 	})
-	return actors
 }
 
 func countOperations(t *testing.T, req *actors.TransactionalRequest) (upsertCount, deleteCount int) {
