@@ -408,7 +408,7 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 	key := keyObj.String()
 
 	a.connLock.Lock()
-	a.componentUpdateChan[key] = make(chan *loader.Event[componentsapi.Component], 10)
+	a.componentUpdateChan[key] = make(chan *loader.Event[componentsapi.Component], 1)
 	updateChan := a.componentUpdateChan[key]
 	a.connLock.Unlock()
 
@@ -524,7 +524,7 @@ func (a *apiServer) HTTPEndpointUpdate(in *operatorv1pb.HTTPEndpointUpdateReques
 	key := keyObj.String()
 
 	a.endpointLock.Lock()
-	a.endpointsUpdateChan[key] = make(chan *loader.Event[httpendpointsapi.HTTPEndpoint], 10)
+	a.endpointsUpdateChan[key] = make(chan *loader.Event[httpendpointsapi.HTTPEndpoint], 1)
 	updateChan := a.endpointsUpdateChan[key]
 	a.endpointLock.Unlock()
 
