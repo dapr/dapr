@@ -17,6 +17,7 @@ package runtime
 import (
 	"context"
 	"crypto/rand"
+	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -70,6 +71,7 @@ import (
 	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
 	"github.com/dapr/dapr/pkg/config/protocol"
 	"github.com/dapr/dapr/pkg/metrics"
+	"github.com/dapr/dapr/pkg/security"
 
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
@@ -2068,4 +2070,23 @@ func TestTraceShutdown(t *testing.T) {
 	}
 
 	assert.Nil(t, rt.tracerProvider)
+}
+
+func testSecurity(t *testing.T) security.Handler {
+	secP, err := security.New(context.Background(), security.Options{
+		TrustAnchors:            []byte("test"),
+		AppID:                   "test",
+		ControlPlaneTrustDomain: "test.example.com",
+		ControlPlaneNamespace:   "default",
+		MTLSEnabled:             false,
+		OverrideCertRequestSource: func(context.Context, []byte) ([]*x509.Certificate, error) {
+			return []*x509.Certificate{nil}, nil
+		},
+	})
+	require.NoError(t, err)
+	go secP.Run(context.Background())
+	sec, err := secP.Handler(context.Background())
+	require.NoError(t, err)
+
+	return sec
 }

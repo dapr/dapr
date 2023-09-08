@@ -95,7 +95,6 @@ type DaprRuntime struct {
 	nameResolver        nr.Resolver
 	hostAddress         string
 	actorStateStoreLock sync.RWMutex
-	authenticator       security.Authenticator
 	namespace           string
 	podName             string
 	daprHTTPAPI         http.API

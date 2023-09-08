@@ -27,7 +27,8 @@ type component struct {
 	operatorpb.Operator_ComponentUpdateClient
 }
 
-// The go linter does not yet understand that these functions are being used by the generic operator.
+// The go linter does not yet understand that these functions are being used by
+// the generic operator.
 //
 //nolint:unused
 func (c *component) list(ctx context.Context, opclient operatorpb.OperatorClient, ns, podName string) ([][]byte, error) {

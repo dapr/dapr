@@ -12,6 +12,7 @@ require (
 	github.com/dapr/components-contrib v1.12.0-rc.1
 	github.com/dapr/kit v0.12.0
 	github.com/evanphx/json-patch/v5 v5.7.0
+	github.com/fsnotify/fsnotify v1.6.0
 	github.com/go-chi/chi/v5 v5.0.10
 	github.com/go-chi/cors v1.2.1
 	github.com/go-logr/logr v1.2.4

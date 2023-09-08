@@ -31,6 +31,9 @@ type component struct {
 	loader.Loader[componentsapi.Component]
 }
 
+// The go linter does not yet understand that these functions are being used by
+// the generic reconciler.
+//
 //nolint:unused
 func (c *component) update(ctx context.Context, comp componentsapi.Component) {
 	oldComp, exists := c.store.GetComponent(comp.Name)

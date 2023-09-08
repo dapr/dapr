@@ -31,6 +31,9 @@ type endpoint struct {
 	loader.Loader[httpendpointsapi.HTTPEndpoint]
 }
 
+// The go linter does not yet understand that these functions are being used by
+// the generic reconciler.
+//
 //nolint:unused
 func (e *endpoint) update(ctx context.Context, endpoint httpendpointsapi.HTTPEndpoint) {
 	oldEndpoint, exists := e.store.GetHTTPEndpoint(endpoint.Name)

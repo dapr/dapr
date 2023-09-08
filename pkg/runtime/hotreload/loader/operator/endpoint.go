@@ -27,7 +27,8 @@ type endpoint struct {
 	operatorpb.Operator_HTTPEndpointUpdateClient
 }
 
-// The go linter does not yet understand that these functions are being used by the generic operator.
+// The go linter does not yet understand that these functions are being used by
+// the generic operator.
 //
 //nolint:unused
 func (e *endpoint) list(ctx context.Context, opclient operatorpb.OperatorClient, ns, podName string) ([][]byte, error) {
