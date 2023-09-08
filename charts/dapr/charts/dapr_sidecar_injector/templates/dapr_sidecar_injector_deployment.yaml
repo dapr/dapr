@@ -129,7 +129,7 @@ spec:
         - name: DAPR_CONTROL_PLANE_TRUST_DOMAIN
           value: {{ .Values.global.mtls.controlPlaneTrustDomain }}
         - name: DAPR_SENTRY_ADDRESS
-          value: {{ if .Values.global.mtls.sentryAddress }}{{ .Values.global.mtls.sentryAddress }}{{ else }}dapr-sentry.{{ .Release.Namespace }}.svc:80{{ end }}
+          value: {{ if .Values.global.mtls.sentryAddress }}{{ .Values.global.mtls.sentryAddress }}{{ else }}dapr-sentry.{{ .Release.Namespace }}.svc.cluster.local:443{{ end }}
 {{- if .Values.kubeClusterDomain }}
         - name: KUBE_CLUSTER_DOMAIN
           value: "{{ .Values.kubeClusterDomain }}"
