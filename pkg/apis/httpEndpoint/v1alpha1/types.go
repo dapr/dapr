@@ -17,6 +17,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/dapr/dapr/pkg/apis/common"
+	httpendpoint "github.com/dapr/dapr/pkg/apis/httpEndpoint"
+)
+
+const (
+	Kind    = "HTTPEndpoint"
+	Version = "v1alpha1"
 )
 
 //+genclient
@@ -36,19 +42,17 @@ type HTTPEndpoint struct {
 	common.Scoped `json:",inline"`
 }
 
-const kind = "HTTPEndpoint"
-
 // Kind returns the component kind.
 func (HTTPEndpoint) Kind() string {
-	return kind
+	return Kind
 }
 
-// Name returns the component name.
+// GetName returns the component name.
 func (h HTTPEndpoint) GetName() string {
 	return h.Name
 }
 
-// Namespace returns the component namespace.
+// GetNamespace returns the component namespace.
 func (h HTTPEndpoint) GetNamespace() string {
 	return h.Namespace
 }
@@ -103,8 +107,8 @@ func (h HTTPEndpoint) HasTLSPrivateKey() bool {
 func (h HTTPEndpoint) EmptyMetaDeepCopy() metav1.Object {
 	n := h.DeepCopy()
 	n.TypeMeta = metav1.TypeMeta{
-		Kind:       "HTTPEndpoint",
-		APIVersion: "dapr.io/v1alpha1",
+		Kind:       Kind,
+		APIVersion: httpendpoint.GroupName + "/" + Version,
 	}
 	n.ObjectMeta = metav1.ObjectMeta{Name: h.Name}
 	return n
