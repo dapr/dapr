@@ -120,7 +120,7 @@ func newTestActorsRuntimeWithInternalActors(internalActors map[string]InternalAc
 	})
 
 	for actorType, actor := range internalActors {
-		if err := a.RegisterInternalActor(context.TODO(), actorType, actor); err != nil {
+		if err := a.RegisterInternalActor(context.TODO(), actorType, actor, 0); err != nil {
 			return nil, err
 		}
 	}

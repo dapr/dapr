@@ -80,7 +80,7 @@ type ActorRuntime interface {
 	Init(context.Context) error
 	IsActorHosted(ctx context.Context, req *ActorHostedRequest) bool
 	GetActiveActorsCount(ctx context.Context) []*runtimev1pb.ActiveActorsCount
-	RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor) error
+	RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor, actorIdleTimeout time.Duration) error
 }
 
 // Actors allow calling into virtual actors as well as actor state management.
@@ -974,7 +974,9 @@ func (a *actorsRuntime) DeleteTimer(ctx context.Context, req *DeleteTimerRequest
 	return a.timers.DeleteTimer(ctx, req.Key())
 }
 
-func (a *actorsRuntime) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor) error {
+func (a *actorsRuntime) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor,
+	actorIdleTimeout time.Duration,
+) error {
 	if !a.haveCompatibleStorage() {
 		return fmt.Errorf("unable to register internal actor '%s': %w", actorType, ErrIncompatibleStateStore)
 	}
@@ -989,7 +991,7 @@ func (a *actorsRuntime) RegisterInternalActor(ctx context.Context, actorType str
 
 		log.Debugf("Registering internal actor type: %s", actorType)
 		actor.SetActorRuntime(a)
-		a.actorsConfig.Config.HostedActorTypes.AddActorType(actorType)
+		a.actorsConfig.Config.HostedActorTypes.AddActorType(actorType, actorIdleTimeout)
 		if a.placement != nil {
 			if err := a.placement.AddHostedActorType(actorType); err != nil {
 				return fmt.Errorf("error updating hosted actor types: %s", err)
