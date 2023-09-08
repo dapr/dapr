@@ -62,17 +62,20 @@ func (c *Config) GetRemindersPartitionCountForType(actorType string) int {
 	return c.RemindersStoragePartitions
 }
 
+// hostedActors is a thread-safe map of actor types.
+// It is optional to specify an idle timeout for an actor type.
+// If an idle timeout is not specified, default idle timeout is ought to be used.
 type hostedActors struct {
-	actors map[string]struct{}
+	actors map[string]time.Duration
 	lock   sync.RWMutex
 }
 
 // NewHostedActors creates a new hostedActors from a slice of actor types.
 func NewHostedActors(actorTypes []string) *hostedActors {
 	// Add + 1 capacity because there's likely the built-in actor engine
-	ha := make(map[string]struct{}, len(actorTypes)+1)
+	ha := make(map[string]time.Duration, len(actorTypes)+1)
 	for _, at := range actorTypes {
-		ha[at] = struct{}{}
+		ha[at] = 0
 	}
 	return &hostedActors{
 		actors: ha,
@@ -80,9 +83,9 @@ func NewHostedActors(actorTypes []string) *hostedActors {
 }
 
 // AddActorType adds an actor type.
-func (ha *hostedActors) AddActorType(actorType string) {
+func (ha *hostedActors) AddActorType(actorType string, idleTimeout time.Duration) {
 	ha.lock.Lock()
-	ha.actors[actorType] = struct{}{}
+	ha.actors[actorType] = idleTimeout
 	ha.lock.Unlock()
 }
 
@@ -99,4 +102,11 @@ func (ha *hostedActors) ListActorTypes() []string {
 	ha.lock.RLock()
 	defer ha.lock.RUnlock()
 	return maps.Keys(ha.actors)
+}
+
+// GetActorIdleTimeout fetches idle timeout stored against an actor type.
+func (ha *hostedActors) GetActorIdleTimeout(actorType string) time.Duration {
+	ha.lock.RLock()
+	defer ha.lock.RUnlock()
+	return ha.actors[actorType]
 }
