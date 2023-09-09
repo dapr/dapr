@@ -261,7 +261,9 @@ func (s *security) GRPCServerOptionMTLS() grpc.ServerOption {
 	return grpc.Creds(
 		// TODO: It would be better if we could give a subset of trust domains in
 		// which this server authorizes.
-		grpccredentials.MTLSServerCredentials(s.source, s.source, tlsconfig.AuthorizeAny()),
+		credentials.NewTLS(
+			legacy.NewServer(s.source, s.source, tlsconfig.AuthorizeAny()),
+		),
 	)
 }
 
@@ -352,17 +354,6 @@ func (s *security) WatchTrustAnchors(ctx context.Context, trustAnchors chan<- []
 // chains against the trust anchors.
 func (s *security) TLSServerConfigNoClientAuth() *tls.Config {
 	return tlsconfig.TLSServerConfig(s.source)
-}
-
-// GRPCDialOption returns a gRPC dial option which instruments client
-// authentication using the current signed client certificate.
-func (s *security) GRPCDialOption(appID spiffeid.ID) grpc.DialOption {
-	if !s.mtls {
-		return grpc.WithTransportCredentials(insecure.NewCredentials())
-	}
-	return grpc.WithTransportCredentials(
-		grpccredentials.MTLSClientCredentials(s.source, s.source, tlsconfig.AuthorizeID(appID)),
-	)
 }
 
 // NetListenerID returns a mTLS net listener which instruments using the

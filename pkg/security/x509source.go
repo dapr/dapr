@@ -33,15 +33,16 @@ import (
 	middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	"github.com/spiffe/go-spiffe/v2/bundle/x509bundle"
-	"github.com/spiffe/go-spiffe/v2/spiffegrpc/grpccredentials"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig"
 	"github.com/spiffe/go-spiffe/v2/svid/x509svid"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"k8s.io/utils/clock"
 
 	"github.com/dapr/dapr/pkg/diagnostics"
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
+	"github.com/dapr/dapr/pkg/security/legacy"
 	secpem "github.com/dapr/dapr/pkg/security/pem"
 	sentryToken "github.com/dapr/dapr/pkg/security/token"
 )
@@ -283,9 +284,9 @@ func (x *x509source) requestFromSentry(ctx context.Context, csrDER []byte) ([]*x
 
 	conn, err := grpc.DialContext(ctx,
 		x.sentryAddress,
-		grpc.WithTransportCredentials(
-			grpccredentials.TLSClientCredentials(x, tlsconfig.AuthorizeID(x.sentryID)),
-		),
+		grpc.WithTransportCredentials(credentials.NewTLS(
+			legacy.NewDialClient(x, x, tlsconfig.AuthorizeID(x.sentryID)),
+		)),
 		grpc.WithUnaryInterceptor(unaryClientInterceptor),
 		grpc.WithReturnConnectionError(),
 	)
