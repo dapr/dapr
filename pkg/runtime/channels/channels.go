@@ -122,6 +122,9 @@ func (c *Channels) Refresh() error {
 		return fmt.Errorf("failed to create HTTP endpoints channels: %w", err)
 	}
 
+	c.httpEndpChannel = httpEndpChannel
+	c.endpChannels = endpChannels
+
 	if c.appConnectionConfig.Port == 0 {
 		log.Warn("App channel is not initialized. Did you configure an app-port?")
 		return nil
@@ -144,9 +147,6 @@ func (c *Channels) Refresh() error {
 	}
 
 	c.appChannel = appChannel
-	c.httpEndpChannel = httpEndpChannel
-	c.endpChannels = endpChannels
-
 	log.Debug("Channels refreshed")
 
 	return nil
