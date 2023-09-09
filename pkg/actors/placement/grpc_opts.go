@@ -53,7 +53,7 @@ func getGrpcOptsGetter(servers []string, sec security.Handler) func() ([]grpc.Di
 			return nil, errEstablishingTLSConn
 		}
 
-		opts = append(opts, sec.GRPCDialOptionMTLS(placementID))
+		opts = append(opts, sec.GRPCDialOptionMTLS(placementID), grpc.WithBlock())
 
 		if diag.DefaultGRPCMonitoring.IsEnabled() {
 			opts = append(
