@@ -261,9 +261,7 @@ func (s *security) GRPCServerOptionMTLS() grpc.ServerOption {
 	return grpc.Creds(
 		// TODO: It would be better if we could give a subset of trust domains in
 		// which this server authorizes.
-		credentials.NewTLS(
-			legacy.NewServer(s.source, s.source, tlsconfig.AuthorizeAny()),
-		),
+		grpccredentials.MTLSServerCredentials(s.source, s.source, tlsconfig.AuthorizeAny()),
 	)
 }
 
