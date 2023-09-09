@@ -19,6 +19,7 @@ import (
 	"errors"
 
 	"github.com/spiffe/go-spiffe/v2/bundle/x509bundle"
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig"
 	"github.com/spiffe/go-spiffe/v2/svid/x509svid"
 )
@@ -113,7 +114,13 @@ func dnsVerifyFn(svid x509svid.Source, bundle x509bundle.Source) func(rawCerts [
 			return err
 		}
 
-		rootBundle, err := bundle.GetX509BundleForTrustDomain(id.ID.TrustDomain())
+		// Default to empty trust domain if no SPIFFE ID is present.
+		td := spiffeid.TrustDomain{}
+		if id != nil {
+			td = id.ID.TrustDomain()
+		}
+
+		rootBundle, err := bundle.GetX509BundleForTrustDomain(td)
 		if err != nil {
 			return err
 		}
