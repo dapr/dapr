@@ -285,7 +285,7 @@ func (x *x509source) requestFromSentry(ctx context.Context, csrDER []byte) ([]*x
 	conn, err := grpc.DialContext(ctx,
 		x.sentryAddress,
 		grpc.WithTransportCredentials(credentials.NewTLS(
-			legacy.NewDialClient(x, x, tlsconfig.AuthorizeID(x.sentryID)),
+			legacy.NewDialClientNoClientAuth(x, x, tlsconfig.AuthorizeID(x.sentryID)),
 		)),
 		grpc.WithUnaryInterceptor(unaryClientInterceptor),
 		grpc.WithReturnConnectionError(),

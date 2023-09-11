@@ -59,12 +59,22 @@ func NewServer(svid x509svid.Source, bundle x509bundle.Source, authorizer tlscon
 // match on `cluster.local` DNS if and when the SPIFFE mTLS handshake fails.
 // TODO: @joshvanl: This package should be removed in v1.13.
 func NewDialClient(svid x509svid.Source, bundle x509bundle.Source, authorizer tlsconfig.Authorizer) *tls.Config {
+	tlsConfig := NewDialClientNoClientAuth(svid, bundle, authorizer)
+	tlsConfig.GetClientCertificate = tlsconfig.GetClientCertificate(svid)
+	return tlsConfig
+}
+
+// NewDialClientNoClientAuth returns a `tls.Config` intended for network clients
+// without client authentication. Because pre v1.12 Dapr servers will be using
+// the issuing CA key pair (!!) for serving and client auth, we need to fallback
+// the `VerifyPeerCertificate` method to match on `cluster.local` DNS if and
+// when the SPIFFE mTLS handshake fails.
+func NewDialClientNoClientAuth(svid x509svid.Source, bundle x509bundle.Source, authorizer tlsconfig.Authorizer) *tls.Config {
 	spiffeVerify := tlsconfig.VerifyPeerCertificate(bundle, authorizer)
 	dnsVerify := dnsVerifyFn(svid, bundle)
 
 	return &tls.Config{
-		GetClientCertificate: tlsconfig.GetClientCertificate(svid),
-		MinVersion:           tls.VersionTLS12,
+		MinVersion: tls.VersionTLS12,
 		// Yep! We need to set this option because we are performing our own TLS
 		// handshake verification, namely the SPIFFE ID validation, and then
 		// falling back to the DNS verification `cluster.local`. See:
