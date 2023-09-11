@@ -106,6 +106,15 @@ var endpoints = map[string][]string{
 		daprRuntimePrefix + "v1.Dapr/PauseWorkflowAlpha1",
 		daprRuntimePrefix + "v1.Dapr/ResumeWorkflowAlpha1",
 	},
+	"workflows.v1beta1": {
+		daprRuntimePrefix + "v1.Dapr/StartWorkflowBeta1",
+		daprRuntimePrefix + "v1.Dapr/GetWorkflowBeta1",
+		daprRuntimePrefix + "v1.Dapr/TerminateWorkflowBeta1",
+		daprRuntimePrefix + "v1.Dapr/RaiseEventWorkflowBeta1",
+		daprRuntimePrefix + "v1.Dapr/PurgeWorkflowBeta1",
+		daprRuntimePrefix + "v1.Dapr/PauseWorkflowBeta1",
+		daprRuntimePrefix + "v1.Dapr/ResumeWorkflowBeta1",
+	},
 	"shutdown.v1": {
 		daprRuntimePrefix + "v1.Dapr/Shutdown",
 	},
