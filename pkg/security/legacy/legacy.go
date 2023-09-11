@@ -19,11 +19,12 @@ import (
 	"errors"
 	"os"
 
-	"github.com/dapr/dapr/pkg/security/consts"
 	"github.com/spiffe/go-spiffe/v2/bundle/x509bundle"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig"
 	"github.com/spiffe/go-spiffe/v2/svid/x509svid"
+
+	"github.com/dapr/dapr/pkg/security/consts"
 )
 
 // NewServer returns a `tls.Config` intended for network servers. Because
