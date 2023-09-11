@@ -301,9 +301,9 @@ func (a *actorsRuntime) startAppHealthCheck(ctx context.Context, opts ...health.
 	for {
 		select {
 		case <-ctx.Done():
-			break
+			return
 		case <-a.closeCh:
-			break
+			return
 		case appHealthy := <-ch:
 			a.appHealthy.Store(appHealthy)
 		}
@@ -660,7 +660,8 @@ func (a *actorsRuntime) GetState(ctx context.Context, req *GetStateRequest) (*St
 	}
 
 	return &StateResponse{
-		Data: resp.Data,
+		Data:     resp.Data,
+		Metadata: resp.Metadata,
 	}, nil
 }
 

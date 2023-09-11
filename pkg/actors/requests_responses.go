@@ -115,7 +115,8 @@ type SaveStateRequest struct {
 
 // StateResponse is the response returned from getting an actor state.
 type StateResponse struct {
-	Data []byte `json:"data"`
+	Data     []byte            `json:"data"`
+	Metadata map[string]string `json:"metadata"`
 }
 
 // BulkStateResponse is the response returned from getting an actor state in bulk.

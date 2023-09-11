@@ -130,11 +130,14 @@ func actorStateHandlerHTTP(w http.ResponseWriter, r *http.Request) {
 		url = fmt.Sprintf(actorSaveStateURLFormat, daprHTTPPort, actorType, id)
 	}
 
-	resp, status, err := httpCall(r.Method, url, r.Body)
+	resp, status, header, err := httpCall(r.Method, url, r.Body)
 	if err != nil {
 		log.Printf("actor state call failed: %s", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
+	}
+	for k, v := range header {
+		w.Header().Set(k, v[0])
 	}
 	w.WriteHeader(status)
 	w.Write(resp)
@@ -193,26 +196,26 @@ func configHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func httpCall(method string, url string, body io.ReadCloser) ([]byte, int, error) {
+func httpCall(method string, url string, body io.ReadCloser) ([]byte, int, http.Header, error) {
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
-		return nil, -1, err
+		return nil, -1, nil, err
 	}
 
 	req.Header.Set("Content-Type", "application/json; utf-8")
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return nil, -1, err
+		return nil, -1, nil, err
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, -1, err
+		return nil, -1, nil, err
 	}
 
-	return respBody, resp.StatusCode, nil
+	return respBody, resp.StatusCode, resp.Header, nil
 }
 
 // appRouter initializes restful api router

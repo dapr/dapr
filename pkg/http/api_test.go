@@ -1083,6 +1083,9 @@ func TestV1ActorEndpoints(t *testing.T) {
 			Key:       "key1",
 		}).Return(&actors.StateResponse{
 			Data: fakeData,
+			Metadata: map[string]string{
+				"ttlExpireTime": "2020-01-01T00:00:00Z",
+			},
 		}, nil)
 
 		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
@@ -1098,6 +1101,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		// assert
 		assert.Equal(t, 200, resp.StatusCode)
 		assert.Equal(t, fakeData, resp.RawBody)
+		assert.Equal(t, "2020-01-01T00:00:00Z", resp.RawHeader.Get("metadata.ttlexpiretime"))
 		mockActors.AssertNumberOfCalls(t, "GetState", 1)
 	})
 
@@ -1123,6 +1127,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		// assert
 		assert.Equal(t, 204, resp.StatusCode)
 		assert.Equal(t, []byte{}, resp.RawBody)
+		assert.Empty(t, resp.RawHeader["Metadata.ttlexpiretime"])
 		mockActors.AssertNumberOfCalls(t, "GetState", 1)
 	})
 
@@ -1148,6 +1153,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		// assert
 		assert.Equal(t, 500, resp.StatusCode)
 		assert.Equal(t, "ERR_ACTOR_STATE_GET", resp.ErrorBody["errorCode"])
+		assert.Empty(t, resp.RawHeader["Metadata.ttlexpiretime"])
 		mockActors.AssertNumberOfCalls(t, "GetState", 1)
 	})
 
@@ -1175,6 +1181,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		// assert
 		assert.Equal(t, 400, resp.StatusCode)
 		mockActors.AssertNumberOfCalls(t, "IsActorHosted", 1)
+		assert.Empty(t, resp.RawHeader["Metadata.ttlexpiretime"])
 		assert.Equal(t, "ERR_ACTOR_INSTANCE_MISSING", resp.ErrorBody["errorCode"])
 	})
 
@@ -1260,6 +1267,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		// assert
 		assert.Equal(t, 400, resp.StatusCode)
 		mockActors.AssertNumberOfCalls(t, "IsActorHosted", 1)
+		assert.Empty(t, resp.RawHeader["Metadata.ttlexpiretime"])
 		assert.Equal(t, "ERR_ACTOR_INSTANCE_MISSING", resp.ErrorBody["errorCode"])
 	})
 
@@ -1306,6 +1314,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		assert.Equal(t, 500, resp.StatusCode)
 		mockActors.AssertNumberOfCalls(t, "TransactionalStateOperation", 1)
 		mockActors.AssertNumberOfCalls(t, "IsActorHosted", 1)
+		assert.Empty(t, resp.RawHeader["Metadata.ttlexpiretime"])
 		assert.Equal(t, "ERR_ACTOR_STATE_TRANSACTION_SAVE", resp.ErrorBody["errorCode"])
 	})
 
