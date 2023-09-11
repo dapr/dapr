@@ -951,7 +951,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			defer grpcServer.Stop()
 		}
 
-		grpc := manager.NewManager(modes.StandaloneMode, &manager.AppChannelConfig{Port: port})
+		grpc := manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: port})
 
 		// create a new AppChannel and gRPC client for every test
 		ps.channels = channels.New(channels.Options{
@@ -1112,7 +1112,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		}
 
 		// create a new AppChannel and gRPC client for every test
-		grpc := manager.NewManager(modes.StandaloneMode, &manager.AppChannelConfig{Port: port})
+		grpc := manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: port})
 		ps.channels = channels.New(channels.Options{
 			ComponentStore:      compstore.New(),
 			Registry:            reg,
@@ -1219,7 +1219,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			defer grpcServer.Stop()
 		}
 
-		grpc := manager.NewManager(modes.StandaloneMode, &manager.AppChannelConfig{Port: port})
+		grpc := manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: port})
 		ps.channels = channels.New(channels.Options{
 			ComponentStore:      compstore.New(),
 			Registry:            reg,
@@ -1329,7 +1329,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			defer grpcServer.Stop()
 		}
 
-		grpc := manager.NewManager(modes.StandaloneMode, &manager.AppChannelConfig{Port: port})
+		grpc := manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: port})
 		ps.channels = channels.New(channels.Options{
 			ComponentStore:      compstore.New(),
 			Registry:            reg,
@@ -1434,7 +1434,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			defer grpcServer.Stop()
 		}
 
-		grpc := manager.NewManager(modes.StandaloneMode, &manager.AppChannelConfig{Port: port})
+		grpc := manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: port})
 		ps.channels = channels.New(channels.Options{
 			ComponentStore:      compstore.New(),
 			Registry:            reg,
@@ -1525,7 +1525,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			defer grpcServer.Stop()
 		}
 
-		grpc := manager.NewManager(modes.StandaloneMode, &manager.AppChannelConfig{Port: port})
+		grpc := manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: port})
 		ps.channels = channels.New(channels.Options{
 			ComponentStore:      compstore.New(),
 			Registry:            reg,

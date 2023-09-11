@@ -14,6 +14,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -34,7 +35,9 @@ import (
 	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	workflowsLoader "github.com/dapr/dapr/pkg/components/workflows"
+	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/runtime/registry"
+	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/pkg/signals"
 
 	"github.com/dapr/dapr/pkg/runtime"
@@ -103,49 +106,72 @@ func main() {
 		WithWorkflows(workflowsLoader.DefaultRegistry)
 
 	ctx := signals.Context()
-
-	rt, err := runtime.FromConfig(ctx, &runtime.Config{
-		AppID:                        opts.AppID,
-		PlacementServiceHostAddr:     opts.PlacementServiceHostAddr,
-		AllowedOrigins:               opts.AllowedOrigins,
-		ResourcesPath:                opts.ResourcesPath,
-		ControlPlaneAddress:          opts.ControlPlaneAddress,
-		AppProtocol:                  opts.AppProtocol,
-		Mode:                         opts.Mode,
-		DaprHTTPPort:                 opts.DaprHTTPPort,
-		DaprInternalGRPCPort:         opts.DaprInternalGRPCPort,
-		DaprAPIGRPCPort:              opts.DaprAPIGRPCPort,
-		DaprAPIListenAddresses:       opts.DaprAPIListenAddresses,
-		DaprPublicPort:               opts.DaprPublicPort,
-		ApplicationPort:              opts.AppPort,
-		ProfilePort:                  opts.ProfilePort,
-		EnableProfiling:              opts.EnableProfiling,
-		AppMaxConcurrency:            opts.AppMaxConcurrency,
-		EnableMTLS:                   opts.EnableMTLS,
-		SentryAddress:                opts.SentryAddress,
-		DaprHTTPMaxRequestSize:       opts.DaprHTTPMaxRequestSize,
-		UnixDomainSocket:             opts.UnixDomainSocket,
-		DaprHTTPReadBufferSize:       opts.DaprHTTPReadBufferSize,
-		DaprGracefulShutdownSeconds:  opts.DaprGracefulShutdownSeconds,
-		DisableBuiltinK8sSecretStore: opts.DisableBuiltinK8sSecretStore,
-		EnableAppHealthCheck:         opts.EnableAppHealthCheck,
-		AppHealthCheckPath:           opts.AppHealthCheckPath,
-		AppHealthProbeInterval:       opts.AppHealthProbeInterval,
-		AppHealthProbeTimeout:        opts.AppHealthProbeTimeout,
-		AppHealthThreshold:           opts.AppHealthThreshold,
-		AppChannelAddress:            opts.AppChannelAddress,
-		EnableAPILogging:             opts.EnableAPILogging,
-		Config:                       opts.Config,
-		Metrics:                      opts.Metrics,
-		AppSSL:                       opts.AppSSL,
-		ComponentsPath:               opts.ComponentsPath,
-		Registry:                     reg,
+	secProvider, err := security.New(ctx, security.Options{
+		SentryAddress:           opts.SentryAddress,
+		ControlPlaneTrustDomain: opts.ControlPlaneTrustDomain,
+		ControlPlaneNamespace:   opts.ControlPlaneNamespace,
+		TrustAnchors:            opts.TrustAnchors,
+		AppID:                   opts.AppID,
+		MTLSEnabled:             opts.EnableMTLS,
 	})
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	if err := rt.Run(ctx); err != nil {
-		log.Fatalf("fatal error from runtime: %s", err)
+	err = concurrency.NewRunnerManager(
+		secProvider.Run,
+		func(ctx context.Context) error {
+			sec, serr := secProvider.Handler(ctx)
+			if serr != nil {
+				return serr
+			}
+
+			rt, rerr := runtime.FromConfig(ctx, &runtime.Config{
+				AppID:                        opts.AppID,
+				PlacementServiceHostAddr:     opts.PlacementServiceHostAddr,
+				AllowedOrigins:               opts.AllowedOrigins,
+				ResourcesPath:                opts.ResourcesPath,
+				ControlPlaneAddress:          opts.ControlPlaneAddress,
+				AppProtocol:                  opts.AppProtocol,
+				Mode:                         opts.Mode,
+				DaprHTTPPort:                 opts.DaprHTTPPort,
+				DaprInternalGRPCPort:         opts.DaprInternalGRPCPort,
+				DaprAPIGRPCPort:              opts.DaprAPIGRPCPort,
+				DaprAPIListenAddresses:       opts.DaprAPIListenAddresses,
+				DaprPublicPort:               opts.DaprPublicPort,
+				ApplicationPort:              opts.AppPort,
+				ProfilePort:                  opts.ProfilePort,
+				EnableProfiling:              opts.EnableProfiling,
+				AppMaxConcurrency:            opts.AppMaxConcurrency,
+				EnableMTLS:                   opts.EnableMTLS,
+				SentryAddress:                opts.SentryAddress,
+				DaprHTTPMaxRequestSize:       opts.DaprHTTPMaxRequestSize,
+				UnixDomainSocket:             opts.UnixDomainSocket,
+				DaprHTTPReadBufferSize:       opts.DaprHTTPReadBufferSize,
+				DaprGracefulShutdownSeconds:  opts.DaprGracefulShutdownSeconds,
+				DisableBuiltinK8sSecretStore: opts.DisableBuiltinK8sSecretStore,
+				EnableAppHealthCheck:         opts.EnableAppHealthCheck,
+				AppHealthCheckPath:           opts.AppHealthCheckPath,
+				AppHealthProbeInterval:       opts.AppHealthProbeInterval,
+				AppHealthProbeTimeout:        opts.AppHealthProbeTimeout,
+				AppHealthThreshold:           opts.AppHealthThreshold,
+				AppChannelAddress:            opts.AppChannelAddress,
+				EnableAPILogging:             opts.EnableAPILogging,
+				Config:                       opts.Config,
+				Metrics:                      opts.Metrics,
+				AppSSL:                       opts.AppSSL,
+				ComponentsPath:               opts.ComponentsPath,
+				Registry:                     reg,
+				Security:                     sec,
+			})
+			if rerr != nil {
+				return rerr
+			}
+
+			return rt.Run(ctx)
+		},
+	).Run(ctx)
+	if err != nil {
+		log.Fatalf("Fatal error from runtime: %s", err)
 	}
 }

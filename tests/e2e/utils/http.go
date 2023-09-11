@@ -41,11 +41,6 @@ func InitHTTPClient(allowHTTP2 bool) {
 	httpClient = NewHTTPClient(allowHTTP2)
 }
 
-// GetHTTPClient returns the shared httpClient object.
-func GetHTTPClient() *http.Client {
-	return httpClient
-}
-
 // NewHTTPClient initializes a new *http.Client.
 // This should not be used except in rare circumstances. Developers should use the shared httpClient instead to re-use sockets as much as possible.
 func NewHTTPClient(allowHTTP2 bool) *http.Client {
@@ -280,4 +275,9 @@ func SanitizeHTTPURL(url string) string {
 	}
 
 	return url
+}
+
+// GetHTTPClient returns the shared httpClient object.
+func GetHTTPClient() *http.Client {
+	return httpClient
 }

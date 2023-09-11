@@ -151,10 +151,10 @@ func (s *server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 	}
 
 	// TODO: @joshvanl: before v1.12, daprd was matching on
-	// `<app-id>.<namespace>.svc.cluster.local`/`cluster.local` DNS SAN name so
-	// without this, daprd->daprd connections would fail. This is no longer the
-	// case since we now match with SPIFFE URI SAN, but we need to keep this here
-	// for backwards compatibility. Remove after v1.14.
+	// `<app-id>.<namespace>.svc.cluster.local` DNS SAN name so without this,
+	// daprd->daprd connections would fail. This is no longer the case since we
+	// now match with SPIFFE URI SAN, but we need to keep this here for backwards
+	// compatibility. Remove after v1.14.
 	var dns []string
 	switch {
 	case req.Namespace == security.CurrentNamespace() && req.Id == "dapr-injector":
