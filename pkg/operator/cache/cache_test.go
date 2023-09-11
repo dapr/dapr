@@ -3,24 +3,19 @@ package cache
 import (
 	"testing"
 
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	operatormeta "github.com/dapr/dapr/pkg/operator/meta"
-
+	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
-
-	"github.com/dapr/dapr/pkg/injector/sidecar"
-
-	"github.com/dapr/dapr/pkg/operator/testobjects"
-
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes/scheme"
 	cache2 "k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 
-	"github.com/stretchr/testify/require"
-	corev1 "k8s.io/api/core/v1"
+	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
+	operatormeta "github.com/dapr/dapr/pkg/operator/meta"
+	"github.com/dapr/dapr/pkg/operator/testobjects"
 )
 
 // convertToByGVK exposed/modified from sigs.k8s.io/controller-runtime/pkg/cache/cache.go:427
@@ -100,7 +95,7 @@ func Test_podTransformer(t *testing.T) {
 
 		pods := []corev1.Pod{
 			testobjects.GetPod("test", "true", testobjects.NameNamespace("pod1", "ns1"),
-				testobjects.AddLabels(map[string]string{sidecar.SidecarInjectedLabel: "true"})),
+				testobjects.AddLabels(map[string]string{injectorConsts.SidecarInjectedLabel: "true"})),
 			testobjects.GetPod("test", "true", testobjects.NameNamespace("pod2", "ns2")),
 			testobjects.GetPod("test", "no", testobjects.NameNamespace("pod3", "ns3")),
 		}
@@ -135,7 +130,7 @@ func Test_deployTransformer(t *testing.T) {
 		}
 		require.Len(t, store.List(), len(deployments))
 
-		depObj, ok, err := store.Get(&appsv1.Deployment{ObjectMeta: v1.ObjectMeta{Name: "pod1", Namespace: "ns1"}})
+		depObj, ok, err := store.Get(&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "ns1"}})
 		require.NoError(t, err)
 		require.True(t, ok)
 		dep := depObj.(*appsv1.Deployment)
@@ -200,7 +195,7 @@ func Test_stsTransformer(t *testing.T) {
 		}
 		require.Len(t, store.List(), len(statefulsets))
 
-		depObj, ok, err := store.Get(&appsv1.StatefulSet{ObjectMeta: v1.ObjectMeta{Name: "pod1", Namespace: "ns1"}})
+		depObj, ok, err := store.Get(&appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "ns1"}})
 		require.NoError(t, err)
 		require.True(t, ok)
 		sts := depObj.(*appsv1.StatefulSet)

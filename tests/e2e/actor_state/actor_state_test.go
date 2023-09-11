@@ -57,7 +57,8 @@ func TestMain(m *testing.M) {
 			Replicas:       1,
 			IngressEnabled: true,
 			MetricsEnabled: true,
-			Config:         "actorstatettl",
+			// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
+			Config: "actorstatettl",
 		},
 	}
 

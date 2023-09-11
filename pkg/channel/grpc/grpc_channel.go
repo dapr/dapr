@@ -32,8 +32,8 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
-	auth "github.com/dapr/dapr/pkg/runtime/security"
-	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
+	"github.com/dapr/dapr/pkg/security"
+	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 )
 
 // Channel is a concrete AppChannel implementation for interacting with gRPC based user code.
@@ -56,7 +56,7 @@ func CreateLocalChannel(port, maxConcurrency int, conn *grpc.ClientConn, spec co
 		conn:                 conn,
 		baseAddress:          net.JoinHostPort(baseAddress, strconv.Itoa(port)),
 		tracingSpec:          spec,
-		appMetadataToken:     auth.GetAppToken(),
+		appMetadataToken:     security.GetAppToken(),
 		maxRequestBodySizeMB: maxRequestBodySize,
 	}
 	if maxConcurrency > 0 {
@@ -66,30 +66,24 @@ func CreateLocalChannel(port, maxConcurrency int, conn *grpc.ClientConn, spec co
 }
 
 // GetAppConfig gets application config from user application.
-func (g *Channel) GetAppConfig() (*config.ApplicationConfig, error) {
+func (g *Channel) GetAppConfig(appID string) (*config.ApplicationConfig, error) {
 	return nil, nil
 }
 
 // InvokeMethod invokes user code via gRPC.
-func (g *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+func (g *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest, _ string) (*invokev1.InvokeMethodResponse, error) {
 	if g.appHealth != nil && g.appHealth.GetStatus() != apphealth.AppStatusHealthy {
 		return nil, status.Error(codes.Internal, messages.ErrAppUnhealthy)
 	}
 
-	var rsp *invokev1.InvokeMethodResponse
-	var err error
-
 	switch req.APIVersion() {
 	case internalv1pb.APIVersion_V1: //nolint:nosnakecase
-		rsp, err = g.invokeMethodV1(ctx, req)
+		return g.invokeMethodV1(ctx, req)
 
 	default:
 		// Reject unsupported version
-		rsp = nil
-		err = status.Error(codes.Unimplemented, fmt.Sprintf("Unsupported spec version: %d", req.APIVersion()))
+		return nil, status.Error(codes.Unimplemented, fmt.Sprintf("Unsupported spec version: %d", req.APIVersion()))
 	}
-
-	return rsp, err
 }
 
 // invokeMethodV1 calls user applications using daprclient v1.
@@ -107,7 +101,7 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	md := invokev1.InternalMetadataToGrpcMetadata(ctx, pd.Metadata, true)
 
 	if g.appMetadataToken != "" {
-		md.Set(authConsts.APITokenHeader, g.appMetadataToken)
+		md.Set(securityConsts.APITokenHeader, g.appMetadataToken)
 	}
 
 	// Prepare gRPC Metadata
@@ -142,6 +136,13 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 		WithTrailers(trailer).
 		WithMessage(resp)
 
+	// If the data has a type_url, set protobuf as content type
+	// This is necessary to support the HTTP->gRPC service invocation path correctly
+	typeURL := resp.GetData().GetTypeUrl()
+	if typeURL != "" {
+		rsp.WithContentType(invokev1.ProtobufContentType)
+	}
+
 	return rsp, nil
 }
 
@@ -160,9 +161,7 @@ func (g *Channel) HealthProbe(ctx context.Context) (bool, error) {
 	defer emptyPbPool.Put(out)
 	err := g.conn.Invoke(ctx, "/dapr.proto.runtime.v1.AppCallbackHealthCheck/HealthCheck", in, out)
 
-	// Errors here are network-level errors, so we are not returning them as errors
-	// Instead, we just return a failed probe
-	return err == nil, nil
+	return err == nil, err
 }
 
 // SetAppHealth sets the apphealth.AppHealth object.

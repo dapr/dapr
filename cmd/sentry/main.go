@@ -15,13 +15,11 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"path/filepath"
 	"time"
 
-	"k8s.io/client-go/util/homedir"
-
+	"github.com/dapr/dapr/cmd/sentry/options"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/credentials"
@@ -38,79 +36,52 @@ import (
 
 var log = logger.NewLogger("dapr.sentry")
 
-//nolint:gosec
-const (
-	defaultCredentialsPath = "/var/run/dapr/credentials"
-	// defaultDaprSystemConfigName is the default resource object name for Dapr System Config.
-	defaultDaprSystemConfigName = "daprsystem"
-
-	healthzPort = 8080
-)
-
 func main() {
-	configName := flag.String("config", defaultDaprSystemConfigName, "Path to config file, or name of a configuration object")
-	credsPath := flag.String("issuer-credentials", defaultCredentialsPath, "Path to the credentials directory holding the issuer data")
-	flag.StringVar(&credentials.RootCertFilename, "issuer-ca-filename", credentials.RootCertFilename, "Certificate Authority certificate filename")
-	flag.StringVar(&credentials.IssuerCertFilename, "issuer-certificate-filename", credentials.IssuerCertFilename, "Issuer certificate filename")
-	flag.StringVar(&credentials.IssuerKeyFilename, "issuer-key-filename", credentials.IssuerKeyFilename, "Issuer private key filename")
-	trustDomain := flag.String("trust-domain", "localhost", "The CA trust domain")
-	tokenAudience := flag.String("token-audience", "", "Expected audience for tokens; multiple values can be separated by a comma")
+	log.Infof("Starting sentry certificate authority -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
 
-	loggerOptions := logger.DefaultOptions()
-	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
-
-	metricsExporter := metrics.NewExporter(metrics.DefaultMetricNamespace)
-	metricsExporter.Options().AttachCmdFlags(flag.StringVar, flag.BoolVar)
-
-	var kubeconfig *string
-	if home := homedir.HomeDir(); home != "" {
-		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
-	} else {
-		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
-	}
-	flag.Parse()
-	if err := utils.SetEnvVariables(map[string]string{
-		utils.KubeConfigVar: *kubeconfig,
-	}); err != nil {
-		log.Fatalf("error set env failed:  %s", err.Error())
-	}
+	opts := options.New()
 
 	// Apply options to all loggers
-	if err := logger.ApplyOptionsToLoggers(&loggerOptions); err != nil {
+	if err := logger.ApplyOptionsToLoggers(&opts.Logger); err != nil {
 		log.Fatal(err)
 	}
 
-	log.Infof("starting sentry certificate authority -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
-	log.Infof("log level set to: %s", loggerOptions.OutputLevel)
+	log.Infof("Starting Dapr Sentry certificate authority -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
+	log.Infof("Log level set to: %s", opts.Logger.OutputLevel)
 
-	// Initialize dapr metrics exporter
-	if err := metricsExporter.Init(); err != nil {
-		log.Fatal(err)
+	metricsExporter := metrics.NewExporterWithOptions(log, metrics.DefaultMetricNamespace, opts.Metrics)
+
+	if len(opts.TokenAudience) > 0 {
+		log.Warn("--token-audience is deprecated and will be removed in Dapr v1.14")
+	}
+
+	if err := utils.SetEnvVariables(map[string]string{
+		utils.KubeConfigVar: opts.Kubeconfig,
+	}); err != nil {
+		log.Fatalf("error set env failed:  %s", err.Error())
 	}
 
 	if err := monitoring.InitMetrics(); err != nil {
 		log.Fatal(err)
 	}
 
-	issuerCertPath := filepath.Join(*credsPath, credentials.IssuerCertFilename)
-	issuerKeyPath := filepath.Join(*credsPath, credentials.IssuerKeyFilename)
-	rootCertPath := filepath.Join(*credsPath, credentials.RootCertFilename)
+	issuerCertPath := filepath.Join(opts.IssuerCredentialsPath, credentials.IssuerCertFilename)
+	issuerKeyPath := filepath.Join(opts.IssuerCredentialsPath, credentials.IssuerKeyFilename)
+	rootCertPath := filepath.Join(opts.IssuerCredentialsPath, credentials.RootCertFilename)
 
-	config, err := config.FromConfigName(*configName)
+	cfg, err := config.FromConfigName(opts.ConfigName)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	config.IssuerCertPath = issuerCertPath
-	config.IssuerKeyPath = issuerKeyPath
-	config.RootCertPath = rootCertPath
-	config.TrustDomain = *trustDomain
-	if *tokenAudience != "" {
-		config.TokenAudience = tokenAudience
-	}
+	cfg.IssuerCertPath = issuerCertPath
+	cfg.IssuerKeyPath = issuerKeyPath
+	cfg.RootCertPath = rootCertPath
+	cfg.TrustDomain = opts.TrustDomain
+	cfg.Port = opts.Port
 
 	var (
-		watchDir    = filepath.Dir(config.IssuerCertPath)
+		watchDir    = filepath.Dir(cfg.IssuerCertPath)
 		issuerEvent = make(chan struct{})
 		mngr        = concurrency.NewRunnerManager()
 	)
@@ -121,9 +92,7 @@ func main() {
 	// events (as well as wanting to terminate the program on signals).
 	caMngrFactory := func() *concurrency.RunnerManager {
 		return concurrency.NewRunnerManager(
-			func(ctx context.Context) error {
-				return sentry.NewSentryCA().Start(ctx, config)
-			},
+			sentry.New(cfg).Start,
 			func(ctx context.Context) error {
 				select {
 				case <-ctx.Done():
@@ -147,10 +116,11 @@ func main() {
 	}
 
 	// CA Server
-	mngr.Add(func(ctx context.Context) error {
+	err = mngr.Add(func(ctx context.Context) error {
 		for {
-			if err := caMngrFactory().Run(ctx); err != nil {
-				return err
+			runErr := caMngrFactory().Run(ctx)
+			if runErr != nil {
+				return runErr
 			}
 			// Catch outer context cancellation to exit.
 			select {
@@ -160,26 +130,38 @@ func main() {
 			}
 		}
 	})
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	// Watch for changes in the watchDir
-	mngr.Add(func(ctx context.Context) error {
-		log.Infof("starting watch on filesystem directory: %s", watchDir)
+	err = mngr.Add(func(ctx context.Context) error {
+		log.Infof("Starting watch on filesystem directory: %s", watchDir)
 		return fswatcher.Watch(ctx, watchDir, issuerEvent)
 	})
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	// Healthz server
-	mngr.Add(func(ctx context.Context) error {
+	err = mngr.Add(func(ctx context.Context) error {
 		healthzServer := health.NewServer(log)
 		healthzServer.Ready()
-		if err := healthzServer.Run(ctx, healthzPort); err != nil {
-			return fmt.Errorf("failed to start healthz server: %s", err)
+		runErr := healthzServer.Run(ctx, opts.HealthzPort)
+		if runErr != nil {
+			return fmt.Errorf("failed to start healthz server: %s", runErr)
 		}
 		return nil
 	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	mngr.Add(metricsExporter.Run)
 
 	// Run the runner manager.
 	if err := mngr.Run(signals.Context()); err != nil {
 		log.Fatal(err)
 	}
-	log.Info("sentry shut down gracefully")
+	log.Info("Sentry shut down gracefully")
 }

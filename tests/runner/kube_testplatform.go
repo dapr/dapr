@@ -19,11 +19,13 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"time"
 
 	configurationv1alpha1 "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -43,6 +45,7 @@ const (
 type KubeTestPlatform struct {
 	AppResources       *TestResources
 	ComponentResources *TestResources
+	Secrets            *TestResources
 	KubeClient         *kube.KubeClient
 }
 
@@ -51,6 +54,7 @@ func NewKubeTestPlatform() *KubeTestPlatform {
 	return &KubeTestPlatform{
 		AppResources:       new(TestResources),
 		ComponentResources: new(TestResources),
+		Secrets:            new(TestResources),
 	}
 }
 
@@ -68,6 +72,10 @@ func (c *KubeTestPlatform) TearDown() error {
 
 	if err := c.ComponentResources.tearDown(); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to tear down ComponentResources. got: %q", err)
+	}
+
+	if err := c.Secrets.tearDown(); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to tear down Secrets. got: %q", err)
 	}
 
 	// TODO: clean up kube cluster
@@ -93,6 +101,24 @@ func (c *KubeTestPlatform) AddComponents(comps []kube.ComponentDescription) erro
 	return nil
 }
 
+// AddSecrets adds secrets to disposable Resource queues.
+func (c *KubeTestPlatform) AddSecrets(secrets []kube.SecretDescription) error {
+	if c.KubeClient == nil {
+		return fmt.Errorf("kubernetes cluster needs to be setup")
+	}
+
+	for _, secret := range secrets {
+		c.Secrets.Add(kube.NewSecret(c.KubeClient, secret.Namespace, secret.Name, secret.Data))
+	}
+
+	// setup secret resources
+	if err := c.Secrets.setup(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // addApps adds test apps to disposable App Resource queues.
 func (c *KubeTestPlatform) AddApps(apps []kube.AppDescription) error {
 	if c.KubeClient == nil {
@@ -101,6 +127,7 @@ func (c *KubeTestPlatform) AddApps(apps []kube.AppDescription) error {
 
 	dt := c.disableTelemetry()
 
+	namespaces := make(map[string]struct{}, 0)
 	for _, app := range apps {
 		if app.RegistryName == "" {
 			app.RegistryName = getTestImageRegistry()
@@ -145,15 +172,26 @@ func (c *KubeTestPlatform) AddApps(apps []kube.AppDescription) error {
 		}
 
 		log.Printf("Adding app %v", app)
-		c.AppResources.Add(kube.NewAppManager(c.KubeClient, getNamespaceOrDefault(app.Namespace), app))
+		namespace := getNamespaceOrDefault(app.Namespace)
+		namespaces[namespace] = struct{}{}
+		c.AppResources.Add(kube.NewAppManager(c.KubeClient, namespace, app))
+	}
+
+	// Create all namespaces (if they don't already exist)
+	log.Print("Ensuring namespaces exist ...")
+	for namespace := range namespaces {
+		_, err := c.GetOrCreateNamespace(context.Background(), namespace)
+		if err != nil {
+			return fmt.Errorf("failed to create namespace %q: %w", namespace, err)
+		}
 	}
 
 	// installApps installs the apps in AppResource queue sequentially
-	log.Printf("Installing apps ...")
+	log.Print("Installing apps ...")
 	if err := c.AppResources.setup(); err != nil {
 		return err
 	}
-	log.Printf("Apps are installed.")
+	log.Print("Apps are installed.")
 
 	return nil
 }
@@ -229,6 +267,26 @@ func (c *KubeTestPlatform) appMemoryLimit() string {
 		return mem
 	}
 	return defaultAppMemoryLimit
+}
+
+// GetOrCreateNamespace gets or creates namespace unless namespace exists.
+func (c *KubeTestPlatform) GetOrCreateNamespace(parentCtx context.Context, namespace string) (*corev1.Namespace, error) {
+	log.Printf("Checking namespace %q ...", namespace)
+	namespaceClient := c.KubeClient.Namespaces()
+	ctx, cancel := context.WithTimeout(parentCtx, 30*time.Second)
+	ns, err := namespaceClient.Get(ctx, namespace, metav1.GetOptions{})
+	cancel()
+
+	if err != nil && errors.IsNotFound(err) {
+		log.Printf("Creating namespace %q ...", namespace)
+		obj := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
+		ctx, cancel = context.WithTimeout(parentCtx, 30*time.Second)
+		ns, err = namespaceClient.Create(ctx, obj, metav1.CreateOptions{})
+		cancel()
+		return ns, err
+	}
+
+	return ns, err
 }
 
 // AcquireAppExternalURL returns the external url for 'name'.

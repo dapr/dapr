@@ -18,13 +18,14 @@ package actors
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/dapr/dapr/pkg/actors/reminders"
+	"github.com/dapr/dapr/pkg/actors/internal"
 	"github.com/dapr/dapr/pkg/config"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -119,12 +120,12 @@ func newTestActorsRuntimeWithInternalActors(internalActors map[string]InternalAc
 	})
 
 	for actorType, actor := range internalActors {
-		if err := a.RegisterInternalActor(context.TODO(), actorType, actor); err != nil {
+		if err := a.RegisterInternalActor(context.TODO(), actorType, actor, 0); err != nil {
 			return nil, err
 		}
 	}
 
-	if err := a.Init(); err != nil {
+	if err := a.Init(context.Background()); err != nil {
 		return nil, err
 	}
 
@@ -159,11 +160,10 @@ func TestInternalActorCall(t *testing.T) {
 		// Verify the response metadata matches what we expect
 		assert.Equal(t, int32(200), resp.Status().Code)
 		contentType := resp.ContentType()
-		data, _ := resp.RawDataFull()
 		assert.Equal(t, invokev1.OctetStreamContentType, contentType)
 
 		// Verify the actor got all the expected inputs (which are echoed back to us)
-		info, err := decodeTestResponse(data)
+		info, err := decodeTestResponse(resp.RawData())
 		require.NoError(t, err)
 		require.NotNil(t, info)
 		assert.Equal(t, testActorID, info.ActorID)
@@ -183,13 +183,13 @@ func TestInternalActorReminder(t *testing.T) {
 	testActorRuntime, err := newTestActorsRuntimeWithInternalActors(internalActors)
 	require.NoError(t, err)
 
-	period, _ := reminders.NewReminderPeriod("2s")
+	period, _ := internal.NewReminderPeriod("2s")
 	data, _ := json.Marshal(testReminderData{
 		SomeBytes:  []byte("こんにちは！"),
 		SomeInt:    42,
 		SomeString: "Hello!",
 	})
-	testReminder := &reminders.Reminder{
+	testReminder := &internal.Reminder{
 		ActorType:      testActorType,
 		ActorID:        "myActor",
 		RegisteredTime: time.Now().Add(2 * time.Second),
@@ -198,7 +198,7 @@ func TestInternalActorReminder(t *testing.T) {
 		Name:           "reminder1",
 		Data:           data,
 	}
-	err = testActorRuntime.executeReminder(testReminder, false)
+	err = testActorRuntime.doExecuteReminderOrTimer(testReminder, false)
 	require.NoError(t, err)
 	require.Len(t, ia.InvokedReminders, 1)
 	invokedReminder := ia.InvokedReminders[0]
@@ -245,7 +245,7 @@ func TestInternalActorDeactivation(t *testing.T) {
 	}
 }
 
-func decodeTestResponse(data []byte) (*invokeMethodCallInfo, error) {
+func decodeTestResponse(data io.Reader) (*invokeMethodCallInfo, error) {
 	info := new(invokeMethodCallInfo)
 	err := DecodeInternalActorData(data, info)
 	if err != nil {

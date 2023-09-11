@@ -40,7 +40,7 @@ type WorkflowEngine struct {
 	workflowActor *workflowActor
 	activityActor *activityActor
 
-	actorRuntime   actors.Actors
+	actorRuntime   actors.ActorRuntime
 	startMutex     sync.Mutex
 	disconnectChan chan any
 	config         wfConfig
@@ -72,6 +72,14 @@ func NewWorkflowConfig(appID string) wfConfig {
 		workflowActorType: actors.InternalActorTypePrefix + utils.GetNamespaceOrDefault(defaultNamespace) + utils.DotDelimiter + appID + utils.DotDelimiter + WorkflowNameLabelKey,
 		activityActorType: actors.InternalActorTypePrefix + utils.GetNamespaceOrDefault(defaultNamespace) + utils.DotDelimiter + appID + utils.DotDelimiter + ActivityNameLabelKey,
 	}
+}
+
+// String implements fmt.Stringer and is primarily used for debugging purposes.
+func (c *wfConfig) String() string {
+	if c == nil {
+		return "(nil)"
+	}
+	return fmt.Sprintf("AppID:'%s', workflowActorType:'%s', activityActorType:'%s'", c.AppID, c.workflowActorType, c.activityActorType)
 }
 
 func IsWorkflowRequest(path string) bool {
@@ -133,7 +141,7 @@ func (wfe *WorkflowEngine) SetExecutor(fn func(be backend.Backend) backend.Execu
 	wfe.executor = fn(wfe.backend)
 }
 
-func (wfe *WorkflowEngine) SetActorRuntime(actorRuntime actors.Actors) error {
+func (wfe *WorkflowEngine) SetActorRuntime(actorRuntime actors.ActorRuntime) error {
 	wfLogger.Info("Configuring workflow engine with actors backend")
 	wfe.actorRuntime = actorRuntime
 	wfe.backend.SetActorRuntime(actorRuntime)
@@ -189,7 +197,7 @@ func (wfe *WorkflowEngine) Start(ctx context.Context) (err error) {
 	}
 
 	for actorType, actor := range wfe.InternalActors() {
-		err = wfe.actorRuntime.RegisterInternalActor(ctx, actorType, actor)
+		err = wfe.actorRuntime.RegisterInternalActor(ctx, actorType, actor, time.Minute*1)
 		if err != nil {
 			return fmt.Errorf("failed to register workflow actor %s: %w", actorType, err)
 		}
@@ -211,7 +219,7 @@ func (wfe *WorkflowEngine) Start(ctx context.Context) (err error) {
 	return nil
 }
 
-func (wfe *WorkflowEngine) Stop(ctx context.Context) error {
+func (wfe *WorkflowEngine) Close(ctx context.Context) error {
 	wfe.startMutex.Lock()
 	defer wfe.startMutex.Unlock()
 

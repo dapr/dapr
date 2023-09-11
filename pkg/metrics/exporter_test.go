@@ -14,7 +14,9 @@ limitations under the License.
 package metrics
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -22,28 +24,41 @@ import (
 )
 
 func TestMetricsExporter(t *testing.T) {
+	logger := logger.NewLogger("test.logger")
+
 	t.Run("returns default options", func(t *testing.T) {
-		e := NewExporter("test")
+		e := NewExporter(logger, "test")
 		op := e.Options()
-		assert.Equal(t, defaultMetricOptions(), op)
+		assert.Equal(t, DefaultMetricOptions(), op)
 	})
 
 	t.Run("return error if exporter is not initialized", func(t *testing.T) {
 		e := &promMetricsExporter{
-			&exporter{
+			exporter: &exporter{
 				namespace: "test",
-				options:   defaultMetricOptions(),
-				logger:    logger.NewLogger("dapr.metrics"),
+				options:   DefaultMetricOptions(),
+				logger:    logger,
 			},
-			nil,
 		}
-		assert.Error(t, e.startMetricServer())
+		assert.Error(t, e.startMetricServer(context.Background()))
 	})
 
-	t.Run("skip starting metric server", func(t *testing.T) {
-		e := NewExporter("test")
+	t.Run("skip starting metric server but wait for context cancellation", func(t *testing.T) {
+		e := NewExporter(logger, "test")
 		e.Options().MetricsEnabled = false
-		err := e.Init()
-		assert.NoError(t, err)
+		ctx, cancel := context.WithCancel(context.Background())
+		errCh := make(chan error)
+		go func() {
+			errCh <- e.Run(ctx)
+		}()
+
+		cancel()
+
+		select {
+		case err := <-errCh:
+			assert.NoError(t, err)
+		case <-time.After(time.Second):
+			t.Error("expected metrics Run() to return in time when context is cancelled")
+		}
 	})
 }

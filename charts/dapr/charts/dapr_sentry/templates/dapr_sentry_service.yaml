@@ -2,6 +2,7 @@ kind: Service
 apiVersion: v1
 metadata:
   name: dapr-sentry
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- range $key, $value := .Values.global.k8sLabels }}
     {{ $key }}: {{ tpl $value $ }}
@@ -11,5 +12,14 @@ spec:
     app: dapr-sentry
   ports:
   - protocol: TCP
-    port: {{ .Values.ports.port }} 
-    targetPort: {{ .Values.ports.targetPort }}  
+    port: {{ .Values.ports.port }}
+    targetPort: {{ .Values.ports.targetPort }}
+    name: grpc
+# Added for backwards compatibility where previous clients will attempt to
+# connect on port 80.
+{{ if (ne (int .Values.ports.port) 80) }}
+  - protocol: TCP
+    port: 80
+    targetPort: {{ .Values.ports.targetPort }}
+    name: legacy
+{{ end }}

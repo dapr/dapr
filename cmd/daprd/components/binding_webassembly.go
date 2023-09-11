@@ -17,9 +17,11 @@ package components
 
 import (
 	"github.com/dapr/components-contrib/bindings/wasm"
+	"github.com/dapr/dapr/pkg/components"
 	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
 )
 
 func init() {
 	bindingsLoader.DefaultRegistry.RegisterOutputBinding(wasm.NewWasmOutput, "wasm")
+	components.RegisterWasmComponentType(components.CategoryBindings, "wasm")
 }

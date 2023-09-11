@@ -28,6 +28,7 @@ type PubSubClient interface {
 	Features(ctx context.Context, in *FeaturesRequest, opts ...grpc.CallOption) (*FeaturesResponse, error)
 	// Publish publishes a new message for the given topic.
 	Publish(ctx context.Context, in *PublishRequest, opts ...grpc.CallOption) (*PublishResponse, error)
+	BulkPublish(ctx context.Context, in *BulkPublishRequest, opts ...grpc.CallOption) (*BulkPublishResponse, error)
 	// Establishes a stream with the server (PubSub component), which sends
 	// messages down to the client (daprd). The client streams acknowledgements
 	// back to the server. The server will close the stream and return the status
@@ -68,6 +69,15 @@ func (c *pubSubClient) Features(ctx context.Context, in *FeaturesRequest, opts .
 func (c *pubSubClient) Publish(ctx context.Context, in *PublishRequest, opts ...grpc.CallOption) (*PublishResponse, error) {
 	out := new(PublishResponse)
 	err := c.cc.Invoke(ctx, "/dapr.proto.components.v1.PubSub/Publish", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *pubSubClient) BulkPublish(ctx context.Context, in *BulkPublishRequest, opts ...grpc.CallOption) (*BulkPublishResponse, error) {
+	out := new(BulkPublishResponse)
+	err := c.cc.Invoke(ctx, "/dapr.proto.components.v1.PubSub/BulkPublish", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -124,6 +134,7 @@ type PubSubServer interface {
 	Features(context.Context, *FeaturesRequest) (*FeaturesResponse, error)
 	// Publish publishes a new message for the given topic.
 	Publish(context.Context, *PublishRequest) (*PublishResponse, error)
+	BulkPublish(context.Context, *BulkPublishRequest) (*BulkPublishResponse, error)
 	// Establishes a stream with the server (PubSub component), which sends
 	// messages down to the client (daprd). The client streams acknowledgements
 	// back to the server. The server will close the stream and return the status
@@ -147,6 +158,9 @@ func (UnimplementedPubSubServer) Features(context.Context, *FeaturesRequest) (*F
 }
 func (UnimplementedPubSubServer) Publish(context.Context, *PublishRequest) (*PublishResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Publish not implemented")
+}
+func (UnimplementedPubSubServer) BulkPublish(context.Context, *BulkPublishRequest) (*BulkPublishResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method BulkPublish not implemented")
 }
 func (UnimplementedPubSubServer) PullMessages(PubSub_PullMessagesServer) error {
 	return status.Errorf(codes.Unimplemented, "method PullMessages not implemented")
@@ -220,6 +234,24 @@ func _PubSub_Publish_Handler(srv interface{}, ctx context.Context, dec func(inte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PubSub_BulkPublish_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BulkPublishRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PubSubServer).BulkPublish(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.components.v1.PubSub/BulkPublish",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PubSubServer).BulkPublish(ctx, req.(*BulkPublishRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _PubSub_PullMessages_Handler(srv interface{}, stream grpc.ServerStream) error {
 	return srv.(PubSubServer).PullMessages(&pubSubPullMessagesServer{stream})
 }
@@ -282,6 +314,10 @@ var PubSub_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Publish",
 			Handler:    _PubSub_Publish_Handler,
+		},
+		{
+			MethodName: "BulkPublish",
+			Handler:    _PubSub_BulkPublish_Handler,
 		},
 		{
 			MethodName: "Ping",

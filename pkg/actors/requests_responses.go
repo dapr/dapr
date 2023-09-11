@@ -16,7 +16,7 @@ package actors
 import (
 	"encoding/json"
 
-	"github.com/dapr/dapr/pkg/actors/reminders"
+	"github.com/dapr/dapr/pkg/actors/internal"
 )
 
 // ActorHostedRequest is the request object for checking if an actor is hosted on this instance.
@@ -26,17 +26,13 @@ type ActorHostedRequest struct {
 }
 
 // CreateReminderRequest is the request object to create a new reminder.
-type CreateReminderRequest = reminders.CreateReminderRequest
+type CreateReminderRequest = internal.CreateReminderRequest
 
 // CreateTimerRequest is the request object to create a new timer.
-type CreateTimerRequest = reminders.CreateTimerRequest
+type CreateTimerRequest = internal.CreateTimerRequest
 
 // DeleteReminderRequest is the request object for deleting a reminder.
-type DeleteReminderRequest struct {
-	Name      string
-	ActorType string
-	ActorID   string
-}
+type DeleteReminderRequest = internal.DeleteReminderRequest
 
 // DeleteStateRequest is the request object for deleting an actor state.
 type DeleteStateRequest struct {
@@ -46,18 +42,10 @@ type DeleteStateRequest struct {
 }
 
 // DeleteTimerRequest is a request object for deleting a timer.
-type DeleteTimerRequest struct {
-	Name      string
-	ActorType string
-	ActorID   string
-}
+type DeleteTimerRequest = internal.DeleteTimerRequest
 
 // GetReminderRequest is the request object to get an existing reminder.
-type GetReminderRequest struct {
-	Name      string
-	ActorType string
-	ActorID   string
-}
+type GetReminderRequest = internal.GetReminderRequest
 
 // GetStateRequest is the request object for getting actor state.
 type GetStateRequest struct {
@@ -68,6 +56,18 @@ type GetStateRequest struct {
 
 // ActorKey returns the key of the actor for this request.
 func (r GetStateRequest) ActorKey() string {
+	return r.ActorType + daprSeparator + r.ActorID
+}
+
+// GetBulkStateRequest is the request object for getting bulk actor state.
+type GetBulkStateRequest struct {
+	ActorID   string   `json:"actorId"`
+	ActorType string   `json:"actorType"`
+	Keys      []string `json:"keys"`
+}
+
+// ActorKey returns the key of the actor for this request.
+func (r GetBulkStateRequest) ActorKey() string {
 	return r.ActorType + daprSeparator + r.ActorID
 }
 
@@ -103,12 +103,7 @@ func (r *ReminderResponse) MarshalJSON() ([]byte, error) {
 }
 
 // RenameReminderRequest is the request object for rename a reminder.
-type RenameReminderRequest struct {
-	OldName   string
-	ActorType string
-	ActorID   string
-	NewName   string
-}
+type RenameReminderRequest = internal.RenameReminderRequest
 
 // SaveStateRequest is the request object for saving an actor state.
 type SaveStateRequest struct {
@@ -122,6 +117,10 @@ type SaveStateRequest struct {
 type StateResponse struct {
 	Data []byte `json:"data"`
 }
+
+// BulkStateResponse is the response returned from getting an actor state in bulk.
+// It's a map where the key is the key of the state, and the value is the value as byte slice.
+type BulkStateResponse map[string][]byte
 
 // TimerResponse is the response object send to an Actor SDK API when a timer fires.
 type TimerResponse struct {

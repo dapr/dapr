@@ -5,6 +5,6 @@ metadata:
 spec:
   secrets:
     scopes:
-        - storeName: "local"
-          defaultAccess: "allow"
-          allowedSecrets: ["${DAPR_SECRET}"]
+      - storeName: "local"
+        defaultAccess: "allow"
+        allowedSecrets: ["${DAPR_SECRET}"]

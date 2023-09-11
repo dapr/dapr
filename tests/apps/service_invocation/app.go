@@ -190,13 +190,18 @@ func multihopHandler(w http.ResponseWriter, r *http.Request) {
 
 // Handles a request with a JSON body.  Extracts s string from the input json and returns in it an appResponse.
 func withBodyHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Printf("withBodyHandler called. HTTP Verb: %s\n", r.Method)
+	log.Printf("withBodyHandler called. HTTP Verb: %s\n", r.Method)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		onBadRequest(w, err)
 		return
 	}
-	fmt.Printf("withBodyHandler body: %s\n", string(body))
+
+	if len(body) > 100 {
+		log.Printf("withBodyHandler body (first 100 bytes): %s\n", string(body[:100]))
+	} else {
+		log.Printf("withBodyHandler body: %s\n", string(body))
+	}
 	var s string
 	err = json.Unmarshal(body, &s)
 	if err != nil {
@@ -238,7 +243,7 @@ func opRedirectHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func testHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Enter testHandler")
+	log.Println("Enter testHandler")
 	var commandBody testCommandRequest
 	err := json.NewDecoder(r.Body).Decode(&commandBody)
 	if err != nil {
@@ -246,7 +251,7 @@ func testHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Printf("  testHandler invoking %s with method %s\n", commandBody.RemoteApp, commandBody.Method)
+	log.Printf("  testHandler invoking %s with method %s\n", commandBody.RemoteApp, commandBody.Method)
 	response, statusCode, err := invokeService(commandBody.RemoteApp, commandBody.Method)
 	if err != nil {
 		w.WriteHeader(statusCode)
@@ -1011,8 +1016,8 @@ func httpTohttpTestExternal(w http.ResponseWriter, r *http.Request) {
 	}
 	daprAddress := fmt.Sprintf("localhost:%d", daprHTTPPort)
 
-	log.Printf("dapr address is %s\n", daprAddress)
-	log.Printf("httpTohttpTestExternal calling with method %s\n", commandBody.Method)
+	log.Printf("dapr address is %s", daprAddress)
+	log.Printf("httpTohttpTestExternal calling with method %s", commandBody.Method)
 
 	for _, test := range testMethods {
 		testMessage := "success"
@@ -1037,23 +1042,23 @@ func httpTohttpTestExternal(w http.ResponseWriter, r *http.Request) {
 				commandBody.Method)
 		}
 
-		log.Printf("%s invoke url is %s\n", test.Verb, url)
+		log.Printf("%s invoke url is %s", test.Verb, url)
 		var b []byte
 
 		if test.SendBody {
 			var err error
 			b, err = json.Marshal(testMessage)
 			if err != nil {
-				log.Printf("marshal had error %s\n", err)
+				log.Printf("marshal had error %s", err)
 				onSerializationFailed(w, err)
 				return
 			}
-			log.Printf("sending body: %s\n", string(b))
+			log.Printf("sending body: %s", string(b))
 		}
 
 		resp, err := httpWrapper(test.Verb, url, b)
 		if err != nil {
-			log.Printf("response had error %s\n", err)
+			log.Printf("response had error %s", err)
 			onHTTPCallFailed(w, 0, err)
 			return
 		}
@@ -1064,7 +1069,7 @@ func httpTohttpTestExternal(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		log.Printf("httpTohttpTestExternal - %s test successful\n", test.Verb)
+		log.Printf("httpTohttpTestExternal - %s test successful", test.Verb)
 	}
 
 	logAndSetResponse(w, http.StatusOK, "success")
@@ -1376,7 +1381,7 @@ func largeDataErrorServiceCall(w http.ResponseWriter, r *http.Request, isHTTP bo
 			name: "4MB",
 		},
 		{
-			size: 1024*1024*3 - 1,
+			size: 1024*1024*3 + 10,
 			name: "4MB+",
 		},
 		{
@@ -1392,7 +1397,7 @@ func largeDataErrorServiceCall(w http.ResponseWriter, r *http.Request, isHTTP bo
 
 		body := make([]byte, test.size)
 		jsonBody, _ := json.Marshal(body)
-		fmt.Printf("largeDataErrorServiceCall - Request size: %d\n", len(jsonBody))
+		fmt.Printf("largeDataErrorServiceCall %s - Request size: %d\n", test.name, len(jsonBody))
 
 		if isHTTP {
 			resp, err := httpClient.Post(sanitizeHTTPURL(url), jsonContentType, bytes.NewReader(jsonBody))

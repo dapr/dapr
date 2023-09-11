@@ -55,6 +55,7 @@ pluggable_redis-pubsub \
 pluggable_kafka-bindings \
 tracingapp \
 configurationapp \
+workflowsapp \
 
 # PERFORMANCE test app list
 PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc actor-activation-locker k6-custom pubsub_subscribe_http configuration
@@ -76,6 +77,7 @@ state_get_http \
 pubsub_publish_grpc \
 pubsub_publish_http \
 pubsub_bulk_publish_grpc \
+pubsub_bulk_publish_http \
 actor_double_activation \
 actor_id_scale \
 actor_type_scale \
@@ -88,19 +90,19 @@ DAPR_CONTAINER_LOG_PATH?=./dist/container_logs
 DAPR_TEST_LOG_PATH?=./dist/logs
 
 ifeq ($(DAPR_TEST_STATE_STORE),)
-DAPR_TEST_STATE_STORE=redis
+DAPR_TEST_STATE_STORE=postgres
 endif
 
 ifeq ($(DAPR_TEST_QUERY_STATE_STORE),)
-DAPR_TEST_QUERY_STATE_STORE=mongodb
+DAPR_TEST_QUERY_STATE_STORE=postgres
 endif
 
 ifeq ($(DAPR_TEST_PUBSUB),)
 DAPR_TEST_PUBSUB=redis
 endif
 
-ifeq ($(DAPR_TEST_CONFIGURATION),)
-DAPR_TEST_CONFIGURATION=redis
+ifeq ($(DAPR_TEST_CONFIG_STORE),)
+DAPR_TEST_CONFIG_STORE=redis
 endif
 
 ifeq ($(DAPR_TEST_NAMESPACE),)
@@ -252,7 +254,7 @@ create-test-namespace:
 delete-test-namespace:
 	kubectl delete namespace $(DAPR_TEST_NAMESPACE)
 
-setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-mongodb setup-test-env-zipkin setup-test-env-postgres
+setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-zipkin setup-test-env-postgres
 
 setup-pubsub-subs-perf-test-components: setup-test-env-rabbitmq setup-test-env-pulsar setup-test-env-mqtt
 
@@ -322,10 +324,10 @@ test-e2e-all: check-e2e-env test-deps
 	# test
 	# Note2: use env variable DAPR_E2E_TEST to pick one e2e test to run.
      ifeq ($(DAPR_E2E_TEST),)
-	DAPR_CONTAINER_LOG_PATH=$(DAPR_CONTAINER_LOG_PATH) DAPR_TEST_LOG_PATH=$(DAPR_TEST_LOG_PATH) GOOS=$(TARGET_OS_LOCAL) DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.json --junitfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.xml --format standard-quiet -- -p 2 -count=1 -v -tags=e2e ./tests/e2e/$(DAPR_E2E_TEST)/...
+	DAPR_CONTAINER_LOG_PATH=$(DAPR_CONTAINER_LOG_PATH) DAPR_TEST_LOG_PATH=$(DAPR_TEST_LOG_PATH) GOOS=$(TARGET_OS_LOCAL) DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.json --junitfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.xml --format standard-quiet -- -timeout 15m -p 2 -count=1 -v -tags=e2e ./tests/e2e/$(DAPR_E2E_TEST)/...
      else
 	for app in $(DAPR_E2E_TEST); do \
-		DAPR_CONTAINER_LOG_PATH=$(DAPR_CONTAINER_LOG_PATH) DAPR_TEST_LOG_PATH=$(DAPR_TEST_LOG_PATH) GOOS=$(TARGET_OS_LOCAL) DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.json --junitfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.xml --format standard-quiet -- -p 2 -count=1 -v -tags=e2e ./tests/e2e/$$app/...; \
+		DAPR_CONTAINER_LOG_PATH=$(DAPR_CONTAINER_LOG_PATH) DAPR_TEST_LOG_PATH=$(DAPR_TEST_LOG_PATH) GOOS=$(TARGET_OS_LOCAL) DAPR_TEST_NAMESPACE=$(DAPR_TEST_NAMESPACE) DAPR_TEST_TAG=$(DAPR_TEST_TAG) DAPR_TEST_REGISTRY=$(DAPR_TEST_REGISTRY) DAPR_TEST_MINIKUBE_IP=$(MINIKUBE_NODE_IP) gotestsum --jsonfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.json --junitfile $(TEST_OUTPUT_FILE_PREFIX)_e2e.xml --format standard-quiet -- -timeout 15m -p 2 -count=1 -v -tags=e2e ./tests/e2e/$$app/...; \
 	done
      endif
 
@@ -495,16 +497,6 @@ setup-test-env-pulsar:
 delete-test-env-kafka:
 	$(HELM) del dapr-kafka --namespace $(DAPR_TEST_NAMESPACE)
 
-# install mongodb to the cluster without password
-setup-test-env-mongodb:
-	$(HELM) upgrade \
-	  --install dapr-mongodb bitnami/mongodb \
-	  --version 13.16.2 \
-	  -f ./tests/config/mongodb_override.yaml \
-	  --namespace $(DAPR_TEST_NAMESPACE) \
-	  --wait \
-	  --timeout 5m0s
-
 # install postgres to the cluster
 setup-test-env-postgres:
 	$(HELM) upgrade \
@@ -519,10 +511,6 @@ setup-test-env-postgres:
 delete-test-env-postgres:
 	$(HELM) del dapr-postgres --namespace $(DAPR_TEST_NAMESPACE)
 
-# delete mongodb from cluster
-delete-test-env-mongodb:
-	${HELM} del dapr-mongodb --namespace ${DAPR_TEST_NAMESPACE}
-
 # install zipkin to the cluster
 setup-test-env-zipkin:
 	$(KUBECTL) apply -f ./tests/config/zipkin.yaml -n $(DAPR_TEST_NAMESPACE)
@@ -530,7 +518,7 @@ delete-test-env-zipkin:
 	$(KUBECTL) delete -f ./tests/config/zipkin.yaml -n $(DAPR_TEST_NAMESPACE)
 
 # Setup the test environment by installing components
-setup-test-env: setup-test-env-kafka setup-test-env-redis setup-test-env-mongodb setup-test-env-postgres setup-test-env-k6 setup-test-env-zipkin
+setup-test-env: setup-test-env-kafka setup-test-env-redis setup-test-env-postgres setup-test-env-k6 setup-test-env-zipkin setup-test-env-postgres
 
 save-dapr-control-plane-k8s-resources:
 	mkdir -p '$(DAPR_CONTAINER_LOG_PATH)'
@@ -556,11 +544,11 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/kubernetes_redis_host_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_STATE_STORE)_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_STATE_STORE)_state_actorstore.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_QUERY_STATE_STORE)_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_QUERY_STATE_STORE)_query_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_redis_pluggable_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_tests_cluster_role_binding.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_PUBSUB)_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_CONFIGURATION)_configuration.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_CONFIG_STORE)_configuration.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/pubsub_no_resiliency.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/kafka_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_kafka_pluggable_bindings.yaml --namespace $(DAPR_TEST_NAMESPACE)
@@ -582,7 +570,6 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/preview_configurations.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/app_topic_subscription_routing.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/app_topic_subscription_routing_grpc.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/app_pubsub_routing.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/resiliency.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/resiliency_kafka_bindings.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/resiliency_kafka_bindings_grpc.yaml --namespace $(DAPR_TEST_NAMESPACE)
@@ -595,6 +582,7 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/grpcproxyserverexternal_service.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/externalinvocationcrd.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/omithealthchecks_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/external_invocation_http_endpoint_tls.yaml --namespace $(DAPR_TEST_NAMESPACE)
 
 	# Show the installed components
 	$(KUBECTL) get components --namespace $(DAPR_TEST_NAMESPACE)
@@ -670,5 +658,6 @@ delete-minikube:
 test-clean:
 	-rm -rv ./tests/e2e/*/dist
 	-rm -rv ./tests/perf/*/dist
+	-rm -rv ./tests/perf/*/test_report_summary_table_*.json
 	-rm test_report_*.json
 	-rm test_report_*.xml

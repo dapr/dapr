@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/proto/common/v1"
@@ -130,7 +131,7 @@ func initializeAccessControlList(isHTTP bool) (*config.AccessControlList, error)
 			},
 		},
 	}
-	accessControlList, err := ParseAccessControlSpec(inputSpec, isHTTP)
+	accessControlList, err := ParseAccessControlSpec(&inputSpec, isHTTP)
 
 	return accessControlList, err
 }
@@ -139,7 +140,7 @@ func TestParseAccessControlSpec(t *testing.T) {
 	t.Run("translate to in-memory rules", func(t *testing.T) {
 		accessControlList, err := initializeAccessControlList(true)
 
-		assert.Nil(t, err)
+		require.NoError(t, err)
 
 		assert.Equal(t, config.DenyAccess, accessControlList.DefaultAction)
 		assert.Equal(t, "abcd", accessControlList.TrustDomain)
@@ -237,7 +238,7 @@ func TestParseAccessControlSpec(t *testing.T) {
 	})
 
 	t.Run("test when no trust domain and namespace specified in app policy", func(t *testing.T) {
-		invalidAccessControlSpec := config.AccessControlSpec{
+		invalidAccessControlSpec := &config.AccessControlSpec{
 			DefaultAction: config.DenyAccess,
 			TrustDomain:   "public",
 			AppPolicies: []config.AppPolicySpec{
@@ -300,7 +301,7 @@ func TestParseAccessControlSpec(t *testing.T) {
 	})
 
 	t.Run("test when no trust domain is specified for the app", func(t *testing.T) {
-		accessControlSpec := config.AccessControlSpec{
+		accessControlSpec := &config.AccessControlSpec{
 			DefaultAction: config.DenyAccess,
 			TrustDomain:   "",
 			AppPolicies: []config.AppPolicySpec{
@@ -330,18 +331,23 @@ func TestParseAccessControlSpec(t *testing.T) {
 	})
 
 	t.Run("test when no access control policy has been specified", func(t *testing.T) {
-		invalidAccessControlSpec := config.AccessControlSpec{
+		accessControlList, err := ParseAccessControlSpec(nil, true)
+		require.NoError(t, err)
+		assert.Nil(t, accessControlList)
+
+		invalidAccessControlSpec := &config.AccessControlSpec{
 			DefaultAction: "",
 			TrustDomain:   "",
 			AppPolicies:   []config.AppPolicySpec{},
 		}
 
-		accessControlList, _ := ParseAccessControlSpec(invalidAccessControlSpec, true)
+		accessControlList, _ = ParseAccessControlSpec(invalidAccessControlSpec, true)
+		require.NoError(t, err)
 		assert.Nil(t, accessControlList)
 	})
 
 	t.Run("test when no default global action has been specified", func(t *testing.T) {
-		invalidAccessControlSpec := config.AccessControlSpec{
+		invalidAccessControlSpec := &config.AccessControlSpec{
 			TrustDomain: "public",
 			AppPolicies: []config.AppPolicySpec{
 				{
@@ -377,32 +383,32 @@ func TestSpiffeID(t *testing.T) {
 		assert.Equal(t, "mydomain", id.TrustDomain)
 		assert.Equal(t, "mynamespace", id.Namespace)
 		assert.Equal(t, "myappid", id.AppID)
-		assert.Nil(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("test parse invalid spiffe id", func(t *testing.T) {
 		spiffeID := "abcd"
 		_, err := parseSpiffeID(spiffeID)
-		assert.NotNil(t, err)
+		require.Error(t, err)
 	})
 
 	t.Run("test parse spiffe id with not all fields", func(t *testing.T) {
 		spiffeID := "spiffe://mydomain/ns/myappid"
 		_, err := parseSpiffeID(spiffeID)
-		assert.NotNil(t, err)
+		require.Error(t, err)
 	})
 
 	t.Run("test empty spiffe id", func(t *testing.T) {
 		spiffeID := ""
 		_, err := parseSpiffeID(spiffeID)
-		assert.NotNil(t, err)
+		require.Error(t, err)
 	})
 }
 
 func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 	t.Run("test when no acl specified", func(t *testing.T) {
 		srcAppID := app1
-		spiffeID := config.SpiffeID{
+		spiffeID := SpiffeID{
 			TrustDomain: "public",
 			Namespace:   "ns1",
 			AppID:       srcAppID,
@@ -415,7 +421,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 	t.Run("test when no matching app in acl found", func(t *testing.T) {
 		srcAppID := "appX"
 		accessControlList, _ := initializeAccessControlList(true)
-		spiffeID := config.SpiffeID{
+		spiffeID := SpiffeID{
 			TrustDomain: "public",
 			Namespace:   "ns1",
 			AppID:       srcAppID,
@@ -428,7 +434,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 	t.Run("test when trust domain does not match", func(t *testing.T) {
 		srcAppID := app1
 		accessControlList, _ := initializeAccessControlList(true)
-		spiffeID := config.SpiffeID{
+		spiffeID := SpiffeID{
 			TrustDomain: "private",
 			Namespace:   "ns1",
 			AppID:       srcAppID,
@@ -441,7 +447,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 	t.Run("test when namespace does not match", func(t *testing.T) {
 		srcAppID := app1
 		accessControlList, _ := initializeAccessControlList(true)
-		spiffeID := config.SpiffeID{
+		spiffeID := SpiffeID{
 			TrustDomain: "public",
 			Namespace:   "abcd",
 			AppID:       srcAppID,
@@ -470,7 +476,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 	t.Run("test when operation is not found in the policy spec", func(t *testing.T) {
 		srcAppID := app1
 		accessControlList, _ := initializeAccessControlList(true)
-		spiffeID := config.SpiffeID{
+		spiffeID := SpiffeID{
 			TrustDomain: "public",
 			Namespace:   "ns1",
 			AppID:       srcAppID,
@@ -483,7 +489,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 	t.Run("test http case-sensitivity when matching operation post fix", func(t *testing.T) {
 		srcAppID := app1
 		accessControlList, _ := initializeAccessControlList(true)
-		spiffeID := config.SpiffeID{
+		spiffeID := SpiffeID{
 			TrustDomain: "public",
 			Namespace:   "ns1",
 			AppID:       srcAppID,
@@ -496,7 +502,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 	t.Run("test when http verb is not found", func(t *testing.T) {
 		srcAppID := app2
 		accessControlList, _ := initializeAccessControlList(true)
-		spiffeID := config.SpiffeID{
+		spiffeID := SpiffeID{
 			TrustDomain: "domain1",
 			Namespace:   "ns2",
 			AppID:       srcAppID,
@@ -509,7 +515,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 	t.Run("test when default action for app is not specified and no matching http verb found", func(t *testing.T) {
 		srcAppID := app3
 		accessControlList, _ := initializeAccessControlList(true)
-		spiffeID := config.SpiffeID{
+		spiffeID := SpiffeID{
 			TrustDomain: "domain1",
 			Namespace:   "ns1",
 			AppID:       srcAppID,
@@ -522,7 +528,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 	t.Run("test when http verb matches *", func(t *testing.T) {
 		srcAppID := app1
 		accessControlList, _ := initializeAccessControlList(true)
-		spiffeID := config.SpiffeID{
+		spiffeID := SpiffeID{
 			TrustDomain: "public",
 			Namespace:   "ns1",
 			AppID:       srcAppID,
@@ -535,7 +541,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 	t.Run("test when http verb matches a specific verb", func(t *testing.T) {
 		srcAppID := app2
 		accessControlList, _ := initializeAccessControlList(true)
-		spiffeID := config.SpiffeID{
+		spiffeID := SpiffeID{
 			TrustDomain: "domain1",
 			Namespace:   "ns2",
 			AppID:       srcAppID,
@@ -548,7 +554,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 	t.Run("test when operation is invoked with /", func(t *testing.T) {
 		srcAppID := app2
 		accessControlList, _ := initializeAccessControlList(true)
-		spiffeID := config.SpiffeID{
+		spiffeID := SpiffeID{
 			TrustDomain: "domain1",
 			Namespace:   "ns2",
 			AppID:       srcAppID,
@@ -561,7 +567,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 	t.Run("test when http verb is not specified", func(t *testing.T) {
 		srcAppID := app2
 		accessControlList, _ := initializeAccessControlList(true)
-		spiffeID := config.SpiffeID{
+		spiffeID := SpiffeID{
 			TrustDomain: "domain1",
 			Namespace:   "ns2",
 			AppID:       srcAppID,
@@ -574,7 +580,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 	t.Run("test when matching operation post fix is specified in policy spec", func(t *testing.T) {
 		srcAppID := app2
 		accessControlList, _ := initializeAccessControlList(true)
-		spiffeID := config.SpiffeID{
+		spiffeID := SpiffeID{
 			TrustDomain: "domain1",
 			Namespace:   "ns2",
 			AppID:       srcAppID,
@@ -587,7 +593,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 	t.Run("test grpc case-sensitivity when matching operation post fix", func(t *testing.T) {
 		srcAppID := app2
 		accessControlList, _ := initializeAccessControlList(false)
-		spiffeID := config.SpiffeID{
+		spiffeID := SpiffeID{
 			TrustDomain: "domain1",
 			Namespace:   "ns2",
 			AppID:       srcAppID,
@@ -600,7 +606,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 	t.Run("test when non-matching operation post fix is specified in policy spec", func(t *testing.T) {
 		srcAppID := app2
 		accessControlList, _ := initializeAccessControlList(true)
-		spiffeID := config.SpiffeID{
+		spiffeID := SpiffeID{
 			TrustDomain: "domain1",
 			Namespace:   "ns2",
 			AppID:       srcAppID,
@@ -613,7 +619,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 	t.Run("test when non-matching operation post fix is specified in policy spec", func(t *testing.T) {
 		srcAppID := app2
 		accessControlList, _ := initializeAccessControlList(true)
-		spiffeID := config.SpiffeID{
+		spiffeID := SpiffeID{
 			TrustDomain: "domain1",
 			Namespace:   "ns2",
 			AppID:       srcAppID,
@@ -626,7 +632,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 	t.Run("test with grpc invocation", func(t *testing.T) {
 		srcAppID := app2
 		accessControlList, _ := initializeAccessControlList(false)
-		spiffeID := config.SpiffeID{
+		spiffeID := SpiffeID{
 			TrustDomain: "domain1",
 			Namespace:   "ns2",
 			AppID:       srcAppID,
@@ -639,7 +645,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 	t.Run("when testing grpc calls, acl is not configured with http verb", func(t *testing.T) {
 		srcAppID := app4
 		accessControlList, _ := initializeAccessControlList(false)
-		spiffeID := config.SpiffeID{
+		spiffeID := SpiffeID{
 			TrustDomain: "domain1",
 			Namespace:   "ns2",
 			AppID:       srcAppID,
@@ -652,7 +658,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 	t.Run("when testing grpc calls, acl configured with wildcard * for full matching", func(t *testing.T) {
 		srcAppID := app4
 		accessControlList, _ := initializeAccessControlList(false)
-		spiffeID := config.SpiffeID{
+		spiffeID := SpiffeID{
 			TrustDomain: "domain1",
 			Namespace:   "ns2",
 			AppID:       srcAppID,
@@ -670,7 +676,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 	t.Run("when testing grpc calls, acl is configured with wildcards", func(t *testing.T) {
 		srcAppID := app4
 		accessControlList, _ := initializeAccessControlList(false)
-		spiffeID := config.SpiffeID{
+		spiffeID := SpiffeID{
 			TrustDomain: "domain1",
 			Namespace:   "ns2",
 			AppID:       srcAppID,
@@ -682,7 +688,7 @@ func TestIsOperationAllowedByAccessControlPolicy(t *testing.T) {
 	t.Run("when testing grpc calls, acl configured with wildcard ** for full matching", func(t *testing.T) {
 		srcAppID := app4
 		accessControlList, _ := initializeAccessControlList(false)
-		spiffeID := config.SpiffeID{
+		spiffeID := SpiffeID{
 			TrustDomain: "domain1",
 			Namespace:   "ns2",
 			AppID:       srcAppID,

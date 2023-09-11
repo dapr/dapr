@@ -39,16 +39,16 @@ func (a *api) constructCryptoEndpoints() []Endpoint {
 	// These APIs are not implemented as Universal because the gRPC APIs are stream-based.
 	return []Endpoint{
 		{
-			Methods: []string{fasthttp.MethodPut},
-			Route:   "crypto/{name}/encrypt",
-			Version: apiVersionV1alpha1,
-			Handler: a.onCryptoEncrypt,
+			Methods:         []string{fasthttp.MethodPut},
+			Route:           "crypto/{name}/encrypt",
+			Version:         apiVersionV1alpha1,
+			FastHTTPHandler: a.onCryptoEncrypt,
 		},
 		{
-			Methods: []string{fasthttp.MethodPut},
-			Route:   "crypto/{name}/decrypt",
-			Version: apiVersionV1alpha1,
-			Handler: a.onCryptoDecrypt,
+			Methods:         []string{fasthttp.MethodPut},
+			Route:           "crypto/{name}/decrypt",
+			Version:         apiVersionV1alpha1,
+			FastHTTPHandler: a.onCryptoDecrypt,
 		},
 	}
 }
@@ -127,7 +127,7 @@ func (a *api) onCryptoEncrypt(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 	reqCtx.Response.Header.SetContentType("application/octet-stream")
-	respond(reqCtx, with(fasthttp.StatusOK, resBody))
+	fasthttpRespond(reqCtx, fasthttpResponseWith(fasthttp.StatusOK, resBody))
 }
 
 // Handler for crypto/<component-name>/decrypt
@@ -175,7 +175,7 @@ func (a *api) onCryptoDecrypt(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 	reqCtx.Response.Header.SetContentType("application/octet-stream")
-	respond(reqCtx, with(fasthttp.StatusOK, resBody))
+	fasthttpRespond(reqCtx, fasthttpResponseWith(fasthttp.StatusOK, resBody))
 }
 
 func (a *api) cryptoGetComponent(componentName string) (contribCrypto.SubtleCrypto, error) {
