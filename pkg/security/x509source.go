@@ -310,7 +310,7 @@ func (x *x509source) requestFromSentry(ctx context.Context, csrDER []byte) ([]*x
 		CertificateSigningRequest: pem.EncodeToMemory(&pem.Block{
 			Type: "CERTIFICATE REQUEST", Bytes: csrDER,
 		}),
-		Id:             x.appID,
+		Id:             getSentryIdentifier(x.appID),
 		Token:          token,
 		Namespace:      x.appNamespace,
 		TokenValidator: tokenValidator,
@@ -318,6 +318,13 @@ func (x *x509source) requestFromSentry(ctx context.Context, csrDER []byte) ([]*x
 
 	if x.trustDomain != nil {
 		req.TrustDomain = *x.trustDomain
+	} else {
+		// For v1.11 sentry, if the trust domain is empty in the request then it
+		// will return an empty certificate so we default to `public` here to
+		// ensure we get an identity certificate back.
+		// This request field is ignored for non control-plane requests in v1.12.
+		// TODO: @joshvanl: Remove in v1.13.
+		req.TrustDomain = "public"
 	}
 
 	resp, err := sentryv1pb.NewCAClient(conn).SignCertificate(ctx, req)
@@ -478,4 +485,13 @@ func isControlPlaneService(id string) bool {
 	default:
 		return false
 	}
+}
+
+func getSentryIdentifier(appID string) string {
+	// return injected identity, default id if not present
+	localID := os.Getenv("SENTRY_LOCAL_IDENTITY")
+	if localID != "" {
+		return localID
+	}
+	return appID
 }
