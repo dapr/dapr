@@ -4,7 +4,23 @@ global:
   dnsSuffix: ".cluster.local"
   logAsJson: false
   imagePullPolicy: IfNotPresent
+
+  # To help compatibility with other charts which use global.imagePullSecrets.
+  # Allow either a string with single imagepullsecret or an array of {name: pullSecret} maps (k8s-style) or an array of strings (more common helm-style).
+  # global:
+  #   imagePullSecrets: "pullSecret"
+  # or
+  # global:
+  #   imagePullSecrets:
+  #   - name: pullSecret1
+  #   - name: pullSecret2
+  # or
+  # global:
+  #   imagePullSecrets:
+  #   - pullSecret1
+  #   - pullSecret2
   imagePullSecrets: ""
+
   nodeSelector: {}
   tolerations: []
   rbac:
@@ -23,7 +39,7 @@ global:
     workloadCertTTL: 24h
     allowedClockSkew: 15m
     controlPlaneTrustDomain: "cluster.local"
-    # Used to override `dapr-sentry.{{ .Release.Namespace }}.svc:80`
+    # Used to override `dapr-sentry.{{ .Release.Namespace }}.svc.cluster.local:443`
     #sentryAddress:
   actors:
     enabled: true

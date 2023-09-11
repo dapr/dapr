@@ -9,8 +9,8 @@ require (
 	github.com/argoproj/argo-rollouts v1.4.1
 	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/cloudevents/sdk-go/v2 v2.14.0
-	github.com/dapr/components-contrib v1.11.3-0.20230830212031-75ac7518038b
-	github.com/dapr/kit v0.11.4-0.20230807225040-b6b141aa3e32
+	github.com/dapr/components-contrib v1.11.3-0.20230905221417-0c2ce324b2bf
+	github.com/dapr/kit v0.11.4-0.20230907165049-f08dc3ff1671
 	github.com/evanphx/json-patch/v5 v5.6.0
 	github.com/go-chi/chi/v5 v5.0.10
 	github.com/go-chi/cors v1.2.1
@@ -34,7 +34,7 @@ require (
 	github.com/jhump/protoreflect v1.15.1
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/lestrrat-go/jwx/v2 v2.0.12
-	github.com/microsoft/durabletask-go v0.3.0
+	github.com/microsoft/durabletask-go v0.3.1
 	github.com/mitchellh/mapstructure v1.5.1-0.20220423185008-bf980b35cac4
 	github.com/phayes/freeport v0.0.0-20220201140144-74d24b5ae9f5
 	github.com/prometheus/client_golang v1.16.0

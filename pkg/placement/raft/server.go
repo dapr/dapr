@@ -24,7 +24,10 @@ import (
 
 	"github.com/hashicorp/raft"
 	raftboltdb "github.com/hashicorp/raft-boltdb"
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"k8s.io/utils/clock"
+
+	"github.com/dapr/dapr/pkg/security"
 )
 
 const (
@@ -124,9 +127,21 @@ func (s *Server) tryResolveRaftAdvertiseAddr(ctx context.Context, bindAddr strin
 	return nil, err
 }
 
+type spiffeStreamLayer struct {
+	placeID spiffeid.ID
+	ctx     context.Context
+	sec     security.Handler
+	net.Listener
+}
+
+// Dial implements the StreamLayer interface.
+func (s *spiffeStreamLayer) Dial(address raft.ServerAddress, timeout time.Duration) (net.Conn, error) {
+	return s.sec.NetDialerID(s.ctx, s.placeID, timeout)("tcp", string(address))
+}
+
 // StartRaft starts Raft node with Raft protocol configuration. if config is nil,
 // the default config will be used.
-func (s *Server) StartRaft(ctx context.Context, config *raft.Config) error {
+func (s *Server) StartRaft(ctx context.Context, sec security.Handler, config *raft.Config) error {
 	// If we have an unclean exit then attempt to close the Raft store.
 	defer func() {
 		s.lock.RLock()
@@ -146,12 +161,21 @@ func (s *Server) StartRaft(ctx context.Context, config *raft.Config) error {
 	}
 
 	loggerAdapter := newLoggerAdapter()
-	trans, err := raft.NewTCPTransportWithLogger(s.raftBind, addr, 3, 10*time.Second, loggerAdapter)
+	listener, err := net.Listen("tcp", addr.String())
+	if err != nil {
+		return fmt.Errorf("failed to create raft listener: %w", err)
+	}
+
+	placeID, err := spiffeid.FromSegments(sec.ControlPlaneTrustDomain(), "ns", sec.ControlPlaneNamespace(), "dapr-placement")
 	if err != nil {
 		return err
 	}
-
-	s.raftTransport = trans
+	s.raftTransport = raft.NewNetworkTransportWithLogger(&spiffeStreamLayer{
+		Listener: sec.NetListenerID(listener, placeID),
+		placeID:  placeID,
+		sec:      sec,
+		ctx:      ctx,
+	}, 3, 10*time.Second, loggerAdapter)
 
 	// Build an all in-memory setup for dev mode, otherwise prepare a full
 	// disk-based setup.
@@ -218,7 +242,7 @@ func (s *Server) StartRaft(ctx context.Context, config *raft.Config) error {
 	if bootstrapConf != nil {
 		if err = raft.BootstrapCluster(
 			s.config, s.logStore, s.stableStore,
-			s.snapStore, trans, *bootstrapConf); err != nil {
+			s.snapStore, s.raftTransport, *bootstrapConf); err != nil {
 			return err
 		}
 	}

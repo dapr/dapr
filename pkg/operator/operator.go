@@ -16,10 +16,12 @@ package operator
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -28,12 +30,10 @@ import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
@@ -41,12 +41,12 @@ import (
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subscriptionsapiV1alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	subscriptionsapiV2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
-	"github.com/dapr/dapr/pkg/credentials"
+	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/operator/api"
 	operatorcache "github.com/dapr/dapr/pkg/operator/cache"
 	"github.com/dapr/dapr/pkg/operator/handlers"
-	"github.com/dapr/kit/fswatcher"
+	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/logger"
 )
 
@@ -65,7 +65,6 @@ type Operator interface {
 // Options contains the options for `NewOperator`.
 type Options struct {
 	Config                              string
-	CertChainPath                       string
 	LeaderElection                      bool
 	WatchdogEnabled                     bool
 	WatchdogInterval                    time.Duration
@@ -74,17 +73,16 @@ type Options struct {
 	ServiceReconcilerEnabled            bool
 	ArgoRolloutServiceReconcilerEnabled bool
 	WatchdogCanPatchPodLabels           bool
+	TrustAnchorsFile                    string
 }
 
 type operator struct {
 	apiServer api.Server
 
-	configName    string
-	certChainPath string
-	config        *Config
+	config *Config
 
-	mgr    ctrl.Manager
-	client client.Client
+	mgr         ctrl.Manager
+	secProvider security.Provider
 }
 
 // NewOperator returns a new Dapr Operator.
@@ -93,6 +91,32 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 	if err != nil {
 		return nil, fmt.Errorf("unable to get controller runtime configuration, err: %s", err)
 	}
+
+	config, err := LoadConfiguration(ctx, opts.Config, conf)
+	if err != nil {
+		return nil, fmt.Errorf("unable to load configuration, config: %s, err: %w", opts.Config, err)
+	}
+
+	certDir, err := os.MkdirTemp("", "dapr-operator")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create operator SVID directory: %w", err)
+	}
+	certDir = filepath.Join(certDir, "/var/run/secrets/dapr.io/webhook/tls")
+
+	secProvider, err := security.New(ctx, security.Options{
+		SentryAddress:           config.SentryAddress,
+		ControlPlaneTrustDomain: config.ControlPlaneTrustDomain,
+		ControlPlaneNamespace:   security.CurrentNamespace(),
+		TrustAnchorsFile:        opts.TrustAnchorsFile,
+		AppID:                   "dapr-operator",
+		// mTLS is always enabled for the operator.
+		MTLSEnabled:    true,
+		WriteSVIDToDir: &certDir,
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	watchdogPodSelector := getSideCarInjectedNotExistsSelector()
 
 	scheme, err := buildScheme(opts)
@@ -101,14 +125,27 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 	}
 
 	mgr, err := ctrl.NewManager(conf, ctrl.Options{
-		Scheme:                 scheme,
-		Port:                   19443,
-		HealthProbeBindAddress: "0",
-		MetricsBindAddress:     "0",
-		LeaderElection:         opts.LeaderElection,
-		LeaderElectionID:       "operator.dapr.io",
-		Namespace:              opts.WatchNamespace,
-		NewCache:               operatorcache.GetFilteredCache(watchdogPodSelector),
+		Scheme:                        scheme,
+		Port:                          19443,
+		HealthProbeBindAddress:        "0",
+		MetricsBindAddress:            "0",
+		LeaderElection:                opts.LeaderElection,
+		LeaderElectionID:              "operator.dapr.io",
+		Namespace:                     opts.WatchNamespace,
+		NewCache:                      operatorcache.GetFilteredCache(watchdogPodSelector),
+		CertDir:                       certDir,
+		LeaderElectionReleaseOnCancel: true,
+		TLSOpts: []func(*tls.Config){
+			func(tlsConfig *tls.Config) {
+				sec, sErr := secProvider.Handler(ctx)
+				// Error here means that the context has been cancelled before security
+				// is ready.
+				if sErr != nil {
+					return
+				}
+				*tlsConfig = *sec.TLSServerConfigNoClientAuth()
+			},
+		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("unable to start manager: %w", err)
@@ -140,25 +177,12 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 		}
 	}
 
-	o := &operator{
-		mgr:           mgr,
-		client:        mgrClient,
-		configName:    opts.Config,
-		certChainPath: opts.CertChainPath,
-	}
-	o.apiServer = api.NewAPIServer(o.client)
-
-	return o, nil
-}
-
-func (o *operator) prepareConfig() error {
-	var err error
-	o.config, err = LoadConfiguration(o.configName, o.client)
-	if err != nil {
-		return fmt.Errorf("unable to load configuration, config: %s, err: %w", o.configName, err)
-	}
-	o.config.Credentials = credentials.NewTLSCredentials(o.certChainPath)
-	return nil
+	return &operator{
+		mgr:         mgr,
+		secProvider: secProvider,
+		config:      config,
+		apiServer:   api.NewAPIServer(mgrClient),
+	}, nil
 }
 
 func (o *operator) syncComponent(ctx context.Context) func(obj interface{}) {
@@ -181,216 +205,157 @@ func (o *operator) syncHTTPEndpoint(ctx context.Context) func(obj interface{}) {
 	}
 }
 
-func (o *operator) loadCertChain(ctx context.Context) (*credentials.CertChain, error) {
-	log.Info("Getting TLS certificates")
-
-	watchCtx, watchCancel := context.WithTimeout(ctx, time.Minute)
-	defer watchCancel()
-	fsevent := make(chan struct{})
-	fserr := make(chan error)
-
-	go func() {
-		log.Infof("Starting watch for certs on filesystem: %s", o.config.Credentials.Path())
-		err := fswatcher.Watch(watchCtx, o.config.Credentials.Path(), fsevent)
-		// Watch always returns an error, which is context.Canceled if everything went well
-		if err != nil {
-			if !errors.Is(err, context.Canceled) {
-				// Ignore context.Canceled
-				fserr <- fmt.Errorf("error starting watch on filesystem: %w", err)
-			} else {
-				fserr <- nil
-			}
-
-			return
-		}
-
-		close(fsevent)
-	}()
-
-	var certChain *credentials.CertChain
-	for {
-		chain, err := credentials.LoadFromDisk(o.config.Credentials.RootCertPath(), o.config.Credentials.CertPath(), o.config.Credentials.KeyPath())
-		if err == nil {
-			log.Info("TLS certificates loaded successfully")
-			watchCancel()
-			certChain = chain
-			break
-		}
-		log.Infof("TLS certificate not found; waiting for disk changes. err=%v", err)
-		select {
-		case <-fsevent:
-			log.Debug("Watcher found activity on filesystem")
-			continue
-		case <-watchCtx.Done():
-			return nil, errors.New("timeout while waiting to load TLS certificates")
-		}
-	}
-
-	return certChain, <-fserr
-}
-
 func (o *operator) Run(ctx context.Context) error {
 	log.Info("Dapr Operator is starting")
 	healthzServer := health.NewServer(log)
 
-	err := o.mgr.Add(nonLeaderRunnable{func(ctx context.Context) error {
-		// start healthz server
-		if rErr := healthzServer.Run(ctx, healthzPort); rErr != nil {
-			return fmt.Errorf("failed to start healthz server: %w", rErr)
+	/*
+		Make sure to set `ENABLE_WEBHOOKS=false` when we run locally.
+	*/
+	if !strings.EqualFold(os.Getenv("ENABLE_WEBHOOKS"), "false") {
+		err := ctrl.NewWebhookManagedBy(o.mgr).
+			For(&subscriptionsapiV1alpha1.Subscription{}).
+			Complete()
+		if err != nil {
+			return fmt.Errorf("unable to create webhook Subscriptions v1alpha1: %w", err)
 		}
-		return nil
-	}})
-	if err != nil {
-		return err
+		err = ctrl.NewWebhookManagedBy(o.mgr).
+			For(&subscriptionsapiV2alpha1.Subscription{}).
+			Complete()
+		if err != nil {
+			return fmt.Errorf("unable to create webhook Subscriptions v2alpha1: %w", err)
+		}
 	}
 
-	err = o.mgr.Add(nonLeaderRunnable{func(ctx context.Context) error {
-		if rErr := o.apiServer.Ready(ctx); rErr != nil {
-			return fmt.Errorf("failed to start API server: %w", rErr)
-		}
-		healthzServer.Ready()
-		log.Infof("Dapr Operator started")
-		<-ctx.Done()
-		return nil
-	}})
-	if err != nil {
-		return err
-	}
+	caBundleCh := make(chan []byte)
 
-	err = o.mgr.Add(nonLeaderRunnable{func(ctx context.Context) error {
-		rErr := o.prepareConfig()
-		if rErr != nil {
-			return rErr
-		}
-
-		/*
-			Make sure to set `ENABLE_WEBHOOKS=false` when we run locally.
-		*/
-		if !strings.EqualFold(os.Getenv("ENABLE_WEBHOOKS"), "false") {
-			rErr = ctrl.NewWebhookManagedBy(o.mgr).
-				For(&subscriptionsapiV1alpha1.Subscription{}).
-				Complete()
+	runner := concurrency.NewRunnerManager(
+		o.secProvider.Start,
+		func(ctx context.Context) error {
+			// Wait for webhook certificates to be ready before starting the manager.
+			_, rErr := o.secProvider.Handler(ctx)
 			if rErr != nil {
-				return fmt.Errorf("unable to create webhook Subscriptions v1alpha1: %w", rErr)
+				return rErr
 			}
-			rErr = ctrl.NewWebhookManagedBy(o.mgr).
-				For(&subscriptionsapiV2alpha1.Subscription{}).
-				Complete()
+			return o.mgr.Start(ctx)
+		},
+		func(ctx context.Context) error {
+			// start healthz server
+			if rErr := healthzServer.Run(ctx, healthzPort); rErr != nil {
+				return fmt.Errorf("failed to start healthz server: %w", rErr)
+			}
+			return nil
+		},
+		func(ctx context.Context) error {
+			if rErr := o.apiServer.Ready(ctx); rErr != nil {
+				return fmt.Errorf("API server did not become ready in time: %w", rErr)
+			}
+			healthzServer.Ready()
+			log.Infof("Dapr Operator started")
+			<-ctx.Done()
+			return nil
+		},
+		func(ctx context.Context) error {
+			sec, rErr := o.secProvider.Handler(ctx)
 			if rErr != nil {
-				return fmt.Errorf("unable to create webhook Subscriptions v2alpha1: %w", rErr)
+				return rErr
 			}
-		}
+			sec.WatchTrustAnchors(ctx, caBundleCh)
+			return nil
+		},
+		func(ctx context.Context) error {
+			sec, rErr := o.secProvider.Handler(ctx)
+			if rErr != nil {
+				return rErr
+			}
 
-		// load certs from disk
-		certChain, rErr := o.loadCertChain(ctx)
-		if rErr != nil {
-			return fmt.Errorf("failed to load cert chain: %w", rErr)
-		}
+			caBundle, rErr := sec.CurrentTrustAnchors()
+			if rErr != nil {
+				return rErr
+			}
 
-		rErr = o.patchCRDs(ctx, o.mgr.GetConfig(), "subscriptions.dapr.io")
-		if rErr != nil {
-			return rErr
-		}
+			for {
+				rErr = o.patchCRDs(ctx, caBundle, o.mgr.GetConfig(), "subscriptions.dapr.io")
+				if rErr != nil {
+					return rErr
+				}
 
-		log.Info("Starting api server")
-		rErr = o.apiServer.Run(ctx, certChain)
-		if rErr != nil {
-			return fmt.Errorf("failed to start API server: %w", rErr)
-		}
-		return nil
-	}})
-	if err != nil {
-		return err
-	}
+				select {
+				case caBundle = <-caBundleCh:
+				case <-ctx.Done():
+					return nil
+				}
+			}
+		},
+		func(ctx context.Context) error {
+			sec, rErr := o.secProvider.Handler(ctx)
+			if rErr != nil {
+				return rErr
+			}
 
-	err = o.mgr.Add(nonLeaderRunnable{func(ctx context.Context) error {
-		if !o.mgr.GetCache().WaitForCacheSync(ctx) {
-			return errors.New("failed to wait for cache sync")
-		}
+			log.Info("Starting API server")
+			rErr = o.apiServer.Run(ctx, sec)
+			if rErr != nil {
+				return fmt.Errorf("failed to start API server: %w", rErr)
+			}
 
-		componentInformer, rErr := o.mgr.GetCache().GetInformer(ctx, &componentsapi.Component{})
-		if rErr != nil {
-			return fmt.Errorf("unable to get setup components informer: %w", rErr)
-		}
+			return nil
+		},
+		func(ctx context.Context) error {
+			if !o.mgr.GetCache().WaitForCacheSync(ctx) {
+				return errors.New("failed to wait for cache sync")
+			}
 
-		_, rErr = componentInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-			AddFunc: o.syncComponent(ctx),
-			UpdateFunc: func(_, newObj interface{}) {
-				o.syncComponent(ctx)(newObj)
-			},
-		})
-		if rErr != nil {
-			return fmt.Errorf("unable to add components informer event handler: %w", rErr)
-		}
-		<-ctx.Done()
-		return nil
-	}})
-	if err != nil {
-		return err
-	}
+			componentInformer, rErr := o.mgr.GetCache().GetInformer(ctx, &componentsapi.Component{})
+			if rErr != nil {
+				return fmt.Errorf("unable to get setup components informer: %w", rErr)
+			}
+			_, rErr = componentInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+				AddFunc: o.syncComponent(ctx),
+				UpdateFunc: func(_, newObj interface{}) {
+					o.syncComponent(ctx)(newObj)
+				},
+			})
+			if rErr != nil {
+				return fmt.Errorf("unable to add components informer event handler: %w", rErr)
+			}
+			<-ctx.Done()
+			return nil
+		},
+		func(ctx context.Context) error {
+			if !o.mgr.GetCache().WaitForCacheSync(ctx) {
+				return errors.New("failed to wait for cache sync")
+			}
 
-	err = o.mgr.Add(nonLeaderRunnable{func(ctx context.Context) error {
-		if !o.mgr.GetCache().WaitForCacheSync(ctx) {
-			return errors.New("failed to wait for cache sync")
-		}
+			httpEndpointInformer, rErr := o.mgr.GetCache().GetInformer(ctx, &httpendpointsapi.HTTPEndpoint{})
+			if rErr != nil {
+				return fmt.Errorf("unable to get http endpoint informer: %w", rErr)
+			}
 
-		httpEndpointInformer, rErr := o.mgr.GetCache().GetInformer(ctx, &httpendpointsapi.HTTPEndpoint{})
-		if rErr != nil {
-			return fmt.Errorf("unable to get http endpoint informer: %w", rErr)
-		}
+			_, rErr = httpEndpointInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+				AddFunc: o.syncHTTPEndpoint(ctx),
+				UpdateFunc: func(_, newObj interface{}) {
+					o.syncHTTPEndpoint(ctx)(newObj)
+				},
+			})
+			if rErr != nil {
+				return fmt.Errorf("unable to add http endpoint informer event handler: %w", rErr)
+			}
+			<-ctx.Done()
+			return nil
+		},
+	)
 
-		_, rErr = httpEndpointInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-			AddFunc: o.syncHTTPEndpoint(ctx),
-			UpdateFunc: func(_, newObj interface{}) {
-				o.syncHTTPEndpoint(ctx)(newObj)
-			},
-		})
-		if rErr != nil {
-			return fmt.Errorf("unable to add http endpoint informer event handler: %w", rErr)
-		}
-		<-ctx.Done()
-		return nil
-	}})
-	if err != nil {
-		return err
-	}
-
-	err = o.mgr.Start(ctx)
-	if err != nil {
-		return fmt.Errorf("error running operator: %w", err)
-	}
-
-	return nil
+	return runner.Run(ctx)
 }
 
-func (o *operator) patchCRDs(ctx context.Context, conf *rest.Config, crdNames ...string) error {
-	client, err := kubernetes.NewForConfig(conf)
-	if err != nil {
-		return fmt.Errorf("could not get Kubernetes API client: %v", err)
-	}
-
+func (o *operator) patchCRDs(ctx context.Context, caBundle []byte, conf *rest.Config, crdNames ...string) error {
 	clientSet, err := apiextensionsclient.NewForConfig(conf)
 	if err != nil {
 		return fmt.Errorf("could not get API extension client: %v", err)
 	}
 
 	crdClient := clientSet.ApiextensionsV1().CustomResourceDefinitions()
-	namespace := os.Getenv("NAMESPACE")
-	if namespace == "" {
-		return errors.New("could not get dapr namespace")
-	}
-
-	si, err := client.CoreV1().Secrets(namespace).Get(ctx, webhookCAName, v1.GetOptions{})
-	if err != nil {
-		log.Debugf("Could not get webhook CA: %v", err)
-		log.Info("The webhook CA secret was not found. Assuming conversion webhook caBundles are managed manually.")
-		return nil
-	}
-
-	caBundle, ok := si.Data["caBundle"]
-	if !ok {
-		return errors.New("webhook CA secret did not contain 'caBundle'")
-	}
 
 	for _, crdName := range crdNames {
 		crd, err := crdClient.Get(ctx, crdName, v1.GetOptions{})
@@ -406,7 +371,7 @@ func (o *operator) patchCRDs(ctx context.Context, conf *rest.Config, crdNames ..
 		}
 
 		if crd.Spec.Conversion.Webhook.ClientConfig.Service != nil &&
-			crd.Spec.Conversion.Webhook.ClientConfig.Service.Namespace == namespace &&
+			crd.Spec.Conversion.Webhook.ClientConfig.Service.Namespace == security.CurrentNamespace() &&
 			crd.Spec.Conversion.Webhook.ClientConfig.CABundle != nil &&
 			bytes.Equal(crd.Spec.Conversion.Webhook.ClientConfig.CABundle, caBundle) {
 			log.Infof("Conversion webhook for %q is up to date", crdName)
@@ -424,7 +389,7 @@ func (o *operator) patchCRDs(ctx context.Context, conf *rest.Config, crdNames ..
 		payload := []patchValue{{
 			Op:    "replace",
 			Path:  "/spec/conversion/webhook/clientConfig/service/namespace",
-			Value: namespace,
+			Value: security.CurrentNamespace(),
 		}, {
 			Op:    "replace",
 			Path:  "/spec/conversion/webhook/clientConfig/caBundle",
@@ -433,7 +398,7 @@ func (o *operator) patchCRDs(ctx context.Context, conf *rest.Config, crdNames ..
 
 		payloadJSON, err := json.Marshal(payload)
 		if err != nil {
-			return fmt.Errorf("could not marshal webhook spec: %v", err)
+			return fmt.Errorf("could not marshal webhook spec: %w", err)
 		}
 		if _, err := crdClient.Patch(ctx, crdName, types.JSONPatchType, payloadJSON, v1.PatchOptions{}); err != nil {
 			return fmt.Errorf("failed to patch webhook in CRD %q: %v", crdName, err)
@@ -443,18 +408,6 @@ func (o *operator) patchCRDs(ctx context.Context, conf *rest.Config, crdNames ..
 	}
 
 	return nil
-}
-
-type nonLeaderRunnable struct {
-	fn func(ctx context.Context) error
-}
-
-func (r nonLeaderRunnable) Start(ctx context.Context) error {
-	return r.fn(ctx)
-}
-
-func (r nonLeaderRunnable) NeedLeaderElection() bool {
-	return false
 }
 
 func buildScheme(opts Options) (*runtime.Scheme, error) {

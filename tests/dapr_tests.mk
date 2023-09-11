@@ -90,11 +90,11 @@ DAPR_CONTAINER_LOG_PATH?=./dist/container_logs
 DAPR_TEST_LOG_PATH?=./dist/logs
 
 ifeq ($(DAPR_TEST_STATE_STORE),)
-DAPR_TEST_STATE_STORE=redis
+DAPR_TEST_STATE_STORE=postgres
 endif
 
 ifeq ($(DAPR_TEST_QUERY_STATE_STORE),)
-DAPR_TEST_QUERY_STATE_STORE=mongodb
+DAPR_TEST_QUERY_STATE_STORE=postgres
 endif
 
 ifeq ($(DAPR_TEST_PUBSUB),)
@@ -254,7 +254,7 @@ create-test-namespace:
 delete-test-namespace:
 	kubectl delete namespace $(DAPR_TEST_NAMESPACE)
 
-setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-mongodb setup-test-env-zipkin setup-test-env-postgres
+setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-zipkin setup-test-env-postgres
 
 setup-pubsub-subs-perf-test-components: setup-test-env-rabbitmq setup-test-env-pulsar setup-test-env-mqtt
 
@@ -497,16 +497,6 @@ setup-test-env-pulsar:
 delete-test-env-kafka:
 	$(HELM) del dapr-kafka --namespace $(DAPR_TEST_NAMESPACE)
 
-# install mongodb to the cluster without password
-setup-test-env-mongodb:
-	$(HELM) upgrade \
-	  --install dapr-mongodb bitnami/mongodb \
-	  --version 13.16.2 \
-	  -f ./tests/config/mongodb_override.yaml \
-	  --namespace $(DAPR_TEST_NAMESPACE) \
-	  --wait \
-	  --timeout 5m0s
-
 # install postgres to the cluster
 setup-test-env-postgres:
 	$(HELM) upgrade \
@@ -521,10 +511,6 @@ setup-test-env-postgres:
 delete-test-env-postgres:
 	$(HELM) del dapr-postgres --namespace $(DAPR_TEST_NAMESPACE)
 
-# delete mongodb from cluster
-delete-test-env-mongodb:
-	${HELM} del dapr-mongodb --namespace ${DAPR_TEST_NAMESPACE}
-
 # install zipkin to the cluster
 setup-test-env-zipkin:
 	$(KUBECTL) apply -f ./tests/config/zipkin.yaml -n $(DAPR_TEST_NAMESPACE)
@@ -532,7 +518,7 @@ delete-test-env-zipkin:
 	$(KUBECTL) delete -f ./tests/config/zipkin.yaml -n $(DAPR_TEST_NAMESPACE)
 
 # Setup the test environment by installing components
-setup-test-env: setup-test-env-kafka setup-test-env-redis setup-test-env-mongodb setup-test-env-postgres setup-test-env-k6 setup-test-env-zipkin setup-test-env-postgres
+setup-test-env: setup-test-env-kafka setup-test-env-redis setup-test-env-postgres setup-test-env-k6 setup-test-env-zipkin setup-test-env-postgres
 
 save-dapr-control-plane-k8s-resources:
 	mkdir -p '$(DAPR_CONTAINER_LOG_PATH)'
@@ -558,7 +544,7 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/kubernetes_redis_host_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_STATE_STORE)_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_STATE_STORE)_state_actorstore.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_QUERY_STATE_STORE)_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_QUERY_STATE_STORE)_query_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_redis_pluggable_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_tests_cluster_role_binding.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_PUBSUB)_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)

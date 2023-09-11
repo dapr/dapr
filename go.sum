@@ -393,10 +393,10 @@ github.com/dancannon/gorethink v4.0.0+incompatible h1:KFV7Gha3AuqT+gr0B/eKvGhbjm
 github.com/dancannon/gorethink v4.0.0+incompatible/go.mod h1:BLvkat9KmZc1efyYwhz3WnybhRZtgF1K929FD8z1avU=
 github.com/danieljoos/wincred v1.1.2 h1:QLdCxFs1/Yl4zduvBdcHB8goaYk9RARS2SgLLRuAyr0=
 github.com/danieljoos/wincred v1.1.2/go.mod h1:GijpziifJoIBfYh+S7BbkdUTU4LfM+QnGqR5Vl2tAx0=
-github.com/dapr/components-contrib v1.11.3-0.20230830212031-75ac7518038b h1:ULnG1d6te1C3ZuC4TcBp2tTH8ofwI9eWOIkVOVuQxVo=
-github.com/dapr/components-contrib v1.11.3-0.20230830212031-75ac7518038b/go.mod h1:jgo1jGXsi+ikW/g/qDXZMMRTUYz8+i3+HmvVVhMqcIU=
-github.com/dapr/kit v0.11.4-0.20230807225040-b6b141aa3e32 h1:ctqg12Eqd9SE88pwlJTupsIJowtaQcyH4s5xRMoweUU=
-github.com/dapr/kit v0.11.4-0.20230807225040-b6b141aa3e32/go.mod h1:bRyy09hwD03VEJ6b4weVNZWDjC5K3XY1+oGI5JCdZnU=
+github.com/dapr/components-contrib v1.11.3-0.20230905221417-0c2ce324b2bf h1:dszfRm7WTZuLz0/lfEqvfJjstZEbTx2GgL9Re38UY7M=
+github.com/dapr/components-contrib v1.11.3-0.20230905221417-0c2ce324b2bf/go.mod h1:jgo1jGXsi+ikW/g/qDXZMMRTUYz8+i3+HmvVVhMqcIU=
+github.com/dapr/kit v0.11.4-0.20230907165049-f08dc3ff1671 h1:G+bO4jojjphyGgPWwDlgXCROSMk4U+yfDCMHGshduck=
+github.com/dapr/kit v0.11.4-0.20230907165049-f08dc3ff1671/go.mod h1:eNYjsudq3Ij0x8CLWsPturHor56sZRNu5tk2hUiJT80=
 github.com/dave/jennifer v1.4.0/go.mod h1:fIb+770HOpJ2fmN9EPPKOqm1vMGhB+TwXKMZhrIygKg=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
@@ -1102,8 +1102,8 @@ github.com/matttproud/golang_protobuf_extensions v1.0.1/go.mod h1:D8He9yQNgCq6Z5
 github.com/matttproud/golang_protobuf_extensions v1.0.4 h1:mmDVorXM7PCGKw94cs5zkfA9PSy5pEvNWRP0ET0TIVo=
 github.com/matttproud/golang_protobuf_extensions v1.0.4/go.mod h1:BSXmuO+STAnVfrANrmjBb36TMTDstsz7MSK+HVaYKv4=
 github.com/microcosm-cc/bluemonday v1.0.24 h1:NGQoPtwGVcbGkKfvyYk1yRqknzBuoMiUrO6R7uFTPlw=
-github.com/microsoft/durabletask-go v0.3.0 h1:n3DE/SwI9sebft3vG0QcD7ioxqy15VJMzv3HOry8dJk=
-github.com/microsoft/durabletask-go v0.3.0/go.mod h1:t3u0iRvIadT1y4MD5cUG0mbTOqgANT6IFcLogv7o0M0=
+github.com/microsoft/durabletask-go v0.3.1 h1:Y7RrPefd4cz5GMxjMx/Zvf9r5INombNlzI0DaQd994k=
+github.com/microsoft/durabletask-go v0.3.1/go.mod h1:t3u0iRvIadT1y4MD5cUG0mbTOqgANT6IFcLogv7o0M0=
 github.com/microsoft/go-mssqldb v1.5.0 h1:CgENxkwtOBNj3Jg6T1X209y2blCfTTcwuOlznd2k9fk=
 github.com/microsoft/go-mssqldb v1.5.0/go.mod h1:lmWsjHD8XX/Txr0f8ZqgbEZSC+BZjmEQy/Ms+rLrvho=
 github.com/miekg/dns v1.0.14/go.mod h1:W1PPwlIAgtquWBMBEV9nkV9Cazfe8ScdGz/Lj7v3Nrg=

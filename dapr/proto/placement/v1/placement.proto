@@ -47,4 +47,6 @@ message Host {
   repeated string entities = 4;
   string id = 5;
   string pod = 6;
+  // Version of the Actor APIs supported by the Dapr runtime
+  uint32 api_level = 7;
 }

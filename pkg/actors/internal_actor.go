@@ -96,8 +96,10 @@ func (c *internalActorChannel) InvokeMethod(ctx context.Context, req *invokev1.I
 		return nil, fmt.Errorf("internal actor type '%s' not recognized", actorType)
 	}
 
-	var result interface{} = nil
-	var err error
+	var (
+		result any
+		err    error
+	)
 
 	verb := req.Message().GetHttpExtension().GetVerb()
 	actorID := req.Actor().GetActorId()
