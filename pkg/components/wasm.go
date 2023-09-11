@@ -1,8 +1,5 @@
-//go:build windows
-// +build windows
-
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -14,14 +11,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package grpc
+package components
 
-import (
-	"github.com/dapr/dapr/pkg/modes"
-)
+var wasmComponentsMap = map[string]struct{}{}
 
-// GetDialAddressPrefix returns a dial prefix for a gRPC client connections for a given DaprMode.
-// This is used on Windows hosts.
-func GetDialAddressPrefix(mode modes.DaprMode) string {
-	return ""
+func RegisterWasmComponentType(category Category, typeName string) {
+	wasmComponentsMap[string(category)+"."+typeName] = struct{}{}
+}
+
+func IsWasmComponentType(componentType string) bool {
+	_, ok := wasmComponentsMap[componentType]
+	return ok
 }

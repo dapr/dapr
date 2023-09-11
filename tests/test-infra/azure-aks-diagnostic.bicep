@@ -43,5 +43,30 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2021-08-01' = {
   }
 }
 
+resource storageManagementPolicies 'Microsoft.Storage/storageAccounts/managementPolicies@2023-01-01' = {
+  name: 'blobPolicy'
+  parent: storageAccount
+  properties: {
+    policy: {
+      rules: [
+        {
+          enabled: true
+          name: 'Delete blob after 15 days'
+          type: 'Lifecycle'
+          definition: {
+            actions: {
+              baseBlob: {
+                delete: {
+                  daysAfterModificationGreaterThan: 15
+                }
+              }              
+            }
+          }
+        }
+      ]
+    }
+  }
+}
+
 output diagLogAnalyticsWorkspaceResourceId string = logAnalyticsWorkspace.id
 output diagStorageResourceId string = storageAccount.id

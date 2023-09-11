@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -88,11 +89,8 @@ func (wf *workflowActor) SetActorRuntime(actorRuntime actors.Actors) {
 }
 
 // InvokeMethod implements actors.InternalActor
-func (wf *workflowActor) InvokeMethod(ctx context.Context, actorID string, methodName string, request []byte) (interface{}, error) {
+func (wf *workflowActor) InvokeMethod(ctx context.Context, actorID string, methodName string, request []byte) (result any, err error) {
 	wfLogger.Debugf("invoking method '%s' on workflow actor '%s'", methodName, actorID)
-
-	var result interface{}
-	var err error
 
 	switch methodName {
 	case CreateWorkflowInstanceMethod:
@@ -329,7 +327,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 	}
 
 	// The logic/for loop below purges/removes any leftover state from a completed or failed activity
-	// TODO: for optimization make multiple go routines and run them in parallel
+	transactionalRequests := make(map[string][]actors.TransactionalOperation)
 	for _, e := range state.Inbox {
 		var taskID int32
 		if ts := e.GetTaskCompleted(); ts != nil {
@@ -339,19 +337,28 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 		} else {
 			continue
 		}
-		req := actors.TransactionalRequest{
-			ActorType: wf.config.activityActorType,
-			ActorID:   getActivityActorID(actorID, taskID, state.Generation),
-			Operations: []actors.TransactionalOperation{{
-				Operation: actors.Delete,
-				Request: actors.TransactionalDelete{
-					Key: activityStateKey,
-				},
-			}},
+		op := actors.TransactionalOperation{
+			Operation: actors.Delete,
+			Request: actors.TransactionalDelete{
+				Key: activityStateKey,
+			},
 		}
-		err = wf.actors.TransactionalStateOperation(ctx, &req)
+		activityActorID := getActivityActorID(actorID, taskID, state.Generation)
+		if transactionalRequests[activityActorID] == nil {
+			transactionalRequests[activityActorID] = []actors.TransactionalOperation{op}
+		} else {
+			transactionalRequests[activityActorID] = append(transactionalRequests[activityActorID], op)
+		}
+	}
+	// TODO: for optimization make multiple go routines and run them in parallel
+	for activityActorID, operations := range transactionalRequests {
+		err = wf.actors.TransactionalStateOperation(ctx, &actors.TransactionalRequest{
+			ActorType:  wf.config.activityActorType,
+			ActorID:    activityActorID,
+			Operations: operations,
+		})
 		if err != nil {
-			return fmt.Errorf("failed to delete activity state with error: %w", err)
+			return fmt.Errorf("failed to delete activity state for activity actor '%s' with error: %w", activityActorID, err)
 		}
 	}
 
@@ -402,7 +409,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 			if err != nil {
 				return fmt.Errorf("failed to marshal pending timer data: %w", err)
 			}
-			delay := tf.FireAt.AsTime().Sub(time.Now().UTC())
+			delay := tf.FireAt.AsTime().Sub(time.Now())
 			if delay < 0 {
 				delay = 0
 			}
@@ -426,42 +433,45 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 		}
 	}
 
-	// Schedule activities (TODO: Parallelism)
+	// Schedule activities
+	// TODO: Parallelism
 	for _, e := range runtimeState.PendingTasks() {
-		if ts := e.GetTaskScheduled(); ts != nil {
-			eventData, err := backend.MarshalHistoryEvent(e)
-			if err != nil {
-				return err
-			}
-			activityRequestBytes, err := actors.EncodeInternalActorData(ActivityRequest{
-				HistoryEvent: eventData,
-			})
-			if err != nil {
-				return err
-			}
-			targetActorID := getActivityActorID(actorID, e.EventId, state.Generation)
-
-			req := invokev1.
-				NewInvokeMethodRequest("Execute").
-				WithActor(wf.config.activityActorType, targetActorID).
-				WithRawDataBytes(activityRequestBytes).
-				WithContentType(invokev1.OctetStreamContentType)
-			defer req.Close()
-
-			wf.activityResultAwaited.Store(true)
-
-			resp, err := wf.actors.Call(ctx, req)
-			if err != nil {
-				if errors.Is(err, ErrDuplicateInvocation) {
-					wfLogger.Warnf("%s: activity invocation %s::%d was flagged as a duplicate and will be skipped", actorID, ts.Name, e.EventId)
-					continue
-				}
-				return newRecoverableError(fmt.Errorf("failed to invoke activity actor '%s' to execute '%s': %w", targetActorID, ts.Name, err))
-			}
-			resp.Close()
-		} else {
-			wfLogger.Warn("don't know how to process task %v", e)
+		ts := e.GetTaskScheduled()
+		if ts == nil {
+			wfLogger.Warn("Unable to process task %v", e)
+			continue
 		}
+
+		eventData, err := backend.MarshalHistoryEvent(e)
+		if err != nil {
+			return err
+		}
+		activityRequestBytes, err := actors.EncodeInternalActorData(ActivityRequest{
+			HistoryEvent: eventData,
+		})
+		if err != nil {
+			return err
+		}
+		targetActorID := getActivityActorID(actorID, e.EventId, state.Generation)
+
+		req := invokev1.
+			NewInvokeMethodRequest("Execute").
+			WithActor(wf.config.activityActorType, targetActorID).
+			WithRawDataBytes(activityRequestBytes).
+			WithContentType(invokev1.OctetStreamContentType)
+		defer req.Close()
+
+		wf.activityResultAwaited.Store(true)
+
+		resp, err := wf.actors.Call(ctx, req)
+		if err != nil {
+			if errors.Is(err, ErrDuplicateInvocation) {
+				wfLogger.Warnf("%s: activity invocation %s::%d was flagged as a duplicate and will be skipped", actorID, ts.Name, e.EventId)
+				continue
+			}
+			return newRecoverableError(fmt.Errorf("failed to invoke activity actor '%s' to execute '%s': %w", targetActorID, ts.Name, err))
+		}
+		resp.Close()
 	}
 
 	// TODO: Do these in parallel?
@@ -540,6 +550,7 @@ func (wf *workflowActor) createReliableReminder(ctx context.Context, actorID str
 	// Reminders need to have unique names or else they may not fire in certain race conditions.
 	reminderName := fmt.Sprintf("%s-%s", namePrefix, uuid.NewString()[:8])
 	wfLogger.Debugf("%s: creating '%s' reminder with DueTime = %s", actorID, reminderName, delay)
+
 	dataEnc, err := json.Marshal(data)
 	if err != nil {
 		return reminderName, fmt.Errorf("failed to encode data as JSON: %w", err)
@@ -562,7 +573,7 @@ func getRuntimeState(actorID string, state *workflowState) *backend.Orchestratio
 
 func getActivityActorID(workflowActorID string, taskID int32, generation uint64) string {
 	// An activity can be identified by its name followed by its task ID and generation. Example: SayHello::0::1, SayHello::1::1, etc.
-	return fmt.Sprintf("%s::%d::%d", workflowActorID, taskID, generation)
+	return workflowActorID + "::" + strconv.Itoa(int(taskID)) + "::" + strconv.FormatUint(generation, 10)
 }
 
 func (wf *workflowActor) removeCompletedStateData(ctx context.Context, state *workflowState, actorID string) error {

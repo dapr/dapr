@@ -339,6 +339,15 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 		channelReq.Header.Set(hdr.Name, hdr.Value.String())
 	}
 
+	if cl := channelReq.Header.Get(invokev1.ContentLengthHeader); cl != "" {
+		v, err := strconv.ParseInt(cl, 10, 64)
+		if err != nil {
+			return nil, err
+		}
+
+		channelReq.ContentLength = v
+	}
+
 	// HTTP client needs to inject traceparent header for proper tracing stack.
 	span := diagUtils.SpanFromContext(ctx)
 	tp := diag.SpanContextToW3CString(span.SpanContext())

@@ -36,8 +36,9 @@ const TestAppID = "fakeAppID"
 
 func newTestTimers() *timers {
 	clock := clocktesting.NewFakeClock(startOfTime)
-	r := NewTimersProvider(clock)
-	return r.(*timers)
+	r := NewTimersProvider(clock).(*timers)
+	r.processor.WithClock(clock)
+	return r
 }
 
 // testRequest is the request object that encapsulates the `data` field of a request.
@@ -49,6 +50,7 @@ func TestCreateTimerDueTimes(t *testing.T) {
 	t.Run("create timer with positive DueTime", func(t *testing.T) {
 		clock := clocktesting.NewFakeClock(startOfTime)
 		provider := NewTimersProvider(clock).(*timers)
+		provider.processor.WithClock(clock)
 		defer provider.Close()
 
 		executed := make(chan string, 1)
@@ -86,6 +88,7 @@ func TestCreateTimerDueTimes(t *testing.T) {
 	t.Run("create timer with 0 DueTime", func(t *testing.T) {
 		clock := clocktesting.NewFakeClock(startOfTime)
 		provider := NewTimersProvider(clock).(*timers)
+		provider.processor.WithClock(clock)
 		defer provider.Close()
 
 		executed := make(chan string, 1)
@@ -123,6 +126,7 @@ func TestCreateTimerDueTimes(t *testing.T) {
 	t.Run("create timer with no DueTime", func(t *testing.T) {
 		clock := clocktesting.NewFakeClock(startOfTime)
 		provider := NewTimersProvider(clock).(*timers)
+		provider.processor.WithClock(clock)
 		defer provider.Close()
 
 		executed := make(chan string, 1)
@@ -575,6 +579,7 @@ func TestTimerValidation(t *testing.T) {
 func TestOverrideTimer(t *testing.T) {
 	clock := clocktesting.NewFakeClock(startOfTime)
 	provider := NewTimersProvider(clock).(*timers)
+	provider.processor.WithClock(clock)
 	defer provider.Close()
 
 	executed := make(chan string, 1)
@@ -648,6 +653,7 @@ func TestTimerCounter(t *testing.T) {
 
 	clock := clocktesting.NewFakeClock(startOfTime)
 	provider := NewTimersProvider(clock).(*timers)
+	provider.processor.WithClock(clock)
 	defer provider.Close()
 
 	// Init a mock metrics collector
@@ -774,6 +780,7 @@ func TestTimerCounter(t *testing.T) {
 func TestCreateTimerGoroutineLeak(t *testing.T) {
 	clock := clocktesting.NewFakeClock(startOfTime)
 	provider := NewTimersProvider(clock).(*timers)
+	provider.processor.WithClock(clock)
 	defer provider.Close()
 	require.NoError(t, provider.Init(context.Background()))
 
