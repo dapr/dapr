@@ -134,6 +134,9 @@ func TestGetActorState(t *testing.T) {
 			Key:       "key1",
 		}).Return(&actors.StateResponse{
 			Data: data,
+			Metadata: map[string]string{
+				"ttlExpireTime": "2020-10-02T22:00:00Z",
+			},
 		}, nil)
 
 		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
@@ -164,6 +167,9 @@ func TestGetActorState(t *testing.T) {
 		// assert
 		assert.Nil(t, err)
 		assert.Equal(t, data, res.Data)
+		assert.Equal(t, map[string]string{
+			"ttlExpireTime": "2020-10-02T22:00:00Z",
+		}, res.Metadata)
 		mockActors.AssertNumberOfCalls(t, "GetState", 1)
 	})
 }
