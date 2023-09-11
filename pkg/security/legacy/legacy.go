@@ -17,7 +17,9 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"os"
 
+	"github.com/dapr/dapr/pkg/security/consts"
 	"github.com/spiffe/go-spiffe/v2/bundle/x509bundle"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig"
@@ -59,17 +61,39 @@ func NewServer(svid x509svid.Source, bundle x509bundle.Source, authorizer tlscon
 // match on `cluster.local` DNS if and when the SPIFFE mTLS handshake fails.
 // TODO: @joshvanl: This package should be removed in v1.13.
 func NewDialClient(svid x509svid.Source, bundle x509bundle.Source, authorizer tlsconfig.Authorizer) *tls.Config {
-	tlsConfig := NewDialClientNoClientAuth(svid, bundle, authorizer)
+	tlsConfig := newDialClientNoClientAuth(svid, bundle, authorizer)
 	tlsConfig.GetClientCertificate = tlsconfig.GetClientCertificate(svid)
 	return tlsConfig
 }
 
-// NewDialClientNoClientAuth returns a `tls.Config` intended for network clients
-// without client authentication. Because pre v1.12 Dapr servers will be using
-// the issuing CA key pair (!!) for serving and client auth, we need to fallback
-// the `VerifyPeerCertificate` method to match on `cluster.local` DNS if and
-// when the SPIFFE mTLS handshake fails.
-func NewDialClientNoClientAuth(svid x509svid.Source, bundle x509bundle.Source, authorizer tlsconfig.Authorizer) *tls.Config {
+// NewDialClientOptionalClientAuth returns a `tls.Config` intended for network
+// clients with optional client authentication. Because pre v1.12 Dapr servers
+// will be using the issuing CA key pair (!!) for serving and client auth, we
+// need to fallback the `VerifyPeerCertificate` method to match on
+// `cluster.local` DNS if and when the SPIFFE mTLS handshake fails.
+// Sets the client certificate to that configured in environment variables to satisfy
+// sentry v1.11 servers.
+func NewDialClientOptionalClientAuth(svid x509svid.Source, bundle x509bundle.Source, authorizer tlsconfig.Authorizer) (*tls.Config, error) {
+	tlsConfig := newDialClientNoClientAuth(svid, bundle, authorizer)
+	certPEM, cok := os.LookupEnv(consts.CertChainEnvVar)
+	keyPEM, pok := os.LookupEnv(consts.CertKeyEnvVar)
+
+	if cok && pok {
+		cert, err := tls.X509KeyPair([]byte(certPEM), []byte(keyPEM))
+		if err != nil {
+			return nil, err
+		}
+		tlsConfig.GetClientCertificate = func(_ *tls.CertificateRequestInfo) (*tls.Certificate, error) {
+			return &cert, nil
+		}
+	}
+
+	return tlsConfig, nil
+}
+
+// newDialClientNoClientAuth returns a `tls.Config` intended for network clients
+// without client authentication.
+func newDialClientNoClientAuth(svid x509svid.Source, bundle x509bundle.Source, authorizer tlsconfig.Authorizer) *tls.Config {
 	spiffeVerify := tlsconfig.VerifyPeerCertificate(bundle, authorizer)
 	dnsVerify := dnsVerifyFn(svid, bundle)
 

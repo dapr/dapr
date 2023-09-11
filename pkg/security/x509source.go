@@ -282,11 +282,14 @@ func (x *x509source) requestFromSentry(ctx context.Context, csrDER []byte) ([]*x
 		)
 	}
 
+	tlsConfig, err := legacy.NewDialClientOptionalClientAuth(x, x, tlsconfig.AuthorizeID(x.sentryID))
+	if err != nil {
+		return nil, fmt.Errorf("error creating tls config: %w", err)
+	}
+
 	conn, err := grpc.DialContext(ctx,
 		x.sentryAddress,
-		grpc.WithTransportCredentials(credentials.NewTLS(
-			legacy.NewDialClientNoClientAuth(x, x, tlsconfig.AuthorizeID(x.sentryID)),
-		)),
+		grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)),
 		grpc.WithUnaryInterceptor(unaryClientInterceptor),
 		grpc.WithReturnConnectionError(),
 	)
