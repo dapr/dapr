@@ -22,6 +22,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"k8s.io/client-go/rest"
 
 	"github.com/dapr/dapr/pkg/concurrency"
@@ -99,7 +100,7 @@ func (s *sentry) Start(parentCtx context.Context) error {
 				// authorizing the server based on the correct SPIFFE ID, and instead
 				// matched on the DNS SAN `cluster.local`(!).
 				DNS: []string{"cluster.local"},
-			})
+			}, false)
 			if csrErr != nil {
 				monitoring.ServerCertIssueFailed("ca_error")
 				return nil, csrErr
@@ -149,14 +150,19 @@ func (s *sentry) Start(parentCtx context.Context) error {
 
 func (s *sentry) getValidators(ctx context.Context) (map[sentryv1pb.SignCertificateRequest_TokenValidator]validator.Validator, error) {
 	validators := make(map[sentryv1pb.SignCertificateRequest_TokenValidator]validator.Validator, len(s.conf.Validators))
+
 	for validatorID, opts := range s.conf.Validators {
 		switch validatorID {
 		case sentryv1pb.SignCertificateRequest_KUBERNETES:
+			td, err := spiffeid.TrustDomainFromString(s.conf.TrustDomain)
+			if err != nil {
+				return nil, err
+			}
 			config, err := rest.InClusterConfig()
 			if err != nil {
 				return nil, err
 			}
-			sentryID, err := security.SentryID(s.conf.TrustDomain, security.CurrentNamespace())
+			sentryID, err := security.SentryID(td, security.CurrentNamespace())
 			if err != nil {
 				return nil, err
 			}
@@ -176,7 +182,11 @@ func (s *sentry) getValidators(ctx context.Context) (map[sentryv1pb.SignCertific
 			validators[validatorID] = validatorInsecure.New()
 
 		case sentryv1pb.SignCertificateRequest_JWKS:
-			sentryID, err := security.SentryID(s.conf.TrustDomain, security.CurrentNamespace())
+			td, err := spiffeid.TrustDomainFromString(s.conf.TrustDomain)
+			if err != nil {
+				return nil, err
+			}
+			sentryID, err := security.SentryID(td, security.CurrentNamespace())
 			if err != nil {
 				return nil, err
 			}

@@ -129,13 +129,7 @@ func (be *actorBackend) GetOrchestrationMetadata(ctx context.Context, id api.Ins
 	}
 
 	defer res.Close()
-	data, err := res.RawDataFull()
-	if err != nil {
-		return nil, fmt.Errorf("failed to read the internal actor response: %w", err)
-	}
-	if len(data) == 0 {
-		return nil, api.ErrInstanceNotFound
-	}
+	data := res.RawData()
 	var metadata api.OrchestrationMetadata
 	if err := actors.DecodeInternalActorData(data, &metadata); err != nil {
 		return nil, fmt.Errorf("failed to decode the internal actor response: %w", err)
