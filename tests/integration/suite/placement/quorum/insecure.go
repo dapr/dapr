@@ -93,7 +93,7 @@ func (i *insecure) Run(t *testing.T, ctx context.Context) {
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- secProv.Start(ctx)
+		errCh <- secProv.Run(ctx)
 	}()
 	t.Cleanup(func() { cancel(); require.NoError(t, <-errCh) })
 
@@ -113,7 +113,7 @@ func (i *insecure) Run(t *testing.T, ctx context.Context) {
 		}
 		host := "localhost:" + strconv.Itoa(i.places[j].Port())
 		conn, cerr := grpc.DialContext(ctx, host, grpc.WithBlock(),
-			grpc.WithReturnConnectionError(), sec.GRPCDialOption(placeID),
+			grpc.WithReturnConnectionError(), sec.GRPCDialOptionMTLS(placeID),
 		)
 		if cerr != nil {
 			return false

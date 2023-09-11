@@ -15,15 +15,21 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/dapr/dapr/cmd/injector/options"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/health"
+	"github.com/dapr/dapr/pkg/injector/sentry"
 	"github.com/dapr/dapr/pkg/injector/service"
 	"github.com/dapr/dapr/pkg/metrics"
+	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/pkg/signals"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
@@ -75,15 +81,55 @@ func main() {
 		log.Fatalf("Failed to get authentication uids from services accounts: %s", err)
 	}
 
-	inj, err := service.NewInjector(uids, cfg, daprClient, kubeClient)
+	secProvider, err := security.New(ctx, security.Options{
+		SentryAddress:           cfg.SentryAddress,
+		ControlPlaneTrustDomain: cfg.ControlPlaneTrustDomain,
+		ControlPlaneNamespace:   security.CurrentNamespace(),
+		TrustAnchorsFile:        cfg.TrustAnchorsFile,
+		AppID:                   "dapr-injector",
+		MTLSEnabled:             true,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	inj, err := service.NewInjector(service.Options{
+		AuthUIDs:                uids,
+		Config:                  cfg,
+		DaprClient:              daprClient,
+		KubeClient:              kubeClient,
+		ControlPlaneNamespace:   security.CurrentNamespace(),
+		ControlPlaneTrustDomain: cfg.ControlPlaneTrustDomain,
+	})
 	if err != nil {
 		log.Fatalf("Error creating injector: %v", err)
 	}
 
 	healthzServer := health.NewServer(log)
+	caBundleCh := make(chan []byte)
 	mngr := concurrency.NewRunnerManager(
-		inj.Run,
 		metricsExporter.Run,
+		secProvider.Run,
+		func(ctx context.Context) error {
+			sec, rerr := secProvider.Handler(ctx)
+			if rerr != nil {
+				return rerr
+			}
+			sentryID, rerr := security.SentryID(sec.ControlPlaneTrustDomain(), security.CurrentNamespace())
+			if err != nil {
+				return rerr
+			}
+			requester := sentry.New(sentry.Options{
+				SentryAddress: cfg.SentryAddress,
+				SentryID:      sentryID,
+				Security:      sec,
+			})
+			return inj.Run(ctx,
+				sec.TLSServerConfigNoClientAuth(),
+				requester.RequestCertificateFromSentry,
+				sec.CurrentTrustAnchors,
+			)
+		},
 		func(ctx context.Context) error {
 			readyErr := inj.Ready(ctx)
 			if readyErr != nil {
@@ -99,6 +145,48 @@ func main() {
 				return fmt.Errorf("failed to start healthz server: %w", healhtzErr)
 			}
 			return nil
+		},
+		func(ctx context.Context) error {
+			sec, rErr := secProvider.Handler(ctx)
+			if rErr != nil {
+				return rErr
+			}
+			sec.WatchTrustAnchors(ctx, caBundleCh)
+			return nil
+		},
+		// Watch for changes to the trust anchors and update the webhook
+		// configuration on events.
+		func(ctx context.Context) error {
+			sec, rerr := secProvider.Handler(ctx)
+			if rerr != nil {
+				return rerr
+			}
+
+			caBundle, rErr := sec.CurrentTrustAnchors()
+			if rErr != nil {
+				return rErr
+			}
+
+			// Patch the mutating webhook configuration with the current trust
+			// anchors.
+			// Re-patch every time the trust anchors change.
+			for {
+				_, rErr = kubeClient.AdmissionregistrationV1().MutatingWebhookConfigurations().Patch(ctx,
+					"dapr-sidecar-injector",
+					types.JSONPatchType,
+					[]byte(`[{"op":"replace","path":"/webhooks/0/clientConfig/caBundle","value":"`+base64.StdEncoding.EncodeToString(caBundle)+`"}]`),
+					metav1.PatchOptions{},
+				)
+				if rErr != nil {
+					return rErr
+				}
+
+				select {
+				case caBundle = <-caBundleCh:
+				case <-ctx.Done():
+					return nil
+				}
+			}
 		},
 	)
 

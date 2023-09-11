@@ -148,7 +148,7 @@ func (p *Service) Run(ctx context.Context, port string, sec security.Handler) er
 	if err != nil {
 		return fmt.Errorf("failed to listen: %w", err)
 	}
-	grpcServer := grpc.NewServer(sec.GRPCServerOption())
+	grpcServer := grpc.NewServer(sec.GRPCServerOptionMTLS())
 
 	placementv1pb.RegisterPlacementServer(grpcServer, p)
 

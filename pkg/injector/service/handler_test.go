@@ -15,6 +15,7 @@ package service
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -37,16 +38,26 @@ import (
 func TestHandleRequest(t *testing.T) {
 	authID := "test-auth-id"
 
-	i, err := NewInjector([]string{authID}, Config{
-		TLSCertFile:                       "test-cert",
-		TLSKeyFile:                        "test-key",
-		SidecarImage:                      "test-image",
-		Namespace:                         "test-ns",
-		AllowedServiceAccountsPrefixNames: "vc-proj*:sa-dev*,vc-all-allowed*:*",
-	}, fake.NewSimpleClientset(), kubernetesfake.NewSimpleClientset())
+	i, err := NewInjector(Options{
+		AuthUIDs: []string{authID},
+		Config: Config{
+			SidecarImage:                      "test-image",
+			Namespace:                         "test-ns",
+			ControlPlaneTrustDomain:           "test-trust-domain",
+			AllowedServiceAccountsPrefixNames: "vc-proj*:sa-dev*,vc-all-allowed*:*",
+		},
+		DaprClient: fake.NewSimpleClientset(),
+		KubeClient: kubernetesfake.NewSimpleClientset(),
+	})
 
 	assert.NoError(t, err)
 	injector := i.(*injector)
+	injector.currentTrustAnchors = func() ([]byte, error) {
+		return nil, nil
+	}
+	injector.signDaprdCertificate = func(context.Context, string) ([]byte, []byte, error) {
+		return []byte("test-cert"), []byte("test-key"), nil
+	}
 
 	podBytes, _ := json.Marshal(corev1.Pod{
 		TypeMeta: metav1.TypeMeta{

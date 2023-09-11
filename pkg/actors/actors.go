@@ -40,7 +40,6 @@ import (
 	"github.com/dapr/dapr/pkg/actors/timers"
 	"github.com/dapr/dapr/pkg/channel"
 	configuration "github.com/dapr/dapr/pkg/config"
-	daprCredentials "github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/health"
@@ -52,6 +51,7 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/retry"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/logger"
 )
 
@@ -120,7 +120,6 @@ type actorsRuntime struct {
 	actorsReminders      internal.RemindersProvider
 	actorsTable          *sync.Map
 	appHealthy           *atomic.Bool
-	certChain            *daprCredentials.CertChain
 	tracingSpec          configuration.TracingSpec
 	resiliency           resiliency.Provider
 	storeName            string
@@ -128,6 +127,7 @@ type actorsRuntime struct {
 	clock                clock.WithTicker
 	internalActors       map[string]InternalActor
 	internalActorChannel *internalActorChannel
+	sec                  security.Handler
 	wg                   sync.WaitGroup
 	closed               atomic.Bool
 	closeCh              chan struct{}
@@ -141,11 +141,11 @@ type ActorsOpts struct {
 	AppChannel       channel.AppChannel
 	GRPCConnectionFn GRPCConnectionFn
 	Config           Config
-	CertChain        *daprCredentials.CertChain
 	TracingSpec      configuration.TracingSpec
 	Resiliency       resiliency.Provider
 	StateStoreName   string
 	CompStore        *compstore.ComponentStore
+	Security         security.Handler
 
 	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 	StateTTLEnabled bool
@@ -174,7 +174,6 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) ActorRuntime {
 		actorsConfig:         opts.Config,
 		timers:               timers.NewTimersProvider(clock),
 		actorsReminders:      remindersProvider,
-		certChain:            opts.CertChain,
 		tracingSpec:          opts.TracingSpec,
 		resiliency:           opts.Resiliency,
 		storeName:            opts.StateStoreName,
@@ -185,6 +184,7 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) ActorRuntime {
 		internalActors:       map[string]InternalActor{},
 		internalActorChannel: newInternalActorChannel(),
 		compStore:            opts.CompStore,
+		sec:                  opts.Security,
 
 		// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 		stateTTLEnabled: opts.StateTTLEnabled,
@@ -247,7 +247,7 @@ func (a *actorsRuntime) Init(ctx context.Context) error {
 	if a.placement == nil {
 		a.placement = placement.NewActorPlacement(placement.ActorPlacementOpts{
 			ServerAddrs:     a.actorsConfig.Config.PlacementAddresses,
-			CertChain:       a.certChain,
+			Security:        a.sec,
 			AppID:           a.actorsConfig.Config.AppID,
 			RuntimeHostname: hostname,
 			PodName:         a.actorsConfig.Config.PodName,
@@ -301,9 +301,9 @@ func (a *actorsRuntime) startAppHealthCheck(ctx context.Context, opts ...health.
 	for {
 		select {
 		case <-ctx.Done():
-			break
+			return
 		case <-a.closeCh:
-			break
+			return
 		case appHealthy := <-ch:
 			a.appHealthy.Store(appHealthy)
 		}
@@ -660,7 +660,8 @@ func (a *actorsRuntime) GetState(ctx context.Context, req *GetStateRequest) (*St
 	}
 
 	return &StateResponse{
-		Data: resp.Data,
+		Data:     resp.Data,
+		Metadata: resp.Metadata,
 	}, nil
 }
 
