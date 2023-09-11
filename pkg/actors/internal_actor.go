@@ -20,6 +20,7 @@ import (
 	"encoding/gob"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/dapr/dapr/pkg/apphealth"
@@ -95,8 +96,10 @@ func (c *internalActorChannel) InvokeMethod(ctx context.Context, req *invokev1.I
 		return nil, fmt.Errorf("internal actor type '%s' not recognized", actorType)
 	}
 
-	var result interface{} = nil
-	var err error
+	var (
+		result any
+		err    error
+	)
 
 	verb := req.Message().GetHttpExtension().GetVerb()
 	actorID := req.Actor().GetActorId()
@@ -113,8 +116,7 @@ func (c *internalActorChannel) InvokeMethod(ctx context.Context, req *invokev1.I
 		methodName := methodURL[methodStartIndex+len("/method/"):]
 
 		// Check for well-known method names; otherwise, just call InvokeMethod on the internal actor.
-		if strings.HasPrefix(methodName, "remind/") {
-			reminderName := strings.TrimPrefix(methodName, "remind/")
+		if reminderName, prefixFound := strings.CutPrefix(methodName, "remind/"); prefixFound {
 			reminderInfo, ok := req.GetDataObject().(*ReminderResponse)
 			if !ok {
 				return nil, fmt.Errorf("unexpected type for reminder object: %T", req.GetDataObject())
@@ -133,8 +135,7 @@ func (c *internalActorChannel) InvokeMethod(ctx context.Context, req *invokev1.I
 				return nil, err
 			}
 
-			if strings.HasPrefix(methodName, "timer/") {
-				timerName := strings.TrimPrefix(methodName, "timer/")
+			if timerName, prefixFound := strings.CutPrefix(methodName, "timer/"); prefixFound {
 				err = actor.InvokeTimer(ctx, actorID, timerName, requestData)
 			} else {
 				result, err = actor.InvokeMethod(ctx, actorID, methodName, requestData)
@@ -176,10 +177,9 @@ func EncodeInternalActorData(result any) ([]byte, error) {
 }
 
 // DecodeInternalActorData decodes encoding/gob data and stores the result in e.
-func DecodeInternalActorData(data []byte, e any) error {
+func DecodeInternalActorData(data io.Reader, e any) error {
 	// Decode the data using encoding/gob (https://go.dev/blog/gob)
-	buffer := bytes.NewBuffer(data)
-	dec := gob.NewDecoder(buffer)
+	dec := gob.NewDecoder(data)
 	if err := dec.Decode(e); err != nil {
 		return err
 	}

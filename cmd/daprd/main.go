@@ -34,6 +34,8 @@ import (
 	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	workflowsLoader "github.com/dapr/dapr/pkg/components/workflows"
+	"github.com/dapr/dapr/pkg/runtime/registry"
+	"github.com/dapr/dapr/pkg/signals"
 
 	"github.com/dapr/dapr/pkg/runtime"
 	"github.com/dapr/kit/logger"
@@ -74,10 +76,35 @@ func main() {
 		log.Fatal(err)
 	}
 
-	log.Infof("starting Dapr Runtime -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
-	log.Infof("log level set to: %s", opts.Logger.OutputLevel)
+	log.Infof("Starting Dapr Runtime -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
+	log.Infof("Log level set to: %s", opts.Logger.OutputLevel)
 
-	rt, err := runtime.FromConfig(&runtime.Config{
+	secretstoresLoader.DefaultRegistry.Logger = logContrib
+	stateLoader.DefaultRegistry.Logger = logContrib
+	cryptoLoader.DefaultRegistry.Logger = logContrib
+	configurationLoader.DefaultRegistry.Logger = logContrib
+	lockLoader.DefaultRegistry.Logger = logContrib
+	pubsubLoader.DefaultRegistry.Logger = logContrib
+	nrLoader.DefaultRegistry.Logger = logContrib
+	bindingsLoader.DefaultRegistry.Logger = logContrib
+	workflowsLoader.DefaultRegistry.Logger = logContrib
+	httpMiddlewareLoader.DefaultRegistry.Logger = log // Note this uses log on purpose
+
+	reg := registry.NewOptions().
+		WithSecretStores(secretstoresLoader.DefaultRegistry).
+		WithStateStores(stateLoader.DefaultRegistry).
+		WithConfigurations(configurationLoader.DefaultRegistry).
+		WithLocks(lockLoader.DefaultRegistry).
+		WithPubSubs(pubsubLoader.DefaultRegistry).
+		WithNameResolutions(nrLoader.DefaultRegistry).
+		WithBindings(bindingsLoader.DefaultRegistry).
+		WithCryptoProviders(cryptoLoader.DefaultRegistry).
+		WithHTTPMiddlewares(httpMiddlewareLoader.DefaultRegistry).
+		WithWorkflows(workflowsLoader.DefaultRegistry)
+
+	ctx := signals.Context()
+
+	rt, err := runtime.FromConfig(ctx, &runtime.Config{
 		AppID:                        opts.AppID,
 		PlacementServiceHostAddr:     opts.PlacementServiceHostAddr,
 		AllowedOrigins:               opts.AllowedOrigins,
@@ -108,44 +135,17 @@ func main() {
 		AppHealthThreshold:           opts.AppHealthThreshold,
 		AppChannelAddress:            opts.AppChannelAddress,
 		EnableAPILogging:             opts.EnableAPILogging,
-		ConfigPath:                   opts.ConfigPath,
+		Config:                       opts.Config,
 		Metrics:                      opts.Metrics,
 		AppSSL:                       opts.AppSSL,
 		ComponentsPath:               opts.ComponentsPath,
+		Registry:                     reg,
 	})
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	secretstoresLoader.DefaultRegistry.Logger = logContrib
-	stateLoader.DefaultRegistry.Logger = logContrib
-	cryptoLoader.DefaultRegistry.Logger = logContrib
-	configurationLoader.DefaultRegistry.Logger = logContrib
-	lockLoader.DefaultRegistry.Logger = logContrib
-	pubsubLoader.DefaultRegistry.Logger = logContrib
-	nrLoader.DefaultRegistry.Logger = logContrib
-	bindingsLoader.DefaultRegistry.Logger = logContrib
-	workflowsLoader.DefaultRegistry.Logger = logContrib
-	httpMiddlewareLoader.DefaultRegistry.Logger = log // Note this uses log on purpose
-
-	stopCh := runtime.ShutdownSignal()
-
-	err = rt.Run(
-		runtime.WithSecretStores(secretstoresLoader.DefaultRegistry),
-		runtime.WithStates(stateLoader.DefaultRegistry),
-		runtime.WithConfigurations(configurationLoader.DefaultRegistry),
-		runtime.WithLocks(lockLoader.DefaultRegistry),
-		runtime.WithPubSubs(pubsubLoader.DefaultRegistry),
-		runtime.WithNameResolutions(nrLoader.DefaultRegistry),
-		runtime.WithBindings(bindingsLoader.DefaultRegistry),
-		runtime.WithCryptoProviders(cryptoLoader.DefaultRegistry),
-		runtime.WithHTTPMiddlewares(httpMiddlewareLoader.DefaultRegistry),
-		runtime.WithWorkflowComponents(workflowsLoader.DefaultRegistry),
-	)
-	if err != nil {
+	if err := rt.Run(ctx); err != nil {
 		log.Fatalf("fatal error from runtime: %s", err)
 	}
-
-	<-stopCh
-	rt.ShutdownWithWait()
 }

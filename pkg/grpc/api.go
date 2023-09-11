@@ -18,12 +18,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sort"
+	"io"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	otelTrace "go.opentelemetry.io/otel/trace"
+	"golang.org/x/exp/slices"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -36,7 +38,6 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
-	"github.com/dapr/dapr/pkg/channel"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -45,14 +46,13 @@ import (
 	"github.com/dapr/dapr/pkg/grpc/metadata"
 	"github.com/dapr/dapr/pkg/grpc/universalapi"
 	"github.com/dapr/dapr/pkg/messages"
-	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
-	"github.com/dapr/dapr/pkg/runtime/compstore"
+	"github.com/dapr/dapr/pkg/runtime/channels"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/utils"
 )
@@ -61,6 +61,8 @@ const daprHTTPStatusHeader = "dapr-http-status"
 
 // API is the gRPC interface for the Dapr gRPC API. It implements both the internal and external proto definitions.
 type API interface {
+	io.Closer
+
 	// DaprInternal Service methods
 	internalv1pb.ServiceInvocationServer
 
@@ -68,61 +70,44 @@ type API interface {
 	runtimev1pb.DaprServer
 
 	// Methods internal to the object
-	SetAppChannel(appChannel channel.AppChannel)
-	SetDirectMessaging(directMessaging messaging.DirectMessaging)
-	SetActorRuntime(actor actors.Actors)
+	SetActorRuntime(actor actors.ActorRuntime)
 }
 
 type api struct {
 	*universalapi.UniversalAPI
-	directMessaging       messaging.DirectMessaging
-	appChannel            channel.AppChannel
-	resiliency            resiliency.Provider
+	directMessaging       invokev1.DirectMessaging
+	channels              *channels.Channels
 	pubsubAdapter         runtimePubsub.Adapter
-	sendToOutputBindingFn func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	sendToOutputBindingFn func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	tracingSpec           config.TracingSpec
 	accessControlList     *config.AccessControlList
+	closed                atomic.Bool
+	closeCh               chan struct{}
+	wg                    sync.WaitGroup
 }
 
 // APIOpts contains options for NewAPI.
 type APIOpts struct {
-	AppID                       string
-	AppChannel                  channel.AppChannel
-	Resiliency                  resiliency.Provider
-	CompStore                   *compstore.ComponentStore
-	PubsubAdapter               runtimePubsub.Adapter
-	DirectMessaging             messaging.DirectMessaging
-	Actors                      actors.Actors
-	SendToOutputBindingFn       func(name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
-	TracingSpec                 config.TracingSpec
-	AccessControlList           *config.AccessControlList
-	Shutdown                    func()
-	GetComponentsCapabilitiesFn func() map[string][]string
-	AppConnectionConfig         config.AppConnectionConfig
-	GlobalConfig                *config.Configuration
+	UniversalAPI          *universalapi.UniversalAPI
+	Channels              *channels.Channels
+	PubsubAdapter         runtimePubsub.Adapter
+	DirectMessaging       invokev1.DirectMessaging
+	SendToOutputBindingFn func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
+	TracingSpec           config.TracingSpec
+	AccessControlList     *config.AccessControlList
 }
 
 // NewAPI returns a new gRPC API.
 func NewAPI(opts APIOpts) API {
 	return &api{
-		UniversalAPI: &universalapi.UniversalAPI{
-			AppID:                      opts.AppID,
-			Logger:                     apiServerLogger,
-			Resiliency:                 opts.Resiliency,
-			Actors:                     opts.Actors,
-			CompStore:                  opts.CompStore,
-			ShutdownFn:                 opts.Shutdown,
-			GetComponentsCapabilitesFn: opts.GetComponentsCapabilitiesFn,
-			AppConnectionConfig:        opts.AppConnectionConfig,
-			GlobalConfig:               opts.GlobalConfig,
-		},
+		UniversalAPI:          opts.UniversalAPI,
 		directMessaging:       opts.DirectMessaging,
-		resiliency:            opts.Resiliency,
-		appChannel:            opts.AppChannel,
+		channels:              opts.Channels,
 		pubsubAdapter:         opts.PubsubAdapter,
 		sendToOutputBindingFn: opts.SendToOutputBindingFn,
 		tracingSpec:           opts.TracingSpec,
 		accessControlList:     opts.AccessControlList,
+		closeCh:               make(chan struct{}),
 	}
 }
 
@@ -137,8 +122,8 @@ func (a *api) validateAndGetPubsubAndTopic(pubsubName, topic string, reqMeta map
 		return nil, "", "", false, status.Error(codes.InvalidArgument, messages.ErrPubsubEmpty)
 	}
 
-	thepubsub := a.pubsubAdapter.GetPubSub(pubsubName)
-	if thepubsub == nil {
+	thepubsub, ok := a.UniversalAPI.CompStore.GetPubSub(pubsubName)
+	if !ok {
 		return nil, "", "", false, status.Errorf(codes.InvalidArgument, messages.ErrPubsubNotFound, pubsubName)
 	}
 
@@ -151,7 +136,7 @@ func (a *api) validateAndGetPubsubAndTopic(pubsubName, topic string, reqMeta map
 		return nil, "", "", false, messages.ErrPubSubMetadataDeserialize.WithFormat(metaErr)
 	}
 
-	return thepubsub, pubsubName, topic, rawPayload, nil
+	return thepubsub.Component, pubsubName, topic, rawPayload, nil
 }
 
 func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*emptypb.Empty, error) {
@@ -161,12 +146,6 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 		return &emptypb.Empty{}, validationErr
 	}
 
-	span := diagUtils.SpanFromContext(ctx)
-	// Populate W3C traceparent to cloudevent envelope
-	corID := diag.SpanContextToW3CString(span.SpanContext())
-	// Populate W3C tracestate to cloudevent envelope
-	traceState := diag.TraceStateToW3CString(span.SpanContext())
-
 	body := []byte{}
 	if in.Data != nil {
 		body = in.Data
@@ -175,6 +154,9 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	data := body
 
 	if !rawPayload {
+		span := diagUtils.SpanFromContext(ctx)
+		corID, traceState := diag.TraceIDAndStateFromSpan(span)
+
 		envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
 			Source:          a.UniversalAPI.AppID,
 			Topic:           in.Topic,
@@ -209,7 +191,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	}
 
 	start := time.Now()
-	err := a.pubsubAdapter.Publish(&req)
+	err := a.pubsubAdapter.Publish(ctx, &req)
 	elapsed := diag.ElapsedSince(start)
 
 	diag.DefaultComponentMonitoring.PubsubEgressEvent(context.Background(), pubsubName, topic, err == nil, elapsed)
@@ -248,13 +230,13 @@ var (
 // Deprecated: Use proxy mode service invocation instead.
 func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error) {
 	if a.directMessaging == nil {
-		return nil, status.Errorf(codes.Internal, messages.ErrDirectInvokeNotReady)
+		return nil, messages.ErrDirectInvokeNotReady
 	}
 
 	if invokeServiceDeprecationNoticeShown.CompareAndSwap(false, true) {
 		apiServerLogger.Warn("[DEPRECATION NOTICE] InvokeService is deprecated and will be removed in the future, please use proxy mode instead.")
 	}
-	policyDef := a.resiliency.EndpointPolicy(in.Id, in.Id+":"+in.Message.Method)
+	policyDef := a.UniversalAPI.Resiliency.EndpointPolicy(in.Id, in.Id+":"+in.Message.Method)
 
 	req := invokev1.FromInvokeRequestMessage(in.GetMessage())
 	if policyDef != nil {
@@ -284,7 +266,7 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 			}
 		}
 		if rErr != nil {
-			return rResp, status.Errorf(codes.Internal, messages.ErrDirectInvoke, in.Id, rErr)
+			return rResp, messages.ErrDirectInvoke.WithFormat(in.Id, rErr)
 		}
 
 		rResp.headers = invokev1.InternalMetadataToGrpcMetadata(ctx, imr.Headers(), true)
@@ -343,8 +325,6 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 	}
 
 	span := diagUtils.SpanFromContext(ctx)
-	// Populate W3C tracestate to cloudevent envelope
-	traceState := diag.TraceStateToW3CString(span.SpanContext())
 
 	spanMap := map[int]otelTrace.Span{}
 	// closeChildSpans method is called on every respond() call in all return paths in the following block of code.
@@ -377,10 +357,12 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 		}
 
 		if !rawPayload {
-			// For multiple events in a single bulk call traceParent is different for each event.
+			// Extract trace context from context.
 			_, childSpan := diag.StartGRPCProducerSpanChildFromParent(ctx, span, "/dapr.proto.runtime.v1.Dapr/BulkPublishEventAlpha1/")
+			corID, traceState := diag.TraceIDAndStateFromSpan(childSpan)
+
+			// For multiple events in a single bulk call traceParent is different for each event.
 			// Populate W3C traceparent to cloudevent envelope
-			corID := diag.SpanContextToW3CString(childSpan.SpanContext())
 			spanMap[i] = childSpan
 
 			envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
@@ -421,7 +403,7 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 	start := time.Now()
 	// err is only nil if all entries are successfully published.
 	// For partial success, err is not nil and res contains the failed entries.
-	res, err := a.pubsubAdapter.BulkPublish(&req)
+	res, err := a.pubsubAdapter.BulkPublish(ctx, &req)
 
 	elapsed := diag.ElapsedSince(start)
 	eventsPublished := int64(len(req.Entries))
@@ -484,7 +466,7 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 
 	r := &runtimev1pb.InvokeBindingResponse{}
 	start := time.Now()
-	resp, err := a.sendToOutputBindingFn(in.Name, req)
+	resp, err := a.sendToOutputBindingFn(ctx, in.Name, req)
 	elapsed := diag.ElapsedSince(start)
 
 	diag.DefaultComponentMonitoring.OutputBindingEvent(context.Background(), in.Name, in.Operation, err == nil, elapsed)
@@ -849,8 +831,8 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 		return &emptypb.Empty{}, err
 	}
 
-	operations := make([]state.TransactionalStateOperation, len(in.Operations))
-	for i, inputReq := range in.Operations {
+	operations := make([]state.TransactionalStateOperation, 0, len(in.Operations))
+	for _, inputReq := range in.Operations {
 		req := inputReq.Request
 
 		hasEtag, etag := extractEtag(req)
@@ -879,7 +861,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 				}
 			}
 
-			operations[i] = setReq
+			operations = append(operations, setReq)
 
 		case state.OperationDelete:
 			delReq := state.DeleteRequest{
@@ -897,10 +879,19 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 				}
 			}
 
-			operations[i] = delReq
+			operations = append(operations, delReq)
 
 		default:
 			err := status.Errorf(codes.Unimplemented, messages.ErrNotSupportedStateOperation, inputReq.OperationType)
+			apiServerLogger.Debug(err)
+			return &emptypb.Empty{}, err
+		}
+	}
+
+	if maxMulti, ok := store.(state.TransactionalStoreMultiMaxSize); ok {
+		max := maxMulti.MultiMaxSize()
+		if max > 0 && len(operations) > max {
+			err := messages.ErrStateTooManyTransactionalOp.WithFormat(len(operations), max)
 			apiServerLogger.Debug(err)
 			return &emptypb.Empty{}, err
 		}
@@ -924,9 +915,21 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 		}
 	}
 
+	outboxEnabled := a.pubsubAdapter.Outbox().Enabled(in.StoreName)
+	if outboxEnabled {
+		trs, err := a.pubsubAdapter.Outbox().PublishInternal(ctx, in.StoreName, operations, a.UniversalAPI.AppID)
+		if err != nil {
+			err = status.Errorf(codes.Internal, messages.ErrPublishOutbox, err.Error())
+			apiServerLogger.Debug(err)
+			return &emptypb.Empty{}, err
+		}
+
+		operations = append(operations, trs...)
+	}
+
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[struct{}](ctx,
-		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
+		a.UniversalAPI.Resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
 	)
 	storeReq := &state.TransactionalStateRequest{
 		Operations: operations,
@@ -1016,6 +1019,10 @@ func (a *api) RegisterActorReminder(ctx context.Context, in *runtimev1pb.Registe
 		req.Data = j
 	}
 	err := a.UniversalAPI.Actors.CreateReminder(ctx, req)
+	if err != nil && errors.Is(err, actors.ErrReminderOpActorNotHosted) {
+		apiServerLogger.Debug(messages.ErrActorReminderOpActorNotHosted)
+		return nil, messages.ErrActorReminderOpActorNotHosted
+	}
 	return &emptypb.Empty{}, err
 }
 
@@ -1033,6 +1040,10 @@ func (a *api) UnregisterActorReminder(ctx context.Context, in *runtimev1pb.Unreg
 	}
 
 	err := a.UniversalAPI.Actors.DeleteReminder(ctx, req)
+	if err != nil && errors.Is(err, actors.ErrReminderOpActorNotHosted) {
+		apiServerLogger.Debug(messages.ErrActorReminderOpActorNotHosted)
+		return nil, messages.ErrActorReminderOpActorNotHosted
+	}
 	return &emptypb.Empty{}, err
 }
 
@@ -1051,6 +1062,10 @@ func (a *api) RenameActorReminder(ctx context.Context, in *runtimev1pb.RenameAct
 	}
 
 	err := a.UniversalAPI.Actors.RenameReminder(ctx, req)
+	if err != nil && errors.Is(err, actors.ErrReminderOpActorNotHosted) {
+		apiServerLogger.Debug(messages.ErrActorReminderOpActorNotHosted)
+		return nil, messages.ErrActorReminderOpActorNotHosted
+	}
 	return &emptypb.Empty{}, err
 }
 
@@ -1178,7 +1193,7 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 		return response, err
 	}
 
-	policyDef := a.resiliency.ActorPreLockPolicy(in.ActorType, in.ActorId)
+	policyDef := a.UniversalAPI.Resiliency.ActorPreLockPolicy(in.ActorType, in.ActorId)
 
 	reqMetadata := make(map[string][]string, len(in.Metadata))
 	for k, v := range in.Metadata {
@@ -1226,15 +1241,7 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 	return response, nil
 }
 
-func (a *api) SetAppChannel(appChannel channel.AppChannel) {
-	a.appChannel = appChannel
-}
-
-func (a *api) SetDirectMessaging(directMessaging messaging.DirectMessaging) {
-	a.directMessaging = directMessaging
-}
-
-func (a *api) SetActorRuntime(actor actors.Actors) {
+func (a *api) SetActorRuntime(actor actors.ActorRuntime) {
 	a.UniversalAPI.Actors = actor
 }
 
@@ -1274,7 +1281,7 @@ func (a *api) GetConfiguration(ctx context.Context, in *runtimev1pb.GetConfigura
 
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[*configuration.GetResponse](ctx,
-		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Configuration),
+		a.UniversalAPI.Resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Configuration),
 	)
 	getResponse, err := policyRunner(func(ctx context.Context) (*configuration.GetResponse, error) {
 		return store.Get(ctx, &req)
@@ -1310,12 +1317,29 @@ func (a *api) GetConfigurationAlpha1(ctx context.Context, in *runtimev1pb.GetCon
 }
 
 type configurationEventHandler struct {
+	readyCh      chan struct{}
+	readyClosed  bool
+	lock         sync.Mutex
 	api          *api
 	storeName    string
 	serverStream runtimev1pb.Dapr_SubscribeConfigurationAlpha1Server //nolint:nosnakecase
 }
 
+func (h *configurationEventHandler) ready() {
+	if !h.readyClosed {
+		close(h.readyCh)
+		h.readyClosed = true
+	}
+}
+
 func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *configuration.UpdateEvent) error {
+	// Blocks until the first message is sent
+	<-h.readyCh
+
+	// Calling Send on a gRPC stream from multiple goroutines at the same time is not supported
+	h.lock.Lock()
+	defer h.lock.Unlock()
+
 	items := make(map[string]*commonv1pb.ConfigurationItem, len(e.Items))
 	for k, v := range e.Items {
 		items[k] = &commonv1pb.ConfigurationItem{
@@ -1325,74 +1349,125 @@ func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *c
 		}
 	}
 
-	if err := h.serverStream.Send(&runtimev1pb.SubscribeConfigurationResponse{
+	err := h.serverStream.Send(&runtimev1pb.SubscribeConfigurationResponse{
 		Items: items,
 		Id:    e.ID,
-	}); err != nil {
+	})
+	if err != nil {
 		apiServerLogger.Debug(err)
 		return err
 	}
 	return nil
 }
 
-func (a *api) SubscribeConfiguration(request *runtimev1pb.SubscribeConfigurationRequest, configurationServer runtimev1pb.Dapr_SubscribeConfigurationServer) error { //nolint:nosnakecase
+func (a *api) SubscribeConfiguration(request *runtimev1pb.SubscribeConfigurationRequest, stream runtimev1pb.Dapr_SubscribeConfigurationServer) error { //nolint:nosnakecase
 	store, err := a.getConfigurationStore(request.StoreName)
 	if err != nil {
 		apiServerLogger.Debug(err)
 		return err
 	}
-	sort.Slice(request.Keys, func(i, j int) bool {
-		return request.Keys[i] < request.Keys[j]
-	})
-
-	subscribeKeys := make([]string, 0)
-
-	// TODO(@halspang) provide a switch to use just resiliency or this.
-
-	if len(request.Keys) > 0 {
-		subscribeKeys = append(subscribeKeys, request.Keys...)
-	}
-
-	req := &configuration.SubscribeRequest{
-		Keys:     subscribeKeys,
-		Metadata: request.GetMetadata(),
-	}
 
 	handler := &configurationEventHandler{
+		readyCh:      make(chan struct{}),
 		api:          a,
 		storeName:    request.StoreName,
-		serverStream: configurationServer,
+		serverStream: stream,
 	}
+	// Prevents a leak if we return with an error
+	defer handler.ready()
 
-	// TODO(@laurence) deal with failed subscription and retires
-	start := time.Now()
-	policyRunner := resiliency.NewRunner[string](configurationServer.Context(),
-		a.resiliency.ComponentOutboundPolicy(request.StoreName, resiliency.Configuration),
-	)
-	subscribeID, err := policyRunner(func(ctx context.Context) (string, error) {
-		return store.Subscribe(ctx, req, handler.updateEventHandler)
-	})
-	elapsed := diag.ElapsedSince(start)
-
-	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), request.StoreName, diag.ConfigurationSubscribe, err == nil, elapsed)
-
+	// Subscribe
+	subscribeCtx, subscribeCancel := context.WithCancel(stream.Context())
+	defer subscribeCancel()
+	slices.Sort(request.Keys)
+	subscribeID, err := a.subscribeConfiguration(subscribeCtx, request, handler, store)
 	if err != nil {
-		err = status.Errorf(codes.InvalidArgument, messages.ErrConfigurationSubscribe, req.Keys, request.StoreName, err.Error())
-		apiServerLogger.Debug(err)
+		// Error has already been logged
 		return err
 	}
-	if err := handler.serverStream.Send(&runtimev1pb.SubscribeConfigurationResponse{
+
+	// Send subscription ID
+	// This is primarily meant for backwards-compatibility with using the Unsubscribe method
+	err = handler.serverStream.Send(&runtimev1pb.SubscribeConfigurationResponse{
 		Id: subscribeID,
-	}); err != nil {
+	})
+	if err != nil {
 		apiServerLogger.Debug(err)
 		return err
 	}
 
 	stop := make(chan struct{})
 	a.CompStore.AddConfigurationSubscribe(subscribeID, stop)
-	<-stop
+
+	// We have sent the first message, so signal that we're ready to send messages in the stream
+	handler.ready()
+
+	// Wait until the channel is stopped or until the client disconnects
+	select {
+	case <-stream.Context().Done():
+	case <-stop:
+	}
+
+	// Cancel the context here to immediately stop sending messages while we unsubscribe
+	subscribeCancel()
+
+	// Unsubscribe
+	// We must use a background context here because stream.Context is likely canceled already
+	err = a.unsubscribeConfiguration(context.Background(), subscribeID, request.StoreName, store)
+	if err != nil {
+		// Error has already been logged
+		return err
+	}
+
+	// Delete the subscription ID (and the stop channel) if we got here because of the context being canceled
+	a.CompStore.DeleteConfigurationSubscribe(subscribeID)
 
 	return nil
+}
+
+func (a *api) subscribeConfiguration(ctx context.Context, request *runtimev1pb.SubscribeConfigurationRequest, handler *configurationEventHandler, store configuration.Store) (subscribeID string, err error) {
+	componentReq := &configuration.SubscribeRequest{
+		Keys:     request.Keys,
+		Metadata: request.GetMetadata(),
+	}
+
+	// TODO(@laurence) deal with failed subscription and retires
+	start := time.Now()
+	policyRunner := resiliency.NewRunner[string](ctx,
+		a.UniversalAPI.Resiliency.ComponentOutboundPolicy(request.StoreName, resiliency.Configuration),
+	)
+	subscribeID, err = policyRunner(func(ctx context.Context) (string, error) {
+		return store.Subscribe(ctx, componentReq, handler.updateEventHandler)
+	})
+	elapsed := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), request.StoreName, diag.ConfigurationSubscribe, err == nil, elapsed)
+
+	if err != nil {
+		err = status.Errorf(codes.InvalidArgument, messages.ErrConfigurationSubscribe, componentReq.Keys, request.StoreName, err)
+		apiServerLogger.Debug(err)
+		return "", err
+	}
+
+	return subscribeID, nil
+}
+
+func (a *api) unsubscribeConfiguration(ctx context.Context, subscribeID string, storeName string, store configuration.Store) error {
+	policyRunner := resiliency.NewRunner[struct{}](ctx,
+		a.UniversalAPI.Resiliency.ComponentOutboundPolicy(storeName, resiliency.Configuration),
+	)
+	start := time.Now()
+	storeReq := &configuration.UnsubscribeRequest{
+		ID: subscribeID,
+	}
+	_, err := policyRunner(func(ctx context.Context) (struct{}, error) {
+		return struct{}{}, store.Unsubscribe(ctx, storeReq)
+	})
+	elapsed := diag.ElapsedSince(start)
+
+	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), storeName, diag.ConfigurationUnsubscribe, err == nil, elapsed)
+
+	return err
 }
 
 // TODO: Remove this method when the alpha API is removed.
@@ -1400,18 +1475,10 @@ func (a *api) SubscribeConfigurationAlpha1(request *runtimev1pb.SubscribeConfigu
 	return a.SubscribeConfiguration(request, configurationServer.(runtimev1pb.Dapr_SubscribeConfigurationServer))
 }
 
+// This method is deprecated and exists for backwards-compatibility only.
+// It causes an active SubscribeConfiguration RPC for the given subscription ID to be stopped if active
 func (a *api) UnsubscribeConfiguration(ctx context.Context, request *runtimev1pb.UnsubscribeConfigurationRequest) (*runtimev1pb.UnsubscribeConfigurationResponse, error) {
-	store, err := a.getConfigurationStore(request.GetStoreName())
-	if err != nil {
-		apiServerLogger.Debug(err)
-		return &runtimev1pb.UnsubscribeConfigurationResponse{
-			Ok:      false,
-			Message: err.Error(),
-		}, err
-	}
-
 	subscribeID := request.GetId()
-
 	_, ok := a.CompStore.GetConfigurationSubscribe(subscribeID)
 	if !ok {
 		return &runtimev1pb.UnsubscribeConfigurationResponse{
@@ -1419,29 +1486,12 @@ func (a *api) UnsubscribeConfiguration(ctx context.Context, request *runtimev1pb
 			Message: fmt.Sprintf(messages.ErrConfigurationUnsubscribe, subscribeID, "subscription does not exist"),
 		}, nil
 	}
+
+	a.Logger.Warn("Unsubscribing using UnsubscribeConfiguration is deprecated. Disconnect from the SubscribeConfiguration RPC instead.")
+
+	// This causes the subscription with the given ID to be stopped and that stream to be aborted, if active
 	a.CompStore.DeleteConfigurationSubscribe(subscribeID)
 
-	policyRunner := resiliency.NewRunner[any](ctx,
-		a.resiliency.ComponentOutboundPolicy(request.StoreName, resiliency.Configuration),
-	)
-
-	start := time.Now()
-	storeReq := &configuration.UnsubscribeRequest{
-		ID: subscribeID,
-	}
-	_, err = policyRunner(func(ctx context.Context) (any, error) {
-		return nil, store.Unsubscribe(ctx, storeReq)
-	})
-	elapsed := diag.ElapsedSince(start)
-
-	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), request.StoreName, diag.ConfigurationUnsubscribe, err == nil, elapsed)
-
-	if err != nil {
-		return &runtimev1pb.UnsubscribeConfigurationResponse{
-			Ok:      false,
-			Message: err.Error(),
-		}, err
-	}
 	return &runtimev1pb.UnsubscribeConfigurationResponse{
 		Ok: true,
 	}, nil
@@ -1453,6 +1503,12 @@ func (a *api) UnsubscribeConfigurationAlpha1(ctx context.Context, request *runti
 }
 
 func (a *api) Close() error {
+	defer a.wg.Wait()
+	if a.closed.CompareAndSwap(false, true) {
+		close(a.closeCh)
+	}
+
 	a.CompStore.DeleteAllConfigurationSubscribe()
+
 	return nil
 }

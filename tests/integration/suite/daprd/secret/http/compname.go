@@ -20,7 +20,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -32,6 +31,7 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -63,18 +63,14 @@ func (c *componentName) Setup(t *testing.T) []framework.Option {
 	})
 
 	c.secretStoreNames = make([]string, numTests)
-	files := make([]string, numTests)
 	for i := 0; i < numTests; i++ {
-		var secretFile string
 		fz.Fuzz(&c.secretStoreNames[i])
-		for len(secretFile) == 0 || strings.Contains(secretFile, "/") ||
-			strings.HasPrefix(secretFile, "..") || takenNames[secretFile] {
-			fuzz.New().Fuzz(&secretFile)
-		}
-		takenNames[secretFile] = true
-		secretFile = filepath.Join(t.TempDir(), secretFile)
+	}
 
-		require.NoError(t, os.WriteFile(secretFile, []byte("{}"), 0o600))
+	secretFileNames := util.FileNames(t, numTests)
+	files := make([]string, numTests)
+	for i, secretFileName := range secretFileNames {
+		require.NoError(t, os.WriteFile(secretFileName, []byte("{}"), 0o600))
 
 		files[i] = fmt.Sprintf(`
 apiVersion: dapr.io/v1alpha1
@@ -90,11 +86,11 @@ spec:
 `,
 			// Escape single quotes in the store name.
 			strings.ReplaceAll(c.secretStoreNames[i], "'", "''"),
-			strings.ReplaceAll(secretFile, "'", "''"),
+			strings.ReplaceAll(secretFileName, "'", "''"),
 		)
 	}
 
-	c.daprd = procdaprd.New(t, procdaprd.WithComponentFiles(files...))
+	c.daprd = procdaprd.New(t, procdaprd.WithResourceFiles(files...))
 
 	return []framework.Option{
 		framework.WithProcesses(c.daprd),
@@ -111,7 +107,7 @@ func (c *componentName) Run(t *testing.T, ctx context.Context) {
 			getURL := fmt.Sprintf("http://localhost:%d/v1.0/secrets/%s/key1", c.daprd.HTTPPort(), url.QueryEscape(secretStoreName))
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, getURL, nil)
 			require.NoError(t, err)
-			resp, err := http.DefaultClient.Do(req)
+			resp, err := util.HTTPClient(t).Do(req)
 			require.NoError(t, err)
 			// TODO: @joshvanl: 500 is obviously the wrong status code here and
 			// should be changed.

@@ -16,7 +16,7 @@ package placement
 import (
 	"context"
 	"fmt"
-	"net"
+	"net/http"
 	"strconv"
 	"testing"
 	"time"
@@ -26,14 +26,14 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework/binary"
-	"github.com/dapr/dapr/tests/integration/framework/freeport"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+	"github.com/dapr/dapr/tests/integration/framework/util"
 )
 
 type Placement struct {
 	exec     process.Interface
-	freeport *freeport.FreePort
+	freeport *util.FreePort
 
 	id                  string
 	port                int
@@ -49,7 +49,7 @@ func New(t *testing.T, fopts ...Option) *Placement {
 	uid, err := uuid.NewUUID()
 	require.NoError(t, err)
 
-	fp := freeport.New(t, 4)
+	fp := util.ReservePorts(t, 4)
 	opts := options{
 		id:                  uid.String(),
 		port:                fp.Port(t, 0),
@@ -70,6 +70,13 @@ func New(t *testing.T, fopts ...Option) *Placement {
 		"--healthz-port=" + strconv.Itoa(opts.healthzPort),
 		"--metrics-port=" + strconv.Itoa(opts.metricsPort),
 		"--initial-cluster=" + opts.initialCluster,
+		"--tls-enabled=" + strconv.FormatBool(opts.tlsEnabled),
+	}
+	if opts.sentryAddress != nil {
+		args = append(args, "--sentry-address="+*opts.sentryAddress)
+	}
+	if opts.trustAnchorsFile != nil {
+		args = append(args, "--trust-anchors-file="+*opts.trustAnchorsFile)
 	}
 
 	return &Placement{
@@ -94,14 +101,18 @@ func (p *Placement) Cleanup(t *testing.T) {
 }
 
 func (p *Placement) WaitUntilRunning(t *testing.T, ctx context.Context) {
-	dialer := &net.Dialer{Timeout: time.Second * 5}
+	client := util.HTTPClient(t)
 	assert.Eventually(t, func() bool {
-		conn, err := dialer.DialContext(ctx, "tcp", fmt.Sprintf("localhost:%d", p.port))
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/healthz", p.healthzPort), nil)
 		if err != nil {
 			return false
 		}
-		require.NoError(t, conn.Close())
-		return true
+		resp, err := client.Do(req)
+		if err != nil {
+			return false
+		}
+		defer resp.Body.Close()
+		return http.StatusOK == resp.StatusCode
 	}, time.Second*5, 100*time.Millisecond)
 }
 

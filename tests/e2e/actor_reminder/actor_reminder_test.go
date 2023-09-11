@@ -120,29 +120,33 @@ func TestMain(m *testing.M) {
 	// and will be cleaned up after all tests are finished automatically
 	testApps := []kube.AppDescription{
 		{
-			AppName:        appName,
-			DaprEnabled:    true,
-			ImageName:      "e2e-actorfeatures",
-			Replicas:       1,
-			IngressEnabled: true,
-			DaprCPULimit:   "2.0",
-			DaprCPURequest: "0.1",
-			AppCPULimit:    "2.0",
-			AppCPURequest:  "0.1",
+			AppName:             appName,
+			DaprEnabled:         true,
+			DebugLoggingEnabled: true,
+			ImageName:           "e2e-actorfeatures",
+			Config:              "omithealthchecksconfig",
+			Replicas:            1,
+			IngressEnabled:      true,
+			DaprCPULimit:        "2.0",
+			DaprCPURequest:      "0.1",
+			AppCPULimit:         "2.0",
+			AppCPURequest:       "0.1",
 			AppEnv: map[string]string{
 				"TEST_APP_ACTOR_TYPE": actorName,
 			},
 		},
 		{
-			AppName:        misconfiguredAppName,
-			DaprEnabled:    true,
-			ImageName:      "e2e-actorfeatures",
-			Replicas:       1,
-			IngressEnabled: true,
-			DaprCPULimit:   "2.0",
-			DaprCPURequest: "0.1",
-			AppCPULimit:    "2.0",
-			AppCPURequest:  "0.1",
+			AppName:             misconfiguredAppName,
+			DaprEnabled:         true,
+			DebugLoggingEnabled: true,
+			ImageName:           "e2e-actorfeatures",
+			Config:              "omithealthchecksconfig",
+			Replicas:            1,
+			IngressEnabled:      true,
+			DaprCPULimit:        "2.0",
+			DaprCPURequest:      "0.1",
+			AppCPULimit:         "2.0",
+			AppCPURequest:       "0.1",
 			AppEnv: map[string]string{
 				"TEST_APP_ACTOR_TYPE": actorName,
 			},
@@ -526,5 +530,17 @@ func TestActorReminderTTL(t *testing.T) {
 		t.Log("Checking if all reminders did trigger ...")
 		count := countActorAction(resp, actorID, reminderName)
 		require.Equal(t, 5, count)
+	})
+}
+
+func TestActorReminderNonHostedActor(t *testing.T) {
+	externalURL := tr.Platform.AcquireAppExternalURL(appName)
+	require.NotEmpty(t, externalURL, "external URL must not be empty!")
+
+	t.Run("Operations on actor reminders should fail if actor type is not hosted", func(t *testing.T) {
+		// Run the tests
+		res, err := utils.HTTPPost(externalURL+"/test/nonhosted", nil)
+		require.NoError(t, err)
+		require.Equal(t, "OK", string(res))
 	})
 }

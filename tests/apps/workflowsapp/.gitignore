@@ -1,0 +1,5 @@
+obj/
+bin/
+.vscode/
+data.db
+data.db-*

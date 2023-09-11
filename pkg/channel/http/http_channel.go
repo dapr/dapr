@@ -39,8 +39,8 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
-	auth "github.com/dapr/dapr/pkg/runtime/security"
-	authConsts "github.com/dapr/dapr/pkg/runtime/security/consts"
+	"github.com/dapr/dapr/pkg/security"
+	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 	streamutils "github.com/dapr/dapr/utils/streams"
 )
 
@@ -59,7 +59,7 @@ type Channel struct {
 	baseAddress           string
 	ch                    chan struct{}
 	compStore             *compstore.ComponentStore
-	tracingSpec           config.TracingSpec
+	tracingSpec           *config.TracingSpec
 	appHeaderToken        string
 	maxResponseBodySizeMB int
 	appHealthCheckPath    string
@@ -74,8 +74,12 @@ type ChannelConfiguration struct {
 	Endpoint             string
 	MaxConcurrency       int
 	Pipeline             httpMiddleware.Pipeline
-	TracingSpec          config.TracingSpec
+	TracingSpec          *config.TracingSpec
 	MaxRequestBodySizeMB int
+	TLSClientCert        string
+	TLSClientKey         string
+	TLSRootCA            string
+	TLSRenegotiation     string
 }
 
 // CreateHTTPChannel creates an HTTP AppChannel.
@@ -86,7 +90,7 @@ func CreateHTTPChannel(config ChannelConfiguration) (channel.AppChannel, error) 
 		compStore:             config.CompStore,
 		baseAddress:           config.Endpoint,
 		tracingSpec:           config.TracingSpec,
-		appHeaderToken:        auth.GetAppToken(),
+		appHeaderToken:        security.GetAppToken(),
 		maxResponseBodySizeMB: config.MaxRequestBodySizeMB,
 	}
 
@@ -335,6 +339,15 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 		channelReq.Header.Set(hdr.Name, hdr.Value.String())
 	}
 
+	if cl := channelReq.Header.Get(invokev1.ContentLengthHeader); cl != "" {
+		v, err := strconv.ParseInt(cl, 10, 64)
+		if err != nil {
+			return nil, err
+		}
+
+		channelReq.ContentLength = v
+	}
+
 	// HTTP client needs to inject traceparent header for proper tracing stack.
 	span := diagUtils.SpanFromContext(ctx)
 	tp := diag.SpanContextToW3CString(span.SpanContext())
@@ -345,7 +358,7 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 	}
 
 	if h.appHeaderToken != "" {
-		channelReq.Header.Set(authConsts.APITokenHeader, h.appHeaderToken)
+		channelReq.Header.Set(securityConsts.APITokenHeader, h.appHeaderToken)
 	}
 
 	return channelReq, nil

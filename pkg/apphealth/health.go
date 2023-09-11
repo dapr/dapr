@@ -61,7 +61,7 @@ type AppHealth struct {
 type ProbeFunction func(context.Context) (bool, error)
 
 // ChangeCallback is the signature of the callback that is invoked when the app's health status changes.
-type ChangeCallback func(status uint8)
+type ChangeCallback func(ctx context.Context, status uint8)
 
 // New creates a new AppHealth object.
 func New(config config.AppHealthConfig, probeFn ProbeFunction) *AppHealth {
@@ -130,7 +130,7 @@ func (h *AppHealth) StartProbes(ctx context.Context) error {
 				return
 			case status := <-h.report:
 				log.Debug("Received health status report")
-				h.setResult(status == AppStatusHealthy)
+				h.setResult(ctx, status == AppStatusHealthy)
 			case <-ch:
 				log.Debug("Probing app health")
 				h.Enqueue()
@@ -195,14 +195,14 @@ func (h *AppHealth) doProbe(parentCtx context.Context) {
 	defer cancel()
 
 	successful, err := h.probeFn(ctx)
-	// In case of errors, we do not record the failed probe because this is generally an internal error
 	if err != nil {
+		h.setResult(parentCtx, false)
 		log.Errorf("App health probe could not complete with error: %v", err)
 		return
 	}
 
 	log.Debug("App health probe successful: " + strconv.FormatBool(successful))
-	h.setResult(successful)
+	h.setResult(parentCtx, successful)
 }
 
 // Returns true if the health report can be saved. Only 1 report per second at most is allowed.
@@ -231,7 +231,7 @@ func (h *AppHealth) ratelimitReports() bool {
 	return swapped
 }
 
-func (h *AppHealth) setResult(successful bool) {
+func (h *AppHealth) setResult(ctx context.Context, successful bool) {
 	h.lastReport.Store(h.clock.Now().UnixMicro())
 
 	if successful {
@@ -244,7 +244,7 @@ func (h *AppHealth) setResult(successful bool) {
 				h.wg.Add(1)
 				go func() {
 					defer h.wg.Done()
-					h.changeCb(AppStatusHealthy)
+					h.changeCb(ctx, AppStatusHealthy)
 				}()
 			}
 		}
@@ -265,15 +265,17 @@ func (h *AppHealth) setResult(successful bool) {
 			h.wg.Add(1)
 			go func() {
 				defer h.wg.Done()
-				h.changeCb(AppStatusUnhealthy)
+				h.changeCb(ctx, AppStatusUnhealthy)
 			}()
 		}
 	}
 }
 
-func (h *AppHealth) Close() {
+func (h *AppHealth) Close() error {
 	defer h.wg.Wait()
 	if h.closed.CompareAndSwap(false, true) {
 		close(h.closeCh)
 	}
+
+	return nil
 }

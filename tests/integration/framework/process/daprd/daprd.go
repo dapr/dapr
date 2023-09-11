@@ -16,7 +16,7 @@ package daprd
 import (
 	"context"
 	"fmt"
-	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -28,16 +28,16 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework/binary"
-	"github.com/dapr/dapr/tests/integration/framework/freeport"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
-	"github.com/dapr/dapr/tests/integration/framework/process/http"
+	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
+	"github.com/dapr/dapr/tests/integration/framework/util"
 )
 
 type Daprd struct {
 	exec     process.Interface
 	appHTTP  process.Interface
-	freeport *freeport.FreePort
+	freeport *util.FreePort
 
 	appID            string
 	appPort          int
@@ -55,9 +55,9 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	uid, err := uuid.NewRandom()
 	require.NoError(t, err)
 
-	appHTTP := http.New(t)
+	appHTTP := prochttp.New(t)
 
-	fp := freeport.New(t, 6)
+	fp := util.ReservePorts(t, 6)
 	opts := options{
 		appID:            uid.String(),
 		appPort:          appHTTP.Port(),
@@ -76,7 +76,7 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	}
 
 	dir := t.TempDir()
-	for i, file := range opts.componentFiles {
+	for i, file := range opts.resourceFiles {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, strconv.Itoa(i)+".yaml"), []byte(file), 0o600))
 	}
 
@@ -98,8 +98,13 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	if opts.appHealthCheckPath != "" {
 		args = append(args, "--app-health-check-path="+opts.appHealthCheckPath)
 	}
-	if len(opts.componentFiles) > 0 {
-		args = append(args, "-components-path="+dir)
+	if len(opts.resourceFiles) > 0 {
+		args = append(args, "--resources-path="+dir)
+	}
+	if len(opts.configs) > 0 {
+		for _, c := range opts.configs {
+			args = append(args, "--config="+c)
+		}
 	}
 
 	return &Daprd{
@@ -129,14 +134,18 @@ func (d *Daprd) Cleanup(t *testing.T) {
 }
 
 func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
-	dialer := &net.Dialer{Timeout: time.Second * 5}
+	client := util.HTTPClient(t)
 	assert.Eventually(t, func() bool {
-		conn, err := dialer.DialContext(ctx, "tcp", fmt.Sprintf("localhost:%d", d.publicPort))
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/v1.0/healthz", d.httpPort), nil)
 		if err != nil {
 			return false
 		}
-		require.NoError(t, conn.Close())
-		return true
+		resp, err := client.Do(req)
+		if err != nil {
+			return false
+		}
+		defer resp.Body.Close()
+		return http.StatusNoContent == resp.StatusCode
 	}, time.Second*5, 100*time.Millisecond)
 }
 

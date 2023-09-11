@@ -128,7 +128,7 @@ func (g *grpcMetrics) Init(appID string) error {
 }
 
 func (g *grpcMetrics) IsEnabled() bool {
-	return g.enabled
+	return g != nil && g.enabled
 }
 
 func (g *grpcMetrics) ServerRequestReceived(ctx context.Context, method string, contentSize int64) time.Time {
@@ -230,11 +230,11 @@ func (g *grpcMetrics) AppHealthProbeCompleted(ctx context.Context, status string
 		elapsed := float64(time.Since(start) / time.Millisecond)
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(g.healthProbeCompletedCount.Name(), g.appID, KeyClientStatus, status),
+			diagUtils.WithTags(g.healthProbeCompletedCount.Name(), appIDKey, g.appID, KeyClientStatus, status),
 			g.healthProbeCompletedCount.M(1))
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(g.healthProbeRoundripLatency.Name(), g.appID, KeyClientStatus, status),
+			diagUtils.WithTags(g.healthProbeRoundripLatency.Name(), appIDKey, g.appID, KeyClientStatus, status),
 			g.healthProbeRoundripLatency.M(elapsed))
 	}
 }

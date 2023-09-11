@@ -34,6 +34,7 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -113,15 +114,15 @@ func (f *fuzzstate) Setup(t *testing.T) []framework.Option {
 		fuzz.New().Fuzz(&f.storeName)
 	}
 
-	f.daprd = procdaprd.New(t, procdaprd.WithComponentFiles(fmt.Sprintf(`
+	f.daprd = procdaprd.New(t, procdaprd.WithResourceFiles(fmt.Sprintf(`
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
-  name: %s
+  name: '%s'
 spec:
   type: state.in-memory
   version: v1
-`, f.storeName)))
+`, strings.ReplaceAll(f.storeName, "'", "''"))))
 
 	f.getFuzzKeys = make([]string, numTests)
 	f.saveReqBinaries = make([][]saveReqBinary, numTests)
@@ -151,6 +152,8 @@ spec:
 func (f *fuzzstate) Run(t *testing.T, ctx context.Context) {
 	f.daprd.WaitUntilRunning(t, ctx)
 
+	httpClient := util.HTTPClient(t)
+
 	t.Run("get", func(t *testing.T) {
 		t.Parallel()
 		for i := range f.getFuzzKeys {
@@ -160,7 +163,7 @@ func (f *fuzzstate) Run(t *testing.T, ctx context.Context) {
 			// t.Log("Key", f.getFuzzKeys[i], printRunes(f.getFuzzKeys[i]))
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, getURL, nil)
 			require.NoError(t, err)
-			resp, err := http.DefaultClient.Do(req)
+			resp, err := httpClient.Do(req)
 			require.NoError(t, err)
 			assert.Equal(t, http.StatusNoContent, resp.StatusCode)
 			respBody, err := io.ReadAll(resp.Body)
@@ -182,7 +185,7 @@ func (f *fuzzstate) Run(t *testing.T, ctx context.Context) {
 				// t.Log("State store name", f.storeName, hex.EncodeToString([]byte(f.storeName)), printRunes(f.storeName))
 				req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, b)
 				require.NoError(t, err)
-				resp, err := http.DefaultClient.Do(req)
+				resp, err := httpClient.Do(req)
 				require.NoError(t, err)
 				assert.Equalf(t, http.StatusNoContent, resp.StatusCode, "key: %s", url.QueryEscape(f.storeName))
 				respBody, err := io.ReadAll(resp.Body)
@@ -198,7 +201,7 @@ func (f *fuzzstate) Run(t *testing.T, ctx context.Context) {
 				// t.Log("Key", s.Key, hex.EncodeToString([]byte(s.Key)), printRunes(s.Key))
 				req, err := http.NewRequestWithContext(ctx, http.MethodGet, getURL, nil)
 				require.NoError(t, err)
-				resp, err := http.DefaultClient.Do(req)
+				resp, err := httpClient.Do(req)
 				require.NoError(t, err)
 				assert.Equal(t, http.StatusOK, resp.StatusCode)
 				// TODO: @joshvanl: document the fact that saving binary state will HTTP will be base64
@@ -217,7 +220,7 @@ func (f *fuzzstate) Run(t *testing.T, ctx context.Context) {
 				// t.Log("Key", s.Key, hex.EncodeToString([]byte(s.Key)), printRunes(s.Key))
 				req, err := http.NewRequestWithContext(ctx, http.MethodGet, getURL, nil)
 				require.NoError(t, err)
-				resp, err := http.DefaultClient.Do(req)
+				resp, err := httpClient.Do(req)
 				require.NoError(t, err)
 				assert.Equal(t, http.StatusOK, resp.StatusCode)
 				respBody, err := io.ReadAll(resp.Body)

@@ -20,10 +20,6 @@ func (m *MockBinding) Init(ctx context.Context, metadata bindings.Metadata) erro
 	return nil
 }
 
-func (m *MockBinding) GetComponentMetadata() map[string]string {
-	return map[string]string{}
-}
-
 // Read is a mock read method.
 func (m *MockBinding) Read(ctx context.Context, handler bindings.Handler) error {
 	args := m.Called(ctx, handler)
@@ -67,10 +63,6 @@ type FailingBinding struct {
 // Init is a mock initialization method.
 func (m *FailingBinding) Init(ctx context.Context, metadata bindings.Metadata) error {
 	return nil
-}
-
-func (m *FailingBinding) GetComponentMetadata() map[string]string {
-	return map[string]string{}
 }
 
 // Invoke is a mock invoke method.

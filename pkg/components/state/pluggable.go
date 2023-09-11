@@ -143,7 +143,7 @@ var (
 // grpcStateStore is a implementation of a state store over a gRPC Protocol.
 type grpcStateStore struct {
 	*pluggable.GRPCConnector[stateStoreClient]
-	// features the list of state store implemented features features.
+	// features is the list of state store implemented features.
 	features []state.Feature
 }
 
@@ -183,12 +183,6 @@ func (ss *grpcStateStore) Init(ctx context.Context, metadata state.Metadata) err
 // Features list all implemented features.
 func (ss *grpcStateStore) Features() []state.Feature {
 	return ss.features
-}
-
-// Returns the component metadata options
-func (ss *grpcStateStore) GetComponentMetadata() map[string]string {
-	// GetComponentMetadata does not apply to pluggable components as there is no standard metadata to return
-	return map[string]string{}
 }
 
 // Delete performs a delete operation.

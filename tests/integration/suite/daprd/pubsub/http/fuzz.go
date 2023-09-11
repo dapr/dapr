@@ -38,6 +38,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
+	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -212,7 +213,7 @@ spec:
 	})
 
 	srv := prochttp.New(t, prochttp.WithHandler(handler))
-	f.daprd = procdaprd.New(t, procdaprd.WithAppPort(srv.Port()), procdaprd.WithComponentFiles(files...))
+	f.daprd = procdaprd.New(t, procdaprd.WithAppPort(srv.Port()), procdaprd.WithResourceFiles(files...))
 
 	return []framework.Option{
 		framework.WithProcesses(f.daprd, srv),
@@ -221,6 +222,8 @@ spec:
 
 func (f *fuzzpubsub) Run(t *testing.T, ctx context.Context) {
 	f.daprd.WaitUntilRunning(t, ctx)
+
+	httpClient := util.HTTPClient(t)
 
 	for i := range f.pubSubs {
 		pubsubName := f.pubSubs[i].Name
@@ -247,7 +250,7 @@ func (f *fuzzpubsub) Run(t *testing.T, ctx context.Context) {
 					req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, reqURL, bytes.NewReader(b))
 					require.NoError(t, err)
 					req.Header.Set("Content-Type", "application/json")
-					resp, err := http.DefaultClient.Do(req)
+					resp, err := httpClient.Do(req)
 					if errors.Is(err, context.DeadlineExceeded) {
 						// Only retry if we haven't exceeded the test timeout.
 						d, ok := ctx.Deadline()

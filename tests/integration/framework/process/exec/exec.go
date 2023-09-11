@@ -22,6 +22,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -29,14 +30,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/exec/iowriter"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec/kill"
 )
-
-type options struct {
-	stdout io.WriteCloser
-	stderr io.WriteCloser
-
-	runErrorFn func(*testing.T, error)
-	exitCode   int
-}
 
 type Option func(*options)
 
@@ -48,6 +41,7 @@ type exec struct {
 	binPath    string
 	runErrorFn func(*testing.T, error)
 	exitCode   int
+	envs       map[string]string
 	stdoutpipe io.WriteCloser
 	stderrpipe io.WriteCloser
 }
@@ -83,6 +77,7 @@ func New(t *testing.T, binPath string, args []string, fopts ...Option) *exec {
 	return &exec{
 		binPath:    binPath,
 		args:       args,
+		envs:       opts.envs,
 		stdoutpipe: opts.stdout,
 		stderrpipe: opts.stderr,
 		runErrorFn: opts.runErrorFn,
@@ -102,6 +97,12 @@ func (e *exec) Run(t *testing.T, ctx context.Context) {
 
 	e.cmd.Stdout = e.stdoutpipe
 	e.cmd.Stderr = e.stderrpipe
+	// Wait for a few seconds before killing the process completely.
+	e.cmd.WaitDelay = time.Second * 5
+
+	for k, v := range e.envs {
+		e.cmd.Env = append(e.cmd.Env, k+"="+v)
+	}
 
 	require.NoError(t, e.cmd.Start())
 }

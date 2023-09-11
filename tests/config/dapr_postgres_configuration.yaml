@@ -1,0 +1,14 @@
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: configstore
+spec:
+  type: configuration.postgres
+  version: v1
+  metadata:
+    - name: connectionString
+      value: "host=dapr-postgres-postgresql.dapr-tests.svc.cluster.local user=postgres password=example port=5432 connect_timeout=10 database=dapr_test"
+    - name: table
+      value: configtable
+scopes:
+  - configurationapp

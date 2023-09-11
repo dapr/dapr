@@ -10,6 +10,8 @@ image:
 nameOverride: ""
 fullnameOverride: ""
 
+statefulsetAnnotations: {}
+
 ports:
   protocol: TCP
   apiPort: 50005
@@ -27,6 +29,8 @@ volumeclaims:
   storageClassName:
 
 replicationFactor: 100
+
+metadataEnabled: false
 
 livenessProbe:
   initialDelaySeconds: 10

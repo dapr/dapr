@@ -30,6 +30,7 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -78,7 +79,7 @@ spec:
 			strings.ReplaceAll(c.storeNames[i], "'", "''"))
 	}
 
-	c.daprd = procdaprd.New(t, procdaprd.WithComponentFiles(files...))
+	c.daprd = procdaprd.New(t, procdaprd.WithResourceFiles(files...))
 
 	return []framework.Option{
 		framework.WithProcesses(c.daprd),
@@ -88,6 +89,8 @@ spec:
 func (c *componentName) Run(t *testing.T, ctx context.Context) {
 	c.daprd.WaitUntilRunning(t, ctx)
 
+	httpClient := util.HTTPClient(t)
+
 	for _, storeName := range c.storeNames {
 		storeName := storeName
 		t.Run(storeName, func(t *testing.T) {
@@ -95,7 +98,7 @@ func (c *componentName) Run(t *testing.T, ctx context.Context) {
 			reqURL := fmt.Sprintf("http://localhost:%d/v1.0/state/%s", c.daprd.HTTPPort(), url.QueryEscape(storeName))
 			req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, strings.NewReader(`[{"key": "key1", "value": "value1"}]`))
 			require.NoError(t, err)
-			resp, err := http.DefaultClient.Do(req)
+			resp, err := httpClient.Do(req)
 			require.NoError(t, err)
 			assert.Equal(t, http.StatusNoContent, resp.StatusCode, reqURL)
 			respBody, err := io.ReadAll(resp.Body)
@@ -106,7 +109,7 @@ func (c *componentName) Run(t *testing.T, ctx context.Context) {
 			getURL := fmt.Sprintf("http://localhost:%d/v1.0/state/%s/key1", c.daprd.HTTPPort(), url.QueryEscape(storeName))
 			req, err = http.NewRequestWithContext(ctx, http.MethodGet, getURL, nil)
 			require.NoError(t, err)
-			resp, err = http.DefaultClient.Do(req)
+			resp, err = httpClient.Do(req)
 			require.NoError(t, err)
 			assert.Equal(t, http.StatusOK, resp.StatusCode)
 			respBody, err = io.ReadAll(resp.Body)

@@ -215,9 +215,8 @@ func ConstructSubscriptionSpanAttributes(topic string) map[string]string {
 }
 
 // StartInternalCallbackSpan starts trace span for internal callback such as input bindings and pubsub subscription.
-func StartInternalCallbackSpan(ctx context.Context, spanName string, parent trace.SpanContext, spec config.TracingSpec) (context.Context, trace.Span) {
-	traceEnabled := diagUtils.IsTracingEnabled(spec.SamplingRate)
-	if !traceEnabled {
+func StartInternalCallbackSpan(ctx context.Context, spanName string, parent trace.SpanContext, spec *config.TracingSpec) (context.Context, trace.Span) {
+	if spec == nil || !diagUtils.IsTracingEnabled(spec.SamplingRate) {
 		return ctx, nil
 	}
 
@@ -225,4 +224,21 @@ func StartInternalCallbackSpan(ctx context.Context, spanName string, parent trac
 	ctx, span := tracer.Start(ctx, spanName, trace.WithSpanKind(trace.SpanKindClient))
 
 	return ctx, span
+}
+
+func TraceIDAndStateFromSpan(span trace.Span) (string, string) {
+	var corID, traceState string
+
+	if span != nil {
+		sc := span.SpanContext()
+
+		if !sc.Equal(trace.SpanContext{}) {
+			corID = SpanContextToW3CString(sc)
+		}
+		if sc.TraceState().Len() > 0 {
+			traceState = TraceStateToW3CString(sc)
+		}
+	}
+
+	return corID, traceState
 }

@@ -22,7 +22,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -34,6 +33,7 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -86,12 +86,7 @@ func (f *fuzzsecret) Setup(t *testing.T) []framework.Option {
 		takenNames[key] = true
 	}
 
-	var secretFileName string
-	for len(secretFileName) == 0 || strings.Contains(secretFileName, "/") ||
-		strings.HasPrefix(secretFileName, "..") {
-		fuzz.New().Fuzz(&secretFileName)
-	}
-	secretFileName = filepath.Join(t.TempDir(), secretFileName)
+	secretFileName := util.FileNames(t, 1)[0]
 
 	file, err := os.Create(secretFileName)
 	require.NoError(t, err)
@@ -101,7 +96,7 @@ func (f *fuzzsecret) Setup(t *testing.T) []framework.Option {
 	require.NoError(t, je.Encode(f.values))
 	require.NoError(t, file.Close())
 
-	f.daprd = procdaprd.New(t, procdaprd.WithComponentFiles(fmt.Sprintf(`
+	f.daprd = procdaprd.New(t, procdaprd.WithResourceFiles((fmt.Sprintf(`
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -112,8 +107,8 @@ spec:
   metadata:
   - name: secretsFile
     value: '%s'
-`, f.secretStoreName, secretFileName)))
-
+`, f.secretStoreName, strings.ReplaceAll(secretFileName, "'", "''"),
+	))))
 	return []framework.Option{
 		framework.WithProcesses(f.daprd),
 	}
@@ -128,12 +123,9 @@ func (f *fuzzsecret) Run(t *testing.T, ctx context.Context) {
 		t.Run(key+":"+value, func(t *testing.T) {
 			t.Parallel()
 			getURL := fmt.Sprintf("http://localhost:%d/v1.0/secrets/%s/%s", f.daprd.HTTPPort(), url.QueryEscape(f.secretStoreName), url.QueryEscape(key))
-			// t.Log("URL", getURL)
-			// t.Log("Secret store name", f.secretStoreName, printRunes(f.secretStoreName))
-			// t.Log("Key", key, printRunes(key))
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, getURL, nil)
 			require.NoError(t, err)
-			resp, err := http.DefaultClient.Do(req)
+			resp, err := util.HTTPClient(t).Do(req)
 			require.NoError(t, err)
 			assert.Equal(t, http.StatusOK, resp.StatusCode)
 			respBody, err := io.ReadAll(resp.Body)
@@ -145,13 +137,3 @@ func (f *fuzzsecret) Run(t *testing.T, ctx context.Context) {
 
 	// TODO: Bulk APIs, nesting, multi-valued
 }
-
-/*
-func printRunes(str string) []string {
-	result := make([]string, 0, len(str))
-	for _, r := range str {
-		result = append(result, strconv.Itoa(int(r)))
-	}
-	return result
-}
-*/

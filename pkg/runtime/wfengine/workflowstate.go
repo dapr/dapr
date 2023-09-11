@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/microsoft/durabletask-go/backend"
@@ -52,8 +53,8 @@ type workflowStateMetadata struct {
 	Generation    uint64
 }
 
-func NewWorkflowState(config wfConfig) workflowState {
-	return workflowState{
+func NewWorkflowState(config wfConfig) *workflowState {
+	return &workflowState{
 		Generation: 1,
 		config:     config,
 	}
@@ -68,6 +69,14 @@ func (s *workflowState) Reset() {
 	s.History = nil
 	s.CustomStatus = ""
 	s.Generation++
+}
+
+// ResetChangeTracking resets the change tracking counters. This should be called after a save request.
+func (s *workflowState) ResetChangeTracking() {
+	s.inboxAddedCount = 0
+	s.inboxRemovedCount = 0
+	s.historyAddedCount = 0
+	s.historyRemovedCount = 0
 }
 
 func (s *workflowState) ApplyRuntimeStateChanges(runtimeState *backend.OrchestrationRuntimeState) {
@@ -90,12 +99,19 @@ func (s *workflowState) AddToInbox(e *backend.HistoryEvent) {
 }
 
 func (s *workflowState) ClearInbox() {
-	s.inboxRemovedCount += len(s.Inbox)
+	for _, e := range s.Inbox {
+		if e.GetTimerFired() != nil {
+			// ignore timer events since those aren't saved into the state store
+			continue
+		}
+		s.inboxRemovedCount++
+	}
 	s.Inbox = nil
 	s.inboxAddedCount = 0
 }
 
 func (s *workflowState) GetSaveRequest(actorID string) (*actors.TransactionalRequest, error) {
+	// TODO: Batching up the save requests into smaller chunks to avoid batch size limits in Dapr state stores.
 	req := &actors.TransactionalRequest{
 		ActorType:  s.config.workflowActorType,
 		ActorID:    actorID,
@@ -110,11 +126,18 @@ func (s *workflowState) GetSaveRequest(actorID string) (*actors.TransactionalReq
 		return nil, err
 	}
 
-	req.Operations = append(req.Operations, actors.TransactionalOperation{
-		Operation: actors.Upsert,
-		Request:   actors.TransactionalUpsert{Key: customStatusKey, Value: s.CustomStatus},
-	})
+	// We update the custom status only when the workflow itself has been updated, and not when
+	// we're saving changes only to the workflow inbox.
+	// CONSIDER: Only save custom status if it has changed. However, need a way to track this.
+	if s.historyAddedCount > 0 || s.historyRemovedCount > 0 {
+		req.Operations = append(req.Operations, actors.TransactionalOperation{
+			Operation: actors.Upsert,
+			Request:   actors.TransactionalUpsert{Key: customStatusKey, Value: s.CustomStatus},
+		})
+	}
 
+	// Every time we save, we also update the metadata with information about the size of the history and inbox,
+	// as well as the generation of the workflow.
 	metadata := workflowStateMetadata{
 		InboxLength:   len(s.Inbox),
 		HistoryLength: len(s.History),
@@ -126,6 +149,36 @@ func (s *workflowState) GetSaveRequest(actorID string) (*actors.TransactionalReq
 	})
 
 	return req, nil
+}
+
+// String implements fmt.Stringer and is primarily used for debugging purposes.
+func (s *workflowState) String() string {
+	if s == nil {
+		return "(nil)"
+	}
+
+	inbox := make([]string, len(s.Inbox))
+	for i, v := range s.Inbox {
+		if v == nil {
+			inbox[i] = "[(nil)]"
+		} else {
+			inbox[i] = "[" + v.String() + "]"
+		}
+	}
+	history := make([]string, len(s.History))
+	for i, v := range s.History {
+		if v == nil {
+			history[i] = "[(nil)]"
+		} else {
+			history[i] = "[" + v.String() + "]"
+		}
+	}
+	return fmt.Sprintf("Inbox:%s\nHistory:%s\nCustomStatus:%s\nGeneration:%d\ninboxAddedCount:%d\ninboxRemovedCount:%d\nhistoryAddedCount:%d\nhistoryRemovedCount:%d\nconfig:%s",
+		strings.Join(inbox, ", "), strings.Join(history, ", "),
+		s.CustomStatus, s.Generation,
+		s.inboxAddedCount, s.inboxRemovedCount,
+		s.historyAddedCount, s.historyRemovedCount,
+		s.config.String())
 }
 
 func addStateOperations(req *actors.TransactionalRequest, keyPrefix string, events []*backend.HistoryEvent, addedCount int, removedCount int) error {
@@ -165,10 +218,11 @@ func addPurgeStateOperations(req *actors.TransactionalRequest, keyPrefix string,
 	return nil
 }
 
-func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID string, config wfConfig) (workflowState, error) {
+func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID string, config wfConfig) (*workflowState, error) {
 	loadStartTime := time.Now()
 	loadedRecords := 0
 
+	// Load metadata
 	req := actors.GetStateRequest{
 		ActorType: config.workflowActorType,
 		ActorID:   actorID,
@@ -177,57 +231,77 @@ func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID 
 	res, err := actorRuntime.GetState(ctx, &req)
 	loadedRecords++
 	if err != nil {
-		return workflowState{}, fmt.Errorf("failed to load workflow metadata: %w", err)
+		return nil, fmt.Errorf("failed to load workflow metadata: %w", err)
 	}
 	if len(res.Data) == 0 {
 		// no state found
-		return workflowState{}, nil
+		return nil, nil
 	}
 	var metadata workflowStateMetadata
 	if err = json.Unmarshal(res.Data, &metadata); err != nil {
-		return workflowState{}, fmt.Errorf("failed to unmarshal workflow metadata: %w", err)
+		return nil, fmt.Errorf("failed to unmarshal workflow metadata: %w", err)
 	}
+
+	// Load inbox, history, and custom status using a bulk request
 	state := NewWorkflowState(config)
 	state.Generation = metadata.Generation
-	// CONSIDER: Do some of these loads in parallel
+	state.Inbox = make([]*backend.HistoryEvent, metadata.InboxLength)
+	state.History = make([]*backend.HistoryEvent, metadata.HistoryLength)
+
+	bulkReq := &actors.GetBulkStateRequest{
+		ActorType: config.workflowActorType,
+		ActorID:   actorID,
+		// Initializing with size for all the inbox, history, and custom status
+		Keys: make([]string, metadata.InboxLength+metadata.HistoryLength+1),
+	}
+
+	var n int
+	bulkReq.Keys[n] = customStatusKey
+	n++
 	for i := 0; i < metadata.InboxLength; i++ {
-		req.Key = getMultiEntryKeyName(inboxKeyPrefix, i)
-		res, err = actorRuntime.GetState(ctx, &req)
-		loadedRecords++
-		if err != nil {
-			return workflowState{}, fmt.Errorf("failed to load workflow inbox state key '%s': %w", req.Key, err)
-		}
-		var e *backend.HistoryEvent
-		e, err = backend.UnmarshalHistoryEvent(res.Data)
-		if err != nil {
-			return workflowState{}, fmt.Errorf("failed to unmarshal history event from inbox state key entry: %w", err)
-		}
-		state.Inbox = append(state.Inbox, e)
+		bulkReq.Keys[n] = getMultiEntryKeyName(inboxKeyPrefix, i)
+		n++
 	}
 	for i := 0; i < metadata.HistoryLength; i++ {
-		req.Key = getMultiEntryKeyName(historyKeyPrefix, i)
-		res, err = actorRuntime.GetState(ctx, &req)
-		loadedRecords++
-		if err != nil {
-			return workflowState{}, fmt.Errorf("failed to load workflow history state key '%s': %w", req.Key, err)
-		}
-		var e *backend.HistoryEvent
-		e, err = backend.UnmarshalHistoryEvent(res.Data)
-		if err != nil {
-			return workflowState{}, fmt.Errorf("failed to unmarshal history event from inbox state key entry: %w", err)
-		}
-
-		state.History = append(state.History, e)
+		bulkReq.Keys[n] = getMultiEntryKeyName(historyKeyPrefix, i)
+		n++
 	}
 
-	req.Key = customStatusKey
-	res, err = actorRuntime.GetState(ctx, &req)
-	loadedRecords++
+	// Perform the request
+	bulkRes, err := actorRuntime.GetBulkState(ctx, bulkReq)
 	if err != nil {
-		return workflowState{}, fmt.Errorf("failed to load workflow custom status key '%s': %w", req.Key, err)
+		return nil, fmt.Errorf("failed to load workflow state: %w", err)
 	}
-	if err = json.Unmarshal(res.Data, &state.CustomStatus); err != nil {
-		return workflowState{}, fmt.Errorf("failed to unmarshal JSON from custom status key entry: %w", err)
+
+	// Parse responses
+	loadedRecords += len(bulkRes)
+	var key string
+	for i := 0; i < metadata.InboxLength; i++ {
+		key = getMultiEntryKeyName(inboxKeyPrefix, i)
+		if bulkRes[key] == nil {
+			return nil, fmt.Errorf("failed to load inbox state key '%s': not found", key)
+		}
+		state.Inbox[i], err = backend.UnmarshalHistoryEvent(bulkRes[key])
+		if err != nil {
+			return nil, fmt.Errorf("failed to unmarshal history event from inbox state key '%s': %w", key, err)
+		}
+	}
+	for i := 0; i < metadata.HistoryLength; i++ {
+		key = getMultiEntryKeyName(historyKeyPrefix, i)
+		if bulkRes[key] == nil {
+			return nil, fmt.Errorf("failed to load history state key '%s': not found", key)
+		}
+		state.History[i], err = backend.UnmarshalHistoryEvent(bulkRes[key])
+		if err != nil {
+			return nil, fmt.Errorf("failed to unmarshal history event from history state key '%s': %w", key, err)
+		}
+	}
+
+	if len(bulkRes[customStatusKey]) > 0 {
+		err = json.Unmarshal(bulkRes[customStatusKey], &state.CustomStatus)
+		if err != nil {
+			return nil, fmt.Errorf("failed to unmarshal JSON from custom status key entry: %w", err)
+		}
 	}
 
 	wfLogger.Infof("%s: loaded %d state records in %v", actorID, loadedRecords, time.Since(loadStartTime))
@@ -236,9 +310,10 @@ func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID 
 
 func (s *workflowState) GetPurgeRequest(actorID string) (*actors.TransactionalRequest, error) {
 	req := &actors.TransactionalRequest{
-		ActorType:  s.config.workflowActorType,
-		ActorID:    actorID,
-		Operations: make([]actors.TransactionalOperation, 0, 100),
+		ActorType: s.config.workflowActorType,
+		ActorID:   actorID,
+		// Initial capacity should be enough to contain the entire inbox, history, and custom status + metadata
+		Operations: make([]actors.TransactionalOperation, 0, len(s.Inbox)+len(s.History)+2),
 	}
 
 	// Inbox Purging
@@ -251,13 +326,16 @@ func (s *workflowState) GetPurgeRequest(actorID string) (*actors.TransactionalRe
 		return nil, err
 	}
 
-	req.Operations = append(req.Operations, actors.TransactionalOperation{
-		Operation: actors.Delete,
-		Request:   actors.TransactionalDelete{Key: customStatusKey},
-	}, actors.TransactionalOperation{
-		Operation: actors.Delete,
-		Request:   actors.TransactionalDelete{Key: metadataKey},
-	})
+	req.Operations = append(req.Operations,
+		actors.TransactionalOperation{
+			Operation: actors.Delete,
+			Request:   actors.TransactionalDelete{Key: customStatusKey},
+		},
+		actors.TransactionalOperation{
+			Operation: actors.Delete,
+			Request:   actors.TransactionalDelete{Key: metadataKey},
+		},
+	)
 
 	return req, nil
 }

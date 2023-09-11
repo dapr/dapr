@@ -14,16 +14,41 @@ limitations under the License.
 package http
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"net/http"
+	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 // options contains the options for running a HTTP server in integration tests.
 type options struct {
-	handler http.Handler
+	handler   http.Handler
+	tlsConfig *tls.Config
 }
 
 func WithHandler(handler http.Handler) Option {
 	return func(o *options) {
 		o.handler = handler
+	}
+}
+
+func WithTLS(t *testing.T, ca, cert, key []byte) Option {
+	return func(o *options) {
+		caCertPool := x509.NewCertPool()
+		require.True(t, caCertPool.AppendCertsFromPEM(ca))
+
+		cert, err := tls.X509KeyPair(cert, key)
+		require.NoError(t, err)
+
+		tlsConfig := &tls.Config{
+			MinVersion:   tls.VersionTLS12,
+			ClientCAs:    caCertPool,
+			ClientAuth:   tls.RequireAndVerifyClientCert,
+			Certificates: []tls.Certificate{cert},
+		}
+
+		o.tlsConfig = tlsConfig
 	}
 }

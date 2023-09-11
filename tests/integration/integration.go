@@ -22,10 +22,14 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/suite"
 
+	// Register all tests
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd"
 	_ "github.com/dapr/dapr/tests/integration/suite/healthz"
+	_ "github.com/dapr/dapr/tests/integration/suite/httpserver"
 	_ "github.com/dapr/dapr/tests/integration/suite/metadata"
+	_ "github.com/dapr/dapr/tests/integration/suite/placement"
 	_ "github.com/dapr/dapr/tests/integration/suite/ports"
+	_ "github.com/dapr/dapr/tests/integration/suite/sentry"
 )
 
 func RunIntegrationTests(t *testing.T) {
@@ -36,7 +40,7 @@ func RunIntegrationTests(t *testing.T) {
 			t.Logf("setting up test case")
 			options := tcase.Setup(t)
 
-			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
 			t.Cleanup(cancel)
 
 			f := framework.Run(t, ctx, options...)

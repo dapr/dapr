@@ -35,9 +35,11 @@ import (
 	operatorV1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	resiliencyConfig "github.com/dapr/dapr/pkg/resiliency"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
+	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/validation"
 	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/ptr"
 )
 
 const (
@@ -95,13 +97,14 @@ type Config struct {
 	AppHealthThreshold           int
 	EnableAppHealthCheck         bool
 	Mode                         string
-	ConfigPath                   string
+	Config                       []string
 	UnixDomainSocket             string
 	DaprHTTPReadBufferSize       int
 	DisableBuiltinK8sSecretStore bool
 	AppHealthCheckPath           string
 	AppChannelAddress            string
 	Metrics                      *metrics.Options
+	Registry                     *registry.Options
 }
 
 type internalConfig struct {
@@ -127,12 +130,14 @@ type internalConfig struct {
 	gracefulShutdownDuration     time.Duration
 	enableAPILogging             *bool
 	disableBuiltinK8sSecretStore bool
-	configPath                   string
+	config                       []string
 	certChain                    *credentials.CertChain
+	registry                     *registry.Registry
+	metricsExporter              metrics.Exporter
 }
 
 // FromConfig creates a new Dapr Runtime from a configuration.
-func FromConfig(cfg *Config) (*DaprRuntime, error) {
+func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 	intc, err := cfg.toInternal()
 	if err != nil {
 		return nil, err
@@ -145,12 +150,6 @@ func FromConfig(cfg *Config) (*DaprRuntime, error) {
 		log.Warnf("failed to get host address, env variable %s will not be set", env.HostAddress)
 	}
 
-	// Initialize dapr metrics exporter
-	metricsExporter := metrics.NewExporterWithOptions(metrics.DefaultMetricNamespace, cfg.Metrics)
-	if err = metricsExporter.Init(); err != nil {
-		return nil, err
-	}
-
 	variables := map[string]string{
 		env.AppID:           intc.id,
 		env.AppPort:         strconv.Itoa(intc.appConnectionConfig.Port),
@@ -158,16 +157,13 @@ func FromConfig(cfg *Config) (*DaprRuntime, error) {
 		env.DaprPort:        strconv.Itoa(intc.internalGRPCPort),
 		env.DaprGRPCPort:    strconv.Itoa(intc.apiGRPCPort),
 		env.DaprHTTPPort:    strconv.Itoa(intc.httpPort),
-		env.DaprMetricsPort: metricsExporter.Options().Port,
+		env.DaprMetricsPort: intc.metricsExporter.Options().Port,
 		env.DaprProfilePort: strconv.Itoa(intc.profilePort),
 	}
 
 	if err = utils.SetEnvVariables(variables); err != nil {
 		return nil, err
 	}
-
-	var globalConfig *config.Configuration
-	var configErr error
 
 	if intc.mTLSEnabled || intc.mode == modes.KubernetesMode {
 		intc.certChain, err = security.GetCertChain()
@@ -180,7 +176,7 @@ func FromConfig(cfg *Config) (*DaprRuntime, error) {
 	var operatorClient operatorV1.OperatorClient
 	if intc.mode == modes.KubernetesMode {
 		log.Info("Initializing the operator client")
-		client, conn, clientErr := client.GetOperatorClient(context.TODO(), intc.kubernetes.ControlPlaneAddress, security.TLSServerName, intc.certChain)
+		client, conn, clientErr := client.GetOperatorClient(ctx, intc.kubernetes.ControlPlaneAddress, security.TLSServerName, intc.certChain)
 		if clientErr != nil {
 			return nil, clientErr
 		}
@@ -188,18 +184,26 @@ func FromConfig(cfg *Config) (*DaprRuntime, error) {
 		operatorClient = client
 	}
 
-	var accessControlList *config.AccessControlList
 	namespace := os.Getenv("NAMESPACE")
 	podName := os.Getenv("POD_NAME")
 
-	if intc.configPath != "" {
+	var (
+		globalConfig *config.Configuration
+		configErr    error
+	)
+
+	if len(intc.config) > 0 {
 		switch intc.mode {
 		case modes.KubernetesMode:
-			log.Debug("Loading Kubernetes config resource: " + intc.configPath)
-			globalConfig, configErr = config.LoadKubernetesConfiguration(intc.configPath, namespace, podName, operatorClient)
+			if len(intc.config) > 1 {
+				// We are not returning an error here because in Kubernetes mode, the injector itself doesn't allow multiple configuration flags to be added, so this should never happen in normal environments
+				log.Warnf("Multiple configurations are not supported in Kubernetes mode; only the first one will be loaded")
+			}
+			log.Debug("Loading Kubernetes config resource: " + intc.config[0])
+			globalConfig, configErr = config.LoadKubernetesConfiguration(intc.config[0], namespace, podName, operatorClient)
 		case modes.StandaloneMode:
-			log.Debug("Loading config from file: " + intc.configPath)
-			globalConfig, _, configErr = config.LoadStandaloneConfiguration(intc.configPath)
+			log.Debug("Loading config from file(s): " + strings.Join(intc.config, ", "))
+			globalConfig, configErr = config.LoadStandaloneConfiguration(intc.config...)
 		}
 	}
 
@@ -218,8 +222,9 @@ func FromConfig(cfg *Config) (*DaprRuntime, error) {
 	}
 
 	// Initialize metrics only if MetricSpec is enabled.
-	if globalConfig.Spec.MetricSpec.Enabled {
-		if mErr := diag.InitMetrics(intc.id, namespace, globalConfig.Spec.MetricSpec.Rules); mErr != nil {
+	metricsSpec := globalConfig.GetMetricsSpec()
+	if metricsSpec.GetEnabled() {
+		if mErr := diag.InitMetrics(intc.id, namespace, metricsSpec.Rules); mErr != nil {
 			log.Errorf(rterrors.NewInit(rterrors.InitFailure, "metrics", mErr).Error())
 		}
 	}
@@ -241,7 +246,7 @@ func FromConfig(cfg *Config) (*DaprRuntime, error) {
 		}
 	}
 
-	accessControlList, err = acl.ParseAccessControlSpec(
+	accessControlList, err := acl.ParseAccessControlSpec(
 		globalConfig.Spec.AccessControlSpec,
 		intc.appConnectionConfig.Protocol.IsHTTP(),
 	)
@@ -251,17 +256,17 @@ func FromConfig(cfg *Config) (*DaprRuntime, error) {
 
 	// API logging can be enabled for this app or for every app, globally in the config
 	if intc.enableAPILogging == nil {
-		intc.enableAPILogging = &globalConfig.Spec.LoggingSpec.APILogging.Enabled
+		intc.enableAPILogging = ptr.Of(globalConfig.GetAPILoggingSpec().Enabled)
 	}
 
-	return newDaprRuntime(intc, globalConfig, accessControlList, resiliencyProvider), nil
+	return newDaprRuntime(ctx, intc, globalConfig, accessControlList, resiliencyProvider)
 }
 
 func (c *Config) toInternal() (*internalConfig, error) {
 	intc := &internalConfig{
 		id:                   c.AppID,
 		mode:                 modes.DaprMode(c.Mode),
-		configPath:           c.ConfigPath,
+		config:               c.Config,
 		sentryServiceAddress: c.SentryAddress,
 		allowedOrigins:       c.AllowedOrigins,
 		kubernetes: configmodes.KubernetesConfig{
@@ -282,6 +287,8 @@ func (c *Config) toInternal() (*internalConfig, error) {
 			HealthCheckHTTPPath: c.AppHealthCheckPath,
 			MaxConcurrency:      c.AppMaxConcurrency,
 		},
+		registry:        registry.New(c.Registry),
+		metricsExporter: metrics.NewExporterWithOptions(log, metrics.DefaultMetricNamespace, c.Metrics),
 	}
 
 	if len(intc.standalone.ResourcesPath) == 0 && c.ComponentsPath != "" {

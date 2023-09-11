@@ -35,7 +35,8 @@ type options struct {
 	appHealthCheckPath      string
 	appHealthProbeInterval  int
 	appHealthProbeThreshold int
-	componentFiles          []string
+	resourceFiles           []string
+	configs                 []string
 	logLevel                string
 }
 
@@ -123,9 +124,15 @@ func WithAppHealthProbeThreshold(threshold int) Option {
 	}
 }
 
-func WithComponentFiles(files ...string) Option {
+func WithResourceFiles(files ...string) Option {
 	return func(o *options) {
-		o.componentFiles = files
+		o.resourceFiles = files
+	}
+}
+
+func WithConfigs(configs ...string) Option {
+	return func(o *options) {
+		o.configs = configs
 	}
 }
 

@@ -32,7 +32,12 @@ import (
 	"github.com/dapr/dapr/tests/runner/summary"
 )
 
-const numHealthChecks = 60 // Number of times to check for endpoint health per app.
+const (
+	appName = "perfstategrpc"
+	// Number of times to check for endpoint health per app.
+	numHealthChecks = 60
+	testLabel       = "state_get_http"
+)
 
 var tr *runner.TestRunner
 
@@ -41,7 +46,7 @@ func TestMain(m *testing.M) {
 
 	testApps := []kube.AppDescription{
 		{
-			AppName:           "tester",
+			AppName:           appName,
 			DaprEnabled:       true,
 			ImageName:         "perf-tester",
 			Replicas:          1,
@@ -73,7 +78,7 @@ func TestStateGetGrpcPerformance(t *testing.T) {
 	t.Logf("running state get http test with params: qps=%v, connections=%v, duration=%s, payload size=%v, payload=%v", p.QPS, p.ClientConnections, p.TestDuration, p.PayloadSizeKB, p.Payload)
 
 	// Get the ingress external url of tester app
-	testerAppURL := tr.Platform.AcquireAppExternalURL("tester")
+	testerAppURL := tr.Platform.AcquireAppExternalURL(appName)
 	require.NotEmpty(t, testerAppURL, "tester app external URL must not be empty")
 
 	// Check if tester app endpoint is available
@@ -113,13 +118,13 @@ func TestStateGetGrpcPerformance(t *testing.T) {
 	// fast fail if daprResp starts with error
 	require.False(t, strings.HasPrefix(string(daprResp), "error"))
 
-	sidecarUsage, err := tr.Platform.GetSidecarUsage("tester")
+	sidecarUsage, err := tr.Platform.GetSidecarUsage(appName)
 	require.NoError(t, err)
 
-	appUsage, err := tr.Platform.GetAppUsage("tester")
+	appUsage, err := tr.Platform.GetAppUsage(appName)
 	require.NoError(t, err)
 
-	restarts, err := tr.Platform.GetTotalRestarts("tester")
+	restarts, err := tr.Platform.GetTotalRestarts(appName)
 	require.NoError(t, err)
 
 	t.Logf("dapr sidecar consumed %vm Cpu and %vMb of Memory", sidecarUsage.CPUm, sidecarUsage.MemoryMb)
@@ -152,8 +157,21 @@ func TestStateGetGrpcPerformance(t *testing.T) {
 	t.Logf("dapr latency avg: %sms", fmt.Sprintf("%.2f", daprLatency))
 	t.Logf("added latency avg: %sms", fmt.Sprintf("%.2f", avg))
 
+	daprMetrics := utils.DaprMetrics{
+		BaselineLatency:       baselineLatency,
+		DaprLatency:           daprLatency,
+		AddedLatency:          avg,
+		SidecarCPU:            sidecarUsage.CPUm,
+		AppCPU:                appUsage.CPUm,
+		SidecarMemory:         sidecarUsage.MemoryMb,
+		AppMemory:             appUsage.MemoryMb,
+		ApplicationThroughput: daprResult.ActualQPS,
+	}
+
+	utils.PushPrometheusMetrics(daprMetrics, testLabel, "inmemory")
+
 	summary.ForTest(t).
-		Service("tester").
+		Service(appName).
 		CPU(appUsage.CPUm).
 		Memory(appUsage.MemoryMb).
 		SidecarCPU(sidecarUsage.CPUm).

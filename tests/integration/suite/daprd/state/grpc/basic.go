@@ -38,7 +38,7 @@ type basic struct {
 }
 
 func (b *basic) Setup(t *testing.T) []framework.Option {
-	b.daprd = procdaprd.New(t, procdaprd.WithComponentFiles(`
+	b.daprd = procdaprd.New(t, procdaprd.WithResourceFiles(`
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:

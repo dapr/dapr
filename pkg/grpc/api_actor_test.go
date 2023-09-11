@@ -312,7 +312,6 @@ func TestInvokeActorWithResiliency(t *testing.T) {
 			Actors:     &failingActors,
 			Resiliency: rs,
 		},
-		resiliency: rs,
 	}, "")
 	defer server.Stop()
 

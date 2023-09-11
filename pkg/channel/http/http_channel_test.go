@@ -353,7 +353,7 @@ func TestInvokeMethodHeaders(t *testing.T) {
 			baseAddress: server.URL,
 			client:      http.DefaultClient,
 			compStore:   compstore.New(),
-			tracingSpec: config.TracingSpec{
+			tracingSpec: &config.TracingSpec{
 				SamplingRate: "0",
 			},
 		}
@@ -381,7 +381,7 @@ func TestInvokeMethodHeaders(t *testing.T) {
 			baseAddress: server.URL,
 			client:      http.DefaultClient,
 			compStore:   compstore.New(),
-			tracingSpec: config.TracingSpec{
+			tracingSpec: &config.TracingSpec{
 				SamplingRate: "0",
 			},
 		}
@@ -415,7 +415,7 @@ func TestInvokeMethod(t *testing.T) {
 			baseAddress: server.URL,
 			client:      http.DefaultClient,
 			compStore:   compstore.New(),
-			tracingSpec: config.TracingSpec{
+			tracingSpec: &config.TracingSpec{
 				SamplingRate: "0",
 			},
 		}
@@ -439,7 +439,7 @@ func TestInvokeMethod(t *testing.T) {
 			baseAddress: server.URL,
 			client:      http.DefaultClient,
 			compStore:   compstore.New(),
-			tracingSpec: config.TracingSpec{
+			tracingSpec: &config.TracingSpec{
 				SamplingRate: "1",
 			},
 		}
@@ -681,6 +681,38 @@ func TestContentType(t *testing.T) {
 		assert.Equal(t, []byte("text/plain"), body)
 		testServer.Close()
 	})
+}
+
+func TestContentLength(t *testing.T) {
+	ctx := context.Background()
+
+	handler := &testHandlerHeaders{}
+	testServer := httptest.NewServer(handler)
+	c := Channel{
+		baseAddress: testServer.URL,
+		client:      http.DefaultClient,
+		compStore:   compstore.New(),
+	}
+	req := invokev1.NewInvokeMethodRequest("method").
+		WithContentType("text/plain").
+		WithMetadata(map[string][]string{invokev1.ContentLengthHeader: {"1"}}).
+		WithHTTPExtension(http.MethodPost, "").
+		WithRawDataString("1")
+	defer req.Close()
+
+	// act
+	resp, err := c.InvokeMethod(ctx, req, "")
+
+	// assert
+	assert.NoError(t, err)
+	defer resp.Close()
+	body, _ := resp.RawDataFull()
+	actual := map[string]string{}
+	json.Unmarshal(body, &actual)
+	_, hasContentLength := actual["Content-Length"]
+	assert.NoError(t, err)
+	assert.True(t, hasContentLength)
+	testServer.Close()
 }
 
 func TestAppToken(t *testing.T) {

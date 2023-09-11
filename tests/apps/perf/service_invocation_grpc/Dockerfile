@@ -15,7 +15,7 @@ FROM golang:1.20 as build_env
 
 ENV CGO_ENABLED=0
 WORKDIR /app
-COPY . .
+COPY go.mod go.sum app.go .
 RUN go get -d -v
 RUN go build -o app .
 

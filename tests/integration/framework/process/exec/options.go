@@ -18,6 +18,15 @@ import (
 	"testing"
 )
 
+type options struct {
+	stdout io.WriteCloser
+	stderr io.WriteCloser
+
+	runErrorFn func(*testing.T, error)
+	exitCode   int
+	envs       map[string]string
+}
+
 func WithStdout(stdout io.WriteCloser) Option {
 	return func(o *options) {
 		o.stdout = stdout
@@ -39,5 +48,21 @@ func WithRunError(ferr func(*testing.T, error)) Option {
 func WithExitCode(code int) Option {
 	return func(o *options) {
 		o.exitCode = code
+	}
+}
+
+// WithEnvVars sets the environment variables for the command. Expects a list
+// of key value pairs.
+func WithEnvVars(envs ...string) Option {
+	return func(o *options) {
+		if len(envs)%2 != 0 {
+			panic("envs must be a list of key value pairs")
+		}
+		if o.envs == nil {
+			o.envs = make(map[string]string)
+		}
+		for i := 0; i < len(envs); i += 2 {
+			o.envs[envs[i]] = envs[i+1]
+		}
 	}
 }

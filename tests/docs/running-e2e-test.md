@@ -75,12 +75,12 @@ E2E tests are designed for verifying the functional correctness by replicating e
 
 If you are starting from scratch and just want to build dapr, deploy it, and run the e2e tests to your kubernetes cluster, do the following:
 
-1. Uninstall dapr, dapr-kafka, dapr-redis, dapr-mongodb, if they exist
+1. Uninstall dapr, dapr-kafka, dapr-redis, dapr-postgres, if they exist
 
    *Make sure you have DAPR_NAMESPACE set properly before you do this!*
 
    ```sh
-   helm uninstall dapr dapr-kafka dapr-redis dapr-mongodb -n $DAPR_NAMESPACE
+   helm uninstall dapr dapr-kafka dapr-redis dapr-postgres -n $DAPR_NAMESPACE
    ```
 
 2. Remove the test namespace, if it exists
@@ -113,7 +113,7 @@ Install redis and kafka for state, pubsub, and binding building block
 ```bash
 make setup-helm-init
 make setup-test-env-redis
-make setup-test-env-mongodb
+make setup-test-env-postgres
 
 # This may take a few minutes.  You can skip kafka install if you do not use bindings for your tests.
 make setup-test-env-kafka
@@ -183,11 +183,11 @@ To completely remove Dapr, test dependencies, and any lingering e2e test apps:
 *Make sure you have DAPR_NAMESPACE set properly before you do this!*
 
 ```bash
-# Uninstall dapr, dapr-kafka, dapr-redis, dapr-mongodb, then remove dapr-zipkin
+# Uninstall dapr, dapr-kafka, dapr-redis, dapr-postgres, then remove dapr-zipkin
 helm uninstall dapr -n $DAPR_NAMESPACE || true
 helm uninstall dapr-kafka  -n $DAPR_NAMESPACE || true
 helm uninstall dapr-redis  -n $DAPR_NAMESPACE || true
-helm uninstall dapr-mongodb  -n $DAPR_NAMESPACE || true
+helm uninstall dapr-postgres  -n $DAPR_NAMESPACE || true
 kubectl delete deployment dapr-zipkin -n $DAPR_NAMESPACE || true
 
 # Remove the test namespace
@@ -207,6 +207,9 @@ This repository's automated tests (CI) use an Azure Kubernetes Service (AKS) clu
 If you want to run the tests in a similar environment, you can deploy the test infrastructure on your own using the Bicep templates in [tests/test-infra](/tests/test-infra/).
 
 > Before you run the commands below, ensure that you have an Azure subscription, have the Azure CLI installed, and are logged into Azure (`az login`)
+
+
+After using the script below to complete deployment of test environment, refer to [Option 2: Step by step guide](#option-2-step-by-step-guide) to run tests.
 
 ## Run E2E tests using a Wireguard Tunnel with tailscale
 
@@ -269,7 +272,7 @@ If you want to deploy AKS and the Azure Container Registry only (without Azure C
 AZURE_REGION="eastus2"
 
 # Name prefix for your test resources
-# Try to use a unique name
+# Try to use a unique name，at least 4 characters
 export TEST_PREFIX="mydapraks42"
 
 # Set to true to add a Windows node pool to the AKS cluster
@@ -317,7 +320,7 @@ This is the setup that our E2E tests use in GitHub Actions, which includes AKS, 
 AZURE_REGION="eastus2"
 
 # Name prefix for your test resources
-# Try to use a unique name
+# Try to use a unique name，at least 4 characters
 export TEST_PREFIX="mydapraks42"
 
 # Set to true to add a Windows node pool to the AKS cluster

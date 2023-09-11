@@ -29,7 +29,7 @@ import (
 // grpcPubSub is a implementation of a pubsub over a gRPC Protocol.
 type grpcPubSub struct {
 	*pluggable.GRPCConnector[proto.PubSubClient]
-	// features the list of state store implemented features features.
+	// features is the list of pubsub implemented features.
 	features []pubsub.Feature
 	logger   logger.Logger
 }
@@ -212,12 +212,6 @@ func (p *grpcPubSub) Subscribe(ctx context.Context, req pubsub.SubscribeRequest,
 		Metadata: req.Metadata,
 	}
 	return p.pullMessages(ctx, subscription, handler)
-}
-
-// Returns the component metadata options
-func (p *grpcPubSub) GetComponentMetadata() map[string]string {
-	// GetComponentMetadata does not apply to pluggable components as there is no standard metadata to return
-	return map[string]string{}
 }
 
 // fromConnector creates a new GRPC pubsub using the given underlying connector.

@@ -1,0 +1,22 @@
+apiVersion: dapr.io/v1alpha1
+kind: HTTPEndpoint
+metadata:
+  name: "external-http-endpoint-tls"
+spec:
+  baseUrl: https://service-invocation-external:443
+  headers:
+  - name: "Accept-Language"
+    value: "en-US"
+  clientTLS:
+    rootCA:
+      secretKeyRef:
+        name: dapr-tls-client
+        key: ca.crt
+    certificate:
+      secretKeyRef:
+        name: dapr-tls-client
+        key: tls.crt
+    privateKey:
+      secretKeyRef:
+        name: dapr-tls-client
+        key: tls.key
