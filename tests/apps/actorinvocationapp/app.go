@@ -54,7 +54,7 @@ type daprConfig struct {
 }
 
 var daprConfigResponse = daprConfig{
-	[]string{"actor1", "actor2"},
+	[]string{"actor1", "actor2", "resiliencyInvokeActor"},
 	actorIdleTimeout,
 	actorScanInterval,
 	drainOngoingCallTimeout,
@@ -127,6 +127,18 @@ func logCall(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(resp))
 }
 
+func xDaprErrorResponseHeader(w http.ResponseWriter, r *http.Request) {
+	log.Printf("xDaprErrorResponseHeader is called")
+
+	actorType := mux.Vars(r)["actorType"]
+	actorID := mux.Vars(r)["actorId"]
+
+	resp := fmt.Sprintf("x-DaprErrorResponseHeader call with - actorType: %s, actorId: %s", actorType, actorID)
+	log.Println(resp)
+	w.Header().Add("x-DaprErrorResponseHeader", "Simulated error")
+	w.Write([]byte(resp))
+}
+
 func callDifferentActor(w http.ResponseWriter, r *http.Request) {
 	log.Println("callDifferentActor is called")
 
@@ -172,6 +184,7 @@ func appRouter() http.Handler {
 	router.HandleFunc("/", indexHandler).Methods("GET")
 	// Actor methods are individually bound so we can experiment with missing messages
 	router.HandleFunc("/actors/{actorType}/{actorId}/method/logCall", logCall).Methods("POST", "PUT")
+	router.HandleFunc("/actors/{actorType}/{actorId}/method/xDaprErrorResponseHeader", xDaprErrorResponseHeader).Methods("POST", "PUT")
 	router.HandleFunc("/actors/{actorType}/{actorId}/method/callDifferentActor", callDifferentActor).Methods("POST", "PUT")
 	router.HandleFunc("/dapr/config", configHandler).Methods("GET")
 	router.HandleFunc("/healthz", healthzHandler).Methods("GET")
