@@ -207,7 +207,7 @@ func TestErrorPublishedNonCloudEventGRPC(t *testing.T) {
 		Mode:           modes.StandaloneMode,
 		Namespace:      "ns1",
 		ID:             TestRuntimeConfigID,
-		GRPC:           manager.NewManager(modes.StandaloneMode, &manager.AppChannelConfig{}),
+		GRPC:           manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{}),
 	})
 	ps.compStore.SetTopicRoutes(map[string]compstore.TopicRoutes{
 		TestPubsubName: map[string]compstore.TopicRouteElem{
@@ -738,7 +738,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 				Mode:           modes.StandaloneMode,
 				Namespace:      "ns1",
 				ID:             TestRuntimeConfigID,
-				GRPC:           manager.NewManager(modes.StandaloneMode, &manager.AppChannelConfig{Port: port}),
+				GRPC:           manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: port}),
 			})
 			ps.compStore.SetTopicRoutes(map[string]compstore.TopicRoutes{
 				TestPubsubName: map[string]compstore.TopicRouteElem{
@@ -768,7 +768,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 				defer grpcServer.Stop()
 			}
 
-			grpc := manager.NewManager(modes.StandaloneMode, &manager.AppChannelConfig{Port: port})
+			grpc := manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: port})
 			ps.channels = channels.New(channels.Options{
 				ComponentStore:      compstore.New(),
 				Registry:            reg,

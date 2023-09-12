@@ -29,6 +29,7 @@ spec:
           {{- toYaml . | nindent 8 }}
         {{- end }}
       annotations:
+        dapr.io/control-plane: injector
 {{- if eq .Values.global.prometheus.enabled true }}
         prometheus.io/scrape: "{{ .Values.global.prometheus.enabled }}"
         prometheus.io/port: "{{ .Values.global.prometheus.port }}"
@@ -122,19 +123,13 @@ spec:
 {{- end }}
         - "--healthz-port"
         - "{{ .Values.healthzPort }}"
-{{- with .Values.global.issuerFilenames }}
-        - "--issuer-ca-secret-key"
-        - "{{ .ca }}"
-        - "--issuer-certificate-secret-key"
-        - "{{ .cert }}"
-        - "--issuer-key-secret-key"
-        - "{{ .key }}"
-{{- end }}
         env:
-        - name: TLS_CERT_FILE
-          value: /dapr/cert/tls.crt
-        - name: TLS_KEY_FILE
-          value: /dapr/cert/tls.key
+        - name: DAPR_TRUST_ANCHORS_FILE
+          value: /var/run/secrets/dapr.io/tls/ca.crt
+        - name: DAPR_CONTROL_PLANE_TRUST_DOMAIN
+          value: {{ .Values.global.mtls.controlPlaneTrustDomain }}
+        - name: DAPR_SENTRY_ADDRESS
+          value: {{ if .Values.global.mtls.sentryAddress }}{{ .Values.global.mtls.sentryAddress }}{{ else }}dapr-sentry.{{ .Release.Namespace }}.svc.cluster.local:443{{ end }}
 {{- if .Values.kubeClusterDomain }}
         - name: KUBE_CLUSTER_DOMAIN
           value: "{{ .Values.kubeClusterDomain }}"
@@ -194,13 +189,23 @@ spec:
         resources:
 {{ toYaml .Values.resources | indent 10 }}
         volumeMounts:
-        - name: cert
-          mountPath: /dapr/cert
+        - name: dapr-trust-bundle
+          mountPath: /var/run/secrets/dapr.io/tls
+          readOnly: true
+        - name: dapr-identity-token
+          mountPath: /var/run/secrets/dapr.io/sentrytoken
           readOnly: true
       volumes:
-      - name: cert
-        secret:
-          secretName: dapr-sidecar-injector-cert
+      - name: dapr-trust-bundle
+        configMap:
+          name: dapr-trust-bundle
+      - name: dapr-identity-token
+        projected:
+          sources:
+          - serviceAccountToken:
+              path: token
+              expirationSeconds: 600
+              audience: "spiffe://{{ .Values.global.mtls.controlPlaneTrustDomain }}/ns/{{ .Release.Namespace }}/dapr-sentry"
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:

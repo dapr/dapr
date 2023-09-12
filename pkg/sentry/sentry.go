@@ -119,7 +119,7 @@ func (s *sentry) Start(parentCtx context.Context) error {
 
 	// Start all background processes
 	runners := concurrency.NewRunnerManager(
-		provider.Start,
+		provider.Run,
 		func(ctx context.Context) error {
 			sec, secErr := provider.Handler(ctx)
 			if secErr != nil {

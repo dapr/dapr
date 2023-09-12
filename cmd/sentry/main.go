@@ -22,7 +22,6 @@ import (
 	"github.com/dapr/dapr/cmd/sentry/options"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/concurrency"
-	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/sentry"
@@ -65,9 +64,9 @@ func main() {
 		log.Fatal(err)
 	}
 
-	issuerCertPath := filepath.Join(opts.IssuerCredentialsPath, credentials.IssuerCertFilename)
-	issuerKeyPath := filepath.Join(opts.IssuerCredentialsPath, credentials.IssuerKeyFilename)
-	rootCertPath := filepath.Join(opts.IssuerCredentialsPath, credentials.RootCertFilename)
+	issuerCertPath := filepath.Join(opts.IssuerCredentialsPath, opts.IssuerCertFilename)
+	issuerKeyPath := filepath.Join(opts.IssuerCredentialsPath, opts.IssuerKeyFilename)
+	rootCertPath := filepath.Join(opts.IssuerCredentialsPath, opts.RootCAFilename)
 
 	cfg, err := config.FromConfigName(opts.ConfigName)
 	if err != nil {
