@@ -15,6 +15,7 @@ package binding
 
 import (
 	"context"
+	"crypto/x509"
 	"io"
 	"net/http"
 	"testing"
@@ -23,6 +24,7 @@ import (
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -39,6 +41,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/meta"
 	rtmock "github.com/dapr/dapr/pkg/runtime/mock"
 	"github.com/dapr/dapr/pkg/runtime/registry"
+	"github.com/dapr/dapr/pkg/security"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testinggrpc "github.com/dapr/dapr/pkg/testing/grpc"
 	"github.com/dapr/kit/logger"
@@ -174,6 +177,21 @@ func TestStartReadingFromBindings(t *testing.T) {
 }
 
 func TestGetSubscribedBindingsGRPC(t *testing.T) {
+	secP, err := security.New(context.Background(), security.Options{
+		TrustAnchors:            []byte("test"),
+		AppID:                   "test",
+		ControlPlaneTrustDomain: "test.example.com",
+		ControlPlaneNamespace:   "default",
+		MTLSEnabled:             false,
+		OverrideCertRequestSource: func(context.Context, []byte) ([]*x509.Certificate, error) {
+			return []*x509.Certificate{nil}, nil
+		},
+	})
+	require.NoError(t, err)
+	go secP.Run(context.Background())
+	sec, err := secP.Handler(context.Background())
+	require.NoError(t, err)
+
 	testCases := []struct {
 		name             string
 		expectedResponse []string
@@ -199,7 +217,7 @@ func TestGetSubscribedBindingsGRPC(t *testing.T) {
 				Resiliency:     resiliency.New(log),
 				ComponentStore: compstore.New(),
 				Meta:           meta.New(meta.Options{}),
-				GRPC:           manager.NewManager(modes.StandaloneMode, &manager.AppChannelConfig{Port: port}),
+				GRPC:           manager.NewManager(sec, modes.StandaloneMode, &manager.AppChannelConfig{Port: port}),
 			})
 			// create mock application server first
 			grpcServer := testinggrpc.StartTestAppCallbackGRPCServer(t, port, &channelt.MockServer{

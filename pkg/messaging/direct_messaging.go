@@ -259,7 +259,7 @@ func (d *directMessaging) invokeHTTPEndpoint(ctx context.Context, appID, appName
 }
 
 func (d *directMessaging) invokeRemote(ctx context.Context, appID, appNamespace, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, func(destroy bool), error) {
-	conn, teardown, err := d.connectionCreatorFn(context.TODO(), appAddress, appID, appNamespace)
+	conn, teardown, err := d.connectionCreatorFn(ctx, appAddress, appID, appNamespace)
 	if err != nil {
 		if teardown == nil {
 			teardown = nopTeardown

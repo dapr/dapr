@@ -33,15 +33,16 @@ import (
 	middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	"github.com/spiffe/go-spiffe/v2/bundle/x509bundle"
-	"github.com/spiffe/go-spiffe/v2/spiffegrpc/grpccredentials"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig"
 	"github.com/spiffe/go-spiffe/v2/svid/x509svid"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"k8s.io/utils/clock"
 
 	"github.com/dapr/dapr/pkg/diagnostics"
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
+	"github.com/dapr/dapr/pkg/security/legacy"
 	secpem "github.com/dapr/dapr/pkg/security/pem"
 	sentryToken "github.com/dapr/dapr/pkg/security/token"
 )
@@ -281,11 +282,14 @@ func (x *x509source) requestFromSentry(ctx context.Context, csrDER []byte) ([]*x
 		)
 	}
 
+	tlsConfig, err := legacy.NewDialClientOptionalClientAuth(x, x, tlsconfig.AuthorizeID(x.sentryID))
+	if err != nil {
+		return nil, fmt.Errorf("error creating tls config: %w", err)
+	}
+
 	conn, err := grpc.DialContext(ctx,
 		x.sentryAddress,
-		grpc.WithTransportCredentials(
-			grpccredentials.TLSClientCredentials(x, tlsconfig.AuthorizeID(x.sentryID)),
-		),
+		grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)),
 		grpc.WithUnaryInterceptor(unaryClientInterceptor),
 		grpc.WithReturnConnectionError(),
 	)
@@ -306,7 +310,7 @@ func (x *x509source) requestFromSentry(ctx context.Context, csrDER []byte) ([]*x
 		CertificateSigningRequest: pem.EncodeToMemory(&pem.Block{
 			Type: "CERTIFICATE REQUEST", Bytes: csrDER,
 		}),
-		Id:             x.appID,
+		Id:             getSentryIdentifier(x.appID),
 		Token:          token,
 		Namespace:      x.appNamespace,
 		TokenValidator: tokenValidator,
@@ -314,6 +318,13 @@ func (x *x509source) requestFromSentry(ctx context.Context, csrDER []byte) ([]*x
 
 	if x.trustDomain != nil {
 		req.TrustDomain = *x.trustDomain
+	} else {
+		// For v1.11 sentry, if the trust domain is empty in the request then it
+		// will return an empty certificate so we default to `public` here to
+		// ensure we get an identity certificate back.
+		// This request field is ignored for non control-plane requests in v1.12.
+		// TODO: @joshvanl: Remove in v1.13.
+		req.TrustDomain = "public"
 	}
 
 	resp, err := sentryv1pb.NewCAClient(conn).SignCertificate(ctx, req)
@@ -474,4 +485,13 @@ func isControlPlaneService(id string) bool {
 	default:
 		return false
 	}
+}
+
+func getSentryIdentifier(appID string) string {
+	// return injected identity, default id if not present
+	localID := os.Getenv("SENTRY_LOCAL_IDENTITY")
+	if localID != "" {
+		return localID
+	}
+	return appID
 }

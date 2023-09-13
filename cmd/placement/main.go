@@ -88,7 +88,7 @@ func main() {
 			return raftServer.StartRaft(ctx, sec, nil)
 		},
 		metricsExporter.Run,
-		secProvider.Start,
+		secProvider.Run,
 		apiServer.MonitorLeadership,
 		func(ctx context.Context) error {
 			var metadataOptions []health.RouterOptions
