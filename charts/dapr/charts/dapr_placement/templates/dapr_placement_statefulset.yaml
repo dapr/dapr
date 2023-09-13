@@ -81,6 +81,9 @@ spec:
           - name: dapr-identity-token
             mountPath: /var/run/secrets/dapr.io/sentrytoken
         {{- end }}
+        {{- with .Values.global.extraVolumeMounts }}
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
 {{- if or (eq .Values.global.ha.enabled true) (eq .Values.ha true) }}
   {{- if eq .Values.cluster.forceInMemoryLog false }}
           - name: raft-log
@@ -194,6 +197,9 @@ spec:
               path: token
               expirationSeconds: 600
               audience: "spiffe://{{ .Values.global.mtls.controlPlaneTrustDomain }}/ns/{{ .Release.Namespace }}/dapr-sentry"
+    {{- end }}
+    {{- with .Values.global.extraVolumes }}
+      {{- toYaml . | nindent 6 }}
     {{- end }}
       affinity:
         nodeAffinity:
