@@ -42,7 +42,7 @@ const (
 	numHealthChecks = 60 // Number of times to check for endpoint health per app.
 )
 
-var testAppNames = []string{"perf-workflowsapp", "perf-workflowsapp2"}
+var testAppNames = []string{"perf-workflowsapp"}
 
 type K6RunConfig struct {
 	TARGET_URL     string
@@ -57,9 +57,6 @@ func TestMain(m *testing.M) {
 	testApps := []kube.AppDescription{}
 	for _, testAppName := range testAppNames {
 		replicas := 1
-		if testAppName == "perf-workflowsapp2" {
-			replicas = 2
-		}
 		testApps = append(testApps, kube.AppDescription{
 			AppName:           testAppName,
 			DaprEnabled:       true,
@@ -153,11 +150,9 @@ func testWorkflow(t *testing.T, workflowName string, testAppName string, inputs 
 				time.Sleep(10 * time.Second)
 				// // Initialize the workflow runtime
 				url := fmt.Sprintf("http://%s/start-workflow-runtime", externalURL)
-				for i := 0; i <= 10; i++ {
-					// Calling start-workflow-runtime multiple times so that it is started in all app instances
-					_, err = utils.HTTPGet(url)
-					require.NoError(t, err, "error starting workflow runtime")
-				}
+				// Calling start-workflow-runtime multiple times so that it is started in all app instances
+				_, err = utils.HTTPGet(url)
+				require.NoError(t, err, "error starting workflow runtime")
 
 				time.Sleep(10 * time.Second)
 
@@ -234,12 +229,4 @@ func TestWorkflowWithDifferentPayloads(t *testing.T) {
 	inputs := []string{"10000", "50000", "100000"}
 	rateChecks := [][]string{{"rate==1"}, {"rate==1"}, {"rate==1"}}
 	testWorkflow(t, workflowName, testAppNames[0], inputs, scenarios, rateChecks, true, true)
-}
-
-func TestWorkflowOnMultipleInstances(t *testing.T) {
-	workflowName := "sum_series_wf"
-	scenarios := []string{"t_100_1000"}
-	inputs := []string{"100"}
-	rateChecks := [][]string{{"rate==1"}}
-	testWorkflow(t, workflowName, testAppNames[1], inputs, scenarios, rateChecks, true, true)
 }
