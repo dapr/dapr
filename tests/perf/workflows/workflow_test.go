@@ -42,7 +42,7 @@ const (
 	numHealthChecks = 60 // Number of times to check for endpoint health per app.
 )
 
-var testAppNames = []string{"perf-workflowsapp"}
+var testAppNames = []string{"perf-workflowsapp", "perf-workflowsapp2"}
 
 type K6RunConfig struct {
 	TARGET_URL     string
@@ -56,17 +56,21 @@ func TestMain(m *testing.M) {
 	utils.SetupLogs("workflow_test")
 	testApps := []kube.AppDescription{}
 	for _, testAppName := range testAppNames {
+		replicas := 1
+		if testAppName == "perf-workflowsapp2" {
+			replicas = 2
+		}
 		testApps = append(testApps, kube.AppDescription{
 			AppName:           testAppName,
 			DaprEnabled:       true,
 			ImageName:         "perf-workflowsapp",
-			Replicas:          1,
+			Replicas:          int32(replicas),
 			IngressEnabled:    true,
 			MetricsEnabled:    true,
-			DaprMemoryLimit:   "200Mi",
-			DaprMemoryRequest: "200Mi",
-			AppMemoryLimit:    "200Mi",
-			AppMemoryRequest:  "200Mi",
+			DaprMemoryLimit:   "800Mi",
+			DaprMemoryRequest: "800Mi",
+			AppMemoryLimit:    "800Mi",
+			AppMemoryRequest:  "800Mi",
 			AppPort:           3000,
 		})
 	}
@@ -97,27 +101,6 @@ func runk6test(t *testing.T, config K6RunConfig) *loadtest.K6RunnerMetricsSummar
 	require.True(t, sm.Pass, fmt.Sprintf("test has not passed, results %s", string(bts)))
 	t.Logf("test summary `%s`", string(bts))
 	return sm.RunnersResults[0]
-}
-
-func printTestResult(t *testing.T, testName string, testAppName string, result *loadtest.K6RunnerMetricsSummary) {
-	// p90 := result.HTTPReqDuration.Values.P90
-	appUsage, err := tr.Platform.GetAppUsage(testAppName)
-	require.NoError(t, err)
-	sidecarUsage, err := tr.Platform.GetSidecarUsage(testAppName)
-	require.NoError(t, err)
-	restarts, err := tr.Platform.GetTotalRestarts(testAppName)
-	require.NoError(t, err)
-
-	summary.ForTest(t).
-		Service(testName).
-		CPU(appUsage.CPUm).
-		Memory(appUsage.MemoryMb).
-		SidecarCPU(sidecarUsage.CPUm).
-		SidecarMemory(sidecarUsage.MemoryMb).
-		Restarts(restarts).
-		// P90(p90).
-		// OutputK6([]*loadtest.K6RunnerMetricsSummary{result}).
-		Flush()
 }
 
 func addTestResults(t *testing.T, testName string, testAppName string, result *loadtest.K6RunnerMetricsSummary, table *summary.Table) *summary.Table {
@@ -167,10 +150,16 @@ func testWorkflow(t *testing.T, workflowName string, testAppName string, inputs 
 				_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
 				require.NoError(t, err)
 
+				time.Sleep(10 * time.Second)
 				// // Initialize the workflow runtime
 				url := fmt.Sprintf("http://%s/start-workflow-runtime", externalURL)
-				_, err = utils.HTTPGet(url)
-				require.NoError(t, err, "error starting workflow runtime")
+				for i := 0; i <= 10; i++ {
+					// Calling start-workflow-runtime multiple times so that it is started in all app instances
+					_, err = utils.HTTPGet(url)
+					require.NoError(t, err, "error starting workflow runtime")
+				}
+
+				time.Sleep(10 * time.Second)
 
 				targetURL := fmt.Sprintf("http://%s/run-workflow", externalURL)
 
@@ -188,7 +177,6 @@ func testWorkflow(t *testing.T, workflowName string, testAppName string, inputs 
 					table = table.Outputf(subTestName+"Payload Size", "%dKB", int(payloadSize/1000))
 				}
 				table = addTestResults(t, subTestName, testAppName, testResult, table)
-				// printTestResult(t, "workflows", testAppName, testResult)
 
 				time.Sleep(10 * time.Second)
 
@@ -208,8 +196,8 @@ func testWorkflow(t *testing.T, workflowName string, testAppName string, inputs 
 func TestWorkflowWithConstantVUs(t *testing.T) {
 	workflowName := "sum_series_wf"
 	inputs := []string{"100"}
-	scenarios := []string{"t_50_500", "t_50_500", "t_50_500"}
-	rateChecks := [][]string{{"rate==1", "rate==1", "rate==1"}}
+	scenarios := []string{"t_50_500", "t_50_500", "t_50_500", "t_50_500", "t_50_500"}
+	rateChecks := [][]string{{"rate==1", "rate==1", "rate==1", "rate==1", "rate==1"}}
 	testWorkflow(t, workflowName, testAppNames[0], inputs, scenarios, rateChecks, false, false)
 }
 
@@ -225,7 +213,7 @@ func TestWorkflowWithConstantIterations(t *testing.T) {
 func TestSeriesWorkflowWithMaxVUs(t *testing.T) {
 	workflowName := "sum_series_wf"
 	inputs := []string{"100"}
-	scenarios := []string{"t_350_1750"}
+	scenarios := []string{"t_500_3000"}
 	rateChecks := [][]string{{"rate==1"}}
 	testWorkflow(t, workflowName, testAppNames[0], inputs, scenarios, rateChecks, true, false)
 }
@@ -246,4 +234,12 @@ func TestWorkflowWithDifferentPayloads(t *testing.T) {
 	inputs := []string{"10000", "50000", "100000"}
 	rateChecks := [][]string{{"rate==1"}, {"rate==1"}, {"rate==1"}}
 	testWorkflow(t, workflowName, testAppNames[0], inputs, scenarios, rateChecks, true, true)
+}
+
+func TestWorkflowOnMultipleInstances(t *testing.T) {
+	workflowName := "sum_series_wf"
+	scenarios := []string{"t_100_1000"}
+	inputs := []string{"100"}
+	rateChecks := [][]string{{"rate==1"}}
+	testWorkflow(t, workflowName, testAppNames[1], inputs, scenarios, rateChecks, true, true)
 }

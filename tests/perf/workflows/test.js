@@ -27,25 +27,31 @@ const possibleScenarios = {
         vus: 100,
         iterations: 500,
         maxDuration: '450s',     
-    },  
+    },   
     t_150_500: {
         executor: 'shared-iterations',
         vus: 150,
         iterations: 500,
         maxDuration: '450s',     
     },      
-    t_350_1750: {
+    t_500_3000: {
         executor: 'shared-iterations',
-        vus: 350,
-        iterations: 1750,
-        maxDuration: '800s',     
-    },         
+        vus: 500,
+        iterations: 3000,
+        maxDuration: '900s',     
+    },       
     t_110_550: {
         executor: 'shared-iterations',
         vus: 110,
         iterations: 550,
         maxDuration: '500s',     
-    },   
+    }, 
+    t_100_1000: {
+        executor: 'shared-iterations',
+        vus: 100,
+        iterations: 1000,
+        maxDuration: '500s',     
+    },     
 }
 
 let enabledScenarios = {}
