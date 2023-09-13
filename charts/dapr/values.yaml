@@ -45,7 +45,8 @@ global:
     # Used to override `dapr-sentry.{{ .Release.Namespace }}.svc.cluster.local:443`
     #sentryAddress:
   # extraVolumes and extraVolumeMounts are used to mount additional volumes to
-  # the Dapr control plane pods.
+  # the Dapr control plane pods. Useful for using alternative authentication
+  # credentials to sentry.
   #extraVolumes: []
   #extraVolumeMounts: []
   actors:
