@@ -264,7 +264,7 @@ func (p *Service) processRaftStateCommand(ctx context.Context) {
 			return
 
 		case <-processingTicker.C():
-			log.Debugf("Process Raft state command: nothing happened...")
+			// log.Debugf("Process Raft state command: nothing happened...")
 			continue
 
 		case op := <-p.membershipCh:
