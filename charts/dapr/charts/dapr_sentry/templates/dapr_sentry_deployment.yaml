@@ -137,9 +137,9 @@ spec:
           - name: credentials
             mountPath: /var/run/secrets/dapr.io/credentials
             readOnly: true
-      {{- with .Values.global.extraVolumeMounts }}
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
+        {{- with .Values.global.extraVolumeMounts.sentry }}
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
         command:
 {{- if eq .Values.debug.enabled false }}
         - "/sentry"
@@ -188,7 +188,7 @@ spec:
         - name: credentials
           secret:
             secretName: dapr-trust-bundle
-      {{- with .Values.global.extraVolumes }}
+      {{- with .Values.global.extraVolumes.sentry }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
       affinity:

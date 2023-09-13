@@ -47,8 +47,16 @@ global:
   # extraVolumes and extraVolumeMounts are used to mount additional volumes to
   # the Dapr control plane pods. Useful for using alternative authentication
   # credentials to sentry.
-  #extraVolumes: []
-  #extraVolumeMounts: []
+  extraVolumes: {}
+  #  sentry:
+  #  placement:
+  #  operator:
+  #  injector:
+  extraVolumeMounts: {}
+  #  sentry:
+  #  placement:
+  #  operator:
+  #  injector:
   actors:
     enabled: true
   daprControlPlaneOs: linux

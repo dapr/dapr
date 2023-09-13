@@ -81,7 +81,7 @@ spec:
           - name: dapr-identity-token
             mountPath: /var/run/secrets/dapr.io/sentrytoken
         {{- end }}
-        {{- with .Values.global.extraVolumeMounts }}
+        {{- with .Values.global.extraVolumeMounts.placement }}
           {{- toYaml . | nindent 10 }}
         {{- end }}
 {{- if or (eq .Values.global.ha.enabled true) (eq .Values.ha true) }}
@@ -198,7 +198,7 @@ spec:
               expirationSeconds: 600
               audience: "spiffe://{{ .Values.global.mtls.controlPlaneTrustDomain }}/ns/{{ .Release.Namespace }}/dapr-sentry"
     {{- end }}
-    {{- with .Values.global.extraVolumes }}
+    {{- with .Values.global.extraVolumes.placement }}
       {{- toYaml . | nindent 6 }}
     {{- end }}
       affinity:

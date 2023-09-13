@@ -197,7 +197,7 @@ spec:
           mountPath: /var/run/secrets/dapr.io/sentrytoken
           readOnly: true
       {{- end }}
-      {{- with .Values.global.extraVolumeMounts }}
+      {{- with .Values.global.extraVolumeMounts.injector }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
       volumes:
@@ -213,7 +213,7 @@ spec:
               expirationSeconds: 600
               audience: "spiffe://{{ .Values.global.mtls.controlPlaneTrustDomain }}/ns/{{ .Release.Namespace }}/dapr-sentry"
     {{- end }}
-      {{- with .Values.global.extraVolumes }}
+      {{- with .Values.global.extraVolumes.injector }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
       affinity:
