@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -106,6 +107,9 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 			args = append(args, "--config="+c)
 		}
 	}
+	if len(opts.placementAddresses) > 0 {
+		args = append(args, "--placement-host-address="+strings.Join(opts.placementAddresses, ","))
+	}
 
 	return &Daprd{
 		exec:             exec.New(t, binary.EnvValue("daprd"), args, opts.execOpts...),
@@ -146,7 +150,7 @@ func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
 		}
 		defer resp.Body.Close()
 		return http.StatusNoContent == resp.StatusCode
-	}, time.Second*5, 100*time.Millisecond)
+	}, time.Second*10, 100*time.Millisecond)
 }
 
 func (d *Daprd) AppID() string {

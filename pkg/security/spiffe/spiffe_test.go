@@ -15,93 +15,51 @@ package spiffe
 
 import (
 	"errors"
-	"fmt"
 	"testing"
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestFromID(t *testing.T) {
+func TestFromStrings(t *testing.T) {
 	tests := map[string]struct {
-		id     spiffeid.ID
-		expOK  bool
+		td     spiffeid.TrustDomain
+		appID  string
+		ns     string
 		expErr error
-		expID  Parsed
+		expID  *Parsed
 	}{
 		"valid SPIFFE ID": {
-			id:    spiffeid.RequireFromSegments(spiffeid.RequireTrustDomainFromString("example.org"), "ns", "test", "app"),
-			expOK: true,
-			expID: Parsed{
-				TrustDomain: "example.org",
-				Namespace:   "test",
-				AppID:       "app",
-			},
-		},
-		"valid SPIFFE ID with extra identifiers": {
-			id:    spiffeid.RequireFromSegments(spiffeid.RequireTrustDomainFromString("example.org"), "ns", "test", "app", "extra", "identifiers"),
-			expOK: true,
-			expID: Parsed{
-				TrustDomain: "example.org",
-				Namespace:   "test",
-				AppID:       "app",
+			td:    spiffeid.RequireTrustDomainFromString("example.org"),
+			ns:    "test",
+			appID: "app",
+			expID: &Parsed{
+				id:        spiffeid.RequireFromString("spiffe://example.org/ns/test/app"),
+				namespace: "test",
+				appID:     "app",
 			},
 		},
 		"SPIFFE ID: no namespace": {
-			id:     spiffeid.RequireFromSegments(spiffeid.RequireTrustDomainFromString("example.org"), "test", "bar", "app"),
-			expOK:  false,
-			expErr: errors.New("malformed SPIFFE ID: spiffe://example.org/test/bar/app"),
-			expID:  Parsed{},
+			td:     spiffeid.RequireTrustDomainFromString("example.org"),
+			ns:     "",
+			appID:  "app",
+			expErr: errors.New("malformed SPIFFE ID"),
+			expID:  nil,
 		},
-		"SPIFFE ID: too short": {
-			id:     spiffeid.RequireFromPath(spiffeid.RequireTrustDomainFromString("example.org"), "/a"),
-			expOK:  false,
-			expErr: errors.New("malformed SPIFFE ID: spiffe://example.org/a"),
-			expID:  Parsed{},
-		},
-	}
-
-	for name, test := range tests {
-		t.Run(name, func(t *testing.T) {
-			id, ok, err := fromID(test.id)
-
-			assert.Equal(t, test.expOK, ok)
-			assert.Equal(t, test.expErr, err)
-			assert.Equal(t, test.expID, id)
-		})
-	}
-}
-
-func TestToID(t *testing.T) {
-	tests := map[string]struct {
-		parsed Parsed
-		expID  spiffeid.ID
-		expErr error
-	}{
-		"valid parsed SPIFFE ID": {
-			parsed: Parsed{
-				TrustDomain: "example.org",
-				Namespace:   "test",
-				AppID:       "app",
-			},
-			expID: spiffeid.RequireFromSegments(spiffeid.RequireTrustDomainFromString("example.org"), "ns", "test", "app"),
-		},
-		"invalid trust domain": {
-			parsed: Parsed{
-				TrustDomain: "invalid^&%$^%$",
-				Namespace:   "test",
-				AppID:       "app",
-			},
-			expErr: fmt.Errorf("trust domain characters are limited to lowercase letters, numbers, dots, dashes, and underscores"),
+		"SPIFFE ID: no app ID": {
+			td:     spiffeid.RequireTrustDomainFromString("example.org"),
+			ns:     "test",
+			appID:  "",
+			expErr: errors.New("malformed SPIFFE ID"),
+			expID:  nil,
 		},
 	}
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			id, err := test.parsed.ToID()
-
-			assert.Equal(t, test.expID, id)
+			id, err := FromStrings(test.td, test.ns, test.appID)
 			assert.Equal(t, test.expErr, err)
+			assert.Equal(t, test.expID, id)
 		})
 	}
 }

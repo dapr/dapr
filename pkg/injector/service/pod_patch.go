@@ -22,13 +22,10 @@ import (
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
-	"github.com/dapr/dapr/pkg/credentials"
 	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
 	"github.com/dapr/dapr/pkg/injector/patcher"
-	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 )
 
 const (
@@ -53,17 +50,20 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 	sentryAddress := patcher.ServiceAddress(patcher.ServiceSentry, i.config.Namespace, i.config.KubeClusterDomain)
 	operatorAddress := patcher.ServiceAddress(patcher.ServiceAPI, i.config.Namespace, i.config.KubeClusterDomain)
 
-	// Get the TLS credentials
-	trustAnchors, certChain, certKey := GetTrustAnchorsAndCertChain(ctx, i.kubeClient, i.config.Namespace)
+	trustAnchors, err := i.currentTrustAnchors()
+	if err != nil {
+		return nil, err
+	}
+	daprdCert, daprdPrivateKey, err := i.signDaprdCertificate(ctx, pod.Namespace)
+	if err != nil {
+		return nil, err
+	}
 
 	// Create the sidecar configuration object from the pod
 	sidecar := patcher.NewSidecarConfig(pod)
 	sidecar.GetInjectedComponentContainers = i.getInjectedComponentContainers
 	sidecar.Mode = injectorConsts.ModeKubernetes
 	sidecar.Namespace = ar.Request.Namespace
-	sidecar.TrustAnchors = trustAnchors
-	sidecar.CertChain = certChain
-	sidecar.CertKey = certKey
 	sidecar.MTLSEnabled = mTLSEnabled(i.daprClient)
 	sidecar.Identity = ar.Request.Namespace + ":" + pod.Spec.ServiceAccountName
 	sidecar.IgnoreEntrypointTolerations = i.config.GetIgnoreEntrypointTolerations()
@@ -73,6 +73,11 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 	sidecar.RunAsNonRoot = i.config.GetRunAsNonRoot()
 	sidecar.ReadOnlyRootFilesystem = i.config.GetReadOnlyRootFilesystem()
 	sidecar.SidecarDropALLCapabilities = i.config.GetDropCapabilities()
+	sidecar.ControlPlaneNamespace = i.controlPlaneNamespace
+	sidecar.ControlPlaneTrustDomain = i.controlPlaneTrustDomain
+	sidecar.CurrentTrustAnchors = trustAnchors
+	sidecar.CertChain = string(daprdCert)
+	sidecar.CertKey = string(daprdPrivateKey)
 
 	// Set the placement address unless it's skipped
 	// Even if the placement is skipped, however,the placement address will still be included if explicitly set in the annotations
@@ -112,19 +117,4 @@ func mTLSEnabled(daprClient scheme.Interface) bool {
 	}
 	log.Infof("Dapr system configuration '%s' does not exist; using default value %t for mTLSEnabled", defaultConfig, defaultMtlsEnabled)
 	return defaultMtlsEnabled
-}
-
-// GetTrustAnchorsAndCertChain returns the trust anchor and certs.
-func GetTrustAnchorsAndCertChain(ctx context.Context, kubeClient kubernetes.Interface, namespace string) (string, string, string) {
-	secret, err := kubeClient.CoreV1().
-		Secrets(namespace).
-		Get(ctx, securityConsts.TrustBundleK8sSecretName, metav1.GetOptions{})
-	if err != nil {
-		return "", "", ""
-	}
-
-	rootCert := secret.Data[credentials.RootCertFilename]
-	certChain := secret.Data[credentials.IssuerCertFilename]
-	certKey := secret.Data[credentials.IssuerKeyFilename]
-	return string(rootCert), string(certChain), string(certKey)
 }

@@ -19,8 +19,10 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"sync/atomic"
+	"time"
 
 	"github.com/spiffe/go-spiffe/v2/spiffegrpc/grpccredentials"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
@@ -42,19 +44,28 @@ var log = logger.NewLogger("dapr.runtime.security")
 type RequestFn func(ctx context.Context, der []byte) ([]*x509.Certificate, error)
 
 // Handler implements middleware for client and server connection security.
+//
+//nolint:interfacebloat
 type Handler interface {
-	GRPCServerOption() grpc.ServerOption
+	GRPCServerOptionMTLS() grpc.ServerOption
 	GRPCServerOptionNoClientAuth() grpc.ServerOption
+	GRPCDialOptionMTLSUnknownTrustDomain(ns, appID string) grpc.DialOption
+	GRPCDialOptionMTLS(spiffeid.ID) grpc.DialOption
 
 	TLSServerConfigNoClientAuth() *tls.Config
+	NetListenerID(net.Listener, spiffeid.ID) net.Listener
+	NetDialerID(context.Context, spiffeid.ID, time.Duration) func(network, addr string) (net.Conn, error)
 
+	ControlPlaneTrustDomain() spiffeid.TrustDomain
+	ControlPlaneNamespace() string
 	CurrentTrustAnchors() ([]byte, error)
+
 	WatchTrustAnchors(context.Context, chan<- []byte)
 }
 
 // Provider is the security provider.
 type Provider interface {
-	Start(context.Context) error
+	Run(context.Context) error
 	Handler(context.Context) (Handler, error)
 }
 
@@ -107,10 +118,11 @@ type provider struct {
 
 // security implements the Security interface.
 type security struct {
+	controlPlaneTrustDomain spiffeid.TrustDomain
+	controlPlaneNamespace   string
+
 	source *x509source
 	mtls   bool
-
-	controlPlaneNamespace string
 }
 
 func New(ctx context.Context, opts Options) (Provider, error) {
@@ -118,8 +130,12 @@ func New(ctx context.Context, opts Options) (Provider, error) {
 		return nil, errors.New("control plane trust domain is required")
 	}
 
-	var source *x509source
+	td, err := spiffeid.TrustDomainFromString(opts.ControlPlaneTrustDomain)
+	if err != nil {
+		return nil, fmt.Errorf("invalid control plane trust domain: %w", err)
+	}
 
+	var source *x509source
 	if opts.MTLSEnabled {
 		if len(opts.TrustAnchors) > 0 && len(opts.TrustAnchorsFile) > 0 {
 			return nil, errors.New("trust anchors cannot be specified in both TrustAnchors and TrustAnchorsFile")
@@ -130,7 +146,7 @@ func New(ctx context.Context, opts Options) (Provider, error) {
 		}
 
 		var err error
-		source, err = newX509Source(ctx, clock.RealClock{}, opts)
+		source, err = newX509Source(ctx, clock.RealClock{}, td, opts)
 		if err != nil {
 			return nil, err
 		}
@@ -142,16 +158,17 @@ func New(ctx context.Context, opts Options) (Provider, error) {
 		readyCh:          make(chan struct{}),
 		trustAnchorsFile: opts.TrustAnchorsFile,
 		sec: &security{
-			source:                source,
-			mtls:                  opts.MTLSEnabled,
-			controlPlaneNamespace: opts.ControlPlaneNamespace,
+			source:                  source,
+			mtls:                    opts.MTLSEnabled,
+			controlPlaneTrustDomain: td,
+			controlPlaneNamespace:   opts.ControlPlaneNamespace,
 		},
 	}, nil
 }
 
-// Start is a blocking function which starts the security provider, handling
+// Run is a blocking function which starts the security provider, handling
 // rotation of credentials.
-func (p *provider) Start(ctx context.Context) error {
+func (p *provider) Run(ctx context.Context) error {
 	if !p.running.CompareAndSwap(false, true) {
 		return errors.New("security provider already started")
 	}
@@ -223,17 +240,28 @@ func (p *provider) Handler(ctx context.Context) (Handler, error) {
 	}
 }
 
-// GRPCServerOption returns a gRPC server option which instruments
+// GRPCDialOptionMTLS returns a gRPC dial option which instruments client
+// authentication using the current signed client certificate.
+func (s *security) GRPCDialOptionMTLS(appID spiffeid.ID) grpc.DialOption {
+	if !s.mtls {
+		return grpc.WithTransportCredentials(insecure.NewCredentials())
+	}
+	return grpc.WithTransportCredentials(credentials.NewTLS(
+		legacy.NewDialClient(s.source, s.source, tlsconfig.AuthorizeID(appID)),
+	))
+}
+
+// GRPCServerOptionMTLS returns a gRPC server option which instruments
 // authentication of clients using the current trust anchors.
-func (s *security) GRPCServerOption() grpc.ServerOption {
+func (s *security) GRPCServerOptionMTLS() grpc.ServerOption {
 	if !s.mtls {
 		return grpc.Creds(insecure.NewCredentials())
 	}
 
-	// TODO: It would be better if we could give a subset of trust domains in
-	// which this server authorizes.
 	return grpc.Creds(
-		credentials.NewTLS(legacy.NewServer(s.source, s.source, tlsconfig.AuthorizeAny())),
+		// TODO: It would be better if we could give a subset of trust domains in
+		// which this server authorizes.
+		grpccredentials.MTLSServerCredentials(s.source, s.source, tlsconfig.AuthorizeAny()),
 	)
 }
 
@@ -241,9 +269,54 @@ func (s *security) GRPCServerOption() grpc.ServerOption {
 // authentication of clients using the current trust anchors. Doesn't require
 // clients to present a certificate.
 func (s *security) GRPCServerOptionNoClientAuth() grpc.ServerOption {
-	return grpc.Creds(
-		grpccredentials.TLSServerCredentials(s.source),
-	)
+	return grpc.Creds(grpccredentials.TLSServerCredentials(s.source))
+}
+
+// GRPCDialOptionMTLSUnknownTrustDomain returns a gRPC dial option which
+// instruments client authentication using the current signed client
+// certificate. Doesn't verify the servers trust domain, but does authorize the
+// SPIFFE ID path.
+// Used for clients which don't know the servers Trust Domain.
+func (s *security) GRPCDialOptionMTLSUnknownTrustDomain(ns, appID string) grpc.DialOption {
+	if !s.mtls {
+		return grpc.WithTransportCredentials(insecure.NewCredentials())
+	}
+
+	expID := "/ns/" + ns + "/" + appID
+	matcher := func(actual spiffeid.ID) error {
+		if actual.Path() != expID {
+			return fmt.Errorf("unexpected SPIFFE ID: %q", actual)
+		}
+		return nil
+	}
+
+	return grpc.WithTransportCredentials(credentials.NewTLS(
+		legacy.NewDialClient(s.source, s.source, tlsconfig.AdaptMatcher(matcher)),
+	))
+}
+
+// CurrentTrustAnchors returns the current trust anchors for this Dapr
+// installation.
+func (s *security) CurrentTrustAnchors() ([]byte, error) {
+	if s.source == nil {
+		return nil, nil
+	}
+	ta, err := s.source.trustAnchors.Marshal()
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal trust anchors: %w", err)
+	}
+
+	return ta, nil
+}
+
+// ControlPlaneTrustDomain returns the trust domain of the control plane.
+func (s *security) ControlPlaneTrustDomain() spiffeid.TrustDomain {
+	return s.controlPlaneTrustDomain
+}
+
+// ControlPlaneNamespace returns the dapr namespace of the control plane.
+func (s *security) ControlPlaneNamespace() string {
+	return s.controlPlaneNamespace
 }
 
 // WatchTrustAnchors watches for changes to the trust domains and returns the
@@ -281,10 +354,29 @@ func (s *security) TLSServerConfigNoClientAuth() *tls.Config {
 	return tlsconfig.TLSServerConfig(s.source)
 }
 
-// CurrentTrustAnchors returns the current trust anchors for this Dapr
-// installation.
-func (s *security) CurrentTrustAnchors() ([]byte, error) {
-	return s.source.trustAnchors.Marshal()
+// NetListenerID returns a mTLS net listener which instruments using the
+// current signed server certificate. Authorizes client matches against the
+// given SPIFFE ID.
+func (s *security) NetListenerID(lis net.Listener, id spiffeid.ID) net.Listener {
+	if !s.mtls {
+		return lis
+	}
+	return tls.NewListener(lis,
+		tlsconfig.MTLSServerConfig(s.source, s.source, tlsconfig.AuthorizeID(id)),
+	)
+}
+
+// NetDialerID returns a mTLS net dialer which instruments using the current
+// signed client certificate. Authorizes server matches against the given
+// SPIFFE ID.
+func (s *security) NetDialerID(ctx context.Context, spiffeID spiffeid.ID, timeout time.Duration) func(string, string) (net.Conn, error) {
+	if !s.mtls {
+		return (&net.Dialer{Timeout: timeout, Cancel: ctx.Done()}).Dial
+	}
+	return (&tls.Dialer{
+		NetDialer: (&net.Dialer{Timeout: timeout, Cancel: ctx.Done()}),
+		Config:    tlsconfig.MTLSClientConfig(s.source, s.source, tlsconfig.AuthorizeID(spiffeID)),
+	}).Dial
 }
 
 // CurrentNamespace returns the namespace of this workload.
@@ -297,13 +389,8 @@ func CurrentNamespace() string {
 }
 
 // SentryID returns the SPIFFE ID of the sentry server.
-func SentryID(sentryTrustDomain, sentryNamespace string) (spiffeid.ID, error) {
-	td, err := spiffeid.TrustDomainFromString(sentryTrustDomain)
-	if err != nil {
-		return spiffeid.ID{}, fmt.Errorf("invalid trust domain: %w", err)
-	}
-
-	sentryID, err := spiffeid.FromPathf(td, "/ns/%s/dapr-sentry", sentryNamespace)
+func SentryID(sentryTrustDomain spiffeid.TrustDomain, sentryNamespace string) (spiffeid.ID, error) {
+	sentryID, err := spiffeid.FromSegments(sentryTrustDomain, "ns", sentryNamespace, "dapr-sentry")
 	if err != nil {
 		return spiffeid.ID{}, fmt.Errorf("failed to parse sentry SPIFFE ID: %w", err)
 	}

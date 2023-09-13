@@ -30,6 +30,7 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	"github.com/dapr/dapr/pkg/security/fake"
 )
 
 type mockInternalActor struct {
@@ -117,10 +118,11 @@ func newTestActorsRuntimeWithInternalActors(internalActors map[string]InternalAc
 		TracingSpec:    spec,
 		Resiliency:     resiliency.New(log),
 		StateStoreName: "actorStore",
+		Security:       fake.New(),
 	})
 
 	for actorType, actor := range internalActors {
-		if err := a.RegisterInternalActor(context.TODO(), actorType, actor); err != nil {
+		if err := a.RegisterInternalActor(context.TODO(), actorType, actor, 0); err != nil {
 			return nil, err
 		}
 	}

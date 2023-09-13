@@ -81,10 +81,14 @@ func main() {
 
 	err = concurrency.NewRunnerManager(
 		func(ctx context.Context) error {
-			return raftServer.StartRaft(ctx, nil)
+			sec, serr := secProvider.Handler(ctx)
+			if serr != nil {
+				return serr
+			}
+			return raftServer.StartRaft(ctx, sec, nil)
 		},
 		metricsExporter.Run,
-		secProvider.Start,
+		secProvider.Run,
 		apiServer.MonitorLeadership,
 		func(ctx context.Context) error {
 			var metadataOptions []health.RouterOptions

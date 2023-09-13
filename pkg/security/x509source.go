@@ -24,7 +24,6 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -34,15 +33,16 @@ import (
 	middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	"github.com/spiffe/go-spiffe/v2/bundle/x509bundle"
-	"github.com/spiffe/go-spiffe/v2/spiffegrpc/grpccredentials"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig"
 	"github.com/spiffe/go-spiffe/v2/svid/x509svid"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"k8s.io/utils/clock"
 
 	"github.com/dapr/dapr/pkg/diagnostics"
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
+	"github.com/dapr/dapr/pkg/security/legacy"
 	secpem "github.com/dapr/dapr/pkg/security/pem"
 	sentryToken "github.com/dapr/dapr/pkg/security/token"
 )
@@ -62,10 +62,6 @@ type x509source struct {
 
 	// sentryAddress is the network address of the sentry server.
 	sentryAddress string
-
-	// controlPlaneTrustDomain is the trust domain of the sentry server. Used to
-	// validate the connection to sentry.
-	controlPlaneTrustDomain string
 
 	// sentryID is the SPIFFE ID of the sentry server which is validated when
 	// request the identity document.
@@ -94,18 +90,21 @@ type x509source struct {
 	// anchors are updated.
 	trustAnchorSubscribers []chan<- struct{}
 
+	// trustDomain is the optional trust domain which will be set when requesting
+	// the identity certificate. Used by control plane services to request for
+	// the control plane trust domain.
+	trustDomain *string
+
 	lock  sync.RWMutex
 	clock clock.Clock
 }
 
-func newX509Source(ctx context.Context, clock clock.Clock, opts Options) (*x509source, error) {
+func newX509Source(ctx context.Context, clock clock.Clock, cptd spiffeid.TrustDomain, opts Options) (*x509source, error) {
 	rootPEMs := opts.TrustAnchors
 
 	if len(rootPEMs) == 0 {
-		var err error
-		var f *os.File
 		for {
-			f, err = os.Open(opts.TrustAnchorsFile)
+			_, err := os.Stat(opts.TrustAnchorsFile)
 			if err == nil {
 				break
 			}
@@ -118,14 +117,16 @@ func newX509Source(ctx context.Context, clock clock.Clock, opts Options) (*x509s
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			case <-clock.After(time.Second):
-				log.Warnf("trust anchors file '%s' not found, waiting...", opts.TrustAnchorsFile)
+				log.Warnf("Trust anchors file '%s' not found, waiting...", opts.TrustAnchorsFile)
 			}
 		}
 
-		defer f.Close()
-		rootPEMs, err = io.ReadAll(f)
+		log.Infof("Trust anchors file '%s' found", opts.TrustAnchorsFile)
+
+		var err error
+		rootPEMs, err = os.ReadFile(opts.TrustAnchorsFile)
 		if err != nil {
-			return nil, fmt.Errorf("failed to read trust anchors file %q: %w", opts.TrustAnchorsFile, err)
+			return nil, fmt.Errorf("failed to read trust anchors file '%s': %w", opts.TrustAnchorsFile, err)
 		}
 	}
 
@@ -134,22 +135,31 @@ func newX509Source(ctx context.Context, clock clock.Clock, opts Options) (*x509s
 		return nil, fmt.Errorf("failed to decode trust anchors: %w", err)
 	}
 
-	sentryID, err := SentryID(opts.ControlPlaneTrustDomain, opts.ControlPlaneNamespace)
+	sentryID, err := SentryID(cptd, opts.ControlPlaneNamespace)
 	if err != nil {
 		return nil, err
 	}
 
+	var trustDomain *string
+	ns := CurrentNamespace()
+
+	// If the service is a control plane service, set the trust domain to the
+	// control plane trust domain.
+	if isControlPlaneService(opts.AppID) && opts.ControlPlaneNamespace == ns {
+		trustDomain = &opts.ControlPlaneTrustDomain
+	}
+
 	return &x509source{
-		sentryAddress:           opts.SentryAddress,
-		controlPlaneTrustDomain: opts.ControlPlaneTrustDomain,
-		sentryID:                sentryID,
-		trustAnchors:            x509bundle.FromX509Authorities(sentryID.TrustDomain(), trustAnchorCerts),
-		appID:                   opts.AppID,
-		appNamespace:            CurrentNamespace(),
-		kubernetesMode:          os.Getenv("KUBERNETES_SERVICE_HOST") != "",
-		requestFn:               opts.OverrideCertRequestSource,
-		writeToDiskDir:          opts.WriteSVIDToDir,
-		clock:                   clock,
+		sentryAddress:  opts.SentryAddress,
+		sentryID:       sentryID,
+		trustAnchors:   x509bundle.FromX509Authorities(sentryID.TrustDomain(), trustAnchorCerts),
+		appID:          opts.AppID,
+		appNamespace:   ns,
+		trustDomain:    trustDomain,
+		kubernetesMode: os.Getenv("KUBERNETES_SERVICE_HOST") != "",
+		requestFn:      opts.OverrideCertRequestSource,
+		writeToDiskDir: opts.WriteSVIDToDir,
+		clock:          clock,
 	}, nil
 }
 
@@ -272,13 +282,15 @@ func (x *x509source) requestFromSentry(ctx context.Context, csrDER []byte) ([]*x
 		)
 	}
 
+	tlsConfig, err := legacy.NewDialClientOptionalClientAuth(x, x, tlsconfig.AuthorizeID(x.sentryID))
+	if err != nil {
+		return nil, fmt.Errorf("error creating tls config: %w", err)
+	}
+
 	conn, err := grpc.DialContext(ctx,
 		x.sentryAddress,
-		grpc.WithTransportCredentials(
-			grpccredentials.TLSClientCredentials(x, tlsconfig.AuthorizeID(x.sentryID)),
-		),
+		grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)),
 		grpc.WithUnaryInterceptor(unaryClientInterceptor),
-		grpc.WithBlock(),
 		grpc.WithReturnConnectionError(),
 	)
 	if err != nil {
@@ -294,16 +306,28 @@ func (x *x509source) requestFromSentry(ctx context.Context, csrDER []byte) ([]*x
 		return nil, fmt.Errorf("error obtaining token: %w", err)
 	}
 
-	resp, err := sentryv1pb.NewCAClient(conn).SignCertificate(ctx,
-		&sentryv1pb.SignCertificateRequest{
-			CertificateSigningRequest: pem.EncodeToMemory(&pem.Block{
-				Type: "CERTIFICATE REQUEST", Bytes: csrDER,
-			}),
-			Id:             x.appID,
-			Token:          token,
-			Namespace:      x.appNamespace,
-			TokenValidator: tokenValidator,
-		})
+	req := &sentryv1pb.SignCertificateRequest{
+		CertificateSigningRequest: pem.EncodeToMemory(&pem.Block{
+			Type: "CERTIFICATE REQUEST", Bytes: csrDER,
+		}),
+		Id:             getSentryIdentifier(x.appID),
+		Token:          token,
+		Namespace:      x.appNamespace,
+		TokenValidator: tokenValidator,
+	}
+
+	if x.trustDomain != nil {
+		req.TrustDomain = *x.trustDomain
+	} else {
+		// For v1.11 sentry, if the trust domain is empty in the request then it
+		// will return an empty certificate so we default to `public` here to
+		// ensure we get an identity certificate back.
+		// This request field is ignored for non control-plane requests in v1.12.
+		// TODO: @joshvanl: Remove in v1.13.
+		req.TrustDomain = "public"
+	}
+
+	resp, err := sentryv1pb.NewCAClient(conn).SignCertificate(ctx, req)
 	if err != nil {
 		diagnostics.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("sign")
 		return nil, fmt.Errorf("error from sentry SignCertificate: %w", err)
@@ -447,4 +471,27 @@ func atomicWrite(clock clock.Clock, dir string, data map[string][]byte) error {
 // renewalTime is 70% through the certificate validity period.
 func renewalTime(notBefore, notAfter time.Time) time.Time {
 	return notBefore.Add(notAfter.Sub(notBefore) * 7 / 10)
+}
+
+// isControlPlaneService returns true if the app ID corresponds to a Dapr
+// control plane service.
+func isControlPlaneService(id string) bool {
+	switch id {
+	case "dapr-operator",
+		"dapr-placement",
+		"dapr-injector",
+		"dapr-sentry":
+		return true
+	default:
+		return false
+	}
+}
+
+func getSentryIdentifier(appID string) string {
+	// return injected identity, default id if not present
+	localID := os.Getenv("SENTRY_LOCAL_IDENTITY")
+	if localID != "" {
+		return localID
+	}
+	return appID
 }

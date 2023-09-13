@@ -41,11 +41,6 @@ func InitHTTPClient(allowHTTP2 bool) {
 	httpClient = NewHTTPClient(allowHTTP2)
 }
 
-// GetHTTPClient returns the shared httpClient object.
-func GetHTTPClient() *http.Client {
-	return httpClient
-}
-
 // NewHTTPClient initializes a new *http.Client.
 // This should not be used except in rare circumstances. Developers should use the shared httpClient instead to re-use sockets as much as possible.
 func NewHTTPClient(allowHTTP2 bool) *http.Client {
@@ -107,29 +102,30 @@ func HTTPGetNTimes(url string, n int) ([]byte, error) {
 
 // HTTPGet is a helper to make GET request call to url.
 func HTTPGet(url string) ([]byte, error) {
-	resp, err := HTTPGetRaw(url)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	return io.ReadAll(resp.Body)
+	body, _, _, err := HTTPGetWithStatusWithMetadata(url)
+	return body, err
 }
 
 // HTTPGetWithStatus is a helper to make GET request call to url.
 func HTTPGetWithStatus(url string) ([]byte, int, error) {
+	body, status, _, err := HTTPGetWithStatusWithMetadata(url)
+	return body, status, err
+}
+
+// HTTPGetWithStatusWithMetadata is a helper to make GET request call to url.
+func HTTPGetWithStatusWithMetadata(url string) ([]byte, int, http.Header, error) {
 	resp, err := HTTPGetRaw(url)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, nil, err
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, nil, err
 	}
 
-	return body, resp.StatusCode, nil
+	return body, resp.StatusCode, resp.Header, nil
 }
 
 // HTTPGetWithStatusWithData is a helper to make GET request call to url.
@@ -279,4 +275,9 @@ func SanitizeHTTPURL(url string) string {
 	}
 
 	return url
+}
+
+// GetHTTPClient returns the shared httpClient object.
+func GetHTTPClient() *http.Client {
+	return httpClient
 }
