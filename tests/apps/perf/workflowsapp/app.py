@@ -96,7 +96,6 @@ def sum_parallel_wf(ctx:DaprWorkflowContext, input):
     inputs = [f"1,{limit}",f"{limit+1},{2*limit}",f"{2*limit+1},{3*limit}",f"{3*limit+1},{4*limit}",f"{4*limit+1},{num}"]
     parallel_tasks = [ctx.call_activity(sum_activity,input=input) for input in inputs]
     outputs = yield when_all(parallel_tasks)
-    sleep(5)
 
     total_sum = 0
     for x in outputs:
@@ -112,7 +111,6 @@ def sum_activity(ctx:WorkflowActivityContext,input):
     sum = 0
     for i in range(num1,num2+1):
         sum += i
-    sleep(1)
     return sum
 
 # start_workflow_runtime starts the workflow runtime and registers the declared workflows and activities
@@ -187,14 +185,7 @@ def run_workflow(run_id):
         except DaprInternalError as e:
             print(f"error purging workflow: {e.message}")
         
-        try:
-            d.get_workflow(instance_id=instance_id, workflow_component=workflowComponent)
-        except DaprInternalError as err:
-            if nonExistentIDError in err._message:
-                print("Instance Successfully Purged")
-        
         return "Workflow Run completed"
-
 
 if __name__ == '__main__':
     api.run(host="0.0.0.0",port=appPort)
