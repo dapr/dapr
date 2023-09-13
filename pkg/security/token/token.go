@@ -72,3 +72,15 @@ func GetSentryToken(allowKubernetes bool) (token string, validator sentryv1pb.Si
 
 	return "", sentryv1pb.SignCertificateRequest_UNKNOWN, nil
 }
+
+// HasKubernetesToken returns true if a Kubernetes token exists.
+func HasKubernetesToken() bool {
+	_, err := os.Stat(kubeTknPath)
+	if err != nil {
+		_, err = os.Stat(legacyKubeTknPath)
+		if err != nil {
+			return false
+		}
+	}
+	return true
+}
