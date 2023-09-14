@@ -30,26 +30,14 @@ type ActorError struct {
 	message     string
 }
 
-func NewActorError(invokeResponse *invokev1.InvokeMethodResponse) *ActorError {
+func NewActorError(invokeResponse *invokev1.InvokeMethodResponse) error {
 	if invokeResponse == nil {
-		return &ActorError{
-			body:        []byte{},
-			headers:     nil,
-			contentType: "text/plain",
-			statusCode:  500,
-			message:     "actor error without response body",
-		}
+		return fmt.Errorf("coult not parse actor error: no response object")
 	}
 
 	body, err := invokeResponse.RawDataFull()
 	if err != nil {
-		return &ActorError{
-			body:        []byte{},
-			headers:     nil,
-			contentType: "text/plain",
-			statusCode:  500,
-			message:     fmt.Sprintf("could not read error's body: %s", err),
-		}
+		return fmt.Errorf("coult not read actor error: %s", err)
 	}
 
 	statusCode := int(invokeResponse.Status().Code)
