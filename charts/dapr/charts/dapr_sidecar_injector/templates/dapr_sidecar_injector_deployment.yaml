@@ -192,13 +192,19 @@ spec:
         - name: dapr-trust-bundle
           mountPath: /var/run/secrets/dapr.io/tls
           readOnly: true
+      {{- if .Values.global.mtls.mountSentryVolume }}
         - name: dapr-identity-token
           mountPath: /var/run/secrets/dapr.io/sentrytoken
           readOnly: true
+      {{- end }}
+      {{- with .Values.global.extraVolumeMounts.injector }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       volumes:
       - name: dapr-trust-bundle
         configMap:
           name: dapr-trust-bundle
+    {{- if .Values.global.mtls.mountSentryVolume }}
       - name: dapr-identity-token
         projected:
           sources:
@@ -206,6 +212,10 @@ spec:
               path: token
               expirationSeconds: 600
               audience: "spiffe://{{ .Values.global.mtls.controlPlaneTrustDomain }}/ns/{{ .Release.Namespace }}/dapr-sentry"
+    {{- end }}
+      {{- with .Values.global.extraVolumes.injector }}
+        {{- toYaml . | nindent 6 }}
+      {{- end }}
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:

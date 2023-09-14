@@ -225,6 +225,11 @@ func TestActorMetadataEtagRace(t *testing.T) {
 			t.Logf("Sleeping for %d seconds ...", secondsToCheckReminderResult)
 			time.Sleep(secondsToCheckReminderResult * time.Second)
 
+			// Define the backoff strategy
+			bo := backoff.NewExponentialBackOff()
+			bo.InitialInterval = 1 * time.Second
+			const maxRetries = 20
+
 			err = backoff.RetryNotify(
 				func() error {
 					rerr := utils.HealthCheckApps(externalURLOne, externalURLTwo)
@@ -260,7 +265,7 @@ func TestActorMetadataEtagRace(t *testing.T) {
 					t.Logf("All reminders triggerred with partition count as %d!", newPartitionCount)
 					return nil
 				},
-				backoff.WithMaxRetries(backoff.NewExponentialBackOff(), 10),
+				backoff.WithMaxRetries(bo, maxRetries),
 				func(err error, d time.Duration) {
 					log.Printf("Error while invoking actor: '%v' - retrying in %s", err, d)
 				},
