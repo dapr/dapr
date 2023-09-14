@@ -429,6 +429,10 @@ func (a *actorsRuntime) Call(ctx context.Context, req *invokev1.InvokeMethodRequ
 	}
 
 	if err != nil {
+		if resp != nil && IsActorError(err) {
+			return resp, err
+		}
+
 		if resp != nil {
 			resp.Close()
 		}
