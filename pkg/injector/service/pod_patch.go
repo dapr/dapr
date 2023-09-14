@@ -26,6 +26,7 @@ import (
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
 	"github.com/dapr/dapr/pkg/injector/patcher"
+	"github.com/dapr/dapr/pkg/security/token"
 )
 
 const (
@@ -78,6 +79,7 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 	sidecar.CurrentTrustAnchors = trustAnchors
 	sidecar.CertChain = string(daprdCert)
 	sidecar.CertKey = string(daprdPrivateKey)
+	sidecar.DisableTokenVolume = !token.HasKubernetesToken()
 
 	// Set the placement address unless it's skipped
 	// Even if the placement is skipped, however,the placement address will still be included if explicitly set in the annotations
