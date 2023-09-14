@@ -36,8 +36,6 @@ import (
 var log = logger.NewLogger("dapr.sentry")
 
 func main() {
-	log.Infof("Starting sentry certificate authority -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
-
 	opts := options.New()
 
 	// Apply options to all loggers
@@ -50,14 +48,10 @@ func main() {
 
 	metricsExporter := metrics.NewExporterWithOptions(log, metrics.DefaultMetricNamespace, opts.Metrics)
 
-	if len(opts.TokenAudience) > 0 {
-		log.Warn("--token-audience is deprecated and will be removed in Dapr v1.14")
-	}
-
 	if err := utils.SetEnvVariables(map[string]string{
 		utils.KubeConfigVar: opts.Kubeconfig,
 	}); err != nil {
-		log.Fatalf("error set env failed:  %s", err.Error())
+		log.Fatalf("Error set env failed:  %s", err.Error())
 	}
 
 	if err := monitoring.InitMetrics(); err != nil {
