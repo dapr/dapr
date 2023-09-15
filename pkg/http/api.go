@@ -42,6 +42,7 @@ import (
 	"github.com/dapr/components-contrib/state"
 	wfs "github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/dapr/pkg/actors"
+	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/channel"
@@ -2078,10 +2079,28 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 	resp, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
 		return a.actor.Call(ctx, req)
 	})
-	if err != nil && !errors.Is(err, actors.ErrDaprResponseHeader) {
-		msg := NewErrorResponse("ERR_ACTOR_INVOKE_METHOD", fmt.Sprintf(messages.ErrActorInvoke, err))
-		respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
-		log.Debug(msg)
+
+	if resp != nil {
+		defer resp.Close()
+	}
+
+	if err != nil {
+		actorErr, isActorError := actorerrors.As(err)
+		if !isActorError {
+			msg := NewErrorResponse("ERR_ACTOR_INVOKE_METHOD", fmt.Sprintf(messages.ErrActorInvoke, err))
+			respond(reqCtx, withError(fasthttp.StatusInternalServerError, msg))
+			log.Debug(msg)
+			return
+		}
+
+		// Use Add to ensure headers are appended and not replaced
+		invokev1.InternalMetadataToHTTPHeader(reqCtx, actorErr.Headers(), reqCtx.Response.Header.Add)
+		reqCtx.Response.Header.SetContentType(actorErr.ContentType())
+
+		// Construct response.
+		statusCode := actorErr.StatusCode()
+		body := actorErr.Body()
+		respond(reqCtx, with(statusCode, body))
 		return
 	}
 
@@ -2091,7 +2110,6 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 		log.Debug(msg)
 		return
 	}
-	defer resp.Close()
 
 	// Use Add to ensure headers are appended and not replaced
 	invokev1.InternalMetadataToHTTPHeader(reqCtx, resp.Headers(), reqCtx.Response.Header.Add)
