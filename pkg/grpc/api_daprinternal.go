@@ -21,9 +21,10 @@ import (
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/dapr/dapr/pkg/acl"
-	"github.com/dapr/dapr/pkg/actors"
+	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/grpc/metadata"
 	"github.com/dapr/dapr/pkg/messages"
@@ -272,9 +273,17 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	resp, err := a.Actors.Call(ctx, req)
 	if err != nil {
 		// We have to remove the error to keep the body, so callers must re-inspect for the header in the actual response.
-		if resp != nil && errors.Is(err, actors.ErrDaprResponseHeader) {
+		actorErr, isActorErr := actorerrors.As(err)
+		if resp != nil && isActorErr {
 			defer resp.Close()
-			return resp.ProtoWithData()
+			r, eErr := resp.ProtoWithData()
+			if eErr == nil {
+				r.Message.Data = &anypb.Any{
+					Value: actorErr.Body(),
+				}
+				r.Headers = actorErr.Headers()
+			}
+			return r, eErr
 		}
 
 		err = status.Errorf(codes.Internal, messages.ErrActorInvoke, err)
