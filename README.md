@@ -3,7 +3,7 @@
 </div>
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/dapr/dapr)](https://goreportcard.com/report/github.com/dapr/dapr)
-[![CII Best Practices](https://bestpractices.coreinfrastructure.org/projects/5044/badge)](https://bestpractices.coreinfrastructure.org/projects/5044)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/5044/badge)](https://www.bestpractices.dev/projects/5044)
 [![Docker Pulls](https://img.shields.io/docker/pulls/daprio/daprd)](https://hub.docker.com/r/daprio/dapr)
 [![Build Status](https://github.com/dapr/dapr/workflows/dapr/badge.svg?event=push&branch=master)](https://github.com/dapr/dapr/actions?workflow=dapr)
 [![E2E Tests](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/dapr-bot/14e974e8fd6c6eab03a2475beb1d547a/raw/dapr-test-badge.json)](https://github.com/dapr/dapr/actions?workflow=dapr-test&event=schedule)
