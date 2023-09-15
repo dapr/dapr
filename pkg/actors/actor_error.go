@@ -22,6 +22,7 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 )
 
+// ActorError is an error returned by an Actor via a header + body in the method's response.
 type ActorError struct {
 	body        []byte
 	headers     invokev1.DaprInternalMetadata
@@ -32,12 +33,12 @@ type ActorError struct {
 
 func NewActorError(invokeResponse *invokev1.InvokeMethodResponse) error {
 	if invokeResponse == nil {
-		return fmt.Errorf("coult not parse actor error: no response object")
+		return fmt.Errorf("could not parse actor error: no response object")
 	}
 
 	body, err := invokeResponse.RawDataFull()
 	if err != nil {
-		return fmt.Errorf("coult not read actor error: %s", err)
+		return fmt.Errorf("could not read actor error: %s", err)
 	}
 
 	statusCode := int(invokeResponse.Status().Code)
