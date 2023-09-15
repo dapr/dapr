@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package actors
+package errors
 
 import (
 	"errors"
@@ -75,7 +75,7 @@ func (e *ActorError) Body() []byte {
 	return e.body
 }
 
-func AsActorError(err error) (*ActorError, bool) {
+func As(err error) (*ActorError, bool) {
 	var actorError *ActorError
 	if errors.As(err, &actorError) {
 		return actorError, true
@@ -84,7 +84,7 @@ func AsActorError(err error) (*ActorError, bool) {
 	return nil, false
 }
 
-func IsActorError(err error) bool {
+func Is(err error) bool {
 	var actorError *ActorError
 	return errors.As(err, &actorError)
 }

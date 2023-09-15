@@ -24,7 +24,7 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/dapr/dapr/pkg/acl"
-	"github.com/dapr/dapr/pkg/actors"
+	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/grpc/metadata"
 	"github.com/dapr/dapr/pkg/messages"
@@ -273,7 +273,7 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	resp, err := a.Actors.Call(ctx, req)
 	if err != nil {
 		// We have to remove the error to keep the body, so callers must re-inspect for the header in the actual response.
-		actorErr, isActorErr := actors.AsActorError(err)
+		actorErr, isActorErr := actorerrors.As(err)
 		if resp != nil && isActorErr {
 			defer resp.Close()
 			r, eErr := resp.ProtoWithData()
