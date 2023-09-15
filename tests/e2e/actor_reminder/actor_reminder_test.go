@@ -530,7 +530,7 @@ func TestActorReminderTTL(t *testing.T) {
 
 		t.Log("Checking if all reminders did trigger ...")
 		count := countActorAction(resp, actorID, reminderName)
-		require.InDelta(t, 9, count, 2)
+		require.InDelta(t, 10, count, 2)
 	})
 }
 
