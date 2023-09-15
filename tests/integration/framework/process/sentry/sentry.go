@@ -15,6 +15,9 @@ package sentry
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"fmt"
 	"net/http"
 	"os"
@@ -51,7 +54,9 @@ type Sentry struct {
 func New(t *testing.T, fopts ...Option) *Sentry {
 	t.Helper()
 
-	bundle, err := ca.GenerateBundle("integration.test.dapr.io", time.Second*5)
+	rootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	bundle, err := ca.GenerateBundle(rootKey, "integration.test.dapr.io", time.Second*5, nil)
 	require.NoError(t, err)
 
 	fp := util.ReservePorts(t, 3)
