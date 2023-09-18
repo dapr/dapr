@@ -39,7 +39,6 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
-	"github.com/dapr/dapr/pkg/channel"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -48,13 +47,13 @@ import (
 	"github.com/dapr/dapr/pkg/grpc/metadata"
 	"github.com/dapr/dapr/pkg/grpc/universalapi"
 	"github.com/dapr/dapr/pkg/messages"
-	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
+	"github.com/dapr/dapr/pkg/runtime/channels"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/utils"
 )
@@ -72,15 +71,13 @@ type API interface {
 	runtimev1pb.DaprServer
 
 	// Methods internal to the object
-	SetAppChannel(appChannel channel.AppChannel)
-	SetDirectMessaging(directMessaging messaging.DirectMessaging)
-	SetActorRuntime(actor actors.Actors)
+	SetActorRuntime(actor actors.ActorRuntime)
 }
 
 type api struct {
 	*universalapi.UniversalAPI
-	directMessaging       messaging.DirectMessaging
-	appChannel            channel.AppChannel
+	directMessaging       invokev1.DirectMessaging
+	channels              *channels.Channels
 	pubsubAdapter         runtimePubsub.Adapter
 	sendToOutputBindingFn func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	tracingSpec           config.TracingSpec
@@ -94,9 +91,9 @@ type api struct {
 // APIOpts contains options for NewAPI.
 type APIOpts struct {
 	UniversalAPI          *universalapi.UniversalAPI
-	AppChannel            channel.AppChannel
+	Channels              *channels.Channels
 	PubsubAdapter         runtimePubsub.Adapter
-	DirectMessaging       messaging.DirectMessaging
+	DirectMessaging       invokev1.DirectMessaging
 	SendToOutputBindingFn func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	TracingSpec           config.TracingSpec
 	AccessControlList     *config.AccessControlList
@@ -108,7 +105,7 @@ func NewAPI(opts APIOpts) API {
 	return &api{
 		UniversalAPI:          opts.UniversalAPI,
 		directMessaging:       opts.DirectMessaging,
-		appChannel:            opts.AppChannel,
+		channels:              opts.Channels,
 		pubsubAdapter:         opts.PubsubAdapter,
 		sendToOutputBindingFn: opts.SendToOutputBindingFn,
 		tracingSpec:           opts.TracingSpec,
@@ -1130,7 +1127,8 @@ func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRe
 	}
 
 	return &runtimev1pb.GetActorStateResponse{
-		Data: resp.Data,
+		Data:     resp.Data,
+		Metadata: resp.Metadata,
 	}, nil
 }
 
@@ -1266,15 +1264,7 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 	return response, nil
 }
 
-func (a *api) SetAppChannel(appChannel channel.AppChannel) {
-	a.appChannel = appChannel
-}
-
-func (a *api) SetDirectMessaging(directMessaging messaging.DirectMessaging) {
-	a.directMessaging = directMessaging
-}
-
-func (a *api) SetActorRuntime(actor actors.Actors) {
+func (a *api) SetActorRuntime(actor actors.ActorRuntime) {
 	a.UniversalAPI.Actors = actor
 }
 

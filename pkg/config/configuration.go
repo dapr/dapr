@@ -41,8 +41,6 @@ import (
 type Feature string
 
 const (
-	// Enable support for streaming in HTTP service invocation
-	ServiceInvocationStreaming Feature = "ServiceInvocationStreaming"
 	// Disables enforcing minimum TLS version 1.2 in AppChannel, which is insecure.
 	// TODO: Remove this feature flag in Dapr 1.13.
 	AppChannelAllowInsecureTLS Feature = "AppChannelAllowInsecureTLS"
@@ -115,6 +113,7 @@ type ConfigurationSpec struct {
 	APISpec             *APISpec            `json:"api,omitempty" yaml:"api,omitempty"`
 	ComponentsSpec      *ComponentsSpec     `json:"components,omitempty" yaml:"components,omitempty"`
 	LoggingSpec         *LoggingSpec        `json:"logging,omitempty" yaml:"logging,omitempty"`
+	WasmSpec            *WasmSpec           `json:"wasm,omitempty" yaml:"wasm,omitempty"`
 }
 
 type SecretsSpec struct {
@@ -315,6 +314,19 @@ type FeatureSpec struct {
 type ComponentsSpec struct {
 	// Denylist of component types that cannot be instantiated
 	Deny []string `json:"deny,omitempty" yaml:"deny,omitempty"`
+}
+
+// WasmSpec describes the security profile for all Dapr Wasm components.
+type WasmSpec struct {
+	// Force enabling strict sandbox mode for all WASM components.
+	// When this is enabled, WASM components always run in strict mode regardless of their configuration.
+	// Strict mode enhances security of the WASM sandbox by limiting access to certain capabilities such as real-time clocks and random number generators.
+	StrictSandbox bool `json:"strictSandbox,omitempty" yaml:"strictSandbox,omitempty"`
+}
+
+// GetStrictSandbox returns the value of StrictSandbox, with nil-checks.
+func (w *WasmSpec) GetStrictSandbox() bool {
+	return w != nil && w.StrictSandbox
 }
 
 // LoggingSpec defines the configuration for logging.

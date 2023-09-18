@@ -18,6 +18,7 @@ package actors
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"testing"
 	"time"
 
@@ -29,6 +30,7 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	"github.com/dapr/dapr/pkg/security/fake"
 )
 
 type mockInternalActor struct {
@@ -116,10 +118,11 @@ func newTestActorsRuntimeWithInternalActors(internalActors map[string]InternalAc
 		TracingSpec:    spec,
 		Resiliency:     resiliency.New(log),
 		StateStoreName: "actorStore",
+		Security:       fake.New(),
 	})
 
 	for actorType, actor := range internalActors {
-		if err := a.RegisterInternalActor(context.TODO(), actorType, actor); err != nil {
+		if err := a.RegisterInternalActor(context.TODO(), actorType, actor, 0); err != nil {
 			return nil, err
 		}
 	}
@@ -159,11 +162,10 @@ func TestInternalActorCall(t *testing.T) {
 		// Verify the response metadata matches what we expect
 		assert.Equal(t, int32(200), resp.Status().Code)
 		contentType := resp.ContentType()
-		data, _ := resp.RawDataFull()
 		assert.Equal(t, invokev1.OctetStreamContentType, contentType)
 
 		// Verify the actor got all the expected inputs (which are echoed back to us)
-		info, err := decodeTestResponse(data)
+		info, err := decodeTestResponse(resp.RawData())
 		require.NoError(t, err)
 		require.NotNil(t, info)
 		assert.Equal(t, testActorID, info.ActorID)
@@ -245,7 +247,7 @@ func TestInternalActorDeactivation(t *testing.T) {
 	}
 }
 
-func decodeTestResponse(data []byte) (*invokeMethodCallInfo, error) {
+func decodeTestResponse(data io.Reader) (*invokeMethodCallInfo, error) {
 	info := new(invokeMethodCallInfo)
 	err := DecodeInternalActorData(data, info)
 	if err != nil {

@@ -29,5 +29,10 @@ type Validator interface {
 	Start(context.Context) error
 
 	// Validate validates the identity of a certificate request.
-	Validate(context.Context, *sentryv1pb.SignCertificateRequest) (spiffeid.TrustDomain, error)
+	// Returns the Trust Domain of the certificate requester, and whether the
+	// signed certificates duration should be overridden to the maximum time
+	// permitted by the singing certificate.
+	// TODO: @joshvanl remove the overrideDuration bool in v1.13 when injector no
+	// longer needs to request other identities.
+	Validate(context.Context, *sentryv1pb.SignCertificateRequest) (spiffeid.TrustDomain, bool, error)
 }

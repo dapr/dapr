@@ -11,50 +11,26 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package grpc
+package manager
 
 import (
-	"crypto/x509"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
 	"github.com/dapr/dapr/pkg/modes"
-	"github.com/dapr/dapr/pkg/runtime/security"
 )
 
-type authenticatorMock struct{}
-
-func (a *authenticatorMock) GetTrustAnchors() *x509.CertPool {
-	return nil
-}
-
-func (a *authenticatorMock) GetCurrentSignedCert() *security.SignedCertificate {
-	return nil
-}
-
-func (a *authenticatorMock) CreateSignedWorkloadCert(id, namespace, trustDomain string) (*security.SignedCertificate, error) {
-	return nil, nil
-}
-
-func TestNewGRPCManager(t *testing.T) {
+func TestNewManager(t *testing.T) {
 	t.Run("with self hosted", func(t *testing.T) {
-		m := NewGRPCManager(modes.StandaloneMode, &AppChannelConfig{})
+		m := NewManager(nil, modes.StandaloneMode, &AppChannelConfig{})
 		assert.NotNil(t, m)
 		assert.Equal(t, modes.StandaloneMode, m.mode)
 	})
 
 	t.Run("with kubernetes", func(t *testing.T) {
-		m := NewGRPCManager(modes.KubernetesMode, &AppChannelConfig{})
+		m := NewManager(nil, modes.KubernetesMode, &AppChannelConfig{})
 		assert.NotNil(t, m)
 		assert.Equal(t, modes.KubernetesMode, m.mode)
 	})
-}
-
-func TestSetAuthenticator(t *testing.T) {
-	a := &authenticatorMock{}
-	m := NewGRPCManager(modes.StandaloneMode, &AppChannelConfig{})
-	m.SetAuthenticator(a)
-
-	assert.Equal(t, a, m.auth)
 }

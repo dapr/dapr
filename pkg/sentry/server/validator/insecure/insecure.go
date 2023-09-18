@@ -28,7 +28,7 @@ import (
 type insecure struct{}
 
 func New() validator.Validator {
-	return &insecure{}
+	return new(insecure)
 }
 
 func (s *insecure) Start(ctx context.Context) error {
@@ -36,6 +36,6 @@ func (s *insecure) Start(ctx context.Context) error {
 	return nil
 }
 
-func (s *insecure) Validate(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (spiffeid.TrustDomain, error) {
+func (s *insecure) Validate(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (spiffeid.TrustDomain, bool, error) {
 	return internal.Validate(ctx, req)
 }

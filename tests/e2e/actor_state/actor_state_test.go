@@ -155,6 +155,7 @@ func TestActorState(t *testing.T) {
 			assert.NoError(t, err)
 			assert.Equal(t, http.StatusOK, code)
 
+			now := time.Now()
 			myData := []byte(`[{"operation":"upsert","request":{"key":"myTTLKey","value":"myTTLData","metadata":{"ttlInSeconds":"3"}}}]`)
 			resp, code, err := utils.HTTPPostWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID", httpURL, actuid), myData)
 			assert.NoError(t, err)
@@ -162,10 +163,15 @@ func TestActorState(t *testing.T) {
 			assert.Empty(t, resp)
 
 			// Ensure the data isn't deleted yet.
-			resp, code, err = utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID/myTTLKey", httpURL, actuid))
+			resp, code, header, err := utils.HTTPGetWithStatusWithMetadata(fmt.Sprintf("%s/httpMyActorType/%s-myActorID/myTTLKey", httpURL, actuid))
 			assert.NoError(t, err)
 			assert.Equal(t, http.StatusOK, code)
 			assert.Equal(t, `"myTTLData"`, string(resp))
+			ttlExpireTimeStr := header.Get("metadata.ttlexpiretime")
+			require.NotEmpty(t, ttlExpireTimeStr)
+			ttlExpireTime, err := time.Parse(time.RFC3339, ttlExpireTimeStr)
+			require.NoError(t, err)
+			assert.InDelta(t, 3, ttlExpireTime.Sub(now).Seconds(), 1)
 
 			// Data should be deleted within 10s, since TTL is 3s
 			assert.Eventually(t, func() bool {
@@ -306,9 +312,27 @@ func TestActorState(t *testing.T) {
 				},
 			})
 			require.NoError(t, err)
+
+			now := time.Now()
 			_, code, err = utils.HTTPPostWithStatus(grpcURL, b)
 			assert.NoError(t, err)
 			assert.Equal(t, http.StatusOK, code)
+
+			b, err = json.Marshal(&runtimev1.GetActorStateRequest{
+				ActorType: "grpcMyActorType", ActorId: fmt.Sprintf("%s-myActorIDTTL", actuid), Key: "myTTLKey",
+			})
+			resp, code, err := utils.HTTPGetWithStatusWithData(grpcURL, b)
+			assert.NoError(t, err)
+			assert.Equal(t, http.StatusOK, code)
+			var gresp runtimev1.GetActorStateResponse
+			assert.NoError(t, json.Unmarshal(resp, &gresp))
+			assert.Equal(t, []byte("myData"), gresp.Data)
+
+			ttlExpireTimeStr := gresp.Metadata["ttlExpireTime"]
+			require.NotEmpty(t, ttlExpireTimeStr)
+			ttlExpireTime, err := time.Parse(time.RFC3339, ttlExpireTimeStr)
+			require.NoError(t, err)
+			assert.InDelta(t, 3, ttlExpireTime.Sub(now).Seconds(), 1)
 
 			assert.Eventually(t, func() bool {
 				b, err := json.Marshal(&runtimev1.GetActorStateRequest{

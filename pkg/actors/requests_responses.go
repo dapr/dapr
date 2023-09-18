@@ -59,6 +59,18 @@ func (r GetStateRequest) ActorKey() string {
 	return r.ActorType + daprSeparator + r.ActorID
 }
 
+// GetBulkStateRequest is the request object for getting bulk actor state.
+type GetBulkStateRequest struct {
+	ActorID   string   `json:"actorId"`
+	ActorType string   `json:"actorType"`
+	Keys      []string `json:"keys"`
+}
+
+// ActorKey returns the key of the actor for this request.
+func (r GetBulkStateRequest) ActorKey() string {
+	return r.ActorType + daprSeparator + r.ActorID
+}
+
 // ReminderResponse is the payload that is sent to an Actor SDK API for execution.
 type ReminderResponse struct {
 	Data    any    `json:"data"`
@@ -103,8 +115,13 @@ type SaveStateRequest struct {
 
 // StateResponse is the response returned from getting an actor state.
 type StateResponse struct {
-	Data []byte `json:"data"`
+	Data     []byte            `json:"data"`
+	Metadata map[string]string `json:"metadata"`
 }
+
+// BulkStateResponse is the response returned from getting an actor state in bulk.
+// It's a map where the key is the key of the state, and the value is the value as byte slice.
+type BulkStateResponse map[string][]byte
 
 // TimerResponse is the response object send to an Actor SDK API when a timer fires.
 type TimerResponse struct {

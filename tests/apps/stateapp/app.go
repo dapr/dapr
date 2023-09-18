@@ -26,6 +26,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
@@ -76,7 +77,8 @@ func init() {
 
 // appState represents a state in this app.
 type appState struct {
-	Data []byte `json:"data,omitempty"`
+	Data     []byte              `json:"data,omitempty"`
+	Metadata map[string][]string `json:"metadata,omitempty"`
 }
 
 // daprState represents a state in Dapr.
@@ -84,6 +86,7 @@ type daprState struct {
 	Key           string            `json:"key,omitempty"`
 	Value         *appState         `json:"value,omitempty"`
 	Etag          string            `json:"etag,omitempty"`
+	TTLExpireTime *time.Time        `json:"ttlExpireTime,omitempty"`
 	Metadata      map[string]string `json:"metadata,omitempty"`
 	OperationType string            `json:"operationType,omitempty"`
 }
@@ -151,11 +154,11 @@ func load(data []byte, statestore string, meta map[string]string) (int, error) {
 	return res.StatusCode, err
 }
 
-func get(key string, statestore string, meta map[string]string) (*appState, string, error) {
+func get(key string, statestore string, meta map[string]string) (*appState, string, *time.Time, error) {
 	log.Printf("Processing get request for %s.", key)
 	url, err := createStateURL(key, statestore, meta)
 	if err != nil {
-		return nil, "", err
+		return nil, "", nil, err
 	}
 
 	log.Printf("Fetching state from %s", url)
@@ -163,27 +166,36 @@ func get(key string, statestore string, meta map[string]string) (*appState, stri
 	/* #nosec */
 	res, err := httpClient.Get(url)
 	if err != nil {
-		return nil, "", fmt.Errorf("could not get value for key %s from Dapr: %s", key, err.Error())
+		return nil, "", nil, fmt.Errorf("could not get value for key %s from Dapr: %s", key, err.Error())
 	}
 
 	defer res.Body.Close()
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		return nil, "", fmt.Errorf("could not load value for key %s from Dapr: %s", key, err.Error())
+		return nil, "", nil, fmt.Errorf("could not load value for key %s from Dapr: %s", key, err.Error())
 	}
 
 	if res.StatusCode < 200 || res.StatusCode > 299 {
-		return nil, "", fmt.Errorf("failed to get value for key %s from Dapr: %s", key, body)
+		return nil, "", nil, fmt.Errorf("failed to get value for key %s from Dapr: %s", key, body)
 	}
 
 	log.Printf("Found state for key %s: %s", key, body)
 
 	state, err := parseState(key, body)
 	if err != nil {
-		return nil, "", err
+		return nil, "", nil, err
 	}
 
-	return state, res.Header.Get("etag"), nil
+	var ttlExpireTime *time.Time
+	if v := res.Header.Values("metadata.ttlexpiretime"); len(v) == 1 {
+		exp, err := time.Parse(time.RFC3339, v[0])
+		if err != nil {
+			return nil, "", nil, fmt.Errorf("could not parse ttlexpiretime for key %s from Dapr: %w", key, err)
+		}
+		ttlExpireTime = &exp
+	}
+
+	return state, res.Header.Get("etag"), ttlExpireTime, nil
 }
 
 func parseState(key string, body []byte) (*appState, error) {
@@ -210,16 +222,17 @@ func getAll(states []daprState, statestore string, meta map[string]string) ([]da
 
 	output := make([]daprState, 0, len(states))
 	for _, state := range states {
-		value, etag, err := get(state.Key, statestore, meta)
+		value, etag, ttlExpireTime, err := get(state.Key, statestore, meta)
 		if err != nil {
 			return nil, err
 		}
 
 		log.Printf("Result for get request for key %s: %v", state.Key, value)
 		output = append(output, daprState{
-			Key:   state.Key,
-			Value: value,
-			Etag:  etag,
+			Key:           state.Key,
+			Value:         value,
+			Etag:          etag,
+			TTLExpireTime: ttlExpireTime,
 		})
 	}
 
@@ -680,9 +693,10 @@ func toDaprStates(response *runtimev1pb.GetBulkStateResponse) ([]daprState, erro
 			return nil, err
 		}
 		result[i] = daprState{
-			Key:   state.Key,
-			Value: daprStateItem,
-			Etag:  state.Etag,
+			Key:      state.Key,
+			Value:    daprStateItem,
+			Etag:     state.Etag,
+			Metadata: state.Metadata,
 		}
 	}
 
@@ -840,7 +854,7 @@ func etagTestHTTP(statestore string) error {
 		expectEtagNotEqual string
 	}
 	retrieveState := func(stateId int, opts retrieveStateOpts) (string, error) {
-		value, etag, err := get(keys[stateId], statestore, pkMetadata)
+		value, etag, _, err := get(keys[stateId], statestore, pkMetadata)
 		if err != nil {
 			return "", fmt.Errorf("failed to retrieve value %d: %w", stateId, err)
 		}

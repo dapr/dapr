@@ -143,7 +143,7 @@ BASE_PACKAGE_NAME := github.com/dapr/dapr
 LOGGER_PACKAGE_NAME := github.com/dapr/kit/logger
 
 # Comma-separated list of features to enable
-ENABLED_FEATURES ?= ServiceInvocationStreaming
+ENABLED_FEATURES ?= 
 
 DEFAULT_LDFLAGS:=-X $(BASE_PACKAGE_NAME)/pkg/buildinfo.gitcommit=$(GIT_COMMIT) \
   -X $(BASE_PACKAGE_NAME)/pkg/buildinfo.gitversion=$(GIT_VERSION) \
@@ -283,7 +283,8 @@ docker-deploy-k8s: check-docker-env check-arch
 		--set global.ha.enabled=$(HA_MODE) --set-string global.tag=$(BUILD_TAG) \
 		--set-string global.registry=$(DAPR_REGISTRY) --set global.logAsJson=true \
 		--set global.daprControlPlaneOs=$(TARGET_OS) --set global.daprControlPlaneArch=$(TARGET_ARCH) \
-		--set dapr_placement.logLevel=debug --set dapr_sidecar_injector.sidecarImagePullPolicy=$(PULL_POLICY) \
+		--set dapr_placement.logLevel=debug --set dapr_sentry.logLevel=debug \
+		--set dapr_sidecar_injector.sidecarImagePullPolicy=$(PULL_POLICY) \
 		--set global.imagePullPolicy=$(PULL_POLICY) --set global.imagePullSecrets=${DAPR_TEST_REGISTRY_SECRET} \
 		--set global.mtls.enabled=${DAPR_MTLS_ENABLED} \
 		--set dapr_placement.cluster.forceInMemoryLog=$(FORCE_INMEM) \
@@ -328,7 +329,6 @@ TEST_WITH_RACE=./pkg/acl/... \
 ./pkg/concurrency/... \
 ./pkg/config/... \
 ./pkg/cors/... \
-./pkg/credentials/... \
 ./pkg/diagnostics/... \
 ./pkg/encryption/... \
 ./pkg/expr/... \

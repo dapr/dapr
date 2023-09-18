@@ -1,4 +1,4 @@
-# API-001: State Store APIs Parity
+# API-011: State Store APIs Parity
 
 ## Status
 Accepted

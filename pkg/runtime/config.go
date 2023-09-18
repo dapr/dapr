@@ -27,7 +27,6 @@ import (
 	env "github.com/dapr/dapr/pkg/config/env"
 	configmodes "github.com/dapr/dapr/pkg/config/modes"
 	"github.com/dapr/dapr/pkg/config/protocol"
-	"github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
@@ -36,7 +35,7 @@ import (
 	resiliencyConfig "github.com/dapr/dapr/pkg/resiliency"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	"github.com/dapr/dapr/pkg/runtime/registry"
-	"github.com/dapr/dapr/pkg/runtime/security"
+	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/pkg/validation"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/ptr"
@@ -105,6 +104,7 @@ type Config struct {
 	AppChannelAddress            string
 	Metrics                      *metrics.Options
 	Registry                     *registry.Options
+	Security                     security.Handler
 }
 
 type internalConfig struct {
@@ -131,7 +131,6 @@ type internalConfig struct {
 	enableAPILogging             *bool
 	disableBuiltinK8sSecretStore bool
 	config                       []string
-	certChain                    *credentials.CertChain
 	registry                     *registry.Registry
 	metricsExporter              metrics.Exporter
 }
@@ -165,18 +164,11 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 		return nil, err
 	}
 
-	if intc.mTLSEnabled || intc.mode == modes.KubernetesMode {
-		intc.certChain, err = security.GetCertChain()
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	// Config and resiliency need the operator client
 	var operatorClient operatorV1.OperatorClient
 	if intc.mode == modes.KubernetesMode {
 		log.Info("Initializing the operator client")
-		client, conn, clientErr := client.GetOperatorClient(ctx, intc.kubernetes.ControlPlaneAddress, security.TLSServerName, intc.certChain)
+		client, conn, clientErr := client.GetOperatorClient(ctx, cfg.ControlPlaneAddress, cfg.Security)
 		if clientErr != nil {
 			return nil, clientErr
 		}
@@ -259,7 +251,7 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 		intc.enableAPILogging = ptr.Of(globalConfig.GetAPILoggingSpec().Enabled)
 	}
 
-	return newDaprRuntime(ctx, intc, globalConfig, accessControlList, resiliencyProvider)
+	return newDaprRuntime(ctx, cfg.Security, intc, globalConfig, accessControlList, resiliencyProvider)
 }
 
 func (c *Config) toInternal() (*internalConfig, error) {

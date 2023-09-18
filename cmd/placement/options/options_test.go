@@ -21,6 +21,26 @@ import (
 	"github.com/dapr/dapr/pkg/placement/raft"
 )
 
+func TestAppFlag(t *testing.T) {
+	opts := New()
+	assert.EqualValues(t, "dapr-placement-0", opts.RaftID)
+	assert.EqualValues(t, "dapr-placement-0=127.0.0.1:8201", opts.RaftPeerString)
+	assert.EqualValues(t, true, opts.RaftInMemEnabled)
+	assert.EqualValues(t, "", opts.RaftLogStorePath)
+	assert.EqualValues(t, 50005, opts.PlacementPort)
+	assert.EqualValues(t, 8080, opts.HealthzPort)
+	assert.EqualValues(t, false, opts.TLSEnabled)
+	assert.EqualValues(t, false, opts.MetadataEnabled)
+	assert.EqualValues(t, 100, opts.ReplicationFactor)
+	assert.EqualValues(t, "localhost", opts.TrustDomain)
+	assert.EqualValues(t, "/var/run/secrets/dapr.io/tls/ca.crt", opts.TrustAnchorsFile)
+	assert.EqualValues(t, "dapr-sentry.default.svc:443", opts.SentryAddress)
+	assert.EqualValues(t, "info", opts.Logger.OutputLevel)
+	assert.EqualValues(t, false, opts.Logger.JSONFormatEnabled)
+	assert.EqualValues(t, true, opts.Metrics.MetricsEnabled)
+	assert.EqualValues(t, "9090", opts.Metrics.Port)
+}
+
 func TestParsePeersFromFlag(t *testing.T) {
 	peerAddressTests := []struct {
 		in  string

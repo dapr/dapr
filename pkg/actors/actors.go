@@ -40,7 +40,6 @@ import (
 	"github.com/dapr/dapr/pkg/actors/timers"
 	"github.com/dapr/dapr/pkg/channel"
 	configuration "github.com/dapr/dapr/pkg/config"
-	daprCredentials "github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/health"
@@ -52,6 +51,7 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/retry"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/logger"
 )
 
@@ -73,24 +73,39 @@ var (
 	ErrReminderCanceled              = internal.ErrReminderCanceled
 )
 
-// Actors allow calling into virtual actors as well as actor state management.
-//
-//nolint:interfacebloat
-type Actors interface {
+// ActorRuntime is the main runtime for the actors subsystem.
+type ActorRuntime interface {
+	Actors
 	io.Closer
-	Call(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error)
 	Init(context.Context) error
-	GetState(ctx context.Context, req *GetStateRequest) (*StateResponse, error)
-	TransactionalStateOperation(ctx context.Context, req *TransactionalRequest) error
-	GetReminder(ctx context.Context, req *GetReminderRequest) (*internal.Reminder, error)
-	CreateReminder(ctx context.Context, req *CreateReminderRequest) error
-	DeleteReminder(ctx context.Context, req *DeleteReminderRequest) error
-	RenameReminder(ctx context.Context, req *RenameReminderRequest) error
-	CreateTimer(ctx context.Context, req *CreateTimerRequest) error
-	DeleteTimer(ctx context.Context, req *DeleteTimerRequest) error
 	IsActorHosted(ctx context.Context, req *ActorHostedRequest) bool
 	GetActiveActorsCount(ctx context.Context) []*runtimev1pb.ActiveActorsCount
-	RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor) error
+	RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor, actorIdleTimeout time.Duration) error
+}
+
+// Actors allow calling into virtual actors as well as actor state management.
+type Actors interface {
+	// Call an actor.
+	Call(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error)
+	// GetState retrieves actor state.
+	GetState(ctx context.Context, req *GetStateRequest) (*StateResponse, error)
+	// GetBulkState retrieves actor state in bulk.
+	GetBulkState(ctx context.Context, req *GetBulkStateRequest) (BulkStateResponse, error)
+	// TransactionalStateOperation performs a transactional state operation with the actor state store.
+	TransactionalStateOperation(ctx context.Context, req *TransactionalRequest) error
+	// GetReminder retrieves an actor reminder.
+	GetReminder(ctx context.Context, req *GetReminderRequest) (*internal.Reminder, error)
+	// CreateReminder creates an actor reminder.
+	CreateReminder(ctx context.Context, req *CreateReminderRequest) error
+	// DeleteReminder deletes an actor reminder.
+	DeleteReminder(ctx context.Context, req *DeleteReminderRequest) error
+	// RenameReminder renames a reminder.
+	// TODO: remove in Dapr 1.13.
+	RenameReminder(ctx context.Context, req *RenameReminderRequest) error
+	// CreateTimer creates an actor timer.
+	CreateTimer(ctx context.Context, req *CreateTimerRequest) error
+	// DeleteTimer deletes an actor timer.
+	DeleteTimer(ctx context.Context, req *DeleteTimerRequest) error
 }
 
 // GRPCConnectionFn is the type of the function that returns a gRPC connection
@@ -105,7 +120,6 @@ type actorsRuntime struct {
 	actorsReminders      internal.RemindersProvider
 	actorsTable          *sync.Map
 	appHealthy           *atomic.Bool
-	certChain            *daprCredentials.CertChain
 	tracingSpec          configuration.TracingSpec
 	resiliency           resiliency.Provider
 	storeName            string
@@ -113,6 +127,7 @@ type actorsRuntime struct {
 	clock                clock.WithTicker
 	internalActors       map[string]InternalActor
 	internalActorChannel *internalActorChannel
+	sec                  security.Handler
 	wg                   sync.WaitGroup
 	closed               atomic.Bool
 	closeCh              chan struct{}
@@ -126,11 +141,11 @@ type ActorsOpts struct {
 	AppChannel       channel.AppChannel
 	GRPCConnectionFn GRPCConnectionFn
 	Config           Config
-	CertChain        *daprCredentials.CertChain
 	TracingSpec      configuration.TracingSpec
 	Resiliency       resiliency.Provider
 	StateStoreName   string
 	CompStore        *compstore.ComponentStore
+	Security         security.Handler
 
 	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 	StateTTLEnabled bool
@@ -140,11 +155,11 @@ type ActorsOpts struct {
 }
 
 // NewActors create a new actors runtime with given config.
-func NewActors(opts ActorsOpts) Actors {
+func NewActors(opts ActorsOpts) ActorRuntime {
 	return newActorsWithClock(opts, &clock.RealClock{})
 }
 
-func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) Actors {
+func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) ActorRuntime {
 	appHealthy := &atomic.Bool{}
 	appHealthy.Store(true)
 
@@ -159,7 +174,6 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) Actors {
 		actorsConfig:         opts.Config,
 		timers:               timers.NewTimersProvider(clock),
 		actorsReminders:      remindersProvider,
-		certChain:            opts.CertChain,
 		tracingSpec:          opts.TracingSpec,
 		resiliency:           opts.Resiliency,
 		storeName:            opts.StateStoreName,
@@ -170,6 +184,7 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) Actors {
 		internalActors:       map[string]InternalActor{},
 		internalActorChannel: newInternalActorChannel(),
 		compStore:            opts.CompStore,
+		sec:                  opts.Security,
 
 		// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 		stateTTLEnabled: opts.StateTTLEnabled,
@@ -232,7 +247,7 @@ func (a *actorsRuntime) Init(ctx context.Context) error {
 	if a.placement == nil {
 		a.placement = placement.NewActorPlacement(placement.ActorPlacementOpts{
 			ServerAddrs:     a.actorsConfig.Config.PlacementAddresses,
-			CertChain:       a.certChain,
+			Security:        a.sec,
 			AppID:           a.actorsConfig.Config.AppID,
 			RuntimeHostname: hostname,
 			PodName:         a.actorsConfig.Config.PodName,
@@ -286,9 +301,9 @@ func (a *actorsRuntime) startAppHealthCheck(ctx context.Context, opts ...health.
 	for {
 		select {
 		case <-ctx.Done():
-			break
+			return
 		case <-a.closeCh:
-			break
+			return
 		case appHealthy := <-ch:
 			a.appHealthy.Store(appHealthy)
 		}
@@ -645,8 +660,53 @@ func (a *actorsRuntime) GetState(ctx context.Context, req *GetStateRequest) (*St
 	}
 
 	return &StateResponse{
-		Data: resp.Data,
+		Data:     resp.Data,
+		Metadata: resp.Metadata,
 	}, nil
+}
+
+func (a *actorsRuntime) GetBulkState(ctx context.Context, req *GetBulkStateRequest) (BulkStateResponse, error) {
+	store, err := a.stateStore()
+	if err != nil {
+		return nil, err
+	}
+
+	actorKey := req.ActorKey()
+	baseKey := constructCompositeKey(a.actorsConfig.Config.AppID, actorKey)
+	metadata := map[string]string{metadataPartitionKey: baseKey}
+
+	bulkReqs := make([]state.GetRequest, len(req.Keys))
+	for i, key := range req.Keys {
+		bulkReqs[i] = state.GetRequest{
+			Key:      a.constructActorStateKey(actorKey, key),
+			Metadata: metadata,
+		}
+	}
+
+	policyRunner := resiliency.NewRunner[[]state.BulkGetResponse](ctx,
+		a.resiliency.ComponentOutboundPolicy(a.storeName, resiliency.Statestore),
+	)
+	res, err := policyRunner(func(ctx context.Context) ([]state.BulkGetResponse, error) {
+		return store.BulkGet(ctx, bulkReqs, state.BulkGetOpts{})
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Add the dapr separator to baseKey
+	baseKey += daprSeparator
+
+	bulkRes := make(BulkStateResponse, len(res))
+	for _, r := range res {
+		if r.Error != "" {
+			return nil, fmt.Errorf("failed to retrieve key '%s': %s", r.Key, r.Error)
+		}
+
+		// Trim the prefix from the key
+		bulkRes[strings.TrimPrefix(r.Key, baseKey)] = r.Data
+	}
+
+	return bulkRes, nil
 }
 
 func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *TransactionalRequest) error {
@@ -914,7 +974,9 @@ func (a *actorsRuntime) DeleteTimer(ctx context.Context, req *DeleteTimerRequest
 	return a.timers.DeleteTimer(ctx, req.Key())
 }
 
-func (a *actorsRuntime) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor) error {
+func (a *actorsRuntime) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor,
+	actorIdleTimeout time.Duration,
+) error {
 	if !a.haveCompatibleStorage() {
 		return fmt.Errorf("unable to register internal actor '%s': %w", actorType, ErrIncompatibleStateStore)
 	}
@@ -929,7 +991,7 @@ func (a *actorsRuntime) RegisterInternalActor(ctx context.Context, actorType str
 
 		log.Debugf("Registering internal actor type: %s", actorType)
 		actor.SetActorRuntime(a)
-		a.actorsConfig.Config.HostedActorTypes.AddActorType(actorType)
+		a.actorsConfig.Config.HostedActorTypes.AddActorType(actorType, actorIdleTimeout)
 		if a.placement != nil {
 			if err := a.placement.AddHostedActorType(actorType); err != nil {
 				return fmt.Errorf("error updating hosted actor types: %s", err)
