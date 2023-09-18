@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/google/uuid"
 	"k8s.io/utils/clock"
 
@@ -30,6 +31,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/retry"
 )
 
 var log = logger.NewLogger("dapr.runtime.actor.reminders")
@@ -47,14 +49,13 @@ type reminders struct {
 	runningCh            chan struct{}
 	executeReminderFn    internal.ExecuteReminderFn
 	remindersLock        sync.RWMutex
-	remindersStoringLock sync.Mutex
 	reminders            map[string][]ActorReminderReference
 	activeReminders      *sync.Map
 	evaluationChan       chan struct{}
+	evaluationQueue      chan struct{}
 	stateStoreProviderFn internal.StateStoreProviderFn
 	resiliency           resiliency.Provider
 	storeName            string
-	evaluationLock       sync.RWMutex
 	config               internal.Config
 	lookUpActorFn        internal.LookupActorFn
 	metricsCollector     remindersMetricsCollectorFn
@@ -68,6 +69,7 @@ func NewRemindersProvider(clock clock.WithTicker, opts internal.RemindersProvide
 		reminders:        map[string][]ActorReminderReference{},
 		activeReminders:  &sync.Map{},
 		evaluationChan:   make(chan struct{}, 1),
+		evaluationQueue:  make(chan struct{}, 1),
 		storeName:        opts.StoreName,
 		config:           opts.Config,
 		metricsCollector: diag.DefaultMonitoring.ActorReminders,
@@ -96,7 +98,19 @@ func (r *reminders) SetMetricsCollectorFn(fn remindersMetricsCollectorFn) {
 
 // OnPlacementTablesUpdated is invoked when the actors runtime received an updated placement tables.
 func (r *reminders) OnPlacementTablesUpdated(ctx context.Context) {
-	r.evaluateReminders(ctx)
+	go func() {
+		// To handle bursts, use a queue so no more than one evaluation can be queued up at the same time, since they'd all fetch the same data anyways
+		select {
+		case r.evaluationQueue <- struct{}{}:
+			// Queue isn't full
+		default:
+			// There's already one invocation in the queue so no need to queue up another one
+			return
+		}
+
+		// r.evaluationQueue is released in the handler after obtaining the evaluationChan lock
+		r.evaluateReminders(ctx)
+	}()
 }
 
 func (r *reminders) DrainRebalancedReminders(actorType string, actorID string) {
@@ -124,12 +138,14 @@ func (r *reminders) CreateReminder(ctx context.Context, reminder *internal.Remin
 		return err
 	}
 
+	// Wait for the evaluation chan lock
 	if !r.waitForEvaluationChan() {
-		return errors.New("error creating reminder: timed out after 5s")
+		return errors.New("error creating reminder: timed out after 30s")
 	}
-
-	r.remindersStoringLock.Lock()
-	defer r.remindersStoringLock.Unlock()
+	defer func() {
+		// Release the evaluation chan lock
+		<-r.evaluationChan
+	}()
 
 	existing, ok := r.getReminder(reminder.Name, reminder.ActorType, reminder.ActorID)
 	if ok {
@@ -145,10 +161,37 @@ func (r *reminders) CreateReminder(ctx context.Context, reminder *internal.Remin
 
 	stop := make(chan struct{})
 
-	err = r.storeReminder(ctx, store, reminder, stop)
+	config := retry.DefaultConfig()
+	config.Multiplier = 1.0
+	b := config.NewBackOffWithContext(ctx)
+
+	err = retry.NotifyRecover(
+		func() error {
+			innerErr := r.storeReminder(ctx, store, reminder, stop)
+			if innerErr != nil {
+				// If the etag is mismatched, we can retry the operation.
+				if isEtagMismatchError(innerErr) {
+					return innerErr
+				}
+
+				log.Errorf("Error storing reminder: %v", innerErr)
+				return backoff.Permanent(innerErr)
+			}
+			return nil
+		},
+		b,
+		func(err error, d time.Duration) {
+			log.Debugf("Attempting to store reminder again after error: %v", err)
+		},
+		func() {
+			log.Debug("Storing of reminder successful")
+		},
+	)
 	if err != nil {
-		return fmt.Errorf("error storing reminder: %w", err)
+		return err
 	}
+
+	// Start the reminder
 	return r.startReminder(reminder, stop)
 }
 
@@ -182,13 +225,44 @@ func (r *reminders) GetReminder(ctx context.Context, req *internal.GetReminderRe
 
 func (r *reminders) DeleteReminder(ctx context.Context, req internal.DeleteReminderRequest) error {
 	if !r.waitForEvaluationChan() {
-		return errors.New("error deleting reminder: timed out after 5s")
+		return errors.New("error deleting reminder: timed out after 30s")
+	}
+	defer func() {
+		// Release the evaluation chan lock
+		<-r.evaluationChan
+	}()
+
+	config := retry.DefaultConfig()
+	config.Multiplier = 1.0
+	b := config.NewBackOffWithContext(ctx)
+
+	err := retry.NotifyRecover(
+		func() error {
+			innerErr := r.doDeleteReminder(ctx, req.ActorType, req.ActorID, req.Name)
+			if innerErr != nil {
+				// If the etag is mismatched, we can retry the operation.
+				if isEtagMismatchError(innerErr) {
+					return innerErr
+				}
+
+				log.Errorf("Error deleting reminder: %v", innerErr)
+				return backoff.Permanent(innerErr)
+			}
+			return nil
+		},
+		b,
+		func(err error, d time.Duration) {
+			log.Debugf("Attempting to delete reminder again after error: %v", err)
+		},
+		func() {
+			log.Debug("Deletion of reminder successful")
+		},
+	)
+	if err != nil {
+		return err
 	}
 
-	r.remindersStoringLock.Lock()
-	defer r.remindersStoringLock.Unlock()
-
-	return r.doDeleteReminder(ctx, req.ActorType, req.ActorID, req.Name)
+	return nil
 }
 
 func (r *reminders) RenameReminder(ctx context.Context, req *internal.RenameReminderRequest) error {
@@ -199,12 +273,14 @@ func (r *reminders) RenameReminder(ctx context.Context, req *internal.RenameRemi
 		return err
 	}
 
+	// Wait for the evaluation chan lock
 	if !r.waitForEvaluationChan() {
-		return errors.New("error renaming reminder: timed out after 5s")
+		return errors.New("error renaming reminder: timed out after 30s")
 	}
-
-	r.remindersStoringLock.Lock()
-	defer r.remindersStoringLock.Unlock()
+	defer func() {
+		// Release the evaluation chan lock
+		<-r.evaluationChan
+	}()
 
 	oldReminder, exists := r.getReminder(req.OldName, req.ActorType, req.ActorID)
 	if !exists {
@@ -235,23 +311,34 @@ func (r *reminders) RenameReminder(ctx context.Context, req *internal.RenameRemi
 		return err
 	}
 
+	// Start the new reminder
 	return r.startReminder(reminder, stop)
 }
 
 func (r *reminders) evaluateReminders(ctx context.Context) {
-	r.evaluationLock.Lock()
-	defer r.evaluationLock.Unlock()
+	// Wait for the evaluation channel
+	select {
+	case r.evaluationChan <- struct{}{}:
+		// All good, continue
+	case <-r.runningCh:
+		// Processor is shutting down
+		<-r.evaluationQueue
+		return
+	}
+	defer func() {
+		// Release the evaluation chan lock
+		<-r.evaluationChan
+	}()
 
-	r.evaluationChan <- struct{}{}
-
-	var wg sync.WaitGroup
+	// Allow another evaluation operation to get queued up
+	<-r.evaluationQueue
 
 	if r.config.HostedActorTypes == nil {
-		log.Warn("hostedActorTypes is nil, skipping reminder evaluation")
-		<-r.evaluationChan
+		log.Info("hostedActorTypes is nil, skipping reminder evaluation")
 		return
 	}
 
+	var wg sync.WaitGroup
 	ats := r.config.HostedActorTypes.ListActorTypes()
 	for _, t := range ats {
 		vals, _, err := r.getRemindersForActorType(ctx, t, true)
@@ -302,22 +389,30 @@ func (r *reminders) evaluateReminders(ctx context.Context) {
 		}()
 	}
 	wg.Wait()
-	<-r.evaluationChan
 }
 
 func (r *reminders) waitForEvaluationChan() bool {
-	t := r.clock.NewTimer(5 * time.Second)
-	defer t.Stop()
+	t := r.clock.NewTimer(30 * time.Second)
 
 	select {
-	case <-r.runningCh:
-		return false
+	// Evaluation channel was not freed up in time
 	case <-t.C():
 		return false
+
+	// The provider is shutting down
+	case <-r.runningCh:
+		if !t.Stop() {
+			<-t.C()
+		}
+		return false
+
+	// Evaluation chan is available
 	case r.evaluationChan <- struct{}{}:
-		<-r.evaluationChan
+		if !t.Stop() {
+			<-t.C()
+		}
+		return true
 	}
-	return true
 }
 
 func (r *reminders) getReminder(reminderName string, actorType string, actorID string) (*internal.Reminder, bool) {
@@ -441,7 +536,7 @@ func (r *reminders) storeReminder(ctx context.Context, store internal.Transactio
 	// Store the reminder in active reminders list
 	reminderKey := reminder.Key()
 
-	_, loaded := r.activeReminders.LoadOrStore(reminderKey, stopChannel)
+	stored, loaded := r.activeReminders.LoadOrStore(reminderKey, stopChannel)
 	if loaded {
 		// If the value was loaded, we have a race condition: another goroutine is trying to store the same reminder
 		return fmt.Errorf("failed to store reminder %s: reminder was created concurrently by another goroutine", reminderKey)
@@ -499,6 +594,8 @@ func (r *reminders) storeReminder(ctx context.Context, store internal.Transactio
 		return struct{}{}, nil
 	})
 	if err != nil {
+		// Remove the value from the in-memory cache
+		r.activeReminders.CompareAndDelete(reminderKey, stored)
 		return err
 	}
 	return nil
@@ -676,6 +773,8 @@ func (r *reminders) getRemindersForActorType(ctx context.Context, actorType stri
 	return reminderRefs, actorMetadata, nil
 }
 
+// getActorMetadata gets the metadata object for the given actor type.
+// If "migrate" is true, it also performs migration of reminders if needed. Note that this should be set to "true" only by a caller who owns a lock via evaluationChan.
 func (r *reminders) getActorTypeMetadata(ctx context.Context, actorType string, migrate bool) (*ActorMetadata, error) {
 	store, err := r.stateStoreProviderFn()
 	if err != nil {
@@ -730,6 +829,8 @@ func (r *reminders) getActorTypeMetadata(ctx context.Context, actorType string, 
 	})
 }
 
+// migrateRemindersForActorType migrates reminders for actors of a given type.
+// Note that this method should be invoked by a caller that owns the evaluationChan lock.
 func (r *reminders) migrateRemindersForActorType(ctx context.Context, store internal.TransactionalStateStore, actorType string, actorMetadata *ActorMetadata) error {
 	reminderPartitionCount := r.config.GetRemindersPartitionCountForType(actorType)
 	if actorMetadata.RemindersMetadata.PartitionCount == reminderPartitionCount {
@@ -737,14 +838,11 @@ func (r *reminders) migrateRemindersForActorType(ctx context.Context, store inte
 	}
 
 	if actorMetadata.RemindersMetadata.PartitionCount > reminderPartitionCount {
-		log.Warnf("cannot decrease number of partitions for reminders of actor type %s", actorType)
+		log.Errorf("Cannot decrease number of partitions for reminders of actor type %s", actorType)
 		return nil
 	}
 
-	r.remindersStoringLock.Lock()
-	defer r.remindersStoringLock.Unlock()
-
-	log.Warnf("migrating actor metadata record for actor type %s", actorType)
+	log.Warnf("Migrating actor metadata record for actor type %s", actorType)
 
 	// Fetch all reminders for actor type.
 	reminderRefs, refreshedActorMetadata, err := r.getRemindersForActorType(ctx, actorType, false)
@@ -795,9 +893,7 @@ func (r *reminders) migrateRemindersForActorType(ctx context.Context, store inte
 		return fmt.Errorf("failed to perform transaction to migrate records for actor type %s: %w", actorType, err)
 	}
 
-	log.Warnf(
-		"Completed actor metadata record migration for actor type %s, new metadata ID = %s",
-		actorType, actorMetadata.ID)
+	log.Warnf("Completed actor metadata record migration for actor type %s, new metadata ID = %s", actorType, actorMetadata.ID)
 	return nil
 }
 
@@ -984,4 +1080,15 @@ func (r *reminders) updateReminderTrack(ctx context.Context, key string, repetit
 		return nil, store.Set(ctx, setReq)
 	})
 	return err
+}
+
+func isEtagMismatchError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var etagErr *state.ETagError
+	if errors.As(err, &etagErr) {
+		return etagErr.Kind() == state.ETagMismatch
+	}
+	return false
 }

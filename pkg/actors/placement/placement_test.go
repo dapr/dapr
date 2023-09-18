@@ -77,6 +77,7 @@ func TestPlacementStream_RoundRobin(t *testing.T) {
 		ActorTypes:         []string{"actorOne", "actorTwo"},
 		AppHealthFn:        appHealthFunc,
 		AfterTableUpdateFn: func() {},
+		Security:           testSecurity(t),
 	}).(*actorPlacement)
 
 	t.Run("found leader placement in a round robin way", func(t *testing.T) {
@@ -134,6 +135,7 @@ func TestAppHealthyStatus(t *testing.T) {
 		ActorTypes:         []string{"actorOne", "actorTwo"},
 		AppHealthFn:        appHealthFunc,
 		AfterTableUpdateFn: func() {},
+		Security:           testSecurity(t),
 	}).(*actorPlacement)
 
 	// act
@@ -166,6 +168,7 @@ func TestOnPlacementOrder(t *testing.T) {
 		ActorTypes:         []string{"actorOne", "actorTwo"},
 		AppHealthFn:        appHealthFunc,
 		AfterTableUpdateFn: tableUpdateFunc,
+		Security:           testSecurity(t),
 	}).(*actorPlacement)
 
 	t.Run("lock operation", func(t *testing.T) {
@@ -218,6 +221,7 @@ func TestWaitUntilPlacementTableIsReady(t *testing.T) {
 		ActorTypes:         []string{"actorOne", "actorTwo"},
 		AppHealthFn:        appHealthFunc,
 		AfterTableUpdateFn: func() {},
+		Security:           testSecurity(t),
 	}).(*actorPlacement)
 
 	t.Run("already unlocked", func(t *testing.T) {
@@ -295,6 +299,7 @@ func TestLookupActor(t *testing.T) {
 		ActorTypes:         []string{"actorOne", "actorTwo"},
 		AppHealthFn:        appHealthFunc,
 		AfterTableUpdateFn: func() {},
+		Security:           testSecurity(t),
 	}).(*actorPlacement)
 
 	t.Run("Placementtable is unset", func(t *testing.T) {
@@ -338,6 +343,7 @@ func TestConcurrentUnblockPlacements(t *testing.T) {
 		ActorTypes:         []string{"actorOne", "actorTwo"},
 		AppHealthFn:        appHealthFunc,
 		AfterTableUpdateFn: func() {},
+		Security:           testSecurity(t),
 	}).(*actorPlacement)
 
 	t.Run("concurrent_unlock", func(t *testing.T) {

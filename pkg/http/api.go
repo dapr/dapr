@@ -37,7 +37,6 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
-	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/channel/http"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
@@ -46,10 +45,10 @@ import (
 	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/grpc/universalapi"
 	"github.com/dapr/dapr/pkg/messages"
-	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/runtime/channels"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/utils"
 	kitErrorCodes "github.com/dapr/kit/errorcodes"
@@ -61,17 +60,15 @@ type API interface {
 	PublicEndpoints() []Endpoint
 	MarkStatusAsReady()
 	MarkStatusAsOutboundReady()
-	SetAppChannel(appChannel channel.AppChannel)
-	SetDirectMessaging(directMessaging messaging.DirectMessaging)
-	SetActorRuntime(actor actors.Actors)
+	SetActorRuntime(actor actors.ActorRuntime)
 }
 
 type api struct {
 	universal             *universalapi.UniversalAPI
 	endpoints             []Endpoint
 	publicEndpoints       []Endpoint
-	directMessaging       messaging.DirectMessaging
-	appChannel            channel.AppChannel
+	directMessaging       invokev1.DirectMessaging
+	channels              *channels.Channels
 	pubsubAdapter         runtimePubsub.Adapter
 	sendToOutputBindingFn func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	readyStatus           bool
@@ -84,6 +81,7 @@ type api struct {
 const (
 	apiVersionV1             = "v1.0"
 	apiVersionV1alpha1       = "v1.0-alpha1"
+	apiVersionV1beta1        = "v1.0-beta1"
 	methodParam              = "method"
 	wildcardParam            = "*"
 	topicParam               = "topic"
@@ -112,8 +110,8 @@ const (
 // APIOpts contains the options for NewAPI.
 type APIOpts struct {
 	UniversalAPI          *universalapi.UniversalAPI
-	AppChannel            channel.AppChannel
-	DirectMessaging       messaging.DirectMessaging
+	Channels              *channels.Channels
+	DirectMessaging       invokev1.DirectMessaging
 	PubsubAdapter         runtimePubsub.Adapter
 	SendToOutputBindingFn func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	TracingSpec           config.TracingSpec
@@ -125,7 +123,7 @@ type APIOpts struct {
 func NewAPI(opts APIOpts) API {
 	api := &api{
 		universal:             opts.UniversalAPI,
-		appChannel:            opts.AppChannel,
+		channels:              opts.Channels,
 		directMessaging:       opts.DirectMessaging,
 		pubsubAdapter:         opts.PubsubAdapter,
 		sendToOutputBindingFn: opts.SendToOutputBindingFn,
@@ -378,7 +376,7 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 		if !sc.Equal(trace.SpanContext{}) {
 			req.Metadata[traceparentHeader] = diag.SpanContextToW3CString(sc)
 		}
-		if sc.TraceState().Len() == 0 {
+		if sc.TraceState().Len() > 0 {
 			req.Metadata[tracestateHeader] = diag.TraceStateToW3CString(sc)
 		}
 	}
@@ -406,7 +404,7 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 		for k, v := range resp.Metadata {
 			reqCtx.Response.Header.Add(metadataPrefix+k, v)
 		}
-		fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, resp.Data))
+		fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, resp.Data, resp.Metadata))
 	}
 }
 
@@ -439,7 +437,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 	bulkResp := make([]BulkGetResponse, len(req.Keys))
 	if len(req.Keys) == 0 {
 		b, _ := json.Marshal(bulkResp)
-		fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, b))
+		fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, b, nil))
 		return
 	}
 
@@ -512,7 +510,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	b, _ := json.Marshal(bulkResp)
-	fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, b))
+	fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, b, nil))
 }
 
 func (a *api) getStateStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (state.Store, string, error) {
@@ -603,7 +601,7 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 	for k, v := range resp.Metadata {
 		reqCtx.Response.Header.Add(metadataPrefix+k, v)
 	}
-	fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, resp.Data))
+	fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, resp.Data, resp.Metadata))
 }
 
 func (a *api) getConfigurationStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (configuration.Store, string, error) {
@@ -636,14 +634,15 @@ type UnsubscribeConfigurationResponse struct {
 }
 
 type configurationEventHandler struct {
-	api        *api
-	storeName  string
-	appChannel channel.AppChannel
-	res        resiliency.Provider
+	api       *api
+	storeName string
+	channels  *channels.Channels
+	res       resiliency.Provider
 }
 
 func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *configuration.UpdateEvent) error {
-	if h.appChannel == nil {
+	appChannel := h.channels.AppChannel()
+	if appChannel == nil {
 		err := fmt.Errorf("app channel is nil. unable to send configuration update from %s", h.storeName)
 		log.Error(err)
 		return err
@@ -665,7 +664,7 @@ func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *c
 
 		policyRunner := resiliency.NewRunner[struct{}](ctx, policyDef)
 		_, err := policyRunner(func(ctx context.Context) (struct{}, error) {
-			rResp, rErr := h.appChannel.InvokeMethod(ctx, req, "")
+			rResp, rErr := appChannel.InvokeMethod(ctx, req, "")
 			if rErr != nil {
 				return struct{}{}, rErr
 			}
@@ -691,7 +690,7 @@ func (a *api) onSubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
 		log.Debug(err)
 		return
 	}
-	if a.appChannel == nil {
+	if a.channels.AppChannel() == nil {
 		msg := NewErrorResponse("ERR_APP_CHANNEL_NIL", "app channel is not initialized. cannot subscribe to configuration updates")
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
 		log.Debug(msg)
@@ -717,10 +716,10 @@ func (a *api) onSubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
 
 	// create handler
 	handler := &configurationEventHandler{
-		api:        a,
-		storeName:  storeName,
-		appChannel: a.appChannel,
-		res:        a.universal.Resiliency,
+		api:       a,
+		storeName: storeName,
+		channels:  a.channels,
+		res:       a.universal.Resiliency,
 	}
 
 	start := time.Now()
@@ -743,7 +742,7 @@ func (a *api) onSubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
 	respBytes, _ := json.Marshal(&subscribeConfigurationResponse{
 		ID: subscribeID,
 	})
-	fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, respBytes))
+	fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, respBytes, nil))
 }
 
 func (a *api) onUnsubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
@@ -773,14 +772,14 @@ func (a *api) onUnsubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
 			Ok:      false,
 			Message: msg.Message,
 		})
-		fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusInternalServerError, errRespBytes))
+		fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusInternalServerError, errRespBytes, nil))
 		log.Debug(msg)
 		return
 	}
 	respBytes, _ := json.Marshal(&UnsubscribeConfigurationResponse{
 		Ok: true,
 	})
-	fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, respBytes))
+	fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, respBytes, nil))
 }
 
 func (a *api) onGetConfiguration(reqCtx *fasthttp.RequestCtx) {
@@ -827,7 +826,7 @@ func (a *api) onGetConfiguration(reqCtx *fasthttp.RequestCtx) {
 
 	respBytes, _ := json.Marshal(getResponse.Items)
 
-	fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, respBytes))
+	fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, respBytes, nil))
 }
 
 func extractEtag(reqCtx *fasthttp.RequestCtx) (hasEtag bool, etag string) {
@@ -1261,7 +1260,7 @@ func (a *api) onGetActorReminder(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, b))
+	fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, b, nil))
 }
 
 func (a *api) onDeleteActorTimer(reqCtx *fasthttp.RequestCtx) {
@@ -1407,7 +1406,7 @@ func (a *api) onGetActorState(reqCtx *fasthttp.RequestCtx) {
 			fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
 			return
 		}
-		fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, resp.Data))
+		fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, resp.Data, resp.Metadata))
 	}
 }
 
@@ -1434,16 +1433,11 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	// Extract trace context from context.
-	span := diagUtils.SpanFromContext(reqCtx)
-	// Populate W3C traceparent to cloudevent envelope
-	corID := diag.SpanContextToW3CString(span.SpanContext())
-	// Populate W3C tracestate to cloudevent envelope
-	traceState := diag.TraceStateToW3CString(span.SpanContext())
-
 	data := body
 
 	if !rawPayload {
+		span := diagUtils.SpanFromContext(reqCtx)
+		corID, traceState := diag.TraceIDAndStateFromSpan(span)
 		envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
 			Source:          a.universal.AppID,
 			Topic:           topic,
@@ -1551,8 +1545,6 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 
 	// Extract trace context from context.
 	span := diagUtils.SpanFromContext(reqCtx)
-	// Populate W3C tracestate to cloudevent envelope
-	traceState := diag.TraceStateToW3CString(span.SpanContext())
 
 	incomingEntries := make([]bulkPublishMessageEntry, 0)
 	err := json.Unmarshal(body, &incomingEntries)
@@ -1610,10 +1602,10 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 	features := thepubsub.Features()
 	if !rawPayload {
 		for i := range entries {
-			// For multiple events in a single bulk call traceParent is different for each event.
 			childSpan := diag.StartProducerSpanChildFromParent(reqCtx, span)
+			corID, traceState := diag.TraceIDAndStateFromSpan(childSpan)
+			// For multiple events in a single bulk call traceParent is different for each event.
 			// Populate W3C traceparent to cloudevent envelope
-			corID := diag.SpanContextToW3CString(childSpan.SpanContext())
 			spanMap[i] = childSpan
 
 			var envelope map[string]interface{}
@@ -1702,7 +1694,7 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 
 		// Return the error along with the list of failed entries.
 		resData, _ := json.Marshal(bulkRes)
-		fasthttpRespond(reqCtx, fasthttpResponseWithJSON(status, resData), closeChildSpans)
+		fasthttpRespond(reqCtx, fasthttpResponseWithJSON(status, resData, nil), closeChildSpans)
 		return
 	}
 
@@ -2001,14 +1993,6 @@ func (a *api) onQueryStateHandler() nethttp.HandlerFunc {
 	)
 }
 
-func (a *api) SetAppChannel(appChannel channel.AppChannel) {
-	a.appChannel = appChannel
-}
-
-func (a *api) SetDirectMessaging(directMessaging messaging.DirectMessaging) {
-	a.directMessaging = directMessaging
-}
-
-func (a *api) SetActorRuntime(actor actors.Actors) {
+func (a *api) SetActorRuntime(actor actors.ActorRuntime) {
 	a.universal.Actors = actor
 }

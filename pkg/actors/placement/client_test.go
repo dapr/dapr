@@ -15,12 +15,16 @@ package placement
 
 import (
 	"context"
+	"crypto/x509"
 	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
+
+	"github.com/dapr/dapr/pkg/security"
 )
 
 func TestConnectToServer(t *testing.T) {
@@ -49,7 +53,7 @@ func TestConnectToServer(t *testing.T) {
 		conn, _, cleanup := newTestServer() // do not register the placement stream server
 		defer cleanup()
 
-		client := newPlacementClient(getGrpcOptsGetter([]string{conn}, nil))
+		client := newPlacementClient(getGrpcOptsGetter([]string{conn}, testSecurity(t)))
 
 		var ready sync.WaitGroup
 		ready.Add(1)
@@ -95,7 +99,7 @@ func TestDisconnect(t *testing.T) {
 		conn, _, cleanup := newTestServer() // do not register the placement stream server
 		defer cleanup()
 
-		client := newPlacementClient(getGrpcOptsGetter([]string{conn}, nil))
+		client := newPlacementClient(getGrpcOptsGetter([]string{conn}, testSecurity(t)))
 		assert.Nil(t, client.connectToServer(context.Background(), conn))
 
 		called := false
@@ -117,4 +121,23 @@ func TestDisconnect(t *testing.T) {
 		assert.Equal(t, client.clientConn.GetState(), connectivity.Shutdown)
 		assert.True(t, called)
 	})
+}
+
+func testSecurity(t *testing.T) security.Handler {
+	secP, err := security.New(context.Background(), security.Options{
+		TrustAnchors:            []byte("test"),
+		AppID:                   "test",
+		ControlPlaneTrustDomain: "test.example.com",
+		ControlPlaneNamespace:   "default",
+		MTLSEnabled:             false,
+		OverrideCertRequestSource: func(context.Context, []byte) ([]*x509.Certificate, error) {
+			return []*x509.Certificate{nil}, nil
+		},
+	})
+	require.NoError(t, err)
+	go secP.Run(context.Background())
+	sec, err := secP.Handler(context.Background())
+	require.NoError(t, err)
+
+	return sec
 }

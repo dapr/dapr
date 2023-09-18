@@ -22,32 +22,43 @@ import (
 	"github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/dapr/pkg/apis/common"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/modes"
 )
 
+const WasmStrictSandboxMetadataKey = "strictSandbox"
+
 type Options struct {
-	ID        string
-	PodName   string
-	Namespace string
-	Mode      modes.DaprMode
+	ID            string
+	PodName       string
+	Namespace     string
+	StrictSandbox bool
+	Mode          modes.DaprMode
 }
 
 type Meta struct {
-	id        string
-	podName   string
-	namespace string
-	mode      modes.DaprMode
+	id            string
+	podName       string
+	namespace     string
+	strictSandbox bool
+	mode          modes.DaprMode
 }
 
 func New(options Options) *Meta {
 	return &Meta{
-		podName:   options.PodName,
-		namespace: options.Namespace,
-		id:        options.ID,
+		podName:       options.PodName,
+		namespace:     options.Namespace,
+		strictSandbox: options.StrictSandbox,
+		id:            options.ID,
 	}
 }
 
 func (m *Meta) ToBaseMetadata(comp compapi.Component) (metadata.Base, error) {
+	// Add global wasm strict sandbox config to the wasm component metadata
+	if components.IsWasmComponentType(comp.Spec.Type) {
+		m.AddWasmStrictSandbox(&comp)
+	}
+
 	props, err := m.convertItemsToProps(comp.Spec.Metadata)
 	if err != nil {
 		return metadata.Base{}, err
@@ -98,4 +109,29 @@ func ContainsNamespace(items []common.NameValuePair) bool {
 		}
 	}
 	return false
+}
+
+// AddWasmStrictSandbox adds global wasm strict sandbox configuration to component metadata.
+// When strict sandbox is enabled, WASM components always run in strict mode regardless of their configuration.
+// When strict sandbox is disabled or unset, keep the original component configuration.
+func (m *Meta) AddWasmStrictSandbox(comp *compapi.Component) {
+	// If the global strict sandbox is disabled (or unset), it is not enforced.
+	if !m.strictSandbox {
+		return
+	}
+
+	// If the metadata already contains the strict sandbox key, update the value to global strict sandbox config.
+	for i, c := range comp.Spec.Metadata {
+		if strings.EqualFold(c.Name, WasmStrictSandboxMetadataKey) {
+			comp.Spec.Metadata[i].SetValue([]byte("true"))
+			return
+		}
+	}
+
+	// If the metadata does not contain the strict sandbox key, add it.
+	sandbox := common.NameValuePair{
+		Name: WasmStrictSandboxMetadataKey,
+	}
+	sandbox.SetValue([]byte("true"))
+	comp.Spec.Metadata = append(comp.Spec.Metadata, sandbox)
 }

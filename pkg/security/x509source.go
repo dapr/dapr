@@ -25,28 +25,31 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
+	"runtime"
 	"sync"
 	"time"
 
 	middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	"github.com/spiffe/go-spiffe/v2/bundle/x509bundle"
-	"github.com/spiffe/go-spiffe/v2/spiffegrpc/grpccredentials"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig"
 	"github.com/spiffe/go-spiffe/v2/svid/x509svid"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"k8s.io/utils/clock"
 
 	"github.com/dapr/dapr/pkg/diagnostics"
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
+	"github.com/dapr/dapr/pkg/security/legacy"
 	secpem "github.com/dapr/dapr/pkg/security/pem"
 	sentryToken "github.com/dapr/dapr/pkg/security/token"
 )
 
 const (
-	sentrySignTimeout = time.Second * 5
-	sentryMaxRetries  = 100
+	sentrySignTimeout = time.Second * 3
+	sentryMaxRetries  = 5
 )
 
 type renewFn func(context.Context) (*x509.Certificate, error)
@@ -59,10 +62,6 @@ type x509source struct {
 
 	// sentryAddress is the network address of the sentry server.
 	sentryAddress string
-
-	// controlPlaneTrustDomain is the trust domain of the sentry server. Used to
-	// validate the connection to sentry.
-	controlPlaneTrustDomain string
 
 	// sentryID is the SPIFFE ID of the sentry server which is validated when
 	// request the identity document.
@@ -84,31 +83,83 @@ type x509source struct {
 	// remote server. Used for overriding requesting from Sentry.
 	requestFn RequestFn
 
+	// writeToDiskDir is the directory to write the identity document to.
+	writeToDiskDir *string
+
+	// trustAnchorSubscribers is a list of channels to notify when the trust
+	// anchors are updated.
+	trustAnchorSubscribers []chan<- struct{}
+
+	// trustDomain is the optional trust domain which will be set when requesting
+	// the identity certificate. Used by control plane services to request for
+	// the control plane trust domain.
+	trustDomain *string
+
 	lock  sync.RWMutex
 	clock clock.Clock
 }
 
-func newX509Source(ctx context.Context, clock clock.Clock, opts Options) (*x509source, error) {
-	trustAnchorCerts, err := secpem.DecodePEMCertificates(opts.TrustAnchors)
+func newX509Source(ctx context.Context, clock clock.Clock, cptd spiffeid.TrustDomain, opts Options) (*x509source, error) {
+	rootPEMs := opts.TrustAnchors
+
+	if len(rootPEMs) == 0 {
+		for {
+			_, err := os.Stat(opts.TrustAnchorsFile)
+			if err == nil {
+				break
+			}
+			if !errors.Is(err, os.ErrNotExist) {
+				return nil, err
+			}
+
+			// Trust anchors file not be provided yet, wait.
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-clock.After(time.Second):
+				log.Warnf("Trust anchors file '%s' not found, waiting...", opts.TrustAnchorsFile)
+			}
+		}
+
+		log.Infof("Trust anchors file '%s' found", opts.TrustAnchorsFile)
+
+		var err error
+		rootPEMs, err = os.ReadFile(opts.TrustAnchorsFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read trust anchors file '%s': %w", opts.TrustAnchorsFile, err)
+		}
+	}
+
+	trustAnchorCerts, err := secpem.DecodePEMCertificates(rootPEMs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode trust anchors: %w", err)
 	}
 
-	sentryID, err := SentryID(opts.ControlPlaneTrustDomain, opts.ControlPlaneNamespace)
+	sentryID, err := SentryID(cptd, opts.ControlPlaneNamespace)
 	if err != nil {
 		return nil, err
 	}
 
+	var trustDomain *string
+	ns := CurrentNamespace()
+
+	// If the service is a control plane service, set the trust domain to the
+	// control plane trust domain.
+	if isControlPlaneService(opts.AppID) && opts.ControlPlaneNamespace == ns {
+		trustDomain = &opts.ControlPlaneTrustDomain
+	}
+
 	return &x509source{
-		sentryAddress:           opts.SentryAddress,
-		controlPlaneTrustDomain: opts.ControlPlaneTrustDomain,
-		sentryID:                sentryID,
-		trustAnchors:            x509bundle.FromX509Authorities(sentryID.TrustDomain(), trustAnchorCerts),
-		appID:                   opts.AppID,
-		appNamespace:            CurrentNamespace(),
-		kubernetesMode:          os.Getenv("KUBERNETES_SERVICE_HOST") != "",
-		requestFn:               opts.OverrideCertRequestSource,
-		clock:                   clock,
+		sentryAddress:  opts.SentryAddress,
+		sentryID:       sentryID,
+		trustAnchors:   x509bundle.FromX509Authorities(sentryID.TrustDomain(), trustAnchorCerts),
+		appID:          opts.AppID,
+		appNamespace:   ns,
+		trustDomain:    trustDomain,
+		kubernetesMode: os.Getenv("KUBERNETES_SERVICE_HOST") != "",
+		requestFn:      opts.OverrideCertRequestSource,
+		writeToDiskDir: opts.WriteSVIDToDir,
+		clock:          clock,
 	}, nil
 }
 
@@ -175,6 +226,10 @@ func (x *x509source) renewIdentityCertificate(ctx context.Context) (*x509.Certif
 		return nil, err
 	}
 
+	if len(workloadcert) == 0 {
+		return nil, errors.New("no certificates received from sentry")
+	}
+
 	spiffeID, err := x509svid.IDFromCert(workloadcert[0])
 	if err != nil {
 		return nil, fmt.Errorf("error parsing spiffe id from newly signed certificate: %w", err)
@@ -188,7 +243,7 @@ func (x *x509source) renewIdentityCertificate(ctx context.Context) (*x509.Certif
 		PrivateKey:   pk,
 	}
 
-	return workloadcert[0], nil
+	return workloadcert[0], x.maybeWriteSVIDToDir()
 }
 
 func generateCSRAndPrivateKey(id string) ([]byte, crypto.Signer, error) {
@@ -227,13 +282,15 @@ func (x *x509source) requestFromSentry(ctx context.Context, csrDER []byte) ([]*x
 		)
 	}
 
+	tlsConfig, err := legacy.NewDialClientOptionalClientAuth(x, x, tlsconfig.AuthorizeID(x.sentryID))
+	if err != nil {
+		return nil, fmt.Errorf("error creating tls config: %w", err)
+	}
+
 	conn, err := grpc.DialContext(ctx,
 		x.sentryAddress,
-		grpc.WithTransportCredentials(
-			grpccredentials.TLSClientCredentials(x, tlsconfig.AuthorizeID(x.sentryID)),
-		),
+		grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)),
 		grpc.WithUnaryInterceptor(unaryClientInterceptor),
-		grpc.WithBlock(),
 		grpc.WithReturnConnectionError(),
 	)
 	if err != nil {
@@ -249,16 +306,28 @@ func (x *x509source) requestFromSentry(ctx context.Context, csrDER []byte) ([]*x
 		return nil, fmt.Errorf("error obtaining token: %w", err)
 	}
 
-	resp, err := sentryv1pb.NewCAClient(conn).SignCertificate(ctx,
-		&sentryv1pb.SignCertificateRequest{
-			CertificateSigningRequest: pem.EncodeToMemory(&pem.Block{
-				Type: "CERTIFICATE REQUEST", Bytes: csrDER,
-			}),
-			Id:             x.appID,
-			Token:          token,
-			Namespace:      x.appNamespace,
-			TokenValidator: tokenValidator,
-		})
+	req := &sentryv1pb.SignCertificateRequest{
+		CertificateSigningRequest: pem.EncodeToMemory(&pem.Block{
+			Type: "CERTIFICATE REQUEST", Bytes: csrDER,
+		}),
+		Id:             getSentryIdentifier(x.appID),
+		Token:          token,
+		Namespace:      x.appNamespace,
+		TokenValidator: tokenValidator,
+	}
+
+	if x.trustDomain != nil {
+		req.TrustDomain = *x.trustDomain
+	} else {
+		// For v1.11 sentry, if the trust domain is empty in the request then it
+		// will return an empty certificate so we default to `public` here to
+		// ensure we get an identity certificate back.
+		// This request field is ignored for non control-plane requests in v1.12.
+		// TODO: @joshvanl: Remove in v1.13.
+		req.TrustDomain = "public"
+	}
+
+	resp, err := sentryv1pb.NewCAClient(conn).SignCertificate(ctx, req)
 	if err != nil {
 		diagnostics.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("sign")
 		return nil, fmt.Errorf("error from sentry SignCertificate: %w", err)
@@ -277,7 +346,152 @@ func (x *x509source) requestFromSentry(ctx context.Context, csrDER []byte) ([]*x
 	return workloadcert, nil
 }
 
+// maybeWriteSVIDToDir writes the current SVID to the configured directory if
+// configured. Does this atomically using unix symlinks.
+func (x *x509source) maybeWriteSVIDToDir() error {
+	if x.writeToDiskDir == nil || x.currentSVID == nil || x.trustAnchors == nil {
+		return nil
+	}
+
+	certs, pk, err := x.currentSVID.Marshal()
+	if err != nil {
+		return err
+	}
+
+	ta, err := x.trustAnchors.Marshal()
+	if err != nil {
+		return err
+	}
+
+	if err := atomicWrite(x.clock, *x.writeToDiskDir, map[string][]byte{
+		"tls.crt": certs,
+		"tls.key": pk,
+		"ca.crt":  ta,
+	}); err != nil {
+		return fmt.Errorf("unable to write SVID to disk: %w", err)
+	}
+
+	log.Infof("Wrote SVID to '%s'", *x.writeToDiskDir)
+
+	return nil
+}
+
+func (x *x509source) updateTrustAnchorFromFile(ctx context.Context, filepath string) error {
+	x.lock.RLock()
+	defer x.lock.RUnlock()
+
+	rootPEMs, err := os.ReadFile(filepath)
+	if err != nil {
+		return fmt.Errorf("failed to read trust anchors file '%s': %w", filepath, err)
+	}
+
+	trustAnchorCerts, err := secpem.DecodePEMCertificates(rootPEMs)
+	if err != nil {
+		return fmt.Errorf("failed to decode trust anchors: %w", err)
+	}
+
+	x.trustAnchors.SetX509Authorities(trustAnchorCerts)
+
+	if err := x.maybeWriteSVIDToDir(); err != nil {
+		return err
+	}
+
+	var wg sync.WaitGroup
+	defer wg.Wait()
+
+	wg.Add(len(x.trustAnchorSubscribers))
+	for _, ch := range x.trustAnchorSubscribers {
+		go func(chi chan<- struct{}) {
+			defer wg.Done()
+			select {
+			case chi <- struct{}{}:
+			case <-ctx.Done():
+			}
+		}(ch)
+	}
+
+	return nil
+}
+
+func atomicWrite(clock clock.Clock, dir string, data map[string][]byte) error {
+	dir = filepath.Clean(dir)
+	if err := os.MkdirAll(filepath.Dir(dir), 0o700); err != nil {
+		return err
+	}
+
+	newDir := dir + "-" + clock.Now().Format("20060102-150405")
+	if err := os.MkdirAll(newDir, 0o700); err != nil {
+		return err
+	}
+
+	for file, contents := range data {
+		if err := os.WriteFile(filepath.Join(newDir, file), contents, 0o600); err != nil {
+			return err
+		}
+	}
+
+	// Symlinks are typically not available on Windows containers, so we use a
+	// copy and rename instead.
+	if runtime.GOOS == "windows" {
+		os.RemoveAll(dir + "-new")
+		if err := os.MkdirAll(dir+"-new", 0o700); err != nil {
+			return err
+		}
+
+		entries, err := os.ReadDir(newDir)
+		if err != nil {
+			return err
+		}
+		for _, entry := range entries {
+			b, err := os.ReadFile(filepath.Join(newDir, entry.Name()))
+			if err != nil {
+				return err
+			}
+			if err := os.WriteFile(filepath.Join(dir+"-new", entry.Name()), b, 0o600); err != nil {
+				return err
+			}
+		}
+		// You can't rename a directory over an existing directory.
+		os.RemoveAll(dir)
+		if err := os.Rename(dir+"-new", dir); err != nil {
+			return fmt.Errorf("failed to rename %s to %s: %w", dir+"-new", dir, err)
+		}
+	} else {
+		if err := os.Symlink(newDir, dir+"-new"); err != nil {
+			return err
+		}
+		if err := os.Rename(dir+"-new", dir); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // renewalTime is 70% through the certificate validity period.
 func renewalTime(notBefore, notAfter time.Time) time.Time {
 	return notBefore.Add(notAfter.Sub(notBefore) * 7 / 10)
+}
+
+// isControlPlaneService returns true if the app ID corresponds to a Dapr
+// control plane service.
+func isControlPlaneService(id string) bool {
+	switch id {
+	case "dapr-operator",
+		"dapr-placement",
+		"dapr-injector",
+		"dapr-sentry":
+		return true
+	default:
+		return false
+	}
+}
+
+func getSentryIdentifier(appID string) string {
+	// return injected identity, default id if not present
+	localID := os.Getenv("SENTRY_LOCAL_IDENTITY")
+	if localID != "" {
+		return localID
+	}
+	return appID
 }

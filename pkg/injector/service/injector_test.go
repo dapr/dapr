@@ -31,19 +31,18 @@ import (
 )
 
 func TestConfigCorrectValues(t *testing.T) {
-	i, err := NewInjector(nil, Config{
-		TLSCertFile:                       "a",
-		TLSKeyFile:                        "b",
-		SidecarImage:                      "c",
-		SidecarImagePullPolicy:            "d",
-		Namespace:                         "e",
-		AllowedServiceAccountsPrefixNames: "ns*:sa,namespace:sa*",
-	}, nil, nil)
+	i, err := NewInjector(Options{
+		Config: Config{
+			SidecarImage:                      "c",
+			SidecarImagePullPolicy:            "d",
+			Namespace:                         "e",
+			AllowedServiceAccountsPrefixNames: "ns*:sa,namespace:sa*",
+			ControlPlaneTrustDomain:           "trust.domain",
+		},
+	})
 	assert.NoError(t, err)
 
 	injector := i.(*injector)
-	assert.Equal(t, "a", injector.config.TLSCertFile)
-	assert.Equal(t, "b", injector.config.TLSKeyFile)
 	assert.Equal(t, "c", injector.config.SidecarImage)
 	assert.Equal(t, "d", injector.config.SidecarImagePullPolicy)
 	assert.Equal(t, "e", injector.config.Namespace)
@@ -53,14 +52,14 @@ func TestConfigCorrectValues(t *testing.T) {
 }
 
 func TestNewInjectorBadAllowedPrefixedServiceAccountConfig(t *testing.T) {
-	_, err := NewInjector(nil, Config{
-		TLSCertFile:                       "a",
-		TLSKeyFile:                        "b",
-		SidecarImage:                      "c",
-		SidecarImagePullPolicy:            "d",
-		Namespace:                         "e",
-		AllowedServiceAccountsPrefixNames: "ns*:sa,namespace:sa*sa",
-	}, nil, nil)
+	_, err := NewInjector(Options{
+		Config: Config{
+			SidecarImage:                      "c",
+			SidecarImagePullPolicy:            "d",
+			Namespace:                         "e",
+			AllowedServiceAccountsPrefixNames: "ns*:sa,namespace:sa*sa",
+		},
+	})
 	assert.Error(t, err)
 }
 

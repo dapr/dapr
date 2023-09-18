@@ -36,8 +36,9 @@ const TestAppID = "fakeAppID"
 
 func newTestTimers() *timers {
 	clock := clocktesting.NewFakeClock(startOfTime)
-	r := NewTimersProvider(clock)
-	return r.(*timers)
+	r := NewTimersProvider(clock).(*timers)
+	r.processor.WithClock(clock)
+	return r
 }
 
 // testRequest is the request object that encapsulates the `data` field of a request.
@@ -49,6 +50,7 @@ func TestCreateTimerDueTimes(t *testing.T) {
 	t.Run("create timer with positive DueTime", func(t *testing.T) {
 		clock := clocktesting.NewFakeClock(startOfTime)
 		provider := NewTimersProvider(clock).(*timers)
+		provider.processor.WithClock(clock)
 		defer provider.Close()
 
 		executed := make(chan string, 1)
@@ -86,6 +88,7 @@ func TestCreateTimerDueTimes(t *testing.T) {
 	t.Run("create timer with 0 DueTime", func(t *testing.T) {
 		clock := clocktesting.NewFakeClock(startOfTime)
 		provider := NewTimersProvider(clock).(*timers)
+		provider.processor.WithClock(clock)
 		defer provider.Close()
 
 		executed := make(chan string, 1)
@@ -123,6 +126,7 @@ func TestCreateTimerDueTimes(t *testing.T) {
 	t.Run("create timer with no DueTime", func(t *testing.T) {
 		clock := clocktesting.NewFakeClock(startOfTime)
 		provider := NewTimersProvider(clock).(*timers)
+		provider.processor.WithClock(clock)
 		defer provider.Close()
 
 		executed := make(chan string, 1)
@@ -221,8 +225,7 @@ func TestOverrideTimerCancelsActiveTimers(t *testing.T) {
 		require.NoError(t, err)
 
 		// due time for timer3 is 2s
-		advanceTickers(t, clock, time.Second)
-		advanceTickers(t, clock, time.Second)
+		advanceTickers(t, clock, 2*time.Second)
 
 		// The timer update fires in a goroutine so we need to use the wall clock here
 		select {
@@ -270,8 +273,7 @@ func TestOverrideTimerCancelsMultipleActiveTimers(t *testing.T) {
 		require.NoError(t, err)
 
 		// due time for timer2/timer3 is 4s, advance less
-		advanceTickers(t, clock, time.Second)
-		advanceTickers(t, clock, time.Second)
+		advanceTickers(t, clock, 2*time.Second)
 
 		req4 := createTimerData(actorID, actorType, timerName, "7s", "2s", "", "callback4", "d")
 		reminder4, err := req4.NewReminder(testTimers.clock.Now())
@@ -280,7 +282,7 @@ func TestOverrideTimerCancelsMultipleActiveTimers(t *testing.T) {
 		require.NoError(t, err)
 
 		// due time for timer4 is 2s
-		advanceTickers(t, clock, time.Second*2)
+		advanceTickers(t, clock, 2*time.Second)
 
 		// The timer update fires in a goroutine so we need to use the wall clock here
 		select {
@@ -577,6 +579,7 @@ func TestTimerValidation(t *testing.T) {
 func TestOverrideTimer(t *testing.T) {
 	clock := clocktesting.NewFakeClock(startOfTime)
 	provider := NewTimersProvider(clock).(*timers)
+	provider.processor.WithClock(clock)
 	defer provider.Close()
 
 	executed := make(chan string, 1)
@@ -620,9 +623,17 @@ func TestOverrideTimer(t *testing.T) {
 		err = provider.CreateTimer(context.Background(), timer3)
 		require.NoError(t, err)
 
-		// due time for timer3 is 2s
-		advanceTickers(t, clock, time.Second)
-		advanceTickers(t, clock, time.Second)
+		expectCount := int64(1)
+		assert.Eventuallyf(t,
+			func() bool {
+				return provider.GetActiveTimersCount("mytype") == expectCount
+			},
+			5*time.Second, 50*time.Millisecond,
+			"Expected active timers count to be %d, but got %d (note: this value may be outdated)", expectCount, provider.GetActiveTimersCount("mytype"),
+		)
+
+		// Due time for timer3 is 2s
+		advanceTickers(t, clock, 2*time.Second)
 
 		// The timer update fires in a goroutine so we need to use the wall clock here
 		select {
@@ -642,6 +653,8 @@ func TestTimerCounter(t *testing.T) {
 
 	clock := clocktesting.NewFakeClock(startOfTime)
 	provider := NewTimersProvider(clock).(*timers)
+	provider.processor.WithClock(clock)
+	defer provider.Close()
 
 	// Init a mock metrics collector
 	activeCount := atomic.Int64{}
@@ -706,10 +719,32 @@ func TestTimerCounter(t *testing.T) {
 			assert.NoError(t, err)
 		}(i)
 	}
+
 	wg.Wait()
 
-	time.Sleep(1 * time.Second)
-	clock.Sleep(time.Second)
+	// Allow background goroutines to catch up
+	advanceTickers(t, clock, 100*time.Millisecond)
+
+	expectCount := int64(numberOfLongTimersToCreate + numberOfOneTimeTimersToCreate)
+	assert.Eventuallyf(t,
+		func() bool {
+			return provider.GetActiveTimersCount(actorType) == expectCount
+		},
+		5*time.Second, 50*time.Millisecond,
+		"Expected active timers count to be %d, but got %d (note: this value may be outdated)", expectCount, provider.GetActiveTimersCount(actorType),
+	)
+
+	// Advance the timers by 1s to make all short timers execute
+	clock.Step(time.Second)
+
+	expectExecute := int64(numberOfLongTimersToCreate + numberOfOneTimeTimersToCreate)
+	assert.Eventuallyf(t,
+		func() bool {
+			return executeCount.Load() == expectExecute
+		},
+		5*time.Second, 50*time.Millisecond,
+		"Expected to have %d reminders executed, but got %d (note: this value may be outdated)", expectExecute, executeCount.Load(),
+	)
 
 	for i := 0; i < numberOfTimersToDelete; i++ {
 		wg.Add(1)
@@ -724,9 +759,10 @@ func TestTimerCounter(t *testing.T) {
 			assert.NoError(t, err)
 		}(i)
 	}
+
 	wg.Wait()
 
-	expectCount := int64(numberOfLongTimersToCreate - numberOfTimersToDelete)
+	expectCount = int64(numberOfLongTimersToCreate - numberOfTimersToDelete)
 	assert.Eventuallyf(t,
 		func() bool {
 			return provider.GetActiveTimersCount(actorType) == expectCount
@@ -744,6 +780,7 @@ func TestTimerCounter(t *testing.T) {
 func TestCreateTimerGoroutineLeak(t *testing.T) {
 	clock := clocktesting.NewFakeClock(startOfTime)
 	provider := NewTimersProvider(clock).(*timers)
+	provider.processor.WithClock(clock)
 	defer provider.Close()
 	require.NoError(t, provider.Init(context.Background()))
 
@@ -811,11 +848,9 @@ func createTimer(t *testing.T, now time.Time, req internal.CreateTimerRequest) *
 func advanceTickers(t *testing.T, clock *clocktesting.FakeClock, step time.Duration) {
 	t.Helper()
 
-	// Wait for the clock to have tickers before stepping, since they are likely
-	// being created in another go routine to this test.
-	require.Eventually(t, func() bool {
-		return clock.HasWaiters()
-	}, 2*time.Second, 5*time.Millisecond, "ticker in program not created in time")
+	// Sleep a bit on the wall clock too to help advance other goroutines
+	runtime.Gosched()
+	time.Sleep(100 * time.Millisecond)
 	clock.Step(step)
 }
 

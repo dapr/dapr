@@ -36,7 +36,7 @@ import (
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	"github.com/dapr/dapr/pkg/config"
-	daprgrpc "github.com/dapr/dapr/pkg/grpc"
+	"github.com/dapr/dapr/pkg/grpc/manager"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -145,6 +145,7 @@ func TestBulkSubscribe(t *testing.T) {
 			Resiliency:     resiliency.New(log),
 			ComponentStore: compstore.New(),
 			IsHTTP:         true,
+			Channels:       new(channels.Channels),
 		})
 		ps.registry.RegisterComponent(
 			func(_ logger.Logger) contribpubsub.PubSub {
@@ -168,7 +169,7 @@ func TestBulkSubscribe(t *testing.T) {
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		ps.appChannel = mockAppChannel
+		ps.channels.WithAppChannel(mockAppChannel)
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).Return(fakeResp, nil)
 
@@ -198,6 +199,7 @@ func TestBulkSubscribe(t *testing.T) {
 			Resiliency:     resiliency.New(log),
 			ComponentStore: compstore.New(),
 			IsHTTP:         true,
+			Channels:       new(channels.Channels),
 		})
 		ps.registry.RegisterComponent(
 			func(_ logger.Logger) contribpubsub.PubSub {
@@ -219,7 +221,7 @@ func TestBulkSubscribe(t *testing.T) {
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		ps.appChannel = mockAppChannel
+		ps.channels.WithAppChannel(mockAppChannel)
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).Return(fakeResp, nil)
 
@@ -251,6 +253,7 @@ func TestBulkSubscribe(t *testing.T) {
 			Resiliency:     resiliency.New(log),
 			ComponentStore: compstore.New(),
 			IsHTTP:         true,
+			Channels:       new(channels.Channels),
 		})
 		ms := &mockSubscribePubSub{
 			features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
@@ -276,7 +279,7 @@ func TestBulkSubscribe(t *testing.T) {
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		ps.appChannel = mockAppChannel
+		ps.channels.WithAppChannel(mockAppChannel)
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
 		fakeResp1 := invokev1.NewInvokeMethodResponse(200, "OK", nil)
 		defer fakeResp1.Close()
@@ -311,7 +314,7 @@ func TestBulkSubscribe(t *testing.T) {
 		defer fakeResp2.Close()
 		mockAppChannel1 := new(channelt.MockAppChannel)
 		mockAppChannel1.Init()
-		ps.appChannel = mockAppChannel1
+		ps.channels.WithAppChannel(mockAppChannel1)
 		mockAppChannel1.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).Return(fakeResp2, nil)
 
 		msgArr = getBulkMessageEntries(3)
@@ -338,7 +341,7 @@ func TestBulkSubscribe(t *testing.T) {
 		defer fakeResp3.Close()
 		mockAppChannel2 := new(channelt.MockAppChannel)
 		mockAppChannel2.Init()
-		ps.appChannel = mockAppChannel2
+		ps.channels.WithAppChannel(mockAppChannel2)
 		mockAppChannel2.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).Return(fakeResp3, nil)
 
 		msgArr = getBulkMessageEntries(4)
@@ -364,7 +367,7 @@ func TestBulkSubscribe(t *testing.T) {
 
 		mockAppChannel3 := new(channelt.MockAppChannel)
 		mockAppChannel3.Init()
-		ps.appChannel = mockAppChannel3
+		ps.channels.WithAppChannel(mockAppChannel3)
 		mockAppChannel3.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).Return(nil, errors.New("Mock error"))
 		msgArr = getBulkMessageEntries(1)
 
@@ -393,6 +396,7 @@ func TestBulkSubscribe(t *testing.T) {
 			Resiliency:     resiliency.New(log),
 			ComponentStore: compstore.New(),
 			IsHTTP:         true,
+			Channels:       new(channels.Channels),
 		})
 		ps.registry.RegisterComponent(
 			func(_ logger.Logger) contribpubsub.PubSub {
@@ -430,7 +434,7 @@ func TestBulkSubscribe(t *testing.T) {
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		ps.appChannel = mockAppChannel
+		ps.channels.WithAppChannel(mockAppChannel)
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).Return(fakeResp, nil)
 
@@ -467,6 +471,7 @@ func TestBulkSubscribe(t *testing.T) {
 			Resiliency:     resiliency.New(log),
 			ComponentStore: compstore.New(),
 			IsHTTP:         true,
+			Channels:       new(channels.Channels),
 		})
 		ps.registry.RegisterComponent(
 			func(_ logger.Logger) contribpubsub.PubSub {
@@ -504,7 +509,7 @@ func TestBulkSubscribe(t *testing.T) {
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		ps.appChannel = mockAppChannel
+		ps.channels.WithAppChannel(mockAppChannel)
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
 
 		require.NoError(t, ps.Init(context.TODO(), pubsubComponent))
@@ -595,6 +600,7 @@ func TestBulkSubscribe(t *testing.T) {
 			Resiliency:     resiliency.New(log),
 			ComponentStore: compstore.New(),
 			IsHTTP:         true,
+			Channels:       new(channels.Channels),
 		})
 		ps.registry.RegisterComponent(
 			func(_ logger.Logger) contribpubsub.PubSub {
@@ -621,7 +627,7 @@ func TestBulkSubscribe(t *testing.T) {
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		ps.appChannel = mockAppChannel
+		ps.channels.WithAppChannel(mockAppChannel)
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
 
 		require.NoError(t, ps.Init(context.TODO(), pubsubComponent))
@@ -685,6 +691,7 @@ func TestBulkSubscribe(t *testing.T) {
 			Resiliency:     resiliency.New(log),
 			ComponentStore: compstore.New(),
 			IsHTTP:         true,
+			Channels:       new(channels.Channels),
 		})
 		ps.registry.RegisterComponent(
 			func(_ logger.Logger) contribpubsub.PubSub {
@@ -711,7 +718,7 @@ func TestBulkSubscribe(t *testing.T) {
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		ps.appChannel = mockAppChannel
+		ps.channels.WithAppChannel(mockAppChannel)
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
 
 		require.NoError(t, ps.Init(context.TODO(), pubsubComponent))
@@ -779,6 +786,7 @@ func TestBulkSubscribe(t *testing.T) {
 			Resiliency:     resiliency.New(log),
 			ComponentStore: compstore.New(),
 			IsHTTP:         true,
+			Channels:       new(channels.Channels),
 		})
 		ps.registry.RegisterComponent(
 			func(_ logger.Logger) contribpubsub.PubSub {
@@ -805,7 +813,7 @@ func TestBulkSubscribe(t *testing.T) {
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		ps.appChannel = mockAppChannel
+		ps.channels.WithAppChannel(mockAppChannel)
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
 
 		require.NoError(t, ps.Init(context.TODO(), pubsubComponent))
@@ -887,6 +895,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			Resiliency:     resiliency.New(log),
 			ComponentStore: compstore.New(),
 			IsHTTP:         false,
+			Channels:       new(channels.Channels),
 		})
 		ms := &mockSubscribePubSub{
 			features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
@@ -942,10 +951,10 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			defer grpcServer.Stop()
 		}
 
-		grpc := daprgrpc.NewGRPCManager(modes.StandaloneMode, &daprgrpc.AppChannelConfig{Port: port})
+		grpc := manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: port})
 
 		// create a new AppChannel and gRPC client for every test
-		ch, err := channels.New(channels.Options{
+		ps.channels = channels.New(channels.Options{
 			ComponentStore: compstore.New(),
 			Registry:       reg,
 			GlobalConfig:   new(config.Configuration),
@@ -954,8 +963,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 				Port: port,
 			},
 		})
-		require.NoError(t, err)
-		ps.appChannel = ch.AppChannel()
+		require.NoError(t, ps.channels.Refresh())
 		ps.grpc = grpc
 
 		require.NoError(t, ps.Init(context.TODO(), pubsubComponent))
@@ -1017,6 +1025,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			Resiliency:     resiliency.New(log),
 			ComponentStore: compstore.New(),
 			IsHTTP:         false,
+			Channels:       new(channels.Channels),
 		})
 
 		ps.registry.RegisterComponent(
@@ -1103,16 +1112,15 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		}
 
 		// create a new AppChannel and gRPC client for every test
-		grpc := daprgrpc.NewGRPCManager(modes.StandaloneMode, &daprgrpc.AppChannelConfig{Port: port})
-		ch, err := channels.New(channels.Options{
+		grpc := manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: port})
+		ps.channels = channels.New(channels.Options{
 			ComponentStore:      compstore.New(),
 			Registry:            reg,
 			GlobalConfig:        new(config.Configuration),
 			AppConnectionConfig: config.AppConnectionConfig{Port: port},
 			GRPC:                grpc,
 		})
-		require.NoError(t, err)
-		ps.appChannel = ch.AppChannel()
+		require.NoError(t, ps.channels.Refresh())
 		ps.grpc = grpc
 
 		require.NoError(t, ps.Init(context.TODO(), pubsubComponent))
@@ -1159,6 +1167,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			Resiliency:     resiliency.New(log),
 			ComponentStore: compstore.New(),
 			IsHTTP:         false,
+			Channels:       new(channels.Channels),
 		})
 
 		ps.registry.RegisterComponent(
@@ -1210,8 +1219,8 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			defer grpcServer.Stop()
 		}
 
-		grpc := daprgrpc.NewGRPCManager(modes.StandaloneMode, &daprgrpc.AppChannelConfig{Port: port})
-		ch, err := channels.New(channels.Options{
+		grpc := manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: port})
+		ps.channels = channels.New(channels.Options{
 			ComponentStore:      compstore.New(),
 			Registry:            reg,
 			GlobalConfig:        new(config.Configuration),
@@ -1219,7 +1228,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			AppConnectionConfig: config.AppConnectionConfig{Port: port},
 		})
 		require.NoError(t, err)
-		ps.appChannel = ch.AppChannel()
+		require.NoError(t, ps.channels.Refresh())
 		ps.grpc = grpc
 
 		require.NoError(t, ps.Init(context.TODO(), pubsubComponent))
@@ -1257,6 +1266,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			Resiliency:     resiliency.New(log),
 			ComponentStore: compstore.New(),
 			IsHTTP:         false,
+			Channels:       new(channels.Channels),
 		})
 
 		ps.registry.RegisterComponent(
@@ -1319,8 +1329,8 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			defer grpcServer.Stop()
 		}
 
-		grpc := daprgrpc.NewGRPCManager(modes.StandaloneMode, &daprgrpc.AppChannelConfig{Port: port})
-		ch, err := channels.New(channels.Options{
+		grpc := manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: port})
+		ps.channels = channels.New(channels.Options{
 			ComponentStore:      compstore.New(),
 			Registry:            reg,
 			GlobalConfig:        new(config.Configuration),
@@ -1328,7 +1338,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			AppConnectionConfig: config.AppConnectionConfig{Port: port},
 		})
 		require.NoError(t, err)
-		ps.appChannel = ch.AppChannel()
+		require.NoError(t, ps.channels.Refresh())
 		ps.grpc = grpc
 
 		require.NoError(t, ps.Init(context.TODO(), pubsubComponent))
@@ -1367,6 +1377,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			Resiliency:     resiliency.New(log),
 			ComponentStore: compstore.New(),
 			IsHTTP:         false,
+			Channels:       new(channels.Channels),
 		})
 
 		ps.registry.RegisterComponent(
@@ -1423,8 +1434,8 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			defer grpcServer.Stop()
 		}
 
-		grpc := daprgrpc.NewGRPCManager(modes.StandaloneMode, &daprgrpc.AppChannelConfig{Port: port})
-		ch, err := channels.New(channels.Options{
+		grpc := manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: port})
+		ps.channels = channels.New(channels.Options{
 			ComponentStore:      compstore.New(),
 			Registry:            reg,
 			GlobalConfig:        new(config.Configuration),
@@ -1432,7 +1443,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			AppConnectionConfig: config.AppConnectionConfig{Port: port},
 		})
 		require.NoError(t, err)
-		ps.appChannel = ch.AppChannel()
+		require.NoError(t, ps.channels.Refresh())
 		ps.grpc = grpc
 
 		require.NoError(t, ps.Init(context.TODO(), pubsubComponent))
@@ -1471,6 +1482,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			Resiliency:     resiliency.New(log),
 			ComponentStore: compstore.New(),
 			IsHTTP:         false,
+			Channels:       new(channels.Channels),
 		})
 
 		ps.registry.RegisterComponent(
@@ -1513,16 +1525,15 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			defer grpcServer.Stop()
 		}
 
-		grpc := daprgrpc.NewGRPCManager(modes.StandaloneMode, &daprgrpc.AppChannelConfig{Port: port})
-		ch, err := channels.New(channels.Options{
+		grpc := manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: port})
+		ps.channels = channels.New(channels.Options{
 			ComponentStore:      compstore.New(),
 			Registry:            reg,
 			GlobalConfig:        new(config.Configuration),
 			GRPC:                grpc,
 			AppConnectionConfig: config.AppConnectionConfig{Port: port},
 		})
-		require.NoError(t, err)
-		ps.appChannel = ch.AppChannel()
+		require.NoError(t, ps.channels.Refresh())
 		ps.grpc = grpc
 
 		require.NoError(t, ps.Init(context.TODO(), pubsubComponent))
@@ -1761,6 +1772,7 @@ func TestPubSubDeadLetter(t *testing.T) {
 			Resiliency:     resiliency.New(log),
 			ComponentStore: compstore.New(),
 			IsHTTP:         true,
+			Channels:       new(channels.Channels),
 		})
 		reg.PubSubs().RegisterComponent(
 			func(_ logger.Logger) contribpubsub.PubSub {
@@ -1780,7 +1792,7 @@ func TestPubSubDeadLetter(t *testing.T) {
 		defer fakeResp.Close()
 
 		mockAppChannel := new(channelt.MockAppChannel)
-		ps.appChannel = mockAppChannel
+		ps.channels.WithAppChannel(mockAppChannel)
 		mockAppChannel.
 			On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).
 			Return(fakeResp, nil)
@@ -1815,6 +1827,7 @@ func TestPubSubDeadLetter(t *testing.T) {
 			Resiliency:     resiliency.New(log),
 			ComponentStore: compstore.New(),
 			IsHTTP:         true,
+			Channels:       new(channels.Channels),
 		})
 		ps.resiliency = resiliency.FromConfigurations(logger.NewLogger("test"), daprt.TestResiliency)
 		reg.PubSubs().RegisterComponent(
@@ -1835,7 +1848,7 @@ func TestPubSubDeadLetter(t *testing.T) {
 		defer fakeResp.Close()
 
 		mockAppChannel := new(channelt.MockAppChannel)
-		ps.appChannel = mockAppChannel
+		ps.channels.WithAppChannel(mockAppChannel)
 		mockAppChannel.
 			On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).
 			Return(fakeResp, nil)

@@ -21,6 +21,7 @@ package actors
 import (
 	"context"
 	"errors"
+	"time"
 
 	mock "github.com/stretchr/testify/mock"
 
@@ -41,7 +42,9 @@ type MockActors struct {
 	mock.Mock
 }
 
-func (_m *MockActors) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor) error {
+func (_m *MockActors) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor,
+	actorIdleTimeout time.Duration,
+) error {
 	return nil
 }
 
@@ -175,6 +178,29 @@ func (_m *MockActors) GetState(ctx context.Context, req *GetStateRequest) (*Stat
 	return r0, r1
 }
 
+// BulkGetState provides a mock function with given fields: req
+func (_m *MockActors) GetBulkState(ctx context.Context, req *GetBulkStateRequest) (BulkStateResponse, error) {
+	ret := _m.Called(req)
+
+	var r0 BulkStateResponse
+	if rf, ok := ret.Get(0).(func(*GetBulkStateRequest) BulkStateResponse); ok {
+		r0 = rf(req)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(BulkStateResponse)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(*GetBulkStateRequest) error); ok {
+		r1 = rf(req)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // Init provides a mock function with given fields:
 func (_m *MockActors) Init(_ context.Context) error {
 	ret := _m.Called()
@@ -251,7 +277,9 @@ type FailingActors struct {
 	Failure daprt.Failure
 }
 
-func (f *FailingActors) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor) error {
+func (f *FailingActors) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor,
+	actorIdleTimeout time.Duration,
+) error {
 	return nil
 }
 
@@ -284,6 +312,10 @@ func (f *FailingActors) Close() error {
 }
 
 func (f *FailingActors) GetState(ctx context.Context, req *GetStateRequest) (*StateResponse, error) {
+	return nil, nil
+}
+
+func (f *FailingActors) GetBulkState(ctx context.Context, req *GetBulkStateRequest) (BulkStateResponse, error) {
 	return nil, nil
 }
 

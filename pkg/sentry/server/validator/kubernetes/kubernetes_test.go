@@ -35,10 +35,11 @@ import (
 )
 
 func TestValidate(t *testing.T) {
-	newToken := func(t *testing.T, podName string) string {
-		token, err := jwt.NewBuilder().Claim("kubernetes.io", map[string]interface{}{
-			"pod": map[string]interface{}{
-				"name": podName,
+	newToken := func(t *testing.T, ns, name string) string {
+		token, err := jwt.NewBuilder().Claim("kubernetes.io", map[string]any{
+			"pod": map[string]any{
+				"namespace": ns,
+				"name":      name,
 			},
 		}).Build()
 		require.NoError(t, err)
@@ -57,8 +58,9 @@ func TestValidate(t *testing.T) {
 
 		sentryAudience string
 
-		expTD  spiffeid.TrustDomain
-		expErr bool
+		expTD               spiffeid.TrustDomain
+		expOverrideDuration bool
+		expErr              bool
 	}{
 		"if pod in different namespace, expect error": {
 			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
@@ -77,7 +79,7 @@ func TestValidate(t *testing.T) {
 			req: &sentryv1pb.SignCertificateRequest{
 				CertificateSigningRequest: []byte("csr"),
 				Namespace:                 "my-ns",
-				Token:                     newToken(t, "my-pod"),
+				Token:                     newToken(t, "not-my-ns", "my-pod"),
 				TrustDomain:               "example.test.dapr.io",
 				Id:                        "my-app-id",
 			},
@@ -116,7 +118,7 @@ func TestValidate(t *testing.T) {
 					return true, &kauthapi.TokenReview{Status: kauthapi.TokenReviewStatus{
 						Authenticated: true,
 						User: kauthapi.UserInfo{
-							Username: "system:serviceaccount:my-ns:my-sa",
+							Username: "system:serviceaccount:dapr-test:my-sa",
 						},
 					}}, nil
 				}
@@ -124,7 +126,7 @@ func TestValidate(t *testing.T) {
 			req: &sentryv1pb.SignCertificateRequest{
 				CertificateSigningRequest: []byte("csr"),
 				Namespace:                 "my-ns",
-				Token:                     newToken(t, "my-pod"),
+				Token:                     newToken(t, "dapr-test", "my-pod"),
 				TrustDomain:               "example.test.dapr.io",
 				Id:                        "my-app-id",
 			},
@@ -171,7 +173,7 @@ func TestValidate(t *testing.T) {
 			req: &sentryv1pb.SignCertificateRequest{
 				CertificateSigningRequest: []byte("csr"),
 				Namespace:                 "my-ns",
-				Token:                     newToken(t, "my-pod"),
+				Token:                     newToken(t, "my-ns", "my-pod"),
 				TrustDomain:               "example.test.dapr.io",
 				Id:                        "my-pod",
 			},
@@ -217,7 +219,7 @@ func TestValidate(t *testing.T) {
 			req: &sentryv1pb.SignCertificateRequest{
 				CertificateSigningRequest: []byte("csr"),
 				Namespace:                 "my-ns",
-				Token:                     newToken(t, "my-pod"),
+				Token:                     newToken(t, "dapr-test", "my-pod"),
 				TrustDomain:               "example.test.dapr.io",
 				Id:                        "my-app-id",
 			},
@@ -263,7 +265,7 @@ func TestValidate(t *testing.T) {
 			req: &sentryv1pb.SignCertificateRequest{
 				CertificateSigningRequest: []byte("csr"),
 				Namespace:                 "my-ns",
-				Token:                     newToken(t, "my-pod"),
+				Token:                     newToken(t, "dapr-test", "my-pod"),
 				TrustDomain:               "example.test.dapr.io",
 				Id:                        "my-app-id",
 			},
@@ -300,7 +302,7 @@ func TestValidate(t *testing.T) {
 			req: &sentryv1pb.SignCertificateRequest{
 				CertificateSigningRequest: []byte("csr"),
 				Namespace:                 "my-ns",
-				Token:                     newToken(t, "my-pod"),
+				Token:                     newToken(t, "dapr-test", "my-pod"),
 				TrustDomain:               "example.test.dapr.io",
 				Id:                        "my-app-id",
 			},
@@ -347,7 +349,7 @@ func TestValidate(t *testing.T) {
 			req: &sentryv1pb.SignCertificateRequest{
 				CertificateSigningRequest: []byte("csr"),
 				Namespace:                 "not-my-ns",
-				Token:                     newToken(t, "my-pod"),
+				Token:                     newToken(t, "dapr-test", "my-pod"),
 				TrustDomain:               "example.test.dapr.io",
 				Id:                        "my-app-id",
 			},
@@ -383,7 +385,7 @@ func TestValidate(t *testing.T) {
 			req: &sentryv1pb.SignCertificateRequest{
 				CertificateSigningRequest: []byte("csr"),
 				Namespace:                 "my-ns",
-				Token:                     newToken(t, "my-pod"),
+				Token:                     newToken(t, "dapr-test", "my-pod"),
 				TrustDomain:               "example.test.dapr.io",
 				Id:                        "my-app-id",
 			},
@@ -415,7 +417,7 @@ func TestValidate(t *testing.T) {
 			req: &sentryv1pb.SignCertificateRequest{
 				CertificateSigningRequest: []byte("csr"),
 				Namespace:                 "my-ns",
-				Token:                     newToken(t, "my-pod"),
+				Token:                     newToken(t, "dapr-test", "my-pod"),
 				TrustDomain:               "example.test.dapr.io",
 				Id:                        "my-app-id",
 			},
@@ -450,7 +452,7 @@ func TestValidate(t *testing.T) {
 			req: &sentryv1pb.SignCertificateRequest{
 				CertificateSigningRequest: []byte("csr"),
 				Namespace:                 "my-ns",
-				Token:                     newToken(t, ""),
+				Token:                     newToken(t, "dapr-test", ""),
 				TrustDomain:               "example.test.dapr.io",
 				Id:                        "my-app-id",
 			},
@@ -484,7 +486,7 @@ func TestValidate(t *testing.T) {
 			req: &sentryv1pb.SignCertificateRequest{
 				CertificateSigningRequest: []byte("csr"),
 				Namespace:                 "my-ns",
-				Token:                     newToken(t, "my-pod"),
+				Token:                     newToken(t, "my-ns", "my-pod"),
 				TrustDomain:               "example.test.dapr.io",
 				Id:                        "my-app-id",
 			},
@@ -518,7 +520,7 @@ func TestValidate(t *testing.T) {
 			req: &sentryv1pb.SignCertificateRequest{
 				CertificateSigningRequest: []byte("csr"),
 				Namespace:                 "my-ns",
-				Token:                     newToken(t, "my-pod"),
+				Token:                     newToken(t, "my-ns", "my-pod"),
 				TrustDomain:               "example.test.dapr.io",
 				Id:                        "my-app-id",
 			},
@@ -564,7 +566,7 @@ func TestValidate(t *testing.T) {
 			req: &sentryv1pb.SignCertificateRequest{
 				CertificateSigningRequest: []byte("csr"),
 				Namespace:                 "my-ns",
-				Token:                     newToken(t, "my-pod"),
+				Token:                     newToken(t, "my-ns", "my-pod"),
 				TrustDomain:               "example.test.dapr.io",
 				Id:                        "my-app-id",
 			},
@@ -610,7 +612,7 @@ func TestValidate(t *testing.T) {
 			req: &sentryv1pb.SignCertificateRequest{
 				CertificateSigningRequest: []byte("csr"),
 				Namespace:                 "dapr-test",
-				Token:                     newToken(t, "dapr-sentry"),
+				Token:                     newToken(t, "dapr-test", "dapr-sentry"),
 				TrustDomain:               "example.test.dapr.io",
 				Id:                        "dapr-sentry",
 			},
@@ -644,7 +646,7 @@ func TestValidate(t *testing.T) {
 			req: &sentryv1pb.SignCertificateRequest{
 				CertificateSigningRequest: []byte("csr"),
 				Namespace:                 "dapr-test",
-				Token:                     newToken(t, "dapr-operator"),
+				Token:                     newToken(t, "dapr-test", "dapr-operator"),
 				TrustDomain:               "example.test.dapr.io",
 				Id:                        "dapr-operator",
 			},
@@ -678,7 +680,7 @@ func TestValidate(t *testing.T) {
 			req: &sentryv1pb.SignCertificateRequest{
 				CertificateSigningRequest: []byte("csr"),
 				Namespace:                 "dapr-test",
-				Token:                     newToken(t, "dapr-injector"),
+				Token:                     newToken(t, "dapr-test", "dapr-injector"),
 				TrustDomain:               "example.test.dapr.io",
 				Id:                        "dapr-injector",
 			},
@@ -712,7 +714,7 @@ func TestValidate(t *testing.T) {
 			req: &sentryv1pb.SignCertificateRequest{
 				CertificateSigningRequest: []byte("csr"),
 				Namespace:                 "dapr-test",
-				Token:                     newToken(t, "dapr-placement"),
+				Token:                     newToken(t, "dapr-test", "dapr-placement"),
 				TrustDomain:               "example.test.dapr.io",
 				Id:                        "dapr-placement",
 			},
@@ -746,7 +748,7 @@ func TestValidate(t *testing.T) {
 			req: &sentryv1pb.SignCertificateRequest{
 				CertificateSigningRequest: []byte("csr"),
 				Namespace:                 "dapr-test",
-				Token:                     newToken(t, "my-pod"),
+				Token:                     newToken(t, "dapr-test", "my-pod"),
 				TrustDomain:               "example.test.dapr.io",
 				Id:                        "dapr-test:my-sa",
 			},
@@ -793,7 +795,7 @@ func TestValidate(t *testing.T) {
 			req: &sentryv1pb.SignCertificateRequest{
 				CertificateSigningRequest: []byte("csr"),
 				Namespace:                 "dapr-test",
-				Token:                     newToken(t, "my-pod"),
+				Token:                     newToken(t, "dapr-test", "my-pod"),
 				TrustDomain:               "example.test.dapr.io",
 				Id:                        "dapr-test:my-sa",
 			},
@@ -839,7 +841,7 @@ func TestValidate(t *testing.T) {
 			req: &sentryv1pb.SignCertificateRequest{
 				CertificateSigningRequest: []byte("csr"),
 				Namespace:                 "my-ns",
-				Token:                     newToken(t, "my-pod"),
+				Token:                     newToken(t, "dapr-test", "my-pod"),
 				TrustDomain:               "example.test.dapr.io",
 				Id:                        "my-ns:my-sa",
 			},
@@ -884,7 +886,7 @@ func TestValidate(t *testing.T) {
 			req: &sentryv1pb.SignCertificateRequest{
 				CertificateSigningRequest: []byte("csr"),
 				Namespace:                 "dapr-test",
-				Token:                     newToken(t, "my-pod"),
+				Token:                     newToken(t, "dapr-test", "my-pod"),
 				TrustDomain:               "example.test.dapr.io",
 				Id:                        "dapr-test:my-sa",
 			},
@@ -929,7 +931,7 @@ func TestValidate(t *testing.T) {
 			req: &sentryv1pb.SignCertificateRequest{
 				CertificateSigningRequest: []byte("csr"),
 				Namespace:                 "dapr-test",
-				Token:                     newToken(t, "my-pod"),
+				Token:                     newToken(t, "dapr-test", "my-pod"),
 				TrustDomain:               "example.test.dapr.io",
 				Id:                        "dapr-test:my-sa",
 			},
@@ -958,6 +960,145 @@ func TestValidate(t *testing.T) {
 			expErr: false,
 			expTD:  spiffeid.RequireTrustDomainFromString("cluster.local"),
 		},
+		"injector is able to request for whatever identity it wants (name)": {
+			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
+			reactor: func(t *testing.T) core.ReactionFunc {
+				return func(action core.Action) (bool, runtime.Object, error) {
+					obj := action.(core.CreateAction).GetObject().(*kauthapi.TokenReview)
+					assert.Equal(t, []string{"dapr.io/sentry", "spiffe://cluster.local/ns/dapr-test/dapr-sentry"}, obj.Spec.Audiences)
+					return true, &kauthapi.TokenReview{Status: kauthapi.TokenReviewStatus{
+						Authenticated: true,
+						User: kauthapi.UserInfo{
+							Username: "system:serviceaccount:dapr-test:my-sa",
+						},
+					}}, nil
+				}
+			},
+			req: &sentryv1pb.SignCertificateRequest{
+				CertificateSigningRequest: []byte("csr"),
+				Namespace:                 "dapr-test",
+				Token:                     newToken(t, "dapr-test", "my-pod"),
+				TrustDomain:               "example.test.dapr.io",
+				Id:                        "bar",
+			},
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-pod",
+					Namespace: "dapr-test",
+					Annotations: map[string]string{
+						"dapr.io/control-plane": "injector",
+					},
+				},
+				Spec: corev1.PodSpec{ServiceAccountName: "my-sa"},
+			},
+			expErr:              false,
+			expOverrideDuration: true,
+			expTD:               spiffeid.RequireTrustDomainFromString("cluster.local"),
+		},
+		"injector is able to request for whatever identity it wants (namespace)": {
+			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
+			reactor: func(t *testing.T) core.ReactionFunc {
+				return func(action core.Action) (bool, runtime.Object, error) {
+					obj := action.(core.CreateAction).GetObject().(*kauthapi.TokenReview)
+					assert.Equal(t, []string{"dapr.io/sentry", "spiffe://cluster.local/ns/dapr-test/dapr-sentry"}, obj.Spec.Audiences)
+					return true, &kauthapi.TokenReview{Status: kauthapi.TokenReviewStatus{
+						Authenticated: true,
+						User: kauthapi.UserInfo{
+							Username: "system:serviceaccount:dapr-test:my-sa",
+						},
+					}}, nil
+				}
+			},
+			req: &sentryv1pb.SignCertificateRequest{
+				CertificateSigningRequest: []byte("csr"),
+				Namespace:                 "foo",
+				Token:                     newToken(t, "dapr-test", "my-pod"),
+				TrustDomain:               "example.test.dapr.io",
+				Id:                        "my-pod",
+			},
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-pod",
+					Namespace: "dapr-test",
+					Annotations: map[string]string{
+						"dapr.io/control-plane": "injector",
+					},
+				},
+				Spec: corev1.PodSpec{ServiceAccountName: "my-sa"},
+			},
+			expErr:              false,
+			expOverrideDuration: true,
+			expTD:               spiffeid.RequireTrustDomainFromString("cluster.local"),
+		},
+		"injector is able to request for whatever identity it wants (namespace + name)": {
+			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
+			reactor: func(t *testing.T) core.ReactionFunc {
+				return func(action core.Action) (bool, runtime.Object, error) {
+					obj := action.(core.CreateAction).GetObject().(*kauthapi.TokenReview)
+					assert.Equal(t, []string{"dapr.io/sentry", "spiffe://cluster.local/ns/dapr-test/dapr-sentry"}, obj.Spec.Audiences)
+					return true, &kauthapi.TokenReview{Status: kauthapi.TokenReviewStatus{
+						Authenticated: true,
+						User: kauthapi.UserInfo{
+							Username: "system:serviceaccount:dapr-test:my-sa",
+						},
+					}}, nil
+				}
+			},
+			req: &sentryv1pb.SignCertificateRequest{
+				CertificateSigningRequest: []byte("csr"),
+				Namespace:                 "foo",
+				Token:                     newToken(t, "dapr-test", "my-pod"),
+				TrustDomain:               "example.test.dapr.io",
+				Id:                        "bar",
+			},
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-pod",
+					Namespace: "dapr-test",
+					Annotations: map[string]string{
+						"dapr.io/control-plane": "injector",
+					},
+				},
+				Spec: corev1.PodSpec{ServiceAccountName: "my-sa"},
+			},
+			expErr:              false,
+			expOverrideDuration: true,
+			expTD:               spiffeid.RequireTrustDomainFromString("cluster.local"),
+		},
+		"injector is not able to request for whatever identity it wants if not in control plane namespace": {
+			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
+			reactor: func(t *testing.T) core.ReactionFunc {
+				return func(action core.Action) (bool, runtime.Object, error) {
+					obj := action.(core.CreateAction).GetObject().(*kauthapi.TokenReview)
+					assert.Equal(t, []string{"dapr.io/sentry", "spiffe://cluster.local/ns/dapr-test/dapr-sentry"}, obj.Spec.Audiences)
+					return true, &kauthapi.TokenReview{Status: kauthapi.TokenReviewStatus{
+						Authenticated: true,
+						User: kauthapi.UserInfo{
+							Username: "system:serviceaccount:dapr-test:my-sa",
+						},
+					}}, nil
+				}
+			},
+			req: &sentryv1pb.SignCertificateRequest{
+				CertificateSigningRequest: []byte("csr"),
+				Namespace:                 "foo",
+				Token:                     newToken(t, "bar", "my-pod"),
+				TrustDomain:               "example.test.dapr.io",
+				Id:                        "bar",
+			},
+			pod: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-pod",
+					Namespace: "bar",
+					Annotations: map[string]string{
+						"dapr.io/control-plane": "injector",
+					},
+				},
+				Spec: corev1.PodSpec{ServiceAccountName: "my-sa"},
+			},
+			expErr: true,
+			expTD:  spiffeid.TrustDomain{},
+		},
 	}
 
 	for name, test := range tests {
@@ -969,6 +1110,9 @@ func TestValidate(t *testing.T) {
 
 			kubeCl := kubefake.NewSimpleClientset(kobjs...)
 			kubeCl.Fake.PrependReactor("create", "tokenreviews", test.reactor(t))
+			scheme := runtime.NewScheme()
+			require.NoError(t, configapi.AddToScheme(scheme))
+			require.NoError(t, corev1.AddToScheme(scheme))
 			client := clientfake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(kobjs...).Build()
 
 			if test.config != nil {
@@ -984,9 +1128,10 @@ func TestValidate(t *testing.T) {
 				ready:          func(_ context.Context) bool { return true },
 			}
 
-			td, err := k.Validate(context.Background(), test.req)
+			td, overrideDuration, err := k.Validate(context.Background(), test.req)
 			assert.Equal(t, test.expErr, err != nil, "%v", err)
 			assert.Equal(t, test.expTD, td)
+			assert.Equal(t, test.expOverrideDuration, overrideDuration)
 		})
 	}
 }

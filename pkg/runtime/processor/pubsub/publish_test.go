@@ -35,7 +35,7 @@ import (
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	"github.com/dapr/dapr/pkg/config"
-	daprgrpc "github.com/dapr/dapr/pkg/grpc"
+	"github.com/dapr/dapr/pkg/grpc/manager"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -89,7 +89,7 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 
 	t.Run("ok without result body", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
-		ps.appChannel = mockAppChannel
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		// User App subscribes 1 topics via http app channel
 
@@ -110,7 +110,7 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 
 	t.Run("ok with retry", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
-		ps.appChannel = mockAppChannel
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		// User App subscribes 1 topics via http app channel
 
@@ -130,7 +130,7 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 
 	t.Run("ok with drop", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
-		ps.appChannel = mockAppChannel
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		// User App subscribes 1 topics via http app channel
 
@@ -150,7 +150,7 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 
 	t.Run("ok with unknown", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
-		ps.appChannel = mockAppChannel
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		// User App subscribes 1 topics via http app channel
 
@@ -170,7 +170,7 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 
 	t.Run("not found response", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
-		ps.appChannel = mockAppChannel
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		// User App subscribes 1 topics via http app channel
 
@@ -207,7 +207,7 @@ func TestErrorPublishedNonCloudEventGRPC(t *testing.T) {
 		Mode:           modes.StandaloneMode,
 		Namespace:      "ns1",
 		ID:             TestRuntimeConfigID,
-		GRPC:           daprgrpc.NewGRPCManager(modes.StandaloneMode, &daprgrpc.AppChannelConfig{}),
+		GRPC:           manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{}),
 	})
 	ps.compStore.SetTopicRoutes(map[string]compstore.TopicRoutes{
 		TestPubsubName: map[string]compstore.TopicRouteElem{
@@ -321,7 +321,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 
 	t.Run("succeeded to publish message to user app with empty response", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
-		ps.appChannel = mockAppChannel
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		// User App subscribes 1 topics via http app channel
 		var appResp contribpubsub.AppResponse
@@ -342,7 +342,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 
 	t.Run("succeeded to publish message without TraceID", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
-		ps.appChannel = mockAppChannel
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		// User App subscribes 1 topics via http app channel
 		var appResp contribpubsub.AppResponse
@@ -385,7 +385,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 
 	t.Run("succeeded to publish message to user app with non-json response", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
-		ps.appChannel = mockAppChannel
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		// User App subscribes 1 topics via http app channel
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
@@ -405,7 +405,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 
 	t.Run("succeeded to publish message to user app with status", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
-		ps.appChannel = mockAppChannel
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		// User App subscribes 1 topics via http app channel
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
@@ -425,7 +425,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 
 	t.Run("succeeded to publish message to user app but app ask for retry", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
-		ps.appChannel = mockAppChannel
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		// User App subscribes 1 topics via http app channel
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
@@ -448,7 +448,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 
 	t.Run("succeeded to publish message to user app but app ask to drop", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
-		ps.appChannel = mockAppChannel
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		// User App subscribes 1 topics via http app channel
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
@@ -468,7 +468,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 
 	t.Run("succeeded to publish message to user app but app returned unknown status code", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
-		ps.appChannel = mockAppChannel
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		// User App subscribes 1 topics via http app channel
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
@@ -488,7 +488,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 
 	t.Run("succeeded to publish message to user app but app returned empty status code", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
-		ps.appChannel = mockAppChannel
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		// User App subscribes 1 topics via http app channel
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
@@ -508,7 +508,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 
 	t.Run("succeeded to publish message to user app and app returned unexpected json response", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
-		ps.appChannel = mockAppChannel
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		// User App subscribes 1 topics via http app channel
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
@@ -528,7 +528,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 
 	t.Run("failed to publish message error on invoking method", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
-		ps.appChannel = mockAppChannel
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 		invokeError := errors.New("error invoking method")
 
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReq).Return(nil, invokeError)
@@ -544,7 +544,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 
 	t.Run("failed to publish message to user app with 404", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
-		ps.appChannel = mockAppChannel
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		fakeResp := invokev1.NewInvokeMethodResponse(404, "Not Found", nil).
 			WithRawDataString("Not found").
@@ -563,7 +563,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 
 	t.Run("failed to publish message to user app with 500", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
-		ps.appChannel = mockAppChannel
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		fakeResp := invokev1.NewInvokeMethodResponse(500, "Internal Error", nil).
 			WithRawDataString("Internal Error").
@@ -738,7 +738,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 				Mode:           modes.StandaloneMode,
 				Namespace:      "ns1",
 				ID:             TestRuntimeConfigID,
-				GRPC:           daprgrpc.NewGRPCManager(modes.StandaloneMode, &daprgrpc.AppChannelConfig{Port: port}),
+				GRPC:           manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: port}),
 			})
 			ps.compStore.SetTopicRoutes(map[string]compstore.TopicRoutes{
 				TestPubsubName: map[string]compstore.TopicRouteElem{
@@ -768,16 +768,15 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 				defer grpcServer.Stop()
 			}
 
-			grpc := daprgrpc.NewGRPCManager(modes.StandaloneMode, &daprgrpc.AppChannelConfig{Port: port})
-			ch, err := channels.New(channels.Options{
+			grpc := manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: port})
+			ps.channels = channels.New(channels.Options{
 				ComponentStore:      compstore.New(),
 				Registry:            reg,
 				GlobalConfig:        new(config.Configuration),
 				AppConnectionConfig: config.AppConnectionConfig{Port: port},
 				GRPC:                grpc,
 			})
-			require.NoError(t, err)
-			ps.appChannel = ch.AppChannel()
+			require.NoError(t, ps.channels.Refresh())
 			ps.grpc = grpc
 
 			// act

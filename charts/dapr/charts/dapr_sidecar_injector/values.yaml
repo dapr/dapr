@@ -15,6 +15,7 @@ image:
 injectorImage:
   name: "injector"
 
+deploymentAnnotations: {}
 nameOverride: ""
 fullnameOverride: ""
 webhookFailurePolicy: Ignore
