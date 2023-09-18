@@ -86,17 +86,18 @@ func generateIssuerCert(trustDomain string, skew time.Duration) (*x509.Certifica
 		return nil, err
 	}
 
-	sentryID, err := (spiffe.Parsed{
-		TrustDomain: trustDomain,
-		Namespace:   security.CurrentNamespace(),
-		AppID:       "dapr-sentry",
-	}).ToID()
+	td, err := spiffeid.TrustDomainFromString(trustDomain)
+	if err != nil {
+		return nil, err
+	}
+
+	sentryID, err := spiffe.FromStrings(td, security.CurrentNamespace(), "dapr-sentry")
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate sentry ID: %w", err)
 	}
 
 	cert.KeyUsage |= x509.KeyUsageCertSign | x509.KeyUsageCRLSign
-	cert.Subject = pkix.Name{Organization: []string{sentryID.String()}}
+	cert.Subject = pkix.Name{Organization: []string{sentryID.URL().String()}}
 	cert.IsCA = true
 	cert.BasicConstraintsValid = true
 	cert.SignatureAlgorithm = x509.ECDSAWithSHA256
@@ -109,7 +110,7 @@ func generateIssuerCert(trustDomain string, skew time.Duration) (*x509.Certifica
 }
 
 // generateWorkloadCert returns a CA issuing x509 Certificate.
-func generateWorkloadCert(sig x509.SignatureAlgorithm, ttl, skew time.Duration, id spiffeid.ID) (*x509.Certificate, error) {
+func generateWorkloadCert(sig x509.SignatureAlgorithm, ttl, skew time.Duration, id *spiffe.Parsed) (*x509.Certificate, error) {
 	cert, err := generateBaseCert(ttl, skew)
 	if err != nil {
 		return nil, err

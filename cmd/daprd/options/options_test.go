@@ -42,3 +42,49 @@ func TestStandaloneGlobalConfig(t *testing.T) {
 	assert.EqualValues(t, string(modes.StandaloneMode), opts.Mode)
 	assert.Equal(t, []string{"../../../pkg/config/testdata/metric_disabled.yaml"}, []string(opts.Config))
 }
+
+func TestControlPlaneEnvVar(t *testing.T) {
+	t.Run("should default CLI flags if not defined", func(t *testing.T) {
+		// reset CommandLine to avoid conflicts from other tests
+		flag.CommandLine = flag.NewFlagSet("runtime-flag-test-cmd", flag.ExitOnError)
+
+		opts := New([]string{})
+
+		assert.EqualValues(t, "localhost", opts.ControlPlaneTrustDomain)
+		assert.EqualValues(t, "default", opts.ControlPlaneNamespace)
+	})
+
+	t.Run("should use CLI flags if defined", func(t *testing.T) {
+		// reset CommandLine to avoid conflicts from other tests
+		flag.CommandLine = flag.NewFlagSet("runtime-flag-test-cmd", flag.ExitOnError)
+
+		opts := New([]string{"--control-plane-namespace", "flag-namespace", "--control-plane-trust-domain", "flag-trust-domain"})
+
+		assert.EqualValues(t, "flag-trust-domain", opts.ControlPlaneTrustDomain)
+		assert.EqualValues(t, "flag-namespace", opts.ControlPlaneNamespace)
+	})
+
+	t.Run("should use env vars if flags were not defined", func(t *testing.T) {
+		// reset CommandLine to avoid conflicts from other tests
+		flag.CommandLine = flag.NewFlagSet("runtime-flag-test-cmd", flag.ExitOnError)
+		t.Setenv("DAPR_CONTROLPLANE_NAMESPACE", "env-namespace")
+		t.Setenv("DAPR_CONTROLPLANE_TRUST_DOMAIN", "env-trust-domain")
+
+		opts := New([]string{})
+
+		assert.EqualValues(t, "env-trust-domain", opts.ControlPlaneTrustDomain)
+		assert.EqualValues(t, "env-namespace", opts.ControlPlaneNamespace)
+	})
+
+	t.Run("should priorities CLI flags if both flags and env vars are defined", func(t *testing.T) {
+		// reset CommandLine to avoid conflicts from other tests
+		flag.CommandLine = flag.NewFlagSet("runtime-flag-test-cmd", flag.ExitOnError)
+		t.Setenv("DAPR_CONTROLPLANE_NAMESPACE", "env-namespace")
+		t.Setenv("DAPR_CONTROLPLANE_TRUST_DOMAIN", "env-trust-domain")
+
+		opts := New([]string{"--control-plane-namespace", "flag-namespace", "--control-plane-trust-domain", "flag-trust-domain"})
+
+		assert.EqualValues(t, "flag-trust-domain", opts.ControlPlaneTrustDomain)
+		assert.EqualValues(t, "flag-namespace", opts.ControlPlaneNamespace)
+	})
+}

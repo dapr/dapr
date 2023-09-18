@@ -36,7 +36,6 @@ type SidecarConfig struct {
 
 	Mode                        injectorConsts.DaprMode `default:"kubernetes"`
 	Namespace                   string
-	TrustAnchors                string
 	CertChain                   string
 	CertKey                     string
 	MTLSEnabled                 bool
@@ -49,6 +48,9 @@ type SidecarConfig struct {
 	ReadOnlyRootFilesystem      bool
 	SidecarDropALLCapabilities  bool
 	DisableTokenVolume          bool
+	CurrentTrustAnchors         []byte
+	ControlPlaneNamespace       string
+	ControlPlaneTrustDomain     string
 	SidecarHTTPPort             int32 `default:"3500"`
 	SidecarAPIGRPCPort          int32 `default:"50001"`
 	SidecarInternalGRPCPort     int32 `default:"50002"`

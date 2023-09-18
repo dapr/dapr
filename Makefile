@@ -329,7 +329,6 @@ TEST_WITH_RACE=./pkg/acl/... \
 ./pkg/concurrency/... \
 ./pkg/config/... \
 ./pkg/cors/... \
-./pkg/credentials/... \
 ./pkg/diagnostics/... \
 ./pkg/encryption/... \
 ./pkg/expr/... \
