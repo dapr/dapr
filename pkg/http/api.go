@@ -291,12 +291,6 @@ func (a *api) constructActorEndpoints() []Endpoint {
 			Version:         apiVersionV1,
 			FastHTTPHandler: a.onGetActorReminder,
 		},
-		{
-			Methods:         []string{nethttp.MethodPatch},
-			Route:           "actors/{actorType}/{actorId}/reminders/{name}",
-			Version:         apiVersionV1,
-			FastHTTPHandler: a.onRenameActorReminder,
-		},
 	}
 }
 
@@ -1047,48 +1041,6 @@ func (a *api) onCreateActorReminder(reqCtx *fasthttp.RequestCtx) {
 		}
 
 		msg := NewErrorResponse("ERR_ACTOR_REMINDER_CREATE", fmt.Sprintf(messages.ErrActorReminderCreate, err))
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
-		log.Debug(msg)
-		return
-	}
-
-	fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
-}
-
-func (a *api) onRenameActorReminder(reqCtx *fasthttp.RequestCtx) {
-	if a.universal.Actors == nil {
-		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", messages.ErrActorRuntimeNotFound)
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
-		return
-	}
-
-	actorType := reqCtx.UserValue(actorTypeParam).(string)
-	actorID := reqCtx.UserValue(actorIDParam).(string)
-	name := reqCtx.UserValue(nameParam).(string)
-
-	var req actors.RenameReminderRequest
-	err := json.Unmarshal(reqCtx.PostBody(), &req)
-	if err != nil {
-		msg := messages.ErrMalformedRequest.WithFormat(err)
-		universalFastHTTPErrorResponder(reqCtx, msg)
-		log.Debug(msg)
-		return
-	}
-
-	req.OldName = name
-	req.ActorType = actorType
-	req.ActorID = actorID
-
-	err = a.universal.Actors.RenameReminder(reqCtx, &req)
-	if err != nil {
-		if errors.Is(err, actors.ErrReminderOpActorNotHosted) {
-			msg := messages.ErrActorReminderOpActorNotHosted
-			universalFastHTTPErrorResponder(reqCtx, msg)
-			log.Debug(msg)
-			return
-		}
-
-		msg := NewErrorResponse("ERR_ACTOR_REMINDER_RENAME", fmt.Sprintf(messages.ErrActorReminderRename, err))
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
 		log.Debug(msg)
 		return

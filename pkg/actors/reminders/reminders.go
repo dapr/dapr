@@ -265,56 +265,6 @@ func (r *reminders) DeleteReminder(ctx context.Context, req internal.DeleteRemin
 	return nil
 }
 
-func (r *reminders) RenameReminder(ctx context.Context, req *internal.RenameReminderRequest) error {
-	log.Warn("[DEPRECATION NOTICE] Currently RenameReminder renames by deleting-then-inserting-again. This implementation is not fault-tolerant, as a failed insert after deletion would result in no reminder")
-
-	store, err := r.stateStoreProviderFn()
-	if err != nil {
-		return err
-	}
-
-	// Wait for the evaluation chan lock
-	if !r.waitForEvaluationChan() {
-		return errors.New("error renaming reminder: timed out after 30s")
-	}
-	defer func() {
-		// Release the evaluation chan lock
-		<-r.evaluationChan
-	}()
-
-	oldReminder, exists := r.getReminder(req.OldName, req.ActorType, req.ActorID)
-	if !exists {
-		return nil
-	}
-
-	// delete old reminder
-	err = r.doDeleteReminder(ctx, req.ActorType, req.ActorID, req.OldName)
-	if err != nil {
-		return err
-	}
-
-	reminder := &internal.Reminder{
-		ActorID:        req.ActorID,
-		ActorType:      req.ActorType,
-		Name:           req.NewName,
-		Data:           oldReminder.Data,
-		Period:         oldReminder.Period,
-		RegisteredTime: oldReminder.RegisteredTime,
-		DueTime:        oldReminder.DueTime,
-		ExpirationTime: oldReminder.ExpirationTime,
-	}
-
-	stop := make(chan struct{})
-
-	err = r.storeReminder(ctx, store, reminder, stop)
-	if err != nil {
-		return err
-	}
-
-	// Start the new reminder
-	return r.startReminder(reminder, stop)
-}
-
 func (r *reminders) evaluateReminders(ctx context.Context) {
 	// Wait for the evaluation channel
 	select {
