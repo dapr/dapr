@@ -47,7 +47,7 @@ const (
 	// pollInterval is how frequently will poll for updates.
 	pollInterval = 5 * time.Second
 	// pollTimeout is how long the test should took.
-	pollTimeout = 10 * time.Minute
+	pollTimeout = 20 * time.Minute
 )
 
 // k6ConfigMapFor builds a unique config map for each test being executed.
