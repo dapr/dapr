@@ -1433,6 +1433,9 @@ func (a *DaprRuntime) cleanSockets() error {
 	if a.runtimeConfig.unixDomainSocket != "" {
 		for _, s := range []string{"http", "grpc"} {
 			err := os.Remove(fmt.Sprintf("%s/dapr-%s-%s.socket", a.runtimeConfig.unixDomainSocket, a.runtimeConfig.id, s))
+			if os.IsNotExist(err) {
+				continue
+			}
 			if err != nil {
 				errs = append(errs, fmt.Errorf("error removing socket file: %w", err))
 			}
