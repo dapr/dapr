@@ -26,7 +26,7 @@ metadata:
     {{- end }}
 {{ if .Values.tls.root.certPEM }}
 data:
-  ca.crt: {{ b64enc .Values.tls.root.certPEM | trim }}
+  ca.crt: {{- .Values.tls.root.certPEM | toYaml | indent 1}}
 {{end}}
 ---
 apiVersion: apps/v1
