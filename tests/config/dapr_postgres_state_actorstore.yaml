@@ -1,7 +1,7 @@
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
-  name: statestore-actors
+  name: statestore-actors1
 spec:
   type: state.postgres
   version: v1
@@ -11,7 +11,7 @@ spec:
     - name: table
       value: actortable
     - name: actorStateStore
-      value: true
+      value: false
 scopes:
 # actortestclient is deliberately omitted to ensure that `actor_features_test` works without a state store
 - actor1
