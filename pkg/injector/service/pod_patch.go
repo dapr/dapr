@@ -55,7 +55,7 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 	if err != nil {
 		return nil, err
 	}
-	daprdCert, daprdPrivateKey, err := i.signDaprdCertificate(ctx, pod.Namespace)
+	daprdCert, daprdPrivateKey, err := i.signDaprdCertificate(ctx, ar.Request.Namespace)
 	if err != nil {
 		return nil, err
 	}
