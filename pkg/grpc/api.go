@@ -1047,28 +1047,6 @@ func (a *api) UnregisterActorReminder(ctx context.Context, in *runtimev1pb.Unreg
 	return &emptypb.Empty{}, err
 }
 
-func (a *api) RenameActorReminder(ctx context.Context, in *runtimev1pb.RenameActorReminderRequest) (*emptypb.Empty, error) {
-	if a.UniversalAPI.Actors == nil {
-		err := status.Errorf(codes.Internal, messages.ErrActorRuntimeNotFound)
-		apiServerLogger.Debug(err)
-		return &emptypb.Empty{}, err
-	}
-
-	req := &actors.RenameReminderRequest{
-		OldName:   in.OldName,
-		ActorID:   in.ActorId,
-		ActorType: in.ActorType,
-		NewName:   in.NewName,
-	}
-
-	err := a.UniversalAPI.Actors.RenameReminder(ctx, req)
-	if err != nil && errors.Is(err, actors.ErrReminderOpActorNotHosted) {
-		apiServerLogger.Debug(messages.ErrActorReminderOpActorNotHosted)
-		return nil, messages.ErrActorReminderOpActorNotHosted
-	}
-	return &emptypb.Empty{}, err
-}
-
 func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRequest) (*runtimev1pb.GetActorStateResponse, error) {
 	if a.UniversalAPI.Actors == nil {
 		err := status.Errorf(codes.Internal, messages.ErrActorRuntimeNotFound)
