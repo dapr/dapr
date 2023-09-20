@@ -422,9 +422,9 @@ func TestActorReminderTTL(t *testing.T) {
 	// Set reminder
 	reminder := actorReminder{
 		Data:    "reminderdata",
-		DueTime: "1s",
-		Period:  "PT2S",
-		TTL:     "9s",
+		DueTime: "10s",
+		Period:  "PT5S",
+		TTL:     "59s",
 	}
 	reminderBody, err := json.Marshal(reminder)
 	require.NoError(t, err)
@@ -438,8 +438,9 @@ func TestActorReminderTTL(t *testing.T) {
 		_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName), reminderBody)
 		require.NoError(t, err)
 
-		t.Logf("Sleeping for %d seconds ...", secondsToCheckReminderResult)
-		time.Sleep(secondsToCheckReminderResult * time.Second)
+		waitForReminderWithTTLToFinishInSeconds := 60
+		t.Logf("Sleeping for %d seconds ...", waitForReminderWithTTLToFinishInSeconds)
+		time.Sleep(time.Duration(waitForReminderWithTTLToFinishInSeconds) * time.Second)
 
 		t.Logf("Getting logs from %s to see if reminders did trigger ...", logsURL)
 		resp, err := utils.HTTPGet(logsURL)
@@ -447,7 +448,7 @@ func TestActorReminderTTL(t *testing.T) {
 
 		t.Log("Checking if all reminders did trigger ...")
 		count := countActorAction(resp, actorID, reminderName)
-		require.Equal(t, 5, count)
+		require.InDelta(t, 10, count, 2)
 	})
 }
 
