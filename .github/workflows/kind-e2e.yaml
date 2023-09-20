@@ -53,7 +53,8 @@ jobs:
       DAPR_NAMESPACE: dapr-tests
       GOVER: "^1.19.2"
       # Container registry where to cache e2e test images
-      DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
+      # Disabling it for release-1.10 branch.
+      DAPR_CACHE_REGISTRY: "localhost:5000/dapr"
       PULL_POLICY: IfNotPresent
     strategy:
       fail-fast: false # Keep running if one leg fails.
