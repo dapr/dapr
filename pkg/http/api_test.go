@@ -1015,7 +1015,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		apisAndMethods := map[string][]string{
 			"v1.0/actors/fakeActorType/fakeActorID/state/key1":          {"GET"},
 			"v1.0/actors/fakeActorType/fakeActorID/state":               {"POST", "PUT"},
-			"v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1": {"POST", "PUT", "GET", "DELETE", "PATCH"},
+			"v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1": {"POST", "PUT", "GET", "DELETE"},
 			"v1.0/actors/fakeActorType/fakeActorID/method/method1":      {"POST", "PUT", "GET", "DELETE"},
 			"v1.0/actors/fakeActorType/fakeActorID/timers/timer1":       {"POST", "PUT", "DELETE"},
 		}
@@ -1023,12 +1023,14 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 		for apiPath, testMethods := range apisAndMethods {
 			for _, method := range testMethods {
-				// act
-				resp := fakeServer.DoRequest(method, apiPath, fakeData, nil)
+				t.Run(fmt.Sprintf("%s %s", method, apiPath), func(t *testing.T) {
+					// act
+					resp := fakeServer.DoRequest(method, apiPath, fakeData, nil)
 
-				// assert
-				assert.Equal(t, 500, resp.StatusCode, apiPath)
-				assert.Equal(t, "ERR_ACTOR_RUNTIME_NOT_FOUND", resp.ErrorBody["errorCode"])
+					// assert
+					assert.Equal(t, 500, resp.StatusCode, apiPath)
+					assert.Equal(t, "ERR_ACTOR_RUNTIME_NOT_FOUND", resp.ErrorBody["errorCode"])
+				})
 			}
 		}
 	})
@@ -1053,24 +1055,6 @@ func TestV1ActorEndpoints(t *testing.T) {
 				assert.Equal(t, 400, resp.StatusCode, apiPath)
 				assert.Equal(t, "ERR_MALFORMED_REQUEST", resp.ErrorBody["errorCode"])
 			}
-		}
-	})
-
-	t.Run("All PATCH APIs - 400 for invalid JSON", func(t *testing.T) {
-		testAPI.universal.Actors = new(actors.MockActors)
-		apiPaths := []string{
-			"v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1",
-		}
-
-		for _, apiPath := range apiPaths {
-			inputBodyBytes := invalidJSON
-
-			// act
-			resp := fakeServer.DoRequest(fasthttp.MethodPatch, apiPath, inputBodyBytes, nil)
-
-			// assert
-			assert.Equal(t, 400, resp.StatusCode, apiPath)
-			assert.Equal(t, "ERR_MALFORMED_REQUEST", resp.ErrorBody["errorCode"])
 		}
 	})
 
@@ -1394,78 +1378,6 @@ func TestV1ActorEndpoints(t *testing.T) {
 		assert.Equal(t, 403, resp.StatusCode)
 		assert.Equal(t, "ERR_ACTOR_REMINDER_NON_HOSTED", resp.ErrorBody["errorCode"])
 		mockActors.AssertNumberOfCalls(t, "CreateReminder", 1)
-	})
-
-	t.Run("Reminder Rename - 204 No Content", func(t *testing.T) {
-		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
-
-		reminderRequest := actors.RenameReminderRequest{
-			OldName:   "reminder1",
-			ActorType: "fakeActorType",
-			ActorID:   "fakeActorID",
-			NewName:   "reminder2",
-		}
-		mockActors := new(actors.MockActors)
-
-		mockActors.On("RenameReminder", &reminderRequest).Return(nil)
-
-		testAPI.universal.Actors = mockActors
-
-		// act
-		inputBodyBytes, err := json.Marshal(reminderRequest)
-
-		assert.NoError(t, err)
-		resp := fakeServer.DoRequest("PATCH", apiPath, inputBodyBytes, nil)
-
-		// assert
-		assert.Equal(t, 204, resp.StatusCode)
-		mockActors.AssertNumberOfCalls(t, "RenameReminder", 1)
-	})
-
-	t.Run("Reminder Rename - 500 when RenameReminderFails", func(t *testing.T) {
-		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
-
-		reminderRequest := actors.RenameReminderRequest{
-			OldName:   "reminder1",
-			ActorType: "fakeActorType",
-			ActorID:   "fakeActorID",
-			NewName:   "reminder2",
-		}
-		mockActors := new(actors.MockActors)
-
-		mockActors.On("RenameReminder", &reminderRequest).Return(errors.New("UPSTREAM_ERROR"))
-
-		testAPI.universal.Actors = mockActors
-
-		// act
-		inputBodyBytes, err := json.Marshal(reminderRequest)
-
-		assert.NoError(t, err)
-		resp := fakeServer.DoRequest("PATCH", apiPath, inputBodyBytes, nil)
-
-		// assert
-		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, "ERR_ACTOR_REMINDER_RENAME", resp.ErrorBody["errorCode"])
-		mockActors.AssertNumberOfCalls(t, "RenameReminder", 1)
-	})
-
-	t.Run("Reminder Rename - 403 when actor type is not hosted", func(t *testing.T) {
-		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
-
-		mockActors := new(actors.MockActors)
-		mockActors.
-			On("RenameReminder", mock.AnythingOfType("*internal.RenameReminderRequest")).
-			Return(actors.ErrReminderOpActorNotHosted)
-
-		testAPI.universal.Actors = mockActors
-
-		// act
-		resp := fakeServer.DoRequest("PATCH", apiPath, []byte("{}"), nil)
-
-		// assert
-		assert.Equal(t, 403, resp.StatusCode)
-		assert.Equal(t, "ERR_ACTOR_REMINDER_NON_HOSTED", resp.ErrorBody["errorCode"])
-		mockActors.AssertNumberOfCalls(t, "RenameReminder", 1)
 	})
 
 	t.Run("Reminder Delete - 204 No Content", func(t *testing.T) {
