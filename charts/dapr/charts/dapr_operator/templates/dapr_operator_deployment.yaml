@@ -75,6 +75,7 @@ spec:
           capabilities:
             add: ["SYS_PTRACE"]
   {{- else }}
+          readOnlyRootFilesystem: true
           capabilities:
             drop: ["ALL"]
   {{- end }}
@@ -110,6 +111,11 @@ spec:
         - name: dapr-identity-token
           mountPath: /var/run/secrets/dapr.io/sentrytoken
           readOnly: true
+      {{- end }}
+      {{- if eq .Values.debug.enabled false }}
+        # This is not needed in debug mode because the root FS is writable
+        - name: dapr-operator-tmp
+          mountPath: /tmp
       {{- end }}
       {{- with .Values.global.extraVolumeMounts.operator }}
         {{- toYaml . | nindent 8 }}
@@ -164,6 +170,10 @@ spec:
 {{- end }}
       serviceAccountName: dapr-operator
       volumes:
+        - name: dapr-operator-tmp
+          emptyDir:
+            sizeLimit: 2Mi
+            medium: Memory
         - name: dapr-trust-bundle
           configMap:
             name: dapr-trust-bundle
