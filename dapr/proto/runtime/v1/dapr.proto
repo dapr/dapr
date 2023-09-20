@@ -79,9 +79,6 @@ service Dapr {
   // Unregister an actor reminder.
   rpc UnregisterActorReminder(UnregisterActorReminderRequest) returns (google.protobuf.Empty) {}
 
-  // Rename an actor reminder.
-  rpc RenameActorReminder(RenameActorReminderRequest) returns (google.protobuf.Empty) {}
-
   // Gets the state for a specific actor.
   rpc GetActorState(GetActorStateRequest) returns (GetActorStateResponse) {}
 
@@ -542,14 +539,6 @@ message UnregisterActorReminderRequest {
   string actor_type = 1;
   string actor_id = 2;
   string name = 3;
-}
-
-// RenameActorReminderRequest is the message to rename an actor reminder.
-message RenameActorReminderRequest {
-  string actor_type = 1;
-  string actor_id = 2;
-  string old_name = 3;
-  string new_name = 4;
 }
 
 // GetActorStateRequest is the message to get key-value states from specific actor.

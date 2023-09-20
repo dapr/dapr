@@ -99,9 +99,6 @@ type Actors interface {
 	CreateReminder(ctx context.Context, req *CreateReminderRequest) error
 	// DeleteReminder deletes an actor reminder.
 	DeleteReminder(ctx context.Context, req *DeleteReminderRequest) error
-	// RenameReminder renames a reminder.
-	// TODO: remove in Dapr 1.13.
-	RenameReminder(ctx context.Context, req *RenameReminderRequest) error
 	// CreateTimer creates an actor timer.
 	CreateTimer(ctx context.Context, req *CreateTimerRequest) error
 	// DeleteTimer deletes an actor timer.
@@ -950,16 +947,6 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 	}
 
 	return a.actorsReminders.DeleteReminder(ctx, *req)
-}
-
-// Deprecated: Currently RenameReminder renames by deleting-then-inserting-again.
-// This implementation is not fault-tolerant, as a failed insert after deletion would result in no reminder
-func (a *actorsRuntime) RenameReminder(ctx context.Context, req *RenameReminderRequest) error {
-	if !a.actorsConfig.Config.HostedActorTypes.IsActorTypeHosted(req.ActorType) {
-		return ErrReminderOpActorNotHosted
-	}
-
-	return a.actorsReminders.RenameReminder(ctx, req)
 }
 
 func (a *actorsRuntime) GetReminder(ctx context.Context, req *GetReminderRequest) (*internal.Reminder, error) {

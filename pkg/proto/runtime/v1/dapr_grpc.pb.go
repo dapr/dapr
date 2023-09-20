@@ -59,8 +59,6 @@ type DaprClient interface {
 	RegisterActorReminder(ctx context.Context, in *RegisterActorReminderRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Unregister an actor reminder.
 	UnregisterActorReminder(ctx context.Context, in *UnregisterActorReminderRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	// Rename an actor reminder.
-	RenameActorReminder(ctx context.Context, in *RenameActorReminderRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Gets the state for a specific actor.
 	GetActorState(ctx context.Context, in *GetActorStateRequest, opts ...grpc.CallOption) (*GetActorStateResponse, error)
 	// Executes state transactions for a specified actor
@@ -292,15 +290,6 @@ func (c *daprClient) RegisterActorReminder(ctx context.Context, in *RegisterActo
 func (c *daprClient) UnregisterActorReminder(ctx context.Context, in *UnregisterActorReminderRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/UnregisterActorReminder", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *daprClient) RenameActorReminder(ctx context.Context, in *RenameActorReminderRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/RenameActorReminder", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -769,8 +758,6 @@ type DaprServer interface {
 	RegisterActorReminder(context.Context, *RegisterActorReminderRequest) (*emptypb.Empty, error)
 	// Unregister an actor reminder.
 	UnregisterActorReminder(context.Context, *UnregisterActorReminderRequest) (*emptypb.Empty, error)
-	// Rename an actor reminder.
-	RenameActorReminder(context.Context, *RenameActorReminderRequest) (*emptypb.Empty, error)
 	// Gets the state for a specific actor.
 	GetActorState(context.Context, *GetActorStateRequest) (*GetActorStateResponse, error)
 	// Executes state transactions for a specified actor
@@ -901,9 +888,6 @@ func (UnimplementedDaprServer) RegisterActorReminder(context.Context, *RegisterA
 }
 func (UnimplementedDaprServer) UnregisterActorReminder(context.Context, *UnregisterActorReminderRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UnregisterActorReminder not implemented")
-}
-func (UnimplementedDaprServer) RenameActorReminder(context.Context, *RenameActorReminderRequest) (*emptypb.Empty, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method RenameActorReminder not implemented")
 }
 func (UnimplementedDaprServer) GetActorState(context.Context, *GetActorStateRequest) (*GetActorStateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetActorState not implemented")
@@ -1330,24 +1314,6 @@ func _Dapr_UnregisterActorReminder_Handler(srv interface{}, ctx context.Context,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(DaprServer).UnregisterActorReminder(ctx, req.(*UnregisterActorReminderRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Dapr_RenameActorReminder_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(RenameActorReminderRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(DaprServer).RenameActorReminder(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/dapr.proto.runtime.v1.Dapr/RenameActorReminder",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaprServer).RenameActorReminder(ctx, req.(*RenameActorReminderRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -2114,10 +2080,6 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UnregisterActorReminder",
 			Handler:    _Dapr_UnregisterActorReminder_Handler,
-		},
-		{
-			MethodName: "RenameActorReminder",
-			Handler:    _Dapr_RenameActorReminder_Handler,
 		},
 		{
 			MethodName: "GetActorState",
