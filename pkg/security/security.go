@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"sync/atomic"
 	"time"
 
@@ -135,8 +136,11 @@ func New(ctx context.Context, opts Options) (Provider, error) {
 		return nil, fmt.Errorf("invalid control plane trust domain: %w", err)
 	}
 
+	// Always request certificates from Sentry if mTLS is enabled or running in
+	// Kubernetes. In Kubernetes, Daprd always communicates mTLS with the control
+	// plane.
 	var source *x509source
-	if opts.MTLSEnabled {
+	if opts.MTLSEnabled || os.Getenv("KUBERNETES_SERVICE_HOST") != "" {
 		if len(opts.TrustAnchors) > 0 && len(opts.TrustAnchorsFile) > 0 {
 			return nil, errors.New("trust anchors cannot be specified in both TrustAnchors and TrustAnchorsFile")
 		}
@@ -173,7 +177,8 @@ func (p *provider) Run(ctx context.Context) error {
 		return errors.New("security provider already started")
 	}
 
-	if !p.sec.mtls {
+	// If the security source has not been initialized, then just wait to exit.
+	if p.sec.source == nil {
 		close(p.readyCh)
 		<-ctx.Done()
 		return nil
@@ -200,7 +205,7 @@ func (p *provider) Run(ctx context.Context) error {
 		err = mngr.Add(
 			func(ctx context.Context) error {
 				log.Infof("Watching trust anchors file '%s' for changes", p.trustAnchorsFile)
-				return fswatcher.Watch(ctx, p.trustAnchorsFile, caEvent)
+				return fswatcher.Watch(ctx, filepath.Dir(p.trustAnchorsFile), caEvent)
 			},
 			func(ctx context.Context) error {
 				for {
@@ -243,7 +248,11 @@ func (p *provider) Handler(ctx context.Context) (Handler, error) {
 // GRPCDialOptionMTLS returns a gRPC dial option which instruments client
 // authentication using the current signed client certificate.
 func (s *security) GRPCDialOptionMTLS(appID spiffeid.ID) grpc.DialOption {
-	if !s.mtls {
+	// If source has not been initialized, then just return an insecure dial
+	// option. We don't check on `mtls` here as we still want to use mTLS with
+	// control plane peers when running in Kubernetes mode even if mTLS is
+	// disabled.
+	if s.source == nil {
 		return grpc.WithTransportCredentials(insecure.NewCredentials())
 	}
 	return grpc.WithTransportCredentials(credentials.NewTLS(
