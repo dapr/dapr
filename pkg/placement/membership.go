@@ -256,16 +256,10 @@ func (p *Service) processRaftStateCommand(ctx context.Context) {
 	// of raft apply command.
 	logApplyConcurrency := make(chan struct{}, raftApplyCommandMaxConcurrency)
 
-	processingTicker := p.clock.NewTicker(10 * time.Second)
-
 	for {
 		select {
 		case <-ctx.Done():
 			return
-
-		case <-processingTicker.C():
-			log.Debugf("Process Raft state command: nothing happened...")
-			continue
 
 		case op := <-p.membershipCh:
 			switch op.cmdType {
