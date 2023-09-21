@@ -36,6 +36,7 @@ import (
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	workflowsLoader "github.com/dapr/dapr/pkg/components/workflows"
 	"github.com/dapr/dapr/pkg/concurrency"
+	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/pkg/signals"
@@ -113,6 +114,7 @@ func main() {
 		TrustAnchors:            opts.TrustAnchors,
 		AppID:                   opts.AppID,
 		MTLSEnabled:             opts.EnableMTLS,
+		Mode:                    modes.DaprMode(opts.Mode),
 	})
 	if err != nil {
 		log.Fatal(err)
