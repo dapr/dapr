@@ -35,6 +35,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/security/legacy"
 	"github.com/dapr/kit/fswatcher"
 	"github.com/dapr/kit/logger"
@@ -107,6 +108,10 @@ type Options struct {
 	// key pair to. This is highly discouraged since it results in the private
 	// key being written to file.
 	WriteSVIDToDir *string
+
+	// Mode is the operation mode of this security instance (self-hosted or
+	// Kubernetes).
+	Mode modes.DaprMode
 }
 
 type provider struct {
@@ -140,7 +145,7 @@ func New(ctx context.Context, opts Options) (Provider, error) {
 	// Kubernetes. In Kubernetes, Daprd always communicates mTLS with the control
 	// plane.
 	var source *x509source
-	if opts.MTLSEnabled || os.Getenv("KUBERNETES_SERVICE_HOST") != "" {
+	if opts.MTLSEnabled || opts.Mode == modes.KubernetesMode {
 		if len(opts.TrustAnchors) > 0 && len(opts.TrustAnchorsFile) > 0 {
 			return nil, errors.New("trust anchors cannot be specified in both TrustAnchors and TrustAnchorsFile")
 		}
