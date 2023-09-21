@@ -33,7 +33,6 @@ import (
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	procgrpc "github.com/dapr/dapr/tests/integration/framework/process/grpc"
-	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	procplacement "github.com/dapr/dapr/tests/integration/framework/process/placement"
 	procsentry "github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -61,10 +60,10 @@ func (e *disable) Setup(t *testing.T) []framework.Option {
 	// Control plane services always serves with mTLS in kubernetes mode.
 	taFile := filepath.Join(t.TempDir(), "ca.pem")
 	require.NoError(t, os.WriteFile(taFile, bundle.TrustAnchors, 0o600))
-	e.placement = placement.New(t,
-		placement.WithEnableTLS(true),
-		placement.WithTrustAnchorsFile(taFile),
-		placement.WithSentryAddress("localhost:"+strconv.Itoa(e.sentry.Port())),
+	e.placement = procplacement.New(t,
+		procplacement.WithEnableTLS(true),
+		procplacement.WithTrustAnchorsFile(taFile),
+		procplacement.WithSentryAddress("localhost:"+strconv.Itoa(e.sentry.Port())),
 	)
 
 	e.operator = newOperator(t, bundle.TrustAnchors, "localhost:"+strconv.Itoa(e.sentry.Port()))

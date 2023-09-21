@@ -29,7 +29,6 @@ type Option func(*options)
 
 // GRPC is a GRPC server that can be used in integration tests.
 type GRPC struct {
-	server      *grpc.Server
 	registerFns []func(*grpc.Server)
 	serverOpts  []func(*testing.T, context.Context) grpc.ServerOption
 	listener    net.Listener
@@ -66,9 +65,9 @@ func (g *GRPC) Port() int {
 func (g *GRPC) Run(t *testing.T, ctx context.Context) {
 	ctx, cancel := context.WithCancel(ctx)
 
-	var opts []grpc.ServerOption
-	for _, opt := range g.serverOpts {
-		opts = append(opts, opt(t, ctx))
+	opts := make([]grpc.ServerOption, len(g.serverOpts))
+	for i, opt := range g.serverOpts {
+		opts[i] = opt(t, ctx)
 	}
 	server := grpc.NewServer(opts...)
 	for _, rfs := range g.registerFns {
