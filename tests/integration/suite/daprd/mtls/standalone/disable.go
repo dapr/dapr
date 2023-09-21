@@ -29,7 +29,6 @@ import (
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	procplacement "github.com/dapr/dapr/tests/integration/framework/process/placement"
 	procsentry "github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -51,9 +50,9 @@ func (e *disable) Setup(t *testing.T) []framework.Option {
 	e.sentry = procsentry.New(t)
 	e.trustAnchors = e.sentry.CABundle().TrustAnchors
 
-	e.placement = placement.New(t,
-		placement.WithEnableTLS(false),
-		placement.WithSentryAddress("localhost:"+strconv.Itoa(e.sentry.Port())),
+	e.placement = procplacement.New(t,
+		procplacement.WithEnableTLS(false),
+		procplacement.WithSentryAddress("localhost:"+strconv.Itoa(e.sentry.Port())),
 	)
 
 	e.daprd = procdaprd.New(t,
