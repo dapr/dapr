@@ -434,7 +434,7 @@ init-proto:
 ################################################################################
 # Target: gen-proto                                                            #
 ################################################################################
-GRPC_PROTOS:=common internals operator placement runtime sentry components
+GRPC_PROTOS:=$(shell ls dapr/proto)
 PROTO_PREFIX:=github.com/dapr/dapr
 
 # Generate archive files for each binary
