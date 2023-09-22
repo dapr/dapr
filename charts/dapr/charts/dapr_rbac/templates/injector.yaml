@@ -20,6 +20,10 @@ rules:
   - apiGroups: [""]
     resources: ["serviceaccounts"]
     verbs: ["get", "list"]
+  - apiGroups: ["admissionregistration.k8s.io"]
+    resources: ["mutatingwebhookconfigurations"]
+    verbs: ["patch"]
+    resourceNames: ["dapr-sidecar-injector"]
 {{- if not .Values.global.rbac.namespaced }}
   - apiGroups: ["dapr.io"]
     resources: ["configurations", "components"]

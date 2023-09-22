@@ -230,7 +230,7 @@ func (o *operator) Run(ctx context.Context) error {
 	caBundleCh := make(chan []byte)
 
 	runner := concurrency.NewRunnerManager(
-		o.secProvider.Start,
+		o.secProvider.Run,
 		func(ctx context.Context) error {
 			// Wait for webhook certificates to be ready before starting the manager.
 			_, rErr := o.secProvider.Handler(ctx)

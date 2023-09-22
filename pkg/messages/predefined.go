@@ -65,7 +65,6 @@ const (
 	ErrActorInstanceMissing      = "actor instance is missing"
 	ErrActorInvoke               = "error invoke actor method: %s"
 	ErrActorReminderCreate       = "error creating actor reminder: %s"
-	ErrActorReminderRename       = "error rename actor reminder: %s"
 	ErrActorReminderGet          = "error getting actor reminder: %s"
 	ErrActorReminderDelete       = "error deleting actor reminder: %s"
 	ErrActorTimerCreate          = "error creating actor timer: %s"

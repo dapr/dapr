@@ -329,7 +329,6 @@ TEST_WITH_RACE=./pkg/acl/... \
 ./pkg/concurrency/... \
 ./pkg/config/... \
 ./pkg/cors/... \
-./pkg/credentials/... \
 ./pkg/diagnostics/... \
 ./pkg/encryption/... \
 ./pkg/expr/... \
@@ -435,7 +434,7 @@ init-proto:
 ################################################################################
 # Target: gen-proto                                                            #
 ################################################################################
-GRPC_PROTOS:=common internals operator placement runtime sentry components
+GRPC_PROTOS:=$(shell ls dapr/proto)
 PROTO_PREFIX:=github.com/dapr/dapr
 
 # Generate archive files for each binary

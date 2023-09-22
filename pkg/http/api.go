@@ -79,6 +79,7 @@ type api struct {
 const (
 	apiVersionV1             = "v1.0"
 	apiVersionV1alpha1       = "v1.0-alpha1"
+	apiVersionV1beta1        = "v1.0-beta1"
 	methodParam              = "method"
 	wildcardParam            = "*"
 	topicParam               = "topic"
@@ -290,12 +291,6 @@ func (a *api) constructActorEndpoints() []Endpoint {
 			Version:         apiVersionV1,
 			FastHTTPHandler: a.onGetActorReminder,
 		},
-		{
-			Methods:         []string{nethttp.MethodPatch},
-			Route:           "actors/{actorType}/{actorId}/reminders/{name}",
-			Version:         apiVersionV1,
-			FastHTTPHandler: a.onRenameActorReminder,
-		},
 	}
 }
 
@@ -399,7 +394,7 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 		for k, v := range resp.Metadata {
 			reqCtx.Response.Header.Add(metadataPrefix+k, v)
 		}
-		fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, resp.Data))
+		fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, resp.Data, resp.Metadata))
 	}
 }
 
@@ -432,7 +427,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 	bulkResp := make([]BulkGetResponse, len(req.Keys))
 	if len(req.Keys) == 0 {
 		b, _ := json.Marshal(bulkResp)
-		fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, b))
+		fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, b, nil))
 		return
 	}
 
@@ -505,7 +500,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	b, _ := json.Marshal(bulkResp)
-	fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, b))
+	fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, b, nil))
 }
 
 func (a *api) getStateStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (state.Store, string, error) {
@@ -596,7 +591,7 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 	for k, v := range resp.Metadata {
 		reqCtx.Response.Header.Add(metadataPrefix+k, v)
 	}
-	fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, resp.Data))
+	fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, resp.Data, resp.Metadata))
 }
 
 func (a *api) getConfigurationStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (configuration.Store, string, error) {
@@ -737,7 +732,7 @@ func (a *api) onSubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
 	respBytes, _ := json.Marshal(&subscribeConfigurationResponse{
 		ID: subscribeID,
 	})
-	fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, respBytes))
+	fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, respBytes, nil))
 }
 
 func (a *api) onUnsubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
@@ -767,14 +762,14 @@ func (a *api) onUnsubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
 			Ok:      false,
 			Message: msg.Message,
 		})
-		fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusInternalServerError, errRespBytes))
+		fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusInternalServerError, errRespBytes, nil))
 		log.Debug(msg)
 		return
 	}
 	respBytes, _ := json.Marshal(&UnsubscribeConfigurationResponse{
 		Ok: true,
 	})
-	fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, respBytes))
+	fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, respBytes, nil))
 }
 
 func (a *api) onGetConfiguration(reqCtx *fasthttp.RequestCtx) {
@@ -821,7 +816,7 @@ func (a *api) onGetConfiguration(reqCtx *fasthttp.RequestCtx) {
 
 	respBytes, _ := json.Marshal(getResponse.Items)
 
-	fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, respBytes))
+	fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, respBytes, nil))
 }
 
 func extractEtag(reqCtx *fasthttp.RequestCtx) (hasEtag bool, etag string) {
@@ -1054,48 +1049,6 @@ func (a *api) onCreateActorReminder(reqCtx *fasthttp.RequestCtx) {
 	fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
 }
 
-func (a *api) onRenameActorReminder(reqCtx *fasthttp.RequestCtx) {
-	if a.universal.Actors == nil {
-		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", messages.ErrActorRuntimeNotFound)
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
-		return
-	}
-
-	actorType := reqCtx.UserValue(actorTypeParam).(string)
-	actorID := reqCtx.UserValue(actorIDParam).(string)
-	name := reqCtx.UserValue(nameParam).(string)
-
-	var req actors.RenameReminderRequest
-	err := json.Unmarshal(reqCtx.PostBody(), &req)
-	if err != nil {
-		msg := messages.ErrMalformedRequest.WithFormat(err)
-		universalFastHTTPErrorResponder(reqCtx, msg)
-		log.Debug(msg)
-		return
-	}
-
-	req.OldName = name
-	req.ActorType = actorType
-	req.ActorID = actorID
-
-	err = a.universal.Actors.RenameReminder(reqCtx, &req)
-	if err != nil {
-		if errors.Is(err, actors.ErrReminderOpActorNotHosted) {
-			msg := messages.ErrActorReminderOpActorNotHosted
-			universalFastHTTPErrorResponder(reqCtx, msg)
-			log.Debug(msg)
-			return
-		}
-
-		msg := NewErrorResponse("ERR_ACTOR_REMINDER_RENAME", fmt.Sprintf(messages.ErrActorReminderRename, err))
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
-		log.Debug(msg)
-		return
-	}
-
-	fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
-}
-
 func (a *api) onCreateActorTimer(reqCtx *fasthttp.RequestCtx) {
 	if a.universal.Actors == nil {
 		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", messages.ErrActorRuntimeNotFound)
@@ -1255,7 +1208,7 @@ func (a *api) onGetActorReminder(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, b))
+	fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, b, nil))
 }
 
 func (a *api) onDeleteActorTimer(reqCtx *fasthttp.RequestCtx) {
@@ -1401,7 +1354,7 @@ func (a *api) onGetActorState(reqCtx *fasthttp.RequestCtx) {
 			fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
 			return
 		}
-		fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, resp.Data))
+		fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, resp.Data, resp.Metadata))
 	}
 }
 
@@ -1673,7 +1626,7 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 
 		// Return the error along with the list of failed entries.
 		resData, _ := json.Marshal(bulkRes)
-		fasthttpRespond(reqCtx, fasthttpResponseWithJSON(status, resData), closeChildSpans)
+		fasthttpRespond(reqCtx, fasthttpResponseWithJSON(status, resData, nil), closeChildSpans)
 		return
 	}
 

@@ -26,10 +26,10 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/actors/internal"
-	daprCredentials "github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/placement/hashing"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/logger"
 )
 
@@ -91,12 +91,14 @@ type actorPlacement struct {
 	shutdown atomic.Bool
 	// shutdownConnLoop is the wait group to wait until all connection loop are done
 	shutdownConnLoop sync.WaitGroup
+	// closeCh is the channel to close the placement service.
+	closeCh chan struct{}
 }
 
 // ActorPlacementOpts contains options for NewActorPlacement.
 type ActorPlacementOpts struct {
 	ServerAddrs        []string // Address(es) for the Placement service
-	CertChain          *daprCredentials.CertChain
+	Security           security.Handler
 	AppID              string
 	RuntimeHostname    string
 	PodName            string
@@ -115,7 +117,7 @@ func NewActorPlacement(opts ActorPlacementOpts) internal.PlacementService {
 		podName:         opts.PodName,
 		serverAddr:      servers,
 
-		client: newPlacementClient(getGrpcOptsGetter(servers, opts.CertChain)),
+		client: newPlacementClient(getGrpcOptsGetter(servers, opts.Security)),
 
 		placementTableLock: &sync.RWMutex{},
 		placementTables:    &hashing.ConsistentHashTables{Entries: make(map[string]*hashing.Consistent)},
@@ -124,6 +126,7 @@ func NewActorPlacement(opts ActorPlacementOpts) internal.PlacementService {
 		tableIsBlocked:      &atomic.Bool{},
 		appHealthFn:         opts.AppHealthFn,
 		afterTableUpdateFn:  opts.AfterTableUpdateFn,
+		closeCh:             make(chan struct{}),
 	}
 }
 
@@ -149,6 +152,18 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 	if !p.establishStreamConn(ctx) {
 		return nil
 	}
+
+	ctx, cancel := context.WithCancel(ctx)
+	p.shutdownConnLoop.Add(1)
+	go func() {
+		defer p.shutdownConnLoop.Done()
+
+		select {
+		case <-ctx.Done():
+		case <-p.closeCh:
+		}
+		cancel()
+	}()
 
 	// establish connection loop, whenever a disconnect occurs it starts to run trying to connect to a new server.
 	p.shutdownConnLoop.Add(1)
@@ -252,6 +267,8 @@ func (p *actorPlacement) Close() error {
 	// CAS to avoid stop more than once.
 	if p.shutdown.CompareAndSwap(false, true) {
 		p.client.disconnect()
+		p.shutdown.Store(true)
+		close(p.closeCh)
 	}
 	p.shutdownConnLoop.Wait()
 	return nil
