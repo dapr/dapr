@@ -20,7 +20,6 @@ import (
 	"io"
 	"os"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -196,9 +195,8 @@ func (d *directMessaging) invokeWithRetry(
 				Disposer: resiliency.DisposerCloser[*invokev1.InvokeMethodResponse],
 			},
 		)
-		attempts := atomic.Int32{}
 		return policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
-			attempt := attempts.Add(1)
+			attempt := resiliency.GetAttempt(ctx)
 			rResp, teardown, rErr := fn(ctx, app.id, app.namespace, app.address, req)
 			if rErr == nil {
 				teardown(false)
