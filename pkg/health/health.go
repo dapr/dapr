@@ -17,6 +17,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -39,6 +40,7 @@ var healthLogger = logger.NewLogger("health")
 type Option func(o *healthCheckOptions)
 
 type healthCheckOptions struct {
+	address           string
 	initialDelay      time.Duration
 	requestTimeout    time.Duration
 	failureThreshold  int32
@@ -50,26 +52,36 @@ type healthCheckOptions struct {
 
 // StartEndpointHealthCheck starts a health check on the specified address with the given options.
 // It returns a channel that will emit true if the endpoint is healthy and false if the failure conditions
-// Have been met.
-func StartEndpointHealthCheck(ctx context.Context, endpointAddress string, opts ...Option) <-chan bool {
+// have been met.
+func StartEndpointHealthCheck(ctx context.Context, opts ...Option) <-chan bool {
 	options := &healthCheckOptions{}
 	applyDefaults(options)
-
 	for _, o := range opts {
 		o(options)
 	}
+
+	if options.address == "" {
+		panic("required option 'address' is missing")
+	}
+
 	signalChan := make(chan bool, 1)
 
 	ticker := options.clock.NewTicker(options.interval)
 	ch := ticker.C()
 
-	go func() {
-		failureCount := &atomic.Int32{}
+	client := options.client
+	if client == nil {
+		client = &http.Client{}
+	}
 
-		client := options.client
-		if client == nil {
-			client = &http.Client{}
-		}
+	go func() {
+		wg := sync.WaitGroup{}
+		defer func() {
+			wg.Wait()
+			close(signalChan)
+		}()
+
+		failureCount := &atomic.Int32{}
 
 		if options.initialDelay > 0 {
 			select {
@@ -81,12 +93,17 @@ func StartEndpointHealthCheck(ctx context.Context, endpointAddress string, opts 
 		for {
 			select {
 			case <-ch:
-				go doHealthCheck(client, endpointAddress, options.requestTimeout, signalChan, failureCount, options)
+				wg.Add(1)
+				go func() {
+					doHealthCheck(client, options.address, options.requestTimeout, signalChan, failureCount, options)
+					wg.Done()
+				}()
 			case <-ctx.Done():
 				return
 			}
 		}
 	}()
+
 	return signalChan
 }
 
@@ -123,6 +140,13 @@ func applyDefaults(o *healthCheckOptions) {
 	o.successStatusCode = successStatusCode
 	o.interval = interval
 	o.clock = &kclock.RealClock{}
+}
+
+// WithAddress sets the endpoint address for the health check.
+func WithAddress(address string) Option {
+	return func(o *healthCheckOptions) {
+		o.address = address
+	}
 }
 
 // WithInitialDelay sets the initial delay for the health check.

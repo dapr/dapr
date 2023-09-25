@@ -39,7 +39,8 @@ func TestHealthCheck(t *testing.T) {
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		ch := StartEndpointHealthCheck(ctx, "none",
+		ch := StartEndpointHealthCheck(ctx,
+			WithAddress("none"),
 			WithClock(clock),
 			WithInterval(time.Second),
 			WithFailureThreshold(2),
@@ -64,7 +65,8 @@ func TestHealthCheck(t *testing.T) {
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		ch := StartEndpointHealthCheck(ctx, "none",
+		ch := StartEndpointHealthCheck(ctx,
+			WithAddress("none"),
 			WithClock(clock),
 			WithInterval(time.Second),
 			WithFailureThreshold(1),
@@ -91,7 +93,8 @@ func TestHealthCheck(t *testing.T) {
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		ch := StartEndpointHealthCheck(ctx, "none",
+		ch := StartEndpointHealthCheck(ctx,
+			WithAddress("none"),
 			WithClock(clock),
 			WithInterval(time.Second*1),
 			WithFailureThreshold(2),
@@ -172,7 +175,8 @@ func TestResponses(t *testing.T) {
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		ch := StartEndpointHealthCheck(ctx, server.URL,
+		ch := StartEndpointHealthCheck(ctx,
+			WithAddress(server.URL),
 			WithClock(clock),
 			WithInitialDelay(0),
 			WithFailureThreshold(1),
@@ -196,7 +200,8 @@ func TestResponses(t *testing.T) {
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		ch := StartEndpointHealthCheck(ctx, server.URL,
+		ch := StartEndpointHealthCheck(ctx,
+			WithAddress(server.URL),
 			WithClock(clock),
 			WithInitialDelay(0),
 			WithFailureThreshold(1),
@@ -221,7 +226,8 @@ func TestResponses(t *testing.T) {
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		ch := StartEndpointHealthCheck(ctx, server.URL,
+		ch := StartEndpointHealthCheck(ctx,
+			WithAddress(server.URL),
 			WithClock(clock),
 			WithInitialDelay(0),
 			WithFailureThreshold(1),
@@ -246,7 +252,8 @@ func TestResponses(t *testing.T) {
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		ch := StartEndpointHealthCheck(ctx, server.URL,
+		ch := StartEndpointHealthCheck(ctx,
+			WithAddress(server.URL),
 			WithClock(clock),
 			WithInitialDelay(0),
 			WithFailureThreshold(1),
