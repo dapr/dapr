@@ -403,12 +403,20 @@ func (a *actorsRuntime) Call(ctx context.Context, req *invokev1.InvokeMethodRequ
 	}
 
 	actor := req.Actor()
-	lar, err := a.placement.LookupActor(ctx, internal.LookupActorRequest{
-		ActorType: actor.GetActorType(),
-		ActorID:   actor.GetActorId(),
-	})
-	if err != nil {
-		return nil, err
+	var lar internal.LookupActorResponse
+	if isInternalActor(actor.ActorType) {
+		lar = internal.LookupActorResponse{
+			Address: "localhost",
+			AppID:   a.actorsConfig.AppID,
+		}
+	} else {
+		lar, err = a.placement.LookupActor(ctx, internal.LookupActorRequest{
+			ActorType: actor.GetActorType(),
+			ActorID:   actor.GetActorId(),
+		})
+		if err != nil {
+			return nil, err
+		}
 	}
 	var resp *invokev1.InvokeMethodResponse
 	if a.isActorLocal(lar.Address, a.actorsConfig.Config.HostAddress, a.actorsConfig.Config.Port) {
