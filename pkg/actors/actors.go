@@ -447,9 +447,8 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 				Disposer: resiliency.DisposerCloser[*invokev1.InvokeMethodResponse],
 			},
 		)
-		attempts := atomic.Int32{}
 		return policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
-			attempt := attempts.Add(1)
+			attempt := resiliency.GetAttempt(ctx)
 			rResp, teardown, rErr := fn(ctx, targetAddress, targetID, req)
 			if rErr == nil {
 				teardown(false)
