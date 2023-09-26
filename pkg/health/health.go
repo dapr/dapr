@@ -81,14 +81,17 @@ func StartEndpointHealthCheck(ctx context.Context, opts ...Option) <-chan bool {
 			close(signalChan)
 		}()
 
-		failureCount := &atomic.Int32{}
-
 		if options.initialDelay > 0 {
 			select {
 			case <-options.clock.After(options.initialDelay):
 			case <-ctx.Done():
 			}
 		}
+
+		// Initial state is unhealthy until we validate it
+		failureCount := &atomic.Int32{}
+		failureCount.Store(options.failureThreshold)
+		signalChan <- false
 
 		for {
 			select {
@@ -110,6 +113,7 @@ func StartEndpointHealthCheck(ctx context.Context, opts ...Option) <-chan bool {
 func doHealthCheck(client *http.Client, endpointAddress string, timeout time.Duration, signalChan chan bool, failureCount *atomic.Int32, options *healthCheckOptions) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpointAddress, nil)
 	if err != nil {
 		healthLogger.Errorf("Failed to create healthcheck request: %v", err)
@@ -118,14 +122,25 @@ func doHealthCheck(client *http.Client, endpointAddress string, timeout time.Dur
 
 	res, err := client.Do(req)
 	if err != nil || res.StatusCode != options.successStatusCode {
-		if failureCount.Add(1) >= options.failureThreshold {
-			failureCount.Store(options.failureThreshold - 1)
+		fc := failureCount.Add(1)
+		// Check if we've overflown
+		if fc < 0 {
+			failureCount.Store(options.failureThreshold + 1)
+		} else if fc == options.failureThreshold {
+			// If we're here, we just passed the threshold right now
+			healthLogger.Warn("Actor healthchecks detected unhealthy app")
 			signalChan <- false
 		}
 	} else {
-		signalChan <- true
-		failureCount.Store(0)
+		// Reset the failure count
+		// If the previous value was >= threshold, we need to report a health change
+		prev := failureCount.Swap(0)
+		if prev >= options.failureThreshold {
+			healthLogger.Info("Actor healthchecks detected app entering healthy status")
+			signalChan <- true
+		}
 	}
+
 	if res != nil {
 		// Drain before closing
 		_, _ = io.Copy(io.Discard, res.Body)
