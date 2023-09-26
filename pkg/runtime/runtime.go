@@ -525,8 +525,6 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	}
 	log.Infof("Internal gRPC server is running on port %v", a.runtimeConfig.internalGRPCPort)
 
-	a.initDirectMessaging(a.nameResolver)
-
 	if a.daprHTTPAPI != nil {
 		a.daprHTTPAPI.MarkStatusAsOutboundReady()
 	}
@@ -563,6 +561,8 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		a.appHealthChanged(ctx, apphealth.AppStatusHealthy)
 	}
 
+	// Service invocation is a special case because it requires app's endpoint to be up.
+	a.initDirectMessaging(a.nameResolver)
 	return nil
 }
 
