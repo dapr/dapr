@@ -119,16 +119,12 @@ func NewActorPlacement(opts ActorPlacementOpts) internal.PlacementService {
 		podName:         opts.PodName,
 		serverAddr:      servers,
 
-		client: newPlacementClient(getGrpcOptsGetter(servers, opts.Security)),
+		client:          newPlacementClient(getGrpcOptsGetter(servers, opts.Security)),
+		placementTables: &hashing.ConsistentHashTables{Entries: make(map[string]*hashing.Consistent)},
 
-		placementTableLock: sync.RWMutex{},
-		placementTables:    &hashing.ConsistentHashTables{Entries: make(map[string]*hashing.Consistent)},
-
-		operationUpdateLock: sync.Mutex{},
-		tableIsBlocked:      atomic.Bool{},
-		appHealthFn:         opts.AppHealthFn,
-		afterTableUpdateFn:  opts.AfterTableUpdateFn,
-		closeCh:             make(chan struct{}),
+		appHealthFn:        opts.AppHealthFn,
+		afterTableUpdateFn: opts.AfterTableUpdateFn,
+		closeCh:            make(chan struct{}),
 	}
 }
 
