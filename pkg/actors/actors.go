@@ -466,15 +466,15 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 	return resp, err
 }
 
-func (a *actorsRuntime) getOrCreateActor(actorType, actorID string) *actor {
-	key := constructCompositeKey(actorType, actorID)
+func (a *actorsRuntime) getOrCreateActor(act *internalv1pb.Actor) *actor {
+	key := act.GetActorKey()
 
 	// This avoids allocating multiple actor allocations by calling newActor
 	// whenever actor is invoked. When storing actor key first, there is a chance to
 	// call newActor, but this is trivial.
 	val, ok := a.actorsTable.Load(key)
 	if !ok {
-		val, _ = a.actorsTable.LoadOrStore(key, newActor(actorType, actorID, a.actorsConfig.GetReentrancyForType(actorType).MaxStackDepth, a.clock))
+		val, _ = a.actorsTable.LoadOrStore(key, newActor(act.ActorType, act.ActorId, a.actorsConfig.GetReentrancyForType(act.ActorType).MaxStackDepth, a.clock))
 	}
 
 	return val.(*actor)
@@ -483,7 +483,7 @@ func (a *actorsRuntime) getOrCreateActor(actorType, actorID string) *actor {
 func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	actorTypeID := req.Actor()
 
-	act := a.getOrCreateActor(actorTypeID.GetActorType(), actorTypeID.GetActorId())
+	act := a.getOrCreateActor(actorTypeID)
 
 	// Reentrancy to determine how we lock.
 	var reentrancyID *string
@@ -735,7 +735,7 @@ func (a *actorsRuntime) executeStateStoreTransaction(ctx context.Context, store 
 }
 
 func (a *actorsRuntime) IsActorHosted(ctx context.Context, req *ActorHostedRequest) bool {
-	key := constructCompositeKey(req.ActorType, req.ActorID)
+	key := req.ActorKey()
 	policyDef := a.resiliency.BuiltInPolicy(resiliency.BuiltInActorNotFoundRetries)
 	policyRunner := resiliency.NewRunner[any](ctx, policyDef)
 	_, err := policyRunner(func(ctx context.Context) (any, error) {

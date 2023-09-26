@@ -38,6 +38,7 @@ import (
 	"github.com/dapr/dapr/pkg/health"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
+	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -968,14 +969,23 @@ func TestGetOrCreateActor(t *testing.T) {
 	defer testActorsRuntime.Close()
 
 	t.Run("create new key", func(t *testing.T) {
-		act := testActorsRuntime.getOrCreateActor(testActorType, "id-1")
+		act := testActorsRuntime.getOrCreateActor(&internalsv1pb.Actor{
+			ActorType: testActorType,
+			ActorId:   "id-1",
+		})
 		assert.NotNil(t, act)
 	})
 
 	t.Run("try to create the same key", func(t *testing.T) {
-		oldActor := testActorsRuntime.getOrCreateActor(testActorType, "id-2")
+		oldActor := testActorsRuntime.getOrCreateActor(&internalsv1pb.Actor{
+			ActorType: testActorType,
+			ActorId:   "id-2",
+		})
 		assert.NotNil(t, oldActor)
-		newActor := testActorsRuntime.getOrCreateActor(testActorType, "id-2")
+		newActor := testActorsRuntime.getOrCreateActor(&internalsv1pb.Actor{
+			ActorType: testActorType,
+			ActorId:   "id-2",
+		})
 		assert.Same(t, oldActor, newActor, "should not create new actor")
 	})
 }
