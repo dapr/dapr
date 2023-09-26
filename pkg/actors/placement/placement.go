@@ -151,7 +151,6 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 	p.serverIndex.Store(0)
 	p.shutdown.Store(false)
 	p.appHealthy.Store(true)
-	p.appHealthy.Store(true)
 
 	if !p.establishStreamConn(ctx) {
 		return nil

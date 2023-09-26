@@ -89,6 +89,7 @@ func StartEndpointHealthCheck(ctx context.Context, opts ...Option) <-chan bool {
 		}
 
 		// Initial state is unhealthy until we validate it
+		// This makes it so the channel will receive a healthy status on the first successful healthcheck
 		failureCount := &atomic.Int32{}
 		failureCount.Store(options.failureThreshold)
 		signalChan <- false
