@@ -103,14 +103,12 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 	req, err := http.NewRequest(http.MethodPost, daprdURL+"/v1.0/actors/myactortype/myactorid/method/foo", nil)
 	require.NoError(t, err)
 
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		resp, err := client.Do(req)
-		require.NoError(c, err)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		resp, rErr := client.Do(req)
+		require.NoError(c, rErr)
 		assert.NoError(c, resp.Body.Close())
 		assert.Equal(c, http.StatusOK, resp.StatusCode)
 	}, time.Second*10, time.Millisecond*100, "actor not ready")
-
-	require.False(t, t.Failed())
 
 	now := time.Now()
 
