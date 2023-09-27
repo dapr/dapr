@@ -37,33 +37,33 @@ import (
 )
 
 func init() {
-	suite.Register(new(sentry))
+	suite.Register(new(expiry))
 }
 
-// sentry tests Sentry with the insecure validator.
-type sentry struct {
+// expiry tests the certificate expiry metric.
+type expiry struct {
 	notGiven *procsentry.Sentry
 	given    *procsentry.Sentry
 }
 
-func (s *sentry) Setup(t *testing.T) []framework.Option {
+func (e *expiry) Setup(t *testing.T) []framework.Option {
 	rootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
 	onemonth := time.Hour * 24 * 30
 	bundle, err := ca.GenerateBundle(rootKey, "integration.test.dapr.io", time.Second*5, &onemonth)
 	require.NoError(t, err)
 
-	s.notGiven = procsentry.New(t, procsentry.WithDontGiveBundle(true))
-	s.given = procsentry.New(t, procsentry.WithCABundle(bundle))
+	e.notGiven = procsentry.New(t, procsentry.WithDontGiveBundle(true))
+	e.given = procsentry.New(t, procsentry.WithCABundle(bundle))
 
 	return []framework.Option{
-		framework.WithProcesses(s.notGiven, s.given),
+		framework.WithProcesses(e.notGiven, e.given),
 	}
 }
 
-func (s *sentry) Run(t *testing.T, ctx context.Context) {
-	s.notGiven.WaitUntilRunning(t, ctx)
-	s.given.WaitUntilRunning(t, ctx)
+func (e *expiry) Run(t *testing.T, ctx context.Context) {
+	e.notGiven.WaitUntilRunning(t, ctx)
+	e.given.WaitUntilRunning(t, ctx)
 
 	time.Sleep(time.Second)
 	client := util.HTTPClient(t)
@@ -104,6 +104,6 @@ func (s *sentry) Run(t *testing.T, ctx context.Context) {
 		})
 	}
 
-	testExpiry("certificate not given", s.notGiven, time.Now().Add(time.Hour*24*365))
-	testExpiry("certificate given", s.given, time.Now().Add(time.Hour*24*30))
+	testExpiry("certificate not given", e.notGiven, time.Now().Add(time.Hour*24*365))
+	testExpiry("certificate given", e.given, time.Now().Add(time.Hour*24*30))
 }
