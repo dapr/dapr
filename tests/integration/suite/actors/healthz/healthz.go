@@ -21,14 +21,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func init() {
@@ -101,14 +102,18 @@ func (i *initerror) Run(t *testing.T, ctx context.Context) {
 
 	req, err := http.NewRequestWithContext(rctx, http.MethodPost, daprdURL, nil)
 	require.NoError(t, err)
-	_, err = client.Do(req)
+	resp, err := client.Do(req)
 	assert.ErrorIs(t, err, context.DeadlineExceeded)
+	if resp != nil && resp.Body != nil {
+		assert.NoError(t, resp.Body.Close())
+	}
 
 	close(i.blockConfig)
 
 	req, err = http.NewRequestWithContext(ctx, http.MethodPost, daprdURL, nil)
 	require.NoError(t, err)
-	resp, err := client.Do(req)
+	resp, err = client.Do(req)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.NoError(t, resp.Body.Close())
 }
