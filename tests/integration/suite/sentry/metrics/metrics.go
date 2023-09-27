@@ -77,6 +77,7 @@ func (e *expiry) Run(t *testing.T, ctx context.Context) {
 
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
+		assert.NoError(t, resp.Body.Close())
 
 		t.Run(name+": test `dapr_sentry_issuercert_expiry_timestamp` metric is present with correct date", func(t *testing.T) {
 			for _, line := range bytes.Split(respBody, []byte("\n")) {
