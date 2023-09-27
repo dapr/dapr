@@ -68,7 +68,7 @@ func (s *sentry) Run(t *testing.T, ctx context.Context) {
 	time.Sleep(time.Second)
 	client := util.HTTPClient(t)
 
-	testExiry := func(name string, proc *procsentry.Sentry, expTime time.Time) {
+	testExpiry := func(name string, proc *procsentry.Sentry, expTime time.Time) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/metrics", proc.MetricsPort()), nil)
 		require.NoError(t, err)
 
@@ -104,6 +104,6 @@ func (s *sentry) Run(t *testing.T, ctx context.Context) {
 		})
 	}
 
-	testExiry("certificate not given", s.notGiven, time.Now().Add(time.Hour*24*365))
-	testExiry("certificate given", s.given, time.Now().Add(time.Hour*24*30))
+	testExpiry("certificate not given", s.notGiven, time.Now().Add(time.Hour*24*365))
+	testExpiry("certificate given", s.given, time.Now().Add(time.Hour*24*30))
 }
