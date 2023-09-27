@@ -39,16 +39,19 @@ func init() {
 // initerror tests that Daprd will block actor calls until actors have been
 // initialized.
 type initerror struct {
-	daprd       *daprd.Daprd
-	place       *placement.Placement
-	blockConfig chan struct{}
+	daprd        *daprd.Daprd
+	place        *placement.Placement
+	configCalled chan struct{}
+	blockConfig  chan struct{}
 }
 
 func (i *initerror) Setup(t *testing.T) []framework.Option {
+	i.configCalled = make(chan struct{})
 	i.blockConfig = make(chan struct{})
 
 	handler := http.NewServeMux()
 	handler.HandleFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
+		close(i.configCalled)
 		<-i.blockConfig
 		w.Write([]byte(`{"entities": ["myactortype"]}`))
 	})
@@ -95,6 +98,12 @@ func (i *initerror) Run(t *testing.T, ctx context.Context) {
 	}, time.Second*5, time.Millisecond*100)
 
 	client := util.HTTPClient(t)
+
+	select {
+	case <-i.configCalled:
+	case <-time.After(time.Second * 5):
+		t.Fatal("timed out waiting for config call")
+	}
 
 	rctx, cancel := context.WithTimeout(ctx, time.Second*2)
 	t.Cleanup(cancel)
