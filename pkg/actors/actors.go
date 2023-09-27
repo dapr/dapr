@@ -544,6 +544,11 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 		msg.HttpExtension.Verb = commonv1pb.HTTPExtension_PUT //nolint:nosnakecase
 	}
 
+	appCh := a.getAppChannel(act.actorType)
+	if appCh == nil {
+		return nil, fmt.Errorf("app channel for actor type %s is nil", act.actorType)
+	}
+
 	policyDef := a.resiliency.ActorPostLockPolicy(act.actorType, act.actorID)
 
 	// If the request can be retried, we need to enable replaying
@@ -557,7 +562,7 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 		},
 	)
 	resp, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
-		return a.getAppChannel(act.actorType).InvokeMethod(ctx, req, "")
+		return appCh.InvokeMethod(ctx, req, "")
 	})
 	if err != nil {
 		return nil, err
