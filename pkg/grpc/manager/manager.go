@@ -155,10 +155,7 @@ func (g *Manager) createLocalConnection(parentCtx context.Context, port int, ena
 		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	}
 	opts = append(opts, grpc.WithConnectParams(grpc.ConnectParams{
-		Backoff: backoff.Config{
-			MaxDelay:  5 * time.Second,
-			BaseDelay: 500 * time.Microsecond,
-		},
+		Backoff:           backoff.DefaultConfig,
 		MinConnectTimeout: 1 * time.Second,
 	}))
 
