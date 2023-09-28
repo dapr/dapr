@@ -347,6 +347,11 @@ func (p *actorPlacement) establishStreamConn(ctx context.Context) (established b
 			continue
 		}
 
+		// Do not retry to connect if context is canceled
+		if ctx.Err() != nil {
+			return false
+		}
+
 		serverAddr := p.serverAddr[p.serverIndex.Load()]
 
 		if !logFailureShown {
