@@ -135,6 +135,10 @@ type internalConfig struct {
 	metricsExporter              metrics.Exporter
 }
 
+func (i internalConfig) ActorsEnabled() bool {
+	return len(i.placementAddresses) > 0
+}
+
 // FromConfig creates a new Dapr Runtime from a configuration.
 func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 	intc, err := cfg.toInternal()

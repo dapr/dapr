@@ -99,7 +99,12 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 		"-issuer-key-filename=issuer.key",
 		"-metrics-port=" + strconv.Itoa(opts.metricsPort),
 		"-healthz-port=" + strconv.Itoa(opts.healthzPort),
-		"-issuer-credentials=" + tmpDir,
+	}
+
+	if opts.dontGiveBundle {
+		args = append(args, "-issuer-credentials="+t.TempDir())
+	} else {
+		args = append(args, "-issuer-credentials="+tmpDir)
 	}
 
 	return &Sentry{
