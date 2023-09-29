@@ -43,6 +43,7 @@ import (
 	subscriptionsapiV2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/health"
+	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/api"
 	operatorcache "github.com/dapr/dapr/pkg/operator/cache"
 	"github.com/dapr/dapr/pkg/operator/handlers"
@@ -112,6 +113,7 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 		// mTLS is always enabled for the operator.
 		MTLSEnabled:    true,
 		WriteSVIDToDir: &certDir,
+		Mode:           modes.KubernetesMode,
 	})
 	if err != nil {
 		return nil, err

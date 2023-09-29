@@ -14,6 +14,8 @@ limitations under the License.
 package daprd
 
 import (
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/httpserver"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/mtls"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/multipleconfigs"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/outbox"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/pubsub"
