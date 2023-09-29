@@ -24,7 +24,7 @@ import (
 // ErrReminderCanceled is returned when the reminder has been canceled.
 var ErrReminderCanceled = errors.New("reminder has been canceled")
 
-// ExecuteReminderFn is the type of the function invoked when a re,omder is to be executed.
+// ExecuteReminderFn is the type of the function invoked when a reminder is to be executed.
 // If this method returns false, the reminder is canceled by the actor.
 type ExecuteReminderFn func(reminder *Reminder) bool
 

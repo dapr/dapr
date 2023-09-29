@@ -18,7 +18,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -246,8 +245,6 @@ func (a *actorsRuntime) Init(ctx context.Context) error {
 		}
 	}
 
-	hostname := net.JoinHostPort(a.actorsConfig.Config.HostAddress, strconv.Itoa(a.actorsConfig.Config.Port))
-
 	a.actorsReminders.Init(ctx)
 	a.timers.Init(ctx)
 
@@ -256,7 +253,7 @@ func (a *actorsRuntime) Init(ctx context.Context) error {
 			ServerAddrs:     a.actorsConfig.Config.PlacementAddresses,
 			Security:        a.sec,
 			AppID:           a.actorsConfig.Config.AppID,
-			RuntimeHostname: hostname,
+			RuntimeHostname: a.actorsConfig.GetRuntimeHostname(),
 			PodName:         a.actorsConfig.Config.PodName,
 			ActorTypes:      a.actorsConfig.Config.HostedActorTypes.ListActorTypes(),
 			Resiliency:      a.resiliency,
@@ -758,7 +755,7 @@ func (a *actorsRuntime) executeStateStoreTransaction(ctx context.Context, store 
 }
 
 func (a *actorsRuntime) IsActorHosted(ctx context.Context, req *ActorHostedRequest) bool {
-	key := constructCompositeKey(req.ActorType, req.ActorID)
+	key := req.ActorKey()
 	policyDef := a.resiliency.BuiltInPolicy(resiliency.BuiltInActorNotFoundRetries)
 	policyRunner := resiliency.NewRunner[any](ctx, policyDef)
 	_, err := policyRunner(func(ctx context.Context) (any, error) {
