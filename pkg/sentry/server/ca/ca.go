@@ -16,6 +16,8 @@ package ca
 import (
 	"context"
 	"crypto"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
 	"time"
@@ -114,7 +116,12 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 	if !ok {
 		log.Info("Root and issuer certs not found: generating self signed CA")
 
-		bundle, err = GenerateBundle(conf.TrustDomain, conf.AllowedClockSkew)
+		rootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		if err != nil {
+			return nil, err
+		}
+
+		bundle, err = GenerateBundle(rootKey, conf.TrustDomain, conf.AllowedClockSkew, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -127,10 +134,10 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 
 		log.Info("Self-signed certs generated and persisted successfully")
 		monitoring.IssuerCertChanged()
-		monitoring.IssuerCertExpiry(bundle.IssChain[0].NotAfter)
 	} else {
 		log.Info("Root and issuer certs found: using existing certs")
 	}
+	monitoring.IssuerCertExpiry(bundle.IssChain[0].NotAfter)
 
 	return &ca{
 		bundle: bundle,
