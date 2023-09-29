@@ -22,6 +22,7 @@ namespace DaprDemoActor
     Task<int> IncrementAndGetAsync(int delta);
     Task<string> CarToJSONAsync(Car car);
     Task<Car> CarFromJSONAsync(string content);
+    Task ThrowException(string errorMessage);
   }
 
   public class Car

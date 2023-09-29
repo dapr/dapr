@@ -13,7 +13,6 @@ limitations under the License.
 
 namespace DaprDemoActor
 {
-  using Dapr.Actors.AspNetCore;
   using Microsoft.AspNetCore.Hosting;
   using Microsoft.Extensions.Hosting;
 
@@ -28,11 +27,7 @@ namespace DaprDemoActor
         Host.CreateDefaultBuilder(args)
             .ConfigureWebHostDefaults(webBuilder =>
             {
-              webBuilder.UseStartup<Startup>().UseActors(options =>
-              {
-                options.Actors.RegisterActor<CarActor>();
-              })
-              .UseUrls("http://*:3000");
+              webBuilder.UseStartup<Startup>().UseUrls("http://*:3000");
             });
   }
 }

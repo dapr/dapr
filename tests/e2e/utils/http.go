@@ -230,6 +230,27 @@ func HTTPPostWithStatus(url string, data []byte) ([]byte, int, error) {
 	return body, resp.StatusCode, err
 }
 
+// HTTPPostComplete is a helper to make POST request call to url and a complete response
+func HTTPPostComplete(url string, data []byte) ([]byte, int, http.Header, error) {
+	resp, err := httpClient.Post(SanitizeHTTPURL(url), "application/json", bytes.NewReader(data))
+	if err != nil {
+		// From the Do method for the client.Post
+		// An error is returned if caused by client policy (such as
+		// CheckRedirect), or failure to speak HTTP (such as a network
+		// connectivity problem). A non-2xx status code doesn't cause an
+		// error.
+		if resp != nil {
+			return nil, resp.StatusCode, nil, err
+		}
+		return nil, http.StatusInternalServerError, nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+
+	return body, resp.StatusCode, resp.Header.Clone(), err
+}
+
 // HTTPDelete calls a given URL with the HTTP DELETE method.
 func HTTPDelete(url string) ([]byte, error) {
 	req, err := http.NewRequest(http.MethodDelete, SanitizeHTTPURL(url), nil)

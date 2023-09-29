@@ -46,6 +46,7 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+// Invokes an actor and expects it to be successful.
 func testCallActorHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Processing %s test request for %s", r.Method, r.URL.RequestURI())
 
@@ -54,7 +55,7 @@ func testCallActorHandler(w http.ResponseWriter, r *http.Request) {
 	method := mux.Vars(r)["method"]
 	url := fmt.Sprintf(actorMethodURLFormat, actorType, id, method)
 
-	body, err := httpCall(r.Method, url, "fakereq", 200)
+	body, err := httpCallAndVerify(r.Method, url, "fakereq", 200)
 	if err != nil {
 		log.Printf("Could not read actor's test response: %s", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
@@ -77,40 +78,80 @@ func testCallActorHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(response.Data)
 }
 
-func httpCall(method string, url string, requestBody interface{}, expectedHTTPStatusCode int) ([]byte, error) {
+// Invokes an actor and forwards the response back (as a proxy).
+func testCallActorProxyHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Processing %s test request for %s", r.Method, r.URL.RequestURI())
+
+	actorType := mux.Vars(r)["actorType"]
+	id := mux.Vars(r)["id"]
+	method := mux.Vars(r)["method"]
+	url := fmt.Sprintf(actorMethodURLFormat, actorType, id, method)
+
+	reqBody, err := io.ReadAll(r.Body)
+	if err != nil {
+		log.Printf("Could not read request body: %s", err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	body, statusCode, headers, err := httpCall(r.Method, url, reqBody)
+	if err != nil {
+		log.Printf("Could not read actor's test response: %s", err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	for k, vals := range headers {
+		for _, v := range vals {
+			w.Header().Add(k, v)
+		}
+	}
+	w.WriteHeader(statusCode)
+	w.Write(body)
+}
+
+func httpCallAndVerify(method string, url string, requestBody interface{}, expectedHTTPStatusCode int) ([]byte, error) {
+	body, statusCode, _, err := httpCall(method, url, requestBody)
+	if err != nil {
+		return nil, err
+	}
+
+	if statusCode != expectedHTTPStatusCode {
+		t := fmt.Errorf("expected http status %d, received %d", expectedHTTPStatusCode, statusCode) //nolint:stylecheck
+		return nil, t
+	}
+
+	return body, nil
+}
+
+func httpCall(method string, url string, requestBody interface{}) ([]byte, int, http.Header, error) {
 	var body []byte
 	var err error
 
 	if requestBody != nil {
 		body, err = json.Marshal(requestBody)
 		if err != nil {
-			return nil, err
+			return nil, 0, nil, err
 		}
 	}
 
 	req, err := http.NewRequest(method, url, bytes.NewReader(body))
 	if err != nil {
-		return nil, err
+		return nil, 0, nil, err
 	}
 
 	res, err := httpClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, 0, nil, err
 	}
 
 	defer res.Body.Close()
-
-	if res.StatusCode != expectedHTTPStatusCode {
-		t := fmt.Errorf("Expected http status %d, received %d", expectedHTTPStatusCode, res.StatusCode) //nolint:stylecheck
-		return nil, t
-	}
-
 	resBody, err := io.ReadAll(res.Body)
 	if err != nil {
-		return nil, err
+		return nil, res.StatusCode, nil, err
 	}
 
-	return resBody, nil
+	return resBody, res.StatusCode, res.Header.Clone(), nil
 }
 
 // appRouter initializes restful api router
@@ -121,6 +162,7 @@ func appRouter() http.Handler {
 	router.Use(utils.LoggerMiddleware)
 
 	router.HandleFunc("/", indexHandler).Methods("GET")
+	router.HandleFunc("/proxy/{actorType}/{id}/method/{method}", testCallActorProxyHandler).Methods("POST", "DELETE")
 	router.HandleFunc("/test/{actorType}/{id}/method/{method}", testCallActorHandler).Methods("POST", "DELETE")
 	router.Use(mux.CORSMethodMiddleware(router))
 

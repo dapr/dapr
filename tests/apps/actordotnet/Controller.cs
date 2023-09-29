@@ -28,7 +28,7 @@ namespace DaprDemoActor
     public async Task<ActionResult<int>> IncrementAndGetAsync([FromRoute] string actorType, [FromRoute] string actorId)
     {
       var proxy = ActorProxy.Create(new ActorId(actorId), actorType);
-      return await proxy.InvokeAsync<int, int>("IncrementAndGetAsync", 1);
+      return await proxy.InvokeMethodAsync<int, int>("IncrementAndGetAsync", 1);
     }
 
     [HttpPost("carFromJSON/{actorType}/{actorId}")]
@@ -38,7 +38,7 @@ namespace DaprDemoActor
       {
         string json = await reader.ReadToEndAsync();
         var proxy = ActorProxy.Create(new ActorId(actorId), actorType);
-        return await proxy.InvokeAsync<string, Car>("CarFromJSONAsync", json);
+        return await proxy.InvokeMethodAsync<string, Car>("CarFromJSONAsync", json);
       }
     }
 
@@ -46,7 +46,7 @@ namespace DaprDemoActor
     public async Task<ActionResult<string>> CarToJSONAsync([FromRoute] string actorType, [FromRoute] string actorId, [FromBody] Car car)
     {
       var proxy = ActorProxy.Create(new ActorId(actorId), actorType);
-      return await proxy.InvokeAsync<Car, string>("CarToJSONAsync", car);
+      return await proxy.InvokeMethodAsync<Car, string>("CarToJSONAsync", car);
     }
   }
 }

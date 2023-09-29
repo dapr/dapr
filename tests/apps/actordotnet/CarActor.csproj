@@ -5,10 +5,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Dapr.AspNetCore" Version="1.0.0-rc02" />
-    <PackageReference Include="Dapr.Client" Version="1.0.0-rc02" />
-    <PackageReference Include="Dapr.Actors" Version="1.0.0-rc02" />
-    <PackageReference Include="Dapr.Actors.AspNetCore" Version="1.0.0-rc02" />
+    <PackageReference Include="Dapr.AspNetCore" Version="1.11.0" />
+    <PackageReference Include="Dapr.Client" Version="1.11.0" />
+    <PackageReference Include="Dapr.Actors" Version="1.11.0" />
+    <PackageReference Include="Dapr.Actors.AspNetCore" Version="1.11.0" />
   </ItemGroup>
 
 </Project>

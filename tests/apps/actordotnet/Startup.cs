@@ -32,6 +32,10 @@ namespace DaprDemoActor
     {
       services.AddRouting();
       services.AddControllers();
+      services.AddActors(options =>
+      {
+          options.Actors.RegisterActor<CarActor>();
+      });
     }
 
     public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
@@ -50,6 +54,7 @@ namespace DaprDemoActor
       app.UseEndpoints(endpoints =>
       {
         endpoints.MapControllers();
+        endpoints.MapActorsHandlers();
       });
     }
   }

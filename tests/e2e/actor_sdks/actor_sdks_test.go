@@ -18,7 +18,9 @@ package actor_sdks_e2e
 
 import (
 	"fmt"
+	"log"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -33,6 +35,8 @@ import (
 const (
 	appName         = "actorinvocationapp" // App name in Dapr.
 	numHealthChecks = 60                   // Number of get calls before starting tests.
+
+	actorInvokeURLFormat = "%s/proxy/%s/%s/%s/%s" // URL to invoke a Dapr's actor method in test app.
 )
 
 var (
@@ -74,6 +78,18 @@ func TestMain(m *testing.M) {
 			AppMemoryLimit:   "200Mi",
 			AppMemoryRequest: "100Mi",
 		},
+		{
+			AppName:        "actortestclient",
+			DaprEnabled:    true,
+			ImageName:      "e2e-actorclientapp",
+			Replicas:       1,
+			IngressEnabled: true,
+			MetricsEnabled: true,
+			DaprCPULimit:   "2.0",
+			DaprCPURequest: "0.1",
+			AppCPULimit:    "2.0",
+			AppCPURequest:  "0.1",
+		},
 	}
 
 	if utils.TestTargetOS() != "windows" {
@@ -105,6 +121,46 @@ func TestMain(m *testing.M) {
 
 	tr = runner.NewTestRunner(appName, apps, nil, nil)
 	os.Exit(tr.Start(m))
+}
+
+func TestActorInvocationToSDK(t *testing.T) {
+	// This initial probe makes the test wait a little bit longer when needed,
+	// making this test less flaky due to delays in the deployment.
+	for _, appSpec := range apps {
+		app := appSpec.AppName
+		externalURL := tr.Platform.AcquireAppExternalURL(app)
+		healthCheckApp(t, externalURL, numHealthChecks)
+	}
+
+	actorTypes := []string{"DotNetCarActor"}
+	externalURL := tr.Platform.AcquireAppExternalURL("actortestclient")
+	require.NotEmpty(t, externalURL, "external URL must not be empty!")
+
+	// This initial probe makes the test wait a little bit longer when needed,
+	// making this test less flaky due to delays in the deployment.
+	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
+	require.NoError(t, err, "error while waiting for app actortestclient")
+
+	for _, actorType := range actorTypes {
+		t.Run("Actor remote invocation with exception on "+actorType, func(t *testing.T) {
+			actorID := uuid.NewString()
+			errorMessage := "random error message - " + uuid.NewString()
+
+			body, statusCode, headers, err := utils.HTTPPostComplete(
+				fmt.Sprintf(actorInvokeURLFormat, externalURL, actorType, actorID, "method", "throwException"), []byte(errorMessage))
+			log.Printf("SDK exception call statusCode: %v", statusCode)
+			log.Printf("SDK exception call res: %v", string(body))
+			log.Printf("SDK exception call err: %s", err)
+			if err != nil {
+				log.Printf("failed to invoke method testmethod. Error='%v' Response='%s'", err, string(body))
+			}
+
+			require.NoError(t, err, "failed to invoke actor method with SDK exception")
+			_, ok := headers["X-Daprerrorresponseheader"]
+			require.True(t, ok, "did not find X-Daprerrorresponseheader")
+			require.True(t, strings.Contains(string(body), errorMessage))
+		})
+	}
 }
 
 func TestActorInvocationCrossSDKs(t *testing.T) {
@@ -186,6 +242,11 @@ func TestActorInvocationCrossSDKs(t *testing.T) {
 
 	for _, appSpec := range apps {
 		app := appSpec.AppName
+		if app == "actortestclient" {
+			// This app does not use any SDK, so we skip it.
+			continue
+		}
+
 		t.Logf("Getting URL for app %s ...", app)
 		externalURL := tr.Platform.AcquireAppExternalURL(app)
 

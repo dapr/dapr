@@ -37,11 +37,18 @@ namespace DaprDemoActor
       string json = JsonSerializer.Serialize(car);
       return Task.FromResult(json);
     }
+
     public Task<Car> CarFromJSONAsync(string content)
     {
       System.Console.WriteLine(content);
       Car car = JsonSerializer.Deserialize<Car>(content);
       return Task.FromResult(car);
+    }
+
+    public Task ThrowException(string errorMessage)
+    {
+      System.Console.WriteLine("Will throw exception with message: " + errorMessage);
+      throw new System.ArgumentException(errorMessage);
     }
   }
 }
