@@ -56,7 +56,7 @@ func (f *fuzzgrpc) Setup(t *testing.T) []framework.Option {
 	}
 
 	srv := newGRPCServer(t, onInvoke)
-	f.daprd1 = procdaprd.New(t, procdaprd.WithAppProtocol("grpc"), procdaprd.WithAppPort(srv.Port()))
+	f.daprd1 = procdaprd.New(t, procdaprd.WithAppProtocol("grpc"), procdaprd.WithAppPort(srv.Port(t)))
 	f.daprd2 = procdaprd.New(t)
 
 	f.methods = make([]string, numTests)

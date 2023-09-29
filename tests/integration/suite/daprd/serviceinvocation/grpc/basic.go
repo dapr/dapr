@@ -85,8 +85,8 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 
 	srv1 := newGRPCServer(t, onInvoke)
 	srv2 := newGRPCServer(t, onInvoke)
-	b.daprd1 = procdaprd.New(t, procdaprd.WithAppProtocol("grpc"), procdaprd.WithAppPort(srv1.Port()))
-	b.daprd2 = procdaprd.New(t, procdaprd.WithAppProtocol("grpc"), procdaprd.WithAppPort(srv2.Port()))
+	b.daprd1 = procdaprd.New(t, procdaprd.WithAppProtocol("grpc"), procdaprd.WithAppPort(srv1.Port(t)))
+	b.daprd2 = procdaprd.New(t, procdaprd.WithAppProtocol("grpc"), procdaprd.WithAppPort(srv2.Port(t)))
 
 	return []framework.Option{
 		framework.WithProcesses(srv1, srv2, b.daprd1, b.daprd2),
