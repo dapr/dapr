@@ -22,11 +22,12 @@ import (
 type options struct {
 	execOpts []exec.Option
 
-	bundle        ca.Bundle
-	port          int
-	healthzPort   int
-	metricsPort   int
-	configuration string
+	bundle         ca.Bundle
+	dontGiveBundle bool
+	port           int
+	healthzPort    int
+	metricsPort    int
+	configuration  string
 }
 
 // Option is a function that configures the process.
@@ -65,5 +66,11 @@ func WithCABundle(bundle ca.Bundle) Option {
 func WithConfiguration(config string) Option {
 	return func(o *options) {
 		o.configuration = config
+	}
+}
+
+func WithDontGiveBundle(dontGiveBundle bool) Option {
+	return func(o *options) {
+		o.dontGiveBundle = dontGiveBundle
 	}
 }

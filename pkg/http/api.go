@@ -37,6 +37,7 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
+	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/channel/http"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
@@ -59,7 +60,6 @@ type API interface {
 	PublicEndpoints() []Endpoint
 	MarkStatusAsReady()
 	MarkStatusAsOutboundReady()
-	SetActorRuntime(actor actors.ActorRuntime)
 }
 
 type api struct {
@@ -118,6 +118,8 @@ type APIOpts struct {
 
 // NewAPI returns a new API.
 func NewAPI(opts APIOpts) API {
+	opts.UniversalAPI.InitUniversalAPI()
+
 	api := &api{
 		universal:             opts.UniversalAPI,
 		channels:              opts.Channels,
@@ -1008,9 +1010,8 @@ func (a *api) getStateStoreName(reqCtx *fasthttp.RequestCtx) string {
 }
 
 func (a *api) onCreateActorReminder(reqCtx *fasthttp.RequestCtx) {
-	if a.universal.Actors == nil {
-		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", messages.ErrActorRuntimeNotFound)
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
+	if !a.actorReadinessCheckFastHTTP(reqCtx) {
+		// Response already sent
 		return
 	}
 
@@ -1050,10 +1051,8 @@ func (a *api) onCreateActorReminder(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onCreateActorTimer(reqCtx *fasthttp.RequestCtx) {
-	if a.universal.Actors == nil {
-		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", messages.ErrActorRuntimeNotFound)
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
-		log.Debug(msg)
+	if !a.actorReadinessCheckFastHTTP(reqCtx) {
+		// Response already sent
 		return
 	}
 
@@ -1085,10 +1084,8 @@ func (a *api) onCreateActorTimer(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onDeleteActorReminder(reqCtx *fasthttp.RequestCtx) {
-	if a.universal.Actors == nil {
-		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", messages.ErrActorRuntimeNotFound)
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
-		log.Debug(msg)
+	if !a.actorReadinessCheckFastHTTP(reqCtx) {
+		// Response already sent
 		return
 	}
 
@@ -1121,10 +1118,8 @@ func (a *api) onDeleteActorReminder(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onActorStateTransaction(reqCtx *fasthttp.RequestCtx) {
-	if a.universal.Actors == nil {
-		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", messages.ErrActorRuntimeNotFound)
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
-		log.Debug(msg)
+	if !a.actorReadinessCheckFastHTTP(reqCtx) {
+		// Response already sent
 		return
 	}
 
@@ -1170,10 +1165,8 @@ func (a *api) onActorStateTransaction(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onGetActorReminder(reqCtx *fasthttp.RequestCtx) {
-	if a.universal.Actors == nil {
-		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", messages.ErrActorRuntimeNotFound)
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
-		log.Debug(msg)
+	if !a.actorReadinessCheckFastHTTP(reqCtx) {
+		// Response already sent
 		return
 	}
 
@@ -1212,10 +1205,8 @@ func (a *api) onGetActorReminder(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onDeleteActorTimer(reqCtx *fasthttp.RequestCtx) {
-	if a.universal.Actors == nil {
-		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", messages.ErrActorRuntimeNotFound)
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
-		log.Debug(msg)
+	if !a.actorReadinessCheckFastHTTP(reqCtx) {
+		// Response already sent
 		return
 	}
 
@@ -1239,10 +1230,8 @@ func (a *api) onDeleteActorTimer(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
-	if a.universal.Actors == nil {
-		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", messages.ErrActorRuntimeNotFound)
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
-		log.Debug(msg)
+	if !a.actorReadinessCheckFastHTTP(reqCtx) {
+		// Response already sent
 		return
 	}
 
@@ -1280,10 +1269,28 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 	resp, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
 		return a.universal.Actors.Call(ctx, req)
 	})
-	if err != nil && !errors.Is(err, actors.ErrDaprResponseHeader) {
-		msg := NewErrorResponse("ERR_ACTOR_INVOKE_METHOD", fmt.Sprintf(messages.ErrActorInvoke, err))
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
-		log.Debug(msg)
+
+	if resp != nil {
+		defer resp.Close()
+	}
+
+	if err != nil {
+		actorErr, isActorError := actorerrors.As(err)
+		if !isActorError {
+			msg := NewErrorResponse("ERR_ACTOR_INVOKE_METHOD", fmt.Sprintf(messages.ErrActorInvoke, err))
+			fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
+			log.Debug(msg)
+			return
+		}
+
+		// Use Add to ensure headers are appended and not replaced
+		invokev1.InternalMetadataToHTTPHeader(reqCtx, actorErr.Headers(), reqCtx.Response.Header.Add)
+		reqCtx.Response.Header.SetContentType(actorErr.ContentType())
+
+		// Construct response.
+		statusCode := actorErr.StatusCode()
+		body := actorErr.Body()
+		fasthttpRespond(reqCtx, fasthttpResponseWith(statusCode, body))
 		return
 	}
 
@@ -1293,7 +1300,6 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 		log.Debug(msg)
 		return
 	}
-	defer resp.Close()
 
 	// Use Add to ensure headers are appended and not replaced
 	invokev1.InternalMetadataToHTTPHeader(reqCtx, resp.Headers(), reqCtx.Response.Header.Add)
@@ -1315,10 +1321,8 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) onGetActorState(reqCtx *fasthttp.RequestCtx) {
-	if a.universal.Actors == nil {
-		msg := NewErrorResponse("ERR_ACTOR_RUNTIME_NOT_FOUND", messages.ErrActorRuntimeNotFound)
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
-		log.Debug(msg)
+	if !a.actorReadinessCheckFastHTTP(reqCtx) {
+		// Response already sent
 		return
 	}
 
@@ -1925,6 +1929,20 @@ func (a *api) onQueryStateHandler() nethttp.HandlerFunc {
 	)
 }
 
-func (a *api) SetActorRuntime(actor actors.ActorRuntime) {
-	a.universal.Actors = actor
+// This function makes sure that the actor subsystem is ready.
+// If it returns false, handlers should return without performing any other action: responses will be sent to the client already.
+func (a *api) actorReadinessCheckFastHTTP(reqCtx *fasthttp.RequestCtx) bool {
+	// Note: with FastHTTP, reqCtx is tied to the context of the *server* and not the request.
+	// See: https://github.com/valyala/fasthttp/issues/1219#issuecomment-1041548933
+	// So, this is effectively a background context when using FastHTTP.
+	// There's no workaround besides migrating to the standard library's server.
+	a.universal.WaitForActorsReady(reqCtx)
+
+	if a.universal.Actors == nil {
+		universalFastHTTPErrorResponder(reqCtx, messages.ErrActorRuntimeNotFound)
+		log.Debug(messages.ErrActorRuntimeNotFound)
+		return false
+	}
+
+	return true
 }
