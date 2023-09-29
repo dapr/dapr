@@ -67,7 +67,7 @@ func (e *expiry) Run(t *testing.T, ctx context.Context) {
 
 	client := util.HTTPClient(t)
 
-	testExpiry := func(name string, proc *procsentry.Sentry, expTime time.Time) {
+	testExpiry := func(proc *procsentry.Sentry, expTime time.Time) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/metrics", proc.MetricsPort()), nil)
 		require.NoError(t, err)
 
@@ -78,32 +78,33 @@ func (e *expiry) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		assert.NoError(t, resp.Body.Close())
 
-		t.Run(name+": test `dapr_sentry_issuercert_expiry_timestamp` metric is present with correct date", func(t *testing.T) {
-			for _, line := range bytes.Split(respBody, []byte("\n")) {
-				if len(line) == 0 || line[0] == '#' {
-					continue
-				}
-
-				split := bytes.Split(line, []byte(" "))
-				if len(split) != 2 {
-					continue
-				}
-
-				if string(split[0]) != "dapr_sentry_issuercert_expiry_timestamp" {
-					continue
-				}
-
-				timestamp, err := strconv.ParseFloat(string(split[1]), 64)
-				require.NoError(t, err)
-
-				tsTime := time.Unix(int64(timestamp), 0)
-				assert.InDelta(t, expTime.Unix(), tsTime.Unix(), 20)
-				return
+		for _, line := range bytes.Split(respBody, []byte("\n")) {
+			if len(line) == 0 || line[0] == '#' {
+				continue
 			}
-			assert.Fail(t, "metric not found")
-		})
+
+			split := bytes.Split(line, []byte(" "))
+			if len(split) != 2 {
+				continue
+			}
+
+			if string(split[0]) != "dapr_sentry_issuercert_expiry_timestamp" {
+				continue
+			}
+
+			timestamp, err := strconv.ParseFloat(string(split[1]), 64)
+			require.NoError(t, err)
+
+			tsTime := time.Unix(int64(timestamp), 0)
+			assert.InDelta(t, expTime.Unix(), tsTime.Unix(), 20, "expected expiry time to be within 20 seconds of expected")
+			return
+		}
+		assert.Fail(t, "metric not found")
 	}
 
-	testExpiry("certificate not given", e.notGiven, time.Now().Add(time.Hour*24*365))
-	testExpiry("certificate given", e.given, time.Now().Add(time.Hour*24*30))
+	// Expect the expiry to be 1 year from now for sentry self generated certs.
+	testExpiry(e.notGiven, time.Now().Add(time.Hour*24*365))
+
+	// Expect the expiry to be 1 month from now for sentry certs given by the user.
+	testExpiry(e.given, time.Now().Add(time.Hour*24*30))
 }

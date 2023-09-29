@@ -106,11 +106,11 @@ func (h *healthz) Run(t *testing.T, ctx context.Context) {
 
 	client := util.HTTPClient(t)
 
-	rctx, cancel := context.WithTimeout(ctx, time.Second*2)
+	ctx, cancel := context.WithTimeout(ctx, time.Second)
 	t.Cleanup(cancel)
 	daprdURL := "http://localhost:" + strconv.Itoa(h.daprd.HTTPPort()) + "/v1.0/actors/myactortype/myactorid/method/foo"
 
-	req, err := http.NewRequestWithContext(rctx, http.MethodPost, daprdURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, daprdURL, nil)
 	require.NoError(t, err)
 	resp, err := client.Do(req)
 	assert.ErrorIs(t, err, context.DeadlineExceeded)

@@ -50,6 +50,8 @@ func (h *httpServer) Setup(t *testing.T) []framework.Option {
 }
 
 func (h *httpServer) Run(t *testing.T, ctx context.Context) {
+	h.proc.WaitUntilRunning(t, ctx)
+
 	h1Client := util.HTTPClient(t)
 	h2cClient := &http.Client{
 		Transport: &http2.Transport{
@@ -63,32 +65,8 @@ func (h *httpServer) Run(t *testing.T, ctx context.Context) {
 	}
 	t.Cleanup(h2cClient.CloseIdleConnections)
 
-	// Wait for daprd to be up
-	assert.Eventually(t, func() bool {
-		reqCtx, reqCancel := context.WithTimeout(ctx, 150*time.Millisecond)
-		defer reqCancel()
-		req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, fmt.Sprintf("http://localhost:%d/v1.0/healthz", h.proc.HTTPPort()), nil)
-		if err != nil {
-			return false
-		}
-
-		// Body is closed below but the linter isn't seeing that
-		//nolint:bodyclose
-		res, err := h1Client.Do(req)
-		if err != nil {
-			return false
-		}
-
-		err = closeBody(res.Body)
-		if err != nil {
-			return false
-		}
-
-		return res.StatusCode == http.StatusNoContent
-	}, time.Second*5, 200*time.Millisecond)
-
 	t.Run("test with HTTP1", func(t *testing.T) {
-		reqCtx, reqCancel := context.WithTimeout(ctx, 150*time.Millisecond)
+		reqCtx, reqCancel := context.WithTimeout(ctx, 100*time.Millisecond)
 		defer reqCancel()
 
 		req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, fmt.Sprintf("http://localhost:%d/v1.0/healthz", h.proc.HTTPPort()), nil)
@@ -105,7 +83,7 @@ func (h *httpServer) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("test with HTTP2 Cleartext with prior knowledge", func(t *testing.T) {
-		reqCtx, reqCancel := context.WithTimeout(ctx, 150*time.Millisecond)
+		reqCtx, reqCancel := context.WithTimeout(ctx, 100*time.Millisecond)
 		defer reqCancel()
 
 		req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, fmt.Sprintf("http://localhost:%d/v1.0/healthz", h.proc.HTTPPort()), nil)
@@ -137,10 +115,11 @@ func (h *httpServer) Run(t *testing.T, ctx context.Context) {
 		req.Header.Set("HTTP2-Settings", "AAMAAABkAARAAAAAAAIAAAAA")
 
 		// Body is closed below but the linter isn't seeing that
-		//nolint:bodyclose
 		res, err := h1Client.Do(req)
 		require.NoError(t, err)
-		defer closeBody(res.Body)
+		t.Cleanup(func() {
+			assert.NoError(t, res.Body.Close())
+		})
 
 		// This response should have arrived over HTTP/1
 		assert.Equal(t, 1, res.ProtoMajor)
