@@ -41,6 +41,7 @@ import (
 	"k8s.io/utils/clock"
 
 	"github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/modes"
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/dapr/dapr/pkg/security/legacy"
 	secpem "github.com/dapr/dapr/pkg/security/pem"
@@ -156,7 +157,7 @@ func newX509Source(ctx context.Context, clock clock.Clock, cptd spiffeid.TrustDo
 		appID:          opts.AppID,
 		appNamespace:   ns,
 		trustDomain:    trustDomain,
-		kubernetesMode: os.Getenv("KUBERNETES_SERVICE_HOST") != "",
+		kubernetesMode: opts.Mode == modes.KubernetesMode,
 		requestFn:      opts.OverrideCertRequestSource,
 		writeToDiskDir: opts.WriteSVIDToDir,
 		clock:          clock,

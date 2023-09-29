@@ -34,6 +34,7 @@ import (
 	"k8s.io/utils/clock"
 
 	"github.com/dapr/components-contrib/state"
+	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/internal"
 	"github.com/dapr/dapr/pkg/actors/placement"
 	"github.com/dapr/dapr/pkg/actors/reminders"
@@ -67,7 +68,6 @@ var (
 	log = logger.NewLogger("dapr.runtime.actor")
 
 	ErrIncompatibleStateStore        = errors.New("actor state store does not exist, or does not support transactions which are required to save state - please see https://docs.dapr.io/operations/components/setup-state-store/supported-state-stores/")
-	ErrDaprResponseHeader            = errors.New("error indicated via actor header response")
 	ErrReminderOpActorNotHosted      = errors.New("operations on actor reminders are only possible on hosted actor types")
 	ErrTransactionsTooManyOperations = errors.New("the transaction contains more operations than supported by the state store")
 	ErrReminderCanceled              = internal.ErrReminderCanceled
@@ -427,10 +427,10 @@ func (a *actorsRuntime) Call(ctx context.Context, req *invokev1.InvokeMethodRequ
 	}
 
 	if err != nil {
-		if errors.Is(err, ErrDaprResponseHeader) {
-			// We return the response to maintain the .NET Actor contract which communicates errors via the body, but resiliency needs the error to retry.
+		if resp != nil && actorerrors.Is(err) {
 			return resp, err
 		}
+
 		if resp != nil {
 			resp.Close()
 		}
@@ -571,7 +571,7 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 
 	// The .NET SDK signifies Actor failure via a header instead of a bad response.
 	if _, ok := resp.Headers()["X-Daprerrorresponseheader"]; ok {
-		return resp, ErrDaprResponseHeader
+		return resp, actorerrors.NewActorError(resp)
 	}
 
 	return resp, nil
@@ -614,7 +614,7 @@ func (a *actorsRuntime) callRemoteActor(
 
 	// Generated gRPC client eats the response when we send
 	if _, ok := invokeResponse.Headers()["X-Daprerrorresponseheader"]; ok {
-		return invokeResponse, teardown, ErrDaprResponseHeader
+		return invokeResponse, teardown, actorerrors.NewActorError(invokeResponse)
 	}
 
 	return invokeResponse, teardown, nil
