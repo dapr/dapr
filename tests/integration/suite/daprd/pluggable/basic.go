@@ -144,6 +144,21 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			require.NoError(t, err)
 			assert.WithinDuration(t, now.Add(time.Second), expireTime, time.Second)
 		}
+
+		_, err = client.DeleteState(ctx, &rtv1.DeleteStateRequest{
+			StoreName: "mystore",
+			Key:       "key1",
+		})
+		assert.NoError(t, err)
+		_, err = client.DeleteBulkState(ctx, &rtv1.DeleteBulkStateRequest{
+			StoreName: "mystore",
+			States: []*commonv1.StateItem{
+				{
+					Key: "key2",
+				},
+			},
+		})
+		assert.NoError(t, err)
 	}
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
