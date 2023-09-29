@@ -74,13 +74,13 @@ func TestWrite(t *testing.T) {
 		_ = assert.Len(t, logger.msgs, 1) && assert.Equal(t, "TestLogger/proc: test", logger.msgs[0])
 	})
 
-	t.Run("should return error on write when closed", func(t *testing.T) {
+	t.Run("should not return error on write when closed", func(t *testing.T) {
 		writer := New(&mockLogger{t: t}, "proc").(*stdwriter)
 		assert.NoError(t, writer.Close())
 
 		_, err := writer.Write([]byte("test\n"))
-		assert.ErrorIs(t, err, io.ErrClosedPipe)
-		assert.Empty(t, writer.buf.String())
+		assert.NoError(t, err, io.ErrClosedPipe)
+		assert.Equal(t, "test\n", writer.buf.String())
 	})
 }
 

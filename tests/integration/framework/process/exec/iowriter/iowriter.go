@@ -17,7 +17,6 @@ import (
 	"bytes"
 	"io"
 	"sync"
-	"sync/atomic"
 )
 
 // Logger is an interface that provides a Log method and a Name method. The Log
@@ -36,7 +35,6 @@ type stdwriter struct {
 	t        Logger
 	procName string
 	buf      bytes.Buffer
-	closed   atomic.Bool
 	lock     sync.Mutex
 }
 
@@ -56,17 +54,12 @@ func New(t Logger, procName string) io.WriteCloser {
 func (w *stdwriter) Write(inp []byte) (n int, err error) {
 	w.lock.Lock()
 	defer w.lock.Unlock()
-	if w.closed.Load() {
-		return 0, io.ErrClosedPipe
-	}
 	return w.buf.Write(inp)
 }
 
 // Close flushes the buffer and marks the writer as closed.
 func (w *stdwriter) Close() error {
-	if w.closed.CompareAndSwap(false, true) {
-		w.flush()
-	}
+	w.flush()
 	return nil
 }
 

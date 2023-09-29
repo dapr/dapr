@@ -112,6 +112,9 @@ func (e *exec) Cleanup(t *testing.T) {
 	e.lock.Lock()
 	defer e.lock.Unlock()
 
+	assert.NoError(t, e.stderrpipe.Close())
+	assert.NoError(t, e.stdoutpipe.Close())
+
 	kill.Kill(t, e.cmd)
 	e.checkExit(t)
 }
