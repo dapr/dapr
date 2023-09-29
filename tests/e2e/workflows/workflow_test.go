@@ -25,10 +25,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
-	"github.com/stretchr/testify/require"
 )
 
 var tr *runner.TestRunner
@@ -45,17 +47,18 @@ func TestMain(m *testing.M) {
 	if os.Getenv("WORKFLOW_APP_ENDPOINT") == "" {
 		testApps := []kube.AppDescription{
 			{
-				AppName:           "workflowsapp",
-				DaprEnabled:       true,
-				ImageName:         "e2e-workflowsapp",
-				Replicas:          1,
-				IngressEnabled:    true,
-				MetricsEnabled:    true,
-				DaprMemoryLimit:   "200Mi",
-				DaprMemoryRequest: "100Mi",
-				AppMemoryLimit:    "200Mi",
-				AppMemoryRequest:  "100Mi",
-				AppPort:           3000,
+				AppName:             "workflowsapp",
+				DaprEnabled:         true,
+				ImageName:           "e2e-workflowsapp",
+				Replicas:            1,
+				IngressEnabled:      true,
+				IngressPort:         3000,
+				DaprMemoryLimit:     "200Mi",
+				DaprMemoryRequest:   "100Mi",
+				AppMemoryLimit:      "200Mi",
+				AppMemoryRequest:    "100Mi",
+				AppPort:             -1,
+				DebugLoggingEnabled: true,
 			},
 		}
 
@@ -74,165 +77,125 @@ func getAppEndpoint() string {
 	return tr.Platform.AcquireAppExternalURL("workflowsapp")
 }
 
-func startTest(url string, instanceID string) error {
-	postString := fmt.Sprintf("%s/StartWorkflow/dapr/placeOrder/%s", url, instanceID)
-	// Start the workflow and check that it is running
-	resp, err := utils.HTTPPost(postString, nil)
-	if err != nil {
-		return fmt.Errorf("failure starting workflow: %w", err)
-	}
+func startTest(url string, instanceID string) func(t *testing.T) {
+	return func(t *testing.T) {
+		getString := fmt.Sprintf("%s/dapr/%s", url, instanceID)
 
-	getString := fmt.Sprintf("%s/dapr/%s", url, instanceID)
-	resp, err = utils.HTTPGet(getString)
-	if err != nil {
-		return fmt.Errorf("failure getting info on workflow: %w", err)
-	}
-	if string(resp) != "Running" {
-		return fmt.Errorf("expected workflow to be Running, actual workflow state is: %s", string(resp))
-	}
+		// Start the workflow and check that it is running
+		resp, err := utils.HTTPPost(fmt.Sprintf("%s/StartWorkflow/dapr/placeOrder/%s", url, instanceID), nil)
+		require.NoError(t, err, "failure starting workflow")
 
-	return nil
+		require.EventuallyWithT(t, func(t *assert.CollectT) {
+			resp, err = utils.HTTPGet(getString)
+			assert.NoError(t, err, "failure getting info on workflow")
+			assert.Equalf(t, "Running", string(resp), "expected workflow to be Running, actual workflow state is: %s", string(resp))
+		}, 5*time.Second, 100*time.Millisecond)
+	}
 }
 
-func pauseResumeTest(url string, instanceID string) error {
-	postString := fmt.Sprintf("%s/StartWorkflow/dapr/placeOrder/%s", url, instanceID)
-	// Start the workflow and check that it is running
-	resp, err := utils.HTTPPost(postString, nil)
-	if err != nil {
-		return fmt.Errorf("failure starting workflow: %w", err)
-	}
+func pauseResumeTest(url string, instanceID string) func(t *testing.T) {
+	return func(t *testing.T) {
+		getString := fmt.Sprintf("%s/dapr/%s", url, instanceID)
 
-	getString := fmt.Sprintf("%s/dapr/%s", url, instanceID)
-	resp, err = utils.HTTPGet(getString)
-	if err != nil {
-		return fmt.Errorf("failure getting info on started workflow: %w", err)
-	}
-	if string(resp) != "Running" {
-		return fmt.Errorf("expected workflow to be Running, actual workflow state is: %s", string(resp))
-	}
+		// Start the workflow and check that it is running
+		resp, err := utils.HTTPPost(fmt.Sprintf("%s/StartWorkflow/dapr/placeOrder/%s", url, instanceID), nil)
+		require.NoError(t, err, "failure starting workflow")
 
-	postString = fmt.Sprintf("%s/PauseWorkflow/dapr/%s", url, instanceID)
-	resp, err = utils.HTTPPost(postString, nil)
-	if err != nil {
-		return fmt.Errorf("failure pausing workflow: %w", err)
-	}
+		require.EventuallyWithT(t, func(t *assert.CollectT) {
+			resp, err = utils.HTTPGet(getString)
+			assert.NoError(t, err, "failure getting info on workflow")
+			assert.Equalf(t, "Running", string(resp), "expected workflow to be Running, actual workflow state is: %s", string(resp))
+		}, 5*time.Second, 100*time.Millisecond)
 
-	resp, err = utils.HTTPGet(getString)
-	if err != nil {
-		return fmt.Errorf("failure getting info on paused workflow: %w", err)
-	}
-	if string(resp) != "Suspended" {
-		return fmt.Errorf("expected workflow to be Suspended, actual workflow state is: %s", string(resp))
-	}
+		// Pause the workflow
+		resp, err = utils.HTTPPost(fmt.Sprintf("%s/PauseWorkflow/dapr/%s", url, instanceID), nil)
+		require.NoError(t, err, "failure pausing workflow")
 
-	// Resume the workflow
-	postString = fmt.Sprintf("%s/ResumeWorkflow/dapr/%s", url, instanceID)
-	resp, err = utils.HTTPPost(postString, nil)
-	if err != nil {
-		return fmt.Errorf("failure resuming workflow: %w", err)
-	}
+		require.EventuallyWithT(t, func(t *assert.CollectT) {
+			resp, err = utils.HTTPGet(getString)
+			assert.NoError(t, err, "failure getting info on workflow")
+			assert.Equalf(t, "Suspended", string(resp), "expected workflow to be Suspended, actual workflow state is: %s", string(resp))
+		}, 5*time.Second, 100*time.Millisecond)
 
-	resp, err = utils.HTTPGet(getString)
-	if err != nil {
-		return fmt.Errorf("failure getting info on resumed workflow: %w", err)
-	}
-	if string(resp) != "Running" {
-		return fmt.Errorf("expected resumed workflow to be Running, actual workflow state is: %s", string(resp))
-	}
+		// Resume the workflow
+		resp, err = utils.HTTPPost(fmt.Sprintf("%s/ResumeWorkflow/dapr/%s", url, instanceID), nil)
+		require.NoError(t, err, "failure resuming workflow")
 
-	return nil
+		require.EventuallyWithT(t, func(t *assert.CollectT) {
+			resp, err = utils.HTTPGet(getString)
+			assert.NoError(t, err, "failure getting info on workflow")
+			assert.Equalf(t, "Running", string(resp), "expected workflow to be Running, actual workflow state is: %s", string(resp))
+		}, 5*time.Second, 100*time.Millisecond)
+	}
 }
 
-func raiseEventTest(url string, instanceID string) error {
-	postString := fmt.Sprintf("%s/StartWorkflow/dapr/placeOrder/%s", url, instanceID)
-	// Start the workflow and check that it is running
-	resp, err := utils.HTTPPost(postString, nil)
-	if err != nil {
-		return fmt.Errorf("failure starting workflow: %w", err)
-	}
+func raiseEventTest(url string, instanceID string) func(t *testing.T) {
+	return func(t *testing.T) {
+		getString := fmt.Sprintf("%s/dapr/%s", url, instanceID)
 
-	getString := fmt.Sprintf("%s/dapr/%s", url, instanceID)
-	resp, err = utils.HTTPGet(getString)
-	if err != nil {
-		return fmt.Errorf("failure getting info on workflow: %w", err)
-	}
-	if string(resp) != "Running" {
-		return fmt.Errorf("expected workflow to be Running, actual workflow state is: %s", string(resp))
-	}
+		// Start the workflow and check that it is running
+		resp, err := utils.HTTPPost(fmt.Sprintf("%s/StartWorkflow/dapr/placeOrder/%s", url, instanceID), nil)
+		require.NoError(t, err, "failure starting workflow")
 
-	// Raise an event on the workflow
-	postString = fmt.Sprintf("%s/RaiseWorkflowEvent/dapr/%s/ChangePurchaseItem/1", url, instanceID)
-	resp, err = utils.HTTPPost(postString, nil)
+		require.EventuallyWithT(t, func(t *assert.CollectT) {
+			resp, err = utils.HTTPGet(getString)
+			assert.NoError(t, err, "failure getting info on workflow")
+			assert.Equalf(t, "Running", string(resp), "expected workflow to be Running, actual workflow state is: %s", string(resp))
+		}, 5*time.Second, 100*time.Millisecond)
 
-	time.Sleep(1 * time.Second)
+		// Raise an event on the workflow
+		resp, err = utils.HTTPPost(fmt.Sprintf("%s/RaiseWorkflowEvent/dapr/%s/ChangePurchaseItem/1", url, instanceID), nil)
+		require.NoError(t, err, "failure raising event on workflow")
 
-	resp, err = utils.HTTPGet(getString)
-	if err != nil {
-		return fmt.Errorf("failure getting info on workflow: %w", err)
+		require.EventuallyWithT(t, func(t *assert.CollectT) {
+			resp, err = utils.HTTPGet(getString)
+			assert.NoError(t, err, "failure getting info on workflow")
+			assert.Equalf(t, "Completed", string(resp), "expected workflow to be Completed, actual workflow state is: %s", string(resp))
+		}, 5*time.Second, 100*time.Millisecond)
 	}
-	if string(resp) != "Completed" {
-		return fmt.Errorf("expected workflow to be Completed, actual workflow state is: %s", string(resp))
-	}
-
-	return nil
 }
 
 // Functions for each test case
-func purgeTest(url string, instanceID string) error {
-	// Start the workflow and check that it is running
-	postString := fmt.Sprintf("%s/StartWorkflow/dapr/placeOrder/%s", url, instanceID)
-	resp, err := utils.HTTPPost(postString, nil)
-	if err != nil {
-		return fmt.Errorf("failure starting workflow: %w", err)
-	}
+func purgeTest(url string, instanceID string) func(t *testing.T) {
+	return func(t *testing.T) {
+		getString := fmt.Sprintf("%s/dapr/%s", url, instanceID)
 
-	getString := fmt.Sprintf("%s/dapr/%s", url, instanceID)
-	resp, err = utils.HTTPGet(getString)
-	if err != nil {
-		return fmt.Errorf("failure getting info on newly started workflow: %w", err)
-	}
-	if string(resp) != "Running" {
-		return fmt.Errorf("expected workflow to be Running, actual workflow state is: %s", string(resp))
-	}
+		// Start the workflow and check that it is running
+		resp, err := utils.HTTPPost(fmt.Sprintf("%s/StartWorkflow/dapr/placeOrder/%s", url, instanceID), nil)
+		require.NoError(t, err, "failure starting workflow")
 
-	// Terminate the workflow
-	postString = fmt.Sprintf("%s/TerminateWorkflow/dapr/%s", url, instanceID)
-	resp, err = utils.HTTPPost(postString, nil)
-	if err != nil {
-		return fmt.Errorf("failure terminating workflow: %w", err)
-	}
-	resp, err = utils.HTTPGet(getString)
-	if err != nil {
-		return fmt.Errorf("failure getting info on terminated workflow: %w", err)
-	}
-	if string(resp) != "Terminated" {
-		return fmt.Errorf("expected workflow to be Terminated, actual workflow state is: %s", string(resp))
-	}
+		require.EventuallyWithT(t, func(t *assert.CollectT) {
+			resp, err = utils.HTTPGet(getString)
+			assert.NoError(t, err, "failure getting info on workflow")
+			assert.Equalf(t, "Running", string(resp), "expected workflow to be Running, actual workflow state is: %s", string(resp))
+		}, 5*time.Second, 100*time.Millisecond)
 
-	// Purge the workflow
-	postString = fmt.Sprintf("%s/PurgeWorkflow/dapr/%s", url, instanceID)
-	resp, err = utils.HTTPPost(postString, nil)
-	if err != nil {
-		return fmt.Errorf("failure purging workflow: %w", err)
-	}
+		// Terminate the workflow
+		resp, err = utils.HTTPPost(fmt.Sprintf("%s/TerminateWorkflow/dapr/%s", url, instanceID), nil)
+		require.NoError(t, err, "failure terminating workflow")
 
-	// Startup a new workflow with the same instanceID to ensure that it is available
-	postString = fmt.Sprintf("%s/StartWorkflow/dapr/placeOrder/%s", url, instanceID)
-	resp, err = utils.HTTPPost(postString, nil)
-	if err != nil {
-		return fmt.Errorf("failure starting workflow: %w", err)
-	}
+		require.EventuallyWithT(t, func(t *assert.CollectT) {
+			resp, err = utils.HTTPGet(getString)
+			assert.NoError(t, err, "failure getting info on workflow")
+			assert.Equalf(t, "Terminated", string(resp), "expected workflow to be Terminated, actual workflow state is: %s", string(resp))
+		}, 5*time.Second, 100*time.Millisecond)
 
-	instanceID = string(resp)
-	resp, err = utils.HTTPGet(getString)
-	if err != nil {
-		return fmt.Errorf("failure getting info on newly started workflow: %w", err)
-	}
-	if string(resp) != "Running" {
-		return fmt.Errorf("expected workflow to be Running, actual workflow state is: %s", string(resp))
-	}
+		// Purge the workflow
+		resp, err = utils.HTTPPost(fmt.Sprintf("%s/PurgeWorkflow/dapr/%s", url, instanceID), nil)
+		require.NoError(t, err, "failure purging workflow")
 
-	return nil
+		// Start a new workflow with the same instanceID to ensure that it is available
+		resp, err = utils.HTTPPost(fmt.Sprintf("%s/StartWorkflow/dapr/placeOrder/%s", url, instanceID), nil)
+		require.NoError(t, err, "failure starting workflow")
+
+		require.Equal(t, instanceID, string(resp))
+
+		require.EventuallyWithT(t, func(t *assert.CollectT) {
+			resp, err = utils.HTTPGet(getString)
+			assert.NoError(t, err, "failure getting info on workflow")
+			assert.Equalf(t, "Running", string(resp), "expected workflow to be Running, actual workflow state is: %s", string(resp))
+		}, 5*time.Second, 100*time.Millisecond)
+	}
 }
 
 func TestWorkflow(t *testing.T) {
@@ -250,19 +213,8 @@ func TestWorkflow(t *testing.T) {
 	suffix := hex.EncodeToString(suffixBytes)
 
 	// Run tests
-	t.Run("Start", func(t *testing.T) {
-		require.NoError(t, startTest(externalURL, "start-"+suffix))
-	})
-
-	t.Run("Pause and Resume", func(t *testing.T) {
-		require.NoError(t, pauseResumeTest(externalURL, "pause-"+suffix))
-	})
-
-	t.Run("Purge", func(t *testing.T) {
-		require.NoError(t, purgeTest(externalURL, "purge-"+suffix))
-	})
-
-	t.Run("Raise event", func(t *testing.T) {
-		require.NoError(t, raiseEventTest(externalURL, "raiseEvent-"+suffix))
-	})
+	t.Run("Start", startTest(externalURL, "start-"+suffix))
+	t.Run("Pause and Resume", pauseResumeTest(externalURL, "pause-"+suffix))
+	t.Run("Purge", purgeTest(externalURL, "purge-"+suffix))
+	t.Run("Raise event", raiseEventTest(externalURL, "raiseEvent-"+suffix))
 }
