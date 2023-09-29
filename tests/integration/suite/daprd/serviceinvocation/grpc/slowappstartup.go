@@ -87,8 +87,6 @@ func (s *slowappstartup) Setup(t *testing.T) []framework.Option {
 func (s *slowappstartup) Run(t *testing.T, ctx context.Context) {
 	s.daprd.WaitUntilRunning(t, ctx)
 	s.daprd.WaitUntilAppHealth(t, ctx)
-	// Waiting is needed to compensate delay from runtime's app health check and the test's app health check.
-	time.Sleep(3 * time.Second)
 
 	conn, err := grpc.DialContext(ctx, "localhost:"+strconv.Itoa(s.daprd.GRPCPort()),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -100,14 +98,21 @@ func (s *slowappstartup) Run(t *testing.T, ctx context.Context) {
 	req, err := anypb.New(new(testpb.PingRequest))
 	require.NoError(t, err)
 
-	resp, err := client.InvokeService(ctx, &rtv1.InvokeServiceRequest{
-		Id: s.daprd.AppID(),
-		Message: &commonv1.InvokeRequest{
-			Method: "Ping",
-			Data:   req,
-		},
-	})
-	require.NoError(t, err)
 	var pingResp testpb.PingResponse
+	var resp *commonv1.InvokeResponse
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		resp, err = client.InvokeService(ctx, &rtv1.InvokeServiceRequest{
+			Id: s.daprd.AppID(),
+			Message: &commonv1.InvokeRequest{
+				Method: "Ping",
+				Data:   req,
+			},
+		})
+		// This function must only return that the app is not in a healthy state
+		// until the app is in a healthy state.
+		if !assert.NoError(c, err) {
+			require.ErrorContains(c, err, "app is not in a healthy state")
+		}
+	}, time.Second*3, time.Millisecond*100)
 	assert.NoError(t, resp.Data.UnmarshalTo(&pingResp))
 }
