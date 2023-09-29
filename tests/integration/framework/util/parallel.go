@@ -38,20 +38,27 @@ func NewParallel(t *testing.T, fns ...func(*assert.CollectT)) *ParallelTest {
 		defer p.lock.Unlock()
 		t.Helper()
 
+		jobs := make(chan func(), len(p.fns))
+		for i := 0; i < 5; i++ {
+			go p.worker(jobs)
+		}
+
 		ch := make(chan any)
 		collects := make([]*assert.CollectT, len(p.fns))
-		for i, fn := range p.fns {
+
+		for i := range p.fns {
+			i := i
 			collects[i] = new(assert.CollectT)
-			go func(i int, fn func(*assert.CollectT)) {
+			jobs <- func() {
 				defer func() {
 					if r := recover(); r != nil {
 						ch <- r
 					}
 				}()
 
-				fn(collects[i])
+				p.fns[i](collects[i])
 				ch <- nil
-			}(i, fn)
+			}
 		}
 
 		for i := 0; i < len(p.fns); i++ {
@@ -61,9 +68,17 @@ func NewParallel(t *testing.T, fns ...func(*assert.CollectT)) *ParallelTest {
 		for _, collect := range collects {
 			collect.Copy(t)
 		}
+
+		close(jobs)
 	})
 
 	return p
+}
+
+func (p *ParallelTest) worker(jobs <-chan func()) {
+	for j := range jobs {
+		j()
+	}
 }
 
 // Add adds a test function to be executed in parallel.
