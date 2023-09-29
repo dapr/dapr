@@ -69,7 +69,8 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		publicPort:       fp.Port(t, 3),
 		metricsPort:      fp.Port(t, 4),
 		profilePort:      fp.Port(t, 5),
-		logLevel:         "debug",
+		logLevel:         "info",
+		mode:             "standalone",
 	}
 
 	for _, fopt := range fopts {
@@ -95,6 +96,8 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		"--enable-app-health-check=" + strconv.FormatBool(opts.appHealthCheck),
 		"--app-health-probe-interval=" + strconv.Itoa(opts.appHealthProbeInterval),
 		"--app-health-threshold=" + strconv.Itoa(opts.appHealthProbeThreshold),
+		"--mode=" + opts.mode,
+		"--enable-mtls=" + strconv.FormatBool(opts.enableMTLS),
 	}
 	if opts.appHealthCheckPath != "" {
 		args = append(args, "--app-health-check-path="+opts.appHealthCheckPath)
@@ -109,6 +112,15 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	}
 	if len(opts.placementAddresses) > 0 {
 		args = append(args, "--placement-host-address="+strings.Join(opts.placementAddresses, ","))
+	}
+	if len(opts.sentryAddress) > 0 {
+		args = append(args, "--sentry-address="+opts.sentryAddress)
+	}
+	if len(opts.controlPlaneAddress) > 0 {
+		args = append(args, "--control-plane-address="+opts.controlPlaneAddress)
+	}
+	if opts.disableK8sSecretStore != nil {
+		args = append(args, "--disable-builtin-k8s-secret-store="+strconv.FormatBool(*opts.disableK8sSecretStore))
 	}
 
 	return &Daprd{
