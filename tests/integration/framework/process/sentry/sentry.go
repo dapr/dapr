@@ -91,7 +91,7 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 	}
 
 	args := []string{
-		"-log-level=" + "debug",
+		"-log-level=" + "info",
 		"-port=" + strconv.Itoa(opts.port),
 		"-config=" + configPath,
 		"-issuer-ca-filename=ca.crt",
