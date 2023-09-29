@@ -24,19 +24,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/util"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 type Daprd struct {
@@ -202,9 +202,6 @@ func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
 			in := emptypb.Empty{}
 			out := runtimev1pb.HealthCheckResponse{}
 			err = conn.Invoke(ctx, "/dapr.proto.runtime.v1.AppCallbackHealthCheck/HealthCheck", &in, &out)
-			if err != nil {
-				fmt.Println(err)
-			}
 			return err == nil
 		}, time.Second*10, 100*time.Millisecond)
 	}
