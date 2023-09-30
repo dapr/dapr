@@ -51,7 +51,7 @@ func main() {
 	if err := utils.SetEnvVariables(map[string]string{
 		utils.KubeConfigVar: opts.Kubeconfig,
 	}); err != nil {
-		log.Fatalf("Error set env failed:  %s", err.Error())
+		log.Fatalf("Error setting env: %v", err)
 	}
 
 	if err := monitoring.InitMetrics(); err != nil {
@@ -93,14 +93,14 @@ func main() {
 
 				case <-issuerEvent:
 					monitoring.IssuerCertChanged()
-					log.Debug("received issuer credentials changed signal")
+					log.Debug("Received issuer credentials changed signal")
 
 					select {
 					case <-ctx.Done():
 						return nil
 					// Batch all signals within 2s of each other
 					case <-time.After(2 * time.Second):
-						log.Warn("issuer credentials changed; reloading")
+						log.Warn("Issuer credentials changed; reloading")
 						return nil
 					}
 				}

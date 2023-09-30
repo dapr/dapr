@@ -1002,9 +1002,10 @@ func TestV1ActorEndpoints(t *testing.T) {
 		universal: &universalapi.UniversalAPI{
 			AppID:      "fakeAPI",
 			Resiliency: rc,
-			Actors:     nil,
 		},
 	}
+	testAPI.universal.InitUniversalAPI()
+	testAPI.universal.SetActorsInitDone()
 
 	fakeServer.StartServer(testAPI.constructActorEndpoints(), nil)
 
@@ -1822,7 +1823,6 @@ func TestV1MetadataEndpoint(t *testing.T) {
 	testAPI := &api{
 		universal: &universalapi.UniversalAPI{
 			AppID:     "xyz",
-			Actors:    mockActors,
 			CompStore: compStore,
 			GetComponentsCapabilitiesFn: func() map[string][]string {
 				capsMap := make(map[string][]string)
@@ -1837,6 +1837,9 @@ func TestV1MetadataEndpoint(t *testing.T) {
 			GlobalConfig:        &config.Configuration{},
 		},
 	}
+	testAPI.universal.InitUniversalAPI()
+	testAPI.universal.SetActorRuntime(mockActors)
+	testAPI.universal.SetActorsInitDone()
 
 	fakeServer.StartServer(testAPI.constructMetadataEndpoints(), nil)
 
@@ -1889,11 +1892,12 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 	testAPI := &api{
 		universal: &universalapi.UniversalAPI{
-			Actors:     nil,
 			Resiliency: resiliency.New(nil),
 		},
 		tracingSpec: spec,
 	}
+	testAPI.universal.InitUniversalAPI()
+	testAPI.universal.SetActorsInitDone()
 
 	fakeServer.StartServer(testAPI.constructActorEndpoints(), &fakeHTTPServerOptions{
 		spec: &spec,

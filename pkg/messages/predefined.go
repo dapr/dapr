@@ -61,7 +61,6 @@ const (
 	ErrAppUnhealthy = "app is not in a healthy state"
 
 	// Actor.
-	ErrActorRuntimeNotFound      = "the state store is not configured to use the actor runtime. Have you set the - name: actorStateStore value: \"true\" in your state store component file?"
 	ErrActorInstanceMissing      = "actor instance is missing"
 	ErrActorInvoke               = "error invoke actor method: %s"
 	ErrActorReminderCreate       = "error creating actor reminder: %s"
@@ -124,6 +123,7 @@ var (
 
 	// Actor.
 	ErrActorReminderOpActorNotHosted = APIError{"operations on actor reminders are only possible on hosted actor types", "ERR_ACTOR_REMINDER_NON_HOSTED", http.StatusForbidden, grpcCodes.PermissionDenied}
+	ErrActorRuntimeNotFound          = APIError{`the state store is not configured to use the actor runtime. Have you set the - name: actorStateStore value: "true" in your state store component file?`, "ERR_ACTOR_RUNTIME_NOT_FOUND", http.StatusInternalServerError, grpcCodes.Internal}
 
 	// Lock.
 	ErrLockStoresNotConfigured    = APIError{"lock store is not configured", "ERR_LOCK_STORE_NOT_CONFIGURED", http.StatusInternalServerError, grpcCodes.FailedPrecondition}

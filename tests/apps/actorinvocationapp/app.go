@@ -20,6 +20,8 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
+	"strings"
 
 	"github.com/dapr/dapr/tests/apps/utils"
 
@@ -30,6 +32,8 @@ const (
 	appPort            = 3000
 	daprBaseURL        = "http://localhost:3500//v1.0" // Using "//" to repro regression.
 	daprActorMethodURL = daprBaseURL + "/actors/%s/%s/method/%s"
+	defaultActorTypes  = "actor1,actor2"        // Actor type must be unique per test app.
+	actorTypesEnvName  = "TEST_APP_ACTOR_TYPES" // To set to change actor types.
 
 	actorIdleTimeout        = "5s" // Short idle timeout.
 	actorScanInterval       = "1s" // Smaller then actorIdleTimeout and short for speedy test.
@@ -54,11 +58,20 @@ type daprConfig struct {
 }
 
 var daprConfigResponse = daprConfig{
-	[]string{"actor1", "actor2"},
+	getActorTypes(),
 	actorIdleTimeout,
 	actorScanInterval,
 	drainOngoingCallTimeout,
 	drainRebalancedActors,
+}
+
+func getActorTypes() []string {
+	actorTypes := os.Getenv(actorTypesEnvName)
+	if actorTypes == "" {
+		return strings.Split(defaultActorTypes, ",")
+	}
+
+	return strings.Split(actorTypes, ",")
 }
 
 func parseCallRequest(r *http.Request) (callRequest, []byte, error) {
@@ -127,6 +140,18 @@ func logCall(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(resp))
 }
 
+func xDaprErrorResponseHeader(w http.ResponseWriter, r *http.Request) {
+	log.Printf("xDaprErrorResponseHeader is called")
+
+	actorType := mux.Vars(r)["actorType"]
+	actorID := mux.Vars(r)["actorId"]
+
+	resp := fmt.Sprintf("x-DaprErrorResponseHeader call with - actorType: %s, actorId: %s", actorType, actorID)
+	log.Println(resp)
+	w.Header().Add("x-DaprErrorResponseHeader", "Simulated error")
+	w.Write([]byte(resp))
+}
+
 func callDifferentActor(w http.ResponseWriter, r *http.Request) {
 	log.Println("callDifferentActor is called")
 
@@ -155,6 +180,12 @@ func callDifferentActor(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func deactivateActorHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Deactivated actor: %s", r.URL.RequestURI())
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+}
+
 // indexHandler is the handler for root path.
 func indexHandler(w http.ResponseWriter, r *http.Request) {
 	log.Println("indexHandler is called")
@@ -172,7 +203,9 @@ func appRouter() http.Handler {
 	router.HandleFunc("/", indexHandler).Methods("GET")
 	// Actor methods are individually bound so we can experiment with missing messages
 	router.HandleFunc("/actors/{actorType}/{actorId}/method/logCall", logCall).Methods("POST", "PUT")
+	router.HandleFunc("/actors/{actorType}/{actorId}/method/xDaprErrorResponseHeader", xDaprErrorResponseHeader).Methods("POST", "PUT")
 	router.HandleFunc("/actors/{actorType}/{actorId}/method/callDifferentActor", callDifferentActor).Methods("POST", "PUT")
+	router.HandleFunc("/actors/{actorType}/{id}", deactivateActorHandler).Methods("POST", "DELETE")
 	router.HandleFunc("/dapr/config", configHandler).Methods("GET")
 	router.HandleFunc("/healthz", healthzHandler).Methods("GET")
 	router.HandleFunc("/test/callActorMethod", callActorMethod).Methods("POST")

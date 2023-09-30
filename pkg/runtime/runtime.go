@@ -121,6 +121,7 @@ type DaprRuntime struct {
 	actorStateStoreLock     sync.RWMutex
 	namespace               string
 	podName                 string
+	daprUniversalAPI        *universalapi.UniversalAPI
 	daprHTTPAPI             http.API
 	daprGRPCAPI             grpc.API
 	operatorClient          operatorv1pb.OperatorClient
@@ -469,7 +470,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	a.populateSecretsConfiguration()
 
 	// Create and start the external gRPC server
-	univAPI := &universalapi.UniversalAPI{
+	a.daprUniversalAPI = &universalapi.UniversalAPI{
 		AppID:                       a.runtimeConfig.id,
 		Logger:                      logger.NewLogger("dapr.api"),
 		CompStore:                   a.compStore,
@@ -483,7 +484,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 
 	// Create and start internal and external gRPC servers
 	a.daprGRPCAPI = grpc.NewAPI(grpc.APIOpts{
-		UniversalAPI:          univAPI,
+		UniversalAPI:          a.daprUniversalAPI,
 		Channels:              a.channels,
 		PubsubAdapter:         a.processor.PubSub(),
 		DirectMessaging:       a.directMessaging,
@@ -507,7 +508,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	}
 
 	// Start HTTP Server
-	err = a.startHTTPServer(a.runtimeConfig.httpPort, a.runtimeConfig.publicPort, a.runtimeConfig.profilePort, a.runtimeConfig.allowedOrigins, pipeline, univAPI)
+	err = a.startHTTPServer(a.runtimeConfig.httpPort, a.runtimeConfig.publicPort, a.runtimeConfig.profilePort, a.runtimeConfig.allowedOrigins, pipeline)
 	if err != nil {
 		return fmt.Errorf("failed to start HTTP server: %w", err)
 	}
@@ -573,18 +574,24 @@ func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) error {
 	// Load app configuration (for actors) and init actors
 	a.loadAppConfiguration(ctx)
 
-	if len(a.runtimeConfig.placementAddresses) != 0 {
+	if a.runtimeConfig.ActorsEnabled() {
 		err = a.initActors(ctx)
 		if err != nil {
 			log.Warn(err)
 		} else {
-			a.daprHTTPAPI.SetActorRuntime(a.actor)
-			a.daprGRPCAPI.SetActorRuntime(a.actor)
-
 			// Workflow engine depends on actor runtime being initialized
+			// This needs to be called before "SetActorsInitDone" on the universal API object to prevent a race condition in workflow methods
 			a.initWorkflowEngine(ctx)
+
+			a.daprUniversalAPI.SetActorRuntime(a.actor)
 		}
+	} else {
+		// If actors are not enabled, still invoke SetActorRuntime on the workflow engine with `nil` to unblock the goroutine
+		a.workflowEngine.SetActorRuntime(a.actor)
 	}
+
+	// We set actors as initialized whether we have an actors runtime or not
+	a.daprUniversalAPI.SetActorsInitDone()
 
 	if cb := a.runtimeConfig.registry.ComponentsCallback(); cb != nil {
 		if err = cb(registry.ComponentRegistry{
@@ -601,18 +608,15 @@ func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) error {
 func (a *DaprRuntime) initWorkflowEngine(ctx context.Context) {
 	wfComponentFactory := wfengine.BuiltinWorkflowFactory(a.workflowEngine)
 
-	if wfInitErr := a.workflowEngine.SetActorRuntime(a.actor); wfInitErr != nil {
-		log.Warnf("Failed to set actor runtime for Dapr workflow engine - workflow engine will not start: %w", wfInitErr)
-	} else {
-		if reg := a.runtimeConfig.registry.Workflows(); reg != nil {
-			log.Infof("Registering component for dapr workflow engine...")
-			reg.RegisterComponent(wfComponentFactory, "dapr")
-			if componentInitErr := a.processor.Init(ctx, wfengine.ComponentDefinition); componentInitErr != nil {
-				log.Warnf("Failed to initialize Dapr workflow component: %v", componentInitErr)
-			}
-		} else {
-			log.Infof("No workflow registry available, not registering Dapr workflow component...")
+	a.workflowEngine.SetActorRuntime(a.actor)
+	if reg := a.runtimeConfig.registry.Workflows(); reg != nil {
+		log.Infof("Registering component for dapr workflow engine...")
+		reg.RegisterComponent(wfComponentFactory, "dapr")
+		if componentInitErr := a.processor.Init(ctx, wfengine.ComponentDefinition); componentInitErr != nil {
+			log.Warnf("Failed to initialize Dapr workflow component: %v", componentInitErr)
 		}
+	} else {
+		log.Infof("No workflow registry available, not registering Dapr workflow component...")
 	}
 }
 
@@ -971,9 +975,9 @@ func (a *DaprRuntime) processHTTPEndpointSecrets(ctx context.Context, endpoint *
 	}
 }
 
-func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int, allowedOrigins string, pipeline httpMiddleware.Pipeline, univAPI *universalapi.UniversalAPI) error {
+func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int, allowedOrigins string, pipeline httpMiddleware.Pipeline) error {
 	a.daprHTTPAPI = http.NewAPI(http.APIOpts{
-		UniversalAPI:          univAPI,
+		UniversalAPI:          a.daprUniversalAPI,
 		Channels:              a.channels,
 		DirectMessaging:       a.directMessaging,
 		PubsubAdapter:         a.processor.PubSub(),
@@ -1433,6 +1437,9 @@ func (a *DaprRuntime) cleanSockets() error {
 	if a.runtimeConfig.unixDomainSocket != "" {
 		for _, s := range []string{"http", "grpc"} {
 			err := os.Remove(fmt.Sprintf("%s/dapr-%s-%s.socket", a.runtimeConfig.unixDomainSocket, a.runtimeConfig.id, s))
+			if os.IsNotExist(err) {
+				continue
+			}
 			if err != nil {
 				errs = append(errs, fmt.Errorf("error removing socket file: %w", err))
 			}

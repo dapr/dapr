@@ -37,6 +37,10 @@ spec:
         timeout: fast
         retry: fiveRetries
 
+      resiliencyInvokeActor:
+        timeout: fast
+        retry: fiveRetries
+
     components:
       dapr-resiliency-binding:
         inbound: 
