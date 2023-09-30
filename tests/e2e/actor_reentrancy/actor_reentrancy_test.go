@@ -21,10 +21,12 @@ import (
 	"fmt"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -124,6 +126,21 @@ func TestActorReentrancy(t *testing.T) {
 	)
 
 	logsURL := fmt.Sprintf(actorlogsURLFormat, reentrantURL)
+
+	// This basic test makes it possible to assert that the actor subsystem is ready
+	t.Run("Readiness", func(t *testing.T) {
+		body, _ := json.Marshal(actorCall{
+			ActorType: "actor1",
+			ActorID:   "hi",
+			Method:    "helloMethod",
+		})
+
+		require.EventuallyWithT(t, func(t *assert.CollectT) {
+			_, status, err := utils.HTTPPostWithStatus(fmt.Sprintf(actorInvokeURLFormat, reentrantURL, "hi", "method", "helloMethod"), body)
+			assert.NoError(t, err)
+			assert.Equal(t, 200, status)
+		}, 15*time.Second, 200*time.Millisecond)
+	})
 
 	t.Run("Same Actor Reentrancy", func(t *testing.T) {
 		utils.HTTPDelete(logsURL)

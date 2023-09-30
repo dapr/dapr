@@ -22,10 +22,12 @@ import (
 	"os"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -108,31 +110,31 @@ func TestActorInvocation(t *testing.T) {
 	// making this test less flaky due to delays in the deployment.
 	require.NoError(t, utils.HealthCheckApps(firstActorURL, secondActorURL))
 
-	// This basic test is already covered in actor_feature_tests but serves as a sanity check here to ensure apps are up.
+	// This basic test is already covered in actor_feature_tests but serves as a sanity check here to ensure apps are up and the actor subsystem is ready.
 	t.Run("Actor remote invocation", func(t *testing.T) {
-		request := actorCallRequest{
+		body, _ := json.Marshal(actorCallRequest{
 			ActorType: "actor1",
 			ActorID:   "10",
 			Method:    "logCall",
-		}
+		})
 
-		body, _ := json.Marshal(request)
+		require.EventuallyWithT(t, func(t *assert.CollectT) {
+			_, status, err := utils.HTTPPostWithStatus(fmt.Sprintf(callActorURL, firstActorURL), body)
+			assert.NoError(t, err)
+			assert.Equal(t, 200, status)
+		}, 15*time.Second, 200*time.Millisecond)
 
-		_, status, err := utils.HTTPPostWithStatus(fmt.Sprintf(callActorURL, firstActorURL), body)
-		require.NoError(t, err)
-		require.Equal(t, 200, status)
-
-		request = actorCallRequest{
+		body, _ = json.Marshal(actorCallRequest{
 			ActorType: "actor2",
 			ActorID:   "20",
 			Method:    "logCall",
-		}
+		})
 
-		body, _ = json.Marshal(request)
-
-		_, status, err = utils.HTTPPostWithStatus(fmt.Sprintf(callActorURL, secondActorURL), body)
-		require.NoError(t, err)
-		require.Equal(t, 200, status)
+		require.EventuallyWithT(t, func(t *assert.CollectT) {
+			_, status, err := utils.HTTPPostWithStatus(fmt.Sprintf(callActorURL, secondActorURL), body)
+			assert.NoError(t, err)
+			assert.Equal(t, 200, status)
+		}, 15*time.Second, 200*time.Millisecond)
 	})
 
 	// Validates special error handling for actors is working in runtime (.Net SDK case).

@@ -37,8 +37,6 @@ const (
 	actorScanInterval       = "30s"
 	drainOngoingCallTimeout = "30s"
 	drainRebalancedActors   = true
-	reentrantMethod         = "reentrantMethod"
-	standardMethod          = "standardMethod"
 )
 
 var (
@@ -202,13 +200,15 @@ func actorTestCallHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func actorMethodHandler(w http.ResponseWriter, r *http.Request) {
-	log.Print("Handling actor method call.")
 	method := mux.Vars(r)["method"]
+	log.Printf("Handling actor method call %s", method)
 
 	switch method {
-	case reentrantMethod:
+	case "helloMethod":
+		// No-op
+	case "reentrantMethod":
 		reentrantCallHandler(w, r)
-	case standardMethod:
+	case "standardMethod":
 		fallthrough
 	default:
 		standardHandler(w, r)
