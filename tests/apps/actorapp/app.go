@@ -88,7 +88,7 @@ func getActorLogs() []actorLogEntry {
 }
 
 func createActorID(actorType string, id string) string {
-	return fmt.Sprintf("%s.%s", actorType, id)
+	return actorType + "." + id
 }
 
 // indexHandler is the handler for root path

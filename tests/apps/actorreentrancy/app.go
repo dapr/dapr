@@ -20,6 +20,8 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
+	"strconv"
 	"sync"
 
 	"github.com/gorilla/mux"
@@ -29,9 +31,7 @@ import (
 )
 
 const (
-	appPort                 = 22222
-	daprV1URL               = "http://localhost:3500/v1.0"
-	actorMethodURLFormat    = daprV1URL + "/actors/%s/%s/method/%s"
+	actorMethodURLFormat    = "http://localhost:%d/v1.0/actors/%s/%s/method/%s"
 	defaultActorType        = "reentrantActor"
 	actorIdleTimeout        = "1h"
 	actorScanInterval       = "30s"
@@ -40,6 +40,22 @@ const (
 	reentrantMethod         = "reentrantMethod"
 	standardMethod          = "standardMethod"
 )
+
+var (
+	appPort      = 22222
+	daprHTTPPort = 3500
+)
+
+func init() {
+	p := os.Getenv("DAPR_HTTP_PORT")
+	if p != "" && p != "0" {
+		daprHTTPPort, _ = strconv.Atoi(p)
+	}
+	p = os.Getenv("PORT")
+	if p != "" && p != "0" {
+		appPort, _ = strconv.Atoi(p)
+	}
+}
 
 // represents a response for the APIs in this app.
 type actorLogEntry struct {
@@ -98,7 +114,7 @@ func resetLogs() {
 	actorLogsMutex.Lock()
 	defer actorLogsMutex.Unlock()
 
-	actorLogs = []actorLogEntry{}
+	actorLogs = actorLogs[:0]
 }
 
 func appendLog(actorType string, actorID string, action string) {
@@ -111,10 +127,6 @@ func appendLog(actorType string, actorID string, action string) {
 	actorLogsMutex.Lock()
 	defer actorLogsMutex.Unlock()
 	actorLogs = append(actorLogs, logEntry)
-}
-
-func getLogs() []actorLogEntry {
-	return actorLogs
 }
 
 // indexHandler is the handler for root path.
@@ -132,7 +144,7 @@ func logsHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(getLogs())
+	json.NewEncoder(w).Encode(actorLogs)
 }
 
 func configHandler(w http.ResponseWriter, r *http.Request) {
@@ -168,7 +180,7 @@ func actorTestCallHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	nextCall, nextBody := advanceCallStackForNextRequest(reentrantReq)
-	req, _ := http.NewRequest(http.MethodPut, fmt.Sprintf(actorMethodURLFormat, nextCall.ActorType, nextCall.ActorID, nextCall.Method), bytes.NewReader(nextBody))
+	req, _ := http.NewRequest(http.MethodPut, fmt.Sprintf(actorMethodURLFormat, daprHTTPPort, nextCall.ActorType, nextCall.ActorID, nextCall.Method), bytes.NewReader(nextBody))
 
 	res, err := httpClient.Do(req)
 	if err != nil {
@@ -226,7 +238,7 @@ func reentrantCallHandler(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Next call: %s on %s.%s", nextCall.Method, nextCall.ActorType, nextCall.ActorID)
 
-	url := fmt.Sprintf(actorMethodURLFormat, nextCall.ActorType, nextCall.ActorID, nextCall.Method)
+	url := fmt.Sprintf(actorMethodURLFormat, daprHTTPPort, nextCall.ActorType, nextCall.ActorID, nextCall.Method)
 	req, _ := http.NewRequest(http.MethodPut, url, bytes.NewReader(nextBody))
 
 	reentrancyID := r.Header.Get("Dapr-Reentrancy-Id")
@@ -234,7 +246,7 @@ func reentrantCallHandler(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := httpClient.Do(req)
 
-	log.Printf("Call status: %d\n", resp.StatusCode)
+	log.Printf("Call status: %d", resp.StatusCode)
 	if err != nil || resp.StatusCode == http.StatusInternalServerError {
 		w.WriteHeader(http.StatusInternalServerError)
 		appendLog(mux.Vars(r)["actorType"], mux.Vars(r)["id"], fmt.Sprintf("Error %s", mux.Vars(r)["method"]))
@@ -252,10 +264,10 @@ func standardHandler(w http.ResponseWriter, r *http.Request) {
 
 func advanceCallStackForNextRequest(req reentrantRequest) (actorCall, []byte) {
 	nextCall := req.Calls[0]
-	log.Printf("Current call: %v\n", nextCall)
+	log.Printf("Current call: %v", nextCall)
 	nextReq := req
 	nextReq.Calls = nextReq.Calls[1:]
-	log.Printf("Next req: %v\n", nextReq)
+	log.Printf("Next req: %v", nextReq)
 	nextBody, _ := json.Marshal(nextReq)
 	return nextCall, nextBody
 }
