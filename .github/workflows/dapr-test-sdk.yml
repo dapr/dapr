@@ -253,13 +253,9 @@ jobs:
         run: |
           docker stop dapr_placement
           ./dist/linux_amd64/release/placement &
-      - name: Install local Kafka using docker-compose
+      - name: Spin local environment
         run: |
-          docker-compose -f ./java-sdk/sdk-tests/deploy/local-test-kafka.yml up -d
-          docker ps
-      - name: Install local Mongo database using docker-compose
-        run: |
-          docker-compose -f ./java-sdk/sdk-tests/deploy/local-test-mongo.yml up -d
+          docker-compose -f ./sdk-tests/deploy/local-test.yml up -d mongo kafka
           docker ps
       - name: Install local ToxiProxy to simulate connectivity issues to Dapr sidecar
         run: |
