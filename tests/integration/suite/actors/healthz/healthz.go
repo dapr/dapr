@@ -58,7 +58,7 @@ func (i *initerror) Setup(t *testing.T) []framework.Option {
 		w.Write([]byte(`{"entities": ["myactortype"]}`))
 	})
 	handler.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNoContent)
+		w.WriteHeader(http.StatusOK)
 		close(i.healthzCalled)
 	})
 	handler.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
