@@ -16,6 +16,7 @@ package http
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"testing"
 	"time"
 
@@ -41,6 +42,10 @@ type basic struct {
 }
 
 func (b *basic) Setup(t *testing.T) []framework.Option {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping unix socket based test on windows")
+	}
+
 	socketDir := t.TempDir()
 
 	store := statestore.New(t,
