@@ -131,8 +131,8 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, "key3", resp.Items[2].Key)
 		assert.Equal(t, "value3", string(resp.Items[2].Data))
 		if assert.Contains(t, resp.Items[2].Metadata, "ttlExpireTime") {
-			expireTime, err := time.Parse(time.RFC3339, resp.Items[2].Metadata["ttlExpireTime"])
-			require.NoError(t, err)
+			expireTime, eerr := time.Parse(time.RFC3339, resp.Items[2].Metadata["ttlExpireTime"])
+			require.NoError(t, eerr)
 			assert.WithinDuration(t, now.Add(time.Second), expireTime, time.Second)
 		}
 
@@ -140,8 +140,8 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, "value4", string(resp.Items[3].Data))
 		assert.Equal(t, etag4, resp.Items[3].GetEtag())
 		if assert.Contains(t, resp.Items[3].Metadata, "ttlExpireTime") {
-			expireTime, err := time.Parse(time.RFC3339, resp.Items[3].Metadata["ttlExpireTime"])
-			require.NoError(t, err)
+			expireTime, eerr := time.Parse(time.RFC3339, resp.Items[3].Metadata["ttlExpireTime"])
+			require.NoError(t, eerr)
 			assert.WithinDuration(t, now.Add(time.Second), expireTime, time.Second)
 		}
 

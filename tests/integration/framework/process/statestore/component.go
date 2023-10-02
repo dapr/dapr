@@ -37,9 +37,9 @@ func newComponent(t *testing.T, opts options) *component {
 }
 
 func (c *component) BulkDelete(ctx context.Context, req *compv1pb.BulkDeleteRequest) (*compv1pb.BulkDeleteResponse, error) {
-	var dr []state.DeleteRequest
-	for _, item := range req.Items {
-		dr = append(dr, state.DeleteRequest{
+	dr := make([]state.DeleteRequest, len(req.Items))
+	for i, item := range req.Items {
+		dr[i] = state.DeleteRequest{
 			Key:      item.Key,
 			ETag:     &item.GetEtag().Value,
 			Metadata: item.Metadata,
@@ -47,7 +47,7 @@ func (c *component) BulkDelete(ctx context.Context, req *compv1pb.BulkDeleteRequ
 				Concurrency: concurrencyOf(item.Options.Concurrency),
 				Consistency: consistencyOf(item.Options.Consistency),
 			},
-		})
+		}
 	}
 
 	err := c.impl.BulkDelete(ctx, dr, state.BulkStoreOpts{})
@@ -59,15 +59,15 @@ func (c *component) BulkDelete(ctx context.Context, req *compv1pb.BulkDeleteRequ
 }
 
 func (c *component) BulkGet(ctx context.Context, req *compv1pb.BulkGetRequest) (*compv1pb.BulkGetResponse, error) {
-	var gr []state.GetRequest
-	for _, item := range req.Items {
-		gr = append(gr, state.GetRequest{
+	gr := make([]state.GetRequest, len(req.Items))
+	for i, item := range req.Items {
+		gr[i] = state.GetRequest{
 			Key:      item.Key,
 			Metadata: item.Metadata,
 			Options: state.GetStateOption{
 				Consistency: consistencyOf(item.Consistency),
 			},
-		})
+		}
 	}
 
 	resp, err := c.impl.BulkGet(ctx, gr, state.BulkGetOpts{})
@@ -96,13 +96,13 @@ func (c *component) BulkGet(ctx context.Context, req *compv1pb.BulkGetRequest) (
 }
 
 func (c *component) BulkSet(ctx context.Context, req *compv1pb.BulkSetRequest) (*compv1pb.BulkSetResponse, error) {
-	var sr []state.SetRequest
-	for _, item := range req.Items {
+	sr := make([]state.SetRequest, len(req.Items))
+	for i, item := range req.Items {
 		var etag *string
 		if item.Etag != nil {
 			etag = &item.GetEtag().Value
 		}
-		sr = append(sr, state.SetRequest{
+		sr[i] = state.SetRequest{
 			Key:      item.Key,
 			Value:    item.Value,
 			ETag:     etag,
@@ -111,7 +111,7 @@ func (c *component) BulkSet(ctx context.Context, req *compv1pb.BulkSetRequest) (
 				Concurrency: concurrencyOf(item.Options.Concurrency),
 				Consistency: consistencyOf(item.Options.Consistency),
 			},
-		})
+		}
 	}
 
 	err := c.impl.BulkSet(ctx, sr, state.BulkStoreOpts{})
@@ -143,9 +143,10 @@ func (c *component) Delete(ctx context.Context, req *compv1pb.DeleteRequest) (*c
 }
 
 func (c *component) Features(context.Context, *compv1pb.FeaturesRequest) (*compv1pb.FeaturesResponse, error) {
-	var features []string
-	for _, f := range c.impl.Features() {
-		features = append(features, string(f))
+	implF := c.impl.Features()
+	features := make([]string, len(implF))
+	for i, f := range implF {
+		features[i] = string(f)
 	}
 	return &compv1pb.FeaturesResponse{
 		Features: features,

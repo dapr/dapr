@@ -79,8 +79,6 @@ func (s *StateStore) SocketName() string {
 func (s *StateStore) Run(t *testing.T, ctx context.Context) {
 	s.component.impl.Init(ctx, state.Metadata{})
 
-	ctx, cancel := context.WithCancel(ctx)
-
 	server := grpc.NewServer()
 	compv1pb.RegisterStateStoreServer(server, s.component)
 	compv1pb.RegisterTransactionalStateStoreServer(server, s.component)
@@ -92,7 +90,6 @@ func (s *StateStore) Run(t *testing.T, ctx context.Context) {
 
 	go func() {
 		<-s.stopCh
-		cancel()
 		server.GracefulStop()
 	}()
 }
