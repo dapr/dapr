@@ -1,0 +1,244 @@
+/*
+Copyright 2023 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implier.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package healthz
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"strconv"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+
+	compv1pb "github.com/dapr/dapr/pkg/proto/components/v1"
+	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
+	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+	procstatestore "github.com/dapr/dapr/tests/integration/framework/process/statestore"
+	"github.com/dapr/dapr/tests/integration/suite"
+)
+
+func init() {
+	suite.Register(new(reminderrace))
+}
+
+// TODO: @joshvanl
+type reminderrace struct {
+	firstCall  chan struct{}
+	daprd1     *daprd.Daprd
+	daprd2Opts []daprd.Option
+	//daprd3     *daprd.Daprd
+	// TODO: @joshvanl
+	blockBulkGet       sync.Mutex
+	place              *placement.Placement
+	dontExpectReminder atomic.Bool
+	reminderErr        chan error
+
+	invokeCalled atomic.Int64
+	called       atomic.Int64
+}
+
+func (r *reminderrace) Setup(t *testing.T) []framework.Option {
+	r.firstCall = make(chan struct{})
+	r.reminderErr = make(chan error, 1)
+
+	socketDir := t.TempDir()
+
+	store := procstatestore.NewWrappedInMemory(t)
+	store2 := procstatestore.NewWrappedInMemory(t)
+
+	ssNoBlock := procstatestore.New(t,
+		procstatestore.WithSocketDirectory(socketDir),
+		procstatestore.WithStateStore(store),
+	)
+
+	ssBlock := procstatestore.New(t,
+		procstatestore.WithSocketDirectory(socketDir),
+		procstatestore.WithStateStore(store2),
+		procstatestore.WithOnBulkGet(func(ctx context.Context, req *compv1pb.BulkGetRequest) {
+			r.blockBulkGet.Lock()
+			defer r.blockBulkGet.Unlock()
+		}),
+		procstatestore.WithOnGet(func(ctx context.Context, req *compv1pb.GetRequest) {
+			fmt.Printf(">>GET: %s\n", req.Key)
+			//if !strings.HasPrefix(req.Key, "myactortype") {
+			//	return
+			//}
+			r.blockBulkGet.Lock()
+			defer r.blockBulkGet.Unlock()
+		}),
+	)
+
+	newServer := func(withEntities bool, onRoot http.HandlerFunc) *prochttp.HTTP {
+		handler := http.NewServeMux()
+		handler.HandleFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
+			if withEntities {
+				w.Write([]byte(`{"entities": ["myactortype"], "remindersStoragePartitions": 0}`))
+			} else {
+				w.Write([]byte(`{"entities": [], "remindersStoragePartitions": 0}`))
+			}
+		})
+		handler.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte(`OK`))
+		})
+		handler.HandleFunc("/", onRoot)
+		return prochttp.New(t, prochttp.WithHandler(handler))
+	}
+
+	srv1 := newServer(true, func(w http.ResponseWriter, req *http.Request) {
+		//panic(req.URL.Path)
+		r.invokeCalled.Store(1)
+		r.called.Add(1)
+		select {
+		case <-r.firstCall:
+		default:
+			close(r.firstCall)
+		}
+		//if r.dontExpectReminder.Load() && req.URL.Path == "/actors/myactortype/actor2/method/remind/foo" {
+		if r.dontExpectReminder.Load() {
+			//if r.dontExpectReminder.Load() && req.URL.Path != "/actors/myactortype/actor2" && req.URL.Path != "/healthz" {
+			t.Errorf("unexpected reminder executed on deactivated actor: %s", req.URL.Path)
+			//go func() {
+			//	r.reminderErr <- fmt.Errorf("unexpected reminder executed on deactivated actor: %s", req.URL.Path)
+			//}()
+		}
+		w.Write([]byte(`OK`))
+	})
+
+	srv2 := newServer(true, func(w http.ResponseWriter, req *http.Request) {
+		r.invokeCalled.Store(2)
+		w.Write([]byte(`OK`))
+	})
+
+	srv3 := newServer(false, func(w http.ResponseWriter, req *http.Request) {
+		r.invokeCalled.Store(3)
+		w.Write([]byte(`OK`))
+	})
+
+	daprdOpts := func(appID string, srv *prochttp.HTTP, ss *procstatestore.StateStore) []daprd.Option {
+		return []daprd.Option{
+			daprd.WithResourceFiles(fmt.Sprintf(`
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: mystore
+spec:
+  type: state.%s
+  version: v1
+  metadata:
+  - name: actorStateStore
+    value: true
+`, ss.SocketName())),
+			daprd.WithAppPort(srv.Port()),
+			daprd.WithLogLevel("info"),
+			daprd.WithExecOptions(exec.WithEnvVars(
+				"DAPR_COMPONENTS_SOCKETS_FOLDER", socketDir,
+			)),
+			daprd.WithPlacementAddresses("localhost:" + strconv.Itoa(r.place.Port())),
+			daprd.WithAppID(appID),
+		}
+	}
+
+	r.place = placement.New(t)
+	r.daprd1 = daprd.New(t, daprdOpts("daprd1", srv1, ssBlock)...)
+	//r.daprd1 = daprd.New(t, daprdOpts("daprd1", srv1, ssNoBlock)...)
+	r.daprd2Opts = daprdOpts("darpd2", srv2, ssNoBlock)
+	//r.daprd3 = daprd.New(t, daprdOpts("daprd3", srv3, ssNoBlock)...)
+
+	return []framework.Option{
+		framework.WithProcesses(r.place, ssBlock, ssNoBlock, srv1, srv2, srv3, r.daprd1),
+		//framework.WithProcesses(r.place, ssNoBlock, srv1, srv2, srv3, r.daprd1, r.daprd3),
+	}
+}
+
+func (r *reminderrace) Run(t *testing.T, ctx context.Context) {
+	r.place.WaitUntilRunning(t, ctx)
+	r.daprd1.WaitUntilRunning(t, ctx)
+	//r.daprd3.WaitUntilRunning(t, ctx)
+
+	conn1, err := grpc.DialContext(ctx, fmt.Sprintf("localhost:%d", r.daprd1.GRPCPort()),
+		grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+	require.NoError(t, err)
+	//t.Cleanup(func() { require.NoError(t, conn1.Close()) })
+
+	//conn3, err := grpc.DialContext(ctx, fmt.Sprintf("localhost:%d", r.daprd3.GRPCPort()),
+	//	grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+	//require.NoError(t, err)
+	//t.Cleanup(func() { require.NoError(t, conn3.Close()) })
+
+	client1 := rtv1.NewDaprClient(conn1)
+	//client3 := rtv1.NewDaprClient(conn3)
+
+	_, err = client1.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
+		ActorType: "myactortype",
+		ActorId:   "actor2",
+		Name:      "foo",
+		Period:    "1s",
+	})
+	require.NoError(t, err)
+
+	select {
+	case <-r.firstCall:
+	case <-time.After(10 * time.Second):
+		require.Fail(t, "timed out waiting for first call")
+	}
+
+	//_, err = client1.InvokeActor(ctx, &rtv1.InvokeActorRequest{
+	//	ActorType: "myactortype",
+	//	ActorId:   "actor2",
+	//	Method:    "foo",
+	//})
+	//assert.NoError(t, err)
+	assert.Equal(t, int64(1), r.invokeCalled.Load())
+
+	r.blockBulkGet.Lock()
+	r.dontExpectReminder.Store(true)
+
+	//for i := 0; i < 5; i++ {
+	daprd2 := daprd.New(t, r.daprd2Opts...)
+	daprd2.Run(t, ctx)
+	daprd2.WaitUntilRunning(t, ctx)
+	t.Cleanup(func() { daprd2.Cleanup(t) })
+	//}
+
+	// If the following test starts failing, then it suggests the actor hash
+	// function has changed and this test case needs to update the triggered
+	// actor ID until a string forces a rebalance when a second daprd joins.
+	require.Eventually(t, func() bool {
+		return r.invokeCalled.Load() == 2
+	}, time.Second*10, time.Millisecond*100)
+
+	select {
+	case err := <-r.reminderErr:
+		assert.NoError(t, err)
+	case <-time.After(time.Second * 5):
+	}
+
+	r.blockBulkGet.Unlock()
+	assert.Equal(t, int64(1), r.called.Load())
+
+	conn1.Close()
+	//conn3.Close()
+	//daprd2.Cleanup(t)
+}

@@ -20,13 +20,13 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
 	"github.com/dapr/components-contrib/state"
 	compv1pb "github.com/dapr/dapr/pkg/proto/components/v1"
+	"github.com/dapr/dapr/tests/integration/framework/util"
 )
 
 // Option is a function that configures the process.
@@ -50,8 +50,8 @@ func New(t *testing.T, fopts ...Option) *StateStore {
 	}
 
 	require.NotEmpty(t, opts.socketDir)
-	uid, err := uuid.NewRandom()
-	require.NoError(t, err)
+
+	socketFile := util.RandomString(8)
 
 	require.NotNil(t, opts.statestore)
 	_, ok := opts.statestore.(state.TransactionalStore)
@@ -59,14 +59,14 @@ func New(t *testing.T, fopts ...Option) *StateStore {
 
 	// Start the listener in New so we can squat on the path immediately, and
 	// keep it for the entire test case.
-	path := filepath.Join(opts.socketDir, uid.String()+".sock")
+	path := filepath.Join(opts.socketDir, socketFile+".sock")
 	listener, err := net.Listen("unix", path)
 	require.NoError(t, err)
 
 	return &StateStore{
 		listener:   listener,
 		component:  newComponent(t, opts),
-		socketName: uid.String(),
+		socketName: socketFile,
 		srvErrCh:   make(chan error),
 		stopCh:     make(chan struct{}),
 	}
