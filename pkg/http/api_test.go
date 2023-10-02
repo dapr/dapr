@@ -1002,9 +1002,10 @@ func TestV1ActorEndpoints(t *testing.T) {
 		universal: &universalapi.UniversalAPI{
 			AppID:      "fakeAPI",
 			Resiliency: rc,
-			Actors:     nil,
 		},
 	}
+	testAPI.universal.InitUniversalAPI()
+	testAPI.universal.SetActorsInitDone()
 
 	fakeServer.StartServer(testAPI.constructActorEndpoints(), nil)
 
@@ -1015,7 +1016,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		apisAndMethods := map[string][]string{
 			"v1.0/actors/fakeActorType/fakeActorID/state/key1":          {"GET"},
 			"v1.0/actors/fakeActorType/fakeActorID/state":               {"POST", "PUT"},
-			"v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1": {"POST", "PUT", "GET", "DELETE", "PATCH"},
+			"v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1": {"POST", "PUT", "GET", "DELETE"},
 			"v1.0/actors/fakeActorType/fakeActorID/method/method1":      {"POST", "PUT", "GET", "DELETE"},
 			"v1.0/actors/fakeActorType/fakeActorID/timers/timer1":       {"POST", "PUT", "DELETE"},
 		}
@@ -1023,12 +1024,14 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 		for apiPath, testMethods := range apisAndMethods {
 			for _, method := range testMethods {
-				// act
-				resp := fakeServer.DoRequest(method, apiPath, fakeData, nil)
+				t.Run(fmt.Sprintf("%s %s", method, apiPath), func(t *testing.T) {
+					// act
+					resp := fakeServer.DoRequest(method, apiPath, fakeData, nil)
 
-				// assert
-				assert.Equal(t, 500, resp.StatusCode, apiPath)
-				assert.Equal(t, "ERR_ACTOR_RUNTIME_NOT_FOUND", resp.ErrorBody["errorCode"])
+					// assert
+					assert.Equal(t, 500, resp.StatusCode, apiPath)
+					assert.Equal(t, "ERR_ACTOR_RUNTIME_NOT_FOUND", resp.ErrorBody["errorCode"])
+				})
 			}
 		}
 	})
@@ -1056,24 +1059,6 @@ func TestV1ActorEndpoints(t *testing.T) {
 		}
 	})
 
-	t.Run("All PATCH APIs - 400 for invalid JSON", func(t *testing.T) {
-		testAPI.universal.Actors = new(actors.MockActors)
-		apiPaths := []string{
-			"v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1",
-		}
-
-		for _, apiPath := range apiPaths {
-			inputBodyBytes := invalidJSON
-
-			// act
-			resp := fakeServer.DoRequest(fasthttp.MethodPatch, apiPath, inputBodyBytes, nil)
-
-			// assert
-			assert.Equal(t, 400, resp.StatusCode, apiPath)
-			assert.Equal(t, "ERR_MALFORMED_REQUEST", resp.ErrorBody["errorCode"])
-		}
-	})
-
 	t.Run("Get actor state - 200 OK", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
 		mockActors := new(actors.MockActors)
@@ -1083,6 +1068,9 @@ func TestV1ActorEndpoints(t *testing.T) {
 			Key:       "key1",
 		}).Return(&actors.StateResponse{
 			Data: fakeData,
+			Metadata: map[string]string{
+				"ttlExpireTime": "2020-01-01T00:00:00Z",
+			},
 		}, nil)
 
 		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
@@ -1098,6 +1086,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		// assert
 		assert.Equal(t, 200, resp.StatusCode)
 		assert.Equal(t, fakeData, resp.RawBody)
+		assert.Equal(t, "2020-01-01T00:00:00Z", resp.RawHeader.Get("metadata.ttlexpiretime"))
 		mockActors.AssertNumberOfCalls(t, "GetState", 1)
 	})
 
@@ -1123,6 +1112,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		// assert
 		assert.Equal(t, 204, resp.StatusCode)
 		assert.Equal(t, []byte{}, resp.RawBody)
+		assert.Empty(t, resp.RawHeader["Metadata.ttlexpiretime"])
 		mockActors.AssertNumberOfCalls(t, "GetState", 1)
 	})
 
@@ -1148,6 +1138,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		// assert
 		assert.Equal(t, 500, resp.StatusCode)
 		assert.Equal(t, "ERR_ACTOR_STATE_GET", resp.ErrorBody["errorCode"])
+		assert.Empty(t, resp.RawHeader["Metadata.ttlexpiretime"])
 		mockActors.AssertNumberOfCalls(t, "GetState", 1)
 	})
 
@@ -1175,6 +1166,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		// assert
 		assert.Equal(t, 400, resp.StatusCode)
 		mockActors.AssertNumberOfCalls(t, "IsActorHosted", 1)
+		assert.Empty(t, resp.RawHeader["Metadata.ttlexpiretime"])
 		assert.Equal(t, "ERR_ACTOR_INSTANCE_MISSING", resp.ErrorBody["errorCode"])
 	})
 
@@ -1260,6 +1252,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		// assert
 		assert.Equal(t, 400, resp.StatusCode)
 		mockActors.AssertNumberOfCalls(t, "IsActorHosted", 1)
+		assert.Empty(t, resp.RawHeader["Metadata.ttlexpiretime"])
 		assert.Equal(t, "ERR_ACTOR_INSTANCE_MISSING", resp.ErrorBody["errorCode"])
 	})
 
@@ -1306,6 +1299,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		assert.Equal(t, 500, resp.StatusCode)
 		mockActors.AssertNumberOfCalls(t, "TransactionalStateOperation", 1)
 		mockActors.AssertNumberOfCalls(t, "IsActorHosted", 1)
+		assert.Empty(t, resp.RawHeader["Metadata.ttlexpiretime"])
 		assert.Equal(t, "ERR_ACTOR_STATE_TRANSACTION_SAVE", resp.ErrorBody["errorCode"])
 	})
 
@@ -1385,78 +1379,6 @@ func TestV1ActorEndpoints(t *testing.T) {
 		assert.Equal(t, 403, resp.StatusCode)
 		assert.Equal(t, "ERR_ACTOR_REMINDER_NON_HOSTED", resp.ErrorBody["errorCode"])
 		mockActors.AssertNumberOfCalls(t, "CreateReminder", 1)
-	})
-
-	t.Run("Reminder Rename - 204 No Content", func(t *testing.T) {
-		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
-
-		reminderRequest := actors.RenameReminderRequest{
-			OldName:   "reminder1",
-			ActorType: "fakeActorType",
-			ActorID:   "fakeActorID",
-			NewName:   "reminder2",
-		}
-		mockActors := new(actors.MockActors)
-
-		mockActors.On("RenameReminder", &reminderRequest).Return(nil)
-
-		testAPI.universal.Actors = mockActors
-
-		// act
-		inputBodyBytes, err := json.Marshal(reminderRequest)
-
-		assert.NoError(t, err)
-		resp := fakeServer.DoRequest("PATCH", apiPath, inputBodyBytes, nil)
-
-		// assert
-		assert.Equal(t, 204, resp.StatusCode)
-		mockActors.AssertNumberOfCalls(t, "RenameReminder", 1)
-	})
-
-	t.Run("Reminder Rename - 500 when RenameReminderFails", func(t *testing.T) {
-		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
-
-		reminderRequest := actors.RenameReminderRequest{
-			OldName:   "reminder1",
-			ActorType: "fakeActorType",
-			ActorID:   "fakeActorID",
-			NewName:   "reminder2",
-		}
-		mockActors := new(actors.MockActors)
-
-		mockActors.On("RenameReminder", &reminderRequest).Return(errors.New("UPSTREAM_ERROR"))
-
-		testAPI.universal.Actors = mockActors
-
-		// act
-		inputBodyBytes, err := json.Marshal(reminderRequest)
-
-		assert.NoError(t, err)
-		resp := fakeServer.DoRequest("PATCH", apiPath, inputBodyBytes, nil)
-
-		// assert
-		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, "ERR_ACTOR_REMINDER_RENAME", resp.ErrorBody["errorCode"])
-		mockActors.AssertNumberOfCalls(t, "RenameReminder", 1)
-	})
-
-	t.Run("Reminder Rename - 403 when actor type is not hosted", func(t *testing.T) {
-		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
-
-		mockActors := new(actors.MockActors)
-		mockActors.
-			On("RenameReminder", mock.AnythingOfType("*internal.RenameReminderRequest")).
-			Return(actors.ErrReminderOpActorNotHosted)
-
-		testAPI.universal.Actors = mockActors
-
-		// act
-		resp := fakeServer.DoRequest("PATCH", apiPath, []byte("{}"), nil)
-
-		// assert
-		assert.Equal(t, 403, resp.StatusCode)
-		assert.Equal(t, "ERR_ACTOR_REMINDER_NON_HOSTED", resp.ErrorBody["errorCode"])
-		mockActors.AssertNumberOfCalls(t, "RenameReminder", 1)
 	})
 
 	t.Run("Reminder Delete - 204 No Content", func(t *testing.T) {
@@ -1901,7 +1823,6 @@ func TestV1MetadataEndpoint(t *testing.T) {
 	testAPI := &api{
 		universal: &universalapi.UniversalAPI{
 			AppID:     "xyz",
-			Actors:    mockActors,
 			CompStore: compStore,
 			GetComponentsCapabilitiesFn: func() map[string][]string {
 				capsMap := make(map[string][]string)
@@ -1916,6 +1837,9 @@ func TestV1MetadataEndpoint(t *testing.T) {
 			GlobalConfig:        &config.Configuration{},
 		},
 	}
+	testAPI.universal.InitUniversalAPI()
+	testAPI.universal.SetActorRuntime(mockActors)
+	testAPI.universal.SetActorsInitDone()
 
 	fakeServer.StartServer(testAPI.constructMetadataEndpoints(), nil)
 
@@ -1968,11 +1892,12 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 	testAPI := &api{
 		universal: &universalapi.UniversalAPI{
-			Actors:     nil,
 			Resiliency: resiliency.New(nil),
 		},
 		tracingSpec: spec,
 	}
+	testAPI.universal.InitUniversalAPI()
+	testAPI.universal.SetActorsInitDone()
 
 	fakeServer.StartServer(testAPI.constructActorEndpoints(), &fakeHTTPServerOptions{
 		spec: &spec,
@@ -2722,7 +2647,7 @@ func TestV1Alpha1DistributedLock(t *testing.T) {
 	})
 }
 
-func TestV1Alpha1Workflow(t *testing.T) {
+func TestV1Beta1Workflow(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 
 	fakeWorkflowComponent := &daprt.MockWorkflow{}
@@ -2747,7 +2672,7 @@ func TestV1Alpha1Workflow(t *testing.T) {
 	/////////////////////
 
 	t.Run("Start with non existent component", func(t *testing.T) {
-		apiPath := "v1.0-alpha1/workflows/non-existent-component/workflowName/start"
+		apiPath := "v1.0-beta1/workflows/non-existent-component/workflowName/start"
 
 		req := workflowContrib.StartRequest{
 			WorkflowName: "Non-existent-workflow",
@@ -2765,7 +2690,7 @@ func TestV1Alpha1Workflow(t *testing.T) {
 	})
 
 	t.Run("Start with no instance ID", func(t *testing.T) {
-		apiPath := "v1.0-alpha1/workflows/dapr/workflowName/start"
+		apiPath := "v1.0-beta1/workflows/dapr/workflowName/start"
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 202, resp.StatusCode)
 
@@ -2781,7 +2706,7 @@ func TestV1Alpha1Workflow(t *testing.T) {
 	})
 
 	t.Run("Start with invalid instance ID", func(t *testing.T) {
-		apiPath := "v1.0-alpha1/workflows/dapr/workflowName/start?instanceID=invalid$ID"
+		apiPath := "v1.0-beta1/workflows/dapr/workflowName/start?instanceID=invalid$ID"
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 400, resp.StatusCode)
 
@@ -2793,7 +2718,7 @@ func TestV1Alpha1Workflow(t *testing.T) {
 
 	t.Run("Start with too long instance ID", func(t *testing.T) {
 		maxInstanceIDLength := 64
-		apiPath := "v1.0-alpha1/workflows/dapr/workflowName/start?instanceID=this_is_a_very_long_instance_id_that_is_longer_than_64_characters_and_therefore_should_not_be_allowed"
+		apiPath := "v1.0-beta1/workflows/dapr/workflowName/start?instanceID=this_is_a_very_long_instance_id_that_is_longer_than_64_characters_and_therefore_should_not_be_allowed"
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 400, resp.StatusCode)
 
@@ -2804,7 +2729,7 @@ func TestV1Alpha1Workflow(t *testing.T) {
 	})
 
 	t.Run("Start with explicit instance ID", func(t *testing.T) {
-		apiPath := "v1.0-alpha1/workflows/dapr/workflowName/start?instanceID=my-explicit-ID"
+		apiPath := "v1.0-beta1/workflows/dapr/workflowName/start?instanceID=my-explicit-ID"
 		resp := fakeServer.DoRequest("POST", apiPath, []byte("input payload"), nil)
 		assert.Equal(t, 202, resp.StatusCode)
 
@@ -2824,7 +2749,7 @@ func TestV1Alpha1Workflow(t *testing.T) {
 	/////////////////////
 
 	t.Run("Get with non existent workflow component", func(t *testing.T) {
-		apiPath := "v1.0-alpha1/workflows/non-existent-component/instanceID"
+		apiPath := "v1.0-beta1/workflows/non-existent-component/instanceID"
 
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 		assert.Equal(t, 400, resp.StatusCode)
@@ -2838,7 +2763,7 @@ func TestV1Alpha1Workflow(t *testing.T) {
 	t.Run("Get with valid api call", func(t *testing.T) {
 		// Note that this test passes even though there is no workflow implemented.
 		// This is due to the fact that the 'fakecomponent' has the 'get' method implemented to return a dummy response.
-		apiPath := "v1.0-alpha1/workflows/dapr/myInstanceID"
+		apiPath := "v1.0-beta1/workflows/dapr/myInstanceID"
 
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 		assert.Equal(t, 200, resp.StatusCode)
@@ -2871,7 +2796,7 @@ func TestV1Alpha1Workflow(t *testing.T) {
 	/////////////////////////
 
 	t.Run("Terminate with non existent component", func(t *testing.T) {
-		apiPath := "v1.0-alpha1/workflows/non-existent-component/instanceID/terminate"
+		apiPath := "v1.0-beta1/workflows/non-existent-component/instanceID/terminate"
 
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 400, resp.StatusCode)
@@ -2886,7 +2811,7 @@ func TestV1Alpha1Workflow(t *testing.T) {
 		// Note that this test passes even though there is no workflow implemented.
 		// This is due to the fact that the 'fakecomponent' has the 'terminate' method implemented to simply return nil
 
-		apiPath := "v1.0-alpha1/workflows/dapr/instanceID/terminate"
+		apiPath := "v1.0-beta1/workflows/dapr/instanceID/terminate"
 
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 202, resp.StatusCode)
@@ -2900,7 +2825,7 @@ func TestV1Alpha1Workflow(t *testing.T) {
 	///////////////////////////
 
 	t.Run("Raise Event with non existent component", func(t *testing.T) {
-		apiPath := "v1.0-alpha1/workflows/non-existent-component/instanceID/raiseEvent/fakeEvent"
+		apiPath := "v1.0-beta1/workflows/non-existent-component/instanceID/raiseEvent/fakeEvent"
 
 		req := workflowContrib.RaiseEventRequest{
 			InstanceID: "",
@@ -2923,7 +2848,7 @@ func TestV1Alpha1Workflow(t *testing.T) {
 		// Note that this test passes even though there is no workflow implemented.
 		// This is due to the fact that the 'fakecomponent' has the 'RaiseEvent' method implemented to simply return nil
 
-		apiPath := "v1.0-alpha1/workflows/dapr/instanceID/raiseEvent/fakeEvent"
+		apiPath := "v1.0-beta1/workflows/dapr/instanceID/raiseEvent/fakeEvent"
 
 		resp := fakeServer.DoRequest("POST", apiPath, []byte("event payload"), nil)
 		assert.Equal(t, 202, resp.StatusCode)
@@ -2937,7 +2862,7 @@ func TestV1Alpha1Workflow(t *testing.T) {
 	/////////////////////////
 
 	t.Run("Pause with non existent component", func(t *testing.T) {
-		apiPath := "v1.0-alpha1/workflows/non-existent-component/instanceID/pause"
+		apiPath := "v1.0-beta1/workflows/non-existent-component/instanceID/pause"
 
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 400, resp.StatusCode)
@@ -2952,7 +2877,7 @@ func TestV1Alpha1Workflow(t *testing.T) {
 		// Note that this test passes even though there is no workflow implemented.
 		// This is due to the fact that the 'fakecomponent' has the 'pause' method implemented to simply return nil
 
-		apiPath := "v1.0-alpha1/workflows/dapr/instanceID/pause"
+		apiPath := "v1.0-beta1/workflows/dapr/instanceID/pause"
 
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 202, resp.StatusCode)
@@ -2966,7 +2891,7 @@ func TestV1Alpha1Workflow(t *testing.T) {
 	/////////////////////////
 
 	t.Run("Resume with non existent component", func(t *testing.T) {
-		apiPath := "v1.0-alpha1/workflows/non-existent-component/instanceID/resume"
+		apiPath := "v1.0-beta1/workflows/non-existent-component/instanceID/resume"
 
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 400, resp.StatusCode)
@@ -2981,7 +2906,7 @@ func TestV1Alpha1Workflow(t *testing.T) {
 		// Note that this test passes even though there is no workflow implemented.
 		// This is due to the fact that the 'fakecomponent' has the 'resume' method implemented to simply return nil
 
-		apiPath := "v1.0-alpha1/workflows/dapr/instanceID/resume"
+		apiPath := "v1.0-beta1/workflows/dapr/instanceID/resume"
 
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 202, resp.StatusCode)
@@ -2998,7 +2923,7 @@ func TestV1Alpha1Workflow(t *testing.T) {
 		// Note that this test passes even though there is no workflow implemented.
 		// This is due to the fact that the 'fakecomponent' has the 'purge' method implemented to simply return nil
 
-		apiPath := "v1.0-alpha1/workflows/dapr/instanceID/purge"
+		apiPath := "v1.0-beta1/workflows/dapr/instanceID/purge"
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 202, resp.StatusCode)
 

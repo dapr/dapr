@@ -621,7 +621,6 @@ func nonHostedTestHandler(w http.ResponseWriter, r *http.Request) {
 		"GetReminder":    {"GET", nil},
 		"CreateReminder": {"PUT", struct{}{}},
 		"DeleteReminder": {"DELETE", struct{}{}},
-		"RenameReminder": {"PATCH", struct{}{}},
 	}
 	for op, t := range tests {
 		body, err := httpCall(t.Method, url, t.Body, http.StatusForbidden)

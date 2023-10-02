@@ -23,15 +23,18 @@ import (
 func TestFastHTTPReponses(t *testing.T) {
 	t.Run("Respond with JSON", func(t *testing.T) {
 		ctx := &fasthttp.RequestCtx{Request: fasthttp.Request{}}
-		fasthttpRespond(ctx, fasthttpResponseWithJSON(200, nil))
+		fasthttpRespond(ctx, fasthttpResponseWithJSON(200, nil, map[string]string{
+			"foo": "bar",
+		}))
 
 		assert.Equal(t, "application/json", string(ctx.Response.Header.ContentType()))
+		assert.Equal(t, "bar", string(ctx.Response.Header.Peek("metadata.foo")))
 	})
 
 	t.Run("Respond with JSON overrides custom content-type", func(t *testing.T) {
 		ctx := &fasthttp.RequestCtx{Request: fasthttp.Request{}}
 		ctx.Response.Header.SetContentType("custom")
-		fasthttpRespond(ctx, fasthttpResponseWithJSON(200, nil))
+		fasthttpRespond(ctx, fasthttpResponseWithJSON(200, nil, nil))
 
 		assert.Equal(t, "application/json", string(ctx.Response.Header.ContentType()))
 	})

@@ -28,6 +28,9 @@ type options struct {
 	metricsPort         int
 	initialCluster      string
 	initialClusterPorts []int
+	tlsEnabled          bool
+	sentryAddress       *string
+	trustAnchorsFile    *string
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
@@ -66,7 +69,25 @@ func WithInitialCluster(initialCluster string) Option {
 	}
 }
 
-func WithInitialClusterPorts(ports []int) Option {
+func WithEnableTLS(enable bool) Option {
+	return func(o *options) {
+		o.tlsEnabled = enable
+	}
+}
+
+func WithSentryAddress(sentryAddress string) Option {
+	return func(o *options) {
+		o.sentryAddress = &sentryAddress
+	}
+}
+
+func WithTrustAnchorsFile(file string) Option {
+	return func(o *options) {
+		o.trustAnchorsFile = &file
+	}
+}
+
+func WithInitialClusterPorts(ports ...int) Option {
 	return func(o *options) {
 		o.initialClusterPorts = ports
 	}

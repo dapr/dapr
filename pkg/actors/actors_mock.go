@@ -21,6 +21,7 @@ package actors
 import (
 	"context"
 	"errors"
+	"time"
 
 	mock "github.com/stretchr/testify/mock"
 
@@ -41,7 +42,9 @@ type MockActors struct {
 	mock.Mock
 }
 
-func (_m *MockActors) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor) error {
+func (_m *MockActors) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor,
+	actorIdleTimeout time.Duration,
+) error {
 	return nil
 }
 
@@ -74,20 +77,6 @@ func (_m *MockActors) CreateReminder(ctx context.Context, req *CreateReminderReq
 
 	var r0 error
 	if rf, ok := ret.Get(0).(func(*CreateReminderRequest) error); ok {
-		r0 = rf(req)
-	} else {
-		r0 = ret.Error(0)
-	}
-
-	return r0
-}
-
-// RenameReminder provides a mock function with given fields: req
-func (_m *MockActors) RenameReminder(ctx context.Context, req *RenameReminderRequest) error {
-	ret := _m.Called(req)
-
-	var r0 error
-	if rf, ok := ret.Get(0).(func(request *RenameReminderRequest) error); ok {
 		r0 = rf(req)
 	} else {
 		r0 = ret.Error(0)
@@ -274,7 +263,9 @@ type FailingActors struct {
 	Failure daprt.Failure
 }
 
-func (f *FailingActors) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor) error {
+func (f *FailingActors) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor,
+	actorIdleTimeout time.Duration,
+) error {
 	return nil
 }
 
@@ -327,10 +318,6 @@ func (f *FailingActors) CreateReminder(ctx context.Context, req *CreateReminderR
 }
 
 func (f *FailingActors) DeleteReminder(ctx context.Context, req *DeleteReminderRequest) error {
-	return nil
-}
-
-func (f *FailingActors) RenameReminder(ctx context.Context, req *RenameReminderRequest) error {
 	return nil
 }
 

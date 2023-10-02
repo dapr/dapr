@@ -10,6 +10,7 @@ import (
 	clocktesting "k8s.io/utils/clock/testing"
 
 	"github.com/dapr/dapr/pkg/placement/raft"
+	"github.com/dapr/dapr/pkg/security/fake"
 	daprtesting "github.com/dapr/dapr/pkg/testing"
 )
 
@@ -43,7 +44,7 @@ func TestMain(m *testing.M) {
 	serverStoped := make(chan struct{})
 	go func() {
 		defer close(serverStoped)
-		if err := testRaftServer.StartRaft(ctx, nil); err != nil {
+		if err := testRaftServer.StartRaft(ctx, fake.New(), nil); err != nil {
 			log.Fatalf("error running test raft server: %v", err)
 		}
 	}()

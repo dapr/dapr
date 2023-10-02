@@ -17,6 +17,7 @@ package universalapi
 
 import (
 	"sync"
+	"sync/atomic"
 
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/config"
@@ -39,4 +40,16 @@ type UniversalAPI struct {
 	GlobalConfig                *config.Configuration
 
 	extendedMetadataLock sync.RWMutex
+	actorsReady          atomic.Bool
+	actorsReadyCh        chan struct{}
+	initDone             atomic.Bool
+}
+
+// InitUniversalAPI completes the initialization of the UniversalAPI object.
+func (a *UniversalAPI) InitUniversalAPI() {
+	if !a.initDone.CompareAndSwap(false, true) {
+		return
+	}
+
+	a.actorsReadyCh = make(chan struct{})
 }

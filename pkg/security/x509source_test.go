@@ -18,6 +18,7 @@ import (
 	"crypto/x509"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -229,12 +230,14 @@ func Test_atomicWrite(t *testing.T) {
 
 			f, err = os.Lstat(dir)
 			require.NoError(t, err)
-			assert.False(t, f.IsDir())
-			assert.Equal(t, os.ModeSymlink.Type().String(), f.Mode().Type().String())
-
-			target, err := os.Readlink(dir)
-			require.NoError(t, err)
-			assert.Equal(t, newDir, target)
+			if runtime.GOOS == "windows" {
+				assert.Equal(t, os.ModeDir.Type().String(), f.Mode().Type().String())
+			} else {
+				assert.Equal(t, os.ModeSymlink.Type().String(), f.Mode().Type().String())
+				target, lerr := os.Readlink(dir)
+				require.NoError(t, lerr)
+				assert.Equal(t, newDir, target)
+			}
 
 			walkDir, err := os.ReadDir(newDir)
 			require.NoError(t, err)
@@ -280,6 +283,40 @@ func Test_renewalTime(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			actual := renewalTime(test.notBefore, test.notAfter)
 			assert.Equal(t, test.expected, actual)
+		})
+	}
+}
+
+func Test_isControlPlaneService(t *testing.T) {
+	tests := map[string]struct {
+		name string
+		exp  bool
+	}{
+		"operator should be control plane service": {
+			name: "dapr-operator",
+			exp:  true,
+		},
+		"sentry should be control plane service": {
+			name: "dapr-sentry",
+			exp:  true,
+		},
+		"placement should be control plane service": {
+			name: "dapr-placement",
+			exp:  true,
+		},
+		"sidecar injector should be control plane service": {
+			name: "dapr-injector",
+			exp:  true,
+		},
+		"not a control plane service": {
+			name: "my-app",
+			exp:  false,
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, test.exp, isControlPlaneService(test.name))
 		})
 	}
 }

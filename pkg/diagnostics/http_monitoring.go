@@ -278,6 +278,29 @@ func (h *httpMetrics) convertPathToMetricLabel(path string) string {
 		parsedPath[3] = "{id}"
 		// Concat 5 items(v1, actors, DemoActor, {id}, timer) in /v1/actors/DemoActor/1/timer/name
 		return "/" + strings.Join(parsedPath[0:5], "/")
+	case "workflows":
+		// v1.0-alpha1/workflows/<workflowComponentName>/<instanceId>
+		if len(parsedPath) == 4 {
+			parsedPath[3] = "{instanceId}"
+			return "/" + strings.Join(parsedPath[0:4], "/")
+		}
+		// v1.0-alpha1/workflows/<workflowComponentName>/<workflowName>/start[?instanceID=<instanceID>]
+		if parsedPath[4] != "" && strings.HasPrefix(parsedPath[4], "start") {
+			// not obfuscating the workflow name, just the possible instanceID
+			return "/" + strings.Join(parsedPath[0:4], "/") + "/start"
+		} else {
+			// v1.0-alpha1/workflows/<workflowComponentName>/<instanceId>/terminate
+			// v1.0-alpha1/workflows/<workflowComponentName>/<instanceId>/pause
+			// v1.0-alpha1/workflows/<workflowComponentName>/<instanceId>/resume
+			// v1.0-alpha1/workflows/<workflowComponentName>/<instanceId>/purge
+			parsedPath[3] = "{instanceId}"
+			// v1.0-alpha1/workflows/<workflowComponentName>/<instanceID>/raiseEvent/<eventName>
+			if len(parsedPath) == 6 && parsedPath[4] == "raiseEvent" && parsedPath[5] != "" {
+				parsedPath[5] = "{eventName}"
+				return "/" + strings.Join(parsedPath[0:6], "/")
+			}
+		}
+		return "/" + strings.Join(parsedPath[0:5], "/")
 	}
 
 	return path

@@ -138,7 +138,7 @@ func (t TransactionalUpsert) StateOperation(baseKey string, opts StateOperationO
 		maps.Copy(t.Metadata, opts.Metadata)
 	}
 
-	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
+	// TODO: @joshvanl Remove in Dapr 1.13 when ActorStateTTL is out of preview.
 	if !opts.StateTTLEnabled {
 		if _, ok := t.Metadata["ttlInSeconds"]; ok {
 			return op, fmt.Errorf("ttlInSeconds is not supported without the %q feature enabled", config.ActorStateTTL)

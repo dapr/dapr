@@ -15,7 +15,9 @@ package spiffe
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/spiffe/go-spiffe/v2/spiffegrpc/grpccredentials"
@@ -24,42 +26,77 @@ import (
 
 // Parsed is a parsed SPIFFE ID according to the Dapr SPIFFE ID path format.
 type Parsed struct {
-	TrustDomain string
-	Namespace   string
-	AppID       string
+	id spiffeid.ID
+
+	namespace string
+	appID     string
 }
 
-// FromContext parses a SPIFFE ID from a gRPC context.
-func FromContext(ctx context.Context) (Parsed, bool, error) {
+// FromGRPCContext parses a SPIFFE ID from a gRPC context.
+func FromGRPCContext(ctx context.Context) (*Parsed, bool, error) {
 	// Apply access control list filter
 	id, ok := grpccredentials.PeerIDFromContext(ctx)
 	if !ok {
-		return Parsed{}, false, nil
+		return nil, false, nil
 	}
 
-	return fromID(id)
-}
-
-func fromID(id spiffeid.ID) (Parsed, bool, error) {
 	split := strings.Split(id.Path(), "/")
 	// Don't force match of 4 segments, since we may want to add more identifiers
 	// to the path in future which would otherwise break backwards compat.
 	if len(split) < 4 || split[0] != "" || split[1] != "ns" {
-		return Parsed{}, false, fmt.Errorf("malformed SPIFFE ID: %s", id.String())
+		return nil, false, fmt.Errorf("malformed SPIFFE ID: %s", id.String())
 	}
 
-	return Parsed{
-		TrustDomain: id.TrustDomain().String(),
-		Namespace:   split[2],
-		AppID:       split[3],
+	return &Parsed{
+		id:        id,
+		namespace: split[2],
+		appID:     split[3],
 	}, true, nil
 }
 
-func (p Parsed) ToID() (spiffeid.ID, error) {
-	td, err := spiffeid.TrustDomainFromString(p.TrustDomain)
-	if err != nil {
-		return spiffeid.ID{}, err
+// FromStrings builds a Dapr SPIFFE ID with the given namespace and app ID in
+// the given Trust Domain.
+func FromStrings(td spiffeid.TrustDomain, namespace, appID string) (*Parsed, error) {
+	if len(td.String()) == 0 || len(namespace) == 0 || len(appID) == 0 {
+		return nil, errors.New("malformed SPIFFE ID")
 	}
 
-	return spiffeid.FromSegments(td, "ns", p.Namespace, p.AppID)
+	id, err := spiffeid.FromSegments(td, "ns", namespace, appID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Parsed{
+		id:        id,
+		namespace: namespace,
+		appID:     appID,
+	}, nil
+}
+
+func (p *Parsed) TrustDomain() spiffeid.TrustDomain {
+	if p == nil {
+		return spiffeid.TrustDomain{}
+	}
+	return p.id.TrustDomain()
+}
+
+func (p *Parsed) AppID() string {
+	if p == nil {
+		return ""
+	}
+	return p.appID
+}
+
+func (p *Parsed) Namespace() string {
+	if p == nil {
+		return ""
+	}
+	return p.namespace
+}
+
+func (p *Parsed) URL() *url.URL {
+	if p == nil {
+		return new(url.URL)
+	}
+	return p.id.URL()
 }

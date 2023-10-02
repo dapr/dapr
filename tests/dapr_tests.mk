@@ -58,7 +58,7 @@ configurationapp \
 workflowsapp \
 
 # PERFORMANCE test app list
-PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc actor-activation-locker k6-custom pubsub_subscribe_http configuration
+PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc actor-activation-locker k6-custom pubsub_subscribe_http configuration workflowsapp
 
 # E2E test app root directory
 E2E_TESTAPP_DIR=./tests/apps
@@ -83,6 +83,7 @@ actor_id_scale \
 actor_type_scale \
 configuration \
 pubsub_subscribe_http \
+workflows \
 
 KUBECTL=kubectl
 
@@ -319,7 +320,7 @@ test-deps:
 # start all e2e tests
 test-e2e-all: check-e2e-env test-deps
 	# Note: we can set -p 2 to run two tests apps at a time, because today we do not share state between
-	# tests. In the future, if we add any tests that modify global state (such as dapr config), we'll 
+	# tests. In the future, if we add any tests that modify global state (such as dapr config), we'll
 	# have to be sure and run them after the main test suite, so as not to alter the state of a running
 	# test
 	# Note2: use env variable DAPR_E2E_TEST to pick one e2e test to run.
@@ -347,7 +348,7 @@ test-perf-$(1): check-e2e-env test-deps
 			--junitfile $(TEST_OUTPUT_FILE_PREFIX)_perf_$(1).xml \
 			--format standard-quiet \
 			-- \
-				-timeout 1h -p 1 -count=1 -v -tags=perf ./tests/perf/$(1)/...
+				-timeout 2h -p 1 -count=1 -v -tags=perf ./tests/perf/$(1)/...
 	jq -r .Output $(TEST_OUTPUT_FILE_PREFIX)_perf_$(1).json | strings
 endef
 
@@ -373,7 +374,7 @@ ifeq ($(DAPR_PERF_TEST),)
 		--junitfile $(TEST_OUTPUT_FILE_PREFIX)_perf.xml \
 		--format standard-quiet \
 		-- \
-			-timeout 1h -p 1 -count=1 -v -tags=perf ./tests/perf/...
+			-timeout 2.5h -p 1 -count=1 -v -tags=perf ./tests/perf/...
 	jq -r .Output $(TEST_OUTPUT_FILE_PREFIX)_perf.json | strings
 else
 	for app in $(DAPR_PERF_TEST); do \
@@ -390,7 +391,7 @@ else
 			--junitfile $(TEST_OUTPUT_FILE_PREFIX)_perf.xml \
 			--format standard-quiet \
 			-- \
-				-timeout 1h -p 1 -count=1 -v -tags=perf ./tests/perf/$$app... || exit -1 ; \
+				-timeout 2.5h -p 1 -count=1 -v -tags=perf ./tests/perf/$$app... || exit -1 ; \
 		jq -r .Output $(TEST_OUTPUT_FILE_PREFIX)_perf.json | strings ; \
 	done
 endif
@@ -475,7 +476,7 @@ setup-test-env-rabbitmq:
 
 # install mqtt to the cluster
 setup-test-env-mqtt:
-	$(HELM) repo add emqx https://repos.emqx.io/charts 
+	$(HELM) repo add emqx https://repos.emqx.io/charts
 	$(HELM) repo update
 	$(HELM) upgrade \
 	  --install perf-test-emqx emqx/emqx \
@@ -613,13 +614,13 @@ describe-kind-env:
 	export DAPR_TEST_REGISTRY=$${DAPR_TEST_REGISTRY:-localhost:5000/dapr}\n\
 	export DAPR_TAG=dev\n\
 	export DAPR_NAMESPACE=dapr-tests"
-	
+
 
 delete-kind:
 	docker stop kind-registry && docker rm kind-registry || echo "Could not delete registry."
 	kind delete cluster --name kind
 
-ifeq ($(OS),Windows_NT) 
+ifeq ($(OS),Windows_NT)
     detected_OS := windows
 else
     detected_OS := $(shell sh -c 'uname 2>/dev/null || echo Unknown' |  tr '[:upper:]' '[:lower:]')

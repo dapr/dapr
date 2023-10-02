@@ -23,6 +23,7 @@ import (
 	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/metrics"
+	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/placement"
 	"github.com/dapr/dapr/pkg/placement/hashing"
 	"github.com/dapr/dapr/pkg/placement/monitoring"
@@ -71,6 +72,7 @@ func main() {
 		TrustAnchorsFile:        opts.TrustAnchorsFile,
 		AppID:                   "dapr-placement",
 		MTLSEnabled:             opts.TLSEnabled,
+		Mode:                    modes.DaprMode(opts.Mode),
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -81,10 +83,14 @@ func main() {
 
 	err = concurrency.NewRunnerManager(
 		func(ctx context.Context) error {
-			return raftServer.StartRaft(ctx, nil)
+			sec, serr := secProvider.Handler(ctx)
+			if serr != nil {
+				return serr
+			}
+			return raftServer.StartRaft(ctx, sec, nil)
 		},
 		metricsExporter.Run,
-		secProvider.Start,
+		secProvider.Run,
 		apiServer.MonitorLeadership,
 		func(ctx context.Context) error {
 			var metadataOptions []health.RouterOptions
