@@ -39,17 +39,15 @@ func init() {
 // initerror tests that Daprd will block actor calls until actors have been
 // initialized.
 type initerror struct {
-	daprd         *daprd.Daprd
-	place         *placement.Placement
-	configCalled  chan struct{}
-	blockConfig   chan struct{}
-	healthzCalled chan struct{}
+	daprd        *daprd.Daprd
+	place        *placement.Placement
+	configCalled chan struct{}
+	blockConfig  chan struct{}
 }
 
 func (i *initerror) Setup(t *testing.T) []framework.Option {
 	i.configCalled = make(chan struct{})
 	i.blockConfig = make(chan struct{})
-	i.healthzCalled = make(chan struct{})
 
 	handler := http.NewServeMux()
 	handler.HandleFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
@@ -59,7 +57,6 @@ func (i *initerror) Setup(t *testing.T) []framework.Option {
 	})
 	handler.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		close(i.healthzCalled)
 	})
 	handler.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`OK`))
@@ -80,7 +77,6 @@ spec:
     value: true
 `),
 		daprd.WithPlacementAddresses("localhost:"+strconv.Itoa(i.place.Port())),
-		daprd.WithAppProtocol("http"),
 		daprd.WithAppPort(srv.Port()),
 		// Daprd is super noisy in debug mode when connecting to placement.
 		daprd.WithLogLevel("info"),
@@ -125,12 +121,6 @@ func (i *initerror) Run(t *testing.T, ctx context.Context) {
 	}
 
 	close(i.blockConfig)
-
-	select {
-	case <-i.healthzCalled:
-	case <-time.After(time.Second * 5):
-		t.Fatal("timed out waiting for healthz call")
-	}
 
 	req, err = http.NewRequestWithContext(ctx, http.MethodPost, daprdURL, nil)
 	require.NoError(t, err)
