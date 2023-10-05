@@ -29,10 +29,11 @@ type Option func(*options)
 
 // GRPC is a GRPC server that can be used in integration tests.
 type GRPC struct {
-	server   *grpc.Server
-	listener net.Listener
-	srvErrCh chan error
-	stopCh   chan struct{}
+	registerFns []func(*grpc.Server)
+	serverOpts  []func(*testing.T, context.Context) grpc.ServerOption
+	listener    net.Listener
+	srvErrCh    chan error
+	stopCh      chan struct{}
 }
 
 func New(t *testing.T, fopts ...Option) *GRPC {
@@ -43,21 +44,17 @@ func New(t *testing.T, fopts ...Option) *GRPC {
 		fopt(&opts)
 	}
 
-	server := grpc.NewServer()
-	for _, rfs := range opts.registerFns {
-		rfs(server)
-	}
-
 	// Start the listener in New so we can squat on the port immediately, and
 	// keep it for the entire test case.
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 
 	return &GRPC{
-		listener: listener,
-		server:   server,
-		srvErrCh: make(chan error),
-		stopCh:   make(chan struct{}),
+		listener:    listener,
+		registerFns: opts.registerFns,
+		serverOpts:  opts.serverOpts,
+		srvErrCh:    make(chan error),
+		stopCh:      make(chan struct{}),
 	}
 }
 
@@ -66,8 +63,19 @@ func (g *GRPC) Port() int {
 }
 
 func (g *GRPC) Run(t *testing.T, ctx context.Context) {
+	ctx, cancel := context.WithCancel(ctx)
+
+	opts := make([]grpc.ServerOption, len(g.serverOpts))
+	for i, opt := range g.serverOpts {
+		opts[i] = opt(t, ctx)
+	}
+	server := grpc.NewServer(opts...)
+	for _, rfs := range g.registerFns {
+		rfs(server)
+	}
+
 	go func() {
-		err := g.server.Serve(g.listener)
+		err := server.Serve(g.listener)
 		if !errors.Is(err, http.ErrServerClosed) {
 			g.srvErrCh <- err
 		} else {
@@ -77,7 +85,8 @@ func (g *GRPC) Run(t *testing.T, ctx context.Context) {
 
 	go func() {
 		<-g.stopCh
-		g.server.GracefulStop()
+		cancel()
+		server.GracefulStop()
 	}()
 }
 

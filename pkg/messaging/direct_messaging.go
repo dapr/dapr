@@ -20,7 +20,6 @@ import (
 	"io"
 	"os"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -196,9 +195,8 @@ func (d *directMessaging) invokeWithRetry(
 				Disposer: resiliency.DisposerCloser[*invokev1.InvokeMethodResponse],
 			},
 		)
-		attempts := atomic.Int32{}
 		return policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
-			attempt := attempts.Add(1)
+			attempt := resiliency.GetAttempt(ctx)
 			rResp, teardown, rErr := fn(ctx, app.id, app.namespace, app.address, req)
 			if rErr == nil {
 				teardown(false)
@@ -259,7 +257,7 @@ func (d *directMessaging) invokeHTTPEndpoint(ctx context.Context, appID, appName
 }
 
 func (d *directMessaging) invokeRemote(ctx context.Context, appID, appNamespace, appAddress string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, func(destroy bool), error) {
-	conn, teardown, err := d.connectionCreatorFn(context.TODO(), appAddress, appID, appNamespace)
+	conn, teardown, err := d.connectionCreatorFn(ctx, appAddress, appID, appNamespace)
 	if err != nil {
 		if teardown == nil {
 			teardown = nopTeardown

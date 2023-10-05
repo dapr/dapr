@@ -151,10 +151,10 @@ func (s *server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 	}
 
 	// TODO: @joshvanl: before v1.12, daprd was matching on
-	// `<app-id>.<namespace>.svc.cluster.local`/`cluster.local` DNS SAN name so
-	// without this, daprd->daprd connections would fail. This is no longer the
-	// case since we now match with SPIFFE URI SAN, but we need to keep this here
-	// for backwards compatibility. Remove after v1.14.
+	// `<app-id>.<namespace>.svc.cluster.local` DNS SAN name so without this,
+	// daprd->daprd connections would fail. This is no longer the case since we
+	// now match with SPIFFE URI SAN, but we need to keep this here for backwards
+	// compatibility. Remove after v1.14.
 	var dns []string
 	switch {
 	case req.Namespace == security.CurrentNamespace() && req.Id == "dapr-injector":
@@ -188,7 +188,7 @@ func (s *server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 		return nil, status.Error(codes.Internal, "failed to encode certificate chain")
 	}
 
-	log.Debug("Successfully signed certificate for %s/%s", req.Namespace, req.Id)
+	log.Debugf("Successfully signed certificate for %s/%s", req.Namespace, req.Id)
 
 	return &sentryv1pb.SignCertificateResponse{
 		WorkloadCertificate: chainPEM,

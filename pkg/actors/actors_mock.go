@@ -85,20 +85,6 @@ func (_m *MockActors) CreateReminder(ctx context.Context, req *CreateReminderReq
 	return r0
 }
 
-// RenameReminder provides a mock function with given fields: req
-func (_m *MockActors) RenameReminder(ctx context.Context, req *RenameReminderRequest) error {
-	ret := _m.Called(req)
-
-	var r0 error
-	if rf, ok := ret.Get(0).(func(request *RenameReminderRequest) error); ok {
-		r0 = rf(req)
-	} else {
-		r0 = ret.Error(0)
-	}
-
-	return r0
-}
-
 // IsActorHosted provides a mock function with given fields: req
 func (_m *MockActors) IsActorHosted(ctx context.Context, req *ActorHostedRequest) bool {
 	ret := _m.Called(req)
@@ -332,10 +318,6 @@ func (f *FailingActors) CreateReminder(ctx context.Context, req *CreateReminderR
 }
 
 func (f *FailingActors) DeleteReminder(ctx context.Context, req *DeleteReminderRequest) error {
-	return nil
-}
-
-func (f *FailingActors) RenameReminder(ctx context.Context, req *RenameReminderRequest) error {
 	return nil
 }
 

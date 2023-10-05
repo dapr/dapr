@@ -34,13 +34,13 @@ import (
 	"k8s.io/utils/clock"
 
 	"github.com/dapr/components-contrib/state"
+	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/internal"
 	"github.com/dapr/dapr/pkg/actors/placement"
 	"github.com/dapr/dapr/pkg/actors/reminders"
 	"github.com/dapr/dapr/pkg/actors/timers"
 	"github.com/dapr/dapr/pkg/channel"
 	configuration "github.com/dapr/dapr/pkg/config"
-	daprCredentials "github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/health"
@@ -52,6 +52,7 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/retry"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/logger"
 )
 
@@ -67,7 +68,6 @@ var (
 	log = logger.NewLogger("dapr.runtime.actor")
 
 	ErrIncompatibleStateStore        = errors.New("actor state store does not exist, or does not support transactions which are required to save state - please see https://docs.dapr.io/operations/components/setup-state-store/supported-state-stores/")
-	ErrDaprResponseHeader            = errors.New("error indicated via actor header response")
 	ErrReminderOpActorNotHosted      = errors.New("operations on actor reminders are only possible on hosted actor types")
 	ErrTransactionsTooManyOperations = errors.New("the transaction contains more operations than supported by the state store")
 	ErrReminderCanceled              = internal.ErrReminderCanceled
@@ -99,9 +99,6 @@ type Actors interface {
 	CreateReminder(ctx context.Context, req *CreateReminderRequest) error
 	// DeleteReminder deletes an actor reminder.
 	DeleteReminder(ctx context.Context, req *DeleteReminderRequest) error
-	// RenameReminder renames a reminder.
-	// TODO: remove in Dapr 1.13.
-	RenameReminder(ctx context.Context, req *RenameReminderRequest) error
 	// CreateTimer creates an actor timer.
 	CreateTimer(ctx context.Context, req *CreateTimerRequest) error
 	// DeleteTimer deletes an actor timer.
@@ -120,7 +117,6 @@ type actorsRuntime struct {
 	actorsReminders      internal.RemindersProvider
 	actorsTable          *sync.Map
 	appHealthy           *atomic.Bool
-	certChain            *daprCredentials.CertChain
 	tracingSpec          configuration.TracingSpec
 	resiliency           resiliency.Provider
 	storeName            string
@@ -128,6 +124,7 @@ type actorsRuntime struct {
 	clock                clock.WithTicker
 	internalActors       map[string]InternalActor
 	internalActorChannel *internalActorChannel
+	sec                  security.Handler
 	wg                   sync.WaitGroup
 	closed               atomic.Bool
 	closeCh              chan struct{}
@@ -141,11 +138,11 @@ type ActorsOpts struct {
 	AppChannel       channel.AppChannel
 	GRPCConnectionFn GRPCConnectionFn
 	Config           Config
-	CertChain        *daprCredentials.CertChain
 	TracingSpec      configuration.TracingSpec
 	Resiliency       resiliency.Provider
 	StateStoreName   string
 	CompStore        *compstore.ComponentStore
+	Security         security.Handler
 
 	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 	StateTTLEnabled bool
@@ -174,7 +171,6 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) ActorRuntime {
 		actorsConfig:         opts.Config,
 		timers:               timers.NewTimersProvider(clock),
 		actorsReminders:      remindersProvider,
-		certChain:            opts.CertChain,
 		tracingSpec:          opts.TracingSpec,
 		resiliency:           opts.Resiliency,
 		storeName:            opts.StateStoreName,
@@ -185,6 +181,7 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) ActorRuntime {
 		internalActors:       map[string]InternalActor{},
 		internalActorChannel: newInternalActorChannel(),
 		compStore:            opts.CompStore,
+		sec:                  opts.Security,
 
 		// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 		stateTTLEnabled: opts.StateTTLEnabled,
@@ -247,7 +244,7 @@ func (a *actorsRuntime) Init(ctx context.Context) error {
 	if a.placement == nil {
 		a.placement = placement.NewActorPlacement(placement.ActorPlacementOpts{
 			ServerAddrs:     a.actorsConfig.Config.PlacementAddresses,
-			CertChain:       a.certChain,
+			Security:        a.sec,
 			AppID:           a.actorsConfig.Config.AppID,
 			RuntimeHostname: hostname,
 			PodName:         a.actorsConfig.Config.PodName,
@@ -301,9 +298,9 @@ func (a *actorsRuntime) startAppHealthCheck(ctx context.Context, opts ...health.
 	for {
 		select {
 		case <-ctx.Done():
-			break
+			return
 		case <-a.closeCh:
-			break
+			return
 		case appHealthy := <-ch:
 			a.appHealthy.Store(appHealthy)
 		}
@@ -430,10 +427,10 @@ func (a *actorsRuntime) Call(ctx context.Context, req *invokev1.InvokeMethodRequ
 	}
 
 	if err != nil {
-		if errors.Is(err, ErrDaprResponseHeader) {
-			// We return the response to maintain the .NET Actor contract which communicates errors via the body, but resiliency needs the error to retry.
+		if resp != nil && actorerrors.Is(err) {
 			return resp, err
 		}
+
 		if resp != nil {
 			resp.Close()
 		}
@@ -459,9 +456,8 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 				Disposer: resiliency.DisposerCloser[*invokev1.InvokeMethodResponse],
 			},
 		)
-		attempts := atomic.Int32{}
 		return policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
-			attempt := attempts.Add(1)
+			attempt := resiliency.GetAttempt(ctx)
 			rResp, teardown, rErr := fn(ctx, targetAddress, targetID, req)
 			if rErr == nil {
 				teardown(false)
@@ -575,7 +571,7 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 
 	// The .NET SDK signifies Actor failure via a header instead of a bad response.
 	if _, ok := resp.Headers()["X-Daprerrorresponseheader"]; ok {
-		return resp, ErrDaprResponseHeader
+		return resp, actorerrors.NewActorError(resp)
 	}
 
 	return resp, nil
@@ -618,7 +614,7 @@ func (a *actorsRuntime) callRemoteActor(
 
 	// Generated gRPC client eats the response when we send
 	if _, ok := invokeResponse.Headers()["X-Daprerrorresponseheader"]; ok {
-		return invokeResponse, teardown, ErrDaprResponseHeader
+		return invokeResponse, teardown, actorerrors.NewActorError(invokeResponse)
 	}
 
 	return invokeResponse, teardown, nil
@@ -660,7 +656,8 @@ func (a *actorsRuntime) GetState(ctx context.Context, req *GetStateRequest) (*St
 	}
 
 	return &StateResponse{
-		Data: resp.Data,
+		Data:     resp.Data,
+		Metadata: resp.Metadata,
 	}, nil
 }
 
@@ -949,16 +946,6 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 	}
 
 	return a.actorsReminders.DeleteReminder(ctx, *req)
-}
-
-// Deprecated: Currently RenameReminder renames by deleting-then-inserting-again.
-// This implementation is not fault-tolerant, as a failed insert after deletion would result in no reminder
-func (a *actorsRuntime) RenameReminder(ctx context.Context, req *RenameReminderRequest) error {
-	if !a.actorsConfig.Config.HostedActorTypes.IsActorTypeHosted(req.ActorType) {
-		return ErrReminderOpActorNotHosted
-	}
-
-	return a.actorsReminders.RenameReminder(ctx, req)
 }
 
 func (a *actorsRuntime) GetReminder(ctx context.Context, req *GetReminderRequest) (*internal.Reminder, error) {

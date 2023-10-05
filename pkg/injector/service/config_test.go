@@ -33,8 +33,6 @@ func TestGetInjectorConfig(t *testing.T) {
 
 		cfg, err := GetConfig()
 		assert.NoError(t, err)
-		assert.Equal(t, "test-cert-file", cfg.TLSCertFile)
-		assert.Equal(t, "test-key-file", cfg.TLSKeyFile)
 		assert.Equal(t, "daprd-test-image", cfg.SidecarImage)
 		assert.Equal(t, "Always", cfg.SidecarImagePullPolicy)
 		assert.Equal(t, "test-namespace", cfg.Namespace)
@@ -53,8 +51,6 @@ func TestGetInjectorConfig(t *testing.T) {
 
 		cfg, err := GetConfig()
 		assert.NoError(t, err)
-		assert.Equal(t, "test-cert-file", cfg.TLSCertFile)
-		assert.Equal(t, "test-key-file", cfg.TLSKeyFile)
 		assert.Equal(t, "daprd-test-image", cfg.SidecarImage)
 		assert.Equal(t, "IfNotPresent", cfg.SidecarImagePullPolicy)
 		assert.Equal(t, "test-namespace", cfg.Namespace)

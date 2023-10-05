@@ -102,9 +102,6 @@ func (r *ReminderResponse) MarshalJSON() ([]byte, error) {
 	return json.Marshal(m)
 }
 
-// RenameReminderRequest is the request object for rename a reminder.
-type RenameReminderRequest = internal.RenameReminderRequest
-
 // SaveStateRequest is the request object for saving an actor state.
 type SaveStateRequest struct {
 	ActorID   string `json:"actorId"`
@@ -115,7 +112,8 @@ type SaveStateRequest struct {
 
 // StateResponse is the response returned from getting an actor state.
 type StateResponse struct {
-	Data []byte `json:"data"`
+	Data     []byte            `json:"data"`
+	Metadata map[string]string `json:"metadata"`
 }
 
 // BulkStateResponse is the response returned from getting an actor state in bulk.
