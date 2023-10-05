@@ -115,6 +115,8 @@ func TestStartWorkflowBeta1API(t *testing.T) {
 		Resiliency: resiliency.New(nil),
 		CompStore:  compStore,
 	}
+	fakeAPI.InitUniversalAPI()
+	fakeAPI.SetActorsInitDone()
 
 	for _, tt := range testCases {
 		t.Run(tt.testName, func(t *testing.T) {
@@ -187,6 +189,8 @@ func TestGetWorkflowBeta1API(t *testing.T) {
 		Resiliency: resiliency.New(nil),
 		CompStore:  compStore,
 	}
+	fakeAPI.InitUniversalAPI()
+	fakeAPI.SetActorsInitDone()
 
 	for _, tt := range testCases {
 		t.Run(tt.testName, func(t *testing.T) {
@@ -258,6 +262,8 @@ func TestTerminateWorkflowBeta1API(t *testing.T) {
 		Resiliency: resiliency.New(nil),
 		CompStore:  compStore,
 	}
+	fakeAPI.InitUniversalAPI()
+	fakeAPI.SetActorsInitDone()
 
 	for _, tt := range testCases {
 		t.Run(tt.testName, func(t *testing.T) {
@@ -344,6 +350,8 @@ func TestRaiseEventWorkflowBeta1Api(t *testing.T) {
 		Resiliency: resiliency.New(nil),
 		CompStore:  compStore,
 	}
+	fakeAPI.InitUniversalAPI()
+	fakeAPI.SetActorsInitDone()
 
 	for _, tt := range testCases {
 		t.Run(tt.testName, func(t *testing.T) {
@@ -417,6 +425,8 @@ func TestPauseWorkflowBeta1Api(t *testing.T) {
 		Resiliency: resiliency.New(nil),
 		CompStore:  compStore,
 	}
+	fakeAPI.InitUniversalAPI()
+	fakeAPI.SetActorsInitDone()
 
 	for _, tt := range testCases {
 		t.Run(tt.testName, func(t *testing.T) {
@@ -488,6 +498,8 @@ func TestResumeWorkflowBeta1Api(t *testing.T) {
 		Resiliency: resiliency.New(nil),
 		CompStore:  compStore,
 	}
+	fakeAPI.InitUniversalAPI()
+	fakeAPI.SetActorsInitDone()
 
 	for _, tt := range testCases {
 		t.Run(tt.testName, func(t *testing.T) {

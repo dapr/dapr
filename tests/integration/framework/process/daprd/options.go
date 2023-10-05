@@ -39,6 +39,11 @@ type options struct {
 	configs                 []string
 	placementAddresses      []string
 	logLevel                string
+	mode                    string
+	enableMTLS              bool
+	sentryAddress           string
+	controlPlaneAddress     string
+	disableK8sSecretStore   *bool
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
@@ -146,5 +151,35 @@ func WithPlacementAddresses(addresses ...string) Option {
 func WithLogLevel(logLevel string) Option {
 	return func(o *options) {
 		o.logLevel = logLevel
+	}
+}
+
+func WithMode(mode string) Option {
+	return func(o *options) {
+		o.mode = mode
+	}
+}
+
+func WithEnableMTLS(enable bool) Option {
+	return func(o *options) {
+		o.enableMTLS = enable
+	}
+}
+
+func WithSentryAddress(address string) Option {
+	return func(o *options) {
+		o.sentryAddress = address
+	}
+}
+
+func WithControlPlaneAddress(address string) Option {
+	return func(o *options) {
+		o.controlPlaneAddress = address
+	}
+}
+
+func WithDisableK8sSecretStore(disable bool) Option {
+	return func(o *options) {
+		o.disableK8sSecretStore = &disable
 	}
 }
