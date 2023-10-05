@@ -34,13 +34,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var (
-	tr *runner.TestRunner
-)
-
-const (
-	numHealthChecks = 60 // Number of times to check for endpoint health per app.
-)
+var tr *runner.TestRunner
 
 var testAppNames = []string{"perf-workflowsapp"}
 
@@ -56,19 +50,20 @@ func TestMain(m *testing.M) {
 	utils.SetupLogs("workflow_test")
 	testApps := []kube.AppDescription{}
 	for _, testAppName := range testAppNames {
-		replicas := 1
+		const replicas = 1
 		testApps = append(testApps, kube.AppDescription{
 			AppName:           testAppName,
 			DaprEnabled:       true,
 			ImageName:         "perf-workflowsapp",
-			Replicas:          int32(replicas),
+			Replicas:          replicas,
 			IngressEnabled:    true,
+			IngressPort:       3000,
 			MetricsEnabled:    true,
 			DaprMemoryLimit:   "800Mi",
 			DaprMemoryRequest: "800Mi",
 			AppMemoryLimit:    "800Mi",
 			AppMemoryRequest:  "800Mi",
-			AppPort:           3000,
+			AppPort:           -1,
 		})
 	}
 
@@ -131,9 +126,9 @@ func testWorkflow(t *testing.T, workflowName string, testAppName string, inputs 
 		for index2, scenario := range scenarios {
 			subTestName := "[" + strings.ToUpper(scenario) + "]: "
 			t.Run(subTestName, func(t *testing.T) {
-				//re-starting the app to clear previous runs memory
+				// Re-starting the app to clear previous run's memory
 				if restart {
-					log.Println("restarting app", testAppName)
+					log.Printf("Restarting app %s", testAppName)
 					err := tr.Platform.Restart(testAppName)
 					require.NoError(t, err, "Error restarting the app")
 				}
@@ -144,14 +139,14 @@ func testWorkflow(t *testing.T, workflowName string, testAppName string, inputs 
 				require.NotEmpty(t, externalURL, "external URL must not be empty")
 
 				// Check if test app endpoint is available
-				_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
-				require.NoError(t, err)
+				require.NoError(t, utils.HealthCheckApps(externalURL))
 
 				time.Sleep(10 * time.Second)
-				// // Initialize the workflow runtime
+
+				// Initialize the workflow runtime
 				url := fmt.Sprintf("http://%s/start-workflow-runtime", externalURL)
 				// Calling start-workflow-runtime multiple times so that it is started in all app instances
-				_, err = utils.HTTPGet(url)
+				_, err := utils.HTTPGet(url)
 				require.NoError(t, err, "error starting workflow runtime")
 
 				time.Sleep(10 * time.Second)
