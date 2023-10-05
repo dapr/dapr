@@ -45,7 +45,7 @@ namespace DaprDemoActor
       return Task.FromResult(car);
     }
 
-    public Task ThrowException(string errorMessage)
+    public Task<string> ThrowExceptionAsync(string errorMessage)
     {
       System.Console.WriteLine("Will throw exception with message: " + errorMessage);
       throw new System.ArgumentException(errorMessage);

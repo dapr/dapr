@@ -48,5 +48,19 @@ namespace DaprDemoActor
       var proxy = ActorProxy.Create(new ActorId(actorId), actorType);
       return await proxy.InvokeMethodAsync<Car, string>("CarToJSONAsync", car);
     }
+
+    [HttpPost("remotingException/{actorType}/{actorId}")]
+    public async Task<ActionResult<string>> RemotingExceptionAsync([FromRoute] string actorType, [FromRoute] string actorId, [FromBody] string message)
+    {
+      var proxy = ActorProxy.Create<ICarActor>(new ActorId(actorId), actorType);
+      try
+      {
+        return await proxy.ThrowExceptionAsync(message);
+      }
+      catch (ActorMethodInvocationException ex)
+      {
+        return ex.InnerException.Message;
+      }
+    }
   }
 }
