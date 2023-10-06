@@ -200,10 +200,6 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) ActorRuntime {
 }
 
 func (a *actorsRuntime) isActorLocallyHosted(ctx context.Context, actorType string, actorID string) (isLocal bool, actorAddress string) {
-	if isInternalActor(actorType) {
-		return true, "localhost"
-	}
-
 	lar, err := a.placement.LookupActor(ctx, internal.LookupActorRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
@@ -403,20 +399,12 @@ func (a *actorsRuntime) Call(ctx context.Context, req *invokev1.InvokeMethodRequ
 	}
 
 	actor := req.Actor()
-	var lar internal.LookupActorResponse
-	if isInternalActor(actor.ActorType) {
-		lar = internal.LookupActorResponse{
-			Address: "localhost",
-			AppID:   a.actorsConfig.AppID,
-		}
-	} else {
-		lar, err = a.placement.LookupActor(ctx, internal.LookupActorRequest{
-			ActorType: actor.GetActorType(),
-			ActorID:   actor.GetActorId(),
-		})
-		if err != nil {
-			return nil, err
-		}
+	lar, err := a.placement.LookupActor(ctx, internal.LookupActorRequest{
+		ActorType: actor.GetActorType(),
+		ActorID:   actor.GetActorId(),
+	})
+	if err != nil {
+		return nil, err
 	}
 	var resp *invokev1.InvokeMethodResponse
 	if a.isActorLocal(lar.Address, a.actorsConfig.Config.HostAddress, a.actorsConfig.Config.Port) {
