@@ -21,6 +21,7 @@ import (
 	"io"
 	"net"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -186,6 +187,8 @@ func TestInvokeRemote(t *testing.T) {
 	}
 
 	t.Run("streaming with no data", func(t *testing.T) {
+		routines := runtime.NumGoroutine()
+
 		messaging, teardown := prepareEnvironment(t, true, nil)
 		defer teardown()
 
@@ -199,11 +202,16 @@ func TestInvokeRemote(t *testing.T) {
 
 		pd, err := res.ProtoWithData()
 		require.NoError(t, err)
-
+		if err != nil {
+			return
+		}
 		assert.True(t, pd.Message.Data == nil || len(pd.Message.Data.Value) == 0)
+		assert.Equal(t, routines, runtime.NumGoroutine())
 	})
 
 	t.Run("streaming with single chunk", func(t *testing.T) {
+		routines := runtime.NumGoroutine()
+
 		messaging, teardown := prepareEnvironment(t, true, []string{"🐱"})
 		defer teardown()
 
@@ -219,9 +227,11 @@ func TestInvokeRemote(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, "🐱", string(pd.Message.Data.Value))
+		assert.Equal(t, routines, runtime.NumGoroutine())
 	})
 
 	t.Run("streaming with multiple chunks", func(t *testing.T) {
+		routines := runtime.NumGoroutine()
 		chunks := []string{
 			"Sempre caro mi fu quest'ermo colle ",
 			"e questa siepe, che da tanta parte ",
@@ -244,9 +254,11 @@ func TestInvokeRemote(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, "Sempre caro mi fu quest'ermo colle e questa siepe, che da tanta parte dell'ultimo orizzonte il guardo esclude. … E il naufragar m'è dolce in questo mare.", string(pd.Message.Data.Value))
+		assert.Equal(t, routines, runtime.NumGoroutine())
 	})
 
 	t.Run("target does not support streaming - request is not replayable", func(t *testing.T) {
+		routines := runtime.NumGoroutine()
 		messaging, teardown := prepareEnvironment(t, false, nil)
 		defer teardown()
 
@@ -259,9 +271,11 @@ func TestInvokeRemote(t *testing.T) {
 		require.Error(t, err)
 		assert.Equal(t, fmt.Sprintf(streamingUnsupportedErr, "app1"), err.Error())
 		assert.Nil(t, res)
+		assert.Equal(t, routines, runtime.NumGoroutine())
 	})
 
 	t.Run("target does not support streaming - request is replayable", func(t *testing.T) {
+		routines := runtime.NumGoroutine()
 		messaging, teardown := prepareEnvironment(t, false, nil)
 		defer teardown()
 
@@ -278,9 +292,11 @@ func TestInvokeRemote(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, "🐶", string(pd.Message.Data.Value))
+		assert.Equal(t, routines, runtime.NumGoroutine())
 	})
 
 	t.Run("target does not support streaming - request has data in-memory", func(t *testing.T) {
+		routines := runtime.NumGoroutine()
 		messaging, teardown := prepareEnvironment(t, false, nil)
 		defer teardown()
 
@@ -302,6 +318,7 @@ func TestInvokeRemote(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, "🐶", string(pd.Message.Data.Value))
+		assert.Equal(t, routines, runtime.NumGoroutine())
 	})
 }
 
