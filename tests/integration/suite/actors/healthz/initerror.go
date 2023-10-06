@@ -6,7 +6,7 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implieh.
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or impliei.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
@@ -33,34 +33,41 @@ import (
 )
 
 func init() {
-	suite.Register(new(healthz))
+	suite.Register(new(initerror))
 }
 
-// healthz ensures that the daprd `/healthz` endpoint is called and actors will respond successfully when invoked.
-type healthz struct {
+// initerror tests that Daprd will block actor calls until actors have been
+// initialized.
+type initerror struct {
 	daprd         *daprd.Daprd
 	place         *placement.Placement
+	configCalled  chan struct{}
+	blockConfig   chan struct{}
 	healthzCalled chan struct{}
 }
 
-func (h *healthz) Setup(t *testing.T) []framework.Option {
-	h.healthzCalled = make(chan struct{})
+func (i *initerror) Setup(t *testing.T) []framework.Option {
+	i.configCalled = make(chan struct{})
+	i.blockConfig = make(chan struct{})
+	i.healthzCalled = make(chan struct{})
 
 	handler := http.NewServeMux()
 	handler.HandleFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
+		close(i.configCalled)
+		<-i.blockConfig
 		w.Write([]byte(`{"entities": ["myactortype"]}`))
 	})
 	handler.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		close(h.healthzCalled)
+		close(i.healthzCalled)
 	})
 	handler.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`OK`))
 	})
 
 	srv := prochttp.New(t, prochttp.WithHandler(handler))
-	h.place = placement.New(t)
-	h.daprd = daprd.New(t, daprd.WithResourceFiles(`
+	i.place = placement.New(t)
+	i.daprd = daprd.New(t, daprd.WithResourceFiles(`
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -72,25 +79,23 @@ spec:
   - name: actorStateStore
     value: true
 `),
-		daprd.WithPlacementAddresses("localhost:"+strconv.Itoa(h.place.Port())),
-		daprd.WithAppProtocol("http"),
+		daprd.WithPlacementAddresses("localhost:"+strconv.Itoa(i.place.Port())),
 		daprd.WithAppPort(srv.Port()),
-		daprd.WithAppHealthCheck(true),
 		// Daprd is super noisy in debug mode when connecting to placement.
 		daprd.WithLogLevel("info"),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(h.place, srv, h.daprd),
+		framework.WithProcesses(i.place, srv, i.daprd),
 	}
 }
 
-func (h *healthz) Run(t *testing.T, ctx context.Context) {
-	h.place.WaitUntilRunning(t, ctx)
+func (i *initerror) Run(t *testing.T, ctx context.Context) {
+	i.place.WaitUntilRunning(t, ctx)
 
 	assert.Eventually(t, func() bool {
 		dialer := net.Dialer{Timeout: time.Second}
-		net, err := dialer.DialContext(ctx, "tcp", "localhost:"+strconv.Itoa(h.daprd.HTTPPort()))
+		net, err := dialer.DialContext(ctx, "tcp", "localhost:"+strconv.Itoa(i.daprd.HTTPPort()))
 		if err != nil {
 			return false
 		}
@@ -98,17 +103,17 @@ func (h *healthz) Run(t *testing.T, ctx context.Context) {
 		return true
 	}, time.Second*5, time.Millisecond*100)
 
-	select {
-	case <-h.healthzCalled:
-	case <-time.After(time.Second * 5):
-		t.Fatal("timed out waiting for healthz call")
-	}
-
 	client := util.HTTPClient(t)
+
+	select {
+	case <-i.configCalled:
+	case <-time.After(time.Second * 5):
+		t.Fatal("timed out waiting for config call")
+	}
 
 	rctx, cancel := context.WithTimeout(ctx, time.Second*2)
 	t.Cleanup(cancel)
-	daprdURL := "http://localhost:" + strconv.Itoa(h.daprd.HTTPPort()) + "/v1.0/actors/myactortype/myactorid/method/foo"
+	daprdURL := "http://localhost:" + strconv.Itoa(i.daprd.HTTPPort()) + "/v1.0/actors/myactortype/myactorid/method/foo"
 
 	req, err := http.NewRequestWithContext(rctx, http.MethodPost, daprdURL, nil)
 	require.NoError(t, err)
@@ -117,4 +122,19 @@ func (h *healthz) Run(t *testing.T, ctx context.Context) {
 	if resp != nil && resp.Body != nil {
 		assert.NoError(t, resp.Body.Close())
 	}
+
+	close(i.blockConfig)
+
+	select {
+	case <-i.healthzCalled:
+	case <-time.After(time.Second * 15):
+		t.Fatal("timed out waiting for healthz call")
+	}
+
+	req, err = http.NewRequestWithContext(ctx, http.MethodPost, daprdURL, nil)
+	require.NoError(t, err)
+	resp, err = client.Do(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.NoError(t, resp.Body.Close())
 }

@@ -116,7 +116,6 @@ type actorsRuntime struct {
 	timers               internal.TimersProvider
 	actorsReminders      internal.RemindersProvider
 	actorsTable          *sync.Map
-	appHealthy           *atomic.Bool
 	tracingSpec          configuration.TracingSpec
 	resiliency           resiliency.Provider
 	storeName            string
@@ -157,9 +156,6 @@ func NewActors(opts ActorsOpts) ActorRuntime {
 }
 
 func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) ActorRuntime {
-	appHealthy := &atomic.Bool{}
-	appHealthy.Store(true)
-
 	remindersProvider := reminders.NewRemindersProvider(clock, internal.RemindersProviderOpts{
 		StoreName: opts.StateStoreName,
 		Config:    opts.Config.Config,
@@ -176,7 +172,6 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) ActorRuntime {
 		storeName:            opts.StateStoreName,
 		placement:            opts.MockPlacement,
 		actorsTable:          &sync.Map{},
-		appHealthy:           appHealthy,
 		clock:                clock,
 		internalActors:       map[string]InternalActor{},
 		internalActorChannel: newInternalActorChannel(),
@@ -249,8 +244,8 @@ func (a *actorsRuntime) Init(ctx context.Context) error {
 			RuntimeHostname: hostname,
 			PodName:         a.actorsConfig.Config.PodName,
 			ActorTypes:      a.actorsConfig.Config.HostedActorTypes.ListActorTypes(),
-			AppHealthFn: func() bool {
-				return a.appHealthy.Load()
+			AppHealthFn: func(ctx context.Context) <-chan bool {
+				return a.getAppHealthCheckChan(ctx)
 			},
 			AfterTableUpdateFn: func() {
 				a.drainRebalancedActors()
@@ -259,7 +254,7 @@ func (a *actorsRuntime) Init(ctx context.Context) error {
 		})
 	}
 
-	a.wg.Add(3)
+	a.wg.Add(2)
 	go func() {
 		defer a.wg.Done()
 		a.placement.Start(ctx)
@@ -272,39 +267,29 @@ func (a *actorsRuntime) Init(ctx context.Context) error {
 	log.Infof("Actor runtime started. Actor idle timeout: %v. Actor scan interval: %v",
 		a.actorsConfig.Config.ActorIdleTimeout, a.actorsConfig.Config.ActorDeactivationScanInterval)
 
+	return nil
+}
+
+func (a *actorsRuntime) getAppHealthCheckChan(ctx context.Context) <-chan bool {
+	if len(a.actorsConfig.Config.HostedActorTypes.ListActorTypes()) == 0 || a.appChannel == nil {
+		return nil
+	}
+
 	// Be careful to configure healthz endpoint option. If app healthz returns unhealthy status, Dapr will
 	// disconnect from placement to remove the node from consistent hashing ring.
 	// i.e if app is busy state, the healthz status would be flaky, which leads to frequent
 	// actor rebalancing. It will impact the entire service.
-	go func() {
-		defer a.wg.Done()
-		a.startAppHealthCheck(ctx,
-			health.WithFailureThreshold(4),
-			health.WithInterval(5*time.Second),
-			health.WithRequestTimeout(2*time.Second),
-			health.WithHTTPClient(a.actorsConfig.HealthHTTPClient),
-		)
-	}()
-
-	return nil
+	return a.getAppHealthCheckChanWithOptions(ctx,
+		health.WithFailureThreshold(4),
+		health.WithInterval(5*time.Second),
+		health.WithRequestTimeout(2*time.Second),
+		health.WithHTTPClient(a.actorsConfig.HealthHTTPClient),
+	)
 }
 
-func (a *actorsRuntime) startAppHealthCheck(ctx context.Context, opts ...health.Option) {
-	if len(a.actorsConfig.Config.HostedActorTypes.ListActorTypes()) == 0 || a.appChannel == nil {
-		return
-	}
-
-	ch := health.StartEndpointHealthCheck(ctx, a.actorsConfig.HealthEndpoint+"/healthz", opts...)
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-a.closeCh:
-			return
-		case appHealthy := <-ch:
-			a.appHealthy.Store(appHealthy)
-		}
-	}
+func (a *actorsRuntime) getAppHealthCheckChanWithOptions(ctx context.Context, opts ...health.Option) <-chan bool {
+	opts = append(opts, health.WithAddress(a.actorsConfig.HealthEndpoint+"/healthz"))
+	return health.StartEndpointHealthCheck(ctx, opts...)
 }
 
 func constructCompositeKey(keys ...string) string {
@@ -481,15 +466,15 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 	return resp, err
 }
 
-func (a *actorsRuntime) getOrCreateActor(actorType, actorID string) *actor {
-	key := constructCompositeKey(actorType, actorID)
+func (a *actorsRuntime) getOrCreateActor(act *internalv1pb.Actor) *actor {
+	key := act.GetActorKey()
 
 	// This avoids allocating multiple actor allocations by calling newActor
 	// whenever actor is invoked. When storing actor key first, there is a chance to
 	// call newActor, but this is trivial.
 	val, ok := a.actorsTable.Load(key)
 	if !ok {
-		val, _ = a.actorsTable.LoadOrStore(key, newActor(actorType, actorID, a.actorsConfig.GetReentrancyForType(actorType).MaxStackDepth, a.clock))
+		val, _ = a.actorsTable.LoadOrStore(key, newActor(act.ActorType, act.ActorId, a.actorsConfig.GetReentrancyForType(act.ActorType).MaxStackDepth, a.clock))
 	}
 
 	return val.(*actor)
@@ -498,7 +483,7 @@ func (a *actorsRuntime) getOrCreateActor(actorType, actorID string) *actor {
 func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	actorTypeID := req.Actor()
 
-	act := a.getOrCreateActor(actorTypeID.GetActorType(), actorTypeID.GetActorId())
+	act := a.getOrCreateActor(actorTypeID)
 
 	// Reentrancy to determine how we lock.
 	var reentrancyID *string
@@ -750,7 +735,7 @@ func (a *actorsRuntime) executeStateStoreTransaction(ctx context.Context, store 
 }
 
 func (a *actorsRuntime) IsActorHosted(ctx context.Context, req *ActorHostedRequest) bool {
-	key := constructCompositeKey(req.ActorType, req.ActorID)
+	key := req.ActorKey()
 	policyDef := a.resiliency.BuiltInPolicy(resiliency.BuiltInActorNotFoundRetries)
 	policyRunner := resiliency.NewRunner[any](ctx, policyDef)
 	_, err := policyRunner(func(ctx context.Context) (any, error) {
