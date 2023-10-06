@@ -25,6 +25,11 @@ type ActorHostedRequest struct {
 	ActorType string `json:"actorType"`
 }
 
+// ActorKey returns the key of the actor for this request.
+func (r ActorHostedRequest) ActorKey() string {
+	return r.ActorType + daprSeparator + r.ActorID
+}
+
 // CreateReminderRequest is the request object to create a new reminder.
 type CreateReminderRequest = internal.CreateReminderRequest
 
@@ -39,6 +44,11 @@ type DeleteStateRequest struct {
 	ActorID   string `json:"actorId"`
 	ActorType string `json:"actorType"`
 	Key       string `json:"key"`
+}
+
+// ActorKey returns the key of the actor for this request.
+func (r DeleteStateRequest) ActorKey() string {
+	return r.ActorType + daprSeparator + r.ActorID
 }
 
 // DeleteTimerRequest is a request object for deleting a timer.
