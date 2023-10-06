@@ -72,17 +72,19 @@ type actorPlacement struct {
 	// look up Dapr runtime host address to locate actor.
 	placementTables *hashing.ConsistentHashTables
 	// placementTableLock is the lock for placementTables.
-	placementTableLock *sync.RWMutex
+	placementTableLock sync.RWMutex
 
 	// unblockSignal is the channel to unblock table locking.
 	unblockSignal chan struct{}
 	// tableIsBlocked is the status of table lock.
-	tableIsBlocked *atomic.Bool
+	tableIsBlocked atomic.Bool
 	// operationUpdateLock is the lock for three stage commit.
-	operationUpdateLock *sync.Mutex
+	operationUpdateLock sync.Mutex
 
-	// appHealthFn is the user app health check callback.
-	appHealthFn func() bool
+	// appHealthFn returns the appHealthCh
+	appHealthFn func(ctx context.Context) <-chan bool
+	// appHealthy contains the result of the app health checks.
+	appHealthy atomic.Bool
 	// afterTableUpdateFn is function for post processing done after table updates,
 	// such as draining actors and resetting reminders.
 	afterTableUpdateFn func()
@@ -103,7 +105,7 @@ type ActorPlacementOpts struct {
 	RuntimeHostname    string
 	PodName            string
 	ActorTypes         []string
-	AppHealthFn        func() bool
+	AppHealthFn        func(ctx context.Context) <-chan bool
 	AfterTableUpdateFn func()
 }
 
@@ -117,16 +119,12 @@ func NewActorPlacement(opts ActorPlacementOpts) internal.PlacementService {
 		podName:         opts.PodName,
 		serverAddr:      servers,
 
-		client: newPlacementClient(getGrpcOptsGetter(servers, opts.Security)),
+		client:          newPlacementClient(getGrpcOptsGetter(servers, opts.Security)),
+		placementTables: &hashing.ConsistentHashTables{Entries: make(map[string]*hashing.Consistent)},
 
-		placementTableLock: &sync.RWMutex{},
-		placementTables:    &hashing.ConsistentHashTables{Entries: make(map[string]*hashing.Consistent)},
-
-		operationUpdateLock: &sync.Mutex{},
-		tableIsBlocked:      &atomic.Bool{},
-		appHealthFn:         opts.AppHealthFn,
-		afterTableUpdateFn:  opts.AfterTableUpdateFn,
-		closeCh:             make(chan struct{}),
+		appHealthFn:        opts.AppHealthFn,
+		afterTableUpdateFn: opts.AfterTableUpdateFn,
+		closeCh:            make(chan struct{}),
 	}
 }
 
@@ -148,6 +146,7 @@ func (p *actorPlacement) AddHostedActorType(actorType string) error {
 func (p *actorPlacement) Start(ctx context.Context) error {
 	p.serverIndex.Store(0)
 	p.shutdown.Store(false)
+	p.appHealthy.Store(true)
 
 	if !p.establishStreamConn(ctx) {
 		return nil
@@ -163,6 +162,19 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 		case <-p.closeCh:
 		}
 		cancel()
+	}()
+
+	p.shutdownConnLoop.Add(1)
+	go func() {
+		defer p.shutdownConnLoop.Done()
+		ch := p.appHealthFn(ctx)
+		if ch == nil {
+			return
+		}
+
+		for healthy := range ch {
+			p.appHealthy.Store(healthy)
+		}
 	}()
 
 	// establish connection loop, whenever a disconnect occurs it starts to run trying to connect to a new server.
@@ -223,9 +235,9 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 				break
 			}
 
-			// appHealthFn is the health status of actor service application. This allows placement to update
+			// appHealthy is the health status of actor service application. This allows placement to update
 			// the member list and hashing table quickly.
-			if !p.appHealthFn() {
+			if !p.appHealthy.Load() {
 				// app is unresponsive, close the stream and disconnect from the placement service.
 				// Then Placement will remove this host from the member list.
 				log.Debug("disconnecting from placement service by the unhealthy app.")
@@ -318,7 +330,7 @@ func (p *actorPlacement) establishStreamConn(ctx context.Context) (established b
 	logFailureShown := false
 	for !p.shutdown.Load() {
 		// Stop reconnecting to placement until app is healthy.
-		if !p.appHealthFn() {
+		if !p.appHealthy.Load() {
 			// We are not using an exponential backoff here because we haven't begun to establish connections yet
 			time.Sleep(placementReadinessWaitInterval)
 			continue
