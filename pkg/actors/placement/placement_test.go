@@ -65,17 +65,13 @@ func TestPlacementStream_RoundRobin(t *testing.T) {
 		address[i], testSrv[i], cleanup[i] = newTestServer()
 	}
 
-	appHealthFunc := func() bool {
-		return true
-	}
-
 	testPlacement := NewActorPlacement(ActorPlacementOpts{
 		ServerAddrs:        address,
 		AppID:              "testAppID",
 		RuntimeHostname:    "127.0.0.1:1000",
 		PodName:            "testPodName",
 		ActorTypes:         []string{"actorOne", "actorTwo"},
-		AppHealthFn:        appHealthFunc,
+		AppHealthFn:        func(ctx context.Context) <-chan bool { return nil },
 		AfterTableUpdateFn: func() {},
 		Security:           testSecurity(t),
 	}).(*actorPlacement)
@@ -123,17 +119,15 @@ func TestAppHealthyStatus(t *testing.T) {
 	// set leader
 	testSrv.setLeader(true)
 
-	appHealth := atomic.Bool{}
-	appHealth.Store(true)
+	appHealthCh := make(chan bool)
 
-	appHealthFunc := appHealth.Load
 	testPlacement := NewActorPlacement(ActorPlacementOpts{
 		ServerAddrs:        []string{address},
 		AppID:              "testAppID",
 		RuntimeHostname:    "127.0.0.1:1000",
 		PodName:            "testPodName",
 		ActorTypes:         []string{"actorOne", "actorTwo"},
-		AppHealthFn:        appHealthFunc,
+		AppHealthFn:        func(ctx context.Context) <-chan bool { return appHealthCh },
 		AfterTableUpdateFn: func() {},
 		Security:           testSecurity(t),
 	}).(*actorPlacement)
@@ -147,18 +141,18 @@ func TestAppHealthyStatus(t *testing.T) {
 	assert.True(t, oldCount >= 2, "client must send at least twice")
 
 	// Mark app unhealthy
-	appHealth.Store(false)
+	appHealthCh <- false
 	time.Sleep(statusReportHeartbeatInterval * 2)
 	assert.True(t, testSrv.recvCount.Load() <= oldCount+1, "no more +1 heartbeat because app is unhealthy")
 
 	// clean up
+	close(appHealthCh)
 	require.NoError(t, testPlacement.Close())
 	cleanup()
 }
 
 func TestOnPlacementOrder(t *testing.T) {
 	tableUpdateCount := atomic.Int64{}
-	appHealthFunc := func() bool { return true }
 	tableUpdateFunc := func() { tableUpdateCount.Add(1) }
 	testPlacement := NewActorPlacement(ActorPlacementOpts{
 		ServerAddrs:        []string{},
@@ -166,7 +160,7 @@ func TestOnPlacementOrder(t *testing.T) {
 		RuntimeHostname:    "127.0.0.1:1000",
 		PodName:            "testPodName",
 		ActorTypes:         []string{"actorOne", "actorTwo"},
-		AppHealthFn:        appHealthFunc,
+		AppHealthFn:        func(ctx context.Context) <-chan bool { return nil },
 		AfterTableUpdateFn: tableUpdateFunc,
 		Security:           testSecurity(t),
 	}).(*actorPlacement)
@@ -212,14 +206,13 @@ func TestOnPlacementOrder(t *testing.T) {
 }
 
 func TestWaitUntilPlacementTableIsReady(t *testing.T) {
-	appHealthFunc := func() bool { return true }
 	testPlacement := NewActorPlacement(ActorPlacementOpts{
 		ServerAddrs:        []string{},
 		AppID:              "testAppID",
 		RuntimeHostname:    "127.0.0.1:1000",
 		PodName:            "testPodName",
 		ActorTypes:         []string{"actorOne", "actorTwo"},
-		AppHealthFn:        appHealthFunc,
+		AppHealthFn:        func(ctx context.Context) <-chan bool { return nil },
 		AfterTableUpdateFn: func() {},
 		Security:           testSecurity(t),
 	}).(*actorPlacement)
@@ -290,14 +283,13 @@ func TestWaitUntilPlacementTableIsReady(t *testing.T) {
 }
 
 func TestLookupActor(t *testing.T) {
-	appHealthFunc := func() bool { return true }
 	testPlacement := NewActorPlacement(ActorPlacementOpts{
 		ServerAddrs:        []string{},
 		AppID:              "testAppID",
 		RuntimeHostname:    "127.0.0.1:1000",
 		PodName:            "testPodName",
 		ActorTypes:         []string{"actorOne", "actorTwo"},
-		AppHealthFn:        appHealthFunc,
+		AppHealthFn:        func(ctx context.Context) <-chan bool { return nil },
 		AfterTableUpdateFn: func() {},
 		Security:           testSecurity(t),
 	}).(*actorPlacement)
@@ -334,14 +326,13 @@ func TestLookupActor(t *testing.T) {
 }
 
 func TestConcurrentUnblockPlacements(t *testing.T) {
-	appHealthFunc := func() bool { return true }
 	testPlacement := NewActorPlacement(ActorPlacementOpts{
 		ServerAddrs:        []string{},
 		AppID:              "testAppID",
 		RuntimeHostname:    "127.0.0.1:1000",
 		PodName:            "testPodName",
 		ActorTypes:         []string{"actorOne", "actorTwo"},
-		AppHealthFn:        appHealthFunc,
+		AppHealthFn:        func(ctx context.Context) <-chan bool { return nil },
 		AfterTableUpdateFn: func() {},
 		Security:           testSecurity(t),
 	}).(*actorPlacement)
