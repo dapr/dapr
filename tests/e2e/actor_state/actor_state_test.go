@@ -92,12 +92,12 @@ func TestActorState(t *testing.T) {
 			resp, code, err := utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID", initActorURL, actuid))
 			assert.NoError(t, err)
 			assert.Equal(t, http.StatusOK, code)
-			assert.Empty(t, resp)
+			assert.Empty(t, string(resp))
 
 			resp, code, err = utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID/doesnotexist", httpURL, actuid))
 			assert.NoError(t, err)
 			assert.Equal(t, http.StatusNoContent, code)
-			assert.Empty(t, resp)
+			assert.Empty(t, string(resp))
 		})
 
 		t.Run("should be able to save, get, update and delete state", func(t *testing.T) {

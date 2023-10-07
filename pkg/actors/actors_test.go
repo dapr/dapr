@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -37,6 +38,7 @@ import (
 	"github.com/dapr/dapr/pkg/health"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
+	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -967,14 +969,23 @@ func TestGetOrCreateActor(t *testing.T) {
 	defer testActorsRuntime.Close()
 
 	t.Run("create new key", func(t *testing.T) {
-		act := testActorsRuntime.getOrCreateActor(testActorType, "id-1")
+		act := testActorsRuntime.getOrCreateActor(&internalsv1pb.Actor{
+			ActorType: testActorType,
+			ActorId:   "id-1",
+		})
 		assert.NotNil(t, act)
 	})
 
 	t.Run("try to create the same key", func(t *testing.T) {
-		oldActor := testActorsRuntime.getOrCreateActor(testActorType, "id-2")
+		oldActor := testActorsRuntime.getOrCreateActor(&internalsv1pb.Actor{
+			ActorType: testActorType,
+			ActorId:   "id-2",
+		})
 		assert.NotNil(t, oldActor)
-		newActor := testActorsRuntime.getOrCreateActor(testActorType, "id-2")
+		newActor := testActorsRuntime.getOrCreateActor(&internalsv1pb.Actor{
+			ActorType: testActorType,
+			ActorId:   "id-2",
+		})
 		assert.Same(t, oldActor, newActor, "should not create new actor")
 	})
 }
@@ -1009,68 +1020,82 @@ func TestActiveActorsCount(t *testing.T) {
 }
 
 func TestActorsAppHealthCheck(t *testing.T) {
-	testActorsRuntime := newTestActorsRuntime()
-	defer testActorsRuntime.Close()
+	testFn := func(testActorsRuntime *actorsRuntime) func(t *testing.T) {
+		return func(t *testing.T) {
+			defer testActorsRuntime.Close()
+			clock := testActorsRuntime.clock.(*clocktesting.FakeClock)
 
-	clock := testActorsRuntime.clock.(*clocktesting.FakeClock)
+			testActorsRuntime.actorsConfig.Config.HostedActorTypes = internal.NewHostedActors([]string{"actor1"})
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
 
-	testActorsRuntime.actorsConfig.Config.HostedActorTypes = internal.NewHostedActors([]string{"actor1"})
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	go testActorsRuntime.startAppHealthCheck(ctx,
-		health.WithClock(clock),
-		health.WithFailureThreshold(1),
-		health.WithInterval(1*time.Second),
-		health.WithRequestTimeout(100*time.Millisecond),
-	)
+			opts := []health.Option{
+				health.WithClock(clock),
+				health.WithFailureThreshold(1),
+				health.WithInterval(1 * time.Second),
+				health.WithRequestTimeout(100 * time.Millisecond),
+			}
+			closingCh := make(chan struct{})
+			healthy := atomic.Bool{}
+			healthy.Store(true)
+			go func() {
+				defer close(closingCh)
+				for v := range testActorsRuntime.getAppHealthCheckChanWithOptions(ctx, opts...) {
+					healthy.Store(v)
+				}
+			}()
 
-	assert.Eventually(t, func() bool {
-		advanceTickers(t, clock, time.Second)
-		return !testActorsRuntime.appHealthy.Load()
-	}, time.Second, time.Microsecond*10, testActorsRuntime.appHealthy.Load())
-}
+			clock.Step(time.Second)
 
-func TestHostedActorsWithoutStateStore(t *testing.T) {
-	testActorsRuntime := newTestActorsRuntimeWithoutStore()
-	defer testActorsRuntime.Close()
-	clock := testActorsRuntime.clock.(*clocktesting.FakeClock)
+			assert.Eventually(t, func() bool {
+				advanceTickers(t, clock, time.Second)
+				return !healthy.Load()
+			}, time.Second, time.Microsecond*10)
 
-	testActorsRuntime.actorsConfig.Config.HostedActorTypes = internal.NewHostedActors([]string{"actor1"})
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	go testActorsRuntime.startAppHealthCheck(ctx,
-		health.WithClock(clock),
-		health.WithFailureThreshold(1),
-		health.WithInterval(1*time.Second),
-		health.WithRequestTimeout(100*time.Millisecond),
-	)
+			// Cancel now which should cause the shutdown
+			cancel()
+			<-closingCh
+		}
+	}
 
-	assert.Eventually(t, func() bool {
-		advanceTickers(t, clock, time.Second)
-		return !testActorsRuntime.appHealthy.Load()
-	}, time.Second, time.Microsecond*10, testActorsRuntime.appHealthy.Load())
-}
+	t.Run("with state store", testFn(newTestActorsRuntime()))
 
-func TestNoHostedActorsWithoutStateStore(t *testing.T) {
-	testActorsRuntime := newTestActorsRuntimeWithoutStore()
-	defer testActorsRuntime.Close()
-	clock := testActorsRuntime.clock.(*clocktesting.FakeClock)
+	t.Run("without state store", testFn(newTestActorsRuntimeWithoutStore()))
 
-	testActorsRuntime.actorsConfig.HostedActorTypes = internal.NewHostedActors([]string{})
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	go testActorsRuntime.startAppHealthCheck(ctx,
-		health.WithClock(clock),
-		health.WithFailureThreshold(1),
-		health.WithInterval(1*time.Second),
-		health.WithRequestTimeout(100*time.Millisecond),
-	)
+	t.Run("no hosted actors without state store", func(t *testing.T) {
+		testActorsRuntime := newTestActorsRuntimeWithoutStore()
+		defer testActorsRuntime.Close()
+		clock := testActorsRuntime.clock.(*clocktesting.FakeClock)
 
-	clock.Step(2 * time.Second)
+		testActorsRuntime.actorsConfig.HostedActorTypes = internal.NewHostedActors([]string{})
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 
-	assert.Eventually(t, func() bool {
-		return testActorsRuntime.appHealthy.Load()
-	}, time.Second, time.Microsecond*10)
+		opts := []health.Option{
+			health.WithClock(clock),
+			health.WithFailureThreshold(1),
+			health.WithInterval(1 * time.Second),
+			health.WithRequestTimeout(100 * time.Millisecond),
+		}
+
+		closingCh := make(chan struct{})
+		healthy := atomic.Bool{}
+		healthy.Store(true)
+		go func() {
+			defer close(closingCh)
+			for v := range testActorsRuntime.getAppHealthCheckChanWithOptions(ctx, opts...) {
+				healthy.Store(v)
+			}
+		}()
+
+		clock.Step(2 * time.Second)
+
+		assert.Eventually(t, healthy.Load, time.Second, time.Microsecond*10)
+
+		// Cancel now which should cause the shutdown
+		cancel()
+		<-closingCh
+	})
 }
 
 func TestShutdown(t *testing.T) {

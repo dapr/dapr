@@ -14,16 +14,26 @@ limitations under the License.
 package grpc
 
 import (
+	"context"
+	"testing"
+
 	"google.golang.org/grpc"
 )
 
 // options contains the options for running a GRPC server in integration tests.
 type options struct {
 	registerFns []func(*grpc.Server)
+	serverOpts  []func(*testing.T, context.Context) grpc.ServerOption
 }
 
 func WithRegister(f func(*grpc.Server)) Option {
 	return func(o *options) {
 		o.registerFns = append(o.registerFns, f)
+	}
+}
+
+func WithServerOption(opt func(t *testing.T, ctx context.Context) grpc.ServerOption) Option {
+	return func(o *options) {
+		o.serverOpts = append(o.serverOpts, opt)
 	}
 }

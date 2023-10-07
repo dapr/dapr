@@ -61,6 +61,9 @@ spec:
 	handler.HandleFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`{"entities": ["myactortype"]}`))
 	})
+	handler.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(""))
+	})
 	handler.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`OK`))
 	})
@@ -99,16 +102,20 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 
 	req, err := http.NewRequest(http.MethodPost, daprdURL+"/v1.0/actors/myactortype/myactorid/method/foo", nil)
 	require.NoError(t, err)
-	resp, err := client.Do(req)
-	require.NoError(t, err)
-	assert.NoError(t, resp.Body.Close())
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		resp, rErr := client.Do(req)
+		require.NoError(c, rErr)
+		assert.NoError(c, resp.Body.Close())
+		assert.Equal(c, http.StatusOK, resp.StatusCode)
+	}, time.Second*10, time.Millisecond*100, "actor not ready")
 
 	now := time.Now()
+
 	reqBody := `[{"operation":"upsert","request":{"key":"key1","value":"value1","metadata":{"ttlInSeconds":"3"}}}]`
 	req, err = http.NewRequest(http.MethodPost, daprdURL+"/v1.0/actors/myactortype/myactorid/state", strings.NewReader(reqBody))
 	require.NoError(t, err)
-	resp, err = client.Do(req)
+	resp, err := client.Do(req)
 	require.NoError(t, err)
 	assert.NoError(t, resp.Body.Close())
 

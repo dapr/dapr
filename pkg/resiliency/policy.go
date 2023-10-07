@@ -42,6 +42,8 @@ type doneCh[T any] struct {
 	err error
 }
 
+type attemptsCtxKey struct{}
+
 // PolicyDefinition contains a definition for a policy, used to create a Runner.
 type PolicyDefinition struct {
 	log                       logger.Logger
@@ -186,9 +188,12 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 
 		// Use retry/back off
 		b := def.r.NewBackOffWithContext(ctx)
+		attempts := atomic.Int32{}
 		return retry.NotifyRecoverWithData(
 			func() (T, error) {
-				rRes, rErr := operation(ctx)
+				attempt := attempts.Add(1)
+				opCtx := context.WithValue(ctx, attemptsCtxKey{}, attempt)
+				rRes, rErr := operation(opCtx)
 				// In case of an error, if we have a disposer we invoke it with the return value, then reset the return value
 				if rErr != nil && opts.Disposer != nil && !isZero(rRes) {
 					opts.Disposer(rRes)
@@ -205,7 +210,7 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 				def.log.Debugf("Error for operation %s was: %v", def.name, opErr)
 			},
 			func() {
-				def.log.Infof("Recovered processing operation %s.", def.name)
+				def.log.Infof("Recovered processing operation %s after %d attempts", def.name, attempts.Load())
 			},
 		)
 	}
@@ -214,6 +219,18 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 // DisposerCloser is a Disposer function for RunnerOpts that invokes Close() on the object.
 func DisposerCloser[T io.Closer](obj T) {
 	_ = obj.Close()
+}
+
+// GetAttempt returns the attempt number from a context
+// Attempts are numbered from 1 onwards.
+// If the context doesn't have an attempt number, returns 0
+func GetAttempt(ctx context.Context) int32 {
+	v := ctx.Value(attemptsCtxKey{})
+	attempt, ok := v.(int32)
+	if !ok {
+		return 0
+	}
+	return attempt
 }
 
 func isZero(val any) bool {

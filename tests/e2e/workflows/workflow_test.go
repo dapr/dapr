@@ -50,12 +50,12 @@ func TestMain(m *testing.M) {
 				ImageName:         "e2e-workflowsapp",
 				Replicas:          1,
 				IngressEnabled:    true,
-				MetricsEnabled:    true,
+				IngressPort:       3000,
 				DaprMemoryLimit:   "200Mi",
 				DaprMemoryRequest: "100Mi",
 				AppMemoryLimit:    "200Mi",
 				AppMemoryRequest:  "100Mi",
-				AppPort:           3000,
+				AppPort:           -1,
 			},
 		}
 
