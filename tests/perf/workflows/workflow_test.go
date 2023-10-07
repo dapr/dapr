@@ -63,12 +63,13 @@ func TestMain(m *testing.M) {
 			ImageName:         "perf-workflowsapp",
 			Replicas:          int32(replicas),
 			IngressEnabled:    true,
+			IngressPort:       3000,
 			MetricsEnabled:    true,
 			DaprMemoryLimit:   "800Mi",
 			DaprMemoryRequest: "800Mi",
 			AppMemoryLimit:    "800Mi",
 			AppMemoryRequest:  "800Mi",
-			AppPort:           3000,
+			AppPort:           -1,
 		})
 	}
 

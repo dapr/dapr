@@ -260,7 +260,7 @@ func (h *AppHealth) setResult(ctx context.Context, successful bool) {
 		h.failureCount.Store(h.config.Threshold + 1)
 	} else if failures == h.config.Threshold {
 		// If we're here, we just passed the threshold right now
-		log.Warnf("App entered un-healthy status")
+		log.Warn("App entered un-healthy status")
 		if h.changeCb != nil {
 			h.wg.Add(1)
 			go func() {
