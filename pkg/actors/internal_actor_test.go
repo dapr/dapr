@@ -119,6 +119,7 @@ func newTestActorsRuntimeWithInternalActors(internalActors map[string]InternalAc
 		Resiliency:     resiliency.New(log),
 		StateStoreName: "actorStore",
 		Security:       fake.New(),
+		MockPlacement:  NewMockPlacement(TestAppID),
 	})
 
 	for actorType, actor := range internalActors {
