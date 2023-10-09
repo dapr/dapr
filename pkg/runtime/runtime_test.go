@@ -1329,7 +1329,7 @@ func TestKafkaMetadataClientID(t *testing.T) {
 			select {
 			case clientID := <-clientIDChan:
 				assert.Equal(t, standAloneClientID, clientID)
-			case <-time.After(20 * time.Second):
+			case <-time.After(5 * time.Second):
 				t.Error("Timed out waiting for clientID for Standalone Mode test")
 			}
 		})
@@ -1347,7 +1347,7 @@ func TestKafkaMetadataClientID(t *testing.T) {
 						},
 					},
 				})
-			//only func to accept k8s mode
+
 			rt, err := NewTestDaprRuntime(t, modes.KubernetesMode)
 			require.NoError(t, err)
 			defer stopRuntime(t, rt)
@@ -1369,7 +1369,7 @@ func TestKafkaMetadataClientID(t *testing.T) {
 			case <-testOk:
 				return
 			case <-time.After(5 * time.Second):
-				t.Fatalf("test failed")
+				t.Fatalf("PubSub Generic test failed")
 			}
 
 			var k8sClientID string
@@ -1382,7 +1382,7 @@ func TestKafkaMetadataClientID(t *testing.T) {
 			select {
 			case clientID := <-clientIDChan:
 				assert.Equal(t, "test.myApp", clientID)
-			case <-time.After(20 * time.Second):
+			case <-time.After(5 * time.Second):
 				t.Error("Timed out waiting for clientID for Kubernetes Mode test")
 			}
 			err = rt.processComponentAndDependents(context.Background(), pubsubComponent)
@@ -1449,7 +1449,7 @@ func TestKafkaMetadataClientID(t *testing.T) {
 			select {
 			case clientID := <-clientIDChan:
 				assert.Equal(t, standAloneClientID, clientID)
-			case <-time.After(20 * time.Second):
+			case <-time.After(5 * time.Second):
 				t.Error("Timed out waiting for clientID for Standalone Mode test")
 			}
 		})
@@ -1465,7 +1465,6 @@ func TestKafkaMetadataClientID(t *testing.T) {
 					Value: commonapi.DynamicValue{
 						JSON: v1.JSON{
 							Raw: []byte(""),
-							// Raw: []byte("{namespace}"),
 						},
 					},
 				})
@@ -1491,7 +1490,7 @@ func TestKafkaMetadataClientID(t *testing.T) {
 			case <-testOk:
 				return
 			case <-time.After(5 * time.Second):
-				t.Fatalf("test failed")
+				t.Fatalf("PubSub Kafka test failed")
 			}
 
 			var k8sClientID string
@@ -1508,7 +1507,7 @@ func TestKafkaMetadataClientID(t *testing.T) {
 			select {
 			case clientID := <-clientIDChan:
 				assert.Equal(t, fmt.Sprintf("%s.%s", rt.namespace, rt.runtimeConfig.id), clientID)
-			case <-time.After(20 * time.Second):
+			case <-time.After(5 * time.Second):
 				t.Error("Timed out waiting for clientID for Kubernetes Mode test")
 			}
 		})
@@ -1559,7 +1558,7 @@ func TestKafkaMetadataClientID(t *testing.T) {
 			case <-testOk:
 				return
 			case <-time.After(5 * time.Second):
-				t.Fatalf("test failed")
+				t.Fatalf("Bindings Kafka test failed")
 			}
 
 			var standAloneClientID string
@@ -1581,7 +1580,7 @@ func TestKafkaMetadataClientID(t *testing.T) {
 			select {
 			case clientID := <-clientIDChan:
 				assert.Equal(t, standAloneClientID, clientID)
-			case <-time.After(20 * time.Second):
+			case <-time.After(5 * time.Second):
 				t.Error("Timed out waiting for clientID for Standalone Mode test")
 			}
 		})
@@ -1639,7 +1638,7 @@ func TestKafkaMetadataClientID(t *testing.T) {
 			select {
 			case clientID := <-clientIDChan:
 				assert.Equal(t, "test.myApp", clientID)
-			case <-time.After(20 * time.Second):
+			case <-time.After(5 * time.Second):
 				t.Error("Timed out waiting for clientID for Kubernetes Mode test")
 			}
 		})
