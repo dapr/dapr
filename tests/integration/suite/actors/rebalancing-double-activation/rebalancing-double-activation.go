@@ -216,9 +216,9 @@ func (i *rebalancingDoubleActivation) Run(t *testing.T, ctx context.Context) {
 		}(j)
 	}
 
-	// After 5s, stop doubleActivationCh by sending an empty message
+	// After 2s, stop doubleActivationCh by sending an empty message
 	go func() {
-		<-time.After(5 * time.Second)
+		<-time.After(2 * time.Second)
 		i.doubleActivationCh <- ""
 	}()
 
@@ -279,6 +279,8 @@ func (h *httpServer) NewHandler(num int) http.Handler {
 			h.doubleActivationCh <- fmt.Sprintf("%s/%s", actorType, actorID)
 		}
 		log.Printf("MYLOG [%d] Invoked actor %s/%s: method %s", h.num, actorType, actorID, methodName)
+
+		// Simulate the actor doing some work
 		time.Sleep(2 * time.Second)
 		h.activeActors[actorIDNum].Store(false)
 
@@ -310,6 +312,8 @@ func (h *httpServer) NewHandler(num int) http.Handler {
 			h.doubleActivationCh <- fmt.Sprintf("%s/%s", actorType, actorID)
 		}
 		log.Printf("MYLOG [%d] Invoked actor %s/%s: reminder %s", h.num, actorType, actorID, reminderName)
+
+		// Simulate the actor doing some work
 		time.Sleep(2 * time.Second)
 		h.activeActors[actorIDNum].Store(false)
 
@@ -349,13 +353,12 @@ func (i *rebalancingDoubleActivation) getPlacementClient(ctx context.Context, pl
 	// Establish a stream and send the initial heartbeat, with no actors
 	// We need to retry here because this will fail until the instance of placement (the only one) acquires leadership
 	for j := 0; j < 4; j++ {
-		// Sleep before, as it takes time for placement to be ready
-		time.Sleep(time.Second)
-
 		client := placementv1pb.NewPlacementClient(conn)
 		stream, rErr := client.ReportDaprStatus(ctx)
 		if rErr != nil {
 			log.Printf("Failed to connect to placement; will retry: %v", rErr)
+			// Sleep before retrying
+			time.Sleep(time.Second)
 			continue
 		}
 
@@ -365,6 +368,8 @@ func (i *rebalancingDoubleActivation) getPlacementClient(ctx context.Context, pl
 		if rErr != nil {
 			log.Printf("Failed to report status to placement; will retry: %v", rErr)
 			stream.CloseSend()
+			// Sleep before retrying
+			time.Sleep(time.Second)
 			continue
 		}
 		i.placementStream = stream
