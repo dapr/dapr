@@ -14,10 +14,13 @@ limitations under the License.
 package util
 
 import (
+	"os"
+	"strconv"
 	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // ParallelTest is a helper for running tests in parallel without having to
@@ -39,31 +42,34 @@ func NewParallel(t *testing.T, fns ...func(*assert.CollectT)) *ParallelTest {
 		t.Helper()
 
 		jobs := make(chan func(), len(p.fns))
-		for i := 0; i < 5; i++ {
+		workers := 5
+		wrokersStr, ok := os.LookupEnv("DAPR_INTEGRATION_PARALLEL_WORKERS")
+		if ok {
+			var err error
+			workers, err = strconv.Atoi(wrokersStr)
+			require.NoError(t, err)
+		}
+
+		for i := 0; i < workers; i++ {
 			go p.worker(jobs)
 		}
 
-		ch := make(chan any)
 		collects := make([]*assert.CollectT, len(p.fns))
 
+		var wg sync.WaitGroup
+		wg.Add(len(p.fns))
 		for i := range p.fns {
 			i := i
 			collects[i] = new(assert.CollectT)
 			jobs <- func() {
-				defer func() {
-					if r := recover(); r != nil {
-						ch <- r
-					}
-				}()
+				defer wg.Done()
+				defer recover()
 
 				p.fns[i](collects[i])
-				ch <- nil
 			}
 		}
 
-		for i := 0; i < len(p.fns); i++ {
-			assert.Nil(t, <-ch)
-		}
+		wg.Wait()
 
 		for _, collect := range collects {
 			collect.Copy(t)

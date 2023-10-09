@@ -156,6 +156,7 @@ func (f *fuzzstate) Run(t *testing.T, ctx context.Context) {
 	t.Run("get", func(t *testing.T) {
 		pt := util.NewParallel(t)
 		for i := range f.getFuzzKeys {
+			i := i
 			pt.Add(func(t *assert.CollectT) {
 				getURL := fmt.Sprintf("http://localhost:%d/v1.0/state/%s/%s", f.daprd.HTTPPort(), url.QueryEscape(f.storeName), url.QueryEscape(f.getFuzzKeys[i]))
 				// t.Log("URL", getURL)

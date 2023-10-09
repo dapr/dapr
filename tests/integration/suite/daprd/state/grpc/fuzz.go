@@ -177,6 +177,7 @@ func (f *fuzzstate) Run(t *testing.T, ctx context.Context) {
 	t.Run("get", func(t *testing.T) {
 		pt := util.NewParallel(t)
 		for i := range f.getFuzzKeys {
+			i := i
 			pt.Add(func(t *assert.CollectT) {
 				resp, err := client.GetState(ctx, &rtv1.GetStateRequest{
 					StoreName: f.storeName,
