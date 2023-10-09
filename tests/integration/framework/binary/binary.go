@@ -60,7 +60,7 @@ func Build(t *testing.T, name string) {
 
 		t.Logf("Root dir: %q", rootDir)
 		t.Logf("Compiling %q binary to: %q", name, binPath)
-		cmd := exec.Command("go", "build", "-tags=allcomponents", "-v", "-o", binPath, filepath.Join(rootDir, "cmd/"+name))
+		cmd := exec.Command("go", "build", "-tags=allcomponents", "-v", "-o", binPath, "./cmd/"+name)
 		cmd.Dir = rootDir
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
