@@ -1388,7 +1388,6 @@ func TestKafkaMetadataClientID(t *testing.T) {
 			err = rt.processComponentAndDependents(context.Background(), pubsubComponent)
 			assert.NoError(t, err)
 		})
-
 	})
 
 	t.Run("PubSub Kafka", func(t *testing.T) {
