@@ -28,11 +28,13 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/grpc/manager"
+	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	"github.com/dapr/dapr/pkg/runtime/meta"
+	metadatahelper "github.com/dapr/dapr/pkg/runtime/metadata_helper"
 	"github.com/dapr/kit/logger"
 )
 
@@ -61,7 +63,10 @@ type Options struct {
 }
 
 type binding struct {
-	isHTTP bool
+	id        string
+	namespace string
+	isHTTP    bool
+	mode      modes.DaprMode
 
 	registry    *compbindings.Registry
 	resiliency  resiliency.Provider
@@ -166,13 +171,18 @@ func (b *binding) initInputBinding(ctx context.Context, comp compapi.Component) 
 		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
 	}
 
-	meta, err := b.meta.ToBaseMetadata(comp)
+	baseMetadata, err := b.meta.ToBaseMetadata(comp)
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
 		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
 	}
+	properties := baseMetadata.Properties
 
-	err = binding.Init(ctx, bindings.Metadata{Base: meta})
+	if comp.Spec.Type == "bindings.kafka" {
+		metadatahelper.SetKafkaClientID(properties, b.id, b.namespace, b.mode)
+	}
+
+	err = binding.Init(ctx, bindings.Metadata{Base: baseMetadata})
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
 		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
@@ -204,13 +214,18 @@ func (b *binding) initOutputBinding(ctx context.Context, comp compapi.Component)
 	}
 
 	if binding != nil {
-		meta, err := b.meta.ToBaseMetadata(comp)
+		baseMetadata, err := b.meta.ToBaseMetadata(comp)
 		if err != nil {
 			diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
 			return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 		}
+		properties := baseMetadata.Properties
 
-		err = binding.Init(ctx, bindings.Metadata{Base: meta})
+		if comp.Spec.Type == "bindings.kafka" {
+			metadatahelper.SetKafkaClientID(properties, b.id, b.namespace, b.mode)
+		}
+
+		err = binding.Init(ctx, bindings.Metadata{Base: baseMetadata})
 		if err != nil {
 			diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
 			return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)

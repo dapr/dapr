@@ -1267,70 +1267,268 @@ func TestMetadataNamespace(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func TestMetadataClientID(t *testing.T) {
-	pubsubComponent := componentsV1alpha1.Component{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: TestPubsubName,
-		},
-		Spec: componentsV1alpha1.ComponentSpec{
-			Type:     "pubsub.mockPubSub",
-			Version:  "v1",
-			Metadata: daprt.GetFakeMetadataItems(),
-		},
-	}
+// TestKafkaMetadataClientID ensures that for pubsub.kafka && bindings.kafka
+// that the clientID is set properly: Defaults to
+// `"namespace.appID"` for Kubernetes mode or `"appID"` for Self-Hosted mode.
+func TestKafkaMetadataClientID(t *testing.T) {
+	t.Run("PubSub Generic", func(t *testing.T) {
+		pubsubComponent := componentsV1alpha1.Component{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: TestPubsubName,
+			},
+			Spec: componentsV1alpha1.ComponentSpec{
+				Type:     "pubsub.mockPubSub",
+				Version:  "v1",
+				Metadata: daprt.GetFakeMetadataItems(),
+			},
+		}
 
-	// ClientID should be namespace.AppID for Kubernetes
-	t.Run("Kubernetes Mode AppID", func(t *testing.T) {
-		t.Setenv("NAMESPACE", "test")
-		pubsubComponent.Spec.Metadata = append(
-			pubsubComponent.Spec.Metadata,
-			commonapi.NameValuePair{
-				Name: "clientID",
-				Value: commonapi.DynamicValue{
-					JSON: v1.JSON{
-						Raw: []byte("{namespace}"),
+		// ClientID should be AppID for Self-Hosted
+		t.Run("Standalone Mode", func(t *testing.T) {
+			pubsubComponent.Spec.Metadata = append(
+				pubsubComponent.Spec.Metadata,
+				commonapi.NameValuePair{
+					Name: "clientID",
+					Value: commonapi.DynamicValue{
+						JSON: v1.JSON{
+							Raw: []byte("{appID} {appID}"),
+						},
 					},
+				})
+
+			rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
+			require.NoError(t, err)
+
+			rt.runtimeConfig.id = daprt.TestRuntimeConfigID
+			defer stopRuntime(t, rt)
+			mockPubSub := new(daprt.MockPubSub)
+
+			rt.runtimeConfig.registry.PubSubs().RegisterComponent(
+				func(_ logger.Logger) pubsub.PubSub {
+					return mockPubSub
 				},
+				"mockPubSub",
+			)
+
+			var standAloneClientID string
+			clientIDChan := make(chan string, 1)
+			mockPubSub.On("Init", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
+				metadata := args.Get(0).(pubsub.Metadata)
+				standAloneClientID = metadata.Properties["clientID"]
+				clientIDChan <- standAloneClientID
 			})
 
-		rt, err := NewTestDaprRuntimeWithID(t, modes.KubernetesMode, "myApp")
-		require.NoError(t, err)
+			err = rt.processComponentAndDependents(context.Background(), pubsubComponent)
+			assert.NoError(t, err)
+			appIds := strings.Split(standAloneClientID, " ")
+			assert.Equal(t, 2, len(appIds))
+			for _, appID := range appIds {
+				assert.Equal(t, daprt.TestRuntimeConfigID, appID)
+			}
 
-		rt.runtimeConfig.id = daprt.TestRuntimeConfigID
-		defer stopRuntime(t, rt)
-		mockPubSub := new(daprt.MockPubSub)
-
-		rt.runtimeConfig.registry.PubSubs().RegisterComponent(
-			func(_ logger.Logger) pubsub.PubSub {
-				return mockPubSub
-			},
-			"mockPubSub",
-		)
-
-		var k8sClientID string
-		clientIDChan := make(chan string, 1)
-		mockPubSub.On("Init", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
-			metadata := args.Get(0).(pubsub.Metadata)
-			k8sClientID = metadata.Properties["clientID"]
-			clientIDChan <- k8sClientID
+			select {
+			case clientID := <-clientIDChan:
+				assert.Equal(t, standAloneClientID, clientID)
+			case <-time.After(20 * time.Second):
+				t.Error("Timed out waiting for clientID for Standalone Mode test")
+			}
 		})
 
-		err = rt.processComponentAndDependents(context.Background(), pubsubComponent)
-		assert.NoError(t, err)
+		// ClientID should be namespace.AppID for Kubernetes
+		t.Run("Kubernetes Mode", func(t *testing.T) {
+			t.Setenv("NAMESPACE", "test")
+			pubsubComponent.Spec.Metadata = append(
+				pubsubComponent.Spec.Metadata,
+				commonapi.NameValuePair{
+					Name: "clientID",
+					Value: commonapi.DynamicValue{
+						JSON: v1.JSON{
+							Raw: []byte("{namespace}"),
+						},
+					},
+				})
+			//only func to accept k8s mode
+			rt, err := NewTestDaprRuntime(t, modes.KubernetesMode)
+			require.NoError(t, err)
+			defer stopRuntime(t, rt)
+			mockPubSub := new(daprt.MockPubSub)
 
-		select {
-		case clientID := <-clientIDChan:
-			assert.Equal(t, "test.myApp", clientID)
-		case <-time.After(20 * time.Second):
-			t.Error("Timed out waiting for clientID for Kubernetes Mode test")
-		}
+			testOk := make(chan struct{})
+			defer close(testOk)
+			go func() {
+				// If the test fails, this call blocks forever, eventually causing a timeout
+				rt.runtimeConfig.registry.PubSubs().RegisterComponent(
+					func(_ logger.Logger) pubsub.PubSub {
+						return mockPubSub
+					},
+					"mockPubSub",
+				)
+				testOk <- struct{}{}
+			}()
+			select {
+			case <-testOk:
+				return
+			case <-time.After(5 * time.Second):
+				t.Fatalf("test failed")
+			}
+
+			var k8sClientID string
+			clientIDChan := make(chan string, 1)
+			mockPubSub.On("Init", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
+				metadata := args.Get(0).(pubsub.Metadata)
+				k8sClientID = metadata.Properties["clientID"]
+				clientIDChan <- k8sClientID
+			})
+			select {
+			case clientID := <-clientIDChan:
+				assert.Equal(t, "test.myApp", clientID)
+			case <-time.After(20 * time.Second):
+				t.Error("Timed out waiting for clientID for Kubernetes Mode test")
+			}
+			err = rt.processComponentAndDependents(context.Background(), pubsubComponent)
+			assert.NoError(t, err)
+		})
+
 	})
 
-	// ClientID should be AppID for Self-Hosted
-	t.Run("Standalone Mode AppID", func(t *testing.T) {
-		pubsubComponent.Spec.Metadata = append(
-			pubsubComponent.Spec.Metadata,
-			commonapi.NameValuePair{
+	t.Run("PubSub Kafka", func(t *testing.T) {
+		pubsubComponent := componentsV1alpha1.Component{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: TestPubsubName,
+			},
+			Spec: componentsV1alpha1.ComponentSpec{
+				Type:     "pubsub.kafka",
+				Version:  "v1",
+				Metadata: daprt.GetFakeMetadataItems(),
+			},
+		}
+
+		// ClientID should be AppID for Self-Hosted
+		t.Run("Standalone Mode", func(t *testing.T) {
+			pubsubComponent.Spec.Metadata = append(
+				pubsubComponent.Spec.Metadata,
+				commonapi.NameValuePair{
+					Name: "clientID",
+					Value: commonapi.DynamicValue{
+						JSON: v1.JSON{
+							Raw: []byte("{appID} {appID}"),
+						},
+					},
+				})
+
+			rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
+			require.NoError(t, err)
+
+			rt.runtimeConfig.id = daprt.TestRuntimeConfigID
+			defer stopRuntime(t, rt)
+			mockPubSub := new(daprt.MockPubSub)
+
+			rt.runtimeConfig.registry.PubSubs().RegisterComponent(
+				func(_ logger.Logger) pubsub.PubSub {
+					return mockPubSub
+				},
+				"kafka",
+			)
+
+			var standAloneClientID string
+			clientIDChan := make(chan string, 1)
+			mockPubSub.On("Init", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
+				metadata := args.Get(0).(pubsub.Metadata)
+				standAloneClientID = metadata.Properties["clientID"]
+				clientIDChan <- standAloneClientID
+			})
+
+			err = rt.processComponentAndDependents(context.Background(), pubsubComponent)
+			assert.NoError(t, err)
+			appIds := strings.Split(standAloneClientID, " ")
+			assert.Equal(t, 2, len(appIds))
+			for _, appID := range appIds {
+				assert.Equal(t, daprt.TestRuntimeConfigID, appID)
+			}
+
+			select {
+			case clientID := <-clientIDChan:
+				assert.Equal(t, standAloneClientID, clientID)
+			case <-time.After(20 * time.Second):
+				t.Error("Timed out waiting for clientID for Standalone Mode test")
+			}
+		})
+
+		// ClientID should be namespace.AppID for Kubernetes
+		t.Run("Kubernetes Mode", func(t *testing.T) {
+			t.Setenv("NAMESPACE", "test")
+
+			pubsubComponent.Spec.Metadata = append(
+				pubsubComponent.Spec.Metadata,
+				commonapi.NameValuePair{
+					Name: "clientID",
+					Value: commonapi.DynamicValue{
+						JSON: v1.JSON{
+							Raw: []byte(""),
+							// Raw: []byte("{namespace}"),
+						},
+					},
+				})
+
+			rt, err := NewTestDaprRuntime(t, modes.KubernetesMode)
+			require.NoError(t, err)
+			defer stopRuntime(t, rt)
+			mockPubSub := new(daprt.MockPubSub)
+
+			testOk := make(chan struct{})
+			defer close(testOk)
+			go func() {
+				// If the test fails, this call blocks forever, eventually causing a timeout
+				rt.runtimeConfig.registry.PubSubs().RegisterComponent(
+					func(_ logger.Logger) pubsub.PubSub {
+						return mockPubSub
+					},
+					"kafka",
+				)
+				testOk <- struct{}{}
+			}()
+			select {
+			case <-testOk:
+				return
+			case <-time.After(5 * time.Second):
+				t.Fatalf("test failed")
+			}
+
+			var k8sClientID string
+			clientIDChan := make(chan string, 1)
+			mockPubSub.On("Init", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
+				metadata := args.Get(0).(pubsub.Metadata)
+				k8sClientID = metadata.Properties["clientID"]
+				clientIDChan <- k8sClientID
+			})
+
+			err = rt.processComponentAndDependents(context.Background(), pubsubComponent)
+			assert.NoError(t, err)
+
+			select {
+			case clientID := <-clientIDChan:
+				assert.Equal(t, fmt.Sprintf("%s.%s", rt.namespace, rt.runtimeConfig.id), clientID)
+			case <-time.After(20 * time.Second):
+				t.Error("Timed out waiting for clientID for Kubernetes Mode test")
+			}
+		})
+	})
+
+	t.Run("Bindings Kafka", func(t *testing.T) {
+		mockBindingComponent := componentsV1alpha1.Component{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "mockBinding",
+			},
+			Spec: componentsV1alpha1.ComponentSpec{
+				Type:     "bindings.kafka",
+				Version:  "v1",
+				Metadata: []commonapi.NameValuePair{},
+			},
+		}
+
+		// ClientID should be AppID for Self-Hosted
+		t.Run("Standalone Mode", func(t *testing.T) {
+			mockBindingComponent.Spec.Metadata = append(mockBindingComponent.Spec.Metadata, commonapi.NameValuePair{
 				Name: "clientID",
 				Value: commonapi.DynamicValue{
 					JSON: v1.JSON{
@@ -1339,42 +1537,112 @@ func TestMetadataClientID(t *testing.T) {
 				},
 			})
 
-		rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
-		require.NoError(t, err)
+			rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
+			require.NoError(t, err)
 
-		rt.runtimeConfig.id = daprt.TestRuntimeConfigID
-		defer stopRuntime(t, rt)
-		mockPubSub := new(daprt.MockPubSub)
+			rt.runtimeConfig.id = daprt.TestRuntimeConfigID
+			defer stopRuntime(t, rt)
 
-		rt.runtimeConfig.registry.PubSubs().RegisterComponent(
-			func(_ logger.Logger) pubsub.PubSub {
-				return mockPubSub
-			},
-			"mockPubSub",
-		)
+			mockBinding := new(daprt.MockBinding)
+			testOk := make(chan struct{})
+			defer close(testOk)
+			go func() {
+				rt.runtimeConfig.registry.Bindings().RegisterInputBinding(
+					func(_ logger.Logger) bindings.InputBinding {
+						return mockBinding
+					},
+					"kafka",
+				)
+				testOk <- struct{}{}
+			}()
+			select {
+			case <-testOk:
+				return
+			case <-time.After(5 * time.Second):
+				t.Fatalf("test failed")
+			}
 
-		var standAloneClientID string
-		clientIDChan := make(chan string, 1)
-		mockPubSub.On("Init", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
-			metadata := args.Get(0).(pubsub.Metadata)
-			standAloneClientID = metadata.Properties["clientID"]
-			clientIDChan <- standAloneClientID
+			var standAloneClientID string
+			clientIDChan := make(chan string, 1)
+			mockBinding.On("Init", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
+				metadata := args.Get(0).(pubsub.Metadata)
+				standAloneClientID = metadata.Properties["clientID"]
+				clientIDChan <- standAloneClientID
+			})
+
+			err = rt.processComponentAndDependents(context.Background(), mockBindingComponent)
+			assert.NoError(t, err)
+			appIds := strings.Split(standAloneClientID, " ")
+			assert.Equal(t, 2, len(appIds))
+			for _, appID := range appIds {
+				assert.Equal(t, daprt.TestRuntimeConfigID, appID)
+			}
+
+			select {
+			case clientID := <-clientIDChan:
+				assert.Equal(t, standAloneClientID, clientID)
+			case <-time.After(20 * time.Second):
+				t.Error("Timed out waiting for clientID for Standalone Mode test")
+			}
 		})
 
-		err = rt.processComponentAndDependents(context.Background(), pubsubComponent)
-		assert.NoError(t, err)
-		appIds := strings.Split(standAloneClientID, " ")
-		assert.Equal(t, 2, len(appIds))
-		for _, appID := range appIds {
-			assert.Equal(t, daprt.TestRuntimeConfigID, appID)
-		}
+		// ClientID should be namespace.AppID for Kubernetes
+		t.Run("Kubernetes Mode", func(t *testing.T) {
+			t.Setenv("NAMESPACE", "test")
+			mockBindingComponent.Spec.Metadata = append(mockBindingComponent.Spec.Metadata, commonapi.NameValuePair{
+				Name: "clientID",
+				Value: commonapi.DynamicValue{
+					JSON: v1.JSON{
+						Raw: []byte("{namespace}"),
+					},
+				},
+			})
 
-		select {
-		case clientID := <-clientIDChan:
-			assert.Equal(t, standAloneClientID, clientID)
-		case <-time.After(20 * time.Second):
-			t.Error("Timed out waiting for clientID for Standalone Mode test")
-		}
+			rt, err := NewTestDaprRuntime(t, modes.KubernetesMode)
+			require.NoError(t, err)
+
+			rt.runtimeConfig.id = daprt.TestRuntimeConfigID
+			defer stopRuntime(t, rt)
+
+			mockBinding := new(daprt.MockBinding)
+
+			testOk := make(chan struct{})
+			defer close(testOk)
+			go func() {
+				// If the test fails, this call blocks forever, eventually causing a timeout
+				rt.runtimeConfig.registry.Bindings().RegisterInputBinding(
+					func(_ logger.Logger) bindings.InputBinding {
+						return mockBinding
+					},
+					"kafka",
+				)
+				testOk <- struct{}{}
+			}()
+			select {
+			case <-testOk:
+				return
+			case <-time.After(5 * time.Second):
+				t.Fatalf("test failed")
+			}
+
+			var k8sClientID string
+			clientIDChan := make(chan string, 1)
+			mockBinding.On("Init", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
+				metadata := args.Get(0).(pubsub.Metadata)
+				k8sClientID = metadata.Properties["clientID"]
+				clientIDChan <- k8sClientID
+			})
+
+			err = rt.processComponentAndDependents(context.Background(), mockBindingComponent)
+			assert.NoError(t, err)
+
+			select {
+			case clientID := <-clientIDChan:
+				assert.Equal(t, "test.myApp", clientID)
+			case <-time.After(20 * time.Second):
+				t.Error("Timed out waiting for clientID for Kubernetes Mode test")
+			}
+		})
 	})
 }
 
@@ -1817,7 +2085,7 @@ func TestPodName(t *testing.T) {
 func TestAuthorizedComponents(t *testing.T) {
 	testCompName := "fakeComponent"
 
-	t.Run("standalone mode, no namespce", func(t *testing.T) {
+	t.Run("standalone mode, no namespace", func(t *testing.T) {
 		rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
 		require.NoError(t, err)
 		defer stopRuntime(t, rt)

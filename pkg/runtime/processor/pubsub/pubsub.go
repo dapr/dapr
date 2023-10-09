@@ -39,6 +39,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	"github.com/dapr/dapr/pkg/runtime/meta"
+	metadatahelper "github.com/dapr/dapr/pkg/runtime/metadata_helper"
 	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/scopes"
 	"github.com/dapr/kit/logger"
@@ -158,6 +159,10 @@ func (p *pubsub) Init(ctx context.Context, comp compapi.Component) error {
 		consumerID = p.id
 	}
 	properties["consumerID"] = consumerID
+
+	if comp.Spec.Type == "pubsub.kafka" {
+		metadatahelper.SetKafkaClientID(properties, p.id, p.namespace, p.mode)
+	}
 
 	err = pubSub.Init(ctx, contribpubsub.Metadata{Base: baseMetadata})
 	if err != nil {
