@@ -65,7 +65,7 @@ func Build(t *testing.T, name string) {
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		// Ensure CGO is disabled to avoid linking against system libraries.
-		cmd.Env = append(cmd.Env, "CGO_ENABLED=0")
+		cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
 		require.NoError(t, cmd.Run())
 
 		require.NoError(t, os.Setenv(EnvKey(name), binPath))
