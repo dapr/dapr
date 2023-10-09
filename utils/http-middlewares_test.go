@@ -25,7 +25,7 @@ import (
 
 func TestUppercaseRequestMiddleware(t *testing.T) {
 	requestBody := "fake_body"
-	testRequest := httptest.NewRequest("POST", "/test", strings.NewReader(requestBody))
+	testRequest := httptest.NewRequest(http.MethodPost, "/test", strings.NewReader(requestBody))
 
 	var echoHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		io.Copy(w, r.Body)
@@ -40,7 +40,7 @@ func TestUppercaseRequestMiddleware(t *testing.T) {
 }
 
 func TestResponseMiddleware(t *testing.T) {
-	testRequest := httptest.NewRequest("GET", "/test", nil)
+	testRequest := httptest.NewRequest(http.MethodGet, "/test", nil)
 
 	responseBody := "fake_body"
 	var responseHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
