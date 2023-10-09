@@ -440,11 +440,6 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 			readErr   error
 		)
 		for {
-			if ctx.Err() != nil {
-				pw.CloseWithError(ctx.Err())
-				return
-			}
-
 			// Get the payload from the chunk that was previously read
 			payload = chunk.GetPayload()
 			if payload != nil {
