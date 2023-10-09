@@ -30,8 +30,11 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/dapr/dapr/pkg/actors/internal"
 	"github.com/dapr/dapr/pkg/placement/hashing"
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/kit/logger"
 )
 
 func TestAddDNSResolverPrefix(t *testing.T) {
@@ -78,6 +81,7 @@ func TestPlacementStream_RoundRobin(t *testing.T) {
 		AppHealthFn:        appHealthFunc,
 		AfterTableUpdateFn: func() {},
 		Security:           testSecurity(t),
+		Resiliency:         resiliency.New(logger.NewLogger("test")),
 	}).(*actorPlacement)
 
 	t.Run("found leader placement in a round robin way", func(t *testing.T) {
@@ -136,6 +140,7 @@ func TestAppHealthyStatus(t *testing.T) {
 		AppHealthFn:        appHealthFunc,
 		AfterTableUpdateFn: func() {},
 		Security:           testSecurity(t),
+		Resiliency:         resiliency.New(logger.NewLogger("test")),
 	}).(*actorPlacement)
 
 	// act
@@ -169,6 +174,7 @@ func TestOnPlacementOrder(t *testing.T) {
 		AppHealthFn:        appHealthFunc,
 		AfterTableUpdateFn: tableUpdateFunc,
 		Security:           testSecurity(t),
+		Resiliency:         resiliency.New(logger.NewLogger("test")),
 	}).(*actorPlacement)
 
 	t.Run("lock operation", func(t *testing.T) {
@@ -222,6 +228,7 @@ func TestWaitUntilPlacementTableIsReady(t *testing.T) {
 		AppHealthFn:        appHealthFunc,
 		AfterTableUpdateFn: func() {},
 		Security:           testSecurity(t),
+		Resiliency:         resiliency.New(logger.NewLogger("test")),
 	}).(*actorPlacement)
 
 	t.Run("already unlocked", func(t *testing.T) {
@@ -300,16 +307,19 @@ func TestLookupActor(t *testing.T) {
 		AppHealthFn:        appHealthFunc,
 		AfterTableUpdateFn: func() {},
 		Security:           testSecurity(t),
+		Resiliency:         resiliency.New(logger.NewLogger("test")),
 	}).(*actorPlacement)
 
-	t.Run("Placementtable is unset", func(t *testing.T) {
-		name, appID := testPlacement.LookupActor("actorOne", "test")
-		assert.Empty(t, name)
-		assert.Empty(t, appID)
+	t.Run("Placement table is unset", func(t *testing.T) {
+		_, err := testPlacement.LookupActor(context.Background(), internal.LookupActorRequest{
+			ActorType: "actorOne",
+			ActorID:   "test",
+		})
+		require.Error(t, err)
+		assert.ErrorContains(t, err, "did not find address for actor")
 	})
 
 	t.Run("found host and appid", func(t *testing.T) {
-		const testActorType = "actorOne"
 		testPlacement.placementTables = &hashing.ConsistentHashTables{
 			Version: "1",
 			Entries: map[string]*hashing.Consistent{},
@@ -319,17 +329,26 @@ func TestLookupActor(t *testing.T) {
 		hashing.SetReplicationFactor(10)
 		actorOneHashing := hashing.NewConsistentHash()
 		actorOneHashing.Add(testPlacement.runtimeHostName, testPlacement.appID, 0)
-		testPlacement.placementTables.Entries[testActorType] = actorOneHashing
+		testPlacement.placementTables.Entries["actorOne"] = actorOneHashing
 
 		// existing actor type
-		name, appID := testPlacement.LookupActor(testActorType, "id0")
-		assert.Equal(t, testPlacement.runtimeHostName, name)
-		assert.Equal(t, testPlacement.appID, appID)
+		lar, err := testPlacement.LookupActor(context.Background(), internal.LookupActorRequest{
+			ActorType: "actorOne",
+			ActorID:   "id0",
+		})
+		require.NoError(t, err)
+		assert.Equal(t, testPlacement.runtimeHostName, lar.Address)
+		assert.Equal(t, testPlacement.appID, lar.AppID)
 
 		// non existing actor type
-		name, appID = testPlacement.LookupActor("nonExistingActorType", "id0")
-		assert.Empty(t, name)
-		assert.Empty(t, appID)
+		lar, err = testPlacement.LookupActor(context.Background(), internal.LookupActorRequest{
+			ActorType: "nonExistingActorType",
+			ActorID:   "id0",
+		})
+		require.Error(t, err)
+		assert.ErrorContains(t, err, "did not find address for actor")
+		assert.Empty(t, lar.Address)
+		assert.Empty(t, lar.AppID)
 	})
 }
 
@@ -344,6 +363,7 @@ func TestConcurrentUnblockPlacements(t *testing.T) {
 		AppHealthFn:        appHealthFunc,
 		AfterTableUpdateFn: func() {},
 		Security:           testSecurity(t),
+		Resiliency:         resiliency.New(logger.NewLogger("test")),
 	}).(*actorPlacement)
 
 	t.Run("concurrent_unlock", func(t *testing.T) {

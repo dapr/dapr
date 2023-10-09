@@ -60,7 +60,7 @@ func newTestReminders() *reminders {
 	r.SetStateStoreProviderFn(func() (internal.TransactionalStateStore, error) {
 		return store, nil
 	})
-	r.SetLookupActorFn(func(string, string) (bool, string) {
+	r.SetLookupActorFn(func(context.Context, string, string) (bool, string) {
 		return true, "localhost"
 	})
 	r.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {

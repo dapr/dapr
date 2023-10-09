@@ -45,17 +45,18 @@ func TestMain(m *testing.M) {
 	if os.Getenv("WORKFLOW_APP_ENDPOINT") == "" {
 		testApps := []kube.AppDescription{
 			{
-				AppName:           "workflowsapp",
-				DaprEnabled:       true,
-				ImageName:         "e2e-workflowsapp",
-				Replicas:          1,
-				IngressEnabled:    true,
-				MetricsEnabled:    true,
-				DaprMemoryLimit:   "200Mi",
-				DaprMemoryRequest: "100Mi",
-				AppMemoryLimit:    "200Mi",
-				AppMemoryRequest:  "100Mi",
-				AppPort:           3000,
+				AppName:             "workflowsapp",
+				DaprEnabled:         true,
+				ImageName:           "e2e-workflowsapp",
+				Replicas:            1,
+				IngressEnabled:      true,
+				MetricsEnabled:      true,
+				DaprMemoryLimit:     "200Mi",
+				DaprMemoryRequest:   "100Mi",
+				AppMemoryLimit:      "200Mi",
+				AppMemoryRequest:    "100Mi",
+				AppPort:             3000,
+				DebugLoggingEnabled: true,
 			},
 		}
 

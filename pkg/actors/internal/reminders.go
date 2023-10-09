@@ -24,12 +24,12 @@ import (
 // ErrReminderCanceled is returned when the reminder has been canceled.
 var ErrReminderCanceled = errors.New("reminder has been canceled")
 
-// ExecuteReminderFn is the type of the function invoked when a re,omder is to be executed.
+// ExecuteReminderFn is the type of the function invoked when a reminder is to be executed.
 // If this method returns false, the reminder is canceled by the actor.
 type ExecuteReminderFn func(reminder *Reminder) bool
 
 // LookupActorFn is the type of a function that returns whether an actor is locally-hosted and the address of its host.
-type LookupActorFn func(actorType string, actorID string) (isLocal bool, actorAddress string)
+type LookupActorFn func(ctx context.Context, actorType string, actorID string) (isLocal bool, actorAddress string)
 
 // StateStoreProviderFn is the type of a function that returns the state store provider.
 type StateStoreProviderFn func() (TransactionalStateStore, error)
