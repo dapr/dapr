@@ -188,7 +188,7 @@ func (s *server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 		return nil, status.Error(codes.Internal, "failed to encode certificate chain")
 	}
 
-	log.Debug("Successfully signed certificate for %s/%s", req.Namespace, req.Id)
+	log.Debugf("Successfully signed certificate for %s/%s", req.Namespace, req.Id)
 
 	return &sentryv1pb.SignCertificateResponse{
 		WorkloadCertificate: chainPEM,

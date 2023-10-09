@@ -176,6 +176,11 @@ func actorMethodHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func healthzHandler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(""))
+}
+
 func configHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Processing dapr request for %s", r.URL.RequestURI())
 
@@ -227,6 +232,7 @@ func appRouter() http.Handler {
 
 	router.HandleFunc("/", indexHandler).Methods("GET")
 	router.HandleFunc("/dapr/config", configHandler).Methods("GET")
+	router.HandleFunc("/healthz", healthzHandler).Methods("GET")
 	router.HandleFunc("/test/initactor/{actorType}/{id}", initActor).Methods("GET")
 	router.HandleFunc("/test/actor_state_http/{actorType}/{id}/{key}", actorStateHandlerHTTP).Methods("GET", "DELETE")
 	router.HandleFunc("/test/actor_state_http/{actorType}/{id}", actorStateHandlerHTTP).Methods("PUT", "POST", "PATCH")

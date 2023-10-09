@@ -15,6 +15,9 @@ package sentry
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"fmt"
 	"net/http"
 	"os"
@@ -51,7 +54,9 @@ type Sentry struct {
 func New(t *testing.T, fopts ...Option) *Sentry {
 	t.Helper()
 
-	bundle, err := ca.GenerateBundle("integration.test.dapr.io", time.Second*5)
+	rootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	bundle, err := ca.GenerateBundle(rootKey, "integration.test.dapr.io", time.Second*5, nil)
 	require.NoError(t, err)
 
 	fp := util.ReservePorts(t, 3)
@@ -94,7 +99,12 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 		"-issuer-key-filename=issuer.key",
 		"-metrics-port=" + strconv.Itoa(opts.metricsPort),
 		"-healthz-port=" + strconv.Itoa(opts.healthzPort),
-		"-issuer-credentials=" + tmpDir,
+	}
+
+	if opts.dontGiveBundle {
+		args = append(args, "-issuer-credentials="+t.TempDir())
+	} else {
+		args = append(args, "-issuer-credentials="+tmpDir)
 	}
 
 	return &Sentry{
