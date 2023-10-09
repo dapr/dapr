@@ -20,7 +20,7 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -42,14 +42,14 @@ import (
 )
 
 func init() {
-	suite.Register(new(rebalancingDoubleActivation))
+	suite.Register(new(rebalancing))
 }
 
 // Number of iterations for the test
 const iterations = 30
 
-// rebalancingDoubleActivation tests that during rebalancing, reminders do not cause actors to be activated on 2 separate hosts.
-type rebalancingDoubleActivation struct {
+// rebalancing tests that during rebalancing, reminders do not cause actors to be activated on 2 separate hosts.
+type rebalancing struct {
 	daprd              [2]*daprd.Daprd
 	srv                [2]*prochttp.HTTP
 	handler            [2]*httpServer
@@ -59,13 +59,14 @@ type rebalancingDoubleActivation struct {
 	doubleActivationCh chan string
 }
 
-func (i *rebalancingDoubleActivation) Setup(t *testing.T) []framework.Option {
+func (i *rebalancing) Setup(t *testing.T) []framework.Option {
 	i.activeActors = make([]atomic.Bool, iterations)
 	i.doubleActivationCh = make(chan string)
 
-	// Remove the database if present
-	// Ignore errors here
-	_ = os.Remove("tmp/test-data.db")
+	// Get a temporary directory where to store the SQLite DB
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test-data.db")
+	t.Logf("Storing database in %s", dbPath)
 
 	// Init placement
 	i.place = placement.New(t)
@@ -87,7 +88,7 @@ spec:
   version: v1
   metadata:
     - name: connectionString
-      value: 'tmp/test-data.db'
+      value: '`+dbPath+`'
     - name: busyTimeout
       value: '10s'
     - name: disableWAL
@@ -107,7 +108,7 @@ spec:
 	}
 }
 
-func (i *rebalancingDoubleActivation) Run(t *testing.T, ctx context.Context) {
+func (i *rebalancing) Run(t *testing.T, ctx context.Context) {
 	i.place.WaitUntilRunning(t, ctx)
 
 	// Wait for daprd to be ready
@@ -338,7 +339,7 @@ func (h *httpServer) WaitForActorsReady(ctx context.Context) error {
 	}
 }
 
-func (i *rebalancingDoubleActivation) getPlacementClient(ctx context.Context, placementClientReady chan error) {
+func (i *rebalancing) getPlacementClient(ctx context.Context, placementClientReady chan error) {
 	// Establish a connection with placement
 	conn, err := grpc.DialContext(ctx, "localhost:"+strconv.Itoa(i.place.Port()),
 		grpc.WithBlock(),
@@ -387,7 +388,7 @@ func (i *rebalancingDoubleActivation) getPlacementClient(ctx context.Context, pl
 	<-ctx.Done()
 }
 
-func (i *rebalancingDoubleActivation) reportStatusToPlacement(ctx context.Context, stream placementv1pb.Placement_ReportDaprStatusClient, entities []string) error {
+func (i *rebalancing) reportStatusToPlacement(ctx context.Context, stream placementv1pb.Placement_ReportDaprStatusClient, entities []string) error {
 	err := stream.Send(&placementv1pb.Host{
 		Name:     "invalidapp",
 		Port:     1234,
