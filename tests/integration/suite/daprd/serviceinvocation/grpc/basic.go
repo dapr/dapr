@@ -47,7 +47,8 @@ type basic struct {
 
 func (b *basic) Setup(t *testing.T) []framework.Option {
 	onInvoke := func(ctx context.Context, in *commonv1.InvokeRequest) (*commonv1.InvokeResponse, error) {
-		if in.Method == "foo" {
+		switch in.GetMethod() {
+		case "foo":
 			var verb int
 			var data []byte
 			switch in.HttpExtension.Verb {
@@ -71,22 +72,37 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 				Data:        &anypb.Any{Value: data},
 				ContentType: strconv.Itoa(verb),
 			}, nil
-		}
 
-		if in.Method == "multiple/segments" {
+		case "typed":
+			return &commonv1.InvokeResponse{
+				Data: &anypb.Any{
+					Value:   []byte(fmt.Sprintf("%s/%s", string(in.GetData().GetValue()), in.GetData().GetTypeUrl())),
+					TypeUrl: "mytype",
+				},
+				ContentType: "application/json",
+			}, nil
+
+		case "multiple/segments":
 			return &commonv1.InvokeResponse{
 				Data:        &anypb.Any{Value: []byte("multiple/segments")},
 				ContentType: "application/json",
 			}, nil
-		}
 
-		return nil, errors.New("invalid method")
+		default:
+			return nil, errors.New("invalid method")
+		}
 	}
 
 	srv1 := newGRPCServer(t, onInvoke)
 	srv2 := newGRPCServer(t, onInvoke)
-	b.daprd1 = procdaprd.New(t, procdaprd.WithAppProtocol("grpc"), procdaprd.WithAppPort(srv1.Port(t)))
-	b.daprd2 = procdaprd.New(t, procdaprd.WithAppProtocol("grpc"), procdaprd.WithAppPort(srv2.Port(t)))
+	b.daprd1 = procdaprd.New(t,
+		procdaprd.WithAppProtocol("grpc"),
+		procdaprd.WithAppPort(srv1.Port(t)),
+	)
+	b.daprd2 = procdaprd.New(t,
+		procdaprd.WithAppProtocol("grpc"),
+		procdaprd.WithAppPort(srv2.Port(t)),
+	)
 
 	return []framework.Option{
 		framework.WithProcesses(srv1, srv2, b.daprd1, b.daprd2),
@@ -99,7 +115,10 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("invoke host", func(t *testing.T) {
 		doReq := func(host, hostID string, verb commonv1.HTTPExtension_Verb) ([]byte, string) {
-			conn, err := grpc.DialContext(ctx, host, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+			conn, err := grpc.DialContext(ctx, host,
+				grpc.WithTransportCredentials(insecure.NewCredentials()),
+				grpc.WithBlock(),
+			)
 			require.NoError(t, err)
 			t.Cleanup(func() { require.NoError(t, conn.Close()) })
 
@@ -148,7 +167,10 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("method doesn't exist", func(t *testing.T) {
 		host := fmt.Sprintf("localhost:%d", b.daprd1.GRPCPort())
-		conn, err := grpc.DialContext(ctx, host, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+		conn, err := grpc.DialContext(ctx, host,
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithBlock(),
+		)
 		require.NoError(t, err)
 		t.Cleanup(func() { require.NoError(t, conn.Close()) })
 
@@ -168,7 +190,10 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("no method", func(t *testing.T) {
 		host := fmt.Sprintf("localhost:%d", b.daprd1.GRPCPort())
-		conn, err := grpc.DialContext(ctx, host, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+		conn, err := grpc.DialContext(ctx, host,
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithBlock(),
+		)
 		require.NoError(t, err)
 		t.Cleanup(func() { require.NoError(t, conn.Close()) })
 
@@ -188,7 +213,10 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("multiple segments", func(t *testing.T) {
 		host := fmt.Sprintf("localhost:%d", b.daprd1.GRPCPort())
-		conn, err := grpc.DialContext(ctx, host, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+		conn, err := grpc.DialContext(ctx, host,
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithBlock(),
+		)
 		require.NoError(t, err)
 		t.Cleanup(func() { require.NoError(t, conn.Close()) })
 
@@ -204,24 +232,70 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, "application/json", resp.ContentType)
 	})
 
-	for i := 0; i < 100; i++ {
-		t.Run("parallel requests", func(t *testing.T) {
-			t.Parallel()
-			host := fmt.Sprintf("localhost:%d", b.daprd1.GRPCPort())
-			conn, err := grpc.DialContext(ctx, host, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
-			require.NoError(t, err)
-			t.Cleanup(func() { require.NoError(t, conn.Close()) })
+	t.Run("parallel requests", func(t *testing.T) {
+		errCh := make(chan error)
+		for i := 0; i < 100; i++ {
+			go func(i int) {
+				host := fmt.Sprintf("localhost:%d", b.daprd1.GRPCPort())
+				conn, err := grpc.DialContext(ctx, host,
+					grpc.WithTransportCredentials(insecure.NewCredentials()),
+					grpc.WithBlock(),
+				)
+				if err != nil {
+					errCh <- err
+					return
+				}
 
-			resp, err := rtv1.NewDaprClient(conn).InvokeService(ctx, &rtv1.InvokeServiceRequest{
-				Id: b.daprd2.AppID(),
-				Message: &commonv1.InvokeRequest{
-					Method:        "foo",
-					HttpExtension: &commonv1.HTTPExtension{Verb: commonv1.HTTPExtension_POST},
+				resp, err := rtv1.NewDaprClient(conn).InvokeService(ctx, &rtv1.InvokeServiceRequest{
+					Id: b.daprd2.AppID(),
+					Message: &commonv1.InvokeRequest{
+						Method:        "foo",
+						HttpExtension: &commonv1.HTTPExtension{Verb: commonv1.HTTPExtension_POST},
+					},
+				})
+				if err != nil {
+					errCh <- err
+					return
+				}
+				if string(resp.Data.Value) != "POST" {
+					errCh <- fmt.Errorf("value is '%s', expected 'POST'", string(resp.Data.Value))
+					return
+				}
+				if resp.ContentType != "201" {
+					errCh <- fmt.Errorf("content type is '%s', expected '201'", resp.ContentType)
+					return
+				}
+				errCh <- conn.Close()
+			}(i)
+		}
+
+		for i := 0; i < 100; i++ {
+			require.NoError(t, <-errCh)
+		}
+	})
+
+	t.Run("type URL", func(t *testing.T) {
+		host := fmt.Sprintf("localhost:%d", b.daprd1.GRPCPort())
+		conn, err := grpc.DialContext(ctx, host,
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithBlock(),
+		)
+		require.NoError(t, err)
+		t.Cleanup(func() { require.NoError(t, conn.Close()) })
+
+		resp, err := rtv1.NewDaprClient(conn).InvokeService(ctx, &rtv1.InvokeServiceRequest{
+			Id: b.daprd2.AppID(),
+			Message: &commonv1.InvokeRequest{
+				Method: "typed",
+				Data: &anypb.Any{
+					Value:   []byte("emozioni di settembre"),
+					TypeUrl: "pfm",
 				},
-			})
-			require.NoError(t, err)
-			assert.Equal(t, "POST", string(resp.Data.Value))
-			assert.Equal(t, "201", resp.ContentType)
+			},
 		})
-	}
+		require.NoError(t, err)
+		require.NotNil(t, resp.GetData())
+		assert.Equal(t, "emozioni di settembre/pfm", string(resp.Data.Value))
+		assert.Equal(t, "mytype", resp.Data.TypeUrl)
+	})
 }
