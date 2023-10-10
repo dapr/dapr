@@ -142,6 +142,11 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 		WithTrailers(trailer).
 		WithMessage(resp)
 
+	// If the data has a type_url, set that in the object too
+	// This is necessary to support the HTTP->gRPC and gRPC->gRPC service invocation (legacy, non-proxy) paths correctly
+	// (Note that GetTypeUrl could return an empty value, so this call becomes a no-op)
+	rsp.WithDataTypeURL(resp.GetData().GetTypeUrl())
+
 	return rsp, nil
 }
 
