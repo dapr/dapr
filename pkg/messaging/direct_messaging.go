@@ -47,7 +47,7 @@ import (
 
 var log = logger.NewLogger("dapr.runtime.direct_messaging")
 
-const streamingUnsupportedErr = "streaming-based service invocation is enabled, but target app %s is running a version of Dapr that does not support it"
+const streamingUnsupportedErr = "target app '%s' is running a version of Dapr that does not support streaming-based service invocation"
 
 // messageClientConnection is the function type to connect to the other
 // applications to send the message using service invocation.
@@ -336,6 +336,17 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 	}()
 	r := req.RawData()
 	reqProto := req.Proto()
+
+	// If there's a message in the proto, we remove it from the message we send to avoid sending it twice
+	// However we need to keep a reference to those bytes, and if needed add them back, to retry the request
+	// This is needed for backwards-compatibility with Dapr 1.10
+	// TODO @ItalyPaleAle: Remove in Dapr 1.14
+	messageData := reqProto.GetMessage().GetData()
+	messageDataValue := messageData.GetValue()
+	if len(messageDataValue) > 0 {
+		messageData.Value = nil
+	}
+
 	proto := &internalv1pb.InternalInvokeRequestStream{}
 	var (
 		n    int
@@ -376,10 +387,6 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 
 		// Send the chunk if there's anything to send
 		if proto.Request != nil || proto.Payload != nil {
-			// Avoid sending the data in the message too
-			if md := proto.GetRequest().GetMessage().GetData(); md != nil {
-				md.Value = nil
-			}
 			err = stream.SendMsg(proto)
 			if errors.Is(err, io.EOF) {
 				// If SendMsg returns an io.EOF error, it usually means that there's a transport-level error
@@ -410,8 +417,13 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 		// - If the request is replayable, we will re-submit it as unary. This will have a small performance impact due to the additional round-trip, but it will still work (and the warning will remind users to upgrade)
 		// - If the request is not replayable, the data stream has already been consumed at this point so nothing else we can do - just show an error and tell users to upgrade the target app… (or disable streaming for now)
 		// At this point it seems that this is the best we can do, since we cannot detect Unimplemented status codes earlier (unless we send a "ping", which would add latency).
-		// See: // See: https://github.com/grpc/grpc-go/issues/5910
+		// See: https://github.com/grpc/grpc-go/issues/5910
 		if status.Code(err) == codes.Unimplemented {
+			// Re-add the message data value if we took it out
+			if len(messageDataValue) > 0 {
+				messageData.Value = messageDataValue
+			}
+
 			if req.CanReplay() {
 				log.Warnf("App %s does not support streaming-based service invocation (most likely because it's using an older version of Dapr); falling back to unary calls", appID)
 				return d.invokeRemoteUnary(ctx, clientV1, req, opts)
