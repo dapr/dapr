@@ -91,7 +91,6 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 		default:
 			return nil, errors.New("invalid method")
 		}
-
 	}
 
 	srv1 := newGRPCServer(t, onInvoke)
@@ -115,7 +114,6 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	b.daprd2.WaitUntilRunning(t, ctx)
 
 	t.Run("invoke host", func(t *testing.T) {
-		t.Skip()
 		doReq := func(host, hostID string, verb commonv1.HTTPExtension_Verb) ([]byte, string) {
 			conn, err := grpc.DialContext(ctx, host,
 				grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -168,7 +166,6 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("method doesn't exist", func(t *testing.T) {
-		t.Skip()
 		host := fmt.Sprintf("localhost:%d", b.daprd1.GRPCPort())
 		conn, err := grpc.DialContext(ctx, host,
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -192,7 +189,6 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("no method", func(t *testing.T) {
-		t.Skip()
 		host := fmt.Sprintf("localhost:%d", b.daprd1.GRPCPort())
 		conn, err := grpc.DialContext(ctx, host,
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -216,7 +212,6 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("multiple segments", func(t *testing.T) {
-		t.Skip()
 		host := fmt.Sprintf("localhost:%d", b.daprd1.GRPCPort())
 		conn, err := grpc.DialContext(ctx, host,
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -238,8 +233,6 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("parallel requests", func(t *testing.T) {
-		t.Skip()
-
 		errCh := make(chan error)
 		for i := 0; i < 100; i++ {
 			go func(i int) {
