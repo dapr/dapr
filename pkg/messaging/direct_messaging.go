@@ -338,13 +338,15 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 	reqProto := req.Proto()
 
 	// If there's a message in the proto, we remove it from the message we send to avoid sending it twice
-	// However we need to keep a reference to those bytes, and if needed add them back, to retry the request
-	// This is needed for backwards-compatibility with Dapr 1.10
-	// TODO @ItalyPaleAle: Remove in Dapr 1.14
+	// However we need to keep a reference to those bytes, and if needed add them back, to retry the request with resiliency
+	// We re-add it when the method ends to ensure we can perform retries
 	messageData := reqProto.GetMessage().GetData()
 	messageDataValue := messageData.GetValue()
 	if len(messageDataValue) > 0 {
 		messageData.Value = nil
+		defer func() {
+			messageData.Value = messageDataValue
+		}()
 	}
 
 	proto := &internalv1pb.InternalInvokeRequestStream{}
@@ -419,11 +421,6 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 		// At this point it seems that this is the best we can do, since we cannot detect Unimplemented status codes earlier (unless we send a "ping", which would add latency).
 		// See: https://github.com/grpc/grpc-go/issues/5910
 		if status.Code(err) == codes.Unimplemented {
-			// Re-add the message data value if we took it out
-			if len(messageDataValue) > 0 {
-				messageData.Value = messageDataValue
-			}
-
 			if req.CanReplay() {
 				log.Warnf("App %s does not support streaming-based service invocation (most likely because it's using an older version of Dapr); falling back to unary calls", appID)
 				return d.invokeRemoteUnary(ctx, clientV1, req, opts)
