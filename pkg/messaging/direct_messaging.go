@@ -345,7 +345,9 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 	if len(messageDataValue) > 0 {
 		messageData.Value = nil
 		defer func() {
-			messageData.Value = messageDataValue
+			if messageDataValue != nil {
+				messageData.Value = messageDataValue
+			}
 		}()
 	}
 
@@ -421,6 +423,11 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 		// At this point it seems that this is the best we can do, since we cannot detect Unimplemented status codes earlier (unless we send a "ping", which would add latency).
 		// See: https://github.com/grpc/grpc-go/issues/5910
 		if status.Code(err) == codes.Unimplemented {
+			// If we took out the data from the message, re-add it, so we can attempt to perform an unary invocation
+			if messageDataValue != nil {
+				messageData.Value = messageDataValue
+				messageDataValue = nil
+			}
 			if req.CanReplay() {
 				log.Warnf("App %s does not support streaming-based service invocation (most likely because it's using an older version of Dapr); falling back to unary calls", appID)
 				return d.invokeRemoteUnary(ctx, clientV1, req, opts)
