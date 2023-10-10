@@ -109,6 +109,11 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 		WithContentType(chunk.Request.Message.ContentType)
 	defer req.Close()
 
+	// If the data has a type_url, set that in the object too
+	// This is necessary to support the gRPC->gRPC service invocation (legacy, non-proxy) path correctly
+	// (Note that GetTypeUrl could return an empty value, so this call becomes a no-op)
+	req.WithDataTypeURL(chunk.Request.Message.GetData().GetTypeUrl())
+
 	ctx, cancel := context.WithCancel(stream.Context())
 	defer cancel()
 

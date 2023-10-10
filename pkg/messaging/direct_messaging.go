@@ -376,6 +376,10 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 
 		// Send the chunk if there's anything to send
 		if proto.Request != nil || proto.Payload != nil {
+			// Avoid sending the data in the message too
+			if md := proto.GetRequest().GetMessage().GetData(); md != nil {
+				md.Value = nil
+			}
 			err = stream.SendMsg(proto)
 			if errors.Is(err, io.EOF) {
 				// If SendMsg returns an io.EOF error, it usually means that there's a transport-level error
