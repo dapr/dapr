@@ -210,6 +210,13 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 	}()
 	r := res.RawData()
 	resProto := res.Proto()
+
+	// If there's a message in the proto, we remove it from the message we send to avoid sending it twice
+	messageData := resProto.GetMessage().GetData()
+	if messageData != nil {
+		messageData.Value = nil
+	}
+
 	proto := &internalv1pb.InternalInvokeResponseStream{}
 	var (
 		n    int

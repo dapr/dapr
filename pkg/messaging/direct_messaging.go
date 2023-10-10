@@ -442,10 +442,11 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 	if err != nil {
 		return nil, err
 	}
-	res.WithRawData(pr)
 	if chunk.Response.Message != nil {
 		res.WithContentType(chunk.Response.Message.ContentType)
+		res.WithDataTypeURL(chunk.Response.Message.GetData().GetTypeUrl()) // Could be empty
 	}
+	res.WithRawData(pr)
 
 	// Read the response into the stream in the background
 	go func() {
