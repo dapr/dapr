@@ -51,7 +51,7 @@ func New(t *testing.T, fopts ...Option) *StateStore {
 
 	require.NotEmpty(t, opts.socketDir)
 
-	socketFile := util.RandomString(8)
+	socketFile := util.RandomString(t, 8)
 
 	require.NotNil(t, opts.statestore)
 	_, ok := opts.statestore.(state.TransactionalStore)

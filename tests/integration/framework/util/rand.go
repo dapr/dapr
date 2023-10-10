@@ -15,15 +15,26 @@ package util
 
 import (
 	"crypto/rand"
+	"math/big"
+	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 // RandomString generates a random string of length n.
-func RandomString(n int) string {
+func RandomString(t *testing.T, n int) string {
+	t.Helper()
+
 	const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	bytes := make([]byte, n)
-	rand.Read(bytes)
-	for i, b := range bytes {
-		bytes[i] = letters[b%byte(len(letters))]
+	_, err := rand.Read(bytes)
+	require.NoError(t, err)
+
+	for i, _ := range bytes {
+		j, err := rand.Int(rand.Reader, big.NewInt(int64(len(letters))))
+		require.NoError(t, err)
+		bytes[i] = letters[j.Int64()]
 	}
+
 	return string(bytes)
 }

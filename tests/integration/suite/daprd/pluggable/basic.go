@@ -54,7 +54,7 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 	tmp, err := nettest.LocalPath()
 	require.NoError(t, err)
 
-	socketDir := filepath.Join(tmp, util.RandomString(4))
+	socketDir := filepath.Join(tmp, util.RandomString(t, 4))
 	require.NoError(t, os.MkdirAll(socketDir, 0o700))
 	t.Cleanup(func() {
 		require.NoError(t, os.RemoveAll(socketDir))
