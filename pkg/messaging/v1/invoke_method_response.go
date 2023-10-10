@@ -209,7 +209,7 @@ func (imr *InvokeMethodResponse) Message() *commonv1pb.InvokeResponse {
 // HasMessageData returns true if the message object contains a slice of data buffered.
 func (imr *InvokeMethodResponse) HasMessageData() bool {
 	m := imr.r.Message
-	return m != nil && m.Data != nil && len(m.Data.Value) > 0
+	return len(m.GetData().GetValue()) > 0
 }
 
 // ResetMessageData resets the data inside the message object if present.
@@ -230,7 +230,7 @@ func (imr *InvokeMethodResponse) ContentType() string {
 
 	contentType := m.ContentType
 
-	if m.Data != nil && m.Data.TypeUrl != "" {
+	if m.GetData().GetTypeUrl() != "" {
 		contentType = ProtobufContentType
 	}
 
