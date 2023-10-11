@@ -17,8 +17,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -31,11 +34,11 @@ import (
 	clocktesting "k8s.io/utils/clock/testing"
 
 	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/dapr/pkg/actors/health"
 	"github.com/dapr/dapr/pkg/actors/internal"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
-	"github.com/dapr/dapr/pkg/health"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -1027,22 +1030,45 @@ func TestActorsAppHealthCheck(t *testing.T) {
 			defer testActorsRuntime.Close()
 			clock := testActorsRuntime.clock.(*clocktesting.FakeClock)
 
+			var i int
+			testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if i == 0 {
+					w.WriteHeader(http.StatusOK)
+				} else {
+					w.WriteHeader(http.StatusInternalServerError)
+				}
+				i++
+			}))
+			t.Cleanup(testServer.Close)
+
 			testActorsRuntime.actorsConfig.Config.HostedActorTypes = internal.NewHostedActors([]string{"actor1"})
+			testActorsRuntime.actorsConfig.HealthEndpoint = testServer.URL
 			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
+			t.Cleanup(cancel)
 
 			opts := []health.Option{
 				health.WithClock(clock),
 				health.WithFailureThreshold(1),
-				health.WithInterval(1 * time.Second),
+				health.WithHealthyStateInterval(2 * time.Second),
+				health.WithUnHealthyStateInterval(2 * time.Second),
 				health.WithRequestTimeout(100 * time.Millisecond),
 			}
-			closingCh := make(chan struct{})
+			var wg sync.WaitGroup
+
+			checker, err := testActorsRuntime.getAppHealthCheckerWithOptions(opts...)
+			require.NoError(t, err)
+
+			wg.Add(2)
+			go func() {
+				defer wg.Done()
+				checker.Run(ctx)
+			}()
+
 			healthy := atomic.Bool{}
 			healthy.Store(true)
 			go func() {
-				defer close(closingCh)
-				for v := range testActorsRuntime.getAppHealthCheckChanWithOptions(ctx, opts...) {
+				defer wg.Done()
+				for v := range checker.HealthChannel() {
 					healthy.Store(v)
 				}
 			}()
@@ -1056,7 +1082,7 @@ func TestActorsAppHealthCheck(t *testing.T) {
 
 			// Cancel now which should cause the shutdown
 			cancel()
-			<-closingCh
+			wg.Wait()
 		}
 	}
 
@@ -1069,23 +1095,40 @@ func TestActorsAppHealthCheck(t *testing.T) {
 		defer testActorsRuntime.Close()
 		clock := testActorsRuntime.clock.(*clocktesting.FakeClock)
 
+		testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+		t.Cleanup(testServer.Close)
+
 		testActorsRuntime.actorsConfig.HostedActorTypes = internal.NewHostedActors([]string{})
+		testActorsRuntime.actorsConfig.HealthEndpoint = testServer.URL
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
 		opts := []health.Option{
 			health.WithClock(clock),
 			health.WithFailureThreshold(1),
-			health.WithInterval(1 * time.Second),
+			health.WithHealthyStateInterval(2 * time.Second),
+			health.WithUnHealthyStateInterval(2 * time.Second),
 			health.WithRequestTimeout(100 * time.Millisecond),
 		}
 
-		closingCh := make(chan struct{})
+		var wg sync.WaitGroup
+		checker, err := testActorsRuntime.getAppHealthCheckerWithOptions(opts...)
+		require.NoError(t, err)
+
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			checker.Run(ctx)
+		}()
+
 		healthy := atomic.Bool{}
 		healthy.Store(true)
+
 		go func() {
-			defer close(closingCh)
-			for v := range testActorsRuntime.getAppHealthCheckChanWithOptions(ctx, opts...) {
+			defer wg.Done()
+			for v := range checker.HealthChannel() {
 				healthy.Store(v)
 			}
 		}()
@@ -1096,7 +1139,7 @@ func TestActorsAppHealthCheck(t *testing.T) {
 
 		// Cancel now which should cause the shutdown
 		cancel()
-		<-closingCh
+		wg.Wait()
 	})
 }
 
