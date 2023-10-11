@@ -69,7 +69,7 @@ jobs:
         with:
           go-version-file: "go.mod"
       - name: Set Go Version to Env Variable
-        run: echo "GOVER=$(go version | grep -oP 'go\K[0-9]+\.[0-9]+(\.[0-9]+)?')" >> $GITHUB_ENV
+        run: echo "GOVER=$(go version | awk '{print substr($3,3)}')" >> $GITHUB_ENV
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v1
         if: matrix.target_os == 'linux' && github.event_name != 'pull_request'
