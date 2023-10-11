@@ -198,7 +198,9 @@ func (c *Checker) doHealthyStateCheck(ctx context.Context) {
 			return
 
 		case <-ticker.C():
-			if !c.getStateHealth(ctx) {
+			if c.getStateHealth(ctx) {
+				failureCount = 0
+			} else {
 				failureCount++
 			}
 
