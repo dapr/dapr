@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"os"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -12,7 +14,7 @@ import (
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	grpcGo "google.golang.org/grpc"
+	"google.golang.org/grpc"
 	grpcMetadata "google.golang.org/grpc/metadata"
 
 	"github.com/dapr/dapr/pkg/config"
@@ -22,25 +24,6 @@ import (
 	dapr_testing "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/logger"
 )
-
-func TestCertRenewal(t *testing.T) {
-	t.Run("shouldn't renew", func(t *testing.T) {
-		certExpiry := time.Now().Add(time.Hour * 2).UTC()
-		certDuration := certExpiry.Sub(time.Now().UTC())
-
-		renew := shouldRenewCert(certExpiry, certDuration)
-		assert.False(t, renew)
-	})
-
-	t.Run("should renew", func(t *testing.T) {
-		certExpiry := time.Now().Add(time.Second * 3).UTC()
-		certDuration := certExpiry.Sub(time.Now().UTC())
-
-		time.Sleep(time.Millisecond * 2200)
-		renew := shouldRenewCert(certExpiry, certDuration)
-		assert.True(t, renew)
-	})
-}
 
 func TestGetMiddlewareOptions(t *testing.T) {
 	t.Run("should enable unary interceptor if tracing and metrics are enabled", func(t *testing.T) {
@@ -110,7 +93,7 @@ func TestClose(t *testing.T) {
 			ReadBufferSizeKB:     4,
 			EnableAPILogging:     true,
 		}
-		a := &api{UniversalAPI: &universalapi.UniversalAPI{CompStore: compstore.New()}}
+		a := &api{UniversalAPI: &universalapi.UniversalAPI{CompStore: compstore.New()}, closeCh: make(chan struct{})}
 		server := NewAPIServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, config.APISpec{}, nil, nil)
 		require.NoError(t, server.StartNonBlocking())
 		dapr_testing.WaitForListeningAddress(t, 5*time.Second, fmt.Sprintf("127.0.0.1:%d", port))
@@ -131,7 +114,7 @@ func TestClose(t *testing.T) {
 			ReadBufferSizeKB:     4,
 			EnableAPILogging:     false,
 		}
-		a := &api{UniversalAPI: &universalapi.UniversalAPI{CompStore: compstore.New()}}
+		a := &api{UniversalAPI: &universalapi.UniversalAPI{CompStore: compstore.New()}, closeCh: make(chan struct{})}
 		server := NewAPIServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, config.APISpec{}, nil, nil)
 		require.NoError(t, server.StartNonBlocking())
 		dapr_testing.WaitForListeningAddress(t, 5*time.Second, fmt.Sprintf("127.0.0.1:%d", port))
@@ -139,11 +122,11 @@ func TestClose(t *testing.T) {
 	})
 }
 
-func Test_server_getGRPCAPILoggingMiddlewares(t *testing.T) {
+func TestGrpcAPILoggingMiddlewares(t *testing.T) {
 	logDest := &bytes.Buffer{}
 	infoLog := logger.NewLogger("test-api-logging")
 	infoLog.EnableJSONOutput(true)
-	infoLog.SetOutput(logDest)
+	infoLog.SetOutput(io.MultiWriter(logDest, os.Stderr))
 
 	s := &server{
 		infoLogger: infoLog,
@@ -165,7 +148,7 @@ func Test_server_getGRPCAPILoggingMiddlewares(t *testing.T) {
 		}
 		ctx := grpcMetadata.NewIncomingContext(context.Background(), md)
 
-		info := &grpcGo.UnaryServerInfo{
+		info := &grpc.UnaryServerInfo{
 			FullMethod: "/dapr.proto.runtime.v1.Dapr/GetState",
 		}
 		return func(t *testing.T) {

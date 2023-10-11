@@ -27,11 +27,17 @@ BINARIES    ?= daprd placement operator injector sentry
 HA_MODE     ?= false
 # Force in-memory log for placement
 FORCE_INMEM ?= true
-# Go's build tags:
+# Dapr sidecar "flavor" build tag:
 # allcomponents - (default) includes all components in Dapr sidecar
 # stablecomponents - includes all stable components in Dapr sidecar
 DAPR_SIDECAR_FLAVOR ?= allcomponents
-DAPR_GO_BUILD_TAGS = $(DAPR_SIDECAR_FLAVOR)
+# Additional build tags
+DAPR_GO_BUILD_TAGS ?=
+ifneq ($(DAPR_GO_BUILD_TAGS),)
+	DAPR_GO_BUILD_TAGS := $(DAPR_GO_BUILD_TAGS),$(DAPR_SIDECAR_FLAVOR)
+else
+	DAPR_GO_BUILD_TAGS := $(DAPR_SIDECAR_FLAVOR)
+endif
 
 # Add latest tag if LATEST_RELEASE is true
 LATEST_RELEASE ?=
@@ -277,7 +283,8 @@ docker-deploy-k8s: check-docker-env check-arch
 		--set global.ha.enabled=$(HA_MODE) --set-string global.tag=$(BUILD_TAG) \
 		--set-string global.registry=$(DAPR_REGISTRY) --set global.logAsJson=true \
 		--set global.daprControlPlaneOs=$(TARGET_OS) --set global.daprControlPlaneArch=$(TARGET_ARCH) \
-		--set dapr_placement.logLevel=debug --set dapr_sidecar_injector.sidecarImagePullPolicy=$(PULL_POLICY) \
+		--set dapr_placement.logLevel=debug --set dapr_sentry.logLevel=debug \
+		--set dapr_sidecar_injector.sidecarImagePullPolicy=$(PULL_POLICY) \
 		--set global.imagePullPolicy=$(PULL_POLICY) --set global.imagePullSecrets=${DAPR_TEST_REGISTRY_SECRET} \
 		--set global.mtls.enabled=${DAPR_MTLS_ENABLED} \
 		--set dapr_placement.cluster.forceInMemoryLog=$(FORCE_INMEM) \
@@ -297,7 +304,7 @@ test: test-deps
 	CGO_ENABLED=$(CGO) \
 		gotestsum \
 			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_unit.json \
-			--format standard-quiet \
+			--format pkgname-and-test-fails \
 			-- \
 				./pkg/... ./utils/... ./cmd/... \
 				$(COVERAGE_OPTS) --tags=unit,allcomponents
@@ -315,16 +322,20 @@ TEST_WITH_RACE=./pkg/acl/... \
 ./pkg/actors \
 ./pkg/apis/... \
 ./pkg/apphealth/... \
+./pkg/buildinfo/... \
 ./pkg/channel/... \
 ./pkg/client/... \
 ./pkg/components/... \
 ./pkg/concurrency/... \
+./pkg/config/... \
+./pkg/cors/... \
 ./pkg/diagnostics/... \
 ./pkg/encryption/... \
 ./pkg/expr/... \
 ./pkg/grpc/... \
 ./pkg/health/... \
 ./pkg/http/... \
+./pkg/httpendpoint/... \
 ./pkg/injector/... \
 ./pkg/messages/... \
 ./pkg/messaging/... \
@@ -332,16 +343,34 @@ TEST_WITH_RACE=./pkg/acl/... \
 ./pkg/middleware/... \
 ./pkg/modes/... \
 ./pkg/operator/... \
+./pkg/outbox/... \
 ./pkg/placement/... \
 ./pkg/proto/... \
+./pkg/retry/... \
 ./pkg/resiliency/... \
 ./pkg/runtime/... \
-./pkg/signals/...
+./pkg/scopes/... \
+./pkg/security/... \
+./pkg/sentry/... \
+./pkg/signals/... \
+./pkg/validation/... \
+./utils/...
 
 .PHONY: test-race
 test-race:
-	echo "$(TEST_WITH_RACE)" | xargs \
+	CGO_ENABLED=1 echo "$(TEST_WITH_RACE)" | xargs \
 		go test -tags="allcomponents unit" -race
+
+################################################################################
+# Target: test-integration                                                                 #
+################################################################################
+.PHONY: test-integration
+test-integration: test-deps
+		CGO_ENABLED=1 gotestsum \
+			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json \
+			--format testname \
+			-- \
+			./tests/integration -count=1 -v -tags="integration"
 
 ################################################################################
 # Target: lint                                                                 #
@@ -405,7 +434,7 @@ init-proto:
 ################################################################################
 # Target: gen-proto                                                            #
 ################################################################################
-GRPC_PROTOS:=common internals operator placement runtime sentry components
+GRPC_PROTOS:=$(shell ls dapr/proto)
 PROTO_PREFIX:=github.com/dapr/dapr
 
 # Generate archive files for each binary

@@ -1,48 +1,8 @@
-{{- $existingSecret := lookup "v1" "Secret" .Release.Namespace "dapr-webhook-cert"}}
-{{- $existingCA := lookup "v1" "Secret" .Release.Namespace "dapr-webhook-ca"}}
-{{- $ca := genCA "dapr-webhook-ca" 3650 }}
-{{- $cn := printf "dapr-webhook" }}
-{{- $altName1 := printf "dapr-webhook.%s" .Release.Namespace }}
-{{- $altName2 := printf "dapr-webhook.%s.svc" .Release.Namespace }}
-{{- $altName3 := printf "dapr-webhook.%s.svc.cluster" .Release.Namespace }}
-{{- $altName4 := printf "dapr-webhook.%s.svc.cluster.local" .Release.Namespace }}
-{{- $cert := genSignedCert $cn nil (list $altName1 $altName2 $altName3 $altName4) 3650 $ca }}
-apiVersion: v1
-kind: Secret
-metadata:
-  name: dapr-webhook-cert
-  labels:
-    app: dapr-operator
-    {{- range $key, $value := .Values.global.k8sLabels }}
-    {{ $key }}: {{ tpl $value $ }}
-    {{- end }}
-data:
-  {{ if $existingSecret }}tls.crt: {{ index $existingSecret.data "tls.crt" }}
-  {{ else }}tls.crt: {{ b64enc $cert.Cert }}
-  {{ end }}
-
-  {{ if $existingSecret }}tls.key: {{ index $existingSecret.data "tls.key" }}
-  {{ else }}tls.key: {{ b64enc $cert.Key }}
-  {{ end }}
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: dapr-webhook-ca
-  labels:
-    app: dapr-operator
-    {{- range $key, $value := .Values.global.k8sLabels }}
-    {{ $key }}: {{ tpl $value $ }}
-    {{- end }}
-data:
-  {{ if $existingCA }}caBundle: {{ index $existingCA.data "caBundle" }}
-  {{ else }}caBundle: {{ b64enc $ca.Cert }}
-  {{ end }}
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: dapr-operator
+  namespace: {{ .Release.Namespace }}
   labels:
     app: dapr-operator
     {{- range $key, $value := .Values.global.k8sLabels }}
@@ -67,11 +27,15 @@ spec:
         {{- with .Values.global.labels }}
           {{- toYaml . | nindent 8 }}
         {{- end }}
-{{- if eq .Values.global.prometheus.enabled true }}
       annotations:
+        dapr.io/control-plane: operator
+{{- if eq .Values.global.prometheus.enabled true }}
         prometheus.io/scrape: "{{ .Values.global.prometheus.enabled }}"
         prometheus.io/port: "{{ .Values.global.prometheus.port }}"
         prometheus.io/path: "/"
+{{- end }}
+{{- if .Values.deploymentAnnotations }}
+{{ toYaml .Values.deploymentAnnotations | indent 4}}
 {{- end }}
     spec:
       containers:
@@ -107,11 +71,18 @@ spec:
 {{- if eq .Values.global.daprControlPlaneOs "linux" }}
         securityContext:
           runAsNonRoot: {{ .Values.runAsNonRoot }}
-{{- if eq .Values.debug.enabled true }}
+  {{- if eq .Values.debug.enabled true }}
           capabilities:
-            add:
-            - SYS_PTRACE
-{{- end }}
+            add: ["SYS_PTRACE"]
+  {{- else }}
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
+  {{- end }}
+  {{- if .Values.global.seccompProfile }}
+          seccompProfile:
+            type: {{ .Values.global.seccompProfile }}
+  {{- end }}
 {{- end }}
         env:
         - name: NAMESPACE
@@ -133,16 +104,22 @@ spec:
         resources:
 {{ toYaml .Values.resources | indent 10 }}
         volumeMounts:
-          - name: credentials
-            mountPath: /var/run/dapr/credentials
-            readOnly: true
-          - name: webhook-creds
-            {{- if eq .Values.global.daprControlPlaneOs "windows" }}
-            mountPath: "C:\\Windows\\TEMP\\k8s-webhook-server\\serving-certs"
-            {{- else }}
-            mountPath: /tmp/k8s-webhook-server/serving-certs
-            {{- end }}
-            readOnly: true
+        - name: dapr-trust-bundle
+          mountPath: /var/run/secrets/dapr.io/tls
+          readOnly: true
+      {{- if .Values.global.mtls.mountSentryVolume }}
+        - name: dapr-identity-token
+          mountPath: /var/run/secrets/dapr.io/sentrytoken
+          readOnly: true
+      {{- end }}
+      {{- if eq .Values.debug.enabled false }}
+        # This is not needed in debug mode because the root FS is writable
+        - name: dapr-operator-tmp
+          mountPath: /tmp
+      {{- end }}
+      {{- with .Values.global.extraVolumeMounts.operator }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
         command:
 {{- if eq .Values.debug.enabled false }}
         - "/operator"
@@ -166,6 +143,8 @@ spec:
         - "{{ .Values.maxPodRestartsPerMinute }}"
         - "--log-level"
         - "{{ .Values.logLevel }}"
+        - "--trust-anchors-file"
+        - "/var/run/secrets/dapr.io/tls/ca.crt"
 {{- if eq .Values.global.logAsJson true }}
         - "--log-as-json"
 {{- end }}
@@ -175,14 +154,6 @@ spec:
         - "{{ .Values.global.prometheus.port }}"
 {{- else }}
         - "--enable-metrics=false"
-{{- end }}
-{{- with .Values.global.issuerFilenames }}
-        - "--issuer-ca-filename"
-        - "{{ .ca }}"
-        - "--issuer-certificate-filename"
-        - "{{ .cert }}"
-        - "--issuer-key-filename"
-        - "{{ .key }}"
 {{- end }}
 {{- if .Values.watchNamespace }}
         - "--watch-namespace"
@@ -199,12 +170,25 @@ spec:
 {{- end }}
       serviceAccountName: dapr-operator
       volumes:
-        - name: credentials
-          secret:
-            secretName: dapr-trust-bundle
-        - name: webhook-creds
-          secret:
-            secretName: dapr-webhook-cert
+        - name: dapr-operator-tmp
+          emptyDir:
+            sizeLimit: 2Mi
+            medium: Memory
+        - name: dapr-trust-bundle
+          configMap:
+            name: dapr-trust-bundle
+    {{- if .Values.global.mtls.mountSentryVolume }}
+        - name: dapr-identity-token
+          projected:
+            sources:
+            - serviceAccountToken:
+                path: token
+                expirationSeconds: 600
+                audience: "spiffe://{{ .Values.global.mtls.controlPlaneTrustDomain }}/ns/{{ .Release.Namespace }}/dapr-sentry"
+    {{- end }}
+      {{- with .Values.global.extraVolumes.operator }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -235,7 +219,7 @@ spec:
 {{- end }}
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:
-        - name: {{ .Values.global.imagePullSecrets }}
+        {{- include "dapr.imagePullSecrets" (dict "imagePullSecrets" .Values.global.imagePullSecrets) | nindent 8 }}
 {{- end }}
 {{- if .Values.global.nodeSelector }}
       nodeSelector:

@@ -28,8 +28,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const numHealthChecks = 60 // Number of get calls before starting tests.
-
 type testResponse struct {
 	Input  string `json:"input"`
 	Output string `json:"output"`
@@ -41,11 +39,6 @@ func getExternalURL(t *testing.T, appName string) string {
 	externalURL := tr.Platform.AcquireAppExternalURL(appName)
 	require.NotEmpty(t, externalURL, "external URL must not be empty!")
 	return externalURL
-}
-
-func healthCheckApp(t *testing.T, externalURL string, numHealthChecks int) {
-	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
-	require.NoError(t, err)
 }
 
 func TestMain(m *testing.M) {
@@ -92,18 +85,18 @@ func TestSimpleMiddleware(t *testing.T) {
 	appMiddlewareURL := getExternalURL(t, "app-channel-middleware")
 	noMiddlewareURL := getExternalURL(t, "no-middleware")
 
-	// This initial probe makes the test wait a little bit longer when needed,
-	// making this test less flaky due to delays in the deployment.
-	healthCheckApp(t, middlewareURL, numHealthChecks)
-	healthCheckApp(t, noMiddlewareURL, numHealthChecks)
+	// Makes the test wait for the apps and load balancers to be ready
+	err := utils.HealthCheckApps(middlewareURL, noMiddlewareURL, appMiddlewareURL)
+	require.NoError(t, err, "Health checks failed")
 
-	t.Logf("middlewareURL is '%s'\n", middlewareURL)
-	t.Logf("noMiddlewareURL is '%s'\n", noMiddlewareURL)
+	t.Logf("middlewareURL is '%s'", middlewareURL)
+	t.Logf("appMiddlewareURL is '%s'", appMiddlewareURL)
+	t.Logf("noMiddlewareURL is '%s'", noMiddlewareURL)
 
 	t.Run("test_basicMiddleware", func(t *testing.T) {
 		resp, status, err := utils.HTTPPostWithStatus(fmt.Sprintf("http://%s/test/logCall/%s", middlewareURL, "middlewareapp"), []byte{})
 
-		require.Nil(t, err)
+		require.NoError(t, err)
 		require.Equal(t, 200, status)
 		require.NotNil(t, resp)
 
@@ -117,7 +110,7 @@ func TestSimpleMiddleware(t *testing.T) {
 	t.Run("test_basicAppChannelMiddleware", func(t *testing.T) {
 		resp, status, err := utils.HTTPPostWithStatus(fmt.Sprintf("http://%s/test/logCall/%s", appMiddlewareURL, "app-channel-middleware"), []byte{})
 
-		require.Nil(t, err)
+		require.NoError(t, err)
 		require.Equal(t, 200, status)
 		require.NotNil(t, resp)
 
@@ -131,7 +124,7 @@ func TestSimpleMiddleware(t *testing.T) {
 	t.Run("test_noMiddleware", func(t *testing.T) {
 		resp, status, err := utils.HTTPPostWithStatus(fmt.Sprintf("http://%s/test/logCall/%s", noMiddlewareURL, "no-middleware"), []byte{})
 
-		require.Nil(t, err)
+		require.NoError(t, err)
 		require.Equal(t, 200, status)
 		require.NotNil(t, resp)
 

@@ -25,6 +25,7 @@ type PubsubItem struct {
 	ScopedSubscriptions []string
 	ScopedPublishings   []string
 	AllowedTopics       []string
+	ProtectedTopics     []string
 	NamespaceScoped     bool
 }
 
@@ -50,6 +51,17 @@ func (c *ComponentStore) GetPubSub(name string) (PubsubItem, bool) {
 	return pubsub, ok
 }
 
+func (c *ComponentStore) GetPubSubComponent(name string) (pubsub.PubSub, bool) {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+	pubsub, ok := c.pubSubs[name]
+	if !ok {
+		return nil, false
+	}
+
+	return pubsub.Component, ok
+}
+
 func (c *ComponentStore) ListPubSubs() map[string]PubsubItem {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
@@ -68,16 +80,16 @@ func (c *ComponentStore) DeletePubSub(name string) {
 	delete(c.pubSubs, name)
 }
 
-func (c *ComponentStore) TopicRoutesIsNil() bool {
-	c.lock.RLock()
-	defer c.lock.RUnlock()
-	return c.topicRoutes == nil
-}
-
 func (c *ComponentStore) SetTopicRoutes(topicRoutes map[string]TopicRoutes) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	c.topicRoutes = topicRoutes
+}
+
+func (c *ComponentStore) DeleteTopicRoute(name string) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	delete(c.topicRoutes, name)
 }
 
 func (c *ComponentStore) GetTopicRoutes() map[string]TopicRoutes {

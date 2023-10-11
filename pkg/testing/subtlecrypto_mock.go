@@ -151,10 +151,6 @@ func (c FakeSubtleCrypto) Features() []contribCrypto.Feature {
 	return []contribCrypto.Feature{}
 }
 
-func (c FakeSubtleCrypto) GetComponentMetadata() map[string]string {
-	return nil
-}
-
 type FailingSubtleCrypto struct {
 	FakeSubtleCrypto
 	Failure Failure

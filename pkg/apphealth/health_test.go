@@ -24,20 +24,22 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	clocktesting "k8s.io/utils/clock/testing"
+
+	"github.com/dapr/dapr/pkg/config"
 )
 
 func TestAppHealth_setResult(t *testing.T) {
 	var threshold int32 = 3
-	h := New(Config{
+	h := New(config.AppHealthConfig{
 		Threshold: threshold,
 	}, nil)
 
 	// Set the initial state to healthy
-	h.setResult(true)
+	h.setResult(context.Background(), true)
 
 	statusChange := make(chan uint8, 1)
 	unexpectedStatusChanges := atomic.Int32{}
-	h.OnHealthChange(func(status uint8) {
+	h.OnHealthChange(func(ctx context.Context, status uint8) {
 		select {
 		case statusChange <- status:
 			// Do nothing
@@ -53,7 +55,7 @@ func TestAppHealth_setResult(t *testing.T) {
 			if i == threshold-1 {
 				<-statusChange // Allow the channel to be written into
 			}
-			h.setResult(false)
+			h.setResult(context.Background(), false)
 			if i == threshold-1 {
 				select {
 				case v := <-statusChange:
@@ -75,7 +77,7 @@ func TestAppHealth_setResult(t *testing.T) {
 
 	// First success should bring the app back to healthy
 	<-statusChange // Allow the channel to be written into
-	h.setResult(true)
+	h.setResult(context.Background(), true)
 	select {
 	case v := <-statusChange:
 		assert.Equal(t, AppStatusHealthy, v)
@@ -91,7 +93,7 @@ func TestAppHealth_setResult(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			for i := int32(0); i < (threshold + 5); i++ {
-				h.setResult(false)
+				h.setResult(context.Background(), false)
 			}
 			wg.Done()
 		}()
@@ -112,7 +114,7 @@ func TestAppHealth_setResult(t *testing.T) {
 	h.failureCount.Store(int32(math.MaxInt32 - 2))
 	statusChange <- 255 // Fill the channel again
 	for i := int32(0); i < 5; i++ {
-		h.setResult(false)
+		h.setResult(context.Background(), false)
 	}
 	assert.Empty(t, unexpectedStatusChanges.Load())
 	assert.Equal(t, threshold+3, h.failureCount.Load())
@@ -120,7 +122,7 @@ func TestAppHealth_setResult(t *testing.T) {
 
 func TestAppHealth_ratelimitReports(t *testing.T) {
 	clock := clocktesting.NewFakeClock(time.Now())
-	h := New(Config{}, nil)
+	h := New(config.AppHealthConfig{}, nil)
 	h.clock = clock
 
 	// First run should always succeed
@@ -175,7 +177,7 @@ func Test_StartProbes(t *testing.T) {
 
 		done := make(chan struct{})
 
-		h := New(Config{
+		h := New(config.AppHealthConfig{
 			ProbeInterval: time.Second,
 		}, func(context.Context) (bool, error) {
 			assert.Fail(t, "unexpected probe call")
@@ -204,7 +206,7 @@ func Test_StartProbes(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		t.Cleanup(cancel)
 
-		h := New(Config{
+		h := New(config.AppHealthConfig{
 			ProbeInterval: time.Second,
 		}, func(context.Context) (bool, error) {
 			assert.Fail(t, "unexpected probe call")
@@ -230,7 +232,7 @@ func Test_StartProbes(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		t.Cleanup(cancel)
 
-		h := New(Config{
+		h := New(config.AppHealthConfig{
 			ProbeInterval: time.Second,
 		}, func(context.Context) (bool, error) {
 			assert.Fail(t, "unexpected probe call")
@@ -264,7 +266,7 @@ func Test_StartProbes(t *testing.T) {
 		var probeCalls atomic.Int64
 		var currentStatus atomic.Uint32
 
-		h := New(Config{
+		h := New(config.AppHealthConfig{
 			ProbeInterval: time.Second,
 			Threshold:     1,
 		}, func(context.Context) (bool, error) {
@@ -280,7 +282,7 @@ func Test_StartProbes(t *testing.T) {
 			assert.NoError(t, h.StartProbes(ctx))
 		}()
 
-		h.OnHealthChange(func(status uint8) {
+		h.OnHealthChange(func(ctx context.Context, status uint8) {
 			currentStatus.Store(uint32(status))
 		})
 

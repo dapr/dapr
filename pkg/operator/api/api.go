@@ -31,13 +31,14 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subscriptionsapiV2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
-	daprCredentials "github.com/dapr/dapr/pkg/credentials"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
+	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/logger"
 )
 
@@ -53,7 +54,7 @@ var log = logger.NewLogger("dapr.operator.api")
 
 // Server runs the Dapr API server for components and configurations.
 type Server interface {
-	Run(ctx context.Context, certChain *daprCredentials.CertChain) error
+	Run(context.Context, security.Handler) error
 	Ready(context.Context) error
 	OnComponentUpdated(ctx context.Context, component *componentsapi.Component)
 	OnHTTPEndpointUpdated(ctx context.Context, endpoint *httpendpointsapi.HTTPEndpoint)
@@ -82,18 +83,14 @@ func NewAPIServer(client client.Client) Server {
 }
 
 // Run starts a new gRPC server.
-func (a *apiServer) Run(ctx context.Context, certChain *daprCredentials.CertChain) error {
+func (a *apiServer) Run(ctx context.Context, sec security.Handler) error {
 	if !a.running.CompareAndSwap(false, true) {
 		return errors.New("api server already running")
 	}
 
 	log.Infof("starting gRPC server on port %d", serverPort)
 
-	opts, err := daprCredentials.GetServerOptions(certChain)
-	if err != nil {
-		return fmt.Errorf("error getting gRPC server options: %w", err)
-	}
-	s := grpc.NewServer(opts...)
+	s := grpc.NewServer(sec.GRPCServerOptionMTLS())
 	operatorv1pb.RegisterOperatorServer(s, a)
 
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%v", serverPort))
@@ -223,7 +220,7 @@ func processComponentSecrets(ctx context.Context, component *componentsapi.Compo
 				if err != nil {
 					return err
 				}
-				component.Spec.Metadata[i].Value = componentsapi.DynamicValue{
+				component.Spec.Metadata[i].Value = commonapi.DynamicValue{
 					JSON: v1.JSON{
 						Raw: jsonEnc,
 					},
@@ -235,38 +232,81 @@ func processComponentSecrets(ctx context.Context, component *componentsapi.Compo
 	return nil
 }
 
+func pairNeedsSecretExtraction(ref commonapi.SecretKeyRef, auth httpendpointsapi.Auth) bool {
+	return ref.Name != "" && (auth.SecretStore == kubernetesSecretStore || auth.SecretStore == "")
+}
+
+func getSecret(ctx context.Context, name, namespace string, ref commonapi.SecretKeyRef, kubeClient client.Client) (commonapi.DynamicValue, error) {
+	var secret corev1.Secret
+
+	err := kubeClient.Get(ctx, types.NamespacedName{
+		Name:      name,
+		Namespace: namespace,
+	}, &secret)
+	if err != nil {
+		return commonapi.DynamicValue{}, err
+	}
+
+	key := ref.Key
+	if key == "" {
+		key = ref.Name
+	}
+
+	val, ok := secret.Data[key]
+	if ok {
+		enc := b64.StdEncoding.EncodeToString(val)
+		jsonEnc, err := json.Marshal(enc)
+		if err != nil {
+			return commonapi.DynamicValue{}, err
+		}
+
+		return commonapi.DynamicValue{
+			JSON: v1.JSON{
+				Raw: jsonEnc,
+			},
+		}, nil
+	}
+
+	return commonapi.DynamicValue{}, nil
+}
+
 func processHTTPEndpointSecrets(ctx context.Context, endpoint *httpendpointsapi.HTTPEndpoint, namespace string, kubeClient client.Client) error {
 	for i, header := range endpoint.Spec.Headers {
-		if header.SecretKeyRef.Name != "" && (endpoint.Auth.SecretStore == kubernetesSecretStore || endpoint.Auth.SecretStore == "") {
-			var secret corev1.Secret
-
-			err := kubeClient.Get(ctx, types.NamespacedName{
-				Name:      header.SecretKeyRef.Name,
-				Namespace: namespace,
-			}, &secret)
+		if pairNeedsSecretExtraction(header.SecretKeyRef, endpoint.Auth) {
+			v, err := getSecret(ctx, header.SecretKeyRef.Name, namespace, header.SecretKeyRef, kubeClient)
 			if err != nil {
 				return err
 			}
 
-			key := header.SecretKeyRef.Key
-			if key == "" {
-				key = header.SecretKeyRef.Name
-			}
-
-			val, ok := secret.Data[key]
-			if ok {
-				enc := b64.StdEncoding.EncodeToString(val)
-				jsonEnc, err := json.Marshal(enc)
-				if err != nil {
-					return err
-				}
-				endpoint.Spec.Headers[i].Value = httpendpointsapi.DynamicValue{
-					JSON: v1.JSON{
-						Raw: jsonEnc,
-					},
-				}
-			}
+			endpoint.Spec.Headers[i].Value = v
 		}
+	}
+
+	if endpoint.HasTLSClientCertSecret() && pairNeedsSecretExtraction(*endpoint.Spec.ClientTLS.Certificate.SecretKeyRef, endpoint.Auth) {
+		v, err := getSecret(ctx, endpoint.Spec.ClientTLS.Certificate.SecretKeyRef.Name, namespace, *endpoint.Spec.ClientTLS.Certificate.SecretKeyRef, kubeClient)
+		if err != nil {
+			return err
+		}
+
+		endpoint.Spec.ClientTLS.Certificate.Value = &v
+	}
+
+	if endpoint.HasTLSPrivateKeySecret() && pairNeedsSecretExtraction(*endpoint.Spec.ClientTLS.PrivateKey.SecretKeyRef, endpoint.Auth) {
+		v, err := getSecret(ctx, endpoint.Spec.ClientTLS.PrivateKey.SecretKeyRef.Name, namespace, *endpoint.Spec.ClientTLS.PrivateKey.SecretKeyRef, kubeClient)
+		if err != nil {
+			return err
+		}
+
+		endpoint.Spec.ClientTLS.PrivateKey.Value = &v
+	}
+
+	if endpoint.HasTLSRootCASecret() && pairNeedsSecretExtraction(*endpoint.Spec.ClientTLS.RootCA.SecretKeyRef, endpoint.Auth) {
+		v, err := getSecret(ctx, endpoint.Spec.ClientTLS.RootCA.SecretKeyRef.Name, namespace, *endpoint.Spec.ClientTLS.RootCA.SecretKeyRef, kubeClient)
+		if err != nil {
+			return err
+		}
+
+		endpoint.Spec.ClientTLS.RootCA.Value = &v
 	}
 
 	return nil
@@ -443,8 +483,15 @@ func (a *apiServer) ListHTTPEndpoints(ctx context.Context, in *operatorv1pb.List
 		return nil, fmt.Errorf("error listing http endpoints: %w", err)
 	}
 
-	for _, item := range endpoints.Items {
-		b, err := json.Marshal(item)
+	for i, item := range endpoints.Items {
+		e := endpoints.Items[i]
+		err := processHTTPEndpointSecrets(ctx, &e, item.Namespace, a.Client)
+		if err != nil {
+			log.Warnf("error processing secrets for http endpoint '%s/%s': %s", item.Namespace, item.Name, err)
+			return &operatorv1pb.ListHTTPEndpointsResponse{}, err
+		}
+
+		b, err := json.Marshal(e)
 		if err != nil {
 			log.Warnf("Error unmarshalling http endpoints: %s", err)
 			continue

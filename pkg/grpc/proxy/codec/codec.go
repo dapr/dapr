@@ -3,11 +3,10 @@
 
 package codec
 
-//nolint:staticcheck
 import (
 	"fmt"
 
-	protoV1 "github.com/golang/protobuf/proto"
+	protoV1 "github.com/golang/protobuf/proto" //nolint:staticcheck
 	"google.golang.org/grpc/encoding"
 	"google.golang.org/protobuf/proto"
 )

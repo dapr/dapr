@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -64,17 +65,17 @@ func (*mockPlacement) LookupActor(actorType string, actorID string) (name string
 }
 
 // Start implements internal.PlacementService
-func (*mockPlacement) Start() {
-	// no-op
+func (*mockPlacement) Start(context.Context) error {
+	return nil
 }
 
 // Stop implements internal.PlacementService
-func (*mockPlacement) Stop() {
-	// no-op
+func (*mockPlacement) Close() error {
+	return nil
 }
 
-// WaitUntilPlacementTableIsReady implements internal.PlacementService
-func (*mockPlacement) WaitUntilPlacementTableIsReady(ctx context.Context) error {
+// WaitUntilReady implements internal.PlacementService
+func (*mockPlacement) WaitUntilReady(ctx context.Context) error {
 	return nil
 }
 
@@ -406,17 +407,17 @@ func TestRecreateRunningWorkflowFails(t *testing.T) {
 // TestRetryWorkflowOnTimeout verifies that workflow operations are retried when they fail to complete.
 func TestRetryWorkflowOnTimeout(t *testing.T) {
 	const expectedCallCount = 3
-	actualCallCount := 0
+	actualCallCount := atomic.Int32{}
 
 	r := task.NewTaskRegistry()
 	r.AddOrchestratorN("FlakyWorkflow", func(ctx *task.OrchestrationContext) (any, error) {
 		// update this global counter each time the workflow gets invoked
-		actualCallCount++
-		if actualCallCount < expectedCallCount {
+		acc := actualCallCount.Add(1)
+		if acc < expectedCallCount {
 			// simulate a hang for the first two calls
 			time.Sleep(5 * time.Minute)
 		}
-		return actualCallCount, nil
+		return acc, nil
 	})
 
 	ctx := context.Background()
@@ -431,7 +432,7 @@ func TestRetryWorkflowOnTimeout(t *testing.T) {
 
 	for _, opt := range GetTestOptions() {
 		t.Run(opt(engine), func(t *testing.T) {
-			actualCallCount = 0
+			actualCallCount.Store(0)
 
 			id, err := client.ScheduleNewOrchestration(ctx, "FlakyWorkflow")
 			require.NoError(t, err)
@@ -457,16 +458,16 @@ func TestRetryActivityOnTimeout(t *testing.T) {
 	})
 
 	const expectedCallCount = 3
-	actualCallCount := 0
+	actualCallCount := atomic.Int32{}
 
 	r.AddActivityN("FlakyActivity", func(ctx task.ActivityContext) (any, error) {
 		// update this global counter each time the activity gets invoked
-		actualCallCount++
-		if actualCallCount < expectedCallCount {
+		acc := actualCallCount.Add(1)
+		if acc < expectedCallCount {
 			// simulate a hang for the first two calls
 			time.Sleep(5 * time.Minute)
 		}
-		return actualCallCount, nil
+		return acc, nil
 	})
 
 	ctx := context.Background()
@@ -481,7 +482,7 @@ func TestRetryActivityOnTimeout(t *testing.T) {
 
 	for _, opt := range GetTestOptions() {
 		t.Run(opt(engine), func(t *testing.T) {
-			actualCallCount = 0
+			actualCallCount.Store(0)
 
 			id, err := client.ScheduleNewOrchestration(ctx, "FlakyWorkflow")
 			require.NoError(t, err)
@@ -638,20 +639,20 @@ func TestPurge(t *testing.T) {
 			assert.Equal(t, id, metadata.InstanceID)
 
 			// Get the number of keys that were stored from the activity and ensure that at least some keys were stored
-			keyCounter := 0
-			for key := range stateStore.Items {
+			keyCounter := atomic.Int64{}
+			for key := range stateStore.GetItems() {
 				if strings.Contains(key, string(id)) {
-					keyCounter += 1
+					keyCounter.Add(1)
 				}
 			}
-			assert.Greater(t, keyCounter, 10)
+			assert.Greater(t, keyCounter.Load(), int64(10))
 
 			err = client.PurgeOrchestrationState(ctx, id)
 			assert.NoError(t, err)
 
 			// Check that no key from the statestore containing the actor id is still present in the statestore
 			keysPostPurge := []string{}
-			for key := range stateStore.Items {
+			for key := range stateStore.GetItems() {
 				keysPostPurge = append(keysPostPurge, key)
 			}
 
@@ -704,20 +705,20 @@ func TestPurgeContinueAsNew(t *testing.T) {
 
 			// Purging
 			// Get the number of keys that were stored from the activity and ensure that at least some keys were stored
-			keyCounter := 0
-			for key := range stateStore.Items {
+			keyCounter := atomic.Int64{}
+			for key := range stateStore.GetItems() {
 				if strings.Contains(key, string(id)) {
-					keyCounter += 1
+					keyCounter.Add(1)
 				}
 			}
-			assert.Greater(t, keyCounter, 2)
+			assert.Greater(t, keyCounter.Load(), int64(2))
 
 			err = client.PurgeOrchestrationState(ctx, id)
 			assert.NoError(t, err)
 
 			// Check that no key from the statestore containing the actor id is still present in the statestore
 			keysPostPurge := []string{}
-			for key := range stateStore.Items {
+			for key := range stateStore.GetItems() {
 				keysPostPurge = append(keysPostPurge, key)
 			}
 
@@ -796,7 +797,7 @@ func getEngine(t *testing.T) *wfengine.WorkflowEngine {
 		Resiliency:     resiliency.New(logger.NewLogger("test")),
 	})
 
-	if err := actors.Init(); err != nil {
+	if err := actors.Init(context.Background()); err != nil {
 		require.NoError(t, err)
 	}
 	engine.SetActorRuntime(actors)
@@ -822,7 +823,7 @@ func getEngineAndStateStore(t *testing.T) (*wfengine.WorkflowEngine, *daprt.Fake
 		Resiliency:     resiliency.New(logger.NewLogger("test")),
 	})
 
-	require.NoError(t, actors.Init())
+	require.NoError(t, actors.Init(context.Background()))
 	engine.SetActorRuntime(actors)
 	return engine, store
 }

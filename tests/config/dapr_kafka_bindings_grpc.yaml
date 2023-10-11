@@ -35,3 +35,9 @@ spec:
     value: "false"
   - name: initialOffset
     value: oldest
+  - name: direction
+    value: input, output
+scopes:
+  - bindinginput
+  - bindingoutput
+  - bindinginputgrpc

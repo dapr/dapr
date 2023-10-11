@@ -10,10 +10,14 @@ image:
 nameOverride: ""
 fullnameOverride: ""
 
+statefulsetAnnotations: {}
+
 ports:
   protocol: TCP
   apiPort: 50005
   raftRPCPort: 8201
+
+ha: false
 
 cluster:
   forceInMemoryLog: false
@@ -25,6 +29,8 @@ volumeclaims:
   storageClassName:
 
 replicationFactor: 100
+
+metadataEnabled: false
 
 livenessProbe:
   initialDelaySeconds: 10

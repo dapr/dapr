@@ -15,16 +15,21 @@ package http
 
 import (
 	"encoding/json"
-	"io"
-	"net"
+	"net/http"
+	"strconv"
 
-	"github.com/valyala/fasthttp"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/reflect/protoreflect"
+
+	"github.com/dapr/dapr/pkg/messages"
 )
 
 const (
 	jsonContentTypeHeader = "application/json"
 	etagHeader            = "ETag"
 	metadataPrefix        = "metadata."
+	headerContentType     = "content-type"
+	headerContentLength   = "content-length"
 )
 
 // BulkGetResponse is the response object for a state bulk get operation.
@@ -63,99 +68,82 @@ type QueryItem struct {
 	Error string          `json:"error,omitempty"`
 }
 
-type option = func(ctx *fasthttp.RequestCtx)
-
-// withEtag sets etag header.
-func withEtag(etag *string) option {
-	return func(ctx *fasthttp.RequestCtx) {
-		if etag != nil {
-			ctx.Response.Header.Add(etagHeader, *etag)
-		}
+// respondWithJSON sends a response with an object that will be encoded as JSON.
+func respondWithJSON(w http.ResponseWriter, code int, obj any) {
+	w.Header().Set(headerContentType, jsonContentTypeHeader)
+	w.WriteHeader(code)
+	err := json.NewEncoder(w).Encode(obj)
+	if err != nil {
+		log.Error("Failed to encode response as JSON:", err)
 	}
 }
 
-// withMetadata sets metadata headers.
-func withMetadata(metadata map[string]string) option {
-	return func(ctx *fasthttp.RequestCtx) {
-		for k, v := range metadata {
-			ctx.Response.Header.Add(metadataPrefix+k, v)
-		}
+// respondWithData sends a response using the passed byte slice for the body.
+func respondWithData(w http.ResponseWriter, code int, data []byte) {
+	if w.Header().Get(headerContentType) == "" {
+		w.Header().Set(headerContentType, jsonContentTypeHeader)
+	}
+	w.WriteHeader(code)
+	_, err := w.Write(data)
+	if err != nil {
+		log.Error("Failed to write response data:", err)
 	}
 }
 
-// withJSON overrides the content-type with application/json.
-func withJSON(code int, obj []byte) option {
-	return func(ctx *fasthttp.RequestCtx) {
-		ctx.Response.SetStatusCode(code)
-		ctx.Response.SetBody(obj)
-		ctx.Response.Header.SetContentType(jsonContentTypeHeader)
-	}
+// respondWithEmpty sends an empty response with 204 status code.
+func respondWithEmpty(w http.ResponseWriter) {
+	w.WriteHeader(http.StatusNoContent)
 }
 
-// withError sets error code and jsonized error message.
-func withError(code int, resp ErrorResponse) option {
-	b, _ := json.Marshal(&resp)
-	return withJSON(code, b)
+func respondWithHTTPRawResponse(w http.ResponseWriter, m *UniversalHTTPRawResponse, statusCode int) {
+	if m.StatusCode > 0 {
+		statusCode = m.StatusCode
+	}
+
+	headers := w.Header()
+	if m.ContentType != "" {
+		headers.Set(headerContentType, m.ContentType)
+	} else if headers.Get(headerContentType) == "" {
+		headers.Set(headerContentType, jsonContentTypeHeader)
+	}
+	if headers.Get(headerContentLength) == "" {
+		headers.Set(headerContentLength, strconv.Itoa(len(m.Body)))
+	}
+
+	w.WriteHeader(statusCode)
+	w.Write(m.Body)
 }
 
-// withEmpty sets 204 status code.
-func withEmpty() option {
-	return func(ctx *fasthttp.RequestCtx) {
-		ctx.Response.SetBody(nil)
-		ctx.Response.SetStatusCode(fasthttp.StatusNoContent)
+func respondWithProto(w http.ResponseWriter, m protoreflect.ProtoMessage, statusCode int, emitUnpopulated bool) {
+	// Encode the response as JSON using protojson
+	respBytes, err := protojson.MarshalOptions{
+		EmitUnpopulated: emitUnpopulated,
+	}.Marshal(m)
+	if err != nil {
+		msg := NewErrorResponse("ERR_INTERNAL", "failed to encode response as JSON: "+err.Error())
+		respondWithData(w, http.StatusInternalServerError, msg.JSONErrorValue())
+		log.Debug(msg)
+		return
 	}
+
+	respondWithData(w, statusCode, respBytes)
 }
 
-// with sets a default application/json content type if content type is not present.
-func with(code int, obj []byte) option {
-	return func(ctx *fasthttp.RequestCtx) {
-		ctx.Response.SetStatusCode(code)
-		ctx.Response.SetBody(obj)
-
-		if len(ctx.Response.Header.ContentType()) == 0 {
-			ctx.Response.Header.SetContentType(jsonContentTypeHeader)
-		}
+// respondWithError responds with an error.
+// Normally, this is used with messages.APIError.
+func respondWithError(w http.ResponseWriter, err error) {
+	if err == nil {
+		return
 	}
-}
 
-// withStream is like "with" but accepts a stream
-// The stream is closed at the end if it implements the Close() method
-func withStream(code int, r io.Reader, onDone func()) option {
-	return func(ctx *fasthttp.RequestCtx) {
-		if len(ctx.Response.Header.ContentType()) == 0 {
-			ctx.Response.Header.SetContentType(jsonContentTypeHeader)
-		}
-		ctx.Response.SetStatusCode(code)
-
-		// This is a bit hacky (there's literally "hijack" in the name), but it seems to be the only way we can actually send data to the client in a streamed way
-		// (believe me, I've spent over a day on this and I'm not exaggerating)
-		ctx.HijackSetNoResponse(true)
-		ctx.Hijack(func(c net.Conn) {
-			// Write the headers
-			c.Write(ctx.Response.Header.Header())
-
-			// Send the data as a stream
-			_, err := io.Copy(c, r)
-			if err != nil {
-				log.Warn("Error while copying response into connection: ", err)
-			}
-
-			// Close the stream if it implements io.Closer
-			if rc, ok := r.(io.Closer); ok {
-				_ = rc.Close()
-			}
-
-			// Call the "onDone" method (usually a context.Cancel function)
-			// Note: "c" (net.Conn) is closed automatically, no need to close that
-			if onDone != nil {
-				onDone()
-			}
-		})
+	// Check if it's an APIError object
+	apiErr, ok := err.(messages.APIError)
+	if ok {
+		respondWithData(w, apiErr.HTTPCode(), apiErr.JSONErrorValue())
+		return
 	}
-}
 
-func respond(ctx *fasthttp.RequestCtx, options ...option) {
-	for _, option := range options {
-		option(ctx)
-	}
+	// Respond with a generic error
+	msg := NewErrorResponse("ERROR", err.Error())
+	respondWithData(w, http.StatusInternalServerError, msg.JSONErrorValue())
 }

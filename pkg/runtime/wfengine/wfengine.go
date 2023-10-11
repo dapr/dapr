@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/microsoft/durabletask-go/backend"
@@ -40,7 +41,10 @@ type WorkflowEngine struct {
 	workflowActor *workflowActor
 	activityActor *activityActor
 
-	actorRuntime   actors.Actors
+	actorRuntime  actors.ActorRuntime
+	actorsReady   atomic.Bool
+	actorsReadyCh chan struct{}
+
 	startMutex     sync.Mutex
 	disconnectChan chan any
 	config         wfConfig
@@ -74,6 +78,14 @@ func NewWorkflowConfig(appID string) wfConfig {
 	}
 }
 
+// String implements fmt.Stringer and is primarily used for debugging purposes.
+func (c *wfConfig) String() string {
+	if c == nil {
+		return "(nil)"
+	}
+	return fmt.Sprintf("AppID:'%s', workflowActorType:'%s', activityActorType:'%s'", c.AppID, c.workflowActorType, c.activityActorType)
+}
+
 func IsWorkflowRequest(path string) bool {
 	return backend.IsDurableTaskGrpcRequest(path)
 }
@@ -85,7 +97,8 @@ func NewWorkflowEngine(config wfConfig) *WorkflowEngine {
 	// into the backend because the backend is what is registered with the gRPC
 	// service and needs to have a reference in order to start it.
 	engine := &WorkflowEngine{
-		config: config,
+		config:        config,
+		actorsReadyCh: make(chan struct{}),
 	}
 	be := NewActorBackend(engine)
 	engine.backend = be
@@ -133,12 +146,26 @@ func (wfe *WorkflowEngine) SetExecutor(fn func(be backend.Backend) backend.Execu
 	wfe.executor = fn(wfe.backend)
 }
 
-func (wfe *WorkflowEngine) SetActorRuntime(actorRuntime actors.Actors) error {
-	wfLogger.Info("Configuring workflow engine with actors backend")
-	wfe.actorRuntime = actorRuntime
-	wfe.backend.SetActorRuntime(actorRuntime)
+func (wfe *WorkflowEngine) SetActorRuntime(actorRuntime actors.ActorRuntime) {
+	if actorRuntime != nil {
+		wfLogger.Info("Configuring workflow engine with actors backend")
+		wfe.actorRuntime = actorRuntime
+		wfe.backend.SetActorRuntime(actorRuntime)
+	}
 
-	return nil
+	if wfe.actorsReady.CompareAndSwap(false, true) {
+		close(wfe.actorsReadyCh)
+	}
+}
+
+// WaitForActorsReady blocks until the actor runtime is set in the object (or until the context is canceled).
+func (wfe *WorkflowEngine) WaitForActorsReady(ctx context.Context) {
+	select {
+	case <-ctx.Done():
+		// No-op
+	case <-wfe.actorsReadyCh:
+		// No-op
+	}
 }
 
 // DisableActorCaching turns off the default caching done by the workflow and activity actors.
@@ -173,6 +200,8 @@ func (wfe *WorkflowEngine) SetActorReminderInterval(interval time.Duration) {
 }
 
 func (wfe *WorkflowEngine) Start(ctx context.Context) (err error) {
+	wfe.WaitForActorsReady(ctx)
+
 	// Start could theoretically get called by multiple goroutines concurrently
 	wfe.startMutex.Lock()
 	defer wfe.startMutex.Unlock()
@@ -189,7 +218,7 @@ func (wfe *WorkflowEngine) Start(ctx context.Context) (err error) {
 	}
 
 	for actorType, actor := range wfe.InternalActors() {
-		err = wfe.actorRuntime.RegisterInternalActor(ctx, actorType, actor)
+		err = wfe.actorRuntime.RegisterInternalActor(ctx, actorType, actor, time.Minute*1)
 		if err != nil {
 			return fmt.Errorf("failed to register workflow actor %s: %w", actorType, err)
 		}
@@ -211,7 +240,7 @@ func (wfe *WorkflowEngine) Start(ctx context.Context) (err error) {
 	return nil
 }
 
-func (wfe *WorkflowEngine) Stop(ctx context.Context) error {
+func (wfe *WorkflowEngine) Close(ctx context.Context) error {
 	wfe.startMutex.Lock()
 	defer wfe.startMutex.Unlock()
 

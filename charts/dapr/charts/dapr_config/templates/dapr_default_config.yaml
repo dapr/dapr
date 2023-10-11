@@ -3,6 +3,7 @@ apiVersion: dapr.io/v1alpha1
 kind: Configuration
 metadata:
   name: {{ .Values.dapr_default_system_config_name }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- range $key, $value := .Values.global.k8sLabels }}
     {{ $key }}: {{ tpl $value $ }}
@@ -12,4 +13,6 @@ spec:
     enabled: {{ .Values.global.mtls.enabled }}
     workloadCertTTL: {{ .Values.global.mtls.workloadCertTTL }}
     allowedClockSkew: {{ .Values.global.mtls.allowedClockSkew }}
+    controlPlaneTrustDomain: {{ .Values.global.mtls.controlPlaneTrustDomain }}
+    sentryAddress: {{ if .Values.global.mtls.sentryAddress }}{{ .Values.global.mtls.sentryAddress }}{{ else }}dapr-sentry.{{ .Release.Namespace }}.svc.cluster.local:443{{ end }}
 {{- end }}

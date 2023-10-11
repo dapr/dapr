@@ -63,20 +63,28 @@ func TestMain(m *testing.M) {
 	// and will be cleaned up after all tests are finished automatically
 	testApps := []kube.AppDescription{
 		{
-			AppName:        "actor1",
-			DaprEnabled:    true,
-			ImageName:      "e2e-actorinvocationapp",
-			Replicas:       1,
-			IngressEnabled: true,
-			MetricsEnabled: true,
+			AppName:             "actor1",
+			DaprEnabled:         true,
+			ImageName:           "e2e-actorinvocationapp",
+			DebugLoggingEnabled: true,
+			Replicas:            1,
+			IngressEnabled:      true,
+			MetricsEnabled:      true,
+			AppEnv: map[string]string{
+				"TEST_APP_ACTOR_TYPES": "actor1,actor2,resiliencyInvokeActor",
+			},
 		},
 		{
-			AppName:        "actor2",
-			DaprEnabled:    true,
-			ImageName:      "e2e-actorinvocationapp",
-			Replicas:       1,
-			IngressEnabled: true,
-			MetricsEnabled: true,
+			AppName:             "actor2",
+			DaprEnabled:         true,
+			ImageName:           "e2e-actorinvocationapp",
+			DebugLoggingEnabled: true,
+			Replicas:            1,
+			IngressEnabled:      true,
+			MetricsEnabled:      true,
+			AppEnv: map[string]string{
+				"TEST_APP_ACTOR_TYPES": "actor1,actor2",
+			},
 		},
 	}
 
@@ -118,6 +126,42 @@ func TestActorInvocation(t *testing.T) {
 		_, status, err = utils.HTTPPostWithStatus(fmt.Sprintf(callActorURL, secondActorURL), body)
 		require.NoError(t, err)
 		require.Equal(t, 200, status)
+	})
+
+	// Validates special error handling for actors is working in runtime (.Net SDK case).
+	t.Run("Actor local invocation with X-DaprErrorResponseHeader + Resiliency", func(t *testing.T) {
+		request := actorCallRequest{
+			ActorType: "resiliencyInvokeActor",
+			ActorID:   "981",
+			Method:    "xDaprErrorResponseHeader",
+		}
+
+		body, _ := json.Marshal(request)
+
+		resp, status, err := utils.HTTPPostWithStatus(fmt.Sprintf(callActorURL, firstActorURL), body)
+		require.NoError(t, err)
+		require.Equal(t, 200, status)
+		require.Equal(t,
+			"x-DaprErrorResponseHeader call with - actorType: resiliencyInvokeActor, actorId: 981",
+			string(resp))
+	})
+
+	// Validates special error handling for actors is working in runtime (.Net SDK case).
+	t.Run("Actor remote invocation with X-DaprErrorResponseHeader + Resiliency", func(t *testing.T) {
+		request := actorCallRequest{
+			ActorType: "resiliencyInvokeActor",
+			ActorID:   "789",
+			Method:    "xDaprErrorResponseHeader",
+		}
+
+		body, _ := json.Marshal(request)
+
+		resp, status, err := utils.HTTPPostWithStatus(fmt.Sprintf(callActorURL, secondActorURL), body)
+		require.NoError(t, err)
+		require.Equal(t, 200, status)
+		require.Equal(t,
+			"x-DaprErrorResponseHeader call with - actorType: resiliencyInvokeActor, actorId: 789",
+			string(resp))
 	})
 
 	t.Run("Actor cross actor call (same pod)", func(t *testing.T) {

@@ -16,31 +16,50 @@ limitations under the License.
 package testing
 
 import (
+	"context"
+
 	"github.com/dapr/components-contrib/pubsub"
+	state "github.com/dapr/components-contrib/state"
+	"github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	"github.com/dapr/dapr/pkg/outbox"
 )
 
 // MockPubSubAdapter is mock for PubSubAdapter
 type MockPubSubAdapter struct {
-	PublishFn     func(req *pubsub.PublishRequest) error
-	BulkPublishFn func(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error)
-	GetPubSubFn   func(pubsubName string) pubsub.PubSub
+	PublishFn     func(ctx context.Context, req *pubsub.PublishRequest) error
+	BulkPublishFn func(ctx context.Context, req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error)
 }
 
 // Publish is an adapter method for the runtime to pre-validate publish requests
 // And then forward them to the Pub/Sub component.
 // This method is used by the HTTP and gRPC APIs.
-func (a *MockPubSubAdapter) Publish(req *pubsub.PublishRequest) error {
-	return a.PublishFn(req)
+func (a *MockPubSubAdapter) Publish(ctx context.Context, req *pubsub.PublishRequest) error {
+	return a.PublishFn(ctx, req)
 }
 
 // Publish is an adapter method for the runtime to pre-validate publish requests
 // And then forward them to the Pub/Sub component.
 // This method is used by the HTTP and gRPC APIs.
-func (a *MockPubSubAdapter) BulkPublish(req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
-	return a.BulkPublishFn(req)
+func (a *MockPubSubAdapter) BulkPublish(ctx context.Context, req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
+	return a.BulkPublishFn(ctx, req)
 }
 
-// GetPubSub is an adapter method to fetch a pubsub
-func (a *MockPubSubAdapter) GetPubSub(pubsubName string) pubsub.PubSub {
-	return a.GetPubSubFn(pubsubName)
+func (a *MockPubSubAdapter) Outbox() outbox.Outbox {
+	return &outboxMock{}
+}
+
+type outboxMock struct{}
+
+func (o *outboxMock) AddOrUpdateOutbox(stateStore v1alpha1.Component) {}
+
+func (o *outboxMock) Enabled(stateStore string) bool {
+	return false
+}
+
+func (o *outboxMock) PublishInternal(ctx context.Context, stateStore string, states []state.TransactionalStateOperation, source string) ([]state.TransactionalStateOperation, error) {
+	return nil, nil
+}
+
+func (o *outboxMock) SubscribeToInternalTopics(ctx context.Context, appID string) error {
+	return nil
 }

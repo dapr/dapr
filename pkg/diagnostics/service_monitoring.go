@@ -10,6 +10,7 @@ import (
 	"go.opencensus.io/tag"
 
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"github.com/dapr/dapr/pkg/security/spiffe"
 )
 
 // Tag keys.
@@ -30,6 +31,12 @@ var (
 	statusKey           = tag.MustNewKey("status")
 	flowDirectionKey    = tag.MustNewKey("flow_direction")
 	targetKey           = tag.MustNewKey("target")
+	typeKey             = tag.MustNewKey("type")
+)
+
+const (
+	typeUnary     = "unary"
+	typeStreaming = "streaming"
 )
 
 // serviceMetrics holds dapr runtime metric monitoring methods.
@@ -234,10 +241,10 @@ func (s *serviceMetrics) Init(appID string) error {
 		diagUtils.NewMeasureView(s.appPolicyActionBlocked, []tag.Key{appIDKey, trustDomainKey, namespaceKey, operationKey, httpMethodKey, policyActionKey}, view.Count()),
 		diagUtils.NewMeasureView(s.globalPolicyActionBlocked, []tag.Key{appIDKey, trustDomainKey, namespaceKey, operationKey, httpMethodKey, policyActionKey}, view.Count()),
 
-		diagUtils.NewMeasureView(s.serviceInvocationRequestSentTotal, []tag.Key{appIDKey, destinationAppIDKey, methodKey}, view.Count()),
+		diagUtils.NewMeasureView(s.serviceInvocationRequestSentTotal, []tag.Key{appIDKey, destinationAppIDKey, methodKey, typeKey}, view.Count()),
 		diagUtils.NewMeasureView(s.serviceInvocationRequestReceivedTotal, []tag.Key{appIDKey, sourceAppIDKey, methodKey}, view.Count()),
 		diagUtils.NewMeasureView(s.serviceInvocationResponseSentTotal, []tag.Key{appIDKey, destinationAppIDKey, methodKey, statusKey}, view.Count()),
-		diagUtils.NewMeasureView(s.serviceInvocationResponseReceivedTotal, []tag.Key{appIDKey, sourceAppIDKey, methodKey, statusKey}, view.Count()),
+		diagUtils.NewMeasureView(s.serviceInvocationResponseReceivedTotal, []tag.Key{appIDKey, sourceAppIDKey, methodKey, statusKey, typeKey}, view.Count()),
 		diagUtils.NewMeasureView(s.serviceInvocationResponseReceivedLatency, []tag.Key{appIDKey, sourceAppIDKey, methodKey, statusKey}, defaultLatencyDistribution),
 	)
 }
@@ -409,15 +416,15 @@ func (s *serviceMetrics) ReportActorPendingCalls(actorType string, pendingLocks 
 }
 
 // RequestAllowedByAppAction records the requests allowed due to a match with the action specified in the access control policy for the app.
-func (s *serviceMetrics) RequestAllowedByAppAction(appID, trustDomain, namespace, operation, httpverb string, policyAction bool) {
+func (s *serviceMetrics) RequestAllowedByAppAction(spiffeID *spiffe.Parsed, operation, httpverb string, policyAction bool) {
 	if s.enabled {
 		stats.RecordWithTags(
 			s.ctx,
 			diagUtils.WithTags(
 				s.appPolicyActionAllowed.Name(),
-				appIDKey, appID,
-				trustDomainKey, trustDomain,
-				namespaceKey, namespace,
+				appIDKey, spiffeID.AppID(),
+				trustDomainKey, spiffeID.TrustDomain().String(),
+				namespaceKey, spiffeID.Namespace(),
 				operationKey, operation,
 				httpMethodKey, httpverb,
 				policyActionKey, policyAction),
@@ -426,15 +433,15 @@ func (s *serviceMetrics) RequestAllowedByAppAction(appID, trustDomain, namespace
 }
 
 // RequestBlockedByAppAction records the requests blocked due to a match with the action specified in the access control policy for the app.
-func (s *serviceMetrics) RequestBlockedByAppAction(appID, trustDomain, namespace, operation, httpverb string, policyAction bool) {
+func (s *serviceMetrics) RequestBlockedByAppAction(spiffeID *spiffe.Parsed, operation, httpverb string, policyAction bool) {
 	if s.enabled {
 		stats.RecordWithTags(
 			s.ctx,
 			diagUtils.WithTags(
 				s.appPolicyActionBlocked.Name(),
-				appIDKey, appID,
-				trustDomainKey, trustDomain,
-				namespaceKey, namespace,
+				appIDKey, spiffeID.AppID(),
+				trustDomainKey, spiffeID.TrustDomain().String(),
+				namespaceKey, spiffeID.Namespace(),
 				operationKey, operation,
 				httpMethodKey, httpverb,
 				policyActionKey, policyAction),
@@ -443,15 +450,15 @@ func (s *serviceMetrics) RequestBlockedByAppAction(appID, trustDomain, namespace
 }
 
 // RequestAllowedByGlobalAction records the requests allowed due to a match with the global action in the access control policy.
-func (s *serviceMetrics) RequestAllowedByGlobalAction(appID, trustDomain, namespace, operation, httpverb string, policyAction bool) {
+func (s *serviceMetrics) RequestAllowedByGlobalAction(spiffeID *spiffe.Parsed, operation, httpverb string, policyAction bool) {
 	if s.enabled {
 		stats.RecordWithTags(
 			s.ctx,
 			diagUtils.WithTags(
 				s.globalPolicyActionAllowed.Name(),
-				appIDKey, appID,
-				trustDomainKey, trustDomain,
-				namespaceKey, namespace,
+				appIDKey, spiffeID.AppID(),
+				trustDomainKey, spiffeID.TrustDomain().String(),
+				namespaceKey, spiffeID.Namespace(),
 				operationKey, operation,
 				httpMethodKey, httpverb,
 				policyActionKey, policyAction),
@@ -460,15 +467,15 @@ func (s *serviceMetrics) RequestAllowedByGlobalAction(appID, trustDomain, namesp
 }
 
 // RequestBlockedByGlobalAction records the requests blocked due to a match with the global action in the access control policy.
-func (s *serviceMetrics) RequestBlockedByGlobalAction(appID, trustDomain, namespace, operation, httpverb string, policyAction bool) {
+func (s *serviceMetrics) RequestBlockedByGlobalAction(spiffeID *spiffe.Parsed, operation, httpverb string, policyAction bool) {
 	if s.enabled {
 		stats.RecordWithTags(
 			s.ctx,
 			diagUtils.WithTags(
 				s.globalPolicyActionBlocked.Name(),
-				appIDKey, appID,
-				trustDomainKey, trustDomain,
-				namespaceKey, namespace,
+				appIDKey, spiffeID.AppID(),
+				trustDomainKey, spiffeID.TrustDomain().String(),
+				namespaceKey, spiffeID.Namespace(),
 				operationKey, operation,
 				httpMethodKey, httpverb,
 				policyActionKey, policyAction),
@@ -485,7 +492,24 @@ func (s *serviceMetrics) ServiceInvocationRequestSent(destinationAppID, method s
 				s.serviceInvocationRequestSentTotal.Name(),
 				appIDKey, s.appID,
 				destinationAppIDKey, destinationAppID,
-				methodKey, method),
+				methodKey, method,
+				typeKey, typeUnary,
+			),
+			s.serviceInvocationRequestSentTotal.M(1))
+	}
+}
+
+// ServiceInvocationRequestSent records the number of service invocation requests sent.
+func (s *serviceMetrics) ServiceInvocationStreamingRequestSent(destinationAppID, method string) {
+	if s.enabled {
+		stats.RecordWithTags(
+			s.ctx,
+			diagUtils.WithTags(
+				s.serviceInvocationRequestSentTotal.Name(),
+				appIDKey, s.appID,
+				destinationAppIDKey, destinationAppID,
+				methodKey, method,
+				typeKey, typeStreaming),
 			s.serviceInvocationRequestSentTotal.M(1))
 	}
 }
@@ -531,7 +555,8 @@ func (s *serviceMetrics) ServiceInvocationResponseReceived(sourceAppID, method s
 				appIDKey, s.appID,
 				sourceAppIDKey, sourceAppID,
 				methodKey, method,
-				statusKey, statusCode),
+				statusKey, statusCode,
+				typeKey, typeUnary),
 			s.serviceInvocationResponseReceivedTotal.M(1))
 		stats.RecordWithTags(
 			s.ctx,
@@ -542,5 +567,23 @@ func (s *serviceMetrics) ServiceInvocationResponseReceived(sourceAppID, method s
 				methodKey, method,
 				statusKey, statusCode),
 			s.serviceInvocationResponseReceivedLatency.M(ElapsedSince(start)))
+	}
+}
+
+// ServiceInvocationStreamingResponseReceived records the number of service invocation responses received for streaming operations.
+// this is mainly targeted to recording errors for proxying gRPC streaming calls
+func (s *serviceMetrics) ServiceInvocationStreamingResponseReceived(sourceAppID, method string, status int32) {
+	if s.enabled {
+		statusCode := strconv.Itoa(int(status))
+		stats.RecordWithTags(
+			s.ctx,
+			diagUtils.WithTags(
+				s.serviceInvocationResponseReceivedTotal.Name(),
+				appIDKey, s.appID,
+				sourceAppIDKey, sourceAppID,
+				methodKey, method,
+				statusKey, statusCode,
+				typeKey, typeStreaming),
+			s.serviceInvocationResponseReceivedTotal.M(1))
 	}
 }

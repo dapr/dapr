@@ -17,14 +17,15 @@ package v1
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/valyala/fasthttp"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -148,13 +149,13 @@ func TestMetadata(t *testing.T) {
 	})
 
 	t.Run("HTTP headers", func(t *testing.T) {
-		req := fasthttp.AcquireRequest()
-		req.Header.Set("Header1", "Value1")
-		req.Header.Set("Header2", "Value2")
-		req.Header.Set("Header3", "Value3")
+		headers := http.Header{}
+		headers.Set("Header1", "Value1")
+		headers.Set("Header2", "Value2")
+		headers.Set("Header3", "Value3")
 
 		re := NewInvokeMethodRequest("test_method").
-			WithFastHTTPHeaders(&req.Header)
+			WithHTTPHeaders(headers)
 		defer re.Close()
 		mheader := re.Metadata()
 
@@ -344,7 +345,7 @@ func TestRequestProto(t *testing.T) {
 		ir, err := InternalInvokeRequest(&pb)
 		assert.NoError(t, err)
 		defer ir.Close()
-		ir.data = io.NopCloser(strings.NewReader("test"))
+		ir.data = newReaderCloser(strings.NewReader("test"))
 		req2 := ir.Proto()
 
 		assert.Equal(t, "application/json", req2.GetMessage().ContentType)
@@ -391,7 +392,7 @@ func TestRequestProtoWithData(t *testing.T) {
 		ir, err := InternalInvokeRequest(&pb)
 		assert.NoError(t, err)
 		defer ir.Close()
-		ir.data = io.NopCloser(strings.NewReader("test"))
+		ir.data = newReaderCloser(strings.NewReader("test"))
 		req2, err := ir.ProtoWithData()
 		assert.NoError(t, err)
 
@@ -404,9 +405,9 @@ func TestAddHeaders(t *testing.T) {
 	t.Run("single value", func(t *testing.T) {
 		req := NewInvokeMethodRequest("test_method")
 		defer req.Close()
-		header := fasthttp.RequestHeader{}
+		header := http.Header{}
 		header.Add("Dapr-Reentrant-Id", "test")
-		req.AddHeaders(&header)
+		req.AddMetadata(header)
 
 		require.NotNil(t, req.r.Metadata)
 		require.NotNil(t, req.r.Metadata["Dapr-Reentrant-Id"])
@@ -417,10 +418,10 @@ func TestAddHeaders(t *testing.T) {
 	t.Run("multiple values", func(t *testing.T) {
 		req := NewInvokeMethodRequest("test_method")
 		defer req.Close()
-		header := fasthttp.RequestHeader{}
+		header := http.Header{}
 		header.Add("Dapr-Reentrant-Id", "test")
 		header.Add("Dapr-Reentrant-Id", "test2")
-		req.AddHeaders(&header)
+		req.AddMetadata(header)
 
 		require.NotNil(t, req.r.Metadata)
 		require.NotNil(t, req.r.Metadata["Dapr-Reentrant-Id"])
@@ -429,13 +430,13 @@ func TestAddHeaders(t *testing.T) {
 	})
 
 	t.Run("does not overwrite", func(t *testing.T) {
-		header := fasthttp.RequestHeader{}
+		header := http.Header{}
 		header.Add("Dapr-Reentrant-Id", "test")
-		req := NewInvokeMethodRequest("test_method").WithFastHTTPHeaders(&header)
+		req := NewInvokeMethodRequest("test_method").WithHTTPHeaders(header)
 		defer req.Close()
 
 		header.Set("Dapr-Reentrant-Id", "test2")
-		req.AddHeaders(&header)
+		req.AddMetadata(header)
 
 		require.NotNil(t, req.r.Metadata["Dapr-Reentrant-Id"])
 		require.NotEmpty(t, req.r.Metadata["Dapr-Reentrant-Id"].Values)
@@ -499,7 +500,7 @@ func TestRequestReplayable(t *testing.T) {
 	const message = "Nel mezzo del cammin di nostra vita mi ritrovai per una selva oscura, che' la diritta via era smarrita."
 	newReplayable := func() *InvokeMethodRequest {
 		return NewInvokeMethodRequest("test_method").
-			WithRawDataString(message).
+			WithRawData(newReaderCloser(strings.NewReader(message))).
 			WithReplay(true)
 	}
 
@@ -519,7 +520,7 @@ func TestRequestReplayable(t *testing.T) {
 			buf := make([]byte, 9)
 			n, err := io.ReadFull(req.data, buf)
 			assert.Equal(t, 0, n)
-			assert.ErrorIs(t, err, io.EOF)
+			assert.Truef(t, errors.Is(err, io.EOF) || errors.Is(err, http.ErrBodyReadAfterClose), "unexpected error: %v", err)
 		})
 
 		t.Run("replay buffer is full", func(t *testing.T) {
@@ -551,7 +552,7 @@ func TestRequestReplayable(t *testing.T) {
 			buf := make([]byte, 9)
 			n, err := io.ReadFull(req.data, buf)
 			assert.Equal(t, 0, n)
-			assert.ErrorIs(t, err, io.EOF)
+			assert.Truef(t, errors.Is(err, io.EOF) || errors.Is(err, http.ErrBodyReadAfterClose), "unexpected error: %v", err)
 		})
 
 		t.Run("replay buffer is full", func(t *testing.T) {
@@ -652,7 +653,7 @@ func TestRequestReplayable(t *testing.T) {
 			buf := make([]byte, 9)
 			n, err := io.ReadFull(req.data, buf)
 			assert.Equal(t, 0, n)
-			assert.ErrorIs(t, err, io.EOF)
+			assert.Truef(t, errors.Is(err, io.EOF) || errors.Is(err, http.ErrBodyReadAfterClose), "unexpected error: %v", err)
 		})
 
 		t.Run("replay buffer is full", func(t *testing.T) {

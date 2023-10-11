@@ -14,11 +14,17 @@ limitations under the License.
 package main
 
 import (
+	"context"
+	"fmt"
+	"os"
+
 	"go.uber.org/automaxprocs/maxprocs"
 
 	// Register all components
 	_ "github.com/dapr/dapr/cmd/daprd/components"
 
+	"github.com/dapr/dapr/cmd/daprd/options"
+	"github.com/dapr/dapr/pkg/buildinfo"
 	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
 	configurationLoader "github.com/dapr/dapr/pkg/components/configuration"
 	cryptoLoader "github.com/dapr/dapr/pkg/components/crypto"
@@ -30,6 +36,11 @@ import (
 	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	workflowsLoader "github.com/dapr/dapr/pkg/components/workflows"
+	"github.com/dapr/dapr/pkg/concurrency"
+	"github.com/dapr/dapr/pkg/modes"
+	"github.com/dapr/dapr/pkg/runtime/registry"
+	"github.com/dapr/dapr/pkg/security"
+	"github.com/dapr/dapr/pkg/signals"
 
 	"github.com/dapr/dapr/pkg/runtime"
 	"github.com/dapr/kit/logger"
@@ -44,10 +55,34 @@ func main() {
 	// set GOMAXPROCS
 	_, _ = maxprocs.Set()
 
-	rt, err := runtime.FromFlags()
-	if err != nil {
+	opts := options.New(os.Args[1:])
+
+	if opts.RuntimeVersion {
+		//nolint:forbidigo
+		fmt.Println(buildinfo.Version())
+		os.Exit(0)
+	}
+
+	if opts.BuildInfo {
+		//nolint:forbidigo
+		fmt.Printf("Version: %s\nGit Commit: %s\nGit Version: %s\n", buildinfo.Version(), buildinfo.Commit(), buildinfo.GitVersion())
+		os.Exit(0)
+	}
+
+	if opts.WaitCommand {
+		runtime.WaitUntilDaprOutboundReady(opts.DaprHTTPPort)
+		os.Exit(0)
+	}
+
+	// Apply options to all loggers.
+	opts.Logger.SetAppID(opts.AppID)
+
+	if err := logger.ApplyOptionsToLoggers(&opts.Logger); err != nil {
 		log.Fatal(err)
 	}
+
+	log.Infof("Starting Dapr Runtime -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
+	log.Infof("Log level set to: %s", opts.Logger.OutputLevel)
 
 	secretstoresLoader.DefaultRegistry.Logger = logContrib
 	stateLoader.DefaultRegistry.Logger = logContrib
@@ -61,25 +96,86 @@ func main() {
 	httpMiddlewareLoader.DefaultRegistry.Logger = log      // Note this uses log on purpose
 	grpcMiddlewareLoader.DefaultUnaryRegistry.Logger = log // Note this uses log on purpose
 
-	stopCh := runtime.ShutdownSignal()
+	reg := registry.NewOptions().
+		WithSecretStores(secretstoresLoader.DefaultRegistry).
+		WithStateStores(stateLoader.DefaultRegistry).
+		WithConfigurations(configurationLoader.DefaultRegistry).
+		WithLocks(lockLoader.DefaultRegistry).
+		WithPubSubs(pubsubLoader.DefaultRegistry).
+		WithNameResolutions(nrLoader.DefaultRegistry).
+		WithBindings(bindingsLoader.DefaultRegistry).
+		WithCryptoProviders(cryptoLoader.DefaultRegistry).
+		WithHTTPMiddlewares(httpMiddlewareLoader.DefaultRegistry).
+		WithWorkflows(workflowsLoader.DefaultRegistry)
 
-	err = rt.Run(
-		runtime.WithSecretStores(secretstoresLoader.DefaultRegistry),
-		runtime.WithStates(stateLoader.DefaultRegistry),
-		runtime.WithConfigurations(configurationLoader.DefaultRegistry),
-		runtime.WithLocks(lockLoader.DefaultRegistry),
-		runtime.WithPubSubs(pubsubLoader.DefaultRegistry),
-		runtime.WithNameResolutions(nrLoader.DefaultRegistry),
-		runtime.WithBindings(bindingsLoader.DefaultRegistry),
-		runtime.WithCryptoProviders(cryptoLoader.DefaultRegistry),
-		runtime.WithHTTPMiddlewares(httpMiddlewareLoader.DefaultRegistry),
-		runtime.WithGrpcUnaryMiddlewares(grpcMiddlewareLoader.DefaultUnaryRegistry),
-		runtime.WithWorkflowComponents(workflowsLoader.DefaultRegistry),
-	)
+	ctx := signals.Context()
+	secProvider, err := security.New(ctx, security.Options{
+		SentryAddress:           opts.SentryAddress,
+		ControlPlaneTrustDomain: opts.ControlPlaneTrustDomain,
+		ControlPlaneNamespace:   opts.ControlPlaneNamespace,
+		TrustAnchors:            opts.TrustAnchors,
+		AppID:                   opts.AppID,
+		MTLSEnabled:             opts.EnableMTLS,
+		Mode:                    modes.DaprMode(opts.Mode),
+	})
 	if err != nil {
-		log.Fatalf("fatal error from runtime: %s", err)
+		log.Fatal(err)
 	}
 
-	<-stopCh
-	rt.ShutdownWithWait()
+	err = concurrency.NewRunnerManager(
+		secProvider.Run,
+		func(ctx context.Context) error {
+			sec, serr := secProvider.Handler(ctx)
+			if serr != nil {
+				return serr
+			}
+
+			rt, rerr := runtime.FromConfig(ctx, &runtime.Config{
+				AppID:                        opts.AppID,
+				PlacementServiceHostAddr:     opts.PlacementServiceHostAddr,
+				AllowedOrigins:               opts.AllowedOrigins,
+				ResourcesPath:                opts.ResourcesPath,
+				ControlPlaneAddress:          opts.ControlPlaneAddress,
+				AppProtocol:                  opts.AppProtocol,
+				Mode:                         opts.Mode,
+				DaprHTTPPort:                 opts.DaprHTTPPort,
+				DaprInternalGRPCPort:         opts.DaprInternalGRPCPort,
+				DaprAPIGRPCPort:              opts.DaprAPIGRPCPort,
+				DaprAPIListenAddresses:       opts.DaprAPIListenAddresses,
+				DaprPublicPort:               opts.DaprPublicPort,
+				ApplicationPort:              opts.AppPort,
+				ProfilePort:                  opts.ProfilePort,
+				EnableProfiling:              opts.EnableProfiling,
+				AppMaxConcurrency:            opts.AppMaxConcurrency,
+				EnableMTLS:                   opts.EnableMTLS,
+				SentryAddress:                opts.SentryAddress,
+				DaprHTTPMaxRequestSize:       opts.DaprHTTPMaxRequestSize,
+				UnixDomainSocket:             opts.UnixDomainSocket,
+				DaprHTTPReadBufferSize:       opts.DaprHTTPReadBufferSize,
+				DaprGracefulShutdownSeconds:  opts.DaprGracefulShutdownSeconds,
+				DisableBuiltinK8sSecretStore: opts.DisableBuiltinK8sSecretStore,
+				EnableAppHealthCheck:         opts.EnableAppHealthCheck,
+				AppHealthCheckPath:           opts.AppHealthCheckPath,
+				AppHealthProbeInterval:       opts.AppHealthProbeInterval,
+				AppHealthProbeTimeout:        opts.AppHealthProbeTimeout,
+				AppHealthThreshold:           opts.AppHealthThreshold,
+				AppChannelAddress:            opts.AppChannelAddress,
+				EnableAPILogging:             opts.EnableAPILogging,
+				Config:                       opts.Config,
+				Metrics:                      opts.Metrics,
+				AppSSL:                       opts.AppSSL,
+				ComponentsPath:               opts.ComponentsPath,
+				Registry:                     reg,
+				Security:                     sec,
+			})
+			if rerr != nil {
+				return rerr
+			}
+
+			return rt.Run(ctx)
+		},
+	).Run(ctx)
+	if err != nil {
+		log.Fatalf("Fatal error from runtime: %s", err)
+	}
 }

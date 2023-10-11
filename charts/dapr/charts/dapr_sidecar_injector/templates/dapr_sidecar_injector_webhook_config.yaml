@@ -1,31 +1,4 @@
 {{- if eq .Values.enabled true }}
-{{- $existingSecret := lookup "v1" "Secret" .Release.Namespace "dapr-sidecar-injector-cert"}}
-{{- $existingWebHookConfig := lookup "admissionregistration.k8s.io/v1" "MutatingWebhookConfiguration" .Release.Namespace "dapr-sidecar-injector"}}
-{{- $ca := genCA "dapr-sidecar-injector-ca" 3650 }}
-{{- $cn := printf "dapr-sidecar-injector" }}
-{{- $altName1 := printf "dapr-sidecar-injector.%s" .Release.Namespace }}
-{{- $altName2 := printf "dapr-sidecar-injector.%s.svc" .Release.Namespace }}
-{{- $altName3 := printf "dapr-sidecar-injector.%s.svc.cluster" .Release.Namespace }}
-{{- $altName4 := printf "dapr-sidecar-injector.%s.svc.cluster.local" .Release.Namespace }}
-{{- $cert := genSignedCert $cn nil (list $altName1 $altName2 $altName3 $altName4) 3650 $ca }}
-apiVersion: v1
-kind: Secret
-metadata:
-  name: dapr-sidecar-injector-cert
-  labels:
-    app: dapr-sidecar-injector
-    {{- range $key, $value := .Values.global.k8sLabels }}
-    {{ $key }}: {{ tpl $value $ }}
-    {{- end }}
-data:
-  {{ if $existingSecret }}tls.crt: {{ index $existingSecret.data "tls.crt" }}
-  {{ else }}tls.crt: {{ b64enc $cert.Cert }}
-  {{ end }}
-
-  {{ if $existingSecret }}tls.key: {{ index $existingSecret.data "tls.key" }}
-  {{ else }}tls.key: {{ b64enc $cert.Key }}
-  {{ end }}
----
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
 metadata:
@@ -43,7 +16,6 @@ webhooks:
       namespace: {{ .Release.Namespace }}
       name: dapr-sidecar-injector
       path: "/mutate"
-    caBundle: {{ if $existingWebHookConfig }}{{ (index $existingWebHookConfig.webhooks 0).clientConfig.caBundle }}{{ else }}{{ b64enc $ca.Cert }}{{ end }}
   rules:
   - apiGroups:
     - ""

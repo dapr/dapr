@@ -22,7 +22,7 @@ if [[ -z "$TEST_RESOURCE_GROUP" ]]; then
     exit 1
 fi
 
-# Control if we're using Cosmos DB
+# Control if we're using Cosmos DB and Service Bus
 USE_COSMOSDB=${1:-true}
 USE_SERVICEBUS=${2:-true}
 
@@ -31,7 +31,7 @@ if $USE_COSMOSDB ; then
 
   # Set environmental variables to use Cosmos DB as state store
   export DAPR_TEST_STATE_STORE=cosmosdb
-  export DAPR_TEST_QUERY_STATE_STORE=cosmosdb_query
+  export DAPR_TEST_QUERY_STATE_STORE=cosmosdb
 
   # Write into the GitHub Actions environment
   if [ -n "$GITHUB_ENV" ]; then
@@ -56,9 +56,9 @@ else
 fi
 
 if $USE_SERVICEBUS ; then
-  echo "Configuring Service Bus as pubsub store"
+  echo "Configuring Service Bus as pubsub broker"
 
-  # Set environmental variables to Service Bus state store
+  # Set environmental variables to Service Bus pubsub
   export DAPR_TEST_PUBSUB=servicebus
   if [ -n "$GITHUB_ENV" ]; then
     echo "DAPR_TEST_PUBSUB=${DAPR_TEST_PUBSUB}" >> $GITHUB_ENV
@@ -77,5 +77,5 @@ if $USE_SERVICEBUS ; then
     --namespace=$DAPR_NAMESPACE \
     --from-literal=connectionString=${SERVICEBUS_CONNSTRING}
 else
-  echo "NOT configuring Service Bus as pubsub store"
+  echo "NOT configuring Service Bus as pubsub broker"
 fi

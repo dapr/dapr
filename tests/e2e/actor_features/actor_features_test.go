@@ -136,28 +136,32 @@ func TestMain(m *testing.M) {
 	// and will be cleaned up after all tests are finished automatically
 	testApps := []kube.AppDescription{
 		{
-			AppName:        appName,
-			DaprEnabled:    true,
-			ImageName:      "e2e-actorfeatures",
-			Replicas:       1,
-			IngressEnabled: true,
-			MetricsEnabled: true,
-			DaprCPULimit:   "2.0",
-			DaprCPURequest: "0.1",
-			AppCPULimit:    "2.0",
-			AppCPURequest:  "0.1",
+			AppName:             appName,
+			DaprEnabled:         true,
+			DebugLoggingEnabled: true,
+			ImageName:           "e2e-actorfeatures",
+			Config:              "omithealthchecksconfig",
+			Replicas:            1,
+			IngressEnabled:      true,
+			MetricsEnabled:      true,
+			DaprCPULimit:        "2.0",
+			DaprCPURequest:      "0.1",
+			AppCPULimit:         "2.0",
+			AppCPURequest:       "0.1",
 		},
 		{
-			AppName:        "actortestclient",
-			DaprEnabled:    true,
-			ImageName:      "e2e-actorclientapp",
-			Replicas:       1,
-			IngressEnabled: true,
-			MetricsEnabled: true,
-			DaprCPULimit:   "2.0",
-			DaprCPURequest: "0.1",
-			AppCPULimit:    "2.0",
-			AppCPURequest:  "0.1",
+			AppName:             "actortestclient",
+			DaprEnabled:         true,
+			DebugLoggingEnabled: true,
+			ImageName:           "e2e-actorclientapp",
+			Config:              "omithealthchecksconfig",
+			Replicas:            1,
+			IngressEnabled:      true,
+			MetricsEnabled:      true,
+			DaprCPULimit:        "2.0",
+			DaprCPURequest:      "0.1",
+			AppCPULimit:         "2.0",
+			AppCPURequest:       "0.1",
 		},
 	}
 
@@ -832,9 +836,7 @@ func TestActorFeatures(t *testing.T) {
 		time.Sleep(secondsToCheckGetMetadata * time.Second)
 
 		res, err = httpGet(fmt.Sprintf(actorMetadataURLFormat, externalURL))
-		if err != nil {
-			log.Printf("failed to get metadata. Error='%v' Response='%s'", err, string(res))
-		}
+		log.Printf("Got metadata: Error='%v' Response='%s'", err, string(res))
 		require.NoError(t, err, "failed to get metadata")
 
 		var previousMetadata metadata
@@ -857,9 +859,7 @@ func TestActorFeatures(t *testing.T) {
 		time.Sleep(5 * time.Second)
 
 		res, err = httpGet(fmt.Sprintf(actorMetadataURLFormat, externalURL))
-		if err != nil {
-			log.Printf("failed to get metadata. Error='%v' Response='%s'", err, string(res))
-		}
+		log.Printf("Got metadata: Error='%v' Response='%s'", err, string(res))
 		require.NoError(t, err, "failed to get metadata")
 
 		var currentMetadata metadata

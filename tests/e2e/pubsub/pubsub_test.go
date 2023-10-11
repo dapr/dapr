@@ -44,9 +44,6 @@ import (
 var tr *runner.TestRunner
 
 const (
-	// Number of get calls before starting tests.
-	numHealthChecks = 60
-
 	// used as the exclusive max of a random number that is used as a suffix to the first message sent.  Each subsequent message gets this number+1.
 	// This is random so the first message name is not the same every time.
 	randomOffsetMax           = 49
@@ -313,13 +310,14 @@ func testPublish(t *testing.T, publisherExternalURL string, protocol string) rec
 func postSingleMessage(url string, data []byte) (int, error) {
 	// HTTPPostWithStatus by default sends with content-type application/json
 	start := time.Now()
-	_, statusCode, err := utils.HTTPPostWithStatus(url, data)
+	body, statusCode, err := utils.HTTPPostWithStatus(url, data)
 	if err != nil {
-		log.Printf("Publish failed with error=%s (body=%s) (duration=%s)", err.Error(), data, utils.FormatDuration(time.Now().Sub(start)))
+		log.Printf("Publish failed with error=%s (response=%s) (request=%s) (duration=%s)", err.Error(), string(body), string(data), utils.FormatDuration(time.Since(start)))
 		return http.StatusInternalServerError, err
 	}
 	if (statusCode != http.StatusOK) && (statusCode != http.StatusNoContent) {
-		err = fmt.Errorf("publish failed with StatusCode=%d (body=%s) (duration=%s)", statusCode, data, utils.FormatDuration(time.Now().Sub(start)))
+		log.Printf("publish failed with StatusCode=%d (response=%s) (request=%s) (duration=%s)", statusCode, string(body), string(data), utils.FormatDuration(time.Since(start)))
+		err = fmt.Errorf("publish failed with StatusCode=%d (response=%s) (request=%s) (duration=%s)", statusCode, string(body), string(data), utils.FormatDuration(time.Since(start)))
 	}
 	return statusCode, err
 }
@@ -328,7 +326,7 @@ func testBulkPublishSuccessfully(t *testing.T, publisherExternalURL, subscriberE
 	// set to respond with success
 	setDesiredResponse(t, subscriberAppName, "success", publisherExternalURL, protocol)
 
-	log.Printf("Test bulkPublish and normal subscribe success flow\n")
+	log.Printf("Test bulkPublish and normal subscribe success flow")
 	sentMessages := testPublishBulk(t, publisherExternalURL, protocol)
 
 	time.Sleep(5 * time.Second)
@@ -340,7 +338,7 @@ func testPublishSubscribeSuccessfully(t *testing.T, publisherExternalURL, subscr
 	// set to respond with success
 	setDesiredResponse(t, subscriberAppName, "success", publisherExternalURL, protocol)
 
-	log.Printf("Test publish subscribe success flow\n")
+	log.Print("Test publish subscribe success flow")
 	sentMessages := testPublish(t, publisherExternalURL, protocol)
 
 	time.Sleep(5 * time.Second)
@@ -349,7 +347,7 @@ func testPublishSubscribeSuccessfully(t *testing.T, publisherExternalURL, subscr
 }
 
 func testPublishWithoutTopic(t *testing.T, publisherExternalURL, subscriberExternalURL, _, _, protocol string) string {
-	log.Printf("Test publish without topic\n")
+	log.Print("Test publish without topic")
 	commandBody := publishCommand{
 		ReqID:    "c-" + uuid.New().String(),
 		Protocol: protocol,
@@ -715,9 +713,9 @@ func TestMain(m *testing.M) {
 		})
 	}
 
-	log.Printf("Creating TestRunner\n")
+	log.Printf("Creating TestRunner")
 	tr = runner.NewTestRunner("pubsubtest", testApps, components, nil)
-	log.Printf("Starting TestRunner\n")
+	log.Printf("Starting TestRunner")
 	os.Exit(tr.Start(m))
 }
 
@@ -769,13 +767,9 @@ func TestPubSubHTTP(t *testing.T) {
 		subscriberExternalURL := tr.Platform.AcquireAppExternalURL(app.subscriber)
 		require.NotEmpty(t, subscriberExternalURL, "subscriberExternalURLHTTP must not be empty!")
 
-		// This initial probe makes the test wait a little bit longer when needed,
-		// making this test less flaky due to delays in the deployment.
-		_, err := utils.HTTPGetNTimes(publisherExternalURL, numHealthChecks)
-		require.NoError(t, err)
-
-		_, err = utils.HTTPGetNTimes(subscriberExternalURL, numHealthChecks)
-		require.NoError(t, err)
+		// Makes the test wait for the apps and load balancers to be ready
+		err := utils.HealthCheckApps(publisherExternalURL, subscriberExternalURL)
+		require.NoError(t, err, "Health checks failed")
 
 		err = publishHealthCheck(publisherExternalURL)
 		require.NoError(t, err)

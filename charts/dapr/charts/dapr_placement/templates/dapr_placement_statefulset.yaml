@@ -3,13 +3,14 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: dapr-placement-server
+  namespace: {{ .Release.Namespace }}
   labels:
     app: dapr-placement-server
     {{- range $key, $value := .Values.global.k8sLabels }}
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
 spec:
-{{- if eq .Values.global.ha.enabled true }}
+{{- if or (eq .Values.global.ha.enabled true) (eq .Values.ha true) }}
   replicas: 3
 {{- else }}
   replicas: 1
@@ -29,11 +30,15 @@ spec:
         {{- with .Values.global.labels }}
           {{- toYaml . | nindent 8 }}
         {{- end }}
-{{- if eq .Values.global.prometheus.enabled true }}
       annotations:
+        dapr.io/control-plane: placement
+{{- if eq .Values.global.prometheus.enabled true }}
         prometheus.io/scrape: "{{ .Values.global.prometheus.enabled }}"
         prometheus.io/port: "{{ .Values.global.prometheus.port }}"
         prometheus.io/path: "/"
+{{- end }}
+{{- if .Values.statefulsetAnnotations }}
+{{ toYaml .Values.statefulsetAnnotations | indent 4}}
 {{- end }}
     spec:
       containers:
@@ -69,10 +74,17 @@ spec:
         resources:
 {{ toYaml .Values.resources | indent 10 }}
         volumeMounts:
-          - name: credentials
-            mountPath: /var/run/dapr/credentials
+          - name: dapr-trust-bundle
+            mountPath: /var/run/secrets/dapr.io/tls
             readOnly: true
-{{- if eq .Values.global.ha.enabled true }}
+        {{- if .Values.global.mtls.mountSentryVolume }}
+          - name: dapr-identity-token
+            mountPath: /var/run/secrets/dapr.io/sentrytoken
+        {{- end }}
+        {{- with .Values.global.extraVolumeMounts.placement }}
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+{{- if or (eq .Values.global.ha.enabled true) (eq .Values.ha true) }}
   {{- if eq .Values.cluster.forceInMemoryLog false }}
           - name: raft-log
     {{- if eq .Values.global.daprControlPlaneOs "windows" }}
@@ -109,7 +121,7 @@ spec:
         - "/placement"
         - "--"
 {{- end }}
-{{- if eq .Values.global.ha.enabled true }}
+{{- if or (eq .Values.global.ha.enabled true) (eq .Values.ha true) }}
         - "--id"
         - "$(PLACEMENT_ID)"
         - "--initial-cluster"
@@ -128,6 +140,9 @@ spec:
 {{- if eq .Values.global.logAsJson true }}
         - "--log-as-json"
 {{- end }}
+{{- if eq .Values.metadataEnabled true }}
+        - "--metadata-enabled"
+{{- end }}
 {{- if eq .Values.global.prometheus.enabled true }}
         - "--enable-metrics"
         - "--replicationFactor"
@@ -138,14 +153,10 @@ spec:
         - "--enable-metrics=false"
 {{- end }}
         - "--tls-enabled"
-{{- with .Values.global.issuerFilenames }}
-        - "--issuer-ca-filename"
-        - "{{ .ca }}"
-        - "--issuer-certificate-filename"
-        - "{{ .cert }}"
-        - "--issuer-key-filename"
-        - "{{ .key }}"
-{{- end }}
+        - "--trust-domain={{ .Values.global.mtls.controlPlaneTrustDomain }}"
+        - "--trust-anchors-file=/var/run/secrets/dapr.io/tls/ca.crt"
+        - "--sentry-address={{ if .Values.global.mtls.sentryAddress }}{{ .Values.global.mtls.sentryAddress }}{{ else }}dapr-sentry.{{ .Release.Namespace }}.svc.cluster.local:443{{ end }}"
+        - "--mode=kubernetes"
 {{- if eq .Values.global.daprControlPlaneOs "linux" }}
         securityContext:
 {{- if eq .Values.cluster.forceInMemoryLog true }}
@@ -153,11 +164,18 @@ spec:
 {{- else }}
           runAsUser: 0
 {{- end }}
-{{- if eq .Values.debug.enabled true }}
+  {{- if eq .Values.debug.enabled true }}
           capabilities:
-            add:
-              - SYS_PTRACE
-{{- end }}
+            add: ["SYS_PTRACE"]
+  {{- else }}
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
+  {{- end }}
+  {{- if .Values.global.seccompProfile }}
+          seccompProfile:
+            type: {{ .Values.global.seccompProfile }}
+  {{- end }}
 {{- end }}
         env:
           - name: PLACEMENT_ID
@@ -170,9 +188,21 @@ spec:
                 fieldPath: metadata.namespace
       serviceAccountName: dapr-placement
       volumes:
-        - name: credentials
-          secret:
-            secretName: dapr-trust-bundle
+      - name: dapr-trust-bundle
+        configMap:
+          name: dapr-trust-bundle
+    {{- if .Values.global.mtls.mountSentryVolume }}
+      - name: dapr-identity-token
+        projected:
+          sources:
+          - serviceAccountToken:
+              path: token
+              expirationSeconds: 600
+              audience: "spiffe://{{ .Values.global.mtls.controlPlaneTrustDomain }}/ns/{{ .Release.Namespace }}/dapr-sentry"
+    {{- end }}
+    {{- with .Values.global.extraVolumes.placement }}
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -203,7 +233,7 @@ spec:
 {{- end }}
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:
-        - name: {{ .Values.global.imagePullSecrets }}
+        {{- include "dapr.imagePullSecrets" (dict "imagePullSecrets" .Values.global.imagePullSecrets) | nindent 8 }}
 {{- end }}
 {{- if .Values.global.nodeSelector }}
       nodeSelector:
@@ -213,7 +243,7 @@ spec:
       tolerations:
 {{ toYaml .Values.global.tolerations | indent 8 }}
 {{- end }}
-{{- if eq .Values.global.ha.enabled true }}
+{{- if or (eq .Values.global.ha.enabled true) (eq .Values.ha true) }}
   {{- if eq .Values.cluster.forceInMemoryLog false }}
   volumeClaimTemplates:
   - metadata:

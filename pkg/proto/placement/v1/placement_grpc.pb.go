@@ -22,6 +22,7 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type PlacementClient interface {
+	// Reports Dapr actor status and retrieves actor placement table.
 	ReportDaprStatus(ctx context.Context, opts ...grpc.CallOption) (Placement_ReportDaprStatusClient, error)
 }
 
@@ -68,6 +69,7 @@ func (x *placementReportDaprStatusClient) Recv() (*PlacementOrder, error) {
 // All implementations should embed UnimplementedPlacementServer
 // for forward compatibility
 type PlacementServer interface {
+	// Reports Dapr actor status and retrieves actor placement table.
 	ReportDaprStatus(Placement_ReportDaprStatusServer) error
 }
 

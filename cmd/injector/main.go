@@ -15,122 +15,187 @@ package main
 
 import (
 	"context"
-	"flag"
+	"encoding/base64"
 	"fmt"
-	"path/filepath"
 
-	"k8s.io/client-go/util/homedir"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 
+	"github.com/dapr/dapr/cmd/injector/options"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"github.com/dapr/dapr/pkg/concurrency"
-	"github.com/dapr/dapr/pkg/credentials"
 	"github.com/dapr/dapr/pkg/health"
-	"github.com/dapr/dapr/pkg/injector"
-	"github.com/dapr/dapr/pkg/injector/monitoring"
+	"github.com/dapr/dapr/pkg/injector/sentry"
+	"github.com/dapr/dapr/pkg/injector/service"
 	"github.com/dapr/dapr/pkg/metrics"
+	"github.com/dapr/dapr/pkg/modes"
+	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/pkg/signals"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 )
 
-var (
-	log         = logger.NewLogger("dapr.injector")
-	healthzPort int
-)
+var log = logger.NewLogger("dapr.injector")
 
 func main() {
-	log.Infof("starting Dapr Sidecar Injector -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
+	opts := options.New()
+
+	// Apply options to all loggers
+	err := logger.ApplyOptionsToLoggers(&opts.Logger)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	log.Infof("Starting Dapr Sidecar Injector -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
+	log.Infof("Log level set to: %s", opts.Logger.OutputLevel)
+
+	metricsExporter := metrics.NewExporterWithOptions(log, metrics.DefaultMetricNamespace, opts.Metrics)
+
+	err = utils.SetEnvVariables(map[string]string{
+		utils.KubeConfigVar: opts.Kubeconfig,
+	})
+	if err != nil {
+		log.Fatalf("Error set env: %v", err)
+	}
+
+	// Initialize injector service metrics
+	err = service.InitMetrics()
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	ctx := signals.Context()
-	cfg, err := injector.GetConfig()
+	cfg, err := service.GetConfig()
 	if err != nil {
-		log.Fatalf("error getting config: %s", err)
+		log.Fatalf("Error getting config: %v", err)
 	}
 
 	kubeClient := utils.GetKubeClient()
 	conf := utils.GetConfig()
 	daprClient, err := scheme.NewForConfig(conf)
 	if err != nil {
-		log.Fatalf("error creating dapr client: %s", err)
+		log.Fatalf("Error creating Dapr client: %v", err)
 	}
-	uids, err := injector.AllowedControllersServiceAccountUID(ctx, cfg, kubeClient)
+	uids, err := service.AllowedControllersServiceAccountUID(ctx, cfg, kubeClient)
 	if err != nil {
-		log.Fatalf("failed to get authentication uids from services accounts: %s", err)
+		log.Fatalf("Failed to get authentication uids from services accounts: %s", err)
 	}
 
-	inj, err := injector.NewInjector(uids, cfg, daprClient, kubeClient)
+	secProvider, err := security.New(ctx, security.Options{
+		SentryAddress:           cfg.SentryAddress,
+		ControlPlaneTrustDomain: cfg.ControlPlaneTrustDomain,
+		ControlPlaneNamespace:   security.CurrentNamespace(),
+		TrustAnchorsFile:        cfg.TrustAnchorsFile,
+		AppID:                   "dapr-injector",
+		MTLSEnabled:             true,
+		Mode:                    modes.KubernetesMode,
+	})
 	if err != nil {
-		log.Fatalf("error creating injector: %s", err)
+		log.Fatal(err)
+	}
+
+	inj, err := service.NewInjector(service.Options{
+		AuthUIDs:                uids,
+		Config:                  cfg,
+		DaprClient:              daprClient,
+		KubeClient:              kubeClient,
+		ControlPlaneNamespace:   security.CurrentNamespace(),
+		ControlPlaneTrustDomain: cfg.ControlPlaneTrustDomain,
+	})
+	if err != nil {
+		log.Fatalf("Error creating injector: %v", err)
 	}
 
 	healthzServer := health.NewServer(log)
+	caBundleCh := make(chan []byte)
 	mngr := concurrency.NewRunnerManager(
-		inj.Run,
+		metricsExporter.Run,
+		secProvider.Run,
 		func(ctx context.Context) error {
-			if err := inj.Ready(ctx); err != nil {
-				return err
+			sec, rerr := secProvider.Handler(ctx)
+			if rerr != nil {
+				return rerr
+			}
+			sentryID, rerr := security.SentryID(sec.ControlPlaneTrustDomain(), security.CurrentNamespace())
+			if err != nil {
+				return rerr
+			}
+			requester := sentry.New(sentry.Options{
+				SentryAddress: cfg.SentryAddress,
+				SentryID:      sentryID,
+				Security:      sec,
+			})
+			return inj.Run(ctx,
+				sec.TLSServerConfigNoClientAuth(),
+				requester.RequestCertificateFromSentry,
+				sec.CurrentTrustAnchors,
+			)
+		},
+		func(ctx context.Context) error {
+			readyErr := inj.Ready(ctx)
+			if readyErr != nil {
+				return readyErr
 			}
 			healthzServer.Ready()
 			<-ctx.Done()
 			return nil
 		},
 		func(ctx context.Context) error {
-			if err := healthzServer.Run(ctx, healthzPort); err != nil {
-				return fmt.Errorf("failed to start healthz server: %w", err)
+			healhtzErr := healthzServer.Run(ctx, opts.HealthzPort)
+			if healhtzErr != nil {
+				return fmt.Errorf("failed to start healthz server: %w", healhtzErr)
 			}
 			return nil
 		},
+		func(ctx context.Context) error {
+			sec, rErr := secProvider.Handler(ctx)
+			if rErr != nil {
+				return rErr
+			}
+			sec.WatchTrustAnchors(ctx, caBundleCh)
+			return nil
+		},
+		// Watch for changes to the trust anchors and update the webhook
+		// configuration on events.
+		func(ctx context.Context) error {
+			sec, rerr := secProvider.Handler(ctx)
+			if rerr != nil {
+				return rerr
+			}
+
+			caBundle, rErr := sec.CurrentTrustAnchors()
+			if rErr != nil {
+				return rErr
+			}
+
+			// Patch the mutating webhook configuration with the current trust
+			// anchors.
+			// Re-patch every time the trust anchors change.
+			for {
+				_, rErr = kubeClient.AdmissionregistrationV1().MutatingWebhookConfigurations().Patch(ctx,
+					"dapr-sidecar-injector",
+					types.JSONPatchType,
+					[]byte(`[{"op":"replace","path":"/webhooks/0/clientConfig/caBundle","value":"`+base64.StdEncoding.EncodeToString(caBundle)+`"}]`),
+					metav1.PatchOptions{},
+				)
+				if rErr != nil {
+					return rErr
+				}
+
+				select {
+				case caBundle = <-caBundleCh:
+				case <-ctx.Done():
+					return nil
+				}
+			}
+		},
 	)
 
-	if err := mngr.Run(ctx); err != nil {
-		log.Fatalf("error running injector: %s", err)
+	err = mngr.Run(ctx)
+	if err != nil {
+		log.Fatalf("Error running injector: %v", err)
 	}
 
-	log.Infof("Dapr sidecar injector shut down gracefully")
-}
-
-func init() {
-	loggerOptions := logger.DefaultOptions()
-	loggerOptions.AttachCmdFlags(flag.StringVar, flag.BoolVar)
-
-	metricsExporter := metrics.NewExporter(metrics.DefaultMetricNamespace)
-	metricsExporter.Options().AttachCmdFlags(flag.StringVar, flag.BoolVar)
-	var kubeconfig *string
-	if home := homedir.HomeDir(); home != "" {
-		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
-	} else {
-		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
-	}
-
-	flag.IntVar(&healthzPort, "healthz-port", 8080, "The port used for health checks")
-
-	flag.StringVar(&credentials.RootCertFilename, "issuer-ca-secret-key", credentials.RootCertFilename, "Certificate Authority certificate secret key")
-	flag.StringVar(&credentials.IssuerCertFilename, "issuer-certificate-secret-key", credentials.IssuerCertFilename, "Issuer certificate secret key")
-	flag.StringVar(&credentials.IssuerKeyFilename, "issuer-key-secret-key", credentials.IssuerKeyFilename, "Issuer private key secret key")
-
-	flag.Parse()
-
-	if err := utils.SetEnvVariables(map[string]string{
-		utils.KubeConfigVar: *kubeconfig,
-	}); err != nil {
-		log.Fatalf("error set env failed:  %s", err.Error())
-	}
-
-	// Apply options to all loggers
-	if err := logger.ApplyOptionsToLoggers(&loggerOptions); err != nil {
-		log.Fatal(err)
-	} else {
-		log.Infof("log level set to: %s", loggerOptions.OutputLevel)
-	}
-
-	// Initialize dapr metrics exporter
-	if err := metricsExporter.Init(); err != nil {
-		log.Fatal(err)
-	}
-
-	// Initialize injector service metrics
-	if err := monitoring.InitMetrics(); err != nil {
-		log.Fatal(err)
-	}
+	log.Info("Dapr sidecar injector shut down gracefully")
 }

@@ -35,6 +35,7 @@ type AppDescription struct {
 	AppEnv                    map[string]string               `json:",omitempty"`
 	AppVolumeMounts           []apiv1.VolumeMount             `json:",omitempty"`
 	DaprEnabled               bool                            `json:",omitempty"`
+	DebugLoggingEnabled       bool                            `json:",omitempty"`
 	ImageName                 string                          `json:",omitempty"`
 	ImageSecret               string                          `json:",omitempty"`
 	SidecarImage              string                          `json:",omitempty"`

@@ -1,0 +1,28 @@
+global:
+  postgresql:
+    auth:
+      username: postgres
+      postgresPassword: example
+      database: dapr_test
+primary:
+  initdb:
+    scripts:
+      init.sql: |
+        CREATE TABLE IF NOT EXISTS configtable (KEY VARCHAR NOT NULL, VALUE VARCHAR NOT NULL, VERSION VARCHAR NOT NULL, METADATA JSON);
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: kubernetes.io/os
+                operator: In
+                values:
+                  - linux
+              - key: kubernetes.io/arch
+                operator: In
+                values:
+                  - amd64
+  persistence:
+    enabled: false
+tls:
+  enabled: false

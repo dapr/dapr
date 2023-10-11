@@ -21,6 +21,7 @@ import (
 
 	"github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/secretstores"
+	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	"github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 
 	"github.com/stretchr/testify/assert"
@@ -65,16 +66,16 @@ func TestComponentEncryptionKey(t *testing.T) {
 				Name: "statestore",
 			},
 			Spec: v1alpha1.ComponentSpec{
-				Metadata: []v1alpha1.MetadataItem{
+				Metadata: []commonapi.NameValuePair{
 					{
 						Name: primaryEncryptionKey,
-						SecretKeyRef: v1alpha1.SecretKeyRef{
+						SecretKeyRef: commonapi.SecretKeyRef{
 							Name: "primaryKey",
 						},
 					},
 					{
 						Name: secondaryEncryptionKey,
-						SecretKeyRef: v1alpha1.SecretKeyRef{
+						SecretKeyRef: commonapi.SecretKeyRef{
 							Name: "secondaryKey",
 						},
 					},
@@ -111,16 +112,16 @@ func TestComponentEncryptionKey(t *testing.T) {
 				Name: "statestore",
 			},
 			Spec: v1alpha1.ComponentSpec{
-				Metadata: []v1alpha1.MetadataItem{
+				Metadata: []commonapi.NameValuePair{
 					{
 						Name: primaryEncryptionKey,
-						SecretKeyRef: v1alpha1.SecretKeyRef{
+						SecretKeyRef: commonapi.SecretKeyRef{
 							Name: "primaryKey",
 						},
 					},
 					{
 						Name: secondaryEncryptionKey,
-						SecretKeyRef: v1alpha1.SecretKeyRef{
+						SecretKeyRef: commonapi.SecretKeyRef{
 							Name: "secondaryKey",
 						},
 					},
@@ -140,7 +141,7 @@ func TestComponentEncryptionKey(t *testing.T) {
 				Name: "statestore",
 			},
 			Spec: v1alpha1.ComponentSpec{
-				Metadata: []v1alpha1.MetadataItem{
+				Metadata: []commonapi.NameValuePair{
 					{
 						Name: "something",
 					},
@@ -163,7 +164,7 @@ func TestTryGetEncryptionKeyFromMetadataItem(t *testing.T) {
 			},
 		}})
 
-		_, err := tryGetEncryptionKeyFromMetadataItem("", v1alpha1.MetadataItem{}, secretStore)
+		_, err := tryGetEncryptionKeyFromMetadataItem("", commonapi.NameValuePair{}, secretStore)
 		assert.Error(t, err)
 	})
 }

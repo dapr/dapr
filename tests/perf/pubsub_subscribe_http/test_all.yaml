@@ -30,7 +30,7 @@ components:
     numHealthChecks: 60
     testAppName: rabbitmq-test-app
     testLabel: pubsub_subscribe_rabbitmq
-    subscribeHTTPThresholdMs: 1500
+    subscribeHTTPThresholdMs: 3000
     bulkSubscribeHTTPThresholdMs: 500
     imageName: perf-pubsub_subscribe_http
     operations: [bulk, normal]

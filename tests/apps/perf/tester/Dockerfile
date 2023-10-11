@@ -2,7 +2,7 @@ FROM golang:1.20-bullseye as build_env
 
 ENV CGO_ENABLED=0
 WORKDIR /app
-COPY app.go go.mod ./
+COPY *.go go.mod ./
 RUN go get -d -v && go build -o tester .
 
 FROM golang:1.20-bullseye as fortio_build_env

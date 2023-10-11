@@ -43,3 +43,6 @@ spec:
           ]
         }
       ]
+scopes:
+  - stateapp
+  - stateapp-pluggable
