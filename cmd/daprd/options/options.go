@@ -94,7 +94,7 @@ func New(origArgs []string) *Options {
 		}
 	}
 
-	// Create a flag set that allows unknown flags
+	// Create a flag set
 	fs := pflag.NewFlagSet("daprd", pflag.ExitOnError)
 	fs.SortFlags = true
 
