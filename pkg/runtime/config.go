@@ -444,10 +444,9 @@ func (c *Config) toInternal() (*internalConfig, error) {
 }
 
 func parsePlacementAddr(val string) []string {
-	parsed := []string{}
 	p := strings.Split(val, ",")
-	for _, addr := range p {
-		parsed = append(parsed, strings.TrimSpace(addr))
+	for i, v := range p {
+		p[i] = strings.TrimSpace(v)
 	}
-	return parsed
+	return p
 }
