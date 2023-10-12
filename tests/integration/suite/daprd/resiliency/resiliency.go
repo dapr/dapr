@@ -11,11 +11,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package actors
+package resiliency
 
 import (
-	_ "github.com/dapr/dapr/tests/integration/suite/actors/grpc"
-	_ "github.com/dapr/dapr/tests/integration/suite/actors/healthz"
-	_ "github.com/dapr/dapr/tests/integration/suite/actors/http"
-	_ "github.com/dapr/dapr/tests/integration/suite/actors/reminders"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/resiliency/apps"
 )

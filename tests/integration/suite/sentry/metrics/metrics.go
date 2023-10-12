@@ -65,7 +65,6 @@ func (e *expiry) Run(t *testing.T, ctx context.Context) {
 	e.notGiven.WaitUntilRunning(t, ctx)
 	e.given.WaitUntilRunning(t, ctx)
 
-	time.Sleep(time.Second)
 	client := util.HTTPClient(t)
 
 	testExpiry := func(name string, proc *procsentry.Sentry, expTime time.Time) {

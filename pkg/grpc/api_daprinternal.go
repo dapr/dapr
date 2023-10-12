@@ -109,6 +109,11 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 		WithContentType(chunk.Request.Message.ContentType)
 	defer req.Close()
 
+	// If the data has a type_url, set that in the object too
+	// This is necessary to support the gRPC->gRPC service invocation (legacy, non-proxy) path correctly
+	// (Note that GetTypeUrl could return an empty value, so this call becomes a no-op)
+	req.WithDataTypeURL(chunk.Request.Message.GetData().GetTypeUrl())
+
 	ctx, cancel := context.WithCancel(stream.Context())
 	defer cancel()
 
@@ -205,6 +210,18 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 	}()
 	r := res.RawData()
 	resProto := res.Proto()
+
+	// If there's a message in the proto, we remove it from the message we send to avoid sending it twice
+	// We re-add it when the method ends to ensure we can perform retries
+	messageData := resProto.GetMessage().GetData()
+	messageDataValue := messageData.GetValue()
+	if len(messageDataValue) > 0 {
+		messageData.Value = nil
+		defer func() {
+			messageData.Value = messageDataValue
+		}()
+	}
+
 	proto := &internalv1pb.InternalInvokeResponseStream{}
 	var (
 		n    int

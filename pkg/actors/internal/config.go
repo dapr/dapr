@@ -14,7 +14,9 @@ limitations under the License.
 package internal
 
 import (
+	"net"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -43,6 +45,10 @@ type Config struct {
 	HealthEndpoint                string
 	AppChannelAddress             string
 	PodName                       string
+}
+
+func (c Config) GetRuntimeHostname() string {
+	return net.JoinHostPort(c.HostAddress, strconv.Itoa(c.Port))
 }
 
 // Remap of daprAppConfig.EntityConfig but with more useful types for actors.go.
