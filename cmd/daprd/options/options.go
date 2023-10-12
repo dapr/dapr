@@ -123,7 +123,7 @@ func New(origArgs []string) *Options {
 	fs.BoolVar(&opts.BuildInfo, "build-info", false, "Prints the build info")
 	fs.BoolVar(&opts.WaitCommand, "wait", false, "wait for Dapr outbound ready")
 	fs.IntVar(&opts.AppMaxConcurrency, "app-max-concurrency", -1, "Controls the concurrency level when forwarding requests to user code; set to -1 for no limits")
-	fs.BoolVar(&opts.EnableMTLS, "enable-mtls", false, "Enables automatic mTLS for daprd to daprd communication channels")
+	fs.BoolVar(&opts.EnableMTLS, "enable-mtls", false, "Enables automatic mTLS for daprd-to-daprd communication channels")
 	fs.BoolVar(&opts.AppSSL, "app-ssl", false, "Sets the URI scheme of the app to https and attempts a TLS connection")
 	fs.MarkDeprecated("app-ssl", "use '--app-protocol https|grpcs'")
 	fs.IntVar(&opts.DaprHTTPMaxRequestSize, "dapr-http-max-request-size", runtime.DefaultMaxRequestBodySize, "Increasing max size of request body in MB to handle uploading of big files")

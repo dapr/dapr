@@ -16,12 +16,12 @@ package options
 import (
 	"path/filepath"
 
+	"github.com/spf13/pflag"
 	"k8s.io/client-go/util/homedir"
 
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/sentry/config"
 	"github.com/dapr/kit/logger"
-	"github.com/spf13/pflag"
 )
 
 const (

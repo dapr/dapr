@@ -14,10 +14,11 @@ limitations under the License.
 package options
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/spf13/pflag"
 
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
@@ -40,7 +41,7 @@ const (
 type Options struct {
 	// Raft protocol configurations
 	RaftID           string
-	RaftPeerString   string
+	raftPeerFlag     []string
 	RaftPeers        []raft.PeerInfo
 	RaftInMemEnabled bool
 	RaftLogStorePath string
@@ -63,37 +64,41 @@ type Options struct {
 	Metrics *metrics.Options
 }
 
-func New() *Options {
+func New(args []string) *Options {
 	// Default options
-	var opts Options
+	opts := Options{
+		MetadataEnabled: utils.IsTruthy(os.Getenv(envMetadataEnabled)),
+	}
 
-	flag.StringVar(&opts.RaftID, "id", "dapr-placement-0", "Placement server ID.")
-	flag.StringVar(&opts.RaftPeerString, "initial-cluster", "dapr-placement-0=127.0.0.1:8201", "raft cluster peers")
-	flag.BoolVar(&opts.RaftInMemEnabled, "inmem-store-enabled", true, "Enable in-memory log and snapshot store unless --raft-logstore-path is set")
-	flag.StringVar(&opts.RaftLogStorePath, "raft-logstore-path", "", "raft log store path.")
-	flag.IntVar(&opts.PlacementPort, "port", defaultPlacementPort, "sets the gRPC port for the placement service")
-	flag.IntVar(&opts.HealthzPort, "healthz-port", defaultHealthzPort, "sets the HTTP port for the healthz server")
-	flag.BoolVar(&opts.TLSEnabled, "tls-enabled", false, "Should TLS be enabled for the placement gRPC server")
-	flag.BoolVar(&opts.MetadataEnabled, "metadata-enabled", opts.MetadataEnabled, "Expose the placement tables on the healthz server")
-	flag.IntVar(&opts.ReplicationFactor, "replicationFactor", defaultReplicationFactor, "sets the replication factor for actor distribution on vnodes")
+	// Create a flag set
+	fs := pflag.NewFlagSet("sentry", pflag.ExitOnError)
+	fs.SortFlags = true
 
-	flag.StringVar(&opts.TrustDomain, "trust-domain", "localhost", "Trust domain for the Dapr control plane")
-	flag.StringVar(&opts.TrustAnchorsFile, "trust-anchors-file", securityConsts.ControlPlaneDefaultTrustAnchorsPath, "Filepath to the trust anchors for the Dapr control plane")
-	flag.StringVar(&opts.SentryAddress, "sentry-address", fmt.Sprintf("dapr-sentry.%s.svc:443", security.CurrentNamespace()), "Address of the Sentry service")
-	flag.StringVar(&opts.Mode, "mode", string(modes.StandaloneMode), "Runtime mode for Placement")
+	fs.StringVar(&opts.RaftID, "id", "dapr-placement-0", "Placement server ID.")
+	fs.StringSliceVar(&opts.raftPeerFlag, "initial-cluster", []string{"dapr-placement-0=127.0.0.1:8201"}, "raft cluster peers")
+	fs.BoolVar(&opts.RaftInMemEnabled, "inmem-store-enabled", true, "Enable in-memory log and snapshot store unless --raft-logstore-path is set")
+	fs.StringVar(&opts.RaftLogStorePath, "raft-logstore-path", "", "raft log store path.")
+	fs.IntVar(&opts.PlacementPort, "port", defaultPlacementPort, "sets the gRPC port for the placement service")
+	fs.IntVar(&opts.HealthzPort, "healthz-port", defaultHealthzPort, "sets the HTTP port for the healthz server")
+	fs.BoolVar(&opts.TLSEnabled, "tls-enabled", false, "Should TLS be enabled for the placement gRPC server")
+	fs.BoolVar(&opts.MetadataEnabled, "metadata-enabled", opts.MetadataEnabled, "Expose the placement tables on the healthz server")
+	fs.IntVar(&opts.ReplicationFactor, "replicationFactor", defaultReplicationFactor, "sets the replication factor for actor distribution on vnodes")
+
+	fs.StringVar(&opts.TrustDomain, "trust-domain", "localhost", "Trust domain for the Dapr control plane")
+	fs.StringVar(&opts.TrustAnchorsFile, "trust-anchors-file", securityConsts.ControlPlaneDefaultTrustAnchorsPath, "Filepath to the trust anchors for the Dapr control plane")
+	fs.StringVar(&opts.SentryAddress, "sentry-address", fmt.Sprintf("dapr-sentry.%s.svc:443", security.CurrentNamespace()), "Address of the Sentry service")
+	fs.StringVar(&opts.Mode, "mode", string(modes.StandaloneMode), "Runtime mode for Placement")
 
 	opts.Logger = logger.DefaultOptions()
-	opts.Logger.AttachCmdFlags(flag.StringVar, flag.BoolVar)
+	opts.Logger.AttachCmdFlags(fs.StringVar, fs.BoolVar)
 
 	opts.Metrics = metrics.DefaultMetricOptions()
-	opts.Metrics.AttachCmdFlags(flag.StringVar, flag.BoolVar)
+	opts.Metrics.AttachCmdFlags(fs.StringVar, fs.BoolVar)
 
-	// parse env variables before parsing flags, so the flags takes priority over env variables
-	opts.MetadataEnabled = utils.IsTruthy(os.Getenv(envMetadataEnabled))
+	// Ignore errors; flagset is set for ExitOnError
+	_ = fs.Parse(args)
 
-	flag.Parse()
-
-	opts.RaftPeers = parsePeersFromFlag(opts.RaftPeerString)
+	opts.RaftPeers = parsePeersFromFlag(opts.raftPeerFlag)
 	if opts.RaftLogStorePath != "" {
 		opts.RaftInMemEnabled = false
 	}
@@ -101,21 +106,22 @@ func New() *Options {
 	return &opts
 }
 
-func parsePeersFromFlag(val string) []raft.PeerInfo {
-	peers := []raft.PeerInfo{}
+func parsePeersFromFlag(val []string) []raft.PeerInfo {
+	peers := make([]raft.PeerInfo, len(val))
 
-	p := strings.Split(val, ",")
-	for _, addr := range p {
-		peer := strings.Split(addr, "=")
+	i := 0
+	for _, addr := range val {
+		peer := strings.SplitN(addr, "=", 3)
 		if len(peer) != 2 {
 			continue
 		}
 
-		peers = append(peers, raft.PeerInfo{
+		peers[i] = raft.PeerInfo{
 			ID:      strings.TrimSpace(peer[0]),
 			Address: strings.TrimSpace(peer[1]),
-		})
+		}
+		i++
 	}
 
-	return peers
+	return peers[:i]
 }

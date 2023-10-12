@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"os"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -39,7 +40,7 @@ import (
 var log = logger.NewLogger("dapr.injector")
 
 func main() {
-	opts := options.New()
+	opts := options.New(os.Args[1:])
 
 	// Apply options to all loggers
 	err := logger.ApplyOptionsToLoggers(&opts.Logger)
