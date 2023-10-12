@@ -181,12 +181,18 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) ActorRuntime {
 
 	// Init reminders and placement
 	providerOpts := internal.ActorsProviderOptions{
-		Config:      a.actorsConfig.Config,
-		Security:    a.sec,
-		AppHealthFn: a.getAppHealthCheckChan,
-		Clock:       a.clock,
-		APILevel:    &a.apiLevel,
-		Resiliency:  a.resiliency,
+		Config:   a.actorsConfig.Config,
+		Security: a.sec,
+		AppHealthFn: func(ctx context.Context) <-chan bool {
+			if a.checker == nil {
+				return nil
+
+			}
+			return a.checker.HealthChannel()
+		},
+		Clock:      a.clock,
+		APILevel:   &a.apiLevel,
+		Resiliency: a.resiliency,
 	}
 	a.actorsReminders = reminders.NewRemindersProvider(providerOpts)
 	if a.placement == nil {
@@ -255,7 +261,6 @@ func (a *actorsRuntime) Init(ctx context.Context) (err error) {
 	a.actorsReminders.Init(ctx)
 	a.timers.Init(ctx)
 
-<<<<<<< HEAD
 	a.placementEnabled = true
 
 	a.placement.SetOnTableUpdateFn(func() {
@@ -263,51 +268,20 @@ func (a *actorsRuntime) Init(ctx context.Context) (err error) {
 		a.actorsReminders.OnPlacementTablesUpdated(ctx)
 	})
 
+	if a.checker != nil {
+		a.wg.Add(1)
+		go func() {
+			defer a.wg.Done()
+			a.checker.Run(ctx)
+		}()
+	}
+
 	for _, actorType := range hat {
 		err = a.placement.AddHostedActorType(actorType, a.actorsConfig.GetIdleTimeoutForType(actorType))
 		if err != nil {
 			return fmt.Errorf("failed to register actor '%s': %w", actorType, err)
-=======
-	if a.placement == nil {
-		var err error
-		a.checker, err = a.getAppHealthChecker()
-		if err != nil {
-			return fmt.Errorf("actors: couldn't create health check: %w", err)
 		}
 
-		a.placement = placement.NewActorPlacement(placement.ActorPlacementOpts{
-			ServerAddrs:     a.actorsConfig.Config.PlacementAddresses,
-			Security:        a.sec,
-			AppID:           a.actorsConfig.Config.AppID,
-			RuntimeHostname: a.actorsConfig.GetRuntimeHostname(),
-			PodName:         a.actorsConfig.Config.PodName,
-			ActorTypes:      a.actorsConfig.Config.HostedActorTypes.ListActorTypes(),
-			AppHealthFn: func(ctx context.Context) <-chan bool {
-				if a.checker == nil {
-					return nil
-				}
-				return a.checker.HealthChannel()
-			},
-			Resiliency: a.resiliency,
-			AfterTableUpdateFn: func() {
-				a.drainRebalancedActors()
-				a.actorsReminders.OnPlacementTablesUpdated(ctx)
-			},
-		})
-
-		a.placement.SetOnAPILevelUpdate(func(apiLevel uint32) {
-			a.apiLevel.Store(apiLevel)
-			log.Infof("Actor API level in the cluster has been updated to %d", apiLevel)
-		})
-
-		if a.checker != nil {
-			a.wg.Add(1)
-			go func() {
-				defer a.wg.Done()
-				a.checker.Run(ctx)
-			}()
->>>>>>> 3dca7141d (Tune actor app health check to become healthy sooner)
-		}
 	}
 
 	a.wg.Add(1)

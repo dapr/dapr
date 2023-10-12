@@ -39,7 +39,7 @@ func TestApplyOptions(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		assert.Equal(t, defaultFailureThreshold, int32(2))
+		assert.Equal(t, defaultFailureThreshold, 2)
 		assert.Equal(t, defaultInitialDelay, time.Second)
 		assert.Equal(t, defaultHealthyStateInterval, time.Second*3)
 		assert.Equal(t, defaultUnHealthyStateInterval, time.Second/2)
@@ -68,7 +68,7 @@ func TestApplyOptions(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, "http://localhost:8081", checker.address)
-		assert.Equal(t, int32(10), checker.failureThreshold)
+		assert.Equal(t, 10, checker.failureThreshold)
 		assert.Equal(t, time.Second*11, checker.initialDelay)
 		assert.Equal(t, time.Second*12, checker.healthyStateInterval)
 		assert.Equal(t, time.Second*15, checker.unhealthyStateInterval)

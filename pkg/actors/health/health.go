@@ -27,7 +27,7 @@ import (
 
 const (
 	defaultInitialDelay           = time.Second * 1
-	defaultFailureThreshold       = int32(2)
+	defaultFailureThreshold       = 2
 	defaultRequestTimeout         = time.Second * 2
 	defaultHealthyStateInterval   = time.Second * 3
 	defaultUnHealthyStateInterval = time.Second / 2
@@ -41,7 +41,7 @@ type options struct {
 	address                string
 	initialDelay           time.Duration
 	requestTimeout         time.Duration
-	failureThreshold       int32
+	failureThreshold       int
 	healthyStateInterval   time.Duration
 	unhealthyStateInterval time.Duration
 	successStatusCode      int
@@ -61,7 +61,7 @@ type Checker struct {
 	address                string
 	initialDelay           time.Duration
 	requestTimeout         time.Duration
-	failureThreshold       int32
+	failureThreshold       int
 	healthyStateInterval   time.Duration
 	unhealthyStateInterval time.Duration
 	successStatusCode      int
@@ -192,7 +192,7 @@ func (c *Checker) doHealthyStateCheck(ctx context.Context) {
 	ticker := c.clock.NewTicker(c.healthyStateInterval)
 	defer ticker.Stop()
 
-	var failureCount int32
+	var failureCount int
 	for {
 		select {
 		case <-ctx.Done():
@@ -256,7 +256,7 @@ func WithInitialDelay(delay time.Duration) Option {
 }
 
 // WithFailureThreshold sets the failure threshold for the health check.
-func WithFailureThreshold(threshold int32) Option {
+func WithFailureThreshold(threshold int) Option {
 	return func(o *options) {
 		o.failureThreshold = threshold
 	}
