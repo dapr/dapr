@@ -111,11 +111,12 @@ func New(opts ...Option) (*Checker, error) {
 }
 
 func (c *Checker) Run(ctx context.Context) {
-	c.wg.Add(2)
+	c.wg.Add(1)
 	defer c.Close()
 	defer c.wg.Done()
 
 	ctx, cancel := context.WithCancel(ctx)
+	c.wg.Add(1)
 	go func() {
 		defer c.wg.Done()
 		select {
