@@ -73,7 +73,7 @@ func (e *enable) Setup(t *testing.T) []framework.Option {
 		procdaprd.WithMode("kubernetes"),
 		procdaprd.WithExecOptions(exec.WithEnvVars("DAPR_TRUST_ANCHORS", string(bundle.TrustAnchors))),
 		procdaprd.WithSentryAddress("localhost:"+strconv.Itoa(e.sentry.Port())),
-		procdaprd.WithControlPlaneAddress("localhost:"+strconv.Itoa(e.operator.Port())),
+		procdaprd.WithControlPlaneAddress("localhost:"+strconv.Itoa(e.operator.Port(t))),
 		procdaprd.WithDisableK8sSecretStore(true),
 		procdaprd.WithPlacementAddresses("localhost:"+strconv.Itoa(e.placement.Port())),
 
