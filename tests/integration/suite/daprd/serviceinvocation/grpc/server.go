@@ -23,20 +23,25 @@ import (
 	commonv1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	procgrpc "github.com/dapr/dapr/tests/integration/framework/process/grpc"
+	testpb "github.com/dapr/dapr/tests/integration/suite/daprd/serviceinvocation/grpc/proto"
 )
 
-type gServer struct {
-	onInvokeFunc func(ctx context.Context, in *commonv1.InvokeRequest) (*commonv1.InvokeResponse, error)
-}
+type (
+	invokeFn func(ctx context.Context, in *commonv1.InvokeRequest) (*commonv1.InvokeResponse, error)
+	gServer  struct {
+		onInvokeFunc invokeFn
+	}
+)
 
-func newGRPCServer(t *testing.T, onInvoke func(ctx context.Context, in *commonv1.InvokeRequest) (*commonv1.InvokeResponse, error)) *procgrpc.GRPC {
-	return procgrpc.New(t, procgrpc.WithRegister(func(s *grpc.Server) {
+func newGRPCServer(t *testing.T, onInvoke invokeFn, opts ...procgrpc.Option) *procgrpc.GRPC {
+	return procgrpc.New(t, append(opts, procgrpc.WithRegister(func(s *grpc.Server) {
 		srv := &gServer{
 			onInvokeFunc: onInvoke,
 		}
 		rtv1.RegisterAppCallbackServer(s, srv)
 		rtv1.RegisterAppCallbackHealthCheckServer(s, srv)
-	}))
+		testpb.RegisterTestServiceServer(s, srv)
+	}))...)
 }
 
 func (g *gServer) OnInvoke(ctx context.Context, in *commonv1.InvokeRequest) (*commonv1.InvokeResponse, error) {
@@ -62,5 +67,9 @@ func (g *gServer) OnTopicEvent(context.Context, *rtv1.TopicEventRequest) (*rtv1.
 }
 
 func (g *gServer) HealthCheck(context.Context, *emptypb.Empty) (*rtv1.HealthCheckResponse, error) {
-	return &rtv1.HealthCheckResponse{}, nil
+	return new(rtv1.HealthCheckResponse), nil
+}
+
+func (g *gServer) Ping(context.Context, *testpb.PingRequest) (*testpb.PingResponse, error) {
+	return new(testpb.PingResponse), nil
 }
