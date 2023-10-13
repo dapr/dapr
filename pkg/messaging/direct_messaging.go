@@ -566,7 +566,7 @@ func (d *directMessaging) getRemoteApp(appID string) (remoteApp, error) {
 		address = d.checkHTTPEndpoints(id)
 	} else {
 		request := nr.ResolveRequest{ID: id, Namespace: namespace, Port: d.grpcPort}
-		address, err = d.resolver.ResolveID(request)
+		address, err = d.resolver.ResolveID(context.TODO(), request)
 		if err != nil {
 			return remoteApp{}, err
 		}

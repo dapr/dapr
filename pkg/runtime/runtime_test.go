@@ -901,7 +901,7 @@ func TestInitNameResolution(t *testing.T) {
 		initMockResolverForRuntime(rt, "anotherResolver", nil)
 
 		// act
-		err = rt.initNameResolution()
+		err = rt.initNameResolution(context.Background())
 
 		// assert
 		assert.Error(t, err)
@@ -921,7 +921,7 @@ func TestInitNameResolution(t *testing.T) {
 		initMockResolverForRuntime(rt, "someResolver", nil)
 
 		// act
-		err = rt.initNameResolution()
+		err = rt.initNameResolution(context.Background())
 
 		// assert
 		assert.NoError(t, err, "expected no error")
@@ -939,7 +939,7 @@ func TestInitNameResolution(t *testing.T) {
 		initMockResolverForRuntime(rt, "mdns", nil)
 
 		// act
-		err = rt.initNameResolution()
+		err = rt.initNameResolution(context.Background())
 
 		// assert
 		assert.NoError(t, err, "expected no error")
@@ -957,7 +957,7 @@ func TestInitNameResolution(t *testing.T) {
 		initMockResolverForRuntime(rt, "mdns", nil)
 
 		// act
-		err = rt.initNameResolution()
+		err = rt.initNameResolution(context.Background())
 
 		// assert
 		assert.NoError(t, err, "expected no error")
@@ -975,7 +975,7 @@ func TestInitNameResolution(t *testing.T) {
 		initMockResolverForRuntime(rt, "kubernetes", nil)
 
 		// act
-		err = rt.initNameResolution()
+		err = rt.initNameResolution(context.Background())
 
 		// assert
 		assert.NoError(t, err, "expected no error")
@@ -993,7 +993,7 @@ func TestInitNameResolution(t *testing.T) {
 		initMockResolverForRuntime(rt, "kubernetes", nil)
 
 		// act
-		err = rt.initNameResolution()
+		err = rt.initNameResolution(context.Background())
 
 		// assert
 		assert.NoError(t, err, "expected no error")
