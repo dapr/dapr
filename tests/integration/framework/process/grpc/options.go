@@ -15,6 +15,7 @@ package grpc
 
 import (
 	"context"
+	"net"
 	"testing"
 
 	"google.golang.org/grpc"
@@ -24,6 +25,7 @@ import (
 type options struct {
 	registerFns []func(*grpc.Server)
 	serverOpts  []func(*testing.T, context.Context) grpc.ServerOption
+	listener    func() (net.Listener, error)
 }
 
 func WithRegister(f func(*grpc.Server)) Option {
@@ -35,5 +37,11 @@ func WithRegister(f func(*grpc.Server)) Option {
 func WithServerOption(opt func(t *testing.T, ctx context.Context) grpc.ServerOption) Option {
 	return func(o *options) {
 		o.serverOpts = append(o.serverOpts, opt)
+	}
+}
+
+func WithListener(l func() (net.Listener, error)) Option {
+	return func(o *options) {
+		o.listener = l
 	}
 }
