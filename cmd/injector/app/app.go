@@ -17,7 +17,6 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"os"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -26,7 +25,6 @@ import (
 	"github.com/dapr/dapr/pkg/buildinfo"
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"github.com/dapr/dapr/pkg/health"
-	"github.com/dapr/dapr/pkg/injector/sentry"
 	"github.com/dapr/dapr/pkg/injector/service"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
@@ -40,7 +38,7 @@ import (
 var log = logger.NewLogger("dapr.injector")
 
 func Run() {
-	opts := options.New(os.Args[1:])
+	opts := options.New()
 
 	// Apply options to all loggers
 	err := logger.ApplyOptionsToLoggers(&opts.Logger)
@@ -83,10 +81,15 @@ func Run() {
 		log.Fatalf("Failed to get authentication uids from services accounts: %s", err)
 	}
 
+	namespace, err := security.CurrentNamespaceOrError()
+	if err != nil {
+		log.Fatalf("Failed to get current namespace: %s", err)
+	}
+
 	secProvider, err := security.New(ctx, security.Options{
 		SentryAddress:           cfg.SentryAddress,
 		ControlPlaneTrustDomain: cfg.ControlPlaneTrustDomain,
-		ControlPlaneNamespace:   security.CurrentNamespace(),
+		ControlPlaneNamespace:   namespace,
 		TrustAnchorsFile:        cfg.TrustAnchorsFile,
 		AppID:                   "dapr-injector",
 		MTLSEnabled:             true,
@@ -108,7 +111,7 @@ func Run() {
 		log.Fatalf("Error creating injector: %v", err)
 	}
 
-	healthzServer := health.NewServer(health.Options{Log: log})
+	healthzServer := health.NewServer(log)
 	caBundleCh := make(chan []byte)
 	mngr := concurrency.NewRunnerManager(
 		metricsExporter.Run,
@@ -118,23 +121,8 @@ func Run() {
 			if rerr != nil {
 				return rerr
 			}
-			sentryID, rerr := security.SentryID(sec.ControlPlaneTrustDomain(), security.CurrentNamespace())
-			if err != nil {
-				return rerr
-			}
-			requester, derr := sentry.New(ctx, sentry.Options{
-				SentryAddress: cfg.SentryAddress,
-				SentryID:      sentryID,
-				Security:      sec,
-			})
-			if derr != nil {
-				return derr
-			}
-
 			return inj.Run(ctx,
 				sec.TLSServerConfigNoClientAuth(),
-				sentryID,
-				requester.RequestCertificateFromSentry,
 				sec.CurrentTrustAnchors,
 			)
 		},

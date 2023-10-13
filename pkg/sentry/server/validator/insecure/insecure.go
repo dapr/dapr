@@ -36,6 +36,6 @@ func (s *insecure) Start(ctx context.Context) error {
 	return nil
 }
 
-func (s *insecure) Validate(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (spiffeid.TrustDomain, bool, error) {
+func (s *insecure) Validate(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (spiffeid.TrustDomain, error) {
 	return internal.Validate(ctx, req)
 }

@@ -59,7 +59,6 @@ func (m *insecure) Run(t *testing.T, parentCtx context.Context) {
 		defaultNamespace = "default"
 	)
 	defaultAppSPIFFEID := fmt.Sprintf("spiffe://public/ns/%s/%s", defaultNamespace, defaultAppID)
-	defaultAppDNSName := fmt.Sprintf("%s.%s.svc.cluster.local", defaultAppID, defaultNamespace)
 
 	m.proc.WaitUntilRunning(t, parentCtx)
 
@@ -102,7 +101,7 @@ func (m *insecure) Run(t *testing.T, parentCtx context.Context) {
 		require.NoError(t, err)
 		require.NotEmpty(t, res.GetWorkloadCertificate())
 
-		validateCertificateResponse(t, res, m.proc.CABundle(), defaultAppSPIFFEID, defaultAppDNSName)
+		validateCertificateResponse(t, res, m.proc.CABundle(), defaultAppSPIFFEID)
 	})
 
 	t.Run("insecure validator is the default", func(t *testing.T) {
@@ -117,7 +116,7 @@ func (m *insecure) Run(t *testing.T, parentCtx context.Context) {
 		require.NoError(t, err)
 		require.NotEmpty(t, res.GetWorkloadCertificate())
 
-		validateCertificateResponse(t, res, m.proc.CABundle(), defaultAppSPIFFEID, defaultAppDNSName)
+		validateCertificateResponse(t, res, m.proc.CABundle(), defaultAppSPIFFEID)
 	})
 
 	t.Run("fails with missing CSR", func(t *testing.T) {
