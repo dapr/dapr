@@ -255,7 +255,7 @@ jobs:
           ./dist/linux_amd64/release/placement &
       - name: Spin local environment
         run: |
-          docker-compose -f ./sdk-tests/deploy/local-test.yml up -d mongo kafka
+          docker-compose -f ./java-sdk/sdk-tests/deploy/local-test.yml up -d mongo kafka
           docker ps
       - name: Install local ToxiProxy to simulate connectivity issues to Dapr sidecar
         run: |
