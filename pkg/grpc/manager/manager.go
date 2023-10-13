@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -153,6 +154,10 @@ func (g *Manager) createLocalConnection(parentCtx context.Context, port int, ena
 	} else {
 		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	}
+	opts = append(opts, grpc.WithConnectParams(grpc.ConnectParams{
+		Backoff:           backoff.DefaultConfig,
+		MinConnectTimeout: 1 * time.Second,
+	}))
 
 	dialPrefix := GetDialAddressPrefix(g.mode)
 	address := net.JoinHostPort(g.channelConfig.BaseAddress, strconv.Itoa(port))
