@@ -453,3 +453,6 @@ replace github.com/microcosm-cc/bluemonday => github.com/microcosm-cc/bluemonday
 //
 // Then, run `make modtidy` in this repository.
 // This ensures that go.mod and go.sum are up-to-date.
+
+// TODO: REMOVE
+replace github.com/dapr/components-contrib => github.com/italypaleale/dapr-components-contrib v1.10.2-0.20231013225904-b55509fe9b3a
