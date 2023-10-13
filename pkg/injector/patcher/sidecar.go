@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cast"
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	corev1 "k8s.io/api/core/v1"
 
 	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
@@ -53,6 +54,7 @@ type SidecarConfig struct {
 	ControlPlaneTrustDomain     string
 	ActorsService               string
 	RemindersService            string
+	SentrySPIFFEID              spiffeid.ID
 	SidecarHTTPPort             int32 `default:"3500"`
 	SidecarAPIGRPCPort          int32 `default:"50001"`
 	SidecarInternalGRPCPort     int32 `default:"50002"`

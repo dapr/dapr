@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	jsonpatch "github.com/evanphx/json-patch/v5"
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -269,6 +270,10 @@ func TestPatching(t *testing.T) {
 			c.Identity = "pod:identity"
 			c.CertChain = "certchain"
 			c.CertKey = "certkey"
+			td, err := spiffeid.TrustDomainFromString("foo.bar")
+			require.NoError(t, err)
+			c.SentrySPIFFEID, err = spiffeid.FromSegments(td, "ns", "example", "dapr-sentry")
+			require.NoError(t, err)
 
 			if tc.sidecarConfigModifierFn != nil {
 				tc.sidecarConfigModifierFn(c)
@@ -317,6 +322,9 @@ func TestPatching(t *testing.T) {
 				tokenVolume := pod.Spec.Volumes[0]
 				assert.Equal(t, "dapr-identity-token", tokenVolume.Name)
 				assert.NotNil(t, tokenVolume.Projected)
+				require.Len(t, tokenVolume.Projected.Sources, 1)
+				require.NotNil(t, tokenVolume.Projected.Sources[0].ServiceAccountToken)
+				assert.Equal(t, "spiffe://foo.bar/ns/example/dapr-sentry", tokenVolume.Projected.Sources[0].ServiceAccountToken.Audience)
 
 				// Assertions on added labels
 				assert.Equal(t, "true", pod.Labels[injectorConsts.SidecarInjectedLabel])
@@ -351,6 +359,9 @@ func TestPatching(t *testing.T) {
 				tokenVolume := pod.Spec.Volumes[1]
 				assert.Equal(t, "dapr-identity-token", tokenVolume.Name)
 				assert.NotNil(t, tokenVolume.Projected)
+				require.Len(t, tokenVolume.Projected.Sources, 1)
+				require.NotNil(t, tokenVolume.Projected.Sources[0].ServiceAccountToken)
+				assert.Equal(t, "spiffe://foo.bar/ns/example/dapr-sentry", tokenVolume.Projected.Sources[0].ServiceAccountToken.Audience)
 
 				// Check the presence of the volume mount in the app container
 				appContainer := pod.Spec.Containers[0]
