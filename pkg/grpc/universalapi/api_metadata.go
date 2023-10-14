@@ -39,10 +39,17 @@ func (a *UniversalAPI) GetMetadata(ctx context.Context, in *emptypb.Empty) (*run
 	// This is deprecated, but we still need to support it for backward compatibility.
 	extendedMetadata[daprRuntimeVersionKey] = buildinfo.Version()
 
-	// Active actors count
-	activeActorsCount := []*runtimev1pb.ActiveActorsCount{}
-	if a.Actors != nil {
-		activeActorsCount = a.Actors.GetActiveActorsCount(ctx)
+	// Actor runtime
+	var actorRuntime *runtimev1pb.ActorRuntime
+	if a.actorsReady.Load() {
+		if a.Actors == nil {
+			actorRuntime = &runtimev1pb.ActorRuntime{
+				RuntimeStatus: runtimev1pb.ActorRuntime_DISABLED,
+			}
+		} else {
+			actorRuntime = a.Actors.GetRuntimeStatus(ctx)
+			actorRuntime.RuntimeStatus = runtimev1pb.ActorRuntime_RUNNING
+		}
 	}
 
 	// App connection information
@@ -105,12 +112,13 @@ func (a *UniversalAPI) GetMetadata(ctx context.Context, in *emptypb.Empty) (*run
 		Id:                      a.AppID,
 		ExtendedMetadata:        extendedMetadata,
 		RegisteredComponents:    registeredComponents,
-		ActiveActorsCount:       activeActorsCount,
+		ActiveActorsCount:       actorRuntime.GetActiveActors(), // Alias for backwards-compatibility
 		Subscriptions:           ps,
 		HttpEndpoints:           registeredHTTPEndpoints,
 		AppConnectionProperties: appConnectionProperties,
 		RuntimeVersion:          buildinfo.Version(),
 		EnabledFeatures:         a.GlobalConfig.EnabledFeatures(),
+		ActorRuntime:            actorRuntime,
 	}, nil
 }
 
