@@ -219,9 +219,8 @@ jobs:
         make setup-helm-init
         make setup-test-env-redis
         make setup-test-env-kafka
-        make setup-test-env-mongodb
         make setup-test-env-zipkin
-        helm upgrade --install dapr-kafka bitnami/kafka --version 23.0.7 -f ./tests/config/kafka_override.yaml --namespace ${{ env.DAPR_NAMESPACE }} --timeout 10m0s
+        make setup-test-env-postgres
         make setup-test-components
 
     - name: Free up some diskspace
