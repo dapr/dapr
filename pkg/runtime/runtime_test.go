@@ -871,16 +871,18 @@ func TestInitNameResolution(t *testing.T) {
 			resolverName,
 		)
 
-		expectedMetadata := nameresolution.Metadata{Base: mdata.Base{
-			Name: resolverName,
-			Properties: map[string]string{
-				nameresolution.DaprHTTPPort: strconv.Itoa(rt.runtimeConfig.httpPort),
-				nameresolution.DaprPort:     strconv.Itoa(rt.runtimeConfig.internalGRPCPort),
-				nameresolution.AppPort:      strconv.Itoa(rt.runtimeConfig.appConnectionConfig.Port),
-				nameresolution.HostAddress:  rt.hostAddress,
-				nameresolution.AppID:        rt.runtimeConfig.id,
+		expectedMetadata := nameresolution.Metadata{
+			Base: mdata.Base{
+				Name: resolverName,
 			},
-		}}
+			Instance: nameresolution.Instance{
+				DaprHTTPPort:     rt.runtimeConfig.httpPort,
+				DaprInternalPort: rt.runtimeConfig.internalGRPCPort,
+				AppPort:          rt.runtimeConfig.appConnectionConfig.Port,
+				Address:          rt.hostAddress,
+				AppID:            rt.runtimeConfig.id,
+			},
+		}
 
 		mockResolver.On("Init", expectedMetadata).Return(e)
 
