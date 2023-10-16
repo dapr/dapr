@@ -15,6 +15,7 @@ package iowriter
 
 import (
 	"fmt"
+	"io"
 	"sync"
 	"testing"
 
@@ -24,6 +25,7 @@ import (
 
 type mockLogger struct {
 	msgs []string
+	t    *testing.T
 }
 
 func (m *mockLogger) Log(args ...any) {
@@ -34,9 +36,13 @@ func (m mockLogger) Name() string {
 	return "TestLogger"
 }
 
+func (m mockLogger) Cleanup(fn func()) {
+	m.t.Cleanup(fn)
+}
+
 func TestNew(t *testing.T) {
 	t.Run("should return new stdwriter", func(t *testing.T) {
-		writer := New(new(mockLogger), "proc")
+		writer := New(&mockLogger{t: t}, "proc")
 		_, ok := writer.(*stdwriter)
 		assert.True(t, ok)
 	})
@@ -44,7 +50,7 @@ func TestNew(t *testing.T) {
 
 func TestWrite(t *testing.T) {
 	t.Run("should write to buffer", func(t *testing.T) {
-		logger := new(mockLogger)
+		logger := &mockLogger{t: t}
 		writer := New(logger, "proc").(*stdwriter)
 
 		_, err := writer.Write([]byte("test"))
@@ -52,31 +58,35 @@ func TestWrite(t *testing.T) {
 		assert.Equal(t, "test", writer.buf.String())
 	})
 
-	t.Run("should flush on newline", func(t *testing.T) {
-		logger := new(mockLogger)
+	t.Run("should not flush on newline but on close", func(t *testing.T) {
+		logger := &mockLogger{t: t}
 		writer := New(logger, "proc").(*stdwriter)
 
 		_, err := writer.Write([]byte("test\n"))
 		require.NoError(t, err)
 
-		assert.Equal(t, 0, writer.buf.Len())
+		assert.Equal(t, 5, writer.buf.Len())
+
+		assert.Len(t, logger.msgs, 0)
+
+		assert.NoError(t, writer.Close())
 
 		_ = assert.Len(t, logger.msgs, 1) && assert.Equal(t, "TestLogger/proc: test", logger.msgs[0])
 	})
 
-	t.Run("should return error when closed", func(t *testing.T) {
-		writer := New(new(mockLogger), "proc").(*stdwriter)
-		writer.Close()
+	t.Run("should not return error on write when closed", func(t *testing.T) {
+		writer := New(&mockLogger{t: t}, "proc").(*stdwriter)
+		assert.NoError(t, writer.Close())
 
 		_, err := writer.Write([]byte("test\n"))
-		assert.NoError(t, err)
-		assert.Empty(t, writer.buf.String())
+		assert.NoError(t, err, io.ErrClosedPipe)
+		assert.Equal(t, "test\n", writer.buf.String())
 	})
 }
 
 func TestClose(t *testing.T) {
 	t.Run("should flush and close", func(t *testing.T) {
-		logger := new(mockLogger)
+		logger := &mockLogger{t: t}
 		writer := New(logger, "proc").(*stdwriter)
 		writer.Write([]byte("test"))
 		writer.Close()
@@ -88,7 +98,7 @@ func TestClose(t *testing.T) {
 
 func TestConcurrency(t *testing.T) {
 	t.Run("should handle concurrent writes", func(t *testing.T) {
-		logger := new(mockLogger)
+		logger := &mockLogger{t: t}
 		writer := New(logger, "proc").(*stdwriter)
 		wg := sync.WaitGroup{}
 		wg.Add(2)
@@ -108,6 +118,8 @@ func TestConcurrency(t *testing.T) {
 		}()
 
 		wg.Wait()
+
+		assert.NoError(t, writer.Close())
 
 		assert.Equal(t, 0, writer.buf.Len())
 		assert.Len(t, logger.msgs, 2000)

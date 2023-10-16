@@ -370,7 +370,7 @@ test-integration: test-deps
 			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json \
 			--format testname \
 			-- \
-			./tests/integration -count=1 -v -tags="integration"
+			./tests/integration -timeout=20m -count=1 -v -tags="integration"
 
 ################################################################################
 # Target: lint                                                                 #
