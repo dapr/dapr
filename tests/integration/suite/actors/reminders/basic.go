@@ -103,7 +103,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(c, http.StatusOK, resp.StatusCode)
 	}, time.Second*10, time.Millisecond*100, "actor not ready in time")
 
-	body := `{"dueTime": "100ms"}`
+	body := `{"dueTime": "0ms"}`
 	req, err = http.NewRequest(http.MethodPost, daprdURL+"/v1.0/actors/myactortype/myactorid/reminders/remindermethod", strings.NewReader(body))
 	require.NoError(t, err)
 
@@ -127,7 +127,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		ActorType: "myactortype",
 		ActorId:   "myactorid",
 		Name:      "remindermethod",
-		DueTime:   "100ms",
+		DueTime:   "0ms",
 	})
 	require.NoError(t, err)
 
