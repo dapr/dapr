@@ -1,0 +1,13 @@
+diff --git a/tests/e2e/actor_reminder/actor_reminder_test.go b/tests/e2e/actor_reminder/actor_reminder_test.go
+index 45047f423..fbcfd8321 100644
+--- a/tests/e2e/actor_reminder/actor_reminder_test.go
++++ b/tests/e2e/actor_reminder/actor_reminder_test.go
+@@ -375,6 +375,8 @@ func TestActorReminder(t *testing.T) {
+ 	})
+ 
+ 	t.Run("Actor reminder rename should succeed.", func(t *testing.T) {
++		t.Skip("Actor reminder rename is no longer supported in 1.13")
++
+ 		var wg sync.WaitGroup
+ 		for iteration := 1; iteration <= numIterations; iteration++ {
+ 			wg.Add(1)

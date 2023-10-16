@@ -33,6 +33,7 @@ import (
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -232,47 +233,27 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, "application/json", resp.ContentType)
 	})
 
-	t.Run("parallel requests", func(t *testing.T) {
-		errCh := make(chan error)
-		for i := 0; i < 100; i++ {
-			go func(i int) {
-				host := fmt.Sprintf("localhost:%d", b.daprd1.GRPCPort())
-				conn, err := grpc.DialContext(ctx, host,
-					grpc.WithTransportCredentials(insecure.NewCredentials()),
-					grpc.WithBlock(),
-				)
-				if err != nil {
-					errCh <- err
-					return
-				}
+	pt := util.NewParallel(t)
+	for i := 0; i < 100; i++ {
+		pt.Add(func(c *assert.CollectT) {
+			host := fmt.Sprintf("localhost:%d", b.daprd1.GRPCPort())
+			conn, err := grpc.DialContext(ctx, host, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+			require.NoError(c, err)
+			t.Cleanup(func() { require.NoError(c, conn.Close()) })
 
-				resp, err := rtv1.NewDaprClient(conn).InvokeService(ctx, &rtv1.InvokeServiceRequest{
-					Id: b.daprd2.AppID(),
-					Message: &commonv1.InvokeRequest{
-						Method:        "foo",
-						HttpExtension: &commonv1.HTTPExtension{Verb: commonv1.HTTPExtension_POST},
-					},
-				})
-				if err != nil {
-					errCh <- err
-					return
-				}
-				if string(resp.Data.Value) != "POST" {
-					errCh <- fmt.Errorf("value is '%s', expected 'POST'", string(resp.Data.Value))
-					return
-				}
-				if resp.ContentType != "201" {
-					errCh <- fmt.Errorf("content type is '%s', expected '201'", resp.ContentType)
-					return
-				}
-				errCh <- conn.Close()
-			}(i)
-		}
+			resp, err := rtv1.NewDaprClient(conn).InvokeService(ctx, &rtv1.InvokeServiceRequest{
+				Id: b.daprd2.AppID(),
+				Message: &commonv1.InvokeRequest{
+					Method:        "foo",
+					HttpExtension: &commonv1.HTTPExtension{Verb: commonv1.HTTPExtension_POST},
+				},
+			})
+			require.NoError(c, err)
 
-		for i := 0; i < 100; i++ {
-			require.NoError(t, <-errCh)
-		}
-	})
+			assert.Equal(c, "POST", string(resp.Data.Value))
+			assert.Equal(c, "201", resp.ContentType)
+		})
+	}
 
 	t.Run("type URL", func(t *testing.T) {
 		host := fmt.Sprintf("localhost:%d", b.daprd1.GRPCPort())
