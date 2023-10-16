@@ -15,11 +15,13 @@ package http
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -140,6 +142,26 @@ func (h *httpendpoints) Run(t *testing.T, ctx context.Context) {
 	httpClient := util.HTTPClient(t)
 
 	invokeTests := func(t *testing.T, expTLSCode int, assertBody func(t *testing.T, body string), daprd *procdaprd.Daprd) {
+		for _, port := range []int{
+			h.daprd1.HTTPPort(),
+			h.daprd2.HTTPPort(),
+		} {
+			assert.EventuallyWithT(t, func(t *assert.CollectT) {
+				url := fmt.Sprintf("http://localhost:%d/v1.0/metadata", port)
+				req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+				require.NoError(t, err)
+
+				resp, err := httpClient.Do(req)
+				require.NoError(t, err)
+
+				body := make(map[string]any)
+				require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+				require.NoError(t, resp.Body.Close())
+				endpoints, ok := body["httpEndpoints"]
+				_ = assert.True(t, ok) && assert.Len(t, endpoints.([]any), 2)
+			}, time.Second*5, time.Millisecond*100)
+		}
+
 		t.Run("invoke http endpoint", func(t *testing.T) {
 			doReq := func(method, url string, headers map[string]string) (int, string) {
 				req, err := http.NewRequestWithContext(ctx, method, url, nil)
