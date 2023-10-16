@@ -58,15 +58,14 @@ func Build(t *testing.T, name string) {
 			binPath += ".exe"
 		}
 
-		// Ensure CGO is disabled to avoid linking against system libraries.
-		require.NoError(t, os.Setenv("CGO_ENABLED", "0"))
-
 		t.Logf("Root dir: %q", rootDir)
 		t.Logf("Compiling %q binary to: %q", name, binPath)
-		cmd := exec.Command("go", "build", "-tags=allcomponents", "-v", "-o", binPath, filepath.Join(rootDir, "cmd/"+name))
+		cmd := exec.Command("go", "build", "-tags=allcomponents", "-v", "-o", binPath, "./cmd/"+name)
 		cmd.Dir = rootDir
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
+		// Ensure CGO is disabled to avoid linking against system libraries.
+		cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
 		require.NoError(t, cmd.Run())
 
 		require.NoError(t, os.Setenv(EnvKey(name), binPath))
