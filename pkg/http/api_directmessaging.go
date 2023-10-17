@@ -98,11 +98,8 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 	}
 	defer req.Close()
 
-	policyRunner := resiliency.NewRunnerWithOptions(
+	policyRunner := resiliency.NewRunner[*invokev1.InvokeMethodResponse](
 		r.Context(), policyDef,
-		resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
-			Disposer: resiliency.DisposerCloser[*invokev1.InvokeMethodResponse],
-		},
 	)
 	// Since we don't want to return the actual error, we have to extract several things in order to construct our response.
 	resp, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
