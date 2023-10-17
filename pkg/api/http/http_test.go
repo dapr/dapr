@@ -142,10 +142,10 @@ var testResiliency = &v1alpha1.Resiliency{
 func TestPubSubEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
-		universal: &universal.Universal{
+		universal: universal.New(universal.Options{
 			AppID:     "fakeAPI",
 			CompStore: compstore.New(),
-		},
+		}),
 		pubsubAdapter: &daprt.MockPubSubAdapter{
 			PublishFn: func(ctx context.Context, req *pubsub.PublishRequest) error {
 				if req.PubsubName == "errorpubsub" {
@@ -167,10 +167,10 @@ func TestPubSubEndpoints(t *testing.T) {
 
 	mock := daprt.MockPubSub{}
 	mock.On("Features").Return([]pubsub.Feature{})
-	testAPI.universal.CompStore.AddPubSub("pubsubname", compstore.PubsubItem{Component: &mock})
-	testAPI.universal.CompStore.AddPubSub("errorpubsub", compstore.PubsubItem{Component: &mock})
-	testAPI.universal.CompStore.AddPubSub("errnotfound", compstore.PubsubItem{Component: &mock})
-	testAPI.universal.CompStore.AddPubSub("errnotallowed", compstore.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore().AddPubSub("pubsubname", compstore.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore().AddPubSub("errorpubsub", compstore.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore().AddPubSub("errnotfound", compstore.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore().AddPubSub("errnotallowed", compstore.PubsubItem{Component: &mock})
 
 	fakeServer.StartServer(testAPI.constructPubSubEndpoints(), nil)
 
@@ -312,10 +312,10 @@ func TestPubSubEndpoints(t *testing.T) {
 func TestBulkPubSubEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
-		universal: &universal.Universal{
+		universal: universal.New(universal.Options{
 			AppID:     "fakeAPI",
 			CompStore: compstore.New(),
-		},
+		}),
 		pubsubAdapter: &daprt.MockPubSubAdapter{
 			BulkPublishFn: func(ctx context.Context, req *pubsub.BulkPublishRequest) (pubsub.BulkPublishResponse, error) {
 				switch req.PubsubName {
@@ -345,10 +345,10 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 
 	mock := daprt.MockPubSub{}
 	mock.On("Features").Return([]pubsub.Feature{})
-	testAPI.universal.CompStore.AddPubSub("pubsubname", compstore.PubsubItem{Component: &mock})
-	testAPI.universal.CompStore.AddPubSub("errorpubsub", compstore.PubsubItem{Component: &mock})
-	testAPI.universal.CompStore.AddPubSub("errnotfound", compstore.PubsubItem{Component: &mock})
-	testAPI.universal.CompStore.AddPubSub("errnotallowed", compstore.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore().AddPubSub("pubsubname", compstore.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore().AddPubSub("errorpubsub", compstore.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore().AddPubSub("errnotfound", compstore.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore().AddPubSub("errnotallowed", compstore.PubsubItem{Component: &mock})
 
 	fakeServer.StartServer(testAPI.constructPubSubEndpoints(), nil)
 
@@ -781,11 +781,11 @@ func TestShutdownEndpoints(t *testing.T) {
 
 	shutdownCh := make(chan struct{})
 	testAPI := &api{
-		universal: &universal.Universal{
+		universal: universal.New(universal.Options{
 			ShutdownFn: func() {
 				close(shutdownCh)
 			},
-		},
+		}),
 	}
 
 	fakeServer.StartServer(testAPI.constructShutdownEndpoints(), nil)
@@ -1000,12 +1000,11 @@ func TestV1ActorEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	rc := resiliency.FromConfigurations(logger.NewLogger("test.api.http.actors"), testResiliency)
 	testAPI := &api{
-		universal: &universal.Universal{
+		universal: universal.New(universal.Options{
 			AppID:      "fakeAPI",
 			Resiliency: rc,
-		},
+		}),
 	}
-	testAPI.universal.Init()
 	testAPI.universal.SetActorsInitDone()
 
 	fakeServer.StartServer(testAPI.constructActorEndpoints(), nil)
@@ -1021,7 +1020,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			"v1.0/actors/fakeActorType/fakeActorID/method/method1":      {"POST", "PUT", "GET", "DELETE"},
 			"v1.0/actors/fakeActorType/fakeActorID/timers/timer1":       {"POST", "PUT", "DELETE"},
 		}
-		testAPI.universal.Actors = nil
+		testAPI.universal.SetActorRuntime(nil)
 
 		for apiPath, testMethods := range apisAndMethods {
 			for _, method := range testMethods {
@@ -1038,7 +1037,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 	})
 
 	t.Run("All PUT/POST APIs - 400 for invalid JSON", func(t *testing.T) {
-		testAPI.universal.Actors = new(actors.MockActors)
+		testAPI.universal.SetActorRuntime(new(actors.MockActors))
 		apiPaths := []string{
 			"v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1",
 			"v1.0/actors/fakeActorType/fakeActorID/state",
@@ -1079,7 +1078,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			ActorType: "fakeActorType",
 		}).Return(true)
 
-		testAPI.universal.Actors = mockActors
+		testAPI.universal.SetActorRuntime(mockActors)
 
 		// act
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
@@ -1105,7 +1104,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			ActorType: "fakeActorType",
 		}).Return(true)
 
-		testAPI.universal.Actors = mockActors
+		testAPI.universal.SetActorRuntime(mockActors)
 
 		// act
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
@@ -1131,7 +1130,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			ActorType: "fakeActorType",
 		}).Return(true)
 
-		testAPI.universal.Actors = mockActors
+		testAPI.universal.SetActorRuntime(mockActors)
 
 		// act
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
@@ -1159,7 +1158,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			ActorType: "fakeActorType",
 		}).Return(func(*actors.ActorHostedRequest) bool { return false })
 
-		testAPI.universal.Actors = mockActors
+		testAPI.universal.SetActorRuntime(mockActors)
 
 		// act
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
@@ -1202,7 +1201,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			ActorType: "fakeActorType",
 		}).Return(true)
 
-		testAPI.universal.Actors = mockActors
+		testAPI.universal.SetActorRuntime(mockActors)
 
 		// act
 		inputBodyBytes, err := json.Marshal(testTransactionalOperations)
@@ -1242,7 +1241,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			ActorType: "fakeActorType",
 		}).Return(func(*actors.ActorHostedRequest) bool { return false })
 
-		testAPI.universal.Actors = mockActors
+		testAPI.universal.SetActorRuntime(mockActors)
 
 		// act
 		inputBodyBytes, err := json.Marshal(testTransactionalOperations)
@@ -1288,7 +1287,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			ActorType: "fakeActorType",
 		}).Return(true)
 
-		testAPI.universal.Actors = mockActors
+		testAPI.universal.SetActorRuntime(mockActors)
 
 		// act
 		inputBodyBytes, err := json.Marshal(testTransactionalOperations)
@@ -1319,7 +1318,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 		mockActors.On("CreateReminder", &reminderRequest).Return(nil)
 
-		testAPI.universal.Actors = mockActors
+		testAPI.universal.SetActorRuntime(mockActors)
 
 		// act
 		inputBodyBytes, err := json.Marshal(reminderRequest)
@@ -1349,7 +1348,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 		mockActors.On("CreateReminder", &reminderRequest).Return(errors.New("UPSTREAM_ERROR"))
 
-		testAPI.universal.Actors = mockActors
+		testAPI.universal.SetActorRuntime(mockActors)
 
 		// act
 		inputBodyBytes, err := json.Marshal(reminderRequest)
@@ -1371,7 +1370,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			On("CreateReminder", mock.AnythingOfType("*internal.CreateReminderRequest")).
 			Return(actors.ErrReminderOpActorNotHosted)
 
-		testAPI.universal.Actors = mockActors
+		testAPI.universal.SetActorRuntime(mockActors)
 
 		// act
 		resp := fakeServer.DoRequest("POST", apiPath, []byte("{}"), nil)
@@ -1394,7 +1393,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 		mockActors.On("DeleteReminder", &reminderRequest).Return(nil)
 
-		testAPI.universal.Actors = mockActors
+		testAPI.universal.SetActorRuntime(mockActors)
 
 		// act
 		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil)
@@ -1417,7 +1416,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 		mockActors.On("DeleteReminder", &reminderRequest).Return(errors.New("UPSTREAM_ERROR"))
 
-		testAPI.universal.Actors = mockActors
+		testAPI.universal.SetActorRuntime(mockActors)
 
 		// act
 		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil)
@@ -1436,7 +1435,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			On("DeleteReminder", mock.AnythingOfType("*internal.DeleteReminderRequest")).
 			Return(actors.ErrReminderOpActorNotHosted)
 
-		testAPI.universal.Actors = mockActors
+		testAPI.universal.SetActorRuntime(mockActors)
 
 		// act
 		resp := fakeServer.DoRequest("DELETE", apiPath, []byte("{}"), nil)
@@ -1459,7 +1458,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 		mockActors.On("GetReminder", &reminderRequest).Return(nil, nil)
 
-		testAPI.universal.Actors = mockActors
+		testAPI.universal.SetActorRuntime(mockActors)
 
 		// act
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
@@ -1481,7 +1480,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 		mockActors.On("GetReminder", &reminderRequest).Return(nil, errors.New("UPSTREAM_ERROR"))
 
-		testAPI.universal.Actors = mockActors
+		testAPI.universal.SetActorRuntime(mockActors)
 
 		// act
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
@@ -1500,7 +1499,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			On("GetReminder", mock.AnythingOfType("*internal.GetReminderRequest")).
 			Return(nil, actors.ErrReminderOpActorNotHosted)
 
-		testAPI.universal.Actors = mockActors
+		testAPI.universal.SetActorRuntime(mockActors)
 
 		// act
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
@@ -1528,7 +1527,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 		mockActors.On("GetReminder", &reminderRequest).Return(&reminderResponse, nil)
 
-		testAPI.universal.Actors = mockActors
+		testAPI.universal.SetActorRuntime(mockActors)
 
 		// act
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
@@ -1555,7 +1554,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 		mockActors.On("CreateTimer", &timerRequest).Return(nil)
 
-		testAPI.universal.Actors = mockActors
+		testAPI.universal.SetActorRuntime(mockActors)
 
 		// act
 		inputBodyBytes, err := json.Marshal(timerRequest)
@@ -1585,7 +1584,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 		mockActors.On("CreateTimer", &timerRequest).Return(errors.New("UPSTREAM_ERROR"))
 
-		testAPI.universal.Actors = mockActors
+		testAPI.universal.SetActorRuntime(mockActors)
 
 		// act
 		inputBodyBytes, err := json.Marshal(timerRequest)
@@ -1611,7 +1610,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 		mockActors.On("DeleteTimer", &timerRequest).Return(nil)
 
-		testAPI.universal.Actors = mockActors
+		testAPI.universal.SetActorRuntime(mockActors)
 
 		// act
 		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil)
@@ -1634,7 +1633,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 		mockActors.On("DeleteTimer", &timerRequest).Return(errors.New("UPSTREAM_ERROR"))
 
-		testAPI.universal.Actors = mockActors
+		testAPI.universal.SetActorRuntime(mockActors)
 
 		// act
 		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil)
@@ -1668,7 +1667,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			return true
 		})).Return(response, nil)
 
-		testAPI.universal.Actors = mockActors
+		testAPI.universal.SetActorRuntime(mockActors)
 
 		// act
 		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
@@ -1697,7 +1696,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			return true
 		})).Return(nil, errors.New("UPSTREAM_ERROR"))
 
-		testAPI.universal.Actors = mockActors
+		testAPI.universal.SetActorRuntime(mockActors)
 
 		// act
 		resp := fakeServer.DoRequest("POST", apiPath, []byte("fakeData"), nil)
@@ -1721,7 +1720,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 	}
 
 	t.Run("Direct Message - retries with resiliency", func(t *testing.T) {
-		testAPI.universal.Actors = failingActors
+		testAPI.universal.SetActorRuntime(failingActors)
 
 		msg := []byte("M'illumino d'immenso.")
 		apiPath := fmt.Sprintf("v1.0/actors/failingActorType/%s/method/method1", "failingId")
@@ -1824,7 +1823,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 	}
 
 	testAPI := &api{
-		universal: &universal.Universal{
+		universal: universal.New(universal.Options{
 			AppID:     "xyz",
 			CompStore: compStore,
 			GetComponentsCapabilitiesFn: func() map[string][]string {
@@ -1838,9 +1837,8 @@ func TestV1MetadataEndpoint(t *testing.T) {
 			},
 			AppConnectionConfig: appConnectionConfig,
 			GlobalConfig:        &config.Configuration{},
-		},
+		}),
 	}
-	testAPI.universal.Init()
 	testAPI.universal.SetActorRuntime(mockActors)
 	testAPI.universal.SetActorsInitDone()
 
@@ -1886,12 +1884,11 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 	createExporters(&buffer)
 
 	testAPI := &api{
-		universal: &universal.Universal{
+		universal: universal.New(universal.Options{
 			Resiliency: resiliency.New(nil),
-		},
+		}),
 		tracingSpec: spec,
 	}
-	testAPI.universal.Init()
 	testAPI.universal.SetActorsInitDone()
 
 	fakeServer.StartServer(testAPI.constructActorEndpoints(), &fakeHTTPServerOptions{
@@ -1903,7 +1900,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 	t.Run("Actor runtime is not initialized", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
-		testAPI.universal.Actors = nil
+		testAPI.universal.SetActorRuntime(nil)
 
 		testMethods := []string{"GET"}
 
@@ -1935,7 +1932,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 			ActorType: "fakeActorType",
 		}).Return(true)
 
-		testAPI.universal.Actors = mockActors
+		testAPI.universal.SetActorRuntime(mockActors)
 
 		// act
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
@@ -1978,7 +1975,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 			ActorType: "fakeActorType",
 		}).Return(true)
 
-		testAPI.universal.Actors = mockActors
+		testAPI.universal.SetActorRuntime(mockActors)
 
 		// act
 		inputBodyBytes, err := json.Marshal(testTransactionalOperations)
@@ -2012,10 +2009,10 @@ func TestAPIToken(t *testing.T) {
 
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
-		universal: &universal.Universal{
+		universal: universal.New(universal.Options{
 			CompStore:  compStore,
 			Resiliency: resiliency.New(nil),
-		},
+		}),
 	}
 	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints(), &fakeHTTPServerOptions{
 		apiAuth: true,
@@ -2134,10 +2131,10 @@ func TestEmptyPipelineWithTracer(t *testing.T) {
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
 		tracingSpec:     spec,
-		universal: &universal.Universal{
+		universal: universal.New(universal.Options{
 			CompStore:  compStore,
 			Resiliency: resiliency.New(nil),
-		},
+		}),
 	}
 	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints(), &fakeHTTPServerOptions{
 		spec:     &spec,
@@ -2180,10 +2177,10 @@ func TestConfigurationGet(t *testing.T) {
 	compStore := compstore.New()
 	compStore.AddConfiguration(storeName, fakeConfigurationStore)
 	testAPI := &api{
-		universal: &universal.Universal{
+		universal: universal.New(universal.Options{
 			Resiliency: resiliency.New(nil),
 			CompStore:  compStore,
-		},
+		}),
 	}
 	fakeServer.StartServer(testAPI.constructConfigurationEndpoints(), nil)
 
@@ -2382,10 +2379,10 @@ func TestV1Alpha1ConfigurationUnsubscribe(t *testing.T) {
 	compStore := compstore.New()
 	compStore.AddConfiguration(storeName, fakeConfigurationStore)
 	testAPI := &api{
-		universal: &universal.Universal{
+		universal: universal.New(universal.Options{
 			Resiliency: resiliency.New(nil),
 			CompStore:  compStore,
-		},
+		}),
 		channels: new(channels.Channels),
 	}
 	fakeServer.StartServer(testAPI.constructConfigurationEndpoints(), nil)
@@ -2484,11 +2481,11 @@ func TestV1Alpha1DistributedLock(t *testing.T) {
 	compStore := compstore.New()
 	compStore.AddLock(storeName, fakeLockStore)
 	testAPI := &api{
-		universal: &universal.Universal{
+		universal: universal.New(universal.Options{
 			Logger:     l,
 			CompStore:  compStore,
 			Resiliency: resiliencyConfig,
-		},
+		}),
 	}
 	fakeServer.StartServer(testAPI.constructDistributedLockEndpoints(), nil)
 
@@ -2653,11 +2650,11 @@ func TestV1Beta1Workflow(t *testing.T) {
 	compStore := compstore.New()
 	compStore.AddWorkflow(componentName, fakeWorkflowComponent)
 	testAPI := &api{
-		universal: &universal.Universal{
+		universal: universal.New(universal.Options{
 			Logger:     logger.NewLogger("fakeLogger"),
 			CompStore:  compStore,
 			Resiliency: resiliencyConfig,
-		},
+		}),
 	}
 	testAPI.universal.InitUniversalAPI()
 	testAPI.universal.SetActorsInitDone()
@@ -2975,10 +2972,10 @@ func TestSinglePipelineWithTracer(t *testing.T) {
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
 		tracingSpec:     spec,
-		universal: &universal.Universal{
+		universal: universal.New(universal.Options{
 			CompStore:  compStore,
 			Resiliency: resiliency.New(nil),
-		},
+		}),
 	}
 	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints(), &fakeHTTPServerOptions{
 		spec:     &spec,
@@ -3037,10 +3034,10 @@ func TestSinglePipelineWithNoTracing(t *testing.T) {
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
 		tracingSpec:     spec,
-		universal: &universal.Universal{
+		universal: universal.New(universal.Options{
 			CompStore:  compStore,
 			Resiliency: resiliency.New(nil),
-		},
+		}),
 	}
 	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints(), &fakeHTTPServerOptions{
 		spec:     &spec,
@@ -3256,11 +3253,11 @@ func TestV1StateEndpoints(t *testing.T) {
 	compStore.AddStateStore("failStore", failingStore)
 	rc := resiliency.FromConfigurations(logger.NewLogger("state.test"), testResiliency)
 	testAPI := &api{
-		universal: &universal.Universal{
+		universal: universal.New(universal.Options{
 			Logger:     logger.NewLogger("fakeLogger"),
 			CompStore:  compStore,
 			Resiliency: rc,
-		},
+		}),
 		pubsubAdapter: &daprt.MockPubSubAdapter{},
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints(), nil)
@@ -3276,16 +3273,16 @@ func TestV1StateEndpoints(t *testing.T) {
 
 		for apiPath, testMethods := range apisAndMethods {
 			for _, method := range testMethods {
-				for name := range testAPI.universal.CompStore.ListStateStores() {
-					testAPI.universal.CompStore.DeleteStateStore(name)
+				for name := range testAPI.universal.CompStore().ListStateStores() {
+					testAPI.universal.CompStore().DeleteStateStore(name)
 				}
 				resp := fakeServer.DoRequest(method, apiPath, nil, nil)
 				// assert
 				assert.Equal(t, 500, resp.StatusCode, apiPath)
 				assert.Equal(t, "ERR_STATE_STORE_NOT_CONFIGURED", resp.ErrorBody["errorCode"])
 
-				testAPI.universal.CompStore.AddStateStore("store1", fakeStore)
-				testAPI.universal.CompStore.AddStateStore("failStore", failingStore)
+				testAPI.universal.CompStore().AddStateStore("store1", fakeStore)
+				testAPI.universal.CompStore().AddStateStore("failStore", failingStore)
 
 				// act
 				resp = fakeServer.DoRequest(method, apiPath, nil, nil)
@@ -3810,11 +3807,11 @@ func TestStateStoreQuerierNotImplemented(t *testing.T) {
 	compStore := compstore.New()
 	compStore.AddStateStore("store1", newFakeStateStore())
 	testAPI := &api{
-		universal: &universal.Universal{
+		universal: universal.New(universal.Options{
 			Logger:     logger.NewLogger("fakeLogger"),
 			CompStore:  compStore,
 			Resiliency: resiliency.New(nil),
-		},
+		}),
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints(), nil)
 
@@ -3829,11 +3826,11 @@ func TestStateStoreQuerierNotEnabled(t *testing.T) {
 	compStore := compstore.New()
 	compStore.AddStateStore("store1", newFakeStateStore())
 	testAPI := &api{
-		universal: &universal.Universal{
+		universal: universal.New(universal.Options{
 			Logger:     logger.NewLogger("fakeLogger"),
 			CompStore:  compStore,
 			Resiliency: resiliency.New(nil),
-		},
+		}),
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints(), nil)
 
@@ -3848,11 +3845,11 @@ func TestStateStoreQuerierEncrypted(t *testing.T) {
 	compStore := compstore.New()
 	compStore.AddStateStore(storeName, newFakeStateStoreQuerier())
 	testAPI := &api{
-		universal: &universal.Universal{
+		universal: universal.New(universal.Options{
 			Logger:     logger.NewLogger("fakeLogger"),
 			CompStore:  compStore,
 			Resiliency: resiliency.New(nil),
-		},
+		}),
 	}
 	encryption.AddEncryptedStateStore(storeName, encryption.ComponentEncryptionKeys{})
 	fakeServer.StartServer(testAPI.constructStateEndpoints(), nil)
@@ -4039,11 +4036,11 @@ func TestV1SecretEndpoints(t *testing.T) {
 		compStore.AddSecretStore(name, store)
 	}
 	testAPI := &api{
-		universal: &universal.Universal{
+		universal: universal.New(universal.Options{
 			Logger:     l,
 			CompStore:  compStore,
 			Resiliency: res,
-		},
+		}),
 	}
 	fakeServer.StartServer(testAPI.constructSecretsEndpoints(), nil)
 	storeName := "store1"
@@ -4136,12 +4133,12 @@ func TestV1SecretEndpoints(t *testing.T) {
 	t.Run("Get secret - 500 for secret store not congfigured", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/secrets/%s/good-key", unrestrictedStore)
 		// act
-		for name := range testAPI.universal.CompStore.ListSecretStores() {
-			testAPI.universal.CompStore.DeleteSecretStore(name)
+		for name := range testAPI.universal.CompStore().ListSecretStores() {
+			testAPI.universal.CompStore().DeleteSecretStore(name)
 		}
 		defer func() {
 			for name, store := range fakeStores {
-				testAPI.universal.CompStore.AddSecretStore(name, store)
+				testAPI.universal.CompStore().AddSecretStore(name, store)
 			}
 		}()
 
@@ -4367,9 +4364,9 @@ func TestV1HealthzEndpoint(t *testing.T) {
 
 	const appID = "fakeAPI"
 	testAPI := &api{
-		universal: &universal.Universal{
+		universal: universal.New(universal.Options{
 			AppID: appID,
-		},
+		}),
 	}
 
 	fakeServer.StartServer(testAPI.constructHealthzEndpoints(), nil)
@@ -4415,10 +4412,10 @@ func TestV1TransactionEndpoints(t *testing.T) {
 	compStore.AddStateStore("storeNonTransactional", fakeStoreNonTransactional)
 
 	testAPI := &api{
-		universal: &universal.Universal{
+		universal: universal.New(universal.Options{
 			CompStore:  compStore,
 			Resiliency: resiliency.New(nil),
-		},
+		}),
 		pubsubAdapter: &daprt.MockPubSubAdapter{},
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints(), nil)

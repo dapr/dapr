@@ -289,7 +289,7 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	defer req.Close()
 
 	// We don't do resiliency here as it is handled in the API layer. See InvokeActor().
-	resp, err := a.Actors.Call(ctx, req)
+	resp, err := a.Actors().Call(ctx, req)
 	if err != nil {
 		// We have to remove the error to keep the body, so callers must re-inspect for the header in the actual response.
 		actorErr, isActorErr := actorerrors.As(err)
@@ -319,7 +319,7 @@ func (a *api) callLocalValidateACL(ctx context.Context, req *invokev1.InvokeMeth
 		operation := req.Message().GetMethod()
 		var httpVerb commonv1pb.HTTPExtension_Verb //nolint:nosnakecase
 		// Get the HTTP verb in case the application protocol is "http"
-		appProtocolIsHTTP := a.Universal.AppConnectionConfig.Protocol.IsHTTP()
+		appProtocolIsHTTP := a.Universal.AppConnectionConfig().Protocol.IsHTTP()
 		if appProtocolIsHTTP && req.Metadata() != nil && len(req.Metadata()) > 0 {
 			httpExt := req.Message().GetHttpExtension()
 			if httpExt != nil {

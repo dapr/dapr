@@ -36,9 +36,9 @@ import (
 func TestCallLocal(t *testing.T) {
 	t.Run("appchannel is not ready", func(t *testing.T) {
 		fakeAPI := &api{
-			Universal: &universal.Universal{
+			Universal: universal.New(universal.Options{
 				AppID: "fakeAPI",
-			},
+			}),
 			channels: new(channels.Channels),
 		}
 		server, lis := startInternalServer(fakeAPI)
@@ -57,9 +57,9 @@ func TestCallLocal(t *testing.T) {
 	t.Run("parsing InternalInvokeRequest is failed", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		fakeAPI := &api{
-			Universal: &universal.Universal{
+			Universal: universal.New(universal.Options{
 				AppID: "fakeAPI",
-			},
+			}),
 			channels: (new(channels.Channels)).WithAppChannel(mockAppChannel),
 		}
 		server, lis := startInternalServer(fakeAPI)
@@ -83,9 +83,9 @@ func TestCallLocal(t *testing.T) {
 			mock.AnythingOfType("*v1.InvokeMethodRequest"),
 		).Return(nil, status.Error(codes.Unknown, "unknown error"))
 		fakeAPI := &api{
-			Universal: &universal.Universal{
+			Universal: universal.New(universal.Options{
 				AppID: "fakeAPI",
-			},
+			}),
 			channels: (new(channels.Channels)).WithAppChannel(mockAppChannel),
 		}
 		server, lis := startInternalServer(fakeAPI)
@@ -105,9 +105,9 @@ func TestCallLocal(t *testing.T) {
 func TestCallLocalStream(t *testing.T) {
 	t.Run("appchannel is not ready", func(t *testing.T) {
 		fakeAPI := &api{
-			Universal: &universal.Universal{
+			Universal: universal.New(universal.Options{
 				AppID: "fakeAPI",
-			},
+			}),
 			channels: new(channels.Channels),
 		}
 		server, lis := startInternalServer(fakeAPI)
@@ -135,9 +135,9 @@ func TestCallLocalStream(t *testing.T) {
 	t.Run("parsing InternalInvokeRequest is failed", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		fakeAPI := &api{
-			Universal: &universal.Universal{
+			Universal: universal.New(universal.Options{
 				AppID: "fakeAPI",
-			},
+			}),
 			channels: (new(channels.Channels)).WithAppChannel(mockAppChannel),
 		}
 		server, lis := startInternalServer(fakeAPI)
@@ -172,9 +172,9 @@ func TestCallLocalStream(t *testing.T) {
 			).
 			Return(nil, status.Error(codes.Unknown, "unknown error"))
 		fakeAPI := &api{
-			Universal: &universal.Universal{
+			Universal: universal.New(universal.Options{
 				AppID: "fakeAPI",
-			},
+			}),
 			channels: (new(channels.Channels)).WithAppChannel(mockAppChannel),
 		}
 		server, lis := startInternalServer(fakeAPI)

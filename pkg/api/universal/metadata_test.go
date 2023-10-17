@@ -90,19 +90,19 @@ func TestGetMetadata(t *testing.T) {
 			}
 
 			fakeAPI := &Universal{
-				AppID:     "fakeAPI",
-				Actors:    mockActors,
-				CompStore: compStore,
-				GetComponentsCapabilitiesFn: func() map[string][]string {
+				appID:     "fakeAPI",
+				actors:    mockActors,
+				compStore: compStore,
+				getComponentsCapabilitiesFn: func() map[string][]string {
 					capsMap := make(map[string][]string)
 					capsMap["testComponent"] = []string{"mock.feat.testComponent"}
 					return capsMap
 				},
-				ExtendedMetadata: map[string]string{
+				extendedMetadata: map[string]string{
 					"testKey": "testValue",
 				},
-				AppConnectionConfig: appConnectionConfig,
-				GlobalConfig:        &config.Configuration{},
+				appConnectionConfig: appConnectionConfig,
+				globalConfig:        &config.Configuration{},
 			}
 			fakeAPI.actorsReady.Store(true)
 
@@ -134,7 +134,7 @@ func TestSetMetadata(t *testing.T) {
 	fakeComponent := componentsV1alpha.Component{}
 	fakeComponent.Name = "testComponent"
 	fakeAPI := &Universal{
-		AppID: "fakeAPI",
+		appID: "fakeAPI",
 	}
 
 	_, err := fakeAPI.SetMetadata(context.Background(), &runtimev1pb.SetMetadataRequest{
@@ -142,5 +142,5 @@ func TestSetMetadata(t *testing.T) {
 		Value: "testValue",
 	})
 	require.NoError(t, err, "Expected no error")
-	assert.Equal(t, map[string]string{"testKey": "testValue"}, fakeAPI.ExtendedMetadata)
+	assert.Equal(t, map[string]string{"testKey": "testValue"}, fakeAPI.extendedMetadata)
 }

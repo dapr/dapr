@@ -16,13 +16,7 @@ package universal
 import (
 	"context"
 	"time"
-
-	"github.com/dapr/dapr/pkg/actors"
 )
-
-func (a *Universal) SetActorRuntime(actor actors.ActorRuntime) {
-	a.Actors = actor
-}
 
 // SetActorsInitDone indicates that the actors runtime has been initialized, whether actors are available or not
 func (a *Universal) SetActorsInitDone() {

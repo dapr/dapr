@@ -66,7 +66,7 @@ func (a *api) onGetHealthz(w http.ResponseWriter, r *http.Request) {
 	// If we have an "appid" parameter in the query string, we will return an error if the ID of this app is not the value of the requested "appid"
 	// This is used by some components (e.g. Consul nameresolver) to check if the app was replaced with a different one
 	qs := r.URL.Query()
-	if qs.Has("appid") && qs.Get("appid") != a.universal.AppID {
+	if qs.Has("appid") && qs.Get("appid") != a.universal.AppID() {
 		msg := messages.ErrHealthAppIDNotMatch
 		respondWithError(w, msg)
 		log.Debug(msg)

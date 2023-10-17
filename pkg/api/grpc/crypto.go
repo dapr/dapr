@@ -41,24 +41,24 @@ func (a *api) EncryptAlpha1(stream runtimev1pb.Dapr_EncryptAlpha1Server) (err er
 	err = a.cryptoGetFirstChunk(stream, reqProto)
 	if err != nil {
 		// This is already an APIError object.
-		a.Logger.Debug(err)
+		a.logger.Debug(err)
 		return err
 	}
 
 	// Validate required options
 	if reqProto.GetOptions() == nil {
 		err = messages.ErrBadRequest.WithFormat("first message does not contain the required options")
-		a.Logger.Debug(err)
+		a.logger.Debug(err)
 		return err
 	}
 	if reqProto.GetOptions().GetKeyName() == "" {
 		err = messages.ErrBadRequest.WithFormat("missing property 'keyName' in the options message")
-		a.Logger.Debug(err)
+		a.logger.Debug(err)
 		return err
 	}
 	if reqProto.GetOptions().GetKeyWrapAlgorithm() == "" {
 		err = messages.ErrBadRequest.WithFormat("missing property 'keyWrapAlgorithm' in the options message")
-		a.Logger.Debug(err)
+		a.logger.Debug(err)
 		return err
 	}
 
@@ -96,14 +96,14 @@ func (a *api) DecryptAlpha1(stream runtimev1pb.Dapr_DecryptAlpha1Server) (err er
 	err = a.cryptoGetFirstChunk(stream, reqProto)
 	if err != nil {
 		// This is already an APIError object.
-		a.Logger.Debug(err)
+		a.logger.Debug(err)
 		return err
 	}
 
 	// Validate required options
 	if reqProto.GetOptions() == nil {
 		err = messages.ErrBadRequest.WithFormat("first message does not contain the required options")
-		a.Logger.Debug(err)
+		a.logger.Debug(err)
 		return err
 	}
 
@@ -216,11 +216,11 @@ func (a *api) cryptoProcessStream(stream grpc.ServerStream, reqProto runtimev1pb
 		resProto = &runtimev1pb.DecryptResponse{}
 	default:
 		// It's ok to panic here since this indicates a development-time error.
-		a.Logger.Fatal("Invalid type for opts argument")
+		a.logger.Fatal("Invalid type for opts argument")
 	}
 	if err != nil {
 		err = messages.ErrCryptoOperation.WithFormat(err)
-		a.Logger.Debug(err)
+		a.logger.Debug(err)
 		return err
 	}
 
@@ -238,7 +238,7 @@ func (a *api) cryptoProcessStream(stream grpc.ServerStream, reqProto runtimev1pb
 	for {
 		if ctx.Err() != nil {
 			err = messages.ErrCryptoOperation.WithFormat(ctx.Err())
-			a.Logger.Debug(err)
+			a.logger.Debug(err)
 			return err
 		}
 
@@ -248,7 +248,7 @@ func (a *api) cryptoProcessStream(stream grpc.ServerStream, reqProto runtimev1pb
 			done = true
 		} else if err != nil {
 			err = messages.ErrCryptoOperation.WithFormat(err)
-			a.Logger.Debug(err)
+			a.logger.Debug(err)
 			return err
 		}
 
@@ -263,7 +263,7 @@ func (a *api) cryptoProcessStream(stream grpc.ServerStream, reqProto runtimev1pb
 			err = stream.SendMsg(resProto)
 			if err != nil {
 				err = messages.ErrCryptoOperation.WithFormat(fmt.Errorf("error sending message: %w", err))
-				a.Logger.Debug(err)
+				a.logger.Debug(err)
 				return err
 			}
 		}

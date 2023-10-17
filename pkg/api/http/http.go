@@ -121,8 +121,6 @@ type APIOpts struct {
 
 // NewAPI returns a new API.
 func NewAPI(opts APIOpts) API {
-	opts.Universal.Init()
-
 	api := &api{
 		universal:             opts.Universal,
 		channels:              opts.Channels,
@@ -624,7 +622,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 	var key string
 	reqs := make([]state.GetRequest, len(req.Keys))
 	for i, k := range req.Keys {
-		key, err = stateLoader.GetModifiedStateKey(k, storeName, a.universal.AppID)
+		key, err = stateLoader.GetModifiedStateKey(k, storeName, a.universal.AppID())
 		if err != nil {
 			status := apierrors.StateStoreInvalidKeyName(storeName, k, err.Error())
 			universalFastHTTPErrorResponder(reqCtx, status)
@@ -640,7 +638,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[[]state.BulkGetResponse](reqCtx,
-		a.universal.Resiliency.ComponentOutboundPolicy(storeName, resiliency.Statestore),
+		a.universal.Resiliency().ComponentOutboundPolicy(storeName, resiliency.Statestore),
 	)
 	responses, err := policyRunner(func(ctx context.Context) ([]state.BulkGetResponse, error) {
 		return store.BulkGet(ctx, reqs, state.BulkGetOpts{
@@ -694,7 +692,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) getStateStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (state.Store, string, error) {
-	if a.universal.CompStore.StateStoresLen() == 0 {
+	if a.universal.CompStore().StateStoresLen() == 0 {
 		err := apierrors.StateStoreNotConfigured()
 		log.Debug(err)
 		universalFastHTTPErrorResponder(reqCtx, err)
@@ -703,7 +701,7 @@ func (a *api) getStateStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (s
 
 	storeName := a.getStateStoreName(reqCtx)
 
-	stateStore, ok := a.universal.CompStore.GetStateStore(storeName)
+	state, ok := a.universal.CompStore().GetStateStore(storeName)
 	if !ok {
 		err := apierrors.StateStoreNotFound(storeName)
 		log.Debug(err)
@@ -724,7 +722,7 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 
 	key := reqCtx.UserValue(stateKeyParam).(string)
 	consistency := string(reqCtx.QueryArgs().Peek(consistencyParam))
-	k, err := stateLoader.GetModifiedStateKey(key, storeName, a.universal.AppID)
+	k, err := stateLoader.GetModifiedStateKey(key, storeName, a.universal.AppID())
 	if err != nil {
 		status := apierrors.StateStoreInvalidKeyName(storeName, key, err.Error())
 		universalFastHTTPErrorResponder(reqCtx, status)
@@ -742,7 +740,7 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[*state.GetResponse](reqCtx,
-		a.universal.Resiliency.ComponentOutboundPolicy(storeName, resiliency.Statestore),
+		a.universal.Resiliency().ComponentOutboundPolicy(storeName, resiliency.Statestore),
 	)
 	resp, err := policyRunner(func(ctx context.Context) (*state.GetResponse, error) {
 		return store.Get(ctx, req)
@@ -787,7 +785,7 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) getConfigurationStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (configuration.Store, string, error) {
-	if a.universal.CompStore.ConfigurationsLen() == 0 {
+	if a.universal.CompStore().ConfigurationsLen() == 0 {
 		msg := NewErrorResponse("ERR_CONFIGURATION_STORE_NOT_CONFIGURED", messages.ErrConfigurationStoresNotConfigured)
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
 		log.Debug(msg)
@@ -796,7 +794,7 @@ func (a *api) getConfigurationStoreWithRequestValidation(reqCtx *fasthttp.Reques
 
 	storeName := a.getStateStoreName(reqCtx)
 
-	conf, ok := a.universal.CompStore.GetConfiguration(storeName)
+	conf, ok := a.universal.CompStore().GetConfiguration(storeName)
 	if !ok {
 		msg := NewErrorResponse("ERR_CONFIGURATION_STORE_NOT_FOUND", fmt.Sprintf(messages.ErrConfigurationStoreNotFound, storeName))
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusBadRequest, msg))
@@ -901,12 +899,12 @@ func (a *api) onSubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
 		api:       a,
 		storeName: storeName,
 		channels:  a.channels,
-		res:       a.universal.Resiliency,
+		res:       a.universal.Resiliency(),
 	}
 
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[string](reqCtx,
-		a.universal.Resiliency.ComponentOutboundPolicy(storeName, resiliency.Configuration),
+		a.universal.Resiliency().ComponentOutboundPolicy(storeName, resiliency.Configuration),
 	)
 	subscribeID, err := policyRunner(func(ctx context.Context) (string, error) {
 		return store.Subscribe(ctx, req, handler.updateEventHandler)
@@ -940,7 +938,7 @@ func (a *api) onUnsubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
 	}
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[any](reqCtx,
-		a.universal.Resiliency.ComponentOutboundPolicy(storeName, resiliency.Configuration),
+		a.universal.Resiliency().ComponentOutboundPolicy(storeName, resiliency.Configuration),
 	)
 	_, err = policyRunner(func(ctx context.Context) (any, error) {
 		return nil, store.Unsubscribe(ctx, &req)
@@ -985,7 +983,7 @@ func (a *api) onGetConfiguration(reqCtx *fasthttp.RequestCtx) {
 
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[*configuration.GetResponse](reqCtx,
-		a.universal.Resiliency.ComponentOutboundPolicy(storeName, resiliency.Configuration),
+		a.universal.Resiliency().ComponentOutboundPolicy(storeName, resiliency.Configuration),
 	)
 	getResponse, err := policyRunner(func(ctx context.Context) (*configuration.GetResponse, error) {
 		return store.Get(ctx, req)
@@ -1036,7 +1034,7 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 	consistency := string(reqCtx.QueryArgs().Peek(consistencyParam))
 
 	metadata := getMetadataFromFastHTTPRequest(reqCtx)
-	k, err := stateLoader.GetModifiedStateKey(key, storeName, a.universal.AppID)
+	k, err := stateLoader.GetModifiedStateKey(key, storeName, a.universal.AppID())
 	if err != nil {
 		status := apierrors.StateStoreInvalidKeyName(storeName, key, err.Error())
 		universalFastHTTPErrorResponder(reqCtx, status)
@@ -1059,7 +1057,7 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[any](reqCtx,
-		a.universal.Resiliency.ComponentOutboundPolicy(storeName, resiliency.Statestore),
+		a.universal.Resiliency().ComponentOutboundPolicy(storeName, resiliency.Statestore),
 	)
 	_, err = policyRunner(func(ctx context.Context) (any, error) {
 		return nil, store.Delete(ctx, &req)
@@ -1118,7 +1116,7 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 			}
 		}
 
-		reqs[i].Key, err = stateLoader.GetModifiedStateKey(r.Key, storeName, a.universal.AppID)
+		reqs[i].Key, err = stateLoader.GetModifiedStateKey(r.Key, storeName, a.universal.AppID())
 		if err != nil {
 			status := apierrors.StateStoreInvalidKeyName(storeName, r.Key, err.Error())
 			universalFastHTTPErrorResponder(reqCtx, status)
@@ -1144,7 +1142,7 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 
 	start := time.Now()
 	err = stateLoader.PerformBulkStoreOperation(reqCtx, reqs,
-		a.universal.Resiliency.ComponentOutboundPolicy(storeName, resiliency.Statestore),
+		a.universal.Resiliency().ComponentOutboundPolicy(storeName, resiliency.Statestore),
 		state.BulkStoreOpts{},
 		store.Set,
 		store.BulkSet,
@@ -1222,7 +1220,7 @@ func (a *api) onCreateActorReminder(reqCtx *fasthttp.RequestCtx) {
 	req.ActorType = actorType
 	req.ActorID = actorID
 
-	err = a.universal.Actors.CreateReminder(reqCtx, &req)
+	err = a.universal.Actors().CreateReminder(reqCtx, &req)
 	if err != nil {
 		if errors.Is(err, actors.ErrReminderOpActorNotHosted) {
 			msg := messages.ErrActorReminderOpActorNotHosted
@@ -1263,7 +1261,7 @@ func (a *api) onCreateActorTimer(reqCtx *fasthttp.RequestCtx) {
 	req.ActorType = actorType
 	req.ActorID = actorID
 
-	err = a.universal.Actors.CreateTimer(reqCtx, &req)
+	err = a.universal.Actors().CreateTimer(reqCtx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_TIMER_CREATE", fmt.Sprintf(messages.ErrActorTimerCreate, err))
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
@@ -1289,7 +1287,7 @@ func (a *api) onDeleteActorReminder(reqCtx *fasthttp.RequestCtx) {
 		ActorType: actorType,
 	}
 
-	err := a.universal.Actors.DeleteReminder(reqCtx, &req)
+	err := a.universal.Actors().DeleteReminder(reqCtx, &req)
 	if err != nil {
 		if errors.Is(err, actors.ErrReminderOpActorNotHosted) {
 			msg := messages.ErrActorReminderOpActorNotHosted
@@ -1326,7 +1324,7 @@ func (a *api) onActorStateTransaction(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	hosted := a.universal.Actors.IsActorHosted(reqCtx, &actors.ActorHostedRequest{
+	hosted := a.universal.Actors().IsActorHosted(reqCtx, &actors.ActorHostedRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 	})
@@ -1344,7 +1342,7 @@ func (a *api) onActorStateTransaction(reqCtx *fasthttp.RequestCtx) {
 		Operations: ops,
 	}
 
-	err = a.universal.Actors.TransactionalStateOperation(reqCtx, &req)
+	err = a.universal.Actors().TransactionalStateOperation(reqCtx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_STATE_TRANSACTION_SAVE", fmt.Sprintf(messages.ErrActorStateTransactionSave, err))
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
@@ -1364,7 +1362,7 @@ func (a *api) onGetActorReminder(reqCtx *fasthttp.RequestCtx) {
 	actorID := reqCtx.UserValue(actorIDParam).(string)
 	name := reqCtx.UserValue(nameParam).(string)
 
-	resp, err := a.universal.Actors.GetReminder(reqCtx, &actors.GetReminderRequest{
+	resp, err := a.universal.Actors().GetReminder(reqCtx, &actors.GetReminderRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 		Name:      name,
@@ -1409,7 +1407,7 @@ func (a *api) onDeleteActorTimer(reqCtx *fasthttp.RequestCtx) {
 		ActorID:   actorID,
 		ActorType: actorType,
 	}
-	err := a.universal.Actors.DeleteTimer(reqCtx, &req)
+	err := a.universal.Actors().DeleteTimer(reqCtx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_TIMER_DELETE", fmt.Sprintf(messages.ErrActorTimerDelete, err))
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
@@ -1430,7 +1428,7 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 	verb := strings.ToUpper(string(reqCtx.Method()))
 	method := reqCtx.UserValue(methodParam).(string)
 
-	policyDef := a.universal.Resiliency.ActorPreLockPolicy(actorType, actorID)
+	policyDef := a.universal.Resiliency().ActorPreLockPolicy(actorType, actorID)
 
 	req := invokev1.NewInvokeMethodRequest(method).
 		WithActor(actorType, actorID).
@@ -1457,7 +1455,7 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 		},
 	)
 	resp, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
-		return a.universal.Actors.Call(ctx, req)
+		return a.universal.Actors().Call(ctx, req)
 	})
 
 	if resp != nil {
@@ -1520,7 +1518,7 @@ func (a *api) onGetActorState(reqCtx *fasthttp.RequestCtx) {
 	actorID := reqCtx.UserValue(actorIDParam).(string)
 	key := reqCtx.UserValue(stateKeyParam).(string)
 
-	hosted := a.universal.Actors.IsActorHosted(reqCtx, &actors.ActorHostedRequest{
+	hosted := a.universal.Actors().IsActorHosted(reqCtx, &actors.ActorHostedRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 	})
@@ -1538,7 +1536,7 @@ func (a *api) onGetActorState(reqCtx *fasthttp.RequestCtx) {
 		Key:       key,
 	}
 
-	resp, err := a.universal.Actors.GetState(reqCtx, &req)
+	resp, err := a.universal.Actors().GetState(reqCtx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_STATE_GET", fmt.Sprintf(messages.ErrActorStateGet, err))
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
@@ -1577,7 +1575,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 		span := diagUtils.SpanFromContext(reqCtx)
 		corID, traceState := diag.TraceIDAndStateFromSpan(span)
 		envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
-			Source:          a.universal.AppID,
+			Source:          a.universal.AppID(),
 			Topic:           topic,
 			DataContentType: contentType,
 			Data:            body,
@@ -1735,7 +1733,7 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 
 			var envelope map[string]interface{}
 			envelope, err = runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
-				Source:          a.universal.AppID,
+				Source:          a.universal.AppID(),
 				Topic:           topic,
 				DataContentType: entries[i].ContentType,
 				Data:            entries[i].Event,
@@ -1841,7 +1839,7 @@ func (a *api) validateAndGetPubsubAndTopic(reqCtx *fasthttp.RequestCtx) (pubsub.
 		return nil, "", "", nethttp.StatusNotFound, &msg
 	}
 
-	thepubsub, ok := a.universal.CompStore.GetPubSub(pubsubName)
+	thepubsub, ok := a.universal.CompStore().GetPubSub(pubsubName)
 	if !ok {
 		msg := NewErrorResponse("ERR_PUBSUB_NOT_FOUND", fmt.Sprintf(messages.ErrPubsubNotFound, pubsubName))
 		return nil, "", "", nethttp.StatusNotFound, &msg
@@ -1907,7 +1905,7 @@ type stateTransactionRequestBodyOperation struct {
 }
 
 func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
-	if a.universal.CompStore.StateStoresLen() == 0 {
+	if a.universal.CompStore().StateStoresLen() == 0 {
 		err := apierrors.StateStoreNotConfigured()
 		log.Debug(err)
 		universalFastHTTPErrorResponder(reqCtx, err)
@@ -1915,7 +1913,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	storeName := reqCtx.UserValue(storeNameParam).(string)
-	store, ok := a.universal.CompStore.GetStateStore(storeName)
+	store, ok := a.universal.CompStore().GetStateStore(storeName)
 	if !ok {
 		err := apierrors.StateStoreNotFound(storeName)
 		log.Debug(err)
@@ -1966,7 +1964,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 				log.Debug(msg)
 				return
 			}
-			upsertReq.Key, err = stateLoader.GetModifiedStateKey(upsertReq.Key, storeName, a.universal.AppID)
+			upsertReq.Key, err = stateLoader.GetModifiedStateKey(upsertReq.Key, storeName, a.universal.AppID())
 			if err != nil {
 				status := apierrors.StateStoreInvalidKeyName(storeName, upsertReq.Key, err.Error())
 				universalFastHTTPErrorResponder(reqCtx, status)
@@ -1983,7 +1981,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 				log.Debug(msg)
 				return
 			}
-			delReq.Key, err = stateLoader.GetModifiedStateKey(delReq.Key, storeName, a.universal.AppID)
+			delReq.Key, err = stateLoader.GetModifiedStateKey(delReq.Key, storeName, a.universal.AppID())
 			if err != nil {
 				status := apierrors.StateStoreInvalidKeyName(storeName, delReq.Key, err.Error())
 				universalFastHTTPErrorResponder(reqCtx, status)
@@ -2037,7 +2035,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	if outboxEnabled {
 		span := diagUtils.SpanFromContext(reqCtx)
 		corID, traceState := diag.TraceIDAndStateFromSpan(span)
-		trs, err := a.pubsubAdapter.Outbox().PublishInternal(reqCtx, storeName, operations, a.universal.AppID, corID, traceState)
+		trs, err := a.pubsubAdapter.Outbox().PublishInternal(reqCtx, storeName, operations, a.universal.AppID(), corID, traceState)
 		if err != nil {
 			msg := NewErrorResponse(
 				"ERR_PUBLISH_OUTBOX",
@@ -2052,7 +2050,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[any](reqCtx,
-		a.universal.Resiliency.ComponentOutboundPolicy(storeName, resiliency.Statestore),
+		a.universal.Resiliency().ComponentOutboundPolicy(storeName, resiliency.Statestore),
 	)
 	storeReq := &state.TransactionalStateRequest{
 		Operations: operations,
@@ -2126,7 +2124,7 @@ func (a *api) actorReadinessCheckFastHTTP(reqCtx *fasthttp.RequestCtx) bool {
 	// There's no workaround besides migrating to the standard library's server.
 	a.universal.WaitForActorsReady(reqCtx)
 
-	if a.universal.Actors == nil {
+	if a.universal.Actors() == nil {
 		universalFastHTTPErrorResponder(reqCtx, messages.ErrActorRuntimeNotFound)
 		log.Debug(messages.ErrActorRuntimeNotFound)
 		return false

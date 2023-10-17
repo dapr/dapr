@@ -61,22 +61,22 @@ func (a *Universal) SubtleVerifyAlpha1(ctx context.Context, in *runtimev1pb.Subt
 
 // CryptoValidateRequest is an internal method that checks if the request is for a valid crypto component.
 func (a *Universal) CryptoValidateRequest(componentName string) (contribCrypto.SubtleCrypto, error) {
-	if a.CompStore.CryptoProvidersLen() == 0 {
+	if a.compStore.CryptoProvidersLen() == 0 {
 		err := messages.ErrCryptoProvidersNotConfigured
-		a.Logger.Debug(err)
+		a.logger.Debug(err)
 		return nil, err
 	}
 
 	if componentName == "" {
 		err := messages.ErrBadRequest.WithFormat("missing component name")
-		a.Logger.Debug(err)
+		a.logger.Debug(err)
 		return nil, err
 	}
 
-	component, ok := a.CompStore.GetCryptoProvider(componentName)
+	component, ok := a.compStore.GetCryptoProvider(componentName)
 	if !ok {
 		err := messages.ErrCryptoProviderNotFound.WithFormat(componentName)
-		a.Logger.Debug(err)
+		a.logger.Debug(err)
 		return nil, err
 	}
 

@@ -35,8 +35,8 @@ import (
 func TestSecretStoreNotConfigured(t *testing.T) {
 	// Setup Dapr API
 	fakeAPI := &Universal{
-		Logger:    testLogger,
-		CompStore: compstore.New(),
+		logger:    testLogger,
+		compStore: compstore.New(),
 	}
 
 	// act
@@ -163,9 +163,9 @@ func TestGetSecret(t *testing.T) {
 
 	// Setup Dapr API
 	fakeAPI := &Universal{
-		Logger:     testLogger,
-		Resiliency: resiliency.New(nil),
-		CompStore:  compStore,
+		logger:     testLogger,
+		resiliency: resiliency.New(nil),
+		compStore:  compStore,
 	}
 
 	// act
@@ -228,9 +228,9 @@ func TestGetBulkSecret(t *testing.T) {
 
 	// Setup Dapr API
 	fakeAPI := &Universal{
-		Logger:     testLogger,
-		Resiliency: resiliency.New(nil),
-		CompStore:  compStore,
+		logger:     testLogger,
+		resiliency: resiliency.New(nil),
+		compStore:  compStore,
 	}
 
 	// act
@@ -266,9 +266,9 @@ func TestSecretAPIWithResiliency(t *testing.T) {
 
 	// Setup Dapr API
 	fakeAPI := &Universal{
-		Logger:     testLogger,
-		Resiliency: resiliency.FromConfigurations(testLogger, testResiliency),
-		CompStore:  compStore,
+		logger:     testLogger,
+		resiliency: resiliency.FromConfigurations(testLogger, testResiliency),
+		compStore:  compStore,
 	}
 
 	// act

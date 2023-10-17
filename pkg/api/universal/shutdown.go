@@ -25,7 +25,7 @@ import (
 func (a *Universal) Shutdown(ctx context.Context, in *runtimev1pb.ShutdownRequest) (*emptypb.Empty, error) {
 	go func() {
 		<-ctx.Done()
-		a.ShutdownFn()
+		a.shutdownFn()
 	}()
 	return &emptypb.Empty{}, nil
 }

@@ -26,8 +26,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-// Universal contains the implementation of gRPC APIs that are also used by the HTTP server.
-type Universal struct {
+type Options struct {
 	AppID                       string
 	Logger                      logger.Logger
 	Resiliency                  resiliency.Provider
@@ -38,18 +37,67 @@ type Universal struct {
 	ExtendedMetadata            map[string]string
 	AppConnectionConfig         config.AppConnectionConfig
 	GlobalConfig                *config.Configuration
-
-	extendedMetadataLock sync.RWMutex
-	actorsReady          atomic.Bool
-	actorsReadyCh        chan struct{}
-	initDone             atomic.Bool
 }
 
-// Init completes the initialization of the Universal object.
-func (a *Universal) Init() {
-	if !a.initDone.CompareAndSwap(false, true) {
-		return
-	}
+// Universal contains the implementation of gRPC APIs that are also used by the HTTP server.
+type Universal struct {
+	appID                       string
+	logger                      logger.Logger
+	resiliency                  resiliency.Provider
+	actors                      actors.ActorRuntime
+	compStore                   *compstore.ComponentStore
+	shutdownFn                  func()
+	getComponentsCapabilitiesFn func() map[string][]string
+	extendedMetadata            map[string]string
+	appConnectionConfig         config.AppConnectionConfig
+	globalConfig                *config.Configuration
 
-	a.actorsReadyCh = make(chan struct{})
+	extendedMetadataLock sync.RWMutex
+	actorsLock           sync.RWMutex
+	actorsReady          atomic.Bool
+	actorsReadyCh        chan struct{}
+}
+
+func New(opts Options) *Universal {
+	return &Universal{
+		appID:                       opts.AppID,
+		logger:                      opts.Logger,
+		resiliency:                  opts.Resiliency,
+		actors:                      opts.Actors,
+		compStore:                   opts.CompStore,
+		shutdownFn:                  opts.ShutdownFn,
+		getComponentsCapabilitiesFn: opts.GetComponentsCapabilitiesFn,
+		extendedMetadata:            opts.ExtendedMetadata,
+		appConnectionConfig:         opts.AppConnectionConfig,
+		globalConfig:                opts.GlobalConfig,
+		actorsReadyCh:               make(chan struct{}),
+	}
+}
+
+func (a *Universal) AppID() string {
+	return a.appID
+}
+
+func (a *Universal) Resiliency() resiliency.Provider {
+	return a.resiliency
+}
+
+func (a *Universal) Actors() actors.ActorRuntime {
+	a.actorsLock.RLock()
+	defer a.actorsLock.RUnlock()
+	return a.actors
+}
+
+func (a *Universal) SetActorRuntime(actor actors.ActorRuntime) {
+	a.actorsLock.Lock()
+	defer a.actorsLock.Unlock()
+	a.actors = actor
+}
+
+func (a *Universal) CompStore() *compstore.ComponentStore {
+	return a.compStore
+}
+
+func (a *Universal) AppConnectionConfig() config.AppConnectionConfig {
+	return a.appConnectionConfig
 }

@@ -111,11 +111,11 @@ func TestStartWorkflowBeta1API(t *testing.T) {
 
 	// Setup universal dapr API
 	fakeAPI := &Universal{
-		Logger:     logger.NewLogger("test"),
-		Resiliency: resiliency.New(nil),
-		CompStore:  compStore,
+		logger:        logger.NewLogger("test"),
+		resiliency:    resiliency.New(nil),
+		compStore:     compStore,
+		actorsReadyCh: make(chan struct{}),
 	}
-	fakeAPI.Init()
 	fakeAPI.SetActorsInitDone()
 
 	for _, tt := range testCases {
@@ -185,11 +185,11 @@ func TestGetWorkflowBeta1API(t *testing.T) {
 
 	// Setup universal dapr API
 	fakeAPI := &Universal{
-		Logger:     logger.NewLogger("test"),
-		Resiliency: resiliency.New(nil),
-		CompStore:  compStore,
+		logger:        logger.NewLogger("test"),
+		resiliency:    resiliency.New(nil),
+		compStore:     compStore,
+		actorsReadyCh: make(chan struct{}),
 	}
-	fakeAPI.Init()
 	fakeAPI.SetActorsInitDone()
 
 	for _, tt := range testCases {
@@ -258,11 +258,11 @@ func TestTerminateWorkflowBeta1API(t *testing.T) {
 
 	// Setup universal dapr API
 	fakeAPI := &Universal{
-		Logger:     logger.NewLogger("test"),
-		Resiliency: resiliency.New(nil),
-		CompStore:  compStore,
+		logger:        logger.NewLogger("test"),
+		resiliency:    resiliency.New(nil),
+		compStore:     compStore,
+		actorsReadyCh: make(chan struct{}),
 	}
-	fakeAPI.Init()
 	fakeAPI.SetActorsInitDone()
 
 	for _, tt := range testCases {
@@ -346,11 +346,11 @@ func TestRaiseEventWorkflowBeta1Api(t *testing.T) {
 
 	// Setup universal dapr API
 	fakeAPI := &Universal{
-		Logger:     logger.NewLogger("test"),
-		Resiliency: resiliency.New(nil),
-		CompStore:  compStore,
+		logger:        logger.NewLogger("test"),
+		resiliency:    resiliency.New(nil),
+		compStore:     compStore,
+		actorsReadyCh: make(chan struct{}),
 	}
-	fakeAPI.Init()
 	fakeAPI.SetActorsInitDone()
 
 	for _, tt := range testCases {
@@ -421,11 +421,11 @@ func TestPauseWorkflowBeta1Api(t *testing.T) {
 
 	// Setup universal dapr API
 	fakeAPI := &Universal{
-		Logger:     logger.NewLogger("test"),
-		Resiliency: resiliency.New(nil),
-		CompStore:  compStore,
+		logger:        logger.NewLogger("test"),
+		resiliency:    resiliency.New(nil),
+		compStore:     compStore,
+		actorsReadyCh: make(chan struct{}),
 	}
-	fakeAPI.Init()
 	fakeAPI.SetActorsInitDone()
 
 	for _, tt := range testCases {
@@ -494,11 +494,11 @@ func TestResumeWorkflowBeta1Api(t *testing.T) {
 
 	// Setup universal dapr API
 	fakeAPI := &Universal{
-		Logger:     logger.NewLogger("test"),
-		Resiliency: resiliency.New(nil),
-		CompStore:  compStore,
+		logger:        logger.NewLogger("test"),
+		resiliency:    resiliency.New(nil),
+		compStore:     compStore,
+		actorsReadyCh: make(chan struct{}),
 	}
-	fakeAPI.Init()
 	fakeAPI.SetActorsInitDone()
 
 	for _, tt := range testCases {

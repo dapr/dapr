@@ -122,16 +122,16 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 	var policyDef *resiliency.PolicyDefinition
 	switch {
 	case strings.HasPrefix(targetID, "http://") || strings.HasPrefix(targetID, "https://"):
-		policyDef = a.universal.Resiliency.EndpointPolicy(targetID, targetID+"/"+invokeMethodName)
+		policyDef = a.universal.Resiliency().EndpointPolicy(targetID, targetID+"/"+invokeMethodName)
 
 	case a.isHTTPEndpoint(targetID):
 		// http endpoint CRD resource is detected being used for service invocation
 		baseURL := a.getBaseURL(targetID)
-		policyDef = a.universal.Resiliency.EndpointPolicy(targetID, targetID+":"+baseURL)
+		policyDef = a.universal.Resiliency().EndpointPolicy(targetID, targetID+":"+baseURL)
 
 	default:
 		// regular service to service invocation
-		policyDef = a.universal.Resiliency.EndpointPolicy(targetID, targetID+":"+invokeMethodName)
+		policyDef = a.universal.Resiliency().EndpointPolicy(targetID, targetID+":"+invokeMethodName)
 	}
 
 	req := invokev1.NewInvokeMethodRequest(invokeMethodName).
@@ -365,14 +365,14 @@ func pathHasPrefix(path string, prefixParts ...string) int {
 }
 
 func (a *api) isHTTPEndpoint(appID string) bool {
-	endpoint, ok := a.universal.CompStore.GetHTTPEndpoint(appID)
+	endpoint, ok := a.universal.CompStore().GetHTTPEndpoint(appID)
 	return ok && endpoint.Name == appID
 }
 
 // getBaseURL takes an app id and checks if the app id is an HTTP endpoint CRD.
 // It returns the baseURL if found.
 func (a *api) getBaseURL(targetAppID string) string {
-	endpoint, ok := a.universal.CompStore.GetHTTPEndpoint(targetAppID)
+	endpoint, ok := a.universal.CompStore().GetHTTPEndpoint(targetAppID)
 	if ok && endpoint.Name == targetAppID {
 		return endpoint.Spec.BaseURL
 	}

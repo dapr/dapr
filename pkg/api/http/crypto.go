@@ -195,7 +195,7 @@ func (a *api) onCryptoDecrypt(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) cryptoGetComponent(componentName string) (contribCrypto.SubtleCrypto, error) {
-	if a.universal.CompStore.CryptoProvidersLen() == 0 {
+	if a.universal.CompStore().CryptoProvidersLen() == 0 {
 		err := messages.ErrCryptoProvidersNotConfigured
 		log.Debug(err)
 		return nil, err
@@ -207,7 +207,7 @@ func (a *api) cryptoGetComponent(componentName string) (contribCrypto.SubtleCryp
 		return nil, err
 	}
 
-	component, ok := a.universal.CompStore.GetCryptoProvider(componentName)
+	component, ok := a.universal.CompStore().GetCryptoProvider(componentName)
 	if !ok {
 		err := messages.ErrCryptoProviderNotFound.WithFormat(componentName)
 		log.Debug(err)

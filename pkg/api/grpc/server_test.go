@@ -94,7 +94,9 @@ func TestClose(t *testing.T) {
 			ReadBufferSizeKB:     4,
 			EnableAPILogging:     true,
 		}
-		a := &api{Universal: &universal.Universal{CompStore: compstore.New()}, closeCh: make(chan struct{})}
+		a := &api{Universal: universal.New(universal.Options{
+			CompStore: compstore.New(),
+		}), closeCh: make(chan struct{})}
 		server := NewAPIServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, config.APISpec{}, nil, nil)
 		require.NoError(t, server.StartNonBlocking())
 		dapr_testing.WaitForListeningAddress(t, 5*time.Second, fmt.Sprintf("127.0.0.1:%d", port))
@@ -115,7 +117,9 @@ func TestClose(t *testing.T) {
 			ReadBufferSizeKB:     4,
 			EnableAPILogging:     false,
 		}
-		a := &api{Universal: &universal.Universal{CompStore: compstore.New()}, closeCh: make(chan struct{})}
+		a := &api{Universal: universal.New(universal.Options{
+			CompStore: compstore.New(),
+		}), closeCh: make(chan struct{})}
 		server := NewAPIServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, config.APISpec{}, nil, nil)
 		require.NoError(t, server.StartNonBlocking())
 		dapr_testing.WaitForListeningAddress(t, 5*time.Second, fmt.Sprintf("127.0.0.1:%d", port))

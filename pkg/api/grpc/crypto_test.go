@@ -38,11 +38,12 @@ func TestCryptoAlpha1(t *testing.T) {
 	compStore := compstore.New()
 	compStore.AddCryptoProvider("myvault", &daprt.FakeSubtleCrypto{})
 	fakeAPI := &api{
-		Universal: &universal.Universal{
+		logger: apiServerLogger,
+		Universal: universal.New(universal.Options{
 			Logger:     apiServerLogger,
 			Resiliency: resiliency.New(nil),
 			CompStore:  compStore,
-		},
+		}),
 	}
 
 	// Run test server

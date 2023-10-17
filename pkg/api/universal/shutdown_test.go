@@ -27,8 +27,8 @@ func TestShutdownEndpoint(t *testing.T) {
 	shutdownCh := make(chan struct{})
 
 	fakeAPI := &Universal{
-		Logger: testLogger,
-		ShutdownFn: func() {
+		logger: testLogger,
+		shutdownFn: func() {
 			close(shutdownCh)
 		},
 	}

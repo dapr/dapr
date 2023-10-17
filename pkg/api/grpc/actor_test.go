@@ -58,11 +58,10 @@ var testActorResiliency = &v1alpha1.Resiliency{
 func TestRegisterActorReminder(t *testing.T) {
 	t.Run("actors not initialized", func(t *testing.T) {
 		api := &api{
-			Universal: &universal.Universal{
+			Universal: universal.New(universal.Options{
 				AppID: "fakeAPI",
-			},
+			}),
 		}
-		api.Init()
 		api.SetActorsInitDone()
 		server, lis := startDaprAPIServer(api, "")
 		defer server.Stop()
@@ -79,11 +78,10 @@ func TestRegisterActorReminder(t *testing.T) {
 func TestUnregisterActorTimer(t *testing.T) {
 	t.Run("actors not initialized", func(t *testing.T) {
 		api := &api{
-			Universal: &universal.Universal{
+			Universal: universal.New(universal.Options{
 				AppID: "fakeAPI",
-			},
+			}),
 		}
-		api.Init()
 		api.SetActorsInitDone()
 		server, lis := startDaprAPIServer(api, "")
 		defer server.Stop()
@@ -100,11 +98,10 @@ func TestUnregisterActorTimer(t *testing.T) {
 func TestRegisterActorTimer(t *testing.T) {
 	t.Run("actors not initialized", func(t *testing.T) {
 		api := &api{
-			Universal: &universal.Universal{
+			Universal: universal.New(universal.Options{
 				AppID: "fakeAPI",
-			},
+			}),
 		}
-		api.Init()
 		api.SetActorsInitDone()
 		server, lis := startDaprAPIServer(api, "")
 		defer server.Stop()
@@ -121,11 +118,10 @@ func TestRegisterActorTimer(t *testing.T) {
 func TestGetActorState(t *testing.T) {
 	t.Run("actors not initialized", func(t *testing.T) {
 		api := &api{
-			Universal: &universal.Universal{
+			Universal: universal.New(universal.Options{
 				AppID: "fakeAPI",
-			},
+			}),
 		}
-		api.Init()
 		api.SetActorsInitDone()
 		server, lis := startDaprAPIServer(api, "")
 		defer server.Stop()
@@ -158,11 +154,10 @@ func TestGetActorState(t *testing.T) {
 		}).Return(true)
 
 		api := &api{
-			Universal: &universal.Universal{
+			Universal: universal.New(universal.Options{
 				AppID: "fakeAPI",
-			},
+			}),
 		}
-		api.Init()
 		api.SetActorRuntime(mockActors)
 		api.SetActorsInitDone()
 		server, lis := startDaprAPIServer(api, "")
@@ -193,11 +188,10 @@ func TestGetActorState(t *testing.T) {
 func TestExecuteActorStateTransaction(t *testing.T) {
 	t.Run("actors not initialized", func(t *testing.T) {
 		api := &api{
-			Universal: &universal.Universal{
+			Universal: universal.New(universal.Options{
 				AppID: "fakeAPI",
-			},
+			}),
 		}
-		api.Init()
 		api.SetActorsInitDone()
 		server, lis := startDaprAPIServer(api, "")
 		defer server.Stop()
@@ -242,11 +236,10 @@ func TestExecuteActorStateTransaction(t *testing.T) {
 		}).Return(true)
 
 		api := &api{
-			Universal: &universal.Universal{
+			Universal: universal.New(universal.Options{
 				AppID: "fakeAPI",
-			},
+			}),
 		}
-		api.Init()
 		api.SetActorRuntime(mockActors)
 		api.SetActorsInitDone()
 		server, lis := startDaprAPIServer(api, "")
@@ -289,11 +282,10 @@ func TestExecuteActorStateTransaction(t *testing.T) {
 func TestUnregisterActorReminder(t *testing.T) {
 	t.Run("actors not initialized", func(t *testing.T) {
 		api := &api{
-			Universal: &universal.Universal{
+			Universal: universal.New(universal.Options{
 				AppID: "fakeAPI",
-			},
+			}),
 		}
-		api.Init()
 		api.SetActorsInitDone()
 		server, lis := startDaprAPIServer(api, "")
 		defer server.Stop()
@@ -310,11 +302,10 @@ func TestUnregisterActorReminder(t *testing.T) {
 func TestInvokeActor(t *testing.T) {
 	t.Run("actors not initialized", func(t *testing.T) {
 		api := &api{
-			Universal: &universal.Universal{
+			Universal: universal.New(universal.Options{
 				AppID: "fakeAPI",
-			},
+			}),
 		}
-		api.Init()
 		api.SetActorsInitDone()
 		server, lis := startDaprAPIServer(api, "")
 		defer server.Stop()
@@ -341,12 +332,11 @@ func TestInvokeActorWithResiliency(t *testing.T) {
 
 	rs := resiliency.FromConfigurations(logger.NewLogger("grpc.api.test"), testActorResiliency)
 	api := &api{
-		Universal: &universal.Universal{
+		Universal: universal.New(universal.Options{
 			AppID:      "fakeAPI",
 			Resiliency: rs,
-		},
+		}),
 	}
-	api.Init()
 	api.SetActorRuntime(failingActors)
 	api.SetActorsInitDone()
 	server, lis := startDaprAPIServer(api, "")

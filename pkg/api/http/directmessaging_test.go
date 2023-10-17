@@ -45,10 +45,10 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
-		universal: &universal.Universal{
+		universal: universal.New(universal.Options{
 			CompStore:  compStore,
 			Resiliency: resiliency.New(nil),
-		},
+		}),
 	}
 	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints(), nil)
 
@@ -744,10 +744,10 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 	testAPI := &api{
 		directMessaging: mockDirectMessaging,
 		tracingSpec:     spec,
-		universal: &universal.Universal{
+		universal: universal.New(universal.Options{
 			CompStore:  compStore,
 			Resiliency: resiliency.New(nil),
-		},
+		}),
 	}
 	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints(), &fakeHTTPServerOptions{
 		spec: &spec,
@@ -909,10 +909,10 @@ func TestV1DirectMessagingEndpointsWithResiliency(t *testing.T) {
 	compStore := compstore.New()
 	testAPI := &api{
 		directMessaging: failingDirectMessaging,
-		universal: &universal.Universal{
+		universal: universal.New(universal.Options{
 			CompStore:  compStore,
 			Resiliency: resiliency.FromConfigurations(logger.NewLogger("messaging.test"), testResiliency),
-		},
+		}),
 	}
 	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints(), nil)
 

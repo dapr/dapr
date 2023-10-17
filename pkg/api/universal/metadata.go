@@ -28,9 +28,9 @@ const daprRuntimeVersionKey = "daprRuntimeVersion"
 
 func (a *Universal) GetMetadata(ctx context.Context, in *runtimev1pb.GetMetadataRequest) (*runtimev1pb.GetMetadataResponse, error) {
 	// Extended metadata
-	extendedMetadata := make(map[string]string, len(a.ExtendedMetadata)+1)
+	extendedMetadata := make(map[string]string, len(a.extendedMetadata)+1)
 	a.extendedMetadataLock.RLock()
-	for k, v := range a.ExtendedMetadata {
+	for k, v := range a.extendedMetadata {
 		extendedMetadata[k] = v
 	}
 	a.extendedMetadataLock.RUnlock()
@@ -46,36 +46,36 @@ func (a *Universal) GetMetadata(ctx context.Context, in *runtimev1pb.GetMetadata
 				RuntimeStatus: runtimev1pb.ActorRuntime_DISABLED,
 			}
 		} else {
-			actorRuntime = a.Actors.GetRuntimeStatus(ctx)
+			actorRuntime = a.actors.GetRuntimeStatus(ctx)
 			actorRuntime.RuntimeStatus = runtimev1pb.ActorRuntime_RUNNING
 		}
 	}
 
 	// App connection information
 	appConnectionProperties := &runtimev1pb.AppConnectionProperties{
-		ChannelAddress: a.AppConnectionConfig.ChannelAddress,
-		Port:           int32(a.AppConnectionConfig.Port),
-		Protocol:       string(a.AppConnectionConfig.Protocol),
-		MaxConcurrency: int32(a.AppConnectionConfig.MaxConcurrency),
+		ChannelAddress: a.appConnectionConfig.ChannelAddress,
+		Port:           int32(a.appConnectionConfig.Port),
+		Protocol:       string(a.appConnectionConfig.Protocol),
+		MaxConcurrency: int32(a.appConnectionConfig.MaxConcurrency),
 	}
 
-	if a.AppConnectionConfig.HealthCheck != nil {
+	if a.appConnectionConfig.HealthCheck != nil {
 		appConnectionProperties.Health = &runtimev1pb.AppConnectionHealthProperties{
-			HealthProbeInterval: a.AppConnectionConfig.HealthCheck.ProbeInterval.String(),
-			HealthProbeTimeout:  a.AppConnectionConfig.HealthCheck.ProbeTimeout.String(),
-			HealthThreshold:     a.AppConnectionConfig.HealthCheck.Threshold,
+			HealthProbeInterval: a.appConnectionConfig.HealthCheck.ProbeInterval.String(),
+			HealthProbeTimeout:  a.appConnectionConfig.HealthCheck.ProbeTimeout.String(),
+			HealthThreshold:     a.appConnectionConfig.HealthCheck.Threshold,
 		}
 
 		// Health check path is not applicable for gRPC.
-		if protocol.Protocol(appConnectionProperties.GetProtocol()).IsHTTP() {
-			appConnectionProperties.Health.HealthCheckPath = a.AppConnectionConfig.HealthCheckHTTPPath
+		if protocol.Protocol(appConnectionProperties.Protocol).IsHTTP() {
+			appConnectionProperties.Health.HealthCheckPath = a.appConnectionConfig.HealthCheckHTTPPath
 		}
 	}
 
 	// Components
-	components := a.CompStore.ListComponents()
+	components := a.compStore.ListComponents()
 	registeredComponents := make([]*runtimev1pb.RegisteredComponents, len(components))
-	componentsCapabilities := a.GetComponentsCapabilitiesFn()
+	componentsCapabilities := a.getComponentsCapabilitiesFn()
 	for i, comp := range components {
 		registeredComponents[i] = &runtimev1pb.RegisteredComponents{
 			Name:         comp.Name,
@@ -86,7 +86,7 @@ func (a *Universal) GetMetadata(ctx context.Context, in *runtimev1pb.GetMetadata
 	}
 
 	// Subscriptions
-	subscriptions := a.CompStore.ListSubscriptions()
+	subscriptions := a.compStore.ListSubscriptions()
 	ps := make([]*runtimev1pb.PubsubSubscription, len(subscriptions))
 	for i, s := range subscriptions {
 		ps[i] = &runtimev1pb.PubsubSubscription{
@@ -99,7 +99,7 @@ func (a *Universal) GetMetadata(ctx context.Context, in *runtimev1pb.GetMetadata
 	}
 
 	// HTTP endpoints
-	endpoints := a.CompStore.ListHTTPEndpoints()
+	endpoints := a.compStore.ListHTTPEndpoints()
 	registeredHTTPEndpoints := make([]*runtimev1pb.MetadataHTTPEndpoint, len(endpoints))
 	for i, e := range endpoints {
 		registeredHTTPEndpoints[i] = &runtimev1pb.MetadataHTTPEndpoint{
@@ -108,7 +108,7 @@ func (a *Universal) GetMetadata(ctx context.Context, in *runtimev1pb.GetMetadata
 	}
 
 	return &runtimev1pb.GetMetadataResponse{
-		Id:                      a.AppID,
+		Id:                      a.appID,
 		ExtendedMetadata:        extendedMetadata,
 		RegisteredComponents:    registeredComponents,
 		ActiveActorsCount:       actorRuntime.GetActiveActors(), // Alias for backwards-compatibility
@@ -116,7 +116,7 @@ func (a *Universal) GetMetadata(ctx context.Context, in *runtimev1pb.GetMetadata
 		HttpEndpoints:           registeredHTTPEndpoints,
 		AppConnectionProperties: appConnectionProperties,
 		RuntimeVersion:          buildinfo.Version(),
-		EnabledFeatures:         a.GlobalConfig.EnabledFeatures(),
+		EnabledFeatures:         a.globalConfig.EnabledFeatures(),
 		ActorRuntime:            actorRuntime,
 	}, nil
 }
@@ -129,10 +129,10 @@ func (a *Universal) SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadata
 	}
 
 	a.extendedMetadataLock.Lock()
-	if a.ExtendedMetadata == nil {
-		a.ExtendedMetadata = make(map[string]string)
+	if a.extendedMetadata == nil {
+		a.extendedMetadata = make(map[string]string)
 	}
-	a.ExtendedMetadata[in.GetKey()] = in.GetValue()
+	a.extendedMetadata[in.Key] = in.Value
 	a.extendedMetadataLock.Unlock()
 
 	return &emptypb.Empty{}, nil

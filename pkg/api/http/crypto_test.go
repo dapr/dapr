@@ -35,11 +35,11 @@ func TestCryptoEndpoints(t *testing.T) {
 	const cryptoComponentName = "myvault"
 	compStore.AddCryptoProvider(cryptoComponentName, &daprt.FakeSubtleCrypto{})
 	testAPI := &api{
-		universal: &universal.Universal{
+		universal: universal.New(universal.Options{
 			Logger:     log,
 			CompStore:  compStore,
 			Resiliency: resiliency.New(nil),
-		},
+		}),
 	}
 
 	fakeServer.StartServer(testAPI.constructCryptoEndpoints(), nil)

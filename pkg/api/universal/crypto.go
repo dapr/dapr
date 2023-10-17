@@ -39,7 +39,7 @@ func (a *Universal) CryptoGetWrapKeyFn(ctx context.Context, componentName string
 		}
 
 		policyRunner := resiliency.NewRunner[subtleWrapKeyRes](ctx,
-			a.Resiliency.ComponentOutboundPolicy(componentName, resiliency.Crypto),
+			a.resiliency.ComponentOutboundPolicy(componentName, resiliency.Crypto),
 		)
 		start := time.Now()
 		swkr, err := policyRunner(func(ctx context.Context) (r subtleWrapKeyRes, rErr error) {
@@ -60,7 +60,7 @@ func (a *Universal) CryptoGetWrapKeyFn(ctx context.Context, componentName string
 func (a *Universal) CryptoGetUnwrapKeyFn(ctx context.Context, componentName string, component contribCrypto.SubtleCrypto) encv1.UnwrapKeyFn {
 	return func(wrappedKey []byte, algorithm, keyName string, nonce, tag []byte) (plaintextKeyBytes []byte, err error) {
 		policyRunner := resiliency.NewRunner[jwk.Key](ctx,
-			a.Resiliency.ComponentOutboundPolicy(componentName, resiliency.Crypto),
+			a.resiliency.ComponentOutboundPolicy(componentName, resiliency.Crypto),
 		)
 		start := time.Now()
 		plaintextKey, err := policyRunner(func(ctx context.Context) (jwk.Key, error) {
