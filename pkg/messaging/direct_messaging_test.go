@@ -198,7 +198,9 @@ func TestInvokeRemote(t *testing.T) {
 
 		pd, err := res.ProtoWithData()
 		require.NoError(t, err)
-
+		if err != nil {
+			return
+		}
 		assert.True(t, pd.Message.Data == nil || len(pd.Message.Data.Value) == 0)
 	})
 
