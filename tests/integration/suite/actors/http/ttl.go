@@ -112,7 +112,7 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 
 	now := time.Now()
 
-	reqBody := `[{"operation":"upsert","request":{"key":"key1","value":"value1","metadata":{"ttlInSeconds":"3"}}}]`
+	reqBody := `[{"operation":"upsert","request":{"key":"key1","value":"value1","metadata":{"ttlInSeconds":"2"}}}]`
 	req, err = http.NewRequest(http.MethodPost, daprdURL+"/v1.0/actors/myactortype/myactorid/state", strings.NewReader(reqBody))
 	require.NoError(t, err)
 	resp, err := client.Do(req)
@@ -132,7 +132,7 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 		ttlExpireTimeStr := resp.Header.Get("metadata.ttlExpireTime")
 		ttlExpireTime, err := time.Parse(time.RFC3339, ttlExpireTimeStr)
 		require.NoError(t, err)
-		assert.InDelta(t, now.Add(3*time.Second).Unix(), ttlExpireTime.Unix(), 1)
+		assert.InDelta(t, now.Add(2*time.Second).Unix(), ttlExpireTime.Unix(), 1)
 	})
 
 	t.Run("ensure the state key is deleted after the ttl", func(t *testing.T) {

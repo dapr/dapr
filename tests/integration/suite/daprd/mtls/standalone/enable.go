@@ -86,11 +86,11 @@ func (e *enable) Run(t *testing.T, ctx context.Context) {
 	e.daprd.WaitUntilRunning(t, ctx)
 
 	t.Run("trying plain text connection to Dapr API should fail", func(t *testing.T) {
-		gctx, gcancel := context.WithTimeout(ctx, time.Second*5)
+		gctx, gcancel := context.WithTimeout(ctx, time.Second)
 		t.Cleanup(gcancel)
 		_, err := grpc.DialContext(gctx, "localhost:"+strconv.Itoa(e.daprd.InternalGRPCPort()),
-			grpc.WithReturnConnectionError(),
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithReturnConnectionError(),
 		)
 		require.ErrorContains(t, err, "error reading server preface:")
 	})

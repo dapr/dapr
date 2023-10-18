@@ -100,14 +100,16 @@ spec:
 func (c *componentName) Run(t *testing.T, ctx context.Context) {
 	c.daprd.WaitUntilRunning(t, ctx)
 
+	client := util.HTTPClient(t)
+
+	pt := util.NewParallel(t)
 	for _, secretStoreName := range c.secretStoreNames {
 		secretStoreName := secretStoreName
-		t.Run(secretStoreName, func(t *testing.T) {
-			t.Parallel()
+		pt.Add(func(t *assert.CollectT) {
 			getURL := fmt.Sprintf("http://localhost:%d/v1.0/secrets/%s/key1", c.daprd.HTTPPort(), url.QueryEscape(secretStoreName))
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, getURL, nil)
 			require.NoError(t, err)
-			resp, err := util.HTTPClient(t).Do(req)
+			resp, err := client.Do(req)
 			require.NoError(t, err)
 			// TODO: @joshvanl: 500 is obviously the wrong status code here and
 			// should be changed.

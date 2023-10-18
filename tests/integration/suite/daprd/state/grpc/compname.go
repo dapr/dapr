@@ -31,6 +31,7 @@ import (
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -89,13 +90,12 @@ spec:
 func (c *componentName) Run(t *testing.T, ctx context.Context) {
 	c.daprd.WaitUntilRunning(t, ctx)
 
+	pt := util.NewParallel(t)
 	for _, storeName := range c.storeNames {
 		storeName := storeName
-		t.Run(storeName, func(t *testing.T) {
-			t.Parallel()
-
+		pt.Add(func(col *assert.CollectT) {
 			conn, err := grpc.DialContext(ctx, fmt.Sprintf("localhost:%d", c.daprd.GRPCPort()), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
-			require.NoError(t, err)
+			require.NoError(col, err)
 			t.Cleanup(func() { require.NoError(t, conn.Close()) })
 
 			client := rtv1.NewDaprClient(conn)
@@ -107,7 +107,7 @@ func (c *componentName) Run(t *testing.T, ctx context.Context) {
 					{Key: "key2", Value: []byte("value2")},
 				},
 			})
-			require.NoError(t, err)
+			require.NoError(col, err)
 
 			_, err = client.SaveState(ctx, &rtv1.SaveStateRequest{
 				StoreName: storeName,
@@ -116,21 +116,21 @@ func (c *componentName) Run(t *testing.T, ctx context.Context) {
 					{Key: "key2", Value: []byte("value2")},
 				},
 			})
-			require.NoError(t, err)
+			require.NoError(col, err)
 
 			resp, err := client.GetState(ctx, &rtv1.GetStateRequest{
 				StoreName: storeName,
 				Key:       "key1",
 			})
-			require.NoError(t, err)
-			assert.Equal(t, "value1", string(resp.Data))
+			require.NoError(col, err)
+			assert.Equal(col, "value1", string(resp.Data))
 
 			resp, err = client.GetState(ctx, &rtv1.GetStateRequest{
 				StoreName: storeName,
 				Key:       "key2",
 			})
-			require.NoError(t, err)
-			assert.Equal(t, "value2", string(resp.Data))
+			require.NoError(col, err)
+			assert.Equal(col, "value2", string(resp.Data))
 		})
 	}
 }
