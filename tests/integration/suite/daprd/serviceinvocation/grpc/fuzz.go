@@ -16,6 +16,7 @@ package grpc
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -30,6 +31,7 @@ import (
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -62,15 +64,12 @@ func (f *fuzzgrpc) Setup(t *testing.T) []framework.Option {
 	f.methods = make([]string, numTests)
 	f.bodies = make([][]byte, numTests)
 	f.queries = make([]map[string]string, numTests)
-	t.Run("", func(t *testing.T) {
-		t.Parallel()
-		for i := 0; i < numTests; i++ {
-			fz := fuzz.New()
-			fz.NumElements(0, 100).Fuzz(&f.methods[i])
-			fz.NumElements(0, 100).Fuzz(&f.bodies[i])
-			fz.NumElements(0, 100).Fuzz(&f.queries[i])
-		}
-	})
+	for i := 0; i < numTests; i++ {
+		fz := fuzz.New()
+		fz.NumElements(0, 100).Fuzz(&f.methods[i])
+		fz.NumElements(0, 100).Fuzz(&f.bodies[i])
+		fz.NumElements(0, 100).Fuzz(&f.queries[i])
+	}
 
 	return []framework.Option{
 		framework.WithProcesses(f.daprd1, f.daprd2, srv),
@@ -81,6 +80,7 @@ func (f *fuzzgrpc) Run(t *testing.T, ctx context.Context) {
 	f.daprd1.WaitUntilRunning(t, ctx)
 	f.daprd2.WaitUntilRunning(t, ctx)
 
+	pt := util.NewParallel(t)
 	for i := 0; i < len(f.methods); i++ {
 		method := f.methods[i]
 		body := f.bodies[i]
@@ -90,24 +90,27 @@ func (f *fuzzgrpc) Run(t *testing.T, ctx context.Context) {
 			queryString = append(queryString, fmt.Sprintf("%s=%s", k, v))
 		}
 
-		t.Run("method="+method, func(t *testing.T) {
-			t.Parallel()
+		pt.Add(func(c *assert.CollectT) {
 			conn, err := grpc.DialContext(ctx, fmt.Sprintf("127.0.0.1:%d", f.daprd2.GRPCPort()), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
-			require.NoError(t, err)
+			require.NoError(c, err)
 			t.Cleanup(func() { require.NoError(t, conn.Close()) })
 
 			resp, err := rtv1.NewDaprClient(conn).InvokeService(ctx, &rtv1.InvokeServiceRequest{
 				Id: f.daprd1.AppID(),
 				Message: &commonv1.InvokeRequest{
-					Method: method,
+					Method: url.QueryEscape(method),
+					Data:   &anypb.Any{Value: body},
 					HttpExtension: &commonv1.HTTPExtension{
 						Verb:        commonv1.HTTPExtension_POST,
 						Querystring: strings.Join(queryString, "&"),
 					},
 				},
 			})
-			require.NoError(t, err)
-			assert.Equal(t, body, resp.Data.Value)
+			require.NoError(c, err)
+			if len(body) == 0 {
+				body = nil
+			}
+			assert.Equal(c, body, resp.Data.GetValue())
 		})
 	}
 }

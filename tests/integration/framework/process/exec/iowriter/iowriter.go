@@ -25,6 +25,7 @@ import (
 type Logger interface {
 	Log(args ...any)
 	Name() string
+	Cleanup(func())
 }
 
 // stdwriter is an io.WriteCloser that writes to the test logger. It buffers
@@ -38,10 +39,14 @@ type stdwriter struct {
 }
 
 func New(t Logger, procName string) io.WriteCloser {
-	return &stdwriter{
+	s := &stdwriter{
 		t:        t,
 		procName: procName,
 	}
+
+	t.Cleanup(s.flush)
+
+	return s
 }
 
 // Write writes the input bytes to the buffer. If the input contains a newline,
@@ -49,22 +54,11 @@ func New(t Logger, procName string) io.WriteCloser {
 func (w *stdwriter) Write(inp []byte) (n int, err error) {
 	w.lock.Lock()
 	defer w.lock.Unlock()
-
-	for _, b := range inp {
-		if b == '\n' {
-			w.flush()
-			continue
-		}
-		w.buf.WriteByte(b)
-	}
-
-	return len(inp), nil
+	return w.buf.Write(inp)
 }
 
 // Close flushes the buffer and marks the writer as closed.
 func (w *stdwriter) Close() error {
-	w.lock.Lock()
-	defer w.lock.Unlock()
 	w.flush()
 	return nil
 }
@@ -72,8 +66,12 @@ func (w *stdwriter) Close() error {
 // flush writes the buffer to the test logger. Expects the lock to be held
 // before calling.
 func (w *stdwriter) flush() {
+	w.lock.Lock()
+	defer w.lock.Unlock()
 	defer w.buf.Reset()
-	if b := w.buf.Bytes(); len(b) > 0 {
-		w.t.Log(w.t.Name() + "/" + w.procName + ": " + string(b))
+	for _, line := range bytes.Split(w.buf.Bytes(), []byte("\n")) {
+		if len(line) > 0 {
+			w.t.Log(w.t.Name() + "/" + w.procName + ": " + string(line))
+		}
 	}
 }
