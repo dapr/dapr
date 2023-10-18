@@ -322,5 +322,5 @@ type codeError struct {
 }
 
 func (ce codeError) Error() string {
-	return fmt.Sprintf("codeError (statusCode='%d') msg='%v'", ce.statusCode, string(ce.msg))
+	return fmt.Sprintf("CodeError: received non-successful status code (statusCode='%d') msg='%v'", ce.statusCode, string(ce.msg))
 }
