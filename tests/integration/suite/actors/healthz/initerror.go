@@ -15,7 +15,6 @@ package healthz
 
 import (
 	"context"
-	"net"
 	"net/http"
 	"strconv"
 	"testing"
@@ -92,16 +91,7 @@ spec:
 
 func (i *initerror) Run(t *testing.T, ctx context.Context) {
 	i.place.WaitUntilRunning(t, ctx)
-
-	assert.Eventually(t, func() bool {
-		dialer := net.Dialer{Timeout: time.Second}
-		net, err := dialer.DialContext(ctx, "tcp", "localhost:"+strconv.Itoa(i.daprd.HTTPPort()))
-		if err != nil {
-			return false
-		}
-		net.Close()
-		return true
-	}, time.Second*5, time.Millisecond*100)
+	i.daprd.WaitUntilTCPReady(t, ctx)
 
 	client := util.HTTPClient(t)
 
