@@ -19,6 +19,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -38,7 +39,7 @@ func init() {
 type defaultretry struct {
 	daprd1    *daprd.Daprd
 	daprd2    *daprd.Daprd
-	callCount map[string]int
+	callCount map[string]*atomic.Int32
 }
 
 func (d *defaultretry) Setup(t *testing.T) []framework.Option {
@@ -54,8 +55,10 @@ func (d *defaultretry) Setup(t *testing.T) []framework.Option {
 			return
 		}
 		key := string(body)
-		d.callCount[key]++
-
+		if d.callCount[key] == nil {
+			d.callCount[key] = &atomic.Int32{}
+		}
+		d.callCount[key].Add(1)
 		w.Header().Set("x-method", r.Method)
 		w.Header().Set("content-type", "application/json")
 		if key == "success" {
@@ -90,7 +93,7 @@ spec:
 		daprd.WithAppPort(srv.Port()),
 		daprd.WithResourceFiles(resiliency),
 	)
-	d.callCount = make(map[string]int)
+	d.callCount = make(map[string]*atomic.Int32)
 
 	return []framework.Option{
 		framework.WithProcesses(srv, d.daprd1, d.daprd2),
@@ -115,7 +118,7 @@ func (d *defaultretry) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, "application/json", resp.Header.Get("content-type"))
 		assert.Equal(t, "success", string(body))
 		// CallCount["success"] should be 1 as there would be no retry on successful statuscode
-		assert.Equal(t, 1, d.callCount["success"])
+		assert.Equal(t, int32(1), d.callCount["success"].Load())
 	})
 
 	t.Run("retry on unsuccessful statuscode", func(t *testing.T) {
@@ -132,6 +135,6 @@ func (d *defaultretry) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, "application/json", resp.Header.Get("content-type"))
 		assert.Equal(t, "fail", string(body))
 		// Callcount["fail"] should be 4 as there will be 3 retries(maxRetries=3)
-		assert.Equal(t, 4, d.callCount["fail"])
+		assert.Equal(t, int32(4), d.callCount["fail"].Load())
 	})
 }
