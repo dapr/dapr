@@ -85,7 +85,6 @@ spec:
 	d.daprd1 = daprd.New(t,
 		daprd.WithAppPort(srv.Port()),
 		daprd.WithResourceFiles(resiliency),
-		daprd.WithLogLevel("debug"),
 	)
 	d.daprd2 = daprd.New(t,
 		daprd.WithAppPort(srv.Port()),
