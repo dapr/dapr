@@ -85,7 +85,7 @@ func (_m *FailingDirectMessaging) Invoke(ctx context.Context, targetAppID string
 	if statusCode == 0 {
 		statusCode = http.StatusOK
 	}
-	//Setting up the headers passed in request
+	// Setting up the headers passed in request
 	md := r.GetMetadata()
 	headers := make(map[string][]string)
 	for k, v := range md {
