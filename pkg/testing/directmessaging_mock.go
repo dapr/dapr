@@ -85,9 +85,18 @@ func (_m *FailingDirectMessaging) Invoke(ctx context.Context, targetAppID string
 	if statusCode == 0 {
 		statusCode = http.StatusOK
 	}
+	// Setting up the headers passed in request
+	md := r.GetMetadata()
+	headers := make(map[string][]string)
+	for k, v := range md {
+		headers[k] = v.GetValues()
+	}
+	contentType := r.Message.GetContentType()
 	resp := invokev1.
 		NewInvokeMethodResponse(int32(statusCode), http.StatusText(statusCode), nil).
-		WithRawDataBytes(r.Message.Data.Value)
+		WithRawDataBytes(r.Message.Data.Value).
+		WithHTTPHeaders(headers).
+		WithContentType(contentType)
 	return resp, nil
 }
 
