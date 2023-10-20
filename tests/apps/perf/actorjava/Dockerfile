@@ -1,5 +1,5 @@
 # build stage build the jar with all our resources
-FROM maven:3-openjdk-11 as build
+FROM maven:3-eclipse-temurin-11 as build
 
 VOLUME /tmp
 WORKDIR /build
@@ -11,7 +11,7 @@ ADD src/ /build/src/
 RUN mvn package
 
 # package stage
-FROM openjdk:11-jre-slim
+FROM eclipse-temurin:11-jre
 
 ARG JAR_FILE
 COPY --from=build /build/target/app.jar /opt/app.jar
