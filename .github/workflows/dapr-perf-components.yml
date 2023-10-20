@@ -34,7 +34,7 @@ env:
   # Configure proxy for Go modules
   GOPROXY: https://proxy.golang.org
   # Version of kubectl
-  KUBECTLVER: "v1.25.2"
+  KUBECTLVER: "v1.27.6"
   # Version of Helm
   HELMVER: "v3.10.0"
   # Kubernetes namespace to use
@@ -387,12 +387,12 @@ jobs:
           key: ${{ runner.os }}-go-perf-test-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-perf-test-
-      - uses: azure/setup-kubectl@v1
+      - uses: azure/setup-kubectl@v3
         with:
           version: ${{ env.KUBECTLVER }}
         id: install
       - name: Set up Helm ${{ env.HELMVER }}
-        uses: azure/setup-helm@v1
+        uses: azure/setup-helm@v3
         with:
           version: ${{ env.HELMVER }}
       - name: Login to Azure
