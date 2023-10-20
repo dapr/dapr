@@ -23,4 +23,5 @@ type Rule struct {
 
 type Expr interface {
 	Eval(variables map[string]interface{}) (interface{}, error)
+	String() string
 }

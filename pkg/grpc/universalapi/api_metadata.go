@@ -15,7 +15,6 @@ package universalapi
 
 import (
 	"context"
-	"fmt"
 
 	"google.golang.org/protobuf/types/known/emptypb"
 
@@ -143,9 +142,12 @@ func metadataConvertPubSubSubscriptionRules(rules []*runtimePubsub.Rule) *runtim
 		Rules: make([]*runtimev1pb.PubsubSubscriptionRule, 0),
 	}
 	for _, r := range rules {
+		match := ""
+		if r.Match != nil {
+			match = r.Match.String()
+		}
 		out.Rules = append(out.Rules, &runtimev1pb.PubsubSubscriptionRule{
-			// TODO avoid using fmt.Sprintf
-			Match: fmt.Sprintf("%s", r.Match),
+			Match: match,
 			Path:  r.Path,
 		})
 	}
