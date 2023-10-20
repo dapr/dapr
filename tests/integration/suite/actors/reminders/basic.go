@@ -91,9 +91,9 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 	client := util.HTTPClient(t)
 
-	daprdURL := "http://localhost:" + strconv.Itoa(b.daprd.HTTPPort())
+	daprdURL := "http://localhost:" + strconv.Itoa(b.daprd.HTTPPort()) + "/v1.0/actors/myactortype/myactorid"
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, daprdURL+"/v1.0/actors/myactortype/myactorid/method/foo", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, daprdURL+"/method/foo", nil)
 	require.NoError(t, err)
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -104,7 +104,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	}, time.Second*10, time.Millisecond*100, "actor not ready in time")
 
 	body := `{"dueTime": "0ms"}`
-	req, err = http.NewRequestWithContext(ctx, http.MethodPost, daprdURL+"/v1.0/actors/myactortype/myactorid/reminders/remindermethod", strings.NewReader(body))
+	req, err = http.NewRequestWithContext(ctx, http.MethodPost, daprdURL+"/reminders/remindermethod", strings.NewReader(body))
 	require.NoError(t, err)
 
 	resp, err := client.Do(req)
