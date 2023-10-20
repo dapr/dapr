@@ -143,9 +143,14 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 				resStatus.Code = statusCode
 			}
 		} else if resStatus.Code < 200 || resStatus.Code > 399 {
-			// We are not returning an `invokeError` here on purpose.
-			// Returning an error that is not an `invokeError` will cause Resiliency to retry the request (if retries are enabled), but if the request continues to fail, the response is sent to the user with whatever status code the app returned so the "received non-successful status code" is "swallowed" (will appear in logs but won't be returned to the app).
-			return rResp, fmt.Errorf("received non-successful status code: %d", resStatus.Code)
+			msg, _ := rResp.RawDataFull()
+			// Returning a `codeError` here will cause Resiliency to retry the request (if retries are enabled), but if the request continues to fail, the response is sent to the user with whatever status code the app returned.
+			return rResp, codeError{
+				headers:     rResp.Headers(),
+				statusCode:  int(resStatus.Code),
+				msg:         msg,
+				contentType: rResp.ContentType(),
+			}
 		}
 		return rResp, nil
 	})
@@ -153,6 +158,22 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 	// Special case for timeouts/circuit breakers since they won't go through the rest of the logic.
 	if errors.Is(err, context.DeadlineExceeded) || breaker.IsErrorPermanent(err) {
 		respondWithError(w, messages.ErrDirectInvoke.WithFormat(targetID, err))
+		return
+	}
+
+	var codeErr codeError
+	if errors.As(err, &codeErr) {
+		if len(codeErr.headers) > 0 {
+			invokev1.InternalMetadataToHTTPHeader(r.Context(), codeErr.headers, w.Header().Add)
+		}
+		respondWithHTTPRawResponse(w, &UniversalHTTPRawResponse{
+			Body:        codeErr.msg,
+			ContentType: codeErr.contentType,
+			StatusCode:  codeErr.statusCode,
+		}, codeErr.statusCode)
+		if resp != nil {
+			_ = resp.Close()
+		}
 		return
 	}
 
@@ -291,4 +312,15 @@ type invokeError struct {
 
 func (ie invokeError) Error() string {
 	return fmt.Sprintf("invokeError (statusCode='%d') msg='%v'", ie.statusCode, string(ie.msg))
+}
+
+type codeError struct {
+	statusCode  int
+	msg         []byte
+	headers     invokev1.DaprInternalMetadata
+	contentType string
+}
+
+func (ce codeError) Error() string {
+	return fmt.Sprintf("received non-successful status code in response: %d", ce.statusCode)
 }
