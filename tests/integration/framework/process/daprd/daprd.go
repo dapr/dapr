@@ -27,7 +27,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/types/known/emptypb"
 
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
@@ -41,6 +45,7 @@ type Daprd struct {
 	freeport *util.FreePort
 
 	appID            string
+	appProtocol      string
 	appPort          int
 	grpcPort         int
 	httpPort         int
@@ -128,6 +133,7 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		freeport:         fp,
 		appHTTP:          appHTTP,
 		appID:            opts.appID,
+		appProtocol:      opts.appProtocol,
 		appPort:          opts.appPort,
 		grpcPort:         opts.grpcPort,
 		httpPort:         opts.httpPort,
@@ -163,6 +169,42 @@ func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
 		defer resp.Body.Close()
 		return http.StatusNoContent == resp.StatusCode
 	}, time.Second*10, 100*time.Millisecond)
+}
+
+func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
+	if d.appProtocol == "http" {
+		client := util.HTTPClient(t)
+		assert.Eventually(t, func() bool {
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/v1.0/healthz", d.httpPort), nil)
+			if err != nil {
+				return false
+			}
+			resp, err := client.Do(req)
+			if err != nil {
+				return false
+			}
+			defer resp.Body.Close()
+			return http.StatusNoContent == resp.StatusCode
+		}, time.Second*10, 100*time.Millisecond)
+	}
+	if d.appProtocol == "grpc" {
+		assert.Eventually(t, func() bool {
+			conn, err := grpc.Dial("localhost:"+strconv.Itoa(d.appPort),
+				grpc.WithTransportCredentials(insecure.NewCredentials()),
+				grpc.WithBlock())
+			if conn != nil {
+				defer conn.Close()
+			}
+
+			if err != nil {
+				return false
+			}
+			in := emptypb.Empty{}
+			out := runtimev1pb.HealthCheckResponse{}
+			err = conn.Invoke(ctx, "/dapr.proto.runtime.v1.AppCallbackHealthCheck/HealthCheck", &in, &out)
+			return err == nil
+		}, time.Second*10, 100*time.Millisecond)
+	}
 }
 
 func (d *Daprd) AppID() string {

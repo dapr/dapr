@@ -73,17 +73,15 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			`[{"key": "key1", "value": "value1", "etag": 123}]`,
 			`[{"ey": "key0", "value": "value1"}]`,
 		} {
-			t.Run(body, func(t *testing.T) {
-				req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(body))
-				require.NoError(t, err)
-				resp, err := httpClient.Do(req)
-				require.NoError(t, err)
-				assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
-				body, err := io.ReadAll(resp.Body)
-				require.NoError(t, err)
-				require.NoError(t, resp.Body.Close())
-				assert.Contains(t, string(body), "ERR_MALFORMED_REQUEST")
-			})
+			req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(body))
+			require.NoError(t, err)
+			resp, err := httpClient.Do(req)
+			require.NoError(t, err)
+			assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+			body, err := io.ReadAll(resp.Body)
+			require.NoError(t, err)
+			require.NoError(t, resp.Body.Close())
+			assert.Contains(t, string(body), "ERR_MALFORMED_REQUEST")
 		}
 	})
 
@@ -95,17 +93,15 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			`[{"key": "key1", "value": "value1"},{"key": "key2", "value": "value1"}]`,
 			`[{"key": "key1", "value": "value1"},{"key": "key2", "value": "value1"},  {"key": "key1", "value": "value1"},{"key": "key2", "value": "value1"}]`,
 		} {
-			t.Run(body, func(t *testing.T) {
-				req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(body))
-				require.NoError(t, err)
-				resp, err := httpClient.Do(req)
-				require.NoError(t, err)
-				assert.Equal(t, http.StatusNoContent, resp.StatusCode)
-				body, err := io.ReadAll(resp.Body)
-				require.NoError(t, err)
-				require.NoError(t, resp.Body.Close())
-				assert.Empty(t, string(body))
-			})
+			req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(body))
+			require.NoError(t, err)
+			resp, err := httpClient.Do(req)
+			require.NoError(t, err)
+			assert.Equal(t, http.StatusNoContent, resp.StatusCode)
+			body, err := io.ReadAll(resp.Body)
+			require.NoError(t, err)
+			require.NoError(t, resp.Body.Close())
+			assert.Empty(t, string(body))
 		}
 	})
 }

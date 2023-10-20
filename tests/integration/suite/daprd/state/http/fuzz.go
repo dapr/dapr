@@ -22,7 +22,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -155,28 +154,31 @@ func (f *fuzzstate) Run(t *testing.T, ctx context.Context) {
 	httpClient := util.HTTPClient(t)
 
 	t.Run("get", func(t *testing.T) {
-		t.Parallel()
+		pt := util.NewParallel(t)
 		for i := range f.getFuzzKeys {
-			getURL := fmt.Sprintf("http://localhost:%d/v1.0/state/%s/%s", f.daprd.HTTPPort(), url.QueryEscape(f.storeName), url.QueryEscape(f.getFuzzKeys[i]))
-			// t.Log("URL", getURL)
-			// t.Log("State store name", f.storeName, hex.EncodeToString([]byte(f.storeName)), printRunes(f.storeName))
-			// t.Log("Key", f.getFuzzKeys[i], printRunes(f.getFuzzKeys[i]))
-			req, err := http.NewRequestWithContext(ctx, http.MethodGet, getURL, nil)
-			require.NoError(t, err)
-			resp, err := httpClient.Do(req)
-			require.NoError(t, err)
-			assert.Equal(t, http.StatusNoContent, resp.StatusCode)
-			respBody, err := io.ReadAll(resp.Body)
-			require.NoError(t, err)
-			require.NoError(t, resp.Body.Close())
-			assert.Empty(t, string(respBody), "key: %s", f.getFuzzKeys[i])
+			i := i
+			pt.Add(func(t *assert.CollectT) {
+				getURL := fmt.Sprintf("http://localhost:%d/v1.0/state/%s/%s", f.daprd.HTTPPort(), url.QueryEscape(f.storeName), url.QueryEscape(f.getFuzzKeys[i]))
+				// t.Log("URL", getURL)
+				// t.Log("State store name", f.storeName, hex.EncodeToString([]byte(f.storeName)), printRunes(f.storeName))
+				// t.Log("Key", f.getFuzzKeys[i], printRunes(f.getFuzzKeys[i]))
+				req, err := http.NewRequestWithContext(ctx, http.MethodGet, getURL, nil)
+				require.NoError(t, err)
+				resp, err := httpClient.Do(req)
+				require.NoError(t, err)
+				assert.Equal(t, http.StatusNoContent, resp.StatusCode)
+				respBody, err := io.ReadAll(resp.Body)
+				require.NoError(t, err)
+				require.NoError(t, resp.Body.Close())
+				assert.Empty(t, string(respBody), "key: %s", f.getFuzzKeys[i])
+			})
 		}
 	})
 
+	pt := util.NewParallel(t)
 	for i := 0; i < len(f.getFuzzKeys); i++ {
 		i := i
-		t.Run("save "+strconv.Itoa(i), func(t *testing.T) {
-			t.Parallel()
+		pt.Add(func(t *assert.CollectT) {
 			for _, req := range []any{f.saveReqBinaries[i], f.saveReqStrings[i]} {
 				postURL := fmt.Sprintf("http://localhost:%d/v1.0/state/%s", f.daprd.HTTPPort(), url.QueryEscape(f.storeName))
 				b := new(bytes.Buffer)

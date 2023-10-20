@@ -91,10 +91,10 @@ func (c *componentName) Run(t *testing.T, ctx context.Context) {
 
 	httpClient := util.HTTPClient(t)
 
+	pt := util.NewParallel(t)
 	for _, storeName := range c.storeNames {
 		storeName := storeName
-		t.Run(storeName, func(t *testing.T) {
-			t.Parallel()
+		pt.Add(func(t *assert.CollectT) {
 			reqURL := fmt.Sprintf("http://localhost:%d/v1.0/state/%s", c.daprd.HTTPPort(), url.QueryEscape(storeName))
 			req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, strings.NewReader(`[{"key": "key1", "value": "value1"}]`))
 			require.NoError(t, err)
