@@ -134,7 +134,7 @@ func NewActorPlacement(opts ActorPlacementOpts) internal.PlacementService {
 	}
 }
 
-func (p *actorPlacement) ActorHostReady() bool {
+func (p *actorPlacement) PlacementHealthy() bool {
 	return p.appHealthy.Load() && p.client.isConnected()
 }
 

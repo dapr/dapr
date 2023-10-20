@@ -28,8 +28,8 @@ type PlacementService interface {
 	LookupActor(ctx context.Context, req LookupActorRequest) (LookupActorResponse, error)
 	AddHostedActorType(actorType string, idleTimeout time.Duration) error
 
-	// ActorHostReady returns true if the actor host is ready.
-	ActorHostReady() bool
+	// PlacementHealthy returns true if the placement service is healthy.
+	PlacementHealthy() bool
 	// StatusMessage returns a custom status message.
 	StatusMessage() string
 }

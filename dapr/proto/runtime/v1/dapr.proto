@@ -592,7 +592,7 @@ message InvokeActorResponse {
 // GetMetadataResponse is a message that is returned on GetMetadata rpc call
 message GetMetadataResponse {
   string id = 1;
-  // Deprecated alias for actor_system.active_actors.
+  // Deprecated alias for actor_runtime.active_actors.
   repeated ActiveActorsCount active_actors_count = 2 [json_name = "actors", deprecated = true];
   repeated RegisteredComponents registered_components = 3 [json_name = "components"];
   map<string, string> extended_metadata = 4 [json_name = "extended"];

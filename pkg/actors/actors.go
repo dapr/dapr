@@ -979,7 +979,7 @@ func (a *actorsRuntime) GetRuntimeStatus(ctx context.Context) *runtimev1pb.Actor
 	}
 
 	if a.placement != nil {
-		res.HostReady = a.placement.ActorHostReady() && a.haveCompatibleStorage()
+		res.HostReady = a.placement.PlacementHealthy() && a.haveCompatibleStorage()
 		res.Placement = a.placement.StatusMessage()
 	}
 

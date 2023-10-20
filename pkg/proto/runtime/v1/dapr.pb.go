@@ -2621,7 +2621,7 @@ type GetMetadataResponse struct {
 	unknownFields protoimpl.UnknownFields
 
 	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	// Deprecated alias for actor_system.active_actors.
+	// Deprecated alias for actor_runtime.active_actors.
 	//
 	// Deprecated: Do not use.
 	ActiveActorsCount       []*ActiveActorsCount     `protobuf:"bytes,2,rep,name=active_actors_count,json=actors,proto3" json:"active_actors_count,omitempty"`

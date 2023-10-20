@@ -89,8 +89,8 @@ func (*MockPlacement) WaitUntilReady(ctx context.Context) error {
 	return nil
 }
 
-// ActorHostReady implements internal.PlacementService
-func (*MockPlacement) ActorHostReady() bool {
+// PlacementHealthy implements internal.PlacementService
+func (*MockPlacement) PlacementHealthy() bool {
 	return true
 }
 
