@@ -39,10 +39,9 @@ const (
 	actorIDPartitionTemplate     = "actor-reminder-partition-test-%d" // Template for Actor ID.
 	reminderName                 = "PartitionTestReminder"            // Reminder name.
 	numIterations                = 7                                  // Number of times each test should run.
-	numHealthChecks              = 60                                 // Number of get calls before starting tests.
 	numActors                    = 40                                 // Number of actors to register a reminder.
 	secondsToCheckReminderResult = 90                                 // How much time to wait to make sure the result is in logs.
-	secondsToWaitForAppRestart   = 10                                 // How much time to wait until app has restarted.
+	secondsToWaitForAppRestart   = 30                                 // How much time to wait until app has restarted.
 	reminderUpdateRateLimitRPS   = 20                                 // Sane rate limiting in persisting reminders.
 	actorName                    = "testactorreminderpartition"       // Actor type.
 	actorInvokeURLFormat         = "%s/test/%s/%s/%s/%s"              // URL to invoke a Dapr's actor method in test app.
@@ -81,7 +80,7 @@ func countActorAction(resp []byte, actorID string, action string) int {
 	count := 0
 	logEntries := parseLogEntries(resp)
 	for _, logEntry := range logEntries {
-		if (logEntry.ActorID == actorID) && (logEntry.Action == action) {
+		if logEntry.ActorID == actorID && logEntry.Action == action {
 			count++
 		}
 	}
@@ -154,7 +153,7 @@ func validateReminderLogs(t *testing.T, numActorsToCheck int) error {
 			}
 
 			log.Print("Checking if all reminders did trigger ...")
-			// Errors below should NOT be considered flakyness and must be investigated.
+			// Errors below should NOT be considered flakiness and must be investigated.
 			// If there was no other error until now, there should be reminders triggered.
 			for i := 0; i < numActorsToCheck; i++ {
 				actorID := fmt.Sprintf(actorIDPartitionTemplate, i+1000)
@@ -162,8 +161,8 @@ func validateReminderLogs(t *testing.T, numActorsToCheck int) error {
 				// Due to possible load stress, we do not expect all reminders to be called at the same frequency.
 				// There are other E2E tests that validate the correct frequency of reminders in a happy path.
 				if count == 0 {
-					log.Printf("Reminder %s for Actor %s was not invoked.", reminderName, actorID)
-					return fmt.Errorf("Reminder %s for Actor %s was not invoked.", reminderName, actorID)
+					log.Printf("Reminder %s for Actor %s was not invoked", reminderName, actorID)
+					return fmt.Errorf("reminder %s for Actor %s was not invoked", reminderName, actorID)
 				}
 			}
 
@@ -184,8 +183,7 @@ func TestActorReminder(t *testing.T) {
 	// This initial probe makes the test wait a little bit longer when needed,
 	// making this test less flaky due to delays in the deployment.
 	log.Printf("Checking if app is healthy ...")
-	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
-	require.NoError(t, err, "failed to check app's health status")
+	require.NoError(t, utils.HealthCheckApps(externalURL), "failed to check app's health status")
 
 	// Set reminder
 	reminder := actorReminder{
@@ -229,18 +227,19 @@ func TestActorReminder(t *testing.T) {
 				_, err = utils.HTTPPost(
 					fmt.Sprintf(envURLFormat, externalURL, "TEST_APP_ACTOR_REMINDERS_PARTITIONS"),
 					[]byte(strconv.Itoa(newPartitionCount)))
-				require.NoError(t, err)
+				require.NoErrorf(t, err, "i=%d actorID=%s", i, actorID)
 
 				// Shutdown the sidecar to load the new partition config
 				_, err = utils.HTTPPost(fmt.Sprintf(shutdownSidecarURLFormat, externalURL), []byte(""))
 				err = tr.Platform.SetAppEnv(appName, "TEST_APP_ACTOR_REMINDERS_PARTITIONS", strconv.Itoa(newPartitionCount))
-				require.NoError(t, err)
+				require.NoErrorf(t, err, "i=%d actorID=%s", i, actorID)
 
+				log.Printf("Updated partition count to %d", newPartitionCount)
 				log.Printf("Waiting for app %s to restart ...", appName)
 
 				// Sleep for some time to let the sidecar restart.
 				// Calling the health-check right away might trigger a false-positive health prior to actual restart.
-				time.Sleep(secondsToWaitForAppRestart * 12 * time.Second)
+				time.Sleep(secondsToWaitForAppRestart * time.Second)
 
 				expectedEnvPartitionCount = strconv.Itoa(newPartitionCount)
 			}
@@ -252,7 +251,7 @@ func TestActorReminder(t *testing.T) {
 					//	return fmt.Errorf("external URL must not be empty!")
 					//}
 
-					_, rerr := utils.HTTPGetNTimes(externalURL, numHealthChecks)
+					rerr := utils.HealthCheckApps(externalURL)
 					if rerr != nil {
 						return rerr
 					}
@@ -262,7 +261,7 @@ func TestActorReminder(t *testing.T) {
 						return rerr
 					}
 					if expectedEnvPartitionCount != string(envValue) {
-						return fmt.Errorf("invalid number of partitions: %s (expected) vs %s (actual)", expectedEnvPartitionCount, string(envValue))
+						return fmt.Errorf("invalid number of partitions: expected=%s - actual=%s", expectedEnvPartitionCount, string(envValue))
 					}
 
 					return nil
@@ -272,7 +271,7 @@ func TestActorReminder(t *testing.T) {
 					log.Printf("Error while invoking actor: '%v' - retrying in %s", err, d)
 				},
 			)
-			require.NoError(t, err)
+			require.NoErrorf(t, err, "i=%d actorID=%s", i, actorID)
 
 			err = backoff.RetryNotify(
 				func() error {
@@ -285,7 +284,7 @@ func TestActorReminder(t *testing.T) {
 						return rerr
 					}
 
-					if (httpStatusCode != 200) && (httpStatusCode != 204) {
+					if httpStatusCode != 200 && httpStatusCode != 204 {
 						return fmt.Errorf("invalid status code %d while registering reminder for actorID %s", httpStatusCode, actorID)
 					}
 					return nil
@@ -295,11 +294,11 @@ func TestActorReminder(t *testing.T) {
 					log.Printf("error while registering the reminder: '%v' - retrying in %s", err, d)
 				},
 			)
-			require.NoError(t, err)
+			require.NoErrorf(t, err, "i=%d actorID=%s", i, actorID)
 
 			if mustCheckLogs {
 				err = validateReminderLogs(t, i+1)
-				require.NoError(t, err)
+				require.NoErrorf(t, err, "i=%d actorID=%s", i, actorID)
 				mustCheckLogs = false
 			}
 		}
