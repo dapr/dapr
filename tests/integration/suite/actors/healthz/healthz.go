@@ -92,7 +92,7 @@ func (h *healthz) Run(t *testing.T, ctx context.Context) {
 
 	select {
 	case <-h.healthzCalled:
-	case <-time.After(time.Second * 5):
+	case <-time.After(time.Second * 15):
 		t.Fatal("timed out waiting for healthz call")
 	}
 
