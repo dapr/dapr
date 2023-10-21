@@ -1,5 +1,7 @@
 package pubsub
 
+import "fmt"
+
 type Subscription struct {
 	PubsubName      string            `json:"pubsubname"`
 	Topic           string            `json:"topic"`
@@ -22,5 +24,7 @@ type Rule struct {
 }
 
 type Expr interface {
+	fmt.Stringer
+
 	Eval(variables map[string]interface{}) (interface{}, error)
 }
