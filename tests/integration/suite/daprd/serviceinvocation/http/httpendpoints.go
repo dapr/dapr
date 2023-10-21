@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -214,9 +215,22 @@ func (h *httpendpoints) Run(t *testing.T, ctx context.Context) {
 				{url: fmt.Sprintf("http://localhost:%d/v1.0/invoke/mywebsitetls/method/hello", daprd.HTTPPort())},
 			} {
 				t.Run(fmt.Sprintf("url %d", i), func(t *testing.T) {
-					status, body := doReq(http.MethodGet, ts.url, ts.headers)
-					assert.Equal(t, expTLSCode, status)
-					assertBody(t, body)
+					for {
+						status, body := doReq(http.MethodGet, ts.url, ts.headers)
+						assert.Equal(t, expTLSCode, status)
+						if runtime.GOOS == "windows" &&
+							strings.Contains(body, "wsasend: An existing connection was forcibly closed by the remote host.") {
+							t.Logf("retrying due to: %s", body)
+							select {
+							case <-ctx.Done():
+								assert.Fail(t, "context done")
+							case <-time.After(time.Millisecond * 100):
+								continue
+							}
+						}
+						assertBody(t, body)
+						break
+					}
 				})
 			}
 		})
