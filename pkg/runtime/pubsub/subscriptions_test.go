@@ -800,7 +800,7 @@ func TestK8sSubscriptions(t *testing.T) {
 }
 
 func TestGetRuleMatchString(t *testing.T) {
-	var cases = []subscriptionsapiV2alpha1.Rule{
+	cases := []subscriptionsapiV2alpha1.Rule{
 		{
 			Match: `event.type == "myevent.v3"`,
 			Path:  "myroute.v3",

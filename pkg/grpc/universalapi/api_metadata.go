@@ -139,17 +139,15 @@ func metadataGetOrDefaultCapabilities(dict map[string][]string, key string) []st
 
 func metadataConvertPubSubSubscriptionRules(rules []*runtimePubsub.Rule) *runtimev1pb.PubsubSubscriptionRules {
 	out := &runtimev1pb.PubsubSubscriptionRules{
-		Rules: make([]*runtimev1pb.PubsubSubscriptionRule, 0),
+		Rules: make([]*runtimev1pb.PubsubSubscriptionRule, len(rules)),
 	}
-	for _, r := range rules {
-		match := ""
-		if r.Match != nil {
-			match = r.Match.String()
+	for i, r := range rules {
+		out.Rules[i] = &runtimev1pb.PubsubSubscriptionRule{
+			Path: r.Path,
 		}
-		out.Rules = append(out.Rules, &runtimev1pb.PubsubSubscriptionRule{
-			Match: match,
-			Path:  r.Path,
-		})
+		if r.Match != nil {
+			out.Rules[i].Match = r.Match.String()
+		}
 	}
 	return out
 }
