@@ -798,3 +798,26 @@ func TestK8sSubscriptions(t *testing.T) {
 		assert.Equal(t, "testValue", subs[0].Metadata["testName"])
 	}
 }
+
+func TestGetRuleMatchString(t *testing.T) {
+	cases := []subscriptionsapiV2alpha1.Rule{
+		{
+			Match: `event.type == "myevent.v3"`,
+			Path:  "myroute.v3",
+		},
+		{
+			Match: `event.type == "myevent.v2"`,
+			Path:  "myroute.v2",
+		},
+		{
+			Match: "",
+			Path:  "myroute.v1",
+		},
+	}
+
+	for _, v := range cases {
+		rule, err := createRoutingRule(v.Match, v.Path)
+		assert.NoError(t, err)
+		assert.Equal(t, v.Match, rule.Match.String())
+	}
+}
