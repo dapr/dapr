@@ -40,7 +40,25 @@ type metadata struct {
 }
 
 func (m *metadata) Setup(t *testing.T) []framework.Option {
-	m.proc = procdaprd.New(t)
+	subComponentAndConfiguration := `
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: pubsub
+spec:
+  type: pubsub.in-memory
+  version: v1
+---
+apiVersion: dapr.io/v1alpha1
+kind: Subscription
+metadata:
+  name: sub
+spec:
+  topic: B
+  route: /B
+  pubsubname: pubsub
+`
+	m.proc = procdaprd.New(t, procdaprd.WithResourceFiles(subComponentAndConfiguration))
 	return []framework.Option{
 		framework.WithProcesses(m.proc),
 	}
@@ -95,4 +113,17 @@ func validateResponse(t *testing.T, appID string, appPort int, body io.Reader) {
 	require.Equal(t, appPort, int(port))
 	require.Equal(t, "http", appConnectionProperties["protocol"])
 	require.Equal(t, "127.0.0.1", appConnectionProperties["channelAddress"])
+
+	// validate that the metadata contains correct format of subscription.
+	// The http response struct is private, so we use assert here.
+	subscriptions, ok := bodyMap["subscriptions"].([]interface{})
+	require.True(t, ok)
+	subscription, ok := subscriptions[0].(map[string]interface{})
+	require.True(t, ok)
+	rules, ok := subscription["rules"].([]interface{})
+	require.True(t, ok)
+	rule, ok := rules[0].(map[string]interface{})
+	require.True(t, ok)
+	require.Empty(t, rule["match"])
+	require.Equal(t, "/B", rule["path"])
 }
