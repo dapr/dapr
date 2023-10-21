@@ -123,6 +123,7 @@ func validateResponse(t *testing.T, appID string, appPort int, body io.Reader) {
 	rules, ok := subscription["rules"].([]interface{})
 	require.True(t, ok)
 	rule, ok := rules[0].(map[string]interface{})
+	require.True(t, ok)
 	require.Empty(t, rule["match"])
 	require.Equal(t, "/B", rule["path"])
 }
