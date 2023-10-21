@@ -170,8 +170,8 @@ func NewPlacementService(opts PlacementServiceOpts) (*Service, error) {
 	fhdd.Store(int64(faultyHostDetectInitialDuration))
 
 	disseminateRateLimiter, err := ratelimiting.NewCoalescing(ratelimiting.OptionsCoalescing{
-		InitialDelay:     ptr.Of(time.Millisecond * 500),
-		MaxDelay:         ptr.Of(time.Second * 5),
+		InitialDelay:     ptr.Of(time.Millisecond * 200),
+		MaxDelay:         ptr.Of(time.Second * 4),
 		MaxPendingEvents: ptr.Of(5),
 	})
 	if err != nil {
