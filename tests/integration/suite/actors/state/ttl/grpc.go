@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package grpc
+package ttl
 
 import (
 	"context"
@@ -37,15 +37,15 @@ import (
 )
 
 func init() {
-	suite.Register(new(ttl))
+	suite.Register(new(sgrpc))
 }
 
-type ttl struct {
+type sgrpc struct {
 	daprd *daprd.Daprd
 	place *placement.Placement
 }
 
-func (l *ttl) Setup(t *testing.T) []framework.Option {
+func (s *sgrpc) Setup(t *testing.T) []framework.Option {
 	configFile := filepath.Join(t.TempDir(), "config.yaml")
 	require.NoError(t, os.WriteFile(configFile, []byte(`
 apiVersion: dapr.io/v1alpha1
@@ -70,24 +70,24 @@ spec:
 	})
 
 	srv := prochttp.New(t, prochttp.WithHandler(handler))
-	l.place = placement.New(t)
-	l.daprd = daprd.New(t,
+	s.place = placement.New(t)
+	s.daprd = daprd.New(t,
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithConfigs(configFile),
-		daprd.WithPlacementAddresses(l.place.Address()),
+		daprd.WithPlacementAddresses(s.place.Address()),
 		daprd.WithAppPort(srv.Port()),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(l.place, srv, l.daprd),
+		framework.WithProcesses(s.place, srv, s.daprd),
 	}
 }
 
-func (l *ttl) Run(t *testing.T, ctx context.Context) {
-	l.place.WaitUntilRunning(t, ctx)
-	l.daprd.WaitUntilRunning(t, ctx)
+func (s *sgrpc) Run(t *testing.T, ctx context.Context) {
+	s.place.WaitUntilRunning(t, ctx)
+	s.daprd.WaitUntilRunning(t, ctx)
 
-	conn, err := grpc.DialContext(ctx, l.daprd.GRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+	conn, err := grpc.DialContext(ctx, s.daprd.GRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
 	client := rtv1.NewDaprClient(conn)

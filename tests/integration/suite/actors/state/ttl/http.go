@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package http
+package ttl
 
 import (
 	"context"
@@ -37,17 +37,17 @@ import (
 )
 
 func init() {
-	suite.Register(new(ttl))
+	suite.Register(new(shttp))
 }
 
-type ttl struct {
+type shttp struct {
 	daprd         *daprd.Daprd
 	place         *placement.Placement
 	healthzCalled chan struct{}
 }
 
-func (l *ttl) Setup(t *testing.T) []framework.Option {
-	l.healthzCalled = make(chan struct{})
+func (s *shttp) Setup(t *testing.T) []framework.Option {
+	s.healthzCalled = make(chan struct{})
 	var once sync.Once
 
 	configFile := filepath.Join(t.TempDir(), "config.yaml")
@@ -68,7 +68,7 @@ spec:
 	})
 	handler.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		once.Do(func() {
-			close(l.healthzCalled)
+			close(s.healthzCalled)
 		})
 		w.WriteHeader(http.StatusOK)
 	})
@@ -77,32 +77,32 @@ spec:
 	})
 
 	srv := prochttp.New(t, prochttp.WithHandler(handler))
-	l.place = placement.New(t)
-	l.daprd = daprd.New(t,
+	s.place = placement.New(t)
+	s.daprd = daprd.New(t,
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithConfigs(configFile),
-		daprd.WithPlacementAddresses(l.place.Address()),
+		daprd.WithPlacementAddresses(s.place.Address()),
 		daprd.WithAppPort(srv.Port()),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(l.place, srv, l.daprd),
+		framework.WithProcesses(s.place, srv, s.daprd),
 	}
 }
 
-func (l *ttl) Run(t *testing.T, ctx context.Context) {
-	l.place.WaitUntilRunning(t, ctx)
-	l.daprd.WaitUntilRunning(t, ctx)
+func (s *shttp) Run(t *testing.T, ctx context.Context) {
+	s.place.WaitUntilRunning(t, ctx)
+	s.daprd.WaitUntilRunning(t, ctx)
 
 	select {
-	case <-l.healthzCalled:
+	case <-s.healthzCalled:
 	case <-time.After(time.Second * 15):
 		t.Fatal("timed out waiting for healthz call")
 	}
 
 	client := util.HTTPClient(t)
 
-	daprdURL := "http://localhost:" + strconv.Itoa(l.daprd.HTTPPort())
+	daprdURL := "http://localhost:" + strconv.Itoa(s.daprd.HTTPPort())
 
 	req, err := http.NewRequest(http.MethodPost, daprdURL+"/v1.0/actors/myactortype/myactorid/method/foo", nil)
 	require.NoError(t, err)
