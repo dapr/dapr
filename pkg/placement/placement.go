@@ -34,7 +34,10 @@ import (
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/pkg/security/spiffe"
+	"github.com/dapr/kit/concurrency"
+	"github.com/dapr/kit/events/ratelimiting"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 )
 
 var log = logger.NewLogger("dapr.placement")
@@ -60,16 +63,6 @@ const (
 
 	// faultyHostDetectInterval is the interval to check the faulty member.
 	faultyHostDetectInterval = 500 * time.Millisecond
-
-	// disseminateTimerInterval is the interval to disseminate the latest consistent hashing table.
-	disseminateTimerInterval = 500 * time.Millisecond
-	// disseminateTimeout is the timeout to disseminate hashing tables after the membership change.
-	// When the multiple actor service pods are deployed first, a few pods are deployed in the beginning
-	// and the rest of pods will be deployed gradually. disseminateNextTime is maintained to decide when
-	// the hashing table is disseminated. disseminateNextTime is updated whenever membership change
-	// is applied to raft state or each pod is deployed. If we increase disseminateTimeout, it will
-	// reduce the frequency of dissemination, but it will delay the table dissemination.
-	disseminateTimeout = 2 * time.Second
 )
 
 type hostMemberChange struct {
@@ -128,8 +121,6 @@ type Service struct {
 	membershipCh chan hostMemberChange
 	// disseminateLock is the lock for hashing table dissemination.
 	disseminateLock sync.Mutex
-	// disseminateNextTime is the time when the hashing tables are disseminated.
-	disseminateNextTime atomic.Int64
 	// memberUpdateCount represents how many dapr runtimes needs to change.
 	// consistent hashing table. Only actor runtime's heartbeat will increase this.
 	memberUpdateCount atomic.Uint32
@@ -145,6 +136,10 @@ type Service struct {
 
 	// hasLeadership indicates the state for leadership.
 	hasLeadership atomic.Bool
+
+	disseminateRateLimiter ratelimiting.RateLimiter
+
+	disseminateCh chan struct{}
 
 	// streamConnGroup represents the number of stream connections.
 	// This waits until all stream connections are drained when revoking leadership.
@@ -170,9 +165,18 @@ type PlacementServiceOpts struct {
 }
 
 // NewPlacementService returns a new placement service.
-func NewPlacementService(opts PlacementServiceOpts) *Service {
+func NewPlacementService(opts PlacementServiceOpts) (*Service, error) {
 	fhdd := &atomic.Int64{}
 	fhdd.Store(int64(faultyHostDetectInitialDuration))
+
+	disseminateRateLimiter, err := ratelimiting.NewCoalescing(ratelimiting.OptionsCoalescing{
+		InitialDelay:     ptr.Of(time.Millisecond * 500),
+		MaxDelay:         ptr.Of(time.Second * 5),
+		MaxPendingEvents: ptr.Of(5),
+	})
+	if err != nil {
+		return nil, err
+	}
 
 	return &Service{
 		streamConnPool:           []placementGRPCStream{},
@@ -181,6 +185,8 @@ func NewPlacementService(opts PlacementServiceOpts) *Service {
 		raftNode:                 opts.RaftNode,
 		maxAPILevel:              opts.MaxAPILevel,
 		minAPILevel:              opts.MinAPILevel,
+		disseminateCh:            make(chan struct{}),
+		disseminateRateLimiter:   disseminateRateLimiter,
 		clock:                    &clock.RealClock{},
 		closedCh:                 make(chan struct{}),
 		sec:                      opts.SecProvider,
@@ -213,22 +219,28 @@ func (p *Service) Run(ctx context.Context, port string) error {
 
 	log.Infof("Placement service started on port %d", serverListener.Addr().(*net.TCPAddr).Port)
 
-	errCh := make(chan error)
-	go func() {
-		errCh <- grpcServer.Serve(serverListener)
-		log.Info("Placement service stopped")
-	}()
-
-	<-ctx.Done()
-
-	if p.closed.CompareAndSwap(false, true) {
-		close(p.closedCh)
-	}
-
-	grpcServer.GracefulStop()
-	p.wg.Wait()
-
-	return <-errCh
+	defer p.wg.Wait()
+	return concurrency.NewRunnerManager(
+		func(ctx context.Context) error {
+			return p.disseminateRateLimiter.Run(ctx, p.disseminateCh)
+		},
+		func(ctx context.Context) error {
+			if err := grpcServer.Serve(serverListener); err != nil {
+				return err
+			}
+			log.Info("placement service stopped")
+			return nil
+		},
+		func(ctx context.Context) error {
+			<-ctx.Done()
+			if p.closed.CompareAndSwap(false, true) {
+				close(p.closedCh)
+			}
+			grpcServer.GracefulStop()
+			p.disseminateRateLimiter.Close()
+			return nil
+		},
+	).Run(ctx)
 }
 
 // ReportDaprStatus gets a heartbeat report from different Dapr hosts.

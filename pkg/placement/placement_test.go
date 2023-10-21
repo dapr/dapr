@@ -40,10 +40,11 @@ const testStreamSendLatency = time.Second
 func newTestPlacementServer(t *testing.T, raftServer *raft.Server) (string, *Service, *clocktesting.FakeClock, context.CancelFunc) {
 	t.Helper()
 
-	testServer := NewPlacementService(PlacementServiceOpts{
+	testServer, err := NewPlacementService(PlacementServiceOpts{
 		RaftNode:    raftServer,
 		SecProvider: securityfake.New(),
 	})
+	require.NoError(t, err)
 	clock := clocktesting.NewFakeClock(time.Now())
 	testServer.clock = clock
 
@@ -155,7 +156,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 
 		// assert
 		assert.Eventually(t, func() bool {
-			clock.Step(disseminateTimerInterval)
+			clock.Step(time.Second / 2)
 			select {
 			case memberChange := <-testServer.membershipCh:
 				assert.Equal(t, raft.MemberUpsert, memberChange.cmdType)

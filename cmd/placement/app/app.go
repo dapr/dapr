@@ -93,7 +93,10 @@ func Run() {
 	if opts.MaxAPILevel >= 0 && opts.MaxAPILevel < math.MaxInt32 {
 		placementOpts.MaxAPILevel = ptr.Of(uint32(opts.MaxAPILevel))
 	}
-	apiServer := placement.NewPlacementService(placementOpts)
+	apiServer, err := placement.NewPlacementService(placementOpts)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	err = concurrency.NewRunnerManager(
 		func(ctx context.Context) error {
