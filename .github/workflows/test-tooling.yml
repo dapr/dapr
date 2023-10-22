@@ -7,7 +7,7 @@ on:
       - "tools/*"
   pull_request:
     branches:
-      - main
+      - master
     paths: # Explicitly declare which paths
       - ".github/workflows/test-tooling.yml"
       - "tools/*"
