@@ -250,7 +250,7 @@ dapr.yaml: check-docker-env
 		--include-crds=true  --set global.ha.enabled=$(HA_MODE) --set dapr_config.dapr_config_chart_included=false --set-string global.tag=$(DAPR_TAG) --set-string global.registry=$(DAPR_REGISTRY) $(HELM_CHART_DIR) > $(HELM_MANIFEST_FILE)
 
 ################################################################################
-# Target: upload-helmchart
+# Target: upload-helmchart													   #
 ################################################################################
 
 # Upload helm charts to Helm Registry
@@ -360,7 +360,7 @@ test-race:
 		go test -tags="allcomponents unit" -race
 
 ################################################################################
-# Target: test-integration                                                                 #
+# Target: test-integration                                                     #
 ################################################################################
 .PHONY: test-integration
 test-integration: test-deps
@@ -386,9 +386,9 @@ lint: check-linter
 .SILENT: check-linter # Silence output other than the application run
 .PHONY: check-linter
 check-linter:
-	cd ./tools/check-lint-version && \
+	cd ./.build-tools && \
 	go mod tidy && \
-	go run main.go
+	go run . check-linter
 
 ################################################################################
 # Target: modtidy-all                                                          #
@@ -418,22 +418,22 @@ modtidy-all: $(TIDY_MODFILES)
 modtidy:
 	go mod tidy
 
-################################################################################
-# Target: format                                                              #
+################################################################################f
+# Target: format                                                               #
 ################################################################################
 .PHONY: format
 format: modtidy-all
 	gofumpt -l -w . && goimports -local github.com/dapr/ -w $(shell find ./pkg -type f -name '*.go' -not -path "./pkg/proto/*")
 
 ################################################################################
-# Target: check                                                              #
+# Target: check                                                                #
 ################################################################################
 .PHONY: check
 check: format test lint
 	git status && [[ -z `git status -s` ]]
 
 ################################################################################
-# Target: init-proto                                                            #
+# Target: init-proto                                                           #
 ################################################################################
 .PHONY: init-proto
 init-proto:
@@ -478,7 +478,7 @@ check-diff:
 	git diff --exit-code ./go.sum # check no changes
 
 ################################################################################
-# Target: check-proto-version                                                         #
+# Target: check-proto-version                                                  #
 ################################################################################
 .PHONY: check-proto-version
 check-proto-version: ## Checking the version of proto related tools
@@ -492,7 +492,7 @@ check-proto-version: ## Checking the version of proto related tools
 	|| { echo "please use protoc-gen-go $(PROTOC_GEN_GO_VERSION) to generate proto, see https://github.com/dapr/dapr/blob/master/dapr/README.md#proto-client-generation"; exit 1; }
 
 ################################################################################
-# Target: check-proto-diff                                                           #
+# Target: check-proto-diff                                                     #
 ################################################################################
 .PHONY: check-proto-diff
 check-proto-diff:
@@ -508,7 +508,7 @@ check-proto-diff:
 
 
 ################################################################################
-# Target: compile-build-tools                                                              #
+# Target: compile-build-tools                                                  #
 ################################################################################
 compile-build-tools:
 ifeq (,$(wildcard $(BUILD_TOOLS)))

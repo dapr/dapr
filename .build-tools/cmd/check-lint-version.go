@@ -1,12 +1,12 @@
-package main
+package cmd
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"regexp"
 
+	"github.com/spf13/cobra"
 	"golang.org/x/mod/semver"
 	"gopkg.in/yaml.v3"
 )
@@ -76,6 +76,22 @@ func compareVersions(path string) string {
 	return fmt.Sprintf("Linter version is valid (MajorMinor): %s", currentVersion)
 }
 
-func main() {
-	log.Println(compareVersions("../../.github/workflows/dapr.yml"))
+func getCmdCheckLint(cmdType string) *cobra.Command {
+	// Base command
+	cmd := &cobra.Command{
+		Use:   cmdType,
+		Short: "Compare local golangci-lint version against workflow version",
+		Run: func(cmd *cobra.Command, args []string) {
+			path := cmd.Flag("path").Value.String()
+			fmt.Println(compareVersions(path))
+		},
+	}
+	cmd.PersistentFlags().String("path", "../.github/workflows/dapr.yml", "Path to workflow file")
+	return cmd
+}
+
+func init() {
+	// checkLintCmd represents the checkLint command
+	checkLintCmd := getCmdCheckLint("check-linter")
+	rootCmd.AddCommand(checkLintCmd)
 }

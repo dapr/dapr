@@ -1,4 +1,4 @@
-package main
+package cmd
 
 import (
 	"testing"
@@ -8,19 +8,19 @@ import (
 
 func TestParseWorkflow(t *testing.T) {
 	t.Run("parse invalid workflow file", func(t *testing.T) {
-		parsedVersion, err := parseWorkflowVersionFromFile("../../.github/workflows/invalid.yaml")
+		parsedVersion, err := parseWorkflowVersionFromFile("../testdata/check-lint-version/invalid.yml")
 		assert.Equal(t, "", parsedVersion)
 		assert.Error(t, err)
 	})
 
 	t.Run("parse workflow file with a missing key", func(t *testing.T) {
-		parsedVersion, err := parseWorkflowVersionFromFile("./testing/invalid-test.yml")
+		parsedVersion, err := parseWorkflowVersionFromFile("../testdata/check-lint-version/invalid-test.yml")
 		assert.Equal(t, "", parsedVersion)
 		assert.NoError(t, err)
 	})
 
 	t.Run("parse an invalid workflow file", func(t *testing.T) {
-		parsedVersion, err := parseWorkflowVersionFromFile("./testing/invalid-yaml.yml")
+		parsedVersion, err := parseWorkflowVersionFromFile("../testdata/check-lint-version/invalid-yaml.yml")
 		assert.Equal(t, "", parsedVersion)
 		assert.Error(t, err)
 	})
@@ -75,14 +75,14 @@ func TestCompareVersions(t *testing.T) {
 	})
 
 	t.Run("Invalid comparison", func(t *testing.T) {
-		res := compareVersions("./testing/invalid-test.yml")
+		res := compareVersions("../testdata/check-lint-version/invalid-test.yml")
 		assert.Contains(t, res, "Invalid version")
 	})
 
 	// TODO: test function for failure to get the current version using getCurrentVersion()
 
 	t.Run("Invalid path for comparison", func(t *testing.T) {
-		res := compareVersions("./testing/invalid-test-incorrect-path.yml")
+		res := compareVersions("../testdata/check-lint-version/invalid-test-incorrect-path.yml")
 		assert.Contains(t, res, "Error parsing workflow")
 	})
 }
