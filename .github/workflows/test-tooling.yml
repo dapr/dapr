@@ -19,25 +19,23 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        gover:
-          - "1.21"
         os: 
           - "ubuntu-latest"
           - "windows-latest"
           - "macos-latest"
     runs-on: ${{ matrix.os }}
     env:
-      GOVER: ${{ matrix.gover }}
       GOLANGCILINT_VER: "v1.51.2" # Make sure to bump /tools/check-lint-version/main_test.go
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Setup
         uses: actions/setup-go@v4
         with:
-          go-version: ${{ env.GOVER }}
+          go-version-file: './tools/check-lint-version/go.mod'
 
-      - name: Checkout
-        uses: actions/checkout@v4
 
       - name: Tidy
         working-directory: ./tools/check-lint-version
