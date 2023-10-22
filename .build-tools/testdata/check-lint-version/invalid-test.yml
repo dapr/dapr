@@ -9,4 +9,4 @@ on:
 jobs:
   build:
     env:
-      NOGOLANGCILINT_VER: "123.123.123"
+      NOGOLANGCILINT_VER: "123.123.123" 
