@@ -1,0 +1,59 @@
+name: Test Tooling
+
+on:
+  push:
+    paths: # Explicitly declare which paths
+      - ".github/workflows/test-tooling.yml"
+      - "tools/*"
+  pull_request:
+    branches:
+      - main
+    paths: # Explicitly declare which paths
+      - ".github/workflows/test-tooling.yml"
+      - "tools/*"
+
+jobs:
+  lint:
+    name: Test (${{ matrix.os}}) go ${{ matrix.gover }}
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        gover:
+          - "1.21"
+        os: 
+          - "ubuntu-latest"
+          - "windows-latest"
+          - "macos-latest"
+    runs-on: ${{ matrix.os }}
+    env:
+      GOVER: ${{ matrix.gover }}
+      GOLANGCILINT_VER: "v1.51.2" # Make sure to bump /tools/check-lint-version/main_test.go
+
+    steps:
+      - name: Setup
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GOVER }}
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Tidy
+        working-directory: ./tools/check-lint-version
+        run: make tidy
+
+      - name: Lint
+        uses: golangci/golangci-lint-action@v3
+        with:
+          version: ${{ env.GOLANGCILINT_VER }}
+          working-directory: ./tools/check-lint-version
+          skip-cache: true
+          args: --timeout=10m0s --config ../../.golangci.yml
+
+      - name: Install Linter
+        run: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b "$(go env GOPATH)/bin" ${{ env.GOLANGCILINT_VER }} 
+
+      - name: Test
+        working-directory: ./tools/check-lint-version
+        run: make test
