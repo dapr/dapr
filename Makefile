@@ -376,8 +376,19 @@ test-integration: test-deps
 # Please use golangci-lint version v1.51.2 , otherwise you might encounter errors.
 # You can download version v1.51.2 at https://github.com/golangci/golangci-lint/releases/tag/v1.51.2
 .PHONY: lint
-lint:
+lint: check-linter
 	$(GOLANGCI_LINT) run --build-tags=allcomponents --timeout=20m
+
+
+################################################################################
+# Target: check-linter                                                         #
+################################################################################
+.SILENT: check-linter # Silence output other than the application run
+.PHONY: check-linter
+check-linter:
+	cd ./tools/check-lint-version && \
+	go mod tidy && \
+	go run main.go
 
 ################################################################################
 # Target: modtidy-all                                                          #
@@ -407,7 +418,7 @@ modtidy-all: $(TIDY_MODFILES)
 modtidy:
 	go mod tidy
 
-################################################################################
+################################################################################f
 # Target: format                                                              #
 ################################################################################
 .PHONY: format
