@@ -11,22 +11,26 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package validator
+package insecure
 
 import (
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	sentrypbv1 "github.com/dapr/dapr/pkg/proto/sentry/v1"
+	"github.com/dapr/dapr/pkg/sentry/server/ca"
 	"github.com/dapr/dapr/tests/integration/framework"
 	procsentry "github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -59,17 +63,15 @@ func (m *insecure) Run(t *testing.T, parentCtx context.Context) {
 
 	m.proc.WaitUntilRunning(t, parentCtx)
 
-	// Generate a private privKey that we'll need for tests
-	privKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	require.NoError(t, err, "failed to generate private key")
-
 	// Get a CSR for the app "myapp"
-	defaultAppCSR, err := generateCSR(defaultAppID, privKey)
+	pk, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
+	csrDer, err := x509.CreateCertificateRequest(rand.Reader, new(x509.CertificateRequest), pk)
+	require.NoError(t, err)
+	defaultAppCSR := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDer})
 
 	// Connect to Sentry
-	conn, err := m.proc.ConnectGrpc(parentCtx)
-	require.NoError(t, err)
+	conn := m.proc.DialGRPC(t, parentCtx, "spiffe://localhost/ns/default/dapr-sentry")
 	client := sentrypbv1.NewCAClient(conn)
 
 	t.Run("fails when passing an invalid validator", func(t *testing.T) {
@@ -168,4 +170,40 @@ func (m *insecure) Run(t *testing.T, parentCtx context.Context) {
 		require.Equal(t, codes.InvalidArgument, grpcStatus.Code())
 		require.Contains(t, grpcStatus.Message(), "invalid certificate signing request")
 	})
+}
+
+func validateCertificateResponse(t *testing.T, res *sentrypbv1.SignCertificateResponse, sentryBundle ca.Bundle, expectSPIFFEID, expectDNSName string) {
+	t.Helper()
+
+	require.NotEmpty(t, res.WorkloadCertificate)
+
+	rest := res.WorkloadCertificate
+
+	// First block should contain the issued workload certificate
+	var block *pem.Block
+	block, rest = pem.Decode(rest)
+	require.NotEmpty(t, block)
+	require.Equal(t, "CERTIFICATE", block.Type)
+
+	cert, err := x509.ParseCertificate(block.Bytes)
+	require.NoError(t, err)
+
+	certURIs := make([]string, len(cert.URIs))
+	for i, v := range cert.URIs {
+		certURIs[i] = v.String()
+	}
+	assert.Equal(t, []string{expectSPIFFEID}, certURIs)
+	assert.Equal(t, []string{expectDNSName}, cert.DNSNames)
+	assert.Contains(t, cert.ExtKeyUsage, x509.ExtKeyUsageServerAuth)
+	assert.Contains(t, cert.ExtKeyUsage, x509.ExtKeyUsageClientAuth)
+
+	// Second block should contain the Sentry CA certificate
+	block, rest = pem.Decode(rest)
+	require.Empty(t, rest)
+	require.NotEmpty(t, block)
+	require.Equal(t, "CERTIFICATE", block.Type)
+
+	cert, err = x509.ParseCertificate(block.Bytes)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"cluster.local"}, cert.DNSNames)
 }
