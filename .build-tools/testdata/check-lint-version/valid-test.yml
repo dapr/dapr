@@ -1,0 +1,12 @@
+name: Test
+
+on:
+  push:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  lint:
+    env:
+      GOLANGCILINT_VER: "123.123.123" 

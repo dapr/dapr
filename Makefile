@@ -386,9 +386,7 @@ lint: check-linter
 .SILENT: check-linter # Silence output other than the application run
 .PHONY: check-linter
 check-linter:
-	cd ./.build-tools && \
-	go mod tidy && \
-	go run . check-linter
+	$(RUN_BUILD_TOOLS) check-linter
 
 ################################################################################
 # Target: modtidy-all                                                          #

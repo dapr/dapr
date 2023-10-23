@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -9,6 +10,11 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/mod/semver"
 	"gopkg.in/yaml.v3"
+)
+
+var (
+	ErrVersionNotSupported = errors.New("version not supported")
+	ErrVersionNotFound     = errors.New("version not found")
 )
 
 type GHWorkflow struct {
@@ -60,20 +66,20 @@ func isVersionValid(workflowVersion, currentVersion string) bool {
 	return res
 }
 
-func compareVersions(path string) string {
+func compareVersions(path string) (string, error) {
 	workflowVersion, err := parseWorkflowVersionFromFile(path)
 	if err != nil {
-		return fmt.Sprintf("Error parsing workflow version: %v", err)
+		return fmt.Sprintf("Error parsing workflow version: %v", err), ErrVersionNotFound
 	}
 	currentVersion, err := getCurrentVersion()
 	if err != nil {
-		return fmt.Sprintf("Error getting current version: %v", err)
+		return fmt.Sprintf("Error getting current version: %v", err), ErrVersionNotFound
 	}
 	validVersion := isVersionValid(workflowVersion, currentVersion)
 	if !validVersion {
-		return fmt.Sprintf("Invalid version, expected: %s, current: %s - See: https://golangci-lint.run/usage/install/ for instructions to update", workflowVersion, currentVersion)
+		return fmt.Sprintf("Invalid version, expected: %s, current: %s ", workflowVersion, currentVersion), ErrVersionNotSupported
 	}
-	return fmt.Sprintf("Linter version is valid (MajorMinor): %s", currentVersion)
+	return fmt.Sprintf("Linter version is valid (MajorMinor): %s", currentVersion), nil
 }
 
 func getCmdCheckLint(cmdType string) *cobra.Command {
@@ -83,7 +89,15 @@ func getCmdCheckLint(cmdType string) *cobra.Command {
 		Short: "Compare local golangci-lint version against workflow version",
 		Run: func(cmd *cobra.Command, args []string) {
 			path := cmd.Flag("path").Value.String()
-			fmt.Println(compareVersions(path))
+			res, err := compareVersions(path)
+			fmt.Println(res)
+			if err != nil {
+				fmt.Println("Please install the correct version using the guide - https://golangci-lint.run/usage/install/")
+				if err == ErrVersionNotSupported {
+					fmt.Println("Alternatively review the golangci-lint version in the workflow file at .github/workflows/dapr.yml")
+				}
+				os.Exit(1)
+			}
 		},
 	}
 	cmd.PersistentFlags().String("path", "../.github/workflows/dapr.yml", "Path to workflow file")
