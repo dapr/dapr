@@ -26,8 +26,8 @@ func TestParseWorkflow(t *testing.T) {
 	})
 
 	t.Run("parse testing workflow file", func(t *testing.T) {
-		parsedVersion, err := parseWorkflowVersionFromFile("../../.github/workflows/test-tooling.yml")
-		assert.Equal(t, "v1.51.2", parsedVersion)
+		parsedVersion, err := parseWorkflowVersionFromFile("../testdata/check-lint-version/valid-test.yml")
+		assert.Equal(t, "123.123.123", parsedVersion)
 		assert.NoError(t, err)
 	})
 }
@@ -70,19 +70,22 @@ func TestIsVersionValid(t *testing.T) {
 
 func TestCompareVersions(t *testing.T) {
 	t.Run("Valid comparison", func(t *testing.T) {
-		res := compareVersions("../../.github/workflows/dapr.yml")
+		res, err := compareVersions("../../.github/workflows/dapr.yml")
 		assert.Contains(t, res, "Linter version is valid")
+		assert.NoError(t, err)
 	})
 
 	t.Run("Invalid comparison", func(t *testing.T) {
-		res := compareVersions("../testdata/check-lint-version/invalid-test.yml")
+		res, err := compareVersions("../testdata/check-lint-version/invalid-test.yml")
 		assert.Contains(t, res, "Invalid version")
+		assert.Error(t, err)
 	})
 
 	// TODO: test function for failure to get the current version using getCurrentVersion()
 
 	t.Run("Invalid path for comparison", func(t *testing.T) {
-		res := compareVersions("../testdata/check-lint-version/invalid-test-incorrect-path.yml")
+		res, err := compareVersions("../testdata/check-lint-version/invalid-test-incorrect-path.yml")
 		assert.Contains(t, res, "Error parsing workflow")
+		assert.Error(t, err)
 	})
 }
