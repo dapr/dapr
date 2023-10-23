@@ -180,36 +180,30 @@ func validateCertificateResponse(t *testing.T, res *sentrypbv1.SignCertificateRe
 	rest := res.WorkloadCertificate
 
 	// First block should contain the issued workload certificate
-	{
-		var block *pem.Block
-		block, rest = pem.Decode(rest)
-		require.NotEmpty(t, block)
-		require.Equal(t, "CERTIFICATE", block.Type)
+	var block *pem.Block
+	block, rest = pem.Decode(rest)
+	require.NotEmpty(t, block)
+	require.Equal(t, "CERTIFICATE", block.Type)
 
-		cert, err := x509.ParseCertificate(block.Bytes)
-		require.NoError(t, err)
+	cert, err := x509.ParseCertificate(block.Bytes)
+	require.NoError(t, err)
 
-		certURIs := make([]string, len(cert.URIs))
-		for i, v := range cert.URIs {
-			certURIs[i] = v.String()
-		}
-		assert.Equal(t, []string{expectSPIFFEID}, certURIs)
-		assert.Equal(t, []string{expectDNSName}, cert.DNSNames)
-		assert.Contains(t, cert.ExtKeyUsage, x509.ExtKeyUsageServerAuth)
-		assert.Contains(t, cert.ExtKeyUsage, x509.ExtKeyUsageClientAuth)
+	certURIs := make([]string, len(cert.URIs))
+	for i, v := range cert.URIs {
+		certURIs[i] = v.String()
 	}
+	assert.Equal(t, []string{expectSPIFFEID}, certURIs)
+	assert.Equal(t, []string{expectDNSName}, cert.DNSNames)
+	assert.Contains(t, cert.ExtKeyUsage, x509.ExtKeyUsageServerAuth)
+	assert.Contains(t, cert.ExtKeyUsage, x509.ExtKeyUsageClientAuth)
 
 	// Second block should contain the Sentry CA certificate
-	{
-		var block *pem.Block
-		block, rest = pem.Decode(rest)
-		require.Empty(t, rest)
-		require.NotEmpty(t, block)
-		require.Equal(t, "CERTIFICATE", block.Type)
+	block, rest = pem.Decode(rest)
+	require.Empty(t, rest)
+	require.NotEmpty(t, block)
+	require.Equal(t, "CERTIFICATE", block.Type)
 
-		cert, err := x509.ParseCertificate(block.Bytes)
-		require.NoError(t, err)
-
-		assert.Equal(t, []string{"cluster.local"}, cert.DNSNames)
-	}
+	cert, err = x509.ParseCertificate(block.Bytes)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"cluster.local"}, cert.DNSNames)
 }
