@@ -123,11 +123,6 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 		return spiffeid.TrustDomain{}, false, errors.New("validator not ready")
 	}
 
-	// The TrustDomain field is ignored by the Kubernetes validator.
-	if _, _, err := internal.Validate(ctx, req); err != nil {
-		return spiffeid.TrustDomain{}, false, err
-	}
-
 	prts, err := k.executeTokenReview(ctx, req.GetToken(), LegacyServiceAccountAudience, k.sentryAudience)
 	if err != nil {
 		return spiffeid.TrustDomain{}, false, err
@@ -192,8 +187,16 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 	// for the ID containing their namespace and service account (ns:sa). This
 	// is wrong- dapr identities are based on daprd namespace + _app ID_.
 	// Remove this allowance in v1.13.
-	if req.Namespace+":"+pod.Spec.ServiceAccountName == req.Id {
+	if pod.Namespace+":"+pod.Spec.ServiceAccountName == req.Id {
 		req.Id = expID
+	}
+
+	// The TrustDomain field is ignored by the Kubernetes validator. We must
+	// validate the request _after_ performing the token review so that in the
+	// event the client is uing the "legacy" <ns>:<sa> ID, we can override it
+	// with the expected app ID.
+	if _, _, err = internal.Validate(ctx, req); err != nil {
+		return spiffeid.TrustDomain{}, false, err
 	}
 
 	// TODO: @joshvanl: Remove is v1.13 when injector no longer needs to request

@@ -22,12 +22,15 @@ import (
 type options struct {
 	execOpts []exec.Option
 
-	bundle         ca.Bundle
-	dontGiveBundle bool
-	port           int
-	healthzPort    int
-	metricsPort    int
-	configuration  string
+	bundle        ca.Bundle
+	writeBundle   bool
+	port          int
+	healthzPort   int
+	metricsPort   int
+	configuration string
+	writeConfig   bool
+	kubeconfig    *string
+	trustDomain   *string
 }
 
 // Option is a function that configures the process.
@@ -69,8 +72,26 @@ func WithConfiguration(config string) Option {
 	}
 }
 
-func WithDontGiveBundle(dontGiveBundle bool) Option {
+func WithWriteTrustBundle(writeBundle bool) Option {
 	return func(o *options) {
-		o.dontGiveBundle = dontGiveBundle
+		o.writeBundle = writeBundle
+	}
+}
+
+func WithKubeconfig(kubeconfig string) Option {
+	return func(o *options) {
+		o.kubeconfig = &kubeconfig
+	}
+}
+
+func WithTrustDomain(trustDomain string) Option {
+	return func(o *options) {
+		o.trustDomain = &trustDomain
+	}
+}
+
+func WithWriteConfig(write bool) Option {
+	return func(o *options) {
+		o.writeConfig = write
 	}
 }

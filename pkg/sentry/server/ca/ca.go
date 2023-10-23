@@ -24,12 +24,12 @@ import (
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/pkg/security/spiffe"
 	"github.com/dapr/dapr/pkg/sentry/config"
 	"github.com/dapr/dapr/pkg/sentry/monitoring"
+	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 )
 
@@ -89,11 +89,7 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 	if config.IsKubernetesHosted() {
 		log.Info("Using kubernetes secret store for trust bundle storage")
 
-		restConfig, err := rest.InClusterConfig()
-		if err != nil {
-			return nil, err
-		}
-		client, err := kubernetes.NewForConfig(restConfig)
+		client, err := kubernetes.NewForConfig(utils.GetConfig())
 		if err != nil {
 			return nil, err
 		}

@@ -53,7 +53,7 @@ func (e *expiry) Setup(t *testing.T) []framework.Option {
 	bundle, err := ca.GenerateBundle(rootKey, "integration.test.dapr.io", time.Second*5, &onemonth)
 	require.NoError(t, err)
 
-	e.notGiven = procsentry.New(t, procsentry.WithDontGiveBundle(true))
+	e.notGiven = procsentry.New(t, procsentry.WithWriteTrustBundle(false))
 	e.given = procsentry.New(t, procsentry.WithCABundle(bundle))
 
 	return []framework.Option{
