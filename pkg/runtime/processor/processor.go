@@ -26,7 +26,6 @@ import (
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpendapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/config"
@@ -171,8 +170,8 @@ func New(opts Options) *Processor {
 
 	return &Processor{
 		pendingHTTPEndpoints:       make(chan httpendapi.HTTPEndpoint),
-		pendingComponents:          make(chan componentsapi.Component),
-		pendingComponentDependents: make(map[string][]componentsapi.Component),
+		pendingComponents:          make(chan compapi.Component),
+		pendingComponentDependents: make(map[string][]compapi.Component),
 		closedCh:                   make(chan struct{}),
 		compStore:                  opts.ComponentStore,
 		state:                      state,
@@ -274,7 +273,7 @@ func (p *Processor) Process(ctx context.Context) error {
 	).Run(ctx)
 }
 
-func (p *Processor) AddPendingComponent(ctx context.Context, comp componentsapi.Component) bool {
+func (p *Processor) AddPendingComponent(ctx context.Context, comp compapi.Component) bool {
 	p.chlock.RLock()
 	defer p.chlock.RUnlock()
 	if p.shutdown.Load() {
@@ -340,7 +339,7 @@ func (p *Processor) processHTTPEndpoints(ctx context.Context) error {
 	return nil
 }
 
-func (p *Processor) processComponentAndDependents(ctx context.Context, comp componentsapi.Component) error {
+func (p *Processor) processComponentAndDependents(ctx context.Context, comp compapi.Component) error {
 	log.Debug("Loading component: " + comp.LogName())
 	res := p.preprocessOneComponent(ctx, &comp)
 	if res.unreadyDependency != "" {
@@ -462,7 +461,7 @@ func (p *Processor) processHTTPEndpointSecrets(ctx context.Context, endpoint *ht
 	}
 }
 
-func (p *Processor) preprocessOneComponent(ctx context.Context, comp *componentsapi.Component) componentPreprocessRes {
+func (p *Processor) preprocessOneComponent(ctx context.Context, comp *compapi.Component) componentPreprocessRes {
 	_, unreadySecretsStore := p.secret.ProcessResource(ctx, comp)
 	if unreadySecretsStore != "" {
 		return componentPreprocessRes{
@@ -472,7 +471,7 @@ func (p *Processor) preprocessOneComponent(ctx context.Context, comp *components
 	return componentPreprocessRes{}
 }
 
-func (p *Processor) category(comp componentsapi.Component) components.Category {
+func (p *Processor) category(comp compapi.Component) components.Category {
 	for category := range p.managers {
 		if strings.HasPrefix(comp.Spec.Type, string(category)+".") {
 			return category
