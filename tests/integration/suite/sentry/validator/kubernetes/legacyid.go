@@ -20,7 +20,6 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/pem"
-	"strings"
 	"testing"
 	"time"
 
@@ -38,31 +37,30 @@ import (
 )
 
 func init() {
-	suite.Register(new(longname))
+	suite.Register(new(legacyid))
 }
 
-// longname tests that sentry with _not_ authenticate requests with legacy
-// identities that use namespace + serviceaccount names longer than 253
-// characters.
-type longname struct {
+// legacyid ensures that the legacy '<namespace>:<service account>' ID format
+// is no longer supported.
+type legacyid struct {
 	sentry *sentry.Sentry
 }
 
-func (l *longname) Setup(t *testing.T) []framework.Option {
+func (l *legacyid) Setup(t *testing.T) []framework.Option {
 	rootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
 	bundle, err := ca.GenerateBundle(rootKey, "integration.test.dapr.io", time.Second*5, nil)
 	require.NoError(t, err)
 
-	kubeAPI := kubeAPI(t, bundle, strings.Repeat("n", 253), strings.Repeat("s", 253))
+	kubeAPI := kubeAPI(t, bundle, "myns", "myaccount")
 
 	l.sentry = sentry.New(t,
 		sentry.WithWriteConfig(false),
-		sentry.WithKubeconfig(kubeAPI.KubeconfigPath(t)),
-		sentry.WithNamespace("sentrynamespace"),
+		sentry.WithKubeconfig(kubeconfigPath(t, kubeAPI.Port())),
 		sentry.WithExecOptions(
 			// Enable Kubernetes validator.
-			exec.WithEnvVars(t, "KUBERNETES_SERVICE_HOST", "anything"),
+			exec.WithEnvVars("KUBERNETES_SERVICE_HOST", "anything"),
+			exec.WithEnvVars("NAMESPACE", "sentrynamespace"),
 		),
 		sentry.WithCABundle(bundle),
 		sentry.WithTrustDomain("integration.test.dapr.io"),
@@ -73,7 +71,7 @@ func (l *longname) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (l *longname) Run(t *testing.T, ctx context.Context) {
+func (l *legacyid) Run(t *testing.T, ctx context.Context) {
 	l.sentry.WaitUntilRunning(t, ctx)
 
 	conn := l.sentry.DialGRPC(t, ctx, "spiffe://integration.test.dapr.io/ns/sentrynamespace/dapr-sentry")
@@ -85,8 +83,8 @@ func (l *longname) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	resp, err := client.SignCertificate(ctx, &sentrypbv1.SignCertificateRequest{
-		Id:                        strings.Repeat("n", 253) + ":" + strings.Repeat("s", 253),
-		Namespace:                 strings.Repeat("n", 253),
+		Id:                        "myns:myaccount",
+		Namespace:                 "myns",
 		CertificateSigningRequest: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDer}),
 		TokenValidator:            sentrypbv1.SignCertificateRequest_KUBERNETES,
 		Token:                     `{"kubernetes.io":{"pod":{"name":"mypod"}}}`,
