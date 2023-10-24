@@ -162,6 +162,13 @@ func (wfe *WorkflowEngine) SetActorReminderInterval(interval time.Duration) {
 	wfe.backend.activityActor.reminderInterval = interval
 }
 
+// SetLogLevel sets the logging level for the workflow engine.
+// This function is only intended to be used for testing.
+func SetLogLevel(level logger.LogLevel) {
+	wfLogger.SetOutputLevel(level)
+	wfBackendLogger.SetOutputLevel(level)
+}
+
 func (wfe *WorkflowEngine) Start(ctx context.Context) (err error) {
 	wfe.WaitForActorsReady(ctx)
 
