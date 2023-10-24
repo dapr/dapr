@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package validator
+package jwks
 
 import (
 	"context"
@@ -86,8 +86,7 @@ func (m *jwks) Run(t *testing.T, parentCtx context.Context) {
 	require.NoError(t, err)
 
 	// Connect to Sentry
-	conn, err := m.proc.ConnectGrpc(parentCtx)
-	require.NoError(t, err)
+	conn := m.proc.DialGRPC(t, parentCtx, "spiffe://localhost/ns/default/dapr-sentry")
 	client := sentrypbv1.NewCAClient(conn)
 
 	t.Run("fails when passing an invalid validator", func(t *testing.T) {

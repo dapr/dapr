@@ -64,7 +64,7 @@ func New(t *testing.T, fopts ...Option) *Placement {
 	}
 
 	args := []string{
-		"--log-level=" + "debug",
+		"--log-level=" + "info",
 		"--id=" + opts.id,
 		"--port=" + strconv.Itoa(opts.port),
 		"--healthz-port=" + strconv.Itoa(opts.healthzPort),

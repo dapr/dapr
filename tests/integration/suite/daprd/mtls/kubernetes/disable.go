@@ -73,7 +73,7 @@ func (e *disable) Setup(t *testing.T) []framework.Option {
 		procdaprd.WithMode("kubernetes"),
 		procdaprd.WithExecOptions(exec.WithEnvVars("DAPR_TRUST_ANCHORS", string(bundle.TrustAnchors))),
 		procdaprd.WithSentryAddress("localhost:"+strconv.Itoa(e.sentry.Port())),
-		procdaprd.WithControlPlaneAddress("localhost:"+strconv.Itoa(e.operator.Port())),
+		procdaprd.WithControlPlaneAddress("localhost:"+strconv.Itoa(e.operator.Port(t))),
 		procdaprd.WithDisableK8sSecretStore(true),
 		procdaprd.WithPlacementAddresses("localhost:"+strconv.Itoa(e.placement.Port())),
 
@@ -136,7 +136,7 @@ func (e *disable) Run(t *testing.T, ctx context.Context) {
 		myAppID, err := spiffeid.FromSegments(spiffeid.RequireTrustDomainFromString("public"), "ns", "default", "my-app")
 		require.NoError(t, err)
 
-		gctx, gcancel := context.WithTimeout(ctx, time.Second*2)
+		gctx, gcancel := context.WithTimeout(ctx, time.Second)
 		t.Cleanup(gcancel)
 		_, err = grpc.DialContext(gctx, "localhost:"+strconv.Itoa(e.daprd.InternalGRPCPort()), sec.GRPCDialOptionMTLS(myAppID),
 			grpc.WithReturnConnectionError())
