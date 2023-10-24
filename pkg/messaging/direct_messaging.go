@@ -245,12 +245,12 @@ func (d *directMessaging) invokeHTTPEndpoint(ctx context.Context, appID, appName
 
 	// Set up timers
 	start := time.Now()
-	diag.DefaultMonitoring.ServiceInvocationRequestSent(appID, req.Message().Method)
+	diag.DefaultMonitoring.ServiceInvocationRequestSent(appID)
 	imr, err := d.invokeRemoteUnaryForHTTPEndpoint(ctx, req, appID)
 
 	// Diagnostics
 	if imr != nil {
-		diag.DefaultMonitoring.ServiceInvocationResponseReceived(appID, req.Message().Method, imr.Status().Code, start)
+		diag.DefaultMonitoring.ServiceInvocationResponseReceived(appID, imr.Status().Code, start)
 	}
 
 	return imr, nopTeardown, err
@@ -280,14 +280,14 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, appNamespace,
 
 	// Set up timers
 	start := time.Now()
-	diag.DefaultMonitoring.ServiceInvocationRequestSent(appID, req.Message().Method)
+	diag.DefaultMonitoring.ServiceInvocationRequestSent(appID)
 
 	// Do invoke
 	imr, err := d.invokeRemoteStream(ctx, clientV1, req, appID, opts)
 
 	// Diagnostics
 	if imr != nil {
-		diag.DefaultMonitoring.ServiceInvocationResponseReceived(appID, req.Message().Method, imr.Status().Code, start)
+		diag.DefaultMonitoring.ServiceInvocationResponseReceived(appID, imr.Status().Code, start)
 	}
 
 	return imr, teardown, err

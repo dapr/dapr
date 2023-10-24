@@ -172,7 +172,7 @@ func ApplyAccessControlPolicies(ctx context.Context, operation string, httpVerb 
 	}
 
 	action, actionPolicy := isOperationAllowedByAccessControlPolicy(spiffeID, operation, httpVerb, isHTTP, acl)
-	emitACLMetrics(spiffeID, actionPolicy, operation, httpVerb.String(), action)
+	emitACLMetrics(spiffeID, actionPolicy, action)
 
 	if !action {
 		errMessage = fmt.Sprintf("access control policy has denied access to id: %s operation: %s verb: %s", spiffeID.URL(), operation, httpVerb)
@@ -182,20 +182,20 @@ func ApplyAccessControlPolicies(ctx context.Context, operation string, httpVerb 
 	return action, errMessage
 }
 
-func emitACLMetrics(spiffeID *spiffe.Parsed, actionPolicy, operation, verb string, action bool) {
+func emitACLMetrics(spiffeID *spiffe.Parsed, actionPolicy string, action bool) {
 	if action {
 		switch actionPolicy {
 		case config.ActionPolicyApp:
-			diag.DefaultMonitoring.RequestAllowedByAppAction(spiffeID, operation, verb, action)
+			diag.DefaultMonitoring.RequestAllowedByAppAction(spiffeID)
 		case config.ActionPolicyGlobal:
-			diag.DefaultMonitoring.RequestAllowedByGlobalAction(spiffeID, operation, verb, action)
+			diag.DefaultMonitoring.RequestAllowedByGlobalAction(spiffeID)
 		}
 	} else {
 		switch actionPolicy {
 		case config.ActionPolicyApp:
-			diag.DefaultMonitoring.RequestBlockedByAppAction(spiffeID, operation, verb, action)
+			diag.DefaultMonitoring.RequestBlockedByAppAction(spiffeID)
 		case config.ActionPolicyGlobal:
-			diag.DefaultMonitoring.RequestBlockedByGlobalAction(spiffeID, operation, verb, action)
+			diag.DefaultMonitoring.RequestBlockedByGlobalAction(spiffeID)
 		}
 	}
 }

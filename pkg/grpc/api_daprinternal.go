@@ -26,6 +26,7 @@ import (
 	"github.com/dapr/dapr/pkg/acl"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	"github.com/dapr/dapr/pkg/grpc/metadata"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messaging"
@@ -58,7 +59,7 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 
 	var statusCode int32
 	defer func() {
-		diag.DefaultMonitoring.ServiceInvocationResponseSent(callerAppID, req.Message().Method, statusCode)
+		diag.DefaultMonitoring.ServiceInvocationResponseSent(callerAppID, statusCode)
 	}()
 
 	// stausCode will be read by the deferred method above
@@ -95,7 +96,7 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 
 	// Append the invoked method to the context's metadata so we can use it for tracing
 	if md, ok := metadata.FromIncomingContext(stream.Context()); ok {
-		md[diag.DaprCallLocalStreamMethodKey] = []string{chunk.Request.Message.Method}
+		md[diagConsts.DaprCallLocalStreamMethodKey] = []string{chunk.Request.Message.Method}
 	}
 
 	// Create the request object
@@ -138,7 +139,7 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 
 	var statusCode int32
 	defer func() {
-		diag.DefaultMonitoring.ServiceInvocationResponseSent(callerAppID, req.Message().Method, statusCode)
+		diag.DefaultMonitoring.ServiceInvocationResponseSent(callerAppID, statusCode)
 	}()
 
 	// Read the rest of the data in background as we submit the request
@@ -351,7 +352,7 @@ func (a *api) callLocalRecordRequest(req *internalv1pb.InternalInvokeRequest) (c
 		callerAppID = "unknown"
 	}
 
-	diag.DefaultMonitoring.ServiceInvocationRequestReceived(callerAppID, req.Message.Method)
+	diag.DefaultMonitoring.ServiceInvocationRequestReceived(callerAppID)
 
 	return
 }

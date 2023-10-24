@@ -168,9 +168,9 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 		requestStartedAt = time.Now()
 		if grpcDestinationAppID != "" {
 			if isStream {
-				diagnostics.DefaultMonitoring.ServiceInvocationStreamingRequestSent(grpcDestinationAppID, fullMethodName)
+				diagnostics.DefaultMonitoring.ServiceInvocationStreamingRequestSent(grpcDestinationAppID)
 			} else {
-				diagnostics.DefaultMonitoring.ServiceInvocationRequestSent(grpcDestinationAppID, fullMethodName)
+				diagnostics.DefaultMonitoring.ServiceInvocationRequestSent(grpcDestinationAppID)
 			}
 		}
 
@@ -190,9 +190,9 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 				// if we could not reconnect just create the response metrics for the connection error
 				if !reconnectionSucceeded && grpcDestinationAppID != "" {
 					if !isStream {
-						diagnostics.DefaultMonitoring.ServiceInvocationResponseReceived(grpcDestinationAppID, fullMethodName, int32(code), requestStartedAt)
+						diagnostics.DefaultMonitoring.ServiceInvocationResponseReceived(grpcDestinationAppID, int32(code), requestStartedAt)
 					} else {
-						diagnostics.DefaultMonitoring.ServiceInvocationStreamingResponseReceived(grpcDestinationAppID, fullMethodName, int32(code))
+						diagnostics.DefaultMonitoring.ServiceInvocationStreamingResponseReceived(grpcDestinationAppID, int32(code))
 					}
 				}
 			}()
@@ -253,7 +253,7 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 		err = pr.run()
 		if grpcDestinationAppID != "" {
 			code := status.Code(err)
-			diagnostics.DefaultMonitoring.ServiceInvocationResponseReceived(grpcDestinationAppID, fullMethodName, int32(code), requestStartedAt)
+			diagnostics.DefaultMonitoring.ServiceInvocationResponseReceived(grpcDestinationAppID, int32(code), requestStartedAt)
 		}
 
 		if err != nil {

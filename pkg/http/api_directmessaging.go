@@ -27,23 +27,65 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
+	"github.com/dapr/dapr/pkg/http/endpoints"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
-	"github.com/dapr/dapr/utils/responsewriter"
 )
 
-func (a *api) constructDirectMessagingEndpoints() []Endpoint {
-	return []Endpoint{
+// directMessagingSpanData is the data passed by the onDirectMessage endpoint to the tracing middleware
+type directMessagingSpanData struct {
+	// Target app ID
+	AppID string
+	// Method invoked
+	Method string
+}
+
+func appendDirectMessagingSpanAttributes(r *http.Request, m map[string]string) {
+	endpointData, _ := r.Context().Value(endpoints.EndpointCtxKey{}).(*endpoints.EndpointCtxData)
+	if endpointData != nil && endpointData.SpanData != nil {
+		spanData, _ := endpointData.SpanData.(*directMessagingSpanData)
+		if spanData != nil {
+			m[diagConsts.GrpcServiceSpanAttributeKey] = "ServiceInvocation"
+			m[diagConsts.NetPeerNameSpanAttributeKey] = spanData.AppID
+			m[diagConsts.DaprAPISpanNameInternal] = "CallLocal/" + spanData.AppID + "/" + spanData.Method
+		}
+	}
+}
+
+func directMessagingMethodNameFn(r *http.Request) string {
+	endpointData, _ := r.Context().Value(endpoints.EndpointCtxKey{}).(*endpoints.EndpointCtxData)
+	if endpointData != nil && endpointData.SpanData != nil {
+		spanData, _ := endpointData.SpanData.(*directMessagingSpanData)
+		if spanData != nil {
+			return "InvokeService/" + spanData.AppID
+		}
+	}
+
+	return "InvokeService"
+}
+
+func (a *api) constructDirectMessagingEndpoints() []endpoints.Endpoint {
+	return []endpoints.Endpoint{
 		{
 			// No method is defined here to match any method
 			Methods: []string{},
 			Route:   "invoke/*",
 			// This is the fallback route for when no other method is matched by the router
-			IsFallback: true,
-			Version:    apiVersionV1,
-			Handler:    a.onDirectMessage,
+			Version: apiVersionV1,
+			Group: &endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupServiceInvocation,
+				Version:              endpoints.EndpointGroupVersion1,
+				AppendSpanAttributes: appendDirectMessagingSpanAttributes,
+				MethodName:           directMessagingMethodNameFn,
+			},
+			Handler: a.onDirectMessage,
+			Settings: endpoints.EndpointSettings{
+				Name:       "InvokeService",
+				IsFallback: true,
+			},
 		},
 	}
 }
@@ -62,9 +104,13 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Store target and method as values in the context so they can be picked up by the tracing library
-	rw := responsewriter.EnsureResponseWriter(w)
-	rw.SetUserValue("id", targetID)
-	rw.SetUserValue("method", invokeMethodName)
+	endpointData, _ := r.Context().Value(endpoints.EndpointCtxKey{}).(*endpoints.EndpointCtxData)
+	if endpointData != nil {
+		endpointData.SpanData = &directMessagingSpanData{
+			AppID:  targetID,
+			Method: invokeMethodName,
+		}
+	}
 
 	verb := strings.ToUpper(r.Method)
 	if a.directMessaging == nil {

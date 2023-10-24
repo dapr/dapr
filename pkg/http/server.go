@@ -42,9 +42,11 @@ import (
 	corsDapr "github.com/dapr/dapr/pkg/cors"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"github.com/dapr/dapr/pkg/http/endpoints"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/utils"
+	"github.com/dapr/dapr/utils/responsewriter"
 	"github.com/dapr/kit/logger"
 )
 
@@ -99,11 +101,13 @@ func (s *server) StartNonBlocking() error {
 	// Create a chi router and add middlewares
 	r := s.getRouter()
 	s.useMaxBodySize(r)
+	s.useContextSetup(r)
 	s.useTracing(r)
 	s.useMetrics(r)
 	s.useAPIAuthentication(r)
 	s.useCors(r)
 	s.useComponents(r)
+	s.useAPILogging(r)
 
 	// Add all routes
 	s.setupRoutes(r, s.api.APIEndpoints())
@@ -163,6 +167,7 @@ func (s *server) StartNonBlocking() error {
 	// Start the public HTTP server
 	if s.config.PublicPort != nil {
 		publicR := s.getRouter()
+		s.useContextSetup(publicR)
 		s.useTracing(publicR)
 		s.useMetrics(publicR)
 
@@ -295,20 +300,60 @@ func (s *server) useMaxBodySize(r chi.Router) {
 	r.Use(MaxBodySizeMiddleware(maxSize))
 }
 
-func (s *server) apiLoggingInfo(route string, next http.Handler) http.HandlerFunc {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fields := make(map[string]any, 2)
-		if s.config.APILoggingObfuscateURLs {
-			fields["method"] = r.Method + " " + route
-		} else {
-			fields["method"] = r.Method + " " + r.URL.Path
-		}
-		if userAgent := r.Header.Get("User-Agent"); userAgent != "" {
-			fields["useragent"] = userAgent
-		}
+func (s *server) useContextSetup(mux chi.Router) {
+	// Adds an empty `endpoints.EndpointCtxData` value to the context so it can be later set by the handler
+	// This context value is used by the logging, tracing, and metrics middlewares
+	mux.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := context.WithValue(r.Context(), endpoints.EndpointCtxKey{}, &endpoints.EndpointCtxData{})
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	})
+}
 
-		infoLog.WithFields(fields).Info("HTTP API Called")
-		next.ServeHTTP(w, r)
+func (s *server) useAPILogging(mux chi.Router) {
+	if !s.config.EnableAPILogging {
+		return
+	}
+
+	mux.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Wrap the writer in a ResponseWriter so we can collect stats such as status code and size
+			w = responsewriter.EnsureResponseWriter(w)
+
+			start := time.Now()
+			next.ServeHTTP(w, r)
+
+			endpointData, _ := r.Context().Value(endpoints.EndpointCtxKey{}).(*endpoints.EndpointCtxData)
+			if endpointData == nil || (endpointData.Settings.IsHealthCheck && !s.config.APILogHealthChecks) {
+				return
+			}
+
+			fields := make(map[string]any, 5)
+
+			// Report duration in milliseconds
+			fields["duration"] = time.Since(start).Milliseconds()
+
+			if s.config.APILoggingObfuscateURLs {
+				endpointName := endpointData.GetEndpointName()
+				if endpointData.Group != nil && endpointData.Group.MethodName != nil {
+					endpointName = endpointData.Group.MethodName(r)
+				}
+				fields["method"] = endpointName
+			} else {
+				fields["method"] = r.Method + " " + r.URL.Path
+			}
+			if userAgent := r.Header.Get("User-Agent"); userAgent != "" {
+				fields["useragent"] = userAgent
+			}
+
+			if rw, ok := w.(responsewriter.ResponseWriter); ok {
+				fields["code"] = rw.Status()
+				fields["size"] = rw.Size()
+			}
+
+			infoLog.WithFields(fields).Info("HTTP API Called")
+		})
 	})
 }
 
@@ -372,7 +417,7 @@ func (s *server) unespaceRequestParametersInContext(chiCtx *chi.Context) (err er
 	return nil
 }
 
-func (s *server) setupRoutes(r chi.Router, endpoints []Endpoint) {
+func (s *server) setupRoutes(r chi.Router, endpoints []endpoints.Endpoint) {
 	parameterFinder, _ := regexp.Compile("/{.*}")
 
 	// Build the API allowlist and denylist
@@ -388,21 +433,32 @@ func (s *server) setupRoutes(r chi.Router, endpoints []Endpoint) {
 		s.handle(
 			e, path, r,
 			parameterFinder.MatchString(path),
-			s.config.EnableAPILogging && (!e.IsHealthCheck || s.config.APILogHealthChecks),
 		)
 	}
 }
 
-func (s *server) handle(e Endpoint, path string, r chi.Router, unescapeParameters bool, apiLogging bool) {
+// Add information about the route in the context's value.
+func (s *server) addEndpointCtx(e endpoints.Endpoint, next http.Handler) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Here, the context should already have a value in the key which is a nil pointer; we need to populate the value
+		// We do it this way because otherwise previous middlewares cannot get the value from the context
+		endpointData, _ := r.Context().Value(endpoints.EndpointCtxKey{}).(*endpoints.EndpointCtxData)
+		if endpointData != nil {
+			endpointData.Group = e.Group
+			endpointData.Settings = e.Settings
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *server) handle(e endpoints.Endpoint, path string, r chi.Router, unescapeParameters bool) {
 	handler := e.GetHandler()
 
 	if unescapeParameters {
 		handler = s.unescapeRequestParametersHandler(handler)
 	}
 
-	if apiLogging {
-		handler = s.apiLoggingInfo(path, handler)
-	}
+	handler = s.addEndpointCtx(e, handler)
 
 	// If no method is defined, match any method
 	if len(e.Methods) == 0 {
@@ -414,7 +470,7 @@ func (s *server) handle(e Endpoint, path string, r chi.Router, unescapeParameter
 	}
 
 	// Set as fallback method
-	if e.IsFallback {
+	if e.Settings.IsFallback {
 		r.NotFound(handler)
 		r.MethodNotAllowed(handler)
 	}

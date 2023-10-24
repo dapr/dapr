@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -32,6 +32,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/config"
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/grpc/metadata"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -60,7 +61,7 @@ func TestSpanAttributesMapFromGRPC(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.rpcMethod, func(t *testing.T) {
 			got := spanAttributesMapFromGRPC("fakeAppID", tt.req, tt.rpcMethod)
-			assert.Equal(t, tt.expectedServiceNameAttribute, got[gRPCServiceSpanAttributeKey], "servicename attribute should be equal")
+			assert.Equal(t, tt.expectedServiceNameAttribute, got[diagConsts.GrpcServiceSpanAttributeKey], "servicename attribute should be equal")
 		})
 	}
 }

@@ -17,23 +17,34 @@ import (
 	"net/http"
 
 	"google.golang.org/protobuf/types/known/emptypb"
+
+	"github.com/dapr/dapr/pkg/http/endpoints"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
-func (a *api) constructShutdownEndpoints() []Endpoint {
-	return []Endpoint{
+func (a *api) constructShutdownEndpoints() []endpoints.Endpoint {
+	return []endpoints.Endpoint{
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "shutdown",
 			Version: apiVersionV1,
+			Group: &endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupShutdown,
+				Version:              endpoints.EndpointGroupVersion1,
+				AppendSpanAttributes: nil, // TODO
+			},
 			Handler: UniversalHTTPHandler(
 				a.universal.Shutdown,
-				UniversalHTTPHandlerOpts[*emptypb.Empty, *emptypb.Empty]{
+				UniversalHTTPHandlerOpts[*runtimev1pb.ShutdownRequest, *emptypb.Empty]{
 					OutModifier: func(out *emptypb.Empty) (any, error) {
 						// Nullify the response so status code is 204
 						return nil, nil
 					},
 				},
 			),
+			Settings: endpoints.EndpointSettings{
+				Name: "Shutdown",
+			},
 		},
 	}
 }

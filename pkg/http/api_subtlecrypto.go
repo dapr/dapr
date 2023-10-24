@@ -18,52 +18,87 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/dapr/dapr/pkg/http/endpoints"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
-func (a *api) constructSubtleCryptoEndpoints() []Endpoint {
-	return []Endpoint{
+var endpointGroupSubtleCryptoV1Alpha1 = &endpoints.EndpointGroup{
+	Name:                 endpoints.EndpointGroupSubtleCrypto,
+	Version:              endpoints.EndpointGroupVersion1alpha1,
+	AppendSpanAttributes: nil, // TODO
+}
+
+func (a *api) constructSubtleCryptoEndpoints() []endpoints.Endpoint {
+	return []endpoints.Endpoint{
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "subtlecrypto/{name}/getkey",
 			Version: apiVersionV1alpha1,
+			Group:   endpointGroupSubtleCryptoV1Alpha1,
 			Handler: a.onPostSubtleCryptoGetKey(),
+			Settings: endpoints.EndpointSettings{
+				Name: "SubtleGetKey",
+			},
 		},
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "subtlecrypto/{name}/encrypt",
 			Version: apiVersionV1alpha1,
+			Group:   endpointGroupSubtleCryptoV1Alpha1,
 			Handler: a.onPostSubtleCryptoEncrypt(),
+			Settings: endpoints.EndpointSettings{
+				Name: "SubtleEncrypt",
+			},
 		},
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "subtlecrypto/{name}/decrypt",
 			Version: apiVersionV1alpha1,
+			Group:   endpointGroupSubtleCryptoV1Alpha1,
 			Handler: a.onPostSubtleCryptoDecrypt(),
+			Settings: endpoints.EndpointSettings{
+				Name: "SubtleDecrypt",
+			},
 		},
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "subtlecrypto/{name}/wrapkey",
 			Version: apiVersionV1alpha1,
+			Group:   endpointGroupSubtleCryptoV1Alpha1,
 			Handler: a.onPostSubtleCryptoWrapKey(),
+			Settings: endpoints.EndpointSettings{
+				Name: "SubtleWrapKey",
+			},
 		},
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "subtlecrypto/{name}/unwrapkey",
 			Version: apiVersionV1alpha1,
+			Group:   endpointGroupSubtleCryptoV1Alpha1,
 			Handler: a.onPostSubtleCryptoUnwrapKey(),
+			Settings: endpoints.EndpointSettings{
+				Name: "SubtleUnwrapKey",
+			},
 		},
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "subtlecrypto/{name}/sign",
 			Version: apiVersionV1alpha1,
+			Group:   endpointGroupSubtleCryptoV1Alpha1,
 			Handler: a.onPostSubtleCryptoSign(),
+			Settings: endpoints.EndpointSettings{
+				Name: "SubtleSign",
+			},
 		},
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "subtlecrypto/{name}/verify",
 			Version: apiVersionV1alpha1,
+			Group:   endpointGroupSubtleCryptoV1Alpha1,
 			Handler: a.onPostSubtleCryptoVerify(),
+			Settings: endpoints.EndpointSettings{
+				Name: "SubtleVerify",
+			},
 		},
 	}
 }

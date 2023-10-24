@@ -18,22 +18,45 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
+	"github.com/dapr/dapr/pkg/http/endpoints"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
-func (a *api) constructSecretEndpoints() []Endpoint {
-	return []Endpoint{
+var endpointGroupSecretsV1 = &endpoints.EndpointGroup{
+	Name:                 endpoints.EndpointGroupSecrets,
+	Version:              endpoints.EndpointGroupVersion1,
+	AppendSpanAttributes: appendSecretsSpanAttributes,
+}
+
+func appendSecretsSpanAttributes(r *http.Request, m map[string]string) {
+	m[diagConsts.DBSystemSpanAttributeKey] = diagConsts.SecretBuildingBlockType
+	m[diagConsts.DBConnectionStringSpanAttributeKey] = diagConsts.SecretBuildingBlockType
+	m[diagConsts.DBStatementSpanAttributeKey] = r.Method + " " + r.URL.Path
+	m[diagConsts.DBNameSpanAttributeKey] = chi.URLParam(r, secretStoreNameParam)
+}
+
+func (a *api) constructSecretsEndpoints() []endpoints.Endpoint {
+	return []endpoints.Endpoint{
 		{
 			Methods: []string{http.MethodGet},
 			Route:   "secrets/{secretStoreName}/bulk",
 			Version: apiVersionV1,
+			Group:   endpointGroupSecretsV1,
 			Handler: a.onBulkGetSecretHandler(),
+			Settings: endpoints.EndpointSettings{
+				Name: "GetBulkSecret",
+			},
 		},
 		{
 			Methods: []string{http.MethodGet},
 			Route:   "secrets/{secretStoreName}/{key}",
 			Version: apiVersionV1,
+			Group:   endpointGroupSecretsV1,
 			Handler: a.onGetSecretHandler(),
+			Settings: endpoints.EndpointSettings{
+				Name: "GetSecret",
+			},
 		},
 	}
 }

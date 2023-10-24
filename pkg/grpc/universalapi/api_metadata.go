@@ -26,7 +26,7 @@ import (
 
 const daprRuntimeVersionKey = "daprRuntimeVersion"
 
-func (a *UniversalAPI) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.GetMetadataResponse, error) {
+func (a *UniversalAPI) GetMetadata(ctx context.Context, in *runtimev1pb.GetMetadataRequest) (*runtimev1pb.GetMetadataResponse, error) {
 	// Extended metadata
 	extendedMetadata := make(map[string]string, len(a.ExtendedMetadata)+1)
 	a.extendedMetadataLock.RLock()

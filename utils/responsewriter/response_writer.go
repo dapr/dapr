@@ -34,15 +34,6 @@ type ResponseWriter interface {
 	// Before allows for a function to be called before the ResponseWriter has been written to. This is
 	// useful for setting headers or any other operations that must happen before a response has been written.
 	Before(func(ResponseWriter))
-	// UserValue retrieves values from the object.
-	UserValue(key any) any
-	// UserValueString retrieves the user value and casts it as string.
-	// If the value is not a string, returns an empty string.
-	UserValueString(key any) string
-	// AllUserValues retrieves all user values.
-	AllUserValues() map[any]any
-	// SetUserValue sets arbitrary values in the object.
-	SetUserValue(key any, value any)
 }
 
 type beforeFunc func(ResponseWriter)
@@ -71,7 +62,6 @@ type responseWriter struct {
 	size           int
 	beforeFuncs    []beforeFunc
 	callingBefores bool
-	userValues     map[any]any
 }
 
 func (rw *responseWriter) WriteHeader(s int) {
@@ -153,27 +143,4 @@ func (rw *responseWriter) callBefore() {
 	for i := len(rw.beforeFuncs) - 1; i >= 0; i-- {
 		rw.beforeFuncs[i](rw)
 	}
-}
-
-func (rw *responseWriter) SetUserValue(key any, value any) {
-	if rw.userValues == nil {
-		rw.userValues = map[any]any{}
-	}
-	rw.userValues[key] = value
-}
-
-func (rw *responseWriter) UserValue(key any) any {
-	if rw.userValues == nil {
-		return nil
-	}
-	return rw.userValues[key]
-}
-
-func (rw *responseWriter) UserValueString(key any) string {
-	v, _ := rw.UserValue(key).(string)
-	return v
-}
-
-func (rw *responseWriter) AllUserValues() map[any]any {
-	return rw.userValues
 }

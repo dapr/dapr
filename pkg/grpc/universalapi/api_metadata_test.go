@@ -21,7 +21,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/dapr/dapr/pkg/actors"
 	componentsV1alpha "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
@@ -108,7 +107,7 @@ func TestGetMetadata(t *testing.T) {
 				GlobalConfig:        &config.Configuration{},
 			}
 
-			response, err := fakeAPI.GetMetadata(context.Background(), &emptypb.Empty{})
+			response, err := fakeAPI.GetMetadata(context.Background(), &runtimev1pb.GetMetadataRequest{})
 			require.NoError(t, err, "Expected no error")
 
 			bytes, err := json.Marshal(response)

@@ -22,430 +22,407 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/dapr/dapr/pkg/config"
-)
-
-const (
-	healthzEndpoint         = "healthz"
-	healthzOutboundEndpoint = "healthz/outbound"
+	"github.com/dapr/dapr/pkg/http/endpoints"
 )
 
 func TestAPIAllowlist(t *testing.T) {
-	t.Run("state allowed", func(t *testing.T) {
-		allowed := config.APIAccessRules{
-			{
-				Name:     "state",
-				Version:  "v1.0",
-				Protocol: "http",
-			},
-			{
-				Name:     "state",
-				Version:  "v1.0-alpha1",
-				Protocol: "http",
-			},
-		}.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
+	testFn := func(v1, v1alpha1 string) func(t *testing.T) {
+		return func(t *testing.T) {
+			t.Run("state allowed", func(t *testing.T) {
+				allowed := config.APIAccessRules{
+					{
+						Name:     "state",
+						Version:  v1,
+						Protocol: "http",
+					},
+					{
+						Name:     "state",
+						Version:  v1alpha1,
+						Protocol: "http",
+					},
+				}.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
 
-		a := &api{}
-		eps := a.constructStateEndpoints()
+				a := &api{}
+				eps := a.constructStateEndpoints()
 
-		for _, e := range eps {
-			valid := e.IsAllowed(allowed, nil)
-			assert.True(t, valid)
+				for _, e := range eps {
+					valid := e.IsAllowed(allowed, nil)
+					assert.True(t, valid)
+				}
+
+				allOtherEndpoints := []endpoints.Endpoint{}
+				allOtherEndpoints = append(allOtherEndpoints, a.constructActorEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructBindingsEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructDirectMessagingEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructMetadataEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructPubSubEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructSecretsEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructShutdownEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructHealthzEndpoints()...)
+
+				for _, e := range allOtherEndpoints {
+					valid := e.IsAllowed(allowed, nil)
+
+					// healthz endpoints are always allowed
+					assert.Equal(t, e.Settings.AlwaysAllowed, valid)
+				}
+			})
+
+			t.Run("state denied", func(t *testing.T) {
+				denied := config.APIAccessRules{
+					{
+						Name:     "state",
+						Version:  v1,
+						Protocol: "http",
+					},
+					{
+						Name:     "state",
+						Version:  v1alpha1,
+						Protocol: "http",
+					},
+				}.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
+
+				a := &api{}
+				eps := a.constructStateEndpoints()
+
+				for _, e := range eps {
+					valid := e.IsAllowed(nil, denied)
+					assert.False(t, valid, e.Route)
+				}
+
+				allOtherEndpoints := []endpoints.Endpoint{}
+				allOtherEndpoints = append(allOtherEndpoints, a.constructActorEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructBindingsEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructDirectMessagingEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructMetadataEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructPubSubEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructSecretsEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructShutdownEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructHealthzEndpoints()...)
+
+				for _, e := range allOtherEndpoints {
+					valid := e.IsAllowed(nil, denied)
+					assert.True(t, valid, e.Route)
+				}
+			})
+
+			t.Run("pubsub allowed", func(t *testing.T) {
+				allowed := config.APIAccessRules{
+					{
+						Name:     "publish",
+						Version:  v1,
+						Protocol: "http",
+					},
+					{
+						Name:     "publish",
+						Version:  v1alpha1,
+						Protocol: "http",
+					},
+				}.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
+
+				a := &api{}
+				eps := a.constructPubSubEndpoints()
+
+				for _, e := range eps {
+					valid := e.IsAllowed(allowed, nil)
+					assert.True(t, valid)
+				}
+
+				allOtherEndpoints := []endpoints.Endpoint{}
+				allOtherEndpoints = append(allOtherEndpoints, a.constructActorEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructBindingsEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructDirectMessagingEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructMetadataEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructStateEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructSecretsEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructShutdownEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructHealthzEndpoints()...)
+
+				for _, e := range allOtherEndpoints {
+					valid := e.IsAllowed(allowed, nil)
+
+					// healthz endpoints are always allowed
+					assert.Equal(t, e.Settings.AlwaysAllowed, valid)
+				}
+			})
+
+			t.Run("invoke allowed", func(t *testing.T) {
+				allowed := config.APIAccessRules{
+					{
+						Name:     "invoke",
+						Version:  v1,
+						Protocol: "http",
+					},
+				}.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
+
+				a := &api{}
+				eps := a.constructDirectMessagingEndpoints()
+
+				for _, e := range eps {
+					valid := e.IsAllowed(allowed, nil)
+					assert.True(t, valid)
+				}
+
+				allOtherEndpoints := []endpoints.Endpoint{}
+				allOtherEndpoints = append(allOtherEndpoints, a.constructActorEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructBindingsEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructPubSubEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructMetadataEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructStateEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructSecretsEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructShutdownEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructHealthzEndpoints()...)
+
+				for _, e := range allOtherEndpoints {
+					valid := e.IsAllowed(allowed, nil)
+
+					// healthz endpoints are always allowed
+					assert.Equal(t, e.Settings.AlwaysAllowed, valid)
+				}
+			})
+
+			t.Run("bindings allowed", func(t *testing.T) {
+				allowed := config.APIAccessRules{
+					{
+						Name:     "bindings",
+						Version:  v1,
+						Protocol: "http",
+					},
+				}.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
+
+				a := &api{}
+				eps := a.constructBindingsEndpoints()
+
+				for _, e := range eps {
+					valid := e.IsAllowed(allowed, nil)
+					assert.True(t, valid)
+				}
+
+				allOtherEndpoints := []endpoints.Endpoint{}
+				allOtherEndpoints = append(allOtherEndpoints, a.constructActorEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructDirectMessagingEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructPubSubEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructMetadataEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructStateEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructSecretsEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructShutdownEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructHealthzEndpoints()...)
+
+				for _, e := range allOtherEndpoints {
+					valid := e.IsAllowed(allowed, nil)
+
+					// healthz endpoints are always allowed
+					assert.Equal(t, e.Settings.AlwaysAllowed, valid)
+				}
+			})
+
+			t.Run("metadata allowed", func(t *testing.T) {
+				allowed := config.APIAccessRules{
+					{
+						Name:     "metadata",
+						Version:  v1,
+						Protocol: "http",
+					},
+				}.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
+
+				a := &api{}
+				eps := a.constructMetadataEndpoints()
+
+				for _, e := range eps {
+					valid := e.IsAllowed(allowed, nil)
+					assert.True(t, valid)
+				}
+
+				allOtherEndpoints := []endpoints.Endpoint{}
+				allOtherEndpoints = append(allOtherEndpoints, a.constructActorEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructDirectMessagingEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructPubSubEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructBindingsEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructStateEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructSecretsEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructShutdownEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructHealthzEndpoints()...)
+
+				for _, e := range allOtherEndpoints {
+					valid := e.IsAllowed(allowed, nil)
+
+					// healthz endpoints are always allowed
+					assert.Equal(t, e.Settings.AlwaysAllowed, valid)
+				}
+			})
+
+			t.Run("secrets allowed", func(t *testing.T) {
+				allowed := config.APIAccessRules{
+					{
+						Name:     "secrets",
+						Version:  v1,
+						Protocol: "http",
+					},
+				}.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
+
+				a := &api{}
+				eps := a.constructSecretsEndpoints()
+
+				for _, e := range eps {
+					valid := e.IsAllowed(allowed, nil)
+					assert.True(t, valid)
+				}
+
+				allOtherEndpoints := []endpoints.Endpoint{}
+				allOtherEndpoints = append(allOtherEndpoints, a.constructActorEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructDirectMessagingEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructPubSubEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructBindingsEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructStateEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructMetadataEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructShutdownEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructHealthzEndpoints()...)
+
+				for _, e := range allOtherEndpoints {
+					valid := e.IsAllowed(allowed, nil)
+
+					// healthz endpoints are always allowed
+					assert.Equal(t, e.Settings.AlwaysAllowed, valid)
+				}
+			})
+
+			t.Run("shutdown allowed", func(t *testing.T) {
+				allowed := config.APIAccessRules{
+					{
+						Name:     "shutdown",
+						Version:  v1,
+						Protocol: "http",
+					},
+				}.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
+
+				a := &api{}
+				eps := a.constructShutdownEndpoints()
+
+				for _, e := range eps {
+					valid := e.IsAllowed(allowed, nil)
+					assert.True(t, valid)
+				}
+
+				allOtherEndpoints := []endpoints.Endpoint{}
+				allOtherEndpoints = append(allOtherEndpoints, a.constructActorEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructDirectMessagingEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructPubSubEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructBindingsEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructStateEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructMetadataEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructSecretsEndpoints()...)
+				allOtherEndpoints = append(allOtherEndpoints, a.constructHealthzEndpoints()...)
+
+				for _, e := range allOtherEndpoints {
+					valid := e.IsAllowed(allowed, nil)
+
+					// healthz endpoints are always allowed
+					assert.Equal(t, e.Settings.AlwaysAllowed, valid)
+				}
+			})
+
+			t.Run("non-overlapping denylist and allowlist", func(t *testing.T) {
+				allowed := config.APIAccessRules{
+					{
+						Name:     "invoke",
+						Version:  v1,
+						Protocol: "http",
+					},
+				}.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
+
+				denied := config.APIAccessRules{
+					{
+						Name:     "state",
+						Version:  v1,
+						Protocol: "http",
+					},
+					{
+						Name:     "state",
+						Version:  v1alpha1,
+						Protocol: "http",
+					},
+				}.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
+
+				a := &api{}
+				allEndpoints := []endpoints.Endpoint{}
+				allEndpoints = append(allEndpoints, a.constructDirectMessagingEndpoints()...)
+				allEndpoints = append(allEndpoints, a.constructActorEndpoints()...)
+				allEndpoints = append(allEndpoints, a.constructBindingsEndpoints()...)
+				allEndpoints = append(allEndpoints, a.constructStateEndpoints()...)
+				allEndpoints = append(allEndpoints, a.constructMetadataEndpoints()...)
+				allEndpoints = append(allEndpoints, a.constructPubSubEndpoints()...)
+				allEndpoints = append(allEndpoints, a.constructSecretsEndpoints()...)
+				allEndpoints = append(allEndpoints, a.constructShutdownEndpoints()...)
+				allEndpoints = append(allEndpoints, a.constructHealthzEndpoints()...)
+
+				for _, e := range allEndpoints {
+					valid := e.IsAllowed(allowed, denied)
+					switch {
+					// healthz endpoints are always allowed
+					case e.Settings.AlwaysAllowed:
+						assert.True(t, valid, e.Route)
+					case strings.HasPrefix(e.Route, "invoke"):
+						assert.True(t, valid, e.Route)
+					default:
+						assert.False(t, valid, e.Route)
+					}
+				}
+			})
+
+			t.Run("overlapping denylist and allowlist", func(t *testing.T) {
+				allowed := config.APIAccessRules{
+					{
+						Name:     "state",
+						Version:  v1,
+						Protocol: "http",
+					},
+					{
+						Name:     "state",
+						Version:  v1alpha1,
+						Protocol: "http",
+					},
+				}.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
+
+				denied := config.APIAccessRules{
+					{
+						Name:     "state",
+						Version:  v1,
+						Protocol: "http",
+					},
+				}.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
+
+				a := &api{}
+				allEndpoints := []endpoints.Endpoint{}
+				allEndpoints = append(allEndpoints, a.constructDirectMessagingEndpoints()...)
+				allEndpoints = append(allEndpoints, a.constructActorEndpoints()...)
+				allEndpoints = append(allEndpoints, a.constructBindingsEndpoints()...)
+				allEndpoints = append(allEndpoints, a.constructStateEndpoints()...)
+				allEndpoints = append(allEndpoints, a.constructMetadataEndpoints()...)
+				allEndpoints = append(allEndpoints, a.constructPubSubEndpoints()...)
+				allEndpoints = append(allEndpoints, a.constructSecretsEndpoints()...)
+				allEndpoints = append(allEndpoints, a.constructShutdownEndpoints()...)
+				allEndpoints = append(allEndpoints, a.constructHealthzEndpoints()...)
+
+				for _, e := range allEndpoints {
+					valid := e.IsAllowed(allowed, denied)
+					switch {
+					// healthz endpoints are always allowed
+					case e.Settings.AlwaysAllowed:
+						assert.True(t, valid, e.Route)
+					// Only alpha APIs are allowed
+					case e.Group.Name == "state" && e.Group.Version == endpoints.EndpointGroupVersion1alpha1:
+						assert.True(t, valid, e.Route)
+					default:
+						assert.False(t, valid, e.Route)
+					}
+				}
+			})
 		}
+	}
 
-		allOtherEndpoints := []Endpoint{}
-		allOtherEndpoints = append(allOtherEndpoints, a.constructActorEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructBindingsEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructDirectMessagingEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructMetadataEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructPubSubEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructSecretEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructShutdownEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructHealthzEndpoints()...)
+	t.Run("new format", testFn(string(endpoints.EndpointGroupVersion1), string(endpoints.EndpointGroupVersion1alpha1)))
 
-		for _, e := range allOtherEndpoints {
-			valid := e.IsAllowed(allowed, nil)
-			switch e.Route {
-			// healthz endpoints are always allowed
-			case healthzEndpoint, healthzOutboundEndpoint:
-				assert.True(t, valid)
-			default:
-				assert.False(t, valid)
-			}
-		}
-	})
-
-	t.Run("state denied", func(t *testing.T) {
-		denied := config.APIAccessRules{
-			{
-				Name:     "state",
-				Version:  "v1.0",
-				Protocol: "http",
-			},
-			{
-				Name:     "state",
-				Version:  "v1.0-alpha1",
-				Protocol: "http",
-			},
-		}.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
-
-		a := &api{}
-		eps := a.constructStateEndpoints()
-
-		for _, e := range eps {
-			valid := e.IsAllowed(nil, denied)
-			assert.False(t, valid, e.Route)
-		}
-
-		allOtherEndpoints := []Endpoint{}
-		allOtherEndpoints = append(allOtherEndpoints, a.constructActorEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructBindingsEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructDirectMessagingEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructMetadataEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructPubSubEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructSecretEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructShutdownEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructHealthzEndpoints()...)
-
-		for _, e := range allOtherEndpoints {
-			valid := e.IsAllowed(nil, denied)
-			assert.True(t, valid, e.Route)
-		}
-	})
-
-	t.Run("publish allowed", func(t *testing.T) {
-		allowed := config.APIAccessRules{
-			{
-				Name:     "publish",
-				Version:  "v1.0",
-				Protocol: "http",
-			},
-			{
-				Name:     "publish",
-				Version:  "v1.0-alpha1",
-				Protocol: "http",
-			},
-		}.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
-
-		a := &api{}
-		eps := a.constructPubSubEndpoints()
-
-		for _, e := range eps {
-			valid := e.IsAllowed(allowed, nil)
-			assert.True(t, valid)
-		}
-
-		allOtherEndpoints := []Endpoint{}
-		allOtherEndpoints = append(allOtherEndpoints, a.constructActorEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructBindingsEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructDirectMessagingEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructMetadataEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructStateEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructSecretEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructShutdownEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructHealthzEndpoints()...)
-
-		for _, e := range allOtherEndpoints {
-			valid := e.IsAllowed(allowed, nil)
-			switch e.Route {
-			// healthz endpoints are always allowed
-			case healthzEndpoint, healthzOutboundEndpoint:
-				assert.True(t, valid)
-			default:
-				assert.False(t, valid)
-			}
-		}
-	})
-
-	t.Run("invoke allowed", func(t *testing.T) {
-		allowed := config.APIAccessRules{
-			{
-				Name:     "invoke",
-				Version:  "v1.0",
-				Protocol: "http",
-			},
-		}.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
-
-		a := &api{}
-		eps := a.constructDirectMessagingEndpoints()
-
-		for _, e := range eps {
-			valid := e.IsAllowed(allowed, nil)
-			assert.True(t, valid)
-		}
-
-		allOtherEndpoints := []Endpoint{}
-		allOtherEndpoints = append(allOtherEndpoints, a.constructActorEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructBindingsEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructPubSubEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructMetadataEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructStateEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructSecretEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructShutdownEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructHealthzEndpoints()...)
-
-		for _, e := range allOtherEndpoints {
-			valid := e.IsAllowed(allowed, nil)
-			switch e.Route {
-			case healthzEndpoint, healthzOutboundEndpoint:
-				assert.True(t, valid)
-			default:
-				assert.False(t, valid)
-			}
-		}
-	})
-
-	t.Run("bindings allowed", func(t *testing.T) {
-		allowed := config.APIAccessRules{
-			{
-				Name:     "bindings",
-				Version:  "v1.0",
-				Protocol: "http",
-			},
-		}.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
-
-		a := &api{}
-		eps := a.constructBindingsEndpoints()
-
-		for _, e := range eps {
-			valid := e.IsAllowed(allowed, nil)
-			assert.True(t, valid)
-		}
-
-		allOtherEndpoints := []Endpoint{}
-		allOtherEndpoints = append(allOtherEndpoints, a.constructActorEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructDirectMessagingEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructPubSubEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructMetadataEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructStateEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructSecretEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructShutdownEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructHealthzEndpoints()...)
-
-		for _, e := range allOtherEndpoints {
-			valid := e.IsAllowed(allowed, nil)
-			switch e.Route {
-			// healthz endpoints are always allowed
-			case healthzEndpoint, healthzOutboundEndpoint:
-				assert.True(t, valid)
-			default:
-				assert.False(t, valid)
-			}
-		}
-	})
-
-	t.Run("metadata allowed", func(t *testing.T) {
-		allowed := config.APIAccessRules{
-			{
-				Name:     "metadata",
-				Version:  "v1.0",
-				Protocol: "http",
-			},
-		}.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
-
-		a := &api{}
-		eps := a.constructMetadataEndpoints()
-
-		for _, e := range eps {
-			valid := e.IsAllowed(allowed, nil)
-			assert.True(t, valid)
-		}
-
-		allOtherEndpoints := []Endpoint{}
-		allOtherEndpoints = append(allOtherEndpoints, a.constructActorEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructDirectMessagingEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructPubSubEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructBindingsEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructStateEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructSecretEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructShutdownEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructHealthzEndpoints()...)
-
-		for _, e := range allOtherEndpoints {
-			valid := e.IsAllowed(allowed, nil)
-			switch e.Route {
-			// healthz endpoints are always allowed
-			case healthzEndpoint, healthzOutboundEndpoint:
-				assert.True(t, valid)
-			default:
-				assert.False(t, valid)
-			}
-		}
-	})
-
-	t.Run("secrets allowed", func(t *testing.T) {
-		allowed := config.APIAccessRules{
-			{
-				Name:     "secrets",
-				Version:  "v1.0",
-				Protocol: "http",
-			},
-		}.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
-
-		a := &api{}
-		eps := a.constructSecretEndpoints()
-
-		for _, e := range eps {
-			valid := e.IsAllowed(allowed, nil)
-			assert.True(t, valid)
-		}
-
-		allOtherEndpoints := []Endpoint{}
-		allOtherEndpoints = append(allOtherEndpoints, a.constructActorEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructDirectMessagingEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructPubSubEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructBindingsEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructStateEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructMetadataEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructShutdownEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructHealthzEndpoints()...)
-
-		for _, e := range allOtherEndpoints {
-			valid := e.IsAllowed(allowed, nil)
-			switch e.Route {
-			// healthz endpoints are always allowed
-			case healthzEndpoint, healthzOutboundEndpoint:
-				assert.True(t, valid)
-			default:
-				assert.False(t, valid)
-			}
-		}
-	})
-
-	t.Run("shutdown allowed", func(t *testing.T) {
-		allowed := config.APIAccessRules{
-			{
-				Name:     "shutdown",
-				Version:  "v1.0",
-				Protocol: "http",
-			},
-		}.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
-
-		a := &api{}
-		eps := a.constructShutdownEndpoints()
-
-		for _, e := range eps {
-			valid := e.IsAllowed(allowed, nil)
-			assert.True(t, valid)
-		}
-
-		allOtherEndpoints := []Endpoint{}
-		allOtherEndpoints = append(allOtherEndpoints, a.constructActorEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructDirectMessagingEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructPubSubEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructBindingsEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructStateEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructMetadataEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructSecretEndpoints()...)
-		allOtherEndpoints = append(allOtherEndpoints, a.constructHealthzEndpoints()...)
-
-		for _, e := range allOtherEndpoints {
-			valid := e.IsAllowed(allowed, nil)
-			switch e.Route {
-			// healthz endpoints are always allowed
-			case healthzEndpoint, healthzOutboundEndpoint:
-				assert.True(t, valid)
-			default:
-				assert.False(t, valid)
-			}
-		}
-	})
-
-	t.Run("non-overlapping denylist and allowlist", func(t *testing.T) {
-		allowed := config.APIAccessRules{
-			{
-				Name:     "invoke",
-				Version:  "v1.0",
-				Protocol: "http",
-			},
-		}.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
-
-		denied := config.APIAccessRules{
-			{
-				Name:     "state",
-				Version:  "v1.0",
-				Protocol: "http",
-			},
-			{
-				Name:     "state",
-				Version:  "v1.0-alpha1",
-				Protocol: "http",
-			},
-		}.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
-
-		a := &api{}
-		allEndpoints := []Endpoint{}
-		allEndpoints = append(allEndpoints, a.constructDirectMessagingEndpoints()...)
-		allEndpoints = append(allEndpoints, a.constructActorEndpoints()...)
-		allEndpoints = append(allEndpoints, a.constructBindingsEndpoints()...)
-		allEndpoints = append(allEndpoints, a.constructStateEndpoints()...)
-		allEndpoints = append(allEndpoints, a.constructMetadataEndpoints()...)
-		allEndpoints = append(allEndpoints, a.constructPubSubEndpoints()...)
-		allEndpoints = append(allEndpoints, a.constructSecretEndpoints()...)
-		allEndpoints = append(allEndpoints, a.constructShutdownEndpoints()...)
-		allEndpoints = append(allEndpoints, a.constructHealthzEndpoints()...)
-
-		for _, e := range allEndpoints {
-			valid := e.IsAllowed(allowed, denied)
-			switch {
-			// healthz endpoints are always allowed
-			case e.Route == healthzEndpoint, e.Route == healthzOutboundEndpoint:
-				assert.True(t, valid, e.Route)
-			case strings.HasPrefix(e.Route, "invoke"):
-				assert.True(t, valid, e.Route)
-			default:
-				assert.False(t, valid, e.Route)
-			}
-		}
-	})
-
-	t.Run("overlapping denylist and allowlist", func(t *testing.T) {
-		allowed := config.APIAccessRules{
-			{
-				Name:     "state",
-				Version:  "v1.0",
-				Protocol: "http",
-			},
-			{
-				Name:     "state",
-				Version:  "v1.0-alpha1",
-				Protocol: "http",
-			},
-		}.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
-
-		denied := config.APIAccessRules{
-			{
-				Name:     "state",
-				Version:  "v1.0",
-				Protocol: "http",
-			},
-		}.GetRulesByProtocol(config.APIAccessRuleProtocolHTTP)
-
-		a := &api{}
-		allEndpoints := []Endpoint{}
-		allEndpoints = append(allEndpoints, a.constructDirectMessagingEndpoints()...)
-		allEndpoints = append(allEndpoints, a.constructActorEndpoints()...)
-		allEndpoints = append(allEndpoints, a.constructBindingsEndpoints()...)
-		allEndpoints = append(allEndpoints, a.constructStateEndpoints()...)
-		allEndpoints = append(allEndpoints, a.constructMetadataEndpoints()...)
-		allEndpoints = append(allEndpoints, a.constructPubSubEndpoints()...)
-		allEndpoints = append(allEndpoints, a.constructSecretEndpoints()...)
-		allEndpoints = append(allEndpoints, a.constructShutdownEndpoints()...)
-		allEndpoints = append(allEndpoints, a.constructHealthzEndpoints()...)
-
-		for _, e := range allEndpoints {
-			valid := e.IsAllowed(allowed, denied)
-			switch {
-			// healthz endpoints are always allowed
-			case e.Route == healthzEndpoint, e.Route == healthzOutboundEndpoint:
-				assert.True(t, valid, e.Route)
-			// Only alpha APIs are allowed
-			case strings.HasPrefix(e.Route, "state") && e.Version != "v1.0":
-				assert.True(t, valid, e.Route)
-			default:
-				assert.False(t, valid, e.Route)
-			}
-		}
-	})
+	t.Run("legacy format", testFn(apiVersionV1, apiVersionV1alpha1))
 
 	t.Run("no rules, all endpoints allowed", func(t *testing.T) {
 		a := &api{}
@@ -536,7 +513,7 @@ func TestAPIAllowlist(t *testing.T) {
 			apiSpec: config.APISpec{
 				Allowed: []config.APIAccessRule{
 					{
-						Version:  "v1.0",
+						Version:  "v1",
 						Name:     "state",
 						Protocol: "http",
 					},
