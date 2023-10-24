@@ -15,9 +15,9 @@ package healthz
 
 import (
 	"context"
-	"net"
 	"net/http"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -36,11 +36,13 @@ func init() {
 	suite.Register(new(healthz))
 }
 
-// healthz ensures that the daprd `/healthz` endpoint is called and actors will respond successfully when invoked.
+// healthz ensures that the daprd `/healthz` endpoint is called and actors will
+// respond successfully when invoked.
 type healthz struct {
 	daprd         *daprd.Daprd
 	place         *placement.Placement
 	healthzCalled chan struct{}
+	once          sync.Once
 }
 
 func (h *healthz) Setup(t *testing.T) []framework.Option {
@@ -52,7 +54,9 @@ func (h *healthz) Setup(t *testing.T) []framework.Option {
 	})
 	handler.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		close(h.healthzCalled)
+		h.once.Do(func() {
+			close(h.healthzCalled)
+		})
 	})
 	handler.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`OK`))
@@ -75,9 +79,6 @@ spec:
 		daprd.WithPlacementAddresses("localhost:"+strconv.Itoa(h.place.Port())),
 		daprd.WithAppProtocol("http"),
 		daprd.WithAppPort(srv.Port()),
-		daprd.WithAppHealthCheck(true),
-		// Daprd is super noisy in debug mode when connecting to placement.
-		daprd.WithLogLevel("info"),
 	)
 
 	return []framework.Option{
@@ -87,34 +88,21 @@ spec:
 
 func (h *healthz) Run(t *testing.T, ctx context.Context) {
 	h.place.WaitUntilRunning(t, ctx)
-
-	assert.Eventually(t, func() bool {
-		dialer := net.Dialer{Timeout: time.Second}
-		net, err := dialer.DialContext(ctx, "tcp", "localhost:"+strconv.Itoa(h.daprd.HTTPPort()))
-		if err != nil {
-			return false
-		}
-		net.Close()
-		return true
-	}, time.Second*5, time.Millisecond*100)
+	h.daprd.WaitUntilRunning(t, ctx)
 
 	select {
 	case <-h.healthzCalled:
-	case <-time.After(time.Second * 5):
+	case <-time.After(time.Second * 15):
 		t.Fatal("timed out waiting for healthz call")
 	}
 
 	client := util.HTTPClient(t)
 
-	ctx, cancel := context.WithTimeout(ctx, time.Second)
-	t.Cleanup(cancel)
 	daprdURL := "http://localhost:" + strconv.Itoa(h.daprd.HTTPPort()) + "/v1.0/actors/myactortype/myactorid/method/foo"
-
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, daprdURL, nil)
 	require.NoError(t, err)
 	resp, err := client.Do(req)
-	assert.ErrorIs(t, err, context.DeadlineExceeded)
-	if resp != nil && resp.Body != nil {
-		assert.NoError(t, resp.Body.Close())
-	}
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.NoError(t, resp.Body.Close())
 }
