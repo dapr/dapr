@@ -25,12 +25,31 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	"github.com/dapr/dapr/utils"
 )
 
-// workflowScheduler is an interface for pushing work items into the backend
-type workflowScheduler interface {
-	ScheduleWorkflow(ctx context.Context, wi *backend.OrchestrationWorkItem) error
-	ScheduleActivity(ctx context.Context, wi *backend.ActivityWorkItem) error
+// actorsBackendConfig is the configuration for the workflow engine's actors backend
+type actorsBackendConfig struct {
+	AppID             string
+	workflowActorType string
+	activityActorType string
+}
+
+// NewActorsBackendConfig creates a new workflow engine configuration
+func NewActorsBackendConfig(appID string) actorsBackendConfig {
+	return actorsBackendConfig{
+		AppID:             appID,
+		workflowActorType: actors.InternalActorTypePrefix + utils.GetNamespaceOrDefault(defaultNamespace) + utils.DotDelimiter + appID + utils.DotDelimiter + WorkflowNameLabelKey,
+		activityActorType: actors.InternalActorTypePrefix + utils.GetNamespaceOrDefault(defaultNamespace) + utils.DotDelimiter + appID + utils.DotDelimiter + ActivityNameLabelKey,
+	}
+}
+
+// String implements fmt.Stringer and is primarily used for debugging purposes.
+func (c *actorsBackendConfig) String() string {
+	if c == nil {
+		return "(nil)"
+	}
+	return fmt.Sprintf("AppID:'%s', workflowActorType:'%s', activityActorType:'%s'", c.AppID, c.workflowActorType, c.activityActorType)
 }
 
 type actorBackend struct {
@@ -38,15 +57,54 @@ type actorBackend struct {
 	orchestrationWorkItemChan chan *backend.OrchestrationWorkItem
 	activityWorkItemChan      chan *backend.ActivityWorkItem
 	startedOnce               sync.Once
-	config                    wfConfig
+	config                    actorsBackendConfig
+	workflowActor             *workflowActor
+	activityActor             *activityActor
 }
 
-func NewActorBackend(engine *WorkflowEngine) *actorBackend {
+func NewActorBackend(appID string) *actorBackend {
+	backendConfig := NewActorsBackendConfig(appID)
 	return &actorBackend{
 		orchestrationWorkItemChan: make(chan *backend.OrchestrationWorkItem),
 		activityWorkItemChan:      make(chan *backend.ActivityWorkItem),
-		config:                    engine.config,
+		config:                    backendConfig,
+		workflowActor:             NewWorkflowActor(getWorkflowScheduler(), backendConfig),
+		activityActor:             NewActivityActor(getActivityScheduler(), backendConfig),
 	}
+}
+
+// getWorkflowScheduler returns a workflowScheduler func that sends an orchestration work item to the Durable Task Framework.
+func getWorkflowScheduler() workflowScheduler {
+	orchestrationWorkItemChan := make(chan *backend.OrchestrationWorkItem)
+	return func(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
+		select {
+		case <-ctx.Done(): // <-- engine is shutting down
+			return ctx.Err()
+		case orchestrationWorkItemChan <- wi: // blocks until the engine is ready to process the work item
+			return nil
+		}
+	}
+}
+
+// getActivityScheduler returns an activityScheduler func that sends an activity work item to the Durable Task Framework.
+func getActivityScheduler() activityScheduler {
+	activityWorkItemChan := make(chan *backend.ActivityWorkItem)
+	return func(ctx context.Context, wi *backend.ActivityWorkItem) error {
+		select {
+		case <-ctx.Done(): // engine is shutting down
+			return ctx.Err()
+		case activityWorkItemChan <- wi: // blocks until the engine is ready to process the work item
+			return nil
+		}
+	}
+}
+
+// InternalActors returns a map of internal actors that are used to implement workflows
+func (be *actorBackend) GetInternalActorsMap() map[string]actors.InternalActor {
+	internalActors := make(map[string]actors.InternalActor)
+	internalActors[be.config.workflowActorType] = be.workflowActor
+	internalActors[be.config.activityActorType] = be.activityActor
+	return internalActors
 }
 
 func (be *actorBackend) SetActorRuntime(actors actors.Actors) {
@@ -266,7 +324,7 @@ func (*actorBackend) Stop(context.Context) error {
 
 // String displays the type information
 func (be *actorBackend) String() string {
-	return fmt.Sprintf("dapr.actors/v1-alpha")
+	return "dapr.actors/v1-alpha"
 }
 
 func (be *actorBackend) validateConfiguration() error {

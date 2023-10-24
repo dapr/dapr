@@ -338,9 +338,9 @@ func TestRecreateCompletedWorkflow(t *testing.T) {
 func TestInternalActorsSetupForWF(t *testing.T) {
 	ctx := context.Background()
 	_, engine := startEngine(ctx, t, task.NewTaskRegistry())
-	assert.Equal(t, 2, len(engine.InternalActors()))
-	assert.Contains(t, engine.InternalActors(), workflowActorType)
-	assert.Contains(t, engine.InternalActors(), activityActorType)
+	assert.Equal(t, 2, len(engine.GetInternalActorsMap()))
+	assert.Contains(t, engine.GetInternalActorsMap(), workflowActorType)
+	assert.Contains(t, engine.GetInternalActorsMap(), activityActorType)
 }
 
 // TestRecreateRunningWorkflowFails verifies that a workflow can't be recreated if it's in a running state.
@@ -750,7 +750,8 @@ func startEngineAndGetStore(ctx context.Context, t *testing.T, r *task.TaskRegis
 }
 
 func getEngine(t *testing.T) *wfengine.WorkflowEngine {
-	engine := wfengine.NewWorkflowEngine(wfengine.NewWorkflowConfig(testAppID))
+	spec := config.WorkflowSpec{MaxConcurrentWorkflows: 100, MaxConcurrentActivities: 100}
+	engine := wfengine.NewWorkflowEngine(testAppID, spec)
 	store := fakeStore()
 	cfg := actors.NewConfig(actors.ConfigOpts{
 		AppID:              testAppID,
@@ -775,7 +776,8 @@ func getEngine(t *testing.T) *wfengine.WorkflowEngine {
 }
 
 func getEngineAndStateStore(t *testing.T) (*wfengine.WorkflowEngine, *daprt.FakeStateStore) {
-	engine := wfengine.NewWorkflowEngine(wfengine.NewWorkflowConfig(testAppID))
+	spec := config.WorkflowSpec{MaxConcurrentWorkflows: 100, MaxConcurrentActivities: 100}
+	engine := wfengine.NewWorkflowEngine(testAppID, spec)
 	store := fakeStore().(*daprt.FakeStateStore)
 	cfg := actors.NewConfig(actors.ConfigOpts{
 		AppID:              testAppID,

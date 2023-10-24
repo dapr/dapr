@@ -49,7 +49,7 @@ type workflowActor struct {
 	cachingDisabled       bool
 	defaultTimeout        time.Duration
 	reminderInterval      time.Duration
-	config                wfConfig
+	config                actorsBackendConfig
 	activityResultAwaited atomic.Bool
 }
 
@@ -61,6 +61,9 @@ type durableTimer struct {
 type recoverableError struct {
 	cause error
 }
+
+// workflowScheduler is a func interface for pushing workflow (orchestration) work items into the backend
+type workflowScheduler func(ctx context.Context, wi *backend.OrchestrationWorkItem) error
 
 func NewDurableTimer(bytes []byte, generation uint64) durableTimer {
 	return durableTimer{bytes, generation}
@@ -74,7 +77,7 @@ func (err recoverableError) Error() string {
 	return err.cause.Error()
 }
 
-func NewWorkflowActor(scheduler workflowScheduler, config wfConfig) *workflowActor {
+func NewWorkflowActor(scheduler workflowScheduler, config actorsBackendConfig) *workflowActor {
 	return &workflowActor{
 		scheduler:        scheduler,
 		defaultTimeout:   30 * time.Second,
@@ -375,7 +378,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 	// will trigger this callback channel.
 	callback := make(chan bool)
 	wi.Properties[CallbackChannelProperty] = callback
-	err = wf.scheduler.ScheduleWorkflow(ctx, wi)
+	err = wf.scheduler(ctx, wi)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
 			return newRecoverableError(fmt.Errorf("timed-out trying to schedule a workflow execution - this can happen if there are too many in-flight workflows or if the workflow engine isn't running: %w", err))
@@ -409,7 +412,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 			if err != nil {
 				return fmt.Errorf("failed to marshal pending timer data: %w", err)
 			}
-			delay := tf.FireAt.AsTime().Sub(time.Now())
+			delay := time.Until(tf.FireAt.AsTime())
 			if delay < 0 {
 				delay = 0
 			}
@@ -520,6 +523,10 @@ func (wf *workflowActor) loadInternalState(ctx context.Context, actorID string) 
 	if state == nil {
 		// No such state exists in the state store
 		return nil, nil
+	}
+	if !wf.cachingDisabled {
+		// update cached state
+		wf.states.Store(actorID, state)
 	}
 	return state, nil
 }

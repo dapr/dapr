@@ -112,6 +112,17 @@ type ConfigurationSpec struct {
 	ComponentsSpec      *ComponentsSpec     `json:"components,omitempty" yaml:"components,omitempty"`
 	LoggingSpec         *LoggingSpec        `json:"logging,omitempty" yaml:"logging,omitempty"`
 	WasmSpec            *WasmSpec           `json:"wasm,omitempty" yaml:"wasm,omitempty"`
+	WorkflowSpec        *WorkflowSpec       `json:"workflow,omitempty" yaml:"workflow,omitempty"`
+}
+
+// WorkflowSpec defines the configuration for Dapr workflows.
+type WorkflowSpec struct {
+	// MaxConcurrentWorkflows is the maximum number of concurrent workflows that can be processed by a single Dapr instance.
+	// If omitted, the default value of 1000 will be used.
+	MaxConcurrentWorkflows int32 `json:"maxConcurrentWorkflows,omitempty" yaml:"maxConcurrentWorkflows,omitempty"`
+	// MaxConcurrentActivities is the maximum number of concurrent activities that can be processed by a single Dapr instance.
+	// If omitted, the default value of 1000 will be used.
+	MaxConcurrentActivities int32 `json:"maxConcurrentActivities,omitempty" yaml:"maxConcurrentActivities,omitempty"`
 }
 
 type SecretsSpec struct {
@@ -580,6 +591,18 @@ func (c Configuration) GetAPILoggingSpec() APILoggingSpec {
 		return APILoggingSpec{}
 	}
 	return *c.Spec.LoggingSpec.APILogging
+}
+
+// GetWorkflowSpec returns the Workflow spec.
+// It's a short-hand that includes nil-checks for safety.
+func (c *Configuration) GetWorkflowSpec() WorkflowSpec {
+	if c == nil || c.Spec.WorkflowSpec == nil {
+		return WorkflowSpec{
+			MaxConcurrentWorkflows:  100,
+			MaxConcurrentActivities: 100,
+		}
+	}
+	return *c.Spec.WorkflowSpec
 }
 
 // ToYAML returns the Configuration represented as YAML.
