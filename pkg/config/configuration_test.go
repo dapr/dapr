@@ -174,6 +174,25 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 		assert.Equal(t, "1h", mtlsSpec.AllowedClockSkew)
 	})
 
+	t.Run("workflow spec - configured", func(t *testing.T) {
+		config, err := LoadStandaloneConfiguration("./testdata/workflow_config.yaml")
+		require.NoError(t, err)
+		workflowSpec := config.GetWorkflowSpec()
+		assert.Equal(t, int32(32), workflowSpec.MaxConcurrentWorkflows)
+		assert.Equal(t, int32(64), workflowSpec.MaxConcurrentActivities)
+	})
+
+	t.Run("workflow spec - defaults", func(t *testing.T) {
+		// Intentionally loading an unrelated config file to test defaults
+		config, err := LoadStandaloneConfiguration("./testdata/mtls_config.yaml")
+		require.NoError(t, err)
+		workflowSpec := config.GetWorkflowSpec()
+
+		// These are the documented default values. Changes to these defaults require changes to documentation.
+		assert.Equal(t, int32(100), workflowSpec.MaxConcurrentWorkflows)
+		assert.Equal(t, int32(100), workflowSpec.MaxConcurrentActivities)
+	})
+
 	t.Run("multiple configurations", func(t *testing.T) {
 		config, err := LoadStandaloneConfiguration("./testdata/feature_config.yaml", "./testdata/mtls_config.yaml")
 		require.NoError(t, err)
