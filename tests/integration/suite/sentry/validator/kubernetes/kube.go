@@ -36,21 +36,26 @@ import (
 )
 
 func init() {
-	suite.Register(new(kubernetes))
+	suite.Register(new(kube))
 }
 
-// kubernetes tests Sentry with the Kubernetes validator.
-type kubernetes struct {
+// kube tests Sentry with the Kubernetes validator.
+type kube struct {
 	sentry *sentry.Sentry
 }
 
-func (k *kubernetes) Setup(t *testing.T) []framework.Option {
+func (k *kube) Setup(t *testing.T) []framework.Option {
 	rootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
 	bundle, err := ca.GenerateBundle(rootKey, "integration.test.dapr.io", time.Second*5, nil)
 	require.NoError(t, err)
 
-	kubeAPI := kubeAPI(t, bundle, "mynamespace", "myserviceaccount")
+	kubeAPI := kubeAPI(t, kubeAPIOptions{
+		bundle:         bundle,
+		namespace:      "mynamespace",
+		serviceAccount: "myserviceaccount",
+		appID:          "myappid",
+	})
 
 	k.sentry = sentry.New(t,
 		sentry.WithWriteConfig(false),
@@ -69,7 +74,7 @@ func (k *kubernetes) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (k *kubernetes) Run(t *testing.T, ctx context.Context) {
+func (k *kube) Run(t *testing.T, ctx context.Context) {
 	k.sentry.WaitUntilRunning(t, ctx)
 
 	conn := k.sentry.DialGRPC(t, ctx, "spiffe://integration.test.dapr.io/ns/sentrynamespace/dapr-sentry")

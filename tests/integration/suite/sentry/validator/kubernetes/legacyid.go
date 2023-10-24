@@ -25,8 +25,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	sentrypbv1 "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/dapr/dapr/pkg/sentry/server/ca"
@@ -52,15 +52,20 @@ func (l *legacyid) Setup(t *testing.T) []framework.Option {
 	bundle, err := ca.GenerateBundle(rootKey, "integration.test.dapr.io", time.Second*5, nil)
 	require.NoError(t, err)
 
-	kubeAPI := kubeAPI(t, bundle, "myns", "myaccount")
+	kubeAPI := kubeAPI(t, kubeAPIOptions{
+		bundle:         bundle,
+		namespace:      "myns",
+		serviceAccount: "myaccount",
+		appID:          "myappid",
+	})
 
 	l.sentry = sentry.New(t,
 		sentry.WithWriteConfig(false),
-		sentry.WithKubeconfig(kubeconfigPath(t, kubeAPI.Port())),
+		sentry.WithKubeconfig(kubeAPI.KubeconfigPath(t)),
 		sentry.WithExecOptions(
 			// Enable Kubernetes validator.
-			exec.WithEnvVars("KUBERNETES_SERVICE_HOST", "anything"),
-			exec.WithEnvVars("NAMESPACE", "sentrynamespace"),
+			exec.WithEnvVars(t, "KUBERNETES_SERVICE_HOST", "anything"),
+			exec.WithEnvVars(t, "NAMESPACE", "sentrynamespace"),
 		),
 		sentry.WithCABundle(bundle),
 		sentry.WithTrustDomain("integration.test.dapr.io"),
@@ -91,5 +96,5 @@ func (l *legacyid) Run(t *testing.T, ctx context.Context) {
 	})
 	assert.Nil(t, resp)
 	require.Error(t, err)
-	assert.Equal(t, codes.PermissionDenied, grpc.Code(err))
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
 }

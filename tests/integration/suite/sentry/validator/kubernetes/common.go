@@ -30,7 +30,14 @@ import (
 	prockube "github.com/dapr/dapr/tests/integration/framework/process/kubernetes"
 )
 
-func kubeAPI(t *testing.T, bundle ca.Bundle, namespace, serviceaccount string) *prockube.Kubernetes {
+type kubeAPIOptions struct {
+	bundle         ca.Bundle
+	namespace      string
+	serviceAccount string
+	appID          string
+}
+
+func kubeAPI(t *testing.T, opts kubeAPIOptions) *prockube.Kubernetes {
 	t.Helper()
 
 	return prockube.New(t,
@@ -46,15 +53,15 @@ func kubeAPI(t *testing.T, bundle ca.Bundle, namespace, serviceaccount string) *
 			TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"},
 			ObjectMeta: metav1.ObjectMeta{Namespace: "sentrynamespace", Name: "dapr-trust-bundle"},
 			Data: map[string][]byte{
-				"ca.crt":     bundle.TrustAnchors,
-				"issuer.crt": bundle.IssChainPEM,
-				"issuer.key": bundle.IssKeyPEM,
+				"ca.crt":     opts.bundle.TrustAnchors,
+				"issuer.crt": opts.bundle.IssChainPEM,
+				"issuer.key": opts.bundle.IssKeyPEM,
 			},
 		}),
 		prockube.WithConfigMapGet(t, &corev1.ConfigMap{
 			TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "ConfigMap"},
 			ObjectMeta: metav1.ObjectMeta{Namespace: "sentrynamespace", Name: "dapr-trust-bundle"},
-			Data:       map[string]string{"ca.crt": string(bundle.TrustAnchors)},
+			Data:       map[string]string{"ca.crt": string(opts.bundle.TrustAnchors)},
 		}),
 		prockube.WithClusterPodList(t, &corev1.PodList{
 			TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "PodList"},
@@ -62,10 +69,10 @@ func kubeAPI(t *testing.T, bundle ca.Bundle, namespace, serviceaccount string) *
 				{
 					TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Pod"},
 					ObjectMeta: metav1.ObjectMeta{
-						Namespace: namespace, Name: "mypod",
-						Annotations: map[string]string{"dapr.io/app-id": "myappid"},
+						Namespace: opts.namespace, Name: "mypod",
+						Annotations: map[string]string{"dapr.io/app-id": opts.appID},
 					},
-					Spec: corev1.PodSpec{ServiceAccountName: serviceaccount},
+					Spec: corev1.PodSpec{ServiceAccountName: opts.serviceAccount},
 				},
 			},
 		}),
@@ -81,7 +88,7 @@ func kubeAPI(t *testing.T, bundle ca.Bundle, namespace, serviceaccount string) *
 			resp, err := json.Marshal(&authapi.TokenReview{
 				Status: authapi.TokenReviewStatus{
 					Authenticated: true,
-					User:          authapi.UserInfo{Username: fmt.Sprintf("system:serviceaccount:%s:%s", namespace, serviceaccount)},
+					User:          authapi.UserInfo{Username: fmt.Sprintf("system:serviceaccount:%s:%s", opts.namespace, opts.serviceAccount)},
 				},
 			})
 			require.NoError(t, err)
