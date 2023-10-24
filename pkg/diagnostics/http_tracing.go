@@ -206,9 +206,16 @@ func spanAttributesMapFromHTTPContext(rw responsewriter.ResponseWriter, r *http.
 	statusCode := rw.Status()
 
 	m := map[string]string{}
-	_, componentType := getAPIComponent(path)
 
 	var dbType string
+	var componentType string
+
+	appId := r.Header.Get("dapr-app-id")
+	if appId != "" {
+		componentType = "invoke"
+	} else {
+		_, componentType = getAPIComponent(path)
+	}
 	switch componentType {
 	case "state":
 		dbType = stateBuildingBlockType

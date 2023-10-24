@@ -174,12 +174,13 @@ func TestGetAPIComponent(t *testing.T) {
 
 func TestGetSpanAttributesMapFromHTTPContext(t *testing.T) {
 	tests := []struct {
-		path string
-		out  map[string]string
+		path    string
+		out     map[string]string
+		headers map[string]string
 	}{
 		{
-			"/v1.0/state/statestore/key",
-			map[string]string{
+			path: "/v1.0/state/statestore/key",
+			out: map[string]string{
 				dbSystemSpanAttributeKey:           "state",
 				dbNameSpanAttributeKey:             "statestore",
 				dbStatementSpanAttributeKey:        "GET /v1.0/state/statestore/key",
@@ -187,8 +188,8 @@ func TestGetSpanAttributesMapFromHTTPContext(t *testing.T) {
 			},
 		},
 		{
-			"/v1.0/state/statestore",
-			map[string]string{
+			path: "/v1.0/state/statestore",
+			out: map[string]string{
 				dbSystemSpanAttributeKey:           "state",
 				dbNameSpanAttributeKey:             "statestore",
 				dbStatementSpanAttributeKey:        "GET /v1.0/state/statestore",
@@ -196,8 +197,8 @@ func TestGetSpanAttributesMapFromHTTPContext(t *testing.T) {
 			},
 		},
 		{
-			"/v1.0/secrets/keyvault/name",
-			map[string]string{
+			path: "/v1.0/secrets/keyvault/name",
+			out: map[string]string{
 				dbSystemSpanAttributeKey:           secretBuildingBlockType,
 				dbNameSpanAttributeKey:             "keyvault",
 				dbStatementSpanAttributeKey:        "GET /v1.0/secrets/keyvault/name",
@@ -205,24 +206,24 @@ func TestGetSpanAttributesMapFromHTTPContext(t *testing.T) {
 			},
 		},
 		{
-			"/v1.0/invoke/fakeApp/method/add",
-			map[string]string{
+			path: "/v1.0/invoke/fakeApp/method/add",
+			out: map[string]string{
 				gRPCServiceSpanAttributeKey: daprGRPCServiceInvocationService,
 				netPeerNameSpanAttributeKey: "fakeApp",
 				daprAPISpanNameInternal:     "CallLocal/fakeApp/add",
 			},
 		},
 		{
-			"/v1/publish/topicA",
-			map[string]string{
+			path: "/v1/publish/topicA",
+			out: map[string]string{
 				messagingSystemSpanAttributeKey:          pubsubBuildingBlockType,
 				messagingDestinationSpanAttributeKey:     "topicA",
 				messagingDestinationKindSpanAttributeKey: messagingDestinationTopicKind,
 			},
 		},
 		{
-			"/v1/bindings/kafka",
-			map[string]string{
+			path: "/v1/bindings/kafka",
+			out: map[string]string{
 				dbSystemSpanAttributeKey:           bindingBuildingBlockType,
 				dbNameSpanAttributeKey:             "kafka",
 				dbStatementSpanAttributeKey:        "GET /v1/bindings/kafka",
@@ -230,8 +231,8 @@ func TestGetSpanAttributesMapFromHTTPContext(t *testing.T) {
 			},
 		},
 		{
-			"/v1.0/actors/demo_actor/1/state/my_data",
-			map[string]string{
+			path: "/v1.0/actors/demo_actor/1/state/my_data",
+			out: map[string]string{
 				dbSystemSpanAttributeKey:           stateBuildingBlockType,
 				dbNameSpanAttributeKey:             "actor",
 				dbStatementSpanAttributeKey:        "GET /v1.0/actors/demo_actor/1/state/my_data",
@@ -240,12 +241,23 @@ func TestGetSpanAttributesMapFromHTTPContext(t *testing.T) {
 			},
 		},
 		{
-			"/v1.0/actors/demo_actor/1/method/method1",
-			map[string]string{
+			path: "/v1.0/actors/demo_actor/1/method/method1",
+			out: map[string]string{
 				gRPCServiceSpanAttributeKey: daprGRPCServiceInvocationService,
 				netPeerNameSpanAttributeKey: "demo_actor.1",
 				daprAPIActorTypeID:          "demo_actor.1",
 				daprAPISpanNameInternal:     "CallActor/demo_actor/add",
+			},
+		},
+		{
+			path: "/v1/bindings/kafka",
+			out: map[string]string{
+				gRPCServiceSpanAttributeKey: daprGRPCServiceInvocationService,
+				netPeerNameSpanAttributeKey: "fakeApp",
+				daprAPISpanNameInternal:     "CallLocal/fakeApp/add",
+			},
+			headers: map[string]string{
+				"dapr-app-id": "fakeApp",
 			},
 		},
 	}
@@ -257,6 +269,11 @@ func TestGetSpanAttributesMapFromHTTPContext(t *testing.T) {
 			resp := responsewriter.EnsureResponseWriter(httptest.NewRecorder())
 			resp.WriteHeader(http.StatusOK)
 			req.URL, err = url.Parse("http://test.local" + tt.path)
+			if tt.headers != nil {
+				for s := range tt.headers {
+					req.Header.Set(s, tt.headers[s])
+				}
+			}
 			require.NoError(t, err)
 
 			resp.SetUserValue("storeName", "statestore")
