@@ -20,7 +20,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/go-chi/chi/v5"
+	chi "github.com/go-chi/chi/v5"
 	"github.com/valyala/fasthttp"
 
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
@@ -98,12 +98,6 @@ func NewNetHTTPHandlerFunc(h fasthttp.RequestHandler) http.HandlerFunc {
 
 		// Invoke the handler
 		h(&c)
-
-		if uvw, ok := w.(interface{ SetUserValue(key any, value any) }); ok {
-			c.VisitUserValuesAll(func(k any, v any) {
-				uvw.SetUserValue(k, v)
-			})
-		}
 
 		c.Response.Header.VisitAll(func(k []byte, v []byte) {
 			w.Header().Add(string(k), string(v))
