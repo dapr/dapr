@@ -15,9 +15,7 @@ always built from source within the test.
 go test -v -race -count -tags="integration" ./tests/integration` -run="Test_Integration/daprd/pubsub/http/fuzzpubsubNoRaw"
 ```
 
-Rather than building from source, you can also set a custom daprd, sentry, or
-placement binary path
-with the environment variables
+Rather than building from source, you can also set a custom daprd, sentry, or placement binary path with the environment variables:
 - `DAPR_INTEGRATION_DAPRD_PATH`
 - `DAPR_INTEGRATION_PLACEMENT_PATH`
 - `DAPR_INTEGRATION_SENTRY_PATH`
