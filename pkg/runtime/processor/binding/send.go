@@ -285,7 +285,8 @@ func (b *binding) sendBindingEventToApp(ctx context.Context, bindingName string,
 			diag.DefaultGRPCMonitoring.ServerRequestSent(ctx,
 				"/dapr.proto.runtime.v1.AppCallback/OnBindingEvent",
 				status.Code(err).String(),
-				int64(len(resp.GetData())), start)
+				int64(len(req.GetData())), int64(len(resp.GetData())),
+				start)
 		}
 
 		if err != nil {
