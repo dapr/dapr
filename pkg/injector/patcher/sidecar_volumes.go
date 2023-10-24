@@ -77,7 +77,7 @@ func (c *SidecarConfig) getTokenVolume() corev1.Volume {
 				DefaultMode: ptr.Of(int32(420)),
 				Sources: []corev1.VolumeProjection{{
 					ServiceAccountToken: &corev1.ServiceAccountTokenProjection{
-						Audience:          c.SentrySPIFFEID.String(),
+						Audience:          c.SentrySPIFFEID,
 						ExpirationSeconds: ptr.Of(int64(7200)),
 						Path:              "token",
 					},
