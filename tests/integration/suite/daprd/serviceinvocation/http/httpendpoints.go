@@ -219,7 +219,7 @@ func (h *httpendpoints) Run(t *testing.T, ctx context.Context) {
 						status, body := doReq(http.MethodGet, ts.url, ts.headers)
 						assert.Equal(t, expTLSCode, status)
 						if runtime.GOOS == "windows" &&
-							strings.Contains(body, "wsasend: An existing connection was forcibly closed by the remote host.") {
+							strings.Contains(body, "wsasenv: An existing connection was forcibly closed by the remote host.") {
 							t.Logf("retrying due to: %s", body)
 							select {
 							case <-ctx.Done():
