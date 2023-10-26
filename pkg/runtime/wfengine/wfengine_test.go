@@ -757,7 +757,7 @@ func startEngineAndGetStore(ctx context.Context, t *testing.T, r *task.TaskRegis
 }
 
 func getEngine(t *testing.T) *wfengine.WorkflowEngine {
-	spec := config.WorkflowSpec{MaxConcurrentWorkflows: 100, MaxConcurrentActivities: 100}
+	spec := config.WorkflowSpec{MaxConcurrentWorkflowInvocations: 100, MaxConcurrentActivityInvocations: 100}
 	engine := wfengine.NewWorkflowEngine(testAppID, spec)
 	store := fakeStore()
 	cfg := actors.NewConfig(actors.ConfigOpts{
@@ -783,7 +783,7 @@ func getEngine(t *testing.T) *wfengine.WorkflowEngine {
 }
 
 func getEngineAndStateStore(t *testing.T) (*wfengine.WorkflowEngine, *daprt.FakeStateStore) {
-	spec := config.WorkflowSpec{MaxConcurrentWorkflows: 100, MaxConcurrentActivities: 100}
+	spec := config.WorkflowSpec{MaxConcurrentWorkflowInvocations: 100, MaxConcurrentActivityInvocations: 100}
 	engine := wfengine.NewWorkflowEngine(testAppID, spec)
 	store := fakeStore().(*daprt.FakeStateStore)
 	cfg := actors.NewConfig(actors.ConfigOpts{

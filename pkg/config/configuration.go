@@ -117,12 +117,14 @@ type ConfigurationSpec struct {
 
 // WorkflowSpec defines the configuration for Dapr workflows.
 type WorkflowSpec struct {
-	// MaxConcurrentWorkflows is the maximum number of concurrent workflows that can be processed by a single Dapr instance.
+	// maxConcurrentWorkflowInvocations is the maximum number of concurrent workflow invocations that can be scheduled by a single Dapr instance.
+	// Attempted invocations beyond this will be queued until the number of concurrent invocations drops below this value.
 	// If omitted, the default value of 1000 will be used.
-	MaxConcurrentWorkflows int32 `json:"maxConcurrentWorkflows,omitempty" yaml:"maxConcurrentWorkflows,omitempty"`
-	// MaxConcurrentActivities is the maximum number of concurrent activities that can be processed by a single Dapr instance.
+	MaxConcurrentWorkflowInvocations int32 `json:"maxConcurrentWorkflowInvocations,omitempty" yaml:"maxConcurrentWorkflowInvocations,omitempty"`
+	// maxConcurrentActivityInvocations is the maximum number of concurrent activities that can be processed by a single Dapr instance.
+	// Attempted invocations beyond this will be queued until the number of concurrent invocations drops below this value.
 	// If omitted, the default value of 1000 will be used.
-	MaxConcurrentActivities int32 `json:"maxConcurrentActivities,omitempty" yaml:"maxConcurrentActivities,omitempty"`
+	MaxConcurrentActivityInvocations int32 `json:"maxConcurrentActivityInvocations,omitempty" yaml:"maxConcurrentActivityInvocations,omitempty"`
 }
 
 type SecretsSpec struct {
@@ -598,8 +600,8 @@ func (c Configuration) GetAPILoggingSpec() APILoggingSpec {
 func (c *Configuration) GetWorkflowSpec() WorkflowSpec {
 	if c == nil || c.Spec.WorkflowSpec == nil {
 		return WorkflowSpec{
-			MaxConcurrentWorkflows:  100,
-			MaxConcurrentActivities: 100,
+			MaxConcurrentWorkflowInvocations: 100,
+			MaxConcurrentActivityInvocations: 100,
 		}
 	}
 	return *c.Spec.WorkflowSpec

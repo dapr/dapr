@@ -178,8 +178,8 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 		config, err := LoadStandaloneConfiguration("./testdata/workflow_config.yaml")
 		require.NoError(t, err)
 		workflowSpec := config.GetWorkflowSpec()
-		assert.Equal(t, int32(32), workflowSpec.MaxConcurrentWorkflows)
-		assert.Equal(t, int32(64), workflowSpec.MaxConcurrentActivities)
+		assert.Equal(t, int32(32), workflowSpec.MaxConcurrentWorkflowInvocations)
+		assert.Equal(t, int32(64), workflowSpec.MaxConcurrentActivityInvocations)
 	})
 
 	t.Run("workflow spec - defaults", func(t *testing.T) {
@@ -188,9 +188,9 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 		require.NoError(t, err)
 		workflowSpec := config.GetWorkflowSpec()
 
-		// These are the documented default values. Changes to these defaults require changes to documentation.
-		assert.Equal(t, int32(100), workflowSpec.MaxConcurrentWorkflows)
-		assert.Equal(t, int32(100), workflowSpec.MaxConcurrentActivities)
+		// These are the documented default values. Changes to these defaults require changes to
+		assert.Equal(t, int32(100), workflowSpec.MaxConcurrentWorkflowInvocations)
+		assert.Equal(t, int32(100), workflowSpec.MaxConcurrentActivityInvocations)
 	})
 
 	t.Run("multiple configurations", func(t *testing.T) {
