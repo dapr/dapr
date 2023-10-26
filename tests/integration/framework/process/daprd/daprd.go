@@ -185,7 +185,8 @@ func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
 }
 
 func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
-	if d.appProtocol == "http" {
+	switch d.appProtocol {
+	case "http":
 		client := util.HTTPClient(t)
 		assert.Eventually(t, func() bool {
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/v1.0/healthz", d.httpPort), nil)
@@ -199,8 +200,8 @@ func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
 			defer resp.Body.Close()
 			return http.StatusNoContent == resp.StatusCode
 		}, 10*time.Second, 100*time.Millisecond)
-	}
-	if d.appProtocol == "grpc" {
+
+	case "grpc":
 		assert.Eventually(t, func() bool {
 			conn, err := grpc.Dial("localhost:"+strconv.Itoa(d.appPort),
 				grpc.WithTransportCredentials(insecure.NewCredentials()),
