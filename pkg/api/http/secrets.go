@@ -18,8 +18,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/dapr/dapr/pkg/api/http/endpoints"
 	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
-	"github.com/dapr/dapr/pkg/http/endpoints"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 

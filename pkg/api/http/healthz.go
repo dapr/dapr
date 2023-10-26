@@ -16,7 +16,7 @@ package http
 import (
 	"net/http"
 
-	"github.com/dapr/dapr/pkg/http/endpoints"
+	"github.com/dapr/dapr/pkg/api/http/endpoints"
 	"github.com/dapr/dapr/pkg/messages"
 )
 

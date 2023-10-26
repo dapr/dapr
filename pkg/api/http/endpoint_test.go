@@ -21,8 +21,8 @@ import (
 	chi "github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/dapr/dapr/pkg/api/http/endpoints"
 	"github.com/dapr/dapr/pkg/config"
-	"github.com/dapr/dapr/pkg/http/endpoints"
 )
 
 func TestAPIAllowlist(t *testing.T) {

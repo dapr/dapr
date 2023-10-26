@@ -22,7 +22,7 @@ import (
 	"github.com/valyala/fasthttp"
 
 	contribCrypto "github.com/dapr/components-contrib/crypto"
-	"github.com/dapr/dapr/pkg/http/endpoints"
+	"github.com/dapr/dapr/pkg/api/http/endpoints"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/kit/ptr"
 	encv1 "github.com/dapr/kit/schemes/enc/v1"

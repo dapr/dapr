@@ -41,7 +41,7 @@ func (a *Universal) GetMetadata(ctx context.Context, in *runtimev1pb.GetMetadata
 	// Actor runtime
 	var actorRuntime *runtimev1pb.ActorRuntime
 	if a.actorsReady.Load() {
-		if a.Actors == nil {
+		if a.actors == nil {
 			actorRuntime = &runtimev1pb.ActorRuntime{
 				RuntimeStatus: runtimev1pb.ActorRuntime_DISABLED,
 			}

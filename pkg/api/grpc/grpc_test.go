@@ -4181,8 +4181,7 @@ func TestMetadata(t *testing.T) {
 	mockActors := new(actors.MockActors)
 	mockActors.On("GetRuntimeStatus")
 
-	server, lis := startDaprAPIServer(&api{
-		logger: logger.NewLogger("grpc.api.test"),
+	a := &api{
 		Universal: universal.New(universal.Options{
 			AppID:     "fakeAPI",
 			Actors:    mockActors,
@@ -4198,10 +4197,26 @@ func TestMetadata(t *testing.T) {
 			ExtendedMetadata: map[string]string{
 				"test": "value",
 			},
-			AppConnectionConfig: appConnectionConfig,
-			GlobalConfig:        &config.Configuration{},
+			AppConnectionConfig: config.AppConnectionConfig{
+				ChannelAddress:      "1.2.3.4",
+				MaxConcurrency:      10,
+				Port:                5000,
+				Protocol:            "grpc",
+				HealthCheckHTTPPath: "/healthz",
+				HealthCheck: &config.AppHealthConfig{
+					ProbeInterval: 10 * time.Second,
+					ProbeTimeout:  5 * time.Second,
+					ProbeOnly:     true,
+					Threshold:     3,
+				},
+			},
+			GlobalConfig: &config.Configuration{},
 		}),
-	}, "")
+	}
+
+	a.Universal.SetActorsInitDone()
+
+	server, lis := startDaprAPIServer(a, "")
 	defer server.Stop()
 
 	clientConn := createTestClient(lis)
