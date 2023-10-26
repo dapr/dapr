@@ -20,6 +20,7 @@ import (
 
 	"github.com/dapr/components-contrib/middleware"
 	"github.com/dapr/components-contrib/middleware/http/wasm"
+	"github.com/dapr/dapr/pkg/components"
 	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/kit/logger"
@@ -31,4 +32,5 @@ func init() {
 			return wasm.NewMiddleware(log).GetHandler(context.TODO(), metadata)
 		}
 	}, "wasm")
+	components.RegisterWasmComponentType(components.CategoryMiddleware, "wasm")
 }

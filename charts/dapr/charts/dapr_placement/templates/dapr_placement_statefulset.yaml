@@ -37,6 +37,9 @@ spec:
         prometheus.io/port: "{{ .Values.global.prometheus.port }}"
         prometheus.io/path: "/"
 {{- end }}
+{{- if .Values.statefulsetAnnotations }}
+{{ toYaml .Values.statefulsetAnnotations | indent 4}}
+{{- end }}
     spec:
       containers:
       - name: dapr-placement-server
@@ -74,8 +77,13 @@ spec:
           - name: dapr-trust-bundle
             mountPath: /var/run/secrets/dapr.io/tls
             readOnly: true
+        {{- if .Values.global.mtls.mountSentryVolume }}
           - name: dapr-identity-token
             mountPath: /var/run/secrets/dapr.io/sentrytoken
+        {{- end }}
+        {{- with .Values.global.extraVolumeMounts.placement }}
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
 {{- if or (eq .Values.global.ha.enabled true) (eq .Values.ha true) }}
   {{- if eq .Values.cluster.forceInMemoryLog false }}
           - name: raft-log
@@ -147,7 +155,8 @@ spec:
         - "--tls-enabled"
         - "--trust-domain={{ .Values.global.mtls.controlPlaneTrustDomain }}"
         - "--trust-anchors-file=/var/run/secrets/dapr.io/tls/ca.crt"
-        - "--sentry-address={{ if .Values.global.mtls.sentryAddress }}{{ .Values.global.mtls.sentryAddress }}{{ else }}dapr-sentry.{{ .Release.Namespace }}.svc:80{{ end }}"
+        - "--sentry-address={{ if .Values.global.mtls.sentryAddress }}{{ .Values.global.mtls.sentryAddress }}{{ else }}dapr-sentry.{{ .Release.Namespace }}.svc.cluster.local:443{{ end }}"
+        - "--mode=kubernetes"
 {{- if eq .Values.global.daprControlPlaneOs "linux" }}
         securityContext:
 {{- if eq .Values.cluster.forceInMemoryLog true }}
@@ -159,6 +168,7 @@ spec:
           capabilities:
             add: ["SYS_PTRACE"]
   {{- else }}
+          readOnlyRootFilesystem: true
           capabilities:
             drop: ["ALL"]
   {{- end }}
@@ -181,6 +191,7 @@ spec:
       - name: dapr-trust-bundle
         configMap:
           name: dapr-trust-bundle
+    {{- if .Values.global.mtls.mountSentryVolume }}
       - name: dapr-identity-token
         projected:
           sources:
@@ -188,6 +199,10 @@ spec:
               path: token
               expirationSeconds: 600
               audience: "spiffe://{{ .Values.global.mtls.controlPlaneTrustDomain }}/ns/{{ .Release.Namespace }}/dapr-sentry"
+    {{- end }}
+    {{- with .Values.global.extraVolumes.placement }}
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -218,7 +233,7 @@ spec:
 {{- end }}
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:
-        - name: {{ .Values.global.imagePullSecrets }}
+        {{- include "dapr.imagePullSecrets" (dict "imagePullSecrets" .Values.global.imagePullSecrets) | nindent 8 }}
 {{- end }}
 {{- if .Values.global.nodeSelector }}
       nodeSelector:

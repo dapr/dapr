@@ -13,13 +13,15 @@ limitations under the License.
 
 package consts
 
-/* #nosec */
 const (
 	// APITokenEnvVar is the environment variable for the API token.
+	//nolint:gosec
 	APITokenEnvVar = "DAPR_API_TOKEN"
 	// AppAPITokenEnvVar is the environment variable for the app API token.
+	//nolint:gosec
 	AppAPITokenEnvVar = "APP_API_TOKEN"
 	// APITokenHeader is header name for HTTP/gRPC calls to hold the token.
+	//nolint:gosec
 	APITokenHeader = "dapr-api-token"
 
 	// TrustBundleK8sSecretName is the name of the kubernetes secret that holds the trust bundle.
@@ -41,9 +43,18 @@ const (
 	// SentryLocalIdentityEnvVar is the environment variable for the local identity sent to Sentry.
 	SentryLocalIdentityEnvVar = "SENTRY_LOCAL_IDENTITY"
 	// SentryTokenFileEnvVar is the environment variable for the Sentry token file.
+	//nolint:gosec
 	SentryTokenFileEnvVar = "DAPR_SENTRY_TOKEN_FILE"
 
 	// AnnotationKeyControlPlane is the annotation to mark a control plane
 	// component. The value is the name of the control plane service.
 	AnnotationKeyControlPlane = "dapr.io/control-plane"
+
+	// ControlPlaneAddressEnvVar is the daprd environment variable for
+	// configuring the control plane namespace.
+	ControlPlaneNamespaceEnvVar = "DAPR_CONTROLPLANE_NAMESPACE"
+
+	// ControlPlaneAddressEnvVar is the daprd environment variable for
+	// configuring the control plane trust domain.
+	ControlPlaneTrustDomainEnvVar = "DAPR_CONTROLPLANE_TRUST_DOMAIN"
 )

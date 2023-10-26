@@ -15,6 +15,7 @@ package placement
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"sync"
@@ -26,10 +27,11 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/actors/internal"
-	daprCredentials "github.com/dapr/dapr/pkg/credentials"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/placement/hashing"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/logger"
 )
 
@@ -72,17 +74,19 @@ type actorPlacement struct {
 	// look up Dapr runtime host address to locate actor.
 	placementTables *hashing.ConsistentHashTables
 	// placementTableLock is the lock for placementTables.
-	placementTableLock *sync.RWMutex
+	placementTableLock sync.RWMutex
 
 	// unblockSignal is the channel to unblock table locking.
 	unblockSignal chan struct{}
 	// tableIsBlocked is the status of table lock.
-	tableIsBlocked *atomic.Bool
+	tableIsBlocked atomic.Bool
 	// operationUpdateLock is the lock for three stage commit.
-	operationUpdateLock *sync.Mutex
+	operationUpdateLock sync.Mutex
 
-	// appHealthFn is the user app health check callback.
-	appHealthFn func() bool
+	// appHealthFn returns the appHealthCh
+	appHealthFn func(ctx context.Context) <-chan bool
+	// appHealthy contains the result of the app health checks.
+	appHealthy atomic.Bool
 	// afterTableUpdateFn is function for post processing done after table updates,
 	// such as draining actors and resetting reminders.
 	afterTableUpdateFn func()
@@ -91,18 +95,23 @@ type actorPlacement struct {
 	shutdown atomic.Bool
 	// shutdownConnLoop is the wait group to wait until all connection loop are done
 	shutdownConnLoop sync.WaitGroup
+	// closeCh is the channel to close the placement service.
+	closeCh chan struct{}
+
+	resiliency resiliency.Provider
 }
 
 // ActorPlacementOpts contains options for NewActorPlacement.
 type ActorPlacementOpts struct {
 	ServerAddrs        []string // Address(es) for the Placement service
-	CertChain          *daprCredentials.CertChain
+	Security           security.Handler
 	AppID              string
 	RuntimeHostname    string
 	PodName            string
 	ActorTypes         []string
-	AppHealthFn        func() bool
+	AppHealthFn        func(ctx context.Context) <-chan bool
 	AfterTableUpdateFn func()
+	Resiliency         resiliency.Provider
 }
 
 // NewActorPlacement initializes ActorPlacement for the actor service.
@@ -115,21 +124,19 @@ func NewActorPlacement(opts ActorPlacementOpts) internal.PlacementService {
 		podName:         opts.PodName,
 		serverAddr:      servers,
 
-		client: newPlacementClient(getGrpcOptsGetter(servers, opts.CertChain)),
+		client:          newPlacementClient(getGrpcOptsGetter(servers, opts.Security)),
+		placementTables: &hashing.ConsistentHashTables{Entries: make(map[string]*hashing.Consistent)},
 
-		placementTableLock: &sync.RWMutex{},
-		placementTables:    &hashing.ConsistentHashTables{Entries: make(map[string]*hashing.Consistent)},
-
-		operationUpdateLock: &sync.Mutex{},
-		tableIsBlocked:      &atomic.Bool{},
-		appHealthFn:         opts.AppHealthFn,
-		afterTableUpdateFn:  opts.AfterTableUpdateFn,
+		appHealthFn:        opts.AppHealthFn,
+		afterTableUpdateFn: opts.AfterTableUpdateFn,
+		closeCh:            make(chan struct{}),
+		resiliency:         opts.Resiliency,
 	}
 }
 
 // Register an actor type by adding it to the list of known actor types (if it's not already registered)
 // The placement tables will get updated when the next heartbeat fires
-func (p *actorPlacement) AddHostedActorType(actorType string) error {
+func (p *actorPlacement) AddHostedActorType(actorType string, idleTimeout time.Duration) error {
 	for _, t := range p.actorTypes {
 		if t == actorType {
 			return fmt.Errorf("actor type %s already registered", actorType)
@@ -145,10 +152,36 @@ func (p *actorPlacement) AddHostedActorType(actorType string) error {
 func (p *actorPlacement) Start(ctx context.Context) error {
 	p.serverIndex.Store(0)
 	p.shutdown.Store(false)
+	p.appHealthy.Store(true)
 
 	if !p.establishStreamConn(ctx) {
 		return nil
 	}
+
+	ctx, cancel := context.WithCancel(ctx)
+	p.shutdownConnLoop.Add(1)
+	go func() {
+		defer p.shutdownConnLoop.Done()
+
+		select {
+		case <-ctx.Done():
+		case <-p.closeCh:
+		}
+		cancel()
+	}()
+
+	p.shutdownConnLoop.Add(1)
+	go func() {
+		defer p.shutdownConnLoop.Done()
+		ch := p.appHealthFn(ctx)
+		if ch == nil {
+			return
+		}
+
+		for healthy := range ch {
+			p.appHealthy.Store(healthy)
+		}
+	}()
 
 	// establish connection loop, whenever a disconnect occurs it starts to run trying to connect to a new server.
 	p.shutdownConnLoop.Add(1)
@@ -208,9 +241,9 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 				break
 			}
 
-			// appHealthFn is the health status of actor service application. This allows placement to update
+			// appHealthy is the health status of actor service application. This allows placement to update
 			// the member list and hashing table quickly.
-			if !p.appHealthFn() {
+			if !p.appHealthy.Load() {
 				// app is unresponsive, close the stream and disconnect from the placement service.
 				// Then Placement will remove this host from the member list.
 				log.Debug("disconnecting from placement service by the unhealthy app.")
@@ -226,6 +259,8 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 				Load:     1, // Not used yet
 				Pod:      p.podName,
 				// Port is redundant because Name should include port number
+				// Port: 0,
+				ApiLevel: internal.ActorAPILevel,
 			}
 
 			err := p.client.send(&host)
@@ -250,6 +285,8 @@ func (p *actorPlacement) Close() error {
 	// CAS to avoid stop more than once.
 	if p.shutdown.CompareAndSwap(false, true) {
 		p.client.disconnect()
+		p.shutdown.Store(true)
+		close(p.closeCh)
 	}
 	p.shutdownConnLoop.Wait()
 	return nil
@@ -269,23 +306,40 @@ func (p *actorPlacement) WaitUntilReady(ctx context.Context) error {
 }
 
 // LookupActor resolves to actor service instance address using consistent hashing table.
-func (p *actorPlacement) LookupActor(actorType, actorID string) (string, string) {
+func (p *actorPlacement) LookupActor(ctx context.Context, req internal.LookupActorRequest) (internal.LookupActorResponse, error) {
+	// Retry here to allow placement table dissemination/rebalancing to happen.
+	policyDef := p.resiliency.BuiltInPolicy(resiliency.BuiltInActorNotFoundRetries)
+	policyRunner := resiliency.NewRunner[internal.LookupActorResponse](ctx, policyDef)
+	return policyRunner(func(ctx context.Context) (res internal.LookupActorResponse, rErr error) {
+		rAddr, rAppID, rErr := p.doLookupActor(ctx, req.ActorType, req.ActorID)
+		if rErr != nil {
+			return res, fmt.Errorf("error finding address for actor %s/%s: %w", req.ActorType, req.ActorID, rErr)
+		} else if rAddr == "" {
+			return res, fmt.Errorf("did not find address for actor %s/%s", req.ActorType, req.ActorID)
+		}
+		res.Address = rAddr
+		res.AppID = rAppID
+		return res, nil
+	})
+}
+
+func (p *actorPlacement) doLookupActor(ctx context.Context, actorType, actorID string) (string, string, error) {
 	p.placementTableLock.RLock()
 	defer p.placementTableLock.RUnlock()
 
 	if p.placementTables == nil {
-		return "", ""
+		return "", "", errors.New("placement tables are not set")
 	}
 
 	t := p.placementTables.Entries[actorType]
 	if t == nil {
-		return "", ""
+		return "", "", nil
 	}
 	host, err := t.GetHost(actorID)
 	if err != nil || host == nil {
-		return "", ""
+		return "", "", nil //nolint:nilerr
 	}
-	return host.Name, host.AppID
+	return host.Name, host.AppID, nil
 }
 
 //nolint:nosnakecase
@@ -299,10 +353,15 @@ func (p *actorPlacement) establishStreamConn(ctx context.Context) (established b
 	logFailureShown := false
 	for !p.shutdown.Load() {
 		// Stop reconnecting to placement until app is healthy.
-		if !p.appHealthFn() {
+		if !p.appHealthy.Load() {
 			// We are not using an exponential backoff here because we haven't begun to establish connections yet
 			time.Sleep(placementReadinessWaitInterval)
 			continue
+		}
+
+		// Do not retry to connect if context is canceled
+		if ctx.Err() != nil {
+			return false
 		}
 
 		serverAddr := p.serverAddr[p.serverIndex.Load()]

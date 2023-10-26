@@ -15,6 +15,7 @@ package options
 
 import (
 	"flag"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -25,15 +26,18 @@ import (
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/runtime"
+	"github.com/dapr/dapr/pkg/security/consts"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 )
 
 type Options struct {
 	AppID                        string
 	ComponentsPath               string
 	ControlPlaneAddress          string
+	ControlPlaneTrustDomain      string
+	ControlPlaneNamespace        string
 	SentryAddress                string
+	TrustAnchors                 []byte
 	AllowedOrigins               string
 	EnableProfiling              bool
 	AppMaxConcurrency            int
@@ -90,6 +94,8 @@ func New(args []string) *Options {
 	flag.StringVar(&opts.AppID, "app-id", "", "A unique ID for Dapr. Used for Service Discovery and state")
 	flag.StringVar(&opts.ControlPlaneAddress, "control-plane-address", "", "Address for a Dapr control plane")
 	flag.StringVar(&opts.SentryAddress, "sentry-address", "", "Address for the Sentry CA service")
+	flag.StringVar(&opts.ControlPlaneTrustDomain, "control-plane-trust-domain", "localhost", "Trust domain of the Dapr control plane")
+	flag.StringVar(&opts.ControlPlaneNamespace, "control-plane-namespace", "default", "Namespace of the Dapr control plane")
 	flag.StringVar(&opts.PlacementServiceHostAddr, "placement-host-address", "", "Addresses for Dapr Actor Placement servers")
 	flag.StringVar(&opts.AllowedOrigins, "allowed-origins", cors.DefaultAllowedOrigins, "Allowed HTTP origins")
 	flag.BoolVar(&opts.EnableProfiling, "enable-profiling", false, "Enable profiling")
@@ -121,21 +127,40 @@ func New(args []string) *Options {
 	// Ignore errors; CommandLine is set for ExitOnError.
 	flag.CommandLine.Parse(args)
 
+	opts.TrustAnchors = []byte(os.Getenv(consts.TrustAnchorsEnvVar))
+
 	// flag.Parse() will always set a value to "enableAPILogging", and it will be false whether it's explicitly set to false or unset
 	// For this flag, we need the third state (unset) so we need to do a bit more work here to check if it's unset, then mark "enableAPILogging" as nil
 	// It's not the prettiest approach, but…
-	if !*opts.EnableAPILogging {
+	if !isFlagPassed("enable-api-logging") {
 		opts.EnableAPILogging = nil
-		for _, v := range args {
-			if strings.HasPrefix(v, "--enable-api-logging") || strings.HasPrefix(v, "-enable-api-logging") {
-				// This means that enable-api-logging was explicitly set to false
-				opts.EnableAPILogging = ptr.Of(false)
-				break
-			}
+	}
+
+	if !isFlagPassed("control-plane-namespace") {
+		ns, ok := os.LookupEnv(consts.ControlPlaneNamespaceEnvVar)
+		if ok {
+			opts.ControlPlaneNamespace = ns
+		}
+	}
+
+	if !isFlagPassed("control-plane-trust-domain") {
+		td, ok := os.LookupEnv(consts.ControlPlaneTrustDomainEnvVar)
+		if ok {
+			opts.ControlPlaneTrustDomain = td
 		}
 	}
 
 	return &opts
+}
+
+func isFlagPassed(name string) bool {
+	found := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == name {
+			found = true
+		}
+	})
+	return found
 }
 
 // Flag type. Allows passing a flag multiple times to get a slice of strings.

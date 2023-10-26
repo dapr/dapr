@@ -21,56 +21,168 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/dapr/dapr/pkg/http/endpoints"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+)
+
+var (
+	endpointGroupWorkflowV1Alpha1 = &endpoints.EndpointGroup{
+		Name:                 endpoints.EndpointGroupWorkflow,
+		Version:              endpoints.EndpointGroupVersion1alpha1,
+		AppendSpanAttributes: nil, // TODO
+	}
+	endpointGroupWorkflowV1Beta1 = &endpoints.EndpointGroup{
+		Name:                 endpoints.EndpointGroupWorkflow,
+		Version:              endpoints.EndpointGroupVersion1beta1,
+		AppendSpanAttributes: nil, // TODO
+	}
 )
 
 // Workflow Component: Component specified in yaml
 // Workflow Name: Name of the workflow to run
 // Instance ID: Identifier of the specific run
-func (a *api) constructWorkflowEndpoints() []Endpoint {
-	return []Endpoint{
+func (a *api) constructWorkflowEndpoints() []endpoints.Endpoint {
+	return []endpoints.Endpoint{
 		{
 			Methods: []string{http.MethodGet},
 			Route:   "workflows/{workflowComponent}/{instanceID}",
 			Version: apiVersionV1alpha1,
+			Group:   endpointGroupWorkflowV1Alpha1,
 			Handler: a.onGetWorkflowHandler(),
+			Settings: endpoints.EndpointSettings{
+				Name: "GetWorkflow",
+			},
+		},
+		{
+			Methods: []string{http.MethodGet},
+			Route:   "workflows/{workflowComponent}/{instanceID}",
+			Version: apiVersionV1beta1,
+			Group:   endpointGroupWorkflowV1Beta1,
+			Handler: a.onGetWorkflowHandler(),
+			Settings: endpoints.EndpointSettings{
+				Name: "GetWorkflow",
+			},
 		},
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "workflows/{workflowComponent}/{instanceID}/raiseEvent/{eventName}",
 			Version: apiVersionV1alpha1,
+			Group:   endpointGroupWorkflowV1Alpha1,
 			Handler: a.onRaiseEventWorkflowHandler(),
+			Settings: endpoints.EndpointSettings{
+				Name: "RaiseEventWorkflow",
+			},
+		},
+		{
+			Methods: []string{http.MethodPost},
+			Route:   "workflows/{workflowComponent}/{instanceID}/raiseEvent/{eventName}",
+			Version: apiVersionV1beta1,
+			Group:   endpointGroupWorkflowV1Beta1,
+			Handler: a.onRaiseEventWorkflowHandler(),
+			Settings: endpoints.EndpointSettings{
+				Name: "RaiseEventWorkflow",
+			},
 		},
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "workflows/{workflowComponent}/{workflowName}/start",
 			Version: apiVersionV1alpha1,
+			Group:   endpointGroupWorkflowV1Alpha1,
 			Handler: a.onStartWorkflowHandler(),
+			Settings: endpoints.EndpointSettings{
+				Name: "StartWorkflow",
+			},
+		},
+		{
+			Methods: []string{http.MethodPost},
+			Route:   "workflows/{workflowComponent}/{workflowName}/start",
+			Version: apiVersionV1beta1,
+			Group:   endpointGroupWorkflowV1Beta1,
+			Handler: a.onStartWorkflowHandler(),
+			Settings: endpoints.EndpointSettings{
+				Name: "StartWorkflow",
+			},
 		},
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "workflows/{workflowComponent}/{instanceID}/pause",
 			Version: apiVersionV1alpha1,
+			Group:   endpointGroupWorkflowV1Alpha1,
 			Handler: a.onPauseWorkflowHandler(),
+			Settings: endpoints.EndpointSettings{
+				Name: "PauseWorkflow",
+			},
+		},
+		{
+			Methods: []string{http.MethodPost},
+			Route:   "workflows/{workflowComponent}/{instanceID}/pause",
+			Version: apiVersionV1beta1,
+			Group:   endpointGroupWorkflowV1Beta1,
+			Handler: a.onPauseWorkflowHandler(),
+			Settings: endpoints.EndpointSettings{
+				Name: "PauseWorkflow",
+			},
 		},
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "workflows/{workflowComponent}/{instanceID}/resume",
 			Version: apiVersionV1alpha1,
+			Group:   endpointGroupWorkflowV1Alpha1,
 			Handler: a.onResumeWorkflowHandler(),
+			Settings: endpoints.EndpointSettings{
+				Name: "ResumeWorkflow",
+			},
+		},
+		{
+			Methods: []string{http.MethodPost},
+			Route:   "workflows/{workflowComponent}/{instanceID}/resume",
+			Version: apiVersionV1beta1,
+			Group:   endpointGroupWorkflowV1Beta1,
+			Handler: a.onResumeWorkflowHandler(),
+			Settings: endpoints.EndpointSettings{
+				Name: "ResumeWorkflow",
+			},
 		},
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "workflows/{workflowComponent}/{instanceID}/terminate",
 			Version: apiVersionV1alpha1,
+			Group:   endpointGroupWorkflowV1Alpha1,
 			Handler: a.onTerminateWorkflowHandler(),
+			Settings: endpoints.EndpointSettings{
+				Name: "TerminateWorkflow",
+			},
+		},
+		{
+			Methods: []string{http.MethodPost},
+			Route:   "workflows/{workflowComponent}/{instanceID}/terminate",
+			Version: apiVersionV1beta1,
+			Group:   endpointGroupWorkflowV1Beta1,
+			Handler: a.onTerminateWorkflowHandler(),
+			Settings: endpoints.EndpointSettings{
+				Name: "TerminateWorkflow",
+			},
 		},
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "workflows/{workflowComponent}/{instanceID}/purge",
 			Version: apiVersionV1alpha1,
+			Group:   endpointGroupWorkflowV1Alpha1,
 			Handler: a.onPurgeWorkflowHandler(),
+			Settings: endpoints.EndpointSettings{
+				Name: "PurgeWorkflow",
+			},
+		},
+		{
+			Methods: []string{http.MethodPost},
+			Route:   "workflows/{workflowComponent}/{instanceID}/purge",
+			Version: apiVersionV1beta1,
+			Group:   endpointGroupWorkflowV1Beta1,
+			Handler: a.onPurgeWorkflowHandler(),
+			Settings: endpoints.EndpointSettings{
+				Name: "PurgeWorkflow",
+			},
 		},
 	}
 }
@@ -81,7 +193,7 @@ func (a *api) constructWorkflowEndpoints() []Endpoint {
 // Instance ID: Identifier of the specific run
 func (a *api) onStartWorkflowHandler() http.HandlerFunc {
 	return UniversalHTTPHandler(
-		a.universal.StartWorkflowAlpha1,
+		a.universal.StartWorkflowBeta1,
 		UniversalHTTPHandlerOpts[*runtimev1pb.StartWorkflowRequest, *runtimev1pb.StartWorkflowResponse]{
 			// We pass the input body manually rather than parsing it using protojson
 			SkipInputBody: true,
@@ -115,7 +227,7 @@ func (a *api) onStartWorkflowHandler() http.HandlerFunc {
 // Route: POST "workflows/{workflowComponent}/{instanceID}"
 func (a *api) onGetWorkflowHandler() http.HandlerFunc {
 	return UniversalHTTPHandler(
-		a.universal.GetWorkflowAlpha1,
+		a.universal.GetWorkflowBeta1,
 		UniversalHTTPHandlerOpts[*runtimev1pb.GetWorkflowRequest, *runtimev1pb.GetWorkflowResponse]{
 			InModifier: workflowInModifier[*runtimev1pb.GetWorkflowRequest],
 		})
@@ -124,7 +236,7 @@ func (a *api) onGetWorkflowHandler() http.HandlerFunc {
 // Route: POST "workflows/{workflowComponent}/{instanceID}/terminate"
 func (a *api) onTerminateWorkflowHandler() http.HandlerFunc {
 	return UniversalHTTPHandler(
-		a.universal.TerminateWorkflowAlpha1,
+		a.universal.TerminateWorkflowBeta1,
 		UniversalHTTPHandlerOpts[*runtimev1pb.TerminateWorkflowRequest, *emptypb.Empty]{
 			InModifier:        workflowInModifier[*runtimev1pb.TerminateWorkflowRequest],
 			SuccessStatusCode: http.StatusAccepted,
@@ -134,7 +246,7 @@ func (a *api) onTerminateWorkflowHandler() http.HandlerFunc {
 // Route: POST "workflows/{workflowComponent}/{instanceID}/events/{eventName}"
 func (a *api) onRaiseEventWorkflowHandler() http.HandlerFunc {
 	return UniversalHTTPHandler(
-		a.universal.RaiseEventWorkflowAlpha1,
+		a.universal.RaiseEventWorkflowBeta1,
 		UniversalHTTPHandlerOpts[*runtimev1pb.RaiseEventWorkflowRequest, *emptypb.Empty]{
 			// We pass the input body manually rather than parsing it using protojson
 			SkipInputBody: true,
@@ -159,7 +271,7 @@ func (a *api) onRaiseEventWorkflowHandler() http.HandlerFunc {
 // ROUTE: POST "workflows/{workflowComponent}/{instanceID}/pause"
 func (a *api) onPauseWorkflowHandler() http.HandlerFunc {
 	return UniversalHTTPHandler(
-		a.universal.PauseWorkflowAlpha1,
+		a.universal.PauseWorkflowBeta1,
 		UniversalHTTPHandlerOpts[*runtimev1pb.PauseWorkflowRequest, *emptypb.Empty]{
 			InModifier:        workflowInModifier[*runtimev1pb.PauseWorkflowRequest],
 			SuccessStatusCode: http.StatusAccepted,
@@ -169,7 +281,7 @@ func (a *api) onPauseWorkflowHandler() http.HandlerFunc {
 // ROUTE: POST "workflows/{workflowComponent}/{instanceID}/resume"
 func (a *api) onResumeWorkflowHandler() http.HandlerFunc {
 	return UniversalHTTPHandler(
-		a.universal.ResumeWorkflowAlpha1,
+		a.universal.ResumeWorkflowBeta1,
 		UniversalHTTPHandlerOpts[*runtimev1pb.ResumeWorkflowRequest, *emptypb.Empty]{
 			InModifier:        workflowInModifier[*runtimev1pb.ResumeWorkflowRequest],
 			SuccessStatusCode: http.StatusAccepted,
@@ -178,7 +290,7 @@ func (a *api) onResumeWorkflowHandler() http.HandlerFunc {
 
 func (a *api) onPurgeWorkflowHandler() http.HandlerFunc {
 	return UniversalHTTPHandler(
-		a.universal.PurgeWorkflowAlpha1,
+		a.universal.PurgeWorkflowBeta1,
 		UniversalHTTPHandlerOpts[*runtimev1pb.PurgeWorkflowRequest, *emptypb.Empty]{
 			InModifier:        workflowInModifier[*runtimev1pb.PurgeWorkflowRequest],
 			SuccessStatusCode: http.StatusAccepted,

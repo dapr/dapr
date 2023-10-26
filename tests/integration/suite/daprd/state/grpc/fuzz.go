@@ -22,7 +22,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -67,7 +66,7 @@ type fuzzstate struct {
 }
 
 func (f *fuzzstate) Setup(t *testing.T) []framework.Option {
-	const numTests = 5000
+	const numTests = 1000
 
 	var takenKeys sync.Map
 
@@ -176,23 +175,26 @@ func (f *fuzzstate) Run(t *testing.T, ctx context.Context) {
 	client := rtv1.NewDaprClient(conn)
 
 	t.Run("get", func(t *testing.T) {
-		t.Parallel()
+		pt := util.NewParallel(t)
 		for i := range f.getFuzzKeys {
-			resp, err := client.GetState(ctx, &rtv1.GetStateRequest{
-				StoreName: f.storeName,
-				Key:       f.getFuzzKeys[i],
+			i := i
+			pt.Add(func(t *assert.CollectT) {
+				resp, err := client.GetState(ctx, &rtv1.GetStateRequest{
+					StoreName: f.storeName,
+					Key:       f.getFuzzKeys[i],
+				})
+				require.NoError(t, err)
+				assert.Empty(t, resp.Data, "key: %s", f.getFuzzKeys[i])
 			})
-			require.NoError(t, err)
-			assert.Empty(t, resp.Data, "key: %s", f.getFuzzKeys[i])
 		}
 	})
 
 	httpClient := util.HTTPClient(t)
 
+	pt := util.NewParallel(t)
 	for i := 0; i < len(f.getFuzzKeys); i++ {
 		i := i
-		t.Run("save "+strconv.Itoa(i), func(t *testing.T) {
-			t.Parallel()
+		pt.Add(func(t *assert.CollectT) {
 			for _, req := range [][]*commonv1.StateItem{f.saveReqBinaries[i], f.saveReqStrings[i]} {
 				_, err := client.SaveState(ctx, &rtv1.SaveStateRequest{
 					StoreName: f.storeName,

@@ -16,6 +16,7 @@ package internal
 import (
 	"context"
 	"io"
+	"time"
 )
 
 // PlacementService allows for interacting with the actor placement service.
@@ -24,6 +25,23 @@ type PlacementService interface {
 
 	Start(context.Context) error
 	WaitUntilReady(ctx context.Context) error
-	LookupActor(actorType, actorID string) (host string, appID string)
-	AddHostedActorType(actorType string) error
+	LookupActor(ctx context.Context, req LookupActorRequest) (LookupActorResponse, error)
+	AddHostedActorType(actorType string, idleTimeout time.Duration) error
+}
+
+// LookupActorRequest is the request for LookupActor.
+type LookupActorRequest struct {
+	ActorType string
+	ActorID   string
+}
+
+// ActorKey returns the key for the actor, which is "type/id".
+func (lar LookupActorRequest) ActorKey() string {
+	return lar.ActorType + "/" + lar.ActorID
+}
+
+// LookupActorResponse is the response from LookupActor.
+type LookupActorResponse struct {
+	Address string
+	AppID   string
 }

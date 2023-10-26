@@ -229,6 +229,19 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 					},
 				},
 			},
+			{
+				Name:  securityConsts.TrustAnchorsEnvVar,
+				Value: string(c.CurrentTrustAnchors),
+			},
+			// TODO: @joshvanl: In v1.14, this two env vars should be moved to flags.
+			{
+				Name:  securityConsts.ControlPlaneNamespaceEnvVar,
+				Value: c.ControlPlaneNamespace,
+			},
+			{
+				Name:  securityConsts.ControlPlaneTrustDomainEnvVar,
+				Value: c.ControlPlaneTrustDomain,
+			},
 		},
 		VolumeMounts: opts.VolumeMounts,
 		ReadinessProbe: &corev1.Probe{
@@ -246,6 +259,24 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 			FailureThreshold:    c.SidecarLivenessProbeThreshold,
 		},
 	}
+
+	// TODO: @joshvanl: included for backwards compatibility with v1.11 daprd's
+	// which request these environment variables to be present when running in
+	// Kubernetes. Should be removed in v1.13.
+	container.Env = append(container.Env,
+		corev1.EnvVar{
+			Name:  securityConsts.CertChainEnvVar,
+			Value: c.CertChain,
+		},
+		corev1.EnvVar{
+			Name:  securityConsts.CertKeyEnvVar,
+			Value: c.CertKey,
+		},
+		corev1.EnvVar{
+			Name:  "SENTRY_LOCAL_IDENTITY",
+			Value: c.Identity,
+		},
+	)
 
 	// If the pod contains any of the tolerations specified by the configuration,
 	// the Command and Args are passed as is. Otherwise, the Command is passed as a part of Args.
@@ -295,25 +326,6 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 			Value: opts.ComponentsSocketsVolumeMount.MountPath,
 		})
 	}
-
-	container.Env = append(container.Env,
-		corev1.EnvVar{
-			Name:  securityConsts.TrustAnchorsEnvVar,
-			Value: c.TrustAnchors,
-		},
-		corev1.EnvVar{
-			Name:  securityConsts.CertChainEnvVar,
-			Value: c.CertChain,
-		},
-		corev1.EnvVar{
-			Name:  securityConsts.CertKeyEnvVar,
-			Value: c.CertKey,
-		},
-		corev1.EnvVar{
-			Name:  "SENTRY_LOCAL_IDENTITY",
-			Value: c.Identity,
-		},
-	)
 
 	if c.APITokenSecret != "" {
 		container.Env = append(container.Env, corev1.EnvVar{

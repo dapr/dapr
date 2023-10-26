@@ -20,13 +20,18 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/types/known/emptypb"
 
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
@@ -40,6 +45,7 @@ type Daprd struct {
 	freeport *util.FreePort
 
 	appID            string
+	appProtocol      string
 	appPort          int
 	grpcPort         int
 	httpPort         int
@@ -68,7 +74,8 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		publicPort:       fp.Port(t, 3),
 		metricsPort:      fp.Port(t, 4),
 		profilePort:      fp.Port(t, 5),
-		logLevel:         "debug",
+		logLevel:         "info",
+		mode:             "standalone",
 	}
 
 	for _, fopt := range fopts {
@@ -94,6 +101,8 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		"--enable-app-health-check=" + strconv.FormatBool(opts.appHealthCheck),
 		"--app-health-probe-interval=" + strconv.Itoa(opts.appHealthProbeInterval),
 		"--app-health-threshold=" + strconv.Itoa(opts.appHealthProbeThreshold),
+		"--mode=" + opts.mode,
+		"--enable-mtls=" + strconv.FormatBool(opts.enableMTLS),
 	}
 	if opts.appHealthCheckPath != "" {
 		args = append(args, "--app-health-check-path="+opts.appHealthCheckPath)
@@ -106,12 +115,25 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 			args = append(args, "--config="+c)
 		}
 	}
+	if len(opts.placementAddresses) > 0 {
+		args = append(args, "--placement-host-address="+strings.Join(opts.placementAddresses, ","))
+	}
+	if len(opts.sentryAddress) > 0 {
+		args = append(args, "--sentry-address="+opts.sentryAddress)
+	}
+	if len(opts.controlPlaneAddress) > 0 {
+		args = append(args, "--control-plane-address="+opts.controlPlaneAddress)
+	}
+	if opts.disableK8sSecretStore != nil {
+		args = append(args, "--disable-builtin-k8s-secret-store="+strconv.FormatBool(*opts.disableK8sSecretStore))
+	}
 
 	return &Daprd{
 		exec:             exec.New(t, binary.EnvValue("daprd"), args, opts.execOpts...),
 		freeport:         fp,
 		appHTTP:          appHTTP,
 		appID:            opts.appID,
+		appProtocol:      opts.appProtocol,
 		appPort:          opts.appPort,
 		grpcPort:         opts.grpcPort,
 		httpPort:         opts.httpPort,
@@ -146,7 +168,44 @@ func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
 		}
 		defer resp.Body.Close()
 		return http.StatusNoContent == resp.StatusCode
-	}, time.Second*5, 100*time.Millisecond)
+	}, time.Second*10, 100*time.Millisecond)
+}
+
+func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
+	switch d.appProtocol {
+	case "http":
+		client := util.HTTPClient(t)
+		assert.Eventually(t, func() bool {
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/v1.0/healthz", d.httpPort), nil)
+			if err != nil {
+				return false
+			}
+			resp, err := client.Do(req)
+			if err != nil {
+				return false
+			}
+			defer resp.Body.Close()
+			return http.StatusNoContent == resp.StatusCode
+		}, time.Second*10, 100*time.Millisecond)
+
+	case "grpc":
+		assert.Eventually(t, func() bool {
+			conn, err := grpc.Dial("localhost:"+strconv.Itoa(d.appPort),
+				grpc.WithTransportCredentials(insecure.NewCredentials()),
+				grpc.WithBlock())
+			if conn != nil {
+				defer conn.Close()
+			}
+
+			if err != nil {
+				return false
+			}
+			in := emptypb.Empty{}
+			out := runtimev1pb.HealthCheckResponse{}
+			err = conn.Invoke(ctx, "/dapr.proto.runtime.v1.AppCallbackHealthCheck/HealthCheck", &in, &out)
+			return err == nil
+		}, time.Second*10, 100*time.Millisecond)
+	}
 }
 
 func (d *Daprd) AppID() string {

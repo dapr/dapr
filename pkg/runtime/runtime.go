@@ -63,18 +63,17 @@ import (
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
+	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/meta"
 	"github.com/dapr/dapr/pkg/runtime/processor"
 	"github.com/dapr/dapr/pkg/runtime/registry"
-	"github.com/dapr/dapr/pkg/runtime/security"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
+	"github.com/dapr/dapr/pkg/security"
 	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
-
-	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 
 	"github.com/dapr/dapr/pkg/components/pluggable"
 	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
@@ -115,14 +114,14 @@ type DaprRuntime struct {
 	channels          *channels.Channels
 	appConfig         config.ApplicationConfig
 	directMessaging   invokev1.DirectMessaging
-	actor             actors.Actors
+	actor             actors.ActorRuntime
 
 	nameResolver            nr.Resolver
 	hostAddress             string
 	actorStateStoreLock     sync.RWMutex
-	authenticator           security.Authenticator
 	namespace               string
 	podName                 string
+	daprUniversalAPI        *universalapi.UniversalAPI
 	daprHTTPAPI             http.API
 	daprGRPCAPI             grpc.API
 	operatorClient          operatorv1pb.OperatorClient
@@ -134,6 +133,7 @@ type DaprRuntime struct {
 	compStore               *compstore.ComponentStore
 	processor               *processor.Processor
 	meta                    *meta.Meta
+	sec                     security.Handler
 	runnerCloser            *concurrency.RunnerCloserManager
 
 	pendingHTTPEndpoints       chan httpEndpointV1alpha1.HTTPEndpoint
@@ -157,6 +157,7 @@ type componentPreprocessRes struct {
 
 // newDaprRuntime returns a new runtime with the given runtime config and global config.
 func newDaprRuntime(ctx context.Context,
+	sec security.Handler,
 	runtimeConfig *internalConfig,
 	globalConfig *config.Configuration,
 	accessControlList *config.AccessControlList,
@@ -164,18 +165,19 @@ func newDaprRuntime(ctx context.Context,
 ) (*DaprRuntime, error) {
 	compStore := compstore.New()
 	meta := meta.New(meta.Options{
-		ID:        runtimeConfig.id,
-		PodName:   getPodName(),
-		Namespace: getNamespace(),
-		Mode:      runtimeConfig.mode,
+		ID:            runtimeConfig.id,
+		PodName:       getPodName(),
+		Namespace:     getNamespace(),
+		StrictSandbox: globalConfig.Spec.WasmSpec.GetStrictSandbox(),
+		Mode:          runtimeConfig.mode,
 	})
 
-	operatorClient, err := getOperatorClient(ctx, runtimeConfig)
+	operatorClient, err := getOperatorClient(ctx, sec, runtimeConfig)
 	if err != nil {
 		return nil, err
 	}
 
-	grpc := createGRPCManager(runtimeConfig, globalConfig)
+	grpc := createGRPCManager(sec, runtimeConfig, globalConfig)
 
 	wfe := wfengine.NewWorkflowEngine(wfengine.NewWorkflowConfig(runtimeConfig.id))
 	wfe.ConfigureGrpcExecutor()
@@ -207,6 +209,7 @@ func newDaprRuntime(ctx context.Context,
 		meta:                       meta,
 		operatorClient:             operatorClient,
 		channels:                   channels,
+		sec:                        sec,
 		processor: processor.New(processor.Options{
 			ID:               runtimeConfig.id,
 			Namespace:        getNamespace(),
@@ -317,13 +320,13 @@ func getPodName() string {
 	return os.Getenv("POD_NAME")
 }
 
-func getOperatorClient(ctx context.Context, cfg *internalConfig) (operatorv1pb.OperatorClient, error) {
+func getOperatorClient(ctx context.Context, sec security.Handler, cfg *internalConfig) (operatorv1pb.OperatorClient, error) {
 	// Get the operator client only if we're running in Kubernetes and if we need it
 	if cfg.mode != modes.KubernetesMode {
 		return nil, nil
 	}
 
-	client, _, err := client.GetOperatorClient(ctx, cfg.kubernetes.ControlPlaneAddress, security.TLSServerName, cfg.certChain)
+	client, _, err := client.GetOperatorClient(ctx, cfg.kubernetes.ControlPlaneAddress, sec)
 	if err != nil {
 		return nil, fmt.Errorf("error creating operator client: %w", err)
 	}
@@ -403,13 +406,9 @@ func (a *DaprRuntime) setupTracing(ctx context.Context, hostAddress string, tpSt
 
 func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	a.namespace = getNamespace()
-
-	err := a.establishSecurity(a.runtimeConfig.sentryServiceAddress)
-	if err != nil {
-		return err
-	}
 	a.podName = getPodName()
 
+	var err error
 	if a.hostAddress, err = utils.GetHostAddress(); err != nil {
 		return fmt.Errorf("failed to determine host address: %w", err)
 	}
@@ -471,7 +470,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	a.populateSecretsConfiguration()
 
 	// Create and start the external gRPC server
-	univAPI := &universalapi.UniversalAPI{
+	a.daprUniversalAPI = &universalapi.UniversalAPI{
 		AppID:                       a.runtimeConfig.id,
 		Logger:                      logger.NewLogger("dapr.api"),
 		CompStore:                   a.compStore,
@@ -485,7 +484,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 
 	// Create and start internal and external gRPC servers
 	a.daprGRPCAPI = grpc.NewAPI(grpc.APIOpts{
-		UniversalAPI:          univAPI,
+		UniversalAPI:          a.daprUniversalAPI,
 		Channels:              a.channels,
 		PubsubAdapter:         a.processor.PubSub(),
 		DirectMessaging:       a.directMessaging,
@@ -509,7 +508,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	}
 
 	// Start HTTP Server
-	err = a.startHTTPServer(a.runtimeConfig.httpPort, a.runtimeConfig.publicPort, a.runtimeConfig.profilePort, a.runtimeConfig.allowedOrigins, pipeline, univAPI)
+	err = a.startHTTPServer(a.runtimeConfig.httpPort, a.runtimeConfig.publicPort, a.runtimeConfig.profilePort, a.runtimeConfig.allowedOrigins, pipeline)
 	if err != nil {
 		return fmt.Errorf("failed to start HTTP server: %w", err)
 	}
@@ -573,24 +572,29 @@ func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) error {
 	var err error
 
 	// Load app configuration (for actors) and init actors
-	a.loadAppConfiguration()
+	a.loadAppConfiguration(ctx)
 
-	if len(a.runtimeConfig.placementAddresses) != 0 {
+	if a.runtimeConfig.ActorsEnabled() {
 		err = a.initActors(ctx)
 		if err != nil {
 			log.Warn(err)
 		} else {
-			a.daprHTTPAPI.SetActorRuntime(a.actor)
-			a.daprGRPCAPI.SetActorRuntime(a.actor)
-
 			// Workflow engine depends on actor runtime being initialized
+			// This needs to be called before "SetActorsInitDone" on the universal API object to prevent a race condition in workflow methods
 			a.initWorkflowEngine(ctx)
+
+			a.daprUniversalAPI.SetActorRuntime(a.actor)
 		}
+	} else {
+		// If actors are not enabled, still invoke SetActorRuntime on the workflow engine with `nil` to unblock the goroutine
+		a.workflowEngine.SetActorRuntime(a.actor)
 	}
+
+	// We set actors as initialized whether we have an actors runtime or not
+	a.daprUniversalAPI.SetActorsInitDone()
 
 	if cb := a.runtimeConfig.registry.ComponentsCallback(); cb != nil {
 		if err = cb(registry.ComponentRegistry{
-			Actors:          a.actor,
 			DirectMessaging: a.directMessaging,
 			CompStore:       a.compStore,
 		}); err != nil {
@@ -604,18 +608,15 @@ func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) error {
 func (a *DaprRuntime) initWorkflowEngine(ctx context.Context) {
 	wfComponentFactory := wfengine.BuiltinWorkflowFactory(a.workflowEngine)
 
-	if wfInitErr := a.workflowEngine.SetActorRuntime(a.actor); wfInitErr != nil {
-		log.Warnf("Failed to set actor runtime for Dapr workflow engine - workflow engine will not start: %w", wfInitErr)
-	} else {
-		if reg := a.runtimeConfig.registry.Workflows(); reg != nil {
-			log.Infof("Registering component for dapr workflow engine...")
-			reg.RegisterComponent(wfComponentFactory, "dapr")
-			if componentInitErr := a.processor.Init(ctx, wfengine.ComponentDefinition); componentInitErr != nil {
-				log.Warnf("Failed to initialize Dapr workflow component: %v", componentInitErr)
-			}
-		} else {
-			log.Infof("No workflow registry available, not registering Dapr workflow component...")
+	a.workflowEngine.SetActorRuntime(a.actor)
+	if reg := a.runtimeConfig.registry.Workflows(); reg != nil {
+		log.Infof("Registering component for dapr workflow engine...")
+		reg.RegisterComponent(wfComponentFactory, "dapr")
+		if componentInitErr := a.processor.Init(ctx, wfengine.ComponentDefinition); componentInitErr != nil {
+			log.Warnf("Failed to initialize Dapr workflow component: %v", componentInitErr)
 		}
+	} else {
+		log.Infof("No workflow registry available, not registering Dapr workflow component...")
 	}
 }
 
@@ -974,9 +975,9 @@ func (a *DaprRuntime) processHTTPEndpointSecrets(ctx context.Context, endpoint *
 	}
 }
 
-func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int, allowedOrigins string, pipeline httpMiddleware.Pipeline, univAPI *universalapi.UniversalAPI) error {
+func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int, allowedOrigins string, pipeline httpMiddleware.Pipeline) error {
 	a.daprHTTPAPI = http.NewAPI(http.APIOpts{
-		UniversalAPI:          univAPI,
+		UniversalAPI:          a.daprUniversalAPI,
 		Channels:              a.channels,
 		DirectMessaging:       a.directMessaging,
 		PubsubAdapter:         a.processor.PubSub(),
@@ -1023,7 +1024,7 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 func (a *DaprRuntime) startGRPCInternalServer(api grpc.API, port int) error {
 	// Since GRPCInteralServer is encrypted & authenticated, it is safe to listen on *
 	serverConf := a.getNewServerConfig([]string{""}, port)
-	server := grpc.NewInternalServer(api, serverConf, a.globalConfig.GetTracingSpec(), a.globalConfig.GetMetricsSpec(), a.authenticator, a.proxy)
+	server := grpc.NewInternalServer(api, serverConf, a.globalConfig.GetTracingSpec(), a.globalConfig.GetMetricsSpec(), a.sec, a.proxy)
 	if err := server.StartNonBlocking(); err != nil {
 		return err
 	}
@@ -1159,13 +1160,13 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 		AppChannel:       a.channels.AppChannel(),
 		GRPCConnectionFn: a.grpc.GetGRPCConnection,
 		Config:           actorConfig,
-		CertChain:        a.runtimeConfig.certChain,
 		TracingSpec:      a.globalConfig.GetTracingSpec(),
 		Resiliency:       a.resiliency,
 		StateStoreName:   actorStateStoreName,
 		CompStore:        a.compStore,
 		// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 		StateTTLEnabled: a.globalConfig.IsFeatureEnabled(config.ActorStateTTL),
+		Security:        a.sec,
 	})
 	err = act.Init(ctx)
 	if err == nil {
@@ -1436,6 +1437,9 @@ func (a *DaprRuntime) cleanSockets() error {
 	if a.runtimeConfig.unixDomainSocket != "" {
 		for _, s := range []string{"http", "grpc"} {
 			err := os.Remove(fmt.Sprintf("%s/dapr-%s-%s.socket", a.runtimeConfig.unixDomainSocket, a.runtimeConfig.id, s))
+			if os.IsNotExist(err) {
+				continue
+			}
 			if err != nil {
 				errs = append(errs, fmt.Errorf("error removing socket file: %w", err))
 			}
@@ -1614,12 +1618,12 @@ func (a *DaprRuntime) blockUntilAppIsReady(ctx context.Context) error {
 	return nil
 }
 
-func (a *DaprRuntime) loadAppConfiguration() {
+func (a *DaprRuntime) loadAppConfiguration(ctx context.Context) {
 	if a.channels.AppChannel() == nil {
 		return
 	}
 
-	appConfig, err := a.channels.AppChannel().GetAppConfig(a.runtimeConfig.id)
+	appConfig, err := a.channels.AppChannel().GetAppConfig(ctx, a.runtimeConfig.id)
 	if err != nil {
 		return
 	}
@@ -1712,34 +1716,11 @@ func featureTypeToString(features interface{}) []string {
 	return featureStr
 }
 
-func (a *DaprRuntime) establishSecurity(sentryAddress string) error {
-	if !a.runtimeConfig.mTLSEnabled {
-		log.Info("mTLS is disabled. Skipping certificate request and tls validation")
-		return nil
-	}
-	if sentryAddress == "" {
-		return errors.New("sentryAddress cannot be empty")
-	}
-	log.Info("mTLS enabled; Creating sidecar authenticator")
-
-	auth, err := security.GetSidecarAuthenticator(sentryAddress, a.runtimeConfig.certChain)
-	if err != nil {
-		return err
-	}
-	a.authenticator = auth
-	a.grpc.SetAuthenticator(auth)
-
-	log.Info("Authenticator created")
-
-	diag.DefaultMonitoring.MTLSInitCompleted()
-	return nil
-}
-
 func componentDependency(compCategory components.Category, name string) string {
 	return fmt.Sprintf("%s:%s", compCategory, name)
 }
 
-func createGRPCManager(runtimeConfig *internalConfig, globalConfig *config.Configuration) *manager.Manager {
+func createGRPCManager(sec security.Handler, runtimeConfig *internalConfig, globalConfig *config.Configuration) *manager.Manager {
 	grpcAppChannelConfig := &manager.AppChannelConfig{}
 	if globalConfig != nil {
 		grpcAppChannelConfig.TracingSpec = globalConfig.GetTracingSpec()
@@ -1754,7 +1735,7 @@ func createGRPCManager(runtimeConfig *internalConfig, globalConfig *config.Confi
 		grpcAppChannelConfig.BaseAddress = runtimeConfig.appConnectionConfig.ChannelAddress
 	}
 
-	m := manager.NewManager(runtimeConfig.mode, grpcAppChannelConfig)
+	m := manager.NewManager(sec, runtimeConfig.mode, grpcAppChannelConfig)
 	m.StartCollector()
 	return m
 }

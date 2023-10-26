@@ -58,7 +58,7 @@ configurationapp \
 workflowsapp \
 
 # PERFORMANCE test app list
-PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc actor-activation-locker k6-custom pubsub_subscribe_http configuration
+PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc actor-activation-locker k6-custom pubsub_subscribe_http configuration workflowsapp
 
 # E2E test app root directory
 E2E_TESTAPP_DIR=./tests/apps
@@ -83,6 +83,7 @@ actor_id_scale \
 actor_type_scale \
 configuration \
 pubsub_subscribe_http \
+workflows \
 
 KUBECTL=kubectl
 
@@ -90,11 +91,11 @@ DAPR_CONTAINER_LOG_PATH?=./dist/container_logs
 DAPR_TEST_LOG_PATH?=./dist/logs
 
 ifeq ($(DAPR_TEST_STATE_STORE),)
-DAPR_TEST_STATE_STORE=redis
+DAPR_TEST_STATE_STORE=postgres
 endif
 
 ifeq ($(DAPR_TEST_QUERY_STATE_STORE),)
-DAPR_TEST_QUERY_STATE_STORE=mongodb
+DAPR_TEST_QUERY_STATE_STORE=postgres
 endif
 
 ifeq ($(DAPR_TEST_PUBSUB),)
@@ -254,7 +255,7 @@ create-test-namespace:
 delete-test-namespace:
 	kubectl delete namespace $(DAPR_TEST_NAMESPACE)
 
-setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-mongodb setup-test-env-zipkin setup-test-env-postgres
+setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-zipkin setup-test-env-postgres
 
 setup-pubsub-subs-perf-test-components: setup-test-env-rabbitmq setup-test-env-pulsar setup-test-env-mqtt
 
@@ -319,7 +320,7 @@ test-deps:
 # start all e2e tests
 test-e2e-all: check-e2e-env test-deps
 	# Note: we can set -p 2 to run two tests apps at a time, because today we do not share state between
-	# tests. In the future, if we add any tests that modify global state (such as dapr config), we'll 
+	# tests. In the future, if we add any tests that modify global state (such as dapr config), we'll
 	# have to be sure and run them after the main test suite, so as not to alter the state of a running
 	# test
 	# Note2: use env variable DAPR_E2E_TEST to pick one e2e test to run.
@@ -347,7 +348,7 @@ test-perf-$(1): check-e2e-env test-deps
 			--junitfile $(TEST_OUTPUT_FILE_PREFIX)_perf_$(1).xml \
 			--format standard-quiet \
 			-- \
-				-timeout 1h -p 1 -count=1 -v -tags=perf ./tests/perf/$(1)/...
+				-timeout 2h -p 1 -count=1 -v -tags=perf ./tests/perf/$(1)/...
 	jq -r .Output $(TEST_OUTPUT_FILE_PREFIX)_perf_$(1).json | strings
 endef
 
@@ -373,7 +374,7 @@ ifeq ($(DAPR_PERF_TEST),)
 		--junitfile $(TEST_OUTPUT_FILE_PREFIX)_perf.xml \
 		--format standard-quiet \
 		-- \
-			-timeout 1h -p 1 -count=1 -v -tags=perf ./tests/perf/...
+			-timeout 2.5h -p 1 -count=1 -v -tags=perf ./tests/perf/...
 	jq -r .Output $(TEST_OUTPUT_FILE_PREFIX)_perf.json | strings
 else
 	for app in $(DAPR_PERF_TEST); do \
@@ -390,7 +391,7 @@ else
 			--junitfile $(TEST_OUTPUT_FILE_PREFIX)_perf.xml \
 			--format standard-quiet \
 			-- \
-				-timeout 1h -p 1 -count=1 -v -tags=perf ./tests/perf/$$app... || exit -1 ; \
+				-timeout 2.5h -p 1 -count=1 -v -tags=perf ./tests/perf/$$app... || exit -1 ; \
 		jq -r .Output $(TEST_OUTPUT_FILE_PREFIX)_perf.json | strings ; \
 	done
 endif
@@ -475,7 +476,7 @@ setup-test-env-rabbitmq:
 
 # install mqtt to the cluster
 setup-test-env-mqtt:
-	$(HELM) repo add emqx https://repos.emqx.io/charts 
+	$(HELM) repo add emqx https://repos.emqx.io/charts
 	$(HELM) repo update
 	$(HELM) upgrade \
 	  --install perf-test-emqx emqx/emqx \
@@ -497,16 +498,6 @@ setup-test-env-pulsar:
 delete-test-env-kafka:
 	$(HELM) del dapr-kafka --namespace $(DAPR_TEST_NAMESPACE)
 
-# install mongodb to the cluster without password
-setup-test-env-mongodb:
-	$(HELM) upgrade \
-	  --install dapr-mongodb bitnami/mongodb \
-	  --version 13.16.2 \
-	  -f ./tests/config/mongodb_override.yaml \
-	  --namespace $(DAPR_TEST_NAMESPACE) \
-	  --wait \
-	  --timeout 5m0s
-
 # install postgres to the cluster
 setup-test-env-postgres:
 	$(HELM) upgrade \
@@ -521,10 +512,6 @@ setup-test-env-postgres:
 delete-test-env-postgres:
 	$(HELM) del dapr-postgres --namespace $(DAPR_TEST_NAMESPACE)
 
-# delete mongodb from cluster
-delete-test-env-mongodb:
-	${HELM} del dapr-mongodb --namespace ${DAPR_TEST_NAMESPACE}
-
 # install zipkin to the cluster
 setup-test-env-zipkin:
 	$(KUBECTL) apply -f ./tests/config/zipkin.yaml -n $(DAPR_TEST_NAMESPACE)
@@ -532,7 +519,7 @@ delete-test-env-zipkin:
 	$(KUBECTL) delete -f ./tests/config/zipkin.yaml -n $(DAPR_TEST_NAMESPACE)
 
 # Setup the test environment by installing components
-setup-test-env: setup-test-env-kafka setup-test-env-redis setup-test-env-mongodb setup-test-env-postgres setup-test-env-k6 setup-test-env-zipkin setup-test-env-postgres
+setup-test-env: setup-test-env-kafka setup-test-env-redis setup-test-env-postgres setup-test-env-k6 setup-test-env-zipkin setup-test-env-postgres
 
 save-dapr-control-plane-k8s-resources:
 	mkdir -p '$(DAPR_CONTAINER_LOG_PATH)'
@@ -558,7 +545,7 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/kubernetes_redis_host_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_STATE_STORE)_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_STATE_STORE)_state_actorstore.yaml --namespace $(DAPR_TEST_NAMESPACE)
-	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_QUERY_STATE_STORE)_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_QUERY_STATE_STORE)_query_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_redis_pluggable_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_tests_cluster_role_binding.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_PUBSUB)_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
@@ -627,13 +614,13 @@ describe-kind-env:
 	export DAPR_TEST_REGISTRY=$${DAPR_TEST_REGISTRY:-localhost:5000/dapr}\n\
 	export DAPR_TAG=dev\n\
 	export DAPR_NAMESPACE=dapr-tests"
-	
+
 
 delete-kind:
 	docker stop kind-registry && docker rm kind-registry || echo "Could not delete registry."
 	kind delete cluster --name kind
 
-ifeq ($(OS),Windows_NT) 
+ifeq ($(OS),Windows_NT)
     detected_OS := windows
 else
     detected_OS := $(shell sh -c 'uname 2>/dev/null || echo Unknown' |  tr '[:upper:]' '[:lower:]')

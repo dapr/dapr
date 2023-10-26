@@ -16,16 +16,20 @@ package ca
 import (
 	"context"
 	"crypto"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
+	"time"
 
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/pkg/security/spiffe"
 	"github.com/dapr/dapr/pkg/sentry/config"
 	"github.com/dapr/dapr/pkg/sentry/monitoring"
+	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 )
 
@@ -58,7 +62,11 @@ type Signer interface {
 	// that this does not include the trust anchors, and does not perform _any_
 	// kind of validation on the request; authz should already have happened
 	// before this point.
-	SignIdentity(context.Context, *SignRequest) ([]*x509.Certificate, error)
+	// If given true, then the certificate duration will be given the largest
+	// possible according to the signing certificate.
+	// TODO: @joshvanl: Remove bool value in v1.13 as the inject no longer needs
+	// to request other identities.
+	SignIdentity(context.Context, *SignRequest, bool) ([]*x509.Certificate, error)
 
 	// TrustAnchors returns the trust anchors for the CA in PEM format.
 	TrustAnchors() []byte
@@ -81,11 +89,7 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 	if config.IsKubernetesHosted() {
 		log.Info("Using kubernetes secret store for trust bundle storage")
 
-		restConfig, err := rest.InClusterConfig()
-		if err != nil {
-			return nil, err
-		}
-		client, err := kubernetes.NewForConfig(restConfig)
+		client, err := kubernetes.NewForConfig(utils.GetConfig())
 		if err != nil {
 			return nil, err
 		}
@@ -108,7 +112,12 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 	if !ok {
 		log.Info("Root and issuer certs not found: generating self signed CA")
 
-		bundle, err = GenerateBundle(conf.TrustDomain, conf.AllowedClockSkew)
+		rootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		if err != nil {
+			return nil, err
+		}
+
+		bundle, err = GenerateBundle(rootKey, conf.TrustDomain, conf.AllowedClockSkew, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -121,10 +130,10 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 
 		log.Info("Self-signed certs generated and persisted successfully")
 		monitoring.IssuerCertChanged()
-		monitoring.IssuerCertExpiry(bundle.IssChain[0].NotAfter)
 	} else {
 		log.Info("Root and issuer certs found: using existing certs")
 	}
+	monitoring.IssuerCertExpiry(bundle.IssChain[0].NotAfter)
 
 	return &ca{
 		bundle: bundle,
@@ -132,17 +141,23 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 	}, nil
 }
 
-func (c *ca) SignIdentity(ctx context.Context, req *SignRequest) ([]*x509.Certificate, error) {
-	spiffeID, err := (spiffe.Parsed{
-		TrustDomain: req.TrustDomain,
-		Namespace:   req.Namespace,
-		AppID:       req.AppID,
-	}).ToID()
+func (c *ca) SignIdentity(ctx context.Context, req *SignRequest, overrideDuration bool) ([]*x509.Certificate, error) {
+	td, err := spiffeid.TrustDomainFromString(req.TrustDomain)
 	if err != nil {
 		return nil, err
 	}
 
-	tmpl, err := generateWorkloadCert(req.SignatureAlgorithm, c.config.WorkloadCertTTL, c.config.AllowedClockSkew, spiffeID)
+	spiffeID, err := spiffe.FromStrings(td, req.Namespace, req.AppID)
+	if err != nil {
+		return nil, err
+	}
+
+	dur := c.config.WorkloadCertTTL
+	if overrideDuration {
+		dur = time.Until(c.bundle.IssChain[0].NotAfter)
+	}
+
+	tmpl, err := generateWorkloadCert(req.SignatureAlgorithm, dur, c.config.AllowedClockSkew, spiffeID)
 	if err != nil {
 		return nil, err
 	}

@@ -103,7 +103,7 @@ func CreateHTTPChannel(config ChannelConfiguration) (channel.AppChannel, error) 
 
 // GetAppConfig gets application config from user application
 // GET http://localhost:<app_port>/dapr/config
-func (h *Channel) GetAppConfig(appID string) (*config.ApplicationConfig, error) {
+func (h *Channel) GetAppConfig(ctx context.Context, appID string) (*config.ApplicationConfig, error) {
 	req := invokev1.NewInvokeMethodRequest(appConfigEndpoint).
 		WithHTTPExtension(http.MethodGet, "").
 		WithContentType(invokev1.JSONContentType).
@@ -112,7 +112,7 @@ func (h *Channel) GetAppConfig(appID string) (*config.ApplicationConfig, error) 
 		})
 	defer req.Close()
 
-	resp, err := h.InvokeMethod(context.TODO(), req, "")
+	resp, err := h.InvokeMethod(ctx, req, "")
 	if err != nil {
 		return nil, err
 	}
@@ -228,7 +228,7 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	}()
 
 	// Emit metric when request is sent
-	diag.DefaultHTTPMonitoring.ClientRequestStarted(ctx, channelReq.Method, req.Message().Method, int64(len(req.Message().Data.GetValue())))
+	diag.DefaultHTTPMonitoring.ClientRequestStarted(ctx, int64(len(req.Message().Data.GetValue())))
 	startRequest := time.Now()
 
 	var resp *http.Response
@@ -270,17 +270,17 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	}
 
 	if err != nil {
-		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(http.StatusInternalServerError), contentLength, elapsedMs)
+		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, strconv.Itoa(http.StatusInternalServerError), contentLength, elapsedMs)
 		return nil, err
 	}
 
 	rsp, err := h.parseChannelResponse(req, resp)
 	if err != nil {
-		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(http.StatusInternalServerError), contentLength, elapsedMs)
+		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, strconv.Itoa(http.StatusInternalServerError), contentLength, elapsedMs)
 		return nil, err
 	}
 
-	diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(int(rsp.Status().Code)), contentLength, elapsedMs)
+	diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, strconv.Itoa(int(rsp.Status().Code)), contentLength, elapsedMs)
 
 	return rsp, nil
 }
@@ -337,6 +337,15 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 	// Configure headers from http endpoint CRD (if any)
 	for _, hdr := range headers {
 		channelReq.Header.Set(hdr.Name, hdr.Value.String())
+	}
+
+	if cl := channelReq.Header.Get(invokev1.ContentLengthHeader); cl != "" {
+		v, err := strconv.ParseInt(cl, 10, 64)
+		if err != nil {
+			return nil, err
+		}
+
+		channelReq.ContentLength = v
 	}
 
 	// HTTP client needs to inject traceparent header for proper tracing stack.

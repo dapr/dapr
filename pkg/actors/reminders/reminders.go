@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/google/uuid"
 	"k8s.io/utils/clock"
 
@@ -30,6 +31,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/retry"
 )
 
 var log = logger.NewLogger("dapr.runtime.actor.reminders")
@@ -138,7 +140,7 @@ func (r *reminders) CreateReminder(ctx context.Context, reminder *internal.Remin
 
 	// Wait for the evaluation chan lock
 	if !r.waitForEvaluationChan() {
-		return errors.New("error creating reminder: timed out after 5s")
+		return errors.New("error creating reminder: timed out after 30s")
 	}
 	defer func() {
 		// Release the evaluation chan lock
@@ -159,9 +161,34 @@ func (r *reminders) CreateReminder(ctx context.Context, reminder *internal.Remin
 
 	stop := make(chan struct{})
 
-	err = r.storeReminder(ctx, store, reminder, stop)
+	config := retry.DefaultConfig()
+	config.Multiplier = 1.0
+	b := config.NewBackOffWithContext(ctx)
+
+	err = retry.NotifyRecover(
+		func() error {
+			innerErr := r.storeReminder(ctx, store, reminder, stop)
+			if innerErr != nil {
+				// If the etag is mismatched, we can retry the operation.
+				if isEtagMismatchError(innerErr) {
+					return innerErr
+				}
+
+				log.Errorf("Error storing reminder: %v", innerErr)
+				return backoff.Permanent(innerErr)
+			}
+			return nil
+		},
+		b,
+		func(err error, d time.Duration) {
+			log.Debugf("Attempting to store reminder again after error: %v", err)
+		},
+		func() {
+			log.Debug("Storing of reminder successful")
+		},
+	)
 	if err != nil {
-		return fmt.Errorf("error storing reminder: %w", err)
+		return err
 	}
 
 	// Start the reminder
@@ -198,64 +225,44 @@ func (r *reminders) GetReminder(ctx context.Context, req *internal.GetReminderRe
 
 func (r *reminders) DeleteReminder(ctx context.Context, req internal.DeleteReminderRequest) error {
 	if !r.waitForEvaluationChan() {
-		return errors.New("error deleting reminder: timed out after 5s")
+		return errors.New("error deleting reminder: timed out after 30s")
 	}
 	defer func() {
 		// Release the evaluation chan lock
 		<-r.evaluationChan
 	}()
 
-	return r.doDeleteReminder(ctx, req.ActorType, req.ActorID, req.Name)
-}
+	config := retry.DefaultConfig()
+	config.Multiplier = 1.0
+	b := config.NewBackOffWithContext(ctx)
 
-func (r *reminders) RenameReminder(ctx context.Context, req *internal.RenameReminderRequest) error {
-	log.Warn("[DEPRECATION NOTICE] Currently RenameReminder renames by deleting-then-inserting-again. This implementation is not fault-tolerant, as a failed insert after deletion would result in no reminder")
+	err := retry.NotifyRecover(
+		func() error {
+			innerErr := r.doDeleteReminder(ctx, req.ActorType, req.ActorID, req.Name)
+			if innerErr != nil {
+				// If the etag is mismatched, we can retry the operation.
+				if isEtagMismatchError(innerErr) {
+					return innerErr
+				}
 
-	store, err := r.stateStoreProviderFn()
+				log.Errorf("Error deleting reminder: %v", innerErr)
+				return backoff.Permanent(innerErr)
+			}
+			return nil
+		},
+		b,
+		func(err error, d time.Duration) {
+			log.Debugf("Attempting to delete reminder again after error: %v", err)
+		},
+		func() {
+			log.Debug("Deletion of reminder successful")
+		},
+	)
 	if err != nil {
 		return err
 	}
 
-	// Wait for the evaluation chan lock
-	if !r.waitForEvaluationChan() {
-		return errors.New("error renaming reminder: timed out after 5s")
-	}
-	defer func() {
-		// Release the evaluation chan lock
-		<-r.evaluationChan
-	}()
-
-	oldReminder, exists := r.getReminder(req.OldName, req.ActorType, req.ActorID)
-	if !exists {
-		return nil
-	}
-
-	// delete old reminder
-	err = r.doDeleteReminder(ctx, req.ActorType, req.ActorID, req.OldName)
-	if err != nil {
-		return err
-	}
-
-	reminder := &internal.Reminder{
-		ActorID:        req.ActorID,
-		ActorType:      req.ActorType,
-		Name:           req.NewName,
-		Data:           oldReminder.Data,
-		Period:         oldReminder.Period,
-		RegisteredTime: oldReminder.RegisteredTime,
-		DueTime:        oldReminder.DueTime,
-		ExpirationTime: oldReminder.ExpirationTime,
-	}
-
-	stop := make(chan struct{})
-
-	err = r.storeReminder(ctx, store, reminder, stop)
-	if err != nil {
-		return err
-	}
-
-	// Start the new reminder
-	return r.startReminder(reminder, stop)
+	return nil
 }
 
 func (r *reminders) evaluateReminders(ctx context.Context) {
@@ -302,7 +309,7 @@ func (r *reminders) evaluateReminders(ctx context.Context) {
 			for i := range vals {
 				rmd := vals[i].Reminder
 				reminderKey := rmd.Key()
-				isLocalActor, targetActorAddress := r.lookUpActorFn(rmd.ActorType, rmd.ActorID)
+				isLocalActor, targetActorAddress := r.lookUpActorFn(ctx, rmd.ActorType, rmd.ActorID)
 				if targetActorAddress == "" {
 					log.Warn("Did not find address for actor for reminder " + reminderKey)
 					continue
@@ -335,7 +342,7 @@ func (r *reminders) evaluateReminders(ctx context.Context) {
 }
 
 func (r *reminders) waitForEvaluationChan() bool {
-	t := r.clock.NewTimer(5 * time.Second)
+	t := r.clock.NewTimer(30 * time.Second)
 
 	select {
 	// Evaluation channel was not freed up in time
@@ -479,7 +486,7 @@ func (r *reminders) storeReminder(ctx context.Context, store internal.Transactio
 	// Store the reminder in active reminders list
 	reminderKey := reminder.Key()
 
-	_, loaded := r.activeReminders.LoadOrStore(reminderKey, stopChannel)
+	stored, loaded := r.activeReminders.LoadOrStore(reminderKey, stopChannel)
 	if loaded {
 		// If the value was loaded, we have a race condition: another goroutine is trying to store the same reminder
 		return fmt.Errorf("failed to store reminder %s: reminder was created concurrently by another goroutine", reminderKey)
@@ -537,6 +544,8 @@ func (r *reminders) storeReminder(ctx context.Context, store internal.Transactio
 		return struct{}{}, nil
 	})
 	if err != nil {
+		// Remove the value from the in-memory cache
+		r.activeReminders.CompareAndDelete(reminderKey, stored)
 		return err
 	}
 	return nil
@@ -1021,4 +1030,15 @@ func (r *reminders) updateReminderTrack(ctx context.Context, key string, repetit
 		return nil, store.Set(ctx, setReq)
 	})
 	return err
+}
+
+func isEtagMismatchError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var etagErr *state.ETagError
+	if errors.As(err, &etagErr) {
+		return etagErr.Kind() == state.ETagMismatch
+	}
+	return false
 }

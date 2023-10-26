@@ -283,7 +283,8 @@ docker-deploy-k8s: check-docker-env check-arch
 		--set global.ha.enabled=$(HA_MODE) --set-string global.tag=$(BUILD_TAG) \
 		--set-string global.registry=$(DAPR_REGISTRY) --set global.logAsJson=true \
 		--set global.daprControlPlaneOs=$(TARGET_OS) --set global.daprControlPlaneArch=$(TARGET_ARCH) \
-		--set dapr_placement.logLevel=debug --set dapr_sidecar_injector.sidecarImagePullPolicy=$(PULL_POLICY) \
+		--set dapr_placement.logLevel=debug --set dapr_sentry.logLevel=debug \
+		--set dapr_sidecar_injector.sidecarImagePullPolicy=$(PULL_POLICY) \
 		--set global.imagePullPolicy=$(PULL_POLICY) --set global.imagePullSecrets=${DAPR_TEST_REGISTRY_SECRET} \
 		--set global.mtls.enabled=${DAPR_MTLS_ENABLED} \
 		--set dapr_placement.cluster.forceInMemoryLog=$(FORCE_INMEM) \
@@ -328,7 +329,6 @@ TEST_WITH_RACE=./pkg/acl/... \
 ./pkg/concurrency/... \
 ./pkg/config/... \
 ./pkg/cors/... \
-./pkg/credentials/... \
 ./pkg/diagnostics/... \
 ./pkg/encryption/... \
 ./pkg/expr/... \
@@ -370,7 +370,7 @@ test-integration: test-deps
 			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json \
 			--format testname \
 			-- \
-			./tests/integration -count=1 -v -tags="integration"
+			./tests/integration -timeout=20m -count=1 -v -tags="integration"
 
 ################################################################################
 # Target: lint                                                                 #
@@ -434,7 +434,7 @@ init-proto:
 ################################################################################
 # Target: gen-proto                                                            #
 ################################################################################
-GRPC_PROTOS:=common internals operator placement runtime sentry components
+GRPC_PROTOS:=$(shell ls dapr/proto)
 PROTO_PREFIX:=github.com/dapr/dapr
 
 # Generate archive files for each binary

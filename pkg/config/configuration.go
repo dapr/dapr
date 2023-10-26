@@ -111,6 +111,7 @@ type ConfigurationSpec struct {
 	APISpec             *APISpec            `json:"api,omitempty" yaml:"api,omitempty"`
 	ComponentsSpec      *ComponentsSpec     `json:"components,omitempty" yaml:"components,omitempty"`
 	LoggingSpec         *LoggingSpec        `json:"logging,omitempty" yaml:"logging,omitempty"`
+	WasmSpec            *WasmSpec           `json:"wasm,omitempty" yaml:"wasm,omitempty"`
 }
 
 type SecretsSpec struct {
@@ -155,18 +156,18 @@ const (
 	APIAccessRuleProtocolGRPC APIAccessRuleProtocol = "grpc"
 )
 
-// GetRulesByProtocol returns a list of APIAccessRule objects filtered by protocol
-func (r APIAccessRules) GetRulesByProtocol(protocol APIAccessRuleProtocol) []APIAccessRule {
-	res := make([]APIAccessRule, len(r))
-	n := 0
+// GetRulesByProtocol returns a list of APIAccessRule objects for a protocol
+// The result is a map where the key is in the format "<version>/<endpoint>"
+func (r APIAccessRules) GetRulesByProtocol(protocol APIAccessRuleProtocol) map[string]struct{} {
+	res := make(map[string]struct{}, len(r))
 	for _, v := range r {
 		//nolint:gocritic
 		if strings.ToLower(string(v.Protocol)) == string(protocol) {
-			res[n] = v
-			n++
+			key := v.Version + "/" + v.Name
+			res[key] = struct{}{}
 		}
 	}
-	return res[:n]
+	return res
 }
 
 type HandlerSpec struct {
@@ -311,6 +312,19 @@ type FeatureSpec struct {
 type ComponentsSpec struct {
 	// Denylist of component types that cannot be instantiated
 	Deny []string `json:"deny,omitempty" yaml:"deny,omitempty"`
+}
+
+// WasmSpec describes the security profile for all Dapr Wasm components.
+type WasmSpec struct {
+	// Force enabling strict sandbox mode for all WASM components.
+	// When this is enabled, WASM components always run in strict mode regardless of their configuration.
+	// Strict mode enhances security of the WASM sandbox by limiting access to certain capabilities such as real-time clocks and random number generators.
+	StrictSandbox bool `json:"strictSandbox,omitempty" yaml:"strictSandbox,omitempty"`
+}
+
+// GetStrictSandbox returns the value of StrictSandbox, with nil-checks.
+func (w *WasmSpec) GetStrictSandbox() bool {
+	return w != nil && w.StrictSandbox
 }
 
 // LoggingSpec defines the configuration for logging.
