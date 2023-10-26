@@ -69,8 +69,9 @@ func GetEnvOrElse(name, orElse string) string {
 // Truthy values are "y", "yes", "true", "t", "on", "1" (case-insensitive); everything else is false.
 func IsTruthy(val string) bool {
 	val = strings.TrimSpace(val)
-	if len(val) > 5 {
-		val = val[:5]
+	if len(val) > 4 {
+		// Short-circuit, this can never be a truthy value
+		return false
 	}
 	switch strings.ToLower(val) {
 	case "y", "yes", "true", "t", "on", "1":
