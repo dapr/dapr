@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package http
+package endpoints
 
 import (
 	"net/http"
@@ -19,7 +19,6 @@ import (
 
 	"github.com/valyala/fasthttp"
 
-	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/utils/nethttpadaptor"
 )
 
@@ -28,11 +27,18 @@ type Endpoint struct {
 	Methods         []string
 	Route           string
 	Version         string
-	IsFallback      bool // Endpoint is used as fallback when the method or URL isn't found
+	Group           *EndpointGroup // Endpoint group, used for allowlisting
 	FastHTTPHandler fasthttp.RequestHandler
 	Handler         http.HandlerFunc
-	AlwaysAllowed   bool // Endpoint is always allowed regardless of API access rules
-	IsHealthCheck   bool // Mark endpoint as healthcheck - for API logging purposes
+	Settings        EndpointSettings
+}
+
+// EndpointSettings contains settings for the endpoint.
+type EndpointSettings struct {
+	Name          string // Method name, used in logging and for other purposes
+	IsFallback    bool   // Endpoint is used as fallback when the method or URL isn't found
+	AlwaysAllowed bool   // Endpoint is always allowed regardless of API access rules
+	IsHealthCheck bool   // Mark endpoint as healthcheck - for API logging purposes
 }
 
 // GetHandler returns the handler for the endpoint.
@@ -51,19 +57,15 @@ func (endpoint Endpoint) GetHandler() http.HandlerFunc {
 }
 
 // IsAllowed returns true if the endpoint is allowed given the API allowlist/denylist.
-func (endpoint Endpoint) IsAllowed(allowedAPIs []config.APIAccessRule, deniedAPIs []config.APIAccessRule) bool {
+func (endpoint Endpoint) IsAllowed(allowedAPIs map[string]struct{}, deniedAPIs map[string]struct{}) bool {
 	// If the endpoint is always allowed, return true
-	if endpoint.AlwaysAllowed {
+	if endpoint.Settings.AlwaysAllowed {
 		return true
 	}
 
 	// First, check the denylist
-	if len(deniedAPIs) > 0 {
-		for _, rule := range deniedAPIs {
-			if endpointMatchesAPIAccessRule(endpoint, rule) {
-				return false
-			}
-		}
+	if len(deniedAPIs) > 0 && endpointMatchesAPIAccessRule(endpoint, deniedAPIs) {
+		return false
 	}
 
 	// Now check the allowlist if present
@@ -71,15 +73,27 @@ func (endpoint Endpoint) IsAllowed(allowedAPIs []config.APIAccessRule, deniedAPI
 		return true
 	}
 
-	for _, rule := range allowedAPIs {
-		if endpointMatchesAPIAccessRule(endpoint, rule) {
+	return endpointMatchesAPIAccessRule(endpoint, allowedAPIs)
+}
+
+func endpointMatchesAPIAccessRule(endpoint Endpoint, rules map[string]struct{}) (ok bool) {
+	var key string
+
+	// First, check using the "new method", where we use the endpoint's group configuration
+	if endpoint.Group != nil {
+		key = string(endpoint.Group.Version) + "/" + string(endpoint.Group.Name)
+		_, ok = rules[key]
+		if ok {
+			return true
+		}
+	}
+
+	// Try with the "legacy" method, where we matched the path
+	for k := range rules {
+		if strings.HasPrefix(endpoint.Version+"/"+endpoint.Route, k) {
 			return true
 		}
 	}
 
 	return false
-}
-
-func endpointMatchesAPIAccessRule(endpoint Endpoint, rule config.APIAccessRule) bool {
-	return endpoint.Version == rule.Version && strings.HasPrefix(endpoint.Route, rule.Name)
 }
