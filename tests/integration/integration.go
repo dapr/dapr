@@ -35,9 +35,7 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/sentry"
 )
 
-var (
-	focusF = flag.String("focus", ".*", "Focus on specific test cases. Accepts regex.")
-)
+var focusF = flag.String("focus", ".*", "Focus on specific test cases. Accepts regex.")
 
 func RunIntegrationTests(t *testing.T) {
 	flag.Parse()
