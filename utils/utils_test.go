@@ -206,8 +206,8 @@ func TestFilter(t *testing.T) {
 		out := Filter(in, func(s string) bool {
 			return s != ""
 		})
-		assert.Equal(t, 6, cap(in))
-		assert.Equal(t, 3, cap(out))
+		assert.Equal(t, 6, len(in))
+		assert.Equal(t, 3, len(out))
 		assert.Equal(t, []string{"a", "b", "c"}, out)
 	})
 	t.Run("should filter out empty values and return empty collection if all values are filtered out", func(t *testing.T) {
@@ -215,8 +215,8 @@ func TestFilter(t *testing.T) {
 		out := Filter(in, func(s string) bool {
 			return s != ""
 		})
-		assert.Equal(t, 3, cap(in))
-		assert.Equal(t, 0, cap(out))
+		assert.Equal(t, 3, len(in))
+		assert.Equal(t, 0, len(out))
 		assert.Equal(t, []string{}, out)
 	})
 }
@@ -282,4 +282,27 @@ func TestGetNamespaceOrDefault(t *testing.T) {
 		ns := GetNamespaceOrDefault("default")
 		assert.Equal(t, "testNs", ns)
 	})
+}
+
+func BenchmarkIsTruthy(b *testing.B) {
+	for n := 0; n < b.N; n++ {
+		IsTruthy("true")
+		IsTruthy("false")
+		IsTruthy("  on  ")
+	}
+}
+
+func BenchmarkFilter(b *testing.B) {
+	vals := make([]int, 100)
+	for i := 0; i < len(vals); i++ {
+		vals[i] = i
+	}
+
+	filterFn := func(n int) bool {
+		return n < 50
+	}
+
+	for n := 0; n < b.N; n++ {
+		Filter(vals, filterFn)
+	}
 }
