@@ -4209,7 +4209,7 @@ func TestMetadata(t *testing.T) {
 	})
 
 	t.Run("Get Metadata", func(t *testing.T) {
-		res, err := client.GetMetadata(context.Background(), &emptypb.Empty{})
+		res, err := client.GetMetadata(context.Background(), &runtimev1pb.GetMetadataRequest{})
 		assert.NoError(t, err)
 
 		assert.Equal(t, "fakeAPI", res.Id)

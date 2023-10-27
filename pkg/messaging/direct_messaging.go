@@ -46,7 +46,7 @@ import (
 
 var log = logger.NewLogger("dapr.runtime.direct_messaging")
 
-const streamingUnsupportedErr = "streaming-based service invocation is enabled, but target app %s is running a version of Dapr that does not support it"
+const streamingUnsupportedErr = "target app '%s' is running a version of Dapr that does not support streaming-based service invocation"
 
 // messageClientConnection is the function type to connect to the other
 // applications to send the message using service invocation.
@@ -245,12 +245,12 @@ func (d *directMessaging) invokeHTTPEndpoint(ctx context.Context, appID, appName
 
 	// Set up timers
 	start := time.Now()
-	diag.DefaultMonitoring.ServiceInvocationRequestSent(appID, req.Message().Method)
+	diag.DefaultMonitoring.ServiceInvocationRequestSent(appID)
 	imr, err := d.invokeRemoteUnaryForHTTPEndpoint(ctx, req, appID)
 
 	// Diagnostics
 	if imr != nil {
-		diag.DefaultMonitoring.ServiceInvocationResponseReceived(appID, req.Message().Method, imr.Status().Code, start)
+		diag.DefaultMonitoring.ServiceInvocationResponseReceived(appID, imr.Status().Code, start)
 	}
 
 	return imr, nopTeardown, err
@@ -280,14 +280,14 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, appNamespace,
 
 	// Set up timers
 	start := time.Now()
-	diag.DefaultMonitoring.ServiceInvocationRequestSent(appID, req.Message().Method)
+	diag.DefaultMonitoring.ServiceInvocationRequestSent(appID)
 
 	// Do invoke
 	imr, err := d.invokeRemoteStream(ctx, clientV1, req, appID, opts)
 
 	// Diagnostics
 	if imr != nil {
-		diag.DefaultMonitoring.ServiceInvocationResponseReceived(appID, req.Message().Method, imr.Status().Code, start)
+		diag.DefaultMonitoring.ServiceInvocationResponseReceived(appID, imr.Status().Code, start)
 	}
 
 	return imr, teardown, err
@@ -334,6 +334,21 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 	}()
 	r := req.RawData()
 	reqProto := req.Proto()
+
+	// If there's a message in the proto, we remove it from the message we send to avoid sending it twice
+	// However we need to keep a reference to those bytes, and if needed add them back, to retry the request with resiliency
+	// We re-add it when the method ends to ensure we can perform retries
+	messageData := reqProto.GetMessage().GetData()
+	messageDataValue := messageData.GetValue()
+	if len(messageDataValue) > 0 {
+		messageData.Value = nil
+		defer func() {
+			if messageDataValue != nil {
+				messageData.Value = messageDataValue
+			}
+		}()
+	}
+
 	proto := &internalv1pb.InternalInvokeRequestStream{}
 	var (
 		n    int
@@ -404,8 +419,13 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 		// - If the request is replayable, we will re-submit it as unary. This will have a small performance impact due to the additional round-trip, but it will still work (and the warning will remind users to upgrade)
 		// - If the request is not replayable, the data stream has already been consumed at this point so nothing else we can do - just show an error and tell users to upgrade the target app… (or disable streaming for now)
 		// At this point it seems that this is the best we can do, since we cannot detect Unimplemented status codes earlier (unless we send a "ping", which would add latency).
-		// See: // See: https://github.com/grpc/grpc-go/issues/5910
+		// See: https://github.com/grpc/grpc-go/issues/5910
 		if status.Code(err) == codes.Unimplemented {
+			// If we took out the data from the message, re-add it, so we can attempt to perform an unary invocation
+			if messageDataValue != nil {
+				messageData.Value = messageDataValue
+				messageDataValue = nil
+			}
 			if req.CanReplay() {
 				log.Warnf("App %s does not support streaming-based service invocation (most likely because it's using an older version of Dapr); falling back to unary calls", appID)
 				return d.invokeRemoteUnary(ctx, clientV1, req, opts)
@@ -424,10 +444,11 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 	if err != nil {
 		return nil, err
 	}
-	res.WithRawData(pr)
 	if chunk.Response.Message != nil {
 		res.WithContentType(chunk.Response.Message.ContentType)
+		res.WithDataTypeURL(chunk.Response.Message.GetData().GetTypeUrl()) // Could be empty
 	}
+	res.WithRawData(pr)
 
 	// Read the response into the stream in the background
 	go func() {
@@ -438,11 +459,6 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 			readErr   error
 		)
 		for {
-			if ctx.Err() != nil {
-				pw.CloseWithError(ctx.Err())
-				return
-			}
-
 			// Get the payload from the chunk that was previously read
 			payload = chunk.GetPayload()
 			if payload != nil {

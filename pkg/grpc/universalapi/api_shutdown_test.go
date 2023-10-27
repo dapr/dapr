@@ -19,7 +19,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"google.golang.org/protobuf/types/known/emptypb"
+
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
 func TestShutdownEndpoint(t *testing.T) {
@@ -34,7 +35,7 @@ func TestShutdownEndpoint(t *testing.T) {
 
 	t.Run("Shutdown successfully", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
-		_, err := fakeAPI.Shutdown(ctx, &emptypb.Empty{})
+		_, err := fakeAPI.Shutdown(ctx, &runtimev1pb.ShutdownRequest{})
 		cancel()
 		assert.NoError(t, err, "Expected no error")
 		select {

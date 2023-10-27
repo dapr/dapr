@@ -15,7 +15,6 @@ package universalapi
 
 import (
 	"context"
-	"fmt"
 
 	"google.golang.org/protobuf/types/known/emptypb"
 
@@ -27,7 +26,7 @@ import (
 
 const daprRuntimeVersionKey = "daprRuntimeVersion"
 
-func (a *UniversalAPI) GetMetadata(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.GetMetadataResponse, error) {
+func (a *UniversalAPI) GetMetadata(ctx context.Context, in *runtimev1pb.GetMetadataRequest) (*runtimev1pb.GetMetadataResponse, error) {
 	// Extended metadata
 	extendedMetadata := make(map[string]string, len(a.ExtendedMetadata)+1)
 	a.extendedMetadataLock.RLock()
@@ -140,14 +139,15 @@ func metadataGetOrDefaultCapabilities(dict map[string][]string, key string) []st
 
 func metadataConvertPubSubSubscriptionRules(rules []*runtimePubsub.Rule) *runtimev1pb.PubsubSubscriptionRules {
 	out := &runtimev1pb.PubsubSubscriptionRules{
-		Rules: make([]*runtimev1pb.PubsubSubscriptionRule, 0),
+		Rules: make([]*runtimev1pb.PubsubSubscriptionRule, len(rules)),
 	}
-	for _, r := range rules {
-		out.Rules = append(out.Rules, &runtimev1pb.PubsubSubscriptionRule{
-			// TODO avoid using fmt.Sprintf
-			Match: fmt.Sprintf("%s", r.Match),
-			Path:  r.Path,
-		})
+	for i, r := range rules {
+		out.Rules[i] = &runtimev1pb.PubsubSubscriptionRule{
+			Path: r.Path,
+		}
+		if r.Match != nil {
+			out.Rules[i].Match = r.Match.String()
+		}
 	}
 	return out
 }
