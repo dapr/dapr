@@ -26,6 +26,7 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
+	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 )
 
 const (
@@ -186,6 +187,15 @@ func (p *pubsub) subscribeTopic(ctx context.Context, name, topic string, route c
 			var rErr *rterrors.RetriableError
 			if errors.As(pErr, &rErr) {
 				log.Warnf("encountered a retriable error while publishing a subscribed message to topic %s, err: %v", msgTopic, rErr.Unwrap())
+			} else if errors.Is(pErr, runtimePubsub.ErrMessageDropped) {
+				// send dropped message to dead letter queue if configured
+				if route.DeadLetterTopic != "" {
+					derr := p.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic)
+					if derr != nil {
+						log.Warnf("failed to send dropped message to dead letter queue for topic %s: %v", msgTopic, derr)
+					}
+				}
+				return nil, nil
 			} else if pErr != nil {
 				log.Errorf("encountered a non-retriable error while publishing a subscribed message to topic %s, err: %v", msgTopic, pErr)
 			}

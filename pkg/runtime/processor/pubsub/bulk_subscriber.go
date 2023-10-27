@@ -440,6 +440,15 @@ func (p *pubsub) publishBulkMessageHTTP(ctx context.Context, bulkSubCallData *bu
 					entryRespReceived[response.EntryId] = true
 					log.Warnf("DROP status returned from app while processing pub/sub event %v", response.EntryId)
 					addBulkResponseEntry(&bsrr.entries, response.EntryId, nil)
+					if deadLetterTopic != "" {
+						msg := psm.pubSubMessages[(*bscData.entryIdIndexMap)[response.EntryId]]
+						_ = p.sendToDeadLetter(ctx, bscData.psName, &contribpubsub.NewMessage{
+							Data:        msg.entry.Event,
+							Topic:       bscData.topic,
+							Metadata:    msg.entry.Metadata,
+							ContentType: &msg.entry.ContentType,
+						}, deadLetterTopic)
+					}
 				default:
 					// Consider unknown status field as error and retry
 					bscData.bulkSubDiag.statusWiseDiag[string(contribpubsub.Retry)]++
@@ -494,7 +503,7 @@ func (p *pubsub) publishBulkMessageHTTP(ctx context.Context, bulkSubCallData *bu
 
 // publishBulkMessageGRPC publishes bulk message to a subscriber using gRPC and takes care of corresponding responses.
 func (p *pubsub) publishBulkMessageGRPC(ctx context.Context, bulkSubCallData *bulkSubscribeCallData, psm *bulkSubscribedMessage,
-	bulkResponses *[]contribpubsub.BulkSubscribeResponseEntry, rawPayload bool,
+	bulkResponses *[]contribpubsub.BulkSubscribeResponseEntry, rawPayload bool, deadLetterTopic string,
 ) error {
 	bscData := *bulkSubCallData
 	items := make([]*runtimev1pb.TopicEventBulkRequestEntry, len(psm.pubSubMessages))
@@ -610,6 +619,15 @@ func (p *pubsub) publishBulkMessageGRPC(ctx context.Context, bulkSubCallData *bu
 				bscData.bulkSubDiag.statusWiseDiag[string(contribpubsub.Drop)] += 1
 				entryRespReceived[response.EntryId] = true
 				addBulkResponseEntry(bulkResponses, response.EntryId, nil)
+				if deadLetterTopic != "" {
+					msg := psm.pubSubMessages[(*bscData.entryIdIndexMap)[response.EntryId]]
+					_ = p.sendToDeadLetter(ctx, bscData.psName, &contribpubsub.NewMessage{
+						Data:        msg.entry.Event,
+						Topic:       bscData.topic,
+						Metadata:    msg.entry.Metadata,
+						ContentType: &msg.entry.ContentType,
+					}, deadLetterTopic)
+				}
 			default:
 				// Consider unknown status field as error and retry
 				bscData.bulkSubDiag.statusWiseDiag[string(contribpubsub.Retry)] += 1

@@ -307,6 +307,31 @@ func testPublish(t *testing.T, publisherExternalURL string, protocol string) rec
 	}
 }
 
+func testDropToDeadLetter(t *testing.T, publisherExternalURL, subscriberExternalURL, _, subscriberAppName, protocol string) string {
+	setDesiredResponse(t, subscriberAppName, "drop", publisherExternalURL, protocol)
+	callInitialize(t, subscriberAppName, publisherExternalURL, protocol)
+
+	sentTopicDeadMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-dead-topic", protocol, nil, "")
+	require.NoError(t, err)
+	offset += numberOfMessagesToPublish + 1
+
+	sentTopicNormal, err := sendToPublisher(t, publisherExternalURL, "pubsub-a-topic", protocol, nil, "")
+	require.NoError(t, err)
+	offset += numberOfMessagesToPublish + 1
+
+	time.Sleep(5 * time.Second)
+	received := receivedMessagesResponse{
+		ReceivedByTopicA:          sentTopicNormal,
+		ReceivedByTopicB:          []string{},
+		ReceivedByTopicC:          []string{},
+		ReceivedByTopicRaw:        []string{},
+		ReceivedByTopicDead:       sentTopicDeadMessages,
+		ReceivedByTopicDeadLetter: sentTopicDeadMessages,
+	}
+	validateMessagesReceivedBySubscriber(t, publisherExternalURL, subscriberAppName, protocol, true, received)
+	return subscriberExternalURL
+}
+
 func postSingleMessage(url string, data []byte) (int, error) {
 	// HTTPPostWithStatus by default sends with content-type application/json
 	start := time.Now()
@@ -755,6 +780,10 @@ var pubsubTests = []struct {
 	{
 		name:    "bulk publish and normal subscribe successfully",
 		handler: testBulkPublishSuccessfully,
+	},
+	{
+		name:    "drop message will be published to dlq if configured",
+		handler: testDropToDeadLetter,
 	},
 }
 
