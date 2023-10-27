@@ -117,22 +117,21 @@ func (a *activityActor) InvokeReminder(ctx context.Context, actorID string, remi
 	defer cancelTimeout()
 
 	if err := a.executeActivity(timeoutCtx, actorID, reminderName, state.EventPayload); err != nil {
-		if errors.Is(err, context.DeadlineExceeded) {
+		var recoverableErr *recoverableError
+		switch {
+		case errors.Is(err, context.DeadlineExceeded):
 			wfLogger.Warnf("%s: execution of '%s' timed-out and will be retried later: %v", actorID, reminderName, err)
-
 			// Returning nil signals that we want the execution to be retried in the next period interval
 			return nil
-		} else if errors.Is(err, context.Canceled) {
+		case errors.Is(err, context.Canceled):
 			wfLogger.Warnf("%s: received cancellation signal while waiting for activity execution '%s'", actorID, reminderName)
-
 			// Returning nil signals that we want the execution to be retried in the next period interval
 			return nil
-		} else if _, ok := err.(recoverableError); ok {
+		case errors.As(err, &recoverableErr):
 			wfLogger.Warnf("%s: execution failed with a recoverable error and will be retried later: %v", actorID, err)
-
 			// Returning nil signals that we want the execution to be retried in the next period interval
 			return nil
-		} else {
+		default:
 			wfLogger.Errorf("%s: execution failed with a non-recoverable error: %v", actorID, err)
 			// TODO: Reply with a failure - this requires support from durabletask-go to produce TaskFailure results
 		}
