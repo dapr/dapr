@@ -53,10 +53,6 @@ import (
 
 var log = logger.NewLogger("dapr.operator")
 
-const (
-	webhookCAName = "dapr-webhook-ca"
-)
-
 // Operator is an Dapr Kubernetes Operator for managing components and sidecar lifecycle.
 type Operator interface {
 	Run(ctx context.Context) error
