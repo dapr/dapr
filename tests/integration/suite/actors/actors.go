@@ -15,9 +15,8 @@ package actors
 
 import (
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/healthz"
-	_ "github.com/dapr/dapr/tests/integration/suite/actors/http"
-	_ "github.com/dapr/dapr/tests/integration/suite/actors/invocation"
-	_ "github.com/dapr/dapr/tests/integration/suite/actors/matadatata"
+	_ "github.com/dapr/dapr/tests/integration/suite/actors/invoke"
+	_ "github.com/dapr/dapr/tests/integration/suite/actors/metadata"
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/reminders"
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/reminders/serialization"
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/state"

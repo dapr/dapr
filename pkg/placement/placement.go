@@ -190,7 +190,7 @@ func NewPlacementService(opts PlacementServiceOpts) (*Service, error) {
 		clock:                    &clock.RealClock{},
 		closedCh:                 make(chan struct{}),
 		sec:                      opts.SecProvider,
-	}
+	}, nil
 }
 
 // Run starts the placement service gRPC server.

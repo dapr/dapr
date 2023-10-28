@@ -204,7 +204,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 
 		// assert
 		assert.EventuallyWithT(t, func(t *assert.CollectT) {
-			clock.Step(disseminateTimerInterval)
+			clock.Step(time.Second / 2)
 			select {
 			case memberChange := <-testServer.membershipCh:
 				assert.Equal(t, raft.MemberUpsert, memberChange.cmdType)
