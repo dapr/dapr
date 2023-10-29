@@ -54,9 +54,10 @@ type secret struct {
 
 func New(opts Options) *secret {
 	return &secret{
-		registry:  opts.Registry,
-		compStore: opts.ComponentStore,
-		meta:      opts.Meta,
+		registry:       opts.Registry,
+		compStore:      opts.ComponentStore,
+		meta:           opts.Meta,
+		operatorClient: opts.OperatorClient,
 	}
 }
 
