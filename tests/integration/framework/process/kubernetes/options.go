@@ -120,9 +120,6 @@ func WithBaseOperatorAPI(t *testing.T, td spiffeid.TrustDomain, ns string, sentr
 			WithClusterDeploymentList(t, &appsv1.DeploymentList{TypeMeta: metav1.TypeMeta{APIVersion: "apps/v1", Kind: "DeploymentList"}}),
 			WithClusterDaprComponentList(t, &compapi.ComponentList{TypeMeta: metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "ComponentList"}}),
 			WithClusterDaprHTTPEndpointList(t, &httpendapi.HTTPEndpointList{TypeMeta: metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "HTTPEndpointList"}}),
-			WithClusterDaprConfigurationList(t, &configapi.ConfigurationList{TypeMeta: metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "ConfigurationList"}}),
-			WithClusterDaprResiliencyList(t, &resapi.ResiliencyList{TypeMeta: metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "ResiliencyList"}}),
-			WithClusterDaprSubscriptionList(t, &subapi.SubscriptionList{TypeMeta: metav1.TypeMeta{APIVersion: "dapr.io/v2alpha1", Kind: "SubscriptionList"}}),
 		} {
 			op(o)
 		}
@@ -131,35 +128,26 @@ func WithBaseOperatorAPI(t *testing.T, td spiffeid.TrustDomain, ns string, sentr
 
 func handleClusterListResource(t *testing.T, path string, obj runtime.Object) Option {
 	return func(o *options) {
-		o.handlers[path] = handleObj(t, obj)
-	}
-}
-
-func handleClusterListResourceFromStore(t *testing.T, path string, store *store.Store) Option {
-	return func(o *options) {
-		o.handlers[path] = handleObjFromStore(t, store)
+		o.handlers = append(o.handlers, handleRoute{
+			path:    path,
+			handler: handleObj(t, obj),
+		})
 	}
 }
 
 func handleGetResource(t *testing.T, apigv, resource, ns, name string, obj runtime.Object) Option {
 	return func(o *options) {
-		o.handlers[path.Join(apigv, "namespaces", ns, resource, name)] = handleObj(t, obj)
+		o.handlers = append(o.handlers, handleRoute{
+			path:    path.Join(apigv, "namespaces", ns, resource, name),
+			handler: handleObj(t, obj),
+		})
 	}
 }
 
+// func handleObj(t *testing.T, gvk metav1.GroupVersionKind, obj runtime.Object) http.HandlerFunc {
 func handleObj(t *testing.T, obj runtime.Object) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		objB, err := json.Marshal(obj)
-		require.NoError(t, err)
-		w.Header().Add("Content-Length", strconv.Itoa(len(objB)))
-		w.Header().Add("Content-Type", "application/json")
-		w.Write(objB)
-	}
-}
-
-func handleObjFromStore(t *testing.T, store *store.Store) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		objB, err := json.Marshal(store.Objects())
 		require.NoError(t, err)
 		w.Header().Add("Content-Length", strconv.Itoa(len(objB)))
 		w.Header().Add("Content-Type", "application/json")
