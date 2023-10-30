@@ -18,7 +18,10 @@ go test -v -race -tags integration ./tests/integration
 You can also run a subset of tests by specifying the `-focus` flag, which takes a [Go regular expression](https://github.com/google/re2/wiki/Syntax).
 
 ```bash
+# Run all sentry related tests.
 go test -v -race -tags integration ./tests/integration -focus sentry
+
+# Run all sentry related tests whilst skipping the sentry jwks validator test.
 go test -v -race -tags integration ./tests/integration -test.skip Test_Integration/sentry/validator/jwks -focus sentry
 ```
 
