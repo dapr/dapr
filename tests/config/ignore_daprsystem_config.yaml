@@ -15,7 +15,5 @@ spec:
     enabled: true
   mtls:
     allowedClockSkew: 0m
-    controlPlaneTrustDomain: cluster.local
     enabled: false
-    sentryAddress: bad-address:1234
     workloadCertTTL: 1ms
