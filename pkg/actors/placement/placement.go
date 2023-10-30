@@ -75,11 +75,11 @@ type actorPlacement struct {
 	placementTables *hashing.ConsistentHashTables
 	// placementTableLock is the lock for placementTables.
 	placementTableLock sync.RWMutex
+	// hasPlacementTablesCh is closed when the placement tables have been received.
+	hasPlacementTablesCh chan struct{}
 
 	// unblockSignal is the channel to unblock table locking.
 	unblockSignal chan struct{}
-	// tableIsBlocked is the status of table lock.
-	tableIsBlocked atomic.Bool
 	// operationUpdateLock is the lock for three stage commit.
 	operationUpdateLock sync.Mutex
 
@@ -130,6 +130,7 @@ func NewActorPlacement(opts ActorPlacementOpts) internal.PlacementService {
 		client:          newPlacementClient(getGrpcOptsGetter(servers, opts.Security)),
 		placementTables: &hashing.ConsistentHashTables{Entries: make(map[string]*hashing.Consistent)},
 
+		unblockSignal:      make(chan struct{}, 1),
 		appHealthFn:        opts.AppHealthFn,
 		afterTableUpdateFn: opts.AfterTableUpdateFn,
 		closeCh:            make(chan struct{}),
@@ -156,6 +157,7 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 	p.serverIndex.Store(0)
 	p.shutdown.Store(false)
 	p.appHealthy.Store(true)
+	p.hasPlacementTablesCh = make(chan struct{})
 
 	if !p.establishStreamConn(ctx) {
 		return nil
@@ -252,6 +254,10 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 				log.Debug("Disconnecting from placement service by the unhealthy app")
 
 				p.client.disconnect()
+				p.placementTableLock.Lock()
+				p.placementTables = nil
+				p.hasPlacementTablesCh = make(chan struct{})
+				p.placementTableLock.Unlock()
 				if p.haltAllActorsFn != nil {
 					haltErr := p.haltAllActorsFn()
 					if haltErr != nil {
@@ -303,11 +309,24 @@ func (p *actorPlacement) Close() error {
 
 // WaitUntilReady waits until placement table is until table lock is unlocked.
 func (p *actorPlacement) WaitUntilReady(ctx context.Context) error {
-	if !p.tableIsBlocked.Load() {
+	p.placementTableLock.RLock()
+	hasTablesCh := p.hasPlacementTablesCh
+	p.placementTableLock.RUnlock()
+
+	select {
+	case p.unblockSignal <- struct{}{}:
+		<-p.unblockSignal
+		// continue
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+
+	if hasTablesCh == nil {
 		return nil
 	}
+
 	select {
-	case <-p.unblockSignal:
+	case <-hasTablesCh:
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
@@ -386,7 +405,7 @@ func (p *actorPlacement) establishStreamConn(ctx context.Context) (established b
 
 		if err != nil {
 			if !logFailureShown {
-				log.Debugf("error connecting to placement service (will retry to connect in background): %v", err)
+				log.Debugf("Error connecting to placement service (will retry to connect in background): %v", err)
 				// Don't show the debug log more than once per each reconnection attempt
 				logFailureShown = true
 			}
@@ -395,7 +414,7 @@ func (p *actorPlacement) establishStreamConn(ctx context.Context) (established b
 			continue
 		}
 
-		log.Debug("established connection to placement service at " + p.client.clientConn.Target())
+		log.Debug("Established connection to placement service at " + p.client.clientConn.Target())
 		return true
 	}
 
@@ -410,12 +429,12 @@ func (p *actorPlacement) onPlacementError(err error) {
 	if ok && s.Code() == codes.FailedPrecondition {
 		p.serverIndex.Store((p.serverIndex.Load() + 1) % int32(len(p.serverAddr)))
 	} else {
-		log.Debugf("disconnected from placement: %v", err)
+		log.Debugf("Disconnected from placement: %v", err)
 	}
 }
 
 func (p *actorPlacement) onPlacementOrder(in *v1pb.PlacementOrder) {
-	log.Debugf("placement order received: %s", in.Operation)
+	log.Debugf("Placement order received: %s", in.Operation)
 	diag.DefaultMonitoring.ActorPlacementTableOperationReceived(in.Operation)
 
 	// lock all incoming calls when an updated table arrives
@@ -445,13 +464,20 @@ func (p *actorPlacement) onPlacementOrder(in *v1pb.PlacementOrder) {
 }
 
 func (p *actorPlacement) blockPlacements() {
-	p.unblockSignal = make(chan struct{})
-	p.tableIsBlocked.Store(true)
+	select {
+	case p.unblockSignal <- struct{}{}:
+		// Now  blocked
+	default:
+		// Was already blocked
+	}
 }
 
 func (p *actorPlacement) unblockPlacements() {
-	if p.tableIsBlocked.CompareAndSwap(true, false) {
-		close(p.unblockSignal)
+	select {
+	case <-p.unblockSignal:
+		// Now unblocked
+	default:
+		// Was already unblocked
 	}
 }
 
@@ -465,9 +491,11 @@ func (p *actorPlacement) updatePlacements(in *v1pb.PlacementTables) {
 			return
 		}
 
-		tables := &hashing.ConsistentHashTables{Entries: make(map[string]*hashing.Consistent)}
+		tables := &hashing.ConsistentHashTables{
+			Entries: make(map[string]*hashing.Consistent, len(in.Entries)),
+		}
 		for k, v := range in.Entries {
-			loadMap := map[string]*hashing.Host{}
+			loadMap := make(map[string]*hashing.Host, len(v.LoadMap))
 			for lk, lv := range v.LoadMap {
 				loadMap[lk] = hashing.NewHost(lv.Name, lv.Id, lv.Load, lv.Port)
 			}
@@ -477,6 +505,10 @@ func (p *actorPlacement) updatePlacements(in *v1pb.PlacementTables) {
 		p.placementTables = tables
 		p.placementTables.Version = in.Version
 		updated = true
+		if p.hasPlacementTablesCh != nil {
+			close(p.hasPlacementTablesCh)
+			p.hasPlacementTablesCh = nil
+		}
 	}()
 
 	if !updated {
@@ -484,7 +516,9 @@ func (p *actorPlacement) updatePlacements(in *v1pb.PlacementTables) {
 	}
 
 	// May call LookupActor inside, so should not do this with placementTableLock locked.
-	p.afterTableUpdateFn()
+	if p.afterTableUpdateFn != nil {
+		p.afterTableUpdateFn()
+	}
 
 	log.Infof("Placement tables updated, version: %s", in.GetVersion())
 }
