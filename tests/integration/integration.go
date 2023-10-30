@@ -41,7 +41,7 @@ func RunIntegrationTests(t *testing.T) {
 	flag.Parse()
 
 	focus, err := regexp.Compile(*focusF)
-	require.NoError(t, err)
+	require.NoError(t, err, "Invalid parameter focus")
 	t.Logf("running test suite with focus: %s", *focusF)
 
 	var binFailed bool
