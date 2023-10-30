@@ -20,7 +20,8 @@ import (
 
 	v1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
-	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
@@ -109,7 +110,7 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *v1.AdmissionRe
 		Identity:                     req.Namespace + ":" + pod.Spec.ServiceAccountName,
 		IgnoreEntrypointTolerations:  i.config.GetIgnoreEntrypointTolerations(),
 		ImagePullPolicy:              i.config.GetPullPolicy(),
-		MTLSEnabled:                  mTLSEnabled(daprClient),
+		MTLSEnabled:                  mTLSEnabled(i.namespace, daprClient),
 		Namespace:                    req.Namespace,
 		PlacementServiceAddress:      placementAddress,
 		SentryAddress:                sentryAddress,
@@ -161,18 +162,18 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *v1.AdmissionRe
 	return patchOps, nil
 }
 
-func mTLSEnabled(daprClient scheme.Interface) bool {
-	resp, err := daprClient.ConfigurationV1alpha1().Configurations(metaV1.NamespaceAll).List(metaV1.ListOptions{})
+func mTLSEnabled(controlPlaneNamespace string, daprClient scheme.Interface) bool {
+	resp, err := daprClient.ConfigurationV1alpha1().
+		Configurations(controlPlaneNamespace).
+		Get(defaultConfig, metav1.GetOptions{})
+	if !apierrors.IsNotFound(err) {
+		log.Infof("Dapr system configuration '%s' does not exist; using default value %t for mTLSEnabled", defaultConfig, defaultMtlsEnabled)
+		return defaultMtlsEnabled
+	}
 	if err != nil {
 		log.Errorf("Failed to load dapr configuration from k8s, use default value %t for mTLSEnabled: %s", defaultMtlsEnabled, err)
 		return defaultMtlsEnabled
 	}
 
-	for _, c := range resp.Items {
-		if c.GetName() == defaultConfig {
-			return c.Spec.MTLSSpec.Enabled
-		}
-	}
-	log.Infof("Dapr system configuration (%s) is not found, use default value %t for mTLSEnabled", defaultConfig, defaultMtlsEnabled)
-	return defaultMtlsEnabled
+	return resp.Spec.MTLSSpec.Enabled
 }

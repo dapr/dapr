@@ -40,6 +40,7 @@ import (
 )
 
 func TestConfigCorrectValues(t *testing.T) {
+	t.Setenv("NAMESPACE", "test")
 	i, err := NewInjector(nil, Config{
 		TLSCertFile:                       "a",
 		TLSKeyFile:                        "b",
@@ -402,6 +403,7 @@ func TestGetAppIDFromRequest(t *testing.T) {
 
 func TestHandleRequest(t *testing.T) {
 	authID := "test-auth-id"
+	t.Setenv("NAMESPACE", "test")
 
 	i, err := NewInjector([]string{authID}, Config{
 		TLSCertFile:                       "test-cert",

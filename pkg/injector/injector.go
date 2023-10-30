@@ -22,6 +22,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -73,6 +74,7 @@ type injector struct {
 	kubeClient   kubernetes.Interface
 	daprClient   scheme.Interface
 	authUIDs     []string
+	namespace    string
 
 	namespaceNameMatcher *namespacednamematcher.EqualPrefixNameNamespaceMatcher
 	ready                chan struct{}
@@ -111,8 +113,14 @@ func getAppIDFromRequest(req *v1.AdmissionRequest) string {
 func NewInjector(authUIDs []string, config Config, daprClient scheme.Interface, kubeClient kubernetes.Interface) (Injector, error) {
 	mux := http.NewServeMux()
 
+	namespace, ok := os.LookupEnv("NAMESPACE")
+	if !ok {
+		return nil, errors.New("'NAMESPACE' environment variable not found")
+	}
+
 	i := &injector{
-		config: config,
+		config:    config,
+		namespace: namespace,
 		deserializer: serializer.NewCodecFactory(
 			runtime.NewScheme(),
 		).UniversalDeserializer(),
