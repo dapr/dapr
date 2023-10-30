@@ -14,6 +14,7 @@ limitations under the License.
 package utils
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -210,4 +211,19 @@ func GetNamespaceOrDefault(defaultNamespace string) string {
 		namespace = defaultNamespace
 	}
 	return namespace
+}
+
+// CurrentNamespaceOrError returns the namespace of this workload. If current
+// Namespace is not found, error.
+func CurrentNamespaceOrError() (string, error) {
+	namespace, ok := os.LookupEnv("NAMESPACE")
+	if !ok {
+		return "", errors.New("'NAMESPACE' environment variable not set")
+	}
+
+	if len(namespace) == 0 {
+		return "", errors.New("'NAMESPACE' environment variable is empty")
+	}
+
+	return namespace, nil
 }

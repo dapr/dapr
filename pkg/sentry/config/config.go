@@ -110,9 +110,9 @@ func getKubernetesConfig(configName string) (SentryConfig, error) {
 		return defaultConfig, err
 	}
 
-	namespace, ok := os.LookupEnv("NAMESPACE")
-	if !ok {
-		return defaultConfig, errors.New("'NAMESPACE' environment variable not found")
+	namespace, err := utils.CurrentNamespaceOrError()
+	if err != nil {
+		return defaultConfig, err
 	}
 
 	if configName == "" {

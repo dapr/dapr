@@ -22,7 +22,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -113,9 +112,9 @@ func getAppIDFromRequest(req *v1.AdmissionRequest) string {
 func NewInjector(authUIDs []string, config Config, daprClient scheme.Interface, kubeClient kubernetes.Interface) (Injector, error) {
 	mux := http.NewServeMux()
 
-	namespace, ok := os.LookupEnv("NAMESPACE")
-	if !ok {
-		return nil, errors.New("'NAMESPACE' environment variable not found")
+	namespace, err := utils.CurrentNamespaceOrError()
+	if err != nil {
+		return nil, err
 	}
 
 	i := &injector{
