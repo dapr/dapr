@@ -5,7 +5,7 @@
 Integration tests are run against a live running daprd binary locally. Each test
 scenario is run against a new instance of daprd, where each scenario modifies
 the daprd configuration to suit the test. Tests are expected to complete within
-seconds, ideally less than 5, and should not take longer than 30. Binaries
+seconds, ideally less than 5, and should not take longer than 30. Binaries are
 always built from source within the test.
 
 
