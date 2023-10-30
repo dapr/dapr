@@ -33,6 +33,7 @@ import (
 	"github.com/dapr/dapr/pkg/placement/raft"
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/security"
+	"github.com/dapr/dapr/pkg/security/spiffe"
 	"github.com/dapr/kit/logger"
 )
 
@@ -112,6 +113,8 @@ type Service struct {
 	// clock keeps time. Mocked in tests.
 	clock clock.WithTicker
 
+	sec security.Provider
+
 	running  atomic.Bool
 	closed   atomic.Bool
 	closedCh chan struct{}
@@ -119,7 +122,7 @@ type Service struct {
 }
 
 // NewPlacementService returns a new placement service.
-func NewPlacementService(raftNode *raft.Server) *Service {
+func NewPlacementService(raftNode *raft.Server, sec security.Provider) *Service {
 	fhdd := &atomic.Int64{}
 	fhdd.Store(int64(faultyHostDetectInitialDuration))
 
@@ -130,18 +133,24 @@ func NewPlacementService(raftNode *raft.Server) *Service {
 		raftNode:                 raftNode,
 		clock:                    &clock.RealClock{},
 		closedCh:                 make(chan struct{}),
+		sec:                      sec,
 	}
 }
 
 // Run starts the placement service gRPC server.
 // Blocks until the service is closed and all connections are drained.
-func (p *Service) Run(ctx context.Context, port string, sec security.Handler) error {
+func (p *Service) Run(ctx context.Context, port string) error {
 	if p.closed.Load() {
 		return errors.New("placement service is closed")
 	}
 
 	if !p.running.CompareAndSwap(false, true) {
 		return errors.New("placement service is already running")
+	}
+
+	sec, err := p.sec.Handler(ctx)
+	if err != nil {
+		return err
 	}
 
 	serverListener, err := net.Listen("tcp", fmt.Sprintf(":%s", port))
@@ -177,6 +186,21 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 	registeredMemberID := ""
 	isActorRuntime := false
 
+	sec, err := p.sec.Handler(stream.Context())
+	if err != nil {
+		return status.Errorf(codes.Internal, "")
+	}
+
+	var clientID *spiffe.Parsed
+	if sec.MTLSEnabled() {
+		id, ok, err := spiffe.FromGRPCContext(stream.Context())
+		if err != nil || !ok {
+			log.Debugf("failed to get client ID from context: err=%v, ok=%t", err, ok)
+			return status.Errorf(codes.Unauthenticated, "failed to get client ID from context")
+		}
+		clientID = id
+	}
+
 	p.streamConnGroup.Add(1)
 	defer func() {
 		p.streamConnGroup.Done()
@@ -187,6 +211,10 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 		req, err := stream.Recv()
 		switch err {
 		case nil:
+			if clientID != nil && req.Id != clientID.AppID() {
+				return status.Errorf(codes.PermissionDenied, "client ID %s is not allowed", req.Id)
+			}
+
 			if registeredMemberID == "" {
 				registeredMemberID = req.Name
 				p.addStreamConn(stream)

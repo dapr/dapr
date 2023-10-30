@@ -124,7 +124,7 @@ func (i *insecure) Run(t *testing.T, ctx context.Context) {
 		if err != nil {
 			return false
 		}
-		err = stream.Send(new(v1pb.Host))
+		err = stream.Send(&v1pb.Host{Id: "app-1"})
 		if err != nil {
 			return false
 		}

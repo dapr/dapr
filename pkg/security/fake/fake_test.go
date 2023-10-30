@@ -24,4 +24,5 @@ import (
 
 func TestFake(t *testing.T) {
 	var _ security.Handler = New()
+	var _ security.Provider = New()
 }
