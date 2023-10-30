@@ -21,6 +21,7 @@ import (
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
@@ -65,7 +66,7 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 	sidecar.GetInjectedComponentContainers = i.getInjectedComponentContainers
 	sidecar.Mode = injectorConsts.ModeKubernetes
 	sidecar.Namespace = ar.Request.Namespace
-	sidecar.MTLSEnabled = mTLSEnabled(i.daprClient)
+	sidecar.MTLSEnabled = mTLSEnabled(i.controlPlaneNamespace, i.daprClient)
 	sidecar.Identity = ar.Request.Namespace + ":" + pod.Spec.ServiceAccountName
 	sidecar.IgnoreEntrypointTolerations = i.config.GetIgnoreEntrypointTolerations()
 	sidecar.ImagePullPolicy = i.config.GetPullPolicy()
@@ -103,20 +104,19 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 	return patch, nil
 }
 
-func mTLSEnabled(daprClient scheme.Interface) bool {
+func mTLSEnabled(controlPlaneNamespace string, daprClient scheme.Interface) bool {
 	resp, err := daprClient.ConfigurationV1alpha1().
-		Configurations(metav1.NamespaceAll).
-		List(metav1.ListOptions{})
+		Configurations(controlPlaneNamespace).
+		Get(defaultConfig, metav1.GetOptions{})
+	if !apierrors.IsNotFound(err) {
+		log.Infof("Dapr system configuration '%s' does not exist; using default value %t for mTLSEnabled", defaultConfig, defaultMtlsEnabled)
+		return defaultMtlsEnabled
+	}
+
 	if err != nil {
 		log.Errorf("Failed to load dapr configuration from k8s, use default value %t for mTLSEnabled: %s", defaultMtlsEnabled, err)
 		return defaultMtlsEnabled
 	}
 
-	for _, c := range resp.Items {
-		if c.GetName() == defaultConfig {
-			return c.Spec.MTLSSpec.GetEnabled()
-		}
-	}
-	log.Infof("Dapr system configuration '%s' does not exist; using default value %t for mTLSEnabled", defaultConfig, defaultMtlsEnabled)
-	return defaultMtlsEnabled
+	return resp.Spec.MTLSSpec.GetEnabled()
 }
