@@ -25,6 +25,8 @@ import (
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+
+	"github.com/dapr/dapr/pkg/security"
 )
 
 type Fake struct {
@@ -32,6 +34,7 @@ type Fake struct {
 	controlPlaneNamespaceFn   func() string
 	currentTrustAnchorsFn     func() ([]byte, error)
 	watchTrustAnchorsFn       func(context.Context, chan<- []byte)
+	mtls                      bool
 
 	tlsServerConfigMTLSFn               func(spiffeid.TrustDomain) (*tls.Config, error)
 	tlsServerConfigNoClientAuthFn       func() *tls.Config
@@ -84,6 +87,7 @@ func New() *Fake {
 		netDialerIDFn: func(context.Context, spiffeid.ID, time.Duration) func(network, addr string) (net.Conn, error) {
 			return net.Dial
 		},
+		mtls: false,
 	}
 }
 
@@ -129,6 +133,11 @@ func (f *Fake) WithGRPCServerOptionMTLSFn(fn func() grpc.ServerOption) *Fake {
 
 func (f *Fake) WithGRPCServerOptionNoClientAuthFn(fn func() grpc.ServerOption) *Fake {
 	f.grpcServerOptionNoClientAuthFn = fn
+	return f
+}
+
+func (f *Fake) WithMTLSEnabled(mtls bool) *Fake {
+	f.mtls = mtls
 	return f
 }
 
@@ -211,4 +220,17 @@ func (f *Fake) NetListenerID(l net.Listener, id spiffeid.ID) net.Listener {
 
 func (f *Fake) NetDialerID(ctx context.Context, id spiffeid.ID, timeout time.Duration) func(network, addr string) (net.Conn, error) {
 	return f.netDialerIDFn(ctx, id, timeout)
+}
+
+func (f *Fake) MTLSEnabled() bool {
+	return f.mtls
+}
+
+func (f *Fake) Run(ctx context.Context) error {
+	<-ctx.Done()
+	return nil
+}
+
+func (f *Fake) Handler(context.Context) (security.Handler, error) {
+	return f, nil
 }

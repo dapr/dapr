@@ -79,7 +79,7 @@ func main() {
 	}
 
 	hashing.SetReplicationFactor(opts.ReplicationFactor)
-	apiServer := placement.NewPlacementService(raftServer)
+	apiServer := placement.NewPlacementService(raftServer, secProvider)
 
 	err = concurrency.NewRunnerManager(
 		func(ctx context.Context) error {
@@ -105,11 +105,7 @@ func main() {
 			return nil
 		},
 		func(ctx context.Context) error {
-			sec, sErr := secProvider.Handler(ctx)
-			if sErr != nil {
-				return sErr
-			}
-			return apiServer.Run(ctx, strconv.Itoa(opts.PlacementPort), sec)
+			return apiServer.Run(ctx, strconv.Itoa(opts.PlacementPort))
 		},
 	).Run(ctx)
 	if err != nil {
