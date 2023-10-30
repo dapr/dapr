@@ -39,7 +39,7 @@ import (
 	"google.golang.org/grpc/peer"
 )
 
-type Options struct {
+type PKIOptions struct {
 	LeafDNS   string
 	LeafID    spiffeid.ID
 	ClientDNS string
@@ -62,7 +62,7 @@ type PKI struct {
 	clientID spiffeid.ID
 }
 
-func GenPKI(t *testing.T, opts Options) PKI {
+func GenPKI(t *testing.T, opts PKIOptions) PKI {
 	t.Helper()
 
 	rootPK, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)

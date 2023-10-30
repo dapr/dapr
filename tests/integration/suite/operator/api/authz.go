@@ -47,7 +47,8 @@ func init() {
 	suite.Register(new(authz))
 }
 
-// authz tests the authz of the operator API
+// authz tests the authz of the operator API which is based on client request
+// namespace.
 type authz struct {
 	sentry  *procsentry.Sentry
 	kubeapi *kubernetes.Kubernetes

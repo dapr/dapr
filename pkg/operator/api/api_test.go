@@ -194,7 +194,7 @@ func TestProcessComponentSecrets(t *testing.T) {
 func TestComponentUpdate(t *testing.T) {
 	appID := spiffeid.RequireFromString("spiffe://example.org/ns/ns1/app1")
 	serverID := spiffeid.RequireFromString("spiffe://example.org/ns/dapr-system/dapr-operator")
-	pki := util.GenPKI(t, util.Options{
+	pki := util.GenPKI(t, util.PKIOptions{
 		LeafID:   serverID,
 		ClientID: appID,
 	})
@@ -319,7 +319,7 @@ func TestComponentUpdate(t *testing.T) {
 func TestHTTPEndpointUpdate(t *testing.T) {
 	appID := spiffeid.RequireFromString("spiffe://example.org/ns/ns1/app1")
 	serverID := spiffeid.RequireFromString("spiffe://example.org/ns/dapr-system/dapr-operator")
-	pki := util.GenPKI(t, util.Options{
+	pki := util.GenPKI(t, util.PKIOptions{
 		LeafID:   serverID,
 		ClientID: appID,
 	})
@@ -413,7 +413,7 @@ func TestHTTPEndpointUpdate(t *testing.T) {
 func TestListsNamespaced(t *testing.T) {
 	appID := spiffeid.RequireFromString("spiffe://example.org/ns/namespace-a/app1")
 	serverID := spiffeid.RequireFromString("spiffe://example.org/ns/dapr-system/dapr-operator")
-	pki := util.GenPKI(t, util.Options{
+	pki := util.GenPKI(t, util.PKIOptions{
 		LeafID:   serverID,
 		ClientID: appID,
 	})

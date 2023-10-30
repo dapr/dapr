@@ -28,7 +28,7 @@ import (
 func Test_authzRequest(t *testing.T) {
 	appID := spiffeid.RequireFromString("spiffe://example.org/ns/ns1/app1")
 	serverID := spiffeid.RequireFromString("spiffe://example.org/ns/dapr-system/dapr-operator")
-	pki := util.GenPKI(t, util.Options{LeafID: serverID, ClientID: appID})
+	pki := util.GenPKI(t, util.PKIOptions{LeafID: serverID, ClientID: appID})
 
 	t.Run("no auth context should error", func(t *testing.T) {
 		err := new(apiServer).authzRequest(context.Background(), "ns1")
@@ -50,7 +50,7 @@ func Test_authzRequest(t *testing.T) {
 
 	t.Run("invalid SPIFFE path should error", func(t *testing.T) {
 		appID := spiffeid.RequireFromString("spiffe://example.org/foo/bar")
-		pki2 := util.GenPKI(t, util.Options{LeafID: serverID, ClientID: appID})
+		pki2 := util.GenPKI(t, util.PKIOptions{LeafID: serverID, ClientID: appID})
 		err := new(apiServer).authzRequest(pki2.ClientGRPCCtx(t), "ns1")
 		assert.Error(t, err)
 		assert.Equal(t, codes.PermissionDenied, status.Code(err))
