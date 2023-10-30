@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -45,7 +46,7 @@ type basic struct {
 func (o *basic) Setup(t *testing.T) []framework.Option {
 	newHTTPServer := func() *prochttp.HTTP {
 		handler := http.NewServeMux()
-		var msg []byte
+		var msg atomic.Value
 
 		handler.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
 			defer r.Body.Close()
@@ -54,14 +55,18 @@ func (o *basic) Setup(t *testing.T) []framework.Option {
 				t.Fatal(err)
 			}
 
-			msg = b
+			msg.Store(b)
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("ok"))
 		})
 
 		handler.HandleFunc("/getValue", func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
-			w.Write(msg)
+			m := msg.Load()
+			if m == nil {
+				return
+			}
+			w.Write(msg.Load().([]byte))
 		})
 
 		return prochttp.New(t, prochttp.WithHandler(handler))
