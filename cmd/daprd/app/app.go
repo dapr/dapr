@@ -21,9 +21,9 @@ import (
 	"go.uber.org/automaxprocs/maxprocs"
 
 	// Register all components
-	_ "github.com/dapr/dapr/cmd/daprd/app/components"
+	_ "github.com/dapr/dapr/cmd/daprd/components"
 
-	"github.com/dapr/dapr/cmd/daprd/app/options"
+	"github.com/dapr/dapr/cmd/daprd/options"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
 	configurationLoader "github.com/dapr/dapr/pkg/components/configuration"

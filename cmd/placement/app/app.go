@@ -20,7 +20,7 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/dapr/dapr/cmd/placement/app/options"
+	"github.com/dapr/dapr/cmd/placement/options"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/metrics"

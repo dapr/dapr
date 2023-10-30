@@ -14,7 +14,7 @@ limitations under the License.
 package app
 
 import (
-	"github.com/dapr/dapr/cmd/operator/app/options"
+	"github.com/dapr/dapr/cmd/operator/options"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/operator"
