@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
+	"golang.org/x/exp/maps"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -157,7 +158,7 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 	p.serverIndex.Store(0)
 	p.shutdown.Store(false)
 	p.appHealthy.Store(true)
-	p.hasPlacementTablesCh = make(chan struct{})
+	p.resetPlacementTables()
 
 	if !p.establishStreamConn(ctx) {
 		return nil
@@ -255,8 +256,7 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 
 				p.client.disconnect()
 				p.placementTableLock.Lock()
-				p.placementTables = nil
-				p.hasPlacementTablesCh = make(chan struct{})
+				p.resetPlacementTables()
 				p.placementTableLock.Unlock()
 				if p.haltAllActorsFn != nil {
 					haltErr := p.haltAllActorsFn()
@@ -481,6 +481,14 @@ func (p *actorPlacement) unblockPlacements() {
 	}
 }
 
+// Resets the placement tables.
+// Note that this method should be invoked by a caller that owns a lock.
+func (p *actorPlacement) resetPlacementTables() {
+	p.hasPlacementTablesCh = make(chan struct{})
+	maps.Clear(p.placementTables.Entries)
+	p.placementTables.Version = ""
+}
+
 func (p *actorPlacement) updatePlacements(in *v1pb.PlacementTables) {
 	updated := false
 	func() {
@@ -491,19 +499,16 @@ func (p *actorPlacement) updatePlacements(in *v1pb.PlacementTables) {
 			return
 		}
 
-		tables := &hashing.ConsistentHashTables{
-			Entries: make(map[string]*hashing.Consistent, len(in.Entries)),
-		}
+		maps.Clear(p.placementTables.Entries)
+		p.placementTables.Version = in.Version
 		for k, v := range in.Entries {
 			loadMap := make(map[string]*hashing.Host, len(v.LoadMap))
 			for lk, lv := range v.LoadMap {
 				loadMap[lk] = hashing.NewHost(lv.Name, lv.Id, lv.Load, lv.Port)
 			}
-			tables.Entries[k] = hashing.NewFromExisting(v.Hosts, v.SortedSet, loadMap)
+			p.placementTables.Entries[k] = hashing.NewFromExisting(v.Hosts, v.SortedSet, loadMap)
 		}
 
-		p.placementTables = tables
-		p.placementTables.Version = in.Version
 		updated = true
 		if p.hasPlacementTablesCh != nil {
 			close(p.hasPlacementTablesCh)
