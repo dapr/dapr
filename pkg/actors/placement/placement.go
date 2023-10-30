@@ -380,16 +380,16 @@ func (p *actorPlacement) establishStreamConn(ctx context.Context) (established b
 
 	logFailureShown := false
 	for !p.shutdown.Load() {
+		// Do not retry to connect if context is canceled
+		if ctx.Err() != nil {
+			return false
+		}
+
 		// Stop reconnecting to placement until app is healthy.
 		if !p.appHealthy.Load() {
 			// We are not using an exponential backoff here because we haven't begun to establish connections yet
 			time.Sleep(placementReadinessWaitInterval)
 			continue
-		}
-
-		// Do not retry to connect if context is canceled
-		if ctx.Err() != nil {
-			return false
 		}
 
 		serverAddr := p.serverAddr[p.serverIndex.Load()]
@@ -409,7 +409,17 @@ func (p *actorPlacement) establishStreamConn(ctx context.Context) (established b
 				// Don't show the debug log more than once per each reconnection attempt
 				logFailureShown = true
 			}
+
+			// Try a different instance of the placement service
 			p.serverIndex.Store((p.serverIndex.Load() + 1) % int32(len(p.serverAddr)))
+
+			// Halt all active actors, then reset the placement tables
+			if p.haltAllActorsFn != nil {
+				p.haltAllActorsFn()
+			}
+			p.resetPlacementTables()
+
+			// Sleep with an exponential backoff
 			time.Sleep(bo.NextBackOff())
 			continue
 		}
@@ -484,6 +494,9 @@ func (p *actorPlacement) unblockPlacements() {
 // Resets the placement tables.
 // Note that this method should be invoked by a caller that owns a lock.
 func (p *actorPlacement) resetPlacementTables() {
+	if p.hasPlacementTablesCh != nil {
+		close(p.hasPlacementTablesCh)
+	}
 	p.hasPlacementTablesCh = make(chan struct{})
 	maps.Clear(p.placementTables.Entries)
 	p.placementTables.Version = ""
