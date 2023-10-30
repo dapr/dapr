@@ -91,6 +91,9 @@ type actorPlacement struct {
 	// such as draining actors and resetting reminders.
 	afterTableUpdateFn func()
 
+	// callback invoked to halt all active actors
+	haltAllActorsFn internal.HaltAllActorsFn
+
 	// shutdown is the flag when runtime is being shutdown.
 	shutdown atomic.Bool
 	// shutdownConnLoop is the wait group to wait until all connection loop are done
@@ -246,9 +249,15 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 			if !p.appHealthy.Load() {
 				// app is unresponsive, close the stream and disconnect from the placement service.
 				// Then Placement will remove this host from the member list.
-				log.Debug("disconnecting from placement service by the unhealthy app.")
+				log.Debug("Disconnecting from placement service by the unhealthy app")
 
 				p.client.disconnect()
+				if p.haltAllActorsFn != nil {
+					haltErr := p.haltAllActorsFn()
+					if haltErr != nil {
+						log.Errorf("Failed to deactivate all actors: %v", haltErr)
+					}
+				}
 				continue
 			}
 
@@ -266,7 +275,7 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 			err := p.client.send(&host)
 			if err != nil {
 				diag.DefaultMonitoring.ActorStatusReportFailed("send", "status")
-				log.Debugf("failed to report status to placement service : %v", err)
+				log.Errorf("Failed to report status to placement service : %v", err)
 			}
 
 			// No delay if stream connection is not alive.
@@ -478,6 +487,17 @@ func (p *actorPlacement) updatePlacements(in *v1pb.PlacementTables) {
 	p.afterTableUpdateFn()
 
 	log.Infof("Placement tables updated, version: %s", in.GetVersion())
+}
+
+func (p *actorPlacement) ReportActorDeactivation(ctx context.Context, actorType, actorID string) error {
+	// Nop in this implementation
+	return nil
+}
+
+func (p *actorPlacement) SetHaltActorFns(haltFn internal.HaltActorFn, haltAllFn internal.HaltAllActorsFn) {
+	// haltFn isn't used in this implementation
+	p.haltAllActorsFn = haltAllFn
+	return
 }
 
 // addDNSResolverPrefix add the `dns://` prefix to the given addresses
