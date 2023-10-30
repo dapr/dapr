@@ -16,10 +16,12 @@ package injector
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -67,6 +69,7 @@ type injector struct {
 	kubeClient   kubernetes.Interface
 	daprClient   scheme.Interface
 	authUIDs     []string
+	namespace    string
 }
 
 // errorToAdmissionResponse is a helper function to create an AdmissionResponse
@@ -99,11 +102,17 @@ func getAppIDFromRequest(req *v1.AdmissionRequest) string {
 }
 
 // NewInjector returns a new Injector instance with the given config.
-func NewInjector(authUIDs []string, config Config, daprClient scheme.Interface, kubeClient kubernetes.Interface) Injector {
+func NewInjector(authUIDs []string, config Config, daprClient scheme.Interface, kubeClient kubernetes.Interface) (Injector, error) {
 	mux := http.NewServeMux()
 
+	namespace, ok := os.LookupEnv("NAMESPACE")
+	if !ok {
+		return nil, errors.New("'NAMESPACE' environment variable not found")
+	}
+
 	i := &injector{
-		config: config,
+		config:    config,
+		namespace: namespace,
 		deserializer: serializer.NewCodecFactory(
 			runtime.NewScheme(),
 		).UniversalDeserializer(),
@@ -118,7 +127,7 @@ func NewInjector(authUIDs []string, config Config, daprClient scheme.Interface, 
 	}
 
 	mux.HandleFunc("/mutate", i.handleRequest)
-	return i
+	return i, nil
 }
 
 // AllowedControllersServiceAccountUID returns an array of UID, list of allowed service account on the webhook handler.

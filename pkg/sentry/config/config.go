@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
@@ -108,29 +109,37 @@ func getKubernetesConfig(configName string) (SentryConfig, error) {
 		return defaultConfig, err
 	}
 
-	list, err := daprClient.ConfigurationV1alpha1().Configurations(metaV1.NamespaceAll).List(metaV1.ListOptions{})
-	if err != nil {
-		return defaultConfig, err
+	namespace, ok := os.LookupEnv("NAMESPACE")
+	if !ok {
+		return defaultConfig, errors.New("'NAMESPACE' environment variable not found")
 	}
 
 	if configName == "" {
 		configName = defaultDaprSystemConfigName
 	}
 
-	for _, i := range list.Items {
-		if i.GetName() == configName {
-			spec, _ := json.Marshal(i.Spec)
-
-			var configSpec daprGlobalConfig.ConfigurationSpec
-			json.Unmarshal(spec, &configSpec)
-
-			conf := daprGlobalConfig.Configuration{
-				Spec: configSpec,
-			}
-			return parseConfiguration(defaultConfig, &conf)
-		}
+	cfg, err := daprClient.ConfigurationV1alpha1().Configurations(namespace).Get(configName, metaV1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		return defaultConfig, errors.New("config CRD not found")
 	}
-	return defaultConfig, errors.New("config CRD not found")
+
+	if err != nil {
+		return defaultConfig, err
+	}
+
+	spec, err := json.Marshal(cfg.Spec)
+	if err != nil {
+		return defaultConfig, err
+	}
+
+	var configSpec daprGlobalConfig.ConfigurationSpec
+	if err := json.Unmarshal(spec, &configSpec); err != nil {
+		return defaultConfig, err
+	}
+
+	return parseConfiguration(defaultConfig, &daprGlobalConfig.Configuration{
+		Spec: configSpec,
+	})
 }
 
 func getSelfhostedConfig(configName string) (SentryConfig, error) {
