@@ -25,7 +25,6 @@ import (
 	"math/big"
 	"net"
 	"net/url"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -38,8 +37,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/examples/helloworld/helloworld"
 	"google.golang.org/grpc/peer"
-
-	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 )
 
 type Options struct {
@@ -204,36 +201,6 @@ func (m *mockSVID) GetX509BundleForTrustDomain(_ spiffeid.TrustDomain) (*x509bun
 
 func (m *mockSVID) GetX509SVID() (*x509svid.SVID, error) {
 	return m.svid, nil
-}
-
-type mockComponentUpdateServer struct {
-	grpc.ServerStream
-	Calls atomic.Int64
-	ctx   context.Context
-}
-
-func (m *mockComponentUpdateServer) Send(*operatorv1pb.ComponentUpdateEvent) error {
-	m.Calls.Add(1)
-	return nil
-}
-
-func (m *mockComponentUpdateServer) Context() context.Context {
-	return m.ctx
-}
-
-type mockHTTPEndpointUpdateServer struct {
-	grpc.ServerStream
-	Calls atomic.Int64
-	ctx   context.Context
-}
-
-func (m *mockHTTPEndpointUpdateServer) Send(*operatorv1pb.HTTPEndpointUpdateEvent) error {
-	m.Calls.Add(1)
-	return nil
-}
-
-func (m *mockHTTPEndpointUpdateServer) Context() context.Context {
-	return m.ctx
 }
 
 type greeterServer struct {
