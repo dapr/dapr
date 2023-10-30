@@ -62,6 +62,7 @@ type Handler interface {
 	ControlPlaneNamespace() string
 	CurrentTrustAnchors() ([]byte, error)
 
+	MTLSEnabled() bool
 	WatchTrustAnchors(context.Context, chan<- []byte)
 }
 
@@ -391,6 +392,11 @@ func (s *security) NetDialerID(ctx context.Context, spiffeID spiffeid.ID, timeou
 		NetDialer: (&net.Dialer{Timeout: timeout, Cancel: ctx.Done()}),
 		Config:    tlsconfig.MTLSClientConfig(s.source, s.source, tlsconfig.AuthorizeID(spiffeID)),
 	}).Dial
+}
+
+// MTLSEnabled returns true if mTLS is enabled.
+func (s *security) MTLSEnabled() bool {
+	return s.mtls
 }
 
 // CurrentNamespace returns the namespace of this workload.
