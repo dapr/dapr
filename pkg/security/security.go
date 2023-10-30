@@ -413,8 +413,13 @@ func CurrentNamespace() string {
 func CurrentNamespaceOrError() (string, error) {
 	namespace, ok := os.LookupEnv("NAMESPACE")
 	if !ok {
-		return "", errors.New("'NAMESPACE' environment variable not found")
+		return "", errors.New("'NAMESPACE' environment variable not set")
 	}
+
+	if len(namespace) == 0 {
+		return "", errors.New("'NAMESPACE' environment variable is empty")
+	}
+
 	return namespace, nil
 }
 
