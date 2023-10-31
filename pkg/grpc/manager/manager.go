@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -32,7 +33,7 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/modes"
-	"github.com/dapr/dapr/pkg/runtime/security"
+	"github.com/dapr/dapr/pkg/security"
 )
 
 const (
@@ -60,31 +61,27 @@ type AppChannelConfig struct {
 // Manager is a wrapper around gRPC connection pooling.
 type Manager struct {
 	remoteConns   *RemoteConnectionPool
-	auth          security.Authenticator
 	mode          modes.DaprMode
 	channelConfig *AppChannelConfig
 	localConn     *ConnectionPool
 	localConnLock sync.RWMutex
 	appClientConn grpc.ClientConnInterface
+	sec           security.Handler
 	wg            sync.WaitGroup
 	closed        atomic.Bool
 	closeCh       chan struct{}
 }
 
 // NewManager returns a new grpc manager.
-func NewManager(mode modes.DaprMode, channelConfig *AppChannelConfig) *Manager {
+func NewManager(sec security.Handler, mode modes.DaprMode, channelConfig *AppChannelConfig) *Manager {
 	return &Manager{
 		remoteConns:   NewRemoteConnectionPool(),
 		mode:          mode,
 		channelConfig: channelConfig,
 		localConn:     NewConnectionPool(maxConnIdle, 1),
+		sec:           sec,
 		closeCh:       make(chan struct{}),
 	}
-}
-
-// SetAuthenticator sets the gRPC manager a tls authenticator context.
-func (g *Manager) SetAuthenticator(auth security.Authenticator) {
-	g.auth = auth
 }
 
 // GetAppChannel returns a connection to the local channel.
@@ -157,6 +154,10 @@ func (g *Manager) createLocalConnection(parentCtx context.Context, port int, ena
 	} else {
 		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	}
+	opts = append(opts, grpc.WithConnectParams(grpc.ConnectParams{
+		Backoff:           backoff.DefaultConfig,
+		MinConnectTimeout: 1 * time.Second,
+	}))
 
 	dialPrefix := GetDialAddressPrefix(g.mode)
 	address := net.JoinHostPort(g.channelConfig.BaseAddress, strconv.Itoa(port))
@@ -202,29 +203,7 @@ func (g *Manager) connectRemote(
 		)
 	}
 
-	if g.auth != nil {
-		signedCert := g.auth.GetCurrentSignedCert()
-		var cert tls.Certificate
-		cert, err = tls.X509KeyPair(signedCert.WorkloadCert, signedCert.PrivateKeyPem)
-		if err != nil {
-			return nil, fmt.Errorf("error loading x509 Key Pair: %w", err)
-		}
-
-		var serverName string
-		if id != "cluster.local" {
-			serverName = id + "." + namespace + ".svc.cluster.local"
-		}
-
-		//nolint:gosec
-		ta := credentials.NewTLS(&tls.Config{
-			ServerName:   serverName,
-			Certificates: []tls.Certificate{cert},
-			RootCAs:      signedCert.TrustChain,
-		})
-		opts = append(opts, grpc.WithTransportCredentials(ta))
-	} else {
-		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	}
+	opts = append(opts, g.sec.GRPCDialOptionMTLSUnknownTrustDomain(namespace, id))
 
 	opts = append(opts, customOpts...)
 

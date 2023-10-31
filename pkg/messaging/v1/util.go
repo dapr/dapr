@@ -54,6 +54,8 @@ const (
 	DaprHeaderPrefix = "dapr-"
 	// gRPCBinaryMetadata is the suffix of grpc metadata binary value.
 	gRPCBinaryMetadataSuffix = "-bin"
+	// ContentLengthHeader is the header key of content-length.
+	ContentLengthHeader = "content-length"
 
 	// W3C trace correlation headers.
 	traceparentHeader = "traceparent"

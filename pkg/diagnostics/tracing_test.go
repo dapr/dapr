@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/pkg/config"
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 
 	"go.opentelemetry.io/otel"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -224,16 +225,16 @@ func runTraces(t *testing.T, testName string, numTraces int, samplingRate string
 // modified in go.opentelemetry.io/otel/semconv library, and thus in
 // the spec.
 func TestOtelConventionStrings(t *testing.T) {
-	assert.Equal(t, "db.system", dbSystemSpanAttributeKey)
-	assert.Equal(t, "db.name", dbNameSpanAttributeKey)
-	assert.Equal(t, "db.statement", dbStatementSpanAttributeKey)
-	assert.Equal(t, "db.connection_string", dbConnectionStringSpanAttributeKey)
-	assert.Equal(t, "topic", messagingDestinationTopicKind)
-	assert.Equal(t, "messaging.system", messagingSystemSpanAttributeKey)
-	assert.Equal(t, "messaging.destination", messagingDestinationSpanAttributeKey)
-	assert.Equal(t, "messaging.destination_kind", messagingDestinationKindSpanAttributeKey)
-	assert.Equal(t, "rpc.service", gRPCServiceSpanAttributeKey)
-	assert.Equal(t, "net.peer.name", netPeerNameSpanAttributeKey)
+	assert.Equal(t, "db.system", diagConsts.DBSystemSpanAttributeKey)
+	assert.Equal(t, "db.name", diagConsts.DBNameSpanAttributeKey)
+	assert.Equal(t, "db.statement", diagConsts.DBStatementSpanAttributeKey)
+	assert.Equal(t, "db.connection_string", diagConsts.DBConnectionStringSpanAttributeKey)
+	assert.Equal(t, "topic", diagConsts.MessagingDestinationTopicKind)
+	assert.Equal(t, "messaging.system", diagConsts.MessagingSystemSpanAttributeKey)
+	assert.Equal(t, "messaging.destination", diagConsts.MessagingDestinationSpanAttributeKey)
+	assert.Equal(t, "messaging.destination_kind", diagConsts.MessagingDestinationKindSpanAttributeKey)
+	assert.Equal(t, "rpc.service", diagConsts.GrpcServiceSpanAttributeKey)
+	assert.Equal(t, "net.peer.name", diagConsts.NetPeerNameSpanAttributeKey)
 }
 
 // Otel Fake Exporter implements an open telemetry span exporter that does nothing.

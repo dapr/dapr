@@ -72,7 +72,7 @@ func (c *internalActorChannel) Contains(actorType string) bool {
 }
 
 // GetAppConfig implements channel.AppChannel
-func (c *internalActorChannel) GetAppConfig(appID string) (*config.ApplicationConfig, error) {
+func (c *internalActorChannel) GetAppConfig(_ context.Context, appID string) (*config.ApplicationConfig, error) {
 	actorTypes := make([]string, 0, len(c.actors))
 	for actorType := range c.actors {
 		actorTypes = append(actorTypes, actorType)
@@ -96,8 +96,10 @@ func (c *internalActorChannel) InvokeMethod(ctx context.Context, req *invokev1.I
 		return nil, fmt.Errorf("internal actor type '%s' not recognized", actorType)
 	}
 
-	var result interface{} = nil
-	var err error
+	var (
+		result any
+		err    error
+	)
 
 	verb := req.Message().GetHttpExtension().GetVerb()
 	actorID := req.Actor().GetActorId()

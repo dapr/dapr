@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/exp/slices"
 
@@ -238,21 +239,28 @@ func TestPolicyRetry(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			called := atomic.Int32{}
 			maxCalls := test.maxCalls
-			fn := func(ctx context.Context) (any, error) {
+			fn := func(ctx context.Context) (struct{}, error) {
 				v := called.Add(1)
-				if v <= maxCalls {
-					return nil, fmt.Errorf("called (%d) vs Max (%d)", v-1, maxCalls)
+				attempt := GetAttempt(ctx)
+				if attempt != v {
+					return struct{}{}, backoff.Permanent(fmt.Errorf("expected attempt in context to be %d but got %d", v, attempt))
 				}
-				return nil, nil
+				if v <= maxCalls {
+					return struct{}{}, fmt.Errorf("called (%d) vs Max (%d)", v-1, maxCalls)
+				}
+				return struct{}{}, nil
 			}
 
-			policy := NewRunner[any](context.Background(), &PolicyDefinition{
+			policy := NewRunner[struct{}](context.Background(), &PolicyDefinition{
 				log:  testLog,
 				name: "retry",
 				t:    10 * time.Millisecond,
 				r:    &retry.Config{MaxRetries: test.maxRetries},
 			})
-			policy(fn)
+			_, err := policy(fn)
+			if err != nil {
+				assert.NotContains(t, err.Error(), "expected attempt in context to be")
+			}
 			assert.Equal(t, test.expected, called.Load())
 		})
 	}

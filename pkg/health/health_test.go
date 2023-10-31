@@ -29,22 +29,37 @@ import (
 var startOfTime = time.Date(2022, 1, 1, 12, 0, 0, 0, time.UTC)
 
 func TestHealthCheck(t *testing.T) {
-	t.Parallel()
+	ts := &testServer{}
+	server := httptest.NewServer(ts)
+	defer server.Close()
 
-	t.Run("unhealthy endpoint custom interval 1, failure threshold 2s", func(t *testing.T) {
-		t.Parallel()
+	t.Run("unhealthy endpoint, custom interval 1, failure threshold 2s", func(t *testing.T) {
+		ts.SetStatusCode(200)
 
 		clock := &clocktesting.FakeClock{}
 		clock.SetTime(startOfTime)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		ch := StartEndpointHealthCheck(ctx, "none",
+		ch := StartEndpointHealthCheck(ctx,
+			WithAddress(server.URL),
 			WithClock(clock),
 			WithInterval(time.Second),
 			WithFailureThreshold(2),
 			WithInitialDelay(0),
 		)
+
+		// First healthcheck is always unsuccessful, right away
+		healthy := assertHealthSignal(t, clock, ch)
+		assert.False(t, healthy)
+
+		// First actual healthcheck is successful
+		clock.Step(time.Second)
+		healthy = assertHealthSignal(t, clock, ch)
+		assert.True(t, healthy)
+
+		// Set to unsuccessful
+		ts.SetStatusCode(500)
 
 		// Nothing happens for the first second
 		clock.Step(time.Second)
@@ -52,19 +67,20 @@ func TestHealthCheck(t *testing.T) {
 
 		// Get a signal after the next tick
 		clock.Step(time.Second)
-		healthy := assertHealthSignal(t, clock, ch)
+		healthy = assertHealthSignal(t, clock, ch)
 		assert.False(t, healthy)
 	})
 
-	t.Run("unhealthy endpoint custom interval 1s, failure threshold 1, initial delay 2s", func(t *testing.T) {
-		t.Parallel()
+	t.Run("healthy endpoint, custom interval 1s, failure threshold 1, initial delay 2s", func(t *testing.T) {
+		ts.SetStatusCode(200)
 
 		clock := &clocktesting.FakeClock{}
 		clock.SetTime(startOfTime)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		ch := StartEndpointHealthCheck(ctx, "none",
+		ch := StartEndpointHealthCheck(ctx,
+			WithAddress(server.URL),
 			WithClock(clock),
 			WithInterval(time.Second),
 			WithFailureThreshold(1),
@@ -77,36 +93,59 @@ func TestHealthCheck(t *testing.T) {
 			assertNoHealthSignal(t, clock, ch)
 		}
 
-		// Get a signal after the next tick
+		// Get a signal right away
 		clock.Step(time.Second)
 		healthy := assertHealthSignal(t, clock, ch)
 		assert.False(t, healthy)
+
+		// App recovers after the next tick
+		clock.Step(time.Second)
+		healthy = assertHealthSignal(t, clock, ch)
+		assert.True(t, healthy)
 	})
 
-	t.Run("unhealthy endpoint custom interval 1s, failure threshold 2, initial delay 2s", func(t *testing.T) {
-		t.Parallel()
+	t.Run("unhealthy endpoint, custom interval 1s, failure threshold 2, initial delay 2s", func(t *testing.T) {
+		ts.SetStatusCode(200)
 
 		clock := &clocktesting.FakeClock{}
 		clock.SetTime(startOfTime)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		ch := StartEndpointHealthCheck(ctx, "none",
+		ch := StartEndpointHealthCheck(ctx,
+			WithAddress(server.URL),
 			WithClock(clock),
 			WithInterval(time.Second*1),
 			WithFailureThreshold(2),
 			WithInitialDelay(time.Second*2),
 		)
 
-		// Nothing happens for the first 3s
-		for i := 0; i < 3; i++ {
+		// Nothing happens for the first 2s
+		for i := 0; i < 2; i++ {
 			clock.Step(time.Second)
 			assertNoHealthSignal(t, clock, ch)
 		}
 
-		// Get a signal after the next tick
+		// Get a signal right away
 		clock.Step(time.Second)
 		healthy := assertHealthSignal(t, clock, ch)
+		assert.False(t, healthy)
+
+		// App recovers after the next tick
+		clock.Step(time.Second)
+		healthy = assertHealthSignal(t, clock, ch)
+		assert.True(t, healthy)
+
+		// Set to unsuccessful
+		ts.SetStatusCode(500)
+
+		// Nothing happens for the first 1s
+		clock.Step(time.Second)
+		assertNoHealthSignal(t, clock, ch)
+
+		// Get a signal after the next tick
+		clock.Step(time.Second)
+		healthy = assertHealthSignal(t, clock, ch)
 		assert.False(t, healthy)
 	})
 }
@@ -146,119 +185,125 @@ func TestApplyOptions(t *testing.T) {
 }
 
 type testServer struct {
-	statusCode    int
+	statusCode    atomic.Int32
 	numberOfCalls atomic.Int64
 }
 
 func (t *testServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	t.numberOfCalls.Add(1)
-	w.WriteHeader(t.statusCode)
-	w.Write([]byte(""))
+	w.WriteHeader(int(t.statusCode.Load()))
+}
+
+func (t *testServer) SetStatusCode(statusCode int32) {
+	t.statusCode.Store(statusCode)
 }
 
 func TestResponses(t *testing.T) {
-	t.Parallel()
-
 	t.Run("default success status", func(t *testing.T) {
-		t.Parallel()
-
 		clock := &clocktesting.FakeClock{}
 		clock.SetTime(startOfTime)
 
-		server := httptest.NewServer(&testServer{
-			statusCode: 200,
-		})
+		ts := &testServer{}
+		ts.SetStatusCode(200)
+		server := httptest.NewServer(ts)
 		defer server.Close()
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		ch := StartEndpointHealthCheck(ctx, server.URL,
+		ch := StartEndpointHealthCheck(ctx,
+			WithAddress(server.URL),
 			WithClock(clock),
 			WithInitialDelay(0),
 			WithFailureThreshold(1),
 		)
 
-		clock.Step(5 * time.Second)
 		healthy := assertHealthSignal(t, clock, ch)
+		assert.False(t, healthy)
+
+		clock.Step(5 * time.Second)
+		healthy = assertHealthSignal(t, clock, ch)
 		assert.True(t, healthy)
 	})
 
 	t.Run("custom success status", func(t *testing.T) {
-		t.Parallel()
-
 		clock := &clocktesting.FakeClock{}
 		clock.SetTime(startOfTime)
 
-		server := httptest.NewServer(&testServer{
-			statusCode: 201,
-		})
+		ts := &testServer{}
+		ts.SetStatusCode(201)
+		server := httptest.NewServer(ts)
 		defer server.Close()
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		ch := StartEndpointHealthCheck(ctx, server.URL,
+		ch := StartEndpointHealthCheck(ctx,
+			WithAddress(server.URL),
 			WithClock(clock),
 			WithInitialDelay(0),
 			WithFailureThreshold(1),
 			WithSuccessStatusCode(201),
 		)
 
-		clock.Step(5 * time.Second)
 		healthy := assertHealthSignal(t, clock, ch)
+		assert.False(t, healthy)
+
+		clock.Step(5 * time.Second)
+		healthy = assertHealthSignal(t, clock, ch)
 		assert.True(t, healthy)
 	})
 
 	t.Run("test fail", func(t *testing.T) {
-		t.Parallel()
-
 		clock := &clocktesting.FakeClock{}
 		clock.SetTime(startOfTime)
 
-		server := httptest.NewServer(&testServer{
-			statusCode: 500,
-		})
+		ts := &testServer{}
+		ts.SetStatusCode(500)
+		server := httptest.NewServer(ts)
 		defer server.Close()
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		ch := StartEndpointHealthCheck(ctx, server.URL,
+		ch := StartEndpointHealthCheck(ctx,
+			WithAddress(server.URL),
 			WithClock(clock),
 			WithInitialDelay(0),
 			WithFailureThreshold(1),
 		)
-
-		clock.Step(5 * time.Second)
 		healthy := assertHealthSignal(t, clock, ch)
 		assert.False(t, healthy)
+
+		clock.Step(5 * time.Second)
+		assertNoHealthSignal(t, clock, ch)
 	})
 
 	t.Run("test app recovery", func(t *testing.T) {
-		t.Parallel()
-
 		clock := &clocktesting.FakeClock{}
 		clock.SetTime(startOfTime)
 
-		test := &testServer{
-			statusCode: 500,
-		}
-		server := httptest.NewServer(test)
+		ts := &testServer{}
+		ts.SetStatusCode(500)
+		server := httptest.NewServer(ts)
 		defer server.Close()
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		ch := StartEndpointHealthCheck(ctx, server.URL,
+		ch := StartEndpointHealthCheck(ctx,
+			WithAddress(server.URL),
 			WithClock(clock),
 			WithInitialDelay(0),
 			WithFailureThreshold(1),
 		)
 
+		healthy := assertHealthSignal(t, clock, ch)
+		assert.False(t, healthy)
+
 		for i := 0; i <= 1; i++ {
 			clock.Step(5 * time.Second)
-			healthy := assertHealthSignal(t, clock, ch)
 			if i == 0 {
-				assert.False(t, healthy)
-				test.statusCode = 200
+				assertNoHealthSignal(t, clock, ch)
+				ts.SetStatusCode(200)
 			} else {
+				healthy = assertHealthSignal(t, clock, ch)
 				assert.True(t, healthy)
 			}
 		}

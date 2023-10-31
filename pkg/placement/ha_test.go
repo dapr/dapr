@@ -13,6 +13,7 @@ import (
 	clocktesting "k8s.io/utils/clock/testing"
 
 	"github.com/dapr/dapr/pkg/placement/raft"
+	"github.com/dapr/dapr/pkg/security/fake"
 	daprtesting "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/logger"
 )
@@ -295,7 +296,7 @@ func createRaftServer(t *testing.T, nodeID int, peers []raft.PeerInfo) (*raft.Se
 	stopped := make(chan struct{})
 	go func() {
 		defer close(stopped)
-		require.NoError(t, srv.StartRaft(ctx, &hcraft.Config{
+		require.NoError(t, srv.StartRaft(ctx, fake.New(), &hcraft.Config{
 			ProtocolVersion:    hcraft.ProtocolVersionMax,
 			HeartbeatTimeout:   2 * time.Second,
 			ElectionTimeout:    2 * time.Second,

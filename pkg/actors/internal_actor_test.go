@@ -30,6 +30,7 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	"github.com/dapr/dapr/pkg/security/fake"
 )
 
 type mockInternalActor struct {
@@ -117,10 +118,12 @@ func newTestActorsRuntimeWithInternalActors(internalActors map[string]InternalAc
 		TracingSpec:    spec,
 		Resiliency:     resiliency.New(log),
 		StateStoreName: "actorStore",
+		Security:       fake.New(),
+		MockPlacement:  NewMockPlacement(TestAppID),
 	})
 
 	for actorType, actor := range internalActors {
-		if err := a.RegisterInternalActor(context.TODO(), actorType, actor); err != nil {
+		if err := a.RegisterInternalActor(context.TODO(), actorType, actor, 0); err != nil {
 			return nil, err
 		}
 	}
@@ -198,7 +201,7 @@ func TestInternalActorReminder(t *testing.T) {
 		Name:           "reminder1",
 		Data:           data,
 	}
-	err = testActorRuntime.doExecuteReminderOrTimer(testReminder, false)
+	err = testActorRuntime.doExecuteReminderOrTimer(context.Background(), testReminder, false)
 	require.NoError(t, err)
 	require.Len(t, ia.InvokedReminders, 1)
 	invokedReminder := ia.InvokedReminders[0]

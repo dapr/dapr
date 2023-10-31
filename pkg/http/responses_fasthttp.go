@@ -24,17 +24,20 @@ import (
 type fasthttpResponseOption = func(ctx *fasthttp.RequestCtx)
 
 // fasthttpResponseWithJSON overrides the content-type with application/json.
-func fasthttpResponseWithJSON(code int, obj []byte) fasthttpResponseOption {
+func fasthttpResponseWithJSON(code int, obj []byte, metadata map[string]string) fasthttpResponseOption {
 	return func(ctx *fasthttp.RequestCtx) {
 		ctx.Response.SetStatusCode(code)
 		ctx.Response.SetBody(obj)
 		ctx.Response.Header.SetContentType(jsonContentTypeHeader)
+		for k, v := range metadata {
+			ctx.Response.Header.Set(metadataPrefix+k, v)
+		}
 	}
 }
 
 // fasthttpResponseWithError sets error code and jsonized error message.
 func fasthttpResponseWithError(code int, resp errorResponseValue) fasthttpResponseOption {
-	return fasthttpResponseWithJSON(code, resp.JSONErrorValue())
+	return fasthttpResponseWithJSON(code, resp.JSONErrorValue(), nil)
 }
 
 // fasthttpResponseWithEmpty sets 204 status code.

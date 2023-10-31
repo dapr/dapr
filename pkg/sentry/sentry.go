@@ -22,7 +22,7 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"k8s.io/client-go/rest"
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
 
 	"github.com/dapr/dapr/pkg/concurrency"
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
@@ -35,6 +35,7 @@ import (
 	validatorInsecure "github.com/dapr/dapr/pkg/sentry/server/validator/insecure"
 	validatorJWKS "github.com/dapr/dapr/pkg/sentry/server/validator/jwks"
 	validatorKube "github.com/dapr/dapr/pkg/sentry/server/validator/kubernetes"
+	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 )
 
@@ -99,7 +100,7 @@ func (s *sentry) Start(parentCtx context.Context) error {
 				// authorizing the server based on the correct SPIFFE ID, and instead
 				// matched on the DNS SAN `cluster.local`(!).
 				DNS: []string{"cluster.local"},
-			})
+			}, false)
 			if csrErr != nil {
 				monitoring.ServerCertIssueFailed("ca_error")
 				return nil, csrErr
@@ -118,7 +119,7 @@ func (s *sentry) Start(parentCtx context.Context) error {
 
 	// Start all background processes
 	runners := concurrency.NewRunnerManager(
-		provider.Start,
+		provider.Run,
 		func(ctx context.Context) error {
 			sec, secErr := provider.Handler(ctx)
 			if secErr != nil {
@@ -149,19 +150,20 @@ func (s *sentry) Start(parentCtx context.Context) error {
 
 func (s *sentry) getValidators(ctx context.Context) (map[sentryv1pb.SignCertificateRequest_TokenValidator]validator.Validator, error) {
 	validators := make(map[sentryv1pb.SignCertificateRequest_TokenValidator]validator.Validator, len(s.conf.Validators))
+
 	for validatorID, opts := range s.conf.Validators {
 		switch validatorID {
 		case sentryv1pb.SignCertificateRequest_KUBERNETES:
-			config, err := rest.InClusterConfig()
+			td, err := spiffeid.TrustDomainFromString(s.conf.TrustDomain)
 			if err != nil {
 				return nil, err
 			}
-			sentryID, err := security.SentryID(s.conf.TrustDomain, security.CurrentNamespace())
+			sentryID, err := security.SentryID(td, security.CurrentNamespace())
 			if err != nil {
 				return nil, err
 			}
 			val, err := validatorKube.New(ctx, validatorKube.Options{
-				RestConfig:     config,
+				RestConfig:     utils.GetConfig(),
 				SentryID:       sentryID,
 				ControlPlaneNS: security.CurrentNamespace(),
 			})
@@ -176,7 +178,11 @@ func (s *sentry) getValidators(ctx context.Context) (map[sentryv1pb.SignCertific
 			validators[validatorID] = validatorInsecure.New()
 
 		case sentryv1pb.SignCertificateRequest_JWKS:
-			sentryID, err := security.SentryID(s.conf.TrustDomain, security.CurrentNamespace())
+			td, err := spiffeid.TrustDomainFromString(s.conf.TrustDomain)
+			if err != nil {
+				return nil, err
+			}
+			sentryID, err := security.SentryID(td, security.CurrentNamespace())
 			if err != nil {
 				return nil, err
 			}

@@ -79,9 +79,6 @@ service Dapr {
   // Unregister an actor reminder.
   rpc UnregisterActorReminder(UnregisterActorReminderRequest) returns (google.protobuf.Empty) {}
 
-  // Rename an actor reminder.
-  rpc RenameActorReminder(RenameActorReminderRequest) returns (google.protobuf.Empty) {}
-
   // Gets the state for a specific actor.
   rpc GetActorState(GetActorStateRequest) returns (GetActorStateResponse) {}
 
@@ -122,7 +119,7 @@ service Dapr {
   rpc DecryptAlpha1(stream DecryptRequest) returns (stream DecryptResponse);
 
   // Gets metadata of the sidecar
-  rpc GetMetadata (google.protobuf.Empty) returns (GetMetadataResponse) {}
+  rpc GetMetadata (GetMetadataRequest) returns (GetMetadataResponse) {}
 
   // Sets value in extended metadata of the sidecar
   rpc SetMetadata (SetMetadataRequest) returns (google.protobuf.Empty) {}
@@ -169,8 +166,28 @@ service Dapr {
   // Raise an event to a running workflow instance
   rpc RaiseEventWorkflowAlpha1 (RaiseEventWorkflowRequest) returns (google.protobuf.Empty) {}
 
+  // Starts a new instance of a workflow
+  rpc StartWorkflowBeta1 (StartWorkflowRequest) returns (StartWorkflowResponse) {}
+
+  // Gets details about a started workflow instance
+  rpc GetWorkflowBeta1 (GetWorkflowRequest) returns (GetWorkflowResponse) {}
+
+  // Purge Workflow
+  rpc PurgeWorkflowBeta1 (PurgeWorkflowRequest) returns (google.protobuf.Empty) {}
+
+  // Terminates a running workflow instance
+  rpc TerminateWorkflowBeta1 (TerminateWorkflowRequest) returns (google.protobuf.Empty) {}
+
+  // Pauses a running workflow instance
+  rpc PauseWorkflowBeta1 (PauseWorkflowRequest) returns (google.protobuf.Empty) {}
+
+  // Resumes a paused workflow instance
+  rpc ResumeWorkflowBeta1 (ResumeWorkflowRequest) returns (google.protobuf.Empty) {}
+
+  // Raise an event to a running workflow instance
+  rpc RaiseEventWorkflowBeta1 (RaiseEventWorkflowRequest) returns (google.protobuf.Empty) {}
   // Shutdown the sidecar
-  rpc Shutdown (google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc Shutdown (ShutdownRequest) returns (google.protobuf.Empty) {}
 }
 
 // InvokeServiceRequest represents the request message for Service invocation.
@@ -387,14 +404,12 @@ message BulkPublishResponse {
 
 // BulkPublishResponseFailedEntry is the message containing the entryID and error of a failed event in BulkPublishEvent call
 message BulkPublishResponseFailedEntry {
-
   // The response scoped unique ID referring to this message
   string entry_id = 1;
 
   // The error message if any on failure
   string error = 2;
 }
-
 
 // InvokeBindingRequest is the message to send data to output bindings
 message InvokeBindingRequest {
@@ -524,14 +539,6 @@ message UnregisterActorReminderRequest {
   string name = 3;
 }
 
-// RenameActorReminderRequest is the message to rename an actor reminder.
-message RenameActorReminderRequest {
-  string actor_type = 1;
-  string actor_id = 2;
-  string old_name = 3;
-  string new_name = 4;
-}
-
 // GetActorStateRequest is the message to get key-value states from specific actor.
 message GetActorStateRequest {
   string actor_type = 1;
@@ -542,6 +549,9 @@ message GetActorStateRequest {
 // GetActorStateResponse is the response conveying the actor's state value.
 message GetActorStateResponse {
   bytes data = 1;
+
+  // The metadata which will be sent to app.
+  map<string, string> metadata = 2;
 }
 
 // ExecuteActorStateTransactionRequest is the message to execute multiple operations on a specified actor.
@@ -577,7 +587,12 @@ message InvokeActorResponse {
   bytes data = 1;
 }
 
-// GetMetadataResponse is a message that is returned on GetMetadata rpc call
+// GetMetadataRequest is the message for the GetMetadata request.
+message GetMetadataRequest {
+  // Empty
+}
+
+// GetMetadataResponse is a message that is returned on GetMetadata rpc call.
 message GetMetadataResponse {
   string id = 1;
   repeated ActiveActorsCount active_actors_count = 2 [json_name = "actors"];
@@ -978,7 +993,7 @@ message DecryptResponse {
   common.v1.StreamPayload payload = 1;
 }
 
-// GetWorkflowRequest is the request for GetWorkflowAlpha1.
+// GetWorkflowRequest is the request for GetWorkflowBeta1.
 message GetWorkflowRequest {
   // ID of the workflow instance to query.
   string instance_id  = 1 [json_name = "instanceID"];
@@ -986,7 +1001,7 @@ message GetWorkflowRequest {
   string workflow_component = 2 [json_name = "workflowComponent"];
 }
 
-// GetWorkflowResponse is the response for GetWorkflowAlpha1.
+// GetWorkflowResponse is the response for GetWorkflowBeta1.
 message GetWorkflowResponse {
   // ID of the workflow instance.
   string instance_id = 1 [json_name = "instanceID"];
@@ -1002,7 +1017,7 @@ message GetWorkflowResponse {
   map<string, string> properties = 6;
 }
 
-// StartWorkflowRequest is the request for StartWorkflowAlpha1.
+// StartWorkflowRequest is the request for StartWorkflowBeta1.
 message StartWorkflowRequest {
   // The ID to assign to the started workflow instance. If empty, a random ID is generated.
   string instance_id = 1 [json_name = "instanceID"];
@@ -1016,13 +1031,13 @@ message StartWorkflowRequest {
   bytes input = 5;
 }
 
-// StartWorkflowResponse is the response for StartWorkflowAlpha1.
+// StartWorkflowResponse is the response for StartWorkflowBeta1.
 message StartWorkflowResponse {
   // ID of the started workflow instance.
   string instance_id = 1 [json_name = "instanceID"];
 }
 
-// TerminateWorkflowRequest is the request for TerminateWorkflowAlpha1.
+// TerminateWorkflowRequest is the request for TerminateWorkflowBeta1.
 message TerminateWorkflowRequest {
   // ID of the workflow instance to terminate.
   string instance_id = 1 [json_name = "instanceID"];
@@ -1030,7 +1045,7 @@ message TerminateWorkflowRequest {
   string workflow_component = 2 [json_name = "workflowComponent"];
 }
 
-// PauseWorkflowRequest is the request for PauseWorkflowAlpha1.
+// PauseWorkflowRequest is the request for PauseWorkflowBeta1.
 message PauseWorkflowRequest {
   // ID of the workflow instance to pause.
   string instance_id = 1 [json_name = "instanceID"];
@@ -1038,7 +1053,7 @@ message PauseWorkflowRequest {
   string workflow_component = 2 [json_name = "workflowComponent"];
 }
 
-// ResumeWorkflowRequest is the request for ResumeWorkflowAlpha1.
+// ResumeWorkflowRequest is the request for ResumeWorkflowBeta1.
 message ResumeWorkflowRequest {
   // ID of the workflow instance to resume.
   string instance_id = 1 [json_name = "instanceID"];
@@ -1046,7 +1061,7 @@ message ResumeWorkflowRequest {
   string workflow_component = 2 [json_name = "workflowComponent"];
 }
 
-// RaiseEventWorkflowRequest is the request for RaiseEventWorkflowAlpha1.
+// RaiseEventWorkflowRequest is the request for RaiseEventWorkflowBeta1.
 message RaiseEventWorkflowRequest {
   // ID of the workflow instance to raise an event for.
   string instance_id = 1 [json_name = "instanceID"];
@@ -1058,10 +1073,15 @@ message RaiseEventWorkflowRequest {
   bytes event_data = 4;
 }
 
-// PurgeWorkflowRequest is the request for PurgeWorkflowAlpha1.
+// PurgeWorkflowRequest is the request for PurgeWorkflowBeta1.
 message PurgeWorkflowRequest {
   // ID of the workflow instance to purge.
   string instance_id = 1 [json_name = "instanceID"];
   // Name of the workflow component.
   string workflow_component = 2 [json_name = "workflowComponent"];
+}
+
+// ShutdownRequest is the request for Shutdown.
+message ShutdownRequest {
+  // Empty
 }

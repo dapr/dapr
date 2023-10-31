@@ -19,7 +19,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -56,10 +55,25 @@ var AllowedServiceAccountInfos = []string{
 	"tekton-pipelines:tekton-pipelines-controller",
 }
 
+type (
+	signDaprdCertificateFn func(ctx context.Context, namespace string) (cert []byte, key []byte, err error)
+	currentTrustAnchorsFn  func() (ca []byte, err error)
+)
+
 // Injector is the interface for the Dapr runtime sidecar injection component.
 type Injector interface {
-	Run(context.Context) error
+	Run(context.Context, *tls.Config, signDaprdCertificateFn, currentTrustAnchorsFn) error
 	Ready(context.Context) error
+}
+
+type Options struct {
+	AuthUIDs   []string
+	Config     Config
+	DaprClient scheme.Interface
+	KubeClient kubernetes.Interface
+
+	ControlPlaneNamespace   string
+	ControlPlaneTrustDomain string
 }
 
 type injector struct {
@@ -69,6 +83,11 @@ type injector struct {
 	kubeClient   kubernetes.Interface
 	daprClient   scheme.Interface
 	authUIDs     []string
+
+	controlPlaneNamespace   string
+	controlPlaneTrustDomain string
+	currentTrustAnchors     currentTrustAnchorsFn
+	signDaprdCertificate    signDaprdCertificateFn
 
 	namespaceNameMatcher *namespacednamematcher.EqualPrefixNameNamespaceMatcher
 	ready                chan struct{}
@@ -110,29 +129,28 @@ func getAppIDFromRequest(req *admissionv1.AdmissionRequest) (appID string) {
 }
 
 // NewInjector returns a new Injector instance with the given config.
-func NewInjector(authUIDs []string, config Config, daprClient scheme.Interface, kubeClient kubernetes.Interface) (Injector, error) {
+func NewInjector(opts Options) (Injector, error) {
 	mux := http.NewServeMux()
 
 	i := &injector{
-		config: config,
+		config: opts.Config,
 		deserializer: serializer.NewCodecFactory(
 			runtime.NewScheme(),
 		).UniversalDeserializer(),
 		server: &http.Server{
-			Addr:    fmt.Sprintf(":%d", port),
-			Handler: mux,
-			TLSConfig: &tls.Config{
-				MinVersion: tls.VersionTLS12,
-			},
+			Addr:              fmt.Sprintf(":%d", port),
+			Handler:           mux,
 			ReadHeaderTimeout: 10 * time.Second,
 		},
-		kubeClient: kubeClient,
-		daprClient: daprClient,
-		authUIDs:   authUIDs,
-		ready:      make(chan struct{}),
+		kubeClient:              opts.KubeClient,
+		daprClient:              opts.DaprClient,
+		authUIDs:                opts.AuthUIDs,
+		controlPlaneNamespace:   opts.ControlPlaneNamespace,
+		controlPlaneTrustDomain: opts.ControlPlaneTrustDomain,
+		ready:                   make(chan struct{}),
 	}
 
-	matcher, err := createNamespaceNameMatcher(config.AllowedServiceAccountsPrefixNames)
+	matcher, err := createNamespaceNameMatcher(opts.Config.AllowedServiceAccountsPrefixNames)
 	if err != nil {
 		return nil, err
 	}
@@ -195,7 +213,7 @@ func getServiceAccount(ctx context.Context, kubeClient kubernetes.Interface, all
 	return allowedUids, nil
 }
 
-func (i *injector) Run(ctx context.Context) error {
+func (i *injector) Run(ctx context.Context, tlsConfig *tls.Config, signDaprdFn signDaprdCertificateFn, currentTrustAnchors currentTrustAnchorsFn) error {
 	select {
 	case <-i.ready:
 		return errors.New("injector already running")
@@ -203,18 +221,17 @@ func (i *injector) Run(ctx context.Context) error {
 		// Nop
 	}
 
-	ln, err := net.Listen("tcp", i.server.Addr)
-	if err != nil {
-		return fmt.Errorf("error while creating listener: %w", err)
-	}
-
 	log.Infof("Sidecar injector is listening on %s, patching Dapr-enabled pods", i.server.Addr)
+
+	i.currentTrustAnchors = currentTrustAnchors
+	i.signDaprdCertificate = signDaprdFn
+	i.server.TLSConfig = tlsConfig
 
 	errCh := make(chan error, 1)
 	go func() {
-		srverr := i.server.ServeTLS(ln, i.config.TLSCertFile, i.config.TLSKeyFile)
-		if !errors.Is(srverr, http.ErrServerClosed) {
-			errCh <- fmt.Errorf("sidecar injector error: %s", srverr)
+		err := i.server.ListenAndServeTLS("", "")
+		if !errors.Is(err, http.ErrServerClosed) {
+			errCh <- fmt.Errorf("sidecar injector error: %w", err)
 			return
 		}
 		errCh <- nil
@@ -227,11 +244,11 @@ func (i *injector) Run(ctx context.Context) error {
 		log.Info("Sidecar injector is shutting down")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		if err = i.server.Shutdown(shutdownCtx); err != nil {
+		if err := i.server.Shutdown(shutdownCtx); err != nil {
 			return fmt.Errorf("error while shutting down injector: %v; %v", err, <-errCh)
 		}
 		return <-errCh
-	case err = <-errCh:
+	case err := <-errCh:
 		return err
 	}
 }

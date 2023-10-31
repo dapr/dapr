@@ -20,6 +20,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/kit/ptr"
 )
@@ -51,34 +53,7 @@ func TestParsePlacementAddr(t *testing.T) {
 }
 
 func Test_toInternal(t *testing.T) {
-	cfg := &Config{
-		AppID:                        "app1",
-		PlacementServiceHostAddr:     "localhost:5050",
-		ControlPlaneAddress:          "localhost:5051",
-		AllowedOrigins:               "*",
-		ResourcesPath:                []string{"components"},
-		AppProtocol:                  "http",
-		Mode:                         "kubernetes",
-		DaprHTTPPort:                 "3500",
-		DaprInternalGRPCPort:         "50002",
-		DaprAPIGRPCPort:              "50001",
-		DaprAPIListenAddresses:       "1.2.3.4",
-		DaprPublicPort:               "3501",
-		ApplicationPort:              "8080",
-		ProfilePort:                  "7070",
-		EnableProfiling:              true,
-		AppMaxConcurrency:            1,
-		EnableMTLS:                   true,
-		SentryAddress:                "localhost:5052",
-		DaprHTTPMaxRequestSize:       4,
-		UnixDomainSocket:             "",
-		DaprHTTPReadBufferSize:       4,
-		DaprGracefulShutdownSeconds:  1,
-		EnableAPILogging:             ptr.Of(true),
-		DisableBuiltinK8sSecretStore: true,
-		AppChannelAddress:            "1.1.1.1",
-		Registry:                     registry.NewOptions(),
-	}
+	cfg := defaultTestConfig()
 
 	intc, err := cfg.toInternal()
 	require.NoError(t, err)
@@ -109,4 +84,43 @@ func Test_toInternal(t *testing.T) {
 	assert.Equal(t, ptr.Of(true), intc.enableAPILogging)
 	assert.Equal(t, true, intc.disableBuiltinK8sSecretStore)
 	assert.Equal(t, "1.1.1.1", intc.appConnectionConfig.ChannelAddress)
+}
+
+func TestStandaloneWasmStrictSandbox(t *testing.T) {
+	global, err := config.LoadStandaloneConfiguration("../config/testdata/wasm_strict_sandbox.yaml")
+
+	assert.Nil(t, err)
+	assert.True(t, global.Spec.WasmSpec.StrictSandbox)
+}
+
+func defaultTestConfig() Config {
+	return Config{
+		AppID:                        "app1",
+		PlacementServiceHostAddr:     "localhost:5050",
+		ControlPlaneAddress:          "localhost:5051",
+		AllowedOrigins:               "*",
+		ResourcesPath:                []string{"components"},
+		AppProtocol:                  "http",
+		Mode:                         "kubernetes",
+		DaprHTTPPort:                 "3500",
+		DaprInternalGRPCPort:         "50002",
+		DaprAPIGRPCPort:              "50001",
+		DaprAPIListenAddresses:       "1.2.3.4",
+		DaprPublicPort:               "3501",
+		ApplicationPort:              "8080",
+		ProfilePort:                  "7070",
+		EnableProfiling:              true,
+		AppMaxConcurrency:            1,
+		EnableMTLS:                   true,
+		SentryAddress:                "localhost:5052",
+		DaprHTTPMaxRequestSize:       4,
+		UnixDomainSocket:             "",
+		DaprHTTPReadBufferSize:       4,
+		DaprGracefulShutdownSeconds:  1,
+		EnableAPILogging:             ptr.Of(true),
+		DisableBuiltinK8sSecretStore: true,
+		AppChannelAddress:            "1.1.1.1",
+		Registry:                     registry.NewOptions(),
+		Metrics:                      &metrics.Options{MetricsEnabled: false},
+	}
 }

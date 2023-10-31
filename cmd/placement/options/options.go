@@ -19,12 +19,12 @@ import (
 	"os"
 	"strings"
 
-	"github.com/dapr/dapr/utils"
-	"github.com/dapr/kit/logger"
-
 	"github.com/dapr/dapr/pkg/metrics"
+	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/placement/raft"
 	"github.com/dapr/dapr/pkg/security"
+	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/logger"
 )
 
 const (
@@ -53,6 +53,7 @@ type Options struct {
 	TrustDomain      string
 	TrustAnchorsFile string
 	SentryAddress    string
+	Mode             string
 
 	ReplicationFactor int
 
@@ -77,9 +78,10 @@ func New() *Options {
 	flag.BoolVar(&opts.MetadataEnabled, "metadata-enabled", opts.MetadataEnabled, "Expose the placement tables on the healthz server")
 	flag.IntVar(&opts.ReplicationFactor, "replicationFactor", defaultReplicationFactor, "sets the replication factor for actor distribution on vnodes")
 
-	flag.StringVar(&opts.TrustDomain, "trust-domain", "cluster.local", "Trust domain for the Dapr control plane")
+	flag.StringVar(&opts.TrustDomain, "trust-domain", "localhost", "Trust domain for the Dapr control plane")
 	flag.StringVar(&opts.TrustAnchorsFile, "trust-anchors-file", "/var/run/secrets/dapr.io/tls/ca.crt", "Filepath to the trust anchors for the Dapr control plane")
-	flag.StringVar(&opts.SentryAddress, "sentry-address", fmt.Sprintf("dapr-sentry.%s.svc:80", security.CurrentNamespace()), "Filepath to the trust anchors for the Dapr control plane")
+	flag.StringVar(&opts.SentryAddress, "sentry-address", fmt.Sprintf("dapr-sentry.%s.svc:443", security.CurrentNamespace()), "Filepath to the trust anchors for the Dapr control plane")
+	flag.StringVar(&opts.Mode, "mode", string(modes.StandaloneMode), "Runtime mode for Placement")
 
 	depCC := flag.String("certchain", "", "DEPRECATED")
 	depRCF := flag.String("issuer-ca-filename", "", "DEPRECATED")
