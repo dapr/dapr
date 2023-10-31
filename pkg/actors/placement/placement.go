@@ -392,6 +392,11 @@ func (p *actorPlacement) establishStreamConn(ctx context.Context) (established b
 			continue
 		}
 
+		// Check for context validity again, after sleeping
+		if ctx.Err() != nil {
+			return false
+		}
+
 		serverAddr := p.serverAddr[p.serverIndex.Load()]
 
 		if !logFailureShown {
