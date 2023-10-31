@@ -39,7 +39,9 @@ const testStreamSendLatency = time.Second
 func newTestPlacementServer(t *testing.T, raftServer *raft.Server) (string, *Service, *clocktesting.FakeClock, context.CancelFunc) {
 	t.Helper()
 
-	testServer := NewPlacementService(raftServer)
+	testServer := NewPlacementService(PlacementServiceOpts{
+		RaftNode: raftServer,
+	})
 	clock := clocktesting.NewFakeClock(time.Now())
 	testServer.clock = clock
 

@@ -23,6 +23,7 @@ type HostInfo struct {
 	AppID      string   `json:"appId,omitempty"`
 	ActorTypes []string `json:"actorTypes,omitempty"`
 	UpdatedAt  int64    `json:"updatedAt,omitempty"`
+	APILevel   uint32   `json:"apiLevel"`
 }
 
 // GetPlacementTables returns the current placement host infos.
@@ -33,6 +34,9 @@ func (p *Service) GetPlacementTables() (*PlacementTables, error) {
 		TableVersion: state.TableGeneration(),
 		MinAPILevel:  state.MinAPILevel(),
 	}
+	if p.maxAPILevel >= 0 && int(response.MinAPILevel) > p.maxAPILevel {
+		response.MinAPILevel = uint32(p.maxAPILevel)
+	}
 	members := make([]HostInfo, len(m))
 	// the key of the member map is the host name, so we can just ignore it.
 	var i int
@@ -42,6 +46,7 @@ func (p *Service) GetPlacementTables() (*PlacementTables, error) {
 			AppID:      v.AppID,
 			ActorTypes: v.Entities,
 			UpdatedAt:  v.UpdatedAt,
+			APILevel:   v.APILevel,
 		}
 		i++
 	}

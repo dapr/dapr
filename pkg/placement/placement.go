@@ -99,6 +99,10 @@ type Service struct {
 	// consistent hashing table. Only actor runtime's heartbeat will increase this.
 	memberUpdateCount atomic.Uint32
 
+	// Maximum API level to return.
+	// If -1, there's no limit.
+	maxAPILevel int
+
 	// faultyHostDetectDuration
 	faultyHostDetectDuration *atomic.Int64
 
@@ -118,8 +122,14 @@ type Service struct {
 	wg       sync.WaitGroup
 }
 
+// PlacementServiceOpts contains options for the NewPlacementService method.
+type PlacementServiceOpts struct {
+	RaftNode    *raft.Server
+	MaxAPILevel int
+}
+
 // NewPlacementService returns a new placement service.
-func NewPlacementService(raftNode *raft.Server) *Service {
+func NewPlacementService(opts PlacementServiceOpts) *Service {
 	fhdd := &atomic.Int64{}
 	fhdd.Store(int64(faultyHostDetectInitialDuration))
 
@@ -127,7 +137,8 @@ func NewPlacementService(raftNode *raft.Server) *Service {
 		streamConnPool:           []placementGRPCStream{},
 		membershipCh:             make(chan hostMemberChange, membershipChangeChSize),
 		faultyHostDetectDuration: fhdd,
-		raftNode:                 raftNode,
+		raftNode:                 opts.RaftNode,
+		maxAPILevel:              opts.MaxAPILevel,
 		clock:                    &clock.RealClock{},
 		closedCh:                 make(chan struct{}),
 	}

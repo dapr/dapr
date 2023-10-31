@@ -79,7 +79,10 @@ func main() {
 	}
 
 	hashing.SetReplicationFactor(opts.ReplicationFactor)
-	apiServer := placement.NewPlacementService(raftServer)
+	apiServer := placement.NewPlacementService(placement.PlacementServiceOpts{
+		RaftNode:    raftServer,
+		MaxAPILevel: opts.MaxAPILevel,
+	})
 
 	err = concurrency.NewRunnerManager(
 		func(ctx context.Context) error {
