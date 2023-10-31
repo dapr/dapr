@@ -32,6 +32,7 @@ type options struct {
 	tlsEnabled          bool
 	sentryAddress       *string
 	trustAnchorsFile    *string
+	maxAPILevel         int
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
@@ -97,5 +98,11 @@ func WithTrustAnchorsFile(file string) Option {
 func WithInitialClusterPorts(ports ...int) Option {
 	return func(o *options) {
 		o.initialClusterPorts = ports
+	}
+}
+
+func WithMaxAPILevel(val int) Option {
+	return func(o *options) {
+		o.maxAPILevel = val
 	}
 }

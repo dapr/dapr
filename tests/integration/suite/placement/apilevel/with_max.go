@@ -29,17 +29,18 @@ import (
 )
 
 func init() {
-	suite.Register(new(noMax))
+	suite.Register(new(withMax))
 }
 
-// noMax tests placement reports API level with no maximum API level.
-type noMax struct {
+// withMax tests placement reports API level with maximum API level.
+type withMax struct {
 	place *placement.Placement
 }
 
-func (n *noMax) Setup(t *testing.T) []framework.Option {
+func (n *withMax) Setup(t *testing.T) []framework.Option {
 	n.place = placement.New(t,
 		placement.WithLogLevel("debug"),
+		placement.WithMaxAPILevel(15),
 	)
 
 	return []framework.Option{
@@ -47,7 +48,7 @@ func (n *noMax) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (n *noMax) Run(t *testing.T, ctx context.Context) {
+func (n *withMax) Run(t *testing.T, ctx context.Context) {
 	n.place.WaitUntilRunning(t, ctx)
 
 	// Collect messages
@@ -94,12 +95,9 @@ func (n *noMax) Run(t *testing.T, ctx context.Context) {
 	time.Sleep(3 * time.Second)
 	require.Equal(t, lastUpdate, lastVersionUpdate.Load())
 
-	// Stop the first host, and the in API level should increase
+	// Stop the first host, and the in API level should increase to the max (15)
 	cancel1()
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		assert.Equal(t, uint32(20), currentVersion.Load())
+		assert.Equal(t, uint32(15), currentVersion.Load())
 	}, 10*time.Second, 50*time.Millisecond)
-
-	// Trying to register a host with version 5 should fail
-	registerHostFailing(t, ctx, n.place.Port(), 5)
 }

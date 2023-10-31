@@ -202,11 +202,9 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 			if registeredMemberID == "" {
 				// New connection
 				// Ensure that the reported API level is at least equal to the current one in the cluster
-				var clusterAPILevel uint32
-				if p.maxAPILevel > -1 {
+				clusterAPILevel := state.MinAPILevel()
+				if p.maxAPILevel > -1 && int(clusterAPILevel) > p.maxAPILevel {
 					clusterAPILevel = uint32(p.maxAPILevel)
-				} else {
-					clusterAPILevel = state.MinAPILevel()
 				}
 				if req.ApiLevel < clusterAPILevel {
 					return status.Errorf(codes.FailedPrecondition, "The cluster's Actor API level is %d, which is higher than the reported API level %d", clusterAPILevel, req.ApiLevel)

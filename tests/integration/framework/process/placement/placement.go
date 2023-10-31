@@ -58,6 +58,7 @@ func New(t *testing.T, fopts ...Option) *Placement {
 		metricsPort:         fp.Port(t, 2),
 		initialCluster:      uid.String() + "=localhost:" + strconv.Itoa(fp.Port(t, 3)),
 		initialClusterPorts: []int{fp.Port(t, 3)},
+		maxAPILevel:         -1,
 	}
 
 	for _, fopt := range fopts {
@@ -72,6 +73,7 @@ func New(t *testing.T, fopts ...Option) *Placement {
 		"--metrics-port=" + strconv.Itoa(opts.metricsPort),
 		"--initial-cluster=" + opts.initialCluster,
 		"--tls-enabled=" + strconv.FormatBool(opts.tlsEnabled),
+		"--max-api-level=" + strconv.Itoa(opts.maxAPILevel),
 	}
 	if opts.sentryAddress != nil {
 		args = append(args, "--sentry-address="+*opts.sentryAddress)
