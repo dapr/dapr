@@ -198,7 +198,20 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 		req, err := stream.Recv()
 		switch err {
 		case nil:
+			state := p.raftNode.FSM().State()
 			if registeredMemberID == "" {
+				// New connection
+				// Ensure that the reported API level is at least equal to the current one in the cluster
+				var clusterAPILevel uint32
+				if p.maxAPILevel > -1 {
+					clusterAPILevel = uint32(p.maxAPILevel)
+				} else {
+					clusterAPILevel = state.MinAPILevel()
+				}
+				if req.ApiLevel < clusterAPILevel {
+					return status.Errorf(codes.FailedPrecondition, "The cluster's Actor API level is %d, which is higher than the reported API level %d", clusterAPILevel, req.ApiLevel)
+				}
+
 				registeredMemberID = req.Name
 				p.addStreamConn(stream)
 				// TODO: If each sidecar can report table version, then placement
@@ -228,7 +241,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 			// the member will be marked as faulty node and removed.
 			p.lastHeartBeat.Store(req.Name, now.UnixNano())
 
-			members := p.raftNode.FSM().State().Members()
+			members := state.Members()
 
 			// Upsert incoming member only if it is an actor service (not actor client) and
 			// the existing member info is unmatched with the incoming member info.
@@ -259,7 +272,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 				return nil
 			}
 
-			if errors.Is(err, io.EOF) || errors.Is(err, context.Canceled) {
+			if errors.Is(err, io.EOF) || errors.Is(err, context.Canceled) || status.Code(err) == codes.Canceled {
 				log.Debugf("Stream connection is disconnected gracefully: %s", registeredMemberID)
 				if isActorRuntime {
 					p.membershipCh <- hostMemberChange{

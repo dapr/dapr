@@ -52,6 +52,7 @@ func New(t *testing.T, fopts ...Option) *Placement {
 	fp := util.ReservePorts(t, 4)
 	opts := options{
 		id:                  uid.String(),
+		logLevel:            "info",
 		port:                fp.Port(t, 0),
 		healthzPort:         fp.Port(t, 1),
 		metricsPort:         fp.Port(t, 2),
@@ -64,7 +65,7 @@ func New(t *testing.T, fopts ...Option) *Placement {
 	}
 
 	args := []string{
-		"--log-level=" + "info",
+		"--log-level=" + opts.logLevel,
 		"--id=" + opts.id,
 		"--port=" + strconv.Itoa(opts.port),
 		"--healthz-port=" + strconv.Itoa(opts.healthzPort),

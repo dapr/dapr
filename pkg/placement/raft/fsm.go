@@ -115,7 +115,7 @@ func (c *FSM) PlacementState() *v1pb.PlacementTables {
 		totalLoadMap += len(table.LoadMap)
 	}
 
-	logging.Debugf("PlacementTable Size, Hosts: %d, SortedSet: %d, LoadMap: %d", totalHostSize, totalSortedSet, totalLoadMap)
+	logging.Debugf("PlacementTable HostsCount=%d SortedSetCount=%d LoadMapCount=%d ApiLevel=%d", totalHostSize, totalSortedSet, totalLoadMap, newTable.ApiLevel)
 
 	return newTable
 }

@@ -23,6 +23,7 @@ type options struct {
 	execOpts []exec.Option
 
 	id                  string
+	logLevel            string
 	port                int
 	healthzPort         int
 	metricsPort         int
@@ -48,6 +49,12 @@ func WithPort(port int) Option {
 func WithID(id string) Option {
 	return func(o *options) {
 		o.id = id
+	}
+}
+
+func WithLogLevel(level string) Option {
+	return func(o *options) {
+		o.logLevel = level
 	}
 }
 
