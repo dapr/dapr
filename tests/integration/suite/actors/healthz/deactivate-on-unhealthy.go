@@ -112,9 +112,6 @@ func (h *deactivateOnUnhealthy) Run(t *testing.T, ctx context.Context) {
 
 	client := util.HTTPClient(t)
 
-	// Sleep a bit at the beginning as it takes time for the actor host to be registered
-	time.Sleep(500 * time.Millisecond)
-
 	// Activate 2 actors
 	for i := 0; i < 2; i++ {
 		assert.EventuallyWithT(t, func(t *assert.CollectT) {
