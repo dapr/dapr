@@ -69,8 +69,9 @@ func (c *FSM) PlacementState() *v1pb.PlacementTables {
 	defer c.stateLock.RUnlock()
 
 	newTable := &v1pb.PlacementTables{
-		Version: strconv.FormatUint(c.state.TableGeneration(), 10),
-		Entries: make(map[string]*v1pb.PlacementTable),
+		Version:  strconv.FormatUint(c.state.TableGeneration(), 10),
+		Entries:  make(map[string]*v1pb.PlacementTable),
+		ApiLevel: c.state.MinAPILevel(),
 	}
 
 	var (
