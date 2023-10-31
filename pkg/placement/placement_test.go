@@ -40,7 +40,8 @@ func newTestPlacementServer(t *testing.T, raftServer *raft.Server) (string, *Ser
 	t.Helper()
 
 	testServer := NewPlacementService(PlacementServiceOpts{
-		RaftNode: raftServer,
+		RaftNode:    raftServer,
+		SecProvider: securityfake.New(),
 	})
 	clock := clocktesting.NewFakeClock(time.Now())
 	testServer.clock = clock
@@ -52,7 +53,7 @@ func newTestPlacementServer(t *testing.T, raftServer *raft.Server) (string, *Ser
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
 		defer close(serverStopped)
-		require.NoError(t, testServer.Run(ctx, strconv.Itoa(port), securityfake.New()))
+		require.NoError(t, testServer.Run(ctx, strconv.Itoa(port)))
 	}()
 
 	assert.Eventually(t, func() bool {

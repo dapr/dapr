@@ -82,6 +82,7 @@ func main() {
 	apiServer := placement.NewPlacementService(placement.PlacementServiceOpts{
 		RaftNode:    raftServer,
 		MaxAPILevel: opts.MaxAPILevel,
+		SecProvider: secProvider,
 	})
 
 	err = concurrency.NewRunnerManager(
@@ -108,11 +109,7 @@ func main() {
 			return nil
 		},
 		func(ctx context.Context) error {
-			sec, sErr := secProvider.Handler(ctx)
-			if sErr != nil {
-				return sErr
-			}
-			return apiServer.Run(ctx, strconv.Itoa(opts.PlacementPort), sec)
+			return apiServer.Run(ctx, strconv.Itoa(opts.PlacementPort))
 		},
 	).Run(ctx)
 	if err != nil {
