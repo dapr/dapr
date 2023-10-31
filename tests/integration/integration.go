@@ -18,6 +18,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -26,15 +28,22 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/actors"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd"
 	_ "github.com/dapr/dapr/tests/integration/suite/healthz"
-	_ "github.com/dapr/dapr/tests/integration/suite/httpserver"
-	_ "github.com/dapr/dapr/tests/integration/suite/metadata"
 	_ "github.com/dapr/dapr/tests/integration/suite/placement"
 	_ "github.com/dapr/dapr/tests/integration/suite/ports"
 	_ "github.com/dapr/dapr/tests/integration/suite/sentry"
 )
 
 func RunIntegrationTests(t *testing.T) {
-	binary.BuildAll(t)
+	var binFailed bool
+
+	t.Run("build binaries", func(t *testing.T) {
+		t.Cleanup(func() {
+			binFailed = t.Failed()
+		})
+		binary.BuildAll(t)
+	})
+
+	require.False(t, binFailed, "building binaries must succeed")
 
 	for name, tcase := range suite.All(t) {
 		t.Run(name, func(t *testing.T) {

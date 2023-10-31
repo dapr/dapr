@@ -17,6 +17,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -39,6 +40,7 @@ var healthLogger = logger.NewLogger("health")
 type Option func(o *healthCheckOptions)
 
 type healthCheckOptions struct {
+	address           string
 	initialDelay      time.Duration
 	requestTimeout    time.Duration
 	failureThreshold  int32
@@ -50,26 +52,34 @@ type healthCheckOptions struct {
 
 // StartEndpointHealthCheck starts a health check on the specified address with the given options.
 // It returns a channel that will emit true if the endpoint is healthy and false if the failure conditions
-// Have been met.
-func StartEndpointHealthCheck(ctx context.Context, endpointAddress string, opts ...Option) <-chan bool {
+// have been met.
+func StartEndpointHealthCheck(ctx context.Context, opts ...Option) <-chan bool {
 	options := &healthCheckOptions{}
 	applyDefaults(options)
-
 	for _, o := range opts {
 		o(options)
 	}
+
+	if options.address == "" {
+		panic("required option 'address' is missing")
+	}
+
 	signalChan := make(chan bool, 1)
 
 	ticker := options.clock.NewTicker(options.interval)
 	ch := ticker.C()
 
-	go func() {
-		failureCount := &atomic.Int32{}
+	client := options.client
+	if client == nil {
+		client = &http.Client{}
+	}
 
-		client := options.client
-		if client == nil {
-			client = &http.Client{}
-		}
+	go func() {
+		wg := sync.WaitGroup{}
+		defer func() {
+			wg.Wait()
+			close(signalChan)
+		}()
 
 		if options.initialDelay > 0 {
 			select {
@@ -78,21 +88,33 @@ func StartEndpointHealthCheck(ctx context.Context, endpointAddress string, opts 
 			}
 		}
 
+		// Initial state is unhealthy until we validate it
+		// This makes it so the channel will receive a healthy status on the first successful healthcheck
+		failureCount := &atomic.Int32{}
+		failureCount.Store(options.failureThreshold)
+		signalChan <- false
+
 		for {
 			select {
 			case <-ch:
-				go doHealthCheck(client, endpointAddress, options.requestTimeout, signalChan, failureCount, options)
+				wg.Add(1)
+				go func() {
+					doHealthCheck(client, options.address, options.requestTimeout, signalChan, failureCount, options)
+					wg.Done()
+				}()
 			case <-ctx.Done():
 				return
 			}
 		}
 	}()
+
 	return signalChan
 }
 
 func doHealthCheck(client *http.Client, endpointAddress string, timeout time.Duration, signalChan chan bool, failureCount *atomic.Int32, options *healthCheckOptions) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpointAddress, nil)
 	if err != nil {
 		healthLogger.Errorf("Failed to create healthcheck request: %v", err)
@@ -101,14 +123,25 @@ func doHealthCheck(client *http.Client, endpointAddress string, timeout time.Dur
 
 	res, err := client.Do(req)
 	if err != nil || res.StatusCode != options.successStatusCode {
-		if failureCount.Add(1) >= options.failureThreshold {
-			failureCount.Store(options.failureThreshold - 1)
+		fc := failureCount.Add(1)
+		// Check if we've overflown
+		if fc < 0 {
+			failureCount.Store(options.failureThreshold + 1)
+		} else if fc == options.failureThreshold {
+			// If we're here, we just passed the threshold right now
+			healthLogger.Warn("Actor healthchecks detected unhealthy app")
 			signalChan <- false
 		}
 	} else {
-		signalChan <- true
-		failureCount.Store(0)
+		// Reset the failure count
+		// If the previous value was >= threshold, we need to report a health change
+		prev := failureCount.Swap(0)
+		if prev >= options.failureThreshold {
+			healthLogger.Info("Actor healthchecks detected app entering healthy status")
+			signalChan <- true
+		}
 	}
+
 	if res != nil {
 		// Drain before closing
 		_, _ = io.Copy(io.Discard, res.Body)
@@ -123,6 +156,13 @@ func applyDefaults(o *healthCheckOptions) {
 	o.successStatusCode = successStatusCode
 	o.interval = interval
 	o.clock = &kclock.RealClock{}
+}
+
+// WithAddress sets the endpoint address for the health check.
+func WithAddress(address string) Option {
+	return func(o *healthCheckOptions) {
+		o.address = address
+	}
 }
 
 // WithInitialDelay sets the initial delay for the health check.

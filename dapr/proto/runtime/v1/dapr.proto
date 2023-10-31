@@ -79,9 +79,6 @@ service Dapr {
   // Unregister an actor reminder.
   rpc UnregisterActorReminder(UnregisterActorReminderRequest) returns (google.protobuf.Empty) {}
 
-  // Rename an actor reminder.
-  rpc RenameActorReminder(RenameActorReminderRequest) returns (google.protobuf.Empty) {}
-
   // Gets the state for a specific actor.
   rpc GetActorState(GetActorStateRequest) returns (GetActorStateResponse) {}
 
@@ -122,7 +119,7 @@ service Dapr {
   rpc DecryptAlpha1(stream DecryptRequest) returns (stream DecryptResponse);
 
   // Gets metadata of the sidecar
-  rpc GetMetadata (google.protobuf.Empty) returns (GetMetadataResponse) {}
+  rpc GetMetadata (GetMetadataRequest) returns (GetMetadataResponse) {}
 
   // Sets value in extended metadata of the sidecar
   rpc SetMetadata (SetMetadataRequest) returns (google.protobuf.Empty) {}
@@ -190,7 +187,7 @@ service Dapr {
   // Raise an event to a running workflow instance
   rpc RaiseEventWorkflowBeta1 (RaiseEventWorkflowRequest) returns (google.protobuf.Empty) {}
   // Shutdown the sidecar
-  rpc Shutdown (google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc Shutdown (ShutdownRequest) returns (google.protobuf.Empty) {}
 }
 
 // InvokeServiceRequest represents the request message for Service invocation.
@@ -407,14 +404,12 @@ message BulkPublishResponse {
 
 // BulkPublishResponseFailedEntry is the message containing the entryID and error of a failed event in BulkPublishEvent call
 message BulkPublishResponseFailedEntry {
-
   // The response scoped unique ID referring to this message
   string entry_id = 1;
 
   // The error message if any on failure
   string error = 2;
 }
-
 
 // InvokeBindingRequest is the message to send data to output bindings
 message InvokeBindingRequest {
@@ -544,14 +539,6 @@ message UnregisterActorReminderRequest {
   string name = 3;
 }
 
-// RenameActorReminderRequest is the message to rename an actor reminder.
-message RenameActorReminderRequest {
-  string actor_type = 1;
-  string actor_id = 2;
-  string old_name = 3;
-  string new_name = 4;
-}
-
 // GetActorStateRequest is the message to get key-value states from specific actor.
 message GetActorStateRequest {
   string actor_type = 1;
@@ -600,7 +587,12 @@ message InvokeActorResponse {
   bytes data = 1;
 }
 
-// GetMetadataResponse is a message that is returned on GetMetadata rpc call
+// GetMetadataRequest is the message for the GetMetadata request.
+message GetMetadataRequest {
+  // Empty
+}
+
+// GetMetadataResponse is a message that is returned on GetMetadata rpc call.
 message GetMetadataResponse {
   string id = 1;
   repeated ActiveActorsCount active_actors_count = 2 [json_name = "actors"];
@@ -1087,4 +1079,9 @@ message PurgeWorkflowRequest {
   string instance_id = 1 [json_name = "instanceID"];
   // Name of the workflow component.
   string workflow_component = 2 [json_name = "workflowComponent"];
+}
+
+// ShutdownRequest is the request for Shutdown.
+message ShutdownRequest {
+  // Empty
 }

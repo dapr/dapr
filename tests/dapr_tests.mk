@@ -58,7 +58,7 @@ configurationapp \
 workflowsapp \
 
 # PERFORMANCE test app list
-PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc actor-activation-locker k6-custom pubsub_subscribe_http configuration
+PERF_TEST_APPS=actorfeatures actorjava tester service_invocation_http service_invocation_grpc actor-activation-locker k6-custom pubsub_subscribe_http configuration workflowsapp
 
 # E2E test app root directory
 E2E_TESTAPP_DIR=./tests/apps
@@ -83,6 +83,7 @@ actor_id_scale \
 actor_type_scale \
 configuration \
 pubsub_subscribe_http \
+workflows \
 
 KUBECTL=kubectl
 
@@ -347,7 +348,7 @@ test-perf-$(1): check-e2e-env test-deps
 			--junitfile $(TEST_OUTPUT_FILE_PREFIX)_perf_$(1).xml \
 			--format standard-quiet \
 			-- \
-				-timeout 1h -p 1 -count=1 -v -tags=perf ./tests/perf/$(1)/...
+				-timeout 2h -p 1 -count=1 -v -tags=perf ./tests/perf/$(1)/...
 	jq -r .Output $(TEST_OUTPUT_FILE_PREFIX)_perf_$(1).json | strings
 endef
 
@@ -373,7 +374,7 @@ ifeq ($(DAPR_PERF_TEST),)
 		--junitfile $(TEST_OUTPUT_FILE_PREFIX)_perf.xml \
 		--format standard-quiet \
 		-- \
-			-timeout 1h -p 1 -count=1 -v -tags=perf ./tests/perf/...
+			-timeout 2.5h -p 1 -count=1 -v -tags=perf ./tests/perf/...
 	jq -r .Output $(TEST_OUTPUT_FILE_PREFIX)_perf.json | strings
 else
 	for app in $(DAPR_PERF_TEST); do \
@@ -390,7 +391,7 @@ else
 			--junitfile $(TEST_OUTPUT_FILE_PREFIX)_perf.xml \
 			--format standard-quiet \
 			-- \
-				-timeout 1h -p 1 -count=1 -v -tags=perf ./tests/perf/$$app... || exit -1 ; \
+				-timeout 2.5h -p 1 -count=1 -v -tags=perf ./tests/perf/$$app... || exit -1 ; \
 		jq -r .Output $(TEST_OUTPUT_FILE_PREFIX)_perf.json | strings ; \
 	done
 endif
