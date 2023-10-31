@@ -199,12 +199,12 @@ func (wfe *WorkflowEngine) Start(ctx context.Context) (err error) {
 		wfe.backend,
 		wfe.executor,
 		wfBackendLogger,
-		backend.WithMaxParallelism(wfe.spec.MaxConcurrentWorkflowInvocations))
+		backend.WithMaxParallelism(wfe.spec.GetMaxConcurrentWorkflowInvocations()))
 	activityWorker := backend.NewActivityTaskWorker(
 		wfe.backend,
 		wfe.executor,
 		wfBackendLogger,
-		backend.WithMaxParallelism(wfe.spec.MaxConcurrentActivityInvocations))
+		backend.WithMaxParallelism(wfe.spec.GetMaxConcurrentActivityInvocations()))
 	wfe.worker = backend.NewTaskHubWorker(wfe.backend, orchestrationWorker, activityWorker, wfBackendLogger)
 
 	// Start the Durable Task worker, which will allow workflows to be scheduled and execute.
