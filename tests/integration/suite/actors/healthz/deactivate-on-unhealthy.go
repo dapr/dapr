@@ -20,14 +20,11 @@ import (
 	"log"
 	"net/http"
 	"strconv"
-	"sync/atomic"
 	"testing"
 	"time"
 
 	chi "github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"golang.org/x/exp/slices"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -45,13 +42,11 @@ func init() {
 type deactivateOnUnhealthy struct {
 	daprd               *daprd.Daprd
 	place               *placement.Placement
-	isHealthy           atomic.Bool
 	invokedActorsCh     chan string
 	deactivatedActorsCh chan string
 }
 
 func (h *deactivateOnUnhealthy) Setup(t *testing.T) []framework.Option {
-	h.isHealthy.Store(true)
 	h.invokedActorsCh = make(chan string, 2)
 	h.deactivatedActorsCh = make(chan string, 2)
 
@@ -60,14 +55,7 @@ func (h *deactivateOnUnhealthy) Setup(t *testing.T) []framework.Option {
 		w.Write([]byte(`{"entities": ["myactortype"]}`))
 	})
 	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		if h.isHealthy.Load() {
-			w.WriteHeader(http.StatusOK)
-		} else {
-			w.WriteHeader(http.StatusInternalServerError)
-		}
-	})
-	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`OK`))
+		w.WriteHeader(http.StatusOK)
 	})
 	r.Delete("/actors/{actorType}/{actorId}", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -130,26 +118,25 @@ func (h *deactivateOnUnhealthy) Run(t *testing.T, ctx context.Context) {
 	// Validate invocations
 	invoked := make([]string, 2)
 	for i := 0; i < 2; i++ {
-		invoked[i] = <-h.invokedActorsCh
+		select {
+		case invoked[i] = <-h.invokedActorsCh:
+		case <-time.After(time.Second * 5):
+			assert.Fail(t, "failed to invoke actor in time")
+		}
 	}
-	slices.Sort(invoked)
-	assert.Equal(t, []string{"myactortype/myactor0", "myactortype/myactor1"}, invoked)
+	assert.ElementsMatch(t, []string{"myactortype/myactor0", "myactortype/myactor1"}, invoked)
 
 	// Terminate the placement process to simulate a failure
 	h.place.Cleanup(t)
 
 	// Ensure actors get deactivated
-	deactivated := make([]string, 0, 2)
-	require.Eventually(t, func() bool {
+	deactivated := make([]string, 2)
+	for i := range deactivated {
 		select {
-		case act := <-h.deactivatedActorsCh:
-			deactivated = append(deactivated, act)
-		case <-time.After(50 * time.Millisecond):
-			return false
+		case deactivated[i] = <-h.deactivatedActorsCh:
+		case <-time.After(5 * time.Second):
+			assert.Fail(t, "Did not receive deactivation signal in time")
 		}
-
-		return len(deactivated) == 2
-	}, 5*time.Second, 50*time.Millisecond, "Did not receive 2 deactivation signals")
-	slices.Sort(deactivated)
-	assert.Equal(t, []string{"myactortype/myactor0", "myactortype/myactor1"}, deactivated)
+	}
+	assert.ElementsMatch(t, []string{"myactortype/myactor0", "myactortype/myactor1"}, deactivated)
 }

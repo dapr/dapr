@@ -315,7 +315,10 @@ func (p *actorPlacement) WaitUntilReady(ctx context.Context) error {
 
 	select {
 	case p.unblockSignal <- struct{}{}:
-		<-p.unblockSignal
+		select {
+		case <-p.unblockSignal:
+		default:
+		}
 		// continue
 	case <-ctx.Done():
 		return ctx.Err()
@@ -425,7 +428,11 @@ func (p *actorPlacement) establishStreamConn(ctx context.Context) (established b
 			p.resetPlacementTables()
 
 			// Sleep with an exponential backoff
-			time.Sleep(bo.NextBackOff())
+			select {
+			case <-time.After(bo.NextBackOff()):
+			case <-ctx.Done():
+				return false
+			}
 			continue
 		}
 
