@@ -29,15 +29,15 @@ import (
 )
 
 func init() {
-	suite.Register(new(metadataActorDisabled))
+	suite.Register(new(disabled))
 }
 
-// metadataActorDisabled tests the response of the metadata API when the actor runtime is disabled
-type metadataActorDisabled struct {
+// disabled tests the response of the metadata API when the actor runtime is disabled
+type disabled struct {
 	daprd *daprd.Daprd
 }
 
-func (m *metadataActorDisabled) Setup(t *testing.T) []framework.Option {
+func (m *disabled) Setup(t *testing.T) []framework.Option {
 	handler := http.NewServeMux()
 	handler.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -59,7 +59,7 @@ func (m *metadataActorDisabled) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (m *metadataActorDisabled) Run(t *testing.T, ctx context.Context) {
+func (m *disabled) Run(t *testing.T, ctx context.Context) {
 	// Test an app that has the actor runtime disabled (when there's no placement address)
 
 	m.daprd.WaitUntilTCPReady(t, ctx)

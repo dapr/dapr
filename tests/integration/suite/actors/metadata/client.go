@@ -32,23 +32,23 @@ import (
 )
 
 func init() {
-	suite.Register(new(metadataActorHost))
+	suite.Register(new(client))
 }
 
-// metadataActorHost tests the response of the metadata API for a healthy actor host.
-type metadataActorHost struct {
+// client tests the response of the metadata API for a healthy actor client.
+type client struct {
 	daprd       *daprd.Daprd
 	place       *placement.Placement
 	blockConfig chan struct{}
 }
 
-func (m *metadataActorHost) Setup(t *testing.T) []framework.Option {
+func (m *client) Setup(t *testing.T) []framework.Option {
 	m.blockConfig = make(chan struct{})
 
 	handler := http.NewServeMux()
 	handler.HandleFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
 		<-m.blockConfig
-		w.Write([]byte(`{"entities": ["myactortype"]}`))
+		w.Write([]byte(`{"entities": []}`))
 	})
 	handler.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -60,7 +60,6 @@ func (m *metadataActorHost) Setup(t *testing.T) []framework.Option {
 	srv := prochttp.New(t, prochttp.WithHandler(handler))
 	m.place = placement.New(t)
 	m.daprd = daprd.New(t,
-		daprd.WithResourceFiles(stateStore),
 		daprd.WithPlacementAddresses("localhost:"+strconv.Itoa(m.place.Port())),
 		daprd.WithAppProtocol("http"),
 		daprd.WithAppPort(srv.Port()),
@@ -72,10 +71,10 @@ func (m *metadataActorHost) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (m *metadataActorHost) Run(t *testing.T, ctx context.Context) {
-	// Test an app that is an actor host
+func (m *client) Run(t *testing.T, ctx context.Context) {
+	// Test an app that is an actor client (no actor state store configured)
 	// 1. Assert that status is "INITIALIZING" before /dapr/config is called
-	// 2. After init is done, status is "RUNNING", hostReady is "true", placement reports a connection, and hosted actors are listed
+	// 2. After init is done, status is "RUNNING", hostReady is "false", placement reports a connection, and hosted actors are empty
 
 	m.place.WaitUntilRunning(t, ctx)
 	m.daprd.WaitUntilTCPReady(t, ctx)
@@ -95,11 +94,8 @@ func (m *metadataActorHost) Run(t *testing.T, ctx context.Context) {
 	assert.EventuallyWithT(t, func(t *assert.CollectT) {
 		res := getMetadata(t, ctx, client, m.daprd.HTTPPort())
 		assert.Equal(t, "RUNNING", res.ActorRuntime.RuntimeStatus)
-		assert.True(t, res.ActorRuntime.HostReady)
+		assert.False(t, res.ActorRuntime.HostReady)
 		assert.Equal(t, "placement: connected", res.ActorRuntime.Placement)
-		if assert.Len(t, res.ActorRuntime.ActiveActors, 1) {
-			assert.Equal(t, "myactortype", res.ActorRuntime.ActiveActors[0].Type)
-			assert.Equal(t, 0, res.ActorRuntime.ActiveActors[0].Count)
-		}
+		assert.Empty(t, res.ActorRuntime.ActiveActors, 0)
 	}, 10*time.Second, 100*time.Millisecond)
 }

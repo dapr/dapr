@@ -16,7 +16,6 @@ package metadata
 import (
 	"context"
 	"net/http"
-	"strconv"
 	"testing"
 	"time"
 
@@ -26,29 +25,27 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
-	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
 func init() {
-	suite.Register(new(metadataActorClient))
+	suite.Register(new(hostNoPlacement))
 }
 
-// metadataActorClient tests the response of the metadata API for a healthy actor client.
-type metadataActorClient struct {
+// hostNoPlacement tests the response of the metadata API for an actor host that isn't connected to Placement.
+type hostNoPlacement struct {
 	daprd       *daprd.Daprd
-	place       *placement.Placement
 	blockConfig chan struct{}
 }
 
-func (m *metadataActorClient) Setup(t *testing.T) []framework.Option {
+func (m *hostNoPlacement) Setup(t *testing.T) []framework.Option {
 	m.blockConfig = make(chan struct{})
 
 	handler := http.NewServeMux()
 	handler.HandleFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
 		<-m.blockConfig
-		w.Write([]byte(`{"entities": []}`))
+		w.Write([]byte(`{"entities": ["myactortype"]}`))
 	})
 	handler.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -58,25 +55,24 @@ func (m *metadataActorClient) Setup(t *testing.T) []framework.Option {
 	})
 
 	srv := prochttp.New(t, prochttp.WithHandler(handler))
-	m.place = placement.New(t)
 	m.daprd = daprd.New(t,
-		daprd.WithPlacementAddresses("localhost:"+strconv.Itoa(m.place.Port())),
+		daprd.WithPlacementAddresses("localhost:65500"), // Placement isn't listening on that port
+		daprd.WithResourceFiles(stateStore),
 		daprd.WithAppProtocol("http"),
 		daprd.WithAppPort(srv.Port()),
 		daprd.WithLogLevel("info"), // Daprd is super noisy in debug mode when connecting to placement.
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(m.place, srv, m.daprd),
+		framework.WithProcesses(srv, m.daprd),
 	}
 }
 
-func (m *metadataActorClient) Run(t *testing.T, ctx context.Context) {
-	// Test an app that is an actor client (no actor state store configured)
+func (m *hostNoPlacement) Run(t *testing.T, ctx context.Context) {
+	// Test an app that is an actor host, but the placement service is not connected
 	// 1. Assert that status is "INITIALIZING" before /dapr/config is called
-	// 2. After init is done, status is "RUNNING", hostReady is "false", placement reports a connection, and hosted actors are empty
+	// 2. After init is done, status is "RUNNING", hostReady is "false", placement reports no connection, and hosted actors are listed
 
-	m.place.WaitUntilRunning(t, ctx)
 	m.daprd.WaitUntilTCPReady(t, ctx)
 
 	client := util.HTTPClient(t)
@@ -95,7 +91,10 @@ func (m *metadataActorClient) Run(t *testing.T, ctx context.Context) {
 		res := getMetadata(t, ctx, client, m.daprd.HTTPPort())
 		assert.Equal(t, "RUNNING", res.ActorRuntime.RuntimeStatus)
 		assert.False(t, res.ActorRuntime.HostReady)
-		assert.Equal(t, "placement: connected", res.ActorRuntime.Placement)
-		assert.Empty(t, res.ActorRuntime.ActiveActors, 0)
+		assert.Equal(t, "placement: disconnected", res.ActorRuntime.Placement)
+		if assert.Len(t, res.ActorRuntime.ActiveActors, 1) {
+			assert.Equal(t, "myactortype", res.ActorRuntime.ActiveActors[0].Type)
+			assert.Equal(t, 0, res.ActorRuntime.ActiveActors[0].Count)
+		}
 	}, 10*time.Second, 100*time.Millisecond)
 }
