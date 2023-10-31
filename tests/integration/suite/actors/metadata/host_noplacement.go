@@ -50,14 +50,11 @@ func (m *hostNoPlacement) Setup(t *testing.T) []framework.Option {
 	handler.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	handler.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`OK`))
-	})
 
 	srv := prochttp.New(t, prochttp.WithHandler(handler))
 	m.daprd = daprd.New(t,
 		daprd.WithPlacementAddresses("localhost:65500"), // Placement isn't listening on that port
-		daprd.WithResourceFiles(stateStore),
+		daprd.WithInMemoryStore("mystore"),
 		daprd.WithAppProtocol("http"),
 		daprd.WithAppPort(srv.Port()),
 		daprd.WithLogLevel("info"), // Daprd is super noisy in debug mode when connecting to placement.

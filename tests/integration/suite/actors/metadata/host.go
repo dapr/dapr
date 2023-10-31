@@ -60,7 +60,7 @@ func (m *host) Setup(t *testing.T) []framework.Option {
 	srv := prochttp.New(t, prochttp.WithHandler(handler))
 	m.place = placement.New(t)
 	m.daprd = daprd.New(t,
-		daprd.WithResourceFiles(stateStore),
+		daprd.WithInMemoryStore("mystore"),
 		daprd.WithPlacementAddresses("localhost:"+strconv.Itoa(m.place.Port())),
 		daprd.WithAppProtocol("http"),
 		daprd.WithAppPort(srv.Port()),

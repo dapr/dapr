@@ -42,13 +42,10 @@ func (m *disabled) Setup(t *testing.T) []framework.Option {
 	handler.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	handler.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`OK`))
-	})
 
 	srv := prochttp.New(t, prochttp.WithHandler(handler))
 	m.daprd = daprd.New(t, // "WithPlacementAddress" is missing on purpose, to disable the actor runtime
-		daprd.WithResourceFiles(stateStore),
+		daprd.WithInMemoryStore("mystore"),
 		daprd.WithAppProtocol("http"),
 		daprd.WithAppPort(srv.Port()),
 		daprd.WithLogLevel("info"), // Daprd is super noisy in debug mode when connecting to placement.

@@ -23,19 +23,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// In-memory state store component.
-const stateStore = `apiVersion: dapr.io/v1alpha1
-kind: Component
-metadata:
-  name: mystore
-spec:
-  type: state.in-memory
-  version: v1
-  metadata:
-    - name: actorStateStore
-      value: true
-`
-
 // Subset of data returned by the metadata endpoint.
 type metadataRes struct {
 	ActorRuntime struct {

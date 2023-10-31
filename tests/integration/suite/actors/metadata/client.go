@@ -53,9 +53,6 @@ func (m *client) Setup(t *testing.T) []framework.Option {
 	handler.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	handler.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`OK`))
-	})
 
 	srv := prochttp.New(t, prochttp.WithHandler(handler))
 	m.place = placement.New(t)

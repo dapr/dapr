@@ -66,18 +66,8 @@ func (i *initerror) Setup(t *testing.T) []framework.Option {
 
 	srv := prochttp.New(t, prochttp.WithHandler(handler))
 	i.place = placement.New(t)
-	i.daprd = daprd.New(t, daprd.WithResourceFiles(`
-apiVersion: dapr.io/v1alpha1
-kind: Component
-metadata:
-  name: mystore
-spec:
-  type: state.in-memory
-  version: v1
-  metadata:
-  - name: actorStateStore
-    value: true
-`),
+	i.daprd = daprd.New(t,
+		daprd.WithInMemoryStore("mystore"),
 		daprd.WithPlacementAddresses("localhost:"+strconv.Itoa(i.place.Port())),
 		daprd.WithAppPort(srv.Port()),
 		// Daprd is super noisy in debug mode when connecting to placement.
