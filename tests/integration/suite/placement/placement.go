@@ -14,5 +14,6 @@ limitations under the License.
 package placement
 
 import (
+	_ "github.com/dapr/dapr/tests/integration/suite/placement/apilevel"
 	_ "github.com/dapr/dapr/tests/integration/suite/placement/quorum"
 )
