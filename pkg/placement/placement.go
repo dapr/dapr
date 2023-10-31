@@ -206,14 +206,16 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 				continue
 			}
 
+			now := p.clock.Now()
+
 			for _, entity := range req.Entities {
-				monitoring.RecordActorHeartbeat(req.Id, entity, req.Name, req.Pod, p.clock.Now())
+				monitoring.RecordActorHeartbeat(req.Id, entity, req.Name, req.Pod, now)
 			}
 
 			// Record the heartbeat timestamp. This timestamp will be used to check if the member
 			// state maintained by raft is valid or not. If the member is outdated based the timestamp
 			// the member will be marked as faulty node and removed.
-			p.lastHeartBeat.Store(req.Name, p.clock.Now().UnixNano())
+			p.lastHeartBeat.Store(req.Name, now.UnixNano())
 
 			members := p.raftNode.FSM().State().Members()
 
@@ -233,7 +235,8 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 						Name:      req.Name,
 						AppID:     req.Id,
 						Entities:  req.Entities,
-						UpdatedAt: p.clock.Now().UnixNano(),
+						UpdatedAt: now.UnixNano(),
+						APILevel:  req.ApiLevel,
 					},
 				}
 				log.Debugf("Member changed upserting appid %s with entities %v", req.Id, req.Entities)

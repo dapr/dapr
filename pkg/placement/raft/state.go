@@ -34,6 +34,9 @@ type DaprHostMember struct {
 
 	// UpdatedAt is the last time when this host member info is updated.
 	UpdatedAt int64
+
+	// Version of the Actor APIs supported by the Dapr runtime
+	APILevel uint32
 }
 
 type DaprHostMemberStateData struct {
@@ -64,8 +67,6 @@ type DaprHostMemberState struct {
 func newDaprHostMemberState() *DaprHostMemberState {
 	return &DaprHostMemberState{
 		data: DaprHostMemberStateData{
-			Index:           0,
-			TableGeneration: 0,
 			Members:         map[string]*DaprHostMember{},
 			hashingTableMap: map[string]*hashing.Consistent{},
 		},
@@ -83,7 +84,7 @@ func (s *DaprHostMemberState) Members() map[string]*DaprHostMember {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
-	members := make(map[string]*DaprHostMember)
+	members := make(map[string]*DaprHostMember, len(s.data.Members))
 	for k, v := range s.data.Members {
 		members[k] = v
 	}
@@ -95,6 +96,23 @@ func (s *DaprHostMemberState) TableGeneration() uint64 {
 	defer s.lock.RUnlock()
 
 	return s.data.TableGeneration
+}
+
+func (s *DaprHostMemberState) MinAPILevel() (minVer uint32) {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	for k := range s.data.Members {
+		apiLevel := s.data.Members[k].APILevel
+		if apiLevel <= 0 {
+			apiLevel = 0
+		}
+		if minVer <= 0 || minVer > apiLevel {
+			minVer = apiLevel
+		}
+	}
+
+	return minVer
 }
 
 func (s *DaprHostMemberState) hashingTableMap() map[string]*hashing.Consistent {
@@ -112,8 +130,7 @@ func (s *DaprHostMemberState) clone() *DaprHostMemberState {
 		data: DaprHostMemberStateData{
 			Index:           s.data.Index,
 			TableGeneration: s.data.TableGeneration,
-			Members:         map[string]*DaprHostMember{},
-			hashingTableMap: nil,
+			Members:         make(map[string]*DaprHostMember, len(s.data.Members)),
 		},
 	}
 	for k, v := range s.data.Members {
@@ -122,6 +139,7 @@ func (s *DaprHostMemberState) clone() *DaprHostMemberState {
 			AppID:     v.AppID,
 			Entities:  make([]string, len(v.Entities)),
 			UpdatedAt: v.UpdatedAt,
+			APILevel:  v.APILevel,
 		}
 		copy(m.Entities, v.Entities)
 		newMembers.data.Members[k] = m
@@ -181,6 +199,7 @@ func (s *DaprHostMemberState) upsertMember(host *DaprHostMember) bool {
 		Name:      host.Name,
 		AppID:     host.AppID,
 		UpdatedAt: host.UpdatedAt,
+		APILevel:  host.APILevel,
 	}
 
 	// Update hashing table only when host reports actor types

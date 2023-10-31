@@ -15,7 +15,8 @@ package placement
 
 type PlacementTables struct {
 	HostList     []HostInfo `json:"hostList,omitempty"`
-	TableVersion uint64     `json:"tableVersion,omitempty"`
+	TableVersion uint64     `json:"tableVersion"`
+	MinAPILevel  uint32     `json:"minApiLevel"`
 }
 type HostInfo struct {
 	Name       string   `json:"name,omitempty"`
@@ -26,20 +27,23 @@ type HostInfo struct {
 
 // GetPlacementTables returns the current placement host infos.
 func (p *Service) GetPlacementTables() (*PlacementTables, error) {
-	m := p.raftNode.FSM().State().Members()
-	version := p.raftNode.FSM().State().TableGeneration()
+	state := p.raftNode.FSM().State()
+	m := state.Members()
 	response := &PlacementTables{
-		TableVersion: version,
+		TableVersion: state.TableGeneration(),
+		MinAPILevel:  state.MinAPILevel(),
 	}
-	members := make([]HostInfo, 0, len(m))
+	members := make([]HostInfo, len(m))
 	// the key of the member map is the host name, so we can just ignore it.
+	var i int
 	for _, v := range m {
-		members = append(members, HostInfo{
+		members[i] = HostInfo{
 			Name:       v.Name,
 			AppID:      v.AppID,
 			ActorTypes: v.Entities,
 			UpdatedAt:  v.UpdatedAt,
-		})
+		}
+		i++
 	}
 	response.HostList = members
 	return response, nil

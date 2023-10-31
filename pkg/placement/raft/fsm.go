@@ -73,9 +73,11 @@ func (c *FSM) PlacementState() *v1pb.PlacementTables {
 		Entries: make(map[string]*v1pb.PlacementTable),
 	}
 
-	totalHostSize := 0
-	totalSortedSet := 0
-	totalLoadMap := 0
+	var (
+		totalHostSize  int
+		totalSortedSet int
+		totalLoadMap   int
+	)
 
 	entries := c.state.hashingTableMap()
 	for k, v := range entries {
