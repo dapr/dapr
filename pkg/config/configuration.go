@@ -60,6 +60,9 @@ const (
 	DefaultNamespace    = "default"
 	ActionPolicyApp     = "app"
 	ActionPolicyGlobal  = "global"
+
+	defaultMaxWorkflowConcurrentInvocations = 1000
+	defaultMaxActivityConcurrentInvocations = 1000
 )
 
 // Configuration is an internal (and duplicate) representation of Dapr's Configuration CRD.
@@ -125,6 +128,20 @@ type WorkflowSpec struct {
 	// Attempted invocations beyond this will be queued until the number of concurrent invocations drops below this value.
 	// If omitted, the default value of 1000 will be used.
 	MaxConcurrentActivityInvocations int32 `json:"maxConcurrentActivityInvocations,omitempty" yaml:"maxConcurrentActivityInvocations,omitempty"`
+}
+
+func (w *WorkflowSpec) GetMaxConcurrentWorkflowInvocations() int32 {
+	if w == nil || w.MaxConcurrentWorkflowInvocations <= 0 {
+		return defaultMaxWorkflowConcurrentInvocations
+	}
+	return w.MaxConcurrentWorkflowInvocations
+}
+
+func (w *WorkflowSpec) GetMaxConcurrentActivityInvocations() int32 {
+	if w == nil || w.MaxConcurrentActivityInvocations <= 0 {
+		return defaultMaxActivityConcurrentInvocations
+	}
+	return w.MaxConcurrentActivityInvocations
 }
 
 type SecretsSpec struct {
@@ -376,6 +393,10 @@ func LoadDefaultConfiguration() *Configuration {
 				DefaultAction: AllowAccess,
 				TrustDomain:   "public",
 			},
+			WorkflowSpec: &WorkflowSpec{
+				MaxConcurrentWorkflowInvocations: defaultMaxWorkflowConcurrentInvocations,
+				MaxConcurrentActivityInvocations: defaultMaxActivityConcurrentInvocations,
+			},
 		},
 	}
 }
@@ -600,8 +621,8 @@ func (c Configuration) GetAPILoggingSpec() APILoggingSpec {
 func (c *Configuration) GetWorkflowSpec() WorkflowSpec {
 	if c == nil || c.Spec.WorkflowSpec == nil {
 		return WorkflowSpec{
-			MaxConcurrentWorkflowInvocations: 100,
-			MaxConcurrentActivityInvocations: 100,
+			MaxConcurrentWorkflowInvocations: defaultMaxWorkflowConcurrentInvocations,
+			MaxConcurrentActivityInvocations: defaultMaxActivityConcurrentInvocations,
 		}
 	}
 	return *c.Spec.WorkflowSpec
