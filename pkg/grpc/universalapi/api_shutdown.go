@@ -17,10 +17,12 @@ import (
 	"context"
 
 	"google.golang.org/protobuf/types/known/emptypb"
+
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
 // Shutdown the sidecar.
-func (a *UniversalAPI) Shutdown(ctx context.Context, in *emptypb.Empty) (*emptypb.Empty, error) {
+func (a *UniversalAPI) Shutdown(ctx context.Context, in *runtimev1pb.ShutdownRequest) (*emptypb.Empty, error) {
 	go func() {
 		<-ctx.Done()
 		a.ShutdownFn()

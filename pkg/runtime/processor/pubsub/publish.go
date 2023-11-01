@@ -157,7 +157,7 @@ func (p *pubsub) publishMessageHTTP(ctx context.Context, msg *subscribedMessage)
 		case contribpubsub.Drop:
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(contribpubsub.Drop)), msg.topic, elapsed)
 			log.Warnf("DROP status returned from app while processing pub/sub event %v", cloudEvent[contribpubsub.IDField])
-			return nil
+			return rtpubsub.ErrMessageDropped
 		}
 		// Consider unknown status field as error and retry
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(contribpubsub.Retry)), msg.topic, elapsed)
@@ -306,7 +306,7 @@ func (p *pubsub) publishMessageGRPC(ctx context.Context, msg *subscribedMessage)
 		log.Warnf("DROP status returned from app while processing pub/sub event %v", cloudEvent[contribpubsub.IDField])
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(contribpubsub.Drop)), msg.topic, elapsed)
 
-		return nil
+		return rtpubsub.ErrMessageDropped
 	}
 
 	// Consider unknown status field as error and retry

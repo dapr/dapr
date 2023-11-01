@@ -20,23 +20,38 @@ import (
 	"github.com/go-chi/chi/v5"
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/dapr/dapr/pkg/http/endpoints"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
-func (a *api) constructMetadataEndpoints() []Endpoint {
-	return []Endpoint{
+var endpointGroupMetadataV1 = &endpoints.EndpointGroup{
+	Name:                 endpoints.EndpointGroupMetadata,
+	Version:              endpoints.EndpointGroupVersion1,
+	AppendSpanAttributes: nil, // TODO
+}
+
+func (a *api) constructMetadataEndpoints() []endpoints.Endpoint {
+	return []endpoints.Endpoint{
 		{
 			Methods: []string{http.MethodGet},
 			Route:   "metadata",
 			Version: apiVersionV1,
+			Group:   endpointGroupMetadataV1,
 			Handler: a.onGetMetadata(),
+			Settings: endpoints.EndpointSettings{
+				Name: "GetMetadata",
+			},
 		},
 		{
 			Methods: []string{http.MethodPut},
 			Route:   "metadata/{key}",
 			Version: apiVersionV1,
+			Group:   endpointGroupMetadataV1,
 			Handler: a.onPutMetadata(),
+			Settings: endpoints.EndpointSettings{
+				Name: "PutMetadata",
+			},
 		},
 	}
 }
@@ -44,7 +59,7 @@ func (a *api) constructMetadataEndpoints() []Endpoint {
 func (a *api) onGetMetadata() http.HandlerFunc {
 	return UniversalHTTPHandler(
 		a.universal.GetMetadata,
-		UniversalHTTPHandlerOpts[*emptypb.Empty, *runtimev1pb.GetMetadataResponse]{
+		UniversalHTTPHandlerOpts[*runtimev1pb.GetMetadataRequest, *runtimev1pb.GetMetadataResponse]{
 			OutModifier: func(out *runtimev1pb.GetMetadataResponse) (any, error) {
 				// In the protos, the property subscriptions[*].rules is serialized as subscriptions[*].rules.rules
 				// To maintain backwards-compatibility, we need to copy into a custom struct and marshal that instead
