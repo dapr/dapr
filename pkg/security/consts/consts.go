@@ -30,6 +30,11 @@ const (
 	// TrustAnchorsEnvVar is the environment variable name for the trust anchors in the sidecar.
 	TrustAnchorsEnvVar = "DAPR_TRUST_ANCHORS"
 
+	// TrustAnchorsFileEnvVar is the environment variable name for the trust anchors file in the sidecar.
+	// Superceeds TrustAnchorsEnvVar if set.
+	// TODO: @joshvanl: remove in v1.14 after this env var has been deprecated and removed in favour of just the CLI flag --trust-anchor-file.
+	TrustAnchorsFileEnvVar = "DAPR_TRUST_ANCHORS_FILE"
+
 	// EnvKeysEnvVar is the variable injected in the daprd container with the list of injected env vars.
 	EnvKeysEnvVar = "DAPR_ENV_KEYS"
 
