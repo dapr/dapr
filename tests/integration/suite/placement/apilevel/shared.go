@@ -46,9 +46,9 @@ func establishConn(ctx context.Context, port int) (*grpc.ClientConn, error) {
 	)
 }
 
-func registerHost(ctx context.Context, conn *grpc.ClientConn, apiLevel int, placementMessage chan any, stopCh chan struct{}) {
+func registerHost(ctx context.Context, conn *grpc.ClientConn, name string, apiLevel int, placementMessage chan any, stopCh chan struct{}) {
 	msg := &placementv1pb.Host{
-		Name:     "myapp",
+		Name:     name,
 		Port:     1234,
 		Entities: []string{"someactor"},
 		Id:       "myapp",
@@ -135,7 +135,7 @@ func registerHost(ctx context.Context, conn *grpc.ClientConn, apiLevel int, plac
 // Expect the registration to fail with FailedPrecondition.
 func registerHostFailing(t *testing.T, ctx context.Context, conn *grpc.ClientConn, apiLevel int) {
 	msg := &placementv1pb.Host{
-		Name:     "myapp",
+		Name:     "myapp-fail",
 		Port:     1234,
 		Entities: []string{"someactor"},
 		Id:       "myapp",
@@ -156,7 +156,7 @@ func registerHostFailing(t *testing.T, ctx context.Context, conn *grpc.ClientCon
 }
 
 // Checks the API level reported in the state tables matched.
-func checkAPILevelInState(t assert.TestingT, port int, expectApiLevel int) {
+func checkAPILevelInState(t assert.TestingT, port int, expectApiLevel int) (tableVersion int) {
 	res, err := client.Get(fmt.Sprintf("http://localhost:%d/placement/state", port))
 	if !assert.NoError(t, err) {
 		return
@@ -164,7 +164,8 @@ func checkAPILevelInState(t assert.TestingT, port int, expectApiLevel int) {
 	defer res.Body.Close()
 
 	stateRes := struct {
-		ApiLevel int `json:"apiLevel"`
+		ApiLevel     int `json:"apiLevel"`
+		TableVersion int `json:"tableVersion"`
 	}{}
 	err = json.NewDecoder(res.Body).Decode(&stateRes)
 	if !assert.NoError(t, err) {
@@ -172,4 +173,6 @@ func checkAPILevelInState(t assert.TestingT, port int, expectApiLevel int) {
 	}
 
 	assert.Equal(t, expectApiLevel, stateRes.ApiLevel)
+
+	return stateRes.TableVersion
 }
