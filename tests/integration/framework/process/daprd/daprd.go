@@ -153,6 +153,9 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	if opts.controlPlaneTrustDomain != nil {
 		args = append(args, "--control-plane-trust-domain="+*opts.controlPlaneTrustDomain)
 	}
+	if opts.trustAnchorsFile != nil {
+		args = append(args, "--trust-anchors-file="+*opts.trustAnchorsFile)
+	}
 
 	ns := "default"
 	if opts.namespace != nil {

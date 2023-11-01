@@ -76,10 +76,16 @@ func Run() {
 	cfg.ListenAddress = opts.ListenAddress
 
 	var (
-		watchDir    = filepath.Dir(cfg.IssuerCertPath)
 		issuerEvent = make(chan struct{})
 		mngr        = concurrency.NewRunnerManager()
 	)
+
+	fw, err := fswatcher.New(fswatcher.Options{
+		Targets: []string{opts.IssuerCredentialsPath},
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	// We use runner manager inception here since we want the inner manager to be
 	// restarted when the CA server needs to be restarted because of file events.
@@ -130,15 +136,9 @@ func Run() {
 	}
 
 	// Watch for changes in the watchDir
-	fs, err := fswatcher.New(fswatcher.Options{
-		Targets: []string{watchDir},
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
 	if err = mngr.Add(func(ctx context.Context) error {
-		log.Infof("Starting watch on filesystem directory: %s", watchDir)
-		return fs.Run(ctx, issuerEvent)
+		log.Infof("Starting watch on filesystem directory: %s", opts.IssuerCredentialsPath)
+		return fw.Run(ctx, issuerEvent)
 	}); err != nil {
 		log.Fatal(err)
 	}

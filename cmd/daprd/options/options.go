@@ -43,6 +43,7 @@ type Options struct {
 	ControlPlaneNamespace         string
 	SentryAddress                 string
 	TrustAnchors                  []byte
+	TrustAnchorsFile              *string
 	AllowedOrigins                string
 	EnableProfiling               bool
 	AppMaxConcurrency             int
@@ -82,6 +83,8 @@ type Options struct {
 	AppChannelAddress             string
 	Logger                        logger.Options
 	Metrics                       *metrics.Options
+
+	trustAnchorsFile string
 }
 
 func New(origArgs []string) (*Options, error) {
@@ -163,6 +166,7 @@ func New(origArgs []string) (*Options, error) {
 	fs.IntVar(&opts.AppHealthProbeTimeout, "app-health-probe-timeout", int(config.AppHealthConfigDefaultProbeTimeout/time.Millisecond), "Timeout for app health probes in milliseconds")
 	fs.IntVar(&opts.AppHealthThreshold, "app-health-threshold", int(config.AppHealthConfigDefaultThreshold), "Number of consecutive failures for the app to be considered unhealthy")
 	fs.StringVar(&opts.AppChannelAddress, "app-channel-address", runtime.DefaultChannelAddress, "The network address the application listens on")
+	fs.StringVar(&opts.trustAnchorsFile, "trust-anchors-file", "", "Path to trust anchors file")
 
 	// Add flags for actors, placement, and reminders
 	// --placement-host-address is a legacy (but not deprecated) flag that is translated to the actors-service flag
@@ -231,8 +235,6 @@ func New(origArgs []string) (*Options, error) {
 		}
 	}
 
-	opts.TrustAnchors = []byte(os.Getenv(consts.TrustAnchorsEnvVar))
-
 	if !fs.Changed("control-plane-namespace") {
 		ns, ok := os.LookupEnv(consts.ControlPlaneNamespaceEnvVar)
 		if ok {
@@ -255,6 +257,18 @@ func New(origArgs []string) (*Options, error) {
 		addr, ok := os.LookupEnv(consts.SchedulerHostAddressEnvVar)
 		if ok {
 			opts.SchedulerAddress = strings.Split(addr, ",")
+		}
+	}
+
+	// If trust anchors file CLI flag is not passed, fall back to env var
+	if fs.Changed("trust-anchors-file") {
+		opts.TrustAnchorsFile = &opts.trustAnchorsFile
+	} else {
+		tsFile, ok := os.LookupEnv(consts.TrustAnchorsFileEnvVar)
+		if ok {
+			opts.TrustAnchorsFile = &tsFile
+		} else {
+			opts.TrustAnchors = []byte(os.Getenv(consts.TrustAnchorsEnvVar))
 		}
 	}
 
