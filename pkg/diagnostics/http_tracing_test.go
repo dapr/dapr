@@ -33,7 +33,9 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/dapr/dapr/pkg/config"
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"github.com/dapr/dapr/pkg/http/endpoints"
 	"github.com/dapr/dapr/utils/responsewriter"
 )
 
@@ -146,112 +148,31 @@ func TestSpanContextToHTTPHeaders(t *testing.T) {
 	})
 }
 
-func TestGetAPIComponent(t *testing.T) {
-	tests := []struct {
-		path    string
-		version string
-		api     string
-	}{
-		{"/v1.0/state/statestore/key", "v1.0", "state"},
-		{"/v1.0/state/statestore", "v1.0", "state"},
-		{"/v1.0/secrets/keyvault/name", "v1.0", "secrets"},
-		{"/v1.0/invoke/fakeApp/method/add", "v1.0", "invoke"},
-		{"/v1/publish/topicA", "v1", "publish"},
-		{"/v1/bindings/kafka", "v1", "bindings"},
-		{"/healthz", "", ""},
-		{"/v1/actors/DemoActor/1/state/key", "v1", "actors"},
-		{"", "", ""},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.path, func(t *testing.T) {
-			ver, api := getAPIComponent(tt.path)
-			assert.Equal(t, tt.version, ver)
-			assert.Equal(t, tt.api, api)
-		})
-	}
-}
-
 func TestGetSpanAttributesMapFromHTTPContext(t *testing.T) {
 	tests := []struct {
-		path string
-		out  map[string]string
+		path               string
+		appendAttributesFn endpoints.AppendSpanAttributesFn
+		out                map[string]string
 	}{
 		{
 			"/v1.0/state/statestore/key",
-			map[string]string{
-				dbSystemSpanAttributeKey:           "state",
-				dbNameSpanAttributeKey:             "statestore",
-				dbStatementSpanAttributeKey:        "GET /v1.0/state/statestore/key",
-				dbConnectionStringSpanAttributeKey: "state",
+			func(r *http.Request, m map[string]string) {
+				m[diagConsts.DBSystemSpanAttributeKey] = "state"
+				m[diagConsts.DBNameSpanAttributeKey] = "statestore"
+				m[diagConsts.DBConnectionStringSpanAttributeKey] = "state"
 			},
-		},
-		{
-			"/v1.0/state/statestore",
 			map[string]string{
-				dbSystemSpanAttributeKey:           "state",
-				dbNameSpanAttributeKey:             "statestore",
-				dbStatementSpanAttributeKey:        "GET /v1.0/state/statestore",
-				dbConnectionStringSpanAttributeKey: "state",
-			},
-		},
-		{
-			"/v1.0/secrets/keyvault/name",
-			map[string]string{
-				dbSystemSpanAttributeKey:           secretBuildingBlockType,
-				dbNameSpanAttributeKey:             "keyvault",
-				dbStatementSpanAttributeKey:        "GET /v1.0/secrets/keyvault/name",
-				dbConnectionStringSpanAttributeKey: secretBuildingBlockType,
-			},
-		},
-		{
-			"/v1.0/invoke/fakeApp/method/add",
-			map[string]string{
-				gRPCServiceSpanAttributeKey: daprGRPCServiceInvocationService,
-				netPeerNameSpanAttributeKey: "fakeApp",
-				daprAPISpanNameInternal:     "CallLocal/fakeApp/add",
-			},
-		},
-		{
-			"/v1/publish/topicA",
-			map[string]string{
-				messagingSystemSpanAttributeKey:          pubsubBuildingBlockType,
-				messagingDestinationSpanAttributeKey:     "topicA",
-				messagingDestinationKindSpanAttributeKey: messagingDestinationTopicKind,
-			},
-		},
-		{
-			"/v1/bindings/kafka",
-			map[string]string{
-				dbSystemSpanAttributeKey:           bindingBuildingBlockType,
-				dbNameSpanAttributeKey:             "kafka",
-				dbStatementSpanAttributeKey:        "GET /v1/bindings/kafka",
-				dbConnectionStringSpanAttributeKey: bindingBuildingBlockType,
-			},
-		},
-		{
-			"/v1.0/actors/demo_actor/1/state/my_data",
-			map[string]string{
-				dbSystemSpanAttributeKey:           stateBuildingBlockType,
-				dbNameSpanAttributeKey:             "actor",
-				dbStatementSpanAttributeKey:        "GET /v1.0/actors/demo_actor/1/state/my_data",
-				dbConnectionStringSpanAttributeKey: stateBuildingBlockType,
-				daprAPIActorTypeID:                 "demo_actor.1",
-			},
-		},
-		{
-			"/v1.0/actors/demo_actor/1/method/method1",
-			map[string]string{
-				gRPCServiceSpanAttributeKey: daprGRPCServiceInvocationService,
-				netPeerNameSpanAttributeKey: "demo_actor.1",
-				daprAPIActorTypeID:          "demo_actor.1",
-				daprAPISpanNameInternal:     "CallActor/demo_actor/add",
+				diagConsts.DaprAPIProtocolSpanAttributeKey:    "http",
+				diagConsts.DaprAPISpanAttributeKey:            "GET /v1.0/state/statestore/key",
+				diagConsts.DBSystemSpanAttributeKey:           "state",
+				diagConsts.DBNameSpanAttributeKey:             "statestore",
+				diagConsts.DBConnectionStringSpanAttributeKey: "state",
 			},
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.path, func(t *testing.T) {
+	for i, tt := range tests {
+		t.Run(fmt.Sprintf("test %d", i), func(t *testing.T) {
 			var err error
 			req := getTestHTTPRequest()
 			resp := responsewriter.EnsureResponseWriter(httptest.NewRecorder())
@@ -259,14 +180,12 @@ func TestGetSpanAttributesMapFromHTTPContext(t *testing.T) {
 			req.URL, err = url.Parse("http://test.local" + tt.path)
 			require.NoError(t, err)
 
-			resp.SetUserValue("storeName", "statestore")
-			resp.SetUserValue("secretStoreName", "keyvault")
-			resp.SetUserValue("topic", "topicA")
-			resp.SetUserValue("name", "kafka")
-			resp.SetUserValue("id", "fakeApp")
-			resp.SetUserValue("method", "add")
-			resp.SetUserValue("actorType", "demo_actor")
-			resp.SetUserValue("actorId", "1")
+			ctx := context.WithValue(req.Context(), endpoints.EndpointCtxKey{}, &endpoints.EndpointCtxData{
+				Group: &endpoints.EndpointGroup{
+					AppendSpanAttributes: tt.appendAttributesFn,
+				},
+			})
+			req = req.WithContext(ctx)
 
 			got := spanAttributesMapFromHTTPContext(responsewriter.EnsureResponseWriter(resp), req)
 			for k, v := range tt.out {
@@ -405,28 +324,6 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 		span := diagUtils.SpanFromContext(r.Context())
 		sc := span.SpanContext()
 		assert.NotEqual(t, w.Header().Get(TraceparentHeader), SpanContextToW3CString(sc))
-	})
-
-	t.Run("path is /v1.0/invoke/*", func(t *testing.T) {
-		r := newTraceRequest(
-			requestBody, "/v1.0/invoke/callee/method/method1",
-			map[string]string{},
-		)
-
-		w := responsewriter.EnsureResponseWriter(httptest.NewRecorder())
-		w.SetUserValue("id", "callee")
-		w.SetUserValue("method", "method1")
-
-		handler.ServeHTTP(w, r)
-
-		span := diagUtils.SpanFromContext(r.Context())
-		sc := span.SpanContext()
-		spanString := fmt.Sprintf("%v", span)
-		assert.Truef(t, strings.Contains(spanString, "CallLocal/callee/method1"), "spanString is %s", spanString)
-		traceID := sc.TraceID()
-		spanID := sc.SpanID()
-		assert.NotEmpty(t, fmt.Sprintf("%x", traceID[:]))
-		assert.NotEmpty(t, fmt.Sprintf("%x", spanID[:]))
 	})
 }
 

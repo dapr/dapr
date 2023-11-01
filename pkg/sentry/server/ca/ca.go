@@ -16,18 +16,20 @@ package ca
 import (
 	"context"
 	"crypto"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
 	"time"
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/pkg/security/spiffe"
 	"github.com/dapr/dapr/pkg/sentry/config"
 	"github.com/dapr/dapr/pkg/sentry/monitoring"
+	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 )
 
@@ -87,11 +89,7 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 	if config.IsKubernetesHosted() {
 		log.Info("Using kubernetes secret store for trust bundle storage")
 
-		restConfig, err := rest.InClusterConfig()
-		if err != nil {
-			return nil, err
-		}
-		client, err := kubernetes.NewForConfig(restConfig)
+		client, err := kubernetes.NewForConfig(utils.GetConfig())
 		if err != nil {
 			return nil, err
 		}
@@ -114,7 +112,12 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 	if !ok {
 		log.Info("Root and issuer certs not found: generating self signed CA")
 
-		bundle, err = GenerateBundle(conf.TrustDomain, conf.AllowedClockSkew)
+		rootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		if err != nil {
+			return nil, err
+		}
+
+		bundle, err = GenerateBundle(rootKey, conf.TrustDomain, conf.AllowedClockSkew, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -127,10 +130,10 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 
 		log.Info("Self-signed certs generated and persisted successfully")
 		monitoring.IssuerCertChanged()
-		monitoring.IssuerCertExpiry(bundle.IssChain[0].NotAfter)
 	} else {
 		log.Info("Root and issuer certs found: using existing certs")
 	}
+	monitoring.IssuerCertExpiry(bundle.IssChain[0].NotAfter)
 
 	return &ca{
 		bundle: bundle,

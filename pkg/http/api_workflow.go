@@ -21,98 +21,168 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/dapr/dapr/pkg/http/endpoints"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+)
+
+var (
+	endpointGroupWorkflowV1Alpha1 = &endpoints.EndpointGroup{
+		Name:                 endpoints.EndpointGroupWorkflow,
+		Version:              endpoints.EndpointGroupVersion1alpha1,
+		AppendSpanAttributes: nil, // TODO
+	}
+	endpointGroupWorkflowV1Beta1 = &endpoints.EndpointGroup{
+		Name:                 endpoints.EndpointGroupWorkflow,
+		Version:              endpoints.EndpointGroupVersion1beta1,
+		AppendSpanAttributes: nil, // TODO
+	}
 )
 
 // Workflow Component: Component specified in yaml
 // Workflow Name: Name of the workflow to run
 // Instance ID: Identifier of the specific run
-func (a *api) constructWorkflowEndpoints() []Endpoint {
-	return []Endpoint{
+func (a *api) constructWorkflowEndpoints() []endpoints.Endpoint {
+	return []endpoints.Endpoint{
 		{
 			Methods: []string{http.MethodGet},
 			Route:   "workflows/{workflowComponent}/{instanceID}",
 			Version: apiVersionV1alpha1,
+			Group:   endpointGroupWorkflowV1Alpha1,
 			Handler: a.onGetWorkflowHandler(),
+			Settings: endpoints.EndpointSettings{
+				Name: "GetWorkflow",
+			},
 		},
 		{
 			Methods: []string{http.MethodGet},
 			Route:   "workflows/{workflowComponent}/{instanceID}",
 			Version: apiVersionV1beta1,
+			Group:   endpointGroupWorkflowV1Beta1,
 			Handler: a.onGetWorkflowHandler(),
+			Settings: endpoints.EndpointSettings{
+				Name: "GetWorkflow",
+			},
 		},
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "workflows/{workflowComponent}/{instanceID}/raiseEvent/{eventName}",
 			Version: apiVersionV1alpha1,
+			Group:   endpointGroupWorkflowV1Alpha1,
 			Handler: a.onRaiseEventWorkflowHandler(),
+			Settings: endpoints.EndpointSettings{
+				Name: "RaiseEventWorkflow",
+			},
 		},
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "workflows/{workflowComponent}/{instanceID}/raiseEvent/{eventName}",
 			Version: apiVersionV1beta1,
+			Group:   endpointGroupWorkflowV1Beta1,
 			Handler: a.onRaiseEventWorkflowHandler(),
+			Settings: endpoints.EndpointSettings{
+				Name: "RaiseEventWorkflow",
+			},
 		},
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "workflows/{workflowComponent}/{workflowName}/start",
 			Version: apiVersionV1alpha1,
+			Group:   endpointGroupWorkflowV1Alpha1,
 			Handler: a.onStartWorkflowHandler(),
+			Settings: endpoints.EndpointSettings{
+				Name: "StartWorkflow",
+			},
 		},
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "workflows/{workflowComponent}/{workflowName}/start",
 			Version: apiVersionV1beta1,
+			Group:   endpointGroupWorkflowV1Beta1,
 			Handler: a.onStartWorkflowHandler(),
+			Settings: endpoints.EndpointSettings{
+				Name: "StartWorkflow",
+			},
 		},
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "workflows/{workflowComponent}/{instanceID}/pause",
 			Version: apiVersionV1alpha1,
+			Group:   endpointGroupWorkflowV1Alpha1,
 			Handler: a.onPauseWorkflowHandler(),
+			Settings: endpoints.EndpointSettings{
+				Name: "PauseWorkflow",
+			},
 		},
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "workflows/{workflowComponent}/{instanceID}/pause",
 			Version: apiVersionV1beta1,
+			Group:   endpointGroupWorkflowV1Beta1,
 			Handler: a.onPauseWorkflowHandler(),
+			Settings: endpoints.EndpointSettings{
+				Name: "PauseWorkflow",
+			},
 		},
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "workflows/{workflowComponent}/{instanceID}/resume",
 			Version: apiVersionV1alpha1,
+			Group:   endpointGroupWorkflowV1Alpha1,
 			Handler: a.onResumeWorkflowHandler(),
+			Settings: endpoints.EndpointSettings{
+				Name: "ResumeWorkflow",
+			},
 		},
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "workflows/{workflowComponent}/{instanceID}/resume",
 			Version: apiVersionV1beta1,
+			Group:   endpointGroupWorkflowV1Beta1,
 			Handler: a.onResumeWorkflowHandler(),
+			Settings: endpoints.EndpointSettings{
+				Name: "ResumeWorkflow",
+			},
 		},
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "workflows/{workflowComponent}/{instanceID}/terminate",
 			Version: apiVersionV1alpha1,
+			Group:   endpointGroupWorkflowV1Alpha1,
 			Handler: a.onTerminateWorkflowHandler(),
+			Settings: endpoints.EndpointSettings{
+				Name: "TerminateWorkflow",
+			},
 		},
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "workflows/{workflowComponent}/{instanceID}/terminate",
 			Version: apiVersionV1beta1,
+			Group:   endpointGroupWorkflowV1Beta1,
 			Handler: a.onTerminateWorkflowHandler(),
+			Settings: endpoints.EndpointSettings{
+				Name: "TerminateWorkflow",
+			},
 		},
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "workflows/{workflowComponent}/{instanceID}/purge",
 			Version: apiVersionV1alpha1,
+			Group:   endpointGroupWorkflowV1Alpha1,
 			Handler: a.onPurgeWorkflowHandler(),
+			Settings: endpoints.EndpointSettings{
+				Name: "PurgeWorkflow",
+			},
 		},
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "workflows/{workflowComponent}/{instanceID}/purge",
 			Version: apiVersionV1beta1,
+			Group:   endpointGroupWorkflowV1Beta1,
 			Handler: a.onPurgeWorkflowHandler(),
+			Settings: endpoints.EndpointSettings{
+				Name: "PurgeWorkflow",
+			},
 		},
 	}
 }

@@ -29,6 +29,7 @@ import (
 	"github.com/dapr/dapr/pkg/injector/sentry"
 	"github.com/dapr/dapr/pkg/injector/service"
 	"github.com/dapr/dapr/pkg/metrics"
+	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/pkg/signals"
 	"github.com/dapr/dapr/utils"
@@ -88,6 +89,7 @@ func main() {
 		TrustAnchorsFile:        cfg.TrustAnchorsFile,
 		AppID:                   "dapr-injector",
 		MTLSEnabled:             true,
+		Mode:                    modes.KubernetesMode,
 	})
 	if err != nil {
 		log.Fatal(err)

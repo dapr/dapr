@@ -16,11 +16,13 @@ package http
 import (
 	"bytes"
 	"io"
+	"net/http"
 	"strings"
 
 	"github.com/valyala/fasthttp"
 
 	contribCrypto "github.com/dapr/components-contrib/crypto"
+	"github.com/dapr/dapr/pkg/http/endpoints"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/ptr"
@@ -35,20 +37,34 @@ const (
 	cryptoHeaderDataEncryptionCipher  = "dapr-data-encryption-cipher"
 )
 
-func (a *api) constructCryptoEndpoints() []Endpoint {
+var endpointGroupCryptoV1Alpha1 = &endpoints.EndpointGroup{
+	Name:                 endpoints.EndpointGroupCrypto,
+	Version:              endpoints.EndpointGroupVersion1alpha1,
+	AppendSpanAttributes: nil, // TODO
+}
+
+func (a *api) constructCryptoEndpoints() []endpoints.Endpoint {
 	// These APIs are not implemented as Universal because the gRPC APIs are stream-based.
-	return []Endpoint{
+	return []endpoints.Endpoint{
 		{
-			Methods:         []string{fasthttp.MethodPut},
+			Methods:         []string{http.MethodPut},
 			Route:           "crypto/{name}/encrypt",
 			Version:         apiVersionV1alpha1,
+			Group:           endpointGroupCryptoV1Alpha1,
 			FastHTTPHandler: a.onCryptoEncrypt,
+			Settings: endpoints.EndpointSettings{
+				Name: "Encrypt",
+			},
 		},
 		{
-			Methods:         []string{fasthttp.MethodPut},
+			Methods:         []string{http.MethodPut},
 			Route:           "crypto/{name}/decrypt",
 			Version:         apiVersionV1alpha1,
+			Group:           endpointGroupCryptoV1Alpha1,
 			FastHTTPHandler: a.onCryptoDecrypt,
+			Settings: endpoints.EndpointSettings{
+				Name: "Decrypt",
+			},
 		},
 	}
 }
