@@ -57,6 +57,20 @@ func WithDaprConfigurationList(t *testing.T, configs *configapi.ConfigurationLis
 	}
 }
 
+func WithDaprConfigurationGet(t *testing.T, config *configapi.Configuration) Option {
+	return func(o *options) {
+		obj, err := json.Marshal(config)
+		require.NoError(t, err)
+		o.handlers = append(o.handlers, handleRoute{
+			path: "/apis/dapr.io/v1alpha1/namespaces/" + config.Namespace + "/configurations/" + config.Name,
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Add("Content-Type", "application/json")
+				w.Write(obj)
+			},
+		})
+	}
+}
+
 func WithSecretGet(t *testing.T, ns, name string, secret *corev1.Secret) Option {
 	return func(o *options) {
 		obj, err := json.Marshal(secret)
