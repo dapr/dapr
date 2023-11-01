@@ -50,6 +50,13 @@ spec:
         duration: 5s
         maxRetries: 3
 
+      withFilter:
+        policy: constant
+        duration: 5s
+        maxRetries: 3
+        retryOnCodes:
+          - 500
+
     # Circuit breakers are automatically instantiated per component, service endpoint, and application route.
     # using these settings as a template. See logic below under `buildingBlocks`.
     # Circuit breakers maintain counters that can live as long as the Dapr sidecar.

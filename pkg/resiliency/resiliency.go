@@ -112,7 +112,7 @@ type (
 		log       logger.Logger
 
 		timeouts        map[string]time.Duration
-		retries         map[string]*retry.Config
+		retries         map[string]*Retry
 		circuitBreakers map[string]*breaker.CircuitBreaker
 
 		actorCBCaches    map[string]*lru.Cache[string, *breaker.CircuitBreaker]
@@ -306,7 +306,7 @@ func New(log logger.Logger) *Resiliency {
 	return &Resiliency{
 		log:             log,
 		timeouts:        make(map[string]time.Duration),
-		retries:         make(map[string]*retry.Config),
+		retries:         make(map[string]*Retry),
 		circuitBreakers: make(map[string]*breaker.CircuitBreaker),
 		actorCBCaches:   make(map[string]*lru.Cache[string, *breaker.CircuitBreaker]),
 		serviceCBs:      make(map[string]*lru.Cache[string, *breaker.CircuitBreaker]),
@@ -337,54 +337,64 @@ func (r *Resiliency) DecodeConfiguration(c *resiliencyV1alpha.Resiliency) error 
 func (r *Resiliency) addBuiltInPolicies() {
 	// Cover retries for remote service invocation, but don't overwrite anything that is already present.
 	if _, ok := r.retries[string(BuiltInServiceRetries)]; !ok {
-		r.retries[string(BuiltInServiceRetries)] = &retry.Config{
-			Policy: retry.PolicyConstant,
-			// Note: If this value changes to 0, don't forget to disable "Replay" in direct messaging
-			MaxRetries: 3,
-			Duration:   time.Second,
+		r.retries[string(BuiltInServiceRetries)] = &Retry{
+			Config: &retry.Config{
+				Policy: retry.PolicyConstant,
+				// Note: If this value changes to 0, don't forget to disable "Replay" in direct messaging
+				MaxRetries: 3,
+				Duration:   time.Second,
+			},
 		}
 	}
 
 	// Cover retries for remote actor invocation, but don't overwrite anything that is already present.
 	if _, ok := r.retries[string(BuiltInActorRetries)]; !ok {
-		r.retries[string(BuiltInActorRetries)] = &retry.Config{
-			Policy:     retry.PolicyConstant,
-			MaxRetries: 3,
-			Duration:   time.Second,
+		r.retries[string(BuiltInActorRetries)] = &Retry{
+			Config: &retry.Config{
+				Policy:     retry.PolicyConstant,
+				MaxRetries: 3,
+				Duration:   time.Second,
+			},
 		}
 	}
 
 	// Cover retries for actor reminder operations, but don't overwrite anything that is already present.
 	if _, ok := r.retries[string(BuiltInActorReminderRetries)]; !ok {
-		r.retries[string(BuiltInActorReminderRetries)] = &retry.Config{
-			Policy:              retry.PolicyExponential,
-			InitialInterval:     500 * time.Millisecond,
-			RandomizationFactor: 0.5,
-			Multiplier:          1.5,
-			MaxInterval:         60 * time.Second,
-			MaxElapsedTime:      15 * time.Minute,
+		r.retries[string(BuiltInActorReminderRetries)] = &Retry{
+			Config: &retry.Config{
+				Policy:              retry.PolicyExponential,
+				InitialInterval:     500 * time.Millisecond,
+				RandomizationFactor: 0.5,
+				Multiplier:          1.5,
+				MaxInterval:         60 * time.Second,
+				MaxElapsedTime:      15 * time.Minute,
+			},
 		}
 	}
 
 	// Cover retries for initialization, but don't overwrite anything that is already present.
 	if _, ok := r.retries[string(BuiltInInitializationRetries)]; !ok {
-		r.retries[string(BuiltInInitializationRetries)] = &retry.Config{
-			Policy:              retry.PolicyExponential,
-			InitialInterval:     time.Millisecond * 500,
-			MaxRetries:          3,
-			MaxInterval:         time.Second,
-			MaxElapsedTime:      time.Second * 10,
-			Duration:            time.Second * 2,
-			Multiplier:          1.5,
-			RandomizationFactor: 0.5,
+		r.retries[string(BuiltInInitializationRetries)] = &Retry{
+			Config: &retry.Config{
+				Policy:              retry.PolicyExponential,
+				InitialInterval:     time.Millisecond * 500,
+				MaxRetries:          3,
+				MaxInterval:         time.Second,
+				MaxElapsedTime:      time.Second * 10,
+				Duration:            time.Second * 2,
+				Multiplier:          1.5,
+				RandomizationFactor: 0.5,
+			},
 		}
 	}
 
 	if _, ok := r.retries[string(BuiltInActorNotFoundRetries)]; !ok {
-		r.retries[string(BuiltInActorNotFoundRetries)] = &retry.Config{
-			Policy:     retry.PolicyConstant,
-			MaxRetries: 5,
-			Duration:   time.Second,
+		r.retries[string(BuiltInActorNotFoundRetries)] = &Retry{
+			Config: &retry.Config{
+				Policy:     retry.PolicyConstant,
+				MaxRetries: 5,
+				Duration:   time.Second,
+			},
 		}
 	}
 }
@@ -413,8 +423,15 @@ func (r *Resiliency) decodePolicies(c *resiliencyV1alpha.Resiliency) (err error)
 				r.log.Warnf("Attempted override of %s did not meet minimum retry count, resetting to 3.", name)
 				rc.MaxRetries = 3
 			}
+			filter, err := ParseStatusCodeFilter(t.RetryOnCodes, t.IgnoreOnCodes)
+			if err != nil {
+				return err
+			}
 
-			r.retries[name] = &rc
+			r.retries[name] = &Retry{
+				Config:           &rc,
+				StatusCodeFilter: filter,
+			}
 		} else {
 			r.log.Warnf("Attempted to override protected policy %s which is not allowed. Ignoring provided policy and using default.", name)
 		}

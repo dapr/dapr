@@ -13,6 +13,12 @@ spec:
         policy: constant
         duration: 10ms
         maxRetries: 5
+      fiveRetriesWithFilter:
+        policy: constant
+        duration: 10ms
+        maxRetries: 5
+        retryOnCodes:
+          - 500
 
     circuitBreakers:
       simpleCB:
@@ -49,6 +55,13 @@ spec:
         outbound:
           timeout: fast
           retry: fiveRetries
+      dapr-resiliency-binding-with-filter:
+        inbound:
+          timeout: fast
+          retry: fiveRetriesWithFilter
+        outbound:
+          timeout: fast
+          retry: fiveRetriesWithFilter
 
       dapr-resiliency-binding-grpc:
         inbound: 

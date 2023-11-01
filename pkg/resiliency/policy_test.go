@@ -40,7 +40,7 @@ func ExampleNewRunnerWithOptions_accumulator() {
 		log:  testLog,
 		name: "retry",
 		t:    10 * time.Millisecond,
-		r:    &retry.Config{MaxRetries: 6},
+		r:    NewRetry(&retry.Config{MaxRetries: 6}, nil),
 	}
 
 	// Handler function
@@ -82,7 +82,7 @@ func ExampleNewRunnerWithOptions_disposer() {
 		log:  testLog,
 		name: "retry",
 		t:    10 * time.Millisecond,
-		r:    &retry.Config{MaxRetries: 6},
+		r:    NewRetry(&retry.Config{MaxRetries: 6}, nil),
 	}
 
 	// Handler function
@@ -135,13 +135,13 @@ func TestPolicy(t *testing.T) {
 	cbValue.Initialize(testLog)
 	tests := map[string]*struct {
 		t  time.Duration
-		r  *retry.Config
+		r  *Retry
 		cb *breaker.CircuitBreaker
 	}{
 		"empty": {},
 		"all": {
 			t:  10 * time.Millisecond,
-			r:  &retryValue,
+			r:  NewRetry(&retryValue, nil),
 			cb: &cbValue,
 		},
 		"nil policy": nil,
@@ -256,9 +256,78 @@ func TestPolicyRetry(t *testing.T) {
 				log:  testLog,
 				name: "retry",
 				t:    10 * time.Millisecond,
-				r:    &retry.Config{MaxRetries: test.maxRetries},
+				r:    NewRetry(&retry.Config{MaxRetries: test.maxRetries}, nil),
 			})
 			_, err := policy(fn)
+			if err != nil {
+				assert.NotContains(t, err.Error(), "expected attempt in context to be")
+			}
+			assert.Equal(t, test.expected, called.Load())
+		})
+	}
+}
+
+func TestPolicyRetryWithFilter(t *testing.T) {
+	tests := []struct {
+		name         string
+		maxCalls     int32
+		returnedCode int
+		retryOn      []string
+		ignoreOn     []string
+		maxRetries   int64
+		expected     int32
+	}{
+		{
+			name:         "Retries succeed",
+			maxCalls:     5,
+			returnedCode: 500,
+			retryOn:      []string{"5**"},
+			maxRetries:   6,
+			expected:     6,
+		},
+		{
+			name:         "Retries code ignored",
+			maxCalls:     5,
+			returnedCode: 500,
+			ignoreOn:     []string{"5**"},
+			maxRetries:   6,
+			expected:     1,
+		},
+		{
+			name:         "Retries code not in retry list",
+			maxCalls:     5,
+			returnedCode: 500,
+			retryOn:      []string{"4**"},
+			maxRetries:   6,
+			expected:     1,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			called := atomic.Int32{}
+			maxCalls := test.maxCalls
+			fn := func(ctx context.Context) (struct{}, error) {
+				v := called.Add(1)
+				attempt := GetAttempt(ctx)
+				if attempt != v {
+					return struct{}{}, backoff.Permanent(fmt.Errorf("expected attempt in context to be %d but got %d", v, attempt))
+				}
+				if v <= maxCalls {
+					return struct{}{}, NewCodeError(test.returnedCode, fmt.Errorf("called (%d) vs Max (%d)", v-1, maxCalls))
+				}
+				return struct{}{}, nil
+			}
+
+			filter, err := ParseStatusCodeFilter(test.retryOn, test.ignoreOn)
+			assert.NoError(t, err)
+			policy := NewRunner[struct{}](context.Background(), &PolicyDefinition{
+				log:  testLog,
+				name: "retry",
+				t:    10 * time.Millisecond,
+				r:    NewRetry(&retry.Config{MaxRetries: test.maxRetries}, filter),
+			})
+			_, err = policy(fn)
 			if err != nil {
 				assert.NotContains(t, err.Error(), "expected attempt in context to be")
 			}
@@ -293,7 +362,7 @@ func TestPolicyAccumulator(t *testing.T) {
 		log:  testLog,
 		name: "retry",
 		t:    10 * time.Millisecond,
-		r:    &retry.Config{MaxRetries: 6},
+		r:    NewRetry(&retry.Config{MaxRetries: 6}, nil),
 	}
 	var accumulatorCalled int
 	policy := NewRunnerWithOptions(context.Background(), policyDef, RunnerOpts[int32]{
@@ -337,7 +406,7 @@ func TestPolicyDisposer(t *testing.T) {
 		log:  testLog,
 		name: "retry",
 		t:    10 * time.Millisecond,
-		r:    &retry.Config{MaxRetries: 5},
+		r:    NewRetry(&retry.Config{MaxRetries: 5}, nil),
 	}
 	policy := NewRunnerWithOptions(context.Background(), policyDef, RunnerOpts[int32]{
 		Disposer: func(i int32) {
