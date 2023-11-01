@@ -41,6 +41,7 @@ func (n *withMax) Setup(t *testing.T) []framework.Option {
 	n.place = placement.New(t,
 		placement.WithLogLevel("debug"),
 		placement.WithMaxAPILevel(15),
+		placement.WithMetadataEnabled(true),
 	)
 
 	return []framework.Option{
@@ -94,6 +95,10 @@ func (n *withMax) Run(t *testing.T, parentCtx context.Context) {
 	}, 10*time.Second, 50*time.Millisecond)
 	lastUpdate := lastVersionUpdate.Load()
 
+	require.EventuallyWithT(t, func(t *assert.CollectT) {
+		checkAPILevelInState(t, n.place.HealthzPort(), 10)
+	}, 5*time.Second, 100*time.Millisecond)
+
 	// Register the second host with API level 20
 	registerHost(ctx, conn, 20, placementMessageCh, nil)
 
@@ -102,9 +107,18 @@ func (n *withMax) Run(t *testing.T, parentCtx context.Context) {
 	time.Sleep(3 * time.Second)
 	require.Equal(t, lastUpdate, lastVersionUpdate.Load())
 
+	// API level should not increase
+	require.EventuallyWithT(t, func(t *assert.CollectT) {
+		checkAPILevelInState(t, n.place.HealthzPort(), 10)
+	}, 5*time.Second, 100*time.Millisecond)
+
 	// Stop the first host, and the in API level should increase to the max (15)
 	close(stopCh1)
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
 		assert.Equal(t, uint32(15), currentVersion.Load())
 	}, 15*time.Second, 50*time.Millisecond)
+
+	require.EventuallyWithT(t, func(t *assert.CollectT) {
+		checkAPILevelInState(t, n.place.HealthzPort(), 15)
+	}, 5*time.Second, 100*time.Millisecond)
 }

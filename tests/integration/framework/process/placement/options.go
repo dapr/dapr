@@ -33,6 +33,7 @@ type options struct {
 	sentryAddress       *string
 	trustAnchorsFile    *string
 	maxAPILevel         int
+	metadataEnabled     bool
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
@@ -104,5 +105,11 @@ func WithInitialClusterPorts(ports ...int) Option {
 func WithMaxAPILevel(val int) Option {
 	return func(o *options) {
 		o.maxAPILevel = val
+	}
+}
+
+func WithMetadataEnabled(enabled bool) Option {
+	return func(o *options) {
+		o.metadataEnabled = enabled
 	}
 }

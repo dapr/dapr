@@ -16,7 +16,7 @@ package placement
 type PlacementTables struct {
 	HostList     []HostInfo `json:"hostList,omitempty"`
 	TableVersion uint64     `json:"tableVersion"`
-	MinAPILevel  uint32     `json:"minApiLevel"`
+	APILevel     uint32     `json:"apiLevel"`
 }
 type HostInfo struct {
 	Name       string   `json:"name,omitempty"`
@@ -32,10 +32,10 @@ func (p *Service) GetPlacementTables() (*PlacementTables, error) {
 	m := state.Members()
 	response := &PlacementTables{
 		TableVersion: state.TableGeneration(),
-		MinAPILevel:  state.APILevel(),
+		APILevel:     state.APILevel(),
 	}
-	if p.maxAPILevel >= 0 && int(response.MinAPILevel) > p.maxAPILevel {
-		response.MinAPILevel = uint32(p.maxAPILevel)
+	if p.maxAPILevel >= 0 && int(response.APILevel) > p.maxAPILevel {
+		response.APILevel = uint32(p.maxAPILevel)
 	}
 	members := make([]HostInfo, len(m))
 	// the key of the member map is the host name, so we can just ignore it.

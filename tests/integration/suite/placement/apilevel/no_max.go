@@ -40,6 +40,7 @@ type noMax struct {
 func (n *noMax) Setup(t *testing.T) []framework.Option {
 	n.place = placement.New(t,
 		placement.WithLogLevel("debug"),
+		placement.WithMetadataEnabled(true),
 	)
 
 	return []framework.Option{
@@ -93,13 +94,23 @@ func (n *noMax) Run(t *testing.T, parentCtx context.Context) {
 	}, 10*time.Second, 50*time.Millisecond)
 	lastUpdate := lastVersionUpdate.Load()
 
+	require.EventuallyWithT(t, func(t *assert.CollectT) {
+		checkAPILevelInState(t, n.place.HealthzPort(), 10)
+	}, 5*time.Second, 100*time.Millisecond)
+
 	// Register the second host with API level 20
-	registerHost(ctx, conn, 20, placementMessageCh, nil)
+	stopCh2 := make(chan struct{})
+	registerHost(ctx, conn, 20, placementMessageCh, stopCh2)
 
 	// After 3s, we should not receive an update
 	// This can take a while as disseination happens on intervals
 	time.Sleep(3 * time.Second)
 	require.Equal(t, lastUpdate, lastVersionUpdate.Load())
+
+	// API level should still be 10
+	require.EventuallyWithT(t, func(t *assert.CollectT) {
+		checkAPILevelInState(t, n.place.HealthzPort(), 10)
+	}, 5*time.Second, 100*time.Millisecond)
 
 	// Stop the first host, and the in API level should increase
 	close(stopCh1)
@@ -107,6 +118,13 @@ func (n *noMax) Run(t *testing.T, parentCtx context.Context) {
 		assert.Equal(t, uint32(20), currentVersion.Load())
 	}, 10*time.Second, 50*time.Millisecond)
 
+	require.EventuallyWithT(t, func(t *assert.CollectT) {
+		checkAPILevelInState(t, n.place.HealthzPort(), 20)
+	}, 5*time.Second, 100*time.Millisecond)
+
 	// Trying to register a host with version 5 should fail
 	registerHostFailing(t, ctx, conn, 5)
+
+	// Stop the second host too
+	close(stopCh2)
 }

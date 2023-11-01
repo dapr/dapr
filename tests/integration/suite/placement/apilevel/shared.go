@@ -15,14 +15,17 @@ package quorum
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"strconv"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -31,6 +34,10 @@ import (
 
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 )
+
+var client = http.Client{
+	Timeout: 5 * time.Second,
+}
 
 func establishConn(ctx context.Context, port int) (*grpc.ClientConn, error) {
 	return grpc.DialContext(ctx, "localhost:"+strconv.Itoa(port),
@@ -146,4 +153,23 @@ func registerHostFailing(t *testing.T, ctx context.Context, conn *grpc.ClientCon
 	_, err = stream.Recv()
 	require.Error(t, err)
 	require.Equalf(t, codes.FailedPrecondition, status.Code(err), "error was: %v", err)
+}
+
+// Checks the API level reported in the state tables matched.
+func checkAPILevelInState(t assert.TestingT, port int, expectApiLevel int) {
+	res, err := client.Get(fmt.Sprintf("http://localhost:%d/placement/state", port))
+	if !assert.NoError(t, err) {
+		return
+	}
+	defer res.Body.Close()
+
+	stateRes := struct {
+		ApiLevel int `json:"apiLevel"`
+	}{}
+	err = json.NewDecoder(res.Body).Decode(&stateRes)
+	if !assert.NoError(t, err) {
+		return
+	}
+
+	assert.Equal(t, expectApiLevel, stateRes.ApiLevel)
 }
