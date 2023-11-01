@@ -239,9 +239,9 @@ func (s *DaprHostMemberState) removeMember(host *DaprHostMember) bool {
 
 	if m, ok := s.data.Members[host.Name]; ok {
 		s.removeHashingTables(m)
-		s.updateAPILevel()
 		s.data.TableGeneration++
 		delete(s.data.Members, host.Name)
+		s.updateAPILevel()
 
 		return true
 	}
