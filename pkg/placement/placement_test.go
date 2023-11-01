@@ -77,17 +77,25 @@ func newTestPlacementServer(t *testing.T, raftServer *raft.Server) (string, *Ser
 	return serverAddress, testServer, clock, cleanUpFn
 }
 
-func newTestClient(t *testing.T, serverAddress string) (*grpc.ClientConn, v1pb.Placement_ReportDaprStatusClient) { //nolint:nosnakecase
+func newTestClient(t *testing.T, serverAddress string) (*grpc.ClientConn, *net.TCPConn, v1pb.Placement_ReportDaprStatusClient) { //nolint:nosnakecase
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
-	conn, err := grpc.DialContext(ctx, serverAddress, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+	tcpConn, err := net.Dial("tcp", serverAddress)
+	require.NoError(t, err)
+	conn, err := grpc.DialContext(ctx, "",
+		grpc.WithContextDialer(func(ctx context.Context, s string) (net.Conn, error) {
+			return tcpConn, nil
+		}),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithBlock(),
+	)
 	require.NoError(t, err)
 
 	client := v1pb.NewPlacementClient(conn)
 	stream, err := client.ReportDaprStatus(context.Background())
 	require.NoError(t, err)
 
-	return conn, stream
+	return conn, tcpConn.(*net.TCPConn), stream
 }
 
 func TestMemberRegistration_NoLeadership(t *testing.T) {
@@ -97,7 +105,7 @@ func TestMemberRegistration_NoLeadership(t *testing.T) {
 	testServer.hasLeadership.Store(false)
 
 	// arrange
-	conn, stream := newTestClient(t, serverAddress)
+	conn, _, stream := newTestClient(t, serverAddress)
 
 	host := &v1pb.Host{
 		Name:     "127.0.0.1:50102",
@@ -128,7 +136,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 
 	t.Run("Connect server and disconnect it gracefully", func(t *testing.T) {
 		// arrange
-		conn, stream := newTestClient(t, serverAddress)
+		conn, _, stream := newTestClient(t, serverAddress)
 
 		host := &v1pb.Host{
 			Name:     "127.0.0.1:50102",
@@ -177,7 +185,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 
 	t.Run("Connect server and disconnect it forcefully", func(t *testing.T) {
 		// arrange
-		conn, stream := newTestClient(t, serverAddress)
+		_, tcpConn, stream := newTestClient(t, serverAddress)
 
 		// act
 		host := &v1pb.Host{
@@ -210,7 +218,9 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 		// act
 		// Close tcp connection before closing stream, which simulates the scenario
 		// where dapr runtime disconnects the connection from placement service unexpectedly.
-		conn.Close()
+		// Use SetLinger to forcefully close the TCP connection.
+		tcpConn.SetLinger(0)
+		tcpConn.Close()
 
 		// assert
 		select {
@@ -227,7 +237,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 
 	t.Run("non actor host", func(t *testing.T) {
 		// arrange
-		conn, stream := newTestClient(t, serverAddress)
+		conn, _, stream := newTestClient(t, serverAddress)
 
 		// act
 		host := &v1pb.Host{

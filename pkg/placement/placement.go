@@ -300,7 +300,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 				return nil
 			}
 
-			if errors.Is(err, io.EOF) || errors.Is(err, context.Canceled) || status.Code(err) == codes.Canceled {
+			if errors.Is(err, io.EOF) || errors.Is(err, context.Canceled) {
 				log.Debugf("Stream connection is disconnected gracefully: %s", registeredMemberID)
 				if isActorRuntime {
 					p.membershipCh <- hostMemberChange{

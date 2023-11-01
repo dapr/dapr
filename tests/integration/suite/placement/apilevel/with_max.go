@@ -48,7 +48,10 @@ func (n *withMax) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (n *withMax) Run(t *testing.T, ctx context.Context) {
+func (n *withMax) Run(t *testing.T, parentCtx context.Context) {
+	ctx, cancel := context.WithCancel(parentCtx)
+	defer cancel()
+
 	n.place.WaitUntilRunning(t, ctx)
 
 	// Connect
@@ -65,9 +68,12 @@ func (n *withMax) Run(t *testing.T, ctx context.Context) {
 			case <-ctx.Done():
 				return
 			case msgAny := <-placementMessageCh:
+				if ctx.Err() != nil {
+					return
+				}
 				switch msg := msgAny.(type) {
 				case error:
-					log.Printf("Received an error in the channel. This will make the test fail: '%v'", msg)
+					log.Printf("Received an error in the channel: '%v'", msg)
 					return
 				case uint32:
 					old := currentVersion.Swap(msg)
@@ -80,9 +86,8 @@ func (n *withMax) Run(t *testing.T, ctx context.Context) {
 	}()
 
 	// Register the first host with API level 10
-	ctx1, cancel1 := context.WithCancel(ctx)
-	defer cancel1()
-	registerHost(ctx1, conn, 10, placementMessageCh)
+	stopCh1 := make(chan struct{})
+	registerHost(ctx, conn, 10, placementMessageCh, stopCh1)
 
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
 		assert.Equal(t, uint32(10), currentVersion.Load())
@@ -90,9 +95,7 @@ func (n *withMax) Run(t *testing.T, ctx context.Context) {
 	lastUpdate := lastVersionUpdate.Load()
 
 	// Register the second host with API level 20
-	ctx2, cancel2 := context.WithCancel(ctx)
-	defer cancel2()
-	registerHost(ctx2, conn, 20, placementMessageCh)
+	registerHost(ctx, conn, 20, placementMessageCh, nil)
 
 	// After 3s, we should not receive an update
 	// This can take a while as disseination happens on intervals
@@ -100,7 +103,7 @@ func (n *withMax) Run(t *testing.T, ctx context.Context) {
 	require.Equal(t, lastUpdate, lastVersionUpdate.Load())
 
 	// Stop the first host, and the in API level should increase to the max (15)
-	cancel1()
+	close(stopCh1)
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
 		assert.Equal(t, uint32(15), currentVersion.Load())
 	}, 15*time.Second, 50*time.Millisecond)

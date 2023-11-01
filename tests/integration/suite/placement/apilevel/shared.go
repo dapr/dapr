@@ -39,7 +39,7 @@ func establishConn(ctx context.Context, port int) (*grpc.ClientConn, error) {
 	)
 }
 
-func registerHost(ctx context.Context, conn *grpc.ClientConn, apiLevel int, placementMessage chan any) {
+func registerHost(ctx context.Context, conn *grpc.ClientConn, apiLevel int, placementMessage chan any, stopCh chan struct{}) {
 	msg := &placementv1pb.Host{
 		Name:     "myapp",
 		Port:     1234,
@@ -57,7 +57,7 @@ func registerHost(ctx context.Context, conn *grpc.ClientConn, apiLevel int, plac
 		if rErr != nil {
 			log.Printf("Failed to connect to placement; will retry: %v", rErr)
 			// Sleep before retrying
-			time.Sleep(time.Second)
+			time.Sleep(1500 * time.Millisecond)
 			continue
 		}
 
@@ -66,7 +66,7 @@ func registerHost(ctx context.Context, conn *grpc.ClientConn, apiLevel int, plac
 			log.Printf("Failed to send message; will retry: %v", rErr)
 			_ = stream.CloseSend()
 			// Sleep before retrying
-			time.Sleep(time.Second)
+			time.Sleep(1500 * time.Millisecond)
 			continue
 		}
 
@@ -76,7 +76,7 @@ func registerHost(ctx context.Context, conn *grpc.ClientConn, apiLevel int, plac
 			log.Printf("Failed to receive message; will retry: %v", rErr)
 			_ = stream.CloseSend()
 			// Sleep before retrying
-			time.Sleep(time.Second)
+			time.Sleep(1500 * time.Millisecond)
 			continue
 		}
 
@@ -93,7 +93,10 @@ func registerHost(ctx context.Context, conn *grpc.ClientConn, apiLevel int, plac
 		for {
 			select {
 			case <-ctx.Done():
-				// Disconnect when the context is done
+				placementStream.CloseSend()
+				return
+			case <-stopCh:
+				// Disconnect when there's a signal on stopCh
 				placementStream.CloseSend()
 				return
 			case <-time.After(time.Second):
@@ -107,12 +110,13 @@ func registerHost(ctx context.Context, conn *grpc.ClientConn, apiLevel int, plac
 		for {
 			in, rerr := placementStream.Recv()
 			if rerr != nil {
-				if errors.Is(rerr, context.Canceled) || errors.Is(rerr, io.EOF) || status.Code(rerr) == codes.Canceled {
+				if ctx.Err() != nil || errors.Is(rerr, context.Canceled) || errors.Is(rerr, io.EOF) || status.Code(rerr) == codes.Canceled {
 					// Stream ended
 					placementMessage <- nil
 					return
 				}
 				placementMessage <- fmt.Errorf("error from placement: %w", rerr)
+				return
 			}
 			if in.GetOperation() == "update" {
 				placementMessage <- in.GetTables().GetApiLevel()
