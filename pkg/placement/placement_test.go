@@ -169,7 +169,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 			assert.Equal(t, host.Name, memberChange.host.Name)
 
 		case <-time.After(testStreamSendLatency):
-			require.True(t, false, "no membership change")
+			require.Fail(t, "no membership change")
 		}
 
 		conn.Close()
@@ -190,7 +190,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 		stream.Send(host)
 
 		// assert
-		assert.Eventually(t, func() bool {
+		assert.EventuallyWithT(t, func(t *assert.CollectT) {
 			clock.Step(disseminateTimerInterval)
 			select {
 			case memberChange := <-testServer.membershipCh:
@@ -202,9 +202,8 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 				l := len(testServer.streamConnPool)
 				testServer.streamConnPoolLock.Unlock()
 				assert.Equal(t, 1, l)
-				return true
 			default:
-				return false
+				assert.Fail(t, "No member change")
 			}
 		}, testStreamSendLatency+3*time.Second, time.Millisecond, "no membership change")
 
@@ -216,7 +215,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 		// assert
 		select {
 		case <-testServer.membershipCh:
-			require.True(t, false, "should not have any member change message because faulty host detector time will clean up")
+			require.Fail(t, "should not have any member change message because faulty host detector time will clean up")
 
 		case <-time.After(testStreamSendLatency):
 			testServer.streamConnPoolLock.RLock()
@@ -246,7 +245,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 			require.Fail(t, "should not have any membership change")
 
 		case <-time.After(testStreamSendLatency):
-			require.True(t, true)
+			// All good
 		}
 
 		// act
