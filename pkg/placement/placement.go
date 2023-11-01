@@ -232,7 +232,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 			if registeredMemberID == "" {
 				// New connection
 				// Ensure that the reported API level is at least equal to the current one in the cluster
-				clusterAPILevel := state.MinAPILevel()
+				clusterAPILevel := state.APILevel()
 				if p.maxAPILevel > -1 && int(clusterAPILevel) > p.maxAPILevel {
 					clusterAPILevel = uint32(p.maxAPILevel)
 				}

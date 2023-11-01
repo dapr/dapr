@@ -32,7 +32,7 @@ func (p *Service) GetPlacementTables() (*PlacementTables, error) {
 	m := state.Members()
 	response := &PlacementTables{
 		TableVersion: state.TableGeneration(),
-		MinAPILevel:  state.MinAPILevel(),
+		MinAPILevel:  state.APILevel(),
 	}
 	if p.maxAPILevel >= 0 && int(response.MinAPILevel) > p.maxAPILevel {
 		response.MinAPILevel = uint32(p.maxAPILevel)

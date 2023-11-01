@@ -71,7 +71,7 @@ func (c *FSM) PlacementState() *v1pb.PlacementTables {
 	newTable := &v1pb.PlacementTables{
 		Version:  strconv.FormatUint(c.state.TableGeneration(), 10),
 		Entries:  make(map[string]*v1pb.PlacementTable),
-		ApiLevel: c.state.MinAPILevel(),
+		ApiLevel: c.state.APILevel(),
 	}
 
 	var (
