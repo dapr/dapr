@@ -24,8 +24,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dapr/dapr/tests/apps/utils"
 	"golang.org/x/net/http2"
+
+	"github.com/dapr/dapr/tests/apps/utils"
 )
 
 const (
