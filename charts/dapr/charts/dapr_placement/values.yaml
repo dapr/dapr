@@ -19,6 +19,8 @@ ports:
 
 ha: false
 
+maxApiLevel: -1
+
 cluster:
   forceInMemoryLog: false
   logStorePath: /var/run/dapr/raft-log
