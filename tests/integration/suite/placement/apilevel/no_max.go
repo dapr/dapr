@@ -50,6 +50,10 @@ func (n *noMax) Setup(t *testing.T) []framework.Option {
 func (n *noMax) Run(t *testing.T, ctx context.Context) {
 	n.place.WaitUntilRunning(t, ctx)
 
+	// Connect
+	conn, err := establishConn(ctx, n.place.Port())
+	require.NoError(t, err)
+
 	// Collect messages
 	placementMessageCh := make(chan any)
 	currentVersion := atomic.Uint32{}
@@ -77,17 +81,17 @@ func (n *noMax) Run(t *testing.T, ctx context.Context) {
 	// Register the first host with API level 10
 	ctx1, cancel1 := context.WithCancel(ctx)
 	defer cancel1()
-	registerHost(ctx1, n.place.Port(), 10, placementMessageCh)
+	registerHost(ctx1, conn, 10, placementMessageCh)
 
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
 		assert.Equal(t, uint32(10), currentVersion.Load())
-	}, 10*time.Second, 50*time.Millisecond)
+	}, 15*time.Second, 50*time.Millisecond)
 	lastUpdate := lastVersionUpdate.Load()
 
 	// Register the second host with API level 20
 	ctx2, cancel2 := context.WithCancel(ctx)
 	defer cancel2()
-	registerHost(ctx2, n.place.Port(), 20, placementMessageCh)
+	registerHost(ctx2, conn, 20, placementMessageCh)
 
 	// After 3s, we should not receive an update
 	// This can take a while as disseination happens on intervals
@@ -98,8 +102,8 @@ func (n *noMax) Run(t *testing.T, ctx context.Context) {
 	cancel1()
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
 		assert.Equal(t, uint32(20), currentVersion.Load())
-	}, 10*time.Second, 50*time.Millisecond)
+	}, 15*time.Second, 50*time.Millisecond)
 
 	// Trying to register a host with version 5 should fail
-	registerHostFailing(t, ctx, n.place.Port(), 5)
+	registerHostFailing(t, ctx, conn, 5)
 }

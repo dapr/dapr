@@ -32,17 +32,14 @@ import (
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 )
 
-func registerHost(ctx context.Context, port int, apiLevel int, placementMessage chan any) {
-	// Establish a connection with placement
-	conn, err := grpc.DialContext(ctx, "localhost:"+strconv.Itoa(port),
+func establishConn(ctx context.Context, port int) (*grpc.ClientConn, error) {
+	return grpc.DialContext(ctx, "localhost:"+strconv.Itoa(port),
 		grpc.WithBlock(),
 		grpc.WithTransportCredentials(grpcinsecure.NewCredentials()),
 	)
-	if err != nil {
-		placementMessage <- fmt.Errorf("failed to establish gRPC connection: %w", err)
-		return
-	}
+}
 
+func registerHost(ctx context.Context, conn *grpc.ClientConn, apiLevel int, placementMessage chan any) {
 	msg := &placementv1pb.Host{
 		Name:     "myapp",
 		Port:     1234,
@@ -98,7 +95,6 @@ func registerHost(ctx context.Context, port int, apiLevel int, placementMessage 
 			case <-ctx.Done():
 				// Disconnect when the context is done
 				placementStream.CloseSend()
-				conn.Close()
 				return
 			case <-time.After(time.Second):
 				placementStream.Send(msg)
@@ -126,15 +122,7 @@ func registerHost(ctx context.Context, port int, apiLevel int, placementMessage 
 }
 
 // Expect the registration to fail with FailedPrecondition.
-func registerHostFailing(t *testing.T, ctx context.Context, port int, apiLevel int) {
-	// Establish a connection with placement
-	conn, err := grpc.DialContext(ctx, "localhost:"+strconv.Itoa(port),
-		grpc.WithBlock(),
-		grpc.WithTransportCredentials(grpcinsecure.NewCredentials()),
-	)
-	require.NoError(t, err, "failed to establish gRPC connection")
-	defer conn.Close()
-
+func registerHostFailing(t *testing.T, ctx context.Context, conn *grpc.ClientConn, apiLevel int) {
 	msg := &placementv1pb.Host{
 		Name:     "myapp",
 		Port:     1234,
