@@ -80,6 +80,20 @@ func WithDaprConfigurationGet(t *testing.T, ns, name string, config *configapi.C
 	return handleGetResource(t, "/apis/dapr.io/v1alpha1", "configurations", ns, name, config)
 }
 
+func WithDaprConfigurationGet(t *testing.T, config *configapi.Configuration) Option {
+	return func(o *options) {
+		obj, err := json.Marshal(config)
+		require.NoError(t, err)
+		o.handlers = append(o.handlers, handleRoute{
+			path: "/apis/dapr.io/v1alpha1/namespaces/" + config.Namespace + "/configurations/" + config.Name,
+			handler: func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Add("Content-Type", "application/json")
+				w.Write(obj)
+			},
+		})
+	}
+}
+
 func WithSecretGet(t *testing.T, ns, name string, secret *corev1.Secret) Option {
 	return handleGetResource(t, "/api/v1", "secrets", ns, name, secret)
 }
