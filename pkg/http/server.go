@@ -44,8 +44,8 @@ import (
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/http/endpoints"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
+	"github.com/dapr/dapr/pkg/responsewriter"
 	"github.com/dapr/dapr/pkg/security"
-	"github.com/dapr/dapr/utils/responsewriter"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/utils"
 )

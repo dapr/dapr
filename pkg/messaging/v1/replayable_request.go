@@ -18,8 +18,8 @@ import (
 	"io"
 	"sync"
 
-	streamutils "github.com/dapr/dapr/utils/streams"
 	"github.com/dapr/kit/byteslicepool"
+	streamutils "github.com/dapr/kit/streams"
 )
 
 // Minimum capacity for the slices is 2KB
