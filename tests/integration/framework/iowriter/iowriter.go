@@ -15,7 +15,10 @@ package iowriter
 
 import (
 	"bytes"
+	"errors"
 	"io"
+	"os"
+	"strings"
 	"sync"
 )
 
@@ -26,6 +29,7 @@ type Logger interface {
 	Log(args ...any)
 	Name() string
 	Cleanup(func())
+	Failed() bool
 }
 
 // stdwriter is an io.WriteCloser that writes to the test logger. It buffers
@@ -69,9 +73,25 @@ func (w *stdwriter) flush() {
 	w.lock.Lock()
 	defer w.lock.Unlock()
 	defer w.buf.Reset()
-	for _, line := range bytes.Split(w.buf.Bytes(), []byte("\n")) {
+
+	// Don't log if the test hasn't failed and the user hasn't requested logs to
+	// always be printed.
+	if !w.t.Failed() &&
+		strings.ToLower(os.Getenv("DAPR_INTEGRATION_LOGS")) != "true" {
+		return
+	}
+
+	for {
+		line, err := w.buf.ReadBytes('\n')
 		if len(line) > 0 {
-			w.t.Log(w.t.Name() + "/" + w.procName + ": " + string(line))
+			w.t.Log(w.t.Name() + "/" + w.procName + ": " +
+				strings.TrimSuffix(string(line), "\n"))
+		}
+		if err != nil {
+			if !errors.Is(err, io.EOF) {
+				w.t.Log(w.t.Name() + "/" + w.procName + ": " + err.Error())
+			}
+			break
 		}
 	}
 }
