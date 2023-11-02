@@ -30,7 +30,7 @@ spec:
     apps:
       resiliencyapp:
         timeout: fast
-        retry: fiveRetries
+        retry: fiveRetriesWithFilter
         circuitBreaker: simpleCB
 
       resiliencyappgrpc:

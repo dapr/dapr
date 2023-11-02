@@ -340,7 +340,7 @@ func (b *binding) sendBindingEventToApp(ctx context.Context, bindingName string,
 				return rResp, rErr
 			}
 			if rResp != nil && rResp.Status().Code != http.StatusOK {
-				return rResp, fmt.Errorf("%w, status %d", respErr, rResp.Status().Code)
+				return rResp, resiliency.NewCodeError(rResp.Status().Code, fmt.Errorf("%w, status %d", respErr, rResp.Status().Code))
 			}
 			return rResp, nil
 		})
