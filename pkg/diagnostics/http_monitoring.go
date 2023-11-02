@@ -279,7 +279,7 @@ func (h *httpMetrics) convertPathToMetricLabel(path string) string {
 		// Concat 5 items(v1, actors, DemoActor, {id}, timer) in /v1/actors/DemoActor/1/timer/name
 		return "/" + strings.Join(parsedPath[0:5], "/")
 	case "workflows":
-		if (len(parsedPath) < 4) {
+		if len(parsedPath) < 4 {
 			return path
 		}
 
