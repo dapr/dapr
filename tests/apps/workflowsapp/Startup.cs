@@ -72,6 +72,30 @@ namespace DaprDemoActor
                 });
 
             });
+
+            services.AddDaprWorkflow(options =>
+            {
+                // Example of registering a "ManyActivities" workflow function
+                options.RegisterWorkflow<string, int>("ManyActivities", implementation: async (context, input) =>
+                {
+
+                    var value = 0;
+                    for (int i = 0; i < 1000; i ++)
+                    {
+                        value = await context.CallActivityAsync<int>("IncrementValue", i);
+                    }
+                    return value;
+                });
+
+                // Example of registering a "IncrementValue" workflow activity function
+                options.RegisterActivity<int, int>("IncrementValue", implementation: (context, input) =>
+                {
+                    input+=1;
+                    return Task.FromResult(input);
+                });
+
+            });
+
             services.AddAuthentication().AddDapr();
             services.AddAuthorization(o => o.AddDapr());
             services.AddControllers().AddDapr();
