@@ -24,7 +24,7 @@ import (
 )
 
 type CodeError struct {
-	StatusCode int
+	StatusCode int32
 	err        error
 }
 
@@ -36,7 +36,7 @@ func (ce CodeError) Unwrap() error {
 	return ce.err
 }
 
-func NewCodeError(statusCode int, err error) CodeError {
+func NewCodeError(statusCode int32, err error) CodeError {
 	return CodeError{
 		StatusCode: statusCode,
 		err:        err,
@@ -117,8 +117,8 @@ func (f *StatusCodeFilter) ParseIgnoreOnList(patterns []string) error {
 	return nil
 }
 
-func (f *StatusCodeFilter) StatusCodeNeedRetry(statusCode int) bool {
-	statusCodeStr := strconv.Itoa(statusCode)
+func (f *StatusCodeFilter) StatusCodeNeedRetry(statusCode int32) bool {
+	statusCodeStr := strconv.Itoa(int(statusCode))
 
 	// Check whitelist patterns
 	for _, pattern := range f.retryOnPatterns {

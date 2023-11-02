@@ -159,11 +159,7 @@ func TestInputBindingResiliency(t *testing.T) {
 			b, _ := json.Marshal(message)
 			_, code, err := utils.HTTPPostWithStatus(fmt.Sprintf("%s/tests/invokeBinding/%s", externalURL, tc.binding), b)
 			require.NoError(t, err)
-			if tc.responseStatusCode == nil {
-				require.Equal(t, 200, code)
-			} else {
-				require.Equal(t, *tc.responseStatusCode, code)
-			}
+			require.Equal(t, 200, code)
 
 			// Let the binding propagate and give time for retries/timeout.
 			time.Sleep(time.Second * 5)
@@ -329,6 +325,19 @@ func TestServiceInvocationResiliency(t *testing.T) {
 			callType:     "http",
 		},
 		{
+			Name:         "Test resiliency with filter consider non-500 as success",
+			shouldFail:   false,
+			expectStatus: ptr.Of(404),
+			expectCount:  ptr.Of(0),
+			callType:     "http",
+		},
+		{
+			Name:         "Test resiliency with filter retry on 500",
+			shouldFail:   true,
+			expectStatus: ptr.Of(500),
+			callType:     "http",
+		},
+		{
 			Name:         "Test invoking grpc app method recovers from failure",
 			FailureCount: ptr.Of(3),
 			shouldFail:   false,
@@ -396,7 +405,7 @@ func TestServiceInvocationResiliency(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.Name, func(t *testing.T) {
-			message := createFailureMessage(tc.FailureCount, tc.Timeout, nil)
+			message := createFailureMessage(tc.FailureCount, tc.Timeout, tc.expectStatus)
 			b, _ := json.Marshal(message)
 			u := fmt.Sprintf("%s/tests/invokeService/%s", externalURL, tc.callType)
 			if tc.targetApp != "" {

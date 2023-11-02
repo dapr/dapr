@@ -271,7 +271,7 @@ func TestPolicyRetryWithFilter(t *testing.T) {
 	tests := []struct {
 		name         string
 		maxCalls     int32
-		returnedCode int
+		returnedCode int32
 		retryOn      []string
 		ignoreOn     []string
 		maxRetries   int64

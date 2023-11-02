@@ -43,21 +43,17 @@ func (b *binding) StartReadingFromBindings(ctx context.Context) error {
 	b.lock.Lock()
 	defer b.lock.Unlock()
 
-	if b.stopForever {
-		return nil
-	}
-
-	b.readingBindings = true
-
 	if b.channels.AppChannel() == nil {
 		return errors.New("app channel not initialized")
 	}
 
 	// Clean any previous state
-	for _, cancel := range b.inputCancels {
-		cancel()
+	if b.inputCancel != nil {
+		b.inputCancel()
 	}
-	b.inputCancels = make(map[string]context.CancelFunc)
+
+	// Input bindings are stopped via cancellation of the main runtime's context
+	ctx, b.inputCancel = context.WithCancel(ctx)
 
 	comps := b.compStore.ListComponents()
 	bindings := make(map[string]componentsV1alpha1.Component)
@@ -68,67 +64,49 @@ func (b *binding) StartReadingFromBindings(ctx context.Context) error {
 	}
 
 	for name, bind := range b.compStore.ListInputBindings() {
-		if err := b.startInputBinding(bindings[name], bind); err != nil {
-			return err
-		}
-	}
+		var isSubscribed bool
 
-	return nil
-}
-
-func (b *binding) startInputBinding(comp componentsV1alpha1.Component, binding bindings.InputBinding) error {
-	var isSubscribed bool
-
-	meta, err := b.meta.ToBaseMetadata(comp)
-	if err != nil {
-		return err
-	}
-
-	m := meta.Properties
-
-	ctx, cancel := context.WithCancel(context.Background())
-	if isBindingOfExplicitDirection(ComponentTypeInput, m) {
-		isSubscribed = true
-	} else {
-		var err error
-		isSubscribed, err = b.isAppSubscribedToBinding(ctx, comp.Name)
+		meta, err := b.meta.ToBaseMetadata(bindings[name])
 		if err != nil {
-			cancel()
 			return err
+		}
+
+		m := meta.Properties
+
+		if isBindingOfExplicitDirection(ComponentTypeInput, m) {
+			isSubscribed = true
+		} else {
+			var err error
+			isSubscribed, err = b.isAppSubscribedToBinding(ctx, name)
+			if err != nil {
+				return err
+			}
+		}
+
+		if !isSubscribed {
+			log.Infof("app has not subscribed to binding %s.", name)
+			continue
+		}
+
+		if err := b.readFromBinding(ctx, name, bind); err != nil {
+			log.Errorf("error reading from input binding %s: %s", name, err)
+			continue
 		}
 	}
 
-	if !isSubscribed {
-		log.Infof("app has not subscribed to binding %s.", comp.Name)
-		cancel()
-		return nil
-	}
-
-	if err := b.readFromBinding(ctx, comp.Name, binding); err != nil {
-		log.Errorf("error reading from input binding %s: %s", comp.Name, err)
-		cancel()
-		return nil
-	}
-
-	b.inputCancels[comp.Name] = cancel
 	return nil
 }
 
-func (b *binding) StopReadingFromBindings(forever bool) {
+func (b *binding) StopReadingFromBindings() {
 	b.lock.Lock()
 	defer b.lock.Unlock()
 	defer b.wg.Wait()
 
-	if forever {
-		b.stopForever = true
+	if b.inputCancel != nil {
+		b.inputCancel()
 	}
 
-	b.readingBindings = false
-
-	for _, cancel := range b.inputCancels {
-		cancel()
-	}
-	b.inputCancels = make(map[string]context.CancelFunc)
+	b.inputCancel = nil
 }
 
 func (b *binding) sendBatchOutputBindingsParallel(ctx context.Context, to []string, data []byte) {
@@ -315,19 +293,19 @@ func (b *binding) sendBindingEventToApp(ctx context.Context, bindingName string,
 			return nil, fmt.Errorf("error invoking app: %w", err)
 		}
 		if resp != nil {
-			if resp.GetConcurrency() == runtimev1pb.BindingEventResponse_PARALLEL { //nolint:nosnakecase
+			if resp.Concurrency == runtimev1pb.BindingEventResponse_PARALLEL { //nolint:nosnakecase
 				response.Concurrency = ConcurrencyParallel
 			} else {
 				response.Concurrency = ConcurrencySequential
 			}
 
-			response.To = resp.GetTo()
+			response.To = resp.To
 
-			if resp.GetData() != nil {
-				appResponseBody = resp.GetData()
+			if resp.Data != nil {
+				appResponseBody = resp.Data
 
 				var d interface{}
-				err := json.Unmarshal(resp.GetData(), &d)
+				err := json.Unmarshal(resp.Data, &d)
 				if err == nil {
 					response.Data = d
 				}
@@ -361,8 +339,8 @@ func (b *binding) sendBindingEventToApp(ctx context.Context, bindingName string,
 			if rErr != nil {
 				return rResp, rErr
 			}
-			if rResp != nil && rResp.Status().GetCode() != http.StatusOK {
-				return rResp, fmt.Errorf("%w, status %d", respErr, rResp.Status().GetCode())
+			if rResp != nil && rResp.Status().Code != http.StatusOK {
+				return rResp, resiliency.NewCodeError(rResp.Status().Code, fmt.Errorf("%w, status %d", respErr, rResp.Status().Code))
 			}
 			return rResp, nil
 		})
@@ -381,15 +359,15 @@ func (b *binding) sendBindingEventToApp(ctx context.Context, bindingName string,
 				http.MethodPost+" /"+bindingName,
 			)
 			diag.AddAttributesToSpan(span, m)
-			diag.UpdateSpanStatusFromHTTPStatus(span, int(resp.Status().GetCode()))
+			diag.UpdateSpanStatusFromHTTPStatus(span, int(resp.Status().Code))
 			span.End()
 		}
 
 		appResponseBody, err = resp.RawDataFull()
 
 		// ::TODO report metrics for http, such as grpc
-		if code := resp.Status().GetCode(); code < 200 || code > 299 {
-			return nil, fmt.Errorf("fails to send binding event to http app channel, status code: %d body: %s", code, string(appResponseBody))
+		if resp.Status().Code < 200 || resp.Status().Code > 299 {
+			return nil, fmt.Errorf("fails to send binding event to http app channel, status code: %d body: %s", resp.Status().Code, string(appResponseBody))
 		}
 
 		if err != nil {
@@ -436,7 +414,7 @@ func (b *binding) getSubscribedBindingsGRPC(ctx context.Context) ([]string, erro
 	bindings := []string{}
 
 	if err == nil && resp != nil {
-		bindings = resp.GetBindings()
+		bindings = resp.Bindings
 	}
 	return bindings, nil
 }
@@ -466,10 +444,10 @@ func (b *binding) isAppSubscribedToBinding(ctx context.Context, binding string) 
 
 		resp, err := b.channels.AppChannel().InvokeMethod(ctx, req, "")
 		if err != nil {
-			return false, fmt.Errorf("could not invoke OPTIONS method on input binding subscription endpoint %q: %v", path, err)
+			log.Fatalf("could not invoke OPTIONS method on input binding subscription endpoint %q: %v", path, err)
 		}
 		defer resp.Close()
-		code := resp.Status().GetCode()
+		code := resp.Status().Code
 
 		return code/100 == 2 || code == http.StatusMethodNotAllowed, nil
 	}
