@@ -18,7 +18,7 @@ spec:
         duration: 10ms
         maxRetries: 5
         retryOnCodes:
-          - 500
+          - "500"
 
     circuitBreakers:
       simpleCB:
