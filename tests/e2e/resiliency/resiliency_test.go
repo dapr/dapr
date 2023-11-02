@@ -328,7 +328,7 @@ func TestServiceInvocationResiliency(t *testing.T) {
 			Name:         "Test resiliency with filter consider non-500 as success",
 			shouldFail:   false,
 			expectStatus: ptr.Of(404),
-			expectCount:  ptr.Of(0),
+			expectCount:  ptr.Of(1),
 			callType:     "http",
 		},
 		{
