@@ -24,8 +24,9 @@ import (
 )
 
 type mockLogger struct {
-	msgs []string
-	t    *testing.T
+	msgs   []string
+	failed bool
+	t      *testing.T
 }
 
 func (m *mockLogger) Log(args ...any) {
@@ -40,6 +41,10 @@ func (m mockLogger) Cleanup(fn func()) {
 	m.t.Cleanup(fn)
 }
 
+func (m mockLogger) Failed() bool {
+	return m.failed
+}
+
 func TestNew(t *testing.T) {
 	t.Run("should return new stdwriter", func(t *testing.T) {
 		writer := New(&mockLogger{t: t}, "proc")
@@ -50,7 +55,7 @@ func TestNew(t *testing.T) {
 
 func TestWrite(t *testing.T) {
 	t.Run("should write to buffer", func(t *testing.T) {
-		logger := &mockLogger{t: t}
+		logger := &mockLogger{t: t, failed: true}
 		writer := New(logger, "proc").(*stdwriter)
 
 		_, err := writer.Write([]byte("test"))
@@ -59,7 +64,7 @@ func TestWrite(t *testing.T) {
 	})
 
 	t.Run("should not flush on newline but on close", func(t *testing.T) {
-		logger := &mockLogger{t: t}
+		logger := &mockLogger{t: t, failed: true}
 		writer := New(logger, "proc").(*stdwriter)
 
 		_, err := writer.Write([]byte("test\n"))
@@ -86,19 +91,56 @@ func TestWrite(t *testing.T) {
 
 func TestClose(t *testing.T) {
 	t.Run("should flush and close", func(t *testing.T) {
-		logger := &mockLogger{t: t}
+		logger := &mockLogger{t: t, failed: true}
 		writer := New(logger, "proc").(*stdwriter)
 		writer.Write([]byte("test"))
 		writer.Close()
 
 		assert.Equal(t, 0, writer.buf.Len())
-		_ = assert.Equal(t, 1, len(logger.msgs)) && assert.Equal(t, "TestLogger/proc: test", logger.msgs[0])
+		_ = assert.Equal(t, 1, len(logger.msgs)) &&
+			assert.Equal(t, "TestLogger/proc: test", logger.msgs[0])
+	})
+}
+
+func TestNotFailed(t *testing.T) {
+	t.Run("if test has not failed it should not print output", func(t *testing.T) {
+		logger := &mockLogger{t: t, failed: false}
+		writer := New(logger, "proc").(*stdwriter)
+		writer.Write([]byte("test"))
+		writer.Close()
+
+		assert.Equal(t, 0, writer.buf.Len())
+		assert.Equal(t, 0, len(logger.msgs))
+	})
+
+	t.Run("if test has not failed but `DAPR_INTEGRATION_LOGS=true`, print output", func(t *testing.T) {
+		t.Setenv("DAPR_INTEGRATION_LOGS", "true")
+		logger := &mockLogger{t: t, failed: false}
+		writer := New(logger, "proc").(*stdwriter)
+		writer.Write([]byte("test"))
+		writer.Close()
+
+		assert.Equal(t, 0, writer.buf.Len())
+		_ = assert.Equal(t, 1, len(logger.msgs)) &&
+			assert.Equal(t, "TestLogger/proc: test", logger.msgs[0])
+	})
+
+	t.Run("if test has not failed but `DAPR_INTEGRATION_LOGS=TRUE`, print output", func(t *testing.T) {
+		t.Setenv("DAPR_INTEGRATION_LOGS", "true")
+		logger := &mockLogger{t: t, failed: false}
+		writer := New(logger, "proc").(*stdwriter)
+		writer.Write([]byte("test"))
+		writer.Close()
+
+		assert.Equal(t, 0, writer.buf.Len())
+		_ = assert.Equal(t, 1, len(logger.msgs)) &&
+			assert.Equal(t, "TestLogger/proc: test", logger.msgs[0])
 	})
 }
 
 func TestConcurrency(t *testing.T) {
 	t.Run("should handle concurrent writes", func(t *testing.T) {
-		logger := &mockLogger{t: t}
+		logger := &mockLogger{t: t, failed: true}
 		writer := New(logger, "proc").(*stdwriter)
 		wg := sync.WaitGroup{}
 		wg.Add(2)
