@@ -51,13 +51,6 @@ spec:
       dapr-resiliency-binding:
         inbound: 
           timeout: fast
-          retry: fiveRetries
-        outbound:
-          timeout: fast
-          retry: fiveRetries
-      dapr-resiliency-binding-with-filter:
-        inbound:
-          timeout: fast
           retry: fiveRetriesWithFilter
         outbound:
           timeout: fast

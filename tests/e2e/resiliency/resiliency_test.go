@@ -114,13 +114,13 @@ func TestInputBindingResiliency(t *testing.T) {
 			FailureCount:       ptr.Of(0), // since responseStatusCode is set, constantly fails with 404, this is the expected failure count
 			shouldFail:         false,
 			responseStatusCode: ptr.Of(404),
-			binding:            "dapr-resiliency-binding-with-filter",
+			binding:            "dapr-resiliency-binding",
 		},
 		{
 			Name:               "Test resiliency with filter retry on 500",
 			shouldFail:         true,
 			responseStatusCode: ptr.Of(500),
-			binding:            "dapr-resiliency-binding-with-filter",
+			binding:            "dapr-resiliency-binding",
 		},
 		{
 			Name:         "Test sending input binding to grpc app recovers from failure",
@@ -159,7 +159,11 @@ func TestInputBindingResiliency(t *testing.T) {
 			b, _ := json.Marshal(message)
 			_, code, err := utils.HTTPPostWithStatus(fmt.Sprintf("%s/tests/invokeBinding/%s", externalURL, tc.binding), b)
 			require.NoError(t, err)
-			require.Equal(t, 200, code)
+			if tc.responseStatusCode == nil {
+				require.Equal(t, 200, code)
+			} else {
+				require.Equal(t, *tc.responseStatusCode, code)
+			}
 
 			// Let the binding propagate and give time for retries/timeout.
 			time.Sleep(time.Second * 5)
