@@ -19,7 +19,8 @@ ports:
 
 ha: false
 
-maxApiLevel: -1
+maxActorApiLevel: -1
+minActorApiLevel: 0
 
 cluster:
   forceInMemoryLog: false

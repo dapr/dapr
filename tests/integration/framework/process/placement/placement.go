@@ -59,6 +59,7 @@ func New(t *testing.T, fopts ...Option) *Placement {
 		initialCluster:      uid.String() + "=localhost:" + strconv.Itoa(fp.Port(t, 3)),
 		initialClusterPorts: []int{fp.Port(t, 3)},
 		maxAPILevel:         -1,
+		minAPILevel:         0,
 		metadataEnabled:     false,
 	}
 
@@ -75,6 +76,7 @@ func New(t *testing.T, fopts ...Option) *Placement {
 		"--initial-cluster=" + opts.initialCluster,
 		"--tls-enabled=" + strconv.FormatBool(opts.tlsEnabled),
 		"--max-api-level=" + strconv.Itoa(opts.maxAPILevel),
+		"--min-api-level=" + strconv.Itoa(opts.minAPILevel),
 		"--metadata-enabled=" + strconv.FormatBool(opts.metadataEnabled),
 	}
 	if opts.sentryAddress != nil {

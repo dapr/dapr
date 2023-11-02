@@ -103,6 +103,8 @@ type Service struct {
 	// Maximum API level to return.
 	// If -1, there's no limit.
 	maxAPILevel int
+	// Minimum API level to return
+	minAPILevel int
 
 	// faultyHostDetectDuration
 	faultyHostDetectDuration *atomic.Int64
@@ -129,6 +131,7 @@ type Service struct {
 type PlacementServiceOpts struct {
 	RaftNode    *raft.Server
 	MaxAPILevel int
+	MinAPILevel int
 	SecProvider security.Provider
 }
 
@@ -143,6 +146,7 @@ func NewPlacementService(opts PlacementServiceOpts) *Service {
 		faultyHostDetectDuration: fhdd,
 		raftNode:                 opts.RaftNode,
 		maxAPILevel:              opts.MaxAPILevel,
+		minAPILevel:              opts.MinAPILevel,
 		clock:                    &clock.RealClock{},
 		closedCh:                 make(chan struct{}),
 		sec:                      opts.SecProvider,
@@ -233,6 +237,9 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 				// New connection
 				// Ensure that the reported API level is at least equal to the current one in the cluster
 				clusterAPILevel := state.APILevel()
+				if clusterAPILevel < uint32(p.minAPILevel) {
+					clusterAPILevel = uint32(p.minAPILevel)
+				}
 				if p.maxAPILevel > -1 && int(clusterAPILevel) > p.maxAPILevel {
 					clusterAPILevel = uint32(p.maxAPILevel)
 				}

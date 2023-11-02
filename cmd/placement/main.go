@@ -82,6 +82,7 @@ func main() {
 	apiServer := placement.NewPlacementService(placement.PlacementServiceOpts{
 		RaftNode:    raftServer,
 		MaxAPILevel: opts.MaxAPILevel,
+		MinAPILevel: opts.MinAPILevel,
 		SecProvider: secProvider,
 	})
 
