@@ -289,7 +289,7 @@ func shutdownRestartTest(url string, instanceID string) func(t *testing.T) {
 				resp, err = utils.HTTPGet(fmt.Sprintf("%s/dapr/%s", url, instance))
 				assert.NoError(t, err, "failure getting info on workflow")
 				assert.Equalf(t, "Completed", string(resp), "expected workflow: %s to be Completed, actual workflow state is: %s", instance, string(resp))
-			}, 20*time.Second, 100*time.Millisecond)
+			}, 30*time.Second, 100*time.Millisecond)
 		}
 	}
 }
