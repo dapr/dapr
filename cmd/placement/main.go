@@ -20,7 +20,6 @@ import (
 
 	"github.com/dapr/dapr/cmd/placement/options"
 	"github.com/dapr/dapr/pkg/buildinfo"
-	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
@@ -29,8 +28,9 @@ import (
 	"github.com/dapr/dapr/pkg/placement/monitoring"
 	"github.com/dapr/dapr/pkg/placement/raft"
 	"github.com/dapr/dapr/pkg/security"
-	"github.com/dapr/dapr/pkg/signals"
+	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/signals"
 )
 
 var log = logger.NewLogger("dapr.placement")
@@ -79,7 +79,7 @@ func main() {
 	}
 
 	hashing.SetReplicationFactor(opts.ReplicationFactor)
-	apiServer := placement.NewPlacementService(raftServer)
+	apiServer := placement.NewPlacementService(raftServer, secProvider)
 
 	err = concurrency.NewRunnerManager(
 		func(ctx context.Context) error {
@@ -105,11 +105,7 @@ func main() {
 			return nil
 		},
 		func(ctx context.Context) error {
-			sec, sErr := secProvider.Handler(ctx)
-			if sErr != nil {
-				return sErr
-			}
-			return apiServer.Run(ctx, strconv.Itoa(opts.PlacementPort), sec)
+			return apiServer.Run(ctx, strconv.Itoa(opts.PlacementPort))
 		},
 	).Run(ctx)
 	if err != nil {

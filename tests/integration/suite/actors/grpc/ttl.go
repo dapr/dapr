@@ -64,6 +64,9 @@ spec:
 	handler.HandleFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`{"entities": ["myactortype"]}`))
 	})
+	handler.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(""))
+	})
 	handler.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`OK`))
 	})

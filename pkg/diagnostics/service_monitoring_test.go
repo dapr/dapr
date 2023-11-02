@@ -19,7 +19,7 @@ func TestServiceInvocation(t *testing.T) {
 	t.Run("record service invocation request sent", func(t *testing.T) {
 		s := servicesMetrics()
 
-		s.ServiceInvocationRequestSent("testAppId2", "testMethod")
+		s.ServiceInvocationRequestSent("testAppId2")
 
 		viewData, _ := view.RetrieveData("runtime/service_invocation/req_sent_total")
 		v := view.Find("runtime/service_invocation/req_sent_total")
@@ -31,7 +31,7 @@ func TestServiceInvocation(t *testing.T) {
 	t.Run("record service invocation streaming request sent", func(t *testing.T) {
 		s := servicesMetrics()
 
-		s.ServiceInvocationStreamingRequestSent("testAppId2", "testMethod")
+		s.ServiceInvocationStreamingRequestSent("testAppId2")
 
 		viewData, _ := view.RetrieveData("runtime/service_invocation/req_sent_total")
 		v := view.Find("runtime/service_invocation/req_sent_total")
@@ -43,7 +43,7 @@ func TestServiceInvocation(t *testing.T) {
 	t.Run("record service invocation request received", func(t *testing.T) {
 		s := servicesMetrics()
 
-		s.ServiceInvocationRequestReceived("testAppId", "testMethod")
+		s.ServiceInvocationRequestReceived("testAppId")
 
 		viewData, _ := view.RetrieveData("runtime/service_invocation/req_recv_total")
 		v := view.Find("runtime/service_invocation/req_recv_total")
@@ -54,7 +54,7 @@ func TestServiceInvocation(t *testing.T) {
 	t.Run("record service invocation response sent", func(t *testing.T) {
 		s := servicesMetrics()
 
-		s.ServiceInvocationResponseSent("testAppId2", "testMethod", 200)
+		s.ServiceInvocationResponseSent("testAppId2", 200)
 
 		viewData, _ := view.RetrieveData("runtime/service_invocation/res_sent_total")
 		v := view.Find("runtime/service_invocation/res_sent_total")
@@ -65,7 +65,7 @@ func TestServiceInvocation(t *testing.T) {
 	t.Run("record service invocation response received", func(t *testing.T) {
 		s := servicesMetrics()
 
-		s.ServiceInvocationResponseReceived("testAppId", "testMethod", 200, time.Now())
+		s.ServiceInvocationResponseReceived("testAppId", 200, time.Now())
 
 		viewData, _ := view.RetrieveData("runtime/service_invocation/res_recv_total")
 		v := view.Find("runtime/service_invocation/res_recv_total")

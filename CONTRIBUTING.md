@@ -116,6 +116,10 @@ git push --force-with-lease <remote-name> <branch-name>
 
 - Third-party code must include licenses.
 
+### Available GitHub Slash Commands
+
+- Available GitHub Slash Commands listed in [command-reference](https://docs.dapr.io/contributing/daprbot/#command-reference).
+
 **Thank You!** - Your contributions to open source, large or small, make projects like this possible. Thank you for taking the time to contribute.
 
 ## Code of Conduct

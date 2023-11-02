@@ -21,8 +21,8 @@ import (
 	"github.com/dapr/dapr/pkg/operator/meta"
 	"github.com/dapr/dapr/pkg/operator/monitoring"
 	"github.com/dapr/dapr/pkg/validation"
-	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/utils"
 )
 
 const (
