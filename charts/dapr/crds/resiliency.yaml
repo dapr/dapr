@@ -67,11 +67,11 @@ spec:
                         retryOnCodes:
                           type: array
                           items:
-                            type: integer
+                            type: string
                         ignoreOnCodes:
                           type: array
                           items:
-                            type: integer
+                            type: string
                       type: object
                     type: object
                   timeouts:
