@@ -58,6 +58,8 @@ spec:
                       properties:
                         duration:
                           type: string
+                        initialInterval:
+                          type: string
                         maxInterval:
                           type: string
                         maxRetries:

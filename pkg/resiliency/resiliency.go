@@ -398,11 +398,17 @@ func (r *Resiliency) decodePolicies(c *resiliencyV1alpha.Resiliency) (err error)
 	}
 
 	for name, t := range policies.Retries {
+		// if the policy is exponential and "initialInterval" is not set use "duration" as "initialInterval"
+		if t.Policy == "exponential" && t.InitialInterval == "" {
+			t.InitialInterval = t.Duration
+		}
+
 		rc := retry.DefaultConfig()
 		m, err := toMap(t)
 		if err != nil {
 			return err
 		}
+
 		if err = retry.DecodeConfig(&rc, m); err != nil {
 			return fmt.Errorf("invalid retry configuration %q: %w", name, err)
 		}

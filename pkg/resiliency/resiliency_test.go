@@ -358,6 +358,26 @@ func TestBuiltInPoliciesAreCreated(t *testing.T) {
 	assert.Equal(t, time.Second, retry.Duration)
 }
 
+func TestResiliencyExponentialPolicyDurationUsedAsInitialInterval(t *testing.T) {
+	r := &resiliencyV1alpha.Resiliency{
+		Spec: resiliencyV1alpha.ResiliencySpec{
+			Policies: resiliencyV1alpha.Policies{
+				Retries: map[string]resiliencyV1alpha.Retry{
+					"myRetry": {
+						Policy:   "exponential",
+						Duration: "123s",
+					},
+				},
+			},
+		},
+	}
+	config := FromConfigurations(log, r)
+
+	assert.Equal(t, 123*time.Second, config.retries["myRetry"].InitialInterval)
+	assert.Equal(t, 123*time.Second, config.retries["myRetry"].Duration)
+	assert.Equal(t, "exponential", config.retries["myRetry"].Policy.String())
+}
+
 func TestResiliencyHasTargetDefined(t *testing.T) {
 	r := &resiliencyV1alpha.Resiliency{
 		Spec: resiliencyV1alpha.ResiliencySpec{
