@@ -279,13 +279,18 @@ func (h *httpMetrics) convertPathToMetricLabel(path string) string {
 		// Concat 5 items(v1, actors, DemoActor, {id}, timer) in /v1/actors/DemoActor/1/timer/name
 		return "/" + strings.Join(parsedPath[0:5], "/")
 	case "workflows":
+		if len(parsedPath) < 4 {
+			return path
+		}
+
 		// v1.0-alpha1/workflows/<workflowComponentName>/<instanceId>
 		if len(parsedPath) == 4 {
 			parsedPath[3] = "{instanceId}"
 			return "/" + strings.Join(parsedPath[0:4], "/")
 		}
+
 		// v1.0-alpha1/workflows/<workflowComponentName>/<workflowName>/start[?instanceID=<instanceID>]
-		if parsedPath[4] != "" && strings.HasPrefix(parsedPath[4], "start") {
+		if len(parsedPath) == 5 && parsedPath[4] != "" && strings.HasPrefix(parsedPath[4], "start") {
 			// not obfuscating the workflow name, just the possible instanceID
 			return "/" + strings.Join(parsedPath[0:4], "/") + "/start"
 		} else {
