@@ -73,6 +73,7 @@ type injector struct {
 	kubeClient   kubernetes.Interface
 	daprClient   scheme.Interface
 	authUIDs     []string
+	namespace    string
 
 	namespaceNameMatcher *namespacednamematcher.EqualPrefixNameNamespaceMatcher
 	ready                chan struct{}
@@ -111,8 +112,14 @@ func getAppIDFromRequest(req *v1.AdmissionRequest) string {
 func NewInjector(authUIDs []string, config Config, daprClient scheme.Interface, kubeClient kubernetes.Interface) (Injector, error) {
 	mux := http.NewServeMux()
 
+	namespace, err := utils.CurrentNamespaceOrError()
+	if err != nil {
+		return nil, err
+	}
+
 	i := &injector{
-		config: config,
+		config:    config,
+		namespace: namespace,
 		deserializer: serializer.NewCodecFactory(
 			runtime.NewScheme(),
 		).UniversalDeserializer(),
