@@ -104,7 +104,7 @@ func (n *noMax) Run(t *testing.T, parentCtx context.Context) {
 	registerHost(ctx, conn, "myapp2", 20, placementMessageCh, stopCh2)
 
 	// After 3s, we should not receive an update
-	// This can take a while as disseination happens on intervals
+	// This can take a while as dissemination happens on intervals
 	time.Sleep(3 * time.Second)
 	require.Equal(t, lastUpdate, lastVersionUpdate.Load())
 
