@@ -25,8 +25,14 @@ go test -v -race -tags integration ./tests/integration -focus sentry
 go test -v -race -tags integration ./tests/integration -test.skip Test_Integration/sentry/validator/jwks -focus sentry
 ```
 
-Rather than building from source, you can also set a custom daprd binary path
-with the environment variable `DAPR_INTEGRATION_DAPRD_PATH`.
+Rather than building from source, you can also set a custom daprd, sentry, or placement binary path with the environment variables:
+- `DAPR_INTEGRATION_DAPRD_PATH`
+- `DAPR_INTEGRATION_PLACEMENT_PATH`
+- `DAPR_INTEGRATION_SENTRY_PATH`
+
+By default, binary logs will not be printed unless the test fails. You can force
+logs to always be printed with the environment variable
+`DAPR_INTEGRATION_LOGS=true`.
 
 ## Adding a new test
 
