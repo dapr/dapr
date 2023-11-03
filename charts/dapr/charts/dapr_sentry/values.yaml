@@ -15,6 +15,10 @@ tokenAudience: ""
 
 deploymentAnnotations: {}
 
+service:
+  type: ClusterIP
+  annotations: {}
+
 ports:
   protocol: TCP
   port: 443
