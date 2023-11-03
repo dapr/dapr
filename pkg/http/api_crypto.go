@@ -24,9 +24,9 @@ import (
 	contribCrypto "github.com/dapr/components-contrib/crypto"
 	"github.com/dapr/dapr/pkg/http/endpoints"
 	"github.com/dapr/dapr/pkg/messages"
-	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/ptr"
 	encv1 "github.com/dapr/kit/schemes/enc/v1"
+	"github.com/dapr/kit/utils"
 )
 
 const (
