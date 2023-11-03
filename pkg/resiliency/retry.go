@@ -127,7 +127,7 @@ func (f *StatusCodeFilter) StatusCodeNeedRetry(statusCode int32) bool {
 		}
 	}
 
-	// Check blacklist patterns
+	// Check ignored codes (denylist)
 	for _, pattern := range f.ignoreOnPatterns {
 		if pattern.MatchString(statusCodeStr) {
 			return false
