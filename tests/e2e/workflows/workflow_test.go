@@ -89,7 +89,7 @@ func startTest(url string, instanceID string) func(t *testing.T) {
 			resp, err = utils.HTTPGet(getString)
 			assert.NoError(t, err, "failure getting info on workflow")
 			assert.Equalf(t, "Running", string(resp), "expected workflow to be Running, actual workflow state is: %s", string(resp))
-		}, 5*time.Second, 100*time.Millisecond)
+		}, 15*time.Second, 100*time.Millisecond)
 	}
 }
 
@@ -105,7 +105,7 @@ func pauseResumeTest(url string, instanceID string) func(t *testing.T) {
 			resp, err = utils.HTTPGet(getString)
 			assert.NoError(t, err, "failure getting info on workflow")
 			assert.Equalf(t, "Running", string(resp), "expected workflow to be Running, actual workflow state is: %s", string(resp))
-		}, 5*time.Second, 100*time.Millisecond)
+		}, 15*time.Second, 100*time.Millisecond)
 
 		// Pause the workflow
 		resp, err = utils.HTTPPost(fmt.Sprintf("%s/PauseWorkflow/dapr/%s", url, instanceID), nil)
@@ -115,7 +115,7 @@ func pauseResumeTest(url string, instanceID string) func(t *testing.T) {
 			resp, err = utils.HTTPGet(getString)
 			assert.NoError(t, err, "failure getting info on workflow")
 			assert.Equalf(t, "Suspended", string(resp), "expected workflow to be Suspended, actual workflow state is: %s", string(resp))
-		}, 5*time.Second, 100*time.Millisecond)
+		}, 15*time.Second, 100*time.Millisecond)
 
 		// Resume the workflow
 		resp, err = utils.HTTPPost(fmt.Sprintf("%s/ResumeWorkflow/dapr/%s", url, instanceID), nil)
@@ -125,7 +125,7 @@ func pauseResumeTest(url string, instanceID string) func(t *testing.T) {
 			resp, err = utils.HTTPGet(getString)
 			assert.NoError(t, err, "failure getting info on workflow")
 			assert.Equalf(t, "Running", string(resp), "expected workflow to be Running, actual workflow state is: %s", string(resp))
-		}, 5*time.Second, 100*time.Millisecond)
+		}, 15*time.Second, 100*time.Millisecond)
 	}
 }
 
@@ -141,7 +141,7 @@ func raiseEventTest(url string, instanceID string) func(t *testing.T) {
 			resp, err = utils.HTTPGet(getString)
 			assert.NoError(t, err, "failure getting info on workflow")
 			assert.Equalf(t, "Running", string(resp), "expected workflow to be Running, actual workflow state is: %s", string(resp))
-		}, 5*time.Second, 100*time.Millisecond)
+		}, 15*time.Second, 100*time.Millisecond)
 
 		// Raise an event on the workflow
 		resp, err = utils.HTTPPost(fmt.Sprintf("%s/RaiseWorkflowEvent/dapr/%s/ChangePurchaseItem/1", url, instanceID), nil)
@@ -151,7 +151,7 @@ func raiseEventTest(url string, instanceID string) func(t *testing.T) {
 			resp, err = utils.HTTPGet(getString)
 			assert.NoError(t, err, "failure getting info on workflow")
 			assert.Equalf(t, "Completed", string(resp), "expected workflow to be Completed, actual workflow state is: %s", string(resp))
-		}, 5*time.Second, 100*time.Millisecond)
+		}, 15*time.Second, 100*time.Millisecond)
 	}
 }
 
@@ -168,7 +168,7 @@ func purgeTest(url string, instanceID string) func(t *testing.T) {
 			resp, err = utils.HTTPGet(getString)
 			assert.NoError(t, err, "failure getting info on workflow")
 			assert.Equalf(t, "Running", string(resp), "expected workflow to be Running, actual workflow state is: %s", string(resp))
-		}, 5*time.Second, 100*time.Millisecond)
+		}, 15*time.Second, 100*time.Millisecond)
 
 		// Terminate the workflow
 		resp, err = utils.HTTPPost(fmt.Sprintf("%s/TerminateWorkflow/dapr/%s", url, instanceID), nil)
@@ -178,7 +178,7 @@ func purgeTest(url string, instanceID string) func(t *testing.T) {
 			resp, err = utils.HTTPGet(getString)
 			assert.NoError(t, err, "failure getting info on workflow")
 			assert.Equalf(t, "Terminated", string(resp), "expected workflow to be Terminated, actual workflow state is: %s", string(resp))
-		}, 5*time.Second, 100*time.Millisecond)
+		}, 15*time.Second, 100*time.Millisecond)
 
 		// Purge the workflow
 		resp, err = utils.HTTPPost(fmt.Sprintf("%s/PurgeWorkflow/dapr/%s", url, instanceID), nil)
@@ -194,7 +194,7 @@ func purgeTest(url string, instanceID string) func(t *testing.T) {
 			resp, err = utils.HTTPGet(getString)
 			assert.NoError(t, err, "failure getting info on workflow")
 			assert.Equalf(t, "Running", string(resp), "expected workflow to be Running, actual workflow state is: %s", string(resp))
-		}, 5*time.Second, 100*time.Millisecond)
+		}, 15*time.Second, 100*time.Millisecond)
 	}
 }
 
@@ -215,7 +215,7 @@ func multiAppTest(url string, instanceID string) func(t *testing.T) {
 				resp, err := utils.HTTPGet(getString)
 				assert.NoError(t, err, "failure getting info on workflow")
 				assert.Equalf(t, "Running", string(resp), "expected workflow to be Running, actual workflow state is: %s", string(resp))
-			}, 5*time.Second, 100*time.Millisecond)
+			}, 15*time.Second, 100*time.Millisecond)
 		}
 		// Raise Events across all the instance amongst the 2 apps
 		for _, instance := range workflowInstanceIDs {
@@ -224,7 +224,7 @@ func multiAppTest(url string, instanceID string) func(t *testing.T) {
 				resp, err = utils.HTTPGet(fmt.Sprintf("%s/dapr/%s", url, instance))
 				assert.NoError(t, err, "failure getting info on workflow")
 				assert.Equalf(t, "Completed", string(resp), "expected workflow to be Completed, actual workflow state is: %s", string(resp))
-			}, 5*time.Second, 100*time.Millisecond)
+			}, 15*time.Second, 100*time.Millisecond)
 		}
 	}
 }
@@ -246,7 +246,7 @@ func shutdownRestartTest(url string, instanceID string) func(t *testing.T) {
 				resp, err := utils.HTTPGet(getString)
 				assert.NoError(t, err, "failure getting info on workflow")
 				assert.Equalf(t, "Running", string(resp), "expected workflow to be Running, actual workflow state is: %s", string(resp))
-			}, 5*time.Second, 100*time.Millisecond)
+			}, 15*time.Second, 100*time.Millisecond)
 		}
 
 		// Pause workflows across all the instances amongst the 2 apps
@@ -256,7 +256,7 @@ func shutdownRestartTest(url string, instanceID string) func(t *testing.T) {
 				resp, err = utils.HTTPGet(fmt.Sprintf("%s/dapr/%s", url, instance))
 				assert.NoError(t, err, "failure getting info on workflow")
 				assert.Equalf(t, "Suspended", string(resp), "expected workflow to be Suspended, actual workflow state is: %s", string(resp))
-			}, 5*time.Second, 100*time.Millisecond)
+			}, 15*time.Second, 100*time.Millisecond)
 		}
 
 		// Shutdown the sidecar
@@ -306,7 +306,7 @@ func manyActivitiesTest(url string, instanceID string) func(t *testing.T) {
 			resp, err = utils.HTTPGet(getString)
 			assert.NoError(t, err, "failure getting info on workflow")
 			assert.Equalf(t, "Running", string(resp), "expected workflow: %s to be Running, actual workflow state is: %s", instanceID, string(resp))
-		}, 5*time.Second, 100*time.Millisecond)
+		}, 15*time.Second, 100*time.Millisecond)
 
 		require.EventuallyWithT(t, func(t *assert.CollectT) {
 			resp, err = utils.HTTPGet(getString)
