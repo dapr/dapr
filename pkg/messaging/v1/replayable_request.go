@@ -18,8 +18,8 @@ import (
 	"io"
 	"sync"
 
-	"github.com/dapr/dapr/utils"
-	streamutils "github.com/dapr/dapr/utils/streams"
+	"github.com/dapr/kit/byteslicepool"
+	streamutils "github.com/dapr/kit/streams"
 )
 
 // Minimum capacity for the slices is 2KB
@@ -29,7 +29,7 @@ const minByteSliceCapacity = 2 << 10
 // Used to reduce the number of allocations in replayableRequest for buffers and relieve pressure on the GC.
 var (
 	bufPool = sync.Pool{New: newBuffer}
-	bsPool  = utils.NewByteSlicePool(minByteSliceCapacity)
+	bsPool  = byteslicepool.NewByteSlicePool(minByteSliceCapacity)
 )
 
 func newBuffer() any {
