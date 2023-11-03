@@ -120,7 +120,7 @@ func (f *StatusCodeFilter) ParseIgnoreOnList(patterns []string) error {
 func (f *StatusCodeFilter) StatusCodeNeedRetry(statusCode int32) bool {
 	statusCodeStr := strconv.Itoa(int(statusCode))
 
-	// Check whitelist patterns
+	// Check retriable codes (allowlist)
 	for _, pattern := range f.retryOnPatterns {
 		if pattern.MatchString(statusCodeStr) {
 			return true
