@@ -35,14 +35,13 @@ import (
 	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	workflowsLoader "github.com/dapr/dapr/pkg/components/workflows"
-	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/modes"
+	"github.com/dapr/dapr/pkg/runtime"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/dapr/pkg/security"
-	"github.com/dapr/dapr/pkg/signals"
-
-	"github.com/dapr/dapr/pkg/runtime"
+	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/signals"
 )
 
 var (

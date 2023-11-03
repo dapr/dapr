@@ -25,7 +25,7 @@ import (
 
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/http/endpoints"
-	"github.com/dapr/dapr/utils/responsewriter"
+	"github.com/dapr/dapr/pkg/responsewriter"
 )
 
 // To track the metrics for fasthttp using opencensus, this implementation is inspired by

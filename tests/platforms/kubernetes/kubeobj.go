@@ -27,7 +27,7 @@ import (
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/utils"
 )
 
 const (

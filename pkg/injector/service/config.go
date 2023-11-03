@@ -20,6 +20,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/dapr/dapr/utils"
+	kitutils "github.com/dapr/kit/utils"
 )
 
 // Config represents configuration options for the Dapr Sidecar Injector webhook server.
@@ -101,7 +102,7 @@ func (c *Config) GetRunAsNonRoot() bool {
 	if c.RunAsNonRoot == "" {
 		return true
 	}
-	return utils.IsTruthy(c.RunAsNonRoot)
+	return kitutils.IsTruthy(c.RunAsNonRoot)
 }
 
 func (c *Config) GetReadOnlyRootFilesystem() bool {
@@ -109,17 +110,17 @@ func (c *Config) GetReadOnlyRootFilesystem() bool {
 	if c.ReadOnlyRootFilesystem == "" {
 		return true
 	}
-	return utils.IsTruthy(c.ReadOnlyRootFilesystem)
+	return kitutils.IsTruthy(c.ReadOnlyRootFilesystem)
 }
 
 func (c *Config) GetDropCapabilities() bool {
 	// Default is false if empty
-	return utils.IsTruthy(c.SidecarDropALLCapabilities)
+	return kitutils.IsTruthy(c.SidecarDropALLCapabilities)
 }
 
 func (c *Config) GetSkipPlacement() bool {
 	// Default is false if empty
-	return utils.IsTruthy(c.SkipPlacement)
+	return kitutils.IsTruthy(c.SkipPlacement)
 }
 
 func (c *Config) parseTolerationsJSON() {

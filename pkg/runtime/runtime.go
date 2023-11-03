@@ -41,13 +41,17 @@ import (
 	apiextensionsV1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	nr "github.com/dapr/components-contrib/nameresolution"
+	"github.com/dapr/components-contrib/secretstores"
+	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpEndpointV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/components"
-	"github.com/dapr/dapr/pkg/concurrency"
+	"github.com/dapr/dapr/pkg/components/pluggable"
+	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/config/protocol"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -66,6 +70,8 @@ import (
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/channels"
+	"github.com/dapr/dapr/pkg/runtime/compstore"
+	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	"github.com/dapr/dapr/pkg/runtime/meta"
 	"github.com/dapr/dapr/pkg/runtime/processor"
 	"github.com/dapr/dapr/pkg/runtime/registry"
@@ -73,16 +79,8 @@ import (
 	"github.com/dapr/dapr/pkg/security"
 	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
-
-	"github.com/dapr/dapr/pkg/components/pluggable"
-	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
-	"github.com/dapr/dapr/pkg/runtime/compstore"
-	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
-
-	nr "github.com/dapr/components-contrib/nameresolution"
-	"github.com/dapr/components-contrib/secretstores"
-	"github.com/dapr/components-contrib/state"
 )
 
 const (

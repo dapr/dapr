@@ -17,7 +17,6 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"path/filepath"
 	"strings"
 )
 
@@ -63,31 +62,6 @@ func GetEnvOrElse(name, orElse string) string {
 		return value
 	}
 	return orElse
-}
-
-// IsTruthy returns true if a string is a truthy value.
-// Truthy values are "y", "yes", "true", "t", "on", "1" (case-insensitive); everything else is false.
-func IsTruthy(val string) bool {
-	val = strings.TrimSpace(val)
-	if len(val) > 4 {
-		// Short-circuit, this can never be a truthy value
-		return false
-	}
-	switch strings.ToLower(val) {
-	case "y", "yes", "true", "t", "on", "1":
-		return true
-	default:
-		return false
-	}
-}
-
-// IsYaml checks whether the file is yaml or not.
-func IsYaml(fileName string) bool {
-	extension := strings.ToLower(filepath.Ext(fileName))
-	if extension == ".yaml" || extension == ".yml" {
-		return true
-	}
-	return false
 }
 
 // GetIntValOrDefault returns an int value if greater than 0 OR default value.

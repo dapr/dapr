@@ -31,6 +31,7 @@ import (
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
+	"github.com/dapr/dapr/pkg/ports"
 	operatorV1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	resiliencyConfig "github.com/dapr/dapr/pkg/resiliency"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
@@ -323,7 +324,7 @@ func (c *Config) toInternal() (*internalConfig, error) {
 		// acquired using a deterministic algorithm that returns the same value if
 		// the same app is restarted
 		// Otherwise, the port will be random.
-		intc.internalGRPCPort, err = utils.GetStablePort(47300, intc.id)
+		intc.internalGRPCPort, err = ports.GetStablePort(47300, intc.id)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get free port for internal grpc server: %w", err)
 		}

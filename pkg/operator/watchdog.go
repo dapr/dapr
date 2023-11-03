@@ -15,7 +15,7 @@ import (
 
 	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
 	operatorConsts "github.com/dapr/dapr/pkg/operator/meta"
-	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/utils"
 )
 
 const (

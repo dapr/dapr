@@ -65,27 +65,6 @@ func TestSetEnvVariables(t *testing.T) {
 	})
 }
 
-func TestIsYaml(t *testing.T) {
-	testCases := []struct {
-		input    string
-		expected bool
-	}{
-		{
-			input:    "a.yaml",
-			expected: true,
-		}, {
-			input:    "a.yml",
-			expected: true,
-		}, {
-			input:    "a.txt",
-			expected: false,
-		},
-	}
-	for _, tc := range testCases {
-		assert.Equal(t, IsYaml(tc.input), tc.expected)
-	}
-}
-
 func TestGetIntValFromStringVal(t *testing.T) {
 	tcs := []struct {
 		name     string
@@ -282,14 +261,6 @@ func TestGetNamespaceOrDefault(t *testing.T) {
 		ns := GetNamespaceOrDefault("default")
 		assert.Equal(t, "testNs", ns)
 	})
-}
-
-func BenchmarkIsTruthy(b *testing.B) {
-	for n := 0; n < b.N; n++ {
-		IsTruthy("true")
-		IsTruthy("false")
-		IsTruthy("  on  ")
-	}
 }
 
 func BenchmarkFilter(b *testing.B) {

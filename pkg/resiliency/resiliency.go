@@ -33,10 +33,10 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
-	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/config"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/retry"
+	"github.com/dapr/kit/utils"
 )
 
 const (

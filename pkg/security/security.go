@@ -33,10 +33,10 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"k8s.io/utils/clock"
 
-	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/security/legacy"
+	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/fswatcher"
 	"github.com/dapr/kit/logger"
 )
