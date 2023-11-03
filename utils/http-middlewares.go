@@ -17,7 +17,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/dapr/dapr/utils/streams"
+	"github.com/dapr/kit/streams"
 )
 
 // UppercaseRequestMiddleware is a HTTP middleware that transforms the request body to uppercase
