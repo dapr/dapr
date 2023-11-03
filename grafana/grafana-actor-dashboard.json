@@ -802,10 +802,11 @@
   "templating": {
     "list": [
       {
+        "allValue": null,
         "current": {
           "selected": false,
-          "text": "longhaul-test",
-          "value": "longhaul-test"
+          "text": "pipeline",
+          "value": "pipeline"
         },
         "datasource": "Dapr",
         "definition": "label_values(dapr_runtime_component_loaded,namespace)",
@@ -828,14 +829,11 @@
         "useTags": false
       },
       {
+        "allValue": null,
         "current": {
-          "selected": true,
-          "text": [
-            "HashTagActor"
-          ],
-          "value": [
-            "HashTagActor"
-          ]
+          "selected": false,
+          "text": "StateActor",
+          "value": "StateActor"
         },
         "datasource": "Dapr",
         "definition": "label_values(dapr_runtime_actor_pending_actor_calls,actor_type)",

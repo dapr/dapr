@@ -2406,10 +2406,11 @@
   "templating": {
     "list": [
       {
+        "allValue": null,
         "current": {
           "selected": false,
-          "text": "longhaul-test",
-          "value": "longhaul-test"
+          "text": "pipeline",
+          "value": "pipeline"
         },
         "datasource": "Dapr",
         "definition": "label_values(dapr_runtime_component_loaded,namespace)",
@@ -2432,27 +2433,17 @@
         "useTags": false
       },
       {
+        "allValue": null,
         "current": {
           "selected": true,
+          "tags": [],
           "text": [
-            "feed-generator",
-            "hashtag-actor",
-            "hashtag-counter",
-            "message-analyzer",
-            "pubsub-workflow",
-            "snapshot",
-            "validation-worker",
-            "workflow-gen"
+            "loadtestclient",
+            "stateactor"
           ],
           "value": [
-            "feed-generator",
-            "hashtag-actor",
-            "hashtag-counter",
-            "message-analyzer",
-            "pubsub-workflow",
-            "snapshot",
-            "validation-worker",
-            "workflow-gen"
+            "loadtestclient",
+            "stateactor"
           ]
         },
         "datasource": "Dapr",
