@@ -26,7 +26,7 @@ import (
 	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/http/endpoints"
-	"github.com/dapr/dapr/utils/responsewriter"
+	"github.com/dapr/dapr/pkg/responsewriter"
 )
 
 // We have leveraged the code from opencensus-go plugin to adhere the w3c trace context.
