@@ -589,6 +589,7 @@ func (m *AppManager) AcquireExternalURL() string {
 	log.Printf("Waiting until service ingress is ready for %s...\n", m.app.AppName)
 	svc, err := m.WaitUntilServiceState(m.app.AppName, m.IsServiceIngressReady)
 	if err != nil {
+		log.Printf("Service ingress for %s is not ready: %s", m.app.AppName, err)
 		return ""
 	}
 
