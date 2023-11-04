@@ -90,6 +90,15 @@ The Helm chart has the follow configuration options that can be supplied:
 | `global.mtls.allowedClockSkew`            | Allowed clock skew for workload cert rotation                           | `15m`                   |
 | `global.mtls.controlPlaneTrustDomain `    | Trust domain for control plane                                          | `cluster.local`         |
 | `global.mtls.sentryAddress`               | Sentry address for control plane                                        | `dapr-sentry.{{ .ReleaseNamespace  }}.svc:443` |
+| `global.mtls.mountSentryToken`            | Gates whether the sentry bound service account token volume is mounted to control plane pods | `true` |
+| `global.extraVolumes.sentry`              | Array of extra volumes to make available to sentry pods                 | `[]`                    |
+| `global.extraVolumes.placement`           | Array of extra volumes to make available to placement pods              | `[]`                    |
+| `global.extraVolumes.operator`            | Array of extra volumes to make available to operator pods               | `[]`                    |
+| `global.extraVolumes.injector`            | Array of extra volumes to make available to sidecar injector pods       | `[]`                    |
+| `global.extraVolumeMounts.sentry`         | Array of extra volume mounts to make available to sentry pod containers           | `[]`          |
+| `global.extraVolumeMounts.placement`      | Array of extra volume mounts to make available to placement pod containers        | `[]`          |
+| `global.extraVolumeMounts.operator`       | Array of extra volume mounts to make available to operator pod containers         | `[]`          |
+| `global.extraVolumeMounts.injector`       | Array of extra volume mounts to make available to sidecar injector pod containers | `[]`          |
 | `global.dnsSuffix`                        | Kuberentes DNS suffix                                                   | `.cluster.local`        |
 | `global.daprControlPlaneOs`               | Operating System for Dapr control plane                                 | `linux`                 |
 | `global.daprControlPlaneArch`             | CPU Architecture for Dapr control plane                                 | `amd64`                 |

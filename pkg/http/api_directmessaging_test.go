@@ -925,6 +925,7 @@ func TestV1DirectMessagingEndpointsWithResiliency(t *testing.T) {
 
 		assert.Equal(t, 200, resp.StatusCode)
 		assert.Equal(t, 1, failingDirectMessaging.Failure.CallCount("allgood"))
+		assert.Equal(t, fakeData, resp.RawBody)
 	})
 
 	t.Run("Test invoke direct message does not retry on 2xx", func(t *testing.T) {
@@ -941,6 +942,7 @@ func TestV1DirectMessagingEndpointsWithResiliency(t *testing.T) {
 
 		assert.Equal(t, 201, resp.StatusCode)
 		assert.Equal(t, 1, failingDirectMessaging.Failure.CallCount("allgood2"))
+		assert.Equal(t, fakeData, resp.RawBody)
 	})
 
 	t.Run("Test invoke direct message retries with resiliency", func(t *testing.T) {
@@ -952,6 +954,24 @@ func TestV1DirectMessagingEndpointsWithResiliency(t *testing.T) {
 
 		assert.Equal(t, 200, resp.StatusCode)
 		assert.Equal(t, 2, failingDirectMessaging.Failure.CallCount("failingKey"))
+	})
+
+	t.Run("Test invoke direct message retries on unsuccessful statuscode with resiliency", func(t *testing.T) {
+		failingDirectMessaging.SuccessStatusCode = 450
+		defer func() {
+			failingDirectMessaging.SuccessStatusCode = 0
+		}()
+		apiPath := "v1.0/invoke/failingApp/method/fakeMethod"
+		fakeData := []byte("failingKey2")
+
+		// act
+		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil, "header1", "val1")
+
+		assert.Equal(t, 450, resp.StatusCode)
+		assert.Equal(t, 2, failingDirectMessaging.Failure.CallCount("failingKey2"))
+		assert.Equal(t, fakeData, resp.RawBody)
+		assert.Equal(t, "val1", resp.RawHeader.Get("header1"))
+		assert.Equal(t, "application/json", resp.ContentType)
 	})
 
 	t.Run("Test invoke direct message fails with timeout", func(t *testing.T) {

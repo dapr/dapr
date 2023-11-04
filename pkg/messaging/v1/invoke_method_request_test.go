@@ -194,11 +194,10 @@ func TestData(t *testing.T) {
 	t.Run("typeurl is set but content_type is unset", func(t *testing.T) {
 		req := NewInvokeMethodRequest("test_method")
 		defer req.Close()
-		req.r.Message.Data = &anypb.Any{TypeUrl: "fake", Value: []byte("fake")}
-		contentType := req.ContentType()
+		req.r.Message.Data = &anypb.Any{TypeUrl: "type", Value: []byte("fake")}
 		bData, err := io.ReadAll(req.RawData())
 		assert.NoError(t, err)
-		assert.Equal(t, "", contentType)
+		assert.Equal(t, ProtobufContentType, req.ContentType())
 		assert.Equal(t, "fake", string(bData))
 	})
 }
@@ -683,28 +682,79 @@ func TestRequestReplayable(t *testing.T) {
 
 		t.Run("first ProtoWithData request", func(t *testing.T) {
 			pb, err := req.ProtoWithData()
-			assert.NoError(t, err)
-			assert.NotNil(t, pb)
-			assert.NotNil(t, pb.Message)
-			assert.NotNil(t, pb.Message.Data)
+			require.NoError(t, err)
+			require.NotNil(t, pb)
+			require.NotNil(t, pb.Message)
+			require.NotNil(t, pb.Message.Data)
 			assert.Equal(t, message, string(pb.Message.Data.Value))
 		})
 
 		t.Run("second ProtoWithData request", func(t *testing.T) {
 			pb, err := req.ProtoWithData()
-			assert.NoError(t, err)
-			assert.NotNil(t, pb)
-			assert.NotNil(t, pb.Message)
-			assert.NotNil(t, pb.Message.Data)
+			require.NoError(t, err)
+			require.NotNil(t, pb)
+			require.NotNil(t, pb.Message)
+			require.NotNil(t, pb.Message.Data)
 			assert.Equal(t, message, string(pb.Message.Data.Value))
 		})
 
 		t.Run("close request", func(t *testing.T) {
 			err := req.Close()
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Nil(t, req.data)
 			assert.Nil(t, req.replay)
 		})
+	})
+}
+
+func TestDataTypeUrl(t *testing.T) {
+	t.Run("preserve type URL from proto", func(t *testing.T) {
+		const (
+			message = "cerco l'estate tutto l'anno"
+			typeURL = "testurl"
+		)
+
+		pb := &commonv1pb.InvokeRequest{
+			Method: "frominvokerequestmessage",
+			Data: &anypb.Any{
+				Value:   []byte(message),
+				TypeUrl: typeURL,
+			},
+		}
+
+		req := FromInvokeRequestMessage(pb).
+			WithContentType("text/plain") // Should be ignored
+		defer req.Close()
+
+		pd, err := req.ProtoWithData()
+		require.NoError(t, err)
+		require.NotNil(t, pd.GetMessage().GetData())
+		assert.Equal(t, message, string(pd.Message.Data.Value))
+		assert.Equal(t, typeURL, pd.Message.Data.TypeUrl)
+
+		// Content type should be the protobuf one
+		assert.Equal(t, ProtobufContentType, req.ContentType())
+	})
+
+	t.Run("set type URL in message", func(t *testing.T) {
+		const (
+			message = "e all'improvviso eccola qua"
+			typeURL = "testurl"
+		)
+		req := NewInvokeMethodRequest("test_method").
+			WithContentType("text/plain"). // Should be ignored
+			WithRawDataString(message).
+			WithDataTypeURL(typeURL)
+		defer req.Close()
+
+		pd, err := req.ProtoWithData()
+		require.NoError(t, err)
+		require.NotNil(t, pd.GetMessage().GetData())
+		assert.Equal(t, message, string(pd.Message.Data.Value))
+		assert.Equal(t, typeURL, pd.Message.Data.TypeUrl)
+
+		// Content type should be the protobuf one
+		assert.Equal(t, ProtobufContentType, req.ContentType())
 	})
 }
 

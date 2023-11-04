@@ -32,6 +32,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/cors"
+	"github.com/dapr/dapr/pkg/http/endpoints"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	dapr_testing "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/logger"
@@ -97,7 +98,7 @@ func TestUnescapeRequestParametersHandler(t *testing.T) {
 	}
 
 	t.Run("unescapeRequestParametersHandler is added as middleware if the endpoint includes Parameters in its path", func(t *testing.T) {
-		endpoints := []Endpoint{
+		endpoints := []endpoints.Endpoint{
 			{
 				Methods: []string{http.MethodGet},
 				Route:   "state/{storeName}/{key}",
@@ -146,7 +147,7 @@ func TestUnescapeRequestParametersHandler(t *testing.T) {
 	})
 
 	t.Run("unescapeRequestParameterHandler is not added as middleware if the endpoint does not include Parameters in its path", func(t *testing.T) {
-		endpoints := []Endpoint{
+		endpoints := []endpoints.Endpoint{
 			{
 				Methods: []string{http.MethodGet},
 				Route:   "metadata",
@@ -262,7 +263,7 @@ func TestAPILogging(t *testing.T) {
 
 	body := []byte("👋")
 
-	endpoints := []Endpoint{
+	endpoints := []endpoints.Endpoint{
 		{
 			Methods: []string{http.MethodGet, http.MethodPost},
 			Route:   "state/{storeName}/{key}",
@@ -270,12 +271,17 @@ func TestAPILogging(t *testing.T) {
 			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Write(body)
 			}),
+			Settings: endpoints.EndpointSettings{
+				Name: "GetState",
+			},
 		},
 	}
 	srv := newServer()
 	srv.config.EnableAPILogging = true
 
 	router := chi.NewRouter()
+	srv.useContextSetup(router)
+	srv.useAPILogging(router)
 	srv.setupRoutes(router, endpoints)
 
 	dec := json.NewDecoder(logDest)
@@ -285,7 +291,6 @@ func TestAPILogging(t *testing.T) {
 			srv.config.APILoggingObfuscateURLs = obfuscateURL
 
 			for _, e := range endpoints {
-				routePath := fmt.Sprintf("/%s/%s", e.Version, e.Route)
 				path := fmt.Sprintf("/%s/%s", e.Version, "state/mystate/mykey")
 				for _, m := range e.Methods {
 					req := httptest.NewRequest(m, path, nil)
@@ -301,17 +306,33 @@ func TestAPILogging(t *testing.T) {
 					require.NoError(t, err)
 					assert.Equal(t, body, respBody)
 
-					logData := map[string]string{}
+					logData := map[string]any{}
 					err = dec.Decode(&logData)
 					require.NoError(t, err)
 
 					assert.Equal(t, "test-api-logging", logData["scope"])
 					assert.Equal(t, "HTTP API Called", logData["msg"])
+
 					if obfuscateURL {
-						assert.Equal(t, m+" "+routePath, logData["method"])
+						assert.Equal(t, e.Settings.Name, logData["method"])
 					} else {
 						assert.Equal(t, m+" "+path, logData["method"])
 					}
+
+					timeStr, ok := logData["time"].(string)
+					assert.True(t, ok)
+					tt, err := time.Parse(time.RFC3339Nano, timeStr)
+					assert.NoError(t, err)
+					assert.InDelta(t, time.Now().Unix(), tt.Unix(), 120)
+
+					// In our test the duration better be no more than 10ms!
+					dur, ok := logData["duration"].(float64)
+					assert.True(t, ok)
+					assert.Less(t, dur, 10.0)
+
+					assert.Equal(t, float64(len(body)), logData["size"])
+					assert.Equal(t, float64(http.StatusOK), logData["code"])
+
 					if userAgent != "" {
 						assert.Equal(t, userAgent, logData["useragent"])
 					} else {
@@ -344,7 +365,7 @@ func TestAPILoggingOmitHealthChecks(t *testing.T) {
 
 	body := []byte("👋")
 
-	endpoints := []Endpoint{
+	endpoints := []endpoints.Endpoint{
 		{
 			Methods: []string{http.MethodGet},
 			Route:   "log",
@@ -352,7 +373,9 @@ func TestAPILoggingOmitHealthChecks(t *testing.T) {
 			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Write(body)
 			}),
-			IsHealthCheck: false,
+			Settings: endpoints.EndpointSettings{
+				IsHealthCheck: false,
+			},
 		},
 		{
 			Methods: []string{http.MethodGet},
@@ -361,7 +384,9 @@ func TestAPILoggingOmitHealthChecks(t *testing.T) {
 			Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Write(body)
 			}),
-			IsHealthCheck: true,
+			Settings: endpoints.EndpointSettings{
+				IsHealthCheck: true,
+			},
 		},
 	}
 	srv := newServer()
@@ -369,6 +394,8 @@ func TestAPILoggingOmitHealthChecks(t *testing.T) {
 	srv.config.APILogHealthChecks = false
 
 	router := chi.NewRouter()
+	srv.useContextSetup(router)
+	srv.useAPILogging(router)
 	srv.setupRoutes(router, endpoints)
 
 	dec := json.NewDecoder(logDest)
@@ -389,7 +416,7 @@ func TestAPILoggingOmitHealthChecks(t *testing.T) {
 		assert.Equal(t, body, respBody)
 
 		if e.Route == "log" {
-			logData := map[string]string{}
+			logData := map[string]any{}
 			err := dec.Decode(&logData)
 			require.NoError(t, err)
 

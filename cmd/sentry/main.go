@@ -21,23 +21,21 @@ import (
 
 	"github.com/dapr/dapr/cmd/sentry/options"
 	"github.com/dapr/dapr/pkg/buildinfo"
-	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/sentry"
 	"github.com/dapr/dapr/pkg/sentry/config"
 	"github.com/dapr/dapr/pkg/sentry/monitoring"
-	"github.com/dapr/dapr/pkg/signals"
 	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/fswatcher"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/signals"
 )
 
 var log = logger.NewLogger("dapr.sentry")
 
 func main() {
-	log.Infof("Starting sentry certificate authority -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
-
 	opts := options.New()
 
 	// Apply options to all loggers
@@ -57,7 +55,7 @@ func main() {
 	if err := utils.SetEnvVariables(map[string]string{
 		utils.KubeConfigVar: opts.Kubeconfig,
 	}); err != nil {
-		log.Fatalf("error set env failed:  %s", err.Error())
+		log.Fatalf("Error setting env: %v", err)
 	}
 
 	if err := monitoring.InitMetrics(); err != nil {
@@ -99,14 +97,14 @@ func main() {
 
 				case <-issuerEvent:
 					monitoring.IssuerCertChanged()
-					log.Debug("received issuer credentials changed signal")
+					log.Debug("Received issuer credentials changed signal")
 
 					select {
 					case <-ctx.Done():
 						return nil
 					// Batch all signals within 2s of each other
 					case <-time.After(2 * time.Second):
-						log.Warn("issuer credentials changed; reloading")
+						log.Warn("Issuer credentials changed; reloading")
 						return nil
 					}
 				}

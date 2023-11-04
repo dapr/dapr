@@ -28,7 +28,6 @@ import (
 	chi "github.com/go-chi/chi/v5"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/protobuf/types/known/emptypb"
 
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/apps/utils"
@@ -180,7 +179,7 @@ func getMetadataHTTP(ctx context.Context) (metadata mockMetadata, err error) {
 func getMetadataGRPC(ctx context.Context) (metadata mockMetadata, err error) {
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	res, err := grpcClient.GetMetadata(ctx, &emptypb.Empty{})
+	res, err := grpcClient.GetMetadata(ctx, &runtimev1pb.GetMetadataRequest{})
 	if err != nil {
 		return metadata, fmt.Errorf("failed to get sidecar metadata from gRPC: %w", err)
 	}
