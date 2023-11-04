@@ -89,7 +89,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(dapr_http_server_latency_bucket{path=~\"/v1.0/actors/$dapr_actor_type/.*\", kubernetes_namespace=\"$namespace\"}[5m])) by (le, app_id, method, path))",
+          "expr": "histogram_quantile(0.95, sum(rate(dapr_http_server_latency_bucket{path=~\"/v1.0/actors/$dapr_actor_type/.*\", namespace=\"$namespace\"}[5m])) by (le, app_id, method, path))",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -97,7 +97,7 @@
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.75, sum(rate(dapr_http_server_latency_bucket{path=~\"/v1.0/actors/$dapr_actor_type/.*\", kubernetes_namespace=\"$namespace\"}[5m])) by (le, app_id, method, path))",
+          "expr": "histogram_quantile(0.75, sum(rate(dapr_http_server_latency_bucket{path=~\"/v1.0/actors/$dapr_actor_type/.*\", namespace=\"$namespace\"}[5m])) by (le, app_id, method, path))",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -200,7 +200,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum by (app_id, method, path) (rate(dapr_http_server_response_count{path=~\"/v1.0/actors/$dapr_actor_type/.*\", kubernetes_namespace=\"$namespace\"}[5m]))",
+          "expr": "sum by (app_id, method, path) (rate(dapr_http_server_response_count{path=~\"/v1.0/actors/$dapr_actor_type/.*\", namespace=\"$namespace\"}[5m]))",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -302,7 +302,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(dapr_http_client_roundtrip_latency_bucket{path=~\"actors/$dapr_actor_type/.*/method/.*\", kubernetes_namespace=\"$namespace\"}[5m])) by (le, app_id, method, path))",
+          "expr": "histogram_quantile(0.95, sum(rate(dapr_http_client_roundtrip_latency_bucket{path=~\"actors/$dapr_actor_type/.*/method/.*\", namespace=\"$namespace\"}[5m])) by (le, app_id, method, path))",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -310,7 +310,7 @@
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.75, sum(rate(dapr_http_client_roundtrip_latency_bucket{path=~\"actors/$dapr_actor_type/.*/method/.*\", kubernetes_namespace=\"$namespace\"}[5m])) by (le, app_id, method, path))",
+          "expr": "histogram_quantile(0.75, sum(rate(dapr_http_client_roundtrip_latency_bucket{path=~\"actors/$dapr_actor_type/.*/method/.*\", namespace=\"$namespace\"}[5m])) by (le, app_id, method, path))",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -414,7 +414,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum by (app_id, method, path) (rate(dapr_http_client_completed_count{path=~\"actors/$dapr_actor_type/.*/method/.*\", kubernetes_namespace=\"$namespace\"}[5m]))",
+          "expr": "sum by (app_id, method, path) (rate(dapr_http_client_completed_count{path=~\"actors/$dapr_actor_type/.*/method/.*\", namespace=\"$namespace\"}[5m]))",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -530,7 +530,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(dapr_http_client_roundtrip_latency_bucket{path=~\"actors/$dapr_actor_type/.*/method/timer/.*\", kubernetes_namespace=\"$namespace\"}[5m])) by (path)",
+          "expr": "sum(rate(dapr_http_client_roundtrip_latency_bucket{path=~\"actors/$dapr_actor_type/.*/method/timer/.*\", namespace=\"$namespace\"}[5m])) by (path)",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -632,7 +632,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(dapr_http_client_roundtrip_latency_bucket{path=~\"actors/$dapr_actor_type/.*/method/remind/.*\", kubernetes_namespace=\"$namespace\"}[5m])) by (path)",
+          "expr": "sum(rate(dapr_http_client_roundtrip_latency_bucket{path=~\"actors/$dapr_actor_type/.*/method/remind/.*\", namespace=\"$namespace\"}[5m])) by (path)",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -809,7 +809,7 @@
           "value": "pipeline"
         },
         "datasource": "Dapr",
-        "definition": "label_values(dapr_runtime_component_loaded,kubernetes_namespace)",
+        "definition": "label_values(dapr_runtime_component_loaded,namespace)",
         "error": null,
         "hide": 0,
         "includeAll": false,
@@ -817,7 +817,7 @@
         "multi": false,
         "name": "namespace",
         "options": [],
-        "query": "label_values(dapr_runtime_component_loaded,kubernetes_namespace)",
+        "query": "label_values(dapr_runtime_component_loaded,namespace)",
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
@@ -858,14 +858,11 @@
     ]
   },
   "time": {
-    "from": "now-3h",
+    "from": "now-14d",
     "to": "now"
   },
   "timepicker": {
     "refresh_intervals": [
-      "5s",
-      "10s",
-      "30s",
       "1m",
       "5m",
       "15m",
