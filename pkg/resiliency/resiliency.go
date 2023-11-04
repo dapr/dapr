@@ -337,7 +337,7 @@ func (r *Resiliency) addBuiltInPolicies() {
 	// Cover retries for remote service invocation, but don't overwrite anything that is already present.
 	if _, ok := r.retries[string(BuiltInServiceRetries)]; !ok {
 		r.retries[string(BuiltInServiceRetries)] = &Retry{
-			Config: &retry.Config{
+			Config: retry.Config{
 				Policy: retry.PolicyConstant,
 				// Note: If this value changes to 0, don't forget to disable "Replay" in direct messaging
 				MaxRetries: 3,
@@ -349,7 +349,7 @@ func (r *Resiliency) addBuiltInPolicies() {
 	// Cover retries for remote actor invocation, but don't overwrite anything that is already present.
 	if _, ok := r.retries[string(BuiltInActorRetries)]; !ok {
 		r.retries[string(BuiltInActorRetries)] = &Retry{
-			Config: &retry.Config{
+			Config: retry.Config{
 				Policy:     retry.PolicyConstant,
 				MaxRetries: 3,
 				Duration:   time.Second,
@@ -360,7 +360,7 @@ func (r *Resiliency) addBuiltInPolicies() {
 	// Cover retries for actor reminder operations, but don't overwrite anything that is already present.
 	if _, ok := r.retries[string(BuiltInActorReminderRetries)]; !ok {
 		r.retries[string(BuiltInActorReminderRetries)] = &Retry{
-			Config: &retry.Config{
+			Config: retry.Config{
 				Policy:              retry.PolicyExponential,
 				InitialInterval:     500 * time.Millisecond,
 				RandomizationFactor: 0.5,
@@ -374,7 +374,7 @@ func (r *Resiliency) addBuiltInPolicies() {
 	// Cover retries for initialization, but don't overwrite anything that is already present.
 	if _, ok := r.retries[string(BuiltInInitializationRetries)]; !ok {
 		r.retries[string(BuiltInInitializationRetries)] = &Retry{
-			Config: &retry.Config{
+			Config: retry.Config{
 				Policy:              retry.PolicyExponential,
 				InitialInterval:     time.Millisecond * 500,
 				MaxRetries:          3,
@@ -389,7 +389,7 @@ func (r *Resiliency) addBuiltInPolicies() {
 
 	if _, ok := r.retries[string(BuiltInActorNotFoundRetries)]; !ok {
 		r.retries[string(BuiltInActorNotFoundRetries)] = &Retry{
-			Config: &retry.Config{
+			Config: retry.Config{
 				Policy:     retry.PolicyConstant,
 				MaxRetries: 5,
 				Duration:   time.Second,
@@ -428,7 +428,7 @@ func (r *Resiliency) decodePolicies(c *resiliencyV1alpha.Resiliency) (err error)
 			}
 
 			r.retries[name] = &Retry{
-				Config:           &rc,
+				Config:           rc,
 				StatusCodeFilter: filter,
 			}
 		} else {

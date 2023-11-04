@@ -39,7 +39,7 @@ func ExampleNewRunnerWithOptions_accumulator() {
 		log:  testLog,
 		name: "retry",
 		t:    10 * time.Millisecond,
-		r:    NewRetry(&retry.Config{MaxRetries: 6}, nil),
+		r:    NewRetry(retry.Config{MaxRetries: 6}, NewStatusCodeFilter()),
 	}
 
 	// Handler function
@@ -81,7 +81,7 @@ func ExampleNewRunnerWithOptions_disposer() {
 		log:  testLog,
 		name: "retry",
 		t:    10 * time.Millisecond,
-		r:    NewRetry(&retry.Config{MaxRetries: 6}, nil),
+		r:    NewRetry(retry.Config{MaxRetries: 6}, NewStatusCodeFilter()),
 	}
 
 	// Handler function
@@ -140,7 +140,7 @@ func TestPolicy(t *testing.T) {
 		"empty": {},
 		"all": {
 			t:  10 * time.Millisecond,
-			r:  NewRetry(&retryValue, nil),
+			r:  NewRetry(retryValue, NewStatusCodeFilter()),
 			cb: &cbValue,
 		},
 		"nil policy": nil,
@@ -255,7 +255,7 @@ func TestPolicyRetry(t *testing.T) {
 				log:  testLog,
 				name: "retry",
 				t:    10 * time.Millisecond,
-				r:    NewRetry(&retry.Config{MaxRetries: test.maxRetries}, nil),
+				r:    NewRetry(retry.Config{MaxRetries: test.maxRetries}, NewStatusCodeFilter()),
 			})
 			_, err := policy(fn)
 			if err != nil {
@@ -280,7 +280,7 @@ func TestPolicyRetryWithFilter(t *testing.T) {
 			name:         "Retries succeed",
 			maxCalls:     5,
 			returnedCode: 500,
-			retryOn:      []string{"5**"},
+			retryOn:      []string{"500-599"},
 			maxRetries:   6,
 			expected:     6,
 		},
@@ -288,7 +288,7 @@ func TestPolicyRetryWithFilter(t *testing.T) {
 			name:         "Retries code ignored",
 			maxCalls:     5,
 			returnedCode: 500,
-			ignoreOn:     []string{"5**"},
+			ignoreOn:     []string{"500-599"},
 			maxRetries:   6,
 			expected:     1,
 		},
@@ -296,7 +296,7 @@ func TestPolicyRetryWithFilter(t *testing.T) {
 			name:         "Retries code not in retry list",
 			maxCalls:     5,
 			returnedCode: 500,
-			retryOn:      []string{"4**"},
+			retryOn:      []string{"400-499"},
 			maxRetries:   6,
 			expected:     1,
 		},
@@ -324,7 +324,7 @@ func TestPolicyRetryWithFilter(t *testing.T) {
 				log:  testLog,
 				name: "retry",
 				t:    10 * time.Millisecond,
-				r:    NewRetry(&retry.Config{MaxRetries: test.maxRetries}, filter),
+				r:    NewRetry(retry.Config{MaxRetries: test.maxRetries}, filter),
 			})
 			_, err = policy(fn)
 			if err != nil {
@@ -361,7 +361,7 @@ func TestPolicyAccumulator(t *testing.T) {
 		log:  testLog,
 		name: "retry",
 		t:    10 * time.Millisecond,
-		r:    NewRetry(&retry.Config{MaxRetries: 6}, nil),
+		r:    NewRetry(retry.Config{MaxRetries: 6}, NewStatusCodeFilter()),
 	}
 	var accumulatorCalled int
 	policy := NewRunnerWithOptions(context.Background(), policyDef, RunnerOpts[int32]{
@@ -405,7 +405,7 @@ func TestPolicyDisposer(t *testing.T) {
 		log:  testLog,
 		name: "retry",
 		t:    10 * time.Millisecond,
-		r:    NewRetry(&retry.Config{MaxRetries: 5}, nil),
+		r:    NewRetry(retry.Config{MaxRetries: 5}, NewStatusCodeFilter()),
 	}
 	policy := NewRunnerWithOptions(context.Background(), policyDef, RunnerOpts[int32]{
 		Disposer: func(i int32) {
