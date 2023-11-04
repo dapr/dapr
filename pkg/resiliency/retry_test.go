@@ -17,21 +17,21 @@ func TestResiliencyFunctions(t *testing.T) {
 	}{
 		{
 			name:          "TestRetryOn",
-			retryOn:       []string{"2**", "30[0-9]", "400", "50[189]"},
+			retryOn:       []string{"200,201,202,203,204", "300-309", "400", "500,505-509"},
 			expectError:   false,
 			testCodes:     []int32{200, 204, 300, 310, 400, 500, 509},
-			expectedRetry: []bool{true, true, true, false, true, false, true},
+			expectedRetry: []bool{true, true, true, false, true, true, true},
 		},
 		{
 			name:          "TestIgnoreOn",
-			ignoreOn:      []string{"4**", "500"},
+			ignoreOn:      []string{"400-499", "500"},
 			expectError:   false,
 			testCodes:     []int32{200, 300, 400, 500},
 			expectedRetry: []bool{true, true, false, false},
 		},
 		{
 			name:        "TestRetryOnAndIgnoreOn",
-			retryOn:     []string{"2**"},
+			retryOn:     []string{"200-299"},
 			ignoreOn:    []string{"200"},
 			expectError: true,
 		},

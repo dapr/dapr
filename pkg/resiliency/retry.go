@@ -16,7 +16,6 @@ package resiliency
 import (
 	"errors"
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 
@@ -44,11 +43,11 @@ func NewCodeError(statusCode int32, err error) CodeError {
 }
 
 type Retry struct {
-	*retry.Config
-	*StatusCodeFilter
+	retry.Config
+	StatusCodeFilter
 }
 
-func NewRetry(retryConfig *retry.Config, statusCodeFilter *StatusCodeFilter) *Retry {
+func NewRetry(retryConfig retry.Config, statusCodeFilter StatusCodeFilter) *Retry {
 	return &Retry{
 		Config:           retryConfig,
 		StatusCodeFilter: statusCodeFilter,
@@ -56,80 +55,79 @@ func NewRetry(retryConfig *retry.Config, statusCodeFilter *StatusCodeFilter) *Re
 }
 
 type StatusCodeFilter struct {
-	retryOnPatterns  []*regexp.Regexp
-	ignoreOnPatterns []*regexp.Regexp
+	retryOnPatterns  []codeRange
+	ignoreOnPatterns []codeRange
 	defaultRetry     bool
 }
 
-func NewStatusCodeFilter() *StatusCodeFilter {
-	return &StatusCodeFilter{defaultRetry: true}
+// codeRange represents a range of status codes from start to end.
+type codeRange struct {
+	start int32
+	end   int32
 }
 
-func ParseStatusCodeFilter(retryOnPatterns []string, ignoreOnPatterns []string) (*StatusCodeFilter, error) {
-	if len(retryOnPatterns) != 0 && len(ignoreOnPatterns) != 0 {
-		return nil, errors.New("retryOn and ignoreOn cannot be used together")
-	}
+func (cr codeRange) MatchCode(c int32) bool {
+	return cr.start <= c && c <= cr.end
+}
+
+func NewStatusCodeFilter() StatusCodeFilter {
+	return StatusCodeFilter{defaultRetry: true}
+}
+
+func ParseStatusCodeFilter(retryOnPatterns []string, ignoreOnPatterns []string) (StatusCodeFilter, error) {
 	filter := NewStatusCodeFilter()
-	if err := filter.ParseRetryOnList(retryOnPatterns); err != nil {
-		return nil, err
+	if len(retryOnPatterns) != 0 && len(ignoreOnPatterns) != 0 {
+		return filter, errors.New("retryOnCodes and ignoreOnCodes cannot be used together")
 	}
-	if err := filter.ParseIgnoreOnList(ignoreOnPatterns); err != nil {
-		return nil, err
+	// if retryOn is set, parse retry on patterns and set default retry to false
+	if len(retryOnPatterns) != 0 {
+		parsedPatterns, err := filter.parsePatterns(retryOnPatterns)
+		if err != nil {
+			return filter, err
+		}
+		filter.retryOnPatterns = parsedPatterns
+		filter.defaultRetry = false
+	}
+	// if ignoreOn is set, parse ignore on patterns and set default retry to true
+	if len(ignoreOnPatterns) != 0 {
+		parsedPatterns, err := filter.parsePatterns(ignoreOnPatterns)
+		if err != nil {
+			return filter, err
+		}
+		filter.ignoreOnPatterns = parsedPatterns
+		filter.defaultRetry = true
 	}
 	return filter, nil
 }
 
-func (f *StatusCodeFilter) ParseRetryOnList(patterns []string) error {
-	if len(patterns) == 0 {
-		return nil
-	}
-	regexpPatterns, err := f.parsePatterns(patterns)
-	if err != nil {
-		return err
-	}
-	f.retryOnPatterns = regexpPatterns
-	f.defaultRetry = false
-	return nil
-}
-
-func (f *StatusCodeFilter) parsePatterns(patterns []string) ([]*regexp.Regexp, error) {
-	regexpPatterns := make([]*regexp.Regexp, len(patterns))
-	for i, pattern := range patterns {
-		regexpPattern, err := compilePattern(pattern)
-		if err != nil {
-			return nil, err
+func (f StatusCodeFilter) parsePatterns(patterns []string) ([]codeRange, error) {
+	parsedPatterns := make([]codeRange, 0, len(patterns))
+	for _, item := range patterns {
+		// one item can contain multiple patterns separated by comma
+		splited := strings.Split(item, ",")
+		for _, p := range splited {
+			parsedPattern, err := compilePattern(p)
+			if err != nil {
+				return nil, fmt.Errorf("failed to compile item %s, %w", item, err)
+			}
+			parsedPatterns = append(parsedPatterns, parsedPattern)
 		}
-		regexpPatterns[i] = regexpPattern
 	}
-	return regexpPatterns, nil
+	return parsedPatterns, nil
 }
 
-func (f *StatusCodeFilter) ParseIgnoreOnList(patterns []string) error {
-	if len(patterns) == 0 {
-		return nil
-	}
-	regexpPatterns, err := f.parsePatterns(patterns)
-	if err != nil {
-		return err
-	}
-	f.ignoreOnPatterns = regexpPatterns
-	f.defaultRetry = true
-	return nil
-}
-
-func (f *StatusCodeFilter) StatusCodeNeedRetry(statusCode int32) bool {
-	statusCodeStr := strconv.Itoa(int(statusCode))
+func (f StatusCodeFilter) StatusCodeNeedRetry(statusCode int32) bool {
 
 	// Check retriable codes (allowlist)
 	for _, pattern := range f.retryOnPatterns {
-		if pattern.MatchString(statusCodeStr) {
+		if pattern.MatchCode(statusCode) {
 			return true
 		}
 	}
 
 	// Check ignored codes (denylist)
 	for _, pattern := range f.ignoreOnPatterns {
-		if pattern.MatchString(statusCodeStr) {
+		if pattern.MatchCode(statusCode) {
 			return false
 		}
 	}
@@ -137,16 +135,31 @@ func (f *StatusCodeFilter) StatusCodeNeedRetry(statusCode int32) bool {
 	return f.defaultRetry
 }
 
-func compilePattern(pattern string) (*regexp.Regexp, error) {
-	// Convert wildcard patterns like "4**", "40*" to a regex pattern
-	if strings.Contains(pattern, "*") {
-		pattern = strings.ReplaceAll(pattern, "*", "[0-9]")
+func compilePattern(pattern string) (codeRange, error) {
+	// parse code range pattern
+	if strings.Contains(pattern, "-") {
+		patterns := strings.Split(pattern, "-")
+		if len(patterns) != 2 {
+			return codeRange{}, fmt.Errorf("invalid pattern %s, more than one '-' exists", pattern)
+		}
+		start, err := strconv.Atoi(patterns[0])
+		if err != nil {
+			return codeRange{}, fmt.Errorf("failed to parse start code %s from pattern %s to int, %w", patterns[0], pattern, err)
+		}
+		end, err := strconv.Atoi(patterns[1])
+		if err != nil {
+			return codeRange{}, fmt.Errorf("failed to prase start code %s from pattern %s to int, %w", patterns[1], pattern, err)
+		}
+		return codeRange{start: int32(start), end: int32(end)}, nil
 	}
-	// Compile the regex pattern
-	compiledPattern, err := regexp.Compile(pattern)
+	// specific code
+	code, err := strconv.Atoi(pattern)
 	if err != nil {
-		return nil, fmt.Errorf("failed to compile pattern %s, %w", pattern, err)
+		return codeRange{}, fmt.Errorf("failed to compile pattern %s, %w", pattern, err)
 	}
 
-	return compiledPattern, nil
+	return codeRange{
+		start: int32(code),
+		end:   int32(code),
+	}, nil
 }
