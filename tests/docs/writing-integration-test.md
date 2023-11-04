@@ -5,14 +5,24 @@
 Integration tests are run against a live running daprd binary locally. Each test
 scenario is run against a new instance of daprd, where each scenario modifies
 the daprd configuration to suit the test. Tests are expected to complete within
-seconds, ideally less than 5, and should not take longer than 30. Daprd is
+seconds, ideally less than 5, and should not take longer than 30. Binaries are
 always built from source within the test.
 
 
 ## Invoking the test
 
 ```bash
-go test -v -race -count -tags="integration" ./tests/integration` -run="Test_Integration/daprd/pubsub/http/fuzzpubsubNoRaw"
+go test -v -race -tags integration ./tests/integration
+```
+
+You can also run a subset of tests by specifying the `-focus` flag, which takes a [Go regular expression](https://github.com/google/re2/wiki/Syntax).
+
+```bash
+# Run all sentry related tests.
+go test -v -race -tags integration ./tests/integration -focus sentry
+
+# Run all sentry related tests whilst skipping the sentry jwks validator test.
+go test -v -race -tags integration ./tests/integration -test.skip Test_Integration/sentry/validator/jwks -focus sentry
 ```
 
 Rather than building from source, you can also set a custom daprd, sentry, or placement binary path with the environment variables:
