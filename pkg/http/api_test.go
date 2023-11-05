@@ -1952,6 +1952,32 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 		mockActors.AssertNumberOfCalls(t, "GetState", 1)
 	})
 
+	t.Run("Delete actor state - 200 OK", func(t *testing.T) {
+		buffer = ""
+		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
+		mockActors := new(actors.MockActors)
+		mockActors.On("DeleteState", &actors.DeleteStateRequest{
+			ActorID:   "fakeActorID",
+			ActorType: "fakeActorType",
+			Key:       "key1",
+		}).Return(nil)
+
+		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
+			ActorID:   "fakeActorID",
+			ActorType: "fakeActorType",
+		}).Return(true)
+
+		testAPI.universal.Actors = mockActors
+
+		// act
+		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil)
+
+		// assert
+		assert.Equal(t, 204, resp)
+		assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
+		mockActors.AssertNumberOfCalls(t, "DeleteState", 1)
+	})
+
 	t.Run("Transaction - 204 No Content", func(t *testing.T) {
 		buffer = ""
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state"

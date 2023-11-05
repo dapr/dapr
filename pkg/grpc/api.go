@@ -1081,6 +1081,42 @@ func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRe
 	}, nil
 }
 
+func (a *api) DeleteActorState(ctx context.Context, in *runtimev1pb.DeleteActorStateRequest) (*emptypb.Empty, error) {
+	if err := a.actorReadinessCheck(ctx); err != nil {
+		return &emptypb.Empty{}, err
+	}
+
+	actorType := in.ActorType
+	actorID := in.ActorId
+	key := in.Key
+
+	hosted := a.UniversalAPI.Actors.IsActorHosted(ctx, &actors.ActorHostedRequest{
+		ActorType: actorType,
+		ActorID:   actorID,
+	})
+
+	if !hosted {
+		err := status.Errorf(codes.Internal, messages.ErrActorInstanceMissing)
+		apiServerLogger.Debug(err)
+		return &emptypb.Empty{}, err
+	}
+
+	req := actors.DeleteStateRequest{
+		ActorType: actorType,
+		ActorID:   actorID,
+		Key:       key,
+	}
+
+	err := a.UniversalAPI.Actors.DeleteState(ctx, &req)
+	if err != nil {
+		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrActorStateGet, err))
+		apiServerLogger.Debug(err)
+		return &emptypb.Empty{}, err
+	}
+
+	return &emptypb.Empty{}, nil
+}
+
 func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteActorStateTransactionRequest) (*emptypb.Empty, error) {
 	if err := a.actorReadinessCheck(ctx); err != nil {
 		return nil, err

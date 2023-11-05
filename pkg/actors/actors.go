@@ -88,6 +88,8 @@ type Actors interface {
 	Call(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error)
 	// GetState retrieves actor state.
 	GetState(ctx context.Context, req *GetStateRequest) (*StateResponse, error)
+	// DeleteState deletes actor state.
+	DeleteState(ctx context.Context, req *DeleteStateRequest) error
 	// GetBulkState retrieves actor state in bulk.
 	GetBulkState(ctx context.Context, req *GetBulkStateRequest) (BulkStateResponse, error)
 	// TransactionalStateOperation performs a transactional state operation with the actor state store.
@@ -635,6 +637,32 @@ func (a *actorsRuntime) GetState(ctx context.Context, req *GetStateRequest) (*St
 		Data:     resp.Data,
 		Metadata: resp.Metadata,
 	}, nil
+}
+
+func (a *actorsRuntime) DeleteState(ctx context.Context, req *DeleteStateRequest) error {
+	store, err := a.stateStore()
+	if err != nil {
+		return err
+	}
+
+	actorKey := req.ActorKey()
+	partitionKey := constructCompositeKey(a.actorsConfig.Config.AppID, actorKey)
+	metadata := map[string]string{metadataPartitionKey: partitionKey}
+
+	key := a.constructActorStateKey(actorKey, req.Key)
+
+	policyRunner := resiliency.NewRunner[*state.GetResponse](ctx,
+		a.resiliency.ComponentOutboundPolicy(a.storeName, resiliency.Statestore),
+	)
+	storeReq := &state.DeleteRequest{
+		Key:      key,
+		Metadata: metadata,
+	}
+	_, err = policyRunner(func(ctx context.Context) (*state.GetResponse, error) {
+		return nil, store.Delete(ctx, storeReq)
+	})
+
+	return err
 }
 
 func (a *actorsRuntime) GetBulkState(ctx context.Context, req *GetBulkStateRequest) (BulkStateResponse, error) {

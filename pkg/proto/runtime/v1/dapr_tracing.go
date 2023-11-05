@@ -97,6 +97,9 @@ func (*ExecuteStateTransactionRequest) AppendSpanAttributes(rpcMethod string, m 
 func (*GetActorStateRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
+func (*DeleteActorStateRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	// TODO
+}
 func (*GetBulkSecretRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }

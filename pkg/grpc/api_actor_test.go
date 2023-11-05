@@ -189,6 +189,68 @@ func TestGetActorState(t *testing.T) {
 	})
 }
 
+func TestDeleteActorState(t *testing.T) {
+	t.Run("actors not initialized", func(t *testing.T) {
+		api := &api{
+			UniversalAPI: &universalapi.UniversalAPI{
+				AppID: "fakeAPI",
+			},
+		}
+		api.InitUniversalAPI()
+		api.SetActorsInitDone()
+		server, lis := startDaprAPIServer(api, "")
+		defer server.Stop()
+
+		clientConn := createTestClient(lis)
+		defer clientConn.Close()
+
+		client := runtimev1pb.NewDaprClient(clientConn)
+		_, err := client.DeleteActorState(context.Background(), &runtimev1pb.DeleteActorStateRequest{})
+		assert.Equal(t, codes.Internal, status.Code(err))
+	})
+
+	t.Run("Delete actor state - OK", func(t *testing.T) {
+		mockActors := new(actors.MockActors)
+		mockActors.On("DeleteState", &actors.DeleteStateRequest{
+			ActorID:   "fakeActorID",
+			ActorType: "fakeActorType",
+			Key:       "key1",
+		}).Return(nil, nil)
+
+		mockActors.On("IsActorHosted", &actors.ActorHostedRequest{
+			ActorID:   "fakeActorID",
+			ActorType: "fakeActorType",
+		}).Return(true)
+
+		api := &api{
+			UniversalAPI: &universalapi.UniversalAPI{
+				AppID: "fakeAPI",
+			},
+		}
+		api.InitUniversalAPI()
+		api.SetActorRuntime(mockActors)
+		api.SetActorsInitDone()
+		server, lis := startDaprAPIServer(api, "")
+		defer server.Stop()
+
+		clientConn := createTestClient(lis)
+		defer clientConn.Close()
+
+		client := runtimev1pb.NewDaprClient(clientConn)
+
+		// act
+		_, err := client.DeleteActorState(context.Background(), &runtimev1pb.DeleteActorStateRequest{
+			ActorId:   "fakeActorID",
+			ActorType: "fakeActorType",
+			Key:       "key1",
+		})
+
+		// assert
+		assert.Nil(t, err)
+		mockActors.AssertNumberOfCalls(t, "DeleteState", 1)
+	})
+}
+
 func TestExecuteActorStateTransaction(t *testing.T) {
 	t.Run("actors not initialized", func(t *testing.T) {
 		api := &api{

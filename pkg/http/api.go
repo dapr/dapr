@@ -395,6 +395,16 @@ func (a *api) constructActorEndpoints() []endpoints.Endpoint {
 			},
 		},
 		{
+			Methods:         []string{nethttp.MethodDelete},
+			Route:           "actors/{actorType}/{actorId}/state/{key}",
+			Version:         apiVersionV1,
+			Group:           endpointGroupActorV1State,
+			FastHTTPHandler: a.onDeleteActorState,
+			Settings: endpoints.EndpointSettings{
+				Name: "DeleteActorState",
+			},
+		},
+		{
 			Methods:         []string{nethttp.MethodPost, nethttp.MethodPut},
 			Route:           "actors/{actorType}/{actorId}/reminders/{name}",
 			Version:         apiVersionV1,
@@ -1546,6 +1556,44 @@ func (a *api) onGetActorState(reqCtx *fasthttp.RequestCtx) {
 			return
 		}
 		fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, resp.Data, resp.Metadata))
+	}
+}
+
+func (a *api) onDeleteActorState(reqCtx *fasthttp.RequestCtx) {
+	if !a.actorReadinessCheckFastHTTP(reqCtx) {
+		// Response already sent
+		return
+	}
+
+	actorType := reqCtx.UserValue(actorTypeParam).(string)
+	actorID := reqCtx.UserValue(actorIDParam).(string)
+	key := reqCtx.UserValue(stateKeyParam).(string)
+
+	hosted := a.universal.Actors.IsActorHosted(reqCtx, &actors.ActorHostedRequest{
+		ActorType: actorType,
+		ActorID:   actorID,
+	})
+
+	if !hosted {
+		msg := NewErrorResponse("ERR_ACTOR_INSTANCE_MISSING", messages.ErrActorInstanceMissing)
+		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusBadRequest, msg))
+		log.Debug(msg)
+		return
+	}
+
+	req := actors.DeleteStateRequest{
+		ActorType: actorType,
+		ActorID:   actorID,
+		Key:       key,
+	}
+
+	err := a.universal.Actors.DeleteState(reqCtx, &req)
+	if err != nil {
+		msg := NewErrorResponse("ERR_ACTOR_STATE_DELETE", fmt.Sprintf(messages.ErrActorStateGet, err))
+		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
+		log.Debug(msg)
+	} else {
+		fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
 	}
 }
 
