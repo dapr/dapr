@@ -104,11 +104,15 @@ func (f StatusCodeFilter) parsePatterns(patterns []string) ([]codeRange, error) 
 	parsedPatterns := make([]codeRange, 0, len(patterns))
 	for _, item := range patterns {
 		// one item can contain multiple patterns separated by comma
-		splited := strings.Split(item, ",")
-		for _, p := range splited {
+		splitted := strings.Split(item, ",")
+		for _, p := range splitted {
+			// make sure empty patterns are ignored
+			if len(p) == 0 {
+				continue
+			}
 			parsedPattern, err := compilePattern(p)
 			if err != nil {
-				return nil, fmt.Errorf("failed to compile item %s, %w", item, err)
+				return nil, fmt.Errorf("failed to compile pattern '%s', %w", item, err)
 			}
 			parsedPatterns = append(parsedPatterns, parsedPattern)
 		}
@@ -136,30 +140,26 @@ func (f StatusCodeFilter) StatusCodeNeedRetry(statusCode int32) bool {
 }
 
 func compilePattern(pattern string) (codeRange, error) {
-	// parse code range pattern
-	if strings.Contains(pattern, "-") {
-		patterns := strings.Split(pattern, "-")
-		if len(patterns) != 2 {
-			return codeRange{}, fmt.Errorf("invalid pattern %s, more than one '-' exists", pattern)
-		}
-		start, err := strconv.Atoi(patterns[0])
-		if err != nil {
-			return codeRange{}, fmt.Errorf("failed to parse start code %s from pattern %s to int, %w", patterns[0], pattern, err)
-		}
-		end, err := strconv.Atoi(patterns[1])
-		if err != nil {
-			return codeRange{}, fmt.Errorf("failed to prase start code %s from pattern %s to int, %w", patterns[1], pattern, err)
-		}
-		return codeRange{start: int32(start), end: int32(end)}, nil
+	patterns := strings.Split(pattern, "-")
+	if len(patterns) > 2 {
+		return codeRange{}, fmt.Errorf("invalid pattern %s, more than one '-' exists", pattern)
 	}
-	// specific code
-	code, err := strconv.Atoi(pattern)
+	// empty string is not allowed by strconv.Atoi, so we do not need to check empty string here
+	start, err := strconv.Atoi(patterns[0])
 	if err != nil {
-		return codeRange{}, fmt.Errorf("failed to compile pattern %s, %w", pattern, err)
+		return codeRange{}, fmt.Errorf("failed to parse start code %s from pattern %s to int, %w", patterns[0], pattern, err)
 	}
 
-	return codeRange{
-		start: int32(code),
-		end:   int32(code),
-	}, nil
+	end := start
+	if len(patterns) == 2 {
+		end, err = strconv.Atoi(patterns[1])
+		if err != nil {
+			return codeRange{}, fmt.Errorf("failed to parse end code %s from pattern %s to int, %w", patterns[1], pattern, err)
+		}
+	}
+
+	if end < start {
+		return codeRange{}, fmt.Errorf("invalid pattern %s, start value should not bigger than end value", pattern)
+	}
+	return codeRange{start: int32(start), end: int32(end)}, nil
 }
