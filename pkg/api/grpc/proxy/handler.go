@@ -275,6 +275,11 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 	})
 
 	if cErr != nil {
+		// If the error is a resiliency.CodeError, unwrap it so we can return the original error.
+		var rErr resiliency.CodeError
+		if errors.As(cErr, &rErr) {
+			return rErr.Unwrap()
+		}
 		return cErr
 	}
 
