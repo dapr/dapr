@@ -19,6 +19,7 @@ spec:
         maxRetries: 5
         retryOnCodes:
           - "500"
+          - "2"
 
     circuitBreakers:
       simpleCB:
@@ -35,7 +36,7 @@ spec:
 
       resiliencyappgrpc:
         timeout: fast
-        retry: fiveRetries
+        retry: fiveRetriesWithFilter
         circuitBreaker: simpleCB
 
     actors:

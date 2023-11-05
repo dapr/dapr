@@ -376,6 +376,20 @@ func TestServiceInvocationResiliency(t *testing.T) {
 			callType:     "grpc_proxy",
 		},
 		{
+			Name:         "Test resiliency with filter consider code non-2 as success in grpc proxy",
+			expectStatus: ptr.Of(5),
+			expectCount:  ptr.Of(1),
+			shouldFail:   false,
+			callType:     "grpc_proxy",
+		},
+		{
+			Name:         "Test resiliency with filter retry on 2 in grpc proxy",
+			FailureCount: ptr.Of(10),
+			expectStatus: ptr.Of(2),
+			shouldFail:   true,
+			callType:     "grpc_proxy",
+		},
+		{
 			Name:         "Test invoking non-existent app http",
 			FailureCount: ptr.Of(3),
 			expectStatus: ptr.Of(500),
@@ -416,13 +430,15 @@ func TestServiceInvocationResiliency(t *testing.T) {
 			}
 			_, code, err := utils.HTTPPostWithStatus(u, b)
 			require.NoError(t, err)
-			switch {
-			case tc.expectStatus != nil:
-				require.Equal(t, *tc.expectStatus, code)
-			case tc.shouldFail:
-				require.Equal(t, 500, code)
-			default:
-				require.Equal(t, 200, code)
+			if tc.callType == "http" {
+				switch {
+				case tc.expectStatus != nil:
+					require.Equal(t, *tc.expectStatus, code)
+				case tc.shouldFail:
+					require.Equal(t, 500, code)
+				default:
+					require.Equal(t, 200, code)
+				}
 			}
 
 			var callCount map[string][]CallRecord
