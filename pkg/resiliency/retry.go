@@ -121,7 +121,6 @@ func (f StatusCodeFilter) parsePatterns(patterns []string) ([]codeRange, error) 
 }
 
 func (f StatusCodeFilter) StatusCodeNeedRetry(statusCode int32) bool {
-
 	// Check retriable codes (allowlist)
 	for _, pattern := range f.retryOnPatterns {
 		if pattern.MatchCode(statusCode) {
@@ -149,6 +148,9 @@ func compilePattern(pattern string) (codeRange, error) {
 	if err != nil {
 		return codeRange{}, fmt.Errorf("failed to parse start code %s from pattern %s to int, %w", patterns[0], pattern, err)
 	}
+	if !validCode(start) {
+		return codeRange{}, fmt.Errorf("invalid pattern %s, start code %d is not valid", pattern, start)
+	}
 
 	end := start
 	if len(patterns) == 2 {
@@ -157,9 +159,21 @@ func compilePattern(pattern string) (codeRange, error) {
 			return codeRange{}, fmt.Errorf("failed to parse end code %s from pattern %s to int, %w", patterns[1], pattern, err)
 		}
 	}
+	if !validCode(end) {
+		return codeRange{}, fmt.Errorf("invalid pattern %s, end code %d is not valid", pattern, end)
+	}
 
 	if end < start {
 		return codeRange{}, fmt.Errorf("invalid pattern %s, start value should not bigger than end value", pattern)
 	}
+
+	//nolint:gosec
 	return codeRange{start: int32(start), end: int32(end)}, nil
+}
+
+// validCode checks if the code is valid.
+// For grpc, the code should be less than 100.
+// For http, the code should be 100 - 599.
+func validCode(code int) bool {
+	return code < 600
 }
