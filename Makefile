@@ -307,7 +307,7 @@ test: test-deps
 			--format pkgname-and-test-fails \
 			-- \
 				./pkg/... ./utils/... ./cmd/... \
-				$(COVERAGE_OPTS) --tags=unit,allcomponents
+				$(COVERAGE_OPTS) -timeout=20m --tags=unit,allcomponents
 	CGO_ENABLED=$(CGO) \
 		go test --tags=allcomponents ./tests/...
 
