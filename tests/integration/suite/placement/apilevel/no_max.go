@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package quorum
+package apilevel
 
 import (
 	"context"
@@ -50,7 +50,7 @@ func (n *noMax) Setup(t *testing.T) []framework.Option {
 
 func (n *noMax) Run(t *testing.T, parentCtx context.Context) {
 	ctx, cancel := context.WithCancel(parentCtx)
-	defer cancel()
+	t.Cleanup(cancel)
 
 	n.place.WaitUntilRunning(t, ctx)
 
