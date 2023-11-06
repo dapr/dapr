@@ -25,6 +25,7 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -50,6 +51,8 @@ func (n *withMin) Setup(t *testing.T) []framework.Option {
 }
 
 func (n *withMin) Run(t *testing.T, parentCtx context.Context) {
+	httpClient := util.HTTPClient(t)
+
 	ctx, cancel := context.WithCancel(parentCtx)
 	t.Cleanup(cancel)
 
@@ -88,7 +91,7 @@ func (n *withMin) Run(t *testing.T, parentCtx context.Context) {
 
 	// API level should be 10
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		checkAPILevelInState(t, n.place.HealthzPort(), 10)
+		checkAPILevelInState(t, httpClient, n.place.HealthzPort(), 10)
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// Trying to register a host with version 5 should fail
@@ -99,7 +102,7 @@ func (n *withMin) Run(t *testing.T, parentCtx context.Context) {
 	registerHost(ctx, conn, "myapp1", 10, placementMessageCh, stopCh1)
 
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		checkAPILevelInState(t, n.place.HealthzPort(), 10)
+		checkAPILevelInState(t, httpClient, n.place.HealthzPort(), 10)
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// Register the second host with API level 20
@@ -107,7 +110,7 @@ func (n *withMin) Run(t *testing.T, parentCtx context.Context) {
 
 	// API level should not increase
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		checkAPILevelInState(t, n.place.HealthzPort(), 10)
+		checkAPILevelInState(t, httpClient, n.place.HealthzPort(), 10)
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// Stop the first host, and the in API level should increase to 20
@@ -117,6 +120,6 @@ func (n *withMin) Run(t *testing.T, parentCtx context.Context) {
 	}, 15*time.Second, 50*time.Millisecond)
 
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		checkAPILevelInState(t, n.place.HealthzPort(), 20)
+		checkAPILevelInState(t, httpClient, n.place.HealthzPort(), 20)
 	}, 5*time.Second, 100*time.Millisecond)
 }

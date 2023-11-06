@@ -35,10 +35,6 @@ import (
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 )
 
-var client = http.Client{
-	Timeout: 5 * time.Second,
-}
-
 func establishConn(ctx context.Context, port int) (*grpc.ClientConn, error) {
 	return grpc.DialContext(ctx, "localhost:"+strconv.Itoa(port),
 		grpc.WithBlock(),
@@ -156,7 +152,7 @@ func registerHostFailing(t *testing.T, ctx context.Context, conn *grpc.ClientCon
 }
 
 // Checks the API level reported in the state tables matched.
-func checkAPILevelInState(t assert.TestingT, port int, expectAPILevel int) (tableVersion int) {
+func checkAPILevelInState(t assert.TestingT, client *http.Client, port int, expectAPILevel int) (tableVersion int) {
 	res, err := client.Get(fmt.Sprintf("http://localhost:%d/placement/state", port))
 	if !assert.NoError(t, err) {
 		return

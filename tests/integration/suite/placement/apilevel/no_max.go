@@ -25,6 +25,7 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -49,6 +50,8 @@ func (n *noMax) Setup(t *testing.T) []framework.Option {
 }
 
 func (n *noMax) Run(t *testing.T, parentCtx context.Context) {
+	httpClient := util.HTTPClient(t)
+
 	ctx, cancel := context.WithCancel(parentCtx)
 	t.Cleanup(cancel)
 
@@ -96,7 +99,7 @@ func (n *noMax) Run(t *testing.T, parentCtx context.Context) {
 
 	var tableVersion int
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		tableVersion = checkAPILevelInState(t, n.place.HealthzPort(), 10)
+		tableVersion = checkAPILevelInState(t, httpClient, n.place.HealthzPort(), 10)
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// Register the second host with API level 20
@@ -110,7 +113,7 @@ func (n *noMax) Run(t *testing.T, parentCtx context.Context) {
 
 	// API level should still be 10 (but table version should have increased)
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		newTableVersion := checkAPILevelInState(t, n.place.HealthzPort(), 10)
+		newTableVersion := checkAPILevelInState(t, httpClient, n.place.HealthzPort(), 10)
 		assert.Greater(t, newTableVersion, tableVersion)
 	}, 10*time.Second, 100*time.Millisecond)
 
@@ -121,7 +124,7 @@ func (n *noMax) Run(t *testing.T, parentCtx context.Context) {
 	}, 10*time.Second, 50*time.Millisecond)
 
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		tableVersion = checkAPILevelInState(t, n.place.HealthzPort(), 20)
+		tableVersion = checkAPILevelInState(t, httpClient, n.place.HealthzPort(), 20)
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// Trying to register a host with version 5 should fail
@@ -132,7 +135,7 @@ func (n *noMax) Run(t *testing.T, parentCtx context.Context) {
 
 	// Ensure that the table version increases, but the API level remains the same
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		newTableVersion := checkAPILevelInState(t, n.place.HealthzPort(), 20)
+		newTableVersion := checkAPILevelInState(t, httpClient, n.place.HealthzPort(), 20)
 		assert.Greater(t, newTableVersion, tableVersion)
 	}, 5*time.Second, 100*time.Millisecond)
 

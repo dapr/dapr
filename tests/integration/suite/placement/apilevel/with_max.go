@@ -25,6 +25,7 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -50,6 +51,8 @@ func (n *withMax) Setup(t *testing.T) []framework.Option {
 }
 
 func (n *withMax) Run(t *testing.T, parentCtx context.Context) {
+	httpClient := util.HTTPClient(t)
+
 	ctx, cancel := context.WithCancel(parentCtx)
 	defer cancel()
 
@@ -96,7 +99,7 @@ func (n *withMax) Run(t *testing.T, parentCtx context.Context) {
 	lastUpdate := lastVersionUpdate.Load()
 
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		checkAPILevelInState(t, n.place.HealthzPort(), 10)
+		checkAPILevelInState(t, httpClient, n.place.HealthzPort(), 10)
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// Register the second host with API level 20
@@ -109,7 +112,7 @@ func (n *withMax) Run(t *testing.T, parentCtx context.Context) {
 
 	// API level should not increase
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		checkAPILevelInState(t, n.place.HealthzPort(), 10)
+		checkAPILevelInState(t, httpClient, n.place.HealthzPort(), 10)
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// Stop the first host, and the in API level should increase to the max (15)
@@ -119,6 +122,6 @@ func (n *withMax) Run(t *testing.T, parentCtx context.Context) {
 	}, 15*time.Second, 50*time.Millisecond)
 
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		checkAPILevelInState(t, n.place.HealthzPort(), 15)
+		checkAPILevelInState(t, httpClient, n.place.HealthzPort(), 15)
 	}, 5*time.Second, 100*time.Millisecond)
 }
