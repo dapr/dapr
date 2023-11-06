@@ -62,6 +62,8 @@ type recoverableError struct {
 	cause error
 }
 
+// [Suggestion] we can elaborate more about durable timers ?
+
 func NewDurableTimer(bytes []byte, generation uint64) durableTimer {
 	return durableTimer{bytes, generation}
 }
@@ -266,6 +268,7 @@ func (wf *workflowActor) purgeWorkflowState(ctx context.Context, actorID string)
 	return nil
 }
 
+// [Question] What could be the use-case of calling this function ?
 func (wf *workflowActor) addWorkflowEvent(ctx context.Context, actorID string, historyEventBytes []byte) error {
 	state, err := wf.loadInternalState(ctx, actorID)
 	if err != nil {
@@ -290,6 +293,7 @@ func (wf *workflowActor) addWorkflowEvent(ctx context.Context, actorID string, h
 	return wf.saveInternalState(ctx, actorID, state)
 }
 
+// [Question] Does this invoke ? or schedules a reminder for the workflow ?
 func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, reminderName string, reminderData []byte) error {
 	state, err := wf.loadInternalState(ctx, actorID)
 	if err != nil {
@@ -387,11 +391,13 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 	case <-ctx.Done(): // caller is responsible for timeout management
 		return ctx.Err()
 	case completed := <-callback:
+		// [Question] Is this rescheduling the workflow to be completed ?
 		if !completed {
 			return newRecoverableError(errExecutionAborted)
 		}
 	}
 
+	// [Question] Not quite sure why this below logic is written.
 	// Increment the generation counter if the workflow used continue-as-new. Subsequent actions below
 	// will use this updated generation value for their duplication execution handling.
 	if runtimeState.ContinuedAsNew() {
@@ -498,6 +504,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 		}
 	}
 
+	// [Question] Is this workflow instance completed at this stage, since we are clearing the inbox ?
 	state.ApplyRuntimeStateChanges(runtimeState)
 	state.ClearInbox()
 
@@ -546,6 +553,7 @@ func (wf *workflowActor) saveInternalState(ctx context.Context, actorID string, 
 	return nil
 }
 
+// [Question] creating reminders is how we schedule workflows/Activities ?
 func (wf *workflowActor) createReliableReminder(ctx context.Context, actorID string, namePrefix string, data any, delay time.Duration) (string, error) {
 	// Reminders need to have unique names or else they may not fire in certain race conditions.
 	reminderName := fmt.Sprintf("%s-%s", namePrefix, uuid.NewString()[:8])
