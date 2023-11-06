@@ -35,18 +35,18 @@ import (
 )
 
 func init() {
-	suite.Register(new(deactivateOnUnhealthy))
+	suite.Register(new(deactivateOnPlacementFail))
 }
 
-// deactivateOnUnhealthy ensures that all active actors are deactivated if the app is reported as unhealthy.
-type deactivateOnUnhealthy struct {
+// deactivateOnPlacementFail ensures that all active actors are deactivated if the connection with Placement fails.
+type deactivateOnPlacementFail struct {
 	daprd               *daprd.Daprd
 	place               *placement.Placement
 	invokedActorsCh     chan string
 	deactivatedActorsCh chan string
 }
 
-func (h *deactivateOnUnhealthy) Setup(t *testing.T) []framework.Option {
+func (h *deactivateOnPlacementFail) Setup(t *testing.T) []framework.Option {
 	h.invokedActorsCh = make(chan string, 2)
 	h.deactivatedActorsCh = make(chan string, 2)
 
@@ -94,7 +94,7 @@ spec:
 	}
 }
 
-func (h *deactivateOnUnhealthy) Run(t *testing.T, ctx context.Context) {
+func (h *deactivateOnPlacementFail) Run(t *testing.T, ctx context.Context) {
 	h.place.WaitUntilRunning(t, ctx)
 	h.daprd.WaitUntilRunning(t, ctx)
 
