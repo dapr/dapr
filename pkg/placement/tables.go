@@ -34,11 +34,11 @@ func (p *Service) GetPlacementTables() (*PlacementTables, error) {
 		TableVersion: state.TableGeneration(),
 		APILevel:     state.APILevel(),
 	}
-	if response.APILevel < uint32(p.minAPILevel) {
-		response.APILevel = uint32(p.minAPILevel)
+	if response.APILevel < p.minAPILevel {
+		response.APILevel = p.minAPILevel
 	}
-	if p.maxAPILevel >= 0 && int(response.APILevel) > p.maxAPILevel {
-		response.APILevel = uint32(p.maxAPILevel)
+	if p.maxAPILevel != nil && response.APILevel > *p.maxAPILevel {
+		response.APILevel = *p.maxAPILevel
 	}
 	members := make([]HostInfo, len(m))
 	// the key of the member map is the host name, so we can just ignore it.

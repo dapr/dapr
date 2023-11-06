@@ -355,11 +355,11 @@ func (p *Service) performTablesUpdate(ctx context.Context, hosts []placementGRPC
 
 	// Enforce maximum API level
 	if newTable != nil {
-		if newTable.ApiLevel < uint32(p.minAPILevel) {
-			newTable.ApiLevel = uint32(p.minAPILevel)
+		if newTable.ApiLevel < p.minAPILevel {
+			newTable.ApiLevel = p.minAPILevel
 		}
-		if p.maxAPILevel >= 0 && int(newTable.ApiLevel) > p.maxAPILevel {
-			newTable.ApiLevel = uint32(p.maxAPILevel)
+		if p.maxAPILevel != nil && newTable.ApiLevel > *p.maxAPILevel {
+			newTable.ApiLevel = *p.maxAPILevel
 		}
 	}
 

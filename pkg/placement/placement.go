@@ -101,10 +101,10 @@ type Service struct {
 	memberUpdateCount atomic.Uint32
 
 	// Maximum API level to return.
-	// If -1, there's no limit.
-	maxAPILevel int
+	// If nil, there's no limit.
+	maxAPILevel *uint32
 	// Minimum API level to return
-	minAPILevel int
+	minAPILevel uint32
 
 	// faultyHostDetectDuration
 	faultyHostDetectDuration *atomic.Int64
@@ -130,8 +130,8 @@ type Service struct {
 // PlacementServiceOpts contains options for the NewPlacementService method.
 type PlacementServiceOpts struct {
 	RaftNode    *raft.Server
-	MaxAPILevel int
-	MinAPILevel int
+	MaxAPILevel *uint32
+	MinAPILevel uint32
 	SecProvider security.Provider
 }
 
@@ -237,11 +237,11 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 				// New connection
 				// Ensure that the reported API level is at least equal to the current one in the cluster
 				clusterAPILevel := state.APILevel()
-				if clusterAPILevel < uint32(p.minAPILevel) {
-					clusterAPILevel = uint32(p.minAPILevel)
+				if clusterAPILevel < p.minAPILevel {
+					clusterAPILevel = p.minAPILevel
 				}
-				if p.maxAPILevel > -1 && int(clusterAPILevel) > p.maxAPILevel {
-					clusterAPILevel = uint32(p.maxAPILevel)
+				if p.maxAPILevel != nil && clusterAPILevel > *p.maxAPILevel {
+					clusterAPILevel = *p.maxAPILevel
 				}
 				if req.ApiLevel < clusterAPILevel {
 					return status.Errorf(codes.FailedPrecondition, "The cluster's Actor API level is %d, which is higher than the reported API level %d", clusterAPILevel, req.ApiLevel)
