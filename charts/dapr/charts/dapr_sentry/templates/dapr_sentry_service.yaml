@@ -7,9 +7,13 @@ metadata:
     {{- range $key, $value := .Values.global.k8sLabels }}
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
+{{- if .Values.service.annotations }}
+{{ toYaml .Values.service.annotations | indent 4}}
+{{- end }}
 spec:
   selector:
     app: dapr-sentry
+  type: {{ .Values.service.type }}
   ports:
   - protocol: TCP
     port: {{ .Values.ports.port }}

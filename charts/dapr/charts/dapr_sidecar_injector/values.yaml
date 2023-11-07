@@ -16,6 +16,11 @@ injectorImage:
   name: "injector"
 
 deploymentAnnotations: {}
+
+service:
+  type: ClusterIP
+  annotations: {}
+
 nameOverride: ""
 fullnameOverride: ""
 webhookFailurePolicy: Ignore
