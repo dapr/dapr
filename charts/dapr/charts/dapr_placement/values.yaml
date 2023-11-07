@@ -12,6 +12,9 @@ fullnameOverride: ""
 
 statefulsetAnnotations: {}
 
+service:
+  annotations: {}
+
 ports:
   protocol: TCP
   apiPort: 50005
