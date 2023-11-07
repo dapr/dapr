@@ -67,7 +67,7 @@ func (i *initerror) Setup(t *testing.T) []framework.Option {
 	srv := prochttp.New(t, prochttp.WithHandler(handler))
 	i.place = placement.New(t)
 	i.daprd = daprd.New(t,
-		daprd.WithInMemoryStore("mystore"),
+		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithPlacementAddresses("localhost:"+strconv.Itoa(i.place.Port())),
 		daprd.WithAppPort(srv.Port()),
 		// Daprd is super noisy in debug mode when connecting to placement.

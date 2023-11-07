@@ -38,7 +38,7 @@ type basic struct {
 }
 
 func (b *basic) Setup(t *testing.T) []framework.Option {
-	b.daprd = procdaprd.New(t, procdaprd.WithInMemoryStore("mystore"))
+	b.daprd = procdaprd.New(t, procdaprd.WithInMemoryActorStateStore("mystore"))
 
 	return []framework.Option{
 		framework.WithProcesses(b.daprd),

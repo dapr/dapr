@@ -65,7 +65,7 @@ func (h *healthz) Setup(t *testing.T) []framework.Option {
 	srv := prochttp.New(t, prochttp.WithHandler(handler))
 	h.place = placement.New(t)
 	h.daprd = daprd.New(t,
-		daprd.WithInMemoryStore("mystore"),
+		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithPlacementAddresses("localhost:"+strconv.Itoa(h.place.Port())),
 		daprd.WithAppProtocol("http"),
 		daprd.WithAppPort(srv.Port()),

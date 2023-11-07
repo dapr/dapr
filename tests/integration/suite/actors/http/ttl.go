@@ -71,7 +71,7 @@ spec:
 	srv := prochttp.New(t, prochttp.WithHandler(handler))
 	l.place = placement.New(t)
 	l.daprd = daprd.New(t,
-		daprd.WithInMemoryStore("mystore"),
+		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithConfigs(configFile),
 		daprd.WithPlacementAddresses("localhost:"+strconv.Itoa(l.place.Port())),
 		daprd.WithAppPort(srv.Port()),

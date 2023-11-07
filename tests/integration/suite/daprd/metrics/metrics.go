@@ -60,7 +60,7 @@ func (m *metrics) Setup(t *testing.T) []framework.Option {
 		procdaprd.WithAppID("myapp"),
 		procdaprd.WithAppPort(srv.Port()),
 		procdaprd.WithAppProtocol("http"),
-		procdaprd.WithInMemoryStore("mystore"),
+		procdaprd.WithInMemoryActorStateStore("mystore"),
 	)
 
 	return []framework.Option{

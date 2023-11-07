@@ -40,7 +40,7 @@ type ttl struct {
 }
 
 func (l *ttl) Setup(t *testing.T) []framework.Option {
-	l.daprd = procdaprd.New(t, procdaprd.WithInMemoryStore("mystore"))
+	l.daprd = procdaprd.New(t, procdaprd.WithInMemoryActorStateStore("mystore"))
 
 	return []framework.Option{
 		framework.WithProcesses(l.daprd),

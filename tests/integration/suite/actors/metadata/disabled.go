@@ -45,7 +45,7 @@ func (m *disabled) Setup(t *testing.T) []framework.Option {
 
 	srv := prochttp.New(t, prochttp.WithHandler(handler))
 	m.daprd = daprd.New(t, // "WithPlacementAddress" is missing on purpose, to disable the actor runtime
-		daprd.WithInMemoryStore("mystore"),
+		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithAppProtocol("http"),
 		daprd.WithAppPort(srv.Port()),
 		daprd.WithLogLevel("info"), // Daprd is super noisy in debug mode when connecting to placement.

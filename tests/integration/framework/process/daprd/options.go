@@ -136,8 +136,8 @@ func WithResourceFiles(files ...string) Option {
 	}
 }
 
-// WithInMemoryStore adds an in-memory state store component, which is also enabled as actor state store.
-func WithInMemoryStore(storeName string) Option {
+// WithInMemoryActorStateStore adds an in-memory state store component, which is also enabled as actor state store.
+func WithInMemoryActorStateStore(storeName string) Option {
 	return WithResourceFiles(`apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
