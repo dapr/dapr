@@ -16,6 +16,13 @@ fullnameOverride: ""
 
 deploymentAnnotations: {}
 
+apiService:
+  type: ClusterIP
+  annotations: {}
+webhookService:
+  type: ClusterIP
+  annotations: {}
+
 runAsNonRoot: true
 
 serviceReconciler:
