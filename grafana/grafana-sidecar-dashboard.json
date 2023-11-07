@@ -96,8 +96,8 @@
       "pluginVersion": "7.3.3",
       "targets": [
         {
-          "expr": "time() - max(process_start_time_seconds{kubernetes_name=~\"($dapr_app_id)-dapr\", kubernetes_namespace=\"$namespace\"}) by (kubernetes_name)",
-          "legendFormat": "{{kubernetes_name}}",
+          "expr": "time() - max(process_start_time_seconds{service=~\"($dapr_app_id)-dapr\", namespace=\"$namespace\"}) by (service)",
+          "legendFormat": "{{service}}",
           "refId": "A"
         }
       ],
@@ -266,8 +266,8 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(go_goroutines{kubernetes_name=~\"($dapr_app_id)-dapr.*\", kubernetes_namespace=\"$namespace\"}) by (kubernetes_name)",
-          "legendFormat": "{{kubernetes_name}}",
+          "expr": "sum(go_goroutines{service=~\"($dapr_app_id)-dapr.*\", namespace=\"$namespace\"}) by (service)",
+          "legendFormat": "{{service}}",
           "refId": "A"
         }
       ],
@@ -362,9 +362,9 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(go_memstats_alloc_bytes{kubernetes_name=~\"($dapr_app_id)-dapr\", kubernetes_namespace=\"$namespace\"}) by (kubernetes_name)",
+          "expr": "sum(go_memstats_alloc_bytes{service=~\"($dapr_app_id)-dapr\", namespace=\"$namespace\"}) by (service)",
           "interval": "",
-          "legendFormat": "{{kubernetes_name}}",
+          "legendFormat": "{{service}}",
           "refId": "A"
         }
       ],
@@ -459,9 +459,9 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(process_virtual_memory_bytes{kubernetes_name=~\"($dapr_app_id)-dapr\", kubernetes_namespace=\"$namespace\"}) by (kubernetes_name)",
+          "expr": "sum(process_virtual_memory_bytes{service=~\"($dapr_app_id)-dapr\", namespace=\"$namespace\"}) by (service)",
           "interval": "",
-          "legendFormat": "{{kubernetes_name}}",
+          "legendFormat": "{{service}}",
           "refId": "A"
         }
       ],
@@ -574,14 +574,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(dapr_http_server_latency_bucket{app_id=~\"$dapr_app_id\", kubernetes_namespace=\"$namespace\"}[5m])) by (le, app_id, method, path))",
+          "expr": "histogram_quantile(0.95, sum(rate(dapr_http_server_latency_bucket{app_id=~\"$dapr_app_id\", namespace=\"$namespace\"}[5m])) by (le, app_id, method, path))",
           "format": "time_series",
           "instant": false,
           "legendFormat": "[95p] {{method}} {{path}} ({{app_id}})",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.75, sum(rate(dapr_http_server_latency_bucket{app_id=~\"$dapr_app_id\", kubernetes_namespace=\"$namespace\"}[5m])) by (le, app_id, method, path))",
+          "expr": "histogram_quantile(0.75, sum(rate(dapr_http_server_latency_bucket{app_id=~\"$dapr_app_id\", namespace=\"$namespace\"}[5m])) by (le, app_id, method, path))",
           "format": "time_series",
           "instant": false,
           "legendFormat": "[75p] {{method}} {{path}} ({{app_id}})",
@@ -683,7 +683,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum by (app_id, method, path) (rate(dapr_http_server_response_count{app_id=~\"$dapr_app_id\", kubernetes_namespace=\"$namespace\"}[5m]))",
+          "expr": "sum by (app_id, method, path) (rate(dapr_http_server_response_count{app_id=~\"$dapr_app_id\", namespace=\"$namespace\"}[5m]))",
           "format": "time_series",
           "instant": false,
           "legendFormat": "{{method}} {{path}} ({{app_id}})",
@@ -784,14 +784,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(dapr_http_client_roundtrip_latency_bucket{app_id=~\"$dapr_app_id\", kubernetes_namespace=\"$namespace\"}[5m])) by (le, app_id, method, path))",
+          "expr": "histogram_quantile(0.95, sum(rate(dapr_http_client_roundtrip_latency_bucket{app_id=~\"$dapr_app_id\", namespace=\"$namespace\"}[5m])) by (le, app_id, method, path))",
           "format": "time_series",
           "instant": false,
           "legendFormat": "[95p] {{method}} /{{path}} ({{app_id}})",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.75, sum(rate(dapr_http_client_roundtrip_latency_bucket{app_id=~\"$dapr_app_id\", kubernetes_namespace=\"$namespace\"}[5m])) by (le, app_id, method, path))",
+          "expr": "histogram_quantile(0.75, sum(rate(dapr_http_client_roundtrip_latency_bucket{app_id=~\"$dapr_app_id\", namespace=\"$namespace\"}[5m])) by (le, app_id, method, path))",
           "format": "time_series",
           "instant": false,
           "legendFormat": "[75p] {{method}} /{{path}} ({{app_id}})",
@@ -893,7 +893,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum by (app_id, method, path) (rate(dapr_http_client_completed_count{app_id=~\"$dapr_app_id\", kubernetes_namespace=\"$namespace\"}[5m]))",
+          "expr": "sum by (app_id, method, path) (rate(dapr_http_client_completed_count{app_id=~\"$dapr_app_id\", namespace=\"$namespace\"}[5m]))",
           "format": "time_series",
           "instant": false,
           "legendFormat": "{{method}} {{path}} ({{app_id}})",
@@ -1006,13 +1006,13 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(dapr_grpc_io_server_server_latency_bucket{app_id=~\"$dapr_app_id\", grpc_server_method=~\".*.Dapr/.*\", kubernetes_namespace=\"$namespace\"}[5m])) by (le, app_id, grpc_server_method))",
+          "expr": "histogram_quantile(0.95, sum(rate(dapr_grpc_io_server_server_latency_bucket{app_id=~\"$dapr_app_id\", grpc_server_method=~\".*.Dapr/.*\", namespace=\"$namespace\"}[5m])) by (le, app_id, grpc_server_method))",
           "interval": "",
           "legendFormat": "[95p] - {{grpc_server_method}} ({{app_id}})",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.75, sum(rate(dapr_grpc_io_server_server_latency_bucket{app_id=~\"$dapr_app_id\", grpc_server_method=~\".*.Dapr/.*\", kubernetes_namespace=\"$namespace\"}[5m])) by (le, app_id, grpc_server_method))",
+          "expr": "histogram_quantile(0.75, sum(rate(dapr_grpc_io_server_server_latency_bucket{app_id=~\"$dapr_app_id\", grpc_server_method=~\".*.Dapr/.*\", namespace=\"$namespace\"}[5m])) by (le, app_id, grpc_server_method))",
           "interval": "",
           "legendFormat": "[75p] {{grpc_server_method}} ({{app_id}})",
           "refId": "B"
@@ -1206,13 +1206,13 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(dapr_grpc_io_client_roundtrip_latency_bucket{app_id=~\"$dapr_app_id\", grpc_client_method=~\".*.AppCallback/.*\", kubernetes_namespace=\"$namespace\"}[5m])) by (le, app_id, grpc_client_method))",
+          "expr": "histogram_quantile(0.95, sum(rate(dapr_grpc_io_client_roundtrip_latency_bucket{app_id=~\"$dapr_app_id\", grpc_client_method=~\".*.AppCallback/.*\", namespace=\"$namespace\"}[5m])) by (le, app_id, grpc_client_method))",
           "interval": "",
           "legendFormat": "[95p] {{grpc_client_method}} ({{app_id}})",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.75, sum(rate(dapr_grpc_io_client_roundtrip_latency_bucket{app_id=~\"$dapr_app_id\", grpc_client_method=~\".*.AppCallback/.*\", kubernetes_namespace=\"$namespace\"}[5m])) by (le, app_id, grpc_client_method))",
+          "expr": "histogram_quantile(0.75, sum(rate(dapr_grpc_io_client_roundtrip_latency_bucket{app_id=~\"$dapr_app_id\", grpc_client_method=~\".*.AppCallback/.*\", namespace=\"$namespace\"}[5m])) by (le, app_id, grpc_client_method))",
           "interval": "",
           "legendFormat": "[75p] {{grpc_client_method}} ({{app_id}})",
           "refId": "B"
@@ -1309,7 +1309,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum by (app_id, grpc_client_method, grpc_client_status) (rate(dapr_grpc_io_client_completed_rpcs{app_id=~\"$dapr_app_id\", grpc_client_method=~\".*.AppCallback/.*\", kubernetes_namespace=\"$namespace\"}[5m]))",
+          "expr": "sum by (app_id, grpc_client_method, grpc_client_status) (rate(dapr_grpc_io_client_completed_rpcs{app_id=~\"$dapr_app_id\", grpc_client_method=~\".*.AppCallback/.*\", namespace=\"$namespace\"}[5m]))",
           "interval": "",
           "legendFormat": "{{grpc_client_status}} {{grpc_client_method}} ({{app_id}})",
           "refId": "A"
@@ -1414,7 +1414,7 @@
           "pluginVersion": "7.3.3",
           "targets": [
             {
-              "expr": "sum(dapr_runtime_component_loaded{app_id=~\"$dapr_app_id\", kubernetes_namespace=\"$namespace\"}) by (app_id)",
+              "expr": "sum(dapr_runtime_component_loaded{app_id=~\"$dapr_app_id\", namespace=\"$namespace\"}) by (app_id)",
               "legendFormat": "{{app_id}}",
               "refId": "A"
             }
@@ -1483,7 +1483,7 @@
           "pluginVersion": "7.3.3",
           "targets": [
             {
-              "expr": "sum(dapr_runtime_component_init_total{app_id=~\"$dapr_app_id\", kubernetes_namespace=\"$namespace\"}) by (app_id)",
+              "expr": "sum(dapr_runtime_component_init_total{app_id=~\"$dapr_app_id\", namespace=\"$namespace\"}) by (app_id)",
               "legendFormat": "{{app_id}}",
               "refId": "A"
             }
@@ -1544,7 +1544,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(dapr_runtime_component_init_fail_total{app_id=~\"$dapr_app_id\", kubernetes_namespace=\"$namespace\"}) by (app_id, reason)",
+              "expr": "sum(dapr_runtime_component_init_fail_total{app_id=~\"$dapr_app_id\", namespace=\"$namespace\"}) by (app_id, reason)",
               "legendFormat": "{{app_id}} - {{reason}}",
               "refId": "A"
             }
@@ -1655,12 +1655,12 @@
           "steppedLine": true,
           "targets": [
             {
-              "expr": "rate(dapr_runtime_actor_status_report_total{app_id=~\"$dapr_app_id\", kubernetes_namespace=\"$namespace\"}[5m])",
+              "expr": "rate(dapr_runtime_actor_status_report_total{app_id=~\"$dapr_app_id\", namespace=\"$namespace\"}[5m])",
               "legendFormat": "OK ({{app_id}})",
               "refId": "A"
             },
             {
-              "expr": "rate(dapr_runtime_actor_status_report_fail_total{app_id=~\"$dapr_app_id\", kubernetes_namespace=\"$namespace\"}[5m])",
+              "expr": "rate(dapr_runtime_actor_status_report_fail_total{app_id=~\"$dapr_app_id\", namespace=\"$namespace\"}[5m])",
               "legendFormat": "Error ({{app_id}})",
               "refId": "B"
             }
@@ -1753,7 +1753,7 @@
           "pluginVersion": "7.3.3",
           "targets": [
             {
-              "expr": "sum(dapr_runtime_actor_status_report_fail_total{app_id=~\"$dapr_app_id\", kubernetes_namespace=\"$namespace\"}) by (app_id, operation)",
+              "expr": "sum(dapr_runtime_actor_status_report_fail_total{app_id=~\"$dapr_app_id\", namespace=\"$namespace\"}) by (app_id, operation)",
               "legendFormat": "{{operation}} ({{app_id}})",
               "refId": "A"
             }
@@ -1813,7 +1813,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "sum(dapr_runtime_actor_table_operation_recv_total{app_id=~\"$dapr_app_id\", kubernetes_namespace=\"$namespace\"}) by (app_id, operation)",
+              "expr": "sum(dapr_runtime_actor_table_operation_recv_total{app_id=~\"$dapr_app_id\", namespace=\"$namespace\"}) by (app_id, operation)",
               "format": "time_series",
               "intervalFactor": 3,
               "legendFormat": "{{operation}} ({{app_id}})",
@@ -1911,12 +1911,12 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "dapr_runtime_actor_deactivated_total{app_id=~\"$dapr_app_id\", kubernetes_namespace=\"$namespace\"}",
+              "expr": "dapr_runtime_actor_deactivated_total{app_id=~\"$dapr_app_id\", namespace=\"$namespace\"}",
               "legendFormat": "OK {{actor_type}}",
               "refId": "A"
             },
             {
-              "expr": "dapr_runtime_actor_deactivated_failed_total{app_id=~\"$dapr_app_id\", kubernetes_namespace=\"$namespace\"}",
+              "expr": "dapr_runtime_actor_deactivated_failed_total{app_id=~\"$dapr_app_id\", namespace=\"$namespace\"}",
               "legendFormat": "Error {{actor_type}}",
               "refId": "C"
             }
@@ -2012,7 +2012,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "dapr_runtime_actor_rebalanced_total{app_id=~\"$dapr_app_id\", kubernetes_namespace=\"$namespace\"}",
+              "expr": "dapr_runtime_actor_rebalanced_total{app_id=~\"$dapr_app_id\", namespace=\"$namespace\"}",
               "intervalFactor": 1,
               "legendFormat": "{{app_id}}",
               "refId": "B"
@@ -2124,13 +2124,13 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "rate(dapr_runtime_mtls_init_total{app_id=~\"$dapr_app_id\", kubernetes_namespace=\"$namespace\"}[5m])",
+              "expr": "rate(dapr_runtime_mtls_init_total{app_id=~\"$dapr_app_id\", namespace=\"$namespace\"}[5m])",
               "intervalFactor": 2,
               "legendFormat": "OK {{app_id}}",
               "refId": "A"
             },
             {
-              "expr": "rate(dapr_runtime_mtls_init_fail_total{app_id=~\"$dapr_app_id\", kubernetes_namespace=\"$namespace\"}[5m])",
+              "expr": "rate(dapr_runtime_mtls_init_fail_total{app_id=~\"$dapr_app_id\", namespace=\"$namespace\"}[5m])",
               "intervalFactor": 2,
               "legendFormat": "Error {{app_id}}",
               "refId": "B"
@@ -2223,7 +2223,7 @@
           "pluginVersion": "7.3.3",
           "targets": [
             {
-              "expr": "sum(dapr_runtime_mtls_init_fail_total{app_id=~\"$dapr_app_id\", kubernetes_namespace=\"$namespace\"}) by (app_id, reason)",
+              "expr": "sum(dapr_runtime_mtls_init_fail_total{app_id=~\"$dapr_app_id\", namespace=\"$namespace\"}) by (app_id, reason)",
               "legendFormat": "{{reason}} ({{app_id}})",
               "refId": "A"
             }
@@ -2283,7 +2283,7 @@
           "steppedLine": false,
           "targets": [
             {
-              "expr": "rate(dapr_runtime_mtls_workload_cert_rotated_total{app_id=~\"$dapr_app_id\", kubernetes_namespace=\"$namespace\"}[5m])",
+              "expr": "rate(dapr_runtime_mtls_workload_cert_rotated_total{app_id=~\"$dapr_app_id\", namespace=\"$namespace\"}[5m])",
               "format": "time_series",
               "instant": false,
               "intervalFactor": 2,
@@ -2291,7 +2291,7 @@
               "refId": "A"
             },
             {
-              "expr": "rate(dapr_runtime_mtls_workload_cert_rotated_fail_total{app_id=~\"$dapr_app_id\", kubernetes_namespace=\"$namespace\"}[5m])",
+              "expr": "rate(dapr_runtime_mtls_workload_cert_rotated_fail_total{app_id=~\"$dapr_app_id\", namespace=\"$namespace\"}[5m])",
               "intervalFactor": 2,
               "legendFormat": "Error {{app_id}}",
               "refId": "B"
@@ -2384,7 +2384,7 @@
           "pluginVersion": "7.3.3",
           "targets": [
             {
-              "expr": "sum(dapr_runtime_mtls_workload_cert_rotated_fail_total{app_id=~\"$dapr_app_id\", kubernetes_namespace=\"$namespace\"}) by (app_id, reason)",
+              "expr": "sum(dapr_runtime_mtls_workload_cert_rotated_fail_total{app_id=~\"$dapr_app_id\", namespace=\"$namespace\"}) by (app_id, reason)",
               "legendFormat": "{{reason}} ({{app_id}})",
               "refId": "A"
             }
@@ -2413,7 +2413,7 @@
           "value": "pipeline"
         },
         "datasource": "Dapr",
-        "definition": "label_values(dapr_runtime_component_loaded,kubernetes_namespace)",
+        "definition": "label_values(dapr_runtime_component_loaded,namespace)",
         "error": null,
         "hide": 0,
         "includeAll": false,
@@ -2421,7 +2421,7 @@
         "multi": false,
         "name": "namespace",
         "options": [],
-        "query": "label_values(dapr_runtime_component_loaded,kubernetes_namespace)",
+        "query": "label_values(dapr_runtime_component_loaded,namespace)",
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
@@ -2469,14 +2469,11 @@
     ]
   },
   "time": {
-    "from": "now-3h",
+    "from": "now-14d",
     "to": "now"
   },
   "timepicker": {
     "refresh_intervals": [
-      "5s",
-      "10s",
-      "30s",
       "1m",
       "5m",
       "15m",
