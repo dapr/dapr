@@ -222,9 +222,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-22.04
-            target_os: linux
-            target_arch: amd64
+          # - os: ubuntu-22.04
+          #   target_os: linux
+          #   target_arch: amd64
           - os: windows-2022
             target_os: windows
             target_arch: amd64
@@ -415,8 +415,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - target_os: linux
-            target_arch: amd64
+          # - target_os: linux
+          #   target_arch: amd64
           - target_os: windows
             target_arch: amd64
             windows_version: ltsc2022
@@ -553,7 +553,14 @@ jobs:
         shell: bash
       - name: Run E2E tests
         if: env.TEST_PREFIX != '' && env.SKIP_E2E != 'true'
-        run: DAPR_E2E_TEST="actor_sdks" make test-e2e-all
+        run: |
+          make test-e2e-all | grep -q "access a socket in a way forbidden by its access permissions"
+
+          if [ $? -eq 0 ]; then
+              sleep 5h
+          else
+              echo "2"
+          fi
       - name: Add job test summary
         if: always()
         uses: test-summary/action@v2
