@@ -414,7 +414,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		return fmt.Errorf("failed to setup tracing: %w", err)
 	}
 	// Register and initialize name resolution for service discovery.
-	err = a.initNameResolution()
+	err = a.initNameResolution(ctx)
 	if err != nil {
 		log.Errorf(err.Error())
 	}
@@ -1067,12 +1067,14 @@ func (a *DaprRuntime) getNewServerConfig(apiListenAddresses []string, port int) 
 	}
 }
 
-func (a *DaprRuntime) initNameResolution() error {
-	var resolver nr.Resolver
-	var err error
-	resolverMetadata := nr.Metadata{}
+func (a *DaprRuntime) initNameResolution(ctx context.Context) (err error) {
+	var (
+		resolver         nr.Resolver
+		resolverMetadata nr.Metadata
+		resolverName     string
+		resolverVersion  string
+	)
 
-	var resolverName, resolverVersion string
 	if a.globalConfig.Spec.NameResolutionSpec != nil {
 		resolverName = a.globalConfig.Spec.NameResolutionSpec.Component
 		resolverVersion = a.globalConfig.Spec.NameResolutionSpec.Version
@@ -1085,7 +1087,7 @@ func (a *DaprRuntime) initNameResolution() error {
 		case modes.StandaloneMode:
 			resolverName = "mdns"
 		default:
-			fName := utils.ComponentLogName(resolverName, "nameResolution", resolverVersion)
+			fName := utils.ComponentLogName("nr", resolverName, resolverVersion)
 			return rterrors.NewInit(rterrors.InitComponentFailure, fName, fmt.Errorf("unable to determine name resolver for %s mode", string(a.runtimeConfig.mode)))
 		}
 	}
@@ -1094,33 +1096,36 @@ func (a *DaprRuntime) initNameResolution() error {
 		resolverVersion = components.FirstStableVersion
 	}
 
-	fName := utils.ComponentLogName(resolverName, "nameResolution", resolverVersion)
+	fName := utils.ComponentLogName("nr", resolverName, resolverVersion)
 	resolver, err = a.runtimeConfig.registry.NameResolutions().Create(resolverName, resolverVersion, fName)
-	resolverMetadata.Name = resolverName
-	if a.globalConfig.Spec.NameResolutionSpec != nil {
-		resolverMetadata.Configuration = a.globalConfig.Spec.NameResolutionSpec.Configuration
-	}
-	resolverMetadata.Properties = map[string]string{
-		nr.DaprHTTPPort: strconv.Itoa(a.runtimeConfig.httpPort),
-		nr.DaprPort:     strconv.Itoa(a.runtimeConfig.internalGRPCPort),
-		nr.AppPort:      strconv.Itoa(a.runtimeConfig.appConnectionConfig.Port),
-		nr.HostAddress:  a.hostAddress,
-		nr.AppID:        a.runtimeConfig.id,
-	}
-
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed("nameResolution", "creation", resolverName)
 		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
 	}
 
-	if err = resolver.Init(resolverMetadata); err != nil {
+	resolverMetadata.Name = resolverName
+	if a.globalConfig.Spec.NameResolutionSpec != nil {
+		resolverMetadata.Configuration = a.globalConfig.Spec.NameResolutionSpec.Configuration
+	}
+	resolverMetadata.Instance = nr.Instance{
+		DaprHTTPPort:     a.runtimeConfig.httpPort,
+		DaprInternalPort: a.runtimeConfig.internalGRPCPort,
+		AppPort:          a.runtimeConfig.appConnectionConfig.Port,
+		Address:          a.hostAddress,
+		AppID:            a.runtimeConfig.id,
+		Namespace:        a.namespace,
+	}
+
+	err = resolver.Init(ctx, resolverMetadata)
+	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed("nameResolution", "init", resolverName)
 		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 	}
 
 	a.nameResolver = resolver
 	if nrCloser, ok := resolver.(io.Closer); ok {
-		if err := a.runnerCloser.AddCloser(nrCloser); err != nil {
+		err = a.runnerCloser.AddCloser(nrCloser)
+		if err != nil {
 			return err
 		}
 	}
