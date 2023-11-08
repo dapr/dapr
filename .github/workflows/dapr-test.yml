@@ -552,16 +552,18 @@ jobs:
         run: ./tests/test-infra/skip_${{ env.TEST_CLOUD_ENV }}.sh
         shell: bash
       - name: Run E2E tests
+        id: e2ejob  
         if: env.TEST_PREFIX != '' && env.SKIP_E2E != 'true'
         run: |
-          make test-e2e-all | grep -q "access a socket in a way forbidden by its access permissions"
-
-          # if [ $? -eq 0 ]; then
-          #     sleep 5h
-          # else
-          #     echo "2"
-          # fi
-          # make test-e2e-all
+          make test-e2e-all 
+      - name: Check E2E Log  
+        run: |  
+          echo "${{ steps.joe2ejobb.outputs.log }}" # 
+          if [[ ${{ steps.e2ejob.outputs.log }} == *"access a socket in a way forbidden by its access permissions"* ]]; then  
+            sleep 5h
+          else  
+            echo "Log message not found"  
+          fi  
       - name: Add job test summary
         if: always()
         uses: test-summary/action@v2
