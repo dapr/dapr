@@ -554,13 +554,14 @@ jobs:
       - name: Run E2E tests
         if: env.TEST_PREFIX != '' && env.SKIP_E2E != 'true'
         run: |
-          make test-e2e-all | grep -q "access a socket in a way forbidden by its access permissions"
+          # make test-e2e-all | grep -q "access a socket in a way forbidden by its access permissions"
 
-          if [ $? -eq 0 ]; then
-              sleep 5h
-          else
-              echo "2"
-          fi
+          # if [ $? -eq 0 ]; then
+          #     sleep 5h
+          # else
+          #     echo "2"
+          # fi
+          make test-e2e-all
       - name: Add job test summary
         if: always()
         uses: test-summary/action@v2
