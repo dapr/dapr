@@ -11,8 +11,6 @@ image:
 nameOverride: ""
 fullnameOverride: ""
 
-tokenAudience: ""
-
 deploymentAnnotations: {}
 
 service:
