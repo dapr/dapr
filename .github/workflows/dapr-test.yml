@@ -556,6 +556,7 @@ jobs:
         if: env.TEST_PREFIX != '' && env.SKIP_E2E != 'true'
         run: |
           make test-e2e-all > e2e_log.txt
+          cat e2e_log.txt
       - name: Check E2E Log  
         run: |  
           if grep -q -i -w "bind: An attempt was made to access a socket in a way forbidden by its access permissions" "e2e_log.txt"; then  
