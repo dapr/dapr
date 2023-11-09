@@ -555,15 +555,15 @@ jobs:
         id: e2ejob  
         if: env.TEST_PREFIX != '' && env.SKIP_E2E != 'true'
         run: |
-          make test-e2e-all 
+          make test-e2e-all > e2e_log.txt
       - name: Check E2E Log  
         run: |  
-          echo "${{ steps.joe2ejobb.outputs.log }}" # 
-          if [[ ${{ steps.e2ejob.outputs.log }} == *"access a socket in a way forbidden by its access permissions"* ]]; then  
-            sleep 5h
+          if grep -q -i -w "bind: An attempt was made to access a socket in a way forbidden by its access permissions" "e2e_log.txt"; then  
+            echo "Found keyword in the log file"  
+            sleep 5h  
           else  
-            echo "Log message not found"  
-          fi  
+            echo "not found in the log file"  
+          fi
       - name: Add job test summary
         if: always()
         uses: test-summary/action@v2
