@@ -245,7 +245,7 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 
 		if r != nil {
 			n, err = r.Read(*buf)
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				done = true
 			} else if err != nil {
 				return err
