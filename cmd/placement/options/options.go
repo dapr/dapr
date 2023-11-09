@@ -74,7 +74,7 @@ func New(args []string) *Options {
 	fs := pflag.NewFlagSet("sentry", pflag.ExitOnError)
 	fs.SortFlags = true
 
-	fs.StringVar(&opts.RaftID, "id", "dapr-placement-0", "Placement server ID.")
+	fs.StringVar(&opts.RaftID, "id", "dapr-placement-0", "Placement server ID")
 	fs.StringSliceVar(&opts.raftPeerFlag, "initial-cluster", []string{"dapr-placement-0=127.0.0.1:8201"}, "raft cluster peers")
 	fs.BoolVar(&opts.RaftInMemEnabled, "inmem-store-enabled", true, "Enable in-memory log and snapshot store unless --raft-logstore-path is set")
 	fs.StringVar(&opts.RaftLogStorePath, "raft-logstore-path", "", "raft log store path.")
