@@ -59,9 +59,9 @@ jobs:
       fail-fast: false # Keep running if one leg fails.
       matrix:
         k8s-version:
-        - v1.23.13
-        - v1.24.7
-        - v1.25.3
+        - v1.24.15
+        - v1.25.11
+        - v1.26.6
         mode:
         - ha
         - non-ha
@@ -69,17 +69,17 @@ jobs:
         # This is attempting to make it a bit clearer what's being tested.
         # See: https://github.com/kubernetes-sigs/kind/releases/tag/v0.11.1
         include:
-        - k8s-version: v1.23.13
-          kind-version: v0.17.0
-          kind-image-sha: sha256:ef453bb7c79f0e3caba88d2067d4196f427794086a7d0df8df4f019d5e336b61
-        - k8s-version: v1.24.7
-          kind-version: v0.17.0
-          kind-image-sha: sha256:577c630ce8e509131eab1aea12c022190978dd2f745aac5eb1fe65c0807eb315
-        - k8s-version: v1.25.3
-          kind-version: v0.17.0
-          kind-image-sha: sha256:f52781bc0d7a19fb6c405c2af83abfeb311f130707a0e219175677e366cc45d1
+        - k8s-version: v1.24.15
+          kind-version: v0.20.0
+          kind-image-sha: sha256:7db4f8bea3e14b82d12e044e25e34bd53754b7f2b0e9d56df21774e6f66a70ab
+        - k8s-version: v1.25.11
+          kind-version: v0.20.0
+          kind-image-sha: sha256:227fa11ce74ea76a0474eeefb84cb75d8dad1b08638371ecf0e86259b35be0c8
+        - k8s-version: v1.26.6
+          kind-version: v0.20.0
+          kind-image-sha: sha256:6e2d8b28a5b601defe327b98bd1c2d1930b49e5d8c512e1895099e4504007adb
         exclude:
-        - k8s-version: v1.23.13
+        - k8s-version: v1.24.15
           mode: non-ha
     steps:
     - name: Set up Go ${{ env.GOVER }}
