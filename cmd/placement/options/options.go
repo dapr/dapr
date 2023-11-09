@@ -23,6 +23,7 @@ import (
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/placement/raft"
 	"github.com/dapr/dapr/pkg/security"
+	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/utils"
 )
@@ -62,8 +63,6 @@ type Options struct {
 	Metrics *metrics.Options
 }
 
-var log = logger.NewLogger("dapr.placement.options")
-
 func New() *Options {
 	// Default options
 	var opts Options
@@ -79,14 +78,9 @@ func New() *Options {
 	flag.IntVar(&opts.ReplicationFactor, "replicationFactor", defaultReplicationFactor, "sets the replication factor for actor distribution on vnodes")
 
 	flag.StringVar(&opts.TrustDomain, "trust-domain", "localhost", "Trust domain for the Dapr control plane")
-	flag.StringVar(&opts.TrustAnchorsFile, "trust-anchors-file", "/var/run/secrets/dapr.io/tls/ca.crt", "Filepath to the trust anchors for the Dapr control plane")
-	flag.StringVar(&opts.SentryAddress, "sentry-address", fmt.Sprintf("dapr-sentry.%s.svc:443", security.CurrentNamespace()), "Filepath to the trust anchors for the Dapr control plane")
+	flag.StringVar(&opts.TrustAnchorsFile, "trust-anchors-file", securityConsts.ControlPlaneDefaultTrustAnchorsPath, "Filepath to the trust anchors for the Dapr control plane")
+	flag.StringVar(&opts.SentryAddress, "sentry-address", fmt.Sprintf("dapr-sentry.%s.svc:443", security.CurrentNamespace()), "Address of the Sentry service")
 	flag.StringVar(&opts.Mode, "mode", string(modes.StandaloneMode), "Runtime mode for Placement")
-
-	depCC := flag.String("certchain", "", "DEPRECATED")
-	depRCF := flag.String("issuer-ca-filename", "", "DEPRECATED")
-	depICF := flag.String("issuer-certificate-filename", "", "DEPRECATED")
-	depIKF := flag.String("issuer-key-filename", "", "DEPRECATED")
 
 	opts.Logger = logger.DefaultOptions()
 	opts.Logger.AttachCmdFlags(flag.StringVar, flag.BoolVar)
@@ -98,10 +92,6 @@ func New() *Options {
 	opts.MetadataEnabled = utils.IsTruthy(os.Getenv(envMetadataEnabled))
 
 	flag.Parse()
-
-	if len(*depRCF) > 0 || len(*depICF) > 0 || len(*depIKF) > 0 || len(*depCC) > 0 {
-		log.Warn("--certchain, --issuer-ca-filename, --issuer-certificate-filename and --issuer-key-filename are deprecated and will be removed in v1.14.")
-	}
 
 	opts.RaftPeers = parsePeersFromFlag(opts.RaftPeerString)
 	if opts.RaftLogStorePath != "" {
