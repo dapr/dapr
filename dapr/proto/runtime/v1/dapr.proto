@@ -609,8 +609,12 @@ message GetMetadataResponse {
 
 message ActorRuntime {
   enum ActorRuntimeStatus {
+    // Indicates that the actor runtime is still being initialized.
     INITIALIZING = 0;
+    // Indicates that the actor runtime is disabled.
+    // This normally happens when Dapr is started without "placement-host-address"
     DISABLED = 1;
+    // Indicates the actor runtime is running, either as an actor host or client.
     RUNNING = 2;
   }
 

@@ -39,9 +39,13 @@ const (
 type ActorRuntime_ActorRuntimeStatus int32
 
 const (
+	// Indicates that the actor runtime is still being initialized.
 	ActorRuntime_INITIALIZING ActorRuntime_ActorRuntimeStatus = 0
-	ActorRuntime_DISABLED     ActorRuntime_ActorRuntimeStatus = 1
-	ActorRuntime_RUNNING      ActorRuntime_ActorRuntimeStatus = 2
+	// Indicates that the actor runtime is disabled.
+	// This normally happens when Dapr is started without "placement-host-address"
+	ActorRuntime_DISABLED ActorRuntime_ActorRuntimeStatus = 1
+	// Indicates the actor runtime is running, either as an actor host or client.
+	ActorRuntime_RUNNING ActorRuntime_ActorRuntimeStatus = 2
 )
 
 // Enum value maps for ActorRuntime_ActorRuntimeStatus.
