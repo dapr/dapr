@@ -141,19 +141,27 @@ make setup-test-env-k6
 make test-perf-all
 ```
 
-You can also run the test apps individually.
+You can also run selected tests using environment variables `DAPR_PERF TEST``.
 ```bash
-# build perf apps docker image under apps/
-make test-perf-<app-name>
+export DAPR_PERF_TEST="<app-name-1> <app-name-2>"
 
-# push perf apps docker image to docker hub
-make test-perf-<app-name>
+# it will start perf tests defined in DAPR_PERF_TEST
+make test-perf-all
 ```
-`<app-name>` can be found at [PERF_TESTS](https://github.com/dapr/dapr/blob/6def7d1b9ffe896b7b06d05128b9cd605d39f939/tests/dapr_tests.mk#L70)
+Then it will run the tests defined in `DAPR_PERF_TEST`. `<app-name>` can be found at [PERF_TESTS](https://github.com/dapr/dapr/blob/6def7d1b9ffe896b7b06d05128b9cd605d39f939/tests/dapr_tests.mk#L70)
 
-For example, if you only want to run workflows tests, you can run
+For example, if you only want to run `actor_id_scale` and `workflows` tests, you can do
 ```bash
-make test-perf-workflows
+export DAPR_PERF_TEST="actor_id_scale workflows"
+
+make test-perf-all
+```
+
+### Remove all tests data
+Once you finished your testing, it's recommended to remove old test data, so it's easier to find the new tests. 
+You can run
+```bash
+make test-clean
 ```
 
 ## Run perf tests through GitHub Actions
