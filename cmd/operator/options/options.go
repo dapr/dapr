@@ -21,6 +21,7 @@ import (
 	"k8s.io/klog"
 
 	"github.com/dapr/dapr/pkg/metrics"
+	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 	"github.com/dapr/kit/logger"
 )
 
@@ -72,12 +73,7 @@ func New() *Options {
 	flag.BoolVar(&opts.EnableArgoRolloutServiceReconciler, "enable-argo-rollout-service-reconciler", false, "Enable the service reconciler for Dapr-enabled Argo Rollouts")
 	flag.BoolVar(&opts.WatchdogCanPatchPodLabels, "watchdog-can-patch-pod-labels", false, "Allow watchdog to patch pod labels to set pods with sidecar present")
 
-	flag.StringVar(&opts.TrustAnchorsFile, "trust-anchors-file", "/var/run/secrets/dapr.io/tls/ca.crt", "Path to trust anchors file")
-
-	depCCP := flag.String("certchain", "", "DEPRECATED")
-	depRCF := flag.String("issuer-ca-filename", "", "DEPRECATED")
-	depICF := flag.String("issuer-certificate-filename", "", "DEPRECATED")
-	depIKF := flag.String("issuer-key-filename", "", "DEPRECATED")
+	flag.StringVar(&opts.TrustAnchorsFile, "trust-anchors-file", securityConsts.ControlPlaneDefaultTrustAnchorsPath, "Filepath to the trust anchors for the Dapr control plane")
 
 	opts.Logger = logger.DefaultOptions()
 	opts.Logger.AttachCmdFlags(flag.StringVar, flag.BoolVar)
@@ -86,10 +82,6 @@ func New() *Options {
 	opts.Metrics.AttachCmdFlags(flag.StringVar, flag.BoolVar)
 
 	flag.Parse()
-
-	if len(*depRCF) > 0 || len(*depICF) > 0 || len(*depIKF) > 0 || len(*depCCP) > 0 {
-		log.Warn("--certchain, --issuer-ca-filename, --issuer-certificate-filename and --issuer-key-filename are deprecated and will be removed in v1.14")
-	}
 
 	wilc := strings.ToLower(opts.watchdogIntervalStr)
 	switch wilc {

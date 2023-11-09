@@ -38,7 +38,6 @@ type Options struct {
 	HealthzPort           int
 	IssuerCredentialsPath string
 	TrustDomain           string
-	TokenAudience         string
 	Kubeconfig            string
 	Logger                logger.Options
 	Metrics               *metrics.Options
@@ -57,7 +56,6 @@ func New() *Options {
 	flag.StringVar(&opts.IssuerCertFilename, "issuer-certificate-filename", config.DefaultIssuerCertFilename, "Issuer certificate filename")
 	flag.StringVar(&opts.IssuerKeyFilename, "issuer-key-filename", config.DefaultIssuerKeyFilename, "Issuer private key filename")
 	flag.StringVar(&opts.TrustDomain, "trust-domain", "localhost", "The CA trust domain")
-	flag.StringVar(&opts.TokenAudience, "token-audience", "", "DEPRECATED, flag has no effect.")
 	flag.IntVar(&opts.Port, "port", config.DefaultPort, "The port for the sentry server to listen on")
 	flag.IntVar(&opts.HealthzPort, "healthz-port", 8080, "The port for the healthz server to listen on")
 
