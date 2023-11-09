@@ -32,7 +32,8 @@ import (
 // and provides the helpers to manage it.
 type InvokeMethodResponse struct {
 	replayableRequest
-	r *internalv1pb.InternalInvokeResponse
+	r           *internalv1pb.InternalInvokeResponse
+	dataTypeURL string
 }
 
 // NewInvokeMethodResponse returns new InvokeMethodResponse object with status.
@@ -84,6 +85,13 @@ func (imr *InvokeMethodResponse) WithRawDataString(data string) *InvokeMethodRes
 // WithContentType sets the content type.
 func (imr *InvokeMethodResponse) WithContentType(contentType string) *InvokeMethodResponse {
 	imr.r.Message.ContentType = contentType
+	return imr
+}
+
+// WithDataTypeURL sets the type_url property for the data.
+// When a type_url is set, the Content-Type automatically becomes the protobuf one.
+func (imr *InvokeMethodResponse) WithDataTypeURL(val string) *InvokeMethodResponse {
+	imr.dataTypeURL = val
 	return imr
 }
 
@@ -176,7 +184,8 @@ func (imr *InvokeMethodResponse) ProtoWithData() (*internalv1pb.InternalInvokeRe
 		return m, err
 	}
 	m.Message.Data = &anypb.Any{
-		Value: data,
+		Value:   data,
+		TypeUrl: imr.dataTypeURL, // Could be empty
 	}
 
 	return m, nil
@@ -209,7 +218,7 @@ func (imr *InvokeMethodResponse) Message() *commonv1pb.InvokeResponse {
 // HasMessageData returns true if the message object contains a slice of data buffered.
 func (imr *InvokeMethodResponse) HasMessageData() bool {
 	m := imr.r.Message
-	return m != nil && m.Data != nil && len(m.Data.Value) > 0
+	return len(m.GetData().GetValue()) > 0
 }
 
 // ResetMessageData resets the data inside the message object if present.
@@ -230,8 +239,9 @@ func (imr *InvokeMethodResponse) ContentType() string {
 
 	contentType := m.ContentType
 
-	if m.Data != nil && m.Data.TypeUrl != "" {
-		contentType = ProtobufContentType
+	// If there's a proto data and that has a type URL, or if we have a dataTypeUrl in the object, then the content type is the protobuf one
+	if imr.dataTypeURL != "" || m.GetData().GetTypeUrl() != "" {
+		return ProtobufContentType
 	}
 
 	return contentType

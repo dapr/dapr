@@ -223,20 +223,18 @@ spec:
 func (f *fuzzpubsub) Run(t *testing.T, ctx context.Context) {
 	f.daprd.WaitUntilRunning(t, ctx)
 
-	httpClient := util.HTTPClient(t)
+	t.Skip("TODO: @joshvanl skipping until pubsub publish is made stable")
 
+	pt := util.NewParallel(t)
 	for i := range f.pubSubs {
 		pubsubName := f.pubSubs[i].Name
 		for j := range f.pubSubs[i].Topics {
 			topicName := f.pubSubs[i].Topics[j].Name
 			route := f.pubSubs[i].Topics[j].Route
 			payload := f.pubSubs[i].Topics[j].payload
-			t.Run(pubsubName+"/"+topicName+route, func(t *testing.T) {
-				t.Skip("TODO: @joshvanl skipping until pubsub publish is made stable")
-
-				t.Parallel()
-
-				reqURL := fmt.Sprintf("http://127.0.0.1:%d/v1.0/publish/%s/%s", f.daprd.HTTPPort(), url.QueryEscape(pubsubName), url.QueryEscape(topicName))
+			pt.Add(func(col *assert.CollectT) {
+				reqURL := fmt.Sprintf("http://127.0.0.1:%d/v1.0/publish/%s/%s",
+					f.daprd.HTTPPort(), url.QueryEscape(pubsubName), url.QueryEscape(topicName))
 				// TODO: @joshvanl: under heavy load, messages seem to get lost here
 				// with no response from Dapr. Until this is fixed, we use to smaller
 				// timeout, and retry on context deadline exceeded.
@@ -245,27 +243,27 @@ func (f *fuzzpubsub) Run(t *testing.T, ctx context.Context) {
 					t.Cleanup(cancel)
 
 					b, err := json.Marshal(payload)
-					require.NoError(t, err)
+					require.NoError(col, err)
 
 					req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, reqURL, bytes.NewReader(b))
-					require.NoError(t, err)
+					require.NoError(col, err)
 					req.Header.Set("Content-Type", "application/json")
-					resp, err := httpClient.Do(req)
+					resp, err := util.HTTPClient(t).Do(req)
 					if errors.Is(err, context.DeadlineExceeded) {
 						// Only retry if we haven't exceeded the test timeout.
 						d, ok := ctx.Deadline()
-						require.True(t, ok)
-						require.True(t, time.Now().After(d))
+						require.True(col, ok)
+						require.True(col, time.Now().After(d))
 						continue
 					}
-					require.NoError(t, err)
+					require.NoError(col, err)
 
-					assert.Equal(t, http.StatusNoContent, resp.StatusCode, reqURL)
+					assert.Equal(col, http.StatusNoContent, resp.StatusCode, reqURL)
 					var respBody []byte
 					respBody, err = io.ReadAll(resp.Body)
-					require.NoError(t, err)
-					require.NoError(t, resp.Body.Close())
-					assert.Empty(t, string(respBody))
+					require.NoError(col, err)
+					require.NoError(col, resp.Body.Close())
+					assert.Empty(col, string(respBody))
 					break
 				}
 
@@ -274,16 +272,16 @@ func (f *fuzzpubsub) Run(t *testing.T, ctx context.Context) {
 					var data []byte
 					if f.withRaw {
 						var message pubSubMessage
-						require.NoError(t, json.Unmarshal(body, &message))
+						require.NoError(col, json.Unmarshal(body, &message))
 						var err error
 						data, err = base64.StdEncoding.DecodeString(message.DataBase64)
-						require.NoError(t, err)
+						require.NoError(col, err)
 					} else {
 						data = body
 					}
 					var messageData pubSubMessageData
-					require.NoError(t, json.Unmarshal(data, &messageData), string(data))
-					assert.Equal(t, payload, messageData.Data)
+					require.NoError(col, json.Unmarshal(data, &messageData), string(data))
+					assert.Equal(col, payload, messageData.Data)
 				case <-ctx.Done():
 					t.Fatal("timed out waiting for message")
 				}

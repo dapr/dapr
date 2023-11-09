@@ -8,13 +8,16 @@ metadata:
     {{- range $key, $value := .Values.global.k8sLabels }}
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
+{{- if .Values.service.annotations }}
+{{ toYaml .Values.service.annotations | indent 4}}
+{{- end }}
 spec:
-  type: ClusterIP
+  selector:
+    app: dapr-sidecar-injector
+  type: {{ .Values.service.type }}
   ports:
   - port: 443
     targetPort: https
     protocol: TCP
     name: https
-  selector:
-    app: dapr-sidecar-injector
 {{- end }}

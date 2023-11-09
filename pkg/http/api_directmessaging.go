@@ -27,23 +27,65 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
+	"github.com/dapr/dapr/pkg/http/endpoints"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
-	"github.com/dapr/dapr/utils/responsewriter"
 )
 
-func (a *api) constructDirectMessagingEndpoints() []Endpoint {
-	return []Endpoint{
+// directMessagingSpanData is the data passed by the onDirectMessage endpoint to the tracing middleware
+type directMessagingSpanData struct {
+	// Target app ID
+	AppID string
+	// Method invoked
+	Method string
+}
+
+func appendDirectMessagingSpanAttributes(r *http.Request, m map[string]string) {
+	endpointData, _ := r.Context().Value(endpoints.EndpointCtxKey{}).(*endpoints.EndpointCtxData)
+	if endpointData != nil && endpointData.SpanData != nil {
+		spanData, _ := endpointData.SpanData.(*directMessagingSpanData)
+		if spanData != nil {
+			m[diagConsts.GrpcServiceSpanAttributeKey] = "ServiceInvocation"
+			m[diagConsts.NetPeerNameSpanAttributeKey] = spanData.AppID
+			m[diagConsts.DaprAPISpanNameInternal] = "CallLocal/" + spanData.AppID + "/" + spanData.Method
+		}
+	}
+}
+
+func directMessagingMethodNameFn(r *http.Request) string {
+	endpointData, _ := r.Context().Value(endpoints.EndpointCtxKey{}).(*endpoints.EndpointCtxData)
+	if endpointData != nil && endpointData.SpanData != nil {
+		spanData, _ := endpointData.SpanData.(*directMessagingSpanData)
+		if spanData != nil {
+			return "InvokeService/" + spanData.AppID
+		}
+	}
+
+	return "InvokeService"
+}
+
+func (a *api) constructDirectMessagingEndpoints() []endpoints.Endpoint {
+	return []endpoints.Endpoint{
 		{
 			// No method is defined here to match any method
 			Methods: []string{},
 			Route:   "invoke/*",
 			// This is the fallback route for when no other method is matched by the router
-			IsFallback: true,
-			Version:    apiVersionV1,
-			Handler:    a.onDirectMessage,
+			Version: apiVersionV1,
+			Group: &endpoints.EndpointGroup{
+				Name:                 endpoints.EndpointGroupServiceInvocation,
+				Version:              endpoints.EndpointGroupVersion1,
+				AppendSpanAttributes: appendDirectMessagingSpanAttributes,
+				MethodName:           directMessagingMethodNameFn,
+			},
+			Handler: a.onDirectMessage,
+			Settings: endpoints.EndpointSettings{
+				Name:       "InvokeService",
+				IsFallback: true,
+			},
 		},
 	}
 }
@@ -62,9 +104,13 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Store target and method as values in the context so they can be picked up by the tracing library
-	rw := responsewriter.EnsureResponseWriter(w)
-	rw.SetUserValue("id", targetID)
-	rw.SetUserValue("method", invokeMethodName)
+	endpointData, _ := r.Context().Value(endpoints.EndpointCtxKey{}).(*endpoints.EndpointCtxData)
+	if endpointData != nil {
+		endpointData.SpanData = &directMessagingSpanData{
+			AppID:  targetID,
+			Method: invokeMethodName,
+		}
+	}
 
 	verb := strings.ToUpper(r.Method)
 	if a.directMessaging == nil {
@@ -143,9 +189,14 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 				resStatus.Code = statusCode
 			}
 		} else if resStatus.Code < 200 || resStatus.Code > 399 {
-			// We are not returning an `invokeError` here on purpose.
-			// Returning an error that is not an `invokeError` will cause Resiliency to retry the request (if retries are enabled), but if the request continues to fail, the response is sent to the user with whatever status code the app returned so the "received non-successful status code" is "swallowed" (will appear in logs but won't be returned to the app).
-			return rResp, fmt.Errorf("received non-successful status code: %d", resStatus.Code)
+			msg, _ := rResp.RawDataFull()
+			// Returning a `codeError` here will cause Resiliency to retry the request (if retries are enabled), but if the request continues to fail, the response is sent to the user with whatever status code the app returned.
+			return rResp, codeError{
+				headers:     rResp.Headers(),
+				statusCode:  int(resStatus.Code),
+				msg:         msg,
+				contentType: rResp.ContentType(),
+			}
 		}
 		return rResp, nil
 	})
@@ -153,6 +204,22 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 	// Special case for timeouts/circuit breakers since they won't go through the rest of the logic.
 	if errors.Is(err, context.DeadlineExceeded) || breaker.IsErrorPermanent(err) {
 		respondWithError(w, messages.ErrDirectInvoke.WithFormat(targetID, err))
+		return
+	}
+
+	var codeErr codeError
+	if errors.As(err, &codeErr) {
+		if len(codeErr.headers) > 0 {
+			invokev1.InternalMetadataToHTTPHeader(r.Context(), codeErr.headers, w.Header().Add)
+		}
+		respondWithHTTPRawResponse(w, &UniversalHTTPRawResponse{
+			Body:        codeErr.msg,
+			ContentType: codeErr.contentType,
+			StatusCode:  codeErr.statusCode,
+		}, codeErr.statusCode)
+		if resp != nil {
+			_ = resp.Close()
+		}
 		return
 	}
 
@@ -291,4 +358,15 @@ type invokeError struct {
 
 func (ie invokeError) Error() string {
 	return fmt.Sprintf("invokeError (statusCode='%d') msg='%v'", ie.statusCode, string(ie.msg))
+}
+
+type codeError struct {
+	statusCode  int
+	msg         []byte
+	headers     invokev1.DaprInternalMetadata
+	contentType string
+}
+
+func (ce codeError) Error() string {
+	return fmt.Sprintf("received non-successful status code in response: %d", ce.statusCode)
 }

@@ -128,6 +128,10 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_operator.serviceReconciler.enabled` | If false, disables the reconciler that creates Services for Dapr-enabled Deployments and StatefulSets.<br>Note: disabling this reconciler could prevent Dapr service invocation from working. | `true`  |
 | `dapr_operator.watchNamespace`            | The namespace to watch for annotated Dapr resources in                                                                                                                                     | `""`    |
 | `dapr_operator.deploymentAnnotations`     | Custom annotations for Dapr Operator Deployment                                                                                                                                            | `{}`    |
+| `dapr_operator.apiService.annotations` | Custom annotations for "dapr-operator" Service resource | `{}` |
+| `dapr_operator.apiService.type` | Type for "dapr-operator" Service resource (e.g. `ClusterIP`, `LoadBalancer`, etc) | `ClusterIP` |
+| `dapr_operator.webhookService.annotations` | Custom annotations for "dapr-webhook" Service resource | `{}` |
+| `dapr_operator.webhookService.type` | Type for "dapr-webhook" Service resource (e.g. `ClusterIP`, `LoadBalancer`, etc) | `ClusterIP` |
 
 ### Dapr Placement options:
 | Parameter                                      | Description                                                                                                                                                               | Default                 |
@@ -146,6 +150,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_placement.debug.enabled`                 | Boolean value for enabling debug mode                                                                                                                                     | `{}`                    |
 | `dapr_placement.metadataEnabled`               | Boolean value for enabling placement tables metadata HTTP API                                                                                                             | `false`                 |
 | `dapr_placement.statefulsetAnnotations`         | Custom annotations for Dapr Placement Statefulset                                                                                                                         | `{}`    |
+| `dapr_placement.service.annotations` | Custom annotations for "dapr-placement-server" Service resource | `{}` |
 
 ### Dapr RBAC options:
 | Parameter                                 | Description                                                             | Default                 |
@@ -167,6 +172,8 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_sentry.resources`             | Value of `resources` attribute. Can be used to set memory/cpu resources/limits. See the section "Resource configuration" above. Defaults to empty       | `{}` |
 | `dapr_sentry.debug.enabled`         | Boolean value for enabling debug mode                                                                                                                   | `{}` |
 | `dapr_sentry.deploymentAnnotations` | Custom annotations for Dapr Sentry Deployment                                                                                                           | `{}`    |
+| `dapr_sentry.service.annotations` | Custom annotations for "dapr-sentry" Service resource | `{}` |
+| `dapr_sentry.service.type` | Type for "dapr-sentry" Service resource (e.g. `ClusterIP`, `LoadBalancer`, etc) | `ClusterIP` |
 
 ### Dapr Sidecar Injector options:
 | Parameter                                                 | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Default                 |
@@ -190,7 +197,9 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_sidecar_injector.ignoreEntrypointTolerations`       | JSON array of Kubernetes tolerations. If pod contains any of these tolerations, it will ignore the Docker image ENTRYPOINT for Dapr sidecar.                                                                                                                                                                                                                                                                                                                           | `[{\"effect\":\"NoSchedule\",\"key\":\"alibabacloud.com/eci\"},{\"effect\":\"NoSchedule\",\"key\":\"azure.com/aci\"},{\"effect\":\"NoSchedule\",\"key\":\"aws\"},{\"effect\":\"NoSchedule\",\"key\":\"huawei.com/cci\"}]` |
 | `dapr_sidecar_injector.hostNetwork`                       | Enable hostNetwork mode. This is helpful when working with overlay networks such as Calico CNI and admission webhooks fail                                                                                                                                                                                                                                                                                                                                             | `false` |
 | `dapr_sidecar_injector.healthzPort`                       | The port used for health checks. Helpful in combination with hostNetwork to avoid port collisions                                                                                                                                                                                                                                                                                                                                                                      | `8080` |
-| `dapr_sidecar.deploymentAnnotations`                      | Custom annotations for Dapr sidecar Deployment                                                                                                                                                                                                                                                                                                                                                                                                                         | `{}`    |
+| `dapr_sidecar_injector.deploymentAnnotations` | Custom annotations for Dapr Sidecar Injector Deployment | `{}` |
+| `dapr_sidecar_injector.service.annotations` | Custom annotations for "dapr-sidecar-injector" Service resource | `{}` |
+| `dapr_sidecar_injector.service.type` | Type for "dapr-sidecar-injector" Service resource (e.g. `ClusterIP`, `LoadBalancer`, etc) | `ClusterIP` |
 
 ## Example of highly available configuration of the control plane
 

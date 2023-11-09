@@ -224,6 +224,7 @@ func newTestActorsRuntimeWithMock(appChannel channel.AppChannel) *actorsRuntime 
 		TracingSpec:    config.TracingSpec{SamplingRate: "1"},
 		Resiliency:     resiliency.New(log),
 		StateStoreName: "actorStore",
+		MockPlacement:  NewMockPlacement(TestAppID),
 	}, clock)
 
 	return a.(*actorsRuntime)
@@ -448,7 +449,7 @@ func TestTimerExecution(t *testing.T) {
 	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 
 	period, _ := internal.NewReminderPeriod("2s")
-	err := testActorsRuntime.doExecuteReminderOrTimer(&internal.Reminder{
+	err := testActorsRuntime.doExecuteReminderOrTimer(context.Background(), &internal.Reminder{
 		ActorType:      actorType,
 		ActorID:        actorID,
 		Name:           "timer1",
@@ -469,7 +470,7 @@ func TestReminderExecution(t *testing.T) {
 	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 
 	period, _ := internal.NewReminderPeriod("2s")
-	err := testActorsRuntime.doExecuteReminderOrTimer(&internal.Reminder{
+	err := testActorsRuntime.doExecuteReminderOrTimer(context.Background(), &internal.Reminder{
 		ActorType:      actorType,
 		ActorID:        actorID,
 		RegisteredTime: time.Now().Add(2 * time.Second),

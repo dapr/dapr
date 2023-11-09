@@ -86,7 +86,7 @@ type DaprClient interface {
 	// DecryptAlpha1 decrypts a message using the Dapr encryption scheme and a key stored in the vault.
 	DecryptAlpha1(ctx context.Context, opts ...grpc.CallOption) (Dapr_DecryptAlpha1Client, error)
 	// Gets metadata of the sidecar
-	GetMetadata(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetMetadataResponse, error)
+	GetMetadata(ctx context.Context, in *GetMetadataRequest, opts ...grpc.CallOption) (*GetMetadataResponse, error)
 	// Sets value in extended metadata of the sidecar
 	SetMetadata(ctx context.Context, in *SetMetadataRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// SubtleGetKeyAlpha1 returns the public part of an asymmetric key stored in the vault.
@@ -132,7 +132,7 @@ type DaprClient interface {
 	// Raise an event to a running workflow instance
 	RaiseEventWorkflowBeta1(ctx context.Context, in *RaiseEventWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Shutdown the sidecar
-	Shutdown(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	Shutdown(ctx context.Context, in *ShutdownRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
 
 type daprClient struct {
@@ -503,7 +503,7 @@ func (x *daprDecryptAlpha1Client) Recv() (*DecryptResponse, error) {
 	return m, nil
 }
 
-func (c *daprClient) GetMetadata(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*GetMetadataResponse, error) {
+func (c *daprClient) GetMetadata(ctx context.Context, in *GetMetadataRequest, opts ...grpc.CallOption) (*GetMetadataResponse, error) {
 	out := new(GetMetadataResponse)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/GetMetadata", in, out, opts...)
 	if err != nil {
@@ -710,7 +710,7 @@ func (c *daprClient) RaiseEventWorkflowBeta1(ctx context.Context, in *RaiseEvent
 	return out, nil
 }
 
-func (c *daprClient) Shutdown(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+func (c *daprClient) Shutdown(ctx context.Context, in *ShutdownRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/Shutdown", in, out, opts...)
 	if err != nil {
@@ -785,7 +785,7 @@ type DaprServer interface {
 	// DecryptAlpha1 decrypts a message using the Dapr encryption scheme and a key stored in the vault.
 	DecryptAlpha1(Dapr_DecryptAlpha1Server) error
 	// Gets metadata of the sidecar
-	GetMetadata(context.Context, *emptypb.Empty) (*GetMetadataResponse, error)
+	GetMetadata(context.Context, *GetMetadataRequest) (*GetMetadataResponse, error)
 	// Sets value in extended metadata of the sidecar
 	SetMetadata(context.Context, *SetMetadataRequest) (*emptypb.Empty, error)
 	// SubtleGetKeyAlpha1 returns the public part of an asymmetric key stored in the vault.
@@ -831,7 +831,7 @@ type DaprServer interface {
 	// Raise an event to a running workflow instance
 	RaiseEventWorkflowBeta1(context.Context, *RaiseEventWorkflowRequest) (*emptypb.Empty, error)
 	// Shutdown the sidecar
-	Shutdown(context.Context, *emptypb.Empty) (*emptypb.Empty, error)
+	Shutdown(context.Context, *ShutdownRequest) (*emptypb.Empty, error)
 }
 
 // UnimplementedDaprServer should be embedded to have forward compatible implementations.
@@ -928,7 +928,7 @@ func (UnimplementedDaprServer) EncryptAlpha1(Dapr_EncryptAlpha1Server) error {
 func (UnimplementedDaprServer) DecryptAlpha1(Dapr_DecryptAlpha1Server) error {
 	return status.Errorf(codes.Unimplemented, "method DecryptAlpha1 not implemented")
 }
-func (UnimplementedDaprServer) GetMetadata(context.Context, *emptypb.Empty) (*GetMetadataResponse, error) {
+func (UnimplementedDaprServer) GetMetadata(context.Context, *GetMetadataRequest) (*GetMetadataResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetMetadata not implemented")
 }
 func (UnimplementedDaprServer) SetMetadata(context.Context, *SetMetadataRequest) (*emptypb.Empty, error) {
@@ -997,7 +997,7 @@ func (UnimplementedDaprServer) ResumeWorkflowBeta1(context.Context, *ResumeWorkf
 func (UnimplementedDaprServer) RaiseEventWorkflowBeta1(context.Context, *RaiseEventWorkflowRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RaiseEventWorkflowBeta1 not implemented")
 }
-func (UnimplementedDaprServer) Shutdown(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
+func (UnimplementedDaprServer) Shutdown(context.Context, *ShutdownRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Shutdown not implemented")
 }
 
@@ -1575,7 +1575,7 @@ func (x *daprDecryptAlpha1Server) Recv() (*DecryptRequest, error) {
 }
 
 func _Dapr_GetMetadata_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(emptypb.Empty)
+	in := new(GetMetadataRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -1587,7 +1587,7 @@ func _Dapr_GetMetadata_Handler(srv interface{}, ctx context.Context, dec func(in
 		FullMethod: "/dapr.proto.runtime.v1.Dapr/GetMetadata",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaprServer).GetMetadata(ctx, req.(*emptypb.Empty))
+		return srv.(DaprServer).GetMetadata(ctx, req.(*GetMetadataRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1989,7 +1989,7 @@ func _Dapr_RaiseEventWorkflowBeta1_Handler(srv interface{}, ctx context.Context,
 }
 
 func _Dapr_Shutdown_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(emptypb.Empty)
+	in := new(ShutdownRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -2001,7 +2001,7 @@ func _Dapr_Shutdown_Handler(srv interface{}, ctx context.Context, dec func(inter
 		FullMethod: "/dapr.proto.runtime.v1.Dapr/Shutdown",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaprServer).Shutdown(ctx, req.(*emptypb.Empty))
+		return srv.(DaprServer).Shutdown(ctx, req.(*ShutdownRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
