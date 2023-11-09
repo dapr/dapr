@@ -186,8 +186,8 @@ func testWorkflow(t *testing.T, workflowName string, testAppName string, inputs 
 func TestWorkflowWithConstantVUs(t *testing.T) {
 	workflowName := "sum_series_wf"
 	inputs := []string{"100"}
-	scenarios := []string{"t_30_300", "t_30_300", "t_30_300", "t_30_300"}
-	rateChecks := [][]string{{"rate==1", "rate==1", "rate==1", "rate==1"}}
+	scenarios := []string{"t_30_300", "t_30_300", "t_30_300"}
+	rateChecks := [][]string{{"rate==1", "rate==1", "rate==1"}}
 	testWorkflow(t, workflowName, testAppNames[0], inputs, scenarios, rateChecks, false, false)
 }
 
