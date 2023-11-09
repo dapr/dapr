@@ -15,6 +15,7 @@ package placement
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -108,8 +109,9 @@ func TestPlacementStream_RoundRobin(t *testing.T) {
 
 	// tear down
 	require.NoError(t, testPlacement.Close())
-	time.Sleep(statusReportHeartbeatInterval)
-	assert.True(t, testSrv[testPlacement.serverIndex.Load()].isGracefulShutdown.Load())
+	assert.EventuallyWithT(t, func(t *assert.CollectT) {
+		assert.True(t, testSrv[testPlacement.serverIndex.Load()].isGracefulShutdown.Load())
+	}, statusReportHeartbeatInterval*3, 50*time.Millisecond)
 
 	for _, fn := range cleanup {
 		fn()
@@ -412,9 +414,7 @@ func newTestServerWithOpts(useGrpcServer ...func(*grpc.Server)) (string, func())
 
 type testServer struct {
 	isLeader           atomic.Bool
-	lastHost           *placementv1pb.Host
 	recvCount          atomic.Int32
-	lastTimestamp      time.Time
 	recvError          error
 	isGracefulShutdown atomic.Bool
 }
@@ -425,8 +425,8 @@ func (s *testServer) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStat
 			return status.Error(codes.FailedPrecondition, "only leader can serve the request")
 		}
 
-		req, err := srv.Recv()
-		if err == io.EOF {
+		_, err := srv.Recv()
+		if errors.Is(err, io.EOF) || status.Code(err) == codes.Canceled {
 			s.isGracefulShutdown.Store(true)
 			return nil
 		} else if err != nil {
@@ -434,8 +434,6 @@ func (s *testServer) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStat
 			return err
 		}
 		s.recvCount.Add(1)
-		s.lastHost = req
-		s.lastTimestamp = time.Now()
 	}
 }
 
