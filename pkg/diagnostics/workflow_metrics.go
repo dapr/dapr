@@ -14,6 +14,7 @@ limitations under the License.
 package diagnostics
 
 import (
+	"context"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
@@ -72,7 +73,7 @@ func newWorkflowMetrics() *workflowMetrics {
 			stats.UnitMilliseconds),
 		workflowRemindersTotal: stats.Int64(
 			"runtime/workflows/reminders/total",
-			"The number of workflows/activity executions.",
+			"The number of workflows/activity reminders created.",
 			stats.UnitDimensionless),
 		workflowExecutionTotal: stats.Int64(
 			"runtime/workflow/execution/total",
@@ -113,8 +114,49 @@ func (w *workflowMetrics) Init(appID string) error {
 		diagUtils.NewMeasureView(w.workflowSchedulingLatency, []tag.Key{appIDKey, executionTypeKey}, defaultLatencyDistribution))
 }
 
-// TODO: Functions to handle metrics for:
-// - Operations
-// - Reminders
-// - Execution
-// - Scheduling
+// RemindersTotalCreated records total number of Workflow and Activity reminders created.
+func (w *workflowMetrics) RemindersTotalCreated(ctx context.Context, reminderType string) {
+	if !w.IsEnabled() {
+		return
+	}
+	// [Question] Why are we ignoring errors in recording metrics ?
+	stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowRemindersTotal.Name(), appIDKey, w.appID, reminderTypeKey, reminderType), w.workflowRemindersTotal.M(1))
+}
+
+// ExecutionCompleted records total number of successful workflow/activity executions.
+func (w *workflowMetrics) ExecutionCompleted(ctx context.Context, executionType string) {
+	if !w.IsEnabled() {
+		return
+	}
+
+	stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowExecutionTotal.Name(), appIDKey, w.appID, executionTypeKey, executionType), w.workflowExecutionTotal.M(1))
+}
+
+// ExecutionFailed records total number of failed workflow/activity executions.
+func (w *workflowMetrics) ExecutionFailed(ctx context.Context, executionType string, isRetryable bool) {
+	if !w.IsEnabled() {
+		return
+	}
+
+	stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowExecutionFailedTotal.Name(), appIDKey, w.appID, executionTypeKey, executionType, isRetryableKey, isRetryable), w.workflowExecutionFailedTotal.M(1))
+}
+
+// WorkflowOperationsSuccessful records total number of successful workflow Operations requests.
+func (w *workflowMetrics) WorkflowOperationsSuccessful(ctx context.Context, operation string) {
+	if !w.IsEnabled() {
+		return
+	}
+
+	stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowOperationsTotal.Name(), appIDKey, w.appID, operationKey, operation), w.workflowOperationsTotal.M(1))
+}
+
+// WorkflowOperationsFailed records total number of failed workflow Operations requests.
+func (w *workflowMetrics) WorkflowOperationsFailed(ctx context.Context, operation string) {
+	if !w.IsEnabled() {
+		return
+	}
+
+	stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowOperationsFailedTotal.Name(), appIDKey, w.appID, operationKey, operation), w.workflowOperationsFailedTotal.M(1))
+}
+
+// TODO: Implementing logic to record latencies.
