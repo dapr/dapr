@@ -36,7 +36,7 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	securityConsts "github.com/dapr/dapr/pkg/security/consts"
-	"github.com/dapr/dapr/utils/streams"
+	daprt "github.com/dapr/dapr/pkg/testing"
 )
 
 // TODO: Add APIVersion testing
@@ -124,7 +124,7 @@ func TestInvokeMethod(t *testing.T) {
 	t.Run("request body stream errors", func(t *testing.T) {
 		req := invokev1.NewInvokeMethodRequest("method").
 			WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2").
-			WithRawData(&streams.ErrorReader{})
+			WithRawData(&daprt.ErrorReader{})
 		defer req.Close()
 
 		response, err := c.InvokeMethod(ctx, req, "")

@@ -11,9 +11,11 @@ image:
 nameOverride: ""
 fullnameOverride: ""
 
-tokenAudience: ""
-
 deploymentAnnotations: {}
+
+service:
+  type: ClusterIP
+  annotations: {}
 
 ports:
   protocol: TCP

@@ -41,7 +41,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/security"
 	securityConsts "github.com/dapr/dapr/pkg/security/consts"
-	streamutils "github.com/dapr/dapr/utils/streams"
+	streamutils "github.com/dapr/kit/streams"
 )
 
 const (
