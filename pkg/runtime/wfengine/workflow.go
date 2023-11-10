@@ -25,6 +25,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/google/uuid"
 	"github.com/microsoft/durabletask-go/api"
 	"github.com/microsoft/durabletask-go/backend"
@@ -109,6 +110,8 @@ func (wf *workflowActor) InvokeMethod(ctx context.Context, actorID string, metho
 	return result, err
 }
 
+// NOTE: InvokeReminder actually runs the reminder.
+
 // InvokeReminder implements actors.InternalActor
 func (wf *workflowActor) InvokeReminder(ctx context.Context, actorID string, reminderName string, data []byte, dueTime string, period string) error {
 	wfLogger.Debugf("invoking reminder '%s' on workflow actor '%s'", reminderName, actorID)
@@ -116,6 +119,7 @@ func (wf *workflowActor) InvokeReminder(ctx context.Context, actorID string, rem
 	// Workflow executions should never take longer than a few seconds at the most
 	timeoutCtx, cancelTimeout := context.WithTimeout(ctx, wf.defaultTimeout)
 	defer cancelTimeout()
+	// NOTE: Here the workflow starts executing.
 	err := wf.runWorkflow(timeoutCtx, actorID, reminderName, data)
 	if err != nil {
 		var re recoverableError
@@ -155,6 +159,7 @@ func (wf *workflowActor) DeactivateActor(ctx context.Context, actorID string) er
 	return nil
 }
 
+// NOTE: A workflow Instance is made here, check if it failed or not.
 func (wf *workflowActor) createWorkflowInstance(ctx context.Context, actorID string, startEventBytes []byte) error {
 	// create a new state entry if one doesn't already exist
 	state, err := wf.loadInternalState(ctx, actorID)
@@ -198,10 +203,14 @@ func (wf *workflowActor) createWorkflowInstance(ctx context.Context, actorID str
 		return err
 	}
 
+	// workflow reminder created, record metrics.
+	diag.DefaultWorkflowMonitoring.RemindersTotalCreated(ctx, "Workflow")
+
 	state.AddToInbox(startEvent)
 	return wf.saveInternalState(ctx, actorID, state)
 }
 
+// NOTE: This makes request to get the workflow
 func (wf *workflowActor) getWorkflowMetadata(ctx context.Context, actorID string) (*api.OrchestrationMetadata, error) {
 	state, err := wf.loadInternalState(ctx, actorID)
 	if err != nil {
@@ -268,7 +277,7 @@ func (wf *workflowActor) purgeWorkflowState(ctx context.Context, actorID string)
 	return nil
 }
 
-// [Question] What could be the use-case of calling this function ?
+// addWorkflowEvent creates a reminder for each event in the workflow.
 func (wf *workflowActor) addWorkflowEvent(ctx context.Context, actorID string, historyEventBytes []byte) error {
 	state, err := wf.loadInternalState(ctx, actorID)
 	if err != nil {
@@ -290,10 +299,11 @@ func (wf *workflowActor) addWorkflowEvent(ctx context.Context, actorID string, h
 	if _, err := wf.createReliableReminder(ctx, actorID, "new-event", nil, 0); err != nil {
 		return err
 	}
+	// event reminder created, record metrics.
+	diag.DefaultWorkflowMonitoring.RemindersTotalCreated(ctx, "Event")
 	return wf.saveInternalState(ctx, actorID, state)
 }
 
-// [Question] Does this invoke ? or schedules a reminder for the workflow ?
 func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, reminderName string, reminderData []byte) error {
 	state, err := wf.loadInternalState(ctx, actorID)
 	if err != nil {
@@ -391,13 +401,11 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 	case <-ctx.Done(): // caller is responsible for timeout management
 		return ctx.Err()
 	case completed := <-callback:
-		// [Question] Is this rescheduling the workflow to be completed ?
 		if !completed {
 			return newRecoverableError(errExecutionAborted)
 		}
 	}
 
-	// [Question] Not quite sure why this below logic is written.
 	// Increment the generation counter if the workflow used continue-as-new. Subsequent actions below
 	// will use this updated generation value for their duplication execution handling.
 	if runtimeState.ContinuedAsNew() {
@@ -424,6 +432,8 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 			if _, err := wf.createReliableReminder(ctx, actorID, reminderPrefix, data, delay); err != nil {
 				return newRecoverableError(fmt.Errorf("actor %s failed to create reminder for timer: %w", actorID, err))
 			}
+			// timer reminder created, record metrics
+			diag.DefaultWorkflowMonitoring.RemindersTotalCreated(ctx, "Timer")
 		}
 	}
 
@@ -504,7 +514,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 		}
 	}
 
-	// [Question] Is this workflow instance completed at this stage, since we are clearing the inbox ?
+	// NOTE: Here it executes completely.
 	state.ApplyRuntimeStateChanges(runtimeState)
 	state.ClearInbox()
 
@@ -553,7 +563,6 @@ func (wf *workflowActor) saveInternalState(ctx context.Context, actorID string, 
 	return nil
 }
 
-// [Question] creating reminders is how we schedule workflows/Activities ?
 func (wf *workflowActor) createReliableReminder(ctx context.Context, actorID string, namePrefix string, data any, delay time.Duration) (string, error) {
 	// Reminders need to have unique names or else they may not fire in certain race conditions.
 	reminderName := fmt.Sprintf("%s-%s", namePrefix, uuid.NewString()[:8])

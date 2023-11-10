@@ -28,6 +28,7 @@ import (
 	"github.com/microsoft/durabletask-go/backend"
 
 	"github.com/dapr/dapr/pkg/actors"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 )
 
@@ -100,6 +101,10 @@ func (a *activityActor) InvokeMethod(ctx context.Context, actorID string, method
 
 	// The actual execution is triggered by a reminder
 	err := a.createReliableReminder(ctx, actorID, nil)
+	if err == nil {
+		// Activity reminder created, record metrics
+		diag.DefaultWorkflowMonitoring.RemindersTotalCreated(ctx, "Activity")
+	}
 	return nil, err
 }
 
