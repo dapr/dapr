@@ -61,8 +61,8 @@ const (
 	ActionPolicyApp     = "app"
 	ActionPolicyGlobal  = "global"
 
-	defaultMaxWorkflowConcurrentInvocations = 1000
-	defaultMaxActivityConcurrentInvocations = 1000
+	defaultMaxWorkflowConcurrentInvocations = 100
+	defaultMaxActivityConcurrentInvocations = 100
 )
 
 // Configuration is an internal (and duplicate) representation of Dapr's Configuration CRD.
