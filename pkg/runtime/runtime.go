@@ -1154,7 +1154,7 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 		Namespace:          a.namespace,
 		AppConfig:          a.appConfig,
 		HealthHTTPClient:   a.channels.AppHTTPClient(),
-		HealthEndpoint:     a.channels.AppHTTPEndpoint(),
+		HealthEndpoint:     a.channels.AppHealthEndpoint(),
 		AppChannelAddress:  a.runtimeConfig.appConnectionConfig.ChannelAddress,
 		PodName:            getPodName(),
 	})

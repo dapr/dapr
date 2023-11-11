@@ -27,10 +27,11 @@ func TestAppFlag(t *testing.T) {
 	// reset CommandLine to avoid conflicts from other tests
 	flag.CommandLine = flag.NewFlagSet("runtime-flag-test-cmd", flag.ExitOnError)
 
-	opts := New([]string{"--app-id", "testapp", "--app-port", "80", "--app-protocol", "http", "--metrics-port", strconv.Itoa(10000)})
+	opts := New([]string{"--app-id", "testapp", "--app-port", "80", "--app-protocol", "http", "--app-health-port", "81", "--metrics-port", strconv.Itoa(10000)})
 	assert.EqualValues(t, "testapp", opts.AppID)
 	assert.EqualValues(t, "80", opts.AppPort)
 	assert.EqualValues(t, "http", opts.AppProtocol)
+	assert.EqualValues(t, "81", opts.AppHealthPort)
 }
 
 func TestStandaloneGlobalConfig(t *testing.T) {

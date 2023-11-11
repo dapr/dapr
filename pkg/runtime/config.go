@@ -89,6 +89,7 @@ type Config struct {
 	DaprInternalGRPCPort         string
 	DaprPublicPort               string
 	ApplicationPort              string
+	ApplicationHealthPort        string
 	DaprGracefulShutdownSeconds  int
 	PlacementServiceHostAddr     string
 	DaprAPIListenAddresses       string
@@ -341,6 +342,18 @@ func (c *Config) toInternal() (*internalConfig, error) {
 
 	if c.ApplicationPort != "" {
 		intc.appConnectionConfig.Port, err = strconv.Atoi(c.ApplicationPort)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing app-port: %w", err)
+		}
+	}
+
+	if c.ApplicationPort != "" {
+		intc.appConnectionConfig.HealthPort, err = strconv.Atoi(c.ApplicationHealthPort)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing app-port: %w", err)
+		}
+	} else {
+		intc.appConnectionConfig.HealthPort, err = strconv.Atoi(c.ApplicationPort)
 		if err != nil {
 			return nil, fmt.Errorf("error parsing app-port: %w", err)
 		}

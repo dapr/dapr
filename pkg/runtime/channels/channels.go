@@ -198,6 +198,19 @@ func (c *Channels) AppHTTPEndpoint() string {
 	}
 }
 
+func (c *Channels) AppHealthEndpoint() string {
+	// Application protocol is "http" or "https"
+	port := strconv.Itoa(c.appConnectionConfig.HealthPort)
+	switch c.appConnectionConfig.Protocol {
+	case protocol.HTTPProtocol, protocol.H2CProtocol:
+		return "http://" + c.appConnectionConfig.ChannelAddress + ":" + port
+	case protocol.HTTPSProtocol:
+		return "https://" + c.appConnectionConfig.ChannelAddress + ":" + port
+	default:
+		return ""
+	}
+}
+
 func (c *Channels) buildHTTPPipelineForSpec(spec *config.PipelineSpec, targetPipeline string) (middlehttp.Pipeline, error) {
 	if spec == nil {
 		return middlehttp.Pipeline{}, nil

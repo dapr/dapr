@@ -56,6 +56,7 @@ type Options struct {
 	DaprInternalGRPCPort         string
 	DaprPublicPort               string
 	AppPort                      string
+	AppHealthPort                string
 	DaprGracefulShutdownSeconds  int
 	PlacementServiceHostAddr     string
 	DaprAPIListenAddresses       string
@@ -86,6 +87,7 @@ func New(args []string) *Options {
 	flag.StringVar(&opts.DaprAPIGRPCPort, "dapr-grpc-port", strconv.Itoa(runtime.DefaultDaprAPIGRPCPort), "gRPC port for the Dapr API to listen on")
 	flag.StringVar(&opts.DaprInternalGRPCPort, "dapr-internal-grpc-port", "", "gRPC port for the Dapr Internal API to listen on")
 	flag.StringVar(&opts.AppPort, "app-port", "", "The port the application is listening on")
+	flag.StringVar(&opts.AppHealthPort, "app-health-port", "", "The Healthy port of the application")
 	flag.StringVar(&opts.ProfilePort, "profile-port", strconv.Itoa(runtime.DefaultProfilePort), "The port for the profile server")
 	flag.StringVar(&opts.AppProtocol, "app-protocol", string(protocol.HTTPProtocol), "Protocol for the application: grpc, grpcs, http, https, h2c")
 	flag.StringVar(&opts.ComponentsPath, "components-path", "", "Alias for --resources-path [Deprecated, use --resources-path]")
