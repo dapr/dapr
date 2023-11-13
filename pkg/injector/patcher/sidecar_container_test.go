@@ -293,11 +293,8 @@ func TestGetSidecarContainer(t *testing.T) {
 
 			container, err := c.getSidecarContainer(tc.getSidecarContainerOpts)
 			require.NoError(t, err)
-			tc.assertFn(t, container)
 
-			c.AppID = ""
-			_, err = c.getSidecarContainer(tc.getSidecarContainerOpts)
-			require.Error(t, err)
+			tc.assertFn(t, container)
 		}
 	}
 	testSuiteGenerator := func(tests []testCase) func(t *testing.T) {
@@ -829,7 +826,6 @@ func TestGetSidecarContainer(t *testing.T) {
 				},
 			})
 			c.IgnoreEntrypointTolerations = tc.ignoreEntrypointTolerations
-			c.AppID = "myapp"
 
 			container, err := c.getSidecarContainer(getSidecarContainerOpts{})
 			require.NoError(t, err)

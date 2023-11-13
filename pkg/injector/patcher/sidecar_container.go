@@ -38,9 +38,6 @@ type getSidecarContainerOpts struct {
 
 // getSidecarContainer returns the Container object for the sidecar.
 func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*corev1.Container, error) {
-	if c.GetAppID() == "" {
-		return nil, fmt.Errorf("app-id is not set")
-	}
 	// Ports for the daprd container
 	ports := []corev1.ContainerPort{
 		{
@@ -411,6 +408,11 @@ func (c *SidecarConfig) getResourceRequirements() (*corev1.ResourceRequirements,
 
 // GetAppID returns the AppID property, fallinb back to the name of the pod.
 func (c *SidecarConfig) GetAppID() string {
+	if c.AppID == "" {
+		log.Warnf("app-id not set defaulting the app-id to: %s", c.pod.GetName())
+		return c.pod.GetName()
+	}
+
 	return c.AppID
 }
 
