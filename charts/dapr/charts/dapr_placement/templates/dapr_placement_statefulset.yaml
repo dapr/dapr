@@ -147,6 +147,10 @@ spec:
         - "--enable-metrics"
         - "--replicationFactor"
         - "{{ .Values.replicationFactor }}"
+        - "--max-api-level"
+        - "{{ .Values.maxActorApiLevel }}"
+        - "--min-api-level"
+        - "{{ .Values.minActorApiLevel }}"
         - "--metrics-port"
         - "{{ .Values.global.prometheus.port }}"
 {{- else }}
