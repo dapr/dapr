@@ -48,10 +48,6 @@ func main() {
 
 	metricsExporter := metrics.NewExporterWithOptions(log, metrics.DefaultMetricNamespace, opts.Metrics)
 
-	if len(opts.TokenAudience) > 0 {
-		log.Warn("--token-audience is deprecated and will be removed in Dapr v1.14")
-	}
-
 	if err := utils.SetEnvVariables(map[string]string{
 		utils.KubeConfigVar: opts.Kubeconfig,
 	}); err != nil {

@@ -109,7 +109,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `global.issuerFilenames.ca`               | Custom name of the file containing the root CA certificate inside the container    | `ca.crt`     |
 | `global.issuerFilenames.cert`             | Custom name of the file containing the leaf certificate inside the container       | `issuer.crt` |
 | `global.issuerFilenames.key`              | Custom name of the file containing the leaf certificate's key inside the container | `issuer.key` |
-| `global.actors.enabled`                   | Enables the Dapr actors building block. When "false", the Dapr Placement serice is not installed, and attempting to use Dapr actors will fail. | `true` |
+| `global.actors.enabled`                   | Enables the Dapr actors building block. When "false", the Dapr Placement service is not installed, and attempting to use Dapr actors will fail. | `true` |
 | `global.seccompProfile` | SeccompProfile for Dapr control plane services | `""` |
 | `global.rbac.namespaced`                  | Removes cluster wide permissions where applicable  | `false` |
 | `global.argoRolloutServiceReconciler.enabled` | Enable the service reconciler for Dapr-enabled Argo Rollouts         | `false` |
@@ -167,7 +167,6 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_sentry.tls.issuer.certPEM`    | Issuer Certificate cert                                                                                                                                 | `""`                    |
 | `dapr_sentry.tls.issuer.keyPEM`     | Issuer Private Key cert                                                                                                                                 | `""`                    |
 | `dapr_sentry.tls.root.certPEM`      | Root Certificate cert                                                                                                                                   | `""`                    |
-| `dapr_sentry.tokenAudience`         | Expected audience for tokens; multiple values can be separated by a comma. Defaults to the audience expected by the Kubernetes control plane if not set | `""` |
 | `dapr_sentry.runAsNonRoot`          | Boolean value for `securityContext.runAsNonRoot`. You may have to set this to `false` when running in Minikube                                          | `true` |
 | `dapr_sentry.resources`             | Value of `resources` attribute. Can be used to set memory/cpu resources/limits. See the section "Resource configuration" above. Defaults to empty       | `{}` |
 | `dapr_sentry.debug.enabled`         | Boolean value for enabling debug mode                                                                                                                   | `{}` |
