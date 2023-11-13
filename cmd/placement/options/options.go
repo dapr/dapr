@@ -49,6 +49,8 @@ type Options struct {
 	PlacementPort   int
 	HealthzPort     int
 	MetadataEnabled bool
+	MaxAPILevel     int
+	MinAPILevel     int
 
 	TLSEnabled       bool
 	TrustDomain      string
@@ -75,6 +77,8 @@ func New() *Options {
 	flag.IntVar(&opts.HealthzPort, "healthz-port", defaultHealthzPort, "sets the HTTP port for the healthz server")
 	flag.BoolVar(&opts.TLSEnabled, "tls-enabled", false, "Should TLS be enabled for the placement gRPC server")
 	flag.BoolVar(&opts.MetadataEnabled, "metadata-enabled", opts.MetadataEnabled, "Expose the placement tables on the healthz server")
+	flag.IntVar(&opts.MaxAPILevel, "max-api-level", -1, "If set to >= 0, causes the reported 'api-level' in the cluster to never exceed this value")
+	flag.IntVar(&opts.MinAPILevel, "min-api-level", 0, "Enforces a minimum 'api-level' in the cluster")
 	flag.IntVar(&opts.ReplicationFactor, "replicationFactor", defaultReplicationFactor, "sets the replication factor for actor distribution on vnodes")
 
 	flag.StringVar(&opts.TrustDomain, "trust-domain", "localhost", "Trust domain for the Dapr control plane")
