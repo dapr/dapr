@@ -829,6 +829,7 @@ func TestGetSidecarContainer(t *testing.T) {
 				},
 			})
 			c.IgnoreEntrypointTolerations = tc.ignoreEntrypointTolerations
+			c.AppID = "myapp"
 
 			container, err := c.getSidecarContainer(getSidecarContainerOpts{})
 			require.NoError(t, err)
