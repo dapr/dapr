@@ -1,7 +1,7 @@
 //go:build allcomponents || stablecomponents
 
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -16,10 +16,20 @@ limitations under the License.
 package components
 
 import (
-	"github.com/dapr/components-contrib/state/azure/blobstorage"
+	v1 "github.com/dapr/components-contrib/state/azure/blobstorage/v1"
+	v2 "github.com/dapr/components-contrib/state/azure/blobstorage/v2"
+	"github.com/dapr/dapr/pkg/components"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 )
 
 func init() {
-	stateLoader.DefaultRegistry.RegisterComponent(blobstorage.NewAzureBlobStorageStore, "azure.blobstorage")
+	stateLoader.DefaultRegistry.RegisterComponentWithVersions("azure.blobstorage", components.Versioning{
+		Preferred: components.VersionConstructor{
+			Version: "v2", Constructor: v2.NewAzureBlobStorageStore,
+		},
+		Deprecated: []components.VersionConstructor{
+			{Version: "v1", Constructor: v1.NewAzureBlobStorageStore},
+		},
+		Default: "v1",
+	})
 }

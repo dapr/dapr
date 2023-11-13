@@ -28,6 +28,7 @@ import (
 	"time"
 
 	chi "github.com/go-chi/chi/v5"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	grpcinsecure "google.golang.org/grpc/credentials/insecure"
@@ -88,7 +89,7 @@ spec:
   version: v1
   metadata:
     - name: connectionString
-      value: '`+dbPath+`'
+      value: 'file:`+dbPath+`'
     - name: busyTimeout
       value: '10s'
     - name: disableWAL
@@ -117,7 +118,8 @@ func (i *rebalancing) Run(t *testing.T, ctx context.Context) {
 	}
 	// Wait for actors to be ready
 	for j := 0; j < 2; j++ {
-		i.handler[j].WaitForActorsReady(ctx)
+		err := i.handler[j].WaitForActorsReady(ctx)
+		require.NoErrorf(t, err, "Actor instance %d not ready", j)
 	}
 
 	// Establish a connection to the placement service
@@ -133,6 +135,16 @@ func (i *rebalancing) Run(t *testing.T, ctx context.Context) {
 	}
 
 	client := util.HTTPClient(t)
+
+	// Try to invoke an actor to ensure the actor subsystem is ready
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost:%d/v1.0/actors/myactortype/pinger/method/ping", i.daprd[0].HTTPPort()), nil)
+		require.NoError(c, err)
+		resp, rErr := client.Do(req)
+		require.NoError(c, rErr)
+		assert.NoError(c, resp.Body.Close())
+		assert.Equal(c, http.StatusOK, resp.StatusCode)
+	}, 10*time.Second, 100*time.Millisecond, "actors not ready")
 
 	// Do a bunch of things in parallel
 	errCh := make(chan error)
@@ -259,6 +271,12 @@ func (h *httpServer) NewHandler(num int) http.Handler {
 		actorType := chi.URLParam(r, "actorType")
 		actorID := chi.URLParam(r, "actorId")
 		methodName := chi.URLParam(r, "methodName")
+
+		// Check if this is just a ping and return quickly
+		if methodName == "ping" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
 
 		parts := strings.Split(actorID, "-")
 		if len(parts) != 2 {
