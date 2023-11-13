@@ -39,7 +39,10 @@ const testStreamSendLatency = time.Second
 func newTestPlacementServer(t *testing.T, raftServer *raft.Server) (string, *Service, *clocktesting.FakeClock, context.CancelFunc) {
 	t.Helper()
 
-	testServer := NewPlacementService(raftServer, securityfake.New())
+	testServer := NewPlacementService(PlacementServiceOpts{
+		RaftNode:    raftServer,
+		SecProvider: securityfake.New(),
+	})
 	clock := clocktesting.NewFakeClock(time.Now())
 	testServer.clock = clock
 
@@ -74,17 +77,25 @@ func newTestPlacementServer(t *testing.T, raftServer *raft.Server) (string, *Ser
 	return serverAddress, testServer, clock, cleanUpFn
 }
 
-func newTestClient(t *testing.T, serverAddress string) (*grpc.ClientConn, v1pb.Placement_ReportDaprStatusClient) { //nolint:nosnakecase
+func newTestClient(t *testing.T, serverAddress string) (*grpc.ClientConn, *net.TCPConn, v1pb.Placement_ReportDaprStatusClient) { //nolint:nosnakecase
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
-	conn, err := grpc.DialContext(ctx, serverAddress, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+	tcpConn, err := net.Dial("tcp", serverAddress)
+	require.NoError(t, err)
+	conn, err := grpc.DialContext(ctx, "",
+		grpc.WithContextDialer(func(ctx context.Context, s string) (net.Conn, error) {
+			return tcpConn, nil
+		}),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithBlock(),
+	)
 	require.NoError(t, err)
 
 	client := v1pb.NewPlacementClient(conn)
 	stream, err := client.ReportDaprStatus(context.Background())
 	require.NoError(t, err)
 
-	return conn, stream
+	return conn, tcpConn.(*net.TCPConn), stream
 }
 
 func TestMemberRegistration_NoLeadership(t *testing.T) {
@@ -94,7 +105,7 @@ func TestMemberRegistration_NoLeadership(t *testing.T) {
 	testServer.hasLeadership.Store(false)
 
 	// arrange
-	conn, stream := newTestClient(t, serverAddress)
+	conn, _, stream := newTestClient(t, serverAddress)
 
 	host := &v1pb.Host{
 		Name:     "127.0.0.1:50102",
@@ -125,7 +136,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 
 	t.Run("Connect server and disconnect it gracefully", func(t *testing.T) {
 		// arrange
-		conn, stream := newTestClient(t, serverAddress)
+		conn, _, stream := newTestClient(t, serverAddress)
 
 		host := &v1pb.Host{
 			Name:     "127.0.0.1:50102",
@@ -166,7 +177,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 			assert.Equal(t, host.Name, memberChange.host.Name)
 
 		case <-time.After(testStreamSendLatency):
-			require.True(t, false, "no membership change")
+			require.Fail(t, "no membership change")
 		}
 
 		conn.Close()
@@ -174,7 +185,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 
 	t.Run("Connect server and disconnect it forcefully", func(t *testing.T) {
 		// arrange
-		conn, stream := newTestClient(t, serverAddress)
+		_, tcpConn, stream := newTestClient(t, serverAddress)
 
 		// act
 		host := &v1pb.Host{
@@ -187,7 +198,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 		stream.Send(host)
 
 		// assert
-		assert.Eventually(t, func() bool {
+		assert.EventuallyWithT(t, func(t *assert.CollectT) {
 			clock.Step(disseminateTimerInterval)
 			select {
 			case memberChange := <-testServer.membershipCh:
@@ -199,21 +210,22 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 				l := len(testServer.streamConnPool)
 				testServer.streamConnPoolLock.Unlock()
 				assert.Equal(t, 1, l)
-				return true
 			default:
-				return false
+				assert.Fail(t, "No member change")
 			}
 		}, testStreamSendLatency+3*time.Second, time.Millisecond, "no membership change")
 
 		// act
 		// Close tcp connection before closing stream, which simulates the scenario
 		// where dapr runtime disconnects the connection from placement service unexpectedly.
-		conn.Close()
+		// Use SetLinger to forcefully close the TCP connection.
+		tcpConn.SetLinger(0)
+		tcpConn.Close()
 
 		// assert
 		select {
 		case <-testServer.membershipCh:
-			require.True(t, false, "should not have any member change message because faulty host detector time will clean up")
+			require.Fail(t, "should not have any member change message because faulty host detector time will clean up")
 
 		case <-time.After(testStreamSendLatency):
 			testServer.streamConnPoolLock.RLock()
@@ -225,7 +237,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 
 	t.Run("non actor host", func(t *testing.T) {
 		// arrange
-		conn, stream := newTestClient(t, serverAddress)
+		conn, _, stream := newTestClient(t, serverAddress)
 
 		// act
 		host := &v1pb.Host{
@@ -243,7 +255,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 			require.Fail(t, "should not have any membership change")
 
 		case <-time.After(testStreamSendLatency):
-			require.True(t, true)
+			// All good
 		}
 
 		// act
