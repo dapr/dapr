@@ -411,10 +411,6 @@ func (c *SidecarConfig) getResourceRequirements() (*corev1.ResourceRequirements,
 
 // GetAppID returns the AppID property, fallinb back to the name of the pod.
 func (c *SidecarConfig) GetAppID() string {
-	if c.AppID == "" {
-		return c.pod.GetName()
-	}
-
 	return c.AppID
 }
 
