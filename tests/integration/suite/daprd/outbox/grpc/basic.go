@@ -53,7 +53,7 @@ func (o *basic) Setup(t *testing.T) []framework.Option {
 	}
 
 	srv1 := newGRPCServer(t, onTopicEvent)
-	o.daprd = procdaprd.New(t, procdaprd.WithAppID("outboxtest"), procdaprd.WithAppPort(srv1.Port()), procdaprd.WithAppProtocol("grpc"), procdaprd.WithResourceFiles(`
+	o.daprd = procdaprd.New(t, procdaprd.WithAppID("outboxtest"), procdaprd.WithAppPort(srv1.Port(t)), procdaprd.WithAppProtocol("grpc"), procdaprd.WithResourceFiles(`
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:

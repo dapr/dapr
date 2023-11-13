@@ -64,7 +64,7 @@ func (p *pubsub) applyBulkSubscribeResiliency(ctx context.Context, bulkSubCallDa
 		if p.isHTTP {
 			pErr = p.publishBulkMessageHTTP(ctx, &bscData, &psm, bsrr, deadLetterTopic)
 		} else {
-			pErr = p.publishBulkMessageGRPC(ctx, &bscData, &psm, &bsrr.entries, rawPayload)
+			pErr = p.publishBulkMessageGRPC(ctx, &bscData, &psm, &bsrr.entries, rawPayload, deadLetterTopic)
 		}
 		return bsrr, pErr
 	})

@@ -125,7 +125,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			return resp.StatusCode, string(body)
 		}
 
-		for i, ts := range []struct {
+		for _, ts := range []struct {
 			url     string
 			headers map[string]string
 		}{
@@ -138,27 +138,25 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				"dapr-app-id": b.daprd2.AppID(),
 			}},
 		} {
-			t.Run(fmt.Sprintf("url %d", i), func(t *testing.T) {
-				status, body := doReq(http.MethodGet, ts.url, ts.headers)
-				assert.Equal(t, http.StatusOK, status)
-				assert.Equal(t, "GET", body)
+			status, body := doReq(http.MethodGet, ts.url, ts.headers)
+			assert.Equal(t, http.StatusOK, status)
+			assert.Equal(t, "GET", body)
 
-				status, body = doReq(http.MethodPost, ts.url, ts.headers)
-				assert.Equal(t, http.StatusCreated, status)
-				assert.Equal(t, "POST", body)
+			status, body = doReq(http.MethodPost, ts.url, ts.headers)
+			assert.Equal(t, http.StatusCreated, status)
+			assert.Equal(t, "POST", body)
 
-				status, body = doReq(http.MethodPut, ts.url, ts.headers)
-				assert.Equal(t, http.StatusAccepted, status)
-				assert.Equal(t, "PUT", body)
+			status, body = doReq(http.MethodPut, ts.url, ts.headers)
+			assert.Equal(t, http.StatusAccepted, status)
+			assert.Equal(t, "PUT", body)
 
-				status, body = doReq(http.MethodDelete, ts.url, ts.headers)
-				assert.Equal(t, http.StatusConflict, status)
-				assert.Equal(t, "DELETE", body)
+			status, body = doReq(http.MethodDelete, ts.url, ts.headers)
+			assert.Equal(t, http.StatusConflict, status)
+			assert.Equal(t, "DELETE", body)
 
-				status, body = doReq(http.MethodPatch, ts.url, ts.headers)
-				assert.Equal(t, http.StatusBadGateway, status)
-				assert.Equal(t, "PATCH", body)
-			})
+			status, body = doReq(http.MethodPatch, ts.url, ts.headers)
+			assert.Equal(t, http.StatusBadGateway, status)
+			assert.Equal(t, "PATCH", body)
 		}
 	})
 
@@ -216,14 +214,15 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		assert.NoError(t, resp.Body.Close())
 	})
 
+	client := util.HTTPClient(t)
+	pt := util.NewParallel(t)
 	for i := 0; i < 100; i++ {
-		t.Run("parallel requests", func(t *testing.T) {
-			t.Parallel()
+		pt.Add(func(t *assert.CollectT) {
 			u := uuid.New().String()
 			reqURL := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/echo", b.daprd1.HTTPPort(), b.daprd2.AppID())
 			req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, strings.NewReader(u))
 			require.NoError(t, err)
-			resp, err := util.HTTPClient(t).Do(req)
+			resp, err := client.Do(req)
 			require.NoError(t, err)
 			assert.Equal(t, http.StatusOK, resp.StatusCode)
 			body, err := io.ReadAll(resp.Body)

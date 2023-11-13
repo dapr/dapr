@@ -39,8 +39,9 @@ const (
 type InvokeMethodRequest struct {
 	replayableRequest
 
-	r          *internalv1pb.InternalInvokeRequest
-	dataObject any
+	r           *internalv1pb.InternalInvokeRequest
+	dataObject  any
+	dataTypeURL string
 }
 
 // NewInvokeMethodRequest creates InvokeMethodRequest object for method.
@@ -131,6 +132,13 @@ func (imr *InvokeMethodRequest) WithContentType(contentType string) *InvokeMetho
 	return imr
 }
 
+// WithDataTypeURL sets the type_url property for the data.
+// When a type_url is set, the Content-Type automatically becomes the protobuf one.
+func (imr *InvokeMethodRequest) WithDataTypeURL(val string) *InvokeMethodRequest {
+	imr.dataTypeURL = val
+	return imr
+}
+
 // WithHTTPExtension sets new HTTP extension with verb and querystring.
 //
 //nolint:nosnakecase
@@ -183,7 +191,7 @@ func (imr *InvokeMethodRequest) CanReplay() bool {
 // EncodeHTTPQueryString generates querystring for http using http extension object.
 func (imr *InvokeMethodRequest) EncodeHTTPQueryString() string {
 	m := imr.r.Message
-	if m == nil || m.HttpExtension == nil {
+	if m.GetHttpExtension() == nil {
 		return ""
 	}
 
@@ -227,7 +235,8 @@ func (imr *InvokeMethodRequest) ProtoWithData() (*internalv1pb.InternalInvokeReq
 		return m, err
 	}
 	m.Message.Data = &anypb.Any{
-		Value: data,
+		Value:   data,
+		TypeUrl: imr.dataTypeURL, // Could be empty
 	}
 
 	return m, nil
@@ -246,7 +255,7 @@ func (imr *InvokeMethodRequest) Message() *commonv1pb.InvokeRequest {
 // HasMessageData returns true if the message object contains a slice of data buffered.
 func (imr *InvokeMethodRequest) HasMessageData() bool {
 	m := imr.r.Message
-	return m != nil && m.Data != nil && len(m.Data.Value) > 0
+	return len(m.GetData().GetValue()) > 0
 }
 
 // ResetMessageData resets the data inside the message object if present.
@@ -263,6 +272,11 @@ func (imr *InvokeMethodRequest) ContentType() string {
 	m := imr.r.Message
 	if m == nil {
 		return ""
+	}
+
+	// If there's a proto data and that has a type URL, or if we have a dataTypeUrl in the object, then the content type is the protobuf one
+	if imr.dataTypeURL != "" || m.GetData().GetTypeUrl() != "" {
+		return ProtobufContentType
 	}
 
 	return m.GetContentType()

@@ -172,10 +172,6 @@ spec:
 {{- end }}
         - "--trust-domain"
         - {{ .Values.global.mtls.controlPlaneTrustDomain }}
-{{- if .Values.tokenAudience }}
-        - "--token-audience"
-        - {{ .Values.tokenAudience }}
-{{- end }}
 {{- with .Values.global.issuerFilenames }}
         - "--issuer-ca-filename"
         - "{{ .ca }}"

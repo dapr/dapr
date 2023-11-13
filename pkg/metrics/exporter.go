@@ -116,9 +116,14 @@ func (m *promMetricsExporter) startMetricServer(ctx context.Context) error {
 		errCh <- nil
 	}()
 
-	<-ctx.Done()
+	var err error
+	select {
+	case <-ctx.Done():
+	case err = <-errCh:
+		close(errCh)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
-	return errors.Join(m.server.Shutdown(ctx), <-errCh)
+	return errors.Join(m.server.Shutdown(ctx), err, <-errCh)
 }

@@ -31,7 +31,7 @@ type Option func(*options)
 type GRPC struct {
 	registerFns []func(*grpc.Server)
 	serverOpts  []func(*testing.T, context.Context) grpc.ServerOption
-	listener    net.Listener
+	listener    func() (net.Listener, error)
 	srvErrCh    chan error
 	stopCh      chan struct{}
 }
@@ -44,13 +44,17 @@ func New(t *testing.T, fopts ...Option) *GRPC {
 		fopt(&opts)
 	}
 
-	// Start the listener in New so we can squat on the port immediately, and
-	// keep it for the entire test case.
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
+	ln := opts.listener
+	if ln == nil {
+		// Start the listener in New so we can squat on the port immediately, and
+		// keep it for the entire test case.
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		require.NoError(t, err)
+		ln = func() (net.Listener, error) { return listener, nil }
+	}
 
 	return &GRPC{
-		listener:    listener,
+		listener:    ln,
 		registerFns: opts.registerFns,
 		serverOpts:  opts.serverOpts,
 		srvErrCh:    make(chan error),
@@ -58,8 +62,10 @@ func New(t *testing.T, fopts ...Option) *GRPC {
 	}
 }
 
-func (g *GRPC) Port() int {
-	return g.listener.Addr().(*net.TCPAddr).Port
+func (g *GRPC) Port(t *testing.T) int {
+	ln, err := g.listener()
+	require.NoError(t, err)
+	return ln.Addr().(*net.TCPAddr).Port
 }
 
 func (g *GRPC) Run(t *testing.T, ctx context.Context) {
@@ -75,12 +81,12 @@ func (g *GRPC) Run(t *testing.T, ctx context.Context) {
 	}
 
 	go func() {
-		err := server.Serve(g.listener)
-		if !errors.Is(err, http.ErrServerClosed) {
+		ln, err := g.listener()
+		if err != nil {
 			g.srvErrCh <- err
-		} else {
-			g.srvErrCh <- nil
+			return
 		}
+		g.srvErrCh <- server.Serve(ln)
 	}()
 
 	go func() {
@@ -92,5 +98,9 @@ func (g *GRPC) Run(t *testing.T, ctx context.Context) {
 
 func (g *GRPC) Cleanup(t *testing.T) {
 	close(g.stopCh)
-	require.NoError(t, <-g.srvErrCh)
+	err := <-g.srvErrCh
+	if errors.Is(err, http.ErrServerClosed) || errors.Is(err, grpc.ErrServerStopped) {
+		err = nil
+	}
+	require.NoError(t, err)
 }

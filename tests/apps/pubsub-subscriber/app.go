@@ -101,6 +101,8 @@ const (
 	respondWithError
 	// respond with retry
 	respondWithRetry
+	// respond with drop
+	respondWithDrop
 	// respond with invalid status
 	respondWithInvalidStatus
 )
@@ -332,6 +334,18 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// notice that dropped messages are also counted into received messages set
+	if desiredResponse == respondWithDrop {
+		log.Printf("(%s) Responding with DROP", reqID)
+		// Return success with DROP status to drop message
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(appResponse{
+			Message: "consumed",
+			Status:  "DROP",
+		})
+		return
+	}
+
 	w.WriteHeader(http.StatusOK)
 	if desiredResponse == respondWithEmptyJSON {
 		log.Printf("(%s) Responding with {}", reqID)
@@ -465,6 +479,8 @@ func appRouter() http.Handler {
 		setDesiredResponse(respondWithError, "set respond with error")).Methods("POST")
 	router.HandleFunc("/set-respond-retry",
 		setDesiredResponse(respondWithRetry, "set respond with retry")).Methods("POST")
+	router.HandleFunc("/set-respond-drop",
+		setDesiredResponse(respondWithDrop, "set respond with drop")).Methods("POST")
 	router.HandleFunc("/set-respond-empty-json",
 		setDesiredResponse(respondWithEmptyJSON, "set respond with empty json"))
 	router.HandleFunc("/set-respond-invalid-status",
