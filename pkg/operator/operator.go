@@ -214,7 +214,8 @@ func (o *operator) Run(ctx context.Context) error {
 	/*
 		Make sure to set `ENABLE_WEBHOOKS=false` when we run locally.
 	*/
-	if !strings.EqualFold(os.Getenv("ENABLE_WEBHOOKS"), "false") {
+	enableConversionWebhooks := !strings.EqualFold(os.Getenv("ENABLE_WEBHOOKS"), "false")
+	if enableConversionWebhooks {
 		err := ctrl.NewWebhookManagedBy(o.mgr).
 			For(&subscriptionsapiV1alpha1.Subscription{}).
 			Complete()
@@ -258,6 +259,10 @@ func (o *operator) Run(ctx context.Context) error {
 			return nil
 		},
 		func(ctx context.Context) error {
+			if !enableConversionWebhooks {
+				return nil
+			}
+
 			sec, rErr := o.secProvider.Handler(ctx)
 			if rErr != nil {
 				return rErr
@@ -266,6 +271,10 @@ func (o *operator) Run(ctx context.Context) error {
 			return nil
 		},
 		func(ctx context.Context) error {
+			if !enableConversionWebhooks {
+				return nil
+			}
+
 			sec, rErr := o.secProvider.Handler(ctx)
 			if rErr != nil {
 				return rErr
@@ -277,7 +286,7 @@ func (o *operator) Run(ctx context.Context) error {
 			}
 
 			for {
-				rErr = o.patchCRDs(ctx, caBundle, o.mgr.GetConfig(), "subscriptions.dapr.io")
+				rErr = o.patchConversionWebhooksInCRDs(ctx, caBundle, o.mgr.GetConfig(), "subscriptions.dapr.io")
 				if rErr != nil {
 					return rErr
 				}
@@ -351,7 +360,8 @@ func (o *operator) Run(ctx context.Context) error {
 	return runner.Run(ctx)
 }
 
-func (o *operator) patchCRDs(ctx context.Context, caBundle []byte, conf *rest.Config, crdNames ...string) error {
+// Patches the conversion webhooks in the specified CRDs to set the TLS configuration (including namespace and CA bundle)
+func (o *operator) patchConversionWebhooksInCRDs(ctx context.Context, caBundle []byte, conf *rest.Config, crdNames ...string) error {
 	clientSet, err := apiextensionsclient.NewForConfig(conf)
 	if err != nil {
 		return fmt.Errorf("could not get API extension client: %v", err)
