@@ -294,6 +294,10 @@ func TestGetSidecarContainer(t *testing.T) {
 			container, err := c.getSidecarContainer(tc.getSidecarContainerOpts)
 			require.NoError(t, err)
 
+			c.AppID = ""
+			container, err = c.getSidecarContainer(tc.getSidecarContainerOpts)
+			require.Error(t, err)
+
 			tc.assertFn(t, container)
 		}
 	}

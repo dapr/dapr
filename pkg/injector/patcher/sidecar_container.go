@@ -38,6 +38,9 @@ type getSidecarContainerOpts struct {
 
 // getSidecarContainer returns the Container object for the sidecar.
 func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*corev1.Container, error) {
+	if c.GetAppID() == "" {
+		return nil, fmt.Errorf("app-id is not set empty")
+	}
 	// Ports for the daprd container
 	ports := []corev1.ContainerPort{
 		{
