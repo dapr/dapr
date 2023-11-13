@@ -293,12 +293,11 @@ func TestGetSidecarContainer(t *testing.T) {
 
 			container, err := c.getSidecarContainer(tc.getSidecarContainerOpts)
 			require.NoError(t, err)
+			tc.assertFn(t, container)
 
 			c.AppID = ""
-			container, err = c.getSidecarContainer(tc.getSidecarContainerOpts)
+			_, err = c.getSidecarContainer(tc.getSidecarContainerOpts)
 			require.Error(t, err)
-
-			tc.assertFn(t, container)
 		}
 	}
 	testSuiteGenerator := func(tests []testCase) func(t *testing.T) {
