@@ -352,12 +352,10 @@ func (c *Config) toInternal() (*internalConfig, error) {
 		if err != nil {
 			return nil, fmt.Errorf("error parsing app-port: %w", err)
 		}
-	} else {
-		if c.ApplicationPort != "" {
-			intc.appConnectionConfig.HealthPort, err = strconv.Atoi(c.ApplicationPort)
-			if err != nil {
-				return nil, fmt.Errorf("error parsing app-port: %w", err)
-			}
+	} else if c.ApplicationPort != "" {
+		intc.appConnectionConfig.HealthPort, err = strconv.Atoi(c.ApplicationPort)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing app-port: %w", err)
 		}
 	}
 
