@@ -93,17 +93,10 @@ require (
 	github.com/99designs/keyring v1.2.1 // indirect
 	github.com/AthenZ/athenz v1.10.39 // indirect
 	github.com/Azure/azure-sdk-for-go v68.0.0+incompatible // indirect
-<<<<<<< HEAD
 	github.com/Azure/azure-sdk-for-go/sdk/ai/azopenai v0.3.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.8.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.4.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig v0.6.0 // indirect
-=======
-	github.com/Azure/azure-sdk-for-go/sdk/ai/azopenai v0.1.1 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.8.0 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.4.0 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig v0.5.0 // indirect
->>>>>>> 7616e7da6 (Pin contrib 1.12.1 (#7155))
 	github.com/Azure/azure-sdk-for-go/sdk/data/azcosmos v0.3.6 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/data/aztables v1.0.2 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.4.0 // indirect
@@ -316,8 +309,9 @@ require (
 	github.com/mtibben/percent v0.2.1 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/natefinch/lumberjack v2.0.0+incompatible // indirect
+	github.com/nats-io/nats-server/v2 v2.9.23 // indirect
 	github.com/nats-io/nats.go v1.28.0 // indirect
-	github.com/nats-io/nkeys v0.4.4 // indirect
+	github.com/nats-io/nkeys v0.4.6 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/oleiade/lane v1.0.1 // indirect
 	github.com/open-policy-agent/opa v0.55.0 // indirect
@@ -390,13 +384,8 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.24.0 // indirect
 	golang.org/x/arch v0.3.0 // indirect
-<<<<<<< HEAD
 	golang.org/x/mod v0.13.0 // indirect
 	golang.org/x/oauth2 v0.13.0 // indirect
-=======
-	golang.org/x/mod v0.12.0 // indirect
-	golang.org/x/oauth2 v0.11.0 // indirect
->>>>>>> 7616e7da6 (Pin contrib 1.12.1 (#7155))
 	golang.org/x/sys v0.13.0 // indirect
 	golang.org/x/term v0.13.0 // indirect
 	golang.org/x/text v0.13.0 // indirect
