@@ -120,6 +120,9 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
+        {{- if .Values.extraEnvVars }}
+        {{-     toYaml .Values.extraEnvVars | nindent 8 }}
+        {{- end }}
         ports:
         - containerPort: 50001
 {{- if eq .Values.global.prometheus.enabled true }}

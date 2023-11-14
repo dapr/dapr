@@ -131,6 +131,9 @@ spec:
           value: {{ .Values.global.mtls.controlPlaneTrustDomain }}
         - name: DAPR_SENTRY_ADDRESS
           value: {{ if .Values.global.mtls.sentryAddress }}{{ .Values.global.mtls.sentryAddress }}{{ else }}dapr-sentry.{{ .Release.Namespace }}.svc.cluster.local:443{{ end }}
+        {{- if .Values.extraEnvVars }}
+        {{-     toYaml .Values.extraEnvVars | nindent 8 }}
+        {{- end }}
 {{- if .Values.kubeClusterDomain }}
         - name: KUBE_CLUSTER_DOMAIN
           value: "{{ .Values.kubeClusterDomain }}"
