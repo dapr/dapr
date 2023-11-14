@@ -71,12 +71,12 @@ type ConfigurationSpec struct {
 type WorkflowSpec struct {
 	// maxConcurrentWorkflowInvocations is the maximum number of concurrent workflow invocations that can be scheduled by a single Dapr instance.
 	// Attempted invocations beyond this will be queued until the number of concurrent invocations drops below this value.
-	// If omitted, the default value of 1000 will be used.
+	// If omitted, the default value of 100 will be used.
 	// +optional
 	MaxConcurrentWorkflowInvocations int32 `json:"maxConcurrentWorkflowInvocations,omitempty"`
 	// maxConcurrentActivityInvocations is the maximum number of concurrent activities that can be processed by a single Dapr instance.
 	// Attempted invocations beyond this will be queued until the number of concurrent invocations drops below this value.
-	// If omitted, the default value of 1000 will be used.
+	// If omitted, the default value of 100 will be used.
 	// +optional
 	MaxConcurrentActivityInvocations int32 `json:"maxConcurrentActivityInvocations,omitempty"`
 }
