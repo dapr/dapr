@@ -1619,6 +1619,17 @@ func (a *api) getStateStoreName(reqCtx *fasthttp.RequestCtx) string {
 	return reqCtx.UserValue(storeNameParam).(string)
 }
 
+type codeError struct {
+	statusCode  int
+	msg         []byte
+	headers     invokev1.DaprInternalMetadata
+	contentType string
+}
+
+func (ce codeError) Error() string {
+	return fmt.Sprintf("received non-successful status code in response: %d", ce.statusCode)
+}
+
 type invokeError struct {
 	statusCode int
 	msg        ErrorResponse
@@ -1708,9 +1719,14 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 				resStatus.Code = statusCode
 			}
 		} else if resStatus.Code < 200 || resStatus.Code > 399 {
-			// We are not returning an `invokeError` here on purpose.
-			// Returning an error that is not an `invokeError` will cause Resiliency to retry the request (if retries are enabled), but if the request continues to fail, the response is sent to the user with whatever status code the app returned so the "received non-successful status code" is "swallowed" (will appear in logs but won't be returned to the app).
-			return rResp, fmt.Errorf("received non-successful status code: %d", resStatus.Code)
+			msg, _ := rResp.RawDataFull()
+			// Returning a `codeError` here will cause Resiliency to retry the request (if retries are enabled), but if the request continues to fail, the response is sent to the user with whatever status code the app returned.
+			return rResp, codeError{
+				headers:     rResp.Headers(),
+				statusCode:  int(resStatus.Code),
+				msg:         msg,
+				contentType: rResp.ContentType(),
+			}
 		}
 		return rResp, nil
 	})
@@ -1719,6 +1735,19 @@ func (a *api) onDirectMessage(reqCtx *fasthttp.RequestCtx) {
 	if errors.Is(err, context.DeadlineExceeded) || breaker.IsErrorPermanent(err) {
 		respond(reqCtx, withError(fasthttp.StatusInternalServerError, NewErrorResponse("ERR_DIRECT_INVOKE", err.Error())))
 		cancel()
+		return
+	}
+	var codeErr codeError
+	if errors.As(err, &codeErr) {
+		if len(codeErr.headers) > 0 {
+			invokev1.InternalMetadataToHTTPHeader(reqCtx, codeErr.headers, reqCtx.Response.Header.Add)
+		}
+		reqCtx.Response.Header.SetContentType(codeErr.contentType)
+		respond(reqCtx, with(codeErr.statusCode, codeErr.msg))
+		cancel()
+		if resp != nil {
+			_ = resp.Close()
+		}
 		return
 	}
 
