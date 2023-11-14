@@ -15,8 +15,12 @@ package integration
 
 import (
 	"context"
+	"flag"
+	"regexp"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/binary"
@@ -31,11 +35,30 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/sentry"
 )
 
+var focusF = flag.String("focus", ".*", "Focus on specific test cases. Accepts regex.")
+
 func RunIntegrationTests(t *testing.T) {
-	binary.BuildAll(t)
+	flag.Parse()
+
+	focus, err := regexp.Compile(*focusF)
+	require.NoError(t, err, "Invalid parameter focus")
+	t.Logf("running test suite with focus: %s", *focusF)
+
+	var binFailed bool
+	t.Run("build binaries", func(t *testing.T) {
+		t.Cleanup(func() {
+			binFailed = t.Failed()
+		})
+		binary.BuildAll(t)
+	})
+	require.False(t, binFailed, "building binaries must succeed")
 
 	for name, tcase := range suite.All(t) {
 		t.Run(name, func(t *testing.T) {
+			if !focus.MatchString(t.Name()) {
+				t.Skipf("skipping test case due to focus %s", t.Name())
+			}
+
 			t.Logf("setting up test case")
 			options := tcase.Setup(t)
 

@@ -19,7 +19,7 @@ import (
 	"github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/grpc/proxy/codec"
 	"github.com/dapr/dapr/pkg/resiliency"
-	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/utils"
 )
 
 // Metadata header used to indicate if the call should be handled as a gRPC stream.

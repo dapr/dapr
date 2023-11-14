@@ -21,16 +21,16 @@ import (
 
 	"github.com/dapr/dapr/cmd/sentry/options"
 	"github.com/dapr/dapr/pkg/buildinfo"
-	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/sentry"
 	"github.com/dapr/dapr/pkg/sentry/config"
 	"github.com/dapr/dapr/pkg/sentry/monitoring"
-	"github.com/dapr/dapr/pkg/signals"
 	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/fswatcher"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/signals"
 )
 
 var log = logger.NewLogger("dapr.sentry")
@@ -47,10 +47,6 @@ func main() {
 	log.Infof("Log level set to: %s", opts.Logger.OutputLevel)
 
 	metricsExporter := metrics.NewExporterWithOptions(log, metrics.DefaultMetricNamespace, opts.Metrics)
-
-	if len(opts.TokenAudience) > 0 {
-		log.Warn("--token-audience is deprecated and will be removed in Dapr v1.14")
-	}
 
 	if err := utils.SetEnvVariables(map[string]string{
 		utils.KubeConfigVar: opts.Kubeconfig,
