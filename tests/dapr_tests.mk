@@ -233,7 +233,7 @@ create-test-namespace:
 	kubectl create namespace $(DAPR_TEST_NAMESPACE)
 
 delete-test-namespace:
-	kubectl delete namespace $(DAPR_TEST_NAMESPACE)
+	kubectl delete namespace $(DAPR_TEST_NAMESPACE) aa
 
 setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-mongodb setup-test-env-zipkin
 
@@ -511,6 +511,8 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/dapr_cron_binding.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	# TODO: Remove once AppHealthCheck feature is finalized
 	$(KUBECTL) apply -f ./tests/config/app_healthcheck.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	# Don't set namespace as Namespace is defind in the yaml.
+	$(KUBECTL) apply -f ./tests/config/ignore_daprsystem_config.yaml
 
 	# Show the installed components
 	$(KUBECTL) get components --namespace $(DAPR_TEST_NAMESPACE)
