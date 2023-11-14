@@ -51,7 +51,9 @@ jobs:
         id: setup-go
         uses: actions/setup-go@v3
         with:
-          go-version-file: "go.mod"
+          go-version: '1.20.11'
+          # temporarily hard code version to accelerate release due to a Go CVE
+          # go-version-file: "go.mod"
       - name: Check white space in .md files
         if: github.event_name == 'pull_request'
         run: |
