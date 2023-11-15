@@ -86,10 +86,10 @@ func main() {
 		RaftNode:    raftServer,
 		SecProvider: secProvider,
 	}
-	if opts.MinAPILevel >= 0 && opts.MinAPILevel < math.MaxUint32 {
+	if opts.MinAPILevel >= 0 && opts.MinAPILevel < math.MaxInt32 {
 		placementOpts.MinAPILevel = uint32(opts.MinAPILevel)
 	}
-	if opts.MaxAPILevel >= 0 && opts.MaxAPILevel < math.MaxUint32 {
+	if opts.MaxAPILevel >= 0 && opts.MaxAPILevel < math.MaxInt32 {
 		placementOpts.MaxAPILevel = ptr.Of(uint32(opts.MaxAPILevel))
 	}
 	apiServer := placement.NewPlacementService(placementOpts)
