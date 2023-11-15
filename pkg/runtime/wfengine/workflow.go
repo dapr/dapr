@@ -510,10 +510,12 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 }
 
 func (wf *workflowActor) loadInternalState(ctx context.Context, actorID string) (*workflowState, error) {
-	// see if the state for this actor is already cached in memory
-	cachedState, ok := wf.states.Load(actorID)
-	if ok {
-		return cachedState.(*workflowState), nil
+	if !wf.cachingDisabled {
+		// see if the state for this actor is already cached in memory
+		cachedState, ok := wf.states.Load(actorID)
+		if ok {
+			return cachedState.(*workflowState), nil
+		}
 	}
 
 	// state is not cached, so try to load it from the state store
@@ -534,11 +536,6 @@ func (wf *workflowActor) loadInternalState(ctx context.Context, actorID string) 
 }
 
 func (wf *workflowActor) saveInternalState(ctx context.Context, actorID string, state *workflowState) error {
-	if !wf.cachingDisabled {
-		// update cached state
-		wf.states.Store(actorID, state)
-	}
-
 	// generate and run a state store operation that saves all changes
 	req, err := state.GetSaveRequest(actorID)
 	if err != nil {
@@ -552,6 +549,11 @@ func (wf *workflowActor) saveInternalState(ctx context.Context, actorID string, 
 
 	// ResetChangeTracking should always be called after a save operation succeeds
 	state.ResetChangeTracking()
+
+	if !wf.cachingDisabled {
+		// update cached state
+		wf.states.Store(actorID, state)
+	}
 	return nil
 }
 
