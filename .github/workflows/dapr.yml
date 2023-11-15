@@ -200,9 +200,7 @@ jobs:
             target_os: windows
             target_arch: amd64
             windows_version: ltsc2022
-          - os: macOS-latest
-            target_os: darwin
-            target_arch: amd64
+          # Temporarily removed macos-latest/darwin/amd64 due to flakiness
     env:
       GOOS: "${{ matrix.target_os }}"
       GOARCH: "${{ matrix.target_arch }}"
