@@ -562,6 +562,7 @@ jobs:
         run: |  
           if grep -q -i -w "bind: An attempt was made to access a socket in a way forbidden by its access permissions" "e2e_log.txt"; then  
             echo "Found keyword in the log file"  
+            az lock create --name LockGroup --lock-type CanNotDelete --resource-group ${{ env.TEST_RESOURCE_GROUP }}
             sleep 5h  
           else  
             echo "not found in the log file"  
