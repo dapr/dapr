@@ -26,7 +26,7 @@ import (
 
 	"golang.org/x/net/http2"
 
-	"github.com/dapr/dapr/tests/apps/utils"
+	"github.com/dapr/kit/utils"
 )
 
 const (
