@@ -35,7 +35,7 @@ ports:
 
 resources: {}
 
-extraEnvVars: []
+extraEnvVars: {}
 
 livenessProbe:
   initialDelaySeconds: 3

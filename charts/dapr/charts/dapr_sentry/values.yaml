@@ -47,5 +47,5 @@ debug:
 runAsNonRoot: true
 resources: {}
 
-extraEnvVars: []
+extraEnvVars: {}
 
