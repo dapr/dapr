@@ -11,13 +11,14 @@
 # limitations under the License.
 #
 
-apiVersion: dapr.io/v1alpha1
+apiVersion: dapr.io/v2alpha1
 kind: Subscription
 metadata:
   name: pluggable-c-topic-subscription
 spec:
   pubsubname: pluggable-messagebus
   topic: pubsub-c-topic-http
-  route: /pubsub-c-topic-http
+  routes:
+    default: /pubsub-c-topic-http
 scopes:
   - pubsub-subscriber-pluggable
