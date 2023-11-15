@@ -249,9 +249,10 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 
 				registeredMemberID = req.Name
 				p.addStreamConn(stream)
+				// We need to use a background context here so dissemination isn't tied to the context of this stream
 				// TODO: If each sidecar can report table version, then placement
 				// doesn't need to disseminate tables to each sidecar.
-				err = p.performTablesUpdate(stream.Context(), []placementGRPCStream{stream}, p.raftNode.FSM().PlacementState())
+				err = p.performTablesUpdate(context.Background(), []placementGRPCStream{stream}, p.raftNode.FSM().PlacementState())
 				if err != nil {
 					return err
 				}

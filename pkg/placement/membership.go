@@ -316,30 +316,33 @@ func (p *Service) performTableDissemination(ctx context.Context) error {
 	monitoring.RecordRuntimesCount(nStreamConnPool)
 	monitoring.RecordActorRuntimesCount(nTargetConns)
 
-	// ignore dissemination if there is no member update.
-	if cnt := p.memberUpdateCount.Load(); cnt > 0 {
-		p.disseminateLock.Lock()
-		defer p.disseminateLock.Unlock()
-
-		state := p.raftNode.FSM().PlacementState()
-		log.Infof(
-			"Start disseminating tables. memberUpdateCount: %d, streams: %d, targets: %d, table generation: %s",
-			cnt, nStreamConnPool, nTargetConns, state.Version)
-		p.streamConnPoolLock.RLock()
-		streamConnPool := make([]placementGRPCStream, len(p.streamConnPool))
-		copy(streamConnPool, p.streamConnPool)
-		p.streamConnPoolLock.RUnlock()
-		if err := p.performTablesUpdate(ctx, streamConnPool, state); err != nil {
-			return err
-		}
-		log.Infof(
-			"Completed dissemination. memberUpdateCount: %d, streams: %d, targets: %d, table generation: %s",
-			cnt, nStreamConnPool, nTargetConns, state.Version)
-		p.memberUpdateCount.Store(0)
-
-		// set faultyHostDetectDuration to the default duration.
-		p.faultyHostDetectDuration.Store(int64(faultyHostDetectDefaultDuration))
+	// Ignore dissemination if there is no member update
+	cnt := p.memberUpdateCount.Load()
+	if cnt == 0 {
+		return nil
 	}
+
+	p.disseminateLock.Lock()
+	defer p.disseminateLock.Unlock()
+
+	state := p.raftNode.FSM().PlacementState()
+	log.Infof(
+		"Start disseminating tables. memberUpdateCount: %d, streams: %d, targets: %d, table generation: %s",
+		cnt, nStreamConnPool, nTargetConns, state.Version)
+	p.streamConnPoolLock.RLock()
+	streamConnPool := make([]placementGRPCStream, len(p.streamConnPool))
+	copy(streamConnPool, p.streamConnPool)
+	p.streamConnPoolLock.RUnlock()
+	if err := p.performTablesUpdate(ctx, streamConnPool, state); err != nil {
+		return err
+	}
+	log.Infof(
+		"Completed dissemination. memberUpdateCount: %d, streams: %d, targets: %d, table generation: %s",
+		cnt, nStreamConnPool, nTargetConns, state.Version)
+	p.memberUpdateCount.Store(0)
+
+	// set faultyHostDetectDuration to the default duration.
+	p.faultyHostDetectDuration.Store(int64(faultyHostDetectDefaultDuration))
 
 	return nil
 }
@@ -363,77 +366,78 @@ func (p *Service) performTablesUpdate(ctx context.Context, hosts []placementGRPC
 		}
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
-	errCh := make(chan error)
-
-	for _, host := range hosts {
-		go func(h placementGRPCStream) {
-			for _, s := range []struct {
-				op    string
-				table *v1pb.PlacementTables
-			}{
-				{"lock", nil},
-				{"update", newTable},
-				{"unlock", nil},
-			} {
-				errCh <- p.disseminateOperation(ctx, []placementGRPCStream{h}, s.op, s.table)
-			}
-		}(host)
-	}
-
-	var err error
-	for i := 0; i < len(hosts)*3; i++ {
-		err = errors.Join(err, <-errCh)
-	}
+	// Perform each update on all hosts in sequence
+	err := p.disseminateOperationOnHosts(ctx, hosts, "lock", nil)
 	if err != nil {
-		return fmt.Errorf("dissemination failed: %s", err)
+		return fmt.Errorf("dissemination of 'lock' failed: %v", err)
+	}
+	err = p.disseminateOperationOnHosts(ctx, hosts, "update", newTable)
+	if err != nil {
+		return fmt.Errorf("dissemination of 'update' failed: %v", err)
+	}
+	err = p.disseminateOperationOnHosts(ctx, hosts, "unlock", nil)
+	if err != nil {
+		return fmt.Errorf("dissemination of 'unlock' failed: %v", err)
 	}
 
-	log.Debugf("performTablesUpdate succeed %v", p.clock.Since(startedAt))
+	log.Debugf("performTablesUpdate succeed in %v", p.clock.Since(startedAt))
 	return nil
 }
 
-func (p *Service) disseminateOperation(ctx context.Context, targets []placementGRPCStream, operation string, tables *v1pb.PlacementTables) error {
+func (p *Service) disseminateOperationOnHosts(ctx context.Context, hosts []placementGRPCStream, operation string, tables *v1pb.PlacementTables) error {
+	errCh := make(chan error)
+
+	for i := 0; i < len(hosts); i++ {
+		go func(i int) {
+			errCh <- p.disseminateOperation(ctx, hosts[i], operation, tables)
+		}(i)
+	}
+
+	var errs []error
+	for i := 0; i < len(hosts); i++ {
+		err := <-errCh
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func (p *Service) disseminateOperation(ctx context.Context, target placementGRPCStream, operation string, tables *v1pb.PlacementTables) error {
 	o := &v1pb.PlacementOrder{
 		Operation: operation,
 		Tables:    tables,
 	}
 
-	for _, s := range targets {
-		config := retry.DefaultConfig()
-		config.MaxRetries = 3
-		backoff := config.NewBackOffWithContext(ctx)
-		err := retry.NotifyRecover(func() error {
-			// Check stream in stream pool, if stream is not available, skip to next.
-			if !p.hasStreamConn(s) {
-				remoteAddr := "n/a"
-				if p, ok := peer.FromContext(s.Context()); ok {
-					remoteAddr = p.Addr.String()
-				}
-				log.Debugf("Runtime host (%q) is disconnected with server; go with next dissemination (operation: %s)", remoteAddr, operation)
-				return nil
+	config := retry.DefaultConfig()
+	config.MaxRetries = 3
+	backoff := config.NewBackOffWithContext(ctx)
+	return retry.NotifyRecover(func() error {
+		// Check stream in stream pool, if stream is not available, skip to next.
+		if !p.hasStreamConn(target) {
+			remoteAddr := "n/a"
+			if p, ok := peer.FromContext(target.Context()); ok {
+				remoteAddr = p.Addr.String()
 			}
-
-			if err := s.Send(o); err != nil {
-				remoteAddr := "n/a"
-				if p, ok := peer.FromContext(s.Context()); ok {
-					remoteAddr = p.Addr.String()
-				}
-				log.Errorf("error updating runtime host (%q) on %q operation: %s", remoteAddr, operation, err)
-				return err
-			}
+			log.Debugf("Runtime host %q is disconnected with server; go with next dissemination (operation: %s)", remoteAddr, operation)
 			return nil
-		},
-			backoff,
-			func(err error, d time.Duration) { log.Debugf("Attempting to disseminate again after error: %v", err) },
-			func() { log.Debug("Dissemination successful") },
-		)
-		if err != nil {
+		}
+
+		if err := target.Send(o); err != nil {
+			remoteAddr := "n/a"
+			if p, ok := peer.FromContext(target.Context()); ok {
+				remoteAddr = p.Addr.String()
+			}
+			log.Errorf("Error updating runtime host %q on %q operation: %v", remoteAddr, operation, err)
 			return err
 		}
-	}
-
-	return nil
+		return nil
+	},
+		backoff,
+		func(err error, d time.Duration) { log.Debugf("Attempting to disseminate again after error: %v", err) },
+		func() { log.Debug("Dissemination successful after failure") },
+	)
 }
