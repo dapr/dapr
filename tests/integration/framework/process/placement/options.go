@@ -23,6 +23,7 @@ type options struct {
 	execOpts []exec.Option
 
 	id                  string
+	logLevel            string
 	port                int
 	healthzPort         int
 	metricsPort         int
@@ -31,6 +32,9 @@ type options struct {
 	tlsEnabled          bool
 	sentryAddress       *string
 	trustAnchorsFile    *string
+	maxAPILevel         int
+	minAPILevel         int
+	metadataEnabled     bool
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
@@ -48,6 +52,12 @@ func WithPort(port int) Option {
 func WithID(id string) Option {
 	return func(o *options) {
 		o.id = id
+	}
+}
+
+func WithLogLevel(level string) Option {
+	return func(o *options) {
+		o.logLevel = level
 	}
 }
 
@@ -90,5 +100,23 @@ func WithTrustAnchorsFile(file string) Option {
 func WithInitialClusterPorts(ports ...int) Option {
 	return func(o *options) {
 		o.initialClusterPorts = ports
+	}
+}
+
+func WithMaxAPILevel(val int) Option {
+	return func(o *options) {
+		o.maxAPILevel = val
+	}
+}
+
+func WithMinAPILevel(val int) Option {
+	return func(o *options) {
+		o.minAPILevel = val
+	}
+}
+
+func WithMetadataEnabled(enabled bool) Option {
+	return func(o *options) {
+		o.metadataEnabled = enabled
 	}
 }
