@@ -18,6 +18,7 @@ const owners = [
     'pruthvidhodda',
     'robertojrojas',
     'ryanlettieri',
+    'shivamkm07',
     'shubham1172',
     'skyao',
     'taction',
