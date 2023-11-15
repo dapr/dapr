@@ -164,7 +164,11 @@ func (tr *TestRunner) Start(m runnable) int {
 
 func (tr *TestRunner) TearDown() {
 	// Tearing down platform
-	tr.Platform.TearDown()
-
+	//tr.Platform.TearDown()
+	fmt.Println("#### QUIT WITHOUT TEARDOWN")
+	fmt.Println("#### QUIT WITHOUT TEARDOWN")
+	fmt.Println("#### QUIT WITHOUT TEARDOWN")
+	fmt.Println("#### QUIT WITHOUT TEARDOWN")
+	fmt.Println("#### QUIT WITHOUT TEARDOWN")
 	// TODO: Add the resources which will be tearing down
 }
