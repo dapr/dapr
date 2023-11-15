@@ -1,5 +1,5 @@
 global:
-  registry: docker.io/daprio
+  registry: ghcr.io/dapr
   tag: 'edge'
   dnsSuffix: ".cluster.local"
   logAsJson: false
