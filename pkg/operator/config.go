@@ -2,13 +2,13 @@ package operator
 
 import (
 	"context"
-	"os"
 
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	"github.com/dapr/dapr/pkg/credentials"
+	"github.com/dapr/dapr/utils"
 )
 
 // Config returns an operator config options.
@@ -17,16 +17,16 @@ type Config struct {
 	Credentials credentials.TLSCredentials
 }
 
-// GetNamespace returns the namespace for Dapr.
-func GetNamespace() string {
-	return os.Getenv("NAMESPACE")
-}
-
 // LoadConfiguration loads the Kubernetes configuration and returns an Operator Config.
 func LoadConfiguration(name string, client client.Client) (*Config, error) {
+	namespace, err := utils.CurrentNamespaceOrError()
+	if err != nil {
+		return nil, err
+	}
+
 	var conf v1alpha1.Configuration
 	key := types.NamespacedName{
-		Namespace: GetNamespace(),
+		Namespace: namespace,
 		Name:      name,
 	}
 	if err := client.Get(context.Background(), key, &conf); err != nil {
