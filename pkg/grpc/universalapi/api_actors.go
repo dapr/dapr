@@ -15,9 +15,15 @@ package universalapi
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/messages"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/gogo/status"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 func (a *UniversalAPI) SetActorRuntime(actor actors.ActorRuntime) {
@@ -46,4 +52,52 @@ func (a *UniversalAPI) WaitForActorsReady(ctx context.Context) {
 	case <-waitCtx.Done():
 	case <-a.actorsReadyCh:
 	}
+}
+
+// This function makes sure that the actor subsystem is ready.
+func (a *UniversalAPI) actorReadinessCheck(ctx context.Context) error {
+	a.WaitForActorsReady(ctx)
+
+	if a.Actors == nil {
+		a.Logger.Debug(messages.ErrActorRuntimeNotFound)
+		return messages.ErrActorRuntimeNotFound
+	}
+
+	return nil
+}
+
+func (a *UniversalAPI) DeleteActorState(ctx context.Context, in *runtimev1pb.DeleteActorStateRequest) (*emptypb.Empty, error) {
+	if err := a.actorReadinessCheck(ctx); err != nil {
+		return &emptypb.Empty{}, err
+	}
+
+	actorType := in.ActorType
+	actorID := in.ActorId
+	key := in.Key
+
+	hosted := a.Actors.IsActorHosted(ctx, &actors.ActorHostedRequest{
+		ActorType: actorType,
+		ActorID:   actorID,
+	})
+
+	if !hosted {
+		err := status.Errorf(codes.Internal, messages.ErrActorInstanceMissing)
+		a.Logger.Debug(err)
+		return &emptypb.Empty{}, err
+	}
+
+	req := actors.DeleteStateRequest{
+		ActorType: actorType,
+		ActorID:   actorID,
+		Key:       key,
+	}
+
+	err := a.Actors.DeleteState(ctx, &req)
+	if err != nil {
+		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrActorStateGet, err))
+		a.Logger.Debug(err)
+		return &emptypb.Empty{}, err
+	}
+
+	return &emptypb.Empty{}, nil
 }
