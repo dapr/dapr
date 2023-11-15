@@ -43,7 +43,7 @@ type uniquename struct {
 
 func (u *uniquename) Setup(t *testing.T) []framework.Option {
 	filename := filepath.Join(t.TempDir(), "secrets.json")
-	require.NoError(t, os.WriteFile(filename, []byte(`{"key1":"bla"}`), 0o644))
+	require.NoError(t, os.WriteFile(filename, []byte(`{"key1":"bla"}`), 0o600))
 
 	u.logline = logline.New(t,
 		logline.WithStdoutLineContains(

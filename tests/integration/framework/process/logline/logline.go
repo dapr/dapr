@@ -21,9 +21,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dapr/dapr/tests/integration/framework/iowriter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/dapr/dapr/tests/integration/framework/iowriter"
 )
 
 // Option is a function that configures the process.
