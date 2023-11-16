@@ -33,6 +33,7 @@ import (
 	"github.com/dapr/dapr/pkg/placement/raft"
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/security"
+	"github.com/dapr/dapr/pkg/security/spiffe"
 	"github.com/dapr/kit/logger"
 )
 
@@ -99,6 +100,12 @@ type Service struct {
 	// consistent hashing table. Only actor runtime's heartbeat will increase this.
 	memberUpdateCount atomic.Uint32
 
+	// Maximum API level to return.
+	// If nil, there's no limit.
+	maxAPILevel *uint32
+	// Minimum API level to return
+	minAPILevel uint32
+
 	// faultyHostDetectDuration
 	faultyHostDetectDuration *atomic.Int64
 
@@ -112,14 +119,24 @@ type Service struct {
 	// clock keeps time. Mocked in tests.
 	clock clock.WithTicker
 
+	sec security.Provider
+
 	running  atomic.Bool
 	closed   atomic.Bool
 	closedCh chan struct{}
 	wg       sync.WaitGroup
 }
 
+// PlacementServiceOpts contains options for the NewPlacementService method.
+type PlacementServiceOpts struct {
+	RaftNode    *raft.Server
+	MaxAPILevel *uint32
+	MinAPILevel uint32
+	SecProvider security.Provider
+}
+
 // NewPlacementService returns a new placement service.
-func NewPlacementService(raftNode *raft.Server) *Service {
+func NewPlacementService(opts PlacementServiceOpts) *Service {
 	fhdd := &atomic.Int64{}
 	fhdd.Store(int64(faultyHostDetectInitialDuration))
 
@@ -127,21 +144,29 @@ func NewPlacementService(raftNode *raft.Server) *Service {
 		streamConnPool:           []placementGRPCStream{},
 		membershipCh:             make(chan hostMemberChange, membershipChangeChSize),
 		faultyHostDetectDuration: fhdd,
-		raftNode:                 raftNode,
+		raftNode:                 opts.RaftNode,
+		maxAPILevel:              opts.MaxAPILevel,
+		minAPILevel:              opts.MinAPILevel,
 		clock:                    &clock.RealClock{},
 		closedCh:                 make(chan struct{}),
+		sec:                      opts.SecProvider,
 	}
 }
 
 // Run starts the placement service gRPC server.
 // Blocks until the service is closed and all connections are drained.
-func (p *Service) Run(ctx context.Context, port string, sec security.Handler) error {
+func (p *Service) Run(ctx context.Context, port string) error {
 	if p.closed.Load() {
 		return errors.New("placement service is closed")
 	}
 
 	if !p.running.CompareAndSwap(false, true) {
 		return errors.New("placement service is already running")
+	}
+
+	sec, err := p.sec.Handler(ctx)
+	if err != nil {
+		return err
 	}
 
 	serverListener, err := net.Listen("tcp", fmt.Sprintf(":%s", port))
@@ -177,6 +202,21 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 	registeredMemberID := ""
 	isActorRuntime := false
 
+	sec, err := p.sec.Handler(stream.Context())
+	if err != nil {
+		return status.Errorf(codes.Internal, "")
+	}
+
+	var clientID *spiffe.Parsed
+	if sec.MTLSEnabled() {
+		id, ok, err := spiffe.FromGRPCContext(stream.Context())
+		if err != nil || !ok {
+			log.Debugf("failed to get client ID from context: err=%v, ok=%t", err, ok)
+			return status.Errorf(codes.Unauthenticated, "failed to get client ID from context")
+		}
+		clientID = id
+	}
+
 	p.streamConnGroup.Add(1)
 	defer func() {
 		p.streamConnGroup.Done()
@@ -187,7 +227,26 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 		req, err := stream.Recv()
 		switch err {
 		case nil:
+			if clientID != nil && req.Id != clientID.AppID() {
+				return status.Errorf(codes.PermissionDenied, "client ID %s is not allowed", req.Id)
+			}
+
+			state := p.raftNode.FSM().State()
+
 			if registeredMemberID == "" {
+				// New connection
+				// Ensure that the reported API level is at least equal to the current one in the cluster
+				clusterAPILevel := state.APILevel()
+				if clusterAPILevel < p.minAPILevel {
+					clusterAPILevel = p.minAPILevel
+				}
+				if p.maxAPILevel != nil && clusterAPILevel > *p.maxAPILevel {
+					clusterAPILevel = *p.maxAPILevel
+				}
+				if req.ApiLevel < clusterAPILevel {
+					return status.Errorf(codes.FailedPrecondition, "The cluster's Actor API level is %d, which is higher than the reported API level %d", clusterAPILevel, req.ApiLevel)
+				}
+
 				registeredMemberID = req.Name
 				p.addStreamConn(stream)
 				// TODO: If each sidecar can report table version, then placement
@@ -206,16 +265,18 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 				continue
 			}
 
+			now := p.clock.Now()
+
 			for _, entity := range req.Entities {
-				monitoring.RecordActorHeartbeat(req.Id, entity, req.Name, req.Pod, p.clock.Now())
+				monitoring.RecordActorHeartbeat(req.Id, entity, req.Name, req.Pod, now)
 			}
 
 			// Record the heartbeat timestamp. This timestamp will be used to check if the member
 			// state maintained by raft is valid or not. If the member is outdated based the timestamp
 			// the member will be marked as faulty node and removed.
-			p.lastHeartBeat.Store(req.Name, p.clock.Now().UnixNano())
+			p.lastHeartBeat.Store(req.Name, now.UnixNano())
 
-			members := p.raftNode.FSM().State().Members()
+			members := state.Members()
 
 			// Upsert incoming member only if it is an actor service (not actor client) and
 			// the existing member info is unmatched with the incoming member info.
@@ -233,7 +294,8 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 						Name:      req.Name,
 						AppID:     req.Id,
 						Entities:  req.Entities,
-						UpdatedAt: p.clock.Now().UnixNano(),
+						UpdatedAt: now.UnixNano(),
+						APILevel:  req.ApiLevel,
 					},
 				}
 				log.Debugf("Member changed upserting appid %s with entities %v", req.Id, req.Entities)
