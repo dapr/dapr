@@ -69,13 +69,16 @@ func (c *FSM) PlacementState() *v1pb.PlacementTables {
 	defer c.stateLock.RUnlock()
 
 	newTable := &v1pb.PlacementTables{
-		Version: strconv.FormatUint(c.state.TableGeneration(), 10),
-		Entries: make(map[string]*v1pb.PlacementTable),
+		Version:  strconv.FormatUint(c.state.TableGeneration(), 10),
+		Entries:  make(map[string]*v1pb.PlacementTable),
+		ApiLevel: c.state.APILevel(),
 	}
 
-	totalHostSize := 0
-	totalSortedSet := 0
-	totalLoadMap := 0
+	var (
+		totalHostSize  int
+		totalSortedSet int
+		totalLoadMap   int
+	)
 
 	entries := c.state.hashingTableMap()
 	for k, v := range entries {
@@ -112,7 +115,7 @@ func (c *FSM) PlacementState() *v1pb.PlacementTables {
 		totalLoadMap += len(table.LoadMap)
 	}
 
-	logging.Debugf("PlacementTable Size, Hosts: %d, SortedSet: %d, LoadMap: %d", totalHostSize, totalSortedSet, totalLoadMap)
+	logging.Debugf("PlacementTable HostsCount=%d SortedSetCount=%d LoadMapCount=%d ApiLevel=%d", totalHostSize, totalSortedSet, totalLoadMap, newTable.ApiLevel)
 
 	return newTable
 }

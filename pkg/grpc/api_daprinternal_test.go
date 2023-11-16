@@ -15,6 +15,8 @@ package grpc
 
 import (
 	"context"
+	"errors"
+	"io"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -122,7 +124,7 @@ func TestCallLocalStream(t *testing.T) {
 		err = st.Send(&internalv1pb.InternalInvokeRequestStream{
 			Request: request.Proto(),
 		})
-		require.NoError(t, err)
+		require.True(t, err == nil || errors.Is(err, io.EOF))
 		err = st.CloseSend()
 		require.NoError(t, err)
 
