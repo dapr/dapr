@@ -51,7 +51,6 @@ jobs:
       DAPR_REGISTRY: localhost:5000/dapr
       DAPR_TAG: dev
       DAPR_NAMESPACE: dapr-tests
-      GOVER: "^1.19.2"
       # Container registry where to cache e2e test images
       DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
       PULL_POLICY: IfNotPresent
@@ -82,14 +81,15 @@ jobs:
         - k8s-version: v1.23.13
           mode: non-ha
     steps:
-    - name: Set up Go ${{ env.GOVER }}
-      uses: actions/setup-go@v2
-      with:
-        go-version: ${{ env.GOVER }}
-    - name: Check out code onto GOPATH
+    - name: Check out code into the Go module directory
       uses: actions/checkout@v2
       with:
         path: ./src/github.com/dapr/dapr
+    - name: Set up Go
+      id: setup-go
+      uses: actions/setup-go@v3
+      with:
+        go-version-file: "./src/github.com/dapr/dapr/go.mod"
     - name: Configure KinD
       # Generate a KinD configuration file that uses:
       # (a) a couple of worker nodes: this is needed to run both

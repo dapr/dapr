@@ -38,13 +38,15 @@ import (
 )
 
 func TestConfigCorrectValues(t *testing.T) {
-	i := NewInjector(nil, Config{
+	t.Setenv("NAMESPACE", "test")
+	i, err := NewInjector(nil, Config{
 		TLSCertFile:            "a",
 		TLSKeyFile:             "b",
 		SidecarImage:           "c",
 		SidecarImagePullPolicy: "d",
 		Namespace:              "e",
 	}, nil, nil)
+	assert.NoError(t, err)
 
 	injector := i.(*injector)
 	assert.Equal(t, "a", injector.config.TLSCertFile)
@@ -376,13 +378,15 @@ func TestGetAppIDFromRequest(t *testing.T) {
 
 func TestHandleRequest(t *testing.T) {
 	authID := "test-auth-id"
+	t.Setenv("NAMESPACE", "test")
 
-	i := NewInjector([]string{authID}, Config{
+	i, err := NewInjector([]string{authID}, Config{
 		TLSCertFile:  "test-cert",
 		TLSKeyFile:   "test-key",
 		SidecarImage: "test-image",
 		Namespace:    "test-ns",
 	}, fake.NewSimpleClientset(), kubernetesfake.NewSimpleClientset())
+	assert.NoError(t, err)
 	injector := i.(*injector)
 
 	podBytes, _ := json.Marshal(corev1.Pod{
