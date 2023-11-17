@@ -124,7 +124,7 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 				Key:           "mykey",
 				Value:         &anypb.Any{Value: []byte("myvalue")},
 				Metadata: map[string]string{
-					"ttlInSeconds": "3",
+					"ttlInSeconds": "2",
 				},
 			},
 		},
@@ -133,9 +133,7 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("ensure the state key returns a ttlExpireTime", func(t *testing.T) {
 		resp, err := client.GetActorState(ctx, &rtv1.GetActorStateRequest{
-			ActorType: "myactortype",
-			ActorId:   "myactorid",
-			Key:       "mykey",
+			ActorType: "myactortype", ActorId: "myactorid", Key: "mykey",
 		})
 		require.NoError(t, err)
 
@@ -144,7 +142,34 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 		require.True(t, ok)
 		ttlExpireTime, err := time.Parse(time.RFC3339, ttlExpireTimeStr)
 		require.NoError(t, err)
-		assert.InDelta(t, now.Add(3*time.Second).Unix(), ttlExpireTime.Unix(), 1)
+		assert.InDelta(t, now.Add(2*time.Second).Unix(), ttlExpireTime.Unix(), 1)
+	})
+
+	t.Run("can update ttl with new value", func(t *testing.T) {
+		_, err = client.ExecuteActorStateTransaction(ctx, &rtv1.ExecuteActorStateTransactionRequest{
+			ActorType: "myactortype",
+			ActorId:   "myactorid",
+			Operations: []*rtv1.TransactionalActorStateOperation{
+				{
+					OperationType: string(state.OperationUpsert),
+					Key:           "mykey",
+					Value:         &anypb.Any{Value: []byte("myvalue")},
+					Metadata: map[string]string{
+						"ttlInSeconds": "3",
+					},
+				},
+			},
+		})
+		require.NoError(t, err)
+
+		time.Sleep(time.Second * 2)
+
+		resp, err := client.GetActorState(ctx, &rtv1.GetActorStateRequest{
+			ActorType: "myactortype", ActorId: "myactorid", Key: "mykey",
+		})
+		require.NoError(t, err)
+
+		assert.Equal(t, "myvalue", string(resp.Data))
 	})
 
 	t.Run("ensure the state key is deleted after the ttl", func(t *testing.T) {

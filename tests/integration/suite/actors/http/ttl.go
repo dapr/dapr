@@ -135,6 +135,27 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 		assert.InDelta(t, now.Add(2*time.Second).Unix(), ttlExpireTime.Unix(), 1)
 	})
 
+	t.Run("can update ttl with new value", func(t *testing.T) {
+		reqBody = `[{"operation":"upsert","request":{"key":"key1","value":"value1","metadata":{"ttlInSeconds":"3"}}}]`
+		req, err = http.NewRequest(http.MethodPost, daprdURL+"/v1.0/actors/myactortype/myactorid/state", strings.NewReader(reqBody))
+		require.NoError(t, err)
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		assert.NoError(t, resp.Body.Close())
+
+		time.Sleep(time.Second * 2)
+
+		req, err = http.NewRequest(http.MethodGet, daprdURL+"/v1.0/actors/myactortype/myactorid/state/key1", nil)
+		require.NoError(t, err)
+		resp, err = client.Do(req)
+		require.NoError(t, err)
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		assert.NoError(t, resp.Body.Close())
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		assert.Equal(t, `"value1"`, string(body))
+	})
+
 	t.Run("ensure the state key is deleted after the ttl", func(t *testing.T) {
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			req, err := http.NewRequest(http.MethodGet, daprdURL+"/v1.0/actors/myactortype/myactorid/state/key1", nil)
