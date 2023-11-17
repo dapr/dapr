@@ -69,18 +69,18 @@ func TestMain(m *testing.M) {
 	os.Exit(tr.Start(m))
 }
 
-func collect(t *testing.T, testAppName string, table *summary.Table) {
-	appUsage, err1 := tr.Platform.GetAppUsage(testAppName)
-	sidecarUsage, err2 := tr.Platform.GetSidecarUsage(testAppName)
+func collect(t *testing.T, testName string, table *summary.Table) {
+	appUsage, err1 := tr.Platform.GetAppUsage(testName)
+	sidecarUsage, err2 := tr.Platform.GetSidecarUsage(testName)
 	if err1 == nil {
 		table.
-		Outputf(testAppName+"App Memory", "%vMb, at time %v", appUsage.MemoryMb, time.Now()).
-		Outputf(testAppName+"App CPU", "%vm, at time %v", appUsage.CPUm, time.Now())
+		Outputf(testName+"App Memory", "%vMb--at time %v", appUsage.MemoryMb, time.Now()).
+		Outputf(testName+"App CPU", "%vm--at time %v", appUsage.CPUm, time.Now())
 	}
 	if err2 == nil {
 		table.
-		Outputf(testAppName+"Sidecar Memory", "%vMb, at time %v", sidecarUsage.MemoryMb, time.Now()).
-		Outputf(testAppName+"Sidecar CPU", "%vm, at time %v", sidecarUsage.CPUm, time.Now())
+		Outputf(testName+"Sidecar Memory", "%vMb--at time %v", sidecarUsage.MemoryMb, time.Now()).
+		Outputf(testName+"Sidecar CPU", "%vm--at time %v", sidecarUsage.CPUm, time.Now())
 	}
 }
 
@@ -114,8 +114,8 @@ func addTestResults(t *testing.T, testName string, testAppName string, result *l
 	return table.
 		OutputInt(testName+"VUs Max", result.VusMax.Values.Max).
 		OutputFloat64(testName+"Iterations Count", result.Iterations.Values.Count).
-		Outputf(testName+"App Memory", "%vMb", appUsage.MemoryMb).
-		Outputf(testName+"App CPU", "%vm", appUsage.CPUm).
+		Outputf(testAppName+"App Memory", "%vMb--at time %v", appUsage.MemoryMb, time.Now()).
+		Outputf(testAppName+"App CPU", "%vm--at time %v", appUsage.CPUm, time.Now()).
 		Outputf(testAppName+"Sidecar Memory", "%vMb--at time %v", sidecarUsage.MemoryMb, time.Now()).
 		Outputf(testAppName+"Sidecar CPU", "%vm--at time %v", sidecarUsage.CPUm, time.Now()).
 		OutputInt(testName+"Restarts", restarts).
@@ -127,7 +127,7 @@ func addTestResults(t *testing.T, testName string, testAppName string, result *l
 func TestWorkflowWithConstantVUs(t *testing.T) {
 
 	table := summary.ForTest(t)
-	subTestName := "[kc_chaining]: "
+	subTestName := "[task_chaining]"
 	// Get the ingress external url of test app
 	log.Println("acquiring app external URL")
 	externalURL := tr.Platform.AcquireAppExternalURL(testAppNames[0])
@@ -160,7 +160,7 @@ func TestWorkflowWithConstantVUs(t *testing.T) {
 	t.Log("running the k6 load test...")
 	
 	// start a goroutine to polling cpu and memory usage for a given time peroid
-	go collectMetrics(t, testAppNames[0], table, 12)
+	go collectMetrics(t, subTestName, table, 12)
 
 	require.NoError(t, tr.Platform.LoadTest(k6Test))
 	sm, err := loadtest.K6ResultDefault(k6Test)

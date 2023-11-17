@@ -12,11 +12,7 @@ limitations under the License.
 */
 
 import http from 'k6/http'
-import exec from 'k6/execution'
 import { check } from 'k6'
-import { Rate } from 'k6/metrics';
-
-const errorRate = new Rate('errorRate');
 
 export const options = {
     discardResponseBodies: true,
