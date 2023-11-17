@@ -104,7 +104,7 @@ func collectCPUMemoryUsage(t *testing.T, testAppName string, table *summary.Tabl
 }
 
 func appendTime(head string) string {
-	return head + time.Now().Format("2006-01-02 15:04:05")
+	return head + "-" + time.Now().Format("2006-01-02 15:04:05")
 }
 
 func addTestResults(t *testing.T, testName string, testAppName string, result *loadtest.K6RunnerMetricsSummary, table *summary.Table) *summary.Table {
@@ -145,16 +145,6 @@ func TestWorkFlowPerf(t *testing.T) {
 			rateCheck:    "rate==1",
 			enableMemoryCheck: false,
 		},
-		// {
-		// 	name:         "stress_load",
-		// 	rateCheck:    "rate==1",
-		// 	enableMemoryCheck: false,
-		// },
-		// {
-		// 	name:         "ramp_up",
-		// 	rateCheck:    "rate>0.9",
-		// 	enableMemoryCheck: true,
-		// },
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

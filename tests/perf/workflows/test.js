@@ -36,23 +36,6 @@ const possibleScenarios = {
         ],
         gracefulRampDown: '10s',
     },
-    ramp_up: {
-        executor: 'ramping-vus',
-        startVUs: 500,
-        stages: [
-          { duration: '2m', target: 500 },
-          { duration: '10s', target: 600 },
-          { duration: '2m', target: 600 },
-          { duration: '10s', target: 700 },
-          { duration: '2m', target: 700 },
-          { duration: '10s', target: 800 },
-          { duration: '2m', target: 800 },
-          { duration: '10s', target: 900 },
-          { duration: '2m', target: 900 },
-          { duration: '10s', target: 1000 },
-          { duration: '2m', target: 1000 },
-        ],
-      },
 }
 
 let enabledScenarios = {}
