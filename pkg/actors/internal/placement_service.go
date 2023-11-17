@@ -27,6 +27,7 @@ type PlacementService interface {
 	WaitUntilReady(ctx context.Context) error
 	LookupActor(ctx context.Context, req LookupActorRequest) (LookupActorResponse, error)
 	AddHostedActorType(actorType string, idleTimeout time.Duration) error
+	SetOnAPILevelUpdate(fn func(apiLevel uint32))
 }
 
 // LookupActorRequest is the request for LookupActor.
