@@ -108,7 +108,7 @@ func mTLSEnabled(controlPlaneNamespace string, daprClient scheme.Interface) bool
 	resp, err := daprClient.ConfigurationV1alpha1().
 		Configurations(controlPlaneNamespace).
 		Get(defaultConfig, metav1.GetOptions{})
-	if !apierrors.IsNotFound(err) {
+	if apierrors.IsNotFound(err) {
 		log.Infof("Dapr system configuration '%s' does not exist; using default value %t for mTLSEnabled", defaultConfig, defaultMtlsEnabled)
 		return defaultMtlsEnabled
 	}
