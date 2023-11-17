@@ -17,7 +17,7 @@ import { check } from 'k6'
 const possibleScenarios = {
     average_load: {
         executor: 'constant-vus',
-        vus: 200, // Key for Smoke test. Keep it at 2, 3, max 5 VUs
+        vus: 2000, // Key for Smoke test. Keep it at 2, 3, max 5 VUs
         duration: '2m',
     },
     stress_load: {

@@ -125,7 +125,6 @@ func addTestResults(t *testing.T, testName string, testAppName string, result *l
 }
 
 func TestWorkFlowPerf(t *testing.T) {
-	table := summary.ForTest(t)
 	tcs := []struct {
 		name         		string
 		rateCheck       	string
@@ -156,6 +155,7 @@ func TestWorkFlowPerf(t *testing.T) {
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
+			table := summary.ForTest(t)
 			subTestName := "[" + tc.name +"]: "
 			// Get the ingress external url of test app
 			log.Println("acquiring app external URL")
