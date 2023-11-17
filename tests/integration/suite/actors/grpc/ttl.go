@@ -132,7 +132,8 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	t.Run("ensure the state key returns a ttlExpireTime", func(t *testing.T) {
-		resp, err := client.GetActorState(ctx, &rtv1.GetActorStateRequest{
+		var resp *rtv1.GetActorStateResponse
+		resp, err = client.GetActorState(ctx, &rtv1.GetActorStateRequest{
 			ActorType: "myactortype", ActorId: "myactorid", Key: "mykey",
 		})
 		require.NoError(t, err)
@@ -140,7 +141,8 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, "myvalue", string(resp.Data))
 		ttlExpireTimeStr, ok := resp.Metadata["ttlExpireTime"]
 		require.True(t, ok)
-		ttlExpireTime, err := time.Parse(time.RFC3339, ttlExpireTimeStr)
+		var ttlExpireTime time.Time
+		ttlExpireTime, err = time.Parse(time.RFC3339, ttlExpireTimeStr)
 		require.NoError(t, err)
 		assert.InDelta(t, now.Add(2*time.Second).Unix(), ttlExpireTime.Unix(), 1)
 	})
@@ -155,16 +157,17 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 					Key:           "mykey",
 					Value:         &anypb.Any{Value: []byte("myvalue")},
 					Metadata: map[string]string{
-						"ttlInSeconds": "3",
+						"ttlInSeconds": "4",
 					},
 				},
 			},
 		})
 		require.NoError(t, err)
 
-		time.Sleep(time.Second * 2)
+		time.Sleep(time.Second * 3)
 
-		resp, err := client.GetActorState(ctx, &rtv1.GetActorStateRequest{
+		var resp *rtv1.GetActorStateResponse
+		resp, err = client.GetActorState(ctx, &rtv1.GetActorStateRequest{
 			ActorType: "myactortype", ActorId: "myactorid", Key: "mykey",
 		})
 		require.NoError(t, err)
