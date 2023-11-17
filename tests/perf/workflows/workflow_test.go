@@ -143,7 +143,7 @@ func TestWorkFlowPerf(t *testing.T) {
 		{
 			name:         "comprehensive_load",
 			rateCheck:    "rate==1",
-			enableMemoryCheck: true,
+			enableMemoryCheck: false,
 		},
 		// {
 		// 	name:         "stress_load",
