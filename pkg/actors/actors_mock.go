@@ -84,6 +84,11 @@ func (*MockPlacement) Close() error {
 	return nil
 }
 
+// Stop implements internal.PlacementService
+func (*MockPlacement) SetOnAPILevelUpdate(fn func(apiLevel uint32)) {
+	// No-op
+}
+
 // WaitUntilReady implements internal.PlacementService
 func (*MockPlacement) WaitUntilReady(ctx context.Context) error {
 	return nil

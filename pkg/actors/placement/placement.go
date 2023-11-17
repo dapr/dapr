@@ -33,6 +33,7 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 )
 
 var log = logger.NewLogger("dapr.runtime.actors.placement")
@@ -75,6 +76,11 @@ type actorPlacement struct {
 	placementTables *hashing.ConsistentHashTables
 	// placementTableLock is the lock for placementTables.
 	placementTableLock sync.RWMutex
+
+	// apiLevel is the current API level of the cluster
+	apiLevel uint32
+	// onAPILevelUpdate is invoked when the API level is updated
+	onAPILevelUpdate func(apiLevel uint32)
 
 	// unblockSignal is the channel to unblock table locking.
 	unblockSignal chan struct{}
@@ -448,12 +454,18 @@ func (p *actorPlacement) unblockPlacements() {
 
 func (p *actorPlacement) updatePlacements(in *v1pb.PlacementTables) {
 	updated := false
+	var updatedAPILevel *uint32
 	func() {
 		p.placementTableLock.Lock()
 		defer p.placementTableLock.Unlock()
 
 		if in.Version == p.placementTables.Version {
 			return
+		}
+
+		if in.ApiLevel != p.apiLevel {
+			p.apiLevel = in.ApiLevel
+			updatedAPILevel = ptr.Of(in.ApiLevel)
 		}
 
 		tables := &hashing.ConsistentHashTables{Entries: make(map[string]*hashing.Consistent)}
@@ -470,14 +482,19 @@ func (p *actorPlacement) updatePlacements(in *v1pb.PlacementTables) {
 		updated = true
 	}()
 
-	if !updated {
-		return
+	if updatedAPILevel != nil && p.onAPILevelUpdate != nil {
+		p.onAPILevelUpdate(*updatedAPILevel)
 	}
 
-	// May call LookupActor inside, so should not do this with placementTableLock locked.
-	p.afterTableUpdateFn()
+	if updated {
+		// May call LookupActor inside, so should not do this with placementTableLock locked.
+		p.afterTableUpdateFn()
+		log.Infof("Placement tables updated, version: %s", in.GetVersion())
+	}
+}
 
-	log.Infof("Placement tables updated, version: %s", in.GetVersion())
+func (p *actorPlacement) SetOnAPILevelUpdate(fn func(apiLevel uint32)) {
+	p.onAPILevelUpdate = fn
 }
 
 // addDNSResolverPrefix add the `dns://` prefix to the given addresses
