@@ -15,6 +15,7 @@ package grpc
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/http"
@@ -87,6 +88,24 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 			return &commonv1.InvokeResponse{
 				Data:        &anypb.Any{Value: []byte("multiple/segments")},
 				ContentType: "application/json",
+			}, nil
+
+		case "testing_proto_data":
+			// Based on the 'getaccount' call in .Net SDK example
+			if in.Data.TypeUrl != "type.googleapis.com/GetAccountRequest" {
+				return nil, errors.New("unexpected request data's type_url: " + in.Data.TypeUrl)
+			}
+			if base64.StdEncoding.EncodeToString(in.Data.Value) != "CgIxNw==" {
+				return nil, errors.New("unexpected request data")
+			}
+
+			value, _ := base64.StdEncoding.DecodeString("CgIxNxDIBQ==")
+			return &commonv1.InvokeResponse{
+				Data: &anypb.Any{
+					TypeUrl: "type.googleapis.com/Account",
+					Value:   value,
+				},
+				ContentType: "",
 			}, nil
 
 		default:
@@ -187,6 +206,32 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, codes.Unknown, status.Convert(err).Code())
 		assert.Equal(t, "invalid method", status.Convert(err).Message())
 		assert.Nil(t, resp)
+	})
+
+	t.Run("gRPC invoke with type_url data and payload via a separate client sidecar", func(t *testing.T) {
+		host := fmt.Sprintf("localhost:%d", b.daprd1.GRPCPort())
+		conn, err := grpc.DialContext(ctx, host, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+		require.NoError(t, err)
+		t.Cleanup(func() { require.NoError(t, conn.Close()) })
+
+		// Based on the "getaccount" example at the .Net SDK.
+		value, _ := base64.StdEncoding.DecodeString("CgIxNw==")
+		resp, err := rtv1.NewDaprClient(conn).InvokeService(ctx, &rtv1.InvokeServiceRequest{
+			Id: b.daprd2.AppID(),
+			Message: &commonv1.InvokeRequest{
+				Method: "testing_proto_data",
+				Data: &anypb.Any{
+					TypeUrl: "type.googleapis.com/GetAccountRequest",
+					Value:   value,
+				},
+			},
+		})
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+
+		assert.Equal(t, "type.googleapis.com/Account", resp.Data.TypeUrl)
+		assert.Equal(t, "CgIxNxDIBQ==", base64.StdEncoding.EncodeToString(resp.Data.Value))
+		assert.Equal(t, "", resp.ContentType)
 	})
 
 	t.Run("no method", func(t *testing.T) {
