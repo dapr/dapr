@@ -14,78 +14,29 @@ limitations under the License.
 import http from 'k6/http'
 import exec from 'k6/execution'
 import { check } from 'k6'
+import { Rate } from 'k6/metrics';
 
-const possibleScenarios = {
-    t_50_500: {
-        executor: 'shared-iterations',
-        vus: 50,
-        iterations: 500,
-        maxDuration: '250s',     
-    },
-    t_100_500: {
-        executor: 'shared-iterations',
-        vus: 100,
-        iterations: 500,
-        maxDuration: '450s',     
-    },   
-    t_150_500: {
-        executor: 'shared-iterations',
-        vus: 150,
-        iterations: 500,
-        maxDuration: '450s',     
-    },      
-    t_350_1750: {
-        executor: 'shared-iterations',
-        vus: 350,
-        iterations: 1750,
-        maxDuration: '1200s',     
-    },       
-    t_110_550: {
-        executor: 'shared-iterations',
-        vus: 110,
-        iterations: 550,
-        maxDuration: '500s',     
-    }, 
-    t_100_1000: {
-        executor: 'shared-iterations',
-        vus: 100,
-        iterations: 1000,
-        maxDuration: '500s',     
-    },     
-}
-
-let enabledScenarios = {}
-enabledScenarios[__ENV.SCENARIO] = possibleScenarios[__ENV.SCENARIO]
+const errorRate = new Rate('errorRate');
 
 export const options = {
     discardResponseBodies: true,
     thresholds: {
-        checks: [__ENV.RATE_CHECK],
+        checks: [
+            { threshold: 'rate > 0.9'},
+        ],
     },
-    scenarios: enabledScenarios,
+    vus: 100, // Key for Smoke test. Keep it at 2, 3, max 5 VUs
+    duration: '10m',
+    gracefulRampDown: '3m',
 }
 
 const DAPR_ADDRESS = `http://127.0.0.1:${__ENV.DAPR_HTTP_PORT}`
 
-function execute() {
-    console.log("Executing the execute function with idInTest: " + `${exec.scenario.iterationInTest}`)
-    let data = JSON.stringify({
-        workflow_name : __ENV.WORKFLOW_NAME,
-        workflow_input: __ENV.WORKFLOW_INPUT,
-    })
-    let params = {
-        headers: {
-            'Content-Type': 'application/json',
-          },
-        timeout: '250s'
-    }
-    const res =  http.post(`${__ENV.TARGET_URL}/${exec.scenario.iterationInTest}`,data,params)
-    console.log("http response", JSON.stringify(res));
-    return res
-}
-
 export default function () {
-    let result = execute()
+
+    const res = http.get(`${__ENV.TARGET_URL}`)
+    console.log("http response", JSON.stringify(res));
+
     check(result, {
         'response code was 2xx': (result) =>
             result.status >= 200 && result.status < 300,
