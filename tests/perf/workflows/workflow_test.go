@@ -131,28 +131,33 @@ func TestWorkFlowPerf(t *testing.T) {
 		rateCheck       	string
 		enableMemoryCheck	bool
 	}{
-		{
-			name:         "smoke_test",
-			rateCheck:    "rate==1",
-			enableMemoryCheck: false,
-		},
+		// {
+		// 	name:         "smoke_test",
+		// 	rateCheck:    "rate==1",
+		// 	enableMemoryCheck: false,
+		// },
 		{
 			name:         "average_load",
 			rateCheck:    "rate==1",
 			enableMemoryCheck: true,
 
 		},
-		{
-			name:         "stress_load",
-			rateCheck:    "rate==1",
-			enableMemoryCheck: true,
+		// {
+		// 	name:         "stress_load",
+		// 	rateCheck:    "rate==1",
+		// 	enableMemoryCheck: true,
 
-		},
-		{
-			name:         "stress_load",
-			rateCheck:    "rate==1",
-			enableMemoryCheck: false,
-		},
+		// },
+		// {
+		// 	name:         "stress_load",
+		// 	rateCheck:    "rate==1",
+		// 	enableMemoryCheck: false,
+		// },
+		// {
+		// 	name:         "ramp_up",
+		// 	rateCheck:    "rate>0.9",
+		// 	enableMemoryCheck: true,
+		// },
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

@@ -22,13 +22,13 @@ const possibleScenarios = {
     },
     average_load: {
         executor: 'constant-vus',
-        vus: 100, // Key for Smoke test. Keep it at 2, 3, max 5 VUs
-        duration: '5m',
+        vus: 200, // Key for Smoke test. Keep it at 2, 3, max 5 VUs
+        duration: '2m',
     },
     stress_load: {
         executor: 'constant-vus',
-        vus: 200, // Key for Smoke test. Keep it at 2, 3, max 5 VUs
-        duration: '5m',
+        vus: 500, // Key for Smoke test. Keep it at 2, 3, max 5 VUs
+        duration: '2m',
     },
     spike_load: {
         executor: 'ramping-vus',
@@ -38,7 +38,24 @@ const possibleScenarios = {
             { duration: '5s', target: 0 },
         ],
         gracefulRampDown: '10s',
-    }
+    },
+    ramp_up: {
+        executor: 'ramping-vus',
+        startVUs: 500,
+        stages: [
+          { duration: '2m', target: 500 },
+          { duration: '10s', target: 600 },
+          { duration: '2m', target: 600 },
+          { duration: '10s', target: 700 },
+          { duration: '2m', target: 700 },
+          { duration: '10s', target: 800 },
+          { duration: '2m', target: 800 },
+          { duration: '10s', target: 900 },
+          { duration: '2m', target: 900 },
+          { duration: '10s', target: 1000 },
+          { duration: '2m', target: 1000 },
+        ],
+      },
 }
 
 let enabledScenarios = {}
