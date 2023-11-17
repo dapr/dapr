@@ -15,11 +15,6 @@ import http from 'k6/http'
 import { check } from 'k6'
 
 const possibleScenarios = {
-    smoke_test: {
-        executor: 'shared-iterations',
-        vus: 1, // Key for Smoke test. Keep it at 2, 3, max 5 VUs
-        iterations: 1,
-    },
     average_load: {
         executor: 'constant-vus',
         vus: 200, // Key for Smoke test. Keep it at 2, 3, max 5 VUs

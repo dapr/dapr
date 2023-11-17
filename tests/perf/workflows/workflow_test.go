@@ -131,11 +131,6 @@ func TestWorkFlowPerf(t *testing.T) {
 		rateCheck       	string
 		enableMemoryCheck	bool
 	}{
-		// {
-		// 	name:         "smoke_test",
-		// 	rateCheck:    "rate==1",
-		// 	enableMemoryCheck: false,
-		// },
 		{
 			name:         "average_load",
 			rateCheck:    "rate==1",
