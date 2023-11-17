@@ -24,7 +24,7 @@ The average load test runs for a duration of 10 minutes, involving 500 clients t
 
 In the test code, we implement a monitoring mechanism to check CPU and memory usage every 30 seconds. This data serves as a robust indicator, allowing us to promptly identify any potential memory leaks.
 
-2. comprehensive load test
+2. Comprehensive load test
 ```js
     comprehensive_load: {
         executor: 'ramping-vus',
