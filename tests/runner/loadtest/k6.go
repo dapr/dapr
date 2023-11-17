@@ -403,12 +403,13 @@ func isJobCompleted(job batchv1.Job) bool {
 func (k6 *K6) waitUntilJobsState(isState func(*batchv1.JobList, error) bool) error {
 	jobsClient := k6.kubeClient.BatchV1().Jobs(k6.namespace)
 
-	waitErr := wait.PollImmediate(pollInterval, pollTimeout, func() (bool, error) {
-		ctx, cancel := context.WithTimeout(k6.ctx, time.Minute)
+	ctx, cancel := context.WithTimeout(k6.ctx, pollTimeout)
+	defer cancel()
+
+	waitErr := wait.PollUntilContextCancel(ctx, pollInterval, true, func(ctx context.Context) (bool, error) {
 		jobList, err := jobsClient.List(ctx, v1.ListOptions{
 			LabelSelector: k6.selector(),
 		})
-		cancel()
 
 		done := isState(jobList, err)
 		if done {
