@@ -24,6 +24,7 @@ const owners = [
     'taction',
     'tanvigour',
     'yaron2',
+    'kaibocai',
 ]
 
 const SDKs = [
