@@ -183,7 +183,7 @@ func TestWorkFlowPerf(t *testing.T) {
 				// loadtest.EnableLog(), // uncomment this to enable k6 logs, this however breaks reporting, only for debugging.
 				loadtest.WithRunnerEnvVar("TARGET_URL", targetURL),
 				loadtest.WithRunnerEnvVar("SCENARIO", tc.name),
-				loadtest.WithRunnerEnvVar("RATE_CHECK", "rate==1"),
+				loadtest.WithRunnerEnvVar("RATE_CHECK", tc.rateCheck),
 			)
 			defer k6Test.Dispose()
 			t.Log("running the k6 load test...")
