@@ -57,6 +57,24 @@ func TestAppToken(t *testing.T) {
 		token := GetAppToken()
 		assert.Equal(t, "", token)
 	})
+
+	t.Run("custom token header name", func(t *testing.T) {
+		/* #nosec */
+		name := "x-api-token"
+		t.Setenv(consts.AppAPITokenHeaderEnvVar, name)
+
+		n := GetAppTokenHeaderName()
+		assert.Equal(t, name, n)
+	})
+
+	t.Run("default token header name", func(t *testing.T) {
+		/* #nosec */
+		name := ""
+		t.Setenv(consts.AppAPITokenHeaderEnvVar, name)
+
+		n := GetAppTokenHeaderName()
+		assert.Equal(t, consts.APITokenHeader, n)
+	})
 }
 
 func TestGetKubernetesIdentityToken(t *testing.T) {

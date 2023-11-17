@@ -37,6 +37,16 @@ func GetAppToken() string {
 	return os.Getenv(consts.AppAPITokenEnvVar)
 }
 
+// GetAppTokenHeaderName returns the header name of the app api token from an environment variable.
+func GetAppTokenHeaderName() string {
+	header := os.Getenv(consts.AppAPITokenHeaderEnvVar)
+	if header == "" {
+		return consts.APITokenHeader
+	}
+
+	return header
+}
+
 // getKubernetesIdentityToken returns the value of the Kubernetes identity
 // token.
 func getKubernetesIdentityToken() (string, error) {

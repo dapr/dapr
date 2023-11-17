@@ -40,7 +40,6 @@ import (
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/security"
-	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 	streamutils "github.com/dapr/kit/streams"
 )
 
@@ -55,16 +54,17 @@ const (
 
 // Channel is an HTTP implementation of an AppChannel.
 type Channel struct {
-	client                *http.Client
-	baseAddress           string
-	ch                    chan struct{}
-	compStore             *compstore.ComponentStore
-	tracingSpec           *config.TracingSpec
-	appHeaderToken        string
-	maxResponseBodySizeMB int
-	appHealthCheckPath    string
-	appHealth             *apphealth.AppHealth
-	pipeline              httpMiddleware.Pipeline
+	client                   *http.Client
+	baseAddress              string
+	ch                       chan struct{}
+	compStore                *compstore.ComponentStore
+	tracingSpec              *config.TracingSpec
+	appHeaderToken           string
+	appHeaderTokenHeaderName string
+	maxResponseBodySizeMB    int
+	appHealthCheckPath       string
+	appHealth                *apphealth.AppHealth
+	pipeline                 httpMiddleware.Pipeline
 }
 
 // ChannelConfiguration is the configuration used to create an HTTP AppChannel.
@@ -85,13 +85,14 @@ type ChannelConfiguration struct {
 // CreateHTTPChannel creates an HTTP AppChannel.
 func CreateHTTPChannel(config ChannelConfiguration) (channel.AppChannel, error) {
 	c := &Channel{
-		pipeline:              config.Pipeline,
-		client:                config.Client,
-		compStore:             config.CompStore,
-		baseAddress:           config.Endpoint,
-		tracingSpec:           config.TracingSpec,
-		appHeaderToken:        security.GetAppToken(),
-		maxResponseBodySizeMB: config.MaxRequestBodySizeMB,
+		pipeline:                 config.Pipeline,
+		client:                   config.Client,
+		compStore:                config.CompStore,
+		baseAddress:              config.Endpoint,
+		tracingSpec:              config.TracingSpec,
+		appHeaderToken:           security.GetAppToken(),
+		appHeaderTokenHeaderName: security.GetAppTokenHeaderName(),
+		maxResponseBodySizeMB:    config.MaxRequestBodySizeMB,
 	}
 
 	if config.MaxConcurrency > 0 {
@@ -358,7 +359,7 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 	}
 
 	if h.appHeaderToken != "" {
-		channelReq.Header.Set(securityConsts.APITokenHeader, h.appHeaderToken)
+		channelReq.Header.Set(h.appHeaderTokenHeaderName, h.appHeaderToken)
 	}
 
 	return channelReq, nil

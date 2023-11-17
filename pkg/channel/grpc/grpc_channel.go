@@ -33,31 +33,32 @@ import (
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/security"
-	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 )
 
 // Channel is a concrete AppChannel implementation for interacting with gRPC based user code.
 type Channel struct {
-	appCallbackClient    runtimev1pb.AppCallbackClient
-	conn                 *grpc.ClientConn
-	baseAddress          string
-	ch                   chan struct{}
-	tracingSpec          config.TracingSpec
-	appMetadataToken     string
-	maxRequestBodySizeMB int
-	appHealth            *apphealth.AppHealth
+	appCallbackClient          runtimev1pb.AppCallbackClient
+	conn                       *grpc.ClientConn
+	baseAddress                string
+	ch                         chan struct{}
+	tracingSpec                config.TracingSpec
+	appMetadataToken           string
+	appMetadataTokenHeaderName string
+	maxRequestBodySizeMB       int
+	appHealth                  *apphealth.AppHealth
 }
 
 // CreateLocalChannel creates a gRPC connection with user code.
 func CreateLocalChannel(port, maxConcurrency int, conn *grpc.ClientConn, spec config.TracingSpec, maxRequestBodySize int, readBufferSize int, baseAddress string) *Channel {
 	// readBufferSize is unused
 	c := &Channel{
-		appCallbackClient:    runtimev1pb.NewAppCallbackClient(conn),
-		conn:                 conn,
-		baseAddress:          net.JoinHostPort(baseAddress, strconv.Itoa(port)),
-		tracingSpec:          spec,
-		appMetadataToken:     security.GetAppToken(),
-		maxRequestBodySizeMB: maxRequestBodySize,
+		appCallbackClient:          runtimev1pb.NewAppCallbackClient(conn),
+		conn:                       conn,
+		baseAddress:                net.JoinHostPort(baseAddress, strconv.Itoa(port)),
+		tracingSpec:                spec,
+		appMetadataToken:           security.GetAppToken(),
+		appMetadataTokenHeaderName: security.GetAppTokenHeaderName(),
+		maxRequestBodySizeMB:       maxRequestBodySize,
 	}
 	if maxConcurrency > 0 {
 		c.ch = make(chan struct{}, maxConcurrency)
@@ -101,7 +102,7 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	md := invokev1.InternalMetadataToGrpcMetadata(ctx, pd.Metadata, true)
 
 	if g.appMetadataToken != "" {
-		md.Set(securityConsts.APITokenHeader, g.appMetadataToken)
+		md.Set(g.appMetadataTokenHeaderName, g.appMetadataToken)
 	}
 
 	// Prepare gRPC Metadata
