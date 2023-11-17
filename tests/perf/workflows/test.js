@@ -34,6 +34,22 @@ const possibleScenarios = {
         ],
         gracefulRampDown: '10s',
     },
+    average_stress_spike_load: {
+        executor: 'ramping-vus',
+        stages: [
+            // average load: 200 VUs run for 2 mins
+          { duration: '10s', target: 200 },
+          { duration: '2m', target: 200 },
+          // stress load: 500 VUs run for 2 mins
+          { duration: '10s', target: 500 },
+          { duration: '2m', target: 500 },
+          { duration: '20s', target: 0 },
+          // Spike load: 200 VUs in 10s
+          { duration: '10s', target: 200 },
+          { duration: '5s', target: 0 },
+        ],
+        gracefulRampDown: '10s',
+    },
     ramp_up: {
         executor: 'ramping-vus',
         startVUs: 500,

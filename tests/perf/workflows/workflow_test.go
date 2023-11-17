@@ -86,11 +86,11 @@ func collect(t *testing.T, testAppName string, table *summary.Table) {
 
 func collectCPUMemoryUsage(t *testing.T, testAppName string, table *summary.Table, num int) {
 	done := make(chan bool)
-	time.AfterFunc(time.Duration(num) * time.Second, func() {
+	time.AfterFunc(time.Duration(num) * time.Minute, func() {
 		done <- true
 	})
 
-	ticker := time.NewTicker(1 * time.Second)
+	ticker := time.NewTicker(20 * time.Second)
 
 	for {
 		select {
@@ -189,7 +189,7 @@ func TestWorkFlowPerf(t *testing.T) {
 			t.Log("running the k6 load test...")
 			
 			if tc.enableMemoryCheck {
-				go collectCPUMemoryUsage(t, testAppNames[0], table, 15)
+				go collectCPUMemoryUsage(t, testAppNames[0], table, 5)
 			}
 		
 			require.NoError(t, tr.Platform.LoadTest(k6Test))
