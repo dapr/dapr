@@ -11,6 +11,7 @@ const owners = [
     'italypaleale',
     'johnewart',
     'joshvanl',
+    'kaibocai',
     'mcandeia',
     'msfussell',
     'mukundansundar',
