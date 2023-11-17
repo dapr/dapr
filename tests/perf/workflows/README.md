@@ -29,14 +29,14 @@ In the test code, we implement a monitoring mechanism to check CPU and memory us
     comprehensive_load: {
         executor: 'ramping-vus',
         stages: [
-            // average load: 200 VUs run for 2 mins
+            // average load: 500 VUs run for 2 mins
           { duration: '10s', target: 500 },
           { duration: '2m', target: 500 },
-          // stress load: 500 VUs run for 2 mins
+          // stress load: 1000 VUs run for 2 mins
           { duration: '10s', target: 1000 },
           { duration: '2m', target: 1000 },
           { duration: '20s', target: 0 },
-          // Spike load: 200 VUs in 10s
+          // Spike load: 1000 VUs in 10s
           { duration: '10s', target: 1000 },
           { duration: '5s', target: 0 },
         ],
