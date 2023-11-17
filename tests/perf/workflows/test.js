@@ -14,25 +14,49 @@ limitations under the License.
 import http from 'k6/http'
 import { check } from 'k6'
 
+const possibleScenarios = {
+    smoke_test: {
+        executor: 'shared-iterations',
+        vus: 1, // Key for Smoke test. Keep it at 2, 3, max 5 VUs
+        iterations: 1,
+    },
+    average_load: {
+        executor: 'constant-vus',
+        vus: 100, // Key for Smoke test. Keep it at 2, 3, max 5 VUs
+        duration: '5m',
+    },
+    stress_load: {
+        executor: 'constant-vus',
+        vus: 200, // Key for Smoke test. Keep it at 2, 3, max 5 VUs
+        duration: '5m',
+    },
+    spike_load: {
+        executor: 'ramping-vus',
+        startVUs: 0,
+        stages: [
+            { duration: '10s', target: 100 },
+            { duration: '5s', target: 0 },
+        ],
+        gracefulRampDown: '10s',
+    }
+}
+
+let enabledScenarios = {}
+enabledScenarios[__ENV.SCENARIO] = possibleScenarios[__ENV.SCENARIO]
+
 export const options = {
     discardResponseBodies: true,
     thresholds: {
-        checks: [
-            { threshold: 'rate > 0.9'},
-        ],
+        checks: [__ENV.RATE_CHECK],
     },
-    vus: 100, // Key for Smoke test. Keep it at 2, 3, max 5 VUs
-    duration: '10m',
-    gracefulRampDown: '3m',
+    scenarios: enabledScenarios,
 }
 
 const DAPR_ADDRESS = `http://127.0.0.1:${__ENV.DAPR_HTTP_PORT}`
 
 export default function () {
-
     const res = http.get(`${__ENV.TARGET_URL}`)
     console.log("http response", JSON.stringify(res));
-
     check(result, {
         'response code was 2xx': (result) =>
             result.status >= 200 && result.status < 300,
