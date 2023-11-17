@@ -182,7 +182,7 @@ func TestWorkFlowPerf(t *testing.T) {
 				loadtest.WithParallelism(1),
 				// loadtest.EnableLog(), // uncomment this to enable k6 logs, this however breaks reporting, only for debugging.
 				loadtest.WithRunnerEnvVar("TARGET_URL", targetURL),
-				loadtest.WithRunnerEnvVar("SCENARIO", "smoke_test"),
+				loadtest.WithRunnerEnvVar("SCENARIO", tc.name),
 				loadtest.WithRunnerEnvVar("RATE_CHECK", "rate==1"),
 			)
 			defer k6Test.Dispose()
