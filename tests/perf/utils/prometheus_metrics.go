@@ -35,11 +35,12 @@ type DaprMetrics struct {
 	ApplicationThroughput float64
 }
 
-// DAPR_PERF_METRICS_PROMETHEUS_URL needs to be set
-func PushPrometheusMetrics(metrics DaprMetrics, perfTest string, component string) {
+// DAPR_PERF_METRICS_PROMETHEUS_PUSHGATEWAY_URL needs to be set
+func PushPrometheusMetrics(metrics DaprMetrics, perfTest, component string) {
 
-	daprPerfMetricsPrometheusURL := os.Getenv("DAPR_PERF_METRICS_PROMETHEUS_URL")
-	if daprPerfMetricsPrometheusURL == "" {
+	prometheusPushgatewayURL := os.Getenv("DAPR_PERF_METRICS_PROMETHEUS_PUSHGATEWAY_URL")
+	if prometheusPushgatewayURL == "" {
+		log.Println("DAPR_PERF_METRICS_PROMETHEUS_PUSHGATEWAY_URL is not set, skipping pushing perf test metrics to Prometheus Pushgateway")
 		return
 	}
 
@@ -78,7 +79,7 @@ func PushPrometheusMetrics(metrics DaprMetrics, perfTest string, component strin
 	})
 
 	// Create a pusher to push metrics to the Prometheus Pushgateway
-	pusher := push.New(daprPerfMetricsPrometheusURL, perfTest).
+	pusher := push.New(prometheusPushgatewayURL, perfTest).
 		Collector(baselineLatencyGauge).
 		Collector(daprLatencyGauge).
 		Collector(addedLatencyGauge).
@@ -94,6 +95,13 @@ func PushPrometheusMetrics(metrics DaprMetrics, perfTest string, component strin
 		pusher.Grouping("component", component)
 	}
 
+	// Set username and password if specified
+	prometheusPushgatewayUsername := os.Getenv("DAPR_PERF_METRICS_PROMETHEUS_PUSHGATEWAY_USERNAME")
+	prometheusPushgatewayPassword := os.Getenv("DAPR_PERF_METRICS_PROMETHEUS_PUSHGATEWAY_PASSWORD")
+	if len(prometheusPushgatewayUsername) > 0 && len(prometheusPushgatewayPassword) > 0 {
+		pusher.BasicAuth(prometheusPushgatewayUsername, prometheusPushgatewayPassword)
+	}
+
 	// Set the dapr_metrics values to the Gauges created
 	baselineLatencyGauge.Set(metrics.BaselineLatency)
 	daprLatencyGauge.Set(metrics.DaprLatency)
@@ -106,6 +114,6 @@ func PushPrometheusMetrics(metrics DaprMetrics, perfTest string, component strin
 
 	// Push the metrics value to the Pushgateway
 	if err := pusher.Push(); err != nil {
-		log.Println("Failed to push metrics:", err)
+		log.Println("Failed to push perf test metrics to Prometheus Pushgateway:", err)
 	}
 }
