@@ -71,5 +71,4 @@ func Test_mtlsEnabled(t *testing.T) {
 		)
 		assert.True(t, mTLSEnabled("test-ns", cl))
 	})
-
 }
