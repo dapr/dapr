@@ -17,35 +17,21 @@ import { check } from 'k6'
 const possibleScenarios = {
     average_load: {
         executor: 'constant-vus',
-        vus: 200000, // Key for Smoke test. Keep it at 2, 3, max 5 VUs
-        duration: '2m',
+        vus: 500, 
+        duration: '10m',
     },
-    stress_load: {
-        executor: 'constant-vus',
-        vus: 500, // Key for Smoke test. Keep it at 2, 3, max 5 VUs
-        duration: '2m',
-    },
-    spike_load: {
-        executor: 'ramping-vus',
-        startVUs: 0,
-        stages: [
-            { duration: '10s', target: 100 },
-            { duration: '5s', target: 0 },
-        ],
-        gracefulRampDown: '10s',
-    },
-    average_stress_spike_load: {
+    comprehensive_load: {
         executor: 'ramping-vus',
         stages: [
             // average load: 200 VUs run for 2 mins
-          { duration: '10s', target: 200 },
-          { duration: '2m', target: 200 },
-          // stress load: 500 VUs run for 2 mins
           { duration: '10s', target: 500 },
           { duration: '2m', target: 500 },
+          // stress load: 500 VUs run for 2 mins
+          { duration: '10s', target: 1000 },
+          { duration: '2m', target: 1000 },
           { duration: '20s', target: 0 },
           // Spike load: 200 VUs in 10s
-          { duration: '10s', target: 200 },
+          { duration: '10s', target: 1000 },
           { duration: '5s', target: 0 },
         ],
         gracefulRampDown: '10s',

@@ -74,13 +74,13 @@ func collect(t *testing.T, testAppName string, table *summary.Table) {
 	sidecarUsage, err2 := tr.Platform.GetSidecarUsage(testAppName)
 	if err1 == nil {
 		table.
-		Outputf(testAppName+"App Memory", "%vMb--at time %v", appUsage.MemoryMb, time.Now()).
-		Outputf(testAppName+"App CPU", "%vm--at time %v", appUsage.CPUm, time.Now())
+		Outputf(appendTime(testAppName+"App Memory"), "%vMb", appUsage.MemoryMb).
+		Outputf(appendTime(testAppName+"App CPU"), "%vm", appUsage.CPUm)
 	}
 	if err2 == nil {
 		table.
-		Outputf(testAppName+"Sidecar Memory", "%vMb--at time %v", sidecarUsage.MemoryMb, time.Now()).
-		Outputf(testAppName+"Sidecar CPU", "%vm--at time %v", sidecarUsage.CPUm, time.Now())
+		Outputf(appendTime(testAppName+"Sidecar Memory"), "%vMb", sidecarUsage.MemoryMb).
+		Outputf(appendTime(testAppName+"Sidecar CPU"), "%vm", sidecarUsage.CPUm)
 	}
 }
 
@@ -90,7 +90,7 @@ func collectCPUMemoryUsage(t *testing.T, testAppName string, table *summary.Tabl
 		done <- true
 	})
 
-	ticker := time.NewTicker(20 * time.Second)
+	ticker := time.NewTicker(30 * time.Second)
 
 	for {
 		select {
@@ -101,6 +101,10 @@ func collectCPUMemoryUsage(t *testing.T, testAppName string, table *summary.Tabl
 			return
 		}
 	}
+}
+
+func appendTime(head string) string {
+	return head + time.Now().Format("2006-01-02 15:04:05")
 }
 
 func addTestResults(t *testing.T, testName string, testAppName string, result *loadtest.K6RunnerMetricsSummary, table *summary.Table) *summary.Table {
@@ -114,10 +118,10 @@ func addTestResults(t *testing.T, testName string, testAppName string, result *l
 	return table.
 		OutputInt(testName+"VUs Max", result.VusMax.Values.Max).
 		OutputFloat64(testName+"Iterations Count", result.Iterations.Values.Count).
-		Outputf(testAppName+"App Memory", "%vMb--at time %v", appUsage.MemoryMb, time.Now()).
-		Outputf(testAppName+"App CPU", "%vm--at time %v", appUsage.CPUm, time.Now()).
-		Outputf(testAppName+"Sidecar Memory", "%vMb--at time %v", sidecarUsage.MemoryMb, time.Now()).
-		Outputf(testAppName+"Sidecar CPU", "%vm--at time %v", sidecarUsage.CPUm, time.Now()).
+		Outputf(appendTime(testAppName+"App Memory"), "%vMb", appUsage.MemoryMb).
+		Outputf(appendTime(testAppName+"App CPU"), "%vm", appUsage.CPUm).
+		Outputf(appendTime(testAppName+"Sidecar Memory"), "%vMb", sidecarUsage.MemoryMb).
+		Outputf(appendTime(testAppName+"Sidecar CPU"), "%vm", sidecarUsage.CPUm).
 		OutputInt(testName+"Restarts", restarts).
 		OutputK6Trend(testName+"Req Duration", "ms", result.HTTPReqDuration).
 		OutputK6Trend(testName+"Req Waiting", "ms", result.HTTPReqWaiting).
@@ -136,12 +140,11 @@ func TestWorkFlowPerf(t *testing.T) {
 			enableMemoryCheck: true,
 
 		},
-		// {
-		// 	name:         "stress_load",
-		// 	rateCheck:    "rate==1",
-		// 	enableMemoryCheck: true,
-
-		// },
+		{
+			name:         "comprehensive_load",
+			rateCheck:    "rate==1",
+			enableMemoryCheck: true,
+		},
 		// {
 		// 	name:         "stress_load",
 		// 	rateCheck:    "rate==1",
@@ -189,7 +192,7 @@ func TestWorkFlowPerf(t *testing.T) {
 			t.Log("running the k6 load test...")
 			
 			if tc.enableMemoryCheck {
-				go collectCPUMemoryUsage(t, testAppNames[0], table, 5)
+				go collectCPUMemoryUsage(t, testAppNames[0], table, 15)
 			}
 		
 			require.NoError(t, tr.Platform.LoadTest(k6Test))
