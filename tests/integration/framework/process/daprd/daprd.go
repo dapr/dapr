@@ -44,15 +44,17 @@ type Daprd struct {
 	appHTTP  process.Interface
 	freeport *util.FreePort
 
-	appID            string
-	appProtocol      string
-	appPort          int
-	grpcPort         int
-	httpPort         int
+	appID       string
+	appProtocol string
+	appPort     int
+	grpcPort    int
+	httpPort    int
+
 	internalGRPCPort int
 	publicPort       int
 	metricsPort      int
 	profilePort      int
+	healthPort       int
 }
 
 func New(t *testing.T, fopts ...Option) *Daprd {
@@ -63,7 +65,7 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 
 	appHTTP := prochttp.New(t)
 
-	fp := util.ReservePorts(t, 6)
+	fp := util.ReservePorts(t, 7)
 	opts := options{
 		appID:            uid.String(),
 		appPort:          appHTTP.Port(),
@@ -74,6 +76,7 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		publicPort:       fp.Port(t, 3),
 		metricsPort:      fp.Port(t, 4),
 		profilePort:      fp.Port(t, 5),
+		healthPort:       fp.Port(t, 6),
 		logLevel:         "info",
 		mode:             "standalone",
 	}
@@ -91,6 +94,7 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		"--log-level=" + opts.logLevel,
 		"--app-id=" + opts.appID,
 		"--app-port=" + strconv.Itoa(opts.appPort),
+		"--app-health-port=" + strconv.Itoa(opts.healthPort),
 		"--app-protocol=" + opts.appProtocol,
 		"--dapr-grpc-port=" + strconv.Itoa(opts.grpcPort),
 		"--dapr-http-port=" + strconv.Itoa(opts.httpPort),
@@ -176,7 +180,7 @@ func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
 	case "http":
 		client := util.HTTPClient(t)
 		assert.Eventually(t, func() bool {
-			req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/v1.0/healthz", d.httpPort), nil)
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/v1.0/healthz", d.healthPort), nil)
 			if err != nil {
 				return false
 			}

@@ -303,6 +303,8 @@ func (c *Channels) getHTTPEndpointAppChannel(pipeline middlehttp.Pipeline, endpo
 		Pipeline:             pipeline,
 		MaxRequestBodySizeMB: c.maxRequestBodySize,
 		TracingSpec:          c.tracingSpec,
+		Endpoint:             c.AppHTTPEndpoint(),
+		HealthEndpoint:       c.AppHealthEndpoint(),
 	}
 
 	var tlsConfig *tls.Config
