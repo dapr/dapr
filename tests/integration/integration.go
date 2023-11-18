@@ -45,12 +45,19 @@ func RunIntegrationTests(t *testing.T) {
 	})
 	require.False(t, binFailed, "building binaries must succeed")
 
+	focusedTests := make(map[string]suite.Case)
 	for name, tcase := range suite.All(t) {
-		t.Run(name, func(t *testing.T) {
-			if !focus.MatchString(t.Name()) {
-				t.Skipf("skipping test case due to focus %s", t.Name())
-			}
+		// Continue rather than using `t.Skip` to reduce the noise in the test
+		// output.
+		if !focus.MatchString(name) {
+			t.Logf("skipping test case due to focus %s", name)
+			continue
+		}
+		focusedTests[name] = tcase
+	}
 
+	for name, tcase := range focusedTests {
+		t.Run(name, func(t *testing.T) {
 			t.Logf("setting up test case")
 			options := tcase.Setup(t)
 
