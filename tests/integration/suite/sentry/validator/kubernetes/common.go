@@ -17,8 +17,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -36,7 +34,7 @@ func kubeAPI(t *testing.T, bundle ca.Bundle, namespace, serviceaccount string) *
 	t.Helper()
 
 	return prockube.New(t,
-		prockube.WithDaprConfigurationList(t, &configapi.ConfigurationList{Items: []configapi.Configuration{
+		prockube.WithClusterDaprConfigurationList(t, &configapi.ConfigurationList{Items: []configapi.Configuration{
 			{
 				TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Configuration"},
 				ObjectMeta: metav1.ObjectMeta{Name: "daprsystem"},
@@ -59,7 +57,7 @@ func kubeAPI(t *testing.T, bundle ca.Bundle, namespace, serviceaccount string) *
 			ObjectMeta: metav1.ObjectMeta{Name: "dapr-trust-bundle"},
 			Data:       map[string]string{"ca.crt": string(bundle.TrustAnchors)},
 		}),
-		prockube.WithPodList(t, &corev1.PodList{
+		prockube.WithClusterPodList(t, &corev1.PodList{
 			TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "PodList"},
 			Items: []corev1.Pod{
 				{
@@ -92,27 +90,4 @@ func kubeAPI(t *testing.T, bundle ca.Bundle, namespace, serviceaccount string) *
 			w.Write(resp)
 		}),
 	)
-}
-
-func kubeconfigPath(t *testing.T, apiPort int) string {
-	t.Helper()
-
-	path := filepath.Join(t.TempDir(), "kubeconfig")
-	require.NoError(t, os.WriteFile(path, []byte(fmt.Sprintf(`
-apiVersion: v1
-kind: Config
-clusters:
-- name: default
-  cluster:
-    server: http://localhost:%d
-contexts:
-- name: default
-  context:
-    cluster: default
-    user: default
-users:
-- name: default
-current-context: default
-`, apiPort)), 0o600))
-	return path
 }

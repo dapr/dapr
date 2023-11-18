@@ -32,7 +32,7 @@ import (
 func BuildAll(t *testing.T) {
 	t.Helper()
 
-	binaryNames := []string{"daprd", "placement", "sentry"}
+	binaryNames := []string{"daprd", "placement", "sentry", "operator"}
 
 	var wg sync.WaitGroup
 	wg.Add(len(binaryNames))

@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strconv"
 	"sync"
 	"sync/atomic"
 
@@ -42,8 +43,6 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-const serverPort = 6500
-
 const (
 	APIVersionV1alpha1    = "dapr.io/v1alpha1"
 	APIVersionV2alpha1    = "dapr.io/v2alpha1"
@@ -52,9 +51,15 @@ const (
 
 var log = logger.NewLogger("dapr.operator.api")
 
+type Options struct {
+	Client   client.Client
+	Security security.Provider
+	Port     int
+}
+
 // Server runs the Dapr API server for components and configurations.
 type Server interface {
-	Run(context.Context, security.Handler) error
+	Run(context.Context) error
 	Ready(context.Context) error
 	OnComponentUpdated(ctx context.Context, component *componentsapi.Component)
 	OnHTTPEndpointUpdated(ctx context.Context, endpoint *httpendpointsapi.HTTPEndpoint)
@@ -63,6 +68,8 @@ type Server interface {
 type apiServer struct {
 	operatorv1pb.UnimplementedOperatorServer
 	Client client.Client
+	sec    security.Provider
+	port   string
 	// notify all dapr runtime
 	connLock               sync.Mutex
 	endpointLock           sync.Mutex
@@ -73,9 +80,11 @@ type apiServer struct {
 }
 
 // NewAPIServer returns a new API server.
-func NewAPIServer(client client.Client) Server {
+func NewAPIServer(opts Options) Server {
 	return &apiServer{
-		Client:                 client,
+		Client:                 opts.Client,
+		sec:                    opts.Security,
+		port:                   strconv.Itoa(opts.Port),
 		allConnUpdateChan:      make(map[string]chan *componentsapi.Component),
 		allEndpointsUpdateChan: make(map[string]chan *httpendpointsapi.HTTPEndpoint),
 		readyCh:                make(chan struct{}),
@@ -83,17 +92,22 @@ func NewAPIServer(client client.Client) Server {
 }
 
 // Run starts a new gRPC server.
-func (a *apiServer) Run(ctx context.Context, sec security.Handler) error {
+func (a *apiServer) Run(ctx context.Context) error {
 	if !a.running.CompareAndSwap(false, true) {
 		return errors.New("api server already running")
 	}
 
-	log.Infof("starting gRPC server on port %d", serverPort)
+	log.Infof("Starting gRPC server on port %s", a.port)
+
+	sec, err := a.sec.Handler(ctx)
+	if err != nil {
+		return err
+	}
 
 	s := grpc.NewServer(sec.GRPCServerOptionMTLS())
 	operatorv1pb.RegisterOperatorServer(s, a)
 
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%v", serverPort))
+	lis, err := net.Listen("tcp", ":"+a.port)
 	if err != nil {
 		return fmt.Errorf("error starting tcp listener: %w", err)
 	}
@@ -117,7 +131,7 @@ func (a *apiServer) Run(ctx context.Context, sec security.Handler) error {
 		return err
 	}
 	err = lis.Close()
-	if err != nil {
+	if err != nil && !errors.Is(err, net.ErrClosed) {
 		return fmt.Errorf("error closing listener: %w", err)
 	}
 	return nil
