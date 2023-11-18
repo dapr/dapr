@@ -145,6 +145,7 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		publicPort:       opts.publicPort,
 		metricsPort:      opts.metricsPort,
 		profilePort:      opts.profilePort,
+		healthPort:       opts.healthPort,
 	}
 }
 
