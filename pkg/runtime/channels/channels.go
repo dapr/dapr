@@ -261,6 +261,7 @@ func (c *Channels) appHTTPChannelConfig(pipeline middlehttp.Pipeline) channelhtt
 	}
 
 	conf.Endpoint = c.AppHTTPEndpoint()
+	conf.HealthEndpoint = c.AppHealthEndpoint()
 	conf.Client = c.httpClient
 
 	return conf

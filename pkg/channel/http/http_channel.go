@@ -57,6 +57,7 @@ const (
 type Channel struct {
 	client                *http.Client
 	baseAddress           string
+	healthAddress         string
 	ch                    chan struct{}
 	compStore             *compstore.ComponentStore
 	tracingSpec           *config.TracingSpec
@@ -72,6 +73,7 @@ type ChannelConfiguration struct {
 	Client               *http.Client
 	CompStore            *compstore.ComponentStore
 	Endpoint             string
+	HealthEndpoint       string
 	MaxConcurrency       int
 	Pipeline             httpMiddleware.Pipeline
 	TracingSpec          *config.TracingSpec
@@ -89,6 +91,7 @@ func CreateHTTPChannel(config ChannelConfiguration) (channel.AppChannel, error) 
 		client:                config.Client,
 		compStore:             config.CompStore,
 		baseAddress:           config.Endpoint,
+		healthAddress:         config.HealthEndpoint,
 		tracingSpec:           config.TracingSpec,
 		appHeaderToken:        security.GetAppToken(),
 		maxResponseBodySizeMB: config.MaxRequestBodySizeMB,
@@ -157,7 +160,7 @@ func (h *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRe
 	}
 
 	// If the request is for an internal endpoint, do not allow it if the app health status is not successful
-	if h.baseAddress != "" && appID == "" && h.appHealth != nil && h.appHealth.GetStatus() != apphealth.AppStatusHealthy {
+	if (h.baseAddress != "" || h.healthAddress != "") && appID == "" && h.appHealth != nil && h.appHealth.GetStatus() != apphealth.AppStatusHealthy {
 		return nil, status.Error(codes.Internal, messages.ErrAppUnhealthy)
 	}
 
@@ -182,7 +185,7 @@ func (h *Channel) SetAppHealth(ah *apphealth.AppHealth) {
 
 // HealthProbe performs a health probe.
 func (h *Channel) HealthProbe(ctx context.Context) (bool, error) {
-	channelReq, err := http.NewRequestWithContext(ctx, http.MethodGet, h.baseAddress+h.appHealthCheckPath, nil)
+	channelReq, err := http.NewRequestWithContext(ctx, http.MethodGet, h.healthAddress+h.appHealthCheckPath, nil)
 	if err != nil {
 		return false, err
 	}
