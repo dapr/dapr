@@ -25,14 +25,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/suite"
-
-	// Register all tests
-	_ "github.com/dapr/dapr/tests/integration/suite/actors"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd"
-	_ "github.com/dapr/dapr/tests/integration/suite/healthz"
-	_ "github.com/dapr/dapr/tests/integration/suite/placement"
-	_ "github.com/dapr/dapr/tests/integration/suite/ports"
-	_ "github.com/dapr/dapr/tests/integration/suite/sentry"
 )
 
 var focusF = flag.String("focus", ".*", "Focus on specific test cases. Accepts regex.")
