@@ -19,9 +19,57 @@ import (
 	"github.com/valyala/fasthttp"
 
 	"github.com/dapr/dapr/pkg/messages"
+	kitErrors "github.com/dapr/kit/errors"
 )
 
 type fasthttpResponseOption = func(ctx *fasthttp.RequestCtx)
+
+/******************************
+New funcs with kitErrors
+*******************************/
+
+// fasthttpResponseWithJSON overrides the content-type with application/json.
+func fasthttpResponseWithKitError(err *kitErrors.Error, metadata map[string]string) fasthttpResponseOption {
+	// func fasthttpResponseWithJSONStandardizedError(code int, obj []byte, metadata map[string]string) fasthttpResponseOption {
+	return func(ctx *fasthttp.RequestCtx) {
+		ctx.Response.SetStatusCode(err.HttpCode)
+		ctx.Response.SetBody(err.JSONErrorValue())
+		ctx.Response.Header.SetContentType(jsonContentTypeHeader)
+		//keeping to not break http expectations
+		//mostly nil, but some calls to this func with metadata exist in http/api.go
+		for k, v := range metadata {
+			ctx.Response.Header.Set(metadataPrefix+k, v)
+		}
+	}
+}
+
+// fasthttpResponseWithStandardizedError sets error code and jsonized error message.
+// func fasthttpResponseWithKitError(err *kitErrors.Error) fasthttpResponseOption {
+// 	return fasthttpResponseWithKitError(err, nil)
+// }
+
+func universalFastHTTPStandardizedErrorResponder(reqCtx *fasthttp.RequestCtx, err *kitErrors.Error) {
+	// if there is NOT an err
+	if err.HttpCode == 0 {
+		return
+	}
+
+	// Check if it's an APIError object
+	// apiErr, ok := err.(messages.APIError)
+	// if ok {
+	// 	fasthttpRespond(reqCtx, fasthttpResponseWithError(apiErr.HTTPCode(), apiErr))
+	// 	return
+	// }
+
+	// Respond with a generic error
+	// msg := NewErrorResponse("ERROR", err.Error())
+	// fasthttpRespond(reqCtx, fasthttpResponseWithError(http.StatusInternalServerError, msg))
+	fasthttpRespond(reqCtx, fasthttpResponseWithKitError(err, nil))
+}
+
+/******************************
+Old funcs withOUT kitErrors
+*******************************/
 
 // fasthttpResponseWithJSON overrides the content-type with application/json.
 func fasthttpResponseWithJSON(code int, obj []byte, metadata map[string]string) fasthttpResponseOption {

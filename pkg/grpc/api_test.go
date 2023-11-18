@@ -59,6 +59,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
+	"github.com/dapr/dapr/pkg/errutil"
 	"github.com/dapr/dapr/pkg/expr"
 	"github.com/dapr/dapr/pkg/grpc/metadata"
 	"github.com/dapr/dapr/pkg/grpc/universalapi"
@@ -2329,6 +2330,7 @@ func TestPublishTopic(t *testing.T) {
 		pubsubAdapter: &daprt.MockPubSubAdapter{
 			PublishFn: func(ctx context.Context, req *pubsub.PublishRequest) error {
 				if req.Topic == "error-topic" {
+					//TODO: Cassie - might need to update
 					return errors.New("error when publish")
 				}
 
@@ -2372,14 +2374,33 @@ func TestPublishTopic(t *testing.T) {
 
 	t.Run("err: empty publish event request", func(t *testing.T) {
 		_, err := client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{})
-		assert.Equal(t, codes.InvalidArgument, status.Code(err))
+
+		stat, ok := status.FromError(err)
+		if ok {
+			t.Log("OK")
+
+			fmt.Printf("\nstatus: %v\n", stat)
+		}
+
+		assert.Equal(t, stat.Code(), errutil.ErrPubSubNameEmpty.GrpcCode)
+		assert.Equal(t, stat.Message(), errutil.ErrPubSubNameEmpty.Message)
+		assert.Equal(t, stat.Details(), errutil.ErrPubSubNameEmpty.Details)
 	})
 
 	t.Run("err: publish event request with empty topic", func(t *testing.T) {
 		_, err := client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
 			PubsubName: "pubsub",
 		})
-		assert.Equal(t, codes.InvalidArgument, status.Code(err))
+
+		stat, ok := status.FromError(err)
+		if ok {
+			t.Log("OK")
+
+			fmt.Printf("\nstatus: %v\n", stat)
+		}
+
+		// t.Log(err)
+		assert.Equal(t, stat.Code(), errutil.ErrPubSubTopicEmpty.GrpcCode)
 	})
 
 	t.Run("no err: publish event request with topic and pubsub alone", func(t *testing.T) {
@@ -2429,7 +2450,16 @@ func TestPublishTopic(t *testing.T) {
 
 	t.Run("err: empty bulk publish event request", func(t *testing.T) {
 		_, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{})
-		assert.Equal(t, codes.InvalidArgument, status.Code(err))
+
+		stat, ok := status.FromError(err)
+		if ok {
+			t.Log("OK")
+
+			fmt.Printf("\nstatus: %v\n", stat)
+		}
+
+		// t.Log(err)
+		assert.Equal(t, stat.Code(), errutil.ErrPubSubNameEmpty.GrpcCode)
 	})
 
 	t.Run("err: bulk publish event request with duplicate entry Ids", func(t *testing.T) {
@@ -2482,7 +2512,16 @@ func TestPublishTopic(t *testing.T) {
 		_, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
 			PubsubName: "pubsub",
 		})
-		assert.Equal(t, codes.InvalidArgument, status.Code(err))
+
+		stat, ok := status.FromError(err)
+		if ok {
+			t.Log("OK")
+
+			fmt.Printf("\nstatus: %v\n", stat)
+		}
+
+		// t.Log(err)
+		assert.Equal(t, stat.Code(), errutil.ErrPubSubTopicEmpty.GrpcCode)
 	})
 
 	t.Run("no err: bulk publish event request with pubsub, topic and empty entries", func(t *testing.T) {
