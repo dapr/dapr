@@ -97,6 +97,7 @@ func TestInvokeMethod(t *testing.T) {
 		appCallbackClient:    runtimev1pb.NewAppCallbackClient(conn),
 		conn:                 conn,
 		appMetadataToken:     "token1",
+		appMetadataTokenHeaderName: securityConsts.APITokenHeader,
 		maxRequestBodySizeMB: 4,
 	}
 	ctx := context.Background()
@@ -143,6 +144,7 @@ func TestHealthProbe(t *testing.T) {
 		appCallbackClient:    runtimev1pb.NewAppCallbackClient(conn),
 		conn:                 conn,
 		appMetadataToken:     "token1",
+		appMetadataTokenHeaderName: securityConsts.APITokenHeader,
 		maxRequestBodySizeMB: 4,
 	}
 	ctx := context.Background()

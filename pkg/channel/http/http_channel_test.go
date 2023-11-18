@@ -31,6 +31,8 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	"github.com/dapr/dapr/pkg/security"
+	"github.com/dapr/dapr/pkg/security/consts"
 	"github.com/dapr/dapr/utils"
 )
 
@@ -720,12 +722,12 @@ func TestAppToken(t *testing.T) {
 		ctx := context.Background()
 		testServer := httptest.NewServer(&testHandlerHeaders{})
 		c := Channel{
-			baseAddress:    testServer.URL,
-			client:         http.DefaultClient,
-			appHeaderToken: "token1",
-			compStore:      compstore.New(),
+			baseAddress: testServer.URL,
+			client:      http.DefaultClient,
+			compStore:   compstore.New(),
+			appHeaderToken: "token",
+			appHeaderTokenHeaderName: "token",
 		}
-
 		req := invokev1.NewInvokeMethodRequest("method").
 			WithHTTPExtension(http.MethodPost, "")
 		defer req.Close()
@@ -741,12 +743,74 @@ func TestAppToken(t *testing.T) {
 		actual := map[string]string{}
 		json.Unmarshal(body, &actual)
 
+		_, hasToken := actual["Token"]
+		assert.NoError(t, err)
+		assert.True(t, hasToken)
+		testServer.Close()
+	})
+	
+	t.Run("consider custom token if specified", func(t *testing.T) {
+		t.Setenv(consts.AppAPITokenHeaderEnvVar, "")
+		ctx := context.Background()
+		testServer := httptest.NewServer(&testHandlerHeaders{})
+		c := Channel{
+			baseAddress: testServer.URL,
+			client:      http.DefaultClient,
+			compStore:   compstore.New(),
+			appHeaderToken: "token",
+			appHeaderTokenHeaderName: security.GetAppTokenHeaderName(),
+		}
+		req := invokev1.NewInvokeMethodRequest("method").
+			WithHTTPExtension(http.MethodPost, "")
+		defer req.Close()
+
+		// act
+		resp, err := c.InvokeMethod(ctx, req, "")
+
+		// assert
+		assert.NoError(t, err)
+		defer resp.Close()
+		body, _ := resp.RawDataFull()
+
+		actual := map[string]string{}
+		json.Unmarshal(body, &actual)
 		_, hasToken := actual["Dapr-Api-Token"]
 		assert.NoError(t, err)
 		assert.True(t, hasToken)
 		testServer.Close()
 	})
+	
+	t.Run("fallback to default token if not headerName not specified", func(t *testing.T) {
+		t.Setenv(consts.AppAPITokenHeaderEnvVar, "x-api-token")
+		ctx := context.Background()
+		testServer := httptest.NewServer(&testHandlerHeaders{})
+		c := Channel{
+			baseAddress: testServer.URL,
+			client:      http.DefaultClient,
+			compStore:   compstore.New(),
+			appHeaderToken: "token",
+			appHeaderTokenHeaderName: security.GetAppTokenHeaderName(),
+		}
+		req := invokev1.NewInvokeMethodRequest("method").
+			WithHTTPExtension(http.MethodPost, "")
+		defer req.Close()
 
+		// act
+		resp, err := c.InvokeMethod(ctx, req, "")
+
+		// assert
+		assert.NoError(t, err)
+		defer resp.Close()
+		body, _ := resp.RawDataFull()
+
+		actual := map[string]string{}
+		json.Unmarshal(body, &actual)
+		_, hasToken := actual["X-Api-Token"]
+		assert.NoError(t, err)
+		assert.True(t, hasToken)
+		testServer.Close()
+	})
+	
 	t.Run("token not present", func(t *testing.T) {
 		ctx := context.Background()
 		testServer := httptest.NewServer(&testHandlerHeaders{})
@@ -754,6 +818,8 @@ func TestAppToken(t *testing.T) {
 			baseAddress: testServer.URL,
 			client:      http.DefaultClient,
 			compStore:   compstore.New(),
+			appHeaderToken: "token",
+			appHeaderTokenHeaderName: "token",
 		}
 
 		req := invokev1.NewInvokeMethodRequest("method").
