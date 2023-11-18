@@ -750,37 +750,6 @@ func TestAppToken(t *testing.T) {
 	})
 	
 	t.Run("consider custom token if specified", func(t *testing.T) {
-		t.Setenv(consts.AppAPITokenHeaderEnvVar, "")
-		ctx := context.Background()
-		testServer := httptest.NewServer(&testHandlerHeaders{})
-		c := Channel{
-			baseAddress: testServer.URL,
-			client:      http.DefaultClient,
-			compStore:   compstore.New(),
-			appHeaderToken: "token",
-			appHeaderTokenHeaderName: security.GetAppTokenHeaderName(),
-		}
-		req := invokev1.NewInvokeMethodRequest("method").
-			WithHTTPExtension(http.MethodPost, "")
-		defer req.Close()
-
-		// act
-		resp, err := c.InvokeMethod(ctx, req, "")
-
-		// assert
-		assert.NoError(t, err)
-		defer resp.Close()
-		body, _ := resp.RawDataFull()
-
-		actual := map[string]string{}
-		json.Unmarshal(body, &actual)
-		_, hasToken := actual["Dapr-Api-Token"]
-		assert.NoError(t, err)
-		assert.True(t, hasToken)
-		testServer.Close()
-	})
-	
-	t.Run("fallback to default token if not headerName not specified", func(t *testing.T) {
 		t.Setenv(consts.AppAPITokenHeaderEnvVar, "x-api-token")
 		ctx := context.Background()
 		testServer := httptest.NewServer(&testHandlerHeaders{})
@@ -806,6 +775,37 @@ func TestAppToken(t *testing.T) {
 		actual := map[string]string{}
 		json.Unmarshal(body, &actual)
 		_, hasToken := actual["X-Api-Token"]
+		assert.NoError(t, err)
+		assert.True(t, hasToken)
+		testServer.Close()
+	})
+	
+	t.Run("fallback to default token if not headerName not specified", func(t *testing.T) {
+		t.Setenv(consts.AppAPITokenHeaderEnvVar, "")
+		ctx := context.Background()
+		testServer := httptest.NewServer(&testHandlerHeaders{})
+		c := Channel{
+			baseAddress: testServer.URL,
+			client:      http.DefaultClient,
+			compStore:   compstore.New(),
+			appHeaderToken: "token",
+			appHeaderTokenHeaderName: security.GetAppTokenHeaderName(),
+		}
+		req := invokev1.NewInvokeMethodRequest("method").
+			WithHTTPExtension(http.MethodPost, "")
+		defer req.Close()
+
+		// act
+		resp, err := c.InvokeMethod(ctx, req, "")
+
+		// assert
+		assert.NoError(t, err)
+		defer resp.Close()
+		body, _ := resp.RawDataFull()
+
+		actual := map[string]string{}
+		json.Unmarshal(body, &actual)
+		_, hasToken := actual["Dapr-Api-Token"]
 		assert.NoError(t, err)
 		assert.True(t, hasToken)
 		testServer.Close()
