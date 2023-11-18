@@ -353,6 +353,16 @@ func (p *Service) performTablesUpdate(ctx context.Context, hosts []placementGRPC
 	// Otherwise, each Dapr runtime will have inconsistent hashing table.
 	startedAt := p.clock.Now()
 
+	// Enforce maximum API level
+	if newTable != nil {
+		if newTable.ApiLevel < p.minAPILevel {
+			newTable.ApiLevel = p.minAPILevel
+		}
+		if p.maxAPILevel != nil && newTable.ApiLevel > *p.maxAPILevel {
+			newTable.ApiLevel = *p.maxAPILevel
+		}
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 

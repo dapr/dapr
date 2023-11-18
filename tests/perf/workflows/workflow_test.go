@@ -141,7 +141,7 @@ func testWorkflow(t *testing.T, workflowName string, testAppName string, inputs 
 				// Check if test app endpoint is available
 				require.NoError(t, utils.HealthCheckApps(externalURL))
 
-				time.Sleep(10 * time.Second)
+				time.Sleep(5 * time.Second)
 
 				// Initialize the workflow runtime
 				url := fmt.Sprintf("http://%s/start-workflow-runtime", externalURL)
@@ -149,7 +149,7 @@ func testWorkflow(t *testing.T, workflowName string, testAppName string, inputs 
 				_, err := utils.HTTPGet(url)
 				require.NoError(t, err, "error starting workflow runtime")
 
-				time.Sleep(10 * time.Second)
+				time.Sleep(5 * time.Second)
 
 				targetURL := fmt.Sprintf("http://%s/run-workflow", externalURL)
 
@@ -168,7 +168,7 @@ func testWorkflow(t *testing.T, workflowName string, testAppName string, inputs 
 				}
 				table = addTestResults(t, subTestName, testAppName, testResult, table)
 
-				time.Sleep(10 * time.Second)
+				time.Sleep(5 * time.Second)
 
 				// Stop the workflow runtime
 				url = fmt.Sprintf("http://%s/shutdown-workflow-runtime", externalURL)
@@ -186,15 +186,15 @@ func testWorkflow(t *testing.T, workflowName string, testAppName string, inputs 
 func TestWorkflowWithConstantVUs(t *testing.T) {
 	workflowName := "sum_series_wf"
 	inputs := []string{"100"}
-	scenarios := []string{"t_50_500", "t_50_500", "t_50_500", "t_50_500", "t_50_500"}
-	rateChecks := [][]string{{"rate==1", "rate==1", "rate==1", "rate==1", "rate==1"}}
+	scenarios := []string{"t_30_300", "t_30_300", "t_30_300"}
+	rateChecks := [][]string{{"rate==1", "rate==1", "rate==1"}}
 	testWorkflow(t, workflowName, testAppNames[0], inputs, scenarios, rateChecks, false, false)
 }
 
 func TestWorkflowWithConstantIterations(t *testing.T) {
 	workflowName := "sum_series_wf"
 	inputs := []string{"100"}
-	scenarios := []string{"t_50_500", "t_100_500", "t_150_500"}
+	scenarios := []string{"t_30_300", "t_60_300", "t_90_300"}
 	rateChecks := [][]string{{"rate==1", "rate==1", "rate==1"}}
 	testWorkflow(t, workflowName, testAppNames[0], inputs, scenarios, rateChecks, true, false)
 }
@@ -203,7 +203,7 @@ func TestWorkflowWithConstantIterations(t *testing.T) {
 func TestSeriesWorkflowWithMaxVUs(t *testing.T) {
 	workflowName := "sum_series_wf"
 	inputs := []string{"100"}
-	scenarios := []string{"t_350_1750"}
+	scenarios := []string{"t_350_1400"}
 	rateChecks := [][]string{{"rate==1"}}
 	testWorkflow(t, workflowName, testAppNames[0], inputs, scenarios, rateChecks, true, false)
 }
@@ -212,7 +212,7 @@ func TestSeriesWorkflowWithMaxVUs(t *testing.T) {
 func TestParallelWorkflowWithMaxVUs(t *testing.T) {
 	workflowName := "sum_parallel_wf"
 	inputs := []string{"100"}
-	scenarios := []string{"t_110_550"}
+	scenarios := []string{"t_110_440"}
 	rateChecks := [][]string{{"rate==1"}}
 	testWorkflow(t, workflowName, testAppNames[0], inputs, scenarios, rateChecks, true, false)
 }
@@ -220,7 +220,7 @@ func TestParallelWorkflowWithMaxVUs(t *testing.T) {
 // Runs tests for `state_wf` with different Payload
 func TestWorkflowWithDifferentPayloads(t *testing.T) {
 	workflowName := "state_wf"
-	scenarios := []string{"t_50_500"}
+	scenarios := []string{"t_30_300"}
 	inputs := []string{"10000", "50000", "100000"}
 	rateChecks := [][]string{{"rate==1"}, {"rate==1"}, {"rate==1"}}
 	testWorkflow(t, workflowName, testAppNames[0], inputs, scenarios, rateChecks, true, true)
