@@ -222,10 +222,10 @@ func (d *Daprd) AppPort() int {
 }
 
 func (d *Daprd) AppHealthPort() int {
-	if d.healthPort != 0 {
-		return d.healthPort
-	}
-	return d.appPort
+	// if d.healthPort != 0 {
+	// 	return d.healthPort
+	// }
+	return d.httpPort
 }
 
 func (d *Daprd) GRPCPort() int {
