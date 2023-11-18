@@ -56,9 +56,9 @@ spec:
     - name: HotReload
       enabled: true`), 0o600))
 
-	srv := grpcapp.New(t,
-		grpcapp.WithOnTopicEventFn(func(_ context.Context, in *rtv1.TopicEventRequest) (*rtv1.TopicEventResponse, error) {
-			g.topicChan <- in.GetPath()
+	srv := app.New(t,
+		app.WithOnTopicEventFn(func(_ context.Context, in *rtv1.TopicEventRequest) (*rtv1.TopicEventResponse, error) {
+			g.topicChan <- in.Path
 			return new(rtv1.TopicEventResponse), nil
 		}),
 		app.WithListTopicSubscriptions(func(context.Context, *emptypb.Empty) (*rtv1.ListTopicSubscriptionsResponse, error) {

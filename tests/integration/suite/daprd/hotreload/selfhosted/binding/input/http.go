@@ -76,19 +76,31 @@ spec:
 				assert.True(t, h.registered[0].Load())
 				if h.listening[0].Load() {
 					h.listening[0].Store(false)
+<<<<<<< HEAD
 					h.bindingChan[0] <- path
+=======
+					h.bindingChan[0] <- string(path)
+>>>>>>> 350dc3e86 (Hot Reloading: SelfHosted Componenthot reloading)
 				}
 			case "/binding2":
 				assert.True(t, h.registered[1].Load())
 				if h.listening[1].Load() {
 					h.listening[1].Store(false)
+<<<<<<< HEAD
 					h.bindingChan[1] <- path
+=======
+					h.bindingChan[1] <- string(path)
+>>>>>>> 350dc3e86 (Hot Reloading: SelfHosted Componenthot reloading)
 				}
 			case "/binding3":
 				assert.True(t, h.registered[2].Load())
 				if h.listening[2].Load() {
 					h.listening[2].Store(false)
+<<<<<<< HEAD
 					h.bindingChan[2] <- path
+=======
+					h.bindingChan[2] <- string(path)
+>>>>>>> 350dc3e86 (Hot Reloading: SelfHosted Componenthot reloading)
 				}
 			default:
 				assert.Failf(t, "unexpected binding name", "binding name: %s", path)
@@ -107,7 +119,11 @@ spec:
   version: v1
   metadata:
   - name: schedule
+<<<<<<< HEAD
     value: "@every 300ms"
+=======
+    value: "@every 1s"
+>>>>>>> 350dc3e86 (Hot Reloading: SelfHosted Componenthot reloading)
   - name: direction
     value: "input"
 `), 0o600))
@@ -145,17 +161,26 @@ spec:
   version: v1
   metadata:
   - name: schedule
+<<<<<<< HEAD
     value: "@every 300ms"
+=======
+    value: "@every 1s"
+>>>>>>> 350dc3e86 (Hot Reloading: SelfHosted Componenthot reloading)
   - name: direction
     value: "input"
 `), 0o600))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Len(c, util.GetMetaComponents(c, ctx, client, h.daprd.HTTPPort()), 2)
 		}, time.Second*5, time.Millisecond*100)
+<<<<<<< HEAD
 		h.expectBindings(t, []bindingPair{
 			{0, "binding1"},
 			{1, "binding2"},
 		})
+=======
+		h.expectBinding(t, 0, "binding1")
+		h.expectBinding(t, 1, "binding2")
+>>>>>>> 350dc3e86 (Hot Reloading: SelfHosted Componenthot reloading)
 	})
 
 	t.Run("create a third component", func(t *testing.T) {
@@ -170,7 +195,11 @@ spec:
   version: v1
   metadata:
   - name: schedule
+<<<<<<< HEAD
     value: "@every 300ms"
+=======
+    value: "@every 1s"
+>>>>>>> 350dc3e86 (Hot Reloading: SelfHosted Componenthot reloading)
   - name: direction
     value: "input"
 ---
