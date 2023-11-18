@@ -93,7 +93,7 @@ func (s *server) Ready() {
 // NotReady sets a not ready state for the endpoint handlers.
 func (s *server) NotReady() {
 	s.ready.Store(false)
-}
+} 
 
 // Run starts a net/http server with a healthz endpoint.
 func (s *server) Run(ctx context.Context, port int) error {

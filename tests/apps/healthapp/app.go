@@ -45,6 +45,7 @@ import (
 
 var (
 	appPort          string
+	appHealthPort    string
 	appProtocol      string
 	controlPort      string
 	daprPort         string
@@ -68,6 +69,11 @@ func main() {
 	appPort = os.Getenv("APP_PORT")
 	if appPort == "" {
 		appPort = "4000"
+	}
+
+	appHealthPort = os.Getenv("APP_HEALTH_PORT")
+	if appHealthPort == "" {
+		appHealthPort = appPort
 	}
 
 	appProtocol = os.Getenv("APP_PROTOCOL")
@@ -288,7 +294,7 @@ func publishMessage(count int) {
 }
 
 func startHTTP() {
-	port, _ := strconv.Atoi(appPort)
+	port, _ := strconv.Atoi(appHealthPort)
 	log.Printf("Health App HTTP server listening on http://:%d", port)
 	utils.StartServer(port, httpRouter, true, false)
 }

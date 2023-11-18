@@ -163,7 +163,7 @@ func (d *Daprd) Cleanup(t *testing.T) {
 func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
 	client := util.HTTPClient(t)
 	assert.Eventually(t, func() bool {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/v1.0/healthz", d.AppHealthPort()), nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/v1.0/healthz", d.httpPort), nil)
 		if err != nil {
 			return false
 		}
@@ -181,7 +181,7 @@ func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
 	case "http":
 		client := util.HTTPClient(t)
 		assert.Eventually(t, func() bool {
-			req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/v1.0/healthz", d.AppHealthPort()), nil)
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/v1.0/healthz", d.healthPort), nil)
 			if err != nil {
 				return false
 			}
@@ -222,10 +222,10 @@ func (d *Daprd) AppPort() int {
 }
 
 func (d *Daprd) AppHealthPort() int {
-	// if d.healthPort != 0 {
-	// 	return d.healthPort
-	// }
-	return d.httpPort
+	if d.healthPort != 0 {
+		return d.healthPort
+	}
+	return d.appPort
 }
 
 func (d *Daprd) GRPCPort() int {

@@ -15,6 +15,8 @@ const (
 	DaprPort string = "DAPR_PORT"
 	// AppPort is the port of the application, http/grpc depending on mode.
 	AppPort string = "APP_PORT"
+	// AppPort is the health port of the application, http depending on mode.
+	AppHealthPort string = "APP_HEALTH_PORT"
 	// AppID is the ID of the application.
 	AppID string = "APP_ID"
 	// OpenTelemetry target URL for OTLP exporter
