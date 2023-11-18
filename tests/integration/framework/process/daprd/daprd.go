@@ -75,7 +75,7 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		publicPort:       fp.Port(t, 3),
 		metricsPort:      fp.Port(t, 4),
 		profilePort:      fp.Port(t, 5),
-		logLevel:         "info",
+		logLevel:         "debug",
 		mode:             "standalone",
 	}
 
@@ -109,6 +109,9 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		args = append(args, "--app-health-check-path="+opts.appHealthCheckPath)
 	}
 	if len(opts.resourceFiles) > 0 {
+		args = append(args, "--resources-path="+dir)
+	}
+	for _, dir := range opts.resourceDirs {
 		args = append(args, "--resources-path="+dir)
 	}
 	if len(opts.configs) > 0 {

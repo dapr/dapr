@@ -34,6 +34,8 @@ func (p *pubsub) StartSubscriptions(ctx context.Context) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
+	p.subscribing = true
+
 	var errs []error
 	for pubsubName := range p.compStore.ListPubSubs() {
 		if err := p.beginPubSub(ctx, pubsubName); err != nil {
@@ -48,6 +50,8 @@ func (p *pubsub) StartSubscriptions(ctx context.Context) error {
 func (p *pubsub) StopSubscriptions() {
 	p.lock.Lock()
 	defer p.lock.Unlock()
+
+	p.subscribing = false
 
 	for subKey := range p.topicCancels {
 		p.unsubscribeTopic(subKey)

@@ -36,6 +36,7 @@ type options struct {
 	appHealthProbeInterval  int
 	appHealthProbeThreshold int
 	resourceFiles           []string
+	resourceDirs            []string
 	configs                 []string
 	placementAddresses      []string
 	logLevel                string
@@ -151,6 +152,12 @@ spec:
     - name: actorStateStore
       value: true
 `)
+}
+
+func WithResourcesDir(dirs ...string) Option {
+	return func(o *options) {
+		o.resourceDirs = dirs
+	}
 }
 
 func WithConfigs(configs ...string) Option {

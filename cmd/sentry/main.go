@@ -132,7 +132,7 @@ func main() {
 		Targets: []string{watchDir},
 	})
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	if err = mngr.Add(func(ctx context.Context) error {
 		log.Infof("Starting watch on filesystem directory: %s", watchDir)

@@ -52,7 +52,7 @@ func (p *pubsub) subscribeTopic(ctx context.Context, name, topic string, route c
 		return fmt.Errorf("cannot subscribe to topic '%s' on pubsub '%s': the subscription already exists", topic, name)
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancel(context.Background())
 	policyDef := p.resiliency.ComponentInboundPolicy(name, resiliency.Pubsub)
 	routeMetadata := route.Metadata
 
