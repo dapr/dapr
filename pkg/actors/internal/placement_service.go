@@ -36,6 +36,7 @@ type PlacementService interface {
 	ReportActorDeactivation(ctx context.Context, actorType, actorID string) error
 
 	SetHaltActorFns(haltFn HaltActorFn, haltAllFn HaltAllActorsFn)
+	SetOnAPILevelUpdate(fn func(apiLevel uint32))
 }
 
 // LookupActorRequest is the request for LookupActor.

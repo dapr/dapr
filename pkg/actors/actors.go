@@ -126,6 +126,7 @@ type actorsRuntime struct {
 	wg                   sync.WaitGroup
 	closed               atomic.Bool
 	closeCh              chan struct{}
+	apiLevel             atomic.Uint32
 
 	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 	stateTTLEnabled bool
@@ -254,6 +255,10 @@ func (a *actorsRuntime) Init(ctx context.Context) error {
 		})
 
 		a.placement.SetHaltActorFns(a.haltActor, a.haltAllActors)
+		a.placement.SetOnAPILevelUpdate(func(apiLevel uint32) {
+			a.apiLevel.Store(apiLevel)
+			log.Infof("Actor API level in the cluster has been updated to %d", apiLevel)
+		})
 	}
 
 	a.wg.Add(1)
