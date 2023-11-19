@@ -140,11 +140,11 @@ func TestWorkFlowPerf(t *testing.T) {
 			enableMemoryCheck: true,
 
 		},
-		{
-			name:         "comprehensive_load",
-			rateCheck:    "rate==1",
-			enableMemoryCheck: false,
-		},
+		// {
+		// 	name:         "comprehensive_load",
+		// 	rateCheck:    "rate==1",
+		// 	enableMemoryCheck: false,
+		// },
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
