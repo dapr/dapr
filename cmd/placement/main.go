@@ -16,6 +16,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"strconv"
 
@@ -31,6 +32,7 @@ import (
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 	"github.com/dapr/kit/signals"
 )
 
@@ -80,7 +82,18 @@ func main() {
 	}
 
 	hashing.SetReplicationFactor(opts.ReplicationFactor)
-	apiServer := placement.NewPlacementService(raftServer, secProvider)
+
+	placementOpts := placement.PlacementServiceOpts{
+		RaftNode:    raftServer,
+		SecProvider: secProvider,
+	}
+	if opts.MinAPILevel >= 0 && opts.MinAPILevel < math.MaxInt32 {
+		placementOpts.MinAPILevel = uint32(opts.MinAPILevel)
+	}
+	if opts.MaxAPILevel >= 0 && opts.MaxAPILevel < math.MaxInt32 {
+		placementOpts.MaxAPILevel = ptr.Of(uint32(opts.MaxAPILevel))
+	}
+	apiServer := placement.NewPlacementService(placementOpts)
 
 	err = concurrency.NewRunnerManager(
 		func(ctx context.Context) error {
