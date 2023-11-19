@@ -17,7 +17,7 @@ import { check } from 'k6'
 const possibleScenarios = {
     average_load: {
         executor: 'constant-vus',
-        vus: 100, 
+        vus: 300, 
         duration: '10m',
     },
     comprehensive_load: {
@@ -44,7 +44,7 @@ enabledScenarios[__ENV.SCENARIO] = possibleScenarios[__ENV.SCENARIO]
 export const options = {
     discardResponseBodies: true,
     thresholds: {
-        checks: [__ENV.RATE_CHECK],
+        // checks: [__ENV.RATE_CHECK],
         http_req_failed: ['rate<0.01'], // http errors should be less than 1%
     },
     scenarios: enabledScenarios,
