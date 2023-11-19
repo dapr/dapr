@@ -32,6 +32,8 @@ type PlacementService interface {
 	PlacementHealthy() bool
 	// StatusMessage returns a custom status message.
 	StatusMessage() string
+
+	SetOnAPILevelUpdate(fn func(apiLevel uint32))
 }
 
 // LookupActorRequest is the request for LookupActor.

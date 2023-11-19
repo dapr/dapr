@@ -780,6 +780,7 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 	for k, v := range resp.Metadata {
 		reqCtx.Response.Header.Add(metadataPrefix+k, v)
 	}
+
 	fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, resp.Data, resp.Metadata))
 }
 
