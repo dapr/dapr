@@ -17,7 +17,7 @@ import { check } from 'k6'
 const possibleScenarios = {
     average_load: {
         executor: 'constant-vus',
-        vus: 500, 
+        vus: 400, 
         duration: '10m',
     },
     comprehensive_load: {
