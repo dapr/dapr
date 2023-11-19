@@ -45,6 +45,7 @@ export const options = {
     discardResponseBodies: true,
     thresholds: {
         checks: [__ENV.RATE_CHECK],
+        http_req_failed: ['rate<0.01'], // http errors should be less than 1%
     },
     scenarios: enabledScenarios,
 }
