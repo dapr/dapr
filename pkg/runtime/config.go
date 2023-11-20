@@ -159,7 +159,7 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 		env.AppID:           intc.id,
 		env.AppPort:         strconv.Itoa(intc.appConnectionConfig.Port),
 		env.HostAddress:     host,
-		env.AppHealthPort:	 strconv.Itoa(intc.appConnectionConfig.HealthPort),
+		env.AppHealthPort:   strconv.Itoa(intc.appConnectionConfig.HealthPort),
 		env.DaprPort:        strconv.Itoa(intc.internalGRPCPort),
 		env.DaprGRPCPort:    strconv.Itoa(intc.apiGRPCPort),
 		env.DaprHTTPPort:    strconv.Itoa(intc.httpPort),
