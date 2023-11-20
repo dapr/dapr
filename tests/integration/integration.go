@@ -25,14 +25,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/suite"
-
-	// Register all tests
-	_ "github.com/dapr/dapr/tests/integration/suite/actors"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd"
-	_ "github.com/dapr/dapr/tests/integration/suite/healthz"
-	_ "github.com/dapr/dapr/tests/integration/suite/placement"
-	_ "github.com/dapr/dapr/tests/integration/suite/ports"
-	_ "github.com/dapr/dapr/tests/integration/suite/sentry"
 )
 
 var focusF = flag.String("focus", ".*", "Focus on specific test cases. Accepts regex.")
@@ -53,12 +45,19 @@ func RunIntegrationTests(t *testing.T) {
 	})
 	require.False(t, binFailed, "building binaries must succeed")
 
+	focusedTests := make(map[string]suite.Case)
 	for name, tcase := range suite.All(t) {
-		t.Run(name, func(t *testing.T) {
-			if !focus.MatchString(t.Name()) {
-				t.Skipf("skipping test case due to focus %s", t.Name())
-			}
+		// Continue rather than using `t.Skip` to reduce the noise in the test
+		// output.
+		if !focus.MatchString(name) {
+			t.Logf("skipping test case due to focus %s", name)
+			continue
+		}
+		focusedTests[name] = tcase
+	}
 
+	for name, tcase := range focusedTests {
+		t.Run(name, func(t *testing.T) {
 			t.Logf("setting up test case")
 			options := tcase.Setup(t)
 
