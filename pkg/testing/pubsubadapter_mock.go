@@ -56,7 +56,7 @@ func (o *outboxMock) Enabled(stateStore string) bool {
 	return false
 }
 
-func (o *outboxMock) PublishInternal(ctx context.Context, stateStore string, states []state.TransactionalStateOperation, source string) ([]state.TransactionalStateOperation, error) {
+func (o *outboxMock) PublishInternal(ctx context.Context, stateStore string, states []state.TransactionalStateOperation, source, traceID, traceState string) ([]state.TransactionalStateOperation, error) {
 	return nil, nil
 }
 

@@ -129,7 +129,7 @@ func transaction() (state.TransactionalStateOperation, error) {
 }
 
 // PublishInternal publishes the state to an internal topic for outbox processing
-func (o *outboxImpl) PublishInternal(ctx context.Context, stateStore string, operations []state.TransactionalStateOperation, source string) ([]state.TransactionalStateOperation, error) {
+func (o *outboxImpl) PublishInternal(ctx context.Context, stateStore string, operations []state.TransactionalStateOperation, source, traceID, traceState string) ([]state.TransactionalStateOperation, error) {
 	o.lock.RLock()
 	c, ok := o.outboxStores[stateStore]
 	o.lock.RUnlock()
@@ -156,10 +156,12 @@ func (o *outboxImpl) PublishInternal(ctx context.Context, stateStore string, ope
 			}
 
 			ce := &CloudEvent{
-				ID:     tr.GetKey(),
-				Source: source,
-				Pubsub: c.outboxPubsub,
-				Data:   ceData,
+				ID:         tr.GetKey(),
+				Source:     source,
+				Pubsub:     c.outboxPubsub,
+				Data:       ceData,
+				TraceID:    traceID,
+				TraceState: traceState,
 			}
 
 			if sr.ContentType != nil {
@@ -220,6 +222,8 @@ func (o *outboxImpl) SubscribeToInternalTopics(ctx context.Context, appID string
 			stateKey := o.cloudEventExtractorFn(cloudEvent, contribPubsub.IDField)
 			data := []byte(o.cloudEventExtractorFn(cloudEvent, contribPubsub.DataField))
 			contentType := o.cloudEventExtractorFn(cloudEvent, contribPubsub.DataContentTypeField)
+			traceID := o.cloudEventExtractorFn(cloudEvent, contribPubsub.TraceIDField)
+			traceState := o.cloudEventExtractorFn(cloudEvent, contribPubsub.TraceStateField)
 
 			store, ok := o.getStateFn(stateStore)
 			if !ok {
@@ -268,6 +272,8 @@ func (o *outboxImpl) SubscribeToInternalTopics(ctx context.Context, appID string
 				Pubsub:          c.publishPubSub,
 				Source:          appID,
 				Topic:           c.publishTopic,
+				TraceID:         traceID,
+				TraceState:      traceState,
 			}, nil)
 			if err != nil {
 				return err
