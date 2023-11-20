@@ -2037,7 +2037,9 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 
 	outboxEnabled := a.pubsubAdapter.Outbox().Enabled(storeName)
 	if outboxEnabled {
-		trs, err := a.pubsubAdapter.Outbox().PublishInternal(reqCtx, storeName, operations, a.universal.AppID)
+		span := diagUtils.SpanFromContext(reqCtx)
+		corID, traceState := diag.TraceIDAndStateFromSpan(span)
+		trs, err := a.pubsubAdapter.Outbox().PublishInternal(reqCtx, storeName, operations, a.universal.AppID, corID, traceState)
 		if err != nil {
 			msg := NewErrorResponse(
 				"ERR_PUBLISH_OUTBOX",

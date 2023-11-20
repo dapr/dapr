@@ -254,7 +254,7 @@ func TestPublishInternal(t *testing.T) {
 				Key:   "key",
 				Value: "test",
 			},
-		}, "testapp")
+		}, "testapp", "", "")
 
 		assert.NoError(t, err)
 	})
@@ -309,7 +309,7 @@ func TestPublishInternal(t *testing.T) {
 				Value:       "test",
 				ContentType: &contentType,
 			},
-		}, "testapp")
+		}, "testapp", "", "")
 
 		assert.NoError(t, err)
 	})
@@ -322,7 +322,7 @@ func TestPublishInternal(t *testing.T) {
 				Key:   "key",
 				Value: "test",
 			},
-		}, "testapp")
+		}, "testapp", "", "")
 		assert.Error(t, err)
 	})
 
@@ -359,7 +359,7 @@ func TestPublishInternal(t *testing.T) {
 			},
 		})
 
-		_, err := o.PublishInternal(context.TODO(), "test", []state.TransactionalStateOperation{}, "testapp")
+		_, err := o.PublishInternal(context.TODO(), "test", []state.TransactionalStateOperation{}, "testapp", "", "")
 
 		assert.NoError(t, err)
 	})
@@ -401,14 +401,14 @@ func TestPublishInternal(t *testing.T) {
 				Key:   "1",
 				Value: "hello",
 			},
-		}, "testapp")
+		}, "testapp", "", "")
 
 		assert.Error(t, err)
 	})
 }
 
 func TestSubscribeToInternalTopics(t *testing.T) {
-	t.Run("correct configuration", func(t *testing.T) {
+	t.Run("correct configuration with trace", func(t *testing.T) {
 		o := newTestOutbox().(*outboxImpl)
 		o.cloudEventExtractorFn = extractCloudEventProperty
 
@@ -431,6 +431,14 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 			} else if pr.Topic == "1" {
 				close(externalCalledCh)
 			}
+
+			ce := map[string]string{}
+			json.Unmarshal(pr.Data, &ce)
+
+			traceID := ce[contribPubsub.TraceIDField]
+			traceState := ce[contribPubsub.TraceStateField]
+			assert.Equal(t, "00-ecdf5aaa79bff09b62b201442c0f3061-d2597ed7bfd029e4-01", traceID)
+			assert.Equal(t, "00-ecdf5aaa79bff09b62b201442c0f3061-d2597ed7bfd029e4-01", traceState)
 
 			return psMock.Publish(ctx, pr)
 		}
@@ -480,7 +488,7 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 					Key:   "1",
 					Value: "hello",
 				},
-			}, appID)
+			}, appID, "00-ecdf5aaa79bff09b62b201442c0f3061-d2597ed7bfd029e4-01", "00-ecdf5aaa79bff09b62b201442c0f3061-d2597ed7bfd029e4-01")
 
 			if pErr != nil {
 				errCh <- pErr
@@ -559,7 +567,7 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 				Key:   "1",
 				Value: "hello",
 			},
-		}, appID)
+		}, appID, "", "")
 
 		assert.Error(t, pErr)
 		assert.Len(t, trs, 0)
@@ -634,7 +642,7 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 					Key:   "1",
 					Value: "hello",
 				},
-			}, appID)
+			}, appID, "", "")
 
 			if pErr != nil {
 				errCh <- pErr
@@ -759,7 +767,7 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 					Key:   "1",
 					Value: "hello",
 				},
-			}, appID)
+			}, appID, "", "")
 
 			if pErr != nil {
 				errCh <- pErr
