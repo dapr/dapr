@@ -11,9 +11,9 @@
 # limitations under the License.
 # 
 
-from flask import Flask, request
-from time import sleep
-from dapr.ext.workflow import WorkflowRuntime, DaprWorkflowContext, WorkflowActivityContext, DaprWorkflowClient, WorkflowStatus, when_all
+from flask import Flask
+from datetime import datetime
+from dapr.ext.workflow import WorkflowRuntime, DaprWorkflowContext, WorkflowActivityContext, DaprWorkflowClient, WorkflowStatus
 from dapr.conf import Settings
 from dapr.clients import DaprClient
 from dapr.clients.exceptions import DaprInternalError
@@ -30,15 +30,16 @@ appPort = 3000
 state_store_name = "statestore"
 actor_statestore_name = "statestore-actorstore"
 
-# sum_series_wf calculates sum of numbers {1..input} by dividing the workload among 5 activties running in series
-def sum_series_wf(ctx:DaprWorkflowContext):
-    yield ctx.call_activity(sum_activity)
-    yield ctx.call_activity(sum_activity)
-    sum = yield ctx.call_activity(sum_activity)
+# chaining_wf calls a few activites in sequence
+def chaining_wf(ctx:DaprWorkflowContext):
+    print(f"{datetime.now():%Y-%m-%d %H:%M:%S.%f} [{ctx.instance_id}] Invoked chaining_wf")
+    yield ctx.call_activity(chaining_activity)
+    yield ctx.call_activity(chaining_activity)
+    sum = yield ctx.call_activity(chaining_activity)
     assert 42 == sum
 
-# sum_activity calculates sum of numbers in range [num1,num2] (input:'num1,num2')
-def sum_activity(ctx:WorkflowActivityContext):
+# chaining_activity simply returns a number
+def chaining_activity(ctx:WorkflowActivityContext):
     return 42
 
 # start_workflow_runtime starts the workflow runtime and registers the declared workflows and activities
@@ -48,53 +49,54 @@ def start_workflow_runtime():
     host = settings.DAPR_RUNTIME_HOST
     port = settings.DAPR_GRPC_PORT
     workflowRuntime = WorkflowRuntime(host, port)
-    workflowRuntime.register_workflow(sum_series_wf)
-    workflowRuntime.register_activity(sum_activity)
+    workflowRuntime.register_workflow(chaining_wf)
+    workflowRuntime.register_activity(chaining_activity)
     workflowRuntime.start()
     workflowClient = DaprWorkflowClient(host=host,port=port)
+    print("Workflow Runtime Started")
     return "Workflow Runtime Started"
 
 # shutdown_workflow_runtime stops the workflow runtime
 @api.route('/shutdown-workflow-runtime', methods=['GET'])
 def shutdown_workflow_runtime():
     workflowRuntime.shutdown()
+    print("Workflow Runtime Shutdown")
     return "Workflow Runtime Shutdown"
 
 # run_workflow runs an instance of workflow and waits for it to complete
 @api.route('/run-workflow', methods=['GET'])
 def run_workflow():
     with DaprClient() as d:
-        print("==========Start Workflow:==========")
-
         try:
-            instance_id = workflowClient.schedule_new_workflow(workflow=sum_series_wf)
-            print(f'Workflow started. Instance ID: {instance_id}')
+            print(f"{datetime.now():%Y-%m-%d %H:%M:%S.%f} starting workflow")
+            instance_id = workflowClient.schedule_new_workflow(workflow=chaining_wf)
+            print(f"{datetime.now():%Y-%m-%d %H:%M:%S.%f} started workflow with instance_id {instance_id}")
         except DaprInternalError as e:
-            print(f"error starting workflow: {e.message}")
+            print(f"{datetime.now():%Y-%m-%d %H:%M:%S.%f} error starting workflow: {e.message}")
         
         workflow_state = workflowClient.wait_for_workflow_completion(
                 instance_id=instance_id, timeout_in_seconds=250)
         assert workflow_state.runtime_status == WorkflowStatus.COMPLETED
         
-        print("==========Get Workflow:==========")
         try:
             get_resp = d.get_workflow(instance_id=instance_id, workflow_component=workflowComponent)
-            print(f"workflow instance_id {get_resp.instance_id} runtime_status {get_resp.runtime_status}")
+            print(f"{datetime.now():%Y-%m-%d %H:%M:%S.%f} workflow instance_id {get_resp.instance_id} runtime_status {get_resp.runtime_status}")
         except DaprInternalError as e:
-            print(f"error getting workflow status: {e.message}")
+            print(f"{datetime.now():%Y-%m-%d %H:%M:%S.%f} error getting workflow status: {e.message}")
 
-        print("==========Terminate Workflow:==========")
         try:
+            print(f"{datetime.now():%Y-%m-%d %H:%M:%S.%f} terminating workflow")
             d.terminate_workflow(instance_id=instance_id, workflow_component=workflowComponent)
         except DaprInternalError as e:
-            print(f"error terminating workflow: {e.message}")
+            print(f"{datetime.now():%Y-%m-%d %H:%M:%S.%f} error terminating workflow: {e.message}")
         
-        print("==========Purge Workflow:==========")
         try:
+            print(f"{datetime.now():%Y-%m-%d %H:%M:%S.%f} purging workflow")
             d.purge_workflow(instance_id=instance_id, workflow_component=workflowComponent)
         except DaprInternalError as e:
-            print(f"error purging workflow: {e.message}")
+            print(f"{datetime.now():%Y-%m-%d %H:%M:%S.%f} error purging workflow: {e.message}")
         
+        print(f"{datetime.now():%Y-%m-%d %H:%M:%S.%f} workflow run complete")
         return "Workflow Run completed"
 
 if __name__ == '__main__':
