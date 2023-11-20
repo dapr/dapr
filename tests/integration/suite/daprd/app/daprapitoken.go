@@ -72,6 +72,7 @@ func (d *daprapitoken) Run(t *testing.T, ctx context.Context) {
 	url := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/foo", d.daprd.HTTPPort(), d.daprd.AppID())
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	require.NoError(t, err)
+	//nolint:bodyclose
 	_, err = http.DefaultClient.Do(req)
 	require.NoError(t, err)
 
