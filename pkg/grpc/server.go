@@ -29,6 +29,7 @@ import (
 	grpcCodes "google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/reflection"
 	grpcStatus "google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/config"
@@ -159,6 +160,7 @@ func (s *server) StartNonBlocking() error {
 		if err != nil {
 			return err
 		}
+		reflection.Register(server)
 		s.servers = append(s.servers, server)
 
 		if s.kind == internalServer {
