@@ -34,27 +34,26 @@ func kubeAPI(t *testing.T, bundle ca.Bundle, namespace, serviceaccount string) *
 	t.Helper()
 
 	return prockube.New(t,
-		prockube.WithClusterDaprConfigurationList(t, &configapi.ConfigurationList{Items: []configapi.Configuration{
-			{
-				TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Configuration"},
-				ObjectMeta: metav1.ObjectMeta{Name: "daprsystem"},
-				Spec: configapi.ConfigurationSpec{
-					MTLSSpec: &configapi.MTLSSpec{ControlPlaneTrustDomain: "integration.test.dapr.io"},
-				},
+		prockube.WithClusterDaprConfigurationList(t, new(configapi.ConfigurationList)),
+		prockube.WithDaprConfigurationGet(t, &configapi.Configuration{
+			TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Configuration"},
+			ObjectMeta: metav1.ObjectMeta{Namespace: "sentrynamespace", Name: "daprsystem"},
+			Spec: configapi.ConfigurationSpec{
+				MTLSSpec: &configapi.MTLSSpec{ControlPlaneTrustDomain: "integration.test.dapr.io"},
 			},
 		}),
-		prockube.WithSecretGet(t, "sentrynamespace", "dapr-trust-bundle", &corev1.Secret{
+		prockube.WithSecretGet(t, &corev1.Secret{
 			TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"},
-			ObjectMeta: metav1.ObjectMeta{Name: "dapr-trust-bundle"},
+			ObjectMeta: metav1.ObjectMeta{Namespace: "sentrynamespace", Name: "dapr-trust-bundle"},
 			Data: map[string][]byte{
 				"ca.crt":     bundle.TrustAnchors,
 				"issuer.crt": bundle.IssChainPEM,
 				"issuer.key": bundle.IssKeyPEM,
 			},
 		}),
-		prockube.WithConfigMapGet(t, "sentrynamespace", "dapr-trust-bundle", &corev1.ConfigMap{
+		prockube.WithConfigMapGet(t, &corev1.ConfigMap{
 			TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "ConfigMap"},
-			ObjectMeta: metav1.ObjectMeta{Name: "dapr-trust-bundle"},
+			ObjectMeta: metav1.ObjectMeta{Namespace: "sentrynamespace", Name: "dapr-trust-bundle"},
 			Data:       map[string]string{"ca.crt": string(bundle.TrustAnchors)},
 		}),
 		prockube.WithClusterPodList(t, &corev1.PodList{
