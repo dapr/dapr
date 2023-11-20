@@ -103,8 +103,8 @@ var (
 	ErrPubSubNameEmpty = &kitErrors.Error{
 		Message:  "pubsub name is empty",
 		Tag:      PubSub + ErrNameEmpty,
-		HttpCode: http.StatusNotFound,
-		GrpcCode: grpcCodes.NotFound,
+		HttpCode: http.StatusNotFound, //TODO change this one
+		GrpcCode: grpcCodes.InvalidArgument,
 		// Reason:   PubSub + ErrNameEmpty,
 	}
 
@@ -112,7 +112,7 @@ var (
 		Message:  "topic is empty in pubsub %s",
 		Tag:      PubSub + "Topic" + ErrNameEmpty,
 		HttpCode: http.StatusNotFound,
-		GrpcCode: grpcCodes.NotFound,
+		GrpcCode: grpcCodes.InvalidArgument,
 		// Reason:   PubSub + "Topic" + ErrNameEmpty,
 	}
 

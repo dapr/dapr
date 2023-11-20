@@ -176,7 +176,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	if validationErr != nil {
 		//TODO: update return type of this func
 		apiServerLogger.Debug(validationErr)
-		return &emptypb.Empty{}, errors.New(validationErr.Error())
+		return &emptypb.Empty{}, validationErr
 	}
 
 	body := []byte{}
@@ -200,7 +200,9 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 			Pubsub:          in.GetPubsubName(),
 		}, in.GetMetadata())
 		if err != nil {
-			err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventCreation, err.Error())
+			var err *kitErrors.Error
+			//TODO: dont kill the err
+			//err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventCreation, err.Error())
 			apiServerLogger.Debug(err)
 			return &emptypb.Empty{}, err
 		}
@@ -210,7 +212,9 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 
 		data, err = json.Marshal(envelope)
 		if err != nil {
-			err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventsSer, topic, pubsubName, err.Error())
+			var err *kitErrors.Error
+
+			//err = status.Errorf(codes.InvalidArgument, messages.ErrPubsubCloudEventsSer, topic, pubsubName, err.Error())
 			apiServerLogger.Debug(err)
 			return &emptypb.Empty{}, err
 		}
@@ -230,13 +234,15 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 	diag.DefaultComponentMonitoring.PubsubEgressEvent(context.Background(), pubsubName, topic, err == nil, elapsed)
 
 	if err != nil {
-		nerr := status.Errorf(codes.Internal, messages.ErrPubsubPublishMessage, topic, pubsubName, err.Error())
+		var nerr *kitErrors.Error
+		//TODO: CASSIE
+		//nerr := status.Errorf(codes.Internal, messages.ErrPubsubPublishMessage, topic, pubsubName, err.Error())
 		if errors.As(err, &runtimePubsub.NotAllowedError{}) {
-			nerr = status.Errorf(codes.PermissionDenied, err.Error())
+			//nerr = status.Errorf(codes.PermissionDenied, err.Error())
 		}
 
 		if errors.As(err, &runtimePubsub.NotFoundError{}) {
-			nerr = status.Errorf(codes.NotFound, err.Error())
+			//nerr = status.Errorf(codes.NotFound, err.Error())
 		}
 		apiServerLogger.Debug(nerr)
 		return &emptypb.Empty{}, nerr
