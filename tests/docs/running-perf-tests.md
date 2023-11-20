@@ -175,7 +175,7 @@ Once a contributor creates a pull request, E2E tests on KinD clusters are automa
 ## Optional: Visualize Performance Test Metrics
 
 ```bash
-export DAPR_PERF_METRICS_PROMETHEUS_URL="http://localhost:9091"
+export DAPR_PERF_METRICS_PROMETHEUS_PUSHGATEWAY_URL="http://localhost:9091"
 ```
 
 Install the following in your Kubernetes cluster:
