@@ -4,22 +4,15 @@ go 1.20
 
 require (
 	github.com/dapr/dapr v1.7.4
-<<<<<<< HEAD
 	google.golang.org/grpc v1.59.0
-=======
-	google.golang.org/grpc v1.57.1
->>>>>>> 25a4d45cc ([RELEASE-1.12] Update dependencies for CVEs (#7178))
 	google.golang.org/grpc/examples v0.0.0-20220818173707-97cb7b1653d7
 	google.golang.org/protobuf v1.31.0
 )
 
 require (
 	github.com/golang/protobuf v1.5.3 // indirect
-<<<<<<< HEAD
 	go.opentelemetry.io/otel v1.16.0 // indirect
 	go.opentelemetry.io/otel/trace v1.16.0 // indirect
-=======
->>>>>>> 25a4d45cc ([RELEASE-1.12] Update dependencies for CVEs (#7178))
 	golang.org/x/net v0.17.0 // indirect
 	golang.org/x/sys v0.13.0 // indirect
 	golang.org/x/text v0.13.0 // indirect
