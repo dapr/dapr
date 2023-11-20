@@ -54,7 +54,7 @@ export const options = {
 const DAPR_ADDRESS = `http://127.0.0.1:${__ENV.DAPR_HTTP_PORT}`
 
 export default function () {
-    const res = http.get(`${__ENV.TARGET_URL}`)
+    const res = http.get(`${__ENV.TARGET_URL}/${exec.scenario.iterationInTest}`)
     console.log("http response", JSON.stringify(res));
     check(result, {
         'response code was 2xx': (result) =>
