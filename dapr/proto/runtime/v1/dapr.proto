@@ -188,6 +188,18 @@ service Dapr {
   rpc RaiseEventWorkflowBeta1 (RaiseEventWorkflowRequest) returns (google.protobuf.Empty) {}
   // Shutdown the sidecar
   rpc Shutdown (ShutdownRequest) returns (google.protobuf.Empty) {}
+
+  // Create and schedule a job
+  rpc ScheduleJob(ScheduleJobRequest) returns (google.protobuf.Empty) {}
+
+  // Delete a job
+  rpc DeleteJob(DeleteJobRequest) returns (google.protobuf.Empty) {}
+
+  // Get a job
+  rpc GetJob(GetJobRequest) returns (GetJobResponse) {}
+
+  // List all jobs by app
+  rpc ListJobs(ListJobsRequest) returns (ListJobsResponse) {}
 }
 
 // InvokeServiceRequest represents the request message for Service invocation.
@@ -1107,4 +1119,61 @@ message PurgeWorkflowRequest {
 // ShutdownRequest is the request for Shutdown.
 message ShutdownRequest {
   // Empty
+}
+
+// Job is the definition of a job.
+message Job {
+  // The unique name for the job.
+  string name = 1;
+
+  // The schedule for the job.
+  string schedule = 2;
+
+  // Job data.
+  google.protobuf.Any data = 3;
+
+  // Optional: jobs with fixed repeat counts (accounting for Actor Reminders).
+  int32 repeats = 4;
+
+  // Optional: sets time at which or time interval before the callback is invoked for the first time.
+  string due_time = 5;
+
+  // Optional: Time To Live to allow for auto deletes (accounting for Actor Reminders).
+  string ttl = 6;
+}
+
+// ScheduleJobRequest is the message to create/schedule the job.
+message ScheduleJobRequest {
+  // The job details.
+  Job job = 1;
+}
+
+// DeleteJobRequest is the message to delete the job by name.
+message DeleteJobRequest {
+  // The name of the job.
+  string name = 1;
+}
+
+// GetJobRequest is the message to get the job by name.
+message GetJobRequest {
+  // The name of the job.
+  string name = 1;
+}
+
+// GetJobResponse is the response message to convey the job.
+message GetJobResponse {
+  // The job details.
+  Job job = 1;
+}
+
+// ListJobsRequest is the message to list jobs by app_id.
+message ListJobsRequest {
+  // The id of the application (app_id) for which to list jobs.
+  string app_id = 1;
+}
+
+// ListJobsResponse is the response message to convey the list of jobs.
+message ListJobsResponse {
+  // List of jobs that match the request criteria.
+  repeated Job jobs = 1;
 }
