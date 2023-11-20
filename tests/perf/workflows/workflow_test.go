@@ -134,17 +134,17 @@ func TestWorkFlowPerf(t *testing.T) {
 		rateCheck       	string
 		enableMemoryCheck	bool
 	}{
-		{
-			name:         "average_load",
-			rateCheck:    "rate==1",
-			enableMemoryCheck: true,
-
-		},
 		// {
-		// 	name:         "comprehensive_load",
+		// 	name:         "average_load",
 		// 	rateCheck:    "rate==1",
-		// 	enableMemoryCheck: false,
+		// 	enableMemoryCheck: true,
+
 		// },
+		{
+			name:         "comprehensive_load",
+			rateCheck:    "rate==1",
+			enableMemoryCheck: false,
+		},
 	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {

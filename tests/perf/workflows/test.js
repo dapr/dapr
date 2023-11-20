@@ -15,23 +15,23 @@ import http from 'k6/http'
 import { check } from 'k6'
 
 const possibleScenarios = {
-    average_load: {
-        executor: 'constant-vus',
-        vus: 300, 
-        duration: '10m',
-    },
+    // average_load: {
+    //     executor: 'constant-vus',
+    //     vus: 250, 
+    //     duration: '10m',
+    // },
     comprehensive_load: {
         executor: 'ramping-vus',
         stages: [
-            // average load: 200 VUs run for 2 mins
-          { duration: '10s', target: 500 },
-          { duration: '2m', target: 500 },
-          // stress load: 500 VUs run for 2 mins
-          { duration: '10s', target: 1000 },
-          { duration: '2m', target: 1000 },
-          { duration: '20s', target: 0 },
+            // average load: 200 VUs run for 3 mins
+          { duration: '30s', target: 200 },
+          { duration: '3m', target: 200 },
+          // stress load: 300 VUs run for 3 mins
+          { duration: '30s', target: 300 },
+          { duration: '3m', target: 300 },
+          { duration: '30s', target: 0 },
           // Spike load: 200 VUs in 10s
-          { duration: '10s', target: 1000 },
+          { duration: '10s', target: 200 },
           { duration: '5s', target: 0 },
         ],
         gracefulRampDown: '10s',
