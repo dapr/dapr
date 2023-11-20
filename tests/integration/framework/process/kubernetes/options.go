@@ -76,30 +76,16 @@ func WithClusterStatefulSetList(t *testing.T, ss *appsv1.StatefulSetList) Option
 	return handleClusterListResource(t, "/apis/apps/v1/statefulsets", ss)
 }
 
-func WithDaprConfigurationGet(t *testing.T, ns, name string, config *configapi.Configuration) Option {
-	return handleGetResource(t, "/apis/dapr.io/v1alpha1", "configurations", ns, name, config)
-}
-
 func WithDaprConfigurationGet(t *testing.T, config *configapi.Configuration) Option {
-	return func(o *options) {
-		obj, err := json.Marshal(config)
-		require.NoError(t, err)
-		o.handlers = append(o.handlers, handleRoute{
-			path: "/apis/dapr.io/v1alpha1/namespaces/" + config.Namespace + "/configurations/" + config.Name,
-			handler: func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Add("Content-Type", "application/json")
-				w.Write(obj)
-			},
-		})
-	}
+	return handleGetResource(t, "/apis/dapr.io/v1alpha1", "configurations", config.Namespace, config.Name, config)
 }
 
-func WithSecretGet(t *testing.T, ns, name string, secret *corev1.Secret) Option {
-	return handleGetResource(t, "/api/v1", "secrets", ns, name, secret)
+func WithSecretGet(t *testing.T, secret *corev1.Secret) Option {
+	return handleGetResource(t, "/api/v1", "secrets", secret.Namespace, secret.Name, secret)
 }
 
-func WithConfigMapGet(t *testing.T, ns, name string, configmap *corev1.ConfigMap) Option {
-	return handleGetResource(t, "/api/v1", "configmaps", ns, name, configmap)
+func WithConfigMapGet(t *testing.T, configmap *corev1.ConfigMap) Option {
+	return handleGetResource(t, "/api/v1", "configmaps", configmap.Namespace, configmap.Name, configmap)
 }
 
 func handleClusterListResource(t *testing.T, path string, obj any) Option {

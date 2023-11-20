@@ -9,7 +9,7 @@ require (
 	github.com/argoproj/argo-rollouts v1.4.1
 	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/cloudevents/sdk-go/v2 v2.14.0
-	github.com/dapr/components-contrib v1.12.1-0.20231106194303-88eb49c838c2
+	github.com/dapr/components-contrib v1.12.1-0.20231102232056-f4e73b0e6511
 	github.com/dapr/kit v0.12.2-0.20231031211530-0e1fd37fc4b3
 	github.com/evanphx/json-patch/v5 v5.7.0
 	github.com/go-chi/chi/v5 v5.0.10
@@ -68,7 +68,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.26.9
 	k8s.io/apiextensions-apiserver v0.26.9
-	k8s.io/apimachinery v0.26.9
+	k8s.io/apimachinery v0.26.10
 	k8s.io/cli-runtime v0.26.3
 	k8s.io/client-go v0.26.9
 	k8s.io/code-generator v0.26.9
