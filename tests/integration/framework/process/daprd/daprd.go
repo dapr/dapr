@@ -54,7 +54,7 @@ type Daprd struct {
 	publicPort       int
 	metricsPort      int
 	profilePort      int
-	healthPort       int
+	appHealthPort    *int
 }
 
 func New(t *testing.T, fopts ...Option) *Daprd {
@@ -65,7 +65,7 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 
 	appHTTP := prochttp.New(t)
 
-	fp := util.ReservePorts(t, 7)
+	fp := util.ReservePorts(t, 6)
 	opts := options{
 		appID:            uid.String(),
 		appPort:          appHTTP.Port(),
@@ -76,7 +76,7 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		publicPort:       fp.Port(t, 3),
 		metricsPort:      fp.Port(t, 4),
 		profilePort:      fp.Port(t, 5),
-		healthPort:       appHTTP.Port(),
+		appHealthPort:    appHTTP.Port(),
 		logLevel:         "info",
 		mode:             "standalone",
 	}
@@ -94,7 +94,6 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		"--log-level=" + opts.logLevel,
 		"--app-id=" + opts.appID,
 		"--app-port=" + strconv.Itoa(opts.appPort),
-		"--app-health-port=" + strconv.Itoa(opts.healthPort),
 		"--app-protocol=" + opts.appProtocol,
 		"--dapr-grpc-port=" + strconv.Itoa(opts.grpcPort),
 		"--dapr-http-port=" + strconv.Itoa(opts.httpPort),
@@ -107,6 +106,11 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		"--app-health-threshold=" + strconv.Itoa(opts.appHealthProbeThreshold),
 		"--mode=" + opts.mode,
 		"--enable-mtls=" + strconv.FormatBool(opts.enableMTLS),
+	}
+	if opts.appHealthPort !=0{
+		args = append(args, "--app-health-port="+strconv.Itoa(opts.appHealthPort))
+	}else{
+		args = append(args, "--app-health-port="+strconv.Itoa(opts.appPort))
 	}
 	if opts.appHealthCheckPath != "" {
 		args = append(args, "--app-health-check-path="+opts.appHealthCheckPath)
@@ -145,7 +149,7 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		publicPort:       opts.publicPort,
 		metricsPort:      opts.metricsPort,
 		profilePort:      opts.profilePort,
-		healthPort:       opts.healthPort,
+		appHealthPort:    &opts.appHealthPort,
 	}
 }
 
@@ -221,11 +225,9 @@ func (d *Daprd) AppPort() int {
 	return d.appPort
 }
 
-func (d *Daprd) AppHealthPort() int {
-	if d.healthPort != 0 {
-		return d.healthPort
-	}
-	return d.appPort
+func (d *Daprd) AppHealthPort(t *testing.T) int {
+	require.NotNil(t, d.AppHealthPort)
+	return *d.appHealthPort
 }
 
 func (d *Daprd) GRPCPort() int {

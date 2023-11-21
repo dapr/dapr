@@ -74,11 +74,13 @@ type Options struct {
 	Logger                       logger.Options
 	Metrics                      *metrics.Options
 }
+var appHealthPort string
 
 func New(args []string) *Options {
 	opts := Options{
 		EnableAPILogging: new(bool),
 	}
+
 
 	flag.StringVar(&opts.Mode, "mode", string(modes.StandaloneMode), "Runtime mode for Dapr")
 	flag.StringVar(&opts.DaprHTTPPort, "dapr-http-port", strconv.Itoa(runtime.DefaultDaprHTTPPort), "HTTP port for Dapr API to listen on")
@@ -87,7 +89,7 @@ func New(args []string) *Options {
 	flag.StringVar(&opts.DaprAPIGRPCPort, "dapr-grpc-port", strconv.Itoa(runtime.DefaultDaprAPIGRPCPort), "gRPC port for the Dapr API to listen on")
 	flag.StringVar(&opts.DaprInternalGRPCPort, "dapr-internal-grpc-port", "", "gRPC port for the Dapr Internal API to listen on")
 	flag.StringVar(&opts.AppPort, "app-port", "", "The port the application is listening on")
-	flag.StringVar(&opts.AppHealthPort, "app-health-port", "", "The Healthy port of the application")
+	flag.StringVar(&appHealthPort, "app-health-port", "", "The Healthy port of the application")
 	flag.StringVar(&opts.ProfilePort, "profile-port", strconv.Itoa(runtime.DefaultProfilePort), "The port for the profile server")
 	flag.StringVar(&opts.AppProtocol, "app-protocol", string(protocol.HTTPProtocol), "Protocol for the application: grpc, grpcs, http, https, h2c")
 	flag.StringVar(&opts.ComponentsPath, "components-path", "", "Alias for --resources-path [Deprecated, use --resources-path]")
@@ -130,6 +132,10 @@ func New(args []string) *Options {
 	flag.CommandLine.Parse(args)
 
 	opts.TrustAnchors = []byte(os.Getenv(consts.TrustAnchorsEnvVar))
+
+	if !isFlagPassed("app-health-port") {
+		opts.AppHealthPort = appHealthPort
+	}
 
 	// flag.Parse() will always set a value to "enableAPILogging", and it will be false whether it's explicitly set to false or unset
 	// For this flag, we need the third state (unset) so we need to do a bit more work here to check if it's unset, then mark "enableAPILogging" as nil

@@ -44,7 +44,7 @@ type options struct {
 	sentryAddress           string
 	controlPlaneAddress     string
 	disableK8sSecretStore   *bool
-	healthPort              int
+	appHealthPort           int
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
