@@ -77,14 +77,14 @@ func collect(t *testing.T, testAppName string, table *summary.Table) {
 		Outputf(appendTime(testAppName+"App Memory"), "%vMb", appUsage.MemoryMb).
 		Outputf(appendTime(testAppName+"App CPU"), "%vm", appUsage.CPUm)
 	} else {
-		t.Log("collect App usage error: %v\n", err1)
+		t.Log("collect App usage error: ", err1)
 	}
 	if err2 == nil {
 		table.
 		Outputf(appendTime(testAppName+"Sidecar Memory"), "%vMb", sidecarUsage.MemoryMb).
 		Outputf(appendTime(testAppName+"Sidecar CPU"), "%vm", sidecarUsage.CPUm)
 	} else {
-		t.Log("collect Sidecar usage error: %v\n", err1)
+		t.Log("collect Sidecar usage error: ", err2)
 	}
 }
 
