@@ -119,7 +119,7 @@ func main() {
 }
 
 func startGRPC() {
-	lis, err := net.Listen("tcp", "0.0.0.0:"+appPort)
+	lis, err := net.Listen("tcp", "0.0.0.0:"+appHealthPort)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
@@ -140,7 +140,7 @@ func startGRPC() {
 	}()
 
 	// Blocking call
-	log.Printf("Health App GRPC server listening on :%s", appPort)
+	log.Printf("Health App GRPC server listening on :%s", appHealthPort)
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("Failed to start gRPC server: %v", err)
 	}
@@ -300,11 +300,11 @@ func startHTTP() {
 }
 
 func startH2C() {
-	log.Printf("Health App HTTP/2 Cleartext server listening on http://:%s", appPort)
+	log.Printf("Health App HTTP/2 Cleartext server listening on http://:%s", appHealthPort)
 
 	h2s := &http2.Server{}
 	srv := &http.Server{
-		Addr:              ":" + appPort,
+		Addr:              ":" + appHealthPort,
 		Handler:           h2c.NewHandler(httpRouter(), h2s),
 		ReadHeaderTimeout: 30 * time.Second,
 	}

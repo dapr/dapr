@@ -133,7 +133,7 @@ func New(args []string) *Options {
 
 	opts.TrustAnchors = []byte(os.Getenv(consts.TrustAnchorsEnvVar))
 
-	if !isFlagPassed("app-health-port") {
+	if isFlagPassed("app-health-port") {
 		opts.AppHealthPort = appHealthPort
 	}
 
