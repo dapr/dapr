@@ -56,39 +56,41 @@ func TestInitState(t *testing.T) {
 
 	primaryKey := hex.EncodeToString(bytes)
 
-	mockStateComponent := compapi.Component{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "testpubsub",
-		},
-		Spec: compapi.ComponentSpec{
-			Type:    "state.mockState",
-			Version: "v1",
-			Metadata: []common.NameValuePair{
-				{
-					Name: "actorstatestore",
-					Value: common.DynamicValue{
-						JSON: apiextv1.JSON{Raw: []byte("true")},
+	mockStateComponent := func(name string) compapi.Component {
+		return compapi.Component{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: name,
+			},
+			Spec: compapi.ComponentSpec{
+				Type:    "state.mockState",
+				Version: "v1",
+				Metadata: []common.NameValuePair{
+					{
+						Name: "actorstatestore",
+						Value: common.DynamicValue{
+							JSON: apiextv1.JSON{Raw: []byte("true")},
+						},
 					},
-				},
-				{
-					Name: "primaryEncryptionKey",
-					Value: common.DynamicValue{
-						JSON: apiextv1.JSON{Raw: []byte(primaryKey)},
+					{
+						Name: "primaryEncryptionKey",
+						Value: common.DynamicValue{
+							JSON: apiextv1.JSON{Raw: []byte(primaryKey)},
+						},
 					},
 				},
 			},
-		},
-		Auth: compapi.Auth{
-			SecretStore: "mockSecretStore",
-		},
+			Auth: compapi.Auth{
+				SecretStore: "mockSecretStore",
+			},
+		}
 	}
 
 	t.Run("test init state store", func(t *testing.T) {
 		// setup
-		initMockStateStoreForRegistry(reg, primaryKey, nil)
+		initMockStateStoreForRegistry(reg, "noerror", primaryKey, nil)
 
 		// act
-		err := proc.Init(context.TODO(), mockStateComponent)
+		err := proc.Init(context.TODO(), mockStateComponent("noerror"))
 
 		// assert
 		assert.NoError(t, err, "expected no error")
@@ -96,23 +98,23 @@ func TestInitState(t *testing.T) {
 
 	t.Run("test init state store error", func(t *testing.T) {
 		// setup
-		initMockStateStoreForRegistry(reg, primaryKey, assert.AnError)
+		initMockStateStoreForRegistry(reg, "error", primaryKey, assert.AnError)
 
 		// act
-		err := proc.Init(context.TODO(), mockStateComponent)
+		err := proc.Init(context.TODO(), mockStateComponent("error"))
 
 		// assert
 		assert.Error(t, err, "expected error")
-		assert.Equal(t, err.Error(), rterrors.NewInit(rterrors.InitComponentFailure, "testpubsub (state.mockState/v1)", assert.AnError).Error(), "expected error strings to match")
+		assert.Equal(t, err.Error(), rterrors.NewInit(rterrors.InitComponentFailure, "error (state.mockState/v1)", assert.AnError).Error(), "expected error strings to match")
 	})
 
 	t.Run("test init state store, encryption not enabled", func(t *testing.T) {
 		// setup
-		initMockStateStoreForRegistry(reg, primaryKey, nil)
+		initMockStateStoreForRegistry(reg, "noencryption", primaryKey, nil)
 
 		// act
-		err := proc.Init(context.TODO(), mockStateComponent)
-		ok := encryption.EncryptedStateStore("mockState")
+		err := proc.Init(context.TODO(), mockStateComponent("noencryption"))
+		ok := encryption.EncryptedStateStore("noencryption")
 
 		// assert
 		assert.NoError(t, err)
@@ -121,12 +123,12 @@ func TestInitState(t *testing.T) {
 
 	t.Run("test init state store, encryption enabled", func(t *testing.T) {
 		// setup
-		initMockStateStoreForRegistry(reg, primaryKey, nil)
+		initMockStateStoreForRegistry(reg, "encryption", primaryKey, nil)
 
 		compStore.AddSecretStore("mockSecretStore", &mock.SecretStore{})
 
-		err := proc.Init(context.TODO(), mockStateComponent)
-		ok := encryption.EncryptedStateStore("testpubsub")
+		err := proc.Init(context.TODO(), mockStateComponent("encryption"))
+		ok := encryption.EncryptedStateStore("encryption")
 
 		// assert
 		assert.NoError(t, err)
@@ -134,7 +136,7 @@ func TestInitState(t *testing.T) {
 	})
 }
 
-func initMockStateStoreForRegistry(reg *registry.Registry, encryptKey string, e error) *daprt.MockStateStore {
+func initMockStateStoreForRegistry(reg *registry.Registry, name, encryptKey string, e error) *daprt.MockStateStore {
 	mockStateStore := new(daprt.MockStateStore)
 
 	reg.StateStores().RegisterComponent(
@@ -145,14 +147,14 @@ func initMockStateStoreForRegistry(reg *registry.Registry, encryptKey string, e 
 	)
 
 	expectedMetadata := contribstate.Metadata{Base: metadata.Base{
-		Name: "testpubsub",
+		Name: name,
 		Properties: map[string]string{
 			"actorstatestore":      "true",
 			"primaryEncryptionKey": encryptKey,
 		},
 	}}
 	expectedMetadataUppercase := contribstate.Metadata{Base: metadata.Base{
-		Name: "testpubsub",
+		Name: name,
 		Properties: map[string]string{
 			"ACTORSTATESTORE":      "true",
 			"primaryEncryptionKey": encryptKey,

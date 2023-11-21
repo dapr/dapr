@@ -42,7 +42,8 @@ func TestGetMetadata(t *testing.T) {
 	})
 
 	compStore := compstore.New()
-	compStore.AddComponent(fakeComponent)
+	require.NoError(t, compStore.AddPendingComponentForCommit(fakeComponent))
+	require.NoError(t, compStore.CommitPendingComponent())
 	compStore.SetSubscriptions([]runtimePubsub.Subscription{
 		{
 			PubsubName:      "test",
