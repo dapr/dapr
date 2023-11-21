@@ -109,6 +109,8 @@ func (be *actorBackend) CreateOrchestrationInstance(ctx context.Context, e *back
 
 	resp, err := be.actors.Call(ctx, req)
 	if err != nil {
+		// Failed request to create workflow, record metrics.
+		diag.DefaultWorkflowMonitoring.WorkflowOperationsFailed(ctx, "Create Workflow")
 		return err
 	}
 	// workflow created successfully, record metrics.
@@ -128,6 +130,8 @@ func (be *actorBackend) GetOrchestrationMetadata(ctx context.Context, id api.Ins
 
 	res, err := be.actors.Call(ctx, req)
 	if err != nil {
+		// failed request to GET workflow Information, record metrics
+		diag.DefaultWorkflowMonitoring.WorkflowOperationsFailed(ctx, "Get Workflow")
 		return nil, err
 	}
 	// GET request for workflow, record metrics
@@ -183,6 +187,8 @@ func (be *actorBackend) AddNewOrchestrationEvent(ctx context.Context, id api.Ins
 
 	resp, err := be.actors.Call(ctx, req)
 	if err != nil {
+		// failed request to Add Event, record metrics
+		diag.DefaultWorkflowMonitoring.WorkflowOperationsFailed(ctx, "Add Event")
 		return err
 	}
 	// CREATE request to add an Event.
@@ -251,6 +257,8 @@ func (be *actorBackend) PurgeOrchestrationState(ctx context.Context, id api.Inst
 
 	resp, err := be.actors.Call(ctx, req)
 	if err != nil {
+		// Failed request to Purge Workflow, record workflow/operations metrics
+		diag.DefaultWorkflowMonitoring.WorkflowOperationsFailed(ctx, "Purge Workflow")
 		return err
 	}
 	// DELETE request for workflows
