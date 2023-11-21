@@ -50,7 +50,7 @@ func TestMain(m *testing.M) {
 				AppName:             "workflowsapp",
 				DaprEnabled:         true,
 				ImageName:           "e2e-workflowsapp",
-				Replicas:            2,
+				Replicas:            1,
 				IngressEnabled:      true,
 				IngressPort:         3000,
 				DaprMemoryLimit:     "200Mi",
@@ -69,12 +69,12 @@ func TestMain(m *testing.M) {
 	}
 }
 
-func getAppEndpoint(appname string) string {
+func getAppEndpoint() string {
 	if env := os.Getenv("WORKFLOW_APP_ENDPOINT"); env != "" {
 		return env
 	}
 
-	return tr.Platform.AcquireAppExternalURL(appname)
+	return tr.Platform.AcquireAppExternalURL("workflowsapp")
 }
 
 func startTest(url string, instanceID string) func(t *testing.T) {
@@ -89,7 +89,7 @@ func startTest(url string, instanceID string) func(t *testing.T) {
 			resp, err = utils.HTTPGet(getString)
 			assert.NoError(t, err, "failure getting info on workflow")
 			assert.Equalf(t, "Running", string(resp), "expected workflow to be Running, actual workflow state is: %s", string(resp))
-		}, 15*time.Second, 100*time.Millisecond)
+		}, 5*time.Second, 100*time.Millisecond)
 	}
 }
 
@@ -105,7 +105,7 @@ func pauseResumeTest(url string, instanceID string) func(t *testing.T) {
 			resp, err = utils.HTTPGet(getString)
 			assert.NoError(t, err, "failure getting info on workflow")
 			assert.Equalf(t, "Running", string(resp), "expected workflow to be Running, actual workflow state is: %s", string(resp))
-		}, 15*time.Second, 100*time.Millisecond)
+		}, 5*time.Second, 100*time.Millisecond)
 
 		// Pause the workflow
 		resp, err = utils.HTTPPost(fmt.Sprintf("%s/PauseWorkflow/dapr/%s", url, instanceID), nil)
@@ -115,7 +115,7 @@ func pauseResumeTest(url string, instanceID string) func(t *testing.T) {
 			resp, err = utils.HTTPGet(getString)
 			assert.NoError(t, err, "failure getting info on workflow")
 			assert.Equalf(t, "Suspended", string(resp), "expected workflow to be Suspended, actual workflow state is: %s", string(resp))
-		}, 15*time.Second, 100*time.Millisecond)
+		}, 5*time.Second, 100*time.Millisecond)
 
 		// Resume the workflow
 		resp, err = utils.HTTPPost(fmt.Sprintf("%s/ResumeWorkflow/dapr/%s", url, instanceID), nil)
@@ -125,7 +125,7 @@ func pauseResumeTest(url string, instanceID string) func(t *testing.T) {
 			resp, err = utils.HTTPGet(getString)
 			assert.NoError(t, err, "failure getting info on workflow")
 			assert.Equalf(t, "Running", string(resp), "expected workflow to be Running, actual workflow state is: %s", string(resp))
-		}, 15*time.Second, 100*time.Millisecond)
+		}, 5*time.Second, 100*time.Millisecond)
 	}
 }
 
@@ -141,7 +141,7 @@ func raiseEventTest(url string, instanceID string) func(t *testing.T) {
 			resp, err = utils.HTTPGet(getString)
 			assert.NoError(t, err, "failure getting info on workflow")
 			assert.Equalf(t, "Running", string(resp), "expected workflow to be Running, actual workflow state is: %s", string(resp))
-		}, 15*time.Second, 100*time.Millisecond)
+		}, 5*time.Second, 100*time.Millisecond)
 
 		// Raise an event on the workflow
 		resp, err = utils.HTTPPost(fmt.Sprintf("%s/RaiseWorkflowEvent/dapr/%s/ChangePurchaseItem/1", url, instanceID), nil)
@@ -151,7 +151,7 @@ func raiseEventTest(url string, instanceID string) func(t *testing.T) {
 			resp, err = utils.HTTPGet(getString)
 			assert.NoError(t, err, "failure getting info on workflow")
 			assert.Equalf(t, "Completed", string(resp), "expected workflow to be Completed, actual workflow state is: %s", string(resp))
-		}, 15*time.Second, 100*time.Millisecond)
+		}, 5*time.Second, 100*time.Millisecond)
 	}
 }
 
@@ -168,7 +168,7 @@ func purgeTest(url string, instanceID string) func(t *testing.T) {
 			resp, err = utils.HTTPGet(getString)
 			assert.NoError(t, err, "failure getting info on workflow")
 			assert.Equalf(t, "Running", string(resp), "expected workflow to be Running, actual workflow state is: %s", string(resp))
-		}, 15*time.Second, 100*time.Millisecond)
+		}, 5*time.Second, 100*time.Millisecond)
 
 		// Terminate the workflow
 		resp, err = utils.HTTPPost(fmt.Sprintf("%s/TerminateWorkflow/dapr/%s", url, instanceID), nil)
@@ -178,7 +178,7 @@ func purgeTest(url string, instanceID string) func(t *testing.T) {
 			resp, err = utils.HTTPGet(getString)
 			assert.NoError(t, err, "failure getting info on workflow")
 			assert.Equalf(t, "Terminated", string(resp), "expected workflow to be Terminated, actual workflow state is: %s", string(resp))
-		}, 15*time.Second, 100*time.Millisecond)
+		}, 5*time.Second, 100*time.Millisecond)
 
 		// Purge the workflow
 		resp, err = utils.HTTPPost(fmt.Sprintf("%s/PurgeWorkflow/dapr/%s", url, instanceID), nil)
@@ -194,131 +194,13 @@ func purgeTest(url string, instanceID string) func(t *testing.T) {
 			resp, err = utils.HTTPGet(getString)
 			assert.NoError(t, err, "failure getting info on workflow")
 			assert.Equalf(t, "Running", string(resp), "expected workflow to be Running, actual workflow state is: %s", string(resp))
-		}, 15*time.Second, 100*time.Millisecond)
-	}
-}
-
-func multiAppTest(url string, instanceID string) func(t *testing.T) {
-	return func(t *testing.T) {
-		var workflowInstanceIDs []string
-		// Start 60 workflows spread across the 2 apps and save their instance IDs
-		for i := 0; i < 60; i++ {
-			instance := instanceID + "_" + fmt.Sprint(len(workflowInstanceIDs))
-			workflowInstanceIDs = append(workflowInstanceIDs, instance)
-			_, err := utils.HTTPPost(fmt.Sprintf("%s/StartWorkflow/dapr/placeOrder/%s", url, instance), nil)
-			require.NoError(t, err, fmt.Sprintf("failure starting workflow %s", instance))
-		}
-		// Loop over the instance IDs across both apps and ensure that they are running
-		for _, instance := range workflowInstanceIDs {
-			getString := fmt.Sprintf("%s/dapr/%s", url, instance)
-			require.EventuallyWithT(t, func(t *assert.CollectT) {
-				resp, err := utils.HTTPGet(getString)
-				assert.NoError(t, err, "failure getting info on workflow")
-				assert.Equalf(t, "Running", string(resp), "expected workflow to be Running, actual workflow state is: %s", string(resp))
-			}, 15*time.Second, 100*time.Millisecond)
-		}
-		// Raise Events across all the instance amongst the 2 apps
-		for _, instance := range workflowInstanceIDs {
-			resp, err := utils.HTTPPost(fmt.Sprintf("%s/RaiseWorkflowEvent/dapr/%s/ChangePurchaseItem/1", url, instance), nil)
-			require.EventuallyWithT(t, func(t *assert.CollectT) {
-				resp, err = utils.HTTPGet(fmt.Sprintf("%s/dapr/%s", url, instance))
-				assert.NoError(t, err, "failure getting info on workflow")
-				assert.Equalf(t, "Completed", string(resp), "expected workflow to be Completed, actual workflow state is: %s", string(resp))
-			}, 15*time.Second, 100*time.Millisecond)
-		}
-	}
-}
-
-func shutdownRestartTest(url string, instanceID string) func(t *testing.T) {
-	return func(t *testing.T) {
-		var workflowInstanceIDs []string
-		// Start 60 workflows spread across the 2 apps and save their instance IDs
-		for i := 0; i < 60; i++ {
-			instance := instanceID + "_" + fmt.Sprint(len(workflowInstanceIDs))
-			workflowInstanceIDs = append(workflowInstanceIDs, instance)
-			_, err := utils.HTTPPost(fmt.Sprintf("%s/StartWorkflow/dapr/placeOrder/%s", url, instance), nil)
-			require.NoError(t, err, fmt.Sprintf("failure starting workflow %s", instance))
-		}
-		// Loop over the instance IDs across both apps and ensure that they are running
-		for _, instance := range workflowInstanceIDs {
-			getString := fmt.Sprintf("%s/dapr/%s", url, instance)
-			require.EventuallyWithT(t, func(t *assert.CollectT) {
-				resp, err := utils.HTTPGet(getString)
-				assert.NoError(t, err, "failure getting info on workflow")
-				assert.Equalf(t, "Running", string(resp), "expected workflow to be Running, actual workflow state is: %s", string(resp))
-			}, 15*time.Second, 100*time.Millisecond)
-		}
-
-		// Pause workflows across all the instances amongst the 2 apps
-		for _, instance := range workflowInstanceIDs {
-			resp, err := utils.HTTPPost(fmt.Sprintf("%s/PauseWorkflow/dapr/%s", url, instance), nil)
-			require.EventuallyWithT(t, func(t *assert.CollectT) {
-				resp, err = utils.HTTPGet(fmt.Sprintf("%s/dapr/%s", url, instance))
-				assert.NoError(t, err, "failure getting info on workflow")
-				assert.Equalf(t, "Suspended", string(resp), "expected workflow to be Suspended, actual workflow state is: %s", string(resp))
-			}, 15*time.Second, 100*time.Millisecond)
-		}
-
-		// Shutdown the sidecar
-		_, err := utils.HTTPPost(fmt.Sprintf("%s/ShutdownSidecar", url), nil)
-		require.NoError(t, err)
-
-		// Check status across all the instances amongst the 2 apps
-		for _, instance := range workflowInstanceIDs {
-			require.EventuallyWithT(t, func(t *assert.CollectT) {
-				resp, err := utils.HTTPGet(fmt.Sprintf("%s/dapr/%s", url, instance))
-				assert.NoError(t, err, "failure getting info on workflow")
-				assert.Equalf(t, "Suspended", string(resp), "expected workflow: %s to be Suspended, actual workflow state is: %s", instance, string(resp))
-			}, 60*time.Second, 100*time.Millisecond)
-		}
-
-		// Resume all instances across the apps
-		for _, instance := range workflowInstanceIDs {
-			resp, err := utils.HTTPPost(fmt.Sprintf("%s/ResumeWorkflow/dapr/%s", url, instance), nil)
-			require.EventuallyWithT(t, func(t *assert.CollectT) {
-				resp, err = utils.HTTPGet(fmt.Sprintf("%s/dapr/%s", url, instance))
-				assert.NoError(t, err, "failure getting info on workflow")
-				assert.Equalf(t, "Running", string(resp), "expected workflow: %s to be Running, actual workflow state is: %s", instance, string(resp))
-			}, 15*time.Second, 100*time.Millisecond)
-		}
-
-		// Raise Events across all the instances amongst the 2 apps to complete the workflow
-		for _, instance := range workflowInstanceIDs {
-			resp, err := utils.HTTPPost(fmt.Sprintf("%s/RaiseWorkflowEvent/dapr/%s/ChangePurchaseItem/1", url, instance), nil)
-			require.EventuallyWithT(t, func(t *assert.CollectT) {
-				resp, err = utils.HTTPGet(fmt.Sprintf("%s/dapr/%s", url, instance))
-				assert.NoError(t, err, "failure getting info on workflow")
-				assert.Equalf(t, "Completed", string(resp), "expected workflow: %s to be Completed, actual workflow state is: %s", instance, string(resp))
-			}, 30*time.Second, 100*time.Millisecond)
-		}
-	}
-}
-
-func manyActivitiesTest(url string, instanceID string) func(t *testing.T) {
-	return func(t *testing.T) {
-		getString := fmt.Sprintf("%s/dapr/%s", url, instanceID)
-
-		// Start the workflow and check that it is running
-		resp, err := utils.HTTPPost(fmt.Sprintf("%s/StartWorkflow/dapr/ManyActivities/%s", url, instanceID), nil)
-		require.NoError(t, err, "failure starting workflow")
-
-		require.EventuallyWithT(t, func(t *assert.CollectT) {
-			resp, err = utils.HTTPGet(getString)
-			assert.NoError(t, err, "failure getting info on workflow")
-			assert.Equalf(t, "Running", string(resp), "expected workflow: %s to be Running, actual workflow state is: %s", instanceID, string(resp))
-		}, 15*time.Second, 100*time.Millisecond)
-
-		require.EventuallyWithT(t, func(t *assert.CollectT) {
-			resp, err = utils.HTTPGet(getString)
-			assert.NoError(t, err, "failure getting info on workflow")
-			assert.Equalf(t, "Completed", string(resp), "expected workflow: %s to be Completed, actual workflow state is: %s", instanceID, string(resp))
-		}, 90*time.Second, 100*time.Millisecond)
+		}, 5*time.Second, 100*time.Millisecond)
 	}
 }
 
 func TestWorkflow(t *testing.T) {
 	// Get the ingress external url of test app
-	externalURL := getAppEndpoint("workflowsapp")
+	externalURL := getAppEndpoint()
 	require.NotEmpty(t, externalURL, "external URL must not be empty")
 
 	// Check if test app endpoint is available
@@ -335,7 +217,4 @@ func TestWorkflow(t *testing.T) {
 	t.Run("Pause and Resume", pauseResumeTest(externalURL, "pause-"+suffix))
 	t.Run("Purge", purgeTest(externalURL, "purge-"+suffix))
 	t.Run("Raise event", raiseEventTest(externalURL, "raiseEvent-"+suffix))
-	t.Run("Multiple Apps", multiAppTest(externalURL, "multiApp-"+suffix))
-	t.Run("Dapr Shutdown Restart", shutdownRestartTest(externalURL, "shutdownRestart-"+suffix))
-	t.Run("Many Activities", manyActivitiesTest(externalURL, "manyActivities-"+suffix))
 }

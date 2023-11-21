@@ -43,7 +43,7 @@ namespace DaprDemoActor
       var startResponse = await daprClient.StartWorkflowAsync(
               instanceId: instanceID, 
               workflowComponent: workflowComponent,
-              workflowName: workflowName,
+              workflowName: "PlaceOrder",
               input: inputItem,
               workflowOptions: workflowOptions);
 
@@ -84,13 +84,6 @@ namespace DaprDemoActor
     public async Task<ActionResult<bool>> RaiseWorkflowEvent([FromRoute] string instanceID, string workflowComponent, string eventName, string eventInput)
     {
       await daprClient.RaiseWorkflowEventAsync(instanceID, workflowComponent, eventName, eventInput);
-      return true;
-    }
-
-    [HttpPost("ShutdownSidecar")]
-    public async Task<ActionResult<bool>> ShutdownSidecar()
-    {
-      await daprClient.ShutdownSidecarAsync();
       return true;
     }
   }
