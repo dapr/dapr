@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"sync"
 
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/microsoft/durabletask-go/api"
 	"github.com/microsoft/durabletask-go/backend"
 
@@ -110,6 +111,8 @@ func (be *actorBackend) CreateOrchestrationInstance(ctx context.Context, e *back
 	if err != nil {
 		return err
 	}
+	// workflow created successfully, record metrics.
+	diag.DefaultWorkflowMonitoring.WorkflowOperationsSuccessful(ctx, "Create Workflow")
 	defer resp.Close()
 	return nil
 }
@@ -127,6 +130,8 @@ func (be *actorBackend) GetOrchestrationMetadata(ctx context.Context, id api.Ins
 	if err != nil {
 		return nil, err
 	}
+	// GET request for workflow, record metrics
+	diag.DefaultWorkflowMonitoring.WorkflowOperationsSuccessful(ctx, "Get Workflow")
 
 	defer res.Close()
 	data := res.RawData()
@@ -180,6 +185,8 @@ func (be *actorBackend) AddNewOrchestrationEvent(ctx context.Context, id api.Ins
 	if err != nil {
 		return err
 	}
+	// CREATE request to add an Event.
+	diag.DefaultWorkflowMonitoring.WorkflowOperationsSuccessful(ctx, "Add Event")
 	defer resp.Close()
 	return nil
 }
@@ -246,6 +253,8 @@ func (be *actorBackend) PurgeOrchestrationState(ctx context.Context, id api.Inst
 	if err != nil {
 		return err
 	}
+	// DELETE request for workflows
+	diag.DefaultWorkflowMonitoring.WorkflowOperationsSuccessful(ctx, "Purge Workflow")
 	defer resp.Close()
 	return nil
 }
