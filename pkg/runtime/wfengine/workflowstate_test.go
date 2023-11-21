@@ -1,3 +1,6 @@
+//go:build unit
+// +build unit
+
 /*
 Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -39,18 +42,18 @@ const (
 
 func TestNoWorkflowState(t *testing.T) {
 	actors := getActorRuntime()
-	state, err := wfengine.LoadWorkflowState(context.Background(), actors, "wf1", wfengine.NewWorkflowConfig(testAppID))
+	state, err := wfengine.LoadWorkflowState(context.Background(), actors, "wf1", wfengine.NewActorsBackendConfig(testAppID))
 	assert.NoError(t, err)
 	assert.Empty(t, state)
 }
 
 func TestDefaultWorkflowState(t *testing.T) {
-	state := wfengine.NewWorkflowState(wfengine.NewWorkflowConfig(testAppID))
+	state := wfengine.NewWorkflowState(wfengine.NewActorsBackendConfig(testAppID))
 	assert.Equal(t, uint64(1), state.Generation)
 }
 
 func TestAddingToInbox(t *testing.T) {
-	state := wfengine.NewWorkflowState(wfengine.NewWorkflowConfig(testAppID))
+	state := wfengine.NewWorkflowState(wfengine.NewActorsBackendConfig(testAppID))
 	for i := 0; i < 10; i++ {
 		state.AddToInbox(&backend.HistoryEvent{})
 	}
@@ -67,7 +70,7 @@ func TestAddingToInbox(t *testing.T) {
 }
 
 func TestClearingInbox(t *testing.T) {
-	state := wfengine.NewWorkflowState(wfengine.NewWorkflowConfig(testAppID))
+	state := wfengine.NewWorkflowState(wfengine.NewActorsBackendConfig(testAppID))
 	for i := 0; i < 10; i++ {
 		// Simulate the loadng of inbox events from storage
 		state.Inbox = append(state.Inbox, &backend.HistoryEvent{})
@@ -86,7 +89,7 @@ func TestClearingInbox(t *testing.T) {
 }
 
 func TestAddingToHistory(t *testing.T) {
-	wfstate := wfengine.NewWorkflowState(wfengine.NewWorkflowConfig(testAppID))
+	wfstate := wfengine.NewWorkflowState(wfengine.NewActorsBackendConfig(testAppID))
 	runtimeState := backend.NewOrchestrationRuntimeState(api.InstanceID("wf1"), nil)
 	for i := 0; i < 10; i++ {
 		err := runtimeState.AddEvent(&backend.HistoryEvent{})
@@ -106,7 +109,7 @@ func TestAddingToHistory(t *testing.T) {
 }
 
 func TestLoadSavedState(t *testing.T) {
-	wfstate := wfengine.NewWorkflowState(wfengine.NewWorkflowConfig(testAppID))
+	wfstate := wfengine.NewWorkflowState(wfengine.NewActorsBackendConfig(testAppID))
 
 	runtimeState := backend.NewOrchestrationRuntimeState(api.InstanceID("wf1"), nil)
 	for i := 0; i < 10; i++ {
@@ -132,7 +135,7 @@ func TestLoadSavedState(t *testing.T) {
 	err = actors.TransactionalStateOperation(context.Background(), req)
 	require.NoError(t, err)
 
-	wfstate, err = wfengine.LoadWorkflowState(context.Background(), actors, "wf1", wfengine.NewWorkflowConfig(testAppID))
+	wfstate, err = wfengine.LoadWorkflowState(context.Background(), actors, "wf1", wfengine.NewActorsBackendConfig(testAppID))
 	require.NoError(t, err)
 	require.NotNil(t, wfstate)
 
@@ -149,7 +152,7 @@ func TestLoadSavedState(t *testing.T) {
 }
 
 func TestResetLoadedState(t *testing.T) {
-	wfstate := wfengine.NewWorkflowState(wfengine.NewWorkflowConfig(testAppID))
+	wfstate := wfengine.NewWorkflowState(wfengine.NewActorsBackendConfig(testAppID))
 
 	runtimeState := backend.NewOrchestrationRuntimeState(api.InstanceID("wf1"), nil)
 	for i := 0; i < 10; i++ {
@@ -170,7 +173,7 @@ func TestResetLoadedState(t *testing.T) {
 	err = actorRuntime.TransactionalStateOperation(context.Background(), req)
 	require.NoError(t, err)
 
-	wfstate, err = wfengine.LoadWorkflowState(context.Background(), actorRuntime, "wf1", wfengine.NewWorkflowConfig(testAppID))
+	wfstate, err = wfengine.LoadWorkflowState(context.Background(), actorRuntime, "wf1", wfengine.NewActorsBackendConfig(testAppID))
 	require.NoError(t, err)
 	require.NotNil(t, wfstate)
 
