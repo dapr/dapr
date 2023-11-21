@@ -299,8 +299,9 @@ func (wf *workflowActor) addWorkflowEvent(ctx context.Context, actorID string, h
 	if _, err := wf.createReliableReminder(ctx, actorID, "new-event", nil, 0); err != nil {
 		return err
 	}
-	// event reminder created, record metrics.
+	// event reminder created successfully, record metrics.
 	diag.DefaultWorkflowMonitoring.RemindersTotalCreated(ctx, "Event")
+
 	return wf.saveInternalState(ctx, actorID, state)
 }
 
@@ -389,21 +390,32 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 	// will trigger this callback channel.
 	callback := make(chan bool)
 	wi.Properties[CallbackChannelProperty] = callback
+	// Request to execute workflow
 	err = wf.scheduler.ScheduleWorkflow(ctx, wi)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
+			// Workflow execution scheduling request failed with recoverable error, record metrics.
+			diag.DefaultWorkflowMonitoring.ExecutionFailed(ctx, "Workflow", true)
 			return newRecoverableError(fmt.Errorf("timed-out trying to schedule a workflow execution - this can happen if there are too many in-flight workflows or if the workflow engine isn't running: %w", err))
 		}
+		// Workflow execution scheduling request failed with recoverable error, record metrics.
+		diag.DefaultWorkflowMonitoring.ExecutionFailed(ctx, "Workflow", true)
 		return newRecoverableError(fmt.Errorf("failed to schedule a workflow execution: %w", err))
 	}
 
 	select {
 	case <-ctx.Done(): // caller is responsible for timeout management
+		// Workflow execution failed with non-recoverable error, record metrics.
+		diag.DefaultWorkflowMonitoring.ExecutionFailed(ctx, "Workflow", false)
 		return ctx.Err()
 	case completed := <-callback:
 		if !completed {
+			// Workflow execution failed with Recoverable Error, record metrics
+			diag.DefaultWorkflowMonitoring.ExecutionFailed(ctx, "Workflow", true)
 			return newRecoverableError(errExecutionAborted)
 		}
+		// workflow execution completed, record metrics
+		diag.DefaultWorkflowMonitoring.ExecutionCompleted(ctx, "Workflow")
 	}
 
 	// Increment the generation counter if the workflow used continue-as-new. Subsequent actions below

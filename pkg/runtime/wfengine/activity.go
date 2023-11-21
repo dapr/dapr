@@ -169,8 +169,12 @@ func (a *activityActor) executeActivity(ctx context.Context, actorID string, nam
 	wi.Properties[CallbackChannelProperty] = callback
 	if err = a.scheduler.ScheduleActivity(ctx, wi); err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
+			// Activity execution failed with recoverable error, record metrics.
+			diag.DefaultWorkflowMonitoring.ExecutionFailed(ctx, "Activity", true)
 			return newRecoverableError(fmt.Errorf("timed-out trying to schedule an activity execution - this can happen if too many activities are running in parallel or if the workflow engine isn't running: %w", err))
 		}
+		// Activity execution failed with recoverable error, record metrics.
+		diag.DefaultWorkflowMonitoring.ExecutionFailed(ctx, "Activity", true)
 		return newRecoverableError(fmt.Errorf("failed to schedule an activity execution: %w", err))
 	}
 
@@ -182,6 +186,8 @@ loop:
 			if !t.Stop() {
 				<-t.C
 			}
+			// Activity execution failed with non-recoverable error. Record metrics
+			diag.DefaultWorkflowMonitoring.ExecutionFailed(ctx, "Activity", false)
 			return ctx.Err()
 		case <-t.C:
 			if deadline, ok := ctx.Deadline(); ok {
@@ -194,8 +200,12 @@ loop:
 				<-t.C
 			}
 			if completed {
+				// Activity completed, record metrics
+				diag.DefaultWorkflowMonitoring.ExecutionCompleted(ctx, "Activity")
 				break loop
 			} else {
+				// Activity execution failed with recoverable error, record metrics
+				diag.DefaultWorkflowMonitoring.ExecutionFailed(ctx, "Activity", true)
 				return newRecoverableError(errExecutionAborted)
 			}
 		}
