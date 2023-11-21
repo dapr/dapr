@@ -177,7 +177,7 @@ func newDaprRuntime(ctx context.Context,
 
 	grpc := createGRPCManager(sec, runtimeConfig, globalConfig)
 
-	wfe := wfengine.NewWorkflowEngine(wfengine.NewWorkflowConfig(runtimeConfig.id))
+	wfe := wfengine.NewWorkflowEngine(runtimeConfig.id, globalConfig.GetWorkflowSpec())
 	wfe.ConfigureGrpcExecutor()
 
 	channels := channels.New(channels.Options{
@@ -584,8 +584,8 @@ func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) error {
 			a.daprUniversalAPI.SetActorRuntime(a.actor)
 		}
 	} else {
-		// If actors are not enabled, still invoke SetActorRuntime on the workflow engine with `nil` to unblock the goroutine
-		a.workflowEngine.SetActorRuntime(a.actor)
+		// If actors are not enabled, still invoke SetActorRuntime on the workflow engine with `nil` to unblock startup
+		a.workflowEngine.SetActorRuntime(nil)
 	}
 
 	// We set actors as initialized whether we have an actors runtime or not
