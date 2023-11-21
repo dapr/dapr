@@ -169,3 +169,32 @@ func Test_Start(t *testing.T) {
 		}
 	})
 }
+
+func TestCurrentNamespace(t *testing.T) {
+	t.Run("error is namespace is not set", func(t *testing.T) {
+		osns, ok := os.LookupEnv("NAMESPACE")
+		os.Unsetenv("NAMESPACE")
+		t.Cleanup(func() {
+			if ok {
+				os.Setenv("NAMESPACE", osns)
+			}
+		})
+		ns, err := CurrentNamespaceOrError()
+		assert.Error(t, err)
+		assert.Empty(t, ns)
+	})
+
+	t.Run("error if namespace is set but empty", func(t *testing.T) {
+		t.Setenv("NAMESPACE", "")
+		ns, err := CurrentNamespaceOrError()
+		assert.Error(t, err)
+		assert.Empty(t, ns)
+	})
+
+	t.Run("returns namespace if set", func(t *testing.T) {
+		t.Setenv("NAMESPACE", "foo")
+		ns, err := CurrentNamespaceOrError()
+		assert.NoError(t, err)
+		assert.Equal(t, "foo", ns)
+	})
+}
