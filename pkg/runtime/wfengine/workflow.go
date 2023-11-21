@@ -49,7 +49,7 @@ type workflowActor struct {
 	cachingDisabled       bool
 	defaultTimeout        time.Duration
 	reminderInterval      time.Duration
-	config                wfConfig
+	config                actorsBackendConfig
 	activityResultAwaited atomic.Bool
 }
 
@@ -61,6 +61,9 @@ type durableTimer struct {
 type recoverableError struct {
 	cause error
 }
+
+// workflowScheduler is a func interface for pushing workflow (orchestration) work items into the backend
+type workflowScheduler func(ctx context.Context, wi *backend.OrchestrationWorkItem) error
 
 func NewDurableTimer(bytes []byte, generation uint64) durableTimer {
 	return durableTimer{bytes, generation}
@@ -74,7 +77,7 @@ func (err recoverableError) Error() string {
 	return err.cause.Error()
 }
 
-func NewWorkflowActor(scheduler workflowScheduler, config wfConfig) *workflowActor {
+func NewWorkflowActor(scheduler workflowScheduler, config actorsBackendConfig) *workflowActor {
 	return &workflowActor{
 		scheduler:        scheduler,
 		defaultTimeout:   30 * time.Second,
@@ -375,7 +378,9 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 	// will trigger this callback channel.
 	callback := make(chan bool)
 	wi.Properties[CallbackChannelProperty] = callback
-	err = wf.scheduler.ScheduleWorkflow(ctx, wi)
+
+	// Schedule the workflow execution by signaling the backend
+	err = wf.scheduler(ctx, wi)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
 			return newRecoverableError(fmt.Errorf("timed-out trying to schedule a workflow execution - this can happen if there are too many in-flight workflows or if the workflow engine isn't running: %w", err))
@@ -409,7 +414,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 			if err != nil {
 				return fmt.Errorf("failed to marshal pending timer data: %w", err)
 			}
-			delay := tf.FireAt.AsTime().Sub(time.Now())
+			delay := time.Until(tf.FireAt.AsTime())
 			if delay < 0 {
 				delay = 0
 			}
@@ -505,10 +510,12 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 }
 
 func (wf *workflowActor) loadInternalState(ctx context.Context, actorID string) (*workflowState, error) {
-	// see if the state for this actor is already cached in memory
-	cachedState, ok := wf.states.Load(actorID)
-	if ok {
-		return cachedState.(*workflowState), nil
+	if !wf.cachingDisabled {
+		// see if the state for this actor is already cached in memory
+		cachedState, ok := wf.states.Load(actorID)
+		if ok {
+			return cachedState.(*workflowState), nil
+		}
 	}
 
 	// state is not cached, so try to load it from the state store
@@ -521,15 +528,14 @@ func (wf *workflowActor) loadInternalState(ctx context.Context, actorID string) 
 		// No such state exists in the state store
 		return nil, nil
 	}
-	return state, nil
-}
-
-func (wf *workflowActor) saveInternalState(ctx context.Context, actorID string, state *workflowState) error {
 	if !wf.cachingDisabled {
 		// update cached state
 		wf.states.Store(actorID, state)
 	}
+	return state, nil
+}
 
+func (wf *workflowActor) saveInternalState(ctx context.Context, actorID string, state *workflowState) error {
 	// generate and run a state store operation that saves all changes
 	req, err := state.GetSaveRequest(actorID)
 	if err != nil {
@@ -543,6 +549,11 @@ func (wf *workflowActor) saveInternalState(ctx context.Context, actorID string, 
 
 	// ResetChangeTracking should always be called after a save operation succeeds
 	state.ResetChangeTracking()
+
+	if !wf.cachingDisabled {
+		// update cached state
+		wf.states.Store(actorID, state)
+	}
 	return nil
 }
 
