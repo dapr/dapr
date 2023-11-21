@@ -75,6 +75,7 @@ def run_workflow(run_id):
         except DaprInternalError as e:
             print(f"{datetime.now():%Y-%m-%d %H:%M:%S.%f} [{run_id}] error starting workflow: {e.message}")
         
+        # quick sleep to avoid polling in wait_for_workflow_completion
         sleep(0.5)
 
         workflow_state = workflowClient.wait_for_workflow_completion(

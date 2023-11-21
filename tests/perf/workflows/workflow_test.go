@@ -76,11 +76,15 @@ func collect(t *testing.T, testAppName string, table *summary.Table) {
 		table.
 		Outputf(appendTime(testAppName+"App Memory"), "%vMb", appUsage.MemoryMb).
 		Outputf(appendTime(testAppName+"App CPU"), "%vm", appUsage.CPUm)
+	} else {
+		t.Log("collect App usage error: %v\n", err1)
 	}
 	if err2 == nil {
 		table.
 		Outputf(appendTime(testAppName+"Sidecar Memory"), "%vMb", sidecarUsage.MemoryMb).
 		Outputf(appendTime(testAppName+"Sidecar CPU"), "%vm", sidecarUsage.CPUm)
+	} else {
+		t.Log("collect Sidecar usage error: %v\n", err1)
 	}
 }
 
@@ -158,14 +162,13 @@ func TestWorkFlowPerf(t *testing.T) {
 			// Check if test app endpoint is available
 			require.NoError(t, utils.HealthCheckApps(externalURL))
 
-			time.Sleep(2 * time.Second)
-
 			// Initialize the workflow runtime
 			url := fmt.Sprintf("http://%s/start-workflow-runtime", externalURL)
 			// Calling start-workflow-runtime multiple times so that it is started in all app instances
 			_, err := utils.HTTPGet(url)
 			require.NoError(t, err, "error starting workflow runtime")
 			
+			// 2 seconds buffer for workflow runtime to start
 			time.Sleep(2 * time.Second)
 
 			targetURL := fmt.Sprintf("http://%s/run-workflow", externalURL)
