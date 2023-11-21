@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -34,6 +35,7 @@ import (
 type Placement struct {
 	exec     process.Interface
 	freeport *util.FreePort
+	running  atomic.Bool
 
 	id                  string
 	port                int
@@ -99,11 +101,19 @@ func New(t *testing.T, fopts ...Option) *Placement {
 }
 
 func (p *Placement) Run(t *testing.T, ctx context.Context) {
+	if !p.running.CompareAndSwap(false, true) {
+		t.Fatal("Process is already running")
+	}
+
 	p.freeport.Free(t)
 	p.exec.Run(t, ctx)
 }
 
 func (p *Placement) Cleanup(t *testing.T) {
+	if !p.running.CompareAndSwap(true, false) {
+		return
+	}
+
 	p.exec.Cleanup(t)
 }
 

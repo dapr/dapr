@@ -65,7 +65,7 @@ spec:
 		w.Write([]byte(`{"entities": ["myactortype"]}`))
 	})
 	handler.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(""))
+		w.WriteHeader(http.StatusOK)
 	})
 	handler.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`OK`))

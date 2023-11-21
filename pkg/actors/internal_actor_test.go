@@ -241,7 +241,11 @@ func TestInternalActorDeactivation(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Deactivate the actor, ensuring no errors and that the correct actor ID was provided.
-	err = testActorRuntime.deactivateActor(testActorType, testActorID)
+	actAny, ok := testActorRuntime.actorsTable.Load(constructCompositeKey(testActorType, testActorID))
+	require.True(t, ok)
+	act, ok := actAny.(*actor)
+	require.True(t, ok)
+	err = testActorRuntime.deactivateActor(act)
 	require.NoError(t, err)
 	if assert.Len(t, ia.DeactivationCalls, 1) {
 		assert.Equal(t, testActorID, ia.DeactivationCalls[0])

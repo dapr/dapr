@@ -22,6 +22,7 @@ import (
 	"k8s.io/utils/clock"
 
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/kit/ptr"
 )
 
 // ErrActorDisposed is the error when runtime tries to hold the lock of the disposed actor.
@@ -39,11 +40,12 @@ type actor struct {
 	// pendingActorCalls is the number of the current pending actor calls by turn-based concurrency.
 	pendingActorCalls atomic.Int32
 
-	// When consistent hashing tables are updated, actor runtime drains actor to rebalance actors
-	// across actor hosts after drainOngoingCallTimeout or until all pending actor calls are completed.
-	// lastUsedTime is the time when the last actor call holds lock. This is used to calculate
-	// the duration of ongoing calls to time out.
-	lastUsedTime time.Time
+	// idleTimeout is the configured max idle time for actors of this kind.
+	idleTimeout time.Duration
+
+	// idleAt is the time after which this actor is considered to be idle.
+	// When the actor is locked, idleAt is updated by adding the idleTimeout to the current time.
+	idleAt atomic.Pointer[time.Time]
 
 	// disposeLock guards disposed and disposeCh.
 	disposeLock sync.RWMutex
@@ -56,17 +58,33 @@ type actor struct {
 	clock clock.Clock
 }
 
-func newActor(actorType, actorID string, maxReentrancyDepth *int, cl clock.Clock) *actor {
+func newActor(actorType, actorID string, maxReentrancyDepth *int, idleTimeout time.Duration, cl clock.Clock) *actor {
 	if cl == nil {
 		cl = &clock.RealClock{}
 	}
-	return &actor{
-		actorType:    actorType,
-		actorID:      actorID,
-		actorLock:    NewActorLock(int32(*maxReentrancyDepth)),
-		clock:        cl,
-		lastUsedTime: cl.Now().UTC(),
+
+	a := &actor{
+		actorType:   actorType,
+		actorID:     actorID,
+		actorLock:   NewActorLock(int32(*maxReentrancyDepth)),
+		clock:       cl,
+		idleTimeout: idleTimeout,
 	}
+	a.idleAt.Store(ptr.Of(cl.Now().Add(idleTimeout)))
+
+	return a
+}
+
+// Key returns the key for this unique actor.
+// This is implemented to comply with the queueable interface.
+func (a *actor) Key() string {
+	return a.actorType + daprSeparator + a.actorID
+}
+
+// ScheduledTime returns the time the actor becomes idle at.
+// This is implemented to comply with the queueable interface.
+func (a *actor) ScheduledTime() time.Time {
+	return *a.idleAt.Load()
 }
 
 // isBusy returns true when pending actor calls are ongoing.
@@ -115,7 +133,8 @@ func (a *actor) lock(reentrancyID *string) error {
 		a.unlock()
 		return ErrActorDisposed
 	}
-	a.lastUsedTime = a.clock.Now().UTC()
+
+	a.idleAt.Store(ptr.Of(a.clock.Now().Add(a.idleTimeout)))
 	return nil
 }
 

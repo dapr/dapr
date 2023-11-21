@@ -19,6 +19,12 @@ import (
 	"time"
 )
 
+// HaltActorFn is the signature of the function invoked when the placement service requires an actor to be deactivated.
+type HaltActorFn = func(actorType string, actorID string) error
+
+// HaltAllActorsFn is the signature of the function invoked when the placement service requires all actors to be deactivated.
+type HaltAllActorsFn = func() error
+
 // PlacementService allows for interacting with the actor placement service.
 type PlacementService interface {
 	io.Closer
@@ -27,6 +33,9 @@ type PlacementService interface {
 	WaitUntilReady(ctx context.Context) error
 	LookupActor(ctx context.Context, req LookupActorRequest) (LookupActorResponse, error)
 	AddHostedActorType(actorType string, idleTimeout time.Duration) error
+	ReportActorDeactivation(ctx context.Context, actorType, actorID string) error
+
+	SetHaltActorFns(haltFn HaltActorFn, haltAllFn HaltAllActorsFn)
 	SetOnAPILevelUpdate(fn func(apiLevel uint32))
 }
 
