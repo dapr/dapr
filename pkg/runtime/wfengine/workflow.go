@@ -399,7 +399,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 			return newRecoverableError(errExecutionAborted)
 		}
 	}
-	wfLogger.Debugf("workflow actor '%s': workflow execution returned with %d  status %s instanceId '%s'", actorID, runtimeState.RuntimeStatus().String(), wi.InstanceID)
+	wfLogger.Debugf("workflow actor '%s': workflow execution returned with status %s instanceId '%s'", actorID, runtimeState.RuntimeStatus().String(), wi.InstanceID)
 
 	// Increment the generation counter if the workflow used continue-as-new. Subsequent actions below
 	// will use this updated generation value for their duplication execution handling.
