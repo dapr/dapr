@@ -177,12 +177,12 @@ func (p *Service) Run(ctx context.Context, port string) error {
 
 	placementv1pb.RegisterPlacementServer(grpcServer, p)
 
-	log.Infof("starting placement service started on port %d", serverListener.Addr().(*net.TCPAddr).Port)
+	log.Infof("Placement service started on port %d", serverListener.Addr().(*net.TCPAddr).Port)
 
 	errCh := make(chan error)
 	go func() {
 		errCh <- grpcServer.Serve(serverListener)
-		log.Info("placement service stopped")
+		log.Info("Placement service stopped")
 	}()
 
 	<-ctx.Done()
