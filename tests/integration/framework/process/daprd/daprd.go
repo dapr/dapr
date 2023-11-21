@@ -107,9 +107,9 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		"--mode=" + opts.mode,
 		"--enable-mtls=" + strconv.FormatBool(opts.enableMTLS),
 	}
-	if opts.appHealthPort !=0{
+	if opts.appHealthPort != 0 {
 		args = append(args, "--app-health-port="+strconv.Itoa(opts.appHealthPort))
-	}else{
+	} else {
 		args = append(args, "--app-health-port="+strconv.Itoa(opts.appPort))
 	}
 	if opts.appHealthCheckPath != "" {

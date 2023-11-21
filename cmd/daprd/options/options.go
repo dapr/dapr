@@ -74,13 +74,13 @@ type Options struct {
 	Logger                       logger.Options
 	Metrics                      *metrics.Options
 }
+
 var appHealthPort string
 
 func New(args []string) *Options {
 	opts := Options{
 		EnableAPILogging: new(bool),
 	}
-
 
 	flag.StringVar(&opts.Mode, "mode", string(modes.StandaloneMode), "Runtime mode for Dapr")
 	flag.StringVar(&opts.DaprHTTPPort, "dapr-http-port", strconv.Itoa(runtime.DefaultDaprHTTPPort), "HTTP port for Dapr API to listen on")
