@@ -528,7 +528,8 @@ func TestComponentsUpdate(t *testing.T) {
 			if comp.Name == "" {
 				continue
 			}
-			rt.compStore.AddComponent(comp)
+			require.NoError(t, rt.compStore.AddPendingComponentForCommit(comp))
+			require.NoError(t, rt.compStore.CommitPendingComponent())
 			processedCh <- struct{}{}
 		}
 	}
@@ -582,7 +583,7 @@ func TestComponentsUpdate(t *testing.T) {
 		t.Errorf("Expect component [comp1] processed.")
 		t.FailNow()
 	}
-	_, exists := rt.compStore.GetComponent(comp1.Spec.Type, comp1.Name)
+	_, exists := rt.compStore.GetComponent(comp1.Name)
 	assert.True(t, exists, fmt.Sprintf("expect component, type: %s, name: %s", comp1.Spec.Type, comp1.Name))
 
 	// Close all client streams to trigger an stream error in `beginComponentsUpdates`
@@ -611,7 +612,7 @@ func TestComponentsUpdate(t *testing.T) {
 		t.Errorf("Expect component [comp2] processed.")
 		t.FailNow()
 	}
-	_, exists = rt.compStore.GetComponent(comp2.Spec.Type, comp2.Name)
+	_, exists = rt.compStore.GetComponent(comp2.Name)
 	assert.True(t, exists, fmt.Sprintf("Expect component, type: %s, name: %s", comp2.Spec.Type, comp2.Name))
 
 	mockOpCli.UpdateComponent(comp3)
@@ -623,7 +624,7 @@ func TestComponentsUpdate(t *testing.T) {
 		t.Errorf("Expect component [comp3] processed.")
 		t.FailNow()
 	}
-	_, exists = rt.compStore.GetComponent(comp3.Spec.Type, comp3.Name)
+	_, exists = rt.compStore.GetComponent(comp3.Name)
 	assert.True(t, exists, fmt.Sprintf("Expect component, type: %s, name: %s", comp3.Spec.Type, comp3.Name))
 }
 
@@ -1383,7 +1384,7 @@ func TestMetadataClientID(t *testing.T) {
 func TestOnComponentUpdated(t *testing.T) {
 	t.Run("component spec changed, component is updated", func(t *testing.T) {
 		rt, _ := NewTestDaprRuntime(t, modes.KubernetesMode)
-		rt.compStore.AddComponent(componentsV1alpha1.Component{
+		require.NoError(t, rt.compStore.AddPendingComponentForCommit(componentsV1alpha1.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "test",
 			},
@@ -1401,7 +1402,8 @@ func TestOnComponentUpdated(t *testing.T) {
 					},
 				},
 			},
-		})
+		}))
+		require.NoError(t, rt.compStore.CommitPendingComponent())
 
 		go func() {
 			<-rt.pendingComponents
@@ -1432,7 +1434,7 @@ func TestOnComponentUpdated(t *testing.T) {
 
 	t.Run("component spec unchanged, component is skipped", func(t *testing.T) {
 		rt, _ := NewTestDaprRuntime(t, modes.KubernetesMode)
-		rt.compStore.AddComponent(componentsV1alpha1.Component{
+		require.NoError(t, rt.compStore.AddPendingComponentForCommit(componentsV1alpha1.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "test",
 			},
@@ -1450,7 +1452,8 @@ func TestOnComponentUpdated(t *testing.T) {
 					},
 				},
 			},
-		})
+		}))
+		require.NoError(t, rt.compStore.CommitPendingComponent())
 
 		go func() {
 			<-rt.pendingComponents
@@ -2301,7 +2304,7 @@ func TestCloseWithErrors(t *testing.T) {
 
 	mockOutputBindingComponent := componentsV1alpha1.Component{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: TestPubsubName,
+			Name: "binding",
 		},
 		Spec: componentsV1alpha1.ComponentSpec{
 			Type:    "bindings.output",
@@ -2318,7 +2321,7 @@ func TestCloseWithErrors(t *testing.T) {
 	}
 	mockPubSubComponent := componentsV1alpha1.Component{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: TestPubsubName,
+			Name: "pubsub",
 		},
 		Spec: componentsV1alpha1.ComponentSpec{
 			Type:    "pubsub.pubsub",
@@ -2335,7 +2338,7 @@ func TestCloseWithErrors(t *testing.T) {
 	}
 	mockStateComponent := componentsV1alpha1.Component{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: TestPubsubName,
+			Name: "state",
 		},
 		Spec: componentsV1alpha1.ComponentSpec{
 			Type:    "state.statestore",
@@ -2352,7 +2355,7 @@ func TestCloseWithErrors(t *testing.T) {
 	}
 	mockSecretsComponent := componentsV1alpha1.Component{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: TestPubsubName,
+			Name: "secret",
 		},
 		Spec: componentsV1alpha1.ComponentSpec{
 			Type:    "secretstores.secretstore",

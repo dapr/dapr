@@ -104,7 +104,7 @@ func TestInitBindings(t *testing.T) {
 		assert.NoError(t, err)
 
 		output := compapi.Component{}
-		output.ObjectMeta.Name = "testinput"
+		output.ObjectMeta.Name = "testoutput"
 		output.Spec.Type = "bindings.testoutput"
 		err = proc.Init(context.TODO(), output)
 		assert.NoError(t, err)

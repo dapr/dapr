@@ -792,7 +792,7 @@ func (a *DaprRuntime) beginComponentsUpdates(ctx context.Context) error {
 }
 
 func (a *DaprRuntime) onComponentUpdated(ctx context.Context, component componentsV1alpha1.Component) bool {
-	oldComp, exists := a.compStore.GetComponent(component.Spec.Type, component.Name)
+	oldComp, exists := a.compStore.GetComponent(component.Name)
 	_, _ = a.processResourceSecrets(ctx, &component)
 
 	if exists && reflect.DeepEqual(oldComp.Spec, component.Spec) {

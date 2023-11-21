@@ -1739,7 +1739,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 
 	compStore := compstore.New()
-	compStore.AddComponent(componentsV1alpha1.Component{
+	require.NoError(t, compStore.AddPendingComponentForCommit(componentsV1alpha1.Component{
 		ObjectMeta: metaV1.ObjectMeta{
 			Name: "MockComponent1Name",
 		},
@@ -1755,8 +1755,9 @@ func TestV1MetadataEndpoint(t *testing.T) {
 				},
 			},
 		},
-	})
-	compStore.AddComponent(componentsV1alpha1.Component{
+	}))
+	require.NoError(t, compStore.CommitPendingComponent())
+	require.NoError(t, compStore.AddPendingComponentForCommit(componentsV1alpha1.Component{
 		ObjectMeta: metaV1.ObjectMeta{
 			Name: "MockComponent2Name",
 		},
@@ -1772,7 +1773,8 @@ func TestV1MetadataEndpoint(t *testing.T) {
 				},
 			},
 		},
-	})
+	}))
+	require.NoError(t, compStore.CommitPendingComponent())
 	compStore.SetSubscriptions([]runtimePubsub.Subscription{
 		{
 			PubsubName:      "test",

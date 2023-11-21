@@ -153,7 +153,7 @@ func TestStartReadingFromBindings(t *testing.T) {
 		}
 
 		b.compStore.AddInputBinding("test", m)
-		b.compStore.AddComponent(componentsV1alpha1.Component{
+		require.NoError(t, b.compStore.AddPendingComponentForCommit(componentsV1alpha1.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "test",
 			},
@@ -168,7 +168,8 @@ func TestStartReadingFromBindings(t *testing.T) {
 					},
 				},
 			},
-		})
+		}))
+		require.NoError(t, b.compStore.CommitPendingComponent())
 		err := b.StartReadingFromBindings(context.Background())
 
 		assert.NoError(t, err)

@@ -208,7 +208,7 @@ func (c *Channels) buildHTTPPipelineForSpec(spec *config.PipelineSpec, targetPip
 	}
 
 	for _, handlerSpec := range spec.Handlers {
-		comp, exists := c.compStore.GetComponent(handlerSpec.Type, handlerSpec.Name)
+		comp, exists := c.compStore.GetComponent(handlerSpec.Name)
 		if !exists {
 			// Log the error but continue with initializing the pipeline
 			log.Errorf("couldn't find middleware component defined in configuration with name %s and type %s",
