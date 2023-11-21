@@ -54,9 +54,9 @@ func (o *operator) Setup(t *testing.T) []framework.Option {
 	o.sentry = procsentry.New(t, procsentry.WithTrustDomain("integration.test.dapr.io"))
 
 	kubeAPI := kubernetes.New(t,
-		kubernetes.WithDaprConfigurationGet(t, "dapr-system", "daprsystem", &configapi.Configuration{
+		kubernetes.WithDaprConfigurationGet(t, &configapi.Configuration{
 			TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Configuration"},
-			ObjectMeta: metav1.ObjectMeta{Name: "daprsystem", Namespace: "default"},
+			ObjectMeta: metav1.ObjectMeta{Name: "daprsystem", Namespace: "dapr-system"},
 			Spec: configapi.ConfigurationSpec{
 				MTLSSpec: &configapi.MTLSSpec{
 					ControlPlaneTrustDomain: "integration.test.dapr.io",
