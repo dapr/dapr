@@ -2667,6 +2667,8 @@ func TestV1Beta1Workflow(t *testing.T) {
 			Resiliency: resiliencyConfig,
 		},
 	}
+	testAPI.universal.InitUniversalAPI()
+	testAPI.universal.SetActorsInitDone()
 
 	fakeServer.StartServer(testAPI.constructWorkflowEndpoints(), nil)
 
