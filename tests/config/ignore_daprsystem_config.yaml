@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aa
+---
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: daprsystem
+  namespace: aa
+spec:
+  metric:
+    enabled: true
+  metrics:
+    enabled: true
+  mtls:
+    allowedClockSkew: 0m
+    controlPlaneTrustDomain: cluster.local
+    enabled: false
+    sentryAddress: bad-address:1234
+    workloadCertTTL: 1ms
