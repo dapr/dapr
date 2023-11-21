@@ -408,6 +408,21 @@ func CurrentNamespace() string {
 	return namespace
 }
 
+// CurrentNamespaceOrError returns the namespace of this workload. If current
+// Namespace is not found, error.
+func CurrentNamespaceOrError() (string, error) {
+	namespace, ok := os.LookupEnv("NAMESPACE")
+	if !ok {
+		return "", errors.New("'NAMESPACE' environment variable not set")
+	}
+
+	if len(namespace) == 0 {
+		return "", errors.New("'NAMESPACE' environment variable is empty")
+	}
+
+	return namespace, nil
+}
+
 // SentryID returns the SPIFFE ID of the sentry server.
 func SentryID(sentryTrustDomain spiffeid.TrustDomain, sentryNamespace string) (spiffeid.ID, error) {
 	sentryID, err := spiffeid.FromSegments(sentryTrustDomain, "ns", sentryNamespace, "dapr-sentry")
