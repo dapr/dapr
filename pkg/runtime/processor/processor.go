@@ -15,6 +15,7 @@ package processor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -216,13 +217,15 @@ func (p *Processor) Init(ctx context.Context, comp compapi.Component) error {
 		return err
 	}
 
-	if err := m.Init(ctx, comp); err != nil {
+	if err := p.compStore.AddPendingComponentForCommit(comp); err != nil {
 		return err
 	}
 
-	p.compStore.AddComponent(comp)
+	if err := m.Init(ctx, comp); err != nil {
+		return errors.Join(err, p.compStore.DropPendingComponent())
+	}
 
-	return nil
+	return p.compStore.CommitPendingComponent()
 }
 
 // Close closes the component.
@@ -239,7 +242,7 @@ func (p *Processor) Close(comp compapi.Component) error {
 		return err
 	}
 
-	p.compStore.DeleteComponent(comp.Spec.Type, comp.Name)
+	p.compStore.DeleteComponent(comp.Name)
 
 	return nil
 }

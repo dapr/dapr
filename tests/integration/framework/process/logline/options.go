@@ -1,6 +1,3 @@
-//go:build windows
-// +build windows
-
 /*
 Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,18 +11,22 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package kill
+package logline
 
-import (
-	"os"
-	"os/exec"
-	"strconv"
-	"testing"
-)
+// options contains the options for checking the log lines of a process.
+type options struct {
+	stdoutContains []string
+	stderrContains []string
+}
 
-func interrupt(_ *testing.T, cmd *exec.Cmd) {
-	kill := exec.Command("taskkill", "/T", "/F", "/PID", strconv.Itoa(cmd.Process.Pid))
-	kill.Stdout = os.Stdout
-	kill.Stderr = os.Stderr
-	kill.Run()
+func WithStdoutLineContains(line string) func(*options) {
+	return func(o *options) {
+		o.stdoutContains = append(o.stdoutContains, line)
+	}
+}
+
+func WithStderrLineContains(line string) func(*options) {
+	return func(o *options) {
+		o.stderrContains = append(o.stderrContains, line)
+	}
 }
