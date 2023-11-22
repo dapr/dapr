@@ -1449,7 +1449,6 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 	res, err := policyRunner(func(ctx context.Context) (*internalsv1pb.InternalInvokeResponse, error) {
 		return a.universal.Actors.Call(ctx, req)
 	})
-
 	if err != nil {
 		actorErr, isActorError := actorerrors.As(err)
 		if !isActorError {

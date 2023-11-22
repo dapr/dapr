@@ -78,7 +78,7 @@ func (a *activityActor) SetActorRuntime(actorsRuntime actors.Actors) {
 // activity logic directly, InvokeMethod creates a reminder that executes the activity logic. InvokeMethod
 // returns immediately after creating the reminder, enabling the workflow to continue processing other events
 // in parallel.
-func (a *activityActor) InvokeMethod(ctx context.Context, actorID string, methodName string, data []byte, metadata map[string][]string) (any, error) {
+func (a *activityActor) InvokeMethod(ctx context.Context, actorID string, methodName string, data []byte, metadata map[string][]string) ([]byte, error) {
 	var ar ActivityRequest
 	if err := actors.DecodeInternalActorData(bytes.NewReader(data), &ar); err != nil {
 		return nil, fmt.Errorf("failed to decode activity request: %w", err)

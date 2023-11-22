@@ -93,22 +93,32 @@ func (wf *workflowActor) SetActorRuntime(actorRuntime actors.Actors) {
 }
 
 // InvokeMethod implements actors.InternalActor
-func (wf *workflowActor) InvokeMethod(ctx context.Context, actorID string, methodName string, request []byte, metadata map[string][]string) (result any, err error) {
+func (wf *workflowActor) InvokeMethod(ctx context.Context, actorID string, methodName string, request []byte, metadata map[string][]string) ([]byte, error) {
 	wfLogger.Debugf("invoking method '%s' on workflow actor '%s'", methodName, actorID)
 
+	var (
+		resultData any
+		err        error
+	)
 	switch methodName {
 	case CreateWorkflowInstanceMethod:
 		err = wf.createWorkflowInstance(ctx, actorID, request)
 	case GetWorkflowMetadataMethod:
-		result, err = wf.getWorkflowMetadata(ctx, actorID)
+		resultData, err = wf.getWorkflowMetadata(ctx, actorID)
 	case AddWorkflowEventMethod:
 		err = wf.addWorkflowEvent(ctx, actorID, request)
 	case PurgeWorkflowStateMethod:
 		err = wf.purgeWorkflowState(ctx, actorID)
 	default:
-		err = fmt.Errorf("no such method: %s", methodName)
+		return nil, fmt.Errorf("no such method: %s", methodName)
 	}
-	return result, err
+
+	if resultData == nil {
+		return nil, err
+	}
+
+	// Serialize the response
+	return actors.EncodeInternalActorData(resultData)
 }
 
 // InvokeReminder implements actors.InternalActor
@@ -130,7 +140,7 @@ func (wf *workflowActor) InvokeReminder(ctx context.Context, actorID string, rem
 	case errors.Is(err, context.DeadlineExceeded):
 		wfLogger.Warnf("%s: execution timed-out and will be retried later: %v", actorID, err)
 		return nil
-	case errors.Is(err, context.DeadlineExceeded):
+	case errors.Is(err, context.Canceled):
 		wfLogger.Warnf("%s: execution was canceled (process shutdown?) and will be retried later: %v", actorID, err)
 		return nil
 	case errors.As(err, &re):

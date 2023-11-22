@@ -31,6 +31,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/anypb"
 	"k8s.io/utils/clock"
 
 	"github.com/dapr/components-contrib/state"
@@ -459,6 +460,7 @@ func (a *actorsRuntime) Call(ctx context.Context, req *internalv1pb.InternalInvo
 		return nil, fmt.Errorf("failed to wait for placement readiness: %w", err)
 	}
 
+	// Do a lookup to check if the actor is local
 	actor := req.GetActor()
 	lar, err := a.placement.LookupActor(ctx, internal.LookupActorRequest{
 		ActorType: actor.GetActorType(),
@@ -467,8 +469,14 @@ func (a *actorsRuntime) Call(ctx context.Context, req *internalv1pb.InternalInvo
 	if err != nil {
 		return nil, err
 	}
+
 	if a.isActorLocal(lar.Address, a.actorsConfig.Config.HostAddress, a.actorsConfig.Config.Port) {
-		res, err = a.callLocalActor(ctx, req)
+		// If this is an internal actor, we call it using a separate path
+		if a.internalActors[actor.ActorType] != nil {
+			res, err = a.callInternalActor(ctx, req)
+		} else {
+			res, err = a.callLocalActor(ctx, req)
+		}
 	} else {
 		res, err = a.callRemoteActorWithRetry(ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, a.callRemoteActor, lar.Address, lar.AppID, req)
 	}
@@ -553,7 +561,8 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *internalv1pb.In
 		if md := imReq.Metadata()["Dapr-Reentrancy-Id"]; md != nil && len(md.GetValues()) > 0 {
 			reentrancyID = ptr.Of(md.GetValues()[0])
 		} else {
-			uuidObj, err := uuid.NewRandom()
+			var uuidObj uuid.UUID
+			uuidObj, err = uuid.NewRandom()
 			if err != nil {
 				return nil, fmt.Errorf("failed to generate UUID: %w", err)
 			}
@@ -627,6 +636,82 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *internalv1pb.In
 	}
 
 	return res, nil
+}
+
+// Calls a local, internal actor
+func (a *actorsRuntime) callInternalActor(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
+	if req.GetMessage() == nil {
+		return nil, errors.New("message is nil in request")
+	}
+
+	act := a.getOrCreateActor(req.Actor)
+
+	// Metadata
+	// Allocate with an extra 1 capacity to add the Dapr-Reentrancy-Id value if needed
+	md := make(map[string][]string, len(req.Metadata)+1)
+	for k, v := range req.Metadata {
+		vals := v.GetValues()
+		if len(vals) == 0 {
+			continue
+		}
+		md[k] = vals
+	}
+
+	// Reentrancy to determine how we lock.
+	var (
+		reentrancyID *string
+		err          error
+	)
+	if a.actorsConfig.GetReentrancyForType(act.actorType).Enabled {
+		if len(md["Dapr-Reentrancy-Id"]) > 0 {
+			reentrancyID = ptr.Of(md["Dapr-Reentrancy-Id"][0])
+		} else {
+			var uuidObj uuid.UUID
+			uuidObj, err = uuid.NewRandom()
+			if err != nil {
+				return nil, fmt.Errorf("failed to generate UUID: %w", err)
+			}
+			uuidStr := uuidObj.String()
+			if req.Metadata == nil {
+				req.Metadata = make(map[string]*internalv1pb.ListStringValue, 1)
+			}
+			md["Dapr-Reentrancy-Id"] = []string{uuidStr}
+			reentrancyID = &uuidStr
+		}
+	}
+
+	err = act.lock(reentrancyID)
+	if err != nil {
+		return nil, status.Error(codes.ResourceExhausted, err.Error())
+	}
+	defer act.unlock()
+
+	// Original code overrides method with PUT. Why?
+	if req.Message.HttpExtension == nil {
+		req.WithHTTPExtension(http.MethodPut, "")
+	} else {
+		req.Message.HttpExtension.Verb = commonv1pb.HTTPExtension_PUT //nolint:nosnakecase
+	}
+
+	policyDef := a.resiliency.ActorPostLockPolicy(act.actorType, act.actorID)
+	policyRunner := resiliency.NewRunner[*internalv1pb.InternalInvokeResponse](ctx, policyDef)
+	return policyRunner(func(ctx context.Context) (*internalv1pb.InternalInvokeResponse, error) {
+		resData, err := a.internalActors[act.actorType].InvokeMethod(ctx, act.actorID, req.Message.Method, req.Message.GetData().GetValue(), md)
+		if err != nil {
+			return nil, fmt.Errorf("error from internal actor: %w", err)
+		}
+
+		return &internalv1pb.InternalInvokeResponse{
+			Status: &internalv1pb.Status{
+				Code: http.StatusOK,
+			},
+			Message: &commonv1pb.InvokeResponse{
+				Data: &anypb.Any{
+					Value: resData,
+				},
+			},
+		}, nil
+	})
 }
 
 func (a *actorsRuntime) callRemoteActor(

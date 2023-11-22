@@ -201,13 +201,13 @@ func TestActivityChainingWorkflow(t *testing.T) {
 	for _, opt := range GetTestOptions() {
 		t.Run(opt(engine), func(t *testing.T) {
 			id, err := client.ScheduleNewOrchestration(ctx, "ActivityChain")
-			if assert.NoError(t, err) {
-				metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
-				if assert.NoError(t, err) {
-					assert.True(t, metadata.IsComplete())
-					assert.Equal(t, `10`, metadata.SerializedOutput)
-				}
-			}
+			require.NoError(t, err)
+
+			metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
+			require.NoError(t, err)
+
+			assert.True(t, metadata.IsComplete())
+			assert.Equal(t, `10`, metadata.SerializedOutput)
 		})
 	}
 }
@@ -366,11 +366,10 @@ func TestRecreateRunningWorkflowFails(t *testing.T) {
 			// Start the first workflow, which will not complete
 			var metadata *api.OrchestrationMetadata
 			id, err := client.ScheduleNewOrchestration(ctx, "SleepyWorkflow")
-			if assert.NoError(t, err) {
-				if metadata, err = client.WaitForOrchestrationStart(ctx, id); assert.NoError(t, err) {
-					assert.False(t, metadata.IsComplete())
-				}
-			}
+			require.NoError(t, err)
+			metadata, err = client.WaitForOrchestrationStart(ctx, id)
+			require.NoError(t, err)
+			assert.False(t, metadata.IsComplete())
 
 			// Attempting to start a second workflow with the same ID should fail
 			_, err = client.ScheduleNewOrchestration(ctx, "SleepyWorkflow", api.WithInstanceID(id))

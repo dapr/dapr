@@ -28,7 +28,7 @@ const InternalActorTypePrefix = "dapr.internal."
 // InternalActor represents the interface for invoking an "internal" actor (one which is built into daprd directly).
 type InternalActor interface {
 	SetActorRuntime(actorsRuntime Actors)
-	InvokeMethod(ctx context.Context, actorID string, methodName string, data []byte, metadata map[string][]string) (any, error)
+	InvokeMethod(ctx context.Context, actorID string, methodName string, data []byte, metadata map[string][]string) ([]byte, error)
 	DeactivateActor(ctx context.Context, actorID string) error
 	InvokeReminder(ctx context.Context, actorID string, reminderName string, data []byte, dueTime string, period string) error
 	InvokeTimer(ctx context.Context, actorID string, timerName string, data []byte, dueTime string, period string, callback string) error

@@ -70,14 +70,14 @@ func (ia *mockInternalActor) DeactivateActor(ctx context.Context, actorID string
 }
 
 // InvokeMethod implements InternalActor
-func (ia *mockInternalActor) InvokeMethod(ctx context.Context, actorID string, methodName string, data []byte, metadata map[string][]string) (any, error) {
+func (ia *mockInternalActor) InvokeMethod(ctx context.Context, actorID string, methodName string, data []byte, metadata map[string][]string) ([]byte, error) {
 	// Echo all the inputs back to the caller, plus the preconfigured output
-	return &invokeMethodCallInfo{
+	return EncodeInternalActorData(&invokeMethodCallInfo{
 		ActorID:    actorID,
 		MethodName: methodName,
 		Input:      data,
 		Output:     ia.TestOutput,
-	}, nil
+	})
 }
 
 // InvokeReminder implements InternalActor
@@ -156,7 +156,7 @@ func TestInternalActorCall(t *testing.T) {
 		WithData([]byte(testInput)).
 		WithContentType(invokev1.OctetStreamContentType)
 
-	resp, err := testActorRuntime.callLocalActor(context.Background(), req)
+	resp, err := testActorRuntime.callInternalActor(context.Background(), req)
 	require.NoError(t, err)
 
 	if assert.NoError(t, err) && assert.NotNil(t, resp) {
@@ -234,7 +234,7 @@ func TestInternalActorDeactivation(t *testing.T) {
 		NewInternalInvokeRequest("Foo").
 		WithActor(testActorType, testActorID)
 
-	_, err = testActorRuntime.callLocalActor(context.Background(), req)
+	_, err = testActorRuntime.callInternalActor(context.Background(), req)
 	require.NoError(t, err)
 
 	// Deactivate the actor, ensuring no errors and that the correct actor ID was provided.
