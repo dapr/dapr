@@ -247,16 +247,15 @@ func TestConcurrentActivityExecution(t *testing.T) {
 	for _, opt := range GetTestOptions() {
 		t.Run(opt(engine), func(t *testing.T) {
 			id, err := client.ScheduleNewOrchestration(ctx, "ActivityFanOut")
-			if assert.NoError(t, err) {
-				metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
-				if assert.NoError(t, err) {
-					assert.True(t, metadata.IsComplete())
-					assert.Equal(t, `["9","8","7","6","5","4","3","2","1","0"]`, metadata.SerializedOutput)
+			require.NoError(t, err)
+			metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
+			require.NoError(t, err)
 
-					// Because all the activities run in parallel, they should complete very quickly
-					assert.Less(t, metadata.LastUpdatedAt.Sub(metadata.CreatedAt), 3*time.Second)
-				}
-			}
+			assert.True(t, metadata.IsComplete())
+			assert.Equal(t, `["9","8","7","6","5","4","3","2","1","0"]`, metadata.SerializedOutput)
+
+			// Because all the activities run in parallel, they should complete very quickly
+			assert.Less(t, metadata.LastUpdatedAt.Sub(metadata.CreatedAt), 3*time.Second)
 		})
 	}
 }

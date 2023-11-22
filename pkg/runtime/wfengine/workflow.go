@@ -93,32 +93,27 @@ func (wf *workflowActor) SetActorRuntime(actorRuntime actors.Actors) {
 }
 
 // InvokeMethod implements actors.InternalActor
-func (wf *workflowActor) InvokeMethod(ctx context.Context, actorID string, methodName string, request []byte, metadata map[string][]string) ([]byte, error) {
+func (wf *workflowActor) InvokeMethod(ctx context.Context, actorID string, methodName string, request []byte, metadata map[string][]string) (res []byte, err error) {
 	wfLogger.Debugf("invoking method '%s' on workflow actor '%s'", methodName, actorID)
 
-	var (
-		resultData any
-		err        error
-	)
 	switch methodName {
 	case CreateWorkflowInstanceMethod:
 		err = wf.createWorkflowInstance(ctx, actorID, request)
 	case GetWorkflowMetadataMethod:
-		resultData, err = wf.getWorkflowMetadata(ctx, actorID)
+		var resAny any
+		resAny, err = wf.getWorkflowMetadata(ctx, actorID)
+		if err == nil && resAny != nil {
+			res, err = actors.EncodeInternalActorData(resAny)
+		}
 	case AddWorkflowEventMethod:
 		err = wf.addWorkflowEvent(ctx, actorID, request)
 	case PurgeWorkflowStateMethod:
 		err = wf.purgeWorkflowState(ctx, actorID)
 	default:
-		return nil, fmt.Errorf("no such method: %s", methodName)
+		err = fmt.Errorf("no such method: %s", methodName)
 	}
 
-	if resultData == nil {
-		return nil, err
-	}
-
-	// Serialize the response
-	return actors.EncodeInternalActorData(resultData)
+	return res, err
 }
 
 // InvokeReminder implements actors.InternalActor

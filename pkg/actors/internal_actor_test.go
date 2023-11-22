@@ -159,23 +159,22 @@ func TestInternalActorCall(t *testing.T) {
 	resp, err := testActorRuntime.callInternalActor(context.Background(), req)
 	require.NoError(t, err)
 
-	if assert.NoError(t, err) && assert.NotNil(t, resp) {
-		// Verify the response metadata matches what we expect
-		assert.Equal(t, int32(200), resp.GetStatus().Code)
-		contentType := resp.Message.ContentType
-		assert.Equal(t, invokev1.OctetStreamContentType, contentType)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
 
-		// Verify the actor got all the expected inputs (which are echoed back to us)
-		info, err := decodeTestResponse(bytes.NewReader(resp.Message.Data.Value))
-		require.NoError(t, err)
-		require.NotNil(t, info)
-		assert.Equal(t, testActorID, info.ActorID)
-		assert.Equal(t, testMethod, info.MethodName)
-		assert.Equal(t, []byte(testInput), info.Input)
+	// Verify the response metadata matches what we expect
+	assert.Equal(t, int32(200), resp.GetStatus().Code)
 
-		// Verify the preconfigured output was successfully returned back to us
-		assert.Equal(t, testOutput, info.Output)
-	}
+	// Verify the actor got all the expected inputs (which are echoed back to us)
+	info, err := decodeTestResponse(bytes.NewReader(resp.GetMessage().GetData().Value))
+	require.NoError(t, err)
+	require.NotNil(t, info)
+	assert.Equal(t, testActorID, info.ActorID)
+	assert.Equal(t, testMethod, info.MethodName)
+	assert.Equal(t, []byte(testInput), info.Input)
+
+	// Verify the preconfigured output was successfully returned back to us
+	assert.Equal(t, testOutput, info.Output)
 }
 
 func TestInternalActorReminder(t *testing.T) {

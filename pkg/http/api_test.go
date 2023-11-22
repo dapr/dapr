@@ -1658,11 +1658,11 @@ func TestV1ActorEndpoints(t *testing.T) {
 			},
 		}
 		mockActors.On("Call", mock.MatchedBy(func(m *internalsv1pb.InternalInvokeRequest) bool {
-			if m.Actor == nil || m.Actor.ActorType != "fakeActorType" || m.Actor.ActorId != "fakeActorID" {
+			if m.GetActor().ActorType != "fakeActorType" || m.GetActor().ActorId != "fakeActorID" {
 				return false
 			}
 
-			if m.Message == nil || m.Message.Data == nil || len(m.Message.Data.Value) == 0 || !bytes.Equal(m.Message.Data.Value, fakeData) {
+			if len(m.GetMessage().GetData().Value) == 0 || !bytes.Equal(m.Message.Data.Value, fakeData) {
 				return false
 			}
 			return true
@@ -1682,11 +1682,11 @@ func TestV1ActorEndpoints(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/method/method1"
 		mockActors := new(actors.MockActors)
 		mockActors.On("Call", mock.MatchedBy(func(m *internalsv1pb.InternalInvokeRequest) bool {
-			if m.Actor == nil || m.Actor.ActorType != "fakeActorType" || m.Actor.ActorId != "fakeActorID" {
+			if m.GetActor().ActorType != "fakeActorType" || m.GetActor().ActorId != "fakeActorID" {
 				return false
 			}
 
-			if m.Message == nil || m.Message.Data == nil || len(m.Message.Data.Value) == 0 || !bytes.Equal(m.Message.Data.Value, []byte("fakeData")) {
+			if len(m.GetMessage().GetData().Value) == 0 || !bytes.Equal(m.Message.Data.Value, []byte("fakeData")) {
 				return false
 			}
 			return true

@@ -1478,7 +1478,7 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 
 	// Use Add to ensure headers are appended and not replaced
 	invokev1.InternalMetadataToHTTPHeader(reqCtx, res.GetHeaders(), reqCtx.Response.Header.Add)
-	body := res.GetMessage().GetData().Value
+	body := res.GetMessage().GetData().GetValue()
 	reqCtx.Response.Header.SetContentType(res.GetMessage().GetContentType())
 
 	// Construct response.
