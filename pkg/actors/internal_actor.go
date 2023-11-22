@@ -21,6 +21,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+
+	"github.com/dapr/dapr/pkg/actors/internal"
 )
 
 const InternalActorTypePrefix = "dapr.internal."
@@ -30,8 +32,46 @@ type InternalActor interface {
 	SetActorRuntime(actorsRuntime Actors)
 	InvokeMethod(ctx context.Context, actorID string, methodName string, data []byte, metadata map[string][]string) ([]byte, error)
 	DeactivateActor(ctx context.Context, actorID string) error
-	InvokeReminder(ctx context.Context, actorID string, reminderName string, data []byte, dueTime string, period string) error
-	InvokeTimer(ctx context.Context, actorID string, timerName string, data []byte, dueTime string, period string, callback string) error
+	InvokeReminder(ctx context.Context, reminder InternalActorReminder, metadata map[string][]string) error
+	InvokeTimer(ctx context.Context, timer InternalActorTimer, metadata map[string][]string) error
+}
+
+type InternalActorReminder struct {
+	ActorID string
+	Name    string
+	Data    []byte
+	DueTime string
+	Period  string
+}
+
+func newInternalActorReminder(r *internal.Reminder) InternalActorReminder {
+	return InternalActorReminder{
+		ActorID: r.ActorID,
+		Name:    r.Name,
+		Data:    r.Data,
+		DueTime: r.DueTime,
+		Period:  r.Period.String(),
+	}
+}
+
+type InternalActorTimer struct {
+	ActorID  string
+	Name     string
+	Data     []byte
+	DueTime  string
+	Period   string
+	Callback string
+}
+
+func newInternalActorTimer(r *internal.Reminder) InternalActorTimer {
+	return InternalActorTimer{
+		ActorID:  r.ActorID,
+		Name:     r.Name,
+		Data:     r.Data,
+		DueTime:  r.DueTime,
+		Period:   r.Period.String(),
+		Callback: r.Callback,
+	}
 }
 
 // EncodeInternalActorData encodes result using the encoding/gob format.

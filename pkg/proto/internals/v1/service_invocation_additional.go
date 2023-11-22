@@ -44,6 +44,9 @@ const (
 
 // GetActorKey returns the key for the actor.
 func (x *Actor) GetActorKey() string {
+	if x == nil {
+		return ""
+	}
 	return x.GetActorType() + daprSeparator + x.GetActorId()
 }
 

@@ -623,7 +623,7 @@ func TestPurge(t *testing.T) {
 			assert.Greater(t, keyCounter.Load(), int64(10))
 
 			err = client.PurgeOrchestrationState(ctx, id)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			// Check that no key from the statestore containing the actor id is still present in the statestore
 			keysPostPurge := []string{}
@@ -633,7 +633,7 @@ func TestPurge(t *testing.T) {
 
 			for _, item := range keysPostPurge {
 				if strings.Contains(item, string(id)) {
-					assert.True(t, false)
+					assert.Truef(t, false, "Found key post-purge that should not have existed: %v", item)
 				}
 			}
 		})

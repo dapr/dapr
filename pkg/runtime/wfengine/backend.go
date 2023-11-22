@@ -26,7 +26,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	"github.com/dapr/dapr/pkg/proto/internals/v1"
+	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/utils"
 )
 
@@ -148,7 +148,7 @@ func (be *actorBackend) CreateOrchestrationInstance(ctx context.Context, e *back
 
 	// Invoke the well-known workflow actor directly, which will be created by this invocation request.
 	// Note that this request goes directly to the actor runtime, bypassing the API layer.
-	req := internals.NewInternalInvokeRequest(CreateWorkflowInstanceMethod).
+	req := internalsv1pb.NewInternalInvokeRequest(CreateWorkflowInstanceMethod).
 		WithActor(be.config.workflowActorType, workflowInstanceID).
 		WithData(eventData).
 		WithContentType(invokev1.OctetStreamContentType)
@@ -159,7 +159,7 @@ func (be *actorBackend) CreateOrchestrationInstance(ctx context.Context, e *back
 // GetOrchestrationMetadata implements backend.Backend
 func (be *actorBackend) GetOrchestrationMetadata(ctx context.Context, id api.InstanceID) (*api.OrchestrationMetadata, error) {
 	// Invoke the corresponding actor, which internally stores its own workflow metadata
-	req := internals.
+	req := internalsv1pb.
 		NewInternalInvokeRequest(GetWorkflowMetadataMethod).
 		WithActor(be.config.workflowActorType, string(id)).
 		WithContentType(invokev1.OctetStreamContentType)
@@ -209,7 +209,7 @@ func (be *actorBackend) AddNewOrchestrationEvent(ctx context.Context, id api.Ins
 	}
 
 	// Send the event to the corresponding workflow actor, which will store it in its event inbox.
-	req := internals.
+	req := internalsv1pb.
 		NewInternalInvokeRequest(AddWorkflowEventMethod).
 		WithActor(be.config.workflowActorType, string(id)).
 		WithData(data).
@@ -279,7 +279,8 @@ func (be *actorBackend) GetOrchestrationWorkItem(ctx context.Context) (*backend.
 
 // PurgeOrchestrationState deletes all saved state for the specific orchestration instance.
 func (be *actorBackend) PurgeOrchestrationState(ctx context.Context, id api.InstanceID) error {
-	req := internals.NewInternalInvokeRequest(PurgeWorkflowStateMethod).
+	req := internalsv1pb.
+		NewInternalInvokeRequest(PurgeWorkflowStateMethod).
 		WithActor(be.config.workflowActorType, string(id))
 
 	_, err := be.actors.Call(ctx, req)

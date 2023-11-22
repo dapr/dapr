@@ -108,32 +108,32 @@ func (a *activityActor) InvokeMethod(ctx context.Context, actorID string, method
 }
 
 // InvokeReminder implements actors.InternalActor and executes the activity logic.
-func (a *activityActor) InvokeReminder(ctx context.Context, actorID string, reminderName string, data []byte, dueTime string, period string) error {
-	wfLogger.Debugf("Invoking reminder '%s' on activity actor '%s'", reminderName, actorID)
+func (a *activityActor) InvokeReminder(ctx context.Context, reminder actors.InternalActorReminder, metadata map[string][]string) error {
+	wfLogger.Debugf("Invoking reminder '%s' on activity actor '%s'", reminder.Name, reminder.ActorID)
 
-	state, _ := a.loadActivityState(ctx, actorID)
+	state, _ := a.loadActivityState(ctx, reminder.ActorID)
 	// TODO: On error, reply with a failure - this requires support from durabletask-go to produce TaskFailure results
 
 	timeoutCtx, cancelTimeout := context.WithTimeout(ctx, a.defaultTimeout)
 	defer cancelTimeout()
 
-	if err := a.executeActivity(timeoutCtx, actorID, reminderName, state.EventPayload); err != nil {
+	if err := a.executeActivity(timeoutCtx, reminder.ActorID, reminder.Name, state.EventPayload); err != nil {
 		var recoverableErr *recoverableError
 		switch {
 		case errors.Is(err, context.DeadlineExceeded):
-			wfLogger.Warnf("%s: execution of '%s' timed-out and will be retried later: %v", actorID, reminderName, err)
+			wfLogger.Warnf("%s: execution of '%s' timed-out and will be retried later: %v", reminder.ActorID, reminder.Name, err)
 			// Returning nil signals that we want the execution to be retried in the next period interval
 			return nil
 		case errors.Is(err, context.Canceled):
-			wfLogger.Warnf("%s: received cancellation signal while waiting for activity execution '%s'", actorID, reminderName)
+			wfLogger.Warnf("%s: received cancellation signal while waiting for activity execution '%s'", reminder.ActorID, reminder.Name)
 			// Returning nil signals that we want the execution to be retried in the next period interval
 			return nil
 		case errors.As(err, &recoverableErr):
-			wfLogger.Warnf("%s: execution failed with a recoverable error and will be retried later: %v", actorID, err)
+			wfLogger.Warnf("%s: execution failed with a recoverable error and will be retried later: %v", reminder.ActorID, err)
 			// Returning nil signals that we want the execution to be retried in the next period interval
 			return nil
 		default:
-			wfLogger.Errorf("%s: execution failed with a non-recoverable error: %v", actorID, err)
+			wfLogger.Errorf("%s: execution failed with a non-recoverable error: %v", reminder.ActorID, err)
 			// TODO: Reply with a failure - this requires support from durabletask-go to produce TaskFailure results
 		}
 	}
@@ -221,7 +221,7 @@ loop:
 }
 
 // InvokeTimer implements actors.InternalActor
-func (*activityActor) InvokeTimer(ctx context.Context, actorID string, timerName string, data []byte, dueTime string, period string, callback string) error {
+func (*activityActor) InvokeTimer(ctx context.Context, timer actors.InternalActorTimer, metadata map[string][]string) error {
 	return errors.New("timers are not implemented")
 }
 

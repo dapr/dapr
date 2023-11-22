@@ -37,7 +37,7 @@ import (
 
 type mockInternalActor struct {
 	TestOutput        any
-	InvokedReminders  []*reminder
+	InvokedReminders  []InternalActorReminder
 	DeactivationCalls []string
 	actorsRuntime     Actors
 }
@@ -47,14 +47,6 @@ type invokeMethodCallInfo struct {
 	MethodName string
 	Input      []byte
 	Output     any
-}
-
-type reminder struct {
-	ActorID string
-	Name    string
-	Data    []byte
-	DueTime string
-	Period  string
 }
 
 type testReminderData struct {
@@ -81,20 +73,13 @@ func (ia *mockInternalActor) InvokeMethod(ctx context.Context, actorID string, m
 }
 
 // InvokeReminder implements InternalActor
-func (ia *mockInternalActor) InvokeReminder(ctx context.Context, actorID string, reminderName string, data []byte, dueTime string, period string) error {
-	r := &reminder{
-		Name:    reminderName,
-		ActorID: actorID,
-		Data:    data,
-		DueTime: dueTime,
-		Period:  period,
-	}
-	ia.InvokedReminders = append(ia.InvokedReminders, r)
+func (ia *mockInternalActor) InvokeReminder(ctx context.Context, reminder InternalActorReminder, metadata map[string][]string) error {
+	ia.InvokedReminders = append(ia.InvokedReminders, reminder)
 	return nil
 }
 
 // InvokeTimer implements InternalActor
-func (*mockInternalActor) InvokeTimer(ctx context.Context, actorID string, timerName string, data []byte, dueTime string, period string, callback string) error {
+func (*mockInternalActor) InvokeTimer(ctx context.Context, timer InternalActorTimer, metadata map[string][]string) error {
 	panic("unimplemented")
 }
 

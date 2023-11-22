@@ -102,7 +102,7 @@ func (wf *workflowActor) InvokeMethod(ctx context.Context, actorID string, metho
 	case GetWorkflowMetadataMethod:
 		var resAny any
 		resAny, err = wf.getWorkflowMetadata(ctx, actorID)
-		if err == nil && resAny != nil {
+		if err == nil {
 			res, err = actors.EncodeInternalActorData(resAny)
 		}
 	case AddWorkflowEventMethod:
@@ -117,14 +117,14 @@ func (wf *workflowActor) InvokeMethod(ctx context.Context, actorID string, metho
 }
 
 // InvokeReminder implements actors.InternalActor
-func (wf *workflowActor) InvokeReminder(ctx context.Context, actorID string, reminderName string, data []byte, dueTime string, period string) error {
-	wfLogger.Debugf("invoking reminder '%s' on workflow actor '%s'", reminderName, actorID)
+func (wf *workflowActor) InvokeReminder(ctx context.Context, reminder actors.InternalActorReminder, metadata map[string][]string) error {
+	wfLogger.Debugf("invoking reminder '%s' on workflow actor '%s'", reminder.Name, reminder.ActorID)
 
 	// Workflow executions should never take longer than a few seconds at the most
 	timeoutCtx, cancelTimeout := context.WithTimeout(ctx, wf.defaultTimeout)
 	defer cancelTimeout()
 
-	err := wf.runWorkflow(timeoutCtx, actorID, reminderName, data)
+	err := wf.runWorkflow(timeoutCtx, reminder.ActorID, reminder.Name, reminder.Data)
 
 	// We delete the reminder on success and on non-recoverable errors.
 	// Returning nil signals that we want the execution to be retried in the next period interval
@@ -133,22 +133,22 @@ func (wf *workflowActor) InvokeReminder(ctx context.Context, actorID string, rem
 	case err == nil:
 		return actors.ErrReminderCanceled
 	case errors.Is(err, context.DeadlineExceeded):
-		wfLogger.Warnf("%s: execution timed-out and will be retried later: %v", actorID, err)
+		wfLogger.Warnf("%s: execution timed-out and will be retried later: %v", reminder.ActorID, err)
 		return nil
 	case errors.Is(err, context.Canceled):
-		wfLogger.Warnf("%s: execution was canceled (process shutdown?) and will be retried later: %v", actorID, err)
+		wfLogger.Warnf("%s: execution was canceled (process shutdown?) and will be retried later: %v", reminder.ActorID, err)
 		return nil
 	case errors.As(err, &re):
-		wfLogger.Warnf("%s: execution failed with a recoverable error and will be retried later: %v", actorID, re)
+		wfLogger.Warnf("%s: execution failed with a recoverable error and will be retried later: %v", reminder.ActorID, re)
 		return nil
 	default: // Other error
-		wfLogger.Errorf("%s: execution failed with a non-recoverable error: %v", actorID, err)
+		wfLogger.Errorf("%s: execution failed with a non-recoverable error: %v", reminder.ActorID, err)
 		return actors.ErrReminderCanceled
 	}
 }
 
 // InvokeTimer implements actors.InternalActor
-func (wf *workflowActor) InvokeTimer(ctx context.Context, actorID string, timerName string, data []byte, dueTime string, period string, callback string) error {
+func (wf *workflowActor) InvokeTimer(ctx context.Context, timer actors.InternalActorTimer, metadata map[string][]string) error {
 	return errors.New("timers are not implemented")
 }
 

@@ -638,32 +638,26 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *internalv1pb.In
 	return res, nil
 }
 
-// Calls a local, internal actor
-func (a *actorsRuntime) callInternalActor(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-	if req.GetMessage() == nil {
-		return nil, errors.New("message is nil in request")
-	}
-
-	act := a.getOrCreateActor(req.Actor)
-
-	// Metadata
-	// Allocate with an extra 1 capacity to add the Dapr-Reentrancy-Id value if needed
-	md := make(map[string][]string, len(req.Metadata)+1)
-	for k, v := range req.Metadata {
-		vals := v.GetValues()
-		if len(vals) == 0 {
-			continue
+// Locks an internal actor for a request
+func (a *actorsRuntime) lockInternalActorForRequest(act *actor, req *internalv1pb.InternalInvokeRequest) (md map[string][]string, err error) {
+	var reentrancyID *string
+	// The req object is nil if this is a request for a reminder or timer
+	if req != nil {
+		// Get metadata in a map
+		// Allocate with an extra 1 capacity to add the Dapr-Reentrancy-Id value if needed
+		md = make(map[string][]string, len(req.Metadata)+1)
+		for k, v := range req.Metadata {
+			vals := v.GetValues()
+			if len(vals) == 0 {
+				continue
+			}
+			md[k] = vals
 		}
-		md[k] = vals
 	}
 
 	// Reentrancy to determine how we lock.
-	var (
-		reentrancyID *string
-		err          error
-	)
 	if a.actorsConfig.GetReentrancyForType(act.actorType).Enabled {
-		if len(md["Dapr-Reentrancy-Id"]) > 0 {
+		if md != nil && len(md["Dapr-Reentrancy-Id"]) > 0 {
 			reentrancyID = ptr.Of(md["Dapr-Reentrancy-Id"][0])
 		} else {
 			var uuidObj uuid.UUID
@@ -671,18 +665,33 @@ func (a *actorsRuntime) callInternalActor(ctx context.Context, req *internalv1pb
 			if err != nil {
 				return nil, fmt.Errorf("failed to generate UUID: %w", err)
 			}
-			uuidStr := uuidObj.String()
-			if req.Metadata == nil {
-				req.Metadata = make(map[string]*internalv1pb.ListStringValue, 1)
+			reentrancyID = ptr.Of(uuidObj.String())
+			if md == nil {
+				md = make(map[string][]string, 1)
 			}
-			md["Dapr-Reentrancy-Id"] = []string{uuidStr}
-			reentrancyID = &uuidStr
+			md["Dapr-Reentrancy-Id"] = []string{*reentrancyID}
 		}
 	}
 
 	err = act.lock(reentrancyID)
 	if err != nil {
 		return nil, status.Error(codes.ResourceExhausted, err.Error())
+	}
+
+	return md, nil
+}
+
+// Calls a local, internal actor
+func (a *actorsRuntime) callInternalActor(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
+	if req.GetMessage() == nil {
+		return nil, errors.New("message is nil in request")
+	}
+
+	// Get the actor, activating it as necessary, and the metadata for the request
+	act := a.getOrCreateActor(req.GetActor())
+	md, err := a.lockInternalActorForRequest(act, req)
+	if err != nil {
+		return nil, err
 	}
 	defer act.unlock()
 
@@ -977,26 +986,37 @@ func (a *actorsRuntime) executeReminder(reminder *internal.Reminder) bool {
 
 // Executes a reminder or timer on an internal actor
 func (a *actorsRuntime) doExecuteReminderOrTimerOnInternalActor(ctx context.Context, reminder *internal.Reminder, isTimer bool) (err error) {
+	// Get the actor, activating it as necessary, and the metadata for the request
+	act := a.getOrCreateActor(&internalv1pb.Actor{
+		ActorType: reminder.ActorType,
+		ActorId:   reminder.ActorID,
+	})
+	md, err := a.lockInternalActorForRequest(act, nil)
+	if err != nil {
+		return err
+	}
+	defer act.unlock()
+
 	internalAct := a.internalActors[reminder.ActorType]
 	if isTimer {
 		log.Debugf("Executing timer for internal actor '%s'", reminder.Key())
 
-		err = internalAct.InvokeTimer(ctx, reminder.ActorID, reminder.Name, reminder.Data, reminder.DueTime, reminder.Period.String(), reminder.Callback)
-		if err != nil && !errors.Is(err, internal.ErrReminderCanceled) {
+		err = internalAct.InvokeTimer(ctx, newInternalActorTimer(reminder), md)
+		if err != nil && !errors.Is(err, ErrReminderCanceled) {
 			log.Errorf("Error executing timer for internal actor '%s': %v", reminder.Key(), err)
 			return err
 		}
 	} else {
 		log.Debugf("Executing reminder for internal actor '%s'", reminder.Key())
 
-		err = internalAct.InvokeReminder(ctx, reminder.ActorID, reminder.Name, reminder.Data, reminder.DueTime, reminder.Period.String())
-		if err != nil && !errors.Is(err, internal.ErrReminderCanceled) {
+		err = internalAct.InvokeReminder(ctx, newInternalActorReminder(reminder), md)
+		if err != nil && !errors.Is(err, ErrReminderCanceled) {
 			log.Errorf("Error executing reminder for internal actor '%s': %v", reminder.Key(), err)
 			return err
 		}
 	}
 
-	return nil
+	return err
 }
 
 // Executes a reminder or timer
@@ -1055,11 +1075,11 @@ func (a *actorsRuntime) doExecuteReminderOrTimer(ctx context.Context, reminder *
 	_, err = policyRunner(func(ctx context.Context) (*internalv1pb.InternalInvokeResponse, error) {
 		return a.callLocalActor(ctx, req)
 	})
-	if err != nil && !errors.Is(err, internal.ErrReminderCanceled) {
+	if err != nil && !errors.Is(err, ErrReminderCanceled) {
 		log.Errorf("Error executing %s for actor %s: %v", logName, reminder.Key(), err)
 		return err
 	}
-	return nil
+	return err
 }
 
 func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderRequest) error {
