@@ -29,6 +29,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
 var ErrDuplicateInvocation = errors.New("duplicate invocation")
@@ -77,7 +78,7 @@ func (a *activityActor) SetActorRuntime(actorsRuntime actors.Actors) {
 // activity logic directly, InvokeMethod creates a reminder that executes the activity logic. InvokeMethod
 // returns immediately after creating the reminder, enabling the workflow to continue processing other events
 // in parallel.
-func (a *activityActor) InvokeMethod(ctx context.Context, actorID string, methodName string, data []byte) (any, error) {
+func (a *activityActor) InvokeMethod(ctx context.Context, actorID string, methodName string, data []byte, metadata map[string][]string) (any, error) {
 	var ar ActivityRequest
 	if err := actors.DecodeInternalActorData(bytes.NewReader(data), &ar); err != nil {
 		return nil, fmt.Errorf("failed to decode activity request: %w", err)
@@ -206,23 +207,21 @@ loop:
 	if err != nil {
 		return err
 	}
-	req := invokev1.
-		NewInvokeMethodRequest(AddWorkflowEventMethod).
+	req := internalsv1pb.
+		NewInternalInvokeRequest(AddWorkflowEventMethod).
 		WithActor(a.config.workflowActorType, workflowID).
-		WithRawDataBytes(resultData).
+		WithData(resultData).
 		WithContentType(invokev1.OctetStreamContentType)
-	defer req.Close()
 
-	resp, err := a.actorRuntime.Call(ctx, req)
+	_, err = a.actorRuntime.Call(ctx, req)
 	if err != nil {
 		return newRecoverableError(fmt.Errorf("failed to invoke '%s' method on workflow actor: %w", AddWorkflowEventMethod, err))
 	}
-	defer resp.Close()
 	return nil
 }
 
 // InvokeTimer implements actors.InternalActor
-func (*activityActor) InvokeTimer(ctx context.Context, actorID string, timerName string, params []byte) error {
+func (*activityActor) InvokeTimer(ctx context.Context, actorID string, timerName string, data []byte, dueTime string, period string, callback string) error {
 	return errors.New("timers are not implemented")
 }
 

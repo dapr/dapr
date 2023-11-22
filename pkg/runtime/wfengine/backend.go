@@ -15,6 +15,7 @@ limitations under the License.
 package wfengine
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -25,6 +26,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	"github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/utils"
 )
 
@@ -144,41 +146,30 @@ func (be *actorBackend) CreateOrchestrationInstance(ctx context.Context, e *back
 		return err
 	}
 
-	// Invoke the well-known workflow actor directly, which will be created by this invocation
-	// request. Note that this request goes directly to the actor runtime, bypassing the API layer.
-	req := invokev1.
-		NewInvokeMethodRequest(CreateWorkflowInstanceMethod).
+	// Invoke the well-known workflow actor directly, which will be created by this invocation request.
+	// Note that this request goes directly to the actor runtime, bypassing the API layer.
+	req := internals.NewInternalInvokeRequest(CreateWorkflowInstanceMethod).
 		WithActor(be.config.workflowActorType, workflowInstanceID).
-		WithRawDataBytes(eventData).
+		WithData(eventData).
 		WithContentType(invokev1.OctetStreamContentType)
-	defer req.Close()
-
-	resp, err := be.actors.Call(ctx, req)
-	if err != nil {
-		return err
-	}
-	defer resp.Close()
-	return nil
+	_, err = be.actors.Call(ctx, req)
+	return err
 }
 
 // GetOrchestrationMetadata implements backend.Backend
 func (be *actorBackend) GetOrchestrationMetadata(ctx context.Context, id api.InstanceID) (*api.OrchestrationMetadata, error) {
 	// Invoke the corresponding actor, which internally stores its own workflow metadata
-	req := invokev1.
-		NewInvokeMethodRequest(GetWorkflowMetadataMethod).
+	req := internals.NewInternalInvokeRequest(GetWorkflowMetadataMethod).
 		WithActor(be.config.workflowActorType, string(id)).
 		WithContentType(invokev1.OctetStreamContentType)
-	defer req.Close()
 
 	res, err := be.actors.Call(ctx, req)
 	if err != nil {
 		return nil, err
 	}
 
-	defer res.Close()
-	data := res.RawData()
 	var metadata api.OrchestrationMetadata
-	if err := actors.DecodeInternalActorData(data, &metadata); err != nil {
+	if err := actors.DecodeInternalActorData(bytes.NewReader(res.GetMessage().GetData().Value), &metadata); err != nil {
 		return nil, fmt.Errorf("failed to decode the internal actor response: %w", err)
 	}
 	return &metadata, nil
@@ -216,19 +207,12 @@ func (be *actorBackend) AddNewOrchestrationEvent(ctx context.Context, id api.Ins
 	}
 
 	// Send the event to the corresponding workflow actor, which will store it in its event inbox.
-	req := invokev1.
-		NewInvokeMethodRequest(AddWorkflowEventMethod).
+	req := internals.NewInternalInvokeRequest(AddWorkflowEventMethod).
 		WithActor(be.config.workflowActorType, string(id)).
-		WithRawDataBytes(data).
+		WithData(data).
 		WithContentType(invokev1.OctetStreamContentType)
-	defer req.Close()
-
-	resp, err := be.actors.Call(ctx, req)
-	if err != nil {
-		return err
-	}
-	defer resp.Close()
-	return nil
+	_, err = be.actors.Call(ctx, req)
+	return err
 }
 
 // CompleteActivityWorkItem implements backend.Backend
@@ -292,17 +276,11 @@ func (be *actorBackend) GetOrchestrationWorkItem(ctx context.Context) (*backend.
 
 // PurgeOrchestrationState deletes all saved state for the specific orchestration instance.
 func (be *actorBackend) PurgeOrchestrationState(ctx context.Context, id api.InstanceID) error {
-	req := invokev1.
-		NewInvokeMethodRequest(PurgeWorkflowStateMethod).
+	req := internals.NewInternalInvokeRequest(PurgeWorkflowStateMethod).
 		WithActor(be.config.workflowActorType, string(id))
-	defer req.Close()
 
-	resp, err := be.actors.Call(ctx, req)
-	if err != nil {
-		return err
-	}
-	defer resp.Close()
-	return nil
+	_, err := be.actors.Call(ctx, req)
+	return err
 }
 
 // Start implements backend.Backend

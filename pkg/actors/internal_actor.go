@@ -21,12 +21,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"strings"
-
-	"github.com/dapr/dapr/pkg/apphealth"
-	"github.com/dapr/dapr/pkg/config"
-	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 )
 
 const InternalActorTypePrefix = "dapr.internal."
@@ -34,132 +28,10 @@ const InternalActorTypePrefix = "dapr.internal."
 // InternalActor represents the interface for invoking an "internal" actor (one which is built into daprd directly).
 type InternalActor interface {
 	SetActorRuntime(actorsRuntime Actors)
-	InvokeMethod(ctx context.Context, actorID string, methodName string, data []byte) (any, error)
+	InvokeMethod(ctx context.Context, actorID string, methodName string, data []byte, metadata map[string][]string) (any, error)
 	DeactivateActor(ctx context.Context, actorID string) error
-	// InvokeReminder invokes reminder logic for an internal actor.
-	// Note that the DecodeInternalActorReminderData function should be used to decode the [data] parameter.
 	InvokeReminder(ctx context.Context, actorID string, reminderName string, data []byte, dueTime string, period string) error
-	InvokeTimer(ctx context.Context, actorID string, timerName string, params []byte) error
-}
-
-type internalActorChannel struct {
-	actors map[string]InternalActor
-}
-
-func newInternalActorChannel() *internalActorChannel {
-	return &internalActorChannel{
-		actors: make(map[string]InternalActor),
-	}
-}
-
-func (c *internalActorChannel) AddInternalActor(actorType string, actorImpl InternalActor) error {
-	// use internal type name prefixes to avoid conflicting with externally defined actor types
-	internalTypeName := actorType
-	if !strings.HasPrefix(actorType, InternalActorTypePrefix) {
-		internalTypeName = InternalActorTypePrefix + actorType
-	}
-	if _, exists := c.actors[internalTypeName]; exists {
-		return fmt.Errorf("internal actor named '%s' already exists", actorType)
-	}
-	c.actors[internalTypeName] = actorImpl
-	return nil
-}
-
-// Contains returns true if this channel invokes actorType or false if it doesn't.
-func (c *internalActorChannel) Contains(actorType string) bool {
-	_, exists := c.actors[actorType]
-	return exists
-}
-
-// GetAppConfig implements channel.AppChannel
-func (c *internalActorChannel) GetAppConfig(_ context.Context, appID string) (*config.ApplicationConfig, error) {
-	actorTypes := make([]string, 0, len(c.actors))
-	for actorType := range c.actors {
-		actorTypes = append(actorTypes, actorType)
-	}
-	config := &config.ApplicationConfig{
-		Entities: actorTypes,
-	}
-	return config, nil
-}
-
-// HealthProbe implements channel.AppChannel
-func (internalActorChannel) HealthProbe(ctx context.Context) (bool, error) {
-	return true, nil
-}
-
-// InvokeMethod implements channel.AppChannel
-func (c *internalActorChannel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest, _ string) (*invokev1.InvokeMethodResponse, error) {
-	actorType := req.Actor().GetActorType()
-	actor, ok := c.actors[actorType]
-	if !ok {
-		return nil, fmt.Errorf("internal actor type '%s' not recognized", actorType)
-	}
-
-	var (
-		result any
-		err    error
-	)
-
-	verb := req.Message().GetHttpExtension().GetVerb()
-	actorID := req.Actor().GetActorId()
-
-	if verb == commonv1pb.HTTPExtension_DELETE { //nolint:nosnakecase
-		err = actor.DeactivateActor(ctx, actorID)
-	} else {
-		// The actor runtime formats method names as URLs in the form actors/{type}/{id}/method/{methodName}
-		methodURL := req.Message().GetMethod()
-		methodStartIndex := strings.Index(methodURL, "/method/")
-		if methodStartIndex < 0 {
-			return nil, fmt.Errorf("unexpected method format: %s", methodURL)
-		}
-		methodName := methodURL[methodStartIndex+len("/method/"):]
-
-		// Check for well-known method names; otherwise, just call InvokeMethod on the internal actor.
-		if reminderName, prefixFound := strings.CutPrefix(methodName, "remind/"); prefixFound {
-			reminderInfo, ok := req.GetDataObject().(*ReminderResponse)
-			if !ok {
-				return nil, fmt.Errorf("unexpected type for reminder object: %T", req.GetDataObject())
-			}
-
-			// Reminder payloads are always saved as JSON
-			dataBytes, ok := reminderInfo.Data.(json.RawMessage)
-			if !ok {
-				return nil, fmt.Errorf("unexpected type for data object: %T", reminderInfo.Data)
-			}
-			err = actor.InvokeReminder(ctx, actorID, reminderName, dataBytes, reminderInfo.DueTime, reminderInfo.Period)
-		} else {
-			var requestData []byte
-			requestData, err = req.RawDataFull()
-			if err != nil {
-				return nil, err
-			}
-
-			if timerName, prefixFound := strings.CutPrefix(methodName, "timer/"); prefixFound {
-				err = actor.InvokeTimer(ctx, actorID, timerName, requestData)
-			} else {
-				result, err = actor.InvokeMethod(ctx, actorID, methodName, requestData)
-			}
-		}
-	}
-
-	if err != nil {
-		return nil, err
-	}
-
-	resultData, err := EncodeInternalActorData(result)
-	if err != nil {
-		return nil, fmt.Errorf("failed to encode the internal actor response: %w", err)
-	}
-	res := invokev1.NewInvokeMethodResponse(200, "OK", nil).
-		WithRawDataBytes(resultData).
-		WithContentType(invokev1.OctetStreamContentType)
-	return res, nil
-}
-
-// SetAppHealth implements channel.AppChannel
-func (internalActorChannel) SetAppHealth(ah *apphealth.AppHealth) {
-	// no-op
+	InvokeTimer(ctx context.Context, actorID string, timerName string, data []byte, dueTime string, period string, callback string) error
 }
 
 // EncodeInternalActorData encodes result using the encoding/gob format.

@@ -31,6 +31,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	"github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
 const (
@@ -92,7 +93,7 @@ func (wf *workflowActor) SetActorRuntime(actorRuntime actors.Actors) {
 }
 
 // InvokeMethod implements actors.InternalActor
-func (wf *workflowActor) InvokeMethod(ctx context.Context, actorID string, methodName string, request []byte) (result any, err error) {
+func (wf *workflowActor) InvokeMethod(ctx context.Context, actorID string, methodName string, request []byte, metadata map[string][]string) (result any, err error) {
 	wfLogger.Debugf("invoking method '%s' on workflow actor '%s'", methodName, actorID)
 
 	switch methodName {
@@ -117,35 +118,32 @@ func (wf *workflowActor) InvokeReminder(ctx context.Context, actorID string, rem
 	// Workflow executions should never take longer than a few seconds at the most
 	timeoutCtx, cancelTimeout := context.WithTimeout(ctx, wf.defaultTimeout)
 	defer cancelTimeout()
+
 	err := wf.runWorkflow(timeoutCtx, actorID, reminderName, data)
-	if err != nil {
-		var re recoverableError
-		if errors.Is(err, context.DeadlineExceeded) {
-			wfLogger.Warnf("%s: execution timed-out and will be retried later: %v", actorID, err)
-
-			// Returning nil signals that we want the execution to be retried in the next period interval
-			return nil
-		} else if errors.Is(err, context.Canceled) {
-			wfLogger.Warnf("%s: execution was canceled (process shutdown?) and will be retried later: %v", actorID, err)
-
-			// Returning nil signals that we want the execution to be retried in the next period interval
-			return nil
-		} else if errors.As(err, &re) {
-			wfLogger.Warnf("%s: execution failed with a recoverable error and will be retried later: %v", actorID, re)
-
-			// Returning nil signals that we want the execution to be retried in the next period interval
-			return nil
-		} else {
-			wfLogger.Errorf("%s: execution failed with a non-recoverable error: %v", actorID, err)
-		}
-	}
 
 	// We delete the reminder on success and on non-recoverable errors.
-	return actors.ErrReminderCanceled
+	// Returning nil signals that we want the execution to be retried in the next period interval
+	var re recoverableError
+	switch {
+	case err == nil:
+		return actors.ErrReminderCanceled
+	case errors.Is(err, context.DeadlineExceeded):
+		wfLogger.Warnf("%s: execution timed-out and will be retried later: %v", actorID, err)
+		return nil
+	case errors.Is(err, context.DeadlineExceeded):
+		wfLogger.Warnf("%s: execution was canceled (process shutdown?) and will be retried later: %v", actorID, err)
+		return nil
+	case errors.As(err, &re):
+		wfLogger.Warnf("%s: execution failed with a recoverable error and will be retried later: %v", actorID, re)
+		return nil
+	default: // Other error
+		wfLogger.Errorf("%s: execution failed with a non-recoverable error: %v", actorID, err)
+		return actors.ErrReminderCanceled
+	}
 }
 
 // InvokeTimer implements actors.InternalActor
-func (wf *workflowActor) InvokeTimer(ctx context.Context, actorID string, timerName string, params []byte) error {
+func (wf *workflowActor) InvokeTimer(ctx context.Context, actorID string, timerName string, data []byte, dueTime string, period string, callback string) error {
 	return errors.New("timers are not implemented")
 }
 
@@ -459,16 +457,14 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 		}
 		targetActorID := getActivityActorID(actorID, e.EventId, state.Generation)
 
-		req := invokev1.
-			NewInvokeMethodRequest("Execute").
-			WithActor(wf.config.activityActorType, targetActorID).
-			WithRawDataBytes(activityRequestBytes).
-			WithContentType(invokev1.OctetStreamContentType)
-		defer req.Close()
-
 		wf.activityResultAwaited.Store(true)
 
-		resp, err := wf.actors.Call(ctx, req)
+		req := internals.NewInternalInvokeRequest("Execute").
+			WithActor(wf.config.activityActorType, targetActorID).
+			WithData(activityRequestBytes).
+			WithContentType(invokev1.OctetStreamContentType)
+
+		_, err = wf.actors.Call(ctx, req)
 		if err != nil {
 			if errors.Is(err, ErrDuplicateInvocation) {
 				wfLogger.Warnf("%s: activity invocation %s::%d was flagged as a duplicate and will be skipped", actorID, ts.Name, e.EventId)
@@ -476,7 +472,6 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 			}
 			return newRecoverableError(fmt.Errorf("failed to invoke activity actor '%s' to execute '%s': %w", targetActorID, ts.Name, err))
 		}
-		resp.Close()
 	}
 
 	// TODO: Do these in parallel?
@@ -487,19 +482,16 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 				return err
 			}
 
-			req := invokev1.
-				NewInvokeMethodRequest(method).
+			req := internals.NewInternalInvokeRequest(method).
 				WithActor(wf.config.workflowActorType, msg.TargetInstanceID).
-				WithRawDataBytes(eventData).
+				WithData(eventData).
 				WithContentType(invokev1.OctetStreamContentType)
-			defer req.Close()
 
-			resp, err := wf.actors.Call(ctx, req)
+			_, err = wf.actors.Call(ctx, req)
 			if err != nil {
 				// workflow-related actor methods are never expected to return errors
 				return newRecoverableError(fmt.Errorf("method %s on actor '%s' returned an error: %w", method, msg.TargetInstanceID, err))
 			}
-			defer resp.Close()
 		}
 	}
 

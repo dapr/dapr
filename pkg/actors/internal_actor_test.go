@@ -16,6 +16,7 @@ limitations under the License.
 package actors
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -28,6 +29,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/internal"
 	"github.com/dapr/dapr/pkg/config"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	"github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/security/fake"
@@ -68,7 +70,7 @@ func (ia *mockInternalActor) DeactivateActor(ctx context.Context, actorID string
 }
 
 // InvokeMethod implements InternalActor
-func (ia *mockInternalActor) InvokeMethod(ctx context.Context, actorID string, methodName string, data []byte) (any, error) {
+func (ia *mockInternalActor) InvokeMethod(ctx context.Context, actorID string, methodName string, data []byte, metadata map[string][]string) (any, error) {
 	// Echo all the inputs back to the caller, plus the preconfigured output
 	return &invokeMethodCallInfo{
 		ActorID:    actorID,
@@ -92,7 +94,7 @@ func (ia *mockInternalActor) InvokeReminder(ctx context.Context, actorID string,
 }
 
 // InvokeTimer implements InternalActor
-func (*mockInternalActor) InvokeTimer(ctx context.Context, actorID string, timerName string, params []byte) error {
+func (*mockInternalActor) InvokeTimer(ctx context.Context, actorID string, timerName string, data []byte, dueTime string, period string, callback string) error {
 	panic("unimplemented")
 }
 
@@ -149,24 +151,22 @@ func TestInternalActorCall(t *testing.T) {
 	testActorRuntime, err := newTestActorsRuntimeWithInternalActors(internalActors)
 	require.NoError(t, err)
 
-	req := invokev1.NewInvokeMethodRequest(testMethod).
+	req := internals.NewInternalInvokeRequest(testMethod).
 		WithActor(testActorType, testActorID).
-		WithRawDataBytes([]byte(testInput)).
+		WithData([]byte(testInput)).
 		WithContentType(invokev1.OctetStreamContentType)
-	defer req.Close()
 
 	resp, err := testActorRuntime.callLocalActor(context.Background(), req)
 	require.NoError(t, err)
-	defer resp.Close()
 
 	if assert.NoError(t, err) && assert.NotNil(t, resp) {
 		// Verify the response metadata matches what we expect
-		assert.Equal(t, int32(200), resp.Status().Code)
-		contentType := resp.ContentType()
+		assert.Equal(t, int32(200), resp.GetStatus().Code)
+		contentType := resp.Message.ContentType
 		assert.Equal(t, invokev1.OctetStreamContentType, contentType)
 
 		// Verify the actor got all the expected inputs (which are echoed back to us)
-		info, err := decodeTestResponse(resp.RawData())
+		info, err := decodeTestResponse(bytes.NewReader(resp.Message.Data.Value))
 		require.NoError(t, err)
 		require.NotNil(t, info)
 		assert.Equal(t, testActorID, info.ActorID)
@@ -230,15 +230,12 @@ func TestInternalActorDeactivation(t *testing.T) {
 	require.NoError(t, err)
 
 	// Call the internal actor to "activate" it
-	req := invokev1.NewInvokeMethodRequest("Foo").WithActor(testActorType, testActorID)
-	defer req.Close()
+	req := internals.
+		NewInternalInvokeRequest("Foo").
+		WithActor(testActorType, testActorID)
 
-	var resp *invokev1.InvokeMethodResponse
-	resp, err = testActorRuntime.callLocalActor(context.Background(), req)
+	_, err = testActorRuntime.callLocalActor(context.Background(), req)
 	require.NoError(t, err)
-	defer resp.Close()
-
-	assert.NoError(t, err)
 
 	// Deactivate the actor, ensuring no errors and that the correct actor ID was provided.
 	actAny, ok := testActorRuntime.actorsTable.Load(constructCompositeKey(testActorType, testActorID))

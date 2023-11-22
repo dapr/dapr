@@ -1165,18 +1165,7 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 
 	policyDef := a.UniversalAPI.Resiliency.ActorPreLockPolicy(in.ActorType, in.ActorId)
 
-	reqMetadata := make(map[string][]string, len(in.Metadata))
-	for k, v := range in.Metadata {
-		reqMetadata[k] = []string{v}
-	}
-	req := invokev1.NewInvokeMethodRequest(in.Method).
-		WithActor(in.ActorType, in.ActorId).
-		WithRawDataBytes(in.Data).
-		WithMetadata(reqMetadata)
-	if policyDef != nil {
-		req.WithReplay(policyDef.HasRetries())
-	}
-	defer req.Close()
+	req := in.ToInternalInvokeRequest()
 
 	// Unlike other actor calls, resiliency is handled here for invocation.
 	// This is due to actor invocation involving a lookup for the host.
@@ -1185,12 +1174,8 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 	// should technically wait forever on the locking mechanism. If we timeout while
 	// waiting for the lock, we can also create a queue of calls that will try and continue
 	// after the timeout.
-	policyRunner := resiliency.NewRunnerWithOptions(ctx, policyDef,
-		resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
-			Disposer: resiliency.DisposerCloser[*invokev1.InvokeMethodResponse],
-		},
-	)
-	resp, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
+	policyRunner := resiliency.NewRunner[*internalv1pb.InternalInvokeResponse](ctx, policyDef)
+	res, err := policyRunner(func(ctx context.Context) (*internalv1pb.InternalInvokeResponse, error) {
 		return a.UniversalAPI.Actors.Call(ctx, req)
 	})
 	if err != nil && !actorerrors.Is(err) {
@@ -1199,14 +1184,8 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 		return response, err
 	}
 
-	if resp == nil {
-		resp = invokev1.NewInvokeMethodResponse(500, "Blank request", nil)
-	}
-	defer resp.Close()
-
-	response.Data, err = resp.RawDataFull()
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response data: %w", err)
+	if res != nil {
+		response.Data = res.GetMessage().GetData().Value
 	}
 	return response, nil
 }
