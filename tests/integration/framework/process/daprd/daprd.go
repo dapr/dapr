@@ -80,8 +80,6 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		mode:             "standalone",
 	}
 
-	opts.appHealthPort = opts.appPort
-
 	for _, fopt := range fopts {
 		fopt(&opts)
 	}
@@ -91,10 +89,14 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, strconv.Itoa(i)+".yaml"), []byte(file), 0o600))
 	}
 
+	appPort := strconv.Itoa(opts.appPort)
+	appHealthPort := appPort
+
 	args := []string{
 		"--log-level=" + opts.logLevel,
 		"--app-id=" + opts.appID,
-		"--app-port=" + strconv.Itoa(opts.appPort),
+		"--app-port=" + appPort,
+		"--app-health-port=" + appHealthPort,
 		"--app-protocol=" + opts.appProtocol,
 		"--dapr-grpc-port=" + strconv.Itoa(opts.grpcPort),
 		"--dapr-http-port=" + strconv.Itoa(opts.httpPort),
@@ -108,11 +110,7 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		"--mode=" + opts.mode,
 		"--enable-mtls=" + strconv.FormatBool(opts.enableMTLS),
 	}
-	if opts.appHealthPort != 0 {
-		args = append(args, "--app-health-port="+strconv.Itoa(opts.appHealthPort))
-	} else {
-		args = append(args, "--app-health-port="+strconv.Itoa(opts.appPort))
-	}
+
 	if opts.appHealthCheckPath != "" {
 		args = append(args, "--app-health-check-path="+opts.appHealthCheckPath)
 	}
