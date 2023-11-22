@@ -119,7 +119,7 @@ func main() {
 }
 
 func startGRPC() {
-	lis, err := net.Listen("tcp", "0.0.0.0:"+appHealthPort)
+	lis, err := net.Listen("tcp", "0.0.0.0:"+appPort)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
@@ -140,7 +140,7 @@ func startGRPC() {
 	}()
 
 	// Blocking call
-	log.Printf("Health App GRPC server listening on :%s", appHealthPort)
+	log.Printf("Health App GRPC server listening on :%s", appPort)
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("Failed to start gRPC server: %v", err)
 	}

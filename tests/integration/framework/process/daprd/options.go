@@ -65,6 +65,12 @@ func WithAppPort(port int) Option {
 	}
 }
 
+func WithAppHealthPort(port int) Option {
+	return func(o *options) {
+		o.appHealthPort = port
+	}
+}
+
 func WithAppProtocol(protocol string) Option {
 	return func(o *options) {
 		o.appProtocol = protocol

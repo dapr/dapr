@@ -360,11 +360,11 @@ func (c *Config) toInternal() (*internalConfig, error) {
 		}
 	}
 
-	if intc.appConnectionConfig.Port == intc.httpPort {
+	if intc.appConnectionConfig.Port == intc.httpPort || intc.appConnectionConfig.HealthPort == intc.httpPort {
 		return nil, fmt.Errorf("the 'dapr-http-port' argument value %d conflicts with 'app-port'", intc.httpPort)
 	}
 
-	if intc.appConnectionConfig.Port == intc.apiGRPCPort {
+	if intc.appConnectionConfig.Port == intc.apiGRPCPort || intc.appConnectionConfig.HealthPort == intc.apiGRPCPort {
 		return nil, fmt.Errorf("the 'dapr-grpc-port' argument value %d conflicts with 'app-port'", intc.apiGRPCPort)
 	}
 

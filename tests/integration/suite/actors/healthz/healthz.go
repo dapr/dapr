@@ -79,6 +79,7 @@ spec:
 		daprd.WithPlacementAddresses("localhost:"+strconv.Itoa(h.place.Port())),
 		daprd.WithAppProtocol("http"),
 		daprd.WithAppPort(srv.Port()),
+		daprd.WithAppHealthPort(srv.Port()),
 	)
 
 	return []framework.Option{

@@ -76,10 +76,11 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		publicPort:       fp.Port(t, 3),
 		metricsPort:      fp.Port(t, 4),
 		profilePort:      fp.Port(t, 5),
-		appHealthPort:    appHTTP.Port(),
 		logLevel:         "info",
 		mode:             "standalone",
 	}
+
+	opts.appHealthPort = opts.appPort
 
 	for _, fopt := range fopts {
 		fopt(&opts)
