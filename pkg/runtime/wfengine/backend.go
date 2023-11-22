@@ -159,7 +159,8 @@ func (be *actorBackend) CreateOrchestrationInstance(ctx context.Context, e *back
 // GetOrchestrationMetadata implements backend.Backend
 func (be *actorBackend) GetOrchestrationMetadata(ctx context.Context, id api.InstanceID) (*api.OrchestrationMetadata, error) {
 	// Invoke the corresponding actor, which internally stores its own workflow metadata
-	req := internals.NewInternalInvokeRequest(GetWorkflowMetadataMethod).
+	req := internals.
+		NewInternalInvokeRequest(GetWorkflowMetadataMethod).
 		WithActor(be.config.workflowActorType, string(id)).
 		WithContentType(invokev1.OctetStreamContentType)
 
@@ -169,7 +170,8 @@ func (be *actorBackend) GetOrchestrationMetadata(ctx context.Context, id api.Ins
 	}
 
 	var metadata api.OrchestrationMetadata
-	if err := actors.DecodeInternalActorData(bytes.NewReader(res.GetMessage().GetData().Value), &metadata); err != nil {
+	err = actors.DecodeInternalActorData(bytes.NewReader(res.GetMessage().GetData().Value), &metadata)
+	if err != nil {
 		return nil, fmt.Errorf("failed to decode the internal actor response: %w", err)
 	}
 	return &metadata, nil
@@ -207,7 +209,8 @@ func (be *actorBackend) AddNewOrchestrationEvent(ctx context.Context, id api.Ins
 	}
 
 	// Send the event to the corresponding workflow actor, which will store it in its event inbox.
-	req := internals.NewInternalInvokeRequest(AddWorkflowEventMethod).
+	req := internals.
+		NewInternalInvokeRequest(AddWorkflowEventMethod).
 		WithActor(be.config.workflowActorType, string(id)).
 		WithData(data).
 		WithContentType(invokev1.OctetStreamContentType)

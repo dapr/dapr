@@ -64,7 +64,7 @@ func TestStartWorkflowEngine(t *testing.T) {
 	grpcServer := grpc.NewServer()
 	engine.RegisterGrpcServer(grpcServer)
 	err := engine.Start(ctx)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
 
 // GetTestOptions returns an array of functions for configuring the workflow engine. Each
