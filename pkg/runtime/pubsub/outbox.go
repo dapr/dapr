@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -151,6 +152,13 @@ func (o *outboxImpl) PublishInternal(ctx context.Context, stateStore string, ope
 			bt, ok := sr.Value.([]byte)
 			if ok {
 				ceData = bt
+			} else if sr.ContentType != nil && strings.EqualFold(*sr.ContentType, "application/json") {
+				b, sErr := json.Marshal(sr.Value)
+				if sErr != nil {
+					return nil, sErr
+				}
+
+				ceData = b
 			} else {
 				ceData = []byte(fmt.Sprintf("%v", sr.Value))
 			}
