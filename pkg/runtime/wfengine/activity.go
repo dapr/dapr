@@ -37,12 +37,12 @@ const activityStateKey = "activityState"
 
 type activityActor struct {
 	actorRuntime     actors.Actors
-	scheduler        workflowScheduler
+	scheduler        activityScheduler
 	statesCache      sync.Map
 	cachingDisabled  bool
 	defaultTimeout   time.Duration
 	reminderInterval time.Duration
-	config           wfConfig
+	config           actorsBackendConfig
 }
 
 // ActivityRequest represents a request by a worklow to invoke an activity.
@@ -54,13 +54,16 @@ type activityState struct {
 	EventPayload []byte
 }
 
+// activityScheduler is a func interface for pushing activity work items into the backend
+type activityScheduler func(ctx context.Context, wi *backend.ActivityWorkItem) error
+
 // NewActivityActor creates an internal activity actor for executing workflow activity logic.
-func NewActivityActor(scheduler workflowScheduler, config wfConfig) *activityActor {
+func NewActivityActor(scheduler activityScheduler, backendConfig actorsBackendConfig) *activityActor {
 	return &activityActor{
 		scheduler:        scheduler,
 		defaultTimeout:   1 * time.Hour,
 		reminderInterval: 1 * time.Minute,
-		config:           config,
+		config:           backendConfig,
 	}
 }
 
@@ -115,23 +118,25 @@ func (a *activityActor) InvokeReminder(ctx context.Context, actorID string, remi
 	defer cancelTimeout()
 
 	if err := a.executeActivity(timeoutCtx, actorID, reminderName, state.EventPayload); err != nil {
-		if errors.Is(err, context.DeadlineExceeded) {
+		var recoverableErr *recoverableError
+		switch {
+		case errors.Is(err, context.DeadlineExceeded):
 			wfLogger.Warnf("Activity actor '%s': execution of '%s' timed-out and will be retried later: %v", actorID, reminderName, err)
-
 			// Returning nil signals that we want the execution to be retried in the next period interval
 			return nil
-		} else if _, ok := err.(recoverableError); ok {
+		case errors.Is(err, context.Canceled):
+			wfLogger.Warnf("Activity actor '%s': received cancellation signal while waiting for activity execution '%s'", actorID, reminderName)
+			// Returning nil signals that we want the execution to be retried in the next period interval
+			return nil
+		case errors.As(err, &recoverableErr):
 			wfLogger.Warnf("Activity actor '%s': execution failed with a recoverable error and will be retried later: %v", actorID, err)
-
 			// Returning nil signals that we want the execution to be retried in the next period interval
 			return nil
-		} else {
+		default:
 			wfLogger.Errorf("Activity actor '%s': execution failed with a non-recoverable error: %v", actorID, err)
 			// TODO: Reply with a failure - this requires support from durabletask-go to produce TaskFailure results
 		}
 	}
-
-	// TODO: Purge actor state based on some data retention policy
 
 	// We delete the reminder on success and on non-recoverable errors.
 	return actors.ErrReminderCanceled
@@ -164,7 +169,7 @@ func (a *activityActor) executeActivity(ctx context.Context, actorID string, nam
 	callback := make(chan bool)
 	wi.Properties[CallbackChannelProperty] = callback
 	wfLogger.Debugf("Activity actor '%s': scheduling activity '%s' for workflow with instanceId '%s'", actorID, name, wi.InstanceID)
-	if err = a.scheduler.ScheduleActivity(ctx, wi); err != nil {
+	if err = a.scheduler(ctx, wi); err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
 			return newRecoverableError(fmt.Errorf("timed-out trying to schedule an activity execution - this can happen if too many activities are running in parallel or if the workflow engine isn't running: %w", err))
 		}
@@ -179,7 +184,7 @@ loop:
 			if !t.Stop() {
 				<-t.C
 			}
-			return ctx.Err()
+			return ctx.Err() // will be retried
 		case <-t.C:
 			if deadline, ok := ctx.Deadline(); ok {
 				wfLogger.Warnf("Activity actor '%s': '%s' is still running - will keep waiting until '%v'", actorID, name, deadline)
@@ -193,7 +198,7 @@ loop:
 			if completed {
 				break loop
 			} else {
-				return newRecoverableError(errExecutionAborted)
+				return newRecoverableError(errExecutionAborted) // AbandonActivityWorkItem was called
 			}
 		}
 	}
