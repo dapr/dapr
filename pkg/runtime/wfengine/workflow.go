@@ -90,7 +90,7 @@ func (wf *workflowActor) SetActorRuntime(actorRuntime actors.Actors) {
 
 // InvokeMethod implements actors.InternalActor
 func (wf *workflowActor) InvokeMethod(ctx context.Context, actorID string, methodName string, request []byte) (result any, err error) {
-	wfLogger.Debugf("workflow actor '%s': invoking method '%s'", actorID, methodName)
+	wfLogger.Debugf("Workflow actor '%s': invoking method '%s'", actorID, methodName)
 
 	switch methodName {
 	case CreateWorkflowInstanceMethod:
@@ -109,7 +109,7 @@ func (wf *workflowActor) InvokeMethod(ctx context.Context, actorID string, metho
 
 // InvokeReminder implements actors.InternalActor
 func (wf *workflowActor) InvokeReminder(ctx context.Context, actorID string, reminderName string, data []byte, dueTime string, period string) error {
-	wfLogger.Debugf("workflow actor '%s': invoking reminder '%s'", actorID, reminderName)
+	wfLogger.Debugf("Workflow actor '%s': invoking reminder '%s'", actorID, reminderName)
 
 	// Workflow executions should never take longer than a few seconds at the most
 	timeoutCtx, cancelTimeout := context.WithTimeout(ctx, wf.defaultTimeout)
@@ -118,22 +118,22 @@ func (wf *workflowActor) InvokeReminder(ctx context.Context, actorID string, rem
 	if err != nil {
 		var re recoverableError
 		if errors.Is(err, context.DeadlineExceeded) {
-			wfLogger.Warnf("workflow actor '%s': execution timed-out and will be retried later: '%v'", actorID, err)
+			wfLogger.Warnf("Workflow actor '%s': execution timed-out and will be retried later: '%v'", actorID, err)
 
 			// Returning nil signals that we want the execution to be retried in the next period interval
 			return nil
 		} else if errors.Is(err, context.Canceled) {
-			wfLogger.Warnf("workflow actor '%s': execution was canceled (process shutdown?) and will be retried later: '%v'", actorID, err)
+			wfLogger.Warnf("Workflow actor '%s': execution was canceled (process shutdown?) and will be retried later: '%v'", actorID, err)
 
 			// Returning nil signals that we want the execution to be retried in the next period interval
 			return nil
 		} else if errors.As(err, &re) {
-			wfLogger.Warnf("workflow actor '%s': execution failed with a recoverable error and will be retried later: '%v'", actorID, re)
+			wfLogger.Warnf("Workflow actor '%s': execution failed with a recoverable error and will be retried later: '%v'", actorID, re)
 
 			// Returning nil signals that we want the execution to be retried in the next period interval
 			return nil
 		} else {
-			wfLogger.Errorf("workflow actor '%s': execution failed with a non-recoverable error: %v", actorID, err)
+			wfLogger.Errorf("Workflow actor '%s': execution failed with a non-recoverable error: %v", actorID, err)
 		}
 	}
 
@@ -148,7 +148,7 @@ func (wf *workflowActor) InvokeTimer(ctx context.Context, actorID string, timerN
 
 // DeactivateActor implements actors.InternalActor
 func (wf *workflowActor) DeactivateActor(ctx context.Context, actorID string) error {
-	wfLogger.Debugf("workflow actor '%s': deactivating", actorID)
+	wfLogger.Debugf("Workflow actor '%s': deactivating", actorID)
 	wf.states.Delete(actorID)
 	return nil
 }
@@ -175,9 +175,9 @@ func (wf *workflowActor) createWorkflowInstance(ctx context.Context, actorID str
 		return errors.New("invalid execution start event")
 	} else {
 		if es.ParentInstance == nil {
-			wfLogger.Debugf("workflow actor '%s': creating workflow '%s' with instanceId '%s'", actorID, es.Name, es.OrchestrationInstance.InstanceId)
+			wfLogger.Debugf("Workflow actor '%s': creating workflow '%s' with instanceId '%s'", actorID, es.Name, es.OrchestrationInstance.InstanceId)
 		} else {
-			wfLogger.Debugf("workflow actor '%s': creating child workflow '%s' with instanceId '%s' parentWorkflow '%s' parentWorkflowId '%s'", es.Name, es.OrchestrationInstance.InstanceId, es.ParentInstance.Name, es.ParentInstance.OrchestrationInstance.InstanceId)
+			wfLogger.Debugf("Workflow actor '%s': creating child workflow '%s' with instanceId '%s' parentWorkflow '%s' parentWorkflowId '%s'", es.Name, es.OrchestrationInstance.InstanceId, es.ParentInstance.Name, es.ParentInstance.OrchestrationInstance.InstanceId)
 		}
 	}
 
@@ -191,7 +191,7 @@ func (wf *workflowActor) createWorkflowInstance(ctx context.Context, actorID str
 		if wf.activityResultAwaited.Load() {
 			return fmt.Errorf("a terminated workflow with ID '%s' is already awaiting an activity result", actorID)
 		}
-		wfLogger.Infof("workflow actor '%s': workflow was previously completed and is being recreated", actorID)
+		wfLogger.Infof("Workflow actor '%s': workflow was previously completed and is being recreated", actorID)
 		state.Reset()
 	}
 
@@ -288,7 +288,7 @@ func (wf *workflowActor) addWorkflowEvent(ctx context.Context, actorID string, h
 	if err != nil {
 		return err
 	}
-	wfLogger.Debugf("workflow actor '%s': adding event '%v' to the workflow inbox", actorID, e)
+	wfLogger.Debugf("Workflow actor '%s': adding event '%v' to the workflow inbox", actorID, e)
 	state.AddToInbox(e)
 
 	if _, err := wf.createReliableReminder(ctx, actorID, "new-event", nil, 0); err != nil {
@@ -314,7 +314,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 			return err
 		}
 		if timerData.Generation < state.Generation {
-			wfLogger.Infof("workflow actor '%s': ignoring durable timer from previous generation '%v'", actorID, timerData.Generation)
+			wfLogger.Infof("Workflow actor '%s': ignoring durable timer from previous generation '%v'", actorID, timerData.Generation)
 			return nil
 		} else {
 			e, eventErr := backend.UnmarshalHistoryEvent(timerData.Bytes)
@@ -329,7 +329,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 	if len(state.Inbox) == 0 {
 		// This can happen after multiple events are processed in batches; there may still be reminders around
 		// for some of those already processed events.
-		wfLogger.Debugf("workflow actor '%s': ignoring run request for reminder '%s' because the workflow inbox is empty", actorID, reminderName)
+		wfLogger.Debugf("Workflow actor '%s': ignoring run request for reminder '%s' because the workflow inbox is empty", actorID, reminderName)
 		return nil
 	}
 
@@ -382,7 +382,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 	// will trigger this callback channel.
 	callback := make(chan bool)
 	wi.Properties[CallbackChannelProperty] = callback
-	wfLogger.Debugf("workflow actor '%s': scheduling workflow execution with instanceId '%s'", actorID, wi.InstanceID)
+	wfLogger.Debugf("Workflow actor '%s': scheduling workflow execution with instanceId '%s'", actorID, wi.InstanceID)
 	err = wf.scheduler.ScheduleWorkflow(ctx, wi)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
@@ -399,12 +399,12 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 			return newRecoverableError(errExecutionAborted)
 		}
 	}
-	wfLogger.Debugf("workflow actor '%s': workflow execution returned with status '%s' instanceId '%s'", actorID, runtimeState.RuntimeStatus().String(), wi.InstanceID)
+	wfLogger.Debugf("Workflow actor '%s': workflow execution returned with status '%s' instanceId '%s'", actorID, runtimeState.RuntimeStatus().String(), wi.InstanceID)
 
 	// Increment the generation counter if the workflow used continue-as-new. Subsequent actions below
 	// will use this updated generation value for their duplication execution handling.
 	if runtimeState.ContinuedAsNew() {
-		wfLogger.Debugf("workflow actor '%s': workflow with instanceId '%s' continued as new", actorID, wi.InstanceID)
+		wfLogger.Debugf("Workflow actor '%s': workflow with instanceId '%s' continued as new", actorID, wi.InstanceID)
 		state.Generation += 1
 	}
 
@@ -425,7 +425,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 			}
 			reminderPrefix := fmt.Sprintf("timer-%d", tf.TimerId)
 			data := NewDurableTimer(timerBytes, state.Generation)
-			wfLogger.Debugf("workflow actor '%s': creating reminder '%s' for the durable timer", actorID, reminderPrefix)
+			wfLogger.Debugf("Workflow actor '%s': creating reminder '%s' for the durable timer", actorID, reminderPrefix)
 			if _, err := wf.createReliableReminder(ctx, actorID, reminderPrefix, data, delay); err != nil {
 				return newRecoverableError(fmt.Errorf("actor '%s' failed to create reminder for timer: %w", actorID, err))
 			}
@@ -440,7 +440,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 		} else if msg.HistoryEvent.GetSubOrchestrationInstanceCompleted() != nil || msg.HistoryEvent.GetSubOrchestrationInstanceFailed() != nil {
 			reqsByName[AddWorkflowEventMethod] = append(reqsByName[AddWorkflowEventMethod], msg)
 		} else {
-			wfLogger.Warn("workflow actor '%s': don't know how to process outbound message '%v'", actorID, msg)
+			wfLogger.Warnf("Workflow actor '%s': don't know how to process outbound message '%v'", actorID, msg)
 		}
 	}
 
@@ -449,7 +449,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 	for _, e := range runtimeState.PendingTasks() {
 		ts := e.GetTaskScheduled()
 		if ts == nil {
-			wfLogger.Warn("workflow actor '%s': unable to process task '%v'", actorID, e)
+			wfLogger.Warnf("Workflow actor '%s': unable to process task '%v'", actorID, e)
 			continue
 		}
 
@@ -465,7 +465,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 		}
 		targetActorID := getActivityActorID(actorID, e.EventId, state.Generation)
 
-		wfLogger.Debugf("workflow actor '%s': invoking execute method on activity actor '%s'", actorID, targetActorID)
+		wfLogger.Debugf("Workflow actor '%s': invoking execute method on activity actor '%s'", actorID, targetActorID)
 		req := invokev1.
 			NewInvokeMethodRequest("Execute").
 			WithActor(wf.config.activityActorType, targetActorID).
@@ -478,7 +478,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 		resp, err := wf.actors.Call(ctx, req)
 		if err != nil {
 			if errors.Is(err, ErrDuplicateInvocation) {
-				wfLogger.Warnf("workflow actor '%s': activity invocation '%s::%d' was flagged as a duplicate and will be skipped", actorID, ts.Name, e.EventId)
+				wfLogger.Warnf("Workflow actor '%s': activity invocation '%s::%d' was flagged as a duplicate and will be skipped", actorID, ts.Name, e.EventId)
 				continue
 			}
 			return newRecoverableError(fmt.Errorf("failed to invoke activity actor '%s' to execute '%s': %w", targetActorID, ts.Name, err))
@@ -494,7 +494,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 				return err
 			}
 
-			wfLogger.Debugf("workflow actor '%s': invoking method '%s' on workflow actor '%s'", actorID, method, msg.TargetInstanceID)
+			wfLogger.Debugf("Workflow actor '%s': invoking method '%s' on workflow actor '%s'", actorID, method, msg.TargetInstanceID)
 			req := invokev1.
 				NewInvokeMethodRequest(method).
 				WithActor(wf.config.workflowActorType, msg.TargetInstanceID).
@@ -525,7 +525,7 @@ func (wf *workflowActor) loadInternalState(ctx context.Context, actorID string) 
 	}
 
 	// state is not cached, so try to load it from the state store
-	wfLogger.Debugf("workflow actor '%s': loading workflow state", actorID)
+	wfLogger.Debugf("Workflow actor '%s': loading workflow state", actorID)
 	state, err := LoadWorkflowState(ctx, wf.actors, actorID, wf.config)
 	if err != nil {
 		return nil, err
@@ -549,7 +549,7 @@ func (wf *workflowActor) saveInternalState(ctx context.Context, actorID string, 
 		return err
 	}
 
-	wfLogger.Debugf("workflow actor '%s': saving %d keys to actor state store", actorID, len(req.Operations))
+	wfLogger.Debugf("Workflow actor '%s': saving %d keys to actor state store", actorID, len(req.Operations))
 	if err = wf.actors.TransactionalStateOperation(ctx, req); err != nil {
 		return err
 	}
@@ -562,7 +562,7 @@ func (wf *workflowActor) saveInternalState(ctx context.Context, actorID string, 
 func (wf *workflowActor) createReliableReminder(ctx context.Context, actorID string, namePrefix string, data any, delay time.Duration) (string, error) {
 	// Reminders need to have unique names or else they may not fire in certain race conditions.
 	reminderName := fmt.Sprintf("%s-%s", namePrefix, uuid.NewString()[:8])
-	wfLogger.Debugf("workflow actor '%s': creating '%s' reminder with DueTime = '%s'", actorID, reminderName, delay)
+	wfLogger.Debugf("Workflow actor '%s': creating '%s' reminder with DueTime = '%s'", actorID, reminderName, delay)
 
 	dataEnc, err := json.Marshal(data)
 	if err != nil {
