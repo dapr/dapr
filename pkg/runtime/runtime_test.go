@@ -32,12 +32,11 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/golang/mock/gomock"
-	"github.com/google/uuid"
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -60,7 +59,6 @@ import (
 	"github.com/dapr/components-contrib/state"
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	httpEndpointV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/apphealth"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
@@ -82,14 +80,13 @@ import (
 	pb "github.com/dapr/dapr/pkg/grpc/proxy/testservice"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
-	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/runtime/authorizer"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	rtmock "github.com/dapr/dapr/pkg/runtime/mock"
 	"github.com/dapr/dapr/pkg/runtime/processor"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/registry"
-	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
@@ -106,6 +103,7 @@ const (
 func TestNewRuntime(t *testing.T) {
 	// act
 	r, err := newDaprRuntime(context.Background(), nil, &internalConfig{
+		mode:            modes.StandaloneMode,
 		metricsExporter: metrics.NewExporter(log, metrics.DefaultMetricNamespace),
 		registry:        registry.New(registry.NewOptions()),
 	}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
@@ -113,29 +111,6 @@ func TestNewRuntime(t *testing.T) {
 	// assert
 	assert.NoError(t, err)
 	assert.NotNil(t, r, "runtime must be initiated")
-}
-
-func TestProcessComponentsAndDependents(t *testing.T) {
-	rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
-	require.NoError(t, err)
-	defer stopRuntime(t, rt)
-
-	incorrectComponentType := componentsV1alpha1.Component{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: TestPubsubName,
-		},
-		Spec: componentsV1alpha1.ComponentSpec{
-			Type:     "pubsubs.mockPubSub",
-			Version:  "v1",
-			Metadata: daprt.GetFakeMetadataItems(),
-		},
-	}
-
-	t.Run("test incorrect type", func(t *testing.T) {
-		err := rt.processComponentAndDependents(context.Background(), incorrectComponentType)
-		assert.Error(t, err, "expected an error")
-		assert.Equal(t, "incorrect type pubsubs.mockPubSub", err.Error(), "expected error strings to match")
-	})
 }
 
 func TestDoProcessComponent(t *testing.T) {
@@ -298,336 +273,6 @@ func TestDoProcessComponent(t *testing.T) {
 	})
 }
 
-// mockOperatorClient is a mock implementation of operatorv1pb.OperatorClient.
-// It is used to test `beginComponentsUpdates` and `beginHTTPEndpointsUpdates`.
-type mockOperatorClient struct {
-	operatorv1pb.OperatorClient
-
-	lock                              sync.RWMutex
-	compsByName                       map[string]*componentsV1alpha1.Component
-	endpointsByName                   map[string]*httpEndpointV1alpha1.HTTPEndpoint
-	clientStreams                     []*mockOperatorComponentUpdateClientStream
-	clientEndpointStreams             []*mockOperatorHTTPEndpointUpdateClientStream
-	clientStreamCreateWait            chan struct{}
-	clientStreamCreatedNotify         chan struct{}
-	clientEndpointStreamCreateWait    chan struct{}
-	clientEndpointStreamCreatedNotify chan struct{}
-}
-
-func newMockOperatorClient() *mockOperatorClient {
-	mockOpCli := &mockOperatorClient{
-		compsByName:                       make(map[string]*componentsV1alpha1.Component),
-		endpointsByName:                   make(map[string]*httpEndpointV1alpha1.HTTPEndpoint),
-		clientStreams:                     make([]*mockOperatorComponentUpdateClientStream, 0, 1),
-		clientEndpointStreams:             make([]*mockOperatorHTTPEndpointUpdateClientStream, 0, 1),
-		clientStreamCreateWait:            make(chan struct{}, 1),
-		clientStreamCreatedNotify:         make(chan struct{}, 1),
-		clientEndpointStreamCreateWait:    make(chan struct{}, 1),
-		clientEndpointStreamCreatedNotify: make(chan struct{}, 1),
-	}
-	return mockOpCli
-}
-
-func (c *mockOperatorClient) ComponentUpdate(ctx context.Context, in *operatorv1pb.ComponentUpdateRequest, opts ...grpc.CallOption) (operatorv1pb.Operator_ComponentUpdateClient, error) {
-	// Used to block stream creation.
-	<-c.clientStreamCreateWait
-
-	cs := &mockOperatorComponentUpdateClientStream{
-		updateCh: make(chan *operatorv1pb.ComponentUpdateEvent, 1),
-	}
-
-	c.lock.Lock()
-	c.clientStreams = append(c.clientStreams, cs)
-	c.lock.Unlock()
-
-	c.clientStreamCreatedNotify <- struct{}{}
-
-	return cs, nil
-}
-
-func (c *mockOperatorClient) HTTPEndpointUpdate(ctx context.Context, in *operatorv1pb.HTTPEndpointUpdateRequest, opts ...grpc.CallOption) (operatorv1pb.Operator_HTTPEndpointUpdateClient, error) {
-	// Used to block stream creation.
-	<-c.clientEndpointStreamCreateWait
-
-	cs := &mockOperatorHTTPEndpointUpdateClientStream{
-		updateCh: make(chan *operatorv1pb.HTTPEndpointUpdateEvent, 1),
-	}
-
-	c.lock.Lock()
-	c.clientEndpointStreams = append(c.clientEndpointStreams, cs)
-	c.lock.Unlock()
-
-	c.clientEndpointStreamCreatedNotify <- struct{}{}
-
-	return cs, nil
-}
-
-func (c *mockOperatorClient) ListComponents(ctx context.Context, in *operatorv1pb.ListComponentsRequest, opts ...grpc.CallOption) (*operatorv1pb.ListComponentResponse, error) {
-	c.lock.RLock()
-	defer c.lock.RUnlock()
-
-	resp := &operatorv1pb.ListComponentResponse{
-		Components: [][]byte{},
-	}
-	for _, comp := range c.compsByName {
-		b, err := json.Marshal(comp)
-		if err != nil {
-			continue
-		}
-		resp.Components = append(resp.Components, b)
-	}
-	return resp, nil
-}
-
-func (c *mockOperatorClient) ListHTTPEndpoints(ctx context.Context, in *operatorv1pb.ListHTTPEndpointsRequest, opts ...grpc.CallOption) (*operatorv1pb.ListHTTPEndpointsResponse, error) {
-	c.lock.RLock()
-	defer c.lock.RUnlock()
-
-	resp := &operatorv1pb.ListHTTPEndpointsResponse{
-		HttpEndpoints: [][]byte{},
-	}
-	for _, end := range c.endpointsByName {
-		b, err := json.Marshal(end)
-		if err != nil {
-			continue
-		}
-		resp.HttpEndpoints = append(resp.HttpEndpoints, b)
-	}
-	return resp, nil
-}
-
-func (c *mockOperatorClient) ClientStreamCount() int {
-	c.lock.RLock()
-	defer c.lock.RUnlock()
-
-	return len(c.clientStreams)
-}
-
-func (c *mockOperatorClient) ClientHTTPEndpointStreamCount() int {
-	c.lock.RLock()
-	defer c.lock.RUnlock()
-
-	return len(c.clientEndpointStreams)
-}
-
-func (c *mockOperatorClient) AllowOneNewClientStreamCreate() {
-	c.clientStreamCreateWait <- struct{}{}
-}
-
-func (c *mockOperatorClient) AllowOneNewClientEndpointStreamCreate() {
-	c.clientEndpointStreamCreateWait <- struct{}{}
-}
-
-func (c *mockOperatorClient) WaitOneNewClientStreamCreated(ctx context.Context) error {
-	select {
-	case <-c.clientStreamCreatedNotify:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-}
-
-func (c *mockOperatorClient) WaitOneNewClientHTTPEndpointStreamCreated(ctx context.Context) error {
-	select {
-	case <-c.clientEndpointStreamCreatedNotify:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-}
-
-func (c *mockOperatorClient) CloseAllClientStreams() {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
-	for _, cs := range c.clientStreams {
-		close(cs.updateCh)
-	}
-	c.clientStreams = []*mockOperatorComponentUpdateClientStream{}
-}
-
-func (c *mockOperatorClient) CloseAllClientHTTPEndpointStreams() {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
-	for _, cs := range c.clientEndpointStreams {
-		close(cs.updateCh)
-	}
-	c.clientEndpointStreams = []*mockOperatorHTTPEndpointUpdateClientStream{}
-}
-
-func (c *mockOperatorClient) UpdateComponent(comp *componentsV1alpha1.Component) {
-	b, err := json.Marshal(comp)
-	if err != nil {
-		return
-	}
-
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
-	c.compsByName[comp.Name] = comp
-	for _, cs := range c.clientStreams {
-		cs.updateCh <- &operatorv1pb.ComponentUpdateEvent{Component: b}
-	}
-}
-
-func (c *mockOperatorClient) UpdateHTTPEndpoint(endpoint *httpEndpointV1alpha1.HTTPEndpoint) {
-	b, err := json.Marshal(endpoint)
-	if err != nil {
-		return
-	}
-
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
-	c.endpointsByName[endpoint.Name] = endpoint
-	for _, cs := range c.clientEndpointStreams {
-		cs.updateCh <- &operatorv1pb.HTTPEndpointUpdateEvent{HttpEndpoints: b}
-	}
-}
-
-type mockOperatorComponentUpdateClientStream struct {
-	operatorv1pb.Operator_ComponentUpdateClient
-
-	updateCh chan *operatorv1pb.ComponentUpdateEvent
-}
-
-type mockOperatorHTTPEndpointUpdateClientStream struct {
-	operatorv1pb.Operator_HTTPEndpointUpdateClient
-
-	updateCh chan *operatorv1pb.HTTPEndpointUpdateEvent
-}
-
-func (cs *mockOperatorComponentUpdateClientStream) Recv() (*operatorv1pb.ComponentUpdateEvent, error) {
-	e, ok := <-cs.updateCh
-	if !ok {
-		return nil, fmt.Errorf("stream closed")
-	}
-	return e, nil
-}
-
-func (cs *mockOperatorHTTPEndpointUpdateClientStream) Recv() (*operatorv1pb.HTTPEndpointUpdateEvent, error) {
-	e, ok := <-cs.updateCh
-	if !ok {
-		return nil, fmt.Errorf("stream closed")
-	}
-	return e, nil
-}
-
-func TestComponentsUpdate(t *testing.T) {
-	rt, err := NewTestDaprRuntime(t, modes.KubernetesMode)
-	require.NoError(t, err)
-	defer stopRuntime(t, rt)
-
-	mockOpCli := newMockOperatorClient()
-	rt.operatorClient = mockOpCli
-
-	processedCh := make(chan struct{}, 1)
-	mockProcessComponents := func() {
-		for comp := range rt.pendingComponents {
-			if comp.Name == "" {
-				continue
-			}
-			require.NoError(t, rt.compStore.AddPendingComponentForCommit(comp))
-			require.NoError(t, rt.compStore.CommitPendingComponent())
-			processedCh <- struct{}{}
-		}
-	}
-	go mockProcessComponents()
-
-	go rt.beginComponentsUpdates(context.Background())
-
-	comp1 := &componentsV1alpha1.Component{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "mockPubSub1",
-		},
-		Spec: componentsV1alpha1.ComponentSpec{
-			Type:    "pubsub.mockPubSub1",
-			Version: "v1",
-		},
-	}
-	comp2 := &componentsV1alpha1.Component{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "mockPubSub2",
-		},
-		Spec: componentsV1alpha1.ComponentSpec{
-			Type:    "pubsub.mockPubSub2",
-			Version: "v1",
-		},
-	}
-	comp3 := &componentsV1alpha1.Component{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "mockPubSub3",
-		},
-		Spec: componentsV1alpha1.ComponentSpec{
-			Type:    "pubsub.mockPubSub3",
-			Version: "v1",
-		},
-	}
-
-	// Allow a new stream to create.
-	mockOpCli.AllowOneNewClientStreamCreate()
-	// Wait a new stream created.
-	waitCtx, cancel := context.WithTimeout(context.Background(), time.Second*3)
-	defer cancel()
-	if err := mockOpCli.WaitOneNewClientStreamCreated(waitCtx); err != nil {
-		t.Errorf("Wait new stream err: %s", err.Error())
-		t.FailNow()
-	}
-
-	// Wait comp1 received and processed.
-	mockOpCli.UpdateComponent(comp1)
-	select {
-	case <-processedCh:
-	case <-time.After(time.Second * 10):
-		t.Errorf("Expect component [comp1] processed.")
-		t.FailNow()
-	}
-	_, exists := rt.compStore.GetComponent(comp1.Name)
-	assert.True(t, exists, fmt.Sprintf("expect component, type: %s, name: %s", comp1.Spec.Type, comp1.Name))
-
-	// Close all client streams to trigger an stream error in `beginComponentsUpdates`
-	mockOpCli.CloseAllClientStreams()
-
-	// Update during stream error.
-	mockOpCli.UpdateComponent(comp2)
-
-	// Assert no client stream created.
-	assert.Equal(t, mockOpCli.ClientStreamCount(), 0, "Expect 0 client stream")
-
-	// Allow a new stream to create.
-	mockOpCli.AllowOneNewClientStreamCreate()
-	// Wait a new stream created.
-	waitCtx, cancel = context.WithTimeout(context.Background(), time.Second*3)
-	defer cancel()
-	if err := mockOpCli.WaitOneNewClientStreamCreated(waitCtx); err != nil {
-		t.Errorf("Wait new stream err: %s", err.Error())
-		t.FailNow()
-	}
-
-	// Wait comp2 received and processed.
-	select {
-	case <-processedCh:
-	case <-time.After(time.Second * 10):
-		t.Errorf("Expect component [comp2] processed.")
-		t.FailNow()
-	}
-	_, exists = rt.compStore.GetComponent(comp2.Name)
-	assert.True(t, exists, fmt.Sprintf("Expect component, type: %s, name: %s", comp2.Spec.Type, comp2.Name))
-
-	mockOpCli.UpdateComponent(comp3)
-
-	// Wait comp3 received and processed.
-	select {
-	case <-processedCh:
-	case <-time.After(time.Second * 10):
-		t.Errorf("Expect component [comp3] processed.")
-		t.FailNow()
-	}
-	_, exists = rt.compStore.GetComponent(comp3.Name)
-	assert.True(t, exists, fmt.Sprintf("Expect component, type: %s, name: %s", comp3.Spec.Type, comp3.Name))
-}
-
 // Test that flushOutstandingComponents waits for components.
 func TestFlushOutstandingComponent(t *testing.T) {
 	t.Run("We can call flushOustandingComponents more than once", func(t *testing.T) {
@@ -635,7 +280,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 		require.NoError(t, err)
 		defer stopRuntime(t, rt)
 		wasCalled := false
-		m := NewMockKubernetesStoreWithInitCallback(func(context.Context) error {
+		m := rtmock.NewMockKubernetesStoreWithInitCallback(func(context.Context) error {
 			time.Sleep(100 * time.Millisecond)
 			wasCalled = true
 			return nil
@@ -647,8 +292,8 @@ func TestFlushOutstandingComponent(t *testing.T) {
 			"kubernetesMock",
 		)
 
-		go rt.processComponents(context.Background())
-		rt.pendingComponents <- componentsV1alpha1.Component{
+		go rt.processor.Process(context.Background())
+		rt.processor.AddPendingComponent(context.Background(), componentsV1alpha1.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "kubernetesMock",
 			},
@@ -656,7 +301,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 				Type:    "secretstores.kubernetesMock",
 				Version: "v1",
 			},
-		}
+		})
 		rt.flushOutstandingComponents(context.Background())
 		assert.True(t, wasCalled)
 
@@ -669,7 +314,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 			"kubernetesMock2",
 		)
 
-		rt.pendingComponents <- componentsV1alpha1.Component{
+		rt.processor.AddPendingComponent(context.Background(), componentsV1alpha1.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "kubernetesMock2",
 			},
@@ -677,7 +322,7 @@ func TestFlushOutstandingComponent(t *testing.T) {
 				Type:    "secretstores.kubernetesMock",
 				Version: "v1",
 			},
-		}
+		})
 		rt.flushOutstandingComponents(context.Background())
 		assert.True(t, wasCalled)
 	})
@@ -688,17 +333,17 @@ func TestFlushOutstandingComponent(t *testing.T) {
 		wasCalled := false
 		wasCalledChild := false
 		wasCalledGrandChild := false
-		m := NewMockKubernetesStoreWithInitCallback(func(context.Context) error {
+		m := rtmock.NewMockKubernetesStoreWithInitCallback(func(context.Context) error {
 			time.Sleep(100 * time.Millisecond)
 			wasCalled = true
 			return nil
 		})
-		mc := NewMockKubernetesStoreWithInitCallback(func(context.Context) error {
+		mc := rtmock.NewMockKubernetesStoreWithInitCallback(func(context.Context) error {
 			time.Sleep(100 * time.Millisecond)
 			wasCalledChild = true
 			return nil
 		})
-		mgc := NewMockKubernetesStoreWithInitCallback(func(context.Context) error {
+		mgc := rtmock.NewMockKubernetesStoreWithInitCallback(func(context.Context) error {
 			time.Sleep(100 * time.Millisecond)
 			wasCalledGrandChild = true
 			return nil
@@ -722,8 +367,8 @@ func TestFlushOutstandingComponent(t *testing.T) {
 			"kubernetesMockGrandChild",
 		)
 
-		go rt.processComponents(context.Background())
-		rt.pendingComponents <- componentsV1alpha1.Component{
+		go rt.processor.Process(context.Background())
+		rt.processor.AddPendingComponent(context.Background(), componentsV1alpha1.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "kubernetesMockGrandChild",
 			},
@@ -743,8 +388,8 @@ func TestFlushOutstandingComponent(t *testing.T) {
 			Auth: componentsV1alpha1.Auth{
 				SecretStore: "kubernetesMockChild",
 			},
-		}
-		rt.pendingComponents <- componentsV1alpha1.Component{
+		})
+		rt.processor.AddPendingComponent(context.Background(), componentsV1alpha1.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "kubernetesMockChild",
 			},
@@ -764,8 +409,8 @@ func TestFlushOutstandingComponent(t *testing.T) {
 			Auth: componentsV1alpha1.Auth{
 				SecretStore: "kubernetesMock",
 			},
-		}
-		rt.pendingComponents <- componentsV1alpha1.Component{
+		})
+		rt.processor.AddPendingComponent(context.Background(), componentsV1alpha1.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "kubernetesMock",
 			},
@@ -773,91 +418,11 @@ func TestFlushOutstandingComponent(t *testing.T) {
 				Type:    "secretstores.kubernetesMock",
 				Version: "v1",
 			},
-		}
+		})
 		rt.flushOutstandingComponents(context.Background())
 		assert.True(t, wasCalled)
 		assert.True(t, wasCalledChild)
 		assert.True(t, wasCalledGrandChild)
-	})
-}
-
-func TestInitSecretStores(t *testing.T) {
-	t.Run("init with store", func(t *testing.T) {
-		rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
-		require.NoError(t, err)
-		defer stopRuntime(t, rt)
-		m := NewMockKubernetesStore()
-		rt.runtimeConfig.registry.SecretStores().RegisterComponent(
-			func(_ logger.Logger) secretstores.SecretStore {
-				return m
-			},
-			"kubernetesMock",
-		)
-
-		err = rt.processComponentAndDependents(context.Background(), componentsV1alpha1.Component{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "kubernetesMock",
-			},
-			Spec: componentsV1alpha1.ComponentSpec{
-				Type:    "secretstores.kubernetesMock",
-				Version: "v1",
-			},
-		})
-		assert.NoError(t, err)
-	})
-
-	t.Run("secret store is registered", func(t *testing.T) {
-		rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
-		require.NoError(t, err)
-		defer stopRuntime(t, rt)
-		m := NewMockKubernetesStore()
-		rt.runtimeConfig.registry.SecretStores().RegisterComponent(
-			func(_ logger.Logger) secretstores.SecretStore {
-				return m
-			},
-			"kubernetesMock",
-		)
-
-		err = rt.processComponentAndDependents(context.Background(), componentsV1alpha1.Component{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "kubernetesMock",
-			},
-			Spec: componentsV1alpha1.ComponentSpec{
-				Type:    "secretstores.kubernetesMock",
-				Version: "v1",
-			},
-		})
-		assert.NoError(t, err)
-		store, ok := rt.compStore.GetSecretStore("kubernetesMock")
-		assert.True(t, ok)
-		assert.NotNil(t, store)
-	})
-
-	t.Run("get secret store", func(t *testing.T) {
-		rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
-		require.NoError(t, err)
-		defer stopRuntime(t, rt)
-		m := NewMockKubernetesStore()
-		rt.runtimeConfig.registry.SecretStores().RegisterComponent(
-			func(_ logger.Logger) secretstores.SecretStore {
-				return m
-			},
-			"kubernetesMock",
-		)
-
-		rt.processComponentAndDependents(context.Background(), componentsV1alpha1.Component{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "kubernetesMock",
-			},
-			Spec: componentsV1alpha1.ComponentSpec{
-				Type:    "secretstores.kubernetesMock",
-				Version: "v1",
-			},
-		})
-
-		s, ok := rt.compStore.GetSecretStore("kubernetesMock")
-		assert.True(t, ok)
-		assert.NotNil(t, s)
 	})
 }
 
@@ -1112,377 +677,6 @@ func TestSetupTracing(t *testing.T) {
 	}
 }
 
-func TestMetadataUUID(t *testing.T) {
-	pubsubComponent := componentsV1alpha1.Component{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: TestPubsubName,
-		},
-		Spec: componentsV1alpha1.ComponentSpec{
-			Type:     "pubsub.mockPubSub",
-			Version:  "v1",
-			Metadata: daprt.GetFakeMetadataItems(),
-		},
-	}
-
-	pubsubComponent.Spec.Metadata = append(
-		pubsubComponent.Spec.Metadata,
-		commonapi.NameValuePair{
-			Name: "consumerID",
-			Value: commonapi.DynamicValue{
-				JSON: v1.JSON{
-					Raw: []byte("{uuid}"),
-				},
-			},
-		}, commonapi.NameValuePair{
-			Name: "twoUUIDs",
-			Value: commonapi.DynamicValue{
-				JSON: v1.JSON{
-					Raw: []byte("{uuid} {uuid}"),
-				},
-			},
-		})
-	rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
-	require.NoError(t, err)
-	defer stopRuntime(t, rt)
-	mockPubSub := new(daprt.MockPubSub)
-
-	rt.runtimeConfig.registry.PubSubs().RegisterComponent(
-		func(_ logger.Logger) pubsub.PubSub {
-			return mockPubSub
-		},
-		"mockPubSub",
-	)
-
-	mockPubSub.On("Init", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
-		metadata := args.Get(0).(pubsub.Metadata)
-		consumerID := metadata.Properties["consumerID"]
-		var uuid0, uuid1, uuid2 uuid.UUID
-		uuid0, err = uuid.Parse(consumerID)
-		assert.NoError(t, err)
-
-		twoUUIDs := metadata.Properties["twoUUIDs"]
-		uuids := strings.Split(twoUUIDs, " ")
-		assert.Equal(t, 2, len(uuids))
-		uuid1, err = uuid.Parse(uuids[0])
-		assert.NoError(t, err)
-		uuid2, err = uuid.Parse(uuids[1])
-		assert.NoError(t, err)
-
-		assert.NotEqual(t, uuid0, uuid1)
-		assert.NotEqual(t, uuid0, uuid2)
-		assert.NotEqual(t, uuid1, uuid2)
-	})
-
-	err = rt.processComponentAndDependents(context.Background(), pubsubComponent)
-	assert.NoError(t, err)
-}
-
-func TestMetadataPodName(t *testing.T) {
-	t.Setenv("POD_NAME", "testPodName")
-
-	pubsubComponent := componentsV1alpha1.Component{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: TestPubsubName,
-		},
-		Spec: componentsV1alpha1.ComponentSpec{
-			Type:     "pubsub.mockPubSub",
-			Version:  "v1",
-			Metadata: daprt.GetFakeMetadataItems(),
-		},
-	}
-
-	pubsubComponent.Spec.Metadata = append(
-		pubsubComponent.Spec.Metadata,
-		commonapi.NameValuePair{
-			Name: "consumerID",
-			Value: commonapi.DynamicValue{
-				JSON: v1.JSON{
-					Raw: []byte("{podName}"),
-				},
-			},
-		})
-	rt, _ := NewTestDaprRuntime(t, modes.KubernetesMode)
-	defer stopRuntime(t, rt)
-	mockPubSub := new(daprt.MockPubSub)
-
-	rt.runtimeConfig.registry.PubSubs().RegisterComponent(
-		func(_ logger.Logger) pubsub.PubSub {
-			return mockPubSub
-		},
-		"mockPubSub",
-	)
-
-	mockPubSub.On("Init", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
-		metadata := args.Get(0).(pubsub.Metadata)
-		consumerID := metadata.Properties["consumerID"]
-
-		assert.Equal(t, "testPodName", consumerID)
-	})
-
-	err := rt.processComponentAndDependents(context.Background(), pubsubComponent)
-	assert.NoError(t, err)
-}
-
-func TestMetadataNamespace(t *testing.T) {
-	t.Setenv("NAMESPACE", "test")
-
-	pubsubComponent := componentsV1alpha1.Component{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: TestPubsubName,
-		},
-		Spec: componentsV1alpha1.ComponentSpec{
-			Type:     "pubsub.mockPubSub",
-			Version:  "v1",
-			Metadata: daprt.GetFakeMetadataItems(),
-		},
-	}
-
-	pubsubComponent.Spec.Metadata = append(
-		pubsubComponent.Spec.Metadata,
-		commonapi.NameValuePair{
-			Name: "consumerID",
-			Value: commonapi.DynamicValue{
-				JSON: v1.JSON{
-					Raw: []byte("{namespace}"),
-				},
-			},
-		})
-	rt, _ := NewTestDaprRuntimeWithID(t, modes.KubernetesMode, "app1")
-
-	defer stopRuntime(t, rt)
-	mockPubSub := new(daprt.MockPubSub)
-
-	rt.runtimeConfig.registry.PubSubs().RegisterComponent(
-		func(_ logger.Logger) pubsub.PubSub {
-			return mockPubSub
-		},
-		"mockPubSub",
-	)
-
-	mockPubSub.On("Init", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
-		metadata := args.Get(0).(pubsub.Metadata)
-		consumerID := metadata.Properties["consumerID"]
-
-		assert.Equal(t, "test.app1", consumerID)
-	})
-
-	err := rt.processComponentAndDependents(context.Background(), pubsubComponent)
-	assert.NoError(t, err)
-}
-
-func TestMetadataClientID(t *testing.T) {
-	pubsubComponent := componentsV1alpha1.Component{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: TestPubsubName,
-		},
-		Spec: componentsV1alpha1.ComponentSpec{
-			Type:     "pubsub.mockPubSub",
-			Version:  "v1",
-			Metadata: daprt.GetFakeMetadataItems(),
-		},
-	}
-
-	// ClientID should be namespace.AppID for Kubernetes
-	t.Run("Kubernetes Mode AppID", func(t *testing.T) {
-		t.Setenv("NAMESPACE", "test")
-		pubsubComponent.Spec.Metadata = append(
-			pubsubComponent.Spec.Metadata,
-			commonapi.NameValuePair{
-				Name: "clientID",
-				Value: commonapi.DynamicValue{
-					JSON: v1.JSON{
-						Raw: []byte("{namespace}"),
-					},
-				},
-			})
-
-		rt, err := NewTestDaprRuntimeWithID(t, modes.KubernetesMode, "myApp")
-		require.NoError(t, err)
-
-		rt.runtimeConfig.id = daprt.TestRuntimeConfigID
-		defer stopRuntime(t, rt)
-		mockPubSub := new(daprt.MockPubSub)
-
-		rt.runtimeConfig.registry.PubSubs().RegisterComponent(
-			func(_ logger.Logger) pubsub.PubSub {
-				return mockPubSub
-			},
-			"mockPubSub",
-		)
-
-		var k8sClientID string
-		clientIDChan := make(chan string, 1)
-		mockPubSub.On("Init", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
-			metadata := args.Get(0).(pubsub.Metadata)
-			k8sClientID = metadata.Properties["clientID"]
-			clientIDChan <- k8sClientID
-		})
-
-		err = rt.processComponentAndDependents(context.Background(), pubsubComponent)
-		assert.NoError(t, err)
-
-		select {
-		case clientID := <-clientIDChan:
-			assert.Equal(t, "test.myApp", clientID)
-		case <-time.After(20 * time.Second):
-			t.Error("Timed out waiting for clientID for Kubernetes Mode test")
-		}
-	})
-
-	// ClientID should be AppID for Self-Hosted
-	t.Run("Standalone Mode AppID", func(t *testing.T) {
-		pubsubComponent.Spec.Metadata = append(
-			pubsubComponent.Spec.Metadata,
-			commonapi.NameValuePair{
-				Name: "clientID",
-				Value: commonapi.DynamicValue{
-					JSON: v1.JSON{
-						Raw: []byte("{appID} {appID}"),
-					},
-				},
-			})
-
-		rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
-		require.NoError(t, err)
-
-		rt.runtimeConfig.id = daprt.TestRuntimeConfigID
-		defer stopRuntime(t, rt)
-		mockPubSub := new(daprt.MockPubSub)
-
-		rt.runtimeConfig.registry.PubSubs().RegisterComponent(
-			func(_ logger.Logger) pubsub.PubSub {
-				return mockPubSub
-			},
-			"mockPubSub",
-		)
-
-		var standAloneClientID string
-		clientIDChan := make(chan string, 1)
-		mockPubSub.On("Init", mock.Anything).Return(nil).Run(func(args mock.Arguments) {
-			metadata := args.Get(0).(pubsub.Metadata)
-			standAloneClientID = metadata.Properties["clientID"]
-			clientIDChan <- standAloneClientID
-		})
-
-		err = rt.processComponentAndDependents(context.Background(), pubsubComponent)
-		assert.NoError(t, err)
-		appIds := strings.Split(standAloneClientID, " ")
-		assert.Equal(t, 2, len(appIds))
-		for _, appID := range appIds {
-			assert.Equal(t, daprt.TestRuntimeConfigID, appID)
-		}
-
-		select {
-		case clientID := <-clientIDChan:
-			assert.Equal(t, standAloneClientID, clientID)
-		case <-time.After(20 * time.Second):
-			t.Error("Timed out waiting for clientID for Standalone Mode test")
-		}
-	})
-}
-
-func TestOnComponentUpdated(t *testing.T) {
-	t.Run("component spec changed, component is updated", func(t *testing.T) {
-		rt, _ := NewTestDaprRuntime(t, modes.KubernetesMode)
-		require.NoError(t, rt.compStore.AddPendingComponentForCommit(componentsV1alpha1.Component{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "test",
-			},
-			Spec: componentsV1alpha1.ComponentSpec{
-				Type:    "pubsub.mockPubSub",
-				Version: "v1",
-				Metadata: []commonapi.NameValuePair{
-					{
-						Name: "name1",
-						Value: commonapi.DynamicValue{
-							JSON: v1.JSON{
-								Raw: []byte("value1"),
-							},
-						},
-					},
-				},
-			},
-		}))
-		require.NoError(t, rt.compStore.CommitPendingComponent())
-
-		go func() {
-			<-rt.pendingComponents
-		}()
-
-		updated := rt.onComponentUpdated(context.Background(), componentsV1alpha1.Component{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "test",
-			},
-			Spec: componentsV1alpha1.ComponentSpec{
-				Type:    "pubsub.mockPubSub",
-				Version: "v1",
-				Metadata: []commonapi.NameValuePair{
-					{
-						Name: "name1",
-						Value: commonapi.DynamicValue{
-							JSON: v1.JSON{
-								Raw: []byte("value2"),
-							},
-						},
-					},
-				},
-			},
-		})
-
-		assert.True(t, updated)
-	})
-
-	t.Run("component spec unchanged, component is skipped", func(t *testing.T) {
-		rt, _ := NewTestDaprRuntime(t, modes.KubernetesMode)
-		require.NoError(t, rt.compStore.AddPendingComponentForCommit(componentsV1alpha1.Component{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "test",
-			},
-			Spec: componentsV1alpha1.ComponentSpec{
-				Type:    "pubsub.mockPubSub",
-				Version: "v1",
-				Metadata: []commonapi.NameValuePair{
-					{
-						Name: "name1",
-						Value: commonapi.DynamicValue{
-							JSON: v1.JSON{
-								Raw: []byte("value1"),
-							},
-						},
-					},
-				},
-			},
-		}))
-		require.NoError(t, rt.compStore.CommitPendingComponent())
-
-		go func() {
-			<-rt.pendingComponents
-		}()
-
-		updated := rt.onComponentUpdated(context.Background(), componentsV1alpha1.Component{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "test",
-			},
-			Spec: componentsV1alpha1.ComponentSpec{
-				Type:    "pubsub.mockPubSub",
-				Version: "v1",
-				Metadata: []commonapi.NameValuePair{
-					{
-						Name: "name1",
-						Value: commonapi.DynamicValue{
-							JSON: v1.JSON{
-								Raw: []byte("value1"),
-							},
-						},
-					},
-				},
-			},
-		})
-
-		assert.False(t, updated)
-	})
-}
-
 func TestPopulateSecretsConfiguration(t *testing.T) {
 	t.Run("secret store configuration is populated", func(t *testing.T) {
 		// setup
@@ -1510,150 +704,12 @@ func TestPopulateSecretsConfiguration(t *testing.T) {
 	})
 }
 
-func TestProcessResourceSecrets(t *testing.T) {
-	createMockBinding := func() *componentsV1alpha1.Component {
-		return &componentsV1alpha1.Component{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "mockBinding",
-			},
-			Spec: componentsV1alpha1.ComponentSpec{
-				Type:     "bindings.mock",
-				Version:  "v1",
-				Metadata: []commonapi.NameValuePair{},
-			},
-		}
-	}
-
-	t.Run("Standalone Mode", func(t *testing.T) {
-		mockBinding := createMockBinding()
-		mockBinding.Spec.Metadata = append(mockBinding.Spec.Metadata, commonapi.NameValuePair{
-			Name: "a",
-			SecretKeyRef: commonapi.SecretKeyRef{
-				Key:  "key1",
-				Name: "name1",
-			},
-		})
-		mockBinding.Auth.SecretStore = secretstoresLoader.BuiltinKubernetesSecretStore
-
-		rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
-		require.NoError(t, err)
-		defer stopRuntime(t, rt)
-		m := NewMockKubernetesStore()
-		rt.runtimeConfig.registry.SecretStores().RegisterComponent(
-			func(_ logger.Logger) secretstores.SecretStore {
-				return m
-			},
-			secretstoresLoader.BuiltinKubernetesSecretStore,
-		)
-
-		// add Kubernetes component manually
-		rt.processComponentAndDependents(context.Background(), componentsV1alpha1.Component{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: secretstoresLoader.BuiltinKubernetesSecretStore,
-			},
-			Spec: componentsV1alpha1.ComponentSpec{
-				Type:    "secretstores.kubernetes",
-				Version: "v1",
-			},
-		})
-
-		updated, unready := rt.processResourceSecrets(context.Background(), mockBinding)
-		assert.True(t, updated)
-		assert.Equal(t, "value1", mockBinding.Spec.Metadata[0].Value.String())
-		assert.Empty(t, unready)
-	})
-
-	t.Run("Look up name only", func(t *testing.T) {
-		mockBinding := createMockBinding()
-		mockBinding.Spec.Metadata = append(mockBinding.Spec.Metadata, commonapi.NameValuePair{
-			Name: "a",
-			SecretKeyRef: commonapi.SecretKeyRef{
-				Name: "name1",
-			},
-		})
-		mockBinding.Auth.SecretStore = "mock"
-
-		rt, _ := NewTestDaprRuntime(t, modes.KubernetesMode)
-		defer stopRuntime(t, rt)
-
-		rt.runtimeConfig.registry.SecretStores().RegisterComponent(
-			func(_ logger.Logger) secretstores.SecretStore {
-				return &rtmock.SecretStore{}
-			},
-			"mock",
-		)
-
-		// initSecretStore appends Kubernetes component even if kubernetes component is not added
-		err := rt.processComponentAndDependents(context.Background(), componentsV1alpha1.Component{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "mock",
-			},
-			Spec: componentsV1alpha1.ComponentSpec{
-				Type:    "secretstores.mock",
-				Version: "v1",
-			},
-		})
-		assert.NoError(t, err)
-
-		updated, unready := rt.processResourceSecrets(context.Background(), mockBinding)
-		assert.True(t, updated)
-		assert.Equal(t, "value1", mockBinding.Spec.Metadata[0].Value.String())
-		assert.Empty(t, unready)
-	})
-
-	t.Run("Secret from env", func(t *testing.T) {
-		t.Setenv("MY_ENV_VAR", "ciao mondo")
-
-		mockBinding := createMockBinding()
-		mockBinding.Spec.Metadata = append(mockBinding.Spec.Metadata, commonapi.NameValuePair{
-			Name:   "a",
-			EnvRef: "MY_ENV_VAR",
-		})
-
-		rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
-		require.NoError(t, err)
-		defer stopRuntime(t, rt)
-
-		updated, unready := rt.processResourceSecrets(context.Background(), mockBinding)
-		assert.True(t, updated)
-		assert.Equal(t, "ciao mondo", mockBinding.Spec.Metadata[0].Value.String())
-		assert.Empty(t, unready)
-	})
-
-	t.Run("Disallowed env var", func(t *testing.T) {
-		t.Setenv("APP_API_TOKEN", "test")
-		t.Setenv("DAPR_KEY", "test")
-
-		mockBinding := createMockBinding()
-		mockBinding.Spec.Metadata = append(mockBinding.Spec.Metadata,
-			commonapi.NameValuePair{
-				Name:   "a",
-				EnvRef: "DAPR_KEY",
-			},
-			commonapi.NameValuePair{
-				Name:   "b",
-				EnvRef: "APP_API_TOKEN",
-			},
-		)
-
-		rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
-		require.NoError(t, err)
-		defer stopRuntime(t, rt)
-
-		updated, unready := rt.processResourceSecrets(context.Background(), mockBinding)
-		assert.True(t, updated)
-		assert.Equal(t, "", mockBinding.Spec.Metadata[0].Value.String())
-		assert.Equal(t, "", mockBinding.Spec.Metadata[1].Value.String())
-		assert.Empty(t, unready)
-	})
-}
-
 // Test InitSecretStore if secretstore.* refers to Kubernetes secret store.
 func TestInitSecretStoresInKubernetesMode(t *testing.T) {
 	t.Run("built-in secret store is added", func(t *testing.T) {
 		rt, _ := NewTestDaprRuntime(t, modes.KubernetesMode)
 
-		m := NewMockKubernetesStore()
+		m := rtmock.NewMockKubernetesStore()
 		rt.runtimeConfig.registry.SecretStores().RegisterComponent(
 			func(_ logger.Logger) secretstores.SecretStore {
 				return m
@@ -1686,13 +742,13 @@ func TestInitSecretStoresInKubernetesMode(t *testing.T) {
 
 	t.Run("built-in secret store bypasses authorizers", func(t *testing.T) {
 		rt, _ := NewTestDaprRuntime(t, modes.KubernetesMode)
-		rt.componentAuthorizers = []ComponentAuthorizer{
+		rt.authz = rt.authz.WithComponentAuthorizers([]authorizer.ComponentAuthorizer{
 			func(component componentsV1alpha1.Component) bool {
 				return false
 			},
-		}
+		})
 
-		m := NewMockKubernetesStore()
+		m := rtmock.NewMockKubernetesStore()
 		rt.runtimeConfig.registry.SecretStores().RegisterComponent(
 			func(_ logger.Logger) secretstores.SecretStore {
 				return m
@@ -1705,19 +761,13 @@ func TestInitSecretStoresInKubernetesMode(t *testing.T) {
 }
 
 func assertBuiltInSecretStore(t *testing.T, rt *DaprRuntime) {
-	wg := sync.WaitGroup{}
-	wg.Add(1)
-	go func() {
-		for comp := range rt.pendingComponents {
-			err := rt.processComponentAndDependents(context.Background(), comp)
-			assert.NoError(t, err)
-			if comp.Name == secretstoresLoader.BuiltinKubernetesSecretStore {
-				wg.Done()
-			}
-		}
-	}()
+	go rt.processor.Process(context.Background())
 	rt.appendBuiltinSecretStore(context.Background())
-	wg.Wait()
+	assert.Eventually(t, func() bool {
+		_, ok := rt.compStore.GetComponent(secretstoresLoader.BuiltinKubernetesSecretStore)
+		return ok
+	}, time.Second*2, time.Millisecond*100)
+
 	assert.NoError(t, rt.runnerCloser.Close())
 }
 
@@ -1819,272 +869,6 @@ func TestPodName(t *testing.T) {
 	})
 }
 
-func TestAuthorizedComponents(t *testing.T) {
-	testCompName := "fakeComponent"
-
-	t.Run("standalone mode, no namespce", func(t *testing.T) {
-		rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
-		require.NoError(t, err)
-		defer stopRuntime(t, rt)
-		component := componentsV1alpha1.Component{}
-		component.ObjectMeta.Name = testCompName
-
-		componentObj := rt.getAuthorizedObjects([]componentsV1alpha1.Component{component}, rt.isObjectAuthorized)
-		components, ok := componentObj.([]componentsV1alpha1.Component)
-		assert.True(t, ok)
-		assert.Equal(t, 1, len(components))
-		assert.Equal(t, testCompName, components[0].Name)
-	})
-
-	t.Run("namespace mismatch", func(t *testing.T) {
-		rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
-		require.NoError(t, err)
-		defer stopRuntime(t, rt)
-		rt.namespace = "a"
-
-		component := componentsV1alpha1.Component{}
-		component.ObjectMeta.Name = testCompName
-		component.ObjectMeta.Namespace = "b"
-
-		componentObj := rt.getAuthorizedObjects([]componentsV1alpha1.Component{component}, rt.isObjectAuthorized)
-		components, ok := componentObj.([]componentsV1alpha1.Component)
-		assert.True(t, ok)
-		assert.Equal(t, 0, len(components))
-	})
-
-	t.Run("namespace match", func(t *testing.T) {
-		rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
-		require.NoError(t, err)
-		defer stopRuntime(t, rt)
-		rt.namespace = "a"
-
-		component := componentsV1alpha1.Component{}
-		component.ObjectMeta.Name = testCompName
-		component.ObjectMeta.Namespace = "a"
-
-		componentObj := rt.getAuthorizedObjects([]componentsV1alpha1.Component{component}, rt.isObjectAuthorized)
-		components, ok := componentObj.([]componentsV1alpha1.Component)
-		assert.True(t, ok)
-		assert.Equal(t, 1, len(components))
-	})
-
-	t.Run("in scope, namespace match", func(t *testing.T) {
-		rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
-		require.NoError(t, err)
-		defer stopRuntime(t, rt)
-		rt.namespace = "a"
-
-		component := componentsV1alpha1.Component{}
-		component.ObjectMeta.Name = testCompName
-		component.ObjectMeta.Namespace = "a"
-		component.Scopes = []string{daprt.TestRuntimeConfigID}
-
-		componentObj := rt.getAuthorizedObjects([]componentsV1alpha1.Component{component}, rt.isObjectAuthorized)
-		components, ok := componentObj.([]componentsV1alpha1.Component)
-		assert.True(t, ok)
-		assert.Equal(t, 1, len(components))
-	})
-
-	t.Run("not in scope, namespace match", func(t *testing.T) {
-		rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
-		require.NoError(t, err)
-		defer stopRuntime(t, rt)
-		rt.namespace = "a"
-
-		component := componentsV1alpha1.Component{}
-		component.ObjectMeta.Name = testCompName
-		component.ObjectMeta.Namespace = "a"
-		component.Scopes = []string{"other"}
-
-		componentObj := rt.getAuthorizedObjects([]componentsV1alpha1.Component{component}, rt.isObjectAuthorized)
-		components, ok := componentObj.([]componentsV1alpha1.Component)
-		assert.True(t, ok)
-		assert.Equal(t, 0, len(components))
-	})
-
-	t.Run("in scope, namespace mismatch", func(t *testing.T) {
-		rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
-		require.NoError(t, err)
-		defer stopRuntime(t, rt)
-		rt.namespace = "a"
-
-		component := componentsV1alpha1.Component{}
-		component.ObjectMeta.Name = testCompName
-		component.ObjectMeta.Namespace = "b"
-		component.Scopes = []string{daprt.TestRuntimeConfigID}
-
-		componentObj := rt.getAuthorizedObjects([]componentsV1alpha1.Component{component}, rt.isObjectAuthorized)
-		components, ok := componentObj.([]componentsV1alpha1.Component)
-		assert.True(t, ok)
-		assert.Equal(t, 0, len(components))
-	})
-
-	t.Run("not in scope, namespace mismatch", func(t *testing.T) {
-		rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
-		require.NoError(t, err)
-		defer stopRuntime(t, rt)
-		rt.namespace = "a"
-
-		component := componentsV1alpha1.Component{}
-		component.ObjectMeta.Name = testCompName
-		component.ObjectMeta.Namespace = "b"
-		component.Scopes = []string{"other"}
-
-		componentObj := rt.getAuthorizedObjects([]componentsV1alpha1.Component{component}, rt.isObjectAuthorized)
-		components, ok := componentObj.([]componentsV1alpha1.Component)
-		assert.True(t, ok)
-		assert.Equal(t, 0, len(components))
-	})
-
-	t.Run("no authorizers", func(t *testing.T) {
-		rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
-		require.NoError(t, err)
-		defer stopRuntime(t, rt)
-		rt.componentAuthorizers = []ComponentAuthorizer{}
-		// Namespace mismatch, should be accepted anyways
-		rt.namespace = "a"
-
-		component := componentsV1alpha1.Component{}
-		component.ObjectMeta.Name = testCompName
-		component.ObjectMeta.Namespace = "b"
-
-		componentObj := rt.getAuthorizedObjects([]componentsV1alpha1.Component{component}, rt.isObjectAuthorized)
-		components, ok := componentObj.([]componentsV1alpha1.Component)
-		assert.True(t, ok)
-		assert.Equal(t, 1, len(components))
-		assert.Equal(t, testCompName, components[0].Name)
-	})
-
-	t.Run("only deny all", func(t *testing.T) {
-		rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
-		require.NoError(t, err)
-		defer stopRuntime(t, rt)
-		rt.componentAuthorizers = []ComponentAuthorizer{
-			func(component componentsV1alpha1.Component) bool {
-				return false
-			},
-		}
-
-		component := componentsV1alpha1.Component{}
-		component.ObjectMeta.Name = testCompName
-
-		componentObj := rt.getAuthorizedObjects([]componentsV1alpha1.Component{component}, rt.isObjectAuthorized)
-		components, ok := componentObj.([]componentsV1alpha1.Component)
-		assert.True(t, ok)
-		assert.Equal(t, 0, len(components))
-	})
-
-	t.Run("additional authorizer denies all", func(t *testing.T) {
-		cfg := NewTestDaprRuntimeConfig(t, modes.StandaloneMode, string(protocol.HTTPSProtocol), 1024)
-		rt, err := newDaprRuntime(context.Background(), nil, cfg, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
-		require.NoError(t, err)
-		rt.componentAuthorizers = append(rt.componentAuthorizers, func(component componentsV1alpha1.Component) bool {
-			return false
-		})
-		defer stopRuntime(t, rt)
-
-		component := componentsV1alpha1.Component{}
-		component.ObjectMeta.Name = testCompName
-
-		componentObj := rt.getAuthorizedObjects([]componentsV1alpha1.Component{component}, rt.isObjectAuthorized)
-		components, ok := componentObj.([]componentsV1alpha1.Component)
-		assert.True(t, ok)
-		assert.Equal(t, 0, len(components))
-	})
-}
-
-func TestAuthorizedHTTPEndpoints(t *testing.T) {
-	rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
-	require.NoError(t, err)
-	defer stopRuntime(t, rt)
-	endpoint := createTestEndpoint("testEndpoint", "http://api.test.com")
-
-	t.Run("standalone mode, no namespace", func(t *testing.T) {
-		endpointObjs := rt.getAuthorizedObjects([]httpEndpointV1alpha1.HTTPEndpoint{endpoint}, rt.isObjectAuthorized)
-		endpoints, ok := endpointObjs.([]httpEndpointV1alpha1.HTTPEndpoint)
-		assert.True(t, ok)
-		assert.Equal(t, 1, len(endpoints))
-		assert.Equal(t, endpoint.Name, endpoints[0].Name)
-	})
-
-	t.Run("namespace mismatch", func(t *testing.T) {
-		rt.namespace = "a"
-		endpoint.ObjectMeta.Namespace = "b"
-
-		endpointObjs := rt.getAuthorizedObjects([]httpEndpointV1alpha1.HTTPEndpoint{endpoint}, rt.isObjectAuthorized)
-		endpoints, ok := endpointObjs.([]httpEndpointV1alpha1.HTTPEndpoint)
-		assert.True(t, ok)
-		assert.Equal(t, 0, len(endpoints))
-	})
-
-	t.Run("namespace match", func(t *testing.T) {
-		rt.namespace = "a"
-		endpoint.ObjectMeta.Namespace = "a"
-
-		endpointObjs := rt.getAuthorizedObjects([]httpEndpointV1alpha1.HTTPEndpoint{endpoint}, rt.isObjectAuthorized)
-		endpoints, ok := endpointObjs.([]httpEndpointV1alpha1.HTTPEndpoint)
-		assert.True(t, ok)
-		assert.Equal(t, 1, len(endpoints))
-	})
-
-	t.Run("in scope, namespace match", func(t *testing.T) {
-		rt.namespace = "a"
-		endpoint.ObjectMeta.Namespace = "a"
-		endpoint.Scopes = []string{daprt.TestRuntimeConfigID}
-
-		endpointObjs := rt.getAuthorizedObjects([]httpEndpointV1alpha1.HTTPEndpoint{endpoint}, rt.isObjectAuthorized)
-		endpoints, ok := endpointObjs.([]httpEndpointV1alpha1.HTTPEndpoint)
-		assert.True(t, ok)
-		assert.Equal(t, 1, len(endpoints))
-	})
-
-	t.Run("not in scope, namespace match", func(t *testing.T) {
-		rt.namespace = "a"
-		endpoint.ObjectMeta.Namespace = "a"
-		endpoint.Scopes = []string{"other"}
-
-		endpointObjs := rt.getAuthorizedObjects([]httpEndpointV1alpha1.HTTPEndpoint{endpoint}, rt.isObjectAuthorized)
-		endpoints, ok := endpointObjs.([]httpEndpointV1alpha1.HTTPEndpoint)
-		assert.True(t, ok)
-		assert.Equal(t, 0, len(endpoints))
-	})
-
-	t.Run("in scope, namespace mismatch", func(t *testing.T) {
-		rt.namespace = "a"
-		endpoint.ObjectMeta.Namespace = "b"
-		endpoint.Scopes = []string{daprt.TestRuntimeConfigID}
-
-		endpointObjs := rt.getAuthorizedObjects([]httpEndpointV1alpha1.HTTPEndpoint{endpoint}, rt.isObjectAuthorized)
-		endpoints, ok := endpointObjs.([]httpEndpointV1alpha1.HTTPEndpoint)
-		assert.True(t, ok)
-		assert.Equal(t, 0, len(endpoints))
-	})
-
-	t.Run("not in scope, namespace mismatch", func(t *testing.T) {
-		rt.namespace = "a"
-		endpoint.ObjectMeta.Namespace = "b"
-		endpoint.Scopes = []string{"other"}
-
-		endpointObjs := rt.getAuthorizedObjects([]httpEndpointV1alpha1.HTTPEndpoint{endpoint}, rt.isObjectAuthorized)
-		endpoints, ok := endpointObjs.([]httpEndpointV1alpha1.HTTPEndpoint)
-		assert.True(t, ok)
-		assert.Equal(t, 0, len(endpoints))
-	})
-
-	t.Run("no authorizers", func(t *testing.T) {
-		rt.httpEndpointAuthorizers = []HTTPEndpointAuthorizer{}
-		// Namespace mismatch, should be accepted anyways
-		rt.namespace = "a"
-		endpoint.ObjectMeta.Namespace = "b"
-
-		endpointObjs := rt.getAuthorizedObjects([]httpEndpointV1alpha1.HTTPEndpoint{endpoint}, rt.isObjectAuthorized)
-		endpoints, ok := endpointObjs.([]httpEndpointV1alpha1.HTTPEndpoint)
-		assert.True(t, ok)
-		assert.Equal(t, 1, len(endpoints))
-		assert.Equal(t, endpoint.Name, endpoints[0].ObjectMeta.Name)
-	})
-}
-
 func TestInitActors(t *testing.T) {
 	t.Run("missing namespace on kubernetes", func(t *testing.T) {
 		r, err := NewTestDaprRuntime(t, modes.KubernetesMode)
@@ -2121,6 +905,7 @@ func TestInitActors(t *testing.T) {
 	t.Run("placement enable = false", func(t *testing.T) {
 		r, err := newDaprRuntime(context.Background(), testSecurity(t), &internalConfig{
 			metricsExporter: metrics.NewExporter(log, metrics.DefaultMetricNamespace),
+			mode:            modes.StandaloneMode,
 			registry:        registry.New(registry.NewOptions()),
 		}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		require.NoError(t, err)
@@ -2134,6 +919,7 @@ func TestInitActors(t *testing.T) {
 	t.Run("the state stores can still be initialized normally", func(t *testing.T) {
 		r, err := newDaprRuntime(context.Background(), testSecurity(t), &internalConfig{
 			metricsExporter: metrics.NewExporter(log, metrics.DefaultMetricNamespace),
+			mode:            modes.StandaloneMode,
 			registry:        registry.New(registry.NewOptions()),
 		}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		require.NoError(t, err)
@@ -2148,6 +934,7 @@ func TestInitActors(t *testing.T) {
 	t.Run("the actor store can not be initialized normally", func(t *testing.T) {
 		r, err := newDaprRuntime(context.Background(), testSecurity(t), &internalConfig{
 			metricsExporter: metrics.NewExporter(log, metrics.DefaultMetricNamespace),
+			mode:            modes.StandaloneMode,
 			registry:        registry.New(registry.NewOptions()),
 		}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		require.NoError(t, err)
@@ -2376,10 +1163,10 @@ func TestCloseWithErrors(t *testing.T) {
 		errCh <- rt.Run(context.Background())
 	}()
 
-	rt.addPendingComponent(context.Background(), mockOutputBindingComponent)
-	rt.addPendingComponent(context.Background(), mockPubSubComponent)
-	rt.addPendingComponent(context.Background(), mockStateComponent)
-	rt.addPendingComponent(context.Background(), mockSecretsComponent)
+	rt.processor.AddPendingComponent(context.Background(), mockOutputBindingComponent)
+	rt.processor.AddPendingComponent(context.Background(), mockPubSubComponent)
+	rt.processor.AddPendingComponent(context.Background(), mockStateComponent)
+	rt.processor.AddPendingComponent(context.Background(), mockSecretsComponent)
 
 	err = rt.runnerCloser.Close()
 	require.Error(t, err)
@@ -2407,14 +1194,14 @@ func TestComponentsCallback(t *testing.T) {
 	port, _ := strconv.Atoi(u.Port())
 
 	c := make(chan struct{})
-	callbackInvoked := false
+	var callbackInvoked atomic.Bool
 
 	cfg := NewTestDaprRuntimeConfig(t, modes.StandaloneMode, "http", port)
 	rt, err := newDaprRuntime(context.Background(), testSecurity(t), cfg, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 	require.NoError(t, err)
 	rt.runtimeConfig.registry = registry.New(registry.NewOptions().WithComponentsCallback(func(components registry.ComponentRegistry) error {
 		close(c)
-		callbackInvoked = true
+		callbackInvoked.Store(true)
 		return nil
 	}))
 
@@ -2430,7 +1217,7 @@ func TestComponentsCallback(t *testing.T) {
 		t.Fatal("timed out waiting for component callback")
 	}
 
-	assert.True(t, callbackInvoked, "component callback was not invoked")
+	assert.True(t, callbackInvoked.Load(), "component callback was not invoked")
 
 	cancel()
 	select {
@@ -2530,7 +1317,7 @@ func TestShutdownWithWait(t *testing.T) {
 
 		closeSecretClose := make(chan struct{})
 		closeSecretCalled := make(chan struct{})
-		m := NewMockKubernetesStoreWithClose(func() error {
+		m := rtmock.NewMockKubernetesStoreWithClose(func() error {
 			close(closeSecretCalled)
 			<-closeSecretClose
 			return nil
@@ -2610,7 +1397,7 @@ spec:
 
 		initSecretContextClosed := make(chan struct{})
 		closeSecretInit := make(chan struct{})
-		m := NewMockKubernetesStoreWithInitCallback(func(ctx context.Context) error {
+		m := rtmock.NewMockKubernetesStoreWithInitCallback(func(ctx context.Context) error {
 			<-ctx.Done()
 			close(initSecretContextClosed)
 			<-closeSecretInit
@@ -2687,13 +1474,13 @@ spec:
 		require.NoError(t, err)
 
 		secretInited := make(chan struct{})
-		m := NewMockKubernetesStoreWithInitCallback(func(ctx context.Context) error {
+		m := rtmock.NewMockKubernetesStoreWithInitCallback(func(ctx context.Context) error {
 			close(secretInited)
 			return errors.New("this is an error")
 		})
 
 		secretClosed := make(chan struct{})
-		m.(*MockKubernetesStateStore).closeFn = func() error {
+		m.(*rtmock.MockKubernetesStateStore).CloseFn = func() error {
 			close(secretClosed)
 			return nil
 		}
@@ -2759,12 +1546,12 @@ spec:
 		rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
 		require.NoError(t, err)
 
-		m := NewMockKubernetesStoreWithInitCallback(func(ctx context.Context) error {
+		m := rtmock.NewMockKubernetesStoreWithInitCallback(func(ctx context.Context) error {
 			return errors.New("this is an error")
 		})
 
 		secretClosed := make(chan struct{})
-		m.(*MockKubernetesStateStore).closeFn = func() error {
+		m.(*rtmock.MockKubernetesStateStore).CloseFn = func() error {
 			close(secretClosed)
 			return nil
 		}
@@ -2826,7 +1613,7 @@ spec:
 		rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
 		require.NoError(t, err)
 
-		m := NewMockKubernetesStoreWithClose(func() error {
+		m := rtmock.NewMockKubernetesStoreWithClose(func() error {
 			<-time.After(5 * time.Second)
 			return nil
 		})
@@ -3176,11 +1963,20 @@ func TestGracefulShutdownActors(t *testing.T) {
 	// setup
 	initMockStateStoreForRuntime(rt, encryptKey, nil)
 
+	rt.namespace = "test"
+	rt.runtimeConfig.appConnectionConfig.Port = -1
+
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error)
 	go func() {
 		errCh <- rt.Run(ctx)
 	}()
+
+	select {
+	case <-rt.initComplete:
+	case <-time.After(time.Second * 5):
+		t.Fatal("runtime did not init in time")
+	}
 
 	// act
 	err = rt.processor.Init(context.Background(), mockStateComponent)
@@ -3188,7 +1984,6 @@ func TestGracefulShutdownActors(t *testing.T) {
 	// assert
 	assert.NoError(t, err, "expected no error")
 
-	rt.namespace = "test"
 	assert.NoError(t, rt.initActors(context.TODO()))
 
 	cancel()
@@ -3271,214 +2066,6 @@ func TestTraceShutdown(t *testing.T) {
 	}
 
 	assert.Nil(t, rt.tracerProvider)
-}
-
-func createTestEndpoint(name, baseURL string) httpEndpointV1alpha1.HTTPEndpoint {
-	return httpEndpointV1alpha1.HTTPEndpoint{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
-		},
-		Spec: httpEndpointV1alpha1.HTTPEndpointSpec{
-			BaseURL: baseURL,
-		},
-	}
-}
-
-func TestHTTPEndpointsUpdate(t *testing.T) {
-	rt, _ := NewTestDaprRuntime(t, modes.KubernetesMode)
-	defer stopRuntime(t, rt)
-
-	mockOpCli := newMockOperatorClient()
-	rt.operatorClient = mockOpCli
-
-	processedCh := make(chan struct{}, 1)
-	mockProcessHTTPEndpoints := func() {
-		for endpoint := range rt.pendingHTTPEndpoints {
-			if endpoint.Name == "" {
-				continue
-			}
-			rt.compStore.AddHTTPEndpoint(endpoint)
-			processedCh <- struct{}{}
-		}
-	}
-	go mockProcessHTTPEndpoints()
-	go rt.beginHTTPEndpointsUpdates(context.Background())
-
-	endpoint1 := createTestEndpoint("mockEndpoint1", "http://testurl.com")
-	endpoint2 := createTestEndpoint("mockEndpoint2", "http://testurl2.com")
-	endpoint3 := createTestEndpoint("mockEndpoint3", "http://testurl3.com")
-
-	// Allow a new stream to create.
-	mockOpCli.AllowOneNewClientEndpointStreamCreate()
-
-	// Wait a new stream created.
-	waitCtx, cancel := context.WithTimeout(context.Background(), time.Second*3)
-	defer cancel()
-	if err := mockOpCli.WaitOneNewClientHTTPEndpointStreamCreated(waitCtx); err != nil {
-		t.Errorf("Wait new stream err: %s", err.Error())
-		t.FailNow()
-	}
-
-	// Wait endpoint1 received and processed.
-	mockOpCli.UpdateHTTPEndpoint(&endpoint1)
-	select {
-	case <-processedCh:
-	case <-time.After(time.Second * 10):
-		t.Errorf("Expect endpoint [endpoint1] processed.")
-		t.FailNow()
-	}
-	_, exists := rt.compStore.GetHTTPEndpoint(endpoint1.Name)
-	assert.True(t, exists, fmt.Sprintf("expect http endpoint with name: %s", endpoint1.Name))
-
-	// Close all client streams to trigger a stream error in `beginHTTPEndpointsUpdates`
-	mockOpCli.CloseAllClientHTTPEndpointStreams()
-
-	// Update during stream error.
-	mockOpCli.UpdateHTTPEndpoint(&endpoint2)
-
-	// Assert no client stream created.
-	assert.Equal(t, mockOpCli.ClientHTTPEndpointStreamCount(), 0, "Expect 0 client stream")
-
-	// Allow a new stream to create.
-	mockOpCli.AllowOneNewClientEndpointStreamCreate()
-	// Wait a new stream created.
-	waitCtx, cancel = context.WithTimeout(context.Background(), time.Second*3)
-	defer cancel()
-	// was failing here
-	if err := mockOpCli.WaitOneNewClientHTTPEndpointStreamCreated(waitCtx); err != nil {
-		t.Errorf("Wait new stream err: %s", err.Error())
-		t.FailNow()
-	}
-
-	// Wait endpoint2 received and processed.
-	select {
-	case <-processedCh:
-	case <-time.After(time.Second * 10):
-		t.Errorf("Expect http endpoint [endpoint2] processed.")
-		t.FailNow()
-	}
-	_, exists = rt.compStore.GetHTTPEndpoint(endpoint2.Name)
-	assert.True(t, exists, fmt.Sprintf("expect http endpoint with name: %s", endpoint2.Name))
-
-	mockOpCli.UpdateHTTPEndpoint(&endpoint3)
-
-	// Wait endpoint3 received and processed.
-	select {
-	case <-processedCh:
-	case <-time.After(time.Second * 10):
-		t.Errorf("Expect endpoint [endpoint3] processed.")
-		t.FailNow()
-	}
-	_, exists = rt.compStore.GetHTTPEndpoint(endpoint3.Name)
-	assert.True(t, exists, fmt.Sprintf("expect http endpoint with name: %s", endpoint3.Name))
-}
-
-type MockKubernetesStateStore struct {
-	callback func(context.Context) error
-	closeFn  func() error
-}
-
-func (m *MockKubernetesStateStore) Init(ctx context.Context, metadata secretstores.Metadata) error {
-	if m.callback != nil {
-		return m.callback(ctx)
-	}
-	return nil
-}
-
-func (m *MockKubernetesStateStore) GetSecret(ctx context.Context, req secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
-	return secretstores.GetSecretResponse{
-		Data: map[string]string{
-			"key1":   "value1",
-			"_value": "_value_data",
-			"name1":  "value1",
-		},
-	}, nil
-}
-
-func (m *MockKubernetesStateStore) BulkGetSecret(ctx context.Context, req secretstores.BulkGetSecretRequest) (secretstores.BulkGetSecretResponse, error) {
-	response := map[string]map[string]string{}
-	response["k8s-secret"] = map[string]string{
-		"key1":   "value1",
-		"_value": "_value_data",
-		"name1":  "value1",
-	}
-	return secretstores.BulkGetSecretResponse{
-		Data: response,
-	}, nil
-}
-
-func (m *MockKubernetesStateStore) Close() error {
-	if m.closeFn != nil {
-		return m.closeFn()
-	}
-	return nil
-}
-
-func (m *MockKubernetesStateStore) Features() []secretstores.Feature {
-	return []secretstores.Feature{}
-}
-
-func NewMockKubernetesStore() secretstores.SecretStore {
-	return &MockKubernetesStateStore{}
-}
-
-func NewMockKubernetesStoreWithInitCallback(cb func(context.Context) error) secretstores.SecretStore {
-	return &MockKubernetesStateStore{callback: cb}
-}
-
-func NewMockKubernetesStoreWithClose(closeFn func() error) secretstores.SecretStore {
-	return &MockKubernetesStateStore{closeFn: closeFn}
-}
-
-func TestIsEnvVarAllowed(t *testing.T) {
-	t.Run("no allowlist", func(t *testing.T) {
-		tests := []struct {
-			name string
-			key  string
-			want bool
-		}{
-			{name: "empty string is not allowed", key: "", want: false},
-			{name: "key is allowed", key: "FOO", want: true},
-			{name: "keys starting with DAPR_ are denied", key: "DAPR_TEST", want: false},
-			{name: "APP_API_TOKEN is denied", key: "APP_API_TOKEN", want: false},
-			{name: "keys with a space are denied", key: "FOO BAR", want: false},
-		}
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				if got := isEnvVarAllowed(tt.key); got != tt.want {
-					t.Errorf("isEnvVarAllowed(%q) = %v, want %v", tt.key, got, tt.want)
-				}
-			})
-		}
-	})
-
-	t.Run("with allowlist", func(t *testing.T) {
-		t.Setenv(securityConsts.EnvKeysEnvVar, "FOO BAR TEST")
-
-		tests := []struct {
-			name string
-			key  string
-			want bool
-		}{
-			{name: "FOO is allowed", key: "FOO", want: true},
-			{name: "BAR is allowed", key: "BAR", want: true},
-			{name: "TEST is allowed", key: "TEST", want: true},
-			{name: "FO is not allowed", key: "FO", want: false},
-			{name: "EST is not allowed", key: "EST", want: false},
-			{name: "BA is not allowed", key: "BA", want: false},
-			{name: "AR is not allowed", key: "AR", want: false},
-			{name: "keys starting with DAPR_ are denied", key: "DAPR_TEST", want: false},
-			{name: "APP_API_TOKEN is denied", key: "APP_API_TOKEN", want: false},
-			{name: "keys with a space are denied", key: "FOO BAR", want: false},
-		}
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				if got := isEnvVarAllowed(tt.key); got != tt.want {
-					t.Errorf("isEnvVarAllowed(%q) = %v, want %v", tt.key, got, tt.want)
-				}
-			})
-		}
-	})
 }
 
 func testSecurity(t *testing.T) security.Handler {
