@@ -19,22 +19,27 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"time"
 
-	"github.com/dapr/components-contrib/bindings"
-	contribpubsub "github.com/dapr/components-contrib/pubsub"
+	apiextapi "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+
+	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	httpendapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/config"
 	configmodes "github.com/dapr/dapr/pkg/config/modes"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
+	grpcmanager "github.com/dapr/dapr/pkg/grpc/manager"
+	"github.com/dapr/dapr/pkg/internal/apis"
 	"github.com/dapr/dapr/pkg/modes"
-	"github.com/dapr/dapr/pkg/outbox"
 	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	"github.com/dapr/dapr/pkg/runtime/meta"
-
-	grpcmanager "github.com/dapr/dapr/pkg/grpc/manager"
 	"github.com/dapr/dapr/pkg/runtime/processor/binding"
 	"github.com/dapr/dapr/pkg/runtime/processor/configuration"
 	"github.com/dapr/dapr/pkg/runtime/processor/crypto"
@@ -45,7 +50,15 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/processor/state"
 	"github.com/dapr/dapr/pkg/runtime/processor/workflow"
 	"github.com/dapr/dapr/pkg/runtime/registry"
+	"github.com/dapr/kit/concurrency"
+	"github.com/dapr/kit/logger"
 )
+
+const (
+	defaultComponentInitTimeout = time.Second * 5
+)
+
+var log = logger.NewLogger("dapr.runtime.processor")
 
 type Options struct {
 	// ID is the ID of this Dapr instance.
@@ -91,44 +104,24 @@ type Options struct {
 	OperatorClient operatorv1.OperatorClient
 }
 
-// manager implements the life cycle events of a component category.
-type manager interface {
-	Init(context.Context, compapi.Component) error
-	Close(compapi.Component) error
-}
-
-type StateManager interface {
-	ActorStateStoreName() (string, bool)
-	manager
-}
-
-type PubsubManager interface {
-	Publish(context.Context, *contribpubsub.PublishRequest) error
-	BulkPublish(context.Context, *contribpubsub.BulkPublishRequest) (contribpubsub.BulkPublishResponse, error)
-
-	StartSubscriptions(context.Context) error
-	StopSubscriptions()
-	Outbox() outbox.Outbox
-	manager
-}
-
-type BindingManager interface {
-	SendToOutputBinding(context.Context, string, *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
-
-	StartReadingFromBindings(context.Context) error
-	StopReadingFromBindings()
-	manager
-}
-
 // Processor manages the lifecycle of all components categories.
 type Processor struct {
 	compStore *compstore.ComponentStore
 	managers  map[components.Category]manager
 	state     StateManager
+	secret    SecretManager
 	pubsub    PubsubManager
 	binding   BindingManager
 
-	lock sync.RWMutex
+	pendingHTTPEndpoints       chan httpendapi.HTTPEndpoint
+	pendingComponents          chan compapi.Component
+	pendingComponentDependents map[string][]compapi.Component
+
+	lock     sync.RWMutex
+	chlock   sync.RWMutex
+	running  atomic.Bool
+	shutdown atomic.Bool
+	closedCh chan struct{}
 }
 
 func New(opts Options) *Processor {
@@ -157,6 +150,13 @@ func New(opts Options) *Processor {
 		Outbox:           ps.Outbox(),
 	})
 
+	secret := secret.New(secret.Options{
+		Registry:       opts.Registry.SecretStores(),
+		ComponentStore: opts.ComponentStore,
+		Meta:           opts.Meta,
+		OperatorClient: opts.OperatorClient,
+	})
+
 	binding := binding.New(binding.Options{
 		Registry:       opts.Registry.Bindings(),
 		ComponentStore: opts.ComponentStore,
@@ -169,10 +169,15 @@ func New(opts Options) *Processor {
 	})
 
 	return &Processor{
-		compStore: opts.ComponentStore,
-		state:     state,
-		pubsub:    ps,
-		binding:   binding,
+		pendingHTTPEndpoints:       make(chan httpendapi.HTTPEndpoint),
+		pendingComponents:          make(chan compapi.Component),
+		pendingComponentDependents: make(map[string][]compapi.Component),
+		closedCh:                   make(chan struct{}),
+		compStore:                  opts.ComponentStore,
+		state:                      state,
+		pubsub:                     ps,
+		binding:                    binding,
+		secret:                     secret,
 		managers: map[components.Category]manager{
 			components.CategoryBindings: binding,
 			components.CategoryConfiguration: configuration.New(configuration.Options{
@@ -190,13 +195,9 @@ func New(opts Options) *Processor {
 				ComponentStore: opts.ComponentStore,
 				Meta:           opts.Meta,
 			}),
-			components.CategoryPubSub: ps,
-			components.CategorySecretStore: secret.New(secret.Options{
-				Registry:       opts.Registry.SecretStores(),
-				ComponentStore: opts.ComponentStore,
-				Meta:           opts.Meta,
-			}),
-			components.CategoryStateStore: state,
+			components.CategoryPubSub:      ps,
+			components.CategorySecretStore: secret,
+			components.CategoryStateStore:  state,
 			components.CategoryWorkflow: workflow.New(workflow.Options{
 				Registry:       opts.Registry.Workflows(),
 				ComponentStore: opts.ComponentStore,
@@ -247,16 +248,230 @@ func (p *Processor) Close(comp compapi.Component) error {
 	return nil
 }
 
-func (p *Processor) managerFromComp(comp compapi.Component) (manager, error) {
-	category := p.Category(comp)
-	m, ok := p.managers[category]
-	if !ok {
-		return nil, fmt.Errorf("unknown component category: %q", category)
-	}
-	return m, nil
+type componentPreprocessRes struct {
+	unreadyDependency string
 }
 
-func (p *Processor) Category(comp compapi.Component) components.Category {
+func (p *Processor) Process(ctx context.Context) error {
+	if !p.running.CompareAndSwap(false, true) {
+		return errors.New("processor is already running")
+	}
+
+	return concurrency.NewRunnerManager(
+		p.processComponents,
+		p.processHTTPEndpoints,
+		func(ctx context.Context) error {
+			<-ctx.Done()
+			close(p.closedCh)
+			p.chlock.Lock()
+			defer p.chlock.Unlock()
+			p.shutdown.Store(true)
+			close(p.pendingComponents)
+			close(p.pendingHTTPEndpoints)
+			return nil
+		},
+	).Run(ctx)
+}
+
+func (p *Processor) AddPendingComponent(ctx context.Context, comp compapi.Component) bool {
+	p.chlock.RLock()
+	defer p.chlock.RUnlock()
+	if p.shutdown.Load() {
+		return false
+	}
+
+	select {
+	case <-ctx.Done():
+		return false
+	case <-p.closedCh:
+		return false
+	case p.pendingComponents <- comp:
+		return true
+	}
+}
+
+func (p *Processor) AddPendingEndpoint(ctx context.Context, endpoint httpendapi.HTTPEndpoint) bool {
+	p.chlock.RLock()
+	defer p.chlock.RUnlock()
+	if p.shutdown.Load() {
+		return false
+	}
+
+	select {
+	case <-ctx.Done():
+		return false
+	case <-p.closedCh:
+		return false
+	case p.pendingHTTPEndpoints <- endpoint:
+		return true
+	}
+}
+
+func (p *Processor) processComponents(ctx context.Context) error {
+	for comp := range p.pendingComponents {
+		if comp.Name == "" {
+			continue
+		}
+
+		err := p.processComponentAndDependents(ctx, comp)
+		if err != nil {
+			err = fmt.Errorf("process component %s error: %s", comp.Name, err)
+			if !comp.Spec.IgnoreErrors {
+				log.Warnf("Error processing component, daprd will exit gracefully")
+				return err
+			}
+			log.Error(err)
+		}
+	}
+
+	return nil
+}
+
+func (p *Processor) processHTTPEndpoints(ctx context.Context) error {
+	for endpoint := range p.pendingHTTPEndpoints {
+		if endpoint.Name == "" {
+			continue
+		}
+		p.processHTTPEndpointSecrets(ctx, &endpoint)
+		p.compStore.AddHTTPEndpoint(endpoint)
+	}
+
+	return nil
+}
+
+func (p *Processor) processComponentAndDependents(ctx context.Context, comp compapi.Component) error {
+	log.Debug("Loading component: " + comp.LogName())
+	res := p.preprocessOneComponent(ctx, &comp)
+	if res.unreadyDependency != "" {
+		p.pendingComponentDependents[res.unreadyDependency] = append(p.pendingComponentDependents[res.unreadyDependency], comp)
+		return nil
+	}
+
+	compCategory := p.category(comp)
+	if compCategory == "" {
+		// the category entered is incorrect, return error
+		return fmt.Errorf("incorrect type %s", comp.Spec.Type)
+	}
+
+	timeout, err := time.ParseDuration(comp.Spec.InitTimeout)
+	if err != nil {
+		timeout = defaultComponentInitTimeout
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	err = p.Init(ctx, comp)
+	// If the context is canceled, we want  to return an init error.
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		err = fmt.Errorf("init timeout for component %s exceeded after %s", comp.LogName(), timeout.String())
+	}
+	if err != nil {
+		log.Errorf("Failed to init component %s: %s", comp.Name, err)
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
+		return rterrors.NewInit(rterrors.InitComponentFailure, comp.LogName(), err)
+	}
+
+	log.Info("Component loaded: " + comp.LogName())
+	diag.DefaultMonitoring.ComponentLoaded()
+
+	dependency := componentDependency(compCategory, comp.Name)
+	if deps, ok := p.pendingComponentDependents[dependency]; ok {
+		delete(p.pendingComponentDependents, dependency)
+		for _, dependent := range deps {
+			if err := p.processComponentAndDependents(ctx, dependent); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func (p *Processor) processHTTPEndpointSecrets(ctx context.Context, endpoint *httpendapi.HTTPEndpoint) {
+	_, _ = p.secret.ProcessResource(ctx, endpoint)
+
+	tlsResource := apis.GenericNameValueResource{
+		Name:        endpoint.ObjectMeta.Name,
+		Namespace:   endpoint.ObjectMeta.Namespace,
+		SecretStore: endpoint.Auth.SecretStore,
+		Pairs:       []commonapi.NameValuePair{},
+	}
+
+	root, clientCert, clientKey := "root", "clientCert", "clientKey"
+
+	ca := commonapi.NameValuePair{
+		Name: root,
+	}
+
+	if endpoint.HasTLSRootCA() {
+		ca.Value = *endpoint.Spec.ClientTLS.RootCA.Value
+	}
+
+	if endpoint.HasTLSRootCASecret() {
+		ca.SecretKeyRef = *endpoint.Spec.ClientTLS.RootCA.SecretKeyRef
+	}
+	tlsResource.Pairs = append(tlsResource.Pairs, ca)
+
+	cCert := commonapi.NameValuePair{
+		Name: clientCert,
+	}
+
+	if endpoint.HasTLSClientCert() {
+		cCert.Value = *endpoint.Spec.ClientTLS.Certificate.Value
+	}
+
+	if endpoint.HasTLSClientCertSecret() {
+		cCert.SecretKeyRef = *endpoint.Spec.ClientTLS.Certificate.SecretKeyRef
+	}
+	tlsResource.Pairs = append(tlsResource.Pairs, cCert)
+
+	cKey := commonapi.NameValuePair{
+		Name: clientKey,
+	}
+
+	if endpoint.HasTLSPrivateKey() {
+		cKey.Value = *endpoint.Spec.ClientTLS.PrivateKey.Value
+	}
+
+	if endpoint.HasTLSPrivateKeySecret() {
+		cKey.SecretKeyRef = *endpoint.Spec.ClientTLS.PrivateKey.SecretKeyRef
+	}
+
+	tlsResource.Pairs = append(tlsResource.Pairs, cKey)
+
+	updated, _ := p.secret.ProcessResource(ctx, tlsResource)
+	if updated {
+		for _, np := range tlsResource.Pairs {
+			dv := &commonapi.DynamicValue{
+				JSON: apiextapi.JSON{
+					Raw: np.Value.Raw,
+				},
+			}
+
+			switch np.Name {
+			case root:
+				endpoint.Spec.ClientTLS.RootCA.Value = dv
+			case clientCert:
+				endpoint.Spec.ClientTLS.Certificate.Value = dv
+			case clientKey:
+				endpoint.Spec.ClientTLS.PrivateKey.Value = dv
+			}
+		}
+	}
+}
+
+func (p *Processor) preprocessOneComponent(ctx context.Context, comp *compapi.Component) componentPreprocessRes {
+	_, unreadySecretsStore := p.secret.ProcessResource(ctx, comp)
+	if unreadySecretsStore != "" {
+		return componentPreprocessRes{
+			unreadyDependency: componentDependency(components.CategorySecretStore, unreadySecretsStore),
+		}
+	}
+	return componentPreprocessRes{}
+}
+
+func (p *Processor) category(comp compapi.Component) components.Category {
 	for category := range p.managers {
 		if strings.HasPrefix(comp.Spec.Type, string(category)+".") {
 			return category
@@ -265,20 +480,6 @@ func (p *Processor) Category(comp compapi.Component) components.Category {
 	return ""
 }
 
-func (p *Processor) State() StateManager {
-	p.lock.RLock()
-	defer p.lock.RUnlock()
-	return p.state
-}
-
-func (p *Processor) PubSub() PubsubManager {
-	p.lock.RLock()
-	defer p.lock.RUnlock()
-	return p.pubsub
-}
-
-func (p *Processor) Binding() BindingManager {
-	p.lock.RLock()
-	defer p.lock.RUnlock()
-	return p.binding
+func componentDependency(compCategory components.Category, name string) string {
+	return string(compCategory) + ":" + name
 }
