@@ -50,6 +50,7 @@ func New(options Options) *Meta {
 		namespace:     options.Namespace,
 		strictSandbox: options.StrictSandbox,
 		id:            options.ID,
+		mode:          options.Mode,
 	}
 }
 
