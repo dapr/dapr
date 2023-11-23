@@ -163,7 +163,7 @@ func (a *activityActor) executeActivity(ctx context.Context, actorID string, nam
 	//       introduce some kind of heartbeat protocol to help identify such cases.
 	callback := make(chan bool)
 	wi.Properties[CallbackChannelProperty] = callback
-	wfLogger.Debugf("activity actor '%s': scheduling activity %s for workflow with instanceId '%s'", actorID, name, wi.InstanceID)
+	wfLogger.Debugf("activity actor '%s': scheduling activity '%s' for workflow with instanceId '%s'", actorID, name, wi.InstanceID)
 	if err = a.scheduler.ScheduleActivity(ctx, wi); err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
 			return newRecoverableError(fmt.Errorf("timed-out trying to schedule an activity execution - this can happen if too many activities are running in parallel or if the workflow engine isn't running: %w", err))
@@ -182,7 +182,7 @@ loop:
 			return ctx.Err()
 		case <-t.C:
 			if deadline, ok := ctx.Deadline(); ok {
-				wfLogger.Warnf("activity actor '%s': '%s' is still running - will keep waiting until %v", actorID, name, deadline)
+				wfLogger.Warnf("activity actor '%s': '%s' is still running - will keep waiting until '%v'", actorID, name, deadline)
 			} else {
 				wfLogger.Warnf("activity actor '%s': '%s' is still running - will keep waiting indefinitely", actorID, name)
 			}
@@ -197,7 +197,7 @@ loop:
 			}
 		}
 	}
-	wfLogger.Debugf("activity actor '%s': activity '%s' completed for workflow with instanceId %s ", actorID, name, wi.InstanceID)
+	wfLogger.Debugf("activity actor '%s': activity '%s' completed for workflow with instanceId '%s' ", actorID, name, wi.InstanceID)
 
 	// publish the result back to the workflow actor as a new event to be processed
 	resultData, err := backend.MarshalHistoryEvent(wi.Result)
