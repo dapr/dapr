@@ -51,6 +51,9 @@ type ComponentStore struct {
 	components              []compsv1alpha1.Component
 	subscriptions           []rtpubsub.Subscription
 	httpEndpoints           []httpEndpointV1alpha1.HTTPEndpoint
+
+	compPendingLock sync.Mutex
+	compPending     *compsv1alpha1.Component
 }
 
 func New() *ComponentStore {

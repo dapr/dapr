@@ -26,7 +26,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/dapr/dapr/pkg/actors"
-	"github.com/dapr/dapr/utils"
+	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/kit/logger"
 )
 
@@ -38,16 +38,13 @@ type WorkflowEngine struct {
 	worker               backend.TaskHubWorker
 	registerGrpcServerFn func(grpcServer grpc.ServiceRegistrar)
 
-	workflowActor *workflowActor
-	activityActor *activityActor
-
 	actorRuntime  actors.ActorRuntime
 	actorsReady   atomic.Bool
 	actorsReadyCh chan struct{}
 
 	startMutex     sync.Mutex
 	disconnectChan chan any
-	config         wfConfig
+	spec           config.WorkflowSpec
 }
 
 const (
@@ -62,58 +59,24 @@ var (
 	errExecutionAborted = errors.New("execution aborted")
 )
 
-// wfConfig is the configuration for the workflow engine
-type wfConfig struct {
-	AppID             string
-	workflowActorType string
-	activityActorType string
-}
-
-// NewWorkflowConfig creates a new workflow engine configuration
-func NewWorkflowConfig(appID string) wfConfig {
-	return wfConfig{
-		AppID:             appID,
-		workflowActorType: actors.InternalActorTypePrefix + utils.GetNamespaceOrDefault(defaultNamespace) + utils.DotDelimiter + appID + utils.DotDelimiter + WorkflowNameLabelKey,
-		activityActorType: actors.InternalActorTypePrefix + utils.GetNamespaceOrDefault(defaultNamespace) + utils.DotDelimiter + appID + utils.DotDelimiter + ActivityNameLabelKey,
-	}
-}
-
-// String implements fmt.Stringer and is primarily used for debugging purposes.
-func (c *wfConfig) String() string {
-	if c == nil {
-		return "(nil)"
-	}
-	return fmt.Sprintf("AppID:'%s', workflowActorType:'%s', activityActorType:'%s'", c.AppID, c.workflowActorType, c.activityActorType)
-}
-
 func IsWorkflowRequest(path string) bool {
 	return backend.IsDurableTaskGrpcRequest(path)
 }
 
-func NewWorkflowEngine(config wfConfig) *WorkflowEngine {
-	// In order to lazily start the engine (i.e. when it is invoked
-	// by the application when it registers workflows / activities or by
-	// an API call to interact with the engine) we need to inject the engine
-	// into the backend because the backend is what is registered with the gRPC
-	// service and needs to have a reference in order to start it.
+func NewWorkflowEngine(appID string, spec config.WorkflowSpec) *WorkflowEngine {
 	engine := &WorkflowEngine{
-		config:        config,
+		spec:          spec,
 		actorsReadyCh: make(chan struct{}),
 	}
-	be := NewActorBackend(engine)
+	be := NewActorBackend(appID)
 	engine.backend = be
-	engine.activityActor = NewActivityActor(be, config)
-	engine.workflowActor = NewWorkflowActor(be, config)
 
 	return engine
 }
 
-// InternalActors returns a map of internal actors that are used to implement workflows
-func (wfe *WorkflowEngine) InternalActors() map[string]actors.InternalActor {
-	internalActors := make(map[string]actors.InternalActor)
-	internalActors[wfe.config.workflowActorType] = wfe.workflowActor
-	internalActors[wfe.config.activityActorType] = wfe.activityActor
-	return internalActors
+// GetInternalActorsMap returns a map of internal actors that are used to implement workflows
+func (wfe *WorkflowEngine) GetInternalActorsMap() map[string]actors.InternalActor {
+	return wfe.backend.GetInternalActorsMap()
 }
 
 func (wfe *WorkflowEngine) RegisterGrpcServer(grpcServer *grpc.Server) {
@@ -173,8 +136,8 @@ func (wfe *WorkflowEngine) WaitForActorsReady(ctx context.Context) {
 // when actors are newly activated on nodes, but without requiring the actor to actually
 // go through activation.
 func (wfe *WorkflowEngine) DisableActorCaching(disable bool) {
-	wfe.workflowActor.cachingDisabled = disable
-	wfe.activityActor.cachingDisabled = disable
+	wfe.backend.workflowActor.cachingDisabled = disable
+	wfe.backend.activityActor.cachingDisabled = disable
 }
 
 // SetWorkflowTimeout allows configuring a default timeout for workflow execution steps.
@@ -182,21 +145,28 @@ func (wfe *WorkflowEngine) DisableActorCaching(disable bool) {
 // Note that this timeout is for a non-blocking step in the workflow (which is expected
 // to always complete almost immediately) and not for the end-to-end workflow execution.
 func (wfe *WorkflowEngine) SetWorkflowTimeout(timeout time.Duration) {
-	wfe.workflowActor.defaultTimeout = timeout
+	wfe.backend.workflowActor.defaultTimeout = timeout
 }
 
 // SetActivityTimeout allows configuring a default timeout for activity executions.
 // If the timeout is exceeded, the activity execution will be abandoned and retried.
 func (wfe *WorkflowEngine) SetActivityTimeout(timeout time.Duration) {
-	wfe.activityActor.defaultTimeout = timeout
+	wfe.backend.activityActor.defaultTimeout = timeout
 }
 
 // SetActorReminderInterval sets the amount of delay between internal retries for
 // workflow and activity actors. This impacts how long it takes for an operation to
 // restart itself after a timeout or a process failure is encountered while running.
 func (wfe *WorkflowEngine) SetActorReminderInterval(interval time.Duration) {
-	wfe.workflowActor.reminderInterval = interval
-	wfe.activityActor.reminderInterval = interval
+	wfe.backend.workflowActor.reminderInterval = interval
+	wfe.backend.activityActor.reminderInterval = interval
+}
+
+// SetLogLevel sets the logging level for the workflow engine.
+// This function is only intended to be used for testing.
+func SetLogLevel(level logger.LogLevel) {
+	wfLogger.SetOutputLevel(level)
+	wfBackendLogger.SetOutputLevel(level)
 }
 
 func (wfe *WorkflowEngine) Start(ctx context.Context) (err error) {
@@ -217,19 +187,27 @@ func (wfe *WorkflowEngine) Start(ctx context.Context) (err error) {
 		return errors.New("gRPC executor is not yet configured")
 	}
 
-	for actorType, actor := range wfe.InternalActors() {
+	for actorType, actor := range wfe.GetInternalActorsMap() {
 		err = wfe.actorRuntime.RegisterInternalActor(ctx, actorType, actor, time.Minute*1)
 		if err != nil {
 			return fmt.Errorf("failed to register workflow actor %s: %w", actorType, err)
 		}
 	}
 
-	// TODO: Determine whether a more dynamic parallelism configuration is necessary.
-	parallelismOpts := backend.WithMaxParallelism(100)
-
-	orchestrationWorker := backend.NewOrchestrationWorker(wfe.backend, wfe.executor, wfBackendLogger, parallelismOpts)
-	activityWorker := backend.NewActivityTaskWorker(wfe.backend, wfe.executor, wfBackendLogger, parallelismOpts)
+	// There are separate "workers" for executing orchestrations (workflows) and activities
+	orchestrationWorker := backend.NewOrchestrationWorker(
+		wfe.backend,
+		wfe.executor,
+		wfBackendLogger,
+		backend.WithMaxParallelism(wfe.spec.GetMaxConcurrentWorkflowInvocations()))
+	activityWorker := backend.NewActivityTaskWorker(
+		wfe.backend,
+		wfe.executor,
+		wfBackendLogger,
+		backend.WithMaxParallelism(wfe.spec.GetMaxConcurrentActivityInvocations()))
 	wfe.worker = backend.NewTaskHubWorker(wfe.backend, orchestrationWorker, activityWorker, wfBackendLogger)
+
+	// Start the Durable Task worker, which will allow workflows to be scheduled and execute.
 	if err := wfe.worker.Start(ctx); err != nil {
 		return fmt.Errorf("failed to start workflow engine: %w", err)
 	}
