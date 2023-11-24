@@ -31,3 +31,6 @@ spec:
     features:
         - name: Test.Feature
           enabled: true
+    workflow:
+        maxConcurrentWorkflowInvocations: 100
+        maxConcurrentActivityInvocations: 100
