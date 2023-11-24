@@ -552,11 +552,9 @@ jobs:
         run: ./tests/test-infra/skip_${{ env.TEST_CLOUD_ENV }}.sh
         shell: bash
       - name: Run E2E tests
-        id: e2ejob  
         if: env.TEST_PREFIX != '' && env.SKIP_E2E != 'true'
         run: |
           make test-e2e-all > e2e_log.txt
-          cat e2e_log.txt
       - name: Check E2E Log  
         if: always()
         run: |  
