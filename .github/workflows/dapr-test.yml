@@ -222,9 +222,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # - os: ubuntu-22.04
-          #   target_os: linux
-          #   target_arch: amd64
+          - os: ubuntu-22.04
+            target_os: linux
+            target_arch: amd64
           - os: windows-2022
             target_os: windows
             target_arch: amd64
@@ -415,8 +415,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # - target_os: linux
-          #   target_arch: amd64
+          - target_os: linux
+            target_arch: amd64
           - target_os: windows
             target_arch: amd64
             windows_version: ltsc2022
