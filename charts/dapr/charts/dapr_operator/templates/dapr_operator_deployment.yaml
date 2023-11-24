@@ -34,8 +34,8 @@ spec:
         prometheus.io/port: "{{ .Values.global.prometheus.port }}"
         prometheus.io/path: "/"
 {{- end }}
-{{- if .Values.deploymentAnnotations }}
-{{ toYaml .Values.deploymentAnnotations | indent 4}}
+{{- with .Values.deploymentAnnotations }}
+{{ toYaml . | indent 8 }}
 {{- end }}
     spec:
       containers:
