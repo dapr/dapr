@@ -920,7 +920,9 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 
 	outboxEnabled := a.pubsubAdapter.Outbox().Enabled(in.StoreName)
 	if outboxEnabled {
-		trs, err := a.pubsubAdapter.Outbox().PublishInternal(ctx, in.StoreName, operations, a.UniversalAPI.AppID)
+		span := diagUtils.SpanFromContext(ctx)
+		corID, traceState := diag.TraceIDAndStateFromSpan(span)
+		trs, err := a.pubsubAdapter.Outbox().PublishInternal(ctx, in.StoreName, operations, a.UniversalAPI.AppID, corID, traceState)
 		if err != nil {
 			err = status.Errorf(codes.Internal, messages.ErrPublishOutbox, err.Error())
 			apiServerLogger.Debug(err)
