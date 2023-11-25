@@ -14,8 +14,6 @@
 name: dapr-bot-schedule
 
 on:
-  schedule:
-    - cron: '*/10 * * * *'
   workflow_dispatch:
 jobs:
   automerge:
