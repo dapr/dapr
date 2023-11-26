@@ -115,6 +115,7 @@ type Processor struct {
 
 	pendingHTTPEndpoints       chan httpendpointsapi.HTTPEndpoint
 	pendingComponents          chan componentsapi.Component
+	pendingComponentsWaiting   sync.WaitGroup
 	pendingComponentDependents map[string][]componentsapi.Component
 
 	lock     sync.RWMutex
@@ -169,8 +170,8 @@ func New(opts Options) *Processor {
 	})
 
 	return &Processor{
-		pendingHTTPEndpoints:       make(chan httpendpointsapi.HTTPEndpoint),
-		pendingComponents:          make(chan componentsapi.Component),
+		pendingHTTPEndpoints:       make(chan httpendpointsapi.HTTPEndpoint, 1),
+		pendingComponents:          make(chan componentsapi.Component, 1),
 		pendingComponentDependents: make(map[string][]componentsapi.Component),
 		closedCh:                   make(chan struct{}),
 		compStore:                  opts.ComponentStore,
@@ -276,14 +277,18 @@ func (p *Processor) Process(ctx context.Context) error {
 func (p *Processor) AddPendingComponent(ctx context.Context, comp componentsapi.Component) bool {
 	p.chlock.RLock()
 	defer p.chlock.RUnlock()
+
 	if p.shutdown.Load() {
 		return false
 	}
 
+	p.pendingComponentsWaiting.Add(1)
 	select {
 	case <-ctx.Done():
+		p.pendingComponentsWaiting.Done()
 		return false
 	case <-p.closedCh:
+		p.pendingComponentsWaiting.Done()
 		return false
 	case p.pendingComponents <- comp:
 		return true
@@ -308,9 +313,9 @@ func (p *Processor) AddPendingEndpoint(ctx context.Context, endpoint httpendpoin
 }
 
 func (p *Processor) processComponents(ctx context.Context) error {
-	for comp := range p.pendingComponents {
+	process := func(comp componentsapi.Component) error {
 		if comp.Name == "" {
-			continue
+			return nil
 		}
 
 		err := p.processComponentAndDependents(ctx, comp)
@@ -321,6 +326,15 @@ func (p *Processor) processComponents(ctx context.Context) error {
 				return err
 			}
 			log.Error(err)
+		}
+		return nil
+	}
+
+	for comp := range p.pendingComponents {
+		err := process(comp)
+		p.pendingComponentsWaiting.Done()
+		if err != nil {
+			return err
 		}
 	}
 
@@ -337,6 +351,11 @@ func (p *Processor) processHTTPEndpoints(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// WaitForEmptyComponentQueue waits for the component queue to be empty.
+func (p *Processor) WaitForEmptyComponentQueue() {
+	p.pendingComponentsWaiting.Wait()
 }
 
 func (p *Processor) processComponentAndDependents(ctx context.Context, comp componentsapi.Component) error {

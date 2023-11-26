@@ -67,6 +67,7 @@ func (c *component) update(ctx context.Context, comp componentsapi.Component) {
 	log.Infof("Adding Component for processing: %s", comp.LogName())
 	if c.proc.AddPendingComponent(ctx, comp) {
 		log.Infof("Component updated: %s", comp.LogName())
+		c.proc.WaitForEmptyComponentQueue()
 	}
 }
 
