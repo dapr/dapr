@@ -18,9 +18,6 @@ name: dapr-test-sdk
 
 on:
   # Run every 12 hours on weekdays, and every 24 hours on weekends.
-  schedule:
-    - cron: "16 */11 * * 1-5"
-    - cron: "41 0 * * 0,6"
   # Dispatch on external events
   repository_dispatch:
     types:
