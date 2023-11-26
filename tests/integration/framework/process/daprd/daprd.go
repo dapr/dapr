@@ -75,7 +75,7 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		publicPort:       fp.Port(t, 3),
 		metricsPort:      fp.Port(t, 4),
 		profilePort:      fp.Port(t, 5),
-		logLevel:         "debug",
+		logLevel:         "info",
 		mode:             "standalone",
 	}
 
