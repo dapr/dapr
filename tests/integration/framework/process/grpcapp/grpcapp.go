@@ -46,6 +46,7 @@ func New(t *testing.T, fopts ...Option) *GRPCApp {
 				listTopicSubFn:   opts.listTopicSubFn,
 				listInputBindFn:  opts.listInputBindFn,
 				onBindingEventFn: opts.onBindingEventFn,
+				healthCheckFn:    opts.healthCheckFn,
 			}
 			rtv1.RegisterAppCallbackServer(s, srv)
 			rtv1.RegisterAppCallbackHealthCheckServer(s, srv)

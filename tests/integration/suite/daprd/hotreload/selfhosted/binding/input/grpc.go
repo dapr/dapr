@@ -15,7 +15,6 @@ package input
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"sync/atomic"
@@ -24,8 +23,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	googlegrpc "google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -131,14 +128,7 @@ spec:
 func (g *grpc) Run(t *testing.T, ctx context.Context) {
 	g.daprd.WaitUntilRunning(t, ctx)
 
-	conn, err := googlegrpc.DialContext(ctx, fmt.Sprintf("localhost:%d", g.daprd.GRPCPort()),
-		googlegrpc.WithTransportCredentials(insecure.NewCredentials()),
-		googlegrpc.WithBlock(),
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, conn.Close()) })
-
-	client := rtv1.NewDaprClient(conn)
+	client := g.daprd.GRPCClient(t, ctx)
 
 	t.Run("expect 1 component to be loaded", func(t *testing.T) {
 		resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))

@@ -32,6 +32,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/framework/process"
@@ -75,7 +76,7 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		publicPort:       fp.Port(t, 3),
 		metricsPort:      fp.Port(t, 4),
 		profilePort:      fp.Port(t, 5),
-		logLevel:         "debug",
+		logLevel:         "info",
 		mode:             "standalone",
 	}
 
@@ -228,6 +229,17 @@ func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
 			return err == nil
 		}, 10*time.Second, 100*time.Millisecond)
 	}
+}
+
+func (d *Daprd) GRPCClient(t *testing.T, ctx context.Context) rtv1.DaprClient {
+	conn, err := grpc.DialContext(ctx, fmt.Sprintf("localhost:%d", d.GRPCPort()),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithBlock(),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, conn.Close()) })
+
+	return rtv1.NewDaprClient(conn)
 }
 
 func (d *Daprd) AppID() string {

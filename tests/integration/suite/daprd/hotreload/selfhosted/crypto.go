@@ -26,8 +26,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 
 	commonv1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	rtpbv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -77,14 +75,7 @@ spec:
 func (c *crypto) Run(t *testing.T, ctx context.Context) {
 	c.daprd.WaitUntilRunning(t, ctx)
 
-	conn, err := grpc.DialContext(ctx, fmt.Sprintf("localhost:%d", c.daprd.GRPCPort()),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, conn.Close()) })
-
-	client := rtv1.NewDaprClient(conn)
+	client := c.daprd.GRPCClient(t, ctx)
 
 	t.Run("expect no components to be loaded yet", func(t *testing.T) {
 		resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
