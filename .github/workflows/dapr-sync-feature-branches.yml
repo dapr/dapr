@@ -14,7 +14,6 @@
 name: dapr-sync-feature-branches
 
 on:
-  workflow_dispatch:
   push:
     branches:
       - master
