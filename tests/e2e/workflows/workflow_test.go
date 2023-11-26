@@ -164,7 +164,33 @@ func raiseEventTest(url string, instanceID string) error {
 	postString = fmt.Sprintf("%s/RaiseWorkflowEvent/dapr/%s/ChangePurchaseItem/1", url, instanceID)
 	resp, err = utils.HTTPPost(postString, nil)
 
-	time.Sleep(1 * time.Second)
+	// Raise parallel events on the workflow
+	postString = fmt.Sprintf("%s/RaiseWorkflowEvent/dapr/%s/ConfirmSize/1", url, instanceID)
+	_, err = utils.HTTPPost(postString, nil)
+	if err != nil {
+		return fmt.Errorf("failure getting info on workflow: %w", err)
+	}
+
+	postString = fmt.Sprintf("%s/RaiseWorkflowEvent/dapr/%s/ConfirmColor/1", url, instanceID)
+	_, err = utils.HTTPPost(postString, nil)
+	if err != nil {
+		return fmt.Errorf("failure getting info on workflow: %w", err)
+	}
+
+	postString = fmt.Sprintf("%s/RaiseWorkflowEvent/dapr/%s/ConfirmAddress/1", url, instanceID)
+	_, err = utils.HTTPPost(postString, nil)
+	if err != nil {
+		return fmt.Errorf("failure getting info on workflow: %w", err)
+	}
+
+	// Raise a parallel event on the workflow
+	postString = fmt.Sprintf("%s/RaiseWorkflowEvent/dapr/%s/PayByCard/1", url, instanceID)
+	_, err = utils.HTTPPost(postString, nil)
+	if err != nil {
+		return fmt.Errorf("failure getting info on workflow: %w", err)
+	}
+
+	time.Sleep(10 * time.Second)
 
 	resp, err = utils.HTTPGet(getString)
 	if err != nil {
