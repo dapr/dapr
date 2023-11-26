@@ -72,19 +72,19 @@ spec:
 				assert.True(t, g.registered[0].Load())
 				if g.listening[0].Load() {
 					g.listening[0].Store(false)
-					g.bindingChan[0] <- string(in.Name)
+					g.bindingChan[0] <- in.Name
 				}
 			case "binding2":
 				assert.True(t, g.registered[1].Load())
 				if g.listening[1].Load() {
 					g.listening[1].Store(false)
-					g.bindingChan[1] <- string(in.Name)
+					g.bindingChan[1] <- in.Name
 				}
 			case "binding3":
 				assert.True(t, g.registered[2].Load())
 				if g.listening[2].Load() {
 					g.listening[2].Store(false)
-					g.bindingChan[2] <- string(in.Name)
+					g.bindingChan[2] <- in.Name
 				}
 			default:
 				assert.Failf(t, "unexpected binding name", "binding name: %s", in.Name)

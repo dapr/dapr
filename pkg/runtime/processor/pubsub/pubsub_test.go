@@ -1807,7 +1807,7 @@ func TestPubsubLifecycle(t *testing.T) {
 	t.Run("subscribe to mockPubSub3/topic4", func(t *testing.T) {
 		resetState()
 
-		err = ps.subscribeTopic(context.Background(), "mockPubSub3", "topic4", compstore.TopicRouteElem{})
+		err = ps.subscribeTopic("mockPubSub3", "topic4", compstore.TopicRouteElem{})
 		require.NoError(t, err)
 
 		sendMessages(t, 2)

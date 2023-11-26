@@ -89,7 +89,7 @@ func New(ctx context.Context, opts Options) (loader.Interface, error) {
 				return
 
 			case <-eventCh:
-				// Use a seperate index every batch to prevent deduplicates of separate
+				// Use a separate: index every batch to prevent deduplicates of separate
 				// file updates happening at the same time.
 				i++
 				batcher.Batch(i)

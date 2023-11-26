@@ -72,7 +72,7 @@ func (p *pubsub) beginPubSub(ctx context.Context, name string) error {
 
 	var errs []error
 	for topic, route := range v {
-		err = p.subscribeTopic(ctx, name, topic, route)
+		err = p.subscribeTopic(name, topic, route)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("error occurred while beginning pubsub for topic %s on component %s: %v", topic, name, err))
 		}

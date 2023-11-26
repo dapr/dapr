@@ -196,7 +196,7 @@ spec:
 	t.Run("delete last component", func(t *testing.T) {
 		require.NoError(t, os.Remove(filepath.Join(h.resDir, "2.yaml")))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(t, ctx, client, h.daprd.HTTPPort()), 0)
+			assert.Empty(c, util.GetMetaComponents(t, ctx, client, h.daprd.HTTPPort()))
 		}, time.Second*5, time.Millisecond*100)
 		h.publishMessageFails(t, ctx, client, "pubsub1", "topic1")
 		h.publishMessageFails(t, ctx, client, "pubsub2", "topic2")
@@ -254,5 +254,6 @@ func (h *http) publishMessageFails(t *testing.T, ctx context.Context, client *ne
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := client.Do(req)
 	require.NoError(t, err)
+	defer resp.Body.Close()
 	assert.Equal(t, nethttp.StatusNotFound, resp.StatusCode, reqURL)
 }

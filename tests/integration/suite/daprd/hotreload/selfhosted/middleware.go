@@ -165,6 +165,7 @@ func (m *middleware) doReq(t assert.TestingT, ctx context.Context, client *http.
 	if assert.NoError(t, err) {
 		resp, err := client.Do(req)
 		if assert.NoError(t, err) {
+			defer resp.Body.Close()
 			assert.Equal(t, expCode, resp.StatusCode, path)
 		}
 	}

@@ -33,7 +33,7 @@ const (
 	metadataKeyPubSub = "pubsubName"
 )
 
-func (p *pubsub) subscribeTopic(ctx context.Context, name, topic string, route compstore.TopicRouteElem) error {
+func (p *pubsub) subscribeTopic(name, topic string, route compstore.TopicRouteElem) error {
 	subKey := topicKey(name, topic)
 
 	pubSub, ok := p.compStore.GetPubSub(name)

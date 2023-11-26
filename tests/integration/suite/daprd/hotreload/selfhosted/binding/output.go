@@ -250,6 +250,7 @@ func (o *output) postBindingFail(t *testing.T, ctx context.Context, client *http
 
 	resp, err := client.Do(req)
 	require.NoError(t, err)
+	defer resp.Body.Close()
 	respbody, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusInternalServerError, resp.StatusCode, string(respbody))
