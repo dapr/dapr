@@ -18,8 +18,6 @@ name: Cleanup Azure test resources
 
 on:
   # Run every 6 hours
-  schedule:
-    - cron: '30 */6 * * *'
   # Manual trigger
   workflow_dispatch:
 
