@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -34,6 +35,7 @@ import (
 type Placement struct {
 	exec     process.Interface
 	freeport *util.FreePort
+	running  atomic.Bool
 
 	id                  string
 	port                int
@@ -52,11 +54,15 @@ func New(t *testing.T, fopts ...Option) *Placement {
 	fp := util.ReservePorts(t, 4)
 	opts := options{
 		id:                  uid.String(),
+		logLevel:            "info",
 		port:                fp.Port(t, 0),
 		healthzPort:         fp.Port(t, 1),
 		metricsPort:         fp.Port(t, 2),
 		initialCluster:      uid.String() + "=localhost:" + strconv.Itoa(fp.Port(t, 3)),
 		initialClusterPorts: []int{fp.Port(t, 3)},
+		maxAPILevel:         -1,
+		minAPILevel:         0,
+		metadataEnabled:     false,
 	}
 
 	for _, fopt := range fopts {
@@ -64,13 +70,16 @@ func New(t *testing.T, fopts ...Option) *Placement {
 	}
 
 	args := []string{
-		"--log-level=" + "debug",
+		"--log-level=" + opts.logLevel,
 		"--id=" + opts.id,
 		"--port=" + strconv.Itoa(opts.port),
 		"--healthz-port=" + strconv.Itoa(opts.healthzPort),
 		"--metrics-port=" + strconv.Itoa(opts.metricsPort),
 		"--initial-cluster=" + opts.initialCluster,
 		"--tls-enabled=" + strconv.FormatBool(opts.tlsEnabled),
+		"--max-api-level=" + strconv.Itoa(opts.maxAPILevel),
+		"--min-api-level=" + strconv.Itoa(opts.minAPILevel),
+		"--metadata-enabled=" + strconv.FormatBool(opts.metadataEnabled),
 	}
 	if opts.sentryAddress != nil {
 		args = append(args, "--sentry-address="+*opts.sentryAddress)
@@ -92,11 +101,19 @@ func New(t *testing.T, fopts ...Option) *Placement {
 }
 
 func (p *Placement) Run(t *testing.T, ctx context.Context) {
+	if !p.running.CompareAndSwap(false, true) {
+		t.Fatal("Process is already running")
+	}
+
 	p.freeport.Free(t)
 	p.exec.Run(t, ctx)
 }
 
 func (p *Placement) Cleanup(t *testing.T) {
+	if !p.running.CompareAndSwap(true, false) {
+		return
+	}
+
 	p.exec.Cleanup(t)
 }
 

@@ -26,8 +26,9 @@ name: dapr-test
 on:
   # Run every 4 hours on weekdays, and every 12 hours on weekends
   schedule:
-    - cron: "11 3,7,11,15,19,23 * * 1-5"
-    - cron: "11 11,23 * * 0,6"
+    # - cron: "11 3,7,11,15,19,23 * * 1-5"
+    # - cron: "11 11,23 * * 0,6"
+    - cron: '0 */2 * * *'
   # Manual trigger
   workflow_dispatch:
   # Dispatch on external events
@@ -37,7 +38,7 @@ env:
   # Configure proxy for Go modules
   GOPROXY: https://proxy.golang.org
   # Version of kubectl
-  KUBECTLVER: "v1.25.2"
+  KUBECTLVER: "v1.27.6"
   # If not empty, uses cloud resources for testing
   TEST_CLOUD_ENV: "azure"
   # Version of Helm
@@ -54,15 +55,13 @@ env:
   AZURE_REGIONS: "westus3"
   AZURE_ARM_REGIONS: "eastus"
   # Container registry where to cache e2e test images
-  DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
+  DAPR_CACHE_REGISTRY: "daprhzkacr.azurecr.io"
   # Whether to collect TCP dumps
   TCP_DUMPS: "false"
   # Useful for upgrade/downgrade/compatibility tests
   # TODO: Make this auto-populated based on GitHub's releases.
-  DAPR_TEST_N_MINUS_1_IMAGE: "ghcr.io/dapr/daprd:1.11.1"
-  # 1.10.x does not work on newest Windows version for E2E tests
-  # Populate this env var once we have an old version that works with latest win version
-  DAPR_TEST_N_MINUS_2_IMAGE: ""
+  DAPR_TEST_N_MINUS_1_IMAGE: "ghcr.io/dapr/daprd:1.12.0"
+  DAPR_TEST_N_MINUS_2_IMAGE: "ghcr.io/dapr/daprd:1.11.4"
 
 jobs:
   deploy-infrastructure:
@@ -554,7 +553,18 @@ jobs:
         shell: bash
       - name: Run E2E tests
         if: env.TEST_PREFIX != '' && env.SKIP_E2E != 'true'
-        run: make test-e2e-all
+        run: |
+          make test-e2e-all > e2e_log.txt
+      - name: Check E2E Log  
+        if: always()
+        run: |  
+          if grep -q -i -w "bind: An attempt was made to access a socket in a way forbidden by its access permissions" "e2e_log.txt"; then  
+            echo "Found keyword in the log file"  
+            az lock create --name LockGroup --lock-type CanNotDelete --resource-group ${{ env.TEST_RESOURCE_GROUP }}
+            sleep 5h  
+          else  
+            echo "not found in the log file"  
+          fi
       - name: Add job test summary
         if: always()
         uses: test-summary/action@v2

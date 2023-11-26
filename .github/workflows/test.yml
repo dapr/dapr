@@ -1,0 +1,22 @@
+name: test-check-log
+
+on:
+  workflow_dispatch:
+
+
+jobs:
+  run:
+      name:  run job
+      runs-on: ubuntu-22.04
+      steps:
+        - name: Run E2E tests
+          run: |
+            echo "asd 50001 bind asd" > log.txt
+        - name: check e2e log
+          run: |
+            if grep -q -i -w "50001 bind" "log.txt"; then  
+              echo "Found keyword in the log file"  
+              # Add actions or notifications you want to trigger when a keyword is found  
+            else  
+              echo "not found in the log file"  
+            fi    

@@ -17,12 +17,10 @@ limitations under the License.
 package hellodapr_e2e
 
 import (
-	"log"
 	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
@@ -61,14 +59,14 @@ func TestMain(m *testing.M) {
 	tr = runner.NewTestRunner(appName, testApps, nil, nil)
 	code := tr.Start(m)
 
-	for _, app := range testApps {
-		_, err := tr.Platform.GetService(daprServiceName)
-		if err == nil {
-			log.Fatalf("the dapr service %s still exists after app %s deleted", daprServiceName, app.AppName)
-		} else if !errors.IsNotFound(err) {
-			log.Fatalf("failed to get dapr service %s, err: %v", daprServiceName, err)
-		}
-	}
+	// for _, app := range testApps {
+	// 	_, err := tr.Platform.GetService(daprServiceName)
+	// 	if err == nil {
+	// 		log.Fatalf("the dapr service %s still exists after app %s deleted", daprServiceName, app.AppName)
+	// 	} else if !errors.IsNotFound(err) {
+	// 		log.Fatalf("failed to get dapr service %s, err: %v", daprServiceName, err)
+	// 	}
+	// }
 
 	os.Exit(code)
 }

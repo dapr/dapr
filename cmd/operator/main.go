@@ -16,12 +16,12 @@ package main
 import (
 	"github.com/dapr/dapr/cmd/operator/options"
 	"github.com/dapr/dapr/pkg/buildinfo"
-	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/operator"
 	"github.com/dapr/dapr/pkg/operator/monitoring"
-	"github.com/dapr/dapr/pkg/signals"
+	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/signals"
 )
 
 var log = logger.NewLogger("dapr.operator")
@@ -55,6 +55,8 @@ func main() {
 		WatchdogEnabled:                     opts.WatchdogEnabled,
 		WatchdogInterval:                    opts.WatchdogInterval,
 		WatchdogCanPatchPodLabels:           opts.WatchdogCanPatchPodLabels,
+		APIPort:                             opts.APIPort,
+		HealthzPort:                         opts.HealthzPort,
 	})
 	if err != nil {
 		log.Fatalf("error creating operator: %v", err)

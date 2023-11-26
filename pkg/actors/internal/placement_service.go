@@ -16,7 +16,14 @@ package internal
 import (
 	"context"
 	"io"
+	"time"
 )
+
+// HaltActorFn is the signature of the function invoked when the placement service requires an actor to be deactivated.
+type HaltActorFn = func(actorType string, actorID string) error
+
+// HaltAllActorsFn is the signature of the function invoked when the placement service requires all actors to be deactivated.
+type HaltAllActorsFn = func() error
 
 // PlacementService allows for interacting with the actor placement service.
 type PlacementService interface {
@@ -24,6 +31,27 @@ type PlacementService interface {
 
 	Start(context.Context) error
 	WaitUntilReady(ctx context.Context) error
-	LookupActor(actorType, actorID string) (host string, appID string)
-	AddHostedActorType(actorType string) error
+	LookupActor(ctx context.Context, req LookupActorRequest) (LookupActorResponse, error)
+	AddHostedActorType(actorType string, idleTimeout time.Duration) error
+	ReportActorDeactivation(ctx context.Context, actorType, actorID string) error
+
+	SetHaltActorFns(haltFn HaltActorFn, haltAllFn HaltAllActorsFn)
+	SetOnAPILevelUpdate(fn func(apiLevel uint32))
+}
+
+// LookupActorRequest is the request for LookupActor.
+type LookupActorRequest struct {
+	ActorType string
+	ActorID   string
+}
+
+// ActorKey returns the key for the actor, which is "type/id".
+func (lar LookupActorRequest) ActorKey() string {
+	return lar.ActorType + "/" + lar.ActorID
+}
+
+// LookupActorResponse is the response from LookupActor.
+type LookupActorResponse struct {
+	Address string
+	AppID   string
 }

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.opencensus.io/stats/view"
 )
 
@@ -32,29 +33,27 @@ func TestHTTPMiddleware(t *testing.T) {
 
 	// assert
 	rows, err := view.RetrieveData("http/server/request_count")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, 1, len(rows))
 	assert.Equal(t, "app_id", rows[0].Tags[0].Key.Name())
 	assert.Equal(t, "fakeID", rows[0].Tags[0].Value)
-	assert.Equal(t, "method", rows[0].Tags[1].Key.Name())
-	assert.Equal(t, "POST", rows[0].Tags[1].Value)
-	assert.Equal(t, "path", rows[0].Tags[2].Key.Name())
-	assert.Equal(t, "/invoke/method/testmethod", rows[0].Tags[2].Value)
+	assert.Equal(t, "status", rows[0].Tags[1].Key.Name())
+	assert.Equal(t, "200", rows[0].Tags[1].Value)
 
 	rows, err = view.RetrieveData("http/server/request_bytes")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, 1, len(rows))
 	assert.Equal(t, "app_id", rows[0].Tags[0].Key.Name())
 	assert.Equal(t, "fakeID", rows[0].Tags[0].Value)
 	assert.Equal(t, float64(len(requestBody)), (rows[0].Data).(*view.DistributionData).Min)
 
 	rows, err = view.RetrieveData("http/server/response_bytes")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, 1, len(rows))
 	assert.Equal(t, float64(len(responseBody)), (rows[0].Data).(*view.DistributionData).Min)
 
 	rows, err = view.RetrieveData("http/server/latency")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, 1, len(rows))
 	assert.True(t, (rows[0].Data).(*view.DistributionData).Min >= 100.0)
 }
@@ -109,12 +108,16 @@ func TestConvertPathToMethodName(t *testing.T) {
 		{"actors/DemoActor/1/method/remind/reminder1", "actors/DemoActor/{id}/method/remind/reminder1"},
 		{"/v1.0-alpha1/workflows/workflowComponentName/mywf/start?instanceID=1234", "/v1.0-alpha1/workflows/workflowComponentName/mywf/start"},
 		{"/v1.0-alpha1/workflows/workflowComponentName/mywf/start", "/v1.0-alpha1/workflows/workflowComponentName/mywf/start"},
+		{"/v1.0-alpha1/workflows/workflowComponentName/1234/start/value1/value2", "/v1.0-alpha1/workflows/workflowComponentName/{instanceId}/start"},
 		{"/v1.0-alpha1/workflows/workflowComponentName/1234/terminate", "/v1.0-alpha1/workflows/workflowComponentName/{instanceId}/terminate"},
+		{"/v1.0-alpha1/workflows/workflowComponentName/1234/terminate/value1/value2", "/v1.0-alpha1/workflows/workflowComponentName/{instanceId}/terminate"},
 		{"/v1.0-alpha1/workflows/workflowComponentName/1234/raiseEvent/foobaz", "/v1.0-alpha1/workflows/workflowComponentName/{instanceId}/raiseEvent/{eventName}"},
 		{"/v1.0-alpha1/workflows/workflowComponentName/1234/pause", "/v1.0-alpha1/workflows/workflowComponentName/{instanceId}/pause"},
 		{"/v1.0-alpha1/workflows/workflowComponentName/1234/resume", "/v1.0-alpha1/workflows/workflowComponentName/{instanceId}/resume"},
 		{"/v1.0-alpha1/workflows/workflowComponentName/1234/purge", "/v1.0-alpha1/workflows/workflowComponentName/{instanceId}/purge"},
 		{"/v1.0-alpha1/workflows/workflowComponentName/1234", "/v1.0-alpha1/workflows/workflowComponentName/{instanceId}"},
+		{"/v1.0-alpha1/workflows/workflowComponentName", "/v1.0-alpha1/workflows/workflowComponentName"},
+		{"/v1.0-alpha1/workflows", "/v1.0-alpha1/workflows"},
 		{"", ""},
 	}
 

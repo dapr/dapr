@@ -23,13 +23,16 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/dapr/dapr/tests/integration/framework/iowriter"
 )
 
 func BuildAll(t *testing.T) {
 	t.Helper()
 
-	binaryNames := []string{"daprd", "placement", "sentry"}
+	binaryNames := []string{"daprd", "placement", "sentry", "operator"}
 
 	var wg sync.WaitGroup
 	wg.Add(len(binaryNames))
@@ -58,18 +61,25 @@ func Build(t *testing.T, name string) {
 			binPath += ".exe"
 		}
 
-		// Ensure CGO is disabled to avoid linking against system libraries.
-		require.NoError(t, os.Setenv("CGO_ENABLED", "0"))
+		ioout := iowriter.New(t, name)
+		ioerr := iowriter.New(t, name)
 
 		t.Logf("Root dir: %q", rootDir)
 		t.Logf("Compiling %q binary to: %q", name, binPath)
-		cmd := exec.Command("go", "build", "-tags=allcomponents", "-v", "-o", binPath, filepath.Join(rootDir, "cmd/"+name))
+		cmd := exec.Command("go", "build", "-tags=allcomponents", "-v", "-o", binPath, "./cmd/"+name)
 		cmd.Dir = rootDir
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
+		cmd.Stdout = ioout
+		cmd.Stderr = ioerr
+		// Ensure CGO is disabled to avoid linking against system libraries.
+		cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
 		require.NoError(t, cmd.Run())
 
+		assert.NoError(t, ioout.Close())
+		assert.NoError(t, ioerr.Close())
+
 		require.NoError(t, os.Setenv(EnvKey(name), binPath))
+	} else {
+		t.Logf("%q set, using %q pre-built binary", EnvKey(name), EnvValue(name))
 	}
 }
 
