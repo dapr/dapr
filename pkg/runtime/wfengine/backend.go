@@ -110,11 +110,11 @@ func (be *actorBackend) CreateOrchestrationInstance(ctx context.Context, e *back
 	resp, err := be.actors.Call(ctx, req)
 	if err != nil {
 		// Failed request to create workflow, record metrics.
-		diag.DefaultWorkflowMonitoring.WorkflowOperationsFailed(ctx, "Create Workflow")
+		diag.DefaultWorkflowMonitoring.WorkflowOperationsCount(ctx, diag.CreateWorkflow, diag.StatusFailed)
 		return err
 	}
 	// workflow created successfully, record metrics.
-	diag.DefaultWorkflowMonitoring.WorkflowOperationsSuccessful(ctx, "Create Workflow")
+	diag.DefaultWorkflowMonitoring.WorkflowOperationsCount(ctx, diag.CreateWorkflow, diag.StatusSuccess)
 	defer resp.Close()
 	return nil
 }
@@ -131,11 +131,11 @@ func (be *actorBackend) GetOrchestrationMetadata(ctx context.Context, id api.Ins
 	res, err := be.actors.Call(ctx, req)
 	if err != nil {
 		// failed request to GET workflow Information, record metrics
-		diag.DefaultWorkflowMonitoring.WorkflowOperationsFailed(ctx, "Get Workflow")
+		diag.DefaultWorkflowMonitoring.WorkflowOperationsCount(ctx, diag.GetWorkflow, diag.StatusFailed)
 		return nil, err
 	}
 	// GET request for workflow, record metrics
-	diag.DefaultWorkflowMonitoring.WorkflowOperationsSuccessful(ctx, "Get Workflow")
+	diag.DefaultWorkflowMonitoring.WorkflowOperationsCount(ctx, diag.GetWorkflow, diag.StatusSuccess)
 
 	defer res.Close()
 	data := res.RawData()
@@ -188,11 +188,11 @@ func (be *actorBackend) AddNewOrchestrationEvent(ctx context.Context, id api.Ins
 	resp, err := be.actors.Call(ctx, req)
 	if err != nil {
 		// failed request to Add Event, record metrics
-		diag.DefaultWorkflowMonitoring.WorkflowOperationsFailed(ctx, "Add Event")
+		diag.DefaultWorkflowMonitoring.WorkflowOperationsCount(ctx, diag.AddEvent, diag.StatusFailed)
 		return err
 	}
 	// CREATE request to add an Event.
-	diag.DefaultWorkflowMonitoring.WorkflowOperationsSuccessful(ctx, "Add Event")
+	diag.DefaultWorkflowMonitoring.WorkflowOperationsCount(ctx, diag.AddEvent, diag.StatusSuccess)
 	defer resp.Close()
 	return nil
 }
@@ -258,11 +258,11 @@ func (be *actorBackend) PurgeOrchestrationState(ctx context.Context, id api.Inst
 	resp, err := be.actors.Call(ctx, req)
 	if err != nil {
 		// Failed request to Purge Workflow, record workflow/operations metrics
-		diag.DefaultWorkflowMonitoring.WorkflowOperationsFailed(ctx, "Purge Workflow")
+		diag.DefaultWorkflowMonitoring.WorkflowOperationsCount(ctx, diag.PurgeWorkflow, diag.StatusFailed)
 		return err
 	}
 	// DELETE request for workflows
-	diag.DefaultWorkflowMonitoring.WorkflowOperationsSuccessful(ctx, "Purge Workflow")
+	diag.DefaultWorkflowMonitoring.WorkflowOperationsCount(ctx, diag.PurgeWorkflow, diag.StatusSuccess)
 	defer resp.Close()
 	return nil
 }

@@ -15,6 +15,7 @@ package diagnostics
 
 import (
 	"context"
+
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
@@ -27,46 +28,46 @@ var (
 	reminderTypeKey = tag.MustNewKey("reminder_type")
 
 	executionTypeKey = tag.MustNewKey("execution_type")
+)
 
-	isRetryableKey = tag.MustNewKey("is_retryable")
+const (
+	StatusSuccess   = "success"
+	StatusFailed    = "failed"
+	StatusRetryable = "retryable"
+	CreateWorkflow  = "create_workflow"
+	GetWorkflow     = "get_workflow"
+	AddEvent        = "add_event"
+	PurgeWorkflow   = "purge_workflow"
+	Activity        = "activity"
+	Workflow        = "workflow"
+	WorkflowEvent   = "event"
+	Timer           = "timer"
 )
 
 type workflowMetrics struct {
-	// Total successful workflow operation requests
-	workflowOperationsTotal *stats.Int64Measure
-	// Total failed workflow operation requests
-	workflowOperationsFailedTotal *stats.Int64Measure
+	// Total Successful and Failed workflow operation requests
+	workflowOperationsCount *stats.Int64Measure
 	// Workflow operation request's Response latency
 	workflowOperationsLatency *stats.Float64Measure
-
 	// Total workflow/activity reminders created
 	workflowRemindersTotal *stats.Int64Measure
-
-	// Total successful workflow/activity executions
-	workflowExecutionTotal *stats.Int64Measure
-	// Total failed workflow/activity executions
-	workflowExecutionFailedTotal *stats.Int64Measure
+	// Total successful/failed workflow/activity executions
+	workflowExecutionCount *stats.Int64Measure
 	// Time taken to run a workflow to completion
 	workflowExecutionLatency *stats.Float64Measure
-
 	// Latency between execution request and actual execution
 	workflowSchedulingLatency *stats.Float64Measure
-
-	appID   string
-	enabled bool
+	appID                     string
+	enabled                   bool
 }
 
 func newWorkflowMetrics() *workflowMetrics {
 	return &workflowMetrics{
-		workflowOperationsTotal: stats.Int64(
+		workflowOperationsCount: stats.Int64(
 			"runtime/workflow/operations/total",
-			"The number of successful workflow operation requests.",
+			"The number of successful/failed workflow operation requests.",
 			stats.UnitDimensionless),
 
-		workflowOperationsFailedTotal: stats.Int64(
-			"runtime/workflow/operations/failed_total",
-			"The number of failed workflow operations requests.",
-			stats.UnitDimensionless),
 		workflowOperationsLatency: stats.Float64(
 			"runtime/workflow/operations/latency",
 			"The latencies of responses for workflow operation requests.",
@@ -75,13 +76,9 @@ func newWorkflowMetrics() *workflowMetrics {
 			"runtime/workflows/reminders/total",
 			"The number of workflows/activity reminders created.",
 			stats.UnitDimensionless),
-		workflowExecutionTotal: stats.Int64(
+		workflowExecutionCount: stats.Int64(
 			"runtime/workflow/execution/total",
-			"The number of successful workflow/activity executions.",
-			stats.UnitDimensionless),
-		workflowExecutionFailedTotal: stats.Int64(
-			"runtime/workflow/execution/failed_total",
-			"The number of failed workflow/activity executions.",
+			"The number of successful/failed workflow/activity executions.",
 			stats.UnitDimensionless),
 		workflowExecutionLatency: stats.Float64(
 			"runtime/workflow/execution/latency",
@@ -104,12 +101,10 @@ func (w *workflowMetrics) Init(appID string) error {
 	w.enabled = true
 
 	return view.Register(
-		diagUtils.NewMeasureView(w.workflowOperationsTotal, []tag.Key{appIDKey, operationKey}, view.Count()),
-		diagUtils.NewMeasureView(w.workflowOperationsFailedTotal, []tag.Key{appIDKey, operationKey}, view.Count()),
+		diagUtils.NewMeasureView(w.workflowOperationsCount, []tag.Key{appIDKey, operationKey, statusKey}, view.Count()),
 		diagUtils.NewMeasureView(w.workflowOperationsLatency, []tag.Key{appIDKey, elapsedKey}, defaultLatencyDistribution),
 		diagUtils.NewMeasureView(w.workflowRemindersTotal, []tag.Key{appIDKey, reminderTypeKey}, view.Count()),
-		diagUtils.NewMeasureView(w.workflowExecutionTotal, []tag.Key{appIDKey, executionTypeKey}, view.Count()),
-		diagUtils.NewMeasureView(w.workflowExecutionFailedTotal, []tag.Key{appIDKey, executionTypeKey, isRetryableKey}, view.Count()),
+		diagUtils.NewMeasureView(w.workflowExecutionCount, []tag.Key{appIDKey, executionTypeKey, statusKey}, view.Count()),
 		diagUtils.NewMeasureView(w.workflowExecutionLatency, []tag.Key{appIDKey, executionTypeKey, statusKey}, defaultLatencyDistribution),
 		diagUtils.NewMeasureView(w.workflowSchedulingLatency, []tag.Key{appIDKey, executionTypeKey}, defaultLatencyDistribution))
 }
@@ -123,40 +118,23 @@ func (w *workflowMetrics) RemindersTotalCreated(ctx context.Context, reminderTyp
 	stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowRemindersTotal.Name(), appIDKey, w.appID, reminderTypeKey, reminderType), w.workflowRemindersTotal.M(1))
 }
 
-// ExecutionCompleted records total number of successful workflow/activity executions.
-func (w *workflowMetrics) ExecutionCompleted(ctx context.Context, executionType string) {
+// ExecutionCompleted records total number of successful/failed workflow/activity executions.
+func (w *workflowMetrics) ExecutionCount(ctx context.Context, executionType, status string) {
 	if !w.IsEnabled() {
 		return
 	}
 
-	stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowExecutionTotal.Name(), appIDKey, w.appID, executionTypeKey, executionType), w.workflowExecutionTotal.M(1))
+	stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowExecutionCount.Name(), appIDKey, w.appID, executionTypeKey, executionType, statusKey, status))
 }
 
-// ExecutionFailed records total number of failed workflow/activity executions.
-func (w *workflowMetrics) ExecutionFailed(ctx context.Context, executionType string, isRetryable bool) {
+// WorkflowOperationsCount records total number of Successful/Failed workflow Operations requests.
+func (w *workflowMetrics) WorkflowOperationsCount(ctx context.Context, operation, status string) {
 	if !w.IsEnabled() {
 		return
 	}
 
-	stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowExecutionFailedTotal.Name(), appIDKey, w.appID, executionTypeKey, executionType, isRetryableKey, isRetryable), w.workflowExecutionFailedTotal.M(1))
-}
+	stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowOperationsCount.Name(), appIDKey, w.appID, operationKey, operation, statusKey, status), w.workflowOperationsCount.M(1))
 
-// WorkflowOperationsSuccessful records total number of successful workflow Operations requests.
-func (w *workflowMetrics) WorkflowOperationsSuccessful(ctx context.Context, operation string) {
-	if !w.IsEnabled() {
-		return
-	}
-
-	stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowOperationsTotal.Name(), appIDKey, w.appID, operationKey, operation), w.workflowOperationsTotal.M(1))
-}
-
-// WorkflowOperationsFailed records total number of failed workflow Operations requests.
-func (w *workflowMetrics) WorkflowOperationsFailed(ctx context.Context, operation string) {
-	if !w.IsEnabled() {
-		return
-	}
-
-	stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowOperationsFailedTotal.Name(), appIDKey, w.appID, operationKey, operation), w.workflowOperationsFailedTotal.M(1))
 }
 
 // TODO: Implementing logic to record latencies.
