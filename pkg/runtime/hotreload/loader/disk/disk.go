@@ -52,7 +52,7 @@ func New(ctx context.Context, opts Options) (loader.Interface, error) {
 
 	fs, err := fswatcher.New(fswatcher.Options{
 		Targets:  opts.Dirs,
-		Interval: ptr.Of(time.Millisecond * 300),
+		Interval: ptr.Of(time.Millisecond * 200),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create watcher: %w", err)

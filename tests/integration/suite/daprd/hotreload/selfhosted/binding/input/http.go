@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -106,7 +107,7 @@ spec:
   version: v1
   metadata:
   - name: schedule
-    value: "@every 1s"
+    value: "@every 300ms"
   - name: direction
     value: "input"
 `), 0o600))
@@ -144,15 +145,17 @@ spec:
   version: v1
   metadata:
   - name: schedule
-    value: "@every 1s"
+    value: "@every 300ms"
   - name: direction
     value: "input"
 `), 0o600))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Len(c, util.GetMetaComponents(c, ctx, client, h.daprd.HTTPPort()), 2)
 		}, time.Second*5, time.Millisecond*100)
-		h.expectBinding(t, 0, "binding1")
-		h.expectBinding(t, 1, "binding2")
+		h.expectBindings(t, []bindingPair{
+			{0, "binding1"},
+			{1, "binding2"},
+		})
 	})
 
 	t.Run("create a third component", func(t *testing.T) {
@@ -167,7 +170,7 @@ spec:
   version: v1
   metadata:
   - name: schedule
-    value: "@every 1s"
+    value: "@every 300ms"
   - name: direction
     value: "input"
 ---
@@ -180,16 +183,18 @@ spec:
   version: v1
   metadata:
   - name: schedule
-    value: "@every 1s"
+    value: "@every 300ms"
   - name: direction
     value: "input"
 `), 0o600))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Len(c, util.GetMetaComponents(c, ctx, client, h.daprd.HTTPPort()), 3)
 		}, time.Second*5, time.Millisecond*100)
-		h.expectBinding(t, 0, "binding1")
-		h.expectBinding(t, 1, "binding2")
-		h.expectBinding(t, 2, "binding3")
+		h.expectBindings(t, []bindingPair{
+			{0, "binding1"},
+			{1, "binding2"},
+			{2, "binding3"},
+		})
 	})
 
 	t.Run("deleting a component should no longer be available", func(t *testing.T) {
@@ -203,7 +208,7 @@ spec:
   version: v1
   metadata:
   - name: schedule
-    value: "@every 1s"
+    value: "@every 1ms"
   - name: direction
     value: "input"
 `), 0o600))
@@ -211,8 +216,10 @@ spec:
 			assert.Len(c, util.GetMetaComponents(c, ctx, client, h.daprd.HTTPPort()), 2)
 		}, time.Second*5, time.Millisecond*100)
 		h.registered[0].Store(false)
-		h.expectBinding(t, 1, "binding2")
-		h.expectBinding(t, 2, "binding3")
+		h.expectBindings(t, []bindingPair{
+			{1, "binding2"},
+			{2, "binding3"},
+		})
 	})
 
 	t.Run("deleting all components should no longer be available", func(t *testing.T) {
@@ -224,7 +231,7 @@ spec:
 		h.registered[1].Store(false)
 		h.registered[2].Store(false)
 		// Sleep to ensure binding is not triggered.
-		time.Sleep(time.Second * 2)
+		time.Sleep(time.Millisecond * 500)
 	})
 
 	t.Run("recreating binding should start again", func(t *testing.T) {
@@ -239,7 +246,7 @@ spec:
   version: v1
   metadata:
   - name: schedule
-    value: "@every 1s"
+    value: "@every 300ms"
   - name: direction
     value: "input"
 `), 0o600))
@@ -248,6 +255,20 @@ spec:
 		}, time.Second*5, time.Millisecond*100)
 		h.expectBinding(t, 0, "binding1")
 	})
+}
+
+func (h *http) expectBindings(t *testing.T, expected []bindingPair) {
+	t.Helper()
+
+	var wg sync.WaitGroup
+	defer wg.Wait()
+	wg.Add(len(expected))
+	for _, e := range expected {
+		go func(e bindingPair) {
+			h.expectBinding(t, e.i, e.b)
+			wg.Done()
+		}(e)
+	}
 }
 
 func (h *http) expectBinding(t *testing.T, i int, binding string) {
