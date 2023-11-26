@@ -170,8 +170,8 @@ func New(opts Options) *Processor {
 	})
 
 	return &Processor{
-		pendingHTTPEndpoints:       make(chan httpendpointsapi.HTTPEndpoint),
-		pendingComponents:          make(chan componentsapi.Component),
+		pendingHTTPEndpoints:       make(chan httpendpointsapi.HTTPEndpoint, 1),
+		pendingComponents:          make(chan componentsapi.Component, 1),
 		pendingComponentDependents: make(map[string][]componentsapi.Component),
 		closedCh:                   make(chan struct{}),
 		compStore:                  opts.ComponentStore,
