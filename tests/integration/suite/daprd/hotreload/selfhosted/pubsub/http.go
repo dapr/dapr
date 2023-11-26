@@ -222,10 +222,10 @@ spec:
 	})
 }
 
-func (p *http) publishMessage(t *testing.T, ctx context.Context, client *nethttp.Client, pubsub, topic, route string) {
+func (h *http) publishMessage(t *testing.T, ctx context.Context, client *nethttp.Client, pubsub, topic, route string) {
 	t.Helper()
 
-	reqURL := fmt.Sprintf("http://localhost:%d/v1.0/publish/%s/%s", p.daprd.HTTPPort(), pubsub, topic)
+	reqURL := fmt.Sprintf("http://localhost:%d/v1.0/publish/%s/%s", h.daprd.HTTPPort(), pubsub, topic)
 	req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, reqURL, strings.NewReader(`{"status": "completed"}`))
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
@@ -238,17 +238,17 @@ func (p *http) publishMessage(t *testing.T, ctx context.Context, client *nethttp
 	assert.Empty(t, string(respBody))
 
 	select {
-	case topic := <-p.topicChan:
+	case topic := <-h.topicChan:
 		assert.Equal(t, route, topic)
 	case <-time.After(time.Second * 5):
 		assert.Fail(t, "timed out waiting for topic")
 	}
 }
 
-func (p *http) publishMessageFails(t *testing.T, ctx context.Context, client *nethttp.Client, pubsub, topic string) {
+func (h *http) publishMessageFails(t *testing.T, ctx context.Context, client *nethttp.Client, pubsub, topic string) {
 	t.Helper()
 
-	reqURL := fmt.Sprintf("http://localhost:%d/v1.0/publish/%s/%s", p.daprd.HTTPPort(), pubsub, topic)
+	reqURL := fmt.Sprintf("http://localhost:%d/v1.0/publish/%s/%s", h.daprd.HTTPPort(), pubsub, topic)
 	req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, reqURL, strings.NewReader(`{"status": "completed"}`))
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")

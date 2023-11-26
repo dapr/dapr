@@ -99,7 +99,8 @@ func (a *appready) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
+		var resp *rtv1.GetMetadataResponse
+		resp, err = client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 		require.NoError(t, err)
 		assert.Len(c, resp.RegisteredComponents, 1)
 	}, time.Second*5, time.Millisecond*100)
@@ -108,7 +109,8 @@ func (a *appready) Run(t *testing.T, ctx context.Context) {
 	require.Eventually(t, func() bool { return a.healthCalled.Load() > called }, time.Second*5, time.Millisecond*100)
 
 	assert.Eventually(t, func() bool {
-		resp, err := httpClient.Do(req)
+		var resp *http.Response
+		resp, err = httpClient.Do(req)
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		return resp.StatusCode == http.StatusInternalServerError
@@ -134,7 +136,8 @@ func (a *appready) Run(t *testing.T, ctx context.Context) {
 	a.appHealthy.Store(true)
 
 	assert.Eventually(t, func() bool {
-		resp, err := util.HTTPClient(t).Do(req)
+		var resp *http.Response
+		resp, err = util.HTTPClient(t).Do(req)
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		return resp.StatusCode == http.StatusOK
@@ -157,7 +160,8 @@ func (a *appready) Run(t *testing.T, ctx context.Context) {
 	// Should stop sending messages to subscribed app when it becomes unhealthy.
 	a.appHealthy.Store(false)
 	assert.Eventually(t, func() bool {
-		resp, err := httpClient.Do(req)
+		var resp *http.Response
+		resp, err = httpClient.Do(req)
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		return resp.StatusCode == http.StatusInternalServerError

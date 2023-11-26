@@ -22,6 +22,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -30,8 +32,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/grpcapp"
 	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func init() {

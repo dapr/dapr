@@ -346,7 +346,8 @@ spec:
 					{Name: "123", Type: "secretstores.local.file", Version: "v1"},
 					{Name: "xyz", Type: "secretstores.local.env", Version: "v1"},
 					{Name: "foo", Type: "secretstores.local.env", Version: "v1"},
-					{Name: "bar", Type: "state.in-memory", Version: "v1",
+					{
+						Name: "bar", Type: "state.in-memory", Version: "v1",
 						Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
 					},
 				}, resp)

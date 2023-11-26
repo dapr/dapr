@@ -242,7 +242,8 @@ spec:
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
 			assert.ElementsMatch(c, []*rtpbv1.RegisteredComponents{
-				{Name: "crypto1", Type: "state.in-memory", Version: "v1",
+				{
+					Name: "crypto1", Type: "state.in-memory", Version: "v1",
 					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
 				},
 			}, resp.RegisteredComponents)
@@ -333,7 +334,8 @@ func (c *crypto) encryptDecrypt(t *testing.T, ctx context.Context, client rtv1.D
 	require.NoError(t, encclient.CloseSend())
 	var encdata []byte
 	for {
-		resp, err := encclient.Recv()
+		var resp *rtv1.EncryptResponse
+		resp, err = encclient.Recv()
 
 		if resp != nil {
 			encdata = append(encdata, resp.Payload.Data...)

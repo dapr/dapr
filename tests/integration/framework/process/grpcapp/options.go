@@ -16,11 +16,12 @@ package grpcapp
 import (
 	"context"
 
+	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/emptypb"
+
 	commonv1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	procgrpc "github.com/dapr/dapr/tests/integration/framework/process/grpc"
-	"google.golang.org/grpc"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 // options contains the options for running a GRPC server in integration tests.
