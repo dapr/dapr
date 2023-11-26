@@ -327,6 +327,7 @@ func (a *activityActor) createReliableReminder(ctx context.Context, actorID stri
 	if err != nil {
 		return fmt.Errorf("failed to encode data as JSON: %w", err)
 	}
+	// Similar to Workflow, should I add a time stamp here ? which can be checking in execute Activity to determin time taken for complete execution ?
 	return a.actorRuntime.CreateReminder(ctx, &actors.CreateReminderRequest{
 		ActorType: a.config.activityActorType,
 		ActorID:   actorID,

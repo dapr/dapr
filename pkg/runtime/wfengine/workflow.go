@@ -590,6 +590,7 @@ func (wf *workflowActor) createReliableReminder(ctx context.Context, actorID str
 		return reminderName, fmt.Errorf("failed to encode data as JSON: %w", err)
 	}
 
+	// Do I have to add some sort of time instance here, which can be checked in "run-workflow" function for latency calculations ?
 	return reminderName, wf.actors.CreateReminder(ctx, &actors.CreateReminderRequest{
 		ActorType: wf.config.workflowActorType,
 		ActorID:   actorID,
