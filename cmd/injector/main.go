@@ -24,16 +24,16 @@ import (
 	"github.com/dapr/dapr/cmd/injector/options"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
-	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/injector/sentry"
 	"github.com/dapr/dapr/pkg/injector/service"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/security"
-	"github.com/dapr/dapr/pkg/signals"
 	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/signals"
 )
 
 var log = logger.NewLogger("dapr.injector")
@@ -82,10 +82,15 @@ func main() {
 		log.Fatalf("Failed to get authentication uids from services accounts: %s", err)
 	}
 
+	namespace, err := security.CurrentNamespaceOrError()
+	if err != nil {
+		log.Fatalf("Failed to get current namespace: %s", err)
+	}
+
 	secProvider, err := security.New(ctx, security.Options{
 		SentryAddress:           cfg.SentryAddress,
 		ControlPlaneTrustDomain: cfg.ControlPlaneTrustDomain,
-		ControlPlaneNamespace:   security.CurrentNamespace(),
+		ControlPlaneNamespace:   namespace,
 		TrustAnchorsFile:        cfg.TrustAnchorsFile,
 		AppID:                   "dapr-injector",
 		MTLSEnabled:             true,

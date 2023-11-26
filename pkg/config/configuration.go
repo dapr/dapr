@@ -60,6 +60,9 @@ const (
 	DefaultNamespace    = "default"
 	ActionPolicyApp     = "app"
 	ActionPolicyGlobal  = "global"
+
+	defaultMaxWorkflowConcurrentInvocations = 100
+	defaultMaxActivityConcurrentInvocations = 100
 )
 
 // Configuration is an internal (and duplicate) representation of Dapr's Configuration CRD.
@@ -112,6 +115,33 @@ type ConfigurationSpec struct {
 	ComponentsSpec      *ComponentsSpec     `json:"components,omitempty" yaml:"components,omitempty"`
 	LoggingSpec         *LoggingSpec        `json:"logging,omitempty" yaml:"logging,omitempty"`
 	WasmSpec            *WasmSpec           `json:"wasm,omitempty" yaml:"wasm,omitempty"`
+	WorkflowSpec        *WorkflowSpec       `json:"workflow,omitempty" yaml:"workflow,omitempty"`
+}
+
+// WorkflowSpec defines the configuration for Dapr workflows.
+type WorkflowSpec struct {
+	// maxConcurrentWorkflowInvocations is the maximum number of concurrent workflow invocations that can be scheduled by a single Dapr instance.
+	// Attempted invocations beyond this will be queued until the number of concurrent invocations drops below this value.
+	// If omitted, the default value of 100 will be used.
+	MaxConcurrentWorkflowInvocations int32 `json:"maxConcurrentWorkflowInvocations,omitempty" yaml:"maxConcurrentWorkflowInvocations,omitempty"`
+	// maxConcurrentActivityInvocations is the maximum number of concurrent activities that can be processed by a single Dapr instance.
+	// Attempted invocations beyond this will be queued until the number of concurrent invocations drops below this value.
+	// If omitted, the default value of 100 will be used.
+	MaxConcurrentActivityInvocations int32 `json:"maxConcurrentActivityInvocations,omitempty" yaml:"maxConcurrentActivityInvocations,omitempty"`
+}
+
+func (w *WorkflowSpec) GetMaxConcurrentWorkflowInvocations() int32 {
+	if w == nil || w.MaxConcurrentWorkflowInvocations <= 0 {
+		return defaultMaxWorkflowConcurrentInvocations
+	}
+	return w.MaxConcurrentWorkflowInvocations
+}
+
+func (w *WorkflowSpec) GetMaxConcurrentActivityInvocations() int32 {
+	if w == nil || w.MaxConcurrentActivityInvocations <= 0 {
+		return defaultMaxActivityConcurrentInvocations
+	}
+	return w.MaxConcurrentActivityInvocations
 }
 
 type SecretsSpec struct {
@@ -156,18 +186,18 @@ const (
 	APIAccessRuleProtocolGRPC APIAccessRuleProtocol = "grpc"
 )
 
-// GetRulesByProtocol returns a list of APIAccessRule objects filtered by protocol
-func (r APIAccessRules) GetRulesByProtocol(protocol APIAccessRuleProtocol) []APIAccessRule {
-	res := make([]APIAccessRule, len(r))
-	n := 0
+// GetRulesByProtocol returns a list of APIAccessRule objects for a protocol
+// The result is a map where the key is in the format "<version>/<endpoint>"
+func (r APIAccessRules) GetRulesByProtocol(protocol APIAccessRuleProtocol) map[string]struct{} {
+	res := make(map[string]struct{}, len(r))
 	for _, v := range r {
 		//nolint:gocritic
 		if strings.ToLower(string(v.Protocol)) == string(protocol) {
-			res[n] = v
-			n++
+			key := v.Version + "/" + v.Name
+			res[key] = struct{}{}
 		}
 	}
-	return res[:n]
+	return res
 }
 
 type HandlerSpec struct {
@@ -362,6 +392,10 @@ func LoadDefaultConfiguration() *Configuration {
 			AccessControlSpec: &AccessControlSpec{
 				DefaultAction: AllowAccess,
 				TrustDomain:   "public",
+			},
+			WorkflowSpec: &WorkflowSpec{
+				MaxConcurrentWorkflowInvocations: defaultMaxWorkflowConcurrentInvocations,
+				MaxConcurrentActivityInvocations: defaultMaxActivityConcurrentInvocations,
 			},
 		},
 	}
@@ -580,6 +614,18 @@ func (c Configuration) GetAPILoggingSpec() APILoggingSpec {
 		return APILoggingSpec{}
 	}
 	return *c.Spec.LoggingSpec.APILogging
+}
+
+// GetWorkflowSpec returns the Workflow spec.
+// It's a short-hand that includes nil-checks for safety.
+func (c *Configuration) GetWorkflowSpec() WorkflowSpec {
+	if c == nil || c.Spec.WorkflowSpec == nil {
+		return WorkflowSpec{
+			MaxConcurrentWorkflowInvocations: defaultMaxWorkflowConcurrentInvocations,
+			MaxConcurrentActivityInvocations: defaultMaxActivityConcurrentInvocations,
+		}
+	}
+	return *c.Spec.WorkflowSpec
 }
 
 // ToYAML returns the Configuration represented as YAML.

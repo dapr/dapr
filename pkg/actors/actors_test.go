@@ -224,6 +224,7 @@ func newTestActorsRuntimeWithMock(appChannel channel.AppChannel) *actorsRuntime 
 		TracingSpec:    config.TracingSpec{SamplingRate: "1"},
 		Resiliency:     resiliency.New(log),
 		StateStoreName: "actorStore",
+		MockPlacement:  NewMockPlacement(TestAppID),
 	}, clock)
 
 	return a.(*actorsRuntime)
@@ -299,7 +300,8 @@ func fakeStore() state.Store {
 
 func fakeCallAndActivateActor(actors *actorsRuntime, actorType, actorID string, clock kclock.WithTicker) {
 	actorKey := constructCompositeKey(actorType, actorID)
-	actors.actorsTable.LoadOrStore(actorKey, newActor(actorType, actorID, &reentrancyStackDepth, clock))
+	act := newActor(actorType, actorID, &reentrancyStackDepth, actors.actorsConfig.GetIdleTimeoutForType(actorType), clock)
+	actors.actorsTable.LoadOrStore(actorKey, act)
 }
 
 func deactivateActorWithDuration(testActorsRuntime *actorsRuntime, actorType, actorID string) <-chan struct{} {
@@ -448,7 +450,7 @@ func TestTimerExecution(t *testing.T) {
 	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 
 	period, _ := internal.NewReminderPeriod("2s")
-	err := testActorsRuntime.doExecuteReminderOrTimer(&internal.Reminder{
+	err := testActorsRuntime.doExecuteReminderOrTimer(context.Background(), &internal.Reminder{
 		ActorType:      actorType,
 		ActorID:        actorID,
 		Name:           "timer1",
@@ -469,7 +471,7 @@ func TestReminderExecution(t *testing.T) {
 	fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 
 	period, _ := internal.NewReminderPeriod("2s")
-	err := testActorsRuntime.doExecuteReminderOrTimer(&internal.Reminder{
+	err := testActorsRuntime.doExecuteReminderOrTimer(context.Background(), &internal.Reminder{
 		ActorType:      actorType,
 		ActorID:        actorID,
 		RegisteredTime: time.Now().Add(2 * time.Second),
@@ -809,7 +811,7 @@ func TestCallLocalActor(t *testing.T) {
 		defer testActorsRuntime.Close()
 
 		actorKey := constructCompositeKey(testActorType, testActorID)
-		act := newActor(testActorType, testActorID, &reentrancyStackDepth, testActorsRuntime.clock)
+		act := newActor(testActorType, testActorID, &reentrancyStackDepth, 2*time.Second, testActorsRuntime.clock)
 
 		// add test actor
 		testActorsRuntime.actorsTable.LoadOrStore(actorKey, act)

@@ -7,13 +7,27 @@ metadata:
     {{- range $key, $value := .Values.global.k8sLabels }}
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
+{{- if .Values.apiService.annotations }}
+{{ toYaml .Values.apiService.annotations | indent 4}}
+{{- end }}
 spec:
   selector:
     app: dapr-operator
+  type: {{ .Values.apiService.type }}
   ports:
   - protocol: TCP
-    port: {{ .Values.ports.port }} 
+    port: {{ .Values.ports.port }}
     targetPort: {{ .Values.ports.targetPort }}
+    name: grpc
+# Added for backwards compatibility where previous clients will attempt to
+# connect on port 80.
+# TOOD: @joshvanl: remove in v1.14
+{{ if (ne (int .Values.ports.port) 80) }}
+  - protocol: TCP
+    port: 80
+    targetPort: {{ .Values.ports.targetPort }}
+    name: legacy
+{{ end }}
 ---
 apiVersion: v1
 kind: Service
@@ -24,7 +38,11 @@ metadata:
     {{- range $key, $value := .Values.global.k8sLabels }}
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
+{{- if .Values.webhookService.annotations }}
+{{ toYaml .Values.webhookService.annotations | indent 4}}
+{{- end }}
 spec:
+  type: {{ .Values.webhookService.type }}
   ports:
   - port: 443
     targetPort: 19443

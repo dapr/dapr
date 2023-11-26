@@ -120,6 +120,7 @@ make build-perf-app-<app-name>
 # push perf apps docker image to docker hub
 make push-perf-app-<app-name>
 ```
+`<app-name>` can be found at [PERF_TEST_APPS](https://github.com/dapr/dapr/blob/6def7d1b9ffe896b7b06d05128b9cd605d39f939/tests/dapr_tests.mk#L61C1-L61C15)
 
 If you are building test apps individually, you need to build and push the tester app also:
 - tester (`build-perf-app-tester` and `push-perf-app-tester`) for Fortio based tests
@@ -140,6 +141,29 @@ make setup-test-env-k6
 make test-perf-all
 ```
 
+You can also run selected tests using environment variables `DAPR_PERF TEST``.
+```bash
+export DAPR_PERF_TEST="<app-name-1> <app-name-2>"
+
+# it will start perf tests defined in DAPR_PERF_TEST
+make test-perf-all
+```
+Then it will run the tests defined in `DAPR_PERF_TEST`. `<app-name>` can be found at [PERF_TESTS](https://github.com/dapr/dapr/blob/6def7d1b9ffe896b7b06d05128b9cd605d39f939/tests/dapr_tests.mk#L70)
+
+For example, if you only want to run `actor_id_scale` and `workflows` tests, you can do
+```bash
+export DAPR_PERF_TEST="actor_id_scale workflows"
+
+make test-perf-all
+```
+
+### Remove all tests data
+Once you finished your testing, it's recommended to remove old test data, so it's easier to find the new tests. 
+You can run
+```bash
+make test-clean
+```
+
 ## Run perf tests through GitHub Actions
 To keep the build infrastructure simple, Dapr uses dapr-test GitHub Actions Workflow to run e2e tests using one of AKS clusters. A separate workflow also runs E2E in KinD clusters.
 
@@ -151,7 +175,7 @@ Once a contributor creates a pull request, E2E tests on KinD clusters are automa
 ## Optional: Visualize Performance Test Metrics
 
 ```bash
-export DAPR_PERF_METRICS_PROMETHEUS_URL="http://localhost:9091"
+export DAPR_PERF_METRICS_PROMETHEUS_PUSHGATEWAY_URL="http://localhost:9091"
 ```
 
 Install the following in your Kubernetes cluster:

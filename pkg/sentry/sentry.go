@@ -23,9 +23,7 @@ import (
 	"sync/atomic"
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
-	"k8s.io/client-go/rest"
 
-	"github.com/dapr/dapr/pkg/concurrency"
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/pkg/sentry/config"
@@ -36,6 +34,8 @@ import (
 	validatorInsecure "github.com/dapr/dapr/pkg/sentry/server/validator/insecure"
 	validatorJWKS "github.com/dapr/dapr/pkg/sentry/server/validator/jwks"
 	validatorKube "github.com/dapr/dapr/pkg/sentry/server/validator/kubernetes"
+	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
 )
 
@@ -158,16 +158,12 @@ func (s *sentry) getValidators(ctx context.Context) (map[sentryv1pb.SignCertific
 			if err != nil {
 				return nil, err
 			}
-			config, err := rest.InClusterConfig()
-			if err != nil {
-				return nil, err
-			}
 			sentryID, err := security.SentryID(td, security.CurrentNamespace())
 			if err != nil {
 				return nil, err
 			}
 			val, err := validatorKube.New(ctx, validatorKube.Options{
-				RestConfig:     config,
+				RestConfig:     utils.GetConfig(),
 				SentryID:       sentryID,
 				ControlPlaneNS: security.CurrentNamespace(),
 			})

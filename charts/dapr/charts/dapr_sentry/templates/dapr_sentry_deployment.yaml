@@ -65,8 +65,8 @@ spec:
         prometheus.io/port: "{{ .Values.global.prometheus.port }}"
         prometheus.io/path: "/"
 {{- end }}
-{{- if .Values.deploymentAnnotations }}
-{{ toYaml .Values.deploymentAnnotations | indent 4}}
+{{- with .Values.deploymentAnnotations }}
+{{ toYaml . | indent 8 }}
 {{- end }}
     spec:
       containers:
@@ -172,10 +172,6 @@ spec:
 {{- end }}
         - "--trust-domain"
         - {{ .Values.global.mtls.controlPlaneTrustDomain }}
-{{- if .Values.tokenAudience }}
-        - "--token-audience"
-        - {{ .Values.tokenAudience }}
-{{- end }}
 {{- with .Values.global.issuerFilenames }}
         - "--issuer-ca-filename"
         - "{{ .ca }}"

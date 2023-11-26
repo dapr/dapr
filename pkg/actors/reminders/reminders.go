@@ -309,7 +309,7 @@ func (r *reminders) evaluateReminders(ctx context.Context) {
 			for i := range vals {
 				rmd := vals[i].Reminder
 				reminderKey := rmd.Key()
-				isLocalActor, targetActorAddress := r.lookUpActorFn(rmd.ActorType, rmd.ActorID)
+				isLocalActor, targetActorAddress := r.lookUpActorFn(ctx, rmd.ActorType, rmd.ActorID)
 				if targetActorAddress == "" {
 					log.Warn("Did not find address for actor for reminder " + reminderKey)
 					continue

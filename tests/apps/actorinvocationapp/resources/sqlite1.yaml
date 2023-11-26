@@ -1,0 +1,14 @@
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: statestore1
+spec:
+  type: state.sqlite
+  version: v1
+  metadata:
+    - name: actorStateStore
+      value: "true"
+    - name: connectionString
+      value: "data1.db"
+scopes:
+ - actor1

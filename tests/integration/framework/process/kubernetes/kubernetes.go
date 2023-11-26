@@ -1,0 +1,169 @@
+/*
+Copyright 2023 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package kubernetes
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"os"
+	"path/filepath"
+	"runtime"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"sigs.k8s.io/yaml"
+
+	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
+)
+
+const (
+	EnvVarCRDDirectory = "DAPR_INTEGRATION_CRD_DIRECTORY"
+)
+
+// Option is a function that configures the mock Kubernetes process.
+type Option func(*options)
+
+// Kubernetes is a mock Kubernetes API server process.
+type Kubernetes struct {
+	http *prochttp.HTTP
+}
+
+func New(t *testing.T, fopts ...Option) *Kubernetes {
+	t.Helper()
+
+	var opts options
+	for _, fopt := range fopts {
+		fopt(&opts)
+	}
+
+	handler := http.NewServeMux()
+
+	handler.HandleFunc("/api", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Content-Type", "application/json;g=apidiscovery.k8s.io;v=v2beta1;as=APIGroupDiscoveryList")
+		w.Write([]byte(apiDiscovery))
+	})
+
+	handler.HandleFunc("/apis", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Content-Type", "application/json;g=apidiscovery.k8s.io;v=v2beta1;as=APIGroupDiscoveryList")
+		w.Write([]byte(apisDiscovery))
+	})
+
+	for crdName, crd := range parseCRDs(t) {
+		handler.HandleFunc("/apis/apiextensions.k8s.io/v1/customresourcedefinitions/"+crdName, func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Add("Content-Type", "application/json")
+			w.Write(crd)
+		})
+	}
+
+	for _, h := range opts.handlers {
+		handler.HandleFunc(h.path, h.handler)
+	}
+
+	return &Kubernetes{
+		http: prochttp.New(t, prochttp.WithHandler(handler)),
+	}
+}
+
+func (k *Kubernetes) Port() int {
+	return k.http.Port()
+}
+
+func (k *Kubernetes) Run(t *testing.T, ctx context.Context) {
+	t.Helper()
+	k.http.Run(t, ctx)
+}
+
+func (k *Kubernetes) KubeconfigPath(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "kubeconfig")
+	require.NoError(t, os.WriteFile(path, []byte(fmt.Sprintf(`
+apiVersion: v1
+kind: Config
+clusters:
+- name: default
+  cluster:
+    server: http://localhost:%d
+contexts:
+- name: default
+  context:
+    cluster: default
+    user: default
+users:
+- name: default
+current-context: default
+`, k.Port())), 0o600))
+
+	return path
+}
+
+func (k *Kubernetes) Cleanup(t *testing.T) {
+	t.Helper()
+	k.http.Cleanup(t)
+}
+
+func parseCRDs(t *testing.T) map[string][]byte {
+	t.Helper()
+
+	_, tfile, _, ok := runtime.Caller(0)
+	require.True(t, ok)
+	defaultPath := filepath.Join(filepath.Dir(tfile), "../../../../../charts/dapr/crds")
+
+	dir, ok := os.LookupEnv(EnvVarCRDDirectory)
+	if !ok {
+		t.Logf("environment variable %s not set, using default CRD location %s", EnvVarCRDDirectory, defaultPath)
+		dir = defaultPath
+	}
+
+	crds := make(map[string][]byte)
+
+	filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if d.IsDir() || filepath.Ext(path) != ".yaml" {
+			return nil
+		}
+
+		f, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+
+		var crd apiextensionsv1.CustomResourceDefinition
+		if err = yaml.Unmarshal(f, &crd); err != nil {
+			return err
+		}
+
+		// Set conversion webhook client config to non-nil to allow operator to
+		// patch subscriptions.
+		crd.Spec.Conversion = new(apiextensionsv1.CustomResourceConversion)
+		crd.Spec.Conversion.Webhook = new(apiextensionsv1.WebhookConversion)
+		crd.Spec.Conversion.Webhook.ClientConfig = new(apiextensionsv1.WebhookClientConfig)
+
+		fjson, err := json.Marshal(crd)
+		if err != nil {
+			return err
+		}
+
+		crds[crd.Name] = fjson
+
+		return nil
+	})
+
+	return crds
+}

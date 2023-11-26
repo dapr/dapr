@@ -15,27 +15,48 @@ package integration
 
 import (
 	"context"
+	"flag"
+	"regexp"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/suite"
-
-	// Register all tests
-	_ "github.com/dapr/dapr/tests/integration/suite/actors"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd"
-	_ "github.com/dapr/dapr/tests/integration/suite/healthz"
-	_ "github.com/dapr/dapr/tests/integration/suite/metadata"
-	_ "github.com/dapr/dapr/tests/integration/suite/placement"
-	_ "github.com/dapr/dapr/tests/integration/suite/ports"
-	_ "github.com/dapr/dapr/tests/integration/suite/sentry"
 )
 
-func RunIntegrationTests(t *testing.T) {
-	binary.BuildAll(t)
+var focusF = flag.String("focus", ".*", "Focus on specific test cases. Accepts regex.")
 
+func RunIntegrationTests(t *testing.T) {
+	flag.Parse()
+
+	focus, err := regexp.Compile(*focusF)
+	require.NoError(t, err, "Invalid parameter focus")
+	t.Logf("running test suite with focus: %s", *focusF)
+
+	var binFailed bool
+	t.Run("build binaries", func(t *testing.T) {
+		t.Cleanup(func() {
+			binFailed = t.Failed()
+		})
+		binary.BuildAll(t)
+	})
+	require.False(t, binFailed, "building binaries must succeed")
+
+	focusedTests := make(map[string]suite.Case)
 	for name, tcase := range suite.All(t) {
+		// Continue rather than using `t.Skip` to reduce the noise in the test
+		// output.
+		if !focus.MatchString(name) {
+			t.Logf("skipping test case due to focus %s", name)
+			continue
+		}
+		focusedTests[name] = tcase
+	}
+
+	for name, tcase := range focusedTests {
 		t.Run(name, func(t *testing.T) {
 			t.Logf("setting up test case")
 			options := tcase.Setup(t)

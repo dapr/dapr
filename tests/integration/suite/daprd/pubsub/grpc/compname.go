@@ -30,6 +30,7 @@ import (
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -91,14 +92,13 @@ spec:
 func (c *componentName) Run(t *testing.T, ctx context.Context) {
 	c.daprd.WaitUntilRunning(t, ctx)
 
+	pt := util.NewParallel(t)
 	for i := range c.pubsubNames {
 		pubsubName := c.pubsubNames[i]
 		topicName := c.topicNames[i]
-		t.Run(pubsubName, func(t *testing.T) {
-			t.Parallel()
-
+		pt.Add(func(col *assert.CollectT) {
 			conn, err := grpc.DialContext(ctx, fmt.Sprintf("localhost:%d", c.daprd.GRPCPort()), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
-			require.NoError(t, err)
+			require.NoError(col, err)
 			t.Cleanup(func() { require.NoError(t, conn.Close()) })
 
 			client := rtv1.NewDaprClient(conn)
@@ -107,7 +107,7 @@ func (c *componentName) Run(t *testing.T, ctx context.Context) {
 				Topic:      topicName,
 				Data:       []byte(`{"status": "completed"}`),
 			})
-			assert.NoError(t, err)
+			assert.NoError(col, err)
 		})
 	}
 }

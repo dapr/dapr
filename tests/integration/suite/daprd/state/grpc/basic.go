@@ -68,10 +68,8 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			{StoreName: "mystore", States: []*commonv1.StateItem{{}}},
 			{StoreName: "mystore", States: []*commonv1.StateItem{{Value: []byte("value1")}}},
 		} {
-			t.Run(fmt.Sprintf("%+v", req), func(t *testing.T) {
-				_, err = client.SaveState(ctx, req)
-				require.Error(t, err)
-			})
+			_, err = client.SaveState(ctx, req)
+			require.Error(t, err)
 		}
 	})
 
@@ -89,10 +87,8 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				{Key: "key2", Value: []byte("value2")},
 			}},
 		} {
-			t.Run(fmt.Sprintf("%v", req), func(t *testing.T) {
-				_, err = client.SaveState(ctx, req)
-				require.NoError(t, err)
-			})
+			_, err = client.SaveState(ctx, req)
+			require.NoError(t, err)
 		}
 	})
 }

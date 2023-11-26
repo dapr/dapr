@@ -326,7 +326,6 @@ TEST_WITH_RACE=./pkg/acl/... \
 ./pkg/channel/... \
 ./pkg/client/... \
 ./pkg/components/... \
-./pkg/concurrency/... \
 ./pkg/config/... \
 ./pkg/cors/... \
 ./pkg/diagnostics/... \
@@ -352,7 +351,6 @@ TEST_WITH_RACE=./pkg/acl/... \
 ./pkg/scopes/... \
 ./pkg/security/... \
 ./pkg/sentry/... \
-./pkg/signals/... \
 ./pkg/validation/... \
 ./utils/...
 
@@ -370,7 +368,7 @@ test-integration: test-deps
 			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json \
 			--format testname \
 			-- \
-			./tests/integration -count=1 -v -tags="integration"
+			./tests/integration -timeout=20m -count=1 -v -tags="integration"
 
 ################################################################################
 # Target: lint                                                                 #

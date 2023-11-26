@@ -33,10 +33,10 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"k8s.io/utils/clock"
 
-	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/security/legacy"
+	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/fswatcher"
 	"github.com/dapr/kit/logger"
 )
@@ -62,6 +62,7 @@ type Handler interface {
 	ControlPlaneNamespace() string
 	CurrentTrustAnchors() ([]byte, error)
 
+	MTLSEnabled() bool
 	WatchTrustAnchors(context.Context, chan<- []byte)
 }
 
@@ -393,6 +394,11 @@ func (s *security) NetDialerID(ctx context.Context, spiffeID spiffeid.ID, timeou
 	}).Dial
 }
 
+// MTLSEnabled returns true if mTLS is enabled.
+func (s *security) MTLSEnabled() bool {
+	return s.mtls
+}
+
 // CurrentNamespace returns the namespace of this workload.
 func CurrentNamespace() string {
 	namespace, ok := os.LookupEnv("NAMESPACE")
@@ -400,6 +406,21 @@ func CurrentNamespace() string {
 		return "default"
 	}
 	return namespace
+}
+
+// CurrentNamespaceOrError returns the namespace of this workload. If current
+// Namespace is not found, error.
+func CurrentNamespaceOrError() (string, error) {
+	namespace, ok := os.LookupEnv("NAMESPACE")
+	if !ok {
+		return "", errors.New("'NAMESPACE' environment variable not set")
+	}
+
+	if len(namespace) == 0 {
+		return "", errors.New("'NAMESPACE' environment variable is empty")
+	}
+
+	return namespace, nil
 }
 
 // SentryID returns the SPIFFE ID of the sentry server.

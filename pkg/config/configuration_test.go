@@ -22,6 +22,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/maps"
 
 	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/kit/ptr"
@@ -172,6 +173,25 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 		assert.True(t, mtlsSpec.Enabled)
 		assert.Equal(t, "25s", mtlsSpec.WorkloadCertTTL)
 		assert.Equal(t, "1h", mtlsSpec.AllowedClockSkew)
+	})
+
+	t.Run("workflow spec - configured", func(t *testing.T) {
+		config, err := LoadStandaloneConfiguration("./testdata/workflow_config.yaml")
+		require.NoError(t, err)
+		workflowSpec := config.GetWorkflowSpec()
+		assert.Equal(t, int32(32), workflowSpec.MaxConcurrentWorkflowInvocations)
+		assert.Equal(t, int32(64), workflowSpec.MaxConcurrentActivityInvocations)
+	})
+
+	t.Run("workflow spec - defaults", func(t *testing.T) {
+		// Intentionally loading an unrelated config file to test defaults
+		config, err := LoadStandaloneConfiguration("./testdata/mtls_config.yaml")
+		require.NoError(t, err)
+		workflowSpec := config.GetWorkflowSpec()
+
+		// These are the documented default values. Changes to these defaults require changes to
+		assert.Equal(t, int32(100), workflowSpec.MaxConcurrentWorkflowInvocations)
+		assert.Equal(t, int32(100), workflowSpec.MaxConcurrentActivityInvocations)
 	})
 
 	t.Run("multiple configurations", func(t *testing.T) {
@@ -479,6 +499,29 @@ func TestSetTracingSpecFromEnv(t *testing.T) {
 	assert.Equal(t, "configfileendpoint:4321", conf.Spec.TracingSpec.Otel.EndpointAddress)
 	assert.Equal(t, "grpc", conf.Spec.TracingSpec.Otel.Protocol)
 	require.True(t, conf.Spec.TracingSpec.Otel.GetIsSecure())
+}
+
+func TestAPIAccessRules(t *testing.T) {
+	config := &Configuration{
+		Spec: ConfigurationSpec{
+			APISpec: &APISpec{
+				Allowed: APIAccessRules{
+					APIAccessRule{Name: "foo", Version: "v1", Protocol: "http"},
+					APIAccessRule{Name: "MyMethod", Version: "v1alpha1", Protocol: "grpc"},
+				},
+				Denied: APIAccessRules{
+					APIAccessRule{Name: "bar", Version: "v1", Protocol: "http"},
+				},
+			},
+		},
+	}
+
+	apiSpec := config.Spec.APISpec
+
+	assert.Equal(t, []string{"v1/foo"}, maps.Keys(apiSpec.Allowed.GetRulesByProtocol(APIAccessRuleProtocolHTTP)))
+	assert.Equal(t, []string{"v1alpha1/MyMethod"}, maps.Keys(apiSpec.Allowed.GetRulesByProtocol(APIAccessRuleProtocolGRPC)))
+	assert.Equal(t, []string{"v1/bar"}, maps.Keys(apiSpec.Denied.GetRulesByProtocol(APIAccessRuleProtocolHTTP)))
+	assert.Empty(t, maps.Keys(apiSpec.Denied.GetRulesByProtocol(APIAccessRuleProtocolGRPC)))
 }
 
 func TestSortMetrics(t *testing.T) {

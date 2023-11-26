@@ -115,6 +115,14 @@ jobs:
         repository: dapr/dapr
         path: latest-release
         ref: v${{ env.DAPR_PREV_VERSION }}
+    - name: Apply patches to latest release
+      run: |
+        export DAPR_LATEST_MAJOR_MINOR=$(echo ${{ env.DAPR_PREV_VERSION }} | cut -d. -f1-2)
+        export DAPR_PATCH_DIR="$(pwd)/.github/scripts/version-skew-test-patches/release-$DAPR_LATEST_MAJOR_MINOR"
+        if [ -d "$DAPR_PATCH_DIR" ]; then
+          echo "Applying patches from $DAPR_PATCH_DIR"
+          cd latest-release && git apply --ignore-space-change --ignore-whitespace $DAPR_PATCH_DIR/*.patch
+        fi
     - name: Set up Go
       id: setup-go
       uses: actions/setup-go@v4
@@ -219,9 +227,8 @@ jobs:
         make setup-helm-init
         make setup-test-env-redis
         make setup-test-env-kafka
-        make setup-test-env-mongodb
         make setup-test-env-zipkin
-        helm upgrade --install dapr-kafka bitnami/kafka --version 23.0.7 -f ./tests/config/kafka_override.yaml --namespace ${{ env.DAPR_NAMESPACE }} --timeout 10m0s
+        make setup-test-env-postgres
         make setup-test-components
 
     - name: Free up some diskspace
