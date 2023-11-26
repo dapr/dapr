@@ -102,11 +102,27 @@ func (w *workflowMetrics) Init(appID string) error {
 
 	return view.Register(
 		diagUtils.NewMeasureView(w.workflowOperationsCount, []tag.Key{appIDKey, operationKey, statusKey}, view.Count()),
-		diagUtils.NewMeasureView(w.workflowOperationsLatency, []tag.Key{appIDKey, elapsedKey}, defaultLatencyDistribution),
+		diagUtils.NewMeasureView(w.workflowOperationsLatency, []tag.Key{appIDKey}, defaultLatencyDistribution),
 		diagUtils.NewMeasureView(w.workflowRemindersTotal, []tag.Key{appIDKey, reminderTypeKey}, view.Count()),
 		diagUtils.NewMeasureView(w.workflowExecutionCount, []tag.Key{appIDKey, executionTypeKey, statusKey}, view.Count()),
 		diagUtils.NewMeasureView(w.workflowExecutionLatency, []tag.Key{appIDKey, executionTypeKey, statusKey}, defaultLatencyDistribution),
 		diagUtils.NewMeasureView(w.workflowSchedulingLatency, []tag.Key{appIDKey, executionTypeKey}, defaultLatencyDistribution))
+}
+
+func (w *workflowMetrics) WorkflowOperationsLatency(ctx context.Context, operation, status string, elapsed float64) {
+	if !w.IsEnabled() {
+		return
+	}
+
+	stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowOperationsLatency.Name(), appIDKey, w.appID, operationKey, operation, statusKey, status), w.workflowOperationsLatency.M(elapsed))
+}
+
+func (w *workflowMetrics) ExecutionLatency(ctx context.Context, executionType, status string, elapsed float64) {
+	if !w.IsEnabled() {
+		return
+	}
+
+	stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowExecutionLatency.Name(), appIDKey, w.appID, executionTypeKey, executionType, statusKey, status), w.workflowExecutionLatency.M(elapsed))
 }
 
 // RemindersTotalCreated records total number of Workflow and Activity reminders created.

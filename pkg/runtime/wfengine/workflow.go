@@ -391,6 +391,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 	callback := make(chan bool)
 	wi.Properties[CallbackChannelProperty] = callback
 	// Request to execute workflow
+	start := time.Now()
 	err = wf.scheduler.ScheduleWorkflow(ctx, wi)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
@@ -527,7 +528,10 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 		}
 	}
 
-	// NOTE: Here it executes completely.
+	// record time taken to complete the workflow
+	elapsed := diag.ElapsedSince(start)
+	diag.DefaultWorkflowMonitoring.ExecutionLatency(ctx, diag.Workflow, diag.StatusSuccess, elapsed)
+	diag.DefaultWorkflowMonitoring.ExecutionCount(ctx, diag.Workflow, diag.StatusSuccess)
 	state.ApplyRuntimeStateChanges(runtimeState)
 	state.ClearInbox()
 

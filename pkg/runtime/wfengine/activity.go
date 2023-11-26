@@ -167,6 +167,7 @@ func (a *activityActor) executeActivity(ctx context.Context, actorID string, nam
 	//       introduce some kind of heartbeat protocol to help identify such cases.
 	callback := make(chan bool)
 	wi.Properties[CallbackChannelProperty] = callback
+	start := time.Now()
 	if err = a.scheduler.ScheduleActivity(ctx, wi); err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
 			// Activity execution failed with recoverable error, record metrics.
@@ -200,8 +201,12 @@ loop:
 				<-t.C
 			}
 			if completed {
+				elapsed := diag.ElapsedSince(start)
 				// Activity completed, record metrics
 				diag.DefaultWorkflowMonitoring.ExecutionCount(ctx, diag.Activity, diag.StatusSuccess)
+
+				// record the time taken to complete Activity execution
+				diag.DefaultWorkflowMonitoring.ExecutionLatency(ctx, diag.Activity, diag.StatusSuccess, elapsed)
 				break loop
 			} else {
 				// Activity execution failed with recoverable error, record metrics
