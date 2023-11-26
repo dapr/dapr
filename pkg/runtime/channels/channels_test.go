@@ -74,7 +74,7 @@ func TestMiddlewareBuildPipeline(t *testing.T) {
 	})
 
 	compStore := compstore.New()
-	compStore.AddComponent(componentsapi.Component{
+	require.NoError(t, compStore.AddPendingComponentForCommit(componentsapi.Component{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "mymw1",
 		},
@@ -82,8 +82,9 @@ func TestMiddlewareBuildPipeline(t *testing.T) {
 			Type:    "middleware.http.fakemw",
 			Version: "v1",
 		},
-	})
-	compStore.AddComponent(componentsapi.Component{
+	}))
+	require.NoError(t, compStore.CommitPendingComponent())
+	require.NoError(t, compStore.AddPendingComponentForCommit(componentsapi.Component{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "mymw2",
 		},
@@ -91,7 +92,8 @@ func TestMiddlewareBuildPipeline(t *testing.T) {
 			Type:    "middleware.http.fakemw",
 			Version: "v1",
 		},
-	})
+	}))
+	require.NoError(t, compStore.CommitPendingComponent())
 
 	t.Run("all components exists", func(t *testing.T) {
 		ch := &Channels{
@@ -135,7 +137,7 @@ func TestMiddlewareBuildPipeline(t *testing.T) {
 
 	testInitFail := func(ignoreErrors bool) func(t *testing.T) {
 		compStore := compstore.New()
-		compStore.AddComponent(componentsapi.Component{
+		require.NoError(t, compStore.AddPendingComponentForCommit(componentsapi.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "mymw",
 			},
@@ -143,9 +145,10 @@ func TestMiddlewareBuildPipeline(t *testing.T) {
 				Type:    "middleware.http.fakemw",
 				Version: "v1",
 			},
-		})
+		}))
+		require.NoError(t, compStore.CommitPendingComponent())
 
-		compStore.AddComponent(componentsapi.Component{
+		require.NoError(t, compStore.AddPendingComponentForCommit(componentsapi.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "failmw",
 			},
@@ -157,7 +160,8 @@ func TestMiddlewareBuildPipeline(t *testing.T) {
 					{Name: "fail", Value: commonapi.DynamicValue{JSON: v1.JSON{Raw: []byte("true")}}},
 				},
 			},
-		})
+		}))
+		require.NoError(t, compStore.CommitPendingComponent())
 		return func(t *testing.T) {
 			ch := &Channels{
 				compStore: compStore,
