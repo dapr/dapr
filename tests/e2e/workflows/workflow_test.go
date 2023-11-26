@@ -162,7 +162,10 @@ func raiseEventTest(url string, instanceID string) error {
 
 	// Raise an event on the workflow
 	postString = fmt.Sprintf("%s/RaiseWorkflowEvent/dapr/%s/ChangePurchaseItem/1", url, instanceID)
-	resp, err = utils.HTTPPost(postString, nil)
+	_, err = utils.HTTPPost(postString, nil)
+	if err != nil {
+		return fmt.Errorf("failure getting info on workflow: %w", err)
+	}
 
 	// Raise parallel events on the workflow
 	postString = fmt.Sprintf("%s/RaiseWorkflowEvent/dapr/%s/ConfirmSize/1", url, instanceID)
