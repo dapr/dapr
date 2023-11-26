@@ -14,9 +14,6 @@
 name: dapr
 
 on:
-  workflow_dispatch:
-  schedule:
-    - cron: "00 22 * * *"
   push:
     branches:
       - master
