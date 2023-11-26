@@ -28,6 +28,7 @@ type server struct {
 	listTopicSubFn   func(context.Context, *emptypb.Empty) (*rtv1.ListTopicSubscriptionsResponse, error)
 	listInputBindFn  func(context.Context, *emptypb.Empty) (*rtv1.ListInputBindingsResponse, error)
 	onBindingEventFn func(context.Context, *rtv1.BindingEventRequest) (*rtv1.BindingEventResponse, error)
+	healthCheckFn    func(context.Context, *emptypb.Empty) (*rtv1.HealthCheckResponse, error)
 }
 
 func (s *server) OnInvoke(ctx context.Context, in *commonv1.InvokeRequest) (*commonv1.InvokeResponse, error) {
@@ -65,6 +66,9 @@ func (s *server) OnTopicEvent(ctx context.Context, in *rtv1.TopicEventRequest) (
 	return s.onTopicEventFn(ctx, in)
 }
 
-func (s *server) HealthCheck(context.Context, *emptypb.Empty) (*rtv1.HealthCheckResponse, error) {
-	return new(rtv1.HealthCheckResponse), nil
+func (s *server) HealthCheck(ctx context.Context, e *emptypb.Empty) (*rtv1.HealthCheckResponse, error) {
+	if s.healthCheckFn == nil {
+		return new(rtv1.HealthCheckResponse), nil
+	}
+	return s.healthCheckFn(ctx, e)
 }

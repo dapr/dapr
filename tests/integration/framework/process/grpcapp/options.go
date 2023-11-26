@@ -32,6 +32,7 @@ type options struct {
 	listTopicSubFn   func(ctx context.Context, in *emptypb.Empty) (*rtv1.ListTopicSubscriptionsResponse, error)
 	listInputBindFn  func(context.Context, *emptypb.Empty) (*rtv1.ListInputBindingsResponse, error)
 	onBindingEventFn func(context.Context, *rtv1.BindingEventRequest) (*rtv1.BindingEventResponse, error)
+	healthCheckFn    func(context.Context, *emptypb.Empty) (*rtv1.HealthCheckResponse, error)
 }
 
 func WithGRPCOptions(opts ...procgrpc.Option) func(*options) {
@@ -67,6 +68,12 @@ func WithListInputBindings(fn func(context.Context, *emptypb.Empty) (*rtv1.ListI
 func WithOnBindingEventFn(fn func(context.Context, *rtv1.BindingEventRequest) (*rtv1.BindingEventResponse, error)) func(*options) {
 	return func(opts *options) {
 		opts.onBindingEventFn = fn
+	}
+}
+
+func WithHealthCheckFn(fn func(context.Context, *emptypb.Empty) (*rtv1.HealthCheckResponse, error)) func(*options) {
+	return func(opts *options) {
+		opts.healthCheckFn = fn
 	}
 }
 
