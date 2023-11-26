@@ -24,8 +24,6 @@ name: dapr-perf-components
 
 on:
   # Run every Saturday at 4.34am UTC
-  schedule:
-    - cron: "34 4 * * 6"  # Manual trigger
   workflow_dispatch:
   # Dispatch on external events
   repository_dispatch:
