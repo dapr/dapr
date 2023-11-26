@@ -28,7 +28,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	commonv1 "github.com/dapr/dapr/pkg/proto/common/v1"
-	rtpbv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -206,7 +205,7 @@ spec:
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
-			assert.ElementsMatch(c, []*rtpbv1.RegisteredComponents{
+			assert.ElementsMatch(c, []*rtv1.RegisteredComponents{
 				{Name: "crypto1", Type: "crypto.dapr.localstorage", Version: "v1"},
 				{Name: "crypto3", Type: "crypto.dapr.localstorage", Version: "v1"},
 				{
@@ -241,7 +240,7 @@ spec:
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
-			assert.ElementsMatch(c, []*rtpbv1.RegisteredComponents{
+			assert.ElementsMatch(c, []*rtv1.RegisteredComponents{
 				{
 					Name: "crypto1", Type: "state.in-memory", Version: "v1",
 					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},

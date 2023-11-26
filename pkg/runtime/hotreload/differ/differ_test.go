@@ -183,7 +183,6 @@ func Test_detectDiff(t *testing.T) {
 				return true
 			}))
 		})
-
 	})
 }
 

@@ -33,7 +33,6 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
-	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
@@ -224,7 +223,7 @@ func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
 				return false
 			}
 			in := emptypb.Empty{}
-			out := runtimev1pb.HealthCheckResponse{}
+			out := rtv1.HealthCheckResponse{}
 			err = conn.Invoke(ctx, "/dapr.proto.runtime.v1.AppCallbackHealthCheck/HealthCheck", &in, &out)
 			return err == nil
 		}, 10*time.Second, 100*time.Millisecond)
