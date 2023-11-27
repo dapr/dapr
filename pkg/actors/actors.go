@@ -78,7 +78,7 @@ type ActorRuntime interface {
 	io.Closer
 	Init(context.Context) error
 	IsActorHosted(ctx context.Context, req *ActorHostedRequest) bool
-	GetActiveActorsCount(ctx context.Context) []*runtimev1pb.ActiveActorsCount
+	GetRuntimeStatus(ctx context.Context) *runtimev1pb.ActorRuntime
 	RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor, actorIdleTimeout time.Duration) error
 }
 
@@ -1036,7 +1036,21 @@ func (a *actorsRuntime) RegisterInternalActor(ctx context.Context, actorType str
 	return nil
 }
 
-func (a *actorsRuntime) GetActiveActorsCount(ctx context.Context) []*runtimev1pb.ActiveActorsCount {
+func (a *actorsRuntime) GetRuntimeStatus(ctx context.Context) *runtimev1pb.ActorRuntime {
+	// Do not populate RuntimeStatus, which will be populated by the runtime
+	res := &runtimev1pb.ActorRuntime{
+		ActiveActors: a.getActiveActorsCount(ctx),
+	}
+
+	if a.placement != nil {
+		res.HostReady = a.placement.PlacementHealthy() && a.haveCompatibleStorage()
+		res.Placement = a.placement.StatusMessage()
+	}
+
+	return res
+}
+
+func (a *actorsRuntime) getActiveActorsCount(ctx context.Context) []*runtimev1pb.ActiveActorsCount {
 	actorTypes := a.actorsConfig.Config.HostedActorTypes.ListActorTypes()
 	actorCountMap := make(map[string]int32, len(actorTypes))
 	for _, actorType := range actorTypes {
