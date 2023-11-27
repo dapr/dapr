@@ -14,6 +14,8 @@ limitations under the License.
 package apis
 
 import (
+	"fmt"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/dapr/dapr/pkg/apis/common"
@@ -48,7 +50,7 @@ func (g GenericNameValueResource) NameValuePairs() []common.NameValuePair {
 }
 
 func (g GenericNameValueResource) LogName() string {
-	return g.Name + " (" + g.ResourceKind + ")"
+	return fmt.Sprintf("%s (%s)", g.Name, g.ResourceKind)
 }
 
 func (g GenericNameValueResource) EmptyMetaDeepCopy() metav1.Object {

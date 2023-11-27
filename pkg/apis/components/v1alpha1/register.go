@@ -25,7 +25,7 @@ import (
 var SchemeGroupVersion = schema.GroupVersion{Group: components.GroupName, Version: "v1alpha1"}
 
 // GroupKind takes an unqualified kind and returns back a Group qualified GroupKind.
-func GroupKindFromKind(kind string) schema.GroupKind {
+func GroupKind(kind string) schema.GroupKind {
 	return SchemeGroupVersion.WithKind(kind).GroupKind()
 }
 
