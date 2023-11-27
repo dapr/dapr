@@ -259,7 +259,7 @@ func TestPublishInternal(t *testing.T) {
 		assert.NoError(t, err)
 	})
 
-	t.Run("valid operation, custom datacontenttype", func(t *testing.T) {
+	t.Run("valid operation, no datacontenttype", func(t *testing.T) {
 		o := newTestOutbox().(*outboxImpl)
 		o.publishFn = func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
 			var cloudEvent map[string]interface{}
@@ -267,6 +267,71 @@ func TestPublishInternal(t *testing.T) {
 			assert.NoError(t, err)
 
 			assert.Equal(t, "test", cloudEvent["data"])
+			assert.Equal(t, "a", pr.PubsubName)
+			assert.Equal(t, "testapp1outbox", pr.Topic)
+			assert.Equal(t, "testapp", cloudEvent["source"])
+			assert.Equal(t, "text/plain", cloudEvent["datacontenttype"])
+			assert.Equal(t, "a", cloudEvent["pubsubname"])
+
+			return nil
+		}
+
+		o.AddOrUpdateOutbox(v1alpha1.Component{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test",
+			},
+			Spec: v1alpha1.ComponentSpec{
+				Metadata: []common.NameValuePair{
+					{
+						Name: outboxPublishPubsubKey,
+						Value: common.DynamicValue{
+							JSON: v1.JSON{
+								Raw: []byte("a"),
+							},
+						},
+					},
+					{
+						Name: outboxPublishTopicKey,
+						Value: common.DynamicValue{
+							JSON: v1.JSON{
+								Raw: []byte("1"),
+							},
+						},
+					},
+				},
+			},
+		})
+
+		contentType := ""
+		_, err := o.PublishInternal(context.TODO(), "test", []state.TransactionalStateOperation{
+			state.SetRequest{
+				Key:         "key",
+				Value:       "test",
+				ContentType: &contentType,
+			},
+		}, "testapp", "", "")
+
+		assert.NoError(t, err)
+	})
+
+	type customData struct {
+		Name string `json:"name"`
+	}
+
+	t.Run("valid operation, application/json datacontenttype", func(t *testing.T) {
+		o := newTestOutbox().(*outboxImpl)
+		o.publishFn = func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
+			var cloudEvent map[string]interface{}
+			err := json.Unmarshal(pr.Data, &cloudEvent)
+			assert.NoError(t, err)
+
+			data := cloudEvent["data"]
+			j := customData{}
+
+			err = json.Unmarshal([]byte(data.(string)), &j)
+			assert.NoError(t, err)
+
+			assert.Equal(t, "test", j.Name)
 			assert.Equal(t, "a", pr.PubsubName)
 			assert.Equal(t, "testapp1outbox", pr.Topic)
 			assert.Equal(t, "testapp", cloudEvent["source"])
@@ -302,11 +367,17 @@ func TestPublishInternal(t *testing.T) {
 			},
 		})
 
+		j := customData{
+			Name: "test",
+		}
+		b, err := json.Marshal(&j)
+		require.NoError(t, err)
+
 		contentType := "application/json"
-		_, err := o.PublishInternal(context.TODO(), "test", []state.TransactionalStateOperation{
+		_, err = o.PublishInternal(context.TODO(), "test", []state.TransactionalStateOperation{
 			state.SetRequest{
 				Key:         "key",
-				Value:       "test",
+				Value:       string(b),
 				ContentType: &contentType,
 			},
 		}, "testapp", "", "")

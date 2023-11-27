@@ -4091,7 +4091,7 @@ func TestUnlock(t *testing.T) {
 
 func TestMetadata(t *testing.T) {
 	compStore := compstore.New()
-	compStore.AddComponent(componentsV1alpha1.Component{
+	require.NoError(t, compStore.AddPendingComponentForCommit(componentsV1alpha1.Component{
 		ObjectMeta: metaV1.ObjectMeta{
 			Name: "MockComponent1Name",
 		},
@@ -4107,8 +4107,9 @@ func TestMetadata(t *testing.T) {
 				},
 			},
 		},
-	})
-	compStore.AddComponent(componentsV1alpha1.Component{
+	}))
+	require.NoError(t, compStore.CommitPendingComponent())
+	require.NoError(t, compStore.AddPendingComponentForCommit(componentsV1alpha1.Component{
 		ObjectMeta: metaV1.ObjectMeta{
 			Name: "MockComponent2Name",
 		},
@@ -4124,7 +4125,8 @@ func TestMetadata(t *testing.T) {
 				},
 			},
 		},
-	})
+	}))
+	require.NoError(t, compStore.CommitPendingComponent())
 	compStore.SetSubscriptions([]runtimePubsub.Subscription{
 		{
 			PubsubName:      "test",

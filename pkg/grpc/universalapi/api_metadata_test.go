@@ -39,7 +39,8 @@ func TestGetMetadata(t *testing.T) {
 	mockActors.On("GetRuntimeStatus")
 
 	compStore := compstore.New()
-	compStore.AddComponent(fakeComponent)
+	require.NoError(t, compStore.AddPendingComponentForCommit(fakeComponent))
+	require.NoError(t, compStore.CommitPendingComponent())
 	compStore.SetSubscriptions([]runtimePubsub.Subscription{
 		{
 			PubsubName:      "test",
