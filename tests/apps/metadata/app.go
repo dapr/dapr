@@ -77,15 +77,16 @@ type mockRegisteredComponent struct {
 }
 
 func newMockMetadataFromGrpc(res *runtimev1pb.GetMetadataResponse) mockMetadata {
+	activeActors := res.GetActorRuntime().GetActiveActors()
 	metadata := mockMetadata{
 		ID:                   res.GetId(),
-		ActiveActorsCount:    make([]activeActorsCount, len(res.GetActiveActorsCount())),
+		ActiveActorsCount:    make([]activeActorsCount, len(activeActors)),
 		Extended:             res.GetExtendedMetadata(),
 		RegisteredComponents: make([]mockRegisteredComponent, len(res.GetRegisteredComponents())),
 		EnabledFeatures:      res.GetEnabledFeatures(),
 	}
 
-	for i, v := range res.GetActiveActorsCount() {
+	for i, v := range activeActors {
 		metadata.ActiveActorsCount[i] = activeActorsCount{
 			Type:  v.GetType(),
 			Count: int(v.GetCount()),
