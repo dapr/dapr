@@ -177,12 +177,12 @@ func (p *Service) Run(ctx context.Context, port string) error {
 
 	placementv1pb.RegisterPlacementServer(grpcServer, p)
 
-	log.Infof("starting placement service started on port %d", serverListener.Addr().(*net.TCPAddr).Port)
+	log.Infof("Placement service started on port %d", serverListener.Addr().(*net.TCPAddr).Port)
 
 	errCh := make(chan error)
 	go func() {
 		errCh <- grpcServer.Serve(serverListener)
-		log.Info("placement service stopped")
+		log.Info("Placement service stopped")
 	}()
 
 	<-ctx.Done()
@@ -249,9 +249,10 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 
 				registeredMemberID = req.Name
 				p.addStreamConn(stream)
+				// We need to use a background context here so dissemination isn't tied to the context of this stream
 				// TODO: If each sidecar can report table version, then placement
 				// doesn't need to disseminate tables to each sidecar.
-				err = p.performTablesUpdate(stream.Context(), []placementGRPCStream{stream}, p.raftNode.FSM().PlacementState())
+				err = p.performTablesUpdate(context.Background(), []placementGRPCStream{stream}, p.raftNode.FSM().PlacementState())
 				if err != nil {
 					return err
 				}

@@ -13,31 +13,73 @@ limitations under the License.
 
 package compstore
 
-import compsv1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+import (
+	"errors"
+	"fmt"
 
-func (c *ComponentStore) GetComponent(componentType, name string) (compsv1alpha1.Component, bool) {
+	compsv1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+)
+
+func (c *ComponentStore) GetComponent(name string) (compsv1alpha1.Component, bool) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 	for i, comp := range c.components {
-		if comp.Spec.Type == componentType && comp.ObjectMeta.Name == name {
+		if comp.ObjectMeta.Name == name {
 			return c.components[i], true
 		}
 	}
 	return compsv1alpha1.Component{}, false
 }
 
-func (c *ComponentStore) AddComponent(component compsv1alpha1.Component) {
+func (c *ComponentStore) AddPendingComponentForCommit(component compsv1alpha1.Component) error {
+	c.compPendingLock.Lock()
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	for i, comp := range c.components {
-		if comp.Spec.Type == component.Spec.Type && comp.ObjectMeta.Name == component.Name {
-			c.components[i] = component
-			return
+	if c.compPending != nil {
+		c.compPendingLock.Unlock()
+		return errors.New("pending component not yet committed")
+	}
+
+	for _, existing := range c.components {
+		if existing.Name == component.Name {
+			c.compPendingLock.Unlock()
+			return fmt.Errorf("component %s already exists", existing.Name)
 		}
 	}
 
-	c.components = append(c.components, component)
+	c.compPending = &component
+
+	return nil
+}
+
+func (c *ComponentStore) DropPendingComponent() error {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	if c.compPending == nil {
+		return errors.New("no pending component to drop")
+	}
+
+	c.compPending = nil
+	c.compPendingLock.Unlock()
+
+	return nil
+}
+
+func (c *ComponentStore) CommitPendingComponent() error {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	if c.compPending == nil {
+		return errors.New("no pending component to commit")
+	}
+
+	c.components = append(c.components, *c.compPending)
+	c.compPending = nil
+	c.compPendingLock.Unlock()
+
+	return nil
 }
 
 func (c *ComponentStore) ListComponents() []compsv1alpha1.Component {
@@ -48,12 +90,12 @@ func (c *ComponentStore) ListComponents() []compsv1alpha1.Component {
 	return comps
 }
 
-func (c *ComponentStore) DeleteComponent(compType, name string) {
+func (c *ComponentStore) DeleteComponent(name string) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
 	for i, comp := range c.components {
-		if comp.Spec.Type == compType && comp.ObjectMeta.Name == name {
+		if comp.ObjectMeta.Name == name {
 			c.components = append(c.components[:i], c.components[i+1:]...)
 			return
 		}

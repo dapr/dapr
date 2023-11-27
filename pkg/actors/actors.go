@@ -128,6 +128,7 @@ type actorsRuntime struct {
 	wg                   sync.WaitGroup
 	closed               atomic.Bool
 	closeCh              chan struct{}
+	apiLevel             atomic.Uint32
 
 	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 	stateTTLEnabled bool
@@ -157,17 +158,11 @@ func NewActors(opts ActorsOpts) ActorRuntime {
 }
 
 func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) ActorRuntime {
-	remindersProvider := reminders.NewRemindersProvider(clock, internal.RemindersProviderOpts{
-		StoreName: opts.StateStoreName,
-		Config:    opts.Config.Config,
-	})
-
 	a := &actorsRuntime{
 		appChannel:           opts.AppChannel,
 		grpcConnectionFn:     opts.GRPCConnectionFn,
 		actorsConfig:         opts.Config,
 		timers:               timers.NewTimersProvider(clock),
-		actorsReminders:      remindersProvider,
 		tracingSpec:          opts.TracingSpec,
 		resiliency:           opts.Resiliency,
 		storeName:            opts.StateStoreName,
@@ -184,11 +179,18 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) ActorRuntime {
 		closeCh:         make(chan struct{}),
 	}
 
-	a.timers.SetExecuteTimerFn(a.executeTimer)
+	// Init reminders
+	a.actorsReminders = reminders.NewRemindersProvider(a.clock, internal.RemindersProviderOpts{
+		StoreName: a.storeName,
+		Config:    a.actorsConfig.Config,
+	})
 	a.actorsReminders.SetExecuteReminderFn(a.executeReminder)
 	a.actorsReminders.SetResiliencyProvider(a.resiliency)
 	a.actorsReminders.SetStateStoreProviderFn(a.stateStore)
 	a.actorsReminders.SetLookupActorFn(a.isActorLocallyHosted)
+
+	// Init timers
+	a.timers.SetExecuteTimerFn(a.executeTimer)
 
 	return a
 }
@@ -246,14 +248,18 @@ func (a *actorsRuntime) Init(ctx context.Context) error {
 			RuntimeHostname: a.actorsConfig.GetRuntimeHostname(),
 			PodName:         a.actorsConfig.Config.PodName,
 			ActorTypes:      a.actorsConfig.Config.HostedActorTypes.ListActorTypes(),
-			AppHealthFn: func(ctx context.Context) <-chan bool {
-				return a.getAppHealthCheckChan(ctx)
-			},
-			Resiliency: a.resiliency,
+			Resiliency:      a.resiliency,
+			AppHealthFn:     a.getAppHealthCheckChan,
 			AfterTableUpdateFn: func() {
 				a.drainRebalancedActors()
 				a.actorsReminders.OnPlacementTablesUpdated(ctx)
 			},
+		})
+
+		a.placement.SetHaltActorFns(a.haltActor, a.haltAllActors)
+		a.placement.SetOnAPILevelUpdate(func(apiLevel uint32) {
+			a.apiLevel.Store(apiLevel)
+			log.Infof("Actor API level in the cluster has been updated to %d", apiLevel)
 		})
 	}
 
@@ -266,7 +272,7 @@ func (a *actorsRuntime) Init(ctx context.Context) error {
 	a.wg.Add(1)
 	go func() {
 		defer a.wg.Done()
-		a.deactivationTicker(a.actorsConfig, a.deactivateActor)
+		a.deactivationTicker(a.actorsConfig, a.haltActor)
 	}()
 
 	log.Infof("Actor runtime started. Actor idle timeout: %v. Actor scan interval: %v",
@@ -301,32 +307,97 @@ func constructCompositeKey(keys ...string) string {
 	return strings.Join(keys, daprSeparator)
 }
 
-func (a *actorsRuntime) deactivateActor(actorType, actorID string) error {
-	req := invokev1.NewInvokeMethodRequest("actors/"+actorType+"/"+actorID).
-		WithActor(actorType, actorID).
+// Halts an actor, removing it from the actors table and then deactivating it
+func (a *actorsRuntime) haltActor(actorType, actorID string) error {
+	key := constructCompositeKey(actorType, actorID)
+	log.Debugf("Halting actor '%s'", key)
+
+	// Remove the actor from the table
+	// This will forbit more state changes
+	actAny, ok := a.actorsTable.LoadAndDelete(key)
+
+	// If nothing was loaded, the actor was probably already deactivated
+	if !ok || actAny == nil {
+		return nil
+	}
+
+	act := actAny.(*actor)
+	for {
+		// wait until actor is not busy, then deactivate
+		if !act.isBusy() {
+			break
+		}
+
+		a.clock.Sleep(time.Millisecond * 100)
+	}
+
+	return a.deactivateActor(act)
+}
+
+// Halts all actors
+func (a *actorsRuntime) haltAllActors() error {
+	// Visit all currently active actors and deactivate them
+	errCh := make(chan error)
+	count := atomic.Int32{}
+	a.actorsTable.Range(func(key any, value any) bool {
+		count.Add(1)
+		go func(key any) {
+			actorKey := key.(string)
+			err := a.haltActor(a.getActorTypeAndIDFromKey(actorKey))
+			if err != nil {
+				errCh <- fmt.Errorf("failed to deactivate actor '%s': %v", actorKey, err)
+			}
+			errCh <- nil
+		}(key)
+		return true
+	})
+
+	// Collect all errors, which also waits for all goroutines to return
+	errs := []error{}
+	for i := int32(0); i < count.Load(); i++ {
+		err := <-errCh
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	return errors.Join(errs...)
+}
+
+func (a *actorsRuntime) deactivateActor(act *actor) error {
+	ctx := context.Background()
+
+	// Delete the actor from the actor table regardless of the outcome of deactivation the actor in the app
+	actorKey := act.Key()
+	a.actorsTable.Delete(actorKey)
+
+	req := invokev1.NewInvokeMethodRequest("actors/"+act.actorType+"/"+act.actorID).
+		WithActor(act.actorType, act.actorID).
 		WithHTTPExtension(http.MethodDelete, "").
 		WithContentType(invokev1.JSONContentType)
 	defer req.Close()
 
-	// TODO Propagate context.
-	ctx := context.TODO()
-
-	resp, err := a.getAppChannel(actorType).InvokeMethod(ctx, req, "")
+	resp, err := a.getAppChannel(act.actorType).InvokeMethod(ctx, req, "")
 	if err != nil {
-		diag.DefaultMonitoring.ActorDeactivationFailed(actorType, "invoke")
+		diag.DefaultMonitoring.ActorDeactivationFailed(act.actorType, "invoke")
 		return err
 	}
 	defer resp.Close()
 
 	if resp.Status().Code != http.StatusOK {
-		diag.DefaultMonitoring.ActorDeactivationFailed(actorType, "status_code_"+strconv.FormatInt(int64(resp.Status().Code), 10))
+		diag.DefaultMonitoring.ActorDeactivationFailed(act.actorType, "status_code_"+strconv.FormatInt(int64(resp.Status().Code), 10))
 		body, _ := resp.RawDataFull()
 		return fmt.Errorf("error from actor service: %s", string(body))
 	}
 
-	a.removeActorFromTable(actorType, actorID)
-	diag.DefaultMonitoring.ActorDeactivated(actorType)
-	log.Debugf("Deactivated actor type=%s, id=%s", actorType, actorID)
+	diag.DefaultMonitoring.ActorDeactivated(act.actorType)
+	log.Debugf("Deactivated actor '%s'", actorKey)
+
+	// This uses a background context as it should be unrelated from the caller's context - once the actor is deactivated, it should be reported
+	err = a.placement.ReportActorDeactivation(context.Background(), act.actorType, act.actorID)
+	if err != nil {
+		return fmt.Errorf("failed to report actor deactivation for actor '%s': %w", actorKey, err)
+	}
 
 	return nil
 }
@@ -340,9 +411,7 @@ func (a *actorsRuntime) getActorTypeAndIDFromKey(key string) (string, string) {
 	return typ, id
 }
 
-type deactivateFn = func(actorType string, actorID string) error
-
-func (a *actorsRuntime) deactivationTicker(configuration Config, deactivateFn deactivateFn) {
+func (a *actorsRuntime) deactivationTicker(configuration Config, haltFn internal.HaltActorFn) {
 	ticker := a.clock.NewTicker(configuration.ActorDeactivationScanInterval)
 	ch := ticker.C()
 	defer ticker.Stop()
@@ -350,20 +419,19 @@ func (a *actorsRuntime) deactivationTicker(configuration Config, deactivateFn de
 	for {
 		select {
 		case t := <-ch:
-			a.actorsTable.Range(func(key, value interface{}) bool {
+			a.actorsTable.Range(func(key, value any) bool {
 				actorInstance := value.(*actor)
 
 				if actorInstance.isBusy() {
 					return true
 				}
 
-				durationPassed := t.Sub(actorInstance.lastUsedTime)
-				if durationPassed >= configuration.GetIdleTimeoutForType(actorInstance.actorType) {
+				if !t.Before(actorInstance.ScheduledTime()) {
 					a.wg.Add(1)
 					go func(actorKey string) {
 						defer a.wg.Done()
 						actorType, actorID := a.getActorTypeAndIDFromKey(actorKey)
-						err := deactivateFn(actorType, actorID)
+						err := haltFn(actorType, actorID)
 						if err != nil {
 							log.Errorf("failed to deactivate actor %s: %s", actorKey, err)
 						}
@@ -462,7 +530,13 @@ func (a *actorsRuntime) getOrCreateActor(act *internalv1pb.Actor) *actor {
 	// call newActor, but this is trivial.
 	val, ok := a.actorsTable.Load(key)
 	if !ok {
-		val, _ = a.actorsTable.LoadOrStore(key, newActor(act.ActorType, act.ActorId, a.actorsConfig.GetReentrancyForType(act.ActorType).MaxStackDepth, a.clock))
+		actorInstance := newActor(
+			act.ActorType, act.ActorId,
+			a.actorsConfig.GetReentrancyForType(act.ActorType).MaxStackDepth,
+			a.actorsConfig.GetIdleTimeoutForType(act.ActorType),
+			a.clock,
+		)
+		val, _ = a.actorsTable.LoadOrStore(key, actorInstance)
 	}
 
 	return val.(*actor)
@@ -778,7 +852,7 @@ func (a *actorsRuntime) drainRebalancedActors() {
 
 	a.actorsTable.Range(func(key any, value any) bool {
 		wg.Add(1)
-		go func(key any, value any, wg *sync.WaitGroup) {
+		go func(key any, value any) {
 			defer wg.Done()
 			// for each actor, deactivate if no longer hosted locally
 			actorKey := key.(string)
@@ -792,38 +866,28 @@ func (a *actorsRuntime) drainRebalancedActors() {
 				// each item in reminders contain a struct with some metadata + the actual reminder struct
 				a.actorsReminders.DrainRebalancedReminders(actorType, actorID)
 
-				actor := value.(*actor)
+				act := value.(*actor)
 				if a.actorsConfig.GetDrainRebalancedActorsForType(actorType) {
 					// wait until actor isn't busy or timeout hits
-					if actor.isBusy() {
+					if act.isBusy() {
 						select {
 						case <-a.clock.After(a.actorsConfig.Config.DrainOngoingCallTimeout):
 							break
-						case <-actor.channel():
+						case <-act.channel():
 							// if a call comes in from the actor for state changes, that's still allowed
 							break
 						}
 					}
 				}
 
-				// don't allow state changes
-				a.actorsTable.Delete(key)
-
 				diag.DefaultMonitoring.ActorRebalanced(actorType)
 
-				for {
-					// wait until actor is not busy, then deactivate
-					if !actor.isBusy() {
-						err := a.deactivateActor(actorType, actorID)
-						if err != nil {
-							log.Errorf("failed to deactivate actor %s: %s", actorKey, err)
-						}
-						break
-					}
-					a.clock.Sleep(time.Millisecond * 500)
+				err := a.haltActor(actorType, actorID)
+				if err != nil {
+					log.Errorf("Failed to deactivate actor '%s': %v", actorKey, err)
 				}
 			}
-		}(key, value, &wg)
+		}(key, value)
 		return true
 	})
 
@@ -1036,9 +1100,14 @@ func (a *actorsRuntime) Close() error {
 
 	if a.closed.CompareAndSwap(false, true) {
 		defer close(a.closeCh)
+		errs := []error{}
 		if a.placement != nil {
-			return a.placement.Close()
+			err := a.placement.Close()
+			if err != nil {
+				errs = append(errs, fmt.Errorf("failed to close placement service: %w", err))
+			}
 		}
+		return errors.Join(errs...)
 	}
 
 	return nil
