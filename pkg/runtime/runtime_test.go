@@ -1996,8 +1996,8 @@ func TestGracefulShutdownActors(t *testing.T) {
 	}
 
 	var activeActCount int32
-	activeActors := rt.actor.GetActiveActorsCount(context.Background())
-	for _, v := range activeActors {
+	runtimeStatus := rt.actor.GetRuntimeStatus(context.Background())
+	for _, v := range runtimeStatus.GetActiveActors() {
 		activeActCount += v.Count
 	}
 	assert.Equal(t, activeActCount, int32(0))

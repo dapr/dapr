@@ -145,6 +145,17 @@ func NewActorPlacement(opts ActorPlacementOpts) internal.PlacementService {
 	}
 }
 
+func (p *actorPlacement) PlacementHealthy() bool {
+	return p.appHealthy.Load() && p.client.isConnected()
+}
+
+func (p *actorPlacement) StatusMessage() string {
+	if p.client.isConnected() {
+		return "placement: connected"
+	}
+	return "placement: disconnected"
+}
+
 // Register an actor type by adding it to the list of known actor types (if it's not already registered)
 // The placement tables will get updated when the next heartbeat fires
 func (p *actorPlacement) AddHostedActorType(actorType string, idleTimeout time.Duration) error {

@@ -4159,23 +4159,9 @@ func TestMetadata(t *testing.T) {
 	})
 
 	mockActors := new(actors.MockActors)
-	mockActors.On("GetActiveActorsCount")
+	mockActors.On("GetRuntimeStatus")
 
-	appConnectionConfig := config.AppConnectionConfig{
-		ChannelAddress:      "1.2.3.4",
-		MaxConcurrency:      10,
-		Port:                5000,
-		Protocol:            "grpc",
-		HealthCheckHTTPPath: "/healthz",
-		HealthCheck: &config.AppHealthConfig{
-			ProbeInterval: 10 * time.Second,
-			ProbeTimeout:  5 * time.Second,
-			ProbeOnly:     true,
-			Threshold:     3,
-		},
-	}
-
-	server, lis := startDaprAPIServer(&api{
+	a := &api{
 		UniversalAPI: &universalapi.UniversalAPI{
 			AppID:     "fakeAPI",
 			Actors:    mockActors,
@@ -4191,10 +4177,26 @@ func TestMetadata(t *testing.T) {
 			ExtendedMetadata: map[string]string{
 				"test": "value",
 			},
-			AppConnectionConfig: appConnectionConfig,
-			GlobalConfig:        &config.Configuration{},
+			AppConnectionConfig: config.AppConnectionConfig{
+				ChannelAddress:      "1.2.3.4",
+				MaxConcurrency:      10,
+				Port:                5000,
+				Protocol:            "grpc",
+				HealthCheckHTTPPath: "/healthz",
+				HealthCheck: &config.AppHealthConfig{
+					ProbeInterval: 10 * time.Second,
+					ProbeTimeout:  5 * time.Second,
+					ProbeOnly:     true,
+					Threshold:     3,
+				},
+			},
+			GlobalConfig: &config.Configuration{},
 		},
-	}, "")
+	}
+	a.UniversalAPI.InitUniversalAPI()
+	a.UniversalAPI.SetActorsInitDone()
+
+	server, lis := startDaprAPIServer(a, "")
 	defer server.Stop()
 
 	clientConn := createTestClient(lis)
@@ -4219,16 +4221,7 @@ func TestMetadata(t *testing.T) {
 		bytes, err := json.Marshal(res)
 		assert.NoError(t, err)
 
-		expectedResponse := `{"id":"fakeAPI",` +
-			`"active_actors_count":[{"type":"abcd","count":10},{"type":"xyz","count":5}],` +
-			`"registered_components":[{"name":"MockComponent1Name","type":"mock.component1Type","version":"v1.0","capabilities":["mock.feat.MockComponent1Name"]},` +
-			`{"name":"MockComponent2Name","type":"mock.component2Type","version":"v1.0","capabilities":["mock.feat.MockComponent2Name"]}],` +
-			`"extended_metadata":{"daprRuntimeVersion":"edge","foo":"bar","test":"value"},` +
-			`"subscriptions":[{"pubsub_name":"test","topic":"topic","rules":{"rules":[{"path":"path"}]},"dead_letter_topic":"dead"}],` +
-			`"http_endpoints":[{"name":"MockHTTPEndpoint"}],` +
-			`"app_connection_properties":{"port":5000,"protocol":"grpc","channel_address":"1.2.3.4","max_concurrency":10,` +
-			`"health":{"health_probe_interval":"10s","health_probe_timeout":"5s","health_threshold":3}},` +
-			`"runtime_version":"edge"}`
+		expectedResponse := `{"id":"fakeAPI","active_actors_count":[{"type":"abcd","count":10},{"type":"xyz","count":5}],"registered_components":[{"name":"MockComponent1Name","type":"mock.component1Type","version":"v1.0","capabilities":["mock.feat.MockComponent1Name"]},{"name":"MockComponent2Name","type":"mock.component2Type","version":"v1.0","capabilities":["mock.feat.MockComponent2Name"]}],"extended_metadata":{"daprRuntimeVersion":"edge","foo":"bar","test":"value"},"subscriptions":[{"pubsub_name":"test","topic":"topic","rules":{"rules":[{"path":"path"}]},"dead_letter_topic":"dead"}],"http_endpoints":[{"name":"MockHTTPEndpoint"}],"app_connection_properties":{"port":5000,"protocol":"grpc","channel_address":"1.2.3.4","max_concurrency":10,"health":{"health_probe_interval":"10s","health_probe_timeout":"5s","health_threshold":3}},"runtime_version":"edge","actor_runtime":{"runtime_status":2,"active_actors":[{"type":"abcd","count":10},{"type":"xyz","count":5}],"host_ready":true}}`
 		assert.Equal(t, expectedResponse, string(bytes))
 	})
 }

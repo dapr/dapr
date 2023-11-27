@@ -94,6 +94,16 @@ func (*MockPlacement) WaitUntilReady(ctx context.Context) error {
 	return nil
 }
 
+// PlacementHealthy implements internal.PlacementService
+func (*MockPlacement) PlacementHealthy() bool {
+	return true
+}
+
+// StatusMessage implements internal.PlacementService
+func (*MockPlacement) StatusMessage() string {
+	return ""
+}
+
 // ReportActorDeactivation implements implements internal.PlacementService
 func (*MockPlacement) ReportActorDeactivation(ctx context.Context, actorType, actorID string) error {
 	return nil
@@ -311,17 +321,20 @@ func (_m *MockActors) GetReminder(ctx context.Context, req *GetReminderRequest) 
 	return r0, r1
 }
 
-// GetActiveActorsCount provides a mock function
-func (_m *MockActors) GetActiveActorsCount(ctx context.Context) []*runtimev1pb.ActiveActorsCount {
+// GetRuntimeStatus provides a mock function
+func (_m *MockActors) GetRuntimeStatus(ctx context.Context) *runtimev1pb.ActorRuntime {
 	_m.Called()
-	return []*runtimev1pb.ActiveActorsCount{
-		{
-			Type:  "abcd",
-			Count: 10,
-		},
-		{
-			Type:  "xyz",
-			Count: 5,
+	return &runtimev1pb.ActorRuntime{
+		HostReady: true,
+		ActiveActors: []*runtimev1pb.ActiveActorsCount{
+			{
+				Type:  "abcd",
+				Count: 10,
+			},
+			{
+				Type:  "xyz",
+				Count: 5,
+			},
 		},
 	}
 }
@@ -400,6 +413,8 @@ func (f *FailingActors) IsActorHosted(ctx context.Context, req *ActorHostedReque
 	return true
 }
 
-func (f *FailingActors) GetActiveActorsCount(ctx context.Context) []*runtimev1pb.ActiveActorsCount {
-	return []*runtimev1pb.ActiveActorsCount{}
+func (f *FailingActors) GetRuntimeStatus(ctx context.Context) *runtimev1pb.ActorRuntime {
+	return &runtimev1pb.ActorRuntime{
+		ActiveActors: []*runtimev1pb.ActiveActorsCount{},
+	}
 }

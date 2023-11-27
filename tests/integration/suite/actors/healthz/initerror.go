@@ -15,7 +15,6 @@ package healthz
 
 import (
 	"context"
-	"net"
 	"net/http"
 	"strconv"
 	"testing"
@@ -67,18 +66,8 @@ func (i *initerror) Setup(t *testing.T) []framework.Option {
 
 	srv := prochttp.New(t, prochttp.WithHandler(handler))
 	i.place = placement.New(t)
-	i.daprd = daprd.New(t, daprd.WithResourceFiles(`
-apiVersion: dapr.io/v1alpha1
-kind: Component
-metadata:
-  name: mystore
-spec:
-  type: state.in-memory
-  version: v1
-  metadata:
-  - name: actorStateStore
-    value: true
-`),
+	i.daprd = daprd.New(t,
+		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithPlacementAddresses("localhost:"+strconv.Itoa(i.place.Port())),
 		daprd.WithAppPort(srv.Port()),
 		// Daprd is super noisy in debug mode when connecting to placement.
@@ -92,16 +81,7 @@ spec:
 
 func (i *initerror) Run(t *testing.T, ctx context.Context) {
 	i.place.WaitUntilRunning(t, ctx)
-
-	assert.Eventually(t, func() bool {
-		dialer := net.Dialer{Timeout: time.Second}
-		net, err := dialer.DialContext(ctx, "tcp", "localhost:"+strconv.Itoa(i.daprd.HTTPPort()))
-		if err != nil {
-			return false
-		}
-		net.Close()
-		return true
-	}, time.Second*5, time.Millisecond*100)
+	i.daprd.WaitUntilTCPReady(t, ctx)
 
 	client := util.HTTPClient(t)
 

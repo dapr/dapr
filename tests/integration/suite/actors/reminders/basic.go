@@ -64,18 +64,8 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 
 	srv := prochttp.New(t, prochttp.WithHandler(handler))
 	b.place = placement.New(t)
-	b.daprd = daprd.New(t, daprd.WithResourceFiles(`
-apiVersion: dapr.io/v1alpha1
-kind: Component
-metadata:
-  name: mystore
-spec:
-  type: state.in-memory
-  version: v1
-  metadata:
-  - name: actorStateStore
-    value: true
-`),
+	b.daprd = daprd.New(t,
+		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithPlacementAddresses("localhost:"+strconv.Itoa(b.place.Port())),
 		daprd.WithAppPort(srv.Port()),
 	)
