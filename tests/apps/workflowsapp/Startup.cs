@@ -62,6 +62,17 @@ namespace DaprDemoActor
                     // inventory and charging the customer credit card etc. But let's keep it simple ;)
                     await context.CallActivityAsync<string>("ShipProduct", itemToPurchase);
 
+                    try
+                    {
+                        await context.WaitForExternalEventAsync<string>("CallSubWorkflow", TimeSpan.FromSeconds(5));
+                        ChildWorkflowTaskOptions options = new ChildWorkflowTaskOptions("subworkflow-" + context.InstanceId);
+                        context.CallChildWorkflowAsync<string>("CloseOrder", itemToPurchase, options);
+                    }
+                    catch (TaskCanceledException e)
+                    {
+                        // sub workflow is not triggered, pass.
+                    }
+
                     return itemToPurchase;
                 });
 
@@ -69,6 +80,11 @@ namespace DaprDemoActor
                 options.RegisterActivity<string, string>("ShipProduct", implementation: (context, input) =>
                 {
                     return Task.FromResult($"We are shipping {input} to the customer using our hoard of drones!");
+                });
+
+                options.RegisterWorkflow<string, string>("CloseOrder",implementation: async (context, input) => {
+                    await context.CreateTimer(TimeSpan.FromSeconds(5));
+                    return $"{input} order closed. Starting a new place order workflow..."; 
                 });
 
             });
