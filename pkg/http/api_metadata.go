@@ -67,7 +67,7 @@ func (a *api) onGetMetadata() http.HandlerFunc {
 					ID:       out.Id,
 					Extended: out.ExtendedMetadata,
 					// We can embed the proto object directly only for as long as the protojson key is == json key
-					ActiveActorsCount:    out.ActiveActorsCount,
+					ActiveActorsCount:    out.ActiveActorsCount, //nolint:staticcheck
 					RegisteredComponents: out.RegisteredComponents,
 					HTTPEndpoints:        out.HttpEndpoints,
 					RuntimeVersion:       out.RuntimeVersion,
@@ -115,6 +115,16 @@ func (a *api) onGetMetadata() http.HandlerFunc {
 					res.Subscriptions = subs
 				}
 
+				// Actor runtime
+				// We need to include the status as string
+				actorRuntime := out.GetActorRuntime()
+				res.ActorRuntime = metadataActorRuntime{
+					Status:       actorRuntime.GetRuntimeStatus().String(),
+					ActiveActors: actorRuntime.GetActiveActors(),
+					HostReady:    actorRuntime.GetHostReady(),
+					Placement:    actorRuntime.GetPlacement(),
+				}
+
 				return res, nil
 			},
 		},
@@ -155,6 +165,14 @@ type metadataResponse struct {
 	Subscriptions           []metadataResponsePubsubSubscription    `json:"subscriptions,omitempty"`
 	HTTPEndpoints           []*runtimev1pb.MetadataHTTPEndpoint     `json:"httpEndpoints,omitempty"`
 	AppConnectionProperties metadataResponseAppConnectionProperties `json:"appConnectionProperties,omitempty"`
+	ActorRuntime            metadataActorRuntime                    `json:"actorRuntime,omitempty"`
+}
+
+type metadataActorRuntime struct {
+	Status       string                           `json:"runtimeStatus"`
+	ActiveActors []*runtimev1pb.ActiveActorsCount `json:"activeActors,omitempty"`
+	HostReady    bool                             `json:"hostReady"`
+	Placement    string                           `json:"placement,omitempty"`
 }
 
 type metadataResponsePubsubSubscription struct {

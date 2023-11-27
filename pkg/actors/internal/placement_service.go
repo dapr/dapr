@@ -37,6 +37,11 @@ type PlacementService interface {
 
 	SetHaltActorFns(haltFn HaltActorFn, haltAllFn HaltAllActorsFn)
 	SetOnAPILevelUpdate(fn func(apiLevel uint32))
+
+	// PlacementHealthy returns true if the placement service is healthy.
+	PlacementHealthy() bool
+	// StatusMessage returns a custom status message.
+	StatusMessage() string
 }
 
 // LookupActorRequest is the request for LookupActor.

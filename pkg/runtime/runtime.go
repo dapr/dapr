@@ -517,9 +517,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 }
 
 // appHealthReadyInit completes the initialization phase and is invoked after the app is healthy
-func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) error {
-	var err error
-
+func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) (err error) {
 	// Load app configuration (for actors) and init actors
 	a.loadAppConfiguration(ctx)
 
