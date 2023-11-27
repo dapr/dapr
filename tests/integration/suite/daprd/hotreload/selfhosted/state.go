@@ -169,6 +169,7 @@ spec:
 		s.writeRead(t, ctx, client, "xyz")
 	})
 
+	tmpDir := t.TempDir()
 	t.Run("changing the type of a state store should update the component and still be available", func(t *testing.T) {
 		s.writeRead(t, ctx, client, "123")
 		s.writeRead(t, ctx, client, "abc")
@@ -185,7 +186,7 @@ spec:
  metadata:
  - name: connectionString
    value: %s/db.sqlite
-`, t.TempDir())), 0o600))
+`, tmpDir)), 0o600))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := util.GetMetaComponents(c, ctx, client, s.daprd.HTTPPort())
@@ -322,13 +323,14 @@ spec:
 		s.writeRead(t, ctx, client, "foo")
 	})
 
+	tmpDir = t.TempDir()
 	t.Run("deleting a component (through type update) should delete the components", func(t *testing.T) {
 		s.writeRead(t, ctx, client, "123")
 		s.writeRead(t, ctx, client, "bar")
 		s.writeRead(t, ctx, client, "xyz")
 		s.writeRead(t, ctx, client, "foo")
 
-		secPath := filepath.Join(t.TempDir(), "foo")
+		secPath := filepath.Join(tmpDir, "foo")
 		require.NoError(t, os.WriteFile(secPath, []byte(`{}`), 0o600))
 		require.NoError(t, os.WriteFile(filepath.Join(s.resDir2, "2.yaml"), []byte(fmt.Sprintf(`
 apiVersion: dapr.io/v1alpha1
