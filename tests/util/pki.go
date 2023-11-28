@@ -64,9 +64,16 @@ type PKI struct {
 
 func GenPKI(t *testing.T, opts PKIOptions) PKI {
 	t.Helper()
-
-	rootPK, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	pki, err := GenPKIError(opts)
 	require.NoError(t, err)
+	return pki
+}
+
+func GenPKIError(opts PKIOptions) (PKI, error) {
+	rootPK, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return PKI{}, err
+	}
 
 	rootCert := &x509.Certificate{
 		SerialNumber:          big.NewInt(1),
@@ -78,15 +85,26 @@ func GenPKI(t *testing.T, opts PKIOptions) PKI {
 		BasicConstraintsValid: true,
 	}
 	rootCertBytes, err := x509.CreateCertificate(rand.Reader, rootCert, rootCert, &rootPK.PublicKey, rootPK)
-	require.NoError(t, err)
+	if err != nil {
+		return PKI{}, err
+	}
 
 	rootCert, err = x509.ParseCertificate(rootCertBytes)
-	require.NoError(t, err)
+	if err != nil {
+		return PKI{}, err
+	}
 
 	rootCertPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: rootCertBytes})
 
-	leafCertPEM, leafPKPEM, leafCert, leafPK := genLeafCert(t, rootPK, rootCert, opts.LeafID, opts.LeafDNS)
-	clientCertPEM, clientPKPEM, clientCert, clientPK := genLeafCert(t, rootPK, rootCert, opts.ClientID, opts.ClientDNS)
+	leafCertPEM, leafPKPEM, leafCert, leafPK, err := genLeafCert(rootPK, rootCert, opts.LeafID, opts.LeafDNS)
+	if err != nil {
+		return PKI{}, err
+	}
+	clientCertPEM, clientPKPEM, clientCert, clientPK, err := genLeafCert(rootPK, rootCert, opts.ClientID, opts.ClientDNS)
+	if err != nil {
+		return PKI{}, err
+	}
+
 	return PKI{
 		RootCert:      rootCert,
 		RootCertPEM:   rootCertPEM,
@@ -100,7 +118,7 @@ func GenPKI(t *testing.T, opts PKIOptions) PKI {
 		ClientPK:      clientPK,
 		leafID:        opts.LeafID,
 		clientID:      opts.ClientID,
-	}
+	}, nil
 }
 
 func (p PKI) ClientGRPCCtx(t *testing.T) context.Context {
@@ -150,14 +168,16 @@ func (p PKI) ClientGRPCCtx(t *testing.T) context.Context {
 	return gs.ctx
 }
 
-func genLeafCert(t *testing.T, rootPK *ecdsa.PrivateKey, rootCert *x509.Certificate, id spiffeid.ID, dns string) ([]byte, []byte, *x509.Certificate, crypto.Signer) {
-	t.Helper()
-
+func genLeafCert(rootPK *ecdsa.PrivateKey, rootCert *x509.Certificate, id spiffeid.ID, dns string) ([]byte, []byte, *x509.Certificate, crypto.Signer, error) {
 	pk, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	require.NoError(t, err)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
 
 	pkBytes, err := x509.MarshalPKCS8PrivateKey(pk)
-	require.NoError(t, err)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
 
 	cert := &x509.Certificate{
 		SerialNumber: big.NewInt(1),
@@ -179,15 +199,19 @@ func genLeafCert(t *testing.T, rootPK *ecdsa.PrivateKey, rootCert *x509.Certific
 	}
 
 	certBytes, err := x509.CreateCertificate(rand.Reader, cert, rootCert, &pk.PublicKey, rootPK)
-	require.NoError(t, err)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
 
 	cert, err = x509.ParseCertificate(certBytes)
-	require.NoError(t, err)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
 
 	pkPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: pkBytes})
 	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certBytes})
 
-	return certPEM, pkPEM, cert, pk
+	return certPEM, pkPEM, cert, pk, nil
 }
 
 type mockSVID struct {

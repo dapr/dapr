@@ -80,7 +80,7 @@ func TestMain(m *testing.M) {
 	utils.SetupLogs("service_invocation")
 	utils.InitHTTPClient(false)
 
-	pki, err := util.GenPKI(t, util.PKIOptions{
+	pki, err := util.GenPKIError(util.PKIOptions{
 		LeafDNS: "service-invocation-external",
 	})
 	if err != nil {
