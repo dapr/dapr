@@ -36,10 +36,7 @@ func TestGetMetadata(t *testing.T) {
 	fakeComponent.Name = "testComponent"
 
 	mockActors := new(actors.MockActors)
-	mockActors.On("GetActiveActorsCount").Return(&runtimev1pb.ActiveActorsCount{
-		Count: 10,
-		Type:  "abcd",
-	})
+	mockActors.On("GetRuntimeStatus")
 
 	compStore := compstore.New()
 	require.NoError(t, compStore.AddPendingComponentForCommit(fakeComponent))
@@ -107,6 +104,7 @@ func TestGetMetadata(t *testing.T) {
 				AppConnectionConfig: appConnectionConfig,
 				GlobalConfig:        &config.Configuration{},
 			}
+			fakeAPI.actorsReady.Store(true)
 
 			response, err := fakeAPI.GetMetadata(context.Background(), &runtimev1pb.GetMetadataRequest{})
 			require.NoError(t, err, "Expected no error")
@@ -126,7 +124,7 @@ func TestGetMetadata(t *testing.T) {
 				`"subscriptions":[{"pubsub_name":"test","topic":"topic","rules":{"rules":[{"path":"path"}]},"dead_letter_topic":"dead"}],` +
 				`"app_connection_properties":{"port":1234,"protocol":"http","channel_address":"1.2.3.4","max_concurrency":10` +
 				healthCheckJSON +
-				`"runtime_version":"edge"}`
+				`"runtime_version":"edge","actor_runtime":{"runtime_status":2,"active_actors":[{"type":"abcd","count":10},{"type":"xyz","count":5}],"host_ready":true}}`
 			assert.Equal(t, expectedResponse, string(bytes))
 		})
 	}
