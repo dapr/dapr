@@ -31,9 +31,9 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
-	procgrpc "github.com/dapr/dapr/tests/integration/framework/process/grpc"
-	procplacement "github.com/dapr/dapr/tests/integration/framework/process/placement"
-	procsentry "github.com/dapr/dapr/tests/integration/framework/process/sentry"
+	"github.com/dapr/dapr/tests/integration/framework/process/grpc/operator"
+	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -44,14 +44,14 @@ func init() {
 // enable tests Kubernetes daprd with mTLS enabled.
 type enable struct {
 	daprd        *procdaprd.Daprd
-	sentry       *procsentry.Sentry
-	placement    *procplacement.Placement
-	operator     *procgrpc.GRPC
+	sentry       *sentry.Sentry
+	placement    *placement.Placement
+	operator     *operator.Operator
 	trustAnchors []byte
 }
 
 func (e *enable) Setup(t *testing.T) []framework.Option {
-	e.sentry = procsentry.New(t)
+	e.sentry = sentry.New(t)
 
 	bundle := e.sentry.CABundle()
 	e.trustAnchors = bundle.TrustAnchors

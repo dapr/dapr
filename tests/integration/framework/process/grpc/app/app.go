@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package grpcapp
+package app
 
 import (
 	"testing"
@@ -25,12 +25,12 @@ import (
 // Option is a function that configures the process.
 type Option func(*options)
 
-// GRPCApp is a wrapper around a grpc.Server that implements a Dapr App.
-type GRPCApp struct {
+// App is a wrapper around a grpc.Server that implements a Dapr App.
+type App struct {
 	*procgrpc.GRPC
 }
 
-func New(t *testing.T, fopts ...Option) *GRPCApp {
+func New(t *testing.T, fopts ...Option) *App {
 	t.Helper()
 
 	var opts options
@@ -38,7 +38,7 @@ func New(t *testing.T, fopts ...Option) *GRPCApp {
 		fopt(&opts)
 	}
 
-	return &GRPCApp{
+	return &App{
 		GRPC: procgrpc.New(t, append(opts.grpcopts, procgrpc.WithRegister(func(s *grpc.Server) {
 			srv := &server{
 				onInvokeFn:       opts.onInvokeFn,

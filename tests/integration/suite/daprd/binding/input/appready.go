@@ -29,7 +29,7 @@ import (
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/grpcapp"
+	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
 	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -47,8 +47,8 @@ type appready struct {
 }
 
 func (a *appready) Setup(t *testing.T) []framework.Option {
-	srv := grpcapp.New(t,
-		grpcapp.WithHealthCheckFn(func(context.Context, *emptypb.Empty) (*rtv1.HealthCheckResponse, error) {
+	srv := app.New(t,
+		app.WithHealthCheckFn(func(context.Context, *emptypb.Empty) (*rtv1.HealthCheckResponse, error) {
 			defer a.healthCalled.Add(1)
 			if a.appHealthy.Load() {
 				return &rtv1.HealthCheckResponse{}, nil
@@ -64,7 +64,7 @@ func (a *appready) Setup(t *testing.T) []framework.Option {
 			}
 			return new(rtv1.BindingEventResponse), nil
 		}),
-		grpcapp.WithListInputBindings(func(context.Context, *emptypb.Empty) (*rtv1.ListInputBindingsResponse, error) {
+		app.WithListInputBindings(func(context.Context, *emptypb.Empty) (*rtv1.ListInputBindingsResponse, error) {
 			return &rtv1.ListInputBindingsResponse{
 				Bindings: []string{"mybinding"},
 			}, nil

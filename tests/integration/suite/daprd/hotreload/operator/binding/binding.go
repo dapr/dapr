@@ -11,9 +11,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package hotreload
+package binding
 
 import (
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/hotreload/operator"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/hotreload/selfhosted"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/hotreload/operator/binding/intput"
 )

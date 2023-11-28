@@ -29,7 +29,7 @@ import (
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/grpcapp"
+	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
 	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -46,8 +46,8 @@ type appready struct {
 }
 
 func (a *appready) Setup(t *testing.T) []framework.Option {
-	srv := grpcapp.New(t,
-		grpcapp.WithHealthCheckFn(func(context.Context, *emptypb.Empty) (*rtv1.HealthCheckResponse, error) {
+	srv := app.New(t,
+		app.WithHealthCheckFn(func(context.Context, *emptypb.Empty) (*rtv1.HealthCheckResponse, error) {
 			defer a.healthCalled.Add(1)
 			if a.appHealthy.Load() {
 				return &rtv1.HealthCheckResponse{}, nil
@@ -58,7 +58,7 @@ func (a *appready) Setup(t *testing.T) []framework.Option {
 			a.topicChan <- in.GetPath()
 			return new(rtv1.TopicEventResponse), nil
 		}),
-		grpcapp.WithListTopicSubscriptions(func(context.Context, *emptypb.Empty) (*rtv1.ListTopicSubscriptionsResponse, error) {
+		app.WithListTopicSubscriptions(func(context.Context, *emptypb.Empty) (*rtv1.ListTopicSubscriptionsResponse, error) {
 			return &rtv1.ListTopicSubscriptionsResponse{
 				Subscriptions: []*rtv1.TopicSubscription{
 					{PubsubName: "mypubsub", Topic: "mytopic", Routes: &rtv1.TopicRoutes{Default: "/myroute"}},
