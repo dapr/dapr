@@ -253,7 +253,7 @@ create-test-namespace:
 	kubectl create namespace $(DAPR_TEST_NAMESPACE)
 
 delete-test-namespace:
-	kubectl delete namespace $(DAPR_TEST_NAMESPACE)
+	kubectl delete namespace $(DAPR_TEST_NAMESPACE) aa
 
 setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-zipkin setup-test-env-postgres
 
@@ -584,6 +584,8 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/externalinvocationcrd.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/omithealthchecks_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/external_invocation_http_endpoint_tls.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	# Don't set namespace as Namespace is defind in the yaml.
+	$(KUBECTL) apply -f ./tests/config/ignore_daprsystem_config.yaml
 
 	# Show the installed components
 	$(KUBECTL) get components --namespace $(DAPR_TEST_NAMESPACE)

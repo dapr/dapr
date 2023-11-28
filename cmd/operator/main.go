@@ -55,6 +55,8 @@ func main() {
 		WatchdogEnabled:                     opts.WatchdogEnabled,
 		WatchdogInterval:                    opts.WatchdogInterval,
 		WatchdogCanPatchPodLabels:           opts.WatchdogCanPatchPodLabels,
+		APIPort:                             opts.APIPort,
+		HealthzPort:                         opts.HealthzPort,
 	})
 	if err != nil {
 		log.Fatalf("error creating operator: %v", err)
