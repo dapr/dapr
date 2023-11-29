@@ -110,7 +110,6 @@ func (i *serializationProtobuf) Run(t *testing.T, ctx context.Context) {
 	// The value must be base64-encoded, and after being decoded it should begin with `\0pb`, which indicates it was serialized as JSON
 	storedVal := serializationLoadRemindersFromDB(t, ctx, i.db.GetConnection())
 	storedValBytes, err := base64.StdEncoding.DecodeString(storedVal)
-	fmt.Println(storedVal)
 	require.NoErrorf(t, err, "Failed to decode value from base64: '%v'", storedVal)
 	assert.Truef(t, bytes.HasPrefix(storedValBytes, []byte{0, 'p', 'b'}), "Prefix not found in value: '%v'", storedVal)
 }
