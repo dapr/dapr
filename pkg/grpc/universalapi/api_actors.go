@@ -21,6 +21,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -89,7 +90,6 @@ func (a *UniversalAPI) DeleteActorState(ctx context.Context, in *runtimev1pb.Del
 		ActorID:   actorID,
 		Key:       key,
 	})
-
 	if err != nil {
 		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrActorStateGet, err))
 		a.Logger.Debug(err)
