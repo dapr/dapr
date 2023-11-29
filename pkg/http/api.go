@@ -1426,44 +1426,6 @@ func (a *api) onGetActorState(reqCtx *fasthttp.RequestCtx) {
 	}
 }
 
-func (a *api) onDeleteActorState(reqCtx *fasthttp.RequestCtx) {
-	if !a.actorReadinessCheckFastHTTP(reqCtx) {
-		// Response already sent
-		return
-	}
-
-	actorType := reqCtx.UserValue(actorTypeParam).(string)
-	actorID := reqCtx.UserValue(actorIDParam).(string)
-	key := reqCtx.UserValue(stateKeyParam).(string)
-
-	hosted := a.universal.Actors.IsActorHosted(reqCtx, &actors.ActorHostedRequest{
-		ActorType: actorType,
-		ActorID:   actorID,
-	})
-
-	if !hosted {
-		msg := NewErrorResponse("ERR_ACTOR_INSTANCE_MISSING", messages.ErrActorInstanceMissing)
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusBadRequest, msg))
-		log.Debug(msg)
-		return
-	}
-
-	req := actors.DeleteStateRequest{
-		ActorType: actorType,
-		ActorID:   actorID,
-		Key:       key,
-	}
-
-	_, err := a.universal.Actors.DeleteState(reqCtx, &req)
-	if err != nil {
-		msg := NewErrorResponse("ERR_ACTOR_STATE_DELETE", fmt.Sprintf(messages.ErrActorStateGet, err))
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
-		log.Debug(msg)
-	} else {
-		fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
-	}
-}
-
 func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	thepubsub, pubsubName, topic, sc, errRes := a.validateAndGetPubsubAndTopic(reqCtx)
 	if errRes != nil {

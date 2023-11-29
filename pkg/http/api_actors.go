@@ -14,7 +14,6 @@ limitations under the License.
 package http
 
 import (
-	"net/http"
 	nethttp "net/http"
 
 	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
@@ -158,15 +157,15 @@ func (a *api) constructActorEndpoints() []endpoints.Endpoint {
 }
 
 // Route: DELETE "actors/{actorType}/{actorId}/state/{key}"
-func (a *api) onDeleteActorStateHandler() http.HandlerFunc {
+func (a *api) onDeleteActorStateHandler() nethttp.HandlerFunc {
 	return UniversalHTTPHandler(
 		a.universal.DeleteActorState,
 		UniversalHTTPHandlerOpts[*runtimev1pb.DeleteActorStateRequest, *runtimev1pb.DeleteActorStateResponse]{
-			InModifier: func(r *http.Request, in *runtimev1pb.DeleteActorStateRequest) (*runtimev1pb.DeleteActorStateRequest, error) {
+			InModifier: func(r *nethttp.Request, in *runtimev1pb.DeleteActorStateRequest) (*runtimev1pb.DeleteActorStateRequest, error) {
 				in.ActorId = chi.URLParam(r, actorIDParam)
 				in.ActorType = chi.URLParam(r, actorTypeParam)
 				return in, nil
 			},
-			SuccessStatusCode: http.StatusNoContent,
+			SuccessStatusCode: nethttp.StatusNoContent,
 		})
 }
