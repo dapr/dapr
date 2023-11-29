@@ -110,6 +110,7 @@ func TestStreamingServerInterceptor(t *testing.T) {
 		require.Equal(t, 1, len(rows))
 		assert.Equal(t, "app_id", rows[0].Tags[0].Key.Name())
 		assert.Equal(t, "grpc_server_method", rows[0].Tags[1].Key.Name())
+		assert.Equal(t, "grpc_server_status", rows[0].Tags[2].Key.Name())
 	})
 }
 
