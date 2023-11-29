@@ -16,6 +16,7 @@ package daprd
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -155,6 +156,18 @@ func (d *Daprd) Cleanup(t *testing.T) {
 	d.appHTTP.Cleanup(t)
 }
 
+func (d *Daprd) WaitUntilTCPReady(t *testing.T, ctx context.Context) {
+	assert.Eventually(t, func() bool {
+		dialer := net.Dialer{Timeout: time.Second}
+		net, err := dialer.DialContext(ctx, "tcp", "localhost:"+strconv.Itoa(d.HTTPPort()))
+		if err != nil {
+			return false
+		}
+		net.Close()
+		return true
+	}, 10*time.Second, 100*time.Millisecond)
+}
+
 func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
 	client := util.HTTPClient(t)
 	assert.Eventually(t, func() bool {
@@ -168,7 +181,7 @@ func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
 		}
 		defer resp.Body.Close()
 		return http.StatusNoContent == resp.StatusCode
-	}, time.Second*10, 100*time.Millisecond)
+	}, 10*time.Second, 100*time.Millisecond)
 }
 
 func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
@@ -186,7 +199,7 @@ func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
 			}
 			defer resp.Body.Close()
 			return http.StatusNoContent == resp.StatusCode
-		}, time.Second*10, 100*time.Millisecond)
+		}, 10*time.Second, 100*time.Millisecond)
 
 	case "grpc":
 		assert.Eventually(t, func() bool {
@@ -204,7 +217,7 @@ func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
 			out := runtimev1pb.HealthCheckResponse{}
 			err = conn.Invoke(ctx, "/dapr.proto.runtime.v1.AppCallbackHealthCheck/HealthCheck", &in, &out)
 			return err == nil
-		}, time.Second*10, 100*time.Millisecond)
+		}, 10*time.Second, 100*time.Millisecond)
 	}
 }
 

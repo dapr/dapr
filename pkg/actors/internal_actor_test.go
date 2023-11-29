@@ -268,6 +268,6 @@ func TestInternalActorsNotCounted(t *testing.T) {
 	internalActors[InternalActorTypePrefix+"wfengine.workflow"] = &mockInternalActor{}
 	testActorRuntime, err := newTestActorsRuntimeWithInternalActors(internalActors)
 	require.NoError(t, err)
-	actorCounts := testActorRuntime.GetActiveActorsCount(context.Background())
+	actorCounts := testActorRuntime.getActiveActorsCount(context.Background())
 	assert.Empty(t, actorCounts)
 }
