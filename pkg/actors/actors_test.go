@@ -1005,7 +1005,7 @@ func TestActiveActorsCount(t *testing.T) {
 		fakeCallAndActivateActor(testActorsRuntime, "cat", "xyz", testActorsRuntime.clock)
 		fakeCallAndActivateActor(testActorsRuntime, "dog", "xyz", testActorsRuntime.clock)
 
-		actualCounts := testActorsRuntime.GetActiveActorsCount(ctx)
+		actualCounts := testActorsRuntime.getActiveActorsCount(ctx)
 		assert.ElementsMatch(t, expectedCounts, actualCounts)
 	})
 
@@ -1016,7 +1016,7 @@ func TestActiveActorsCount(t *testing.T) {
 		testActorsRuntime.actorsConfig.Config.HostedActorTypes = internal.NewHostedActors([]string{})
 		defer testActorsRuntime.Close()
 
-		actualCounts := testActorsRuntime.GetActiveActorsCount(ctx)
+		actualCounts := testActorsRuntime.getActiveActorsCount(ctx)
 		assert.Equal(t, expectedCounts, actualCounts)
 	})
 }
