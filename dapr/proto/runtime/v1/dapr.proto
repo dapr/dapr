@@ -83,7 +83,7 @@ service Dapr {
   rpc GetActorState(GetActorStateRequest) returns (GetActorStateResponse) {}
 
   // Gets the state for a specific actor.
-  rpc DeleteActorState(DeleteActorStateRequest) returns (google.protobuf.Empty) {}
+  rpc DeleteActorState(DeleteActorStateRequest) returns (DeleteActorStateResponse) {}
 
   // Executes state transactions for a specified actor
   rpc ExecuteActorStateTransaction(ExecuteActorStateTransactionRequest) returns (google.protobuf.Empty) {}
@@ -554,6 +554,11 @@ message DeleteActorStateRequest {
   string actor_type = 1;
   string actor_id = 2;
   string key = 3;
+}
+
+// DeleteActorStateResponse is the response for a delete actor state request
+message DeleteActorStateResponse {
+  // Empty
 }
 
 // GetActorStateResponse is the response conveying the actor's state value.

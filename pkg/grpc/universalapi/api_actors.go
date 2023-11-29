@@ -23,7 +23,6 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/gogo/status"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 func (a *UniversalAPI) SetActorRuntime(actor actors.ActorRuntime) {
@@ -55,7 +54,7 @@ func (a *UniversalAPI) WaitForActorsReady(ctx context.Context) {
 }
 
 // This function makes sure that the actor subsystem is ready.
-func (a *UniversalAPI) actorReadinessCheck(ctx context.Context) error {
+func (a *UniversalAPI) ActorReadinessCheck(ctx context.Context) error {
 	a.WaitForActorsReady(ctx)
 
 	if a.Actors == nil {
@@ -66,38 +65,36 @@ func (a *UniversalAPI) actorReadinessCheck(ctx context.Context) error {
 	return nil
 }
 
-func (a *UniversalAPI) DeleteActorState(ctx context.Context, in *runtimev1pb.DeleteActorStateRequest) (*emptypb.Empty, error) {
-	if err := a.actorReadinessCheck(ctx); err != nil {
-		return &emptypb.Empty{}, err
+func (a *UniversalAPI) DeleteActorState(ctx context.Context, in *runtimev1pb.DeleteActorStateRequest) (*runtimev1pb.DeleteActorStateResponse, error) {
+	if err := a.ActorReadinessCheck(ctx); err != nil {
+		return &runtimev1pb.DeleteActorStateResponse{}, err
 	}
 
-	actorType := in.ActorType
 	actorID := in.ActorId
 	key := in.Key
 
 	hosted := a.Actors.IsActorHosted(ctx, &actors.ActorHostedRequest{
-		ActorType: actorType,
+		ActorType: in.ActorType,
 		ActorID:   actorID,
 	})
 
 	if !hosted {
 		err := status.Errorf(codes.Internal, messages.ErrActorInstanceMissing)
 		a.Logger.Debug(err)
-		return &emptypb.Empty{}, err
+		return &runtimev1pb.DeleteActorStateResponse{}, err
 	}
 
-	req := actors.DeleteStateRequest{
-		ActorType: actorType,
+	_, err := a.Actors.DeleteState(ctx, &actors.DeleteStateRequest{
+		ActorType: in.ActorType,
 		ActorID:   actorID,
 		Key:       key,
-	}
+	})
 
-	err := a.Actors.DeleteState(ctx, &req)
 	if err != nil {
 		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrActorStateGet, err))
 		a.Logger.Debug(err)
-		return &emptypb.Empty{}, err
+		return &runtimev1pb.DeleteActorStateResponse{}, err
 	}
 
-	return &emptypb.Empty{}, nil
+	return &runtimev1pb.DeleteActorStateResponse{}, nil
 }

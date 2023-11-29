@@ -89,7 +89,7 @@ type Actors interface {
 	// GetState retrieves actor state.
 	GetState(ctx context.Context, req *GetStateRequest) (*StateResponse, error)
 	// DeleteState deletes actor state.
-	DeleteState(ctx context.Context, req *DeleteStateRequest) error
+	DeleteState(ctx context.Context, req *DeleteStateRequest) (*runtimev1pb.DeleteActorStateResponse, error)
 	// GetBulkState retrieves actor state in bulk.
 	GetBulkState(ctx context.Context, req *GetBulkStateRequest) (BulkStateResponse, error)
 	// TransactionalStateOperation performs a transactional state operation with the actor state store.
@@ -713,10 +713,10 @@ func (a *actorsRuntime) GetState(ctx context.Context, req *GetStateRequest) (*St
 	}, nil
 }
 
-func (a *actorsRuntime) DeleteState(ctx context.Context, req *DeleteStateRequest) error {
+func (a *actorsRuntime) DeleteState(ctx context.Context, req *DeleteStateRequest) (*runtimev1pb.DeleteActorStateResponse, error) {
 	store, err := a.stateStore()
 	if err != nil {
-		return err
+		return &runtimev1pb.DeleteActorStateResponse{}, err
 	}
 
 	actorKey := req.ActorKey()
@@ -736,7 +736,7 @@ func (a *actorsRuntime) DeleteState(ctx context.Context, req *DeleteStateRequest
 		return nil, store.Delete(ctx, storeReq)
 	})
 
-	return err
+	return &runtimev1pb.DeleteActorStateResponse{}, err
 }
 
 func (a *actorsRuntime) GetBulkState(ctx context.Context, req *GetBulkStateRequest) (BulkStateResponse, error) {

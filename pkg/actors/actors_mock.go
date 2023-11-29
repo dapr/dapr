@@ -232,7 +232,7 @@ func (_m *MockActors) GetState(ctx context.Context, req *GetStateRequest) (*Stat
 }
 
 // GetState provides a mock function with given fields: req
-func (_m *MockActors) DeleteState(ctx context.Context, req *DeleteStateRequest) error {
+func (_m *MockActors) DeleteState(ctx context.Context, req *DeleteStateRequest) (*runtimev1pb.DeleteActorStateResponse, error) {
 	ret := _m.Called(req)
 
 	var r0 error
@@ -242,7 +242,7 @@ func (_m *MockActors) DeleteState(ctx context.Context, req *DeleteStateRequest) 
 		r0 = ret.Error(0)
 	}
 
-	return r0
+	return &runtimev1pb.DeleteActorStateResponse{}, r0
 }
 
 // BulkGetState provides a mock function with given fields: req
@@ -382,8 +382,8 @@ func (f *FailingActors) GetState(ctx context.Context, req *GetStateRequest) (*St
 	return nil, nil
 }
 
-func (f *FailingActors) DeleteState(ctx context.Context, req *DeleteStateRequest) error {
-	return nil
+func (f *FailingActors) DeleteState(ctx context.Context, req *DeleteStateRequest) (*runtimev1pb.DeleteActorStateResponse, error) {
+	return nil, nil
 }
 
 func (f *FailingActors) GetBulkState(ctx context.Context, req *GetBulkStateRequest) (BulkStateResponse, error) {

@@ -62,7 +62,7 @@ type DaprClient interface {
 	// Gets the state for a specific actor.
 	GetActorState(ctx context.Context, in *GetActorStateRequest, opts ...grpc.CallOption) (*GetActorStateResponse, error)
 	// Gets the state for a specific actor.
-	DeleteActorState(ctx context.Context, in *DeleteActorStateRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	DeleteActorState(ctx context.Context, in *DeleteActorStateRequest, opts ...grpc.CallOption) (*DeleteActorStateResponse, error)
 	// Executes state transactions for a specified actor
 	ExecuteActorStateTransaction(ctx context.Context, in *ExecuteActorStateTransactionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// InvokeActor calls a method on an actor.
@@ -307,8 +307,8 @@ func (c *daprClient) GetActorState(ctx context.Context, in *GetActorStateRequest
 	return out, nil
 }
 
-func (c *daprClient) DeleteActorState(ctx context.Context, in *DeleteActorStateRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *daprClient) DeleteActorState(ctx context.Context, in *DeleteActorStateRequest, opts ...grpc.CallOption) (*DeleteActorStateResponse, error) {
+	out := new(DeleteActorStateResponse)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/DeleteActorState", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -772,7 +772,7 @@ type DaprServer interface {
 	// Gets the state for a specific actor.
 	GetActorState(context.Context, *GetActorStateRequest) (*GetActorStateResponse, error)
 	// Gets the state for a specific actor.
-	DeleteActorState(context.Context, *DeleteActorStateRequest) (*emptypb.Empty, error)
+	DeleteActorState(context.Context, *DeleteActorStateRequest) (*DeleteActorStateResponse, error)
 	// Executes state transactions for a specified actor
 	ExecuteActorStateTransaction(context.Context, *ExecuteActorStateTransactionRequest) (*emptypb.Empty, error)
 	// InvokeActor calls a method on an actor.
@@ -905,7 +905,7 @@ func (UnimplementedDaprServer) UnregisterActorReminder(context.Context, *Unregis
 func (UnimplementedDaprServer) GetActorState(context.Context, *GetActorStateRequest) (*GetActorStateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetActorState not implemented")
 }
-func (UnimplementedDaprServer) DeleteActorState(context.Context, *DeleteActorStateRequest) (*emptypb.Empty, error) {
+func (UnimplementedDaprServer) DeleteActorState(context.Context, *DeleteActorStateRequest) (*DeleteActorStateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteActorState not implemented")
 }
 func (UnimplementedDaprServer) ExecuteActorStateTransaction(context.Context, *ExecuteActorStateTransactionRequest) (*emptypb.Empty, error) {

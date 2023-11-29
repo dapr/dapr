@@ -1454,7 +1454,7 @@ func (a *api) onDeleteActorState(reqCtx *fasthttp.RequestCtx) {
 		Key:       key,
 	}
 
-	err := a.universal.Actors.DeleteState(reqCtx, &req)
+	_, err := a.universal.Actors.DeleteState(reqCtx, &req)
 	if err != nil {
 		msg := NewErrorResponse("ERR_ACTOR_STATE_DELETE", fmt.Sprintf(messages.ErrActorStateGet, err))
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))

@@ -17,8 +17,6 @@ import (
 	"net/http"
 	nethttp "net/http"
 
-	"google.golang.org/protobuf/types/known/emptypb"
-
 	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	"github.com/dapr/dapr/pkg/http/endpoints"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -163,12 +161,12 @@ func (a *api) constructActorEndpoints() []endpoints.Endpoint {
 func (a *api) onDeleteActorStateHandler() http.HandlerFunc {
 	return UniversalHTTPHandler(
 		a.universal.DeleteActorState,
-		UniversalHTTPHandlerOpts[*runtimev1pb.DeleteActorStateRequest, *emptypb.Empty]{
+		UniversalHTTPHandlerOpts[*runtimev1pb.DeleteActorStateRequest, *runtimev1pb.DeleteActorStateResponse]{
 			InModifier: func(r *http.Request, in *runtimev1pb.DeleteActorStateRequest) (*runtimev1pb.DeleteActorStateRequest, error) {
 				in.ActorId = chi.URLParam(r, actorIDParam)
 				in.ActorType = chi.URLParam(r, actorTypeParam)
 				return in, nil
 			},
-			SuccessStatusCode: http.StatusAccepted,
+			SuccessStatusCode: http.StatusNoContent,
 		})
 }
