@@ -84,6 +84,7 @@ INSERT INTO state VALUES
   ('actors||myactortype','[{"registeredTime":"%[1]s","period":"2m","actorID":"myactorid","actorType":"myactortype","name":"newreminder","dueTime":"0"}]',0,'e467f810-4e93-45ed-85d9-e68d9fc7af4a',NULL,'%[1]s'),
   ('actors||myactortype||metadata','{"id":"00000000-0000-0000-0000-000000000000","actorRemindersMetadata":{"partitionCount":0}}',0,'e82c5496-ae32-40a6-9578-6a7bd84ff331',NULL,'%[1]s');
 `, now))
+	require.NoError(t, err)
 
 	return []framework.Option{
 		framework.WithProcesses(i.place, i.srv, i.daprd),
@@ -203,6 +204,7 @@ func serializationStoreReminder(t *testing.T, ctx context.Context, baseURL strin
 	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, baseURL+"/reminders/newreminder", strings.NewReader(`{"dueTime": "0","period": "2m"}`))
+	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := client.Do(req)
 	require.NoError(t, err)
