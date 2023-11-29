@@ -334,12 +334,12 @@ jobs:
       - name: Build Dapr and its Docker images
         if: env.TEST_PREFIX != ''
         run: |
-          make build
+          make build -j4
           if [ "${{ env.TARGET_OS }}" = "linux" ] && [ "${{ env.TARGET_ARCH }}" != "arm" ]; then
             # For Linux, we use images based on Mariner
-            DOCKERFILE=Dockerfile-mariner make docker-build
+            DOCKERFILE=Dockerfile-mariner make docker-build -j4
           else
-            make docker-build
+            make docker-build -j4
           fi
         shell: bash
       - name: Wait for Azure Container Registry deployment
@@ -362,15 +362,15 @@ jobs:
         run: |
           if [ "${{ env.TARGET_OS }}" = "linux" ] && [ "${{ env.TARGET_ARCH }}" != "arm" ]; then
             # For Linux, we use images based on Mariner
-            DOCKERFILE=Dockerfile-mariner make docker-push
+            DOCKERFILE=Dockerfile-mariner make docker-push -j4
           else
-            make docker-push
+            make docker-push -j4
           fi
         shell: bash
       - name: Build and push E2E test apps
         if: env.TEST_PREFIX != ''
         run: |
-          make build-push-e2e-app-all
+          make build-push-e2e-app-all -j4
         shell: bash
       - name: Update PR comment for success
         if: success() && env.PR_NUMBER != ''
