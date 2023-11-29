@@ -204,7 +204,7 @@ func TestComponentUpdate(t *testing.T) {
 			WithScheme(s).Build()
 
 		mockSidecar := &mockComponentUpdateServer{}
-		api := NewAPIServer(client).(*apiServer)
+		api := NewAPIServer(Options{Client: client}).(*apiServer)
 
 		go func() {
 			assert.Eventually(t, func() bool {
@@ -248,7 +248,7 @@ func TestComponentUpdate(t *testing.T) {
 			WithScheme(s).Build()
 
 		mockSidecar := &mockComponentUpdateServer{}
-		api := NewAPIServer(client).(*apiServer)
+		api := NewAPIServer(Options{Client: client}).(*apiServer)
 
 		go func() {
 			assert.Eventually(t, func() bool {
@@ -293,7 +293,7 @@ func TestHTTPEndpointUpdate(t *testing.T) {
 		WithScheme(s).Build()
 
 	mockSidecar := &mockHTTPEndpointUpdateServer{}
-	api := NewAPIServer(client).(*apiServer)
+	api := NewAPIServer(Options{Client: client}).(*apiServer)
 	t.Run("skip sidecar update if namespace doesn't match", func(t *testing.T) {
 		go func() {
 			assert.Eventually(t, func() bool {
@@ -374,7 +374,7 @@ func TestListsNamespaced(t *testing.T) {
 			}).
 			Build()
 
-		api := NewAPIServer(client).(*apiServer)
+		api := NewAPIServer(Options{Client: client}).(*apiServer)
 
 		res, err := api.ListComponents(context.TODO(), &operatorv1pb.ListComponentsRequest{
 			PodName:   "foo",
@@ -426,7 +426,7 @@ func TestListsNamespaced(t *testing.T) {
 			}).
 			Build()
 
-		api := NewAPIServer(client).(*apiServer)
+		api := NewAPIServer(Options{Client: client}).(*apiServer)
 
 		res, err := api.ListSubscriptionsV2(context.TODO(), &operatorv1pb.ListSubscriptionsRequest{
 			PodName:   "foo",
@@ -480,7 +480,7 @@ func TestListsNamespaced(t *testing.T) {
 			}).
 			Build()
 
-		api := NewAPIServer(client).(*apiServer)
+		api := NewAPIServer(Options{Client: client}).(*apiServer)
 
 		res, err := api.ListResiliency(context.TODO(), &operatorv1pb.ListResiliencyRequest{
 			Namespace: "namespace-a",
@@ -532,7 +532,7 @@ func TestListsNamespaced(t *testing.T) {
 			}).
 			Build()
 
-		api := NewAPIServer(client).(*apiServer)
+		api := NewAPIServer(Options{Client: client}).(*apiServer)
 
 		res, err := api.ListHTTPEndpoints(context.TODO(), &operatorv1pb.ListHTTPEndpointsRequest{
 			Namespace: "namespace-a",

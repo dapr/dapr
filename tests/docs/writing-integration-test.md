@@ -34,6 +34,8 @@ By default, binary logs will not be printed unless the test fails. You can force
 logs to always be printed with the environment variable
 `DAPR_INTEGRATION_LOGS=true`.
 
+You can override the directory that is used to read the CRD definitions that are served by the Kubernetes process with the environment variable `DAPR_INTEGRATION_CRD_DIRECTORY`.
+
 ## Adding a new test
 
 To add a new test scenario, either create a new subject directory in

@@ -26,7 +26,7 @@ rules:
     resourceNames: ["dapr-sidecar-injector"]
 {{- if not .Values.global.rbac.namespaced }}
   - apiGroups: ["dapr.io"]
-    resources: ["configurations", "components"]
+    resources: ["components"]
     verbs: [ "get", "list"]
 {{- end }}
 ---
@@ -63,9 +63,12 @@ rules:
     resourceNames: ["dapr-trust-bundle"]
 {{- if eq .Values.global.rbac.namespaced true }}
   - apiGroups: ["dapr.io"]
-    resources: ["configurations", "components"]
+    resources: ["components"]
     verbs: [ "get", "list"]
 {{- end }}
+  - apiGroups: ["dapr.io"]
+    resources: ["configurations"]
+    verbs: [ "get" ]
 ---
 kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1

@@ -1739,7 +1739,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 
 	compStore := compstore.New()
-	compStore.AddComponent(componentsV1alpha1.Component{
+	require.NoError(t, compStore.AddPendingComponentForCommit(componentsV1alpha1.Component{
 		ObjectMeta: metaV1.ObjectMeta{
 			Name: "MockComponent1Name",
 		},
@@ -1755,8 +1755,9 @@ func TestV1MetadataEndpoint(t *testing.T) {
 				},
 			},
 		},
-	})
-	compStore.AddComponent(componentsV1alpha1.Component{
+	}))
+	require.NoError(t, compStore.CommitPendingComponent())
+	require.NoError(t, compStore.AddPendingComponentForCommit(componentsV1alpha1.Component{
 		ObjectMeta: metaV1.ObjectMeta{
 			Name: "MockComponent2Name",
 		},
@@ -1772,7 +1773,8 @@ func TestV1MetadataEndpoint(t *testing.T) {
 				},
 			},
 		},
-	})
+	}))
+	require.NoError(t, compStore.CommitPendingComponent())
 	compStore.SetSubscriptions([]runtimePubsub.Subscription{
 		{
 			PubsubName:      "test",
@@ -1805,7 +1807,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 	})
 
 	mockActors := new(actors.MockActors)
-	mockActors.On("GetActiveActorsCount")
+	mockActors.On("GetRuntimeStatus")
 
 	appConnectionConfig := config.AppConnectionConfig{
 		ChannelAddress:      "1.2.3.4",
@@ -1849,15 +1851,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 		assert.Equal(t, 204, resp.StatusCode)
 	})
 
-	const expectedBody = `{"id":"xyz","runtimeVersion":"edge",` +
-		`"actors":[{"type":"abcd","count":10},{"type":"xyz","count":5}],` +
-		`"components":[{"name":"MockComponent1Name","type":"mock.component1Type","version":"v1.0","capabilities":["mock.feat.MockComponent1Name"]},` +
-		`{"name":"MockComponent2Name","type":"mock.component2Type","version":"v1.0","capabilities":["mock.feat.MockComponent2Name"]}],` +
-		`"extended":{"daprRuntimeVersion":"edge","foo":"bar","test":"value"},` +
-		`"subscriptions":[{"pubsubname":"test","topic":"topic","rules":[{"path":"path"}],"deadLetterTopic":"dead"}],` +
-		`"httpEndpoints":[{"name":"MockHTTPEndpoint"}],` +
-		`"appConnectionProperties":{"port":5000,"protocol":"http","channelAddress":"1.2.3.4","maxConcurrency":10,` +
-		`"health":{"healthCheckPath":"/healthz","healthProbeInterval":"10s","healthProbeTimeout":"5s","healthThreshold":3}}}`
+	const expectedBody = `{"id":"xyz","runtimeVersion":"edge","actors":[{"type":"abcd","count":10},{"type":"xyz","count":5}],"components":[{"name":"MockComponent1Name","type":"mock.component1Type","version":"v1.0","capabilities":["mock.feat.MockComponent1Name"]},{"name":"MockComponent2Name","type":"mock.component2Type","version":"v1.0","capabilities":["mock.feat.MockComponent2Name"]}],"extended":{"daprRuntimeVersion":"edge","foo":"bar","test":"value"},"subscriptions":[{"pubsubname":"test","topic":"topic","rules":[{"path":"path"}],"deadLetterTopic":"dead"}],"httpEndpoints":[{"name":"MockHTTPEndpoint"}],"appConnectionProperties":{"port":5000,"protocol":"http","channelAddress":"1.2.3.4","maxConcurrency":10,"health":{"healthCheckPath":"/healthz","healthProbeInterval":"10s","healthProbeTimeout":"5s","healthThreshold":3}},"actorRuntime":{"runtimeStatus":"RUNNING","activeActors":[{"type":"abcd","count":10},{"type":"xyz","count":5}],"hostReady":true}}`
 
 	t.Run("Get Metadata", func(t *testing.T) {
 		resp := fakeServer.DoRequest("GET", "v1.0/metadata", nil, nil)
@@ -1872,7 +1866,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 
 		assert.Equal(t, 200, resp.StatusCode)
 		assert.Equal(t, expectedBody, string(resp.RawBody))
-		mockActors.AssertNumberOfCalls(t, "GetActiveActorsCount", 1)
+		mockActors.AssertNumberOfCalls(t, "GetRuntimeStatus", 1)
 	})
 
 	fakeServer.Shutdown()
@@ -2665,6 +2659,8 @@ func TestV1Beta1Workflow(t *testing.T) {
 			Resiliency: resiliencyConfig,
 		},
 	}
+	testAPI.universal.InitUniversalAPI()
+	testAPI.universal.SetActorsInitDone()
 
 	fakeServer.StartServer(testAPI.constructWorkflowEndpoints(), nil)
 
