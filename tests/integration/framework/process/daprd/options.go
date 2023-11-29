@@ -13,7 +13,17 @@ limitations under the License.
 
 package daprd
 
-import "github.com/dapr/dapr/tests/integration/framework/process/exec"
+import (
+	"database/sql"
+	"fmt"
+	"path/filepath"
+	"testing"
+
+	// Blank import for the sqlite driver
+	_ "modernc.org/sqlite"
+
+	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+)
 
 // Option is a function that configures the dapr process.
 type Option func(*options)
@@ -134,6 +144,37 @@ func WithResourceFiles(files ...string) Option {
 	return func(o *options) {
 		o.resourceFiles = files
 	}
+}
+
+// WithSQLiteStateStore adds a SQLite state store component, which is also enabled as actor state store, and also returns a connection to the database.
+func WithSQLiteStateStore(t *testing.T) (Option, *sql.DB, error) {
+	// Create a SQLite database in the test's temporary directory
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test-data.db")
+	t.Logf("Storing SQLite database in %s", dbPath)
+
+	// Get an Option that adds the component
+	opt := WithResourceFiles(`
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: mystore
+spec:
+  type: state.sqlite
+  version: v1
+  metadata:
+    - name: connectionString
+      value: 'file:` + dbPath + `'
+    - name: actorStateStore
+      value: 'true'
+`)
+
+	// Connect to the database
+	conn, err := sql.Open("sqlite", "file://"+dbPath+"?_txlock=immediate&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)")
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to open connection to SQLite database: %w", err)
+	}
+	return opt, conn, nil
 }
 
 // WithInMemoryActorStateStore adds an in-memory state store component, which is also enabled as actor state store.

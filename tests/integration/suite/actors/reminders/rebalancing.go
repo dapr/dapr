@@ -53,7 +53,7 @@ const iterations = 30
 type rebalancing struct {
 	daprd              [2]*daprd.Daprd
 	srv                [2]*prochttp.HTTP
-	handler            [2]*httpServer
+	handler            [2]*rebalancingHTTPServer
 	place              *placement.Placement
 	placementStream    placementv1pb.Placement_ReportDaprStatusClient
 	activeActors       []atomic.Bool
@@ -70,11 +70,11 @@ func (i *rebalancing) Setup(t *testing.T) []framework.Option {
 	t.Logf("Storing database in %s", dbPath)
 
 	// Init placement
-	i.place = placement.New(t)
+	i.place = placement.New(t, placement.WithMaxAPILevel(0))
 
 	// Init two instances of daprd, each with its own server
 	for j := 0; j < 2; j++ {
-		i.handler[j] = &httpServer{
+		i.handler[j] = &rebalancingHTTPServer{
 			activeActors:       i.activeActors,
 			doubleActivationCh: i.doubleActivationCh,
 		}
@@ -241,7 +241,7 @@ func (i *rebalancing) Run(t *testing.T, ctx context.Context) {
 	}
 }
 
-type httpServer struct {
+type rebalancingHTTPServer struct {
 	num                int
 	actorsReady        atomic.Bool
 	actorsReadyCh      chan struct{}
@@ -249,7 +249,7 @@ type httpServer struct {
 	doubleActivationCh chan string
 }
 
-func (h *httpServer) NewHandler(num int) http.Handler {
+func (h *rebalancingHTTPServer) NewHandler(num int) http.Handler {
 	h.actorsReadyCh = make(chan struct{})
 	h.num = num
 
@@ -348,7 +348,7 @@ func (h *httpServer) NewHandler(num int) http.Handler {
 	return r
 }
 
-func (h *httpServer) WaitForActorsReady(ctx context.Context) error {
+func (h *rebalancingHTTPServer) WaitForActorsReady(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
