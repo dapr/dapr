@@ -14,10 +14,6 @@ limitations under the License.
 package daprd
 
 import (
-
-	// Blank import for the sqlite driver
-	_ "modernc.org/sqlite"
-
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 )
 
