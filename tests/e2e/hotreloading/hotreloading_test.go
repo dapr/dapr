@@ -128,14 +128,14 @@ func TestState(t *testing.T) {
 		}, &client.CreateOptions{}))
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			url := fmt.Sprintf("http://%s/save/hotreloading-state/foo/bar", externalURL)
-			_, status, err := utils.HTTPPostWithStatus(url, nil)
+			url := fmt.Sprintf("http://%s/test/http/save/hotreloading-state", externalURL)
+			_, status, err := utils.HTTPPostWithStatus(url, []byte(`{"states":[{"key":"foo","data":"bar"}]}`))
 			assert.NoError(c, err)
 			assert.Equal(c, http.StatusNoContent, status)
 		}, 15*time.Second, 500*time.Millisecond)
 
-		url := fmt.Sprintf("http://%s/get/hotreloading-state/foo", externalURL)
-		resp, code, err := utils.HTTPGetWithStatusWithData(url, nil)
+		url := fmt.Sprintf("http://%s/test/http/get/hotreloading-state", externalURL)
+		resp, code, err := utils.HTTPGetWithStatusWithData(url, []byte(`{"keys":["foo"]}`))
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusOK, code)
 		assert.Equal(t, "bar", string(resp))
@@ -151,8 +151,8 @@ func TestState(t *testing.T) {
 		require.NoError(t, cl.Update(ctx, &comp))
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			url := fmt.Sprintf("http://%s/save/hotreloading-state/foo/bar", externalURL)
-			_, code, err := utils.HTTPPostWithStatus(url, nil)
+			url := fmt.Sprintf("http://%s/test/http/save/hotreloading-state", externalURL)
+			_, code, err := utils.HTTPPostWithStatus(url, []byte(`{"states":[{"key":"foo","data":"xyz"}]}`))
 			assert.NoError(c, err)
 			assert.Equal(c, http.StatusInternalServerError, code)
 		}, 15*time.Second, 500*time.Millisecond)
@@ -172,11 +172,17 @@ func TestState(t *testing.T) {
 		require.NoError(t, cl.Update(ctx, &comp))
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			url := fmt.Sprintf("http://%s/save/hotreloading-state/foo/bar", externalURL)
-			_, status, err := utils.HTTPPostWithStatus(url, nil)
+			url := fmt.Sprintf("http://%s/test/http/save/hotreloading-state", externalURL)
+			_, status, err := utils.HTTPPostWithStatus(url, []byte(`{"states":[{"key":"foo","data":"abc"}]}`))
 			assert.NoError(c, err)
 			assert.Equal(c, http.StatusNoContent, status)
 		}, 15*time.Second, 500*time.Millisecond)
+
+		url := fmt.Sprintf("http://%s/test/http/get/hotreloading-state", externalURL)
+		resp, code, err := utils.HTTPGetWithStatusWithData(url, []byte(`{"keys":["foo"]}`))
+		assert.NoError(t, err)
+		assert.Equal(t, http.StatusOK, code)
+		assert.Equal(t, "abc", string(resp))
 	})
 
 	t.Run("Delete state Component and wait until no longer available", func(t *testing.T) {
@@ -188,8 +194,8 @@ func TestState(t *testing.T) {
 		}, &client.DeleteOptions{})
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			url := fmt.Sprintf("http://%s/save/hotreloading-state/foo/bar", externalURL)
-			_, code, err := utils.HTTPPostWithStatus(url, nil)
+			url := fmt.Sprintf("http://%s/test/http/save/hotreloading-state", externalURL)
+			_, code, err := utils.HTTPPostWithStatus(url, []byte(`{"states":[{"key":"foo","data":"bar"}]}`))
 			assert.NoError(c, err)
 			assert.Equal(c, http.StatusInternalServerError, code)
 		}, 15*time.Second, 500*time.Millisecond)
