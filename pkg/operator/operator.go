@@ -194,11 +194,11 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 func (o *operator) syncComponent(ctx context.Context, eventType operatorv1pb.ResourceEventType) func(obj interface{}) {
 	return func(obj interface{}) {
 		var c *componentsapi.Component
-		switch obj.(type) {
+		switch o := obj.(type) {
 		case *componentsapi.Component:
-			c = obj.(*componentsapi.Component)
+			c = o
 		case cache.DeletedFinalStateUnknown:
-			c = obj.(cache.DeletedFinalStateUnknown).Obj.(*componentsapi.Component)
+			c = o.Obj.(*componentsapi.Component)
 		}
 		if c != nil {
 			log.Debugf("Observed component to be synced: %s/%s", c.Namespace, c.Name)
