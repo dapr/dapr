@@ -57,7 +57,17 @@ namespace DaprDemoActor
                     var itemToPurchase = input;
 
                     itemToPurchase = await context.WaitForExternalEventAsync<string>("ChangePurchaseItem");
-
+                    // Parallel Execution - Waiting for all tasks to finish
+                    Task<string> t1 = context.WaitForExternalEventAsync<string>("ConfirmSize", TimeSpan.FromSeconds(10));  
+                    Task<string> t2 = context.WaitForExternalEventAsync<string>("ConfirmColor", TimeSpan.FromSeconds(10));  
+                    Task<string> t3 = context.WaitForExternalEventAsync<string>("ConfirmAddress", TimeSpan.FromSeconds(10));  
+                    await Task.WhenAll(t1, t2, t3);
+                    // Parallel Execution - Waiting for any task to finish
+                    Task<string> e1 = context.WaitForExternalEventAsync<string>("PayInCash", TimeSpan.FromSeconds(10));  
+                    Task<string> e2 = context.WaitForExternalEventAsync<string>("PayByCard", TimeSpan.FromSeconds(10));  
+                    Task<string> e3 = context.WaitForExternalEventAsync<string>("PayOnline", TimeSpan.FromSeconds(10));  
+                    await Task.WhenAny(e1, e2, e3);  
+   
                     // In real life there are other steps related to placing an order, like reserving
                     // inventory and charging the customer credit card etc. But let's keep it simple ;)
                     await context.CallActivityAsync<string>("ShipProduct", itemToPurchase);
