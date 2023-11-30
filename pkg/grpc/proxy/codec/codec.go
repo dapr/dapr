@@ -15,10 +15,6 @@ import (
 // We have to say that we are the "proto" codec otherwise marshaling will fail.
 const Name = "proto"
 
-func init() {
-	Register()
-}
-
 // Register manually registers the codec.
 func Register() {
 	encoding.RegisterCodec(codec())

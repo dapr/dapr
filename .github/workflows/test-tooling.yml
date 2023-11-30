@@ -25,7 +25,7 @@ jobs:
           - "macos-latest"
     runs-on: ${{ matrix.os }}
     env:
-      GOLANGCILINT_VER: "v1.51.2" # Make sure to bump /.build-tools/check-lint-version/main_test.go
+      GOLANGCILINT_VER: "v1.55.2" # Make sure to bump /.build-tools/check-lint-version/main_test.go
 
     steps:
       - name: Checkout

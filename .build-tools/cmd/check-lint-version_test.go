@@ -35,7 +35,7 @@ func TestParseWorkflow(t *testing.T) {
 func TestGetCurrentVersion(t *testing.T) {
 	t.Run("get current version from system", func(t *testing.T) {
 		currentVersion, err := getCurrentVersion()
-		assert.Equal(t, "v1.51.2", currentVersion)
+		assert.Equal(t, "v1.55.2", currentVersion)
 		assert.NoError(t, err)
 	})
 
