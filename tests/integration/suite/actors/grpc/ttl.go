@@ -73,18 +73,8 @@ spec:
 
 	srv := prochttp.New(t, prochttp.WithHandler(handler))
 	l.place = placement.New(t)
-	l.daprd = daprd.New(t, daprd.WithResourceFiles(`
-apiVersion: dapr.io/v1alpha1
-kind: Component
-metadata:
-  name: mystore
-spec:
-  type: state.in-memory
-  version: v1
-  metadata:
-  - name: actorStateStore
-    value: true
-`),
+	l.daprd = daprd.New(t,
+		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithConfigs(configFile),
 		daprd.WithPlacementAddresses("localhost:"+strconv.Itoa(l.place.Port())),
 		daprd.WithAppPort(srv.Port()),

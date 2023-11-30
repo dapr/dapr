@@ -60,15 +60,7 @@ func (m *metrics) Setup(t *testing.T) []framework.Option {
 		procdaprd.WithAppID("myapp"),
 		procdaprd.WithAppPort(srv.Port()),
 		procdaprd.WithAppProtocol("http"),
-		procdaprd.WithResourceFiles(`
-apiVersion: dapr.io/v1alpha1
-kind: Component
-metadata:
-  name: mystore
-spec:
-  type: state.in-memory
-  version: v1
-`),
+		procdaprd.WithInMemoryActorStateStore("mystore"),
 	)
 
 	return []framework.Option{
