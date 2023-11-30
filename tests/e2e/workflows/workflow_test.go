@@ -147,6 +147,22 @@ func raiseEventTest(url string, instanceID string) func(t *testing.T) {
 		resp, err = utils.HTTPPost(fmt.Sprintf("%s/RaiseWorkflowEvent/dapr/%s/ChangePurchaseItem/1", url, instanceID), nil)
 		require.NoError(t, err, "failure raising event on workflow")
 
+		// Raise parallel events on the workflow
+		resp, err = utils.HTTPPost(fmt.Sprintf("%s/RaiseWorkflowEvent/dapr/%s/ConfirmSize/1", url, instanceID), nil)
+		require.NoError(t, err, "failure raising event on workflow")
+
+		resp, err = utils.HTTPPost(fmt.Sprintf("%s/RaiseWorkflowEvent/dapr/%s/ConfirmColor/1", url, instanceID), nil)
+		require.NoError(t, err, "failure raising event on workflow")
+
+		resp, err = utils.HTTPPost(fmt.Sprintf("%s/RaiseWorkflowEvent/dapr/%s/ConfirmAddress/1", url, instanceID), nil)
+		require.NoError(t, err, "failure raising event on workflow")
+
+		// Raise a parallel event on the workflow
+		resp, err = utils.HTTPPost(fmt.Sprintf("%s/RaiseWorkflowEvent/dapr/%s/PayByCard/1", url, instanceID), nil)
+		require.NoError(t, err, "failure raising event on workflow")
+
+		time.Sleep(10 * time.Second)
+
 		require.EventuallyWithT(t, func(t *assert.CollectT) {
 			resp, err = utils.HTTPGet(getString)
 			assert.NoError(t, err, "failure getting info on workflow")
