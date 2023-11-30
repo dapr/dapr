@@ -55,7 +55,7 @@ const (
 
 var (
 	wfLogger            = logger.NewLogger("dapr.runtime.wfengine")
-	wfBackendLogger     = logger.NewLogger("wfengine.backend")
+	wfBackendLogger     = logger.NewLogger("wfengine.durabletask.backend")
 	errExecutionAborted = errors.New("execution aborted")
 )
 
