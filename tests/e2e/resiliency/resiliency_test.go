@@ -83,11 +83,12 @@ func TestMain(m *testing.M) {
 
 func TestInputBindingResiliency(t *testing.T) {
 	testCases := []struct {
-		Name         string
-		FailureCount *int
-		Timeout      *time.Duration
-		shouldFail   bool
-		binding      string
+		Name               string
+		FailureCount       *int
+		Timeout            *time.Duration
+		shouldFail         bool
+		binding            string
+		responseStatusCode *int
 	}{
 		{
 			Name:         "Test sending input binding to app recovers from failure",
@@ -107,6 +108,19 @@ func TestInputBindingResiliency(t *testing.T) {
 			FailureCount: ptr.Of(10),
 			shouldFail:   true,
 			binding:      "dapr-resiliency-binding",
+		},
+		{
+			Name:               "Test resiliency with filter consider non-500 as success",
+			FailureCount:       ptr.Of(0), // since responseStatusCode is set, constantly fails with 404, this is the expected failure count
+			shouldFail:         false,
+			responseStatusCode: ptr.Of(404),
+			binding:            "dapr-resiliency-binding",
+		},
+		{
+			Name:               "Test resiliency with filter retry on 500",
+			shouldFail:         true,
+			responseStatusCode: ptr.Of(500),
+			binding:            "dapr-resiliency-binding",
 		},
 		{
 			Name:         "Test sending input binding to grpc app recovers from failure",
@@ -141,7 +155,7 @@ func TestInputBindingResiliency(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.Name, func(t *testing.T) {
-			message := createFailureMessage(tc.FailureCount, tc.Timeout)
+			message := createFailureMessage(tc.FailureCount, tc.Timeout, tc.responseStatusCode)
 			b, _ := json.Marshal(message)
 			_, code, err := utils.HTTPPostWithStatus(fmt.Sprintf("%s/tests/invokeBinding/%s", externalURL, tc.binding), b)
 			require.NoError(t, err)
@@ -174,8 +188,8 @@ func TestInputBindingResiliency(t *testing.T) {
 					require.Greater(t, callCount[message.ID][6].TimeSeen.Sub(callCount[message.ID][5].TimeSeen), time.Millisecond*100)
 				}
 			} else {
-				// First call + 3 retries and recovery.
-				require.Equal(t, 4, len(callCount[message.ID]), fmt.Sprintf("Call count mismatch for message %s", message.ID))
+				// First call + FailureCount retries including recovery.
+				require.Equal(t, 1+*tc.FailureCount, len(callCount[message.ID]), fmt.Sprintf("Call count mismatch for message %s", message.ID))
 			}
 		})
 	}
@@ -248,7 +262,7 @@ func TestPubsubSubscriptionResiliency(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.Name, func(t *testing.T) {
-			message := createFailureMessage(tc.FailureCount, tc.Timeout)
+			message := createFailureMessage(tc.FailureCount, tc.Timeout, nil)
 			b, _ := json.Marshal(message)
 			_, code, err := utils.HTTPPostWithStatus(fmt.Sprintf("%s/tests/publishMessage/%s/%s", externalURL, tc.pubsub, tc.topic), b)
 			require.NoError(t, err)
@@ -311,6 +325,19 @@ func TestServiceInvocationResiliency(t *testing.T) {
 			callType:     "http",
 		},
 		{
+			Name:         "Test resiliency with filter consider non-500 as success",
+			shouldFail:   false,
+			expectStatus: ptr.Of(404),
+			expectCount:  ptr.Of(1),
+			callType:     "http",
+		},
+		{
+			Name:         "Test resiliency with filter retry on 500",
+			shouldFail:   true,
+			expectStatus: ptr.Of(500),
+			callType:     "http",
+		},
+		{
 			Name:         "Test invoking grpc app method recovers from failure",
 			FailureCount: ptr.Of(3),
 			shouldFail:   false,
@@ -349,6 +376,20 @@ func TestServiceInvocationResiliency(t *testing.T) {
 			callType:     "grpc_proxy",
 		},
 		{
+			Name:         "Test resiliency with filter consider code non-2 as success in grpc proxy",
+			expectStatus: ptr.Of(5),
+			expectCount:  ptr.Of(1),
+			shouldFail:   false,
+			callType:     "grpc_proxy",
+		},
+		{
+			Name:         "Test resiliency with filter retry on 2 in grpc proxy",
+			FailureCount: ptr.Of(10),
+			expectStatus: ptr.Of(2),
+			shouldFail:   true,
+			callType:     "grpc_proxy",
+		},
+		{
 			Name:         "Test invoking non-existent app http",
 			FailureCount: ptr.Of(3),
 			expectStatus: ptr.Of(500),
@@ -378,7 +419,7 @@ func TestServiceInvocationResiliency(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.Name, func(t *testing.T) {
-			message := createFailureMessage(tc.FailureCount, tc.Timeout)
+			message := createFailureMessage(tc.FailureCount, tc.Timeout, tc.expectStatus)
 			b, _ := json.Marshal(message)
 			u := fmt.Sprintf("%s/tests/invokeService/%s", externalURL, tc.callType)
 			if tc.targetApp != "" {
@@ -389,13 +430,15 @@ func TestServiceInvocationResiliency(t *testing.T) {
 			}
 			_, code, err := utils.HTTPPostWithStatus(u, b)
 			require.NoError(t, err)
-			switch {
-			case tc.expectStatus != nil:
-				require.Equal(t, *tc.expectStatus, code)
-			case tc.shouldFail:
-				require.Equal(t, 500, code)
-			default:
-				require.Equal(t, 200, code)
+			if tc.callType == "http" {
+				switch {
+				case tc.expectStatus != nil:
+					require.Equal(t, *tc.expectStatus, code)
+				case tc.shouldFail:
+					require.Equal(t, 500, code)
+				default:
+					require.Equal(t, 200, code)
+				}
 			}
 
 			var callCount map[string][]CallRecord
@@ -480,7 +523,7 @@ func TestActorResiliency(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.Name, func(t *testing.T) {
-			message := createFailureMessage(tc.FailureCount, tc.Timeout)
+			message := createFailureMessage(tc.FailureCount, tc.Timeout, nil)
 			b, _ := json.Marshal(message)
 			_, code, err := utils.HTTPPostWithStatus(fmt.Sprintf("%s/tests/invokeActor/%s", externalURL, tc.protocol), b)
 			require.NoError(t, err)
@@ -544,14 +587,14 @@ func TestResiliencyCircuitBreakers(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.Name, func(t *testing.T) {
 			// Do a successful request to start to make sure our CB is cleared.
-			passingMessage := createFailureMessage(nil, nil)
+			passingMessage := createFailureMessage(nil, nil, nil)
 			passingBody, _ := json.Marshal(passingMessage)
 			_, code, err := utils.HTTPPostWithStatus(fmt.Sprintf("%s/tests/invokeService/%s", externalURL, tc.CallType), passingBody)
 			require.NoError(t, err)
 			require.Equal(t, 200, code)
 
 			failureCount := 20
-			message := createFailureMessage(&failureCount, nil)
+			message := createFailureMessage(&failureCount, nil, nil)
 			b, _ := json.Marshal(message)
 			// The Circuit Breaker will trip after 15 consecutive errors each request is retried 5 times. Send the message 3 times to hit the breaker.
 			for i := 0; i < 3; i++ {
@@ -588,7 +631,7 @@ func TestResiliencyCircuitBreakers(t *testing.T) {
 	}
 }
 
-func createFailureMessage(maxFailure *int, timeout *time.Duration) FailureMessage {
+func createFailureMessage(maxFailure *int, timeout *time.Duration, failureResponseCode *int) FailureMessage {
 	message := FailureMessage{
 		ID: uuid.New().String(),
 	}
@@ -599,6 +642,10 @@ func createFailureMessage(maxFailure *int, timeout *time.Duration) FailureMessag
 
 	if timeout != nil {
 		message.Timeout = timeout
+	}
+
+	if failureResponseCode != nil {
+		message.ResponseCode = failureResponseCode
 	}
 
 	return message
