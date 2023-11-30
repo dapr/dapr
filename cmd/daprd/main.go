@@ -141,6 +141,7 @@ func main() {
 				DaprAPIListenAddresses:       opts.DaprAPIListenAddresses,
 				DaprPublicPort:               opts.DaprPublicPort,
 				ApplicationPort:              opts.AppPort,
+				ApplicationHealthPort:        opts.AppHealthPort,
 				ProfilePort:                  opts.ProfilePort,
 				EnableProfiling:              opts.EnableProfiling,
 				AppMaxConcurrency:            opts.AppMaxConcurrency,

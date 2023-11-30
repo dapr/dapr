@@ -89,6 +89,7 @@ type Config struct {
 	DaprInternalGRPCPort         string
 	DaprPublicPort               string
 	ApplicationPort              string
+	ApplicationHealthPort        string
 	DaprGracefulShutdownSeconds  int
 	PlacementServiceHostAddr     string
 	DaprAPIListenAddresses       string
@@ -158,6 +159,7 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 		env.AppID:           intc.id,
 		env.AppPort:         strconv.Itoa(intc.appConnectionConfig.Port),
 		env.HostAddress:     host,
+		env.AppHealthPort:   strconv.Itoa(intc.appConnectionConfig.HealthPort),
 		env.DaprPort:        strconv.Itoa(intc.internalGRPCPort),
 		env.DaprGRPCPort:    strconv.Itoa(intc.apiGRPCPort),
 		env.DaprHTTPPort:    strconv.Itoa(intc.httpPort),
@@ -346,11 +348,23 @@ func (c *Config) toInternal() (*internalConfig, error) {
 		}
 	}
 
-	if intc.appConnectionConfig.Port == intc.httpPort {
+	if c.ApplicationHealthPort != "" {
+		intc.appConnectionConfig.HealthPort, err = strconv.Atoi(c.ApplicationHealthPort)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing 'app-health-port': %w", err)
+		}
+	} else if c.ApplicationPort != "" {
+		intc.appConnectionConfig.HealthPort, err = strconv.Atoi(c.ApplicationPort)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing 'app-port': %w", err)
+		}
+	}
+
+	if intc.appConnectionConfig.Port == intc.httpPort || intc.appConnectionConfig.HealthPort == intc.httpPort {
 		return nil, fmt.Errorf("the 'dapr-http-port' argument value %d conflicts with 'app-port'", intc.httpPort)
 	}
 
-	if intc.appConnectionConfig.Port == intc.apiGRPCPort {
+	if intc.appConnectionConfig.Port == intc.apiGRPCPort || intc.appConnectionConfig.HealthPort == intc.apiGRPCPort {
 		return nil, fmt.Errorf("the 'dapr-grpc-port' argument value %d conflicts with 'app-port'", intc.apiGRPCPort)
 	}
 

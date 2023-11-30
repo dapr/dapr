@@ -43,5 +43,6 @@ type AppConnectionConfig struct {
 	HealthCheckHTTPPath string
 	MaxConcurrency      int
 	Port                int
+	HealthPort          int
 	Protocol            protocol.Protocol
 }

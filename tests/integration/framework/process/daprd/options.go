@@ -44,6 +44,7 @@ type options struct {
 	sentryAddress           string
 	controlPlaneAddress     string
 	disableK8sSecretStore   *bool
+	appHealthPort           int
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
@@ -61,6 +62,12 @@ func WithAppID(appID string) Option {
 func WithAppPort(port int) Option {
 	return func(o *options) {
 		o.appPort = port
+	}
+}
+
+func WithAppHealthPort(port int) Option {
+	return func(o *options) {
+		o.appHealthPort = port
 	}
 }
 

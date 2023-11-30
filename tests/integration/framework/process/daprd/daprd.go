@@ -45,15 +45,17 @@ type Daprd struct {
 	appHTTP  process.Interface
 	freeport *util.FreePort
 
-	appID            string
-	appProtocol      string
-	appPort          int
-	grpcPort         int
-	httpPort         int
+	appID       string
+	appProtocol string
+	appPort     int
+	grpcPort    int
+	httpPort    int
+
 	internalGRPCPort int
 	publicPort       int
 	metricsPort      int
 	profilePort      int
+	appHealthPort    *int
 }
 
 func New(t *testing.T, fopts ...Option) *Daprd {
@@ -88,10 +90,14 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		require.NoError(t, os.WriteFile(filepath.Join(dir, strconv.Itoa(i)+".yaml"), []byte(file), 0o600))
 	}
 
+	appPort := strconv.Itoa(opts.appPort)
+	appHealthPort := appPort
+
 	args := []string{
 		"--log-level=" + opts.logLevel,
 		"--app-id=" + opts.appID,
-		"--app-port=" + strconv.Itoa(opts.appPort),
+		"--app-port=" + appPort,
+		"--app-health-port=" + appHealthPort,
 		"--app-protocol=" + opts.appProtocol,
 		"--dapr-grpc-port=" + strconv.Itoa(opts.grpcPort),
 		"--dapr-http-port=" + strconv.Itoa(opts.httpPort),
@@ -105,6 +111,7 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		"--mode=" + opts.mode,
 		"--enable-mtls=" + strconv.FormatBool(opts.enableMTLS),
 	}
+
 	if opts.appHealthCheckPath != "" {
 		args = append(args, "--app-health-check-path="+opts.appHealthCheckPath)
 	}
@@ -142,6 +149,7 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		publicPort:       opts.publicPort,
 		metricsPort:      opts.metricsPort,
 		profilePort:      opts.profilePort,
+		appHealthPort:    &opts.appHealthPort,
 	}
 }
 
@@ -227,6 +235,11 @@ func (d *Daprd) AppID() string {
 
 func (d *Daprd) AppPort() int {
 	return d.appPort
+}
+
+func (d *Daprd) AppHealthPort(t *testing.T) int {
+	require.NotNil(t, d.AppHealthPort)
+	return *d.appHealthPort
 }
 
 func (d *Daprd) GRPCPort() int {

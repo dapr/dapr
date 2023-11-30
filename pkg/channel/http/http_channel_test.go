@@ -783,9 +783,10 @@ func TestHealthProbe(t *testing.T) {
 	h := &testStatusCodeHandler{}
 	testServer := httptest.NewServer(h)
 	c := Channel{
-		baseAddress: testServer.URL,
-		client:      http.DefaultClient,
-		compStore:   compstore.New(),
+		baseAddress:   testServer.URL,
+		healthAddress: testServer.URL,
+		client:        http.DefaultClient,
+		compStore:     compstore.New(),
 	}
 
 	var (

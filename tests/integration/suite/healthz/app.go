@@ -67,6 +67,7 @@ func (a *app) Setup(t *testing.T) []framework.Option {
 		procdaprd.WithAppHealthCheck(true),
 		procdaprd.WithAppHealthCheckPath("/foo"),
 		procdaprd.WithAppPort(a.srv.Port()),
+		procdaprd.WithAppHealthPort(a.srv.Port()),
 		procdaprd.WithAppHealthProbeInterval(1),
 		procdaprd.WithAppHealthProbeThreshold(1),
 	)

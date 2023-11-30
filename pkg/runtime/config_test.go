@@ -72,6 +72,7 @@ func Test_toInternal(t *testing.T) {
 	assert.Equal(t, ptr.Of(3501), intc.publicPort)
 	assert.Equal(t, "1.2.3.4", intc.apiListenAddresses[0])
 	assert.Equal(t, 8080, intc.appConnectionConfig.Port)
+	assert.Equal(t, 8081, intc.appConnectionConfig.HealthPort)
 	assert.Equal(t, 7070, intc.profilePort)
 	assert.Equal(t, true, intc.enableProfiling)
 	assert.Equal(t, 1, intc.appConnectionConfig.MaxConcurrency)
@@ -108,6 +109,7 @@ func defaultTestConfig() Config {
 		DaprAPIListenAddresses:       "1.2.3.4",
 		DaprPublicPort:               "3501",
 		ApplicationPort:              "8080",
+		ApplicationHealthPort:        "8081",
 		ProfilePort:                  "7070",
 		EnableProfiling:              true,
 		AppMaxConcurrency:            1,
