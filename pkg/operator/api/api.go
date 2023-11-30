@@ -443,6 +443,9 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 		})
 		if err != nil {
 			log.Warnf("error updating sidecar with component %s (%s) from pod %s/%s: %s", c.GetName(), c.Spec.Type, in.Namespace, in.PodName, err)
+			if status.Code(err) == codes.Unavailable {
+				close(updateChan)
+			}
 			return
 		}
 
