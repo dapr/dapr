@@ -45,6 +45,7 @@ import (
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/grpc/metadata"
+	"github.com/dapr/dapr/pkg/grpc/proxy/codec"
 	"github.com/dapr/dapr/pkg/grpc/universalapi"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -101,6 +102,8 @@ type APIOpts struct {
 // NewAPI returns a new gRPC API.
 func NewAPI(opts APIOpts) API {
 	opts.UniversalAPI.InitUniversalAPI()
+
+	codec.Register()
 
 	return &api{
 		UniversalAPI:          opts.UniversalAPI,

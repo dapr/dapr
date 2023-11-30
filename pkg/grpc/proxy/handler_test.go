@@ -861,6 +861,7 @@ func (s *proxyTestSuite) TearDownSuite() {
 }
 
 func TestProxySuite(t *testing.T) {
+	codec.Register()
 	suite.Run(t, &proxyTestSuite{})
 }
 
