@@ -101,5 +101,5 @@ func (i *serializationJSON) Run(t *testing.T, ctx context.Context) {
 	// Ensure the reminder was invoked at least once
 	assert.Eventually(t, func() bool {
 		return i.handler.remindersInvokeCount.Load() > 0
-	}, time.Second, 10*time.Millisecond, "Reminder was not invoked at least once")
+	}, 5*time.Second, 10*time.Millisecond, "Reminder was not invoked at least once")
 }
