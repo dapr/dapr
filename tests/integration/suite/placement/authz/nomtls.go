@@ -15,10 +15,8 @@ package authz
 
 import (
 	"context"
-	"strconv"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	grpcinsecure "google.golang.org/grpc/credentials/insecure"
@@ -49,7 +47,7 @@ func (n *nomtls) Setup(t *testing.T) []framework.Option {
 func (n *nomtls) Run(t *testing.T, ctx context.Context) {
 	n.place.WaitUntilRunning(t, ctx)
 
-	host := "localhost:" + strconv.Itoa(n.place.Port())
+	host := n.place.Address()
 	conn, err := grpc.DialContext(ctx, host, grpc.WithBlock(), grpc.WithReturnConnectionError(),
 		grpc.WithTransportCredentials(grpcinsecure.NewCredentials()),
 	)
@@ -60,14 +58,14 @@ func (n *nomtls) Run(t *testing.T, ctx context.Context) {
 
 	// Can create hosts with any appIDs or namespaces.
 	stream := establishStream(t, ctx, client)
-	assert.NoError(t, stream.Send(new(v1pb.Host)))
+	require.NoError(t, stream.Send(new(v1pb.Host)))
 	waitForUnlock(t, stream)
 	_, err = stream.Recv()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	stream = establishStream(t, ctx, client)
-	assert.NoError(t, stream.Send(&v1pb.Host{Name: "bar"}))
+	require.NoError(t, stream.Send(&v1pb.Host{Name: "bar"}))
 	waitForUnlock(t, stream)
 	_, err = stream.Recv()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }

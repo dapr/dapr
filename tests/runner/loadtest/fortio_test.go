@@ -17,12 +17,13 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+
 	"github.com/dapr/dapr/tests/perf"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 )
 
 // mockPlatform is the mock of Disposable interface.
@@ -45,12 +46,12 @@ func TestFortio(t *testing.T) {
 	t.Run("WithAffinity should set test affinity", func(t *testing.T) {
 		const affinity = "test-affinity"
 		f := NewFortio(WithAffinity(affinity))
-		assert.Equal(t, f.affinityLabel, affinity)
+		assert.Equal(t, affinity, f.affinityLabel)
 	})
 	t.Run("WithTesterImage should set test image", func(t *testing.T) {
 		const testerImage = "image"
 		f := NewFortio(WithTesterImage(testerImage))
-		assert.Equal(t, f.testerImage, testerImage)
+		assert.Equal(t, testerImage, f.testerImage)
 	})
 	t.Run("WithParams should set test params", func(t *testing.T) {
 		params := perf.TestParameters{}
@@ -60,12 +61,12 @@ func TestFortio(t *testing.T) {
 	t.Run("WithNumHealthChecks set the number of necessary healthchecks to consider app healthy", func(t *testing.T) {
 		const numHealthCheck = 2
 		f := NewFortio(WithNumHealthChecks(numHealthCheck))
-		assert.Equal(t, f.numHealthChecks, numHealthCheck)
+		assert.Equal(t, numHealthCheck, f.numHealthChecks)
 	})
 	t.Run("WithTestAppName should set test app name", func(t *testing.T) {
 		const appTestName = "test-app"
 		f := NewFortio(WithTestAppName(appTestName))
-		assert.Equal(t, f.testApp, appTestName)
+		assert.Equal(t, appTestName, f.testApp)
 	})
 	t.Run("SetParams should set test params and result to nil", func(t *testing.T) {
 		params := perf.TestParameters{}
@@ -78,7 +79,7 @@ func TestFortio(t *testing.T) {
 		assert.Equal(t, f.params, paramsOthers)
 	})
 	t.Run("valiate should return error when apptesterurl is empty", func(t *testing.T) {
-		assert.Error(t, NewFortio().validate())
+		require.Error(t, NewFortio().validate())
 	})
 	t.Run("setup should return error if AddApps return an error", func(t *testing.T) {
 		errFake := errors.New("my-err")
@@ -94,7 +95,7 @@ func TestFortio(t *testing.T) {
 		mockPlatform.On("AcquireAppExternalURL", appName).Return("")
 		f := NewFortio(WithTestAppName(appName))
 		setupErr := f.setup(mockPlatform)
-		assert.Error(t, setupErr)
+		require.Error(t, setupErr)
 	})
 	t.Run("Run should return error when validate return an error", func(t *testing.T) {
 		const appName = "app-test"
@@ -103,9 +104,9 @@ func TestFortio(t *testing.T) {
 		mockPlatform.On("AcquireAppExternalURL", appName).Return("")
 		f := NewFortio(WithTestAppName(appName))
 		setupErr := f.Run(mockPlatform)
-		assert.Error(t, setupErr)
+		require.Error(t, setupErr)
 		mockPlatform.AssertNumberOfCalls(t, "AcquireAppExternalURL", 1)
-		assert.Error(t, f.Run(mockPlatform))
+		require.Error(t, f.Run(mockPlatform))
 		mockPlatform.AssertNumberOfCalls(t, "AcquireAppExternalURL", 1)
 	})
 }

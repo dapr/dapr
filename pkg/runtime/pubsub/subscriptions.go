@@ -95,7 +95,7 @@ func GetSubscriptionsHTTP(ctx context.Context, channel channel.AppChannel, log l
 		subscriptionItems []SubscriptionJSON
 	)
 
-	switch resp.Status().Code {
+	switch resp.Status().GetCode() {
 	case http.StatusOK:
 		err = json.NewDecoder(resp.RawData()).Decode(&subscriptionItems)
 		if err != nil {
@@ -153,7 +153,7 @@ func GetSubscriptionsHTTP(ctx context.Context, channel channel.AppChannel, log l
 
 	default:
 		// Unexpected response: both GRPC and HTTP have to log the same level.
-		log.Errorf("app returned http status code %v from subscription endpoint", resp.Status().Code)
+		log.Errorf("app returned http status code %v from subscription endpoint", resp.Status().GetCode())
 	}
 
 	log.Debugf("app responded with subscriptions %v", subscriptions)
@@ -198,28 +198,28 @@ func GetSubscriptionsGRPC(ctx context.Context, channel runtimev1pb.AppCallbackCl
 	}
 
 	var subscriptions []Subscription
-	if resp == nil || len(resp.Subscriptions) == 0 {
+	if len(resp.GetSubscriptions()) == 0 {
 		log.Debug(noSubscriptionsError)
 	} else {
-		subscriptions = make([]Subscription, len(resp.Subscriptions))
-		for i, s := range resp.Subscriptions {
-			rules, err := parseRoutingRulesGRPC(s.Routes)
+		subscriptions = make([]Subscription, len(resp.GetSubscriptions()))
+		for i, s := range resp.GetSubscriptions() {
+			rules, err := parseRoutingRulesGRPC(s.GetRoutes())
 			if err != nil {
 				return nil, err
 			}
 			var bulkSubscribe *BulkSubscribe
-			if s.BulkSubscribe != nil {
+			if s.GetBulkSubscribe() != nil {
 				bulkSubscribe = &BulkSubscribe{
-					Enabled:            s.BulkSubscribe.Enabled,
-					MaxMessagesCount:   s.BulkSubscribe.MaxMessagesCount,
-					MaxAwaitDurationMs: s.BulkSubscribe.MaxAwaitDurationMs,
+					Enabled:            s.GetBulkSubscribe().GetEnabled(),
+					MaxMessagesCount:   s.GetBulkSubscribe().GetMaxMessagesCount(),
+					MaxAwaitDurationMs: s.GetBulkSubscribe().GetMaxAwaitDurationMs(),
 				}
 			}
 			subscriptions[i] = Subscription{
-				PubsubName:      s.PubsubName,
+				PubsubName:      s.GetPubsubName(),
 				Topic:           s.GetTopic(),
 				Metadata:        s.GetMetadata(),
-				DeadLetterTopic: s.DeadLetterTopic,
+				DeadLetterTopic: s.GetDeadLetterTopic(),
 				Rules:           rules,
 				BulkSubscribe:   bulkSubscribe,
 			}
@@ -399,10 +399,10 @@ func parseRoutingRulesGRPC(routes *runtimev1pb.TopicRoutes) ([]*Rule, error) {
 			Path: "",
 		}}, nil
 	}
-	r := make([]*Rule, 0, len(routes.Rules)+1)
+	r := make([]*Rule, 0, len(routes.GetRules())+1)
 
-	for _, rule := range routes.Rules {
-		rr, err := createRoutingRule(rule.Match, rule.Path)
+	for _, rule := range routes.GetRules() {
+		rr, err := createRoutingRule(rule.GetMatch(), rule.GetPath())
 		if err != nil {
 			return nil, err
 		}
@@ -412,9 +412,9 @@ func parseRoutingRulesGRPC(routes *runtimev1pb.TopicRoutes) ([]*Rule, error) {
 	// If a default path is set, add a rule with a nil `Match`,
 	// which is treated as `true` and always selected if
 	// no previous rules match.
-	if routes.Default != "" {
+	if routes.GetDefault() != "" {
 		r = append(r, &Rule{
-			Path: routes.Default,
+			Path: routes.GetDefault(),
 		})
 	}
 
@@ -457,7 +457,7 @@ func DeclarativeKubernetes(ctx context.Context, client operatorv1pb.OperatorClie
 		return subs
 	}
 
-	for _, s := range resp.Subscriptions {
+	for _, s := range resp.GetSubscriptions() {
 		// No namespace filtering here as it's been already filtered by the operator
 		subs, err = appendSubscription(subs, s, "")
 		if err != nil {

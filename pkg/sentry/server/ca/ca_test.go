@@ -75,9 +75,9 @@ func TestNew(t *testing.T) {
 		issuerKeyPK, err := pem.DecodePEMPrivateKey(issuerKey)
 		require.NoError(t, err)
 
-		assert.NoError(t, issuerCertX509[0].CheckSignatureFrom(rootCertX509[0]))
+		require.NoError(t, issuerCertX509[0].CheckSignatureFrom(rootCertX509[0]))
 		ok, err := pem.PublicKeysEqual(issuerCertX509[0].PublicKey, issuerKeyPK.Public())
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.True(t, ok)
 	})
 
@@ -182,8 +182,8 @@ func TestSignIdentity(t *testing.T) {
 		assert.ElementsMatch(t, clientCert[0].DNSNames, []string{"my-app-id.my-test-namespace.svc.cluster.local", "example.com"})
 
 		require.Len(t, clientCert[0].URIs, 1)
-		assert.Equal(t, clientCert[0].URIs[0].String(), "spiffe://example.test.dapr.io/ns/my-test-namespace/my-app-id")
+		assert.Equal(t, "spiffe://example.test.dapr.io/ns/my-test-namespace/my-app-id", clientCert[0].URIs[0].String())
 
-		assert.NoError(t, clientCert[0].CheckSignatureFrom(int2Crt))
+		require.NoError(t, clientCert[0].CheckSignatureFrom(int2Crt))
 	})
 }
