@@ -155,7 +155,7 @@ func (a *activityActor) executeActivity(ctx context.Context, actorID string, nam
 	workflowID := actorID[0:endIndex]
 
 	wi := &backend.ActivityWorkItem{
-		SequenceNumber: int64(taskEvent.EventId),
+		SequenceNumber: int64(taskEvent.GetEventId()),
 		InstanceID:     api.InstanceID(workflowID),
 		NewEvent:       taskEvent,
 		Properties:     make(map[string]interface{}),

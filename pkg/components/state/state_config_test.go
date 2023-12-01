@@ -59,9 +59,9 @@ func TestGetModifiedStateKey(t *testing.T) {
 		err := SaveStateConfiguration(item.storename, map[string]string{
 			strategyKey: item.prefix,
 		})
-		require.Nil(t, err)
+		require.NoError(t, err)
 		_, err = GetModifiedStateKey(item.key, item.storename, "")
-		require.NotNil(t, err)
+		require.Error(t, err)
 	}
 }
 
@@ -173,14 +173,14 @@ func TestStateConfigRace(t *testing.T) {
 			defer wg.Done()
 			for i := 0; i < iterations; i++ {
 				err := SaveStateConfiguration(fmt.Sprintf("store%d", i), map[string]string{strategyKey: strategyNone})
-				require.Nil(t, err)
+				require.NoError(t, err)
 			}
 		}()
 		go func() {
 			defer wg.Done()
 			for i := 0; i < iterations; i++ {
 				_, err := GetModifiedStateKey(key, fmt.Sprintf("store%d", i), "appid")
-				require.Nil(t, err)
+				require.NoError(t, err)
 			}
 		}()
 		wg.Wait()
@@ -193,14 +193,14 @@ func TestStateConfigRace(t *testing.T) {
 			defer wg.Done()
 			for i := 0; i < iterations; i++ {
 				_, err := GetModifiedStateKey(key, fmt.Sprintf("store%d", i), "appid")
-				require.Nil(t, err)
+				require.NoError(t, err)
 			}
 		}()
 		go func() {
 			defer wg.Done()
 			for i := 0; i < iterations; i++ {
 				_, err := GetModifiedStateKey(key, fmt.Sprintf("store%d", i), "appid")
-				require.Nil(t, err)
+				require.NoError(t, err)
 			}
 		}()
 		wg.Wait()

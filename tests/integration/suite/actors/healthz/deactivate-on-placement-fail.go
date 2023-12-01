@@ -25,6 +25,7 @@ import (
 
 	chi "github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -105,12 +106,12 @@ func (h *deactivateOnPlacementFail) Run(t *testing.T, ctx context.Context) {
 		assert.EventuallyWithT(t, func(t *assert.CollectT) {
 			daprdURL := fmt.Sprintf("http://localhost:%d/v1.0/actors/myactortype/myactor%d/method/foo", h.daprd.HTTPPort(), i)
 			req, err := http.NewRequestWithContext(ctx, http.MethodPost, daprdURL, nil)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			resp, err := client.Do(req)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			defer resp.Body.Close()
 			body, err := io.ReadAll(resp.Body)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equalf(t, http.StatusOK, resp.StatusCode, "Response body: %v", string(body))
 		}, 10*time.Second, 100*time.Millisecond, "actor not ready")
 	}

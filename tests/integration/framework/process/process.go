@@ -20,6 +20,9 @@ import (
 
 // Interface is an interface for running and cleaning up a process.
 type Interface interface {
+	// Run runs the process.
 	Run(*testing.T, context.Context)
+
+	// Cleanup cleans up the process.
 	Cleanup(*testing.T)
 }

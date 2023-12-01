@@ -94,7 +94,7 @@ func (c *componentName) Run(t *testing.T, ctx context.Context) {
 	for _, storeName := range c.storeNames {
 		storeName := storeName
 		pt.Add(func(col *assert.CollectT) {
-			conn, err := grpc.DialContext(ctx, fmt.Sprintf("localhost:%d", c.daprd.GRPCPort()), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+			conn, err := grpc.DialContext(ctx, c.daprd.GRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 			require.NoError(col, err)
 			t.Cleanup(func() { require.NoError(t, conn.Close()) })
 
@@ -123,14 +123,14 @@ func (c *componentName) Run(t *testing.T, ctx context.Context) {
 				Key:       "key1",
 			})
 			require.NoError(col, err)
-			assert.Equal(col, "value1", string(resp.Data))
+			assert.Equal(col, "value1", string(resp.GetData()))
 
 			resp, err = client.GetState(ctx, &rtv1.GetStateRequest{
 				StoreName: storeName,
 				Key:       "key2",
 			})
 			require.NoError(col, err)
-			assert.Equal(col, "value2", string(resp.Data))
+			assert.Equal(col, "value2", string(resp.GetData()))
 		})
 	}
 }
