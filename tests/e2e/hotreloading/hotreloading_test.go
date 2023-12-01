@@ -49,23 +49,6 @@ func TestMain(m *testing.M) {
 
 	testApps := []kube.AppDescription{
 		{
-			AppName:        "hotreloading-caller",
-			DaprEnabled:    true,
-			ImageName:      "e2e-service_invocation",
-			Replicas:       1,
-			IngressEnabled: true,
-			MetricsEnabled: true,
-			Config:         "hotreloading",
-		},
-		{
-			AppName:        "hotreloading-callee",
-			DaprEnabled:    true,
-			ImageName:      "e2e-service_invocation",
-			Replicas:       1,
-			MetricsEnabled: true,
-			Config:         "hotreloading",
-		},
-		{
 			AppName:        "hotreloading-state",
 			DaprEnabled:    true,
 			ImageName:      "e2e-stateapp",
@@ -129,32 +112,33 @@ func TestState(t *testing.T) {
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			url := fmt.Sprintf("http://%s/test/http/save/hotreloading-state", externalURL)
-			_, status, err := utils.HTTPPostWithStatus(url, []byte(`{"states":[{"key":"foo","data":"bar"}]}`))
+			_, status, err := utils.HTTPPostWithStatus(url, []byte(`{"states":[{"key":"foo","value":{"data":"LXcgYmFyCg=="}}]}`))
 			assert.NoError(c, err)
 			assert.Equal(c, http.StatusNoContent, status)
 		}, 15*time.Second, 500*time.Millisecond)
 
 		url := fmt.Sprintf("http://%s/test/http/get/hotreloading-state", externalURL)
-		resp, code, err := utils.HTTPGetWithStatusWithData(url, []byte(`{"keys":["foo"]}`))
+		resp, code, err := utils.HTTPPostWithStatus(url, []byte(`{"states":[{"key":"foo"}]}`))
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusOK, code)
-		assert.Equal(t, "bar", string(resp))
+		assert.Contains(t, string(resp), `{"states":[{"key":"foo","value":{"data":"LXcgYmFyCg=="},`)
 	})
 
 	t.Run("Update state component to another type and wait for it to become unavailable", func(t *testing.T) {
 		var comp compapi.Component
 		require.NoError(t, cl.Get(ctx, client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "hotreloading-state"}, &comp))
 		comp.Spec = compapi.ComponentSpec{
-			Type:    "pubsub.in-memory",
-			Version: "v1",
+			Type:     "pubsub.in-memory",
+			Version:  "v1",
+			Metadata: []commonapi.NameValuePair{},
 		}
 		require.NoError(t, cl.Update(ctx, &comp))
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			url := fmt.Sprintf("http://%s/test/http/save/hotreloading-state", externalURL)
-			_, code, err := utils.HTTPPostWithStatus(url, []byte(`{"states":[{"key":"foo","data":"xyz"}]}`))
+			_, code, err := utils.HTTPPostWithStatus(url, []byte(`{"states":[{"key":"foo","value":{"data":"xyz"}}]}`))
 			assert.NoError(c, err)
-			assert.Equal(c, http.StatusInternalServerError, code)
+			assert.Equal(c, http.StatusBadRequest, code)
 		}, 15*time.Second, 500*time.Millisecond)
 	})
 
@@ -173,16 +157,16 @@ func TestState(t *testing.T) {
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			url := fmt.Sprintf("http://%s/test/http/save/hotreloading-state", externalURL)
-			_, status, err := utils.HTTPPostWithStatus(url, []byte(`{"states":[{"key":"foo","data":"abc"}]}`))
+			_, status, err := utils.HTTPPostWithStatus(url, []byte(`{"states":[{"key":"foo","value":{"data":"LXcgeHl6Cg=="}}]}`))
 			assert.NoError(c, err)
 			assert.Equal(c, http.StatusNoContent, status)
 		}, 15*time.Second, 500*time.Millisecond)
 
 		url := fmt.Sprintf("http://%s/test/http/get/hotreloading-state", externalURL)
-		resp, code, err := utils.HTTPGetWithStatusWithData(url, []byte(`{"keys":["foo"]}`))
+		resp, code, err := utils.HTTPPostWithStatus(url, []byte(`{"states":[{"key":"foo"}]}`))
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusOK, code)
-		assert.Equal(t, "abc", string(resp))
+		assert.Contains(t, string(resp), `{"states":[{"key":"foo","value":{"data":"LXcgeHl6Cg=="},`)
 	})
 
 	t.Run("Delete state Component and wait until no longer available", func(t *testing.T) {
@@ -195,7 +179,7 @@ func TestState(t *testing.T) {
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			url := fmt.Sprintf("http://%s/test/http/save/hotreloading-state", externalURL)
-			_, code, err := utils.HTTPPostWithStatus(url, []byte(`{"states":[{"key":"foo","data":"bar"}]}`))
+			_, code, err := utils.HTTPPostWithStatus(url, []byte(`{"states":[{"key":"foo","value":{"data":"LXcgYmFyCg=="}}]}`))
 			assert.NoError(c, err)
 			assert.Equal(c, http.StatusInternalServerError, code)
 		}, 15*time.Second, 500*time.Millisecond)
