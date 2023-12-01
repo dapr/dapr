@@ -78,7 +78,7 @@ func TestState(t *testing.T) {
 
 	ctx := context.Background()
 
-	externalURL := tr.Platform.AcquireAppExternalURL("hotreloading-caller")
+	externalURL := tr.Platform.AcquireAppExternalURL("hotreloading-state")
 
 	const connectionString = `"host=dapr-postgres-postgresql.dapr-tests.svc.cluster.local user=postgres password=example port=5432 connect_timeout=10 database=dapr_test"`
 
