@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package reminders
+package serialization
 
 import (
 	"context"
@@ -27,7 +27,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func serializationInvokeActor(t *testing.T, ctx context.Context, baseURL string, client *http.Client) {
+func invokeActor(t *testing.T, ctx context.Context, baseURL string, client *http.Client) {
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/method/foo", nil)
 		require.NoError(c, err)
@@ -38,7 +38,7 @@ func serializationInvokeActor(t *testing.T, ctx context.Context, baseURL string,
 	}, time.Second*10, time.Millisecond*100, "actor not ready in time")
 }
 
-func serializationStoreReminder(t *testing.T, ctx context.Context, baseURL string, client *http.Client) {
+func storeReminder(t *testing.T, ctx context.Context, baseURL string, client *http.Client) {
 	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, baseURL+"/reminders/newreminder", strings.NewReader(`{"dueTime": "0","period": "2m"}`))
@@ -50,7 +50,7 @@ func serializationStoreReminder(t *testing.T, ctx context.Context, baseURL strin
 	require.Equal(t, http.StatusNoContent, resp.StatusCode)
 }
 
-func serializationLoadRemindersFromDB(t *testing.T, ctx context.Context, db *sql.DB) (storedVal string) {
+func loadRemindersFromDB(t *testing.T, ctx context.Context, db *sql.DB) (storedVal string) {
 	queryCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	err := db.QueryRowContext(queryCtx, "SELECT value FROM state WHERE key = 'actors||myactortype'").Scan(&storedVal)
@@ -58,13 +58,13 @@ func serializationLoadRemindersFromDB(t *testing.T, ctx context.Context, db *sql
 	return storedVal
 }
 
-type serializationHTTPServer struct {
+type httpServer struct {
 	actorsReady          atomic.Bool
 	actorsReadyCh        chan struct{}
 	remindersInvokeCount atomic.Uint32
 }
 
-func (h *serializationHTTPServer) NewHandler() http.Handler {
+func (h *httpServer) NewHandler() http.Handler {
 	h.actorsReadyCh = make(chan struct{})
 
 	r := chi.NewRouter()
@@ -87,7 +87,7 @@ func (h *serializationHTTPServer) NewHandler() http.Handler {
 	return r
 }
 
-func (h *serializationHTTPServer) WaitForActorsReady(ctx context.Context) error {
+func (h *httpServer) WaitForActorsReady(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()

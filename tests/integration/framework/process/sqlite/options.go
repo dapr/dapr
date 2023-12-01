@@ -16,7 +16,6 @@ package sqlite
 // options contains the options for using a SQLite database in integration tests.
 type options struct {
 	name            string
-	connect         bool
 	actorStateStore bool
 	metadata        map[string]string
 }
@@ -41,13 +40,5 @@ func WithActorStateStore(enabled bool) Option {
 func WithMetadata(key, value string) Option {
 	return func(o *options) {
 		o.metadata[key] = value
-	}
-}
-
-// WithConnect configures whether the process creates a connection to the database.
-// Default is true.
-func WithConnect(enabled bool) Option {
-	return func(o *options) {
-		o.connect = enabled
 	}
 }

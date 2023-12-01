@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"testing"
 
 	// Blank import for the sqlite driver
@@ -37,9 +38,10 @@ type Option func(*options)
 
 // SQLite database that can be used in integration tests.
 type SQLite struct {
-	dbPath string
-	conn   *sql.DB
-	opts   options
+	dbPath   string
+	connLock sync.RWMutex
+	conn     *sql.DB
+	opts     options
 }
 
 func New(t *testing.T, fopts ...Option) *SQLite {
@@ -49,7 +51,6 @@ func New(t *testing.T, fopts ...Option) *SQLite {
 		opts: options{
 			name:     "mystore",
 			metadata: map[string]string{},
-			connect:  true,
 		},
 	}
 
@@ -60,15 +61,7 @@ func New(t *testing.T, fopts ...Option) *SQLite {
 	// Create a SQLite database in the test's temporary directory
 	tmpDir := t.TempDir()
 	s.dbPath = filepath.Join(tmpDir, "test-data.db")
-	// t.Logf("Storing SQLite database at %s", s.dbPath)
-
-	// Connect to the database
-	// We do this here because the test's init code may need to access the database before starting the test
-	if s.opts.connect {
-		var err error
-		s.conn, err = sql.Open("sqlite", "file://"+s.dbPath+"?_txlock=immediate&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)")
-		require.NoError(t, err, "Failed to connect to SQLite database")
-	}
+	t.Logf("Storing SQLite database at %s", s.dbPath)
 
 	return s
 }
@@ -85,15 +78,31 @@ func (s *SQLite) Cleanup(t *testing.T) {
 }
 
 // GetConnection returns the connection to the SQLite database.
-// This will be nil if the "connect" is false.
-func (s *SQLite) GetConnection() *sql.DB {
+func (s *SQLite) GetConnection(t *testing.T) *sql.DB {
+	s.connLock.RLock()
+	conn := s.conn
+	s.connLock.RUnlock()
+	if conn != nil {
+		return conn
+	}
+
+	s.connLock.Lock()
+	defer s.connLock.Unlock()
+
+	// Re-check after acquiring write lock
+	if s.conn != nil {
+		return s.conn
+	}
+
+	var err error
+	s.conn, err = sql.Open("sqlite", "file://"+s.dbPath+"?_txlock=immediate&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)")
+	require.NoError(t, err, "Failed to connect to SQLite database")
 	return s.conn
 }
 
 // CreateStateTables creates the state tables in a new SQLite DB.
 func (s *SQLite) CreateStateTables(t *testing.T) {
-	require.NotNil(t, s.conn, "Cannot perform if connection isn't active")
-	_, err := s.conn.Exec(`
+	_, err := s.GetConnection(t).Exec(`
 CREATE TABLE metadata (
   key text NOT NULL PRIMARY KEY,
   value text NOT NULL
