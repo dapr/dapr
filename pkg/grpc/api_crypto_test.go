@@ -566,13 +566,13 @@ func cryptoSendRequest(stream grpc.ClientStream, send []runtimev1pb.CryptoReques
 
 		payload := recv.GetPayload()
 		if payload != nil {
-			if payload.Seq != seq {
-				return nil, fmt.Errorf("expected sequence %d but got %d", seq, payload.Seq)
+			if payload.GetSeq() != seq {
+				return nil, fmt.Errorf("expected sequence %d but got %d", seq, payload.GetSeq())
 			}
 			seq++
 
-			if len(payload.Data) > 0 {
-				_, err = res.Write(payload.Data)
+			if len(payload.GetData()) > 0 {
+				_, err = res.Write(payload.GetData())
 				if err != nil {
 					return nil, fmt.Errorf("failed to write data into buffer: %w", err)
 				}

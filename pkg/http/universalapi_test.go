@@ -186,7 +186,7 @@ func TestUniversalHTTPHandler(t *testing.T) {
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 
-		assert.Len(t, respBody, 0)
+		assert.Empty(t, respBody)
 	})
 
 	t.Run("Option SuccessStatusCode", func(t *testing.T) {
@@ -319,7 +319,7 @@ func TestUniversalHTTPHandler(t *testing.T) {
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 
-		assert.Len(t, respBody, 0)
+		assert.Empty(t, respBody)
 	})
 
 	t.Run("Option OutModifier returns JSON data", func(t *testing.T) {

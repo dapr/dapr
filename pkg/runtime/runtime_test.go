@@ -109,7 +109,7 @@ func TestNewRuntime(t *testing.T) {
 	}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 
 	// assert
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, r, "runtime must be initiated")
 }
 
@@ -156,7 +156,7 @@ func TestDoProcessComponent(t *testing.T) {
 		err := rt.processor.Init(context.Background(), lockComponent)
 
 		// assert
-		assert.Error(t, err, "expected an error")
+		require.Error(t, err, "expected an error")
 		assert.Equal(t, err.Error(), rterrors.NewInit(rterrors.InitComponentFailure, "testlock (lock.mockLock/v1)", assert.AnError).Error(), "expected error strings to match")
 	})
 
@@ -179,7 +179,7 @@ func TestDoProcessComponent(t *testing.T) {
 		err := rt.processor.Init(context.Background(), lockComponentV3)
 
 		// assert
-		assert.Error(t, err, "expected an error")
+		require.Error(t, err, "expected an error")
 		assert.Equal(t, err.Error(), rterrors.NewInit(rterrors.CreateComponentFailure, "testlock (lock.mockLock/v3)", fmt.Errorf("couldn't find lock store lock.mockLock/v3")).Error())
 	})
 
@@ -208,7 +208,7 @@ func TestDoProcessComponent(t *testing.T) {
 		// act
 		err := rt.processor.Init(context.Background(), lockComponentWithWrongStrategy)
 		// assert
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 
 	t.Run("lock init successfully and set right strategy", func(t *testing.T) {
@@ -227,11 +227,11 @@ func TestDoProcessComponent(t *testing.T) {
 		// act
 		err := rt.processor.Init(context.Background(), lockComponent)
 		// assert
-		assert.Nil(t, err, "unexpected error")
+		require.NoError(t, err, "unexpected error")
 		// get modified key
 		key, err := lockLoader.GetModifiedLockKey("test", "mockLock", "appid-1")
-		assert.Nil(t, err, "unexpected error")
-		assert.Equal(t, key, "lock||appid-1||test")
+		require.NoError(t, err, "unexpected error")
+		assert.Equal(t, "lock||appid-1||test", key)
 	})
 
 	t.Run("test error on pubsub init", func(t *testing.T) {
@@ -257,7 +257,7 @@ func TestDoProcessComponent(t *testing.T) {
 		err := rt.processor.Init(context.Background(), pubsubComponent)
 
 		// assert
-		assert.Error(t, err, "expected an error")
+		require.Error(t, err, "expected an error")
 		assert.Equal(t, err.Error(), rterrors.NewInit(rterrors.InitComponentFailure, "testpubsub (pubsub.mockPubSub/v1)", assert.AnError).Error(), "expected error strings to match")
 	})
 
@@ -269,7 +269,7 @@ func TestDoProcessComponent(t *testing.T) {
 			},
 		})
 		// assert
-		assert.Error(t, err, "error expected")
+		require.Error(t, err, "error expected")
 	})
 }
 
@@ -472,7 +472,7 @@ func TestInitNameResolution(t *testing.T) {
 		err = rt.initNameResolution(context.Background())
 
 		// assert
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 
 	t.Run("test init nameresolution", func(t *testing.T) {
@@ -492,7 +492,7 @@ func TestInitNameResolution(t *testing.T) {
 		err = rt.initNameResolution(context.Background())
 
 		// assert
-		assert.NoError(t, err, "expected no error")
+		require.NoError(t, err, "expected no error")
 	})
 
 	t.Run("test init nameresolution default in StandaloneMode", func(t *testing.T) {
@@ -510,7 +510,7 @@ func TestInitNameResolution(t *testing.T) {
 		err = rt.initNameResolution(context.Background())
 
 		// assert
-		assert.NoError(t, err, "expected no error")
+		require.NoError(t, err, "expected no error")
 	})
 
 	t.Run("test init nameresolution nil in StandaloneMode", func(t *testing.T) {
@@ -528,7 +528,7 @@ func TestInitNameResolution(t *testing.T) {
 		err = rt.initNameResolution(context.Background())
 
 		// assert
-		assert.NoError(t, err, "expected no error")
+		require.NoError(t, err, "expected no error")
 	})
 
 	t.Run("test init nameresolution default in KubernetesMode", func(t *testing.T) {
@@ -546,7 +546,7 @@ func TestInitNameResolution(t *testing.T) {
 		err = rt.initNameResolution(context.Background())
 
 		// assert
-		assert.NoError(t, err, "expected no error")
+		require.NoError(t, err, "expected no error")
 	})
 
 	t.Run("test init nameresolution nil in KubernetesMode", func(t *testing.T) {
@@ -564,7 +564,7 @@ func TestInitNameResolution(t *testing.T) {
 		err = rt.initNameResolution(context.Background())
 
 		// assert
-		assert.NoError(t, err, "expected no error")
+		require.NoError(t, err, "expected no error")
 	})
 }
 
@@ -642,12 +642,12 @@ func TestSetupTracing(t *testing.T) {
 		expectedExporters: []sdktrace.SpanExporter{&diagUtils.StdoutExporter{}, &zipkin.Exporter{}, &otlptrace.Exporter{}},
 	}}
 
-	for _, tc := range testcases {
+	for i, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
 			rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
 			require.NoError(t, err)
 			defer stopRuntime(t, rt)
-			rt.globalConfig.Spec.TracingSpec = &tc.tracingConfig
+			rt.globalConfig.Spec.TracingSpec = &testcases[i].tracingConfig
 			if tc.hostAddress != "" {
 				rt.hostAddress = tc.hostAddress
 			}
@@ -657,7 +657,7 @@ func TestSetupTracing(t *testing.T) {
 			if err := rt.setupTracing(context.Background(), rt.hostAddress, tpStore); tc.expectedErr != "" {
 				assert.Contains(t, err.Error(), tc.expectedErr)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			}
 			if len(tc.expectedExporters) > 0 {
 				assert.True(t, tpStore.HasExporter())
@@ -768,7 +768,7 @@ func assertBuiltInSecretStore(t *testing.T, rt *DaprRuntime) {
 		return ok
 	}, time.Second*2, time.Millisecond*100)
 
-	assert.NoError(t, rt.runnerCloser.Close())
+	require.NoError(t, rt.runnerCloser.Close())
 }
 
 func NewTestDaprRuntime(t *testing.T, mode modes.DaprMode) (*DaprRuntime, error) {
@@ -843,7 +843,7 @@ func NewTestDaprRuntimeConfig(t *testing.T, mode modes.DaprMode, appProtocol str
 
 func TestGracefulShutdown(t *testing.T) {
 	r, err := NewTestDaprRuntime(t, modes.StandaloneMode)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, time.Second, r.runtimeConfig.gracefulShutdownDuration)
 }
 
@@ -872,13 +872,13 @@ func TestPodName(t *testing.T) {
 func TestInitActors(t *testing.T) {
 	t.Run("missing namespace on kubernetes", func(t *testing.T) {
 		r, err := NewTestDaprRuntime(t, modes.KubernetesMode)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		defer stopRuntime(t, r)
 		r.namespace = ""
 		r.runtimeConfig.mTLSEnabled = true
 
 		err = r.initActors(context.TODO())
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 
 	t.Run("actors hosted = true", func(t *testing.T) {
@@ -913,7 +913,7 @@ func TestInitActors(t *testing.T) {
 		r.channels.Refresh()
 
 		err = r.initActors(context.TODO())
-		assert.NotNil(t, err)
+		require.Error(t, err)
 	})
 
 	t.Run("the state stores can still be initialized normally", func(t *testing.T) {
@@ -945,7 +945,7 @@ func TestInitActors(t *testing.T) {
 		assert.False(t, ok)
 		assert.Equal(t, "", name)
 		err = r.initActors(context.TODO())
-		assert.NotNil(t, err)
+		require.Error(t, err)
 	})
 }
 
@@ -1180,7 +1180,7 @@ func TestCloseWithErrors(t *testing.T) {
 }
 
 func stopRuntime(t *testing.T, rt *DaprRuntime) {
-	assert.NoError(t, rt.runnerCloser.Close())
+	require.NoError(t, rt.runnerCloser.Close())
 }
 
 func TestComponentsCallback(t *testing.T) {
@@ -1222,7 +1222,7 @@ func TestComponentsCallback(t *testing.T) {
 	cancel()
 	select {
 	case err := <-errCh:
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	case <-time.After(10 * time.Second):
 		t.Fatal("timed out waiting for runtime to stop")
 	}
@@ -1262,7 +1262,7 @@ func TestGRPCProxy(t *testing.T) {
 		cancel()
 		select {
 		case err := <-errCh:
-			assert.NoError(t, err)
+			require.NoError(t, err)
 		case <-time.After(5 * time.Second):
 			t.Fatal("timed out waiting for runtime to stop")
 		}
@@ -1331,7 +1331,7 @@ func TestShutdownWithWait(t *testing.T) {
 
 		dir := t.TempDir()
 		rt.runtimeConfig.standalone.ResourcesPath = []string{dir}
-		assert.NoError(t, os.WriteFile(filepath.Join(dir, "kubernetesMock.yaml"), []byte(`
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "kubernetesMock.yaml"), []byte(`
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -1385,7 +1385,7 @@ spec:
 
 		select {
 		case err := <-errCh:
-			assert.NoError(t, err)
+			require.NoError(t, err)
 		case <-time.After(5 * time.Second):
 			t.Error("timed out waiting for runtime to stop")
 		}
@@ -1411,7 +1411,7 @@ spec:
 		)
 		dir := t.TempDir()
 		rt.runtimeConfig.standalone.ResourcesPath = []string{dir}
-		assert.NoError(t, os.WriteFile(filepath.Join(dir, "kubernetesMock.yaml"), []byte(`
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "kubernetesMock.yaml"), []byte(`
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -1457,7 +1457,7 @@ spec:
 
 		select {
 		case err := <-errCh:
-			assert.Error(t, err)
+			require.Error(t, err)
 		case <-time.After(5 * time.Second):
 			t.Error("timed out waiting for runtime to stop")
 		}
@@ -1493,7 +1493,7 @@ spec:
 
 		dir := t.TempDir()
 		rt.runtimeConfig.standalone.ResourcesPath = []string{dir}
-		assert.NoError(t, os.WriteFile(filepath.Join(dir, "kubernetesMock.yaml"), []byte(`
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "kubernetesMock.yaml"), []byte(`
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -1525,7 +1525,7 @@ spec:
 
 		select {
 		case err := <-errCh:
-			assert.NoError(t, err)
+			require.NoError(t, err)
 		case <-time.After(5 * time.Second):
 			t.Error("timed out waiting for runtime to stop")
 		}
@@ -1564,7 +1564,7 @@ spec:
 
 		dir := t.TempDir()
 		rt.runtimeConfig.standalone.ResourcesPath = []string{dir}
-		assert.NoError(t, os.WriteFile(filepath.Join(dir, "kubernetesMock.yaml"), []byte(`
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "kubernetesMock.yaml"), []byte(`
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -1583,7 +1583,7 @@ spec:
 
 		select {
 		case err := <-errCh:
-			assert.ErrorContains(t, err, "this is an error")
+			require.ErrorContains(t, err, "this is an error")
 		case <-time.After(5 * time.Second):
 			t.Error("timed out waiting for runtime to error")
 		}
@@ -1633,7 +1633,7 @@ spec:
 
 		dir := t.TempDir()
 		rt.runtimeConfig.standalone.ResourcesPath = []string{dir}
-		assert.NoError(t, os.WriteFile(filepath.Join(dir, "kubernetesMock.yaml"), []byte(`
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "kubernetesMock.yaml"), []byte(`
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -1733,15 +1733,15 @@ func TestGetComponentsCapabilitiesMap(t *testing.T) {
 	require.NoError(t, rt.processor.Init(context.Background(), cSecretStore))
 
 	capabilities := rt.getComponentsCapabilitesMap()
-	assert.Equal(t, 5, len(capabilities),
+	assert.Len(t, capabilities, 5,
 		"All 5 registered components have are present in capabilities (stateStore pubSub input output secretStore)")
-	assert.Equal(t, 2, len(capabilities["mockPubSub"]),
+	assert.Len(t, capabilities["mockPubSub"], 2,
 		"mockPubSub has 2 features because we mocked it so")
-	assert.Equal(t, 1, len(capabilities["testInputBinding"]),
+	assert.Len(t, capabilities["testInputBinding"], 1,
 		"Input bindings always have INPUT_BINDING added to their capabilities")
-	assert.Equal(t, 1, len(capabilities["testOutputBinding"]),
+	assert.Len(t, capabilities["testOutputBinding"], 1,
 		"Output bindings always have OUTPUT_BINDING added to their capabilities")
-	assert.Equal(t, 1, len(capabilities[mockSecretStoreName]),
+	assert.Len(t, capabilities[mockSecretStoreName], 1,
 		"mockSecretStore has a single feature and it should be present")
 }
 
@@ -1793,7 +1793,7 @@ func (s *pingStreamService) PingStream(stream pb.TestService_PingStreamServer) e
 		} else if err != nil {
 			return err
 		}
-		pong := &pb.PingResponse{Value: ping.Value, Counter: counter}
+		pong := &pb.PingResponse{Value: ping.GetValue(), Counter: counter}
 		if err := stream.Send(pong); err != nil {
 			return err
 		}
@@ -1804,7 +1804,7 @@ func (s *pingStreamService) PingStream(stream pb.TestService_PingStreamServer) e
 
 func matchDaprRequestMethod(method string) any {
 	return mock.MatchedBy(func(req *invokev1.InvokeMethodRequest) bool {
-		if req == nil || req.Message() == nil || req.Message().Method != method {
+		if req == nil || req.Message() == nil || req.Message().GetMethod() != method {
 			return false
 		}
 		return true
@@ -1843,15 +1843,15 @@ func TestGracefulShutdownBindings(t *testing.T) {
 	cout.Spec.Type = "bindings.testOutputBinding"
 	require.NoError(t, rt.processor.Init(context.Background(), cin))
 	require.NoError(t, rt.processor.Init(context.Background(), cout))
-	assert.Equal(t, len(rt.compStore.ListInputBindings()), 1)
-	assert.Equal(t, len(rt.compStore.ListOutputBindings()), 1)
+	assert.Len(t, rt.compStore.ListInputBindings(), 1)
+	assert.Len(t, rt.compStore.ListOutputBindings(), 1)
 
 	cancel()
 	select {
 	case <-time.After(rt.runtimeConfig.gracefulShutdownDuration + 2*time.Second):
 		assert.Fail(t, "input bindings shutdown timed out")
 	case err := <-errCh:
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	}
 }
 
@@ -1920,7 +1920,7 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 	case <-time.After(rt.runtimeConfig.gracefulShutdownDuration + 2*time.Second):
 		assert.Fail(t, "pubsub shutdown timed out")
 	case err := <-errCh:
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	}
 }
 
@@ -1982,9 +1982,9 @@ func TestGracefulShutdownActors(t *testing.T) {
 	err = rt.processor.Init(context.Background(), mockStateComponent)
 
 	// assert
-	assert.NoError(t, err, "expected no error")
+	require.NoError(t, err, "expected no error")
 
-	assert.NoError(t, rt.initActors(context.TODO()))
+	require.NoError(t, rt.initActors(context.TODO()))
 
 	cancel()
 
@@ -1992,15 +1992,15 @@ func TestGracefulShutdownActors(t *testing.T) {
 	case <-time.After(rt.runtimeConfig.gracefulShutdownDuration + 2*time.Second):
 		assert.Fail(t, "actors shutdown timed out")
 	case err := <-errCh:
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	}
 
 	var activeActCount int32
 	runtimeStatus := rt.actor.GetRuntimeStatus(context.Background())
 	for _, v := range runtimeStatus.GetActiveActors() {
-		activeActCount += v.Count
+		activeActCount += v.GetCount()
 	}
-	assert.Equal(t, activeActCount, int32(0))
+	assert.Equal(t, int32(0), activeActCount)
 }
 
 func initMockStateStoreForRuntime(rt *DaprRuntime, encryptKey string, e error) *daprt.MockStateStore {
@@ -2062,7 +2062,7 @@ func TestTraceShutdown(t *testing.T) {
 	case <-time.After(rt.runtimeConfig.gracefulShutdownDuration + 2*time.Second):
 		assert.Fail(t, "tracing shutdown timed out")
 	case err := <-errCh:
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	}
 
 	assert.Nil(t, rt.tracerProvider)

@@ -62,19 +62,19 @@ func (b *grpcInputBinding) adaptHandler(ctx context.Context, streamingPull proto
 	safeSend := &sync.Mutex{}
 	return func(msg *proto.ReadResponse) {
 		var contentType *string
-		if len(msg.ContentType) != 0 {
+		if len(msg.GetContentType()) != 0 {
 			contentType = &msg.ContentType
 		}
 		m := bindings.ReadResponse{
-			Data:        msg.Data,
-			Metadata:    msg.Metadata,
+			Data:        msg.GetData(),
+			Metadata:    msg.GetMetadata(),
 			ContentType: contentType,
 		}
 
 		var respErr *proto.AckResponseError
 		bts, err := handler(ctx, &m)
 		if err != nil {
-			b.logger.Errorf("error when handling message for message: %s", msg.MessageId)
+			b.logger.Errorf("error when handling message for message: %s", msg.GetMessageId())
 			respErr = &proto.AckResponseError{
 				Message: err.Error(),
 			}
@@ -92,9 +92,9 @@ func (b *grpcInputBinding) adaptHandler(ctx context.Context, streamingPull proto
 		if err := streamingPull.Send(&proto.ReadRequest{
 			ResponseData:  bts,
 			ResponseError: respErr,
-			MessageId:     msg.MessageId,
+			MessageId:     msg.GetMessageId(),
 		}); err != nil {
-			b.logger.Errorf("error when ack'ing message %s", msg.MessageId)
+			b.logger.Errorf("error when ack'ing message %s", msg.GetMessageId())
 		}
 	}
 }

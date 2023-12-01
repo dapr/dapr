@@ -108,9 +108,9 @@ func signJWT(builder *jwt.Builder) ([]byte, error) {
 func validateCertificateResponse(t *testing.T, res *sentrypbv1.SignCertificateResponse, sentryBundle ca.Bundle, expectSPIFFEID, expectDNSName string) {
 	t.Helper()
 
-	require.NotEmpty(t, res.WorkloadCertificate)
+	require.NotEmpty(t, res.GetWorkloadCertificate())
 
-	rest := res.WorkloadCertificate
+	rest := res.GetWorkloadCertificate()
 
 	// First block should contain the issued workload certificate
 	{

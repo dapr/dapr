@@ -26,8 +26,8 @@ func TestResponseWriterBeforeWrite(t *testing.T) {
 	rec := httptest.NewRecorder()
 	rw := NewResponseWriter(rec)
 
-	require.Equal(t, rw.Status(), 0)
-	require.Equal(t, rw.Written(), false)
+	require.Equal(t, 0, rw.Status())
+	require.False(t, rw.Written())
 }
 
 func TestResponseWriterBeforeFuncHasAccessToStatus(t *testing.T) {
@@ -41,7 +41,7 @@ func TestResponseWriterBeforeFuncHasAccessToStatus(t *testing.T) {
 	})
 	rw.WriteHeader(http.StatusCreated)
 
-	require.Equal(t, status, http.StatusCreated)
+	require.Equal(t, http.StatusCreated, status)
 }
 
 func TestResponseWriterBeforeFuncCanChangeStatus(t *testing.T) {
@@ -54,7 +54,7 @@ func TestResponseWriterBeforeFuncCanChangeStatus(t *testing.T) {
 	})
 
 	rw.WriteHeader(http.StatusBadRequest)
-	require.Equal(t, rec.Code, http.StatusOK)
+	require.Equal(t, http.StatusOK, rec.Code)
 }
 
 func TestResponseWriterBeforeFuncChangesStatusMultipleTimes(t *testing.T) {
@@ -69,7 +69,7 @@ func TestResponseWriterBeforeFuncChangesStatusMultipleTimes(t *testing.T) {
 	})
 
 	rw.WriteHeader(http.StatusOK)
-	require.Equal(t, rec.Code, http.StatusNotFound)
+	require.Equal(t, http.StatusNotFound, rec.Code)
 }
 
 func TestResponseWriterWritingString(t *testing.T) {
@@ -79,10 +79,10 @@ func TestResponseWriterWritingString(t *testing.T) {
 	rw.Write([]byte("Hello world"))
 
 	require.Equal(t, rec.Code, rw.Status())
-	require.Equal(t, rec.Body.String(), "Hello world")
-	require.Equal(t, rw.Status(), http.StatusOK)
-	require.Equal(t, rw.Size(), 11)
-	require.Equal(t, rw.Written(), true)
+	require.Equal(t, "Hello world", rec.Body.String())
+	require.Equal(t, http.StatusOK, rw.Status())
+	require.Equal(t, 11, rw.Size())
+	require.True(t, rw.Written())
 }
 
 func TestResponseWriterWritingStrings(t *testing.T) {
@@ -93,9 +93,9 @@ func TestResponseWriterWritingStrings(t *testing.T) {
 	rw.Write([]byte("foo bar bat baz"))
 
 	require.Equal(t, rec.Code, rw.Status())
-	require.Equal(t, rec.Body.String(), "Hello worldfoo bar bat baz")
-	require.Equal(t, rw.Status(), http.StatusOK)
-	require.Equal(t, rw.Size(), 26)
+	require.Equal(t, "Hello worldfoo bar bat baz", rec.Body.String())
+	require.Equal(t, http.StatusOK, rw.Status())
+	require.Equal(t, 26, rw.Size())
 }
 
 func TestResponseWriterWritingHeader(t *testing.T) {
@@ -105,9 +105,9 @@ func TestResponseWriterWritingHeader(t *testing.T) {
 	rw.WriteHeader(http.StatusNotFound)
 
 	require.Equal(t, rec.Code, rw.Status())
-	require.Equal(t, rec.Body.String(), "")
-	require.Equal(t, rw.Status(), http.StatusNotFound)
-	require.Equal(t, rw.Size(), 0)
+	require.Equal(t, "", rec.Body.String())
+	require.Equal(t, http.StatusNotFound, rw.Status())
+	require.Equal(t, 0, rw.Size())
 }
 
 func TestResponseWriterWritingHeaderTwice(t *testing.T) {
@@ -117,10 +117,10 @@ func TestResponseWriterWritingHeaderTwice(t *testing.T) {
 	rw.WriteHeader(http.StatusNotFound)
 	rw.WriteHeader(http.StatusInternalServerError)
 
-	require.Equal(t, rec.Code, rw.Status())
-	require.Equal(t, rec.Body.String(), "")
-	require.Equal(t, rw.Status(), http.StatusNotFound)
-	require.Equal(t, rw.Size(), 0)
+	require.Equal(t, rw.Status(), rec.Code)
+	require.Equal(t, "", rec.Body.String())
+	require.Equal(t, http.StatusNotFound, rw.Status())
+	require.Equal(t, 0, rw.Size())
 }
 
 func TestResponseWriterBefore(t *testing.T) {
@@ -138,10 +138,10 @@ func TestResponseWriterBefore(t *testing.T) {
 	rw.WriteHeader(http.StatusNotFound)
 
 	require.Equal(t, rec.Code, rw.Status())
-	require.Equal(t, rec.Body.String(), "")
-	require.Equal(t, rw.Status(), http.StatusNotFound)
-	require.Equal(t, rw.Size(), 0)
-	require.Equal(t, result, "barfoo")
+	require.Equal(t, "", rec.Body.String())
+	require.Equal(t, http.StatusNotFound, rw.Status())
+	require.Equal(t, 0, rw.Size())
+	require.Equal(t, "barfoo", result)
 }
 
 func TestResponseWriterUnwrap(t *testing.T) {
@@ -177,12 +177,12 @@ func TestResponseWriterWithoutReadFrom(t *testing.T) {
 	rw := NewResponseWriter(rec)
 
 	n, err := io.Copy(rw, &mockReader{readStr: writeString})
-	require.Equal(t, err, nil)
-	require.Equal(t, rw.Status(), http.StatusOK)
-	require.Equal(t, rw.Written(), true)
-	require.Equal(t, rw.Size(), len(writeString))
-	require.Equal(t, int(n), len(writeString))
-	require.Equal(t, rec.Body.String(), writeString)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, rw.Status())
+	require.True(t, rw.Written())
+	require.Len(t, writeString, rw.Size())
+	require.Len(t, writeString, int(n))
+	require.Equal(t, writeString, rec.Body.String())
 }
 
 type mockResponseWriterWithReadFrom struct {
@@ -205,11 +205,11 @@ func TestResponseWriterWithReadFrom(t *testing.T) {
 	mrw := &mockResponseWriterWithReadFrom{ResponseRecorder: httptest.NewRecorder()}
 	rw := NewResponseWriter(mrw)
 	n, err := io.Copy(rw, &mockReader{readStr: writeString})
-	require.Equal(t, err, nil)
-	require.Equal(t, rw.Status(), http.StatusOK)
-	require.Equal(t, rw.Written(), true)
-	require.Equal(t, rw.Size(), len(writeString))
-	require.Equal(t, int(n), len(writeString))
-	require.Equal(t, mrw.Body.String(), writeString)
-	require.Equal(t, mrw.writtenStr, writeString)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, rw.Status())
+	require.True(t, rw.Written())
+	require.Len(t, writeString, rw.Size())
+	require.Len(t, writeString, int(n))
+	require.Equal(t, writeString, mrw.Body.String())
+	require.Equal(t, writeString, mrw.writtenStr)
 }

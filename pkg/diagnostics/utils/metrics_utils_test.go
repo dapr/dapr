@@ -76,7 +76,7 @@ func TestCreateRulesMap(t *testing.T) {
 				},
 			},
 		})
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 
 	t.Run("valid rule", func(t *testing.T) {

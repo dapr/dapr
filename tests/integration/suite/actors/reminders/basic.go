@@ -15,7 +15,6 @@ package reminders
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -66,7 +65,7 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 	b.place = placement.New(t)
 	b.daprd = daprd.New(t,
 		daprd.WithInMemoryActorStateStore("mystore"),
-		daprd.WithPlacementAddresses("localhost:"+strconv.Itoa(b.place.Port())),
+		daprd.WithPlacementAddresses(b.place.Address()),
 		daprd.WithAppPort(srv.Port()),
 	)
 
@@ -89,7 +88,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, rErr := client.Do(req)
 		require.NoError(c, rErr)
-		assert.NoError(c, resp.Body.Close())
+		require.NoError(c, resp.Body.Close())
 		assert.Equal(c, http.StatusOK, resp.StatusCode)
 	}, time.Second*10, time.Millisecond*100, "actor not ready in time")
 
@@ -99,14 +98,14 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 	resp, err := client.Do(req)
 	require.NoError(t, err)
-	assert.NoError(t, resp.Body.Close())
+	require.NoError(t, resp.Body.Close())
 	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
 
 	assert.Eventually(t, func() bool {
 		return b.methodcalled.Load() == 1
 	}, time.Second*3, time.Millisecond*100)
 
-	conn, err := grpc.DialContext(ctx, fmt.Sprintf("localhost:%d", b.daprd.GRPCPort()),
+	conn, err := grpc.DialContext(ctx, b.daprd.GRPCAddress(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock(),
 	)
 	require.NoError(t, err)

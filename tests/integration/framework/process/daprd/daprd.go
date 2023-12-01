@@ -159,7 +159,7 @@ func (d *Daprd) Cleanup(t *testing.T) {
 func (d *Daprd) WaitUntilTCPReady(t *testing.T, ctx context.Context) {
 	assert.Eventually(t, func() bool {
 		dialer := net.Dialer{Timeout: time.Second}
-		net, err := dialer.DialContext(ctx, "tcp", "localhost:"+strconv.Itoa(d.HTTPPort()))
+		net, err := dialer.DialContext(ctx, "tcp", d.HTTPAddress())
 		if err != nil {
 			return false
 		}
@@ -203,7 +203,7 @@ func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
 
 	case "grpc":
 		assert.Eventually(t, func() bool {
-			conn, err := grpc.Dial("localhost:"+strconv.Itoa(d.appPort),
+			conn, err := grpc.Dial(d.AppAddress(),
 				grpc.WithTransportCredentials(insecure.NewCredentials()),
 				grpc.WithBlock())
 			if conn != nil {
@@ -229,16 +229,32 @@ func (d *Daprd) AppPort() int {
 	return d.appPort
 }
 
+func (d *Daprd) AppAddress() string {
+	return "localhost:" + strconv.Itoa(d.AppPort())
+}
+
 func (d *Daprd) GRPCPort() int {
 	return d.grpcPort
+}
+
+func (d *Daprd) GRPCAddress() string {
+	return "localhost:" + strconv.Itoa(d.GRPCPort())
 }
 
 func (d *Daprd) HTTPPort() int {
 	return d.httpPort
 }
 
+func (d *Daprd) HTTPAddress() string {
+	return "localhost:" + strconv.Itoa(d.HTTPPort())
+}
+
 func (d *Daprd) InternalGRPCPort() int {
 	return d.internalGRPCPort
+}
+
+func (d *Daprd) InternalGRPCAddress() string {
+	return "localhost:" + strconv.Itoa(d.InternalGRPCPort())
 }
 
 func (d *Daprd) PublicPort() int {

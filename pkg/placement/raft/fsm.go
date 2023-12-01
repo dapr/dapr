@@ -95,7 +95,7 @@ func (c *FSM) PlacementState() *v1pb.PlacementTables {
 				table.Hosts[lk] = lv
 			}
 
-			copy(table.SortedSet, sortedSet)
+			copy(table.GetSortedSet(), sortedSet)
 
 			for lk, lv := range loadMap {
 				h := v1pb.Host{
@@ -110,12 +110,12 @@ func (c *FSM) PlacementState() *v1pb.PlacementTables {
 
 		newTable.Entries[k] = &table
 
-		totalHostSize += len(table.Hosts)
-		totalSortedSet += len(table.SortedSet)
-		totalLoadMap += len(table.LoadMap)
+		totalHostSize += len(table.GetHosts())
+		totalSortedSet += len(table.GetSortedSet())
+		totalLoadMap += len(table.GetLoadMap())
 	}
 
-	logging.Debugf("PlacementTable HostsCount=%d SortedSetCount=%d LoadMapCount=%d ApiLevel=%d", totalHostSize, totalSortedSet, totalLoadMap, newTable.ApiLevel)
+	logging.Debugf("PlacementTable HostsCount=%d SortedSetCount=%d LoadMapCount=%d ApiLevel=%d", totalHostSize, totalSortedSet, totalLoadMap, newTable.GetApiLevel())
 
 	return newTable
 }

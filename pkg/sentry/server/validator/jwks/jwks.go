@@ -83,7 +83,7 @@ func (j *jwks) Start(ctx context.Context) error {
 }
 
 func (j *jwks) Validate(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (td spiffeid.TrustDomain, overrideDuration bool, err error) {
-	if req.Token == "" {
+	if req.GetToken() == "" {
 		return td, false, errors.New("the request does not contain a token")
 	}
 
@@ -95,13 +95,13 @@ func (j *jwks) Validate(ctx context.Context, req *sentryv1pb.SignCertificateRequ
 	}
 
 	// Construct the expected value for the subject, which is the SPIFFE ID of the requestor
-	sub, err := spiffeid.FromSegments(td, "ns", req.Namespace, req.Id)
+	sub, err := spiffeid.FromSegments(td, "ns", req.GetNamespace(), req.GetId())
 	if err != nil {
 		return td, false, fmt.Errorf("failed to construct SPIFFE ID for requestor: %w", err)
 	}
 
 	// Validate the authorization token
-	_, err = jwt.Parse([]byte(req.Token),
+	_, err = jwt.Parse([]byte(req.GetToken()),
 		jwt.WithKeySet(j.cache.KeySet(), jws.WithInferAlgorithmFromKey(true)),
 		jwt.WithAcceptableSkew(5*time.Minute),
 		jwt.WithContext(ctx),

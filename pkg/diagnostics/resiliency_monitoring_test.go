@@ -192,7 +192,7 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 				require.Error(t, err)
 			}
 			require.NoError(t, err)
-			require.Equal(t, test.wantNumberOfRows, len(rows))
+			require.Len(t, rows, test.wantNumberOfRows)
 			for _, wantTag := range test.wantTags {
 				diag.RequireTagExist(t, rows, wantTag)
 			}
@@ -275,7 +275,7 @@ func TestResiliencyCountMonitoringCBStates(t *testing.T) {
 			test.unitFn()
 			rows, err := view.RetrieveData(resiliencyCountViewName)
 			require.NoError(t, err)
-			require.Equal(t, test.wantNumberOfRows, len(rows))
+			require.Len(t, rows, test.wantNumberOfRows)
 
 			wantedTags := []tag.Tag{
 				diag.NewTag("app_id", testAppID),
@@ -443,7 +443,7 @@ func TestResiliencyActivationsCountMonitoring(t *testing.T) {
 			test.unitFn()
 			rows, err := view.RetrieveData(resiliencyActivationViewName)
 			require.NoError(t, err)
-			require.Equal(t, test.wantNumberOfRows, len(rows))
+			require.Len(t, rows, test.wantNumberOfRows)
 			if test.wantNumberOfRows == 0 {
 				return
 			}
@@ -502,7 +502,7 @@ func TestResiliencyLoadedMonitoring(t *testing.T) {
 		rows, err := view.RetrieveData(resiliencyLoadedViewName)
 
 		require.NoError(t, err)
-		require.Equal(t, 1, len(rows))
+		require.Len(t, rows, 1)
 
 		diag.RequireTagExist(t, rows, diag.NewTag("app_id", testAppID))
 		diag.RequireTagExist(t, rows, diag.NewTag("name", testResiliencyName))

@@ -29,7 +29,7 @@ func TestIsBusy(t *testing.T) {
 	testActor := newActor("testType", "testID", &reentrancyStackDepth, time.Second, nil)
 
 	testActor.lock(nil)
-	assert.Equal(t, true, testActor.isBusy())
+	assert.True(t, testActor.isBusy())
 	testActor.unlock()
 }
 
@@ -38,7 +38,7 @@ func TestTurnBasedConcurrencyLocks(t *testing.T) {
 
 	// first lock
 	testActor.lock(nil)
-	assert.Equal(t, true, testActor.isBusy())
+	assert.True(t, testActor.isBusy())
 	firstIdleAt := *testActor.idleAt.Load()
 
 	waitCh := make(chan bool)
@@ -70,7 +70,7 @@ func TestTurnBasedConcurrencyLocks(t *testing.T) {
 
 	assert.Equal(t, int32(0), testActor.pendingActorCalls.Load())
 	assert.False(t, testActor.isBusy())
-	assert.True(t, testActor.idleAt.Load().Sub(firstIdleAt) >= 10*time.Millisecond)
+	assert.GreaterOrEqual(t, testActor.idleAt.Load().Sub(firstIdleAt), 10*time.Millisecond)
 }
 
 func TestDisposedActor(t *testing.T) {

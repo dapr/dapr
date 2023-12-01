@@ -20,6 +20,7 @@ import (
 
 	"github.com/hashicorp/raft"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestFSMApply(t *testing.T) {
@@ -32,7 +33,7 @@ func TestFSMApply(t *testing.T) {
 			Entities: []string{"actorTypeOne", "actorTypeTwo"},
 		})
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		raftLog := &raft.Log{
 			Index: 1,
@@ -47,7 +48,7 @@ func TestFSMApply(t *testing.T) {
 		assert.True(t, ok)
 		assert.True(t, updated)
 		assert.Equal(t, uint64(1), fsm.state.TableGeneration())
-		assert.Equal(t, 1, len(fsm.state.Members()))
+		assert.Len(t, fsm.state.Members(), 1)
 	})
 
 	t.Run("removeMember", func(t *testing.T) {
@@ -55,7 +56,7 @@ func TestFSMApply(t *testing.T) {
 			Name: "127.0.0.1:3030",
 		})
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		raftLog := &raft.Log{
 			Index: 2,
@@ -70,7 +71,7 @@ func TestFSMApply(t *testing.T) {
 		assert.True(t, ok)
 		assert.True(t, updated)
 		assert.Equal(t, uint64(2), fsm.state.TableGeneration())
-		assert.Equal(t, 0, len(fsm.state.Members()))
+		assert.Empty(t, fsm.state.Members())
 	})
 }
 
@@ -86,15 +87,15 @@ func TestRestore(t *testing.T) {
 	})
 	buf := bytes.NewBuffer(make([]byte, 0, 256))
 	err := s.persist(buf)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// act
 	err = fsm.Restore(io.NopCloser(buf))
 
 	// assert
-	assert.NoError(t, err)
-	assert.Equal(t, 1, len(fsm.State().Members()))
-	assert.Equal(t, 2, len(fsm.State().hashingTableMap()))
+	require.NoError(t, err)
+	assert.Len(t, fsm.State().Members(), 1)
+	assert.Len(t, fsm.State().hashingTableMap(), 2)
 }
 
 func TestPlacementState(t *testing.T) {
@@ -105,7 +106,7 @@ func TestPlacementState(t *testing.T) {
 		Entities: []string{"actorTypeOne", "actorTypeTwo"},
 	}
 	cmdLog, err := makeRaftLogCommand(MemberUpsert, m)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	fsm.Apply(&raft.Log{
 		Index: 1,
@@ -115,6 +116,6 @@ func TestPlacementState(t *testing.T) {
 	})
 
 	newTable := fsm.PlacementState()
-	assert.Equal(t, "1", newTable.Version)
-	assert.Equal(t, 2, len(newTable.Entries))
+	assert.Equal(t, "1", newTable.GetVersion())
+	assert.Len(t, newTable.GetEntries(), 2)
 }

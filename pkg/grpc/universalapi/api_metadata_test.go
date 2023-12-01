@@ -110,7 +110,7 @@ func TestGetMetadata(t *testing.T) {
 			require.NoError(t, err, "Expected no error")
 
 			bytes, err := json.Marshal(response)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			healthCheckJSON := "},"
 			if tc.expectHealthCheckEnabled {

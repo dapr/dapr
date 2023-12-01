@@ -15,6 +15,7 @@ package diagnostics
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -110,7 +111,7 @@ func TestUserDefinedHTTPHeaders(t *testing.T) {
 
 	m := userDefinedHTTPHeaders(req)
 
-	assert.Equal(t, 2, len(m))
+	assert.Len(t, m, 2)
 	assert.Equal(t, "value1", m["dapr-userdefined-1"])
 	assert.Equal(t, "value2", m["dapr-userdefined-2"])
 }
@@ -135,7 +136,7 @@ func TestSpanContextToHTTPHeaders(t *testing.T) {
 
 			got := SpanContextFromRequest(req)
 
-			assert.Equalf(t, got, wantSc, "SpanContextToHTTPHeaders() got = %v, want %v", got, wantSc)
+			assert.Equalf(t, wantSc, got, "SpanContextToHTTPHeaders() got = %v, want %v", got, wantSc)
 		})
 	}
 
@@ -216,7 +217,7 @@ func TestSpanContextToResponse(t *testing.T) {
 			h := resp.Header().Get("traceparent")
 			got, _ := SpanContextFromW3CString(h)
 
-			assert.Equalf(t, got, wantSc, "SpanContextToResponse() got = %v, want %v", got, wantSc)
+			assert.Equalf(t, wantSc, got, "SpanContextToResponse() got = %v, want %v", got, wantSc)
 		})
 	}
 }
@@ -275,8 +276,8 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 		sc := span.SpanContext()
 		traceID := sc.TraceID()
 		spanID := sc.SpanID()
-		assert.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", fmt.Sprintf("%x", traceID[:]))
-		assert.NotEqual(t, "00f067aa0ba902b7", fmt.Sprintf("%x", spanID[:]))
+		assert.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", hex.EncodeToString(traceID[:]))
+		assert.NotEqual(t, "00f067aa0ba902b7", hex.EncodeToString(spanID[:]))
 	})
 
 	t.Run("traceparent is not given in request", func(t *testing.T) {
@@ -292,8 +293,8 @@ func TestHTTPTraceMiddleware(t *testing.T) {
 		sc := span.SpanContext()
 		traceID := sc.TraceID()
 		spanID := sc.SpanID()
-		assert.NotEmpty(t, fmt.Sprintf("%x", traceID[:]))
-		assert.NotEmpty(t, fmt.Sprintf("%x", spanID[:]))
+		assert.NotEmpty(t, hex.EncodeToString(traceID[:]))
+		assert.NotEmpty(t, hex.EncodeToString(spanID[:]))
 	})
 
 	t.Run("traceparent not given in response", func(t *testing.T) {
@@ -352,8 +353,8 @@ func TestTraceStatusFromHTTPCode(t *testing.T) {
 	for _, tt := range tests {
 		t.Run("traceStatusFromHTTPCode", func(t *testing.T) {
 			gotOtelCode, gotOtelCodeDescription := traceStatusFromHTTPCode(tt.httpCode)
-			assert.Equalf(t, gotOtelCode, tt.wantOtelCode, "traceStatusFromHTTPCode(%v) got = %v, want %v", tt.httpCode, gotOtelCode, tt.wantOtelCode)
-			assert.Equalf(t, gotOtelCodeDescription, tt.wantOtelCodeDescription, "traceStatusFromHTTPCode(%v) got = %v, want %v", tt.httpCode, gotOtelCodeDescription, tt.wantOtelCodeDescription)
+			assert.Equalf(t, tt.wantOtelCode, gotOtelCode, "traceStatusFromHTTPCode(%v) got = %v, want %v", tt.httpCode, gotOtelCode, tt.wantOtelCode)
+			assert.Equalf(t, tt.wantOtelCodeDescription, gotOtelCodeDescription, "traceStatusFromHTTPCode(%v) got = %v, want %v", tt.httpCode, gotOtelCodeDescription, tt.wantOtelCodeDescription)
 		})
 	}
 }

@@ -118,6 +118,10 @@ func (o *Operator) Port() int {
 	return o.port
 }
 
+func (o *Operator) Address() string {
+	return "localhost:" + strconv.Itoa(o.port)
+}
+
 func (o *Operator) MetricsPort() int {
 	return o.metricsPort
 }

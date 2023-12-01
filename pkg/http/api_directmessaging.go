@@ -171,7 +171,7 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 		// Construct response if not HTTP
 		resStatus := rResp.Status()
 		if !rResp.IsHTTPResponse() {
-			statusCode := int32(invokev1.HTTPStatusFromCode(codes.Code(resStatus.Code)))
+			statusCode := int32(invokev1.HTTPStatusFromCode(codes.Code(resStatus.GetCode())))
 			if statusCode != http.StatusOK {
 				// Close the response to replace the body
 				_ = rResp.Close()
@@ -188,12 +188,12 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 			} else {
 				resStatus.Code = statusCode
 			}
-		} else if resStatus.Code < 200 || resStatus.Code > 399 {
+		} else if resStatus.GetCode() < 200 || resStatus.GetCode() > 399 {
 			msg, _ := rResp.RawDataFull()
 			// Returning a `codeError` here will cause Resiliency to retry the request (if retries are enabled), but if the request continues to fail, the response is sent to the user with whatever status code the app returned.
 			return rResp, codeError{
 				headers:     rResp.Headers(),
-				statusCode:  int(resStatus.Code),
+				statusCode:  int(resStatus.GetCode()),
 				msg:         msg,
 				contentType: rResp.ContentType(),
 			}
@@ -245,7 +245,7 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Close()
 
-	statusCode := int(resp.Status().Code)
+	statusCode := int(resp.Status().GetCode())
 
 	if ct := resp.ContentType(); ct != "" {
 		w.Header().Set("content-type", ct)

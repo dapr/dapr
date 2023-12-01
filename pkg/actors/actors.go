@@ -382,8 +382,8 @@ func (a *actorsRuntime) deactivateActor(act *actor) error {
 	}
 	defer resp.Close()
 
-	if resp.Status().Code != http.StatusOK {
-		diag.DefaultMonitoring.ActorDeactivationFailed(act.actorType, "status_code_"+strconv.FormatInt(int64(resp.Status().Code), 10))
+	if resp.Status().GetCode() != http.StatusOK {
+		diag.DefaultMonitoring.ActorDeactivationFailed(act.actorType, "status_code_"+strconv.FormatInt(int64(resp.Status().GetCode()), 10))
 		body, _ := resp.RawDataFull()
 		return fmt.Errorf("error from actor service: %s", string(body))
 	}
@@ -486,7 +486,7 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 	fn func(ctx context.Context, targetAddress, targetID string, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, func(destroy bool), error),
 	targetAddress, targetID string, req *invokev1.InvokeMethodRequest,
 ) (*invokev1.InvokeMethodResponse, error) {
-	if !a.resiliency.PolicyDefined(req.Actor().ActorType, resiliency.ActorPolicy{}) {
+	if !a.resiliency.PolicyDefined(req.Actor().GetActorType(), resiliency.ActorPolicy{}) {
 		// This policy has built-in retries so enable replay in the request
 		req.WithReplay(true)
 		policyRunner := resiliency.NewRunnerWithOptions(ctx,
@@ -529,9 +529,9 @@ func (a *actorsRuntime) getOrCreateActor(act *internalv1pb.Actor) *actor {
 	val, ok := a.actorsTable.Load(key)
 	if !ok {
 		actorInstance := newActor(
-			act.ActorType, act.ActorId,
-			a.actorsConfig.GetReentrancyForType(act.ActorType).MaxStackDepth,
-			a.actorsConfig.GetIdleTimeoutForType(act.ActorType),
+			act.GetActorType(), act.GetActorId(),
+			a.actorsConfig.GetReentrancyForType(act.GetActorType()).MaxStackDepth,
+			a.actorsConfig.GetIdleTimeoutForType(act.GetActorType()),
 			a.clock,
 		)
 		val, _ = a.actorsTable.LoadOrStore(key, actorInstance)
@@ -571,8 +571,8 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 
 	// Replace method to actors method.
 	msg := req.Message()
-	originalMethod := msg.Method
-	msg.Method = "actors/" + actorTypeID.ActorType + "/" + actorTypeID.ActorId + "/method/" + msg.Method
+	originalMethod := msg.GetMethod()
+	msg.Method = "actors/" + actorTypeID.GetActorType() + "/" + actorTypeID.GetActorId() + "/method/" + msg.GetMethod()
 
 	// Reset the method so we can perform retries.
 	defer func() {
@@ -614,7 +614,7 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 		return nil, errors.New("error from actor service: response object is nil")
 	}
 
-	if resp.Status().Code != http.StatusOK {
+	if resp.Status().GetCode() != http.StatusOK {
 		respData, _ := resp.RawDataFull()
 		return nil, fmt.Errorf("error from actor service: %s", string(respData))
 	}

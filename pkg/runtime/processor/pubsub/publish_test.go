@@ -105,7 +105,7 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 		err := ps.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
-		assert.Equal(t, nil, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("ok with retry", func(t *testing.T) {
@@ -125,7 +125,7 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 		err := ps.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 
 	t.Run("ok with drop", func(t *testing.T) {
@@ -165,7 +165,7 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 		err := ps.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 
 	t.Run("not found response", func(t *testing.T) {
@@ -183,7 +183,7 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 		err := ps.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 }
 
@@ -271,9 +271,9 @@ func TestErrorPublishedNonCloudEventGRPC(t *testing.T) {
 
 			err := ps.publishMessageGRPC(context.Background(), testPubSubMessage)
 			if tc.ExpectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			}
 		})
 	}
@@ -285,7 +285,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 	envelope := contribpubsub.NewCloudEventsEnvelope("", "", contribpubsub.DefaultCloudEventType, "", topic,
 		TestSecondPubsubName, "", []byte("Test Message"), "", "")
 	b, err := json.Marshal(envelope)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	testPubSubMessage := &subscribedMessage{
 		cloudEvent: envelope,
@@ -337,7 +337,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		err := ps.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
 
@@ -358,7 +358,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 			[]byte("Test Message"), "", "")
 		delete(envelopeNoTraceID, contribpubsub.TraceIDField)
 		bNoTraceID, err := json.Marshal(envelopeNoTraceID)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		message := &subscribedMessage{
 			cloudEvent: envelopeNoTraceID,
@@ -380,7 +380,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		err = ps.publishMessageHTTP(context.Background(), message)
 
 		// assert
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
 
@@ -400,7 +400,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		err := ps.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
 
@@ -420,7 +420,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		err := ps.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
 
@@ -483,7 +483,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		err := ps.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
-		assert.Error(t, err, "expected error on unknown status")
+		require.Error(t, err, "expected error on unknown status")
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
 
@@ -503,7 +503,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		err := ps.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
-		assert.NoError(t, err, "expected no error on empty status")
+		require.NoError(t, err, "expected no error on empty status")
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
 
@@ -523,7 +523,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		err := ps.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
-		assert.Nil(t, err, "expected no error on unknown status")
+		require.NoError(t, err, "expected no error on unknown status")
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
 
@@ -558,7 +558,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		err := ps.publishMessageHTTP(context.Background(), testPubSubMessage)
 
 		// assert
-		assert.Nil(t, err, "expected error to be nil")
+		require.NoError(t, err, "expected error to be nil")
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
 
@@ -599,7 +599,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 	envelope["customArray"] = []interface{}{"a", "b", 789, 3.1415}
 	envelope["customMap"] = map[string]interface{}{"a": "b", "c": 456}
 	b, err := json.Marshal(envelope)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	testPubSubMessage := &subscribedMessage{
 		cloudEvent: envelope,
@@ -619,7 +619,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 	envelope["customArray"] = []interface{}{"a", "b", 789, 3.1415}
 	envelope["customMap"] = map[string]interface{}{"a": "b", "c": 456}
 	base64, err := json.Marshal(envelope)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	testPubSubMessageBase64 := &subscribedMessage{
 		cloudEvent: envelope,
@@ -788,7 +788,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			if tc.expectedError != nil {
 				assert.Equal(t, err.Error(), tc.expectedError.Error())
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			}
 		})
 	}

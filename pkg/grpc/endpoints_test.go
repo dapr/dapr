@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 
 	"github.com/dapr/dapr/pkg/config"
@@ -64,20 +65,20 @@ func testMiddleware(u grpc.UnaryServerInterceptor, s grpc.StreamServerIntercepto
 			FullMethod: method,
 		}, hUnary)
 		if expectErr {
-			assert.Error(t, err)
-			assert.ErrorContains(t, err, "Unimplemented")
+			require.Error(t, err)
+			require.ErrorContains(t, err, "Unimplemented")
 		} else {
-			assert.NoError(t, err)
+			require.NoError(t, err)
 		}
 
 		err = s(nil, nil, &grpc.StreamServerInfo{
 			FullMethod: method,
 		}, hStream)
 		if expectErr {
-			assert.Error(t, err)
-			assert.ErrorContains(t, err, "Unimplemented")
+			require.Error(t, err)
+			require.ErrorContains(t, err, "Unimplemented")
 		} else {
-			assert.NoError(t, err)
+			require.NoError(t, err)
 		}
 	}
 }

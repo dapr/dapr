@@ -19,7 +19,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"strconv"
 	"testing"
 	"time"
 
@@ -58,7 +57,7 @@ func (o *operator) Setup(t *testing.T) []framework.Option {
 			Spec: configapi.ConfigurationSpec{
 				MTLSSpec: &configapi.MTLSSpec{
 					ControlPlaneTrustDomain: "integration.test.dapr.io",
-					SentryAddress:           "localhost:" + strconv.Itoa(sentry.Port()),
+					SentryAddress:           sentry.Address(),
 				},
 			},
 		}),
@@ -91,6 +90,7 @@ func (o *operator) Run(t *testing.T, ctx context.Context) {
 	} {
 		assert.EventuallyWithT(t, func(t *assert.CollectT) {
 			conn, err := dialer.DialContext(ctx, "tcp", fmt.Sprintf("localhost:%d", port))
+			//nolint:testifylint
 			_ = assert.NoError(t, err) && assert.NoError(t, conn.Close())
 		}, time.Second*5, 100*time.Millisecond, "port %s (:%d) was not available in time", name, port)
 	}

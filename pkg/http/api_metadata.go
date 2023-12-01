@@ -64,50 +64,50 @@ func (a *api) onGetMetadata() http.HandlerFunc {
 				// In the protos, the property subscriptions[*].rules is serialized as subscriptions[*].rules.rules
 				// To maintain backwards-compatibility, we need to copy into a custom struct and marshal that instead
 				res := &metadataResponse{
-					ID:       out.Id,
-					Extended: out.ExtendedMetadata,
+					ID:       out.GetId(),
+					Extended: out.GetExtendedMetadata(),
 					// We can embed the proto object directly only for as long as the protojson key is == json key
-					ActiveActorsCount:    out.ActiveActorsCount, //nolint:staticcheck
-					RegisteredComponents: out.RegisteredComponents,
-					HTTPEndpoints:        out.HttpEndpoints,
-					RuntimeVersion:       out.RuntimeVersion,
-					EnabledFeatures:      out.EnabledFeatures,
+					ActiveActorsCount:    out.GetActiveActorsCount(), //nolint:staticcheck
+					RegisteredComponents: out.GetRegisteredComponents(),
+					HTTPEndpoints:        out.GetHttpEndpoints(),
+					RuntimeVersion:       out.GetRuntimeVersion(),
+					EnabledFeatures:      out.GetEnabledFeatures(),
 				}
 
 				// Copy the app connection properties into a custom struct
 				// See https://github.com/golang/protobuf/issues/256
 				res.AppConnectionProperties = metadataResponseAppConnectionProperties{
-					Port:           out.AppConnectionProperties.Port,
-					Protocol:       out.AppConnectionProperties.Protocol,
-					ChannelAddress: out.AppConnectionProperties.ChannelAddress,
-					MaxConcurrency: out.AppConnectionProperties.MaxConcurrency,
+					Port:           out.GetAppConnectionProperties().GetPort(),
+					Protocol:       out.GetAppConnectionProperties().GetProtocol(),
+					ChannelAddress: out.GetAppConnectionProperties().GetChannelAddress(),
+					MaxConcurrency: out.GetAppConnectionProperties().GetMaxConcurrency(),
 				}
-				if out.AppConnectionProperties.Health != nil {
+				if out.GetAppConnectionProperties().GetHealth() != nil {
 					res.AppConnectionProperties.Health = &metadataResponseAppConnectionHealthProperties{
-						HealthCheckPath:     out.AppConnectionProperties.Health.HealthCheckPath,
-						HealthProbeInterval: out.AppConnectionProperties.Health.HealthProbeInterval,
-						HealthProbeTimeout:  out.AppConnectionProperties.Health.HealthProbeTimeout,
-						HealthThreshold:     out.AppConnectionProperties.Health.HealthThreshold,
+						HealthCheckPath:     out.GetAppConnectionProperties().GetHealth().GetHealthCheckPath(),
+						HealthProbeInterval: out.GetAppConnectionProperties().GetHealth().GetHealthProbeInterval(),
+						HealthProbeTimeout:  out.GetAppConnectionProperties().GetHealth().GetHealthProbeTimeout(),
+						HealthThreshold:     out.GetAppConnectionProperties().GetHealth().GetHealthThreshold(),
 					}
 				}
 
 				// Copy the subscriptions into a custom struct
-				if len(out.Subscriptions) > 0 {
-					subs := make([]metadataResponsePubsubSubscription, len(out.Subscriptions))
-					for i, v := range out.Subscriptions {
+				if len(out.GetSubscriptions()) > 0 {
+					subs := make([]metadataResponsePubsubSubscription, len(out.GetSubscriptions()))
+					for i, v := range out.GetSubscriptions() {
 						subs[i] = metadataResponsePubsubSubscription{
-							PubsubName:      v.PubsubName,
-							Topic:           v.Topic,
-							Metadata:        v.Metadata,
-							DeadLetterTopic: v.DeadLetterTopic,
+							PubsubName:      v.GetPubsubName(),
+							Topic:           v.GetTopic(),
+							Metadata:        v.GetMetadata(),
+							DeadLetterTopic: v.GetDeadLetterTopic(),
 						}
 
-						if v.Rules != nil && len(v.Rules.Rules) > 0 {
-							subs[i].Rules = make([]metadataResponsePubsubSubscriptionRule, len(v.Rules.Rules))
-							for j, r := range v.Rules.Rules {
+						if v.GetRules() != nil && len(v.GetRules().GetRules()) > 0 {
+							subs[i].Rules = make([]metadataResponsePubsubSubscriptionRule, len(v.GetRules().GetRules()))
+							for j, r := range v.GetRules().GetRules() {
 								subs[i].Rules[j] = metadataResponsePubsubSubscriptionRule{
-									Match: r.Match,
-									Path:  r.Path,
+									Match: r.GetMatch(),
+									Path:  r.GetPath(),
 								}
 							}
 						}

@@ -49,7 +49,7 @@ func TestDestinationHeaders(t *testing.T) {
 		dm := &directMessaging{}
 		dm.addDestinationAppIDHeaderToMetadata(appID, req)
 		md := req.Metadata()[invokev1.DestinationIDHeader]
-		assert.Equal(t, appID, md.Values[0])
+		assert.Equal(t, appID, md.GetValues()[0])
 	})
 }
 
@@ -65,8 +65,8 @@ func TestCallerAndCalleeHeaders(t *testing.T) {
 		dm.addCallerAndCalleeAppIDHeaderToMetadata(callerAppID, calleeAppID, req)
 		actualCallerAppID := req.Metadata()[invokev1.CallerIDHeader]
 		actualCalleeAppID := req.Metadata()[invokev1.CalleeIDHeader]
-		assert.Equal(t, callerAppID, actualCallerAppID.Values[0])
-		assert.Equal(t, calleeAppID, actualCalleeAppID.Values[0])
+		assert.Equal(t, callerAppID, actualCallerAppID.GetValues()[0])
+		assert.Equal(t, calleeAppID, actualCalleeAppID.GetValues()[0])
 	})
 }
 
@@ -83,13 +83,13 @@ func TestForwardedHeaders(t *testing.T) {
 		dm.addForwardedHeadersToMetadata(req)
 
 		md := req.Metadata()[fasthttp.HeaderXForwardedFor]
-		assert.Equal(t, "1", md.Values[0])
+		assert.Equal(t, "1", md.GetValues()[0])
 
 		md = req.Metadata()[fasthttp.HeaderXForwardedHost]
-		assert.Equal(t, "2", md.Values[0])
+		assert.Equal(t, "2", md.GetValues()[0])
 
 		md = req.Metadata()[fasthttp.HeaderForwarded]
-		assert.Equal(t, "for=1;by=1;host=2", md.Values[0])
+		assert.Equal(t, "for=1;by=1;host=2", md.GetValues()[0])
 	})
 
 	t.Run("forwarded headers get appended", func(t *testing.T) {
@@ -108,16 +108,16 @@ func TestForwardedHeaders(t *testing.T) {
 		dm.addForwardedHeadersToMetadata(req)
 
 		md := req.Metadata()[fasthttp.HeaderXForwardedFor]
-		assert.Equal(t, "originalXForwardedFor", md.Values[0])
-		assert.Equal(t, "1", md.Values[1])
+		assert.Equal(t, "originalXForwardedFor", md.GetValues()[0])
+		assert.Equal(t, "1", md.GetValues()[1])
 
 		md = req.Metadata()[fasthttp.HeaderXForwardedHost]
-		assert.Equal(t, "originalXForwardedHost", md.Values[0])
-		assert.Equal(t, "2", md.Values[1])
+		assert.Equal(t, "originalXForwardedHost", md.GetValues()[0])
+		assert.Equal(t, "2", md.GetValues()[1])
 
 		md = req.Metadata()[fasthttp.HeaderForwarded]
-		assert.Equal(t, "originalForwarded", md.Values[0])
-		assert.Equal(t, "for=1;by=1;host=2", md.Values[1])
+		assert.Equal(t, "originalForwarded", md.GetValues()[0])
+		assert.Equal(t, "for=1;by=1;host=2", md.GetValues()[1])
 	})
 }
 
@@ -128,7 +128,7 @@ func TestKubernetesNamespace(t *testing.T) {
 		dm := &directMessaging{}
 		id, ns, err := dm.requestAppIDAndNamespace(appID)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Empty(t, ns)
 		assert.Equal(t, appID, id)
 	})
@@ -139,7 +139,7 @@ func TestKubernetesNamespace(t *testing.T) {
 		dm := &directMessaging{}
 		id, ns, err := dm.requestAppIDAndNamespace(appID)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, "ns1", ns)
 		assert.Equal(t, "app1", id)
 	})
@@ -150,7 +150,7 @@ func TestKubernetesNamespace(t *testing.T) {
 		dm := &directMessaging{}
 		_, _, err := dm.requestAppIDAndNamespace(appID)
 
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 }
 
@@ -202,7 +202,7 @@ func TestInvokeRemote(t *testing.T) {
 		if err != nil {
 			return
 		}
-		assert.True(t, pd.Message.Data == nil || len(pd.Message.Data.Value) == 0)
+		assert.True(t, pd.GetMessage().GetData() == nil || len(pd.GetMessage().GetData().GetValue()) == 0)
 	})
 
 	t.Run("streaming with single chunk", func(t *testing.T) {
@@ -220,7 +220,7 @@ func TestInvokeRemote(t *testing.T) {
 		pd, err := res.ProtoWithData()
 		require.NoError(t, err)
 
-		assert.Equal(t, "🐱", string(pd.Message.Data.Value))
+		assert.Equal(t, "🐱", string(pd.GetMessage().GetData().GetValue()))
 	})
 
 	t.Run("streaming with multiple chunks", func(t *testing.T) {
@@ -245,7 +245,7 @@ func TestInvokeRemote(t *testing.T) {
 		pd, err := res.ProtoWithData()
 		require.NoError(t, err)
 
-		assert.Equal(t, "Sempre caro mi fu quest'ermo colle e questa siepe, che da tanta parte dell'ultimo orizzonte il guardo esclude. … E il naufragar m'è dolce in questo mare.", string(pd.Message.Data.Value))
+		assert.Equal(t, "Sempre caro mi fu quest'ermo colle e questa siepe, che da tanta parte dell'ultimo orizzonte il guardo esclude. … E il naufragar m'è dolce in questo mare.", string(pd.GetMessage().GetData().GetValue()))
 	})
 
 	t.Run("target does not support streaming - request is not replayable", func(t *testing.T) {
@@ -279,7 +279,7 @@ func TestInvokeRemote(t *testing.T) {
 		pd, err := res.ProtoWithData()
 		require.NoError(t, err)
 
-		assert.Equal(t, "🐶", string(pd.Message.Data.Value))
+		assert.Equal(t, "🐶", string(pd.GetMessage().GetData().GetValue()))
 	})
 
 	t.Run("target does not support streaming - request has data in-memory", func(t *testing.T) {
@@ -303,7 +303,7 @@ func TestInvokeRemote(t *testing.T) {
 		pd, err := res.ProtoWithData()
 		require.NoError(t, err)
 
-		assert.Equal(t, "🐶", string(pd.Message.Data.Value))
+		assert.Equal(t, "🐶", string(pd.GetMessage().GetData().GetValue()))
 	})
 }
 
@@ -476,7 +476,7 @@ func TestInvokeRemoteUnaryForHTTPEndpoint(t *testing.T) {
 		}
 
 		_, err := d.invokeRemoteUnaryForHTTPEndpoint(context.Background(), nil, "abc")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("channel not found", func(t *testing.T) {
@@ -485,7 +485,7 @@ func TestInvokeRemoteUnaryForHTTPEndpoint(t *testing.T) {
 		}
 
 		_, err := d.invokeRemoteUnaryForHTTPEndpoint(context.Background(), nil, "abc")
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 }
 

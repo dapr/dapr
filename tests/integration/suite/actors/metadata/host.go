@@ -16,7 +16,6 @@ package metadata
 import (
 	"context"
 	"net/http"
-	"strconv"
 	"testing"
 	"time"
 
@@ -61,7 +60,7 @@ func (m *host) Setup(t *testing.T) []framework.Option {
 	m.place = placement.New(t)
 	m.daprd = daprd.New(t,
 		daprd.WithInMemoryActorStateStore("mystore"),
-		daprd.WithPlacementAddresses("localhost:"+strconv.Itoa(m.place.Port())),
+		daprd.WithPlacementAddresses(m.place.Address()),
 		daprd.WithAppProtocol("http"),
 		daprd.WithAppPort(srv.Port()),
 		daprd.WithLogLevel("info"), // Daprd is super noisy in debug mode when connecting to placement.

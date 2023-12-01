@@ -81,7 +81,7 @@ spec:
       badStructure: "So please ignore me"
 `
 	components, errs := request.decodeYaml([]byte(yaml))
-	assert.Len(t, components, 0)
+	assert.Empty(t, components)
 	assert.Len(t, errs, 1)
 }
 
@@ -90,7 +90,7 @@ func TestDiskManifestLoaderDecodeUnsuspectingFile(t *testing.T) {
 
 	components, errs := request.decodeYaml([]byte("hey there"))
 	assert.Len(t, errs, 1)
-	assert.Len(t, components, 0)
+	assert.Empty(t, components)
 }
 
 func TesSDiskManifesLoadertDecodeInvalidYaml(t *testing.T) {
@@ -104,7 +104,7 @@ metadata:
 name: statestore`
 	components, errs := request.decodeYaml([]byte(yaml))
 	assert.Len(t, errs, 1)
-	assert.Len(t, components, 0)
+	assert.Empty(t, components)
 }
 
 func TestDiskManifestLoaderDecodeValidMultiYaml(t *testing.T) {

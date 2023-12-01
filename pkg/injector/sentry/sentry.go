@@ -108,7 +108,7 @@ func (r *Requester) RequestCertificateFromSentry(ctx context.Context, namespace 
 		return nil, nil, fmt.Errorf("failed to marshal private key: %w", err)
 	}
 
-	return resp.WorkloadCertificate, pem.EncodeToMemory(&pem.Block{
+	return resp.GetWorkloadCertificate(), pem.EncodeToMemory(&pem.Block{
 		Type: "PRIVATE KEY", Bytes: keyCS8,
 	}), nil
 }

@@ -161,6 +161,10 @@ func (s *Sentry) Port() int {
 	return s.port
 }
 
+func (s *Sentry) Address() string {
+	return "localhost:" + strconv.Itoa(s.Port())
+}
+
 func (s *Sentry) MetricsPort() int {
 	return s.metricsPort
 }
@@ -191,7 +195,7 @@ func (s *Sentry) DialGRPC(t *testing.T, ctx context.Context, sentryID string) *g
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		assert.NoError(t, conn.Close())
+		require.NoError(t, conn.Close())
 	})
 
 	return conn

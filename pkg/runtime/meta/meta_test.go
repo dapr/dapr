@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 
 	"github.com/dapr/dapr/pkg/apis/common"
@@ -38,8 +39,8 @@ func TestMetadataItemsToPropertiesConversion(t *testing.T) {
 			},
 		}
 		m, err := meta.convertItemsToProps(items)
-		assert.NoError(t, err)
-		assert.Equal(t, 1, len(m))
+		require.NoError(t, err)
+		assert.Len(t, m, 1)
 		assert.Equal(t, "b", m["a"])
 	})
 
@@ -54,8 +55,8 @@ func TestMetadataItemsToPropertiesConversion(t *testing.T) {
 			},
 		}
 		m, err := meta.convertItemsToProps(items)
-		assert.NoError(t, err)
-		assert.Equal(t, 1, len(m))
+		require.NoError(t, err)
+		assert.Len(t, m, 1)
 		assert.Equal(t, "6", m["a"])
 	})
 
@@ -70,8 +71,8 @@ func TestMetadataItemsToPropertiesConversion(t *testing.T) {
 			},
 		}
 		m, err := meta.convertItemsToProps(items)
-		assert.NoError(t, err)
-		assert.Equal(t, 1, len(m))
+		require.NoError(t, err)
+		assert.Len(t, m, 1)
 		assert.Equal(t, "true", m["a"])
 	})
 
@@ -86,8 +87,8 @@ func TestMetadataItemsToPropertiesConversion(t *testing.T) {
 			},
 		}
 		m, err := meta.convertItemsToProps(items)
-		assert.NoError(t, err)
-		assert.Equal(t, 1, len(m))
+		require.NoError(t, err)
+		assert.Len(t, m, 1)
 		assert.Equal(t, "5.5", m["a"])
 	})
 
@@ -102,8 +103,8 @@ func TestMetadataItemsToPropertiesConversion(t *testing.T) {
 			},
 		}
 		m, err := meta.convertItemsToProps(items)
-		assert.NoError(t, err)
-		assert.Equal(t, 1, len(m))
+		require.NoError(t, err)
+		assert.Len(t, m, 1)
 		assert.Equal(t, "hello there", m["a"])
 	})
 }
@@ -157,7 +158,7 @@ func TestMetadataOverrideWasmStrictSandbox(t *testing.T) {
 
 		// check that WasmStrictSandbox is set to true
 		base, err := meta.ToBaseMetadata(com)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, "true", base.Properties[WasmStrictSandboxMetadataKey])
 	})
 
@@ -183,7 +184,7 @@ func TestMetadataOverrideWasmStrictSandbox(t *testing.T) {
 
 		// check that WasmStrictSandbox is set to true
 		base, err := meta.ToBaseMetadata(com)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, "true", base.Properties[WasmStrictSandboxMetadataKey])
 	})
 
@@ -217,8 +218,8 @@ func TestMetadataOverrideWasmStrictSandbox(t *testing.T) {
 
 		wasm, err := meta.ToBaseMetadata(com)
 		noneWasm, err2 := meta.ToBaseMetadata(noneWasmComp)
-		assert.NoError(t, err)
-		assert.NoError(t, err2)
+		require.NoError(t, err)
+		require.NoError(t, err2)
 		assert.Equal(t, "true", wasm.Properties[WasmStrictSandboxMetadataKey])
 		assert.Equal(t, "", noneWasm.Properties[WasmStrictSandboxMetadataKey])
 	})

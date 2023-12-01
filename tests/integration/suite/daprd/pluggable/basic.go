@@ -122,13 +122,13 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		StoreName: "mystore", Key: "key2",
 	})
 	require.NoError(t, err)
-	etag2 := resp.Etag
+	etag2 := resp.GetEtag()
 
 	resp, err = client.GetState(ctx, &rtv1.GetStateRequest{
 		StoreName: "mystore", Key: "key4",
 	})
 	require.NoError(t, err)
-	etag4 := resp.Etag
+	etag4 := resp.GetEtag()
 
 	{
 		resp, err := client.GetBulkState(ctx, &rtv1.GetBulkStateRequest{
@@ -136,28 +136,28 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			Keys:      []string{"key1", "key2", "key3", "key4"},
 		})
 		require.NoError(t, err)
-		require.Len(t, resp.Items, 4)
-		assert.Equal(t, "key1", resp.Items[0].Key)
-		assert.Equal(t, "value1", string(resp.Items[0].Data))
-		assert.Empty(t, resp.Items[0].Metadata)
+		require.Len(t, resp.GetItems(), 4)
+		assert.Equal(t, "key1", resp.GetItems()[0].GetKey())
+		assert.Equal(t, "value1", string(resp.GetItems()[0].GetData()))
+		assert.Empty(t, resp.GetItems()[0].GetMetadata())
 
-		assert.Equal(t, "key2", resp.Items[1].Key)
-		assert.Equal(t, "value2", string(resp.Items[1].Data))
-		assert.Equal(t, etag2, resp.Items[1].GetEtag())
+		assert.Equal(t, "key2", resp.GetItems()[1].GetKey())
+		assert.Equal(t, "value2", string(resp.GetItems()[1].GetData()))
+		assert.Equal(t, etag2, resp.GetItems()[1].GetEtag())
 
-		assert.Equal(t, "key3", resp.Items[2].Key)
-		assert.Equal(t, "value3", string(resp.Items[2].Data))
-		if assert.Contains(t, resp.Items[2].Metadata, "ttlExpireTime") {
-			expireTime, eerr := time.Parse(time.RFC3339, resp.Items[2].Metadata["ttlExpireTime"])
+		assert.Equal(t, "key3", resp.GetItems()[2].GetKey())
+		assert.Equal(t, "value3", string(resp.GetItems()[2].GetData()))
+		if assert.Contains(t, resp.GetItems()[2].GetMetadata(), "ttlExpireTime") {
+			expireTime, eerr := time.Parse(time.RFC3339, resp.GetItems()[2].GetMetadata()["ttlExpireTime"])
 			require.NoError(t, eerr)
 			assert.WithinDuration(t, now.Add(time.Second), expireTime, time.Second)
 		}
 
-		assert.Equal(t, "key4", resp.Items[3].Key)
-		assert.Equal(t, "value4", string(resp.Items[3].Data))
-		assert.Equal(t, etag4, resp.Items[3].GetEtag())
-		if assert.Contains(t, resp.Items[3].Metadata, "ttlExpireTime") {
-			expireTime, eerr := time.Parse(time.RFC3339, resp.Items[3].Metadata["ttlExpireTime"])
+		assert.Equal(t, "key4", resp.GetItems()[3].GetKey())
+		assert.Equal(t, "value4", string(resp.GetItems()[3].GetData()))
+		assert.Equal(t, etag4, resp.GetItems()[3].GetEtag())
+		if assert.Contains(t, resp.GetItems()[3].GetMetadata(), "ttlExpireTime") {
+			expireTime, eerr := time.Parse(time.RFC3339, resp.GetItems()[3].GetMetadata()["ttlExpireTime"])
 			require.NoError(t, eerr)
 			assert.WithinDuration(t, now.Add(time.Second), expireTime, time.Second)
 		}
@@ -166,7 +166,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			StoreName: "mystore",
 			Key:       "key1",
 		})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		_, err = client.DeleteBulkState(ctx, &rtv1.DeleteBulkStateRequest{
 			StoreName: "mystore",
 			States: []*commonv1.StateItem{
@@ -175,7 +175,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				},
 			},
 		})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	}
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -185,7 +185,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				Key:       key,
 			})
 			require.NoError(t, err)
-			assert.Empty(c, resp.Data)
+			assert.Empty(c, resp.GetData())
 		}
 	}, time.Second*2, time.Millisecond*100)
 }

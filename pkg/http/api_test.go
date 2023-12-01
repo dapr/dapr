@@ -455,7 +455,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 			assert.Equal(t, "ERR_PUBSUB_PUBLISH_MESSAGE", resp.ErrorBody["errorCode"])
 
 			bulkResp := BulkPublishResponse{}
-			assert.NoError(t, json.Unmarshal(resp.RawBody, &bulkResp))
+			require.NoError(t, json.Unmarshal(resp.RawBody, &bulkResp))
 			assert.Equal(t, len(errBulkResponse.FailedEntries), len(bulkResp.FailedEntries))
 			for i, entry := range bulkResp.FailedEntries {
 				assert.Equal(t, errBulkResponse.FailedEntries[i].EntryId, entry.EntryId)
@@ -503,7 +503,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 			assert.Equal(t, "ERR_PUBSUB_PUBLISH_MESSAGE", resp.ErrorBody["errorCode"])
 
 			bulkResp := BulkPublishResponse{}
-			assert.NoError(t, json.Unmarshal(resp.RawBody, &bulkResp))
+			require.NoError(t, json.Unmarshal(resp.RawBody, &bulkResp))
 			assert.Equal(t, len(errBulkResponse.FailedEntries), len(bulkResp.FailedEntries))
 			for i, entry := range bulkResp.FailedEntries {
 				assert.Equal(t, errBulkResponse.FailedEntries[i].EntryId, entry.EntryId)
@@ -832,7 +832,7 @@ func TestGetMetadataFromRequest(t *testing.T) {
 
 	// assert
 	assert.NotEmpty(t, m, "expected map to be populated")
-	assert.Equal(t, 1, len(m), "expected length to match")
+	assert.Len(t, m, 1, "expected length to match")
 	assert.Equal(t, "test", m["test"], "test", "expected value to be equal")
 }
 
@@ -847,7 +847,7 @@ func TestGetMetadataFromFastHTTPRequest(t *testing.T) {
 
 		// assert
 		assert.NotEmpty(t, m, "expected map to be populated")
-		assert.Equal(t, 1, len(m), "expected length to match")
+		assert.Len(t, m, 1, "expected length to match")
 		assert.Equal(t, "test", m["test"], "test", "expected value to be equal")
 	})
 }
@@ -1207,7 +1207,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		// act
 		inputBodyBytes, err := json.Marshal(testTransactionalOperations)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
 
 		// assert
@@ -1247,7 +1247,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		// act
 		inputBodyBytes, err := json.Marshal(testTransactionalOperations)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
 
 		// assert
@@ -1293,7 +1293,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		// act
 		inputBodyBytes, err := json.Marshal(testTransactionalOperations)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
 
 		// assert
@@ -1324,7 +1324,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		// act
 		inputBodyBytes, err := json.Marshal(reminderRequest)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		for _, method := range []string{"POST", "PUT"} {
 			resp := fakeServer.DoRequest(method, apiPath, inputBodyBytes, nil)
 			assert.Equal(t, 204, resp.StatusCode)
@@ -1354,7 +1354,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		// act
 		inputBodyBytes, err := json.Marshal(reminderRequest)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
 
 		// assert
@@ -1560,7 +1560,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		// act
 		inputBodyBytes, err := json.Marshal(timerRequest)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		for _, method := range []string{"POST", "PUT"} {
 			resp := fakeServer.DoRequest(method, apiPath, inputBodyBytes, nil)
 			assert.Equal(t, 204, resp.StatusCode)
@@ -1590,7 +1590,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		// act
 		inputBodyBytes, err := json.Marshal(timerRequest)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
 		assert.Equal(t, 500, resp.StatusCode)
 		assert.Equal(t, "ERR_ACTOR_TIMER_CREATE", resp.ErrorBody["errorCode"])
@@ -1658,11 +1658,11 @@ func TestV1ActorEndpoints(t *testing.T) {
 				return false
 			}
 
-			if m.Actor == nil || m.Actor.ActorType != "fakeActorType" || m.Actor.ActorId != "fakeActorID" {
+			if m.GetActor() == nil || m.GetActor().GetActorType() != "fakeActorType" || m.GetActor().GetActorId() != "fakeActorID" {
 				return false
 			}
 
-			if m.Message == nil || m.Message.Data == nil || len(m.Message.Data.Value) == 0 || !bytes.Equal(m.Message.Data.Value, fakeData) {
+			if m.GetMessage() == nil || m.GetMessage().GetData() == nil || len(m.GetMessage().GetData().GetValue()) == 0 || !bytes.Equal(m.GetMessage().GetData().GetValue(), fakeData) {
 				return false
 			}
 			return true
@@ -1687,11 +1687,11 @@ func TestV1ActorEndpoints(t *testing.T) {
 				return false
 			}
 
-			if m.Actor == nil || m.Actor.ActorType != "fakeActorType" || m.Actor.ActorId != "fakeActorID" {
+			if m.GetActor() == nil || m.GetActor().GetActorType() != "fakeActorType" || m.GetActor().GetActorId() != "fakeActorID" {
 				return false
 			}
 
-			if m.Message == nil || m.Message.Data == nil || len(m.Message.Data.Value) == 0 || !bytes.Equal(m.Message.Data.Value, []byte("fakeData")) {
+			if m.GetMessage() == nil || m.GetMessage().GetData() == nil || len(m.GetMessage().GetData().GetValue()) == 0 || !bytes.Equal(m.GetMessage().GetData().GetValue(), []byte("fakeData")) {
 				return false
 			}
 			return true
@@ -1983,7 +1983,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 		// act
 		inputBodyBytes, err := json.Marshal(testTransactionalOperations)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
 
 		// assert
@@ -2194,7 +2194,7 @@ func TestConfigurationGet(t *testing.T) {
 
 		// assert
 		assert.NotNil(t, resp.JSONBody)
-		assert.Equal(t, 1, len(resp.JSONBody.(map[string]interface{})))
+		assert.Len(t, resp.JSONBody.(map[string]interface{}), 1)
 		rspMap := resp.JSONBody.(map[string]interface{})
 		assert.NotNil(t, rspMap)
 		assert.Contains(t, rspMap, "good-key1")
@@ -2212,7 +2212,7 @@ func TestConfigurationGet(t *testing.T) {
 
 		// assert
 		assert.NotNil(t, resp.JSONBody)
-		assert.Equal(t, 1, len(resp.JSONBody.(map[string]interface{})))
+		assert.Len(t, resp.JSONBody.(map[string]interface{}), 1)
 		rspMap := resp.JSONBody.(map[string]interface{})
 		assert.NotNil(t, rspMap)
 		assert.Contains(t, rspMap, "good-key1")
@@ -2229,7 +2229,7 @@ func TestConfigurationGet(t *testing.T) {
 		// assert
 		assert.Equal(t, 200, resp.StatusCode, "Accessing configuration store with good keys should return 200")
 		assert.NotNil(t, resp.JSONBody)
-		assert.Equal(t, 2, len(resp.JSONBody.(map[string]interface{})))
+		assert.Len(t, resp.JSONBody.(map[string]interface{}), 2)
 		rspMap1 := resp.JSONBody.(map[string]interface{})
 		assert.NotNil(t, rspMap1)
 		assert.Contains(t, rspMap1, "good-key1")
@@ -2255,7 +2255,7 @@ func TestConfigurationGet(t *testing.T) {
 		// assert
 		assert.Equal(t, 200, resp.StatusCode, "Accessing configuration store with good keys should return 200")
 		assert.NotNil(t, resp.JSONBody)
-		assert.Equal(t, 2, len(resp.JSONBody.(map[string]interface{})))
+		assert.Len(t, resp.JSONBody.(map[string]interface{}), 2)
 		rspMap1 := resp.JSONBody.(map[string]interface{})
 		assert.NotNil(t, rspMap1)
 		assert.Contains(t, rspMap1, "good-key1")
@@ -2283,7 +2283,7 @@ func TestConfigurationGet(t *testing.T) {
 
 		// assert
 		assert.NotNil(t, resp.JSONBody)
-		assert.Equal(t, 2, len(resp.JSONBody.(map[string]interface{})))
+		assert.Len(t, resp.JSONBody.(map[string]interface{}), 2)
 		rspMap1 := resp.JSONBody.(map[string]interface{})
 		assert.NotNil(t, rspMap1)
 		assert.Contains(t, rspMap1, "good-key1")
@@ -2311,7 +2311,7 @@ func TestConfigurationGet(t *testing.T) {
 
 		// assert
 		assert.NotNil(t, resp.JSONBody)
-		assert.Equal(t, 2, len(resp.JSONBody.(map[string]interface{})))
+		assert.Len(t, resp.JSONBody.(map[string]interface{}), 2)
 		rspMap1 := resp.JSONBody.(map[string]interface{})
 		assert.NotNil(t, rspMap1)
 		assert.Contains(t, rspMap1, "good-key1")
@@ -2399,7 +2399,7 @@ func TestV1Alpha1ConfigurationUnsubscribe(t *testing.T) {
 		assert.Nil(t, rspMap1)
 
 		uuid, err := uuid.NewRandom()
-		assert.Nil(t, err, "unable to generate id")
+		require.NoError(t, err, "unable to generate id")
 		apiPath2 := fmt.Sprintf("v1.0-alpha1/configuration/%s/%s/unsubscribe", storeName, &uuid)
 
 		resp2 := fakeServer.DoRequest("GET", apiPath2, nil, nil)
@@ -2416,7 +2416,7 @@ func TestV1Alpha1ConfigurationUnsubscribe(t *testing.T) {
 		assert.Nil(t, rspMap1)
 
 		uuid, err := uuid.NewRandom()
-		assert.Nil(t, err, "unable to generate id")
+		require.NoError(t, err, "unable to generate id")
 		apiPath2 := fmt.Sprintf("v1.0/configuration/%s/%s/unsubscribe", storeName, &uuid)
 
 		resp2 := fakeServer.DoRequest("GET", apiPath2, nil, nil)
@@ -2432,7 +2432,7 @@ func TestV1Alpha1ConfigurationUnsubscribe(t *testing.T) {
 		assert.Nil(t, rspMap1)
 
 		uuid, err := uuid.NewRandom()
-		assert.NoError(t, err, "unable to generate id")
+		require.NoError(t, err, "unable to generate id")
 		apiPath2 := fmt.Sprintf("v1.0-alpha1/configuration/%s/%s/unsubscribe", "", &uuid)
 
 		resp2 := fakeServer.DoRequest("GET", apiPath2, nil, nil)
@@ -2448,7 +2448,7 @@ func TestV1Alpha1ConfigurationUnsubscribe(t *testing.T) {
 		assert.Nil(t, rspMap1)
 
 		uuid, err := uuid.NewRandom()
-		assert.NoError(t, err, "unable to generate id")
+		require.NoError(t, err, "unable to generate id")
 		apiPath2 := fmt.Sprintf("v1.0/configuration/%s/%s/unsubscribe", "", &uuid)
 
 		resp2 := fakeServer.DoRequest("GET", apiPath2, nil, nil)
@@ -2510,7 +2510,7 @@ func TestV1Alpha1DistributedLock(t *testing.T) {
 		assert.NotNil(t, resp.JSONBody)
 		rspMap := resp.JSONBody.(map[string]interface{})
 		assert.NotNil(t, rspMap)
-		assert.Equal(t, true, rspMap["success"].(bool))
+		assert.True(t, rspMap["success"].(bool))
 	})
 
 	t.Run("Lock with invalid resource id", func(t *testing.T) {
@@ -2781,11 +2781,11 @@ func TestV1Beta1Workflow(t *testing.T) {
 		assert.Contains(t, rspMap, "createdAt")
 		createdAtStr := rspMap["createdAt"].(string)
 		_, err := time.Parse(time.RFC3339, createdAtStr) // we expect timestamps to be in RFC3339 format
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Contains(t, rspMap, "lastUpdatedAt")
 		lastUpdatedAtStr := rspMap["lastUpdatedAt"].(string)
 		_, err = time.Parse(time.RFC3339, lastUpdatedAtStr) // we expect timestamps to be in RFC3339 format
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	/////////////////////////
@@ -3530,7 +3530,7 @@ func TestV1StateEndpoints(t *testing.T) {
 
 		var responses []BulkGetResponse
 
-		assert.NoError(t, json.Unmarshal(resp.RawBody, &responses), "Response should be valid JSON")
+		require.NoError(t, json.Unmarshal(resp.RawBody, &responses), "Response should be valid JSON")
 
 		expectedResponses := []BulkGetResponse{
 			{
@@ -3563,7 +3563,7 @@ func TestV1StateEndpoints(t *testing.T) {
 
 		var responses []BulkGetResponse
 
-		assert.NoError(t, json.Unmarshal(resp.RawBody, &responses), "Response should be valid JSON")
+		require.NoError(t, json.Unmarshal(resp.RawBody, &responses), "Response should be valid JSON")
 
 		expectedResponses := []BulkGetResponse{
 			{
@@ -4449,7 +4449,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 			Operations: testTransactionalOperations,
 		})
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
 
 		// assert
@@ -4479,7 +4479,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 		inputBodyBytes, err := json.Marshal(stateTransactionRequestBody{
 			Operations: testTransactionalOperations,
 		})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
 		// assert
 		assert.Equal(t, 400, resp.StatusCode, "Accessing non-existent state store should return 400")
@@ -4502,7 +4502,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 			Operations: testTransactionalOperations,
 		})
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
 
 		// assert
@@ -4529,7 +4529,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 				Operations: testTransactionalOperations,
 			})
 
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
 
 			// assert
@@ -4556,7 +4556,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 			Operations: testTransactionalOperations,
 		})
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
 
 		// assert
@@ -4581,7 +4581,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 			Operations: testTransactionalOperations,
 		})
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
 
 		// assert
@@ -4615,7 +4615,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 			},
 		})
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
 
 		// assert
@@ -4661,7 +4661,7 @@ func TestStateStoreErrors(t *testing.T) {
 		err := state.NewETagError(state.ETagMismatch, errors.New("error"))
 		e, c, m := a.etagError(err)
 
-		assert.Equal(t, true, e)
+		assert.True(t, e)
 		assert.Equal(t, 409, c)
 		assert.Equal(t, "possible etag mismatch. error from state store: error", m)
 	})
@@ -4671,7 +4671,7 @@ func TestStateStoreErrors(t *testing.T) {
 		err := state.NewETagError(state.ETagInvalid, errors.New("error"))
 		e, c, m := a.etagError(err)
 
-		assert.Equal(t, true, e)
+		assert.True(t, e)
 		assert.Equal(t, 400, c)
 		assert.Equal(t, "invalid etag value: error", m)
 	})

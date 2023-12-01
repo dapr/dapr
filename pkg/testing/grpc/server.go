@@ -20,10 +20,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
+
+	"github.com/stretchr/testify/require"
 
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/kit/logger"
@@ -99,7 +100,7 @@ func TestServerWithDialer[TServer any](logger logger.Logger, registersvc func(*g
 
 func StartTestAppCallbackGRPCServer(t *testing.T, port int, mockServer runtimev1pb.AppCallbackServer) *grpc.Server {
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	grpcServer := grpc.NewServer()
 	go func() {
 		runtimev1pb.RegisterAppCallbackServer(grpcServer, mockServer)

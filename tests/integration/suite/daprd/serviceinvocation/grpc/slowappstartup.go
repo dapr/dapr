@@ -49,7 +49,7 @@ type slowappstartup struct {
 
 func (s *slowappstartup) Setup(t *testing.T) []framework.Option {
 	onInvoke := func(ctx context.Context, in *commonv1.InvokeRequest) (*commonv1.InvokeResponse, error) {
-		assert.Equal(t, "Ping", in.Method)
+		assert.Equal(t, "Ping", in.GetMethod())
 		resp, err := anypb.New(new(testpb.PingResponse))
 		if err != nil {
 			return nil, err
@@ -88,7 +88,7 @@ func (s *slowappstartup) Run(t *testing.T, ctx context.Context) {
 	s.daprd.WaitUntilRunning(t, ctx)
 	s.daprd.WaitUntilAppHealth(t, ctx)
 
-	conn, err := grpc.DialContext(ctx, "localhost:"+strconv.Itoa(s.daprd.GRPCPort()),
+	conn, err := grpc.DialContext(ctx, s.daprd.GRPCAddress(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
 	)
@@ -110,9 +110,10 @@ func (s *slowappstartup) Run(t *testing.T, ctx context.Context) {
 		})
 		// This function must only return that the app is not in a healthy state
 		// until the app is in a healthy state.
+		//nolint:testifylint
 		if !assert.NoError(c, err) {
 			require.ErrorContains(c, err, "app is not in a healthy state")
 		}
 	}, time.Second*3, time.Millisecond*100)
-	assert.NoError(t, resp.Data.UnmarshalTo(&pingResp))
+	require.NoError(t, resp.GetData().UnmarshalTo(&pingResp))
 }

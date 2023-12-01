@@ -88,7 +88,7 @@ func TestPlacementStream_RoundRobin(t *testing.T) {
 		require.NoError(t, testPlacement.Start(context.Background()))
 		time.Sleep(statusReportHeartbeatInterval * 3)
 		assert.Equal(t, leaderServer[0], testPlacement.serverIndex.Load())
-		assert.True(t, testSrv[testPlacement.serverIndex.Load()].recvCount.Load() >= 2)
+		assert.GreaterOrEqual(t, testSrv[testPlacement.serverIndex.Load()].recvCount.Load(), int32(2))
 	})
 
 	t.Run("shutdown leader and find the next leader", func(t *testing.T) {
@@ -103,7 +103,7 @@ func TestPlacementStream_RoundRobin(t *testing.T) {
 		// wait until placement connect to the second leader node
 		time.Sleep(statusReportHeartbeatInterval * 3)
 		assert.Equal(t, leaderServer[1], testPlacement.serverIndex.Load())
-		assert.True(t, testSrv[testPlacement.serverIndex.Load()].recvCount.Load() >= 1)
+		assert.GreaterOrEqual(t, testSrv[testPlacement.serverIndex.Load()].recvCount.Load(), int32(1))
 	})
 
 	// tear down
@@ -143,12 +143,12 @@ func TestAppHealthyStatus(t *testing.T) {
 	// wait until client sends heartbeat to the test server
 	time.Sleep(statusReportHeartbeatInterval * 3)
 	oldCount := testSrv.recvCount.Load()
-	assert.True(t, oldCount >= 2, "client must send at least twice")
+	assert.GreaterOrEqual(t, oldCount, int32(2), "client must send at least twice")
 
 	// Mark app unhealthy
 	appHealthCh <- false
 	time.Sleep(statusReportHeartbeatInterval * 2)
-	assert.True(t, testSrv.recvCount.Load() <= oldCount+1, "no more +1 heartbeat because app is unhealthy")
+	assert.LessOrEqual(t, testSrv.recvCount.Load(), oldCount+1, "no more +1 heartbeat because app is unhealthy")
 
 	// clean up
 	close(appHealthCh)
@@ -249,7 +249,7 @@ func TestWaitUntilPlacementTableIsReady(t *testing.T) {
 		}
 
 		err := testPlacement.WaitUntilReady(context.Background())
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("wait until ready", func(t *testing.T) {
@@ -378,7 +378,7 @@ func TestLookupActor(t *testing.T) {
 			ActorID:   "test",
 		})
 		require.Error(t, err)
-		assert.ErrorContains(t, err, "did not find address for actor")
+		require.ErrorContains(t, err, "did not find address for actor")
 	})
 
 	t.Run("found host and appid", func(t *testing.T) {
@@ -408,7 +408,7 @@ func TestLookupActor(t *testing.T) {
 			ActorID:   "id0",
 		})
 		require.Error(t, err)
-		assert.ErrorContains(t, err, "did not find address for actor")
+		require.ErrorContains(t, err, "did not find address for actor")
 		assert.Empty(t, lar.Address)
 		assert.Empty(t, lar.AppID)
 	})

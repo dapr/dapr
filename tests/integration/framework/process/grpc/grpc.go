@@ -18,6 +18,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -66,6 +67,10 @@ func (g *GRPC) Port(t *testing.T) int {
 	ln, err := g.listener()
 	require.NoError(t, err)
 	return ln.Addr().(*net.TCPAddr).Port
+}
+
+func (g *GRPC) Address(t *testing.T) string {
+	return "localhost:" + strconv.Itoa(g.Port(t))
 }
 
 func (g *GRPC) Run(t *testing.T, ctx context.Context) {

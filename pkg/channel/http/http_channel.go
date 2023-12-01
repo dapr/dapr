@@ -120,15 +120,15 @@ func (h *Channel) GetAppConfig(ctx context.Context, appID string) (*config.Appli
 
 	var config config.ApplicationConfig
 
-	if resp.Status().Code != http.StatusOK {
+	if resp.Status().GetCode() != http.StatusOK {
 		return &config, nil
 	}
 
 	// Get versioning info, currently only v1 is supported.
 	headers := resp.Headers()
 	var version string
-	if val, ok := headers["dapr-app-config-version"]; ok && len(val.Values) > 0 {
-		version = val.Values[0]
+	if val, ok := headers["dapr-app-config-version"]; ok && len(val.GetValues()) > 0 {
+		version = val.GetValues()[0]
 	}
 
 	switch version {
@@ -152,7 +152,7 @@ func (h *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRe
 		return nil, status.Error(codes.InvalidArgument, "missing HTTP extension field")
 	}
 	// Go's net/http library does not support sending requests with the CONNECT method
-	if httpExt.Verb == commonv1pb.HTTPExtension_NONE || httpExt.Verb == commonv1pb.HTTPExtension_CONNECT { //nolint:nosnakecase
+	if httpExt.GetVerb() == commonv1pb.HTTPExtension_NONE || httpExt.GetVerb() == commonv1pb.HTTPExtension_CONNECT { //nolint:nosnakecase
 		return nil, status.Error(codes.InvalidArgument, "invalid HTTP verb")
 	}
 
@@ -228,7 +228,7 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	}()
 
 	// Emit metric when request is sent
-	diag.DefaultHTTPMonitoring.ClientRequestStarted(ctx, int64(len(req.Message().Data.GetValue())))
+	diag.DefaultHTTPMonitoring.ClientRequestStarted(ctx, int64(len(req.Message().GetData().GetValue())))
 	startRequest := time.Now()
 
 	var resp *http.Response
@@ -280,7 +280,7 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 		return nil, err
 	}
 
-	diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, strconv.Itoa(int(rsp.Status().Code)), contentLength, elapsedMs)
+	diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, strconv.Itoa(int(rsp.Status().GetCode())), contentLength, elapsedMs)
 
 	return rsp, nil
 }
@@ -288,8 +288,8 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*http.Request, error) {
 	// Construct app channel URI: VERB http://localhost:3000/method?query1=value1
 	msg := req.Message()
-	verb := msg.HttpExtension.Verb.String()
-	method := msg.Method
+	verb := msg.GetHttpExtension().GetVerb().String()
+	method := msg.GetMethod()
 	var headers []commonapi.NameValuePair
 
 	uri := strings.Builder{}

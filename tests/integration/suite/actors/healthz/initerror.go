@@ -20,7 +20,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -68,7 +67,7 @@ func (i *initerror) Setup(t *testing.T) []framework.Option {
 	i.place = placement.New(t)
 	i.daprd = daprd.New(t,
 		daprd.WithInMemoryActorStateStore("mystore"),
-		daprd.WithPlacementAddresses("localhost:"+strconv.Itoa(i.place.Port())),
+		daprd.WithPlacementAddresses(i.place.Address()),
 		daprd.WithAppPort(srv.Port()),
 		// Daprd is super noisy in debug mode when connecting to placement.
 		daprd.WithLogLevel("info"),
@@ -98,9 +97,9 @@ func (i *initerror) Run(t *testing.T, ctx context.Context) {
 	req, err := http.NewRequestWithContext(rctx, http.MethodPost, daprdURL, nil)
 	require.NoError(t, err)
 	resp, err := client.Do(req)
-	assert.ErrorIs(t, err, context.DeadlineExceeded)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
 	if resp != nil && resp.Body != nil {
-		assert.NoError(t, resp.Body.Close())
+		require.NoError(t, resp.Body.Close())
 	}
 
 	close(i.blockConfig)
@@ -116,5 +115,5 @@ func (i *initerror) Run(t *testing.T, ctx context.Context) {
 	resp, err = client.Do(req)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
-	assert.NoError(t, resp.Body.Close())
+	require.NoError(t, resp.Body.Close())
 }

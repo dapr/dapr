@@ -131,10 +131,10 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 				}),
 				mock.MatchedBy(func(req *invokev1.InvokeMethodRequest) bool {
 					msg := req.Message()
-					if msg.Method != "fakeMethod" {
+					if msg.GetMethod() != "fakeMethod" {
 						return false
 					}
-					if msg.HttpExtension.Verb != commonv1.HTTPExtension_POST {
+					if msg.GetHttpExtension().GetVerb() != commonv1.HTTPExtension_POST {
 						return false
 					}
 					return true
@@ -464,7 +464,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 					}
 
 					msg := imr.Message()
-					if msg.Method != "fakeMethod" {
+					if msg.GetMethod() != "fakeMethod" {
 						return false
 					}
 
@@ -509,7 +509,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 					}
 
 					msg := imr.Message()
-					if msg.Method != "fakeMethod" {
+					if msg.GetMethod() != "fakeMethod" {
 						return false
 					}
 
@@ -826,7 +826,7 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 				}
 
 				msg := imr.Message()
-				if msg.Method != "fakeMethod" {
+				if msg.GetMethod() != "fakeMethod" {
 					return false
 				}
 
@@ -867,7 +867,7 @@ func TestV1DirectMessagingEndpointsWithTracer(t *testing.T) {
 				}
 
 				msg := imr.Message()
-				if msg.Method != "fakeMethod" {
+				if msg.GetMethod() != "fakeMethod" {
 					return false
 				}
 

@@ -74,7 +74,7 @@ func (m *metrics) Run(t *testing.T, ctx context.Context) {
 	m.httpClient = util.HTTPClient(t)
 
 	conn, err := grpc.DialContext(ctx,
-		fmt.Sprintf("localhost:%d", m.daprd.GRPCPort()),
+		m.daprd.GRPCAddress(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
 	)
@@ -200,7 +200,7 @@ func (m *metrics) getMetrics(t *testing.T, ctx context.Context) map[string]float
 			continue
 		}
 
-		for _, m := range mf.Metric {
+		for _, m := range mf.GetMetric() {
 			key := mf.GetName()
 			for _, l := range m.GetLabel() {
 				key += "|" + l.GetName() + ":" + l.GetValue()

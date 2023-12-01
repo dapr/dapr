@@ -227,8 +227,8 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 		req, err := stream.Recv()
 		switch err {
 		case nil:
-			if clientID != nil && req.Id != clientID.AppID() {
-				return status.Errorf(codes.PermissionDenied, "client ID %s is not allowed", req.Id)
+			if clientID != nil && req.GetId() != clientID.AppID() {
+				return status.Errorf(codes.PermissionDenied, "client ID %s is not allowed", req.GetId())
 			}
 
 			state := p.raftNode.FSM().State()
@@ -243,11 +243,11 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 				if p.maxAPILevel != nil && clusterAPILevel > *p.maxAPILevel {
 					clusterAPILevel = *p.maxAPILevel
 				}
-				if req.ApiLevel < clusterAPILevel {
-					return status.Errorf(codes.FailedPrecondition, "The cluster's Actor API level is %d, which is higher than the reported API level %d", clusterAPILevel, req.ApiLevel)
+				if req.GetApiLevel() < clusterAPILevel {
+					return status.Errorf(codes.FailedPrecondition, "The cluster's Actor API level is %d, which is higher than the reported API level %d", clusterAPILevel, req.GetApiLevel())
 				}
 
-				registeredMemberID = req.Name
+				registeredMemberID = req.GetName()
 				p.addStreamConn(stream)
 				// We need to use a background context here so dissemination isn't tied to the context of this stream
 				// TODO: If each sidecar can report table version, then placement
@@ -260,7 +260,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 			}
 
 			// Ensure that the incoming runtime is actor instance.
-			isActorRuntime = len(req.Entities) > 0
+			isActorRuntime = len(req.GetEntities()) > 0
 			if !isActorRuntime {
 				// ignore if this runtime is non-actor.
 				continue
@@ -268,22 +268,22 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 
 			now := p.clock.Now()
 
-			for _, entity := range req.Entities {
-				monitoring.RecordActorHeartbeat(req.Id, entity, req.Name, req.Pod, now)
+			for _, entity := range req.GetEntities() {
+				monitoring.RecordActorHeartbeat(req.GetId(), entity, req.GetName(), req.GetPod(), now)
 			}
 
 			// Record the heartbeat timestamp. This timestamp will be used to check if the member
 			// state maintained by raft is valid or not. If the member is outdated based the timestamp
 			// the member will be marked as faulty node and removed.
-			p.lastHeartBeat.Store(req.Name, now.UnixNano())
+			p.lastHeartBeat.Store(req.GetName(), now.UnixNano())
 
 			members := state.Members()
 
 			// Upsert incoming member only if it is an actor service (not actor client) and
 			// the existing member info is unmatched with the incoming member info.
 			upsertRequired := true
-			if m, ok := members[req.Name]; ok {
-				if m.AppID == req.Id && m.Name == req.Name && cmp.Equal(m.Entities, req.Entities) {
+			if m, ok := members[req.GetName()]; ok {
+				if m.AppID == req.GetId() && m.Name == req.GetName() && cmp.Equal(m.Entities, req.GetEntities()) {
 					upsertRequired = false
 				}
 			}
@@ -292,14 +292,14 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 				p.membershipCh <- hostMemberChange{
 					cmdType: raft.MemberUpsert,
 					host: raft.DaprHostMember{
-						Name:      req.Name,
-						AppID:     req.Id,
-						Entities:  req.Entities,
+						Name:      req.GetName(),
+						AppID:     req.GetId(),
+						Entities:  req.GetEntities(),
 						UpdatedAt: now.UnixNano(),
-						APILevel:  req.ApiLevel,
+						APILevel:  req.GetApiLevel(),
 					},
 				}
-				log.Debugf("Member changed upserting appid %s with entities %v", req.Id, req.Entities)
+				log.Debugf("Member changed upserting appid %s with entities %v", req.GetId(), req.GetEntities())
 			}
 
 		default:

@@ -43,13 +43,13 @@ func TestSecretStoreNotConfigured(t *testing.T) {
 	t.Run("GetSecret", func(t *testing.T) {
 		_, err := fakeAPI.GetSecret(context.Background(), &runtimev1pb.GetSecretRequest{})
 		require.Error(t, err)
-		assert.ErrorIs(t, err, messages.ErrSecretStoreNotConfigured)
+		require.ErrorIs(t, err, messages.ErrSecretStoreNotConfigured)
 	})
 
 	t.Run("GetBulkSecret", func(t *testing.T) {
 		_, err := fakeAPI.GetBulkSecret(context.Background(), &runtimev1pb.GetBulkSecretRequest{})
 		require.Error(t, err)
-		assert.ErrorIs(t, err, messages.ErrSecretStoreNotConfigured)
+		require.ErrorIs(t, err, messages.ErrSecretStoreNotConfigured)
 	})
 }
 
@@ -178,10 +178,10 @@ func TestGetSecret(t *testing.T) {
 			resp, err := fakeAPI.GetSecret(context.Background(), req)
 
 			if !tt.errorExcepted {
-				assert.NoError(t, err, "Expected no error")
-				assert.Equal(t, resp.Data[tt.key], tt.expectedResponse, "Expected responses to be same")
+				require.NoError(t, err, "Expected no error")
+				assert.Equal(t, tt.expectedResponse, resp.GetData()[tt.key], "Expected responses to be same")
 			} else {
-				assert.Error(t, err, "Expected error")
+				require.Error(t, err, "Expected error")
 				assert.Equal(t, tt.expectedError, status.Code(err))
 			}
 		})
@@ -242,10 +242,10 @@ func TestGetBulkSecret(t *testing.T) {
 			resp, err := fakeAPI.GetBulkSecret(context.Background(), req)
 
 			if !tt.errorExcepted {
-				assert.NoError(t, err, "Expected no error")
-				assert.Equal(t, resp.Data[tt.key].Secrets[tt.key], tt.expectedResponse, "Expected responses to be same")
+				require.NoError(t, err, "Expected no error")
+				assert.Equal(t, tt.expectedResponse, resp.GetData()[tt.key].GetSecrets()[tt.key], "Expected responses to be same")
 			} else {
-				assert.Error(t, err, "Expected error")
+				require.Error(t, err, "Expected error")
 				assert.Equal(t, tt.expectedError, status.Code(err))
 			}
 		})
@@ -278,7 +278,7 @@ func TestSecretAPIWithResiliency(t *testing.T) {
 			Key:       "key",
 		})
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, 2, failingStore.Failure.CallCount("key"))
 	})
 
@@ -291,7 +291,7 @@ func TestSecretAPIWithResiliency(t *testing.T) {
 		})
 		end := time.Now()
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Equal(t, 2, failingStore.Failure.CallCount("timeout"))
 		assert.Less(t, end.Sub(start), time.Second*30)
 	})
@@ -302,7 +302,7 @@ func TestSecretAPIWithResiliency(t *testing.T) {
 			Metadata:  map[string]string{"key": "bulk"},
 		})
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, 2, failingStore.Failure.CallCount("bulk"))
 	})
 
@@ -314,7 +314,7 @@ func TestSecretAPIWithResiliency(t *testing.T) {
 		})
 		end := time.Now()
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Equal(t, 2, failingStore.Failure.CallCount("bulkTimeout"))
 		assert.Less(t, end.Sub(start), time.Second*30)
 	})

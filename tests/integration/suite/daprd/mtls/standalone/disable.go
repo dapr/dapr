@@ -15,7 +15,6 @@ package standalone
 
 import (
 	"context"
-	"strconv"
 	"testing"
 	"time"
 
@@ -52,14 +51,14 @@ func (e *disable) Setup(t *testing.T) []framework.Option {
 
 	e.placement = procplacement.New(t,
 		procplacement.WithEnableTLS(false),
-		procplacement.WithSentryAddress("localhost:"+strconv.Itoa(e.sentry.Port())),
+		procplacement.WithSentryAddress(e.sentry.Address()),
 	)
 
 	e.daprd = procdaprd.New(t,
 		procdaprd.WithAppID("my-app"),
 		procdaprd.WithMode("standalone"),
-		procdaprd.WithSentryAddress("localhost:"+strconv.Itoa(e.sentry.Port())),
-		procdaprd.WithPlacementAddresses("localhost:"+strconv.Itoa(e.placement.Port())),
+		procdaprd.WithSentryAddress(e.sentry.Address()),
+		procdaprd.WithPlacementAddresses(e.placement.Address()),
 
 		// Disable mTLS
 		procdaprd.WithEnableMTLS(false),
@@ -75,21 +74,21 @@ func (e *disable) Run(t *testing.T, ctx context.Context) {
 	e.daprd.WaitUntilRunning(t, ctx)
 
 	t.Run("trying plain text connection to Dapr API should succeed", func(t *testing.T) {
-		conn, err := grpc.DialContext(ctx, "localhost:"+strconv.Itoa(e.daprd.InternalGRPCPort()),
+		conn, err := grpc.DialContext(ctx, e.daprd.InternalGRPCAddress(),
 			grpc.WithReturnConnectionError(),
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 		)
 		require.NoError(t, err)
 		conn.Connect()
 		assert.Equal(t, connectivity.Ready, conn.GetState())
-		assert.NoError(t, conn.Close())
+		require.NoError(t, conn.Close())
 	})
 
 	t.Run("trying mTLS connection to Dapr API should fail", func(t *testing.T) {
 		sctx, cancel := context.WithCancel(ctx)
 
 		secProv, err := security.New(sctx, security.Options{
-			SentryAddress:           "localhost:" + strconv.Itoa(e.sentry.Port()),
+			SentryAddress:           e.sentry.Address(),
 			ControlPlaneTrustDomain: "localhost",
 			ControlPlaneNamespace:   "default",
 			TrustAnchors:            e.trustAnchors,
@@ -109,7 +108,7 @@ func (e *disable) Run(t *testing.T, ctx context.Context) {
 			case <-time.After(5 * time.Second):
 				t.Fatal("timed out waiting for security provider to stop")
 			case err = <-secProvErr:
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			}
 		})
 
@@ -121,8 +120,8 @@ func (e *disable) Run(t *testing.T, ctx context.Context) {
 
 		gctx, gcancel := context.WithTimeout(ctx, time.Second)
 		t.Cleanup(gcancel)
-		_, err = grpc.DialContext(gctx, "localhost:"+strconv.Itoa(e.daprd.InternalGRPCPort()), sec.GRPCDialOptionMTLS(myAppID),
+		_, err = grpc.DialContext(gctx, e.daprd.InternalGRPCAddress(), sec.GRPCDialOptionMTLS(myAppID),
 			grpc.WithReturnConnectionError())
-		assert.ErrorContains(t, err, "tls: first record does not look like a TLS handshake")
+		require.ErrorContains(t, err, "tls: first record does not look like a TLS handshake")
 	})
 }

@@ -177,10 +177,10 @@ func (wf *workflowActor) createWorkflowInstance(ctx context.Context, actorID str
 	if es := startEvent.GetExecutionStarted(); es == nil {
 		return errors.New("invalid execution start event")
 	} else {
-		if es.ParentInstance == nil {
-			wfLogger.Debugf("Workflow actor '%s': creating workflow '%s' with instanceId '%s'", actorID, es.Name, es.OrchestrationInstance.InstanceId)
+		if es.GetParentInstance() == nil {
+			wfLogger.Debugf("Workflow actor '%s': creating workflow '%s' with instanceId '%s'", actorID, es.GetName(), es.GetOrchestrationInstance().GetInstanceId())
 		} else {
-			wfLogger.Debugf("Workflow actor '%s': creating child workflow '%s' with instanceId '%s' parentWorkflow '%s' parentWorkflowId '%s'", es.Name, es.OrchestrationInstance.InstanceId, es.ParentInstance.Name, es.ParentInstance.OrchestrationInstance.InstanceId)
+			wfLogger.Debugf("Workflow actor '%s': creating child workflow '%s' with instanceId '%s' parentWorkflow '%s' parentWorkflowId '%s'", es.GetName(), es.GetOrchestrationInstance().GetInstanceId(), es.GetParentInstance().GetName(), es.GetParentInstance().GetOrchestrationInstance().GetInstanceId())
 		}
 	}
 
@@ -341,9 +341,9 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 	for _, e := range state.Inbox {
 		var taskID int32
 		if ts := e.GetTaskCompleted(); ts != nil {
-			taskID = ts.TaskScheduledId
+			taskID = ts.GetTaskScheduledId()
 		} else if tf := e.GetTaskFailed(); tf != nil {
-			taskID = tf.TaskScheduledId
+			taskID = tf.GetTaskScheduledId()
 		} else {
 			continue
 		}
@@ -423,11 +423,11 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 			if err != nil {
 				return fmt.Errorf("failed to marshal pending timer data: %w", err)
 			}
-			delay := time.Until(tf.FireAt.AsTime())
+			delay := time.Until(tf.GetFireAt().AsTime())
 			if delay < 0 {
 				delay = 0
 			}
-			reminderPrefix := fmt.Sprintf("timer-%d", tf.TimerId)
+			reminderPrefix := fmt.Sprintf("timer-%d", tf.GetTimerId())
 			data := NewDurableTimer(timerBytes, state.Generation)
 			wfLogger.Debugf("Workflow actor '%s': creating reminder '%s' for the durable timer", actorID, reminderPrefix)
 			if _, err := wf.createReliableReminder(ctx, actorID, reminderPrefix, data, delay); err != nil {
@@ -467,7 +467,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 		if err != nil {
 			return err
 		}
-		targetActorID := getActivityActorID(actorID, e.EventId, state.Generation)
+		targetActorID := getActivityActorID(actorID, e.GetEventId(), state.Generation)
 
 		wfLogger.Debugf("Workflow actor '%s': invoking execute method on activity actor '%s'", actorID, targetActorID)
 		req := invokev1.
@@ -482,10 +482,10 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 		resp, err := wf.actors.Call(ctx, req)
 		if err != nil {
 			if errors.Is(err, ErrDuplicateInvocation) {
-				wfLogger.Warnf("Workflow actor '%s': activity invocation '%s::%d' was flagged as a duplicate and will be skipped", actorID, ts.Name, e.EventId)
+				wfLogger.Warnf("Workflow actor '%s': activity invocation '%s::%d' was flagged as a duplicate and will be skipped", actorID, ts.GetName(), e.GetEventId())
 				continue
 			}
-			return newRecoverableError(fmt.Errorf("failed to invoke activity actor '%s' to execute '%s': %w", targetActorID, ts.Name, err))
+			return newRecoverableError(fmt.Errorf("failed to invoke activity actor '%s' to execute '%s': %w", targetActorID, ts.GetName(), err))
 		}
 		resp.Close()
 	}
@@ -606,9 +606,9 @@ func (wf *workflowActor) removeCompletedStateData(ctx context.Context, state *wo
 	for _, e := range state.Inbox {
 		var taskID int32
 		if ts := e.GetTaskCompleted(); ts != nil {
-			taskID = ts.TaskScheduledId
+			taskID = ts.GetTaskScheduledId()
 		} else if tf := e.GetTaskFailed(); tf != nil {
-			taskID = tf.TaskScheduledId
+			taskID = tf.GetTaskScheduledId()
 		} else {
 			continue
 		}

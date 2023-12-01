@@ -64,7 +64,7 @@ func TestProtoCodec_ReadYourWrites(t *testing.T) {
 	require.NoError(t, err, "unmarshalling must go ok")
 
 	require.Equal(t, p1.ProtoReflect(), p2.ProtoReflect())
-	require.Equal(t, p1.Value, p2.Value)
+	require.Equal(t, p1.GetValue(), p2.GetValue())
 }
 
 func TestProtoCodec_ReadYourWrites_v1(t *testing.T) {
@@ -85,7 +85,7 @@ func TestProtoCodec_ReadYourWrites_v1(t *testing.T) {
 	err = proxyCd.Unmarshal(out2p1, p2)
 	require.NoError(t, err, "unmarshalling must go ok")
 
-	require.Equal(t, p1.Value, p2.Value)
+	require.Equal(t, p1.GetValue(), p2.GetValue())
 }
 
 type errorPingRequest struct {
@@ -106,12 +106,12 @@ func TestProtoCodec_ReadYourWrites_error(t *testing.T) {
 	pv1 := &pbV1.PingRequest{}
 	err = proxyCd.Unmarshal(d1, pv1)
 	require.NoError(t, err, "unmarshalling must go ok")
-	require.Equal(t, pv1.Value, "test-ping")
+	require.Equal(t, "test-ping", pv1.GetValue())
 
 	pv2 := &pb.PingRequest{}
 	err = proxyCd.Unmarshal(d1, pv2)
 	require.NoError(t, err, "unmarshalling must go ok")
-	require.Equal(t, pv2.Value, "test-ping")
+	require.Equal(t, "test-ping", pv2.GetValue())
 
 	pe := &errorPingRequest{}
 	err = proxyCd.Unmarshal(d1, pe)

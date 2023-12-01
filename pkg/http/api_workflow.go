@@ -203,7 +203,7 @@ func (a *api) onStartWorkflowHandler() http.HandlerFunc {
 
 				// The instance ID is optional. If not specified, we generate a random one.
 				in.InstanceId = r.URL.Query().Get(instanceID)
-				if in.InstanceId == "" {
+				if in.GetInstanceId() == "" {
 					randomID, err := uuid.NewRandom()
 					if err != nil {
 						return nil, err

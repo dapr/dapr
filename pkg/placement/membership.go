@@ -328,7 +328,7 @@ func (p *Service) performTableDissemination(ctx context.Context) error {
 	state := p.raftNode.FSM().PlacementState()
 	log.Infof(
 		"Start disseminating tables. memberUpdateCount: %d, streams: %d, targets: %d, table generation: %s",
-		cnt, nStreamConnPool, nTargetConns, state.Version)
+		cnt, nStreamConnPool, nTargetConns, state.GetVersion())
 	p.streamConnPoolLock.RLock()
 	streamConnPool := make([]placementGRPCStream, len(p.streamConnPool))
 	copy(streamConnPool, p.streamConnPool)
@@ -338,7 +338,7 @@ func (p *Service) performTableDissemination(ctx context.Context) error {
 	}
 	log.Infof(
 		"Completed dissemination. memberUpdateCount: %d, streams: %d, targets: %d, table generation: %s",
-		cnt, nStreamConnPool, nTargetConns, state.Version)
+		cnt, nStreamConnPool, nTargetConns, state.GetVersion())
 	p.memberUpdateCount.Store(0)
 
 	// set faultyHostDetectDuration to the default duration.
@@ -358,10 +358,10 @@ func (p *Service) performTablesUpdate(ctx context.Context, hosts []placementGRPC
 
 	// Enforce maximum API level
 	if newTable != nil {
-		if newTable.ApiLevel < p.minAPILevel {
+		if newTable.GetApiLevel() < p.minAPILevel {
 			newTable.ApiLevel = p.minAPILevel
 		}
-		if p.maxAPILevel != nil && newTable.ApiLevel > *p.maxAPILevel {
+		if p.maxAPILevel != nil && newTable.GetApiLevel() > *p.maxAPILevel {
 			newTable.ApiLevel = *p.maxAPILevel
 		}
 	}

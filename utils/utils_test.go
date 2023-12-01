@@ -53,14 +53,14 @@ func TestSetEnvVariables(t *testing.T) {
 		err := SetEnvVariables(map[string]string{
 			"testKey": "testValue",
 		})
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, "testValue", os.Getenv("testKey"))
 	})
 	t.Run("set environment variables failed", func(t *testing.T) {
 		err := SetEnvVariables(map[string]string{
 			"": "testValue",
 		})
-		assert.NotNil(t, err)
+		require.Error(t, err)
 		assert.NotEqual(t, "testValue", os.Getenv(""))
 	})
 }
@@ -101,7 +101,7 @@ func TestEnvOrElse(t *testing.T) {
 		const elseValue, fakeEnVar = "fakeValue", "envVarThatDoesntExists"
 		require.NoError(t, os.Unsetenv(fakeEnVar))
 
-		assert.Equal(t, GetEnvOrElse(fakeEnVar, elseValue), elseValue)
+		assert.Equal(t, elseValue, GetEnvOrElse(fakeEnVar, elseValue))
 	})
 
 	t.Run("envOrElse should return env var value when env var is present", func(t *testing.T) {
@@ -109,7 +109,7 @@ func TestEnvOrElse(t *testing.T) {
 		defer os.Unsetenv(fakeEnVar)
 
 		require.NoError(t, os.Setenv(fakeEnVar, fakeEnvVarValue))
-		assert.Equal(t, GetEnvOrElse(fakeEnVar, elseValue), fakeEnvVarValue)
+		assert.Equal(t, fakeEnvVarValue, GetEnvOrElse(fakeEnVar, elseValue))
 	})
 }
 
@@ -153,7 +153,7 @@ func TestPopulateMetadataForBulkPublishEntry(t *testing.T) {
 			"key2":       "val2",
 		}
 		resMeta := PopulateMetadataForBulkPublishEntry(reqMeta, entryMeta)
-		assert.Equal(t, 4, len(resMeta), "expected length to match")
+		assert.Len(t, resMeta, 4, "expected length to match")
 		assert.Contains(t, resMeta, "key1", "expected key to be present")
 		assert.Equal(t, "val1", resMeta["key1"], "expected val to be equal")
 		assert.Contains(t, resMeta, "key2", "expected key to be present")
@@ -169,7 +169,7 @@ func TestPopulateMetadataForBulkPublishEntry(t *testing.T) {
 			"key2": "val2",
 		}
 		resMeta := PopulateMetadataForBulkPublishEntry(reqMeta, entryMeta)
-		assert.Equal(t, 3, len(resMeta), "expected length to match")
+		assert.Len(t, resMeta, 3, "expected length to match")
 		assert.Contains(t, resMeta, "key1", "expected key to be present")
 		assert.Equal(t, "val1", resMeta["key1"], "expected val to be equal")
 		assert.Contains(t, resMeta, "key2", "expected key to be present")
@@ -185,8 +185,8 @@ func TestFilter(t *testing.T) {
 		out := Filter(in, func(s string) bool {
 			return s != ""
 		})
-		assert.Equal(t, 6, len(in))
-		assert.Equal(t, 3, len(out))
+		assert.Len(t, in, 6)
+		assert.Len(t, out, 3)
 		assert.Equal(t, []string{"a", "b", "c"}, out)
 	})
 	t.Run("should filter out empty values and return empty collection if all values are filtered out", func(t *testing.T) {
@@ -194,9 +194,8 @@ func TestFilter(t *testing.T) {
 		out := Filter(in, func(s string) bool {
 			return s != ""
 		})
-		assert.Equal(t, 3, len(in))
-		assert.Equal(t, 0, len(out))
-		assert.Equal(t, []string{}, out)
+		assert.Len(t, in, 3)
+		assert.Empty(t, out)
 	})
 }
 

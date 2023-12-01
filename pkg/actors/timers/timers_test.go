@@ -174,12 +174,12 @@ func TestDeleteTimer(t *testing.T) {
 	reminder, err := req.NewReminder(testTimers.clock.Now())
 	require.NoError(t, err)
 	err = testTimers.CreateTimer(ctx, reminder)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	assert.Equal(t, int64(1), testTimers.GetActiveTimersCount(actorType))
 
 	err = testTimers.DeleteTimer(ctx, req.Key())
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	assert.Eventuallyf(t,
 		func() bool {
@@ -415,7 +415,7 @@ func TestTimerRepeats(t *testing.T) {
 			}
 			reminder, err := req.NewReminder(testTimers.clock.Now())
 			if test.expRepeats == 0 {
-				assert.ErrorContains(t, err, "has zero repetitions")
+				require.ErrorContains(t, err, "has zero repetitions")
 				return
 			}
 			require.NoError(t, err)
@@ -424,7 +424,7 @@ func TestTimerRepeats(t *testing.T) {
 			t.Cleanup(cancel)
 
 			err = testTimers.CreateTimer(ctx, reminder)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			count := 0
 
@@ -505,7 +505,7 @@ func TestTimerTTL(t *testing.T) {
 
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 			t.Cleanup(cancel)
-			assert.NoError(t, testTimers.CreateTimer(ctx, reminder))
+			require.NoError(t, testTimers.CreateTimer(ctx, reminder))
 
 			count := 0
 
@@ -560,7 +560,7 @@ func timerValidation(dueTime, period, ttl, msg string) func(t *testing.T) {
 		if err == nil {
 			err = testTimers.CreateTimer(context.Background(), reminder)
 		}
-		assert.ErrorContains(t, err, msg)
+		require.ErrorContains(t, err, msg)
 	}
 }
 
@@ -699,7 +699,7 @@ func TestTimerCounter(t *testing.T) {
 				Data:      json.RawMessage(`"testTimer"`),
 			})
 			err := provider.CreateTimer(context.Background(), timer)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 		}(i)
 	}
 
@@ -716,7 +716,7 @@ func TestTimerCounter(t *testing.T) {
 				Data:      json.RawMessage(`"testTimer"`),
 			})
 			err := provider.CreateTimer(context.Background(), timer)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 		}(i)
 	}
 
@@ -756,7 +756,7 @@ func TestTimerCounter(t *testing.T) {
 				Name:      fmt.Sprintf("positiveTimer%d", idx),
 			}
 			err := provider.DeleteTimer(context.Background(), timer.Key())
-			assert.NoError(t, err)
+			require.NoError(t, err)
 		}(i)
 	}
 

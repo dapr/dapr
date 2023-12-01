@@ -25,8 +25,8 @@ import (
 
 func (a *UniversalAPI) TryLockAlpha1(ctx context.Context, req *runtimev1pb.TryLockRequest) (*runtimev1pb.TryLockResponse, error) {
 	// 1. validate and find lock component
-	if req.ExpiryInSeconds <= 0 {
-		err := messages.ErrExpiryInSecondsNotPositive.WithFormat(req.StoreName)
+	if req.GetExpiryInSeconds() <= 0 {
+		err := messages.ErrExpiryInSecondsNotPositive.WithFormat(req.GetStoreName())
 		a.Logger.Debug(err)
 		return &runtimev1pb.TryLockResponse{}, err
 	}
@@ -37,12 +37,12 @@ func (a *UniversalAPI) TryLockAlpha1(ctx context.Context, req *runtimev1pb.TryLo
 
 	// 2. convert request
 	compReq := &lock.TryLockRequest{
-		ResourceID:      req.ResourceId,
-		LockOwner:       req.LockOwner,
-		ExpiryInSeconds: req.ExpiryInSeconds,
+		ResourceID:      req.GetResourceId(),
+		LockOwner:       req.GetLockOwner(),
+		ExpiryInSeconds: req.GetExpiryInSeconds(),
 	}
 	// modify key
-	compReq.ResourceID, err = lockLoader.GetModifiedLockKey(compReq.ResourceID, req.StoreName, a.AppID)
+	compReq.ResourceID, err = lockLoader.GetModifiedLockKey(compReq.ResourceID, req.GetStoreName(), a.AppID)
 	if err != nil {
 		err = messages.ErrTryLockFailed.WithFormat(err)
 		a.Logger.Debug(err)
@@ -51,7 +51,7 @@ func (a *UniversalAPI) TryLockAlpha1(ctx context.Context, req *runtimev1pb.TryLo
 
 	// 3. delegate to the component
 	policyRunner := resiliency.NewRunner[*lock.TryLockResponse](ctx,
-		a.Resiliency.ComponentOutboundPolicy(req.StoreName, resiliency.Lock),
+		a.Resiliency.ComponentOutboundPolicy(req.GetStoreName(), resiliency.Lock),
 	)
 	resp, err := policyRunner(func(ctx context.Context) (*lock.TryLockResponse, error) {
 		return store.TryLock(ctx, compReq)
@@ -82,11 +82,11 @@ func (a *UniversalAPI) UnlockAlpha1(ctx context.Context, req *runtimev1pb.Unlock
 
 	// 2. convert request
 	compReq := &lock.UnlockRequest{
-		ResourceID: req.ResourceId,
-		LockOwner:  req.LockOwner,
+		ResourceID: req.GetResourceId(),
+		LockOwner:  req.GetLockOwner(),
 	}
 	// modify key
-	compReq.ResourceID, err = lockLoader.GetModifiedLockKey(compReq.ResourceID, req.StoreName, a.AppID)
+	compReq.ResourceID, err = lockLoader.GetModifiedLockKey(compReq.ResourceID, req.GetStoreName(), a.AppID)
 	if err != nil {
 		err = messages.ErrUnlockFailed.WithFormat(err)
 		a.Logger.Debug(err)
@@ -95,7 +95,7 @@ func (a *UniversalAPI) UnlockAlpha1(ctx context.Context, req *runtimev1pb.Unlock
 
 	// 3. delegate to the component
 	policyRunner := resiliency.NewRunner[*lock.UnlockResponse](ctx,
-		a.Resiliency.ComponentOutboundPolicy(req.StoreName, resiliency.Lock),
+		a.Resiliency.ComponentOutboundPolicy(req.GetStoreName(), resiliency.Lock),
 	)
 	resp, err := policyRunner(func(ctx context.Context) (*lock.UnlockResponse, error) {
 		return store.Unlock(ctx, compReq)

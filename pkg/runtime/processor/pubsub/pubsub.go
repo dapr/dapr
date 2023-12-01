@@ -276,7 +276,7 @@ func extractCloudEvent(event map[string]interface{}) (runtimev1pb.TopicEventBulk
 	if data, ok := event[contribpubsub.DataField]; ok && data != nil {
 		envelope.Data = nil
 
-		if contenttype.IsStringContentType(envelope.DataContentType) {
+		if contenttype.IsStringContentType(envelope.GetDataContentType()) {
 			switch v := data.(type) {
 			case string:
 				envelope.Data = []byte(v)
@@ -285,7 +285,7 @@ func extractCloudEvent(event map[string]interface{}) (runtimev1pb.TopicEventBulk
 			default:
 				return runtimev1pb.TopicEventBulkRequestEntry_CloudEvent{}, errUnexpectedEnvelopeData //nolint:nosnakecase
 			}
-		} else if contenttype.IsJSONContentType(envelope.DataContentType) || contenttype.IsCloudEventContentType(envelope.DataContentType) {
+		} else if contenttype.IsJSONContentType(envelope.GetDataContentType()) || contenttype.IsCloudEventContentType(envelope.GetDataContentType()) {
 			envelope.Data, _ = json.Marshal(data)
 		}
 	}

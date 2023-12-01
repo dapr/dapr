@@ -120,7 +120,7 @@ func TestActorInvocation(t *testing.T) {
 
 		require.EventuallyWithT(t, func(t *assert.CollectT) {
 			_, status, err := utils.HTTPPostWithStatus(fmt.Sprintf(callActorURL, firstActorURL), body)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, 200, status)
 		}, 15*time.Second, 200*time.Millisecond)
 
@@ -132,7 +132,7 @@ func TestActorInvocation(t *testing.T) {
 
 		require.EventuallyWithT(t, func(t *assert.CollectT) {
 			_, status, err := utils.HTTPPostWithStatus(fmt.Sprintf(callActorURL, secondActorURL), body)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, 200, status)
 		}, 15*time.Second, 200*time.Millisecond)
 	})

@@ -73,23 +73,23 @@ func Test_toInternal(t *testing.T) {
 	assert.Equal(t, "1.2.3.4", intc.apiListenAddresses[0])
 	assert.Equal(t, 8080, intc.appConnectionConfig.Port)
 	assert.Equal(t, 7070, intc.profilePort)
-	assert.Equal(t, true, intc.enableProfiling)
+	assert.True(t, intc.enableProfiling)
 	assert.Equal(t, 1, intc.appConnectionConfig.MaxConcurrency)
-	assert.Equal(t, true, intc.mTLSEnabled)
+	assert.True(t, intc.mTLSEnabled)
 	assert.Equal(t, "localhost:5052", intc.sentryServiceAddress)
 	assert.Equal(t, 4, intc.maxRequestBodySize)
 	assert.Equal(t, "", intc.unixDomainSocket)
 	assert.Equal(t, 4, intc.readBufferSize)
 	assert.Equal(t, time.Second, intc.gracefulShutdownDuration)
 	assert.Equal(t, ptr.Of(true), intc.enableAPILogging)
-	assert.Equal(t, true, intc.disableBuiltinK8sSecretStore)
+	assert.True(t, intc.disableBuiltinK8sSecretStore)
 	assert.Equal(t, "1.1.1.1", intc.appConnectionConfig.ChannelAddress)
 }
 
 func TestStandaloneWasmStrictSandbox(t *testing.T) {
 	global, err := config.LoadStandaloneConfiguration("../config/testdata/wasm_strict_sandbox.yaml")
 
-	assert.Nil(t, err)
+	require.NoError(t, err)
 	assert.True(t, global.Spec.WasmSpec.StrictSandbox)
 }
 

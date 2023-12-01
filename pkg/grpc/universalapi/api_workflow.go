@@ -29,7 +29,7 @@ import (
 
 // GetWorkflowBeta1 is the API handler for getting workflow details
 func (a *UniversalAPI) GetWorkflowBeta1(ctx context.Context, in *runtimev1pb.GetWorkflowRequest) (*runtimev1pb.GetWorkflowResponse, error) {
-	if err := a.validateInstanceID(in.InstanceId, false /* isCreate */); err != nil {
+	if err := a.validateInstanceID(in.GetInstanceId(), false /* isCreate */); err != nil {
 		a.Logger.Debug(err)
 		return &runtimev1pb.GetWorkflowResponse{}, err
 	}
@@ -37,21 +37,21 @@ func (a *UniversalAPI) GetWorkflowBeta1(ctx context.Context, in *runtimev1pb.Get
 	// Workflow requires actors to be ready
 	a.WaitForActorsReady(ctx)
 
-	workflowComponent, err := a.getWorkflowComponent(in.WorkflowComponent)
+	workflowComponent, err := a.getWorkflowComponent(in.GetWorkflowComponent())
 	if err != nil {
 		a.Logger.Debug(err)
 		return &runtimev1pb.GetWorkflowResponse{}, err
 	}
 
 	req := workflows.GetRequest{
-		InstanceID: in.InstanceId,
+		InstanceID: in.GetInstanceId(),
 	}
 	response, err := workflowComponent.Get(ctx, &req)
 	if err != nil {
 		if errors.Is(err, api.ErrInstanceNotFound) {
-			err = messages.ErrWorkflowInstanceNotFound.WithFormat(in.InstanceId, err)
+			err = messages.ErrWorkflowInstanceNotFound.WithFormat(in.GetInstanceId(), err)
 		} else {
-			err = messages.ErrWorkflowGetResponse.WithFormat(in.InstanceId, err)
+			err = messages.ErrWorkflowGetResponse.WithFormat(in.GetInstanceId(), err)
 		}
 		a.Logger.Debug(err)
 		return &runtimev1pb.GetWorkflowResponse{}, err
@@ -70,12 +70,12 @@ func (a *UniversalAPI) GetWorkflowBeta1(ctx context.Context, in *runtimev1pb.Get
 
 // StartWorkflowBeta1 is the API handler for starting a workflow
 func (a *UniversalAPI) StartWorkflowBeta1(ctx context.Context, in *runtimev1pb.StartWorkflowRequest) (*runtimev1pb.StartWorkflowResponse, error) {
-	if err := a.validateInstanceID(in.InstanceId, true /* isCreate */); err != nil {
+	if err := a.validateInstanceID(in.GetInstanceId(), true /* isCreate */); err != nil {
 		a.Logger.Debug(err)
 		return &runtimev1pb.StartWorkflowResponse{}, err
 	}
 
-	if in.WorkflowName == "" {
+	if in.GetWorkflowName() == "" {
 		err := messages.ErrWorkflowNameMissing
 		a.Logger.Debug(err)
 		return &runtimev1pb.StartWorkflowResponse{}, err
@@ -84,22 +84,22 @@ func (a *UniversalAPI) StartWorkflowBeta1(ctx context.Context, in *runtimev1pb.S
 	// Workflow requires actors to be ready
 	a.WaitForActorsReady(ctx)
 
-	workflowComponent, err := a.getWorkflowComponent(in.WorkflowComponent)
+	workflowComponent, err := a.getWorkflowComponent(in.GetWorkflowComponent())
 	if err != nil {
 		a.Logger.Debug(err)
 		return &runtimev1pb.StartWorkflowResponse{}, err
 	}
 
 	req := workflows.StartRequest{
-		InstanceID:    in.InstanceId,
-		Options:       in.Options,
-		WorkflowName:  in.WorkflowName,
-		WorkflowInput: in.Input,
+		InstanceID:    in.GetInstanceId(),
+		Options:       in.GetOptions(),
+		WorkflowName:  in.GetWorkflowName(),
+		WorkflowInput: in.GetInput(),
 	}
 
 	resp, err := workflowComponent.Start(ctx, &req)
 	if err != nil {
-		err := messages.ErrStartWorkflow.WithFormat(in.WorkflowName, err)
+		err := messages.ErrStartWorkflow.WithFormat(in.GetWorkflowName(), err)
 		a.Logger.Debug(err)
 		return &runtimev1pb.StartWorkflowResponse{}, err
 	}
@@ -112,7 +112,7 @@ func (a *UniversalAPI) StartWorkflowBeta1(ctx context.Context, in *runtimev1pb.S
 // TerminateWorkflowBeta1 is the API handler for terminating a workflow
 func (a *UniversalAPI) TerminateWorkflowBeta1(ctx context.Context, in *runtimev1pb.TerminateWorkflowRequest) (*emptypb.Empty, error) {
 	emptyResponse := &emptypb.Empty{}
-	if err := a.validateInstanceID(in.InstanceId, false /* isCreate */); err != nil {
+	if err := a.validateInstanceID(in.GetInstanceId(), false /* isCreate */); err != nil {
 		a.Logger.Debug(err)
 		return emptyResponse, err
 	}
@@ -120,20 +120,20 @@ func (a *UniversalAPI) TerminateWorkflowBeta1(ctx context.Context, in *runtimev1
 	// Workflow requires actors to be ready
 	a.WaitForActorsReady(ctx)
 
-	workflowComponent, err := a.getWorkflowComponent(in.WorkflowComponent)
+	workflowComponent, err := a.getWorkflowComponent(in.GetWorkflowComponent())
 	if err != nil {
 		a.Logger.Debug(err)
 		return emptyResponse, err
 	}
 
 	req := &workflows.TerminateRequest{
-		InstanceID: in.InstanceId,
+		InstanceID: in.GetInstanceId(),
 	}
 	if err := workflowComponent.Terminate(ctx, req); err != nil {
 		if errors.Is(err, api.ErrInstanceNotFound) {
-			err = messages.ErrWorkflowInstanceNotFound.WithFormat(in.InstanceId, err)
+			err = messages.ErrWorkflowInstanceNotFound.WithFormat(in.GetInstanceId(), err)
 		} else {
-			err = messages.ErrTerminateWorkflow.WithFormat(in.InstanceId, err)
+			err = messages.ErrTerminateWorkflow.WithFormat(in.GetInstanceId(), err)
 		}
 		a.Logger.Debug(err)
 		return emptyResponse, err
@@ -144,12 +144,12 @@ func (a *UniversalAPI) TerminateWorkflowBeta1(ctx context.Context, in *runtimev1
 // RaiseEventWorkflowBeta1 is the API handler for raising an event to a workflow
 func (a *UniversalAPI) RaiseEventWorkflowBeta1(ctx context.Context, in *runtimev1pb.RaiseEventWorkflowRequest) (*emptypb.Empty, error) {
 	emptyResponse := &emptypb.Empty{}
-	if err := a.validateInstanceID(in.InstanceId, false /* isCreate */); err != nil {
+	if err := a.validateInstanceID(in.GetInstanceId(), false /* isCreate */); err != nil {
 		a.Logger.Debug(err)
 		return emptyResponse, err
 	}
 
-	if in.EventName == "" {
+	if in.GetEventName() == "" {
 		err := messages.ErrMissingWorkflowEventName
 		a.Logger.Debug(err)
 		return emptyResponse, err
@@ -158,21 +158,21 @@ func (a *UniversalAPI) RaiseEventWorkflowBeta1(ctx context.Context, in *runtimev
 	// Workflow requires actors to be ready
 	a.WaitForActorsReady(ctx)
 
-	workflowComponent, err := a.getWorkflowComponent(in.WorkflowComponent)
+	workflowComponent, err := a.getWorkflowComponent(in.GetWorkflowComponent())
 	if err != nil {
 		a.Logger.Debug(err)
 		return emptyResponse, err
 	}
 
 	req := workflows.RaiseEventRequest{
-		InstanceID: in.InstanceId,
-		EventName:  in.EventName,
-		EventData:  in.EventData,
+		InstanceID: in.GetInstanceId(),
+		EventName:  in.GetEventName(),
+		EventData:  in.GetEventData(),
 	}
 
 	err = workflowComponent.RaiseEvent(ctx, &req)
 	if err != nil {
-		err = messages.ErrRaiseEventWorkflow.WithFormat(in.InstanceId, err)
+		err = messages.ErrRaiseEventWorkflow.WithFormat(in.GetInstanceId(), err)
 		a.Logger.Debug(err)
 		return emptyResponse, err
 	}
@@ -182,7 +182,7 @@ func (a *UniversalAPI) RaiseEventWorkflowBeta1(ctx context.Context, in *runtimev
 // PauseWorkflowBeta1 is the API handler for pausing a workflow
 func (a *UniversalAPI) PauseWorkflowBeta1(ctx context.Context, in *runtimev1pb.PauseWorkflowRequest) (*emptypb.Empty, error) {
 	emptyResponse := &emptypb.Empty{}
-	if err := a.validateInstanceID(in.InstanceId, false /* isCreate */); err != nil {
+	if err := a.validateInstanceID(in.GetInstanceId(), false /* isCreate */); err != nil {
 		a.Logger.Debug(err)
 		return emptyResponse, err
 	}
@@ -190,17 +190,17 @@ func (a *UniversalAPI) PauseWorkflowBeta1(ctx context.Context, in *runtimev1pb.P
 	// Workflow requires actors to be ready
 	a.WaitForActorsReady(ctx)
 
-	workflowComponent, err := a.getWorkflowComponent(in.WorkflowComponent)
+	workflowComponent, err := a.getWorkflowComponent(in.GetWorkflowComponent())
 	if err != nil {
 		a.Logger.Debug(err)
 		return emptyResponse, err
 	}
 
 	req := &workflows.PauseRequest{
-		InstanceID: in.InstanceId,
+		InstanceID: in.GetInstanceId(),
 	}
 	if err := workflowComponent.Pause(ctx, req); err != nil {
-		err = messages.ErrPauseWorkflow.WithFormat(in.InstanceId, err)
+		err = messages.ErrPauseWorkflow.WithFormat(in.GetInstanceId(), err)
 		a.Logger.Debug(err)
 		return emptyResponse, err
 	}
@@ -210,7 +210,7 @@ func (a *UniversalAPI) PauseWorkflowBeta1(ctx context.Context, in *runtimev1pb.P
 // ResumeWorkflowBeta1 is the API handler for resuming a workflow
 func (a *UniversalAPI) ResumeWorkflowBeta1(ctx context.Context, in *runtimev1pb.ResumeWorkflowRequest) (*emptypb.Empty, error) {
 	emptyResponse := &emptypb.Empty{}
-	if err := a.validateInstanceID(in.InstanceId, false /* isCreate */); err != nil {
+	if err := a.validateInstanceID(in.GetInstanceId(), false /* isCreate */); err != nil {
 		a.Logger.Debug(err)
 		return emptyResponse, err
 	}
@@ -218,17 +218,17 @@ func (a *UniversalAPI) ResumeWorkflowBeta1(ctx context.Context, in *runtimev1pb.
 	// Workflow requires actors to be ready
 	a.WaitForActorsReady(ctx)
 
-	workflowComponent, err := a.getWorkflowComponent(in.WorkflowComponent)
+	workflowComponent, err := a.getWorkflowComponent(in.GetWorkflowComponent())
 	if err != nil {
 		a.Logger.Debug(err)
 		return emptyResponse, err
 	}
 
 	req := &workflows.ResumeRequest{
-		InstanceID: in.InstanceId,
+		InstanceID: in.GetInstanceId(),
 	}
 	if err := workflowComponent.Resume(ctx, req); err != nil {
-		err = messages.ErrResumeWorkflow.WithFormat(in.InstanceId, err)
+		err = messages.ErrResumeWorkflow.WithFormat(in.GetInstanceId(), err)
 		a.Logger.Debug(err)
 		return emptyResponse, err
 	}
@@ -238,7 +238,7 @@ func (a *UniversalAPI) ResumeWorkflowBeta1(ctx context.Context, in *runtimev1pb.
 // PurgeWorkflowBeta1 is the API handler for purging a workflow
 func (a *UniversalAPI) PurgeWorkflowBeta1(ctx context.Context, in *runtimev1pb.PurgeWorkflowRequest) (*emptypb.Empty, error) {
 	emptyResponse := &emptypb.Empty{}
-	if err := a.validateInstanceID(in.InstanceId, false /* isCreate */); err != nil {
+	if err := a.validateInstanceID(in.GetInstanceId(), false /* isCreate */); err != nil {
 		a.Logger.Debug(err)
 		return emptyResponse, err
 	}
@@ -246,22 +246,22 @@ func (a *UniversalAPI) PurgeWorkflowBeta1(ctx context.Context, in *runtimev1pb.P
 	// Workflow requires actors to be ready
 	a.WaitForActorsReady(ctx)
 
-	workflowComponent, err := a.getWorkflowComponent(in.WorkflowComponent)
+	workflowComponent, err := a.getWorkflowComponent(in.GetWorkflowComponent())
 	if err != nil {
 		a.Logger.Debug(err)
 		return emptyResponse, err
 	}
 
 	req := workflows.PurgeRequest{
-		InstanceID: in.InstanceId,
+		InstanceID: in.GetInstanceId(),
 	}
 
 	err = workflowComponent.Purge(ctx, &req)
 	if err != nil {
 		if errors.Is(err, api.ErrInstanceNotFound) {
-			err = messages.ErrWorkflowInstanceNotFound.WithFormat(in.InstanceId, err)
+			err = messages.ErrWorkflowInstanceNotFound.WithFormat(in.GetInstanceId(), err)
 		} else {
-			err = messages.ErrPurgeWorkflow.WithFormat(in.InstanceId, err)
+			err = messages.ErrPurgeWorkflow.WithFormat(in.GetInstanceId(), err)
 		}
 		a.Logger.Debug(err)
 		return emptyResponse, err

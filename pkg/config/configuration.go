@@ -101,21 +101,21 @@ type AccessControlListOperationAction struct {
 }
 
 type ConfigurationSpec struct {
-	HTTPPipelineSpec    *PipelineSpec       `json:"httpPipeline,omitempty" yaml:"httpPipeline,omitempty"`
+	HTTPPipelineSpec    *PipelineSpec       `json:"httpPipeline,omitempty"    yaml:"httpPipeline,omitempty"`
 	AppHTTPPipelineSpec *PipelineSpec       `json:"appHttpPipeline,omitempty" yaml:"appHttpPipeline,omitempty"`
-	TracingSpec         *TracingSpec        `json:"tracing,omitempty" yaml:"tracing,omitempty"`
-	MTLSSpec            *MTLSSpec           `json:"mtls,omitempty" yaml:"mtls,omitempty"`
-	MetricSpec          *MetricSpec         `json:"metric,omitempty" yaml:"metric,omitempty"`
-	MetricsSpec         *MetricSpec         `json:"metrics,omitempty" yaml:"metrics,omitempty"`
-	Secrets             *SecretsSpec        `json:"secrets,omitempty" yaml:"secrets,omitempty"`
-	AccessControlSpec   *AccessControlSpec  `json:"accessControl,omitempty" yaml:"accessControl,omitempty"`
-	NameResolutionSpec  *NameResolutionSpec `json:"nameResolution,omitempty" yaml:"nameResolution,omitempty"`
-	Features            []FeatureSpec       `json:"features,omitempty" yaml:"features,omitempty"`
-	APISpec             *APISpec            `json:"api,omitempty" yaml:"api,omitempty"`
-	ComponentsSpec      *ComponentsSpec     `json:"components,omitempty" yaml:"components,omitempty"`
-	LoggingSpec         *LoggingSpec        `json:"logging,omitempty" yaml:"logging,omitempty"`
-	WasmSpec            *WasmSpec           `json:"wasm,omitempty" yaml:"wasm,omitempty"`
-	WorkflowSpec        *WorkflowSpec       `json:"workflow,omitempty" yaml:"workflow,omitempty"`
+	TracingSpec         *TracingSpec        `json:"tracing,omitempty"         yaml:"tracing,omitempty"`
+	MTLSSpec            *MTLSSpec           `json:"mtls,omitempty"            yaml:"mtls,omitempty"`
+	MetricSpec          *MetricSpec         `json:"metric,omitempty"          yaml:"metric,omitempty"`
+	MetricsSpec         *MetricSpec         `json:"metrics,omitempty"         yaml:"metrics,omitempty"`
+	Secrets             *SecretsSpec        `json:"secrets,omitempty"         yaml:"secrets,omitempty"`
+	AccessControlSpec   *AccessControlSpec  `json:"accessControl,omitempty"   yaml:"accessControl,omitempty"`
+	NameResolutionSpec  *NameResolutionSpec `json:"nameResolution,omitempty"  yaml:"nameResolution,omitempty"`
+	Features            []FeatureSpec       `json:"features,omitempty"        yaml:"features,omitempty"`
+	APISpec             *APISpec            `json:"api,omitempty"             yaml:"api,omitempty"`
+	ComponentsSpec      *ComponentsSpec     `json:"components,omitempty"      yaml:"components,omitempty"`
+	LoggingSpec         *LoggingSpec        `json:"logging,omitempty"         yaml:"logging,omitempty"`
+	WasmSpec            *WasmSpec           `json:"wasm,omitempty"            yaml:"wasm,omitempty"`
+	WorkflowSpec        *WorkflowSpec       `json:"workflow,omitempty"        yaml:"workflow,omitempty"`
 }
 
 // WorkflowSpec defines the configuration for Dapr workflows.
@@ -150,10 +150,10 @@ type SecretsSpec struct {
 
 // SecretsScope defines the scope for secrets.
 type SecretsScope struct {
-	DefaultAccess  string   `json:"defaultAccess,omitempty" yaml:"defaultAccess,omitempty"`
-	StoreName      string   `json:"storeName,omitempty" yaml:"storeName,omitempty"`
+	DefaultAccess  string   `json:"defaultAccess,omitempty"  yaml:"defaultAccess,omitempty"`
+	StoreName      string   `json:"storeName,omitempty"      yaml:"storeName,omitempty"`
 	AllowedSecrets []string `json:"allowedSecrets,omitempty" yaml:"allowedSecrets,omitempty"`
-	DeniedSecrets  []string `json:"deniedSecrets,omitempty" yaml:"deniedSecrets,omitempty"`
+	DeniedSecrets  []string `json:"deniedSecrets,omitempty"  yaml:"deniedSecrets,omitempty"`
 }
 
 type PipelineSpec struct {
@@ -201,9 +201,9 @@ func (r APIAccessRules) GetRulesByProtocol(protocol APIAccessRuleProtocol) map[s
 }
 
 type HandlerSpec struct {
-	Name         string       `json:"name,omitempty" yaml:"name,omitempty"`
-	Type         string       `json:"type,omitempty" yaml:"type,omitempty"`
-	Version      string       `json:"version,omitempty" yaml:"version,omitempty"`
+	Name         string       `json:"name,omitempty"     yaml:"name,omitempty"`
+	Type         string       `json:"type,omitempty"     yaml:"type,omitempty"`
+	Version      string       `json:"version,omitempty"  yaml:"version,omitempty"`
 	SelectorSpec SelectorSpec `json:"selector,omitempty" yaml:"selector,omitempty"`
 }
 
@@ -223,9 +223,9 @@ type SelectorField struct {
 
 type TracingSpec struct {
 	SamplingRate string      `json:"samplingRate,omitempty" yaml:"samplingRate,omitempty"`
-	Stdout       bool        `json:"stdout,omitempty" yaml:"stdout,omitempty"`
-	Zipkin       *ZipkinSpec `json:"zipkin,omitempty" yaml:"zipkin,omitempty"`
-	Otel         *OtelSpec   `json:"otel,omitempty" yaml:"otel,omitempty"`
+	Stdout       bool        `json:"stdout,omitempty"       yaml:"stdout,omitempty"`
+	Zipkin       *ZipkinSpec `json:"zipkin,omitempty"       yaml:"zipkin,omitempty"`
+	Otel         *OtelSpec   `json:"otel,omitempty"         yaml:"otel,omitempty"`
 }
 
 // ZipkinSpec defines Zipkin exporter configurations.
@@ -235,7 +235,7 @@ type ZipkinSpec struct {
 
 // OtelSpec defines Otel exporter configurations.
 type OtelSpec struct {
-	Protocol        string `json:"protocol,omitempty" yaml:"protocol,omitempty"`
+	Protocol        string `json:"protocol,omitempty"        yaml:"protocol,omitempty"`
 	EndpointAddress string `json:"endpointAddress,omitempty" yaml:"endpointAddress,omitempty"`
 	// Defaults to true
 	IsSecure *bool `json:"isSecure,omitempty" yaml:"isSecure,omitempty"`
@@ -251,7 +251,7 @@ func (o OtelSpec) GetIsSecure() bool {
 type MetricSpec struct {
 	// Defaults to true
 	Enabled *bool         `json:"enabled,omitempty" yaml:"enabled,omitempty"`
-	Rules   []MetricsRule `json:"rules,omitempty" yaml:"rules,omitempty"`
+	Rules   []MetricsRule `json:"rules,omitempty"   yaml:"rules,omitempty"`
 }
 
 // GetEnabled returns true if metrics are enabled.
@@ -260,53 +260,53 @@ func (m MetricSpec) GetEnabled() bool {
 	return m.Enabled == nil || *m.Enabled
 }
 
-// MetricsRule defines configuration options for a metric.
+// MetricsRu le defines configuration options for a metric.
 type MetricsRule struct {
-	Name   string        `json:"name,omitempty" yaml:"name,omitempty"`
+	Name   string        `json:"name,omitempty"   yaml:"name,omitempty"`
 	Labels []MetricLabel `json:"labels,omitempty" yaml:"labels,omitempty"`
 }
 
 // MetricsLabel defines an object that allows to set regex expressions for a label.
 type MetricLabel struct {
-	Name  string            `json:"name,omitempty" yaml:"name,omitempty"`
+	Name  string            `json:"name,omitempty"  yaml:"name,omitempty"`
 	Regex map[string]string `json:"regex,omitempty" yaml:"regex,omitempty"`
 }
 
 // AppPolicySpec defines the policy data structure for each app.
 type AppPolicySpec struct {
-	AppName             string         `json:"appId,omitempty" yaml:"appId,omitempty"`
+	AppName             string         `json:"appId,omitempty"         yaml:"appId,omitempty"`
 	DefaultAction       string         `json:"defaultAction,omitempty" yaml:"defaultAction,omitempty"`
-	TrustDomain         string         `json:"trustDomain,omitempty" yaml:"trustDomain,omitempty"`
-	Namespace           string         `json:"namespace,omitempty" yaml:"namespace,omitempty"`
-	AppOperationActions []AppOperation `json:"operations,omitempty" yaml:"operations,omitempty"`
+	TrustDomain         string         `json:"trustDomain,omitempty"   yaml:"trustDomain,omitempty"`
+	Namespace           string         `json:"namespace,omitempty"     yaml:"namespace,omitempty"`
+	AppOperationActions []AppOperation `json:"operations,omitempty"    yaml:"operations,omitempty"`
 }
 
 // AppOperation defines the data structure for each app operation.
 type AppOperation struct {
-	Operation string   `json:"name,omitempty" yaml:"name,omitempty"`
+	Operation string   `json:"name,omitempty"     yaml:"name,omitempty"`
 	HTTPVerb  []string `json:"httpVerb,omitempty" yaml:"httpVerb,omitempty"`
-	Action    string   `json:"action,omitempty" yaml:"action,omitempty"`
+	Action    string   `json:"action,omitempty"   yaml:"action,omitempty"`
 }
 
 // AccessControlSpec is the spec object in ConfigurationSpec.
 type AccessControlSpec struct {
 	DefaultAction string          `json:"defaultAction,omitempty" yaml:"defaultAction,omitempty"`
-	TrustDomain   string          `json:"trustDomain,omitempty" yaml:"trustDomain,omitempty"`
-	AppPolicies   []AppPolicySpec `json:"policies,omitempty" yaml:"policies,omitempty"`
+	TrustDomain   string          `json:"trustDomain,omitempty"   yaml:"trustDomain,omitempty"`
+	AppPolicies   []AppPolicySpec `json:"policies,omitempty"      yaml:"policies,omitempty"`
 }
 
 type NameResolutionSpec struct {
-	Component     string `json:"component,omitempty" yaml:"component,omitempty"`
-	Version       string `json:"version,omitempty" yaml:"version,omitempty"`
+	Component     string `json:"component,omitempty"     yaml:"component,omitempty"`
+	Version       string `json:"version,omitempty"       yaml:"version,omitempty"`
 	Configuration any    `json:"configuration,omitempty" yaml:"configuration,omitempty"`
 }
 
 // MTLSSpec defines mTLS configuration.
 type MTLSSpec struct {
-	Enabled                 bool   `json:"enabled,omitempty" yaml:"enabled,omitempty"`
-	WorkloadCertTTL         string `json:"workloadCertTTL,omitempty" yaml:"workloadCertTTL,omitempty"`
-	AllowedClockSkew        string `json:"allowedClockSkew,omitempty" yaml:"allowedClockSkew,omitempty"`
-	SentryAddress           string `json:"sentryAddress,omitempty" yaml:"sentryAddress,omitempty"`
+	Enabled                 bool   `json:"enabled,omitempty"                 yaml:"enabled,omitempty"`
+	WorkloadCertTTL         string `json:"workloadCertTTL,omitempty"         yaml:"workloadCertTTL,omitempty"`
+	AllowedClockSkew        string `json:"allowedClockSkew,omitempty"        yaml:"allowedClockSkew,omitempty"`
+	SentryAddress           string `json:"sentryAddress,omitempty"           yaml:"sentryAddress,omitempty"`
 	ControlPlaneTrustDomain string `json:"controlPlaneTrustDomain,omitempty" yaml:"controlPlaneTrustDomain,omitempty"`
 	// Additional token validators to use.
 	// When Dapr is running in Kubernetes mode, this is in addition to the built-in "kubernetes" validator.
@@ -334,7 +334,7 @@ func (v ValidatorSpec) OptionsMap() map[string]string {
 
 // FeatureSpec defines which preview features are enabled.
 type FeatureSpec struct {
-	Name    Feature `json:"name" yaml:"name"`
+	Name    Feature `json:"name"    yaml:"name"`
 	Enabled bool    `json:"enabled" yaml:"enabled"`
 }
 

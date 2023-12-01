@@ -227,7 +227,7 @@ func TestComponentCalls(t *testing.T) {
 		assert.Empty(t, stStore.Features())
 		stStore.features = []state.Feature{state.FeatureETag}
 		assert.NotEmpty(t, stStore.Features())
-		assert.Equal(t, stStore.Features()[0], state.FeatureETag)
+		assert.Equal(t, state.FeatureETag, stStore.Features()[0])
 	})
 
 	t.Run("delete should call delete grpc method", func(t *testing.T) {
@@ -235,7 +235,7 @@ func TestComponentCalls(t *testing.T) {
 
 		svc := &server{
 			onDeleteCalled: func(req *proto.DeleteRequest) {
-				assert.Equal(t, req.Key, fakeKey)
+				assert.Equal(t, fakeKey, req.GetKey())
 			},
 		}
 		stStore, cleanup, err := getStateStore(svc)
@@ -255,7 +255,7 @@ func TestComponentCalls(t *testing.T) {
 
 		svc := &server{
 			onDeleteCalled: func(req *proto.DeleteRequest) {
-				assert.Equal(t, req.Key, fakeKey)
+				assert.Equal(t, fakeKey, req.GetKey())
 			},
 			deleteErr: fakeErr,
 		}
@@ -266,7 +266,7 @@ func TestComponentCalls(t *testing.T) {
 			Key: fakeKey,
 		})
 
-		assert.NotNil(t, err)
+		require.Error(t, err)
 		assert.Equal(t, int64(1), svc.deleteCalled.Load())
 	})
 
@@ -279,13 +279,13 @@ func TestComponentCalls(t *testing.T) {
 			Description: desc,
 		}
 		br := &errdetails.BadRequest{}
-		br.FieldViolations = append(br.FieldViolations, v)
+		br.FieldViolations = append(br.GetFieldViolations(), v)
 		st, err := st.WithDetails(br)
 		require.NoError(t, err)
 
 		svc := &server{
 			onDeleteCalled: func(req *proto.DeleteRequest) {
-				assert.Equal(t, req.Key, fakeKey)
+				assert.Equal(t, fakeKey, req.GetKey())
 			},
 			deleteErr: st.Err(),
 		}
@@ -296,10 +296,10 @@ func TestComponentCalls(t *testing.T) {
 			Key: fakeKey,
 		})
 
-		assert.NotNil(t, err)
+		require.Error(t, err)
 		etag, ok := err.(*state.ETagError)
 		require.True(t, ok)
-		assert.Equal(t, etag.Kind(), state.ETagMismatch)
+		assert.Equal(t, state.ETagMismatch, etag.Kind())
 		assert.Equal(t, int64(1), svc.deleteCalled.Load())
 	})
 
@@ -312,13 +312,13 @@ func TestComponentCalls(t *testing.T) {
 			Description: desc,
 		}
 		br := &errdetails.BadRequest{}
-		br.FieldViolations = append(br.FieldViolations, v)
+		br.FieldViolations = append(br.GetFieldViolations(), v)
 		st, err := st.WithDetails(br)
 		require.NoError(t, err)
 
 		svc := &server{
 			onDeleteCalled: func(req *proto.DeleteRequest) {
-				assert.Equal(t, req.Key, fakeKey)
+				assert.Equal(t, fakeKey, req.GetKey())
 			},
 			deleteErr: st.Err(),
 		}
@@ -329,10 +329,10 @@ func TestComponentCalls(t *testing.T) {
 			Key: fakeKey,
 		})
 
-		assert.NotNil(t, err)
+		require.Error(t, err)
 		etag, ok := err.(*state.ETagError)
 		require.True(t, ok)
-		assert.Equal(t, etag.Kind(), state.ETagInvalid)
+		assert.Equal(t, state.ETagInvalid, etag.Kind())
 		assert.Equal(t, int64(1), svc.deleteCalled.Load())
 	})
 
@@ -341,7 +341,7 @@ func TestComponentCalls(t *testing.T) {
 
 		svc := &server{
 			onGetCalled: func(req *proto.GetRequest) {
-				assert.Equal(t, req.Key, fakeKey)
+				assert.Equal(t, fakeKey, req.GetKey())
 			},
 			getErr: errors.New("my-fake-err"),
 		}
@@ -353,7 +353,7 @@ func TestComponentCalls(t *testing.T) {
 			Key: fakeKey,
 		})
 
-		assert.NotNil(t, err)
+		require.Error(t, err)
 		assert.Equal(t, int64(1), svc.getCalled.Load())
 		assert.Nil(t, resp)
 	})
@@ -363,7 +363,7 @@ func TestComponentCalls(t *testing.T) {
 
 		svc := &server{
 			onGetCalled: func(req *proto.GetRequest) {
-				assert.Equal(t, req.Key, fakeKey)
+				assert.Equal(t, fakeKey, req.GetKey())
 			},
 		}
 		stStore, cleanup, err := getStateStore(svc)
@@ -374,7 +374,7 @@ func TestComponentCalls(t *testing.T) {
 			Key: fakeKey,
 		})
 
-		assert.NotNil(t, err)
+		require.Error(t, err)
 		assert.Equal(t, int64(1), svc.getCalled.Load())
 		assert.Nil(t, resp)
 	})
@@ -385,7 +385,7 @@ func TestComponentCalls(t *testing.T) {
 
 		svc := &server{
 			onGetCalled: func(req *proto.GetRequest) {
-				assert.Equal(t, req.Key, fakeKey)
+				assert.Equal(t, fakeKey, req.GetKey())
 			},
 			getResponse: &proto.GetResponse{
 				Data: fakeData,
@@ -409,8 +409,8 @@ func TestComponentCalls(t *testing.T) {
 
 		svc := &server{
 			onSetCalled: func(req *proto.SetRequest) {
-				assert.Equal(t, req.Key, fakeKey)
-				assert.Equal(t, req.Value, []byte(wrapString(fakeData)))
+				assert.Equal(t, fakeKey, req.GetKey())
+				assert.Equal(t, []byte(wrapString(fakeData)), req.GetValue())
 			},
 			setErr: errors.New("fake-set-err"),
 		}
@@ -423,7 +423,7 @@ func TestComponentCalls(t *testing.T) {
 			Value: fakeData,
 		})
 
-		assert.NotNil(t, err)
+		require.Error(t, err)
 		assert.Equal(t, int64(1), svc.setCalled.Load())
 	})
 
@@ -432,8 +432,8 @@ func TestComponentCalls(t *testing.T) {
 
 		svc := &server{
 			onSetCalled: func(req *proto.SetRequest) {
-				assert.Equal(t, req.Key, fakeKey)
-				assert.Equal(t, req.Value, []byte(wrapString(fakeData)))
+				assert.Equal(t, fakeKey, req.GetKey())
+				assert.Equal(t, []byte(wrapString(fakeData)), req.GetValue())
 			},
 		}
 		stStore, cleanup, err := getStateStore(svc)
@@ -471,7 +471,7 @@ func TestComponentCalls(t *testing.T) {
 
 		err = stStore.Ping()
 
-		assert.NotNil(t, err)
+		require.Error(t, err)
 		assert.Equal(t, int64(1), svc.pingCalled.Load())
 	})
 
@@ -485,7 +485,7 @@ func TestComponentCalls(t *testing.T) {
 
 		err = stStore.BulkSet(context.Background(), []state.SetRequest{}, state.BulkStoreOpts{})
 
-		assert.NotNil(t, err)
+		require.Error(t, err)
 		assert.Equal(t, int64(1), svc.bulkSetCalled.Load())
 	})
 
@@ -506,7 +506,7 @@ func TestComponentCalls(t *testing.T) {
 
 		err = stStore.BulkSet(context.Background(), requests, state.BulkStoreOpts{})
 
-		assert.ErrorIs(t, ErrNilSetValue, err)
+		require.ErrorIs(t, ErrNilSetValue, err)
 		assert.Equal(t, int64(0), svc.bulkSetCalled.Load())
 	})
 
@@ -524,7 +524,7 @@ func TestComponentCalls(t *testing.T) {
 		}
 		svc := &server{
 			onBulkSetCalled: func(bsr *proto.BulkSetRequest) {
-				assert.Len(t, bsr.Items, len(requests))
+				assert.Len(t, bsr.GetItems(), len(requests))
 			},
 		}
 		stStore, cleanup, err := getStateStore(svc)
@@ -549,7 +549,7 @@ func TestComponentCalls(t *testing.T) {
 		}
 		svc := &server{
 			onBulkDeleteCalled: func(bsr *proto.BulkDeleteRequest) {
-				assert.Len(t, bsr.Items, len(requests))
+				assert.Len(t, bsr.GetItems(), len(requests))
 			},
 		}
 		stStore, cleanup, err := getStateStore(svc)
@@ -571,7 +571,7 @@ func TestComponentCalls(t *testing.T) {
 		svc := &server{
 			bulkDeleteErr: errors.New("fake-bulk-delete-err"),
 			onBulkDeleteCalled: func(bsr *proto.BulkDeleteRequest) {
-				assert.Len(t, bsr.Items, len(requests))
+				assert.Len(t, bsr.GetItems(), len(requests))
 			},
 		}
 		stStore, cleanup, err := getStateStore(svc)
@@ -580,7 +580,7 @@ func TestComponentCalls(t *testing.T) {
 
 		err = stStore.BulkDelete(context.Background(), requests, state.BulkStoreOpts{})
 
-		assert.NotNil(t, err)
+		require.Error(t, err)
 		assert.Equal(t, int64(1), svc.bulkDeleteCalled.Load())
 	})
 
@@ -603,7 +603,7 @@ func TestComponentCalls(t *testing.T) {
 		svc := &server{
 			bulkDeleteErr: st.Err(),
 			onBulkDeleteCalled: func(bsr *proto.BulkDeleteRequest) {
-				assert.Len(t, bsr.Items, len(requests))
+				assert.Len(t, bsr.GetItems(), len(requests))
 			},
 		}
 		stStore, cleanup, err := getStateStore(svc)
@@ -612,7 +612,7 @@ func TestComponentCalls(t *testing.T) {
 
 		err = stStore.BulkDelete(context.Background(), requests, state.BulkStoreOpts{})
 
-		assert.NotNil(t, err)
+		require.Error(t, err)
 		_, ok := err.(*state.BulkDeleteRowMismatchError)
 		require.True(t, ok)
 		assert.Equal(t, int64(1), svc.bulkDeleteCalled.Load())
@@ -633,7 +633,7 @@ func TestComponentCalls(t *testing.T) {
 
 		resp, err := stStore.BulkGet(context.Background(), requests, state.BulkGetOpts{})
 
-		assert.NotNil(t, err)
+		require.Error(t, err)
 		assert.Nil(t, resp)
 		assert.Equal(t, int64(1), svc.bulkGetCalled.Load())
 	})
@@ -654,7 +654,7 @@ func TestComponentCalls(t *testing.T) {
 
 		svc := &server{
 			onBulkGetCalled: func(bsr *proto.BulkGetRequest) {
-				assert.Len(t, bsr.Items, len(requests))
+				assert.Len(t, bsr.GetItems(), len(requests))
 			},
 			bulkGetResponse: &proto.BulkGetResponse{
 				Items: respItems,
@@ -685,7 +685,7 @@ func TestComponentCalls(t *testing.T) {
 			Metadata:   map[string]string{},
 		})
 
-		assert.NotNil(t, err)
+		require.Error(t, err)
 		assert.Equal(t, int64(1), svc.transactCalled.Load())
 	})
 
@@ -703,7 +703,7 @@ func TestComponentCalls(t *testing.T) {
 		}
 		svc := &server{
 			onTransactCalled: func(bsr *proto.TransactionalStateRequest) {
-				assert.Len(t, bsr.Operations, len(operations))
+				assert.Len(t, bsr.GetOperations(), len(operations))
 			},
 		}
 		stStore, cleanup, err := getStateStore(svc)
@@ -731,7 +731,7 @@ func TestComponentCalls(t *testing.T) {
 
 		resp, err := stStore.Query(context.Background(), &state.QueryRequest{})
 
-		assert.NotNil(t, err)
+		require.Error(t, err)
 		assert.Nil(t, resp)
 		assert.Equal(t, int64(1), svc.queryCalled.Load())
 	})
@@ -759,7 +759,7 @@ func TestComponentCalls(t *testing.T) {
 		}
 		svc := &server{
 			onQueryCalled: func(bsr *proto.QueryRequest) {
-				assert.Len(t, bsr.Query.Filter, len(filters))
+				assert.Len(t, bsr.GetQuery().GetFilter(), len(filters))
 			},
 			queryResp: &proto.QueryResponse{
 				Items: results,
@@ -813,9 +813,9 @@ func TestMappers(t *testing.T) {
 				Consistency: state.Eventual,
 			},
 		})
-		assert.Equal(t, getRequest.Key, fakeKey)
-		assert.Equal(t, getRequest.Metadata[fakeKey], fakeKey)
-		assert.Equal(t, getRequest.Consistency, proto.StateOptions_CONSISTENCY_EVENTUAL)
+		assert.Equal(t, fakeKey, getRequest.GetKey())
+		assert.Equal(t, fakeKey, getRequest.GetMetadata()[fakeKey])
+		assert.Equal(t, proto.StateOptions_CONSISTENCY_EVENTUAL, getRequest.GetConsistency())
 	})
 
 	t.Run("fromGetResponse should map all properties from the given response", func(t *testing.T) {
@@ -843,7 +843,7 @@ func TestMappers(t *testing.T) {
 		fakeETag := "this"
 		etagRequest := toETagRequest(&fakeETag)
 		assert.NotNil(t, etagRequest)
-		assert.Equal(t, etagRequest.Value, fakeETag)
+		assert.Equal(t, etagRequest.GetValue(), fakeETag)
 	})
 
 	t.Run("fromETagResponse should return nil when receiving a nil etag response", func(t *testing.T) {
@@ -880,14 +880,14 @@ func TestMappers(t *testing.T) {
 			})
 			require.NoError(t, err)
 			assert.NotNil(t, req)
-			assert.Equal(t, req.Key, fakeKey)
-			assert.NotNil(t, req.Value)
+			assert.Equal(t, fakeKey, req.GetKey())
+			assert.NotNil(t, req.GetValue())
 			if v, ok := fakeValue.(string); ok {
-				assert.Equal(t, string(req.Value), wrapString(v))
+				assert.Equal(t, string(req.GetValue()), wrapString(v))
 			}
-			assert.Equal(t, req.Metadata[fakeKey], fakePropValue)
-			assert.Equal(t, req.Options.Concurrency, proto.StateOptions_CONCURRENCY_LAST_WRITE)
-			assert.Equal(t, req.Options.Consistency, proto.StateOptions_CONSISTENCY_EVENTUAL)
+			assert.Equal(t, fakePropValue, req.GetMetadata()[fakeKey])
+			assert.Equal(t, proto.StateOptions_CONCURRENCY_LAST_WRITE, req.GetOptions().GetConcurrency())
+			assert.Equal(t, proto.StateOptions_CONSISTENCY_EVENTUAL, req.GetOptions().GetConsistency())
 		}
 	})
 
@@ -909,17 +909,17 @@ func TestMappers(t *testing.T) {
 			})
 			require.NoError(t, err)
 			assert.NotNil(t, req)
-			assert.Equal(t, req.Key, fakeKey)
-			assert.NotNil(t, req.Value)
-			assert.Equal(t, req.Metadata[fakeKey], fakePropValue)
-			assert.Equal(t, req.Options.Concurrency, proto.StateOptions_CONCURRENCY_LAST_WRITE)
-			assert.Equal(t, req.Options.Consistency, proto.StateOptions_CONSISTENCY_EVENTUAL)
+			assert.Equal(t, fakeKey, req.GetKey())
+			assert.NotNil(t, req.GetValue())
+			assert.Equal(t, fakePropValue, req.GetMetadata()[fakeKey])
+			assert.Equal(t, proto.StateOptions_CONCURRENCY_LAST_WRITE, req.GetOptions().GetConcurrency())
+			assert.Equal(t, proto.StateOptions_CONSISTENCY_EVENTUAL, req.GetOptions().GetConsistency())
 		}
 
 		t.Run("toTransact should return err when type is unrecognized", func(t *testing.T) {
 			req, err := toTransactOperation(failingTransactOperation{})
 			assert.Nil(t, req)
-			assert.ErrorIs(t, err, ErrTransactOperationNotSupported)
+			require.ErrorIs(t, err, ErrTransactOperationNotSupported)
 		})
 
 		t.Run("toTransact should return set operation when type is SetOperation", func(t *testing.T) {
@@ -930,7 +930,7 @@ func TestMappers(t *testing.T) {
 			})
 			require.NoError(t, err)
 			assert.NotNil(t, req)
-			assert.IsType(t, &proto.TransactionalStateOperation_Set{}, req.Request)
+			assert.IsType(t, &proto.TransactionalStateOperation_Set{}, req.GetRequest())
 		})
 
 		t.Run("toTransact should return delete operation when type is SetOperation", func(t *testing.T) {
@@ -939,7 +939,7 @@ func TestMappers(t *testing.T) {
 			})
 			require.NoError(t, err)
 			assert.NotNil(t, req)
-			assert.IsType(t, &proto.TransactionalStateOperation_Delete{}, req.Request)
+			assert.IsType(t, &proto.TransactionalStateOperation_Delete{}, req.GetRequest())
 		})
 	})
 }

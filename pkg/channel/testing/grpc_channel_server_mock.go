@@ -54,22 +54,22 @@ func (m *MockServer) Init() {
 func (m *MockServer) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*commonv1pb.InvokeResponse, error) {
 	md, _ := metadata.FromIncomingContext(ctx)
 	dt := map[string]string{
-		"method": in.Method,
+		"method": in.GetMethod(),
 	}
 
 	for k, v := range md {
 		dt[k] = v[0]
 	}
 
-	dt["httpverb"] = in.HttpExtension.GetVerb().String()
-	dt["querystring"] = in.HttpExtension.Querystring
+	dt["httpverb"] = in.GetHttpExtension().GetVerb().String()
+	dt["querystring"] = in.GetHttpExtension().GetQuerystring()
 
 	ds, _ := json.Marshal(dt)
 	return &commonv1pb.InvokeResponse{Data: &anypb.Any{Value: ds}, ContentType: "application/json"}, m.Error
 }
 
 func (m *MockServer) ListTopicSubscriptions(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.ListTopicSubscriptionsResponse, error) {
-	if m.ListTopicSubscriptionsResponse.Subscriptions != nil {
+	if m.ListTopicSubscriptionsResponse.GetSubscriptions() != nil {
 		return m.ListTopicSubscriptionsResponse, m.Error
 	}
 	return &runtimev1pb.ListTopicSubscriptionsResponse{
@@ -88,7 +88,7 @@ func (m *MockServer) OnBindingEvent(ctx context.Context, in *runtimev1pb.Binding
 }
 
 func (m *MockServer) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventRequest) (*runtimev1pb.TopicEventResponse, error) {
-	jsonBytes, marshalErr := in.Extensions.MarshalJSON()
+	jsonBytes, marshalErr := in.GetExtensions().MarshalJSON()
 	if marshalErr != nil {
 		return nil, marshalErr
 	}
@@ -117,9 +117,9 @@ func (m *MockServer) OnBulkTopicEventAlpha1(ctx context.Context, in *runtimev1pb
 	if !m.initialized {
 		m.Init()
 	}
-	m.RequestsReceived[in.Path] = in
+	m.RequestsReceived[in.GetPath()] = in
 	if m.BulkResponsePerPath != nil {
-		return m.BulkResponsePerPath[in.Path], m.Error
+		return m.BulkResponsePerPath[in.GetPath()], m.Error
 	}
 	return nil, m.Error
 }

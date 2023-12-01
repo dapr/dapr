@@ -34,7 +34,7 @@ func TestHTTPMiddleware(t *testing.T) {
 	// assert
 	rows, err := view.RetrieveData("http/server/request_count")
 	require.NoError(t, err)
-	assert.Equal(t, 1, len(rows))
+	assert.Len(t, rows, 1)
 	assert.Equal(t, "app_id", rows[0].Tags[0].Key.Name())
 	assert.Equal(t, "fakeID", rows[0].Tags[0].Value)
 	assert.Equal(t, "status", rows[0].Tags[1].Key.Name())
@@ -42,20 +42,20 @@ func TestHTTPMiddleware(t *testing.T) {
 
 	rows, err = view.RetrieveData("http/server/request_bytes")
 	require.NoError(t, err)
-	assert.Equal(t, 1, len(rows))
+	assert.Len(t, rows, 1)
 	assert.Equal(t, "app_id", rows[0].Tags[0].Key.Name())
 	assert.Equal(t, "fakeID", rows[0].Tags[0].Value)
-	assert.Equal(t, float64(len(requestBody)), (rows[0].Data).(*view.DistributionData).Min)
+	assert.InEpsilon(t, float64(len(requestBody)), (rows[0].Data).(*view.DistributionData).Min, 0)
 
 	rows, err = view.RetrieveData("http/server/response_bytes")
 	require.NoError(t, err)
-	assert.Equal(t, 1, len(rows))
-	assert.Equal(t, float64(len(responseBody)), (rows[0].Data).(*view.DistributionData).Min)
+	assert.Len(t, rows, 1)
+	assert.InEpsilon(t, float64(len(responseBody)), (rows[0].Data).(*view.DistributionData).Min, 0)
 
 	rows, err = view.RetrieveData("http/server/latency")
 	require.NoError(t, err)
-	assert.Equal(t, 1, len(rows))
-	assert.True(t, (rows[0].Data).(*view.DistributionData).Min >= 100.0)
+	assert.Len(t, rows, 1)
+	assert.GreaterOrEqual(t, (rows[0].Data).(*view.DistributionData).Min, 100.0)
 }
 
 func TestHTTPMiddlewareWhenMetricsDisabled(t *testing.T) {
@@ -83,7 +83,7 @@ func TestHTTPMiddlewareWhenMetricsDisabled(t *testing.T) {
 
 	// assert
 	rows, err := view.RetrieveData("http/server/request_count")
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Nil(t, rows)
 }
 
