@@ -154,7 +154,7 @@ func initializeSets() {
 // The payload carries a Method to identify the method, a set of metadata properties and an optional payload.
 func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*commonv1pb.InvokeResponse, error) {
 	reqID := "s-" + uuid.New().String()
-	if in.GetHttpExtension() != nil && in.GetHttpExtension().GetQuerystring() != "" {
+	if len(in.GetHttpExtension().GetQuerystring()) > 0 {
 		qs, err := url.ParseQuery(in.GetHttpExtension().GetQuerystring())
 		if err == nil && qs.Has("reqid") {
 			reqID = qs.Get("reqid")

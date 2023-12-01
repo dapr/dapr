@@ -166,19 +166,15 @@ func (m *mockGRPCAPI) CallLocalStream(stream internalv1pb.ServiceInvocation_Call
 		WithContentType("text/plain")
 	defer resp.Close()
 
-	var data []byte
 	pd, err := resp.ProtoWithData()
 	if err != nil {
 		return err
-	}
-	if pd.GetMessage() != nil && pd.GetMessage().GetData() != nil {
-		data = pd.GetMessage().GetData().GetValue()
 	}
 
 	stream.Send(&internalv1pb.InternalInvokeResponseStream{
 		Response: resp.Proto(),
 		Payload: &commonv1pb.StreamPayload{
-			Data: data,
+			Data: pd.GetMessage().GetData().GetValue(),
 			Seq:  0,
 		},
 	})
