@@ -366,8 +366,8 @@ func (b *binding) sendBindingEventToApp(ctx context.Context, bindingName string,
 		appResponseBody, err = resp.RawDataFull()
 
 		// ::TODO report metrics for http, such as grpc
-		if resp.Status().GetCode() < 200 || resp.Status().GetCode() > 299 {
-			return nil, fmt.Errorf("fails to send binding event to http app channel, status code: %d body: %s", resp.Status().GetCode(), string(appResponseBody))
+		if code := resp.Status().GetCode(); code < 200 || code > 299 {
+			return nil, fmt.Errorf("fails to send binding event to http app channel, status code: %d body: %s", code, string(appResponseBody))
 		}
 
 		if err != nil {

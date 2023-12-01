@@ -198,7 +198,7 @@ func GetSubscriptionsGRPC(ctx context.Context, channel runtimev1pb.AppCallbackCl
 	}
 
 	var subscriptions []Subscription
-	if resp == nil || len(resp.GetSubscriptions()) == 0 {
+	if len(resp.GetSubscriptions()) == 0 {
 		log.Debug(noSubscriptionsError)
 	} else {
 		subscriptions = make([]Subscription, len(resp.GetSubscriptions()))

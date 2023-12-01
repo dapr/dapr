@@ -436,7 +436,7 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 		}
 		return nil, err
 	}
-	if chunk.GetResponse() == nil || chunk.GetResponse().GetStatus() == nil {
+	if chunk.GetResponse().GetStatus() == nil {
 		return nil, errors.New("response does not contain the required fields in the leading chunk")
 	}
 	pr, pw := io.Pipe()
@@ -486,7 +486,7 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 				return
 			}
 
-			if chunk.GetResponse() != nil && (chunk.GetResponse().GetStatus() != nil || chunk.GetResponse().GetHeaders() != nil || chunk.GetResponse().GetMessage() != nil) {
+			if chunk.GetResponse().GetStatus() != nil || chunk.GetResponse().GetHeaders() != nil || chunk.GetResponse().GetMessage() != nil {
 				pw.CloseWithError(errors.New("response metadata found in non-leading chunk"))
 				return
 			}

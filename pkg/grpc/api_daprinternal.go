@@ -90,7 +90,7 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 	if err != nil {
 		return err
 	}
-	if chunk.GetRequest() == nil || chunk.GetRequest().GetMetadata() == nil || chunk.GetRequest().GetMessage() == nil {
+	if chunk.GetRequest().GetMetadata() == nil || chunk.GetRequest().GetMessage() == nil {
 		return status.Errorf(codes.InvalidArgument, messages.ErrInternalInvokeRequest, "request does not contain the required fields in the leading chunk")
 	}
 
@@ -186,7 +186,7 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 				return
 			}
 
-			if chunk.GetRequest() != nil && (chunk.GetRequest().GetMetadata() != nil || chunk.GetRequest().GetMessage() != nil) {
+			if chunk.GetRequest().GetMetadata() != nil || chunk.GetRequest().GetMessage() != nil {
 				pw.CloseWithError(errors.New("request metadata found in non-leading chunk"))
 				return
 			}

@@ -125,7 +125,7 @@ func httpHeadersToInternalMetadata(header http.Header) DaprInternalMetadata {
 	internalMD := make(DaprInternalMetadata, len(header))
 	for key, val := range header {
 		// Note: HTTP headers can never be binary (only gRPC supports binary headers)
-		if internalMD[key] == nil || len(internalMD[key].GetValues()) == 0 {
+		if len(internalMD[key].GetValues()) == 0 {
 			internalMD[key] = &internalv1pb.ListStringValue{
 				Values: val,
 			}
