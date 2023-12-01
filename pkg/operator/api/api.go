@@ -447,7 +447,7 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 		delete(a.allConnUpdateChan, key)
 	}()
 
-	updateComponentFunc := func(ctx context.Context, c *componentsapi.Component) {
+	updateComponentFunc := func(ctx context.Context, t operatorv1pb.ResourceEventType, c *componentsapi.Component) {
 		if c.Namespace != in.GetNamespace() {
 			return
 		}
@@ -473,7 +473,7 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 			return
 		}
 
-		log.Infof("updated sidecar with component %s (%s) from pod %s/%s", c.GetName(), c.Spec.Type, in.GetNamespace(), in.GetPodName())
+		log.Debugf("updated sidecar with component %s %s (%s) from pod %s/%s", t.String(), c.GetName(), c.Spec.Type, in.GetNamespace(), in.GetPodName())
 	}
 
 	var wg sync.WaitGroup

@@ -186,7 +186,11 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 				return
 			}
 
+<<<<<<< HEAD
 			if chunk.GetRequest().GetMetadata() != nil || chunk.GetRequest().GetMessage() != nil {
+=======
+			if chunk.GetRequest() != nil && (chunk.GetRequest().GetMetadata() != nil || chunk.GetRequest().GetMessage() != nil) {
+>>>>>>> 8ff270d9a (Lint code)
 				pw.CloseWithError(errors.New("request metadata found in non-leading chunk"))
 				return
 			}

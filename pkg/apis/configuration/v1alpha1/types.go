@@ -198,9 +198,9 @@ type TracingSpec struct {
 
 // OtelSpec defines Otel exporter configurations.
 type OtelSpec struct {
-	Protocol        string `json:"protocol" yaml:"protocol"`
+	Protocol        string `json:"protocol"        yaml:"protocol"`
 	EndpointAddress string `json:"endpointAddress" yaml:"endpointAddress"`
-	IsSecure        *bool  `json:"isSecure" yaml:"isSecure"`
+	IsSecure        *bool  `json:"isSecure"        yaml:"isSecure"`
 }
 
 // ZipkinSpec defines Zipkin trace configurations.
@@ -242,7 +242,7 @@ type AppPolicySpec struct {
 
 // AppOperationAction defines the data structure for each app operation.
 type AppOperationAction struct {
-	Operation string `json:"name" yaml:"name"`
+	Operation string `json:"name"   yaml:"name"`
 	Action    string `json:"action" yaml:"action"`
 	// +optional
 	HTTPVerb []string `json:"httpVerb,omitempty" yaml:"httpVerb,omitempty"`
@@ -260,7 +260,7 @@ type AccessControlSpec struct {
 
 // FeatureSpec defines the features that are enabled/disabled.
 type FeatureSpec struct {
-	Name    string `json:"name" yaml:"name"`
+	Name    string `json:"name"    yaml:"name"`
 	Enabled *bool  `json:"enabled" yaml:"enabled"`
 }
 
