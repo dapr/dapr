@@ -41,58 +41,58 @@ func (r Resiliency) String() string {
 
 type ResiliencySpec struct {
 	Policies Policies `json:"policies"`
-	Targets  Targets  `json:"targets" yaml:"targets"`
+	Targets  Targets  `json:"targets"  yaml:"targets"`
 }
 
 type Policies struct {
-	Timeouts        map[string]string         `json:"timeouts,omitempty" yaml:"timeouts,omitempty"`
-	Retries         map[string]Retry          `json:"retries,omitempty" yaml:"retries,omitempty"`
+	Timeouts        map[string]string         `json:"timeouts,omitempty"        yaml:"timeouts,omitempty"`
+	Retries         map[string]Retry          `json:"retries,omitempty"         yaml:"retries,omitempty"`
 	CircuitBreakers map[string]CircuitBreaker `json:"circuitBreakers,omitempty" yaml:"circuitBreakers,omitempty"`
 }
 
 type Retry struct {
-	Policy      string `json:"policy,omitempty" yaml:"policy,omitempty"`
-	Duration    string `json:"duration,omitempty" yaml:"duration,omitempty"`
+	Policy      string `json:"policy,omitempty"      yaml:"policy,omitempty"`
+	Duration    string `json:"duration,omitempty"    yaml:"duration,omitempty"`
 	MaxInterval string `json:"maxInterval,omitempty" yaml:"maxInterval,omitempty"`
-	MaxRetries  *int   `json:"maxRetries,omitempty" yaml:"maxRetries,omitempty"`
+	MaxRetries  *int   `json:"maxRetries,omitempty"  yaml:"maxRetries,omitempty"`
 }
 
 type CircuitBreaker struct {
 	MaxRequests int    `json:"maxRequests,omitempty" yaml:"maxRequests,omitempty"`
-	Interval    string `json:"interval,omitempty" yaml:"interval,omitempty"`
-	Timeout     string `json:"timeout,omitempty" yaml:"timeout,omitempty"`
-	Trip        string `json:"trip,omitempty" yaml:"trip,omitempty"`
+	Interval    string `json:"interval,omitempty"    yaml:"interval,omitempty"`
+	Timeout     string `json:"timeout,omitempty"     yaml:"timeout,omitempty"`
+	Trip        string `json:"trip,omitempty"        yaml:"trip,omitempty"`
 }
 
 type Targets struct {
-	Apps       map[string]EndpointPolicyNames  `json:"apps,omitempty" yaml:"apps,omitempty"`
-	Actors     map[string]ActorPolicyNames     `json:"actors,omitempty" yaml:"actors,omitempty"`
+	Apps       map[string]EndpointPolicyNames  `json:"apps,omitempty"       yaml:"apps,omitempty"`
+	Actors     map[string]ActorPolicyNames     `json:"actors,omitempty"     yaml:"actors,omitempty"`
 	Components map[string]ComponentPolicyNames `json:"components,omitempty" yaml:"components,omitempty"`
 }
 
 type ComponentPolicyNames struct {
-	Inbound  PolicyNames `json:"inbound,omitempty" yaml:"inbound,omitempty"`
+	Inbound  PolicyNames `json:"inbound,omitempty"  yaml:"inbound,omitempty"`
 	Outbound PolicyNames `json:"outbound,omitempty" yaml:"outbound,omitempty"`
 }
 
 type PolicyNames struct {
-	Timeout        string `json:"timeout,omitempty" yaml:"timeout,omitempty"`
-	Retry          string `json:"retry,omitempty" yaml:"retry,omitempty"`
+	Timeout        string `json:"timeout,omitempty"        yaml:"timeout,omitempty"`
+	Retry          string `json:"retry,omitempty"          yaml:"retry,omitempty"`
 	CircuitBreaker string `json:"circuitBreaker,omitempty" yaml:"circuitBreaker,omitempty"`
 }
 
 type EndpointPolicyNames struct {
-	Timeout                 string `json:"timeout,omitempty" yaml:"timeout,omitempty"`
-	Retry                   string `json:"retry,omitempty" yaml:"retry,omitempty"`
-	CircuitBreaker          string `json:"circuitBreaker,omitempty" yaml:"circuitBreaker,omitempty"`
+	Timeout                 string `json:"timeout,omitempty"                 yaml:"timeout,omitempty"`
+	Retry                   string `json:"retry,omitempty"                   yaml:"retry,omitempty"`
+	CircuitBreaker          string `json:"circuitBreaker,omitempty"          yaml:"circuitBreaker,omitempty"`
 	CircuitBreakerCacheSize int    `json:"circuitBreakerCacheSize,omitempty" yaml:"circuitBreakerCacheSize,omitempty"`
 }
 
 type ActorPolicyNames struct {
-	Timeout                 string `json:"timeout,omitempty" yaml:"timeout,omitempty"`
-	Retry                   string `json:"retry,omitempty" yaml:"retry,omitempty"`
-	CircuitBreaker          string `json:"circuitBreaker,omitempty" yaml:"circuitBreaker,omitempty"`
-	CircuitBreakerScope     string `json:"circuitBreakerScope,omitempty" yaml:"circuitBreakerScope,omitempty"`
+	Timeout                 string `json:"timeout,omitempty"                 yaml:"timeout,omitempty"`
+	Retry                   string `json:"retry,omitempty"                   yaml:"retry,omitempty"`
+	CircuitBreaker          string `json:"circuitBreaker,omitempty"          yaml:"circuitBreaker,omitempty"`
+	CircuitBreakerScope     string `json:"circuitBreakerScope,omitempty"     yaml:"circuitBreakerScope,omitempty"`
 	CircuitBreakerCacheSize int    `json:"circuitBreakerCacheSize,omitempty" yaml:"circuitBreakerCacheSize,omitempty"`
 }
 
