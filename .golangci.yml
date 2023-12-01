@@ -330,3 +330,4 @@ linters:
     - varcheck
     - deadcode
     - inamedparam
+    - tagalign
