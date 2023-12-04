@@ -62,9 +62,9 @@ func New(t *testing.T, binPath string, args []string, fopts ...Option) *exec {
 			t.Helper()
 			if runtime.GOOS == "windows" {
 				// Windows returns 1 when we kill the process.
-				assert.ErrorContains(t, err, "exit status 1")
+				require.ErrorContains(t, err, "exit status 1")
 			} else {
-				assert.NoError(t, err, "expected %q to run without error", binPath)
+				require.NoError(t, err, "expected %q to run without error", binPath)
 			}
 		},
 		exitCode: defaultExitCode,
@@ -112,8 +112,8 @@ func (e *exec) Cleanup(t *testing.T) {
 	e.lock.Lock()
 	defer e.lock.Unlock()
 
-	assert.NoError(t, e.stderrpipe.Close())
-	assert.NoError(t, e.stdoutpipe.Close())
+	require.NoError(t, e.stderrpipe.Close())
+	require.NoError(t, e.stdoutpipe.Close())
 
 	kill.Kill(t, e.cmd)
 	e.checkExit(t)

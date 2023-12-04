@@ -15,11 +15,9 @@ package grpc
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"testing"
 	"time"
 
@@ -76,7 +74,7 @@ spec:
 	l.daprd = daprd.New(t,
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithConfigs(configFile),
-		daprd.WithPlacementAddresses("localhost:"+strconv.Itoa(l.place.Port())),
+		daprd.WithPlacementAddresses(l.place.Address()),
 		daprd.WithAppPort(srv.Port()),
 	)
 
@@ -89,7 +87,7 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 	l.place.WaitUntilRunning(t, ctx)
 	l.daprd.WaitUntilRunning(t, ctx)
 
-	conn, err := grpc.DialContext(ctx, fmt.Sprintf("localhost:%d", l.daprd.GRPCPort()), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+	conn, err := grpc.DialContext(ctx, l.daprd.GRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
 	client := rtv1.NewDaprClient(conn)
@@ -100,6 +98,7 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 			ActorId:   "myactorid",
 			Method:    "foo",
 		})
+		//nolint:testifylint
 		assert.NoError(c, err)
 	}, time.Second*10, time.Millisecond*100, "actor not ready")
 
@@ -128,8 +127,8 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 		})
 		require.NoError(t, err)
 
-		assert.Equal(t, "myvalue", string(resp.Data))
-		ttlExpireTimeStr, ok := resp.Metadata["ttlExpireTime"]
+		assert.Equal(t, "myvalue", string(resp.GetData()))
+		ttlExpireTimeStr, ok := resp.GetMetadata()["ttlExpireTime"]
 		require.True(t, ok)
 		var ttlExpireTime time.Time
 		ttlExpireTime, err = time.Parse(time.RFC3339, ttlExpireTimeStr)
@@ -162,7 +161,7 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 		})
 		require.NoError(t, err)
 
-		assert.Equal(t, "myvalue", string(resp.Data))
+		assert.Equal(t, "myvalue", string(resp.GetData()))
 	})
 
 	t.Run("ensure the state key is deleted after the ttl", func(t *testing.T) {
@@ -173,8 +172,8 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 				Key:       "mykey",
 			})
 			require.NoError(c, err)
-			assert.Empty(c, resp.Data)
-			assert.Empty(c, resp.Metadata)
+			assert.Empty(c, resp.GetData())
+			assert.Empty(c, resp.GetMetadata())
 		}, 5*time.Second, 100*time.Millisecond)
 	})
 }

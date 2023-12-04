@@ -97,7 +97,7 @@ func (c *componentName) Run(t *testing.T, ctx context.Context) {
 		pubsubName := c.pubsubNames[i]
 		topicName := c.topicNames[i]
 		pt.Add(func(col *assert.CollectT) {
-			conn, err := grpc.DialContext(ctx, fmt.Sprintf("localhost:%d", c.daprd.GRPCPort()), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+			conn, err := grpc.DialContext(ctx, c.daprd.GRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 			require.NoError(col, err)
 			t.Cleanup(func() { require.NoError(t, conn.Close()) })
 
@@ -107,6 +107,7 @@ func (c *componentName) Run(t *testing.T, ctx context.Context) {
 				Topic:      topicName,
 				Data:       []byte(`{"status": "completed"}`),
 			})
+			//nolint:testifylint
 			assert.NoError(col, err)
 		})
 	}

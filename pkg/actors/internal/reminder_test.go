@@ -35,11 +35,11 @@ func TestReminderProperties(t *testing.T) {
 	}
 
 	t.Run("ActorKey", func(t *testing.T) {
-		require.Equal(t, r.ActorKey(), "type||id")
+		require.Equal(t, "type||id", r.ActorKey())
 	})
 
 	t.Run("Key", func(t *testing.T) {
-		require.Equal(t, r.Key(), "type||id||name")
+		require.Equal(t, "type||id||name", r.Key())
 	})
 
 	t.Run("NextTick", func(t *testing.T) {

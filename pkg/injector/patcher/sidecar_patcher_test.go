@@ -148,7 +148,7 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 		t.Run(tc.testName, func(t *testing.T) {
 			c := NewSidecarConfig(&corev1.Pod{})
 			patchEnv := c.addDaprEnvVarsToContainers(map[int]corev1.Container{0: tc.mockContainer}, tc.appProtocol)
-			assert.Equal(t, tc.expOpsLen, len(patchEnv))
+			assert.Len(t, patchEnv, tc.expOpsLen)
 			assert.Equal(t, tc.expOps, patchEnv)
 		})
 	}
@@ -306,7 +306,7 @@ func TestPatching(t *testing.T) {
 				assert.Len(t, daprdContainer.VolumeMounts, 1)
 				assert.Equal(t, "dapr-identity-token", daprdContainer.VolumeMounts[0].Name)
 				assert.Equal(t, "/var/run/secrets/dapr.io/sentrytoken", daprdContainer.VolumeMounts[0].MountPath)
-				assert.Equal(t, true, daprdContainer.VolumeMounts[0].ReadOnly)
+				assert.True(t, daprdContainer.VolumeMounts[0].ReadOnly)
 
 				assert.NotNil(t, daprdContainer.LivenessProbe)
 				assert.Equal(t, "/v1.0/healthz", daprdContainer.LivenessProbe.HTTPGet.Path)

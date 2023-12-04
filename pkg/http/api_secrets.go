@@ -73,12 +73,12 @@ func (a *api) onGetSecretHandler() http.HandlerFunc {
 			},
 			OutModifier: func(out *runtimev1pb.GetSecretResponse) (any, error) {
 				// If the data is nil, return nil
-				if out == nil || out.Data == nil {
+				if out == nil || out.GetData() == nil {
 					return nil, nil
 				}
 
 				// Return just the data property
-				return out.Data, nil
+				return out.GetData(), nil
 			},
 		},
 	)
@@ -95,15 +95,15 @@ func (a *api) onBulkGetSecretHandler() http.HandlerFunc {
 			},
 			OutModifier: func(out *runtimev1pb.GetBulkSecretResponse) (any, error) {
 				// If the data is nil, return nil
-				if out == nil || out.Data == nil {
+				if out == nil || out.GetData() == nil {
 					return nil, nil
 				}
 
 				var secrets map[string]map[string]string
-				secrets = make(map[string]map[string]string, len(out.Data))
+				secrets = make(map[string]map[string]string, len(out.GetData()))
 				// Return just the secrets as map
-				for secretKey, secret := range out.Data {
-					secrets[secretKey] = secret.Secrets
+				for secretKey, secret := range out.GetData() {
+					secrets[secretKey] = secret.GetSecrets()
 				}
 
 				return secrets, nil

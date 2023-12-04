@@ -159,23 +159,23 @@ func TestInternalActorCall(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Close()
 
-	if assert.NoError(t, err) && assert.NotNil(t, resp) {
-		// Verify the response metadata matches what we expect
-		assert.Equal(t, int32(200), resp.Status().Code)
-		contentType := resp.ContentType()
-		assert.Equal(t, invokev1.OctetStreamContentType, contentType)
+	require.NoError(t, err)
+	assert.NotNil(t, resp)
+	// Verify the response metadata matches what we expect
+	assert.Equal(t, int32(200), resp.Status().GetCode())
+	contentType := resp.ContentType()
+	assert.Equal(t, invokev1.OctetStreamContentType, contentType)
 
-		// Verify the actor got all the expected inputs (which are echoed back to us)
-		info, err := decodeTestResponse(resp.RawData())
-		require.NoError(t, err)
-		require.NotNil(t, info)
-		assert.Equal(t, testActorID, info.ActorID)
-		assert.Equal(t, testMethod, info.MethodName)
-		assert.Equal(t, []byte(testInput), info.Input)
+	// Verify the actor got all the expected inputs (which are echoed back to us)
+	info, err := decodeTestResponse(resp.RawData())
+	require.NoError(t, err)
+	require.NotNil(t, info)
+	assert.Equal(t, testActorID, info.ActorID)
+	assert.Equal(t, testMethod, info.MethodName)
+	assert.Equal(t, []byte(testInput), info.Input)
 
-		// Verify the preconfigured output was successfully returned back to us
-		assert.Equal(t, testOutput, info.Output)
-	}
+	// Verify the preconfigured output was successfully returned back to us
+	assert.Equal(t, testOutput, info.Output)
 }
 
 func TestInternalActorReminder(t *testing.T) {
@@ -238,7 +238,7 @@ func TestInternalActorDeactivation(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Close()
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Deactivate the actor, ensuring no errors and that the correct actor ID was provided.
 	actAny, ok := testActorRuntime.actorsTable.Load(constructCompositeKey(testActorType, testActorID))

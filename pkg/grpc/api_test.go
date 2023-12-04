@@ -166,19 +166,15 @@ func (m *mockGRPCAPI) CallLocalStream(stream internalv1pb.ServiceInvocation_Call
 		WithContentType("text/plain")
 	defer resp.Close()
 
-	var data []byte
 	pd, err := resp.ProtoWithData()
 	if err != nil {
 		return err
-	}
-	if pd.Message != nil && pd.Message.Data != nil {
-		data = pd.Message.Data.Value
 	}
 
 	stream.Send(&internalv1pb.InternalInvokeResponseStream{
 		Response: resp.Proto(),
 		Payload: &commonv1pb.StreamPayload{
-			Data: data,
+			Data: pd.GetMessage().GetData().GetValue(),
 			Seq:  0,
 		},
 	})
@@ -420,9 +416,9 @@ func TestAPIToken(t *testing.T) {
 			assert.Equal(t, "Not Found", s.Message())
 
 			errInfo := s.Details()[0].(*epb.ErrorInfo)
-			assert.Equal(t, 1, len(s.Details()))
-			assert.Equal(t, "404", errInfo.Metadata["http.code"])
-			assert.Equal(t, "fakeDirectMessageResponse", errInfo.Metadata["http.error_message"])
+			assert.Len(t, s.Details(), 1)
+			assert.Equal(t, "404", errInfo.GetMetadata()["http.code"])
+			assert.Equal(t, "fakeDirectMessageResponse", errInfo.GetMetadata()["http.error_message"])
 		})
 
 		t.Run("stream", func(t *testing.T) {
@@ -438,8 +434,8 @@ func TestAPIToken(t *testing.T) {
 			// The request was invalid so we should get an error about the actor runtime (which means we passed the auth middleware and are hitting the API as expected)
 			var m any
 			err = stream.RecvMsg(&m)
-			assert.Error(t, err)
-			assert.ErrorContains(t, err, "actor runtime")
+			require.Error(t, err)
+			require.ErrorContains(t, err, "actor runtime")
 		})
 	})
 
@@ -501,7 +497,7 @@ func TestAPIToken(t *testing.T) {
 			// We should get an Unauthenticated error
 			var m any
 			err = stream.RecvMsg(&m)
-			assert.Error(t, err)
+			require.Error(t, err)
 			s, ok := status.FromError(err)
 			assert.True(t, ok)
 			assert.Equal(t, codes.Unauthenticated, s.Code())
@@ -565,7 +561,7 @@ func TestAPIToken(t *testing.T) {
 			// We should get an Unauthenticated error
 			var m any
 			err = stream.RecvMsg(&m)
-			assert.Error(t, err)
+			require.Error(t, err)
 			s, ok := status.FromError(err)
 			assert.True(t, ok)
 			assert.Equal(t, codes.Unauthenticated, s.Code())
@@ -672,9 +668,9 @@ func TestInvokeServiceFromHTTPResponse(t *testing.T) {
 
 			if tt.errHTTPCode != "" {
 				errInfo := s.Details()[0].(*epb.ErrorInfo)
-				assert.Equal(t, 1, len(s.Details()))
-				assert.Equal(t, tt.errHTTPCode, errInfo.Metadata["http.code"])
-				assert.Equal(t, tt.errHTTPMessage, errInfo.Metadata["http.error_message"])
+				assert.Len(t, s.Details(), 1)
+				assert.Equal(t, tt.errHTTPCode, errInfo.GetMetadata()["http.code"])
+				assert.Equal(t, tt.errHTTPMessage, errInfo.GetMetadata()["http.error_message"])
 			}
 		})
 	}
@@ -741,7 +737,7 @@ func TestInvokeServiceFromGRPCResponse(t *testing.T) {
 		assert.Equal(t, "Unimplemented", s.Message())
 
 		errInfo := s.Details()[0].(*epb.ResourceInfo)
-		assert.Equal(t, 1, len(s.Details()))
+		assert.Len(t, s.Details(), 1)
 		assert.Equal(t, "sidecar", errInfo.GetResourceType())
 		assert.Equal(t, "invoke/service", errInfo.GetResourceName())
 		assert.Equal(t, "Dapr", errInfo.GetOwner())
@@ -903,10 +899,10 @@ func TestGetSecret(t *testing.T) {
 			resp, err := client.GetSecret(context.Background(), req)
 
 			if !tt.errorExcepted {
-				assert.NoError(t, err)
-				assert.Equal(t, resp.Data[tt.key], tt.expectedResponse, "Expected responses to be same")
+				require.NoError(t, err)
+				assert.Equal(t, tt.expectedResponse, resp.GetData()[tt.key], "Expected responses to be same")
 			} else {
-				assert.Error(t, err, "Expected error")
+				require.Error(t, err, "Expected error")
 				assert.Equal(t, tt.expectedError, status.Code(err))
 			}
 		})
@@ -979,10 +975,10 @@ func TestGetBulkSecret(t *testing.T) {
 			resp, err := client.GetBulkSecret(context.Background(), req)
 
 			if !tt.errorExcepted {
-				assert.NoError(t, err)
-				assert.Equal(t, resp.Data[tt.key].Secrets[tt.key], tt.expectedResponse, "Expected responses to be same")
+				require.NoError(t, err)
+				assert.Equal(t, tt.expectedResponse, resp.GetData()[tt.key].GetSecrets()[tt.key], "Expected responses to be same")
 			} else {
-				assert.Error(t, err, "Expected error")
+				require.Error(t, err, "Expected error")
 				assert.Equal(t, tt.expectedError, status.Code(err))
 			}
 		})
@@ -1295,11 +1291,11 @@ func TestGetState(t *testing.T) {
 
 			resp, err := client.GetState(context.Background(), req)
 			if !tt.errorExcepted {
-				assert.NoError(t, err)
-				assert.Equal(t, resp.Data, tt.expectedResponse.Data, "Expected response Data to be same")
-				assert.Equal(t, resp.Etag, tt.expectedResponse.Etag, "Expected response Etag to be same")
+				require.NoError(t, err)
+				assert.Equal(t, resp.GetData(), tt.expectedResponse.GetData(), "Expected response Data to be same")
+				assert.Equal(t, resp.GetEtag(), tt.expectedResponse.GetEtag(), "Expected response Etag to be same")
 			} else {
-				assert.Error(t, err, "Expected error")
+				require.Error(t, err, "Expected error")
 				assert.Equal(t, tt.expectedError, status.Code(err))
 			}
 		})
@@ -1433,10 +1429,10 @@ func TestGetConfiguration(t *testing.T) {
 
 			resp, err := client.GetConfigurationAlpha1(context.Background(), req)
 			if !tt.errorExcepted {
-				assert.NoError(t, err)
-				assert.Equal(t, resp.Items, tt.expectedResponse.Items, "Expected response items to be same")
+				require.NoError(t, err)
+				assert.Equal(t, resp.GetItems(), tt.expectedResponse.GetItems(), "Expected response items to be same")
 			} else {
-				assert.Error(t, err, "Expected error")
+				require.Error(t, err, "Expected error")
 				assert.Equal(t, tt.expectedError, status.Code(err))
 			}
 		})
@@ -1449,10 +1445,10 @@ func TestGetConfiguration(t *testing.T) {
 
 			resp, err := client.GetConfiguration(context.Background(), req)
 			if !tt.errorExcepted {
-				assert.NoError(t, err)
-				assert.Equal(t, resp.Items, tt.expectedResponse.Items, "Expected response items to be same")
+				require.NoError(t, err)
+				assert.Equal(t, resp.GetItems(), tt.expectedResponse.GetItems(), "Expected response items to be same")
 			} else {
-				assert.Error(t, err, "Expected error")
+				require.Error(t, err, "Expected error")
 				assert.Equal(t, tt.expectedError, status.Code(err))
 			}
 		})
@@ -1613,12 +1609,12 @@ func TestSubscribeConfiguration(t *testing.T) {
 					rsp, err := resp.Recv()
 					require.NoError(t, err)
 					require.NotNil(t, rsp)
-					require.NotEmpty(t, rsp.Id)
-					require.Empty(t, rsp.Items)
+					require.NotEmpty(t, rsp.GetId())
+					require.Empty(t, rsp.GetItems())
 
 					rsp, err = resp.Recv()
 					require.NoError(t, err)
-					assert.Equal(t, tt.expectedResponse, rsp.Items, "Expected response items to be same")
+					assert.Equal(t, tt.expectedResponse, rsp.GetItems(), "Expected response items to be same")
 				} else {
 					const retry = 3
 					count := 0
@@ -1635,7 +1631,7 @@ func TestSubscribeConfiguration(t *testing.T) {
 						_, err = resp.Recv()
 					}
 					assert.Equal(t, tt.expectedError, status.Code(err))
-					assert.Error(t, err, "Expected error")
+					require.Error(t, err, "Expected error")
 				}
 			}
 		}
@@ -1816,12 +1812,12 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 				rsp, recvErr := resp.Recv()
 				require.NoError(t, recvErr)
 				require.NotNil(t, rsp)
-				if rsp.Items != nil {
-					assert.Equal(t, tt.expectedResponse, rsp.Items)
+				if rsp.GetItems() != nil {
+					assert.Equal(t, tt.expectedResponse, rsp.GetItems())
 				} else {
-					assert.Equal(t, mockSubscribeID, rsp.Id)
+					assert.Equal(t, mockSubscribeID, rsp.GetId())
 				}
-				subscribeID = rsp.Id
+				subscribeID = rsp.GetId()
 			}
 			require.NoError(t, err, "Error should be nil")
 			_, err = client.UnsubscribeConfigurationAlpha1(context.Background(), &runtimev1pb.UnsubscribeConfigurationRequest{
@@ -1864,13 +1860,13 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 				time.Sleep(time.Millisecond * 10)
 				rsp, recvErr := resp.Recv()
 				assert.NotNil(t, rsp)
-				assert.NoError(t, recvErr)
-				if rsp.Items != nil {
-					assert.Equal(t, tt.expectedResponse, rsp.Items)
+				require.NoError(t, recvErr)
+				if rsp.GetItems() != nil {
+					assert.Equal(t, tt.expectedResponse, rsp.GetItems())
 				} else {
-					assert.Equal(t, mockSubscribeID, rsp.Id)
+					assert.Equal(t, mockSubscribeID, rsp.GetId())
 				}
-				subscribeID = rsp.Id
+				subscribeID = rsp.GetId()
 			}
 			require.NoError(t, err, "Error should be nil")
 			_, err = client.UnsubscribeConfiguration(context.Background(), &runtimev1pb.UnsubscribeConfigurationRequest{
@@ -2070,22 +2066,22 @@ func TestGetBulkState(t *testing.T) {
 
 			resp, err := client.GetBulkState(context.Background(), req)
 			if !tt.errorExcepted {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 
 				if len(tt.expectedResponse) == 0 {
-					assert.Equal(t, len(resp.Items), 0, "Expected response to be empty")
+					assert.Empty(t, resp.GetItems(), "Expected response to be empty")
 				} else {
-					for i := 0; i < len(resp.Items); i++ {
-						if tt.expectedResponse[i].Error == "" {
-							assert.Equal(t, resp.Items[i].Data, tt.expectedResponse[i].Data, "Expected response Data to be same")
-							assert.Equal(t, resp.Items[i].Etag, tt.expectedResponse[i].Etag, "Expected response Etag to be same")
+					for i := 0; i < len(resp.GetItems()); i++ {
+						if tt.expectedResponse[i].GetError() == "" {
+							assert.Equal(t, resp.GetItems()[i].GetData(), tt.expectedResponse[i].GetData(), "Expected response Data to be same")
+							assert.Equal(t, resp.GetItems()[i].GetEtag(), tt.expectedResponse[i].GetEtag(), "Expected response Etag to be same")
 						} else {
-							assert.Equal(t, resp.Items[i].Error, tt.expectedResponse[i].Error, "Expected response error to be same")
+							assert.Equal(t, resp.GetItems()[i].GetError(), tt.expectedResponse[i].GetError(), "Expected response error to be same")
 						}
 					}
 				}
 			} else {
-				assert.Error(t, err, "Expected error")
+				require.Error(t, err, "Expected error")
 				assert.Equal(t, tt.expectedError, status.Code(err))
 			}
 		})
@@ -2391,7 +2387,7 @@ func TestPublishTopic(t *testing.T) {
 			PubsubName: "pubsub",
 			Topic:      "topic",
 		})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("no err: publish event request with topic, pubsub and ce metadata override", func(t *testing.T) {
@@ -2404,7 +2400,7 @@ func TestPublishTopic(t *testing.T) {
 				"cloudevent.pubsub": "overridepubsub", // noop -- if this modified the envelope the test would fail
 			},
 		})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("err: publish event request with error-topic and pubsub", func(t *testing.T) {
@@ -2455,7 +2451,7 @@ func TestPublishTopic(t *testing.T) {
 				},
 			},
 		})
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Equal(t, codes.InvalidArgument, status.Code(err))
 		assert.Contains(t, err.Error(), "entryId is duplicated")
 	})
@@ -2478,7 +2474,7 @@ func TestPublishTopic(t *testing.T) {
 				},
 			},
 		})
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Equal(t, codes.InvalidArgument, status.Code(err))
 		assert.Contains(t, err.Error(), "not present for entry")
 	})
@@ -2494,7 +2490,7 @@ func TestPublishTopic(t *testing.T) {
 			PubsubName: "pubsub",
 			Topic:      "topic",
 		})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("err: bulk publish event request with error-topic and pubsub", func(t *testing.T) {
@@ -2582,8 +2578,8 @@ func TestBulkPublish(t *testing.T) {
 			Topic:      "topic",
 			Entries:    sampleEntries,
 		})
-		assert.NoError(t, err)
-		assert.Empty(t, res.FailedEntries)
+		require.NoError(t, err)
+		assert.Empty(t, res.GetFailedEntries())
 	})
 
 	t.Run("no failures with ce metadata override", func(t *testing.T) {
@@ -2597,8 +2593,8 @@ func TestBulkPublish(t *testing.T) {
 				"cloudevent.pubsub": "overridepubsub", // noop -- if this modified the envelope the test would fail
 			},
 		})
-		assert.NoError(t, err)
-		assert.Empty(t, res.FailedEntries)
+		require.NoError(t, err)
+		assert.Empty(t, res.GetFailedEntries())
 	})
 
 	t.Run("all failures from component", func(t *testing.T) {
@@ -2609,9 +2605,9 @@ func TestBulkPublish(t *testing.T) {
 		})
 		t.Log(res)
 		// Full failure from component, so expecting no error
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotNil(t, res)
-		assert.Equal(t, 4, len(res.FailedEntries))
+		assert.Len(t, res.GetFailedEntries(), 4)
 	})
 
 	t.Run("partial failures from component", func(t *testing.T) {
@@ -2621,9 +2617,9 @@ func TestBulkPublish(t *testing.T) {
 			Entries:    sampleEntries,
 		})
 		// Partial failure, so expecting no error
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotNil(t, res)
-		assert.Equal(t, 2, len(res.FailedEntries))
+		assert.Len(t, res.GetFailedEntries(), 2)
 	})
 }
 
@@ -2644,18 +2640,18 @@ func TestInvokeBinding(t *testing.T) {
 
 	client := runtimev1pb.NewDaprClient(clientConn)
 	_, err := client.InvokeBinding(context.Background(), &runtimev1pb.InvokeBindingRequest{})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	_, err = client.InvokeBinding(context.Background(), &runtimev1pb.InvokeBindingRequest{Name: "error-binding"})
 	assert.Equal(t, codes.Internal, status.Code(err))
 
 	ctx := grpcMetadata.AppendToOutgoingContext(context.Background(), "traceparent", "Test")
 	resp, err := client.InvokeBinding(ctx, &runtimev1pb.InvokeBindingRequest{Metadata: map[string]string{"userMetadata": "val1"}})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, resp)
-	assert.Contains(t, resp.Metadata, "traceparent")
-	assert.Equal(t, resp.Metadata["traceparent"], "Test")
-	assert.Contains(t, resp.Metadata, "userMetadata")
-	assert.Equal(t, resp.Metadata["userMetadata"], "val1")
+	assert.Contains(t, resp.GetMetadata(), "traceparent")
+	assert.Equal(t, "Test", resp.GetMetadata()["traceparent"])
+	assert.Contains(t, resp.GetMetadata(), "userMetadata")
+	assert.Equal(t, "val1", resp.GetMetadata()["userMetadata"])
 }
 
 func TestTransactionStateStoreNotConfigured(t *testing.T) {
@@ -2831,9 +2827,9 @@ func TestExecuteStateTransaction(t *testing.T) {
 
 			_, err := client.ExecuteStateTransaction(context.Background(), req)
 			if !tt.errorExcepted {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			} else {
-				assert.Error(t, err, "Expected error")
+				require.Error(t, err, "Expected error")
 				assert.Equal(t, tt.expectedError, status.Code(err))
 			}
 		})
@@ -3021,17 +3017,17 @@ func TestQueryState(t *testing.T) {
 		StoreName: "store1",
 		Query:     queryTestRequestOK,
 	})
-	assert.Equal(t, 1, len(resp.Results))
+	assert.Len(t, resp.GetResults(), 1)
 	assert.Equal(t, codes.OK, status.Code(err))
-	if len(resp.Results) > 0 {
-		assert.NotNil(t, resp.Results[0].Data)
+	if len(resp.GetResults()) > 0 {
+		assert.NotNil(t, resp.GetResults()[0].GetData())
 	}
 
 	resp, err = client.QueryStateAlpha1(context.Background(), &runtimev1pb.QueryStateRequest{
 		StoreName: "store1",
 		Query:     queryTestRequestNoRes,
 	})
-	assert.Equal(t, 0, len(resp.Results))
+	assert.Empty(t, resp.GetResults())
 	assert.Equal(t, codes.OK, status.Code(err))
 
 	_, err = client.QueryStateAlpha1(context.Background(), &runtimev1pb.QueryStateRequest{
@@ -3130,9 +3126,9 @@ func TestGetConfigurationAPI(t *testing.T) {
 			})
 
 			require.NoError(t, err)
-			require.NotNil(t, r.Items)
-			assert.Len(t, r.Items, 1)
-			assert.Equal(t, "val1", r.Items["key1"].Value)
+			require.NotNil(t, r.GetItems())
+			assert.Len(t, r.GetItems(), 1)
+			assert.Equal(t, "val1", r.GetItems()["key1"].GetValue())
 		}
 	}
 
@@ -3177,15 +3173,15 @@ func TestSubscribeConfigurationAPI(t *testing.T) {
 					break
 				}
 
-				if update != nil && len(update.Items) > 0 {
+				if update != nil && len(update.GetItems()) > 0 {
 					r = update
 					break
 				}
 			}
 
 			require.NotNil(t, r)
-			assert.Len(t, r.Items, 1)
-			assert.Equal(t, "val1", r.Items["key1"].Value)
+			assert.Len(t, r.GetItems(), 1)
+			assert.Equal(t, "val1", r.GetItems()["key1"].GetValue())
 		}
 	}
 
@@ -3219,16 +3215,16 @@ func TestSubscribeConfigurationAPI(t *testing.T) {
 					break
 				}
 
-				if update != nil && len(update.Items) > 0 {
+				if update != nil && len(update.GetItems()) > 0 {
 					r = update
 					break
 				}
 			}
 
 			require.NotNil(t, r)
-			assert.Len(t, r.Items, 2)
-			assert.Equal(t, "val1", r.Items["key1"].Value)
-			assert.Equal(t, "val2", r.Items["key2"].Value)
+			assert.Len(t, r.GetItems(), 2)
+			assert.Equal(t, "val1", r.GetItems()["key1"].GetValue())
+			assert.Equal(t, "val2", r.GetItems()["key2"].GetValue())
 		}
 	}
 
@@ -3303,7 +3299,7 @@ func TestStateAPIWithResiliency(t *testing.T) {
 			StoreName: "failStore",
 			Key:       "failingGetKey",
 		})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, 2, failingStore.Failure.CallCount("failingGetKey"))
 	})
 
@@ -3315,7 +3311,7 @@ func TestStateAPIWithResiliency(t *testing.T) {
 		})
 		end := time.Now()
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutGetKey"))
 		assert.Less(t, end.Sub(start), time.Second*30)
 	})
@@ -3330,7 +3326,7 @@ func TestStateAPIWithResiliency(t *testing.T) {
 				},
 			},
 		})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, 2, failingStore.Failure.CallCount("failingSetKey"))
 	})
 
@@ -3347,7 +3343,7 @@ func TestStateAPIWithResiliency(t *testing.T) {
 		})
 		end := time.Now()
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutSetKey"))
 		assert.Less(t, end.Sub(start), time.Second*30)
 	})
@@ -3357,7 +3353,7 @@ func TestStateAPIWithResiliency(t *testing.T) {
 			StoreName: "failStore",
 			Key:       "failingDeleteKey",
 		})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, 2, failingStore.Failure.CallCount("failingDeleteKey"))
 	})
 
@@ -3369,7 +3365,7 @@ func TestStateAPIWithResiliency(t *testing.T) {
 		})
 		end := time.Now()
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutDeleteKey"))
 		assert.Less(t, end.Sub(start), time.Second*30)
 	})
@@ -3386,7 +3382,7 @@ func TestStateAPIWithResiliency(t *testing.T) {
 			Keys:      []string{"failingBulkGetKey", "goodBulkGetKey"},
 		})
 
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 
 	t.Run("bulk state set recovers from single key failure with resiliency", func(t *testing.T) {
@@ -3404,7 +3400,7 @@ func TestStateAPIWithResiliency(t *testing.T) {
 			},
 		})
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, 2, failingStore.Failure.CallCount("failingBulkSetKey"))
 		assert.Equal(t, 1, failingStore.Failure.CallCount("goodBulkSetKey"))
 	})
@@ -3426,7 +3422,7 @@ func TestStateAPIWithResiliency(t *testing.T) {
 		})
 		end := time.Now()
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutBulkSetKey"))
 		assert.Equal(t, 0, failingStore.Failure.CallCount("goodTimeoutBulkSetKey"))
 		assert.Less(t, end.Sub(start), time.Second*30)
@@ -3445,7 +3441,7 @@ func TestStateAPIWithResiliency(t *testing.T) {
 			},
 		})
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, 2, failingStore.Failure.CallCount("failingMultiKey"))
 	})
 
@@ -3462,7 +3458,7 @@ func TestStateAPIWithResiliency(t *testing.T) {
 			},
 		})
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutMultiKey"))
 	})
 
@@ -3473,7 +3469,7 @@ func TestStateAPIWithResiliency(t *testing.T) {
 			Metadata:  map[string]string{"key": "failingQueryKey"},
 		})
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, 2, failingStore.Failure.CallCount("failingQueryKey"))
 	})
 
@@ -3484,7 +3480,7 @@ func TestStateAPIWithResiliency(t *testing.T) {
 			Metadata:  map[string]string{"key": "timeoutQueryKey"},
 		})
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Equal(t, 2, failingStore.Failure.CallCount("timeoutQueryKey"))
 	})
 }
@@ -3532,7 +3528,7 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 			Metadata:  map[string]string{"key": "failingGetKey"},
 		})
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("failingGetKey"))
 	})
 
@@ -3543,7 +3539,7 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 			Metadata:  map[string]string{"key": "timeoutGetKey"},
 		})
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("timeoutGetKey"))
 	})
 
@@ -3553,10 +3549,10 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 			Keys:      []string{},
 			Metadata:  map[string]string{"key": "failingSubscribeKey"},
 		})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		_, err = resp.Recv()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("failingSubscribeKey"))
 	})
@@ -3567,10 +3563,10 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 			Keys:      []string{},
 			Metadata:  map[string]string{"key": "timeoutSubscribeKey"},
 		})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		_, err = resp.Recv()
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Equal(t, 2, failingConfigStore.Failure.CallCount("timeoutSubscribeKey"))
 	})
 }
@@ -3613,7 +3609,7 @@ func TestSecretAPIWithResiliency(t *testing.T) {
 			Key:       "key",
 		})
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, 2, failingStore.Failure.CallCount("key"))
 	})
 
@@ -3626,7 +3622,7 @@ func TestSecretAPIWithResiliency(t *testing.T) {
 		})
 		end := time.Now()
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Equal(t, 2, failingStore.Failure.CallCount("timeout"))
 		assert.Less(t, end.Sub(start), time.Second*30)
 	})
@@ -3637,7 +3633,7 @@ func TestSecretAPIWithResiliency(t *testing.T) {
 			Metadata:  map[string]string{"key": "bulk"},
 		})
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, 2, failingStore.Failure.CallCount("bulk"))
 	})
 
@@ -3649,7 +3645,7 @@ func TestSecretAPIWithResiliency(t *testing.T) {
 		})
 		end := time.Now()
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Equal(t, 2, failingStore.Failure.CallCount("bulkTimeout"))
 		assert.Less(t, end.Sub(start), time.Second*30)
 	})
@@ -3703,8 +3699,8 @@ func TestServiceInvocationWithResiliency(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, 2, failingDirectMessaging.Failure.CallCount("failingKey"))
 		require.NotNil(t, res)
-		require.NotNil(t, res.Data)
-		assert.Equal(t, val, res.Data.Value)
+		require.NotNil(t, res.GetData())
+		assert.Equal(t, val, res.GetData().GetValue())
 	})
 
 	t.Run("Test invoke direct message fails with timeout", func(t *testing.T) {
@@ -3718,7 +3714,7 @@ func TestServiceInvocationWithResiliency(t *testing.T) {
 		})
 		end := time.Now()
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Equal(t, 2, failingDirectMessaging.Failure.CallCount("timeoutKey"))
 		assert.Less(t, end.Sub(start), time.Second*30)
 	})
@@ -3732,7 +3728,7 @@ func TestServiceInvocationWithResiliency(t *testing.T) {
 			},
 		})
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Equal(t, 2, failingDirectMessaging.Failure.CallCount("extraFailingKey"))
 	})
 
@@ -3745,7 +3741,7 @@ func TestServiceInvocationWithResiliency(t *testing.T) {
 				Data:   &anypb.Any{Value: []byte("circuitBreakerKey")},
 			},
 		})
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Equal(t, 5, failingDirectMessaging.Failure.CallCount("circuitBreakerKey"))
 
 		// Additional requests should fail due to the circuit breaker.
@@ -3756,7 +3752,7 @@ func TestServiceInvocationWithResiliency(t *testing.T) {
 				Data:   &anypb.Any{Value: []byte("circuitBreakerKey")},
 			},
 		})
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Contains(t, err.Error(), "circuit breaker is open")
 		assert.Equal(t, 5, failingDirectMessaging.Failure.CallCount("circuitBreakerKey"))
 	})
@@ -3965,8 +3961,8 @@ func TestTryLock(t *testing.T) {
 			ExpiryInSeconds: 1,
 		}
 		resp, err := api.TryLockAlpha1(context.Background(), req)
-		assert.NoError(t, err)
-		assert.Equal(t, true, resp.Success)
+		require.NoError(t, err)
+		assert.True(t, resp.GetSuccess())
 	})
 }
 
@@ -4084,8 +4080,8 @@ func TestUnlock(t *testing.T) {
 			LockOwner:  "owner",
 		}
 		resp, err := api.UnlockAlpha1(context.Background(), req)
-		assert.NoError(t, err)
-		assert.Equal(t, runtimev1pb.UnlockResponse_SUCCESS, resp.Status) //nolint:nosnakecase
+		require.NoError(t, err)
+		assert.Equal(t, runtimev1pb.UnlockResponse_SUCCESS, resp.GetStatus()) //nolint:nosnakecase
 	})
 }
 
@@ -4209,17 +4205,17 @@ func TestMetadata(t *testing.T) {
 			Key:   "foo",
 			Value: "bar",
 		})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("Get Metadata", func(t *testing.T) {
 		res, err := client.GetMetadata(context.Background(), &runtimev1pb.GetMetadataRequest{})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
-		assert.Equal(t, "fakeAPI", res.Id)
+		assert.Equal(t, "fakeAPI", res.GetId())
 
 		bytes, err := json.Marshal(res)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		expectedResponse := `{"id":"fakeAPI","active_actors_count":[{"type":"abcd","count":10},{"type":"xyz","count":5}],"registered_components":[{"name":"MockComponent1Name","type":"mock.component1Type","version":"v1.0","capabilities":["mock.feat.MockComponent1Name"]},{"name":"MockComponent2Name","type":"mock.component2Type","version":"v1.0","capabilities":["mock.feat.MockComponent2Name"]}],"extended_metadata":{"daprRuntimeVersion":"edge","foo":"bar","test":"value"},"subscriptions":[{"pubsub_name":"test","topic":"topic","rules":{"rules":[{"path":"path"}]},"dead_letter_topic":"dead"}],"http_endpoints":[{"name":"MockHTTPEndpoint"}],"app_connection_properties":{"port":5000,"protocol":"grpc","channel_address":"1.2.3.4","max_concurrency":10,"health":{"health_probe_interval":"10s","health_probe_timeout":"5s","health_threshold":3}},"runtime_version":"edge","actor_runtime":{"runtime_status":2,"active_actors":[{"type":"abcd","count":10},{"type":"xyz","count":5}],"host_ready":true}}`
 		assert.Equal(t, expectedResponse, string(bytes))
