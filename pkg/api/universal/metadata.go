@@ -67,7 +67,7 @@ func (a *Universal) GetMetadata(ctx context.Context, in *runtimev1pb.GetMetadata
 		}
 
 		// Health check path is not applicable for gRPC.
-		if protocol.Protocol(appConnectionProperties.Protocol).IsHTTP() {
+		if protocol.Protocol(appConnectionProperties.GetProtocol()).IsHTTP() {
 			appConnectionProperties.Health.HealthCheckPath = a.appConnectionConfig.HealthCheckHTTPPath
 		}
 	}
@@ -132,7 +132,7 @@ func (a *Universal) SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadata
 	if a.extendedMetadata == nil {
 		a.extendedMetadata = make(map[string]string)
 	}
-	a.extendedMetadata[in.Key] = in.Value
+	a.extendedMetadata[in.GetKey()] = in.GetValue()
 	a.extendedMetadataLock.Unlock()
 
 	return &emptypb.Empty{}, nil

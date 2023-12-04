@@ -29,7 +29,7 @@ import (
 
 // GetWorkflowBeta1 is the API handler for getting workflow details
 func (a *Universal) GetWorkflowBeta1(ctx context.Context, in *runtimev1pb.GetWorkflowRequest) (*runtimev1pb.GetWorkflowResponse, error) {
-	if err := a.validateInstanceID(in.InstanceId, false /* isCreate */); err != nil {
+	if err := a.validateInstanceID(in.GetInstanceId(), false /* isCreate */); err != nil {
 		a.logger.Debug(err)
 		return &runtimev1pb.GetWorkflowResponse{}, err
 	}
@@ -70,7 +70,7 @@ func (a *Universal) GetWorkflowBeta1(ctx context.Context, in *runtimev1pb.GetWor
 
 // StartWorkflowBeta1 is the API handler for starting a workflow
 func (a *Universal) StartWorkflowBeta1(ctx context.Context, in *runtimev1pb.StartWorkflowRequest) (*runtimev1pb.StartWorkflowResponse, error) {
-	if err := a.validateInstanceID(in.InstanceId, true /* isCreate */); err != nil {
+	if err := a.validateInstanceID(in.GetInstanceId(), true /* isCreate */); err != nil {
 		a.logger.Debug(err)
 		return &runtimev1pb.StartWorkflowResponse{}, err
 	}
@@ -99,7 +99,7 @@ func (a *Universal) StartWorkflowBeta1(ctx context.Context, in *runtimev1pb.Star
 
 	resp, err := workflowComponent.Start(ctx, &req)
 	if err != nil {
-		err := messages.ErrStartWorkflow.WithFormat(in.WorkflowName, err)
+		err := messages.ErrStartWorkflow.WithFormat(in.GetWorkflowName(), err)
 		a.logger.Debug(err)
 		return &runtimev1pb.StartWorkflowResponse{}, err
 	}
@@ -112,7 +112,7 @@ func (a *Universal) StartWorkflowBeta1(ctx context.Context, in *runtimev1pb.Star
 // TerminateWorkflowBeta1 is the API handler for terminating a workflow
 func (a *Universal) TerminateWorkflowBeta1(ctx context.Context, in *runtimev1pb.TerminateWorkflowRequest) (*emptypb.Empty, error) {
 	emptyResponse := &emptypb.Empty{}
-	if err := a.validateInstanceID(in.InstanceId, false /* isCreate */); err != nil {
+	if err := a.validateInstanceID(in.GetInstanceId(), false /* isCreate */); err != nil {
 		a.logger.Debug(err)
 		return emptyResponse, err
 	}
@@ -144,7 +144,7 @@ func (a *Universal) TerminateWorkflowBeta1(ctx context.Context, in *runtimev1pb.
 // RaiseEventWorkflowBeta1 is the API handler for raising an event to a workflow
 func (a *Universal) RaiseEventWorkflowBeta1(ctx context.Context, in *runtimev1pb.RaiseEventWorkflowRequest) (*emptypb.Empty, error) {
 	emptyResponse := &emptypb.Empty{}
-	if err := a.validateInstanceID(in.InstanceId, false /* isCreate */); err != nil {
+	if err := a.validateInstanceID(in.GetInstanceId(), false /* isCreate */); err != nil {
 		a.logger.Debug(err)
 		return emptyResponse, err
 	}
@@ -172,7 +172,7 @@ func (a *Universal) RaiseEventWorkflowBeta1(ctx context.Context, in *runtimev1pb
 
 	err = workflowComponent.RaiseEvent(ctx, &req)
 	if err != nil {
-		err = messages.ErrRaiseEventWorkflow.WithFormat(in.InstanceId, err)
+		err = messages.ErrRaiseEventWorkflow.WithFormat(in.GetInstanceId(), err)
 		a.logger.Debug(err)
 		return emptyResponse, err
 	}
@@ -182,7 +182,7 @@ func (a *Universal) RaiseEventWorkflowBeta1(ctx context.Context, in *runtimev1pb
 // PauseWorkflowBeta1 is the API handler for pausing a workflow
 func (a *Universal) PauseWorkflowBeta1(ctx context.Context, in *runtimev1pb.PauseWorkflowRequest) (*emptypb.Empty, error) {
 	emptyResponse := &emptypb.Empty{}
-	if err := a.validateInstanceID(in.InstanceId, false /* isCreate */); err != nil {
+	if err := a.validateInstanceID(in.GetInstanceId(), false /* isCreate */); err != nil {
 		a.logger.Debug(err)
 		return emptyResponse, err
 	}
@@ -200,7 +200,7 @@ func (a *Universal) PauseWorkflowBeta1(ctx context.Context, in *runtimev1pb.Paus
 		InstanceID: in.GetInstanceId(),
 	}
 	if err := workflowComponent.Pause(ctx, req); err != nil {
-		err = messages.ErrPauseWorkflow.WithFormat(in.InstanceId, err)
+		err = messages.ErrPauseWorkflow.WithFormat(in.GetInstanceId(), err)
 		a.logger.Debug(err)
 		return emptyResponse, err
 	}
@@ -210,7 +210,7 @@ func (a *Universal) PauseWorkflowBeta1(ctx context.Context, in *runtimev1pb.Paus
 // ResumeWorkflowBeta1 is the API handler for resuming a workflow
 func (a *Universal) ResumeWorkflowBeta1(ctx context.Context, in *runtimev1pb.ResumeWorkflowRequest) (*emptypb.Empty, error) {
 	emptyResponse := &emptypb.Empty{}
-	if err := a.validateInstanceID(in.InstanceId, false /* isCreate */); err != nil {
+	if err := a.validateInstanceID(in.GetInstanceId(), false /* isCreate */); err != nil {
 		a.logger.Debug(err)
 		return emptyResponse, err
 	}
@@ -228,7 +228,7 @@ func (a *Universal) ResumeWorkflowBeta1(ctx context.Context, in *runtimev1pb.Res
 		InstanceID: in.GetInstanceId(),
 	}
 	if err := workflowComponent.Resume(ctx, req); err != nil {
-		err = messages.ErrResumeWorkflow.WithFormat(in.InstanceId, err)
+		err = messages.ErrResumeWorkflow.WithFormat(in.GetInstanceId(), err)
 		a.logger.Debug(err)
 		return emptyResponse, err
 	}
@@ -238,7 +238,7 @@ func (a *Universal) ResumeWorkflowBeta1(ctx context.Context, in *runtimev1pb.Res
 // PurgeWorkflowBeta1 is the API handler for purging a workflow
 func (a *Universal) PurgeWorkflowBeta1(ctx context.Context, in *runtimev1pb.PurgeWorkflowRequest) (*emptypb.Empty, error) {
 	emptyResponse := &emptypb.Empty{}
-	if err := a.validateInstanceID(in.InstanceId, false /* isCreate */); err != nil {
+	if err := a.validateInstanceID(in.GetInstanceId(), false /* isCreate */); err != nil {
 		a.logger.Debug(err)
 		return emptyResponse, err
 	}

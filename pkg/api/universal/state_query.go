@@ -45,7 +45,7 @@ func (a *Universal) GetStateStore(name string) (state.Store, error) {
 }
 
 func (a *Universal) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryStateRequest) (*runtimev1pb.QueryStateResponse, error) {
-	store, err := a.GetStateStore(in.StoreName)
+	store, err := a.GetStateStore(in.GetStoreName())
 	if err != nil {
 		// Error has already been logged
 		return nil, err
@@ -58,14 +58,14 @@ func (a *Universal) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryS
 		return nil, err
 	}
 
-	if encryption.EncryptedStateStore(in.StoreName) {
+	if encryption.EncryptedStateStore(in.GetStoreName()) {
 		err = errors.StateStoreQueryFailed(in.GetStoreName(), "cannot query encrypted store")
 		a.logger.Debug(err)
 		return nil, err
 	}
 
 	var req state.QueryRequest
-	if err = json.Unmarshal([]byte(in.Query), &req.Query); err != nil {
+	if err = json.Unmarshal([]byte(in.GetQuery()), &req.Query); err != nil {
 		err = errors.StateStoreQueryFailed(in.GetStoreName(), "failed to parse JSON query body: "+err.Error())
 		a.logger.Debug(err)
 		return nil, err
@@ -75,7 +75,7 @@ func (a *Universal) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryS
 
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[*state.QueryResponse](ctx,
-		a.resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Statestore),
+		a.resiliency.ComponentOutboundPolicy(in.GetStoreName(), resiliency.Statestore),
 	)
 	resp, err := policyRunner(func(ctx context.Context) (*state.QueryResponse, error) {
 		return querier.Query(ctx, &req)
