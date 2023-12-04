@@ -16,7 +16,6 @@ package quorum
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"testing"
 	"time"
 
@@ -72,7 +71,7 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 		if j >= 3 {
 			j = 0
 		}
-		host := "localhost:" + strconv.Itoa(n.places[j].Port())
+		host := n.places[j].Address()
 		conn, err := grpc.DialContext(ctx, host, grpc.WithBlock(), grpc.WithReturnConnectionError(),
 			grpc.WithTransportCredentials(grpcinsecure.NewCredentials()),
 		)
@@ -109,11 +108,11 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		o, err := stream.Recv()
 		require.NoError(t, err)
-		assert.Equal(c, "update", o.Operation)
+		assert.Equal(c, "update", o.GetOperation())
 		if assert.NotNil(c, o.GetTables()) {
-			assert.Len(c, o.GetTables().Entries, 2)
-			assert.Contains(c, o.GetTables().Entries, "entity-1")
-			assert.Contains(c, o.GetTables().Entries, "entity-2")
+			assert.Len(c, o.GetTables().GetEntries(), 2)
+			assert.Contains(c, o.GetTables().GetEntries(), "entity-1")
+			assert.Contains(c, o.GetTables().GetEntries(), "entity-2")
 		}
 	}, time.Second*20, time.Millisecond*100)
 }

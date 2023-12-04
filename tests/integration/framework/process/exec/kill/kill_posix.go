@@ -21,9 +21,9 @@ import (
 	"os/exec"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func interrupt(t *testing.T, cmd *exec.Cmd) {
-	assert.NoError(t, cmd.Process.Signal(os.Interrupt))
+	require.NoError(t, cmd.Process.Signal(os.Interrupt))
 }

@@ -165,9 +165,9 @@ func TestAddOrUpdateOutbox(t *testing.T) {
 		})
 
 		c := o.outboxStores["test"]
-		assert.Equal(t, c.outboxPubsub, "2")
-		assert.Equal(t, c.publishPubSub, "a")
-		assert.Equal(t, c.publishTopic, "1")
+		assert.Equal(t, "2", c.outboxPubsub)
+		assert.Equal(t, "a", c.publishPubSub)
+		assert.Equal(t, "1", c.publishTopic)
 	})
 
 	t.Run("config default values correct", func(t *testing.T) {
@@ -199,9 +199,9 @@ func TestAddOrUpdateOutbox(t *testing.T) {
 		})
 
 		c := o.outboxStores["test"]
-		assert.Equal(t, c.outboxPubsub, "a")
-		assert.Equal(t, c.publishPubSub, "a")
-		assert.Equal(t, c.publishTopic, "1")
+		assert.Equal(t, "a", c.outboxPubsub)
+		assert.Equal(t, "a", c.publishPubSub)
+		assert.Equal(t, "1", c.publishTopic)
 	})
 }
 
@@ -211,7 +211,7 @@ func TestPublishInternal(t *testing.T) {
 		o.publishFn = func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
 			var cloudEvent map[string]interface{}
 			err := json.Unmarshal(pr.Data, &cloudEvent)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			assert.Equal(t, "test", cloudEvent["data"])
 			assert.Equal(t, "a", pr.PubsubName)
@@ -256,7 +256,7 @@ func TestPublishInternal(t *testing.T) {
 			},
 		}, "testapp", "", "")
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("valid operation, no datacontenttype", func(t *testing.T) {
@@ -264,7 +264,7 @@ func TestPublishInternal(t *testing.T) {
 		o.publishFn = func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
 			var cloudEvent map[string]interface{}
 			err := json.Unmarshal(pr.Data, &cloudEvent)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			assert.Equal(t, "test", cloudEvent["data"])
 			assert.Equal(t, "a", pr.PubsubName)
@@ -311,7 +311,7 @@ func TestPublishInternal(t *testing.T) {
 			},
 		}, "testapp", "", "")
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	type customData struct {
@@ -323,13 +323,13 @@ func TestPublishInternal(t *testing.T) {
 		o.publishFn = func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
 			var cloudEvent map[string]interface{}
 			err := json.Unmarshal(pr.Data, &cloudEvent)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			data := cloudEvent["data"]
 			j := customData{}
 
 			err = json.Unmarshal([]byte(data.(string)), &j)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			assert.Equal(t, "test", j.Name)
 			assert.Equal(t, "a", pr.PubsubName)
@@ -382,7 +382,7 @@ func TestPublishInternal(t *testing.T) {
 			},
 		}, "testapp", "", "")
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("missing state store", func(t *testing.T) {
@@ -394,7 +394,7 @@ func TestPublishInternal(t *testing.T) {
 				Value: "test",
 			},
 		}, "testapp", "", "")
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 
 	t.Run("no op when no transactions", func(t *testing.T) {
@@ -432,7 +432,7 @@ func TestPublishInternal(t *testing.T) {
 
 		_, err := o.PublishInternal(context.TODO(), "test", []state.TransactionalStateOperation{}, "testapp", "", "")
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("error when pubsub fails", func(t *testing.T) {
@@ -474,7 +474,7 @@ func TestPublishInternal(t *testing.T) {
 			},
 		}, "testapp", "", "")
 
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 }
 
@@ -640,8 +640,8 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 			},
 		}, appID, "", "")
 
-		assert.Error(t, pErr)
-		assert.Len(t, trs, 0)
+		require.Error(t, pErr)
+		assert.Empty(t, trs)
 	})
 
 	t.Run("outbox state not present", func(t *testing.T) {
@@ -727,7 +727,7 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 		}()
 
 		d, err := time.ParseDuration(stateScan)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		start := time.Now()
 		doneCh := make(chan error, 2)
@@ -852,7 +852,7 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 		}()
 
 		d, err := time.ParseDuration(stateScan)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		start := time.Now()
 		doneCh := make(chan error, 2)
@@ -909,7 +909,7 @@ func (o *outboxPubsubMock) Publish(ctx context.Context, req *contribPubsub.Publi
 		})
 
 		if o.validateNoError {
-			assert.NoError(o.t, err)
+			require.NoError(o.t, err)
 			return
 		}
 	}()

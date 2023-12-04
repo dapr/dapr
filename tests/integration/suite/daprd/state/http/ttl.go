@@ -62,7 +62,7 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		resp, err := client.Do(req)
 		require.NoError(t, err)
-		assert.NoError(t, resp.Body.Close())
+		require.NoError(t, resp.Body.Close())
 		assert.Equal(t, http.StatusNoContent, resp.StatusCode)
 	})
 
@@ -74,7 +74,7 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		body, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
-		assert.NoError(t, resp.Body.Close())
+		require.NoError(t, resp.Body.Close())
 		assert.Equal(t, `"value1"`, string(body))
 
 		ttlExpireTimeStr := resp.Header.Get("metadata.ttlExpireTime")
@@ -90,7 +90,7 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 			require.NoError(c, err)
 			resp, err := client.Do(req)
 			require.NoError(c, err)
-			assert.NoError(t, resp.Body.Close())
+			require.NoError(t, resp.Body.Close())
 			assert.Equal(c, http.StatusNoContent, resp.StatusCode)
 		}, 5*time.Second, 100*time.Millisecond)
 	})
