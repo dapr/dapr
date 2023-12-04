@@ -327,13 +327,13 @@ func TestInitPubSub(t *testing.T) {
 
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
 
-		assert.NoError(t, ps.StartSubscriptions(context.Background()))
+		require.NoError(t, ps.StartSubscriptions(context.Background()))
 		ps.StopSubscriptions()
 
 		// act
 		for _, comp := range pubsubComponents {
 			err := ps.Init(context.Background(), comp)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 		}
 
 		// assert
@@ -362,12 +362,12 @@ func TestInitPubSub(t *testing.T) {
 
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
 
-		assert.NoError(t, ps.StartSubscriptions(context.Background()))
+		require.NoError(t, ps.StartSubscriptions(context.Background()))
 
 		// act
 		for _, comp := range pubsubComponents {
 			err := ps.Init(context.Background(), comp)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 		}
 
 		// assert
