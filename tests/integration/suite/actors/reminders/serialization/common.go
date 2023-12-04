@@ -33,7 +33,7 @@ func invokeActor(t *testing.T, ctx context.Context, baseURL string, client *http
 		require.NoError(c, err)
 		resp, rErr := client.Do(req)
 		require.NoError(c, rErr)
-		assert.NoError(c, resp.Body.Close())
+		require.NoError(c, resp.Body.Close())
 		assert.Equal(c, http.StatusOK, resp.StatusCode)
 	}, time.Second*10, time.Millisecond*100, "actor not ready in time")
 }

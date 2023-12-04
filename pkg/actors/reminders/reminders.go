@@ -638,6 +638,7 @@ func (r *reminders) unserialize(data []byte) ([]internal.Reminder, error) {
 	return batch, err
 }
 
+//nolint:protogetter
 func (r *reminders) unserializeRemindersFromProto(data []byte) ([]internal.Reminder, error) {
 	pb := internalv1pb.Reminders{}
 	err := proto.Unmarshal(data, &pb)
@@ -647,6 +648,9 @@ func (r *reminders) unserializeRemindersFromProto(data []byte) ([]internal.Remin
 
 	res := make([]internal.Reminder, len(pb.GetReminders()))
 	for i, rm := range pb.GetReminders() {
+		if rm == nil {
+			return nil, errors.New("unserialized reminder object is nil")
+		}
 		res[i] = internal.Reminder{
 			ActorID:   rm.ActorId,
 			ActorType: rm.ActorType,
