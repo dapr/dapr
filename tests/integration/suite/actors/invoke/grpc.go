@@ -123,6 +123,7 @@ func (i *igrpc) Run(t *testing.T, ctx context.Context) {
 				ActorId:   "myactorid",
 				Method:    "invoke",
 			})
+			//nolint:testifylint
 			assert.NoError(t, err)
 		}, time.Second*15, time.Millisecond*100)
 	}
@@ -135,7 +136,7 @@ func (i *igrpc) Run(t *testing.T, ctx context.Context) {
 				Method:    "invoke",
 			})
 			require.NoError(t, err)
-			assert.Equal(t, strconv.Itoa(target), string(resp.Data))
+			assert.Equal(t, strconv.Itoa(target), string(resp.GetData()))
 		}
 	}
 }

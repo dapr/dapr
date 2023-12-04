@@ -117,7 +117,7 @@ func (i *ihttp) Run(t *testing.T, ctx context.Context) {
 			assert.Equal(t, http.StatusOK, resp.StatusCode)
 			body, err := io.ReadAll(resp.Body)
 			require.NoError(t, err)
-			assert.NoError(t, resp.Body.Close())
+			require.NoError(t, resp.Body.Close())
 			assert.Equal(t, strconv.Itoa(i), string(body))
 		}, time.Second*15, time.Millisecond*100)
 	}
@@ -133,7 +133,7 @@ func (i *ihttp) Run(t *testing.T, ctx context.Context) {
 			assert.Equal(t, http.StatusOK, resp.StatusCode)
 			body, err := io.ReadAll(resp.Body)
 			require.NoError(t, err)
-			assert.NoError(t, resp.Body.Close())
+			require.NoError(t, resp.Body.Close())
 			assert.Equal(t, strconv.Itoa(target), string(body))
 		}
 	}
