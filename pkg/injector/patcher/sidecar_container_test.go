@@ -576,6 +576,37 @@ func TestGetSidecarContainer(t *testing.T) {
 		},
 	}))
 
+	t.Run("block shutdown seconds", testSuiteGenerator([]testCase{
+		{
+			name:        "default to empty",
+			annotations: map[string]string{},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.NotContains(t, args, "--dapr-block-shutdown-seconds")
+			},
+		},
+		{
+			name: "add a block shutdown seconds",
+			annotations: map[string]string{
+				annotations.KeyBlockShutdownSeconds: "3",
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.Contains(t, args, "--dapr-block-shutdown-seconds 3")
+			},
+		},
+		{
+			name: "empty when value is invalid",
+			annotations: map[string]string{
+				annotations.KeyBlockShutdownSeconds: "invalid",
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.NotContains(t, args, "--dapr-block-shutdown-seconds")
+			},
+		},
+	}))
+
 	t.Run("sidecar image", testSuiteGenerator([]testCase{
 		{
 			name:        "no annotation",

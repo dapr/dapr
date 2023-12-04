@@ -90,6 +90,7 @@ type Config struct {
 	DaprPublicPort               string
 	ApplicationPort              string
 	DaprGracefulShutdownSeconds  int
+	DaprBlockShutdownSeconds     *int
 	PlacementServiceHostAddr     string
 	DaprAPIListenAddresses       string
 	AppHealthProbeInterval       int
@@ -129,6 +130,7 @@ type internalConfig struct {
 	unixDomainSocket             string
 	readBufferSize               int
 	gracefulShutdownDuration     time.Duration
+	blockShutdownDuration        *time.Duration
 	enableAPILogging             *bool
 	disableBuiltinK8sSecretStore bool
 	config                       []string
@@ -360,6 +362,13 @@ func (c *Config) toInternal() (*internalConfig, error) {
 
 	if intc.readBufferSize == -1 {
 		intc.readBufferSize = DefaultReadBufferSize
+	}
+
+	if c.DaprBlockShutdownSeconds != nil {
+		if *c.DaprBlockShutdownSeconds < 0 {
+			return nil, fmt.Errorf("the '-dapr-block-shutdown-seconds' argument value %d must be more then 0", *c.DaprBlockShutdownSeconds)
+		}
+		intc.blockShutdownDuration = ptr.Of(time.Duration(*c.DaprBlockShutdownSeconds) * time.Second)
 	}
 
 	if c.DaprGracefulShutdownSeconds < 0 {

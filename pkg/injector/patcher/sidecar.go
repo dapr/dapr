@@ -91,6 +91,7 @@ type SidecarConfig struct {
 	HTTPMaxRequestSize                  *int   `annotation:"dapr.io/http-max-request-size"`
 	HTTPReadBufferSize                  *int   `annotation:"dapr.io/http-read-buffer-size"`
 	GracefulShutdownSeconds             int    `annotation:"dapr.io/graceful-shutdown-seconds"               default:"-1"`
+	BlockShutdownSeconds                *int   `annotation:"dapr.io/block-shutdown-seconds"`
 	EnableAPILogging                    *bool  `annotation:"dapr.io/enable-api-logging"`
 	UnixDomainSocketPath                string `annotation:"dapr.io/unix-domain-socket-path"`
 	VolumeMounts                        string `annotation:"dapr.io/volume-mounts"`

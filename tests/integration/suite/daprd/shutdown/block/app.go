@@ -1,6 +1,3 @@
-//go:build !windows
-// +build !windows
-
 /*
 Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,20 +11,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package kill
+package app
 
 import (
-	"errors"
-	"os"
-	"os/exec"
-	"testing"
-
-	"github.com/stretchr/testify/require"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/shutdown/block/app"
 )
-
-func interrupt(t *testing.T, cmd *exec.Cmd) {
-	err := cmd.Process.Signal(os.Interrupt)
-	if !errors.Is(err, os.ErrProcessDone) {
-		require.NoError(t, err)
-	}
-}
