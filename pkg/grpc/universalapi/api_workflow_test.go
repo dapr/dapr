@@ -17,7 +17,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/dapr/pkg/messages"
@@ -128,9 +128,9 @@ func TestStartWorkflowBeta1API(t *testing.T) {
 			_, err := fakeAPI.StartWorkflowBeta1(context.Background(), req)
 
 			if tt.expectedError == nil {
-				assert.NoError(t, err)
-			} else if assert.Error(t, err) {
-				assert.Equal(t, tt.expectedError, err)
+				require.NoError(t, err)
+			} else {
+				require.ErrorIs(t, err, tt.expectedError)
 			}
 		})
 	}
@@ -201,9 +201,9 @@ func TestGetWorkflowBeta1API(t *testing.T) {
 			_, err := fakeAPI.GetWorkflowBeta1(context.Background(), req)
 
 			if tt.expectedError == nil {
-				assert.NoError(t, err)
-			} else if assert.Error(t, err) {
-				assert.Equal(t, tt.expectedError, err)
+				require.NoError(t, err)
+			} else {
+				require.ErrorIs(t, err, tt.expectedError)
 			}
 		})
 	}
@@ -274,9 +274,9 @@ func TestTerminateWorkflowBeta1API(t *testing.T) {
 			_, err := fakeAPI.TerminateWorkflowBeta1(context.Background(), req)
 
 			if tt.expectedError == nil {
-				assert.NoError(t, err)
-			} else if assert.Error(t, err) {
-				assert.Equal(t, tt.expectedError, err)
+				require.NoError(t, err)
+			} else {
+				require.ErrorIs(t, err, tt.expectedError)
 			}
 		})
 	}
@@ -364,9 +364,9 @@ func TestRaiseEventWorkflowBeta1Api(t *testing.T) {
 			_, err := fakeAPI.RaiseEventWorkflowBeta1(context.Background(), req)
 
 			if tt.expectedError == nil {
-				assert.NoError(t, err)
-			} else if assert.Error(t, err) {
-				assert.Equal(t, tt.expectedError, err)
+				require.NoError(t, err)
+			} else {
+				require.ErrorIs(t, err, tt.expectedError)
 			}
 		})
 	}
@@ -437,9 +437,9 @@ func TestPauseWorkflowBeta1Api(t *testing.T) {
 			_, err := fakeAPI.PauseWorkflowBeta1(context.Background(), req)
 
 			if tt.expectedError == nil {
-				assert.NoError(t, err)
-			} else if assert.Error(t, err) {
-				assert.Equal(t, tt.expectedError, err)
+				require.NoError(t, err)
+			} else {
+				require.ErrorIs(t, err, tt.expectedError)
 			}
 		})
 	}
@@ -510,9 +510,9 @@ func TestResumeWorkflowBeta1Api(t *testing.T) {
 			_, err := fakeAPI.ResumeWorkflowBeta1(context.Background(), req)
 
 			if tt.expectedError == nil {
-				assert.NoError(t, err)
-			} else if assert.Error(t, err) {
-				assert.Equal(t, tt.expectedError, err)
+				require.NoError(t, err)
+			} else {
+				require.ErrorIs(t, err, tt.expectedError)
 			}
 		})
 	}

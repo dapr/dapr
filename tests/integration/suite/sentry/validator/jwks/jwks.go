@@ -153,7 +153,7 @@ func (m *jwks) Run(t *testing.T, parentCtx context.Context) {
 			Token:                     string(token),
 		})
 		require.NoError(t, err)
-		require.NotEmpty(t, res.WorkloadCertificate)
+		require.NotEmpty(t, res.GetWorkloadCertificate())
 
 		validateCertificateResponse(t, res, m.proc.CABundle(), defaultAppSPIFFEID, defaultAppDNSName)
 	})

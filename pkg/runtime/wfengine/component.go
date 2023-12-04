@@ -199,8 +199,8 @@ func (c *workflowEngineComponent) Get(ctx context.Context, req *workflows.GetReq
 
 		// Status-specific fields
 		if metadata.FailureDetails != nil {
-			res.Workflow.Properties["dapr.workflow.failure.error_type"] = metadata.FailureDetails.ErrorType
-			res.Workflow.Properties["dapr.workflow.failure.error_message"] = metadata.FailureDetails.ErrorMessage
+			res.Workflow.Properties["dapr.workflow.failure.error_type"] = metadata.FailureDetails.GetErrorType()
+			res.Workflow.Properties["dapr.workflow.failure.error_message"] = metadata.FailureDetails.GetErrorMessage()
 		} else if metadata.IsComplete() {
 			res.Workflow.Properties["dapr.workflow.output"] = metadata.SerializedOutput
 		}

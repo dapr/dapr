@@ -87,7 +87,7 @@ func TestParseEnvString(t *testing.T) {
 			c := NewSidecarConfig(&corev1.Pod{})
 			c.Env = tc.envStr
 			envKeys, envVars := c.getEnv()
-			assert.Equal(t, tc.expLen, len(envVars))
+			assert.Len(t, envVars, tc.expLen)
 			assert.Equal(t, tc.expKeys, envKeys)
 			assert.Equal(t, tc.expEnv, envVars)
 		})
@@ -360,7 +360,7 @@ func TestGetSidecarContainer(t *testing.T) {
 		}
 
 		// Command should be empty, image's entrypoint to be used.
-		assert.Equal(t, 0, len(container.Command))
+		assert.Empty(t, container.Command)
 		// NAMESPACE
 		assert.Equal(t, "dapr-system", container.Env[0].Value)
 		// POD_NAME
@@ -450,7 +450,7 @@ func TestGetSidecarContainer(t *testing.T) {
 		}
 
 		// Command should be empty, image's entrypoint to be used.
-		assert.Equal(t, 0, len(container.Command))
+		assert.Empty(t, container.Command)
 		// NAMESPACE
 		assert.Equal(t, "dapr-system", container.Env[0].Value)
 		// POD_NAME
@@ -606,7 +606,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			name:        "default does not use UDS",
 			annotations: map[string]string{},
 			assertFn: func(t *testing.T, container *corev1.Container) {
-				assert.Equal(t, 0, len(container.VolumeMounts))
+				assert.Empty(t, container.VolumeMounts)
 			},
 		},
 		{
@@ -832,11 +832,11 @@ func TestGetSidecarContainer(t *testing.T) {
 
 			t.Run(tc.name, func(t *testing.T) {
 				if tc.explicitCommandSpecified {
-					assert.True(t, len(container.Command) > 0, "Must contain a command")
-					assert.True(t, len(container.Args) > 0, "Must contain arguments")
+					assert.NotEmpty(t, container.Command, "Must contain a command")
+					assert.NotEmpty(t, container.Args, "Must contain arguments")
 				} else {
-					assert.Len(t, container.Command, 0, "Must not contain a command")
-					assert.True(t, len(container.Args) > 0, "Must contain arguments")
+					assert.Empty(t, container.Command, "Must not contain a command")
+					assert.NotEmpty(t, container.Args, "Must contain arguments")
 				}
 			})
 		}

@@ -169,7 +169,7 @@ spec:
 func (f *fuzzstate) Run(t *testing.T, ctx context.Context) {
 	f.daprd.WaitUntilRunning(t, ctx)
 
-	conn, err := grpc.DialContext(ctx, fmt.Sprintf("localhost:%d", f.daprd.GRPCPort()), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+	conn, err := grpc.DialContext(ctx, f.daprd.GRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
 	client := rtv1.NewDaprClient(conn)
@@ -184,7 +184,7 @@ func (f *fuzzstate) Run(t *testing.T, ctx context.Context) {
 					Key:       f.getFuzzKeys[i],
 				})
 				require.NoError(t, err)
-				assert.Empty(t, resp.Data, "key: %s", f.getFuzzKeys[i])
+				assert.Empty(t, resp.GetData(), "key: %s", f.getFuzzKeys[i])
 			})
 		}
 	})
@@ -219,22 +219,22 @@ func (f *fuzzstate) Run(t *testing.T, ctx context.Context) {
 			for _, s := range append(f.saveReqStrings[i], f.saveReqBinaries[i]...) {
 				resp, err := client.GetState(ctx, &rtv1.GetStateRequest{
 					StoreName: f.storeName,
-					Key:       s.Key,
+					Key:       s.GetKey(),
 				})
 				require.NoError(t, err)
-				assert.Equalf(t, s.Value, resp.Data, "orig=%s got=%s", s.Value, resp.Data)
+				assert.Equalf(t, s.GetValue(), resp.GetData(), "orig=%s got=%s", s.GetValue(), resp.GetData())
 			}
 
 			for _, s := range f.saveReqBinariesHTTP[i] {
 				resp, err := client.GetState(ctx, &rtv1.GetStateRequest{
 					StoreName: f.storeName,
-					Key:       s.Key,
+					Key:       s.GetKey(),
 				})
 				require.NoError(t, err)
 				// TODO: Even though we are getting gRPC, the binary data was stored
 				// with HTTP, so it was base64 encoded.
-				val := `"` + base64.StdEncoding.EncodeToString(s.Value) + `"`
-				assert.Equalf(t, val, string(resp.Data), "orig=%s got=%s", val, resp.Data)
+				val := `"` + base64.StdEncoding.EncodeToString(s.GetValue()) + `"`
+				assert.Equalf(t, val, string(resp.GetData()), "orig=%s got=%s", val, resp.GetData())
 			}
 		})
 
