@@ -66,7 +66,7 @@ func (h *healthz) Setup(t *testing.T) []framework.Option {
 	h.place = placement.New(t)
 	h.daprd = daprd.New(t,
 		daprd.WithInMemoryActorStateStore("mystore"),
-		daprd.WithPlacementAddresses("localhost:"+strconv.Itoa(h.place.Port())),
+		daprd.WithPlacementAddresses(h.place.Address()),
 		daprd.WithAppProtocol("http"),
 		daprd.WithAppPort(srv.Port()),
 	)
@@ -94,5 +94,5 @@ func (h *healthz) Run(t *testing.T, ctx context.Context) {
 	resp, err := client.Do(req)
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
-	assert.NoError(t, resp.Body.Close())
+	require.NoError(t, resp.Body.Close())
 }

@@ -180,21 +180,21 @@ func TestCurrentNamespace(t *testing.T) {
 			}
 		})
 		ns, err := CurrentNamespaceOrError()
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Empty(t, ns)
 	})
 
 	t.Run("error if namespace is set but empty", func(t *testing.T) {
 		t.Setenv("NAMESPACE", "")
 		ns, err := CurrentNamespaceOrError()
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Empty(t, ns)
 	})
 
 	t.Run("returns namespace if set", func(t *testing.T) {
 		t.Setenv("NAMESPACE", "foo")
 		ns, err := CurrentNamespaceOrError()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, "foo", ns)
 	})
 }

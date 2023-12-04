@@ -12,7 +12,7 @@ This includes dockerfiles to build Dapr release and debug images and development
 
 The Dev Container can be rebuilt with custom options. Relevant args (and their default values) include:
 
-* `GOVERSION` (default: `1.20`)
+* `GOVERSION` (default: `1.21`)
 * `INSTALL_ZSH` (default: `true`)
 * `KUBECTL_VERSION` (default: `latest`)
 * `HELM_VERSION` (default: `latest`)

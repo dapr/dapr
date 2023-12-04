@@ -16,11 +16,11 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -40,14 +40,14 @@ func TestConfigCorrectValues(t *testing.T) {
 			ControlPlaneTrustDomain:           "trust.domain",
 		},
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	injector := i.(*injector)
 	assert.Equal(t, "c", injector.config.SidecarImage)
 	assert.Equal(t, "d", injector.config.SidecarImagePullPolicy)
 	assert.Equal(t, "e", injector.config.Namespace)
 	m, err := namespacednamematcher.CreateFromString("ns*:sa,namespace:sa*")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, m, injector.namespaceNameMatcher)
 }
 
@@ -60,7 +60,7 @@ func TestNewInjectorBadAllowedPrefixedServiceAccountConfig(t *testing.T) {
 			AllowedServiceAccountsPrefixNames: "ns*:sa,namespace:sa*sa",
 		},
 	})
-	assert.Error(t, err)
+	require.Error(t, err)
 }
 
 func TestGetAppIDFromRequest(t *testing.T) {
@@ -130,31 +130,31 @@ func TestAllowedControllersServiceAccountUID(t *testing.T) {
 			},
 		}
 		_, err := client.CoreV1().ServiceAccounts(testCase.namespace).Create(context.TODO(), sa, metav1.CreateOptions{})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	}
 
 	t.Run("injector config has no allowed service account", func(t *testing.T) {
 		uids, err := AllowedControllersServiceAccountUID(context.TODO(), Config{}, client)
-		assert.NoError(t, err)
-		assert.Equal(t, 2, len(uids))
+		require.NoError(t, err)
+		assert.Len(t, uids, 2)
 	})
 
 	t.Run("injector config has a valid allowed service account", func(t *testing.T) {
 		uids, err := AllowedControllersServiceAccountUID(context.TODO(), Config{AllowedServiceAccounts: "test:test"}, client)
-		assert.NoError(t, err)
-		assert.Equal(t, 3, len(uids))
+		require.NoError(t, err)
+		assert.Len(t, uids, 3)
 	})
 
 	t.Run("injector config has a invalid allowed service account", func(t *testing.T) {
 		uids, err := AllowedControllersServiceAccountUID(context.TODO(), Config{AllowedServiceAccounts: "abc:abc"}, client)
-		assert.NoError(t, err)
-		assert.Equal(t, 2, len(uids))
+		require.NoError(t, err)
+		assert.Len(t, uids, 2)
 	})
 
 	t.Run("injector config has multiple allowed service accounts", func(t *testing.T) {
 		uids, err := AllowedControllersServiceAccountUID(context.TODO(), Config{AllowedServiceAccounts: "test:test,abc:abc"}, client)
-		assert.NoError(t, err)
-		assert.Equal(t, 3, len(uids))
+		require.NoError(t, err)
+		assert.Len(t, uids, 3)
 	})
 }
 
@@ -165,13 +165,13 @@ func TestReady(t *testing.T) {
 	t.Run("if injector ready return nil", func(t *testing.T) {
 		i := &injector{ready: make(chan struct{})}
 		close(i.ready)
-		assert.NoError(t, i.Ready(ctx))
+		require.NoError(t, i.Ready(ctx))
 	})
 
 	t.Run("if not ready then should return timeout error if context cancelled", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*10)
 		defer cancel()
 		i := &injector{ready: make(chan struct{})}
-		assert.Error(t, i.Ready(ctx), errors.New("timed out waiting for injector to become ready"))
+		require.EqualError(t, i.Ready(ctx), "timed out waiting for injector to become ready")
 	})
 }

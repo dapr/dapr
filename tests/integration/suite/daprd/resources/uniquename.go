@@ -20,7 +20,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -75,7 +74,7 @@ spec:
 		daprd.WithExecOptions(
 			exec.WithExitCode(1),
 			exec.WithRunError(func(t *testing.T, err error) {
-				assert.ErrorContains(t, err, "exit status 1")
+				require.ErrorContains(t, err, "exit status 1")
 			}),
 			exec.WithStdout(u.logline.Stdout()),
 		),
