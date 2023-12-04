@@ -70,7 +70,7 @@ func TestMiddlewareBuildPipeline(t *testing.T) {
 			},
 		}, "test")
 		require.NoError(t, err)
-		assert.Len(t, pipeline.Handlers, 0)
+		assert.Empty(t, pipeline.Handlers)
 	})
 
 	compStore := compstore.New()
@@ -232,7 +232,7 @@ func TestGetAppHTTPChannelConfigWithCustomChannel(t *testing.T) {
 	}
 
 	p, err := ch.BuildHTTPPipeline(&config.PipelineSpec{})
-	assert.Nil(t, err)
+	require.NoError(t, err)
 
 	c := ch.appHTTPChannelConfig(p)
 	assert.Equal(t, "http://my.app:0", c.Endpoint)
@@ -285,7 +285,7 @@ func TestGetHTTPEndpointAppChannel(t *testing.T) {
 			Spec: httpendpapi.HTTPEndpointSpec{},
 		})
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Nil(t, conf.Client.Transport.(*http.Transport).TLSClientConfig)
 	})
 
@@ -366,7 +366,7 @@ func TestGetHTTPEndpointAppChannel(t *testing.T) {
 			},
 		})
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotNil(t, conf.Client.Transport.(*http.Transport).TLSClientConfig)
 	})
 
@@ -409,6 +409,6 @@ func TestGetHTTPEndpointAppChannel(t *testing.T) {
 			},
 		})
 
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 }

@@ -88,5 +88,5 @@ func (l *longname) Run(t *testing.T, ctx context.Context) {
 		Token:                     `{"kubernetes.io":{"pod":{"name":"mypod"}}}`,
 	})
 	require.NoError(t, err)
-	require.NotEmpty(t, resp.WorkloadCertificate)
+	require.NotEmpty(t, resp.GetWorkloadCertificate())
 }

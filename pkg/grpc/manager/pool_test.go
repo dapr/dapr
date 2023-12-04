@@ -152,7 +152,7 @@ func TestConnectionPool(t *testing.T) {
 
 		// Destroy all connections
 		cp.DestroyAll()
-		require.Len(t, cp.connections, 0)
+		require.Empty(t, cp.connections)
 		require.True(t, conns[0].Closed)
 		require.True(t, conns[1].Closed)
 	})
@@ -236,7 +236,7 @@ func TestConnectionPool(t *testing.T) {
 
 		// Destroy all connections
 		cp.DestroyAll()
-		require.Len(t, cp.connections, 0)
+		require.Empty(t, cp.connections)
 		require.True(t, conns[0].Closed)
 		require.True(t, conns[1].Closed)
 	})
@@ -244,7 +244,7 @@ func TestConnectionPool(t *testing.T) {
 	testExpiredConn := func(minActiveConns int) func(t *testing.T) {
 		// Reset the object
 		cp.DestroyAll()
-		require.Len(t, cp.connections, 0)
+		require.Empty(t, cp.connections)
 		conns[0].Closed = false
 		conns[1].Closed = false
 		cp.Register(conns[0])
@@ -338,7 +338,7 @@ func TestConnectionPool(t *testing.T) {
 			cp.Purge()
 
 			if minActiveConns == 0 {
-				require.Len(t, cp.connections, 0)
+				require.Empty(t, cp.connections)
 			} else {
 				require.Len(t, cp.connections, 1)
 				require.Equal(t, conns[0], cp.connections[0].conn)

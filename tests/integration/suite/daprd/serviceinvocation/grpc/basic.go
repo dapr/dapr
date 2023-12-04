@@ -52,7 +52,7 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 		case "foo":
 			var verb int
 			var data []byte
-			switch in.HttpExtension.Verb {
+			switch in.GetHttpExtension().GetVerb() {
 			case commonv1.HTTPExtension_PATCH:
 				data = []byte("PATCH")
 				verb = http.StatusNoContent
@@ -132,15 +132,15 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			})
 			require.NoError(t, err)
 
-			return resp.Data.Value, resp.ContentType
+			return resp.GetData().GetValue(), resp.GetContentType()
 		}
 
 		for _, ts := range []struct {
 			host   string
 			hostID string
 		}{
-			{host: fmt.Sprintf("localhost:%d", b.daprd1.GRPCPort()), hostID: b.daprd2.AppID()},
-			{host: fmt.Sprintf("localhost:%d", b.daprd2.GRPCPort()), hostID: b.daprd1.AppID()},
+			{host: b.daprd1.GRPCAddress(), hostID: b.daprd2.AppID()},
+			{host: b.daprd2.GRPCAddress(), hostID: b.daprd1.AppID()},
 		} {
 			t.Run(ts.host, func(t *testing.T) {
 				body, contentType := doReq(ts.host, ts.hostID, commonv1.HTTPExtension_GET)
@@ -167,7 +167,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("method doesn't exist", func(t *testing.T) {
-		host := fmt.Sprintf("localhost:%d", b.daprd1.GRPCPort())
+		host := b.daprd1.GRPCAddress()
 		conn, err := grpc.DialContext(ctx, host,
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 			grpc.WithBlock(),
@@ -190,7 +190,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("no method", func(t *testing.T) {
-		host := fmt.Sprintf("localhost:%d", b.daprd1.GRPCPort())
+		host := b.daprd1.GRPCAddress()
 		conn, err := grpc.DialContext(ctx, host,
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 			grpc.WithBlock(),
@@ -213,7 +213,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("multiple segments", func(t *testing.T) {
-		host := fmt.Sprintf("localhost:%d", b.daprd1.GRPCPort())
+		host := b.daprd1.GRPCAddress()
 		conn, err := grpc.DialContext(ctx, host,
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 			grpc.WithBlock(),
@@ -229,14 +229,14 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			},
 		})
 		require.NoError(t, err)
-		assert.Equal(t, "multiple/segments", string(resp.Data.Value))
-		assert.Equal(t, "application/json", resp.ContentType)
+		assert.Equal(t, "multiple/segments", string(resp.GetData().GetValue()))
+		assert.Equal(t, "application/json", resp.GetContentType())
 	})
 
 	pt := util.NewParallel(t)
 	for i := 0; i < 100; i++ {
 		pt.Add(func(c *assert.CollectT) {
-			host := fmt.Sprintf("localhost:%d", b.daprd1.GRPCPort())
+			host := b.daprd1.GRPCAddress()
 			conn, err := grpc.DialContext(ctx, host, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 			require.NoError(c, err)
 			t.Cleanup(func() { require.NoError(c, conn.Close()) })
@@ -250,13 +250,13 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			})
 			require.NoError(c, err)
 
-			assert.Equal(c, "POST", string(resp.Data.Value))
-			assert.Equal(c, "201", resp.ContentType)
+			assert.Equal(c, "POST", string(resp.GetData().GetValue()))
+			assert.Equal(c, "201", resp.GetContentType())
 		})
 	}
 
 	t.Run("type URL", func(t *testing.T) {
-		host := fmt.Sprintf("localhost:%d", b.daprd1.GRPCPort())
+		host := b.daprd1.GRPCAddress()
 		conn, err := grpc.DialContext(ctx, host,
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 			grpc.WithBlock(),
@@ -276,7 +276,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		})
 		require.NoError(t, err)
 		require.NotNil(t, resp.GetData())
-		assert.Equal(t, "emozioni di settembre/pfm", string(resp.Data.Value))
-		assert.Equal(t, "mytype", resp.Data.TypeUrl)
+		assert.Equal(t, "emozioni di settembre/pfm", string(resp.GetData().GetValue()))
+		assert.Equal(t, "mytype", resp.GetData().GetTypeUrl())
 	})
 }

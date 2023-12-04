@@ -71,13 +71,13 @@ func TestGrpcMetadataToInternalMetadata(t *testing.T) {
 	testMD.Append("multikey", "ciao", "mamma")
 	internalMD := metadataToInternalMetadata(testMD)
 
-	require.Equal(t, 1, len(internalMD["key"].GetValues()))
+	require.Len(t, internalMD["key"].GetValues(), 1)
 	assert.Equal(t, "key value", internalMD["key"].GetValues()[0])
 
-	require.Equal(t, 1, len(internalMD["key-bin"].GetValues()))
+	require.Len(t, internalMD["key-bin"].GetValues(), 1)
 	assert.Equal(t, base64.StdEncoding.EncodeToString(keyBinValue), internalMD["key-bin"].GetValues()[0], "binary metadata must be saved")
 
-	require.Equal(t, 2, len(internalMD["multikey"].GetValues()))
+	require.Len(t, internalMD["multikey"].GetValues(), 2)
 	assert.Equal(t, []string{"ciao", "mamma"}, internalMD["multikey"].GetValues())
 }
 
@@ -243,7 +243,7 @@ func TestErrorFromHTTPResponseCode(t *testing.T) {
 		err := ErrorFromHTTPResponseCode(200, "OK")
 
 		// assert
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("Created", func(t *testing.T) {
@@ -251,7 +251,7 @@ func TestErrorFromHTTPResponseCode(t *testing.T) {
 		err := ErrorFromHTTPResponseCode(201, "Created")
 
 		// assert
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("NotFound", func(t *testing.T) {
@@ -291,7 +291,7 @@ func TestErrorFromHTTPResponseCode(t *testing.T) {
 		// assert
 		s, _ := status.FromError(err)
 		errInfo := (s.Details()[0]).(*epb.ErrorInfo)
-		assert.Equal(t, 63, len(errInfo.GetMetadata()[errorInfoHTTPErrorMetadata]))
+		assert.Len(t, errInfo.GetMetadata()[errorInfoHTTPErrorMetadata], 63)
 	})
 }
 
@@ -307,9 +307,9 @@ func TestErrorFromInternalStatus(t *testing.T) {
 	)
 
 	internal := &internalv1pb.Status{
-		Code:    expected.Proto().Code,
-		Message: expected.Proto().Message,
-		Details: expected.Proto().Details,
+		Code:    expected.Proto().GetCode(),
+		Message: expected.Proto().GetMessage(),
+		Details: expected.Proto().GetDetails(),
 	}
 
 	expected.Message()
@@ -334,7 +334,7 @@ func TestProtobufToJSON(t *testing.T) {
 	}
 
 	jsonBody, err := ProtobufToJSON(tpb)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	t.Log(string(jsonBody))
 
 	// protojson produces different indentation space based on OS
@@ -383,11 +383,11 @@ func TestFasthttpHeadersToInternalMetadata(t *testing.T) {
 
 	require.NotEmpty(t, imd)
 	require.NotEmpty(t, imd["Foo"])
-	require.NotEmpty(t, imd["Foo"].Values)
-	assert.Equal(t, []string{"test"}, imd["Foo"].Values)
+	require.NotEmpty(t, imd["Foo"].GetValues())
+	assert.Equal(t, []string{"test"}, imd["Foo"].GetValues())
 	require.NotEmpty(t, imd["Bar"])
-	require.NotEmpty(t, imd["Bar"].Values)
-	assert.Equal(t, []string{"test2", "test3"}, imd["Bar"].Values)
+	require.NotEmpty(t, imd["Bar"].GetValues())
+	assert.Equal(t, []string{"test2", "test3"}, imd["Bar"].GetValues())
 }
 
 func TestHttpHeadersToInternalMetadata(t *testing.T) {
@@ -400,9 +400,9 @@ func TestHttpHeadersToInternalMetadata(t *testing.T) {
 
 	require.NotEmpty(t, imd)
 	require.NotEmpty(t, imd["Foo"])
-	require.NotEmpty(t, imd["Foo"].Values)
-	assert.Equal(t, []string{"test"}, imd["Foo"].Values)
+	require.NotEmpty(t, imd["Foo"].GetValues())
+	assert.Equal(t, []string{"test"}, imd["Foo"].GetValues())
 	require.NotEmpty(t, imd["Bar"])
-	require.NotEmpty(t, imd["Bar"].Values)
-	assert.Equal(t, []string{"test2", "test3"}, imd["Bar"].Values)
+	require.NotEmpty(t, imd["Bar"].GetValues())
+	assert.Equal(t, []string{"test2", "test3"}, imd["Bar"].GetValues())
 }

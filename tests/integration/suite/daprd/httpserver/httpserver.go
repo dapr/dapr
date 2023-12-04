@@ -118,7 +118,7 @@ func (h *httpServer) Run(t *testing.T, ctx context.Context) {
 		res, err := h1Client.Do(req)
 		require.NoError(t, err)
 		t.Cleanup(func() {
-			assert.NoError(t, res.Body.Close())
+			require.NoError(t, res.Body.Close())
 		})
 
 		// This response should have arrived over HTTP/1
