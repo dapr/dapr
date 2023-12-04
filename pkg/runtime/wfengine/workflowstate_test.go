@@ -43,7 +43,7 @@ const (
 func TestNoWorkflowState(t *testing.T) {
 	actors := getActorRuntime()
 	state, err := wfengine.LoadWorkflowState(context.Background(), actors, "wf1", wfengine.NewActorsBackendConfig(testAppID))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Empty(t, state)
 }
 
@@ -143,11 +143,11 @@ func TestLoadSavedState(t *testing.T) {
 	assert.Equal(t, uint64(1), wfstate.Generation)
 	require.Len(t, wfstate.History, 10)
 	for i, e := range wfstate.History {
-		assert.Equal(t, int32(i), e.EventId)
+		assert.Equal(t, int32(i), e.GetEventId())
 	}
 	require.Len(t, wfstate.Inbox, 5)
 	for i, e := range wfstate.Inbox {
-		assert.Equal(t, int32(i), e.EventId)
+		assert.Equal(t, int32(i), e.GetEventId())
 	}
 }
 
@@ -156,9 +156,7 @@ func TestResetLoadedState(t *testing.T) {
 
 	runtimeState := backend.NewOrchestrationRuntimeState(api.InstanceID("wf1"), nil)
 	for i := 0; i < 10; i++ {
-		if err := runtimeState.AddEvent(&backend.HistoryEvent{}); !assert.NoError(t, err) {
-			return
-		}
+		require.NoError(t, runtimeState.AddEvent(&backend.HistoryEvent{}))
 	}
 	wfstate.ApplyRuntimeStateChanges(runtimeState)
 
@@ -184,7 +182,7 @@ func TestResetLoadedState(t *testing.T) {
 	req, err = wfstate.GetSaveRequest("wf1")
 	require.NoError(t, err)
 
-	assert.Equal(t, 17, len(req.Operations)) // history x10 + inbox x5 + metadata + customStatus
+	assert.Len(t, req.Operations, 17) // history x10 + inbox x5 + metadata + customStatus
 	upsertCount, deleteCount := countOperations(t, req)
 	assert.Equal(t, 2, upsertCount)  // metadata + customStatus
 	assert.Equal(t, 15, deleteCount) // all history and inbox records are deleted

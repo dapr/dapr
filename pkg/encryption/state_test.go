@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestAddEncryptedStateStore(t *testing.T) {
@@ -89,11 +90,11 @@ func TestTryEncryptValue(t *testing.T) {
 		v := []byte("hello")
 		r, err := TryEncryptValue("test", v)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotEqual(t, v, r)
 
 		dr, err := TryDecryptValue("test", r)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, v, dr)
 	})
 
@@ -121,7 +122,7 @@ func TestTryEncryptValue(t *testing.T) {
 		v := []byte("hello")
 		r, err := TryEncryptValue("test", v)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotEqual(t, v, r)
 
 		encryptedStateStores = map[string]ComponentEncryptionKeys{}
@@ -130,7 +131,7 @@ func TestTryEncryptValue(t *testing.T) {
 		})
 
 		dr, err := TryDecryptValue("test", r)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, v, dr)
 	})
 
@@ -159,11 +160,11 @@ func TestTryEncryptValue(t *testing.T) {
 		s := base64.StdEncoding.EncodeToString(v)
 		r, err := TryEncryptValue("test", []byte(s))
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotEqual(t, v, r)
 
 		dr, err := TryDecryptValue("test", r)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, []byte(s), dr)
 	})
 
@@ -191,11 +192,11 @@ func TestTryEncryptValue(t *testing.T) {
 		v := []byte("hello world")
 		r, err := TryEncryptValue("test", v)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotEqual(t, v, r)
 
 		dr, err := TryDecryptValue("test", r)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, v, dr)
 	})
 }
@@ -223,7 +224,7 @@ func TestTryDecryptValue(t *testing.T) {
 		})
 
 		dr, err := TryDecryptValue("test", nil)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Empty(t, dr)
 	})
 }

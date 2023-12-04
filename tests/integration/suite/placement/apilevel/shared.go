@@ -152,11 +152,9 @@ func registerHostFailing(t *testing.T, ctx context.Context, conn *grpc.ClientCon
 }
 
 // Checks the API level reported in the state tables matched.
-func checkAPILevelInState(t assert.TestingT, client *http.Client, port int, expectAPILevel int) (tableVersion int) {
+func checkAPILevelInState(t require.TestingT, client *http.Client, port int, expectAPILevel int) (tableVersion int) {
 	res, err := client.Get(fmt.Sprintf("http://localhost:%d/placement/state", port))
-	if !assert.NoError(t, err) {
-		return
-	}
+	require.NoError(t, err)
 	defer res.Body.Close()
 
 	stateRes := struct {
@@ -164,9 +162,7 @@ func checkAPILevelInState(t assert.TestingT, client *http.Client, port int, expe
 		TableVersion int `json:"tableVersion"`
 	}{}
 	err = json.NewDecoder(res.Body).Decode(&stateRes)
-	if !assert.NoError(t, err) {
-		return
-	}
+	require.NoError(t, err)
 
 	assert.Equal(t, expectAPILevel, stateRes.APILevel)
 

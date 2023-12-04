@@ -723,7 +723,7 @@ func testV1RequestGRPCToGRPC(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	reqHeadersString := resp.GetData().Value
+	reqHeadersString := resp.GetData().GetValue()
 
 	respHeaders := map[string][]string{}
 	for k, vals := range header {
@@ -813,7 +813,7 @@ func testV1RequestGRPCToHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	reqHeadersString := resp.GetData().Value
+	reqHeadersString := resp.GetData().GetValue()
 
 	respHeaders := map[string][]string{}
 	for k, vals := range header {
@@ -876,7 +876,7 @@ func grpcToGrpcTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body := resp.Data.GetValue()
+	body := resp.GetData().GetValue()
 	log.Printf("resp was %s\n", string(body))
 
 	var responseMessage appResponse
@@ -1175,7 +1175,7 @@ func grpcToHTTPTest(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		body := resp.Data.GetValue()
+		body := resp.GetData().GetValue()
 
 		fmt.Printf("resp was %s\n", string(body))
 		// var responseMessage string
@@ -1318,8 +1318,8 @@ func badServiceCallTestGrpc(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
 
-	if resp != nil && resp.Data != nil {
-		rawBody := resp.Data.GetValue()
+	if resp != nil && resp.GetData() != nil {
+		rawBody := resp.GetData().GetValue()
 		testResponse.RawBody = rawBody
 		json.NewDecoder(strings.NewReader(string(rawBody))).Decode(&testResponse.Results)
 	}
