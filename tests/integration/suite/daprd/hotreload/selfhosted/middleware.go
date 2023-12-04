@@ -159,16 +159,14 @@ spec:
 	})
 }
 
-func (m *middleware) doReq(t assert.TestingT, ctx context.Context, client *http.Client, path string, expCode int) {
+func (m *middleware) doReq(t require.TestingT, ctx context.Context, client *http.Client, path string, expCode int) {
 	reqURL := "http://localhost:" + strconv.Itoa(m.daprd1.HTTPPort()) + path
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
-	if assert.NoError(t, err) {
-		resp, err := client.Do(req)
-		if assert.NoError(t, err) {
-			defer resp.Body.Close()
-			assert.Equal(t, expCode, resp.StatusCode, path)
-		}
-	}
+	require.NoError(t, err)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, expCode, resp.StatusCode, path)
 }
 
 func (m *middleware) expServerResp(t *testing.T, ctx context.Context, server int) {

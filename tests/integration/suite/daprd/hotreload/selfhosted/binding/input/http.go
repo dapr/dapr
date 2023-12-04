@@ -226,7 +226,7 @@ spec:
 		require.NoError(t, os.Remove(filepath.Join(h.resDir, "1.yaml")))
 		require.NoError(t, os.Remove(filepath.Join(h.resDir, "2.yaml")))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(c, ctx, client, h.daprd.HTTPPort()), 0)
+			assert.Empty(c, util.GetMetaComponents(c, ctx, client, h.daprd.HTTPPort()))
 		}, time.Second*5, time.Millisecond*100)
 		h.registered[1].Store(false)
 		h.registered[2].Store(false)

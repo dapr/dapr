@@ -458,7 +458,7 @@ func (b *binding) isAppSubscribedToBinding(ctx context.Context, binding string) 
 
 		resp, err := b.channels.AppChannel().InvokeMethod(ctx, req, "")
 		if err != nil {
-			log.Fatalf("could not invoke OPTIONS method on input binding subscription endpoint %q: %v", path, err)
+			return false, fmt.Errorf("could not invoke OPTIONS method on input binding subscription endpoint %q: %v", path, err)
 		}
 		defer resp.Close()
 		code := resp.Status().GetCode()

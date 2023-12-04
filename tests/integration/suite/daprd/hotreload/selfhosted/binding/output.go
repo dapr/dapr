@@ -76,7 +76,7 @@ func (o *output) Run(t *testing.T, ctx context.Context) {
 
 	client := util.HTTPClient(t)
 	t.Run("expect no components to be loaded yet", func(t *testing.T) {
-		assert.Len(t, util.GetMetaComponents(t, ctx, client, o.daprd.HTTPPort()), 0)
+		assert.Empty(t, util.GetMetaComponents(t, ctx, client, o.daprd.HTTPPort()))
 	})
 
 	t.Run("adding a component should become available", func(t *testing.T) {
@@ -191,7 +191,7 @@ spec:
 		require.NoError(t, os.Remove(filepath.Join(o.resDir, "1.yaml")))
 		require.NoError(t, os.Remove(filepath.Join(o.resDir, "2.yaml")))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(t, ctx, client, o.daprd.HTTPPort()), 0)
+			assert.Empty(c, util.GetMetaComponents(t, ctx, client, o.daprd.HTTPPort()))
 		}, time.Second*5, time.Millisecond*100)
 		o.postBindingFail(t, ctx, client, "binding1")
 		o.postBindingFail(t, ctx, client, "binding2")

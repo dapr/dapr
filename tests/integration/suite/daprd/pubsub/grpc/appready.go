@@ -55,7 +55,7 @@ func (a *appready) Setup(t *testing.T) []framework.Option {
 			return nil, errors.New("app not healthy")
 		}),
 		grpcapp.WithOnTopicEventFn(func(_ context.Context, in *rtv1.TopicEventRequest) (*rtv1.TopicEventResponse, error) {
-			a.topicChan <- in.Path
+			a.topicChan <- in.GetPath()
 			return new(rtv1.TopicEventResponse), nil
 		}),
 		grpcapp.WithListTopicSubscriptions(func(context.Context, *emptypb.Empty) (*rtv1.ListTopicSubscriptionsResponse, error) {
@@ -102,7 +102,7 @@ func (a *appready) Run(t *testing.T, ctx context.Context) {
 		var resp *rtv1.GetMetadataResponse
 		resp, err = client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 		require.NoError(t, err)
-		assert.Len(c, resp.RegisteredComponents, 1)
+		assert.Len(c, resp.GetRegisteredComponents(), 1)
 	}, time.Second*5, time.Millisecond*100)
 
 	called := a.healthCalled.Load()

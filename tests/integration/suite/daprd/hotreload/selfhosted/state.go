@@ -77,7 +77,7 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 	client := util.HTTPClient(t)
 
 	t.Run("expect no components to be loaded yet", func(t *testing.T) {
-		assert.Len(t, util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort()), 0)
+		assert.Empty(t, util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort()))
 		s.writeExpectError(t, ctx, client, "123", http.StatusInternalServerError)
 	})
 

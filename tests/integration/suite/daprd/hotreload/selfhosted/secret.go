@@ -88,7 +88,7 @@ func (s *secret) Run(t *testing.T, ctx context.Context) {
 	s.daprd.WaitUntilRunning(t, ctx)
 
 	t.Run("expect no components to be loaded yet", func(t *testing.T) {
-		assert.Len(t, util.GetMetaComponents(t, ctx, s.client, s.daprd.HTTPPort()), 0)
+		assert.Empty(t, util.GetMetaComponents(t, ctx, s.client, s.daprd.HTTPPort()))
 		s.readExpectError(t, ctx, "123", "SEC_1", http.StatusInternalServerError)
 	})
 
@@ -374,7 +374,7 @@ spec:
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := util.GetMetaComponents(c, ctx, s.client, s.daprd.HTTPPort())
 			if assert.Len(c, resp, 1) {
-				assert.Equal(c, "state.in-memory", resp[0].Type)
+				assert.Equal(c, "state.in-memory", resp[0].GetType())
 			}
 		}, time.Second*5, time.Millisecond*100)
 

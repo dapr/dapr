@@ -56,11 +56,11 @@ func (a *appready) Setup(t *testing.T) []framework.Option {
 			return nil, errors.New("app not healthy")
 		}),
 		grpcapp.WithOnBindingEventFn(func(ctx context.Context, in *rtv1.BindingEventRequest) (*rtv1.BindingEventResponse, error) {
-			switch in.Name {
+			switch in.GetName() {
 			case "mybinding":
 				a.bindingCalled.Add(1)
 			default:
-				assert.Failf(t, "unexpected binding name", "binding name: %s", in.Name)
+				assert.Failf(t, "unexpected binding name", "binding name: %s", in.GetName())
 			}
 			return new(rtv1.BindingEventResponse), nil
 		}),
@@ -109,7 +109,7 @@ func (a *appready) Run(t *testing.T, ctx context.Context) {
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 		require.NoError(t, err)
-		assert.Len(c, resp.RegisteredComponents, 1)
+		assert.Len(c, resp.GetRegisteredComponents(), 1)
 	}, time.Second*5, time.Millisecond*100)
 
 	called := a.healthCalled.Load()

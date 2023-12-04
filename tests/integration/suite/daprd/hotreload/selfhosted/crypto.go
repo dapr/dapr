@@ -79,7 +79,7 @@ func (c *crypto) Run(t *testing.T, ctx context.Context) {
 	t.Run("expect no components to be loaded yet", func(t *testing.T) {
 		resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 		require.NoError(t, err)
-		assert.Len(t, resp.RegisteredComponents, 0)
+		assert.Empty(t, resp.GetRegisteredComponents())
 		c.encryptDecryptFail(t, ctx, client, "crypto1")
 		c.encryptDecryptFail(t, ctx, client, "crypto2")
 	})
@@ -105,7 +105,7 @@ spec:
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
-			assert.Len(c, resp.RegisteredComponents, 1)
+			assert.Len(c, resp.GetRegisteredComponents(), 1)
 		}, time.Second*5, time.Millisecond*100)
 
 		c.encryptDecrypt(t, ctx, client, "crypto1")
@@ -134,7 +134,7 @@ spec:
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
-			assert.Len(c, resp.RegisteredComponents, 2)
+			assert.Len(c, resp.GetRegisteredComponents(), 2)
 		}, time.Second*5, time.Millisecond*100)
 
 		c.encryptDecrypt(t, ctx, client, "crypto1")
@@ -173,7 +173,7 @@ spec:
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
-			assert.Len(c, resp.RegisteredComponents, 3)
+			assert.Len(c, resp.GetRegisteredComponents(), 3)
 		}, time.Second*5, time.Millisecond*100)
 
 		c.encryptDecrypt(t, ctx, client, "crypto1")
@@ -212,7 +212,7 @@ spec:
 					Name: "crypto2", Type: "state.in-memory", Version: "v1",
 					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
 				},
-			}, resp.RegisteredComponents)
+			}, resp.GetRegisteredComponents())
 		}, time.Second*5, time.Millisecond*100)
 
 		c.encryptDecrypt(t, ctx, client, "crypto1")
@@ -225,7 +225,7 @@ spec:
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
-			assert.Len(c, resp.RegisteredComponents, 2)
+			assert.Len(c, resp.GetRegisteredComponents(), 2)
 		}, time.Second*5, time.Millisecond*100)
 		require.NoError(t, os.WriteFile(filepath.Join(c.resDir, "2.yaml"), []byte(`
 apiVersion: dapr.io/v1alpha1
@@ -245,7 +245,7 @@ spec:
 					Name: "crypto1", Type: "state.in-memory", Version: "v1",
 					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
 				},
-			}, resp.RegisteredComponents)
+			}, resp.GetRegisteredComponents())
 		}, time.Second*5, time.Millisecond*100)
 
 		c.encryptDecryptFail(t, ctx, client, "crypto1")
@@ -269,7 +269,7 @@ spec:
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
-			assert.Len(c, resp.RegisteredComponents, 2)
+			assert.Len(c, resp.GetRegisteredComponents(), 2)
 		}, time.Second*5, time.Millisecond*100)
 
 		c.encryptDecryptFail(t, ctx, client, "crypto1")
@@ -337,7 +337,7 @@ func (c *crypto) encryptDecrypt(t *testing.T, ctx context.Context, client rtv1.D
 		resp, err = encclient.Recv()
 
 		if resp != nil {
-			encdata = append(encdata, resp.Payload.Data...)
+			encdata = append(encdata, resp.GetPayload().GetData()...)
 		}
 		if errors.Is(err, io.EOF) {
 			break
@@ -359,7 +359,7 @@ func (c *crypto) encryptDecrypt(t *testing.T, ctx context.Context, client rtv1.D
 	for {
 		respd, err := decclient.Recv()
 		if respd != nil {
-			resp = append(resp, respd.Payload.Data...)
+			resp = append(resp, respd.GetPayload().GetData()...)
 		}
 		if errors.Is(err, io.EOF) {
 			break

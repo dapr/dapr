@@ -76,13 +76,13 @@ func Test_Disk(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Cleanup(func() {
-		assert.NoError(t, d.Close())
+		require.NoError(t, d.Close())
 	})
 
-	assert.Len(t, store.ListComponents(), 0)
+	assert.Empty(t, store.ListComponents())
 
 	ch, err := d.Components().Stream(context.Background())
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	err = os.WriteFile(filepath.Join(dir, "f.yaml"), []byte(strings.Join([]string{comp1, comp2, comp3}, "\n---\n")), 0o600)
 	require.NoError(t, err)
@@ -147,7 +147,7 @@ func Test_Stream(t *testing.T) {
 		batcher.Batch(0)
 
 		ch, err := g.Stream(context.Background())
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		var events []*loader.Event[componentsapi.Component]
 		for i := 0; i < 3; i++ {
@@ -186,7 +186,7 @@ func Test_Stream(t *testing.T) {
 			},
 		}, events)
 
-		assert.NoError(t, g.close())
+		require.NoError(t, g.close())
 	})
 
 	t.Run("if store has a component and event happens, should send create event with new components", func(t *testing.T) {
@@ -214,7 +214,7 @@ func Test_Stream(t *testing.T) {
 		batcher.Batch(0)
 
 		ch, err := g.Stream(context.Background())
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		var events []*loader.Event[componentsapi.Component]
 		for i := 0; i < 2; i++ {
@@ -245,7 +245,7 @@ func Test_Stream(t *testing.T) {
 			},
 		}, events)
 
-		assert.NoError(t, g.close())
+		require.NoError(t, g.close())
 	})
 
 	t.Run("if store has a component and event happens, should send create/update/delete events components", func(t *testing.T) {
@@ -282,7 +282,7 @@ func Test_Stream(t *testing.T) {
 		batcher.Batch(0)
 
 		ch, err := g.Stream(context.Background())
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		var events []*loader.Event[componentsapi.Component]
 		for i := 0; i < 3; i++ {
@@ -321,6 +321,6 @@ func Test_Stream(t *testing.T) {
 			},
 		}, events)
 
-		assert.NoError(t, g.close())
+		require.NoError(t, g.close())
 	})
 }

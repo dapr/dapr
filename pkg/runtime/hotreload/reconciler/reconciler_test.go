@@ -21,6 +21,7 @@ import (
 
 	fuzz "github.com/google/gofuzz"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clocktesting "k8s.io/utils/clock/testing"
 
@@ -65,11 +66,11 @@ func Test_Run(t *testing.T) {
 			return listCalled.Load() == 1
 		}, time.Second*3, time.Millisecond*100)
 
-		assert.NoError(t, r.Close())
+		require.NoError(t, r.Close())
 
 		select {
 		case err := <-errCh:
-			assert.NoError(t, err)
+			require.NoError(t, err)
 		case <-time.After(time.Second * 3):
 			t.Error("reconciler did not return in time")
 		}
@@ -158,8 +159,8 @@ func Test_Run(t *testing.T) {
 			t.Error("did not get event in time")
 		}
 
-		assert.NoError(t, r.Close())
-		assert.NoError(t, <-errCh)
+		require.NoError(t, r.Close())
+		require.NoError(t, <-errCh)
 	})
 }
 
@@ -235,7 +236,7 @@ func Test_reconcile(t *testing.T) {
 
 		select {
 		case err := <-errCh:
-			assert.NoError(t, err)
+			require.NoError(t, err)
 		case <-time.After(time.Second * 3):
 			t.Error("did not get reconcile return in time")
 		}

@@ -39,7 +39,7 @@ func getMeta(t require.TestingT, ctx context.Context, client *http.Client, port 
 	require.NoError(t, err)
 
 	resp, err := client.Do(req)
-	require.NoError(t, err, err)
+	require.NoError(t, err)
 	defer resp.Body.Close()
 	var meta metaResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&meta))

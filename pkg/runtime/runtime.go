@@ -590,9 +590,7 @@ func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) (err error) {
 		} else {
 			// Workflow engine depends on actor runtime being initialized
 			// This needs to be called before "SetActorsInitDone" on the universal API object to prevent a race condition in workflow methods
-			if err = a.initWorkflowEngine(ctx); err != nil {
-				return err
-			}
+			a.initWorkflowEngine(ctx)
 
 			a.daprUniversalAPI.SetActorRuntime(a.actor)
 		}
@@ -616,7 +614,7 @@ func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) (err error) {
 	return nil
 }
 
-func (a *DaprRuntime) initWorkflowEngine(ctx context.Context) error {
+func (a *DaprRuntime) initWorkflowEngine(ctx context.Context) {
 	wfComponentFactory := wfengine.BuiltinWorkflowFactory(a.workflowEngine)
 
 	a.workflowEngine.SetActorRuntime(a.actor)
@@ -629,7 +627,6 @@ func (a *DaprRuntime) initWorkflowEngine(ctx context.Context) error {
 	} else {
 		log.Infof("No workflow registry available, not registering Dapr workflow component...")
 	}
-	return nil
 }
 
 // initPluggableComponents discover pluggable components and initialize with their respective registries.
@@ -990,16 +987,18 @@ func (a *DaprRuntime) flushOutstandingHTTPEndpoints(ctx context.Context) {
 	log.Info("Waiting for all outstanding http endpoints to be processed…")
 	// We flush by sending a no-op http endpoint. Since the processHTTPEndpoints goroutine only reads one http endpoint at a time,
 	// We know that once the no-op http endpoint is read from the channel, all previous http endpoints will have been fully processed.
-	a.processor.AddPendingEndpoint(ctx, httpEndpointV1alpha1.HTTPEndpoint{})
-	log.Info("All outstanding http endpoints processed")
+	if a.processor.AddPendingEndpoint(ctx, httpEndpointV1alpha1.HTTPEndpoint{}) {
+		log.Info("All outstanding http endpoints processed")
+	}
 }
 
 func (a *DaprRuntime) flushOutstandingComponents(ctx context.Context) {
 	log.Info("Waiting for all outstanding components to be processed…")
 	// We flush by sending a no-op component. Since the processComponents goroutine only reads one component at a time,
 	// We know that once the no-op component is read from the channel, all previous components will have been fully processed.
-	a.processor.AddPendingComponent(ctx, componentsV1alpha1.Component{})
-	log.Info("All outstanding components processed")
+	if a.processor.AddPendingComponent(ctx, componentsV1alpha1.Component{}) {
+		log.Info("All outstanding components processed")
+	}
 }
 
 func (a *DaprRuntime) loadHTTPEndpoints(ctx context.Context) error {
