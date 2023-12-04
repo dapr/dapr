@@ -171,13 +171,6 @@ func (s *Sentry) CABundle() ca.Bundle {
 	return *s.bundle
 }
 
-func (s *Sentry) TrustAnchorsFile(t *testing.T) string {
-	t.Helper()
-	taf := filepath.Join(t.TempDir(), "ca.pem")
-	require.NoError(t, os.WriteFile(taf, s.CABundle().TrustAnchors, 0o600))
-	return taf
-}
-
 func (s *Sentry) Port() int {
 	return s.port
 }

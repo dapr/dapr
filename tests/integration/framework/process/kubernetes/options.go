@@ -128,19 +128,19 @@ func WithBaseOperatorAPI(t *testing.T, td spiffeid.TrustDomain, ns string, sentr
 
 func handleClusterListResource(t *testing.T, path string, obj runtime.Object) Option {
 	return func(o *options) {
-		o.handlers = append(o.handlers, handleRoute{
-			path:    path,
-			handler: handleObj(t, obj),
-		})
+		o.handlers[path] = handleObj(t, obj)
+	}
+}
+
+func handleClusterListResourceFromStore(t *testing.T, path string, store *store.Store) Option {
+	return func(o *options) {
+		o.handlers[path] = handleObjFromStore(t, store)
 	}
 }
 
 func handleGetResource(t *testing.T, apigv, resource, ns, name string, obj runtime.Object) Option {
 	return func(o *options) {
-		o.handlers = append(o.handlers, handleRoute{
-			path:    path.Join(apigv, "namespaces", ns, resource, name),
-			handler: handleObj(t, obj),
-		})
+		o.handlers[path.Join(apigv, "namespaces", ns, resource, name)] = handleObj(t, obj)
 	}
 }
 
@@ -148,6 +148,16 @@ func handleGetResource(t *testing.T, apigv, resource, ns, name string, obj runti
 func handleObj(t *testing.T, obj runtime.Object) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		objB, err := json.Marshal(obj)
+		require.NoError(t, err)
+		w.Header().Add("Content-Length", strconv.Itoa(len(objB)))
+		w.Header().Add("Content-Type", "application/json")
+		w.Write(objB)
+	}
+}
+
+func handleObjFromStore(t *testing.T, store *store.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		objB, err := json.Marshal(store.Objects())
 		require.NoError(t, err)
 		w.Header().Add("Content-Length", strconv.Itoa(len(objB)))
 		w.Header().Add("Content-Type", "application/json")

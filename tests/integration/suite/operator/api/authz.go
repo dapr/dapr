@@ -33,9 +33,7 @@ import (
 	httpendapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	resapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
-	"github.com/dapr/dapr/pkg/modes"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
-	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes"
 	operator "github.com/dapr/dapr/tests/integration/framework/process/operator"
@@ -112,35 +110,11 @@ func (a *authz) Run(t *testing.T, ctx context.Context) {
 		resp, err := client.ListComponents(ctx, &operatorv1pb.ListComponentsRequest{
 			Namespace: "default",
 		})
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Nil(t, resp)
 	})
 
-	sec, err := security.New(ctx, security.Options{
-		SentryAddress:           "localhost:" + strconv.Itoa(a.sentry.Port()),
-		ControlPlaneTrustDomain: "integration.test.dapr.io",
-		ControlPlaneNamespace:   "default",
-		TrustAnchorsFile:        a.sentry.TrustAnchorsFile(t),
-		AppID:                   "myapp",
-		Mode:                    modes.StandaloneMode,
-		MTLSEnabled:             true,
-	})
-	require.NoError(t, err)
-
-	errCh := make(chan error)
-	ctx, cancel := context.WithCancel(ctx)
-	go func() {
-		errCh <- sec.Run(ctx)
-	}()
-	t.Cleanup(func() {
-		cancel()
-		require.NoError(t, <-errCh)
-	})
-
-	sech, err := sec.Handler(ctx)
-	require.NoError(t, err)
-
-	client := a.op.Dial(t, ctx, sech)
+	client := a.op.Dial(t, ctx, "default", a.sentry)
 
 	type tcase struct {
 		funcGoodNamespace func() (any, error)
@@ -251,7 +225,7 @@ func (a *authz) Run(t *testing.T, ctx context.Context) {
 
 			// Good namespace should not error
 			resp, err = test.funcGoodNamespace()
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.NotNil(t, resp)
 		})
 	}

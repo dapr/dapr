@@ -202,10 +202,10 @@ func TestComponentUpdate(t *testing.T) {
 	t.Run("expect error if requesting for different namespace", func(t *testing.T) {
 		s := runtime.NewScheme()
 		err := scheme.AddToScheme(s)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		err = corev1.AddToScheme(s)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		client := fake.NewClientBuilder().
 			WithScheme(s).Build()
@@ -467,7 +467,7 @@ func TestListsNamespaced(t *testing.T) {
 			PodName:   "foo",
 			Namespace: "namespace-c",
 		})
-		require.NoError(t, err)
+		require.Error(t, err)
 		assert.Empty(t, res.GetComponents())
 	})
 	t.Run("list subscriptions namespace scoping", func(t *testing.T) {
@@ -521,7 +521,7 @@ func TestListsNamespaced(t *testing.T) {
 			PodName:   "baz",
 			Namespace: "namespace-c",
 		})
-		require.NoError(t, err)
+		require.Error(t, err)
 		assert.Empty(t, res.GetSubscriptions())
 	})
 	t.Run("list resiliencies namespace scoping", func(t *testing.T) {
@@ -570,10 +570,10 @@ func TestListsNamespaced(t *testing.T) {
 		assert.Equal(t, "obj1", sub.Name)
 		assert.Equal(t, "namespace-a", sub.Namespace)
 
-		res, err = api.ListResiliency(context.TODO(), &operatorv1pb.ListResiliencyRequest{
+		res, err = api.ListResiliency(pki.ClientGRPCCtx(t), &operatorv1pb.ListResiliencyRequest{
 			Namespace: "namespace-c",
 		})
-		require.NoError(t, err)
+		require.Error(t, err)
 		assert.Empty(t, res.GetResiliencies())
 	})
 	t.Run("list http endpoints namespace scoping", func(t *testing.T) {
@@ -625,7 +625,7 @@ func TestListsNamespaced(t *testing.T) {
 		res, err = api.ListHTTPEndpoints(context.TODO(), &operatorv1pb.ListHTTPEndpointsRequest{
 			Namespace: "namespace-c",
 		})
-		require.NoError(t, err)
+		require.Error(t, err)
 		assert.Empty(t, res.GetHttpEndpoints())
 	})
 }

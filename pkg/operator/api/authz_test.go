@@ -19,6 +19,7 @@ import (
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -32,19 +33,19 @@ func Test_authzRequest(t *testing.T) {
 
 	t.Run("no auth context should error", func(t *testing.T) {
 		err := new(apiServer).authzRequest(context.Background(), "ns1")
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Equal(t, codes.PermissionDenied, status.Code(err))
 	})
 
 	t.Run("different namespace should error", func(t *testing.T) {
 		err := new(apiServer).authzRequest(pki.ClientGRPCCtx(t), "ns2")
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Equal(t, codes.PermissionDenied, status.Code(err))
 	})
 
 	t.Run("empty namespace should error", func(t *testing.T) {
 		err := new(apiServer).authzRequest(pki.ClientGRPCCtx(t), "")
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Equal(t, codes.PermissionDenied, status.Code(err))
 	})
 
@@ -52,12 +53,12 @@ func Test_authzRequest(t *testing.T) {
 		appID := spiffeid.RequireFromString("spiffe://example.org/foo/bar")
 		pki2 := util.GenPKI(t, util.PKIOptions{LeafID: serverID, ClientID: appID})
 		err := new(apiServer).authzRequest(pki2.ClientGRPCCtx(t), "ns1")
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Equal(t, codes.PermissionDenied, status.Code(err))
 	})
 
 	t.Run("same namespace should no error", func(t *testing.T) {
 		err := new(apiServer).authzRequest(pki.ClientGRPCCtx(t), "ns1")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 }
