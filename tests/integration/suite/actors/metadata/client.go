@@ -16,7 +16,6 @@ package metadata
 import (
 	"context"
 	"net/http"
-	"strconv"
 	"testing"
 	"time"
 
@@ -57,7 +56,7 @@ func (m *client) Setup(t *testing.T) []framework.Option {
 	srv := prochttp.New(t, prochttp.WithHandler(handler))
 	m.place = placement.New(t)
 	m.daprd = daprd.New(t,
-		daprd.WithPlacementAddresses("localhost:"+strconv.Itoa(m.place.Port())),
+		daprd.WithPlacementAddresses(m.place.Address()),
 		daprd.WithAppProtocol("http"),
 		daprd.WithAppPort(srv.Port()),
 		daprd.WithLogLevel("info"), // Daprd is super noisy in debug mode when connecting to placement.

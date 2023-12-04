@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -180,11 +181,11 @@ func TestGetActorState(t *testing.T) {
 		})
 
 		// assert
-		assert.Nil(t, err)
-		assert.Equal(t, data, res.Data)
+		require.NoError(t, err)
+		assert.Equal(t, data, res.GetData())
 		assert.Equal(t, map[string]string{
 			"ttlExpireTime": "2020-10-02T22:00:00Z",
-		}, res.Metadata)
+		}, res.GetMetadata())
 		mockActors.AssertNumberOfCalls(t, "GetState", 1)
 	})
 }
@@ -279,7 +280,7 @@ func TestExecuteActorStateTransaction(t *testing.T) {
 			})
 
 		// assert
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotNil(t, res)
 		mockActors.AssertNumberOfCalls(t, "TransactionalStateOperation", 1)
 	})
@@ -361,7 +362,7 @@ func TestInvokeActorWithResiliency(t *testing.T) {
 
 		client := runtimev1pb.NewDaprClient(clientConn)
 		_, err := client.InvokeActor(context.Background(), req)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, codes.OK, status.Code(err))
 		assert.Equal(t, 2, failingActors.Failure.CallCount("failingActor"))
 	})

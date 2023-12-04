@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
@@ -37,7 +37,7 @@ func TestShutdownEndpoint(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		_, err := fakeAPI.Shutdown(ctx, &runtimev1pb.ShutdownRequest{})
 		cancel()
-		assert.NoError(t, err, "Expected no error")
+		require.NoError(t, err, "Expected no error")
 		select {
 		case <-time.After(time.Second):
 			t.Fatal("Did not shut down within 1 second")

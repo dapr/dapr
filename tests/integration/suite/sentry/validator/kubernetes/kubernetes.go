@@ -88,18 +88,18 @@ func (k *kubernetes) Run(t *testing.T, ctx context.Context) {
 		Token:                     `{"kubernetes.io":{"pod":{"name":"mypod"}}}`,
 	})
 	require.NoError(t, err)
-	require.NotEmpty(t, resp.WorkloadCertificate)
+	require.NotEmpty(t, resp.GetWorkloadCertificate())
 
-	certs, err := secpem.DecodePEMCertificates(resp.WorkloadCertificate)
+	certs, err := secpem.DecodePEMCertificates(resp.GetWorkloadCertificate())
 	require.NoError(t, err)
 	require.Len(t, certs, 2)
-	assert.NoError(t, certs[0].CheckSignatureFrom(certs[1]))
+	require.NoError(t, certs[0].CheckSignatureFrom(certs[1]))
 	require.Len(t, k.sentry.CABundle().IssChain, 1)
 	assert.Equal(t, k.sentry.CABundle().IssChain[0].Raw, certs[1].Raw)
 	trustBundle, err := secpem.DecodePEMCertificates(k.sentry.CABundle().TrustAnchors)
 	require.NoError(t, err)
 	require.Len(t, trustBundle, 1)
-	assert.NoError(t, certs[1].CheckSignatureFrom(trustBundle[0]))
+	require.NoError(t, certs[1].CheckSignatureFrom(trustBundle[0]))
 
 	for _, req := range map[string]*sentrypbv1.SignCertificateRequest{
 		"wrong app id": {

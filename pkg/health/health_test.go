@@ -155,11 +155,11 @@ func TestApplyOptions(t *testing.T) {
 		opts := healthCheckOptions{}
 		applyDefaults(&opts)
 
-		assert.Equal(t, opts.failureThreshold, int32(failureThreshold))
-		assert.Equal(t, opts.initialDelay, initialDelay)
-		assert.Equal(t, opts.interval, interval)
-		assert.Equal(t, opts.requestTimeout, requestTimeout)
-		assert.Equal(t, opts.successStatusCode, successStatusCode)
+		assert.Equal(t, int32(failureThreshold), opts.failureThreshold)
+		assert.Equal(t, initialDelay, opts.initialDelay)
+		assert.Equal(t, interval, opts.interval)
+		assert.Equal(t, requestTimeout, opts.requestTimeout)
+		assert.Equal(t, successStatusCode, opts.successStatusCode)
 	})
 
 	t.Run("valid custom options", func(t *testing.T) {
@@ -176,11 +176,11 @@ func TestApplyOptions(t *testing.T) {
 		for _, o := range customOpts {
 			o(&opts)
 		}
-		assert.Equal(t, opts.failureThreshold, int32(10))
-		assert.Equal(t, opts.initialDelay, time.Second*11)
-		assert.Equal(t, opts.interval, time.Second*12)
-		assert.Equal(t, opts.requestTimeout, time.Second*13)
-		assert.Equal(t, opts.successStatusCode, 201)
+		assert.Equal(t, int32(10), opts.failureThreshold)
+		assert.Equal(t, time.Second*11, opts.initialDelay)
+		assert.Equal(t, time.Second*12, opts.interval)
+		assert.Equal(t, time.Second*13, opts.requestTimeout)
+		assert.Equal(t, 201, opts.successStatusCode)
 	})
 }
 

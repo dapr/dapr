@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	s "github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/components"
@@ -73,44 +74,44 @@ func TestRegistry(t *testing.T) {
 
 		// assert v0 and v1
 		p, e := testRegistry.Create(componentName, "v0", "")
-		assert.NoError(t, e)
+		require.NoError(t, e)
 		assert.Same(t, mock, p)
 		p, e = testRegistry.Create(componentName, "v1", "")
-		assert.NoError(t, e)
+		require.NoError(t, e)
 		assert.Same(t, mock, p)
 
 		// assert v2
 		pV2, e := testRegistry.Create(componentName, "v2", "")
-		assert.NoError(t, e)
+		require.NoError(t, e)
 		assert.Same(t, mockV2, pV2)
 
 		// check case-insensitivity
 		pV2, e = testRegistry.Create(strings.ToUpper(componentName), "V2", "")
-		assert.NoError(t, e)
+		require.NoError(t, e)
 		assert.Same(t, mockV2, pV2)
 
 		// Check availability of foo versions
 
 		p, err := testRegistry.Create("state.foo", "v1", "")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Same(t, fooV1, p)
 		p, err = testRegistry.Create("state.foo", "v2", "")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Same(t, fooV2, p)
 		p, err = testRegistry.Create("state.foo", "v3", "")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Same(t, fooV3, p)
 		p, err = testRegistry.Create("state.foo", "v4", "")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Same(t, fooV4, p)
 		p, err = testRegistry.Create("state.foo", "v5", "")
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Nil(t, p)
 		p, err = testRegistry.Create("state.foo", "", "")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Same(t, fooV1, p)
 		p, err = testRegistry.Create("state.foo", "v0", "")
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Nil(t, p)
 	})
 

@@ -473,14 +473,14 @@ func (p *actorPlacement) onPlacementError(err error) {
 }
 
 func (p *actorPlacement) onPlacementOrder(in *v1pb.PlacementOrder) {
-	log.Debugf("Placement order received: %s", in.Operation)
-	diag.DefaultMonitoring.ActorPlacementTableOperationReceived(in.Operation)
+	log.Debugf("Placement order received: %s", in.GetOperation())
+	diag.DefaultMonitoring.ActorPlacementTableOperationReceived(in.GetOperation())
 
 	// lock all incoming calls when an updated table arrives
 	p.operationUpdateLock.Lock()
 	defer p.operationUpdateLock.Unlock()
 
-	switch in.Operation {
+	switch in.GetOperation() {
 	case lockOperation:
 		p.blockPlacements()
 
@@ -498,7 +498,7 @@ func (p *actorPlacement) onPlacementOrder(in *v1pb.PlacementOrder) {
 		p.unblockPlacements()
 
 	case updateOperation:
-		p.updatePlacements(in.Tables)
+		p.updatePlacements(in.GetTables())
 	}
 }
 
@@ -538,23 +538,23 @@ func (p *actorPlacement) updatePlacements(in *v1pb.PlacementTables) {
 		p.placementTableLock.Lock()
 		defer p.placementTableLock.Unlock()
 
-		if in.Version == p.placementTables.Version {
+		if in.GetVersion() == p.placementTables.Version {
 			return
 		}
 
-		if in.ApiLevel != p.apiLevel {
-			p.apiLevel = in.ApiLevel
-			updatedAPILevel = ptr.Of(in.ApiLevel)
+		if in.GetApiLevel() != p.apiLevel {
+			p.apiLevel = in.GetApiLevel()
+			updatedAPILevel = ptr.Of(in.GetApiLevel())
 		}
 
 		maps.Clear(p.placementTables.Entries)
-		p.placementTables.Version = in.Version
-		for k, v := range in.Entries {
-			loadMap := make(map[string]*hashing.Host, len(v.LoadMap))
-			for lk, lv := range v.LoadMap {
-				loadMap[lk] = hashing.NewHost(lv.Name, lv.Id, lv.Load, lv.Port)
+		p.placementTables.Version = in.GetVersion()
+		for k, v := range in.GetEntries() {
+			loadMap := make(map[string]*hashing.Host, len(v.GetLoadMap()))
+			for lk, lv := range v.GetLoadMap() {
+				loadMap[lk] = hashing.NewHost(lv.GetName(), lv.GetId(), lv.GetLoad(), lv.GetPort())
 			}
-			p.placementTables.Entries[k] = hashing.NewFromExisting(v.Hosts, v.SortedSet, loadMap)
+			p.placementTables.Entries[k] = hashing.NewFromExisting(v.GetHosts(), v.GetSortedSet(), loadMap)
 		}
 
 		updated = true

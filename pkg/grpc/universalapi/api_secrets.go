@@ -27,25 +27,25 @@ import (
 func (a *UniversalAPI) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequest) (*runtimev1pb.GetSecretResponse, error) {
 	var response *runtimev1pb.GetSecretResponse
 
-	component, err := a.secretsValidateRequest(in.StoreName)
+	component, err := a.secretsValidateRequest(in.GetStoreName())
 	if err != nil {
 		return response, err
 	}
 
-	if !a.isSecretAllowed(in.StoreName, in.Key) {
-		err = messages.ErrSecretPermissionDenied.WithFormat(in.Key, in.StoreName)
+	if !a.isSecretAllowed(in.GetStoreName(), in.GetKey()) {
+		err = messages.ErrSecretPermissionDenied.WithFormat(in.GetKey(), in.GetStoreName())
 		a.Logger.Debug(err)
 		return response, err
 	}
 
 	req := secretstores.GetSecretRequest{
-		Name:     in.Key,
-		Metadata: in.Metadata,
+		Name:     in.GetKey(),
+		Metadata: in.GetMetadata(),
 	}
 
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[*secretstores.GetSecretResponse](ctx,
-		a.Resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Secretstore),
+		a.Resiliency.ComponentOutboundPolicy(in.GetStoreName(), resiliency.Secretstore),
 	)
 	getResponse, err := policyRunner(func(ctx context.Context) (*secretstores.GetSecretResponse, error) {
 		rResp, rErr := component.GetSecret(ctx, req)
@@ -53,10 +53,10 @@ func (a *UniversalAPI) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretR
 	})
 	elapsed := diag.ElapsedSince(start)
 
-	diag.DefaultComponentMonitoring.SecretInvoked(ctx, in.StoreName, diag.Get, err == nil, elapsed)
+	diag.DefaultComponentMonitoring.SecretInvoked(ctx, in.GetStoreName(), diag.Get, err == nil, elapsed)
 
 	if err != nil {
-		err = messages.ErrSecretGet.WithFormat(req.Name, in.StoreName, err.Error())
+		err = messages.ErrSecretGet.WithFormat(req.Name, in.GetStoreName(), err.Error())
 		a.Logger.Debug(err)
 		return response, err
 	}
@@ -72,18 +72,18 @@ func (a *UniversalAPI) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretR
 func (a *UniversalAPI) GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSecretRequest) (*runtimev1pb.GetBulkSecretResponse, error) {
 	var response *runtimev1pb.GetBulkSecretResponse
 
-	component, err := a.secretsValidateRequest(in.StoreName)
+	component, err := a.secretsValidateRequest(in.GetStoreName())
 	if err != nil {
 		return response, err
 	}
 
 	req := secretstores.BulkGetSecretRequest{
-		Metadata: in.Metadata,
+		Metadata: in.GetMetadata(),
 	}
 
 	start := time.Now()
 	policyRunner := resiliency.NewRunner[*secretstores.BulkGetSecretResponse](ctx,
-		a.Resiliency.ComponentOutboundPolicy(in.StoreName, resiliency.Secretstore),
+		a.Resiliency.ComponentOutboundPolicy(in.GetStoreName(), resiliency.Secretstore),
 	)
 	getResponse, err := policyRunner(func(ctx context.Context) (*secretstores.BulkGetSecretResponse, error) {
 		rResp, rErr := component.BulkGetSecret(ctx, req)
@@ -91,10 +91,10 @@ func (a *UniversalAPI) GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBul
 	})
 	elapsed := diag.ElapsedSince(start)
 
-	diag.DefaultComponentMonitoring.SecretInvoked(ctx, in.StoreName, diag.BulkGet, err == nil, elapsed)
+	diag.DefaultComponentMonitoring.SecretInvoked(ctx, in.GetStoreName(), diag.BulkGet, err == nil, elapsed)
 
 	if err != nil {
-		err = messages.ErrBulkSecretGet.WithFormat(in.StoreName, err.Error())
+		err = messages.ErrBulkSecretGet.WithFormat(in.GetStoreName(), err.Error())
 		a.Logger.Debug(err)
 		return response, err
 	}
@@ -104,10 +104,10 @@ func (a *UniversalAPI) GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBul
 	}
 	filteredSecrets := map[string]map[string]string{}
 	for key, v := range getResponse.Data {
-		if a.isSecretAllowed(in.StoreName, key) {
+		if a.isSecretAllowed(in.GetStoreName(), key) {
 			filteredSecrets[key] = v
 		} else {
-			a.Logger.Debugf(messages.ErrSecretPermissionDenied.WithFormat(key, in.StoreName).String())
+			a.Logger.Debugf(messages.ErrSecretPermissionDenied.WithFormat(key, in.GetStoreName()).String())
 		}
 	}
 
