@@ -250,7 +250,7 @@ func (d *directMessaging) invokeHTTPEndpoint(ctx context.Context, appID, appName
 
 	// Diagnostics
 	if imr != nil {
-		diag.DefaultMonitoring.ServiceInvocationResponseReceived(appID, imr.Status().Code, start)
+		diag.DefaultMonitoring.ServiceInvocationResponseReceived(appID, imr.Status().GetCode(), start)
 	}
 
 	return imr, nopTeardown, err
@@ -287,7 +287,7 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, appNamespace,
 
 	// Diagnostics
 	if imr != nil {
-		diag.DefaultMonitoring.ServiceInvocationResponseReceived(appID, imr.Status().Code, start)
+		diag.DefaultMonitoring.ServiceInvocationResponseReceived(appID, imr.Status().GetCode(), start)
 	}
 
 	return imr, teardown, err
@@ -388,7 +388,7 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 		}
 
 		// Send the chunk if there's anything to send
-		if proto.Request != nil || proto.Payload != nil {
+		if proto.GetRequest() != nil || proto.GetPayload() != nil {
 			err = stream.SendMsg(proto)
 			if errors.Is(err, io.EOF) {
 				// If SendMsg returns an io.EOF error, it usually means that there's a transport-level error
@@ -436,17 +436,17 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 		}
 		return nil, err
 	}
-	if chunk.Response == nil || chunk.Response.Status == nil {
+	if chunk.GetResponse().GetStatus() == nil {
 		return nil, errors.New("response does not contain the required fields in the leading chunk")
 	}
 	pr, pw := io.Pipe()
-	res, err := invokev1.InternalInvokeResponse(chunk.Response)
+	res, err := invokev1.InternalInvokeResponse(chunk.GetResponse())
 	if err != nil {
 		return nil, err
 	}
-	if chunk.Response.Message != nil {
-		res.WithContentType(chunk.Response.Message.ContentType)
-		res.WithDataTypeURL(chunk.Response.Message.GetData().GetTypeUrl()) // Could be empty
+	if chunk.GetResponse().GetMessage() != nil {
+		res.WithContentType(chunk.GetResponse().GetMessage().GetContentType())
+		res.WithDataTypeURL(chunk.GetResponse().GetMessage().GetData().GetTypeUrl()) // Could be empty
 	}
 	res.WithRawData(pr)
 
@@ -486,7 +486,7 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 				return
 			}
 
-			if chunk.Response != nil && (chunk.Response.Status != nil || chunk.Response.Headers != nil || chunk.Response.Message != nil) {
+			if chunk.GetResponse().GetStatus() != nil || chunk.GetResponse().GetHeaders() != nil || chunk.GetResponse().GetMessage() != nil {
 				pw.CloseWithError(errors.New("response metadata found in non-leading chunk"))
 				return
 			}
@@ -524,7 +524,7 @@ func (d *directMessaging) addForwardedHeadersToMetadata(req *invokev1.InvokeMeth
 				Values: []string{value},
 			}
 		} else {
-			metadata[header].Values = append(metadata[header].Values, value)
+			metadata[header].Values = append(metadata[header].GetValues(), value)
 		}
 	}
 
@@ -582,16 +582,16 @@ func (d *directMessaging) getRemoteApp(appID string) (remoteApp, error) {
 // ReadChunk reads a chunk of data from a StreamPayload object.
 // The returned value "seq" indicates the sequence number
 func ReadChunk(payload *commonv1pb.StreamPayload, out io.Writer) (seq uint64, err error) {
-	if len(payload.Data) > 0 {
+	if len(payload.GetData()) > 0 {
 		var n int
-		n, err = out.Write(payload.Data)
+		n, err = out.Write(payload.GetData())
 		if err != nil {
 			return 0, err
 		}
-		if n != len(payload.Data) {
-			return 0, fmt.Errorf("wrote %d out of %d bytes", n, len(payload.Data))
+		if n != len(payload.GetData()) {
+			return 0, fmt.Errorf("wrote %d out of %d bytes", n, len(payload.GetData()))
 		}
 	}
 
-	return payload.Seq, nil
+	return payload.GetSeq(), nil
 }

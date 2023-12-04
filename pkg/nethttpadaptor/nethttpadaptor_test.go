@@ -317,7 +317,7 @@ func TestNewNetHTTPHandlerFuncRequests(t *testing.T) {
 			},
 			func(t *testing.T) func(ctx *fasthttp.RequestCtx) {
 				return func(ctx *fasthttp.RequestCtx) {
-					assert.Equal(t, 0, len(ctx.Request.Body()))
+					assert.Empty(t, ctx.Request.Body())
 				}
 			},
 		},
