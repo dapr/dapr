@@ -67,7 +67,7 @@ func (a *UniversalAPI) GetMetadata(ctx context.Context, in *runtimev1pb.GetMetad
 		}
 
 		// Health check path is not applicable for gRPC.
-		if protocol.Protocol(appConnectionProperties.Protocol).IsHTTP() {
+		if protocol.Protocol(appConnectionProperties.GetProtocol()).IsHTTP() {
 			appConnectionProperties.Health.HealthCheckPath = a.AppConnectionConfig.HealthCheckHTTPPath
 		}
 	}
@@ -124,7 +124,7 @@ func (a *UniversalAPI) GetMetadata(ctx context.Context, in *runtimev1pb.GetMetad
 // SetMetadata Sets value in extended metadata of the sidecar.
 func (a *UniversalAPI) SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadataRequest) (*emptypb.Empty, error) {
 	// Nop if the key is empty
-	if in.Key == "" {
+	if in.GetKey() == "" {
 		return &emptypb.Empty{}, nil
 	}
 
@@ -132,7 +132,7 @@ func (a *UniversalAPI) SetMetadata(ctx context.Context, in *runtimev1pb.SetMetad
 	if a.ExtendedMetadata == nil {
 		a.ExtendedMetadata = make(map[string]string)
 	}
-	a.ExtendedMetadata[in.Key] = in.Value
+	a.ExtendedMetadata[in.GetKey()] = in.GetValue()
 	a.extendedMetadataLock.Unlock()
 
 	return &emptypb.Empty{}, nil

@@ -37,15 +37,15 @@ func newComponent(t *testing.T, opts options) *component {
 }
 
 func (c *component) BulkDelete(ctx context.Context, req *compv1pb.BulkDeleteRequest) (*compv1pb.BulkDeleteResponse, error) {
-	dr := make([]state.DeleteRequest, len(req.Items))
-	for i, item := range req.Items {
+	dr := make([]state.DeleteRequest, len(req.GetItems()))
+	for i, item := range req.GetItems() {
 		dr[i] = state.DeleteRequest{
-			Key:      item.Key,
+			Key:      item.GetKey(),
 			ETag:     &item.GetEtag().Value,
-			Metadata: item.Metadata,
+			Metadata: item.GetMetadata(),
 			Options: state.DeleteStateOption{
-				Concurrency: concurrencyOf(item.Options.Concurrency),
-				Consistency: consistencyOf(item.Options.Consistency),
+				Concurrency: concurrencyOf(item.GetOptions().GetConcurrency()),
+				Consistency: consistencyOf(item.GetOptions().GetConsistency()),
 			},
 		}
 	}
@@ -59,13 +59,13 @@ func (c *component) BulkDelete(ctx context.Context, req *compv1pb.BulkDeleteRequ
 }
 
 func (c *component) BulkGet(ctx context.Context, req *compv1pb.BulkGetRequest) (*compv1pb.BulkGetResponse, error) {
-	gr := make([]state.GetRequest, len(req.Items))
-	for i, item := range req.Items {
+	gr := make([]state.GetRequest, len(req.GetItems()))
+	for i, item := range req.GetItems() {
 		gr[i] = state.GetRequest{
-			Key:      item.Key,
-			Metadata: item.Metadata,
+			Key:      item.GetKey(),
+			Metadata: item.GetMetadata(),
 			Options: state.GetStateOption{
-				Consistency: consistencyOf(item.Consistency),
+				Consistency: consistencyOf(item.GetConsistency()),
 			},
 		}
 	}
@@ -89,27 +89,27 @@ func (c *component) BulkGet(ctx context.Context, req *compv1pb.BulkGetRequest) (
 			}
 		}
 
-		gresp.Items = append(gresp.Items, gitem)
+		gresp.Items = append(gresp.GetItems(), gitem)
 	}
 
 	return &gresp, nil
 }
 
 func (c *component) BulkSet(ctx context.Context, req *compv1pb.BulkSetRequest) (*compv1pb.BulkSetResponse, error) {
-	sr := make([]state.SetRequest, len(req.Items))
-	for i, item := range req.Items {
+	sr := make([]state.SetRequest, len(req.GetItems()))
+	for i, item := range req.GetItems() {
 		var etag *string
-		if item.Etag != nil {
+		if item.GetEtag() != nil {
 			etag = &item.GetEtag().Value
 		}
 		sr[i] = state.SetRequest{
-			Key:      item.Key,
-			Value:    item.Value,
+			Key:      item.GetKey(),
+			Value:    item.GetValue(),
 			ETag:     etag,
-			Metadata: item.Metadata,
+			Metadata: item.GetMetadata(),
 			Options: state.SetStateOption{
-				Concurrency: concurrencyOf(item.Options.Concurrency),
-				Consistency: consistencyOf(item.Options.Consistency),
+				Concurrency: concurrencyOf(item.GetOptions().GetConcurrency()),
+				Consistency: consistencyOf(item.GetOptions().GetConsistency()),
 			},
 		}
 	}
@@ -124,16 +124,16 @@ func (c *component) BulkSet(ctx context.Context, req *compv1pb.BulkSetRequest) (
 
 func (c *component) Delete(ctx context.Context, req *compv1pb.DeleteRequest) (*compv1pb.DeleteResponse, error) {
 	var etag *string
-	if req.Etag != nil && len(req.GetEtag().Value) > 0 {
+	if req.GetEtag() != nil && len(req.GetEtag().GetValue()) > 0 {
 		etag = &req.GetEtag().Value
 	}
 	err := c.impl.Delete(ctx, &state.DeleteRequest{
-		Key:      req.Key,
+		Key:      req.GetKey(),
 		ETag:     etag,
-		Metadata: req.Metadata,
+		Metadata: req.GetMetadata(),
 		Options: state.DeleteStateOption{
-			Concurrency: concurrencyOf(req.Options.Concurrency),
-			Consistency: consistencyOf(req.Options.Consistency),
+			Concurrency: concurrencyOf(req.GetOptions().GetConcurrency()),
+			Consistency: consistencyOf(req.GetOptions().GetConsistency()),
 		},
 	})
 	if err != nil {
@@ -155,10 +155,10 @@ func (c *component) Features(context.Context, *compv1pb.FeaturesRequest) (*compv
 
 func (c *component) Get(ctx context.Context, req *compv1pb.GetRequest) (*compv1pb.GetResponse, error) {
 	resp, err := c.impl.Get(ctx, &state.GetRequest{
-		Key:      req.Key,
-		Metadata: req.Metadata,
+		Key:      req.GetKey(),
+		Metadata: req.GetMetadata(),
 		Options: state.GetStateOption{
-			Consistency: consistencyOf(req.Consistency),
+			Consistency: consistencyOf(req.GetConsistency()),
 		},
 	})
 	if err != nil {
@@ -183,7 +183,7 @@ func (c *component) Init(ctx context.Context, req *compv1pb.InitRequest) (*compv
 	return new(compv1pb.InitResponse), c.impl.Init(ctx, state.Metadata{
 		Base: metadata.Base{
 			Name:       "state.wrapped-in-memory",
-			Properties: req.GetMetadata().Properties,
+			Properties: req.GetMetadata().GetProperties(),
 		},
 	})
 }
@@ -198,17 +198,17 @@ func (c *component) Ping(ctx context.Context, req *compv1pb.PingRequest) (*compv
 
 func (c *component) Set(ctx context.Context, req *compv1pb.SetRequest) (*compv1pb.SetResponse, error) {
 	var etag *string
-	if req.Etag != nil && len(req.GetEtag().Value) > 0 {
+	if req.GetEtag() != nil && len(req.GetEtag().GetValue()) > 0 {
 		etag = &req.GetEtag().Value
 	}
 	err := c.impl.Set(ctx, &state.SetRequest{
-		Key:      req.Key,
-		Value:    req.Value,
-		Metadata: req.Metadata,
+		Key:      req.GetKey(),
+		Value:    req.GetValue(),
+		Metadata: req.GetMetadata(),
 		ETag:     etag,
 		Options: state.SetStateOption{
-			Concurrency: concurrencyOf(req.Options.Concurrency),
-			Consistency: consistencyOf(req.Options.Consistency),
+			Concurrency: concurrencyOf(req.GetOptions().GetConcurrency()),
+			Consistency: consistencyOf(req.GetOptions().GetConsistency()),
 		},
 	})
 	if err != nil {
@@ -219,33 +219,33 @@ func (c *component) Set(ctx context.Context, req *compv1pb.SetRequest) (*compv1p
 
 func (c *component) Transact(ctx context.Context, req *compv1pb.TransactionalStateRequest) (*compv1pb.TransactionalStateResponse, error) {
 	var operations []state.TransactionalStateOperation
-	for _, op := range req.Operations {
-		switch v := op.Request.(type) {
+	for _, op := range req.GetOperations() {
+		switch v := op.GetRequest().(type) {
 		case *compv1pb.TransactionalStateOperation_Delete:
 			delReq := state.DeleteRequest{
-				Key:      v.Delete.Key,
-				Metadata: v.Delete.Metadata,
+				Key:      v.Delete.GetKey(),
+				Metadata: v.Delete.GetMetadata(),
 				Options: state.DeleteStateOption{
-					Concurrency: concurrencyOf(v.Delete.Options.Concurrency),
-					Consistency: consistencyOf(v.Delete.Options.Consistency),
+					Concurrency: concurrencyOf(v.Delete.GetOptions().GetConcurrency()),
+					Consistency: consistencyOf(v.Delete.GetOptions().GetConsistency()),
 				},
 			}
-			if v.Delete.Etag != nil {
+			if v.Delete.GetEtag() != nil {
 				delReq.ETag = &v.Delete.GetEtag().Value
 			}
 			operations = append(operations, delReq)
 
 		case *compv1pb.TransactionalStateOperation_Set:
 			setReq := state.SetRequest{
-				Key:      v.Set.Key,
-				Value:    v.Set.Value,
-				Metadata: v.Set.Metadata,
+				Key:      v.Set.GetKey(),
+				Value:    v.Set.GetValue(),
+				Metadata: v.Set.GetMetadata(),
 				Options: state.SetStateOption{
-					Concurrency: concurrencyOf(v.Set.Options.Concurrency),
-					Consistency: consistencyOf(v.Set.Options.Consistency),
+					Concurrency: concurrencyOf(v.Set.GetOptions().GetConcurrency()),
+					Consistency: consistencyOf(v.Set.GetOptions().GetConsistency()),
 				},
 			}
-			if v.Set.Etag != nil && v.Set.Etag.Value != "" {
+			if v.Set.GetEtag() != nil && v.Set.GetEtag().GetValue() != "" {
 				setReq.ETag = &v.Set.GetEtag().Value
 			}
 		default:
@@ -255,7 +255,7 @@ func (c *component) Transact(ctx context.Context, req *compv1pb.TransactionalSta
 
 	err := c.impl.(state.TransactionalStore).Multi(ctx, &state.TransactionalStateRequest{
 		Operations: operations,
-		Metadata:   req.Metadata,
+		Metadata:   req.GetMetadata(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("error performing transactional state operation: %s", err)

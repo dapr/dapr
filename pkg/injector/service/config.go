@@ -25,9 +25,9 @@ import (
 
 // Config represents configuration options for the Dapr Sidecar Injector webhook server.
 type Config struct {
-	SidecarImage                      string `envconfig:"SIDECAR_IMAGE" required:"true"`
+	SidecarImage                      string `envconfig:"SIDECAR_IMAGE"                         required:"true"`
 	SidecarImagePullPolicy            string `envconfig:"SIDECAR_IMAGE_PULL_POLICY"`
-	Namespace                         string `envconfig:"NAMESPACE" required:"true"`
+	Namespace                         string `envconfig:"NAMESPACE"                             required:"true"`
 	KubeClusterDomain                 string `envconfig:"KUBE_CLUSTER_DOMAIN"`
 	AllowedServiceAccounts            string `envconfig:"ALLOWED_SERVICE_ACCOUNTS"`
 	AllowedServiceAccountsPrefixNames string `envconfig:"ALLOWED_SERVICE_ACCOUNTS_PREFIX_NAMES"`

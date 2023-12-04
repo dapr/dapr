@@ -20,7 +20,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Subset of data returned by the metadata endpoint.
@@ -36,23 +36,19 @@ type metadataRes struct {
 	} `json:"actorRuntime"`
 }
 
-func getMetadata(t assert.TestingT, ctx context.Context, client *http.Client, port int) (res metadataRes) {
+func getMetadata(t require.TestingT, ctx context.Context, client *http.Client, port int) (res metadataRes) {
 	ctx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/v1.0/metadata", port), nil)
-	if !assert.NoError(t, err) {
-		return res
-	}
+	require.NoError(t, err)
 
 	resp, err := client.Do(req)
-	if !assert.NoError(t, err) {
-		return res
-	}
+	require.NoError(t, err)
 	defer resp.Body.Close()
 
 	err = json.NewDecoder(resp.Body).Decode(&res)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	return res
 }

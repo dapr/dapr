@@ -121,7 +121,7 @@ func (s *assertingService) Ping(ctx context.Context, ping *pb.PingRequest) (*pb.
 	// Send user trailers and headers.
 	grpc.SendHeader(ctx, metadata.Pairs(serverHeaderMdKey, "I like cats."))
 	grpc.SetTrailer(ctx, metadata.Pairs(serverTrailerMdKey, "I also like dogs."))
-	return &pb.PingResponse{Value: ping.Value, Counter: 42}, nil
+	return &pb.PingResponse{Value: ping.GetValue(), Counter: 42}, nil
 }
 
 func (s *assertingService) PingError(ctx context.Context, ping *pb.PingRequest) (*pb.Empty, error) {
@@ -132,7 +132,7 @@ func (s *assertingService) PingList(ping *pb.PingRequest, stream pb.TestService_
 	// Send user trailers and headers.
 	stream.SendHeader(metadata.Pairs(serverHeaderMdKey, "I like cats."))
 	for i := 0; i < countListResponses; i++ {
-		stream.Send(&pb.PingResponse{Value: ping.Value, Counter: int32(i)})
+		stream.Send(&pb.PingResponse{Value: ping.GetValue(), Counter: int32(i)})
 	}
 	stream.SetTrailer(metadata.Pairs(serverTrailerMdKey, "I also like dogs."))
 	return nil
@@ -170,7 +170,7 @@ func (s *assertingService) PingStream(stream pb.TestService_PingStreamServer) er
 			}
 			return err
 		}
-		pong := &pb.PingResponse{Value: ping.Value, Counter: counter}
+		pong := &pb.PingResponse{Value: ping.GetValue(), Counter: counter}
 		if err := stream.Send(pong); err != nil {
 			if s.expectPingStreamError.Load() {
 				require.Error(s.t, err, "should have failed sending back a pong - test name: "+testName)
@@ -210,9 +210,9 @@ func (s *proxyTestSuite) TestPingEmptyCarriesClientMetadata() {
 	defer cancel()
 	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(clientMdKey, "true"))
 	out, err := s.testClient.PingEmpty(ctx, &pb.Empty{})
-	require.NoError(s.T(), err, "PingEmpty should succeed without errors")
-	require.Equal(s.T(), pingDefaultValue, out.Value)
-	require.Equal(s.T(), int32(42), out.Counter)
+	s.Require().NoError(err, "PingEmpty should succeed without errors")
+	s.Require().Equal(pingDefaultValue, out.GetValue())
+	s.Require().Equal(int32(42), out.GetCounter())
 }
 
 func (s *proxyTestSuite) TestPingEmpty_StressTest() {
@@ -229,22 +229,22 @@ func (s *proxyTestSuite) TestPingCarriesServerHeadersAndTrailers() {
 	defer cancel()
 	// This is an awkward calling convention... but meh.
 	out, err := s.testClient.Ping(ctx, &pb.PingRequest{Value: "foo"}, grpc.Header(&headerMd), grpc.Trailer(&trailerMd))
-	require.NoError(s.T(), err, "Ping should succeed without errors")
-	require.Equal(s.T(), "foo", out.Value)
-	require.Equal(s.T(), int32(42), out.Counter)
-	assert.Contains(s.T(), headerMd, serverHeaderMdKey, "server response headers must contain server data")
-	assert.Len(s.T(), trailerMd, 1, "server response trailers must contain server data")
+	s.Require().NoError(err, "Ping should succeed without errors")
+	s.Require().Equal("foo", out.GetValue())
+	s.Require().Equal(int32(42), out.GetCounter())
+	s.Contains(headerMd, serverHeaderMdKey, "server response headers must contain server data")
+	s.Len(trailerMd, 1, "server response headers must contain server data")
 }
 
 func (s *proxyTestSuite) TestPingErrorPropagatesAppError() {
 	ctx, cancel := s.ctx()
 	defer cancel()
 	_, err := s.testClient.PingError(ctx, &pb.PingRequest{Value: "foo"})
-	require.Error(s.T(), err, "PingError should never succeed")
+	s.Require().Error(err, "PingError should never succeed")
 	st, ok := status.FromError(err)
-	require.True(s.T(), ok, "must get status from error")
-	assert.Equal(s.T(), codes.FailedPrecondition, st.Code())
-	assert.Equal(s.T(), "Userspace error.", st.Message())
+	s.Require().True(ok, "must get status from error")
+	s.Equal(codes.FailedPrecondition, st.Code())
+	s.Equal("Userspace error.", st.Message())
 }
 
 func (s *proxyTestSuite) TestDirectorErrorIsPropagated() {
@@ -253,11 +253,11 @@ func (s *proxyTestSuite) TestDirectorErrorIsPropagated() {
 	// See SetupSuite where the StreamDirector has a special case.
 	ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(rejectingMdKey, "true"))
 	_, err := s.testClient.Ping(ctx, &pb.PingRequest{Value: "foo"})
-	require.Error(s.T(), err, "Director should reject this RPC")
+	s.Require().Error(err, "Director should reject this RPC")
 	st, ok := status.FromError(err)
-	require.True(s.T(), ok, "must get status from error")
-	assert.Equal(s.T(), codes.PermissionDenied, st.Code())
-	assert.Equal(s.T(), "testing rejection", st.Message())
+	s.Require().True(ok, "must get status from error")
+	s.Equal(codes.PermissionDenied, st.Code())
+	s.Equal("testing rejection", st.Message())
 }
 
 func (s *proxyTestSuite) TestPingStream_FullDuplexWorks() {
@@ -270,19 +270,19 @@ func (s *proxyTestSuite) TestPingStream_FullDuplexWorks() {
 		"dapr-test", s.T().Name(),
 	))
 	stream, err := s.testClient.PingStream(ctx)
-	require.NoError(s.T(), err, "PingStream request should be successful")
+	s.Require().NoError(err, "PingStream request should be successful")
 
 	for i := 0; i < countListResponses; i++ {
 		if s.sendPing(stream, i) {
 			break
 		}
 	}
-	require.NoError(s.T(), stream.CloseSend(), "no error on close send")
+	s.Require().NoError(stream.CloseSend(), "no error on close send")
 	_, err = stream.Recv()
-	require.ErrorIs(s.T(), err, io.EOF, "stream should close with io.EOF, meaining OK")
+	s.Require().ErrorIs(err, io.EOF, "stream should close with io.EOF, meaining OK")
 	// Check that the trailer headers are here.
 	trailerMd := stream.Trailer()
-	assert.Len(s.T(), trailerMd, 1, "PingStream trailer headers user contain metadata")
+	s.Len(trailerMd, 1, "PingStream trailer headers user contain metadata")
 }
 
 func (s *proxyTestSuite) TestPingStream_StressTest() {
@@ -310,7 +310,7 @@ func (s *proxyTestSuite) TestPingStream_MultipleThreads() {
 	}()
 	select {
 	case <-time.After(time.Second * 10):
-		assert.Fail(s.T(), "Timed out waiting for proxy to return.")
+		s.Fail("Timed out waiting for proxy to return.")
 	case <-ch:
 		return
 	}
@@ -342,7 +342,7 @@ func (s *proxyTestSuite) TestRecoveryFromNetworkFailure() {
 func (s *proxyTestSuite) sendPing(stream pb.TestService_PingStreamClient, i int) (eof bool) {
 	ping := &pb.PingRequest{Value: fmt.Sprintf("foo:%d", i)}
 	err := stream.Send(ping)
-	require.NoError(s.T(), err, "sending to PingStream must not fail")
+	s.Require().NoError(err, "sending to PingStream must not fail")
 	resp, err := stream.Recv()
 	if errors.Is(err, io.EOF) {
 		return true
@@ -350,11 +350,11 @@ func (s *proxyTestSuite) sendPing(stream pb.TestService_PingStreamClient, i int)
 	if i == 0 {
 		// Check that the header arrives before all entries.
 		headerMd, hErr := stream.Header()
-		require.NoError(s.T(), hErr, "PingStream headers should not error.")
-		assert.Contains(s.T(), headerMd, serverHeaderMdKey, "PingStream response headers user contain metadata")
+		s.Require().NoError(hErr, "PingStream headers should not error.")
+		s.Contains(headerMd, serverHeaderMdKey, "PingStream response headers user contain metadata")
 	}
-	require.NotNil(s.T(), resp, "resp must not be nil")
-	assert.EqualValues(s.T(), i, resp.Counter, "ping roundtrip must succeed with the correct id")
+	s.Require().NotNil(resp, "resp must not be nil")
+	s.EqualValues(i, resp.GetCounter(), "ping roundtrip must succeed with the correct id")
 	return false
 }
 
@@ -367,11 +367,11 @@ func (s *proxyTestSuite) TestStreamConnectionInterrupted() {
 		"dapr-test", s.T().Name(),
 	))
 	stream, err := s.testClient.PingStream(ctx)
-	require.NoError(s.T(), err, "PingStream request should be successful")
+	s.Require().NoError(err, "PingStream request should be successful")
 
 	// Send one message then interrupt the connection
 	eof := s.sendPing(stream, 0)
-	require.False(s.T(), eof)
+	s.Require().False(eof)
 
 	s.service.expectPingStreamError.Store(true)
 	defer func() {
@@ -382,15 +382,15 @@ func (s *proxyTestSuite) TestStreamConnectionInterrupted() {
 	// Send another message, which should fail without resiliency
 	ping := &pb.PingRequest{Value: fmt.Sprintf("foo:%d", 1)}
 	err = stream.Send(ping)
-	require.Error(s.T(), err, "sending to PingStream must fail with a stopped server")
+	s.Require().Error(err, "sending to PingStream must fail with a stopped server")
 
 	// Restart the server
 	s.restartServer(s.T())
 
 	// Pings should still fail with EOF because the stream is closed
 	err = stream.Send(ping)
-	require.Error(s.T(), err, "sending to PingStream must fail on a closed stream")
-	assert.ErrorIs(s.T(), err, io.EOF)
+	s.Require().Error(err, "sending to PingStream must fail on a closed stream")
+	s.Require().ErrorIs(err, io.EOF)
 }
 
 func (s *proxyTestSuite) TestPingSimulateFailure() {
@@ -403,8 +403,8 @@ func (s *proxyTestSuite) TestPingSimulateFailure() {
 	}()
 
 	_, err := s.testClient.Ping(ctx, &pb.PingRequest{Value: "Ciao mamma guarda come mi diverto"})
-	require.Error(s.T(), err, "Ping should return a simulated failure")
-	require.ErrorContains(s.T(), err, "Simulated failure")
+	s.Require().Error(err, "Ping should return a simulated failure")
+	s.Require().ErrorContains(err, "Simulated failure")
 }
 
 func (s *proxyTestSuite) setupResiliency() {
@@ -445,19 +445,19 @@ func (s *proxyTestSuite) TestResiliencyUnary() {
 		require.NoError(t, err, "Ping should succeed after retrying")
 		require.NotNil(t, res, "Response should not be nil")
 		require.Equal(t, int32(3), s.service.pingCallCount.Load())
-		require.Equal(t, message, res.Value)
+		require.Equal(t, message, res.GetValue())
 
 		assertRequestSentMetrics(t, "unary", 3, nil)
 
 		rows, err := view.RetrieveData(serviceInvocationResponseRecvName)
-		assert.NoError(t, err)
-		assert.Equal(t, 2, len(rows))
+		require.NoError(t, err)
+		assert.Len(t, rows, 2)
 		// 2 Ping failures
-		assert.Equal(t, diag.GetValueForObservationWithTagSet(
-			rows, map[tag.Tag]bool{diag.NewTag("status", strconv.Itoa(int(codes.Internal))): true}), int64(2))
+		assert.Equal(t, int64(2), diag.GetValueForObservationWithTagSet(
+			rows, map[tag.Tag]bool{diag.NewTag("status", strconv.Itoa(int(codes.Internal))): true}))
 		// 1 success
-		assert.Equal(t, diag.GetValueForObservationWithTagSet(
-			rows, map[tag.Tag]bool{diag.NewTag("status", strconv.Itoa(int(codes.OK))): true}), int64(1))
+		assert.Equal(t, int64(1), diag.GetValueForObservationWithTagSet(
+			rows, map[tag.Tag]bool{diag.NewTag("status", strconv.Itoa(int(codes.OK))): true}))
 	})
 
 	s.T().Run("timeouts", func(t *testing.T) {
@@ -479,8 +479,8 @@ func (s *proxyTestSuite) TestResiliencyUnary() {
 		require.Equal(t, int32(4), s.service.pingCallCount.Load())
 
 		grpcStatus, ok := status.FromError(err)
-		require.True(s.T(), ok, "Error should have a gRPC status code")
-		require.Equal(s.T(), codes.DeadlineExceeded, grpcStatus.Code())
+		s.Require().True(ok, "Error should have a gRPC status code")
+		s.Require().Equal(codes.DeadlineExceeded, grpcStatus.Code())
 
 		// Sleep for 500ms before returning to allow all timed-out goroutines to catch up with the timeouts
 		time.Sleep(500 * time.Millisecond)
@@ -515,7 +515,7 @@ func (s *proxyTestSuite) TestResiliencyUnary() {
 					res, err := s.testClient.Ping(ctx, &pb.PingRequest{Value: pingMsg})
 					require.NoErrorf(t, err, "Ping should succeed for operation %d:%d", i, j)
 					require.NotNilf(t, res, "Response should not be nil for operation %d:%d", i, j)
-					require.Equalf(t, pingMsg, res.Value, "Value should match for operation %d:%d", i, j)
+					require.Equalf(t, pingMsg, res.GetValue(), "Value should match for operation %d:%d", i, j)
 				}
 				wg.Done()
 			}(i)
@@ -528,7 +528,7 @@ func (s *proxyTestSuite) TestResiliencyUnary() {
 		}()
 		select {
 		case <-time.After(time.Second * 10):
-			assert.Fail(s.T(), "Timed out waiting for proxy to return.")
+			s.Fail("Timed out waiting for proxy to return.")
 		case <-ch:
 		}
 
@@ -542,8 +542,8 @@ func (s *proxyTestSuite) TestResiliencyUnary() {
 func assertResponseReceiveMetricsSameCode(t *testing.T, requestType string, code codes.Code, expected int64) []*view.Row {
 	t.Helper()
 	rows, err := view.RetrieveData(serviceInvocationResponseRecvName)
-	assert.NoError(t, err)
-	assert.Equal(t, 1, len(rows))
+	require.NoError(t, err)
+	assert.Len(t, rows, 1)
 	count := diag.GetValueForObservationWithTagSet(
 		rows, map[tag.Tag]bool{
 			diag.NewTag("status", strconv.Itoa(int(code))): true,
@@ -556,8 +556,8 @@ func assertResponseReceiveMetricsSameCode(t *testing.T, requestType string, code
 func assertRequestSentMetrics(t *testing.T, requestType string, requestsSentExpected int64, assertEqualFn func(t assert.TestingT, e1 interface{}, e2 interface{}, msgAndArgs ...interface{}) bool) []*view.Row {
 	t.Helper()
 	rows, err := view.RetrieveData(serviceInvocationRequestSentName)
-	assert.NoError(t, err)
-	assert.Equal(t, 1, len(rows))
+	require.NoError(t, err)
+	assert.Len(t, rows, 1)
 	requestsSent := diag.GetValueForObservationWithTagSet(
 		rows, map[tag.Tag]bool{diag.NewTag("type", requestType): true})
 
@@ -646,14 +646,14 @@ func (s *proxyTestSuite) TestResiliencyStreaming() {
 		// At least 1200ms (2 * 600ms) should have passed
 		require.GreaterOrEqual(t, time.Since(start), 1200*time.Millisecond)
 
-		require.NoError(s.T(), stream.CloseSend(), "no error on close send")
+		s.Require().NoError(stream.CloseSend(), "no error on close send")
 		_, err = stream.Recv()
-		require.ErrorIs(s.T(), err, io.EOF, "stream should close with io.EOF, meaining OK")
+		s.Require().ErrorIs(err, io.EOF, "stream should close with io.EOF, meaining OK")
 
 		assertRequestSentMetrics(t, "streaming", 1, nil)
 		rows, err := view.RetrieveData(serviceInvocationResponseRecvName)
-		assert.NoError(t, err)
-		assert.Equal(t, 0, len(rows)) // no error so no response metric
+		require.NoError(t, err)
+		assert.Empty(t, rows) // no error so no response metric
 	})
 
 	s.T().Run("simulate connection failures with retry", func(t *testing.T) {
@@ -686,9 +686,9 @@ func (s *proxyTestSuite) TestResiliencyStreaming() {
 			require.NotNil(t, res)
 		}
 
-		require.NoError(s.T(), stream.CloseSend(), "no error on close send")
+		s.Require().NoError(stream.CloseSend(), "no error on close send")
 		_, err = stream.Recv()
-		require.ErrorIs(s.T(), err, io.EOF, "stream should close with io.EOF, meaining OK")
+		s.Require().ErrorIs(err, io.EOF, "stream should close with io.EOF, meaining OK")
 
 		assertRequestSentMetrics(t, "streaming", 2, nil)
 		assertResponseReceiveMetricsSameCode(t, "streaming", codes.Unavailable, 1)
@@ -698,7 +698,7 @@ func (s *proxyTestSuite) TestResiliencyStreaming() {
 func setupMetrics(s *proxyTestSuite) {
 	s.T().Helper()
 	metricsCleanup()
-	assert.NoError(s.T(), diag.DefaultMonitoring.Init(testAppID))
+	s.Require().NoError(diag.DefaultMonitoring.Init(testAppID))
 }
 
 func (s *proxyTestSuite) initServer() {
@@ -718,7 +718,7 @@ func (s *proxyTestSuite) restartServer(t *testing.T) {
 
 	srvPort := s.serverListener.Addr().(*net.TCPAddr).Port
 	s.serverListener, err = net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(srvPort))
-	require.NoError(s.T(), err, "must not error while starting serverListener")
+	s.Require().NoError(err, "must not error while starting serverListener")
 
 	s.T().Logf("re-starting grpc.Server at: %v", s.serverListener.Addr().String())
 	s.initServer()
@@ -766,13 +766,13 @@ func (s *proxyTestSuite) SetupSuite() {
 
 	pc := encoding.GetCodec((&codec.Proxy{}).Name())
 	dc := encoding.GetCodec("proto")
-	require.NotNil(s.T(), pc, "proxy codec must be registered")
-	require.NotNil(s.T(), dc, "default codec must be registered")
+	s.Require().NotNil(pc, "proxy codec must be registered")
+	s.Require().NotNil(dc, "default codec must be registered")
 
 	s.proxyListener, err = net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(s.T(), err, "must be able to allocate a port for proxyListener")
+	s.Require().NoError(err, "must be able to allocate a port for proxyListener")
 	s.serverListener, err = net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(s.T(), err, "must be able to allocate a port for serverListener")
+	s.Require().NoError(err, "must be able to allocate a port for serverListener")
 
 	grpclog.SetLoggerV2(testingLog{s.T()})
 
@@ -837,7 +837,7 @@ func (s *proxyTestSuite) SetupSuite() {
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())),
 	)
-	require.NoError(s.T(), err, "must not error on deferred client Dial")
+	s.Require().NoError(err, "must not error on deferred client Dial")
 	s.testClient = pb.NewTestServiceClient(clientConn)
 }
 
@@ -861,6 +861,7 @@ func (s *proxyTestSuite) TearDownSuite() {
 }
 
 func TestProxySuite(t *testing.T) {
+	codec.Register()
 	suite.Run(t, &proxyTestSuite{})
 }
 

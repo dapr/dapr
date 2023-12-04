@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -32,7 +33,7 @@ func TestGetInjectorConfig(t *testing.T) {
 		t.Setenv("ALLOWED_SERVICE_ACCOUNTS_PREFIX_NAMES", "namespace:test-service-account1,namespace2*:test-service-account2")
 
 		cfg, err := GetConfig()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, "daprd-test-image", cfg.SidecarImage)
 		assert.Equal(t, "Always", cfg.SidecarImagePullPolicy)
 		assert.Equal(t, "test-namespace", cfg.Namespace)
@@ -50,7 +51,7 @@ func TestGetInjectorConfig(t *testing.T) {
 		t.Setenv("KUBE_CLUSTER_DOMAIN", "")
 
 		cfg, err := GetConfig()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, "daprd-test-image", cfg.SidecarImage)
 		assert.Equal(t, "IfNotPresent", cfg.SidecarImagePullPolicy)
 		assert.Equal(t, "test-namespace", cfg.Namespace)
@@ -68,7 +69,7 @@ func TestGetInjectorConfig(t *testing.T) {
 		t.Setenv("SIDECAR_READ_ONLY_ROOT_FILESYSTEM", "")
 
 		cfg, err := GetConfig()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.True(t, cfg.GetRunAsNonRoot())
 		assert.True(t, cfg.GetReadOnlyRootFilesystem())
 
@@ -77,7 +78,7 @@ func TestGetInjectorConfig(t *testing.T) {
 		t.Setenv("SIDECAR_READ_ONLY_ROOT_FILESYSTEM", "1")
 
 		cfg, err = GetConfig()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.True(t, cfg.GetRunAsNonRoot())
 		assert.True(t, cfg.GetReadOnlyRootFilesystem())
 
@@ -86,7 +87,7 @@ func TestGetInjectorConfig(t *testing.T) {
 		t.Setenv("SIDECAR_READ_ONLY_ROOT_FILESYSTEM", "no")
 
 		cfg, err = GetConfig()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.False(t, cfg.GetRunAsNonRoot())
 		assert.False(t, cfg.GetReadOnlyRootFilesystem())
 	})
