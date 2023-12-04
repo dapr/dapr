@@ -66,8 +66,8 @@ spec:
 
 	g.registered[0].Store(true)
 
-	srv := grpcapp.New(t,
-		grpcapp.WithOnBindingEventFn(func(ctx context.Context, in *rtv1.BindingEventRequest) (*rtv1.BindingEventResponse, error) {
+	srv := app.New(t,
+		app.WithOnBindingEventFn(func(ctx context.Context, in *rtv1.BindingEventRequest) (*rtv1.BindingEventResponse, error) {
 			switch in.GetName() {
 			case "binding1":
 				assert.True(t, g.registered[0].Load())

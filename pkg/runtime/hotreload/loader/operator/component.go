@@ -59,13 +59,13 @@ func (c *component) recv() (*loader.Event[componentsapi.Component], error) {
 	}
 
 	var component componentsapi.Component
-	if err := json.Unmarshal(event.Component, &component); err != nil {
+	if err := json.Unmarshal(event.GetComponent(), &component); err != nil {
 		return nil, fmt.Errorf("failed to deserializing component: %w", err)
 	}
 
 	return &loader.Event[componentsapi.Component]{
 		Resource: component,
-		Type:     event.Type,
+		Type:     event.GetType(),
 	}, nil
 }
 

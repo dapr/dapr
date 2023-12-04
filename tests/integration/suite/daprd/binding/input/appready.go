@@ -55,7 +55,7 @@ func (a *appready) Setup(t *testing.T) []framework.Option {
 			}
 			return nil, errors.New("app not healthy")
 		}),
-		grpcapp.WithOnBindingEventFn(func(ctx context.Context, in *rtv1.BindingEventRequest) (*rtv1.BindingEventResponse, error) {
+		app.WithOnBindingEventFn(func(ctx context.Context, in *rtv1.BindingEventRequest) (*rtv1.BindingEventResponse, error) {
 			switch in.GetName() {
 			case "mybinding":
 				a.bindingCalled.Add(1)

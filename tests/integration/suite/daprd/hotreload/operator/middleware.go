@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -94,8 +95,8 @@ func (m *middleware) Setup(t *testing.T) []framework.Option {
 		daprd.WithMode("kubernetes"),
 		daprd.WithConfigs("hotreloading"),
 		daprd.WithExecOptions(exec.WithEnvVars("DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors))),
-		daprd.WithSentryAddress("localhost:"+strconv.Itoa(sentry.Port())),
-		daprd.WithControlPlaneAddress("localhost:"+strconv.Itoa(m.operator.Port(t))),
+		daprd.WithSentryAddress(sentry.Address()),
+		daprd.WithControlPlaneAddress(m.operator.Address(t)),
 		daprd.WithDisableK8sSecretStore(true),
 		daprd.WithAppPort(srv1.Port()),
 		daprd.WithAppID("app1"),
@@ -160,16 +161,14 @@ func (m *middleware) Run(t *testing.T, ctx context.Context) {
 	})
 }
 
-func (m *middleware) doReq(t assert.TestingT, ctx context.Context, client *http.Client, path string, expCode int) {
+func (m *middleware) doReq(t require.TestingT, ctx context.Context, client *http.Client, path string, expCode int) {
 	reqURL := "http://localhost:" + strconv.Itoa(m.daprd.HTTPPort()) + path
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
-	if assert.NoError(t, err) {
-		resp, err := client.Do(req)
-		if assert.NoError(t, err) {
-			defer resp.Body.Close()
-			assert.Equal(t, expCode, resp.StatusCode, path)
-		}
-	}
+	require.NoError(t, err)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, expCode, resp.StatusCode, path)
 }
 
 func (m *middleware) expServerResp(t *testing.T, ctx context.Context, server int) {

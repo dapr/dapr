@@ -59,10 +59,10 @@ func (e *disable) Setup(t *testing.T) []framework.Option {
 	// Control plane services always serves with mTLS in kubernetes mode.
 	taFile := filepath.Join(t.TempDir(), "ca.pem")
 	require.NoError(t, os.WriteFile(taFile, bundle.TrustAnchors, 0o600))
-	e.placement = procplacement.New(t,
-		procplacement.WithEnableTLS(true),
-		procplacement.WithTrustAnchorsFile(taFile),
-		procplacement.WithSentryAddress(e.sentry.Address()),
+	e.placement = placement.New(t,
+		placement.WithEnableTLS(true),
+		placement.WithTrustAnchorsFile(taFile),
+		placement.WithSentryAddress(e.sentry.Address()),
 	)
 
 	e.operator = newOperator(t, bundle.TrustAnchors, e.sentry.Address())

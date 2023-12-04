@@ -20,7 +20,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -76,8 +75,8 @@ func (o *output) Setup(t *testing.T) []framework.Option {
 		daprd.WithMode("kubernetes"),
 		daprd.WithConfigs("hotreloading"),
 		daprd.WithExecOptions(exec.WithEnvVars("DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors))),
-		daprd.WithSentryAddress("localhost:"+strconv.Itoa(sentry.Port())),
-		daprd.WithControlPlaneAddress("localhost:"+strconv.Itoa(o.operator.Port(t))),
+		daprd.WithSentryAddress(sentry.Address()),
+		daprd.WithControlPlaneAddress(o.operator.Address(t)),
 		daprd.WithDisableK8sSecretStore(true),
 	)
 
@@ -207,7 +206,7 @@ func (o *output) Run(t *testing.T, ctx context.Context) {
 		o.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &comp2, EventType: operatorv1.ResourceEventType_DELETED})
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(t, ctx, client, o.daprd.HTTPPort()), 0)
+			assert.Empty(c, util.GetMetaComponents(t, ctx, client, o.daprd.HTTPPort()))
 		}, time.Second*5, time.Millisecond*100)
 		o.postBindingFail(t, ctx, client, "binding1")
 		o.postBindingFail(t, ctx, client, "binding2")

@@ -54,7 +54,7 @@ func (a *appready) Setup(t *testing.T) []framework.Option {
 			}
 			return nil, errors.New("app not healthy")
 		}),
-		grpcapp.WithOnTopicEventFn(func(_ context.Context, in *rtv1.TopicEventRequest) (*rtv1.TopicEventResponse, error) {
+		app.WithOnTopicEventFn(func(_ context.Context, in *rtv1.TopicEventRequest) (*rtv1.TopicEventResponse, error) {
 			a.topicChan <- in.GetPath()
 			return new(rtv1.TopicEventResponse), nil
 		}),

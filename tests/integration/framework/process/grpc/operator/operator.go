@@ -22,7 +22,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 
@@ -116,7 +115,7 @@ func New(t *testing.T, fopts ...Option) *Operator {
 				case <-time.After(5 * time.Second):
 					t.Fatal("timed out waiting for security provider to stop")
 				case err = <-secProvErr:
-					assert.NoError(t, err)
+					require.NoError(t, err)
 				}
 			})
 			go func() {

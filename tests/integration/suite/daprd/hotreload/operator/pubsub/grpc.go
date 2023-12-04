@@ -15,7 +15,6 @@ package pubsub
 
 import (
 	"context"
-	"strconv"
 	"testing"
 	"time"
 
@@ -66,7 +65,7 @@ func (g *grpc) Setup(t *testing.T) []framework.Option {
 
 	srv := app.New(t,
 		app.WithOnTopicEventFn(func(_ context.Context, in *rtv1.TopicEventRequest) (*rtv1.TopicEventResponse, error) {
-			g.topicChan <- in.Path
+			g.topicChan <- in.GetPath()
 			return new(rtv1.TopicEventResponse), nil
 		}),
 		app.WithListTopicSubscriptions(func(context.Context, *emptypb.Empty) (*rtv1.ListTopicSubscriptionsResponse, error) {
@@ -95,8 +94,8 @@ func (g *grpc) Setup(t *testing.T) []framework.Option {
 		daprd.WithMode("kubernetes"),
 		daprd.WithConfigs("hotreloading"),
 		daprd.WithExecOptions(exec.WithEnvVars("DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors))),
-		daprd.WithSentryAddress("localhost:"+strconv.Itoa(sentry.Port())),
-		daprd.WithControlPlaneAddress("localhost:"+strconv.Itoa(g.operator.Port(t))),
+		daprd.WithSentryAddress(sentry.Address()),
+		daprd.WithControlPlaneAddress(g.operator.Address(t)),
 		daprd.WithDisableK8sSecretStore(true),
 		daprd.WithAppPort(srv.Port(t)),
 		daprd.WithAppProtocol("grpc"),
@@ -115,7 +114,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 	t.Run("expect 1 component to be loaded", func(t *testing.T) {
 		resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 		require.NoError(t, err)
-		assert.Len(t, resp.RegisteredComponents, 1)
+		assert.Len(t, resp.GetRegisteredComponents(), 1)
 		g.publishMessage(t, ctx, client, "pubsub1", "topic1", "/route1")
 		g.publishMessageFails(t, ctx, client, "pubsub2", "topic2")
 		g.publishMessageFails(t, ctx, client, "pubsub3", "topic3")
@@ -138,7 +137,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
-			assert.Len(c, resp.RegisteredComponents, 2)
+			assert.Len(c, resp.GetRegisteredComponents(), 2)
 		}, time.Second*5, time.Millisecond*100)
 		g.publishMessage(t, ctx, client, "pubsub1", "topic1", "/route1")
 		g.publishMessage(t, ctx, client, "pubsub2", "topic2", "/route2")
@@ -161,7 +160,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
-			assert.Len(c, resp.RegisteredComponents, 3)
+			assert.Len(c, resp.GetRegisteredComponents(), 3)
 		}, time.Second*5, time.Millisecond*100)
 		g.publishMessage(t, ctx, client, "pubsub1", "topic1", "/route1")
 		g.publishMessage(t, ctx, client, "pubsub2", "topic2", "/route2")
@@ -176,7 +175,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
-			assert.Len(c, resp.RegisteredComponents, 2)
+			assert.Len(c, resp.GetRegisteredComponents(), 2)
 		}, time.Second*5, time.Millisecond*100)
 		g.publishMessage(t, ctx, client, "pubsub1", "topic1", "/route1")
 		g.publishMessageFails(t, ctx, client, "pubsub2", "topic2")
@@ -191,7 +190,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
-			assert.Len(c, resp.RegisteredComponents, 1)
+			assert.Len(c, resp.GetRegisteredComponents(), 1)
 		}, time.Second*5, time.Millisecond*100)
 		g.publishMessageFails(t, ctx, client, "pubsub1", "topic1")
 		g.publishMessageFails(t, ctx, client, "pubsub2", "topic2")
@@ -206,7 +205,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
-			assert.Len(c, resp.RegisteredComponents, 0)
+			assert.Empty(c, resp.GetRegisteredComponents())
 		}, time.Second*5, time.Millisecond*100)
 		g.publishMessageFails(t, ctx, client, "pubsub1", "topic1")
 		g.publishMessageFails(t, ctx, client, "pubsub2", "topic2")
@@ -230,7 +229,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
-			assert.Len(c, resp.RegisteredComponents, 1)
+			assert.Len(c, resp.GetRegisteredComponents(), 1)
 		}, time.Second*5, time.Millisecond*100)
 		g.publishMessageFails(t, ctx, client, "pubsub1", "topic1")
 		g.publishMessage(t, ctx, client, "pubsub2", "topic2", "/route2")

@@ -16,7 +16,6 @@ package input
 import (
 	"context"
 	nethttp "net/http"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -128,8 +127,8 @@ func (h *http) Setup(t *testing.T) []framework.Option {
 		daprd.WithMode("kubernetes"),
 		daprd.WithConfigs("hotreloading"),
 		daprd.WithExecOptions(exec.WithEnvVars("DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors))),
-		daprd.WithSentryAddress("localhost:"+strconv.Itoa(sentry.Port())),
-		daprd.WithControlPlaneAddress("localhost:"+strconv.Itoa(h.operator.Port(t))),
+		daprd.WithSentryAddress(sentry.Address()),
+		daprd.WithControlPlaneAddress(h.operator.Address(t)),
 		daprd.WithDisableK8sSecretStore(true),
 		daprd.WithAppPort(srv.Port()),
 	)

@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	operatorpb "github.com/dapr/dapr/pkg/proto/operator/v1"
@@ -38,10 +39,10 @@ func Test_generic(t *testing.T) {
 			streamer,
 		)
 
-		assert.NoError(t, g.close())
+		require.NoError(t, g.close())
 		ch, err := g.Stream(context.Background())
 		assert.Nil(t, ch)
-		assert.ErrorContains(t, err, "stream is closed")
+		require.ErrorContains(t, err, "stream is closed")
 	})
 
 	t.Run("Stream should return error on stream and context cancelled", func(t *testing.T) {
@@ -61,7 +62,7 @@ func Test_generic(t *testing.T) {
 
 		ch, err := g.Stream(ctx)
 		assert.Nil(t, ch)
-		assert.ErrorContains(t, err, "test error")
+		require.ErrorContains(t, err, "test error")
 	})
 
 	t.Run("Should send event to Stream channel on Recv", func(t *testing.T) {
@@ -79,7 +80,7 @@ func Test_generic(t *testing.T) {
 
 		ch, err := g.Stream(context.Background())
 		assert.NotNil(t, ch)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		for i := 0; i < 5; i++ {
 			comp := new(loader.Event[componentsapi.Component])
@@ -99,7 +100,7 @@ func Test_generic(t *testing.T) {
 
 		close(recCh)
 
-		assert.NoError(t, g.close())
+		require.NoError(t, g.close())
 	})
 
 	t.Run("Should attempt to re-establish after the stream fails", func(t *testing.T) {
@@ -131,7 +132,7 @@ func Test_generic(t *testing.T) {
 		}
 
 		_, err := g.Stream(context.Background())
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		select {
 		case <-retried:
@@ -139,7 +140,7 @@ func Test_generic(t *testing.T) {
 			t.Error("expected generic to retry establishing stream after failure")
 		}
 
-		assert.NoError(t, g.close())
+		require.NoError(t, g.close())
 		assert.GreaterOrEqual(t, calls, 3)
 	})
 
@@ -163,14 +164,14 @@ func Test_generic(t *testing.T) {
 
 		select {
 		case err := <-closeCh:
-			assert.ErrorContains(t, err, "streamer error")
+			require.ErrorContains(t, err, "streamer error")
 		case <-time.After(time.Second * 3):
 			t.Error("streamer did not close in time")
 		}
 
 		select {
 		case err := <-closeCh:
-			assert.ErrorContains(t, err, "return error")
+			require.ErrorContains(t, err, "return error")
 		case <-time.After(time.Second * 3):
 			t.Error("generic did not close in time")
 		}

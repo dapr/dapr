@@ -58,7 +58,7 @@ spec:
 
 	srv := app.New(t,
 		app.WithOnTopicEventFn(func(_ context.Context, in *rtv1.TopicEventRequest) (*rtv1.TopicEventResponse, error) {
-			g.topicChan <- in.Path
+			g.topicChan <- in.GetPath()
 			return new(rtv1.TopicEventResponse), nil
 		}),
 		app.WithListTopicSubscriptions(func(context.Context, *emptypb.Empty) (*rtv1.ListTopicSubscriptionsResponse, error) {

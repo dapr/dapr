@@ -21,7 +21,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"strconv"
 	"testing"
 	"time"
 
@@ -76,8 +75,8 @@ func (s *secret) Setup(t *testing.T) []framework.Option {
 	s.daprd = daprd.New(t,
 		daprd.WithMode("kubernetes"),
 		daprd.WithConfigs("hotreloading"),
-		daprd.WithSentryAddress("localhost:"+strconv.Itoa(sentry.Port())),
-		daprd.WithControlPlaneAddress("localhost:"+strconv.Itoa(s.operator.Port(t))),
+		daprd.WithSentryAddress(sentry.Address()),
+		daprd.WithControlPlaneAddress(s.operator.Address(t)),
 		daprd.WithDisableK8sSecretStore(true),
 		daprd.WithExecOptions(exec.WithEnvVars(
 			"DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors),
@@ -104,7 +103,7 @@ func (s *secret) Run(t *testing.T, ctx context.Context) {
 	s.daprd.WaitUntilRunning(t, ctx)
 
 	t.Run("expect no components to be loaded yet", func(t *testing.T) {
-		assert.Len(t, util.GetMetaComponents(t, ctx, s.client, s.daprd.HTTPPort()), 0)
+		assert.Empty(t, util.GetMetaComponents(t, ctx, s.client, s.daprd.HTTPPort()))
 		s.readExpectError(t, ctx, "123", "SEC_1", http.StatusInternalServerError)
 	})
 
@@ -421,7 +420,7 @@ func (s *secret) Run(t *testing.T, ctx context.Context) {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := util.GetMetaComponents(c, ctx, s.client, s.daprd.HTTPPort())
 			if assert.Len(c, resp, 1) {
-				assert.Equal(c, "state.in-memory", resp[0].Type)
+				assert.Equal(c, "state.in-memory", resp[0].GetType())
 			}
 		}, time.Second*5, time.Millisecond*100)
 

@@ -16,7 +16,6 @@ package operator
 import (
 	"context"
 	"path/filepath"
-	"strconv"
 	"testing"
 	"time"
 
@@ -75,7 +74,7 @@ func (i *informer) Setup(t *testing.T) []framework.Option {
 				Spec: configapi.ConfigurationSpec{
 					MTLSSpec: &configapi.MTLSSpec{
 						ControlPlaneTrustDomain: "integration.test.dapr.io",
-						SentryAddress:           "localhost:" + strconv.Itoa(sentry.Port()),
+						SentryAddress:           sentry.Address(),
 					},
 					Features: []configapi.FeatureSpec{{
 						Name:    "HotReload",
@@ -96,8 +95,8 @@ func (i *informer) Setup(t *testing.T) []framework.Option {
 	i.daprd = daprd.New(t,
 		daprd.WithMode("kubernetes"),
 		daprd.WithConfigs("daprsystem"),
-		daprd.WithSentryAddress("localhost:"+strconv.Itoa(sentry.Port())),
-		daprd.WithControlPlaneAddress("localhost:"+strconv.Itoa(i.operator.Port())),
+		daprd.WithSentryAddress(sentry.Address()),
+		daprd.WithControlPlaneAddress(i.operator.Address()),
 		daprd.WithDisableK8sSecretStore(true),
 		daprd.WithEnableMTLS(true),
 		daprd.WithExecOptions(exec.WithEnvVars(
@@ -136,7 +135,7 @@ func (i *informer) Run(t *testing.T, ctx context.Context) {
 			assert.Len(c, util.GetMetaComponents(t, ctx, client, i.daprd.HTTPPort()), 1)
 		}, time.Second*10, time.Millisecond*100)
 		metaComponents := util.GetMetaComponents(t, ctx, client, i.daprd.HTTPPort())
-		assert.Equal(t, "state.in-memory", metaComponents[0].Type)
+		assert.Equal(t, "state.in-memory", metaComponents[0].GetType())
 	})
 
 	tmpDir := t.TempDir()
@@ -161,7 +160,7 @@ func (i *informer) Run(t *testing.T, ctx context.Context) {
 			// Assert here, as we might catch the component in the middle of being
 			// updated, i.e. between closed and re-inited.
 			if assert.Len(c, util.GetMetaComponents(t, ctx, client, i.daprd.HTTPPort()), 1) {
-				assert.Equal(c, "state.sqlite", util.GetMetaComponents(t, ctx, client, i.daprd.HTTPPort())[0].Type)
+				assert.Equal(c, "state.sqlite", util.GetMetaComponents(t, ctx, client, i.daprd.HTTPPort())[0].GetType())
 			}
 		}, time.Second*10, time.Millisecond*100)
 	})
