@@ -11,8 +11,8 @@ require (
 	github.com/argoproj/argo-rollouts v1.4.1
 	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/cloudevents/sdk-go/v2 v2.14.0
-	github.com/dapr/components-contrib v1.12.1-0.20231129042434-36a055ebd8d7
-	github.com/dapr/kit v0.12.2-0.20231031211530-0e1fd37fc4b3
+	github.com/dapr/components-contrib v1.12.1-0.20231204210358-79adc565c17a
+	github.com/dapr/kit v0.12.2-0.20231116003620-df64d3a144b3
 	github.com/evanphx/json-patch/v5 v5.7.0
 	github.com/go-chi/chi/v5 v5.0.10
 	github.com/go-chi/cors v1.2.1
