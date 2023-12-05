@@ -11,7 +11,7 @@ service SchedulerCallback {
 
 // TriggerJobRequest is the message request to convey that the job is at its 'trigger' time. 
 message TriggerJobRequest {
-    // The job.
+    // The job name to be triggered.
     string job_name = 1;
     // The metadata associated with the job.
     // This can contain the generated `key` for the optional state store when the daprd sidecar needs to lookup the entire data from a state store.
