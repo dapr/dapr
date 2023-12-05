@@ -30,7 +30,7 @@ func StateStoreNotConfigured() *kitErrors.Error {
 		"state store is not configured",
 		"ERR_STATE_STORE_NOT_CONFIGURED",
 	).
-		WithErrorInfo(kitErrors.ErrCodeStateStore+kitErrors.ErrCodeNotConfigured, nil)
+		WithErrorInfo(kitErrors.CodePrefixStateStore+kitErrors.CodeNotConfigured, nil)
 }
 
 func StateStoreNotFound(storeName string) *kitErrors.Error {
@@ -40,7 +40,7 @@ func StateStoreNotFound(storeName string) *kitErrors.Error {
 		fmt.Sprintf("state store %s is not found", storeName),
 		"ERR_STATE_STORE_NOT_FOUND",
 	).
-		WithErrorInfo(kitErrors.ErrCodeStateStore+kitErrors.ErrCodeNotFound, nil)
+		WithErrorInfo(kitErrors.CodePrefixStateStore+kitErrors.CodeNotFound, nil)
 }
 
 func StateStoreInvalidKeyName(storeName string, key string, msg string) *kitErrors.Error {
@@ -49,7 +49,7 @@ func StateStoreInvalidKeyName(storeName string, key string, msg string) *kitErro
 		http.StatusBadRequest,
 		msg,
 		"ERR_MALFORMED_REQUEST",
-	).WithErrorInfo(kitErrors.ErrCodeStateStore+kitErrors.ErrCodeIllegalKey, nil).
+	).WithErrorInfo(kitErrors.CodePrefixStateStore+kitErrors.CodeIllegalKey, nil).
 		WithResourceInfo("state", storeName, "", "").
 		WithFieldViolation(key, msg)
 }
@@ -60,10 +60,10 @@ func StateStoreTransactionsNotSupported(storeName string) *kitErrors.Error {
 	return kitErrors.New(
 		grpcCodes.Unimplemented,
 		http.StatusInternalServerError,
-		fmt.Sprintf(kitErrors.ErrMsgStateTransactionsNotSupported, storeName),
+		fmt.Sprintf(kitErrors.MsgStateTransactionsNotSupported, storeName),
 		"ERR_STATE_STORE_NOT_SUPPORTED", // TODO: @elena-kolevska this is misleading and also used for different things ("query unsupported"); it should be removed in the next major version
 	).
-		WithErrorInfo(kitErrors.ErrCodeStateStore+"TRANSACTIONS_NOT_SUPPORTED", nil).
+		WithErrorInfo(kitErrors.CodePrefixStateStore+"TRANSACTIONS_NOT_SUPPORTED", nil).
 		WithResourceInfo("state", storeName, "", "").
 		WithHelpLink("https://docs.dapr.io/reference/components-reference/supported-state-stores/", "Check the list of state stores and the features they support")
 }
@@ -75,7 +75,7 @@ func StateStoreTooManyTransactionalOps(count int, max int) *kitErrors.Error {
 		fmt.Sprintf("the transaction contains %d operations, which is more than what the state store supports: %d", count, max),
 		"ERR_STATE_STORE_TOO_MANY_TRANSACTIONS",
 	).
-		WithErrorInfo(kitErrors.ErrCodeStateStore+"TOO_MANY_TRANSACTIONS", map[string]string{
+		WithErrorInfo(kitErrors.CodePrefixStateStore+"TOO_MANY_TRANSACTIONS", map[string]string{
 			"currentOpsTransaction": strconv.Itoa(count),
 			"maxOpsPerTransaction":  strconv.Itoa(max),
 		}).
@@ -91,7 +91,7 @@ func StateStoreQueryUnsupported(storeName string) *kitErrors.Error {
 		"state store does not support querying",
 		"ERR_STATE_STORE_NOT_SUPPORTED",
 	).
-		WithErrorInfo(kitErrors.ErrCodeStateStore+"QUERYING_"+kitErrors.ErrCodeNotSupported, nil).
+		WithErrorInfo(kitErrors.CodePrefixStateStore+"QUERYING_"+kitErrors.CodeNotSupported, nil).
 		WithResourceInfo("state", storeName, "", "")
 }
 
@@ -103,6 +103,6 @@ func StateStoreQueryFailed(storeName string, detail string) *kitErrors.Error {
 		fmt.Sprintf("state store %s query failed: %s", storeName, detail),
 		"ERR_STATE_QUERY",
 	).
-		WithErrorInfo(kitErrors.ErrCodeStateStore+kitErrors.ErrCodeQueryFailed, nil).
+		WithErrorInfo(kitErrors.CodePrefixStateStore+kitErrors.CodePostfixQueryFailed, nil).
 		WithResourceInfo("state", storeName, "", "")
 }

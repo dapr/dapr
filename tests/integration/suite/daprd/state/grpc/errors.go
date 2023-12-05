@@ -23,11 +23,15 @@ import (
 	"golang.org/x/net/nettest"
 	"google.golang.org/grpc/status"
 
-	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+
+	apierrors "github.com/dapr/dapr/pkg/api/errors"
+
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
+	grpcCodes "google.golang.org/grpc/codes"
 
 	"github.com/dapr/components-contrib/state"
 	commonv1 "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -39,8 +43,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/statestore/inmemory"
 	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"google.golang.org/genproto/googleapis/rpc/errdetails"
-	grpcCodes "google.golang.org/grpc/codes"
 )
 
 func init() {
