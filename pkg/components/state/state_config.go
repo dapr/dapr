@@ -15,6 +15,7 @@ package state
 
 import (
 	"fmt"
+	"github.com/dapr/dapr/pkg/api/errors"
 	"os"
 	"strings"
 	"sync"
@@ -53,7 +54,7 @@ func SaveStateConfiguration(storeName string, metadata map[string]string) error 
 
 	err := checkKeyIllegal(strategy)
 	if err != nil {
-		return err
+		return errors.StateStoreInvalidKeyName(storeName, strategy, err.Error())
 	}
 
 	statesConfigurationLock.Lock()
@@ -64,7 +65,7 @@ func SaveStateConfiguration(storeName string, metadata map[string]string) error 
 
 func GetModifiedStateKey(key, storeName, appID string) (string, error) {
 	if err := checkKeyIllegal(key); err != nil {
-		return "", err
+		return "", errors.StateStoreInvalidKeyName(storeName, key, err.Error())
 	}
 
 	stateConfiguration := getStateConfiguration(storeName)
