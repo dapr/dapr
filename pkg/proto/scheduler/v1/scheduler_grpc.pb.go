@@ -11,7 +11,6 @@ import (
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
-	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -30,9 +29,9 @@ type SchedulerClient interface {
 	// which will also act as health check messages.
 	ConnectHost(ctx context.Context, in *ConnectClientStream, opts ...grpc.CallOption) (*ConnectServerStream, error)
 	// ScheduleJob is used by the daprd sidecar to schedule a job.
-	ScheduleJob(ctx context.Context, in *ScheduledJob, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	ScheduleJob(ctx context.Context, in *ScheduleJobRequest, opts ...grpc.CallOption) (*ScheduleJobResponse, error)
 	// DeleteJob is used by the daprd sidecar to delete a job.
-	DeleteJob(ctx context.Context, in *JobRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	DeleteJob(ctx context.Context, in *JobRequest, opts ...grpc.CallOption) (*DeleteJobResponse, error)
 	// GetJob is used by the daprd sidecar to get details of a job.
 	GetJob(ctx context.Context, in *JobRequest, opts ...grpc.CallOption) (*GetJobResponse, error)
 	// ListJobs is used by the daprd sidecar to list jobs by app_id.
@@ -56,8 +55,8 @@ func (c *schedulerClient) ConnectHost(ctx context.Context, in *ConnectClientStre
 	return out, nil
 }
 
-func (c *schedulerClient) ScheduleJob(ctx context.Context, in *ScheduledJob, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *schedulerClient) ScheduleJob(ctx context.Context, in *ScheduleJobRequest, opts ...grpc.CallOption) (*ScheduleJobResponse, error) {
+	out := new(ScheduleJobResponse)
 	err := c.cc.Invoke(ctx, "/dapr.proto.scheduler.v1.Scheduler/ScheduleJob", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -65,8 +64,8 @@ func (c *schedulerClient) ScheduleJob(ctx context.Context, in *ScheduledJob, opt
 	return out, nil
 }
 
-func (c *schedulerClient) DeleteJob(ctx context.Context, in *JobRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *schedulerClient) DeleteJob(ctx context.Context, in *JobRequest, opts ...grpc.CallOption) (*DeleteJobResponse, error) {
+	out := new(DeleteJobResponse)
 	err := c.cc.Invoke(ctx, "/dapr.proto.scheduler.v1.Scheduler/DeleteJob", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -103,9 +102,9 @@ type SchedulerServer interface {
 	// which will also act as health check messages.
 	ConnectHost(context.Context, *ConnectClientStream) (*ConnectServerStream, error)
 	// ScheduleJob is used by the daprd sidecar to schedule a job.
-	ScheduleJob(context.Context, *ScheduledJob) (*emptypb.Empty, error)
+	ScheduleJob(context.Context, *ScheduleJobRequest) (*ScheduleJobResponse, error)
 	// DeleteJob is used by the daprd sidecar to delete a job.
-	DeleteJob(context.Context, *JobRequest) (*emptypb.Empty, error)
+	DeleteJob(context.Context, *JobRequest) (*DeleteJobResponse, error)
 	// GetJob is used by the daprd sidecar to get details of a job.
 	GetJob(context.Context, *JobRequest) (*GetJobResponse, error)
 	// ListJobs is used by the daprd sidecar to list jobs by app_id.
@@ -119,10 +118,10 @@ type UnimplementedSchedulerServer struct {
 func (UnimplementedSchedulerServer) ConnectHost(context.Context, *ConnectClientStream) (*ConnectServerStream, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ConnectHost not implemented")
 }
-func (UnimplementedSchedulerServer) ScheduleJob(context.Context, *ScheduledJob) (*emptypb.Empty, error) {
+func (UnimplementedSchedulerServer) ScheduleJob(context.Context, *ScheduleJobRequest) (*ScheduleJobResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ScheduleJob not implemented")
 }
-func (UnimplementedSchedulerServer) DeleteJob(context.Context, *JobRequest) (*emptypb.Empty, error) {
+func (UnimplementedSchedulerServer) DeleteJob(context.Context, *JobRequest) (*DeleteJobResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteJob not implemented")
 }
 func (UnimplementedSchedulerServer) GetJob(context.Context, *JobRequest) (*GetJobResponse, error) {
@@ -162,7 +161,7 @@ func _Scheduler_ConnectHost_Handler(srv interface{}, ctx context.Context, dec fu
 }
 
 func _Scheduler_ScheduleJob_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ScheduledJob)
+	in := new(ScheduleJobRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -174,7 +173,7 @@ func _Scheduler_ScheduleJob_Handler(srv interface{}, ctx context.Context, dec fu
 		FullMethod: "/dapr.proto.scheduler.v1.Scheduler/ScheduleJob",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SchedulerServer).ScheduleJob(ctx, req.(*ScheduledJob))
+		return srv.(SchedulerServer).ScheduleJob(ctx, req.(*ScheduleJobRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }

@@ -2,7 +2,6 @@ syntax = "proto3";
 
 package dapr.proto.scheduler.v1;
 
-import "google/protobuf/empty.proto";
 import "dapr/proto/runtime/v1/dapr.proto";
 
 option go_package = "github.com/dapr/dapr/pkg/proto/scheduler/v1;scheduler";
@@ -15,9 +14,9 @@ service Scheduler {
 	// which will also act as health check messages.
 	rpc ConnectHost(ConnectClientStream) returns (ConnectServerStream) {}
 	// ScheduleJob is used by the daprd sidecar to schedule a job.
-	rpc ScheduleJob(ScheduledJob) returns (google.protobuf.Empty) {}
+	rpc ScheduleJob(ScheduleJobRequest) returns (ScheduleJobResponse) {}
 	// DeleteJob is used by the daprd sidecar to delete a job.
-	rpc DeleteJob(JobRequest) returns (google.protobuf.Empty) {}
+	rpc DeleteJob(JobRequest) returns (DeleteJobResponse) {}
 	// GetJob is used by the daprd sidecar to get details of a job.
 	rpc GetJob(JobRequest) returns (GetJobResponse) {}
 	// ListJobs is used by the daprd sidecar to list jobs by app_id.
@@ -42,20 +41,26 @@ message ConnectServerStream {
 }
 
 message RegisterRequest {
-		// The id of the application (app_id). This is used as the key in etcd for the Scheduler Service.
-		string app_id = 1;
-		// The namespace.
-		string namespace = 2;
-		// The hostname of the daprd sidecar.
-		string hostname = 3;
-		// The port of the daprd sidecar.
-		int32 port = 4;
+	// The id of the application (app_id).
+	string app_id = 1;
+	// The namespace.
+	string namespace = 2;
+	// The hostname of the daprd sidecar.
+	string hostname = 3;
+	// The port of the daprd sidecar.
+	int32 port = 4;
 }
 
 // UnregisterRequest is the message used by the daprd sidecar to unregister itself from the scheduler service.
 message UnregisterRequest {
-	// Job name to be unregistered.
-	string job_name = 1;
+	// The id of the application (app_id).
+	string app_id = 1;
+	// The namespace.
+	string namespace = 2;
+	// The hostname of the daprd sidecar.
+	string hostname = 3;
+	// The port of the daprd sidecar.
+	int32 port = 4;
 }
 
 // ScheduledJob is the message used by the daprd sidecar to schedule a job.
@@ -72,9 +77,22 @@ message ScheduledJob {
 	map<string,string> metadata = 3;
 }
 
+message ScheduleJobRequest {
+	// The job to be scheduled.
+	ScheduledJob job = 1;
+}
+
+message ScheduleJobResponse {
+	// Empty as of now
+}
+
 // JobRequest is the message used by the daprd sidecar to delete or get a job.
 message JobRequest {
 	string job_name = 1;
+}
+
+message DeleteJobResponse {
+	// Empty as of now
 }
 
 // GetJobResponse is the response message to convey the details of a job.

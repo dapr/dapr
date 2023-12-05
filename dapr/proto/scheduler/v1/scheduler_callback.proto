@@ -2,21 +2,23 @@ syntax = "proto3";
 
 package dapr.proto.scheduler.v1;
 
-import "google/protobuf/empty.proto";
-
 option go_package = "github.com/dapr/dapr/pkg/proto/scheduler/v1;scheduler";
 
 service SchedulerCallback {
     // Callback RPC for job schedule being at 'trigger' time
-    rpc TriggerJob(TriggerRequest) returns (google.protobuf.Empty) {}
+    rpc TriggerJob(TriggerJobRequest) returns (TriggerJobResponse) {}
 }
 
-// TriggerRequest is the message request to convey that the job is at its 'trigger' time. 
-message TriggerRequest {
+// TriggerJobRequest is the message request to convey that the job is at its 'trigger' time. 
+message TriggerJobRequest {
     // The job.
     string job_name = 1;
     // The metadata associated with the job.
     // This can contain the generated `key` for the optional state store when the daprd sidecar needs to lookup the entire data from a state store.
 	// The sidecar will use the metadata in order to know whether this job is registered for an actor. This is needed, as the routing mechanism for actors is different for the callback.
 	map<string,string> metadata = 2;
+}
+
+message TriggerJobResponse {
+    // Empty as of now.
 }
