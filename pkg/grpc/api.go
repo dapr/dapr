@@ -24,6 +24,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	apierrors "github.com/dapr/dapr/pkg/api/errors"
+
 	otelTrace "go.opentelemetry.io/otel/trace"
 	"golang.org/x/exp/slices"
 	"google.golang.org/grpc"
@@ -832,7 +834,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 
 	transactionalStore, ok := store.(state.TransactionalStore)
 	if !ok {
-		err := status.Errorf(codes.Unimplemented, messages.ErrStateStoreNotSupported, in.GetStoreName())
+		err := apierrors.StateStoreTransactionsNotSupported(in.GetStoreName())
 		apiServerLogger.Debug(err)
 		return &emptypb.Empty{}, err
 	}
@@ -893,11 +895,10 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 			return &emptypb.Empty{}, err
 		}
 	}
-
 	if maxMulti, ok := store.(state.TransactionalStoreMultiMaxSize); ok {
 		max := maxMulti.MultiMaxSize()
 		if max > 0 && len(operations) > max {
-			err := messages.ErrStateTooManyTransactionalOp.WithFormat(len(operations), max)
+			err := apierrors.StateStoreTooManyTransactionalOps(len(operations), max)
 			apiServerLogger.Debug(err)
 			return &emptypb.Empty{}, err
 		}

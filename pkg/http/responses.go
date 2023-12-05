@@ -18,6 +18,8 @@ import (
 	"net/http"
 	"strconv"
 
+	kitErrors "github.com/dapr/kit/errors"
+
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
@@ -140,6 +142,13 @@ func respondWithError(w http.ResponseWriter, err error) {
 	apiErr, ok := err.(messages.APIError)
 	if ok {
 		respondWithData(w, apiErr.HTTPCode(), apiErr.JSONErrorValue())
+		return
+	}
+
+	// Check if it's a kiterrors.Error object
+	apiKitErr, ok := err.(*kitErrors.Error)
+	if ok {
+		respondWithData(w, apiKitErr.HttpCode, apiKitErr.JSONErrorValue())
 		return
 	}
 
