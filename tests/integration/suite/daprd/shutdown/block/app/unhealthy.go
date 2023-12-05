@@ -88,7 +88,7 @@ func (u *unhealthy) Setup(t *testing.T) []framework.Option {
 	)
 
 	u.daprd = daprd.New(t,
-		daprd.WithDaprBlockShutdownSeconds(180),
+		daprd.WithDaprBlockShutdownDuration("180s"),
 		daprd.WithAppPort(app.Port()),
 		daprd.WithAppHealthCheck(true),
 		daprd.WithAppHealthCheckPath("/healthz"),

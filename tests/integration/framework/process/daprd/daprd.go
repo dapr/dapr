@@ -131,8 +131,8 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	if opts.gracefulShutdownSeconds != nil {
 		args = append(args, "--dapr-graceful-shutdown-seconds="+strconv.Itoa(*opts.gracefulShutdownSeconds))
 	}
-	if opts.blockShutdownSeconds != nil {
-		args = append(args, "--dapr-block-shutdown-seconds="+strconv.Itoa(*opts.blockShutdownSeconds))
+	if opts.blockShutdownDuration != nil {
+		args = append(args, "--dapr-block-shutdown-duration="+*opts.blockShutdownDuration)
 	}
 
 	return &Daprd{

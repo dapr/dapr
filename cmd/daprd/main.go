@@ -150,7 +150,7 @@ func main() {
 				UnixDomainSocket:             opts.UnixDomainSocket,
 				DaprHTTPReadBufferSize:       opts.DaprHTTPReadBufferSize,
 				DaprGracefulShutdownSeconds:  opts.DaprGracefulShutdownSeconds,
-				DaprBlockShutdownSeconds:     opts.DaprBlockShutdownSeconds,
+				DaprBlockShutdownDuration:    opts.DaprBlockShutdownDuration,
 				DisableBuiltinK8sSecretStore: opts.DisableBuiltinK8sSecretStore,
 				EnableAppHealthCheck:         opts.EnableAppHealthCheck,
 				AppHealthCheckPath:           opts.AppHealthCheckPath,

@@ -90,7 +90,7 @@ type Config struct {
 	DaprPublicPort               string
 	ApplicationPort              string
 	DaprGracefulShutdownSeconds  int
-	DaprBlockShutdownSeconds     *int
+	DaprBlockShutdownDuration    *time.Duration
 	PlacementServiceHostAddr     string
 	DaprAPIListenAddresses       string
 	AppHealthProbeInterval       int
@@ -286,8 +286,9 @@ func (c *Config) toInternal() (*internalConfig, error) {
 			HealthCheckHTTPPath: c.AppHealthCheckPath,
 			MaxConcurrency:      c.AppMaxConcurrency,
 		},
-		registry:        registry.New(c.Registry),
-		metricsExporter: metrics.NewExporterWithOptions(log, metrics.DefaultMetricNamespace, c.Metrics),
+		registry:              registry.New(c.Registry),
+		metricsExporter:       metrics.NewExporterWithOptions(log, metrics.DefaultMetricNamespace, c.Metrics),
+		blockShutdownDuration: c.DaprBlockShutdownDuration,
 	}
 
 	if len(intc.standalone.ResourcesPath) == 0 && c.ComponentsPath != "" {
@@ -362,13 +363,6 @@ func (c *Config) toInternal() (*internalConfig, error) {
 
 	if intc.readBufferSize == -1 {
 		intc.readBufferSize = DefaultReadBufferSize
-	}
-
-	if c.DaprBlockShutdownSeconds != nil {
-		if *c.DaprBlockShutdownSeconds < 0 {
-			return nil, fmt.Errorf("the '-dapr-block-shutdown-seconds' argument value %d must be more then 0", *c.DaprBlockShutdownSeconds)
-		}
-		intc.blockShutdownDuration = ptr.Of(time.Duration(*c.DaprBlockShutdownSeconds) * time.Second)
 	}
 
 	if c.DaprGracefulShutdownSeconds < 0 {

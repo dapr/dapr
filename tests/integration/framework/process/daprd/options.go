@@ -45,7 +45,7 @@ type options struct {
 	controlPlaneAddress     string
 	disableK8sSecretStore   *bool
 	gracefulShutdownSeconds *int
-	blockShutdownSeconds    *int
+	blockShutdownDuration   *string
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
@@ -207,8 +207,8 @@ func WithDaprGracefulShutdownSeconds(seconds int) Option {
 	}
 }
 
-func WithDaprBlockShutdownSeconds(seconds int) Option {
+func WithDaprBlockShutdownDuration(duration string) Option {
 	return func(o *options) {
-		o.blockShutdownSeconds = &seconds
+		o.blockShutdownDuration = &duration
 	}
 }

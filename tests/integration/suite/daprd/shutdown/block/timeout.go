@@ -77,7 +77,7 @@ func (i *timeout) Setup(t *testing.T) []framework.Option {
 	)
 
 	i.daprd = daprd.New(t,
-		daprd.WithDaprBlockShutdownSeconds(2),
+		daprd.WithDaprBlockShutdownDuration("2s"),
 		daprd.WithAppPort(app.Port()),
 		daprd.WithAppHealthCheck(true),
 		daprd.WithAppHealthCheckPath("/healthz"),
