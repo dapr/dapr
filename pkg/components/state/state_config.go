@@ -15,10 +15,11 @@ package state
 
 import (
 	"fmt"
-	"github.com/dapr/dapr/pkg/api/errors"
 	"os"
 	"strings"
 	"sync"
+
+	"github.com/dapr/dapr/pkg/api/errors"
 )
 
 const (
