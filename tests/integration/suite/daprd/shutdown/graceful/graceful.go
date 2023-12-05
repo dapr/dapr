@@ -16,6 +16,7 @@ package graceful
 import (
 	"context"
 	"net/http"
+	"runtime"
 	"testing"
 
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -37,6 +38,10 @@ type graceful struct {
 }
 
 func (g *graceful) Setup(t *testing.T) []framework.Option {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping test on windows which relies on unix process signals")
+	}
+
 	app := prochttp.New(t, prochttp.WithHandler(http.NewServeMux()))
 
 	logline := logline.New(t,

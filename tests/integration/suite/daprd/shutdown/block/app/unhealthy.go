@@ -17,6 +17,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"runtime"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -50,11 +51,11 @@ type unhealthy struct {
 }
 
 func (u *unhealthy) Setup(t *testing.T) []framework.Option {
- if runtime.GOOS == "windows" {
-  t.Skip("Skipping test on windows which relies on unix process signals")
- }
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping test on windows which relies on unix process signals")
+	}
 
- u.appHealth.Store(true)
+	u.appHealth.Store(true)
 	u.routeCh = make(chan struct{}, 1)
 
 	handler := http.NewServeMux()

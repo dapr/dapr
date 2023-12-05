@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -44,6 +45,10 @@ type timeout struct {
 }
 
 func (i *timeout) Setup(t *testing.T) []framework.Option {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping test on windows which relies on unix process signals")
+	}
+
 	i.closeInvoke = make(chan struct{})
 	i.inInvoke = make(chan struct{})
 	handler := http.NewServeMux()

@@ -17,6 +17,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"runtime"
 	"testing"
 	"time"
 
@@ -47,6 +48,10 @@ type timeout struct {
 }
 
 func (i *timeout) Setup(t *testing.T) []framework.Option {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping test on windows which relies on unix process signals")
+	}
+
 	i.routeCh = make(chan struct{}, 1)
 	handler := http.NewServeMux()
 	handler.HandleFunc("/dapr/subscribe", func(w http.ResponseWriter, r *http.Request) {
