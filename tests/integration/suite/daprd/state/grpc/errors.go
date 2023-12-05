@@ -128,8 +128,8 @@ spec:
 func (e *errors) Run(t *testing.T, ctx context.Context) {
 	e.daprd.WaitUntilRunning(t, ctx)
 
-	conn, err := grpc.DialContext(ctx, fmt.Sprintf("localhost:%d", e.daprd.GRPCPort()), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
-	require.NoError(t, err)
+	conn, connErr := grpc.DialContext(ctx, fmt.Sprintf("localhost:%d", e.daprd.GRPCPort()), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+	require.NoError(t, connErr)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
 	client := rtv1.NewDaprClient(conn)
 
@@ -139,7 +139,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 			StoreName: "mystore-doesnt-exist",
 			States:    []*commonv1.StateItem{{Value: []byte("value1")}},
 		}
-		_, err = client.SaveState(ctx, req)
+		_, err := client.SaveState(ctx, req)
 		require.Error(t, err)
 
 		s, ok := status.FromError(err)
@@ -167,7 +167,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 			StoreName: "mystore",
 			States:    []*commonv1.StateItem{{Key: keyName, Value: []byte("value1")}},
 		}
-		_, err = client.SaveState(ctx, req)
+		_, err := client.SaveState(ctx, req)
 		require.Error(t, err)
 
 		s, ok := status.FromError(err)
@@ -248,7 +248,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 			StoreName: "mystore",
 			Query:     `{"filter":{"EQ":{"state":"CA"}},"sort":[{"key":"person.id","order":"DESC"}]}`,
 		}
-		_, err = client.QueryStateAlpha1(ctx, req)
+		_, err := client.QueryStateAlpha1(ctx, req)
 		require.Error(t, err)
 
 		s, ok := status.FromError(err)
@@ -300,7 +300,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 			StoreName: stateStoreName,
 			Query:     `{"filter":{"EQ":{"state":"CA"}},"sort":[{"key":"person.id","order":"DESC"}]}`,
 		}
-		_, err = client.QueryStateAlpha1(ctx, req)
+		_, err := client.QueryStateAlpha1(ctx, req)
 
 		require.Error(t, err)
 
@@ -354,7 +354,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 			StoreName: stateStoreName,
 			Query:     `{filter":{"EQ":{"state":"CA"}},"sort":[{"key":"person.id","order":"DESC"}]}`, // invalid json
 		}
-		_, err = client.QueryStateAlpha1(ctx, req)
+		_, err := client.QueryStateAlpha1(ctx, req)
 
 		require.Error(t, err)
 
