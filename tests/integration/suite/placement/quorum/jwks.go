@@ -99,7 +99,7 @@ spec:
 		placement.WithInitialClusterPorts(fp.Port(t, 0), fp.Port(t, 1), fp.Port(t, 2)),
 		placement.WithEnableTLS(true),
 		placement.WithTrustAnchorsFile(taFile),
-		placement.WithSentryAddress("localhost:" + strconv.Itoa(j.sentry.Port())),
+		placement.WithSentryAddress(j.sentry.Address()),
 	}
 	j.places = []*placement.Placement{
 		placement.New(t, append(opts, placement.WithID("p1"),
@@ -125,7 +125,7 @@ func (j *jwks) Run(t *testing.T, ctx context.Context) {
 	t.Setenv("DAPR_SENTRY_TOKEN_FILE", j.appTokenFile)
 
 	secProv, err := security.New(ctx, security.Options{
-		SentryAddress:           "localhost:" + strconv.Itoa(j.sentry.Port()),
+		SentryAddress:           j.sentry.Address(),
 		ControlPlaneTrustDomain: "localhost",
 		ControlPlaneNamespace:   "default",
 		TrustAnchors:            j.sentry.CABundle().TrustAnchors,
@@ -156,7 +156,7 @@ func (j *jwks) Run(t *testing.T, ctx context.Context) {
 		if i >= 3 {
 			i = 0
 		}
-		host := "localhost:" + strconv.Itoa(j.places[i].Port())
+		host := j.places[i].Address()
 		conn, cerr := grpc.DialContext(ctx, host, grpc.WithBlock(),
 			grpc.WithReturnConnectionError(), sec.GRPCDialOptionMTLS(placeID),
 		)
@@ -193,11 +193,11 @@ func (j *jwks) Run(t *testing.T, ctx context.Context) {
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		o, err := stream.Recv()
 		require.NoError(t, err)
-		assert.Equal(c, "update", o.Operation)
+		assert.Equal(c, "update", o.GetOperation())
 		if assert.NotNil(c, o.GetTables()) {
-			assert.Len(c, o.GetTables().Entries, 2)
-			assert.Contains(c, o.GetTables().Entries, "entity-1")
-			assert.Contains(c, o.GetTables().Entries, "entity-2")
+			assert.Len(c, o.GetTables().GetEntries(), 2)
+			assert.Contains(c, o.GetTables().GetEntries(), "entity-1")
+			assert.Contains(c, o.GetTables().GetEntries(), "entity-2")
 		}
 	}, time.Second*20, time.Millisecond*100)
 }

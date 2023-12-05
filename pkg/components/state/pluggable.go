@@ -172,8 +172,8 @@ func (ss *grpcStateStore) Init(ctx context.Context, metadata state.Metadata) err
 		return err
 	}
 
-	ss.features = make([]state.Feature, len(featureResponse.Features))
-	for idx, f := range featureResponse.Features {
+	ss.features = make([]state.Feature, len(featureResponse.GetFeatures()))
+	for idx, f := range featureResponse.GetFeatures() {
 		ss.features[idx] = state.Feature(f)
 	}
 
@@ -254,15 +254,15 @@ func (ss *grpcStateStore) BulkGet(ctx context.Context, req []state.GetRequest, o
 		return nil, err
 	}
 
-	items := make([]state.BulkGetResponse, len(bulkGetResponse.Items))
-	for idx, resp := range bulkGetResponse.Items {
+	items := make([]state.BulkGetResponse, len(bulkGetResponse.GetItems()))
+	for idx, resp := range bulkGetResponse.GetItems() {
 		items[idx] = state.BulkGetResponse{
 			Key:         resp.GetKey(),
 			Data:        resp.GetData(),
 			ETag:        fromETagResponse(resp.GetEtag()),
 			Metadata:    resp.GetMetadata(),
-			Error:       resp.Error,
-			ContentType: strNilIfEmpty(resp.ContentType),
+			Error:       resp.GetError(),
+			ContentType: strNilIfEmpty(resp.GetContentType()),
 		}
 	}
 	return items, nil
@@ -370,23 +370,23 @@ func toQuery(req query.Query) (*proto.Query, error) {
 }
 
 func fromQueryResponse(resp *proto.QueryResponse) *state.QueryResponse {
-	results := make([]state.QueryItem, len(resp.Items))
+	results := make([]state.QueryItem, len(resp.GetItems()))
 
-	for idx, item := range resp.Items {
+	for idx, item := range resp.GetItems() {
 		itemIdx := state.QueryItem{
-			Key:         item.Key,
-			Data:        item.Data,
-			ETag:        fromETagResponse(item.Etag),
-			Error:       item.Error,
-			ContentType: strNilIfEmpty(item.ContentType),
+			Key:         item.GetKey(),
+			Data:        item.GetData(),
+			ETag:        fromETagResponse(item.GetEtag()),
+			Error:       item.GetError(),
+			ContentType: strNilIfEmpty(item.GetContentType()),
 		}
 
 		results[idx] = itemIdx
 	}
 	return &state.QueryResponse{
 		Results:  results,
-		Token:    resp.Token,
-		Metadata: resp.Metadata,
+		Token:    resp.GetToken(),
+		Metadata: resp.GetMetadata(),
 	}
 }
 
@@ -445,7 +445,7 @@ func fromGetResponse(resp *proto.GetResponse) *state.GetResponse {
 		Data:        resp.GetData(),
 		ETag:        fromETagResponse(resp.GetEtag()),
 		Metadata:    resp.GetMetadata(),
-		ContentType: strNilIfEmpty(resp.ContentType),
+		ContentType: strNilIfEmpty(resp.GetContentType()),
 	}
 }
 

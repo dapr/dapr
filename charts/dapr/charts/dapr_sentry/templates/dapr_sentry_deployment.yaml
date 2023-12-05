@@ -120,6 +120,10 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
+        {{- range $name, $value := .Values.extraEnvVars }}
+        - name: "{{ $name }}"
+          value: "{{ $value }}"
+        {{- end }}
         ports:
         - containerPort: 50001
 {{- if eq .Values.global.prometheus.enabled true }}

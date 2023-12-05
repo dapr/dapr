@@ -1,6 +1,8 @@
 module github.com/dapr/dapr
 
-go 1.20
+go 1.21
+
+toolchain go1.21.4
 
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.4.2
@@ -9,7 +11,7 @@ require (
 	github.com/argoproj/argo-rollouts v1.4.1
 	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/cloudevents/sdk-go/v2 v2.14.0
-	github.com/dapr/components-contrib v1.12.1-0.20231102232056-f4e73b0e6511
+	github.com/dapr/components-contrib v1.12.1-0.20231129042434-36a055ebd8d7
 	github.com/dapr/kit v0.12.2-0.20231031211530-0e1fd37fc4b3
 	github.com/evanphx/json-patch/v5 v5.7.0
 	github.com/go-chi/chi/v5 v5.0.10
@@ -94,13 +96,13 @@ require (
 	github.com/AthenZ/athenz v1.10.39 // indirect
 	github.com/Azure/azure-sdk-for-go v68.0.0+incompatible // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/ai/azopenai v0.3.0 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.8.0 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.9.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.4.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig v0.6.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/data/azcosmos v0.3.6 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/data/aztables v1.0.2 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/internal v1.4.0 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/messaging/azeventhubs v1.0.1 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/data/aztables v1.1.0 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/internal v1.5.0 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/messaging/azeventhubs v1.0.2 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus v1.5.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/eventgrid/armeventgrid/v2 v2.1.1 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/eventhub/armeventhub v1.1.1 // indirect

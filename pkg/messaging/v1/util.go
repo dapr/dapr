@@ -125,12 +125,12 @@ func httpHeadersToInternalMetadata(header http.Header) DaprInternalMetadata {
 	internalMD := make(DaprInternalMetadata, len(header))
 	for key, val := range header {
 		// Note: HTTP headers can never be binary (only gRPC supports binary headers)
-		if internalMD[key] == nil || len(internalMD[key].Values) == 0 {
+		if len(internalMD[key].GetValues()) == 0 {
 			internalMD[key] = &internalv1pb.ListStringValue{
 				Values: val,
 			}
 		} else {
-			internalMD[key].Values = append(internalMD[key].Values, val...)
+			internalMD[key].Values = append(internalMD[key].GetValues(), val...)
 		}
 	}
 	return internalMD
@@ -148,12 +148,12 @@ func fasthttpHeadersToInternalMetadata(header fasthttpHeaders) DaprInternalMetad
 	header.VisitAll(func(key []byte, value []byte) {
 		// Note: fasthttp headers can never be binary (only gRPC supports binary headers)
 		keyStr := string(key)
-		if internalMD[keyStr] == nil || len(internalMD[keyStr].Values) == 0 {
+		if internalMD[keyStr] == nil || len(internalMD[keyStr].GetValues()) == 0 {
 			internalMD[keyStr] = &internalv1pb.ListStringValue{
 				Values: []string{string(value)},
 			}
 		} else {
-			internalMD[keyStr].Values = append(internalMD[keyStr].Values, string(value))
+			internalMD[keyStr].Values = append(internalMD[keyStr].GetValues(), string(value))
 		}
 	})
 	return internalMD
@@ -212,13 +212,13 @@ func InternalMetadataToGrpcMetadata(ctx context.Context, internalMD DaprInternal
 		// get both the trace headers for HTTP/GRPC and continue
 		switch keyName {
 		case traceparentHeader:
-			traceparentValue = listVal.Values[0]
+			traceparentValue = listVal.GetValues()[0]
 			continue
 		case tracestateHeader:
-			tracestateValue = listVal.Values[0]
+			tracestateValue = listVal.GetValues()[0]
 			continue
 		case tracebinMetadata:
-			grpctracebinValue = listVal.Values[0]
+			grpctracebinValue = listVal.GetValues()[0]
 			continue
 		case DestinationIDHeader:
 			continue
@@ -230,14 +230,14 @@ func InternalMetadataToGrpcMetadata(ctx context.Context, internalMD DaprInternal
 
 		if strings.HasSuffix(k, gRPCBinaryMetadataSuffix) {
 			// decoded base64 encoded key binary
-			for _, val := range listVal.Values {
+			for _, val := range listVal.GetValues() {
 				decoded, err := base64.StdEncoding.DecodeString(val)
 				if err == nil {
 					md.Append(keyName, string(decoded))
 				}
 			}
 		} else {
-			md.Append(keyName, listVal.Values...)
+			md.Append(keyName, listVal.GetValues()...)
 		}
 	}
 
@@ -254,7 +254,7 @@ func InternalMetadataToGrpcMetadata(ctx context.Context, internalMD DaprInternal
 func IsGRPCProtocol(internalMD DaprInternalMetadata) bool {
 	originContentType := ""
 	if val, ok := internalMD[ContentTypeHeader]; ok {
-		originContentType = val.Values[0]
+		originContentType = val.GetValues()[0]
 	}
 	return strings.HasPrefix(originContentType, GRPCContentType)
 }
@@ -275,7 +275,7 @@ func ReservedGRPCMetadataToDaprPrefixHeader(key string) string {
 func InternalMetadataToHTTPHeader(ctx context.Context, internalMD DaprInternalMetadata, setHeader func(string, string)) {
 	var traceparentValue, tracestateValue, grpctracebinValue string
 	for k, listVal := range internalMD {
-		if len(listVal.Values) == 0 {
+		if len(listVal.GetValues()) == 0 {
 			continue
 		}
 
@@ -283,13 +283,13 @@ func InternalMetadataToHTTPHeader(ctx context.Context, internalMD DaprInternalMe
 		// get both the trace headers for HTTP/GRPC and continue
 		switch keyName {
 		case traceparentHeader:
-			traceparentValue = listVal.Values[0]
+			traceparentValue = listVal.GetValues()[0]
 			continue
 		case tracestateHeader:
-			tracestateValue = listVal.Values[0]
+			tracestateValue = listVal.GetValues()[0]
 			continue
 		case tracebinMetadata:
-			grpctracebinValue = listVal.Values[0]
+			grpctracebinValue = listVal.GetValues()[0]
 			continue
 		case DestinationIDHeader:
 			continue
@@ -299,7 +299,7 @@ func InternalMetadataToHTTPHeader(ctx context.Context, internalMD DaprInternalMe
 			continue
 		}
 
-		for _, v := range listVal.Values {
+		for _, v := range listVal.GetValues() {
 			setHeader(ReservedGRPCMetadataToDaprPrefixHeader(keyName), v)
 		}
 	}

@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 const configPrefix = "."
@@ -50,10 +51,10 @@ spec:
     value: value2
 `
 		remove, err := writeTempConfig(filename, yaml)
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		defer remove()
 		components, err := request.LoadComponents()
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		assert.Len(t, components, 1)
 	})
 
@@ -68,18 +69,18 @@ kind: Component
 metadata:
 name: statestore`
 		remove, err := writeTempConfig(filename, yaml)
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		defer remove()
 		components, err := request.LoadComponents()
-		assert.Nil(t, err)
-		assert.Len(t, components, 0)
+		require.NoError(t, err)
+		assert.Empty(t, components)
 	})
 
 	t.Run("load components file not exist", func(t *testing.T) {
 		request := NewLocalComponents("test-path-no-exists")
 
 		components, err := request.LoadComponents()
-		assert.NotNil(t, err)
-		assert.Len(t, components, 0)
+		require.Error(t, err)
+		assert.Empty(t, components)
 	})
 }
