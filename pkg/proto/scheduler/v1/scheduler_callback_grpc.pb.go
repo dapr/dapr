@@ -11,7 +11,6 @@ import (
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
-	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -24,7 +23,7 @@ const _ = grpc.SupportPackageIsVersion7
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type SchedulerCallbackClient interface {
 	// Callback RPC for job schedule being at 'trigger' time
-	TriggerJob(ctx context.Context, in *TriggerRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	TriggerJob(ctx context.Context, in *TriggerJobRequest, opts ...grpc.CallOption) (*TriggerJobResponse, error)
 }
 
 type schedulerCallbackClient struct {
@@ -35,8 +34,8 @@ func NewSchedulerCallbackClient(cc grpc.ClientConnInterface) SchedulerCallbackCl
 	return &schedulerCallbackClient{cc}
 }
 
-func (c *schedulerCallbackClient) TriggerJob(ctx context.Context, in *TriggerRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *schedulerCallbackClient) TriggerJob(ctx context.Context, in *TriggerJobRequest, opts ...grpc.CallOption) (*TriggerJobResponse, error) {
+	out := new(TriggerJobResponse)
 	err := c.cc.Invoke(ctx, "/dapr.proto.scheduler.v1.SchedulerCallback/TriggerJob", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -49,14 +48,14 @@ func (c *schedulerCallbackClient) TriggerJob(ctx context.Context, in *TriggerReq
 // for forward compatibility
 type SchedulerCallbackServer interface {
 	// Callback RPC for job schedule being at 'trigger' time
-	TriggerJob(context.Context, *TriggerRequest) (*emptypb.Empty, error)
+	TriggerJob(context.Context, *TriggerJobRequest) (*TriggerJobResponse, error)
 }
 
 // UnimplementedSchedulerCallbackServer should be embedded to have forward compatible implementations.
 type UnimplementedSchedulerCallbackServer struct {
 }
 
-func (UnimplementedSchedulerCallbackServer) TriggerJob(context.Context, *TriggerRequest) (*emptypb.Empty, error) {
+func (UnimplementedSchedulerCallbackServer) TriggerJob(context.Context, *TriggerJobRequest) (*TriggerJobResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method TriggerJob not implemented")
 }
 
@@ -72,7 +71,7 @@ func RegisterSchedulerCallbackServer(s grpc.ServiceRegistrar, srv SchedulerCallb
 }
 
 func _SchedulerCallback_TriggerJob_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(TriggerRequest)
+	in := new(TriggerJobRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -84,7 +83,7 @@ func _SchedulerCallback_TriggerJob_Handler(srv interface{}, ctx context.Context,
 		FullMethod: "/dapr.proto.scheduler.v1.SchedulerCallback/TriggerJob",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SchedulerCallbackServer).TriggerJob(ctx, req.(*TriggerRequest))
+		return srv.(SchedulerCallbackServer).TriggerJob(ctx, req.(*TriggerJobRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
