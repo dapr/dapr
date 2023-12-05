@@ -1,0 +1,95 @@
+syntax = "proto3";
+
+package dapr.proto.scheduler.v1;
+
+import "google/protobuf/empty.proto";
+import "dapr/proto/runtime/v1/dapr.proto";
+
+option go_package = "github.com/dapr/dapr/pkg/proto/scheduler/v1;scheduler";
+
+service Scheduler {
+	// ConnectHost is used by the daprd sidecar to connect to the scheduler service.
+	// The sidecar will send a stream of RegisterRequest, UnregisterRequest and blank 
+	// health-check messages.
+	// In return, scheduler service will send a stream of blank ConnectServerStream messages,
+	// which will also act as health check messages.
+	rpc ConnectHost(ConnectClientStream) returns (ConnectServerStream) {}
+	// ScheduleJob is used by the daprd sidecar to schedule a job.
+	rpc ScheduleJob(ScheduledJob) returns (google.protobuf.Empty) {}
+	// DeleteJob is used by the daprd sidecar to delete a job.
+	rpc DeleteJob(JobRequest) returns (google.protobuf.Empty) {}
+	// GetJob is used by the daprd sidecar to get details of a job.
+	rpc GetJob(JobRequest) returns (GetJobResponse) {}
+	// ListJobs is used by the daprd sidecar to list jobs by app_id.
+	rpc ListJobs(ListJobsRequest) returns (ListJobsResponse) {}
+}
+
+// ConnectClientStream is the message used by the daprd sidecar to connect to the scheduler service.
+// The initiating message has to be a RegisterRequest, followed by a stream of blank health-check messages.
+// The sidecar can send a UnregisterRequest to unregister itself from the scheduler service.
+message ConnectClientStream {
+	// The message type is oneof, so that the sidecar can send a stream of RegisterRequest or UnregisterRequest 
+	// or blank health-check messages.
+	oneof message {
+		RegisterRequest register = 1;
+		UnregisterRequest unregister = 2;
+	}
+}
+
+message ConnectServerStream {
+	// It is empty as of now. A message to be sent here to act as a response to client stream.
+	// This acts as a health check for the server stream.
+}
+
+message RegisterRequest {
+		// The id of the application (app_id). This is used as the key in etcd for the Scheduler Service.
+		string app_id = 1;
+		// The namespace.
+		string namespace = 2;
+		// The hostname of the daprd sidecar.
+		string hostname = 3;
+		// The port of the daprd sidecar.
+		int32 port = 4;
+}
+
+// UnregisterRequest is the message used by the daprd sidecar to unregister itself from the scheduler service.
+message UnregisterRequest {
+	// Job name to be unregistered.
+	string job_name = 1;
+}
+
+// ScheduledJob is the message used by the daprd sidecar to schedule a job.
+message ScheduledJob {
+	// The job to be scheduled.
+	runtime.v1.Job job = 1;
+
+	// Namespace of the job
+	string namespace = 2;
+
+	// The metadata associated with the job.
+	// The sidecar will create the unique `key` for storing data in the state store and pass the generated `key` along to the scheduler service for data lookup upon ‘trigger’ time later on. 
+	// The sidecar will also add metadata in order to know whether this job is registered for an actor. This is needed, as the routing mechanism for actors is different for the callback.
+	map<string,string> metadata = 3;
+}
+
+// JobRequest is the message used by the daprd sidecar to delete or get a job.
+message JobRequest {
+	string job_name = 1;
+}
+
+// GetJobResponse is the response message to convey the details of a job.
+message GetJobResponse {
+	ScheduledJob job = 1;
+}
+
+// ListJobsRequest is the message to list jobs by app_id.
+message ListJobsRequest {
+    // The id of the application (app_id) for which to list jobs.
+    string app_id = 1;
+}
+// ListJobsResponse is the response message to convey the list of jobs.
+message ListJobsResponse {
+    // List of jobs that match the request criteria.
+    repeated ScheduledJob jobs = 1;
+}
+
