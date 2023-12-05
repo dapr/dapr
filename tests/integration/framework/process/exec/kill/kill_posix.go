@@ -17,7 +17,6 @@ limitations under the License.
 package kill
 
 import (
-	"errors"
 	"os"
 	"os/exec"
 	"testing"
@@ -26,8 +25,5 @@ import (
 )
 
 func interrupt(t *testing.T, cmd *exec.Cmd) {
-	err := cmd.Process.Signal(os.Interrupt)
-	if !errors.Is(err, os.ErrProcessDone) {
-		require.NoError(t, err)
-	}
+	require.NoError(t, cmd.Process.Signal(os.Interrupt))
 }
