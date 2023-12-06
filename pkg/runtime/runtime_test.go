@@ -49,6 +49,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	clocktesting "k8s.io/utils/clock/testing"
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/lock"
@@ -1853,6 +1854,126 @@ func TestGracefulShutdownBindings(t *testing.T) {
 	case err := <-errCh:
 		require.NoError(t, err)
 	}
+}
+
+func TestBlockShutdownBindings(t *testing.T) {
+	t.Run("block timeout", func(t *testing.T) {
+		rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
+		require.NoError(t, err)
+
+		fakeClock := clocktesting.NewFakeClock(time.Now())
+		rt.clock = fakeClock
+		rt.appHealthChanged(context.Background(), apphealth.AppStatusHealthy)
+
+		rt.runtimeConfig.blockShutdownDuration = ptr.Of(time.Millisecond * 100)
+		rt.runtimeConfig.gracefulShutdownDuration = 3 * time.Second
+		rt.runtimeConfig.registry.Bindings().RegisterInputBinding(
+			func(_ logger.Logger) bindings.InputBinding {
+				return &daprt.MockBinding{}
+			},
+			"testInputBinding",
+		)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		errCh := make(chan error)
+		go func() {
+			errCh <- rt.Run(ctx)
+		}()
+
+		cin := componentsV1alpha1.Component{}
+		cin.ObjectMeta.Name = "testInputBinding"
+		cin.Spec.Type = "bindings.testInputBinding"
+
+		rt.runtimeConfig.registry.Bindings().RegisterOutputBinding(
+			func(_ logger.Logger) bindings.OutputBinding {
+				return &daprt.MockBinding{}
+			},
+			"testOutputBinding",
+		)
+		cout := componentsV1alpha1.Component{}
+		cout.ObjectMeta.Name = "testOutputBinding"
+		cout.Spec.Type = "bindings.testOutputBinding"
+		require.NoError(t, rt.processor.Init(context.Background(), cin))
+		require.NoError(t, rt.processor.Init(context.Background(), cout))
+		assert.Len(t, rt.compStore.ListInputBindings(), 1)
+		assert.Len(t, rt.compStore.ListOutputBindings(), 1)
+
+		cancel()
+
+		select {
+		case <-time.After(time.Second):
+		case <-errCh:
+			assert.Fail(t, "expected not to return until block timeout is reached")
+		}
+
+		fakeClock.Step(time.Millisecond * 200)
+
+		select {
+		case <-time.After(rt.runtimeConfig.gracefulShutdownDuration + 2*time.Second):
+			assert.Fail(t, "input bindings shutdown timed out")
+		case err := <-errCh:
+			require.NoError(t, err)
+		}
+	})
+
+	t.Run("block app unhealthy", func(t *testing.T) {
+		rt, err := NewTestDaprRuntime(t, modes.StandaloneMode)
+		require.NoError(t, err)
+
+		fakeClock := clocktesting.NewFakeClock(time.Now())
+		rt.clock = fakeClock
+		rt.appHealthChanged(context.Background(), apphealth.AppStatusHealthy)
+
+		rt.runtimeConfig.blockShutdownDuration = ptr.Of(time.Millisecond * 100)
+		rt.runtimeConfig.gracefulShutdownDuration = 3 * time.Second
+		rt.runtimeConfig.registry.Bindings().RegisterInputBinding(
+			func(_ logger.Logger) bindings.InputBinding {
+				return &daprt.MockBinding{}
+			},
+			"testInputBinding",
+		)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		errCh := make(chan error)
+		go func() {
+			errCh <- rt.Run(ctx)
+		}()
+
+		cin := componentsV1alpha1.Component{}
+		cin.ObjectMeta.Name = "testInputBinding"
+		cin.Spec.Type = "bindings.testInputBinding"
+
+		rt.runtimeConfig.registry.Bindings().RegisterOutputBinding(
+			func(_ logger.Logger) bindings.OutputBinding {
+				return &daprt.MockBinding{}
+			},
+			"testOutputBinding",
+		)
+		cout := componentsV1alpha1.Component{}
+		cout.ObjectMeta.Name = "testOutputBinding"
+		cout.Spec.Type = "bindings.testOutputBinding"
+		require.NoError(t, rt.processor.Init(context.Background(), cin))
+		require.NoError(t, rt.processor.Init(context.Background(), cout))
+		assert.Len(t, rt.compStore.ListInputBindings(), 1)
+		assert.Len(t, rt.compStore.ListOutputBindings(), 1)
+
+		cancel()
+
+		select {
+		case <-time.After(time.Second):
+		case <-errCh:
+			assert.Fail(t, "expected not to return until block timeout is reached")
+		}
+
+		rt.appHealthChanged(context.Background(), apphealth.AppStatusUnhealthy)
+
+		select {
+		case <-time.After(rt.runtimeConfig.gracefulShutdownDuration + 2*time.Second):
+			assert.Fail(t, "input bindings shutdown timed out")
+		case err := <-errCh:
+			require.NoError(t, err)
+		}
+	})
 }
 
 func TestGracefulShutdownPubSub(t *testing.T) {
