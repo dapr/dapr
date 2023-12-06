@@ -453,6 +453,11 @@ replace github.com/microcosm-cc/bluemonday => github.com/microcosm-cc/bluemonday
 // Don't commit with this uncommented!
 //
 // replace github.com/dapr/components-contrib => ../components-contrib
+
+// Pointing to Cassie's fork until this PR gets merged:
+// https://github.com/dapr/kit/pull/77
+replace github.com/dapr/kit => github.com/cicoyle/kit v0.0.0-20231205224319-c0074c16dd0a
+
 //
 // Then, run `make modtidy` in this repository.
 // This ensures that go.mod and go.sum are up-to-date.
