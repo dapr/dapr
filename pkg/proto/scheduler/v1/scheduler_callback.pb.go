@@ -26,7 +26,7 @@ type TriggerJobRequest struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	// The job.
+	// The job name to be triggered.
 	JobName string `protobuf:"bytes,1,opt,name=job_name,json=jobName,proto3" json:"job_name,omitempty"`
 	// The metadata associated with the job.
 	// This can contain the generated `key` for the optional state store when the daprd sidecar needs to lookup the entire data from a state store.

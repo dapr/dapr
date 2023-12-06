@@ -63,8 +63,7 @@ message UnregisterRequest {
 	int32 port = 4;
 }
 
-// ScheduledJob is the message used by the daprd sidecar to schedule a job.
-message ScheduledJob {
+message ScheduleJobRequest {
 	// The job to be scheduled.
 	runtime.v1.Job job = 1;
 
@@ -75,11 +74,6 @@ message ScheduledJob {
 	// The sidecar will create the unique `key` for storing data in the state store and pass the generated `key` along to the scheduler service for data lookup upon ‘trigger’ time later on. 
 	// The sidecar will also add metadata in order to know whether this job is registered for an actor. This is needed, as the routing mechanism for actors is different for the callback.
 	map<string,string> metadata = 3;
-}
-
-message ScheduleJobRequest {
-	// The job to be scheduled.
-	ScheduledJob job = 1;
 }
 
 message ScheduleJobResponse {
@@ -97,7 +91,7 @@ message DeleteJobResponse {
 
 // GetJobResponse is the response message to convey the details of a job.
 message GetJobResponse {
-	ScheduledJob job = 1;
+	runtime.v1.Job job = 1;
 }
 
 // ListJobsRequest is the message to list jobs by app_id.
@@ -108,6 +102,6 @@ message ListJobsRequest {
 // ListJobsResponse is the response message to convey the list of jobs.
 message ListJobsResponse {
     // List of jobs that match the request criteria.
-    repeated ScheduledJob jobs = 1;
+    repeated runtime.v1.Job jobs = 1;
 }
 
