@@ -241,4 +241,55 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, "ke||y1", fieldViolations["field"])
 		require.Contains(t, fmt.Sprintf("input key/keyPrefix '%s' can't contain '%s'", "ke||y1", "||"), fieldViolations["field"])
 	})
+
+	t.Run("state store not configured", func(t *testing.T) {
+		// Start a new daprd without state store
+		daprdNoStateStore := procdaprd.New(t, procdaprd.WithAppID("daprd_no_state_store"))
+		daprdNoStateStore.Run(t, ctx)
+		daprdNoStateStore.WaitUntilRunning(t, ctx)
+
+		storeName := "mystore"
+		endpoint := fmt.Sprintf("http://localhost:%d/v1.0/state/%s", daprdNoStateStore.HTTPPort(), storeName)
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(""))
+		require.NoError(t, err)
+
+		resp, err := httpClient.Do(req)
+		require.NoError(t, err)
+		require.Equal(t, "application/json", resp.Header.Get("Content-Type"))
+		require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+
+		var data map[string]interface{}
+		err = json.Unmarshal([]byte(string(body)), &data)
+		require.NoError(t, err)
+
+		// Confirm that the 'errorCode' field exists and contains the correct error code
+		errCode, exists := data["errorCode"]
+		require.True(t, exists)
+		require.Equal(t, "ERR_STATE_STORE_NOT_CONFIGURED", errCode)
+
+		// Confirm that the 'message' field exists and contains the correct error message
+		errMsg, exists := data["message"]
+		require.True(t, exists)
+		require.Equal(t, "state store is not configured", errMsg)
+
+		// Confirm that the 'details' field exists and has one element
+		details, exists := data["details"]
+		require.True(t, exists)
+
+		detailsArray, ok := details.([]interface{})
+		require.True(t, ok)
+		require.Len(t, detailsArray, 1)
+
+		// Confirm that the first element of the 'details' array has the correct ErrorInfo details
+		detailsObject, ok := detailsArray[0].(map[string]interface{})
+		require.True(t, ok)
+		require.Equal(t, framework.Domain, detailsObject["domain"])
+		require.Equal(t, "DAPR_STATE_NOT_CONFIGURED", detailsObject["reason"])
+		require.Equal(t, "type.googleapis.com/google.rpc.ErrorInfo", detailsObject["@type"])
+	})
 }
