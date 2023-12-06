@@ -24,6 +24,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
 )
 
+// Resource is a generic type constraint.
 type Resource interface {
 	componentsapi.Component
 	meta.Resource

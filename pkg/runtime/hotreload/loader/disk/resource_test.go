@@ -138,7 +138,7 @@ func Test_Stream(t *testing.T) {
 		batcher := batcher.New[int](0)
 		store := compstore.New()
 
-		g := newGeneric[componentsapi.Component](
+		r := newResource[componentsapi.Component](
 			Options{Dirs: []string{dir}},
 			batcher,
 			loadercompstore.NewComponent(store),
@@ -146,7 +146,7 @@ func Test_Stream(t *testing.T) {
 
 		batcher.Batch(0)
 
-		ch, err := g.Stream(context.Background())
+		ch, err := r.Stream(context.Background())
 		require.NoError(t, err)
 
 		var events []*loader.Event[componentsapi.Component]
@@ -186,7 +186,7 @@ func Test_Stream(t *testing.T) {
 			},
 		}, events)
 
-		require.NoError(t, g.close())
+		require.NoError(t, r.close())
 	})
 
 	t.Run("if store has a component and event happens, should send create event with new components", func(t *testing.T) {
@@ -205,7 +205,7 @@ func Test_Stream(t *testing.T) {
 		}))
 		require.NoError(t, store.CommitPendingComponent())
 
-		g := newGeneric[componentsapi.Component](
+		r := newResource[componentsapi.Component](
 			Options{Dirs: []string{dir}},
 			batcher,
 			loadercompstore.NewComponent(store),
@@ -213,7 +213,7 @@ func Test_Stream(t *testing.T) {
 
 		batcher.Batch(0)
 
-		ch, err := g.Stream(context.Background())
+		ch, err := r.Stream(context.Background())
 		require.NoError(t, err)
 
 		var events []*loader.Event[componentsapi.Component]
@@ -245,7 +245,7 @@ func Test_Stream(t *testing.T) {
 			},
 		}, events)
 
-		require.NoError(t, g.close())
+		require.NoError(t, r.close())
 	})
 
 	t.Run("if store has a component and event happens, should send create/update/delete events components", func(t *testing.T) {
@@ -273,7 +273,7 @@ func Test_Stream(t *testing.T) {
 		}))
 		require.NoError(t, store.CommitPendingComponent())
 
-		g := newGeneric[componentsapi.Component](
+		r := newResource[componentsapi.Component](
 			Options{Dirs: []string{dir}},
 			batcher,
 			loadercompstore.NewComponent(store),
@@ -281,7 +281,7 @@ func Test_Stream(t *testing.T) {
 
 		batcher.Batch(0)
 
-		ch, err := g.Stream(context.Background())
+		ch, err := r.Stream(context.Background())
 		require.NoError(t, err)
 
 		var events []*loader.Event[componentsapi.Component]
@@ -321,6 +321,6 @@ func Test_Stream(t *testing.T) {
 			},
 		}, events)
 
-		require.NoError(t, g.close())
+		require.NoError(t, r.close())
 	})
 }

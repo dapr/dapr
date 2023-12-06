@@ -40,7 +40,7 @@ type Options struct {
 }
 
 type disk struct {
-	component *generic[componentsapi.Component]
+	component *resource[componentsapi.Component]
 
 	wg      sync.WaitGroup
 	closeCh chan struct{}
@@ -63,23 +63,23 @@ func New(ctx context.Context, opts Options) (loader.Interface, error) {
 
 	d := &disk{
 		closeCh:   make(chan struct{}),
-		component: newGeneric[componentsapi.Component](opts, batcher, loadercompstore.NewComponent(opts.ComponentStore)),
+		component: newResource[componentsapi.Component](opts, batcher, loadercompstore.NewComponent(opts.ComponentStore)),
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
 
 	d.wg.Add(2)
 	go func() {
-		defer d.wg.Done()
 		if err := fs.Run(ctx, eventCh); err != nil {
 			log.Errorf("Error watching directories: %s", err)
 		}
+		d.wg.Done()
 	}()
 
 	go func() {
 		defer d.wg.Done()
-		defer cancel()
 		defer batcher.Close()
+		defer cancel()
 		var i int
 		for {
 			select {

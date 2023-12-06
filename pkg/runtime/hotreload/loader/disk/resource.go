@@ -26,7 +26,9 @@ import (
 	"github.com/dapr/kit/events/batcher"
 )
 
-type generic[T differ.Resource] struct {
+// resource is a generic implementation of a disk resource loader. resource
+// will watch and load resources from disk.
+type resource[T differ.Resource] struct {
 	batcher    *batcher.Batcher[int]
 	store      store.Store[T]
 	diskLoader components.ManifestLoader[T]
@@ -36,8 +38,8 @@ type generic[T differ.Resource] struct {
 	closed  atomic.Bool
 }
 
-func newGeneric[T differ.Resource](opts Options, batcher *batcher.Batcher[int], store store.Store[T]) *generic[T] {
-	return &generic[T]{
+func newResource[T differ.Resource](opts Options, batcher *batcher.Batcher[int], store store.Store[T]) *resource[T] {
+	return &resource[T]{
 		batcher:    batcher,
 		store:      store,
 		diskLoader: components.NewDiskManifestLoader[T](opts.Dirs...),
@@ -45,64 +47,76 @@ func newGeneric[T differ.Resource](opts Options, batcher *batcher.Batcher[int], 
 	}
 }
 
-func (g *generic[T]) List(ctx context.Context) (*differ.LocalRemoteResources[T], error) {
-	remotes, err := g.diskLoader.Load()
+// List returns the current list of resources loaded from disk.
+func (r *resource[T]) List(ctx context.Context) (*differ.LocalRemoteResources[T], error) {
+	remotes, err := r.diskLoader.Load()
 	if err != nil {
 		return nil, err
 	}
 
 	return &differ.LocalRemoteResources[T]{
-		Local:  g.store.List(),
+		Local:  r.store.List(),
 		Remote: remotes,
 	}, nil
 }
 
-func (g *generic[T]) Stream(ctx context.Context) (<-chan *loader.Event[T], error) {
+// Stream returns a channel of events that will be sent when a resource is
+// created, updated, or deleted.
+func (r *resource[T]) Stream(ctx context.Context) (<-chan *loader.Event[T], error) {
 	batchCh := make(chan struct{})
-	g.batcher.Subscribe(batchCh)
+	r.batcher.Subscribe(batchCh)
 
 	eventCh := make(chan *loader.Event[T])
-	g.wg.Add(1)
+	r.wg.Add(1)
 	go func() {
-		defer g.wg.Done()
-		g.streamResources(ctx, batchCh, eventCh)
+		defer r.wg.Done()
+		r.streamResources(ctx, batchCh, eventCh)
 	}()
 
 	return eventCh, nil
 }
 
-func (g *generic[T]) close() error {
-	defer g.wg.Wait()
-	if g.closed.CompareAndSwap(false, true) {
-		close(g.closeCh)
+func (r *resource[T]) close() error {
+	defer r.wg.Wait()
+	if r.closed.CompareAndSwap(false, true) {
+		close(r.closeCh)
 	}
 
-	g.batcher.Close()
+	r.batcher.Close()
 
 	return nil
 }
 
-func (g *generic[T]) streamResources(ctx context.Context, batchCh <-chan struct{}, eventCh chan<- *loader.Event[T]) {
+// streamResources will stream resources from disk and send events to eventCh.
+func (r *resource[T]) streamResources(ctx context.Context, batchCh <-chan struct{}, eventCh chan<- *loader.Event[T]) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-g.closeCh:
+		case <-r.closeCh:
 			return
 		case <-batchCh:
 		}
 
-		resources, err := g.List(ctx)
+		// List the resources which exist locally (those loaded already), and those
+		// which reside as in a resource file on disk.
+		resources, err := r.List(ctx)
 		if err != nil {
 			log.Errorf("Failed to load resources from disk: %s", err)
 			continue
 		}
 
+		// Reconcile the differences between what we have loaded locally, and what
+		// exists on disk.k
 		result := differ.Diff(resources)
 		if result == nil {
 			continue
 		}
 
+		// Each group is a list of resources which have been created, updated, or
+		// deleted. It is critical that we send the events in the order of deleted,
+		// updated, and created. This ensures we close before initing a resource
+		// with the same name.
 		for _, group := range []struct {
 			resources []T
 			eventType operatorpb.ResourceEventType
@@ -117,7 +131,7 @@ func (g *generic[T]) streamResources(ctx context.Context, batchCh <-chan struct{
 					Resource: resource,
 					Type:     group.eventType,
 				}:
-				case <-g.closeCh:
+				case <-r.closeCh:
 					return
 				case <-ctx.Done():
 					return

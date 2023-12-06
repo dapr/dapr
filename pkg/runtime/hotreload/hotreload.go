@@ -30,7 +30,7 @@ import (
 
 var log = logger.NewLogger("dapr.runtime.hotreload")
 
-type OptionsDisk struct {
+type OptionsReloaderDisk struct {
 	Config         *config.Configuration
 	Dirs           []string
 	ComponentStore *compstore.ComponentStore
@@ -39,11 +39,11 @@ type OptionsDisk struct {
 }
 
 type Reloader struct {
-	isEnabled  bool
-	components *reconciler.Reconciler[componentsapi.Component]
+	isEnabled            bool
+	componentsReconciler *reconciler.Reconciler[componentsapi.Component]
 }
 
-func NewDisk(ctx context.Context, opts OptionsDisk) (*Reloader, error) {
+func NewDisk(ctx context.Context, opts OptionsReloaderDisk) (*Reloader, error) {
 	loader, err := disk.New(ctx, disk.Options{
 		Dirs:           opts.Dirs,
 		ComponentStore: opts.ComponentStore,
@@ -54,7 +54,7 @@ func NewDisk(ctx context.Context, opts OptionsDisk) (*Reloader, error) {
 
 	return &Reloader{
 		isEnabled: opts.Config.IsFeatureEnabled(config.HotReload),
-		components: reconciler.NewComponent(reconciler.Options[componentsapi.Component]{
+		componentsReconciler: reconciler.NewComponent(reconciler.Options[componentsapi.Component]{
 			Loader:     loader,
 			CompStore:  opts.ComponentStore,
 			Processor:  opts.Processor,
@@ -70,10 +70,10 @@ func (r *Reloader) Run(ctx context.Context) error {
 		return nil
 	}
 
-	log.Info("Hot reloading enabled. Daprd will reload resources on change.")
+	log.Info("Hot reloading enabled. Daprd will reload 'Component' resources on change.")
 
 	return concurrency.NewRunnerManager(
-		r.components.Run,
+		r.componentsReconciler.Run,
 	).Run(ctx)
 }
 
@@ -81,5 +81,5 @@ func (r *Reloader) Close() error {
 	if r.isEnabled {
 		log.Info("Closing hot reloader")
 	}
-	return errors.Join(r.components.Close())
+	return errors.Join(r.componentsReconciler.Close())
 }

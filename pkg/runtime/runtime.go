@@ -198,7 +198,7 @@ func newDaprRuntime(ctx context.Context,
 	case modes.KubernetesMode:
 		log.Warnf("hot reloading is not supported in Kubernetes mode")
 	case modes.StandaloneMode:
-		reloader, err = hotreload.NewDisk(ctx, hotreload.OptionsDisk{
+		reloader, err = hotreload.NewDisk(ctx, hotreload.OptionsReloaderDisk{
 			Config:         globalConfig,
 			Dirs:           runtimeConfig.standalone.ResourcesPath,
 			ComponentStore: compStore,
