@@ -16,7 +16,6 @@ package resources
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -87,25 +86,26 @@ spec:
 }
 
 func (n *namespace) Run(t *testing.T, ctx context.Context) {
+	n.daprd.WaitUntilRunning(t, ctx)
+
 	conn, err := grpc.DialContext(ctx, n.daprd.GRPCAddress(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock(),
 	)
 	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, conn.Close()) })
 
 	client := rtv1.NewDaprClient(conn)
 
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-		require.NoError(t, err)
-		assert.ElementsMatch(c, []*rtv1.RegisteredComponents{
-			{
-				Name: "abc", Type: "state.in-memory", Version: "v1",
-				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
-			},
-			{
-				Name: "def", Type: "state.in-memory", Version: "v1",
-				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
-			},
-		}, resp.GetRegisteredComponents())
-	}, time.Second*10, time.Millisecond*100)
+	resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []*rtv1.RegisteredComponents{
+		{
+			Name: "abc", Type: "state.in-memory", Version: "v1",
+			Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+		},
+		{
+			Name: "def", Type: "state.in-memory", Version: "v1",
+			Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+		},
+	}, resp.GetRegisteredComponents())
 }
