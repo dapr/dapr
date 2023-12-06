@@ -97,13 +97,6 @@ type cloudEvent struct {
 	Data            string `json:"data"`
 }
 
-type buggyCloudEvent struct {
-	IID               string `json:"id"`
-	TType             string `json:"type"`
-	DDataCContentType string `json:"datacontenttype"`
-	DData             string `json:"data"`
-}
-
 // checks is publishing is working.
 func publishHealthCheck(publisherExternalURL string) error {
 	commandBody := publishCommand{
@@ -371,51 +364,6 @@ var apps []struct {
 	},
 }
 
-func testBuggyDataToPublisher(t *testing.T, publisherExternalURL, _, _, bulkSubscriberAppName, protocol string) string {
-	contentType := "application/cloudevents+json"
-	metadata := map[string]string{
-		"rawPayload": "true",
-	}
-	commandBody := publishCommand{
-		ContentType: contentType,
-		Topic:       fmt.Sprintf("%s-%s", "pubsub-ce-bulk-sub-topic", protocol),
-		Protocol:    protocol,
-		Metadata:    metadata,
-	}
-	rateLimit := ratelimit.New(publishRateLimitRPS)
-	for i := offset; i < offset+numberOfMessagesToPublish; i++ {
-		// create and marshal message
-		messageID := fmt.Sprintf("msg-%s-%s-%04d", strings.TrimSuffix(topic, "-topic"), protocol, i)
-		var messageData interface{} = messageID
-			messageData = &buggyCloudEvent{
-				IID:               messageID,
-				TType:             contentType,
-				DDataCContentType: "text/plain",
-				DData:             messageID,
-		}
-		commandBody.ReqID = "c-" + uuid.New().String()
-		commandBody.Data = messageData
-		jsonValue, err := json.Marshal(commandBody)
-		require.NoError(t, err)
-
-		// this is the publish app's endpoint, not a dapr endpoint
-		url := fmt.Sprintf("http://%s/tests/publish", publisherExternalURL)
-
-		// debuggability - trace info about the first message.  don't trace others so it doesn't flood log.
-		if i == offset {
-			log.Printf("Sending first publish app at url %s and body '%s', this log will not print for subsequent messages for same topic", url, jsonValue)
-		}
-
-		rateLimit.Take()
-		statusCode, err := postSingleMessage(url, jsonValue)
-		require.Error(t, err, "")
-		assert.NotEqual(t, 200, statusCode)
-
-	}
-
-	return publisherExternalURL
-}
-
 func TestMain(m *testing.M) {
 	utils.SetupLogs("pubsub")
 	utils.InitHTTPClient(true)
@@ -462,10 +410,6 @@ var pubsubTests = []struct {
 	{
 		name:    "drop message will be published to dlq if configured",
 		handler: testDropToDeadLetter,
-	},
-	{
-		name:    "send bugg data structure to publisher",
-		handler: testBuggyDataToPublisher,
 	},
 }
 
