@@ -101,6 +101,9 @@ func Test_Start(t *testing.T) {
 		})
 		require.NoError(t, err)
 
+		// Override the default of 500ms to 0 to speed up the test.
+		p.(*provider).fswatcherInterval = 0
+
 		ctx, cancel := context.WithCancel(context.Background())
 
 		providerStopped := make(chan struct{})
