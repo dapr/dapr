@@ -36,6 +36,7 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.10.0"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/clock"
 
 	nr "github.com/dapr/components-contrib/nameresolution"
 	"github.com/dapr/components-contrib/state"
@@ -98,6 +99,7 @@ type DaprRuntime struct {
 	daprHTTPAPI         http.API
 	daprGRPCAPI         grpc.API
 	operatorClient      operatorv1pb.OperatorClient
+	isAppHealthy        chan struct{}
 	appHealth           *apphealth.AppHealth
 	appHealthReady      func(context.Context) error // Invoked the first time the app health becomes ready
 	appHealthLock       sync.Mutex
@@ -107,6 +109,7 @@ type DaprRuntime struct {
 	authz               *authorizer.Authorizer
 	sec                 security.Handler
 	runnerCloser        *concurrency.RunnerCloserManager
+	clock               clock.Clock
 	// Used for testing.
 	initComplete chan struct{}
 
@@ -206,7 +209,10 @@ func newDaprRuntime(ctx context.Context,
 		namespace:         namespace,
 		podName:           podName,
 		initComplete:      make(chan struct{}),
+		isAppHealthy:      make(chan struct{}),
+		clock:             new(clock.RealClock),
 	}
+	close(rt.isAppHealthy)
 
 	var gracePeriod *time.Duration
 	if duration := runtimeConfig.gracefulShutdownDuration; duration > 0 {
@@ -274,7 +280,31 @@ func newDaprRuntime(ctx context.Context,
 }
 
 // Run performs initialization of the runtime with the runtime and global configurations.
-func (a *DaprRuntime) Run(ctx context.Context) error {
+func (a *DaprRuntime) Run(parentCtx context.Context) error {
+	ctx := parentCtx
+	if a.runtimeConfig.blockShutdownDuration != nil {
+		// Override context with Background. Runner context will be cancelled when
+		// blocking graceful shutdown returns.
+		ctx = context.Background()
+		a.runnerCloser.Add(func(ctx context.Context) error {
+			select {
+			case <-parentCtx.Done():
+			case <-ctx.Done():
+				// Return nil as another routine has returned, not due to an interrupt.
+				return nil
+			}
+
+			log.Infof("Blocking graceful shutdown for %s or until app reports unhealthy...", *a.runtimeConfig.blockShutdownDuration)
+			select {
+			case <-a.clock.After(*a.runtimeConfig.blockShutdownDuration):
+				log.Info("Block shutdown period expired, entering shutdown...")
+			case <-a.isAppHealthy:
+				log.Info("App reported unhealthy, entering shutdown...")
+			}
+			return nil
+		})
+	}
+
 	return a.runnerCloser.Run(ctx)
 }
 
@@ -586,6 +616,12 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status uint8) {
 
 	switch status {
 	case apphealth.AppStatusHealthy:
+		select {
+		case <-a.isAppHealthy:
+			a.isAppHealthy = make(chan struct{})
+		default:
+		}
+
 		// First time the app becomes healthy, complete the init process
 		if a.appHealthReady != nil {
 			if err := a.appHealthReady(ctx); err != nil {
@@ -608,6 +644,12 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status uint8) {
 			log.Warnf("failed to subscribe to outbox topics: %s", err)
 		}
 	case apphealth.AppStatusUnhealthy:
+		select {
+		case <-a.isAppHealthy:
+		default:
+			close(a.isAppHealthy)
+		}
+
 		// Stop topic subscriptions and input bindings
 		a.processor.PubSub().StopSubscriptions()
 		a.processor.Binding().StopReadingFromBindings()
@@ -1025,7 +1067,7 @@ func (a *DaprRuntime) blockUntilAppIsReady(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		// prevents overwhelming the OS with open connections
-		case <-time.After(time.Millisecond * 100):
+		case <-a.clock.After(time.Millisecond * 100):
 		}
 	}
 

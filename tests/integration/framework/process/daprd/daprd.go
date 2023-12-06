@@ -128,6 +128,12 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	if opts.disableK8sSecretStore != nil {
 		args = append(args, "--disable-builtin-k8s-secret-store="+strconv.FormatBool(*opts.disableK8sSecretStore))
 	}
+	if opts.gracefulShutdownSeconds != nil {
+		args = append(args, "--dapr-graceful-shutdown-seconds="+strconv.Itoa(*opts.gracefulShutdownSeconds))
+	}
+	if opts.blockShutdownDuration != nil {
+		args = append(args, "--dapr-block-shutdown-duration="+*opts.blockShutdownDuration)
+	}
 
 	return &Daprd{
 		exec:             exec.New(t, binary.EnvValue("daprd"), args, opts.execOpts...),

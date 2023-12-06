@@ -97,6 +97,7 @@ func (e *exec) Run(t *testing.T, ctx context.Context) {
 
 	e.cmd.Stdout = e.stdoutpipe
 	e.cmd.Stderr = e.stderrpipe
+
 	// Wait for a few seconds before killing the process completely.
 	e.cmd.WaitDelay = time.Second * 5
 
@@ -112,11 +113,12 @@ func (e *exec) Cleanup(t *testing.T) {
 	e.lock.Lock()
 	defer e.lock.Unlock()
 
+	kill.Kill(t, e.cmd)
+
+	e.checkExit(t)
+
 	require.NoError(t, e.stderrpipe.Close())
 	require.NoError(t, e.stdoutpipe.Close())
-
-	kill.Kill(t, e.cmd)
-	e.checkExit(t)
 }
 
 func (e *exec) checkExit(t *testing.T) {
@@ -125,6 +127,6 @@ func (e *exec) checkExit(t *testing.T) {
 	t.Logf("waiting for %q process to exit", filepath.Base(e.binPath))
 
 	e.runErrorFn(t, e.cmd.Wait())
-	assert.NotNil(t, e.cmd.ProcessState, "process state should not be nil")
+	require.NotNil(t, e.cmd.ProcessState, "process state should not be nil")
 	assert.Equalf(t, e.exitCode, e.cmd.ProcessState.ExitCode(), "expected exit code to be %d", e.exitCode)
 }

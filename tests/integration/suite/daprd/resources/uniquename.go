@@ -19,7 +19,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -80,10 +82,10 @@ spec:
 		),
 	)
 	return []framework.Option{
-		framework.WithProcesses(u.daprd, u.logline),
+		framework.WithProcesses(u.logline, u.daprd),
 	}
 }
 
 func (u *uniquename) Run(t *testing.T, ctx context.Context) {
-	// Assertions done in logline process
+	assert.Eventually(t, u.logline.FoundAll, time.Second*5, time.Millisecond*100)
 }

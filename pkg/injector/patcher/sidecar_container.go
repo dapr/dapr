@@ -169,6 +169,10 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 		args = append(args, "--unix-domain-socket", injectorConsts.UnixDomainSocketDaprdPath)
 	}
 
+	if c.BlockShutdownDuration != nil {
+		args = append(args, "--dapr-block-shutdown-duration", *c.BlockShutdownDuration)
+	}
+
 	// When debugging is enabled, we need to override the command and the flags
 	if c.EnableDebug {
 		ports = append(ports, corev1.ContainerPort{

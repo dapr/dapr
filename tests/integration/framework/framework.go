@@ -55,7 +55,8 @@ func (f *Framework) Cleanup(t *testing.T) {
 
 	t.Logf("stopping %d processes", len(f.procs))
 
-	for _, proc := range f.procs {
-		proc.Cleanup(t)
+	// Cleanup processes in reverse order in a stack fashion (same as t.Cleanup).
+	for i := len(f.procs) - 1; i >= 0; i-- {
+		f.procs[i].Cleanup(t)
 	}
 }
