@@ -81,7 +81,7 @@ type ActorRuntime interface {
 	io.Closer
 	Init(context.Context) error
 	IsActorHosted(ctx context.Context, req *ActorHostedRequest) bool
-	GetActiveActorsCount(ctx context.Context) []*runtimev1pb.ActiveActorsCount
+	GetRuntimeStatus(ctx context.Context) *runtimev1pb.ActorRuntime
 	RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor, actorIdleTimeout time.Duration) error
 }
 
@@ -397,8 +397,8 @@ func (a *actorsRuntime) deactivateActor(act *actor) error {
 		}
 		defer resp.Close()
 
-		if resp.Status().Code != http.StatusOK {
-			diag.DefaultMonitoring.ActorDeactivationFailed(act.actorType, "status_code_"+strconv.FormatInt(int64(resp.Status().Code), 10))
+		if resp.Status().GetCode() != http.StatusOK {
+			diag.DefaultMonitoring.ActorDeactivationFailed(act.actorType, "status_code_"+strconv.FormatInt(int64(resp.Status().GetCode()), 10))
 			body, _ := resp.RawDataFull()
 			return fmt.Errorf("error from actor service: %s", string(body))
 		}
@@ -462,8 +462,9 @@ func (a *actorsRuntime) Call(ctx context.Context, req *internalv1pb.InternalInvo
 
 	// Do a lookup to check if the actor is local
 	actor := req.GetActor()
+	actorType := actor.GetActorType()
 	lar, err := a.placement.LookupActor(ctx, internal.LookupActorRequest{
-		ActorType: actor.GetActorType(),
+		ActorType: actorType,
 		ActorID:   actor.GetActorId(),
 	})
 	if err != nil {
@@ -472,7 +473,7 @@ func (a *actorsRuntime) Call(ctx context.Context, req *internalv1pb.InternalInvo
 
 	if a.isActorLocal(lar.Address, a.actorsConfig.Config.HostAddress, a.actorsConfig.Config.Port) {
 		// If this is an internal actor, we call it using a separate path
-		if a.internalActors[actor.ActorType] != nil {
+		if a.internalActors[actorType] != nil {
 			res, err = a.callInternalActor(ctx, req)
 		} else {
 			res, err = a.callLocalActor(ctx, req)
@@ -498,7 +499,7 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 	fn func(ctx context.Context, targetAddress, targetID string, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, func(destroy bool), error),
 	targetAddress, targetID string, req *internalv1pb.InternalInvokeRequest,
 ) (*internalv1pb.InternalInvokeResponse, error) {
-	if !a.resiliency.PolicyDefined(req.GetActor().ActorType, resiliency.ActorPolicy{}) {
+	if !a.resiliency.PolicyDefined(req.GetActor().GetActorType(), resiliency.ActorPolicy{}) {
 		policyRunner := resiliency.NewRunner[*internalv1pb.InternalInvokeResponse](ctx, a.resiliency.BuiltInPolicy(resiliency.BuiltInActorRetries))
 		return policyRunner(func(ctx context.Context) (*internalv1pb.InternalInvokeResponse, error) {
 			attempt := resiliency.GetAttempt(ctx)
@@ -534,9 +535,9 @@ func (a *actorsRuntime) getOrCreateActor(act *internalv1pb.Actor) *actor {
 	val, ok := a.actorsTable.Load(key)
 	if !ok {
 		actorInstance := newActor(
-			act.ActorType, act.ActorId,
-			a.actorsConfig.GetReentrancyForType(act.ActorType).MaxStackDepth,
-			a.actorsConfig.GetIdleTimeoutForType(act.ActorType),
+			act.GetActorType(), act.GetActorId(),
+			a.actorsConfig.GetReentrancyForType(act.GetActorType()).MaxStackDepth,
+			a.actorsConfig.GetIdleTimeoutForType(act.GetActorType()),
 			a.clock,
 		)
 		val, _ = a.actorsTable.LoadOrStore(key, actorInstance)
@@ -546,7 +547,7 @@ func (a *actorsRuntime) getOrCreateActor(act *internalv1pb.Actor) *actor {
 }
 
 func (a *actorsRuntime) callLocalActor(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-	act := a.getOrCreateActor(req.Actor)
+	act := a.getOrCreateActor(req.GetActor())
 
 	// Create the InvokeMethodRequest
 	imReq, err := invokev1.FromInternalInvokeRequest(req)
@@ -582,7 +583,7 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *internalv1pb.In
 
 	// Replace method to actors method.
 	msg := imReq.Message()
-	msg.Method = "actors/" + req.Actor.ActorType + "/" + req.Actor.ActorId + "/method/" + msg.Method
+	msg.Method = "actors/" + act.actorType + "/" + act.actorID + "/method/" + msg.GetMethod()
 
 	// Original code overrides method with PUT. Why?
 	if msg.GetHttpExtension() == nil {
@@ -619,7 +620,7 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *internalv1pb.In
 	}
 	defer imRes.Close()
 
-	if imRes.Status().Code != http.StatusOK {
+	if imRes.Status().GetCode() != http.StatusOK {
 		respData, _ := imRes.RawDataFull()
 		return nil, fmt.Errorf("error from actor service: %s", string(respData))
 	}
@@ -639,6 +640,8 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *internalv1pb.In
 }
 
 // Locks an internal actor for a request
+//
+//nolint:protogetter
 func (a *actorsRuntime) lockInternalActorForRequest(act *actor, req *internalv1pb.InternalInvokeRequest) (md map[string][]string, err error) {
 	var reentrancyID *string
 	// The req object is nil if this is a request for a reminder or timer
@@ -695,17 +698,19 @@ func (a *actorsRuntime) callInternalActor(ctx context.Context, req *internalv1pb
 	}
 	defer act.unlock()
 
+	msg := req.GetMessage()
+
 	// Original code overrides method with PUT. Why?
-	if req.Message.HttpExtension == nil {
+	if msg.GetHttpExtension() == nil {
 		req.WithHTTPExtension(http.MethodPut, "")
 	} else {
-		req.Message.HttpExtension.Verb = commonv1pb.HTTPExtension_PUT //nolint:nosnakecase
+		msg.HttpExtension.Verb = commonv1pb.HTTPExtension_PUT //nolint:nosnakecase
 	}
 
 	policyDef := a.resiliency.ActorPostLockPolicy(act.actorType, act.actorID)
 	policyRunner := resiliency.NewRunner[*internalv1pb.InternalInvokeResponse](ctx, policyDef)
 	return policyRunner(func(ctx context.Context) (*internalv1pb.InternalInvokeResponse, error) {
-		resData, err := a.internalActors[act.actorType].InvokeMethod(ctx, act.actorID, req.Message.Method, req.Message.GetData().GetValue(), md)
+		resData, err := a.internalActors[act.actorType].InvokeMethod(ctx, act.actorID, msg.GetMethod(), msg.GetData().GetValue(), md)
 		if err != nil {
 			return nil, fmt.Errorf("error from internal actor: %w", err)
 		}
@@ -1156,7 +1161,21 @@ func (a *actorsRuntime) RegisterInternalActor(ctx context.Context, actorType str
 	return nil
 }
 
-func (a *actorsRuntime) GetActiveActorsCount(ctx context.Context) []*runtimev1pb.ActiveActorsCount {
+func (a *actorsRuntime) GetRuntimeStatus(ctx context.Context) *runtimev1pb.ActorRuntime {
+	// Do not populate RuntimeStatus, which will be populated by the runtime
+	res := &runtimev1pb.ActorRuntime{
+		ActiveActors: a.getActiveActorsCount(ctx),
+	}
+
+	if a.placement != nil {
+		res.HostReady = a.placement.PlacementHealthy() && a.haveCompatibleStorage()
+		res.Placement = a.placement.StatusMessage()
+	}
+
+	return res
+}
+
+func (a *actorsRuntime) getActiveActorsCount(ctx context.Context) []*runtimev1pb.ActiveActorsCount {
 	actorTypes := a.actorsConfig.Config.HostedActorTypes.ListActorTypes()
 	actorCountMap := make(map[string]int32, len(actorTypes))
 	for _, actorType := range actorTypes {

@@ -136,6 +136,8 @@ func TestInternalActorCall(t *testing.T) {
 	testActorRuntime, err := newTestActorsRuntimeWithInternalActors(internalActors)
 	require.NoError(t, err)
 
+	// Need this nolint due to a bug in the linter
+	//nolint:protogetter
 	req := internals.NewInternalInvokeRequest(testMethod).
 		WithActor(testActorType, testActorID).
 		WithData([]byte(testInput)).
@@ -143,15 +145,13 @@ func TestInternalActorCall(t *testing.T) {
 
 	resp, err := testActorRuntime.callInternalActor(context.Background(), req)
 	require.NoError(t, err)
-
-	require.NoError(t, err)
 	require.NotNil(t, resp)
 
 	// Verify the response metadata matches what we expect
-	assert.Equal(t, int32(200), resp.GetStatus().Code)
+	assert.Equal(t, int32(200), resp.GetStatus().GetCode())
 
 	// Verify the actor got all the expected inputs (which are echoed back to us)
-	info, err := decodeTestResponse(bytes.NewReader(resp.GetMessage().GetData().Value))
+	info, err := decodeTestResponse(bytes.NewReader(resp.GetMessage().GetData().GetValue()))
 	require.NoError(t, err)
 	require.NotNil(t, info)
 	assert.Equal(t, testActorID, info.ActorID)
@@ -249,6 +249,6 @@ func TestInternalActorsNotCounted(t *testing.T) {
 	internalActors[InternalActorTypePrefix+"wfengine.workflow"] = &mockInternalActor{}
 	testActorRuntime, err := newTestActorsRuntimeWithInternalActors(internalActors)
 	require.NoError(t, err)
-	actorCounts := testActorRuntime.GetActiveActorsCount(context.Background())
+	actorCounts := testActorRuntime.getActiveActorsCount(context.Background())
 	assert.Empty(t, actorCounts)
 }

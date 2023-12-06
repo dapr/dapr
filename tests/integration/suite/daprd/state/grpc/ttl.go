@@ -15,7 +15,6 @@ package grpc
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -40,15 +39,7 @@ type ttl struct {
 }
 
 func (l *ttl) Setup(t *testing.T) []framework.Option {
-	l.daprd = procdaprd.New(t, procdaprd.WithResourceFiles(`
-apiVersion: dapr.io/v1alpha1
-kind: Component
-metadata:
-  name: mystore
-spec:
-  type: state.in-memory
-  version: v1
-`))
+	l.daprd = procdaprd.New(t, procdaprd.WithInMemoryActorStateStore("mystore"))
 
 	return []framework.Option{
 		framework.WithProcesses(l.daprd),
@@ -58,7 +49,7 @@ spec:
 func (l *ttl) Run(t *testing.T, ctx context.Context) {
 	l.daprd.WaitUntilRunning(t, ctx)
 
-	conn, err := grpc.DialContext(ctx, fmt.Sprintf("localhost:%d", l.daprd.GRPCPort()), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+	conn, err := grpc.DialContext(ctx, l.daprd.GRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
 	client := rtv1.NewDaprClient(conn)
@@ -77,7 +68,7 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 			StoreName: "mystore", Key: "key1",
 		})
 		require.NoError(t, err)
-		assert.Equal(t, "value1", string(resp.Data))
+		assert.Equal(t, "value1", string(resp.GetData()))
 		ttlExpireTime, err := time.Parse(time.RFC3339, resp.GetMetadata()["ttlExpireTime"])
 		require.NoError(t, err)
 		assert.InDelta(t, now.Add(3*time.Second).Unix(), ttlExpireTime.Unix(), 1)
@@ -89,7 +80,7 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 				StoreName: "mystore", Key: "key1",
 			})
 			require.NoError(c, err)
-			assert.Empty(c, resp.Data)
+			assert.Empty(c, resp.GetData())
 		}, 5*time.Second, 100*time.Millisecond)
 	})
 }

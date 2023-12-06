@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGetHostAdress(t *testing.T) {
@@ -25,13 +26,13 @@ func TestGetHostAdress(t *testing.T) {
 		t.Setenv(HostIPEnvVar, hostIP)
 
 		address, err := GetHostAddress()
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, hostIP, address)
 	})
 
 	t.Run("DAPR_HOST_IP not present, non-empty response", func(t *testing.T) {
 		address, err := GetHostAddress()
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		assert.NotEmpty(t, address)
 	})
 }

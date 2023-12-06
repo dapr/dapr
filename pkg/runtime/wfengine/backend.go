@@ -170,7 +170,7 @@ func (be *actorBackend) GetOrchestrationMetadata(ctx context.Context, id api.Ins
 	}
 
 	var metadata api.OrchestrationMetadata
-	err = actors.DecodeInternalActorData(bytes.NewReader(res.GetMessage().GetData().Value), &metadata)
+	err = actors.DecodeInternalActorData(bytes.NewReader(res.GetMessage().GetData().GetValue()), &metadata)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode the internal actor response: %w", err)
 	}
@@ -180,7 +180,7 @@ func (be *actorBackend) GetOrchestrationMetadata(ctx context.Context, id api.Ins
 // AbandonActivityWorkItem implements backend.Backend. It gets called by durabletask-go when there is
 // an unexpected failure in the workflow activity execution pipeline.
 func (*actorBackend) AbandonActivityWorkItem(ctx context.Context, wi *backend.ActivityWorkItem) error {
-	wfLogger.Warnf("%s: aborting activity execution (::%d)", wi.InstanceID, wi.NewEvent.EventId)
+	wfLogger.Warnf("%s: aborting activity execution (::%d)", wi.InstanceID, wi.NewEvent.GetEventId())
 
 	// Sending false signals the waiting activity actor to abort the activity execution.
 	if channel, ok := wi.Properties[CallbackChannelProperty]; ok {

@@ -97,7 +97,7 @@ spec:
     - name: actorStateStore
       value: 'true'
 `),
-			daprd.WithPlacementAddresses("localhost:"+strconv.Itoa(i.place.Port())),
+			daprd.WithPlacementAddresses(i.place.Address()),
 			daprd.WithAppPort(i.srv[j].Port()),
 			// Daprd is super noisy in debug mode when connecting to placement.
 			daprd.WithLogLevel("info"),
@@ -142,7 +142,7 @@ func (i *rebalancing) Run(t *testing.T, ctx context.Context) {
 		require.NoError(c, err)
 		resp, rErr := client.Do(req)
 		require.NoError(c, rErr)
-		assert.NoError(c, resp.Body.Close())
+		require.NoError(c, resp.Body.Close())
 		assert.Equal(c, http.StatusOK, resp.StatusCode)
 	}, 10*time.Second, 100*time.Millisecond, "actors not ready")
 

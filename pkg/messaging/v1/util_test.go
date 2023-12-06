@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -221,7 +222,7 @@ func TestErrorFromHTTPResponseCode(t *testing.T) {
 		err := ErrorFromHTTPResponseCode(200, "OK")
 
 		// assert
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("Created", func(t *testing.T) {
@@ -229,7 +230,7 @@ func TestErrorFromHTTPResponseCode(t *testing.T) {
 		err := ErrorFromHTTPResponseCode(201, "Created")
 
 		// assert
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("NotFound", func(t *testing.T) {
@@ -269,7 +270,7 @@ func TestErrorFromHTTPResponseCode(t *testing.T) {
 		// assert
 		s, _ := status.FromError(err)
 		errInfo := (s.Details()[0]).(*epb.ErrorInfo)
-		assert.Equal(t, 63, len(errInfo.GetMetadata()[errorInfoHTTPErrorMetadata]))
+		assert.Len(t, errInfo.GetMetadata()[errorInfoHTTPErrorMetadata], 63)
 	})
 }
 
@@ -285,9 +286,9 @@ func TestErrorFromInternalStatus(t *testing.T) {
 	)
 
 	internal := &internalv1pb.Status{
-		Code:    expected.Proto().Code,
-		Message: expected.Proto().Message,
-		Details: expected.Proto().Details,
+		Code:    expected.Proto().GetCode(),
+		Message: expected.Proto().GetMessage(),
+		Details: expected.Proto().GetDetails(),
 	}
 
 	expected.Message()
@@ -312,7 +313,7 @@ func TestProtobufToJSON(t *testing.T) {
 	}
 
 	jsonBody, err := ProtobufToJSON(tpb)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	t.Log(string(jsonBody))
 
 	// protojson produces different indentation space based on OS

@@ -128,17 +128,17 @@ type reentrantAppChannel struct {
 }
 
 func (r *reentrantAppChannel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest, appID string) (*invokev1.InvokeMethodResponse, error) {
-	r.callLog = append(r.callLog, "Entering "+req.Message().Method)
+	r.callLog = append(r.callLog, "Entering "+req.Message().GetMethod())
 	if len(r.nextCall) > 0 {
 		nextReq := r.nextCall[0]
 		r.nextCall = r.nextCall[1:]
 
 		if val := req.Metadata()["Dapr-Reentrancy-Id"]; val != nil {
-			if nextReq.Metadata == nil {
+			if nextReq.Metadata == nil { //nolint:protogetter
 				nextReq.Metadata = make(map[string]*internalsv1pb.ListStringValue)
 			}
 			nextReq.Metadata["Dapr-Reentrancy-Id"] = &internalsv1pb.ListStringValue{
-				Values: val.Values,
+				Values: val.GetValues(),
 			}
 		}
 		_, err := r.a.callLocalActor(context.Background(), nextReq)
@@ -146,7 +146,7 @@ func (r *reentrantAppChannel) InvokeMethod(ctx context.Context, req *invokev1.In
 			return nil, err
 		}
 	}
-	r.callLog = append(r.callLog, "Exiting "+req.Message().Method)
+	r.callLog = append(r.callLog, "Exiting "+req.Message().GetMethod())
 
 	return invokev1.NewInvokeMethodResponse(200, "OK", nil), nil
 }
@@ -462,7 +462,7 @@ func TestTimerExecution(t *testing.T) {
 		Callback:       "callback",
 		Data:           json.RawMessage(`"data"`),
 	}, true)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
 
 func TestReminderExecution(t *testing.T) {
@@ -481,7 +481,7 @@ func TestReminderExecution(t *testing.T) {
 		Name:           "reminder1",
 		Data:           json.RawMessage(`"data"`),
 	}, false)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
 
 func TestConstructActorStateKey(t *testing.T) {
@@ -500,7 +500,7 @@ func TestConstructActorStateKey(t *testing.T) {
 
 	// Check split
 	keys := strings.Split(stateKey, delim)
-	assert.Equal(t, 4, len(keys))
+	assert.Len(t, keys, 4)
 	assert.Equal(t, TestAppID, keys[0])
 	assert.Equal(t, actorType, keys[1])
 	assert.Equal(t, actorID, keys[2])
@@ -659,7 +659,7 @@ func TestDeleteState(t *testing.T) {
 	})
 
 	// assert
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Nilf(t, response.Data, "expected nil, but got %s", string(response.Data))
 }
 
@@ -774,12 +774,12 @@ func TestTransactionalOperation(t *testing.T) {
 		_, err := op.StateOperation("base||", StateOperationOpts{
 			StateTTLEnabled: false,
 		})
-		assert.ErrorContains(t, err, `ttlInSeconds is not supported without the "ActorStateTTL" feature enabled`)
+		require.ErrorContains(t, err, `ttlInSeconds is not supported without the "ActorStateTTL" feature enabled`)
 
 		resI, err := op.StateOperation("base||", StateOperationOpts{
 			StateTTLEnabled: true,
 		})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		res, ok := resI.(state.SetRequest)
 		require.True(t, ok)
@@ -803,7 +803,7 @@ func TestCallLocalActor(t *testing.T) {
 		defer testActorsRuntime.Close()
 
 		resp, err := testActorsRuntime.callLocalActor(context.Background(), req)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotNil(t, resp)
 	})
 
@@ -860,7 +860,7 @@ func TestTransactionalState(t *testing.T) {
 				},
 			},
 		})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("Multiple requests succeeds", func(t *testing.T) {
@@ -890,7 +890,7 @@ func TestTransactionalState(t *testing.T) {
 				},
 			},
 		})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("Too many requests fail", func(t *testing.T) {
@@ -922,8 +922,8 @@ func TestTransactionalState(t *testing.T) {
 			ActorID:    actorID,
 			Operations: ops,
 		})
-		assert.Error(t, err)
-		assert.ErrorIs(t, err, ErrTransactionsTooManyOperations)
+		require.Error(t, err)
+		require.ErrorIs(t, err, ErrTransactionsTooManyOperations)
 	})
 
 	t.Run("Wrong request body - should fail", func(t *testing.T) {
@@ -944,7 +944,7 @@ func TestTransactionalState(t *testing.T) {
 				},
 			},
 		})
-		assert.NotNil(t, err)
+		require.Error(t, err)
 	})
 
 	t.Run("Unsupported operation type - should fail", func(t *testing.T) {
@@ -963,7 +963,7 @@ func TestTransactionalState(t *testing.T) {
 				},
 			},
 		})
-		assert.EqualError(t, err, "operation type Wrong not supported")
+		require.EqualError(t, err, "operation type Wrong not supported")
 	})
 }
 
@@ -1007,7 +1007,7 @@ func TestActiveActorsCount(t *testing.T) {
 		fakeCallAndActivateActor(testActorsRuntime, "cat", "xyz", testActorsRuntime.clock)
 		fakeCallAndActivateActor(testActorsRuntime, "dog", "xyz", testActorsRuntime.clock)
 
-		actualCounts := testActorsRuntime.GetActiveActorsCount(ctx)
+		actualCounts := testActorsRuntime.getActiveActorsCount(ctx)
 		assert.ElementsMatch(t, expectedCounts, actualCounts)
 	})
 
@@ -1018,7 +1018,7 @@ func TestActiveActorsCount(t *testing.T) {
 		testActorsRuntime.actorsConfig.Config.HostedActorTypes = internal.NewHostedActors([]string{})
 		defer testActorsRuntime.Close()
 
-		actualCounts := testActorsRuntime.GetActiveActorsCount(ctx)
+		actualCounts := testActorsRuntime.getActiveActorsCount(ctx)
 		assert.Equal(t, expectedCounts, actualCounts)
 	})
 }
@@ -1125,27 +1125,27 @@ func TestConstructCompositeKeyWithThreeArgs(t *testing.T) {
 func TestHostValidation(t *testing.T) {
 	t.Run("kubernetes mode with mTLS, missing namespace", func(t *testing.T) {
 		err := ValidateHostEnvironment(true, modes.KubernetesMode, "")
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 
 	t.Run("kubernetes mode without mTLS, missing namespace", func(t *testing.T) {
 		err := ValidateHostEnvironment(false, modes.KubernetesMode, "")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("kubernetes mode with mTLS and namespace", func(t *testing.T) {
 		err := ValidateHostEnvironment(true, modes.KubernetesMode, "default")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("self hosted mode with mTLS, missing namespace", func(t *testing.T) {
 		err := ValidateHostEnvironment(true, modes.StandaloneMode, "")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("self hosted mode without mTLS, missing namespace", func(t *testing.T) {
 		err := ValidateHostEnvironment(false, modes.StandaloneMode, "")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 }
 
@@ -1175,7 +1175,7 @@ func TestBasicReentrantActorLocking(t *testing.T) {
 	reentrantAppChannel.a = testActorsRuntime
 
 	resp, err := testActorsRuntime.callLocalActor(context.Background(), req)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, resp)
 	assert.Equal(t, []string{
 		"Entering actors/reentrant/1/method/first",
@@ -1214,7 +1214,7 @@ func TestReentrantActorLockingOverMultipleActors(t *testing.T) {
 	reentrantAppChannel.a = testActorsRuntime
 
 	resp, err := testActorsRuntime.callLocalActor(context.Background(), req)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, resp)
 	assert.Equal(t, []string{
 		"Entering actors/reentrant/1/method/first",
@@ -1251,7 +1251,7 @@ func TestReentrancyStackLimit(t *testing.T) {
 
 	resp, err := testActorsRuntime.callLocalActor(context.Background(), req)
 	assert.Nil(t, resp)
-	assert.Error(t, err)
+	require.Error(t, err)
 }
 
 func TestReentrancyPerActor(t *testing.T) {
@@ -1288,7 +1288,7 @@ func TestReentrancyPerActor(t *testing.T) {
 	reentrantAppChannel.a = testActorsRuntime
 
 	resp, err := testActorsRuntime.callLocalActor(context.Background(), req)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotNil(t, resp)
 	assert.Equal(t, []string{
 		"Entering actors/reentrantActor/1/method/first",
@@ -1331,7 +1331,7 @@ func TestReentrancyStackLimitPerActor(t *testing.T) {
 
 	resp, err := testActorsRuntime.callLocalActor(context.Background(), req)
 	assert.Nil(t, resp)
-	assert.Error(t, err)
+	require.Error(t, err)
 }
 
 func TestActorsRuntimeResiliency(t *testing.T) {
@@ -1362,7 +1362,7 @@ func TestActorsRuntimeResiliency(t *testing.T) {
 			map[string]int{},
 		),
 		KeyFunc: func(req *invokev1.InvokeMethodRequest) string {
-			return req.Actor().ActorId
+			return req.Actor().GetActorId()
 		},
 	}
 	builder := runtimeBuilder{
@@ -1397,7 +1397,7 @@ func TestActorsRuntimeResiliency(t *testing.T) {
 		_, err := runtime.GetState(context.Background(), req)
 
 		callKey := constructCompositeKey(TestAppID, actorType, actorID, "failingGetStateKey")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, 2, failingState.Failure.CallCount(callKey))
 	})
 
@@ -1412,7 +1412,7 @@ func TestActorsRuntimeResiliency(t *testing.T) {
 		end := time.Now()
 
 		callKey := constructCompositeKey(TestAppID, actorType, actorID, "timeoutGetStateKey")
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Equal(t, 2, failingState.Failure.CallCount(callKey))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
@@ -1434,7 +1434,7 @@ func TestActorsRuntimeResiliency(t *testing.T) {
 		err := runtime.TransactionalStateOperation(context.Background(), req)
 
 		callKey := constructCompositeKey(TestAppID, actorType, actorID, "failingMultiKey")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, 2, failingState.Failure.CallCount(callKey))
 	})
 
@@ -1457,7 +1457,7 @@ func TestActorsRuntimeResiliency(t *testing.T) {
 		end := time.Now()
 
 		callKey := constructCompositeKey(TestAppID, actorType, actorID, "timeoutMultiKey")
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Equal(t, 2, failingState.Failure.CallCount(callKey))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
@@ -1469,7 +1469,7 @@ func TestActorsRuntimeResiliency(t *testing.T) {
 		})
 
 		callKey := constructCompositeKey("actors", actorType)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, 2, failingState.Failure.CallCount(callKey))
 
 		// Key will no longer fail, so now we can check the timeout.
@@ -1480,7 +1480,7 @@ func TestActorsRuntimeResiliency(t *testing.T) {
 		})
 		end := time.Now()
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Equal(t, 4, failingState.Failure.CallCount(callKey)) // Should be called 2 more times.
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
