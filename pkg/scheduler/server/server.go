@@ -25,7 +25,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.actorssvc.server")
+var log = logger.NewLogger("dapr.scheduler.server")
 
 type SchedulerServiceOpts struct {
 	// Port is the port that the server will listen on.
@@ -34,14 +34,12 @@ type SchedulerServiceOpts struct {
 	Security security.Handler
 }
 
-// server is the gRPC server for the Actors service.
+// server is the gRPC server for the Scheduler service.
 type server struct {
 	opts       SchedulerServiceOpts
 	srv        *grpc.Server
 	shutdownCh chan struct{}
 
-	// This map contains the list of active connections from sidecar hosts.
-	// We use a "regular" map with a RWMutex instead of a sync.Map because we need to be sure that once we get a channel from the map, it's still valid when we attempt to use it.
 	connectedHosts map[string][]string
 }
 
@@ -54,7 +52,6 @@ func Start(ctx context.Context, opts SchedulerServiceOpts) error {
 		return fmt.Errorf("failed to init server: %w", err)
 	}
 
-	// Blocks until context is canceled
 	return s.Run(ctx)
 }
 
@@ -72,7 +69,6 @@ func (s *server) Init(ctx context.Context, opts SchedulerServiceOpts) (err error
 	return nil
 }
 
-// Run starts the server. Blocks until the context is cancelled.
 func (s *server) Run(ctx context.Context) error {
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", s.opts.Port))
 	if err != nil {
