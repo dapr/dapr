@@ -246,8 +246,7 @@ func testDropToDeadLetter(t *testing.T, publisherExternalURL, subscriberExternal
 			ReceivedByTopicCESub:      []string{},
 			ReceivedByTopicDead:       sentTopicDeadMessages,
 			ReceivedByTopicDeadLetter: sentTopicDeadMessages,
-			ReceivedByTopicCEBulkSub:  sentTopicCEMessages,
-		})
+			ReceivedByTopicCEBulkSub:  sentTopicCEMessages})
 	return subscriberExternalURL
 }
 
@@ -406,8 +405,7 @@ var pubsubTests = []struct {
 	{
 		name:    "publish and bulk subscribe messages successfully",
 		handler: testPublishBulkSubscribeSuccessfully,
-	},
-	{
+	}, {
 		name:    "drop message will be published to dlq if configured",
 		handler: testDropToDeadLetter,
 	},
