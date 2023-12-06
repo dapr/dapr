@@ -53,6 +53,7 @@ const (
 	KeyHTTPMaxRequestSize               = "dapr.io/http-max-request-size"
 	KeyHTTPReadBufferSize               = "dapr.io/http-read-buffer-size"
 	KeyGracefulShutdownSeconds          = "dapr.io/graceful-shutdown-seconds"
+	KeyBlockShutdownDuration            = "dapr.io/block-shutdown-duration"
 	KeyEnableAPILogging                 = "dapr.io/enable-api-logging"
 	KeyUnixDomainSocketPath             = "dapr.io/unix-domain-socket-path"
 	KeyVolumeMountsReadOnly             = "dapr.io/volume-mounts"

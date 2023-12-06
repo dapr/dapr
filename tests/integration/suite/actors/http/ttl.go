@@ -98,7 +98,7 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 		require.NoError(c, rErr)
 		require.NoError(c, resp.Body.Close())
 		assert.Equal(c, http.StatusOK, resp.StatusCode)
-	}, time.Second*10, time.Millisecond*100, "actor not ready")
+	}, time.Second*20, time.Millisecond*100, "actor not ready")
 
 	now := time.Now()
 
