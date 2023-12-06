@@ -99,7 +99,7 @@ func (s *server) Run(ctx context.Context) error {
 	return <-errCh
 }
 
-func (s *server) ConnectHost(context.Context, *schedulerv1pb.ConnectClientStream) (*schedulerv1pb.ConnectServerStream, error) {
+func (s *server) ConnectHost(context.Context, *schedulerv1pb.ConnectHostRequest) (*schedulerv1pb.ConnectHostResponse, error) {
 	return nil, fmt.Errorf("not implemented")
 }
 

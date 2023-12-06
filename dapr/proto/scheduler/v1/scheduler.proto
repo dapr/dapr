@@ -8,11 +8,7 @@ option go_package = "github.com/dapr/dapr/pkg/proto/scheduler/v1;scheduler";
 
 service Scheduler {
 	// ConnectHost is used by the daprd sidecar to connect to the scheduler service.
-	// The sidecar will send a stream of RegisterRequest, UnregisterRequest and blank 
-	// health-check messages.
-	// In return, scheduler service will send a stream of blank ConnectServerStream messages,
-	// which will also act as health check messages.
-	rpc ConnectHost(ConnectClientStream) returns (ConnectServerStream) {}
+	rpc ConnectHost(ConnectHostRequest) returns (ConnectHostResponse) {}
 	// ScheduleJob is used by the daprd sidecar to schedule a job.
 	rpc ScheduleJob(ScheduleJobRequest) returns (ScheduleJobResponse) {}
 	// DeleteJob is used by the daprd sidecar to delete a job.
@@ -23,24 +19,7 @@ service Scheduler {
 	rpc ListJobs(ListJobsRequest) returns (ListJobsResponse) {}
 }
 
-// ConnectClientStream is the message used by the daprd sidecar to connect to the scheduler service.
-// The initiating message has to be a RegisterRequest, followed by a stream of blank health-check messages.
-// The sidecar can send a UnregisterRequest to unregister itself from the scheduler service.
-message ConnectClientStream {
-	// The message type is oneof, so that the sidecar can send a stream of RegisterRequest or UnregisterRequest 
-	// or blank health-check messages.
-	oneof message {
-		RegisterRequest register = 1;
-		UnregisterRequest unregister = 2;
-	}
-}
-
-message ConnectServerStream {
-	// It is empty as of now. A message to be sent here to act as a response to client stream.
-	// This acts as a health check for the server stream.
-}
-
-message RegisterRequest {
+message ConnectHostRequest {
 	// The id of the application (app_id).
 	string app_id = 1;
 	// The namespace.
@@ -49,6 +28,10 @@ message RegisterRequest {
 	string hostname = 3;
 	// The port of the daprd sidecar.
 	int32 port = 4;
+}
+
+message ConnectHostResponse {
+	// Empty as of now
 }
 
 // UnregisterRequest is the message used by the daprd sidecar to unregister itself from the scheduler service.
