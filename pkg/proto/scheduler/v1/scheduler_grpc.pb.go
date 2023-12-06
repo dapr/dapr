@@ -23,11 +23,7 @@ const _ = grpc.SupportPackageIsVersion7
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type SchedulerClient interface {
 	// ConnectHost is used by the daprd sidecar to connect to the scheduler service.
-	// The sidecar will send a stream of RegisterRequest, UnregisterRequest and blank
-	// health-check messages.
-	// In return, scheduler service will send a stream of blank ConnectServerStream messages,
-	// which will also act as health check messages.
-	ConnectHost(ctx context.Context, in *ConnectClientStream, opts ...grpc.CallOption) (*ConnectServerStream, error)
+	ConnectHost(ctx context.Context, in *ConnectHostRequest, opts ...grpc.CallOption) (*ConnectHostResponse, error)
 	// ScheduleJob is used by the daprd sidecar to schedule a job.
 	ScheduleJob(ctx context.Context, in *ScheduleJobRequest, opts ...grpc.CallOption) (*ScheduleJobResponse, error)
 	// DeleteJob is used by the daprd sidecar to delete a job.
@@ -46,8 +42,8 @@ func NewSchedulerClient(cc grpc.ClientConnInterface) SchedulerClient {
 	return &schedulerClient{cc}
 }
 
-func (c *schedulerClient) ConnectHost(ctx context.Context, in *ConnectClientStream, opts ...grpc.CallOption) (*ConnectServerStream, error) {
-	out := new(ConnectServerStream)
+func (c *schedulerClient) ConnectHost(ctx context.Context, in *ConnectHostRequest, opts ...grpc.CallOption) (*ConnectHostResponse, error) {
+	out := new(ConnectHostResponse)
 	err := c.cc.Invoke(ctx, "/dapr.proto.scheduler.v1.Scheduler/ConnectHost", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -96,11 +92,7 @@ func (c *schedulerClient) ListJobs(ctx context.Context, in *ListJobsRequest, opt
 // for forward compatibility
 type SchedulerServer interface {
 	// ConnectHost is used by the daprd sidecar to connect to the scheduler service.
-	// The sidecar will send a stream of RegisterRequest, UnregisterRequest and blank
-	// health-check messages.
-	// In return, scheduler service will send a stream of blank ConnectServerStream messages,
-	// which will also act as health check messages.
-	ConnectHost(context.Context, *ConnectClientStream) (*ConnectServerStream, error)
+	ConnectHost(context.Context, *ConnectHostRequest) (*ConnectHostResponse, error)
 	// ScheduleJob is used by the daprd sidecar to schedule a job.
 	ScheduleJob(context.Context, *ScheduleJobRequest) (*ScheduleJobResponse, error)
 	// DeleteJob is used by the daprd sidecar to delete a job.
@@ -115,7 +107,7 @@ type SchedulerServer interface {
 type UnimplementedSchedulerServer struct {
 }
 
-func (UnimplementedSchedulerServer) ConnectHost(context.Context, *ConnectClientStream) (*ConnectServerStream, error) {
+func (UnimplementedSchedulerServer) ConnectHost(context.Context, *ConnectHostRequest) (*ConnectHostResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ConnectHost not implemented")
 }
 func (UnimplementedSchedulerServer) ScheduleJob(context.Context, *ScheduleJobRequest) (*ScheduleJobResponse, error) {
@@ -143,7 +135,7 @@ func RegisterSchedulerServer(s grpc.ServiceRegistrar, srv SchedulerServer) {
 }
 
 func _Scheduler_ConnectHost_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ConnectClientStream)
+	in := new(ConnectHostRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -155,7 +147,7 @@ func _Scheduler_ConnectHost_Handler(srv interface{}, ctx context.Context, dec fu
 		FullMethod: "/dapr.proto.scheduler.v1.Scheduler/ConnectHost",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SchedulerServer).ConnectHost(ctx, req.(*ConnectClientStream))
+		return srv.(SchedulerServer).ConnectHost(ctx, req.(*ConnectHostRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
