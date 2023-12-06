@@ -69,12 +69,11 @@ namespace DaprDemoActor
                     Task<string> e1 = context.WaitForExternalEventAsync<string>("PayInCash", TimeSpan.FromSeconds(10));  
                     Task<string> e2 = context.WaitForExternalEventAsync<string>("PayByCard", TimeSpan.FromSeconds(10));  
                     Task<string> e3 = context.WaitForExternalEventAsync<string>("PayOnline", TimeSpan.FromSeconds(10));
-                    Task timeout = context.CreateTimer(TimeSpan.FromSeconds(1));
-                    Task winner = await Task.WhenAny(e1, e2, e3, timeout); 
+                    Task<string> winner = await Task.WhenAny(e1, e2, e3); 
 
-                    if (winner == timeout) {
-                        throw new TimeoutException("Payment timed out");
-                    }
+                    // Will throw an exception if the task is not completed
+                    // Task.WhenAny() will not throw an exception if the task is not completed
+                    string result = await winner;
 
                     // In real life there are other steps related to placing an order, like reserving
                     // inventory and charging the customer credit card etc. But let's keep it simple ;)
