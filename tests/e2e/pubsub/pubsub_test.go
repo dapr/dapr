@@ -107,13 +107,6 @@ type cloudEvent struct {
 	Data            string `json:"data"`
 }
 
-type cloudBugEvent struct {
-	IID               string `json:"id"`
-	TType             string `json:"type"`
-	DDataCContentType string `json:"datacontenttype"`
-	DData             string `json:"data"`
-}
-
 // checks is publishing is working.
 func publishHealthCheck(publisherExternalURL string) error {
 	commandBody := publishCommand{
@@ -213,15 +206,6 @@ func testBuggyDataToPublisherBulk(t *testing.T, publisherExternalURL, subscriber
 
 		// create and marshal command
 		messageID := fmt.Sprintf("msg-%s-%s-%04d", strings.TrimSuffix(topic, "-topic"), protocol, i)
-		var messageData interface{} = messageID
-		messageData = &cloudBugEvent{
-			IID:               messageID,
-			TType:             contentType,
-			DDataCContentType: "text/plain",
-			DData:             messageID,
-		}
-		commandBody.ReqID = "c-" + uuid.New().String()
-		commandBody.Data = messageData
 		commands[i] = commandBody
 
 		individualMessages = append(individualMessages, messageID)
