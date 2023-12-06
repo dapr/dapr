@@ -55,6 +55,8 @@ func TestParsePlacementAddr(t *testing.T) {
 func Test_toInternal(t *testing.T) {
 	cfg := defaultTestConfig()
 
+	var nilDuration *time.Duration
+
 	intc, err := cfg.toInternal()
 	require.NoError(t, err)
 
@@ -81,6 +83,7 @@ func Test_toInternal(t *testing.T) {
 	assert.Equal(t, "", intc.unixDomainSocket)
 	assert.Equal(t, 4, intc.readBufferSize)
 	assert.Equal(t, time.Second, intc.gracefulShutdownDuration)
+	assert.Equal(t, nilDuration, intc.blockShutdownDuration)
 	assert.Equal(t, ptr.Of(true), intc.enableAPILogging)
 	assert.True(t, intc.disableBuiltinK8sSecretStore)
 	assert.Equal(t, "1.1.1.1", intc.appConnectionConfig.ChannelAddress)
