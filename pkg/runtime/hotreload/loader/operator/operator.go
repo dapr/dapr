@@ -34,12 +34,12 @@ type Options struct {
 }
 
 type operator struct {
-	component *generic[componentsapi.Component]
+	component *resource[componentsapi.Component]
 }
 
 func New(opts Options) loader.Interface {
 	return &operator{
-		component: newGeneric[componentsapi.Component](opts, loadercompstore.NewComponent(opts.ComponentStore), new(component)),
+		component: newResource[componentsapi.Component](opts, loadercompstore.NewComponent(opts.ComponentStore), new(component)),
 	}
 }
 

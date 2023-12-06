@@ -196,7 +196,7 @@ func newDaprRuntime(ctx context.Context,
 	var reloader *hotreload.Reloader
 	switch runtimeConfig.mode {
 	case modes.KubernetesMode:
-		reloader = hotreload.NewOperator(hotreload.OptionsOperator{
+		reloader = hotreload.NewOperator(hotreload.OptionsReloaderOperator{
 			PodName:        podName,
 			Namespace:      namespace,
 			Client:         operatorClient,

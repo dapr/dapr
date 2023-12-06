@@ -33,21 +33,21 @@ import (
 func Test_generic(t *testing.T) {
 	t.Run("Stream should return error on stream when already closed", func(t *testing.T) {
 		streamer := newFakeStreamer()
-		g := newGeneric[componentsapi.Component](
+		r := newResource[componentsapi.Component](
 			Options{},
 			loadercompstore.NewComponent(compstore.New()),
 			streamer,
 		)
 
-		require.NoError(t, g.close())
-		ch, err := g.Stream(context.Background())
+		require.NoError(t, r.close())
+		ch, err := r.Stream(context.Background())
 		assert.Nil(t, ch)
 		require.ErrorContains(t, err, "stream is closed")
 	})
 
 	t.Run("Stream should return error on stream and context cancelled", func(t *testing.T) {
 		streamer := newFakeStreamer()
-		g := newGeneric[componentsapi.Component](
+		r := newResource[componentsapi.Component](
 			Options{},
 			loadercompstore.NewComponent(compstore.New()),
 			streamer,
@@ -60,14 +60,14 @@ func Test_generic(t *testing.T) {
 			return errors.New("test error")
 		}
 
-		ch, err := g.Stream(ctx)
+		ch, err := r.Stream(ctx)
 		assert.Nil(t, ch)
 		require.ErrorContains(t, err, "test error")
 	})
 
 	t.Run("Should send event to Stream channel on Recv", func(t *testing.T) {
 		streamer := newFakeStreamer()
-		g := newGeneric[componentsapi.Component](
+		r := newResource[componentsapi.Component](
 			Options{},
 			loadercompstore.NewComponent(compstore.New()),
 			streamer,
@@ -78,7 +78,7 @@ func Test_generic(t *testing.T) {
 			return <-recCh, nil
 		}
 
-		ch, err := g.Stream(context.Background())
+		ch, err := r.Stream(context.Background())
 		assert.NotNil(t, ch)
 		require.NoError(t, err)
 
@@ -100,12 +100,12 @@ func Test_generic(t *testing.T) {
 
 		close(recCh)
 
-		require.NoError(t, g.close())
+		require.NoError(t, r.close())
 	})
 
 	t.Run("Should attempt to re-establish after the stream fails", func(t *testing.T) {
 		streamer := newFakeStreamer()
-		g := newGeneric[componentsapi.Component](
+		r := newResource[componentsapi.Component](
 			Options{},
 			loadercompstore.NewComponent(compstore.New()),
 			streamer,
@@ -131,7 +131,7 @@ func Test_generic(t *testing.T) {
 			return nil, errors.New("recv error")
 		}
 
-		_, err := g.Stream(context.Background())
+		_, err := r.Stream(context.Background())
 		require.NoError(t, err)
 
 		select {
@@ -140,13 +140,13 @@ func Test_generic(t *testing.T) {
 			t.Error("expected generic to retry establishing stream after failure")
 		}
 
-		require.NoError(t, g.close())
+		require.NoError(t, r.close())
 		assert.GreaterOrEqual(t, calls, 3)
 	})
 
 	t.Run("close waits for streamer to close", func(t *testing.T) {
 		streamer := newFakeStreamer()
-		g := newGeneric[componentsapi.Component](
+		r := newResource[componentsapi.Component](
 			Options{},
 			loadercompstore.NewComponent(compstore.New()),
 			streamer,
@@ -159,7 +159,7 @@ func Test_generic(t *testing.T) {
 		}
 
 		go func() {
-			closeCh <- g.close()
+			closeCh <- r.close()
 		}()
 
 		select {

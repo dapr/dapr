@@ -40,7 +40,7 @@ type OptionsReloaderDisk struct {
 	Processor      *processor.Processor
 }
 
-type OptionsOperator struct {
+type OptionsReloaderOperator struct {
 	PodName        string
 	Namespace      string
 	Client         operatorv1.OperatorClient
@@ -75,7 +75,7 @@ func NewDisk(ctx context.Context, opts OptionsReloaderDisk) (*Reloader, error) {
 	}, nil
 }
 
-func NewOperator(opts OptionsOperator) *Reloader {
+func NewOperator(opts OptionsReloaderOperator) *Reloader {
 	loader := operator.New(operator.Options{
 		PodName:        opts.PodName,
 		Namespace:      opts.Namespace,
@@ -85,7 +85,7 @@ func NewOperator(opts OptionsOperator) *Reloader {
 
 	return &Reloader{
 		isEnabled: opts.Config.IsFeatureEnabled(config.HotReload),
-		components: reconciler.NewComponent(reconciler.Options[componentsapi.Component]{
+		componentsReconciler: reconciler.NewComponent(reconciler.Options[componentsapi.Component]{
 			Loader:     loader,
 			CompStore:  opts.ComponentStore,
 			Processor:  opts.Processor,

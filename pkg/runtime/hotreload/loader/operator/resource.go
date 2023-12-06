@@ -29,7 +29,9 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader/store"
 )
 
-type generic[T differ.Resource] struct {
+// resource is a generic implementation of an operator resource loader.
+// resource will watch and load resources from the operator service.
+type resource[T differ.Resource] struct {
 	opClient  operatorpb.OperatorClient
 	podName   string
 	namespace string
@@ -42,6 +44,9 @@ type generic[T differ.Resource] struct {
 	closed  atomic.Bool
 }
 
+// streamer is a generic interface for streaming resources from the operator.
+// We need a generic interface because the gRPC methods used for streaming
+// differ between resources.
 type streamer[T differ.Resource] interface {
 	list(ctx context.Context, opclient operatorpb.OperatorClient, ns, podName string) ([][]byte, error)
 	close() error
@@ -49,8 +54,8 @@ type streamer[T differ.Resource] interface {
 	establish(context.Context, operatorpb.OperatorClient, string, string) error
 }
 
-func newGeneric[T differ.Resource](opts Options, store store.Store[T], streamer streamer[T]) *generic[T] {
-	return &generic[T]{
+func newResource[T differ.Resource](opts Options, store store.Store[T], streamer streamer[T]) *resource[T] {
+	return &resource[T]{
 		opClient:  opts.OperatorClient,
 		podName:   opts.PodName,
 		namespace: opts.Namespace,
@@ -60,9 +65,9 @@ func newGeneric[T differ.Resource](opts Options, store store.Store[T], streamer 
 	}
 }
 
-func (g *generic[T]) List(ctx context.Context) (*differ.LocalRemoteResources[T], error) {
+func (r *resource[T]) List(ctx context.Context) (*differ.LocalRemoteResources[T], error) {
 	resp, err := backoff.RetryWithData(func() ([][]byte, error) {
-		return g.streamer.list(ctx, g.opClient, g.namespace, g.podName)
+		return r.streamer.list(ctx, r.opClient, r.namespace, r.podName)
 	}, backoff.WithContext(backoff.NewExponentialBackOff(), ctx))
 	if err != nil {
 		return nil, err
@@ -78,17 +83,17 @@ func (g *generic[T]) List(ctx context.Context) (*differ.LocalRemoteResources[T],
 	}
 
 	return &differ.LocalRemoteResources[T]{
-		Local:  g.store.List(),
+		Local:  r.store.List(),
 		Remote: remotes,
 	}, nil
 }
 
-func (g *generic[T]) Stream(ctx context.Context) (<-chan *loader.Event[T], error) {
-	if g.closed.Load() {
+func (r *resource[T]) Stream(ctx context.Context) (<-chan *loader.Event[T], error) {
+	if r.closed.Load() {
 		return nil, errors.New("stream is closed")
 	}
 
-	if err := g.streamer.establish(ctx, g.opClient, g.namespace, g.podName); err != nil {
+	if err := r.streamer.establish(ctx, r.opClient, r.namespace, r.podName); err != nil {
 		return nil, err
 	}
 
@@ -96,29 +101,29 @@ func (g *generic[T]) Stream(ctx context.Context) (<-chan *loader.Event[T], error
 
 	eventCh := make(chan *loader.Event[T])
 	ctx, cancel := context.WithCancel(ctx)
-	g.wg.Add(2)
+	r.wg.Add(2)
 	go func() {
-		defer g.wg.Done()
+		defer r.wg.Done()
 		select {
-		case <-g.closeCh:
+		case <-r.closeCh:
 		case <-ctx.Done():
 		}
 		cancel()
 	}()
 	go func() {
-		defer g.wg.Done()
-		g.stream(ctx, eventCh)
+		defer r.wg.Done()
+		r.stream(ctx, eventCh)
 	}()
 
 	return eventCh, nil
 }
 
-func (g *generic[T]) stream(ctx context.Context, eventCh chan<- *loader.Event[T]) {
+func (r *resource[T]) stream(ctx context.Context, eventCh chan<- *loader.Event[T]) {
 	for {
 		for {
-			event, err := g.streamer.recv()
+			event, err := r.streamer.recv()
 			if err != nil {
-				g.streamer.close()
+				r.streamer.close()
 				// Retry on stream error.
 				log.Errorf("error from operator stream: %s", err)
 				break
@@ -139,7 +144,7 @@ func (g *generic[T]) stream(ctx context.Context, eventCh chan<- *loader.Event[T]
 			}
 
 			if err := backoff.Retry(func() error {
-				berr := g.streamer.establish(ctx, g.opClient, g.namespace, g.podName)
+				berr := r.streamer.establish(ctx, r.opClient, r.namespace, r.podName)
 				if berr != nil {
 					log.Errorf("Failed to establish stream: %s", berr)
 				}
@@ -152,11 +157,11 @@ func (g *generic[T]) stream(ctx context.Context, eventCh chan<- *loader.Event[T]
 	}
 }
 
-func (g *generic[T]) close() error {
-	defer g.wg.Wait()
-	if g.closed.CompareAndSwap(false, true) {
-		close(g.closeCh)
+func (r *resource[T]) close() error {
+	defer r.wg.Wait()
+	if r.closed.CompareAndSwap(false, true) {
+		close(r.closeCh)
 	}
 
-	return g.streamer.close()
+	return r.streamer.close()
 }
