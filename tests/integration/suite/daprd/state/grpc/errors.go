@@ -52,8 +52,8 @@ func init() {
 type errors struct {
 	daprd *procdaprd.Daprd
 
-	queryErr func(*testing.T) error
-	// tooManyTransactionalOpsErr func(*testing.T) error
+	queryErr                   func(*testing.T) error
+	tooManyTransactionalOpsErr func(*testing.T) error
 }
 
 func (e *errors) Setup(t *testing.T) []framework.Option {
@@ -102,10 +102,10 @@ spec:
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
-  name: mystore-pluggable-querier
+ name: mystore-pluggable-querier
 spec:
-  type: state.%s
-  version: v1
+ type: state.%s
+ version: v1
 ---
 apiVersion: dapr.io/v1alpha1
 kind: Component
@@ -338,51 +338,52 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 
 	// TODO: test for NewErrStateStoreTransactionsNotSupported
 
-	//  t.Run("state store too many transactional operations", func(t *testing.T) {
-	//	t.Cleanup(func() {
-	//		e.tooManyTransactionalOpsErr = func(t *testing.T) error {
-	//			require.FailNow(t, "too many transactional operations")
-	//			return nil
-	//		}
-	//	})
-	//
-	//	e.tooManyTransactionalOpsErr = func(*testing.T) error {
-	//		return apierrors.StateStoreTooManyTransactionalOps(2, 1)
-	//	}
-	//
-	//	ops := make([]*rtv1.TransactionalStateOperation, 0)
-	//	ops = append(ops, &rtv1.TransactionalStateOperation{
-	//		OperationType: "upsert",
-	//		Request: &commonv1.StateItem{
-	//			Key:   "key1",
-	//			Value: []byte("val1"),
-	//		},
-	//	})
-	//	ops = append(ops, &rtv1.TransactionalStateOperation{
-	//		OperationType: "delete",
-	//		Request: &commonv1.StateItem{
-	//			Key: "key2",
-	//		},
-	//	})
-	//	req := &rtv1.ExecuteStateTransactionRequest{
-	//		StoreName:  "mystore-pluggable-multimaxsize",
-	//		Operations: ops,
-	//	}
-	//	_, err := client.ExecuteStateTransaction(ctx, req)
-	//	require.Error(t, err)
-	//
-	//	s, ok := status.FromError(err)
-	//
-	//	require.True(t, ok)
-	//	require.Equal(t, grpcCodes.InvalidArgument, s.Code())
-	//	assert.Equal(t, fmt.Sprintf("the transaction contains %d operations, which is more than what the state store supports: %d", 2, 1), s.Message())
-	//
-	//	//Check status details
-	//	require.Equal(t, 1, len(s.Details()))
-	//	errInfo := s.Details()[0]
-	//	require.IsType(t, &errdetails.ErrorInfo{}, errInfo)
-	//	require.Equal(t, "DAPR_STATE_QUERY_FAILED", errInfo.(*errdetails.ErrorInfo).GetReason())
-	//	require.Equal(t, framework.Domain, errInfo.(*errdetails.ErrorInfo).GetDomain())
-	//	require.Nil(t, errInfo.(*errdetails.ErrorInfo).GetMetadata())
-	//  })
+	t.Run("state store too many transactional operations", func(t *testing.T) {
+		stateStoreName := "mystore-pluggable-multimaxsize"
+		t.Cleanup(func() {
+			e.tooManyTransactionalOpsErr = func(t *testing.T) error {
+				require.FailNow(t, "too many transactional operations")
+				return nil
+			}
+		})
+
+		//e.tooManyTransactionalOpsErr = func(*testing.T) error {
+		//	return apierrors.StateStoreTooManyTransactionalOps(2, 1)
+		//}
+
+		ops := make([]*rtv1.TransactionalStateOperation, 0)
+		ops = append(ops, &rtv1.TransactionalStateOperation{
+			OperationType: "upsert",
+			Request: &commonv1.StateItem{
+				Key:   "key1",
+				Value: []byte("val1"),
+			},
+		})
+		ops = append(ops, &rtv1.TransactionalStateOperation{
+			OperationType: "delete",
+			Request: &commonv1.StateItem{
+				Key: "key2",
+			},
+		})
+		req := &rtv1.ExecuteStateTransactionRequest{
+			StoreName:  stateStoreName,
+			Operations: ops,
+		}
+		_, err := client.ExecuteStateTransaction(ctx, req)
+		require.Error(t, err)
+
+		s, ok := status.FromError(err)
+
+		require.True(t, ok)
+		require.Equal(t, grpcCodes.InvalidArgument, s.Code())
+		assert.Equal(t, fmt.Sprintf("the transaction contains %d operations, which is more than what the state store supports: %d", 2, 1), s.Message())
+
+		//Check status details
+		require.Equal(t, 1, len(s.Details()))
+		errInfo := s.Details()[0]
+		require.IsType(t, &errdetails.ErrorInfo{}, errInfo)
+		require.Equal(t, "DAPR_STATE_QUERY_FAILED", errInfo.(*errdetails.ErrorInfo).GetReason())
+		require.Equal(t, framework.Domain, errInfo.(*errdetails.ErrorInfo).GetDomain())
+		require.Nil(t, errInfo.(*errdetails.ErrorInfo).GetMetadata())
+	})
 }
