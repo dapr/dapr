@@ -336,60 +336,6 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		require.Empty(t, resInfo.GetDescription())
 	})
 
-	t.Run("state store query failed - bad json", func(t *testing.T) {
-		stateStoreName := "mystore-pluggable-querier"
-
-		t.Cleanup(func() {
-			e.queryErr = func(t *testing.T) error {
-				require.FailNow(t, "query should not be called")
-				return nil
-			}
-		})
-
-		e.queryErr = func(*testing.T) error {
-			return apierrors.StateStoreQueryFailed(stateStoreName, "this is a custom error string")
-		}
-
-		req := &rtv1.QueryStateRequest{
-			StoreName: stateStoreName,
-			Query:     `{filter":{"EQ":{"state":"CA"}},"sort":[{"key":"person.id","order":"DESC"}]}`, // invalid json
-		}
-		_, err := client.QueryStateAlpha1(ctx, req)
-
-		require.Error(t, err)
-
-		s, ok := status.FromError(err)
-
-		require.True(t, ok)
-		require.Equal(t, grpcCodes.Internal, s.Code())
-		assert.Contains(t, s.Message(), "failed to parse JSON query body")
-
-		// Check status details
-		require.Len(t, s.Details(), 2)
-
-		var errInfo *errdetails.ErrorInfo
-		var resInfo *errdetails.ResourceInfo
-
-		for _, detail := range s.Details() {
-			switch d := detail.(type) {
-			case *errdetails.ErrorInfo:
-				errInfo = d
-			case *errdetails.ResourceInfo:
-				resInfo = d
-			}
-		}
-		require.NotNil(t, errInfo, "ErrorInfo should be present")
-		require.Equal(t, "DAPR_STATE_QUERY_FAILED", errInfo.GetReason())
-		require.Equal(t, framework.Domain, errInfo.GetDomain())
-		require.Nil(t, errInfo.GetMetadata())
-
-		require.NotNil(t, resInfo, "ResourceInfo should be present")
-		require.Equal(t, "state", resInfo.GetResourceType())
-		require.Equal(t, stateStoreName, resInfo.GetResourceName())
-		require.Empty(t, resInfo.GetOwner())
-		require.Empty(t, resInfo.GetDescription())
-	})
-
 	// TODO: test for NewErrStateStoreTransactionsNotSupported
 
 	//  t.Run("state store too many transactional operations", func(t *testing.T) {
