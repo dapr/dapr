@@ -293,19 +293,19 @@ func (b *binding) sendBindingEventToApp(ctx context.Context, bindingName string,
 			return nil, fmt.Errorf("error invoking app: %w", err)
 		}
 		if resp != nil {
-			if resp.Concurrency == runtimev1pb.BindingEventResponse_PARALLEL { //nolint:nosnakecase
+			if resp.GetConcurrency() == runtimev1pb.BindingEventResponse_PARALLEL { //nolint:nosnakecase
 				response.Concurrency = ConcurrencyParallel
 			} else {
 				response.Concurrency = ConcurrencySequential
 			}
 
-			response.To = resp.To
+			response.To = resp.GetTo()
 
-			if resp.Data != nil {
-				appResponseBody = resp.Data
+			if resp.GetData() != nil {
+				appResponseBody = resp.GetData()
 
 				var d interface{}
-				err := json.Unmarshal(resp.Data, &d)
+				err := json.Unmarshal(resp.GetData(), &d)
 				if err == nil {
 					response.Data = d
 				}
@@ -339,8 +339,8 @@ func (b *binding) sendBindingEventToApp(ctx context.Context, bindingName string,
 			if rErr != nil {
 				return rResp, rErr
 			}
-			if rResp != nil && rResp.Status().Code != http.StatusOK {
-				return rResp, fmt.Errorf("%w, status %d", respErr, rResp.Status().Code)
+			if rResp != nil && rResp.Status().GetCode() != http.StatusOK {
+				return rResp, fmt.Errorf("%w, status %d", respErr, rResp.Status().GetCode())
 			}
 			return rResp, nil
 		})
@@ -359,15 +359,15 @@ func (b *binding) sendBindingEventToApp(ctx context.Context, bindingName string,
 				http.MethodPost+" /"+bindingName,
 			)
 			diag.AddAttributesToSpan(span, m)
-			diag.UpdateSpanStatusFromHTTPStatus(span, int(resp.Status().Code))
+			diag.UpdateSpanStatusFromHTTPStatus(span, int(resp.Status().GetCode()))
 			span.End()
 		}
 
 		appResponseBody, err = resp.RawDataFull()
 
 		// ::TODO report metrics for http, such as grpc
-		if resp.Status().Code < 200 || resp.Status().Code > 299 {
-			return nil, fmt.Errorf("fails to send binding event to http app channel, status code: %d body: %s", resp.Status().Code, string(appResponseBody))
+		if code := resp.Status().GetCode(); code < 200 || code > 299 {
+			return nil, fmt.Errorf("fails to send binding event to http app channel, status code: %d body: %s", code, string(appResponseBody))
 		}
 
 		if err != nil {
@@ -414,7 +414,7 @@ func (b *binding) getSubscribedBindingsGRPC(ctx context.Context) ([]string, erro
 	bindings := []string{}
 
 	if err == nil && resp != nil {
-		bindings = resp.Bindings
+		bindings = resp.GetBindings()
 	}
 	return bindings, nil
 }
@@ -447,7 +447,7 @@ func (b *binding) isAppSubscribedToBinding(ctx context.Context, binding string) 
 			log.Fatalf("could not invoke OPTIONS method on input binding subscription endpoint %q: %v", path, err)
 		}
 		defer resp.Close()
-		code := resp.Status().Code
+		code := resp.Status().GetCode()
 
 		return code/100 == 2 || code == http.StatusMethodNotAllowed, nil
 	}

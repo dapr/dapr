@@ -17,7 +17,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strconv"
 	"testing"
 	"time"
 
@@ -53,7 +52,7 @@ func (m *mtls) Setup(t *testing.T) []framework.Option {
 	require.NoError(t, os.WriteFile(taFile, m.sentry.CABundle().TrustAnchors, 0o600))
 	m.place = placement.New(t,
 		placement.WithEnableTLS(true),
-		placement.WithSentryAddress("localhost:"+strconv.Itoa(m.sentry.Port())),
+		placement.WithSentryAddress(m.sentry.Address()),
 		placement.WithTrustAnchorsFile(taFile),
 	)
 
@@ -67,7 +66,7 @@ func (m *mtls) Run(t *testing.T, ctx context.Context) {
 	m.place.WaitUntilRunning(t, ctx)
 
 	secProv, err := security.New(ctx, security.Options{
-		SentryAddress:           "localhost:" + strconv.Itoa(m.sentry.Port()),
+		SentryAddress:           m.sentry.Address(),
 		ControlPlaneTrustDomain: "localhost",
 		ControlPlaneNamespace:   "default",
 		TrustAnchors:            m.sentry.CABundle().TrustAnchors,
@@ -90,7 +89,7 @@ func (m *mtls) Run(t *testing.T, ctx context.Context) {
 	placeID, err := spiffeid.FromSegments(sec.ControlPlaneTrustDomain(), "ns", "default", "dapr-placement")
 	require.NoError(t, err)
 
-	host := "localhost:" + strconv.Itoa(m.place.Port())
+	host := m.place.Address()
 
 	conn, err := grpc.DialContext(ctx, host, grpc.WithBlock(), sec.GRPCDialOptionMTLS(placeID))
 	require.NoError(t, err)
@@ -99,15 +98,15 @@ func (m *mtls) Run(t *testing.T, ctx context.Context) {
 
 	// Can only create hosts where the app ID match.
 	stream := establishStream(t, ctx, client)
-	assert.NoError(t, stream.Send(&v1pb.Host{
+	require.NoError(t, stream.Send(&v1pb.Host{
 		Id: "app-1",
 	}))
 	waitForUnlock(t, stream)
 	_, err = stream.Recv()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	stream = establishStream(t, ctx, client)
-	assert.NoError(t, stream.Send(&v1pb.Host{
+	require.NoError(t, stream.Send(&v1pb.Host{
 		Id: "app-2",
 	}))
 	waitForUnlock(t, stream)
@@ -120,8 +119,9 @@ func waitForUnlock(t *testing.T, stream v1pb.Placement_ReportDaprStatusClient) {
 	t.Helper()
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, err := stream.Recv()
+		//nolint:testifylint
 		if assert.NoError(c, err) {
-			assert.Equal(c, "unlock", resp.Operation)
+			assert.Equal(c, "unlock", resp.GetOperation())
 		}
 	}, time.Second*5, time.Millisecond*100)
 }
@@ -132,13 +132,16 @@ func establishStream(t *testing.T, ctx context.Context, client v1pb.PlacementCli
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		var err error
 		stream, err = client.ReportDaprStatus(ctx)
+		//nolint:testifylint
 		if !assert.NoError(c, err) {
 			return
 		}
+		//nolint:testifylint
 		if assert.NoError(c, stream.Send(&v1pb.Host{
 			Id: "app-1",
 		})) {
 			_, err = stream.Recv()
+			//nolint:testifylint
 			assert.NoError(c, err)
 		}
 	}, time.Second*5, time.Millisecond*100)

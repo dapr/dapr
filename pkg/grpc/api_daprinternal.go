@@ -68,7 +68,7 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 		statusCode = int32(codes.Internal)
 		return nil, status.Errorf(codes.Internal, messages.ErrChannelInvoke, err)
 	} else {
-		statusCode = res.Status().Code
+		statusCode = res.Status().GetCode()
 	}
 	defer res.Close()
 
@@ -90,30 +90,30 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 	if err != nil {
 		return err
 	}
-	if chunk.Request == nil || chunk.Request.Metadata == nil || chunk.Request.Message == nil {
+	if chunk.GetRequest().GetMetadata() == nil || chunk.GetRequest().GetMessage() == nil {
 		return status.Errorf(codes.InvalidArgument, messages.ErrInternalInvokeRequest, "request does not contain the required fields in the leading chunk")
 	}
 
 	// Append the invoked method to the context's metadata so we can use it for tracing
 	if md, ok := metadata.FromIncomingContext(stream.Context()); ok {
-		md[diagConsts.DaprCallLocalStreamMethodKey] = []string{chunk.Request.Message.Method}
+		md[diagConsts.DaprCallLocalStreamMethodKey] = []string{chunk.GetRequest().GetMessage().GetMethod()}
 	}
 
 	// Create the request object
 	// The "rawData" of the object will be a pipe to which content is added chunk-by-chunk
 	pr, pw := io.Pipe()
-	req, err := invokev1.InternalInvokeRequest(chunk.Request)
+	req, err := invokev1.InternalInvokeRequest(chunk.GetRequest())
 	if err != nil {
 		return status.Errorf(codes.InvalidArgument, messages.ErrInternalInvokeRequest, err.Error())
 	}
 	req.WithRawData(pr).
-		WithContentType(chunk.Request.Message.ContentType)
+		WithContentType(chunk.GetRequest().GetMessage().GetContentType())
 	defer req.Close()
 
 	// If the data has a type_url, set that in the object too
 	// This is necessary to support the gRPC->gRPC service invocation (legacy, non-proxy) path correctly
 	// (Note that GetTypeUrl could return an empty value, so this call becomes a no-op)
-	req.WithDataTypeURL(chunk.Request.Message.GetData().GetTypeUrl())
+	req.WithDataTypeURL(chunk.GetRequest().GetMessage().GetData().GetTypeUrl())
 
 	ctx, cancel := context.WithCancel(stream.Context())
 	defer cancel()
@@ -186,7 +186,7 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 				return
 			}
 
-			if chunk.Request != nil && (chunk.Request.Metadata != nil || chunk.Request.Message != nil) {
+			if chunk.GetRequest().GetMetadata() != nil || chunk.GetRequest().GetMessage() != nil {
 				pw.CloseWithError(errors.New("request metadata found in non-leading chunk"))
 				return
 			}
@@ -202,7 +202,7 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 		return status.Errorf(codes.Internal, messages.ErrChannelInvoke, err)
 	}
 	defer res.Close()
-	statusCode = res.Status().Code
+	statusCode = res.Status().GetCode()
 
 	// Respond to the caller
 	buf := invokev1.BufPool.Get().(*[]byte)
@@ -262,7 +262,7 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 		}
 
 		// Send the chunk if there's anything to send
-		if proto.Response != nil || proto.Payload != nil {
+		if proto.GetResponse() != nil || proto.GetPayload() != nil {
 			err = stream.SendMsg(proto)
 			if err != nil {
 				return fmt.Errorf("error sending message: %w", err)
@@ -315,7 +315,7 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 func (a *api) callLocalValidateACL(ctx context.Context, req *invokev1.InvokeMethodRequest) error {
 	if a.accessControlList != nil {
 		// An access control policy has been specified for the app. Apply the policies.
-		operation := req.Message().Method
+		operation := req.Message().GetMethod()
 		var httpVerb commonv1pb.HTTPExtension_Verb //nolint:nosnakecase
 		// Get the HTTP verb in case the application protocol is "http"
 		appProtocolIsHTTP := a.UniversalAPI.AppConnectionConfig.Protocol.IsHTTP()
@@ -345,9 +345,9 @@ func (a *api) callLocalValidateACL(ctx context.Context, req *invokev1.InvokeMeth
 // }()
 // ```
 func (a *api) callLocalRecordRequest(req *internalv1pb.InternalInvokeRequest) (callerAppID string) {
-	callerIDHeader, ok := req.Metadata[invokev1.CallerIDHeader]
-	if ok && len(callerIDHeader.Values) > 0 {
-		callerAppID = callerIDHeader.Values[0]
+	callerIDHeader, ok := req.GetMetadata()[invokev1.CallerIDHeader]
+	if ok && len(callerIDHeader.GetValues()) > 0 {
+		callerAppID = callerIDHeader.GetValues()[0]
 	} else {
 		callerAppID = "unknown"
 	}

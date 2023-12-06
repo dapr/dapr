@@ -174,7 +174,7 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 		require.NoError(t, err)
 		defer resp.Close()
 		assert.Equal(t, 1, called)
-		assert.Equal(t, int32(http.StatusOK), resp.Status().Code)
+		assert.Equal(t, int32(http.StatusOK), resp.Status().GetCode())
 	})
 
 	t.Run("request can be short-circuited by middleware pipeline", func(t *testing.T) {
@@ -207,7 +207,7 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 		require.NoError(t, err)
 		defer resp.Close()
 		assert.Equal(t, 1, called)
-		assert.Equal(t, int32(http.StatusBadGateway), resp.Status().Code)
+		assert.Equal(t, int32(http.StatusBadGateway), resp.Status().GetCode())
 	})
 
 	server.Close()
@@ -239,7 +239,7 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 		require.NoError(t, err)
 		defer resp.Close()
 		body, _ := resp.RawDataFull()
-		require.Equal(t, int32(http.StatusOK), resp.Status().Code)
+		require.Equal(t, int32(http.StatusOK), resp.Status().GetCode())
 		assert.Equal(t, "text/plain", resp.ContentType())
 		assert.Equal(t, "M'ILLUMINO D'IMMENSO", string(body))
 	})
@@ -271,7 +271,7 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 		require.NoError(t, err)
 		defer resp.Close()
 		body, _ := resp.RawDataFull()
-		require.Equal(t, int32(http.StatusOK), resp.Status().Code)
+		require.Equal(t, int32(http.StatusOK), resp.Status().GetCode())
 		assert.Equal(t, "text/plain", resp.ContentType())
 		assert.Equal(t, "true", string(body))
 	})
@@ -303,7 +303,7 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 		require.NoError(t, err)
 		defer resp.Close()
 		body, _ := resp.RawDataFull()
-		require.Equal(t, int32(http.StatusOK), resp.Status().Code)
+		require.Equal(t, int32(http.StatusOK), resp.Status().GetCode())
 		assert.Equal(t, "text/plain", resp.ContentType())
 		assert.Equal(t, "FALSE", string(body))
 	})
@@ -336,7 +336,7 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 		require.NoError(t, err)
 		defer resp.Close()
 		body, _ := resp.RawDataFull()
-		require.Equal(t, int32(http.StatusOK), resp.Status().Code)
+		require.Equal(t, int32(http.StatusOK), resp.Status().GetCode())
 		assert.Equal(t, "text/plain", resp.ContentType())
 		assert.Equal(t, "TRUE", string(body))
 	})
@@ -366,14 +366,14 @@ func TestInvokeMethodHeaders(t *testing.T) {
 		resp, err := c.InvokeMethod(ctx, fakeReq, "")
 
 		// assert
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		defer resp.Close()
 
 		headers := map[string][]string{}
 		err = json.NewDecoder(resp.RawData()).Decode(&headers)
 		require.NoError(t, err)
 		require.Len(t, headers["Content-Type"], 1)
-		assert.Equal(t, headers["Content-Type"][0], "test/dapr")
+		assert.Equal(t, "test/dapr", headers["Content-Type"][0])
 	})
 
 	t.Run("content-type is omitted when empty", func(t *testing.T) {
@@ -394,7 +394,7 @@ func TestInvokeMethodHeaders(t *testing.T) {
 		resp, err := c.InvokeMethod(ctx, fakeReq, "")
 
 		// assert
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		defer resp.Close()
 
 		headers := map[string][]string{}
@@ -428,7 +428,7 @@ func TestInvokeMethod(t *testing.T) {
 		resp, err := c.InvokeMethod(ctx, fakeReq, "")
 
 		// assert
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		defer resp.Close()
 		body, _ := resp.RawDataFull()
 		assert.Equal(t, "param1=val1&param2=val2", string(body))
@@ -452,7 +452,7 @@ func TestInvokeMethod(t *testing.T) {
 		resp, err := c.InvokeMethod(ctx, fakeReq, "")
 
 		// assert
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		defer resp.Close()
 		body, _ := resp.RawDataFull()
 		assert.Equal(t, "", string(body))
@@ -484,7 +484,7 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 					WithHTTPExtension("GET", "")
 				defer req.Close()
 				resp, err := c.InvokeMethod(ctx, req, "")
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				defer resp.Close()
 				wg.Done()
 			}()
@@ -519,7 +519,7 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 					WithHTTPExtension("GET", "")
 				defer req.Close()
 				resp, err := c.InvokeMethod(ctx, req, "")
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				defer resp.Close()
 				wg.Done()
 			}()
@@ -559,9 +559,9 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 				defer resp.Close()
 			}
 			if i < 10 {
-				assert.Error(t, err)
+				require.Error(t, err)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			}
 		}
 
@@ -592,14 +592,14 @@ func TestInvokeWithHeaders(t *testing.T) {
 	resp, err := c.InvokeMethod(ctx, req, "")
 
 	// assert
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	defer resp.Close()
 	body, _ := resp.RawDataFull()
 
 	actual := map[string]string{}
 	json.Unmarshal(body, &actual)
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Contains(t, "v1", actual["H1"])
 	assert.Contains(t, "v2", actual["H2"])
 	testServer.Close()
@@ -624,7 +624,7 @@ func TestContentType(t *testing.T) {
 		resp, err := c.InvokeMethod(ctx, req, "")
 
 		// assert
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		defer resp.Close()
 		body, _ := resp.RawDataFull()
 		assert.Equal(t, "", resp.ContentType())
@@ -649,7 +649,7 @@ func TestContentType(t *testing.T) {
 		resp, err := c.InvokeMethod(ctx, req, "")
 
 		// assert
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		defer resp.Close()
 		body, _ := resp.RawDataFull()
 		assert.Equal(t, "text/plain; charset=utf-8", resp.ContentType())
@@ -674,7 +674,7 @@ func TestContentType(t *testing.T) {
 		resp, err := c.InvokeMethod(ctx, req, "")
 
 		// assert
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		defer resp.Close()
 		body, _ := resp.RawDataFull()
 		assert.Equal(t, "text/plain; charset=utf-8", resp.ContentType())
@@ -704,13 +704,13 @@ func TestContentLength(t *testing.T) {
 	resp, err := c.InvokeMethod(ctx, req, "")
 
 	// assert
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	defer resp.Close()
 	body, _ := resp.RawDataFull()
 	actual := map[string]string{}
 	json.Unmarshal(body, &actual)
 	_, hasContentLength := actual["Content-Length"]
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, hasContentLength)
 	testServer.Close()
 }
@@ -734,7 +734,7 @@ func TestAppToken(t *testing.T) {
 		resp, err := c.InvokeMethod(ctx, req, "")
 
 		// assert
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		defer resp.Close()
 		body, _ := resp.RawDataFull()
 
@@ -742,7 +742,7 @@ func TestAppToken(t *testing.T) {
 		json.Unmarshal(body, &actual)
 
 		_, hasToken := actual["Dapr-Api-Token"]
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.True(t, hasToken)
 		testServer.Close()
 	})
@@ -764,7 +764,7 @@ func TestAppToken(t *testing.T) {
 		resp, err := c.InvokeMethod(ctx, req, "")
 
 		// assert
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		defer resp.Close()
 		body, _ := resp.RawDataFull()
 
@@ -772,7 +772,7 @@ func TestAppToken(t *testing.T) {
 		json.Unmarshal(body, &actual)
 
 		_, hasToken := actual["Dapr-Api-Token"]
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.False(t, hasToken)
 		testServer.Close()
 	})
@@ -795,19 +795,19 @@ func TestHealthProbe(t *testing.T) {
 
 	// OK response
 	success, err = c.HealthProbe(ctx)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, success)
 
 	// Non-2xx status code
 	h.Code = 500
 	success, err = c.HealthProbe(ctx)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, success)
 
 	// Stopped server
 	// Should still return no error, but a failed probe
 	testServer.Close()
 	success, err = c.HealthProbe(ctx)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, success)
 }
