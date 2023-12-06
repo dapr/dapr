@@ -65,7 +65,7 @@ func (e *disable) Setup(t *testing.T) []framework.Option {
 		placement.WithSentryAddress(e.sentry.Address()),
 	)
 
-	e.operator = newOperator(t, bundle.TrustAnchors, e.sentry.Address())
+	e.operator = operator.New(t, operator.WithSentry(e.sentry))
 
 	e.daprd = procdaprd.New(t,
 		procdaprd.WithAppID("my-app"),

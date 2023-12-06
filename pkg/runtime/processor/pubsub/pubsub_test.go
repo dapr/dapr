@@ -297,8 +297,7 @@ func TestInitPubSub(t *testing.T) {
 
 		// act
 		for _, comp := range pubsubComponents {
-			err := ps.Init(context.Background(), comp)
-			assert.NoError(t, err)
+			require.NoError(t, ps.Init(context.Background(), comp))
 		}
 
 		// assert

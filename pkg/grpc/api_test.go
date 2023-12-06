@@ -170,12 +170,6 @@ func (m *mockGRPCAPI) CallLocalStream(stream internalv1pb.ServiceInvocation_Call
 	if err != nil {
 		return err
 	}
-<<<<<<< HEAD
-=======
-	if pd.GetMessage() != nil && pd.GetMessage().GetData() != nil {
-		data = pd.GetMessage().GetData().GetValue()
-	}
->>>>>>> 8ff270d9a (Lint code)
 
 	stream.Send(&internalv1pb.InternalInvokeResponseStream{
 		Response: resp.Proto(),
