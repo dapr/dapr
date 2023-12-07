@@ -55,6 +55,7 @@ const (
 	EndpointGroupSubtleCrypto      EndpointGroupName = "subtlecrypto"
 	EndpointGroupWorkflow          EndpointGroupName = "workflows"
 	EndpointGroupHealth            EndpointGroupName = "healthz"
+	EndpointGroupScheduler         EndpointGroupName = "scheduler"
 	EndpointGroupShutdown          EndpointGroupName = "shutdown"
 )
 
