@@ -321,6 +321,17 @@ func (ss *grpcStateStore) Multi(ctx context.Context, request *state.Transactiona
 	return err
 }
 
+// MultiMaxSize returns the maximum number of operations allowed in a transactional request.
+func (ss *grpcStateStore) MultiMaxSize() int {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	resp, err := ss.Client.MultiMaxSize(ctx, new(proto.MultiMaxSizeRequest))
+	if err != nil {
+		return -1
+	}
+	return int(resp.GetMaxSize())
+}
+
 // mappers and helpers.
 //
 //nolint:nosnakecase
@@ -526,6 +537,7 @@ type stateStoreClient struct {
 	proto.StateStoreClient
 	proto.TransactionalStateStoreClient
 	proto.QueriableStateStoreClient
+	proto.TransactionalStoreMultiMaxSizeClient
 }
 
 // strNilIfEmpty returns nil if string is empty
@@ -547,9 +559,10 @@ func strValueIfNotNil(str *string) string {
 // newStateStoreClient creates a new stateStore client instance.
 func newStateStoreClient(cc grpc.ClientConnInterface) stateStoreClient {
 	return stateStoreClient{
-		StateStoreClient:              proto.NewStateStoreClient(cc),
-		TransactionalStateStoreClient: proto.NewTransactionalStateStoreClient(cc),
-		QueriableStateStoreClient:     proto.NewQueriableStateStoreClient(cc),
+		StateStoreClient:                     proto.NewStateStoreClient(cc),
+		TransactionalStateStoreClient:        proto.NewTransactionalStateStoreClient(cc),
+		QueriableStateStoreClient:            proto.NewQueriableStateStoreClient(cc),
+		TransactionalStoreMultiMaxSizeClient: proto.NewTransactionalStoreMultiMaxSizeClient(cc),
 	}
 }
 

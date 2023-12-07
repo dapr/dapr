@@ -102,8 +102,10 @@ func (c *component) Query(ctx context.Context, req *compv1pb.QueryRequest) (*com
 	return nil, err
 }
 
-func (c *component) MultiMaxSize() int {
-	return c.impl.(state.TransactionalStoreMultiMaxSize).MultiMaxSize()
+func (c *component) MultiMaxSize(context.Context, *compv1pb.MultiMaxSizeRequest) (*compv1pb.MultiMaxSizeResponse, error) {
+	return &compv1pb.MultiMaxSizeResponse{
+		MaxSize: int64(c.impl.(state.TransactionalStoreMultiMaxSize).MultiMaxSize()),
+	}, nil
 }
 
 func (c *component) BulkSet(ctx context.Context, req *compv1pb.BulkSetRequest) (*compv1pb.BulkSetResponse, error) {

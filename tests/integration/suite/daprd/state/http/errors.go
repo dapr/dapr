@@ -17,13 +17,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	apierrors "github.com/dapr/dapr/pkg/api/errors"
 
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -45,7 +46,6 @@ type errors struct {
 	daprd *procdaprd.Daprd
 
 	queryErr func(*testing.T) error
-	// tooManyTransactionalOpsErr func(*testing.T) error
 }
 
 func (e *errors) Setup(t *testing.T) []framework.Option {

@@ -3,6 +3,7 @@ Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
+
     http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -52,8 +53,7 @@ func init() {
 type errors struct {
 	daprd *procdaprd.Daprd
 
-	queryErr                   func(*testing.T) error
-	tooManyTransactionalOpsErr func(*testing.T) error
+	queryErr func(*testing.T) error
 }
 
 func (e *errors) Setup(t *testing.T) []framework.Option {
@@ -340,17 +340,6 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("state store too many transactional operations", func(t *testing.T) {
 		stateStoreName := "mystore-pluggable-multimaxsize"
-		t.Cleanup(func() {
-			e.tooManyTransactionalOpsErr = func(t *testing.T) error {
-				require.FailNow(t, "too many transactional operations")
-				return nil
-			}
-		})
-
-		//e.tooManyTransactionalOpsErr = func(*testing.T) error {
-		//	return apierrors.StateStoreTooManyTransactionalOps(2, 1)
-		//}
-
 		ops := make([]*rtv1.TransactionalStateOperation, 0)
 		ops = append(ops, &rtv1.TransactionalStateOperation{
 			OperationType: "upsert",
@@ -379,11 +368,13 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, fmt.Sprintf("the transaction contains %d operations, which is more than what the state store supports: %d", 2, 1), s.Message())
 
 		//Check status details
-		require.Equal(t, 1, len(s.Details()))
+		require.Equal(t, 2, len(s.Details()))
 		errInfo := s.Details()[0]
 		require.IsType(t, &errdetails.ErrorInfo{}, errInfo)
-		require.Equal(t, "DAPR_STATE_QUERY_FAILED", errInfo.(*errdetails.ErrorInfo).GetReason())
+		require.Equal(t, "DAPR_STATE_TOO_MANY_TRANSACTIONS", errInfo.(*errdetails.ErrorInfo).GetReason())
 		require.Equal(t, framework.Domain, errInfo.(*errdetails.ErrorInfo).GetDomain())
-		require.Nil(t, errInfo.(*errdetails.ErrorInfo).GetMetadata())
+		require.Equal(t, map[string]string{
+			"currentOpsTransaction": "2", "maxOpsPerTransaction": "1",
+		}, errInfo.(*errdetails.ErrorInfo).GetMetadata())
 	})
 }

@@ -83,6 +83,7 @@ func (s *StateStore) Run(t *testing.T, ctx context.Context) {
 	compv1pb.RegisterStateStoreServer(server, s.component)
 	compv1pb.RegisterTransactionalStateStoreServer(server, s.component)
 	compv1pb.RegisterQueriableStateStoreServer(server, s.component)
+	compv1pb.RegisterTransactionalStoreMultiMaxSizeServer(server, s.component)
 	reflection.Register(server)
 
 	go func() {
