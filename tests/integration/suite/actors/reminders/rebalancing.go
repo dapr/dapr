@@ -406,14 +406,20 @@ func (i *rebalancing) reportStatusToPlacement(ctx context.Context, stream placem
 
 	errCh := make(chan error)
 	go func() {
+		var sent bool
 		for {
+			// When the stream ends (which happens when the context is canceled) this returns an error and we can return
 			o, rerr := stream.Recv()
 			if rerr != nil {
-				errCh <- fmt.Errorf("error from placement: %w", rerr)
-			}
-			if o.GetOperation() == "update" {
-				errCh <- nil
+				if !sent {
+					errCh <- fmt.Errorf("error from placement: %w", rerr)
+					sent = true
+				}
 				return
+			}
+			if o.GetOperation() == "update" && !sent {
+				errCh <- nil
+				sent = true
 			}
 		}
 	}()
