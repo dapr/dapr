@@ -110,8 +110,6 @@ func (wf *workflowActor) InvokeMethod(ctx context.Context, actorID string, metho
 	return result, err
 }
 
-// NOTE: InvokeReminder actually runs the reminder.
-
 // InvokeReminder implements actors.InternalActor
 func (wf *workflowActor) InvokeReminder(ctx context.Context, actorID string, reminderName string, data []byte, dueTime string, period string) error {
 	wfLogger.Debugf("invoking reminder '%s' on workflow actor '%s'", reminderName, actorID)
@@ -119,7 +117,6 @@ func (wf *workflowActor) InvokeReminder(ctx context.Context, actorID string, rem
 	// Workflow executions should never take longer than a few seconds at the most
 	timeoutCtx, cancelTimeout := context.WithTimeout(ctx, wf.defaultTimeout)
 	defer cancelTimeout()
-	// NOTE: Here the workflow starts executing.
 	err := wf.runWorkflow(timeoutCtx, actorID, reminderName, data)
 	if err != nil {
 		var re recoverableError
@@ -159,7 +156,6 @@ func (wf *workflowActor) DeactivateActor(ctx context.Context, actorID string) er
 	return nil
 }
 
-// NOTE: A workflow Instance is made here, check if it failed or not.
 func (wf *workflowActor) createWorkflowInstance(ctx context.Context, actorID string, startEventBytes []byte) error {
 	// create a new state entry if one doesn't already exist
 	state, err := wf.loadInternalState(ctx, actorID)
@@ -210,7 +206,6 @@ func (wf *workflowActor) createWorkflowInstance(ctx context.Context, actorID str
 	return wf.saveInternalState(ctx, actorID, state)
 }
 
-// NOTE: This makes request to get the workflow
 func (wf *workflowActor) getWorkflowMetadata(ctx context.Context, actorID string) (*api.OrchestrationMetadata, error) {
 	state, err := wf.loadInternalState(ctx, actorID)
 	if err != nil {
@@ -396,28 +391,26 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
 			// Workflow execution scheduling request failed with recoverable error, record metrics.
-			diag.DefaultWorkflowMonitoring.ExecutionCount(ctx, diag.Workflow, diag.StatusRetryable)
+			diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, diag.Workflow, diag.StatusRetryable, 0)
 			return newRecoverableError(fmt.Errorf("timed-out trying to schedule a workflow execution - this can happen if there are too many in-flight workflows or if the workflow engine isn't running: %w", err))
 		}
-		// Workflow execution scheduling request failed with recoverable error, record metrics.
-		diag.DefaultWorkflowMonitoring.ExecutionCount(ctx, diag.Workflow, diag.StatusRetryable)
 		return newRecoverableError(fmt.Errorf("failed to schedule a workflow execution: %w", err))
 	}
 
 	select {
 	case <-ctx.Done(): // caller is responsible for timeout management
 		// Workflow execution failed with non-recoverable error, record metrics.
-		diag.DefaultWorkflowMonitoring.ExecutionCount(ctx, diag.Workflow, diag.StatusFailed)
+		diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, diag.Workflow, diag.StatusFailed, 0)
 		return ctx.Err()
 	case completed := <-callback:
 		if !completed {
 			// Workflow execution failed with Recoverable Error, record metrics
-			diag.DefaultWorkflowMonitoring.ExecutionCount(ctx, diag.Workflow, diag.StatusRetryable)
+			diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, diag.Workflow, diag.StatusRetryable, 0)
 
 			return newRecoverableError(errExecutionAborted)
 		}
 		// workflow execution completed, record metrics
-		diag.DefaultWorkflowMonitoring.ExecutionCount(ctx, diag.Workflow, diag.StatusSuccess)
+		diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, diag.Workflow, diag.StatusSuccess, 0)
 	}
 
 	// Increment the generation counter if the workflow used continue-as-new. Subsequent actions below
@@ -530,8 +523,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 
 	// record time taken to complete the workflow
 	elapsed := diag.ElapsedSince(start)
-	diag.DefaultWorkflowMonitoring.ExecutionLatency(ctx, diag.Workflow, diag.StatusSuccess, elapsed)
-	diag.DefaultWorkflowMonitoring.ExecutionCount(ctx, diag.Workflow, diag.StatusSuccess)
+	diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, diag.Workflow, diag.StatusSuccess, elapsed)
 	state.ApplyRuntimeStateChanges(runtimeState)
 	state.ClearInbox()
 

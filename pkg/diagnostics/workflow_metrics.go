@@ -50,7 +50,7 @@ type workflowMetrics struct {
 	// Workflow operation request's Response latency
 	workflowOperationsLatency *stats.Float64Measure
 	// Total workflow/activity reminders created
-	workflowRemindersTotal *stats.Int64Measure
+	workflowRemindersCount *stats.Int64Measure
 	// Total successful/failed workflow/activity executions
 	workflowExecutionCount *stats.Int64Measure
 	// Time taken to run a workflow to completion
@@ -72,7 +72,7 @@ func newWorkflowMetrics() *workflowMetrics {
 			"runtime/workflow/operations/latency",
 			"The latencies of responses for workflow operation requests.",
 			stats.UnitMilliseconds),
-		workflowRemindersTotal: stats.Int64(
+		workflowRemindersCount: stats.Int64(
 			"runtime/workflows/reminders/total",
 			"The number of workflows/activity reminders created.",
 			stats.UnitDimensionless),
@@ -102,27 +102,38 @@ func (w *workflowMetrics) Init(appID string) error {
 
 	return view.Register(
 		diagUtils.NewMeasureView(w.workflowOperationsCount, []tag.Key{appIDKey, operationKey, statusKey}, view.Count()),
-		diagUtils.NewMeasureView(w.workflowOperationsLatency, []tag.Key{appIDKey}, defaultLatencyDistribution),
-		diagUtils.NewMeasureView(w.workflowRemindersTotal, []tag.Key{appIDKey, reminderTypeKey}, view.Count()),
+		diagUtils.NewMeasureView(w.workflowOperationsLatency, []tag.Key{appIDKey, operationKey, statusKey}, defaultLatencyDistribution),
+		diagUtils.NewMeasureView(w.workflowRemindersCount, []tag.Key{appIDKey, reminderTypeKey}, view.Count()),
 		diagUtils.NewMeasureView(w.workflowExecutionCount, []tag.Key{appIDKey, executionTypeKey, statusKey}, view.Count()),
 		diagUtils.NewMeasureView(w.workflowExecutionLatency, []tag.Key{appIDKey, executionTypeKey, statusKey}, defaultLatencyDistribution),
 		diagUtils.NewMeasureView(w.workflowSchedulingLatency, []tag.Key{appIDKey, executionTypeKey}, defaultLatencyDistribution))
 }
 
-func (w *workflowMetrics) WorkflowOperationsLatency(ctx context.Context, operation, status string, elapsed float64) {
+// WorkflowOperationsEvent records total number of Successful/Failed workflow Operations requests. It also records latency for those requests.
+func (w *workflowMetrics) WorkflowOperationsEvent(ctx context.Context, operation, status string, elapsed float64) {
 	if !w.IsEnabled() {
 		return
 	}
 
-	stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowOperationsLatency.Name(), appIDKey, w.appID, operationKey, operation, statusKey, status), w.workflowOperationsLatency.M(elapsed))
+	stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowOperationsCount.Name(), appIDKey, w.appID, operationKey, operation, statusKey, status), w.workflowOperationsCount.M(1))
+
+	if elapsed > 0 {
+		stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowOperationsLatency.Name(), appIDKey, w.appID, operationKey, operation, statusKey, status), w.workflowOperationsLatency.M(elapsed))
+	}
+
 }
 
-func (w *workflowMetrics) ExecutionLatency(ctx context.Context, executionType, status string, elapsed float64) {
+// ExecutionEvent records total number of successful/failed workflow/activity executions. It also records latency for executions.
+func (w *workflowMetrics) ExecutionEvent(ctx context.Context, executionType, status string, elapsed float64) {
 	if !w.IsEnabled() {
 		return
 	}
 
-	stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowExecutionLatency.Name(), appIDKey, w.appID, executionTypeKey, executionType, statusKey, status), w.workflowExecutionLatency.M(elapsed))
+	stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowExecutionCount.Name(), appIDKey, w.appID, executionTypeKey, executionType, statusKey, status))
+
+	if elapsed > 0 {
+		stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowExecutionLatency.Name(), appIDKey, w.appID, executionTypeKey, executionType, statusKey, status), w.workflowExecutionLatency.M(elapsed))
+	}
 }
 
 // RemindersTotalCreated records total number of Workflow and Activity reminders created.
@@ -130,27 +141,5 @@ func (w *workflowMetrics) RemindersTotalCreated(ctx context.Context, reminderTyp
 	if !w.IsEnabled() {
 		return
 	}
-	// [Question] Why are we ignoring errors in recording metrics ?
-	stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowRemindersTotal.Name(), appIDKey, w.appID, reminderTypeKey, reminderType), w.workflowRemindersTotal.M(1))
+	stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowRemindersCount.Name(), appIDKey, w.appID, reminderTypeKey, reminderType), w.workflowRemindersCount.M(1))
 }
-
-// ExecutionCompleted records total number of successful/failed workflow/activity executions.
-func (w *workflowMetrics) ExecutionCount(ctx context.Context, executionType, status string) {
-	if !w.IsEnabled() {
-		return
-	}
-
-	stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowExecutionCount.Name(), appIDKey, w.appID, executionTypeKey, executionType, statusKey, status))
-}
-
-// WorkflowOperationsCount records total number of Successful/Failed workflow Operations requests.
-func (w *workflowMetrics) WorkflowOperationsCount(ctx context.Context, operation, status string) {
-	if !w.IsEnabled() {
-		return
-	}
-
-	stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowOperationsCount.Name(), appIDKey, w.appID, operationKey, operation, statusKey, status), w.workflowOperationsCount.M(1))
-
-}
-
-// TODO: Implementing logic to record latencies.
