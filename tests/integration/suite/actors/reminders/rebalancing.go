@@ -413,7 +413,6 @@ func (i *rebalancing) reportStatusToPlacement(ctx context.Context, stream placem
 			if rerr != nil {
 				if !sent {
 					errCh <- fmt.Errorf("error from placement: %w", rerr)
-					sent = true
 				}
 				return
 			}
