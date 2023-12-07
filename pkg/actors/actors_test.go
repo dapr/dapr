@@ -895,7 +895,7 @@ func TestTransactionalState(t *testing.T) {
 		testActorsRuntime := newTestActorsRuntime()
 		defer testActorsRuntime.Close()
 
-		store, err := testActorsRuntime.stateStore()
+		_, store, err := testActorsRuntime.stateStore()
 		require.NoError(t, err)
 		fakeStore, ok := store.(*daprt.FakeStateStore)
 		require.True(t, ok)
@@ -1478,8 +1478,8 @@ func TestPlacementSwitchIsNotTurnedOn(t *testing.T) {
 	testActorsRuntime := newTestActorsRuntimeWithoutPlacement()
 	defer testActorsRuntime.Close()
 
-	t.Run("placement is empty", func(t *testing.T) {
-		assert.Nil(t, testActorsRuntime.placement)
+	t.Run("placement is not enabled", func(t *testing.T) {
+		assert.False(t, testActorsRuntime.placementEnabled)
 	})
 
 	t.Run("the actor store can not be initialized normally", func(t *testing.T) {
