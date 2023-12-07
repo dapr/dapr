@@ -71,30 +71,6 @@ func NewWorkflowEngine(appID string, spec config.WorkflowSpec) *WorkflowEngine {
 	return engine
 }
 
-// TODO: move this to its own file
-type BackendFactory func(appId string, wfe *WorkflowEngine) backend.Backend
-
-var backendFactories = map[string]BackendFactory{
-	"workflow.backend.actor": func(appId string, wfe *WorkflowEngine) backend.Backend {
-		wfe.BackendType = "workflow.backend.actor"
-		return NewActorBackend(appId, wfe)
-	},
-	"workflow.backend.sqlite": func(appId string, wfe *WorkflowEngine) backend.Backend {
-		wfe.BackendType = "workflow.backend.sqlite"
-		return sqlite.NewSqliteBackend(sqlite.NewSqliteOptions("workflow.db"), wfBackendLogger)
-	},
-}
-
-func InitilizeWorkflowBackend(appId string, backendType string, wfe *WorkflowEngine) backend.Backend {
-	if factory, ok := backendFactories[backendType]; ok {
-		return factory(appId, wfe)
-	}
-
-	// Default backend
-	wfe.BackendType = "workflow.backend.actor"
-	return NewActorBackend(appId, wfe)
-}
-
 func (wfe *WorkflowEngine) RegisterGrpcServer(grpcServer *grpc.Server) {
 	wfe.registerGrpcServerFn(grpcServer)
 }
