@@ -68,7 +68,7 @@ func StateStoreTransactionsNotSupported(storeName string) *kitErrors.Error {
 		WithHelpLink("https://docs.dapr.io/reference/components-reference/supported-state-stores/", "Check the list of state stores and the features they support")
 }
 
-func StateStoreTooManyTransactionalOps(count int, max int) *kitErrors.Error {
+func StateStoreTooManyTransactionalOps(storeName string, count int, max int) *kitErrors.Error {
 	return kitErrors.New(
 		grpcCodes.InvalidArgument,
 		http.StatusBadRequest,
@@ -79,7 +79,7 @@ func StateStoreTooManyTransactionalOps(count int, max int) *kitErrors.Error {
 			"currentOpsTransaction": strconv.Itoa(count),
 			"maxOpsPerTransaction":  strconv.Itoa(max),
 		}).
-		WithResourceInfo("state", "", "", "")
+		WithResourceInfo("state", storeName, "", "")
 }
 
 /**** Query API ****/

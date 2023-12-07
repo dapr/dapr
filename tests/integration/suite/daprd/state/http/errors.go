@@ -364,7 +364,6 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the ResourceInfo details are correct
 		require.Equal(t, "state", resInfo["resource_type"])
 		require.Equal(t, storeName, resInfo["resource_name"])
-
 	})
 
 	t.Run("state store query failed", func(t *testing.T) {
@@ -437,4 +436,72 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, storeName, resInfo["resource_name"])
 	})
 
+	t.Run("state store too many transactional operations", func(t *testing.T) {
+		storeName := "mystore-pluggable-multimaxsize"
+
+		endpoint := fmt.Sprintf("http://localhost:%d/v1.0/state/%s/transaction", e.daprd.HTTPPort(), storeName)
+		payload := `{"operations": [{"operation": "upsert","request": {"key": "key1","value": "val1"}},{"operation": "delete","request": {"key": "key2"}}],"metadata": {"partitionKey": "key2"}}`
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(payload))
+		require.NoError(t, err)
+
+		resp, err := httpClient.Do(req)
+		require.NoError(t, err)
+		require.Equal(t, "application/json", resp.Header.Get("Content-Type"))
+		require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+
+		var data map[string]interface{}
+		err = json.Unmarshal([]byte(string(body)), &data)
+		require.NoError(t, err)
+
+		// Confirm that the 'errorCode' field exists and contains the correct error code
+		errCode, exists := data["errorCode"]
+		require.True(t, exists)
+		require.Equal(t, "ERR_STATE_STORE_TOO_MANY_TRANSACTIONS", errCode)
+
+		// Confirm that the 'message' field exists and contains the correct error message
+		errMsg, exists := data["message"]
+		require.True(t, exists)
+		require.Contains(t, errMsg, fmt.Sprintf("the transaction contains %d operations, which is more than what the state store supports: %d", 2, 1))
+
+		// Confirm that the 'details' field exists and has two elements
+		details, exists := data["details"]
+		require.True(t, exists)
+
+		detailsArray, ok := details.([]interface{})
+		require.True(t, ok)
+		require.Len(t, detailsArray, 2)
+
+		// Parse the json into go objects
+		var errInfo map[string]interface{}
+		var resInfo map[string]interface{}
+
+		for _, detail := range detailsArray {
+			d, ok := detail.(map[string]interface{})
+			require.True(t, ok)
+			switch d["@type"] {
+			case "type.googleapis.com/google.rpc.ErrorInfo":
+				errInfo = d
+			case "type.googleapis.com/google.rpc.ResourceInfo":
+				resInfo = d
+			default:
+				require.FailNow(t, "unexpected status detail")
+			}
+		}
+
+		// Confirm that the ErrorInfo details are correct
+		require.Equal(t, framework.Domain, errInfo["domain"])
+		require.Equal(t, "DAPR_STATE_TOO_MANY_TRANSACTIONS", errInfo["reason"])
+		require.Equal(t, map[string]interface{}{
+			"currentOpsTransaction": "2", "maxOpsPerTransaction": "1",
+		}, errInfo["metadata"])
+
+		// Confirm that the ResourceInfo details are correct
+		require.Equal(t, "state", resInfo["resource_type"])
+		require.Equal(t, storeName, resInfo["resource_name"])
+	})
 }

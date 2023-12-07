@@ -190,6 +190,8 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 				resInfo = d
 			case *errdetails.BadRequest:
 				badRequest = d
+			default:
+				require.FailNow(t, "unexpected status detail")
 			}
 		}
 		require.NotNil(t, errInfo, "ErrorInfo should be present")
@@ -268,6 +270,8 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 				errInfo = d
 			case *errdetails.ResourceInfo:
 				resInfo = d
+			default:
+				require.FailNow(t, "unexpected status detail")
 			}
 		}
 		require.NotNil(t, errInfo, "ErrorInfo should be present")
@@ -322,6 +326,8 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 				errInfo = d
 			case *errdetails.ResourceInfo:
 				resInfo = d
+			default:
+				require.FailNow(t, "unexpected status detail")
 			}
 		}
 		require.NotNil(t, errInfo, "ErrorInfo should be present")
@@ -347,13 +353,13 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 				Key:   "key1",
 				Value: []byte("val1"),
 			},
-		})
-		ops = append(ops, &rtv1.TransactionalStateOperation{
-			OperationType: "delete",
-			Request: &commonv1.StateItem{
-				Key: "key2",
-			},
-		})
+		},
+			&rtv1.TransactionalStateOperation{
+				OperationType: "delete",
+				Request: &commonv1.StateItem{
+					Key: "key2",
+				},
+			})
 		req := &rtv1.ExecuteStateTransactionRequest{
 			StoreName:  stateStoreName,
 			Operations: ops,
@@ -367,14 +373,33 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, grpcCodes.InvalidArgument, s.Code())
 		assert.Equal(t, fmt.Sprintf("the transaction contains %d operations, which is more than what the state store supports: %d", 2, 1), s.Message())
 
-		//Check status details
-		require.Equal(t, 2, len(s.Details()))
-		errInfo := s.Details()[0]
-		require.IsType(t, &errdetails.ErrorInfo{}, errInfo)
-		require.Equal(t, "DAPR_STATE_TOO_MANY_TRANSACTIONS", errInfo.(*errdetails.ErrorInfo).GetReason())
-		require.Equal(t, framework.Domain, errInfo.(*errdetails.ErrorInfo).GetDomain())
+		// Check status details
+		require.Len(t, s.Details(), 2)
+
+		var errInfo *errdetails.ErrorInfo
+		var resInfo *errdetails.ResourceInfo
+
+		for _, detail := range s.Details() {
+			switch d := detail.(type) {
+			case *errdetails.ErrorInfo:
+				errInfo = d
+			case *errdetails.ResourceInfo:
+				resInfo = d
+			default:
+				require.FailNow(t, "unexpected status detail")
+			}
+		}
+		require.NotNil(t, errInfo, "ErrorInfo should be present")
+		require.Equal(t, "DAPR_STATE_TOO_MANY_TRANSACTIONS", errInfo.GetReason())
+		require.Equal(t, framework.Domain, errInfo.GetDomain())
 		require.Equal(t, map[string]string{
 			"currentOpsTransaction": "2", "maxOpsPerTransaction": "1",
-		}, errInfo.(*errdetails.ErrorInfo).GetMetadata())
+		}, errInfo.GetMetadata())
+
+		require.NotNil(t, resInfo, "ResourceInfo should be present")
+		require.Equal(t, "state", resInfo.GetResourceType())
+		require.Equal(t, stateStoreName, resInfo.GetResourceName())
+		require.Empty(t, resInfo.GetOwner())
+		require.Empty(t, resInfo.GetDescription())
 	})
 }
