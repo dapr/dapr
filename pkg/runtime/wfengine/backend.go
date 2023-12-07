@@ -19,6 +19,8 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/microsoft/durabletask-go/api"
 	"github.com/microsoft/durabletask-go/backend"
@@ -60,22 +62,31 @@ type actorBackend struct {
 	config                    actorsBackendConfig
 	workflowActor             *workflowActor
 	activityActor             *activityActor
+
+	actorRuntime  actors.ActorRuntime
+	actorsReady   atomic.Bool
+	actorsReadyCh chan struct{}
 }
 
-func NewActorBackend(appID string) *actorBackend {
+func NewActorBackend(appID string, wfengine *WorkflowEngine) *actorBackend {
 	backendConfig := NewActorsBackendConfig(appID)
 
 	// These channels are used by actors to call into this backend object
 	orchestrationWorkItemChan := make(chan *backend.OrchestrationWorkItem)
 	activityWorkItemChan := make(chan *backend.ActivityWorkItem)
 
-	return &actorBackend{
+	abe := &actorBackend{
 		orchestrationWorkItemChan: orchestrationWorkItemChan,
 		activityWorkItemChan:      activityWorkItemChan,
 		config:                    backendConfig,
 		workflowActor:             NewWorkflowActor(getWorkflowScheduler(orchestrationWorkItemChan), backendConfig),
 		activityActor:             NewActivityActor(getActivityScheduler(activityWorkItemChan), backendConfig),
+		actorsReadyCh:             make(chan struct{}),
 	}
+
+	wfengine.actorBackend = abe
+
+	return abe
 }
 
 // getWorkflowScheduler returns a workflowScheduler func that sends an orchestration work item to the Durable Task Framework.
@@ -116,8 +127,25 @@ func (be *actorBackend) GetInternalActorsMap() map[string]actors.InternalActor {
 	return internalActors
 }
 
-func (be *actorBackend) SetActorRuntime(actors actors.Actors) {
-	be.actors = actors
+func (be *actorBackend) SetActorRuntime(actorRuntime actors.ActorRuntime, ctx context.Context) error {
+	if actorRuntime == nil {
+		return errors.New("actor runtime is not configured")
+	}
+
+	be.actors = actorRuntime
+
+	if be.actorsReady.CompareAndSwap(false, true) {
+		close(be.actorsReadyCh)
+	}
+
+	for actorType, actor := range be.GetInternalActorsMap() {
+		err := actorRuntime.RegisterInternalActor(ctx, actorType, actor, time.Minute*1)
+		if err != nil {
+			return fmt.Errorf("failed to register workflow actor %s: %w", actorType, err)
+		}
+	}
+
+	return nil
 }
 
 // CreateOrchestrationInstance implements backend.Backend and creates a new workflow instance.
@@ -329,4 +357,45 @@ func (be *actorBackend) validateConfiguration() error {
 		return errors.New("actor runtime has not been configured")
 	}
 	return nil
+}
+
+// WaitForActorsReady blocks until the actor runtime is set in the object (or until the context is canceled).
+func (be *actorBackend) WaitForActorsReady(ctx context.Context) {
+	select {
+	case <-ctx.Done():
+		// No-op
+	case <-be.actorsReadyCh:
+		// No-op
+	}
+}
+
+// DisableActorCaching turns off the default caching done by the workflow and activity actors.
+// This method is primarily intended to be used for testing to ensure correct behavior
+// when actors are newly activated on nodes, but without requiring the actor to actually
+// go through activation.
+func (be *actorBackend) DisableActorCaching(disable bool) {
+	be.workflowActor.cachingDisabled = disable
+	be.activityActor.cachingDisabled = disable
+}
+
+// SetWorkflowTimeout allows configuring a default timeout for workflow execution steps.
+// If the timeout is exceeded, the workflow execution step will be abandoned and retried.
+// Note that this timeout is for a non-blocking step in the workflow (which is expected
+// to always complete almost immediately) and not for the end-to-end workflow execution.
+func (be *actorBackend) SetWorkflowTimeout(timeout time.Duration) {
+	be.workflowActor.defaultTimeout = timeout
+}
+
+// SetActivityTimeout allows configuring a default timeout for activity executions.
+// If the timeout is exceeded, the activity execution will be abandoned and retried.
+func (be *actorBackend) SetActivityTimeout(timeout time.Duration) {
+	be.activityActor.defaultTimeout = timeout
+}
+
+// SetActorReminderInterval sets the amount of delay between internal retries for
+// workflow and activity actors. This impacts how long it takes for an operation to
+// restart itself after a timeout or a process failure is encountered while running.
+func (be *actorBackend) SetActorReminderInterval(interval time.Duration) {
+	be.workflowActor.reminderInterval = interval
+	be.activityActor.reminderInterval = interval
 }

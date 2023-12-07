@@ -19,10 +19,9 @@ import (
 	"errors"
 	"fmt"
 	"sync"
-	"sync/atomic"
-	"time"
 
 	"github.com/microsoft/durabletask-go/backend"
+	"github.com/microsoft/durabletask-go/backend/sqlite"
 	"google.golang.org/grpc"
 
 	"github.com/dapr/dapr/pkg/actors"
@@ -33,18 +32,16 @@ import (
 type WorkflowEngine struct {
 	IsRunning bool
 
-	backend              *actorBackend
+	backend              backend.Backend
+	actorBackend         *actorBackend
 	executor             backend.Executor
 	worker               backend.TaskHubWorker
 	registerGrpcServerFn func(grpcServer grpc.ServiceRegistrar)
 
-	actorRuntime  actors.ActorRuntime
-	actorsReady   atomic.Bool
-	actorsReadyCh chan struct{}
-
 	startMutex     sync.Mutex
 	disconnectChan chan any
 	spec           config.WorkflowSpec
+	BackendType    string
 }
 
 const (
@@ -65,18 +62,37 @@ func IsWorkflowRequest(path string) bool {
 
 func NewWorkflowEngine(appID string, spec config.WorkflowSpec) *WorkflowEngine {
 	engine := &WorkflowEngine{
-		spec:          spec,
-		actorsReadyCh: make(chan struct{}),
+		spec: spec,
 	}
-	be := NewActorBackend(appID)
+	// TODO: pass backendtype from backend component config
+	be := InitilizeWorkflowBackend(appID, "workflow.backend.actor", engine)
 	engine.backend = be
 
 	return engine
 }
 
-// GetInternalActorsMap returns a map of internal actors that are used to implement workflows
-func (wfe *WorkflowEngine) GetInternalActorsMap() map[string]actors.InternalActor {
-	return wfe.backend.GetInternalActorsMap()
+// TODO: move this to its own file
+type BackendFactory func(appId string, wfe *WorkflowEngine) backend.Backend
+
+var backendFactories = map[string]BackendFactory{
+	"workflow.backend.actor": func(appId string, wfe *WorkflowEngine) backend.Backend {
+		wfe.BackendType = "workflow.backend.actor"
+		return NewActorBackend(appId, wfe)
+	},
+	"workflow.backend.sqlite": func(appId string, wfe *WorkflowEngine) backend.Backend {
+		wfe.BackendType = "workflow.backend.sqlite"
+		return sqlite.NewSqliteBackend(sqlite.NewSqliteOptions("workflow.db"), wfBackendLogger)
+	},
+}
+
+func InitilizeWorkflowBackend(appId string, backendType string, wfe *WorkflowEngine) backend.Backend {
+	if factory, ok := backendFactories[backendType]; ok {
+		return factory(appId, wfe)
+	}
+
+	// Default backend
+	wfe.BackendType = "workflow.backend.actor"
+	return NewActorBackend(appId, wfe)
 }
 
 func (wfe *WorkflowEngine) RegisterGrpcServer(grpcServer *grpc.Server) {
@@ -109,57 +125,11 @@ func (wfe *WorkflowEngine) SetExecutor(fn func(be backend.Backend) backend.Execu
 	wfe.executor = fn(wfe.backend)
 }
 
-func (wfe *WorkflowEngine) SetActorRuntime(actorRuntime actors.ActorRuntime) {
+func (wfe *WorkflowEngine) SetActorRuntime(actorRuntime actors.ActorRuntime, ctx context.Context) {
 	if actorRuntime != nil {
 		wfLogger.Info("Configuring workflow engine with actors backend")
-		wfe.actorRuntime = actorRuntime
-		wfe.backend.SetActorRuntime(actorRuntime)
+		wfe.actorBackend.SetActorRuntime(actorRuntime, ctx)
 	}
-
-	if wfe.actorsReady.CompareAndSwap(false, true) {
-		close(wfe.actorsReadyCh)
-	}
-}
-
-// WaitForActorsReady blocks until the actor runtime is set in the object (or until the context is canceled).
-func (wfe *WorkflowEngine) WaitForActorsReady(ctx context.Context) {
-	select {
-	case <-ctx.Done():
-		// No-op
-	case <-wfe.actorsReadyCh:
-		// No-op
-	}
-}
-
-// DisableActorCaching turns off the default caching done by the workflow and activity actors.
-// This method is primarily intended to be used for testing to ensure correct behavior
-// when actors are newly activated on nodes, but without requiring the actor to actually
-// go through activation.
-func (wfe *WorkflowEngine) DisableActorCaching(disable bool) {
-	wfe.backend.workflowActor.cachingDisabled = disable
-	wfe.backend.activityActor.cachingDisabled = disable
-}
-
-// SetWorkflowTimeout allows configuring a default timeout for workflow execution steps.
-// If the timeout is exceeded, the workflow execution step will be abandoned and retried.
-// Note that this timeout is for a non-blocking step in the workflow (which is expected
-// to always complete almost immediately) and not for the end-to-end workflow execution.
-func (wfe *WorkflowEngine) SetWorkflowTimeout(timeout time.Duration) {
-	wfe.backend.workflowActor.defaultTimeout = timeout
-}
-
-// SetActivityTimeout allows configuring a default timeout for activity executions.
-// If the timeout is exceeded, the activity execution will be abandoned and retried.
-func (wfe *WorkflowEngine) SetActivityTimeout(timeout time.Duration) {
-	wfe.backend.activityActor.defaultTimeout = timeout
-}
-
-// SetActorReminderInterval sets the amount of delay between internal retries for
-// workflow and activity actors. This impacts how long it takes for an operation to
-// restart itself after a timeout or a process failure is encountered while running.
-func (wfe *WorkflowEngine) SetActorReminderInterval(interval time.Duration) {
-	wfe.backend.workflowActor.reminderInterval = interval
-	wfe.backend.activityActor.reminderInterval = interval
 }
 
 // SetLogLevel sets the logging level for the workflow engine.
@@ -170,8 +140,6 @@ func SetLogLevel(level logger.LogLevel) {
 }
 
 func (wfe *WorkflowEngine) Start(ctx context.Context) (err error) {
-	wfe.WaitForActorsReady(ctx)
-
 	// Start could theoretically get called by multiple goroutines concurrently
 	wfe.startMutex.Lock()
 	defer wfe.startMutex.Unlock()
@@ -180,18 +148,8 @@ func (wfe *WorkflowEngine) Start(ctx context.Context) (err error) {
 		return nil
 	}
 
-	if wfe.actorRuntime == nil {
-		return errors.New("actor runtime is not configured")
-	}
 	if wfe.executor == nil {
 		return errors.New("gRPC executor is not yet configured")
-	}
-
-	for actorType, actor := range wfe.GetInternalActorsMap() {
-		err = wfe.actorRuntime.RegisterInternalActor(ctx, actorType, actor, time.Minute*1)
-		if err != nil {
-			return fmt.Errorf("failed to register workflow actor %s: %w", actorType, err)
-		}
 	}
 
 	// There are separate "workers" for executing orchestrations (workflows) and activities
