@@ -101,6 +101,9 @@ func Test_Start(t *testing.T) {
 		})
 		require.NoError(t, err)
 
+		// Override the default of 500ms to 0 to speed up the test.
+		p.(*provider).fswatcherInterval = 0
+
 		ctx, cancel := context.WithCancel(context.Background())
 
 		providerStopped := make(chan struct{})
@@ -167,5 +170,34 @@ func Test_Start(t *testing.T) {
 		case <-time.After(time.Second):
 			require.FailNow(t, "provider is not stopped")
 		}
+	})
+}
+
+func TestCurrentNamespace(t *testing.T) {
+	t.Run("error is namespace is not set", func(t *testing.T) {
+		osns, ok := os.LookupEnv("NAMESPACE")
+		os.Unsetenv("NAMESPACE")
+		t.Cleanup(func() {
+			if ok {
+				os.Setenv("NAMESPACE", osns)
+			}
+		})
+		ns, err := CurrentNamespaceOrError()
+		require.Error(t, err)
+		assert.Empty(t, ns)
+	})
+
+	t.Run("error if namespace is set but empty", func(t *testing.T) {
+		t.Setenv("NAMESPACE", "")
+		ns, err := CurrentNamespaceOrError()
+		require.Error(t, err)
+		assert.Empty(t, ns)
+	})
+
+	t.Run("returns namespace if set", func(t *testing.T) {
+		t.Setenv("NAMESPACE", "foo")
+		ns, err := CurrentNamespaceOrError()
+		require.NoError(t, err)
+		assert.Equal(t, "foo", ns)
 	})
 }

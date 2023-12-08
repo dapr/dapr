@@ -15,13 +15,11 @@ package healthz
 
 import (
 	"context"
-	"net"
 	"net/http"
 	"strconv"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -67,19 +65,9 @@ func (i *initerror) Setup(t *testing.T) []framework.Option {
 
 	srv := prochttp.New(t, prochttp.WithHandler(handler))
 	i.place = placement.New(t)
-	i.daprd = daprd.New(t, daprd.WithResourceFiles(`
-apiVersion: dapr.io/v1alpha1
-kind: Component
-metadata:
-  name: mystore
-spec:
-  type: state.in-memory
-  version: v1
-  metadata:
-  - name: actorStateStore
-    value: true
-`),
-		daprd.WithPlacementAddresses("localhost:"+strconv.Itoa(i.place.Port())),
+	i.daprd = daprd.New(t,
+		daprd.WithInMemoryActorStateStore("mystore"),
+		daprd.WithPlacementAddresses(i.place.Address()),
 		daprd.WithAppPort(srv.Port()),
 		// Daprd is super noisy in debug mode when connecting to placement.
 		daprd.WithLogLevel("info"),
@@ -92,16 +80,7 @@ spec:
 
 func (i *initerror) Run(t *testing.T, ctx context.Context) {
 	i.place.WaitUntilRunning(t, ctx)
-
-	assert.Eventually(t, func() bool {
-		dialer := net.Dialer{Timeout: time.Second}
-		net, err := dialer.DialContext(ctx, "tcp", "localhost:"+strconv.Itoa(i.daprd.HTTPPort()))
-		if err != nil {
-			return false
-		}
-		net.Close()
-		return true
-	}, time.Second*5, time.Millisecond*100)
+	i.daprd.WaitUntilTCPReady(t, ctx)
 
 	client := util.HTTPClient(t)
 
@@ -118,9 +97,9 @@ func (i *initerror) Run(t *testing.T, ctx context.Context) {
 	req, err := http.NewRequestWithContext(rctx, http.MethodPost, daprdURL, nil)
 	require.NoError(t, err)
 	resp, err := client.Do(req)
-	assert.ErrorIs(t, err, context.DeadlineExceeded)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
 	if resp != nil && resp.Body != nil {
-		assert.NoError(t, resp.Body.Close())
+		require.NoError(t, resp.Body.Close())
 	}
 
 	close(i.blockConfig)
@@ -136,5 +115,5 @@ func (i *initerror) Run(t *testing.T, ctx context.Context) {
 	resp, err = client.Do(req)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
-	assert.NoError(t, resp.Body.Close())
+	require.NoError(t, resp.Body.Close())
 }

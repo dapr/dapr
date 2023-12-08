@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
@@ -62,7 +63,7 @@ func TestNewProxy(t *testing.T) {
 
 	assert.Equal(t, "a", proxy.appID)
 	assert.NotNil(t, proxy.connectionFactory)
-	assert.True(t, reflect.ValueOf(connectionFn).Pointer() == reflect.ValueOf(proxy.connectionFactory).Pointer())
+	assert.Equal(t, reflect.ValueOf(connectionFn).Pointer(), reflect.ValueOf(proxy.connectionFactory).Pointer())
 }
 
 func TestSetRemoteAppFn(t *testing.T) {
@@ -82,7 +83,7 @@ func TestSetRemoteAppFn(t *testing.T) {
 	proxy := p.(*proxy)
 	app, err := proxy.remoteAppFn("a")
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, "a", app.id)
 }
 
@@ -141,7 +142,7 @@ func TestIntercept(t *testing.T) {
 		_, conn, _, teardown, err := proxy.intercept(ctx, "/test")
 		defer teardown(true)
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Nil(t, conn)
 	})
 
@@ -166,7 +167,7 @@ func TestIntercept(t *testing.T) {
 		proxy := p.(*proxy)
 		_, _, _, _, err := proxy.intercept(ctx, "/test")
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("proxy to the app", func(t *testing.T) {
@@ -191,7 +192,7 @@ func TestIntercept(t *testing.T) {
 		_, conn, _, teardown, err := proxy.intercept(ctx, "/test")
 		defer teardown(true)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotNil(t, conn)
 		assert.Equal(t, "a", conn.Target())
 	})
@@ -219,7 +220,7 @@ func TestIntercept(t *testing.T) {
 		ctx, conn, _, teardown, err := proxy.intercept(ctx, "/test")
 		defer teardown(true)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotNil(t, conn)
 		assert.Equal(t, "b", conn.Target())
 
@@ -259,7 +260,7 @@ func TestIntercept(t *testing.T) {
 		_, conn, _, teardown, err := proxy.intercept(ctx, "/test")
 		defer teardown(true)
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Nil(t, conn)
 	})
 
@@ -279,7 +280,7 @@ func TestIntercept(t *testing.T) {
 		_, conn, _, teardown, err := proxy.intercept(ctx, "/test")
 		defer teardown(true)
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Nil(t, conn)
 	})
 }

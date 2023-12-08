@@ -15,7 +15,6 @@ package http
 
 import (
 	"encoding/json"
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -27,20 +26,20 @@ func TestConvertEventToBytes(t *testing.T) {
 		res, err := ConvertEventToBytes(map[string]string{
 			"test": "event",
 		}, "application/octet-stream")
-		assert.Error(t, err)
-		assert.True(t, errors.Is(err, errContentTypeMismatch))
+		require.Error(t, err)
+		require.ErrorIs(t, err, errContentTypeMismatch)
 		assert.Equal(t, []byte{}, res)
 	})
 
 	t.Run("serialize base64 bin to bytes proper content type", func(t *testing.T) {
 		res, err := ConvertEventToBytes("dGVzdCBldmVudA==", "application/octet-stream")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, []byte("test event"), res)
 	})
 
 	t.Run("serialize string data with octet-stream content type", func(t *testing.T) {
 		res, err := ConvertEventToBytes("test event", "application/octet-stream")
-		assert.Error(t, err)
+		require.Error(t, err)
 		t.Log(err)
 		assert.Equal(t, []byte{}, res)
 	})
@@ -49,34 +48,34 @@ func TestConvertEventToBytes(t *testing.T) {
 		res, err := ConvertEventToBytes(map[string]string{
 			"test": "event",
 		}, "text/plain")
-		assert.Error(t, err)
-		assert.True(t, errors.Is(err, errContentTypeMismatch))
+		require.Error(t, err)
+		require.ErrorIs(t, err, errContentTypeMismatch)
 		assert.Equal(t, []byte{}, res)
 	})
 
 	t.Run("serialize string data with application/json content type", func(t *testing.T) {
 		res, err := ConvertEventToBytes("test/plain", "application/json")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		// escape quotes
 		assert.Equal(t, []byte("\"test/plain\""), res)
 	})
 
 	t.Run("serialize string data with text/plain content type", func(t *testing.T) {
 		res, err := ConvertEventToBytes("test event", "text/plain")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, []byte("test event"), res)
 	})
 
 	t.Run("serialize string data with application/xml content type", func(t *testing.T) {
 		res, err := ConvertEventToBytes("</tag>", "text/plain")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, []byte("</tag>"), res)
 	})
 
 	t.Run("serialize string data with wrong content type", func(t *testing.T) {
 		res, err := ConvertEventToBytes("</tag>", "image/png")
-		assert.Error(t, err)
-		assert.True(t, errors.Is(err, errContentTypeMismatch))
+		require.Error(t, err)
+		require.ErrorIs(t, err, errContentTypeMismatch)
 		assert.Equal(t, []byte{}, res)
 	})
 
@@ -87,7 +86,7 @@ func TestConvertEventToBytes(t *testing.T) {
 		exp, err := json.Marshal(event)
 		require.NoError(t, err, "expected no error here")
 		res, err := ConvertEventToBytes(event, "application/json")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, exp, res)
 	})
 
@@ -106,7 +105,7 @@ func TestConvertEventToBytes(t *testing.T) {
 		exp, err := json.Marshal(event)
 		require.NoError(t, err, "expected no error here")
 		res, err := ConvertEventToBytes(event, "application/cloudevents+json")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, exp, res)
 	})
 }

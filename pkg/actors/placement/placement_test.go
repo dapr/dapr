@@ -70,15 +70,14 @@ func TestPlacementStream_RoundRobin(t *testing.T) {
 	}
 
 	testPlacement := NewActorPlacement(ActorPlacementOpts{
-		ServerAddrs:        address,
-		AppID:              "testAppID",
-		RuntimeHostname:    "127.0.0.1:1000",
-		PodName:            "testPodName",
-		ActorTypes:         []string{"actorOne", "actorTwo"},
-		AppHealthFn:        func(ctx context.Context) <-chan bool { return nil },
-		AfterTableUpdateFn: func() {},
-		Security:           testSecurity(t),
-		Resiliency:         resiliency.New(logger.NewLogger("test")),
+		ServerAddrs:     address,
+		AppID:           "testAppID",
+		RuntimeHostname: "127.0.0.1:1000",
+		PodName:         "testPodName",
+		ActorTypes:      []string{"actorOne", "actorTwo"},
+		AppHealthFn:     func(ctx context.Context) <-chan bool { return nil },
+		Security:        testSecurity(t),
+		Resiliency:      resiliency.New(logger.NewLogger("test")),
 	}).(*actorPlacement)
 
 	t.Run("found leader placement in a round robin way", func(t *testing.T) {
@@ -89,7 +88,7 @@ func TestPlacementStream_RoundRobin(t *testing.T) {
 		require.NoError(t, testPlacement.Start(context.Background()))
 		time.Sleep(statusReportHeartbeatInterval * 3)
 		assert.Equal(t, leaderServer[0], testPlacement.serverIndex.Load())
-		assert.True(t, testSrv[testPlacement.serverIndex.Load()].recvCount.Load() >= 2)
+		assert.GreaterOrEqual(t, testSrv[testPlacement.serverIndex.Load()].recvCount.Load(), int32(2))
 	})
 
 	t.Run("shutdown leader and find the next leader", func(t *testing.T) {
@@ -104,7 +103,7 @@ func TestPlacementStream_RoundRobin(t *testing.T) {
 		// wait until placement connect to the second leader node
 		time.Sleep(statusReportHeartbeatInterval * 3)
 		assert.Equal(t, leaderServer[1], testPlacement.serverIndex.Load())
-		assert.True(t, testSrv[testPlacement.serverIndex.Load()].recvCount.Load() >= 1)
+		assert.GreaterOrEqual(t, testSrv[testPlacement.serverIndex.Load()].recvCount.Load(), int32(1))
 	})
 
 	// tear down
@@ -128,15 +127,14 @@ func TestAppHealthyStatus(t *testing.T) {
 	appHealthCh := make(chan bool)
 
 	testPlacement := NewActorPlacement(ActorPlacementOpts{
-		ServerAddrs:        []string{address},
-		AppID:              "testAppID",
-		RuntimeHostname:    "127.0.0.1:1000",
-		PodName:            "testPodName",
-		ActorTypes:         []string{"actorOne", "actorTwo"},
-		AppHealthFn:        func(ctx context.Context) <-chan bool { return appHealthCh },
-		AfterTableUpdateFn: func() {},
-		Security:           testSecurity(t),
-		Resiliency:         resiliency.New(logger.NewLogger("test")),
+		ServerAddrs:     []string{address},
+		AppID:           "testAppID",
+		RuntimeHostname: "127.0.0.1:1000",
+		PodName:         "testPodName",
+		ActorTypes:      []string{"actorOne", "actorTwo"},
+		AppHealthFn:     func(ctx context.Context) <-chan bool { return appHealthCh },
+		Security:        testSecurity(t),
+		Resiliency:      resiliency.New(logger.NewLogger("test")),
 	}).(*actorPlacement)
 
 	// act
@@ -145,12 +143,12 @@ func TestAppHealthyStatus(t *testing.T) {
 	// wait until client sends heartbeat to the test server
 	time.Sleep(statusReportHeartbeatInterval * 3)
 	oldCount := testSrv.recvCount.Load()
-	assert.True(t, oldCount >= 2, "client must send at least twice")
+	assert.GreaterOrEqual(t, oldCount, int32(2), "client must send at least twice")
 
 	// Mark app unhealthy
 	appHealthCh <- false
 	time.Sleep(statusReportHeartbeatInterval * 2)
-	assert.True(t, testSrv.recvCount.Load() <= oldCount+1, "no more +1 heartbeat because app is unhealthy")
+	assert.LessOrEqual(t, testSrv.recvCount.Load(), oldCount+1, "no more +1 heartbeat because app is unhealthy")
 
 	// clean up
 	close(appHealthCh)
@@ -177,7 +175,14 @@ func TestOnPlacementOrder(t *testing.T) {
 		testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{
 			Operation: "lock",
 		})
-		assert.True(t, testPlacement.tableIsBlocked.Load())
+
+		select {
+		case testPlacement.unblockSignal <- struct{}{}:
+			<-testPlacement.unblockSignal
+			t.Fatal("Should be blocked")
+		default:
+			// All good
+		}
 	})
 
 	t.Run("update operation", func(t *testing.T) {
@@ -209,43 +214,60 @@ func TestOnPlacementOrder(t *testing.T) {
 		testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{
 			Operation: "unlock",
 		})
-		assert.False(t, testPlacement.tableIsBlocked.Load())
+		select {
+		case testPlacement.unblockSignal <- struct{}{}:
+			<-testPlacement.unblockSignal
+			// All good
+		default:
+			t.Fatal("Should not have been blocked")
+		}
 	})
 }
 
 func TestWaitUntilPlacementTableIsReady(t *testing.T) {
 	testPlacement := NewActorPlacement(ActorPlacementOpts{
-		ServerAddrs:        []string{},
-		AppID:              "testAppID",
-		RuntimeHostname:    "127.0.0.1:1000",
-		PodName:            "testPodName",
-		ActorTypes:         []string{"actorOne", "actorTwo"},
-		AppHealthFn:        func(ctx context.Context) <-chan bool { return nil },
-		AfterTableUpdateFn: func() {},
-		Security:           testSecurity(t),
-		Resiliency:         resiliency.New(logger.NewLogger("test")),
+		ServerAddrs:     []string{},
+		AppID:           "testAppID",
+		RuntimeHostname: "127.0.0.1:1000",
+		PodName:         "testPodName",
+		ActorTypes:      []string{"actorOne", "actorTwo"},
+		AppHealthFn:     func(ctx context.Context) <-chan bool { return nil },
+		Security:        testSecurity(t),
+		Resiliency:      resiliency.New(logger.NewLogger("test")),
 	}).(*actorPlacement)
 
+	// Set the hasPlacementTablesCh channel to nil for the first tests, indicating that the placement tables already exist
+	testPlacement.hasPlacementTablesCh = nil
+
 	t.Run("already unlocked", func(t *testing.T) {
-		require.False(t, testPlacement.tableIsBlocked.Load())
+		select {
+		case testPlacement.unblockSignal <- struct{}{}:
+			<-testPlacement.unblockSignal
+			// All good
+		default:
+			t.Fatal("Should not have been blocked")
+		}
 
 		err := testPlacement.WaitUntilReady(context.Background())
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("wait until ready", func(t *testing.T) {
 		testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{Operation: "lock"})
 
-		testSuccessCh := make(chan struct{})
+		testSuccessCh := make(chan error)
 		go func() {
-			err := testPlacement.WaitUntilReady(context.Background())
-			if assert.NoError(t, err) {
-				testSuccessCh <- struct{}{}
-			}
+			testSuccessCh <- testPlacement.WaitUntilReady(context.Background())
 		}()
 
 		time.Sleep(50 * time.Millisecond)
-		require.True(t, testPlacement.tableIsBlocked.Load())
+		select {
+		case testPlacement.unblockSignal <- struct{}{}:
+			<-testPlacement.unblockSignal
+			t.Fatal("Should be blocked")
+		default:
+			// All good
+		}
 
 		// unlock
 		testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{Operation: "unlock"})
@@ -253,28 +275,37 @@ func TestWaitUntilPlacementTableIsReady(t *testing.T) {
 		// ensure that it is unlocked
 		select {
 		case <-time.After(500 * time.Millisecond):
-			t.Fatal("placement table not unlocked in 500ms")
-		case <-testSuccessCh:
-			// all good
+			t.Fatal("Placement table not unlocked in 500ms")
+		case err := <-testSuccessCh:
+			require.NoError(t, err)
 		}
 
-		assert.False(t, testPlacement.tableIsBlocked.Load())
+		select {
+		case testPlacement.unblockSignal <- struct{}{}:
+			<-testPlacement.unblockSignal
+			// All good
+		default:
+			t.Fatal("Should not have been blocked")
+		}
 	})
 
 	t.Run("abort on context canceled", func(t *testing.T) {
 		testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{Operation: "lock"})
 
-		testSuccessCh := make(chan struct{})
 		ctx, cancel := context.WithCancel(context.Background())
+		testSuccessCh := make(chan error)
 		go func() {
-			err := testPlacement.WaitUntilReady(ctx)
-			if assert.ErrorIs(t, err, context.Canceled) {
-				testSuccessCh <- struct{}{}
-			}
+			testSuccessCh <- testPlacement.WaitUntilReady(ctx)
 		}()
 
 		time.Sleep(50 * time.Millisecond)
-		require.True(t, testPlacement.tableIsBlocked.Load())
+		select {
+		case testPlacement.unblockSignal <- struct{}{}:
+			<-testPlacement.unblockSignal
+			t.Fatal("Should be blocked")
+		default:
+			// All good
+		}
 
 		// cancel context
 		cancel()
@@ -283,25 +314,62 @@ func TestWaitUntilPlacementTableIsReady(t *testing.T) {
 		select {
 		case <-time.After(500 * time.Millisecond):
 			t.Fatal("did not return in 500ms")
-		case <-testSuccessCh:
-			// all good
+		case err := <-testSuccessCh:
+			require.Error(t, err)
+			require.ErrorIs(t, err, context.Canceled)
 		}
 
-		assert.True(t, testPlacement.tableIsBlocked.Load())
+		select {
+		case testPlacement.unblockSignal <- struct{}{}:
+			<-testPlacement.unblockSignal
+			t.Fatal("Should be blocked")
+		default:
+			// All good
+		}
+
+		// Unblock for the next test
+		<-testPlacement.unblockSignal
+	})
+
+	t.Run("blocks until tables have been received", func(t *testing.T) {
+		hasPlacementTablesCh := make(chan struct{})
+		testPlacement.hasPlacementTablesCh = hasPlacementTablesCh
+
+		testSuccessCh := make(chan error)
+		go func() {
+			testSuccessCh <- testPlacement.WaitUntilReady(context.Background())
+		}()
+
+		// No signal for now
+		select {
+		case <-time.After(500 * time.Millisecond):
+			// all good
+		case <-testSuccessCh:
+			t.Fatal("Received an unexpected signal")
+		}
+
+		// Close the channel
+		close(hasPlacementTablesCh)
+
+		select {
+		case <-time.After(500 * time.Millisecond):
+			t.Fatal("did not return in 500ms")
+		case err := <-testSuccessCh:
+			require.NoError(t, err)
+		}
 	})
 }
 
 func TestLookupActor(t *testing.T) {
 	testPlacement := NewActorPlacement(ActorPlacementOpts{
-		ServerAddrs:        []string{},
-		AppID:              "testAppID",
-		RuntimeHostname:    "127.0.0.1:1000",
-		PodName:            "testPodName",
-		ActorTypes:         []string{"actorOne", "actorTwo"},
-		AppHealthFn:        func(ctx context.Context) <-chan bool { return nil },
-		AfterTableUpdateFn: func() {},
-		Security:           testSecurity(t),
-		Resiliency:         resiliency.New(logger.NewLogger("test")),
+		ServerAddrs:     []string{},
+		AppID:           "testAppID",
+		RuntimeHostname: "127.0.0.1:1000",
+		PodName:         "testPodName",
+		ActorTypes:      []string{"actorOne", "actorTwo"},
+		AppHealthFn:     func(ctx context.Context) <-chan bool { return nil },
+		Security:        testSecurity(t),
+		Resiliency:      resiliency.New(logger.NewLogger("test")),
 	}).(*actorPlacement)
 
 	t.Run("Placement table is unset", func(t *testing.T) {
@@ -310,7 +378,7 @@ func TestLookupActor(t *testing.T) {
 			ActorID:   "test",
 		})
 		require.Error(t, err)
-		assert.ErrorContains(t, err, "did not find address for actor")
+		require.ErrorContains(t, err, "did not find address for actor")
 	})
 
 	t.Run("found host and appid", func(t *testing.T) {
@@ -340,7 +408,7 @@ func TestLookupActor(t *testing.T) {
 			ActorID:   "id0",
 		})
 		require.Error(t, err)
-		assert.ErrorContains(t, err, "did not find address for actor")
+		require.ErrorContains(t, err, "did not find address for actor")
 		assert.Empty(t, lar.Address)
 		assert.Empty(t, lar.AppID)
 	})
@@ -348,18 +416,20 @@ func TestLookupActor(t *testing.T) {
 
 func TestConcurrentUnblockPlacements(t *testing.T) {
 	testPlacement := NewActorPlacement(ActorPlacementOpts{
-		ServerAddrs:        []string{},
-		AppID:              "testAppID",
-		RuntimeHostname:    "127.0.0.1:1000",
-		PodName:            "testPodName",
-		ActorTypes:         []string{"actorOne", "actorTwo"},
-		AppHealthFn:        func(ctx context.Context) <-chan bool { return nil },
-		AfterTableUpdateFn: func() {},
-		Security:           testSecurity(t),
-		Resiliency:         resiliency.New(logger.NewLogger("test")),
+		ServerAddrs:     []string{},
+		AppID:           "testAppID",
+		RuntimeHostname: "127.0.0.1:1000",
+		PodName:         "testPodName",
+		ActorTypes:      []string{"actorOne", "actorTwo"},
+		AppHealthFn:     func(ctx context.Context) <-chan bool { return nil },
+		Security:        testSecurity(t),
+		Resiliency:      resiliency.New(logger.NewLogger("test")),
 	}).(*actorPlacement)
 
-	t.Run("concurrent_unlock", func(t *testing.T) {
+	// Set the hasPlacementTablesCh channel to nil for the first tests, indicating that the placement tables already exist
+	testPlacement.hasPlacementTablesCh = nil
+
+	t.Run("concurrent unlock", func(t *testing.T) {
 		for i := 0; i < 10000; i++ {
 			testPlacement.blockPlacements()
 			wg := sync.WaitGroup{}

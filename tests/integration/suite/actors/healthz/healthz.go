@@ -64,19 +64,9 @@ func (h *healthz) Setup(t *testing.T) []framework.Option {
 
 	srv := prochttp.New(t, prochttp.WithHandler(handler))
 	h.place = placement.New(t)
-	h.daprd = daprd.New(t, daprd.WithResourceFiles(`
-apiVersion: dapr.io/v1alpha1
-kind: Component
-metadata:
-  name: mystore
-spec:
-  type: state.in-memory
-  version: v1
-  metadata:
-  - name: actorStateStore
-    value: true
-`),
-		daprd.WithPlacementAddresses("localhost:"+strconv.Itoa(h.place.Port())),
+	h.daprd = daprd.New(t,
+		daprd.WithInMemoryActorStateStore("mystore"),
+		daprd.WithPlacementAddresses(h.place.Address()),
 		daprd.WithAppProtocol("http"),
 		daprd.WithAppPort(srv.Port()),
 	)
@@ -88,7 +78,7 @@ spec:
 
 func (h *healthz) Run(t *testing.T, ctx context.Context) {
 	h.place.WaitUntilRunning(t, ctx)
-	h.daprd.WaitUntilRunning(t, ctx)
+	h.daprd.WaitUntilTCPReady(t, ctx)
 
 	select {
 	case <-h.healthzCalled:
@@ -104,5 +94,5 @@ func (h *healthz) Run(t *testing.T, ctx context.Context) {
 	resp, err := client.Do(req)
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
-	assert.NoError(t, resp.Body.Close())
+	require.NoError(t, resp.Body.Close())
 }

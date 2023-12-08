@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	contribPubsub "github.com/dapr/components-contrib/pubsub"
 	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
@@ -85,9 +86,9 @@ func (m *mockBulkPublisher) BulkPublish(ctx context.Context, req *contribPubsub.
 			m.entryIDRetryTimes[entry.EntryId] = 1
 		}
 		// assert the data and metadata are correct
-		assert.Equal(m.t, entry.Metadata, map[string]string{
+		assert.Equal(m.t, map[string]string{
 			"key" + entry.EntryId: "value" + entry.EntryId,
-		})
+		}, entry.Metadata)
 		assert.Equal(m.t, entry.Event, []byte("data "+entry.EntryId))
 	}
 	// fail events based on the input count
@@ -189,7 +190,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 
 		// Assert
 		// expecting no final error, the events will pass in the second try
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		assert.Empty(t, res.FailedEntries)
 		assert.Len(t, bulkPublisher.entryIDRetryTimes, 6)
 		t.Logf("event ID try count map %v\n\n", bulkPublisher.entryIDRetryTimes)
@@ -221,7 +222,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 
 		// Assert
 		// Expect final error from the bulk publisher
-		assert.NotNil(t, err)
+		require.Error(t, err)
 		assert.Equal(t, assert.AnError, err)
 		assert.Len(t, res.FailedEntries, 6)
 		assert.Len(t, bulkPublisher.entryIDRetryTimes, 6)
@@ -255,7 +256,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 
 		// Assert
 		// expecting no final error, all the events will pass in the second try
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		assert.Empty(t, res.FailedEntries)
 		assert.Len(t, bulkPublisher.entryIDRetryTimes, 6)
 		t.Logf("event ID try count map %v\n\n", bulkPublisher.entryIDRetryTimes)
@@ -287,7 +288,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 
 		// Assert
 		// expecting no final error, all the events will pass in a single try
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		assert.Empty(t, res.FailedEntries)
 		assert.Len(t, bulkPublisher.entryIDRetryTimes, 6)
 		t.Logf("event ID try count map %v\n\n", bulkPublisher.entryIDRetryTimes)
@@ -322,8 +323,8 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
 
 		// Assert
-		assert.NotNil(t, err)
-		assert.ErrorIs(t, err, context.DeadlineExceeded)
+		require.Error(t, err)
+		require.ErrorIs(t, err, context.DeadlineExceeded)
 		assert.Len(t, res.FailedEntries, 6)
 		// not asserting the number of called times since it may or may not be updated(component called) in actually code.
 		// In test code, it is not updated.
@@ -353,7 +354,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
 
 		// Assert
-		assert.NotNil(t, err)
+		require.Error(t, err)
 		assert.Equal(t, breaker.ErrOpenState, err)
 		assert.Len(t, res.FailedEntries, 6)
 		assert.Len(t, bulkPublisher.entryIDRetryTimes, 6)
@@ -376,7 +377,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		res, err = ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
 
 		// Assert
-		assert.NotNil(t, err)
+		require.Error(t, err)
 		assert.Equal(t, breaker.ErrOpenState, err)
 		assert.Len(t, res.FailedEntries, 6)
 		assert.Len(t, bulkPublisher.entryIDRetryTimes, 6)
@@ -410,7 +411,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
 
 		// Assert
-		assert.NotNil(t, err)
+		require.Error(t, err)
 		assert.Equal(t, breaker.ErrOpenState, err)
 		assert.Len(t, res.FailedEntries, 3)
 		assert.Len(t, bulkPublisher.entryIDRetryTimes, 6)
@@ -433,7 +434,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		res, err = ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
 
 		// Assert
-		assert.NotNil(t, err)
+		require.Error(t, err)
 		assert.Equal(t, breaker.ErrOpenState, err)
 		assert.Len(t, res.FailedEntries, 6)
 		assert.Len(t, bulkPublisher.entryIDRetryTimes, 6)
@@ -467,8 +468,8 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
 
 		// Assert
-		assert.Nil(t, err)
-		assert.Len(t, res.FailedEntries, 0)
+		require.NoError(t, err)
+		assert.Empty(t, res.FailedEntries)
 		assert.Len(t, bulkPublisher.entryIDRetryTimes, 6)
 		t.Logf("event ID try count map %v\n\n", bulkPublisher.entryIDRetryTimes)
 		// It is 3 here because the first failure is before resiliency policy starts
@@ -510,7 +511,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
 
 		// Assert
-		assert.NotNil(t, err)
+		require.Error(t, err)
 		assert.Equal(t, breaker.ErrOpenState, err)
 		assert.Len(t, res.FailedEntries, 3)
 		assert.Len(t, bulkPublisher.entryIDRetryTimes, 6)
@@ -537,8 +538,8 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		res, err = ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
 
 		// Assert
-		assert.Nil(t, err)
-		assert.Len(t, res.FailedEntries, 0)
+		require.NoError(t, err)
+		assert.Empty(t, res.FailedEntries)
 		assert.Len(t, bulkPublisher.entryIDRetryTimes, 6)
 		t.Logf("event ID try count map %v\n\n", bulkPublisher.entryIDRetryTimes)
 		// Increase retry count for all event IDs, bulkPublisher is called as CB is half-open
@@ -582,7 +583,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
 
 		// Assert
-		assert.NotNil(t, err)
+		require.Error(t, err)
 		assert.Equal(t, breaker.ErrOpenState, err)
 		assert.Len(t, res.FailedEntries, 6) // all events fail on timeout
 		// not asserting the number of called times since it may or may not be updated(component called) in actually code.
@@ -593,7 +594,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		res, err = ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
 
 		// Assert
-		assert.NotNil(t, err)
+		require.Error(t, err)
 		assert.Equal(t, breaker.ErrOpenState, err)
 		assert.Len(t, res.FailedEntries, 6)
 		// Not aaserting the number of called times since it may or may not be updated(component called) in actually code.
@@ -631,7 +632,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		res, err := ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
 
 		// Assert
-		assert.NotNil(t, err)
+		require.Error(t, err)
 		assert.Equal(t, breaker.ErrOpenState, err)
 		assert.Len(t, res.FailedEntries, 6) // all events fail on timeout
 		// not asserting the number of called times since it may or may not be updated(component called) in actually code.
@@ -642,7 +643,7 @@ func TestApplyBulkPublishResiliency(t *testing.T) {
 		res, err = ApplyBulkPublishResiliency(ctx, req, policyDef, bulkPublisher)
 
 		// Assert
-		assert.NotNil(t, err)
+		require.Error(t, err)
 		assert.Equal(t, breaker.ErrOpenState, err)
 		assert.Len(t, res.FailedEntries, 6)
 		// Not aaserting the number of called times since it may or may not be updated(component called) in actually code.

@@ -163,7 +163,7 @@ func TestOutputBindingCalls(t *testing.T) {
 				Metadata: fakeMetadata,
 			},
 			onInvokeCalled: func(ir *proto.InvokeRequest) {
-				assert.Equal(t, ir.Operation, fakeOp)
+				assert.Equal(t, fakeOp, ir.GetOperation())
 			},
 		}
 
@@ -196,7 +196,7 @@ func TestOutputBindingCalls(t *testing.T) {
 
 		_, err = outputSvc.Invoke(context.Background(), &bindings.InvokeRequest{})
 
-		assert.NotNil(t, err)
+		require.Error(t, err)
 		assert.Equal(t, int64(1), srv.invokeCalled.Load())
 	})
 }
