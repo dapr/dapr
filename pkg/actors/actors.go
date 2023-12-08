@@ -235,7 +235,7 @@ func (a *actorsRuntime) haveCompatibleStorage() bool {
 	return state.FeatureETag.IsPresent(features) && state.FeatureTransactional.IsPresent(features)
 }
 
-func (a *actorsRuntime) Init(ctx context.Context) error {
+func (a *actorsRuntime) Init(ctx context.Context) (err error) {
 	if a.closed.Load() {
 		return errors.New("actors runtime has already been closed")
 	}
@@ -244,7 +244,8 @@ func (a *actorsRuntime) Init(ctx context.Context) error {
 		return errors.New("actors: couldn't connect to placement service: address is empty")
 	}
 
-	if len(a.actorsConfig.Config.HostedActorTypes.ListActorTypes()) > 0 {
+	hat := a.actorsConfig.Config.HostedActorTypes.ListActorTypes()
+	if len(hat) > 0 {
 		if !a.haveCompatibleStorage() {
 			return ErrIncompatibleStateStore
 		}
@@ -259,6 +260,13 @@ func (a *actorsRuntime) Init(ctx context.Context) error {
 		a.drainRebalancedActors()
 		a.actorsReminders.OnPlacementTablesUpdated(ctx)
 	})
+
+	for _, actorType := range hat {
+		err = a.placement.AddHostedActorType(actorType, a.actorsConfig.GetIdleTimeoutForType(actorType))
+		if err != nil {
+			return fmt.Errorf("failed to register actor '%s': %w", actorType, err)
+		}
+	}
 
 	a.wg.Add(1)
 	go func() {
