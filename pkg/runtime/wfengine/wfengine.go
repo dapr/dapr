@@ -63,7 +63,7 @@ func NewWorkflowEngine(appID string, spec config.WorkflowSpec) *WorkflowEngine {
 		spec: spec,
 	}
 	// TODO: pass backendtype from backend component config
-	be := InitilizeWorkflowBackend(appID, "workflow.backend.actor", engine)
+	be := InitilizeWorkflowBackend(appID, SqliteBackendType, engine)
 	engine.backend = be
 
 	return engine
@@ -105,6 +105,8 @@ func (wfe *WorkflowEngine) SetActorRuntime(actorRuntime actors.ActorRuntime, ctx
 		if ab, ok := wfe.backend.(*actorBackend); ok {
 			ab.SetActorRuntime(actorRuntime, ctx)
 		}
+	} else {
+		wfLogger.Info("actorRuntime is nil, skipping setting up actor runtime for workflow backend")
 	}
 }
 
