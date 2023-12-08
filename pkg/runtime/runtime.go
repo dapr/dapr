@@ -586,7 +586,10 @@ func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) error {
 		}
 	} else {
 		// If actors are not enabled, still invoke SetActorRuntime on the workflow engine with `nil` to unblock startup
-		setActorRuntimeForBackend(ctx, a.workflowEngine.Backend, nil)
+		err = setActorRuntimeForBackend(ctx, a.workflowEngine.Backend, nil)
+		if err != nil {
+			log.Errorf("error while setting actor runtime for backend to nil %v", err)
+		}
 	}
 
 	// We set actors as initialized whether we have an actors runtime or not
@@ -604,17 +607,23 @@ func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) error {
 	return nil
 }
 
-func setActorRuntimeForBackend(ctx context.Context, be backend.Backend, actorRuntime actors.ActorRuntime) {
+func setActorRuntimeForBackend(ctx context.Context, be backend.Backend, actorRuntime actors.ActorRuntime) error {
 	if abe, ok := be.(*wfengine.ActorBackend); ok {
-		abe.SetActorRuntime(actorRuntime, ctx)
+		return abe.SetActorRuntime(actorRuntime, ctx)
 	}
+
+	return nil
 }
 
 func (a *DaprRuntime) initWorkflowEngine(ctx context.Context) {
 	wfComponentFactory := wfengine.BuiltinWorkflowFactory(a.workflowEngine)
 
 	if a.workflowEngine.BackendType == wfengine.ActorBackendType {
-		setActorRuntimeForBackend(ctx, a.workflowEngine.Backend, a.actor)
+		err := setActorRuntimeForBackend(ctx, a.workflowEngine.Backend, a.actor)
+
+		if err != nil {
+			log.Errorf("could not set actor runtime for backend %v", err)
+		}
 	}
 
 	if reg := a.runtimeConfig.registry.Workflows(); reg != nil {
