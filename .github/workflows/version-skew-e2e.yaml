@@ -31,7 +31,7 @@ defaults:
 # supply a specific version to test against, overriding the current latest
 # release, e.g. `/test-version-skew 1.10.5`. This is useful for testing
 # against a specific patch or release candidate. This version must be a
-# valid tag and artefacts be publicly available. Remember that Dapr only
+# valid tag and artifacts be publicly available. Remember that Dapr only
 # guarantees N-1.
 jobs:
   # Dapr guarantees that the control plane and Dapr sidecars may have a version
@@ -62,7 +62,7 @@ jobs:
         - control-plane-master
         - dapr-sidecar-master
     steps:
-    - name: Set up for Dapr lastest release
+    - name: Set up for Dapr latest release
       run: |
         echo "DAPR_PREV_VERSION=$(curl -s https://api.github.com/repos/dapr/dapr/releases/latest | jq -r '.tag_name' | cut -c 2-)" >> $GITHUB_ENV
     - name: Set up for master
@@ -235,7 +235,13 @@ jobs:
       run: |
         docker image prune -a -f
 
-    - name: Run tests
+    - name: Run tests dapr-control-plane-previous
+      if: matrix.mode == 'dapr-sidecar-master'
+      run: |
+        cd master && make test-e2e-all
+
+    - name: Run tests dapr-control-plane-master
+      if: matrix.mode == 'dapr-control-plane-master'
       run: |
         cd latest-release && make test-e2e-all
 
