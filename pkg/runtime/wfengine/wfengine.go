@@ -62,7 +62,7 @@ func NewWorkflowEngine(appID string, spec config.WorkflowSpec) *WorkflowEngine {
 		spec: spec,
 	}
 	// TODO: pass backendtype from backend component config
-	be := InitilizeWorkflowBackend(appID, SqliteBackendType, engine)
+	be := InitilizeWorkflowBackend(appID, ActorBackendType, engine)
 	engine.Backend = be
 
 	return engine
