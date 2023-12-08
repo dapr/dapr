@@ -16,6 +16,7 @@ limitations under the License.
 package universal
 
 import (
+	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"sync"
 	"sync/atomic"
 
@@ -54,6 +55,7 @@ type Universal struct {
 	appConnectionConfig         config.AppConnectionConfig
 	globalConfig                *config.Configuration
 	workflowEngine              *wfengine.WorkflowEngine
+	schedulerClient             schedulerv1pb.SchedulerClient
 
 	extendedMetadataLock sync.RWMutex
 	actorsLock           sync.RWMutex
