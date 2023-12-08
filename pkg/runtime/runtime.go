@@ -62,6 +62,7 @@ import (
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
+	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/authorizer"
 	"github.com/dapr/dapr/pkg/runtime/channels"
@@ -72,6 +73,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/processor"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
+	schedulerCli "github.com/dapr/dapr/pkg/scheduler/client"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/concurrency"
@@ -100,6 +102,7 @@ type DaprRuntime struct {
 	daprHTTPAPI         http.API
 	daprGRPCAPI         grpc.API
 	operatorClient      operatorv1pb.OperatorClient
+	schedulerClient     schedulerv1pb.SchedulerClient
 	isAppHealthy        chan struct{}
 	appHealth           *apphealth.AppHealth
 	appHealthReady      func(context.Context) error // Invoked the first time the app health becomes ready
@@ -149,6 +152,11 @@ func newDaprRuntime(ctx context.Context,
 	})
 
 	operatorClient, err := getOperatorClient(ctx, sec, runtimeConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	schedClient, err := getSchedulerClient(ctx, sec, runtimeConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -228,6 +236,7 @@ func newDaprRuntime(ctx context.Context,
 		compStore:         compStore,
 		meta:              meta,
 		operatorClient:    operatorClient,
+		schedulerClient:   schedClient,
 		channels:          channels,
 		sec:               sec,
 		processor:         processor,
@@ -366,6 +375,15 @@ func getOperatorClient(ctx context.Context, sec security.Handler, cfg *internalC
 	return client, nil
 }
 
+func getSchedulerClient(ctx context.Context, sec security.Handler, cfg *internalConfig) (schedulerv1pb.SchedulerClient, error) {
+	schedClient, _, err := schedulerCli.GetSchedulerClient(ctx, cfg.kubernetes.ControlPlaneAddress, sec)
+	if err != nil {
+		return nil, fmt.Errorf("error creating operator client: %w", err)
+	}
+
+	return schedClient, nil
+}
+
 // setupTracing set up the trace exporters. Technically we don't need to pass `hostAddress` in,
 // but we do so here to explicitly call out the dependency on having `hostAddress` computed.
 func (a *DaprRuntime) setupTracing(ctx context.Context, hostAddress string, tpStore tracerProviderStore) error {
@@ -500,6 +518,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		ShutdownFn:                  a.ShutdownWithWait,
 		AppConnectionConfig:         a.runtimeConfig.appConnectionConfig,
 		GlobalConfig:                a.globalConfig,
+		SchedulerClient:             a.schedulerClient,
 		WorkflowEngine:              wfe,
 	})
 

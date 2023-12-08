@@ -36,7 +36,7 @@ func (a *Universal) ScheduleJob(ctx context.Context, inReq *runtimev1pb.Schedule
 			Ttl:      inReq.GetJob().GetTtl(),
 		},
 		Namespace: "",  //TODO
-		Metadata:  nil, //TODO: this should I think generate key if jobStateStore is configured
+		Metadata:  nil, //TODO: this should generate key if jobStateStore is configured
 	}
 
 	//TODO: do something with following response?
