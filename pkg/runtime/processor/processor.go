@@ -44,6 +44,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/processor/secret"
 	"github.com/dapr/dapr/pkg/runtime/processor/state"
 	"github.com/dapr/dapr/pkg/runtime/processor/workflow"
+	"github.com/dapr/dapr/pkg/runtime/processor/workflowBackend"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 )
 
@@ -197,6 +198,11 @@ func New(opts Options) *Processor {
 				Meta:           opts.Meta,
 			}),
 			components.CategoryStateStore: state,
+			components.CategoryWorkflowBackend: workflowBackend.New(workflowBackend.Options{
+				Registry:       opts.Registry.WorkflowBackends(),
+				ComponentStore: opts.ComponentStore,
+				Meta:           opts.Meta,
+			}),
 			components.CategoryWorkflow: workflow.New(workflow.Options{
 				Registry:       opts.Registry.Workflows(),
 				ComponentStore: opts.ComponentStore,

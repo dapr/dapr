@@ -35,22 +35,23 @@ import (
 type ComponentStore struct {
 	lock sync.RWMutex
 
-	states                  map[string]state.Store
-	configurations          map[string]configuration.Store
-	configurationSubscribes map[string]chan struct{}
-	secretsConfigurations   map[string]config.SecretsScope
-	secrets                 map[string]secretstores.SecretStore
-	inputBindings           map[string]bindings.InputBinding
-	inputBindingRoutes      map[string]string
-	outputBindings          map[string]bindings.OutputBinding
-	locks                   map[string]lock.Store
-	pubSubs                 map[string]PubsubItem
-	topicRoutes             map[string]TopicRoutes
-	workflowComponents      map[string]workflows.Workflow
-	cryptoProviders         map[string]crypto.SubtleCrypto
-	components              []compsv1alpha1.Component
-	subscriptions           []rtpubsub.Subscription
-	httpEndpoints           []httpEndpointV1alpha1.HTTPEndpoint
+	states                    map[string]state.Store
+	configurations            map[string]configuration.Store
+	configurationSubscribes   map[string]chan struct{}
+	secretsConfigurations     map[string]config.SecretsScope
+	secrets                   map[string]secretstores.SecretStore
+	inputBindings             map[string]bindings.InputBinding
+	inputBindingRoutes        map[string]string
+	outputBindings            map[string]bindings.OutputBinding
+	locks                     map[string]lock.Store
+	pubSubs                   map[string]PubsubItem
+	topicRoutes               map[string]TopicRoutes
+	workflowComponents        map[string]workflows.Workflow
+	workflowBackendComponents map[string]workflows.WorkflowBackend
+	cryptoProviders           map[string]crypto.SubtleCrypto
+	components                []compsv1alpha1.Component
+	subscriptions             []rtpubsub.Subscription
+	httpEndpoints             []httpEndpointV1alpha1.HTTPEndpoint
 
 	compPendingLock sync.Mutex
 	compPending     *compsv1alpha1.Component
@@ -58,18 +59,19 @@ type ComponentStore struct {
 
 func New() *ComponentStore {
 	return &ComponentStore{
-		states:                  make(map[string]state.Store),
-		configurations:          make(map[string]configuration.Store),
-		configurationSubscribes: make(map[string]chan struct{}),
-		secretsConfigurations:   make(map[string]config.SecretsScope),
-		secrets:                 make(map[string]secretstores.SecretStore),
-		inputBindings:           make(map[string]bindings.InputBinding),
-		inputBindingRoutes:      make(map[string]string),
-		outputBindings:          make(map[string]bindings.OutputBinding),
-		locks:                   make(map[string]lock.Store),
-		pubSubs:                 make(map[string]PubsubItem),
-		workflowComponents:      make(map[string]workflows.Workflow),
-		cryptoProviders:         make(map[string]crypto.SubtleCrypto),
-		topicRoutes:             make(map[string]TopicRoutes),
+		states:                    make(map[string]state.Store),
+		configurations:            make(map[string]configuration.Store),
+		configurationSubscribes:   make(map[string]chan struct{}),
+		secretsConfigurations:     make(map[string]config.SecretsScope),
+		secrets:                   make(map[string]secretstores.SecretStore),
+		inputBindings:             make(map[string]bindings.InputBinding),
+		inputBindingRoutes:        make(map[string]string),
+		outputBindings:            make(map[string]bindings.OutputBinding),
+		locks:                     make(map[string]lock.Store),
+		pubSubs:                   make(map[string]PubsubItem),
+		workflowComponents:        make(map[string]workflows.Workflow),
+		workflowBackendComponents: make(map[string]workflows.WorkflowBackend),
+		cryptoProviders:           make(map[string]crypto.SubtleCrypto),
+		topicRoutes:               make(map[string]TopicRoutes),
 	}
 }

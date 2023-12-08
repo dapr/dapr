@@ -20,8 +20,8 @@ import (
 )
 
 const (
-	ActorBackendType  = "workflow.backend.actor"
-	SqliteBackendType = "workflow.backend.sqlite"
+	ActorBackendType  = "workflowbackend.actor"
+	SqliteBackendType = "workflowbackend.sqlite"
 )
 
 type BackendFactory func(appId string, wfe *WorkflowEngine) backend.Backend

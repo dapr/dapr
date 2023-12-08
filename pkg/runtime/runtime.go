@@ -626,6 +626,18 @@ func (a *DaprRuntime) initWorkflowEngine(ctx context.Context) {
 		}
 	}
 
+	// wfBackendComponentFactory := wfengine.BuiltinBackendFactory(a.workflowEngine)
+	// if reg := a.runtimeConfig.registry.WorkflowBackends(); reg != nil {
+	// 	log.Infof("Registering component for dapr workflow engine...")
+	// 	reg.RegisterComponent(wfBackendComponentFactory, "sqlite")
+	// 	reg.RegisterComponent(wfBackendComponentFactory, "actor")
+	// 	// if componentInitErr := a.processor.Init(ctx, wfengine.ComponentDefinition); componentInitErr != nil {
+	// 	// 	log.Warnf("Failed to initialize Dapr workflow component: %v", componentInitErr)
+	// 	// }
+	// } else {
+	// 	log.Infof("No workflow registry available, not registering Dapr workflow component...")
+	// }
+
 	if reg := a.runtimeConfig.registry.Workflows(); reg != nil {
 		log.Infof("Registering component for dapr workflow engine...")
 		reg.RegisterComponent(wfComponentFactory, "dapr")

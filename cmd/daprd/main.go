@@ -34,6 +34,7 @@ import (
 	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
 	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
+	wfBackendLoader "github.com/dapr/dapr/pkg/components/wfBackend"
 	workflowsLoader "github.com/dapr/dapr/pkg/components/workflows"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/runtime"
@@ -91,6 +92,7 @@ func main() {
 	nrLoader.DefaultRegistry.Logger = logContrib
 	bindingsLoader.DefaultRegistry.Logger = logContrib
 	workflowsLoader.DefaultRegistry.Logger = logContrib
+	wfBackendLoader.DefaultRegistry.Logger = logContrib
 	httpMiddlewareLoader.DefaultRegistry.Logger = log // Note this uses log on purpose
 
 	reg := registry.NewOptions().
@@ -103,7 +105,8 @@ func main() {
 		WithBindings(bindingsLoader.DefaultRegistry).
 		WithCryptoProviders(cryptoLoader.DefaultRegistry).
 		WithHTTPMiddlewares(httpMiddlewareLoader.DefaultRegistry).
-		WithWorkflows(workflowsLoader.DefaultRegistry)
+		WithWorkflows(workflowsLoader.DefaultRegistry).
+		WithWorkflowBackends(wfBackendLoader.DefaultRegistry)
 
 	ctx := signals.Context()
 	secProvider, err := security.New(ctx, security.Options{
