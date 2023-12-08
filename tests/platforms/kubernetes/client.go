@@ -14,6 +14,7 @@ limitations under the License.
 package kubernetes
 
 import (
+	"os"
 	"path/filepath"
 
 	"k8s.io/client-go/kubernetes"
@@ -65,7 +66,8 @@ func NewKubeClient(configPath string, clusterName string) (*KubeClient, error) {
 
 func clientConfig(kubeConfigPath string, clusterName string) (*rest.Config, error) {
 	if kubeConfigPath == "" {
-		if home := homedir.HomeDir(); home != "" {
+		kubeConfigPath = os.Getenv("KUBECONFIG")
+		if home := homedir.HomeDir(); home != "" && kubeConfigPath == "" {
 			kubeConfigPath = filepath.Join(home, ".kube", "config")
 		}
 	}

@@ -268,8 +268,8 @@ func performBulkPublish(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Printf("(%s) BulkPublish failed with error=%v, StatusCode=%d", reqID, err, status)
 			log.Printf("(%s) BulkPublish failed with bulkRes errorCode=%v", reqID, bulkRes)
-			for _, stat := range bulkRes.FailedEntries {
-				log.Printf("Failed event with entry ID (%s) and error %s", stat.EntryId, stat.Error)
+			for _, stat := range bulkRes.GetFailedEntries() {
+				log.Printf("Failed event with entry ID (%s) and error %s", stat.GetEntryId(), stat.GetError())
 			}
 
 			w.WriteHeader(status)
@@ -316,7 +316,7 @@ func performBulkPublishGRPC(reqID string, pubsubToPublish, topic string, entries
 		Metadata:   reqMeta,
 		Entries:    entries,
 	}
-	log.Printf("Pubsub to publish to is %s", req.PubsubName)
+	log.Printf("Pubsub to publish to is %s", req.GetPubsubName())
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	res, err := grpcClient.BulkPublishEventAlpha1(ctx, req)
 	cancel()
@@ -585,7 +585,7 @@ func callSubscriberMethodGRPC(reqID, appName, method string) ([]byte, error) {
 		return nil, err
 	}
 
-	return resp.Data.Value, nil
+	return resp.GetData().GetValue(), nil
 }
 
 func callSubscriberMethodHTTP(reqID, appName, method string) ([]byte, error) {

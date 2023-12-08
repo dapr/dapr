@@ -190,7 +190,7 @@ func (p *pubsub) bulkSubscribeTopic(ctx context.Context, policyDef *resiliency.P
 							Data:        message.Event,
 							Topic:       topic,
 							Metadata:    message.Metadata,
-							ContentType: &message.ContentType,
+							ContentType: &msg.Entries[i].ContentType,
 						}, route.DeadLetterTopic)
 					}
 					bulkResponses[i].EntryId = message.EntryId
@@ -399,7 +399,7 @@ func (p *pubsub) publishBulkMessageHTTP(ctx context.Context, bulkSubCallData *bu
 	}
 	defer resp.Close()
 
-	statusCode := int(resp.Status().Code)
+	statusCode := int(resp.Status().GetCode())
 
 	for _, span := range spans {
 		m := diag.ConstructSubscriptionSpanAttributes(psm.topic)
@@ -573,7 +573,7 @@ func (p *pubsub) publishBulkMessageGRPC(ctx context.Context, bulkSubCallData *bu
 	elapsed := diag.ElapsedSince(start)
 
 	for _, span := range spans {
-		m := diag.ConstructSubscriptionSpanAttributes(envelope.Topic)
+		m := diag.ConstructSubscriptionSpanAttributes(envelope.GetTopic())
 		diag.AddAttributesToSpan(span, m)
 		diag.UpdateSpanStatusFromGRPCError(span, err)
 	}
@@ -600,27 +600,28 @@ func (p *pubsub) publishBulkMessageGRPC(ctx context.Context, bulkSubCallData *bu
 
 	hasAnyError := false
 	for _, response := range res.GetStatuses() {
-		if _, ok := (*bscData.entryIdIndexMap)[response.EntryId]; ok {
+		entryID := response.GetEntryId()
+		if _, ok := (*bscData.entryIdIndexMap)[entryID]; ok {
 			switch response.GetStatus() {
 			case runtimev1pb.TopicEventResponse_SUCCESS: //nolint:nosnakecase
 				// on uninitialized status, this is the case it defaults to as an uninitialized status defaults to 0 which is
 				// success from protobuf definition
 				bscData.bulkSubDiag.statusWiseDiag[string(contribpubsub.Success)] += 1
-				entryRespReceived[response.EntryId] = true
-				addBulkResponseEntry(bulkResponses, response.EntryId, nil)
+				entryRespReceived[entryID] = true
+				addBulkResponseEntry(bulkResponses, entryID, nil)
 			case runtimev1pb.TopicEventResponse_RETRY: //nolint:nosnakecase
 				bscData.bulkSubDiag.statusWiseDiag[string(contribpubsub.Retry)] += 1
-				entryRespReceived[response.EntryId] = true
-				addBulkResponseEntry(bulkResponses, response.EntryId,
-					fmt.Errorf("RETRY status returned from app while processing pub/sub event for entry id: %v", response.EntryId))
+				entryRespReceived[entryID] = true
+				addBulkResponseEntry(bulkResponses, entryID,
+					fmt.Errorf("RETRY status returned from app while processing pub/sub event for entry id: %v", entryID))
 				hasAnyError = true
 			case runtimev1pb.TopicEventResponse_DROP: //nolint:nosnakecase
-				log.Warnf("DROP status returned from app while processing pub/sub event for entry id: %v", response.EntryId)
+				log.Warnf("DROP status returned from app while processing pub/sub event for entry id: %v", entryID)
 				bscData.bulkSubDiag.statusWiseDiag[string(contribpubsub.Drop)] += 1
-				entryRespReceived[response.EntryId] = true
-				addBulkResponseEntry(bulkResponses, response.EntryId, nil)
+				entryRespReceived[entryID] = true
+				addBulkResponseEntry(bulkResponses, entryID, nil)
 				if deadLetterTopic != "" {
-					msg := psm.pubSubMessages[(*bscData.entryIdIndexMap)[response.EntryId]]
+					msg := psm.pubSubMessages[(*bscData.entryIdIndexMap)[entryID]]
 					_ = p.sendToDeadLetter(ctx, bscData.psName, &contribpubsub.NewMessage{
 						Data:        msg.entry.Event,
 						Topic:       bscData.topic,
@@ -631,13 +632,13 @@ func (p *pubsub) publishBulkMessageGRPC(ctx context.Context, bulkSubCallData *bu
 			default:
 				// Consider unknown status field as error and retry
 				bscData.bulkSubDiag.statusWiseDiag[string(contribpubsub.Retry)] += 1
-				entryRespReceived[response.EntryId] = true
-				addBulkResponseEntry(bulkResponses, response.EntryId,
-					fmt.Errorf("unknown status returned from app while processing pub/sub event  for entry id %v: %v", response.EntryId, response.GetStatus()))
+				entryRespReceived[entryID] = true
+				addBulkResponseEntry(bulkResponses, entryID,
+					fmt.Errorf("unknown status returned from app while processing pub/sub event  for entry id %v: %v", entryID, response.GetStatus()))
 				hasAnyError = true
 			}
 		} else {
-			log.Warnf("Invalid entry id received from app while processing pub/sub event %v", response.EntryId)
+			log.Warnf("Invalid entry id received from app while processing pub/sub event %v", entryID)
 			continue
 		}
 	}

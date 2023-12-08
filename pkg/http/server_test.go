@@ -245,7 +245,7 @@ func TestUnescapeRequestParametersHandler(t *testing.T) {
 			chiCtx.URLParams.Add(parameter["parameterName"], parameter["parameterValue"])
 			err := srv.unespaceRequestParametersInContext(chiCtx)
 			require.Error(t, err)
-			assert.ErrorContains(t, err, "failed to unescape request parameter")
+			require.ErrorContains(t, err, "failed to unescape request parameter")
 		}
 	})
 }
@@ -322,7 +322,7 @@ func TestAPILogging(t *testing.T) {
 					timeStr, ok := logData["time"].(string)
 					assert.True(t, ok)
 					tt, err := time.Parse(time.RFC3339Nano, timeStr)
-					assert.NoError(t, err)
+					require.NoError(t, err)
 					assert.InDelta(t, time.Now().Unix(), tt.Unix(), 120)
 
 					// In our test the duration better be no more than 10ms!
@@ -453,7 +453,7 @@ func TestClose(t *testing.T) {
 		})
 		require.NoError(t, server.StartNonBlocking())
 		dapr_testing.WaitForListeningAddress(t, 5*time.Second, fmt.Sprintf("127.0.0.1:%d", port))
-		assert.NoError(t, server.Close())
+		require.NoError(t, server.Close())
 	})
 
 	t.Run("test close with api logging disabled", func(t *testing.T) {
@@ -479,6 +479,6 @@ func TestClose(t *testing.T) {
 		})
 		require.NoError(t, server.StartNonBlocking())
 		dapr_testing.WaitForListeningAddress(t, 5*time.Second, fmt.Sprintf("127.0.0.1:%d", port))
-		assert.NoError(t, server.Close())
+		require.NoError(t, server.Close())
 	})
 }
