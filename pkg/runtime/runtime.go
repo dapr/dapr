@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
+	"github.com/microsoft/durabletask-go/backend"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	otlptracegrpc "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	otlptracehttp "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
@@ -585,7 +586,7 @@ func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) error {
 		}
 	} else {
 		// If actors are not enabled, still invoke SetActorRuntime on the workflow engine with `nil` to unblock startup
-		a.workflowEngine.SetActorRuntime(nil, ctx)
+		setActorRuntime(ctx, a.workflowEngine.Backend, nil)
 	}
 
 	// We set actors as initialized whether we have an actors runtime or not
@@ -603,13 +604,17 @@ func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) error {
 	return nil
 }
 
+func setActorRuntime(ctx context.Context, be backend.Backend, actorRuntime actors.ActorRuntime) {
+	if abe, ok := be.(*wfengine.ActorBackend); ok {
+		abe.SetActorRuntime(actorRuntime, ctx)
+	}
+}
+
 func (a *DaprRuntime) initWorkflowEngine(ctx context.Context) {
 	wfComponentFactory := wfengine.BuiltinWorkflowFactory(a.workflowEngine)
 
-	//TODO, this should set only when backend type is not set or set to actor
-
 	if a.workflowEngine.BackendType == wfengine.ActorBackendType {
-		a.workflowEngine.SetActorRuntime(a.actor, ctx)
+		setActorRuntime(ctx, a.workflowEngine.Backend, a.actor)
 	}
 
 	if reg := a.runtimeConfig.registry.Workflows(); reg != nil {

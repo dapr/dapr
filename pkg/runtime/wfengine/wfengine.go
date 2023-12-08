@@ -23,7 +23,6 @@ import (
 	"github.com/microsoft/durabletask-go/backend"
 	"google.golang.org/grpc"
 
-	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/kit/logger"
 )
@@ -31,7 +30,7 @@ import (
 type WorkflowEngine struct {
 	IsRunning bool
 
-	backend              backend.Backend
+	Backend              backend.Backend
 	executor             backend.Executor
 	worker               backend.TaskHubWorker
 	registerGrpcServerFn func(grpcServer grpc.ServiceRegistrar)
@@ -64,7 +63,7 @@ func NewWorkflowEngine(appID string, spec config.WorkflowSpec) *WorkflowEngine {
 	}
 	// TODO: pass backendtype from backend component config
 	be := InitilizeWorkflowBackend(appID, SqliteBackendType, engine)
-	engine.backend = be
+	engine.Backend = be
 
 	return engine
 }
@@ -91,23 +90,12 @@ func (wfe *WorkflowEngine) ConfigureGrpcExecutor() {
 	wfe.disconnectChan = make(chan any, 1)
 	disconnectHelper := backend.WithStreamShutdownChannel(wfe.disconnectChan)
 
-	wfe.executor, wfe.registerGrpcServerFn = backend.NewGrpcExecutor(wfe.backend, wfLogger, autoStartCallback, disconnectHelper)
+	wfe.executor, wfe.registerGrpcServerFn = backend.NewGrpcExecutor(wfe.Backend, wfLogger, autoStartCallback, disconnectHelper)
 }
 
 // SetExecutor sets the executor property. This is primarily used for testing.
 func (wfe *WorkflowEngine) SetExecutor(fn func(be backend.Backend) backend.Executor) {
-	wfe.executor = fn(wfe.backend)
-}
-
-func (wfe *WorkflowEngine) SetActorRuntime(actorRuntime actors.ActorRuntime, ctx context.Context) {
-	if actorRuntime != nil {
-		wfLogger.Info("Configuring workflow engine with actors backend")
-		if ab, ok := wfe.backend.(*actorBackend); ok {
-			ab.SetActorRuntime(actorRuntime, ctx)
-		}
-	} else {
-		wfLogger.Info("actorRuntime is nil, skipping setting up actor runtime for workflow backend")
-	}
+	wfe.executor = fn(wfe.Backend)
 }
 
 // SetLogLevel sets the logging level for the workflow engine.
@@ -132,16 +120,16 @@ func (wfe *WorkflowEngine) Start(ctx context.Context) (err error) {
 
 	// There are separate "workers" for executing orchestrations (workflows) and activities
 	orchestrationWorker := backend.NewOrchestrationWorker(
-		wfe.backend,
+		wfe.Backend,
 		wfe.executor,
 		wfBackendLogger,
 		backend.WithMaxParallelism(wfe.spec.GetMaxConcurrentWorkflowInvocations()))
 	activityWorker := backend.NewActivityTaskWorker(
-		wfe.backend,
+		wfe.Backend,
 		wfe.executor,
 		wfBackendLogger,
 		backend.WithMaxParallelism(wfe.spec.GetMaxConcurrentActivityInvocations()))
-	wfe.worker = backend.NewTaskHubWorker(wfe.backend, orchestrationWorker, activityWorker, wfBackendLogger)
+	wfe.worker = backend.NewTaskHubWorker(wfe.Backend, orchestrationWorker, activityWorker, wfBackendLogger)
 
 	// Start the Durable Task worker, which will allow workflows to be scheduled and execute.
 	if err := wfe.worker.Start(ctx); err != nil {
