@@ -588,7 +588,7 @@ func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) error {
 		// If actors are not enabled, still invoke SetActorRuntime on the workflow engine with `nil` to unblock startup
 		err = setActorRuntimeForBackend(ctx, a.workflowEngine.Backend, nil)
 		if err != nil {
-			log.Errorf("error while setting actor runtime for backend to nil %v", err)
+			log.Errorf("error while setting actor runtime for backend to nil: %v", err)
 		}
 	}
 
@@ -622,7 +622,7 @@ func (a *DaprRuntime) initWorkflowEngine(ctx context.Context) {
 		err := setActorRuntimeForBackend(ctx, a.workflowEngine.Backend, a.actor)
 
 		if err != nil {
-			log.Errorf("could not set actor runtime for backend %v", err)
+			log.Errorf("could not set actor runtime for backend: %v", err)
 		}
 	}
 
