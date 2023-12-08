@@ -20,21 +20,21 @@ import (
 )
 
 const (
-	actorBackendType  = "workflow.backend.actor"
-	sqliteBackendType = "workflow.backend.sqlite"
+	ActorBackendType  = "workflow.backend.actor"
+	SqliteBackendType = "workflow.backend.sqlite"
 )
 
 type BackendFactory func(appId string, wfe *WorkflowEngine) backend.Backend
 
 var backendFactories = map[string]BackendFactory{
-	actorBackendType: func(appId string, wfe *WorkflowEngine) backend.Backend {
-		wfe.BackendType = actorBackendType
+	ActorBackendType: func(appId string, wfe *WorkflowEngine) backend.Backend {
+		wfe.BackendType = ActorBackendType
 		return NewActorBackend(appId, wfe)
 	},
-	sqliteBackendType: func(appId string, wfe *WorkflowEngine) backend.Backend {
-		wfe.BackendType = sqliteBackendType
+	SqliteBackendType: func(appId string, wfe *WorkflowEngine) backend.Backend {
+		wfe.BackendType = SqliteBackendType
 		//TODO: SqliteOpttions will be prepared from component config
-		return sqlite.NewSqliteBackend(sqlite.NewSqliteOptions("workflow.db"), wfBackendLogger)
+		return sqlite.NewSqliteBackend(sqlite.NewSqliteOptions(""), wfBackendLogger)
 	},
 }
 
@@ -44,6 +44,6 @@ func InitilizeWorkflowBackend(appId string, backendType string, wfe *WorkflowEng
 	}
 
 	// Default backend
-	wfe.BackendType = actorBackendType
+	wfe.BackendType = ActorBackendType
 	return NewActorBackend(appId, wfe)
 }

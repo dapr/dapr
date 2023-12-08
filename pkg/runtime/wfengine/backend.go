@@ -75,7 +75,7 @@ func NewActorBackend(appID string, wfengine *WorkflowEngine) *actorBackend {
 	orchestrationWorkItemChan := make(chan *backend.OrchestrationWorkItem)
 	activityWorkItemChan := make(chan *backend.ActivityWorkItem)
 
-	abe := &actorBackend{
+	return &actorBackend{
 		orchestrationWorkItemChan: orchestrationWorkItemChan,
 		activityWorkItemChan:      activityWorkItemChan,
 		config:                    backendConfig,
@@ -83,10 +83,6 @@ func NewActorBackend(appID string, wfengine *WorkflowEngine) *actorBackend {
 		activityActor:             NewActivityActor(getActivityScheduler(activityWorkItemChan), backendConfig),
 		actorsReadyCh:             make(chan struct{}),
 	}
-
-	wfengine.actorBackend = abe
-
-	return abe
 }
 
 // getWorkflowScheduler returns a workflowScheduler func that sends an orchestration work item to the Durable Task Framework.

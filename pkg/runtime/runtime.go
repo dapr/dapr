@@ -608,7 +608,7 @@ func (a *DaprRuntime) initWorkflowEngine(ctx context.Context) {
 
 	//TODO, this should set only when backend type is not set or set to actor
 
-	if a.workflowEngine.BackendType == "workflow.backend.actor" {
+	if a.workflowEngine.BackendType == wfengine.ActorBackendType {
 		a.workflowEngine.SetActorRuntime(a.actor, ctx)
 	}
 

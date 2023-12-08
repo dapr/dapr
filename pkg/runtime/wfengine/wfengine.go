@@ -21,7 +21,6 @@ import (
 	"sync"
 
 	"github.com/microsoft/durabletask-go/backend"
-	"github.com/microsoft/durabletask-go/backend/sqlite"
 	"google.golang.org/grpc"
 
 	"github.com/dapr/dapr/pkg/actors"
@@ -33,7 +32,6 @@ type WorkflowEngine struct {
 	IsRunning bool
 
 	backend              backend.Backend
-	actorBackend         *actorBackend
 	executor             backend.Executor
 	worker               backend.TaskHubWorker
 	registerGrpcServerFn func(grpcServer grpc.ServiceRegistrar)
@@ -104,7 +102,9 @@ func (wfe *WorkflowEngine) SetExecutor(fn func(be backend.Backend) backend.Execu
 func (wfe *WorkflowEngine) SetActorRuntime(actorRuntime actors.ActorRuntime, ctx context.Context) {
 	if actorRuntime != nil {
 		wfLogger.Info("Configuring workflow engine with actors backend")
-		wfe.actorBackend.SetActorRuntime(actorRuntime, ctx)
+		if ab, ok := wfe.backend.(*actorBackend); ok {
+			ab.SetActorRuntime(actorRuntime, ctx)
+		}
 	}
 }
 
