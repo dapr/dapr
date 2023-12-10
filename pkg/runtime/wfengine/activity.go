@@ -171,11 +171,11 @@ func (a *activityActor) executeActivity(ctx context.Context, actorID string, nam
 	if err = a.scheduler.ScheduleActivity(ctx, wi); err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
 			// Activity execution failed with recoverable error, record metrics.
-			diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, diag.Activity, diag.StatusRetryable, 0)
+			diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, "dapr", diag.Activity, diag.StatusRetryable, 0)
 			return newRecoverableError(fmt.Errorf("timed-out trying to schedule an activity execution - this can happen if too many activities are running in parallel or if the workflow engine isn't running: %w", err))
 		}
 		// Activity execution failed with recoverable error, record metrics.
-		diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, diag.Activity, diag.StatusRetryable, 0)
+		diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, "dapr", diag.Activity, diag.StatusRetryable, 0)
 		return newRecoverableError(fmt.Errorf("failed to schedule an activity execution: %w", err))
 	}
 
@@ -188,7 +188,7 @@ loop:
 				<-t.C
 			}
 			// Activity execution failed with non-recoverable error. Record metrics
-			diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, diag.Activity, diag.StatusFailed, 0)
+			diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, "dapr", diag.Activity, diag.StatusFailed, 0)
 			return ctx.Err()
 		case <-t.C:
 			if deadline, ok := ctx.Deadline(); ok {
@@ -203,12 +203,12 @@ loop:
 			if completed {
 				elapsed := diag.ElapsedSince(start)
 				// activity completed, record count and latency metrics
-				diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, diag.Activity, diag.StatusSuccess, elapsed)
+				diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, "dapr", diag.Activity, diag.StatusSuccess, elapsed)
 				break loop
 			} else {
 				elapsed := diag.ElapsedSince(start)
 				// Activity execution failed with recoverable error, record metrics
-				diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, diag.Activity, diag.StatusRetryable, elapsed)
+				diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, "dapr", diag.Activity, diag.StatusRetryable, elapsed)
 				return newRecoverableError(errExecutionAborted)
 			}
 		}

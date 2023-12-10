@@ -224,3 +224,105 @@ func TestReminders(t *testing.T) {
 		})
 	})
 }
+
+func TestExecution(t *testing.T) {
+	t.Run("record execution metrics", func(t *testing.T) {
+		countMetricName := "runtime/workflow/execution/count"
+		latencyMetricName := "runtime/workflow/execution/latency"
+		t.Run("Activity executions", func(t *testing.T) {
+			t.Run("Failed with retryable error", func(t *testing.T) {
+				w := workflowsMetrics()
+
+				w.ExecutionEvent(context.Background(), workflowName, Activity, StatusRetryable, 0)
+
+				viewData, _ := view.RetrieveData(countMetricName)
+				v := view.Find(countMetricName)
+
+				allTagsPresent(t, v, viewData[0].Tags)
+			})
+
+			t.Run("Failed with not-retryable error", func(t *testing.T) {
+				w := workflowsMetrics()
+
+				w.ExecutionEvent(context.Background(), workflowName, Activity, StatusFailed, 0)
+
+				viewData, _ := view.RetrieveData(countMetricName)
+				v := view.Find(countMetricName)
+
+				allTagsPresent(t, v, viewData[0].Tags)
+
+			})
+
+			t.Run("Successful activity execution", func(t *testing.T) {
+				w := workflowsMetrics()
+
+				w.ExecutionEvent(context.Background(), workflowName, Activity, StatusSuccess, 0)
+
+				viewData, _ := view.RetrieveData(countMetricName)
+				v := view.Find(countMetricName)
+
+				allTagsPresent(t, v, viewData[0].Tags)
+			})
+
+			t.Run("activity execution latency", func(t *testing.T) {
+				w := workflowsMetrics()
+
+				w.ExecutionEvent(context.Background(), workflowName, Activity, StatusSuccess, 4)
+
+				viewData, _ := view.RetrieveData(latencyMetricName)
+				v := view.Find(latencyMetricName)
+
+				allTagsPresent(t, v, viewData[0].Tags)
+				assert.Equal(t, float64(2), viewData[0].Data.(*view.DistributionData).Min)
+			})
+		})
+
+		t.Run("Workflow executions", func(t *testing.T) {
+			t.Run("Failed with retryable error", func(t *testing.T) {
+				w := workflowsMetrics()
+
+				w.ExecutionEvent(context.Background(), workflowName, Workflow, StatusRetryable, 0)
+
+				viewData, _ := view.RetrieveData(countMetricName)
+				v := view.Find(countMetricName)
+
+				allTagsPresent(t, v, viewData[0].Tags)
+			})
+
+			t.Run("Failed with not-retryable error", func(t *testing.T) {
+				w := workflowsMetrics()
+
+				w.ExecutionEvent(context.Background(), workflowName, Workflow, StatusFailed, 0)
+
+				viewData, _ := view.RetrieveData(countMetricName)
+				v := view.Find(countMetricName)
+
+				allTagsPresent(t, v, viewData[0].Tags)
+
+			})
+
+			t.Run("Successful activity execution", func(t *testing.T) {
+				w := workflowsMetrics()
+
+				w.ExecutionEvent(context.Background(), workflowName, Workflow, StatusSuccess, 0)
+
+				viewData, _ := view.RetrieveData(countMetricName)
+				v := view.Find(countMetricName)
+
+				allTagsPresent(t, v, viewData[0].Tags)
+			})
+
+			t.Run("activity execution latency", func(t *testing.T) {
+				w := workflowsMetrics()
+
+				w.ExecutionEvent(context.Background(), workflowName, Workflow, StatusSuccess, 4)
+
+				viewData, _ := view.RetrieveData(latencyMetricName)
+				v := view.Find(latencyMetricName)
+
+				allTagsPresent(t, v, viewData[0].Tags)
+				assert.Equal(t, float64(2), viewData[0].Data.(*view.DistributionData).Min)
+			})
+		})
+	})
+}

@@ -391,7 +391,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
 			// Workflow execution scheduling request failed with recoverable error, record metrics.
-			diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, diag.Workflow, diag.StatusRetryable, 0)
+			diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, "dapr", diag.Workflow, diag.StatusRetryable, 0)
 			return newRecoverableError(fmt.Errorf("timed-out trying to schedule a workflow execution - this can happen if there are too many in-flight workflows or if the workflow engine isn't running: %w", err))
 		}
 		return newRecoverableError(fmt.Errorf("failed to schedule a workflow execution: %w", err))
@@ -400,17 +400,17 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 	select {
 	case <-ctx.Done(): // caller is responsible for timeout management
 		// Workflow execution failed with non-recoverable error, record metrics.
-		diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, diag.Workflow, diag.StatusFailed, 0)
+		diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, "dapr", diag.Workflow, diag.StatusFailed, 0)
 		return ctx.Err()
 	case completed := <-callback:
 		if !completed {
 			// Workflow execution failed with Recoverable Error, record metrics
-			diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, diag.Workflow, diag.StatusRetryable, 0)
+			diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, "dapr", diag.Workflow, diag.StatusRetryable, 0)
 
 			return newRecoverableError(errExecutionAborted)
 		}
 		// workflow execution completed, record metrics
-		diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, diag.Workflow, diag.StatusSuccess, 0)
+		diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, "dapr", diag.Workflow, diag.StatusSuccess, 0)
 	}
 
 	// Increment the generation counter if the workflow used continue-as-new. Subsequent actions below
@@ -523,7 +523,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 
 	// record time taken to complete the workflow
 	elapsed := diag.ElapsedSince(start)
-	diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, diag.Workflow, diag.StatusSuccess, elapsed)
+	diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, "dapr", diag.Workflow, diag.StatusSuccess, elapsed)
 	state.ApplyRuntimeStateChanges(runtimeState)
 	state.ClearInbox()
 

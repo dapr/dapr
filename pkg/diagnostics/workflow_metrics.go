@@ -127,15 +127,15 @@ func (w *workflowMetrics) WorkflowOperationsEvent(ctx context.Context, operation
 }
 
 // ExecutionEvent records total number of successful/failed workflow/activity executions. It also records latency for executions.
-func (w *workflowMetrics) ExecutionEvent(ctx context.Context, executionType, status string, elapsed float64) {
+func (w *workflowMetrics) ExecutionEvent(ctx context.Context, component, executionType, status string, elapsed float64) {
 	if !w.IsEnabled() {
 		return
 	}
 
-	stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowExecutionCount.Name(), appIDKey, w.appID, namespaceKey, w.namespace, executionTypeKey, executionType, statusKey, status))
+	stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowExecutionCount.Name(), appIDKey, w.appID, componentKey, component, namespaceKey, w.namespace, executionTypeKey, executionType, statusKey, status))
 
 	if elapsed > 0 {
-		stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowExecutionLatency.Name(), appIDKey, w.appID, namespaceKey, w.namespace, executionTypeKey, executionType, statusKey, status), w.workflowExecutionLatency.M(elapsed))
+		stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowExecutionLatency.Name(), appIDKey, w.appID, componentKey, component, namespaceKey, w.namespace, executionTypeKey, executionType, statusKey, status), w.workflowExecutionLatency.M(elapsed))
 	}
 }
 
