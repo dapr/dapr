@@ -200,7 +200,7 @@ func (wf *workflowActor) createWorkflowInstance(ctx context.Context, actorID str
 	}
 
 	// workflow reminder created, record metrics.
-	diag.DefaultWorkflowMonitoring.RemindersTotalCreated(ctx, "Workflow")
+	diag.DefaultWorkflowMonitoring.RemindersTotalCreated(ctx, "dapr", diag.Workflow)
 
 	state.AddToInbox(startEvent)
 	return wf.saveInternalState(ctx, actorID, state)
@@ -295,7 +295,7 @@ func (wf *workflowActor) addWorkflowEvent(ctx context.Context, actorID string, h
 		return err
 	}
 	// event reminder created successfully, record metrics.
-	diag.DefaultWorkflowMonitoring.RemindersTotalCreated(ctx, "Event")
+	diag.DefaultWorkflowMonitoring.RemindersTotalCreated(ctx, "dapr", diag.WorkflowEvent)
 
 	return wf.saveInternalState(ctx, actorID, state)
 }
@@ -440,7 +440,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 				return newRecoverableError(fmt.Errorf("actor %s failed to create reminder for timer: %w", actorID, err))
 			}
 			// timer reminder created, record metrics
-			diag.DefaultWorkflowMonitoring.RemindersTotalCreated(ctx, "Timer")
+			diag.DefaultWorkflowMonitoring.RemindersTotalCreated(ctx, "dapr", diag.Timer)
 		}
 	}
 

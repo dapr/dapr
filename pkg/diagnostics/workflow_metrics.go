@@ -40,8 +40,9 @@ const (
 	PurgeWorkflow   = "purge_workflow"
 	Activity        = "activity"
 	Workflow        = "workflow"
-	WorkflowEvent   = "event"
-	Timer           = "timer"
+
+	WorkflowEvent = "event"
+	Timer         = "timer"
 )
 
 type workflowMetrics struct {
@@ -139,9 +140,9 @@ func (w *workflowMetrics) ExecutionEvent(ctx context.Context, executionType, sta
 }
 
 // RemindersTotalCreated records total number of Workflow and Activity reminders created.
-func (w *workflowMetrics) RemindersTotalCreated(ctx context.Context, reminderType string) {
+func (w *workflowMetrics) RemindersTotalCreated(ctx context.Context, component, reminderType string) {
 	if !w.IsEnabled() {
 		return
 	}
-	stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowRemindersCount.Name(), appIDKey, w.appID, namespaceKey, w.namespace, reminderTypeKey, reminderType), w.workflowRemindersCount.M(1))
+	stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowRemindersCount.Name(), appIDKey, w.appID, componentKey, component, namespaceKey, w.namespace, reminderTypeKey, reminderType), w.workflowRemindersCount.M(1))
 }

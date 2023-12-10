@@ -11,6 +11,8 @@ const (
 	workflowName = "test"
 )
 
+// Not sure about value for "ComponentKey", so passing "test" as component, through "workflowName" variable.
+
 func workflowsMetrics() *workflowMetrics {
 	w := newWorkflowMetrics()
 	w.Init("test", "default")
@@ -169,6 +171,56 @@ func TestOperations(t *testing.T) {
 
 				assert.Equal(t, float64(2), viewData[0].Data.(*view.DistributionData).Min)
 			})
+		})
+	})
+}
+
+func TestReminders(t *testing.T) {
+	t.Run("record reminder creation", func(t *testing.T) {
+		countMetricName := "runtime/workflow/reminders/count"
+
+		t.Run("Activity reminder", func(t *testing.T) {
+			w := workflowsMetrics()
+
+			w.RemindersTotalCreated(context.Background(), workflowName, Activity)
+
+			viewData, _ := view.RetrieveData(countMetricName)
+			v := view.Find(countMetricName)
+
+			allTagsPresent(t, v, viewData[0].Tags)
+		})
+
+		t.Run("Workflow reminder", func(t *testing.T) {
+			w := workflowsMetrics()
+
+			w.RemindersTotalCreated(context.Background(), workflowName, Workflow)
+
+			viewData, _ := view.RetrieveData(countMetricName)
+			v := view.Find(countMetricName)
+
+			allTagsPresent(t, v, viewData[0].Tags)
+		})
+
+		t.Run("Event reminder", func(t *testing.T) {
+			w := workflowsMetrics()
+
+			w.RemindersTotalCreated(context.Background(), workflowName, WorkflowEvent)
+
+			viewData, _ := view.RetrieveData(countMetricName)
+			v := view.Find(countMetricName)
+
+			allTagsPresent(t, v, viewData[0].Tags)
+		})
+
+		t.Run("Timer reminder", func(t *testing.T) {
+			w := workflowsMetrics()
+
+			w.RemindersTotalCreated(context.Background(), workflowName, Timer)
+
+			viewData, _ := view.RetrieveData(countMetricName)
+			v := view.Find(countMetricName)
+
+			allTagsPresent(t, v, viewData[0].Tags)
 		})
 	})
 }
