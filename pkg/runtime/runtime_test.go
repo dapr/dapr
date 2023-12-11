@@ -942,9 +942,10 @@ func TestInitActors(t *testing.T) {
 		defer stopRuntime(t, r)
 		r.channels.Refresh()
 
-		name, ok := r.processor.State().ActorStateStoreName()
+		store, name, ok := r.compStore.GetStateStoreActor()
 		assert.False(t, ok)
 		assert.Equal(t, "", name)
+		assert.Nil(t, store)
 		err = r.initActors(context.TODO())
 		require.Error(t, err)
 	})

@@ -914,8 +914,7 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 	a.actorStateStoreLock.Lock()
 	defer a.actorStateStoreLock.Unlock()
 
-	actorStateStoreName, ok := a.processor.State().ActorStateStoreName()
-	if !ok {
+	if _, _, ok := a.compStore.GetStateStoreActor(); !ok {
 		log.Info("actors: state store is not configured - this is okay for clients but services with hosted actors will fail to initialize!")
 	}
 	actorConfig := actors.NewConfig(actors.ConfigOpts{
@@ -937,7 +936,6 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 		Config:           actorConfig,
 		TracingSpec:      a.globalConfig.GetTracingSpec(),
 		Resiliency:       a.resiliency,
-		StateStoreName:   actorStateStoreName,
 		CompStore:        a.compStore,
 		// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 		StateTTLEnabled: a.globalConfig.IsFeatureEnabled(config.ActorStateTTL),

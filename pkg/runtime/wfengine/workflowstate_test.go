@@ -196,13 +196,12 @@ func getActorRuntime() actors.Actors {
 		AppConfig:          config.ApplicationConfig{},
 	})
 	compStore := compstore.New()
-	compStore.AddStateStore("workflowStore", store)
+	compStore.AddStateStoreActor("workflowStore", store)
 	return actors.NewActors(actors.ActorsOpts{
-		CompStore:      compStore,
-		Config:         cfg,
-		StateStoreName: "workflowStore",
-		MockPlacement:  actors.NewMockPlacement(testAppID),
-		Resiliency:     resiliency.New(logger.NewLogger("test")),
+		CompStore:     compStore,
+		Config:        cfg,
+		MockPlacement: actors.NewMockPlacement(testAppID),
+		Resiliency:    resiliency.New(logger.NewLogger("test")),
 	})
 }
 

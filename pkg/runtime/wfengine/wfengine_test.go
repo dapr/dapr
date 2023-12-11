@@ -872,13 +872,12 @@ func getEngine(t *testing.T) *wfengine.WorkflowEngine {
 		AppConfig:          config.ApplicationConfig{},
 	})
 	compStore := compstore.New()
-	compStore.AddStateStore("workflowStore", store)
+	compStore.AddStateStoreActor("workflowStore", store)
 	actors := actors.NewActors(actors.ActorsOpts{
-		CompStore:      compStore,
-		Config:         cfg,
-		StateStoreName: "workflowStore",
-		MockPlacement:  actors.NewMockPlacement(testAppID),
-		Resiliency:     resiliency.New(logger.NewLogger("test")),
+		CompStore:     compStore,
+		Config:        cfg,
+		MockPlacement: actors.NewMockPlacement(testAppID),
+		Resiliency:    resiliency.New(logger.NewLogger("test")),
 	})
 
 	if err := actors.Init(context.Background()); err != nil {
@@ -898,14 +897,13 @@ func getEngineAndStateStore(t *testing.T) (*wfengine.WorkflowEngine, *daprt.Fake
 		AppConfig:          config.ApplicationConfig{},
 	})
 	compStore := compstore.New()
-	compStore.AddStateStore("workflowStore", store)
+	compStore.AddStateStoreActor("workflowStore", store)
 
 	actors := actors.NewActors(actors.ActorsOpts{
-		CompStore:      compStore,
-		Config:         cfg,
-		StateStoreName: "workflowStore",
-		MockPlacement:  actors.NewMockPlacement(testAppID),
-		Resiliency:     resiliency.New(logger.NewLogger("test")),
+		CompStore:     compStore,
+		Config:        cfg,
+		MockPlacement: actors.NewMockPlacement(testAppID),
+		Resiliency:    resiliency.New(logger.NewLogger("test")),
 	})
 
 	require.NoError(t, actors.Init(context.Background()))
