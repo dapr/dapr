@@ -22,9 +22,9 @@ import (
 )
 
 const (
-	DotDelimiter = "."
+	DotDelimiter            = "."
 	DefaultSocketsExtension = ".sock"
-	SocketsExtensionEnvVar = "DAPR_COMPONENTS_SOCKETS_EXTENSION"
+	SocketsExtensionEnvVar  = "DAPR_COMPONENTS_SOCKETS_EXTENSION"
 )
 
 func GetSocketsExtension() string {

@@ -132,7 +132,7 @@ func TestSocketExists(t *testing.T) {
 			file, err := os.CreateTemp(os.TempDir(), "socket.*.sock")
 			require.NoError(t, err)
 			defer os.Remove(file.Name())
-	
+
 			assert.True(t, SocketExists(file.Name()))
 		})
 
@@ -145,7 +145,7 @@ func TestSocketExists(t *testing.T) {
 			file, err := os.CreateTemp(os.TempDir(), "socket.*.custom")
 			require.NoError(t, err)
 			defer os.Remove(file.Name())
-	
+
 			assert.True(t, SocketExists(file.Name()))
 		})
 

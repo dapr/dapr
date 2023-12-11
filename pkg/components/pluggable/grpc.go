@@ -104,7 +104,7 @@ func socketDialer(socket string, additionalOpts ...grpc.DialOption) GRPCConnecti
 // SocketDial creates a grpc connection using the given socket.
 func SocketDial(ctx context.Context, socket string, additionalOpts ...grpc.DialOption) (*grpc.ClientConn, error) {
 	udsSocket := "unix://" + socket
-	
+
 	if runtime.GOOS == "windows" {
 		udsSocket = "unix:" + socket
 	}

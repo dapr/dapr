@@ -102,7 +102,7 @@ func TestComponentDiscovery(t *testing.T) {
 		fakeSocketFolder := path.Join(os.TempDir(), "test")
 		pattern := "fake"
 
-		if (runtime.GOOS == "windows") {
+		if runtime.GOOS == "windows" {
 			pattern = "fake.*.notsock"
 		}
 
