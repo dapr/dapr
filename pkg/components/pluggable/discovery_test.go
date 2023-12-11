@@ -17,7 +17,7 @@ import (
 	"errors"
 	"net"
 	"os"
-	"path"
+	"path/filepath"
 	"runtime"
 	"sync/atomic"
 	"testing"
@@ -99,7 +99,7 @@ func TestComponentDiscovery(t *testing.T) {
 		assert.Empty(t, services)
 	})
 	t.Run("serviceDiscovery should not connect to service that isn't a unix domain socket", func(t *testing.T) {
-		fakeSocketFolder := path.Join(os.TempDir(), "test")
+		fakeSocketFolder := filepath.Join(os.TempDir(), "test")
 		pattern := "fake"
 
 		if runtime.GOOS == "windows" {
@@ -120,13 +120,13 @@ func TestComponentDiscovery(t *testing.T) {
 		assert.Empty(t, services)
 	})
 	t.Run("serviceDiscovery should return an error when reflect client factory returns an error", func(t *testing.T) {
-		fakeSocketFolder := path.Join(os.TempDir(), "test")
+		fakeSocketFolder := filepath.Join(os.TempDir(), "test")
 		err := os.MkdirAll(fakeSocketFolder, os.ModePerm)
 		defer os.RemoveAll(fakeSocketFolder)
 		require.NoError(t, err)
 		t.Setenv(SocketsFolderEnvVar, fakeSocketFolder)
 
-		fileName := path.Join(fakeSocketFolder, "socket1234.sock")
+		fileName := filepath.Join(fakeSocketFolder, "socket1234.sock")
 		listener, err := net.Listen("unix", fileName)
 		require.NoError(t, err)
 		defer listener.Close()
@@ -140,13 +140,13 @@ func TestComponentDiscovery(t *testing.T) {
 		assert.Equal(t, int64(0), reflectService.listServicesCalled.Load())
 	})
 	t.Run("serviceDiscovery should return an error when list services return an error", func(t *testing.T) {
-		fakeSocketFolder := path.Join(os.TempDir(), "test")
+		fakeSocketFolder := filepath.Join(os.TempDir(), "test")
 		err := os.MkdirAll(fakeSocketFolder, os.ModePerm)
 		defer os.RemoveAll(fakeSocketFolder)
 		require.NoError(t, err)
 		t.Setenv(SocketsFolderEnvVar, fakeSocketFolder)
 
-		fileName := path.Join(fakeSocketFolder, "socket1234.sock")
+		fileName := filepath.Join(fakeSocketFolder, "socket1234.sock")
 		listener, err := net.Listen("unix", fileName)
 		require.NoError(t, err)
 		defer listener.Close()
@@ -162,18 +162,18 @@ func TestComponentDiscovery(t *testing.T) {
 		assert.Equal(t, int64(1), reflectService.listServicesCalled.Load())
 	})
 	t.Run("serviceDiscovery should return all services list", func(t *testing.T) {
-		fakeSocketFolder := path.Join(os.TempDir(), "test")
+		fakeSocketFolder := filepath.Join(os.TempDir(), "test")
 		err := os.MkdirAll(fakeSocketFolder, os.ModePerm)
 		defer os.RemoveAll(fakeSocketFolder)
 		require.NoError(t, err)
 		t.Setenv(SocketsFolderEnvVar, fakeSocketFolder)
 
-		subFolder := path.Join(fakeSocketFolder, "/subfolder")
+		subFolder := filepath.Join(fakeSocketFolder, "/subfolder")
 		err = os.MkdirAll(subFolder, os.ModePerm) // should skip subfolders
 		defer os.RemoveAll(subFolder)
 		require.NoError(t, err)
 
-		fileName := path.Join(fakeSocketFolder, "socket1234.sock")
+		fileName := filepath.Join(fakeSocketFolder, "socket1234.sock")
 		listener, err := net.Listen("unix", fileName)
 		require.NoError(t, err)
 		defer listener.Close()
@@ -203,10 +203,15 @@ func TestRemoveExt(t *testing.T) {
 
 func TestGetSocketFolder(t *testing.T) {
 	t.Run("get socket folder should use default when env var is not set", func(t *testing.T) {
-		assert.Equal(t, defaultSocketsFolder, GetSocketsFolderPath())
+		assert.Equal(t, filepath.Join(os.TempDir(), defaultSocketsFolder), GetSocketsFolderPath())
 	})
 	t.Run("get socket folder should use env var when set", func(t *testing.T) {
-		const fakeSocketFolder = "/tmp"
+		fakeSocketFolder := "/tmp"
+
+		if runtime.GOOS == "windows" {
+			fakeSocketFolder = "C:\\Temp"
+		}
+
 		t.Setenv(SocketsFolderEnvVar, fakeSocketFolder)
 		assert.Equal(t, fakeSocketFolder, GetSocketsFolderPath())
 	})
