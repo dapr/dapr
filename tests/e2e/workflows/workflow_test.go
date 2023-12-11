@@ -107,6 +107,20 @@ func pauseResumeTest(url string, instanceID string) func(t *testing.T) {
 			assert.Equalf(t, "Running", string(resp), "expected workflow to be Running, actual workflow state is: %s", string(resp))
 		}, 5*time.Second, 100*time.Millisecond)
 
+		// Raise an event on the workflow
+		resp, err = utils.HTTPPost(fmt.Sprintf("%s/RaiseWorkflowEvent/dapr/%s/ChangePurchaseItem/1", url, instanceID), nil)
+		require.NoError(t, err, "failure raising event on workflow")
+
+		// Raise parallel events on the workflow
+		resp, err = utils.HTTPPost(fmt.Sprintf("%s/RaiseWorkflowEvent/dapr/%s/ConfirmSize/1", url, instanceID), nil)
+		require.NoError(t, err, "failure raising event on workflow")
+
+		resp, err = utils.HTTPPost(fmt.Sprintf("%s/RaiseWorkflowEvent/dapr/%s/ConfirmColor/1", url, instanceID), nil)
+		require.NoError(t, err, "failure raising event on workflow")
+
+		resp, err = utils.HTTPPost(fmt.Sprintf("%s/RaiseWorkflowEvent/dapr/%s/ConfirmAddress/1", url, instanceID), nil)
+		require.NoError(t, err, "failure raising event on workflow")
+
 		// Pause the workflow
 		resp, err = utils.HTTPPost(fmt.Sprintf("%s/PauseWorkflow/dapr/%s", url, instanceID), nil)
 		require.NoError(t, err, "failure pausing workflow")
@@ -121,10 +135,16 @@ func pauseResumeTest(url string, instanceID string) func(t *testing.T) {
 		resp, err = utils.HTTPPost(fmt.Sprintf("%s/ResumeWorkflow/dapr/%s", url, instanceID), nil)
 		require.NoError(t, err, "failure resuming workflow")
 
+		// Raise a parallel event on the workflow
+		resp, err = utils.HTTPPost(fmt.Sprintf("%s/RaiseWorkflowEvent/dapr/%s/PayByCard/1", url, instanceID), nil)
+		require.NoError(t, err, "failure raising event on workflow")
+
+		time.Sleep(5 * time.Second)
+
 		require.EventuallyWithT(t, func(t *assert.CollectT) {
 			resp, err = utils.HTTPGet(getString)
 			require.NoError(t, err, "failure getting info on workflow")
-			assert.Equalf(t, "Running", string(resp), "expected workflow to be Running, actual workflow state is: %s", string(resp))
+			assert.Equalf(t, "Completed", string(resp), "expected workflow to be Running, actual workflow state is: %s", string(resp))
 		}, 5*time.Second, 100*time.Millisecond)
 	}
 }
