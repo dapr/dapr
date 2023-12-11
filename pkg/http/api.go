@@ -1925,7 +1925,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	transactionalStore, ok := store.(state.TransactionalStore)
-	if !ok {
+	if !ok || !state.FeatureTransactional.IsPresent(store.Features()) {
 		err := apierrors.StateStoreTransactionsNotSupported(storeName)
 		universalFastHTTPStandardizedErrorResponder(reqCtx, err)
 		log.Debug(err)

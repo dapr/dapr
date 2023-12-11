@@ -833,7 +833,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 	}
 
 	transactionalStore, ok := store.(state.TransactionalStore)
-	if !ok {
+	if !ok || !state.FeatureTransactional.IsPresent(store.Features()) {
 		err := apierrors.StateStoreTransactionsNotSupported(in.GetStoreName())
 		apiServerLogger.Debug(err)
 		return &emptypb.Empty{}, err

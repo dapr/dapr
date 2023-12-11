@@ -65,6 +65,13 @@ func (e *errors) Setup(t *testing.T) []framework.Option {
 		return nil
 	}
 
+	storeWithNoTransactional := statestore.New(t,
+		statestore.WithSocketDirectory(socketDir),
+		statestore.WithStateStore(inmemory.New(t,
+			inmemory.WithFeatures(),
+		)),
+	)
+
 	storeWithQuerier := statestore.New(t,
 		statestore.WithSocketDirectory(socketDir),
 		statestore.WithStateStore(inmemory.NewQuerier(t,
@@ -94,6 +101,14 @@ spec:
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
+ name: mystore-non-transactional
+spec:
+ type: state.%s
+ version: v1
+---
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
   name: mystore-pluggable-querier
 spec:
   type: state.%s
@@ -106,14 +121,14 @@ metadata:
 spec:
   type: state.%s
   version: v1
-`, storeWithQuerier.SocketName(), storeWithMultiMaxSize.SocketName())),
+`, storeWithNoTransactional.SocketName(), storeWithQuerier.SocketName(), storeWithMultiMaxSize.SocketName())),
 		procdaprd.WithExecOptions(exec.WithEnvVars(
 			"DAPR_COMPONENTS_SOCKETS_FOLDER", socketDir,
 		)),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(storeWithQuerier, storeWithMultiMaxSize, e.daprd),
+		framework.WithProcesses(storeWithNoTransactional, storeWithQuerier, storeWithMultiMaxSize, e.daprd),
 	}
 }
 
@@ -358,10 +373,12 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		}
 
 		// Confirm that the ErrorInfo details are correct
+		require.NotEmptyf(t, errInfo, "ErrorInfo not found in %+v", detailsArray)
 		require.Equal(t, framework.Domain, errInfo["domain"])
 		require.Equal(t, "DAPR_STATE_QUERYING_NOT_SUPPORTED", errInfo["reason"])
 
 		// Confirm that the ResourceInfo details are correct
+		require.NotEmptyf(t, resInfo, "ResourceInfo not found in %+v", detailsArray)
 		require.Equal(t, "state", resInfo["resource_type"])
 		require.Equal(t, storeName, resInfo["resource_name"])
 	})
@@ -428,10 +445,12 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		}
 
 		// Confirm that the ErrorInfo details are correct
+		require.NotEmptyf(t, errInfo, "ErrorInfo not found in %+v", detailsArray)
 		require.Equal(t, framework.Domain, errInfo["domain"])
 		require.Equal(t, "DAPR_STATE_QUERY_FAILED", errInfo["reason"])
 
 		// Confirm that the ResourceInfo details are correct
+		require.NotEmptyf(t, resInfo, "ResourceInfo not found in %+v", detailsArray)
 		require.Equal(t, "state", resInfo["resource_type"])
 		require.Equal(t, storeName, resInfo["resource_name"])
 	})
@@ -494,6 +513,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		}
 
 		// Confirm that the ErrorInfo details are correct
+		require.NotEmptyf(t, errInfo, "ErrorInfo not found in %+v", detailsArray)
 		require.Equal(t, framework.Domain, errInfo["domain"])
 		require.Equal(t, "DAPR_STATE_TOO_MANY_TRANSACTIONS", errInfo["reason"])
 		require.Equal(t, map[string]interface{}{
@@ -501,7 +521,97 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		}, errInfo["metadata"])
 
 		// Confirm that the ResourceInfo details are correct
+		require.NotEmptyf(t, resInfo, "ResourceInfo not found in %+v", detailsArray)
 		require.Equal(t, "state", resInfo["resource_type"])
 		require.Equal(t, storeName, resInfo["resource_name"])
+	})
+
+	t.Run("state transactions not supported", func(t *testing.T) {
+		storeName := "mystore-non-transactional"
+
+		endpoint := fmt.Sprintf("http://localhost:%d/v1.0/state/%s/transaction", e.daprd.HTTPPort(), storeName)
+		payload := `{"operations": [{"operation": "upsert","request": {"key": "key1","value": "val1"}},{"operation": "delete","request": {"key": "key2"}}],"metadata": {"partitionKey": "key2"}}`
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(payload))
+		require.NoError(t, err)
+
+		resp, err := httpClient.Do(req)
+		require.NoError(t, err)
+		require.Equal(t, "application/json", resp.Header.Get("Content-Type"))
+		require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+
+		var data map[string]interface{}
+		err = json.Unmarshal([]byte(string(body)), &data)
+		require.NoError(t, err)
+
+		// Confirm that the 'errorCode' field exists and contains the correct error code
+		errCode, exists := data["errorCode"]
+		require.True(t, exists)
+		require.Equal(t, "ERR_STATE_STORE_NOT_SUPPORTED", errCode)
+
+		// Confirm that the 'message' field exists and contains the correct error message
+		errMsg, exists := data["message"]
+		require.True(t, exists)
+		require.Equal(t, fmt.Sprintf("state store %s doesn't support transaction", "mystore-non-transactional"), errMsg)
+
+		// Confirm that the 'details' field exists and has two elements
+		details, exists := data["details"]
+		require.True(t, exists)
+
+		detailsArray, ok := details.([]interface{})
+		require.True(t, ok)
+		require.Len(t, detailsArray, 3)
+
+		// Parse the json into go objects
+		var errInfo map[string]interface{}
+		var resInfo map[string]interface{}
+		var help map[string]interface{}
+
+		for _, detail := range detailsArray {
+			d, ok := detail.(map[string]interface{})
+			require.True(t, ok)
+			switch d["@type"] {
+			case "type.googleapis.com/google.rpc.ErrorInfo":
+				errInfo = d
+			case "type.googleapis.com/google.rpc.ResourceInfo":
+				resInfo = d
+			case "type.googleapis.com/google.rpc.Help":
+				help = d
+			default:
+				require.FailNow(t, "unexpected status detail")
+			}
+		}
+
+		// Confirm that the ErrorInfo details are correct
+		require.NotEmptyf(t, errInfo, "ErrorInfo not found in %+v", detailsArray)
+		require.Equal(t, framework.Domain, errInfo["domain"])
+		require.Equal(t, "DAPR_STATE_TRANSACTIONS_NOT_SUPPORTED", errInfo["reason"])
+
+		// Confirm that the ResourceInfo details are correct
+		require.NotEmptyf(t, resInfo, "ResourceInfo not found in %+v", detailsArray)
+		fmt.Println("\n\nresinfo\n", resInfo)
+		require.Equal(t, "state", resInfo["resource_type"])
+		require.Equal(t, storeName, resInfo["resource_name"])
+
+		// Confirm that the Help details are correct
+		helpLinks, ok := help["links"].([]interface{})
+		require.True(t, ok, "Failed to assert Help links as an array")
+		require.NotEmpty(t, helpLinks, "Help links array is empty")
+
+		link, ok := helpLinks[0].(map[string]interface{})
+		require.True(t, ok, "Failed to assert link as a map")
+
+		linkURL, ok := link["url"].(string)
+		require.True(t, ok, "Failed to assert link URL as a string")
+		require.Equal(t, "https://docs.dapr.io/reference/components-reference/supported-state-stores/", linkURL)
+
+		linkDescription, ok := link["description"].(string)
+		require.True(t, ok, "Failed to assert link description as a string")
+		require.Equal(t, "Check the list of state stores and the features they support", linkDescription)
+
 	})
 }

@@ -24,7 +24,6 @@ import (
 	"golang.org/x/net/nettest"
 	"google.golang.org/grpc/status"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -73,6 +72,13 @@ func (e *errors) Setup(t *testing.T) []framework.Option {
 		return nil
 	}
 
+	storeWithNoTransactional := statestore.New(t,
+		statestore.WithSocketDirectory(socketDir),
+		statestore.WithStateStore(inmemory.New(t,
+			inmemory.WithFeatures(),
+		)),
+	)
+
 	storeWithQuerier := statestore.New(t,
 		statestore.WithSocketDirectory(socketDir),
 		statestore.WithStateStore(inmemory.NewQuerier(t,
@@ -81,6 +87,7 @@ func (e *errors) Setup(t *testing.T) []framework.Option {
 			}),
 		)),
 	)
+
 	storeWithMultiMaxSize := statestore.New(t,
 		statestore.WithSocketDirectory(socketDir),
 		statestore.WithStateStore(inmemory.NewTransactionalMultiMaxSize(t,
@@ -102,6 +109,14 @@ spec:
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
+ name: mystore-non-transactional
+spec:
+ type: state.%s
+ version: v1
+---
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
  name: mystore-pluggable-querier
 spec:
  type: state.%s
@@ -114,14 +129,14 @@ metadata:
 spec:
   type: state.%s
   version: v1
-`, storeWithQuerier.SocketName(), storeWithMultiMaxSize.SocketName())),
+`, storeWithNoTransactional.SocketName(), storeWithQuerier.SocketName(), storeWithMultiMaxSize.SocketName())),
 		procdaprd.WithExecOptions(exec.WithEnvVars(
 			"DAPR_COMPONENTS_SOCKETS_FOLDER", socketDir,
 		)),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(storeWithQuerier, storeWithMultiMaxSize, e.daprd),
+		framework.WithProcesses(storeWithNoTransactional, storeWithQuerier, storeWithMultiMaxSize, e.daprd),
 	}
 }
 
@@ -312,7 +327,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 
 		require.True(t, ok)
 		require.Equal(t, grpcCodes.Internal, s.Code())
-		assert.Contains(t, s.Message(), fmt.Sprintf("state store %s query failed: this is a custom error string", stateStoreName))
+		require.Contains(t, s.Message(), fmt.Sprintf("state store %s query failed: this is a custom error string", stateStoreName))
 
 		// Check status details
 		require.Len(t, s.Details(), 2)
@@ -371,7 +386,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 
 		require.True(t, ok)
 		require.Equal(t, grpcCodes.InvalidArgument, s.Code())
-		assert.Equal(t, fmt.Sprintf("the transaction contains %d operations, which is more than what the state store supports: %d", 2, 1), s.Message())
+		require.Equal(t, fmt.Sprintf("the transaction contains %d operations, which is more than what the state store supports: %d", 2, 1), s.Message())
 
 		// Check status details
 		require.Len(t, s.Details(), 2)
@@ -401,5 +416,68 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, stateStoreName, resInfo.GetResourceName())
 		require.Empty(t, resInfo.GetOwner())
 		require.Empty(t, resInfo.GetDescription())
+	})
+
+	t.Run("state transactions not supported", func(t *testing.T) {
+		stateStoreName := "mystore-non-transactional"
+		ops := make([]*rtv1.TransactionalStateOperation, 0)
+		ops = append(ops, &rtv1.TransactionalStateOperation{
+			OperationType: "upsert",
+			Request: &commonv1.StateItem{
+				Key:   "key1",
+				Value: []byte("val1"),
+			},
+		},
+			&rtv1.TransactionalStateOperation{
+				OperationType: "delete",
+				Request: &commonv1.StateItem{
+					Key: "key2",
+				},
+			})
+		req := &rtv1.ExecuteStateTransactionRequest{
+			StoreName:  stateStoreName,
+			Operations: ops,
+		}
+		_, err := client.ExecuteStateTransaction(ctx, req)
+		require.Error(t, err)
+
+		s, ok := status.FromError(err)
+
+		require.True(t, ok)
+		require.Equal(t, grpcCodes.Unimplemented, s.Code())
+		require.Equal(t, fmt.Sprintf("state store %s doesn't support transaction", "mystore-non-transactional"), s.Message())
+
+		// Check status details
+		require.Len(t, s.Details(), 3)
+
+		var errInfo *errdetails.ErrorInfo
+		var resInfo *errdetails.ResourceInfo
+		var help *errdetails.Help
+
+		for _, detail := range s.Details() {
+			switch d := detail.(type) {
+			case *errdetails.ErrorInfo:
+				errInfo = d
+			case *errdetails.ResourceInfo:
+				resInfo = d
+			case *errdetails.Help:
+				help = d
+			default:
+				require.FailNow(t, "unexpected status detail")
+			}
+		}
+		require.NotNil(t, errInfo, "ErrorInfo should be present")
+		require.Equal(t, "DAPR_STATE_TRANSACTIONS_NOT_SUPPORTED", errInfo.GetReason())
+		require.Equal(t, framework.Domain, errInfo.GetDomain())
+
+		require.NotNil(t, resInfo, "ResourceInfo should be present")
+		require.Equal(t, "state", resInfo.GetResourceType())
+		require.Equal(t, stateStoreName, resInfo.GetResourceName())
+		require.Empty(t, resInfo.GetOwner())
+		require.Empty(t, resInfo.GetDescription())
+
+		require.NotNil(t, help, "Help links should be present")
+		require.Equal(t, "https://docs.dapr.io/reference/components-reference/supported-state-stores/", help.GetLinks()[0].GetUrl())
+		require.Equal(t, "Check the list of state stores and the features they support", help.GetLinks()[0].GetDescription())
 	})
 }
