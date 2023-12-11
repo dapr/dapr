@@ -127,19 +127,17 @@ func main() {
 		log.Fatal(err)
 	}
 
+	// Watch for changes in the watchDir
 	fs, err := fswatcher.New(fswatcher.Options{
 		Targets: []string{watchDir},
 	})
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	// Watch for changes in the watchDir
-	err = mngr.Add(func(ctx context.Context) error {
+	if err = mngr.Add(func(ctx context.Context) error {
 		log.Infof("Starting watch on filesystem directory: %s", watchDir)
 		return fs.Run(ctx, issuerEvent)
-	})
-	if err != nil {
+	}); err != nil {
 		log.Fatal(err)
 	}
 
