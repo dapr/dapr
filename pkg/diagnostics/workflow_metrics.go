@@ -132,7 +132,7 @@ func (w *workflowMetrics) ExecutionEvent(ctx context.Context, component, executi
 		return
 	}
 
-	stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowExecutionCount.Name(), appIDKey, w.appID, componentKey, component, namespaceKey, w.namespace, executionTypeKey, executionType, statusKey, status))
+	stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowExecutionCount.Name(), appIDKey, w.appID, componentKey, component, namespaceKey, w.namespace, executionTypeKey, executionType, statusKey, status), w.workflowExecutionCount.M(1))
 
 	if elapsed > 0 {
 		stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowExecutionLatency.Name(), appIDKey, w.appID, componentKey, component, namespaceKey, w.namespace, executionTypeKey, executionType, statusKey, status), w.workflowExecutionLatency.M(elapsed))

@@ -67,7 +67,7 @@ func InitMetrics(appID, namespace string, rules []config.MetricsRule) error {
 		return err
 	}
 
-	if err := DefaultWorkflowMonitoring.Init(appID); err != nil {
+	if err := DefaultWorkflowMonitoring.Init(appID, namespace); err != nil {
 		return err
 	}
 

@@ -50,14 +50,14 @@ func TestOperations(t *testing.T) {
 			t.Run("Create Operation request latency", func(t *testing.T) {
 				w := workflowsMetrics()
 
-				w.WorkflowOperationsEvent(context.Background(), CreateWorkflow, workflowName, StatusSuccess, 2)
+				w.WorkflowOperationsEvent(context.Background(), CreateWorkflow, workflowName, StatusSuccess, 1)
 
 				viewData, _ := view.RetrieveData(latencyMetricName)
 				v := view.Find(latencyMetricName)
 
 				allTagsPresent(t, v, viewData[0].Tags)
 
-				assert.Equal(t, float64(2), viewData[0].Data.(*view.DistributionData).Min)
+				assert.Equal(t, float64(1), viewData[0].Data.(*view.DistributionData).Min)
 
 			})
 		})
@@ -125,14 +125,14 @@ func TestOperations(t *testing.T) {
 			t.Run("Add Event Operation latency", func(t *testing.T) {
 				w := workflowsMetrics()
 
-				w.WorkflowOperationsEvent(context.Background(), AddEvent, workflowName, StatusSuccess, 2)
+				w.WorkflowOperationsEvent(context.Background(), AddEvent, workflowName, StatusSuccess, 1)
 
 				viewData, _ := view.RetrieveData(latencyMetricName)
 				v := view.Find(latencyMetricName)
 
 				allTagsPresent(t, v, viewData[0].Tags)
 
-				assert.Equal(t, float64(2), viewData[0].Data.(*view.DistributionData).Min)
+				assert.Equal(t, float64(1), viewData[0].Data.(*view.DistributionData).Min)
 			})
 		})
 
@@ -162,14 +162,14 @@ func TestOperations(t *testing.T) {
 			t.Run("Purge workflow Operation latency", func(t *testing.T) {
 				w := workflowsMetrics()
 
-				w.WorkflowOperationsEvent(context.Background(), PurgeWorkflow, workflowName, StatusSuccess, 2)
+				w.WorkflowOperationsEvent(context.Background(), PurgeWorkflow, workflowName, StatusSuccess, 1)
 
 				viewData, _ := view.RetrieveData(latencyMetricName)
 				v := view.Find(latencyMetricName)
 
 				allTagsPresent(t, v, viewData[0].Tags)
 
-				assert.Equal(t, float64(2), viewData[0].Data.(*view.DistributionData).Min)
+				assert.Equal(t, float64(1), viewData[0].Data.(*view.DistributionData).Min)
 			})
 		})
 	})
@@ -267,13 +267,13 @@ func TestExecution(t *testing.T) {
 			t.Run("activity execution latency", func(t *testing.T) {
 				w := workflowsMetrics()
 
-				w.ExecutionEvent(context.Background(), workflowName, Activity, StatusSuccess, 4)
+				w.ExecutionEvent(context.Background(), workflowName, Activity, StatusSuccess, 1)
 
 				viewData, _ := view.RetrieveData(latencyMetricName)
 				v := view.Find(latencyMetricName)
 
 				allTagsPresent(t, v, viewData[0].Tags)
-				assert.Equal(t, float64(2), viewData[0].Data.(*view.DistributionData).Min)
+				assert.Equal(t, float64(1), viewData[0].Data.(*view.DistributionData).Min)
 			})
 		})
 
@@ -315,13 +315,13 @@ func TestExecution(t *testing.T) {
 			t.Run("activity execution latency", func(t *testing.T) {
 				w := workflowsMetrics()
 
-				w.ExecutionEvent(context.Background(), workflowName, Workflow, StatusSuccess, 4)
+				w.ExecutionEvent(context.Background(), workflowName, Workflow, StatusSuccess, 1)
 
 				viewData, _ := view.RetrieveData(latencyMetricName)
 				v := view.Find(latencyMetricName)
 
 				allTagsPresent(t, v, viewData[0].Tags)
-				assert.Equal(t, float64(2), viewData[0].Data.(*view.DistributionData).Min)
+				assert.Equal(t, float64(1), viewData[0].Data.(*view.DistributionData).Min)
 			})
 		})
 	})
