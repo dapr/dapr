@@ -17,6 +17,7 @@ import (
 	"errors"
 	"net"
 	"os"
+	"path"
 	"runtime"
 	"sync/atomic"
 	"testing"
@@ -86,9 +87,6 @@ func TestConnectionCloser(t *testing.T) {
 }
 
 func TestComponentDiscovery(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		return
-	}
 	t.Run("add service callback should add a new entry when called", func(t *testing.T) {
 		AddServiceDiscoveryCallback("fake", func(string, GRPCConnectionDialer) {})
 		assert.NotEmpty(t, onServiceDiscovered)
@@ -101,7 +99,13 @@ func TestComponentDiscovery(t *testing.T) {
 		assert.Empty(t, services)
 	})
 	t.Run("serviceDiscovery should not connect to service that isn't a unix domain socket", func(t *testing.T) {
-		const fakeSocketFolder, pattern = "/tmp/test", "fake"
+		fakeSocketFolder := path.Join(os.TempDir(), "test")
+		pattern := "fake"
+
+		if (runtime.GOOS == "windows") {
+			pattern = "fake.*.notsock"
+		}
+
 		err := os.MkdirAll(fakeSocketFolder, os.ModePerm)
 		defer os.RemoveAll(fakeSocketFolder)
 		require.NoError(t, err)
@@ -116,13 +120,13 @@ func TestComponentDiscovery(t *testing.T) {
 		assert.Empty(t, services)
 	})
 	t.Run("serviceDiscovery should return an error when reflect client factory returns an error", func(t *testing.T) {
-		const fakeSocketFolder = "/tmp/test"
+		fakeSocketFolder := path.Join(os.TempDir(), "test")
 		err := os.MkdirAll(fakeSocketFolder, os.ModePerm)
 		defer os.RemoveAll(fakeSocketFolder)
 		require.NoError(t, err)
 		t.Setenv(SocketsFolderEnvVar, fakeSocketFolder)
 
-		const fileName = fakeSocketFolder + "/socket1234.sock"
+		fileName := path.Join(fakeSocketFolder, "socket1234.sock")
 		listener, err := net.Listen("unix", fileName)
 		require.NoError(t, err)
 		defer listener.Close()
@@ -136,13 +140,13 @@ func TestComponentDiscovery(t *testing.T) {
 		assert.Equal(t, int64(0), reflectService.listServicesCalled.Load())
 	})
 	t.Run("serviceDiscovery should return an error when list services return an error", func(t *testing.T) {
-		const fakeSocketFolder = "/tmp/test"
+		fakeSocketFolder := path.Join(os.TempDir(), "test")
 		err := os.MkdirAll(fakeSocketFolder, os.ModePerm)
 		defer os.RemoveAll(fakeSocketFolder)
 		require.NoError(t, err)
 		t.Setenv(SocketsFolderEnvVar, fakeSocketFolder)
 
-		const fileName = fakeSocketFolder + "/socket1234.sock"
+		fileName := path.Join(fakeSocketFolder, "socket1234.sock")
 		listener, err := net.Listen("unix", fileName)
 		require.NoError(t, err)
 		defer listener.Close()
@@ -158,18 +162,18 @@ func TestComponentDiscovery(t *testing.T) {
 		assert.Equal(t, int64(1), reflectService.listServicesCalled.Load())
 	})
 	t.Run("serviceDiscovery should return all services list", func(t *testing.T) {
-		const fakeSocketFolder = "/tmp/test"
+		fakeSocketFolder := path.Join(os.TempDir(), "test")
 		err := os.MkdirAll(fakeSocketFolder, os.ModePerm)
 		defer os.RemoveAll(fakeSocketFolder)
 		require.NoError(t, err)
 		t.Setenv(SocketsFolderEnvVar, fakeSocketFolder)
 
-		subFolder := fakeSocketFolder + "/subfolder"
+		subFolder := path.Join(fakeSocketFolder, "/subfolder")
 		err = os.MkdirAll(subFolder, os.ModePerm) // should skip subfolders
 		defer os.RemoveAll(subFolder)
 		require.NoError(t, err)
 
-		const fileName = fakeSocketFolder + "/socket1234.sock"
+		fileName := path.Join(fakeSocketFolder, "socket1234.sock")
 		listener, err := net.Listen("unix", fileName)
 		require.NoError(t, err)
 		defer listener.Close()
