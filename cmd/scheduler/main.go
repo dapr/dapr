@@ -68,11 +68,11 @@ func main() {
 		metricsExporter.Run,
 		secProvider.Run,
 		func(ctx context.Context) error {
-			_, serr := secProvider.Handler(ctx)
+			secHandler, serr := secProvider.Handler(ctx)
 			if serr != nil {
 				return serr
 			}
-			return server.Start(ctx, server.SchedulerServiceOpts{})
+			return server.Start(ctx, server.SchedulerServiceOpts{}, secHandler)
 		},
 		func(ctx context.Context) error {
 			healthzServer := health.NewServer(log)
