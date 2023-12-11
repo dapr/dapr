@@ -77,7 +77,8 @@ type Options struct {
 
 func New(origArgs []string) *Options {
 	opts := Options{
-		EnableAPILogging: new(bool),
+		EnableAPILogging:          new(bool),
+		DaprBlockShutdownDuration: new(time.Duration),
 	}
 
 	// We are using pflag to parse the CLI flags
