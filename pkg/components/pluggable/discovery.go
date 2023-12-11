@@ -47,13 +47,16 @@ func removeExt(fileName string) string {
 }
 
 const (
-	SocketFolderEnvVar  = "DAPR_COMPONENTS_SOCKETS_FOLDER"
-	defaultSocketFolder = "/tmp/dapr-components-sockets"
+	SocketsFolderEnvVar  = "DAPR_COMPONENTS_SOCKETS_FOLDER"
+	defaultSocketsFolder = "dapr-components-sockets"
 )
 
-// GetSocketFolderPath returns the shared unix domain socket folder path
-func GetSocketFolderPath() string {
-	return utils.GetEnvOrElse(SocketFolderEnvVar, defaultSocketFolder)
+// GetSocketsFolderPath returns the shared unix domain socket folder path
+func GetSocketsFolderPath() string {
+	tmpFolder := os.TempDir()
+	socketsFolder := filepath.Join(tmpFolder, defaultSocketsFolder)
+
+	return utils.GetEnvOrElse(SocketsFolderEnvVar, socketsFolder)
 }
 
 type service struct {
@@ -78,7 +81,7 @@ type grpcConnectionCloser interface {
 // uses gRPC reflection package to list implemented services.
 func serviceDiscovery(reflectClientFactory func(string) (reflectServiceClient, func(), error)) ([]service, error) {
 	services := []service{}
-	componentsSocketPath := GetSocketFolderPath()
+	componentsSocketPath := GetSocketsFolderPath()
 	_, err := os.Stat(componentsSocketPath)
 
 	if os.IsNotExist(err) { // not exists is the same as empty.

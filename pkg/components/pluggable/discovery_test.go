@@ -105,7 +105,7 @@ func TestComponentDiscovery(t *testing.T) {
 		err := os.MkdirAll(fakeSocketFolder, os.ModePerm)
 		defer os.RemoveAll(fakeSocketFolder)
 		require.NoError(t, err)
-		t.Setenv(SocketFolderEnvVar, fakeSocketFolder)
+		t.Setenv(SocketsFolderEnvVar, fakeSocketFolder)
 		_, err = os.CreateTemp(fakeSocketFolder, pattern)
 		require.NoError(t, err)
 
@@ -120,7 +120,7 @@ func TestComponentDiscovery(t *testing.T) {
 		err := os.MkdirAll(fakeSocketFolder, os.ModePerm)
 		defer os.RemoveAll(fakeSocketFolder)
 		require.NoError(t, err)
-		t.Setenv(SocketFolderEnvVar, fakeSocketFolder)
+		t.Setenv(SocketsFolderEnvVar, fakeSocketFolder)
 
 		const fileName = fakeSocketFolder + "/socket1234.sock"
 		listener, err := net.Listen("unix", fileName)
@@ -140,7 +140,7 @@ func TestComponentDiscovery(t *testing.T) {
 		err := os.MkdirAll(fakeSocketFolder, os.ModePerm)
 		defer os.RemoveAll(fakeSocketFolder)
 		require.NoError(t, err)
-		t.Setenv(SocketFolderEnvVar, fakeSocketFolder)
+		t.Setenv(SocketsFolderEnvVar, fakeSocketFolder)
 
 		const fileName = fakeSocketFolder + "/socket1234.sock"
 		listener, err := net.Listen("unix", fileName)
@@ -162,7 +162,7 @@ func TestComponentDiscovery(t *testing.T) {
 		err := os.MkdirAll(fakeSocketFolder, os.ModePerm)
 		defer os.RemoveAll(fakeSocketFolder)
 		require.NoError(t, err)
-		t.Setenv(SocketFolderEnvVar, fakeSocketFolder)
+		t.Setenv(SocketsFolderEnvVar, fakeSocketFolder)
 
 		subFolder := fakeSocketFolder + "/subfolder"
 		err = os.MkdirAll(subFolder, os.ModePerm) // should skip subfolders
@@ -199,11 +199,11 @@ func TestRemoveExt(t *testing.T) {
 
 func TestGetSocketFolder(t *testing.T) {
 	t.Run("get socket folder should use default when env var is not set", func(t *testing.T) {
-		assert.Equal(t, defaultSocketFolder, GetSocketFolderPath())
+		assert.Equal(t, defaultSocketsFolder, GetSocketsFolderPath())
 	})
 	t.Run("get socket folder should use env var when set", func(t *testing.T) {
 		const fakeSocketFolder = "/tmp"
-		t.Setenv(SocketFolderEnvVar, fakeSocketFolder)
-		assert.Equal(t, fakeSocketFolder, GetSocketFolderPath())
+		t.Setenv(SocketsFolderEnvVar, fakeSocketFolder)
+		assert.Equal(t, fakeSocketFolder, GetSocketsFolderPath())
 	})
 }
