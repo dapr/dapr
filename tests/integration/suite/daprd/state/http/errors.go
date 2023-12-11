@@ -26,6 +26,9 @@ import (
 
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
 
+	"github.com/stretchr/testify/require"
+	"golang.org/x/net/nettest"
+
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -34,8 +37,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/statestore/inmemory"
 	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/stretchr/testify/require"
-	"golang.org/x/net/nettest"
 )
 
 func init() {
@@ -47,6 +48,13 @@ type errors struct {
 
 	queryErr func(*testing.T) error
 }
+
+const (
+	ErrInfoType      = "type.googleapis.com/google.rpc.ErrorInfo"
+	ResourceInfoType = "type.googleapis.com/google.rpc.ResourceInfo"
+	BadRequestType   = "type.googleapis.com/google.rpc.BadRequest"
+	HelpType         = "type.googleapis.com/google.rpc.Help"
+)
 
 func (e *errors) Setup(t *testing.T) []framework.Option {
 	// Darwin enforces a maximum 104 byte socket name limit, so we need to be a
@@ -183,7 +191,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		require.True(t, ok)
 		require.Equal(t, framework.Domain, detailsObject["domain"])
 		require.Equal(t, "DAPR_STATE_NOT_FOUND", detailsObject["reason"])
-		require.Equal(t, "type.googleapis.com/google.rpc.ErrorInfo", detailsObject["@type"])
+		require.Equal(t, ErrInfoType, detailsObject["@type"])
 	})
 
 	// Covers errutils.StateStoreInvalidKeyName()
@@ -233,11 +241,11 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 			d, ok := detail.(map[string]interface{})
 			require.True(t, ok)
 			switch d["@type"] {
-			case "type.googleapis.com/google.rpc.ErrorInfo":
+			case ErrInfoType:
 				errInfo = d
-			case "type.googleapis.com/google.rpc.ResourceInfo":
+			case ResourceInfoType:
 				resInfo = d
-			case "type.googleapis.com/google.rpc.BadRequest":
+			case BadRequestType:
 				badRequest = d
 			default:
 				require.FailNow(t, "unexpected status detail")
@@ -313,7 +321,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		require.True(t, ok)
 		require.Equal(t, framework.Domain, detailsObject["domain"])
 		require.Equal(t, "DAPR_STATE_NOT_CONFIGURED", detailsObject["reason"])
-		require.Equal(t, "type.googleapis.com/google.rpc.ErrorInfo", detailsObject["@type"])
+		require.Equal(t, ErrInfoType, detailsObject["@type"])
 	})
 
 	t.Run("state store doesn't support query api", func(t *testing.T) {
@@ -363,9 +371,9 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 			d, ok := detail.(map[string]interface{})
 			require.True(t, ok)
 			switch d["@type"] {
-			case "type.googleapis.com/google.rpc.ErrorInfo":
+			case ErrInfoType:
 				errInfo = d
-			case "type.googleapis.com/google.rpc.ResourceInfo":
+			case ResourceInfoType:
 				resInfo = d
 			default:
 				require.FailNow(t, "unexpected status detail")
@@ -435,9 +443,9 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 			d, ok := detail.(map[string]interface{})
 			require.True(t, ok)
 			switch d["@type"] {
-			case "type.googleapis.com/google.rpc.ErrorInfo":
+			case ErrInfoType:
 				errInfo = d
-			case "type.googleapis.com/google.rpc.ResourceInfo":
+			case ResourceInfoType:
 				resInfo = d
 			default:
 				require.FailNow(t, "unexpected status detail")
@@ -503,9 +511,9 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 			d, ok := detail.(map[string]interface{})
 			require.True(t, ok)
 			switch d["@type"] {
-			case "type.googleapis.com/google.rpc.ErrorInfo":
+			case ErrInfoType:
 				errInfo = d
-			case "type.googleapis.com/google.rpc.ResourceInfo":
+			case ResourceInfoType:
 				resInfo = d
 			default:
 				require.FailNow(t, "unexpected status detail")
@@ -575,11 +583,11 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 			d, ok := detail.(map[string]interface{})
 			require.True(t, ok)
 			switch d["@type"] {
-			case "type.googleapis.com/google.rpc.ErrorInfo":
+			case ErrInfoType:
 				errInfo = d
-			case "type.googleapis.com/google.rpc.ResourceInfo":
+			case ResourceInfoType:
 				resInfo = d
-			case "type.googleapis.com/google.rpc.Help":
+			case HelpType:
 				help = d
 			default:
 				require.FailNow(t, "unexpected status detail")
@@ -593,7 +601,6 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 
 		// Confirm that the ResourceInfo details are correct
 		require.NotEmptyf(t, resInfo, "ResourceInfo not found in %+v", detailsArray)
-		fmt.Println("\n\nresinfo\n", resInfo)
 		require.Equal(t, "state", resInfo["resource_type"])
 		require.Equal(t, storeName, resInfo["resource_name"])
 
@@ -612,6 +619,5 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		linkDescription, ok := link["description"].(string)
 		require.True(t, ok, "Failed to assert link description as a string")
 		require.Equal(t, "Check the list of state stores and the features they support", linkDescription)
-
 	})
 }
