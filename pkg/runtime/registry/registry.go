@@ -23,7 +23,7 @@ import (
 	"github.com/dapr/dapr/pkg/components/pubsub"
 	"github.com/dapr/dapr/pkg/components/secretstores"
 	"github.com/dapr/dapr/pkg/components/state"
-	wfBackend "github.com/dapr/dapr/pkg/components/wfBackend"
+	"github.com/dapr/dapr/pkg/components/workflowBackend"
 	"github.com/dapr/dapr/pkg/components/workflows"
 	messagingv1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -47,7 +47,7 @@ type Registry struct {
 	binding         *bindings.Registry
 	httpMiddleware  *http.Registry
 	workflow        *workflows.Registry
-	workflowBackend *wfBackend.Registry
+	workflowBackend *workflowBackend.Registry
 	crypto          *crypto.Registry
 	componentCb     ComponentsCallback
 }
@@ -105,7 +105,7 @@ func (r *Registry) Workflows() *workflows.Registry {
 	return r.workflow
 }
 
-func (r *Registry) WorkflowBackends() *wfBackend.Registry {
+func (r *Registry) WorkflowBackends() *workflowBackend.Registry {
 	return r.workflowBackend
 }
 

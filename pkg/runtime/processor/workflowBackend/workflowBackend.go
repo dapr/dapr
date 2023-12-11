@@ -20,7 +20,7 @@ import (
 
 	"github.com/dapr/components-contrib/workflows"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	compworkflowbackend "github.com/dapr/dapr/pkg/components/wfBackend"
+	workflowBackendComp "github.com/dapr/dapr/pkg/components/workflowBackend"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
@@ -31,13 +31,13 @@ import (
 var log = logger.NewLogger("dapr.runtime.processor.workflowbackend")
 
 type Options struct {
-	Registry       *compworkflowbackend.Registry
+	Registry       *workflowBackendComp.Registry
 	ComponentStore *compstore.ComponentStore
 	Meta           *meta.Meta
 }
 
 type workflowBackend struct {
-	registry            *compworkflowbackend.Registry
+	registry            *workflowBackendComp.Registry
 	compStore           *compstore.ComponentStore
 	meta                *meta.Meta
 	lock                sync.Mutex

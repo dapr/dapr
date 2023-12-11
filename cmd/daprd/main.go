@@ -34,7 +34,7 @@ import (
 	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
 	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
-	wfBackendLoader "github.com/dapr/dapr/pkg/components/wfBackend"
+	wfBackendLoader "github.com/dapr/dapr/pkg/components/workflowBackend"
 	workflowsLoader "github.com/dapr/dapr/pkg/components/workflows"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/runtime"

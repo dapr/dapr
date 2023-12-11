@@ -23,7 +23,7 @@ import (
 	"github.com/dapr/dapr/pkg/components/pubsub"
 	"github.com/dapr/dapr/pkg/components/secretstores"
 	"github.com/dapr/dapr/pkg/components/state"
-	"github.com/dapr/dapr/pkg/components/wfBackend"
+	"github.com/dapr/dapr/pkg/components/workflowBackend"
 	"github.com/dapr/dapr/pkg/components/workflows"
 )
 
@@ -38,7 +38,7 @@ type Options struct {
 	binding            *bindings.Registry
 	httpMiddleware     *http.Registry
 	workflow           *workflows.Registry
-	workflowBackend    *wfBackend.Registry
+	workflowBackend    *workflowBackend.Registry
 	crypto             *crypto.Registry
 	componentsCallback ComponentsCallback
 }
@@ -112,7 +112,7 @@ func (o *Options) WithWorkflows(registry *workflows.Registry) *Options {
 }
 
 // WithWorkflows adds workflow components to the runtime.
-func (o *Options) WithWorkflowBackends(registry *wfBackend.Registry) *Options {
+func (o *Options) WithWorkflowBackends(registry *workflowBackend.Registry) *Options {
 	o.workflowBackend = registry
 	return o
 }
