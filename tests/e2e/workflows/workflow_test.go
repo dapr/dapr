@@ -186,6 +186,20 @@ func purgeTest(url string, instanceID string) func(t *testing.T) {
 			assert.Equalf(t, "Running", string(resp), "expected workflow to be Running, actual workflow state is: %s", string(resp))
 		}, 5*time.Second, 100*time.Millisecond)
 
+		// Raise an event on the workflow
+		resp, err = utils.HTTPPost(fmt.Sprintf("%s/RaiseWorkflowEvent/dapr/%s/ChangePurchaseItem/1", url, instanceID), nil)
+		require.NoError(t, err, "failure raising event on workflow")
+
+		// Raise parallel events on the workflow
+		resp, err = utils.HTTPPost(fmt.Sprintf("%s/RaiseWorkflowEvent/dapr/%s/ConfirmSize/1", url, instanceID), nil)
+		require.NoError(t, err, "failure raising event on workflow")
+
+		resp, err = utils.HTTPPost(fmt.Sprintf("%s/RaiseWorkflowEvent/dapr/%s/ConfirmColor/1", url, instanceID), nil)
+		require.NoError(t, err, "failure raising event on workflow")
+
+		resp, err = utils.HTTPPost(fmt.Sprintf("%s/RaiseWorkflowEvent/dapr/%s/ConfirmAddress/1", url, instanceID), nil)
+		require.NoError(t, err, "failure raising event on workflow")
+
 		// Terminate the workflow
 		resp, err = utils.HTTPPost(fmt.Sprintf("%s/TerminateWorkflow/dapr/%s", url, instanceID), nil)
 		require.NoError(t, err, "failure terminating workflow")
@@ -210,6 +224,19 @@ func purgeTest(url string, instanceID string) func(t *testing.T) {
 			resp, err = utils.HTTPGet(getString)
 			require.NoError(t, err, "failure getting info on workflow")
 			assert.Equalf(t, "Running", string(resp), "expected workflow to be Running, actual workflow state is: %s", string(resp))
+		}, 5*time.Second, 100*time.Millisecond)
+
+		// Raise a parallel event on the workflow
+		resp, err = utils.HTTPPost(fmt.Sprintf("%s/RaiseWorkflowEvent/dapr/%s/PayByCard/1", url, instanceID), nil)
+		require.NoError(t, err, "failure raising event on workflow")
+
+		time.Sleep(5 * time.Second)
+
+		// Purge will clear the instance data. There are insufficient triggered events which lead to the failure.
+		require.EventuallyWithT(t, func(t *assert.CollectT) {
+			resp, err = utils.HTTPGet(getString)
+			require.NoError(t, err, "failure getting info on workflow")
+			assert.NotEqualf(t, "Completed", string(resp), "expected workflow not to be Completed, actual workflow state is: %s", string(resp))
 		}, 5*time.Second, 100*time.Millisecond)
 	}
 }
