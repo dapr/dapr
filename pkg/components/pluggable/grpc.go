@@ -16,6 +16,7 @@ package pluggable
 import (
 	"context"
 	"fmt"
+	"runtime"
 
 	"github.com/dapr/kit/logger"
 
@@ -103,6 +104,11 @@ func socketDialer(socket string, additionalOpts ...grpc.DialOption) GRPCConnecti
 // SocketDial creates a grpc connection using the given socket.
 func SocketDial(ctx context.Context, socket string, additionalOpts ...grpc.DialOption) (*grpc.ClientConn, error) {
 	udsSocket := "unix://" + socket
+	
+	if runtime.GOOS == "windows" {
+		udsSocket = "unix:" + socket
+	}
+
 	log.Debugf("using socket defined at '%s'", udsSocket)
 	additionalOpts = append(additionalOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 

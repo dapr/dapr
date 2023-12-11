@@ -22,7 +22,6 @@ import (
 	"net"
 	"os"
 	"reflect"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -599,10 +598,6 @@ func (a *DaprRuntime) initWorkflowEngine(ctx context.Context) {
 
 // initPluggableComponents discover pluggable components and initialize with their respective registries.
 func (a *DaprRuntime) initPluggableComponents(ctx context.Context) {
-	if runtime.GOOS == "windows" {
-		log.Debugf("the current OS does not support pluggable components feature, skipping initialization")
-		return
-	}
 	if err := pluggable.Discover(ctx); err != nil {
 		log.Errorf("could not initialize pluggable components %v", err)
 	}

@@ -17,12 +17,19 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"runtime"
 	"strings"
 )
 
 const (
 	DotDelimiter = "."
+	DefaultSocketsExtension = ".sock"
+	SocketsExtensionEnvVar = "DAPR_COMPONENTS_SOCKETS_EXTENSION"
 )
+
+func GetSocketsExtension() string {
+	return GetEnvOrElse(SocketsExtensionEnvVar, DefaultSocketsExtension)
+}
 
 // Contains reports whether v is present in s.
 // Similar to https://pkg.go.dev/golang.org/x/exp/slices#Contains.
@@ -74,7 +81,15 @@ func GetIntValOrDefault(val int, defaultValue int) int {
 
 // IsSocket returns if the given file is a unix socket.
 func IsSocket(f fs.FileInfo) bool {
-	return f.Mode()&fs.ModeSocket != 0
+	// NOTE: Windows does not set the ModeSocket flag so, on that platform, Dapr only looks for "socket shaped" files.
+	if runtime.GOOS == "windows" {
+		name := f.Name()
+		socketsExtension := GetSocketsExtension()
+
+		return strings.HasSuffix(name, socketsExtension)
+	} else {
+		return f.Mode()&fs.ModeSocket != 0
+	}
 }
 
 // SocketExists returns true if the file in that path is an unix socket.
