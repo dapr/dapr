@@ -82,7 +82,7 @@ func TestServiceInvocation(t *testing.T) {
 func TestSerivceMonitoringInit(t *testing.T) {
 	c := servicesMetrics()
 	assert.True(t, c.enabled)
-	assert.Equal(t, c.appID, "testAppId")
+	assert.Equal(t, "testAppId", c.appID)
 }
 
 // export for diagnostics_test package only unexported keys

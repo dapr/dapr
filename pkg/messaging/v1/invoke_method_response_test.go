@@ -33,9 +33,9 @@ func TestInvocationResponse(t *testing.T) {
 	resp := NewInvokeMethodResponse(0, "OK", nil)
 	defer resp.Close()
 
-	assert.Equal(t, int32(0), resp.r.GetStatus().Code)
-	assert.Equal(t, "OK", resp.r.GetStatus().Message)
-	assert.NotNil(t, resp.r.Message)
+	assert.Equal(t, int32(0), resp.r.GetStatus().GetCode())
+	assert.Equal(t, "OK", resp.r.GetStatus().GetMessage())
+	assert.NotNil(t, resp.r.GetMessage())
 }
 
 func TestInternalInvocationResponse(t *testing.T) {
@@ -50,15 +50,15 @@ func TestInternalInvocationResponse(t *testing.T) {
 		}
 
 		ir, err := InternalInvokeResponse(&pb)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		defer ir.Close()
-		assert.NotNil(t, ir.r.Message)
-		assert.Equal(t, int32(0), ir.r.Status.Code)
-		assert.Nil(t, ir.r.Message.Data)
+		assert.NotNil(t, ir.r.GetMessage())
+		assert.Equal(t, int32(0), ir.r.GetStatus().GetCode())
+		assert.Nil(t, ir.r.GetMessage().GetData())
 
 		bData, err := io.ReadAll(ir.RawData())
-		assert.NoError(t, err)
-		assert.Len(t, bData, 0)
+		require.NoError(t, err)
+		assert.Empty(t, bData)
 	})
 
 	t.Run("valid internal invoke response with data", func(t *testing.T) {
@@ -72,16 +72,16 @@ func TestInternalInvocationResponse(t *testing.T) {
 		}
 
 		ir, err := InternalInvokeResponse(&pb)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		defer ir.Close()
-		assert.NotNil(t, ir.r.Message)
-		assert.Equal(t, int32(0), ir.r.Status.Code)
-		require.NotNil(t, ir.r.Message.Data)
-		require.NotNil(t, ir.r.Message.Data.Value)
-		assert.Equal(t, []byte("test"), ir.r.Message.Data.Value)
+		assert.NotNil(t, ir.r.GetMessage())
+		assert.Equal(t, int32(0), ir.r.GetStatus().GetCode())
+		require.NotNil(t, ir.r.GetMessage().GetData())
+		require.NotNil(t, ir.r.GetMessage().GetData().GetValue())
+		assert.Equal(t, []byte("test"), ir.r.GetMessage().GetData().GetValue())
 
 		bData, err := io.ReadAll(ir.RawData())
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, "test", string(bData))
 	})
 
@@ -92,10 +92,10 @@ func TestInternalInvocationResponse(t *testing.T) {
 		}
 
 		ir, err := InternalInvokeResponse(&pb)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		defer ir.Close()
-		assert.NotNil(t, ir.r.Message)
-		assert.Nil(t, ir.r.Message.Data)
+		assert.NotNil(t, ir.r.GetMessage())
+		assert.Nil(t, ir.r.GetMessage().GetData())
 	})
 }
 
@@ -106,8 +106,8 @@ func TestResponseData(t *testing.T) {
 			WithContentType("application/json")
 		defer resp.Close()
 		bData, err := io.ReadAll(resp.RawData())
-		assert.NoError(t, err)
-		contentType := resp.r.Message.ContentType
+		require.NoError(t, err)
+		contentType := resp.r.GetMessage().GetContentType()
 		assert.Equal(t, "application/json", contentType)
 		assert.Equal(t, "test", string(bData))
 	})
@@ -119,8 +119,8 @@ func TestResponseData(t *testing.T) {
 
 		contentType := resp.ContentType()
 		bData, err := io.ReadAll(resp.RawData())
-		assert.NoError(t, err)
-		assert.Equal(t, "", resp.r.Message.ContentType)
+		require.NoError(t, err)
+		assert.Equal(t, "", resp.r.GetMessage().GetContentType())
 		assert.Equal(t, "", contentType)
 		assert.Equal(t, "test", string(bData))
 	})
@@ -128,16 +128,16 @@ func TestResponseData(t *testing.T) {
 	t.Run("typeurl is set but content_type is unset", func(t *testing.T) {
 		s := &commonv1pb.StateItem{Key: "custom_key"}
 		b, err := anypb.New(s)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		resp := NewInvokeMethodResponse(0, "OK", nil)
 		defer resp.Close()
 		resp.r.Message.Data = b
 		contentType := resp.ContentType()
 		bData, err := io.ReadAll(resp.RawData())
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, ProtobufContentType, contentType)
-		assert.Equal(t, b.Value, bData)
+		assert.Equal(t, b.GetValue(), bData)
 	})
 }
 
@@ -149,7 +149,7 @@ func TestResponseRawData(t *testing.T) {
 		r := req.RawData()
 		bData, err := io.ReadAll(r)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Empty(t, bData)
 	})
 
@@ -161,11 +161,11 @@ func TestResponseRawData(t *testing.T) {
 		r := req.RawData()
 		bData, err := io.ReadAll(r)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, "nel blu dipinto di blu", string(bData))
 
-		_ = assert.Nil(t, req.Message().Data) ||
-			assert.Len(t, req.Message().Data.Value, 0)
+		_ = assert.Nil(t, req.Message().GetData()) ||
+			assert.Empty(t, req.Message().GetData().GetValue())
 	})
 
 	t.Run("data inside message has priority", func(t *testing.T) {
@@ -180,11 +180,11 @@ func TestResponseRawData(t *testing.T) {
 		r := req.RawData()
 		bData, err := io.ReadAll(r)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, msg, string(bData))
 
-		_ = assert.NotNil(t, req.Message().Data) &&
-			assert.Equal(t, msg, string(req.Message().Data.Value))
+		_ = assert.NotNil(t, req.Message().GetData()) &&
+			assert.Equal(t, msg, string(req.Message().GetData().GetValue()))
 	})
 }
 
@@ -194,7 +194,7 @@ func TestResponseRawDataFull(t *testing.T) {
 			r: &internalv1pb.InternalInvokeResponse{},
 		}
 		data, err := req.RawDataFull()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Empty(t, data)
 	})
 
@@ -204,11 +204,11 @@ func TestResponseRawDataFull(t *testing.T) {
 		defer req.Close()
 
 		data, err := req.RawDataFull()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, "nel blu dipinto di blu", string(data))
 
-		_ = assert.Nil(t, req.Message().Data) ||
-			assert.Len(t, req.Message().Data.Value, 0)
+		_ = assert.Nil(t, req.Message().GetData()) ||
+			assert.Empty(t, req.Message().GetData().GetValue())
 	})
 
 	t.Run("data inside message has priority", func(t *testing.T) {
@@ -221,11 +221,11 @@ func TestResponseRawDataFull(t *testing.T) {
 		req.Message().Data = &anypb.Any{Value: []byte(msg)}
 
 		data, err := req.RawDataFull()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, msg, string(data))
 
-		_ = assert.NotNil(t, req.Message().Data) &&
-			assert.Equal(t, msg, string(req.Message().Data.Value))
+		_ = assert.NotNil(t, req.Message().GetData()) &&
+			assert.Equal(t, msg, string(req.Message().GetData().GetValue()))
 	})
 }
 
@@ -241,18 +241,18 @@ func TestResponseProto(t *testing.T) {
 		}
 
 		ir, err := InternalInvokeResponse(&pb)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		defer ir.Close()
 		req2 := ir.Proto()
 		msg := req2.GetMessage()
 
-		assert.Equal(t, "application/json", msg.ContentType)
-		require.NotNil(t, msg.Data)
-		require.NotNil(t, msg.Data.Value)
-		assert.Equal(t, []byte("test"), msg.Data.Value)
+		assert.Equal(t, "application/json", msg.GetContentType())
+		require.NotNil(t, msg.GetData())
+		require.NotNil(t, msg.GetData().GetValue())
+		assert.Equal(t, []byte("test"), msg.GetData().GetValue())
 
 		bData, err := io.ReadAll(ir.RawData())
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, []byte("test"), bData)
 	})
 
@@ -266,16 +266,16 @@ func TestResponseProto(t *testing.T) {
 		}
 
 		ir, err := InternalInvokeResponse(&pb)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		defer ir.Close()
 		ir.data = io.NopCloser(strings.NewReader("test"))
 		req2 := ir.Proto()
 
-		assert.Equal(t, "application/json", req2.Message.ContentType)
-		assert.Nil(t, req2.Message.Data)
+		assert.Equal(t, "application/json", req2.GetMessage().GetContentType())
+		assert.Nil(t, req2.GetMessage().GetData())
 
 		bData, err := io.ReadAll(ir.RawData())
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, []byte("test"), bData)
 	})
 }
@@ -288,10 +288,10 @@ func TestResponseProtoWithData(t *testing.T) {
 		}
 
 		ir, err := InternalInvokeResponse(&pb)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		defer ir.Close()
 		_, err = ir.ProtoWithData()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("byte slice", func(t *testing.T) {
@@ -305,13 +305,13 @@ func TestResponseProtoWithData(t *testing.T) {
 		}
 
 		ir, err := InternalInvokeResponse(&pb)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		defer ir.Close()
 		req2, err := ir.ProtoWithData()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
-		assert.Equal(t, "application/json", req2.Message.ContentType)
-		assert.Equal(t, []byte("test"), req2.Message.Data.Value)
+		assert.Equal(t, "application/json", req2.GetMessage().GetContentType())
+		assert.Equal(t, []byte("test"), req2.GetMessage().GetData().GetValue())
 	})
 
 	t.Run("stream", func(t *testing.T) {
@@ -324,14 +324,14 @@ func TestResponseProtoWithData(t *testing.T) {
 		}
 
 		ir, err := InternalInvokeResponse(&pb)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		defer ir.Close()
 		ir.data = io.NopCloser(strings.NewReader("test"))
 		req2, err := ir.ProtoWithData()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
-		assert.Equal(t, "application/json", req2.Message.ContentType)
-		assert.Equal(t, []byte("test"), req2.Message.Data.Value)
+		assert.Equal(t, "application/json", req2.GetMessage().GetContentType())
+		assert.Equal(t, []byte("test"), req2.GetMessage().GetData().GetValue())
 	})
 }
 
@@ -346,10 +346,10 @@ func TestResponseHeader(t *testing.T) {
 		defer imr.Close()
 		mheader := imr.Headers()
 
-		assert.Equal(t, "val1", mheader["test1"].Values[0])
-		assert.Equal(t, "val2", mheader["test1"].Values[1])
-		assert.Equal(t, "val3", mheader["test2"].Values[0])
-		assert.Equal(t, "val4", mheader["test2"].Values[1])
+		assert.Equal(t, "val1", mheader["test1"].GetValues()[0])
+		assert.Equal(t, "val2", mheader["test1"].GetValues()[1])
+		assert.Equal(t, "val3", mheader["test2"].GetValues()[0])
+		assert.Equal(t, "val4", mheader["test2"].GetValues()[1])
 	})
 
 	t.Run("HTTP headers", func(t *testing.T) {
@@ -433,7 +433,7 @@ func TestResponseReplayable(t *testing.T) {
 
 		t.Run("first read in full", func(t *testing.T) {
 			read, err := io.ReadAll(res.RawData())
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, message, string(read))
 		})
 
@@ -441,19 +441,19 @@ func TestResponseReplayable(t *testing.T) {
 			buf := make([]byte, 9)
 			n, err := io.ReadFull(res.data, buf)
 			assert.Equal(t, 0, n)
-			assert.ErrorIs(t, err, io.EOF)
+			require.ErrorIs(t, err, io.EOF)
 		})
 
 		t.Run("replay buffer is full", func(t *testing.T) {
-			assert.Equal(t, len(message), res.replay.Len())
+			assert.Len(t, message, res.replay.Len())
 			read, err := io.ReadAll(bytes.NewReader(res.replay.Bytes()))
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, message, string(read))
 		})
 
 		t.Run("close response", func(t *testing.T) {
 			err := res.Close()
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Nil(t, res.data)
 			assert.Nil(t, res.replay)
 		})
@@ -465,7 +465,7 @@ func TestResponseReplayable(t *testing.T) {
 
 		t.Run("first read in full", func(t *testing.T) {
 			read, err := io.ReadAll(res.RawData())
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, message, string(read))
 		})
 
@@ -473,31 +473,31 @@ func TestResponseReplayable(t *testing.T) {
 			buf := make([]byte, 9)
 			n, err := io.ReadFull(res.data, buf)
 			assert.Equal(t, 0, n)
-			assert.ErrorIs(t, err, io.EOF)
+			require.ErrorIs(t, err, io.EOF)
 		})
 
 		t.Run("replay buffer is full", func(t *testing.T) {
-			assert.Equal(t, len(message), res.replay.Len())
+			assert.Len(t, message, res.replay.Len())
 			read, err := io.ReadAll(bytes.NewReader(res.replay.Bytes()))
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, message, string(read))
 		})
 
 		t.Run("second read in full", func(t *testing.T) {
 			read, err := io.ReadAll(res.RawData())
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, message, string(read))
 		})
 
 		t.Run("third read in full", func(t *testing.T) {
 			read, err := io.ReadAll(res.RawData())
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, message, string(read))
 		})
 
 		t.Run("close response", func(t *testing.T) {
 			err := res.Close()
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Nil(t, res.data)
 			assert.Nil(t, res.replay)
 		})
@@ -509,7 +509,7 @@ func TestResponseReplayable(t *testing.T) {
 
 		t.Run("first read in full", func(t *testing.T) {
 			read, err := io.ReadAll(res.RawData())
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, message, string(read))
 		})
 
@@ -517,14 +517,14 @@ func TestResponseReplayable(t *testing.T) {
 		t.Run("second, partial read", func(t *testing.T) {
 			buf := make([]byte, 9)
 			n, err := io.ReadFull(r, buf)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, 9, n)
 			assert.Equal(t, message[:9], string(buf))
 		})
 
 		t.Run("read rest", func(t *testing.T) {
 			read, err := io.ReadAll(r)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Len(t, read, len(message)-9)
 			// Continue from byte 9
 			assert.Equal(t, message[9:], string(read))
@@ -532,13 +532,13 @@ func TestResponseReplayable(t *testing.T) {
 
 		t.Run("second read in full", func(t *testing.T) {
 			read, err := res.RawDataFull()
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, message, string(read))
 		})
 
 		t.Run("close response", func(t *testing.T) {
 			err := res.Close()
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Nil(t, res.data)
 			assert.Nil(t, res.replay)
 		})
@@ -552,7 +552,7 @@ func TestResponseReplayable(t *testing.T) {
 			buf := make([]byte, 9)
 			n, err := io.ReadFull(res.RawData(), buf)
 
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, 9, n)
 			assert.Equal(t, message[:9], string(buf))
 		})
@@ -560,13 +560,13 @@ func TestResponseReplayable(t *testing.T) {
 		t.Run("replay buffer has partial data", func(t *testing.T) {
 			assert.Equal(t, 9, res.replay.Len())
 			read, err := io.ReadAll(bytes.NewReader(res.replay.Bytes()))
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, message[:9], string(read))
 		})
 
 		t.Run("second read in full", func(t *testing.T) {
 			read, err := io.ReadAll(res.RawData())
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, message, string(read))
 		})
 
@@ -574,25 +574,25 @@ func TestResponseReplayable(t *testing.T) {
 			buf := make([]byte, 9)
 			n, err := io.ReadFull(res.data, buf)
 			assert.Equal(t, 0, n)
-			assert.ErrorIs(t, err, io.EOF)
+			require.ErrorIs(t, err, io.EOF)
 		})
 
 		t.Run("replay buffer is full", func(t *testing.T) {
-			assert.Equal(t, len(message), res.replay.Len())
+			assert.Len(t, message, res.replay.Len())
 			read, err := io.ReadAll(bytes.NewReader(res.replay.Bytes()))
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, message, string(read))
 		})
 
 		t.Run("third read in full", func(t *testing.T) {
 			read, err := io.ReadAll(res.RawData())
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, message, string(read))
 		})
 
 		t.Run("close response", func(t *testing.T) {
 			err := res.Close()
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Nil(t, res.data)
 			assert.Nil(t, res.replay)
 		})
@@ -604,25 +604,25 @@ func TestResponseReplayable(t *testing.T) {
 
 		t.Run("first ProtoWithData response", func(t *testing.T) {
 			pb, err := res.ProtoWithData()
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.NotNil(t, pb)
-			assert.NotNil(t, pb.Message)
-			assert.NotNil(t, pb.Message.Data)
-			assert.Equal(t, message, string(pb.Message.Data.Value))
+			assert.NotNil(t, pb.GetMessage())
+			assert.NotNil(t, pb.GetMessage().GetData())
+			assert.Equal(t, message, string(pb.GetMessage().GetData().GetValue()))
 		})
 
 		t.Run("second ProtoWithData response", func(t *testing.T) {
 			pb, err := res.ProtoWithData()
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.NotNil(t, pb)
-			assert.NotNil(t, pb.Message)
-			assert.NotNil(t, pb.Message.Data)
-			assert.Equal(t, message, string(pb.Message.Data.Value))
+			assert.NotNil(t, pb.GetMessage())
+			assert.NotNil(t, pb.GetMessage().GetData())
+			assert.Equal(t, message, string(pb.GetMessage().GetData().GetValue()))
 		})
 
 		t.Run("close response", func(t *testing.T) {
 			err := res.Close()
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Nil(t, res.data)
 			assert.Nil(t, res.replay)
 		})

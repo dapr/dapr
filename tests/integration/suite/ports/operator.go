@@ -19,7 +19,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"strconv"
 	"testing"
 	"time"
 
@@ -52,13 +51,13 @@ func (o *operator) Setup(t *testing.T) []framework.Option {
 	sentry := procsentry.New(t, procsentry.WithTrustDomain("integration.test.dapr.io"))
 
 	kubeAPI := kubernetes.New(t,
-		kubernetes.WithDaprConfigurationGet(t, "dapr-system", "daprsystem", &configapi.Configuration{
+		kubernetes.WithDaprConfigurationGet(t, &configapi.Configuration{
 			TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Configuration"},
-			ObjectMeta: metav1.ObjectMeta{Name: "daprsystem", Namespace: "default"},
+			ObjectMeta: metav1.ObjectMeta{Name: "daprsystem", Namespace: "dapr-system"},
 			Spec: configapi.ConfigurationSpec{
 				MTLSSpec: &configapi.MTLSSpec{
 					ControlPlaneTrustDomain: "integration.test.dapr.io",
-					SentryAddress:           "localhost:" + strconv.Itoa(sentry.Port()),
+					SentryAddress:           sentry.Address(),
 				},
 			},
 		}),
@@ -91,6 +90,7 @@ func (o *operator) Run(t *testing.T, ctx context.Context) {
 	} {
 		assert.EventuallyWithT(t, func(t *assert.CollectT) {
 			conn, err := dialer.DialContext(ctx, "tcp", fmt.Sprintf("localhost:%d", port))
+			//nolint:testifylint
 			_ = assert.NoError(t, err) && assert.NoError(t, conn.Close())
 		}, time.Second*5, 100*time.Millisecond, "port %s (:%d) was not available in time", name, port)
 	}

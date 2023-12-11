@@ -100,7 +100,7 @@ func (m *insecure) Run(t *testing.T, parentCtx context.Context) {
 			TokenValidator:            sentrypbv1.SignCertificateRequest_INSECURE,
 		})
 		require.NoError(t, err)
-		require.NotEmpty(t, res.WorkloadCertificate)
+		require.NotEmpty(t, res.GetWorkloadCertificate())
 
 		validateCertificateResponse(t, res, m.proc.CABundle(), defaultAppSPIFFEID, defaultAppDNSName)
 	})
@@ -115,7 +115,7 @@ func (m *insecure) Run(t *testing.T, parentCtx context.Context) {
 			// TokenValidator:            sentrypbv1.SignCertificateRequest_INSECURE,
 		})
 		require.NoError(t, err)
-		require.NotEmpty(t, res.WorkloadCertificate)
+		require.NotEmpty(t, res.GetWorkloadCertificate())
 
 		validateCertificateResponse(t, res, m.proc.CABundle(), defaultAppSPIFFEID, defaultAppDNSName)
 	})
@@ -175,9 +175,9 @@ func (m *insecure) Run(t *testing.T, parentCtx context.Context) {
 func validateCertificateResponse(t *testing.T, res *sentrypbv1.SignCertificateResponse, sentryBundle ca.Bundle, expectSPIFFEID, expectDNSName string) {
 	t.Helper()
 
-	require.NotEmpty(t, res.WorkloadCertificate)
+	require.NotEmpty(t, res.GetWorkloadCertificate())
 
-	rest := res.WorkloadCertificate
+	rest := res.GetWorkloadCertificate()
 
 	// First block should contain the issued workload certificate
 	var block *pem.Block

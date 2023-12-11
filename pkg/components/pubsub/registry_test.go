@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/components-contrib/pubsub"
 	daprt "github.com/dapr/dapr/pkg/testing"
@@ -67,21 +68,21 @@ func TestCreatePubSub(t *testing.T) {
 
 		// assert v0 and v1
 		p, e := testRegistry.Create(componentName, "v0", "")
-		assert.NoError(t, e)
+		require.NoError(t, e)
 		assert.Same(t, mockPubSub, p)
 
 		p, e = testRegistry.Create(componentName, "v1", "")
-		assert.NoError(t, e)
+		require.NoError(t, e)
 		assert.Same(t, mockPubSub, p)
 
 		// assert v2
 		pV2, e := testRegistry.Create(componentName, "v2", "")
-		assert.NoError(t, e)
+		require.NoError(t, e)
 		assert.Same(t, mockPubSubV2, pV2)
 
 		// check case-insensitivity
 		pV2, e = testRegistry.Create(strings.ToUpper(componentName), "V2", "")
-		assert.NoError(t, e)
+		require.NoError(t, e)
 		assert.Same(t, mockPubSubV2, pV2)
 	})
 

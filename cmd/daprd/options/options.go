@@ -57,6 +57,7 @@ type Options struct {
 	DaprPublicPort               string
 	AppPort                      string
 	DaprGracefulShutdownSeconds  int
+	DaprBlockShutdownDuration    *time.Duration
 	PlacementServiceHostAddr     string
 	DaprAPIListenAddresses       string
 	AppHealthProbeInterval       int
@@ -130,6 +131,7 @@ func New(origArgs []string) *Options {
 	fs.StringVar(&opts.UnixDomainSocket, "unix-domain-socket", "", "Path to a unix domain socket dir mount. If specified, Dapr API servers will use Unix Domain Sockets")
 	fs.IntVar(&opts.DaprHTTPReadBufferSize, "dapr-http-read-buffer-size", runtime.DefaultReadBufferSize, "Increasing max size of read buffer in KB to handle sending multi-KB headers")
 	fs.IntVar(&opts.DaprGracefulShutdownSeconds, "dapr-graceful-shutdown-seconds", int(runtime.DefaultGracefulShutdownDuration/time.Second), "Graceful shutdown time in seconds")
+	fs.DurationVar(opts.DaprBlockShutdownDuration, "dapr-block-shutdown-duration", 0, "If enabled, will block graceful shutdown after terminate signal is received until either the given duration has elapsed or the app reports unhealthy. Disabled by default")
 	fs.BoolVar(opts.EnableAPILogging, "enable-api-logging", false, "Enable API logging for API calls")
 	fs.BoolVar(&opts.DisableBuiltinK8sSecretStore, "disable-builtin-k8s-secret-store", false, "Disable the built-in Kubernetes Secret Store")
 	fs.BoolVar(&opts.EnableAppHealthCheck, "enable-app-health-check", false, "Enable health checks for the application using the protocol defined with app-protocol")
@@ -169,6 +171,10 @@ func New(origArgs []string) *Options {
 		if ok {
 			opts.ControlPlaneTrustDomain = td
 		}
+	}
+
+	if !fs.Changed("dapr-block-shutdown-duration") {
+		opts.DaprBlockShutdownDuration = nil
 	}
 
 	return &opts
