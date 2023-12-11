@@ -49,7 +49,7 @@ func (s *Registry) Create(name, version, logName string) (wfs.WorkflowBackend, e
 	if method, ok := s.getWorkflowBackendComponent(name, version, logName); ok {
 		return method(), nil
 	}
-	return nil, fmt.Errorf("couldn't find wokflow %s/%s", name, version)
+	return nil, fmt.Errorf("couldn't find wokflow backend %s/%s", name, version)
 }
 
 func (s *Registry) getWorkflowBackendComponent(name, version, logName string) (func() wfs.WorkflowBackend, bool) {

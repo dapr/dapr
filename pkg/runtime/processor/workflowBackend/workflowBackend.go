@@ -3,7 +3,7 @@ Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
-    http://www.apache.org/licenses/LICENSE-2.0
+    http://wwwbe.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -15,6 +15,7 @@ package workflowBackend
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/dapr/components-contrib/workflows"
@@ -36,10 +37,11 @@ type Options struct {
 }
 
 type workflowBackend struct {
-	registry  *compworkflowbackend.Registry
-	compStore *compstore.ComponentStore
-	meta      *meta.Meta
-	lock      sync.Mutex
+	registry            *compworkflowbackend.Registry
+	compStore           *compstore.ComponentStore
+	meta                *meta.Meta
+	lock                sync.Mutex
+	workflowBackendType string
 }
 
 func New(opts Options) *workflowBackend {
@@ -50,13 +52,13 @@ func New(opts Options) *workflowBackend {
 	}
 }
 
-func (w *workflowBackend) Init(ctx context.Context, comp compapi.Component) error {
-	w.lock.Lock()
-	defer w.lock.Unlock()
+func (wbe *workflowBackend) Init(ctx context.Context, comp compapi.Component) error {
+	wbe.lock.Lock()
+	defer wbe.lock.Unlock()
 
 	// create the component
 	fName := comp.LogName()
-	workflowBackendComp, err := w.registry.Create(comp.Spec.Type, comp.Spec.Version, fName)
+	workflowBackendComp, err := wbe.registry.Create(comp.Spec.Type, comp.Spec.Version, fName)
 	if err != nil {
 		log.Warnf("error creating workflow backend component (%s): %s", comp.LogName(), err)
 		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
@@ -68,7 +70,7 @@ func (w *workflowBackend) Init(ctx context.Context, comp compapi.Component) erro
 	}
 
 	// initialization
-	baseMetadata, err := w.meta.ToBaseMetadata(comp)
+	baseMetadata, err := wbe.meta.ToBaseMetadata(comp)
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
 		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
@@ -80,20 +82,37 @@ func (w *workflowBackend) Init(ctx context.Context, comp compapi.Component) erro
 	}
 
 	// save workflow related configuration
-	w.compStore.AddWorkflowBackend(comp.ObjectMeta.Name, workflowBackendComp)
+	wbe.compStore.AddWorkflowBackend(comp.ObjectMeta.Name, workflowBackendComp)
 	diag.DefaultMonitoring.ComponentInitialized(comp.Spec.Type)
+
+	if wbe.workflowBackendType == "" {
+		log.Info("Using '" + comp.Spec.Type + "' as workflow backend")
+		wbe.workflowBackendType = comp.Spec.Type
+	} else if wbe.workflowBackendType != comp.ObjectMeta.Name {
+		return fmt.Errorf("detected duplicate workflow backend: %s and %s", wbe.workflowBackendType, comp.Spec.Type)
+	}
 
 	return nil
 }
 
-func (w *workflowBackend) Close(comp compapi.Component) error {
-	w.lock.Lock()
-	defer w.lock.Unlock()
+func (wbe *workflowBackend) Close(comp compapi.Component) error {
+	wbe.lock.Lock()
+	defer wbe.lock.Unlock()
 
 	// We don't "Close" a workflow here because that has no meaning today since
 	// Dapr doesn't support third-party workflows. Internal workflows are based
 	// on the actor subsystem so there is nothing to close.
-	w.compStore.DeleteWorkflowBackend(comp.Name)
+	wbe.compStore.DeleteWorkflowBackend(comp.Name)
 
 	return nil
+}
+
+func (wbe *workflowBackend) WorkflowBackendType() (string, bool) {
+	wbe.lock.Lock()
+	defer wbe.lock.Unlock()
+
+	if wbe.workflowBackendType == "" {
+		return "", false
+	}
+	return wbe.workflowBackendType, true
 }

@@ -15,10 +15,10 @@ package compstore
 
 import "github.com/dapr/components-contrib/workflows"
 
-func (c *ComponentStore) AddWorkflowBackend(name string, workflow workflows.WorkflowBackend) {
+func (c *ComponentStore) AddWorkflowBackend(name string, workflowBackend workflows.WorkflowBackend) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	c.workflowBackendComponents[name] = workflow
+	c.workflowBackendComponents[name] = workflowBackend
 }
 
 func (c *ComponentStore) GetWorkflowBackend(name string) (workflows.WorkflowBackend, bool) {

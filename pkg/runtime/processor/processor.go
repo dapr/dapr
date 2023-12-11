@@ -103,6 +103,11 @@ type StateManager interface {
 	manager
 }
 
+type WorkflowBackendManager interface {
+	WorkflowBackendType() (string, bool)
+	manager
+}
+
 type PubsubManager interface {
 	Publish(context.Context, *contribpubsub.PublishRequest) error
 	BulkPublish(context.Context, *contribpubsub.BulkPublishRequest) (contribpubsub.BulkPublishResponse, error)
@@ -123,11 +128,12 @@ type BindingManager interface {
 
 // Processor manages the lifecycle of all components categories.
 type Processor struct {
-	compStore *compstore.ComponentStore
-	managers  map[components.Category]manager
-	state     StateManager
-	pubsub    PubsubManager
-	binding   BindingManager
+	compStore       *compstore.ComponentStore
+	managers        map[components.Category]manager
+	state           StateManager
+	pubsub          PubsubManager
+	binding         BindingManager
+	workflowBackend WorkflowBackendManager
 
 	lock sync.RWMutex
 }
@@ -169,11 +175,18 @@ func New(opts Options) *Processor {
 		Channels:       opts.Channels,
 	})
 
+	workflowBackend := workflowBackend.New(workflowBackend.Options{
+		Registry:       opts.Registry.WorkflowBackends(),
+		ComponentStore: opts.ComponentStore,
+		Meta:           opts.Meta,
+	})
+
 	return &Processor{
-		compStore: opts.ComponentStore,
-		state:     state,
-		pubsub:    ps,
-		binding:   binding,
+		compStore:       opts.ComponentStore,
+		state:           state,
+		workflowBackend: workflowBackend,
+		pubsub:          ps,
+		binding:         binding,
 		managers: map[components.Category]manager{
 			components.CategoryBindings: binding,
 			components.CategoryConfiguration: configuration.New(configuration.Options{
@@ -197,12 +210,8 @@ func New(opts Options) *Processor {
 				ComponentStore: opts.ComponentStore,
 				Meta:           opts.Meta,
 			}),
-			components.CategoryStateStore: state,
-			components.CategoryWorkflowBackend: workflowBackend.New(workflowBackend.Options{
-				Registry:       opts.Registry.WorkflowBackends(),
-				ComponentStore: opts.ComponentStore,
-				Meta:           opts.Meta,
-			}),
+			components.CategoryStateStore:      state,
+			components.CategoryWorkflowBackend: workflowBackend,
 			components.CategoryWorkflow: workflow.New(workflow.Options{
 				Registry:       opts.Registry.Workflows(),
 				ComponentStore: opts.ComponentStore,
@@ -275,6 +284,12 @@ func (p *Processor) State() StateManager {
 	p.lock.RLock()
 	defer p.lock.RUnlock()
 	return p.state
+}
+
+func (p *Processor) WorkflowBackend() WorkflowBackendManager {
+	p.lock.RLock()
+	defer p.lock.RUnlock()
+	return p.workflowBackend
 }
 
 func (p *Processor) PubSub() PubsubManager {

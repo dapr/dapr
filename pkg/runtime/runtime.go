@@ -578,10 +578,6 @@ func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) error {
 		if err != nil {
 			log.Warn(err)
 		} else {
-			// Workflow engine depends on actor runtime being initialized
-			// This needs to be called before "SetActorsInitDone" on the universal API object to prevent a race condition in workflow methods
-			a.initWorkflowEngine(ctx)
-
 			a.daprUniversalAPI.SetActorRuntime(a.actor)
 		}
 	} else {
@@ -591,6 +587,9 @@ func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) error {
 			log.Errorf("error while setting actor runtime for backend to nil: %v", err)
 		}
 	}
+
+	// Initialize workflow engine
+	a.initWorkflowEngine(ctx)
 
 	// We set actors as initialized whether we have an actors runtime or not
 	a.daprUniversalAPI.SetActorsInitDone()
@@ -625,18 +624,6 @@ func (a *DaprRuntime) initWorkflowEngine(ctx context.Context) {
 			log.Errorf("could not set actor runtime for backend: %v", err)
 		}
 	}
-
-	// wfBackendComponentFactory := wfengine.BuiltinBackendFactory(a.workflowEngine)
-	// if reg := a.runtimeConfig.registry.WorkflowBackends(); reg != nil {
-	// 	log.Infof("Registering component for dapr workflow engine...")
-	// 	reg.RegisterComponent(wfBackendComponentFactory, "sqlite")
-	// 	reg.RegisterComponent(wfBackendComponentFactory, "actor")
-	// 	// if componentInitErr := a.processor.Init(ctx, wfengine.ComponentDefinition); componentInitErr != nil {
-	// 	// 	log.Warnf("Failed to initialize Dapr workflow component: %v", componentInitErr)
-	// 	// }
-	// } else {
-	// 	log.Infof("No workflow registry available, not registering Dapr workflow component...")
-	// }
 
 	if reg := a.runtimeConfig.registry.Workflows(); reg != nil {
 		log.Infof("Registering component for dapr workflow engine...")
