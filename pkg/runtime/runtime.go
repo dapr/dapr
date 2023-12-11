@@ -178,9 +178,6 @@ func newDaprRuntime(ctx context.Context,
 
 	grpc := createGRPCManager(sec, runtimeConfig, globalConfig)
 
-	wfe := wfengine.NewWorkflowEngine(runtimeConfig.id, globalConfig.GetWorkflowSpec())
-	wfe.ConfigureGrpcExecutor()
-
 	channels := channels.New(channels.Options{
 		Registry:            runtimeConfig.registry,
 		ComponentStore:      compStore,
@@ -202,7 +199,6 @@ func newDaprRuntime(ctx context.Context,
 		pendingComponentDependents: map[string][]componentsV1alpha1.Component{},
 		tracerProvider:             nil,
 		resiliency:                 resiliencyProvider,
-		workflowEngine:             wfe,
 		appHealthReady:             nil,
 		compStore:                  compStore,
 		meta:                       meta,
@@ -448,6 +444,11 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	}
 
 	a.flushOutstandingComponents(ctx)
+
+	// Creating workflow engine after components are loaded
+	wfe := wfengine.NewWorkflowEngine(a.runtimeConfig.id, a.globalConfig.GetWorkflowSpec(), a.processor)
+	wfe.ConfigureGrpcExecutor()
+	a.workflowEngine = wfe
 
 	err = a.loadHTTPEndpoints(ctx)
 	if err != nil {

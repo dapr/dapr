@@ -24,6 +24,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/runtime/processor"
 	"github.com/dapr/kit/logger"
 )
 
@@ -57,18 +58,17 @@ func IsWorkflowRequest(path string) bool {
 	return backend.IsDurableTaskGrpcRequest(path)
 }
 
-func NewWorkflowEngine(appID string, spec config.WorkflowSpec) *WorkflowEngine {
+func NewWorkflowEngine(appID string, spec config.WorkflowSpec, processor *processor.Processor) *WorkflowEngine {
 	engine := &WorkflowEngine{
 		spec: spec,
 	}
 
-	// backendType, ok := processor.WorkflowBackend().WorkflowBackendType()
+	backendType, ok := processor.WorkflowBackend().WorkflowBackendType()
+	if !ok {
+		backendType = ActorBackendType
+	}
 
-	// if !ok {
-	// 	backendType = ActorBackendType
-	// }
-
-	be := InitilizeWorkflowBackend(appID, SqliteBackendType, engine)
+	be := InitilizeWorkflowBackend(appID, backendType, engine)
 	engine.Backend = be
 
 	return engine
