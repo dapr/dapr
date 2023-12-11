@@ -114,10 +114,44 @@ func TestEnvOrElse(t *testing.T) {
 }
 
 func TestSocketExists(t *testing.T) {
-	// Unix Domain Socket does not work on windows.
+	// Unix Domain Sockets work slightly differently on Windows.
 	if runtime.GOOS == "windows" {
+		t.Run("socket exists should return false if file does not exists", func(t *testing.T) {
+			assert.False(t, SocketExists("C:\\fake\\path"))
+		})
+
+		t.Run("socket exists should return false if file exists but it doesn't look like a socket", func(t *testing.T) {
+			file, err := os.CreateTemp(os.TempDir(), "prefix")
+			require.NoError(t, err)
+			defer os.Remove(file.Name())
+
+			assert.False(t, SocketExists(file.Name()))
+		})
+
+		t.Run("socket exists should return true if file exists and it looks like a socket", func(t *testing.T) {
+			file, err := os.CreateTemp(os.TempDir(), "socket.*.sock")
+			require.NoError(t, err)
+			defer os.Remove(file.Name())
+	
+			assert.True(t, SocketExists(file.Name()))
+		})
+
+		t.Run("socket exists should return true if file exists and it looks like a custom-named socket", func(t *testing.T) {
+			const envVar = "DAPR_COMPONENTS_SOCKETS_EXTENSION"
+			defer os.Unsetenv(envVar)
+
+			require.NoError(t, os.Setenv(envVar, ".custom"))
+
+			file, err := os.CreateTemp(os.TempDir(), "socket.*.custom")
+			require.NoError(t, err)
+			defer os.Remove(file.Name())
+	
+			assert.True(t, SocketExists(file.Name()))
+		})
+
 		return
 	}
+
 	t.Run("socket exists should return false if file does not exists", func(t *testing.T) {
 		assert.False(t, SocketExists("/fake/path"))
 	})
