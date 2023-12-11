@@ -119,16 +119,21 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 				ctx, cancel := context.WithTimeout(ctx, def.t)
 				defer cancel()
 
-				done := make(chan doneCh[T])
-				timedOut := atomic.Bool{}
+				done := make(chan doneCh[T], 1)
 				go func() {
 					rRes, rErr := operCopy(ctx)
-					if !timedOut.Load() {
-						done <- doneCh[T]{rRes, rErr}
-					} else if opts.Disposer != nil && !isZero(rRes) {
+
+					// If the channel is full, it means we had a timeout
+					select {
+					case done <- doneCh[T]{rRes, rErr}:
+						// No timeout, all good
+					default:
+						// The operation has timed out
 						// Invoke the disposer if we have a non-zero return value
 						// Note that in case of timeouts we do not invoke the accumulator
-						opts.Disposer(rRes)
+						if opts.Disposer != nil && !isZero(rRes) {
+							opts.Disposer(rRes)
+						}
 					}
 				}()
 
@@ -136,7 +141,21 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 				case v := <-done:
 					return v.res, v.err
 				case <-ctx.Done():
-					timedOut.Store(true)
+					// Because done has a capacity of 1, adding a message on the channel signals that there was a timeout
+					// However, the response may have arrived in the meanwhile, so we need to also check if something was added
+					select {
+					case done <- doneCh[T]{}:
+						// All good, nothing to do here
+					default:
+						// The response arrived at the same time as the context deadline, and the channel has a message
+						v := <-done
+
+						// Invoke the disposer if the return value is non-zero
+						// Note that in case of timeouts we do not invoke the accumulator
+						if opts.Disposer != nil && !isZero(v.res) {
+							opts.Disposer(v.res)
+						}
+					}
 					if def.addTimeoutActivatedMetric != nil && timeoutMetricsActivated.CompareAndSwap(false, true) {
 						def.addTimeoutActivatedMetric()
 					}
