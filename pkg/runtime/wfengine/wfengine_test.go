@@ -41,6 +41,8 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	"github.com/dapr/dapr/pkg/runtime/processor"
+	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/logger"
@@ -59,7 +61,7 @@ func init() {
 // TestStartWorkflowEngine validates that starting the workflow engine returns no errors.
 func TestStartWorkflowEngine(t *testing.T) {
 	ctx := context.Background()
-	engine := getEngine(t)
+	engine := getEngine(t, ctx)
 	engine.ConfigureGrpcExecutor()
 	grpcServer := grpc.NewServer()
 	engine.RegisterGrpcServer(grpcServer)
@@ -77,8 +79,11 @@ func GetTestOptions() []func(wfe *wfengine.WorkflowEngine) string {
 		},
 		func(wfe *wfengine.WorkflowEngine) string {
 			// disable caching to test recovery from failure
-			wfe.DisableActorCaching(true)
-			return "caching disabled"
+			if abe, ok := wfe.Backend.(*wfengine.ActorBackend); ok {
+				abe.DisableActorCaching(true)
+				return "caching disabled"
+			}
+			return ""
 		},
 	}
 }
@@ -345,9 +350,11 @@ func TestRecreateCompletedWorkflow(t *testing.T) {
 func TestInternalActorsSetupForWF(t *testing.T) {
 	ctx := context.Background()
 	_, engine := startEngine(ctx, t, task.NewTaskRegistry())
-	assert.Equal(t, 2, len(engine.GetInternalActorsMap()))
-	assert.Contains(t, engine.GetInternalActorsMap(), workflowActorType)
-	assert.Contains(t, engine.GetInternalActorsMap(), activityActorType)
+	if abe, ok := engine.Backend.(*wfengine.ActorBackend); ok {
+		assert.Equal(t, 2, len(abe.GetInternalActorsMap()))
+		assert.Contains(t, abe.GetInternalActorsMap(), workflowActorType)
+		assert.Contains(t, abe.GetInternalActorsMap(), activityActorType)
+	}
 }
 
 // TestRecreateRunningWorkflowFails verifies that a workflow can't be recreated if it's in a running state.
@@ -400,12 +407,14 @@ func TestRetryWorkflowOnTimeout(t *testing.T) {
 	ctx := context.Background()
 	client, engine := startEngine(ctx, t, r)
 
+	abe, _ := engine.Backend.(*wfengine.ActorBackend)
+
 	// Set a really short timeout to override the default workflow timeout so that we can exercise the timeout
 	// handling codepath in a short period of time.
-	engine.SetWorkflowTimeout(1 * time.Second)
+	abe.SetWorkflowTimeout(1 * time.Second)
 
 	// Set a really short reminder interval to retry workflows immediately after they time out.
-	engine.SetActorReminderInterval(1 * time.Millisecond)
+	abe.SetActorReminderInterval(1 * time.Millisecond)
 
 	for _, opt := range GetTestOptions() {
 		t.Run(opt(engine), func(t *testing.T) {
@@ -450,12 +459,14 @@ func TestRetryActivityOnTimeout(t *testing.T) {
 	ctx := context.Background()
 	client, engine := startEngine(ctx, t, r)
 
+	abe, _ := engine.Backend.(*wfengine.ActorBackend)
+
 	// Set a really short timeout to override the default activity timeout (1 hour at the time of writing)
 	// so that we can exercise the timeout handling codepath in a short period of time.
-	engine.SetActivityTimeout(1 * time.Second)
+	abe.SetActivityTimeout(1 * time.Second)
 
 	// Set a really short reminder interval to retry activities immediately after they time out.
-	engine.SetActorReminderInterval(1 * time.Millisecond)
+	abe.SetActorReminderInterval(1 * time.Millisecond)
 
 	for _, opt := range GetTestOptions() {
 		t.Run(opt(engine), func(t *testing.T) {
@@ -747,7 +758,7 @@ func startEngine(ctx context.Context, t *testing.T, r *task.TaskRegistry) (backe
 
 func startEngineAndGetStore(ctx context.Context, t *testing.T, r *task.TaskRegistry) (backend.TaskHubClient, *wfengine.WorkflowEngine, *daprt.FakeStateStore) {
 	var client backend.TaskHubClient
-	engine, store := getEngineAndStateStore(t)
+	engine, store := getEngineAndStateStore(t, ctx)
 	engine.SetExecutor(func(be backend.Backend) backend.Executor {
 		client = backend.NewTaskHubClient(be)
 		return task.NewTaskExecutor(r)
@@ -756,9 +767,15 @@ func startEngineAndGetStore(ctx context.Context, t *testing.T, r *task.TaskRegis
 	return client, engine, store
 }
 
-func getEngine(t *testing.T) *wfengine.WorkflowEngine {
+func getEngine(t *testing.T, ctx context.Context) *wfengine.WorkflowEngine {
 	spec := config.WorkflowSpec{MaxConcurrentWorkflowInvocations: 100, MaxConcurrentActivityInvocations: 100}
-	engine := wfengine.NewWorkflowEngine(testAppID, spec)
+
+	processor := processor.New(processor.Options{
+		Registry:     registry.New(registry.NewOptions()),
+		GlobalConfig: new(config.Configuration),
+	})
+
+	engine := wfengine.NewWorkflowEngine(testAppID, spec, processor)
 	store := fakeStore()
 	cfg := actors.NewConfig(actors.ConfigOpts{
 		AppID:              testAppID,
@@ -778,13 +795,18 @@ func getEngine(t *testing.T) *wfengine.WorkflowEngine {
 	if err := actors.Init(context.Background()); err != nil {
 		require.NoError(t, err)
 	}
-	engine.SetActorRuntime(actors)
+	abe, _ := engine.Backend.(*wfengine.ActorBackend)
+	abe.SetActorRuntime(actors, ctx)
 	return engine
 }
 
-func getEngineAndStateStore(t *testing.T) (*wfengine.WorkflowEngine, *daprt.FakeStateStore) {
+func getEngineAndStateStore(t *testing.T, ctx context.Context) (*wfengine.WorkflowEngine, *daprt.FakeStateStore) {
 	spec := config.WorkflowSpec{MaxConcurrentWorkflowInvocations: 100, MaxConcurrentActivityInvocations: 100}
-	engine := wfengine.NewWorkflowEngine(testAppID, spec)
+	processor := processor.New(processor.Options{
+		Registry:     registry.New(registry.NewOptions()),
+		GlobalConfig: new(config.Configuration),
+	})
+	engine := wfengine.NewWorkflowEngine(testAppID, spec, processor)
 	store := fakeStore().(*daprt.FakeStateStore)
 	cfg := actors.NewConfig(actors.ConfigOpts{
 		AppID:              testAppID,
@@ -803,6 +825,7 @@ func getEngineAndStateStore(t *testing.T) (*wfengine.WorkflowEngine, *daprt.Fake
 	})
 
 	require.NoError(t, actors.Init(context.Background()))
-	engine.SetActorRuntime(actors)
+	abe, _ := engine.Backend.(*wfengine.ActorBackend)
+	abe.SetActorRuntime(actors, ctx)
 	return engine, store
 }
