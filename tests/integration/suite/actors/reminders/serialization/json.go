@@ -16,6 +16,7 @@ package serialization
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -48,6 +49,10 @@ type serializationJSON struct {
 }
 
 func (i *serializationJSON) Setup(t *testing.T) []framework.Option {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping test on Windows due to SQLite limitations")
+	}
+
 	// Init placement with a maximum API level of 10
 	i.place = placement.New(t,
 		placement.WithMaxAPILevel(10),

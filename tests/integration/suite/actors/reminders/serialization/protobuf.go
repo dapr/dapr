@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"runtime"
 	"strconv"
 	"testing"
 	"time"
@@ -50,6 +51,10 @@ type serializationProtobuf struct {
 }
 
 func (i *serializationProtobuf) Setup(t *testing.T) []framework.Option {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping test on Windows due to SQLite limitations")
+	}
+
 	// Init placement with minimum API level of 20
 	i.place = placement.New(t, placement.WithMinAPILevel(20))
 
