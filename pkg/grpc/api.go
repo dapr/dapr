@@ -24,6 +24,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	apiErrors "github.com/dapr/dapr/pkg/api/errors"
+
 	otelTrace "go.opentelemetry.io/otel/trace"
 	"golang.org/x/exp/slices"
 	"google.golang.org/grpc"
@@ -44,7 +46,6 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
-	"github.com/dapr/dapr/pkg/errutil"
 	"github.com/dapr/dapr/pkg/grpc/metadata"
 	"github.com/dapr/dapr/pkg/grpc/proxy/codec"
 	"github.com/dapr/dapr/pkg/grpc/universalapi"
@@ -121,50 +122,35 @@ func NewAPI(opts APIOpts) API {
 
 // validateAndGetPubsbuAndTopic validates the request parameters and returns the pubsub interface, pubsub name, topic name, rawPayload metadata if set
 // or an error.
-func (a *api) validateAndGetPubsubAndTopic(pubsubName, topic string, reqMeta map[string]string) (pubsub.PubSub, string, string, bool, *kitErrors.Error) {
-	var err *kitErrors.Error
-
+// func (a *api) validateAndGetPubsubAndTopic(pubsubName, topic string, reqMeta map[string]string) (pubsub.PubSub, string, string, bool, *kitErrors.Error) {
+func (a *api) validateAndGetPubsubAndTopic(pubsubName, topic string, reqMeta map[string]string) (pubsub.PubSub, string, string, bool, error) {
+	var err error
 	pubsubType := string(contribMetadata.PubSubType)
 
 	if a.pubsubAdapter == nil {
-		err = errutil.ErrPubSubNotConfigured
-		err = err.WithResourceInfo(pubsubType, pubsubName, "", err.Message).
-			WithErrorInfo(err.Message, reqMeta)
-
+		err = apiErrors.PubSubNotConfigured(pubsubName, pubsubType, reqMeta)
 		return nil, "", "", false, err
 	}
 
 	if pubsubName == "" {
-		err = errutil.ErrPubSubNameEmpty
-		err = err.WithResourceInfo(pubsubType, pubsubName, "", err.Message).
-			WithErrorInfo(err.Message, reqMeta)
-
+		err = apiErrors.PubSubNameEmpty(pubsubName, pubsubType, reqMeta)
 		return nil, "", "", false, err
 	}
 
 	thepubsub, ok := a.UniversalAPI.CompStore.GetPubSub(pubsubName)
 	if !ok {
-		err = errutil.ErrPubSubNotFound.WithVars(pubsubName)
-		err = err.WithErrorInfo(err.Message, reqMeta).
-			WithResourceInfo(pubsubType, pubsubName, "", err.Message)
-
+		err = apiErrors.PubSubNotFound(pubsubName, pubsubType, reqMeta)
 		return nil, "", "", false, err
 	}
 
 	if topic == "" {
-		err = errutil.ErrPubSubTopicEmpty.WithVars(pubsubName)
-		err = err.WithResourceInfo(pubsubType, pubsubName, "", err.Message).
-			WithErrorInfo(err.Message, reqMeta)
-
+		err = apiErrors.PubSubTopicEmpty(pubsubName, pubsubType, reqMeta)
 		return nil, "", "", false, err
 	}
 
 	rawPayload, metaErr := contribMetadata.IsRawPayload(reqMeta)
 	if metaErr != nil {
-		err = errutil.ErrPubSubMetadataDeserialize.WithVars(metaErr)
-		err = err.WithResourceInfo(pubsubType, pubsubName, "", err.Message).
-			WithErrorInfo(err.Message, reqMeta)
-
+		err = apiErrors.PubSubMetadataDeserialize(pubsubName, pubsubType, reqMeta)
 		return nil, "", "", false, err
 	}
 

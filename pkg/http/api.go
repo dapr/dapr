@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	kitErrors "github.com/dapr/kit/errors"
 	"io"
 	nethttp "net/http"
 	"strconv"
@@ -38,6 +39,7 @@ import (
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
+	apiErrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/pkg/channel/http"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
@@ -45,7 +47,6 @@ import (
 	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
-	"github.com/dapr/dapr/pkg/errutil"
 	"github.com/dapr/dapr/pkg/grpc/universalapi"
 	"github.com/dapr/dapr/pkg/http/endpoints"
 	"github.com/dapr/dapr/pkg/messages"
@@ -55,7 +56,6 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/utils"
-	kitErrors "github.com/dapr/kit/errors"
 )
 
 // API returns a list of HTTP endpoints for Dapr.
@@ -1557,7 +1557,11 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 
 	if validationErr != nil {
 		log.Debug(validationErr)
-		fasthttpRespond(reqCtx, fasthttpResponseWithKitError(validationErr, nil))
+		//fasthttpRespond(reqCtx, fasthttpResponseWithError())
+		var kitError *kitErrors.Error
+		if errors.As(validationErr, &kitError) {
+			fasthttpRespond(reqCtx, fasthttpResponseWithKitError(validationErr.(*kitErrors.Error), nil))
+		}
 		return
 	}
 
@@ -1567,10 +1571,9 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 
 	rawPayload, metaErr := contribMetadata.IsRawPayload(metadata)
 	if metaErr != nil {
-		err := errutil.ErrPubSubMetadataDeserialize.WithVars(metaErr)
-		err = err.WithErrorInfo(err.Message, map[string]string{"appID": a.universal.AppID})
-
-		universalFastHTTPStandardizedErrorResponder(reqCtx, err)
+		err := apiErrors.PubSubMetadataDeserialize(pubsubName, string(contribMetadata.PubSubType), map[string]string{"appID": a.universal.AppID})
+		universalFastHTTPErrorResponder(reqCtx, err)
+		//universalFastHTTPStandardizedErrorResponder(reqCtx, err)
 		log.Debug(err)
 
 		return
@@ -1662,7 +1665,11 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 
 	if validationErr != nil {
 		log.Debug(validationErr)
-		fasthttpRespond(reqCtx, fasthttpResponseWithKitError(validationErr, nil))
+		var kitError *kitErrors.Error
+		if errors.As(validationErr, &kitError) {
+			fasthttpRespond(reqCtx, fasthttpResponseWithKitError(validationErr.(*kitErrors.Error), nil))
+		}
+		//fasthttpRespond(reqCtx, fasthttpResponseWithKitError(validationErr, nil))
 		return
 	}
 
@@ -1847,44 +1854,33 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 
 // validateAndGetPubsubAndTopic takes input as request context and returns the pubsub interface, pubsub name, topic name,
 // or error status code and an ErrorResponse object.
-func (a *api) validateAndGetPubsubAndTopic(reqCtx *fasthttp.RequestCtx) (pubsub.PubSub, string, string, *kitErrors.Error) {
-	var err *kitErrors.Error
-
+// func (a *api) validateAndGetPubsubAndTopic(reqCtx *fasthttp.RequestCtx) (pubsub.PubSub, string, string, *kitErrors.Error) {
+func (a *api) validateAndGetPubsubAndTopic(reqCtx *fasthttp.RequestCtx) (pubsub.PubSub, string, string, error) {
+	//var err *kitErrors.Error
+	var err error
 	pubsubName := reqCtx.UserValue(pubsubnameparam).(string)
 	pubsubType := string(contribMetadata.PubSubType)
 	metadata := getMetadataFromFastHTTPRequest(reqCtx)
 
 	if a.pubsubAdapter == nil {
-		err = errutil.ErrPubSubNotConfigured
-		err = err.WithResourceInfo(pubsubType, pubsubName, "", err.Message).
-			WithErrorInfo(err.Message, metadata)
-
+		err = apiErrors.PubSubNotConfigured(pubsubName, pubsubType, metadata)
 		return nil, "", "", err
 	}
 
 	if pubsubName == "" {
-		err = errutil.ErrPubSubNameEmpty
-		err = err.WithResourceInfo(pubsubType, pubsubName, "", err.Message).
-			WithErrorInfo(err.Message, metadata)
-
+		err = apiErrors.PubSubNameEmpty(pubsubName, pubsubType, metadata)
 		return nil, "", "", err
 	}
 
 	thepubsub, ok := a.universal.CompStore.GetPubSub(pubsubName)
 	if !ok {
-		err = errutil.ErrPubSubNotFound.WithVars(pubsubName)
-		err = err.WithErrorInfo(err.Message, metadata).
-			WithResourceInfo(pubsubType, pubsubName, "", err.Message)
-
+		err = apiErrors.PubSubNotFound(pubsubName, pubsubType, metadata)
 		return nil, "", "", err
 	}
 
 	topic := reqCtx.UserValue(wildcardParam).(string)
 	if topic == "" {
-		err = errutil.ErrPubSubTopicEmpty.WithVars(pubsubName)
-		err = err.WithResourceInfo(pubsubType, pubsubName, "", err.Message).
-			WithErrorInfo(err.Message, metadata)
-
+		err = apiErrors.PubSubTopicEmpty(pubsubName, pubsubType, metadata)
 		return nil, "", "", err
 	}
 

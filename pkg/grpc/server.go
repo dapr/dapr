@@ -157,6 +157,8 @@ func (s *server) StartNonBlocking() error {
 		// server is created in a loop because each instance
 		// has a handle on the underlying listener.
 		server, err := s.getGRPCServer()
+		reflection.Register(server)
+
 		if err != nil {
 			return err
 		}

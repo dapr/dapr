@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"strings"
 
 	"github.com/dapr/components-contrib/metadata"
@@ -26,7 +27,6 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
-	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 )
 
 const (
