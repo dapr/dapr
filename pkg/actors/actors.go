@@ -178,9 +178,10 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) ActorRuntime {
 	}
 
 	// Init reminders
-	a.actorsReminders = reminders.NewRemindersProvider(a.clock, internal.RemindersProviderOpts{
+	a.actorsReminders = reminders.NewRemindersProvider(a.clock, reminders.NewRemindersProviderOpts{
 		StoreName: a.storeName,
 		Config:    a.actorsConfig.Config,
+		APILevel:  &a.apiLevel,
 	})
 	a.actorsReminders.SetExecuteReminderFn(a.executeReminder)
 	a.actorsReminders.SetResiliencyProvider(a.resiliency)

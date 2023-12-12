@@ -20,7 +20,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -38,6 +37,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -54,6 +54,7 @@ type rebalancing struct {
 	daprd              [2]*daprd.Daprd
 	srv                [2]*prochttp.HTTP
 	handler            [2]*httpServer
+	db                 *sqlite.SQLite
 	place              *placement.Placement
 	placementStream    placementv1pb.Placement_ReportDaprStatusClient
 	activeActors       []atomic.Bool
@@ -64,13 +65,15 @@ func (i *rebalancing) Setup(t *testing.T) []framework.Option {
 	i.activeActors = make([]atomic.Bool, iterations)
 	i.doubleActivationCh = make(chan string)
 
-	// Get a temporary directory where to store the SQLite DB
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test-data.db")
-	t.Logf("Storing database in %s", dbPath)
+	// Create the SQLite database
+	i.db = sqlite.New(t,
+		sqlite.WithActorStateStore(true),
+		sqlite.WithMetadata("busyTimeout", "10s"),
+		sqlite.WithMetadata("disableWAL", "true"),
+	)
 
 	// Init placement
-	i.place = placement.New(t)
+	i.place = placement.New(t, placement.WithMaxAPILevel(0))
 
 	// Init two instances of daprd, each with its own server
 	for j := 0; j < 2; j++ {
@@ -79,24 +82,8 @@ func (i *rebalancing) Setup(t *testing.T) []framework.Option {
 			doubleActivationCh: i.doubleActivationCh,
 		}
 		i.srv[j] = prochttp.New(t, prochttp.WithHandler(i.handler[j].NewHandler(j)))
-		i.daprd[j] = daprd.New(t, daprd.WithResourceFiles(`
-apiVersion: dapr.io/v1alpha1
-kind: Component
-metadata:
-  name: mystore
-spec:
-  type: state.sqlite
-  version: v1
-  metadata:
-    - name: connectionString
-      value: 'file:`+dbPath+`'
-    - name: busyTimeout
-      value: '10s'
-    - name: disableWAL
-      value: 'true'
-    - name: actorStateStore
-      value: 'true'
-`),
+		i.daprd[j] = daprd.New(t,
+			daprd.WithResourceFiles(i.db.GetComponent()),
 			daprd.WithPlacementAddresses(i.place.Address()),
 			daprd.WithAppPort(i.srv[j].Port()),
 			// Daprd is super noisy in debug mode when connecting to placement.
@@ -105,7 +92,7 @@ spec:
 	}
 
 	return []framework.Option{
-		framework.WithProcesses(i.place, i.srv[0], i.srv[1], i.daprd[0], i.daprd[1]),
+		framework.WithProcesses(i.db, i.place, i.srv[0], i.srv[1], i.daprd[0], i.daprd[1]),
 	}
 }
 
@@ -419,14 +406,19 @@ func (i *rebalancing) reportStatusToPlacement(ctx context.Context, stream placem
 
 	errCh := make(chan error)
 	go func() {
+		var sent bool
 		for {
+			// When the stream ends (which happens when the context is canceled) this returns an error and we can return
 			o, rerr := stream.Recv()
 			if rerr != nil {
-				errCh <- fmt.Errorf("error from placement: %w", rerr)
-			}
-			if o.GetOperation() == "update" {
-				errCh <- nil
+				if !sent {
+					errCh <- fmt.Errorf("error from placement: %w", rerr)
+				}
 				return
+			}
+			if o.GetOperation() == "update" && !sent {
+				errCh <- nil
+				sent = true
 			}
 		}
 	}()

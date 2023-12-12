@@ -50,12 +50,14 @@ func newTestReminders() *reminders {
 		PlacementAddresses: []string{"placement:5050"},
 		HostedActorTypes:   internal.NewHostedActors([]string{"cat"}),
 	}
-	opts := internal.RemindersProviderOpts{
+	clock := clocktesting.NewFakeClock(startOfTime)
+	apiLevel := &atomic.Uint32{}
+	apiLevel.Store(internal.ActorAPILevel)
+	r := NewRemindersProvider(clock, NewRemindersProviderOpts{
 		StoreName: "testStore",
 		Config:    conf,
-	}
-	clock := clocktesting.NewFakeClock(startOfTime)
-	r := NewRemindersProvider(clock, opts)
+		APILevel:  apiLevel,
+	})
 	store := daprt.NewFakeStateStore()
 	r.SetStateStoreProviderFn(func() (internal.TransactionalStateStore, error) {
 		return store, nil
@@ -497,12 +499,14 @@ func newTestRemindersWithMockAndActorMetadataPartition() *reminders {
 			}
 		}
 	}
-	opts := internal.RemindersProviderOpts{
+	clock := clocktesting.NewFakeClock(startOfTime)
+	apiLevel := &atomic.Uint32{}
+	apiLevel.Store(internal.ActorAPILevel)
+	r := NewRemindersProvider(clock, NewRemindersProviderOpts{
 		StoreName: "testStore",
 		Config:    conf,
-	}
-	clock := clocktesting.NewFakeClock(startOfTime)
-	r := NewRemindersProvider(clock, opts)
+		APILevel:  apiLevel,
+	})
 	return r.(*reminders)
 }
 
