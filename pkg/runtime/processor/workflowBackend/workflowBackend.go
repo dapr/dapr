@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/workflows"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	workflowBackendComp "github.com/dapr/dapr/pkg/components/workflowBackend"
@@ -37,11 +38,17 @@ type Options struct {
 }
 
 type workflowBackend struct {
-	registry            *workflowBackendComp.Registry
-	compStore           *compstore.ComponentStore
-	meta                *meta.Meta
-	lock                sync.Mutex
-	workflowBackendType string
+	registry             *workflowBackendComp.Registry
+	compStore            *compstore.ComponentStore
+	meta                 *meta.Meta
+	lock                 sync.Mutex
+	backendComponentInfo *WorkflowBackendComponentInfo
+}
+
+type WorkflowBackendComponentInfo struct {
+	WorkflowBackendType     string
+	WorkflowBackendMetadata metadata.Base
+	InvalidWorkflowBackend  bool
 }
 
 func New(opts Options) *workflowBackend {
@@ -62,6 +69,9 @@ func (wbe *workflowBackend) Init(ctx context.Context, comp compapi.Component) er
 	if err != nil {
 		log.Warnf("error creating workflow backend component (%s): %s", comp.LogName(), err)
 		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
+		wbe.backendComponentInfo = &WorkflowBackendComponentInfo{
+			InvalidWorkflowBackend: true,
+		}
 		return err
 	}
 
@@ -85,11 +95,14 @@ func (wbe *workflowBackend) Init(ctx context.Context, comp compapi.Component) er
 	wbe.compStore.AddWorkflowBackend(comp.ObjectMeta.Name, workflowBackendComp)
 	diag.DefaultMonitoring.ComponentInitialized(comp.Spec.Type)
 
-	if wbe.workflowBackendType == "" {
+	if wbe.backendComponentInfo == nil {
 		log.Info("Using '" + comp.Spec.Type + "' as workflow backend")
-		wbe.workflowBackendType = comp.Spec.Type
-	} else if wbe.workflowBackendType != comp.ObjectMeta.Name {
-		return fmt.Errorf("detected duplicate workflow backend: %s and %s", wbe.workflowBackendType, comp.Spec.Type)
+		wbe.backendComponentInfo = &WorkflowBackendComponentInfo{
+			WorkflowBackendType:     comp.Spec.Type,
+			WorkflowBackendMetadata: baseMetadata,
+		}
+	} else if wbe.backendComponentInfo.WorkflowBackendType != comp.Spec.Type {
+		return fmt.Errorf("detected duplicate workflow backend: %s and %s", wbe.backendComponentInfo.WorkflowBackendType, comp.Spec.Type)
 	}
 
 	return nil
@@ -107,12 +120,12 @@ func (wbe *workflowBackend) Close(comp compapi.Component) error {
 	return nil
 }
 
-func (wbe *workflowBackend) WorkflowBackendType() (string, bool) {
+func (wbe *workflowBackend) WorkflowBackendComponentInfo() (*WorkflowBackendComponentInfo, bool) {
 	wbe.lock.Lock()
 	defer wbe.lock.Unlock()
 
-	if wbe.workflowBackendType == "" {
-		return "", false
+	if wbe.backendComponentInfo == nil {
+		return nil, false
 	}
-	return wbe.workflowBackendType, true
+	return wbe.backendComponentInfo, true
 }

@@ -104,7 +104,7 @@ type StateManager interface {
 }
 
 type WorkflowBackendManager interface {
-	WorkflowBackendType() (string, bool)
+	WorkflowBackendComponentInfo() (*workflowBackend.WorkflowBackendComponentInfo, bool)
 	manager
 }
 
