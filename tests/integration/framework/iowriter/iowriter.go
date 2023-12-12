@@ -20,6 +20,8 @@ import (
 	"os"
 	"strings"
 	"sync"
+
+	"github.com/dapr/kit/utils"
 )
 
 // Logger is an interface that provides a Log method and a Name method. The Log
@@ -77,7 +79,7 @@ func (w *stdwriter) flush() {
 	// Don't log if the test hasn't failed and the user hasn't requested logs to
 	// always be printed.
 	if !w.t.Failed() &&
-		strings.ToLower(os.Getenv("DAPR_INTEGRATION_LOGS")) != "true" {
+		!utils.IsTruthy(os.Getenv("DAPR_INTEGRATION_LOGS")) {
 		return
 	}
 
