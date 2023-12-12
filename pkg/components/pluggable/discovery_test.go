@@ -203,7 +203,7 @@ func TestRemoveExt(t *testing.T) {
 
 func TestGetSocketFolder(t *testing.T) {
 	t.Run("get socket folder should use default when env var is not set", func(t *testing.T) {
-		assert.Equal(t, filepath.Join(os.TempDir(), defaultSocketsFolder), GetSocketsFolderPath())
+		assert.Equal(t, filepath.Join(os.TempDir(), DefaultSocketsFolder), GetSocketsFolderPath())
 	})
 	t.Run("get socket folder should use env var when set", func(t *testing.T) {
 		fakeSocketFolder := "/tmp"

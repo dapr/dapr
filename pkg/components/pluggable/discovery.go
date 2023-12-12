@@ -47,14 +47,14 @@ func removeExt(fileName string) string {
 }
 
 const (
+	DefaultSocketsFolder = "dapr-components-sockets"
 	SocketsFolderEnvVar  = "DAPR_COMPONENTS_SOCKETS_FOLDER"
-	defaultSocketsFolder = "dapr-components-sockets"
 )
 
 // GetSocketsFolderPath returns the shared unix domain socket folder path
 func GetSocketsFolderPath() string {
 	tmpFolder := os.TempDir()
-	socketsFolder := filepath.Join(tmpFolder, defaultSocketsFolder)
+	socketsFolder := filepath.Join(tmpFolder, DefaultSocketsFolder)
 
 	return utils.GetEnvOrElse(SocketsFolderEnvVar, socketsFolder)
 }
