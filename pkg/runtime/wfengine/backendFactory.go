@@ -80,6 +80,12 @@ func getSqliteBackend(appId string, wfe *WorkflowEngine, backendComponentInfo *w
 func InitilizeWorkflowBackend(appId string, backendType string, wfe *WorkflowEngine,
 	backendComponentInfo *workflowBackend.WorkflowBackendComponentInfo, log logger.Logger) backend.Backend {
 
+	// if no backend component is defined, initialize actor backend
+	if backendComponentInfo == nil {
+		wfe.BackendType = ActorBackendType
+		return NewActorBackend(appId, wfe)
+	}
+
 	if backendComponentInfo.InvalidWorkflowBackend {
 		log.Errorf("Invalida workflow backend type provided, backend is not initialized")
 		return nil
@@ -87,8 +93,7 @@ func InitilizeWorkflowBackend(appId string, backendType string, wfe *WorkflowEng
 
 	if factory, ok := backendFactories[backendType]; ok {
 		return factory(appId, wfe, backendComponentInfo, log)
-	} else {
-		wfe.BackendType = ActorBackendType
-		return NewActorBackend(appId, wfe)
 	}
+
+	return nil
 }
