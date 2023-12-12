@@ -27,8 +27,8 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
-// GetWorkflowBeta1 is the API handler for getting workflow details
-func (a *UniversalAPI) GetWorkflowBeta1(ctx context.Context, in *runtimev1pb.GetWorkflowRequest) (*runtimev1pb.GetWorkflowResponse, error) {
+// GetWorkflow is the API handler for getting workflow details
+func (a *UniversalAPI) GetWorkflow(ctx context.Context, in *runtimev1pb.GetWorkflowRequest) (*runtimev1pb.GetWorkflowResponse, error) {
 	if err := a.validateInstanceID(in.GetInstanceId(), false /* isCreate */); err != nil {
 		a.Logger.Debug(err)
 		return &runtimev1pb.GetWorkflowResponse{}, err
@@ -68,8 +68,8 @@ func (a *UniversalAPI) GetWorkflowBeta1(ctx context.Context, in *runtimev1pb.Get
 	return res, nil
 }
 
-// StartWorkflowBeta1 is the API handler for starting a workflow
-func (a *UniversalAPI) StartWorkflowBeta1(ctx context.Context, in *runtimev1pb.StartWorkflowRequest) (*runtimev1pb.StartWorkflowResponse, error) {
+// StartWorkflow is the API handler for starting a workflow
+func (a *UniversalAPI) StartWorkflow(ctx context.Context, in *runtimev1pb.StartWorkflowRequest) (*runtimev1pb.StartWorkflowResponse, error) {
 	if err := a.validateInstanceID(in.GetInstanceId(), true /* isCreate */); err != nil {
 		a.Logger.Debug(err)
 		return &runtimev1pb.StartWorkflowResponse{}, err
@@ -109,8 +109,8 @@ func (a *UniversalAPI) StartWorkflowBeta1(ctx context.Context, in *runtimev1pb.S
 	return ret, nil
 }
 
-// TerminateWorkflowBeta1 is the API handler for terminating a workflow
-func (a *UniversalAPI) TerminateWorkflowBeta1(ctx context.Context, in *runtimev1pb.TerminateWorkflowRequest) (*emptypb.Empty, error) {
+// TerminateWorkflow is the API handler for terminating a workflow
+func (a *UniversalAPI) TerminateWorkflow(ctx context.Context, in *runtimev1pb.TerminateWorkflowRequest) (*emptypb.Empty, error) {
 	emptyResponse := &emptypb.Empty{}
 	if err := a.validateInstanceID(in.GetInstanceId(), false /* isCreate */); err != nil {
 		a.Logger.Debug(err)
@@ -141,8 +141,8 @@ func (a *UniversalAPI) TerminateWorkflowBeta1(ctx context.Context, in *runtimev1
 	return emptyResponse, nil
 }
 
-// RaiseEventWorkflowBeta1 is the API handler for raising an event to a workflow
-func (a *UniversalAPI) RaiseEventWorkflowBeta1(ctx context.Context, in *runtimev1pb.RaiseEventWorkflowRequest) (*emptypb.Empty, error) {
+// RaiseEventWorkflow is the API handler for raising an event to a workflow
+func (a *UniversalAPI) RaiseEventWorkflow(ctx context.Context, in *runtimev1pb.RaiseEventWorkflowRequest) (*emptypb.Empty, error) {
 	emptyResponse := &emptypb.Empty{}
 	if err := a.validateInstanceID(in.GetInstanceId(), false /* isCreate */); err != nil {
 		a.Logger.Debug(err)
@@ -179,8 +179,8 @@ func (a *UniversalAPI) RaiseEventWorkflowBeta1(ctx context.Context, in *runtimev
 	return emptyResponse, nil
 }
 
-// PauseWorkflowBeta1 is the API handler for pausing a workflow
-func (a *UniversalAPI) PauseWorkflowBeta1(ctx context.Context, in *runtimev1pb.PauseWorkflowRequest) (*emptypb.Empty, error) {
+// PauseWorkflow is the API handler for pausing a workflow
+func (a *UniversalAPI) PauseWorkflow(ctx context.Context, in *runtimev1pb.PauseWorkflowRequest) (*emptypb.Empty, error) {
 	emptyResponse := &emptypb.Empty{}
 	if err := a.validateInstanceID(in.GetInstanceId(), false /* isCreate */); err != nil {
 		a.Logger.Debug(err)
@@ -207,8 +207,8 @@ func (a *UniversalAPI) PauseWorkflowBeta1(ctx context.Context, in *runtimev1pb.P
 	return emptyResponse, nil
 }
 
-// ResumeWorkflowBeta1 is the API handler for resuming a workflow
-func (a *UniversalAPI) ResumeWorkflowBeta1(ctx context.Context, in *runtimev1pb.ResumeWorkflowRequest) (*emptypb.Empty, error) {
+// ResumeWorkflow is the API handler for resuming a workflow
+func (a *UniversalAPI) ResumeWorkflow(ctx context.Context, in *runtimev1pb.ResumeWorkflowRequest) (*emptypb.Empty, error) {
 	emptyResponse := &emptypb.Empty{}
 	if err := a.validateInstanceID(in.GetInstanceId(), false /* isCreate */); err != nil {
 		a.Logger.Debug(err)
@@ -235,8 +235,8 @@ func (a *UniversalAPI) ResumeWorkflowBeta1(ctx context.Context, in *runtimev1pb.
 	return emptyResponse, nil
 }
 
-// PurgeWorkflowBeta1 is the API handler for purging a workflow
-func (a *UniversalAPI) PurgeWorkflowBeta1(ctx context.Context, in *runtimev1pb.PurgeWorkflowRequest) (*emptypb.Empty, error) {
+// PurgeWorkflow is the API handler for purging a workflow
+func (a *UniversalAPI) PurgeWorkflow(ctx context.Context, in *runtimev1pb.PurgeWorkflowRequest) (*emptypb.Empty, error) {
 	emptyResponse := &emptypb.Empty{}
 	if err := a.validateInstanceID(in.GetInstanceId(), false /* isCreate */); err != nil {
 		a.Logger.Debug(err)
@@ -267,6 +267,41 @@ func (a *UniversalAPI) PurgeWorkflowBeta1(ctx context.Context, in *runtimev1pb.P
 		return emptyResponse, err
 	}
 	return emptyResponse, nil
+}
+
+// GetWorkflowBeta1 is the API handler for getting workflow details
+func (a *UniversalAPI) GetWorkflowBeta1(ctx context.Context, in *runtimev1pb.GetWorkflowRequest) (*runtimev1pb.GetWorkflowResponse, error) {
+	return a.GetWorkflow(ctx, in)
+}
+
+// StartWorkflowBeta1 is the API handler for starting a workflow
+func (a *UniversalAPI) StartWorkflowBeta1(ctx context.Context, in *runtimev1pb.StartWorkflowRequest) (*runtimev1pb.StartWorkflowResponse, error) {
+	return a.StartWorkflow(ctx, in)
+}
+
+// TerminateWorkflowBeta1 is the API handler for terminating a workflow
+func (a *UniversalAPI) TerminateWorkflowBeta1(ctx context.Context, in *runtimev1pb.TerminateWorkflowRequest) (*emptypb.Empty, error) {
+	return a.TerminateWorkflow(ctx, in)
+}
+
+// RaiseEventWorkflowBeta1 is the API handler for raising an event to a workflow
+func (a *UniversalAPI) RaiseEventWorkflowBeta1(ctx context.Context, in *runtimev1pb.RaiseEventWorkflowRequest) (*emptypb.Empty, error) {
+	return a.RaiseEventWorkflow(ctx, in)
+}
+
+// PauseWorkflowBeta1 is the API handler for pausing a workflow
+func (a *UniversalAPI) PauseWorkflowBeta1(ctx context.Context, in *runtimev1pb.PauseWorkflowRequest) (*emptypb.Empty, error) {
+	return a.PauseWorkflow(ctx, in)
+}
+
+// ResumeWorkflowBeta1 is the API handler for resuming a workflow
+func (a *UniversalAPI) ResumeWorkflowBeta1(ctx context.Context, in *runtimev1pb.ResumeWorkflowRequest) (*emptypb.Empty, error) {
+	return a.ResumeWorkflow(ctx, in)
+}
+
+// PurgeWorkflowBeta1 is the API handler for purging a workflow
+func (a *UniversalAPI) PurgeWorkflowBeta1(ctx context.Context, in *runtimev1pb.PurgeWorkflowRequest) (*emptypb.Empty, error) {
+	return a.PurgeWorkflow(ctx, in)
 }
 
 // GetWorkflowAlpha1 is the API handler for getting workflow details
