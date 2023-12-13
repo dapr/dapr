@@ -153,6 +153,7 @@ func main() {
 				UnixDomainSocket:             opts.UnixDomainSocket,
 				DaprHTTPReadBufferSize:       opts.DaprHTTPReadBufferSize,
 				DaprGracefulShutdownSeconds:  opts.DaprGracefulShutdownSeconds,
+				DaprBlockShutdownDuration:    opts.DaprBlockShutdownDuration,
 				DisableBuiltinK8sSecretStore: opts.DisableBuiltinK8sSecretStore,
 				EnableAppHealthCheck:         opts.EnableAppHealthCheck,
 				AppHealthCheckPath:           opts.AppHealthCheckPath,
@@ -178,4 +179,5 @@ func main() {
 	if err != nil {
 		log.Fatalf("Fatal error from runtime: %s", err)
 	}
+	log.Info("Daprd shutdown gracefully")
 }

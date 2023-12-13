@@ -42,7 +42,7 @@ func TestGetClusterDomain(t *testing.T) {
 		if err != nil {
 			t.Fatalf("get kube cluster domain error:%s", err)
 		}
-		assert.Equal(t, domain, tc.expected)
+		assert.Equal(t, tc.expected, domain)
 	}
 }
 

@@ -107,7 +107,7 @@ func (c *workflowEngineComponent) Start(ctx context.Context, req *workflows.Star
 		return nil, fmt.Errorf("unable to start workflow: %w", err)
 	}
 
-	c.logger.Debugf("Created new workflow instance with ID '%s'", workflowID)
+	c.logger.Debugf("Created new workflow '%s' instance with ID '%s'", req.WorkflowName, workflowID)
 	res := &workflows.StartResponse{
 		InstanceID: string(workflowID),
 	}
@@ -143,6 +143,7 @@ func (c *workflowEngineComponent) Purge(ctx context.Context, req *workflows.Purg
 		}
 		return fmt.Errorf("failed to Purge workflow %s: %w", req.InstanceID, err)
 	}
+	c.logger.Debugf("Purging workflow instance '%s'", req.InstanceID)
 
 	return nil
 }
@@ -198,8 +199,8 @@ func (c *workflowEngineComponent) Get(ctx context.Context, req *workflows.GetReq
 
 		// Status-specific fields
 		if metadata.FailureDetails != nil {
-			res.Workflow.Properties["dapr.workflow.failure.error_type"] = metadata.FailureDetails.ErrorType
-			res.Workflow.Properties["dapr.workflow.failure.error_message"] = metadata.FailureDetails.ErrorMessage
+			res.Workflow.Properties["dapr.workflow.failure.error_type"] = metadata.FailureDetails.GetErrorType()
+			res.Workflow.Properties["dapr.workflow.failure.error_message"] = metadata.FailureDetails.GetErrorMessage()
 		} else if metadata.IsComplete() {
 			res.Workflow.Properties["dapr.workflow.output"] = metadata.SerializedOutput
 		}

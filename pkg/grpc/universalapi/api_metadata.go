@@ -38,10 +38,17 @@ func (a *UniversalAPI) GetMetadata(ctx context.Context, in *runtimev1pb.GetMetad
 	// This is deprecated, but we still need to support it for backward compatibility.
 	extendedMetadata[daprRuntimeVersionKey] = buildinfo.Version()
 
-	// Active actors count
-	activeActorsCount := []*runtimev1pb.ActiveActorsCount{}
-	if a.Actors != nil {
-		activeActorsCount = a.Actors.GetActiveActorsCount(ctx)
+	// Actor runtime
+	var actorRuntime *runtimev1pb.ActorRuntime
+	if a.actorsReady.Load() {
+		if a.Actors == nil {
+			actorRuntime = &runtimev1pb.ActorRuntime{
+				RuntimeStatus: runtimev1pb.ActorRuntime_DISABLED,
+			}
+		} else {
+			actorRuntime = a.Actors.GetRuntimeStatus(ctx)
+			actorRuntime.RuntimeStatus = runtimev1pb.ActorRuntime_RUNNING
+		}
 	}
 
 	// App connection information
@@ -60,7 +67,7 @@ func (a *UniversalAPI) GetMetadata(ctx context.Context, in *runtimev1pb.GetMetad
 		}
 
 		// Health check path is not applicable for gRPC.
-		if protocol.Protocol(appConnectionProperties.Protocol).IsHTTP() {
+		if protocol.Protocol(appConnectionProperties.GetProtocol()).IsHTTP() {
 			appConnectionProperties.Health.HealthCheckPath = a.AppConnectionConfig.HealthCheckHTTPPath
 		}
 	}
@@ -104,19 +111,20 @@ func (a *UniversalAPI) GetMetadata(ctx context.Context, in *runtimev1pb.GetMetad
 		Id:                      a.AppID,
 		ExtendedMetadata:        extendedMetadata,
 		RegisteredComponents:    registeredComponents,
-		ActiveActorsCount:       activeActorsCount,
+		ActiveActorsCount:       actorRuntime.GetActiveActors(), // Alias for backwards-compatibility
 		Subscriptions:           ps,
 		HttpEndpoints:           registeredHTTPEndpoints,
 		AppConnectionProperties: appConnectionProperties,
 		RuntimeVersion:          buildinfo.Version(),
 		EnabledFeatures:         a.GlobalConfig.EnabledFeatures(),
+		ActorRuntime:            actorRuntime,
 	}, nil
 }
 
 // SetMetadata Sets value in extended metadata of the sidecar.
 func (a *UniversalAPI) SetMetadata(ctx context.Context, in *runtimev1pb.SetMetadataRequest) (*emptypb.Empty, error) {
 	// Nop if the key is empty
-	if in.Key == "" {
+	if in.GetKey() == "" {
 		return &emptypb.Empty{}, nil
 	}
 
@@ -124,7 +132,7 @@ func (a *UniversalAPI) SetMetadata(ctx context.Context, in *runtimev1pb.SetMetad
 	if a.ExtendedMetadata == nil {
 		a.ExtendedMetadata = make(map[string]string)
 	}
-	a.ExtendedMetadata[in.Key] = in.Value
+	a.ExtendedMetadata[in.GetKey()] = in.GetValue()
 	a.extendedMetadataLock.Unlock()
 
 	return &emptypb.Empty{}, nil

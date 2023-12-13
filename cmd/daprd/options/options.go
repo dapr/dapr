@@ -57,6 +57,7 @@ type Options struct {
 	DaprPublicPort               string
 	AppPort                      string
 	DaprGracefulShutdownSeconds  int
+	DaprBlockShutdownDuration    *time.Duration
 	PlacementServiceHostAddr     string
 	DaprAPIListenAddresses       string
 	AppHealthProbeInterval       int
@@ -78,6 +79,8 @@ func New(args []string) *Options {
 	opts := Options{
 		EnableAPILogging: new(bool),
 	}
+
+	var blockShutdownDuration time.Duration
 
 	flag.StringVar(&opts.Mode, "mode", string(modes.StandaloneMode), "Runtime mode for Dapr")
 	flag.StringVar(&opts.DaprHTTPPort, "dapr-http-port", strconv.Itoa(runtime.DefaultDaprHTTPPort), "HTTP port for Dapr API to listen on")
@@ -109,6 +112,7 @@ func New(args []string) *Options {
 	flag.StringVar(&opts.UnixDomainSocket, "unix-domain-socket", "", "Path to a unix domain socket dir mount. If specified, Dapr API servers will use Unix Domain Sockets")
 	flag.IntVar(&opts.DaprHTTPReadBufferSize, "dapr-http-read-buffer-size", runtime.DefaultReadBufferSize, "Increasing max size of read buffer in KB to handle sending multi-KB headers")
 	flag.IntVar(&opts.DaprGracefulShutdownSeconds, "dapr-graceful-shutdown-seconds", int(runtime.DefaultGracefulShutdownDuration/time.Second), "Graceful shutdown time in seconds")
+	flag.DurationVar(&blockShutdownDuration, "dapr-block-shutdown-duration", 0, "If enabled, will block graceful shutdown after terminate signal is received until either the given duration has elapsed or the app reports unhealthy. Disabled by default")
 	flag.BoolVar(opts.EnableAPILogging, "enable-api-logging", false, "Enable API logging for API calls")
 	flag.BoolVar(&opts.DisableBuiltinK8sSecretStore, "disable-builtin-k8s-secret-store", false, "Disable the built-in Kubernetes Secret Store")
 	flag.BoolVar(&opts.EnableAppHealthCheck, "enable-app-health-check", false, "Enable health checks for the application using the protocol defined with app-protocol")
@@ -148,6 +152,10 @@ func New(args []string) *Options {
 		if ok {
 			opts.ControlPlaneTrustDomain = td
 		}
+	}
+
+	if isFlagPassed("dapr-block-shutdown-duration") {
+		opts.DaprBlockShutdownDuration = &blockShutdownDuration
 	}
 
 	return &opts

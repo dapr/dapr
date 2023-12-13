@@ -41,7 +41,7 @@ func NewActorError(invokeResponse *invokev1.InvokeMethodResponse) error {
 		return fmt.Errorf("could not read actor error: %s", err)
 	}
 
-	statusCode := int(invokeResponse.Status().Code)
+	statusCode := int(invokeResponse.Status().GetCode())
 	if !invokeResponse.IsHTTPResponse() {
 		statusCode = invokev1.HTTPStatusFromCode(codes.Code(statusCode))
 	}
