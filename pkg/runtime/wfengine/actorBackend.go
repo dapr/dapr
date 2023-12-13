@@ -125,14 +125,18 @@ func (abe *ActorBackend) GetInternalActorsMap() map[string]actors.InternalActor 
 
 func (abe *ActorBackend) SetActorRuntime(actorRuntime actors.ActorRuntime, ctx context.Context) error {
 	abe.actors = actorRuntime
-
+	abe.actorRuntime = actorRuntime
 	if abe.actorsReady.CompareAndSwap(false, true) {
 		close(abe.actorsReadyCh)
 	}
 
-	if actorRuntime != nil {
+	return nil
+}
+
+func (abe *ActorBackend) RegisterActor(ctx context.Context) error {
+	if abe.actorRuntime != nil {
 		for actorType, actor := range abe.GetInternalActorsMap() {
-			err := actorRuntime.RegisterInternalActor(ctx, actorType, actor, time.Minute*1)
+			err := abe.actorRuntime.RegisterInternalActor(ctx, actorType, actor, time.Minute*1)
 			if err != nil {
 				return fmt.Errorf("failed to register workflow actor %s: %w", actorType, err)
 			}

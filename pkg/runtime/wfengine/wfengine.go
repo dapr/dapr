@@ -127,6 +127,11 @@ func (wfe *WorkflowEngine) Start(ctx context.Context) (err error) {
 		return errors.New("gRPC executor is not yet configured")
 	}
 
+	// Register actor backend if backend is actor
+	if abe, ok := wfe.Backend.(*ActorBackend); ok {
+		abe.RegisterActor(ctx)
+	}
+
 	// There are separate "workers" for executing orchestrations (workflows) and activities
 	orchestrationWorker := backend.NewOrchestrationWorker(
 		wfe.Backend,
