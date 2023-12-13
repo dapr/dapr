@@ -628,7 +628,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 		key, err = stateLoader.GetModifiedStateKey(k, storeName, a.universal.AppID)
 		if err != nil {
 			status := apierrors.StateStoreInvalidKeyName(storeName, k, err.Error())
-			universalFastHTTPStandardizedErrorResponder(reqCtx, status)
+			universalFastHTTPErrorResponder(reqCtx, status)
 			log.Debug(status)
 			return
 		}
@@ -698,7 +698,7 @@ func (a *api) getStateStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (s
 	if a.universal.CompStore.StateStoresLen() == 0 {
 		err := apierrors.StateStoreNotConfigured()
 		log.Debug(err)
-		universalFastHTTPStandardizedErrorResponder(reqCtx, err)
+		universalFastHTTPErrorResponder(reqCtx, err)
 		return nil, "", err
 	}
 
@@ -708,7 +708,7 @@ func (a *api) getStateStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (s
 	if !ok {
 		err := apierrors.StateStoreNotFound(storeName)
 		log.Debug(err)
-		universalFastHTTPStandardizedErrorResponder(reqCtx, err)
+		universalFastHTTPErrorResponder(reqCtx, err)
 		return nil, "", err
 	}
 	return stateStore, storeName, nil
@@ -728,7 +728,7 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 	k, err := stateLoader.GetModifiedStateKey(key, storeName, a.universal.AppID)
 	if err != nil {
 		status := apierrors.StateStoreInvalidKeyName(storeName, key, err.Error())
-		universalFastHTTPStandardizedErrorResponder(reqCtx, status)
+		universalFastHTTPErrorResponder(reqCtx, status)
 		log.Debug(status)
 
 		return
@@ -1040,7 +1040,7 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 	k, err := stateLoader.GetModifiedStateKey(key, storeName, a.universal.AppID)
 	if err != nil {
 		status := apierrors.StateStoreInvalidKeyName(storeName, key, err.Error())
-		universalFastHTTPStandardizedErrorResponder(reqCtx, status)
+		universalFastHTTPErrorResponder(reqCtx, status)
 		log.Debug(status)
 		return
 	}
@@ -1122,7 +1122,7 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 		reqs[i].Key, err = stateLoader.GetModifiedStateKey(r.Key, storeName, a.universal.AppID)
 		if err != nil {
 			status := apierrors.StateStoreInvalidKeyName(storeName, r.Key, err.Error())
-			universalFastHTTPStandardizedErrorResponder(reqCtx, status)
+			universalFastHTTPErrorResponder(reqCtx, status)
 			log.Debug(status)
 			return
 		}
@@ -1911,7 +1911,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	if a.universal.CompStore.StateStoresLen() == 0 {
 		err := apierrors.StateStoreNotConfigured()
 		log.Debug(err)
-		universalFastHTTPStandardizedErrorResponder(reqCtx, err)
+		universalFastHTTPErrorResponder(reqCtx, err)
 		return
 	}
 
@@ -1920,14 +1920,14 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	if !ok {
 		err := apierrors.StateStoreNotFound(storeName)
 		log.Debug(err)
-		universalFastHTTPStandardizedErrorResponder(reqCtx, err)
+		universalFastHTTPErrorResponder(reqCtx, err)
 		return
 	}
 
 	transactionalStore, ok := store.(state.TransactionalStore)
 	if !ok || !state.FeatureTransactional.IsPresent(store.Features()) {
 		err := apierrors.StateStoreTransactionsNotSupported(storeName)
-		universalFastHTTPStandardizedErrorResponder(reqCtx, err)
+		universalFastHTTPErrorResponder(reqCtx, err)
 		log.Debug(err)
 		return
 	}
@@ -1970,7 +1970,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 			upsertReq.Key, err = stateLoader.GetModifiedStateKey(upsertReq.Key, storeName, a.universal.AppID)
 			if err != nil {
 				status := apierrors.StateStoreInvalidKeyName(storeName, upsertReq.Key, err.Error())
-				universalFastHTTPStandardizedErrorResponder(reqCtx, status)
+				universalFastHTTPErrorResponder(reqCtx, status)
 				log.Debug(status)
 				return
 			}
@@ -1987,7 +1987,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 			delReq.Key, err = stateLoader.GetModifiedStateKey(delReq.Key, storeName, a.universal.AppID)
 			if err != nil {
 				status := apierrors.StateStoreInvalidKeyName(storeName, delReq.Key, err.Error())
-				universalFastHTTPStandardizedErrorResponder(reqCtx, status)
+				universalFastHTTPErrorResponder(reqCtx, status)
 				log.Debug(status)
 
 				return
@@ -2008,7 +2008,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 		if max > 0 && len(operations) > max {
 			err := apierrors.StateStoreTooManyTransactionalOps(storeName, len(operations), max)
 			log.Debug(err)
-			universalFastHTTPStandardizedErrorResponder(reqCtx, err)
+			universalFastHTTPErrorResponder(reqCtx, err)
 			return
 		}
 	}

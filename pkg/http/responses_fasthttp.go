@@ -14,6 +14,7 @@ limitations under the License.
 package http
 
 import (
+	"errors"
 	"net/http"
 
 	kitErrors "github.com/dapr/kit/errors"
@@ -24,33 +25,6 @@ import (
 )
 
 type fasthttpResponseOption = func(ctx *fasthttp.RequestCtx)
-
-/******************************
-New funcs with kitErrors
-*******************************/
-
-// fasthttpResponseWithKitError overrides the content-type with application/json.
-func fasthttpResponseWithKitError(err *kitErrors.Error, metadata map[string]string) fasthttpResponseOption {
-	return func(ctx *fasthttp.RequestCtx) {
-		ctx.Response.SetStatusCode(err.HttpCode)
-		ctx.Response.SetBody(err.JSONErrorValue())
-		ctx.Response.Header.SetContentType(jsonContentTypeHeader)
-		// keeping to not break http expectations
-		// mostly nil, but some calls to this func with metadata exist in http/api.go
-		for k, v := range metadata {
-			ctx.Response.Header.Set(metadataPrefix+k, v)
-		}
-	}
-}
-
-func universalFastHTTPStandardizedErrorResponder(reqCtx *fasthttp.RequestCtx, err *kitErrors.Error) {
-	// if there is no err
-	if err.HttpCode == 0 {
-		return
-	}
-
-	fasthttpRespond(reqCtx, fasthttpResponseWithKitError(err, nil))
-}
 
 // fasthttpResponseWithJSON overrides the content-type with application/json.
 func fasthttpResponseWithJSON(code int, obj []byte, metadata map[string]string) fasthttpResponseOption {
@@ -104,6 +78,14 @@ func universalFastHTTPErrorResponder(reqCtx *fasthttp.RequestCtx, err error) {
 	apiErr, ok := err.(messages.APIError)
 	if ok {
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(apiErr.HTTPCode(), apiErr))
+		return
+	}
+
+	// Check if it's a kitErrors.Error object
+	var kitErr kitErrors.Error
+	ok = errors.As(err, &kitErr)
+	if ok {
+		fasthttpRespond(reqCtx, fasthttpResponseWithError(kitErr.HTTPStatusCode(), kitErr))
 		return
 	}
 

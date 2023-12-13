@@ -15,6 +15,7 @@ package http
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -132,7 +133,7 @@ func respondWithProto(w http.ResponseWriter, m protoreflect.ProtoMessage, status
 }
 
 // respondWithError responds with an error.
-// Normally, this is used with messages.APIError.
+// Normally, this is used with messages.APIError and kitErrors.Error objects.
 func respondWithError(w http.ResponseWriter, err error) {
 	if err == nil {
 		return
@@ -145,10 +146,11 @@ func respondWithError(w http.ResponseWriter, err error) {
 		return
 	}
 
-	// Check if it's a kiterrors.Error object
-	apiKitErr, ok := err.(*kitErrors.Error)
+	// Check if it's a kitErrors.Error object
+	var kitErr kitErrors.Error
+	ok = errors.As(err, &kitErr)
 	if ok {
-		respondWithData(w, apiKitErr.HttpCode, apiKitErr.JSONErrorValue())
+		respondWithData(w, kitErr.HTTPStatusCode(), kitErr.JSONErrorValue())
 		return
 	}
 
