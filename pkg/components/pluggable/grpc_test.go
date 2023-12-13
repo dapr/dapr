@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"runtime"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -53,11 +53,6 @@ func (f *fakeSvc) handler(srv interface{}, ctx context.Context, dec func(interfa
 }
 
 func TestGRPCConnector(t *testing.T) {
-	// gRPC Pluggable component requires Unix Domain Socket to work, I'm skipping this test when running on windows.
-	if runtime.GOOS == "windows" {
-		return
-	}
-
 	t.Run("invoke method should contain component name as request metadata", func(t *testing.T) {
 		const (
 			fakeSvcName    = "dapr.my.service.fake"
@@ -81,7 +76,8 @@ func TestGRPCConnector(t *testing.T) {
 			fakeFactoryCalled++
 			return clientFake
 		}
-		const fakeSocketPath = "/tmp/socket.sock"
+		const fakeSocketName = "socket.sock"
+		fakeSocketPath := filepath.Join(os.TempDir(), fakeSocketName)
 		os.RemoveAll(fakeSocketPath) // guarantee that is not being used.
 		defer os.RemoveAll(fakeSocketPath)
 		listener, err := net.Listen("unix", fakeSocketPath)
@@ -126,7 +122,8 @@ func TestGRPCConnector(t *testing.T) {
 			fakeFactoryCalled++
 			return clientFake
 		}
-		const fakeSocketPath = "/tmp/socket.sock"
+		const fakeSocketName = "socket.sock"
+		fakeSocketPath := filepath.Join(os.TempDir(), fakeSocketName)
 		os.RemoveAll(fakeSocketPath) // guarantee that is not being used.
 		defer os.RemoveAll(fakeSocketPath)
 		listener, err := net.Listen("unix", fakeSocketPath)
@@ -161,7 +158,8 @@ func TestGRPCConnector(t *testing.T) {
 			return clientFake
 		}
 
-		const fakeSocketPath = "/tmp/socket.sock"
+		const fakeSocketName = "socket.sock"
+		fakeSocketPath := filepath.Join(os.TempDir(), fakeSocketName)
 		os.RemoveAll(fakeSocketPath) // guarantee that is not being used.
 		defer os.RemoveAll(fakeSocketPath)
 		connector := NewGRPCConnector(fakeSocketPath, fakeFactory)
