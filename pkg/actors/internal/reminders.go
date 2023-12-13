@@ -32,12 +32,6 @@ type LookupActorFn func(ctx context.Context, actorType string, actorID string) (
 // StateStoreProviderFn is the type of a function that returns the state store provider and its name.
 type StateStoreProviderFn func() (string, TransactionalStateStore, error)
 
-// RemindersProviderOpts contains the options for the reminders provider.
-type RemindersProviderOpts struct {
-	StoreName string
-	Config    Config
-}
-
 // RemindersProvider is the interface for the object that provides reminders services.
 type RemindersProvider interface {
 	io.Closer
