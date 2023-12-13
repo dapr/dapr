@@ -43,7 +43,7 @@ func TestK6Client(t *testing.T) {
 			Client: fake.CreateHTTPClient(func(r *http.Request) (*http.Response, error) {
 				onRequest(r)
 				return &http.Response{
-					Body:       io.NopCloser(bytes.NewBuffer([]byte(`{}`))),
+					Body:       io.NopCloser(bytes.NewBufferString("{}")),
 					StatusCode: http.StatusOK,
 				}, nil
 			}),
@@ -57,39 +57,39 @@ func TestK6Client(t *testing.T) {
 		called := 0
 		k6.client = getClient(func(r *http.Request) {
 			called++
-			assert.Equal(t, r.Method, "DELETE")
+			assert.Equal(t, "DELETE", r.Method)
 		})
 		require.NoError(t, k6.Delete(context.Background(), k6Name, metav1.DeleteOptions{}))
-		assert.Equal(t, called, 1)
+		assert.Equal(t, 1, called)
 	})
 	t.Run("Get should call rest GET", func(t *testing.T) {
 		called := 0
 		k6.client = getClient(func(r *http.Request) {
 			called++
-			assert.Equal(t, r.Method, "GET")
+			assert.Equal(t, "GET", r.Method)
 		})
 		_, err = k6.Get(context.Background(), k6Name)
 		require.NoError(t, err)
-		assert.Equal(t, called, 1)
+		assert.Equal(t, 1, called)
 	})
 	t.Run("Create should call rest POST", func(t *testing.T) {
 		called := 0
 		k6.client = getClient(func(r *http.Request) {
 			called++
-			assert.Equal(t, r.Method, "POST")
+			assert.Equal(t, "POST", r.Method)
 		})
 		_, err = k6.Create(context.Background(), &v1.K6{})
 		require.NoError(t, err)
-		assert.Equal(t, called, 1)
+		assert.Equal(t, 1, called)
 	})
 	t.Run("List should call rest GET with filters", func(t *testing.T) {
 		called := 0
 		k6.client = getClient(func(r *http.Request) {
 			called++
-			assert.Equal(t, r.Method, "GET")
+			assert.Equal(t, "GET", r.Method)
 		})
 		_, err = k6.List(context.Background(), metav1.ListOptions{})
 		require.NoError(t, err)
-		assert.Equal(t, called, 1)
+		assert.Equal(t, 1, called)
 	})
 }

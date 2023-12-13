@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -93,7 +94,7 @@ func TestInitState(t *testing.T) {
 		err := proc.Init(context.TODO(), mockStateComponent("noerror"))
 
 		// assert
-		assert.NoError(t, err, "expected no error")
+		require.NoError(t, err, "expected no error")
 	})
 
 	t.Run("test init state store error", func(t *testing.T) {
@@ -104,7 +105,7 @@ func TestInitState(t *testing.T) {
 		err := proc.Init(context.TODO(), mockStateComponent("error"))
 
 		// assert
-		assert.Error(t, err, "expected error")
+		require.Error(t, err, "expected error")
 		assert.Equal(t, err.Error(), rterrors.NewInit(rterrors.InitComponentFailure, "error (state.mockState/v1)", assert.AnError).Error(), "expected error strings to match")
 	})
 
@@ -117,7 +118,7 @@ func TestInitState(t *testing.T) {
 		ok := encryption.EncryptedStateStore("noencryption")
 
 		// assert
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.False(t, ok)
 	})
 
@@ -131,7 +132,7 @@ func TestInitState(t *testing.T) {
 		ok := encryption.EncryptedStateStore("encryption")
 
 		// assert
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.True(t, ok)
 	})
 }

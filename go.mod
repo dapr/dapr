@@ -1,6 +1,8 @@
 module github.com/dapr/dapr
 
-go 1.20
+go 1.21
+
+toolchain go1.21.4
 
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.4.2
@@ -9,8 +11,8 @@ require (
 	github.com/argoproj/argo-rollouts v1.4.1
 	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/cloudevents/sdk-go/v2 v2.14.0
-	github.com/dapr/components-contrib v1.12.1-0.20231102232056-f4e73b0e6511
-	github.com/dapr/kit v0.12.2-0.20231031211530-0e1fd37fc4b3
+	github.com/dapr/components-contrib v1.12.1-0.20231204210358-79adc565c17a
+	github.com/dapr/kit v0.12.2-0.20231116003620-df64d3a144b3
 	github.com/evanphx/json-patch/v5 v5.7.0
 	github.com/go-chi/chi/v5 v5.0.10
 	github.com/go-chi/cors v1.2.1
@@ -75,6 +77,7 @@ require (
 	k8s.io/klog v1.0.0
 	k8s.io/metrics v0.26.3
 	k8s.io/utils v0.0.0-20230726121419-3b25d923346b
+	modernc.org/sqlite v1.27.0
 	sigs.k8s.io/controller-runtime v0.14.6
 	sigs.k8s.io/yaml v1.4.0
 )
@@ -94,13 +97,13 @@ require (
 	github.com/AthenZ/athenz v1.10.39 // indirect
 	github.com/Azure/azure-sdk-for-go v68.0.0+incompatible // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/ai/azopenai v0.3.0 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.8.0 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.9.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.4.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig v0.6.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/data/azcosmos v0.3.6 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/data/aztables v1.0.2 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/internal v1.4.0 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/messaging/azeventhubs v1.0.1 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/data/aztables v1.1.0 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/internal v1.5.0 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/messaging/azeventhubs v1.0.2 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/messaging/azservicebus v1.5.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/eventgrid/armeventgrid/v2 v2.1.1 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/eventhub/armeventhub v1.1.1 // indirect
@@ -418,7 +421,6 @@ require (
 	modernc.org/mathutil v1.6.0 // indirect
 	modernc.org/memory v1.7.2 // indirect
 	modernc.org/opt v0.1.3 // indirect
-	modernc.org/sqlite v1.27.0 // indirect
 	modernc.org/strutil v1.2.0 // indirect
 	modernc.org/token v1.1.0 // indirect
 	sigs.k8s.io/json v0.0.0-20220713155537-f223a00ba0e2 // indirect

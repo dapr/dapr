@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -75,16 +76,16 @@ spec:
 		daprd.WithExecOptions(
 			exec.WithExitCode(1),
 			exec.WithRunError(func(t *testing.T, err error) {
-				assert.ErrorContains(t, err, "exit status 1")
+				require.ErrorContains(t, err, "exit status 1")
 			}),
 			exec.WithStdout(u.logline.Stdout()),
 		),
 	)
 	return []framework.Option{
-		framework.WithProcesses(u.daprd, u.logline),
+		framework.WithProcesses(u.logline, u.daprd),
 	}
 }
 
 func (u *uniquename) Run(t *testing.T, ctx context.Context) {
-	// Assertions done in logline process
+	assert.Eventually(t, u.logline.FoundAll, time.Second*5, time.Millisecond*100)
 }

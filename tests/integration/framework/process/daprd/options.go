@@ -13,7 +13,9 @@ limitations under the License.
 
 package daprd
 
-import "github.com/dapr/dapr/tests/integration/framework/process/exec"
+import (
+	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+)
 
 // Option is a function that configures the dapr process.
 type Option func(*options)
@@ -44,6 +46,8 @@ type options struct {
 	sentryAddress           string
 	controlPlaneAddress     string
 	disableK8sSecretStore   *bool
+	gracefulShutdownSeconds *int
+	blockShutdownDuration   *string
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
@@ -136,6 +140,21 @@ func WithResourceFiles(files ...string) Option {
 	}
 }
 
+// WithInMemoryActorStateStore adds an in-memory state store component, which is also enabled as actor state store.
+func WithInMemoryActorStateStore(storeName string) Option {
+	return WithResourceFiles(`apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: ` + storeName + `
+spec:
+  type: state.in-memory
+  version: v1
+  metadata:
+    - name: actorStateStore
+      value: true
+`)
+}
+
 func WithConfigs(configs ...string) Option {
 	return func(o *options) {
 		o.configs = configs
@@ -181,5 +200,17 @@ func WithControlPlaneAddress(address string) Option {
 func WithDisableK8sSecretStore(disable bool) Option {
 	return func(o *options) {
 		o.disableK8sSecretStore = &disable
+	}
+}
+
+func WithDaprGracefulShutdownSeconds(seconds int) Option {
+	return func(o *options) {
+		o.gracefulShutdownSeconds = &seconds
+	}
+}
+
+func WithDaprBlockShutdownDuration(duration string) Option {
+	return func(o *options) {
+		o.blockShutdownDuration = &duration
 	}
 }

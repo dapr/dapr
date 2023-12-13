@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	contribPubsub "github.com/dapr/components-contrib/pubsub"
 )
@@ -72,7 +73,7 @@ func TestFlushMessages(t *testing.T) {
 				}
 
 				flushMessages(context.Background(), "topic", tc.messages, tc.msgCbMap, handler)
-				assert.Equal(t, handlerInvoked, tc.expectedHandlerInvoked)
+				assert.Equal(t, tc.expectedHandlerInvoked, handlerInvoked)
 			})
 		}
 	})
@@ -144,9 +145,9 @@ func TestFlushMessages(t *testing.T) {
 
 				for id, err := range invokedCallbacks {
 					if _, ok := tc.entryIdErrMap[id]; ok {
-						assert.NotNil(t, err)
+						require.Error(t, err)
 					} else {
-						assert.Nil(t, err)
+						require.NoError(t, err)
 					}
 				}
 			})

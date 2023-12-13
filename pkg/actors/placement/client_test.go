@@ -39,7 +39,7 @@ func TestConnectToServer(t *testing.T) {
 			return []grpc.DialOption{}, nil
 		})
 
-		assert.NotNil(t, client.connectToServer(context.Background(), ""))
+		require.Error(t, client.connectToServer(context.Background(), ""))
 	})
 	t.Run("when new placement stream returns an error connectToServer should return an error", func(t *testing.T) {
 		client := newPlacementClient(func() ([]grpc.DialOption, error) {
@@ -47,7 +47,7 @@ func TestConnectToServer(t *testing.T) {
 		})
 		conn, cleanup := newTestServerWithOpts() // do not register the placement stream server
 		defer cleanup()
-		assert.NotNil(t, client.connectToServer(context.Background(), conn))
+		require.Error(t, client.connectToServer(context.Background(), conn))
 	})
 	t.Run("when connectToServer succeeds it should broadcast that a new connection is alive", func(t *testing.T) {
 		conn, _, cleanup := newTestServer() // do not register the placement stream server
@@ -64,7 +64,7 @@ func TestConnectToServer(t *testing.T) {
 			ready.Done()
 		}()
 
-		assert.Nil(t, client.connectToServer(context.Background(), conn))
+		require.NoError(t, client.connectToServer(context.Background(), conn))
 		ready.Wait() // should not timeout
 		assert.True(t, client.streamConnAlive)
 	})
@@ -100,7 +100,7 @@ func TestDisconnect(t *testing.T) {
 		defer cleanup()
 
 		client := newPlacementClient(getGrpcOptsGetter([]string{conn}, testSecurity(t)))
-		assert.Nil(t, client.connectToServer(context.Background(), conn))
+		require.NoError(t, client.connectToServer(context.Background(), conn))
 
 		called := false
 		shouldBeCalled := func() {
@@ -118,7 +118,7 @@ func TestDisconnect(t *testing.T) {
 		}()
 		client.disconnectFn(shouldBeCalled)
 		ready.Wait()
-		assert.Equal(t, client.clientConn.GetState(), connectivity.Shutdown)
+		assert.Equal(t, connectivity.Shutdown, client.clientConn.GetState())
 		assert.True(t, called)
 	})
 }

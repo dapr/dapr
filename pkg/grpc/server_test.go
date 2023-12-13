@@ -38,7 +38,7 @@ func TestGetMiddlewareOptions(t *testing.T) {
 
 		serverOption := fakeServer.getMiddlewareOptions()
 
-		assert.Equal(t, 3, len(serverOption))
+		assert.Len(t, serverOption, 3)
 	})
 
 	t.Run("should not disable middleware even when SamplingRate is 0", func(t *testing.T) {
@@ -52,7 +52,7 @@ func TestGetMiddlewareOptions(t *testing.T) {
 
 		serverOption := fakeServer.getMiddlewareOptions()
 
-		assert.Equal(t, 3, len(serverOption))
+		assert.Len(t, serverOption, 3)
 	})
 
 	t.Run("should have api access rules middleware", func(t *testing.T) {
@@ -75,7 +75,7 @@ func TestGetMiddlewareOptions(t *testing.T) {
 
 		serverOption := fakeServer.getMiddlewareOptions()
 
-		assert.Equal(t, 3, len(serverOption))
+		assert.Len(t, serverOption, 3)
 	})
 }
 
@@ -98,7 +98,7 @@ func TestClose(t *testing.T) {
 		server := NewAPIServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, config.APISpec{}, nil, nil)
 		require.NoError(t, server.StartNonBlocking())
 		dapr_testing.WaitForListeningAddress(t, 5*time.Second, fmt.Sprintf("127.0.0.1:%d", port))
-		assert.NoError(t, server.Close())
+		require.NoError(t, server.Close())
 	})
 
 	t.Run("test close with api logging disabled", func(t *testing.T) {
@@ -119,7 +119,7 @@ func TestClose(t *testing.T) {
 		server := NewAPIServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, config.APISpec{}, nil, nil)
 		require.NoError(t, server.StartNonBlocking())
 		dapr_testing.WaitForListeningAddress(t, 5*time.Second, fmt.Sprintf("127.0.0.1:%d", port))
-		assert.NoError(t, server.Close())
+		require.NoError(t, server.Close())
 	})
 }
 
@@ -176,7 +176,7 @@ func TestGrpcAPILoggingMiddlewares(t *testing.T) {
 			timeStr, ok := logData["time"].(string)
 			assert.True(t, ok)
 			tt, err := time.Parse(time.RFC3339Nano, timeStr)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.InDelta(t, time.Now().Unix(), tt.Unix(), 120)
 
 			// In our test the duration better be no more than 10ms!

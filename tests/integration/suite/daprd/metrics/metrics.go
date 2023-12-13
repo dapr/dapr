@@ -60,15 +60,7 @@ func (m *metrics) Setup(t *testing.T) []framework.Option {
 		procdaprd.WithAppID("myapp"),
 		procdaprd.WithAppPort(srv.Port()),
 		procdaprd.WithAppProtocol("http"),
-		procdaprd.WithResourceFiles(`
-apiVersion: dapr.io/v1alpha1
-kind: Component
-metadata:
-  name: mystore
-spec:
-  type: state.in-memory
-  version: v1
-`),
+		procdaprd.WithInMemoryActorStateStore("mystore"),
 	)
 
 	return []framework.Option{
@@ -82,7 +74,7 @@ func (m *metrics) Run(t *testing.T, ctx context.Context) {
 	m.httpClient = util.HTTPClient(t)
 
 	conn, err := grpc.DialContext(ctx,
-		fmt.Sprintf("localhost:%d", m.daprd.GRPCPort()),
+		m.daprd.GRPCAddress(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
 	)
@@ -208,7 +200,7 @@ func (m *metrics) getMetrics(t *testing.T, ctx context.Context) map[string]float
 			continue
 		}
 
-		for _, m := range mf.Metric {
+		for _, m := range mf.GetMetric() {
 			key := mf.GetName()
 			for _, l := range m.GetLabel() {
 				key += "|" + l.GetName() + ":" + l.GetValue()

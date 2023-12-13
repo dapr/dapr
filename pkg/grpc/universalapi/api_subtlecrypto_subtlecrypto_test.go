@@ -109,7 +109,7 @@ func TestSubtleGetKeyAlpha1(t *testing.T) {
 
 		_, err := fakeAPI.SubtleGetKeyAlpha1(context.Background(), &runtimev1pb.SubtleGetKeyRequest{})
 		require.Error(t, err)
-		assert.ErrorIs(t, err, messages.ErrCryptoProvidersNotConfigured)
+		require.ErrorIs(t, err, messages.ErrCryptoProvidersNotConfigured)
 	})
 
 	t.Run("provider not found", func(t *testing.T) {
@@ -117,7 +117,7 @@ func TestSubtleGetKeyAlpha1(t *testing.T) {
 			ComponentName: "notfound",
 		})
 		require.Error(t, err)
-		assert.ErrorIs(t, err, messages.ErrCryptoProviderNotFound)
+		require.ErrorIs(t, err, messages.ErrCryptoProviderNotFound)
 	})
 
 	t.Run("invalid format", func(t *testing.T) {
@@ -126,8 +126,8 @@ func TestSubtleGetKeyAlpha1(t *testing.T) {
 			Format:        runtimev1pb.SubtleGetKeyRequest_KeyFormat(-9000),
 		})
 		require.Error(t, err)
-		assert.ErrorIs(t, err, messages.ErrBadRequest)
-		assert.ErrorContains(t, err, "invalid key format")
+		require.ErrorIs(t, err, messages.ErrBadRequest)
+		require.ErrorContains(t, err, "invalid key format")
 	})
 
 	t.Run("failed to get key", func(t *testing.T) {
@@ -136,8 +136,8 @@ func TestSubtleGetKeyAlpha1(t *testing.T) {
 			Name:          "error-key",
 		})
 		require.Error(t, err)
-		assert.ErrorIs(t, err, messages.ErrCryptoGetKey)
-		assert.ErrorContains(t, err, "error occurs with error-key")
+		require.ErrorIs(t, err, messages.ErrCryptoGetKey)
+		require.ErrorContains(t, err, "error occurs with error-key")
 	})
 }
 
@@ -172,7 +172,7 @@ func TestSubtleEncryptAlpha1(t *testing.T) {
 
 		_, err := fakeAPI.SubtleEncryptAlpha1(context.Background(), &runtimev1pb.SubtleEncryptRequest{})
 		require.Error(t, err)
-		assert.ErrorIs(t, err, messages.ErrCryptoProvidersNotConfigured)
+		require.ErrorIs(t, err, messages.ErrCryptoProvidersNotConfigured)
 	})
 
 	t.Run("provider not found", func(t *testing.T) {
@@ -180,7 +180,7 @@ func TestSubtleEncryptAlpha1(t *testing.T) {
 			ComponentName: "notfound",
 		})
 		require.Error(t, err)
-		assert.ErrorIs(t, err, messages.ErrCryptoProviderNotFound)
+		require.ErrorIs(t, err, messages.ErrCryptoProviderNotFound)
 	})
 
 	t.Run("failed to encrypt", func(t *testing.T) {
@@ -189,9 +189,9 @@ func TestSubtleEncryptAlpha1(t *testing.T) {
 			KeyName:       "error",
 		})
 		require.Error(t, err)
-		assert.ErrorIs(t, err, messages.ErrCryptoOperation)
+		require.ErrorIs(t, err, messages.ErrCryptoOperation)
 		// The actual error is not returned to the user for security reasons
-		assert.ErrorContains(t, err, "failed to encrypt")
+		require.ErrorContains(t, err, "failed to encrypt")
 	})
 }
 
@@ -225,7 +225,7 @@ func TestSubtleDecryptAlpha1(t *testing.T) {
 
 		_, err := fakeAPI.SubtleDecryptAlpha1(context.Background(), &runtimev1pb.SubtleDecryptRequest{})
 		require.Error(t, err)
-		assert.ErrorIs(t, err, messages.ErrCryptoProvidersNotConfigured)
+		require.ErrorIs(t, err, messages.ErrCryptoProvidersNotConfigured)
 	})
 
 	t.Run("provider not found", func(t *testing.T) {
@@ -233,7 +233,7 @@ func TestSubtleDecryptAlpha1(t *testing.T) {
 			ComponentName: "notfound",
 		})
 		require.Error(t, err)
-		assert.ErrorIs(t, err, messages.ErrCryptoProviderNotFound)
+		require.ErrorIs(t, err, messages.ErrCryptoProviderNotFound)
 	})
 
 	t.Run("failed to decrypt", func(t *testing.T) {
@@ -242,9 +242,9 @@ func TestSubtleDecryptAlpha1(t *testing.T) {
 			KeyName:       "error",
 		})
 		require.Error(t, err)
-		assert.ErrorIs(t, err, messages.ErrCryptoOperation)
+		require.ErrorIs(t, err, messages.ErrCryptoOperation)
 		// The actual error is not returned to the user for security reasons
-		assert.ErrorContains(t, err, "failed to decrypt")
+		require.ErrorContains(t, err, "failed to decrypt")
 	})
 }
 
@@ -278,7 +278,7 @@ func TestSubtleWrapKeyAlpha1(t *testing.T) {
 
 		_, err := fakeAPI.SubtleWrapKeyAlpha1(context.Background(), &runtimev1pb.SubtleWrapKeyRequest{})
 		require.Error(t, err)
-		assert.ErrorIs(t, err, messages.ErrCryptoProvidersNotConfigured)
+		require.ErrorIs(t, err, messages.ErrCryptoProvidersNotConfigured)
 	})
 
 	t.Run("provider not found", func(t *testing.T) {
@@ -286,7 +286,7 @@ func TestSubtleWrapKeyAlpha1(t *testing.T) {
 			ComponentName: "notfound",
 		})
 		require.Error(t, err)
-		assert.ErrorIs(t, err, messages.ErrCryptoProviderNotFound)
+		require.ErrorIs(t, err, messages.ErrCryptoProviderNotFound)
 	})
 
 	t.Run("key is empty", func(t *testing.T) {
@@ -295,8 +295,8 @@ func TestSubtleWrapKeyAlpha1(t *testing.T) {
 			KeyName:       "error",
 		})
 		require.Error(t, err)
-		assert.ErrorIs(t, err, messages.ErrCryptoOperation)
-		assert.ErrorContains(t, err, "key is empty")
+		require.ErrorIs(t, err, messages.ErrCryptoOperation)
+		require.ErrorContains(t, err, "key is empty")
 	})
 
 	t.Run("failed to wrap key", func(t *testing.T) {
@@ -306,9 +306,9 @@ func TestSubtleWrapKeyAlpha1(t *testing.T) {
 			PlaintextKey:  oneHundredTwentyEightBits,
 		})
 		require.Error(t, err)
-		assert.ErrorIs(t, err, messages.ErrCryptoOperation)
+		require.ErrorIs(t, err, messages.ErrCryptoOperation)
 		// The actual error is not returned to the user for security reasons
-		assert.ErrorContains(t, err, "failed to wrap key")
+		require.ErrorContains(t, err, "failed to wrap key")
 	})
 }
 
@@ -342,7 +342,7 @@ func TestSubtleUnwrapKeyAlpha1(t *testing.T) {
 
 		_, err := fakeAPI.SubtleUnwrapKeyAlpha1(context.Background(), &runtimev1pb.SubtleUnwrapKeyRequest{})
 		require.Error(t, err)
-		assert.ErrorIs(t, err, messages.ErrCryptoProvidersNotConfigured)
+		require.ErrorIs(t, err, messages.ErrCryptoProvidersNotConfigured)
 	})
 
 	t.Run("provider not found", func(t *testing.T) {
@@ -350,7 +350,7 @@ func TestSubtleUnwrapKeyAlpha1(t *testing.T) {
 			ComponentName: "notfound",
 		})
 		require.Error(t, err)
-		assert.ErrorIs(t, err, messages.ErrCryptoProviderNotFound)
+		require.ErrorIs(t, err, messages.ErrCryptoProviderNotFound)
 	})
 
 	t.Run("failed to unwrap key", func(t *testing.T) {
@@ -360,9 +360,9 @@ func TestSubtleUnwrapKeyAlpha1(t *testing.T) {
 			WrappedKey:    oneHundredTwentyEightBits,
 		})
 		require.Error(t, err)
-		assert.ErrorIs(t, err, messages.ErrCryptoOperation)
+		require.ErrorIs(t, err, messages.ErrCryptoOperation)
 		// The actual error is not returned to the user for security reasons
-		assert.ErrorContains(t, err, "failed to unwrap key")
+		require.ErrorContains(t, err, "failed to unwrap key")
 	})
 }
 
@@ -396,7 +396,7 @@ func TestSubtleSignAlpha1(t *testing.T) {
 
 		_, err := fakeAPI.SubtleSignAlpha1(context.Background(), &runtimev1pb.SubtleSignRequest{})
 		require.Error(t, err)
-		assert.ErrorIs(t, err, messages.ErrCryptoProvidersNotConfigured)
+		require.ErrorIs(t, err, messages.ErrCryptoProvidersNotConfigured)
 	})
 
 	t.Run("provider not found", func(t *testing.T) {
@@ -404,7 +404,7 @@ func TestSubtleSignAlpha1(t *testing.T) {
 			ComponentName: "notfound",
 		})
 		require.Error(t, err)
-		assert.ErrorIs(t, err, messages.ErrCryptoProviderNotFound)
+		require.ErrorIs(t, err, messages.ErrCryptoProviderNotFound)
 	})
 
 	t.Run("failed to sign", func(t *testing.T) {
@@ -414,9 +414,9 @@ func TestSubtleSignAlpha1(t *testing.T) {
 			Digest:        oneHundredTwentyEightBits,
 		})
 		require.Error(t, err)
-		assert.ErrorIs(t, err, messages.ErrCryptoOperation)
+		require.ErrorIs(t, err, messages.ErrCryptoOperation)
 		// The actual error is not returned to the user for security reasons
-		assert.ErrorContains(t, err, "failed to sign")
+		require.ErrorContains(t, err, "failed to sign")
 	})
 }
 
@@ -462,7 +462,7 @@ func TestSubtleVerifyAlpha1(t *testing.T) {
 
 		_, err := fakeAPI.SubtleVerifyAlpha1(context.Background(), &runtimev1pb.SubtleVerifyRequest{})
 		require.Error(t, err)
-		assert.ErrorIs(t, err, messages.ErrCryptoProvidersNotConfigured)
+		require.ErrorIs(t, err, messages.ErrCryptoProvidersNotConfigured)
 	})
 
 	t.Run("provider not found", func(t *testing.T) {
@@ -470,7 +470,7 @@ func TestSubtleVerifyAlpha1(t *testing.T) {
 			ComponentName: "notfound",
 		})
 		require.Error(t, err)
-		assert.ErrorIs(t, err, messages.ErrCryptoProviderNotFound)
+		require.ErrorIs(t, err, messages.ErrCryptoProviderNotFound)
 	})
 
 	t.Run("failed to verify", func(t *testing.T) {
@@ -479,9 +479,9 @@ func TestSubtleVerifyAlpha1(t *testing.T) {
 			KeyName:       "error",
 		})
 		require.Error(t, err)
-		assert.ErrorIs(t, err, messages.ErrCryptoOperation)
+		require.ErrorIs(t, err, messages.ErrCryptoOperation)
 		// The actual error is not returned to the user for security reasons
-		assert.ErrorContains(t, err, "failed to verify")
+		require.ErrorContains(t, err, "failed to verify")
 	})
 }
 
