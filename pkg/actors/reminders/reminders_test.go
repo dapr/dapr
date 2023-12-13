@@ -54,7 +54,8 @@ func newTestReminders() *reminders {
 	clock := clocktesting.NewFakeClock(startOfTime)
 	apiLevel := &atomic.Uint32{}
 	apiLevel.Store(internal.ActorAPILevel)
-	r := NewRemindersProvider(clock, internal.ActorsProviderOpts{
+	r := NewRemindersProvider(internal.ActorsProviderOpts{
+		Clock:    clock,
 		Config:   conf,
 		APILevel: apiLevel,
 	})
@@ -502,7 +503,8 @@ func newTestRemindersWithMockAndActorMetadataPartition() *reminders {
 	clock := clocktesting.NewFakeClock(startOfTime)
 	apiLevel := &atomic.Uint32{}
 	apiLevel.Store(internal.ActorAPILevel)
-	r := NewRemindersProvider(clock, internal.ActorsProviderOpts{
+	r := NewRemindersProvider(internal.ActorsProviderOpts{
+		Clock:    clock,
 		Config:   conf,
 		APILevel: apiLevel,
 	})
