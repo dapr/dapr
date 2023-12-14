@@ -16,4 +16,24 @@ package internal
 // ActorAPILevel is the level of the Actor APIs supported by this runtime.
 // It is sent to the Placement service and disseminated to all other Dapr runtimes.
 // The Dapr runtime can use this value, as well as the minimum API level observed in the cluster (as disseminated by Placement) to make decisions on feature availability across the cluster.
-const ActorAPILevel = 10
+//
+// API levels per Dapr version:
+// - 1.11.x and older = unset (equivalent to 0)
+// - 1.12.x = 10
+// - 1.13.x = 20
+const ActorAPILevel = 20
+
+// Features that can be enabled depending on the API level
+type apiLevelFeature uint32
+
+const (
+	// Enables serializing reminders as protobuf rather than JSON in the pkg/actors/reminders package
+	// When serialized as protobuf, reminders have the "\0pb" prefix
+	// Note this only control serializations; when un-serializing, legacy JSON is always supported as fallback
+	APILevelFeatureRemindersProtobuf apiLevelFeature = 20
+)
+
+// IsEnabled returns true if the feature is enabled for the current API level.
+func (a apiLevelFeature) IsEnabled(currentAPILevel uint32) bool {
+	return currentAPILevel >= uint32(a)
+}
