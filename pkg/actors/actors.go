@@ -365,6 +365,8 @@ func (a *actorsRuntime) haltAllActors() error {
 }
 
 func (a *actorsRuntime) deactivateActor(act *actor) error {
+	// This uses a background context as it should be unrelated from the caller's context
+	// Once the decision to deactivate an actor has been made, we must go through with it or we could have an inconsistent state
 	ctx := context.Background()
 
 	// Delete the actor from the actor table regardless of the outcome of deactivation the actor in the app
@@ -584,7 +586,13 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *internalv1pb.In
 
 	// Replace method to actors method.
 	msg := imReq.Message()
+	originalMethod := msg.GetMethod()
 	msg.Method = "actors/" + act.actorType + "/" + act.actorID + "/method/" + msg.GetMethod()
+
+	// Reset the method so we can perform retries.
+	defer func() {
+		msg.Method = originalMethod
+	}()
 
 	// Original code overrides method with PUT. Why?
 	if msg.GetHttpExtension() == nil {
@@ -632,7 +640,7 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *internalv1pb.In
 		return nil, fmt.Errorf("failed to read response data: %w", err)
 	}
 
-	// The .NET SDK signifies Actor failure via a header instead of a bad response.
+	// The .NET SDK indicates Actor failure via a header instead of a bad response.
 	if _, ok := imRes.Headers()["X-Daprerrorresponseheader"]; ok {
 		return res, actorerrors.NewActorError(imRes)
 	}
@@ -700,13 +708,6 @@ func (a *actorsRuntime) callInternalActor(ctx context.Context, req *internalv1pb
 	defer act.unlock()
 
 	msg := req.GetMessage()
-
-	// Original code overrides method with PUT. Why?
-	if msg.GetHttpExtension() == nil {
-		req.WithHTTPExtension(http.MethodPut, "")
-	} else {
-		msg.HttpExtension.Verb = commonv1pb.HTTPExtension_PUT //nolint:nosnakecase
-	}
 
 	policyDef := a.resiliency.ActorPostLockPolicy(act.actorType, act.actorID)
 	policyRunner := resiliency.NewRunner[*internalv1pb.InternalInvokeResponse](ctx, policyDef)
@@ -1008,21 +1009,25 @@ func (a *actorsRuntime) doExecuteReminderOrTimerOnInternalActor(ctx context.Cont
 		log.Debugf("Executing timer for internal actor '%s'", reminder.Key())
 
 		err = internalAct.InvokeTimer(ctx, newInternalActorTimer(reminder), md)
-		if err != nil && !errors.Is(err, ErrReminderCanceled) {
-			log.Errorf("Error executing timer for internal actor '%s': %v", reminder.Key(), err)
+		if err != nil {
+			if !errors.Is(err, ErrReminderCanceled) {
+				log.Errorf("Error executing timer for internal actor '%s': %v", reminder.Key(), err)
+			}
 			return err
 		}
 	} else {
 		log.Debugf("Executing reminder for internal actor '%s'", reminder.Key())
 
 		err = internalAct.InvokeReminder(ctx, newInternalActorReminder(reminder), md)
-		if err != nil && !errors.Is(err, ErrReminderCanceled) {
-			log.Errorf("Error executing reminder for internal actor '%s': %v", reminder.Key(), err)
+		if err != nil {
+			if !errors.Is(err, ErrReminderCanceled) {
+				log.Errorf("Error executing reminder for internal actor '%s': %v", reminder.Key(), err)
+			}
 			return err
 		}
 	}
 
-	return err
+	return nil
 }
 
 // Executes a reminder or timer
@@ -1081,11 +1086,14 @@ func (a *actorsRuntime) doExecuteReminderOrTimer(ctx context.Context, reminder *
 	_, err = policyRunner(func(ctx context.Context) (*internalv1pb.InternalInvokeResponse, error) {
 		return a.callLocalActor(ctx, req)
 	})
-	if err != nil && !errors.Is(err, ErrReminderCanceled) {
-		log.Errorf("Error executing %s for actor %s: %v", logName, reminder.Key(), err)
+	if err != nil {
+		if !errors.Is(err, ErrReminderCanceled) {
+			log.Errorf("Error executing %s for actor %s: %v", logName, reminder.Key(), err)
+		}
 		return err
 	}
-	return err
+
+	return nil
 }
 
 func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderRequest) error {
