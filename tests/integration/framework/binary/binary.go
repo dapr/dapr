@@ -23,7 +23,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework/iowriter"
@@ -32,7 +31,7 @@ import (
 func BuildAll(t *testing.T) {
 	t.Helper()
 
-	binaryNames := []string{"daprd", "placement", "sentry"}
+	binaryNames := []string{"daprd", "placement", "sentry", "operator"}
 
 	var wg sync.WaitGroup
 	wg.Add(len(binaryNames))
@@ -74,8 +73,8 @@ func Build(t *testing.T, name string) {
 		cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
 		require.NoError(t, cmd.Run())
 
-		assert.NoError(t, ioout.Close())
-		assert.NoError(t, ioerr.Close())
+		require.NoError(t, ioout.Close())
+		require.NoError(t, ioerr.Close())
 
 		require.NoError(t, os.Setenv(EnvKey(name), binPath))
 	} else {

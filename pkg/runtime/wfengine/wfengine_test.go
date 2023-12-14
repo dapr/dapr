@@ -1,3 +1,6 @@
+//go:build unit
+// +build unit
+
 /*
 Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,6 +24,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -49,6 +53,10 @@ func fakeStore() state.Store {
 	return daprt.NewFakeStateStore()
 }
 
+func init() {
+	wfengine.SetLogLevel(logger.DebugLevel)
+}
+
 // TestStartWorkflowEngine validates that starting the workflow engine returns no errors.
 func TestStartWorkflowEngine(t *testing.T) {
 	ctx := context.Background()
@@ -57,7 +65,7 @@ func TestStartWorkflowEngine(t *testing.T) {
 	grpcServer := grpc.NewServer()
 	engine.RegisterGrpcServer(grpcServer)
 	err := engine.Start(ctx)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
 
 // GetTestOptions returns an array of functions for configuring the workflow engine. Each
@@ -194,13 +202,11 @@ func TestActivityChainingWorkflow(t *testing.T) {
 	for _, opt := range GetTestOptions() {
 		t.Run(opt(engine), func(t *testing.T) {
 			id, err := client.ScheduleNewOrchestration(ctx, "ActivityChain")
-			if assert.NoError(t, err) {
-				metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
-				if assert.NoError(t, err) {
-					assert.True(t, metadata.IsComplete())
-					assert.Equal(t, `10`, metadata.SerializedOutput)
-				}
-			}
+			require.NoError(t, err)
+			metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
+			require.NoError(t, err)
+			assert.True(t, metadata.IsComplete())
+			assert.Equal(t, `10`, metadata.SerializedOutput)
 		})
 	}
 }
@@ -232,7 +238,7 @@ func TestConcurrentActivityExecution(t *testing.T) {
 		}
 		// Sleep for 1 second to ensure that the test passes only if all activities execute in parallel.
 		time.Sleep(1 * time.Second)
-		return fmt.Sprintf("%d", input), nil
+		return strconv.Itoa(input), nil
 	})
 
 	ctx := context.Background()
@@ -240,16 +246,14 @@ func TestConcurrentActivityExecution(t *testing.T) {
 	for _, opt := range GetTestOptions() {
 		t.Run(opt(engine), func(t *testing.T) {
 			id, err := client.ScheduleNewOrchestration(ctx, "ActivityFanOut")
-			if assert.NoError(t, err) {
-				metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
-				if assert.NoError(t, err) {
-					assert.True(t, metadata.IsComplete())
-					assert.Equal(t, `["9","8","7","6","5","4","3","2","1","0"]`, metadata.SerializedOutput)
+			require.NoError(t, err)
+			metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
+			require.NoError(t, err)
+			assert.True(t, metadata.IsComplete())
+			assert.Equal(t, `["9","8","7","6","5","4","3","2","1","0"]`, metadata.SerializedOutput)
 
-					// Because all the activities run in parallel, they should complete very quickly
-					assert.Less(t, metadata.LastUpdatedAt.Sub(metadata.CreatedAt), 3*time.Second)
-				}
-			}
+			// Because all the activities run in parallel, they should complete very quickly
+			assert.Less(t, metadata.LastUpdatedAt.Sub(metadata.CreatedAt), 3*time.Second)
 		})
 	}
 }
@@ -316,21 +320,19 @@ func TestRecreateCompletedWorkflow(t *testing.T) {
 			// First workflow
 			var metadata *api.OrchestrationMetadata
 			id, err := client.ScheduleNewOrchestration(ctx, "EchoWorkflow", api.WithInput("echo!"))
-			if assert.NoError(t, err) {
-				if metadata, err = client.WaitForOrchestrationCompletion(ctx, id); assert.NoError(t, err) {
-					assert.True(t, metadata.IsComplete())
-					assert.Equal(t, `"echo!"`, metadata.SerializedOutput)
-				}
-			}
+			require.NoError(t, err)
+			metadata, err = client.WaitForOrchestrationCompletion(ctx, id)
+			require.NoError(t, err)
+			assert.True(t, metadata.IsComplete())
+			assert.Equal(t, `"echo!"`, metadata.SerializedOutput)
 
 			// Second workflow, using the same ID as the first but a different input
 			_, err = client.ScheduleNewOrchestration(ctx, "EchoWorkflow", api.WithInstanceID(id), api.WithInput(42))
-			if assert.NoError(t, err) {
-				if metadata, err = client.WaitForOrchestrationCompletion(ctx, id); assert.NoError(t, err) {
-					assert.True(t, metadata.IsComplete())
-					assert.Equal(t, `42`, metadata.SerializedOutput)
-				}
-			}
+			require.NoError(t, err)
+			metadata, err = client.WaitForOrchestrationCompletion(ctx, id)
+			require.NoError(t, err)
+			assert.True(t, metadata.IsComplete())
+			assert.Equal(t, `42`, metadata.SerializedOutput)
 		})
 	}
 }
@@ -338,9 +340,9 @@ func TestRecreateCompletedWorkflow(t *testing.T) {
 func TestInternalActorsSetupForWF(t *testing.T) {
 	ctx := context.Background()
 	_, engine := startEngine(ctx, t, task.NewTaskRegistry())
-	assert.Equal(t, 2, len(engine.InternalActors()))
-	assert.Contains(t, engine.InternalActors(), workflowActorType)
-	assert.Contains(t, engine.InternalActors(), activityActorType)
+	assert.Len(t, engine.GetInternalActorsMap(), 2)
+	assert.Contains(t, engine.GetInternalActorsMap(), workflowActorType)
+	assert.Contains(t, engine.GetInternalActorsMap(), activityActorType)
 }
 
 // TestRecreateRunningWorkflowFails verifies that a workflow can't be recreated if it's in a running state.
@@ -359,11 +361,10 @@ func TestRecreateRunningWorkflowFails(t *testing.T) {
 			// Start the first workflow, which will not complete
 			var metadata *api.OrchestrationMetadata
 			id, err := client.ScheduleNewOrchestration(ctx, "SleepyWorkflow")
-			if assert.NoError(t, err) {
-				if metadata, err = client.WaitForOrchestrationStart(ctx, id); assert.NoError(t, err) {
-					assert.False(t, metadata.IsComplete())
-				}
-			}
+			require.NoError(t, err)
+			metadata, err = client.WaitForOrchestrationStart(ctx, id)
+			require.NoError(t, err)
+			assert.False(t, metadata.IsComplete())
 
 			// Attempting to start a second workflow with the same ID should fail
 			_, err = client.ScheduleNewOrchestration(ctx, "SleepyWorkflow", api.WithInstanceID(id))
@@ -413,7 +414,7 @@ func TestRetryWorkflowOnTimeout(t *testing.T) {
 			metadata, err := client.WaitForOrchestrationCompletion(timeoutCtx, id)
 			require.NoError(t, err)
 			assert.True(t, metadata.IsComplete())
-			assert.Equal(t, fmt.Sprintf("%d", expectedCallCount), metadata.SerializedOutput)
+			assert.Equal(t, strconv.Itoa(expectedCallCount), metadata.SerializedOutput)
 		})
 	}
 }
@@ -463,7 +464,7 @@ func TestRetryActivityOnTimeout(t *testing.T) {
 			metadata, err := client.WaitForOrchestrationCompletion(timeoutCtx, id)
 			require.NoError(t, err)
 			assert.True(t, metadata.IsComplete())
-			assert.Equal(t, fmt.Sprintf("%d", expectedCallCount), metadata.SerializedOutput)
+			assert.Equal(t, strconv.Itoa(expectedCallCount), metadata.SerializedOutput)
 		})
 	}
 }
@@ -488,19 +489,17 @@ func TestConcurrentTimerExecution(t *testing.T) {
 	for _, opt := range GetTestOptions() {
 		t.Run(opt(engine), func(t *testing.T) {
 			id, err := client.ScheduleNewOrchestration(ctx, "TimerFanOut")
-			if assert.NoError(t, err) {
-				// Add a 5 second timeout so that the test doesn't take forever if something isn't working
-				timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-				defer cancel()
+			require.NoError(t, err)
+			// Add a 5 second timeout so that the test doesn't take forever if something isn't working
+			timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
 
-				metadata, err := client.WaitForOrchestrationCompletion(timeoutCtx, id)
-				if assert.NoError(t, err) {
-					assert.True(t, metadata.IsComplete())
+			metadata, err := client.WaitForOrchestrationCompletion(timeoutCtx, id)
+			require.NoError(t, err)
+			assert.True(t, metadata.IsComplete())
 
-					// Because all the timers run in parallel, they should complete very quickly
-					assert.Less(t, metadata.LastUpdatedAt.Sub(metadata.CreatedAt), 3*time.Second)
-				}
-			}
+			// Because all the timers run in parallel, they should complete very quickly
+			assert.Less(t, metadata.LastUpdatedAt.Sub(metadata.CreatedAt), 3*time.Second)
 		})
 	}
 }
@@ -522,17 +521,15 @@ func TestRaiseEvent(t *testing.T) {
 	for _, opt := range GetTestOptions() {
 		t.Run(opt(engine), func(t *testing.T) {
 			id, err := client.ScheduleNewOrchestration(ctx, "WorkflowForRaiseEvent")
-			if assert.NoError(t, err) {
-				metadata, err := client.WaitForOrchestrationStart(ctx, id)
-				if assert.NoError(t, err) {
-					assert.Equal(t, id, metadata.InstanceID)
-					client.RaiseEvent(ctx, id, "NameOfEventBeingRaised", api.WithEventPayload("NameOfInput"))
-					metadata, _ = client.WaitForOrchestrationCompletion(ctx, id)
-					assert.True(t, metadata.IsComplete())
-					assert.Equal(t, `"Hello, NameOfInput!"`, metadata.SerializedOutput)
-					assert.Nil(t, metadata.FailureDetails)
-				}
-			}
+			require.NoError(t, err)
+			metadata, err := client.WaitForOrchestrationStart(ctx, id)
+			require.NoError(t, err)
+			assert.Equal(t, id, metadata.InstanceID)
+			client.RaiseEvent(ctx, id, "NameOfEventBeingRaised", api.WithEventPayload("NameOfInput"))
+			metadata, _ = client.WaitForOrchestrationCompletion(ctx, id)
+			assert.True(t, metadata.IsComplete())
+			assert.Equal(t, `"Hello, NameOfInput!"`, metadata.SerializedOutput)
+			assert.Nil(t, metadata.FailureDetails)
 		})
 	}
 }
@@ -618,7 +615,7 @@ func TestPurge(t *testing.T) {
 			assert.Greater(t, keyCounter.Load(), int64(10))
 
 			err = client.PurgeOrchestrationState(ctx, id)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			// Check that no key from the statestore containing the actor id is still present in the statestore
 			keysPostPurge := []string{}
@@ -684,7 +681,7 @@ func TestPurgeContinueAsNew(t *testing.T) {
 			assert.Greater(t, keyCounter.Load(), int64(2))
 
 			err = client.PurgeOrchestrationState(ctx, id)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			// Check that no key from the statestore containing the actor id is still present in the statestore
 			keysPostPurge := []string{}
@@ -716,19 +713,17 @@ func TestPauseResumeWorkflow(t *testing.T) {
 	for _, opt := range GetTestOptions() {
 		t.Run(opt(engine), func(t *testing.T) {
 			id, err := client.ScheduleNewOrchestration(ctx, "PauseWorkflow")
-			if assert.NoError(t, err) {
-				metadata, err := client.WaitForOrchestrationStart(ctx, id)
-				if assert.NoError(t, err) {
-					assert.Equal(t, id, metadata.InstanceID)
-					client.SuspendOrchestration(ctx, id, "PauseWFReasonTest")
-					client.RaiseEvent(ctx, id, "WaitForThisEvent")
-					assert.True(t, metadata.IsRunning())
-					client.ResumeOrchestration(ctx, id, "ResumeWFReasonTest")
-					metadata, _ = client.WaitForOrchestrationCompletion(ctx, id)
-					assert.True(t, metadata.IsComplete())
-					assert.Nil(t, metadata.FailureDetails)
-				}
-			}
+			require.NoError(t, err)
+			metadata, err := client.WaitForOrchestrationStart(ctx, id)
+			require.NoError(t, err)
+			assert.Equal(t, id, metadata.InstanceID)
+			client.SuspendOrchestration(ctx, id, "PauseWFReasonTest")
+			client.RaiseEvent(ctx, id, "WaitForThisEvent")
+			assert.True(t, metadata.IsRunning())
+			client.ResumeOrchestration(ctx, id, "ResumeWFReasonTest")
+			metadata, _ = client.WaitForOrchestrationCompletion(ctx, id)
+			assert.True(t, metadata.IsComplete())
+			assert.Nil(t, metadata.FailureDetails)
 		})
 	}
 }
@@ -750,7 +745,8 @@ func startEngineAndGetStore(ctx context.Context, t *testing.T, r *task.TaskRegis
 }
 
 func getEngine(t *testing.T) *wfengine.WorkflowEngine {
-	engine := wfengine.NewWorkflowEngine(wfengine.NewWorkflowConfig(testAppID))
+	spec := config.WorkflowSpec{MaxConcurrentWorkflowInvocations: 100, MaxConcurrentActivityInvocations: 100}
+	engine := wfengine.NewWorkflowEngine(testAppID, spec)
 	store := fakeStore()
 	cfg := actors.NewConfig(actors.ConfigOpts{
 		AppID:              testAppID,
@@ -775,7 +771,8 @@ func getEngine(t *testing.T) *wfengine.WorkflowEngine {
 }
 
 func getEngineAndStateStore(t *testing.T) (*wfengine.WorkflowEngine, *daprt.FakeStateStore) {
-	engine := wfengine.NewWorkflowEngine(wfengine.NewWorkflowConfig(testAppID))
+	spec := config.WorkflowSpec{MaxConcurrentWorkflowInvocations: 100, MaxConcurrentActivityInvocations: 100}
+	engine := wfengine.NewWorkflowEngine(testAppID, spec)
 	store := fakeStore().(*daprt.FakeStateStore)
 	cfg := actors.NewConfig(actors.ConfigOpts{
 		AppID:              testAppID,

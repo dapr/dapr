@@ -70,11 +70,11 @@ func TestMiddlewareBuildPipeline(t *testing.T) {
 			},
 		}, "test")
 		require.NoError(t, err)
-		assert.Len(t, pipeline.Handlers, 0)
+		assert.Empty(t, pipeline.Handlers)
 	})
 
 	compStore := compstore.New()
-	compStore.AddComponent(componentsapi.Component{
+	require.NoError(t, compStore.AddPendingComponentForCommit(componentsapi.Component{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "mymw1",
 		},
@@ -82,8 +82,9 @@ func TestMiddlewareBuildPipeline(t *testing.T) {
 			Type:    "middleware.http.fakemw",
 			Version: "v1",
 		},
-	})
-	compStore.AddComponent(componentsapi.Component{
+	}))
+	require.NoError(t, compStore.CommitPendingComponent())
+	require.NoError(t, compStore.AddPendingComponentForCommit(componentsapi.Component{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "mymw2",
 		},
@@ -91,7 +92,8 @@ func TestMiddlewareBuildPipeline(t *testing.T) {
 			Type:    "middleware.http.fakemw",
 			Version: "v1",
 		},
-	})
+	}))
+	require.NoError(t, compStore.CommitPendingComponent())
 
 	t.Run("all components exists", func(t *testing.T) {
 		ch := &Channels{
@@ -135,7 +137,7 @@ func TestMiddlewareBuildPipeline(t *testing.T) {
 
 	testInitFail := func(ignoreErrors bool) func(t *testing.T) {
 		compStore := compstore.New()
-		compStore.AddComponent(componentsapi.Component{
+		require.NoError(t, compStore.AddPendingComponentForCommit(componentsapi.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "mymw",
 			},
@@ -143,9 +145,10 @@ func TestMiddlewareBuildPipeline(t *testing.T) {
 				Type:    "middleware.http.fakemw",
 				Version: "v1",
 			},
-		})
+		}))
+		require.NoError(t, compStore.CommitPendingComponent())
 
-		compStore.AddComponent(componentsapi.Component{
+		require.NoError(t, compStore.AddPendingComponentForCommit(componentsapi.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "failmw",
 			},
@@ -157,7 +160,8 @@ func TestMiddlewareBuildPipeline(t *testing.T) {
 					{Name: "fail", Value: commonapi.DynamicValue{JSON: v1.JSON{Raw: []byte("true")}}},
 				},
 			},
-		})
+		}))
+		require.NoError(t, compStore.CommitPendingComponent())
 		return func(t *testing.T) {
 			ch := &Channels{
 				compStore: compStore,
@@ -228,7 +232,7 @@ func TestGetAppHTTPChannelConfigWithCustomChannel(t *testing.T) {
 	}
 
 	p, err := ch.BuildHTTPPipeline(&config.PipelineSpec{})
-	assert.Nil(t, err)
+	require.NoError(t, err)
 
 	c := ch.appHTTPChannelConfig(p)
 	assert.Equal(t, "http://my.app:0", c.Endpoint)
@@ -281,7 +285,7 @@ func TestGetHTTPEndpointAppChannel(t *testing.T) {
 			Spec: httpendpapi.HTTPEndpointSpec{},
 		})
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Nil(t, conf.Client.Transport.(*http.Transport).TLSClientConfig)
 	})
 
@@ -362,7 +366,7 @@ func TestGetHTTPEndpointAppChannel(t *testing.T) {
 			},
 		})
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotNil(t, conf.Client.Transport.(*http.Transport).TLSClientConfig)
 	})
 
@@ -405,6 +409,6 @@ func TestGetHTTPEndpointAppChannel(t *testing.T) {
 			},
 		})
 
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 }

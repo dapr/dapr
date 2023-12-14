@@ -53,8 +53,8 @@ func (gss *grpcSecretStore) Init(ctx context.Context, metadata secretstores.Meta
 		return err
 	}
 
-	gss.features = make([]secretstores.Feature, len(featureResponse.Features))
-	for idx, f := range featureResponse.Features {
+	gss.features = make([]secretstores.Feature, len(featureResponse.GetFeatures()))
+	for idx, f := range featureResponse.GetFeatures() {
 		gss.features[idx] = secretstores.Feature(f)
 	}
 
@@ -76,7 +76,7 @@ func (gss *grpcSecretStore) GetSecret(ctx context.Context, req secretstores.GetS
 		return secretstores.GetSecretResponse{}, err
 	}
 	return secretstores.GetSecretResponse{
-		Data: resp.Data,
+		Data: resp.GetData(),
 	}, nil
 }
 

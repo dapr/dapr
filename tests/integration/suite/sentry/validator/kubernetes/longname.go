@@ -54,7 +54,7 @@ func (l *longname) Setup(t *testing.T) []framework.Option {
 
 	l.sentry = sentry.New(t,
 		sentry.WithWriteConfig(false),
-		sentry.WithKubeconfig(kubeconfigPath(t, kubeAPI.Port())),
+		sentry.WithKubeconfig(kubeAPI.KubeconfigPath(t)),
 		sentry.WithExecOptions(
 			// Enable Kubernetes validator.
 			exec.WithEnvVars("KUBERNETES_SERVICE_HOST", "anything"),
@@ -88,5 +88,5 @@ func (l *longname) Run(t *testing.T, ctx context.Context) {
 		Token:                     `{"kubernetes.io":{"pod":{"name":"mypod"}}}`,
 	})
 	require.NoError(t, err)
-	require.NotEmpty(t, resp.WorkloadCertificate)
+	require.NotEmpty(t, resp.GetWorkloadCertificate())
 }
