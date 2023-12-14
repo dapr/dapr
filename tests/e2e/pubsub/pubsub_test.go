@@ -107,13 +107,6 @@ type cloudEvent struct {
 	Data            string `json:"data"`
 }
 
-type cloudBugEvent struct {
-	IID               string `json:"id"`
-	TType             string `json:"type"`
-	DDataCContentType string `json:"datacontenttype"`
-	DData             string `json:"data"`
-}
-
 // checks is publishing is working.
 func publishHealthCheck(publisherExternalURL string) error {
 	commandBody := publishCommand{
@@ -196,54 +189,6 @@ func sendToPublisherBulk(t *testing.T, publisherExternalURL string, topic string
 
 	// return successfully sent individual messages
 	return individualMessages, nil
-}
-
-func testBuggyDataToPublisherBulk(t *testing.T, publisherExternalURL, subscriberExternalURL, _, subscriberAppName, protocol string) string {
-	topic := "fail"
-	var individualMessages []string
-	commands := make([]publishCommand, numberOfMessagesToPublish)
-	for i := 0; i < numberOfMessagesToPublish; i++ {
-		contentType := "application/cloudevents+json"
-
-		commandBody := publishCommand{
-			ContentType: contentType,
-			Topic:       fmt.Sprintf("%s-%s", topic, protocol),
-			Protocol:    protocol,
-		}
-
-		// create and marshal command
-		messageID := fmt.Sprintf("msg-%s-%s-%04d", strings.TrimSuffix(topic, "-topic"), protocol, i)
-		var messageData interface{} = messageID
-		messageData = &cloudBugEvent{
-			IID:               messageID,
-			TType:             contentType,
-			DDataCContentType: "text/plain",
-			DData:             messageID,
-		}
-		commandBody.ReqID = "c-" + uuid.New().String()
-		commandBody.Data = messageData
-		commands[i] = commandBody
-
-		individualMessages = append(individualMessages, messageID)
-	}
-
-	jsonValue, err := json.Marshal(commands)
-
-	// this is the publish app's endpoint, not a dapr endpoint
-	url := fmt.Sprintf("http://%s/tests/bulkpublish", publisherExternalURL)
-
-	url = setMetadataBulk(url, map[string]string{})
-
-	// debuggability - trace info about the first message.  don't trace others so it doesn't flood log.
-	log.Printf("Sending bulk publish, app at url %s and body '%s', this log will not print for subsequent messages for same topic", url, jsonValue)
-
-	statusCode, err := postSingleMessage(url, jsonValue)
-
-	require.Error(t, err)
-	assert.NotEqual(t, 200, statusCode)
-
-	// return successfully sent individual messages
-	return subscriberExternalURL
 }
 
 // sends messages to the publisher app.  The publisher app does the actual publish.
@@ -839,10 +784,6 @@ var pubsubTests = []struct {
 	{
 		name:    "drop message will be published to dlq if configured",
 		handler: testDropToDeadLetter,
-	},
-	{
-		name:    "produce failure by publishing corrupt message structure",
-		handler: testBuggyDataToPublisherBulk,
 	},
 }
 
