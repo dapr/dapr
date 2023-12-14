@@ -19,10 +19,10 @@ import (
 
 	"github.com/dapr/components-contrib/bindings"
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
+	"github.com/dapr/components-contrib/workflows"
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/outbox"
 	"github.com/dapr/dapr/pkg/runtime/meta"
-	"github.com/dapr/dapr/pkg/runtime/processor/workflowBackend"
 )
 
 // manager implements the life cycle events of a component category.
@@ -60,7 +60,7 @@ type BindingManager interface {
 }
 
 type WorkflowBackendManager interface {
-	WorkflowBackendComponentInfo() (*workflowBackend.WorkflowBackendComponentInfo, bool)
+	WorkflowBackendComponentInfo() (*workflows.WorkflowBackendComponentInfo, bool)
 }
 
 func (p *Processor) managerFromComp(comp componentsapi.Component) (manager, error) {

@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/workflows"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	workflowBackendComp "github.com/dapr/dapr/pkg/components/workflowBackend"
@@ -42,13 +41,7 @@ type workflowBackend struct {
 	compStore            *compstore.ComponentStore
 	meta                 *meta.Meta
 	lock                 sync.Mutex
-	backendComponentInfo *WorkflowBackendComponentInfo
-}
-
-type WorkflowBackendComponentInfo struct {
-	WorkflowBackendType     string
-	WorkflowBackendMetadata metadata.Base
-	InvalidWorkflowBackend  bool
+	backendComponentInfo *workflows.WorkflowBackendComponentInfo
 }
 
 func New(opts Options) *workflowBackend {
@@ -69,7 +62,7 @@ func (wbe *workflowBackend) Init(ctx context.Context, comp compapi.Component) er
 	if err != nil {
 		log.Warnf("error creating workflow backend component (%s): %s", comp.LogName(), err)
 		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
-		wbe.backendComponentInfo = &WorkflowBackendComponentInfo{
+		wbe.backendComponentInfo = &workflows.WorkflowBackendComponentInfo{
 			InvalidWorkflowBackend: true,
 		}
 		return err
@@ -97,7 +90,7 @@ func (wbe *workflowBackend) Init(ctx context.Context, comp compapi.Component) er
 
 	if wbe.backendComponentInfo == nil {
 		log.Info("Using '" + comp.Spec.Type + "' as workflow backend")
-		wbe.backendComponentInfo = &WorkflowBackendComponentInfo{
+		wbe.backendComponentInfo = &workflows.WorkflowBackendComponentInfo{
 			WorkflowBackendType:     comp.Spec.Type,
 			WorkflowBackendMetadata: baseMetadata,
 		}
@@ -120,7 +113,7 @@ func (wbe *workflowBackend) Close(comp compapi.Component) error {
 	return nil
 }
 
-func (wbe *workflowBackend) WorkflowBackendComponentInfo() (*WorkflowBackendComponentInfo, bool) {
+func (wbe *workflowBackend) WorkflowBackendComponentInfo() (*workflows.WorkflowBackendComponentInfo, bool) {
 	wbe.lock.Lock()
 	defer wbe.lock.Unlock()
 

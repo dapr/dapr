@@ -17,7 +17,7 @@ package wfengine
 import (
 	"time"
 
-	"github.com/dapr/dapr/pkg/runtime/processor/workflowBackend"
+	"github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/kit/logger"
 	"github.com/microsoft/durabletask-go/backend"
 	"github.com/microsoft/durabletask-go/backend/sqlite"
@@ -28,19 +28,19 @@ const (
 	SqliteBackendType = "workflowbackend.sqlite"
 )
 
-type BackendFactory func(appId string, wfe *WorkflowEngine, backendComponentInfo *workflowBackend.WorkflowBackendComponentInfo, log logger.Logger) backend.Backend
+type BackendFactory func(appId string, wfe *WorkflowEngine, backendComponentInfo *workflows.WorkflowBackendComponentInfo, log logger.Logger) backend.Backend
 
 var backendFactories = map[string]BackendFactory{
 	ActorBackendType:  getActorBackend,
 	SqliteBackendType: getSqliteBackend,
 }
 
-func getActorBackend(appId string, wfe *WorkflowEngine, backendComponentInfo *workflowBackend.WorkflowBackendComponentInfo, log logger.Logger) backend.Backend {
+func getActorBackend(appId string, wfe *WorkflowEngine, backendComponentInfo *workflows.WorkflowBackendComponentInfo, log logger.Logger) backend.Backend {
 	wfe.BackendType = ActorBackendType
 	return NewActorBackend(appId, wfe)
 }
 
-func getSqliteBackend(appId string, wfe *WorkflowEngine, backendComponentInfo *workflowBackend.WorkflowBackendComponentInfo, log logger.Logger) backend.Backend {
+func getSqliteBackend(appId string, wfe *WorkflowEngine, backendComponentInfo *workflows.WorkflowBackendComponentInfo, log logger.Logger) backend.Backend {
 	wfe.BackendType = SqliteBackendType
 	sqliteOptions := &sqlite.SqliteOptions{
 		OrchestrationLockTimeout: 2 * time.Minute,
@@ -71,7 +71,7 @@ func getSqliteBackend(appId string, wfe *WorkflowEngine, backendComponentInfo *w
 	return sqlite.NewSqliteBackend(sqliteOptions, log)
 }
 
-func InitializeWorkflowBackend(appId string, backendType string, wfe *WorkflowEngine, backendComponentInfo *workflowBackend.WorkflowBackendComponentInfo, log logger.Logger) backend.Backend {
+func InitializeWorkflowBackend(appId string, backendType string, wfe *WorkflowEngine, backendComponentInfo *workflows.WorkflowBackendComponentInfo, log logger.Logger) backend.Backend {
 	if backendComponentInfo == nil {
 		return getActorBackend(appId, wfe, backendComponentInfo, log)
 	}

@@ -22,7 +22,7 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	"github.com/dapr/components-contrib/metadata"
-	"github.com/dapr/dapr/pkg/runtime/processor/workflowBackend"
+	"github.com/dapr/components-contrib/workflows"
 )
 
 const (
@@ -37,8 +37,8 @@ type MockSqliteBackendManager struct {
 	mock.Mock
 }
 
-func (m *MockSqliteBackendManager) WorkflowBackendComponentInfo() (*workflowBackend.WorkflowBackendComponentInfo, bool) {
-	return &workflowBackend.WorkflowBackendComponentInfo{
+func (m *MockSqliteBackendManager) WorkflowBackendComponentInfo() (*workflows.WorkflowBackendComponentInfo, bool) {
+	return &workflows.WorkflowBackendComponentInfo{
 		WorkflowBackendType: SqliteBackendType,
 		WorkflowBackendMetadata: metadata.Base{
 			Properties: map[string]string{
@@ -54,8 +54,8 @@ type MockSqliteBackendManagerWithoutMetadata struct {
 	mock.Mock
 }
 
-func (m *MockSqliteBackendManagerWithoutMetadata) WorkflowBackendComponentInfo() (*workflowBackend.WorkflowBackendComponentInfo, bool) {
-	return &workflowBackend.WorkflowBackendComponentInfo{
+func (m *MockSqliteBackendManagerWithoutMetadata) WorkflowBackendComponentInfo() (*workflows.WorkflowBackendComponentInfo, bool) {
+	return &workflows.WorkflowBackendComponentInfo{
 		WorkflowBackendType: SqliteBackendType,
 	}, true
 }
@@ -64,8 +64,8 @@ type MockActorBackendManager struct {
 	mock.Mock
 }
 
-func (m *MockActorBackendManager) WorkflowBackendComponentInfo() (*workflowBackend.WorkflowBackendComponentInfo, bool) {
-	return &workflowBackend.WorkflowBackendComponentInfo{
+func (m *MockActorBackendManager) WorkflowBackendComponentInfo() (*workflows.WorkflowBackendComponentInfo, bool) {
+	return &workflows.WorkflowBackendComponentInfo{
 		WorkflowBackendType: ActorBackendType,
 	}, true
 }
@@ -74,8 +74,8 @@ type MockInvalidaBackendManager struct {
 	mock.Mock
 }
 
-func (m *MockInvalidaBackendManager) WorkflowBackendComponentInfo() (*workflowBackend.WorkflowBackendComponentInfo, bool) {
-	return &workflowBackend.WorkflowBackendComponentInfo{
+func (m *MockInvalidaBackendManager) WorkflowBackendComponentInfo() (*workflows.WorkflowBackendComponentInfo, bool) {
+	return &workflows.WorkflowBackendComponentInfo{
 		InvalidWorkflowBackend: true,
 	}, true
 }
@@ -83,15 +83,15 @@ func (m *MockInvalidaBackendManager) WorkflowBackendComponentInfo() (*workflowBa
 type MockNilBackendComponentManager struct {
 }
 
-func (m *MockNilBackendComponentManager) WorkflowBackendComponentInfo() (*workflowBackend.WorkflowBackendComponentInfo, bool) {
+func (m *MockNilBackendComponentManager) WorkflowBackendComponentInfo() (*workflows.WorkflowBackendComponentInfo, bool) {
 	return nil, true
 }
 
 type MockSqliteBackendComponentInvalidTimeoutManager struct {
 }
 
-func (m *MockSqliteBackendComponentInvalidTimeoutManager) WorkflowBackendComponentInfo() (*workflowBackend.WorkflowBackendComponentInfo, bool) {
-	return &workflowBackend.WorkflowBackendComponentInfo{
+func (m *MockSqliteBackendComponentInvalidTimeoutManager) WorkflowBackendComponentInfo() (*workflows.WorkflowBackendComponentInfo, bool) {
+	return &workflows.WorkflowBackendComponentInfo{
 		WorkflowBackendType: SqliteBackendType,
 		WorkflowBackendMetadata: metadata.Base{
 			Properties: map[string]string{
