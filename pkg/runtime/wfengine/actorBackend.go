@@ -123,14 +123,12 @@ func (abe *ActorBackend) GetInternalActorsMap() map[string]actors.InternalActor 
 	return internalActors
 }
 
-func (abe *ActorBackend) SetActorRuntime(actorRuntime actors.ActorRuntime, ctx context.Context) error {
+func (abe *ActorBackend) SetActorRuntime(actorRuntime actors.ActorRuntime, ctx context.Context) {
 	abe.actors = actorRuntime
 	abe.actorRuntime = actorRuntime
 	if abe.actorsReady.CompareAndSwap(false, true) {
 		close(abe.actorsReadyCh)
 	}
-
-	return nil
 }
 
 func (abe *ActorBackend) RegisterActor(ctx context.Context) error {

@@ -53,7 +53,7 @@ func getSqliteBackend(appId string, wfe *WorkflowEngine, backendComponentInfo *w
 		orchestrationLockTimeout, err := time.ParseDuration(orchestrationLockTimeout)
 		sqliteOptions.OrchestrationLockTimeout = orchestrationLockTimeout
 
-		if err != nil {
+		if err == nil {
 			sqliteOptions.OrchestrationLockTimeout = orchestrationLockTimeout
 		} else {
 			log.Errorf("invalid orchestrationLockTimeout provided in backend workflow component: %v", err)
@@ -65,7 +65,7 @@ func getSqliteBackend(appId string, wfe *WorkflowEngine, backendComponentInfo *w
 	if activityLockTimeout, ok := backendComponentInfo.WorkflowBackendMetadata.Properties["activityLockTimeout"]; ok {
 		activityLockTimeout, err := time.ParseDuration(activityLockTimeout)
 
-		if err != nil {
+		if err == nil {
 			sqliteOptions.ActivityLockTimeout = activityLockTimeout
 		} else {
 			log.Errorf("invalid activityLockTimeout provided in backend workflow component: %v", err)

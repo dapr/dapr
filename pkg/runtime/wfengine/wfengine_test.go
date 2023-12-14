@@ -345,11 +345,12 @@ func TestRecreateCompletedWorkflow(t *testing.T) {
 func TestInternalActorsSetupForWF(t *testing.T) {
 	ctx := context.Background()
 	_, engine := startEngine(ctx, t, task.NewTaskRegistry())
-	if abe, ok := engine.Backend.(*wfengine.ActorBackend); ok {
-		assert.Len(t, abe.GetInternalActorsMap(), 2)
-		assert.Contains(t, abe.GetInternalActorsMap(), workflowActorType)
-		assert.Contains(t, abe.GetInternalActorsMap(), activityActorType)
-	}
+	abe, ok := engine.Backend.(*wfengine.ActorBackend)
+
+	assert.True(t, ok, "engine.Backend is of type ActorBackend")
+	assert.Len(t, abe.GetInternalActorsMap(), 2)
+	assert.Contains(t, abe.GetInternalActorsMap(), workflowActorType)
+	assert.Contains(t, abe.GetInternalActorsMap(), activityActorType)
 }
 
 // TestRecreateRunningWorkflowFails verifies that a workflow can't be recreated if it's in a running state.
