@@ -41,40 +41,40 @@ func TestRegistry(t *testing.T) {
 		)
 
 		// Initiate mock object
-		mock := &mockWorkflowBackend{}
-		mockV2 := &mockWorkflowBackend{}
+		wbeMock := &mockWorkflowBackend{}
+		wbeMockV2 := &mockWorkflowBackend{}
 
 		// act
 		testRegistry.RegisterComponent(func(_ logger.Logger) wfs.WorkflowBackend {
-			return mock
+			return wbeMock
 		}, backendName)
 		testRegistry.RegisterComponent(func(_ logger.Logger) wfs.WorkflowBackend {
-			return mockV2
+			return wbeMockV2
 		}, backendNameV2)
 
 		// assert v0 and v1
-		p, e := testRegistry.Create(componentType, "v0", "")
+		wbe, e := testRegistry.Create(componentType, "v0", "")
 		require.NoError(t, e)
-		assert.Same(t, mock, p)
-		p, e = testRegistry.Create(componentType, "v1", "")
+		assert.Same(t, wbeMock, wbe)
+		wbe, e = testRegistry.Create(componentType, "v1", "")
 		require.NoError(t, e)
-		assert.Same(t, mock, p)
+		assert.Same(t, wbeMock, wbe)
 
 		// assert v2
-		pV2, e := testRegistry.Create(componentType, "v2", "")
+		wbeV2, e := testRegistry.Create(componentType, "v2", "")
 		require.NoError(t, e)
-		assert.Same(t, mockV2, pV2)
+		assert.Same(t, wbeMockV2, wbeV2)
 
 		// check case-insensitivity
-		pV2, e = testRegistry.Create(strings.ToUpper(componentType), "V2", "")
+		wbeV2, e = testRegistry.Create(strings.ToUpper(componentType), "V2", "")
 		require.NoError(t, e)
-		assert.Same(t, mockV2, pV2)
+		assert.Same(t, wbeMockV2, wbeV2)
 
 		// check case-insensitivity
-		testRegistry.Logger = logger.NewLogger("wfengine.durabletask.backend")
-		pV2, e = testRegistry.Create(strings.ToUpper(componentType), "V2", "workflowbackendlog")
+		testRegistry.Logger = logger.NewLogger("wfengine.backend")
+		wbeV2, e = testRegistry.Create(strings.ToUpper(componentType), "V2", "workflowbackendlog")
 		require.NoError(t, e)
-		assert.Same(t, mockV2, pV2)
+		assert.Same(t, wbeMockV2, wbeV2)
 	})
 
 	t.Run("workflow backend is not registered", func(t *testing.T) {
@@ -84,11 +84,11 @@ func TestRegistry(t *testing.T) {
 		)
 
 		// act
-		p, actualError := testRegistry.Create(componentType, "v1", "")
+		wbe, actualError := testRegistry.Create(componentType, "v1", "")
 		expectedError := fmt.Errorf("couldn't find wokflow backend %s/v1", componentType)
 
 		// assert
-		assert.Nil(t, p)
+		assert.Nil(t, wbe)
 		assert.Equal(t, expectedError.Error(), actualError.Error())
 	})
 }

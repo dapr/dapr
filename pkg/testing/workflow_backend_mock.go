@@ -33,6 +33,24 @@ const (
 	SqliteActivityLockTimeout      = "activityLockTimeout"
 )
 
+type MockWorkflowBackend struct {
+	mock.Mock
+}
+
+// Init provides a mock function with given fields: metadata
+func (_m *MockWorkflowBackend) Init(metadata workflows.Metadata) error {
+	ret := _m.Called(metadata)
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(workflows.Metadata) error); ok {
+		r0 = rf(metadata)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 type MockSqliteBackendManager struct {
 	mock.Mock
 }
