@@ -65,6 +65,7 @@ import (
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
+	middlehttp "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
@@ -459,7 +460,15 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.appConnectionConfig.Protocol), err)
 	}
 
-	pipeline, err := a.channels.BuildHTTPPipeline(a.globalConfig.Spec.HTTPPipelineSpec)
+	var pipeline middlehttp.Pipeline
+
+	if a.globalConfig.Spec.HTTPPipelineSpec != nil {
+		pipeline, err = a.channels.BuildHTTPPipeline(a.globalConfig.Spec.HTTPPipelineSpec)
+	} else {
+		comps := a.compStore.ListMatchComponents("middleware")
+		pipeline, err = a.channels.BuildHTTPPipelineFromComponents(comps)
+	}
+
 	if err != nil {
 		log.Warnf("failed to build HTTP pipeline: %s", err)
 	}

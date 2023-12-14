@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -27,6 +28,7 @@ import (
 
 	contribmiddle "github.com/dapr/components-contrib/middleware"
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
+	compsv1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpendpapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
 	channelhttp "github.com/dapr/dapr/pkg/channel/http"
@@ -150,6 +152,60 @@ func (c *Channels) Refresh() error {
 	log.Debug("Channels refreshed")
 
 	return nil
+}
+
+func (c *Channels) BuildHTTPPipelineFromComponents(comps []compsv1alpha1.Component) (middlehttp.Pipeline, error) {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+
+	priorityHandlers := make(map[int]func(http.Handler) http.Handler)
+
+	pipeline := middlehttp.Pipeline{
+		Handlers: make([]func(next http.Handler) http.Handler, 0, len(comps)),
+	}
+
+	for _, comp := range comps {
+		meta, err := c.meta.ToBaseMetadata(comp)
+		pipelineType := meta.Properties["pipelineType"]
+		if pipelineType != "httpPipeline" {
+			continue
+		}
+		priority := meta.Properties["priority"]
+		priorityInt, err := strconv.Atoi(priority)
+		if err != nil {
+			return middlehttp.Pipeline{}, fmt.Errorf("unable to convert priority to integer for component %s: %w", comp.Name, err)
+		}
+		if err != nil {
+			return middlehttp.Pipeline{}, err
+		}
+		md := contribmiddle.Metadata{Base: meta}
+		handler, err := c.registry.Create(comp.Spec.Type, comp.Spec.Version, md, comp.LogName())
+		if err != nil {
+			err = fmt.Errorf("process component %s error: %w", comp.Name, err)
+			if !comp.Spec.IgnoreErrors {
+				return middlehttp.Pipeline{}, err
+			}
+			log.Error(err)
+			continue
+		}
+
+		log.Infof("enabled %s/%s middleware", comp.Spec.Type, comp.Spec.Version)
+		// priority is the string containing the int value
+		priorityHandlers[priorityInt] = handler
+	}
+	// sort priorities
+	var priorities []int
+	for priority := range priorityHandlers {
+		priorities = append(priorities, priority)
+	}
+	sort.Ints(priorities)
+	// pass the handler to pipeline.handlers according to priority value
+	// arrange handlers according to priority
+	for _, priority := range priorities {
+		pipeline.Handlers = append(pipeline.Handlers, priorityHandlers[priority])
+	}
+
+	return pipeline, nil
 }
 
 func (c *Channels) BuildHTTPPipeline(spec *config.PipelineSpec) (middlehttp.Pipeline, error) {

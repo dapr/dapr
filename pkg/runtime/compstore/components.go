@@ -13,7 +13,10 @@ limitations under the License.
 
 package compstore
 
-import compsv1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+import (
+	"strings"
+	compsv1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+)
 
 func (c *ComponentStore) GetComponent(componentType, name string) (compsv1alpha1.Component, bool) {
 	c.lock.RLock()
@@ -25,6 +28,8 @@ func (c *ComponentStore) GetComponent(componentType, name string) (compsv1alpha1
 	}
 	return compsv1alpha1.Component{}, false
 }
+
+
 
 func (c *ComponentStore) AddComponent(component compsv1alpha1.Component) {
 	c.lock.Lock()
@@ -45,6 +50,18 @@ func (c *ComponentStore) ListComponents() []compsv1alpha1.Component {
 	defer c.lock.RUnlock()
 	comps := make([]compsv1alpha1.Component, len(c.components))
 	copy(comps, c.components)
+	return comps
+}
+
+func (c *ComponentStore) ListMatchComponents(match string) []compsv1alpha1.Component {
+	c.lock.RLock()
+	comps := make([]compsv1alpha1.Component, len(c.components))
+	defer c.lock.RUnlock()
+	for _,c := range c.components {
+		if strings.Contains(c.Spec.Type, match) {
+			comps = append(comps, c)
+		}
+	}
 	return comps
 }
 
