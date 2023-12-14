@@ -40,50 +40,40 @@ func getActorBackend(appId string, wfe *WorkflowEngine, backendComponentInfo *wo
 	return NewActorBackend(appId, wfe)
 }
 
-func getSqliteBackend(appId string, wfe *WorkflowEngine, backendComponentInfo *workflowBackend.WorkflowBackendComponentInfo,
-	log logger.Logger) backend.Backend {
+func getSqliteBackend(appId string, wfe *WorkflowEngine, backendComponentInfo *workflowBackend.WorkflowBackendComponentInfo, log logger.Logger) backend.Backend {
 	wfe.BackendType = SqliteBackendType
-	var sqliteOptions = &sqlite.SqliteOptions{}
+	sqliteOptions := &sqlite.SqliteOptions{
+		OrchestrationLockTimeout: 2 * time.Minute,
+		ActivityLockTimeout:      2 * time.Minute,
+		FilePath:                 "",
+	}
 
 	if connectionString, ok := backendComponentInfo.WorkflowBackendMetadata.Properties["connectionString"]; ok {
 		sqliteOptions.FilePath = connectionString
 	}
 
 	if orchestrationLockTimeout, ok := backendComponentInfo.WorkflowBackendMetadata.Properties["orchestrationLockTimeout"]; ok {
-		orchestrationLockTimeout, err := time.ParseDuration(orchestrationLockTimeout)
-		sqliteOptions.OrchestrationLockTimeout = orchestrationLockTimeout
-
-		if err == nil {
-			sqliteOptions.OrchestrationLockTimeout = orchestrationLockTimeout
+		if duration, err := time.ParseDuration(orchestrationLockTimeout); err == nil {
+			sqliteOptions.OrchestrationLockTimeout = duration
 		} else {
-			log.Errorf("invalid orchestrationLockTimeout provided in backend workflow component: %v", err)
+			log.Errorf("Invalid orchestrationLockTimeout provided in backend workflow component: %v", err)
 		}
-	} else {
-		sqliteOptions.OrchestrationLockTimeout = 2 * time.Minute
 	}
 
 	if activityLockTimeout, ok := backendComponentInfo.WorkflowBackendMetadata.Properties["activityLockTimeout"]; ok {
-		activityLockTimeout, err := time.ParseDuration(activityLockTimeout)
-
-		if err == nil {
-			sqliteOptions.ActivityLockTimeout = activityLockTimeout
+		if duration, err := time.ParseDuration(activityLockTimeout); err == nil {
+			sqliteOptions.ActivityLockTimeout = duration
 		} else {
-			log.Errorf("invalid activityLockTimeout provided in backend workflow component: %v", err)
+			log.Errorf("Invalid activityLockTimeout provided in backend workflow component: %v", err)
 		}
-	} else {
-		sqliteOptions.OrchestrationLockTimeout = 2 * time.Minute
 	}
 
 	return sqlite.NewSqliteBackend(sqliteOptions, log)
 }
 
-func InitilizeWorkflowBackend(appId string, backendType string, wfe *WorkflowEngine,
-	backendComponentInfo *workflowBackend.WorkflowBackendComponentInfo, log logger.Logger) backend.Backend {
-
-	// if no backend component is defined, initialize actor backend
+func InitializeWorkflowBackend(appId string, backendType string, wfe *WorkflowEngine, backendComponentInfo *workflowBackend.WorkflowBackendComponentInfo, log logger.Logger) backend.Backend {
 	if backendComponentInfo == nil {
-		wfe.BackendType = ActorBackendType
-		return NewActorBackend(appId, wfe)
+		return getActorBackend(appId, wfe, backendComponentInfo, log)
 	}
 
 	if backendComponentInfo.InvalidWorkflowBackend {

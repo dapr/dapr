@@ -79,3 +79,26 @@ func (m *MockInvalidaBackendManager) WorkflowBackendComponentInfo() (*workflowBa
 		InvalidWorkflowBackend: true,
 	}, true
 }
+
+type MockNilBackendComponentManager struct {
+}
+
+func (m *MockNilBackendComponentManager) WorkflowBackendComponentInfo() (*workflowBackend.WorkflowBackendComponentInfo, bool) {
+	return nil, true
+}
+
+type MockSqliteBackendComponentInvalidTimeoutManager struct {
+}
+
+func (m *MockSqliteBackendComponentInvalidTimeoutManager) WorkflowBackendComponentInfo() (*workflowBackend.WorkflowBackendComponentInfo, bool) {
+	return &workflowBackend.WorkflowBackendComponentInfo{
+		WorkflowBackendType: SqliteBackendType,
+		WorkflowBackendMetadata: metadata.Base{
+			Properties: map[string]string{
+				SqliteConnectionString:         "in-memory",
+				SqliteActivityLockTimeout:      "100000",
+				SqliteOrchestrationLockTimeout: "100000",
+			},
+		},
+	}, true
+}

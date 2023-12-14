@@ -79,3 +79,27 @@ func TestInvalidBackendSetup(t *testing.T) {
 
 	assert.Nil(t, engine.Backend, "Backend is set to nil")
 }
+
+func TestBackendComponentNilSetup(t *testing.T) {
+	mockWorkflowBackendManager := new(daprt.MockNilBackendComponentManager)
+	spec := config.WorkflowSpec{MaxConcurrentWorkflowInvocations: 100, MaxConcurrentActivityInvocations: 100}
+
+	engine := wfengine.NewWorkflowEngine(testAppID, spec, mockWorkflowBackendManager)
+
+	_, ok := engine.Backend.(*wfengine.ActorBackend)
+
+	assert.True(t, ok, "actor is of type ActorBackend")
+	assert.Equal(t, wfengine.ActorBackendType, engine.BackendType)
+}
+
+func TestInvalidSqliteBackendComponentSetup(t *testing.T) {
+	mockWorkflowBackendManager := new(daprt.MockSqliteBackendComponentInvalidTimeoutManager)
+	spec := config.WorkflowSpec{MaxConcurrentWorkflowInvocations: 100, MaxConcurrentActivityInvocations: 100}
+
+	engine := wfengine.NewWorkflowEngine(testAppID, spec, mockWorkflowBackendManager)
+
+	_, ok := engine.Backend.(*wfengine.ActorBackend)
+
+	assert.False(t, ok, "actor is of type ActorBackend")
+	assert.Equal(t, wfengine.SqliteBackendType, engine.BackendType)
+}
