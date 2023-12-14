@@ -107,7 +107,7 @@ type actorPlacement struct {
 }
 
 // NewActorPlacement initializes ActorPlacement for the actor service.
-func NewActorPlacement(opts internal.ActorsProviderOpts) internal.PlacementService {
+func NewActorPlacement(opts internal.ActorsProviderOptions) internal.PlacementService {
 	servers := addDNSResolverPrefix(opts.Config.PlacementAddresses)
 	return &actorPlacement{
 		config:     opts.Config,

@@ -69,7 +69,7 @@ func TestPlacementStream_RoundRobin(t *testing.T) {
 		address[i], testSrv[i], cleanup[i] = newTestServer()
 	}
 
-	testPlacement := NewActorPlacement(internal.ActorsProviderOpts{
+	testPlacement := NewActorPlacement(internal.ActorsProviderOptions{
 		Config: internal.Config{
 			PlacementAddresses: address,
 			AppID:              "testAppID",
@@ -129,7 +129,7 @@ func TestAppHealthyStatus(t *testing.T) {
 
 	appHealthCh := make(chan bool)
 
-	testPlacement := NewActorPlacement(internal.ActorsProviderOpts{
+	testPlacement := NewActorPlacement(internal.ActorsProviderOptions{
 		Config: internal.Config{
 			PlacementAddresses: []string{address},
 			AppID:              "testAppID",
@@ -165,7 +165,7 @@ func TestAppHealthyStatus(t *testing.T) {
 func TestOnPlacementOrder(t *testing.T) {
 	tableUpdateCount := atomic.Int64{}
 	tableUpdateFunc := func() { tableUpdateCount.Add(1) }
-	testPlacement := NewActorPlacement(internal.ActorsProviderOpts{
+	testPlacement := NewActorPlacement(internal.ActorsProviderOptions{
 		Config: internal.Config{
 			PlacementAddresses: []string{},
 			AppID:              "testAppID",
@@ -234,7 +234,7 @@ func TestOnPlacementOrder(t *testing.T) {
 }
 
 func TestWaitUntilPlacementTableIsReady(t *testing.T) {
-	testPlacement := NewActorPlacement(internal.ActorsProviderOpts{
+	testPlacement := NewActorPlacement(internal.ActorsProviderOptions{
 		Config: internal.Config{
 			PlacementAddresses: []string{},
 			AppID:              "testAppID",
@@ -373,7 +373,7 @@ func TestWaitUntilPlacementTableIsReady(t *testing.T) {
 }
 
 func TestLookupActor(t *testing.T) {
-	testPlacement := NewActorPlacement(internal.ActorsProviderOpts{
+	testPlacement := NewActorPlacement(internal.ActorsProviderOptions{
 		Config: internal.Config{
 			PlacementAddresses: []string{},
 			AppID:              "testAppID",
@@ -430,7 +430,7 @@ func TestLookupActor(t *testing.T) {
 }
 
 func TestConcurrentUnblockPlacements(t *testing.T) {
-	testPlacement := NewActorPlacement(internal.ActorsProviderOpts{
+	testPlacement := NewActorPlacement(internal.ActorsProviderOptions{
 		Config: internal.Config{
 			PlacementAddresses: []string{},
 			AppID:              "testAppID",

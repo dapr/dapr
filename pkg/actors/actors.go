@@ -179,7 +179,7 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) ActorRuntime {
 	}
 
 	// Init reminders and placement
-	providerOpts := internal.ActorsProviderOpts{
+	providerOpts := internal.ActorsProviderOptions{
 		Config:      a.actorsConfig.Config,
 		Security:    a.sec,
 		AppHealthFn: a.getAppHealthCheckChan,

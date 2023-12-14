@@ -26,8 +26,8 @@ import (
 // AppHealthFn is a function that returns a channel which is notified of changes in app health status.
 type AppHealthFn func(ctx context.Context) <-chan bool
 
-// ActorsProviderOpts contains the options for providers of actors services.
-type ActorsProviderOpts struct {
+// ActorsProviderOptions contains the options for providers of actors services.
+type ActorsProviderOptions struct {
 	Config     Config
 	Security   security.Handler
 	Resiliency resiliency.Provider

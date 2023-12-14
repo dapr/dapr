@@ -74,7 +74,7 @@ type NewRemindersProviderOpts struct {
 }
 
 // NewRemindersProvider returns a reminders provider.
-func NewRemindersProvider(opts internal.ActorsProviderOpts) internal.RemindersProvider {
+func NewRemindersProvider(opts internal.ActorsProviderOptions) internal.RemindersProvider {
 	return &reminders{
 		clock:            opts.Clock,
 		apiLevel:         opts.APILevel,
