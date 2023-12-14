@@ -58,13 +58,13 @@ func IsWorkflowRequest(path string) bool {
 	return backend.IsDurableTaskGrpcRequest(path)
 }
 
-func NewWorkflowEngine(appID string, spec config.WorkflowSpec, processor *processor.Processor) *WorkflowEngine {
+func NewWorkflowEngine(appID string, spec config.WorkflowSpec, backendManager processor.WorkflowBackendManager) *WorkflowEngine {
 	engine := &WorkflowEngine{
 		spec: spec,
 	}
 
 	var backendType string
-	backendComponentInfo, ok := processor.WorkflowBackend().WorkflowBackendComponentInfo()
+	backendComponentInfo, ok := backendManager.WorkflowBackendComponentInfo()
 	if ok {
 		backendType = backendComponentInfo.WorkflowBackendType
 	} else {

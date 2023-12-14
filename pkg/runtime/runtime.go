@@ -427,7 +427,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	a.flushOutstandingComponents(ctx)
 
 	// Creating workflow engine after components are loaded
-	wfe := wfengine.NewWorkflowEngine(a.runtimeConfig.id, a.globalConfig.GetWorkflowSpec(), a.processor)
+	wfe := wfengine.NewWorkflowEngine(a.runtimeConfig.id, a.globalConfig.GetWorkflowSpec(), a.processor.WorkflowBackend())
 	wfe.ConfigureGrpcExecutor()
 	a.workflowEngine = wfe
 

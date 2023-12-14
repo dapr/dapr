@@ -764,7 +764,7 @@ func getEngine(t *testing.T, ctx context.Context) *wfengine.WorkflowEngine {
 		GlobalConfig: new(config.Configuration),
 	})
 
-	engine := wfengine.NewWorkflowEngine(testAppID, spec, processor)
+	engine := wfengine.NewWorkflowEngine(testAppID, spec, processor.WorkflowBackend())
 	store := fakeStore()
 	cfg := actors.NewConfig(actors.ConfigOpts{
 		AppID:              testAppID,
@@ -795,7 +795,7 @@ func getEngineAndStateStore(t *testing.T, ctx context.Context) (*wfengine.Workfl
 		Registry:     registry.New(registry.NewOptions()),
 		GlobalConfig: new(config.Configuration),
 	})
-	engine := wfengine.NewWorkflowEngine(testAppID, spec, processor)
+	engine := wfengine.NewWorkflowEngine(testAppID, spec, processor.WorkflowBackend())
 	store := fakeStore().(*daprt.FakeStateStore)
 	cfg := actors.NewConfig(actors.ConfigOpts{
 		AppID:              testAppID,

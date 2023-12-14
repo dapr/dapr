@@ -87,7 +87,7 @@ func InitilizeWorkflowBackend(appId string, backendType string, wfe *WorkflowEng
 	}
 
 	if backendComponentInfo.InvalidWorkflowBackend {
-		log.Errorf("Invalida workflow backend type provided, backend is not initialized")
+		log.Errorf("Invalid workflow backend type provided, backend is not initialized")
 		return nil
 	}
 

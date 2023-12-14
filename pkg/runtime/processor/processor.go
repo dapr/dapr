@@ -105,19 +105,14 @@ type Options struct {
 	OperatorClient operatorv1.OperatorClient
 }
 
-type WorkflowBackendManager interface {
-	WorkflowBackendComponentInfo() (*workflowBackend.WorkflowBackendComponentInfo, bool)
-	manager
-}
-
 // Processor manages the lifecycle of all components categories.
 type Processor struct {
-	compStore *compstore.ComponentStore
-	managers  map[components.Category]manager
-	state     StateManager
-	secret    SecretManager
-	pubsub    PubsubManager
-	binding   BindingManager
+	compStore       *compstore.ComponentStore
+	managers        map[components.Category]manager
+	state           StateManager
+	secret          SecretManager
+	pubsub          PubsubManager
+	binding         BindingManager
 	workflowBackend WorkflowBackendManager
 
 	pendingHTTPEndpoints       chan httpendapi.HTTPEndpoint
@@ -497,10 +492,4 @@ func (p *Processor) category(comp compapi.Component) components.Category {
 
 func componentDependency(compCategory components.Category, name string) string {
 	return string(compCategory) + ":" + name
-}
-
-func (p *Processor) WorkflowBackend() WorkflowBackendManager {
-	p.lock.RLock()
-	defer p.lock.RUnlock()
-	return p.workflowBackend
 }
