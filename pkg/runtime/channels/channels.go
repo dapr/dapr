@@ -109,7 +109,14 @@ func (c *Channels) Refresh() error {
 	log.Debug("Refreshing channels")
 
 	// Create a HTTP channel for external HTTP endpoint invocation
-	pipeline, err := c.buildHTTPPipelineForSpec(c.appHTTPPipelineSpec, "app channel")
+	var pipeline middlehttp.Pipeline
+	var err error
+	if c.appHTTPPipelineSpec != nil {
+		pipeline, err = c.buildHTTPPipelineForSpec(c.appHTTPPipelineSpec, "app channel")
+	} else {
+		comps := c.compStore.ListMatchComponents("middleware")
+		pipeline, err = c.BuildHTTPPipelineFromComponentsForSpec(comps, "appHttpPipeline")
+	}
 	if err != nil {
 		return fmt.Errorf("failed to build app HTTP pipeline: %w", err)
 	}
@@ -154,20 +161,26 @@ func (c *Channels) Refresh() error {
 	return nil
 }
 
-func (c *Channels) BuildHTTPPipelineFromComponents(comps []compsv1alpha1.Component) (middlehttp.Pipeline, error) {
+func (c *Channels) BuildHTTPPipelineFromComponents(comps []compsv1alpha1.Component, expectedPiplineType string) (middlehttp.Pipeline, error) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
+	return c.BuildHTTPPipelineFromComponentsForSpec(comps, expectedPiplineType)
+}
 
+func (c *Channels) BuildHTTPPipelineFromComponentsForSpec(comps []compsv1alpha1.Component, expectedPiplineType string) (middlehttp.Pipeline, error) {
 	priorityHandlers := make(map[int]func(http.Handler) http.Handler)
 
 	pipeline := middlehttp.Pipeline{
-		Handlers: make([]func(next http.Handler) http.Handler, 0, len(comps)),
+		Handlers: make([]func(next http.Handler) http.Handler, 0, 1),
 	}
 
 	for _, comp := range comps {
 		meta, err := c.meta.ToBaseMetadata(comp)
+		if err != nil {
+			return middlehttp.Pipeline{}, err
+		}
 		pipelineType := meta.Properties["pipelineType"]
-		if pipelineType != "httpPipeline" {
+		if pipelineType != expectedPiplineType {
 			continue
 		}
 		priority := meta.Properties["priority"]
@@ -199,8 +212,8 @@ func (c *Channels) BuildHTTPPipelineFromComponents(comps []compsv1alpha1.Compone
 		priorities = append(priorities, priority)
 	}
 	sort.Ints(priorities)
-	// pass the handler to pipeline.handlers according to priority value
-	// arrange handlers according to priority
+	// // pass the handler to pipeline.handlers according to priority value
+	// // arrange handlers according to priority
 	for _, priority := range priorities {
 		pipeline.Handlers = append(pipeline.Handlers, priorityHandlers[priority])
 	}
@@ -315,7 +328,15 @@ func (c *Channels) initEndpointChannels() (map[string]channel.HTTPEndpointAppCha
 
 	channels := make(map[string]channel.HTTPEndpointAppChannel, len(endpoints))
 	if len(endpoints) > 0 {
-		pipeline, err := c.buildHTTPPipeline(c.appHTTPPipelineSpec)
+		var pipeline middlehttp.Pipeline
+		var err error
+		if c.appHTTPPipelineSpec != nil {
+			pipeline, err = c.buildHTTPPipeline(c.appHTTPPipelineSpec)
+		} else {
+			comps := c.compStore.ListMatchComponents("middleware")
+			pipeline, err = c.BuildHTTPPipelineFromComponents(comps, "appHttpPipeline")
+		}
+
 		if err != nil {
 			return nil, err
 		}

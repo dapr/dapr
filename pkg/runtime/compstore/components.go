@@ -14,12 +14,12 @@ limitations under the License.
 package compstore
 
 import (
-	"strings"
-	compsv1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"errors"
 	"fmt"
-)
+	"strings"
 
+	compsv1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+)
 
 func (c *ComponentStore) GetComponent(name string) (compsv1alpha1.Component, bool) {
 	c.lock.RLock()
@@ -31,7 +31,6 @@ func (c *ComponentStore) GetComponent(name string) (compsv1alpha1.Component, boo
 	}
 	return compsv1alpha1.Component{}, false
 }
-
 
 func (c *ComponentStore) AddPendingComponentForCommit(component compsv1alpha1.Component) error {
 	c.compPendingLock.Lock()
@@ -94,16 +93,17 @@ func (c *ComponentStore) ListComponents() []compsv1alpha1.Component {
 
 func (c *ComponentStore) ListMatchComponents(match string) []compsv1alpha1.Component {
 	c.lock.RLock()
-	comps := make([]compsv1alpha1.Component, len(c.components))
+	var comps []compsv1alpha1.Component
 	defer c.lock.RUnlock()
-	for _,c := range c.components {
+	for _, c := range c.components {
 		if strings.Contains(c.Spec.Type, match) {
+			fmt.Println("c.spec.type ", c.Spec.Type, "contains ", match)
 			comps = append(comps, c)
 		}
 	}
+	fmt.Println("comp in listmatch", comps[0].Spec.Type)
 	return comps
 }
-
 
 func (c *ComponentStore) DeleteComponent(name string) {
 	c.lock.Lock()
