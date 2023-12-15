@@ -42,7 +42,6 @@ var (
 	DefaultResiliencyMonitoring = newResiliencyMetrics()
 	// Rules holds regex expressions for metrics labels
 	DefaultWorkflowMonitoring = newWorkflowMetrics()
-	Rules                     map[string]string
 )
 
 // InitMetrics initializes metrics.

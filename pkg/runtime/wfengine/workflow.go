@@ -521,9 +521,8 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 		}
 	}
 
-	// record time taken to complete the workflow
-	elapsed := diag.ElapsedSince(start)
-	diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, "dapr", diag.Workflow, diag.StatusSuccess, elapsed)
+	// Workflow Execution latency is not supported yet.
+	diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, "dapr", diag.Workflow, diag.StatusSuccess, 0)
 	state.ApplyRuntimeStateChanges(runtimeState)
 	state.ClearInbox()
 

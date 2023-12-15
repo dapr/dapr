@@ -86,10 +86,6 @@ func newWorkflowMetrics() *workflowMetrics {
 			"runtime/workflow/execution/latency",
 			"The total time taken to run a workflow/activity to completion.",
 			stats.UnitMilliseconds),
-		workflowSchedulingLatency: stats.Float64(
-			"runtime/workflow/scheduling/latency",
-			"The latency between execution request and actual execution.",
-			stats.UnitMilliseconds),
 	}
 }
 
@@ -109,7 +105,6 @@ func (w *workflowMetrics) Init(appID, namespace string) error {
 		diagUtils.NewMeasureView(w.workflowRemindersCount, []tag.Key{appIDKey, componentKey, namespaceKey, reminderTypeKey}, view.Count()),
 		diagUtils.NewMeasureView(w.workflowExecutionCount, []tag.Key{appIDKey, componentKey, namespaceKey, executionTypeKey, statusKey}, view.Count()),
 		diagUtils.NewMeasureView(w.workflowExecutionLatency, []tag.Key{appIDKey, componentKey, namespaceKey, executionTypeKey, statusKey}, defaultLatencyDistribution),
-		diagUtils.NewMeasureView(w.workflowSchedulingLatency, []tag.Key{appIDKey, componentKey, namespaceKey, executionTypeKey}, defaultLatencyDistribution))
 }
 
 // WorkflowOperationsEvent records total number of Successful/Failed workflow Operations requests. It also records latency for those requests.
