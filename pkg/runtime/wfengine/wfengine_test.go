@@ -167,11 +167,11 @@ func TestSingleActivityWorkflow_ReuseInstanceIDIgnore(t *testing.T) {
 
 	for _, opt := range GetTestOptions() {
 		suffix := opt(engine)
-		t.Run(opt(engine), func(t *testing.T) {
+		t.Run(suffix, func(t *testing.T) {
 			instanceID := api.InstanceID("IGNORE_IF_RUNNING_OR_COMPLETED_" + suffix)
 			reuseIDPolicy := &api.OrchestrationIdReusePolicy{
-				Action:          api.IGNORE,
-				OperationStatus: []api.OrchestrationStatus{api.RUNNING, api.COMPLETED, api.PENDING},
+				Action:          api.REUSE_ID_ACTION_IGNORE,
+				OperationStatus: []api.OrchestrationStatus{api.RUNTIME_STATUS_RUNNING, api.RUNTIME_STATUS_COMPLETED, api.RUNTIME_STATUS_PENDING},
 			}
 
 			// Run the orchestration
@@ -225,11 +225,11 @@ func TestSingleActivityWorkflow_ReuseInstanceIDTerminate(t *testing.T) {
 
 	for _, opt := range GetTestOptions() {
 		suffix := opt(engine)
-		t.Run(opt(engine), func(t *testing.T) {
+		t.Run(suffix, func(t *testing.T) {
 			instanceID := api.InstanceID("IGNORE_IF_RUNNING_OR_COMPLETED_" + suffix)
 			reuseIDPolicy := &api.OrchestrationIdReusePolicy{
-				Action:          api.TERMINATE,
-				OperationStatus: []api.OrchestrationStatus{api.RUNNING, api.COMPLETED, api.PENDING},
+				Action:          api.REUSE_ID_ACTION_TERMINATE,
+				OperationStatus: []api.OrchestrationStatus{api.RUNTIME_STATUS_RUNNING, api.RUNTIME_STATUS_COMPLETED, api.RUNTIME_STATUS_PENDING},
 			}
 
 			// Run the orchestration
@@ -283,7 +283,7 @@ func TestSingleActivityWorkflow_ReuseInstanceIDError(t *testing.T) {
 
 	for _, opt := range GetTestOptions() {
 		suffix := opt(engine)
-		t.Run(opt(engine), func(t *testing.T) {
+		t.Run(suffix, func(t *testing.T) {
 			instanceID := api.InstanceID("IGNORE_IF_RUNNING_OR_COMPLETED_" + suffix)
 			id, err := client.ScheduleNewOrchestration(ctx, "SingleActivity", api.WithInput("世界"), api.WithInstanceID(instanceID))
 			require.NoError(t, err)
