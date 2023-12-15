@@ -1201,8 +1201,8 @@ func TestComponentsCallback(t *testing.T) {
 	rt, err := newDaprRuntime(context.Background(), testSecurity(t), cfg, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 	require.NoError(t, err)
 	rt.runtimeConfig.registry = registry.New(registry.NewOptions().WithComponentsCallback(func(components registry.ComponentRegistry) error {
-		close(c)
 		callbackInvoked.Store(true)
+		close(c)
 		return nil
 	}))
 
