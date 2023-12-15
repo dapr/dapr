@@ -24,11 +24,10 @@ import (
 	"strings"
 	"testing"
 
-	apierrors "github.com/dapr/dapr/pkg/api/errors"
-
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
 
+	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -143,7 +142,6 @@ spec:
 func (e *errors) Run(t *testing.T, ctx context.Context) {
 	e.daprd.WaitUntilRunning(t, ctx)
 
-	// postURL := fmt.Sprintf("http://localhost:%d/v1.0/state/mystore", b.daprd.HTTPPort())
 
 	httpClient := util.HTTPClient(t)
 

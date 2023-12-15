@@ -17,10 +17,9 @@ import (
 	"errors"
 	"net/http"
 
-	kitErrors "github.com/dapr/kit/errors"
-
 	"github.com/valyala/fasthttp"
-
+	
+	"github.com/dapr/kit/errors"
 	"github.com/dapr/dapr/pkg/messages"
 )
 

@@ -18,9 +18,9 @@ import (
 	"net/http"
 	"strconv"
 
-	grpcCodes "google.golang.org/grpc/codes"
+	"google.golang.org/grpc/codes"
 
-	kitErrors "github.com/dapr/kit/errors"
+	"github.com/dapr/kit/errors"
 )
 
 func StateStoreNotConfigured() error {
