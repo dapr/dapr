@@ -24,34 +24,34 @@ import (
 )
 
 func StateStoreNotConfigured() error {
-	return kitErrors.NewBuilder(
-		grpcCodes.FailedPrecondition,
+	return errors.NewBuilder(
+		codes.FailedPrecondition,
 		http.StatusInternalServerError,
 		"state store is not configured",
 		"ERR_STATE_STORE_NOT_CONFIGURED",
 	).
-		WithErrorInfo(kitErrors.CodePrefixStateStore+kitErrors.CodeNotConfigured, nil).
+		WithErrorInfo(errors.CodePrefixStateStore+errors.CodeNotConfigured, nil).
 		Build()
 }
 
 func StateStoreNotFound(storeName string) error {
-	return kitErrors.NewBuilder(
-		grpcCodes.InvalidArgument, // TODO check if it was used in the past, we should change it. It should be grpcCodes.NotFound
+	return errors.NewBuilder(
+		codes.InvalidArgument, // TODO We should change this at some point. It should be codes.NotFound, but it will be a breaking change.
 		http.StatusBadRequest,
 		fmt.Sprintf("state store %s is not found", storeName),
 		"ERR_STATE_STORE_NOT_FOUND",
 	).
-		WithErrorInfo(kitErrors.CodePrefixStateStore+kitErrors.CodeNotFound, nil).
+		WithErrorInfo(errors.CodePrefixStateStore+errors.CodeNotFound, nil).
 		Build()
 }
 
 func StateStoreInvalidKeyName(storeName string, key string, msg string) error {
-	return kitErrors.NewBuilder(
-		grpcCodes.InvalidArgument,
+	return errors.NewBuilder(
+		codes.InvalidArgument,
 		http.StatusBadRequest,
 		msg,
 		"ERR_MALFORMED_REQUEST",
-	).WithErrorInfo(kitErrors.CodePrefixStateStore+kitErrors.CodeIllegalKey, nil).
+	).WithErrorInfo(errors.CodePrefixStateStore+errors.CodeIllegalKey, nil).
 		WithResourceInfo("state", storeName, "", "").
 		WithFieldViolation(key, msg).
 		Build()
@@ -60,26 +60,26 @@ func StateStoreInvalidKeyName(storeName string, key string, msg string) error {
 /**** Transactions ****/
 
 func StateStoreTransactionsNotSupported(storeName string) error {
-	return kitErrors.NewBuilder(
-		grpcCodes.Unimplemented,
+	return errors.NewBuilder(
+		codes.Unimplemented,
 		http.StatusInternalServerError,
-		fmt.Sprintf(kitErrors.MsgStateTransactionsNotSupported, storeName),
+		fmt.Sprintf(errors.MsgStateTransactionsNotSupported, storeName),
 		"ERR_STATE_STORE_NOT_SUPPORTED", // TODO: @elena-kolevska this is misleading and also used for different things ("query unsupported"); it should be removed in the next major version
 	).
-		WithErrorInfo(kitErrors.CodePrefixStateStore+"TRANSACTIONS_NOT_SUPPORTED", nil).
+		WithErrorInfo(errors.CodePrefixStateStore+"TRANSACTIONS_NOT_SUPPORTED", nil).
 		WithResourceInfo("state", storeName, "", "").
 		WithHelpLink("https://docs.dapr.io/reference/components-reference/supported-state-stores/", "Check the list of state stores and the features they support").
 		Build()
 }
 
 func StateStoreTooManyTransactionalOps(storeName string, count int, max int) error {
-	return kitErrors.NewBuilder(
-		grpcCodes.InvalidArgument,
+	return errors.NewBuilder(
+		codes.InvalidArgument,
 		http.StatusBadRequest,
 		fmt.Sprintf("the transaction contains %d operations, which is more than what the state store supports: %d", count, max),
 		"ERR_STATE_STORE_TOO_MANY_TRANSACTIONS",
 	).
-		WithErrorInfo(kitErrors.CodePrefixStateStore+"TOO_MANY_TRANSACTIONS", map[string]string{
+		WithErrorInfo(errors.CodePrefixStateStore+"TOO_MANY_TRANSACTIONS", map[string]string{
 			"currentOpsTransaction": strconv.Itoa(count),
 			"maxOpsPerTransaction":  strconv.Itoa(max),
 		}).
@@ -90,26 +90,25 @@ func StateStoreTooManyTransactionalOps(storeName string, count int, max int) err
 /**** Query API ****/
 
 func StateStoreQueryUnsupported(storeName string) error {
-	return kitErrors.NewBuilder(
-		grpcCodes.Internal,
+	return errors.NewBuilder(
+		codes.Internal,
 		http.StatusInternalServerError,
 		"state store does not support querying",
 		"ERR_STATE_STORE_NOT_SUPPORTED",
 	).
-		WithErrorInfo(kitErrors.CodePrefixStateStore+"QUERYING_"+kitErrors.CodeNotSupported, nil).
+		WithErrorInfo(errors.CodePrefixStateStore+"QUERYING_"+errors.CodeNotSupported, nil).
 		WithResourceInfo("state", storeName, "", "").
 		Build()
 }
 
 func StateStoreQueryFailed(storeName string, detail string) error {
-	// TODO: @elena-kolevska #change-in-next-major: The http and grpc codes are wrong, but they're legacy.
-	return kitErrors.NewBuilder(
-		grpcCodes.Internal,
+	return errors.NewBuilder(
+		codes.Internal,
 		http.StatusInternalServerError,
 		fmt.Sprintf("state store %s query failed: %s", storeName, detail),
 		"ERR_STATE_QUERY",
 	).
-		WithErrorInfo(kitErrors.CodePrefixStateStore+kitErrors.CodePostfixQueryFailed, nil).
+		WithErrorInfo(errors.CodePrefixStateStore+errors.CodePostfixQueryFailed, nil).
 		WithResourceInfo("state", storeName, "", "").
 		Build()
 }

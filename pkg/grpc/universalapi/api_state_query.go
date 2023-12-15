@@ -18,9 +18,8 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/dapr/dapr/pkg/api/errors"
-
 	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/dapr/pkg/api/errors"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/encryption"

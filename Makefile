@@ -373,8 +373,8 @@ test-integration: test-deps
 ################################################################################
 # Target: lint                                                                 #
 ################################################################################
-# Please use golangci-lint version v1.55.2 , otherwise you might encounter errors.
-# You can download version v1.55.2 at https://github.com/golangci/golangci-lint/releases/tag/v1.51.2
+# Please use golangci-lint version v1.51.2 , otherwise you might encounter errors.
+# You can download version v1.51.2 at https://github.com/golangci/golangci-lint/releases/tag/v1.51.2
 .PHONY: lint
 lint: check-linter
 	$(GOLANGCI_LINT) run --build-tags=allcomponents --timeout=20m

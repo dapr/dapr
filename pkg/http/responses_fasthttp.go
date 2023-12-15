@@ -18,9 +18,9 @@ import (
 	"net/http"
 
 	"github.com/valyala/fasthttp"
-	
-	"github.com/dapr/kit/errors"
+
 	"github.com/dapr/dapr/pkg/messages"
+	kiterrors "github.com/dapr/kit/errors"
 )
 
 type fasthttpResponseOption = func(ctx *fasthttp.RequestCtx)
@@ -81,7 +81,7 @@ func universalFastHTTPErrorResponder(reqCtx *fasthttp.RequestCtx, err error) {
 	}
 
 	// Check if it's a kitErrors.Error object
-	var kitErr kitErrors.Error
+	var kitErr kiterrors.Error
 	ok = errors.As(err, &kitErr)
 	if ok {
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(kitErr.HTTPStatusCode(), kitErr))

@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/components-contrib/state/query"
@@ -323,8 +324,9 @@ func (ss *grpcStateStore) Multi(ctx context.Context, request *state.Transactiona
 
 // MultiMaxSize returns the maximum number of operations allowed in a transactional request.
 func (ss *grpcStateStore) MultiMaxSize() int {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+
 	resp, err := ss.Client.MultiMaxSize(ctx, new(proto.MultiMaxSizeRequest))
 	if err != nil {
 		return -1

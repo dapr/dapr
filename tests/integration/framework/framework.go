@@ -20,8 +20,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process"
 )
 
-var Domain = "dapr.io"
-
 type options struct {
 	procs []process.Interface
 }

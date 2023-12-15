@@ -27,8 +27,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
 
-	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/components-contrib/state"
+	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
@@ -142,7 +142,6 @@ spec:
 func (e *errors) Run(t *testing.T, ctx context.Context) {
 	e.daprd.WaitUntilRunning(t, ctx)
 
-
 	httpClient := util.HTTPClient(t)
 
 	// Covers errutils.StateStoreNotFound()
@@ -187,7 +186,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the first element of the 'details' array has the correct ErrorInfo details
 		detailsObject, ok := detailsArray[0].(map[string]interface{})
 		require.True(t, ok)
-		require.Equal(t, framework.Domain, detailsObject["domain"])
+		require.Equal(t, "dapr.io", detailsObject["domain"])
 		require.Equal(t, "DAPR_STATE_NOT_FOUND", detailsObject["reason"])
 		require.Equal(t, ErrInfoType, detailsObject["@type"])
 	})
@@ -251,7 +250,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		}
 
 		// Confirm that the ErrorInfo details are correct
-		require.Equal(t, framework.Domain, errInfo["domain"])
+		require.Equal(t, "dapr.io", errInfo["domain"])
 		require.Equal(t, "DAPR_STATE_ILLEGAL_KEY", errInfo["reason"])
 
 		// Confirm that the ResourceInfo details are correct
@@ -317,7 +316,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the first element of the 'details' array has the correct ErrorInfo details
 		detailsObject, ok := detailsArray[0].(map[string]interface{})
 		require.True(t, ok)
-		require.Equal(t, framework.Domain, detailsObject["domain"])
+		require.Equal(t, "dapr.io", detailsObject["domain"])
 		require.Equal(t, "DAPR_STATE_NOT_CONFIGURED", detailsObject["reason"])
 		require.Equal(t, ErrInfoType, detailsObject["@type"])
 	})
@@ -380,7 +379,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 
 		// Confirm that the ErrorInfo details are correct
 		require.NotEmptyf(t, errInfo, "ErrorInfo not found in %+v", detailsArray)
-		require.Equal(t, framework.Domain, errInfo["domain"])
+		require.Equal(t, "dapr.io", errInfo["domain"])
 		require.Equal(t, "DAPR_STATE_QUERYING_NOT_SUPPORTED", errInfo["reason"])
 
 		// Confirm that the ResourceInfo details are correct
@@ -452,7 +451,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 
 		// Confirm that the ErrorInfo details are correct
 		require.NotEmptyf(t, errInfo, "ErrorInfo not found in %+v", detailsArray)
-		require.Equal(t, framework.Domain, errInfo["domain"])
+		require.Equal(t, "dapr.io", errInfo["domain"])
 		require.Equal(t, "DAPR_STATE_QUERY_FAILED", errInfo["reason"])
 
 		// Confirm that the ResourceInfo details are correct
@@ -520,7 +519,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 
 		// Confirm that the ErrorInfo details are correct
 		require.NotEmptyf(t, errInfo, "ErrorInfo not found in %+v", detailsArray)
-		require.Equal(t, framework.Domain, errInfo["domain"])
+		require.Equal(t, "dapr.io", errInfo["domain"])
 		require.Equal(t, "DAPR_STATE_TOO_MANY_TRANSACTIONS", errInfo["reason"])
 		require.Equal(t, map[string]interface{}{
 			"currentOpsTransaction": "2", "maxOpsPerTransaction": "1",
@@ -594,7 +593,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 
 		// Confirm that the ErrorInfo details are correct
 		require.NotEmptyf(t, errInfo, "ErrorInfo not found in %+v", detailsArray)
-		require.Equal(t, framework.Domain, errInfo["domain"])
+		require.Equal(t, "dapr.io", errInfo["domain"])
 		require.Equal(t, "DAPR_STATE_TRANSACTIONS_NOT_SUPPORTED", errInfo["reason"])
 
 		// Confirm that the ResourceInfo details are correct

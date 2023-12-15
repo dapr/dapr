@@ -21,16 +21,16 @@ import (
 	"path/filepath"
 	"testing"
 
-	"golang.org/x/net/nettest"
-	"google.golang.org/grpc/status"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"golang.org/x/net/nettest"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
+	"google.golang.org/grpc"
 	grpcCodes "google.golang.org/grpc/codes"
-	
-	apierrors "github.com/dapr/dapr/pkg/api/errors"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
+
 	"github.com/dapr/components-contrib/state"
+	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	commonv1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -167,7 +167,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 
 		require.True(t, ok)
 		require.Equal(t, "DAPR_STATE_NOT_FOUND", errInfo.GetReason())
-		require.Equal(t, framework.Domain, errInfo.GetDomain())
+		require.Equal(t, "dapr.io", errInfo.GetDomain())
 		require.Nil(t, errInfo.GetMetadata())
 	})
 
@@ -208,7 +208,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		}
 		require.NotNil(t, errInfo, "ErrorInfo should be present")
 		require.Equal(t, "DAPR_STATE_ILLEGAL_KEY", errInfo.GetReason())
-		require.Equal(t, framework.Domain, errInfo.GetDomain())
+		require.Equal(t, "dapr.io", errInfo.GetDomain())
 		require.Nil(t, errInfo.GetMetadata())
 
 		require.NotNil(t, resInfo, "ResourceInfo should be present")
@@ -252,7 +252,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		errInfo := s.Details()[0]
 		require.IsType(t, &errdetails.ErrorInfo{}, errInfo)
 		require.Equal(t, "DAPR_STATE_NOT_CONFIGURED", errInfo.(*errdetails.ErrorInfo).GetReason())
-		require.Equal(t, framework.Domain, errInfo.(*errdetails.ErrorInfo).GetDomain())
+		require.Equal(t, "dapr.io", errInfo.(*errdetails.ErrorInfo).GetDomain())
 		require.Nil(t, errInfo.(*errdetails.ErrorInfo).GetMetadata())
 	})
 
@@ -288,7 +288,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		}
 		require.NotNil(t, errInfo, "ErrorInfo should be present")
 		require.Equal(t, "DAPR_STATE_QUERYING_NOT_SUPPORTED", errInfo.GetReason())
-		require.Equal(t, framework.Domain, errInfo.GetDomain())
+		require.Equal(t, "dapr.io", errInfo.GetDomain())
 		require.Nil(t, errInfo.GetMetadata())
 
 		require.NotNil(t, resInfo, "ResourceInfo should be present")
@@ -344,7 +344,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		}
 		require.NotNil(t, errInfo, "ErrorInfo should be present")
 		require.Equal(t, "DAPR_STATE_QUERY_FAILED", errInfo.GetReason())
-		require.Equal(t, framework.Domain, errInfo.GetDomain())
+		require.Equal(t, "dapr.io", errInfo.GetDomain())
 		require.Nil(t, errInfo.GetMetadata())
 
 		require.NotNil(t, resInfo, "ResourceInfo should be present")
@@ -354,8 +354,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		require.Empty(t, resInfo.GetDescription())
 	})
 
-	// TODO: test for NewErrStateStoreTransactionsNotSupported
-
+	// Covers errutils.StateStoreTooManyTransactionalOps()
 	t.Run("state store too many transactional operations", func(t *testing.T) {
 		stateStoreName := "mystore-pluggable-multimaxsize"
 		ops := make([]*rtv1.TransactionalStateOperation, 0)
@@ -403,7 +402,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		}
 		require.NotNil(t, errInfo, "ErrorInfo should be present")
 		require.Equal(t, "DAPR_STATE_TOO_MANY_TRANSACTIONS", errInfo.GetReason())
-		require.Equal(t, framework.Domain, errInfo.GetDomain())
+		require.Equal(t, "dapr.io", errInfo.GetDomain())
 		require.Equal(t, map[string]string{
 			"currentOpsTransaction": "2", "maxOpsPerTransaction": "1",
 		}, errInfo.GetMetadata())
@@ -415,6 +414,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		require.Empty(t, resInfo.GetDescription())
 	})
 
+	// Covers errutils.StateStoreTransactionsNotSupported()
 	t.Run("state transactions not supported", func(t *testing.T) {
 		stateStoreName := "mystore-non-transactional"
 		ops := make([]*rtv1.TransactionalStateOperation, 0)
@@ -465,7 +465,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		}
 		require.NotNil(t, errInfo, "ErrorInfo should be present")
 		require.Equal(t, "DAPR_STATE_TRANSACTIONS_NOT_SUPPORTED", errInfo.GetReason())
-		require.Equal(t, framework.Domain, errInfo.GetDomain())
+		require.Equal(t, "dapr.io", errInfo.GetDomain())
 
 		require.NotNil(t, resInfo, "ResourceInfo should be present")
 		require.Equal(t, "state", resInfo.GetResourceType())

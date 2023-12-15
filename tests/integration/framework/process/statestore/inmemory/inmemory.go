@@ -120,7 +120,7 @@ func (w *WrappedTransactionalMultiMaxSize) MultiMaxSize() int {
 	if w.transactionalStoreMultiMaxSizeFn != nil {
 		return w.transactionalStoreMultiMaxSizeFn()
 	}
-	return 10000000
+	return -1
 }
 
 func (w *Wrapped) Close() error {

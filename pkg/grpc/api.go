@@ -24,8 +24,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	apierrors "github.com/dapr/dapr/pkg/api/errors"
-
 	otelTrace "go.opentelemetry.io/otel/trace"
 	"golang.org/x/exp/slices"
 	"google.golang.org/grpc"
@@ -41,6 +39,7 @@ import (
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
+	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
