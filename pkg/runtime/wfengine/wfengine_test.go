@@ -169,7 +169,7 @@ func TestSingleActivityWorkflow_ReuseInstanceIDIgnore(t *testing.T) {
 		suffix := opt(engine)
 		t.Run(opt(engine), func(t *testing.T) {
 			instanceID := api.InstanceID("IGNORE_IF_RUNNING_OR_COMPLETED_" + suffix)
-			reuseIdPolicy := &api.OrchestrationIdReusePolicy{
+			reuseIDPolicy := &api.OrchestrationIdReusePolicy{
 				Action:          api.IGNORE,
 				OperationStatus: []api.OrchestrationStatus{api.RUNNING, api.COMPLETED, api.PENDING},
 			}
@@ -181,13 +181,13 @@ func TestSingleActivityWorkflow_ReuseInstanceIDIgnore(t *testing.T) {
 			client.WaitForOrchestrationStart(ctx, id)
 			pivotTime := time.Now()
 			// schedule again, it should ignore creating the new orchestration
-			id, err = client.ScheduleNewOrchestration(ctx, "SingleActivity", api.WithInput("World"), api.WithInstanceID(id), api.WithOrchestrationIdReusePolicy(reuseIdPolicy))
+			id, err = client.ScheduleNewOrchestration(ctx, "SingleActivity", api.WithInput("World"), api.WithInstanceID(id), api.WithOrchestrationIdReusePolicy(reuseIDPolicy))
 			require.NoError(t, err)
 			timeoutCtx, cancelTimeout := context.WithTimeout(ctx, 30*time.Second)
 			defer cancelTimeout()
 			metadata, err := client.WaitForOrchestrationCompletion(timeoutCtx, id)
 			require.NoError(t, err)
-			assert.Equal(t, true, metadata.IsComplete())
+			assert.True(t, metadata.IsComplete())
 			// the first orchestration should complete as the second one is ignored
 			assert.Equal(t, `"Hello, 世界!"`, metadata.SerializedOutput)
 			// assert the orchestration created timestamp
@@ -227,7 +227,7 @@ func TestSingleActivityWorkflow_ReuseInstanceIDTerminate(t *testing.T) {
 		suffix := opt(engine)
 		t.Run(opt(engine), func(t *testing.T) {
 			instanceID := api.InstanceID("IGNORE_IF_RUNNING_OR_COMPLETED_" + suffix)
-			reuseIdPolicy := &api.OrchestrationIdReusePolicy{
+			reuseIDPolicy := &api.OrchestrationIdReusePolicy{
 				Action:          api.TERMINATE,
 				OperationStatus: []api.OrchestrationStatus{api.RUNNING, api.COMPLETED, api.PENDING},
 			}
@@ -239,13 +239,13 @@ func TestSingleActivityWorkflow_ReuseInstanceIDTerminate(t *testing.T) {
 			client.WaitForOrchestrationStart(ctx, id)
 			pivotTime := time.Now()
 			// schedule again, it should ignore creating the new orchestration
-			id, err = client.ScheduleNewOrchestration(ctx, "SingleActivity", api.WithInput("World"), api.WithInstanceID(id), api.WithOrchestrationIdReusePolicy(reuseIdPolicy))
+			id, err = client.ScheduleNewOrchestration(ctx, "SingleActivity", api.WithInput("World"), api.WithInstanceID(id), api.WithOrchestrationIdReusePolicy(reuseIDPolicy))
 			require.NoError(t, err)
 			timeoutCtx, cancelTimeout := context.WithTimeout(ctx, 30*time.Second)
 			defer cancelTimeout()
 			metadata, err := client.WaitForOrchestrationCompletion(timeoutCtx, id)
 			require.NoError(t, err)
-			assert.Equal(t, true, metadata.IsComplete())
+			assert.True(t, metadata.IsComplete())
 			// the first orchestration should complete as the second one is ignored
 			assert.Equal(t, `"Hello, World!"`, metadata.SerializedOutput)
 			// assert the orchestration created timestamp
@@ -287,10 +287,9 @@ func TestSingleActivityWorkflow_ReuseInstanceIDError(t *testing.T) {
 			instanceID := api.InstanceID("IGNORE_IF_RUNNING_OR_COMPLETED_" + suffix)
 			id, err := client.ScheduleNewOrchestration(ctx, "SingleActivity", api.WithInput("世界"), api.WithInstanceID(instanceID))
 			require.NoError(t, err)
-			id, err = client.ScheduleNewOrchestration(ctx, "SingleActivity", api.WithInput("World"), api.WithInstanceID(id))
-			if assert.Error(t, err) {
-				assert.Contains(t, err.Error(), "already exists")
-			}
+			_, err = client.ScheduleNewOrchestration(ctx, "SingleActivity", api.WithInput("World"), api.WithInstanceID(id))
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "already exists")
 		})
 	}
 }

@@ -178,7 +178,7 @@ func (wf *workflowActor) createWorkflowInstance(ctx context.Context, actorID str
 	if err = json.Unmarshal(request, &policyAndEventData); err != nil {
 		return fmt.Errorf("failed to unmarshal policyAndEventData: %w", err)
 	}
-	reuseIdPolicy := policyAndEventData.Policy
+	reuseIDPolicy := policyAndEventData.Policy
 	startEventBytes := policyAndEventData.EventData
 
 	// Ensure that the start event payload is a valid durabletask execution-started event
@@ -204,13 +204,13 @@ func (wf *workflowActor) createWorkflowInstance(ctx context.Context, actorID str
 	// orchestration already exists, apply reuse id policy
 	runtimeState := getRuntimeState(actorID, state)
 	runtimeStatus := runtimeState.RuntimeStatus()
-	targetStatusValues := backend.BuildStatusSet(reuseIdPolicy.OperationStatus)
+	targetStatusValues := backend.BuildStatusSet(reuseIDPolicy.GetOperationStatus())
 	// if target status doesn't match, fall back to original logic, create instance only if previous one is completed
 	if _, ok := targetStatusValues[runtimeStatus]; !ok {
 		return wf.createIfCompleted(ctx, runtimeState, actorID, state, startEvent)
 	}
 
-	switch reuseIdPolicy.Action {
+	switch reuseIDPolicy.GetAction() {
 	case api.IGNORE:
 		// Log an warning message and ignore creating new instance
 		wfLogger.Warnf("An instance with ID '%s' already exists; dropping duplicate create request", actorID)
@@ -218,7 +218,7 @@ func (wf *workflowActor) createWorkflowInstance(ctx context.Context, actorID str
 	case api.TERMINATE:
 		// terminate existing instance
 		if err := wf.cleanupOrchestrationStateInternal(ctx, actorID, state, false); err != nil {
-			return fmt.Errorf("Failed to terminate existing instance with ID '%s'", actorID)
+			return fmt.Errorf("failed to terminate existing instance with ID '%s'", actorID)
 		}
 
 		// created a new instance
