@@ -204,7 +204,7 @@ func (wf *workflowActor) createWorkflowInstance(ctx context.Context, actorID str
 	// orchestration already exists, apply reuse id policy
 	runtimeState := getRuntimeState(actorID, state)
 	runtimeStatus := runtimeState.RuntimeStatus()
-	targetStatusValues := backend.BuildStatusSet(reuseIDPolicy.GetOperationStatus())
+	targetStatusValues := buildStatusSet(reuseIDPolicy.GetOperationStatus())
 	// if target status doesn't match, fall back to original logic, create instance only if previous one is completed
 	if _, ok := targetStatusValues[runtimeStatus]; !ok {
 		return wf.createIfCompleted(ctx, runtimeState, actorID, state, startEvent)
@@ -227,6 +227,14 @@ func (wf *workflowActor) createWorkflowInstance(ctx context.Context, actorID str
 	}
 	// default Action ERROR, fall back to original logic
 	return wf.createIfCompleted(ctx, runtimeState, actorID, state, startEvent)
+}
+
+func buildStatusSet(statuses []api.OrchestrationStatus) map[api.OrchestrationStatus]struct{} {
+	statusSet := make(map[api.OrchestrationStatus]struct{}, len(statuses))
+	for _, status := range statuses {
+		statusSet[status] = struct{}{}
+	}
+	return statusSet
 }
 
 func (wf *workflowActor) createIfCompleted(ctx context.Context, runtimeState *backend.OrchestrationRuntimeState, actorID string, state *workflowState, startEvent *backend.HistoryEvent) error {
