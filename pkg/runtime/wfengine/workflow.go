@@ -196,7 +196,7 @@ func (wf *workflowActor) createWorkflowInstance(ctx context.Context, actorID str
 		}
 	}
 
-	// orchestration doesn't exist, create it.
+	// orchestration didn't exist and just create it.
 	if created {
 		return wf.createInstance(ctx, actorID, startEvent, state)
 	}
