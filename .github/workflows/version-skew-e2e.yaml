@@ -115,6 +115,13 @@ jobs:
         repository: dapr/dapr
         path: latest-release
         ref: v${{ env.DAPR_PREV_VERSION }}
+    - name: Set DAPR_REPO_DIR
+      run: |
+        if [ "${{ matrix.mode }}" == "dapr-sidecar-master" ]; then
+          echo "DAPR_REPO_DIR=$(pwd)" >> $GITHUB_ENV
+        else
+          echo "DAPR_REPO_DIR=$(pwd)/latest-release" >> $GITHUB_ENV
+        fi
     - name: Apply patches to latest release
       run: |
         export DAPR_LATEST_MAJOR_MINOR=$(echo ${{ env.DAPR_PREV_VERSION }} | cut -d. -f1-2)
@@ -197,7 +204,7 @@ jobs:
 
     - name: Build and push test apps
       run: |
-        cd latest-release && make build-push-e2e-app-all
+        cd ${{ env.DAPR_REPO_DIR }} && make build-push-e2e-app-all
 
     - name: Setup Dapr - control-plane master
       if: matrix.mode == 'control-plane-master'
@@ -222,7 +229,7 @@ jobs:
 
     - name: Setup Components
       run: |
-        cd latest-release
+        cd ${{ env.DAPR_REPO_DIR }}
 
         make setup-helm-init
         make setup-test-env-redis
@@ -237,12 +244,12 @@ jobs:
 
     - name: Run tests
       run: |
-        cd latest-release && make test-e2e-all
+        cd ${{ env.DAPR_REPO_DIR }} && make test-e2e-all
 
     - name: Save control plane logs
       if: always()
       run: |
-        cd latest-release && make save-dapr-control-plane-k8s-logs
+        cd ${{ env.DAPR_REPO_DIR }} && make save-dapr-control-plane-k8s-logs
 
     # Container log files can be bigger than the maximum file size allowed by GitHub
     - name: Compress logs
