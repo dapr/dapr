@@ -62,6 +62,11 @@ type recoverableError struct {
 	cause error
 }
 
+type PolicyAndEventData struct {
+	Policy    *api.OrchestrationIdReusePolicy `json:"policy"`
+	EventData []byte                          `json:"eventData"`
+}
+
 // workflowScheduler is a func interface for pushing workflow (orchestration) work items into the backend
 type workflowScheduler func(ctx context.Context, wi *backend.OrchestrationWorkItem) error
 
@@ -80,7 +85,7 @@ func (err recoverableError) Error() string {
 func NewWorkflowActor(scheduler workflowScheduler, config actorsBackendConfig) *workflowActor {
 	return &workflowActor{
 		scheduler:        scheduler,
-		defaultTimeout:   30 * time.Second,
+		defaultTimeout:   300 * time.Minute,
 		reminderInterval: 1 * time.Minute,
 		config:           config,
 	}
@@ -156,7 +161,7 @@ func (wf *workflowActor) DeactivateActor(ctx context.Context, actorID string) er
 	return nil
 }
 
-func (wf *workflowActor) createWorkflowInstance(ctx context.Context, actorID string, startEventBytes []byte) error {
+func (wf *workflowActor) createWorkflowInstance(ctx context.Context, actorID string, request []byte) error {
 	// create a new state entry if one doesn't already exist
 	state, err := wf.loadInternalState(ctx, actorID)
 	if err != nil {
@@ -168,6 +173,13 @@ func (wf *workflowActor) createWorkflowInstance(ctx context.Context, actorID str
 		state = NewWorkflowState(wf.config)
 		created = true
 	}
+
+	var policyAndEventData PolicyAndEventData
+	if err = json.Unmarshal(request, &policyAndEventData); err != nil {
+		return fmt.Errorf("failed to unmarshal policyAndEventData: %w", err)
+	}
+	reuseIdPolicy := policyAndEventData.Policy
+	startEventBytes := policyAndEventData.EventData
 
 	// Ensure that the start event payload is a valid durabletask execution-started event
 	startEvent, err := backend.UnmarshalHistoryEvent(startEventBytes)
@@ -184,20 +196,54 @@ func (wf *workflowActor) createWorkflowInstance(ctx context.Context, actorID str
 		}
 	}
 
-	// We block (re)creation of existing workflows unless they are in a completed state
-	// Or if they still have any pending activity result awaited.
-	if !created {
-		runtimeState := getRuntimeState(actorID, state)
-		if !runtimeState.IsCompleted() {
-			return fmt.Errorf("an active workflow with ID '%s' already exists", actorID)
-		}
-		if wf.activityResultAwaited.Load() {
-			return fmt.Errorf("a terminated workflow with ID '%s' is already awaiting an activity result", actorID)
-		}
-		wfLogger.Infof("Workflow actor '%s': workflow was previously completed and is being recreated", actorID)
-		state.Reset()
+	// orchestration doesn't exist, create it.
+	if created {
+		return wf.createInstance(ctx, actorID, startEvent, state)
 	}
 
+	// orchestration already exists, apply reuse id policy
+	runtimeState := getRuntimeState(actorID, state)
+	runtimeStatus := runtimeState.RuntimeStatus()
+	targetStatusValues := backend.BuildStatusSet(reuseIdPolicy.OperationStatus)
+	// if target status doesn't match, fall back to original logic, create instance only if previous one is completed
+	if _, ok := targetStatusValues[runtimeStatus]; !ok {
+		return wf.createIfCompleted(ctx, runtimeState, actorID, state, startEvent)
+	}
+
+	switch reuseIdPolicy.Action {
+	case api.IGNORE:
+		// Log an warning message and ignore creating new instance
+		wfLogger.Warnf("An instance with ID '%s' already exists; dropping duplicate create request", actorID)
+		return nil
+	case api.TERMINATE:
+		// terminate existing instance
+		if err := wf.cleanupOrchestrationStateInternal(ctx, actorID, state, false); err != nil {
+			return fmt.Errorf("Failed to terminate existing instance with ID '%s'", actorID)
+		}
+
+		// created a new instance
+		state.Reset()
+		return wf.createInstance(ctx, actorID, startEvent, state)
+	}
+	// default Action ERROR, fall back to original logic
+	return wf.createIfCompleted(ctx, runtimeState, actorID, state, startEvent)
+}
+
+func (wf *workflowActor) createIfCompleted(ctx context.Context, runtimeState *backend.OrchestrationRuntimeState, actorID string, state *workflowState, startEvent *backend.HistoryEvent) error {
+	// We block (re)creation of existing workflows unless they are in a completed state
+	// Or if they still have any pending activity result awaited.
+	if !runtimeState.IsCompleted() {
+		return fmt.Errorf("an active workflow with ID '%s' already exists", actorID)
+	}
+	if wf.activityResultAwaited.Load() {
+		return fmt.Errorf("a terminated workflow with ID '%s' is already awaiting an activity result", actorID)
+	}
+	wfLogger.Infof("Workflow actor '%s': workflow was previously completed and is being recreated", actorID)
+	state.Reset()
+	return wf.createInstance(ctx, actorID, startEvent, state)
+}
+
+func (wf *workflowActor) createInstance(ctx context.Context, actorID string, startEvent *backend.HistoryEvent, state *workflowState) error {
 	// Schedule a reminder to execute immediately after this operation. The reminder will trigger the actual
 	// workflow execution. This is preferable to using the current thread so that we don't block the client
 	// while the workflow logic is running.
@@ -207,6 +253,36 @@ func (wf *workflowActor) createWorkflowInstance(ctx context.Context, actorID str
 
 	state.AddToInbox(startEvent)
 	return wf.saveInternalState(ctx, actorID, state)
+}
+
+// This method cleans up a workflow associated with the given actorID
+func (wf *workflowActor) cleanupOrchestrationStateInternal(ctx context.Context, actorID string, state *workflowState, requireCompleted bool) error {
+	runtimeState := getRuntimeState(actorID, state)
+	runtimeStatus := runtimeState.RuntimeStatus()
+	isCompleted := runtimeStatus == api.COMPLETED || runtimeStatus == api.TERMINATED || runtimeStatus == api.FAILED
+
+	// purge orchestration in ['COMPLETED', 'FAILED', 'TERMINATED']
+	if requireCompleted && !isCompleted {
+		return api.ErrNotCompleted
+	}
+
+	err := wf.removeCompletedStateData(ctx, state, actorID)
+	if err != nil {
+		return err
+	}
+
+	// This will create a request to purge everything
+	req, err := state.GetPurgeRequest(actorID)
+	if err != nil {
+		return err
+	}
+	// This will do the purging
+	err = wf.actors.TransactionalStateOperation(ctx, req)
+	if err != nil {
+		return err
+	}
+	wf.states.Delete(actorID)
+	return nil
 }
 
 func (wf *workflowActor) getWorkflowMetadata(ctx context.Context, actorID string) (*api.OrchestrationMetadata, error) {
@@ -250,29 +326,7 @@ func (wf *workflowActor) purgeWorkflowState(ctx context.Context, actorID string)
 	if state == nil {
 		return api.ErrInstanceNotFound
 	}
-
-	runtimeState := getRuntimeState(actorID, state)
-	if !runtimeState.IsCompleted() {
-		return api.ErrNotCompleted
-	}
-
-	err = wf.removeCompletedStateData(ctx, state, actorID)
-	if err != nil {
-		return err
-	}
-
-	// This will create a request to purge everything
-	req, err := state.GetPurgeRequest(actorID)
-	if err != nil {
-		return err
-	}
-	// This will do the purging
-	err = wf.actors.TransactionalStateOperation(ctx, req)
-	if err != nil {
-		return err
-	}
-	wf.states.Delete(actorID)
-	return nil
+	return wf.cleanupOrchestrationStateInternal(ctx, actorID, state, true)
 }
 
 func (wf *workflowActor) addWorkflowEvent(ctx context.Context, actorID string, historyEventBytes []byte) error {

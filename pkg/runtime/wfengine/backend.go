@@ -16,6 +16,7 @@ package wfengine
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -125,7 +126,7 @@ func (be *actorBackend) SetActorRuntime(actors actors.Actors) {
 // Internally, creating a workflow instance also creates a new actor with the same ID. The create
 // request is saved into the actor's "inbox" and then executed via a reminder thread. If the app is
 // scaled out across multiple replicas, the actor might get assigned to a replicas other than this one.
-func (be *actorBackend) CreateOrchestrationInstance(ctx context.Context, e *backend.HistoryEvent) error {
+func (be *actorBackend) CreateOrchestrationInstance(ctx context.Context, e *backend.HistoryEvent, opts ...backend.OrchestrationIdReusePolicyOptions) error {
 	if err := be.validateConfiguration(); err != nil {
 		return err
 	}
@@ -139,17 +140,30 @@ func (be *actorBackend) CreateOrchestrationInstance(ctx context.Context, e *back
 		workflowInstanceID = oi.GetInstanceId()
 	}
 
+	policy := &api.OrchestrationIdReusePolicy{}
+
+	for _, opt := range opts {
+		opt(policy)
+	}
+
 	eventData, err := backend.MarshalHistoryEvent(e)
 	if err != nil {
 		return err
 	}
+
+	policyAndEventData := PolicyAndEventData{
+		Policy:    policy,
+		EventData: eventData,
+	}
+
+	rawDataBytes, _ := json.Marshal(policyAndEventData)
 
 	// Invoke the well-known workflow actor directly, which will be created by this invocation
 	// request. Note that this request goes directly to the actor runtime, bypassing the API layer.
 	req := invokev1.
 		NewInvokeMethodRequest(CreateWorkflowInstanceMethod).
 		WithActor(be.config.workflowActorType, workflowInstanceID).
-		WithRawDataBytes(eventData).
+		WithRawDataBytes(rawDataBytes).
 		WithContentType(invokev1.OctetStreamContentType)
 	defer req.Close()
 
