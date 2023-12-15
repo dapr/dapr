@@ -143,7 +143,7 @@ func TestInternalActorCall(t *testing.T) {
 		WithData([]byte(testInput)).
 		WithContentType(invokev1.OctetStreamContentType)
 
-	resp, err := testActorRuntime.callInternalActor(context.Background(), req)
+	resp, err := testActorRuntime.callInternalActor(context.Background(), req, internalActors[testActorType])
 	require.NoError(t, err)
 	require.NotNil(t, resp)
 
@@ -218,7 +218,7 @@ func TestInternalActorDeactivation(t *testing.T) {
 		NewInternalInvokeRequest("Foo").
 		WithActor(testActorType, testActorID)
 
-	_, err = testActorRuntime.callInternalActor(context.Background(), req)
+	_, err = testActorRuntime.callInternalActor(context.Background(), req, ia)
 	require.NoError(t, err)
 
 	// Deactivate the actor, ensuring no errors and that the correct actor ID was provided.

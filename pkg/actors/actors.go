@@ -124,6 +124,7 @@ type actorsRuntime struct {
 	compStore        *compstore.ComponentStore
 	clock            clock.WithTicker
 	internalActors   map[string]InternalActor
+	internalActorsMu sync.RWMutex
 	sec              security.Handler
 	wg               sync.WaitGroup
 	closed           atomic.Bool
@@ -379,7 +380,9 @@ func (a *actorsRuntime) deactivateActor(act *actor) error {
 	}
 
 	// If it's an internal actor, we call it directly
+	a.internalActorsMu.RLock()
 	internalAct := a.internalActors[act.actorType]
+	a.internalActorsMu.RUnlock()
 	if internalAct != nil {
 		err = internalAct.DeactivateActor(ctx, act.actorID)
 		if err != nil {
@@ -476,8 +479,11 @@ func (a *actorsRuntime) Call(ctx context.Context, req *internalv1pb.InternalInvo
 
 	if a.isActorLocal(lar.Address, a.actorsConfig.Config.HostAddress, a.actorsConfig.Config.Port) {
 		// If this is an internal actor, we call it using a separate path
-		if a.internalActors[actorType] != nil {
-			res, err = a.callInternalActor(ctx, req)
+		a.internalActorsMu.RLock()
+		internalAct := a.internalActors[actorType]
+		a.internalActorsMu.RUnlock()
+		if internalAct != nil {
+			res, err = a.callInternalActor(ctx, req, internalAct)
 		} else {
 			res, err = a.callLocalActor(ctx, req)
 		}
@@ -694,7 +700,7 @@ func (a *actorsRuntime) lockInternalActorForRequest(act *actor, req *internalv1p
 }
 
 // Calls a local, internal actor
-func (a *actorsRuntime) callInternalActor(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
+func (a *actorsRuntime) callInternalActor(ctx context.Context, req *internalv1pb.InternalInvokeRequest, internalAct InternalActor) (*internalv1pb.InternalInvokeResponse, error) {
 	if req.GetMessage() == nil {
 		return nil, errors.New("message is nil in request")
 	}
@@ -712,7 +718,7 @@ func (a *actorsRuntime) callInternalActor(ctx context.Context, req *internalv1pb
 	policyDef := a.resiliency.ActorPostLockPolicy(act.actorType, act.actorID)
 	policyRunner := resiliency.NewRunner[*internalv1pb.InternalInvokeResponse](ctx, policyDef)
 	return policyRunner(func(ctx context.Context) (*internalv1pb.InternalInvokeResponse, error) {
-		resData, err := a.internalActors[act.actorType].InvokeMethod(ctx, act.actorID, msg.GetMethod(), msg.GetData().GetValue(), md)
+		resData, err := internalAct.InvokeMethod(ctx, act.actorID, msg.GetMethod(), msg.GetData().GetValue(), md)
 		if err != nil {
 			return nil, fmt.Errorf("error from internal actor: %w", err)
 		}
@@ -992,7 +998,7 @@ func (a *actorsRuntime) executeReminder(reminder *internal.Reminder) bool {
 }
 
 // Executes a reminder or timer on an internal actor
-func (a *actorsRuntime) doExecuteReminderOrTimerOnInternalActor(ctx context.Context, reminder *internal.Reminder, isTimer bool) (err error) {
+func (a *actorsRuntime) doExecuteReminderOrTimerOnInternalActor(ctx context.Context, reminder *internal.Reminder, isTimer bool, internalAct InternalActor) (err error) {
 	// Get the actor, activating it as necessary, and the metadata for the request
 	act := a.getOrCreateActor(&internalv1pb.Actor{
 		ActorType: reminder.ActorType,
@@ -1004,7 +1010,6 @@ func (a *actorsRuntime) doExecuteReminderOrTimerOnInternalActor(ctx context.Cont
 	}
 	defer act.unlock()
 
-	internalAct := a.internalActors[reminder.ActorType]
 	if isTimer {
 		log.Debugf("Executing timer for internal actor '%s'", reminder.Key())
 
@@ -1039,8 +1044,11 @@ func (a *actorsRuntime) doExecuteReminderOrTimer(ctx context.Context, reminder *
 	}
 
 	// If it's an internal actor, we call it directly
-	if a.internalActors[reminder.ActorType] != nil {
-		return a.doExecuteReminderOrTimerOnInternalActor(ctx, reminder, isTimer)
+	a.internalActorsMu.RLock()
+	internalAct := a.internalActors[reminder.ActorType]
+	a.internalActorsMu.RUnlock()
+	if internalAct != nil {
+		return a.doExecuteReminderOrTimerOnInternalActor(ctx, reminder, isTimer, internalAct)
 	}
 
 	var (
@@ -1149,6 +1157,9 @@ func (a *actorsRuntime) RegisterInternalActor(ctx context.Context, actorType str
 	if !a.haveCompatibleStorage() {
 		return fmt.Errorf("unable to register internal actor '%s': %w", actorType, ErrIncompatibleStateStore)
 	}
+
+	a.internalActorsMu.Lock()
+	defer a.internalActorsMu.Unlock()
 
 	if a.internalActors[actorType] != nil {
 		return fmt.Errorf("actor type %s already registered", actorType)
