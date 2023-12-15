@@ -53,11 +53,6 @@ import (
 
 var log = logger.NewLogger("dapr.operator")
 
-const (
-	healthzPort   = 8080
-	webhookCAName = "dapr-webhook-ca"
-)
-
 // Operator is an Dapr Kubernetes Operator for managing components and sidecar lifecycle.
 type Operator interface {
 	Run(ctx context.Context) error
@@ -75,6 +70,8 @@ type Options struct {
 	ArgoRolloutServiceReconcilerEnabled bool
 	WatchdogCanPatchPodLabels           bool
 	TrustAnchorsFile                    string
+	APIPort                             int
+	HealthzPort                         int
 }
 
 type operator struct {
@@ -84,6 +81,7 @@ type operator struct {
 
 	mgr         ctrl.Manager
 	secProvider security.Provider
+	healthzPort int
 }
 
 // NewOperator returns a new Dapr Operator.
@@ -183,7 +181,12 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 		mgr:         mgr,
 		secProvider: secProvider,
 		config:      config,
-		apiServer:   api.NewAPIServer(mgrClient),
+		healthzPort: opts.HealthzPort,
+		apiServer: api.NewAPIServer(api.Options{
+			Client:   mgrClient,
+			Security: secProvider,
+			Port:     opts.APIPort,
+		}),
 	}, nil
 }
 
@@ -214,7 +217,8 @@ func (o *operator) Run(ctx context.Context) error {
 	/*
 		Make sure to set `ENABLE_WEBHOOKS=false` when we run locally.
 	*/
-	if !strings.EqualFold(os.Getenv("ENABLE_WEBHOOKS"), "false") {
+	enableConversionWebhooks := !strings.EqualFold(os.Getenv("ENABLE_WEBHOOKS"), "false")
+	if enableConversionWebhooks {
 		err := ctrl.NewWebhookManagedBy(o.mgr).
 			For(&subscriptionsapiV1alpha1.Subscription{}).
 			Complete()
@@ -243,7 +247,7 @@ func (o *operator) Run(ctx context.Context) error {
 		},
 		func(ctx context.Context) error {
 			// start healthz server
-			if rErr := healthzServer.Run(ctx, healthzPort); rErr != nil {
+			if rErr := healthzServer.Run(ctx, o.healthzPort); rErr != nil {
 				return fmt.Errorf("failed to start healthz server: %w", rErr)
 			}
 			return nil
@@ -258,6 +262,10 @@ func (o *operator) Run(ctx context.Context) error {
 			return nil
 		},
 		func(ctx context.Context) error {
+			if !enableConversionWebhooks {
+				return nil
+			}
+
 			sec, rErr := o.secProvider.Handler(ctx)
 			if rErr != nil {
 				return rErr
@@ -266,6 +274,10 @@ func (o *operator) Run(ctx context.Context) error {
 			return nil
 		},
 		func(ctx context.Context) error {
+			if !enableConversionWebhooks {
+				return nil
+			}
+
 			sec, rErr := o.secProvider.Handler(ctx)
 			if rErr != nil {
 				return rErr
@@ -277,7 +289,7 @@ func (o *operator) Run(ctx context.Context) error {
 			}
 
 			for {
-				rErr = o.patchCRDs(ctx, caBundle, o.mgr.GetConfig(), "subscriptions.dapr.io")
+				rErr = o.patchConversionWebhooksInCRDs(ctx, caBundle, o.mgr.GetConfig(), "subscriptions.dapr.io")
 				if rErr != nil {
 					return rErr
 				}
@@ -290,17 +302,11 @@ func (o *operator) Run(ctx context.Context) error {
 			}
 		},
 		func(ctx context.Context) error {
-			sec, rErr := o.secProvider.Handler(ctx)
-			if rErr != nil {
-				return rErr
-			}
-
 			log.Info("Starting API server")
-			rErr = o.apiServer.Run(ctx, sec)
+			rErr := o.apiServer.Run(ctx)
 			if rErr != nil {
 				return fmt.Errorf("failed to start API server: %w", rErr)
 			}
-
 			return nil
 		},
 		func(ctx context.Context) error {
@@ -351,7 +357,8 @@ func (o *operator) Run(ctx context.Context) error {
 	return runner.Run(ctx)
 }
 
-func (o *operator) patchCRDs(ctx context.Context, caBundle []byte, conf *rest.Config, crdNames ...string) error {
+// Patches the conversion webhooks in the specified CRDs to set the TLS configuration (including namespace and CA bundle)
+func (o *operator) patchConversionWebhooksInCRDs(ctx context.Context, caBundle []byte, conf *rest.Config, crdNames ...string) error {
 	clientSet, err := apiextensionsclient.NewForConfig(conf)
 	if err != nil {
 		return fmt.Errorf("could not get API extension client: %v", err)

@@ -14,10 +14,11 @@ limitations under the License.
 package hashing
 
 import (
-	"fmt"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var nodes = []string{"node1", "node2", "node3", "node4", "node5"}
@@ -25,7 +26,7 @@ var nodes = []string{"node1", "node2", "node3", "node4", "node5"}
 func TestReplicationFactor(t *testing.T) {
 	keys := []string{}
 	for i := 0; i < 100; i++ {
-		keys = append(keys, fmt.Sprint(i))
+		keys = append(keys, strconv.Itoa(i))
 	}
 
 	t.Run("varying replication factors, no movement", func(t *testing.T) {
@@ -44,7 +45,7 @@ func TestReplicationFactor(t *testing.T) {
 
 			for _, k := range keys {
 				h, err := h.Get(k)
-				assert.NoError(t, err)
+				require.NoError(t, err)
 
 				k1[k] = h
 			}
@@ -54,7 +55,7 @@ func TestReplicationFactor(t *testing.T) {
 
 			for _, k := range keys {
 				h, err := h.Get(k)
-				assert.NoError(t, err)
+				require.NoError(t, err)
 
 				orgS := k1[k]
 				if orgS != nodeToRemove {

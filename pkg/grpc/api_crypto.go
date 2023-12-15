@@ -46,24 +46,24 @@ func (a *api) EncryptAlpha1(stream runtimev1pb.Dapr_EncryptAlpha1Server) (err er
 	}
 
 	// Validate required options
-	if reqProto.Options == nil {
+	if reqProto.GetOptions() == nil {
 		err = messages.ErrBadRequest.WithFormat("first message does not contain the required options")
 		a.Logger.Debug(err)
 		return err
 	}
-	if reqProto.Options.KeyName == "" {
+	if reqProto.GetOptions().GetKeyName() == "" {
 		err = messages.ErrBadRequest.WithFormat("missing property 'keyName' in the options message")
 		a.Logger.Debug(err)
 		return err
 	}
-	if reqProto.Options.KeyWrapAlgorithm == "" {
+	if reqProto.GetOptions().GetKeyWrapAlgorithm() == "" {
 		err = messages.ErrBadRequest.WithFormat("missing property 'keyWrapAlgorithm' in the options message")
 		a.Logger.Debug(err)
 		return err
 	}
 
 	// Validate the request and get the component
-	component, err := a.CryptoValidateRequest(reqProto.Options.ComponentName)
+	component, err := a.CryptoValidateRequest(reqProto.GetOptions().GetComponentName())
 	if err != nil {
 		// Error is already logged
 		return err
@@ -71,18 +71,18 @@ func (a *api) EncryptAlpha1(stream runtimev1pb.Dapr_EncryptAlpha1Server) (err er
 
 	// Options
 	encOpts := encv1.EncryptOptions{
-		KeyName:   reqProto.Options.KeyName,
-		Algorithm: encv1.KeyAlgorithm(strings.ToUpper(reqProto.Options.KeyWrapAlgorithm)),
-		WrapKeyFn: a.CryptoGetWrapKeyFn(stream.Context(), reqProto.Options.ComponentName, component),
+		KeyName:   reqProto.GetOptions().GetKeyName(),
+		Algorithm: encv1.KeyAlgorithm(strings.ToUpper(reqProto.GetOptions().GetKeyWrapAlgorithm())),
+		WrapKeyFn: a.CryptoGetWrapKeyFn(stream.Context(), reqProto.GetOptions().GetComponentName(), component),
 
 		// The next values are optional and could be empty
-		OmitKeyName:       reqProto.Options.OmitDecryptionKeyName,
-		DecryptionKeyName: reqProto.Options.DecryptionKeyName,
+		OmitKeyName:       reqProto.GetOptions().GetOmitDecryptionKeyName(),
+		DecryptionKeyName: reqProto.GetOptions().GetDecryptionKeyName(),
 	}
 
 	// Set the cipher if present
-	if reqProto.Options.DataEncryptionCipher != "" {
-		encOpts.Cipher = ptr.Of(encv1.Cipher(strings.ToUpper(reqProto.Options.DataEncryptionCipher)))
+	if reqProto.GetOptions().GetDataEncryptionCipher() != "" {
+		encOpts.Cipher = ptr.Of(encv1.Cipher(strings.ToUpper(reqProto.GetOptions().GetDataEncryptionCipher())))
 	}
 
 	// Process the request as a stream
@@ -101,14 +101,14 @@ func (a *api) DecryptAlpha1(stream runtimev1pb.Dapr_DecryptAlpha1Server) (err er
 	}
 
 	// Validate required options
-	if reqProto.Options == nil {
+	if reqProto.GetOptions() == nil {
 		err = messages.ErrBadRequest.WithFormat("first message does not contain the required options")
 		a.Logger.Debug(err)
 		return err
 	}
 
 	// Validate the request and get the component
-	component, err := a.CryptoValidateRequest(reqProto.Options.ComponentName)
+	component, err := a.CryptoValidateRequest(reqProto.GetOptions().GetComponentName())
 	if err != nil {
 		// Error is already logged
 		return err
@@ -116,10 +116,10 @@ func (a *api) DecryptAlpha1(stream runtimev1pb.Dapr_DecryptAlpha1Server) (err er
 
 	// Options
 	decOpts := encv1.DecryptOptions{
-		UnwrapKeyFn: a.CryptoGetUnwrapKeyFn(stream.Context(), reqProto.Options.ComponentName, component),
+		UnwrapKeyFn: a.CryptoGetUnwrapKeyFn(stream.Context(), reqProto.GetOptions().GetComponentName(), component),
 
 		// The next values are optional and could be empty
-		KeyName: reqProto.Options.KeyName,
+		KeyName: reqProto.GetOptions().GetKeyName(),
 	}
 
 	// Process the request as a stream

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -159,13 +160,13 @@ func TestDeclarativeSubscriptionsV1(t *testing.T) {
 	t.Run("load multiple subscriptions in different files", func(t *testing.T) {
 		for i := 0; i < subscriptionCount; i++ {
 			s := testDeclarativeSubscriptionV1()
-			s.Spec.Topic = fmt.Sprintf("%v", i)
-			s.Spec.Route = fmt.Sprintf("%v", i)
-			s.Spec.Pubsubname = fmt.Sprintf("%v", i)
+			s.Spec.Topic = strconv.Itoa(i)
+			s.Spec.Route = strconv.Itoa(i)
+			s.Spec.Pubsubname = strconv.Itoa(i)
 			s.Spec.Metadata = map[string]string{
-				"testName": fmt.Sprintf("%v", i),
+				"testName": strconv.Itoa(i),
 			}
-			s.Scopes = []string{fmt.Sprintf("%v", i)}
+			s.Scopes = []string{strconv.Itoa(i)}
 
 			filepath := fmt.Sprintf("%s/%v.yaml", dir, i)
 			writeSubscriptionToDisk(s, filepath)
@@ -175,13 +176,13 @@ func TestDeclarativeSubscriptionsV1(t *testing.T) {
 		subs := DeclarativeLocal([]string{dir}, "", log)
 		if assert.Len(t, subs, subscriptionCount) {
 			for i := 0; i < subscriptionCount; i++ {
-				assert.Equal(t, fmt.Sprintf("%v", i), subs[i].Topic)
-				if assert.Equal(t, 1, len(subs[i].Rules)) {
-					assert.Equal(t, fmt.Sprintf("%v", i), subs[i].Rules[0].Path)
+				assert.Equal(t, strconv.Itoa(i), subs[i].Topic)
+				if assert.Len(t, subs[i].Rules, 1) {
+					assert.Equal(t, strconv.Itoa(i), subs[i].Rules[0].Path)
 				}
-				assert.Equal(t, fmt.Sprintf("%v", i), subs[i].PubsubName)
-				assert.Equal(t, fmt.Sprintf("%v", i), subs[i].Scopes[0])
-				assert.Equal(t, fmt.Sprintf("%v", i), subs[i].Metadata["testName"])
+				assert.Equal(t, strconv.Itoa(i), subs[i].PubsubName)
+				assert.Equal(t, strconv.Itoa(i), subs[i].Scopes[0])
+				assert.Equal(t, strconv.Itoa(i), subs[i].Metadata["testName"])
 			}
 		}
 	})
@@ -193,13 +194,13 @@ func TestDeclarativeSubscriptionsV1(t *testing.T) {
 
 		for i := 0; i < subscriptionCount; i++ {
 			s := testDeclarativeSubscriptionV1()
-			s.Spec.Topic = fmt.Sprintf("%v", i)
-			s.Spec.Route = fmt.Sprintf("%v", i)
-			s.Spec.Pubsubname = fmt.Sprintf("%v", i)
+			s.Spec.Topic = strconv.Itoa(i)
+			s.Spec.Route = strconv.Itoa(i)
+			s.Spec.Pubsubname = strconv.Itoa(i)
 			s.Spec.Metadata = map[string]string{
-				"testName": fmt.Sprintf("%v", i),
+				"testName": strconv.Itoa(i),
 			}
-			s.Scopes = []string{fmt.Sprintf("%v", i)}
+			s.Scopes = []string{strconv.Itoa(i)}
 
 			subscriptions = append(subscriptions, s)
 		}
@@ -211,13 +212,13 @@ func TestDeclarativeSubscriptionsV1(t *testing.T) {
 		subs := DeclarativeLocal([]string{dir}, "", log)
 		if assert.Len(t, subs, subscriptionCount) {
 			for i := 0; i < subscriptionCount; i++ {
-				assert.Equal(t, fmt.Sprintf("%v", i), subs[i].Topic)
-				if assert.Equal(t, 1, len(subs[i].Rules)) {
-					assert.Equal(t, fmt.Sprintf("%v", i), subs[i].Rules[0].Path)
+				assert.Equal(t, strconv.Itoa(i), subs[i].Topic)
+				if assert.Len(t, subs[i].Rules, 1) {
+					assert.Equal(t, strconv.Itoa(i), subs[i].Rules[0].Path)
 				}
-				assert.Equal(t, fmt.Sprintf("%v", i), subs[i].PubsubName)
-				assert.Equal(t, fmt.Sprintf("%v", i), subs[i].Scopes[0])
-				assert.Equal(t, fmt.Sprintf("%v", i), subs[i].Metadata["testName"])
+				assert.Equal(t, strconv.Itoa(i), subs[i].PubsubName)
+				assert.Equal(t, strconv.Itoa(i), subs[i].Scopes[0])
+				assert.Equal(t, strconv.Itoa(i), subs[i].Metadata["testName"])
 			}
 		}
 	})
@@ -319,7 +320,7 @@ func TestDeclarativeSubscriptionsV1(t *testing.T) {
 		defer os.RemoveAll(filePath)
 
 		subs := DeclarativeLocal([]string{dir}, "", log)
-		assert.Len(t, subs, 0)
+		assert.Empty(t, subs)
 	})
 
 	t.Run("no subscriptions loaded", func(t *testing.T) {
@@ -331,7 +332,7 @@ func TestDeclarativeSubscriptionsV1(t *testing.T) {
 		writeSubscriptionToDisk(s, dir)
 
 		subs := DeclarativeLocal([]string{dir}, "", log)
-		assert.Len(t, subs, 0)
+		assert.Empty(t, subs)
 	})
 }
 
@@ -365,7 +366,7 @@ func TestDeclarativeSubscriptionsV2(t *testing.T) {
 
 	t.Run("load multiple subscriptions in different files", func(t *testing.T) {
 		for i := 0; i < subscriptionCount; i++ {
-			iStr := fmt.Sprintf("%v", i)
+			iStr := strconv.Itoa(i)
 			s := testDeclarativeSubscriptionV2()
 			s.Spec.Topic = iStr
 			for j := range s.Spec.Routes.Rules {
@@ -386,9 +387,9 @@ func TestDeclarativeSubscriptionsV2(t *testing.T) {
 		subs := DeclarativeLocal([]string{dir}, "", log)
 		if assert.Len(t, subs, subscriptionCount) {
 			for i := 0; i < subscriptionCount; i++ {
-				iStr := fmt.Sprintf("%v", i)
+				iStr := strconv.Itoa(i)
 				assert.Equal(t, iStr, subs[i].Topic)
-				if assert.Equal(t, 3, len(subs[i].Rules)) {
+				if assert.Len(t, subs[i].Rules, 3) {
 					assert.Equal(t, iStr, subs[i].Rules[0].Path)
 				}
 				assert.Equal(t, iStr, subs[i].PubsubName)
@@ -401,7 +402,7 @@ func TestDeclarativeSubscriptionsV2(t *testing.T) {
 	t.Run("load multiple subscriptions in single file", func(t *testing.T) {
 		subscriptions := []any{}
 		for i := 0; i < subscriptionCount; i++ {
-			iStr := fmt.Sprintf("%v", i)
+			iStr := strconv.Itoa(i)
 			s := testDeclarativeSubscriptionV2()
 			s.Spec.Topic = iStr
 			for j := range s.Spec.Routes.Rules {
@@ -424,9 +425,9 @@ func TestDeclarativeSubscriptionsV2(t *testing.T) {
 		subs := DeclarativeLocal([]string{dir}, "", log)
 		if assert.Len(t, subs, subscriptionCount) {
 			for i := 0; i < subscriptionCount; i++ {
-				iStr := fmt.Sprintf("%v", i)
+				iStr := strconv.Itoa(i)
 				assert.Equal(t, iStr, subs[i].Topic)
-				if assert.Equal(t, 3, len(subs[i].Rules)) {
+				if assert.Len(t, subs[i].Rules, 3) {
 					assert.Equal(t, iStr, subs[i].Rules[0].Path)
 				}
 				assert.Equal(t, iStr, subs[i].PubsubName)
@@ -445,7 +446,7 @@ func TestDeclarativeSubscriptionsV2(t *testing.T) {
 		writeSubscriptionToDisk(s, dir)
 
 		subs := DeclarativeLocal([]string{dir}, "", log)
-		assert.Len(t, subs, 0)
+		assert.Empty(t, subs)
 	})
 }
 
@@ -732,7 +733,7 @@ func TestGRPCSubscriptions(t *testing.T) {
 		// not implemented error is not retried and is returned as "zero" subscriptions
 		require.NoError(t, err)
 		assert.Equal(t, 1, m.callCount)
-		assert.Len(t, subs, 0)
+		assert.Empty(t, subs)
 	})
 
 	t.Run("error from app, success after retries with resiliency", func(t *testing.T) {
@@ -765,7 +766,7 @@ func TestGRPCSubscriptions(t *testing.T) {
 		// not implemented error is not retried and is returned as "zero" subscriptions
 		require.NoError(t, err)
 		assert.Equal(t, 1, m.callCount)
-		assert.Len(t, subs, 0)
+		assert.Empty(t, subs)
 	})
 }
 
@@ -817,7 +818,7 @@ func TestGetRuleMatchString(t *testing.T) {
 
 	for _, v := range cases {
 		rule, err := createRoutingRule(v.Match, v.Path)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, v.Match, rule.Match.String())
 	}
 }

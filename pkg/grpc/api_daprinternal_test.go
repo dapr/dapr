@@ -15,6 +15,8 @@ package grpc
 
 import (
 	"context"
+	"errors"
+	"io"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -122,7 +124,7 @@ func TestCallLocalStream(t *testing.T) {
 		err = st.Send(&internalv1pb.InternalInvokeRequestStream{
 			Request: request.Proto(),
 		})
-		require.NoError(t, err)
+		require.True(t, err == nil || errors.Is(err, io.EOF))
 		err = st.CloseSend()
 		require.NoError(t, err)
 
@@ -190,12 +192,12 @@ func TestCallLocalStream(t *testing.T) {
 
 		pd, err := request.ProtoWithData()
 		require.NoError(t, err)
-		require.NotNil(t, pd.Message.Data)
+		require.NotNil(t, pd.GetMessage().GetData())
 
 		err = st.Send(&internalv1pb.InternalInvokeRequestStream{
 			Request: request.Proto(),
 			Payload: &commonv1pb.StreamPayload{
-				Data: pd.Message.Data.Value,
+				Data: pd.GetMessage().GetData().GetValue(),
 				Seq:  0,
 			},
 		})
@@ -220,7 +222,7 @@ func TestCallRemoteAppWithTracing(t *testing.T) {
 	defer request.Close()
 
 	resp, err := client.CallLocal(context.Background(), request.Proto())
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, resp.GetMessage(), "failed to generate trace context with app call")
 }
 
@@ -238,6 +240,6 @@ func TestCallActorWithTracing(t *testing.T) {
 	defer request.Close()
 
 	resp, err := client.CallActor(context.Background(), request.Proto())
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.NotEmpty(t, resp.GetMessage(), "failed to generate trace context with actor call")
 }

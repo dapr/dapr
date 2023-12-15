@@ -58,7 +58,7 @@ func TestConfig(t *testing.T) {
 	assert.Equal(t, "1s", c.ActorDeactivationScanInterval.String())
 	assert.Equal(t, "2s", c.ActorIdleTimeout.String())
 	assert.Equal(t, "3s", c.DrainOngoingCallTimeout.String())
-	assert.Equal(t, true, c.DrainRebalancedActors)
+	assert.True(t, c.DrainRebalancedActors)
 	assert.Equal(t, "default", c.Namespace)
 	assert.Equal(t, TestPodName, c.PodName)
 }

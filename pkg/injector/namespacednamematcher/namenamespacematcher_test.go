@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -153,13 +154,10 @@ func TestGetNameNamespaces(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			matcher, err := CreateFromString(tc.s)
 			if tc.wantError {
-				if assert.Error(t, err, "expecting error but did not get it") {
-					return
-				}
+				require.Error(t, err, "expecting error but did not get it")
+				return
 			} else {
-				if !assert.NoError(t, err, "not expecting error to happen") {
-					return
-				}
+				require.NoError(t, err, "not expecting error to happen")
 			}
 			assert.Equalf(t, tc.wantPrefixed, matcher.prefixed, "CreateFromString(%v)", tc.s)
 			assert.Equalf(t, tc.wantEqual, matcher.equal, "CreateFromString(%v)", tc.s)
@@ -256,7 +254,7 @@ func TestEqualPrefixNameNamespaceMatcherMatchesObject(t *testing.T) {
 	for _, tc := range tests {
 		matcher, err := CreateFromString(tc.namespaceNames)
 		if tc.wantError {
-			assert.Error(t, err, "expecting error")
+			require.Error(t, err, "expecting error")
 			continue
 		}
 		sa := &corev1.ServiceAccount{

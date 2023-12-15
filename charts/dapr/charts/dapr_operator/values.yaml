@@ -16,6 +16,13 @@ fullnameOverride: ""
 
 deploymentAnnotations: {}
 
+apiService:
+  type: ClusterIP
+  annotations: {}
+webhookService:
+  type: ClusterIP
+  annotations: {}
+
 runAsNonRoot: true
 
 serviceReconciler:
@@ -23,10 +30,12 @@ serviceReconciler:
 
 ports:
   protocol: TCP
-  port: 80
+  port: 443
   targetPort: 6500
 
 resources: {}
+
+extraEnvVars: {}
 
 livenessProbe:
   initialDelaySeconds: 3

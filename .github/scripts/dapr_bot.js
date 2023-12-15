@@ -11,6 +11,7 @@ const owners = [
     'italypaleale',
     'johnewart',
     'joshvanl',
+    'kaibocai',
     'mcandeia',
     'msfussell',
     'mukundansundar',
@@ -18,11 +19,14 @@ const owners = [
     'pruthvidhodda',
     'robertojrojas',
     'ryanlettieri',
+    'shivamkm07',
     'shubham1172',
     'skyao',
     'taction',
     'tanvigour',
     'yaron2',
+    'rabollin',
+    'ashiquemd'
 ]
 
 const SDKs = [

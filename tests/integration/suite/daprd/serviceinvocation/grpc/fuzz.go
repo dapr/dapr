@@ -53,7 +53,7 @@ func (f *fuzzgrpc) Setup(t *testing.T) []framework.Option {
 
 	onInvoke := func(ctx context.Context, in *commonv1.InvokeRequest) (*commonv1.InvokeResponse, error) {
 		return &commonv1.InvokeResponse{
-			Data: &anypb.Any{Value: in.Data.Value},
+			Data: &anypb.Any{Value: in.GetData().GetValue()},
 		}, nil
 	}
 
@@ -110,7 +110,7 @@ func (f *fuzzgrpc) Run(t *testing.T, ctx context.Context) {
 			if len(body) == 0 {
 				body = nil
 			}
-			assert.Equal(c, body, resp.Data.GetValue())
+			assert.Equal(c, body, resp.GetData().GetValue())
 		})
 	}
 }

@@ -20,7 +20,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -28,6 +27,7 @@ import (
 	"time"
 
 	chi "github.com/go-chi/chi/v5"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	grpcinsecure "google.golang.org/grpc/credentials/insecure"
@@ -37,6 +37,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -53,6 +54,7 @@ type rebalancing struct {
 	daprd              [2]*daprd.Daprd
 	srv                [2]*prochttp.HTTP
 	handler            [2]*httpServer
+	db                 *sqlite.SQLite
 	place              *placement.Placement
 	placementStream    placementv1pb.Placement_ReportDaprStatusClient
 	activeActors       []atomic.Bool
@@ -63,13 +65,15 @@ func (i *rebalancing) Setup(t *testing.T) []framework.Option {
 	i.activeActors = make([]atomic.Bool, iterations)
 	i.doubleActivationCh = make(chan string)
 
-	// Get a temporary directory where to store the SQLite DB
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test-data.db")
-	t.Logf("Storing database in %s", dbPath)
+	// Create the SQLite database
+	i.db = sqlite.New(t,
+		sqlite.WithActorStateStore(true),
+		sqlite.WithMetadata("busyTimeout", "10s"),
+		sqlite.WithMetadata("disableWAL", "true"),
+	)
 
 	// Init placement
-	i.place = placement.New(t)
+	i.place = placement.New(t, placement.WithMaxAPILevel(0))
 
 	// Init two instances of daprd, each with its own server
 	for j := 0; j < 2; j++ {
@@ -78,25 +82,9 @@ func (i *rebalancing) Setup(t *testing.T) []framework.Option {
 			doubleActivationCh: i.doubleActivationCh,
 		}
 		i.srv[j] = prochttp.New(t, prochttp.WithHandler(i.handler[j].NewHandler(j)))
-		i.daprd[j] = daprd.New(t, daprd.WithResourceFiles(`
-apiVersion: dapr.io/v1alpha1
-kind: Component
-metadata:
-  name: mystore
-spec:
-  type: state.sqlite
-  version: v1
-  metadata:
-    - name: connectionString
-      value: '`+dbPath+`'
-    - name: busyTimeout
-      value: '10s'
-    - name: disableWAL
-      value: 'true'
-    - name: actorStateStore
-      value: 'true'
-`),
-			daprd.WithPlacementAddresses("localhost:"+strconv.Itoa(i.place.Port())),
+		i.daprd[j] = daprd.New(t,
+			daprd.WithResourceFiles(i.db.GetComponent()),
+			daprd.WithPlacementAddresses(i.place.Address()),
 			daprd.WithAppPort(i.srv[j].Port()),
 			// Daprd is super noisy in debug mode when connecting to placement.
 			daprd.WithLogLevel("info"),
@@ -104,7 +92,7 @@ spec:
 	}
 
 	return []framework.Option{
-		framework.WithProcesses(i.place, i.srv[0], i.srv[1], i.daprd[0], i.daprd[1]),
+		framework.WithProcesses(i.db, i.place, i.srv[0], i.srv[1], i.daprd[0], i.daprd[1]),
 	}
 }
 
@@ -117,7 +105,8 @@ func (i *rebalancing) Run(t *testing.T, ctx context.Context) {
 	}
 	// Wait for actors to be ready
 	for j := 0; j < 2; j++ {
-		i.handler[j].WaitForActorsReady(ctx)
+		err := i.handler[j].WaitForActorsReady(ctx)
+		require.NoErrorf(t, err, "Actor instance %d not ready", j)
 	}
 
 	// Establish a connection to the placement service
@@ -133,6 +122,16 @@ func (i *rebalancing) Run(t *testing.T, ctx context.Context) {
 	}
 
 	client := util.HTTPClient(t)
+
+	// Try to invoke an actor to ensure the actor subsystem is ready
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost:%d/v1.0/actors/myactortype/pinger/method/ping", i.daprd[0].HTTPPort()), nil)
+		require.NoError(c, err)
+		resp, rErr := client.Do(req)
+		require.NoError(c, rErr)
+		require.NoError(c, resp.Body.Close())
+		assert.Equal(c, http.StatusOK, resp.StatusCode)
+	}, 10*time.Second, 100*time.Millisecond, "actors not ready")
 
 	// Do a bunch of things in parallel
 	errCh := make(chan error)
@@ -259,6 +258,12 @@ func (h *httpServer) NewHandler(num int) http.Handler {
 		actorType := chi.URLParam(r, "actorType")
 		actorID := chi.URLParam(r, "actorId")
 		methodName := chi.URLParam(r, "methodName")
+
+		// Check if this is just a ping and return quickly
+		if methodName == "ping" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
 
 		parts := strings.Split(actorID, "-")
 		if len(parts) != 2 {
@@ -401,14 +406,19 @@ func (i *rebalancing) reportStatusToPlacement(ctx context.Context, stream placem
 
 	errCh := make(chan error)
 	go func() {
+		var sent bool
 		for {
+			// When the stream ends (which happens when the context is canceled) this returns an error and we can return
 			o, rerr := stream.Recv()
 			if rerr != nil {
-				errCh <- fmt.Errorf("error from placement: %w", rerr)
-			}
-			if o.GetOperation() == "update" {
-				errCh <- nil
+				if !sent {
+					errCh <- fmt.Errorf("error from placement: %w", rerr)
+				}
 				return
+			}
+			if o.GetOperation() == "update" && !sent {
+				errCh <- nil
+				sent = true
 			}
 		}
 	}()

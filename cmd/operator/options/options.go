@@ -21,6 +21,7 @@ import (
 	"k8s.io/klog"
 
 	"github.com/dapr/dapr/pkg/metrics"
+	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 	"github.com/dapr/kit/logger"
 )
 
@@ -51,6 +52,8 @@ type Options struct {
 	TrustAnchorsFile                   string
 	Logger                             logger.Options
 	Metrics                            *metrics.Options
+	APIPort                            int
+	HealthzPort                        int
 }
 
 func New() *Options {
@@ -72,12 +75,10 @@ func New() *Options {
 	flag.BoolVar(&opts.EnableArgoRolloutServiceReconciler, "enable-argo-rollout-service-reconciler", false, "Enable the service reconciler for Dapr-enabled Argo Rollouts")
 	flag.BoolVar(&opts.WatchdogCanPatchPodLabels, "watchdog-can-patch-pod-labels", false, "Allow watchdog to patch pod labels to set pods with sidecar present")
 
-	flag.StringVar(&opts.TrustAnchorsFile, "trust-anchors-file", "/var/run/secrets/dapr.io/tls/ca.crt", "Path to trust anchors file")
+	flag.StringVar(&opts.TrustAnchorsFile, "trust-anchors-file", securityConsts.ControlPlaneDefaultTrustAnchorsPath, "Filepath to the trust anchors for the Dapr control plane")
 
-	depCCP := flag.String("certchain", "", "DEPRECATED")
-	depRCF := flag.String("issuer-ca-filename", "", "DEPRECATED")
-	depICF := flag.String("issuer-certificate-filename", "", "DEPRECATED")
-	depIKF := flag.String("issuer-key-filename", "", "DEPRECATED")
+	flag.IntVar(&opts.APIPort, "port", 6500, "The port for the operator API server to listen on")
+	flag.IntVar(&opts.HealthzPort, "healthz-port", 8080, "The port for the healthz server to listen on")
 
 	opts.Logger = logger.DefaultOptions()
 	opts.Logger.AttachCmdFlags(flag.StringVar, flag.BoolVar)
@@ -86,10 +87,6 @@ func New() *Options {
 	opts.Metrics.AttachCmdFlags(flag.StringVar, flag.BoolVar)
 
 	flag.Parse()
-
-	if len(*depRCF) > 0 || len(*depICF) > 0 || len(*depIKF) > 0 || len(*depCCP) > 0 {
-		log.Warn("--certchain, --issuer-ca-filename, --issuer-certificate-filename and --issuer-key-filename are deprecated and will be removed in v1.14")
-	}
 
 	wilc := strings.ToLower(opts.watchdogIntervalStr)
 	switch wilc {

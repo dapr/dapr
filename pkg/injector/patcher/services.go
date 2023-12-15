@@ -25,7 +25,7 @@ type Service struct {
 
 var (
 	// Dapr API service.
-	ServiceAPI = Service{"dapr-api", 80}
+	ServiceAPI = Service{"dapr-api", 443}
 	// Dapr placement service.
 	ServicePlacement = Service{"dapr-placement-server", 50005}
 	// Dapr sentry service.

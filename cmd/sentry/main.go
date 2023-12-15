@@ -48,10 +48,6 @@ func main() {
 
 	metricsExporter := metrics.NewExporterWithOptions(log, metrics.DefaultMetricNamespace, opts.Metrics)
 
-	if len(opts.TokenAudience) > 0 {
-		log.Warn("--token-audience is deprecated and will be removed in Dapr v1.14")
-	}
-
 	if err := utils.SetEnvVariables(map[string]string{
 		utils.KubeConfigVar: opts.Kubeconfig,
 	}); err != nil {
@@ -132,11 +128,16 @@ func main() {
 	}
 
 	// Watch for changes in the watchDir
-	err = mngr.Add(func(ctx context.Context) error {
-		log.Infof("Starting watch on filesystem directory: %s", watchDir)
-		return fswatcher.Watch(ctx, watchDir, issuerEvent)
+	fs, err := fswatcher.New(fswatcher.Options{
+		Targets: []string{watchDir},
 	})
 	if err != nil {
+		log.Fatal(err)
+	}
+	if err = mngr.Add(func(ctx context.Context) error {
+		log.Infof("Starting watch on filesystem directory: %s", watchDir)
+		return fs.Run(ctx, issuerEvent)
+	}); err != nil {
 		log.Fatal(err)
 	}
 

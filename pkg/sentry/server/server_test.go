@@ -320,7 +320,7 @@ func TestRun(t *testing.T) {
 
 			go func() {
 				defer close(serverClosed)
-				assert.NoError(t, Start(ctx, opts))
+				require.NoError(t, Start(ctx, opts))
 			}()
 
 			require.Eventually(t, func() bool {
@@ -335,7 +335,7 @@ func TestRun(t *testing.T) {
 			conn, err := grpc.DialContext(ctx, fmt.Sprintf(":%d", port), grpc.WithTransportCredentials(insecure.NewCredentials()))
 			require.NoError(t, err)
 			t.Cleanup(func() {
-				assert.NoError(t, conn.Close())
+				require.NoError(t, conn.Close())
 			})
 
 			client := sentryv1pb.NewCAClient(conn)
@@ -346,9 +346,9 @@ func TestRun(t *testing.T) {
 
 			require.Equalf(t, test.expResp == nil, resp == nil, "expected response to be nil: %v", resp)
 			if test.expResp != nil {
-				assert.Equal(t, test.expResp.TrustChainCertificates, resp.TrustChainCertificates)
-				assert.Equal(t, test.expResp.ValidUntil, resp.ValidUntil)
-				assert.Equal(t, test.expResp.WorkloadCertificate, resp.WorkloadCertificate)
+				assert.Equal(t, test.expResp.GetTrustChainCertificates(), resp.GetTrustChainCertificates())
+				assert.Equal(t, test.expResp.GetValidUntil(), resp.GetValidUntil())
+				assert.Equal(t, test.expResp.GetWorkloadCertificate(), resp.GetWorkloadCertificate())
 			}
 		})
 	}

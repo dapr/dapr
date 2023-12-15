@@ -169,6 +169,10 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 		args = append(args, "--unix-domain-socket", injectorConsts.UnixDomainSocketDaprdPath)
 	}
 
+	if c.BlockShutdownDuration != nil {
+		args = append(args, "--dapr-block-shutdown-duration", *c.BlockShutdownDuration)
+	}
+
 	// When debugging is enabled, we need to override the command and the flags
 	if c.EnableDebug {
 		ports = append(ports, corev1.ContainerPort{
@@ -409,6 +413,7 @@ func (c *SidecarConfig) getResourceRequirements() (*corev1.ResourceRequirements,
 // GetAppID returns the AppID property, fallinb back to the name of the pod.
 func (c *SidecarConfig) GetAppID() string {
 	if c.AppID == "" {
+		log.Warnf("app-id not set defaulting the app-id to: %s", c.pod.GetName())
 		return c.pod.GetName()
 	}
 
