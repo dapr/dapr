@@ -85,7 +85,7 @@ func (err recoverableError) Error() string {
 func NewWorkflowActor(scheduler workflowScheduler, config actorsBackendConfig) *workflowActor {
 	return &workflowActor{
 		scheduler:        scheduler,
-		defaultTimeout:   300 * time.Minute,
+		defaultTimeout:   30 * time.Second,
 		reminderInterval: 1 * time.Minute,
 		config:           config,
 	}

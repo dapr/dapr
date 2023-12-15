@@ -156,14 +156,14 @@ func (be *actorBackend) CreateOrchestrationInstance(ctx context.Context, e *back
 		EventData: eventData,
 	}
 
-	rawDataBytes, _ := json.Marshal(policyAndEventData)
+	policyAndEventDataBytes, _ := json.Marshal(policyAndEventData)
 
 	// Invoke the well-known workflow actor directly, which will be created by this invocation
 	// request. Note that this request goes directly to the actor runtime, bypassing the API layer.
 	req := invokev1.
 		NewInvokeMethodRequest(CreateWorkflowInstanceMethod).
 		WithActor(be.config.workflowActorType, workflowInstanceID).
-		WithRawDataBytes(rawDataBytes).
+		WithRawDataBytes(policyAndEventDataBytes).
 		WithContentType(invokev1.OctetStreamContentType)
 	defer req.Close()
 
