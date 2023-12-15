@@ -97,11 +97,9 @@ func (c *ComponentStore) ListMatchComponents(match string) []compsv1alpha1.Compo
 	defer c.lock.RUnlock()
 	for _, c := range c.components {
 		if strings.Contains(c.Spec.Type, match) {
-			fmt.Println("c.spec.type ", c.Spec.Type, "contains ", match)
 			comps = append(comps, c)
 		}
 	}
-	fmt.Println("comp in listmatch", comps[0].Spec.Type)
 	return comps
 }
 

@@ -174,6 +174,7 @@ func (c *Channels) BuildHTTPPipelineFromComponentsForSpec(comps []compsv1alpha1.
 		Handlers: make([]func(next http.Handler) http.Handler, 0, 1),
 	}
 
+	matchingComps := 0
 	for _, comp := range comps {
 		meta, err := c.meta.ToBaseMetadata(comp)
 		if err != nil {
@@ -184,6 +185,9 @@ func (c *Channels) BuildHTTPPipelineFromComponentsForSpec(comps []compsv1alpha1.
 			continue
 		}
 		priority := meta.Properties["priority"]
+		if priority == "" {
+			return middlehttp.Pipeline{}, fmt.Errorf("priority is not set for component %s", comp.Name)
+		}
 		priorityInt, err := strconv.Atoi(priority)
 		if err != nil {
 			return middlehttp.Pipeline{}, fmt.Errorf("unable to convert priority to integer for component %s: %w", comp.Name, err)
@@ -191,6 +195,7 @@ func (c *Channels) BuildHTTPPipelineFromComponentsForSpec(comps []compsv1alpha1.
 		if err != nil {
 			return middlehttp.Pipeline{}, err
 		}
+		matchingComps++
 		md := contribmiddle.Metadata{Base: meta}
 		handler, err := c.registry.Create(comp.Spec.Type, comp.Spec.Version, md, comp.LogName())
 		if err != nil {
@@ -202,12 +207,22 @@ func (c *Channels) BuildHTTPPipelineFromComponentsForSpec(comps []compsv1alpha1.
 			continue
 		}
 
-		log.Infof("enabled %s/%s middleware", comp.Spec.Type, comp.Spec.Version)
 		// priority is the string containing the int value
+		for {
+			// Check if the priority already exists in the map
+			if _, exists := priorityHandlers[priorityInt]; exists {
+				// If exists, increment the priorityInt by 1
+				priorityInt++
+			} else {
+				break // Break the loop when a unique priority is found
+			}
+		}
 		priorityHandlers[priorityInt] = handler
+
+		log.Infof("enabled %s/%s middleware with priority %s", comp.Spec.Type, comp.Spec.Version, priority)
 	}
 	// sort priorities
-	var priorities []int
+	priorities := make([]int, 0, matchingComps)
 	for priority := range priorityHandlers {
 		priorities = append(priorities, priority)
 	}
