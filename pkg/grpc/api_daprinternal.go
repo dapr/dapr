@@ -284,13 +284,14 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	// We don't do resiliency here as it is handled in the API layer. See InvokeActor().
 	res, err := a.Actors.Call(ctx, in)
 	if err != nil {
-		// We have to remove the error to keep the body, so callers must re-inspect for the header in the actual response.
 		actorErr, isActorErr := actorerrors.As(err)
 		if res != nil && isActorErr {
+			// We have to remove the error to keep the body, so callers must re-inspect for the header in the actual response.
 			res.Message.Data = &anypb.Any{
 				Value: actorErr.Body(),
 			}
 			res.Headers = actorErr.Headers()
+			return res, nil
 		}
 
 		err = status.Errorf(codes.Internal, messages.ErrActorInvoke, err)

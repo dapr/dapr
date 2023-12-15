@@ -646,9 +646,9 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *internalv1pb.In
 		return nil, fmt.Errorf("failed to read response data: %w", err)
 	}
 
-	// The .NET SDK indicates Actor failure via a header instead of a bad response.
-	if _, ok := imRes.Headers()["X-Daprerrorresponseheader"]; ok {
-		return res, actorerrors.NewActorError(imRes)
+	// The .NET SDK indicates Actor failure via a header instead of a bad response
+	if _, ok := res.GetHeaders()["X-Daprerrorresponseheader"]; ok {
+		return res, actorerrors.NewActorError(res)
 	}
 
 	return res, nil
@@ -755,12 +755,7 @@ func (a *actorsRuntime) callRemoteActor(
 		return nil, teardown, err
 	}
 	if len(res.GetHeaders()["X-Daprerrorresponseheader"].GetValues()) > 0 {
-		invokeResponse, invokeErr := invokev1.InternalInvokeResponse(res)
-		if invokeErr != nil {
-			return nil, teardown, invokeErr
-		}
-		defer invokeResponse.Close()
-		return res, teardown, actorerrors.NewActorError(invokeResponse)
+		return res, teardown, actorerrors.NewActorError(res)
 	}
 
 	return res, teardown, nil
