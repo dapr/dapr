@@ -265,7 +265,7 @@ func (p *Service) processRaftStateCommand(ctx context.Context) {
 			switch op.cmdType {
 			case raft.MemberUpsert, raft.MemberRemove:
 				// MemberUpsert updates the state of dapr runtime host whenever
-				// Dapr runtime sends heartbeats every 1 second.
+				// Dapr runtime sends heartbeats every X seconds.
 				// MemberRemove will be queued by faultHostDetectTimer.
 				// Even if ApplyCommand is failed, both commands will retry
 				// until the state is consistent.
