@@ -11,22 +11,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package logline
+package shutdown
 
-// options contains the options for checking the log lines of a process.
-type options struct {
-	stdoutContains []string
-	stderrContains []string
-}
-
-func WithStdoutLineContains(lines ...string) func(*options) {
-	return func(o *options) {
-		o.stdoutContains = append(o.stdoutContains, lines...)
-	}
-}
-
-func WithStderrLineContains(lines ...string) func(*options) {
-	return func(o *options) {
-		o.stderrContains = append(o.stderrContains, lines...)
-	}
-}
+import (
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/shutdown/block"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/shutdown/graceful"
+)
