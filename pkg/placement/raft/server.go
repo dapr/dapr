@@ -214,15 +214,15 @@ func (s *Server) StartRaft(ctx context.Context, sec security.Handler, config *ra
 		// Set default configuration for raft
 		s.config = &raft.Config{
 			ProtocolVersion:    raft.ProtocolVersionMax,
-			HeartbeatTimeout:   1000 * time.Millisecond,
-			ElectionTimeout:    1000 * time.Millisecond,
-			CommitTimeout:      50 * time.Millisecond,
+			HeartbeatTimeout:   2 * time.Second,
+			ElectionTimeout:    2 * time.Second,
+			CommitTimeout:      100 * time.Millisecond,
 			MaxAppendEntries:   64,
 			ShutdownOnRemove:   true,
 			TrailingLogs:       10240,
 			SnapshotInterval:   120 * time.Second,
 			SnapshotThreshold:  8192,
-			LeaderLeaseTimeout: 500 * time.Millisecond,
+			LeaderLeaseTimeout: 2 * time.Second,
 		}
 	} else {
 		s.config = config
