@@ -35,4 +35,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install pcre2-utils
       - name: Create release branch and tag
-        run: ./.github/scripts/create-release.sh ${{ inputs.rel_version }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+        run: |
+          git config user.email "daprweb@microsoft.com"
+          git config user.name "Dapr Bot"
+          # Update origin with token
+          git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git
+          ./.github/scripts/create-release.sh ${{ inputs.rel_version }}
