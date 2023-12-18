@@ -28,11 +28,10 @@ type fasthttpResponseOption = func(ctx *fasthttp.RequestCtx)
 New funcs with kitErrors
 *******************************/
 
-// fasthttpResponseWithJSON overrides the content-type with application/json.
+// fasthttpResponseWithKitError overrides the content-type with application/json.
 func fasthttpResponseWithKitError(err *kitErrors.Error, metadata map[string]string) fasthttpResponseOption {
-	// func fasthttpResponseWithJSONStandardizedError(code int, obj []byte, metadata map[string]string) fasthttpResponseOption {
 	return func(ctx *fasthttp.RequestCtx) {
-		ctx.Response.SetStatusCode(err.HttpCode)
+		ctx.Response.SetStatusCode(err.HTTPStatusCode())
 		ctx.Response.SetBody(err.JSONErrorValue())
 		ctx.Response.Header.SetContentType(jsonContentTypeHeader)
 		//keeping to not break http expectations
@@ -42,34 +41,20 @@ func fasthttpResponseWithKitError(err *kitErrors.Error, metadata map[string]stri
 		}
 	}
 }
-
-// fasthttpResponseWithStandardizedError sets error code and jsonized error message.
-// func fasthttpResponseWithKitError(err *kitErrors.Error) fasthttpResponseOption {
-// 	return fasthttpResponseWithKitError(err, nil)
-// }
-
-func universalFastHTTPStandardizedErrorResponder(reqCtx *fasthttp.RequestCtx, err *kitErrors.Error) {
-	// if there is NOT an err
-	if err.HttpCode == 0 {
-		return
+func fasthttpResponseWithKitErrorObject(err *kitErrors.Error, obj []byte, metadata map[string]string) fasthttpResponseOption {
+	return func(ctx *fasthttp.RequestCtx) {
+		ctx.Response.SetStatusCode(err.HTTPStatusCode())
+		ctx.Response.SetBody(obj)
+		ctx.Response.Header.SetContentType(jsonContentTypeHeader)
+		for k, v := range metadata {
+			ctx.Response.Header.Set(metadataPrefix+k, v)
+		}
 	}
-
-	// Check if it's an APIError object
-	// apiErr, ok := err.(messages.APIError)
-	// if ok {
-	// 	fasthttpRespond(reqCtx, fasthttpResponseWithError(apiErr.HTTPCode(), apiErr))
-	// 	return
-	// }
-
-	// Respond with a generic error
-	// msg := NewErrorResponse("ERROR", err.Error())
-	// fasthttpRespond(reqCtx, fasthttpResponseWithError(http.StatusInternalServerError, msg))
-	fasthttpRespond(reqCtx, fasthttpResponseWithKitError(err, nil))
 }
 
-/******************************
-Old funcs withOUT kitErrors
-*******************************/
+/********************************
+Existing funcs without kitErrors
+*********************************/
 
 // fasthttpResponseWithJSON overrides the content-type with application/json.
 func fasthttpResponseWithJSON(code int, obj []byte, metadata map[string]string) fasthttpResponseOption {
@@ -119,6 +104,11 @@ func universalFastHTTPErrorResponder(reqCtx *fasthttp.RequestCtx, err error) {
 		return
 	}
 
+	standardizedErr, ok := kitErrors.FromError(err)
+	if ok {
+		fasthttpRespond(reqCtx, fasthttpResponseWithKitError(standardizedErr, nil))
+		return
+	}
 	// Check if it's an APIError object
 	apiErr, ok := err.(messages.APIError)
 	if ok {

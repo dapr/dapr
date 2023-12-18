@@ -39,18 +39,8 @@ const (
 	ErrInvokeOutputBinding = "error invoking output binding %s: %s"
 
 	// PubSub.
-	ErrPubsubNotConfigured      = "no pubsub is configured"
-	ErrPubsubEmpty              = "pubsub name is empty"
-	ErrPubsubNotFound           = "pubsub %s not found"
-	ErrTopicEmpty               = "topic is empty in pubsub %s"
-	ErrPubsubCloudEventsSer     = "error when marshalling cloud event envelope for topic %s pubsub %s: %s"
-	ErrPubsubPublishMessage     = "error when publish to topic %s in pubsub %s: %s"
-	ErrPubsubForbidden          = "topic %s is not allowed for app id %s"
-	ErrPubsubCloudEventCreation = "cannot create cloudevent: %s"
-	ErrPubsubUnmarshal          = "error when unmarshaling the request for topic %s pubsub %s: %s"
-	ErrPubsubMarshal            = "error marshaling events to bytes for topic %s pubsub %s: %s"
-	ErrPubsubGetSubscriptions   = "unable to get app subscriptions %s"
-	ErrPublishOutbox            = "error while publishing outbox message: %s"
+	ErrPubsubForbidden = "topic %s is not allowed for app id %s"
+	ErrPublishOutbox   = "error while publishing outbox message: %s"
 
 	// AppChannel.
 	ErrChannelNotFound       = "app channel is not initialized"
@@ -104,9 +94,6 @@ var (
 	ErrStateQueryFailed            = APIError{"failed query in state store %s: %s", "ERR_STATE_QUERY", http.StatusInternalServerError, grpcCodes.Internal}
 	ErrStateQueryUnsupported       = APIError{"state store does not support querying", "ERR_STATE_STORE_NOT_SUPPORTED", http.StatusInternalServerError, grpcCodes.Internal}
 	ErrStateTooManyTransactionalOp = APIError{"the transaction contains %d operations, which is more than what the state store supports: %d", "ERR_STATE_STORE_TOO_MANY_TRANSACTIONS", http.StatusBadRequest, grpcCodes.InvalidArgument}
-
-	// PubSub.
-	ErrPubSubMetadataDeserialize = APIError{"failed deserializing metadata: %v", "ERR_PUBSUB_REQUEST_METADATA", http.StatusBadRequest, grpcCodes.InvalidArgument}
 
 	// Secrets.
 	ErrSecretStoreNotConfigured = APIError{"secret store is not configured", "ERR_SECRET_STORES_NOT_CONFIGURED", http.StatusInternalServerError, grpcCodes.FailedPrecondition}

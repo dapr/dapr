@@ -316,7 +316,7 @@ func TestPubSubEndpoints(t *testing.T) {
 			// assert
 			assert.Equal(t, 403, resp.StatusCode, "unexpected success publishing with %s", method)
 			assert.Equal(t, "ERR_PUBSUB_FORBIDDEN", resp.ErrorBody["errorCode"])
-			assert.Equal(t, "topic topic is not allowed for app id test", resp.ErrorBody["message"]) //nolint:dupword
+			assert.Equal(t, "topic topic is not allowed for app id fakeAPI", resp.ErrorBody["message"]) //nolint:dupword
 		}
 	})
 

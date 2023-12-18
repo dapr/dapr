@@ -2373,33 +2373,14 @@ func TestPublishTopic(t *testing.T) {
 
 	t.Run("err: empty publish event request", func(t *testing.T) {
 		_, err := client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{})
-
-		stat, ok := status.FromError(err)
-		if ok {
-			t.Log("OK")
-
-			fmt.Printf("\nstatus: %v\n", stat)
-		}
-
-		//assert.Equal(t, stat.Code(), api.ErrPubSubNameEmpty.GrpcCode)
-		//assert.Equal(t, stat.Message(), api.ErrPubSubNameEmpty.Message)
-		//assert.Equal(t, stat.Details(), api.ErrPubSubNameEmpty.Details)
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
 	})
 
 	t.Run("err: publish event request with empty topic", func(t *testing.T) {
 		_, err := client.PublishEvent(context.Background(), &runtimev1pb.PublishEventRequest{
 			PubsubName: "pubsub",
 		})
-
-		stat, ok := status.FromError(err)
-		if ok {
-			t.Log("OK")
-
-			fmt.Printf("\nstatus: %v\n", stat)
-		}
-
-		// t.Log(err)
-		//assert.Equal(t, stat.Code(), api.ErrPubSubTopicEmpty.GrpcCode)
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
 	})
 
 	t.Run("no err: publish event request with topic and pubsub alone", func(t *testing.T) {

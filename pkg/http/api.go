@@ -1557,10 +1557,9 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 
 	if validationErr != nil {
 		log.Debug(validationErr)
-		//fasthttpRespond(reqCtx, fasthttpResponseWithError())
-		var kitError *kitErrors.Error
-		if errors.As(validationErr, &kitError) {
-			fasthttpRespond(reqCtx, fasthttpResponseWithKitError(validationErr.(*kitErrors.Error), nil))
+		e, ok := validationErr.(kitErrors.Error)
+		if ok {
+			fasthttpRespond(reqCtx, fasthttpResponseWithKitError(&e, nil))
 		}
 		return
 	}
@@ -1573,7 +1572,6 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	if metaErr != nil {
 		err := apiErrors.PubSubMetadataDeserialize(pubsubName, string(contribMetadata.PubSubType), map[string]string{"appID": a.universal.AppID})
 		universalFastHTTPErrorResponder(reqCtx, err)
-		//universalFastHTTPStandardizedErrorResponder(reqCtx, err)
 		log.Debug(err)
 
 		return
@@ -1594,11 +1592,12 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 			Pubsub:          pubsubName,
 		}, metadata)
 		if err != nil {
-			// TODO(Cassie)
-			msg := NewErrorResponse("ERR_PUBSUB_CLOUD_EVENTS_SER",
-				fmt.Sprintf(messages.ErrPubsubCloudEventCreation, err.Error()))
-			fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
-			log.Debug(msg)
+			err = apiErrors.PubSubCloudEventCreation(pubsubName, string(contribMetadata.PubSubType), map[string]string{"appID": a.universal.AppID})
+			e, ok := err.(kitErrors.Error)
+			if ok {
+				fasthttpRespond(reqCtx, fasthttpResponseWithKitError(&e, nil))
+			}
+			log.Debug(err)
 			return
 		}
 
@@ -1608,11 +1607,12 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 
 		data, err = json.Marshal(envelope)
 		if err != nil {
-			// TODO(Cassie)
-			msg := NewErrorResponse("ERR_PUBSUB_CLOUD_EVENTS_SER",
-				fmt.Sprintf(messages.ErrPubsubCloudEventsSer, topic, pubsubName, err.Error()))
-			fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
-			log.Debug(msg)
+			err = apiErrors.PubSubMarshalEnvelope(pubsubName, string(contribMetadata.PubSubType), map[string]string{"appID": a.universal.AppID})
+			e, ok := err.(kitErrors.Error)
+			if ok {
+				fasthttpRespond(reqCtx, fasthttpResponseWithKitError(&e, nil))
+			}
+			log.Debug(e)
 			return
 		}
 	}
@@ -1631,23 +1631,22 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 	diag.DefaultComponentMonitoring.PubsubEgressEvent(context.Background(), pubsubName, topic, err == nil, elapsed)
 
 	if err != nil {
-		// TODO(Cassie)
-		status := nethttp.StatusInternalServerError
-		msg := NewErrorResponse("ERR_PUBSUB_PUBLISH_MESSAGE",
-			fmt.Sprintf(messages.ErrPubsubPublishMessage, topic, pubsubName, err.Error()))
+		var nerr error
+		nerr = apiErrors.PubSubPublishMessage(pubsubName, string(contribMetadata.PubSubType), topic, err)
 
 		if errors.As(err, &runtimePubsub.NotAllowedError{}) {
-			msg = NewErrorResponse("ERR_PUBSUB_FORBIDDEN", err.Error())
-			status = nethttp.StatusForbidden
+			nerr = apiErrors.PubSubPublishForbidden(pubsubName, string(contribMetadata.PubSubType), topic, a.universal.AppID, err)
 		}
 
 		if errors.As(err, &runtimePubsub.NotFoundError{}) {
-			msg = NewErrorResponse("ERR_PUBSUB_NOT_FOUND", err.Error())
-			status = nethttp.StatusBadRequest
+			nerr = apiErrors.PubSubTestNotFound(pubsubName, string(contribMetadata.PubSubType), topic, err)
 		}
 
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(status, msg))
-		log.Debug(msg)
+		e, ok := nerr.(kitErrors.Error)
+		if ok {
+			fasthttpRespond(reqCtx, fasthttpResponseWithKitError(&e, nil))
+		}
+		log.Debug(nerr)
 	} else {
 		fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
 	}
@@ -1665,11 +1664,10 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 
 	if validationErr != nil {
 		log.Debug(validationErr)
-		var kitError *kitErrors.Error
-		if errors.As(validationErr, &kitError) {
-			fasthttpRespond(reqCtx, fasthttpResponseWithKitError(validationErr.(*kitErrors.Error), nil))
+		e, ok := validationErr.(kitErrors.Error)
+		if ok {
+			fasthttpRespond(reqCtx, fasthttpResponseWithKitError(&e, nil))
 		}
-		//fasthttpRespond(reqCtx, fasthttpResponseWithKitError(validationErr, nil))
 		return
 	}
 
@@ -1677,11 +1675,9 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 	metadata := getMetadataFromFastHTTPRequest(reqCtx)
 	rawPayload, metaErr := contribMetadata.IsRawPayload(metadata)
 	if metaErr != nil {
-		// TODO(Cassie)
-		msg := messages.ErrPubSubMetadataDeserialize.WithFormat(metaErr)
-		universalFastHTTPErrorResponder(reqCtx, msg)
-		log.Debug(msg)
-
+		err := apiErrors.PubSubMetadataDeserialize(pubsubName, string(contribMetadata.PubSubType), map[string]string{"appID": a.universal.AppID, "error": metaErr.Error()})
+		log.Debug(err)
+		universalFastHTTPErrorResponder(reqCtx, err)
 		return
 	}
 
@@ -1691,12 +1687,12 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 	incomingEntries := make([]bulkPublishMessageEntry, 0)
 	err := json.Unmarshal(body, &incomingEntries)
 	if err != nil {
-		// TODO(Cassie)
-		msg := NewErrorResponse("ERR_PUBSUB_EVENTS_SER",
-			fmt.Sprintf(messages.ErrPubsubUnmarshal, topic, pubsubName, err.Error()))
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusBadRequest, msg))
-		log.Debug(msg)
-
+		nerr := apiErrors.PubSubUnMarshalEvents(pubsubName, string(contribMetadata.PubSubType), topic, map[string]string{"appID": a.universal.AppID, "error": err.Error()}, err)
+		e, ok := nerr.(kitErrors.Error)
+		if ok {
+			fasthttpRespond(reqCtx, fasthttpResponseWithKitError(&e, nil))
+		}
+		log.Debug(nerr)
 		return
 	}
 	entries := make([]pubsub.BulkMessageEntry, len(incomingEntries))
@@ -1707,11 +1703,12 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 		var dBytes []byte
 		dBytes, err = ConvertEventToBytes(entry.Event, entry.ContentType)
 		if err != nil {
-			// TODO(Cassie)
-			msg := NewErrorResponse("ERR_PUBSUB_EVENTS_SER",
-				fmt.Sprintf(messages.ErrPubsubMarshal, topic, pubsubName, err.Error()))
-			fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusBadRequest, msg))
-			log.Debug(msg)
+			nerr := apiErrors.PubSubMarshalEvents(pubsubName, string(contribMetadata.PubSubType), topic, map[string]string{"appID": a.universal.AppID, "error": err.Error()})
+			e, ok := nerr.(kitErrors.Error)
+			if ok {
+				fasthttpRespond(reqCtx, fasthttpResponseWithKitError(&e, nil))
+			}
+			log.Debug(nerr)
 			return
 		}
 		entries[i] = pubsub.BulkMessageEntry{
@@ -1724,12 +1721,12 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 			entries[i].Metadata = utils.PopulateMetadataForBulkPublishEntry(metadata, entry.Metadata)
 		}
 		if _, ok := entryIDSet[entry.EntryID]; ok || entry.EntryID == "" {
-			// TODO(Cassie)
-			msg := NewErrorResponse("ERR_PUBSUB_EVENTS_SER",
-				fmt.Sprintf(messages.ErrPubsubMarshal, topic, pubsubName, "error: entryId is duplicated or not present for entry"))
-			fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusBadRequest, msg))
-			log.Debug(msg)
-
+			err := apiErrors.PubSubMarshalEvents(pubsubName, string(contribMetadata.PubSubType), topic, map[string]string{"appID": a.universal.AppID, "error": "entryId is duplicated or not present for entry"})
+			e, ok := err.(kitErrors.Error)
+			if ok {
+				fasthttpRespond(reqCtx, fasthttpResponseWithKitError(&e, nil))
+			}
+			log.Debug(err)
 			return
 		}
 		entryIDSet[entry.EntryID] = struct{}{}
@@ -1764,12 +1761,12 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 				Pubsub:          pubsubName,
 			}, entries[i].Metadata)
 			if err != nil {
-				// TODO(Cassie)
-				msg := NewErrorResponse("ERR_PUBSUB_CLOUD_EVENTS_SER",
-					fmt.Sprintf(messages.ErrPubsubCloudEventCreation, err.Error()))
-				fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg), closeChildSpans)
-				log.Debug(msg)
-
+				nerr := apiErrors.PubSubCloudEventCreation(pubsubName, string(contribMetadata.PubSubType), map[string]string{"appID": a.universal.AppID})
+				e, ok := nerr.(kitErrors.Error)
+				if ok {
+					fasthttpRespond(reqCtx, fasthttpResponseWithKitError(&e, nil), closeChildSpans)
+				}
+				log.Debug(nerr)
 				return
 			}
 
@@ -1777,12 +1774,12 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 
 			entries[i].Event, err = json.Marshal(envelope)
 			if err != nil {
-				// TODO(Cassie)
-				msg := NewErrorResponse("ERR_PUBSUB_CLOUD_EVENTS_SER",
-					fmt.Sprintf(messages.ErrPubsubCloudEventsSer, topic, pubsubName, err.Error()))
-				fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg), closeChildSpans)
-				log.Debug(msg)
-
+				nerr := apiErrors.PubSubMarshalEnvelope(pubsubName, string(contribMetadata.PubSubType), map[string]string{"appID": a.universal.AppID})
+				e, ok := nerr.(kitErrors.Error)
+				if ok {
+					fasthttpRespond(reqCtx, fasthttpResponseWithKitError(&e, nil), closeChildSpans)
+				}
+				log.Debug(nerr)
 				return
 			}
 		}
@@ -1810,7 +1807,6 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 	diag.DefaultComponentMonitoring.BulkPubsubEgressEvent(context.Background(), pubsubName, topic, err == nil, eventsPublished, elapsed)
 
 	if err != nil {
-		// TODO(Cassie)
 		bulkRes.FailedEntries = make([]BulkPublishResponseFailedEntry, 0, len(res.FailedEntries))
 		for _, r := range res.FailedEntries {
 			resEntry := BulkPublishResponseFailedEntry{EntryId: r.EntryId}
@@ -1819,32 +1815,39 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 			}
 			bulkRes.FailedEntries = append(bulkRes.FailedEntries, resEntry)
 		}
-		status := nethttp.StatusInternalServerError
 		bulkRes.ErrorCode = "ERR_PUBSUB_PUBLISH_MESSAGE"
 
-		if errors.As(err, &runtimePubsub.NotAllowedError{}) {
-			// TODO(Cassie)
-			msg := NewErrorResponse("ERR_PUBSUB_FORBIDDEN", err.Error())
-			status = nethttp.StatusForbidden
-			fasthttpRespond(reqCtx, fasthttpResponseWithError(status, msg), closeChildSpans)
-			log.Debug(msg)
+		if !errors.As(err, &runtimePubsub.NotAllowedError{}) && !errors.As(err, &runtimePubsub.NotFoundError{}) {
+			err = apiErrors.PubSubPublishMessage(pubsubName, string(contribMetadata.PubSubType), topic, err)
+		}
 
+		if errors.As(err, &runtimePubsub.NotAllowedError{}) {
+			nerr := apiErrors.PubSubPublishForbidden(pubsubName, string(contribMetadata.PubSubType), topic, a.universal.AppID, err)
+			e, ok := nerr.(kitErrors.Error)
+			if ok {
+				fasthttpRespond(reqCtx, fasthttpResponseWithKitError(&e, nil), closeChildSpans)
+			}
+			log.Debug(nerr)
 			return
 		}
 
 		if errors.As(err, &runtimePubsub.NotFoundError{}) {
-			// TODO(Cassie)
-			msg := NewErrorResponse("ERR_PUBSUB_NOT_FOUND", err.Error())
-			status = nethttp.StatusBadRequest
-			fasthttpRespond(reqCtx, fasthttpResponseWithError(status, msg), closeChildSpans)
-			log.Debug(msg)
-
+			nerr := apiErrors.PubSubTestNotFound(pubsubName, string(contribMetadata.PubSubType), topic, err)
+			e, ok := nerr.(kitErrors.Error)
+			if ok {
+				fasthttpRespond(reqCtx, fasthttpResponseWithKitError(&e, nil), closeChildSpans)
+			}
+			log.Debug(nerr)
 			return
 		}
 
 		// Return the error along with the list of failed entries.
 		resData, _ := json.Marshal(bulkRes)
-		fasthttpRespond(reqCtx, fasthttpResponseWithJSON(status, resData, nil), closeChildSpans)
+
+		e, ok := err.(kitErrors.Error)
+		if ok {
+			fasthttpRespond(reqCtx, fasthttpResponseWithKitErrorObject(&e, resData, map[string]string{"responseData": string(resData[:])}), closeChildSpans)
+		}
 		return
 	}
 
@@ -1856,7 +1859,6 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 // or error status code and an ErrorResponse object.
 // func (a *api) validateAndGetPubsubAndTopic(reqCtx *fasthttp.RequestCtx) (pubsub.PubSub, string, string, *kitErrors.Error) {
 func (a *api) validateAndGetPubsubAndTopic(reqCtx *fasthttp.RequestCtx) (pubsub.PubSub, string, string, error) {
-	//var err *kitErrors.Error
 	var err error
 	pubsubName := reqCtx.UserValue(pubsubnameparam).(string)
 	pubsubType := string(contribMetadata.PubSubType)
