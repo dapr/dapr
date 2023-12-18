@@ -13,22 +13,22 @@ limitations under the License.
 
 package compstore
 
-import "github.com/dapr/components-contrib/workflows"
+import wfbe "github.com/dapr/components-contrib/wfbackend"
 
-func (c *ComponentStore) AddWorkflowBackend(name string, workflowBackend workflows.WorkflowBackend) {
+func (c *ComponentStore) AddWorkflowBackend(name string, workflowBackend wfbe.WorkflowBackend) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	c.workflowBackendComponents[name] = workflowBackend
 }
 
-func (c *ComponentStore) GetWorkflowBackend(name string) (workflows.WorkflowBackend, bool) {
+func (c *ComponentStore) GetWorkflowBackend(name string) (wfbe.WorkflowBackend, bool) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 	workflowBackend, ok := c.workflowBackendComponents[name]
 	return workflowBackend, ok
 }
 
-func (c *ComponentStore) ListWorkflowBackends() map[string]workflows.WorkflowBackend {
+func (c *ComponentStore) ListWorkflowBackends() map[string]wfbe.WorkflowBackend {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 	return c.workflowBackendComponents

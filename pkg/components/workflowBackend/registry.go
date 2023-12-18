@@ -17,7 +17,7 @@ import (
 	"fmt"
 	"strings"
 
-	wfs "github.com/dapr/components-contrib/workflows"
+	wfbe "github.com/dapr/components-contrib/wfbackend"
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/kit/logger"
 )
@@ -25,7 +25,7 @@ import (
 // Registry is an interface for a component that returns registered state store implementations.
 type Registry struct {
 	Logger                    logger.Logger
-	workflowBackendComponents map[string]func(logger.Logger) wfs.WorkflowBackend
+	workflowBackendComponents map[string]func(logger.Logger) wfbe.WorkflowBackend
 }
 
 // DefaultRegistry is the singleton with the registry .
@@ -34,25 +34,25 @@ var DefaultRegistry *Registry = NewRegistry()
 // NewRegistry is used to create workflow registry.
 func NewRegistry() *Registry {
 	return &Registry{
-		workflowBackendComponents: make(map[string]func(logger.Logger) wfs.WorkflowBackend),
+		workflowBackendComponents: make(map[string]func(logger.Logger) wfbe.WorkflowBackend),
 	}
 }
 
 // RegisterComponent adds a new workflow to the registry.
-func (s *Registry) RegisterComponent(componentFactory func(logger.Logger) wfs.WorkflowBackend, names ...string) {
+func (s *Registry) RegisterComponent(componentFactory func(logger.Logger) wfbe.WorkflowBackend, names ...string) {
 	for _, name := range names {
 		s.workflowBackendComponents[createFullName(name)] = componentFactory
 	}
 }
 
-func (s *Registry) Create(name, version, logName string) (wfs.WorkflowBackend, error) {
+func (s *Registry) Create(name, version, logName string) (wfbe.WorkflowBackend, error) {
 	if method, ok := s.getWorkflowBackendComponent(name, version, logName); ok {
 		return method(), nil
 	}
 	return nil, fmt.Errorf("couldn't find wokflow backend %s/%s", name, version)
 }
 
-func (s *Registry) getWorkflowBackendComponent(name, version, logName string) (func() wfs.WorkflowBackend, bool) {
+func (s *Registry) getWorkflowBackendComponent(name, version, logName string) (func() wfbe.WorkflowBackend, bool) {
 	nameLower := strings.ToLower(name)
 	versionLower := strings.ToLower(version)
 	workflowFn, ok := s.workflowBackendComponents[nameLower+"/"+versionLower]
@@ -68,8 +68,8 @@ func (s *Registry) getWorkflowBackendComponent(name, version, logName string) (f
 	return nil, false
 }
 
-func (s *Registry) wrapFn(componentFactory func(logger.Logger) wfs.WorkflowBackend, logName string) func() wfs.WorkflowBackend {
-	return func() wfs.WorkflowBackend {
+func (s *Registry) wrapFn(componentFactory func(logger.Logger) wfbe.WorkflowBackend, logName string) func() wfbe.WorkflowBackend {
+	return func() wfbe.WorkflowBackend {
 		l := s.Logger
 		if logName != "" && l != nil {
 			l = l.WithFields(map[string]any{

@@ -22,6 +22,7 @@ import (
 	"github.com/dapr/components-contrib/lock"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
+	wfbe "github.com/dapr/components-contrib/wfbackend"
 	"github.com/dapr/components-contrib/workflows"
 	compsv1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpEndpointV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
@@ -47,7 +48,7 @@ type ComponentStore struct {
 	pubSubs                   map[string]PubsubItem
 	topicRoutes               map[string]TopicRoutes
 	workflowComponents        map[string]workflows.Workflow
-	workflowBackendComponents map[string]workflows.WorkflowBackend
+	workflowBackendComponents map[string]wfbe.WorkflowBackend
 	cryptoProviders           map[string]crypto.SubtleCrypto
 	components                []compsv1alpha1.Component
 	subscriptions             []rtpubsub.Subscription
@@ -70,7 +71,7 @@ func New() *ComponentStore {
 		locks:                     make(map[string]lock.Store),
 		pubSubs:                   make(map[string]PubsubItem),
 		workflowComponents:        make(map[string]workflows.Workflow),
-		workflowBackendComponents: make(map[string]workflows.WorkflowBackend),
+		workflowBackendComponents: make(map[string]wfbe.WorkflowBackend),
 		cryptoProviders:           make(map[string]crypto.SubtleCrypto),
 		topicRoutes:               make(map[string]TopicRoutes),
 	}

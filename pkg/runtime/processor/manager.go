@@ -19,7 +19,7 @@ import (
 
 	"github.com/dapr/components-contrib/bindings"
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
-	"github.com/dapr/components-contrib/workflows"
+	wfbe "github.com/dapr/components-contrib/wfbackend"
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/outbox"
 	"github.com/dapr/dapr/pkg/runtime/meta"
@@ -60,7 +60,7 @@ type BindingManager interface {
 }
 
 type WorkflowBackendManager interface {
-	WorkflowBackendComponentInfo() (*workflows.WorkflowBackendComponentInfo, bool)
+	WorkflowBackendComponentInfo() (*wfbe.WorkflowBackendComponentInfo, bool)
 }
 
 func (p *Processor) managerFromComp(comp componentsapi.Component) (manager, error) {

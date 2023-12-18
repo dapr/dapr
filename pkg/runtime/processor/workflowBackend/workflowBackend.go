@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/dapr/components-contrib/workflows"
+	wfbe "github.com/dapr/components-contrib/wfbackend"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	workflowBackendComp "github.com/dapr/dapr/pkg/components/workflowBackend"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -41,7 +41,7 @@ type workflowBackend struct {
 	compStore            *compstore.ComponentStore
 	meta                 *meta.Meta
 	lock                 sync.Mutex
-	backendComponentInfo *workflows.WorkflowBackendComponentInfo
+	backendComponentInfo *wfbe.WorkflowBackendComponentInfo
 }
 
 func New(opts Options) *workflowBackend {
@@ -62,7 +62,7 @@ func (wbe *workflowBackend) Init(ctx context.Context, comp compapi.Component) er
 	if err != nil {
 		log.Warnf("error creating workflow backend component (%s): %s", comp.LogName(), err)
 		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
-		wbe.backendComponentInfo = &workflows.WorkflowBackendComponentInfo{
+		wbe.backendComponentInfo = &wfbe.WorkflowBackendComponentInfo{
 			InvalidWorkflowBackend: true,
 		}
 		return err
@@ -78,7 +78,7 @@ func (wbe *workflowBackend) Init(ctx context.Context, comp compapi.Component) er
 		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
 		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 	}
-	err = workflowBackendComp.Init(workflows.Metadata{Base: baseMetadata})
+	err = workflowBackendComp.Init(wfbe.Metadata{Base: baseMetadata})
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
 		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
@@ -90,7 +90,7 @@ func (wbe *workflowBackend) Init(ctx context.Context, comp compapi.Component) er
 
 	if wbe.backendComponentInfo == nil {
 		log.Info("Using '" + comp.Spec.Type + "' as workflow backend")
-		wbe.backendComponentInfo = &workflows.WorkflowBackendComponentInfo{
+		wbe.backendComponentInfo = &wfbe.WorkflowBackendComponentInfo{
 			WorkflowBackendType:     comp.Spec.Type,
 			WorkflowBackendMetadata: baseMetadata,
 		}
@@ -113,7 +113,7 @@ func (wbe *workflowBackend) Close(comp compapi.Component) error {
 	return nil
 }
 
-func (wbe *workflowBackend) WorkflowBackendComponentInfo() (*workflows.WorkflowBackendComponentInfo, bool) {
+func (wbe *workflowBackend) WorkflowBackendComponentInfo() (*wfbe.WorkflowBackendComponentInfo, bool) {
 	wbe.lock.Lock()
 	defer wbe.lock.Unlock()
 
