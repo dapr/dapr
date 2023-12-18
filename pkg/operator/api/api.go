@@ -203,11 +203,8 @@ func (a *apiServer) ListComponents(ctx context.Context, in *operatorv1pb.ListCom
 		// By default assume that it is not a component for control plane service.
 		controlPlaneComp := false
 		c := components.Items[i] // Make a copy since we will refer to this as a reference in this loop.
-		// If the component is in the same namespace as the operator, then it is a control plane component.
+		// If the component is in the same namespace as the operator AND has a scope defined with prefix dapr-, then it is a control plane component.
 		if c.ObjectMeta.Namespace == security.CurrentNamespace() {
-			controlPlaneComp = true
-		} else {
-			// If the component is not in the same namespace as the operator, then check if it is a control plane component by checking if it has a scope defined with prefix dapr-.
 			for s := range c.Scopes {
 				scope := c.Scopes[s]
 				if strings.HasPrefix(scope, controlPlaneConstant) {
