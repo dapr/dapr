@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package workflowBackend
+package wfbackend
 
 import (
 	"context"
@@ -20,7 +20,7 @@ import (
 
 	wfbe "github.com/dapr/components-contrib/wfbackend"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	workflowBackendComp "github.com/dapr/dapr/pkg/components/workflowBackend"
+	wfbeComp "github.com/dapr/dapr/pkg/components/wfbackend"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
@@ -31,13 +31,13 @@ import (
 var log = logger.NewLogger("dapr.runtime.processor.workflowbackend")
 
 type Options struct {
-	Registry       *workflowBackendComp.Registry
+	Registry       *wfbeComp.Registry
 	ComponentStore *compstore.ComponentStore
 	Meta           *meta.Meta
 }
 
 type workflowBackend struct {
-	registry             *workflowBackendComp.Registry
+	registry             *wfbeComp.Registry
 	compStore            *compstore.ComponentStore
 	meta                 *meta.Meta
 	lock                 sync.Mutex

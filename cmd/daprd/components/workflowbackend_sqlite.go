@@ -17,9 +17,9 @@ package components
 
 import (
 	wfbe "github.com/dapr/components-contrib/wfbackend"
-	backendLoader "github.com/dapr/dapr/pkg/components/workflowBackend"
+	wfbeLoader "github.com/dapr/dapr/pkg/components/wfbackend"
 )
 
 func init() {
-	backendLoader.DefaultRegistry.RegisterComponent(wfbe.NewWorkflowBackendComp, "sqlite")
+	wfbeLoader.DefaultRegistry.RegisterComponent(wfbe.NewWorkflowBackendComp, "sqlite")
 }

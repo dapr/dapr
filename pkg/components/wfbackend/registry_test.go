@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package workflowBackend_test
+package wfbackend_test
 
 import (
 	"fmt"
@@ -22,7 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	wfbe "github.com/dapr/components-contrib/wfbackend"
-	wbe "github.com/dapr/dapr/pkg/components/workflowBackend"
+	wbe "github.com/dapr/dapr/pkg/components/wfbackend"
 	"github.com/dapr/kit/logger"
 )
 

@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package workflowBackend_test
+package wfbackend_test
 
 import (
 	"context"
@@ -28,7 +28,7 @@ import (
 	wfbe "github.com/dapr/components-contrib/wfbackend"
 	"github.com/dapr/dapr/pkg/apis/common"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	backendLoader "github.com/dapr/dapr/pkg/components/workflowBackend"
+	wfbeLoader "github.com/dapr/dapr/pkg/components/wfbackend"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -41,7 +41,7 @@ import (
 )
 
 func TestInitWorkflowBackend(t *testing.T) {
-	reg := registry.New(registry.NewOptions().WithWorkflowBackends(backendLoader.NewRegistry()))
+	reg := registry.New(registry.NewOptions().WithWorkflowBackends(wfbeLoader.NewRegistry()))
 	compStore := compstore.New()
 	proc := processor.New(processor.Options{
 		Registry:       reg,
