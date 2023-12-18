@@ -1607,7 +1607,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 
 		data, err = json.Marshal(envelope)
 		if err != nil {
-			err = apiErrors.PubSubMarshalEnvelope(pubsubName, string(contribMetadata.PubSubType), map[string]string{"appID": a.universal.AppID})
+			err = apiErrors.PubSubMarshalEnvelope(pubsubName, topic, string(contribMetadata.PubSubType), map[string]string{"appID": a.universal.AppID})
 			e, ok := err.(kitErrors.Error)
 			if ok {
 				fasthttpRespond(reqCtx, fasthttpResponseWithKitError(&e, nil))
@@ -1774,7 +1774,7 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 
 			entries[i].Event, err = json.Marshal(envelope)
 			if err != nil {
-				nerr := apiErrors.PubSubMarshalEnvelope(pubsubName, string(contribMetadata.PubSubType), map[string]string{"appID": a.universal.AppID})
+				nerr := apiErrors.PubSubMarshalEnvelope(pubsubName, topic, string(contribMetadata.PubSubType), map[string]string{"appID": a.universal.AppID})
 				e, ok := nerr.(kitErrors.Error)
 				if ok {
 					fasthttpRespond(reqCtx, fasthttpResponseWithKitError(&e, nil), closeChildSpans)
@@ -2072,12 +2072,13 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 		corID, traceState := diag.TraceIDAndStateFromSpan(span)
 		trs, err := a.pubsubAdapter.Outbox().PublishInternal(reqCtx, storeName, operations, a.universal.AppID, corID, traceState)
 		if err != nil {
-			msg := NewErrorResponse(
-				"ERR_PUBLISH_OUTBOX",
-				fmt.Sprintf(messages.ErrPublishOutbox, err.Error()))
-			fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
-			log.Debug(msg)
-			return
+			nerr := apiErrors.PubSubOubox(a.universal.AppID, err)
+			standardizedErr, ok := kitErrors.FromError(err)
+			if ok {
+				fasthttpRespond(reqCtx, fasthttpResponseWithKitError(standardizedErr, nil))
+				log.Debug(nerr)
+				return
+			}
 		}
 
 		operations = append(operations, trs...)

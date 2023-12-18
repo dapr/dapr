@@ -194,7 +194,7 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 
 		data, err = json.Marshal(envelope)
 		if err != nil {
-			err = apiErrors.PubSubMarshalEnvelope(pubsubName, string(contribMetadata.PubSubType), map[string]string{"appID": a.AppID})
+			err = apiErrors.PubSubMarshalEnvelope(pubsubName, topic, string(contribMetadata.PubSubType), map[string]string{"appID": a.AppID})
 			apiServerLogger.Debug(err)
 			return &emptypb.Empty{}, err
 		}
@@ -405,7 +405,7 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 
 			entries[i].Event, err = json.Marshal(envelope)
 			if err != nil {
-				nerr := apiErrors.PubSubMarshalEnvelope(pubsubName, string(contribMetadata.PubSubType), map[string]string{"appID": a.AppID, "err": err.Error()})
+				nerr := apiErrors.PubSubMarshalEnvelope(pubsubName, topic, string(contribMetadata.PubSubType), map[string]string{"appID": a.AppID, "err": err.Error()})
 				apiServerLogger.Debug(nerr)
 				closeChildSpans(ctx, nerr)
 				return &runtimev1pb.BulkPublishResponse{}, nerr
@@ -945,9 +945,9 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 		corID, traceState := diag.TraceIDAndStateFromSpan(span)
 		trs, err := a.pubsubAdapter.Outbox().PublishInternal(ctx, in.GetStoreName(), operations, a.UniversalAPI.AppID, corID, traceState)
 		if err != nil {
-			err = status.Errorf(codes.Internal, messages.ErrPublishOutbox, err.Error())
-			apiServerLogger.Debug(err)
-			return &emptypb.Empty{}, err
+			nerr := apiErrors.PubSubOubox(a.AppID, err)
+			apiServerLogger.Debug(nerr)
+			return &emptypb.Empty{}, nerr
 		}
 
 		operations = append(operations, trs...)

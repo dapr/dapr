@@ -40,7 +40,6 @@ const (
 
 	// PubSub.
 	ErrPubsubForbidden = "topic %s is not allowed for app id %s"
-	ErrPublishOutbox   = "error while publishing outbox message: %s"
 
 	// AppChannel.
 	ErrChannelNotFound       = "app channel is not initialized"
