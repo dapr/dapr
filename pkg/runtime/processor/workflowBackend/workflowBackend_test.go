@@ -25,7 +25,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/dapr/components-contrib/metadata"
-	wfs "github.com/dapr/components-contrib/workflows"
+	wfbe "github.com/dapr/components-contrib/wfbackend"
 	"github.com/dapr/dapr/pkg/apis/common"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	backendLoader "github.com/dapr/dapr/pkg/components/workflowBackend"
@@ -115,13 +115,13 @@ func initMockWorkflowBackendForRegistry(reg *registry.Registry, name, connection
 	mockWorkflowBackend := new(daprt.MockWorkflowBackend)
 
 	reg.WorkflowBackends().RegisterComponent(
-		func(_ logger.Logger) wfs.WorkflowBackend {
+		func(_ logger.Logger) wfbe.WorkflowBackend {
 			return mockWorkflowBackend
 		},
 		"mockWorkflowBackend",
 	)
 
-	expectedMetadata := wfs.Metadata{Base: metadata.Base{
+	expectedMetadata := wfbe.Metadata{Base: metadata.Base{
 		Name: name,
 		Properties: map[string]string{
 			"orchestrationLockTimeout": "1000ms",
@@ -129,7 +129,7 @@ func initMockWorkflowBackendForRegistry(reg *registry.Registry, name, connection
 			"connectionString":         connectionString,
 		},
 	}}
-	expectedMetadataUppercase := wfs.Metadata{Base: metadata.Base{
+	expectedMetadataUppercase := wfbe.Metadata{Base: metadata.Base{
 		Name: name,
 		Properties: map[string]string{
 			"orchestrationLockTimeout": "1000ms",

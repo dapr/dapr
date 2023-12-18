@@ -21,13 +21,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	wfs "github.com/dapr/components-contrib/workflows"
+	wfbe "github.com/dapr/components-contrib/wfbackend"
 	wbe "github.com/dapr/dapr/pkg/components/workflowBackend"
 	"github.com/dapr/kit/logger"
 )
 
 type mockWorkflowBackend struct {
-	wfs.WorkflowBackend
+	wfbe.WorkflowBackend
 }
 
 func TestRegistry(t *testing.T) {
@@ -45,10 +45,10 @@ func TestRegistry(t *testing.T) {
 		wbeMockV2 := &mockWorkflowBackend{}
 
 		// act
-		testRegistry.RegisterComponent(func(_ logger.Logger) wfs.WorkflowBackend {
+		testRegistry.RegisterComponent(func(_ logger.Logger) wfbe.WorkflowBackend {
 			return wbeMock
 		}, backendName)
-		testRegistry.RegisterComponent(func(_ logger.Logger) wfs.WorkflowBackend {
+		testRegistry.RegisterComponent(func(_ logger.Logger) wfbe.WorkflowBackend {
 			return wbeMockV2
 		}, backendNameV2)
 
