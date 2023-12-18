@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"net"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -47,10 +46,11 @@ import (
 )
 
 const (
-	APIVersionV1alpha1    = "dapr.io/v1alpha1"
-	APIVersionV2alpha1    = "dapr.io/v2alpha1"
-	kubernetesSecretStore = "kubernetes"
-	controlPlaneConstant  = "dapr-"
+	APIVersionV1alpha1        = "dapr.io/v1alpha1"
+	APIVersionV2alpha1        = "dapr.io/v2alpha1"
+	kubernetesSecretStore     = "kubernetes"
+	controlPlanePodNamePrefix = "dapr-"
+	controlPlaneScopePrefix   = "dapr:"
 )
 
 var log = logger.NewLogger("dapr.operator.api")
@@ -230,10 +230,6 @@ func (a *apiServer) ListComponents(ctx context.Context, in *operatorv1pb.ListCom
 		controlPlaneServiceReq = true
 	}
 
-	// If the pod name in request starts with dapr- AND is in the same namespace as the operator, then it is a control plane service.
-	if in.GetNamespace() == security.CurrentNamespace() && strings.HasPrefix(in.GetPodName(), controlPlaneConstant) {
-		controlPlaneServiceReq = true
-	}
 	var components componentsapi.ComponentList
 	if err := a.Client.List(ctx, &components, &client.ListOptions{
 		Namespace: in.GetNamespace(),
