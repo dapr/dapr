@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"os"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -396,6 +397,69 @@ func TestListsNamespaced(t *testing.T) {
 		})
 		require.NoError(t, err)
 		assert.Empty(t, res.GetComponents())
+	})
+	t.Run("list components for control plane", func(t *testing.T) {
+		s := runtime.NewScheme()
+		err := scheme.AddToScheme(s)
+		require.NoError(t, err)
+
+		err = componentsapi.AddToScheme(s)
+		require.NoError(t, err)
+
+		av, kind := componentsapi.SchemeGroupVersion.WithKind("Component").ToAPIVersionAndKind()
+		typeMeta := metav1.TypeMeta{
+			Kind:       kind,
+			APIVersion: av,
+		}
+		client := fake.NewClientBuilder().
+			WithScheme(s).
+			WithObjects(&componentsapi.Component{
+				TypeMeta: typeMeta,
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "obj1",
+					Namespace: "namespace-a",
+				},
+			}, &componentsapi.Component{
+				TypeMeta: typeMeta,
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "obj2",
+					Namespace: "dapr-system",
+				},
+				Scoped: commonapi.Scoped{
+					Scopes: []string{"dapr-actors"},
+				},
+			}).
+			Build()
+
+		api := NewAPIServer(Options{Client: client}).(*apiServer)
+
+		os.Setenv("NAMESPACE", "dapr-system")
+		defer os.Unsetenv("NAMESPACE")
+
+		res, err := api.ListComponents(context.TODO(), &operatorv1pb.ListComponentsRequest{
+			PodName:   "dapr-serviceABC",
+			Namespace: "dapr-system",
+		})
+		require.NoError(t, err)
+		assert.Len(t, res.GetComponents(), 1)
+
+		var sub resiliencyapi.Resiliency
+		require.NoError(t, yaml.Unmarshal(res.GetComponents()[0], &sub))
+
+		assert.Equal(t, "obj2", sub.Name)
+		assert.Equal(t, "dapr-system", sub.Namespace)
+
+		res, err = api.ListComponents(context.TODO(), &operatorv1pb.ListComponentsRequest{
+			PodName:   "foo",
+			Namespace: "namespace-a",
+		})
+		require.NoError(t, err)
+		assert.Len(t, res.GetComponents(), 1)
+
+		require.NoError(t, yaml.Unmarshal(res.GetComponents()[0], &sub))
+
+		assert.Equal(t, "obj1", sub.Name)
+		assert.Equal(t, "namespace-a", sub.Namespace)
 	})
 	t.Run("list subscriptions namespace scoping", func(t *testing.T) {
 		s := runtime.NewScheme()

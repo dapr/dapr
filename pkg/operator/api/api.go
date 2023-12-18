@@ -187,7 +187,7 @@ func (a *apiServer) ListComponents(ctx context.Context, in *operatorv1pb.ListCom
 	// by default assume that components are not getting loaded for control plane service
 	controlPlaneServiceReq := false
 	// If the pod name in request starts with dapr- AND is in the same namespace as the operator, then it is a control plane service.
-	if in.GetNamespace() == security.CurrentNamespace() && strings.HasPrefix(in.PodName, controlPlaneConstant) {
+	if in.GetNamespace() == security.CurrentNamespace() && strings.HasPrefix(in.GetPodName(), controlPlaneConstant) {
 		controlPlaneServiceReq = true
 	}
 	var components componentsapi.ComponentList
