@@ -35,8 +35,8 @@ import (
 )
 
 var tr *runner.TestRunner
-
-var testAppNames = []string{"perf-workflowsapp"}
+var backends = []string{"", "sqlite"}
+var appNamePrefix = "perf-workflowsapp"
 
 type K6RunConfig struct {
 	TARGET_URL     string
@@ -49,10 +49,10 @@ type K6RunConfig struct {
 func TestMain(m *testing.M) {
 	utils.SetupLogs("workflow_test")
 	testApps := []kube.AppDescription{}
-	for _, testAppName := range testAppNames {
+	for _, backend := range backends {
 		const replicas = 1
 		testApps = append(testApps, kube.AppDescription{
-			AppName:           testAppName,
+			AppName:           appNamePrefix + backend,
 			DaprEnabled:       true,
 			ImageName:         "perf-workflowsapp",
 			Replicas:          replicas,
@@ -67,7 +67,18 @@ func TestMain(m *testing.M) {
 		})
 	}
 
-	tr = runner.NewTestRunner("workflow_test", testApps, nil, nil)
+	comps := []kube.ComponentDescription{
+		{
+			Name:     "sqlitebackend",
+			TypeName: "workflowbackend.sqlite",
+			MetaData: map[string]kube.MetadataValue{
+				"connectionString": {Raw: `""`},
+			},
+			Scopes: []string{appNamePrefix + "sqlite"},
+		},
+	}
+
+	tr = runner.NewTestRunner("workflow_test", testApps, comps, nil)
 	os.Exit(tr.Start(m))
 }
 
@@ -184,44 +195,64 @@ func testWorkflow(t *testing.T, workflowName string, testAppName string, inputs 
 
 // Runs tests for `sum_series_wf` with constant VUs
 func TestWorkflowWithConstantVUs(t *testing.T) {
-	workflowName := "sum_series_wf"
-	inputs := []string{"100"}
-	scenarios := []string{"t_30_300", "t_30_300", "t_30_300"}
-	rateChecks := [][]string{{"rate==1", "rate==1", "rate==1"}}
-	testWorkflow(t, workflowName, testAppNames[0], inputs, scenarios, rateChecks, false, false)
+	for _, backend := range backends {
+		t.Run(backend, func(t *testing.T) {
+			workflowName := "sum_series_wf"
+			inputs := []string{"100"}
+			scenarios := []string{"t_30_300", "t_30_300", "t_30_300"}
+			rateChecks := [][]string{{"rate==1", "rate==1", "rate==1"}}
+			testWorkflow(t, workflowName, appNamePrefix+backend, inputs, scenarios, rateChecks, false, false)
+		})
+	}
 }
 
 func TestWorkflowWithConstantIterations(t *testing.T) {
-	workflowName := "sum_series_wf"
-	inputs := []string{"100"}
-	scenarios := []string{"t_30_300", "t_60_300", "t_90_300"}
-	rateChecks := [][]string{{"rate==1", "rate==1", "rate==1"}}
-	testWorkflow(t, workflowName, testAppNames[0], inputs, scenarios, rateChecks, true, false)
+	for _, backend := range backends {
+		t.Run(backend, func(t *testing.T) {
+			workflowName := "sum_series_wf"
+			inputs := []string{"100"}
+			scenarios := []string{"t_30_300", "t_60_300", "t_90_300"}
+			rateChecks := [][]string{{"rate==1", "rate==1", "rate==1"}}
+			testWorkflow(t, workflowName, appNamePrefix+backend, inputs, scenarios, rateChecks, true, false)
+		})
+	}
 }
 
 // Runs tests for `sum_series_wf` with Max VUs
 func TestSeriesWorkflowWithMaxVUs(t *testing.T) {
-	workflowName := "sum_series_wf"
-	inputs := []string{"100"}
-	scenarios := []string{"t_350_1400"}
-	rateChecks := [][]string{{"rate==1"}}
-	testWorkflow(t, workflowName, testAppNames[0], inputs, scenarios, rateChecks, true, false)
+	for _, backend := range backends {
+		t.Run(backend, func(t *testing.T) {
+			workflowName := "sum_series_wf"
+			inputs := []string{"100"}
+			scenarios := []string{"t_350_1400"}
+			rateChecks := [][]string{{"rate==1"}}
+			testWorkflow(t, workflowName, appNamePrefix+backend, inputs, scenarios, rateChecks, true, false)
+		})
+	}
 }
 
 // Runs tests for `sum_parallel_wf` with Max VUs
 func TestParallelWorkflowWithMaxVUs(t *testing.T) {
-	workflowName := "sum_parallel_wf"
-	inputs := []string{"100"}
-	scenarios := []string{"t_110_440"}
-	rateChecks := [][]string{{"rate==1"}}
-	testWorkflow(t, workflowName, testAppNames[0], inputs, scenarios, rateChecks, true, false)
+	for _, backend := range backends {
+		t.Run(backend, func(t *testing.T) {
+			workflowName := "sum_parallel_wf"
+			inputs := []string{"100"}
+			scenarios := []string{"t_110_440"}
+			rateChecks := [][]string{{"rate==1"}}
+			testWorkflow(t, workflowName, appNamePrefix+backend, inputs, scenarios, rateChecks, true, false)
+		})
+	}
 }
 
 // Runs tests for `state_wf` with different Payload
 func TestWorkflowWithDifferentPayloads(t *testing.T) {
-	workflowName := "state_wf"
-	scenarios := []string{"t_30_300"}
-	inputs := []string{"10000", "50000", "100000"}
-	rateChecks := [][]string{{"rate==1"}, {"rate==1"}, {"rate==1"}}
-	testWorkflow(t, workflowName, testAppNames[0], inputs, scenarios, rateChecks, true, true)
+	for _, backend := range backends {
+		t.Run(backend, func(t *testing.T) {
+			workflowName := "state_wf"
+			scenarios := []string{"t_30_300"}
+			inputs := []string{"10000", "50000", "100000"}
+			rateChecks := [][]string{{"rate==1"}, {"rate==1"}, {"rate==1"}}
+			testWorkflow(t, workflowName, appNamePrefix+backend, inputs, scenarios, rateChecks, true, true)
+		})
+	}
 }
