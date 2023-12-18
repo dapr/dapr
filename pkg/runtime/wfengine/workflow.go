@@ -212,11 +212,11 @@ func (wf *workflowActor) createWorkflowInstance(ctx context.Context, actorID str
 	switch reuseIDPolicy.GetAction() {
 	case api.REUSE_ID_ACTION_IGNORE:
 		// Log an warning message and ignore creating new instance
-		wfLogger.Warnf("An instance with ID '%s' already exists; dropping duplicate create request", actorID)
+		wfLogger.Warnf("Workflow actor '%s': ignoring request to recreate the current workflow instance", actorID)
 		return nil
 	case api.REUSE_ID_ACTION_TERMINATE:
 		// terminate existing instance
-		if err := wf.cleanupOrchestrationStateInternal(ctx, actorID, state, false); err != nil {
+		if err := wf.cleanupWorkflowStateInternal(ctx, actorID, state, false); err != nil {
 			return fmt.Errorf("failed to terminate existing instance with ID '%s'", actorID)
 		}
 
@@ -264,9 +264,9 @@ func (wf *workflowActor) scheduleWorkflowStart(ctx context.Context, actorID stri
 }
 
 // This method cleans up a workflow associated with the given actorID
-func (wf *workflowActor) cleanupOrchestrationStateInternal(ctx context.Context, actorID string, state *workflowState, requiredAndNotCompleted bool) error {
-	// Only purge orchestration in the ['COMPLETED', 'FAILED', 'TERMINATED'] statuses,
-	// indicating that the orchestration is completed.
+func (wf *workflowActor) cleanupWorkflowStateInternal(ctx context.Context, actorID string, state *workflowState, requiredAndNotCompleted bool) error {
+	// If the workflow is required to complete but it's not yet completed then return [ErrNotCompleted]
+	// This check is used by purging workflow
 	if requiredAndNotCompleted {
 		return api.ErrNotCompleted
 	}
@@ -332,7 +332,7 @@ func (wf *workflowActor) purgeWorkflowState(ctx context.Context, actorID string)
 		return api.ErrInstanceNotFound
 	}
 	runtimeState := getRuntimeState(actorID, state)
-	return wf.cleanupOrchestrationStateInternal(ctx, actorID, state, true && !runtimeState.IsCompleted())
+	return wf.cleanupWorkflowStateInternal(ctx, actorID, state, !runtimeState.IsCompleted())
 }
 
 func (wf *workflowActor) addWorkflowEvent(ctx context.Context, actorID string, historyEventBytes []byte) error {

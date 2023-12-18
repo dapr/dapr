@@ -167,7 +167,7 @@ func (be *actorBackend) CreateOrchestrationInstance(ctx context.Context, e *back
 		NewInvokeMethodRequest(CreateWorkflowInstanceMethod).
 		WithActor(be.config.workflowActorType, workflowInstanceID).
 		WithRawDataBytes(requestBytes).
-		WithContentType(invokev1.OctetStreamContentType)
+		WithContentType(invokev1.JSONContentType)
 	defer req.Close()
 
 	resp, err := be.actors.Call(ctx, req)
