@@ -43,6 +43,8 @@ const (
 
 	WorkflowEvent = "event"
 	Timer         = "timer"
+
+	ComponentName = "dapr"
 )
 
 type workflowMetrics struct {
@@ -56,11 +58,9 @@ type workflowMetrics struct {
 	workflowExecutionCount *stats.Int64Measure
 	// Time taken to run a workflow to completion
 	workflowExecutionLatency *stats.Float64Measure
-	// Latency between execution request and actual execution
-	workflowSchedulingLatency *stats.Float64Measure
-	appID                     string
-	enabled                   bool
-	namespace                 string
+	appID                    string
+	enabled                  bool
+	namespace                string
 }
 
 func newWorkflowMetrics() *workflowMetrics {
@@ -104,7 +104,7 @@ func (w *workflowMetrics) Init(appID, namespace string) error {
 		diagUtils.NewMeasureView(w.workflowOperationsLatency, []tag.Key{appIDKey, componentKey, namespaceKey, operationKey, statusKey}, defaultLatencyDistribution),
 		diagUtils.NewMeasureView(w.workflowRemindersCount, []tag.Key{appIDKey, componentKey, namespaceKey, reminderTypeKey}, view.Count()),
 		diagUtils.NewMeasureView(w.workflowExecutionCount, []tag.Key{appIDKey, componentKey, namespaceKey, executionTypeKey, statusKey}, view.Count()),
-		diagUtils.NewMeasureView(w.workflowExecutionLatency, []tag.Key{appIDKey, componentKey, namespaceKey, executionTypeKey, statusKey}, defaultLatencyDistribution),
+		diagUtils.NewMeasureView(w.workflowExecutionLatency, []tag.Key{appIDKey, componentKey, namespaceKey, executionTypeKey, statusKey}, defaultLatencyDistribution))
 }
 
 // WorkflowOperationsEvent records total number of Successful/Failed workflow Operations requests. It also records latency for those requests.

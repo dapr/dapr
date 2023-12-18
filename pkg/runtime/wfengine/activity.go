@@ -107,7 +107,7 @@ func (a *activityActor) InvokeMethod(ctx context.Context, actorID string, method
 	err := a.createReliableReminder(ctx, actorID, nil)
 	if err == nil {
 		// Activity reminder created, record metrics
-		diag.DefaultWorkflowMonitoring.RemindersTotalCreated(ctx, "dapr", diag.Activity)
+		diag.DefaultWorkflowMonitoring.RemindersTotalCreated(ctx, diag.ComponentName, diag.Activity)
 	}
 	return nil, err
 }
@@ -178,11 +178,11 @@ func (a *activityActor) executeActivity(ctx context.Context, actorID string, nam
 	if err = a.scheduler(ctx, wi); err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
 			// Activity execution failed with recoverable error, record metrics.
-			diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, "dapr", diag.Activity, diag.StatusRetryable, 0)
+			diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, diag.ComponentName, diag.Activity, diag.StatusRetryable, 0)
 			return newRecoverableError(fmt.Errorf("timed-out trying to schedule an activity execution - this can happen if too many activities are running in parallel or if the workflow engine isn't running: %w", err))
 		}
 		// Activity execution failed with recoverable error, record metrics.
-		diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, "dapr", diag.Activity, diag.StatusRetryable, 0)
+		diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, diag.ComponentName, diag.Activity, diag.StatusRetryable, 0)
 		return newRecoverableError(fmt.Errorf("failed to schedule an activity execution: %w", err))
 	}
 
@@ -194,8 +194,9 @@ loop:
 			if !t.Stop() {
 				<-t.C
 			}
-			// Activity execution failed with non-recoverable error. Record metrics
-			diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, "dapr", diag.Activity, diag.StatusFailed, 0)
+			// Activity execution failed with recoverable error. Record metrics
+			elapsed := diag.ElapsedSince(start)
+			diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, diag.ComponentName, diag.Activity, diag.StatusRetryable, elapsed)
 			return ctx.Err() // will be retried
 		case <-t.C:
 			if deadline, ok := ctx.Deadline(); ok {
@@ -210,12 +211,12 @@ loop:
 			if completed {
 				elapsed := diag.ElapsedSince(start)
 				// activity completed, record count and latency metrics
-				diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, "dapr", diag.Activity, diag.StatusSuccess, elapsed)
+				diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, diag.ComponentName, diag.Activity, diag.StatusSuccess, elapsed)
 				break loop
 			} else {
 				elapsed := diag.ElapsedSince(start)
 				// Activity execution failed with recoverable error, record metrics
-				diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, "dapr", diag.Activity, diag.StatusRetryable, elapsed)
+				diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, diag.ComponentName, diag.Activity, diag.StatusRetryable, elapsed)
 				return newRecoverableError(errExecutionAborted) // AbandonActivityWorkItem was called
 			}
 		}
@@ -334,7 +335,6 @@ func (a *activityActor) createReliableReminder(ctx context.Context, actorID stri
 	if err != nil {
 		return fmt.Errorf("failed to encode data as JSON: %w", err)
 	}
-	// Similar to Workflow, should I add a time stamp here ? which can be checking in execute Activity to determin time taken for complete execution ?
 	return a.actorRuntime.CreateReminder(ctx, &actors.CreateReminderRequest{
 		ActorType: a.config.activityActorType,
 		ActorID:   actorID,

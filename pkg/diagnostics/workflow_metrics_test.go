@@ -8,10 +8,8 @@ import (
 )
 
 const (
-	workflowName = "test"
+	workflowName = componentName
 )
-
-// Not sure about value for "ComponentKey", so passing "test" as component, through "workflowName" variable.
 
 func workflowsMetrics() *workflowMetrics {
 	w := newWorkflowMetrics()

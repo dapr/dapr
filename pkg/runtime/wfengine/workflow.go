@@ -207,7 +207,7 @@ func (wf *workflowActor) createWorkflowInstance(ctx context.Context, actorID str
 	}
 
 	// workflow reminder created, record metrics.
-	diag.DefaultWorkflowMonitoring.RemindersTotalCreated(ctx, "dapr", diag.Workflow)
+	diag.DefaultWorkflowMonitoring.RemindersTotalCreated(ctx, diag.ComponentName, diag.Workflow)
 
 	state.AddToInbox(startEvent)
 	return wf.saveInternalState(ctx, actorID, state)
@@ -303,7 +303,7 @@ func (wf *workflowActor) addWorkflowEvent(ctx context.Context, actorID string, h
 		return err
 	}
 	// event reminder created successfully, record metrics.
-	diag.DefaultWorkflowMonitoring.RemindersTotalCreated(ctx, "dapr", diag.WorkflowEvent)
+	diag.DefaultWorkflowMonitoring.RemindersTotalCreated(ctx, diag.ComponentName, diag.WorkflowEvent)
 
 	return wf.saveInternalState(ctx, actorID, state)
 }
@@ -400,7 +400,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
 			// Workflow execution scheduling request failed with recoverable error, record metrics.
-			diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, "dapr", diag.Workflow, diag.StatusRetryable, 0)
+			diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, diag.ComponentName, diag.Workflow, diag.StatusRetryable, 0)
 			return newRecoverableError(fmt.Errorf("timed-out trying to schedule a workflow execution - this can happen if there are too many in-flight workflows or if the workflow engine isn't running: %w", err))
 		}
 		return newRecoverableError(fmt.Errorf("failed to schedule a workflow execution: %w", err))
@@ -408,18 +408,18 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 
 	select {
 	case <-ctx.Done(): // caller is responsible for timeout management
-		// Workflow execution failed with non-recoverable error, record metrics.
-		diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, "dapr", diag.Workflow, diag.StatusFailed, 0)
+		// Workflow execution failed with recoverable error, record metrics.
+		diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, diag.ComponentName, diag.Workflow, diag.StatusRetryable, 0)
 		return ctx.Err()
 	case completed := <-callback:
 		if !completed {
 			// Workflow execution failed with Recoverable Error, record metrics
-			diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, "dapr", diag.Workflow, diag.StatusRetryable, 0)
+			diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, diag.ComponentName, diag.Workflow, diag.StatusRetryable, 0)
 
 			return newRecoverableError(errExecutionAborted)
 		}
-		// workflow execution completed, record metrics
-		diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, "dapr", diag.Workflow, diag.StatusSuccess, 0)
+		// execution latency for workflow is not supported yet.
+		diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, diag.ComponentName, diag.Workflow, diag.StatusSuccess, 0)
 	}
 	wfLogger.Debugf("Workflow actor '%s': workflow execution returned with status '%s' instanceId '%s'", actorID, runtimeState.RuntimeStatus().String(), wi.InstanceID)
 
@@ -452,7 +452,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 				return newRecoverableError(fmt.Errorf("actor '%s' failed to create reminder for timer: %w", actorID, err))
 			}
 			// timer reminder created, record metrics
-			diag.DefaultWorkflowMonitoring.RemindersTotalCreated(ctx, "dapr", diag.Timer)
+			diag.DefaultWorkflowMonitoring.RemindersTotalCreated(ctx, diag.ComponentName, diag.Timer)
 		}
 	}
 
@@ -535,8 +535,6 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 		}
 	}
 
-	// Workflow Execution latency is not supported yet.
-	diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, "dapr", diag.Workflow, diag.StatusSuccess, 0)
 	state.ApplyRuntimeStateChanges(runtimeState)
 	state.ClearInbox()
 
@@ -601,7 +599,6 @@ func (wf *workflowActor) createReliableReminder(ctx context.Context, actorID str
 		return reminderName, fmt.Errorf("failed to encode data as JSON: %w", err)
 	}
 
-	// Do I have to add some sort of time instance here, which can be checked in "run-workflow" function for latency calculations ?
 	return reminderName, wf.actors.CreateReminder(ctx, &actors.CreateReminderRequest{
 		ActorType: wf.config.workflowActorType,
 		ActorID:   actorID,
