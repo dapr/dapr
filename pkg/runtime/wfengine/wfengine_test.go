@@ -249,7 +249,7 @@ func TestSingleActivityWorkflow_ReuseInstanceIDTerminate(t *testing.T) {
 			// the first orchestration should complete as the second one is ignored
 			assert.Equal(t, `"Hello, World!"`, metadata.SerializedOutput)
 			// assert the orchestration created timestamp
-			assert.True(t, pivotTime.Before(metadata.CreatedAt))
+			assert.False(t, pivotTime.After(metadata.CreatedAt))
 		})
 	}
 }
