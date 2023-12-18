@@ -129,7 +129,7 @@ func main() {
 
 			rt, rerr := runtime.FromConfig(ctx, &runtime.Config{
 				AppID:                        opts.AppID,
-				PlacementServiceHostAddr:     opts.PlacementServiceHostAddr,
+				PlacementServiceHostAddr:     "", // TODO
 				AllowedOrigins:               opts.AllowedOrigins,
 				ResourcesPath:                opts.ResourcesPath,
 				ControlPlaneAddress:          opts.ControlPlaneAddress,
