@@ -19,6 +19,7 @@ import (
 
 	wfbe "github.com/dapr/components-contrib/wfbackend"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/metadata"
 	"github.com/microsoft/durabletask-go/backend"
 	"github.com/microsoft/durabletask-go/backend/sqlite"
 )
@@ -48,11 +49,11 @@ func getSqliteBackend(appId string, wfe *WorkflowEngine, backendComponentInfo *w
 		FilePath:                 "",
 	}
 
-	if connectionString, ok := backendComponentInfo.WorkflowBackendMetadata.Properties["connectionString"]; ok {
+	if connectionString, ok := metadata.GetMetadataProperty(backendComponentInfo.WorkflowBackendMetadata.Properties, "connectionString"); ok {
 		sqliteOptions.FilePath = connectionString
 	}
 
-	if orchestrationLockTimeout, ok := backendComponentInfo.WorkflowBackendMetadata.Properties["orchestrationLockTimeout"]; ok {
+	if orchestrationLockTimeout, ok := metadata.GetMetadataProperty(backendComponentInfo.WorkflowBackendMetadata.Properties, "orchestrationLockTimeout"); ok {
 		if duration, err := time.ParseDuration(orchestrationLockTimeout); err == nil {
 			sqliteOptions.OrchestrationLockTimeout = duration
 		} else {
@@ -60,7 +61,7 @@ func getSqliteBackend(appId string, wfe *WorkflowEngine, backendComponentInfo *w
 		}
 	}
 
-	if activityLockTimeout, ok := backendComponentInfo.WorkflowBackendMetadata.Properties["activityLockTimeout"]; ok {
+	if activityLockTimeout, ok := metadata.GetMetadataProperty(backendComponentInfo.WorkflowBackendMetadata.Properties, "activityLockTimeout"); ok {
 		if duration, err := time.ParseDuration(activityLockTimeout); err == nil {
 			sqliteOptions.ActivityLockTimeout = duration
 		} else {
