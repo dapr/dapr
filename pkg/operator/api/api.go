@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -47,6 +48,7 @@ const (
 	APIVersionV1alpha1    = "dapr.io/v1alpha1"
 	APIVersionV2alpha1    = "dapr.io/v2alpha1"
 	kubernetesSecretStore = "kubernetes"
+	controlPlaneConstant  = "dapr-"
 )
 
 var log = logger.NewLogger("dapr.operator.api")
@@ -182,6 +184,12 @@ func (a *apiServer) GetConfiguration(ctx context.Context, in *operatorv1pb.GetCo
 
 // ListComponents returns a list of Dapr components.
 func (a *apiServer) ListComponents(ctx context.Context, in *operatorv1pb.ListComponentsRequest) (*operatorv1pb.ListComponentResponse, error) {
+	// by default assume that components are not getting loaded for control plane service
+	controlPlaneServiceReq := false
+	// If the pod name in request starts with dapr- AND is in the same namespace as the operator, then it is a control plane service.
+	if in.GetNamespace() == security.CurrentNamespace() && strings.HasPrefix(in.PodName, controlPlaneConstant) {
+		controlPlaneServiceReq = true
+	}
 	var components componentsapi.ComponentList
 	if err := a.Client.List(ctx, &components, &client.ListOptions{
 		Namespace: in.GetNamespace(),
@@ -192,7 +200,26 @@ func (a *apiServer) ListComponents(ctx context.Context, in *operatorv1pb.ListCom
 		Components: [][]byte{},
 	}
 	for i := range components.Items {
+		// By default assume that it is not a component for control plane service.
+		controlPlaneComp := false
 		c := components.Items[i] // Make a copy since we will refer to this as a reference in this loop.
+		// If the component is in the same namespace as the operator, then it is a control plane component.
+		if c.ObjectMeta.Namespace == security.CurrentNamespace() {
+			controlPlaneComp = true
+		} else {
+			// If the component is not in the same namespace as the operator, then check if it is a control plane component by checking if it has a scope defined with prefix dapr-.
+			for s := range c.Scopes {
+				scope := c.Scopes[s]
+				if strings.HasPrefix(scope, controlPlaneConstant) {
+					controlPlaneComp = true
+					break
+				}
+			}
+		}
+		if (!controlPlaneServiceReq && controlPlaneComp) || (controlPlaneServiceReq && !controlPlaneComp) {
+			continue
+		}
+
 		err := processComponentSecrets(ctx, &c, in.GetNamespace(), a.Client)
 		if err != nil {
 			log.Warnf("error processing component %s secrets from pod %s/%s: %s", c.Name, in.GetNamespace(), in.GetPodName(), err)
