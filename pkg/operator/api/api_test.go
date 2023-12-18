@@ -426,7 +426,7 @@ func TestListsNamespaced(t *testing.T) {
 					Namespace: "dapr-system",
 				},
 				Scoped: commonapi.Scoped{
-					Scopes: []string{"dapr-actors"},
+					Scopes: []string{"dapr:actors"},
 				},
 			}).
 			Build()

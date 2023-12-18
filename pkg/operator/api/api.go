@@ -45,10 +45,11 @@ import (
 )
 
 const (
-	APIVersionV1alpha1    = "dapr.io/v1alpha1"
-	APIVersionV2alpha1    = "dapr.io/v2alpha1"
-	kubernetesSecretStore = "kubernetes"
-	controlPlaneConstant  = "dapr-"
+	APIVersionV1alpha1        = "dapr.io/v1alpha1"
+	APIVersionV2alpha1        = "dapr.io/v2alpha1"
+	kubernetesSecretStore     = "kubernetes"
+	controlPlanePodNamePrefix = "dapr-"
+	controlPlaneScopePrefix   = "dapr:"
 )
 
 var log = logger.NewLogger("dapr.operator.api")
@@ -186,8 +187,8 @@ func (a *apiServer) GetConfiguration(ctx context.Context, in *operatorv1pb.GetCo
 func (a *apiServer) ListComponents(ctx context.Context, in *operatorv1pb.ListComponentsRequest) (*operatorv1pb.ListComponentResponse, error) {
 	// by default assume that components are not getting loaded for control plane service
 	controlPlaneServiceReq := false
-	// If the pod name in request starts with dapr- AND is in the same namespace as the operator, then it is a control plane service.
-	if in.GetNamespace() == security.CurrentNamespace() && strings.HasPrefix(in.GetPodName(), controlPlaneConstant) {
+	// If the pod name in request starts with dapr- AND is in the same namespace as the operator, then it is a control plane service request.
+	if in.GetNamespace() == security.CurrentNamespace() && strings.HasPrefix(in.GetPodName(), controlPlanePodNamePrefix) {
 		controlPlaneServiceReq = true
 	}
 	var components componentsapi.ComponentList
@@ -203,11 +204,11 @@ func (a *apiServer) ListComponents(ctx context.Context, in *operatorv1pb.ListCom
 		// By default assume that it is not a component for control plane service.
 		controlPlaneComp := false
 		c := components.Items[i] // Make a copy since we will refer to this as a reference in this loop.
-		// If the component is in the same namespace as the operator AND has a scope defined with prefix dapr-, then it is a control plane component.
+		// If the component is in the same namespace as the operator AND has a scope defined with prefix dapr:, then it is a control plane component.
 		if c.ObjectMeta.Namespace == security.CurrentNamespace() {
 			for s := range c.Scopes {
 				scope := c.Scopes[s]
-				if strings.HasPrefix(scope, controlPlaneConstant) {
+				if strings.HasPrefix(scope, controlPlaneScopePrefix) {
 					controlPlaneComp = true
 					break
 				}
