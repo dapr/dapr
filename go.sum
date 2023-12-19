@@ -334,8 +334,8 @@ github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e/go.mod h1:nSuG5e5P
 github.com/chzyer/readline v1.5.0/go.mod h1:x22KAscuvRqlLoK9CsoYsmxoXZMMFVyOl86cAH8qUic=
 github.com/chzyer/test v0.0.0-20180213035817-a1ea475d72b1/go.mod h1:Q3SI9o4m/ZMnBNeIyt5eFwwo7qiLfzFZmjNmxjkiQlU=
 github.com/chzyer/test v0.0.0-20210722231415-061457976a23/go.mod h1:Q3SI9o4m/ZMnBNeIyt5eFwwo7qiLfzFZmjNmxjkiQlU=
-github.com/cicoyle/kit v0.0.0-20231205224319-c0074c16dd0a h1:Hh+5N1OOMwbwZqsaKU4ztQEvugvRbkPRUWd0orkM4k4=
-github.com/cicoyle/kit v0.0.0-20231205224319-c0074c16dd0a/go.mod h1:c3Z78F+h7UYtb0LmpzJNC/ChT240ycDJFViRUztdpoo=
+github.com/cicoyle/kit v0.0.0-20231218210627-b4bce9be6418 h1:/K/WP797nLL8zP6HWL11LGewHKQeltFcOWyRwO4Wbbo=
+github.com/cicoyle/kit v0.0.0-20231218210627-b4bce9be6418/go.mod h1:kCRdU8av1epsDzfxjpLo2gB2VYTgsNefRauD5gbir3A=
 github.com/circonus-labs/circonus-gometrics v2.3.1+incompatible/go.mod h1:nmEj6Dob7S7YxXgwXpfOuvO54S+tGdZdw9fuRZt25Ag=
 github.com/circonus-labs/circonusllhist v0.1.3/go.mod h1:kMXHVDlOchFAehlya5ePtbp5jckzBHf4XRpQvBOLI+I=
 github.com/clbanning/mxj/v2 v2.5.5/go.mod h1:hNiWqW14h+kc+MdF9C6/YoRfjEJoR3ou6tn/Qo+ve2s=

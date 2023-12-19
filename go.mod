@@ -456,7 +456,7 @@ replace github.com/microcosm-cc/bluemonday => github.com/microcosm-cc/bluemonday
 
 // Pointing to Cassie's fork until this PR gets merged:
 // https://github.com/dapr/kit/pull/77
-replace github.com/dapr/kit => github.com/cicoyle/kit v0.0.0-20231205224319-c0074c16dd0a
+replace github.com/dapr/kit => github.com/cicoyle/kit v0.0.0-20231218210627-b4bce9be6418
 
 //
 // Then, run `make modtidy` in this repository.
