@@ -154,7 +154,6 @@ func TestPubSubEndpoints(t *testing.T) {
 				}
 
 				if req.PubsubName == "errnotfound" {
-					// return api.ErrPubSubNotFound.WithVars("errnotfound")
 					return runtimePubsub.NotFoundError{PubsubName: "errnotfound"}
 				}
 

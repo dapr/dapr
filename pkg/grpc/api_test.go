@@ -2329,7 +2329,6 @@ func TestPublishTopic(t *testing.T) {
 		pubsubAdapter: &daprt.MockPubSubAdapter{
 			PublishFn: func(ctx context.Context, req *pubsub.PublishRequest) error {
 				if req.Topic == "error-topic" {
-					//TODO: Cassie - might need to update
 					return errors.New("error when publish")
 				}
 
