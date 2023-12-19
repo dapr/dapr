@@ -22,7 +22,7 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	"github.com/dapr/components-contrib/metadata"
-	wfbe "github.com/dapr/components-contrib/wfbackend"
+	wfbe "github.com/dapr/dapr/pkg/components/wfbackend"
 )
 
 const (

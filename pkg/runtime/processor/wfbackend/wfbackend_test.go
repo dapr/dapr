@@ -25,10 +25,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/dapr/components-contrib/metadata"
-	wfbe "github.com/dapr/components-contrib/wfbackend"
+	wfbe "github.com/dapr/dapr/pkg/components/wfbackend"
 	"github.com/dapr/dapr/pkg/apis/common"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	wfbeLoader "github.com/dapr/dapr/pkg/components/wfbackend"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -41,7 +40,7 @@ import (
 )
 
 func TestInitWorkflowBackend(t *testing.T) {
-	reg := registry.New(registry.NewOptions().WithWorkflowBackends(wfbeLoader.NewRegistry()))
+	reg := registry.New(registry.NewOptions().WithWorkflowBackends(wfbe.NewRegistry()))
 	compStore := compstore.New()
 	proc := processor.New(processor.Options{
 		Registry:       reg,

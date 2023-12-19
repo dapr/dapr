@@ -13,7 +13,7 @@ limitations under the License.
 
 package compstore
 
-import wfbe "github.com/dapr/components-contrib/wfbackend"
+import wfbe "github.com/dapr/dapr/pkg/components/wfbackend"
 
 func (c *ComponentStore) AddWorkflowBackend(name string, workflowBackend wfbe.WorkflowBackend) {
 	c.lock.Lock()

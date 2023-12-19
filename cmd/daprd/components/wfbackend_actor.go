@@ -16,10 +16,9 @@ limitations under the License.
 package components
 
 import (
-	wfbe "github.com/dapr/components-contrib/wfbackend"
 	wfbeLoader "github.com/dapr/dapr/pkg/components/wfbackend"
 )
 
 func init() {
-	wfbeLoader.DefaultRegistry.RegisterComponent(wfbe.NewWorkflowBackendComp, "actor")
+	wfbeLoader.DefaultRegistry.RegisterComponent(wfbeLoader.NewWorkflowBackendComp, "actor")
 }

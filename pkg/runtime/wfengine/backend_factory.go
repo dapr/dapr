@@ -17,7 +17,7 @@ package wfengine
 import (
 	"time"
 
-	wfbe "github.com/dapr/components-contrib/wfbackend"
+	wfbe "github.com/dapr/dapr/pkg/components/wfbackend"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/metadata"
 	"github.com/microsoft/durabletask-go/backend"

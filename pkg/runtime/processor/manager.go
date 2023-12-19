@@ -19,7 +19,7 @@ import (
 
 	"github.com/dapr/components-contrib/bindings"
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
-	wfbe "github.com/dapr/components-contrib/wfbackend"
+	wfbe "github.com/dapr/dapr/pkg/components/wfbackend"
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/outbox"
 	"github.com/dapr/dapr/pkg/runtime/meta"
