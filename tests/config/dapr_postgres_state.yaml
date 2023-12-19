@@ -17,7 +17,7 @@ metadata:
   name: statestore
 spec:
   type: state.postgres
-  version: v1
+  version: v2
   initTimeout: 1m
   metadata:
     - name: connectionString
