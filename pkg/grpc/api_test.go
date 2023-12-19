@@ -2429,16 +2429,7 @@ func TestPublishTopic(t *testing.T) {
 
 	t.Run("err: empty bulk publish event request", func(t *testing.T) {
 		_, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{})
-
-		stat, ok := status.FromError(err)
-		if ok {
-			t.Log("OK")
-
-			fmt.Printf("\nstatus: %v\n", stat)
-		}
-
-		// t.Log(err)
-		//assert.Equal(t, stat.Code(), apiErrors.ErrPubSubNameEmpty.GrpcCode)
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
 	})
 
 	t.Run("err: bulk publish event request with duplicate entry Ids", func(t *testing.T) {
@@ -2491,16 +2482,7 @@ func TestPublishTopic(t *testing.T) {
 		_, err := client.BulkPublishEventAlpha1(context.Background(), &runtimev1pb.BulkPublishRequest{
 			PubsubName: "pubsub",
 		})
-
-		stat, ok := status.FromError(err)
-		if ok {
-			t.Log("OK")
-
-			fmt.Printf("\nstatus: %v\n", stat)
-		}
-
-		// t.Log(err)
-		//assert.Equal(t, stat.Code(), apiErrors.ErrPubSubTopicEmpty.GrpcCode)
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
 	})
 
 	t.Run("no err: bulk publish event request with pubsub, topic and empty entries", func(t *testing.T) {
