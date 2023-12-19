@@ -92,6 +92,7 @@ type Config struct {
 	DaprGracefulShutdownSeconds  int
 	DaprBlockShutdownDuration    *time.Duration
 	PlacementServiceHostAddr     string
+	ReminderService              string
 	DaprAPIListenAddresses       string
 	AppHealthProbeInterval       int
 	AppHealthProbeTimeout        int
@@ -121,6 +122,7 @@ type internalConfig struct {
 	appConnectionConfig          config.AppConnectionConfig
 	mode                         modes.DaprMode
 	placementAddresses           []string
+	reminderServiceAddresses     []string
 	allowedOrigins               string
 	standalone                   configmodes.StandaloneConfig
 	kubernetes                   configmodes.KubernetesConfig
@@ -372,7 +374,11 @@ func (c *Config) toInternal() (*internalConfig, error) {
 	}
 
 	if c.PlacementServiceHostAddr != "" {
-		intc.placementAddresses = parsePlacementAddr(c.PlacementServiceHostAddr)
+		intc.placementAddresses = parseServiceAddr(c.PlacementServiceHostAddr)
+	}
+
+	if c.ReminderService != "" {
+		intc.reminderServiceAddresses = parseServiceAddr(c.ReminderService)
 	}
 
 	if intc.appConnectionConfig.MaxConcurrency == -1 {
@@ -447,7 +453,7 @@ func (c *Config) toInternal() (*internalConfig, error) {
 	return intc, nil
 }
 
-func parsePlacementAddr(val string) []string {
+func parseServiceAddr(val string) []string {
 	p := strings.Split(val, ",")
 	for i, v := range p {
 		p[i] = strings.TrimSpace(v)
