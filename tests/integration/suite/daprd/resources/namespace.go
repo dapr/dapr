@@ -49,10 +49,12 @@ spec:
   type: state.in-memory
   version: v1
 ---
+# This component is skipped because it is in a different namespace. Even though
+# it has the same name, daprd will not error as it is not loaded.
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
-  name: ghi
+  name: abc
   namespace: notmynamespace
 spec:
   type: state.in-memory
@@ -61,7 +63,7 @@ spec:
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
-  name: abc
+  name: ghi
   namespace: notmynamespace
 spec:
   type: state.in-memory
