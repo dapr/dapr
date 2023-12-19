@@ -141,7 +141,6 @@ func (be *actorBackend) CreateOrchestrationInstance(ctx context.Context, e *back
 	}
 
 	policy := &api.OrchestrationIdReusePolicy{}
-
 	for _, opt := range opts {
 		opt(policy)
 	}
@@ -151,12 +150,10 @@ func (be *actorBackend) CreateOrchestrationInstance(ctx context.Context, e *back
 		return err
 	}
 
-	createWorkflowInstanceRequest := CreateWorkflowInstanceRequest{
+	requestBytes, err := json.Marshal(CreateWorkflowInstanceRequest{
 		Policy:          policy,
 		StartEventBytes: eventData,
-	}
-
-	requestBytes, err := json.Marshal(createWorkflowInstanceRequest)
+	})
 	if err != nil {
 		return fmt.Errorf("failed to marshal createWorkflowInstanceRequest: %w", err)
 	}

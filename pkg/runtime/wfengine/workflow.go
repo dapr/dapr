@@ -196,12 +196,12 @@ func (wf *workflowActor) createWorkflowInstance(ctx context.Context, actorID str
 		}
 	}
 
-	// orchestration didn't exist and just create it.
+	// orchestration didn't exist and was just created
 	if created {
 		return wf.scheduleWorkflowStart(ctx, actorID, startEvent, state)
 	}
 
-	// orchestration already exists, apply reuse id policy
+	// orchestration already existed: apply reuse id policy
 	runtimeState := getRuntimeState(actorID, state)
 	runtimeStatus := runtimeState.RuntimeStatus()
 	// if target status doesn't match, fall back to original logic, create instance only if previous one is completed
