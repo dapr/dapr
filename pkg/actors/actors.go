@@ -52,6 +52,7 @@ import (
 	"github.com/dapr/dapr/pkg/retry"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/security"
+	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 )
 
@@ -226,7 +227,7 @@ func (a *actorsRuntime) Init(ctx context.Context) error {
 		return errors.New("actors runtime has already been closed")
 	}
 
-	if len(a.actorsConfig.PlacementAddresses) == 0 {
+	if len(a.actorsConfig.ActorsService) == 0 {
 		return errors.New("actors: couldn't connect to placement service: address is empty")
 	}
 
@@ -240,8 +241,10 @@ func (a *actorsRuntime) Init(ctx context.Context) error {
 	a.timers.Init(ctx)
 
 	if a.placement == nil {
+		// TODO: Handle this pending https://github.com/dapr/dapr/pull/7281
+		addrs := utils.ParseServiceAddr(strings.TrimPrefix(a.actorsConfig.ActorsService, "placement:"))
 		a.placement = placement.NewActorPlacement(placement.ActorPlacementOpts{
-			ServerAddrs:     a.actorsConfig.Config.PlacementAddresses,
+			ServerAddrs:     addrs,
 			Security:        a.sec,
 			AppID:           a.actorsConfig.Config.AppID,
 			RuntimeHostname: a.actorsConfig.GetRuntimeHostname(),

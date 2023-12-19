@@ -129,7 +129,8 @@ func main() {
 
 			rt, rerr := runtime.FromConfig(ctx, &runtime.Config{
 				AppID:                        opts.AppID,
-				PlacementServiceHostAddr:     opts.ActorsService,
+				ActorsService:                opts.ActorsService,
+				RemindersService:             opts.RemindersService,
 				AllowedOrigins:               opts.AllowedOrigins,
 				ResourcesPath:                opts.ResourcesPath,
 				ControlPlaneAddress:          opts.ControlPlaneAddress,

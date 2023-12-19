@@ -94,7 +94,7 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 			sidecar.ActorsService = ""
 			sidecar.PlacementAddress = actorsSvcAddr
 		} else {
-			// We have a different actors sevice, not placement
+			// We have a different actors service, not placement
 			// Set the actors-service CLI flag with "<name>:<address>"
 			sidecar.ActorsService = actorsSvcName + ":" + actorsSvcAddr
 		}

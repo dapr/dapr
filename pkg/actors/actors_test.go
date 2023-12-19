@@ -164,11 +164,11 @@ func (b *runtimeBuilder) buildActorRuntime() *actorsRuntime {
 
 	if b.config == nil {
 		config := NewConfig(ConfigOpts{
-			HostAddress:        "",
-			AppID:              TestAppID,
-			PlacementAddresses: []string{"placement:5050"},
-			Port:               0,
-			Namespace:          "",
+			HostAddress:   "",
+			AppID:         TestAppID,
+			ActorsService: "placement:placement:5050",
+			Port:          0,
+			Namespace:     "",
 			AppConfig: config.ApplicationConfig{
 				Entities: []string{"failingActor"},
 			},
@@ -206,8 +206,8 @@ func (b *runtimeBuilder) buildActorRuntime() *actorsRuntime {
 
 func newTestActorsRuntimeWithMock(appChannel channel.AppChannel) *actorsRuntime {
 	conf := NewConfig(ConfigOpts{
-		AppID:              TestAppID,
-		PlacementAddresses: []string{"placement:5050"},
+		AppID:         TestAppID,
+		ActorsService: "placement:placement:5050",
 		AppConfig: config.ApplicationConfig{
 			Entities: []string{"cat", "dog", "actor2"},
 		},
@@ -232,9 +232,9 @@ func newTestActorsRuntimeWithMock(appChannel channel.AppChannel) *actorsRuntime 
 
 func newTestActorsRuntimeWithMockWithoutPlacement(appChannel channel.AppChannel) *actorsRuntime {
 	conf := NewConfig(ConfigOpts{
-		AppID:              TestAppID,
-		PlacementAddresses: []string{""},
-		AppConfig:          config.ApplicationConfig{},
+		AppID:         TestAppID,
+		ActorsService: "",
+		AppConfig:     config.ApplicationConfig{},
 	})
 
 	clock := clocktesting.NewFakeClock(startOfTime)
@@ -253,9 +253,9 @@ func newTestActorsRuntimeWithMockWithoutPlacement(appChannel channel.AppChannel)
 
 func newTestActorsRuntimeWithMockAndNoStore(appChannel channel.AppChannel) *actorsRuntime {
 	conf := NewConfig(ConfigOpts{
-		AppID:              TestAppID,
-		PlacementAddresses: []string{""},
-		AppConfig:          config.ApplicationConfig{},
+		AppID:         TestAppID,
+		ActorsService: "",
+		AppConfig:     config.ApplicationConfig{},
 	})
 
 	clock := clocktesting.NewFakeClock(startOfTime)
@@ -1156,9 +1156,9 @@ func TestBasicReentrantActorLocking(t *testing.T) {
 	appConfig := DefaultAppConfig
 	appConfig.Reentrancy = config.ReentrancyConfig{Enabled: true}
 	reentrantConfig := NewConfig(ConfigOpts{
-		AppID:              TestAppID,
-		PlacementAddresses: []string{"placement:5050"},
-		AppConfig:          appConfig,
+		AppID:         TestAppID,
+		ActorsService: "placement:placement:5050",
+		AppConfig:     appConfig,
 	})
 	reentrantAppChannel := new(reentrantAppChannel)
 	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{req2}
@@ -1191,9 +1191,9 @@ func TestReentrantActorLockingOverMultipleActors(t *testing.T) {
 	appConfig := DefaultAppConfig
 	appConfig.Reentrancy = config.ReentrancyConfig{Enabled: true}
 	reentrantConfig := NewConfig(ConfigOpts{
-		AppID:              TestAppID,
-		PlacementAddresses: []string{"placement:5050"},
-		AppConfig:          appConfig,
+		AppID:         TestAppID,
+		ActorsService: "placement:placement:5050",
+		AppConfig:     appConfig,
 	})
 	reentrantAppChannel := new(reentrantAppChannel)
 	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{req2, req3}
@@ -1224,9 +1224,9 @@ func TestReentrancyStackLimit(t *testing.T) {
 	appConfig := DefaultAppConfig
 	appConfig.Reentrancy = config.ReentrancyConfig{Enabled: true, MaxStackDepth: &stackDepth}
 	reentrantConfig := NewConfig(ConfigOpts{
-		AppID:              TestAppID,
-		PlacementAddresses: []string{"placement:5050"},
-		AppConfig:          appConfig,
+		AppID:         TestAppID,
+		ActorsService: "placement:placement:5050",
+		AppConfig:     appConfig,
 	})
 	reentrantAppChannel := new(reentrantAppChannel)
 	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{}
@@ -1260,9 +1260,9 @@ func TestReentrancyPerActor(t *testing.T) {
 		},
 	}
 	reentrantConfig := NewConfig(ConfigOpts{
-		AppID:              TestAppID,
-		PlacementAddresses: []string{""},
-		AppConfig:          appConfig,
+		AppID:         TestAppID,
+		ActorsService: "",
+		AppConfig:     appConfig,
 	})
 	reentrantAppChannel := new(reentrantAppChannel)
 	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{req2}
@@ -1301,9 +1301,9 @@ func TestReentrancyStackLimitPerActor(t *testing.T) {
 		},
 	}
 	reentrantConfig := NewConfig(ConfigOpts{
-		AppID:              TestAppID,
-		PlacementAddresses: []string{""},
-		AppConfig:          appConfig,
+		AppID:         TestAppID,
+		ActorsService: "",
+		AppConfig:     appConfig,
 	})
 	reentrantAppChannel := new(reentrantAppChannel)
 	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{}

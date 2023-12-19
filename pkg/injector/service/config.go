@@ -78,7 +78,8 @@ func GetConfig() (Config, error) {
 
 	if c.KubeClusterDomain == "" {
 		// auto-detect KubeClusterDomain from resolv.conf file
-		clusterDomain, err := utils.GetKubeClusterDomain()
+		var clusterDomain string
+		clusterDomain, err = utils.GetKubeClusterDomain()
 		if err != nil {
 			log.Errorf("Failed to get clusterDomain err:%s, set default:%s", err, utils.DefaultKubeClusterDomain)
 			c.KubeClusterDomain = utils.DefaultKubeClusterDomain

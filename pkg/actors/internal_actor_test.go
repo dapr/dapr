@@ -106,8 +106,8 @@ func newTestActorsRuntimeWithInternalActors(internalActors map[string]InternalAc
 	spec := config.TracingSpec{SamplingRate: "1"}
 	store := fakeStore()
 	config := NewConfig(ConfigOpts{
-		AppID:              TestAppID,
-		PlacementAddresses: []string{"placement:5050"},
+		AppID:         TestAppID,
+		ActorsService: "placement:placement:5050",
 	})
 
 	compStore := compstore.New()

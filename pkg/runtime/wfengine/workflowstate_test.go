@@ -191,9 +191,9 @@ func TestResetLoadedState(t *testing.T) {
 func getActorRuntime() actors.Actors {
 	store := fakeStore()
 	cfg := actors.NewConfig(actors.ConfigOpts{
-		AppID:              testAppID,
-		PlacementAddresses: []string{"placement:5050"},
-		AppConfig:          config.ApplicationConfig{},
+		AppID:         testAppID,
+		ActorsService: "placement:placement:5050",
+		AppConfig:     config.ApplicationConfig{},
 	})
 	compStore := compstore.New()
 	compStore.AddStateStore("workflowStore", store)

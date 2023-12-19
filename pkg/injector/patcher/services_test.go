@@ -51,6 +51,7 @@ func TestServiceAddress(t *testing.T) {
 		assert.Equal(t, tc.expect, dns)
 	}
 }
+
 func TestNewService(t *testing.T) {
 	testCases := []struct {
 		input    string
