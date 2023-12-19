@@ -41,8 +41,6 @@ import (
 type Feature string
 
 const (
-	// Enables support for setting TTL on Actor state keys. Remove this flag in
-	// Dapr 1.12.
 	ActorStateTTL Feature = "ActorStateTTL"
 )
 
