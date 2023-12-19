@@ -460,7 +460,6 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 	for _, r := range res.FailedEntries {
 		resEntry := runtimev1pb.BulkPublishResponseFailedEntry{EntryId: r.EntryId}
 		if r.Error != nil {
-			//TODO: Cassie
 			resEntry.Error = r.Error.Error()
 		}
 		bulkRes.FailedEntries = append(bulkRes.GetFailedEntries(), &resEntry)

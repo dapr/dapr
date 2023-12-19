@@ -16,10 +16,10 @@ package pubsub
 import (
 	"errors"
 	"fmt"
-
 	"github.com/dapr/dapr/pkg/messages"
 )
 
+// TODO: remove this and use apiErrors.PubSubMsgDropped
 var ErrMessageDropped = errors.New("pubsub message dropped")
 
 // pubsub.NotFoundError is returned by the runtime when the pubsub does not exist.
