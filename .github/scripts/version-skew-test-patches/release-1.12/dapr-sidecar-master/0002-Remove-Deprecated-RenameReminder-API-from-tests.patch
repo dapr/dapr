@@ -1,0 +1,25 @@
+From 01ae6f45a75608c0322f9ac556b73d53fb3d8983 Mon Sep 17 00:00:00 2001
+From: Shivam Kumar <shivamkm07@gmail.com>
+Date: Tue, 19 Dec 2023 06:28:51 +0530
+Subject: Remove Deprecated RenameReminder API from tests
+
+Signed-off-by: Shivam Kumar <shivamkm07@gmail.com>
+---
+ tests/apps/actorfeatures/app.go | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/tests/apps/actorfeatures/app.go b/tests/apps/actorfeatures/app.go
+index 9344f204..62e8c935 100644
+--- a/tests/apps/actorfeatures/app.go
++++ b/tests/apps/actorfeatures/app.go
+@@ -621,7 +621,6 @@ func nonHostedTestHandler(w http.ResponseWriter, r *http.Request) {
+ 		"GetReminder":    {"GET", nil},
+ 		"CreateReminder": {"PUT", struct{}{}},
+ 		"DeleteReminder": {"DELETE", struct{}{}},
+-		"RenameReminder": {"PATCH", struct{}{}},
+ 	}
+ 	for op, t := range tests {
+ 		body, err := httpCall(t.Method, url, t.Body, http.StatusForbidden)
+-- 
+2.34.1
+
