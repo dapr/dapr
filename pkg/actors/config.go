@@ -41,6 +41,7 @@ type ConfigOpts struct {
 	HostAddress       string
 	AppID             string
 	ActorsService     string
+	RemindersService  string
 	Port              int
 	Namespace         string
 	AppConfig         daprAppConfig.ApplicationConfig
@@ -56,6 +57,7 @@ func NewConfig(opts ConfigOpts) Config {
 		HostAddress:                   opts.HostAddress,
 		AppID:                         opts.AppID,
 		ActorsService:                 opts.ActorsService,
+		RemindersService:              opts.RemindersService,
 		Port:                          opts.Port,
 		Namespace:                     opts.Namespace,
 		DrainRebalancedActors:         opts.AppConfig.DrainRebalancedActors,

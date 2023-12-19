@@ -872,6 +872,7 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 		HostAddress:       a.hostAddress,
 		AppID:             a.runtimeConfig.id,
 		ActorsService:     a.runtimeConfig.actorsService,
+		RemindersService:  a.runtimeConfig.remindersService,
 		Port:              a.runtimeConfig.internalGRPCPort,
 		Namespace:         a.namespace,
 		AppConfig:         a.appConfig,

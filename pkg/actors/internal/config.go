@@ -30,6 +30,7 @@ type Config struct {
 	HostAddress                   string
 	AppID                         string
 	ActorsService                 string
+	RemindersService              string
 	HostedActorTypes              *hostedActors
 	Port                          int
 	HeartbeatInterval             time.Duration
