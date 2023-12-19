@@ -40,7 +40,6 @@ namespace DaprDemoActor
               name: workflowName,
               input: inputItem,
               instanceId: instanceID);
-      var getResponse = await workflowClient.GetWorkflowStateAsync(instanceID);
       return startResponse;
     }
 
