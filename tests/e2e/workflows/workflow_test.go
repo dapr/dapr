@@ -79,10 +79,10 @@ func getAppEndpoint() string {
 
 func startTest(url string, instanceID string) func(t *testing.T) {
 	return func(t *testing.T) {
-		getString := fmt.Sprintf("%s/dapr/%s", url, instanceID)
+		getString := fmt.Sprintf("%s/%s", url, instanceID)
 
 		// Start the workflow and check that it is running
-		resp, err := utils.HTTPPost(fmt.Sprintf("%s/StartWorkflow/dapr/placeOrder/%s", url, instanceID), nil)
+		resp, err := utils.HTTPPost(fmt.Sprintf("%s/StartWorkflow/placeOrder/%s", url, instanceID), nil)
 		require.NoError(t, err, "failure starting workflow")
 
 		require.EventuallyWithT(t, func(t *assert.CollectT) {
@@ -95,10 +95,10 @@ func startTest(url string, instanceID string) func(t *testing.T) {
 
 func pauseResumeTest(url string, instanceID string) func(t *testing.T) {
 	return func(t *testing.T) {
-		getString := fmt.Sprintf("%s/dapr/%s", url, instanceID)
+		getString := fmt.Sprintf("%s/%s", url, instanceID)
 
 		// Start the workflow and check that it is running
-		resp, err := utils.HTTPPost(fmt.Sprintf("%s/StartWorkflow/dapr/placeOrder/%s", url, instanceID), nil)
+		resp, err := utils.HTTPPost(fmt.Sprintf("%s/StartWorkflow/placeOrder/%s", url, instanceID), nil)
 		require.NoError(t, err, "failure starting workflow")
 
 		require.EventuallyWithT(t, func(t *assert.CollectT) {
@@ -108,7 +108,7 @@ func pauseResumeTest(url string, instanceID string) func(t *testing.T) {
 		}, 5*time.Second, 100*time.Millisecond)
 
 		// Pause the workflow
-		resp, err = utils.HTTPPost(fmt.Sprintf("%s/PauseWorkflow/dapr/%s", url, instanceID), nil)
+		resp, err = utils.HTTPPost(fmt.Sprintf("%s/PauseWorkflow/%s", url, instanceID), nil)
 		require.NoError(t, err, "failure pausing workflow")
 
 		require.EventuallyWithT(t, func(t *assert.CollectT) {
@@ -118,7 +118,7 @@ func pauseResumeTest(url string, instanceID string) func(t *testing.T) {
 		}, 5*time.Second, 100*time.Millisecond)
 
 		// Resume the workflow
-		resp, err = utils.HTTPPost(fmt.Sprintf("%s/ResumeWorkflow/dapr/%s", url, instanceID), nil)
+		resp, err = utils.HTTPPost(fmt.Sprintf("%s/ResumeWorkflow/%s", url, instanceID), nil)
 		require.NoError(t, err, "failure resuming workflow")
 
 		require.EventuallyWithT(t, func(t *assert.CollectT) {
@@ -131,10 +131,10 @@ func pauseResumeTest(url string, instanceID string) func(t *testing.T) {
 
 func raiseEventTest(url string, instanceID string) func(t *testing.T) {
 	return func(t *testing.T) {
-		getString := fmt.Sprintf("%s/dapr/%s", url, instanceID)
+		getString := fmt.Sprintf("%s/%s", url, instanceID)
 
 		// Start the workflow and check that it is running
-		resp, err := utils.HTTPPost(fmt.Sprintf("%s/StartWorkflow/dapr/placeOrder/%s", url, instanceID), nil)
+		resp, err := utils.HTTPPost(fmt.Sprintf("%s/StartWorkflow/placeOrder/%s", url, instanceID), nil)
 		require.NoError(t, err, "failure starting workflow")
 
 		require.EventuallyWithT(t, func(t *assert.CollectT) {
@@ -144,21 +144,21 @@ func raiseEventTest(url string, instanceID string) func(t *testing.T) {
 		}, 5*time.Second, 100*time.Millisecond)
 
 		// Raise an event on the workflow
-		resp, err = utils.HTTPPost(fmt.Sprintf("%s/RaiseWorkflowEvent/dapr/%s/ChangePurchaseItem/1", url, instanceID), nil)
+		resp, err = utils.HTTPPost(fmt.Sprintf("%s/RaiseWorkflowEvent/%s/ChangePurchaseItem/1", url, instanceID), nil)
 		require.NoError(t, err, "failure raising event on workflow")
 
 		// Raise parallel events on the workflow
-		resp, err = utils.HTTPPost(fmt.Sprintf("%s/RaiseWorkflowEvent/dapr/%s/ConfirmSize/1", url, instanceID), nil)
+		resp, err = utils.HTTPPost(fmt.Sprintf("%s/RaiseWorkflowEvent/%s/ConfirmSize/1", url, instanceID), nil)
 		require.NoError(t, err, "failure raising event on workflow")
 
-		resp, err = utils.HTTPPost(fmt.Sprintf("%s/RaiseWorkflowEvent/dapr/%s/ConfirmColor/1", url, instanceID), nil)
+		resp, err = utils.HTTPPost(fmt.Sprintf("%s/RaiseWorkflowEvent/%s/ConfirmColor/1", url, instanceID), nil)
 		require.NoError(t, err, "failure raising event on workflow")
 
-		resp, err = utils.HTTPPost(fmt.Sprintf("%s/RaiseWorkflowEvent/dapr/%s/ConfirmAddress/1", url, instanceID), nil)
+		resp, err = utils.HTTPPost(fmt.Sprintf("%s/RaiseWorkflowEvent/%s/ConfirmAddress/1", url, instanceID), nil)
 		require.NoError(t, err, "failure raising event on workflow")
 
 		// Raise a parallel event on the workflow
-		resp, err = utils.HTTPPost(fmt.Sprintf("%s/RaiseWorkflowEvent/dapr/%s/PayByCard/1", url, instanceID), nil)
+		resp, err = utils.HTTPPost(fmt.Sprintf("%s/RaiseWorkflowEvent/%s/PayByCard/1", url, instanceID), nil)
 		require.NoError(t, err, "failure raising event on workflow")
 
 		time.Sleep(10 * time.Second)
@@ -174,10 +174,10 @@ func raiseEventTest(url string, instanceID string) func(t *testing.T) {
 // Functions for each test case
 func purgeTest(url string, instanceID string) func(t *testing.T) {
 	return func(t *testing.T) {
-		getString := fmt.Sprintf("%s/dapr/%s", url, instanceID)
+		getString := fmt.Sprintf("%s/%s", url, instanceID)
 
 		// Start the workflow and check that it is running
-		resp, err := utils.HTTPPost(fmt.Sprintf("%s/StartWorkflow/dapr/placeOrder/%s", url, instanceID), nil)
+		resp, err := utils.HTTPPost(fmt.Sprintf("%s/StartWorkflow/placeOrder/%s", url, instanceID), nil)
 		require.NoError(t, err, "failure starting workflow")
 
 		require.EventuallyWithT(t, func(t *assert.CollectT) {
@@ -187,7 +187,7 @@ func purgeTest(url string, instanceID string) func(t *testing.T) {
 		}, 5*time.Second, 100*time.Millisecond)
 
 		// Terminate the workflow
-		resp, err = utils.HTTPPost(fmt.Sprintf("%s/TerminateWorkflow/dapr/%s", url, instanceID), nil)
+		resp, err = utils.HTTPPost(fmt.Sprintf("%s/TerminateWorkflow/%s", url, instanceID), nil)
 		require.NoError(t, err, "failure terminating workflow")
 
 		require.EventuallyWithT(t, func(t *assert.CollectT) {
@@ -197,11 +197,11 @@ func purgeTest(url string, instanceID string) func(t *testing.T) {
 		}, 5*time.Second, 100*time.Millisecond)
 
 		// Purge the workflow
-		resp, err = utils.HTTPPost(fmt.Sprintf("%s/PurgeWorkflow/dapr/%s", url, instanceID), nil)
+		resp, err = utils.HTTPPost(fmt.Sprintf("%s/PurgeWorkflow/%s", url, instanceID), nil)
 		require.NoError(t, err, "failure purging workflow")
 
 		// Start a new workflow with the same instanceID to ensure that it is available
-		resp, err = utils.HTTPPost(fmt.Sprintf("%s/StartWorkflow/dapr/placeOrder/%s", url, instanceID), nil)
+		resp, err = utils.HTTPPost(fmt.Sprintf("%s/StartWorkflow/placeOrder/%s", url, instanceID), nil)
 		require.NoError(t, err, "failure starting workflow")
 
 		require.Equal(t, instanceID, string(resp))

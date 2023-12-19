@@ -25,55 +25,55 @@ namespace DaprDemoActor
   {
 
 
-    [HttpGet("{workflowComponent}/{instanceID}")]
-    public async Task<ActionResult<string>> GetWorkflow([FromServices] DaprWorkflowClient workflowClient, [FromRoute] string instanceID, string workflowComponent)
+    [HttpGet("/{instanceID}")]
+    public async Task<ActionResult<string>> GetWorkflow([FromServices] DaprWorkflowClient workflowClient, [FromRoute] string instanceID)
     {
       var getResponse = await workflowClient.GetWorkflowStateAsync(instanceID);
       return Enum.GetName(typeof(WorkflowRuntimeStatus), getResponse.RuntimeStatus);
     }
 
-    [HttpPost("StartWorkflow/{workflowComponent}/{workflowName}/{instanceID}")]
-    public async Task<ActionResult<string>> StartWorkflow([FromServices] DaprWorkflowClient workflowClient, [FromRoute] string instanceID, string workflowName, string workflowComponent)
+    [HttpPost("StartWorkflow/{workflowName}/{instanceID}")]
+    public async Task<ActionResult<string>> StartWorkflow([FromServices] DaprWorkflowClient workflowClient, [FromRoute] string instanceID, string workflowName)
     {
       var inputItem = "paperclips";
       var startResponse = await workflowClient.ScheduleNewWorkflowAsync(
-              name: "PlaceOrder",
+              name: workflowName,
               input: inputItem,
               instanceId: instanceID);
       var getResponse = await workflowClient.GetWorkflowStateAsync(instanceID);
       return startResponse;
     }
 
-    [HttpPost("PurgeWorkflow/{workflowComponent}/{instanceID}")]
-    public async Task<ActionResult<bool>> PurgeWorkflow([FromServices] DaprWorkflowClient workflowClient, [FromRoute] string instanceID, string workflowComponent)
+    [HttpPost("PurgeWorkflow/{instanceID}")]
+    public async Task<ActionResult<bool>> PurgeWorkflow([FromServices] DaprWorkflowClient workflowClient, [FromRoute] string instanceID)
     {
       await workflowClient.PurgeInstanceAsync(instanceID);
       return true;
     }
 
-    [HttpPost("TerminateWorkflow/{workflowComponent}/{instanceID}")]
-    public async Task<ActionResult<bool>> TerminateWorkflow([FromServices] DaprWorkflowClient workflowClient, [FromRoute] string instanceID, string workflowComponent)
+    [HttpPost("TerminateWorkflow/{instanceID}")]
+    public async Task<ActionResult<bool>> TerminateWorkflow([FromServices] DaprWorkflowClient workflowClient, [FromRoute] string instanceID)
     {
       await workflowClient.TerminateWorkflowAsync(instanceID);
       return true;
     }
 
-    [HttpPost("PauseWorkflow/{workflowComponent}/{instanceID}")]
-    public async Task<ActionResult<bool>> PauseWorkflow([FromServices] DaprWorkflowClient workflowClient, [FromRoute] string instanceID, string workflowComponent)
+    [HttpPost("PauseWorkflow/{instanceID}")]
+    public async Task<ActionResult<bool>> PauseWorkflow([FromServices] DaprWorkflowClient workflowClient, [FromRoute] string instanceID)
     {
       await workflowClient.SuspendWorkflowAsync(instanceID);
       return true;
     }
 
-    [HttpPost("ResumeWorkflow/{workflowComponent}/{instanceID}")]
-    public async Task<ActionResult<bool>> ResumeWorkflow([FromServices] DaprWorkflowClient workflowClient, [FromRoute] string instanceID, string workflowComponent)
+    [HttpPost("ResumeWorkflow/{instanceID}")]
+    public async Task<ActionResult<bool>> ResumeWorkflow([FromServices] DaprWorkflowClient workflowClient, [FromRoute] string instanceID)
     {
       await workflowClient.ResumeWorkflowAsync(instanceID);
       return true;
     }
 
-    [HttpPost("RaiseWorkflowEvent/{workflowComponent}/{instanceID}/{eventName}/{eventInput}")]
-    public async Task<ActionResult<bool>> RaiseWorkflowEvent([FromServices] DaprWorkflowClient workflowClient, [FromRoute] string instanceID, string workflowComponent, string eventName, string eventInput)
+    [HttpPost("RaiseWorkflowEvent/{instanceID}/{eventName}/{eventInput}")]
+    public async Task<ActionResult<bool>> RaiseWorkflowEvent([FromServices] DaprWorkflowClient workflowClient, [FromRoute] string instanceID, string eventName, string eventInput)
     {
       await workflowClient.RaiseEventAsync(instanceID, eventName, eventInput);
       return true;
