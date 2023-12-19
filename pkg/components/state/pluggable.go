@@ -18,7 +18,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/dapr/kit/ptr"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/dapr/components-contrib/state"
@@ -46,6 +48,8 @@ var (
 	GRPCCodeETagMismatch          = codes.FailedPrecondition
 	GRPCCodeETagInvalid           = codes.InvalidArgument
 	GRPCCodeBulkDeleteRowMismatch = codes.Internal
+
+	log = logger.NewLogger("state-pluggable-logger")
 )
 
 const (
@@ -145,7 +149,9 @@ var (
 type grpcStateStore struct {
 	*pluggable.GRPCConnector[stateStoreClient]
 	// features is the list of state store implemented features.
-	features []state.Feature
+	features     []state.Feature
+	multiMaxSize *int
+	lock         sync.RWMutex
 }
 
 // Init initializes the grpc state passing out the metadata to the grpc component.
@@ -324,14 +330,32 @@ func (ss *grpcStateStore) Multi(ctx context.Context, request *state.Transactiona
 
 // MultiMaxSize returns the maximum number of operations allowed in a transactional request.
 func (ss *grpcStateStore) MultiMaxSize() int {
+	ss.lock.RLock()
+	multiMaxSize := ss.multiMaxSize
+	ss.lock.RUnlock()
+
+	if multiMaxSize != nil {
+		return *multiMaxSize
+	}
+
+	// In a worst case scenario, two or more callers may get to this point,
+	// meaning that we unnecessarily call MultiMaxSize multiple ties,
+	// however this is functionally not a problem and the cost is minimal.
+	ss.lock.Lock()
+	defer ss.lock.Unlock()
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	resp, err := ss.Client.MultiMaxSize(ctx, new(proto.MultiMaxSizeRequest))
 	if err != nil {
-		return -1
+		log.Error("failed to get multi max size from state store", err)
+		ss.multiMaxSize = ptr.Of(-1)
+		return *ss.multiMaxSize
 	}
-	return int(resp.GetMaxSize())
+
+	ss.multiMaxSize = ptr.Of(int(resp.GetMaxSize()))
+	return *ss.multiMaxSize
 }
 
 // mappers and helpers.

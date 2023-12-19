@@ -63,7 +63,7 @@ func StateStoreTransactionsNotSupported(storeName string) error {
 	return errors.NewBuilder(
 		codes.Unimplemented,
 		http.StatusInternalServerError,
-		fmt.Sprintf(errors.MsgStateTransactionsNotSupported, storeName),
+		fmt.Sprintf(MsgStateTransactionsNotSupported, storeName),
 		"ERR_STATE_STORE_NOT_SUPPORTED", // TODO: @elena-kolevska this is misleading and also used for different things ("query unsupported"); it should be removed in the next major version
 	).
 		WithErrorInfo(errors.CodePrefixStateStore+"TRANSACTIONS_NOT_SUPPORTED", nil).
