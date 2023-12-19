@@ -41,6 +41,7 @@ import (
 type Feature string
 
 const (
+	// Enables support for setting TTL on Actor state keys.
 	ActorStateTTL Feature = "ActorStateTTL"
 )
 
