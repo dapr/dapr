@@ -15,6 +15,9 @@ limitations under the License.
 package wfengine
 
 import (
+	"fmt"
+	"strings"
+
 	wfbe "github.com/dapr/dapr/pkg/components/wfbackend"
 	"github.com/dapr/kit/logger"
 
@@ -43,7 +46,14 @@ func InitializeWorkflowBackend(appId string, backendType string, wfe *WorkflowEn
 		return nil
 	}
 
-	be, err := backendfactory.InitializeWorkflowBackend(backendType, backendComponentInfo.WorkflowBackendMetadata.Properties, log)
+	backendTypeName, err := getBackendTypeName(backendType)
+
+	if err != nil {
+		log.Errorf("Invalid workflow backend type provided, backend is not initialized: %v", err)
+		return nil
+	}
+
+	be, err := backendfactory.InitializeBackend(backendTypeName, backendComponentInfo.WorkflowBackendMetadata.Properties, log)
 
 	if err == nil {
 		wfe.BackendType = backendType
@@ -53,4 +63,18 @@ func InitializeWorkflowBackend(appId string, backendType string, wfe *WorkflowEn
 	}
 
 	return nil
+}
+
+func getBackendTypeName(backendType string) (string, error) {
+	if backendType == "" {
+		return "", fmt.Errorf("backendType is empty")
+	}
+
+	parts := strings.Split(backendType, ".")
+	if len(parts) < 2 {
+		return "", fmt.Errorf("backendType should contain a '.'")
+	}
+
+	backendTypeName := parts[len(parts)-1]
+	return backendTypeName, nil
 }
