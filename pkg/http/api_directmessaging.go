@@ -240,8 +240,22 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Handle errors; successful operations are already complete
+	// If success is true, it means that headers have already been sent, so we can't send the error to the user, because:
+	// headers cannot be re-sent, and adding to response body may cause corrupted data to be sent
+	if success.Load() {
+		// Use Warn log here because it's the only way users are notified of the error
+		log.Warnf("HTTP service invocation failed to complete with error: %v", err)
+
+		// Do nothing else, as at least some data was already sent to the client
+		return
+	}
+
+	// Log with debug level and send the error to the client in the body
+	log.Debugf("HTTP service invocation failed to complete with error: %v", err)
+
 	if resp != nil {
-		defer resp.Close()
+		resp.Close()
 
 		// Set headers if present (if resp is not nil, they haven't been sent already)
 		headers := resp.Headers()
@@ -250,7 +264,6 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Handle errors; successful operations are already complete
 	var (
 		codeErr   codeError
 		invokeErr invokeError
