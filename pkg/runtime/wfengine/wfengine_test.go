@@ -138,10 +138,12 @@ func TestSingleTimerWorkflow(t *testing.T) {
 	}
 }
 
-// TestSingleActivityWorkflow executes a workflow that calls a single activity and completes. The input
-// passed to the workflow is also passed to the activity, and the activity's return value is also returned
-// by the workflow, allowing the test to verify input and output handling, as well as activity execution.
-func TestSingleActivityWorkflow(t *testing.T) {
+// TestSingleActivityWorkflow_ReuseInstanceIDIgnore executes a workflow twice.
+// The workflow calls a single activity with orchestraion ID reuse policy.
+// The reuse ID policy contains action IGNORE and target status ['RUNNING', 'COMPLETED', 'PENDING']
+// The second call to create a workflow with same instance ID is expected to be ignored
+// if first workflow instance is in above statuses
+func TestSingleActivityWorkflow_ReuseInstanceIDIgnore(t *testing.T) {
 	r := task.NewTaskRegistry()
 	r.AddOrchestratorN("SingleActivity", func(ctx *task.OrchestrationContext) (any, error) {
 		var input string
@@ -162,16 +164,132 @@ func TestSingleActivityWorkflow(t *testing.T) {
 
 	ctx := context.Background()
 	client, engine := startEngine(ctx, t, r)
-	for _, opt := range GetTestOptions() {
-		t.Run(opt(engine), func(t *testing.T) {
-			id, err := client.ScheduleNewOrchestration(ctx, "SingleActivity", api.WithInput("世界"))
-			require.NoError(t, err)
 
-			metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
+	for _, opt := range GetTestOptions() {
+		suffix := opt(engine)
+		t.Run(suffix, func(t *testing.T) {
+			instanceID := api.InstanceID("IGNORE_IF_RUNNING_OR_COMPLETED_" + suffix)
+			reuseIDPolicy := &api.OrchestrationIdReusePolicy{
+				Action:          api.REUSE_ID_ACTION_IGNORE,
+				OperationStatus: []api.OrchestrationStatus{api.RUNTIME_STATUS_RUNNING, api.RUNTIME_STATUS_COMPLETED, api.RUNTIME_STATUS_PENDING},
+			}
+
+			// Run the orchestration
+			id, err := client.ScheduleNewOrchestration(ctx, "SingleActivity", api.WithInput("世界"), api.WithInstanceID(instanceID))
+			require.NoError(t, err)
+			// wait orchestration to start
+			client.WaitForOrchestrationStart(ctx, id)
+			pivotTime := time.Now()
+			// schedule again, it should ignore creating the new orchestration
+			id, err = client.ScheduleNewOrchestration(ctx, "SingleActivity", api.WithInput("World"), api.WithInstanceID(id), api.WithOrchestrationIdReusePolicy(reuseIDPolicy))
+			require.NoError(t, err)
+			timeoutCtx, cancelTimeout := context.WithTimeout(ctx, 30*time.Second)
+			defer cancelTimeout()
+			metadata, err := client.WaitForOrchestrationCompletion(timeoutCtx, id)
 			require.NoError(t, err)
 			assert.True(t, metadata.IsComplete())
-			assert.Equal(t, `"世界"`, metadata.SerializedInput)
+			// the first orchestration should complete as the second one is ignored
 			assert.Equal(t, `"Hello, 世界!"`, metadata.SerializedOutput)
+			// assert the orchestration created timestamp
+			assert.True(t, pivotTime.After(metadata.CreatedAt))
+		})
+	}
+}
+
+// TestSingleActivityWorkflow_ReuseInstanceIDIgnore executes a workflow twice.
+// The workflow calls a single activity with orchestraion ID reuse policy.
+// The reuse ID policy contains action TERMINATE and target status ['RUNNING', 'COMPLETED', 'PENDING']
+// The second call to create a workflow with same instance ID is expected to terminate
+// the first workflow instance and create a new workflow instance if it's status is in target statuses
+func TestSingleActivityWorkflow_ReuseInstanceIDTerminate(t *testing.T) {
+	r := task.NewTaskRegistry()
+	r.AddOrchestratorN("SingleActivity", func(ctx *task.OrchestrationContext) (any, error) {
+		var input string
+		if err := ctx.GetInput(&input); err != nil {
+			return nil, err
+		}
+		var output string
+		err := ctx.CallActivity("SayHello", task.WithActivityInput(input)).Await(&output)
+		return output, err
+	})
+	r.AddActivityN("SayHello", func(ctx task.ActivityContext) (any, error) {
+		var name string
+		if err := ctx.GetInput(&name); err != nil {
+			return nil, err
+		}
+		return fmt.Sprintf("Hello, %s!", name), nil
+	})
+
+	ctx := context.Background()
+	client, engine := startEngine(ctx, t, r)
+
+	for _, opt := range GetTestOptions() {
+		suffix := opt(engine)
+		t.Run(suffix, func(t *testing.T) {
+			instanceID := api.InstanceID("IGNORE_IF_RUNNING_OR_COMPLETED_" + suffix)
+			reuseIDPolicy := &api.OrchestrationIdReusePolicy{
+				Action:          api.REUSE_ID_ACTION_TERMINATE,
+				OperationStatus: []api.OrchestrationStatus{api.RUNTIME_STATUS_RUNNING, api.RUNTIME_STATUS_COMPLETED, api.RUNTIME_STATUS_PENDING},
+			}
+
+			// Run the orchestration
+			id, err := client.ScheduleNewOrchestration(ctx, "SingleActivity", api.WithInput("世界"), api.WithInstanceID(instanceID))
+			require.NoError(t, err)
+			// wait orchestration to start
+			client.WaitForOrchestrationStart(ctx, id)
+			pivotTime := time.Now()
+			// schedule again, it should ignore creating the new orchestration
+			id, err = client.ScheduleNewOrchestration(ctx, "SingleActivity", api.WithInput("World"), api.WithInstanceID(id), api.WithOrchestrationIdReusePolicy(reuseIDPolicy))
+			require.NoError(t, err)
+			timeoutCtx, cancelTimeout := context.WithTimeout(ctx, 30*time.Second)
+			defer cancelTimeout()
+			metadata, err := client.WaitForOrchestrationCompletion(timeoutCtx, id)
+			require.NoError(t, err)
+			assert.True(t, metadata.IsComplete())
+			// the first orchestration should complete as the second one is ignored
+			assert.Equal(t, `"Hello, World!"`, metadata.SerializedOutput)
+			// assert the orchestration created timestamp
+			assert.False(t, pivotTime.After(metadata.CreatedAt))
+		})
+	}
+}
+
+// TestSingleActivityWorkflow_ReuseInstanceIDIgnore executes a workflow twice.
+// The workflow calls a single activity with orchestraion ID reuse policy.
+// The reuse ID policy contains default action Error and empty target status
+// The second call to create a workflow with same instance ID is expected to error out
+// the first workflow instance is not completed.
+func TestSingleActivityWorkflow_ReuseInstanceIDError(t *testing.T) {
+	r := task.NewTaskRegistry()
+	r.AddOrchestratorN("SingleActivity", func(ctx *task.OrchestrationContext) (any, error) {
+		var input string
+		if err := ctx.GetInput(&input); err != nil {
+			return nil, err
+		}
+		var output string
+		err := ctx.CallActivity("SayHello", task.WithActivityInput(input)).Await(&output)
+		return output, err
+	})
+	r.AddActivityN("SayHello", func(ctx task.ActivityContext) (any, error) {
+		var name string
+		if err := ctx.GetInput(&name); err != nil {
+			return nil, err
+		}
+		return fmt.Sprintf("Hello, %s!", name), nil
+	})
+
+	ctx := context.Background()
+	client, engine := startEngine(ctx, t, r)
+
+	for _, opt := range GetTestOptions() {
+		suffix := opt(engine)
+		t.Run(suffix, func(t *testing.T) {
+			instanceID := api.InstanceID("IGNORE_IF_RUNNING_OR_COMPLETED_" + suffix)
+			id, err := client.ScheduleNewOrchestration(ctx, "SingleActivity", api.WithInput("世界"), api.WithInstanceID(instanceID))
+			require.NoError(t, err)
+			_, err = client.ScheduleNewOrchestration(ctx, "SingleActivity", api.WithInput("World"), api.WithInstanceID(id))
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "already exists")
 		})
 	}
 }
