@@ -16,6 +16,7 @@ package wfengine
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -149,7 +150,7 @@ func (abe *ActorBackend) RegisterActor(ctx context.Context) error {
 // Internally, creating a workflow instance also creates a new actor with the same ID. The create
 // request is saved into the actor's "inbox" and then executed via a reminder thread. If the app is
 // scaled out across multiple replicas, the actor might get assigned to a replicas other than this one.
-func (abe *ActorBackend) CreateOrchestrationInstance(ctx context.Context, e *backend.HistoryEvent) error {
+func (abe *ActorBackend) CreateOrchestrationInstance(ctx context.Context, e *backend.HistoryEvent, opts ...backend.OrchestrationIdReusePolicyOptions) error {
 	if err := abe.validateConfiguration(); err != nil {
 		return err
 	}
@@ -163,9 +164,22 @@ func (abe *ActorBackend) CreateOrchestrationInstance(ctx context.Context, e *bac
 		workflowInstanceID = oi.GetInstanceId()
 	}
 
+	policy := &api.OrchestrationIdReusePolicy{}
+	for _, opt := range opts {
+		opt(policy)
+	}
+
 	eventData, err := backend.MarshalHistoryEvent(e)
 	if err != nil {
 		return err
+	}
+
+	requestBytes, err := json.Marshal(CreateWorkflowInstanceRequest{
+		Policy:          policy,
+		StartEventBytes: eventData,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to marshal createWorkflowInstanceRequest: %w", err)
 	}
 
 	// Invoke the well-known workflow actor directly, which will be created by this invocation
@@ -173,8 +187,8 @@ func (abe *ActorBackend) CreateOrchestrationInstance(ctx context.Context, e *bac
 	req := invokev1.
 		NewInvokeMethodRequest(CreateWorkflowInstanceMethod).
 		WithActor(abe.config.workflowActorType, workflowInstanceID).
-		WithRawDataBytes(eventData).
-		WithContentType(invokev1.OctetStreamContentType)
+		WithRawDataBytes(requestBytes).
+		WithContentType(invokev1.JSONContentType)
 	defer req.Close()
 
 	resp, err := abe.actors.Call(ctx, req)
