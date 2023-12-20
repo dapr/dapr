@@ -17,6 +17,7 @@ metadata:
   name: querystatestore
 spec:
   type: state.postgres
+  # Must use v1 as the v2 of the component does not support query API
   version: v1
   initTimeout: 1m
   metadata:
