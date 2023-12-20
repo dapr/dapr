@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"strconv"
 	"sync"
@@ -28,7 +29,7 @@ import (
 	grpcGo "google.golang.org/grpc"
 	grpcCodes "google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/keepalive"
+	grpcGoKeepalive "google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/reflection"
 	grpcStatus "google.golang.org/grpc/status"
 
@@ -46,11 +47,10 @@ import (
 )
 
 const (
-	certWatchInterval              = time.Second * 3
-	renewWhenPercentagePassed      = 70
-	apiServer                      = "apiServer"
-	internalServer                 = "internalServer"
-	defaultMaxConnectionAgeSeconds = 30
+	certWatchInterval         = time.Second * 3
+	renewWhenPercentagePassed = 70
+	apiServer                 = "apiServer"
+	internalServer            = "internalServer"
 )
 
 // Server is an interface for the dapr gRPC server.
@@ -60,23 +60,23 @@ type Server interface {
 }
 
 type server struct {
-	api              API
-	config           ServerConfig
-	tracingSpec      config.TracingSpec
-	metricSpec       config.MetricSpec
-	servers          []*grpcGo.Server
-	kind             string
-	logger           logger.Logger
-	infoLogger       logger.Logger
-	maxConnectionAge *time.Duration
-	authToken        string
-	apiSpec          config.APISpec
-	proxy            messaging.Proxy
-	workflowEngine   *wfengine.WorkflowEngine
-	sec              security.Handler
-	wg               sync.WaitGroup
-	closed           atomic.Bool
-	closeCh          chan struct{}
+	api            API
+	config         ServerConfig
+	tracingSpec    config.TracingSpec
+	metricSpec     config.MetricSpec
+	servers        []*grpcGo.Server
+	kind           string
+	logger         logger.Logger
+	infoLogger     logger.Logger
+	grpcServerOpts []grpcGo.ServerOption
+	authToken      string
+	apiSpec        config.APISpec
+	proxy          messaging.Proxy
+	workflowEngine *wfengine.WorkflowEngine
+	sec            security.Handler
+	wg             sync.WaitGroup
+	closed         atomic.Bool
+	closeCh        chan struct{}
 }
 
 var (
@@ -106,23 +106,40 @@ func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec, 
 
 // NewInternalServer returns a new gRPC server for Dapr to Dapr communications.
 func NewInternalServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricSpec config.MetricSpec, sec security.Handler, proxy messaging.Proxy) Server {
-	return &server{
-		api:              api,
-		config:           config,
-		tracingSpec:      tracingSpec,
-		metricSpec:       metricSpec,
-		kind:             internalServer,
-		logger:           internalServerLogger,
-		maxConnectionAge: getDefaultMaxAgeDuration(),
-		proxy:            proxy,
-		sec:              sec,
-		closeCh:          make(chan struct{}),
+	serverOpts := []grpcGo.ServerOption{
+		grpcGo.KeepaliveEnforcementPolicy(grpcGoKeepalive.EnforcementPolicy{
+			// If a client pings more than once every 8s, terminate the connection
+			MinTime: 8 * time.Second,
+			// Allow pings even when there are no active streams
+			PermitWithoutStream: true,
+		}),
+		grpcGo.KeepaliveParams(grpcGoKeepalive.ServerParameters{
+			// If any connection is alive for more than 30 seconds, send a GOAWAY
+			// We set a maximum age to allow load balancing with not-yet-known nodes
+			MaxConnectionAge: 30 * time.Second,
+			// Do not forcefully close connections if there are pending RPCs
+			// This is equivalent to "infinity" time (see: https://github.com/grpc/grpc-go/blob/master/internal/transport/defaults.go)
+			MaxConnectionAgeGrace: time.Duration(math.MaxInt64),
+			// If a client is idle for 15s, send a GOAWAY
+			MaxConnectionIdle: 15 * time.Second,
+			// Ping the client if it is idle for 10s to ensure the connection is still active
+			Time: 10 * time.Second,
+			// Wait 5s for the ping ack before assuming the connection is dead
+			Timeout: 5 * time.Second,
+		}),
 	}
-}
-
-func getDefaultMaxAgeDuration() *time.Duration {
-	d := time.Second * defaultMaxConnectionAgeSeconds
-	return &d
+	return &server{
+		api:            api,
+		config:         config,
+		tracingSpec:    tracingSpec,
+		metricSpec:     metricSpec,
+		kind:           internalServer,
+		logger:         internalServerLogger,
+		grpcServerOpts: serverOpts,
+		proxy:          proxy,
+		sec:            sec,
+		closeCh:        make(chan struct{}),
+	}
 }
 
 // StartNonBlocking starts a new server in a goroutine.
@@ -267,8 +284,8 @@ func (s *server) getMiddlewareOptions() []grpcGo.ServerOption {
 
 func (s *server) getGRPCServer() (*grpcGo.Server, error) {
 	opts := s.getMiddlewareOptions()
-	if s.maxConnectionAge != nil {
-		opts = append(opts, grpcGo.KeepaliveParams(keepalive.ServerParameters{MaxConnectionAge: *s.maxConnectionAge}))
+	if len(s.grpcServerOpts) > 0 {
+		opts = append(opts, s.grpcServerOpts...)
 	}
 
 	opts = append(opts,
