@@ -19,9 +19,11 @@ import (
 	"errors"
 	"fmt"
 	"github.com/dapr/kit/ptr"
+	"math"
 	"strconv"
 	"sync"
 	"time"
+	"unsafe"
 
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/components-contrib/state/query"
@@ -351,6 +353,16 @@ func (ss *grpcStateStore) MultiMaxSize() int {
 	if err != nil {
 		log.Error("failed to get multi max size from state store", err)
 		ss.multiMaxSize = ptr.Of(-1)
+		return *ss.multiMaxSize
+	}
+
+	// If the pluggable component is on a 64bit system and the dapr runtime is on a 32bit system,
+	// the response will be larger than the maximum int32 value.
+	// In this case, we set the max size to the maximum possible value for a 32bit system.
+	is32bitSystem := unsafe.Sizeof(int(0)) == 4
+	if is32bitSystem && resp.GetMaxSize() > int64(math.MaxInt32) {
+		log.Warnf("multi max size %d is too large for 32bit systems, setting to max possible", resp.GetMaxSize())
+		ss.multiMaxSize = ptr.Of(math.MaxInt32)
 		return *ss.multiMaxSize
 	}
 

@@ -15,43 +15,42 @@ package errors
 
 import (
 	"fmt"
+	"google.golang.org/grpc/codes"
 	"net/http"
 	"strconv"
 
-	"google.golang.org/grpc/codes"
-
-	"github.com/dapr/kit/errors"
+	kiterrors "github.com/dapr/kit/errors"
 )
 
 func StateStoreNotConfigured() error {
-	return errors.NewBuilder(
+	return kiterrors.NewBuilder(
 		codes.FailedPrecondition,
 		http.StatusInternalServerError,
 		"state store is not configured",
 		"ERR_STATE_STORE_NOT_CONFIGURED",
 	).
-		WithErrorInfo(errors.CodePrefixStateStore+errors.CodeNotConfigured, nil).
+		WithErrorInfo(kiterrors.CodePrefixStateStore+kiterrors.CodeNotConfigured, nil).
 		Build()
 }
 
 func StateStoreNotFound(storeName string) error {
-	return errors.NewBuilder(
+	return kiterrors.NewBuilder(
 		codes.InvalidArgument, // TODO We should change this at some point. It should be codes.NotFound, but it will be a breaking change.
 		http.StatusBadRequest,
 		fmt.Sprintf("state store %s is not found", storeName),
 		"ERR_STATE_STORE_NOT_FOUND",
 	).
-		WithErrorInfo(errors.CodePrefixStateStore+errors.CodeNotFound, nil).
+		WithErrorInfo(kiterrors.CodePrefixStateStore+kiterrors.CodeNotFound, nil).
 		Build()
 }
 
 func StateStoreInvalidKeyName(storeName string, key string, msg string) error {
-	return errors.NewBuilder(
+	return kiterrors.NewBuilder(
 		codes.InvalidArgument,
 		http.StatusBadRequest,
 		msg,
 		"ERR_MALFORMED_REQUEST",
-	).WithErrorInfo(errors.CodePrefixStateStore+errors.CodeIllegalKey, nil).
+	).WithErrorInfo(kiterrors.CodePrefixStateStore+kiterrors.CodeIllegalKey, nil).
 		WithResourceInfo("state", storeName, "", "").
 		WithFieldViolation(key, msg).
 		Build()
@@ -60,26 +59,26 @@ func StateStoreInvalidKeyName(storeName string, key string, msg string) error {
 /**** Transactions ****/
 
 func StateStoreTransactionsNotSupported(storeName string) error {
-	return errors.NewBuilder(
+	return kiterrors.NewBuilder(
 		codes.Unimplemented,
 		http.StatusInternalServerError,
 		fmt.Sprintf(MsgStateTransactionsNotSupported, storeName),
 		"ERR_STATE_STORE_NOT_SUPPORTED", // TODO: @elena-kolevska this is misleading and also used for different things ("query unsupported"); it should be removed in the next major version
 	).
-		WithErrorInfo(errors.CodePrefixStateStore+"TRANSACTIONS_NOT_SUPPORTED", nil).
+		WithErrorInfo(kiterrors.CodePrefixStateStore+"TRANSACTIONS_NOT_SUPPORTED", nil).
 		WithResourceInfo("state", storeName, "", "").
 		WithHelpLink("https://docs.dapr.io/reference/components-reference/supported-state-stores/", "Check the list of state stores and the features they support").
 		Build()
 }
 
 func StateStoreTooManyTransactionalOps(storeName string, count int, max int) error {
-	return errors.NewBuilder(
+	return kiterrors.NewBuilder(
 		codes.InvalidArgument,
 		http.StatusBadRequest,
 		fmt.Sprintf("the transaction contains %d operations, which is more than what the state store supports: %d", count, max),
 		"ERR_STATE_STORE_TOO_MANY_TRANSACTIONS",
 	).
-		WithErrorInfo(errors.CodePrefixStateStore+"TOO_MANY_TRANSACTIONS", map[string]string{
+		WithErrorInfo(kiterrors.CodePrefixStateStore+"TOO_MANY_TRANSACTIONS", map[string]string{
 			"currentOpsTransaction": strconv.Itoa(count),
 			"maxOpsPerTransaction":  strconv.Itoa(max),
 		}).
@@ -90,25 +89,25 @@ func StateStoreTooManyTransactionalOps(storeName string, count int, max int) err
 /**** Query API ****/
 
 func StateStoreQueryUnsupported(storeName string) error {
-	return errors.NewBuilder(
+	return kiterrors.NewBuilder(
 		codes.Internal,
 		http.StatusInternalServerError,
 		"state store does not support querying",
 		"ERR_STATE_STORE_NOT_SUPPORTED",
 	).
-		WithErrorInfo(errors.CodePrefixStateStore+"QUERYING_"+errors.CodeNotSupported, nil).
+		WithErrorInfo(kiterrors.CodePrefixStateStore+"QUERYING_"+kiterrors.CodeNotSupported, nil).
 		WithResourceInfo("state", storeName, "", "").
 		Build()
 }
 
 func StateStoreQueryFailed(storeName string, detail string) error {
-	return errors.NewBuilder(
+	return kiterrors.NewBuilder(
 		codes.Internal,
 		http.StatusInternalServerError,
 		fmt.Sprintf("state store %s query failed: %s", storeName, detail),
 		"ERR_STATE_QUERY",
 	).
-		WithErrorInfo(errors.CodePrefixStateStore+errors.CodePostfixQueryFailed, nil).
+		WithErrorInfo(kiterrors.CodePrefixStateStore+kiterrors.CodePostfixQueryFailed, nil).
 		WithResourceInfo("state", storeName, "", "").
 		Build()
 }
