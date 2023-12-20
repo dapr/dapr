@@ -17,6 +17,7 @@ package wfengine
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -127,7 +128,7 @@ func (be *actorBackend) SetActorRuntime(actors actors.Actors) {
 // Internally, creating a workflow instance also creates a new actor with the same ID. The create
 // request is saved into the actor's "inbox" and then executed via a reminder thread. If the app is
 // scaled out across multiple replicas, the actor might get assigned to a replicas other than this one.
-func (be *actorBackend) CreateOrchestrationInstance(ctx context.Context, e *backend.HistoryEvent) error {
+func (be *actorBackend) CreateOrchestrationInstance(ctx context.Context, e *backend.HistoryEvent, opts ...backend.OrchestrationIdReusePolicyOptions) error {
 	if err := be.validateConfiguration(); err != nil {
 		return err
 	}
@@ -141,19 +142,35 @@ func (be *actorBackend) CreateOrchestrationInstance(ctx context.Context, e *back
 		workflowInstanceID = oi.GetInstanceId()
 	}
 
+	policy := &api.OrchestrationIdReusePolicy{}
+	for _, opt := range opts {
+		opt(policy)
+	}
+
 	eventData, err := backend.MarshalHistoryEvent(e)
 	if err != nil {
 		return err
+	}
+
+	requestBytes, err := json.Marshal(CreateWorkflowInstanceRequest{
+		Policy:          policy,
+		StartEventBytes: eventData,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to marshal CreateWorkflowInstanceRequest: %w", err)
 	}
 
 	// Invoke the well-known workflow actor directly, which will be created by this invocation request.
 	// Note that this request goes directly to the actor runtime, bypassing the API layer.
 	req := internalsv1pb.NewInternalInvokeRequest(CreateWorkflowInstanceMethod).
 		WithActor(be.config.workflowActorType, workflowInstanceID).
-		WithData(eventData).
-		WithContentType(invokev1.OctetStreamContentType)
+		WithData(requestBytes).
+		WithContentType(invokev1.JSONContentType)
 	_, err = be.actors.Call(ctx, req)
-	return err
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // GetOrchestrationMetadata implements backend.Backend
