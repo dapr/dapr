@@ -38,7 +38,6 @@ func init() {
 
 type errors struct {
 	daprd *daprd.Daprd
-	//someErr func(*testing.T) error
 }
 
 func (e *errors) Setup(t *testing.T) []framework.Option {
