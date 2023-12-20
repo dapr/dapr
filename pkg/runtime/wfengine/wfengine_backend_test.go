@@ -31,6 +31,8 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
+const SqliteBackendType = "workflowbackend.sqlite"
+
 func init() {
 	wfengine.SetLogLevel(logger.DebugLevel)
 }
@@ -44,7 +46,7 @@ func TestSqliteBackendSetupWithMetadata(t *testing.T) {
 	_, ok := engine.Backend.(*wfengine.ActorBackend)
 
 	assert.False(t, ok, "actor is not of type ActorBackend")
-	assert.Equal(t, wfengine.SqliteBackendType, engine.BackendType)
+	assert.Equal(t, SqliteBackendType, engine.BackendType)
 }
 
 func TestSqliteBackendSetupWithoutMetadata(t *testing.T) {
@@ -56,7 +58,7 @@ func TestSqliteBackendSetupWithoutMetadata(t *testing.T) {
 	_, ok := engine.Backend.(*wfengine.ActorBackend)
 
 	assert.False(t, ok, "actor is not of type ActorBackend")
-	assert.Equal(t, wfengine.SqliteBackendType, engine.BackendType)
+	assert.Equal(t, SqliteBackendType, engine.BackendType)
 }
 
 func TestActorBackendSetup(t *testing.T) {
@@ -93,7 +95,7 @@ func TestBackendComponentNilSetup(t *testing.T) {
 }
 
 func TestInvalidSqliteBackendComponentSetup(t *testing.T) {
-	mockWorkflowBackendManager := new(daprt.MockSqliteBackendComponentInvalidTimeoutManager)
+	mockWorkflowBackendManager := new(daprt.MockSqliteBackendComponentInvalidManager)
 	spec := config.WorkflowSpec{MaxConcurrentWorkflowInvocations: 100, MaxConcurrentActivityInvocations: 100}
 
 	engine := wfengine.NewWorkflowEngine(testAppID, spec, mockWorkflowBackendManager)
@@ -101,5 +103,17 @@ func TestInvalidSqliteBackendComponentSetup(t *testing.T) {
 	_, ok := engine.Backend.(*wfengine.ActorBackend)
 
 	assert.False(t, ok, "actor is of type ActorBackend")
-	assert.Equal(t, wfengine.SqliteBackendType, engine.BackendType)
+	assert.Equal(t, SqliteBackendType, engine.BackendType)
+}
+
+func TestInvalidBackendComponentSetup(t *testing.T) {
+	mockWorkflowBackendManager := new(daprt.MockInvalidSqliteBackendComponentManager)
+	spec := config.WorkflowSpec{MaxConcurrentWorkflowInvocations: 100, MaxConcurrentActivityInvocations: 100}
+
+	engine := wfengine.NewWorkflowEngine(testAppID, spec, mockWorkflowBackendManager)
+
+	_, ok := engine.Backend.(*wfengine.ActorBackend)
+
+	assert.Nil(t, nil, engine.Backend)
+	assert.False(t, ok, "actor is not of type ActorBackend")
 }

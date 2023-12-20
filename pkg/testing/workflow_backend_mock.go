@@ -31,6 +31,7 @@ const (
 	SqliteConnectionString         = "connectionString"
 	SqliteOrchestrationLockTimeout = "orchestrationLockTimeout"
 	SqliteActivityLockTimeout      = "activityLockTimeout"
+	IvalidSqliteBackendType        = "workflowbackendsqlite"
 )
 
 type MockWorkflowBackend struct {
@@ -105,12 +106,28 @@ func (m *MockNilBackendComponentManager) WorkflowBackendComponentInfo() (*wfbe.W
 	return nil, true
 }
 
-type MockSqliteBackendComponentInvalidTimeoutManager struct {
+type MockSqliteBackendComponentInvalidManager struct {
 }
 
-func (m *MockSqliteBackendComponentInvalidTimeoutManager) WorkflowBackendComponentInfo() (*wfbe.WorkflowBackendComponentInfo, bool) {
+func (m *MockSqliteBackendComponentInvalidManager) WorkflowBackendComponentInfo() (*wfbe.WorkflowBackendComponentInfo, bool) {
 	return &wfbe.WorkflowBackendComponentInfo{
 		WorkflowBackendType: SqliteBackendType,
+		WorkflowBackendMetadata: metadata.Base{
+			Properties: map[string]string{
+				SqliteConnectionString:         "in-memory",
+				SqliteActivityLockTimeout:      "100000",
+				SqliteOrchestrationLockTimeout: "100000",
+			},
+		},
+	}, true
+}
+
+type MockInvalidSqliteBackendComponentManager struct {
+}
+
+func (m *MockInvalidSqliteBackendComponentManager) WorkflowBackendComponentInfo() (*wfbe.WorkflowBackendComponentInfo, bool) {
+	return &wfbe.WorkflowBackendComponentInfo{
+		WorkflowBackendType: IvalidSqliteBackendType,
 		WorkflowBackendMetadata: metadata.Base{
 			Properties: map[string]string{
 				SqliteConnectionString:         "in-memory",

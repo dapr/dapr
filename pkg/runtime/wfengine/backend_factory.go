@@ -27,7 +27,6 @@ import (
 
 const (
 	ActorBackendType  = "workflowbackend.actor"
-	SqliteBackendType = "workflowbackend.sqlite"
 )
 
 func getActorBackend(appId string, wfe *WorkflowEngine) backend.Backend {
