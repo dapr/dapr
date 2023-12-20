@@ -18,12 +18,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/dapr/kit/ptr"
 	"math"
 	"strconv"
 	"sync"
 	"time"
 	"unsafe"
+
+	"github.com/dapr/kit/ptr"
 
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/components-contrib/state/query"

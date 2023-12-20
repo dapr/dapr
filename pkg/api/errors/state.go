@@ -15,9 +15,10 @@ package errors
 
 import (
 	"fmt"
-	"google.golang.org/grpc/codes"
 	"net/http"
 	"strconv"
+
+	"google.golang.org/grpc/codes"
 
 	kiterrors "github.com/dapr/kit/errors"
 )
