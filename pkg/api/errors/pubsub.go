@@ -21,6 +21,10 @@ import (
 	grpcCodes "google.golang.org/grpc/codes"
 )
 
+const (
+	PostFixNameEmpty = "NAME_EMPTY"
+)
+
 func PubSubNotFound(name string, pubsubType string, metadata map[string]string) error {
 	message := fmt.Sprintf("pubsub %s not found", name)
 
@@ -28,7 +32,7 @@ func PubSubNotFound(name string, pubsubType string, metadata map[string]string) 
 		grpcCodes.InvalidArgument,
 		http.StatusNotFound,
 		message,
-		kitErrors.CodePrefixPubSub+kitErrors.CodeNotFound,
+		"ERR_PUBSUB_NOT_FOUND",
 	).
 		WithErrorInfo(kitErrors.CodePrefixPubSub+kitErrors.CodeNotFound, metadata).
 		WithResourceInfo(pubsubType, name, "", message).
@@ -54,9 +58,9 @@ func PubSubNameEmpty(name string, pubsubType string, metadata map[string]string)
 		grpcCodes.InvalidArgument,
 		http.StatusNotFound,
 		message,
-		kitErrors.CodePrefixPubSub+"NAME_EMPTY",
+		"ERR_PUBSUB_EMPTY",
 	).
-		WithErrorInfo(message, metadata).
+		WithErrorInfo(kitErrors.CodePrefixPubSub+PostFixNameEmpty, metadata).
 		WithResourceInfo(pubsubType, name, "", message).
 		Build()
 }
@@ -67,9 +71,9 @@ func PubSubTopicEmpty(name string, pubsubType string, metadata map[string]string
 		grpcCodes.InvalidArgument,
 		http.StatusNotFound,
 		message,
-		kitErrors.CodePrefixPubSub+"TOPIC"+"NAME_EMPTY",
+		"ERR_TOPIC_EMPTY",
 	).
-		WithErrorInfo(message, metadata).
+		WithErrorInfo(kitErrors.CodePrefixPubSub+"TOPIC"+PostFixNameEmpty, metadata).
 		WithResourceInfo(pubsubType, name, "", message).
 		Build()
 }
@@ -82,7 +86,7 @@ func PubSubMetadataDeserialize(name string, pubsubType string, metadata map[stri
 		message,
 		"ERR_PUBSUB_REQUEST_METADATA",
 	).
-		WithErrorInfo(message, metadata).
+		WithErrorInfo(kitErrors.CodePrefixPubSub+"METADATA_DESERIALIZATION", metadata).
 		WithResourceInfo(pubsubType, name, "", message).
 		Build()
 }
@@ -95,7 +99,7 @@ func PubSubPublishMessage(name string, pubsubType string, topic string, err erro
 		message,
 		"ERR_PUBSUB_PUBLISH_MESSAGE",
 	).
-		WithErrorInfo(message, map[string]string{"topic": topic, "error": err.Error()}).
+		WithErrorInfo(kitErrors.CodePrefixPubSub+"PUBLISH_MESSAGE", map[string]string{"topic": topic, "error": err.Error()}).
 		WithResourceInfo(pubsubType, name, "", message).
 		Build()
 }
@@ -107,9 +111,9 @@ func PubSubCloudEventCreation(name string, pubsubType string, metadata map[strin
 		grpcCodes.InvalidArgument,
 		http.StatusInternalServerError,
 		message,
-		"ERR_PUBSUB_CLOUD_EVENTS_SER", //legacy, was errorCode - confirm
+		"ERR_PUBSUB_CLOUD_EVENTS_SER",
 	).
-		WithErrorInfo(message, metadata).
+		WithErrorInfo(kitErrors.CodePrefixPubSub+"CLOUD_EVENT_CREATION", metadata).
 		WithResourceInfo(pubsubType, name, "", message).
 		Build()
 }
@@ -121,9 +125,9 @@ func PubSubMarshalEnvelope(name string, topic string, pubsubType string, metadat
 		grpcCodes.InvalidArgument,
 		http.StatusInternalServerError,
 		message,
-		"ERR_PUBSUB_CLOUD_EVENTS_SER", //legacy, was errorCode - confirm
+		"ERR_PUBSUB_CLOUD_EVENTS_SER",
 	).
-		WithErrorInfo(message, metadata).
+		WithErrorInfo(kitErrors.CodePrefixPubSub+"MARSHAL_ENVELOPE", metadata).
 		WithResourceInfo(pubsubType, name, "", message).
 		Build()
 }
@@ -135,13 +139,14 @@ func PubSubMarshalEvents(name string, pubsubType string, topic string, metadata 
 		grpcCodes.InvalidArgument,
 		http.StatusBadRequest,
 		message+". error: "+metadata["error"],
-		"ERR_PUBSUB_EVENTS_SER", //legacy, was errorCode - confirm
+		"ERR_PUBSUB_EVENTS_SER",
 	).
-		WithErrorInfo(message, metadata).
+		WithErrorInfo(kitErrors.CodePrefixPubSub+"MARSHAL_EVENTS", metadata).
 		WithResourceInfo(pubsubType, name, "", message).
 		Build()
 }
 
+// PubSubUnMarshalEvents only occurs in http/api.go
 func PubSubUnMarshalEvents(name string, pubsubType string, topic string, metadata map[string]string, err error) error {
 	message := fmt.Sprintf("error when unmarshaling the request for topic %s pubsub %s: %s", topic, name, err.Error())
 
@@ -149,9 +154,9 @@ func PubSubUnMarshalEvents(name string, pubsubType string, topic string, metadat
 		grpcCodes.InvalidArgument,
 		http.StatusBadRequest,
 		message,
-		"ERR_PUBSUB_EVENTS_SER", //legacy, was errorCode - confirm
+		"ERR_PUBSUB_EVENTS_SER",
 	).
-		WithErrorInfo(message, metadata).
+		WithErrorInfo(kitErrors.CodePrefixPubSub+"UNMARSHAL_EVENTS", metadata).
 		WithResourceInfo(pubsubType, name, "", message).
 		Build()
 }
@@ -164,7 +169,7 @@ func PubSubPublishForbidden(name string, pubsubType string, topic string, appID 
 		message,
 		"ERR_PUBSUB_FORBIDDEN",
 	).
-		WithErrorInfo(message, map[string]string{"topic": topic, "error": err.Error()}).
+		WithErrorInfo(kitErrors.CodePrefixPubSub+"FORBIDDEN", map[string]string{"topic": topic, "error": err.Error()}).
 		WithResourceInfo(pubsubType, name, "", message).
 		Build()
 }
@@ -180,7 +185,7 @@ func PubSubTestNotFound(name string, pubsubType string, topic string, err error)
 		message,
 		"ERR_PUBSUB_NOT_FOUND",
 	).
-		WithErrorInfo(message, map[string]string{"topic": topic, "error": err.Error()}).
+		WithErrorInfo(kitErrors.CodePrefixPubSub+"TEST"+kitErrors.CodeNotFound, map[string]string{"topic": topic, "error": err.Error()}).
 		WithResourceInfo(pubsubType, name, "", message).
 		Build()
 }
@@ -193,19 +198,6 @@ func PubSubOubox(appID string, err error) error {
 		message,
 		"ERR_PUBLISH_OUTBOX",
 	).
-		WithErrorInfo(message, map[string]string{"appID": appID, "error": err.Error()}).
-		Build()
-}
-
-func PubSubMsgDropped(name string, pubsubType string, topic string, metadata map[string]string) error {
-	message := fmt.Sprintf("pubsub message dropped for topic: %s", topic)
-	return kitErrors.NewBuilder(
-		grpcCodes.NotFound,
-		http.StatusNotFound,
-		message,
-		kitErrors.CodePrefixPubSub+"MSG_DROPPED",
-	).
-		WithErrorInfo(message, metadata).
-		WithResourceInfo(pubsubType, name, "", message).
+		WithErrorInfo(kitErrors.CodePrefixPubSub+"OUTBOX", map[string]string{"appID": appID, "error": err.Error()}).
 		Build()
 }
