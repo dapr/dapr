@@ -14,9 +14,9 @@ limitations under the License.
 package options
 
 import (
-	"flag"
 	"path/filepath"
 
+	"github.com/spf13/pflag"
 	"k8s.io/client-go/util/homedir"
 
 	"github.com/dapr/dapr/pkg/metrics"
@@ -47,31 +47,51 @@ type Options struct {
 	IssuerKeyFilename  string
 }
 
-func New() *Options {
+func New(origArgs []string) *Options {
+	// We are using pflag to parse the CLI flags
+	// pflag is a drop-in replacement for the standard library's "flag" package, however…
+	// There's one key difference: with the stdlib's "flag" package, there are no short-hand options so options can be defined with a single slash (such as "daprd -mode").
+	// With pflag, single slashes are reserved for shorthands.
+	// So, we are doing this thing where we iterate through all args and double-up the slash if it's single
+	// This works *as long as* we don't start using shorthand flags (which haven't been in use so far).
+	args := make([]string, len(origArgs))
+	for i, a := range origArgs {
+		if len(a) > 2 && a[0] == '-' && a[1] != '-' {
+			args[i] = "-" + a
+		} else {
+			args[i] = a
+		}
+	}
+
 	var opts Options
 
-	flag.StringVar(&opts.ConfigName, "config", defaultDaprSystemConfigName, "Path to config file, or name of a configuration object")
-	flag.StringVar(&opts.IssuerCredentialsPath, "issuer-credentials", defaultCredentialsPath, "Path to the credentials directory holding the issuer data")
-	flag.StringVar(&opts.RootCAFilename, "issuer-ca-filename", config.DefaultRootCertFilename, "Certificate Authority certificate filename")
-	flag.StringVar(&opts.IssuerCertFilename, "issuer-certificate-filename", config.DefaultIssuerCertFilename, "Issuer certificate filename")
-	flag.StringVar(&opts.IssuerKeyFilename, "issuer-key-filename", config.DefaultIssuerKeyFilename, "Issuer private key filename")
-	flag.StringVar(&opts.TrustDomain, "trust-domain", "localhost", "The CA trust domain")
-	flag.IntVar(&opts.Port, "port", config.DefaultPort, "The port for the sentry server to listen on")
-	flag.IntVar(&opts.HealthzPort, "healthz-port", 8080, "The port for the healthz server to listen on")
+	// Create a flag set
+	fs := pflag.NewFlagSet("sentry", pflag.ExitOnError)
+	fs.SortFlags = true
+
+	fs.StringVar(&opts.ConfigName, "config", defaultDaprSystemConfigName, "Path to config file, or name of a configuration object")
+	fs.StringVar(&opts.IssuerCredentialsPath, "issuer-credentials", defaultCredentialsPath, "Path to the credentials directory holding the issuer data")
+	fs.StringVar(&opts.RootCAFilename, "issuer-ca-filename", config.DefaultRootCertFilename, "Certificate Authority certificate filename")
+	fs.StringVar(&opts.IssuerCertFilename, "issuer-certificate-filename", config.DefaultIssuerCertFilename, "Issuer certificate filename")
+	fs.StringVar(&opts.IssuerKeyFilename, "issuer-key-filename", config.DefaultIssuerKeyFilename, "Issuer private key filename")
+	fs.StringVar(&opts.TrustDomain, "trust-domain", "localhost", "The CA trust domain")
+	fs.IntVar(&opts.Port, "port", config.DefaultPort, "The port for the sentry server to listen on")
+	fs.IntVar(&opts.HealthzPort, "healthz-port", 8080, "The port for the healthz server to listen on")
 
 	if home := homedir.HomeDir(); home != "" {
-		flag.StringVar(&opts.Kubeconfig, "kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
+		fs.StringVar(&opts.Kubeconfig, "kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
 	} else {
-		flag.StringVar(&opts.Kubeconfig, "kubeconfig", "", "absolute path to the kubeconfig file")
+		fs.StringVar(&opts.Kubeconfig, "kubeconfig", "", "absolute path to the kubeconfig file")
 	}
 
 	opts.Logger = logger.DefaultOptions()
-	opts.Logger.AttachCmdFlags(flag.StringVar, flag.BoolVar)
+	opts.Logger.AttachCmdFlags(fs.StringVar, fs.BoolVar)
 
 	opts.Metrics = metrics.DefaultMetricOptions()
-	opts.Metrics.AttachCmdFlags(flag.StringVar, flag.BoolVar)
+	opts.Metrics.AttachCmdFlags(fs.StringVar, fs.BoolVar)
 
-	flag.Parse()
+	// Ignore errors; flagset is set for ExitOnError
+	_ = fs.Parse(args)
 
 	return &opts
 }
