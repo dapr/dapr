@@ -62,7 +62,7 @@ global:
     # Enables actor functionality in the cluster
     enabled: true
     # Name of the service that provides actor placement services
-    serviceName: "placement"
+    serviceName: "actors"
 
   reminders:
     # Name of the service that provides reminders
