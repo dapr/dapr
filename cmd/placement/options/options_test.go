@@ -22,9 +22,9 @@ import (
 )
 
 func TestAppFlag(t *testing.T) {
-	opts := New()
+	opts := New([]string{})
 	assert.EqualValues(t, "dapr-placement-0", opts.RaftID)
-	assert.EqualValues(t, "dapr-placement-0=127.0.0.1:8201", opts.RaftPeerString)
+	assert.EqualValues(t, []raft.PeerInfo{{ID: "dapr-placement-0", Address: "127.0.0.1:8201"}}, opts.RaftPeers)
 	assert.EqualValues(t, true, opts.RaftInMemEnabled)
 	assert.EqualValues(t, "", opts.RaftLogStorePath)
 	assert.EqualValues(t, 50005, opts.PlacementPort)
@@ -41,25 +41,36 @@ func TestAppFlag(t *testing.T) {
 	assert.EqualValues(t, "9090", opts.Metrics.Port)
 }
 
-func TestParsePeersFromFlag(t *testing.T) {
+func TestInitialCluster(t *testing.T) {
 	peerAddressTests := []struct {
-		in  string
-		out []raft.PeerInfo
+		name string
+		in   []string
+		out  []raft.PeerInfo
 	}{
 		{
-			"node0=127.0.0.1:3030",
+			"one address",
+			[]string{
+				"--initial-cluster", "node0=127.0.0.1:3030",
+			},
 			[]raft.PeerInfo{
 				{ID: "node0", Address: "127.0.0.1:3030"},
 			},
 		}, {
-			"node0=127.0.0.1:3030,node1=127.0.0.1:3031,node2=127.0.0.1:3032",
+			"three addresses in two flags",
+			[]string{
+				"--initial-cluster", "node0=127.0.0.1:3030",
+				"--initial-cluster", "node1=127.0.0.1:3031,node2=127.0.0.1:3032",
+			},
 			[]raft.PeerInfo{
 				{ID: "node0", Address: "127.0.0.1:3030"},
 				{ID: "node1", Address: "127.0.0.1:3031"},
 				{ID: "node2", Address: "127.0.0.1:3032"},
 			},
 		}, {
-			"127.0.0.1:3030,node1=127.0.0.1:3031,node2=127.0.0.1:3032",
+			"one address is invalid",
+			[]string{
+				"--initial-cluster", "127.0.0.1:3030,node1=127.0.0.1:3031,node2=127.0.0.1:3032",
+			},
 			[]raft.PeerInfo{
 				{ID: "node1", Address: "127.0.0.1:3031"},
 				{ID: "node2", Address: "127.0.0.1:3032"},
@@ -68,9 +79,9 @@ func TestParsePeersFromFlag(t *testing.T) {
 	}
 
 	for _, tt := range peerAddressTests {
-		t.Run("parse peers from cmd flag: "+tt.in, func(t *testing.T) {
-			peerInfo := parsePeersFromFlag(tt.in)
-			assert.EqualValues(t, tt.out, peerInfo)
+		t.Run(tt.name, func(t *testing.T) {
+			opts := New(tt.in)
+			assert.EqualValues(t, tt.out, opts.RaftPeers)
 		})
 	}
 }

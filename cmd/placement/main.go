@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"os"
 	"strconv"
 
 	"github.com/dapr/dapr/cmd/placement/options"
@@ -38,7 +39,7 @@ import (
 var log = logger.NewLogger("dapr.placement")
 
 func main() {
-	opts := options.New()
+	opts := options.New(os.Args[1:])
 
 	// Apply options to all loggers.
 	if err := logger.ApplyOptionsToLoggers(&opts.Logger); err != nil {

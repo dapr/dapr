@@ -14,40 +14,108 @@ limitations under the License.
 package options
 
 import (
-	"flag"
 	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/pkg/modes"
 )
 
 func TestAppFlag(t *testing.T) {
-	// reset CommandLine to avoid conflicts from other tests
-	flag.CommandLine = flag.NewFlagSet("runtime-flag-test-cmd", flag.ExitOnError)
-
-	opts := New([]string{"--app-id", "testapp", "--app-port", "80", "--app-protocol", "http", "--metrics-port", strconv.Itoa(10000)})
+	opts := New([]string{
+		"-app-id", "testapp", // Single dash
+		"--app-port", "80",
+		"--app-protocol", "http",
+		"--metrics-port", strconv.Itoa(10000),
+	})
 	assert.EqualValues(t, "testapp", opts.AppID)
 	assert.EqualValues(t, "80", opts.AppPort)
 	assert.EqualValues(t, "http", opts.AppProtocol)
 }
 
 func TestStandaloneGlobalConfig(t *testing.T) {
-	// reset CommandLine to avoid conflicts from other tests
-	flag.CommandLine = flag.NewFlagSet("runtime-flag-test-cmd", flag.ExitOnError)
-
-	opts := New([]string{"--app-id", "testapp", "--mode", string(modes.StandaloneMode), "--config", "../../../pkg/config/testdata/metric_disabled.yaml", "--metrics-port", strconv.Itoa(10000)})
+	opts := New([]string{
+		"--app-id", "testapp",
+		"-mode", string(modes.StandaloneMode), // Single dash
+		"--config", "../../../pkg/config/testdata/metric_disabled.yaml",
+		"--metrics-port", strconv.Itoa(10000),
+	})
 	assert.EqualValues(t, "testapp", opts.AppID)
 	assert.EqualValues(t, string(modes.StandaloneMode), opts.Mode)
-	assert.Equal(t, []string{"../../../pkg/config/testdata/metric_disabled.yaml"}, []string(opts.Config))
+	assert.Equal(t, []string{"../../../pkg/config/testdata/metric_disabled.yaml"}, opts.Config)
+}
+
+func TestEnableAPILogging(t *testing.T) {
+	t.Run("explicitly enabled", func(t *testing.T) {
+		opts := New([]string{
+			"-enable-api-logging", // Single dash
+		})
+		require.NotNil(t, opts.EnableAPILogging)
+		assert.True(t, *opts.EnableAPILogging)
+	})
+	t.Run("explicitly enabled with true written out", func(t *testing.T) {
+		opts := New([]string{
+			"--enable-api-logging=true",
+		})
+		require.NotNil(t, opts.EnableAPILogging)
+		assert.True(t, *opts.EnableAPILogging)
+	})
+
+	t.Run("explicitly disabled", func(t *testing.T) {
+		opts := New([]string{
+			"-enable-api-logging=false", // Single dash
+		})
+		require.NotNil(t, opts.EnableAPILogging)
+		assert.False(t, *opts.EnableAPILogging)
+	})
+
+	t.Run("flag is unset", func(t *testing.T) {
+		opts := New([]string{})
+		require.Nil(t, opts.EnableAPILogging)
+	})
+}
+
+func TestMultipleConfig(t *testing.T) {
+	t.Run("config flag not defined", func(t *testing.T) {
+		opts := New([]string{})
+		require.Empty(t, opts.Config)
+	})
+
+	t.Run("single config", func(t *testing.T) {
+		opts := New([]string{
+			"--config", "cfg1.yaml",
+		})
+		require.Equal(t, []string{"cfg1.yaml"}, opts.Config)
+	})
+
+	t.Run("comma-separated configs", func(t *testing.T) {
+		opts := New([]string{
+			"-config=cfg1.yaml,cfg2.yaml", // Single dash
+		})
+		require.Equal(t, []string{"cfg1.yaml", "cfg2.yaml"}, opts.Config)
+	})
+
+	t.Run("multiple config flags", func(t *testing.T) {
+		opts := New([]string{
+			"-config=cfg1.yaml",    // Single dash
+			"-config", "cfg2.yaml", // Single dash
+		})
+		require.Equal(t, []string{"cfg1.yaml", "cfg2.yaml"}, opts.Config)
+	})
+
+	t.Run("multiple config flags and comma-separated values", func(t *testing.T) {
+		opts := New([]string{
+			"-config=cfg1.yaml", // Single dash
+			"--config", "cfg2.yaml,cfg3.yaml",
+		})
+		require.Equal(t, []string{"cfg1.yaml", "cfg2.yaml", "cfg3.yaml"}, opts.Config)
+	})
 }
 
 func TestControlPlaneEnvVar(t *testing.T) {
 	t.Run("should default CLI flags if not defined", func(t *testing.T) {
-		// reset CommandLine to avoid conflicts from other tests
-		flag.CommandLine = flag.NewFlagSet("runtime-flag-test-cmd", flag.ExitOnError)
-
 		opts := New([]string{})
 
 		assert.EqualValues(t, "localhost", opts.ControlPlaneTrustDomain)
@@ -55,18 +123,16 @@ func TestControlPlaneEnvVar(t *testing.T) {
 	})
 
 	t.Run("should use CLI flags if defined", func(t *testing.T) {
-		// reset CommandLine to avoid conflicts from other tests
-		flag.CommandLine = flag.NewFlagSet("runtime-flag-test-cmd", flag.ExitOnError)
-
-		opts := New([]string{"--control-plane-namespace", "flag-namespace", "--control-plane-trust-domain", "flag-trust-domain"})
+		opts := New([]string{
+			"--control-plane-namespace", "flag-namespace",
+			"--control-plane-trust-domain", "flag-trust-domain",
+		})
 
 		assert.EqualValues(t, "flag-trust-domain", opts.ControlPlaneTrustDomain)
 		assert.EqualValues(t, "flag-namespace", opts.ControlPlaneNamespace)
 	})
 
 	t.Run("should use env vars if flags were not defined", func(t *testing.T) {
-		// reset CommandLine to avoid conflicts from other tests
-		flag.CommandLine = flag.NewFlagSet("runtime-flag-test-cmd", flag.ExitOnError)
 		t.Setenv("DAPR_CONTROLPLANE_NAMESPACE", "env-namespace")
 		t.Setenv("DAPR_CONTROLPLANE_TRUST_DOMAIN", "env-trust-domain")
 
@@ -77,12 +143,13 @@ func TestControlPlaneEnvVar(t *testing.T) {
 	})
 
 	t.Run("should priorities CLI flags if both flags and env vars are defined", func(t *testing.T) {
-		// reset CommandLine to avoid conflicts from other tests
-		flag.CommandLine = flag.NewFlagSet("runtime-flag-test-cmd", flag.ExitOnError)
 		t.Setenv("DAPR_CONTROLPLANE_NAMESPACE", "env-namespace")
 		t.Setenv("DAPR_CONTROLPLANE_TRUST_DOMAIN", "env-trust-domain")
 
-		opts := New([]string{"--control-plane-namespace", "flag-namespace", "--control-plane-trust-domain", "flag-trust-domain"})
+		opts := New([]string{
+			"--control-plane-namespace", "flag-namespace",
+			"--control-plane-trust-domain", "flag-trust-domain",
+		})
 
 		assert.EqualValues(t, "flag-trust-domain", opts.ControlPlaneTrustDomain)
 		assert.EqualValues(t, "flag-namespace", opts.ControlPlaneNamespace)
