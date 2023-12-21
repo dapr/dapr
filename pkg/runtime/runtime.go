@@ -1160,7 +1160,6 @@ func createGRPCManager(sec security.Handler, runtimeConfig *internalConfig, glob
 	grpcAppChannelConfig := &manager.AppChannelConfig{}
 	if globalConfig != nil {
 		grpcAppChannelConfig.TracingSpec = globalConfig.GetTracingSpec()
-		grpcAppChannelConfig.AllowInsecureTLS = globalConfig.IsFeatureEnabled(config.AppChannelAllowInsecureTLS)
 	}
 	if runtimeConfig != nil {
 		grpcAppChannelConfig.Port = runtimeConfig.appConnectionConfig.Port
