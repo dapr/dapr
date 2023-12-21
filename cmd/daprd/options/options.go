@@ -165,7 +165,7 @@ func New(origArgs []string) *Options {
 		opts.EnableAPILogging = nil
 	}
 
-	// If placement-host-address is set, that takes priority over actors-service
+	// If placement-host-address is set, that always takes priority over actors-service
 	if placementServiceHostAddr != "" {
 		opts.ActorsService = "placement:" + placementServiceHostAddr
 	}
