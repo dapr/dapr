@@ -27,7 +27,6 @@ ONLY_DAPR_IMAGE?=false
 DAPR_SYSTEM_IMAGE_NAME?=$(RELEASE_NAME)
 DAPR_RUNTIME_IMAGE_NAME?=daprd
 DAPR_PLACEMENT_IMAGE_NAME?=placement
-DAPR_ACTORS_IMAGE_NAME?=actors
 DAPR_SENTRY_IMAGE_NAME?=sentry
 DAPR_OPERATOR_IMAGE_NAME?=operator
 DAPR_INJECTOR_IMAGE_NAME?=injector
@@ -87,7 +86,6 @@ LINUX_BINS_OUT_DIR=$(OUT_DIR)/linux_$(GOARCH)
 DOCKER_IMAGE=$(DAPR_REGISTRY)/$(DAPR_SYSTEM_IMAGE_NAME)
 DAPR_RUNTIME_DOCKER_IMAGE=$(DAPR_REGISTRY)/$(DAPR_RUNTIME_IMAGE_NAME)
 DAPR_PLACEMENT_DOCKER_IMAGE=$(DAPR_REGISTRY)/$(DAPR_PLACEMENT_IMAGE_NAME)
-DAPR_ACTORS_DOCKER_IMAGE=$(DAPR_REGISTRY)/$(DAPR_ACTORS_IMAGE_NAME)
 DAPR_SENTRY_DOCKER_IMAGE=$(DAPR_REGISTRY)/$(DAPR_SENTRY_IMAGE_NAME)
 DAPR_OPERATOR_DOCKER_IMAGE=$(DAPR_REGISTRY)/$(DAPR_OPERATOR_IMAGE_NAME)
 DAPR_INJECTOR_DOCKER_IMAGE=$(DAPR_REGISTRY)/$(DAPR_INJECTOR_IMAGE_NAME)
@@ -127,9 +125,6 @@ else
 	if [[ "$(BINARIES)" == *"placement"* ]]; then \
 		$(DOCKER) build --build-arg PKG_FILES=placement $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_PLACEMENT_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
-	if [[ "$(BINARIES)" == *"actors"* ]]; then \
-		$(DOCKER) build --build-arg PKG_FILES=actors $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_ACTORS_DOCKER_IMAGE):$(BUILD_TAG); \
-	fi
 	if [[ "$(BINARIES)" == *"sentry"* ]]; then \
 		$(DOCKER) build --build-arg PKG_FILES=sentry $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_SENTRY_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
@@ -152,9 +147,6 @@ else
 	fi
 	if [[ "$(BINARIES)" == *"placement"* ]]; then \
 		$(DOCKER) buildx build --build-arg PKG_FILES=placement $(BUILD_ARGS) --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_PLACEMENT_DOCKER_IMAGE):$(BUILD_TAG) --provenance=false; \
-	fi
-	if [[ "$(BINARIES)" == *"actors"* ]]; then \
-		$(DOCKER) buildx build --build-arg PKG_FILES=actors $(BUILD_ARGS) --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_ACTORS_DOCKER_IMAGE):$(BUILD_TAG) --provenance=false; \
 	fi
 	if [[ "$(BINARIES)" == *"sentry"* ]]; then \
 		$(DOCKER) buildx build --build-arg PKG_FILES=sentry $(BUILD_ARGS) --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_SENTRY_DOCKER_IMAGE):$(BUILD_TAG) --provenance=false; \
@@ -183,9 +175,6 @@ else
 	if [[ "$(BINARIES)" == *"placement"* ]]; then \
 		$(DOCKER) push $(DAPR_PLACEMENT_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
-	if [[ "$(BINARIES)" == *"actors"* ]]; then \
-		$(DOCKER) push $(DAPR_ACTORS_DOCKER_IMAGE):$(BUILD_TAG); \
-	fi
 	if [[ "$(BINARIES)" == *"sentry"* ]]; then \
 		$(DOCKER) push $(DAPR_SENTRY_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
@@ -208,9 +197,6 @@ else
 	fi
 	if [[ "$(BINARIES)" == *"placement"* ]]; then \
 		$(DOCKER) buildx build --build-arg PKG_FILES=placement --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_PLACEMENT_DOCKER_IMAGE):$(BUILD_TAG) --provenance=false --push; \
-	fi
-	if [[ "$(BINARIES)" == *"actors"* ]]; then \
-		$(DOCKER) buildx build --build-arg PKG_FILES=actors --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_ACTORS_DOCKER_IMAGE):$(BUILD_TAG) --provenance=false --push; \
 	fi
 	if [[ "$(BINARIES)" == *"sentry"* ]]; then \
 		$(DOCKER) buildx build --build-arg PKG_FILES=sentry --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_SENTRY_DOCKER_IMAGE):$(BUILD_TAG) --provenance=false --push; \
@@ -238,9 +224,6 @@ else
 	if [[ "$(BINARIES)" == *"placement"* ]]; then \
 		kind load docker-image $(DAPR_PLACEMENT_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
-	if [[ "$(BINARIES)" == *"actors"* ]]; then \
-		kind load docker-image $(DAPR_ACTORS_DOCKER_IMAGE):$(BUILD_TAG); \
-	fi
 	if [[ "$(BINARIES)" == *"sentry"* ]]; then \
 		kind load docker-image $(DAPR_SENTRY_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
@@ -265,9 +248,6 @@ else
 	if [[ "$(BINARIES)" == *"placement"* ]]; then \
 	$(DOCKER) manifest create $(DAPR_PLACEMENT_DOCKER_IMAGE):$(DAPR_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_PLACEMENT_DOCKER_IMAGE):$(MANIFEST_TAG)-%); \
 	fi
-	if [[ "$(BINARIES)" == *"actors"* ]]; then \
-	$(DOCKER) manifest create $(DAPR_ACTORS_DOCKER_IMAGE):$(DAPR_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_ACTORS_DOCKER_IMAGE):$(MANIFEST_TAG)-%); \
-	fi
 	if [[ "$(BINARIES)" == *"sentry"* ]]; then \
 	$(DOCKER) manifest create $(DAPR_SENTRY_DOCKER_IMAGE):$(DAPR_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_SENTRY_DOCKER_IMAGE):$(MANIFEST_TAG)-%); \
 	fi
@@ -288,9 +268,6 @@ else
 	fi
 	if [[ "$(BINARIES)" == *"placement"* ]]; then \
 	$(DOCKER) manifest create $(DAPR_PLACEMENT_DOCKER_IMAGE):$(LATEST_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_PLACEMENT_DOCKER_IMAGE):$(MANIFEST_LATEST_TAG)-%); \
-	fi
-	if [[ "$(BINARIES)" == *"actors"* ]]; then \
-	$(DOCKER) manifest create $(DAPR_ACTORS_DOCKER_IMAGE):$(LATEST_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_ACTORS_DOCKER_IMAGE):$(MANIFEST_LATEST_TAG)-%); \
 	fi
 	if [[ "$(BINARIES)" == *"sentry"* ]]; then \
 	$(DOCKER) manifest create $(DAPR_SENTRY_DOCKER_IMAGE):$(LATEST_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_SENTRY_DOCKER_IMAGE):$(MANIFEST_LATEST_TAG)-%); \
@@ -316,9 +293,6 @@ else
 	if [[ "$(BINARIES)" == *"placement"* ]]; then \
 	$(DOCKER) manifest push $(DAPR_PLACEMENT_DOCKER_IMAGE):$(DAPR_TAG); \
 	fi
-	if [[ "$(BINARIES)" == *"actors"* ]]; then \
-	$(DOCKER) manifest push $(DAPR_ACTORS_DOCKER_IMAGE):$(DAPR_TAG); \
-	fi
 	if [[ "$(BINARIES)" == *"sentry"* ]]; then \
 	$(DOCKER) manifest push $(DAPR_SENTRY_DOCKER_IMAGE):$(DAPR_TAG); \
 	fi
@@ -339,9 +313,6 @@ else
 	fi
 	if [[ "$(BINARIES)" == *"placement"* ]]; then \
 	$(DOCKER) manifest push $(DAPR_PLACEMENT_DOCKER_IMAGE):$(LATEST_TAG); \
-	fi
-	if [[ "$(BINARIES)" == *"actors"* ]]; then \
-	$(DOCKER) manifest push $(DAPR_ACTORS_DOCKER_IMAGE):$(LATEST_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"sentry"* ]]; then \
 	$(DOCKER) manifest push $(DAPR_SENTRY_DOCKER_IMAGE):$(LATEST_TAG); \
