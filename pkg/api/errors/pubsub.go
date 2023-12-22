@@ -40,7 +40,7 @@ func PubSubNotFound(name string, pubsubType string, metadata map[string]string) 
 }
 
 func PubSubNotConfigured(name string, pubsubType string, metadata map[string]string) error {
-	message := "no pubsub is configured"
+	message := "pubsub is not configured"
 	return kitErrors.NewBuilder(
 		grpcCodes.FailedPrecondition,
 		http.StatusBadRequest,

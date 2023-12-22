@@ -33,15 +33,14 @@ import (
 )
 
 func init() {
-	suite.Register(new(errors))
+	suite.Register(new(standardizedErrors))
 }
 
-type errors struct {
+type standardizedErrors struct {
 	daprd *daprd.Daprd
 }
 
-func (e *errors) Setup(t *testing.T) []framework.Option {
-
+func (e *standardizedErrors) Setup(t *testing.T) []framework.Option {
 	//spin up a new daprd with a pubsub component
 	e.daprd = procdaprd.New(t, procdaprd.WithResourceFiles(`
 apiVersion: dapr.io/v1alpha1
@@ -59,7 +58,8 @@ spec:
 	}
 }
 
-func (e *errors) Run(t *testing.T, ctx context.Context) {
+func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
+
 	e.daprd.WaitUntilRunning(t, ctx)
 
 	conn, connErr := grpc.DialContext(ctx, fmt.Sprintf("localhost:%d", e.daprd.GRPCPort()), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
@@ -75,7 +75,6 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		_, err := client.PublishEvent(ctx, req)
 
 		require.Error(t, err)
-
 		s, ok := status.FromError(err)
 		require.True(t, ok)
 		require.Equal(t, grpcCodes.InvalidArgument, s.Code())
