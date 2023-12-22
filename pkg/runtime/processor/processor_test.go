@@ -33,6 +33,7 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/meta"
 	rtmock "github.com/dapr/dapr/pkg/runtime/mock"
@@ -59,7 +60,7 @@ func newTestProcWithID(id string) (*Processor, *registry.Registry) {
 		PodName:        "testPodName",
 		OperatorClient: nil,
 		GRPC:           nil,
-		Channels:       nil,
+		Channels:       new(channels.Channels),
 		GlobalConfig:   new(config.Configuration),
 	}), reg
 }

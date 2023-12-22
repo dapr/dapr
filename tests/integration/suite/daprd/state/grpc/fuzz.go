@@ -29,8 +29,6 @@ import (
 	fuzz "github.com/google/gofuzz"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 	"k8s.io/apimachinery/pkg/api/validation/path"
 
 	commonv1 "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -169,10 +167,7 @@ spec:
 func (f *fuzzstate) Run(t *testing.T, ctx context.Context) {
 	f.daprd.WaitUntilRunning(t, ctx)
 
-	conn, err := grpc.DialContext(ctx, f.daprd.GRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, conn.Close()) })
-	client := rtv1.NewDaprClient(conn)
+	client := f.daprd.GRPCClient(t, ctx)
 
 	t.Run("get", func(t *testing.T) {
 		pt := util.NewParallel(t)

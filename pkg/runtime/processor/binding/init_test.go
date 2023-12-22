@@ -22,6 +22,8 @@ import (
 	"github.com/dapr/components-contrib/bindings"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/grpc/manager"
+	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/meta"
 	"github.com/dapr/dapr/pkg/runtime/processor"
@@ -44,6 +46,7 @@ func TestInitBindings(t *testing.T) {
 			ComponentStore: compstore.New(),
 			GlobalConfig:   new(config.Configuration),
 			Meta:           meta.New(meta.Options{}),
+			GRPC:           manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: 0}),
 		})
 
 		c := compapi.Component{}
@@ -95,6 +98,7 @@ func TestInitBindings(t *testing.T) {
 			ComponentStore: compstore.New(),
 			GlobalConfig:   new(config.Configuration),
 			Meta:           meta.New(meta.Options{}),
+			GRPC:           manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: 0}),
 		})
 
 		input := compapi.Component{}
@@ -119,6 +123,7 @@ func TestInitBindings(t *testing.T) {
 			ComponentStore: compstore.New(),
 			GlobalConfig:   new(config.Configuration),
 			Meta:           meta.New(meta.Options{}),
+			GRPC:           manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: 0}),
 		})
 
 		c := compapi.Component{}

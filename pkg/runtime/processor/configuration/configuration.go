@@ -86,6 +86,8 @@ func (c *configuration) Close(comp compapi.Component) error {
 		return nil
 	}
 
+	defer c.compStore.DeleteConfiguration(comp.ObjectMeta.Name)
+
 	closer, ok := conf.(io.Closer)
 	if ok && closer != nil {
 		if err := closer.Close(); err != nil {
@@ -93,6 +95,5 @@ func (c *configuration) Close(comp compapi.Component) error {
 		}
 	}
 
-	c.compStore.DeleteConfiguration(comp.ObjectMeta.Name)
 	return nil
 }

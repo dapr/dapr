@@ -20,8 +20,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 
 	commonv1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -49,13 +47,10 @@ func (l *ttl) Setup(t *testing.T) []framework.Option {
 func (l *ttl) Run(t *testing.T, ctx context.Context) {
 	l.daprd.WaitUntilRunning(t, ctx)
 
-	conn, err := grpc.DialContext(ctx, l.daprd.GRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, conn.Close()) })
-	client := rtv1.NewDaprClient(conn)
+	client := l.daprd.GRPCClient(t, ctx)
 
 	now := time.Now()
-	_, err = client.SaveState(ctx, &rtv1.SaveStateRequest{
+	_, err := client.SaveState(ctx, &rtv1.SaveStateRequest{
 		StoreName: "mystore",
 		States: []*commonv1.StateItem{
 			{Key: "key1", Value: []byte("value1"), Metadata: map[string]string{"ttlInSeconds": "3"}},

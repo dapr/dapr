@@ -156,14 +156,14 @@ func (s *state) Close(comp compapi.Component) error {
 		return nil
 	}
 
+	defer s.compStore.DeleteStateStore(comp.Name)
+
 	closer, ok := ss.(io.Closer)
 	if ok && closer != nil {
 		if err := closer.Close(); err != nil {
 			return err
 		}
 	}
-
-	s.compStore.DeleteStateStore(comp.Name)
 
 	return nil
 }

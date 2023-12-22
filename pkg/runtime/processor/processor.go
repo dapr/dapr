@@ -25,8 +25,8 @@ import (
 	apiextapi "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
-	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	httpendapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/config"
 	configmodes "github.com/dapr/dapr/pkg/config/modes"
@@ -113,9 +113,10 @@ type Processor struct {
 	pubsub    PubsubManager
 	binding   BindingManager
 
-	pendingHTTPEndpoints       chan httpendapi.HTTPEndpoint
-	pendingComponents          chan compapi.Component
-	pendingComponentDependents map[string][]compapi.Component
+	pendingHTTPEndpoints       chan httpendpointsapi.HTTPEndpoint
+	pendingComponents          chan componentsapi.Component
+	pendingComponentsWaiting   sync.WaitGroup
+	pendingComponentDependents map[string][]componentsapi.Component
 
 	lock     sync.RWMutex
 	chlock   sync.RWMutex
@@ -169,9 +170,9 @@ func New(opts Options) *Processor {
 	})
 
 	return &Processor{
-		pendingHTTPEndpoints:       make(chan httpendapi.HTTPEndpoint),
-		pendingComponents:          make(chan compapi.Component),
-		pendingComponentDependents: make(map[string][]compapi.Component),
+		pendingHTTPEndpoints:       make(chan httpendpointsapi.HTTPEndpoint),
+		pendingComponents:          make(chan componentsapi.Component),
+		pendingComponentDependents: make(map[string][]componentsapi.Component),
 		closedCh:                   make(chan struct{}),
 		compStore:                  opts.ComponentStore,
 		state:                      state,
@@ -209,7 +210,7 @@ func New(opts Options) *Processor {
 }
 
 // Init initializes a component of a category.
-func (p *Processor) Init(ctx context.Context, comp compapi.Component) error {
+func (p *Processor) Init(ctx context.Context, comp componentsapi.Component) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -230,7 +231,7 @@ func (p *Processor) Init(ctx context.Context, comp compapi.Component) error {
 }
 
 // Close closes the component.
-func (p *Processor) Close(comp compapi.Component) error {
+func (p *Processor) Close(comp componentsapi.Component) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -273,24 +274,28 @@ func (p *Processor) Process(ctx context.Context) error {
 	).Run(ctx)
 }
 
-func (p *Processor) AddPendingComponent(ctx context.Context, comp compapi.Component) bool {
+func (p *Processor) AddPendingComponent(ctx context.Context, comp componentsapi.Component) bool {
 	p.chlock.RLock()
 	defer p.chlock.RUnlock()
+
 	if p.shutdown.Load() {
 		return false
 	}
 
+	p.pendingComponentsWaiting.Add(1)
 	select {
 	case <-ctx.Done():
+		p.pendingComponentsWaiting.Done()
 		return false
 	case <-p.closedCh:
+		p.pendingComponentsWaiting.Done()
 		return false
 	case p.pendingComponents <- comp:
 		return true
 	}
 }
 
-func (p *Processor) AddPendingEndpoint(ctx context.Context, endpoint httpendapi.HTTPEndpoint) bool {
+func (p *Processor) AddPendingEndpoint(ctx context.Context, endpoint httpendpointsapi.HTTPEndpoint) bool {
 	p.chlock.RLock()
 	defer p.chlock.RUnlock()
 	if p.shutdown.Load() {
@@ -308,9 +313,9 @@ func (p *Processor) AddPendingEndpoint(ctx context.Context, endpoint httpendapi.
 }
 
 func (p *Processor) processComponents(ctx context.Context) error {
-	for comp := range p.pendingComponents {
+	process := func(comp componentsapi.Component) error {
 		if comp.Name == "" {
-			continue
+			return nil
 		}
 
 		err := p.processComponentAndDependents(ctx, comp)
@@ -321,6 +326,15 @@ func (p *Processor) processComponents(ctx context.Context) error {
 				return err
 			}
 			log.Error(err)
+		}
+		return nil
+	}
+
+	for comp := range p.pendingComponents {
+		err := process(comp)
+		p.pendingComponentsWaiting.Done()
+		if err != nil {
+			return err
 		}
 	}
 
@@ -339,7 +353,12 @@ func (p *Processor) processHTTPEndpoints(ctx context.Context) error {
 	return nil
 }
 
-func (p *Processor) processComponentAndDependents(ctx context.Context, comp compapi.Component) error {
+// WaitForEmptyComponentQueue waits for the component queue to be empty.
+func (p *Processor) WaitForEmptyComponentQueue() {
+	p.pendingComponentsWaiting.Wait()
+}
+
+func (p *Processor) processComponentAndDependents(ctx context.Context, comp componentsapi.Component) error {
 	log.Debug("Loading component: " + comp.LogName())
 	res := p.preprocessOneComponent(ctx, &comp)
 	if res.unreadyDependency != "" {
@@ -367,7 +386,7 @@ func (p *Processor) processComponentAndDependents(ctx context.Context, comp comp
 		err = fmt.Errorf("init timeout for component %s exceeded after %s", comp.LogName(), timeout.String())
 	}
 	if err != nil {
-		log.Errorf("Failed to init component %s: %s", comp.Name, err)
+		log.Errorf("Failed to init component %s: %s", comp.LogName(), err)
 		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
 		return rterrors.NewInit(rterrors.InitComponentFailure, comp.LogName(), err)
 	}
@@ -388,7 +407,7 @@ func (p *Processor) processComponentAndDependents(ctx context.Context, comp comp
 	return nil
 }
 
-func (p *Processor) processHTTPEndpointSecrets(ctx context.Context, endpoint *httpendapi.HTTPEndpoint) {
+func (p *Processor) processHTTPEndpointSecrets(ctx context.Context, endpoint *httpendpointsapi.HTTPEndpoint) {
 	_, _ = p.secret.ProcessResource(ctx, endpoint)
 
 	tlsResource := apis.GenericNameValueResource{
@@ -461,7 +480,7 @@ func (p *Processor) processHTTPEndpointSecrets(ctx context.Context, endpoint *ht
 	}
 }
 
-func (p *Processor) preprocessOneComponent(ctx context.Context, comp *compapi.Component) componentPreprocessRes {
+func (p *Processor) preprocessOneComponent(ctx context.Context, comp *componentsapi.Component) componentPreprocessRes {
 	_, unreadySecretsStore := p.secret.ProcessResource(ctx, comp)
 	if unreadySecretsStore != "" {
 		return componentPreprocessRes{
@@ -471,7 +490,7 @@ func (p *Processor) preprocessOneComponent(ctx context.Context, comp *compapi.Co
 	return componentPreprocessRes{}
 }
 
-func (p *Processor) category(comp compapi.Component) components.Category {
+func (p *Processor) category(comp componentsapi.Component) components.Category {
 	for category := range p.managers {
 		if strings.HasPrefix(comp.Spec.Type, string(category)+".") {
 			return category

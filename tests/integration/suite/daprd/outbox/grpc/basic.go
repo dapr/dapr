@@ -28,6 +28,7 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/grpcapp"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -51,7 +52,7 @@ func (o *basic) Setup(t *testing.T) []framework.Option {
 		}, nil
 	}
 
-	srv1 := newGRPCServer(t, onTopicEvent)
+	srv1 := grpcapp.New(t, grpcapp.WithOnTopicEventFn(onTopicEvent))
 	o.daprd = procdaprd.New(t, procdaprd.WithAppID("outboxtest"), procdaprd.WithAppPort(srv1.Port(t)), procdaprd.WithAppProtocol("grpc"), procdaprd.WithResourceFiles(`
 apiVersion: dapr.io/v1alpha1
 kind: Component

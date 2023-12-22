@@ -177,6 +177,107 @@ func TestInitPubSub(t *testing.T) {
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 	})
 
+	t.Run("if not subscribing yet should not call Subscribe", func(t *testing.T) {
+		mockPubSub, mockPubSub2 := initMockPubSubForRuntime(ps)
+
+		mockAppChannel := new(channelt.MockAppChannel)
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
+		// User App subscribes 2 topics via http app channel
+		subs := getSubscriptionsJSONString(
+			[]string{"topic0", "topic1"}, // first pubsub
+			[]string{"topic0"},           // second pubsub
+		)
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataString(subs).
+			WithContentType("application/json")
+		defer fakeResp.Close()
+
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
+
+		// act
+		for _, comp := range pubsubComponents {
+			err := ps.Init(context.Background(), comp)
+			require.NoError(t, err)
+		}
+
+		// assert
+		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
+		mockPubSub2.AssertNumberOfCalls(t, "Init", 1)
+
+		mockPubSub.AssertNumberOfCalls(t, "Subscribe", 0)
+		mockPubSub2.AssertNumberOfCalls(t, "Subscribe", 0)
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 0)
+	})
+
+	t.Run("if start subscribing then not subscribing should not call Subscribe", func(t *testing.T) {
+		mockPubSub, mockPubSub2 := initMockPubSubForRuntime(ps)
+
+		mockAppChannel := new(channelt.MockAppChannel)
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
+		// User App subscribes 2 topics via http app channel
+		subs := getSubscriptionsJSONString(
+			[]string{"topic0", "topic1"}, // first pubsub
+			[]string{"topic0"},           // second pubsub
+		)
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataString(subs).
+			WithContentType("application/json")
+		defer fakeResp.Close()
+
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
+
+		require.NoError(t, ps.StartSubscriptions(context.Background()))
+		ps.StopSubscriptions()
+
+		// act
+		for _, comp := range pubsubComponents {
+			err := ps.Init(context.Background(), comp)
+			require.NoError(t, err)
+		}
+
+		// assert
+		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
+		mockPubSub2.AssertNumberOfCalls(t, "Init", 1)
+
+		mockPubSub.AssertNumberOfCalls(t, "Subscribe", 0)
+		mockPubSub2.AssertNumberOfCalls(t, "Subscribe", 0)
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 0)
+	})
+
+	t.Run("if start subscription then init, expect Subscribe", func(t *testing.T) {
+		mockPubSub, mockPubSub2 := initMockPubSubForRuntime(ps)
+
+		mockAppChannel := new(channelt.MockAppChannel)
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
+		// User App subscribes 2 topics via http app channel
+		subs := getSubscriptionsJSONString(
+			[]string{"topic0", "topic1"}, // first pubsub
+			[]string{"topic0"},           // second pubsub
+		)
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataString(subs).
+			WithContentType("application/json")
+		defer fakeResp.Close()
+
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
+
+		require.NoError(t, ps.StartSubscriptions(context.Background()))
+
+		// act
+		for _, comp := range pubsubComponents {
+			err := ps.Init(context.Background(), comp)
+			require.NoError(t, err)
+		}
+
+		// assert
+		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
+		mockPubSub2.AssertNumberOfCalls(t, "Init", 1)
+
+		mockPubSub.AssertNumberOfCalls(t, "Subscribe", 2)
+		mockPubSub2.AssertNumberOfCalls(t, "Subscribe", 1)
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
+	})
+
 	t.Run("subscribe to topic with custom route", func(t *testing.T) {
 		mockPubSub, _ := initMockPubSubForRuntime(ps)
 
@@ -1706,7 +1807,7 @@ func TestPubsubLifecycle(t *testing.T) {
 	t.Run("subscribe to mockPubSub3/topic4", func(t *testing.T) {
 		resetState()
 
-		err = ps.subscribeTopic(context.Background(), "mockPubSub3", "topic4", compstore.TopicRouteElem{})
+		err = ps.subscribeTopic("mockPubSub3", "topic4", compstore.TopicRouteElem{})
 		require.NoError(t, err)
 
 		sendMessages(t, 2)
