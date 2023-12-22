@@ -1,0 +1,32 @@
+From a662f110afba13ce24b51e83eaa9f4bf43b9aadf Mon Sep 17 00:00:00 2001
+From: Shivam Kumar <shivamkm07@gmail.com>
+Date: Fri, 22 Dec 2023 19:20:51 +0530
+Subject: Setting IngressPort in workflow test
+
+Signed-off-by: Shivam Kumar <shivamkm07@gmail.com>
+---
+ tests/e2e/workflows/workflow_test.go | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/tests/e2e/workflows/workflow_test.go b/tests/e2e/workflows/workflow_test.go
+index 307c5456..00ed176d 100644
+--- a/tests/e2e/workflows/workflow_test.go
++++ b/tests/e2e/workflows/workflow_test.go
+@@ -52,12 +52,12 @@ func TestMain(m *testing.M) {
+ 				ImageName:           "e2e-workflowsapp",
+ 				Replicas:            1,
+ 				IngressEnabled:      true,
+-				MetricsEnabled:      true,
++				IngressPort:         3000,
+ 				DaprMemoryLimit:     "200Mi",
+ 				DaprMemoryRequest:   "100Mi",
+ 				AppMemoryLimit:      "200Mi",
+ 				AppMemoryRequest:    "100Mi",
+-				AppPort:             3000,
++				AppPort:             -1,
+ 				DebugLoggingEnabled: true,
+ 			},
+ 		}
+-- 
+2.34.1
+
