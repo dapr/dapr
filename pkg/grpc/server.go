@@ -28,7 +28,7 @@ import (
 	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	grpcGoKeepalive "google.golang.org/grpc/keepalive"
+	grpcKeepalive "google.golang.org/grpc/keepalive"
 
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -65,7 +65,7 @@ type server struct {
 	kind           string
 	logger         logger.Logger
 	infoLogger     logger.Logger
-	grpcServerOpts []grpcGo.ServerOption
+	grpcServerOpts []grpc.ServerOption
 	authToken      string
 	apiSpec        config.APISpec
 	proxy          messaging.Proxy
@@ -106,14 +106,14 @@ func NewInternalServer(api API, config ServerConfig, tracingSpec config.TracingS
 	// This is equivalent to "infinity" time (see: https://github.com/grpc/grpc-go/blob/master/internal/transport/defaults.go)
 	const infinity = time.Duration(math.MaxInt64)
 
-	serverOpts := []grpcGo.ServerOption{
-		grpcGo.KeepaliveEnforcementPolicy(grpcGoKeepalive.EnforcementPolicy{
+	serverOpts := []grpc.ServerOption{
+		grpc.KeepaliveEnforcementPolicy(grpcKeepalive.EnforcementPolicy{
 			// If a client pings more than once every 8s, terminate the connection
 			MinTime: 8 * time.Second,
 			// Allow pings even when there are no active streams
 			PermitWithoutStream: true,
 		}),
-		grpcGo.KeepaliveParams(grpcGoKeepalive.ServerParameters{
+		grpc.KeepaliveParams(grpcKeepalive.ServerParameters{
 			// Do not set a max age
 			// The client uses a pool that recycles connections automatically
 			MaxConnectionAge: infinity,
