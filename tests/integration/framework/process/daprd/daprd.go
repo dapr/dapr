@@ -32,7 +32,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/emptypb"
 
-	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
@@ -109,6 +109,9 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		args = append(args, "--app-health-check-path="+opts.appHealthCheckPath)
 	}
 	if len(opts.resourceFiles) > 0 {
+		args = append(args, "--resources-path="+dir)
+	}
+	for _, dir := range opts.resourceDirs {
 		args = append(args, "--resources-path="+dir)
 	}
 	if len(opts.configs) > 0 {
@@ -220,11 +223,22 @@ func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
 				return false
 			}
 			in := emptypb.Empty{}
-			out := runtimev1pb.HealthCheckResponse{}
+			out := rtv1.HealthCheckResponse{}
 			err = conn.Invoke(ctx, "/dapr.proto.runtime.v1.AppCallbackHealthCheck/HealthCheck", &in, &out)
 			return err == nil
 		}, 10*time.Second, 100*time.Millisecond)
 	}
+}
+
+func (d *Daprd) GRPCClient(t *testing.T, ctx context.Context) rtv1.DaprClient {
+	conn, err := grpc.DialContext(ctx, fmt.Sprintf("localhost:%d", d.GRPCPort()),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithBlock(),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, conn.Close()) })
+
+	return rtv1.NewDaprClient(conn)
 }
 
 func (d *Daprd) AppID() string {
