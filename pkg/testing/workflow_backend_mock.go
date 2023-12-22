@@ -100,6 +100,7 @@ func (m *MockInvalidaBackendManager) WorkflowBackendComponentInfo() (*wfbe.Workf
 }
 
 type MockNilBackendComponentManager struct {
+	mock.Mock
 }
 
 func (m *MockNilBackendComponentManager) WorkflowBackendComponentInfo() (*wfbe.WorkflowBackendComponentInfo, bool) {
@@ -107,6 +108,7 @@ func (m *MockNilBackendComponentManager) WorkflowBackendComponentInfo() (*wfbe.W
 }
 
 type MockSqliteBackendComponentInvalidManager struct {
+	mock.Mock
 }
 
 func (m *MockSqliteBackendComponentInvalidManager) WorkflowBackendComponentInfo() (*wfbe.WorkflowBackendComponentInfo, bool) {
@@ -123,6 +125,7 @@ func (m *MockSqliteBackendComponentInvalidManager) WorkflowBackendComponentInfo(
 }
 
 type MockInvalidSqliteBackendComponentManager struct {
+	mock.Mock
 }
 
 func (m *MockInvalidSqliteBackendComponentManager) WorkflowBackendComponentInfo() (*wfbe.WorkflowBackendComponentInfo, bool) {
