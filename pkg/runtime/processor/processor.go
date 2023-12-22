@@ -170,7 +170,7 @@ func New(opts Options) *Processor {
 		Channels:       opts.Channels,
 	})
 
-	workflowBackend := wfbeProcessor.New(wfbeProcessor.Options{
+	wfbe := wfbeProcessor.New(wfbeProcessor.Options{
 		Registry:       opts.Registry.WorkflowBackends(),
 		ComponentStore: opts.ComponentStore,
 		Meta:           opts.Meta,
@@ -186,7 +186,7 @@ func New(opts Options) *Processor {
 		pubsub:                     ps,
 		binding:                    binding,
 		secret:                     secret,
-		workflowBackend:            workflowBackend,
+		workflowBackend:            wfbe,
 		managers: map[components.Category]manager{
 			components.CategoryBindings: binding,
 			components.CategoryConfiguration: configuration.New(configuration.Options{
@@ -207,7 +207,7 @@ func New(opts Options) *Processor {
 			components.CategoryPubSub:          ps,
 			components.CategorySecretStore:     secret,
 			components.CategoryStateStore:      state,
-			components.CategoryWorkflowBackend: workflowBackend,
+			components.CategoryWorkflowBackend: wfbe,
 			components.CategoryWorkflow: workflow.New(workflow.Options{
 				Registry:       opts.Registry.Workflows(),
 				ComponentStore: opts.ComponentStore,

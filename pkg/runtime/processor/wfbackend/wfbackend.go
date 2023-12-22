@@ -3,7 +3,7 @@ Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
-    http://wwwbe.apache.org/licenses/LICENSE-2.0
+    http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -51,17 +51,17 @@ func New(opts Options) *workflowBackend {
 	}
 }
 
-func (wbe *workflowBackend) Init(ctx context.Context, comp compapi.Component) error {
-	wbe.lock.Lock()
-	defer wbe.lock.Unlock()
+func (wfbe *workflowBackend) Init(ctx context.Context, comp compapi.Component) error {
+	wfbe.lock.Lock()
+	defer wfbe.lock.Unlock()
 
 	// create the component
 	fName := comp.LogName()
-	workflowBackendComp, err := wbe.registry.Create(comp.Spec.Type, comp.Spec.Version, fName)
+	workflowBackendComp, err := wfbe.registry.Create(comp.Spec.Type, comp.Spec.Version, fName)
 	if err != nil {
 		log.Warnf("error creating workflow backend component (%s): %s", comp.LogName(), err)
 		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
-		wbe.backendComponentInfo = &wfbeComp.WorkflowBackendComponentInfo{
+		wfbe.backendComponentInfo = &wfbeComp.WorkflowBackendComponentInfo{
 			InvalidWorkflowBackend: true,
 		}
 		return err
@@ -72,7 +72,7 @@ func (wbe *workflowBackend) Init(ctx context.Context, comp compapi.Component) er
 	}
 
 	// initialization
-	baseMetadata, err := wbe.meta.ToBaseMetadata(comp)
+	baseMetadata, err := wfbe.meta.ToBaseMetadata(comp)
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
 		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
@@ -84,40 +84,40 @@ func (wbe *workflowBackend) Init(ctx context.Context, comp compapi.Component) er
 	}
 
 	// save workflow related configuration
-	wbe.compStore.AddWorkflowBackend(comp.ObjectMeta.Name, workflowBackendComp)
+	wfbe.compStore.AddWorkflowBackend(comp.ObjectMeta.Name, workflowBackendComp)
 	diag.DefaultMonitoring.ComponentInitialized(comp.Spec.Type)
 
-	if wbe.backendComponentInfo == nil {
+	if wfbe.backendComponentInfo == nil {
 		log.Info("Using '" + comp.Spec.Type + "' as workflow backend")
-		wbe.backendComponentInfo = &wfbeComp.WorkflowBackendComponentInfo{
+		wfbe.backendComponentInfo = &wfbeComp.WorkflowBackendComponentInfo{
 			WorkflowBackendType:     comp.Spec.Type,
 			WorkflowBackendMetadata: baseMetadata,
 		}
-	} else if wbe.backendComponentInfo.WorkflowBackendType != comp.Spec.Type {
-		return fmt.Errorf("detected duplicate workflow backend: %s and %s", wbe.backendComponentInfo.WorkflowBackendType, comp.Spec.Type)
+	} else if wfbe.backendComponentInfo.WorkflowBackendType != comp.Spec.Type {
+		return fmt.Errorf("detected duplicate workflow backend: %s and %s", wfbe.backendComponentInfo.WorkflowBackendType, comp.Spec.Type)
 	}
 
 	return nil
 }
 
-func (wbe *workflowBackend) Close(comp compapi.Component) error {
-	wbe.lock.Lock()
-	defer wbe.lock.Unlock()
+func (wfbe *workflowBackend) Close(comp compapi.Component) error {
+	wfbe.lock.Lock()
+	defer wfbe.lock.Unlock()
 
 	// We don't "Close" a workflow here because that has no meaning today since
 	// Dapr doesn't support third-party workflows. Internal workflows are based
 	// on the actor subsystem so there is nothing to close.
-	wbe.compStore.DeleteWorkflowBackend(comp.Name)
+	wfbe.compStore.DeleteWorkflowBackend(comp.Name)
 
 	return nil
 }
 
-func (wbe *workflowBackend) WorkflowBackendComponentInfo() (*wfbeComp.WorkflowBackendComponentInfo, bool) {
-	wbe.lock.Lock()
-	defer wbe.lock.Unlock()
+func (wfbe *workflowBackend) WorkflowBackendComponentInfo() (*wfbeComp.WorkflowBackendComponentInfo, bool) {
+	wfbe.lock.Lock()
+	defer wfbe.lock.Unlock()
 
-	if wbe.backendComponentInfo == nil {
+	if wfbe.backendComponentInfo == nil {
 		return nil, false
 	}
-	return wbe.backendComponentInfo, true
+	return wfbe.backendComponentInfo, true
 }
