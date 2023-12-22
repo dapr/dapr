@@ -31,6 +31,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	procgrpc "github.com/dapr/dapr/tests/integration/framework/process/grpc"
+	"github.com/dapr/dapr/tests/integration/framework/process/grpcapp"
 	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 	testpb "github.com/dapr/dapr/tests/integration/suite/daprd/serviceinvocation/grpc/proto"
@@ -44,7 +45,7 @@ func init() {
 // the app is slow to startup.
 type slowappstartup struct {
 	daprd *procdaprd.Daprd
-	srv   *procgrpc.GRPC
+	srv   *grpcapp.GRPCApp
 }
 
 func (s *slowappstartup) Setup(t *testing.T) []framework.Option {

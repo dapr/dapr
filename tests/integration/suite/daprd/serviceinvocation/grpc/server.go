@@ -18,58 +18,29 @@ import (
 	"testing"
 
 	"google.golang.org/grpc"
-	"google.golang.org/protobuf/types/known/emptypb"
 
 	commonv1 "github.com/dapr/dapr/pkg/proto/common/v1"
-	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	procgrpc "github.com/dapr/dapr/tests/integration/framework/process/grpc"
+	"github.com/dapr/dapr/tests/integration/framework/process/grpcapp"
 	testpb "github.com/dapr/dapr/tests/integration/suite/daprd/serviceinvocation/grpc/proto"
 )
 
 type (
 	invokeFn func(ctx context.Context, in *commonv1.InvokeRequest) (*commonv1.InvokeResponse, error)
-	gServer  struct {
-		onInvokeFunc invokeFn
-	}
 )
 
-func newGRPCServer(t *testing.T, onInvoke invokeFn, opts ...procgrpc.Option) *procgrpc.GRPC {
-	return procgrpc.New(t, append(opts, procgrpc.WithRegister(func(s *grpc.Server) {
-		srv := &gServer{
-			onInvokeFunc: onInvoke,
-		}
-		rtv1.RegisterAppCallbackServer(s, srv)
-		rtv1.RegisterAppCallbackHealthCheckServer(s, srv)
-		testpb.RegisterTestServiceServer(s, srv)
-	}))...)
+type pingserver struct{}
+
+func newGRPCServer(t *testing.T, onInvoke invokeFn, opts ...procgrpc.Option) *grpcapp.GRPCApp {
+	return grpcapp.New(t,
+		grpcapp.WithGRPCOptions(opts...),
+		grpcapp.WithOnInvokeFn(onInvoke),
+		grpcapp.WithRegister(func(s *grpc.Server) {
+			testpb.RegisterTestServiceServer(s, new(pingserver))
+		}),
+	)
 }
 
-func (g *gServer) OnInvoke(ctx context.Context, in *commonv1.InvokeRequest) (*commonv1.InvokeResponse, error) {
-	return g.onInvokeFunc(ctx, in)
-}
-
-func (g *gServer) ListInputBindings(context.Context, *emptypb.Empty) (*rtv1.ListInputBindingsResponse, error) {
-	return &rtv1.ListInputBindingsResponse{
-		Bindings: []string{"foobar"},
-	}, nil
-}
-
-func (g *gServer) ListTopicSubscriptions(context.Context, *emptypb.Empty) (*rtv1.ListTopicSubscriptionsResponse, error) {
-	return nil, nil
-}
-
-func (g *gServer) OnBindingEvent(context.Context, *rtv1.BindingEventRequest) (*rtv1.BindingEventResponse, error) {
-	return nil, nil
-}
-
-func (g *gServer) OnTopicEvent(context.Context, *rtv1.TopicEventRequest) (*rtv1.TopicEventResponse, error) {
-	return nil, nil
-}
-
-func (g *gServer) HealthCheck(context.Context, *emptypb.Empty) (*rtv1.HealthCheckResponse, error) {
-	return new(rtv1.HealthCheckResponse), nil
-}
-
-func (g *gServer) Ping(context.Context, *testpb.PingRequest) (*testpb.PingResponse, error) {
+func (p *pingserver) Ping(context.Context, *testpb.PingRequest) (*testpb.PingResponse, error) {
 	return new(testpb.PingResponse), nil
 }
