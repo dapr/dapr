@@ -28,9 +28,9 @@ import (
 	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpcGo "google.golang.org/grpc"
 	grpcCodes "google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
-	grpcGoKeepalive "google.golang.org/grpc/keepalive"
-	"google.golang.org/grpc/reflection"
+	grpcInsecure "google.golang.org/grpc/credentials/insecure"
+	grpcKeepalive "google.golang.org/grpc/keepalive"
+	grpcReflection "google.golang.org/grpc/reflection"
 	grpcStatus "google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/config"
@@ -110,13 +110,13 @@ func NewInternalServer(api API, config ServerConfig, tracingSpec config.TracingS
 	const infinity = time.Duration(math.MaxInt64)
 
 	serverOpts := []grpcGo.ServerOption{
-		grpcGo.KeepaliveEnforcementPolicy(grpcGoKeepalive.EnforcementPolicy{
+		grpcGo.KeepaliveEnforcementPolicy(grpcKeepalive.EnforcementPolicy{
 			// If a client pings more than once every 8s, terminate the connection
 			MinTime: 8 * time.Second,
 			// Allow pings even when there are no active streams
 			PermitWithoutStream: true,
 		}),
-		grpcGo.KeepaliveParams(grpcGoKeepalive.ServerParameters{
+		grpcGo.KeepaliveParams(grpcKeepalive.ServerParameters{
 			// Do not set a max age
 			// The client uses a pool that recycles connections automatically
 			MaxConnectionAge: infinity,
@@ -180,7 +180,7 @@ func (s *server) StartNonBlocking() error {
 		if err != nil {
 			return err
 		}
-		reflection.Register(server)
+		grpcReflection.Register(server)
 		s.servers = append(s.servers, server)
 
 		if s.kind == internalServer {
@@ -298,7 +298,7 @@ func (s *server) getGRPCServer() (*grpcGo.Server, error) {
 	)
 
 	if s.sec == nil {
-		opts = append(opts, grpcGo.Creds(insecure.NewCredentials()))
+		opts = append(opts, grpcGo.Creds(grpcInsecure.NewCredentials()))
 	} else {
 		opts = append(opts, s.sec.GRPCServerOptionMTLS())
 	}
