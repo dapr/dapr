@@ -197,7 +197,7 @@ spec:
 				},
 				{
 					Name: "abc", Type: "state.sqlite", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 				},
 				{
 					Name: "xyz", Type: "state.in-memory", Version: "v1",
@@ -255,7 +255,7 @@ spec:
 			assert.ElementsMatch(c, []*rtpbv1.RegisteredComponents{
 				{
 					Name: "123", Type: "state.sqlite", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 				},
 				{
 					Name: "abc", Type: "state.in-memory", Version: "v1",
@@ -300,7 +300,7 @@ spec:
 			assert.ElementsMatch(c, []*rtpbv1.RegisteredComponents{
 				{
 					Name: "123", Type: "state.sqlite", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 				},
 				{
 					Name: "bar", Type: "state.in-memory", Version: "v1",
@@ -351,7 +351,7 @@ spec:
 				{Name: "bar", Type: "secretstores.local.file", Version: "v1"},
 				{
 					Name: "123", Type: "state.sqlite", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 				},
 				{
 					Name: "xyz", Type: "state.in-memory", Version: "v1",
