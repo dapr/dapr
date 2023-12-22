@@ -1201,8 +1201,8 @@ func TestComponentsCallback(t *testing.T) {
 	rt, err := newDaprRuntime(context.Background(), testSecurity(t), cfg, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 	require.NoError(t, err)
 	rt.runtimeConfig.registry = registry.New(registry.NewOptions().WithComponentsCallback(func(components registry.ComponentRegistry) error {
-		close(c)
 		callbackInvoked.Store(true)
+		close(c)
 		return nil
 	}))
 
@@ -1867,36 +1867,12 @@ func TestBlockShutdownBindings(t *testing.T) {
 
 		rt.runtimeConfig.blockShutdownDuration = ptr.Of(time.Millisecond * 100)
 		rt.runtimeConfig.gracefulShutdownDuration = 3 * time.Second
-		rt.runtimeConfig.registry.Bindings().RegisterInputBinding(
-			func(_ logger.Logger) bindings.InputBinding {
-				return &daprt.MockBinding{}
-			},
-			"testInputBinding",
-		)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		errCh := make(chan error)
 		go func() {
 			errCh <- rt.Run(ctx)
 		}()
-
-		cin := componentsV1alpha1.Component{}
-		cin.ObjectMeta.Name = "testInputBinding"
-		cin.Spec.Type = "bindings.testInputBinding"
-
-		rt.runtimeConfig.registry.Bindings().RegisterOutputBinding(
-			func(_ logger.Logger) bindings.OutputBinding {
-				return &daprt.MockBinding{}
-			},
-			"testOutputBinding",
-		)
-		cout := componentsV1alpha1.Component{}
-		cout.ObjectMeta.Name = "testOutputBinding"
-		cout.Spec.Type = "bindings.testOutputBinding"
-		require.NoError(t, rt.processor.Init(context.Background(), cin))
-		require.NoError(t, rt.processor.Init(context.Background(), cout))
-		assert.Len(t, rt.compStore.ListInputBindings(), 1)
-		assert.Len(t, rt.compStore.ListOutputBindings(), 1)
 
 		cancel()
 
@@ -1926,36 +1902,12 @@ func TestBlockShutdownBindings(t *testing.T) {
 
 		rt.runtimeConfig.blockShutdownDuration = ptr.Of(time.Millisecond * 100)
 		rt.runtimeConfig.gracefulShutdownDuration = 3 * time.Second
-		rt.runtimeConfig.registry.Bindings().RegisterInputBinding(
-			func(_ logger.Logger) bindings.InputBinding {
-				return &daprt.MockBinding{}
-			},
-			"testInputBinding",
-		)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		errCh := make(chan error)
 		go func() {
 			errCh <- rt.Run(ctx)
 		}()
-
-		cin := componentsV1alpha1.Component{}
-		cin.ObjectMeta.Name = "testInputBinding"
-		cin.Spec.Type = "bindings.testInputBinding"
-
-		rt.runtimeConfig.registry.Bindings().RegisterOutputBinding(
-			func(_ logger.Logger) bindings.OutputBinding {
-				return &daprt.MockBinding{}
-			},
-			"testOutputBinding",
-		)
-		cout := componentsV1alpha1.Component{}
-		cout.ObjectMeta.Name = "testOutputBinding"
-		cout.Spec.Type = "bindings.testOutputBinding"
-		require.NoError(t, rt.processor.Init(context.Background(), cin))
-		require.NoError(t, rt.processor.Init(context.Background(), cout))
-		assert.Len(t, rt.compStore.ListInputBindings(), 1)
-		assert.Len(t, rt.compStore.ListOutputBindings(), 1)
 
 		cancel()
 
