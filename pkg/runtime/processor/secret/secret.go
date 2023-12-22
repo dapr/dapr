@@ -99,6 +99,8 @@ func (s *secret) Close(comp compapi.Component) error {
 		return nil
 	}
 
+	defer s.compStore.DeleteSecretStore(comp.Name)
+
 	closer, ok := sec.(io.Closer)
 	if ok && closer != nil {
 		if err := closer.Close(); err != nil {
@@ -106,7 +108,6 @@ func (s *secret) Close(comp compapi.Component) error {
 		}
 	}
 
-	s.compStore.DeleteSecretStore(comp.Name)
 	return nil
 }
 
