@@ -468,7 +468,3 @@ replace github.com/microcosm-cc/bluemonday => github.com/microcosm-cc/bluemonday
 //
 // Then, run `make modtidy` in this repository.
 // This ensures that go.mod and go.sum are up-to-date.
-
-replace github.com/dapr/components-contrib => ../components-contrib
-
-replace github.com/microsoft/durabletask-go => ../durabletask-go

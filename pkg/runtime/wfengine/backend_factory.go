@@ -15,29 +15,66 @@ limitations under the License.
 package wfengine
 
 import (
-	"fmt"
-	"strings"
+	"time"
 
 	wfbe "github.com/dapr/dapr/pkg/components/wfbackend"
 	"github.com/dapr/kit/logger"
-
+	"github.com/dapr/kit/metadata"
 	"github.com/microsoft/durabletask-go/backend"
-	"github.com/microsoft/durabletask-go/backend/backendfactory"
+	"github.com/microsoft/durabletask-go/backend/sqlite"
 )
 
 const (
 	ActorBackendType  = "workflowbackend.actor"
+	SqliteBackendType = "workflowbackend.sqlite"
 )
 
-func getActorBackend(appId string, wfe *WorkflowEngine) backend.Backend {
+type BackendFactory func(appId string, wfe *WorkflowEngine, backendComponentInfo *wfbe.WorkflowBackendComponentInfo, log logger.Logger) backend.Backend
+
+var backendFactories = map[string]BackendFactory{
+	ActorBackendType:  getActorBackend,
+	SqliteBackendType: getSqliteBackend,
+}
+
+func getActorBackend(appId string, wfe *WorkflowEngine, backendComponentInfo *wfbe.WorkflowBackendComponentInfo, log logger.Logger) backend.Backend {
 	wfe.BackendType = ActorBackendType
 	return NewActorBackend(appId, wfe)
 }
 
+func getSqliteBackend(appId string, wfe *WorkflowEngine, backendComponentInfo *wfbe.WorkflowBackendComponentInfo, log logger.Logger) backend.Backend {
+	wfe.BackendType = SqliteBackendType
+	sqliteOptions := &sqlite.SqliteOptions{
+		OrchestrationLockTimeout: 2 * time.Minute,
+		ActivityLockTimeout:      2 * time.Minute,
+		FilePath:                 "",
+	}
+
+	if connectionString, ok := metadata.GetMetadataProperty(backendComponentInfo.WorkflowBackendMetadata.Properties, "connectionString"); ok {
+		sqliteOptions.FilePath = connectionString
+	}
+
+	if orchestrationLockTimeout, ok := metadata.GetMetadataProperty(backendComponentInfo.WorkflowBackendMetadata.Properties, "orchestrationLockTimeout"); ok {
+		if duration, err := time.ParseDuration(orchestrationLockTimeout); err == nil {
+			sqliteOptions.OrchestrationLockTimeout = duration
+		} else {
+			log.Errorf("Invalid orchestrationLockTimeout provided in backend workflow component: %v", err)
+		}
+	}
+
+	if activityLockTimeout, ok := metadata.GetMetadataProperty(backendComponentInfo.WorkflowBackendMetadata.Properties, "activityLockTimeout"); ok {
+		if duration, err := time.ParseDuration(activityLockTimeout); err == nil {
+			sqliteOptions.ActivityLockTimeout = duration
+		} else {
+			log.Errorf("Invalid activityLockTimeout provided in backend workflow component: %v", err)
+		}
+	}
+
+	return sqlite.NewSqliteBackend(sqliteOptions, log)
+}
+
 func InitializeWorkflowBackend(appId string, backendType string, wfe *WorkflowEngine, backendComponentInfo *wfbe.WorkflowBackendComponentInfo, log logger.Logger) backend.Backend {
-	// Default to ActorBackend if no backend type is provided
-	if backendComponentInfo == nil || backendType == ActorBackendType {
-		return getActorBackend(appId, wfe)
+	if backendComponentInfo == nil {
+		return getActorBackend(appId, wfe, backendComponentInfo, log)
 	}
 
 	if backendComponentInfo.InvalidWorkflowBackend {
@@ -45,35 +82,9 @@ func InitializeWorkflowBackend(appId string, backendType string, wfe *WorkflowEn
 		return nil
 	}
 
-	backendTypeName, err := getBackendTypeName(backendType)
-
-	if err != nil {
-		log.Errorf("Invalid workflow backend type provided, backend is not initialized: %v", err)
-		return nil
-	}
-
-	be, err := backendfactory.InitializeBackend(backendTypeName, backendComponentInfo.WorkflowBackendMetadata.Properties, log)
-
-	if err == nil {
-		wfe.BackendType = backendType
-		return be
-	} else {
-		log.Errorf("Unable to initialize backend: %v", err)
+	if factory, ok := backendFactories[backendType]; ok {
+		return factory(appId, wfe, backendComponentInfo, log)
 	}
 
 	return nil
-}
-
-func getBackendTypeName(backendType string) (string, error) {
-	if backendType == "" {
-		return "", fmt.Errorf("backendType is empty")
-	}
-
-	parts := strings.Split(backendType, ".")
-	if len(parts) < 2 {
-		return "", fmt.Errorf("backendType should contain a '.'")
-	}
-
-	backendTypeName := parts[len(parts)-1]
-	return backendTypeName, nil
 }
