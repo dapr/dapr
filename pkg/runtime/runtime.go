@@ -445,7 +445,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	if a.globalConfig.Spec.HTTPPipelineSpec != nil {
 		pipeline, err = a.channels.BuildHTTPPipeline(a.globalConfig.Spec.HTTPPipelineSpec)
 	} else {
-		comps := a.compStore.ListMatchComponents("middleware")
+		comps := a.compStore.ListMatchComponents("middleware.")
 		pipeline, err = a.channels.BuildHTTPPipelineFromComponents(comps, "httpPipeline")
 	}
 

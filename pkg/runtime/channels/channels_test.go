@@ -217,6 +217,139 @@ func TestMiddlewareBuildPipeline(t *testing.T) {
 	t.Run("one components fails to init but ignoreErrors is true", testInitFail(true))
 }
 
+func TestMiddlewareBuildPipelineFromComponents(t *testing.T) {
+	t.Run("build when no global config are set", func(t *testing.T) {
+		ch := &Channels{}
+		pipeline, err := ch.BuildHTTPPipelineFromComponentsForSpec([]componentsapi.Component{}, "test")
+		require.NoError(t, err)
+		assert.Empty(t, pipeline.Handlers)
+	})
+	t.Run("ignore component that does not exists", func(t *testing.T) {
+		ch := &Channels{
+			compStore: compstore.New(),
+		}
+		pipeline, err := ch.BuildHTTPPipelineFromComponentsForSpec([]componentsapi.Component{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "not_exists",
+				},
+				Spec: componentsapi.ComponentSpec{
+					Type:         "not_exists",
+					Version:      "not_exists",
+					IgnoreErrors: true,
+				},
+			},
+		}, "test")
+		require.NoError(t, err)
+		assert.Empty(t, pipeline.Handlers)
+	})
+
+	t.Run("all components exists", func(t *testing.T) {
+		ch := &Channels{
+			compStore: compstore.New(),
+			meta:      meta.New(meta.Options{Mode: modes.StandaloneMode}),
+			registry: registry.New(registry.NewOptions().WithHTTPMiddlewares(
+				httpMiddlewareLoader.NewRegistry(),
+			)).HTTPMiddlewares(),
+		}
+		called := 0
+		ch.registry.RegisterComponent(
+			func(_ logger.Logger) httpMiddlewareLoader.FactoryMethod {
+				called++
+				return func(metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
+					return func(next http.Handler) http.Handler {
+						return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+					}, nil
+				}
+			},
+			"fakemw",
+		)
+
+		pipeline, err := ch.BuildHTTPPipelineFromComponentsForSpec([]componentsapi.Component{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "mymw1",
+				},
+
+				Spec: componentsapi.ComponentSpec{
+					Type:    "middleware.http.fakemw",
+					Version: "v1",
+					Metadata: []commonapi.NameValuePair{
+						{Name: "pipelineType", Value: commonapi.DynamicValue{JSON: v1.JSON{Raw: []byte("httpPipeline")}}},
+						{Name: "priority", Value: commonapi.DynamicValue{JSON: v1.JSON{Raw: []byte("1")}}},
+					},
+				},
+			},
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "mymw2",
+				},
+				Spec: componentsapi.ComponentSpec{
+					Type:    "middleware.http.fakemw",
+					Version: "v1",
+					Metadata: []commonapi.NameValuePair{
+						{Name: "pipelineType", Value: commonapi.DynamicValue{JSON: v1.JSON{Raw: []byte("httpPipeline")}}},
+						{Name: "priority", Value: commonapi.DynamicValue{JSON: v1.JSON{Raw: []byte("2")}}},
+					},
+				},
+			},
+		}, "httpPipeline")
+		require.NoError(t, err)
+		assert.Len(t, pipeline.Handlers, 2)
+		assert.Equal(t, 2, called)
+	})
+
+	t.Run("Error when priority not set", func(t *testing.T) {
+		ch := &Channels{
+			compStore: compstore.New(),
+			meta:      meta.New(meta.Options{Mode: modes.StandaloneMode}),
+			registry: registry.New(registry.NewOptions().WithHTTPMiddlewares(
+				httpMiddlewareLoader.NewRegistry(),
+			)).HTTPMiddlewares(),
+		}
+		_, err := ch.BuildHTTPPipelineFromComponentsForSpec([]componentsapi.Component{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "mymw1",
+				},
+
+				Spec: componentsapi.ComponentSpec{
+					Type:    "middleware.http.fakemw",
+					Version: "v1",
+					Metadata: []commonapi.NameValuePair{
+						{Name: "pipelineType", Value: commonapi.DynamicValue{JSON: v1.JSON{Raw: []byte("httpPipeline")}}},
+					},
+				},
+			},
+		}, "httpPipeline")
+		require.Error(t, err)
+	})
+
+	t.Run("Ignore components that does not have pipeline set", func(t *testing.T) {
+		ch := &Channels{
+			compStore: compstore.New(),
+			meta:      meta.New(meta.Options{Mode: modes.StandaloneMode}),
+			registry: registry.New(registry.NewOptions().WithHTTPMiddlewares(
+				httpMiddlewareLoader.NewRegistry(),
+			)).HTTPMiddlewares(),
+		}
+		pipeline, err := ch.BuildHTTPPipelineFromComponentsForSpec([]componentsapi.Component{
+			{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "mymw1",
+				},
+
+				Spec: componentsapi.ComponentSpec{
+					Type:    "middleware.http.fakemw",
+					Version: "v1",
+				},
+			},
+		}, "httpPipeline")
+		require.NoError(t, err)
+		assert.Len(t, pipeline.Handlers, 0)
+	})
+}
+
 func TestGetAppHTTPChannelConfigWithCustomChannel(t *testing.T) {
 	ch := &Channels{
 		compStore: compstore.New(),

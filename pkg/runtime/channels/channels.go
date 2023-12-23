@@ -114,7 +114,7 @@ func (c *Channels) Refresh() error {
 	if c.appHTTPPipelineSpec != nil {
 		pipeline, err = c.buildHTTPPipelineForSpec(c.appHTTPPipelineSpec, "app channel")
 	} else {
-		comps := c.compStore.ListMatchComponents("middleware")
+		comps := c.compStore.ListMatchComponents("middleware.")
 		pipeline, err = c.BuildHTTPPipelineFromComponentsForSpec(comps, "appHttpPipeline")
 	}
 	if err != nil {
@@ -352,7 +352,7 @@ func (c *Channels) initEndpointChannels() (map[string]channel.HTTPEndpointAppCha
 		if c.appHTTPPipelineSpec != nil {
 			pipeline, err = c.buildHTTPPipeline(c.appHTTPPipelineSpec)
 		} else {
-			comps := c.compStore.ListMatchComponents("middleware")
+			comps := c.compStore.ListMatchComponents("middleware.")
 			pipeline, err = c.BuildHTTPPipelineFromComponents(comps, "appHttpPipeline")
 		}
 
