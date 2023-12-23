@@ -168,14 +168,13 @@ func (c *Channels) BuildHTTPPipelineFromComponents(comps []compsv1alpha1.Compone
 }
 
 func (c *Channels) BuildHTTPPipelineFromComponentsForSpec(comps []compsv1alpha1.Component, expectedPiplineType string) (middlehttp.Pipeline, error) {
+	if len(comps) == 0 {
+		return middlehttp.Pipeline{}, nil
+	}
 	priorityHandlers := make(map[int]func(http.Handler) http.Handler)
 
 	pipeline := middlehttp.Pipeline{
 		Handlers: make([]func(next http.Handler) http.Handler, 0, len(comps)),
-	}
-
-	if len(comps) == 0 {
-		return pipeline, nil
 	}
 
 	matchingComps := 0
