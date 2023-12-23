@@ -329,5 +329,5 @@ linters:
     - structcheck
     - varcheck
     - deadcode
-    # - inamedparam
+    - inamedparam
     - tagalign
