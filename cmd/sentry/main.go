@@ -16,6 +16,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -36,7 +37,7 @@ import (
 var log = logger.NewLogger("dapr.sentry")
 
 func main() {
-	opts := options.New()
+	opts := options.New(os.Args[1:])
 
 	// Apply options to all loggers
 	if err := logger.ApplyOptionsToLoggers(&opts.Logger); err != nil {

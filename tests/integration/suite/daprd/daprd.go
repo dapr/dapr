@@ -14,6 +14,8 @@ limitations under the License.
 package daprd
 
 import (
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/binding"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/hotreload"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/httpserver"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/metadata"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/metrics"

@@ -94,6 +94,8 @@ func (l *lock) Close(comp compapi.Component) error {
 		return nil
 	}
 
+	defer l.compStore.DeleteLock(comp.ObjectMeta.Name)
+
 	closer, ok := lock.(io.Closer)
 	if ok && closer != nil {
 		if err := closer.Close(); err != nil {
@@ -101,6 +103,5 @@ func (l *lock) Close(comp compapi.Component) error {
 		}
 	}
 
-	l.compStore.DeleteLock(comp.ObjectMeta.Name)
 	return nil
 }
