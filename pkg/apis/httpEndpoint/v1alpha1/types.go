@@ -17,6 +17,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/dapr/dapr/pkg/apis/common"
+	httpendpoint "github.com/dapr/dapr/pkg/apis/httpEndpoint"
+)
+
+const (
+	Kind    = "HTTPEndpoint"
+	Version = "v1alpha1"
 )
 
 //+genclient
@@ -43,9 +49,24 @@ func (HTTPEndpoint) Kind() string {
 	return kind
 }
 
+// GetName returns the component name.
+func (h HTTPEndpoint) GetName() string {
+	return h.Name
+}
+
+// GetNamespace returns the component namespace.
+func (h HTTPEndpoint) GetNamespace() string {
+	return h.Namespace
+}
+
 // GetSecretStore returns the name of the secret store.
 func (h HTTPEndpoint) GetSecretStore() string {
 	return h.Auth.SecretStore
+}
+
+// LogName returns the name of the component that can be used in logging.
+func (h HTTPEndpoint) LogName() string {
+	return h.Name + " (" + h.Spec.BaseURL + ")"
 }
 
 // NameValuePairs returns the component's headers as name/value pairs
@@ -81,6 +102,18 @@ func (h HTTPEndpoint) HasTLSClientCert() bool {
 // HasTLSClientKey returns a bool indicating if the HTTP endpoint contains a tls client key
 func (h HTTPEndpoint) HasTLSPrivateKey() bool {
 	return h.Spec.ClientTLS != nil && h.Spec.ClientTLS.PrivateKey != nil && h.Spec.ClientTLS.PrivateKey.Value != nil
+}
+
+// EmptyMetaDeepCopy returns a new instance of the component type with the
+// TypeMeta's Kind and APIVersion fields set.
+func (h HTTPEndpoint) EmptyMetaDeepCopy() metav1.Object {
+	n := h.DeepCopy()
+	n.TypeMeta = metav1.TypeMeta{
+		Kind:       Kind,
+		APIVersion: httpendpoint.GroupName + "/" + Version,
+	}
+	n.ObjectMeta = metav1.ObjectMeta{Name: h.Name}
+	return n
 }
 
 // HTTPEndpointSpec describes an access specification for allowing external service invocations.
