@@ -176,13 +176,11 @@ func (a *activityActor) executeActivity(ctx context.Context, actorID string, nam
 	start := time.Now()
 	wfLogger.Debugf("Activity actor '%s': scheduling activity '%s' for workflow with instanceId '%s'", actorID, name, wi.InstanceID)
 	if err = a.scheduler(ctx, wi); err != nil {
-		if errors.Is(err, context.DeadlineExceeded) {
-			// Activity execution failed with recoverable error, record metrics.
-			diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, diag.ComponentName, diag.Activity, diag.StatusRetryable, 0)
-			return newRecoverableError(fmt.Errorf("timed-out trying to schedule an activity execution - this can happen if too many activities are running in parallel or if the workflow engine isn't running: %w", err))
-		}
 		// Activity execution failed with recoverable error, record metrics.
 		diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, diag.ComponentName, diag.Activity, diag.StatusRetryable, 0)
+		if errors.Is(err, context.DeadlineExceeded) {
+			return newRecoverableError(fmt.Errorf("timed-out trying to schedule an activity execution - this can happen if too many activities are running in parallel or if the workflow engine isn't running: %w", err))
+		}
 		return newRecoverableError(fmt.Errorf("failed to schedule an activity execution: %w", err))
 	}
 
