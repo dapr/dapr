@@ -346,7 +346,7 @@ func TestMiddlewareBuildPipelineFromComponents(t *testing.T) {
 			},
 		}, "httpPipeline")
 		require.NoError(t, err)
-		assert.Len(t, pipeline.Handlers, 0)
+		assert.Empty(t, pipeline.Handlers)
 	})
 }
 
