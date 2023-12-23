@@ -171,7 +171,7 @@ func (c *Channels) BuildHTTPPipelineFromComponentsForSpec(comps []compsv1alpha1.
 	priorityHandlers := make(map[int]func(http.Handler) http.Handler)
 
 	pipeline := middlehttp.Pipeline{
-		Handlers: make([]func(next http.Handler) http.Handler, 0, 1),
+		Handlers: []func(next http.Handler) http.Handler{},
 	}
 
 	matchingComps := 0
