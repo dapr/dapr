@@ -40,6 +40,21 @@ service Operator {
   rpc HTTPEndpointUpdate (HTTPEndpointUpdateRequest) returns (stream HTTPEndpointUpdateEvent) {}
 }
 
+// ResourceEventType is the type of event to a resource.
+enum ResourceEventType {
+  // UNKNOWN indicates that the event type is unknown.
+  UNKNOWN = 0;
+
+  // CREATED indicates that the resource has been created.
+  CREATED = 1;
+
+  // UPDATED indicates that the resource has been updated.
+  UPDATED = 2;
+
+  // DELETED indicates that the resource has been deleted.
+  DELETED = 3;
+}
+
 // ListComponentsRequest is the request to get components for a sidecar in namespace.
 message ListComponentsRequest {
   string namespace = 1;
@@ -55,6 +70,9 @@ message ComponentUpdateRequest {
 // ComponentUpdateEvent includes the updated component event.
 message ComponentUpdateEvent {
   bytes component = 1;
+
+  // type is the type of event.
+  ResourceEventType type = 2;
 }
 
 // ListComponentResponse includes the list of available components.
