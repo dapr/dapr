@@ -96,7 +96,7 @@ func (c *ComponentStore) ListMatchComponents(match string) []compsv1alpha1.Compo
 	var comps []compsv1alpha1.Component
 	defer c.lock.RUnlock()
 	for _, c := range c.components {
-		if strings.Contains(c.Spec.Type, match) {
+		if strings.HasPrefix(c.Spec.Type, match) {
 			comps = append(comps, c)
 		}
 	}
