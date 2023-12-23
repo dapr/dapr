@@ -171,7 +171,11 @@ func (c *Channels) BuildHTTPPipelineFromComponentsForSpec(comps []compsv1alpha1.
 	priorityHandlers := make(map[int]func(http.Handler) http.Handler)
 
 	pipeline := middlehttp.Pipeline{
-		Handlers: []func(next http.Handler) http.Handler{},
+		Handlers: make([]func(next http.Handler) http.Handler, 0, len(comps)),
+	}
+
+	if len(comps) == 0 {
+		return pipeline, nil
 	}
 
 	matchingComps := 0
@@ -229,6 +233,7 @@ func (c *Channels) BuildHTTPPipelineFromComponentsForSpec(comps []compsv1alpha1.
 	sort.Ints(priorities)
 	// // pass the handler to pipeline.handlers according to priority value
 	// // arrange handlers according to priority
+
 	for _, priority := range priorities {
 		pipeline.Handlers = append(pipeline.Handlers, priorityHandlers[priority])
 	}
