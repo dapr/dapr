@@ -9,11 +9,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/dapr/dapr/pkg/injector/annotations"
@@ -213,26 +215,41 @@ func TestWrapper(t *testing.T) {
 	deploymentWrapper := getDeployment("test_id", "true")
 	statefulsetWrapper := getStatefulSet("test_id", "true")
 	rolloutWrapper := getRollout("test_id", "true")
+	jobWrapper := getAllowedServiceCommonWrapper(testobjects.GetJob("test_id", "true"))
+	cronJobWrapper := getAllowedServiceCommonWrapper(testobjects.GetCronJob("test_id", "true"))
+	daemonSetWrapper := getAllowedServiceCommonWrapper(testobjects.GetDaemonSet("test_id", "true"))
 
 	t.Run("get match label from wrapper", func(t *testing.T) {
 		assert.Equal(t, "test", deploymentWrapper.GetMatchLabels()["app"])
 		assert.Equal(t, "test", statefulsetWrapper.GetMatchLabels()["app"])
 		assert.Equal(t, "test", rolloutWrapper.GetMatchLabels()["app"])
+		assert.Equal(t, "test", jobWrapper.GetMatchLabels()["app"])
+		assert.Equal(t, "test", cronJobWrapper.GetMatchLabels()["app"])
+		assert.Equal(t, "test", daemonSetWrapper.GetMatchLabels()["app"])
 	})
 
 	t.Run("get annotations from wrapper", func(t *testing.T) {
 		assert.Equal(t, "test_id", deploymentWrapper.GetTemplateAnnotations()[annotations.KeyAppID])
 		assert.Equal(t, "test_id", statefulsetWrapper.GetTemplateAnnotations()[annotations.KeyAppID])
 		assert.Equal(t, "test_id", rolloutWrapper.GetTemplateAnnotations()[annotations.KeyAppID])
+		assert.Equal(t, "test_id", jobWrapper.GetTemplateAnnotations()[annotations.KeyAppID])
+		assert.Equal(t, "test_id", cronJobWrapper.GetTemplateAnnotations()[annotations.KeyAppID])
+		assert.Equal(t, "test_id", daemonSetWrapper.GetTemplateAnnotations()[annotations.KeyAppID])
 	})
 
 	t.Run("get object from wrapper", func(t *testing.T) {
 		assert.Equal(t, reflect.TypeOf(deploymentWrapper.GetObject()), reflect.TypeOf(&appsv1.Deployment{}))
 		assert.Equal(t, reflect.TypeOf(statefulsetWrapper.GetObject()), reflect.TypeOf(&appsv1.StatefulSet{}))
 		assert.Equal(t, reflect.TypeOf(rolloutWrapper.GetObject()), reflect.TypeOf(&argov1alpha1.Rollout{}))
+		assert.Equal(t, reflect.TypeOf(jobWrapper.GetObject()), reflect.TypeOf(&batchv1.Job{}))
+		assert.Equal(t, reflect.TypeOf(cronJobWrapper.GetObject()), reflect.TypeOf(&batchv1.CronJob{}))
+		assert.Equal(t, reflect.TypeOf(daemonSetWrapper.GetObject()), reflect.TypeOf(&appsv1.DaemonSet{}))
 		assert.NotEqual(t, reflect.TypeOf(statefulsetWrapper.GetObject()), reflect.TypeOf(&appsv1.Deployment{}))
 		assert.NotEqual(t, reflect.TypeOf(deploymentWrapper.GetObject()), reflect.TypeOf(&appsv1.StatefulSet{}))
 		assert.NotEqual(t, reflect.TypeOf(rolloutWrapper.GetObject()), reflect.TypeOf(&appsv1.Deployment{}))
+		assert.NotEqual(t, reflect.TypeOf(jobWrapper.GetObject()), reflect.TypeOf(&batchv1.CronJob{}))
+		assert.NotEqual(t, reflect.TypeOf(cronJobWrapper.GetObject()), reflect.TypeOf(&batchv1.Job{}))
+		assert.NotEqual(t, reflect.TypeOf(daemonSetWrapper.GetObject()), reflect.TypeOf(&appsv1.Deployment{}))
 	})
 }
 
@@ -244,6 +261,11 @@ func TestInit(t *testing.T) {
 
 	handler := NewDaprHandlerWithOptions(mgr, &Options{
 		ArgoRolloutServiceReconcilerEnabled: true,
+		AllowedServiceResources: []client.Object{
+			testobjects.GetJob("test_id", "true"),
+			testobjects.GetCronJob("test_id", "true"),
+			testobjects.GetDaemonSet("test_id", "true"),
+		},
 	})
 
 	t.Run("test init dapr handler", func(t *testing.T) {
@@ -253,7 +275,7 @@ func TestInit(t *testing.T) {
 
 		require.NoError(t, err)
 
-		assert.Len(t, mgr.GetRunnables(), 3)
+		assert.Len(t, mgr.GetRunnables(), 6)
 
 		srv := &corev1.Service{}
 		val := mgr.GetIndexerFunc(&corev1.Service{})(srv)
@@ -355,6 +377,10 @@ func getRollout(appID string, daprEnabled string) ObjectWrapper {
 	return &RolloutWrapper{
 		rollout,
 	}
+}
+
+func getAllowedServiceCommonWrapper(object client.Object) *AllowedServiceCommonWrapper {
+	return &AllowedServiceCommonWrapper{object}
 }
 
 func getTestDaprHandler() *DaprHandler {

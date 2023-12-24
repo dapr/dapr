@@ -61,12 +61,12 @@ func (r *RolloutWrapper) GetObject() client.Object {
 	return &r.Rollout
 }
 
-type CommonWrapper struct {
+type AllowedServiceCommonWrapper struct {
 	client.Object
 }
 
-func (c *CommonWrapper) GetMatchLabels() map[string]string {
-	switch ro := c.Object.(type) {
+func (a *AllowedServiceCommonWrapper) GetMatchLabels() map[string]string {
+	switch ro := a.Object.(type) {
 	case *appsv1.DaemonSet:
 		return ro.Spec.Selector.MatchLabels
 	case *batchv1.CronJob:
@@ -78,8 +78,8 @@ func (c *CommonWrapper) GetMatchLabels() map[string]string {
 	return nil
 }
 
-func (c *CommonWrapper) GetTemplateAnnotations() map[string]string {
-	switch ro := c.Object.(type) {
+func (a *AllowedServiceCommonWrapper) GetTemplateAnnotations() map[string]string {
+	switch ro := a.Object.(type) {
 	case *appsv1.DaemonSet:
 		return ro.Spec.Template.ObjectMeta.Annotations
 	case *batchv1.CronJob:
@@ -91,6 +91,6 @@ func (c *CommonWrapper) GetTemplateAnnotations() map[string]string {
 	return nil
 }
 
-func (c *CommonWrapper) GetObject() client.Object {
-	return c.Object
+func (a *AllowedServiceCommonWrapper) GetObject() client.Object {
+	return a.Object
 }

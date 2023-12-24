@@ -167,7 +167,7 @@ func (h *DaprHandler) Init(ctx context.Context) error {
 			Complete(&Reconciler{
 				DaprHandler: h,
 				newWrapper: func() ObjectWrapper {
-					return &CommonWrapper{object}
+					return &AllowedServiceCommonWrapper{object}
 				},
 			})
 		if err != nil {
