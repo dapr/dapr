@@ -34,6 +34,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
@@ -72,6 +73,7 @@ type Options struct {
 	TrustAnchorsFile                    string
 	APIPort                             int
 	HealthzPort                         int
+	AllowedServiceResources             []client.Object
 }
 
 type operator struct {
@@ -171,7 +173,11 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 	}
 
 	if opts.ServiceReconcilerEnabled {
-		daprHandler := handlers.NewDaprHandlerWithOptions(mgr, &handlers.Options{ArgoRolloutServiceReconcilerEnabled: opts.ArgoRolloutServiceReconcilerEnabled})
+		daprHandler := handlers.NewDaprHandlerWithOptions(mgr,
+			&handlers.Options{
+				ArgoRolloutServiceReconcilerEnabled: opts.ArgoRolloutServiceReconcilerEnabled,
+				AllowedServiceResources:             opts.AllowedServiceResources,
+			})
 		if err := daprHandler.Init(ctx); err != nil {
 			return nil, fmt.Errorf("unable to initialize handler: %w", err)
 		}

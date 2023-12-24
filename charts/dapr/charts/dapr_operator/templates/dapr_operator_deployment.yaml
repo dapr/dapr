@@ -172,6 +172,10 @@ spec:
 {{- if .Values.global.operator.watchdogCanPatchPodLabels }}
         - "--watchdog-can-patch-pod-labels"
 {{- end }}
+{{- if .Values.allowedServiceResources }}
+        - "--allowed-service-resources"
+        - "{{ .Values.allowedServiceResources }}"
+{{- end }}
       serviceAccountName: dapr-operator
       volumes:
         - name: dapr-operator-tmp
