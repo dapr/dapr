@@ -105,7 +105,6 @@ Dapr uses prometheus process and go collectors by default.
 
 * dapr_runtime_workflow_operations_count.
 * dapr_runtime_workflow_operations_latency.
-* dapr_runtime_workflow_reminders_count.
 * dapr_runtime_workflow_execution_count.
 * dapr_runtime_workflow_execution_latency.
 

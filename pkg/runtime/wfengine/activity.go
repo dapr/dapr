@@ -105,10 +105,6 @@ func (a *activityActor) InvokeMethod(ctx context.Context, actorID string, method
 
 	// The actual execution is triggered by a reminder
 	err := a.createReliableReminder(ctx, actorID, nil)
-	if err == nil {
-		// Activity reminder created, record metrics
-		diag.DefaultWorkflowMonitoring.RemindersTotalCreated(ctx, diag.ComponentName, diag.Activity)
-	}
 	return nil, err
 }
 

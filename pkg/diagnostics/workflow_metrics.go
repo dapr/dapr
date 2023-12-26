@@ -50,8 +50,6 @@ type workflowMetrics struct {
 	workflowOperationsCount *stats.Int64Measure
 	// workflowOperationsLatency records latency of response for workflow operation requests.
 	workflowOperationsLatency *stats.Float64Measure
-	// Total workflow/activity reminders created
-	workflowRemindersCount *stats.Int64Measure
 	// Total successful/failed workflow/activity executions
 	workflowExecutionCount *stats.Int64Measure
 	// Time taken to run a workflow to completion
@@ -72,10 +70,6 @@ func newWorkflowMetrics() *workflowMetrics {
 			"runtime/workflow/operations/latency",
 			"The latencies of responses for workflow operation requests.",
 			stats.UnitMilliseconds),
-		workflowRemindersCount: stats.Int64(
-			"runtime/workflow/reminders/count",
-			"The number of workflow/activity reminders created.",
-			stats.UnitDimensionless),
 		workflowExecutionCount: stats.Int64(
 			"runtime/workflow/execution/count",
 			"The number of successful/failed workflow/activity executions.",
@@ -100,7 +94,6 @@ func (w *workflowMetrics) Init(appID, namespace string) error {
 	return view.Register(
 		diagUtils.NewMeasureView(w.workflowOperationsCount, []tag.Key{appIDKey, componentKey, namespaceKey, operationKey, statusKey}, view.Count()),
 		diagUtils.NewMeasureView(w.workflowOperationsLatency, []tag.Key{appIDKey, componentKey, namespaceKey, operationKey, statusKey}, defaultLatencyDistribution),
-		diagUtils.NewMeasureView(w.workflowRemindersCount, []tag.Key{appIDKey, componentKey, namespaceKey, reminderTypeKey}, view.Count()),
 		diagUtils.NewMeasureView(w.workflowExecutionCount, []tag.Key{appIDKey, componentKey, namespaceKey, executionTypeKey, statusKey}, view.Count()),
 		diagUtils.NewMeasureView(w.workflowExecutionLatency, []tag.Key{appIDKey, componentKey, namespaceKey, executionTypeKey, statusKey}, defaultLatencyDistribution))
 }
@@ -130,12 +123,4 @@ func (w *workflowMetrics) ExecutionEvent(ctx context.Context, component, executi
 	if elapsed > 0 {
 		stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowExecutionLatency.Name(), appIDKey, w.appID, componentKey, component, namespaceKey, w.namespace, executionTypeKey, executionType, statusKey, status), w.workflowExecutionLatency.M(elapsed))
 	}
-}
-
-// RemindersTotalCreated records total number of Workflow and Activity reminders created.
-func (w *workflowMetrics) RemindersTotalCreated(ctx context.Context, component, reminderType string) {
-	if !w.IsEnabled() {
-		return
-	}
-	stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowRemindersCount.Name(), appIDKey, w.appID, componentKey, component, namespaceKey, w.namespace, reminderTypeKey, reminderType), w.workflowRemindersCount.M(1))
 }
