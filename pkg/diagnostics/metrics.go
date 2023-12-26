@@ -40,7 +40,7 @@ var (
 	DefaultComponentMonitoring = newComponentMetrics()
 	// DefaultResiliencyMonitoring holds resiliency specific metrics.
 	DefaultResiliencyMonitoring = newResiliencyMetrics()
-	// Rules holds regex expressions for metrics labels
+	// DefaultWorkflowMonitoring holds workflow specific metrics.
 	DefaultWorkflowMonitoring = newWorkflowMetrics()
 )
 

@@ -46,9 +46,9 @@ const (
 )
 
 type workflowMetrics struct {
-	// Total Successful and Failed workflow operation requests
+	// workflowOperationsCount records count of Successful/Failed requests to Create/Get/Purge Workflow and Add Events.
 	workflowOperationsCount *stats.Int64Measure
-	// Workflow operation request's Response latency
+	// workflowOperationsLatency records latency of response for workflow operation requests.
 	workflowOperationsLatency *stats.Float64Measure
 	// Total workflow/activity reminders created
 	workflowRemindersCount *stats.Int64Measure
