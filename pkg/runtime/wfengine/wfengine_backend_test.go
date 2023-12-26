@@ -57,7 +57,7 @@ func TestSqliteBackendSetupWithoutMetadata(t *testing.T) {
 
 	_, ok := engine.Backend.(*wfengine.ActorBackend)
 
-	assert.False(t, ok, "actor is not of type ActorBackend")
+	assert.False(t, ok, "engine.Backend is not of type ActorBackend")
 	assert.Equal(t, SqliteBackendType, engine.BackendType)
 }
 
@@ -69,7 +69,7 @@ func TestActorBackendSetup(t *testing.T) {
 
 	_, ok := engine.Backend.(*wfengine.ActorBackend)
 
-	assert.True(t, ok, "actor is of type ActorBackend")
+	assert.True(t, ok, "engine.Backend is of type ActorBackend")
 	assert.Equal(t, wfengine.ActorBackendType, engine.BackendType)
 }
 
@@ -90,7 +90,7 @@ func TestBackendComponentNilSetup(t *testing.T) {
 
 	_, ok := engine.Backend.(*wfengine.ActorBackend)
 
-	assert.True(t, ok, "actor is of type ActorBackend")
+	assert.True(t, ok, "engine.Backend is of type ActorBackend")
 	assert.Equal(t, wfengine.ActorBackendType, engine.BackendType)
 }
 
@@ -102,7 +102,7 @@ func TestInvalidSqliteBackendComponentSetup(t *testing.T) {
 
 	_, ok := engine.Backend.(*wfengine.ActorBackend)
 
-	assert.False(t, ok, "actor is of type ActorBackend")
+	assert.False(t, ok, "engine.Backend is of type ActorBackend")
 	assert.Equal(t, SqliteBackendType, engine.BackendType)
 }
 
@@ -115,5 +115,5 @@ func TestInvalidBackendComponentSetup(t *testing.T) {
 	_, ok := engine.Backend.(*wfengine.ActorBackend)
 
 	assert.Nil(t, nil, engine.Backend)
-	assert.False(t, ok, "actor is not of type ActorBackend")
+	assert.False(t, ok, "engine.Backend is not of type ActorBackend")
 }

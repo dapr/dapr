@@ -124,7 +124,7 @@ func (abe *ActorBackend) GetInternalActorsMap() map[string]actors.InternalActor 
 	return internalActors
 }
 
-func (abe *ActorBackend) SetActorRuntime(actorRuntime actors.ActorRuntime, ctx context.Context) {
+func (abe *ActorBackend) SetActorRuntime(ctx context.Context, actorRuntime actors.ActorRuntime) {
 	abe.actors = actorRuntime
 	abe.actorRuntime = actorRuntime
 	if abe.actorsReady.CompareAndSwap(false, true) {

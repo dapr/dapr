@@ -903,7 +903,7 @@ func getEngine(t *testing.T, ctx context.Context) *wfengine.WorkflowEngine {
 		require.NoError(t, err)
 	}
 	abe, _ := engine.Backend.(*wfengine.ActorBackend)
-	abe.SetActorRuntime(actors, ctx)
+	abe.SetActorRuntime(ctx, actors)
 	return engine
 }
 
@@ -952,6 +952,6 @@ func getEngineAndStateStore(t *testing.T, ctx context.Context) (*wfengine.Workfl
 
 	require.NoError(t, actors.Init(context.Background()))
 	abe, _ := engine.Backend.(*wfengine.ActorBackend)
-	abe.SetActorRuntime(actors, ctx)
+	abe.SetActorRuntime(ctx, actors)
 	return engine, store
 }

@@ -618,7 +618,7 @@ func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) (err error) {
 func setActorRuntimeForBackend(ctx context.Context, be backend.Backend, actorRuntime actors.ActorRuntime) {
 	if abe, ok := be.(*wfengine.ActorBackend); ok {
 		log.Info("Configuring workflow engine with actors backend")
-		abe.SetActorRuntime(actorRuntime, ctx)
+		abe.SetActorRuntime(ctx, actorRuntime)
 	}
 }
 

@@ -38,11 +38,13 @@ var backendFactories = map[string]BackendFactory{
 }
 
 func getActorBackend(appID string, wfe *WorkflowEngine, backendComponentInfo *wfbe.WorkflowBackendComponentInfo, log logger.Logger) backend.Backend {
+	log.Infof("Initializing actor backend for appID: %s", appID)
 	wfe.BackendType = ActorBackendType
 	return NewActorBackend(appID, wfe)
 }
 
 func getSqliteBackend(appID string, wfe *WorkflowEngine, backendComponentInfo *wfbe.WorkflowBackendComponentInfo, log logger.Logger) backend.Backend {
+	log.Infof("Initializing sqlite backend for appID: %s", appID)
 	wfe.BackendType = SqliteBackendType
 	sqliteOptions := &sqlite.SqliteOptions{
 		OrchestrationLockTimeout: 2 * time.Minute,
