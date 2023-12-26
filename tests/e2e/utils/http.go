@@ -185,6 +185,17 @@ func HTTPGetRaw(url string) (*http.Response, error) {
 	return httpClient.Get(SanitizeHTTPURL(url))
 }
 
+func HTTPGetRawWithHeaders(url string, header http.Header) (*http.Response, error) {
+	req, err := http.NewRequest(http.MethodGet, SanitizeHTTPURL(url), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header = header
+
+	return httpClient.Do(req)
+}
+
 // HTTPPost is a helper to make POST request call to url.
 func HTTPPost(url string, data []byte) ([]byte, error) {
 	resp, err := httpClient.Post(SanitizeHTTPURL(url), "application/json", bytes.NewReader(data))
