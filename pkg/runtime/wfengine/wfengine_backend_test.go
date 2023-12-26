@@ -45,7 +45,7 @@ func TestSqliteBackendSetupWithMetadata(t *testing.T) {
 
 	_, ok := engine.Backend.(*wfengine.ActorBackend)
 
-	assert.False(t, ok, "actor is not of type ActorBackend")
+	assert.False(t, ok, "engine.Backend is not of type ActorBackend")
 	assert.Equal(t, SqliteBackendType, engine.BackendType)
 }
 
