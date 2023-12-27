@@ -68,14 +68,14 @@ func TestMain(m *testing.M) {
 
 	comps := []kube.ComponentDescription{}
 	if backend == "sqlite" {
-		comps = getSqliteBackend(comps, backend)
+		comps = getSqliteBackendComp(comps, backend)
 	}
 
 	tr = runner.NewTestRunner("workflow_test", testApps, comps, nil)
 	os.Exit(tr.Start(m))
 }
 
-func getSqliteBackend(comps []kube.ComponentDescription, backend string) []kube.ComponentDescription {
+func getSqliteBackendComp(comps []kube.ComponentDescription, backend string) []kube.ComponentDescription {
 	comps = append(comps, kube.ComponentDescription{
 		Name:     "sqlitebackend",
 		TypeName: "workflowbackend.sqlite",
