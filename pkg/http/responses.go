@@ -15,7 +15,6 @@ package http
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 	"strconv"
 
@@ -147,9 +146,7 @@ func respondWithError(w http.ResponseWriter, err error) {
 	}
 
 	// Check if it's a kitErrors.Error object
-	var kitErr kitErrors.Error
-	ok = errors.As(err, &kitErr)
-	if ok {
+	if kitErr, ok := kitErrors.FromError(err); ok {
 		respondWithData(w, kitErr.HTTPStatusCode(), kitErr.JSONErrorValue())
 		return
 	}
