@@ -52,7 +52,6 @@ func New(t *testing.T, fopts ...Option) state.Store {
 	opts := options{
 		features: []state.Feature{state.FeatureETag, state.FeatureTransactional, state.FeatureTTL},
 	}
-
 	for _, fopt := range fopts {
 		fopt(&opts)
 	}

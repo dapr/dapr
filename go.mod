@@ -45,6 +45,7 @@ require (
 	github.com/redis/go-redis/v9 v9.2.1
 	github.com/sony/gobreaker v0.5.0
 	github.com/spf13/cast v1.6.0
+	github.com/spf13/pflag v1.0.5
 	github.com/spiffe/go-spiffe/v2 v2.1.6
 	github.com/stretchr/testify v1.8.4
 	github.com/valyala/fasthttp v1.51.0
@@ -360,7 +361,6 @@ require (
 	github.com/sourcegraph/conc v0.3.0 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/spf13/cobra v1.7.0 // indirect
-	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/stealthrocket/wasi-go v0.8.1-0.20230912180546-8efbab50fb58 // indirect
 	github.com/stoewer/go-strcase v1.2.0 // indirect
 	github.com/stretchr/objx v0.5.0 // indirect
