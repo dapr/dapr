@@ -235,8 +235,8 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		var badRequest map[string]interface{}
 
 		for _, detail := range detailsArray {
-			d, ok := detail.(map[string]interface{})
-			require.True(t, ok)
+			d, innerOK := detail.(map[string]interface{})
+			require.True(t, innerOK)
 			switch d["@type"] {
 			case ErrInfoType:
 				errInfo = d
@@ -577,8 +577,8 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		var help map[string]interface{}
 
 		for _, detail := range detailsArray {
-			d, ok := detail.(map[string]interface{})
-			require.True(t, ok)
+			d, innerOK := detail.(map[string]interface{})
+			require.True(t, innerOK)
 			switch d["@type"] {
 			case ErrInfoType:
 				errInfo = d
