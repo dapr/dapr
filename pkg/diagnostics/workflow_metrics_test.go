@@ -2,9 +2,10 @@ package diagnostics
 
 import (
 	"context"
+	"testing"
+
 	"github.com/stretchr/testify/assert"
 	"go.opencensus.io/stats/view"
-	"testing"
 )
 
 func workflowsMetrics() *workflowMetrics {
@@ -22,7 +23,7 @@ func TestOperations(t *testing.T) {
 			t.Run("Failed Create Operation request count", func(t *testing.T) {
 				w := workflowsMetrics()
 
-				w.WorkflowOperationsEvent(context.Background(), CreateWorkflow, componentName, StatusFailed, 0)
+				w.WorkflowOperationEvent(context.Background(), CreateWorkflow, componentName, StatusFailed, 0)
 
 				viewData, _ := view.RetrieveData(countMetricName)
 				v := view.Find(countMetricName)
@@ -33,7 +34,7 @@ func TestOperations(t *testing.T) {
 			t.Run("Successful Create Operation request count", func(t *testing.T) {
 				w := workflowMetrics{}
 
-				w.WorkflowOperationsEvent(context.Background(), CreateWorkflow, componentName, StatusSuccess, 0)
+				w.WorkflowOperationEvent(context.Background(), CreateWorkflow, componentName, StatusSuccess, 0)
 
 				viewData, _ := view.RetrieveData(countMetricName)
 				v := view.Find(countMetricName)
@@ -44,7 +45,7 @@ func TestOperations(t *testing.T) {
 			t.Run("Create Operation request latency", func(t *testing.T) {
 				w := workflowsMetrics()
 
-				w.WorkflowOperationsEvent(context.Background(), CreateWorkflow, componentName, StatusSuccess, 1)
+				w.WorkflowOperationEvent(context.Background(), CreateWorkflow, componentName, StatusSuccess, 1)
 
 				viewData, _ := view.RetrieveData(latencyMetricName)
 				v := view.Find(latencyMetricName)
@@ -60,7 +61,7 @@ func TestOperations(t *testing.T) {
 			t.Run("Failed Get Operation Request", func(t *testing.T) {
 				w := workflowsMetrics()
 
-				w.WorkflowOperationsEvent(context.Background(), GetWorkflow, componentName, StatusFailed, 0)
+				w.WorkflowOperationEvent(context.Background(), GetWorkflow, componentName, StatusFailed, 0)
 
 				viewData, _ := view.RetrieveData(countMetricName)
 				v := view.Find(countMetricName)
@@ -71,7 +72,7 @@ func TestOperations(t *testing.T) {
 			t.Run("Successful Get Operation Request", func(t *testing.T) {
 				w := workflowsMetrics()
 
-				w.WorkflowOperationsEvent(context.Background(), GetWorkflow, componentName, StatusSuccess, 0)
+				w.WorkflowOperationEvent(context.Background(), GetWorkflow, componentName, StatusSuccess, 0)
 
 				viewData, _ := view.RetrieveData(countMetricName)
 				v := view.Find(countMetricName)
@@ -82,7 +83,7 @@ func TestOperations(t *testing.T) {
 			t.Run("Get Operation request latency", func(t *testing.T) {
 				w := workflowsMetrics()
 
-				w.WorkflowOperationsEvent(context.Background(), GetWorkflow, componentName, StatusSuccess, 1)
+				w.WorkflowOperationEvent(context.Background(), GetWorkflow, componentName, StatusSuccess, 1)
 
 				viewData, _ := view.RetrieveData(latencyMetricName)
 				v := view.Find(latencyMetricName)
@@ -97,7 +98,7 @@ func TestOperations(t *testing.T) {
 			t.Run("Failed Add Event request", func(t *testing.T) {
 				w := workflowsMetrics()
 
-				w.WorkflowOperationsEvent(context.Background(), AddEvent, componentName, StatusFailed, 0)
+				w.WorkflowOperationEvent(context.Background(), AddEvent, componentName, StatusFailed, 0)
 
 				viewData, _ := view.RetrieveData(countMetricName)
 				v := view.Find(countMetricName)
@@ -108,7 +109,7 @@ func TestOperations(t *testing.T) {
 			t.Run("Successful Add Event request", func(t *testing.T) {
 				w := workflowsMetrics()
 
-				w.WorkflowOperationsEvent(context.Background(), AddEvent, componentName, StatusSuccess, 0)
+				w.WorkflowOperationEvent(context.Background(), AddEvent, componentName, StatusSuccess, 0)
 
 				viewData, _ := view.RetrieveData(countMetricName)
 				v := view.Find(countMetricName)
@@ -119,7 +120,7 @@ func TestOperations(t *testing.T) {
 			t.Run("Add Event Operation latency", func(t *testing.T) {
 				w := workflowsMetrics()
 
-				w.WorkflowOperationsEvent(context.Background(), AddEvent, componentName, StatusSuccess, 1)
+				w.WorkflowOperationEvent(context.Background(), AddEvent, componentName, StatusSuccess, 1)
 
 				viewData, _ := view.RetrieveData(latencyMetricName)
 				v := view.Find(latencyMetricName)
@@ -134,7 +135,7 @@ func TestOperations(t *testing.T) {
 			t.Run("Failed Purge workflow request", func(t *testing.T) {
 				w := workflowsMetrics()
 
-				w.WorkflowOperationsEvent(context.Background(), PurgeWorkflow, componentName, StatusFailed, 0)
+				w.WorkflowOperationEvent(context.Background(), PurgeWorkflow, componentName, StatusFailed, 0)
 
 				viewData, _ := view.RetrieveData(countMetricName)
 				v := view.Find(countMetricName)
@@ -145,7 +146,7 @@ func TestOperations(t *testing.T) {
 			t.Run("Successful Purge workflow request", func(t *testing.T) {
 				w := workflowsMetrics()
 
-				w.WorkflowOperationsEvent(context.Background(), PurgeWorkflow, componentName, StatusSuccess, 0)
+				w.WorkflowOperationEvent(context.Background(), PurgeWorkflow, componentName, StatusSuccess, 0)
 
 				viewData, _ := view.RetrieveData(countMetricName)
 				v := view.Find(countMetricName)
@@ -156,7 +157,7 @@ func TestOperations(t *testing.T) {
 			t.Run("Purge workflow Operation latency", func(t *testing.T) {
 				w := workflowsMetrics()
 
-				w.WorkflowOperationsEvent(context.Background(), PurgeWorkflow, componentName, StatusSuccess, 1)
+				w.WorkflowOperationEvent(context.Background(), PurgeWorkflow, componentName, StatusSuccess, 1)
 
 				viewData, _ := view.RetrieveData(latencyMetricName)
 				v := view.Find(latencyMetricName)
@@ -177,7 +178,7 @@ func TestExecution(t *testing.T) {
 			t.Run("Failed with retryable error", func(t *testing.T) {
 				w := workflowsMetrics()
 
-				w.ExecutionEvent(context.Background(), componentName, Activity, StatusRetryable, 0)
+				w.ExecutionEvent(context.Background(), componentName, Activity, StatusRecoverable, 0)
 
 				viewData, _ := view.RetrieveData(countMetricName)
 				v := view.Find(countMetricName)
@@ -225,7 +226,7 @@ func TestExecution(t *testing.T) {
 			t.Run("Failed with retryable error", func(t *testing.T) {
 				w := workflowsMetrics()
 
-				w.ExecutionEvent(context.Background(), componentName, Workflow, StatusRetryable, 0)
+				w.ExecutionEvent(context.Background(), componentName, Workflow, StatusRecoverable, 0)
 
 				viewData, _ := view.RetrieveData(countMetricName)
 				v := view.Find(countMetricName)

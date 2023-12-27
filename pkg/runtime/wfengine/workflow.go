@@ -454,27 +454,30 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 	err = wf.scheduler(ctx, wi)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			// Workflow execution scheduling request failed with recoverable error, record metrics.
-			diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, diag.ComponentName, diag.Workflow, diag.StatusRetryable, 0)
 			return newRecoverableError(fmt.Errorf("timed-out trying to schedule a workflow execution - this can happen if there are too many in-flight workflows or if the workflow engine isn't running: %w", err))
 		}
 		return newRecoverableError(fmt.Errorf("failed to schedule a workflow execution: %w", err))
 	}
+	// Record metrics on exit
+	executionStatus := diag.StatusFailed
+	defer func() {
+		if executionStatus != "" {
+			// execution latency for workflow is not supported yet.
+			diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, diag.ComponentName, diag.Workflow, executionStatus, 0)
+		}
+	}()
 
 	select {
 	case <-ctx.Done(): // caller is responsible for timeout management
-		// Workflow execution failed with recoverable error, record metrics.
-		diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, diag.ComponentName, diag.Workflow, diag.StatusRetryable, 0)
+		// Workflow execution failed with recoverable error
+		executionStatus = diag.StatusRecoverable
 		return ctx.Err()
 	case completed := <-callback:
 		if !completed {
-			// Workflow execution failed with Recoverable Error, record metrics
-			diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, diag.ComponentName, diag.Workflow, diag.StatusRetryable, 0)
-
+			// Workflow execution failed with recoverable error
+			executionStatus = diag.StatusRecoverable
 			return newRecoverableError(errExecutionAborted)
 		}
-		// execution latency for workflow is not supported yet.
-		diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, diag.ComponentName, diag.Workflow, diag.StatusSuccess, 0)
 	}
 	wfLogger.Debugf("Workflow actor '%s': workflow execution returned with status '%s' instanceId '%s'", actorID, runtimeState.RuntimeStatus().String(), wi.InstanceID)
 
@@ -504,6 +507,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 			data := NewDurableTimer(timerBytes, state.Generation)
 			wfLogger.Debugf("Workflow actor '%s': creating reminder '%s' for the durable timer", actorID, reminderPrefix)
 			if _, err := wf.createReliableReminder(ctx, actorID, reminderPrefix, data, delay); err != nil {
+				executionStatus = diag.StatusRecoverable
 				return newRecoverableError(fmt.Errorf("actor '%s' failed to create reminder for timer: %w", actorID, err))
 			}
 		}
@@ -558,6 +562,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 				wfLogger.Warnf("Workflow actor '%s': activity invocation '%s::%d' was flagged as a duplicate and will be skipped", actorID, ts.GetName(), e.GetEventId())
 				continue
 			}
+			executionStatus = diag.StatusRecoverable
 			return newRecoverableError(fmt.Errorf("failed to invoke activity actor '%s' to execute '%s': %w", targetActorID, ts.GetName(), err))
 		}
 		resp.Close()
@@ -581,6 +586,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 
 			resp, err := wf.actors.Call(ctx, req)
 			if err != nil {
+				executionStatus = diag.StatusRecoverable
 				// workflow-related actor methods are never expected to return errors
 				return newRecoverableError(fmt.Errorf("method %s on actor '%s' returned an error: %w", method, msg.TargetInstanceID, err))
 			}
@@ -591,7 +597,19 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 	state.ApplyRuntimeStateChanges(runtimeState)
 	state.ClearInbox()
 
-	return wf.saveInternalState(ctx, actorID, state)
+	err = wf.saveInternalState(ctx, actorID, state)
+	if err != nil {
+		return err
+	}
+	executionStatus = ""
+	if runtimeState.IsCompleted() {
+		if runtimeState.RuntimeStatus() == api.RUNTIME_STATUS_COMPLETED {
+			executionStatus = diag.StatusSuccess
+		} else {
+			executionStatus = diag.StatusFailed
+		}
+	}
+	return nil
 }
 
 func (wf *workflowActor) loadInternalState(ctx context.Context, actorID string) (*workflowState, error) {
