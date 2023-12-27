@@ -19,6 +19,8 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/microsoft/durabletask-go/backend"
 	"google.golang.org/grpc"
@@ -36,10 +38,12 @@ type WorkflowEngine struct {
 	worker               backend.TaskHubWorker
 	registerGrpcServerFn func(grpcServer grpc.ServiceRegistrar)
 
-	startMutex     sync.Mutex
-	disconnectChan chan any
-	spec           config.WorkflowSpec
-	BackendType    string
+	startMutex      sync.Mutex
+	disconnectChan  chan any
+	spec            config.WorkflowSpec
+	BackendType     string
+	wfEngineReady   atomic.Bool
+	wfEngineReadyCh chan struct{}
 }
 
 const (
@@ -60,7 +64,8 @@ func IsWorkflowRequest(path string) bool {
 
 func NewWorkflowEngine(appID string, spec config.WorkflowSpec, backendManager processor.WorkflowBackendManager) *WorkflowEngine {
 	engine := &WorkflowEngine{
-		spec: spec,
+		spec:            spec,
+		wfEngineReadyCh: make(chan struct{}),
 	}
 
 	var backendType string
@@ -154,6 +159,8 @@ func (wfe *WorkflowEngine) Start(ctx context.Context) (err error) {
 	wfe.IsRunning = true
 	wfLogger.Info("Workflow engine started")
 
+	wfe.setWorkflowEngineReadyDone()
+
 	return nil
 }
 
@@ -178,4 +185,26 @@ func (wfe *WorkflowEngine) Close(ctx context.Context) error {
 		wfLogger.Info("Workflow engine stopped")
 	}
 	return nil
+}
+
+// WaitForWorkflowEngineReady waits for the workflow engine to be ready.
+func (wfe *WorkflowEngine) WaitForWorkflowEngineReady(ctx context.Context) {
+	// Quick check to avoid allocating a timer if the workflow engine are ready
+	if wfe.wfEngineReady.Load() {
+		return
+	}
+
+	waitCtx, waitCancel := context.WithTimeout(ctx, 10*time.Second)
+	defer waitCancel()
+
+	select {
+	case <-waitCtx.Done():
+	case <-wfe.wfEngineReadyCh:
+	}
+}
+
+func (wfe *WorkflowEngine) setWorkflowEngineReadyDone() {
+	if wfe.wfEngineReady.CompareAndSwap(false, true) {
+		close(wfe.wfEngineReadyCh)
+	}
 }

@@ -23,6 +23,7 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	"github.com/dapr/dapr/pkg/runtime/wfengine"
 	"github.com/dapr/kit/logger"
 )
 
@@ -38,6 +39,7 @@ type UniversalAPI struct {
 	ExtendedMetadata            map[string]string
 	AppConnectionConfig         config.AppConnectionConfig
 	GlobalConfig                *config.Configuration
+	WorkflowEngine              *wfengine.WorkflowEngine
 
 	extendedMetadataLock sync.RWMutex
 	actorsReady          atomic.Bool

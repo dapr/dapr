@@ -34,8 +34,7 @@ func (a *UniversalAPI) GetWorkflowBeta1(ctx context.Context, in *runtimev1pb.Get
 		return &runtimev1pb.GetWorkflowResponse{}, err
 	}
 
-	// Workflow requires actors to be ready
-	a.WaitForActorsReady(ctx)
+	a.WorkflowEngine.WaitForWorkflowEngineReady(ctx)
 
 	workflowComponent, err := a.getWorkflowComponent(in.GetWorkflowComponent())
 	if err != nil {
@@ -81,8 +80,7 @@ func (a *UniversalAPI) StartWorkflowBeta1(ctx context.Context, in *runtimev1pb.S
 		return &runtimev1pb.StartWorkflowResponse{}, err
 	}
 
-	// Workflow requires actors to be ready
-	a.WaitForActorsReady(ctx)
+	a.WorkflowEngine.WaitForWorkflowEngineReady(ctx)
 
 	workflowComponent, err := a.getWorkflowComponent(in.GetWorkflowComponent())
 	if err != nil {
@@ -117,8 +115,7 @@ func (a *UniversalAPI) TerminateWorkflowBeta1(ctx context.Context, in *runtimev1
 		return emptyResponse, err
 	}
 
-	// Workflow requires actors to be ready
-	a.WaitForActorsReady(ctx)
+	a.WorkflowEngine.WaitForWorkflowEngineReady(ctx)
 
 	workflowComponent, err := a.getWorkflowComponent(in.GetWorkflowComponent())
 	if err != nil {
@@ -155,8 +152,7 @@ func (a *UniversalAPI) RaiseEventWorkflowBeta1(ctx context.Context, in *runtimev
 		return emptyResponse, err
 	}
 
-	// Workflow requires actors to be ready
-	a.WaitForActorsReady(ctx)
+	a.WorkflowEngine.WaitForWorkflowEngineReady(ctx)
 
 	workflowComponent, err := a.getWorkflowComponent(in.GetWorkflowComponent())
 	if err != nil {
@@ -187,8 +183,7 @@ func (a *UniversalAPI) PauseWorkflowBeta1(ctx context.Context, in *runtimev1pb.P
 		return emptyResponse, err
 	}
 
-	// Workflow requires actors to be ready
-	a.WaitForActorsReady(ctx)
+	a.WorkflowEngine.WaitForWorkflowEngineReady(ctx)
 
 	workflowComponent, err := a.getWorkflowComponent(in.GetWorkflowComponent())
 	if err != nil {
@@ -215,8 +210,7 @@ func (a *UniversalAPI) ResumeWorkflowBeta1(ctx context.Context, in *runtimev1pb.
 		return emptyResponse, err
 	}
 
-	// Workflow requires actors to be ready
-	a.WaitForActorsReady(ctx)
+	a.WorkflowEngine.WaitForWorkflowEngineReady(ctx)
 
 	workflowComponent, err := a.getWorkflowComponent(in.GetWorkflowComponent())
 	if err != nil {
@@ -243,8 +237,7 @@ func (a *UniversalAPI) PurgeWorkflowBeta1(ctx context.Context, in *runtimev1pb.P
 		return emptyResponse, err
 	}
 
-	// Workflow requires actors to be ready
-	a.WaitForActorsReady(ctx)
+	a.WorkflowEngine.WaitForWorkflowEngineReady(ctx)
 
 	workflowComponent, err := a.getWorkflowComponent(in.GetWorkflowComponent())
 	if err != nil {

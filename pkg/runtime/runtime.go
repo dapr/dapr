@@ -493,6 +493,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		ShutdownFn:                  a.ShutdownWithWait,
 		AppConnectionConfig:         a.runtimeConfig.appConnectionConfig,
 		GlobalConfig:                a.globalConfig,
+		WorkflowEngine:              wfe,
 	}
 
 	// Create and start internal and external gRPC servers
