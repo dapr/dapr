@@ -701,7 +701,7 @@ func (a *api) getStateStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (s
 
 	storeName := a.getStateStoreName(reqCtx)
 
-	state, ok := a.universal.CompStore().GetStateStore(storeName)
+	stateStore, ok := a.universal.CompStore().GetStateStore(storeName)
 	if !ok {
 		err := apierrors.StateStoreNotFound(storeName)
 		log.Debug(err)

@@ -34,7 +34,7 @@ func (a *Universal) GetStateStore(name string) (state.Store, error) {
 		return nil, err
 	}
 
-	state, ok := a.compStore.GetStateStore(name)
+	stateStore, ok := a.compStore.GetStateStore(name)
 	if !ok {
 		err := errors.StateStoreNotFound(name)
 		a.logger.Debug(err)
@@ -86,7 +86,7 @@ func (a *Universal) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryS
 
 	if err != nil {
 		err = errors.StateStoreQueryFailed(in.GetStoreName(), err.Error())
-		a.Logger.Debug(err)
+		a.logger.Debug(err)
 		return nil, err
 	}
 
