@@ -159,7 +159,7 @@ func (wfe *WorkflowEngine) Start(ctx context.Context) (err error) {
 	wfe.IsRunning = true
 	wfLogger.Info("Workflow engine started")
 
-	wfe.setWorkflowEngineReadyDone()
+	wfe.SetWorkflowEngineReadyDone()
 
 	return nil
 }
@@ -203,7 +203,7 @@ func (wfe *WorkflowEngine) WaitForWorkflowEngineReady(ctx context.Context) {
 	}
 }
 
-func (wfe *WorkflowEngine) setWorkflowEngineReadyDone() {
+func (wfe *WorkflowEngine) SetWorkflowEngineReadyDone() {
 	if wfe.wfEngineReady.CompareAndSwap(false, true) {
 		close(wfe.wfEngineReadyCh)
 	}

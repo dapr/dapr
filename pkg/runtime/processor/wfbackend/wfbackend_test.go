@@ -93,7 +93,27 @@ func TestInitWorkflowBackend(t *testing.T) {
 
 		// act
 		initErr := proc.Init(context.TODO(), comp)
-		closeErr := proc.Close(comp)
+
+		// assert
+		require.NoError(t, initErr, "expected no error")
+	})
+
+	t.Run("test close workflow backend", func(t *testing.T) {
+		// setup
+		newReg := registry.New(registry.NewOptions().WithWorkflowBackends(wfbe.NewRegistry()))
+		newCompStore := compstore.New()
+		newProc := processor.New(processor.Options{
+			Registry:       newReg,
+			ComponentStore: newCompStore,
+			GlobalConfig:   new(config.Configuration),
+			Meta:           meta.New(meta.Options{Mode: modes.StandaloneMode}),
+		})
+		initMockWorkflowBackendForRegistry(newReg, "noerror", connectionString, nil)
+		comp := mockWorkflowBackendComponent("noerror")
+
+		// act
+		initErr := newProc.Init(context.TODO(), comp)
+		closeErr := newProc.Close(comp)
 
 		// assert
 		require.NoError(t, initErr, "expected no error")
@@ -113,34 +133,60 @@ func TestInitWorkflowBackend(t *testing.T) {
 	})
 
 	t.Run("test init workflow backend registry error", func(t *testing.T) {
+		// setup
+		newReg := registry.New(registry.NewOptions().WithWorkflowBackends(wfbe.NewRegistry()))
+		newCompStore := compstore.New()
+		newProc := processor.New(processor.Options{
+			Registry:       newReg,
+			ComponentStore: newCompStore,
+			GlobalConfig:   new(config.Configuration),
+			Meta:           meta.New(meta.Options{Mode: modes.StandaloneMode}),
+		})
+
 		// act
-		err := proc.Init(context.TODO(), mockWorkflowBackendComponent("error1"))
+		err := newProc.Init(context.TODO(), mockWorkflowBackendComponent("error1"))
 
 		// assert
 		require.Error(t, err, "expected error")
-		assert.Equal(t, err.Error(), "couldn't find wokflow backend workflowbackend.mockWorkflowBackend/v1", "expected error strings to match")
+		assert.Equal(t, "couldn't find wokflow backend workflowbackend.mockWorkflowBackend/v1", err.Error(), "expected error strings to match")
 	})
 
 	t.Run("test workflow backend component info not nil", func(t *testing.T) {
 		// setup
-		initMockWorkflowBackendForRegistry(reg, "noerror", connectionString, nil)
+		newReg := registry.New(registry.NewOptions().WithWorkflowBackends(wfbe.NewRegistry()))
+		newCompStore := compstore.New()
+		newProc := processor.New(processor.Options{
+			Registry:       newReg,
+			ComponentStore: newCompStore,
+			GlobalConfig:   new(config.Configuration),
+			Meta:           meta.New(meta.Options{Mode: modes.StandaloneMode}),
+		})
+		initMockWorkflowBackendForRegistry(newReg, "noerror", connectionString, nil)
 		comp := mockWorkflowBackendComponent("noerror")
-		be := proc.WorkflowBackend()
+		be := newProc.WorkflowBackend()
 
 		// act
-		initErr := proc.Init(context.TODO(), comp)
+		initErr := newProc.Init(context.TODO(), comp)
 		componentInfo, ok := be.WorkflowBackendComponentInfo()
 
 		// assert
 		require.NoError(t, initErr, "expected no error")
 		require.True(t, ok, "expected component info ok")
 		assert.NotNil(t, componentInfo, "expected component info not nil")
-		assert.Equal(t, componentInfo.WorkflowBackendType, "workflowbackend.mockWorkflowBackend", "expected workflow backend type to match")
+		assert.Equal(t, "workflowbackend.mockWorkflowBackend", componentInfo.WorkflowBackendType, "expected workflow backend type to match")
 	})
 
 	t.Run("test workflow backend component info nil", func(t *testing.T) {
 		// setup
-		be := proc.WorkflowBackend()
+		newReg := registry.New(registry.NewOptions().WithWorkflowBackends(wfbe.NewRegistry()))
+		newCompStore := compstore.New()
+		newProc := processor.New(processor.Options{
+			Registry:       newReg,
+			ComponentStore: newCompStore,
+			GlobalConfig:   new(config.Configuration),
+			Meta:           meta.New(meta.Options{Mode: modes.StandaloneMode}),
+		})
+		be := newProc.WorkflowBackend()
 
 		// act
 		componentInfo, ok := be.WorkflowBackendComponentInfo()

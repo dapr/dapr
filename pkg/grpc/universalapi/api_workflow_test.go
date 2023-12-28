@@ -20,10 +20,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/components-contrib/workflows"
+	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	"github.com/dapr/dapr/pkg/runtime/wfengine"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/logger"
 )
@@ -111,9 +113,10 @@ func TestStartWorkflowBeta1API(t *testing.T) {
 
 	// Setup universal dapr API
 	fakeAPI := &UniversalAPI{
-		Logger:     logger.NewLogger("test"),
-		Resiliency: resiliency.New(nil),
-		CompStore:  compStore,
+		Logger:         logger.NewLogger("test"),
+		Resiliency:     resiliency.New(nil),
+		CompStore:      compStore,
+		WorkflowEngine: getWorkflowEngine(),
 	}
 	fakeAPI.InitUniversalAPI()
 	fakeAPI.SetActorsInitDone()
@@ -185,9 +188,10 @@ func TestGetWorkflowBeta1API(t *testing.T) {
 
 	// Setup universal dapr API
 	fakeAPI := &UniversalAPI{
-		Logger:     logger.NewLogger("test"),
-		Resiliency: resiliency.New(nil),
-		CompStore:  compStore,
+		Logger:         logger.NewLogger("test"),
+		Resiliency:     resiliency.New(nil),
+		CompStore:      compStore,
+		WorkflowEngine: getWorkflowEngine(),
 	}
 	fakeAPI.InitUniversalAPI()
 	fakeAPI.SetActorsInitDone()
@@ -258,9 +262,10 @@ func TestTerminateWorkflowBeta1API(t *testing.T) {
 
 	// Setup universal dapr API
 	fakeAPI := &UniversalAPI{
-		Logger:     logger.NewLogger("test"),
-		Resiliency: resiliency.New(nil),
-		CompStore:  compStore,
+		Logger:         logger.NewLogger("test"),
+		Resiliency:     resiliency.New(nil),
+		CompStore:      compStore,
+		WorkflowEngine: getWorkflowEngine(),
 	}
 	fakeAPI.InitUniversalAPI()
 	fakeAPI.SetActorsInitDone()
@@ -346,9 +351,10 @@ func TestRaiseEventWorkflowBeta1Api(t *testing.T) {
 
 	// Setup universal dapr API
 	fakeAPI := &UniversalAPI{
-		Logger:     logger.NewLogger("test"),
-		Resiliency: resiliency.New(nil),
-		CompStore:  compStore,
+		Logger:         logger.NewLogger("test"),
+		Resiliency:     resiliency.New(nil),
+		CompStore:      compStore,
+		WorkflowEngine: getWorkflowEngine(),
 	}
 	fakeAPI.InitUniversalAPI()
 	fakeAPI.SetActorsInitDone()
@@ -421,9 +427,10 @@ func TestPauseWorkflowBeta1Api(t *testing.T) {
 
 	// Setup universal dapr API
 	fakeAPI := &UniversalAPI{
-		Logger:     logger.NewLogger("test"),
-		Resiliency: resiliency.New(nil),
-		CompStore:  compStore,
+		Logger:         logger.NewLogger("test"),
+		Resiliency:     resiliency.New(nil),
+		CompStore:      compStore,
+		WorkflowEngine: getWorkflowEngine(),
 	}
 	fakeAPI.InitUniversalAPI()
 	fakeAPI.SetActorsInitDone()
@@ -494,9 +501,10 @@ func TestResumeWorkflowBeta1Api(t *testing.T) {
 
 	// Setup universal dapr API
 	fakeAPI := &UniversalAPI{
-		Logger:     logger.NewLogger("test"),
-		Resiliency: resiliency.New(nil),
-		CompStore:  compStore,
+		Logger:         logger.NewLogger("test"),
+		Resiliency:     resiliency.New(nil),
+		CompStore:      compStore,
+		WorkflowEngine: getWorkflowEngine(),
 	}
 	fakeAPI.InitUniversalAPI()
 	fakeAPI.SetActorsInitDone()
@@ -516,4 +524,12 @@ func TestResumeWorkflowBeta1Api(t *testing.T) {
 			}
 		})
 	}
+}
+
+func getWorkflowEngine() *wfengine.WorkflowEngine {
+	mockWorkflowBackendManager := new(daprt.MockSqliteBackendManager)
+	spec := config.WorkflowSpec{MaxConcurrentWorkflowInvocations: 100, MaxConcurrentActivityInvocations: 100}
+	wfengine := wfengine.NewWorkflowEngine("testAppID", spec, mockWorkflowBackendManager)
+	wfengine.SetWorkflowEngineReadyDone()
+	return wfengine
 }
