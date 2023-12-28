@@ -32,7 +32,7 @@ func TestOperations(t *testing.T) {
 			})
 
 			t.Run("Successful Create Operation request count", func(t *testing.T) {
-				w := workflowMetrics{}
+				w := workflowsMetrics()
 
 				w.WorkflowOperationEvent(context.Background(), CreateWorkflow, componentName, StatusSuccess, 0)
 
