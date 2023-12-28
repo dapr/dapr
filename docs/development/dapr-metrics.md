@@ -103,10 +103,13 @@ Dapr uses prometheus process and go collectors by default.
 
 #### Workflow metrics
 
-* dapr_runtime_workflow_operations_count.
-* dapr_runtime_workflow_operations_latency.
-* dapr_runtime_workflow_execution_count.
-* dapr_runtime_workflow_execution_latency.
+[workflow metrics](../../pkg/diagnostics/workflow_monitoring.go)
+
+* dapr_runtime_workflow_operation_count: The number of successful/failed workflow operation requests.
+* dapr_runtime_workflow_operation_latency: The latencies of responses for workflow operation requests.
+* dapr_runtime_workflow_execution_count: The number of successful/failed/recoverable workflow/activity executions.
+* dapr_runtime_workflow_execution_latency: The total time taken to run a workflow/activity to completion.
+> Note: Execution latency for workflow is not supported yet. `dapr_runtime_workflow_execution_latency` currently only captures activity execution time.
 
 ### gRPC monitoring metrics
 
