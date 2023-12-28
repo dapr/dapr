@@ -402,6 +402,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 	// The logic/for loop below purges/removes any leftover state from a completed or failed activity
 	transactionalRequests := make(map[string][]actors.TransactionalOperation)
 	for _, e := range state.Inbox {
+		fmt.Println("e: ", e)
 		var taskID int32
 		if ts := e.GetTaskCompleted(); ts != nil {
 			taskID = ts.GetTaskScheduledId()
@@ -448,6 +449,13 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 	// will trigger this callback channel.
 	callback := make(chan bool)
 	wi.Properties[CallbackChannelProperty] = callback
+	// Setting executionStatus to failed by default to record metrics for non-recoverable errors.
+	executionStatus := diag.StatusFailed
+	if runtimeState.IsCompleted() {
+		// If workflow is already completed, set executionStatus to empty string
+		// which will skip recording metrics for this execution.
+		executionStatus = ""
+	}
 	// Request to execute workflow
 	wfLogger.Debugf("Workflow actor '%s': scheduling workflow execution with instanceId '%s'", actorID, wi.InstanceID)
 	// Schedule the workflow execution by signaling the backend
@@ -458,8 +466,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 		}
 		return newRecoverableError(fmt.Errorf("failed to schedule a workflow execution: %w", err))
 	}
-	// Record metrics on exit
-	executionStatus := diag.StatusFailed
+	// Record metrics for workflow execution
 	defer func() {
 		if executionStatus != "" {
 			// execution latency for workflow is not supported yet.
@@ -601,13 +608,17 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 	if err != nil {
 		return err
 	}
-	// Setting executionStatus to empty so that metrics are not recorded if workflow is not completed.
-	executionStatus = ""
-	if runtimeState.IsCompleted() {
-		if runtimeState.RuntimeStatus() == api.RUNTIME_STATUS_COMPLETED {
-			executionStatus = diag.StatusSuccess
-		} else {
-			executionStatus = diag.StatusFailed
+	if executionStatus != "" {
+		// If workflow is not completed, set executionStatus to empty string
+		// which will skip recording metrics for this execution.
+		executionStatus = ""
+		if runtimeState.IsCompleted() {
+			if runtimeState.RuntimeStatus() == api.RUNTIME_STATUS_COMPLETED {
+				executionStatus = diag.StatusSuccess
+			} else {
+				// Setting executionStatus to failed if workflow has failed/terminated/cancelled
+				executionStatus = diag.StatusFailed
+			}
 		}
 	}
 	return nil
