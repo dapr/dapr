@@ -108,6 +108,15 @@ func TestInitWorkflowBackend(t *testing.T) {
 		require.Error(t, err, "expected error")
 		assert.Equal(t, err.Error(), rterrors.NewInit(rterrors.InitComponentFailure, "error (workflowbackend.mockWorkflowBackend/v1)", assert.AnError).Error(), "expected error strings to match")
 	})
+
+	t.Run("test init workflow backend registry error", func(t *testing.T) {
+		// act
+		err := proc.Init(context.TODO(), mockWorkflowBackendComponent("error1"))
+
+		// assert
+		require.Error(t, err, "expected error")
+		assert.Equal(t, err.Error(), "couldn't find wokflow backend workflowbackend.mockWorkflowBackend/v1", "expected error strings to match")
+	})
 }
 
 func initMockWorkflowBackendForRegistry(reg *registry.Registry, name, connectionString string, e error) *daprt.MockWorkflowBackend {
