@@ -601,6 +601,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 	if err != nil {
 		return err
 	}
+	// Setting executionStatus to empty so that metrics are not recorded if workflow is not completed.
 	executionStatus = ""
 	if runtimeState.IsCompleted() {
 		if runtimeState.RuntimeStatus() == api.RUNTIME_STATUS_COMPLETED {
