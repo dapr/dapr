@@ -12,7 +12,7 @@ require (
 	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/cloudevents/sdk-go/v2 v2.14.0
 	github.com/dapr/components-contrib v1.12.1-0.20231221220723-9bce125c6ffc
-	github.com/dapr/kit v0.12.2-0.20231221220316-9165c5ae9599
+	github.com/dapr/kit v0.12.2-0.20231227152556-77f7f031c92a
 	github.com/evanphx/json-patch/v5 v5.7.0
 	github.com/go-chi/chi/v5 v5.0.10
 	github.com/go-chi/cors v1.2.1
