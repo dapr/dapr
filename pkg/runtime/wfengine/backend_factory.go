@@ -15,14 +15,11 @@ limitations under the License.
 package wfengine
 
 import (
-	"time"
-
 	"github.com/microsoft/durabletask-go/backend"
 	"github.com/microsoft/durabletask-go/backend/sqlite"
 
 	wfbe "github.com/dapr/dapr/pkg/components/wfbackend"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/metadata"
 )
 
 const (
@@ -40,39 +37,23 @@ var backendFactories = map[string]BackendFactory{
 func getActorBackend(appID string, wfe *WorkflowEngine, backendComponentInfo *wfbe.WorkflowBackendComponentInfo, log logger.Logger) backend.Backend {
 	log.Infof("Initializing actor backend for appID: %s", appID)
 	wfe.BackendType = ActorBackendType
+
 	return NewActorBackend(appID, wfe)
 }
 
 func getSqliteBackend(appID string, wfe *WorkflowEngine, backendComponentInfo *wfbe.WorkflowBackendComponentInfo, log logger.Logger) backend.Backend {
 	log.Infof("Initializing sqlite backend for appID: %s", appID)
 	wfe.BackendType = SqliteBackendType
-	sqliteOptions := &sqlite.SqliteOptions{
-		OrchestrationLockTimeout: 2 * time.Minute,
-		ActivityLockTimeout:      2 * time.Minute,
-		FilePath:                 "",
+
+	sqliteMetadata := wfbe.NewSqliteMetadata()
+	err := sqliteMetadata.Parse(backendComponentInfo.WorkflowBackendMetadata.Properties)
+
+	if err != nil {
+		log.Errorf("Failed to parse sqlite backend metadata: %s, sqlite backend is not initialized", err)
+		return nil
 	}
 
-	if connectionString, ok := metadata.GetMetadataProperty(backendComponentInfo.WorkflowBackendMetadata.Properties, "connectionString"); ok {
-		sqliteOptions.FilePath = connectionString
-	}
-
-	if orchestrationLockTimeout, ok := metadata.GetMetadataProperty(backendComponentInfo.WorkflowBackendMetadata.Properties, "orchestrationLockTimeout"); ok {
-		if duration, err := time.ParseDuration(orchestrationLockTimeout); err == nil {
-			sqliteOptions.OrchestrationLockTimeout = duration
-		} else {
-			log.Errorf("Invalid orchestrationLockTimeout provided in backend workflow component: %v", err)
-		}
-	}
-
-	if activityLockTimeout, ok := metadata.GetMetadataProperty(backendComponentInfo.WorkflowBackendMetadata.Properties, "activityLockTimeout"); ok {
-		if duration, err := time.ParseDuration(activityLockTimeout); err == nil {
-			sqliteOptions.ActivityLockTimeout = duration
-		} else {
-			log.Errorf("Invalid activityLockTimeout provided in backend workflow component: %v", err)
-		}
-	}
-
-	return sqlite.NewSqliteBackend(sqliteOptions, log)
+	return sqlite.NewSqliteBackend(&sqliteMetadata.SqliteOptions, log)
 }
 
 func InitializeWorkflowBackend(appID string, backendType string, wfe *WorkflowEngine, backendComponentInfo *wfbe.WorkflowBackendComponentInfo, log logger.Logger) backend.Backend {

@@ -13,9 +13,44 @@ limitations under the License.
 
 package wfbackend
 
-import "github.com/dapr/components-contrib/metadata"
+import (
+	"time"
+
+	"github.com/dapr/components-contrib/metadata"
+	metadataUtil "github.com/dapr/kit/metadata"
+	"github.com/microsoft/durabletask-go/backend/sqlite"
+)
+
+const (
+	defaultFilePath                 = ""
+	defaultOrchestrationLockTimeout = 2 * time.Minute
+	defaultActivityLockTimeout      = 2 * time.Minute
+)
 
 // Metadata represents a set of workflow specific properties.
 type Metadata struct {
 	metadata.Base `json:",inline"`
+}
+
+type sqliteMetadata struct {
+	sqlite.SqliteOptions
+}
+
+func NewSqliteMetadata() sqliteMetadata {
+	return sqliteMetadata{
+		SqliteOptions: sqlite.SqliteOptions{
+			FilePath:                 defaultFilePath,
+			OrchestrationLockTimeout: defaultOrchestrationLockTimeout,
+			ActivityLockTimeout:      defaultActivityLockTimeout,
+		},
+	}
+}
+
+func (m *sqliteMetadata) Parse(meta map[string]string) error {
+	err := metadataUtil.DecodeMetadata(meta, &m.SqliteOptions)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
