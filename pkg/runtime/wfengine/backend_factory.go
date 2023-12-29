@@ -16,49 +16,34 @@ package wfengine
 
 import (
 	"github.com/microsoft/durabletask-go/backend"
-	"github.com/microsoft/durabletask-go/backend/sqlite"
 
 	wfbe "github.com/dapr/dapr/pkg/components/wfbackend"
 	"github.com/dapr/kit/logger"
 )
 
 const (
-	ActorBackendType  = "workflowbackend.actor"
-	SqliteBackendType = "workflowbackend.sqlite"
+	ActorBackendType = "workflowbackend.actor"
 )
 
-type BackendFactory func(appID string, wfe *WorkflowEngine, backendComponentInfo *wfbe.WorkflowBackendComponentInfo, log logger.Logger) backend.Backend
+type BackendFactory func(appID string, backendComponentInfo *wfbe.WorkflowBackendComponentInfo, log logger.Logger) backend.Backend
 
 var backendFactories = map[string]BackendFactory{
-	ActorBackendType:  getActorBackend,
-	SqliteBackendType: getSqliteBackend,
+	ActorBackendType: getActorBackend,
 }
 
-func getActorBackend(appID string, wfe *WorkflowEngine, backendComponentInfo *wfbe.WorkflowBackendComponentInfo, log logger.Logger) backend.Backend {
+func RegisterBackendFactory(backendType string, factory BackendFactory) {
+	backendFactories[backendType] = factory
+}
+
+func getActorBackend(appID string, backendComponentInfo *wfbe.WorkflowBackendComponentInfo, log logger.Logger) backend.Backend {
 	log.Infof("Initializing actor backend for appID: %s", appID)
-	wfe.BackendType = ActorBackendType
 
-	return NewActorBackend(appID, wfe)
+	return NewActorBackend(appID)
 }
 
-func getSqliteBackend(appID string, wfe *WorkflowEngine, backendComponentInfo *wfbe.WorkflowBackendComponentInfo, log logger.Logger) backend.Backend {
-	log.Infof("Initializing sqlite backend for appID: %s", appID)
-	wfe.BackendType = SqliteBackendType
-
-	sqliteMetadata := wfbe.NewSqliteMetadata()
-	err := sqliteMetadata.Parse(backendComponentInfo.WorkflowBackendMetadata.Properties)
-
-	if err != nil {
-		log.Errorf("Failed to parse sqlite backend metadata: %s, sqlite backend is not initialized", err)
-		return nil
-	}
-
-	return sqlite.NewSqliteBackend(&sqliteMetadata.SqliteOptions, log)
-}
-
-func InitializeWorkflowBackend(appID string, backendType string, wfe *WorkflowEngine, backendComponentInfo *wfbe.WorkflowBackendComponentInfo, log logger.Logger) backend.Backend {
+func InitializeWorkflowBackend(appID string, backendType string, backendComponentInfo *wfbe.WorkflowBackendComponentInfo, log logger.Logger) backend.Backend {
 	if backendComponentInfo == nil {
-		return getActorBackend(appID, wfe, backendComponentInfo, log)
+		return getActorBackend(appID, backendComponentInfo, log)
 	}
 
 	if backendComponentInfo.InvalidWorkflowBackend {
@@ -67,7 +52,7 @@ func InitializeWorkflowBackend(appID string, backendType string, wfe *WorkflowEn
 	}
 
 	if factory, ok := backendFactories[backendType]; ok {
-		return factory(appID, wfe, backendComponentInfo, log)
+		return factory(appID, backendComponentInfo, log)
 	}
 
 	return nil

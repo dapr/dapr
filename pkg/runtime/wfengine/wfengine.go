@@ -68,15 +68,14 @@ func NewWorkflowEngine(appID string, spec config.WorkflowSpec, backendManager pr
 		wfEngineReadyCh: make(chan struct{}),
 	}
 
-	var backendType string
 	backendComponentInfo, ok := backendManager.WorkflowBackendComponentInfo()
 	if ok && backendComponentInfo != nil {
-		backendType = backendComponentInfo.WorkflowBackendType
+		engine.BackendType = backendComponentInfo.WorkflowBackendType
 	} else {
-		backendType = ActorBackendType
+		engine.BackendType = ActorBackendType
 	}
 
-	be := InitializeWorkflowBackend(appID, backendType, engine, backendComponentInfo, wfBackendLogger)
+	be := InitializeWorkflowBackend(appID, engine.BackendType, backendComponentInfo, wfBackendLogger)
 	engine.Backend = be
 
 	return engine

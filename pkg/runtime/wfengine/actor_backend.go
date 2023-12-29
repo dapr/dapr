@@ -69,7 +69,7 @@ type ActorBackend struct {
 	actorsReadyCh chan struct{}
 }
 
-func NewActorBackend(appID string, wfengine *WorkflowEngine) *ActorBackend {
+func NewActorBackend(appID string) *ActorBackend {
 	backendConfig := NewActorsBackendConfig(appID)
 
 	// These channels are used by actors to call into this backend object
