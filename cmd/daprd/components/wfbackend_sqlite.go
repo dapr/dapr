@@ -20,5 +20,5 @@ import (
 )
 
 func init() {
-	wfbeLoader.DefaultRegistry.RegisterComponent(wfbeLoader.NewWorkflowBackendComp, "actor", "sqlite")
+	wfbeLoader.DefaultRegistry.RegisterComponent(wfbeLoader.NewWorkflowBackendComp, "sqlite")
 }
