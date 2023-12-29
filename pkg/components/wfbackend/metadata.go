@@ -16,9 +16,10 @@ package wfbackend
 import (
 	"time"
 
+	"github.com/microsoft/durabletask-go/backend/sqlite"
+
 	"github.com/dapr/components-contrib/metadata"
 	metadataUtil "github.com/dapr/kit/metadata"
-	"github.com/microsoft/durabletask-go/backend/sqlite"
 )
 
 const (

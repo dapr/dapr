@@ -15,10 +15,12 @@ limitations under the License.
 package wfengine
 
 import (
-	wfbe "github.com/dapr/dapr/pkg/components/wfbackend"
-	"github.com/dapr/kit/logger"
 	"github.com/microsoft/durabletask-go/backend"
 	"github.com/microsoft/durabletask-go/backend/sqlite"
+
+	"github.com/dapr/kit/logger"
+
+	wfbe "github.com/dapr/dapr/pkg/components/wfbackend"
 )
 
 const (
