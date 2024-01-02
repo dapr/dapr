@@ -247,7 +247,7 @@ func TestDeleteActorState(t *testing.T) {
 		})
 
 		// assert
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		mockActors.AssertNumberOfCalls(t, "DeleteState", 1)
 	})
 }
