@@ -912,25 +912,6 @@ func getEngine(t *testing.T, ctx context.Context) *wfengine.WorkflowEngine {
 	return engine
 }
 
-// TestStartWorkflowEngine validates that starting the workflow engine returns no errors.
-func TestStartWorkflowEngineWithSqliteBackend(t *testing.T) {
-	ctx := context.Background()
-	engine := getEngineWithSqliteBackend(t, ctx)
-	engine.ConfigureGrpcExecutor()
-	grpcServer := grpc.NewServer()
-	engine.RegisterGrpcServer(grpcServer)
-	err := engine.Start(ctx)
-	require.NoError(t, err)
-}
-
-func getEngineWithSqliteBackend(t *testing.T, ctx context.Context) *wfengine.WorkflowEngine {
-	spec := config.WorkflowSpec{MaxConcurrentWorkflowInvocations: 100, MaxConcurrentActivityInvocations: 100}
-	mockWorkflowBackendManager := new(daprt.MockSqliteBackendManager)
-	engine := wfengine.NewWorkflowEngine(testAppID, spec, mockWorkflowBackendManager)
-
-	return engine
-}
-
 func getEngineAndStateStore(t *testing.T, ctx context.Context) (*wfengine.WorkflowEngine, *daprt.FakeStateStore) {
 	spec := config.WorkflowSpec{MaxConcurrentWorkflowInvocations: 100, MaxConcurrentActivityInvocations: 100}
 	processor := processor.New(processor.Options{

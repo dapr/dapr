@@ -527,9 +527,8 @@ func TestResumeWorkflowBeta1Api(t *testing.T) {
 }
 
 func getWorkflowEngine() *wfengine.WorkflowEngine {
-	mockWorkflowBackendManager := new(daprt.MockSqliteBackendManager)
 	spec := config.WorkflowSpec{MaxConcurrentWorkflowInvocations: 100, MaxConcurrentActivityInvocations: 100}
-	wfengine := wfengine.NewWorkflowEngine("testAppID", spec, mockWorkflowBackendManager)
+	wfengine := wfengine.NewWorkflowEngine("testAppID", spec, nil)
 	wfengine.SetWorkflowEngineReadyDone()
 	return wfengine
 }

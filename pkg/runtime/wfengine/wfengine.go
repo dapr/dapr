@@ -25,6 +25,7 @@ import (
 	"github.com/microsoft/durabletask-go/backend"
 	"google.golang.org/grpc"
 
+	"github.com/dapr/dapr/pkg/components/wfbackend"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/runtime/processor"
 	actorsbe "github.com/dapr/dapr/pkg/runtime/wfengine/backends/actors"
@@ -66,7 +67,15 @@ func NewWorkflowEngine(appID string, spec config.WorkflowSpec, backendManager pr
 		engine.Backend, ok = backendManager.GetBackend()
 	}
 	if !ok {
-		wfLogger.Errorf("Workflow backend not initialized: no component loaded")
+		// If no backend was initialized by the manager, create a backend backed by actors
+		var err error
+		engine.Backend, err = actorsbe.NewActorBackend(wfbackend.Metadata{
+			AppID: appID,
+		}, nil)
+		if err != nil {
+			// Should never happen
+			wfLogger.Errorf("Failed to initialize actors backend for workflow: %v", err)
+		}
 	}
 
 	return engine
@@ -179,7 +188,7 @@ func (wfe *WorkflowEngine) Close(ctx context.Context) error {
 
 // WaitForWorkflowEngineReady waits for the workflow engine to be ready.
 func (wfe *WorkflowEngine) WaitForWorkflowEngineReady(ctx context.Context) {
-	// Quick check to avoid allocating a timer if the workflow engine are ready
+	// Quick check to avoid allocating a timer if the workflow engine is ready
 	if wfe.wfEngineReady.Load() {
 		return
 	}
