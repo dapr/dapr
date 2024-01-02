@@ -14,7 +14,6 @@ limitations under the License.
 package http
 
 import (
-	"errors"
 	"net/http"
 
 	"github.com/valyala/fasthttp"
@@ -81,9 +80,7 @@ func universalFastHTTPErrorResponder(reqCtx *fasthttp.RequestCtx, err error) {
 	}
 
 	// Check if it's a kitErrors.Error object
-	var kitErr kiterrors.Error
-	ok = errors.As(err, &kitErr)
-	if ok {
+	if kitErr, ok := kiterrors.FromError(err); ok {
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(kitErr.HTTPStatusCode(), kitErr))
 		return
 	}
