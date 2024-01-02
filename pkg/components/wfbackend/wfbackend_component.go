@@ -29,6 +29,6 @@ type workflowBackendComponent struct {
 }
 
 func (c *workflowBackendComponent) Init(metadata Metadata) error {
-	c.logger.Info("Initializing Dapr workflow backend component ")
+	c.logger.Info("Initializing Dapr workflow backend component %s.", metadata.Name)
 	return nil
 }
