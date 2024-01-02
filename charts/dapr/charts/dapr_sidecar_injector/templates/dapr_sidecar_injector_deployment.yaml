@@ -154,6 +154,11 @@ spec:
 {{- if not .Values.global.actors.enabled }}
         - name: SKIP_PLACEMENT
           value: "true"
+{{- else }}
+{{- if .Values.global.ha.enabled }}
+        - name: PLACEMENT_ADDRESSES
+          value: "dapr-placement-server-0.dapr-placement-server.{{ .Release.Namespace }}.svc.cluster.local:50005,dapr-placement-server-1.dapr-placement-server.{{ .Release.Namespace }}.svc.cluster.local:50005,dapr-placement-server-2.dapr-placement-server.{{ .Release.Namespace }}.svc.cluster.local:50005"
+{{- end }}
 {{- end }}
         - name: SIDECAR_RUN_AS_NON_ROOT
           value: "{{ .Values.sidecarRunAsNonRoot }}"
