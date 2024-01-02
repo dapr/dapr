@@ -172,6 +172,7 @@ func New(opts Options) *Processor {
 	})
 
 	wfbe := wfbeProcessor.New(wfbeProcessor.Options{
+		AppID:          opts.ID,
 		Registry:       opts.Registry.WorkflowBackends(),
 		ComponentStore: opts.ComponentStore,
 		Meta:           opts.Meta,

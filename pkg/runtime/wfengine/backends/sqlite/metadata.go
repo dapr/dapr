@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,41 +11,35 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package wfbackend
+package sqlite
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/microsoft/durabletask-go/backend/sqlite"
 
-	metadataUtil "github.com/dapr/kit/metadata"
-)
-
-const (
-	defaultSQLiteFilePath                 = ""
-	defaultSQLiteOrchestrationLockTimeout = 2 * time.Minute
-	defaultSQLiteActivityLockTimeout      = 2 * time.Minute
+	kitmd "github.com/dapr/kit/metadata"
 )
 
 type sqliteMetadata struct {
 	sqlite.SqliteOptions
 }
 
-func NewSqliteMetadata() sqliteMetadata {
-	return sqliteMetadata{
-		SqliteOptions: sqlite.SqliteOptions{
-			FilePath:                 defaultSQLiteFilePath,
-			OrchestrationLockTimeout: defaultSQLiteOrchestrationLockTimeout,
-			ActivityLockTimeout:      defaultSQLiteActivityLockTimeout,
-		},
-	}
-}
-
 func (m *sqliteMetadata) Parse(meta map[string]string) error {
-	err := metadataUtil.DecodeMetadata(meta, &m.SqliteOptions)
+	// Reset to default values
+	m.reset()
+
+	err := kitmd.DecodeMetadata(meta, &m.SqliteOptions)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to decode metadata: %w", err)
 	}
 
 	return nil
+}
+
+func (m *sqliteMetadata) reset() {
+	m.FilePath = ""
+	m.OrchestrationLockTimeout = 2 * time.Minute
+	m.ActivityLockTimeout = 2 * time.Minute
 }

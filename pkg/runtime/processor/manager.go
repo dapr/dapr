@@ -17,10 +17,11 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/microsoft/durabletask-go/backend"
+
 	"github.com/dapr/components-contrib/bindings"
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	wfbe "github.com/dapr/dapr/pkg/components/wfbackend"
 	"github.com/dapr/dapr/pkg/outbox"
 	"github.com/dapr/dapr/pkg/runtime/meta"
 )
@@ -60,7 +61,7 @@ type BindingManager interface {
 }
 
 type WorkflowBackendManager interface {
-	WorkflowBackendComponentInfo() (*wfbe.WorkflowBackendComponentInfo, bool)
+	GetBackend() (backend.Backend, bool)
 }
 
 func (p *Processor) managerFromComp(comp componentsapi.Component) (manager, error) {

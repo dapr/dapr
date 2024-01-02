@@ -45,11 +45,16 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/processor"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
+	actorsbe "github.com/dapr/dapr/pkg/runtime/wfengine/backends/actors"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/logger"
 )
 
-const testAppID = "wf-app"
+const (
+	testAppID         = "wf-app"
+	workflowActorType = "dapr.internal.default.wf-app.workflow"
+	activityActorType = "dapr.internal.default.wf-app.activity"
+)
 
 func fakeStore() state.Store {
 	return daprt.NewFakeStateStore()
@@ -80,7 +85,7 @@ func GetTestOptions() []func(wfe *wfengine.WorkflowEngine) string {
 		},
 		func(wfe *wfengine.WorkflowEngine) string {
 			// disable caching to test recovery from failure
-			if abe, ok := wfe.Backend.(*wfengine.ActorBackend); ok {
+			if abe, ok := wfe.Backend.(*actorsbe.ActorBackend); ok {
 				abe.DisableActorCaching(true)
 				return "caching disabled"
 			}
@@ -463,7 +468,7 @@ func TestRecreateCompletedWorkflow(t *testing.T) {
 func TestInternalActorsSetupForWF(t *testing.T) {
 	ctx := context.Background()
 	_, engine := startEngine(ctx, t, task.NewTaskRegistry())
-	abe, ok := engine.Backend.(*wfengine.ActorBackend)
+	abe, ok := engine.Backend.(*actorsbe.ActorBackend)
 
 	assert.True(t, ok, "engine.Backend is of type ActorBackend")
 	assert.Len(t, abe.GetInternalActorsMap(), 2)
@@ -520,7 +525,7 @@ func TestRetryWorkflowOnTimeout(t *testing.T) {
 	ctx := context.Background()
 	client, engine := startEngine(ctx, t, r)
 
-	abe, _ := engine.Backend.(*wfengine.ActorBackend)
+	abe, _ := engine.Backend.(*actorsbe.ActorBackend)
 
 	// Set a really short timeout to override the default workflow timeout so that we can exercise the timeout
 	// handling codepath in a short period of time.
@@ -572,7 +577,7 @@ func TestRetryActivityOnTimeout(t *testing.T) {
 	ctx := context.Background()
 	client, engine := startEngine(ctx, t, r)
 
-	abe, _ := engine.Backend.(*wfengine.ActorBackend)
+	abe, _ := engine.Backend.(*actorsbe.ActorBackend)
 
 	// Set a really short timeout to override the default activity timeout (1 hour at the time of writing)
 	// so that we can exercise the timeout handling codepath in a short period of time.
@@ -902,7 +907,7 @@ func getEngine(t *testing.T, ctx context.Context) *wfengine.WorkflowEngine {
 	if err := actors.Init(context.Background()); err != nil {
 		require.NoError(t, err)
 	}
-	abe, _ := engine.Backend.(*wfengine.ActorBackend)
+	abe, _ := engine.Backend.(*actorsbe.ActorBackend)
 	abe.SetActorRuntime(ctx, actors)
 	return engine
 }
@@ -951,7 +956,7 @@ func getEngineAndStateStore(t *testing.T, ctx context.Context) (*wfengine.Workfl
 	})
 
 	require.NoError(t, actors.Init(context.Background()))
-	abe, _ := engine.Backend.(*wfengine.ActorBackend)
+	abe, _ := engine.Backend.(*actorsbe.ActorBackend)
 	abe.SetActorRuntime(ctx, actors)
 	return engine, store
 }

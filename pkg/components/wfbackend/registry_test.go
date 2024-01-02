@@ -18,6 +18,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/microsoft/durabletask-go/backend"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -26,7 +27,7 @@ import (
 )
 
 type mockWorkflowBackend struct {
-	wbe.WorkflowBackend
+	backend.Backend
 }
 
 func TestRegistry(t *testing.T) {
@@ -42,38 +43,50 @@ func TestRegistry(t *testing.T) {
 		// Initiate mock object
 		wbeMock := &mockWorkflowBackend{}
 		wbeMockV2 := &mockWorkflowBackend{}
+		md := wbe.Metadata{}
 
 		// act
-		testRegistry.RegisterComponent(func(_ logger.Logger) wbe.WorkflowBackend {
-			return wbeMock
+		testRegistry.RegisterComponent(func(_ wbe.Metadata, _ logger.Logger) (backend.Backend, error) {
+			return wbeMock, nil
 		}, backendName)
-		testRegistry.RegisterComponent(func(_ logger.Logger) wbe.WorkflowBackend {
-			return wbeMockV2
+		testRegistry.RegisterComponent(func(_ wbe.Metadata, _ logger.Logger) (backend.Backend, error) {
+			return wbeMockV2, nil
 		}, backendNameV2)
 
 		// assert v0 and v1
-		wbe, e := testRegistry.Create(componentType, "v0", "")
-		require.NoError(t, e)
+		wbeFn, err := testRegistry.Create(componentType, "v0", "")
+		require.NoError(t, err)
+		wbe, err := wbeFn(md)
+		require.NoError(t, err)
 		assert.Same(t, wbeMock, wbe)
-		wbe, e = testRegistry.Create(componentType, "v1", "")
-		require.NoError(t, e)
+
+		wbeFn, err = testRegistry.Create(componentType, "v1", "")
+		require.NoError(t, err)
+		wbe, err = wbeFn(md)
+		require.NoError(t, err)
 		assert.Same(t, wbeMock, wbe)
 
 		// assert v2
-		wbeV2, e := testRegistry.Create(componentType, "v2", "")
-		require.NoError(t, e)
-		assert.Same(t, wbeMockV2, wbeV2)
+		wbeFn, err = testRegistry.Create(componentType, "v2", "")
+		require.NoError(t, err)
+		wbe, err = wbeFn(md)
+		require.NoError(t, err)
+		assert.Same(t, wbeMockV2, wbe)
 
 		// check case-insensitivity
-		wbeV2, e = testRegistry.Create(strings.ToUpper(componentType), "V2", "")
-		require.NoError(t, e)
-		assert.Same(t, wbeMockV2, wbeV2)
+		wbeFn, err = testRegistry.Create(strings.ToUpper(componentType), "V2", "")
+		require.NoError(t, err)
+		wbe, err = wbeFn(md)
+		require.NoError(t, err)
+		assert.Same(t, wbeMockV2, wbe)
 
 		// check case-insensitivity
 		testRegistry.Logger = logger.NewLogger("wfengine.backend")
-		wbeV2, e = testRegistry.Create(strings.ToUpper(componentType), "V2", "workflowbackendlog")
-		require.NoError(t, e)
-		assert.Same(t, wbeMockV2, wbeV2)
+		wbeFn, err = testRegistry.Create(strings.ToUpper(componentType), "V2", "workflowbackendlog")
+		require.NoError(t, err)
+		wbe, err = wbeFn(md)
+		require.NoError(t, err)
+		assert.Same(t, wbeMockV2, wbe)
 	})
 
 	t.Run("workflow backend is not registered", func(t *testing.T) {

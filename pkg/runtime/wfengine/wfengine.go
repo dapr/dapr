@@ -27,6 +27,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/runtime/processor"
+	actorsbe "github.com/dapr/dapr/pkg/runtime/wfengine/backends/actors"
 	"github.com/dapr/kit/logger"
 )
 
@@ -41,21 +42,13 @@ type WorkflowEngine struct {
 	startMutex      sync.Mutex
 	disconnectChan  chan any
 	spec            config.WorkflowSpec
-	BackendType     string
 	wfEngineReady   atomic.Bool
 	wfEngineReadyCh chan struct{}
 }
 
-const (
-	defaultNamespace     = "default"
-	WorkflowNameLabelKey = "workflow"
-	ActivityNameLabelKey = "activity"
-)
-
 var (
-	wfLogger            = logger.NewLogger("dapr.runtime.wfengine")
-	wfBackendLogger     = logger.NewLogger("wfengine.durabletask.backend")
-	errExecutionAborted = errors.New("execution aborted")
+	wfLogger        = logger.NewLogger("dapr.runtime.wfengine")
+	wfBackendLogger = logger.NewLogger("wfengine.durabletask.backend")
 )
 
 func IsWorkflowRequest(path string) bool {
@@ -68,19 +61,12 @@ func NewWorkflowEngine(appID string, spec config.WorkflowSpec, backendManager pr
 		wfEngineReadyCh: make(chan struct{}),
 	}
 
-	backendComponentInfo, ok := backendManager.WorkflowBackendComponentInfo()
-	if ok && backendComponentInfo != nil {
-		engine.BackendType = backendComponentInfo.WorkflowBackendType
-	} else {
-		engine.BackendType = ActorBackendType
+	var ok bool
+	if backendManager != nil {
+		engine.Backend, ok = backendManager.GetBackend()
 	}
-
-	be, err := InitializeWorkflowBackend(appID, engine.BackendType, backendComponentInfo, wfBackendLogger)
-
-	if err != nil {
-		wfLogger.Errorf("Failed to initialize workflow backend: %v", err)
-	} else {
-		engine.Backend = be
+	if !ok {
+		wfLogger.Errorf("Workflow backend not initialized: no component loaded")
 	}
 
 	return engine
@@ -137,7 +123,7 @@ func (wfe *WorkflowEngine) Start(ctx context.Context) (err error) {
 	}
 
 	// Register actor backend if backend is actor
-	if abe, ok := wfe.Backend.(*ActorBackend); ok {
+	if abe, ok := wfe.Backend.(*actorsbe.ActorBackend); ok {
 		abe.WaitForActorsReady(ctx)
 		abe.RegisterActor(ctx)
 	}

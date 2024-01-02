@@ -17,8 +17,9 @@ package components
 
 import (
 	wfbeLoader "github.com/dapr/dapr/pkg/components/wfbackend"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/backends/sqlite"
 )
 
 func init() {
-	wfbeLoader.DefaultRegistry.RegisterComponent(wfbeLoader.NewWorkflowBackend, "sqlite")
+	wfbeLoader.DefaultRegistry.RegisterComponent(sqlite.NewSQLiteBackend, "sqlite")
 }

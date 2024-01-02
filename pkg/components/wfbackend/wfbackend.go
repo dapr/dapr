@@ -13,15 +13,11 @@ limitations under the License.
 
 package wfbackend
 
-import "github.com/dapr/components-contrib/metadata"
+import (
+	"github.com/microsoft/durabletask-go/backend"
 
-// Workflow is an interface to perform operations on Workflow.
-type WorkflowBackend interface {
-	Init(metadata Metadata) error
-}
+	"github.com/dapr/kit/logger"
+)
 
-type WorkflowBackendComponentInfo struct {
-	WorkflowBackendType     string
-	WorkflowBackendMetadata metadata.Base
-	InvalidWorkflowBackend  bool
-}
+// WorkflowBackend is a function that returns a workflow backend
+type WorkflowBackend = func(Metadata, logger.Logger) (backend.Backend, error)

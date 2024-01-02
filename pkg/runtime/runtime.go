@@ -617,7 +617,9 @@ func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) (err error) {
 }
 
 func setActorRuntimeForBackend(ctx context.Context, be backend.Backend, actorRuntime actors.ActorRuntime) {
-	if abe, ok := be.(*wfengine.ActorBackend); ok {
+	if abe, ok := be.(interface {
+		SetActorRuntime(ctx context.Context, actorRuntime actors.ActorRuntime)
+	}); ok {
 		log.Info("Configuring workflow engine with actors backend")
 		abe.SetActorRuntime(ctx, actorRuntime)
 	}
@@ -626,18 +628,16 @@ func setActorRuntimeForBackend(ctx context.Context, be backend.Backend, actorRun
 func (a *DaprRuntime) initWorkflowEngine(ctx context.Context) {
 	wfComponentFactory := wfengine.BuiltinWorkflowFactory(a.workflowEngine)
 
-	if a.workflowEngine.BackendType == wfengine.ActorBackendType {
-		setActorRuntimeForBackend(ctx, a.workflowEngine.Backend, a.actor)
+	reg := a.runtimeConfig.registry.Workflows()
+	if reg == nil {
+		log.Info("No workflow registry available, not registering Dapr workflow component...")
+		return
 	}
 
-	if reg := a.runtimeConfig.registry.Workflows(); reg != nil {
-		log.Infof("Registering component for dapr workflow engine...")
-		reg.RegisterComponent(wfComponentFactory, "dapr")
-		if !a.processor.AddPendingComponent(ctx, wfengine.ComponentDefinition) {
-			log.Warn("failed to initialize Dapr workflow component")
-		}
-	} else {
-		log.Infof("No workflow registry available, not registering Dapr workflow component...")
+	log.Infof("Registering component for dapr workflow engine...")
+	reg.RegisterComponent(wfComponentFactory, "dapr")
+	if !a.processor.AddPendingComponent(ctx, wfengine.ComponentDefinition) {
+		log.Warn("failed to initialize Dapr workflow component")
 	}
 }
 

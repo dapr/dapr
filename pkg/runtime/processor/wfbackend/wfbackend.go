@@ -15,8 +15,10 @@ package wfbackend
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"sync"
+
+	"github.com/microsoft/durabletask-go/backend"
 
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	wfbeComp "github.com/dapr/dapr/pkg/components/wfbackend"
@@ -30,17 +32,19 @@ import (
 var log = logger.NewLogger("dapr.runtime.processor.workflowbackend")
 
 type Options struct {
+	AppID          string
 	Registry       *wfbeComp.Registry
 	ComponentStore *compstore.ComponentStore
 	Meta           *meta.Meta
 }
 
 type workflowBackend struct {
-	registry             *wfbeComp.Registry
-	compStore            *compstore.ComponentStore
-	meta                 *meta.Meta
-	lock                 sync.Mutex
-	backendComponentInfo *wfbeComp.WorkflowBackendComponentInfo
+	registry  *wfbeComp.Registry
+	compStore *compstore.ComponentStore
+	meta      *meta.Meta
+	lock      sync.Mutex
+	backend   backend.Backend
+	appID     string
 }
 
 func New(opts Options) *workflowBackend {
@@ -48,6 +52,7 @@ func New(opts Options) *workflowBackend {
 		registry:  opts.Registry,
 		compStore: opts.ComponentStore,
 		meta:      opts.Meta,
+		appID:     opts.AppID,
 	}
 }
 
@@ -55,69 +60,57 @@ func (wfbe *workflowBackend) Init(ctx context.Context, comp compapi.Component) e
 	wfbe.lock.Lock()
 	defer wfbe.lock.Unlock()
 
-	// create the component
+	if wfbe.backend != nil {
+		// Can only have 1 workflow backend component
+		return errors.New("cannot create more than one workflow backend component")
+	}
+
+	// Create the component
 	fName := comp.LogName()
-	workflowBackendComp, err := wfbe.registry.Create(comp.Spec.Type, comp.Spec.Version, fName)
+	beFactory, err := wfbe.registry.Create(comp.Spec.Type, comp.Spec.Version, fName)
 	if err != nil {
-		log.Warnf("error creating workflow backend component (%s): %s", comp.LogName(), err)
+		log.Errorf("Error creating workflow backend component (%s): %v", fName, err)
 		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
-		wfbe.backendComponentInfo = &wfbeComp.WorkflowBackendComponentInfo{
-			InvalidWorkflowBackend: true,
-		}
 		return err
 	}
 
-	if workflowBackendComp == nil {
+	if beFactory == nil {
 		return nil
 	}
 
-	// initialization
+	// Initialization
 	baseMetadata, err := wfbe.meta.ToBaseMetadata(comp)
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
 		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 	}
-	err = workflowBackendComp.Init(wfbeComp.Metadata{Base: baseMetadata})
+
+	be, err := beFactory(wfbeComp.Metadata{
+		AppID: wfbe.appID,
+		Base:  baseMetadata,
+	})
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
 		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 	}
 
-	// save workflow related configuration
-	wfbe.compStore.AddWorkflowBackend(comp.ObjectMeta.Name, workflowBackendComp)
+	log.Infof("Using %s as workflow backend", comp.Spec.Type)
 	diag.DefaultMonitoring.ComponentInitialized(comp.Spec.Type)
-
-	if wfbe.backendComponentInfo == nil {
-		log.Info("Using '" + comp.Spec.Type + "' as workflow backend")
-		wfbe.backendComponentInfo = &wfbeComp.WorkflowBackendComponentInfo{
-			WorkflowBackendType:     comp.Spec.Type,
-			WorkflowBackendMetadata: baseMetadata,
-		}
-	} else if wfbe.backendComponentInfo.WorkflowBackendType != comp.Spec.Type {
-		return fmt.Errorf("detected duplicate workflow backend: %s and %s", wfbe.backendComponentInfo.WorkflowBackendType, comp.Spec.Type)
-	}
+	wfbe.backend = be
 
 	return nil
 }
 
 func (wfbe *workflowBackend) Close(comp compapi.Component) error {
-	wfbe.lock.Lock()
-	defer wfbe.lock.Unlock()
-
-	// We don't "Close" a workflow here because that has no meaning today since
-	// Dapr doesn't support third-party workflows. Internal workflows are based
-	// on the actor subsystem so there is nothing to close.
-	wfbe.compStore.DeleteWorkflowBackend(comp.Name)
-
 	return nil
 }
 
-func (wfbe *workflowBackend) WorkflowBackendComponentInfo() (*wfbeComp.WorkflowBackendComponentInfo, bool) {
+func (wfbe *workflowBackend) GetBackend() (backend.Backend, bool) {
 	wfbe.lock.Lock()
 	defer wfbe.lock.Unlock()
 
-	if wfbe.backendComponentInfo == nil {
+	if wfbe.backend == nil {
 		return nil, false
 	}
-	return wfbe.backendComponentInfo, true
+	return wfbe.backend, true
 }

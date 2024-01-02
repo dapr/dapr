@@ -17,8 +17,9 @@ package components
 
 import (
 	wfbeLoader "github.com/dapr/dapr/pkg/components/wfbackend"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/backends/actors"
 )
 
 func init() {
-	wfbeLoader.DefaultRegistry.RegisterComponent(wfbeLoader.NewWorkflowBackend, "actor")
+	wfbeLoader.DefaultRegistry.RegisterComponent(actors.NewActorBackend, "actor", "actors")
 }

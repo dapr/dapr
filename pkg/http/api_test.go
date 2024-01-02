@@ -2654,9 +2654,8 @@ func TestV1Beta1Workflow(t *testing.T) {
 	compStore := compstore.New()
 	compStore.AddWorkflow(componentName, fakeWorkflowComponent)
 
-	mockWorkflowBackendManager := new(daprt.MockSqliteBackendManager)
 	spec := config.WorkflowSpec{MaxConcurrentWorkflowInvocations: 100, MaxConcurrentActivityInvocations: 100}
-	wfengine := wfengine.NewWorkflowEngine("testAppID", spec, mockWorkflowBackendManager)
+	wfengine := wfengine.NewWorkflowEngine("testAppID", spec, nil)
 	wfengine.SetWorkflowEngineReadyDone()
 
 	testAPI := &api{

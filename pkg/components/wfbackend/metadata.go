@@ -20,4 +20,7 @@ import (
 // Metadata represents a set of properties specific for workflow backends.
 type Metadata struct {
 	metadata.Base `json:",inline"`
+
+	// Dapr app ID
+	AppID string
 }

@@ -19,6 +19,7 @@ import (
 	"encoding/hex"
 	"testing"
 
+	"github.com/microsoft/durabletask-go/backend"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -92,7 +93,7 @@ func TestInitWorkflowBackend(t *testing.T) {
 		comp := mockWorkflowBackendComponent("noerror")
 
 		// act
-		initErr := proc.Init(context.TODO(), comp)
+		initErr := proc.Init(context.Background(), comp)
 
 		// assert
 		require.NoError(t, initErr, "expected no error")
@@ -112,7 +113,7 @@ func TestInitWorkflowBackend(t *testing.T) {
 		comp := mockWorkflowBackendComponent("noerror")
 
 		// act
-		initErr := newProc.Init(context.TODO(), comp)
+		initErr := newProc.Init(context.Background(), comp)
 		closeErr := newProc.Close(comp)
 
 		// assert
@@ -125,7 +126,7 @@ func TestInitWorkflowBackend(t *testing.T) {
 		initMockWorkflowBackendForRegistry(reg, "error", connectionString, assert.AnError)
 
 		// act
-		err := proc.Init(context.TODO(), mockWorkflowBackendComponent("error"))
+		err := proc.Init(context.Background(), mockWorkflowBackendComponent("error"))
 
 		// assert
 		require.Error(t, err, "expected error")
@@ -144,14 +145,14 @@ func TestInitWorkflowBackend(t *testing.T) {
 		})
 
 		// act
-		err := newProc.Init(context.TODO(), mockWorkflowBackendComponent("error1"))
+		err := newProc.Init(context.Background(), mockWorkflowBackendComponent("error1"))
 
 		// assert
 		require.Error(t, err, "expected error")
 		assert.Equal(t, "couldn't find wokflow backend workflowbackend.mockWorkflowBackend/v1", err.Error(), "expected error strings to match")
 	})
 
-	t.Run("test workflow backend component info not nil", func(t *testing.T) {
+	t.Run("test workflow backend not nil", func(t *testing.T) {
 		// setup
 		newReg := registry.New(registry.NewOptions().WithWorkflowBackends(wfbe.NewRegistry()))
 		newCompStore := compstore.New()
@@ -163,20 +164,19 @@ func TestInitWorkflowBackend(t *testing.T) {
 		})
 		initMockWorkflowBackendForRegistry(newReg, "noerror", connectionString, nil)
 		comp := mockWorkflowBackendComponent("noerror")
-		be := newProc.WorkflowBackend()
+		mgr := newProc.WorkflowBackend()
 
 		// act
-		initErr := newProc.Init(context.TODO(), comp)
-		componentInfo, ok := be.WorkflowBackendComponentInfo()
+		initErr := newProc.Init(context.Background(), comp)
+		be, ok := mgr.GetBackend()
 
 		// assert
-		require.NoError(t, initErr, "expected no error")
-		require.True(t, ok, "expected component info ok")
-		assert.NotNil(t, componentInfo, "expected component info not nil")
-		assert.Equal(t, "workflowbackend.mockWorkflowBackend", componentInfo.WorkflowBackendType, "expected workflow backend type to match")
+		require.NoError(t, initErr)
+		require.True(t, ok)
+		assert.NotNil(t, be)
 	})
 
-	t.Run("test workflow backend component info nil", func(t *testing.T) {
+	t.Run("test workflow backend nil", func(t *testing.T) {
 		// setup
 		newReg := registry.New(registry.NewOptions().WithWorkflowBackends(wfbe.NewRegistry()))
 		newCompStore := compstore.New()
@@ -186,14 +186,14 @@ func TestInitWorkflowBackend(t *testing.T) {
 			GlobalConfig:   new(config.Configuration),
 			Meta:           meta.New(meta.Options{Mode: modes.StandaloneMode}),
 		})
-		be := newProc.WorkflowBackend()
+		mgr := newProc.WorkflowBackend()
 
 		// act
-		componentInfo, ok := be.WorkflowBackendComponentInfo()
+		be, ok := mgr.GetBackend()
 
 		// assert
-		assert.Nil(t, componentInfo, "expected component info not nil")
-		require.False(t, ok, "expected component info not ok")
+		require.False(t, ok)
+		assert.Nil(t, be)
 	})
 }
 
@@ -201,8 +201,8 @@ func initMockWorkflowBackendForRegistry(reg *registry.Registry, name, connection
 	mockWorkflowBackend := new(daprt.MockWorkflowBackend)
 
 	reg.WorkflowBackends().RegisterComponent(
-		func(_ logger.Logger) wfbe.WorkflowBackend {
-			return mockWorkflowBackend
+		func(_ wfbe.Metadata, _ logger.Logger) (backend.Backend, error) {
+			return mockWorkflowBackend, nil
 		},
 		"mockWorkflowBackend",
 	)

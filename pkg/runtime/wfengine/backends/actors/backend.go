@@ -12,7 +12,8 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-package wfengine
+
+package actors
 
 import (
 	"context"
@@ -27,8 +28,21 @@ import (
 	"github.com/microsoft/durabletask-go/backend"
 
 	"github.com/dapr/dapr/pkg/actors"
+	wfbe "github.com/dapr/dapr/pkg/components/wfbackend"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/logger"
+)
+
+var (
+	wfLogger            = logger.NewLogger("dapr.wfengine.backend.actors")
+	errExecutionAborted = errors.New("execution aborted")
+)
+
+const (
+	defaultNamespace     = "default"
+	WorkflowNameLabelKey = "workflow"
+	ActivityNameLabelKey = "activity"
 )
 
 // actorsBackendConfig is the configuration for the workflow engine's actors backend
@@ -52,7 +66,7 @@ func (c *actorsBackendConfig) String() string {
 	if c == nil {
 		return "(nil)"
 	}
-	return fmt.Sprintf("AppID:'%s', workflowActorType:'%s', activityActorType:'%s'", c.AppID, c.workflowActorType, c.activityActorType)
+	return fmt.Sprintf("AppID='%s' workflowActorType='%s' activityActorType='%s'", c.AppID, c.workflowActorType, c.activityActorType)
 }
 
 type ActorBackend struct {
@@ -69,8 +83,8 @@ type ActorBackend struct {
 	actorsReadyCh chan struct{}
 }
 
-func NewActorBackend(appID string) *ActorBackend {
-	backendConfig := NewActorsBackendConfig(appID)
+func NewActorBackend(md wfbe.Metadata, _ logger.Logger) (backend.Backend, error) {
+	backendConfig := NewActorsBackendConfig(md.AppID)
 
 	// These channels are used by actors to call into this backend object
 	orchestrationWorkItemChan := make(chan *backend.OrchestrationWorkItem)
@@ -83,7 +97,7 @@ func NewActorBackend(appID string) *ActorBackend {
 		workflowActor:             NewWorkflowActor(getWorkflowScheduler(orchestrationWorkItemChan), backendConfig),
 		activityActor:             NewActivityActor(getActivityScheduler(activityWorkItemChan), backendConfig),
 		actorsReadyCh:             make(chan struct{}),
-	}
+	}, nil
 }
 
 // getWorkflowScheduler returns a workflowScheduler func that sends an orchestration work item to the Durable Task Framework.
