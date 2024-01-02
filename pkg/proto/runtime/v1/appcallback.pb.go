@@ -20,10 +20,10 @@ package runtime
 
 import (
 	v1 "github.com/dapr/dapr/pkg/proto/common/v1"
+	empty "github.com/golang/protobuf/ptypes/empty"
+	_struct "github.com/golang/protobuf/ptypes/struct"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
-	emptypb "google.golang.org/protobuf/types/known/emptypb"
-	structpb "google.golang.org/protobuf/types/known/structpb"
 	reflect "reflect"
 	sync "sync"
 )
@@ -170,7 +170,7 @@ type TopicEventRequest struct {
 	// This value is used by OnTopicEvent to "switch" inside the handler.
 	Path string `protobuf:"bytes,9,opt,name=path,proto3" json:"path,omitempty"`
 	// The map of additional custom properties to be sent to the app. These are considered to be cloud event extensions.
-	Extensions *structpb.Struct `protobuf:"bytes,10,opt,name=extensions,proto3" json:"extensions,omitempty"`
+	Extensions *_struct.Struct `protobuf:"bytes,10,opt,name=extensions,proto3" json:"extensions,omitempty"`
 }
 
 func (x *TopicEventRequest) Reset() {
@@ -268,7 +268,7 @@ func (x *TopicEventRequest) GetPath() string {
 	return ""
 }
 
-func (x *TopicEventRequest) GetExtensions() *structpb.Struct {
+func (x *TopicEventRequest) GetExtensions() *_struct.Struct {
 	if x != nil {
 		return x.Extensions
 	}
@@ -343,7 +343,7 @@ type TopicEventCERequest struct {
 	// The content of the event.
 	Data []byte `protobuf:"bytes,6,opt,name=data,proto3" json:"data,omitempty"`
 	// Custom attributes which includes cloud event extensions.
-	Extensions *structpb.Struct `protobuf:"bytes,7,opt,name=extensions,proto3" json:"extensions,omitempty"`
+	Extensions *_struct.Struct `protobuf:"bytes,7,opt,name=extensions,proto3" json:"extensions,omitempty"`
 }
 
 func (x *TopicEventCERequest) Reset() {
@@ -420,7 +420,7 @@ func (x *TopicEventCERequest) GetData() []byte {
 	return nil
 }
 
-func (x *TopicEventCERequest) GetExtensions() *structpb.Struct {
+func (x *TopicEventCERequest) GetExtensions() *_struct.Struct {
 	if x != nil {
 		return x.Extensions
 	}
@@ -1627,10 +1627,10 @@ var file_dapr_proto_runtime_v1_appcallback_proto_goTypes = []interface{}{
 	nil,                                               // 19: dapr.proto.runtime.v1.TopicEventBulkRequest.MetadataEntry
 	nil,                                               // 20: dapr.proto.runtime.v1.BindingEventRequest.MetadataEntry
 	nil,                                               // 21: dapr.proto.runtime.v1.TopicSubscription.MetadataEntry
-	(*structpb.Struct)(nil),                           // 22: google.protobuf.Struct
+	(*_struct.Struct)(nil),                            // 22: google.protobuf.Struct
 	(*v1.StateItem)(nil),                              // 23: dapr.proto.common.v1.StateItem
 	(*v1.InvokeRequest)(nil),                          // 24: dapr.proto.common.v1.InvokeRequest
-	(*emptypb.Empty)(nil),                             // 25: google.protobuf.Empty
+	(*empty.Empty)(nil),                               // 25: google.protobuf.Empty
 	(*v1.InvokeResponse)(nil),                         // 26: dapr.proto.common.v1.InvokeResponse
 }
 var file_dapr_proto_runtime_v1_appcallback_proto_depIdxs = []int32{

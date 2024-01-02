@@ -19,9 +19,9 @@
 package operator
 
 import (
+	empty "github.com/golang/protobuf/ptypes/empty"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
-	emptypb "google.golang.org/protobuf/types/known/emptypb"
 	reflect "reflect"
 	sync "sync"
 )
@@ -1228,7 +1228,7 @@ var file_dapr_proto_operator_v1_operator_proto_goTypes = []interface{}{
 	(*ListHTTPEndpointsRequest)(nil),  // 16: dapr.proto.operator.v1.ListHTTPEndpointsRequest
 	(*HTTPEndpointUpdateRequest)(nil), // 17: dapr.proto.operator.v1.HTTPEndpointUpdateRequest
 	(*HTTPEndpointUpdateEvent)(nil),   // 18: dapr.proto.operator.v1.HTTPEndpointUpdateEvent
-	(*emptypb.Empty)(nil),             // 19: google.protobuf.Empty
+	(*empty.Empty)(nil),               // 19: google.protobuf.Empty
 }
 var file_dapr_proto_operator_v1_operator_proto_depIdxs = []int32{
 	0,  // 0: dapr.proto.operator.v1.ComponentUpdateEvent.type:type_name -> dapr.proto.operator.v1.ResourceEventType

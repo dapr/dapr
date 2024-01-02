@@ -9,10 +9,10 @@ package runtime
 import (
 	context "context"
 	v1 "github.com/dapr/dapr/pkg/proto/common/v1"
+	empty "github.com/golang/protobuf/ptypes/empty"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
-	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -32,17 +32,17 @@ type DaprClient interface {
 	// Gets a bulk of state items for a list of keys
 	GetBulkState(ctx context.Context, in *GetBulkStateRequest, opts ...grpc.CallOption) (*GetBulkStateResponse, error)
 	// Saves the state for a specific key.
-	SaveState(ctx context.Context, in *SaveStateRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	SaveState(ctx context.Context, in *SaveStateRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	// Queries the state.
 	QueryStateAlpha1(ctx context.Context, in *QueryStateRequest, opts ...grpc.CallOption) (*QueryStateResponse, error)
 	// Deletes the state for a specific key.
-	DeleteState(ctx context.Context, in *DeleteStateRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	DeleteState(ctx context.Context, in *DeleteStateRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	// Deletes a bulk of state items for a list of keys
-	DeleteBulkState(ctx context.Context, in *DeleteBulkStateRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	DeleteBulkState(ctx context.Context, in *DeleteBulkStateRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	// Executes transactions for a specified store
-	ExecuteStateTransaction(ctx context.Context, in *ExecuteStateTransactionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	ExecuteStateTransaction(ctx context.Context, in *ExecuteStateTransactionRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	// Publishes events to the specific topic.
-	PublishEvent(ctx context.Context, in *PublishEventRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	PublishEvent(ctx context.Context, in *PublishEventRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	// Bulk Publishes multiple events to the specified topic.
 	BulkPublishEventAlpha1(ctx context.Context, in *BulkPublishRequest, opts ...grpc.CallOption) (*BulkPublishResponse, error)
 	// Invokes binding data to specific output bindings
@@ -52,17 +52,17 @@ type DaprClient interface {
 	// Gets a bulk of secrets
 	GetBulkSecret(ctx context.Context, in *GetBulkSecretRequest, opts ...grpc.CallOption) (*GetBulkSecretResponse, error)
 	// Register an actor timer.
-	RegisterActorTimer(ctx context.Context, in *RegisterActorTimerRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	RegisterActorTimer(ctx context.Context, in *RegisterActorTimerRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	// Unregister an actor timer.
-	UnregisterActorTimer(ctx context.Context, in *UnregisterActorTimerRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	UnregisterActorTimer(ctx context.Context, in *UnregisterActorTimerRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	// Register an actor reminder.
-	RegisterActorReminder(ctx context.Context, in *RegisterActorReminderRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	RegisterActorReminder(ctx context.Context, in *RegisterActorReminderRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	// Unregister an actor reminder.
-	UnregisterActorReminder(ctx context.Context, in *UnregisterActorReminderRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	UnregisterActorReminder(ctx context.Context, in *UnregisterActorReminderRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	// Gets the state for a specific actor.
 	GetActorState(ctx context.Context, in *GetActorStateRequest, opts ...grpc.CallOption) (*GetActorStateResponse, error)
 	// Executes state transactions for a specified actor
-	ExecuteActorStateTransaction(ctx context.Context, in *ExecuteActorStateTransactionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	ExecuteActorStateTransaction(ctx context.Context, in *ExecuteActorStateTransactionRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	// InvokeActor calls a method on an actor.
 	InvokeActor(ctx context.Context, in *InvokeActorRequest, opts ...grpc.CallOption) (*InvokeActorResponse, error)
 	// GetConfiguration gets configuration from configuration store.
@@ -88,7 +88,7 @@ type DaprClient interface {
 	// Gets metadata of the sidecar
 	GetMetadata(ctx context.Context, in *GetMetadataRequest, opts ...grpc.CallOption) (*GetMetadataResponse, error)
 	// Sets value in extended metadata of the sidecar
-	SetMetadata(ctx context.Context, in *SetMetadataRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	SetMetadata(ctx context.Context, in *SetMetadataRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	// SubtleGetKeyAlpha1 returns the public part of an asymmetric key stored in the vault.
 	SubtleGetKeyAlpha1(ctx context.Context, in *SubtleGetKeyRequest, opts ...grpc.CallOption) (*SubtleGetKeyResponse, error)
 	// SubtleEncryptAlpha1 encrypts a small message using a key stored in the vault.
@@ -108,31 +108,31 @@ type DaprClient interface {
 	// Gets details about a started workflow instance
 	GetWorkflowAlpha1(ctx context.Context, in *GetWorkflowRequest, opts ...grpc.CallOption) (*GetWorkflowResponse, error)
 	// Purge Workflow
-	PurgeWorkflowAlpha1(ctx context.Context, in *PurgeWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	PurgeWorkflowAlpha1(ctx context.Context, in *PurgeWorkflowRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	// Terminates a running workflow instance
-	TerminateWorkflowAlpha1(ctx context.Context, in *TerminateWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	TerminateWorkflowAlpha1(ctx context.Context, in *TerminateWorkflowRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	// Pauses a running workflow instance
-	PauseWorkflowAlpha1(ctx context.Context, in *PauseWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	PauseWorkflowAlpha1(ctx context.Context, in *PauseWorkflowRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	// Resumes a paused workflow instance
-	ResumeWorkflowAlpha1(ctx context.Context, in *ResumeWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	ResumeWorkflowAlpha1(ctx context.Context, in *ResumeWorkflowRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	// Raise an event to a running workflow instance
-	RaiseEventWorkflowAlpha1(ctx context.Context, in *RaiseEventWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	RaiseEventWorkflowAlpha1(ctx context.Context, in *RaiseEventWorkflowRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	// Starts a new instance of a workflow
 	StartWorkflowBeta1(ctx context.Context, in *StartWorkflowRequest, opts ...grpc.CallOption) (*StartWorkflowResponse, error)
 	// Gets details about a started workflow instance
 	GetWorkflowBeta1(ctx context.Context, in *GetWorkflowRequest, opts ...grpc.CallOption) (*GetWorkflowResponse, error)
 	// Purge Workflow
-	PurgeWorkflowBeta1(ctx context.Context, in *PurgeWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	PurgeWorkflowBeta1(ctx context.Context, in *PurgeWorkflowRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	// Terminates a running workflow instance
-	TerminateWorkflowBeta1(ctx context.Context, in *TerminateWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	TerminateWorkflowBeta1(ctx context.Context, in *TerminateWorkflowRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	// Pauses a running workflow instance
-	PauseWorkflowBeta1(ctx context.Context, in *PauseWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	PauseWorkflowBeta1(ctx context.Context, in *PauseWorkflowRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	// Resumes a paused workflow instance
-	ResumeWorkflowBeta1(ctx context.Context, in *ResumeWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	ResumeWorkflowBeta1(ctx context.Context, in *ResumeWorkflowRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	// Raise an event to a running workflow instance
-	RaiseEventWorkflowBeta1(ctx context.Context, in *RaiseEventWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	RaiseEventWorkflowBeta1(ctx context.Context, in *RaiseEventWorkflowRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 	// Shutdown the sidecar
-	Shutdown(ctx context.Context, in *ShutdownRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	Shutdown(ctx context.Context, in *ShutdownRequest, opts ...grpc.CallOption) (*empty.Empty, error)
 }
 
 type daprClient struct {
@@ -170,8 +170,8 @@ func (c *daprClient) GetBulkState(ctx context.Context, in *GetBulkStateRequest, 
 	return out, nil
 }
 
-func (c *daprClient) SaveState(ctx context.Context, in *SaveStateRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *daprClient) SaveState(ctx context.Context, in *SaveStateRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/SaveState", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -188,8 +188,8 @@ func (c *daprClient) QueryStateAlpha1(ctx context.Context, in *QueryStateRequest
 	return out, nil
 }
 
-func (c *daprClient) DeleteState(ctx context.Context, in *DeleteStateRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *daprClient) DeleteState(ctx context.Context, in *DeleteStateRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/DeleteState", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -197,8 +197,8 @@ func (c *daprClient) DeleteState(ctx context.Context, in *DeleteStateRequest, op
 	return out, nil
 }
 
-func (c *daprClient) DeleteBulkState(ctx context.Context, in *DeleteBulkStateRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *daprClient) DeleteBulkState(ctx context.Context, in *DeleteBulkStateRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/DeleteBulkState", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -206,8 +206,8 @@ func (c *daprClient) DeleteBulkState(ctx context.Context, in *DeleteBulkStateReq
 	return out, nil
 }
 
-func (c *daprClient) ExecuteStateTransaction(ctx context.Context, in *ExecuteStateTransactionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *daprClient) ExecuteStateTransaction(ctx context.Context, in *ExecuteStateTransactionRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/ExecuteStateTransaction", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -215,8 +215,8 @@ func (c *daprClient) ExecuteStateTransaction(ctx context.Context, in *ExecuteSta
 	return out, nil
 }
 
-func (c *daprClient) PublishEvent(ctx context.Context, in *PublishEventRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *daprClient) PublishEvent(ctx context.Context, in *PublishEventRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/PublishEvent", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -260,8 +260,8 @@ func (c *daprClient) GetBulkSecret(ctx context.Context, in *GetBulkSecretRequest
 	return out, nil
 }
 
-func (c *daprClient) RegisterActorTimer(ctx context.Context, in *RegisterActorTimerRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *daprClient) RegisterActorTimer(ctx context.Context, in *RegisterActorTimerRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/RegisterActorTimer", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -269,8 +269,8 @@ func (c *daprClient) RegisterActorTimer(ctx context.Context, in *RegisterActorTi
 	return out, nil
 }
 
-func (c *daprClient) UnregisterActorTimer(ctx context.Context, in *UnregisterActorTimerRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *daprClient) UnregisterActorTimer(ctx context.Context, in *UnregisterActorTimerRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/UnregisterActorTimer", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -278,8 +278,8 @@ func (c *daprClient) UnregisterActorTimer(ctx context.Context, in *UnregisterAct
 	return out, nil
 }
 
-func (c *daprClient) RegisterActorReminder(ctx context.Context, in *RegisterActorReminderRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *daprClient) RegisterActorReminder(ctx context.Context, in *RegisterActorReminderRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/RegisterActorReminder", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -287,8 +287,8 @@ func (c *daprClient) RegisterActorReminder(ctx context.Context, in *RegisterActo
 	return out, nil
 }
 
-func (c *daprClient) UnregisterActorReminder(ctx context.Context, in *UnregisterActorReminderRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *daprClient) UnregisterActorReminder(ctx context.Context, in *UnregisterActorReminderRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/UnregisterActorReminder", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -305,8 +305,8 @@ func (c *daprClient) GetActorState(ctx context.Context, in *GetActorStateRequest
 	return out, nil
 }
 
-func (c *daprClient) ExecuteActorStateTransaction(ctx context.Context, in *ExecuteActorStateTransactionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *daprClient) ExecuteActorStateTransaction(ctx context.Context, in *ExecuteActorStateTransactionRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/ExecuteActorStateTransaction", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -512,8 +512,8 @@ func (c *daprClient) GetMetadata(ctx context.Context, in *GetMetadataRequest, op
 	return out, nil
 }
 
-func (c *daprClient) SetMetadata(ctx context.Context, in *SetMetadataRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *daprClient) SetMetadata(ctx context.Context, in *SetMetadataRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/SetMetadata", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -602,8 +602,8 @@ func (c *daprClient) GetWorkflowAlpha1(ctx context.Context, in *GetWorkflowReque
 	return out, nil
 }
 
-func (c *daprClient) PurgeWorkflowAlpha1(ctx context.Context, in *PurgeWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *daprClient) PurgeWorkflowAlpha1(ctx context.Context, in *PurgeWorkflowRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/PurgeWorkflowAlpha1", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -611,8 +611,8 @@ func (c *daprClient) PurgeWorkflowAlpha1(ctx context.Context, in *PurgeWorkflowR
 	return out, nil
 }
 
-func (c *daprClient) TerminateWorkflowAlpha1(ctx context.Context, in *TerminateWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *daprClient) TerminateWorkflowAlpha1(ctx context.Context, in *TerminateWorkflowRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/TerminateWorkflowAlpha1", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -620,8 +620,8 @@ func (c *daprClient) TerminateWorkflowAlpha1(ctx context.Context, in *TerminateW
 	return out, nil
 }
 
-func (c *daprClient) PauseWorkflowAlpha1(ctx context.Context, in *PauseWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *daprClient) PauseWorkflowAlpha1(ctx context.Context, in *PauseWorkflowRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/PauseWorkflowAlpha1", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -629,8 +629,8 @@ func (c *daprClient) PauseWorkflowAlpha1(ctx context.Context, in *PauseWorkflowR
 	return out, nil
 }
 
-func (c *daprClient) ResumeWorkflowAlpha1(ctx context.Context, in *ResumeWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *daprClient) ResumeWorkflowAlpha1(ctx context.Context, in *ResumeWorkflowRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/ResumeWorkflowAlpha1", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -638,8 +638,8 @@ func (c *daprClient) ResumeWorkflowAlpha1(ctx context.Context, in *ResumeWorkflo
 	return out, nil
 }
 
-func (c *daprClient) RaiseEventWorkflowAlpha1(ctx context.Context, in *RaiseEventWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *daprClient) RaiseEventWorkflowAlpha1(ctx context.Context, in *RaiseEventWorkflowRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/RaiseEventWorkflowAlpha1", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -665,8 +665,8 @@ func (c *daprClient) GetWorkflowBeta1(ctx context.Context, in *GetWorkflowReques
 	return out, nil
 }
 
-func (c *daprClient) PurgeWorkflowBeta1(ctx context.Context, in *PurgeWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *daprClient) PurgeWorkflowBeta1(ctx context.Context, in *PurgeWorkflowRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/PurgeWorkflowBeta1", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -674,8 +674,8 @@ func (c *daprClient) PurgeWorkflowBeta1(ctx context.Context, in *PurgeWorkflowRe
 	return out, nil
 }
 
-func (c *daprClient) TerminateWorkflowBeta1(ctx context.Context, in *TerminateWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *daprClient) TerminateWorkflowBeta1(ctx context.Context, in *TerminateWorkflowRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/TerminateWorkflowBeta1", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -683,8 +683,8 @@ func (c *daprClient) TerminateWorkflowBeta1(ctx context.Context, in *TerminateWo
 	return out, nil
 }
 
-func (c *daprClient) PauseWorkflowBeta1(ctx context.Context, in *PauseWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *daprClient) PauseWorkflowBeta1(ctx context.Context, in *PauseWorkflowRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/PauseWorkflowBeta1", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -692,8 +692,8 @@ func (c *daprClient) PauseWorkflowBeta1(ctx context.Context, in *PauseWorkflowRe
 	return out, nil
 }
 
-func (c *daprClient) ResumeWorkflowBeta1(ctx context.Context, in *ResumeWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *daprClient) ResumeWorkflowBeta1(ctx context.Context, in *ResumeWorkflowRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/ResumeWorkflowBeta1", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -701,8 +701,8 @@ func (c *daprClient) ResumeWorkflowBeta1(ctx context.Context, in *ResumeWorkflow
 	return out, nil
 }
 
-func (c *daprClient) RaiseEventWorkflowBeta1(ctx context.Context, in *RaiseEventWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *daprClient) RaiseEventWorkflowBeta1(ctx context.Context, in *RaiseEventWorkflowRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/RaiseEventWorkflowBeta1", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -710,8 +710,8 @@ func (c *daprClient) RaiseEventWorkflowBeta1(ctx context.Context, in *RaiseEvent
 	return out, nil
 }
 
-func (c *daprClient) Shutdown(ctx context.Context, in *ShutdownRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *daprClient) Shutdown(ctx context.Context, in *ShutdownRequest, opts ...grpc.CallOption) (*empty.Empty, error) {
+	out := new(empty.Empty)
 	err := c.cc.Invoke(ctx, "/dapr.proto.runtime.v1.Dapr/Shutdown", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -731,17 +731,17 @@ type DaprServer interface {
 	// Gets a bulk of state items for a list of keys
 	GetBulkState(context.Context, *GetBulkStateRequest) (*GetBulkStateResponse, error)
 	// Saves the state for a specific key.
-	SaveState(context.Context, *SaveStateRequest) (*emptypb.Empty, error)
+	SaveState(context.Context, *SaveStateRequest) (*empty.Empty, error)
 	// Queries the state.
 	QueryStateAlpha1(context.Context, *QueryStateRequest) (*QueryStateResponse, error)
 	// Deletes the state for a specific key.
-	DeleteState(context.Context, *DeleteStateRequest) (*emptypb.Empty, error)
+	DeleteState(context.Context, *DeleteStateRequest) (*empty.Empty, error)
 	// Deletes a bulk of state items for a list of keys
-	DeleteBulkState(context.Context, *DeleteBulkStateRequest) (*emptypb.Empty, error)
+	DeleteBulkState(context.Context, *DeleteBulkStateRequest) (*empty.Empty, error)
 	// Executes transactions for a specified store
-	ExecuteStateTransaction(context.Context, *ExecuteStateTransactionRequest) (*emptypb.Empty, error)
+	ExecuteStateTransaction(context.Context, *ExecuteStateTransactionRequest) (*empty.Empty, error)
 	// Publishes events to the specific topic.
-	PublishEvent(context.Context, *PublishEventRequest) (*emptypb.Empty, error)
+	PublishEvent(context.Context, *PublishEventRequest) (*empty.Empty, error)
 	// Bulk Publishes multiple events to the specified topic.
 	BulkPublishEventAlpha1(context.Context, *BulkPublishRequest) (*BulkPublishResponse, error)
 	// Invokes binding data to specific output bindings
@@ -751,17 +751,17 @@ type DaprServer interface {
 	// Gets a bulk of secrets
 	GetBulkSecret(context.Context, *GetBulkSecretRequest) (*GetBulkSecretResponse, error)
 	// Register an actor timer.
-	RegisterActorTimer(context.Context, *RegisterActorTimerRequest) (*emptypb.Empty, error)
+	RegisterActorTimer(context.Context, *RegisterActorTimerRequest) (*empty.Empty, error)
 	// Unregister an actor timer.
-	UnregisterActorTimer(context.Context, *UnregisterActorTimerRequest) (*emptypb.Empty, error)
+	UnregisterActorTimer(context.Context, *UnregisterActorTimerRequest) (*empty.Empty, error)
 	// Register an actor reminder.
-	RegisterActorReminder(context.Context, *RegisterActorReminderRequest) (*emptypb.Empty, error)
+	RegisterActorReminder(context.Context, *RegisterActorReminderRequest) (*empty.Empty, error)
 	// Unregister an actor reminder.
-	UnregisterActorReminder(context.Context, *UnregisterActorReminderRequest) (*emptypb.Empty, error)
+	UnregisterActorReminder(context.Context, *UnregisterActorReminderRequest) (*empty.Empty, error)
 	// Gets the state for a specific actor.
 	GetActorState(context.Context, *GetActorStateRequest) (*GetActorStateResponse, error)
 	// Executes state transactions for a specified actor
-	ExecuteActorStateTransaction(context.Context, *ExecuteActorStateTransactionRequest) (*emptypb.Empty, error)
+	ExecuteActorStateTransaction(context.Context, *ExecuteActorStateTransactionRequest) (*empty.Empty, error)
 	// InvokeActor calls a method on an actor.
 	InvokeActor(context.Context, *InvokeActorRequest) (*InvokeActorResponse, error)
 	// GetConfiguration gets configuration from configuration store.
@@ -787,7 +787,7 @@ type DaprServer interface {
 	// Gets metadata of the sidecar
 	GetMetadata(context.Context, *GetMetadataRequest) (*GetMetadataResponse, error)
 	// Sets value in extended metadata of the sidecar
-	SetMetadata(context.Context, *SetMetadataRequest) (*emptypb.Empty, error)
+	SetMetadata(context.Context, *SetMetadataRequest) (*empty.Empty, error)
 	// SubtleGetKeyAlpha1 returns the public part of an asymmetric key stored in the vault.
 	SubtleGetKeyAlpha1(context.Context, *SubtleGetKeyRequest) (*SubtleGetKeyResponse, error)
 	// SubtleEncryptAlpha1 encrypts a small message using a key stored in the vault.
@@ -807,31 +807,31 @@ type DaprServer interface {
 	// Gets details about a started workflow instance
 	GetWorkflowAlpha1(context.Context, *GetWorkflowRequest) (*GetWorkflowResponse, error)
 	// Purge Workflow
-	PurgeWorkflowAlpha1(context.Context, *PurgeWorkflowRequest) (*emptypb.Empty, error)
+	PurgeWorkflowAlpha1(context.Context, *PurgeWorkflowRequest) (*empty.Empty, error)
 	// Terminates a running workflow instance
-	TerminateWorkflowAlpha1(context.Context, *TerminateWorkflowRequest) (*emptypb.Empty, error)
+	TerminateWorkflowAlpha1(context.Context, *TerminateWorkflowRequest) (*empty.Empty, error)
 	// Pauses a running workflow instance
-	PauseWorkflowAlpha1(context.Context, *PauseWorkflowRequest) (*emptypb.Empty, error)
+	PauseWorkflowAlpha1(context.Context, *PauseWorkflowRequest) (*empty.Empty, error)
 	// Resumes a paused workflow instance
-	ResumeWorkflowAlpha1(context.Context, *ResumeWorkflowRequest) (*emptypb.Empty, error)
+	ResumeWorkflowAlpha1(context.Context, *ResumeWorkflowRequest) (*empty.Empty, error)
 	// Raise an event to a running workflow instance
-	RaiseEventWorkflowAlpha1(context.Context, *RaiseEventWorkflowRequest) (*emptypb.Empty, error)
+	RaiseEventWorkflowAlpha1(context.Context, *RaiseEventWorkflowRequest) (*empty.Empty, error)
 	// Starts a new instance of a workflow
 	StartWorkflowBeta1(context.Context, *StartWorkflowRequest) (*StartWorkflowResponse, error)
 	// Gets details about a started workflow instance
 	GetWorkflowBeta1(context.Context, *GetWorkflowRequest) (*GetWorkflowResponse, error)
 	// Purge Workflow
-	PurgeWorkflowBeta1(context.Context, *PurgeWorkflowRequest) (*emptypb.Empty, error)
+	PurgeWorkflowBeta1(context.Context, *PurgeWorkflowRequest) (*empty.Empty, error)
 	// Terminates a running workflow instance
-	TerminateWorkflowBeta1(context.Context, *TerminateWorkflowRequest) (*emptypb.Empty, error)
+	TerminateWorkflowBeta1(context.Context, *TerminateWorkflowRequest) (*empty.Empty, error)
 	// Pauses a running workflow instance
-	PauseWorkflowBeta1(context.Context, *PauseWorkflowRequest) (*emptypb.Empty, error)
+	PauseWorkflowBeta1(context.Context, *PauseWorkflowRequest) (*empty.Empty, error)
 	// Resumes a paused workflow instance
-	ResumeWorkflowBeta1(context.Context, *ResumeWorkflowRequest) (*emptypb.Empty, error)
+	ResumeWorkflowBeta1(context.Context, *ResumeWorkflowRequest) (*empty.Empty, error)
 	// Raise an event to a running workflow instance
-	RaiseEventWorkflowBeta1(context.Context, *RaiseEventWorkflowRequest) (*emptypb.Empty, error)
+	RaiseEventWorkflowBeta1(context.Context, *RaiseEventWorkflowRequest) (*empty.Empty, error)
 	// Shutdown the sidecar
-	Shutdown(context.Context, *ShutdownRequest) (*emptypb.Empty, error)
+	Shutdown(context.Context, *ShutdownRequest) (*empty.Empty, error)
 }
 
 // UnimplementedDaprServer should be embedded to have forward compatible implementations.
@@ -847,22 +847,22 @@ func (UnimplementedDaprServer) GetState(context.Context, *GetStateRequest) (*Get
 func (UnimplementedDaprServer) GetBulkState(context.Context, *GetBulkStateRequest) (*GetBulkStateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetBulkState not implemented")
 }
-func (UnimplementedDaprServer) SaveState(context.Context, *SaveStateRequest) (*emptypb.Empty, error) {
+func (UnimplementedDaprServer) SaveState(context.Context, *SaveStateRequest) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SaveState not implemented")
 }
 func (UnimplementedDaprServer) QueryStateAlpha1(context.Context, *QueryStateRequest) (*QueryStateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method QueryStateAlpha1 not implemented")
 }
-func (UnimplementedDaprServer) DeleteState(context.Context, *DeleteStateRequest) (*emptypb.Empty, error) {
+func (UnimplementedDaprServer) DeleteState(context.Context, *DeleteStateRequest) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteState not implemented")
 }
-func (UnimplementedDaprServer) DeleteBulkState(context.Context, *DeleteBulkStateRequest) (*emptypb.Empty, error) {
+func (UnimplementedDaprServer) DeleteBulkState(context.Context, *DeleteBulkStateRequest) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteBulkState not implemented")
 }
-func (UnimplementedDaprServer) ExecuteStateTransaction(context.Context, *ExecuteStateTransactionRequest) (*emptypb.Empty, error) {
+func (UnimplementedDaprServer) ExecuteStateTransaction(context.Context, *ExecuteStateTransactionRequest) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ExecuteStateTransaction not implemented")
 }
-func (UnimplementedDaprServer) PublishEvent(context.Context, *PublishEventRequest) (*emptypb.Empty, error) {
+func (UnimplementedDaprServer) PublishEvent(context.Context, *PublishEventRequest) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PublishEvent not implemented")
 }
 func (UnimplementedDaprServer) BulkPublishEventAlpha1(context.Context, *BulkPublishRequest) (*BulkPublishResponse, error) {
@@ -877,22 +877,22 @@ func (UnimplementedDaprServer) GetSecret(context.Context, *GetSecretRequest) (*G
 func (UnimplementedDaprServer) GetBulkSecret(context.Context, *GetBulkSecretRequest) (*GetBulkSecretResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetBulkSecret not implemented")
 }
-func (UnimplementedDaprServer) RegisterActorTimer(context.Context, *RegisterActorTimerRequest) (*emptypb.Empty, error) {
+func (UnimplementedDaprServer) RegisterActorTimer(context.Context, *RegisterActorTimerRequest) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RegisterActorTimer not implemented")
 }
-func (UnimplementedDaprServer) UnregisterActorTimer(context.Context, *UnregisterActorTimerRequest) (*emptypb.Empty, error) {
+func (UnimplementedDaprServer) UnregisterActorTimer(context.Context, *UnregisterActorTimerRequest) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UnregisterActorTimer not implemented")
 }
-func (UnimplementedDaprServer) RegisterActorReminder(context.Context, *RegisterActorReminderRequest) (*emptypb.Empty, error) {
+func (UnimplementedDaprServer) RegisterActorReminder(context.Context, *RegisterActorReminderRequest) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RegisterActorReminder not implemented")
 }
-func (UnimplementedDaprServer) UnregisterActorReminder(context.Context, *UnregisterActorReminderRequest) (*emptypb.Empty, error) {
+func (UnimplementedDaprServer) UnregisterActorReminder(context.Context, *UnregisterActorReminderRequest) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UnregisterActorReminder not implemented")
 }
 func (UnimplementedDaprServer) GetActorState(context.Context, *GetActorStateRequest) (*GetActorStateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetActorState not implemented")
 }
-func (UnimplementedDaprServer) ExecuteActorStateTransaction(context.Context, *ExecuteActorStateTransactionRequest) (*emptypb.Empty, error) {
+func (UnimplementedDaprServer) ExecuteActorStateTransaction(context.Context, *ExecuteActorStateTransactionRequest) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ExecuteActorStateTransaction not implemented")
 }
 func (UnimplementedDaprServer) InvokeActor(context.Context, *InvokeActorRequest) (*InvokeActorResponse, error) {
@@ -931,7 +931,7 @@ func (UnimplementedDaprServer) DecryptAlpha1(Dapr_DecryptAlpha1Server) error {
 func (UnimplementedDaprServer) GetMetadata(context.Context, *GetMetadataRequest) (*GetMetadataResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetMetadata not implemented")
 }
-func (UnimplementedDaprServer) SetMetadata(context.Context, *SetMetadataRequest) (*emptypb.Empty, error) {
+func (UnimplementedDaprServer) SetMetadata(context.Context, *SetMetadataRequest) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SetMetadata not implemented")
 }
 func (UnimplementedDaprServer) SubtleGetKeyAlpha1(context.Context, *SubtleGetKeyRequest) (*SubtleGetKeyResponse, error) {
@@ -961,19 +961,19 @@ func (UnimplementedDaprServer) StartWorkflowAlpha1(context.Context, *StartWorkfl
 func (UnimplementedDaprServer) GetWorkflowAlpha1(context.Context, *GetWorkflowRequest) (*GetWorkflowResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetWorkflowAlpha1 not implemented")
 }
-func (UnimplementedDaprServer) PurgeWorkflowAlpha1(context.Context, *PurgeWorkflowRequest) (*emptypb.Empty, error) {
+func (UnimplementedDaprServer) PurgeWorkflowAlpha1(context.Context, *PurgeWorkflowRequest) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PurgeWorkflowAlpha1 not implemented")
 }
-func (UnimplementedDaprServer) TerminateWorkflowAlpha1(context.Context, *TerminateWorkflowRequest) (*emptypb.Empty, error) {
+func (UnimplementedDaprServer) TerminateWorkflowAlpha1(context.Context, *TerminateWorkflowRequest) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method TerminateWorkflowAlpha1 not implemented")
 }
-func (UnimplementedDaprServer) PauseWorkflowAlpha1(context.Context, *PauseWorkflowRequest) (*emptypb.Empty, error) {
+func (UnimplementedDaprServer) PauseWorkflowAlpha1(context.Context, *PauseWorkflowRequest) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PauseWorkflowAlpha1 not implemented")
 }
-func (UnimplementedDaprServer) ResumeWorkflowAlpha1(context.Context, *ResumeWorkflowRequest) (*emptypb.Empty, error) {
+func (UnimplementedDaprServer) ResumeWorkflowAlpha1(context.Context, *ResumeWorkflowRequest) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ResumeWorkflowAlpha1 not implemented")
 }
-func (UnimplementedDaprServer) RaiseEventWorkflowAlpha1(context.Context, *RaiseEventWorkflowRequest) (*emptypb.Empty, error) {
+func (UnimplementedDaprServer) RaiseEventWorkflowAlpha1(context.Context, *RaiseEventWorkflowRequest) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RaiseEventWorkflowAlpha1 not implemented")
 }
 func (UnimplementedDaprServer) StartWorkflowBeta1(context.Context, *StartWorkflowRequest) (*StartWorkflowResponse, error) {
@@ -982,22 +982,22 @@ func (UnimplementedDaprServer) StartWorkflowBeta1(context.Context, *StartWorkflo
 func (UnimplementedDaprServer) GetWorkflowBeta1(context.Context, *GetWorkflowRequest) (*GetWorkflowResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetWorkflowBeta1 not implemented")
 }
-func (UnimplementedDaprServer) PurgeWorkflowBeta1(context.Context, *PurgeWorkflowRequest) (*emptypb.Empty, error) {
+func (UnimplementedDaprServer) PurgeWorkflowBeta1(context.Context, *PurgeWorkflowRequest) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PurgeWorkflowBeta1 not implemented")
 }
-func (UnimplementedDaprServer) TerminateWorkflowBeta1(context.Context, *TerminateWorkflowRequest) (*emptypb.Empty, error) {
+func (UnimplementedDaprServer) TerminateWorkflowBeta1(context.Context, *TerminateWorkflowRequest) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method TerminateWorkflowBeta1 not implemented")
 }
-func (UnimplementedDaprServer) PauseWorkflowBeta1(context.Context, *PauseWorkflowRequest) (*emptypb.Empty, error) {
+func (UnimplementedDaprServer) PauseWorkflowBeta1(context.Context, *PauseWorkflowRequest) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PauseWorkflowBeta1 not implemented")
 }
-func (UnimplementedDaprServer) ResumeWorkflowBeta1(context.Context, *ResumeWorkflowRequest) (*emptypb.Empty, error) {
+func (UnimplementedDaprServer) ResumeWorkflowBeta1(context.Context, *ResumeWorkflowRequest) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ResumeWorkflowBeta1 not implemented")
 }
-func (UnimplementedDaprServer) RaiseEventWorkflowBeta1(context.Context, *RaiseEventWorkflowRequest) (*emptypb.Empty, error) {
+func (UnimplementedDaprServer) RaiseEventWorkflowBeta1(context.Context, *RaiseEventWorkflowRequest) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RaiseEventWorkflowBeta1 not implemented")
 }
-func (UnimplementedDaprServer) Shutdown(context.Context, *ShutdownRequest) (*emptypb.Empty, error) {
+func (UnimplementedDaprServer) Shutdown(context.Context, *ShutdownRequest) (*empty.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Shutdown not implemented")
 }
 
