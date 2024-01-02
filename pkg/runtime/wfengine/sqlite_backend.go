@@ -36,7 +36,7 @@ func getSqliteBackend(appID string, backendComponentInfo *wfbe.WorkflowBackendCo
 	sqliteMetadata := wfbe.NewSqliteMetadata()
 	err := sqliteMetadata.Parse(backendComponentInfo.WorkflowBackendMetadata.Properties)
 	if err != nil {
-		log.Errorf("Failed to parse sqlite backend metadata: %s, sqlite backend is not initialized", err)
+		log.Errorf("Failed to parse SQLite backend metadata; SQLite backend is not initialized: %v", err)
 		return nil
 	}
 
