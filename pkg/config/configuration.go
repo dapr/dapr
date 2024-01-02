@@ -41,12 +41,10 @@ import (
 type Feature string
 
 const (
-	// Disables enforcing minimum TLS version 1.2 in AppChannel, which is insecure.
-	// TODO: Remove this feature flag in Dapr 1.13.
-	AppChannelAllowInsecureTLS Feature = "AppChannelAllowInsecureTLS"
-	// Enables support for setting TTL on Actor state keys. Remove this flag in
-	// Dapr 1.12.
+	// Enables support for setting TTL on Actor state keys.
 	ActorStateTTL Feature = "ActorStateTTL"
+	// Enables support for hot reloading of Daprd Components and HTTPEndpoints.
+	HotReload Feature = "HotReload"
 )
 
 // end feature flags section
