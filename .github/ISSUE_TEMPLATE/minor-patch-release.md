@@ -17,7 +17,7 @@
 - [ ]  Write release notes
     - [ ] <>
 - [ ]  Review release notes [@dapr/maintainers-dapr]
-- [ ]  Create v1.12.3 Tag [@dapr/maintainers-dapr]
+- [ ]  Create Tag [@dapr/maintainers-dapr]
 - [ ]  Backport fixes into master branch [@dapr/maintainers-dapr]
 - [ ]  Update the documentation: Latest version & versions in supported releases
 - [ ]  Push new tag in installer-bundle repo
