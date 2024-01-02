@@ -53,6 +53,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/utils"
 )
 
 const (
@@ -623,6 +624,11 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 	// The .NET SDK signifies Actor failure via a header instead of a bad response.
 	if _, ok := resp.Headers()["X-Daprerrorresponseheader"]; ok {
 		return resp, actorerrors.NewActorError(resp)
+	}
+
+	// Allow stopping a recurring reminder or timer
+	if v := resp.Headers()["X-Daprremindercancel"]; v != nil && len(v.Values) > 0 && utils.IsTruthy(v.Values[0]) {
+		return resp, ErrReminderCanceled
 	}
 
 	return resp, nil
