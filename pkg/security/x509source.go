@@ -431,11 +431,13 @@ func atomicWrite(clock clock.Clock, dir string, data map[string][]byte) error {
 		}
 	}
 
+	const filesuffix = "-new"
+
 	// Symlinks are typically not available on Windows containers, so we use a
 	// copy and rename instead.
 	if runtime.GOOS == "windows" {
-		os.RemoveAll(dir + "-new")
-		if err := os.MkdirAll(dir+"-new", 0o700); err != nil {
+		os.RemoveAll(dir + filesuffix)
+		if err := os.MkdirAll(dir+filesuffix, 0o700); err != nil {
 			return err
 		}
 
@@ -448,20 +450,20 @@ func atomicWrite(clock clock.Clock, dir string, data map[string][]byte) error {
 			if err != nil {
 				return err
 			}
-			if err := os.WriteFile(filepath.Join(dir+"-new", entry.Name()), b, 0o600); err != nil {
+			if err := os.WriteFile(filepath.Join(dir+filesuffix, entry.Name()), b, 0o600); err != nil {
 				return err
 			}
 		}
 		// You can't rename a directory over an existing directory.
 		os.RemoveAll(dir)
-		if err := os.Rename(dir+"-new", dir); err != nil {
-			return fmt.Errorf("failed to rename %s to %s: %w", dir+"-new", dir, err)
+		if err := os.Rename(dir+filesuffix, dir); err != nil {
+			return fmt.Errorf("failed to rename %s to %s: %w", dir+filesuffix, dir, err)
 		}
 	} else {
-		if err := os.Symlink(newDir, dir+"-new"); err != nil {
+		if err := os.Symlink(newDir, dir+filesuffix); err != nil {
 			return err
 		}
-		if err := os.Rename(dir+"-new", dir); err != nil {
+		if err := os.Rename(dir+filesuffix, dir); err != nil {
 			return err
 		}
 	}

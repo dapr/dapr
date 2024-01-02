@@ -62,6 +62,10 @@ type actorLogEntry struct {
 	ActorID   string `json:"actorId,omitempty"`
 }
 
+func (e actorLogEntry) String() string {
+	return fmt.Sprintf("action='%s' actorType='%s' actorID='%s'", e.Action, e.ActorType, e.ActorID)
+}
+
 type daprConfig struct {
 	Entities                []string                `json:"entities,omitempty"`
 	ActorIdleTimeout        string                  `json:"actorIdleTimeout,omitempty"`
@@ -112,6 +116,7 @@ func resetLogs() {
 	actorLogsMutex.Lock()
 	defer actorLogsMutex.Unlock()
 
+	log.Print("Reset actorLogs")
 	actorLogs = actorLogs[:0]
 }
 
@@ -124,6 +129,7 @@ func appendLog(actorType string, actorID string, action string) {
 
 	actorLogsMutex.Lock()
 	defer actorLogsMutex.Unlock()
+	log.Printf("Append to actorLogs: %s", logEntry)
 	actorLogs = append(actorLogs, logEntry)
 }
 
@@ -140,9 +146,14 @@ func logsHandler(w http.ResponseWriter, r *http.Request) {
 		resetLogs()
 	}
 
+	actorLogsMutex.Lock()
+	entries, _ := json.Marshal(actorLogs)
+	actorLogsMutex.Unlock()
+
+	log.Printf("Sending actorLogs: %s", string(entries))
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(actorLogs)
+	w.Write(entries)
 }
 
 func configHandler(w http.ResponseWriter, r *http.Request) {

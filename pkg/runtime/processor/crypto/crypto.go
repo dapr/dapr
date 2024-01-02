@@ -79,6 +79,7 @@ func (c *crypto) Init(ctx context.Context, comp compapi.Component) error {
 func (c *crypto) Close(comp compapi.Component) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
+	defer c.compStore.DeleteCryptoProvider(comp.ObjectMeta.Name)
 
 	crypto, ok := c.compStore.GetCryptoProvider(comp.ObjectMeta.Name)
 	if !ok {
@@ -92,6 +93,5 @@ func (c *crypto) Close(comp compapi.Component) error {
 		}
 	}
 
-	c.compStore.DeleteCryptoProvider(comp.ObjectMeta.Name)
 	return nil
 }

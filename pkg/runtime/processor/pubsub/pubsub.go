@@ -97,7 +97,8 @@ type pubsub struct {
 	channels       *channels.Channels
 	operatorClient operatorv1.OperatorClient
 
-	lock sync.RWMutex
+	lock        sync.RWMutex
+	subscribing bool
 
 	topicCancels map[string]context.CancelFunc
 	outbox       outbox.Outbox
@@ -177,6 +178,10 @@ func (p *pubsub) Init(ctx context.Context, comp compapi.Component) error {
 	})
 	diag.DefaultMonitoring.ComponentInitialized(comp.Spec.Type)
 
+	if p.subscribing {
+		return p.beginPubSub(ctx, pubsubName)
+	}
+
 	return nil
 }
 
@@ -189,6 +194,8 @@ func (p *pubsub) Close(comp compapi.Component) error {
 		return nil
 	}
 
+	defer p.compStore.DeletePubSub(comp.Name)
+
 	for topic := range p.compStore.GetTopicRoutes()[comp.Name] {
 		subKey := topicKey(comp.Name, topic)
 		p.unsubscribeTopic(subKey)
@@ -198,8 +205,6 @@ func (p *pubsub) Close(comp compapi.Component) error {
 	if err := ps.Component.Close(); err != nil {
 		return err
 	}
-
-	p.compStore.DeletePubSub(comp.Name)
 
 	return nil
 }
@@ -276,7 +281,7 @@ func extractCloudEvent(event map[string]interface{}) (runtimev1pb.TopicEventBulk
 	if data, ok := event[contribpubsub.DataField]; ok && data != nil {
 		envelope.Data = nil
 
-		if contenttype.IsStringContentType(envelope.DataContentType) {
+		if contenttype.IsStringContentType(envelope.GetDataContentType()) {
 			switch v := data.(type) {
 			case string:
 				envelope.Data = []byte(v)
@@ -285,7 +290,7 @@ func extractCloudEvent(event map[string]interface{}) (runtimev1pb.TopicEventBulk
 			default:
 				return runtimev1pb.TopicEventBulkRequestEntry_CloudEvent{}, errUnexpectedEnvelopeData //nolint:nosnakecase
 			}
-		} else if contenttype.IsJSONContentType(envelope.DataContentType) || contenttype.IsCloudEventContentType(envelope.DataContentType) {
+		} else if contenttype.IsJSONContentType(envelope.GetDataContentType()) || contenttype.IsCloudEventContentType(envelope.GetDataContentType()) {
 			envelope.Data, _ = json.Marshal(data)
 		}
 	}

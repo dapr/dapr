@@ -166,7 +166,7 @@ func TestInputBindingCalls(t *testing.T) {
 			readResponseChan: messageChan,
 			onReadRequestReceived: func(ma *proto.ReadRequest) {
 				messagesAcked.Done()
-				if ma.ResponseError != nil {
+				if ma.GetResponseError() != nil {
 					totalResponseErrors.Add(1)
 				}
 			},

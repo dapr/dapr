@@ -25,6 +25,8 @@ const owners = [
     'taction',
     'tanvigour',
     'yaron2',
+    'rabollin',
+    'ashiquemd'
 ]
 
 const SDKs = [
