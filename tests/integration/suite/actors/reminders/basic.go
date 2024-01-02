@@ -109,11 +109,14 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("schedule reminder via HTTP", func(t *testing.T) {
 		const body = `{"dueTime": "0ms"}`
-		var req *http.Request
+		var (
+			req  *http.Request
+			resp *http.Response
+		)
 		req, err = http.NewRequestWithContext(ctx, http.MethodPost, daprdURL+"/reminders/remindermethod", strings.NewReader(body))
 		require.NoError(t, err)
 
-		resp, err := client.Do(req)
+		resp, err = client.Do(req)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 		assert.Equal(t, http.StatusNoContent, resp.StatusCode)

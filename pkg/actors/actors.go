@@ -627,7 +627,7 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *invokev1.Invoke
 	}
 
 	// Allow stopping a recurring reminder or timer
-	if v := resp.Headers()["X-Daprremindercancel"]; v != nil && len(v.GetValues()) > 0 && utils.IsTruthy(v.Values[0]) {
+	if v := resp.Headers()["X-Daprremindercancel"]; v != nil && len(v.GetValues()) > 0 && utils.IsTruthy(v.GetValues()[0]) {
 		return resp, ErrReminderCanceled
 	}
 
