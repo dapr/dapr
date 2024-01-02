@@ -15,6 +15,8 @@ limitations under the License.
 package wfengine
 
 import (
+	"fmt"
+
 	"github.com/microsoft/durabletask-go/backend"
 
 	wfbe "github.com/dapr/dapr/pkg/components/wfbackend"
@@ -25,7 +27,7 @@ const (
 	ActorBackendType = "workflowbackend.actor"
 )
 
-type BackendFactory func(appID string, backendComponentInfo *wfbe.WorkflowBackendComponentInfo, log logger.Logger) backend.Backend
+type BackendFactory func(appID string, backendComponentInfo *wfbe.WorkflowBackendComponentInfo, log logger.Logger) (backend.Backend, error)
 
 var backendFactories = map[string]BackendFactory{
 	ActorBackendType: getActorBackend,
@@ -35,25 +37,25 @@ func RegisterBackendFactory(backendType string, factory BackendFactory) {
 	backendFactories[backendType] = factory
 }
 
-func getActorBackend(appID string, backendComponentInfo *wfbe.WorkflowBackendComponentInfo, log logger.Logger) backend.Backend {
+func getActorBackend(appID string, backendComponentInfo *wfbe.WorkflowBackendComponentInfo, log logger.Logger) (backend.Backend, error) {
 	log.Infof("Initializing actor backend for appID: %s", appID)
 
-	return NewActorBackend(appID)
+	return NewActorBackend(appID), nil
 }
 
-func InitializeWorkflowBackend(appID string, backendType string, backendComponentInfo *wfbe.WorkflowBackendComponentInfo, log logger.Logger) backend.Backend {
+func InitializeWorkflowBackend(appID string, backendType string, backendComponentInfo *wfbe.WorkflowBackendComponentInfo, log logger.Logger) (backend.Backend, error) {
 	if backendComponentInfo == nil {
 		return getActorBackend(appID, backendComponentInfo, log)
 	}
 
 	if backendComponentInfo.InvalidWorkflowBackend {
 		log.Errorf("Invalid workflow backend type provided, backend is not initialized")
-		return nil
+		return nil, fmt.Errorf("invalid workflow backend type provided, backend is not initialized")
 	}
 
 	if factory, ok := backendFactories[backendType]; ok {
 		return factory(appID, backendComponentInfo, log)
 	}
 
-	return nil
+	return nil, nil
 }

@@ -75,8 +75,13 @@ func NewWorkflowEngine(appID string, spec config.WorkflowSpec, backendManager pr
 		engine.BackendType = ActorBackendType
 	}
 
-	be := InitializeWorkflowBackend(appID, engine.BackendType, backendComponentInfo, wfBackendLogger)
-	engine.Backend = be
+	be, err := InitializeWorkflowBackend(appID, engine.BackendType, backendComponentInfo, wfBackendLogger)
+
+	if err != nil {
+		wfLogger.Errorf("Failed to initialize workflow backend: %v", err)
+	} else {
+		engine.Backend = be
+	}
 
 	return engine
 }

@@ -31,14 +31,14 @@ func init() {
 	RegisterBackendFactory(SqliteBackendType, getSqliteBackend)
 }
 
-func getSqliteBackend(appID string, backendComponentInfo *wfbe.WorkflowBackendComponentInfo, log logger.Logger) backend.Backend {
+func getSqliteBackend(appID string, backendComponentInfo *wfbe.WorkflowBackendComponentInfo, log logger.Logger) (backend.Backend, error) {
 	log.Infof("Initializing SQLite backend for appID: %s", appID)
 	sqliteMetadata := wfbe.NewSqliteMetadata()
 	err := sqliteMetadata.Parse(backendComponentInfo.WorkflowBackendMetadata.Properties)
 	if err != nil {
 		log.Errorf("Failed to parse SQLite backend metadata; SQLite backend is not initialized: %v", err)
-		return nil
+		return nil, err
 	}
 
-	return sqlite.NewSqliteBackend(&sqliteMetadata.SqliteOptions, log)
+	return sqlite.NewSqliteBackend(&sqliteMetadata.SqliteOptions, log), nil
 }
