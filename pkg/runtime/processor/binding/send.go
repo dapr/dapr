@@ -43,17 +43,17 @@ func (b *binding) StartReadingFromBindings(ctx context.Context) error {
 	b.lock.Lock()
 	defer b.lock.Unlock()
 
+	b.readingBindings = true
+
 	if b.channels.AppChannel() == nil {
 		return errors.New("app channel not initialized")
 	}
 
 	// Clean any previous state
-	if b.inputCancel != nil {
-		b.inputCancel()
+	for _, cancel := range b.inputCancels {
+		cancel()
 	}
-
-	// Input bindings are stopped via cancellation of the main runtime's context
-	ctx, b.inputCancel = context.WithCancel(ctx)
+	b.inputCancels = make(map[string]context.CancelFunc)
 
 	comps := b.compStore.ListComponents()
 	bindings := make(map[string]componentsV1alpha1.Component)
@@ -64,36 +64,49 @@ func (b *binding) StartReadingFromBindings(ctx context.Context) error {
 	}
 
 	for name, bind := range b.compStore.ListInputBindings() {
-		var isSubscribed bool
-
-		meta, err := b.meta.ToBaseMetadata(bindings[name])
-		if err != nil {
+		if err := b.startInputBinding(bindings[name], bind); err != nil {
 			return err
-		}
-
-		m := meta.Properties
-
-		if isBindingOfExplicitDirection(ComponentTypeInput, m) {
-			isSubscribed = true
-		} else {
-			var err error
-			isSubscribed, err = b.isAppSubscribedToBinding(ctx, name)
-			if err != nil {
-				return err
-			}
-		}
-
-		if !isSubscribed {
-			log.Infof("app has not subscribed to binding %s.", name)
-			continue
-		}
-
-		if err := b.readFromBinding(ctx, name, bind); err != nil {
-			log.Errorf("error reading from input binding %s: %s", name, err)
-			continue
 		}
 	}
 
+	return nil
+}
+
+func (b *binding) startInputBinding(comp componentsV1alpha1.Component, binding bindings.InputBinding) error {
+	var isSubscribed bool
+
+	meta, err := b.meta.ToBaseMetadata(comp)
+	if err != nil {
+		return err
+	}
+
+	m := meta.Properties
+
+	ctx, cancel := context.WithCancel(context.Background())
+	if isBindingOfExplicitDirection(ComponentTypeInput, m) {
+		isSubscribed = true
+	} else {
+		var err error
+		isSubscribed, err = b.isAppSubscribedToBinding(ctx, comp.Name)
+		if err != nil {
+			cancel()
+			return err
+		}
+	}
+
+	if !isSubscribed {
+		log.Infof("app has not subscribed to binding %s.", comp.Name)
+		cancel()
+		return nil
+	}
+
+	if err := b.readFromBinding(ctx, comp.Name, binding); err != nil {
+		log.Errorf("error reading from input binding %s: %s", comp.Name, err)
+		cancel()
+		return nil
+	}
+
+	b.inputCancels[comp.Name] = cancel
 	return nil
 }
 
@@ -102,11 +115,12 @@ func (b *binding) StopReadingFromBindings() {
 	defer b.lock.Unlock()
 	defer b.wg.Wait()
 
-	if b.inputCancel != nil {
-		b.inputCancel()
-	}
+	b.readingBindings = false
 
-	b.inputCancel = nil
+	for _, cancel := range b.inputCancels {
+		cancel()
+	}
+	b.inputCancels = make(map[string]context.CancelFunc)
 }
 
 func (b *binding) sendBatchOutputBindingsParallel(ctx context.Context, to []string, data []byte) {
@@ -444,7 +458,7 @@ func (b *binding) isAppSubscribedToBinding(ctx context.Context, binding string) 
 
 		resp, err := b.channels.AppChannel().InvokeMethod(ctx, req, "")
 		if err != nil {
-			log.Fatalf("could not invoke OPTIONS method on input binding subscription endpoint %q: %v", path, err)
+			return false, fmt.Errorf("could not invoke OPTIONS method on input binding subscription endpoint %q: %v", path, err)
 		}
 		defer resp.Close()
 		code := resp.Status().GetCode()
