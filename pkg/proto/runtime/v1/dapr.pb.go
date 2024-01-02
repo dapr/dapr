@@ -20,11 +20,11 @@ package runtime
 
 import (
 	v1 "github.com/dapr/dapr/pkg/proto/common/v1"
-	any1 "github.com/golang/protobuf/ptypes/any"
-	empty "github.com/golang/protobuf/ptypes/empty"
-	timestamp "github.com/golang/protobuf/ptypes/timestamp"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	anypb "google.golang.org/protobuf/types/known/anypb"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 )
@@ -2420,9 +2420,9 @@ type TransactionalActorStateOperation struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	OperationType string    `protobuf:"bytes,1,opt,name=operationType,proto3" json:"operationType,omitempty"`
-	Key           string    `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
-	Value         *any1.Any `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
+	OperationType string     `protobuf:"bytes,1,opt,name=operationType,proto3" json:"operationType,omitempty"`
+	Key           string     `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	Value         *anypb.Any `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
 	// The metadata used for transactional operations.
 	//
 	// Common metadata property:
@@ -2476,7 +2476,7 @@ func (x *TransactionalActorStateOperation) GetKey() string {
 	return ""
 }
 
-func (x *TransactionalActorStateOperation) GetValue() *any1.Any {
+func (x *TransactionalActorStateOperation) GetValue() *anypb.Any {
 	if x != nil {
 		return x.Value
 	}
@@ -5464,9 +5464,9 @@ type GetWorkflowResponse struct {
 	// Name of the workflow.
 	WorkflowName string `protobuf:"bytes,2,opt,name=workflow_name,json=workflowName,proto3" json:"workflow_name,omitempty"`
 	// The time at which the workflow instance was created.
-	CreatedAt *timestamp.Timestamp `protobuf:"bytes,3,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	// The last time at which the workflow instance had its state changed.
-	LastUpdatedAt *timestamp.Timestamp `protobuf:"bytes,4,opt,name=last_updated_at,json=lastUpdatedAt,proto3" json:"last_updated_at,omitempty"`
+	LastUpdatedAt *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=last_updated_at,json=lastUpdatedAt,proto3" json:"last_updated_at,omitempty"`
 	// The current status of the workflow instance, for example, "PENDING", "RUNNING", "SUSPENDED", "COMPLETED", "FAILED", and "TERMINATED".
 	RuntimeStatus string `protobuf:"bytes,5,opt,name=runtime_status,json=runtimeStatus,proto3" json:"runtime_status,omitempty"`
 	// Additional component-specific properties of the workflow instance.
@@ -5519,14 +5519,14 @@ func (x *GetWorkflowResponse) GetWorkflowName() string {
 	return ""
 }
 
-func (x *GetWorkflowResponse) GetCreatedAt() *timestamp.Timestamp {
+func (x *GetWorkflowResponse) GetCreatedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.CreatedAt
 	}
 	return nil
 }
 
-func (x *GetWorkflowResponse) GetLastUpdatedAt() *timestamp.Timestamp {
+func (x *GetWorkflowResponse) GetLastUpdatedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.LastUpdatedAt
 	}
@@ -7517,12 +7517,12 @@ var file_dapr_proto_runtime_v1_dapr_proto_goTypes = []interface{}{
 	(*v1.Etag)(nil),                             // 122: dapr.proto.common.v1.Etag
 	(*v1.StateOptions)(nil),                     // 123: dapr.proto.common.v1.StateOptions
 	(*v1.StateItem)(nil),                        // 124: dapr.proto.common.v1.StateItem
-	(*any1.Any)(nil),                            // 125: google.protobuf.Any
+	(*anypb.Any)(nil),                           // 125: google.protobuf.Any
 	(*v1.StreamPayload)(nil),                    // 126: dapr.proto.common.v1.StreamPayload
-	(*timestamp.Timestamp)(nil),                 // 127: google.protobuf.Timestamp
+	(*timestamppb.Timestamp)(nil),               // 127: google.protobuf.Timestamp
 	(*v1.ConfigurationItem)(nil),                // 128: dapr.proto.common.v1.ConfigurationItem
 	(*v1.InvokeResponse)(nil),                   // 129: dapr.proto.common.v1.InvokeResponse
-	(*empty.Empty)(nil),                         // 130: google.protobuf.Empty
+	(*emptypb.Empty)(nil),                       // 130: google.protobuf.Empty
 }
 var file_dapr_proto_runtime_v1_dapr_proto_depIdxs = []int32{
 	120, // 0: dapr.proto.runtime.v1.InvokeServiceRequest.message:type_name -> dapr.proto.common.v1.InvokeRequest

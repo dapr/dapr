@@ -19,9 +19,9 @@
 package common
 
 import (
-	any1 "github.com/golang/protobuf/ptypes/any"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	anypb "google.golang.org/protobuf/types/known/anypb"
 	reflect "reflect"
 	sync "sync"
 )
@@ -282,7 +282,7 @@ type InvokeRequest struct {
 	Method string `protobuf:"bytes,1,opt,name=method,proto3" json:"method,omitempty"`
 	// Required in unary RPCs. Bytes value or Protobuf message which caller sent.
 	// Dapr treats Any.value as bytes type if Any.type_url is unset.
-	Data *any1.Any `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
+	Data *anypb.Any `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
 	// The type of data content.
 	//
 	// This field is required if data delivers http request body
@@ -334,7 +334,7 @@ func (x *InvokeRequest) GetMethod() string {
 	return ""
 }
 
-func (x *InvokeRequest) GetData() *any1.Any {
+func (x *InvokeRequest) GetData() *anypb.Any {
 	if x != nil {
 		return x.Data
 	}
@@ -365,7 +365,7 @@ type InvokeResponse struct {
 	unknownFields protoimpl.UnknownFields
 
 	// Required in unary RPCs. The content body of InvokeService response.
-	Data *any1.Any `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
+	Data *anypb.Any `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
 	// Required. The type of data content.
 	ContentType string `protobuf:"bytes,2,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
 }
@@ -402,7 +402,7 @@ func (*InvokeResponse) Descriptor() ([]byte, []int) {
 	return file_dapr_proto_common_v1_common_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *InvokeResponse) GetData() *any1.Any {
+func (x *InvokeResponse) GetData() *anypb.Any {
 	if x != nil {
 		return x.Data
 	}
@@ -877,7 +877,7 @@ var file_dapr_proto_common_v1_common_proto_goTypes = []interface{}{
 	(*ConfigurationItem)(nil),          // 10: dapr.proto.common.v1.ConfigurationItem
 	nil,                                // 11: dapr.proto.common.v1.StateItem.MetadataEntry
 	nil,                                // 12: dapr.proto.common.v1.ConfigurationItem.MetadataEntry
-	(*any1.Any)(nil),                   // 13: google.protobuf.Any
+	(*anypb.Any)(nil),                  // 13: google.protobuf.Any
 }
 var file_dapr_proto_common_v1_common_proto_depIdxs = []int32{
 	0,  // 0: dapr.proto.common.v1.HTTPExtension.verb:type_name -> dapr.proto.common.v1.HTTPExtension.Verb

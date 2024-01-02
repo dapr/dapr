@@ -19,9 +19,9 @@
 package internals
 
 import (
-	timestamp "github.com/golang/protobuf/ptypes/timestamp"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 )
@@ -39,14 +39,14 @@ type Reminder struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	ActorId        string               `protobuf:"bytes,1,opt,name=actor_id,json=actorId,proto3" json:"actor_id,omitempty"`
-	ActorType      string               `protobuf:"bytes,2,opt,name=actor_type,json=actorType,proto3" json:"actor_type,omitempty"`
-	Name           string               `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
-	Data           []byte               `protobuf:"bytes,4,opt,name=data,proto3" json:"data,omitempty"`
-	Period         string               `protobuf:"bytes,5,opt,name=period,proto3" json:"period,omitempty"`
-	RegisteredTime *timestamp.Timestamp `protobuf:"bytes,6,opt,name=registered_time,json=registeredTime,proto3" json:"registered_time,omitempty"`
-	DueTime        string               `protobuf:"bytes,7,opt,name=due_time,json=dueTime,proto3" json:"due_time,omitempty"`
-	ExpirationTime *timestamp.Timestamp `protobuf:"bytes,8,opt,name=expiration_time,json=expirationTime,proto3" json:"expiration_time,omitempty"`
+	ActorId        string                 `protobuf:"bytes,1,opt,name=actor_id,json=actorId,proto3" json:"actor_id,omitempty"`
+	ActorType      string                 `protobuf:"bytes,2,opt,name=actor_type,json=actorType,proto3" json:"actor_type,omitempty"`
+	Name           string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Data           []byte                 `protobuf:"bytes,4,opt,name=data,proto3" json:"data,omitempty"`
+	Period         string                 `protobuf:"bytes,5,opt,name=period,proto3" json:"period,omitempty"`
+	RegisteredTime *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=registered_time,json=registeredTime,proto3" json:"registered_time,omitempty"`
+	DueTime        string                 `protobuf:"bytes,7,opt,name=due_time,json=dueTime,proto3" json:"due_time,omitempty"`
+	ExpirationTime *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=expiration_time,json=expirationTime,proto3" json:"expiration_time,omitempty"`
 }
 
 func (x *Reminder) Reset() {
@@ -116,7 +116,7 @@ func (x *Reminder) GetPeriod() string {
 	return ""
 }
 
-func (x *Reminder) GetRegisteredTime() *timestamp.Timestamp {
+func (x *Reminder) GetRegisteredTime() *timestamppb.Timestamp {
 	if x != nil {
 		return x.RegisteredTime
 	}
@@ -130,7 +130,7 @@ func (x *Reminder) GetDueTime() string {
 	return ""
 }
 
-func (x *Reminder) GetExpirationTime() *timestamp.Timestamp {
+func (x *Reminder) GetExpirationTime() *timestamppb.Timestamp {
 	if x != nil {
 		return x.ExpirationTime
 	}
@@ -238,9 +238,9 @@ func file_dapr_proto_internals_v1_reminders_proto_rawDescGZIP() []byte {
 
 var file_dapr_proto_internals_v1_reminders_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_dapr_proto_internals_v1_reminders_proto_goTypes = []interface{}{
-	(*Reminder)(nil),            // 0: dapr.proto.internals.v1.Reminder
-	(*Reminders)(nil),           // 1: dapr.proto.internals.v1.Reminders
-	(*timestamp.Timestamp)(nil), // 2: google.protobuf.Timestamp
+	(*Reminder)(nil),              // 0: dapr.proto.internals.v1.Reminder
+	(*Reminders)(nil),             // 1: dapr.proto.internals.v1.Reminders
+	(*timestamppb.Timestamp)(nil), // 2: google.protobuf.Timestamp
 }
 var file_dapr_proto_internals_v1_reminders_proto_depIdxs = []int32{
 	2, // 0: dapr.proto.internals.v1.Reminder.registered_time:type_name -> google.protobuf.Timestamp

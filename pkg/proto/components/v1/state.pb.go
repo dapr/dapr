@@ -19,9 +19,9 @@
 package components
 
 import (
-	any1 "github.com/golang/protobuf/ptypes/any"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	anypb "google.golang.org/protobuf/types/known/anypb"
 	reflect "reflect"
 	sync "sync"
 )
@@ -299,7 +299,7 @@ type Query struct {
 	unknownFields protoimpl.UnknownFields
 
 	// Filters that should be applied.
-	Filter map[string]*any1.Any `protobuf:"bytes,1,rep,name=filter,proto3" json:"filter,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	Filter map[string]*anypb.Any `protobuf:"bytes,1,rep,name=filter,proto3" json:"filter,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 	// The sort order.
 	Sort []*Sorting `protobuf:"bytes,2,rep,name=sort,proto3" json:"sort,omitempty"`
 	// The query pagination params.
@@ -338,7 +338,7 @@ func (*Query) Descriptor() ([]byte, []int) {
 	return file_dapr_proto_components_v1_state_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *Query) GetFilter() map[string]*any1.Any {
+func (x *Query) GetFilter() map[string]*anypb.Any {
 	if x != nil {
 		return x.Filter
 	}
@@ -2276,7 +2276,7 @@ var file_dapr_proto_components_v1_state_proto_goTypes = []interface{}{
 	nil,                                 // 39: dapr.proto.components.v1.SetRequest.MetadataEntry
 	nil,                                 // 40: dapr.proto.components.v1.BulkStateItem.MetadataEntry
 	(*MetadataRequest)(nil),             // 41: dapr.proto.components.v1.MetadataRequest
-	(*any1.Any)(nil),                    // 42: google.protobuf.Any
+	(*anypb.Any)(nil),                   // 42: google.protobuf.Any
 	(*FeaturesRequest)(nil),             // 43: dapr.proto.components.v1.FeaturesRequest
 	(*PingRequest)(nil),                 // 44: dapr.proto.components.v1.PingRequest
 	(*FeaturesResponse)(nil),            // 45: dapr.proto.components.v1.FeaturesResponse
