@@ -726,7 +726,7 @@ func TestAppToken(t *testing.T) {
 			client:                   http.DefaultClient,
 			compStore:                compstore.New(),
 			appHeaderToken:           "token",
-			appHeaderTokenHeaderName: "token",
+			appHeaderTokenHeaderName: "token-header",
 		}
 		req := invokev1.NewInvokeMethodRequest("method").
 			WithHTTPExtension(http.MethodPost, "")
@@ -743,9 +743,9 @@ func TestAppToken(t *testing.T) {
 		actual := map[string]string{}
 		json.Unmarshal(body, &actual)
 
-		_, hasToken := actual["Token"]
-		assert.NoError(t, err)
-		assert.True(t, hasToken)
+		tokenValue, hasToken := actual["Token-Header"]
+		require.True(t, hasToken)
+		assert.Equal(t, "token", tokenValue)
 		testServer.Close()
 	})
 
@@ -768,15 +768,14 @@ func TestAppToken(t *testing.T) {
 		resp, err := c.InvokeMethod(ctx, req, "")
 
 		// assert
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		defer resp.Close()
 		body, _ := resp.RawDataFull()
 
 		actual := map[string]string{}
 		json.Unmarshal(body, &actual)
 		_, hasToken := actual["X-Api-Token"]
-		assert.NoError(t, err)
-		assert.True(t, hasToken)
+		require.True(t, hasToken)
 		testServer.Close()
 	})
 
@@ -799,14 +798,13 @@ func TestAppToken(t *testing.T) {
 		resp, err := c.InvokeMethod(ctx, req, "")
 
 		// assert
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		defer resp.Close()
 		body, _ := resp.RawDataFull()
 
 		actual := map[string]string{}
 		json.Unmarshal(body, &actual)
 		_, hasToken := actual["Dapr-Api-Token"]
-		require.NoError(t, err)
 		assert.True(t, hasToken)
 		testServer.Close()
 	})
@@ -838,7 +836,6 @@ func TestAppToken(t *testing.T) {
 		json.Unmarshal(body, &actual)
 
 		_, hasToken := actual["Dapr-Api-Token"]
-		require.NoError(t, err)
 		assert.False(t, hasToken)
 		testServer.Close()
 	})
