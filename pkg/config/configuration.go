@@ -1,6 +1,5 @@
 /*
-Copyright 2GetConfiguration
-021 The Dapr Authors
+Copyright 2021 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -23,8 +22,6 @@ import (
 	"strings"
 	"time"
 
-	env "github.com/dapr/dapr/pkg/config/env"
-
 	grpcRetry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	"github.com/spf13/cast"
 	yaml "gopkg.in/yaml.v3"
@@ -32,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 
 	"github.com/dapr/dapr/pkg/buildinfo"
+	env "github.com/dapr/dapr/pkg/config/env"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/ptr"

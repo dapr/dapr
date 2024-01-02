@@ -14,8 +14,6 @@ limitations under the License.
 package operator
 
 import (
-	"errors"
-
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	operatorpb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -44,12 +42,7 @@ func New(opts Options) loader.Interface {
 }
 
 func (o *operator) Close() error {
-	errs := make([]error, 0, 2)
-	if err := o.component.close(); err != nil {
-		errs = append(errs, err)
-	}
-
-	return errors.Join(errs...)
+	return o.component.close()
 }
 
 func (o *operator) Components() loader.Loader[componentsapi.Component] {

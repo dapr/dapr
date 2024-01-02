@@ -205,9 +205,6 @@ func newDaprRuntime(ctx context.Context,
 			Authorizer:     authz,
 			Processor:      processor,
 		})
-		if err != nil {
-			return nil, err
-		}
 	case modes.StandaloneMode:
 		reloader, err = hotreload.NewDisk(ctx, hotreload.OptionsReloaderDisk{
 			Config:         globalConfig,

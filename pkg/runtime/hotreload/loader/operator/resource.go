@@ -125,7 +125,7 @@ func (r *resource[T]) stream(ctx context.Context, eventCh chan<- *loader.Event[T
 			if err != nil {
 				r.streamer.close()
 				// Retry on stream error.
-				log.Errorf("error from operator stream: %s", err)
+				log.Errorf("Error from operator stream: %s", err)
 				break
 			}
 
@@ -137,10 +137,8 @@ func (r *resource[T]) stream(ctx context.Context, eventCh chan<- *loader.Event[T
 		}
 
 		for {
-			select {
-			case <-ctx.Done():
+			if ctx.Err() != nil {
 				return
-			default:
 			}
 
 			if err := backoff.Retry(func() error {
