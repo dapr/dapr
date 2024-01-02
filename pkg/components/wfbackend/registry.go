@@ -21,7 +21,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-// Registry is an interface for a component that returns registered state store implementations.
+// Registry is an interface for a component that returns registered workflow backend implementations.
 type Registry struct {
 	Logger                    logger.Logger
 	workflowBackendComponents map[string]func(logger.Logger) WorkflowBackend
