@@ -16,43 +16,9 @@ limitations under the License.
 package components
 
 import (
-	"time"
-
-	"github.com/microsoft/durabletask-go/backend/sqlite"
-
 	wfbeLoader "github.com/dapr/dapr/pkg/components/wfbackend"
-	metadataUtil "github.com/dapr/kit/metadata"
-)
-
-const (
-	defaultSQLiteFilePath                 = ""
-	defaultSQLiteOrchestrationLockTimeout = 2 * time.Minute
-	defaultSQLiteActivityLockTimeout      = 2 * time.Minute
 )
 
 func init() {
 	wfbeLoader.DefaultRegistry.RegisterComponent(wfbeLoader.NewWorkflowBackend, "sqlite")
-}
-
-type sqliteMetadata struct {
-	sqlite.SqliteOptions
-}
-
-func NewSqliteMetadata() sqliteMetadata {
-	return sqliteMetadata{
-		SqliteOptions: sqlite.SqliteOptions{
-			FilePath:                 defaultSQLiteFilePath,
-			OrchestrationLockTimeout: defaultSQLiteOrchestrationLockTimeout,
-			ActivityLockTimeout:      defaultSQLiteActivityLockTimeout,
-		},
-	}
-}
-
-func (m *sqliteMetadata) Parse(meta map[string]string) error {
-	err := metadataUtil.DecodeMetadata(meta, &m.SqliteOptions)
-	if err != nil {
-		return err
-	}
-
-	return nil
 }

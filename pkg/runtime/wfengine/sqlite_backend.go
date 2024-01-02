@@ -20,7 +20,6 @@ import (
 
 	"github.com/dapr/kit/logger"
 
-	"github.com/dapr/dapr/cmd/daprd/components"
 	wfbe "github.com/dapr/dapr/pkg/components/wfbackend"
 )
 
@@ -34,7 +33,7 @@ func init() {
 
 func getSqliteBackend(appID string, backendComponentInfo *wfbe.WorkflowBackendComponentInfo, log logger.Logger) backend.Backend {
 	log.Infof("Initializing SQLite backend for appID: %s", appID)
-	sqliteMetadata := components.NewSqliteMetadata()
+	sqliteMetadata := wfbe.NewSqliteMetadata()
 	err := sqliteMetadata.Parse(backendComponentInfo.WorkflowBackendMetadata.Properties)
 	if err != nil {
 		log.Errorf("Failed to parse SQLite backend metadata; SQLite backend is not initialized: %v", err)
