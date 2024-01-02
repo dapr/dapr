@@ -32,7 +32,7 @@ func init() {
 }
 
 func getSqliteBackend(appID string, backendComponentInfo *wfbe.WorkflowBackendComponentInfo, log logger.Logger) backend.Backend {
-	log.Infof("Initializing sqlite backend for appID: %s", appID)
+	log.Infof("Initializing SQLite backend for appID: %s", appID)
 	sqliteMetadata := wfbe.NewSqliteMetadata()
 	err := sqliteMetadata.Parse(backendComponentInfo.WorkflowBackendMetadata.Properties)
 	if err != nil {
