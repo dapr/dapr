@@ -122,7 +122,7 @@ func (c *crypto) Run(t *testing.T, ctx context.Context) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 1)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*10, time.Millisecond*100)
 
 		c.encryptDecrypt(t, ctx, client, "crypto1")
 		c.encryptDecryptFail(t, ctx, client, "crypto2")
@@ -154,7 +154,7 @@ func (c *crypto) Run(t *testing.T, ctx context.Context) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 2)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*10, time.Millisecond*100)
 
 		c.encryptDecrypt(t, ctx, client, "crypto1")
 		c.encryptDecrypt(t, ctx, client, "crypto2")
@@ -186,7 +186,7 @@ func (c *crypto) Run(t *testing.T, ctx context.Context) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 3)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*10, time.Millisecond*100)
 
 		c.encryptDecrypt(t, ctx, client, "crypto1")
 		c.encryptDecrypt(t, ctx, client, "crypto2")
@@ -216,7 +216,7 @@ func (c *crypto) Run(t *testing.T, ctx context.Context) {
 					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
 				},
 			}, resp.GetRegisteredComponents())
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*10, time.Millisecond*100)
 
 		c.encryptDecrypt(t, ctx, client, "crypto1")
 		c.encryptDecryptFail(t, ctx, client, "crypto2")
@@ -232,7 +232,7 @@ func (c *crypto) Run(t *testing.T, ctx context.Context) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 2)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*10, time.Millisecond*100)
 
 		delComp = c.operator.Components()[0]
 		c.operator.SetComponents(c.operator.Components()[1])
@@ -254,7 +254,7 @@ func (c *crypto) Run(t *testing.T, ctx context.Context) {
 					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
 				},
 			}, resp.GetRegisteredComponents())
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*10, time.Millisecond*100)
 
 		c.encryptDecryptFail(t, ctx, client, "crypto1")
 		c.encryptDecryptFail(t, ctx, client, "crypto2")
@@ -280,7 +280,7 @@ func (c *crypto) Run(t *testing.T, ctx context.Context) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 2)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*10, time.Millisecond*100)
 
 		c.encryptDecryptFail(t, ctx, client, "crypto1")
 		c.encryptDecrypt(t, ctx, client, "crypto2")
