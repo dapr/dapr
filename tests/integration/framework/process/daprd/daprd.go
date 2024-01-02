@@ -16,6 +16,7 @@ package daprd
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -31,7 +32,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/emptypb"
 
-	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
@@ -110,6 +111,9 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	if len(opts.resourceFiles) > 0 {
 		args = append(args, "--resources-path="+dir)
 	}
+	for _, dir := range opts.resourceDirs {
+		args = append(args, "--resources-path="+dir)
+	}
 	if len(opts.configs) > 0 {
 		for _, c := range opts.configs {
 			args = append(args, "--config="+c)
@@ -126,6 +130,12 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	}
 	if opts.disableK8sSecretStore != nil {
 		args = append(args, "--disable-builtin-k8s-secret-store="+strconv.FormatBool(*opts.disableK8sSecretStore))
+	}
+	if opts.gracefulShutdownSeconds != nil {
+		args = append(args, "--dapr-graceful-shutdown-seconds="+strconv.Itoa(*opts.gracefulShutdownSeconds))
+	}
+	if opts.blockShutdownDuration != nil {
+		args = append(args, "--dapr-block-shutdown-duration="+*opts.blockShutdownDuration)
 	}
 
 	return &Daprd{
@@ -155,6 +165,18 @@ func (d *Daprd) Cleanup(t *testing.T) {
 	d.appHTTP.Cleanup(t)
 }
 
+func (d *Daprd) WaitUntilTCPReady(t *testing.T, ctx context.Context) {
+	assert.Eventually(t, func() bool {
+		dialer := net.Dialer{Timeout: time.Second}
+		net, err := dialer.DialContext(ctx, "tcp", d.HTTPAddress())
+		if err != nil {
+			return false
+		}
+		net.Close()
+		return true
+	}, 10*time.Second, 100*time.Millisecond)
+}
+
 func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
 	client := util.HTTPClient(t)
 	assert.Eventually(t, func() bool {
@@ -168,7 +190,7 @@ func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
 		}
 		defer resp.Body.Close()
 		return http.StatusNoContent == resp.StatusCode
-	}, time.Second*10, 100*time.Millisecond)
+	}, 10*time.Second, 100*time.Millisecond)
 }
 
 func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
@@ -186,11 +208,11 @@ func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
 			}
 			defer resp.Body.Close()
 			return http.StatusNoContent == resp.StatusCode
-		}, time.Second*10, 100*time.Millisecond)
+		}, 10*time.Second, 100*time.Millisecond)
 
 	case "grpc":
 		assert.Eventually(t, func() bool {
-			conn, err := grpc.Dial("localhost:"+strconv.Itoa(d.appPort),
+			conn, err := grpc.Dial(d.AppAddress(),
 				grpc.WithTransportCredentials(insecure.NewCredentials()),
 				grpc.WithBlock())
 			if conn != nil {
@@ -201,11 +223,22 @@ func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
 				return false
 			}
 			in := emptypb.Empty{}
-			out := runtimev1pb.HealthCheckResponse{}
+			out := rtv1.HealthCheckResponse{}
 			err = conn.Invoke(ctx, "/dapr.proto.runtime.v1.AppCallbackHealthCheck/HealthCheck", &in, &out)
 			return err == nil
-		}, time.Second*10, 100*time.Millisecond)
+		}, 10*time.Second, 100*time.Millisecond)
 	}
+}
+
+func (d *Daprd) GRPCClient(t *testing.T, ctx context.Context) rtv1.DaprClient {
+	conn, err := grpc.DialContext(ctx, fmt.Sprintf("localhost:%d", d.GRPCPort()),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithBlock(),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, conn.Close()) })
+
+	return rtv1.NewDaprClient(conn)
 }
 
 func (d *Daprd) AppID() string {
@@ -216,16 +249,32 @@ func (d *Daprd) AppPort() int {
 	return d.appPort
 }
 
+func (d *Daprd) AppAddress() string {
+	return "localhost:" + strconv.Itoa(d.AppPort())
+}
+
 func (d *Daprd) GRPCPort() int {
 	return d.grpcPort
+}
+
+func (d *Daprd) GRPCAddress() string {
+	return "localhost:" + strconv.Itoa(d.GRPCPort())
 }
 
 func (d *Daprd) HTTPPort() int {
 	return d.httpPort
 }
 
+func (d *Daprd) HTTPAddress() string {
+	return "localhost:" + strconv.Itoa(d.HTTPPort())
+}
+
 func (d *Daprd) InternalGRPCPort() int {
 	return d.internalGRPCPort
+}
+
+func (d *Daprd) InternalGRPCAddress() string {
+	return "localhost:" + strconv.Itoa(d.InternalGRPCPort())
 }
 
 func (d *Daprd) PublicPort() int {

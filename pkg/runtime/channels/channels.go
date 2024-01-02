@@ -208,7 +208,7 @@ func (c *Channels) buildHTTPPipelineForSpec(spec *config.PipelineSpec, targetPip
 	}
 
 	for _, handlerSpec := range spec.Handlers {
-		comp, exists := c.compStore.GetComponent(handlerSpec.Type, handlerSpec.Name)
+		comp, exists := c.compStore.GetComponent(handlerSpec.Name)
 		if !exists {
 			// Log the error but continue with initializing the pipeline
 			log.Errorf("couldn't find middleware component defined in configuration with name %s and type %s",
@@ -369,12 +369,7 @@ func appHTTPClient(connConfig config.AppConnectionConfig, globalConfig *config.C
 		if connConfig.Protocol == protocol.HTTPSProtocol {
 			tlsConfig = &tls.Config{
 				InsecureSkipVerify: true, //nolint:gosec
-				// For 1.11
-				MinVersion: channel.AppChannelMinTLSVersion,
-			}
-			// TODO: Remove when the feature is finalized
-			if globalConfig.IsFeatureEnabled(config.AppChannelAllowInsecureTLS) {
-				tlsConfig.MinVersion = 0
+				MinVersion:         channel.AppChannelMinTLSVersion,
 			}
 		}
 

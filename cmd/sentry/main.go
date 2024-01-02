@@ -16,6 +16,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -36,7 +37,7 @@ import (
 var log = logger.NewLogger("dapr.sentry")
 
 func main() {
-	opts := options.New()
+	opts := options.New(os.Args[1:])
 
 	// Apply options to all loggers
 	if err := logger.ApplyOptionsToLoggers(&opts.Logger); err != nil {
@@ -128,11 +129,16 @@ func main() {
 	}
 
 	// Watch for changes in the watchDir
-	err = mngr.Add(func(ctx context.Context) error {
-		log.Infof("Starting watch on filesystem directory: %s", watchDir)
-		return fswatcher.Watch(ctx, watchDir, issuerEvent)
+	fs, err := fswatcher.New(fswatcher.Options{
+		Targets: []string{watchDir},
 	})
 	if err != nil {
+		log.Fatal(err)
+	}
+	if err = mngr.Add(func(ctx context.Context) error {
+		log.Infof("Starting watch on filesystem directory: %s", watchDir)
+		return fs.Run(ctx, issuerEvent)
+	}); err != nil {
 		log.Fatal(err)
 	}
 

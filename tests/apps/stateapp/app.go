@@ -649,12 +649,12 @@ func grpcHandler(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			statusCode, res.Message = setErrorMessage("QueryState", err.Error())
 		}
-		if resp != nil && len(resp.Results) > 0 {
-			res.States = make([]daprState, 0, len(resp.Results))
-			for _, r := range resp.Results {
+		if resp != nil && len(resp.GetResults()) > 0 {
+			res.States = make([]daprState, 0, len(resp.GetResults()))
+			for _, r := range resp.GetResults() {
 				res.States = append(res.States, daprState{
-					Key:   r.Key,
-					Value: &appState{Data: r.Data},
+					Key:   r.GetKey(),
+					Value: &appState{Data: r.GetData()},
 				})
 			}
 		}
@@ -683,20 +683,20 @@ func daprState2Keys(states []daprState) []string {
 }
 
 func toDaprStates(response *runtimev1pb.GetBulkStateResponse) ([]daprState, error) {
-	result := make([]daprState, len(response.Items))
-	for i, state := range response.Items {
-		if state.Error != "" {
-			return nil, fmt.Errorf("%s while getting bulk state", state.Error)
+	result := make([]daprState, len(response.GetItems()))
+	for i, state := range response.GetItems() {
+		if state.GetError() != "" {
+			return nil, fmt.Errorf("%s while getting bulk state", state.GetError())
 		}
-		daprStateItem, err := parseState(state.Key, state.Data)
+		daprStateItem, err := parseState(state.GetKey(), state.GetData())
 		if err != nil {
 			return nil, err
 		}
 		result[i] = daprState{
-			Key:      state.Key,
+			Key:      state.GetKey(),
 			Value:    daprStateItem,
-			Etag:     state.Etag,
-			Metadata: state.Metadata,
+			Etag:     state.GetEtag(),
+			Metadata: state.GetMetadata(),
 		}
 	}
 
@@ -750,8 +750,8 @@ func getAllGRPC(states []daprState, statestore string, meta map[string]string) (
 		if err != nil {
 			return nil, err
 		}
-		log.Printf("found state for key %s, value is %s\n", state.Key, res.Data)
-		val, err := parseState(state.Key, res.Data)
+		log.Printf("found state for key %s, value is %s\n", state.Key, res.GetData())
+		val, err := parseState(state.Key, res.GetData())
 		if err != nil {
 			return nil, err
 		}
@@ -1019,24 +1019,24 @@ func etagTestGRPC(statestore string) error {
 		}
 
 		if opts.expectNotFound {
-			if len(res.Data) != 0 {
-				return "", fmt.Errorf("invalid value for state %d: %q (expected empty)", stateId, string(res.Data))
+			if len(res.GetData()) != 0 {
+				return "", fmt.Errorf("invalid value for state %d: %q (expected empty)", stateId, string(res.GetData()))
 			}
 			return "", nil
 		}
-		if len(res.Data) == 0 || string(res.Data) != opts.expectValue {
-			return "", fmt.Errorf("invalid value for state %d: %q (expected: %q)", stateId, string(res.Data), opts.expectValue)
+		if len(res.GetData()) == 0 || string(res.GetData()) != opts.expectValue {
+			return "", fmt.Errorf("invalid value for state %d: %q (expected: %q)", stateId, string(res.GetData()), opts.expectValue)
 		}
-		if res.Etag == "" {
+		if res.GetEtag() == "" {
 			return "", fmt.Errorf("etag is empty for state %d", stateId)
 		}
-		if opts.expectEtagEqual != "" && res.Etag != opts.expectEtagEqual {
-			return "", fmt.Errorf("etag is invalid for state %d: %q (expected: %q)", stateId, res.Etag, opts.expectEtagEqual)
+		if opts.expectEtagEqual != "" && res.GetEtag() != opts.expectEtagEqual {
+			return "", fmt.Errorf("etag is invalid for state %d: %q (expected: %q)", stateId, res.GetEtag(), opts.expectEtagEqual)
 		}
-		if opts.expectEtagNotEqual != "" && res.Etag == opts.expectEtagNotEqual {
-			return "", fmt.Errorf("etag is invalid for state %d: %q (expected different value)", stateId, res.Etag)
+		if opts.expectEtagNotEqual != "" && res.GetEtag() == opts.expectEtagNotEqual {
+			return "", fmt.Errorf("etag is invalid for state %d: %q (expected different value)", stateId, res.GetEtag())
 		}
-		return res.Etag, nil
+		return res.GetEtag(), nil
 	}
 
 	// First, write three values

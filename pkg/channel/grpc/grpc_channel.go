@@ -99,7 +99,7 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 		return nil, err
 	}
 
-	md := invokev1.InternalMetadataToGrpcMetadata(ctx, pd.Metadata, true)
+	md := invokev1.InternalMetadataToGrpcMetadata(ctx, pd.GetMetadata(), true)
 
 	if g.appMetadataToken != "" {
 		md.Set(g.appMetadataTokenHeaderName, g.appMetadataToken)
@@ -117,7 +117,7 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 		grpc.MaxCallRecvMsgSize(g.maxRequestBodySizeMB << 20),
 	}
 
-	resp, err := g.appCallbackClient.OnInvoke(ctx, pd.Message, opts...)
+	resp, err := g.appCallbackClient.OnInvoke(ctx, pd.GetMessage(), opts...)
 
 	if g.ch != nil {
 		<-g.ch
@@ -128,7 +128,7 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 		// Convert status code
 		respStatus := status.Convert(err)
 		// Prepare response
-		rsp = invokev1.NewInvokeMethodResponse(int32(respStatus.Code()), respStatus.Message(), respStatus.Proto().Details)
+		rsp = invokev1.NewInvokeMethodResponse(int32(respStatus.Code()), respStatus.Message(), respStatus.Proto().GetDetails())
 	} else {
 		rsp = invokev1.NewInvokeMethodResponse(int32(codes.OK), "", nil)
 	}
