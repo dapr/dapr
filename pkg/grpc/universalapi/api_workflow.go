@@ -128,6 +128,7 @@ func (a *UniversalAPI) TerminateWorkflowBeta1(ctx context.Context, in *runtimev1
 
 	req := &workflows.TerminateRequest{
 		InstanceID: in.GetInstanceId(),
+		Recursive:  in.GetRecursive(),
 	}
 	if err := workflowComponent.Terminate(ctx, req); err != nil {
 		if errors.Is(err, api.ErrInstanceNotFound) {
@@ -254,6 +255,7 @@ func (a *UniversalAPI) PurgeWorkflowBeta1(ctx context.Context, in *runtimev1pb.P
 
 	req := workflows.PurgeRequest{
 		InstanceID: in.GetInstanceId(),
+		Recursive:  in.GetRecursive(),
 	}
 
 	err = workflowComponent.Purge(ctx, &req)
