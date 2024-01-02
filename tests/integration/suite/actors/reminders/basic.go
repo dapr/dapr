@@ -108,8 +108,9 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	gclient := rtv1.NewDaprClient(conn)
 
 	t.Run("schedule reminder via HTTP", func(t *testing.T) {
-		body := `{"dueTime": "0ms"}`
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, daprdURL+"/reminders/remindermethod", strings.NewReader(body))
+		const body = `{"dueTime": "0ms"}`
+		var req *http.Request
+		req, err = http.NewRequestWithContext(ctx, http.MethodPost, daprdURL+"/reminders/remindermethod", strings.NewReader(body))
 		require.NoError(t, err)
 
 		resp, err := client.Do(req)
