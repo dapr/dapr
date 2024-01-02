@@ -71,11 +71,11 @@ func (a *UniversalAPI) DeleteActorState(ctx context.Context, in *runtimev1pb.Del
 		return &runtimev1pb.DeleteActorStateResponse{}, err
 	}
 
-	actorID := in.ActorId
-	key := in.Key
+	actorID := in.GetActorId()
+	key := in.GetKey()
 
 	hosted := a.Actors.IsActorHosted(ctx, &actors.ActorHostedRequest{
-		ActorType: in.ActorType,
+		ActorType: in.GetActorType(),
 		ActorID:   actorID,
 	})
 
@@ -86,7 +86,7 @@ func (a *UniversalAPI) DeleteActorState(ctx context.Context, in *runtimev1pb.Del
 	}
 
 	_, err := a.Actors.DeleteState(ctx, &actors.DeleteStateRequest{
-		ActorType: in.ActorType,
+		ActorType: in.GetActorType(),
 		ActorID:   actorID,
 		Key:       key,
 	})
