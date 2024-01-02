@@ -20,7 +20,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/pubsub"
 	inmemory "github.com/dapr/dapr/tests/integration/framework/process/pubsub/in-memory"
 	"github.com/dapr/dapr/tests/integration/framework/util"
@@ -63,11 +62,13 @@ func (e *standardizedErrors) Setup(t *testing.T) []framework.Option {
 
 	pubsubInMem := pubsub.New(t,
 		pubsub.WithSocketDirectory(socketDir),
-		pubsub.WithPubSub(inmemory.NewWrappedInMemory(t)),
+		pubsub.WithPubSub(inmemory.NewWrappedInMemory(t,
+			inmemory.WithFeatures(),
+		)),
 	)
 
 	//spin up a new daprd with a pubsub component
-	e.daprd = procdaprd.New(t, procdaprd.WithResourceFiles(fmt.Sprintf(`
+	e.daprd = procdaprd.New(t, procdaprd.WithResourceFiles(`
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -75,19 +76,8 @@ metadata:
 spec:
   type: pubsub.in-memory
   version: v1
----
-apiVersion: dapr.io/v1alpha1
-kind: Component
-metadata:
-  name: mypubsub-pluggable
-spec:
-  type: pubsub.%s
-  version: v1
-`, pubsubInMem.SocketName())),
-		daprd.WithExecOptions(exec.WithEnvVars(
-			"DAPR_COMPONENTS_SOCKETS_FOLDER", socketDir,
-		)),
-	)
+`,
+	))
 
 	return []framework.Option{
 		framework.WithProcesses(pubsubInMem, e.daprd),
@@ -235,15 +225,9 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, name, resInfo["resource_name"])
 	})
 
-	// Covers apiErrors.PubSubNotConfigured() -> TODO: force adapter interface not being there
-	t.Run("pubsub not configured", func(t *testing.T) {
-		
-	})
-
 	// Covers apiErrors.PubSubMetadataDeserialize()
 	t.Run("pubsub metadata deserialization", func(t *testing.T) {
 		name := "mypubsub"
-
 		endpoint := fmt.Sprintf("http://localhost:%d/v1.0/publish/%s/topic?metadata.rawPayload=invalidBooleanValue", e.daprd.HTTPPort(), name)
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(""))
@@ -309,16 +293,10 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, name, resInfo["resource_name"])
 	})
 
-	// Covers apiErrors.PubSubPublishMessage() -> TODO: need publish func for pluggable pubsub
-	t.Run("pubsub publish message issue", func(t *testing.T) {
-	})
-
 	// Covers apiErrors.PubSubCloudEventCreation()
 	t.Run("pubsub cloud event creation issue", func(t *testing.T) {
 		payload := `{"}`
-
 		name := "mypubsub"
-
 		endpoint := fmt.Sprintf("http://localhost:%d/v1.0/publish/%s/topic?metadata.rawPayload=false", e.daprd.HTTPPort(), name)
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(payload))
@@ -383,32 +361,10 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		require.NotEmptyf(t, resInfo, "ResourceInfo not found in %+v", detailsArray)
 		require.Equal(t, "pubsub", resInfo["resource_type"])
 		require.Equal(t, name, resInfo["resource_name"])
-
-	})
-
-	// Covers apiErrors.PubSubMarshalEnvelope(): need pluggable pubsub
-	t.Run("pubsub marshal envelope issue", func(t *testing.T) {
-
-	})
-
-	// Covers apiErrors.PubSubPublishForbidden() -> requires scoping, so need pluggable
-	t.Run("pubsub publish forbidden", func(t *testing.T) {
-
-	})
-
-	// Covers apiErrors.PubSubTestNotFound() -> need pluggable
-	t.Run("pubsub test not found", func(t *testing.T) {
-
-	})
-
-	// Covers apiErrors.PubSubOubox() -> need pluggable
-	t.Run("pubsub cloud outbox issue", func(t *testing.T) {
-
 	})
 
 	// Covers apiErrors.PubSubMarshalEvents()
 	t.Run("pubsub marshal events issue", func(t *testing.T) {
-
 		name := "mypubsub"
 		endpoint := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/publish/bulk/%s/topic", e.daprd.HTTPPort(), name)
 		payload := `{"entryID": ""}`
@@ -474,7 +430,5 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		require.NotEmptyf(t, resInfo, "ResourceInfo not found in %+v", detailsArray)
 		require.Equal(t, "pubsub", resInfo["resource_type"])
 		require.Equal(t, name, resInfo["resource_name"])
-
 	})
-
 }

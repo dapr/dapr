@@ -21,3 +21,9 @@ import (
 type options struct {
 	features []pubsub.Feature
 }
+
+func WithFeatures(features ...pubsub.Feature) Option {
+	return func(o *options) {
+		o.features = features
+	}
+}

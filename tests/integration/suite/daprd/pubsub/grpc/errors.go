@@ -92,10 +92,6 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		require.Nil(t, errInfo.GetMetadata())
 	})
 
-	// Covers apiErrors.PubSubNotConfigured() -> TODO: force adapter interface not being there
-	t.Run("pubsub not configured", func(t *testing.T) {
-	})
-
 	// Covers apiErrors.PubSubNameEmpty()
 	t.Run("pubsub name empty", func(t *testing.T) {
 		req := &rtv1.PublishEventRequest{
@@ -178,10 +174,6 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		require.NotNil(t, errInfo.GetMetadata())
 	})
 
-	// Covers apiErrors.PubSubPublishMessage() -> TODO: need publish func for pluggable pubsub
-	t.Run("pubsub publish message issue", func(t *testing.T) {
-	})
-
 	// Covers apiErrors.PubSubCloudEventCreation()
 	t.Run("pubsub cloud event creation issue", func(t *testing.T) {
 		metadata := map[string]string{"rawPayload": "false"}
@@ -213,26 +205,6 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, kitErrors.CodePrefixPubSub+"CLOUD_EVENT_CREATION", errInfo.GetReason())
 		require.Equal(t, kitErrors.Domain, errInfo.GetDomain())
 		require.NotNil(t, errInfo.GetMetadata())
-	})
-
-	// Covers apiErrors.PubSubMarshalEnvelope(): need pluggable pubsub
-	t.Run("pubsub marshal envelope issue", func(t *testing.T) {
-
-	})
-
-	// Covers apiErrors.PubSubPublishForbidden() -> requires scoping, so need pluggable
-	t.Run("pubsub publish forbidden", func(t *testing.T) {
-
-	})
-
-	// Covers apiErrors.PubSubTestNotFound() -> need pluggable
-	t.Run("pubsub test not found", func(t *testing.T) {
-
-	})
-
-	// Covers apiErrors.PubSubOubox() -> need pluggable
-	t.Run("pubsub cloud outbox issue", func(t *testing.T) {
-
 	})
 
 	// Covers apiErrors.PubSubMarshalEvents()
@@ -272,5 +244,4 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, kitErrors.Domain, errInfo.GetDomain())
 		require.NotNil(t, errInfo.GetMetadata())
 	})
-
 }

@@ -36,10 +36,19 @@ type WrappedInMemory struct {
 	hasClosed bool
 }
 
-func NewWrappedInMemory(t *testing.T) pubsub.PubSub {
+func NewWrappedInMemory(t *testing.T, fopts ...Option) pubsub.PubSub {
+	opts := options{
+		features: []pubsub.Feature{pubsub.FeatureBulkPublish, pubsub.FeatureMessageTTL, pubsub.FeatureSubscribeWildcards},
+	}
+
+	for _, fopt := range fopts {
+		fopt(&opts)
+	}
+
 	impl := inmemory.New(logger.NewLogger(t.Name() + "_pubsub"))
 	return &WrappedInMemory{
-		PubSub: impl,
+		PubSub:   impl,
+		features: opts.features,
 	}
 }
 
