@@ -48,7 +48,7 @@ type ComponentStore struct {
 	pubSubs                   map[string]PubsubItem
 	topicRoutes               map[string]TopicRoutes
 	workflowComponents        map[string]workflows.Workflow
-	workflowBackendComponents map[string]wfbe.WorkflowBackend
+	workflowBackends map[string]wfbe.WorkflowBackend
 	cryptoProviders           map[string]crypto.SubtleCrypto
 	components                []compsv1alpha1.Component
 	subscriptions             []rtpubsub.Subscription
@@ -71,7 +71,7 @@ func New() *ComponentStore {
 		locks:                     make(map[string]lock.Store),
 		pubSubs:                   make(map[string]PubsubItem),
 		workflowComponents:        make(map[string]workflows.Workflow),
-		workflowBackendComponents: make(map[string]wfbe.WorkflowBackend),
+		workflowBackends: make(map[string]wfbe.WorkflowBackend),
 		cryptoProviders:           make(map[string]crypto.SubtleCrypto),
 		topicRoutes:               make(map[string]TopicRoutes),
 	}

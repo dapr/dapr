@@ -18,24 +18,24 @@ import wfbe "github.com/dapr/dapr/pkg/components/wfbackend"
 func (c *ComponentStore) AddWorkflowBackend(name string, workflowBackend wfbe.WorkflowBackend) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	c.workflowBackendComponents[name] = workflowBackend
+	c.workflowBackends[name] = workflowBackend
 }
 
 func (c *ComponentStore) GetWorkflowBackend(name string) (wfbe.WorkflowBackend, bool) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
-	workflowBackend, ok := c.workflowBackendComponents[name]
+	workflowBackend, ok := c.workflowBackends[name]
 	return workflowBackend, ok
 }
 
 func (c *ComponentStore) ListWorkflowBackends() map[string]wfbe.WorkflowBackend {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
-	return c.workflowBackendComponents
+	return c.workflowBackends
 }
 
 func (c *ComponentStore) DeleteWorkflowBackend(name string) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	delete(c.workflowBackendComponents, name)
+	delete(c.workflowBackends, name)
 }

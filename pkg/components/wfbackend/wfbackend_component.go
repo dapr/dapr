@@ -18,7 +18,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-func NewWorkflowBackendComp(logger logger.Logger) WorkflowBackend {
+func NewWorkflowBackend(logger logger.Logger) WorkflowBackend {
 	return &workflowBackendComponent{
 		logger: logger,
 	}
