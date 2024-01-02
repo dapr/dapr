@@ -16,15 +16,14 @@ package diagnostics
 import (
 	"context"
 
-	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
+
+	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
-var (
-	executionTypeKey = tag.MustNewKey("execution_type")
-)
+var executionTypeKey = tag.MustNewKey("execution_type")
 
 const (
 	StatusSuccess     = "success"
@@ -106,7 +105,6 @@ func (w *workflowMetrics) WorkflowOperationEvent(ctx context.Context, operation,
 	if elapsed > 0 {
 		stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowOperationLatency.Name(), appIDKey, w.appID, componentKey, component, namespaceKey, w.namespace, operationKey, operation, statusKey, status), w.workflowOperationLatency.M(elapsed))
 	}
-
 }
 
 // ExecutionEvent records total number of successful/failed workflow/activity executions. It also records latency for executions.

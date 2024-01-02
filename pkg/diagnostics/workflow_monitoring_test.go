@@ -52,8 +52,7 @@ func TestOperations(t *testing.T) {
 
 				allTagsPresent(t, v, viewData[0].Tags)
 
-				assert.Equal(t, float64(1), viewData[0].Data.(*view.DistributionData).Min)
-
+				assert.InEpsilon(t, float64(1), viewData[0].Data.(*view.DistributionData).Min, 0)
 			})
 		})
 
@@ -90,7 +89,7 @@ func TestOperations(t *testing.T) {
 
 				allTagsPresent(t, v, viewData[0].Tags)
 
-				assert.Equal(t, float64(1), viewData[0].Data.(*view.DistributionData).Min)
+				assert.InEpsilon(t, float64(1), viewData[0].Data.(*view.DistributionData).Min, 0)
 			})
 		})
 
@@ -127,7 +126,7 @@ func TestOperations(t *testing.T) {
 
 				allTagsPresent(t, v, viewData[0].Tags)
 
-				assert.Equal(t, float64(1), viewData[0].Data.(*view.DistributionData).Min)
+				assert.InEpsilon(t, float64(1), viewData[0].Data.(*view.DistributionData).Min, 0)
 			})
 		})
 
@@ -164,7 +163,7 @@ func TestOperations(t *testing.T) {
 
 				allTagsPresent(t, v, viewData[0].Tags)
 
-				assert.Equal(t, float64(1), viewData[0].Data.(*view.DistributionData).Min)
+				assert.InEpsilon(t, float64(1), viewData[0].Data.(*view.DistributionData).Min, 0)
 			})
 		})
 	})
@@ -195,7 +194,6 @@ func TestExecution(t *testing.T) {
 				v := view.Find(countMetricName)
 
 				allTagsPresent(t, v, viewData[0].Tags)
-
 			})
 
 			t.Run("Successful activity execution", func(t *testing.T) {
@@ -218,7 +216,7 @@ func TestExecution(t *testing.T) {
 				v := view.Find(latencyMetricName)
 
 				allTagsPresent(t, v, viewData[0].Tags)
-				assert.Equal(t, float64(1), viewData[0].Data.(*view.DistributionData).Min)
+				assert.InEpsilon(t, float64(1), viewData[0].Data.(*view.DistributionData).Min, 0)
 			})
 		})
 
@@ -243,7 +241,6 @@ func TestExecution(t *testing.T) {
 				v := view.Find(countMetricName)
 
 				allTagsPresent(t, v, viewData[0].Tags)
-
 			})
 
 			t.Run("Successful activity execution", func(t *testing.T) {
@@ -266,7 +263,7 @@ func TestExecution(t *testing.T) {
 				v := view.Find(latencyMetricName)
 
 				allTagsPresent(t, v, viewData[0].Tags)
-				assert.Equal(t, float64(1), viewData[0].Data.(*view.DistributionData).Min)
+				assert.InEpsilon(t, float64(1), viewData[0].Data.(*view.DistributionData).Min, 0)
 			})
 		})
 	})

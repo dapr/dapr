@@ -25,10 +25,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/google/uuid"
 	"github.com/microsoft/durabletask-go/api"
 	"github.com/microsoft/durabletask-go/backend"
+
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 
 	"github.com/dapr/dapr/pkg/actors"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -402,7 +403,6 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 	// The logic/for loop below purges/removes any leftover state from a completed or failed activity
 	transactionalRequests := make(map[string][]actors.TransactionalOperation)
 	for _, e := range state.Inbox {
-		fmt.Println("e: ", e)
 		var taskID int32
 		if ts := e.GetTaskCompleted(); ts != nil {
 			taskID = ts.GetTaskScheduledId()
@@ -502,9 +502,9 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 			if tf == nil {
 				return errors.New("invalid event in the PendingTimers list")
 			}
-			timerBytes, err := backend.MarshalHistoryEvent(t)
-			if err != nil {
-				return fmt.Errorf("failed to marshal pending timer data: %w", err)
+			timerBytes, errMarshal := backend.MarshalHistoryEvent(t)
+			if errMarshal != nil {
+				return fmt.Errorf("failed to marshal pending timer data: %w", errMarshal)
 			}
 			delay := time.Until(tf.GetFireAt().AsTime())
 			if delay < 0 {
@@ -513,7 +513,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 			reminderPrefix := fmt.Sprintf("timer-%d", tf.GetTimerId())
 			data := NewDurableTimer(timerBytes, state.Generation)
 			wfLogger.Debugf("Workflow actor '%s': creating reminder '%s' for the durable timer", actorID, reminderPrefix)
-			if _, err := wf.createReliableReminder(ctx, actorID, reminderPrefix, data, delay); err != nil {
+			if _, err = wf.createReliableReminder(ctx, actorID, reminderPrefix, data, delay); err != nil {
 				executionStatus = diag.StatusRecoverable
 				return newRecoverableError(fmt.Errorf("actor '%s' failed to create reminder for timer: %w", actorID, err))
 			}
@@ -541,15 +541,15 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 			continue
 		}
 
-		eventData, err := backend.MarshalHistoryEvent(e)
-		if err != nil {
-			return err
+		eventData, errMarshal := backend.MarshalHistoryEvent(e)
+		if errMarshal != nil {
+			return errMarshal
 		}
-		activityRequestBytes, err := actors.EncodeInternalActorData(ActivityRequest{
+		activityRequestBytes, errInternal := actors.EncodeInternalActorData(ActivityRequest{
 			HistoryEvent: eventData,
 		})
-		if err != nil {
-			return err
+		if errInternal != nil {
+			return errInternal
 		}
 		targetActorID := getActivityActorID(actorID, e.GetEventId(), state.Generation)
 
@@ -563,14 +563,14 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 
 		wf.activityResultAwaited.Store(true)
 
-		resp, err := wf.actors.Call(ctx, req)
-		if err != nil {
-			if errors.Is(err, ErrDuplicateInvocation) {
+		resp, errResp := wf.actors.Call(ctx, req)
+		if errResp != nil {
+			if errors.Is(errResp, ErrDuplicateInvocation) {
 				wfLogger.Warnf("Workflow actor '%s': activity invocation '%s::%d' was flagged as a duplicate and will be skipped", actorID, ts.GetName(), e.GetEventId())
 				continue
 			}
 			executionStatus = diag.StatusRecoverable
-			return newRecoverableError(fmt.Errorf("failed to invoke activity actor '%s' to execute '%s': %w", targetActorID, ts.GetName(), err))
+			return newRecoverableError(fmt.Errorf("failed to invoke activity actor '%s' to execute '%s': %w", targetActorID, ts.GetName(), errResp))
 		}
 		resp.Close()
 	}
@@ -578,9 +578,9 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 	// TODO: Do these in parallel?
 	for method, msgList := range reqsByName {
 		for _, msg := range msgList {
-			eventData, err := backend.MarshalHistoryEvent(msg.HistoryEvent)
-			if err != nil {
-				return err
+			eventData, errMarshal := backend.MarshalHistoryEvent(msg.HistoryEvent)
+			if errMarshal != nil {
+				return errMarshal
 			}
 
 			wfLogger.Debugf("Workflow actor '%s': invoking method '%s' on workflow actor '%s'", actorID, method, msg.TargetInstanceID)
@@ -591,11 +591,11 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 				WithContentType(invokev1.OctetStreamContentType)
 			defer req.Close()
 
-			resp, err := wf.actors.Call(ctx, req)
-			if err != nil {
+			resp, errResp := wf.actors.Call(ctx, req)
+			if errResp != nil {
 				executionStatus = diag.StatusRecoverable
 				// workflow-related actor methods are never expected to return errors
-				return newRecoverableError(fmt.Errorf("method %s on actor '%s' returned an error: %w", method, msg.TargetInstanceID, err))
+				return newRecoverableError(fmt.Errorf("method %s on actor '%s' returned an error: %w", method, msg.TargetInstanceID, errResp))
 			}
 			defer resp.Close()
 		}

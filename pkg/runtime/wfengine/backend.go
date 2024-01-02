@@ -22,9 +22,10 @@ import (
 	"sync"
 	"time"
 
-	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/microsoft/durabletask-go/api"
 	"github.com/microsoft/durabletask-go/backend"
+
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 
 	"github.com/dapr/dapr/pkg/actors"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
