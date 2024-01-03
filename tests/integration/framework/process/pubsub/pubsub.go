@@ -88,7 +88,6 @@ func (p *PubSub) Run(t *testing.T, ctx context.Context) {
 		<-p.stopCh
 		server.GracefulStop()
 	}()
-
 }
 
 func (p *PubSub) Cleanup(t *testing.T) {

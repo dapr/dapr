@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package in_memory
+package inmemory
 
 import (
 	"context"

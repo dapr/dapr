@@ -76,17 +76,17 @@ func (c *component) Publish(ctx context.Context, req *compv1pb.PublishRequest) (
 }
 
 func (c *component) Subscribe(ctx context.Context, req pubsub.SubscribeRequest, handler pubsub.Handler) error {
-	//TODO:
+	// TODO:
 	return nil
 }
 
 func (c *component) BulkPublish(ctx context.Context, req *compv1pb.BulkPublishRequest) (*compv1pb.BulkPublishResponse, error) {
-	//TODO:
+	// TODO:
 	return new(compv1pb.BulkPublishResponse), nil
 }
 
 func (c *component) PullMessages(req compv1pb.PubSub_PullMessagesServer) error {
-	//TODO:
+	// TODO:
 	return nil
 }
 

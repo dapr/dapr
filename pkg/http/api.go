@@ -1846,7 +1846,7 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 		resData, _ := json.Marshal(bulkRes)
 		standardizedErr, ok := kitErrors.FromError(err)
 		if ok {
-			fasthttpRespond(reqCtx, fasthttpResponseWithJSON(standardizedErr.HTTPStatusCode(), resData, map[string]string{"responseData": string(resData[:]), "error": standardizedErr.Error()}), closeChildSpans)
+			fasthttpRespond(reqCtx, fasthttpResponseWithJSON(standardizedErr.HTTPStatusCode(), resData, map[string]string{"responseData": string(resData), "error": standardizedErr.Error()}), closeChildSpans)
 		}
 		return
 	}

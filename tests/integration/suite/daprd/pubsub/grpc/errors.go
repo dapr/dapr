@@ -28,7 +28,6 @@ import (
 	apiErrors "github.com/dapr/dapr/pkg/api/errors"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/suite"
 	kitErrors "github.com/dapr/kit/errors"
@@ -39,7 +38,7 @@ func init() {
 }
 
 type standardizedErrors struct {
-	daprd *daprd.Daprd
+	daprd *procdaprd.Daprd
 }
 
 func (e *standardizedErrors) Setup(t *testing.T) []framework.Option {
@@ -221,7 +220,8 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 					EntryId:     "",
 					Event:       nil,
 					ContentType: "",
-					Metadata:    nil},
+					Metadata:    nil,
+				},
 			},
 			Metadata: nil,
 		}

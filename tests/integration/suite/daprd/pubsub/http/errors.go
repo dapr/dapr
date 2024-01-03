@@ -28,7 +28,6 @@ import (
 	"golang.org/x/net/nettest"
 
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/pubsub"
 	inmemory "github.com/dapr/dapr/tests/integration/framework/process/pubsub/in-memory"
@@ -47,7 +46,7 @@ func init() {
 }
 
 type standardizedErrors struct {
-	daprd *daprd.Daprd
+	daprd *procdaprd.Daprd
 }
 
 func (e *standardizedErrors) Setup(t *testing.T) []framework.Option {
@@ -69,7 +68,7 @@ func (e *standardizedErrors) Setup(t *testing.T) []framework.Option {
 		)),
 	)
 
-	//spin up a new daprd with a pubsub component
+	// spin up a new daprd with a pubsub component
 	e.daprd = procdaprd.New(t, procdaprd.WithResourceFiles(`
 apiVersion: dapr.io/v1alpha1
 kind: Component
@@ -327,7 +326,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
 		require.True(t, exists)
-		require.Equal(t, errMsg, "cannot create cloudevent")
+		require.Equal(t, "cannot create cloudevent", errMsg)
 
 		// Confirm that the 'details' field exists and has one element
 		details, exists := data["details"]
