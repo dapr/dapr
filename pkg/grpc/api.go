@@ -183,9 +183,9 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 			Pubsub:          in.GetPubsubName(),
 		}, in.GetMetadata())
 		if err != nil {
-			err = apierrors.PubSubCloudEventCreation(pubsubName, string(contribMetadata.PubSubType), map[string]string{"appID": a.AppID})
-			apiServerLogger.Debug(err)
-			return &emptypb.Empty{}, err
+			nerr := apierrors.PubSubCloudEventCreation(pubsubName, string(contribMetadata.PubSubType), map[string]string{"appID": a.AppID, "error": err.Error()})
+			apiServerLogger.Debug(nerr)
+			return &emptypb.Empty{}, nerr
 		}
 
 		features := thepubsub.Features()

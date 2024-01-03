@@ -1737,7 +1737,7 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 				Pubsub:          pubsubName,
 			}, entries[i].Metadata)
 			if err != nil {
-				nerr := apierrors.PubSubCloudEventCreation(pubsubName, string(contribMetadata.PubSubType), map[string]string{"appID": a.universal.AppID})
+				nerr := apierrors.PubSubCloudEventCreation(pubsubName, string(contribMetadata.PubSubType), map[string]string{"appID": a.universal.AppID, "error": err.Error()})
 				standardizedErr, ok := kiterrors.FromError(nerr)
 				if ok {
 					fasthttpRespond(reqCtx, fasthttpResponseWithError(standardizedErr.HTTPStatusCode(), standardizedErr), closeChildSpans)
