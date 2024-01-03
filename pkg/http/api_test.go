@@ -1946,7 +1946,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 		mockActors.AssertNumberOfCalls(t, "GetState", 1)
 	})
 
-	t.Run("Delete actor state - 200 OK", func(t *testing.T) {
+	t.Run("Delete actor state - 204 OK", func(t *testing.T) {
 		buffer = ""
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/state/key1"
 		mockActors := new(actors.MockActors)
@@ -1967,7 +1967,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 		resp := fakeServer.DoRequest("DELETE", apiPath, nil, nil)
 
 		// assert
-		assert.Equal(t, 204, resp)
+		assert.Equal(t, 204, resp.StatusCode)
 		assert.Equal(t, []byte{}, resp.RawBody, "Always give empty body with 204")
 		mockActors.AssertNumberOfCalls(t, "DeleteState", 1)
 	})

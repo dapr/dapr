@@ -241,7 +241,7 @@ func (_m *MockActors) GetState(ctx context.Context, req *GetStateRequest) (*Stat
 	return r0, r1
 }
 
-// GetState provides a mock function with given fields: req
+// DeleteState provides a mock function with given fields: req
 func (_m *MockActors) DeleteState(ctx context.Context, req *DeleteStateRequest) (*runtimev1pb.DeleteActorStateResponse, error) {
 	ret := _m.Called(req)
 

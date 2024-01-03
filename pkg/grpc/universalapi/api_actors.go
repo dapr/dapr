@@ -59,7 +59,6 @@ func (a *UniversalAPI) ActorReadinessCheck(ctx context.Context) error {
 	a.WaitForActorsReady(ctx)
 
 	if a.Actors == nil {
-		a.Logger.Debug(messages.ErrActorRuntimeNotFound)
 		return messages.ErrActorRuntimeNotFound
 	}
 
@@ -72,7 +71,6 @@ func (a *UniversalAPI) DeleteActorState(ctx context.Context, in *runtimev1pb.Del
 	}
 
 	actorID := in.GetActorId()
-	key := in.GetKey()
 
 	hosted := a.Actors.IsActorHosted(ctx, &actors.ActorHostedRequest{
 		ActorType: in.GetActorType(),
@@ -82,19 +80,19 @@ func (a *UniversalAPI) DeleteActorState(ctx context.Context, in *runtimev1pb.Del
 	if !hosted {
 		err := status.Errorf(codes.Internal, messages.ErrActorInstanceMissing)
 		a.Logger.Debug(err)
-		return &runtimev1pb.DeleteActorStateResponse{}, err
+		return &runtimev1pb.DeleteActorStateResponse{Count: 0}, err
 	}
 
-	_, err := a.Actors.DeleteState(ctx, &actors.DeleteStateRequest{
+	res, err := a.Actors.DeleteState(ctx, &actors.DeleteStateRequest{
 		ActorType: in.GetActorType(),
 		ActorID:   actorID,
-		Key:       key,
+		Key:       in.GetKey(),
 	})
 	if err != nil {
 		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrActorStateGet, err))
 		a.Logger.Debug(err)
-		return &runtimev1pb.DeleteActorStateResponse{}, err
+		return &runtimev1pb.DeleteActorStateResponse{Count: 0}, err
 	}
 
-	return &runtimev1pb.DeleteActorStateResponse{}, nil
+	return &runtimev1pb.DeleteActorStateResponse{Count: res.GetCount()}, nil
 }
