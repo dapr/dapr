@@ -121,7 +121,6 @@ func NewAPI(opts APIOpts) API {
 
 // validateAndGetPubsbuAndTopic validates the request parameters and returns the pubsub interface, pubsub name, topic name, rawPayload metadata if set
 // or an error.
-// func (a *api) validateAndGetPubsubAndTopic(pubsubName, topic string, reqMeta map[string]string) (pubsub.PubSub, string, string, bool, *kitErrors.Error) {
 func (a *api) validateAndGetPubsubAndTopic(pubsubName, topic string, reqMeta map[string]string) (pubsub.PubSub, string, string, bool, error) {
 	var err error
 	pubsubType := string(contribMetadata.PubSubType)
@@ -341,7 +340,7 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 
 	if validationErr != nil {
 		apiServerLogger.Debug(validationErr)
-		return &runtimev1pb.BulkPublishResponse{}, errors.New(validationErr.Error())
+		return &runtimev1pb.BulkPublishResponse{}, validationErr.Error()
 	}
 
 	span := diagUtils.SpanFromContext(ctx)
