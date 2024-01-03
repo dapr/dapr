@@ -148,7 +148,7 @@ func (a *api) validateAndGetPubsubAndTopic(pubsubName, topic string, reqMeta map
 
 	rawPayload, metaErr := contribMetadata.IsRawPayload(reqMeta)
 	if metaErr != nil {
-		err = apierrors.PubSubMetadataDeserialize(pubsubName, pubsubType, reqMeta)
+		err = apierrors.PubSubMetadataDeserialize(pubsubName, pubsubType, reqMeta, metaErr)
 		return nil, "", "", false, err
 	}
 

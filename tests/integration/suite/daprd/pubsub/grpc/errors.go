@@ -269,8 +269,8 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		s, ok := status.FromError(err)
 		require.True(t, ok)
 		require.Equal(t, grpcCodes.InvalidArgument, s.Code())
-		require.Equal(t, fmt.Sprintf("failed deserializing metadata: %v", metadata), s.Message())
-
+		expectedErr := "rawPayload value must be a valid boolean: actual is 'invalidBooleanValue'"
+		require.Equal(t, fmt.Sprintf("failed deserializing metadata. Error: %s", expectedErr), s.Message())
 		// Check status details
 		require.Len(t, s.Details(), 2)
 

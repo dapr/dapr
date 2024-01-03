@@ -79,8 +79,8 @@ func PubSubTopicEmpty(name string, pubsubType string, metadata map[string]string
 		Build()
 }
 
-func PubSubMetadataDeserialize(name string, pubsubType string, metadata map[string]string) error {
-	message := fmt.Sprintf("failed deserializing metadata: %v", metadata)
+func PubSubMetadataDeserialize(name string, pubsubType string, metadata map[string]string, err error) error {
+	message := fmt.Sprintf("failed deserializing metadata. Error: %s", err.Error())
 	return kiterrors.NewBuilder(
 		grpcCodes.InvalidArgument,
 		http.StatusBadRequest,

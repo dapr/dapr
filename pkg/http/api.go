@@ -1568,7 +1568,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 
 	rawPayload, metaErr := contribMetadata.IsRawPayload(metadata)
 	if metaErr != nil {
-		err := apierrors.PubSubMetadataDeserialize(pubsubName, string(contribMetadata.PubSubType), map[string]string{"appID": a.universal.AppID})
+		err := apierrors.PubSubMetadataDeserialize(pubsubName, string(contribMetadata.PubSubType), metadata, metaErr)
 		universalFastHTTPErrorResponder(reqCtx, err)
 		log.Debug(err)
 		return
@@ -1660,7 +1660,7 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 	metadata := getMetadataFromFastHTTPRequest(reqCtx)
 	rawPayload, metaErr := contribMetadata.IsRawPayload(metadata)
 	if metaErr != nil {
-		err := apierrors.PubSubMetadataDeserialize(pubsubName, string(contribMetadata.PubSubType), map[string]string{"appID": a.universal.AppID, "error": metaErr.Error()})
+		err := apierrors.PubSubMetadataDeserialize(pubsubName, string(contribMetadata.PubSubType), metadata, metaErr)
 		log.Debug(err)
 		universalFastHTTPErrorResponder(reqCtx, err)
 		return
