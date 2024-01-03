@@ -15,16 +15,18 @@ package pubsub
 
 import (
 	"context"
-	"github.com/dapr/components-contrib/pubsub"
-	compv1pb "github.com/dapr/dapr/pkg/proto/components/v1"
-	"github.com/dapr/dapr/tests/integration/framework/util"
-	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/reflection"
 	"io"
 	"net"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
+
+	"github.com/dapr/components-contrib/pubsub"
+	compv1pb "github.com/dapr/dapr/pkg/proto/components/v1"
+	"github.com/dapr/dapr/tests/integration/framework/util"
 )
 
 // Option is a function that configures the process.

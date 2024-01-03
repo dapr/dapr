@@ -16,6 +16,15 @@ package grpc
 import (
 	"context"
 	"fmt"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
+	"google.golang.org/grpc"
+	grpcCodes "google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
+
 	apiErrors "github.com/dapr/dapr/pkg/api/errors"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -23,13 +32,6 @@ import (
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/suite"
 	kitErrors "github.com/dapr/kit/errors"
-	"github.com/stretchr/testify/require"
-	"google.golang.org/genproto/googleapis/rpc/errdetails"
-	"google.golang.org/grpc"
-	grpcCodes "google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/status"
-	"testing"
 )
 
 func init() {
@@ -41,7 +43,7 @@ type standardizedErrors struct {
 }
 
 func (e *standardizedErrors) Setup(t *testing.T) []framework.Option {
-	//spin up a new daprd with a pubsub component
+	// spin up a new daprd with a pubsub component
 	e.daprd = procdaprd.New(t, procdaprd.WithResourceFiles(`
 apiVersion: dapr.io/v1alpha1
 kind: Component
@@ -59,7 +61,6 @@ spec:
 }
 
 func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
-
 	e.daprd.WaitUntilRunning(t, ctx)
 
 	conn, connErr := grpc.DialContext(ctx, fmt.Sprintf("localhost:%d", e.daprd.GRPCPort()), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())

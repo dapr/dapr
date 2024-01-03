@@ -17,6 +17,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+	"golang.org/x/net/nettest"
+
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -25,14 +35,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 	kitErrors "github.com/dapr/kit/errors"
-	"github.com/stretchr/testify/require"
-	"golang.org/x/net/nettest"
-	"io"
-	"net/http"
-	"os"
-	"path/filepath"
-	"strings"
-	"testing"
 )
 
 const (

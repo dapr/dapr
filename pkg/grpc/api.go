@@ -340,7 +340,7 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 
 	if validationErr != nil {
 		apiServerLogger.Debug(validationErr)
-		return &runtimev1pb.BulkPublishResponse{}, validationErr.Error()
+		return &runtimev1pb.BulkPublishResponse{}, validationErr
 	}
 
 	span := diagUtils.SpanFromContext(ctx)

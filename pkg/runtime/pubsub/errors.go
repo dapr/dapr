@@ -16,6 +16,7 @@ package pubsub
 import (
 	"errors"
 	"fmt"
+
 	"github.com/dapr/dapr/pkg/messages"
 )
 

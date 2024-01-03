@@ -17,8 +17,9 @@ import (
 	"fmt"
 	"net/http"
 
-	kitErrors "github.com/dapr/kit/errors"
 	grpcCodes "google.golang.org/grpc/codes"
+
+	kitErrors "github.com/dapr/kit/errors"
 )
 
 const (
@@ -45,7 +46,7 @@ func PubSubNotConfigured(name string, pubsubType string, metadata map[string]str
 		grpcCodes.FailedPrecondition,
 		http.StatusBadRequest,
 		message,
-		"ERR_PUBSUB_NOT_CONFIGURED", //legacy
+		"ERR_PUBSUB_NOT_CONFIGURED", // legacy
 	).
 		WithErrorInfo(kitErrors.CodePrefixPubSub+kitErrors.CodeNotConfigured, metadata).
 		WithResourceInfo(pubsubType, name, "", message).

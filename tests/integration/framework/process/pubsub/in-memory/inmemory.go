@@ -15,12 +15,13 @@ package in_memory
 
 import (
 	"context"
-	"github.com/dapr/components-contrib/pubsub"
-	inmemory "github.com/dapr/components-contrib/pubsub/in-memory"
-	"github.com/dapr/kit/logger"
 	"io"
 	"sync"
 	"testing"
+
+	"github.com/dapr/components-contrib/pubsub"
+	inmemory "github.com/dapr/components-contrib/pubsub/in-memory"
+	"github.com/dapr/kit/logger"
 )
 
 // Option is a function that configures the process.

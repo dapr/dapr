@@ -15,11 +15,12 @@ package pubsub
 
 import (
 	"context"
+	"io"
+	"testing"
+
 	"github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/pubsub"
 	compv1pb "github.com/dapr/dapr/pkg/proto/components/v1"
-	"io"
-	"testing"
 )
 
 // component is an implementation of the pubsub pluggable component
