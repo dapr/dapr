@@ -720,24 +720,24 @@ func (a *actorsRuntime) DeleteState(ctx context.Context, req *DeleteStateRequest
 		return &runtimev1pb.DeleteActorStateResponse{}, err
 	}
 
-	actorKey := req.ActorKey()
-	partitionKey := constructCompositeKey(a.actorsConfig.Config.AppID, actorKey)
-	metadata := map[string]string{metadataPartitionKey: partitionKey}
+	key := constructCompositeKey(a.actorsConfig.Config.AppID, req.ActorID, req.ActorType, req.ActorKey())
 
-	key := a.constructActorStateKey(actorKey, req.Key)
-
-	policyRunner := resiliency.NewRunner[*state.GetResponse](ctx,
+	policyRunner := resiliency.NewRunner[state.DeleteWithPrefixResponse](ctx,
 		a.resiliency.ComponentOutboundPolicy(a.storeName, resiliency.Statestore),
 	)
-	storeReq := &state.DeleteRequest{
-		Key:      key,
-		Metadata: metadata,
-	}
-	_, err = policyRunner(func(ctx context.Context) (*state.GetResponse, error) {
-		return nil, store.Delete(ctx, storeReq)
-	})
 
-	return &runtimev1pb.DeleteActorStateResponse{}, err
+	storeReq := state.DeleteWithPrefixRequest{
+		Prefix: key,
+	}
+
+	prefixDelete := store.(state.DeleteWithPrefix)
+	resp, err := policyRunner(func(ctx context.Context) (state.DeleteWithPrefixResponse, error) {
+		return prefixDelete.DeleteWithPrefix(ctx, storeReq)
+	})
+	if err != nil {
+		return &runtimev1pb.DeleteActorStateResponse{Count: 0}, err
+	}
+	return &runtimev1pb.DeleteActorStateResponse{Count: resp.Count}, err
 }
 
 func (a *actorsRuntime) GetBulkState(ctx context.Context, req *GetBulkStateRequest) (BulkStateResponse, error) {

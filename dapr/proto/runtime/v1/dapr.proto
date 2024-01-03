@@ -558,7 +558,7 @@ message DeleteActorStateRequest {
 
 // DeleteActorStateResponse is the response for a delete actor state request
 message DeleteActorStateResponse {
-  // Empty
+  int64 count = 1;
 }
 
 // GetActorStateResponse is the response conveying the actor's state value.
