@@ -14,16 +14,24 @@ limitations under the License.
 package inmemory
 
 import (
+	"context"
 	"github.com/dapr/components-contrib/pubsub"
 )
 
 // options contains the options for running an in-memory pubsub.
 type options struct {
-	features []pubsub.Feature
+	publishFn func(ctx context.Context, req *pubsub.PublishRequest) error
+	features  []pubsub.Feature
 }
 
 func WithFeatures(features ...pubsub.Feature) Option {
 	return func(o *options) {
 		o.features = features
+	}
+}
+
+func WithPublishFn(fn func(ctx context.Context, req *pubsub.PublishRequest) error) Option {
+	return func(o *options) {
+		o.publishFn = fn
 	}
 }

@@ -16,6 +16,7 @@ package http
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -24,11 +25,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
 
+	componentspubsub "github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/dapr/tests/integration/framework"
-	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/pubsub"
 	inmemory "github.com/dapr/dapr/tests/integration/framework/process/pubsub/in-memory"
 	"github.com/dapr/dapr/tests/integration/framework/util"
@@ -46,7 +50,7 @@ func init() {
 }
 
 type standardizedErrors struct {
-	daprd *procdaprd.Daprd
+	daprd *daprd.Daprd
 }
 
 func (e *standardizedErrors) Setup(t *testing.T) []framework.Option {
@@ -65,11 +69,15 @@ func (e *standardizedErrors) Setup(t *testing.T) []framework.Option {
 		pubsub.WithSocketDirectory(socketDir),
 		pubsub.WithPubSub(inmemory.NewWrappedInMemory(t,
 			inmemory.WithFeatures(),
+			inmemory.WithPublishFn(func(ctx context.Context, req *componentspubsub.PublishRequest) error {
+				return errors.New("outbox error")
+			}),
 		)),
 	)
 
 	// spin up a new daprd with a pubsub component
-	e.daprd = procdaprd.New(t, procdaprd.WithResourceFiles(`
+	e.daprd = daprd.New(t,
+		daprd.WithResourceFiles(fmt.Sprintf(`
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -77,8 +85,36 @@ metadata:
 spec:
   type: pubsub.in-memory
   version: v1
-`,
-	))
+---
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: pubsub-outbox
+spec:
+  type: pubsub.%s
+  version: v1
+---
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: state-outbox
+spec:
+  type: state.in-memory
+  version: v1
+  metadata:
+  - name: outboxPublishPubsub
+    value: "pubsub-outbox"
+  - name: outboxPublishTopic
+    value: "goodTopic" # force topic mismatch error
+  - name: outboxPubsub
+    value: "pubsub-outbox"
+  - name: outboxDiscardWhenMissingState #Optional. Defaults to false
+    value: false
+`, pubsubInMem.SocketName())),
+		daprd.WithExecOptions(exec.WithEnvVars(
+			"DAPR_COMPONENTS_SOCKETS_FOLDER", socketDir,
+		)),
+	)
 
 	return []framework.Option{
 		framework.WithProcesses(pubsubInMem, e.daprd),
@@ -357,6 +393,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		require.NotEmptyf(t, errInfo, "ErrorInfo not found in %+v", detailsArray)
 		require.Equal(t, "dapr.io", errInfo["domain"])
 		require.Equal(t, kiterrors.CodePrefixPubSub+"CLOUD_EVENT_CREATION", errInfo["reason"])
+		require.NotNil(t, errInfo["metadata"])
 
 		// Confirm that the ResourceInfo details are correct
 		require.NotEmptyf(t, resInfo, "ResourceInfo not found in %+v", detailsArray)
@@ -431,5 +468,53 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		require.NotEmptyf(t, resInfo, "ResourceInfo not found in %+v", detailsArray)
 		require.Equal(t, "pubsub", resInfo["resource_type"])
 		require.Equal(t, name, resInfo["resource_name"])
+	})
+
+	t.Run("pubsub outbox", func(t *testing.T) {
+		name := "state-outbox"
+		payload := `{"operations": [{"operation": "upsert","request": {"key": "key1","value": "val1"}},{"operation": "delete","request": {"key": "key2"}}],"metadata": {"partitionKey": "key2"}}`
+		endpoint := fmt.Sprintf("http://localhost:%d/v1.0/state/%s/transaction", e.daprd.HTTPPort(), name)
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(payload))
+		require.NoError(t, err)
+
+		resp, err := httpClient.Do(req)
+		require.NoError(t, err)
+
+		require.Equal(t, "application/json", resp.Header.Get("Content-Type"))
+		require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+
+		var data map[string]interface{}
+		err = json.Unmarshal([]byte(string(body)), &data)
+		require.NoError(t, err)
+
+		// Confirm that the 'errorCode' field exists and contains the correct error code
+		errCode, exists := data["errorCode"]
+		require.True(t, exists)
+		require.Equal(t, "ERR_PUBLISH_OUTBOX", errCode)
+
+		// Confirm that the 'message' field exists and contains the correct error message
+		errMsg, exists := data["message"]
+		require.True(t, exists)
+		expectedErrMsg := "error while publishing outbox message: rpc error: code = Unknown desc = outbox error"
+		require.Equal(t, expectedErrMsg, errMsg)
+
+		// Confirm that the 'details' field exists and has one element
+		details, exists := data["details"]
+		require.True(t, exists)
+
+		detailsArray, ok := details.([]interface{})
+		require.True(t, ok)
+		require.Len(t, detailsArray, 1)
+
+		// Confirm that the first element of the 'details' array has the correct ErrorInfo details
+		detailsObject, ok := detailsArray[0].(map[string]interface{})
+		require.True(t, ok)
+		require.Equal(t, "dapr.io", detailsObject["domain"])
+		require.Equal(t, kiterrors.CodePrefixPubSub+"OUTBOX", detailsObject["reason"])
+		require.Equal(t, ErrInfoType, detailsObject["@type"])
 	})
 }

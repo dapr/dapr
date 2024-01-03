@@ -16,10 +16,11 @@ package http
 import (
 	"net/http"
 
+	kiterrors "github.com/dapr/kit/errors"
+
 	"github.com/valyala/fasthttp"
 
 	"github.com/dapr/dapr/pkg/messages"
-	kiterrors "github.com/dapr/kit/errors"
 )
 
 type fasthttpResponseOption = func(ctx *fasthttp.RequestCtx)
@@ -72,15 +73,16 @@ func universalFastHTTPErrorResponder(reqCtx *fasthttp.RequestCtx, err error) {
 		return
 	}
 
-	standardizedErr, ok := kiterrors.FromError(err)
-	if ok {
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(standardizedErr.HTTPStatusCode(), standardizedErr))
-		return
-	}
 	// Check if it's an APIError object
 	apiErr, ok := err.(messages.APIError)
 	if ok {
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(apiErr.HTTPCode(), apiErr))
+		return
+	}
+
+	// Check if it's a kitErrors.Error object
+	if kitErr, ok := kiterrors.FromError(err); ok {
+		fasthttpRespond(reqCtx, fasthttpResponseWithError(kitErr.HTTPStatusCode(), kitErr))
 		return
 	}
 

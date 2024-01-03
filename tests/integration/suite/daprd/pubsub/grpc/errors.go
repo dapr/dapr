@@ -15,8 +15,19 @@ package grpc
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
+
+	componentspubsub "github.com/dapr/components-contrib/pubsub"
+	commonv1 "github.com/dapr/dapr/pkg/proto/common/v1"
+	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+	"github.com/dapr/dapr/tests/integration/framework/process/pubsub"
+	inmemory "github.com/dapr/dapr/tests/integration/framework/process/pubsub/in-memory"
+	"github.com/dapr/dapr/tests/integration/framework/util"
+	"golang.org/x/net/nettest"
 
 	"github.com/stretchr/testify/require"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
@@ -28,7 +39,7 @@ import (
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
-	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/suite"
 	kiterrors "github.com/dapr/kit/errors"
 )
@@ -38,12 +49,34 @@ func init() {
 }
 
 type standardizedErrors struct {
-	daprd *procdaprd.Daprd
+	daprd *daprd.Daprd
 }
 
 func (e *standardizedErrors) Setup(t *testing.T) []framework.Option {
+	// Darwin enforces a maximum 104 byte socket name limit, so we need to be a
+	// bit fancy on how we generate the name.
+	tmp, err := nettest.LocalPath()
+	require.NoError(t, err)
+
+	socketDir := filepath.Join(tmp, util.RandomString(t, 4))
+	require.NoError(t, os.MkdirAll(socketDir, 0o700))
+	t.Cleanup(func() {
+		require.NoError(t, os.RemoveAll(socketDir))
+	})
+
+	pubsubInMem := pubsub.New(t,
+		pubsub.WithSocketDirectory(socketDir),
+		pubsub.WithPubSub(inmemory.NewWrappedInMemory(t,
+			inmemory.WithFeatures(),
+			inmemory.WithPublishFn(func(ctx context.Context, req *componentspubsub.PublishRequest) error {
+				return errors.New("outbox error")
+			}),
+		)),
+	)
+
 	// spin up a new daprd with a pubsub component
-	e.daprd = procdaprd.New(t, procdaprd.WithResourceFiles(`
+	e.daprd = daprd.New(t,
+		daprd.WithResourceFiles(fmt.Sprintf(`
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -51,11 +84,39 @@ metadata:
 spec:
   type: pubsub.in-memory
   version: v1
-`,
-	))
+---
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: pubsub-outbox
+spec:
+  type: pubsub.%s
+  version: v1
+---
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: state-outbox
+spec:
+  type: state.in-memory
+  version: v1
+  metadata:
+  - name: outboxPublishPubsub
+    value: "pubsub-outbox"
+  - name: outboxPublishTopic
+    value: "goodTopic" # force topic mismatch error
+  - name: outboxPubsub
+    value: "pubsub-outbox"
+  - name: outboxDiscardWhenMissingState #Optional. Defaults to false
+    value: false
+`, pubsubInMem.SocketName())),
+		daprd.WithExecOptions(exec.WithEnvVars(
+			"DAPR_COMPONENTS_SOCKETS_FOLDER", socketDir,
+		)),
+	)
 
 	return []framework.Option{
-		framework.WithProcesses(e.daprd),
+		framework.WithProcesses(pubsubInMem, e.daprd),
 	}
 }
 
@@ -69,8 +130,9 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 
 	// Covers apierrors.PubSubNotFound()
 	t.Run("pubsub doesn't exist", func(t *testing.T) {
+		name := "pubsub-doesn't-exist"
 		req := &rtv1.PublishEventRequest{
-			PubsubName: "pubsub-doesn't-exist",
+			PubsubName: name,
 		}
 		_, err := client.PublishEvent(ctx, req)
 
@@ -84,12 +146,27 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		require.Len(t, s.Details(), 2)
 
 		var errInfo *errdetails.ErrorInfo
-		errInfo, ok = s.Details()[0].(*errdetails.ErrorInfo)
+		var resInfo *errdetails.ResourceInfo
 
-		require.True(t, ok)
+		for _, detail := range s.Details() {
+			switch d := detail.(type) {
+			case *errdetails.ErrorInfo:
+				errInfo = d
+			case *errdetails.ResourceInfo:
+				resInfo = d
+			default:
+				require.FailNow(t, "unexpected status detail")
+			}
+		}
+		require.NotNil(t, errInfo, "ErrorInfo should be present")
 		require.Equal(t, kiterrors.CodePrefixPubSub+kiterrors.CodeNotFound, errInfo.GetReason())
-		require.Equal(t, kiterrors.Domain, errInfo.GetDomain())
+		require.Equal(t, "dapr.io", errInfo.GetDomain())
 		require.Nil(t, errInfo.GetMetadata())
+
+		require.NotNil(t, resInfo, "ResourceInfo should be present")
+		require.Equal(t, "pubsub", resInfo.GetResourceType())
+		require.Equal(t, name, resInfo.GetResourceName())
+		require.Empty(t, resInfo.GetOwner())
 	})
 
 	// Covers apierrors.PubSubNameEmpty()
@@ -110,18 +187,34 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		require.Len(t, s.Details(), 2)
 
 		var errInfo *errdetails.ErrorInfo
-		errInfo, ok = s.Details()[0].(*errdetails.ErrorInfo)
+		var resInfo *errdetails.ResourceInfo
 
-		require.True(t, ok)
-		require.Equal(t, kiterrors.CodePrefixPubSub+"NAME_EMPTY", errInfo.GetReason())
-		require.Equal(t, kiterrors.Domain, errInfo.GetDomain())
+		for _, detail := range s.Details() {
+			switch d := detail.(type) {
+			case *errdetails.ErrorInfo:
+				errInfo = d
+			case *errdetails.ResourceInfo:
+				resInfo = d
+			default:
+				require.FailNow(t, "unexpected status detail")
+			}
+		}
+		require.NotNil(t, errInfo, "ErrorInfo should be present")
+		require.Equal(t, kiterrors.CodePrefixPubSub+apierrors.PostFixNameEmpty, errInfo.GetReason())
+		require.Equal(t, "dapr.io", errInfo.GetDomain())
 		require.Nil(t, errInfo.GetMetadata())
+
+		require.NotNil(t, resInfo, "ResourceInfo should be present")
+		require.Equal(t, "pubsub", resInfo.GetResourceType())
+		require.Equal(t, "", resInfo.GetResourceName())
+		require.Empty(t, resInfo.GetOwner())
 	})
 
 	// Covers apierrors.PubSubTopicEmpty()
 	t.Run("pubsub topic empty", func(t *testing.T) {
+		name := "mypubsub"
 		req := &rtv1.PublishEventRequest{
-			PubsubName: "mypubsub",
+			PubsubName: name,
 			Topic:      "",
 		}
 		_, err := client.PublishEvent(ctx, req)
@@ -137,19 +230,35 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		require.Len(t, s.Details(), 2)
 
 		var errInfo *errdetails.ErrorInfo
-		errInfo, ok = s.Details()[0].(*errdetails.ErrorInfo)
+		var resInfo *errdetails.ResourceInfo
 
-		require.True(t, ok)
+		for _, detail := range s.Details() {
+			switch d := detail.(type) {
+			case *errdetails.ErrorInfo:
+				errInfo = d
+			case *errdetails.ResourceInfo:
+				resInfo = d
+			default:
+				require.FailNow(t, "unexpected status detail")
+			}
+		}
+		require.NotNil(t, errInfo, "ErrorInfo should be present")
 		require.Equal(t, kiterrors.CodePrefixPubSub+"TOPIC"+apierrors.PostFixNameEmpty, errInfo.GetReason())
-		require.Equal(t, kiterrors.Domain, errInfo.GetDomain())
+		require.Equal(t, "dapr.io", errInfo.GetDomain())
 		require.Nil(t, errInfo.GetMetadata())
+
+		require.NotNil(t, resInfo, "ResourceInfo should be present")
+		require.Equal(t, "pubsub", resInfo.GetResourceType())
+		require.Equal(t, name, resInfo.GetResourceName())
+		require.Empty(t, resInfo.GetOwner())
 	})
 
 	// Covers apierrors.PubSubMetadataDeserialize()
 	t.Run("pubsub metadata deserialization", func(t *testing.T) {
+		name := "mypubsub"
 		metadata := map[string]string{"rawPayload": "invalidBooleanValue"}
 		req := &rtv1.PublishEventRequest{
-			PubsubName: "mypubsub",
+			PubsubName: name,
 			Topic:      "topic",
 			Metadata:   metadata,
 		}
@@ -166,21 +275,37 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		require.Len(t, s.Details(), 2)
 
 		var errInfo *errdetails.ErrorInfo
-		errInfo, ok = s.Details()[0].(*errdetails.ErrorInfo)
+		var resInfo *errdetails.ResourceInfo
 
-		require.True(t, ok)
+		for _, detail := range s.Details() {
+			switch d := detail.(type) {
+			case *errdetails.ErrorInfo:
+				errInfo = d
+			case *errdetails.ResourceInfo:
+				resInfo = d
+			default:
+				require.FailNow(t, "unexpected status detail")
+			}
+		}
+		require.NotNil(t, errInfo, "ErrorInfo should be present")
 		require.Equal(t, kiterrors.CodePrefixPubSub+"METADATA_DESERIALIZATION", errInfo.GetReason())
-		require.Equal(t, kiterrors.Domain, errInfo.GetDomain())
+		require.Equal(t, "dapr.io", errInfo.GetDomain())
 		require.NotNil(t, errInfo.GetMetadata())
+
+		require.NotNil(t, resInfo, "ResourceInfo should be present")
+		require.Equal(t, "pubsub", resInfo.GetResourceType())
+		require.Equal(t, name, resInfo.GetResourceName())
+		require.Empty(t, resInfo.GetOwner())
 	})
 
 	// Covers apierrors.PubSubCloudEventCreation()
 	t.Run("pubsub cloud event creation issue", func(t *testing.T) {
+		name := "mypubsub"
 		metadata := map[string]string{"rawPayload": "false"}
 		invalidData := []byte(`{"missing_quote: invalid}`)
 
 		req := &rtv1.PublishEventRequest{
-			PubsubName:      "mypubsub",
+			PubsubName:      name,
 			Topic:           "topic",
 			Metadata:        metadata,
 			Data:            invalidData,
@@ -199,12 +324,27 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		require.Len(t, s.Details(), 2)
 
 		var errInfo *errdetails.ErrorInfo
-		errInfo, ok = s.Details()[0].(*errdetails.ErrorInfo)
+		var resInfo *errdetails.ResourceInfo
 
-		require.True(t, ok)
+		for _, detail := range s.Details() {
+			switch d := detail.(type) {
+			case *errdetails.ErrorInfo:
+				errInfo = d
+			case *errdetails.ResourceInfo:
+				resInfo = d
+			default:
+				require.FailNow(t, "unexpected status detail")
+			}
+		}
+		require.NotNil(t, errInfo, "ErrorInfo should be present")
 		require.Equal(t, kiterrors.CodePrefixPubSub+"CLOUD_EVENT_CREATION", errInfo.GetReason())
-		require.Equal(t, kiterrors.Domain, errInfo.GetDomain())
+		require.Equal(t, "dapr.io", errInfo.GetDomain())
 		require.NotNil(t, errInfo.GetMetadata())
+
+		require.NotNil(t, resInfo, "ResourceInfo should be present")
+		require.Equal(t, "pubsub", resInfo.GetResourceType())
+		require.Equal(t, name, resInfo.GetResourceName())
+		require.Empty(t, resInfo.GetOwner())
 	})
 
 	// Covers apierrors.PubSubMarshalEvents()
@@ -238,11 +378,67 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		require.Len(t, s.Details(), 2)
 
 		var errInfo *errdetails.ErrorInfo
+		var resInfo *errdetails.ResourceInfo
+
+		for _, detail := range s.Details() {
+			switch d := detail.(type) {
+			case *errdetails.ErrorInfo:
+				errInfo = d
+			case *errdetails.ResourceInfo:
+				resInfo = d
+			default:
+				require.FailNow(t, "unexpected status detail")
+			}
+		}
+		require.NotNil(t, errInfo, "ErrorInfo should be present")
+		require.Equal(t, kiterrors.CodePrefixPubSub+"MARSHAL_EVENTS", errInfo.GetReason())
+		require.Equal(t, "dapr.io", errInfo.GetDomain())
+		require.NotNil(t, errInfo.GetMetadata())
+
+		require.NotNil(t, resInfo, "ResourceInfo should be present")
+		require.Equal(t, "pubsub", resInfo.GetResourceType())
+		require.Equal(t, name, resInfo.GetResourceName())
+		require.Empty(t, resInfo.GetOwner())
+	})
+
+	t.Run("pubsub outbox", func(t *testing.T) {
+		name := "state-outbox"
+		ops := make([]*rtv1.TransactionalStateOperation, 0)
+		ops = append(ops, &rtv1.TransactionalStateOperation{
+			OperationType: "upsert",
+			Request: &commonv1.StateItem{
+				Key:   "key1",
+				Value: []byte("val1"),
+			},
+		},
+			&rtv1.TransactionalStateOperation{
+				OperationType: "delete",
+				Request: &commonv1.StateItem{
+					Key: "key2",
+				},
+			})
+		req := &rtv1.ExecuteStateTransactionRequest{
+			StoreName:  name,
+			Operations: ops,
+		}
+		_, err := client.ExecuteStateTransaction(ctx, req)
+		require.Error(t, err)
+
+		s, ok := status.FromError(err)
+		require.True(t, ok)
+		require.Equal(t, grpcCodes.Internal, s.Code())
+		expectedErrMsg := "error while publishing outbox message: rpc error: code = Unknown desc = outbox error"
+		require.Equal(t, expectedErrMsg, s.Message())
+
+		// Check status details
+		require.Len(t, s.Details(), 1)
+
+		var errInfo *errdetails.ErrorInfo
 		errInfo, ok = s.Details()[0].(*errdetails.ErrorInfo)
 
 		require.True(t, ok)
-		require.Equal(t, kiterrors.CodePrefixPubSub+"MARSHAL_EVENTS", errInfo.GetReason())
-		require.Equal(t, kiterrors.Domain, errInfo.GetDomain())
+		require.Equal(t, kiterrors.CodePrefixPubSub+"OUTBOX", errInfo.GetReason())
+		require.Equal(t, "dapr.io", errInfo.GetDomain())
 		require.NotNil(t, errInfo.GetMetadata())
 	})
 }

@@ -35,6 +35,7 @@ type WrappedInMemory struct {
 	lock      sync.Mutex
 	hasInit   bool
 	hasClosed bool
+	publishFn func(ctx context.Context, req *pubsub.PublishRequest) error
 }
 
 func NewWrappedInMemory(t *testing.T, fopts ...Option) pubsub.PubSub {
@@ -48,9 +49,17 @@ func NewWrappedInMemory(t *testing.T, fopts ...Option) pubsub.PubSub {
 
 	impl := inmemory.New(logger.NewLogger(t.Name() + "_pubsub"))
 	return &WrappedInMemory{
-		PubSub:   impl,
-		features: opts.features,
+		PubSub:    impl,
+		features:  opts.features,
+		publishFn: opts.publishFn,
 	}
+}
+
+func (w *WrappedInMemory) Publish(ctx context.Context, req *pubsub.PublishRequest) error {
+	if w.publishFn != nil {
+		return w.publishFn(ctx, req)
+	}
+	return w.PubSub.Publish(ctx, req)
 }
 
 func (w *WrappedInMemory) Init(ctx context.Context, metadata pubsub.Metadata) error {
