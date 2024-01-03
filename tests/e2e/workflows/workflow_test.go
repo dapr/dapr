@@ -33,9 +33,11 @@ import (
 	"github.com/dapr/dapr/tests/runner"
 )
 
-var tr *runner.TestRunner
-var backends = []string{"", "sqlite"}
-var appNamePrefix = "workflowsapp"
+var (
+	tr            *runner.TestRunner
+	backends      = []string{"actors", "sqlite"}
+	appNamePrefix = "workflowsapp"
+)
 
 func TestMain(m *testing.M) {
 	utils.SetupLogs("workflowtestdapr")
@@ -47,10 +49,8 @@ func TestMain(m *testing.M) {
 	// Then run this test with the env var "WORKFLOW_APP_ENDPOINT" pointing to the address of the app. For example:
 	//   WORKFLOW_APP_ENDPOINT=http://localhost:3000 DAPR_E2E_TEST="workflows" make test-clean test-e2e-all |& tee test.log
 	if os.Getenv("WORKFLOW_APP_ENDPOINT") == "" {
-
-		//set the configuration as environment variables for the test app.
+		// Set the configuration as environment variables for the test app.
 		var testApps []kube.AppDescription
-
 		for _, backend := range backends {
 			testApps = append(testApps, getTestApp(backend))
 		}
@@ -62,7 +62,7 @@ func TestMain(m *testing.M) {
 				MetaData: map[string]kube.MetadataValue{
 					"connectionString": {Raw: `""`},
 				},
-				Scopes: []string{appNamePrefix + "sqlite"},
+				Scopes: []string{appNamePrefix + "-sqlite"},
 			},
 		}
 
@@ -75,7 +75,7 @@ func TestMain(m *testing.M) {
 
 func getTestApp(backend string) kube.AppDescription {
 	testApps := kube.AppDescription{
-		AppName:             appNamePrefix + backend,
+		AppName:             appNamePrefix + "-" + backend,
 		DaprEnabled:         true,
 		ImageName:           "e2e-workflowsapp",
 		Replicas:            1,
@@ -241,7 +241,7 @@ func TestWorkflow(t *testing.T) {
 	for _, backend := range backends {
 		t.Run(backend, func(t *testing.T) {
 			// Get the ingress external url of test app
-			externalURL := getAppEndpoint(appNamePrefix + backend)
+			externalURL := getAppEndpoint(appNamePrefix + "-" + backend)
 			require.NotEmpty(t, externalURL, "external URL must not be empty")
 
 			// Check if test app endpoint is available

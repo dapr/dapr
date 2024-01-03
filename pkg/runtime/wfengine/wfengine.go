@@ -132,7 +132,8 @@ func (wfe *WorkflowEngine) Start(ctx context.Context) (err error) {
 	}
 
 	// Register actor backend if backend is actor
-	if abe, ok := wfe.Backend.(*actorsbe.ActorBackend); ok {
+	abe, ok := wfe.Backend.(*actorsbe.ActorBackend)
+	if ok {
 		abe.WaitForActorsReady(ctx)
 		abe.RegisterActor(ctx)
 	}

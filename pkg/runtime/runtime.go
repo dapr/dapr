@@ -28,7 +28,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/microsoft/durabletask-go/backend"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	otlptracegrpc "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	otlptracehttp "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
@@ -593,9 +592,6 @@ func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) (err error) {
 		} else {
 			a.daprUniversalAPI.SetActorRuntime(a.actor)
 		}
-	} else {
-		// If actors are not enabled, still invoke SetActorRuntime on the workflow engine with `nil` to unblock startup
-		setActorRuntimeForBackend(ctx, a.workflowEngine.Backend, nil)
 	}
 
 	// Initialize workflow engine
@@ -616,17 +612,20 @@ func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) (err error) {
 	return nil
 }
 
-func setActorRuntimeForBackend(ctx context.Context, be backend.Backend, actorRuntime actors.ActorRuntime) {
-	if abe, ok := be.(interface {
+func (a *DaprRuntime) initWorkflowEngine(ctx context.Context) {
+	wfComponentFactory := wfengine.BuiltinWorkflowFactory(a.workflowEngine)
+
+	// If actors are not enabled, still invoke SetActorRuntime on the workflow engine with `nil` to unblock startup
+	if abe, ok := a.workflowEngine.Backend.(interface {
 		SetActorRuntime(ctx context.Context, actorRuntime actors.ActorRuntime)
 	}); ok {
 		log.Info("Configuring workflow engine with actors backend")
+		var actorRuntime actors.ActorRuntime
+		if a.runtimeConfig.ActorsEnabled() {
+			actorRuntime = a.actor
+		}
 		abe.SetActorRuntime(ctx, actorRuntime)
 	}
-}
-
-func (a *DaprRuntime) initWorkflowEngine(ctx context.Context) {
-	wfComponentFactory := wfengine.BuiltinWorkflowFactory(a.workflowEngine)
 
 	reg := a.runtimeConfig.registry.Workflows()
 	if reg == nil {
