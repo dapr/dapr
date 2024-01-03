@@ -26,6 +26,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/alphadose/haxmap"
 	"github.com/cenkalti/backoff/v4"
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
@@ -82,7 +83,7 @@ type ActorRuntime interface {
 	Init(context.Context) error
 	IsActorHosted(ctx context.Context, req *ActorHostedRequest) bool
 	GetRuntimeStatus(ctx context.Context) *runtimev1pb.ActorRuntime
-	RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor, actorIdleTimeout time.Duration) error
+	RegisterInternalActor(ctx context.Context, actorType string, actor InternalActorFactory, actorIdleTimeout time.Duration) error
 }
 
 // Actors allow calling into virtual actors as well as actor state management.
@@ -111,25 +112,25 @@ type Actors interface {
 type GRPCConnectionFn func(ctx context.Context, address string, id string, namespace string, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(destroy bool), error)
 
 type actorsRuntime struct {
-	appChannel       channel.AppChannel
-	placement        internal.PlacementService
-	grpcConnectionFn GRPCConnectionFn
-	actorsConfig     Config
-	timers           internal.TimersProvider
-	actorsReminders  internal.RemindersProvider
-	actorsTable      *sync.Map
-	tracingSpec      configuration.TracingSpec
-	resiliency       resiliency.Provider
-	storeName        string
-	compStore        *compstore.ComponentStore
-	clock            clock.WithTicker
-	internalActors   map[string]InternalActor
-	internalActorsMu sync.RWMutex
-	sec              security.Handler
-	wg               sync.WaitGroup
-	closed           atomic.Bool
-	closeCh          chan struct{}
-	apiLevel         atomic.Uint32
+	appChannel         channel.AppChannel
+	placement          internal.PlacementService
+	grpcConnectionFn   GRPCConnectionFn
+	actorsConfig       Config
+	timers             internal.TimersProvider
+	actorsReminders    internal.RemindersProvider
+	actorsTable        *sync.Map
+	tracingSpec        configuration.TracingSpec
+	resiliency         resiliency.Provider
+	storeName          string
+	compStore          *compstore.ComponentStore
+	clock              clock.WithTicker
+	internalActorTypes *haxmap.Map[string, InternalActorFactory]
+	internalActors     *haxmap.Map[string, InternalActor]
+	sec                security.Handler
+	wg                 sync.WaitGroup
+	closed             atomic.Bool
+	closeCh            chan struct{}
+	apiLevel           atomic.Uint32
 
 	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 	stateTTLEnabled bool
@@ -160,19 +161,20 @@ func NewActors(opts ActorsOpts) ActorRuntime {
 
 func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) ActorRuntime {
 	a := &actorsRuntime{
-		appChannel:       opts.AppChannel,
-		grpcConnectionFn: opts.GRPCConnectionFn,
-		actorsConfig:     opts.Config,
-		timers:           timers.NewTimersProvider(clock),
-		tracingSpec:      opts.TracingSpec,
-		resiliency:       opts.Resiliency,
-		storeName:        opts.StateStoreName,
-		placement:        opts.MockPlacement,
-		actorsTable:      &sync.Map{},
-		clock:            clock,
-		internalActors:   map[string]InternalActor{},
-		compStore:        opts.CompStore,
-		sec:              opts.Security,
+		appChannel:         opts.AppChannel,
+		grpcConnectionFn:   opts.GRPCConnectionFn,
+		actorsConfig:       opts.Config,
+		timers:             timers.NewTimersProvider(clock),
+		tracingSpec:        opts.TracingSpec,
+		resiliency:         opts.Resiliency,
+		storeName:          opts.StateStoreName,
+		placement:          opts.MockPlacement,
+		actorsTable:        &sync.Map{},
+		clock:              clock,
+		internalActorTypes: haxmap.New[string, InternalActorFactory](4), // Initial capacity should be enough for the current built-in actors
+		internalActors:     haxmap.New[string, InternalActor](32),
+		compStore:          opts.CompStore,
+		sec:                opts.Security,
 
 		// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 		stateTTLEnabled: opts.StateTTLEnabled,
@@ -380,14 +382,16 @@ func (a *actorsRuntime) deactivateActor(act *actor) error {
 	}
 
 	// If it's an internal actor, we call it directly
-	a.internalActorsMu.RLock()
-	internalAct := a.internalActors[act.actorType]
-	a.internalActorsMu.RUnlock()
-	if internalAct != nil {
-		err = internalAct.DeactivateActor(ctx, act.actorID)
-		if err != nil {
-			diag.DefaultMonitoring.ActorDeactivationFailed(act.actorType, "internal")
-			return fmt.Errorf("failed to deactivate internal actor: %w", err)
+	_, ok := a.internalActorTypes.Get(act.actorType)
+	if ok {
+		internalAct, loaded := a.internalActors.GetAndDel(act.Key())
+		// If the actor was loaded in-memory, call DeactivateActor on it
+		if loaded {
+			err = internalAct.DeactivateActor(ctx)
+			if err != nil {
+				diag.DefaultMonitoring.ActorDeactivationFailed(act.actorType, "internal")
+				return fmt.Errorf("failed to deactivate internal actor: %w", err)
+			}
 		}
 	} else if a.appChannel != nil {
 		req := invokev1.NewInvokeMethodRequest("actors/"+act.actorType+"/"+act.actorID).
@@ -460,6 +464,20 @@ func (a *actorsRuntime) deactivationTicker(configuration Config, haltFn internal
 	}
 }
 
+// Returns an internal actor instance, allocating it if needed.
+// If the actor type does not correspond to an internal actor, the returned boolean is false
+func (a *actorsRuntime) getInternalActor(actorType string, actorID string) (InternalActor, bool) {
+	factory, ok := a.internalActorTypes.Get(actorType)
+	if !ok {
+		return nil, false
+	}
+
+	internalAct, _ := a.internalActors.GetOrCompute(actorType+daprSeparator+actorID, func() InternalActor {
+		return factory(actorType, actorID, a)
+	})
+	return internalAct, true
+}
+
 func (a *actorsRuntime) Call(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (res *internalv1pb.InternalInvokeResponse, err error) {
 	err = a.placement.WaitUntilReady(ctx)
 	if err != nil {
@@ -479,10 +497,8 @@ func (a *actorsRuntime) Call(ctx context.Context, req *internalv1pb.InternalInvo
 
 	if a.isActorLocal(lar.Address, a.actorsConfig.Config.HostAddress, a.actorsConfig.Config.Port) {
 		// If this is an internal actor, we call it using a separate path
-		a.internalActorsMu.RLock()
-		internalAct := a.internalActors[actorType]
-		a.internalActorsMu.RUnlock()
-		if internalAct != nil {
+		internalAct, ok := a.getInternalActor(actorType, actor.GetActorId())
+		if ok {
 			res, err = a.callInternalActor(ctx, req, internalAct)
 		} else {
 			res, err = a.callLocalActor(ctx, req)
@@ -718,7 +734,7 @@ func (a *actorsRuntime) callInternalActor(ctx context.Context, req *internalv1pb
 	policyDef := a.resiliency.ActorPostLockPolicy(act.actorType, act.actorID)
 	policyRunner := resiliency.NewRunner[*internalv1pb.InternalInvokeResponse](ctx, policyDef)
 	return policyRunner(func(ctx context.Context) (*internalv1pb.InternalInvokeResponse, error) {
-		resData, err := internalAct.InvokeMethod(ctx, act.actorID, msg.GetMethod(), msg.GetData().GetValue(), md)
+		resData, err := internalAct.InvokeMethod(ctx, msg.GetMethod(), msg.GetData().GetValue(), md)
 		if err != nil {
 			return nil, fmt.Errorf("error from internal actor: %w", err)
 		}
@@ -1009,7 +1025,7 @@ func (a *actorsRuntime) doExecuteReminderOrTimerOnInternalActor(ctx context.Cont
 	if isTimer {
 		log.Debugf("Executing timer for internal actor '%s'", reminder.Key())
 
-		err = internalAct.InvokeTimer(ctx, reminder.ActorID, ir, md)
+		err = internalAct.InvokeTimer(ctx, ir, md)
 		if err != nil {
 			if !errors.Is(err, ErrReminderCanceled) {
 				log.Errorf("Error executing timer for internal actor '%s': %v", reminder.Key(), err)
@@ -1019,7 +1035,7 @@ func (a *actorsRuntime) doExecuteReminderOrTimerOnInternalActor(ctx context.Cont
 	} else {
 		log.Debugf("Executing reminder for internal actor '%s'", reminder.Key())
 
-		err = internalAct.InvokeReminder(ctx, reminder.ActorID, ir, md)
+		err = internalAct.InvokeReminder(ctx, ir, md)
 		if err != nil {
 			if !errors.Is(err, ErrReminderCanceled) {
 				log.Errorf("Error executing reminder for internal actor '%s': %v", reminder.Key(), err)
@@ -1040,10 +1056,8 @@ func (a *actorsRuntime) doExecuteReminderOrTimer(ctx context.Context, reminder *
 	}
 
 	// If it's an internal actor, we call it directly
-	a.internalActorsMu.RLock()
-	internalAct := a.internalActors[reminder.ActorType]
-	a.internalActorsMu.RUnlock()
-	if internalAct != nil {
+	internalAct, ok := a.getInternalActor(reminder.ActorType, reminder.ActorID)
+	if ok {
 		return a.doExecuteReminderOrTimerOnInternalActor(ctx, reminder, isTimer, internalAct)
 	}
 
@@ -1147,26 +1161,20 @@ func (a *actorsRuntime) DeleteTimer(ctx context.Context, req *DeleteTimerRequest
 	return a.timers.DeleteTimer(ctx, req.Key())
 }
 
-func (a *actorsRuntime) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor,
-	actorIdleTimeout time.Duration,
-) error {
+func (a *actorsRuntime) RegisterInternalActor(ctx context.Context, actorType string, factory InternalActorFactory, actorIdleTimeout time.Duration) error {
 	if !a.haveCompatibleStorage() {
-		return fmt.Errorf("unable to register internal actor '%s': %w", actorType, ErrIncompatibleStateStore)
+		return fmt.Errorf("unable to register internal actor type '%s': %w", actorType, ErrIncompatibleStateStore)
 	}
 
-	a.internalActorsMu.Lock()
-	defer a.internalActorsMu.Unlock()
-
-	if a.internalActors[actorType] != nil {
-		return fmt.Errorf("actor type %s already registered", actorType)
+	// Call GetOrSet which returns "existing=true" if the actor type was already registered
+	_, existing := a.internalActorTypes.GetOrSet(actorType, factory)
+	if existing {
+		return fmt.Errorf("actor type '%s' already registered", actorType)
 	}
 
-	log.Debugf("Registering internal actor type: %s", actorType)
+	log.Debugf("Registered internal actor type '%s'", actorType)
 
-	actor.SetActorRuntime(a)
 	a.actorsConfig.Config.HostedActorTypes.AddActorType(actorType, actorIdleTimeout)
-
-	a.internalActors[actorType] = actor
 
 	if a.placement != nil {
 		err := a.placement.AddHostedActorType(actorType, actorIdleTimeout)

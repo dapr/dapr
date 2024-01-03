@@ -121,9 +121,7 @@ type MockActors struct {
 	mock.Mock
 }
 
-func (_m *MockActors) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor,
-	actorIdleTimeout time.Duration,
-) error {
+func (_m *MockActors) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActorFactory, actorIdleTimeout time.Duration) error {
 	return nil
 }
 
@@ -345,9 +343,7 @@ type FailingActors struct {
 	Failure daprt.Failure
 }
 
-func (f *FailingActors) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor,
-	actorIdleTimeout time.Duration,
-) error {
+func (f *FailingActors) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActorFactory, actorIdleTimeout time.Duration) error {
 	return nil
 }
 
