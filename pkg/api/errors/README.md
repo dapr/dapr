@@ -13,19 +13,19 @@ Example:
 
 * in `pubsub.go`
 ```go
-import kitErrors "github.com/dapr/kit/errors"
+import kiterrors "github.com/dapr/kit/errors"
 
 // Define error in dapr pkg/api/<building_block>.go
 func PubSubNotFound(name string, pubsubType string, metadata map[string]string) error {
 message := fmt.Sprintf("pubsub %s not found", name)
 
-return kitErrors.NewBuilder(
+return kiterrors.NewBuilder(
 grpcCodes.InvalidArgument,
 http.StatusNotFound,
 message,
-kitErrors.CodePrefixPubSub+kitErrors.CodeNotFound,
+kiterrors.CodePrefixPubSub+kiterrors.CodeNotFound,
 ).
-WithErrorInfo(kitErrors.CodePrefixPubSub+kitErrors.CodeNotFound, metadata).
+WithErrorInfo(kiterrors.CodePrefixPubSub+kiterrors.CodeNotFound, metadata).
 WithResourceInfo(pubsubType, name, "", message).
 Build()
 }
@@ -34,9 +34,9 @@ Build()
 * use error in appropriate file, ex: `pkg/grpc/api.go`
 ```go
 import (	
-    apiErrors "github.com/dapr/dapr/pkg/api/errors"
-    kitErrors "github.com/dapr/kit/errors"
+    apierrors "github.com/dapr/dapr/pkg/api/errors"
+    kiterrors "github.com/dapr/kit/errors"
 )
 // Use error in dapr and pass in relevant information
-err = apiErrors.PubSubNotFound(pubsubName, pubsubType, metadata)
+err = apierrors.PubSubNotFound(pubsubName, pubsubType, metadata)
 ```

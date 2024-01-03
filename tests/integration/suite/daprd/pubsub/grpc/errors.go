@@ -25,12 +25,12 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 
-	apiErrors "github.com/dapr/dapr/pkg/api/errors"
+	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/suite"
-	kitErrors "github.com/dapr/kit/errors"
+	kiterrors "github.com/dapr/kit/errors"
 )
 
 func init() {
@@ -67,7 +67,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
 	client := rtv1.NewDaprClient(conn)
 
-	// Covers apiErrors.PubSubNotFound()
+	// Covers apierrors.PubSubNotFound()
 	t.Run("pubsub doesn't exist", func(t *testing.T) {
 		req := &rtv1.PublishEventRequest{
 			PubsubName: "pubsub-doesn't-exist",
@@ -87,12 +87,12 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		errInfo, ok = s.Details()[0].(*errdetails.ErrorInfo)
 
 		require.True(t, ok)
-		require.Equal(t, kitErrors.CodePrefixPubSub+kitErrors.CodeNotFound, errInfo.GetReason())
-		require.Equal(t, kitErrors.Domain, errInfo.GetDomain())
+		require.Equal(t, kiterrors.CodePrefixPubSub+kiterrors.CodeNotFound, errInfo.GetReason())
+		require.Equal(t, kiterrors.Domain, errInfo.GetDomain())
 		require.Nil(t, errInfo.GetMetadata())
 	})
 
-	// Covers apiErrors.PubSubNameEmpty()
+	// Covers apierrors.PubSubNameEmpty()
 	t.Run("pubsub name empty", func(t *testing.T) {
 		req := &rtv1.PublishEventRequest{
 			PubsubName: "",
@@ -113,12 +113,12 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		errInfo, ok = s.Details()[0].(*errdetails.ErrorInfo)
 
 		require.True(t, ok)
-		require.Equal(t, kitErrors.CodePrefixPubSub+"NAME_EMPTY", errInfo.GetReason())
-		require.Equal(t, kitErrors.Domain, errInfo.GetDomain())
+		require.Equal(t, kiterrors.CodePrefixPubSub+"NAME_EMPTY", errInfo.GetReason())
+		require.Equal(t, kiterrors.Domain, errInfo.GetDomain())
 		require.Nil(t, errInfo.GetMetadata())
 	})
 
-	// Covers apiErrors.PubSubTopicEmpty()
+	// Covers apierrors.PubSubTopicEmpty()
 	t.Run("pubsub topic empty", func(t *testing.T) {
 		req := &rtv1.PublishEventRequest{
 			PubsubName: "mypubsub",
@@ -140,12 +140,12 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		errInfo, ok = s.Details()[0].(*errdetails.ErrorInfo)
 
 		require.True(t, ok)
-		require.Equal(t, kitErrors.CodePrefixPubSub+"TOPIC"+apiErrors.PostFixNameEmpty, errInfo.GetReason())
-		require.Equal(t, kitErrors.Domain, errInfo.GetDomain())
+		require.Equal(t, kiterrors.CodePrefixPubSub+"TOPIC"+apierrors.PostFixNameEmpty, errInfo.GetReason())
+		require.Equal(t, kiterrors.Domain, errInfo.GetDomain())
 		require.Nil(t, errInfo.GetMetadata())
 	})
 
-	// Covers apiErrors.PubSubMetadataDeserialize()
+	// Covers apierrors.PubSubMetadataDeserialize()
 	t.Run("pubsub metadata deserialization", func(t *testing.T) {
 		metadata := map[string]string{"rawPayload": "invalidBooleanValue"}
 		req := &rtv1.PublishEventRequest{
@@ -169,12 +169,12 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		errInfo, ok = s.Details()[0].(*errdetails.ErrorInfo)
 
 		require.True(t, ok)
-		require.Equal(t, kitErrors.CodePrefixPubSub+"METADATA_DESERIALIZATION", errInfo.GetReason())
-		require.Equal(t, kitErrors.Domain, errInfo.GetDomain())
+		require.Equal(t, kiterrors.CodePrefixPubSub+"METADATA_DESERIALIZATION", errInfo.GetReason())
+		require.Equal(t, kiterrors.Domain, errInfo.GetDomain())
 		require.NotNil(t, errInfo.GetMetadata())
 	})
 
-	// Covers apiErrors.PubSubCloudEventCreation()
+	// Covers apierrors.PubSubCloudEventCreation()
 	t.Run("pubsub cloud event creation issue", func(t *testing.T) {
 		metadata := map[string]string{"rawPayload": "false"}
 		invalidData := []byte(`{"missing_quote: invalid}`)
@@ -202,12 +202,12 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		errInfo, ok = s.Details()[0].(*errdetails.ErrorInfo)
 
 		require.True(t, ok)
-		require.Equal(t, kitErrors.CodePrefixPubSub+"CLOUD_EVENT_CREATION", errInfo.GetReason())
-		require.Equal(t, kitErrors.Domain, errInfo.GetDomain())
+		require.Equal(t, kiterrors.CodePrefixPubSub+"CLOUD_EVENT_CREATION", errInfo.GetReason())
+		require.Equal(t, kiterrors.Domain, errInfo.GetDomain())
 		require.NotNil(t, errInfo.GetMetadata())
 	})
 
-	// Covers apiErrors.PubSubMarshalEvents()
+	// Covers apierrors.PubSubMarshalEvents()
 	t.Run("pubsub marshal events issue", func(t *testing.T) {
 		name := "mypubsub"
 		topic := "topic"
@@ -241,8 +241,8 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		errInfo, ok = s.Details()[0].(*errdetails.ErrorInfo)
 
 		require.True(t, ok)
-		require.Equal(t, kitErrors.CodePrefixPubSub+"MARSHAL_EVENTS", errInfo.GetReason())
-		require.Equal(t, kitErrors.Domain, errInfo.GetDomain())
+		require.Equal(t, kiterrors.CodePrefixPubSub+"MARSHAL_EVENTS", errInfo.GetReason())
+		require.Equal(t, kiterrors.Domain, errInfo.GetDomain())
 		require.NotNil(t, errInfo.GetMetadata())
 	})
 }

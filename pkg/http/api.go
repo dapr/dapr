@@ -25,7 +25,7 @@ import (
 	"strings"
 	"time"
 
-	kitErrors "github.com/dapr/kit/errors"
+	kiterrors "github.com/dapr/kit/errors"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/mitchellh/mapstructure"
@@ -40,7 +40,7 @@ import (
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
-	apiErrors "github.com/dapr/dapr/pkg/api/errors"
+	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/pkg/channel/http"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
@@ -1558,7 +1558,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 
 	if validationErr != nil {
 		log.Debug(validationErr)
-		standardizedErr, ok := kitErrors.FromError(validationErr)
+		standardizedErr, ok := kiterrors.FromError(validationErr)
 		if ok {
 			fasthttpRespond(reqCtx, fasthttpResponseWithError(standardizedErr.HTTPStatusCode(), standardizedErr))
 		}
@@ -1571,7 +1571,7 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 
 	rawPayload, metaErr := contribMetadata.IsRawPayload(metadata)
 	if metaErr != nil {
-		err := apiErrors.PubSubMetadataDeserialize(pubsubName, string(contribMetadata.PubSubType), map[string]string{"appID": a.universal.AppID})
+		err := apierrors.PubSubMetadataDeserialize(pubsubName, string(contribMetadata.PubSubType), map[string]string{"appID": a.universal.AppID})
 		universalFastHTTPErrorResponder(reqCtx, err)
 		log.Debug(err)
 
@@ -1593,8 +1593,8 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 			Pubsub:          pubsubName,
 		}, metadata)
 		if err != nil {
-			err = apiErrors.PubSubCloudEventCreation(pubsubName, string(contribMetadata.PubSubType), map[string]string{"appID": a.universal.AppID})
-			standardizedErr, ok := kitErrors.FromError(err)
+			err = apierrors.PubSubCloudEventCreation(pubsubName, string(contribMetadata.PubSubType), map[string]string{"appID": a.universal.AppID})
+			standardizedErr, ok := kiterrors.FromError(err)
 			if ok {
 				fasthttpRespond(reqCtx, fasthttpResponseWithError(standardizedErr.HTTPStatusCode(), standardizedErr))
 			}
@@ -1608,8 +1608,8 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 
 		data, err = json.Marshal(envelope)
 		if err != nil {
-			err = apiErrors.PubSubMarshalEnvelope(pubsubName, topic, string(contribMetadata.PubSubType), map[string]string{"appID": a.universal.AppID})
-			standardizedErr, ok := kitErrors.FromError(err)
+			err = apierrors.PubSubMarshalEnvelope(pubsubName, topic, string(contribMetadata.PubSubType), map[string]string{"appID": a.universal.AppID})
+			standardizedErr, ok := kiterrors.FromError(err)
 			if ok {
 				fasthttpRespond(reqCtx, fasthttpResponseWithError(standardizedErr.HTTPStatusCode(), standardizedErr))
 			}
@@ -1633,17 +1633,17 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 
 	if err != nil {
 		var nerr error
-		nerr = apiErrors.PubSubPublishMessage(pubsubName, string(contribMetadata.PubSubType), topic, err)
+		nerr = apierrors.PubSubPublishMessage(pubsubName, string(contribMetadata.PubSubType), topic, err)
 
 		if errors.As(err, &runtimePubsub.NotAllowedError{}) {
-			nerr = apiErrors.PubSubPublishForbidden(pubsubName, string(contribMetadata.PubSubType), topic, a.universal.AppID, err)
+			nerr = apierrors.PubSubPublishForbidden(pubsubName, string(contribMetadata.PubSubType), topic, a.universal.AppID, err)
 		}
 
 		if errors.As(err, &runtimePubsub.NotFoundError{}) {
-			nerr = apiErrors.PubSubTestNotFound(pubsubName, string(contribMetadata.PubSubType), topic, err)
+			nerr = apierrors.PubSubTestNotFound(pubsubName, string(contribMetadata.PubSubType), topic, err)
 		}
 
-		standardizedErr, ok := kitErrors.FromError(nerr)
+		standardizedErr, ok := kiterrors.FromError(nerr)
 		if ok {
 			fasthttpRespond(reqCtx, fasthttpResponseWithError(standardizedErr.HTTPStatusCode(), standardizedErr))
 		}
@@ -1665,7 +1665,7 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 
 	if validationErr != nil {
 		log.Debug(validationErr)
-		standardizedErr, ok := kitErrors.FromError(validationErr)
+		standardizedErr, ok := kiterrors.FromError(validationErr)
 		if ok {
 			fasthttpRespond(reqCtx, fasthttpResponseWithError(standardizedErr.HTTPStatusCode(), standardizedErr))
 		}
@@ -1676,7 +1676,7 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 	metadata := getMetadataFromFastHTTPRequest(reqCtx)
 	rawPayload, metaErr := contribMetadata.IsRawPayload(metadata)
 	if metaErr != nil {
-		err := apiErrors.PubSubMetadataDeserialize(pubsubName, string(contribMetadata.PubSubType), map[string]string{"appID": a.universal.AppID, "error": metaErr.Error()})
+		err := apierrors.PubSubMetadataDeserialize(pubsubName, string(contribMetadata.PubSubType), map[string]string{"appID": a.universal.AppID, "error": metaErr.Error()})
 		log.Debug(err)
 		universalFastHTTPErrorResponder(reqCtx, err)
 		return
@@ -1688,8 +1688,8 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 	incomingEntries := make([]bulkPublishMessageEntry, 0)
 	err := json.Unmarshal(body, &incomingEntries)
 	if err != nil {
-		nerr := apiErrors.PubSubUnMarshalEvents(pubsubName, string(contribMetadata.PubSubType), topic, map[string]string{"appID": a.universal.AppID, "error": err.Error()}, err)
-		standardizedErr, ok := kitErrors.FromError(nerr)
+		nerr := apierrors.PubSubUnMarshalEvents(pubsubName, string(contribMetadata.PubSubType), topic, map[string]string{"appID": a.universal.AppID, "error": err.Error()}, err)
+		standardizedErr, ok := kiterrors.FromError(nerr)
 		if ok {
 			fasthttpRespond(reqCtx, fasthttpResponseWithError(standardizedErr.HTTPStatusCode(), standardizedErr))
 		}
@@ -1704,8 +1704,8 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 		var dBytes []byte
 		dBytes, err = ConvertEventToBytes(entry.Event, entry.ContentType)
 		if err != nil {
-			nerr := apiErrors.PubSubMarshalEvents(pubsubName, string(contribMetadata.PubSubType), topic, map[string]string{"appID": a.universal.AppID, "error": err.Error()})
-			standardizedErr, ok := kitErrors.FromError(nerr)
+			nerr := apierrors.PubSubMarshalEvents(pubsubName, string(contribMetadata.PubSubType), topic, map[string]string{"appID": a.universal.AppID, "error": err.Error()})
+			standardizedErr, ok := kiterrors.FromError(nerr)
 			if ok {
 				fasthttpRespond(reqCtx, fasthttpResponseWithError(standardizedErr.HTTPStatusCode(), standardizedErr))
 			}
@@ -1722,8 +1722,8 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 			entries[i].Metadata = utils.PopulateMetadataForBulkPublishEntry(metadata, entry.Metadata)
 		}
 		if _, ok := entryIDSet[entry.EntryID]; ok || entry.EntryID == "" {
-			err := apiErrors.PubSubMarshalEvents(pubsubName, string(contribMetadata.PubSubType), topic, map[string]string{"appID": a.universal.AppID, "error": "entryId is duplicated or not present for entry"})
-			standardizedErr, ok := kitErrors.FromError(err)
+			err := apierrors.PubSubMarshalEvents(pubsubName, string(contribMetadata.PubSubType), topic, map[string]string{"appID": a.universal.AppID, "error": "entryId is duplicated or not present for entry"})
+			standardizedErr, ok := kiterrors.FromError(err)
 			if ok {
 				fasthttpRespond(reqCtx, fasthttpResponseWithError(standardizedErr.HTTPStatusCode(), standardizedErr))
 			}
@@ -1762,8 +1762,8 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 				Pubsub:          pubsubName,
 			}, entries[i].Metadata)
 			if err != nil {
-				nerr := apiErrors.PubSubCloudEventCreation(pubsubName, string(contribMetadata.PubSubType), map[string]string{"appID": a.universal.AppID})
-				standardizedErr, ok := kitErrors.FromError(nerr)
+				nerr := apierrors.PubSubCloudEventCreation(pubsubName, string(contribMetadata.PubSubType), map[string]string{"appID": a.universal.AppID})
+				standardizedErr, ok := kiterrors.FromError(nerr)
 				if ok {
 					fasthttpRespond(reqCtx, fasthttpResponseWithError(standardizedErr.HTTPStatusCode(), standardizedErr), closeChildSpans)
 				}
@@ -1775,8 +1775,8 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 
 			entries[i].Event, err = json.Marshal(envelope)
 			if err != nil {
-				nerr := apiErrors.PubSubMarshalEnvelope(pubsubName, topic, string(contribMetadata.PubSubType), map[string]string{"appID": a.universal.AppID})
-				standardizedErr, ok := kitErrors.FromError(nerr)
+				nerr := apierrors.PubSubMarshalEnvelope(pubsubName, topic, string(contribMetadata.PubSubType), map[string]string{"appID": a.universal.AppID})
+				standardizedErr, ok := kiterrors.FromError(nerr)
 				if ok {
 					fasthttpRespond(reqCtx, fasthttpResponseWithError(standardizedErr.HTTPStatusCode(), standardizedErr), closeChildSpans)
 				}
@@ -1819,12 +1819,12 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 		bulkRes.ErrorCode = "ERR_PUBSUB_PUBLISH_MESSAGE"
 
 		if !errors.As(err, &runtimePubsub.NotAllowedError{}) && !errors.As(err, &runtimePubsub.NotFoundError{}) {
-			err = apiErrors.PubSubPublishMessage(pubsubName, string(contribMetadata.PubSubType), topic, err)
+			err = apierrors.PubSubPublishMessage(pubsubName, string(contribMetadata.PubSubType), topic, err)
 		}
 
 		if errors.As(err, &runtimePubsub.NotAllowedError{}) {
-			nerr := apiErrors.PubSubPublishForbidden(pubsubName, string(contribMetadata.PubSubType), topic, a.universal.AppID, err)
-			standardizedErr, ok := kitErrors.FromError(nerr)
+			nerr := apierrors.PubSubPublishForbidden(pubsubName, string(contribMetadata.PubSubType), topic, a.universal.AppID, err)
+			standardizedErr, ok := kiterrors.FromError(nerr)
 			if ok {
 				fasthttpRespond(reqCtx, fasthttpResponseWithError(standardizedErr.HTTPStatusCode(), standardizedErr), closeChildSpans)
 			}
@@ -1833,8 +1833,8 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 		}
 
 		if errors.As(err, &runtimePubsub.NotFoundError{}) {
-			nerr := apiErrors.PubSubTestNotFound(pubsubName, string(contribMetadata.PubSubType), topic, err)
-			standardizedErr, ok := kitErrors.FromError(nerr)
+			nerr := apierrors.PubSubTestNotFound(pubsubName, string(contribMetadata.PubSubType), topic, err)
+			standardizedErr, ok := kiterrors.FromError(nerr)
 			if ok {
 				fasthttpRespond(reqCtx, fasthttpResponseWithError(standardizedErr.HTTPStatusCode(), standardizedErr), closeChildSpans)
 			}
@@ -1844,7 +1844,7 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 
 		// Return the error along with the list of failed entries.
 		resData, _ := json.Marshal(bulkRes)
-		standardizedErr, ok := kitErrors.FromError(err)
+		standardizedErr, ok := kiterrors.FromError(err)
 		if ok {
 			fasthttpRespond(reqCtx, fasthttpResponseWithJSON(standardizedErr.HTTPStatusCode(), resData, map[string]string{"responseData": string(resData), "error": standardizedErr.Error()}), closeChildSpans)
 		}
@@ -1864,24 +1864,24 @@ func (a *api) validateAndGetPubsubAndTopic(reqCtx *fasthttp.RequestCtx) (pubsub.
 	metadata := getMetadataFromFastHTTPRequest(reqCtx)
 
 	if a.pubsubAdapter == nil {
-		err = apiErrors.PubSubNotConfigured(pubsubName, pubsubType, metadata)
+		err = apierrors.PubSubNotConfigured(pubsubName, pubsubType, metadata)
 		return nil, "", "", err
 	}
 
 	if pubsubName == "" {
-		err = apiErrors.PubSubNameEmpty(pubsubName, pubsubType, metadata)
+		err = apierrors.PubSubNameEmpty(pubsubName, pubsubType, metadata)
 		return nil, "", "", err
 	}
 
 	thepubsub, ok := a.universal.CompStore.GetPubSub(pubsubName)
 	if !ok {
-		err = apiErrors.PubSubNotFound(pubsubName, pubsubType, metadata)
+		err = apierrors.PubSubNotFound(pubsubName, pubsubType, metadata)
 		return nil, "", "", err
 	}
 
 	topic := reqCtx.UserValue(wildcardParam).(string)
 	if topic == "" {
-		err = apiErrors.PubSubTopicEmpty(pubsubName, pubsubType, metadata)
+		err = apierrors.PubSubTopicEmpty(pubsubName, pubsubType, metadata)
 		return nil, "", "", err
 	}
 
@@ -2071,8 +2071,8 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 		corID, traceState := diag.TraceIDAndStateFromSpan(span)
 		trs, err := a.pubsubAdapter.Outbox().PublishInternal(reqCtx, storeName, operations, a.universal.AppID, corID, traceState)
 		if err != nil {
-			nerr := apiErrors.PubSubOubox(a.universal.AppID, err)
-			standardizedErr, ok := kitErrors.FromError(err)
+			nerr := apierrors.PubSubOubox(a.universal.AppID, err)
+			standardizedErr, ok := kiterrors.FromError(err)
 			if ok {
 				fasthttpRespond(reqCtx, fasthttpResponseWithError(standardizedErr.HTTPStatusCode(), standardizedErr))
 				log.Debug(nerr)

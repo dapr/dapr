@@ -33,7 +33,7 @@ import (
 	inmemory "github.com/dapr/dapr/tests/integration/framework/process/pubsub/in-memory"
 	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
-	kitErrors "github.com/dapr/kit/errors"
+	kiterrors "github.com/dapr/kit/errors"
 )
 
 const (
@@ -90,7 +90,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 
 	httpClient := util.HTTPClient(t)
 
-	// Covers apiErrors.PubSubNotFound()
+	// Covers apierrors.PubSubNotFound()
 	t.Run("pubsub doesn't exist", func(t *testing.T) {
 		name := "pubsub-doesn't-exist"
 		endpoint := fmt.Sprintf("http://localhost:%d/v1.0/publish/%s/topic", e.daprd.HTTPPort(), name)
@@ -150,7 +150,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the ErrorInfo details are correct
 		require.NotEmptyf(t, errInfo, "ErrorInfo not found in %+v", detailsArray)
 		require.Equal(t, "dapr.io", errInfo["domain"])
-		require.Equal(t, kitErrors.CodePrefixPubSub+kitErrors.CodeNotFound, errInfo["reason"])
+		require.Equal(t, kiterrors.CodePrefixPubSub+kiterrors.CodeNotFound, errInfo["reason"])
 
 		// Confirm that the ResourceInfo details are correct
 		require.NotEmptyf(t, resInfo, "ResourceInfo not found in %+v", detailsArray)
@@ -218,7 +218,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the ErrorInfo details are correct
 		require.NotEmptyf(t, errInfo, "ErrorInfo not found in %+v", detailsArray)
 		require.Equal(t, "dapr.io", errInfo["domain"])
-		require.Equal(t, kitErrors.CodePrefixPubSub+"UNMARSHAL_EVENTS", errInfo["reason"])
+		require.Equal(t, kiterrors.CodePrefixPubSub+"UNMARSHAL_EVENTS", errInfo["reason"])
 
 		// Confirm that the ResourceInfo details are correct
 		require.NotEmptyf(t, resInfo, "ResourceInfo not found in %+v", detailsArray)
@@ -226,7 +226,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, name, resInfo["resource_name"])
 	})
 
-	// Covers apiErrors.PubSubMetadataDeserialize()
+	// Covers apierrors.PubSubMetadataDeserialize()
 	t.Run("pubsub metadata deserialization", func(t *testing.T) {
 		name := "mypubsub"
 		endpoint := fmt.Sprintf("http://localhost:%d/v1.0/publish/%s/topic?metadata.rawPayload=invalidBooleanValue", e.daprd.HTTPPort(), name)
@@ -286,7 +286,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the ErrorInfo details are correct
 		require.NotEmptyf(t, errInfo, "ErrorInfo not found in %+v", detailsArray)
 		require.Equal(t, "dapr.io", errInfo["domain"])
-		require.Equal(t, kitErrors.CodePrefixPubSub+"METADATA_DESERIALIZATION", errInfo["reason"])
+		require.Equal(t, kiterrors.CodePrefixPubSub+"METADATA_DESERIALIZATION", errInfo["reason"])
 
 		// Confirm that the ResourceInfo details are correct
 		require.NotEmptyf(t, resInfo, "ResourceInfo not found in %+v", detailsArray)
@@ -294,7 +294,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, name, resInfo["resource_name"])
 	})
 
-	// Covers apiErrors.PubSubCloudEventCreation()
+	// Covers apierrors.PubSubCloudEventCreation()
 	t.Run("pubsub cloud event creation issue", func(t *testing.T) {
 		payload := `{"}`
 		name := "mypubsub"
@@ -356,7 +356,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the ErrorInfo details are correct
 		require.NotEmptyf(t, errInfo, "ErrorInfo not found in %+v", detailsArray)
 		require.Equal(t, "dapr.io", errInfo["domain"])
-		require.Equal(t, kitErrors.CodePrefixPubSub+"CLOUD_EVENT_CREATION", errInfo["reason"])
+		require.Equal(t, kiterrors.CodePrefixPubSub+"CLOUD_EVENT_CREATION", errInfo["reason"])
 
 		// Confirm that the ResourceInfo details are correct
 		require.NotEmptyf(t, resInfo, "ResourceInfo not found in %+v", detailsArray)
@@ -364,7 +364,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, name, resInfo["resource_name"])
 	})
 
-	// Covers apiErrors.PubSubMarshalEvents()
+	// Covers apierrors.PubSubMarshalEvents()
 	t.Run("pubsub marshal events issue", func(t *testing.T) {
 		name := "mypubsub"
 		endpoint := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/publish/bulk/%s/topic", e.daprd.HTTPPort(), name)
@@ -425,7 +425,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the ErrorInfo details are correct
 		require.NotEmptyf(t, errInfo, "ErrorInfo not found in %+v", detailsArray)
 		require.Equal(t, "dapr.io", errInfo["domain"])
-		require.Equal(t, kitErrors.CodePrefixPubSub+"UNMARSHAL_EVENTS", errInfo["reason"])
+		require.Equal(t, kiterrors.CodePrefixPubSub+"UNMARSHAL_EVENTS", errInfo["reason"])
 
 		// Confirm that the ResourceInfo details are correct
 		require.NotEmptyf(t, resInfo, "ResourceInfo not found in %+v", detailsArray)
