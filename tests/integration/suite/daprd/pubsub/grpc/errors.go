@@ -21,13 +21,14 @@ import (
 	"path/filepath"
 	"testing"
 
+	"golang.org/x/net/nettest"
+
 	componentspubsub "github.com/dapr/components-contrib/pubsub"
 	commonv1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/pubsub"
 	inmemory "github.com/dapr/dapr/tests/integration/framework/process/pubsub/in-memory"
 	"github.com/dapr/dapr/tests/integration/framework/util"
-	"golang.org/x/net/nettest"
 
 	"github.com/stretchr/testify/require"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"

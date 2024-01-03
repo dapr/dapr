@@ -224,7 +224,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		errMsg, exists := data["message"]
 		require.True(t, exists)
 		expectedErr := "unexpected end of JSON input"
-		require.Equal(t, fmt.Sprintf("error when unmarshaling the request for topic %s pubsub %s: %s", "topic", name, expectedErr), errMsg)
+		require.Equal(t, fmt.Sprintf("error when unmarshaling the request for topic topic pubsub %s: %s", name, expectedErr), errMsg) //nolint:dupword
 
 		// Confirm that the 'details' field exists and has one element
 		details, exists := data["details"]
@@ -433,7 +433,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		errMsg, exists := data["message"]
 		require.True(t, exists)
 		expectedErr := "json: cannot unmarshal object into Go value of type []http.bulkPublishMessageEntry"
-		require.Equal(t, fmt.Sprintf("error when unmarshaling the request for topic %s pubsub %s: %s", "topic", name, expectedErr), errMsg)
+		require.Equal(t, fmt.Sprintf("error when unmarshaling the request for topic topic pubsub %s: %s", name, expectedErr), errMsg) //nolint:dupword
 
 		// Confirm that the 'details' field exists and has one element
 		details, exists := data["details"]

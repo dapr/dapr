@@ -15,6 +15,7 @@ package inmemory
 
 import (
 	"context"
+
 	"github.com/dapr/components-contrib/pubsub"
 )
 
