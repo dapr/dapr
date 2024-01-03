@@ -48,10 +48,7 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 	)
 
 	// Keep DNS resolution outside of GetSidecarContainer for unit testing.
-	placementAddress := i.config.PlacementAddresses
-	if placementAddress == "" {
-		placementAddress = patcher.ServiceAddress(patcher.ServicePlacement, i.config.Namespace, i.config.KubeClusterDomain)
-	}
+	placementAddress := patcher.ServiceAddress(patcher.ServicePlacement, i.config.Namespace, i.config.KubeClusterDomain)
 	sentryAddress := patcher.ServiceAddress(patcher.ServiceSentry, i.config.Namespace, i.config.KubeClusterDomain)
 	operatorAddress := patcher.ServiceAddress(patcher.ServiceAPI, i.config.Namespace, i.config.KubeClusterDomain)
 
