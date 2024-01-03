@@ -1795,6 +1795,7 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 
 		if !errors.As(err, &runtimePubsub.NotAllowedError{}) && !errors.As(err, &runtimePubsub.NotFoundError{}) {
 			err = apierrors.PubSubPublishMessage(pubsubName, string(contribMetadata.PubSubType), topic, err)
+			log.Debug(err)
 		}
 
 		if errors.As(err, &runtimePubsub.NotAllowedError{}) {
