@@ -73,13 +73,13 @@ func (ia *mockInternalActor) InvokeMethod(ctx context.Context, actorID string, m
 }
 
 // InvokeReminder implements InternalActor
-func (ia *mockInternalActor) InvokeReminder(ctx context.Context, reminder InternalActorReminder, metadata map[string][]string) error {
+func (ia *mockInternalActor) InvokeReminder(ctx context.Context, actorID string, reminder InternalActorReminder, metadata map[string][]string) error {
 	ia.InvokedReminders = append(ia.InvokedReminders, reminder)
 	return nil
 }
 
 // InvokeTimer implements InternalActor
-func (*mockInternalActor) InvokeTimer(ctx context.Context, timer InternalActorTimer, metadata map[string][]string) error {
+func (*mockInternalActor) InvokeTimer(ctx context.Context, actorID string, timer InternalActorReminder, metadata map[string][]string) error {
 	panic("unimplemented")
 }
 
@@ -189,14 +189,14 @@ func TestInternalActorReminder(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, ia.InvokedReminders, 1)
 	invokedReminder := ia.InvokedReminders[0]
-	assert.Equal(t, testReminder.ActorID, invokedReminder.ActorID)
 	assert.Equal(t, testReminder.Name, invokedReminder.Name)
 	assert.Equal(t, testReminder.DueTime, invokedReminder.DueTime)
 	assert.Equal(t, testReminder.Period.String(), invokedReminder.Period)
 
 	// Reminder data gets marshaled to JSON and unmarshaled back to map[string]interface{}
 	var actualData testReminderData
-	DecodeInternalActorReminderData(invokedReminder.Data, &actualData)
+	err = invokedReminder.DecodeData(&actualData)
+	require.NoError(t, err)
 	enc, err := json.Marshal(actualData)
 	require.NoError(t, err)
 	assert.Equal(t, []byte(testReminder.Data), enc)

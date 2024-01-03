@@ -1005,10 +1005,11 @@ func (a *actorsRuntime) doExecuteReminderOrTimerOnInternalActor(ctx context.Cont
 	}
 	defer act.unlock()
 
+	ir := newInternalActorReminder(reminder)
 	if isTimer {
 		log.Debugf("Executing timer for internal actor '%s'", reminder.Key())
 
-		err = internalAct.InvokeTimer(ctx, newInternalActorTimer(reminder), md)
+		err = internalAct.InvokeTimer(ctx, reminder.ActorID, ir, md)
 		if err != nil {
 			if !errors.Is(err, ErrReminderCanceled) {
 				log.Errorf("Error executing timer for internal actor '%s': %v", reminder.Key(), err)
@@ -1018,7 +1019,7 @@ func (a *actorsRuntime) doExecuteReminderOrTimerOnInternalActor(ctx context.Cont
 	} else {
 		log.Debugf("Executing reminder for internal actor '%s'", reminder.Key())
 
-		err = internalAct.InvokeReminder(ctx, newInternalActorReminder(reminder), md)
+		err = internalAct.InvokeReminder(ctx, reminder.ActorID, ir, md)
 		if err != nil {
 			if !errors.Is(err, ErrReminderCanceled) {
 				log.Errorf("Error executing reminder for internal actor '%s': %v", reminder.Key(), err)

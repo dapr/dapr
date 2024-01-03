@@ -32,12 +32,11 @@ type InternalActor interface {
 	SetActorRuntime(actorsRuntime Actors)
 	InvokeMethod(ctx context.Context, actorID string, methodName string, data []byte, metadata map[string][]string) ([]byte, error)
 	DeactivateActor(ctx context.Context, actorID string) error
-	InvokeReminder(ctx context.Context, reminder InternalActorReminder, metadata map[string][]string) error
-	InvokeTimer(ctx context.Context, timer InternalActorTimer, metadata map[string][]string) error
+	InvokeReminder(ctx context.Context, actorID string, reminder InternalActorReminder, metadata map[string][]string) error
+	InvokeTimer(ctx context.Context, actorID string, timer InternalActorReminder, metadata map[string][]string) error
 }
 
 type InternalActorReminder struct {
-	ActorID string
 	Name    string
 	Data    []byte
 	DueTime string
@@ -46,7 +45,6 @@ type InternalActorReminder struct {
 
 func newInternalActorReminder(r *internal.Reminder) InternalActorReminder {
 	return InternalActorReminder{
-		ActorID: r.ActorID,
 		Name:    r.Name,
 		Data:    r.Data,
 		DueTime: r.DueTime,
@@ -54,24 +52,13 @@ func newInternalActorReminder(r *internal.Reminder) InternalActorReminder {
 	}
 }
 
-type InternalActorTimer struct {
-	ActorID  string
-	Name     string
-	Data     []byte
-	DueTime  string
-	Period   string
-	Callback string
-}
-
-func newInternalActorTimer(r *internal.Reminder) InternalActorTimer {
-	return InternalActorTimer{
-		ActorID:  r.ActorID,
-		Name:     r.Name,
-		Data:     r.Data,
-		DueTime:  r.DueTime,
-		Period:   r.Period.String(),
-		Callback: r.Callback,
+// DecodeData decodes internal actor reminder data payloads and stores the result in dest.
+func (ir InternalActorReminder) DecodeData(dest any) error {
+	err := json.Unmarshal(ir.Data, dest)
+	if err != nil {
+		return fmt.Errorf("unrecognized internal actor reminder payload: %w", err)
 	}
+	return nil
 }
 
 // EncodeInternalActorData encodes result using the encoding/gob format.
@@ -94,14 +81,6 @@ func DecodeInternalActorData(data io.Reader, e any) error {
 	dec := gob.NewDecoder(data)
 	if err := dec.Decode(e); err != nil {
 		return err
-	}
-	return nil
-}
-
-// DecodeInternalActorReminderData decodes internal actor reminder data payloads and stores the result in e.
-func DecodeInternalActorReminderData(data []byte, e any) error {
-	if err := json.Unmarshal(data, e); err != nil {
-		return fmt.Errorf("unrecognized internal actor reminder payload: %w", err)
 	}
 	return nil
 }

@@ -122,13 +122,13 @@ func (wf *workflowActor) InvokeMethod(ctx context.Context, actorID string, metho
 }
 
 // InvokeReminder implements actors.InternalActor
-func (wf *workflowActor) InvokeReminder(ctx context.Context, reminder actors.InternalActorReminder, metadata map[string][]string) error {
-	wfLogger.Debugf("Workflow actor '%s': invoking reminder '%s'", reminder.ActorID, reminder.Name)
+func (wf *workflowActor) InvokeReminder(ctx context.Context, actorID string, reminder actors.InternalActorReminder, metadata map[string][]string) error {
+	wfLogger.Debugf("Workflow actor '%s': invoking reminder '%s'", actorID, reminder.Name)
 
 	// Workflow executions should never take longer than a few seconds at the most
 	timeoutCtx, cancelTimeout := context.WithTimeout(ctx, wf.defaultTimeout)
 	defer cancelTimeout()
-	err := wf.runWorkflow(timeoutCtx, reminder.ActorID, reminder.Name, reminder.Data)
+	err := wf.runWorkflow(timeoutCtx, actorID, reminder)
 
 	// We delete the reminder on success and on non-recoverable errors.
 	// Returning nil signals that we want the execution to be retried in the next period interval
@@ -137,22 +137,22 @@ func (wf *workflowActor) InvokeReminder(ctx context.Context, reminder actors.Int
 	case err == nil:
 		return actors.ErrReminderCanceled
 	case errors.Is(err, context.DeadlineExceeded):
-		wfLogger.Warnf("Workflow actor '%s': execution timed-out and will be retried later: '%v'", reminder.ActorID, err)
+		wfLogger.Warnf("Workflow actor '%s': execution timed-out and will be retried later: '%v'", actorID, err)
 		return nil
 	case errors.Is(err, context.Canceled):
-		wfLogger.Warnf("Workflow actor '%s': execution was canceled (process shutdown?) and will be retried later: '%v'", reminder.ActorID, err)
+		wfLogger.Warnf("Workflow actor '%s': execution was canceled (process shutdown?) and will be retried later: '%v'", actorID, err)
 		return nil
 	case errors.As(err, &re):
-		wfLogger.Warnf("Workflow actor '%s': execution failed with a recoverable error and will be retried later: '%v'", reminder.ActorID, re)
+		wfLogger.Warnf("Workflow actor '%s': execution failed with a recoverable error and will be retried later: '%v'", actorID, re)
 		return nil
 	default: // Other error
-		wfLogger.Errorf("Workflow actor '%s': execution failed with a non-recoverable error: %v", reminder.ActorID, err)
+		wfLogger.Errorf("Workflow actor '%s': execution failed with a non-recoverable error: %v", actorID, err)
 		return actors.ErrReminderCanceled
 	}
 }
 
 // InvokeTimer implements actors.InternalActor
-func (wf *workflowActor) InvokeTimer(ctx context.Context, timer actors.InternalActorTimer, metadata map[string][]string) error {
+func (wf *workflowActor) InvokeTimer(ctx context.Context, actorID string, timer actors.InternalActorReminder, metadata map[string][]string) error {
 	return errors.New("timers are not implemented")
 }
 
@@ -362,7 +362,7 @@ func (wf *workflowActor) addWorkflowEvent(ctx context.Context, actorID string, h
 	return wf.saveInternalState(ctx, actorID, state)
 }
 
-func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, reminderName string, reminderData []byte) error {
+func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, reminder actors.InternalActorReminder) error {
 	state, err := wf.loadInternalState(ctx, actorID)
 	if err != nil {
 		return fmt.Errorf("error loading internal state: %w", err)
@@ -372,9 +372,9 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 		return errors.New("no workflow state found")
 	}
 
-	if strings.HasPrefix(reminderName, "timer-") {
+	if strings.HasPrefix(reminder.Name, "timer-") {
 		var timerData durableTimer
-		if err = actors.DecodeInternalActorReminderData(reminderData, &timerData); err != nil {
+		if err = reminder.DecodeData(&timerData); err != nil {
 			// Likely the result of an incompatible durable task timer format change. This is non-recoverable.
 			return err
 		}
@@ -394,7 +394,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 	if len(state.Inbox) == 0 {
 		// This can happen after multiple events are processed in batches; there may still be reminders around
 		// for some of those already processed events.
-		wfLogger.Debugf("Workflow actor '%s': ignoring run request for reminder '%s' because the workflow inbox is empty", actorID, reminderName)
+		wfLogger.Debugf("Workflow actor '%s': ignoring run request for reminder '%s' because the workflow inbox is empty", actorID, reminder.Name)
 		return nil
 	}
 
