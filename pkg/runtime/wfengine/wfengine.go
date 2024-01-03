@@ -75,7 +75,7 @@ func NewWorkflowEngine(appID string, spec config.WorkflowSpec) *WorkflowEngine {
 }
 
 // GetInternalActorsMap returns a map of internal actors that are used to implement workflows
-func (wfe *WorkflowEngine) GetInternalActorsMap() map[string]actors.InternalActor {
+func (wfe *WorkflowEngine) GetInternalActorsMap() map[string]actors.InternalActorFactory {
 	return wfe.backend.GetInternalActorsMap()
 }
 
@@ -136,8 +136,8 @@ func (wfe *WorkflowEngine) WaitForActorsReady(ctx context.Context) {
 // when actors are newly activated on nodes, but without requiring the actor to actually
 // go through activation.
 func (wfe *WorkflowEngine) DisableActorCaching(disable bool) {
-	wfe.backend.workflowActor.cachingDisabled = disable
-	wfe.backend.activityActor.cachingDisabled = disable
+	wfe.backend.workflowActorOpts.cachingDisabled = disable
+	wfe.backend.activityActorOpts.cachingDisabled = disable
 }
 
 // SetWorkflowTimeout allows configuring a default timeout for workflow execution steps.
@@ -145,21 +145,21 @@ func (wfe *WorkflowEngine) DisableActorCaching(disable bool) {
 // Note that this timeout is for a non-blocking step in the workflow (which is expected
 // to always complete almost immediately) and not for the end-to-end workflow execution.
 func (wfe *WorkflowEngine) SetWorkflowTimeout(timeout time.Duration) {
-	wfe.backend.workflowActor.defaultTimeout = timeout
+	wfe.backend.workflowActorOpts.defaultTimeout = timeout
 }
 
 // SetActivityTimeout allows configuring a default timeout for activity executions.
 // If the timeout is exceeded, the activity execution will be abandoned and retried.
 func (wfe *WorkflowEngine) SetActivityTimeout(timeout time.Duration) {
-	wfe.backend.activityActor.defaultTimeout = timeout
+	wfe.backend.activityActorOpts.defaultTimeout = timeout
 }
 
 // SetActorReminderInterval sets the amount of delay between internal retries for
 // workflow and activity actors. This impacts how long it takes for an operation to
 // restart itself after a timeout or a process failure is encountered while running.
 func (wfe *WorkflowEngine) SetActorReminderInterval(interval time.Duration) {
-	wfe.backend.workflowActor.reminderInterval = interval
-	wfe.backend.activityActor.reminderInterval = interval
+	wfe.backend.workflowActorOpts.reminderInterval = interval
+	wfe.backend.activityActorOpts.reminderInterval = interval
 }
 
 // SetLogLevel sets the logging level for the workflow engine.

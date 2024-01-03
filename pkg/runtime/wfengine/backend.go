@@ -61,8 +61,8 @@ type actorBackend struct {
 	activityWorkItemChan      chan *backend.ActivityWorkItem
 	startedOnce               sync.Once
 	config                    actorsBackendConfig
-	workflowActor             *workflowActor
-	activityActor             *activityActor
+	activityActorOpts         activityActorOpts
+	workflowActorOpts         workflowActorOpts
 }
 
 func NewActorBackend(appID string) *actorBackend {
@@ -76,8 +76,6 @@ func NewActorBackend(appID string) *actorBackend {
 		orchestrationWorkItemChan: orchestrationWorkItemChan,
 		activityWorkItemChan:      activityWorkItemChan,
 		config:                    backendConfig,
-		workflowActor:             NewWorkflowActor(getWorkflowScheduler(orchestrationWorkItemChan), backendConfig),
-		activityActor:             NewActivityActor(getActivityScheduler(activityWorkItemChan), backendConfig),
 	}
 }
 
@@ -112,10 +110,10 @@ func getActivityScheduler(activityWorkItemChan chan *backend.ActivityWorkItem) a
 }
 
 // InternalActors returns a map of internal actors that are used to implement workflows
-func (be *actorBackend) GetInternalActorsMap() map[string]actors.InternalActor {
-	internalActors := make(map[string]actors.InternalActor)
-	internalActors[be.config.workflowActorType] = be.workflowActor
-	internalActors[be.config.activityActorType] = be.activityActor
+func (be *actorBackend) GetInternalActorsMap() map[string]actors.InternalActorFactory {
+	internalActors := make(map[string]actors.InternalActorFactory)
+	internalActors[be.config.workflowActorType] = NewWorkflowActor(getWorkflowScheduler(be.orchestrationWorkItemChan), be.config, &be.workflowActorOpts)
+	internalActors[be.config.activityActorType] = NewActivityActor(getActivityScheduler(be.activityWorkItemChan), be.config, &be.activityActorOpts)
 	return internalActors
 }
 
