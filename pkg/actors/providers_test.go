@@ -93,6 +93,9 @@ func TestConfig_GetRemindersProvider(t *testing.T) {
 		remindersProviders["custom"] = func(config Config, placement internal.PlacementService) (remindersProviderFactory, error) {
 			return nilProvider, nil
 		}
+		t.Cleanup(func() {
+			delete(remindersProviders, "custom")
+		})
 
 		c := Config{
 			Config: internal.Config{

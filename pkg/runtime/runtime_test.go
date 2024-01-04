@@ -1961,18 +1961,18 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 	mockAppChannel.On("InvokeMethod", mock.MatchedBy(daprt.MatchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
 	// Create new processor with mocked app channel.
 	rt.processor = processor.New(processor.Options{
-		ID:               rt.runtimeConfig.id,
-		IsHTTP:           rt.runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
-		PlacementEnabled: len(rt.runtimeConfig.actorsService) > 0,
-		Registry:         rt.runtimeConfig.registry,
-		ComponentStore:   rt.compStore,
-		Meta:             rt.meta,
-		GlobalConfig:     rt.globalConfig,
-		Resiliency:       rt.resiliency,
-		Mode:             rt.runtimeConfig.mode,
-		Standalone:       rt.runtimeConfig.standalone,
-		Channels:         rt.channels,
-		GRPC:             rt.grpc,
+		ID:             rt.runtimeConfig.id,
+		IsHTTP:         rt.runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
+		ActorsEnabled:  len(rt.runtimeConfig.actorsService) > 0,
+		Registry:       rt.runtimeConfig.registry,
+		ComponentStore: rt.compStore,
+		Meta:           rt.meta,
+		GlobalConfig:   rt.globalConfig,
+		Resiliency:     rt.resiliency,
+		Mode:           rt.runtimeConfig.mode,
+		Standalone:     rt.runtimeConfig.standalone,
+		Channels:       rt.channels,
+		GRPC:           rt.grpc,
 	})
 
 	require.NoError(t, rt.processor.Init(context.Background(), cPubSub))
