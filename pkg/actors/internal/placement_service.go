@@ -26,6 +26,8 @@ type HaltActorFn = func(actorType string, actorID string) error
 type HaltAllActorsFn = func() error
 
 // PlacementService allows for interacting with the actor placement service.
+//
+//nolint:interfacebloat
 type PlacementService interface {
 	io.Closer
 
@@ -37,6 +39,7 @@ type PlacementService interface {
 
 	SetHaltActorFns(haltFn HaltActorFn, haltAllFn HaltAllActorsFn)
 	SetOnAPILevelUpdate(fn func(apiLevel uint32))
+	SetOnTableUpdateFn(fn func())
 
 	// PlacementHealthy returns true if the placement service is healthy.
 	PlacementHealthy() bool
