@@ -47,6 +47,8 @@ func (c Config) GetPlacementProvider() (placementProviderFactory, error) {
 		return nil, fmt.Errorf("unsupported actor service provider '%s'", service)
 	}
 
+	log.Infof("Configuring actors placement provider '%s'. Configuration: '%s'", service, c.ActorsService)
+
 	return factory(c)
 }
 
@@ -68,6 +70,8 @@ func (c Config) GetRemindersProvider(placement internal.PlacementService) (remin
 	if !ok {
 		return nil, fmt.Errorf("unsupported reminder service provider '%s'", service)
 	}
+
+	log.Infof("Configuring actor reminders provider '%s'. Configuration: '%s'", service, c.RemindersService)
 
 	return factory(c, placement)
 }
