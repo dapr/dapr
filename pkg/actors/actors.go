@@ -721,7 +721,7 @@ func (a *actorsRuntime) GetState(ctx context.Context, req *GetStateRequest) (*St
 }
 
 func (a *actorsRuntime) DeleteState(ctx context.Context, req *DeleteStateRequest) (*runtimev1pb.DeleteActorStateResponse, error) {
-	store, err := a.stateStore()
+	storeName, store, err := a.stateStore()
 	if err != nil {
 		return &runtimev1pb.DeleteActorStateResponse{}, err
 	}
@@ -729,7 +729,7 @@ func (a *actorsRuntime) DeleteState(ctx context.Context, req *DeleteStateRequest
 	key := constructCompositeKey(a.actorsConfig.Config.AppID, req.ActorID, req.ActorType, req.ActorKey())
 
 	policyRunner := resiliency.NewRunner[state.DeleteWithPrefixResponse](ctx,
-		a.resiliency.ComponentOutboundPolicy(a.storeName, resiliency.Statestore),
+		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Statestore),
 	)
 
 	storeReq := state.DeleteWithPrefixRequest{
