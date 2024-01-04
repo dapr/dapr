@@ -360,7 +360,7 @@ func (ss *grpcStateStore) MultiMaxSize() int {
 	// If the pluggable component is on a 64bit system and the dapr runtime is on a 32bit system,
 	// the response will be larger than the maximum int32 value.
 	// In this case, we set the max size to the maximum possible value for a 32bit system.
-	is32bitSystem := unsafe.Sizeof(int(0)) == 4
+	is32bitSystem := math.MaxInt == math.MaxInt32
 	if is32bitSystem && resp.GetMaxSize() > int64(math.MaxInt32) {
 		log.Warnf("multi max size %d is too large for 32bit systems, setting to max possible", resp.GetMaxSize())
 		ss.multiMaxSize = ptr.Of(math.MaxInt32)
