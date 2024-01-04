@@ -112,7 +112,7 @@ func newTestActorsRuntimeWithInternalActors(internalActors map[string]InternalAc
 
 	compStore := compstore.New()
 	compStore.AddStateStore("actorStore", store)
-	a := NewActors(ActorsOpts{
+	a, err := NewActors(ActorsOpts{
 		CompStore:      compStore,
 		Config:         config,
 		TracingSpec:    spec,
@@ -121,6 +121,9 @@ func newTestActorsRuntimeWithInternalActors(internalActors map[string]InternalAc
 		Security:       fake.New(),
 		MockPlacement:  NewMockPlacement(TestAppID),
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	for actorType, actor := range internalActors {
 		if err := a.RegisterInternalActor(context.TODO(), actorType, actor, 0); err != nil {

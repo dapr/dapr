@@ -921,7 +921,7 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 		PodName:           getPodName(),
 	})
 
-	act := actors.NewActors(actors.ActorsOpts{
+	act, err := actors.NewActors(actors.ActorsOpts{
 		AppChannel:       a.channels.AppChannel(),
 		GRPCConnectionFn: a.grpc.GetGRPCConnection,
 		Config:           actorConfig,
@@ -933,12 +933,15 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 		StateTTLEnabled: a.globalConfig.IsFeatureEnabled(config.ActorStateTTL),
 		Security:        a.sec,
 	})
-	err = act.Init(ctx)
-	if err == nil {
-		a.actor = act
-		return nil
+	if err != nil {
+		return rterrors.NewInit(rterrors.InitFailure, "actors", err)
 	}
-	return rterrors.NewInit(rterrors.InitFailure, "actors", err)
+	err = act.Init(ctx)
+	if err != nil {
+		return rterrors.NewInit(rterrors.InitFailure, "actors", err)
+	}
+	a.actor = act
+	return nil
 }
 
 func (a *DaprRuntime) loadComponents(ctx context.Context) error {

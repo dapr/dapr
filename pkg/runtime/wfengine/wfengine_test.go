@@ -873,13 +873,14 @@ func getEngine(t *testing.T) *wfengine.WorkflowEngine {
 	})
 	compStore := compstore.New()
 	compStore.AddStateStore("workflowStore", store)
-	actors := actors.NewActors(actors.ActorsOpts{
+	actors, err := actors.NewActors(actors.ActorsOpts{
 		CompStore:      compStore,
 		Config:         cfg,
 		StateStoreName: "workflowStore",
 		MockPlacement:  actors.NewMockPlacement(testAppID),
 		Resiliency:     resiliency.New(logger.NewLogger("test")),
 	})
+	require.NoError(t, err)
 
 	if err := actors.Init(context.Background()); err != nil {
 		require.NoError(t, err)
@@ -900,15 +901,17 @@ func getEngineAndStateStore(t *testing.T) (*wfengine.WorkflowEngine, *daprt.Fake
 	compStore := compstore.New()
 	compStore.AddStateStore("workflowStore", store)
 
-	actors := actors.NewActors(actors.ActorsOpts{
+	actors, err := actors.NewActors(actors.ActorsOpts{
 		CompStore:      compStore,
 		Config:         cfg,
 		StateStoreName: "workflowStore",
 		MockPlacement:  actors.NewMockPlacement(testAppID),
 		Resiliency:     resiliency.New(logger.NewLogger("test")),
 	})
+	require.NoError(t, err)
 
-	require.NoError(t, actors.Init(context.Background()))
+	err = actors.Init(context.Background())
+	require.NoError(t, err)
 	engine.SetActorRuntime(actors)
 	return engine, store
 }

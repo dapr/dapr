@@ -41,7 +41,7 @@ const (
 )
 
 func TestNoWorkflowState(t *testing.T) {
-	actors := getActorRuntime()
+	actors := getActorRuntime(t)
 	state, err := wfengine.LoadWorkflowState(context.Background(), actors, "wf1", wfengine.NewActorsBackendConfig(testAppID))
 	require.NoError(t, err)
 	assert.Empty(t, state)
@@ -130,7 +130,7 @@ func TestLoadSavedState(t *testing.T) {
 	assert.Equal(t, 17, upsertCount) // 10x history, 5x inbox, 1 metadata, 1 customStatus
 	assert.Equal(t, 0, deleteCount)
 
-	actors := getActorRuntime()
+	actors := getActorRuntime(t)
 
 	err = actors.TransactionalStateOperation(context.Background(), req)
 	require.NoError(t, err)
@@ -167,7 +167,7 @@ func TestResetLoadedState(t *testing.T) {
 	req, err := wfstate.GetSaveRequest("wf1")
 	require.NoError(t, err)
 
-	actorRuntime := getActorRuntime()
+	actorRuntime := getActorRuntime(t)
 	err = actorRuntime.TransactionalStateOperation(context.Background(), req)
 	require.NoError(t, err)
 
@@ -188,7 +188,7 @@ func TestResetLoadedState(t *testing.T) {
 	assert.Equal(t, 15, deleteCount) // all history and inbox records are deleted
 }
 
-func getActorRuntime() actors.Actors {
+func getActorRuntime(t *testing.T) actors.Actors {
 	store := fakeStore()
 	cfg := actors.NewConfig(actors.ConfigOpts{
 		AppID:         testAppID,
@@ -197,13 +197,15 @@ func getActorRuntime() actors.Actors {
 	})
 	compStore := compstore.New()
 	compStore.AddStateStore("workflowStore", store)
-	return actors.NewActors(actors.ActorsOpts{
+	act, err := actors.NewActors(actors.ActorsOpts{
 		CompStore:      compStore,
 		Config:         cfg,
 		StateStoreName: "workflowStore",
 		MockPlacement:  actors.NewMockPlacement(testAppID),
 		Resiliency:     resiliency.New(logger.NewLogger("test")),
 	})
+	require.NoError(t, err)
+	return act
 }
 
 func countOperations(t *testing.T, req *actors.TransactionalRequest) (upsertCount, deleteCount int) {
