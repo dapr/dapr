@@ -36,9 +36,10 @@ func init() {
 
 // daprapitoken tests Dapr send the correct token to the app.
 type daprapitoken struct {
-	daprd *daprd.Daprd
-	srv   *prochttp.HTTP
-	reqCh chan *http.Request
+	daprdDefaultAppTokenHeader *daprd.Daprd
+	daprdCustomAppTokenHeader  *daprd.Daprd
+	srv                        *prochttp.HTTP
+	reqCh                      chan *http.Request
 }
 
 func (d *daprapitoken) Setup(t *testing.T) []framework.Option {
@@ -52,34 +53,62 @@ func (d *daprapitoken) Setup(t *testing.T) []framework.Option {
 	d.srv = prochttp.New(t,
 		prochttp.WithHandler(handler),
 	)
-	d.daprd = daprd.New(t,
+	d.daprdDefaultAppTokenHeader = daprd.New(t,
 		daprd.WithAppPort(d.srv.Port()),
 		daprd.WithExecOptions(exec.WithEnvVars(
 			"APP_API_TOKEN", "mytoken",
 		)),
 	)
+	d.daprdCustomAppTokenHeader = daprd.New(t,
+		daprd.WithAppPort(d.srv.Port()),
+		daprd.WithExecOptions(exec.WithEnvVars(
+			"APP_API_TOKEN", "mytoken2",
+			"DAPR_APP_API_TOKEN_HEADER", "x-api-token",
+		)),
+	)
 
 	return []framework.Option{
-		framework.WithProcesses(d.srv, d.daprd),
+		framework.WithProcesses(d.srv, d.daprdDefaultAppTokenHeader, d.daprdCustomAppTokenHeader),
 	}
 }
 
 func (d *daprapitoken) Run(t *testing.T, ctx context.Context) {
 	ctx, cancel := context.WithTimeout(ctx, time.Second*3)
 	t.Cleanup(cancel)
-	d.daprd.WaitUntilRunning(t, ctx)
+	d.daprdDefaultAppTokenHeader.WaitUntilRunning(t, ctx)
+	d.daprdCustomAppTokenHeader.WaitUntilRunning(t, ctx)
 
-	url := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/foo", d.daprd.HTTPPort(), d.daprd.AppID())
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	require.NoError(t, err)
-	//nolint:bodyclose
-	_, err = http.DefaultClient.Do(req)
-	require.NoError(t, err)
+	if daprd := d.daprdDefaultAppTokenHeader; daprd != nil {
+		url := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/foo", daprd.HTTPPort(), daprd.AppID())
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		require.NoError(t, err)
+		//nolint:bodyclose
+		_, err = http.DefaultClient.Do(req)
+		require.NoError(t, err)
 
-	select {
-	case <-ctx.Done():
-		assert.Fail(t, "timeout waiting for request")
-	case r := <-d.reqCh:
-		assert.Equal(t, "mytoken", r.Header.Get("Dapr-Api-Token"))
+		select {
+		case <-ctx.Done():
+			assert.Fail(t, "timeout waiting for request")
+		case r := <-d.reqCh:
+			assert.Equal(t, "mytoken", r.Header.Get("Dapr-Api-Token"))
+			assert.Equal(t, "", r.Header.Get("X-Api-Token"))
+		}
+	}
+
+	if daprd := d.daprdCustomAppTokenHeader; daprd != nil {
+		url := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/foo", daprd.HTTPPort(), daprd.AppID())
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		require.NoError(t, err)
+		//nolint:bodyclose
+		_, err = http.DefaultClient.Do(req)
+		require.NoError(t, err)
+
+		select {
+		case <-ctx.Done():
+			assert.Fail(t, "timeout waiting for request")
+		case r := <-d.reqCh:
+			assert.Equal(t, "", r.Header.Get("Dapr-Api-Token"))
+			assert.Equal(t, "mytoken2", r.Header.Get("X-Api-Token"))
+		}
 	}
 }
