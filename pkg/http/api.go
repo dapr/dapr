@@ -780,6 +780,7 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 	for k, v := range resp.Metadata {
 		reqCtx.Response.Header.Add(metadataPrefix+k, v)
 	}
+
 	fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, resp.Data, resp.Metadata))
 }
 
@@ -808,8 +809,8 @@ type subscribeConfigurationResponse struct {
 }
 
 type UnsubscribeConfigurationResponse struct {
-	Ok      bool   `protobuf:"varint,1,opt,name=ok,proto3" json:"ok,omitempty"`
-	Message string `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	Ok      bool   `json:"ok,omitempty"      protobuf:"varint,1,opt,name=ok,proto3"`
+	Message string `json:"message,omitempty" protobuf:"bytes,2,opt,name=message,proto3"`
 }
 
 type configurationEventHandler struct {
@@ -851,8 +852,8 @@ func (h *configurationEventHandler) updateEventHandler(ctx context.Context, e *c
 				defer rResp.Close()
 			}
 
-			if rResp != nil && rResp.Status().Code != nethttp.StatusOK {
-				return struct{}{}, fmt.Errorf("error sending configuration item to application, status %d", rResp.Status().Code)
+			if rResp != nil && rResp.Status().GetCode() != nethttp.StatusOK {
+				return struct{}{}, fmt.Errorf("error sending configuration item to application, status %d", rResp.Status().GetCode())
 			}
 			return struct{}{}, nil
 		})
@@ -1500,7 +1501,7 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 	reqCtx.Response.Header.SetContentType(resp.ContentType())
 
 	// Construct response.
-	statusCode := int(resp.Status().Code)
+	statusCode := int(resp.Status().GetCode())
 	if !resp.IsHTTPResponse() {
 		statusCode = invokev1.HTTPStatusFromCode(codes.Code(statusCode))
 	}
@@ -2036,7 +2037,9 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 
 	outboxEnabled := a.pubsubAdapter.Outbox().Enabled(storeName)
 	if outboxEnabled {
-		trs, err := a.pubsubAdapter.Outbox().PublishInternal(reqCtx, storeName, operations, a.universal.AppID)
+		span := diagUtils.SpanFromContext(reqCtx)
+		corID, traceState := diag.TraceIDAndStateFromSpan(span)
+		trs, err := a.pubsubAdapter.Outbox().PublishInternal(reqCtx, storeName, operations, a.universal.AppID, corID, traceState)
 		if err != nil {
 			msg := NewErrorResponse(
 				"ERR_PUBLISH_OUTBOX",
@@ -2092,23 +2095,23 @@ func (a *api) onQueryStateHandler() nethttp.HandlerFunc {
 			},
 			OutModifier: func(out *runtimev1pb.QueryStateResponse) (any, error) {
 				// If the response is empty, return nil
-				if out == nil || len(out.Results) == 0 {
+				if out == nil || len(out.GetResults()) == 0 {
 					return nil, nil
 				}
 
 				// We need to translate this to a JSON object because one of the fields must be returned as json.RawMessage
 				qresp := &QueryResponse{
-					Results:  make([]QueryItem, len(out.Results)),
-					Token:    out.Token,
-					Metadata: out.Metadata,
+					Results:  make([]QueryItem, len(out.GetResults())),
+					Token:    out.GetToken(),
+					Metadata: out.GetMetadata(),
 				}
-				for i := range out.Results {
-					qresp.Results[i].Key = stateLoader.GetOriginalStateKey(out.Results[i].Key)
-					if out.Results[i].Etag != "" {
+				for i := range out.GetResults() {
+					qresp.Results[i].Key = stateLoader.GetOriginalStateKey(out.GetResults()[i].GetKey())
+					if out.GetResults()[i].GetEtag() != "" {
 						qresp.Results[i].ETag = &out.Results[i].Etag
 					}
-					qresp.Results[i].Error = out.Results[i].Error
-					qresp.Results[i].Data = json.RawMessage(out.Results[i].Data)
+					qresp.Results[i].Error = out.GetResults()[i].GetError()
+					qresp.Results[i].Data = json.RawMessage(out.GetResults()[i].GetData())
 				}
 				return qresp, nil
 			},

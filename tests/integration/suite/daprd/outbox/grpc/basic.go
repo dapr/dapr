@@ -15,7 +15,6 @@ package grpc
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -29,6 +28,7 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/grpcapp"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -46,13 +46,13 @@ func (o *basic) Setup(t *testing.T) []framework.Option {
 	onTopicEvent := func(ctx context.Context, in *runtimev1pb.TopicEventRequest) (*runtimev1pb.TopicEventResponse, error) {
 		o.lock.Lock()
 		defer o.lock.Unlock()
-		o.msg = in.Data
+		o.msg = in.GetData()
 		return &runtimev1pb.TopicEventResponse{
 			Status: runtimev1pb.TopicEventResponse_SUCCESS,
 		}, nil
 	}
 
-	srv1 := newGRPCServer(t, onTopicEvent)
+	srv1 := grpcapp.New(t, grpcapp.WithOnTopicEventFn(onTopicEvent))
 	o.daprd = procdaprd.New(t, procdaprd.WithAppID("outboxtest"), procdaprd.WithAppPort(srv1.Port(t)), procdaprd.WithAppProtocol("grpc"), procdaprd.WithResourceFiles(`
 apiVersion: dapr.io/v1alpha1
 kind: Component
@@ -98,7 +98,7 @@ scopes:
 func (o *basic) Run(t *testing.T, ctx context.Context) {
 	o.daprd.WaitUntilRunning(t, ctx)
 
-	conn, err := grpc.DialContext(ctx, fmt.Sprintf("localhost:%d", o.daprd.GRPCPort()), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+	conn, err := grpc.DialContext(ctx, o.daprd.GRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
 

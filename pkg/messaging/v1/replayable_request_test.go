@@ -44,7 +44,7 @@ func TestReplayableRequest(t *testing.T) {
 
 		t.Run("first read in full", func(t *testing.T) {
 			read, err := io.ReadAll(rr.RawData())
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, message, read)
 		})
 
@@ -56,15 +56,15 @@ func TestReplayableRequest(t *testing.T) {
 		})
 
 		t.Run("replay buffer is full", func(t *testing.T) {
-			assert.Equal(t, len(message), rr.replay.Len())
+			assert.Len(t, message, rr.replay.Len())
 			read, err := io.ReadAll(bytes.NewReader(rr.replay.Bytes()))
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, message, read)
 		})
 
 		t.Run("close rr", func(t *testing.T) {
 			err := rr.Close()
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Nil(t, rr.data)
 			assert.Nil(t, rr.replay)
 		})
@@ -76,7 +76,7 @@ func TestReplayableRequest(t *testing.T) {
 
 		t.Run("first read in full", func(t *testing.T) {
 			read, err := io.ReadAll(rr.RawData())
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, message, read)
 		})
 
@@ -88,27 +88,27 @@ func TestReplayableRequest(t *testing.T) {
 		})
 
 		t.Run("replay buffer is full", func(t *testing.T) {
-			assert.Equal(t, len(message), rr.replay.Len())
+			assert.Len(t, message, rr.replay.Len())
 			read, err := io.ReadAll(bytes.NewReader(rr.replay.Bytes()))
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, message, read)
 		})
 
 		t.Run("second read in full", func(t *testing.T) {
 			read, err := io.ReadAll(rr.RawData())
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, message, read)
 		})
 
 		t.Run("third read in full", func(t *testing.T) {
 			read, err := io.ReadAll(rr.RawData())
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, message, read)
 		})
 
 		t.Run("close rr", func(t *testing.T) {
 			err := rr.Close()
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Nil(t, rr.data)
 			assert.Nil(t, rr.replay)
 		})
@@ -120,7 +120,7 @@ func TestReplayableRequest(t *testing.T) {
 
 		t.Run("first read in full", func(t *testing.T) {
 			read, err := io.ReadAll(rr.RawData())
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, message, read)
 		})
 
@@ -132,14 +132,14 @@ func TestReplayableRequest(t *testing.T) {
 		t.Run("second, partial read", func(t *testing.T) {
 			buf := make([]byte, partial)
 			n, err := io.ReadFull(r, buf)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, partial, n)
 			assert.Equal(t, message[:partial], buf)
 		})
 
 		t.Run("read rest", func(t *testing.T) {
 			read, err := io.ReadAll(r)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Len(t, read, len(message)-partial)
 			// Continue from byte "partial"
 			assert.Equal(t, message[partial:], read)
@@ -147,13 +147,13 @@ func TestReplayableRequest(t *testing.T) {
 
 		t.Run("second read in full", func(t *testing.T) {
 			read, err := io.ReadAll(rr.RawData())
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, message, read)
 		})
 
 		t.Run("close rr", func(t *testing.T) {
 			err := rr.Close()
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Nil(t, rr.data)
 			assert.Nil(t, rr.replay)
 		})
@@ -171,7 +171,7 @@ func TestReplayableRequest(t *testing.T) {
 			buf := make([]byte, partial)
 			n, err := io.ReadFull(rr.RawData(), buf)
 
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, partial, n)
 			assert.Equal(t, message[:partial], buf)
 		})
@@ -179,13 +179,13 @@ func TestReplayableRequest(t *testing.T) {
 		t.Run("replay buffer has partial data", func(t *testing.T) {
 			assert.Equal(t, partial, rr.replay.Len())
 			read, err := io.ReadAll(bytes.NewReader(rr.replay.Bytes()))
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, message[:partial], read)
 		})
 
 		t.Run("second read in full", func(t *testing.T) {
 			read, err := io.ReadAll(rr.RawData())
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, message, read)
 		})
 
@@ -197,21 +197,21 @@ func TestReplayableRequest(t *testing.T) {
 		})
 
 		t.Run("replay buffer is full", func(t *testing.T) {
-			assert.Equal(t, len(message), rr.replay.Len())
+			assert.Len(t, message, rr.replay.Len())
 			read, err := io.ReadAll(bytes.NewReader(rr.replay.Bytes()))
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, message, read)
 		})
 
 		t.Run("third read in full", func(t *testing.T) {
 			read, err := io.ReadAll(rr.RawData())
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, message, read)
 		})
 
 		t.Run("close rr", func(t *testing.T) {
 			err := rr.Close()
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Nil(t, rr.data)
 			assert.Nil(t, rr.replay)
 		})

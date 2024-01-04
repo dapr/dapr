@@ -54,7 +54,6 @@ type AppChannelConfig struct {
 	EnableTLS            bool
 	MaxRequestBodySizeMB int
 	ReadBufferSizeKB     int
-	AllowInsecureTLS     bool
 	BaseAddress          string
 }
 
@@ -128,14 +127,14 @@ func (g *Manager) SetAppClientConn(conn grpc.ClientConnInterface) {
 }
 
 func (g *Manager) defaultLocalConnCreateFn() (grpc.ClientConnInterface, error) {
-	conn, err := g.createLocalConnection(context.Background(), g.channelConfig.Port, g.channelConfig.EnableTLS, g.channelConfig.AllowInsecureTLS)
+	conn, err := g.createLocalConnection(context.Background(), g.channelConfig.Port, g.channelConfig.EnableTLS)
 	if err != nil {
 		return nil, fmt.Errorf("error establishing a grpc connection to app on port %v: %w", g.channelConfig.Port, err)
 	}
 	return conn, nil
 }
 
-func (g *Manager) createLocalConnection(parentCtx context.Context, port int, enableTLS bool, allowInsecureTLS bool) (conn *grpc.ClientConn, err error) {
+func (g *Manager) createLocalConnection(parentCtx context.Context, port int, enableTLS bool) (conn *grpc.ClientConn, err error) {
 	opts := make([]grpc.DialOption, 0, 2)
 
 	if diag.DefaultGRPCMonitoring.IsEnabled() {
@@ -147,9 +146,7 @@ func (g *Manager) createLocalConnection(parentCtx context.Context, port int, ena
 	if enableTLS {
 		//nolint:gosec
 		tlsConfig := &tls.Config{InsecureSkipVerify: true}
-		if !allowInsecureTLS {
-			tlsConfig.MinVersion = channel.AppChannelMinTLSVersion
-		}
+		tlsConfig.MinVersion = channel.AppChannelMinTLSVersion
 		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
 	} else {
 		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))

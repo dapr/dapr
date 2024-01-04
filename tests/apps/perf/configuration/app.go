@@ -416,7 +416,7 @@ func unsubscribeGRPC(subscriptionID string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("error unsubscribing config updates: %w", err)
 	}
-	if !resp.Ok {
+	if !resp.GetOk() {
 		return "", fmt.Errorf("error unsubscribing config updates: %s", resp.GetMessage())
 	}
 	return resp.GetMessage(), nil

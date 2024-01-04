@@ -23,6 +23,7 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/slices"
 
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
@@ -309,9 +310,9 @@ func TestPolicyAccumulator(t *testing.T) {
 	// Sleep a bit to ensure that things in the background aren't continuing
 	time.Sleep(100 * time.Millisecond)
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	// res should contain only the last result, i.e. 4
-	assert.Equal(t, res, int32(4))
+	assert.Equal(t, int32(4), res)
 	assert.Equal(t, 3, accumulatorCalled)
 	assert.Equal(t, int32(5), fnCalled.Load())
 	assert.Equal(t, []int32{1, 3, 4}, received)
@@ -345,9 +346,9 @@ func TestPolicyDisposer(t *testing.T) {
 	})
 	res, err := policy(fn)
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	// res should contain only the last result, i.e. 4
-	assert.Equal(t, res, int32(4))
+	assert.Equal(t, int32(4), res)
 
 	// The disposer should be 3 times called with values 1, 2, 3
 	disposed := []int32{}

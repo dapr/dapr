@@ -23,7 +23,7 @@ import (
 
 func TestNewDaprHandler(t *testing.T) {
 	d := getTestDaprHandler()
-	assert.True(t, d != nil)
+	assert.NotNil(t, d)
 }
 
 func TestGetAppID(t *testing.T) {
@@ -96,13 +96,13 @@ func TestDaprService(t *testing.T) {
 	t.Run("invalid empty app id", func(t *testing.T) {
 		d := getDeployment("", "true")
 		err := getTestDaprHandler().ensureDaprServicePresent(context.TODO(), "default", d)
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 
 	t.Run("invalid char app id", func(t *testing.T) {
 		d := getDeployment("myapp@", "true")
 		err := getTestDaprHandler().ensureDaprServicePresent(context.TODO(), "default", d)
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 }
 
@@ -138,7 +138,7 @@ func TestPatchDaprService(t *testing.T) {
 
 	s := runtime.NewScheme()
 	err := scheme.AddToScheme(s)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	testDaprHandler.Scheme = s
 
 	cli := fake.NewClientBuilder().WithScheme(s).Build()
@@ -152,10 +152,10 @@ func TestPatchDaprService(t *testing.T) {
 	deployment := getDeployment("test", "true")
 
 	err = testDaprHandler.createDaprService(ctx, myDaprService, deployment)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	var actualService corev1.Service
 	err = cli.Get(ctx, myDaprService, &actualService)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, "test", actualService.ObjectMeta.Annotations[annotations.KeyAppID])
 	assert.Equal(t, "true", actualService.ObjectMeta.Annotations["prometheus.io/scrape"])
 	assert.Equal(t, "/", actualService.ObjectMeta.Annotations["prometheus.io/path"])
@@ -164,9 +164,9 @@ func TestPatchDaprService(t *testing.T) {
 	assert.Equal(t, "app", actualService.OwnerReferences[0].Name)
 
 	err = testDaprHandler.patchDaprService(ctx, myDaprService, deployment, actualService)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	err = cli.Get(ctx, myDaprService, &actualService)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, "test", actualService.ObjectMeta.Annotations[annotations.KeyAppID])
 	assert.Equal(t, "true", actualService.ObjectMeta.Annotations["prometheus.io/scrape"])
 	assert.Equal(t, "/", actualService.ObjectMeta.Annotations["prometheus.io/path"])
@@ -251,9 +251,9 @@ func TestInit(t *testing.T) {
 
 		err := handler.Init(context.Background())
 
-		assert.Nil(t, err)
+		require.NoError(t, err)
 
-		assert.Equal(t, 3, len(mgr.GetRunnables()))
+		assert.Len(t, mgr.GetRunnables(), 3)
 
 		srv := &corev1.Service{}
 		val := mgr.GetIndexerFunc(&corev1.Service{})(srv)

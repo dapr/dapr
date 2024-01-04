@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
+	"golang.org/x/exp/maps"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -31,8 +32,8 @@ import (
 	"github.com/dapr/dapr/pkg/placement/hashing"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
-	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 )
 
 var log = logger.NewLogger("dapr.runtime.actors.placement")
@@ -56,11 +57,7 @@ const (
 // tables to discover the actor while interacting with Placement service.
 type actorPlacement struct {
 	actorTypes []string
-	appID      string
-	// runtimeHostname is the address and port of the runtime
-	runtimeHostName string
-	// name of the pod hosting the actor
-	podName string
+	config     internal.Config
 
 	// client is the placement client.
 	client *placementClient
@@ -75,24 +72,32 @@ type actorPlacement struct {
 	placementTables *hashing.ConsistentHashTables
 	// placementTableLock is the lock for placementTables.
 	placementTableLock sync.RWMutex
+	// hasPlacementTablesCh is closed when the placement tables have been received.
+	hasPlacementTablesCh chan struct{}
+
+	// apiLevel is the current API level of the cluster
+	apiLevel uint32
+	// onAPILevelUpdate is invoked when the API level is updated
+	onAPILevelUpdate func(apiLevel uint32)
 
 	// unblockSignal is the channel to unblock table locking.
 	unblockSignal chan struct{}
-	// tableIsBlocked is the status of table lock.
-	tableIsBlocked atomic.Bool
 	// operationUpdateLock is the lock for three stage commit.
 	operationUpdateLock sync.Mutex
 
 	// appHealthFn returns the appHealthCh
-	appHealthFn func(ctx context.Context) <-chan bool
+	appHealthFn internal.AppHealthFn
 	// appHealthy contains the result of the app health checks.
 	appHealthy atomic.Bool
-	// afterTableUpdateFn is function for post processing done after table updates,
+	// afterTableUpdateFn is the function invoked after table updates,
 	// such as draining actors and resetting reminders.
 	afterTableUpdateFn func()
 
-	// shutdown is the flag when runtime is being shutdown.
-	shutdown atomic.Bool
+	// callback invoked to halt all active actors
+	haltAllActorsFn internal.HaltAllActorsFn
+
+	// running is the flag when runtime is running.
+	running atomic.Bool
 	// shutdownConnLoop is the wait group to wait until all connection loop are done
 	shutdownConnLoop sync.WaitGroup
 	// closeCh is the channel to close the placement service.
@@ -101,37 +106,33 @@ type actorPlacement struct {
 	resiliency resiliency.Provider
 }
 
-// ActorPlacementOpts contains options for NewActorPlacement.
-type ActorPlacementOpts struct {
-	ServerAddrs        []string // Address(es) for the Placement service
-	Security           security.Handler
-	AppID              string
-	RuntimeHostname    string
-	PodName            string
-	ActorTypes         []string
-	AppHealthFn        func(ctx context.Context) <-chan bool
-	AfterTableUpdateFn func()
-	Resiliency         resiliency.Provider
-}
-
 // NewActorPlacement initializes ActorPlacement for the actor service.
-func NewActorPlacement(opts ActorPlacementOpts) internal.PlacementService {
-	servers := addDNSResolverPrefix(opts.ServerAddrs)
+func NewActorPlacement(opts internal.ActorsProviderOptions) internal.PlacementService {
+	servers := addDNSResolverPrefix(opts.Config.PlacementAddresses)
 	return &actorPlacement{
-		actorTypes:      opts.ActorTypes,
-		appID:           opts.AppID,
-		runtimeHostName: opts.RuntimeHostname,
-		podName:         opts.PodName,
-		serverAddr:      servers,
+		config:     opts.Config,
+		serverAddr: servers,
 
 		client:          newPlacementClient(getGrpcOptsGetter(servers, opts.Security)),
 		placementTables: &hashing.ConsistentHashTables{Entries: make(map[string]*hashing.Consistent)},
 
-		appHealthFn:        opts.AppHealthFn,
-		afterTableUpdateFn: opts.AfterTableUpdateFn,
-		closeCh:            make(chan struct{}),
-		resiliency:         opts.Resiliency,
+		actorTypes:    []string{},
+		unblockSignal: make(chan struct{}, 1),
+		appHealthFn:   opts.AppHealthFn,
+		closeCh:       make(chan struct{}),
+		resiliency:    opts.Resiliency,
 	}
+}
+
+func (p *actorPlacement) PlacementHealthy() bool {
+	return p.appHealthy.Load() && p.client.isConnected()
+}
+
+func (p *actorPlacement) StatusMessage() string {
+	if p.client.isConnected() {
+		return "placement: connected"
+	}
+	return "placement: disconnected"
 }
 
 // Register an actor type by adding it to the list of known actor types (if it's not already registered)
@@ -151,8 +152,9 @@ func (p *actorPlacement) AddHostedActorType(actorType string, idleTimeout time.D
 // to report the current member status periodically.
 func (p *actorPlacement) Start(ctx context.Context) error {
 	p.serverIndex.Store(0)
-	p.shutdown.Store(false)
+	p.running.Store(true)
 	p.appHealthy.Store(true)
+	p.resetPlacementTables()
 
 	if !p.establishStreamConn(ctx) {
 		return nil
@@ -187,13 +189,13 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 	p.shutdownConnLoop.Add(1)
 	go func() {
 		defer p.shutdownConnLoop.Done()
-		for !p.shutdown.Load() {
+		for p.running.Load() {
 			// wait until disconnection occurs or shutdown is triggered
 			p.client.waitUntil(func(streamConnAlive bool) bool {
-				return !streamConnAlive || p.shutdown.Load()
+				return !streamConnAlive || !p.running.Load()
 			})
 
-			if p.shutdown.Load() {
+			if !p.running.Load() {
 				break
 			}
 			p.establishStreamConn(ctx)
@@ -204,14 +206,14 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 	p.shutdownConnLoop.Add(1)
 	go func() {
 		defer p.shutdownConnLoop.Done()
-		for !p.shutdown.Load() {
+		for p.running.Load() {
 			// Wait until stream is connected or shutdown is triggered.
 			p.client.waitUntil(func(streamAlive bool) bool {
-				return streamAlive || p.shutdown.Load()
+				return streamAlive || !p.running.Load()
 			})
 
 			resp, err := p.client.recv()
-			if p.shutdown.Load() {
+			if !p.running.Load() {
 				break
 			}
 
@@ -231,13 +233,13 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 	p.shutdownConnLoop.Add(1)
 	go func() {
 		defer p.shutdownConnLoop.Done()
-		for !p.shutdown.Load() {
+		for p.running.Load() {
 			// Wait until stream is connected or shutdown is triggered.
 			p.client.waitUntil(func(streamAlive bool) bool {
-				return streamAlive || p.shutdown.Load()
+				return streamAlive || !p.running.Load()
 			})
 
-			if p.shutdown.Load() {
+			if !p.running.Load() {
 				break
 			}
 
@@ -246,18 +248,27 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 			if !p.appHealthy.Load() {
 				// app is unresponsive, close the stream and disconnect from the placement service.
 				// Then Placement will remove this host from the member list.
-				log.Debug("disconnecting from placement service by the unhealthy app.")
+				log.Debug("Disconnecting from placement service by the unhealthy app")
 
 				p.client.disconnect()
+				p.placementTableLock.Lock()
+				p.resetPlacementTables()
+				p.placementTableLock.Unlock()
+				if p.haltAllActorsFn != nil {
+					haltErr := p.haltAllActorsFn()
+					if haltErr != nil {
+						log.Errorf("Failed to deactivate all actors: %v", haltErr)
+					}
+				}
 				continue
 			}
 
 			host := v1pb.Host{
-				Name:     p.runtimeHostName,
+				Name:     p.config.GetRuntimeHostname(),
 				Entities: p.actorTypes,
-				Id:       p.appID,
+				Id:       p.config.AppID,
 				Load:     1, // Not used yet
-				Pod:      p.podName,
+				Pod:      p.config.PodName,
 				// Port is redundant because Name should include port number
 				// Port: 0,
 				ApiLevel: internal.ActorAPILevel,
@@ -266,7 +277,7 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 			err := p.client.send(&host)
 			if err != nil {
 				diag.DefaultMonitoring.ActorStatusReportFailed("send", "status")
-				log.Debugf("failed to report status to placement service : %v", err)
+				log.Errorf("Failed to report status to placement service : %v", err)
 			}
 
 			// No delay if stream connection is not alive.
@@ -283,9 +294,8 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 // Closes shuts down server stream gracefully.
 func (p *actorPlacement) Close() error {
 	// CAS to avoid stop more than once.
-	if p.shutdown.CompareAndSwap(false, true) {
+	if p.running.CompareAndSwap(true, false) {
 		p.client.disconnect()
-		p.shutdown.Store(true)
 		close(p.closeCh)
 	}
 	p.shutdownConnLoop.Wait()
@@ -294,11 +304,27 @@ func (p *actorPlacement) Close() error {
 
 // WaitUntilReady waits until placement table is until table lock is unlocked.
 func (p *actorPlacement) WaitUntilReady(ctx context.Context) error {
-	if !p.tableIsBlocked.Load() {
+	p.placementTableLock.RLock()
+	hasTablesCh := p.hasPlacementTablesCh
+	p.placementTableLock.RUnlock()
+
+	select {
+	case p.unblockSignal <- struct{}{}:
+		select {
+		case <-p.unblockSignal:
+		default:
+		}
+		// continue
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+
+	if hasTablesCh == nil {
 		return nil
 	}
+
 	select {
-	case <-p.unblockSignal:
+	case <-hasTablesCh:
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
@@ -351,7 +377,12 @@ func (p *actorPlacement) establishStreamConn(ctx context.Context) (established b
 	bo.MaxElapsedTime = 0 // Retry forever
 
 	logFailureShown := false
-	for !p.shutdown.Load() {
+	for p.running.Load() {
+		// Do not retry to connect if context is canceled
+		if ctx.Err() != nil {
+			return false
+		}
+
 		// Stop reconnecting to placement until app is healthy.
 		if !p.appHealthy.Load() {
 			// We are not using an exponential backoff here because we haven't begun to establish connections yet
@@ -359,7 +390,7 @@ func (p *actorPlacement) establishStreamConn(ctx context.Context) (established b
 			continue
 		}
 
-		// Do not retry to connect if context is canceled
+		// Check for context validity again, after sleeping
 		if ctx.Err() != nil {
 			return false
 		}
@@ -377,16 +408,30 @@ func (p *actorPlacement) establishStreamConn(ctx context.Context) (established b
 
 		if err != nil {
 			if !logFailureShown {
-				log.Debugf("error connecting to placement service (will retry to connect in background): %v", err)
+				log.Debugf("Error connecting to placement service (will retry to connect in background): %v", err)
 				// Don't show the debug log more than once per each reconnection attempt
 				logFailureShown = true
 			}
+
+			// Try a different instance of the placement service
 			p.serverIndex.Store((p.serverIndex.Load() + 1) % int32(len(p.serverAddr)))
-			time.Sleep(bo.NextBackOff())
+
+			// Halt all active actors, then reset the placement tables
+			if p.haltAllActorsFn != nil {
+				p.haltAllActorsFn()
+			}
+			p.resetPlacementTables()
+
+			// Sleep with an exponential backoff
+			select {
+			case <-time.After(bo.NextBackOff()):
+			case <-ctx.Done():
+				return false
+			}
 			continue
 		}
 
-		log.Debug("established connection to placement service at " + p.client.clientConn.Target())
+		log.Debug("Established connection to placement service at " + p.client.clientConn.Target())
 		return true
 	}
 
@@ -401,19 +446,19 @@ func (p *actorPlacement) onPlacementError(err error) {
 	if ok && s.Code() == codes.FailedPrecondition {
 		p.serverIndex.Store((p.serverIndex.Load() + 1) % int32(len(p.serverAddr)))
 	} else {
-		log.Debugf("disconnected from placement: %v", err)
+		log.Debugf("Disconnected from placement: %v", err)
 	}
 }
 
 func (p *actorPlacement) onPlacementOrder(in *v1pb.PlacementOrder) {
-	log.Debugf("placement order received: %s", in.Operation)
-	diag.DefaultMonitoring.ActorPlacementTableOperationReceived(in.Operation)
+	log.Debugf("Placement order received: %s", in.GetOperation())
+	diag.DefaultMonitoring.ActorPlacementTableOperationReceived(in.GetOperation())
 
 	// lock all incoming calls when an updated table arrives
 	p.operationUpdateLock.Lock()
 	defer p.operationUpdateLock.Unlock()
 
-	switch in.Operation {
+	switch in.GetOperation() {
 	case lockOperation:
 		p.blockPlacements()
 
@@ -431,53 +476,102 @@ func (p *actorPlacement) onPlacementOrder(in *v1pb.PlacementOrder) {
 		p.unblockPlacements()
 
 	case updateOperation:
-		p.updatePlacements(in.Tables)
+		p.updatePlacements(in.GetTables())
 	}
 }
 
 func (p *actorPlacement) blockPlacements() {
-	p.unblockSignal = make(chan struct{})
-	p.tableIsBlocked.Store(true)
+	select {
+	case p.unblockSignal <- struct{}{}:
+		// Now  blocked
+	default:
+		// Was already blocked
+	}
 }
 
 func (p *actorPlacement) unblockPlacements() {
-	if p.tableIsBlocked.CompareAndSwap(true, false) {
-		close(p.unblockSignal)
+	select {
+	case <-p.unblockSignal:
+		// Now unblocked
+	default:
+		// Was already unblocked
 	}
+}
+
+// Resets the placement tables.
+// Note that this method should be invoked by a caller that owns a lock.
+func (p *actorPlacement) resetPlacementTables() {
+	if p.hasPlacementTablesCh != nil {
+		close(p.hasPlacementTablesCh)
+	}
+	p.hasPlacementTablesCh = make(chan struct{})
+	maps.Clear(p.placementTables.Entries)
+	p.placementTables.Version = ""
 }
 
 func (p *actorPlacement) updatePlacements(in *v1pb.PlacementTables) {
 	updated := false
+	var updatedAPILevel *uint32
 	func() {
 		p.placementTableLock.Lock()
 		defer p.placementTableLock.Unlock()
 
-		if in.Version == p.placementTables.Version {
+		if in.GetVersion() == p.placementTables.Version {
 			return
 		}
 
-		tables := &hashing.ConsistentHashTables{Entries: make(map[string]*hashing.Consistent)}
-		for k, v := range in.Entries {
-			loadMap := map[string]*hashing.Host{}
-			for lk, lv := range v.LoadMap {
-				loadMap[lk] = hashing.NewHost(lv.Name, lv.Id, lv.Load, lv.Port)
-			}
-			tables.Entries[k] = hashing.NewFromExisting(v.Hosts, v.SortedSet, loadMap)
+		if in.GetApiLevel() != p.apiLevel {
+			p.apiLevel = in.GetApiLevel()
+			updatedAPILevel = ptr.Of(in.GetApiLevel())
 		}
 
-		p.placementTables = tables
-		p.placementTables.Version = in.Version
+		maps.Clear(p.placementTables.Entries)
+		p.placementTables.Version = in.GetVersion()
+		for k, v := range in.GetEntries() {
+			loadMap := make(map[string]*hashing.Host, len(v.GetLoadMap()))
+			for lk, lv := range v.GetLoadMap() {
+				loadMap[lk] = hashing.NewHost(lv.GetName(), lv.GetId(), lv.GetLoad(), lv.GetPort())
+			}
+			p.placementTables.Entries[k] = hashing.NewFromExisting(v.GetHosts(), v.GetSortedSet(), loadMap)
+		}
+
 		updated = true
+		if p.hasPlacementTablesCh != nil {
+			close(p.hasPlacementTablesCh)
+			p.hasPlacementTablesCh = nil
+		}
 	}()
 
-	if !updated {
-		return
+	if updatedAPILevel != nil && p.onAPILevelUpdate != nil {
+		p.onAPILevelUpdate(*updatedAPILevel)
 	}
 
-	// May call LookupActor inside, so should not do this with placementTableLock locked.
-	p.afterTableUpdateFn()
+	if updated {
+		// May call LookupActor inside, so should not do this with placementTableLock locked.
+		if p.afterTableUpdateFn != nil {
+			p.afterTableUpdateFn()
+		}
+		log.Infof("Placement tables updated, version: %s", in.GetVersion())
+	}
+}
 
-	log.Infof("Placement tables updated, version: %s", in.GetVersion())
+func (p *actorPlacement) SetOnTableUpdateFn(fn func()) {
+	p.afterTableUpdateFn = fn
+}
+
+func (p *actorPlacement) SetOnAPILevelUpdate(fn func(apiLevel uint32)) {
+	p.onAPILevelUpdate = fn
+}
+
+func (p *actorPlacement) ReportActorDeactivation(ctx context.Context, actorType, actorID string) error {
+	// Nop in this implementation
+	return nil
+}
+
+func (p *actorPlacement) SetHaltActorFns(haltFn internal.HaltActorFn, haltAllFn internal.HaltAllActorsFn) {
+	// haltFn isn't used in this implementation
+	p.haltAllActorsFn = haltAllFn
+	return
 }
 
 // addDNSResolverPrefix add the `dns://` prefix to the given addresses

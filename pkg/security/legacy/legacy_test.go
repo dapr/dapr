@@ -186,7 +186,7 @@ func Test_NewServer(t *testing.T) {
 		clientsvid, err := x509svid.ParseRaw(append(clientCertDER, issCert.Raw...), clientPKDER)
 		require.NoError(t, err)
 
-		assert.NoError(t, dial(t, tlsconfig.MTLSClientConfig(clientsvid, rootCA, tlsconfig.AuthorizeAny())))
+		require.NoError(t, dial(t, tlsconfig.MTLSClientConfig(clientsvid, rootCA, tlsconfig.AuthorizeAny())))
 	})
 
 	t.Run("if client uses a SVID but signed by different root, expect error", func(t *testing.T) {
@@ -206,7 +206,7 @@ func Test_NewServer(t *testing.T) {
 		require.NoError(t, err)
 
 		err = dial(t, tlsconfig.MTLSClientConfig(clientsvid, diffRootCA, tlsconfig.AuthorizeAny()))
-		assert.ErrorContains(t, err, "x509: ECDSA verification failure")
+		require.ErrorContains(t, err, "x509: ECDSA verification failure")
 	})
 
 	t.Run("if client uses DNS and is `cluster.local`, expect no error", func(t *testing.T) {
@@ -220,7 +220,7 @@ func Test_NewServer(t *testing.T) {
 		}, issCert, &clientPK.PublicKey, issKey)
 		require.NoError(t, err)
 
-		assert.NoError(t, dial(t, &tls.Config{
+		require.NoError(t, dial(t, &tls.Config{
 			RootCAs: rootPool,
 
 			InsecureSkipVerify: true, //nolint: gosec // this is a test
@@ -242,7 +242,7 @@ func Test_NewServer(t *testing.T) {
 		}, issCert, &clientPK.PublicKey, issKey)
 		require.NoError(t, err)
 
-		assert.NoError(t, dial(t, &tls.Config{
+		require.NoError(t, dial(t, &tls.Config{
 			RootCAs:            rootPool,
 			InsecureSkipVerify: true, //nolint: gosec // this is a test
 			Certificates: []tls.Certificate{
@@ -269,7 +269,7 @@ func Test_NewServer(t *testing.T) {
 				{Certificate: [][]byte{clientCertDER, issCert.Raw}, PrivateKey: clientPK},
 			},
 		})
-		assert.ErrorContains(t, err, "remote error: tls: bad certificate")
+		require.ErrorContains(t, err, "remote error: tls: bad certificate")
 	})
 
 	t.Run("if client uses DNS but is from different root, expect error", func(t *testing.T) {
@@ -290,7 +290,7 @@ func Test_NewServer(t *testing.T) {
 				{Certificate: [][]byte{clientCertDER, diffCert.Raw}, PrivateKey: clientPK},
 			},
 		})
-		assert.ErrorContains(t, err, "remote error: tls: bad certificate")
+		require.ErrorContains(t, err, "remote error: tls: bad certificate")
 	})
 }
 
@@ -384,7 +384,7 @@ func Test_NewDialClient(t *testing.T) {
 		serversvid, err := x509svid.ParseRaw(append(serverCertDER, issCert.Raw...), serverPKDER)
 		require.NoError(t, err)
 
-		assert.NoError(t, serve(t, tlsconfig.MTLSServerConfig(serversvid, rootCA, tlsconfig.AuthorizeAny())))
+		require.NoError(t, serve(t, tlsconfig.MTLSServerConfig(serversvid, rootCA, tlsconfig.AuthorizeAny())))
 	})
 
 	t.Run("if server uses a SVID but signed by different root, expect error", func(t *testing.T) {
@@ -404,7 +404,7 @@ func Test_NewDialClient(t *testing.T) {
 		require.NoError(t, err)
 
 		err = serve(t, tlsconfig.MTLSServerConfig(serversvid, diffRootCA, tlsconfig.AuthorizeAny()))
-		assert.ErrorContains(t, err, "x509: ECDSA verification failure")
+		require.ErrorContains(t, err, "x509: ECDSA verification failure")
 	})
 
 	t.Run("if server uses DNS and is `cluster.local`, expect no error", func(t *testing.T) {
@@ -418,7 +418,7 @@ func Test_NewDialClient(t *testing.T) {
 		}, issCert, &serverPK.PublicKey, issKey)
 		require.NoError(t, err)
 
-		assert.NoError(t, serve(t, &tls.Config{
+		require.NoError(t, serve(t, &tls.Config{
 			RootCAs:            rootPool,
 			InsecureSkipVerify: true, //nolint: gosec // this is a test
 			Certificates: []tls.Certificate{
@@ -438,7 +438,7 @@ func Test_NewDialClient(t *testing.T) {
 		}, issCert, &serverPK.PublicKey, issKey)
 		require.NoError(t, err)
 
-		assert.NoError(t, serve(t, &tls.Config{
+		require.NoError(t, serve(t, &tls.Config{
 			RootCAs:            rootPool,
 			InsecureSkipVerify: true, //nolint: gosec // this is a test
 			Certificates: []tls.Certificate{
@@ -465,7 +465,7 @@ func Test_NewDialClient(t *testing.T) {
 				{Certificate: [][]byte{serverCertDER, issCert.Raw}, PrivateKey: serverPK},
 			},
 		})
-		assert.ErrorContains(t, err, "x509svid: could not get leaf SPIFFE ID: certificate contains no URI SAN\nx509: certificate is valid for no-cluster.foo.local, local.cluster, not cluster.local")
+		require.ErrorContains(t, err, "x509svid: could not get leaf SPIFFE ID: certificate contains no URI SAN\nx509: certificate is valid for no-cluster.foo.local, local.cluster, not cluster.local")
 	})
 
 	t.Run("if server uses DNS but is from different root, expect error", func(t *testing.T) {
@@ -486,6 +486,6 @@ func Test_NewDialClient(t *testing.T) {
 				{Certificate: [][]byte{serverCertDER, diffCert.Raw}, PrivateKey: serverPK},
 			},
 		})
-		assert.ErrorContains(t, err, "x509svid: could not get leaf SPIFFE ID: certificate contains no URI SAN\nx509: certificate is valid for no-cluster.foo.local, local.cluster, not cluster.local")
+		require.ErrorContains(t, err, "x509svid: could not get leaf SPIFFE ID: certificate contains no URI SAN\nx509: certificate is valid for no-cluster.foo.local, local.cluster, not cluster.local")
 	})
 }

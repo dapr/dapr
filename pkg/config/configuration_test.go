@@ -55,10 +55,10 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			config, err := LoadStandaloneConfiguration(tc.path)
 			if tc.errorExpected {
-				assert.Error(t, err, "Expected an error")
+				require.Error(t, err, "Expected an error")
 				assert.Nil(t, config, "Config should not be loaded")
 			} else {
-				assert.NoError(t, err, "Unexpected error")
+				require.NoError(t, err, "Unexpected error")
 				assert.NotNil(t, config, "Config not loaded as expected")
 			}
 		})
@@ -67,14 +67,14 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 	t.Run("parse environment variables", func(t *testing.T) {
 		t.Setenv("DAPR_SECRET", "keepitsecret")
 		config, err := LoadStandaloneConfiguration("./testdata/env_variables_config.yaml")
-		assert.NoError(t, err, "Unexpected error")
+		require.NoError(t, err, "Unexpected error")
 		assert.NotNil(t, config, "Config not loaded as expected")
 		assert.Equal(t, "keepitsecret", config.Spec.Secrets.Scopes[0].AllowedSecrets[0])
 	})
 
 	t.Run("check Kind and Name", func(t *testing.T) {
 		config, err := LoadStandaloneConfiguration("./testdata/config.yaml")
-		assert.NoError(t, err, "Unexpected error")
+		require.NoError(t, err, "Unexpected error")
 		assert.NotNil(t, config, "Config not loaded as expected")
 		assert.Equal(t, "secretappconfig", config.ObjectMeta.Name)
 		assert.Equal(t, "Configuration", config.TypeMeta.Kind)
@@ -101,7 +101,7 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				config, err := LoadStandaloneConfiguration(tc.confFile)
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Equal(t, tc.metricEnabled, config.Spec.MetricSpec.GetEnabled())
 			})
 		}
@@ -123,7 +123,7 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				config, err := LoadStandaloneConfiguration(tc.confFile)
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.True(t, reflect.DeepEqual(tc.componentsDeny, config.Spec.ComponentsSpec.Deny))
 			})
 		}
@@ -173,6 +173,25 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 		assert.True(t, mtlsSpec.Enabled)
 		assert.Equal(t, "25s", mtlsSpec.WorkloadCertTTL)
 		assert.Equal(t, "1h", mtlsSpec.AllowedClockSkew)
+	})
+
+	t.Run("workflow spec - configured", func(t *testing.T) {
+		config, err := LoadStandaloneConfiguration("./testdata/workflow_config.yaml")
+		require.NoError(t, err)
+		workflowSpec := config.GetWorkflowSpec()
+		assert.Equal(t, int32(32), workflowSpec.MaxConcurrentWorkflowInvocations)
+		assert.Equal(t, int32(64), workflowSpec.MaxConcurrentActivityInvocations)
+	})
+
+	t.Run("workflow spec - defaults", func(t *testing.T) {
+		// Intentionally loading an unrelated config file to test defaults
+		config, err := LoadStandaloneConfiguration("./testdata/mtls_config.yaml")
+		require.NoError(t, err)
+		workflowSpec := config.GetWorkflowSpec()
+
+		// These are the documented default values. Changes to these defaults require changes to
+		assert.Equal(t, int32(100), workflowSpec.MaxConcurrentWorkflowInvocations)
+		assert.Equal(t, int32(100), workflowSpec.MaxConcurrentActivityInvocations)
 	})
 
 	t.Run("multiple configurations", func(t *testing.T) {
@@ -325,7 +344,7 @@ func TestSortAndValidateSecretsConfigration(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			err := tc.config.sortAndValidateSecretsConfiguration()
 			if tc.errorExpected {
-				assert.Error(t, err, "expected validation to fail")
+				require.Error(t, err, "expected validation to fail")
 			} else if tc.config.Spec.Secrets != nil {
 				for _, scope := range tc.config.Spec.Secrets.Scopes {
 					assert.True(t, sort.StringsAreSorted(scope.AllowedSecrets), "expected sorted slice")
@@ -412,7 +431,7 @@ func TestIsSecretAllowed(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.scope.IsSecretAllowed(tc.secretKey), tc.expectedResult, "incorrect access")
+			assert.Equal(t, tc.expectedResult, tc.scope.IsSecretAllowed(tc.secretKey), "incorrect access")
 		})
 	}
 }

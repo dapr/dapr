@@ -34,6 +34,8 @@ func (p *pubsub) StartSubscriptions(ctx context.Context) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
+	p.subscribing = true
+
 	var errs []error
 	for pubsubName := range p.compStore.ListPubSubs() {
 		if err := p.beginPubSub(ctx, pubsubName); err != nil {
@@ -48,6 +50,8 @@ func (p *pubsub) StartSubscriptions(ctx context.Context) error {
 func (p *pubsub) StopSubscriptions() {
 	p.lock.Lock()
 	defer p.lock.Unlock()
+
+	p.subscribing = false
 
 	for subKey := range p.topicCancels {
 		p.unsubscribeTopic(subKey)
@@ -68,7 +72,7 @@ func (p *pubsub) beginPubSub(ctx context.Context, name string) error {
 
 	var errs []error
 	for topic, route := range v {
-		err = p.subscribeTopic(ctx, name, topic, route)
+		err = p.subscribeTopic(name, topic, route)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("error occurred while beginning pubsub for topic %s on component %s: %v", topic, name, err))
 		}

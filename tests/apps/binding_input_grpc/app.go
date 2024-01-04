@@ -118,9 +118,9 @@ func main() {
 
 //nolint:forbidigo
 func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*commonv1pb.InvokeResponse, error) {
-	fmt.Printf("Got invoked method %s and data: %s\n", in.Method, string(in.GetData().Value))
+	fmt.Printf("Got invoked method %s and data: %s\n", in.GetMethod(), string(in.GetData().GetValue()))
 
-	switch in.Method {
+	switch in.GetMethod() {
 	case "GetReceivedTopics":
 		return s.GetReceivedTopics(ctx, in)
 	}
@@ -158,10 +158,10 @@ func (s *server) ListTopicSubscriptions(ctx context.Context, in *emptypb.Empty) 
 
 // This method is fired whenever a message has been published to a topic that has been subscribed. Dapr sends published messages in a CloudEvents 1.0 envelope.
 func (s *server) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventRequest) (*runtimev1pb.TopicEventResponse, error) {
-	log.Printf("Message arrived - Topic: %s, Message: %s\n", in.Topic, string(in.Data))
+	log.Printf("Message arrived - Topic: %s, Message: %s\n", in.GetTopic(), string(in.GetData()))
 
 	var message string
-	err := json.Unmarshal(in.Data, &message)
+	err := json.Unmarshal(in.GetData(), &message)
 	log.Printf("Got message: %s", message)
 	if err != nil {
 		log.Printf("error parsing test-topic input binding payload: %s", err)
@@ -192,6 +192,6 @@ func (s *server) ListInputBindings(ctx context.Context, in *emptypb.Empty) (*run
 //
 //nolint:forbidigo
 func (s *server) OnBindingEvent(ctx context.Context, in *runtimev1pb.BindingEventRequest) (*runtimev1pb.BindingEventResponse, error) {
-	fmt.Printf("Invoked from binding: %s - %s\n", in.Name, string(in.Data))
+	fmt.Printf("Invoked from binding: %s - %s\n", in.GetName(), string(in.GetData()))
 	return &runtimev1pb.BindingEventResponse{}, nil
 }
