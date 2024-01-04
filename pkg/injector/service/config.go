@@ -155,8 +155,8 @@ func (c *Config) parse() (err error) {
 	}
 
 	// If the name of the reminders service is empty, we assume we are using the built-in capabilities
-	if c.RemindersServiceName != "" {
-		c.parsedRemindersService, err = patcher.NewService(c.RemindersServiceName)
+	if c.RemindersServiceName != "" && c.RemindersServiceName != "default" {
+		c.parsedRemindersService, err = patcher.NewService(c.RemindersServiceAddress)
 		if err != nil {
 			return fmt.Errorf("invalid value for reminder service address: %w", err)
 		}
