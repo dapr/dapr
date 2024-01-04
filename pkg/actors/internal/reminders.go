@@ -17,8 +17,6 @@ import (
 	"context"
 	"errors"
 	"io"
-
-	"github.com/dapr/dapr/pkg/resiliency"
 )
 
 // ErrReminderCanceled is returned when the reminder has been canceled.
@@ -31,12 +29,10 @@ type ExecuteReminderFn func(reminder *Reminder) bool
 // LookupActorFn is the type of a function that returns whether an actor is locally-hosted and the address of its host.
 type LookupActorFn func(ctx context.Context, actorType string, actorID string) (isLocal bool, actorAddress string)
 
-// StateStoreProviderFn is the type of a function that returns the state store provider.
-type StateStoreProviderFn func() (TransactionalStateStore, error)
+// StateStoreProviderFn is the type of a function that returns the state store provider and its name.
+type StateStoreProviderFn func() (string, TransactionalStateStore, error)
 
 // RemindersProvider is the interface for the object that provides reminders services.
-//
-//nolint:interfacebloat
 type RemindersProvider interface {
 	io.Closer
 
@@ -47,7 +43,6 @@ type RemindersProvider interface {
 	DrainRebalancedReminders(actorType string, actorID string)
 	OnPlacementTablesUpdated(ctx context.Context)
 
-	SetResiliencyProvider(resiliency resiliency.Provider)
 	SetExecuteReminderFn(fn ExecuteReminderFn)
 	SetStateStoreProviderFn(fn StateStoreProviderFn)
 	SetLookupActorFn(fn LookupActorFn)

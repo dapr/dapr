@@ -69,15 +69,18 @@ func TestPlacementStream_RoundRobin(t *testing.T) {
 		address[i], testSrv[i], cleanup[i] = newTestServer()
 	}
 
-	testPlacement := NewActorPlacement(ActorPlacementOpts{
-		ServerAddrs:     address,
-		AppID:           "testAppID",
-		RuntimeHostname: "127.0.0.1:1000",
-		PodName:         "testPodName",
-		ActorTypes:      []string{"actorOne", "actorTwo"},
-		AppHealthFn:     func(ctx context.Context) <-chan bool { return nil },
-		Security:        testSecurity(t),
-		Resiliency:      resiliency.New(logger.NewLogger("test")),
+	testPlacement := NewActorPlacement(internal.ActorsProviderOptions{
+		Config: internal.Config{
+			PlacementAddresses: address,
+			AppID:              "testAppID",
+			HostAddress:        "127.0.0.1",
+			Port:               1000,
+			PodName:            "testPodName",
+			HostedActorTypes:   internal.NewHostedActors([]string{"actorOne", "actorTwo"}),
+		},
+		AppHealthFn: func(ctx context.Context) <-chan bool { return nil },
+		Security:    testSecurity(t),
+		Resiliency:  resiliency.New(logger.NewLogger("test")),
 	}).(*actorPlacement)
 
 	t.Run("found leader placement in a round robin way", func(t *testing.T) {
@@ -126,15 +129,18 @@ func TestAppHealthyStatus(t *testing.T) {
 
 	appHealthCh := make(chan bool)
 
-	testPlacement := NewActorPlacement(ActorPlacementOpts{
-		ServerAddrs:     []string{address},
-		AppID:           "testAppID",
-		RuntimeHostname: "127.0.0.1:1000",
-		PodName:         "testPodName",
-		ActorTypes:      []string{"actorOne", "actorTwo"},
-		AppHealthFn:     func(ctx context.Context) <-chan bool { return appHealthCh },
-		Security:        testSecurity(t),
-		Resiliency:      resiliency.New(logger.NewLogger("test")),
+	testPlacement := NewActorPlacement(internal.ActorsProviderOptions{
+		Config: internal.Config{
+			PlacementAddresses: []string{address},
+			AppID:              "testAppID",
+			HostAddress:        "127.0.0.1",
+			Port:               1000,
+			PodName:            "testPodName",
+			HostedActorTypes:   internal.NewHostedActors([]string{"actorOne", "actorTwo"}),
+		},
+		AppHealthFn: func(ctx context.Context) <-chan bool { return appHealthCh },
+		Security:    testSecurity(t),
+		Resiliency:  resiliency.New(logger.NewLogger("test")),
 	}).(*actorPlacement)
 
 	// act
@@ -159,17 +165,20 @@ func TestAppHealthyStatus(t *testing.T) {
 func TestOnPlacementOrder(t *testing.T) {
 	tableUpdateCount := atomic.Int64{}
 	tableUpdateFunc := func() { tableUpdateCount.Add(1) }
-	testPlacement := NewActorPlacement(ActorPlacementOpts{
-		ServerAddrs:        []string{},
-		AppID:              "testAppID",
-		RuntimeHostname:    "127.0.0.1:1000",
-		PodName:            "testPodName",
-		ActorTypes:         []string{"actorOne", "actorTwo"},
-		AppHealthFn:        func(ctx context.Context) <-chan bool { return nil },
-		AfterTableUpdateFn: tableUpdateFunc,
-		Security:           testSecurity(t),
-		Resiliency:         resiliency.New(logger.NewLogger("test")),
+	testPlacement := NewActorPlacement(internal.ActorsProviderOptions{
+		Config: internal.Config{
+			PlacementAddresses: []string{},
+			AppID:              "testAppID",
+			HostAddress:        "127.0.0.1",
+			Port:               1000,
+			PodName:            "testPodName",
+			HostedActorTypes:   internal.NewHostedActors([]string{"actorOne", "actorTwo"}),
+		},
+		AppHealthFn: func(ctx context.Context) <-chan bool { return nil },
+		Security:    testSecurity(t),
+		Resiliency:  resiliency.New(logger.NewLogger("test")),
 	}).(*actorPlacement)
+	testPlacement.SetOnTableUpdateFn(tableUpdateFunc)
 
 	t.Run("lock operation", func(t *testing.T) {
 		testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{
@@ -225,15 +234,18 @@ func TestOnPlacementOrder(t *testing.T) {
 }
 
 func TestWaitUntilPlacementTableIsReady(t *testing.T) {
-	testPlacement := NewActorPlacement(ActorPlacementOpts{
-		ServerAddrs:     []string{},
-		AppID:           "testAppID",
-		RuntimeHostname: "127.0.0.1:1000",
-		PodName:         "testPodName",
-		ActorTypes:      []string{"actorOne", "actorTwo"},
-		AppHealthFn:     func(ctx context.Context) <-chan bool { return nil },
-		Security:        testSecurity(t),
-		Resiliency:      resiliency.New(logger.NewLogger("test")),
+	testPlacement := NewActorPlacement(internal.ActorsProviderOptions{
+		Config: internal.Config{
+			PlacementAddresses: []string{},
+			AppID:              "testAppID",
+			HostAddress:        "127.0.0.1",
+			Port:               1000,
+			PodName:            "testPodName",
+			HostedActorTypes:   internal.NewHostedActors([]string{"actorOne", "actorTwo"}),
+		},
+		AppHealthFn: func(ctx context.Context) <-chan bool { return nil },
+		Security:    testSecurity(t),
+		Resiliency:  resiliency.New(logger.NewLogger("test")),
 	}).(*actorPlacement)
 
 	// Set the hasPlacementTablesCh channel to nil for the first tests, indicating that the placement tables already exist
@@ -361,15 +373,18 @@ func TestWaitUntilPlacementTableIsReady(t *testing.T) {
 }
 
 func TestLookupActor(t *testing.T) {
-	testPlacement := NewActorPlacement(ActorPlacementOpts{
-		ServerAddrs:     []string{},
-		AppID:           "testAppID",
-		RuntimeHostname: "127.0.0.1:1000",
-		PodName:         "testPodName",
-		ActorTypes:      []string{"actorOne", "actorTwo"},
-		AppHealthFn:     func(ctx context.Context) <-chan bool { return nil },
-		Security:        testSecurity(t),
-		Resiliency:      resiliency.New(logger.NewLogger("test")),
+	testPlacement := NewActorPlacement(internal.ActorsProviderOptions{
+		Config: internal.Config{
+			PlacementAddresses: []string{},
+			AppID:              "testAppID",
+			HostAddress:        "127.0.0.1",
+			Port:               1000,
+			PodName:            "testPodName",
+			HostedActorTypes:   internal.NewHostedActors([]string{"actorOne", "actorTwo"}),
+		},
+		AppHealthFn: func(ctx context.Context) <-chan bool { return nil },
+		Security:    testSecurity(t),
+		Resiliency:  resiliency.New(logger.NewLogger("test")),
 	}).(*actorPlacement)
 
 	t.Run("Placement table is unset", func(t *testing.T) {
@@ -390,7 +405,7 @@ func TestLookupActor(t *testing.T) {
 		// set vnode size
 		hashing.SetReplicationFactor(10)
 		actorOneHashing := hashing.NewConsistentHash()
-		actorOneHashing.Add(testPlacement.runtimeHostName, testPlacement.appID, 0)
+		actorOneHashing.Add(testPlacement.config.GetRuntimeHostname(), testPlacement.config.AppID, 0)
 		testPlacement.placementTables.Entries["actorOne"] = actorOneHashing
 
 		// existing actor type
@@ -399,8 +414,8 @@ func TestLookupActor(t *testing.T) {
 			ActorID:   "id0",
 		})
 		require.NoError(t, err)
-		assert.Equal(t, testPlacement.runtimeHostName, lar.Address)
-		assert.Equal(t, testPlacement.appID, lar.AppID)
+		assert.Equal(t, testPlacement.config.GetRuntimeHostname(), lar.Address)
+		assert.Equal(t, testPlacement.config.AppID, lar.AppID)
 
 		// non existing actor type
 		lar, err = testPlacement.LookupActor(context.Background(), internal.LookupActorRequest{
@@ -415,15 +430,18 @@ func TestLookupActor(t *testing.T) {
 }
 
 func TestConcurrentUnblockPlacements(t *testing.T) {
-	testPlacement := NewActorPlacement(ActorPlacementOpts{
-		ServerAddrs:     []string{},
-		AppID:           "testAppID",
-		RuntimeHostname: "127.0.0.1:1000",
-		PodName:         "testPodName",
-		ActorTypes:      []string{"actorOne", "actorTwo"},
-		AppHealthFn:     func(ctx context.Context) <-chan bool { return nil },
-		Security:        testSecurity(t),
-		Resiliency:      resiliency.New(logger.NewLogger("test")),
+	testPlacement := NewActorPlacement(internal.ActorsProviderOptions{
+		Config: internal.Config{
+			PlacementAddresses: []string{},
+			AppID:              "testAppID",
+			HostAddress:        "127.0.0.1",
+			Port:               1000,
+			PodName:            "testPodName",
+			HostedActorTypes:   internal.NewHostedActors([]string{"actorOne", "actorTwo"}),
+		},
+		AppHealthFn: func(ctx context.Context) <-chan bool { return nil },
+		Security:    testSecurity(t),
+		Resiliency:  resiliency.New(logger.NewLogger("test")),
 	}).(*actorPlacement)
 
 	// Set the hasPlacementTablesCh channel to nil for the first tests, indicating that the placement tables already exist

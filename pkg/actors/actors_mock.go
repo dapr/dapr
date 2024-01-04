@@ -84,7 +84,11 @@ func (*MockPlacement) Close() error {
 	return nil
 }
 
-// Stop implements internal.PlacementService
+// SetOnTableUpdateFn implements internal.PlacementService
+func (*MockPlacement) SetOnTableUpdateFn(fn func()) {
+}
+
+// SetOnAPILevelUpdate implements internal.PlacementService
 func (*MockPlacement) SetOnAPILevelUpdate(fn func(apiLevel uint32)) {
 	// No-op
 }

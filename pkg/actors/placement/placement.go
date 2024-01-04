@@ -32,7 +32,6 @@ import (
 	"github.com/dapr/dapr/pkg/placement/hashing"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
-	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
 )
@@ -58,11 +57,7 @@ const (
 // tables to discover the actor while interacting with Placement service.
 type actorPlacement struct {
 	actorTypes []string
-	appID      string
-	// runtimeHostname is the address and port of the runtime
-	runtimeHostName string
-	// name of the pod hosting the actor
-	podName string
+	config     internal.Config
 
 	// client is the placement client.
 	client *placementClient
@@ -91,18 +86,18 @@ type actorPlacement struct {
 	operationUpdateLock sync.Mutex
 
 	// appHealthFn returns the appHealthCh
-	appHealthFn func(ctx context.Context) <-chan bool
+	appHealthFn internal.AppHealthFn
 	// appHealthy contains the result of the app health checks.
 	appHealthy atomic.Bool
-	// afterTableUpdateFn is function for post processing done after table updates,
+	// afterTableUpdateFn is the function invoked after table updates,
 	// such as draining actors and resetting reminders.
 	afterTableUpdateFn func()
 
 	// callback invoked to halt all active actors
 	haltAllActorsFn internal.HaltAllActorsFn
 
-	// shutdown is the flag when runtime is being shutdown.
-	shutdown atomic.Bool
+	// running is the flag when runtime is running.
+	running atomic.Bool
 	// shutdownConnLoop is the wait group to wait until all connection loop are done
 	shutdownConnLoop sync.WaitGroup
 	// closeCh is the channel to close the placement service.
@@ -111,37 +106,21 @@ type actorPlacement struct {
 	resiliency resiliency.Provider
 }
 
-// ActorPlacementOpts contains options for NewActorPlacement.
-type ActorPlacementOpts struct {
-	ServerAddrs        []string // Address(es) for the Placement service
-	Security           security.Handler
-	AppID              string
-	RuntimeHostname    string
-	PodName            string
-	ActorTypes         []string
-	AppHealthFn        func(ctx context.Context) <-chan bool
-	AfterTableUpdateFn func()
-	Resiliency         resiliency.Provider
-}
-
 // NewActorPlacement initializes ActorPlacement for the actor service.
-func NewActorPlacement(opts ActorPlacementOpts) internal.PlacementService {
-	servers := addDNSResolverPrefix(opts.ServerAddrs)
+func NewActorPlacement(opts internal.ActorsProviderOptions) internal.PlacementService {
+	servers := addDNSResolverPrefix(opts.Config.PlacementAddresses)
 	return &actorPlacement{
-		actorTypes:      opts.ActorTypes,
-		appID:           opts.AppID,
-		runtimeHostName: opts.RuntimeHostname,
-		podName:         opts.PodName,
-		serverAddr:      servers,
+		config:     opts.Config,
+		serverAddr: servers,
 
 		client:          newPlacementClient(getGrpcOptsGetter(servers, opts.Security)),
 		placementTables: &hashing.ConsistentHashTables{Entries: make(map[string]*hashing.Consistent)},
 
-		unblockSignal:      make(chan struct{}, 1),
-		appHealthFn:        opts.AppHealthFn,
-		afterTableUpdateFn: opts.AfterTableUpdateFn,
-		closeCh:            make(chan struct{}),
-		resiliency:         opts.Resiliency,
+		actorTypes:    []string{},
+		unblockSignal: make(chan struct{}, 1),
+		appHealthFn:   opts.AppHealthFn,
+		closeCh:       make(chan struct{}),
+		resiliency:    opts.Resiliency,
 	}
 }
 
@@ -173,7 +152,7 @@ func (p *actorPlacement) AddHostedActorType(actorType string, idleTimeout time.D
 // to report the current member status periodically.
 func (p *actorPlacement) Start(ctx context.Context) error {
 	p.serverIndex.Store(0)
-	p.shutdown.Store(false)
+	p.running.Store(true)
 	p.appHealthy.Store(true)
 	p.resetPlacementTables()
 
@@ -210,13 +189,13 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 	p.shutdownConnLoop.Add(1)
 	go func() {
 		defer p.shutdownConnLoop.Done()
-		for !p.shutdown.Load() {
+		for p.running.Load() {
 			// wait until disconnection occurs or shutdown is triggered
 			p.client.waitUntil(func(streamConnAlive bool) bool {
-				return !streamConnAlive || p.shutdown.Load()
+				return !streamConnAlive || !p.running.Load()
 			})
 
-			if p.shutdown.Load() {
+			if !p.running.Load() {
 				break
 			}
 			p.establishStreamConn(ctx)
@@ -227,14 +206,14 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 	p.shutdownConnLoop.Add(1)
 	go func() {
 		defer p.shutdownConnLoop.Done()
-		for !p.shutdown.Load() {
+		for p.running.Load() {
 			// Wait until stream is connected or shutdown is triggered.
 			p.client.waitUntil(func(streamAlive bool) bool {
-				return streamAlive || p.shutdown.Load()
+				return streamAlive || !p.running.Load()
 			})
 
 			resp, err := p.client.recv()
-			if p.shutdown.Load() {
+			if !p.running.Load() {
 				break
 			}
 
@@ -254,13 +233,13 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 	p.shutdownConnLoop.Add(1)
 	go func() {
 		defer p.shutdownConnLoop.Done()
-		for !p.shutdown.Load() {
+		for p.running.Load() {
 			// Wait until stream is connected or shutdown is triggered.
 			p.client.waitUntil(func(streamAlive bool) bool {
-				return streamAlive || p.shutdown.Load()
+				return streamAlive || !p.running.Load()
 			})
 
-			if p.shutdown.Load() {
+			if !p.running.Load() {
 				break
 			}
 
@@ -285,11 +264,11 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 			}
 
 			host := v1pb.Host{
-				Name:     p.runtimeHostName,
+				Name:     p.config.GetRuntimeHostname(),
 				Entities: p.actorTypes,
-				Id:       p.appID,
+				Id:       p.config.AppID,
 				Load:     1, // Not used yet
-				Pod:      p.podName,
+				Pod:      p.config.PodName,
 				// Port is redundant because Name should include port number
 				// Port: 0,
 				ApiLevel: internal.ActorAPILevel,
@@ -315,9 +294,8 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 // Closes shuts down server stream gracefully.
 func (p *actorPlacement) Close() error {
 	// CAS to avoid stop more than once.
-	if p.shutdown.CompareAndSwap(false, true) {
+	if p.running.CompareAndSwap(true, false) {
 		p.client.disconnect()
-		p.shutdown.Store(true)
 		close(p.closeCh)
 	}
 	p.shutdownConnLoop.Wait()
@@ -399,7 +377,7 @@ func (p *actorPlacement) establishStreamConn(ctx context.Context) (established b
 	bo.MaxElapsedTime = 0 // Retry forever
 
 	logFailureShown := false
-	for !p.shutdown.Load() {
+	for p.running.Load() {
 		// Do not retry to connect if context is canceled
 		if ctx.Err() != nil {
 			return false
@@ -575,6 +553,10 @@ func (p *actorPlacement) updatePlacements(in *v1pb.PlacementTables) {
 		}
 		log.Infof("Placement tables updated, version: %s", in.GetVersion())
 	}
+}
+
+func (p *actorPlacement) SetOnTableUpdateFn(fn func()) {
+	p.afterTableUpdateFn = fn
 }
 
 func (p *actorPlacement) SetOnAPILevelUpdate(fn func(apiLevel uint32)) {

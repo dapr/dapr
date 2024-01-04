@@ -110,6 +110,7 @@ type GRPCConnectionFn func(ctx context.Context, address string, id string, names
 type actorsRuntime struct {
 	appChannel           channel.AppChannel
 	placement            internal.PlacementService
+	placementEnabled     bool
 	grpcConnectionFn     GRPCConnectionFn
 	actorsConfig         Config
 	timers               internal.TimersProvider
@@ -177,18 +178,31 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) ActorRuntime {
 		closeCh:         make(chan struct{}),
 	}
 
-	// Init reminders
-	a.actorsReminders = reminders.NewRemindersProvider(a.clock, reminders.NewRemindersProviderOpts{
-		StoreName: a.storeName,
-		Config:    a.actorsConfig.Config,
-		APILevel:  &a.apiLevel,
-	})
+	// Init reminders and placement
+	providerOpts := internal.ActorsProviderOptions{
+		Config:      a.actorsConfig.Config,
+		Security:    a.sec,
+		AppHealthFn: a.getAppHealthCheckChan,
+		Clock:       a.clock,
+		APILevel:    &a.apiLevel,
+		Resiliency:  a.resiliency,
+	}
+	a.actorsReminders = reminders.NewRemindersProvider(providerOpts)
+	if a.placement == nil {
+		// Initialize the placement client if we don't have a mocked one already
+		a.placement = placement.NewActorPlacement(providerOpts)
+	}
+
 	a.actorsReminders.SetExecuteReminderFn(a.executeReminder)
-	a.actorsReminders.SetResiliencyProvider(a.resiliency)
 	a.actorsReminders.SetStateStoreProviderFn(a.stateStore)
 	a.actorsReminders.SetLookupActorFn(a.isActorLocallyHosted)
 
-	// Init timers
+	a.placement.SetHaltActorFns(a.haltActor, a.haltAllActors)
+	a.placement.SetOnAPILevelUpdate(func(apiLevel uint32) {
+		a.apiLevel.Store(apiLevel)
+		log.Infof("Actor API level in the cluster has been updated to %d", apiLevel)
+	})
+
 	a.timers.SetExecuteTimerFn(a.executeTimer)
 
 	return a
@@ -221,7 +235,7 @@ func (a *actorsRuntime) haveCompatibleStorage() bool {
 	return state.FeatureETag.IsPresent(features) && state.FeatureTransactional.IsPresent(features)
 }
 
-func (a *actorsRuntime) Init(ctx context.Context) error {
+func (a *actorsRuntime) Init(ctx context.Context) (err error) {
 	if a.closed.Load() {
 		return errors.New("actors runtime has already been closed")
 	}
@@ -230,7 +244,8 @@ func (a *actorsRuntime) Init(ctx context.Context) error {
 		return errors.New("actors: couldn't connect to placement service: address is empty")
 	}
 
-	if len(a.actorsConfig.Config.HostedActorTypes.ListActorTypes()) > 0 {
+	hat := a.actorsConfig.Config.HostedActorTypes.ListActorTypes()
+	if len(hat) > 0 {
 		if !a.haveCompatibleStorage() {
 			return ErrIncompatibleStateStore
 		}
@@ -239,27 +254,18 @@ func (a *actorsRuntime) Init(ctx context.Context) error {
 	a.actorsReminders.Init(ctx)
 	a.timers.Init(ctx)
 
-	if a.placement == nil {
-		a.placement = placement.NewActorPlacement(placement.ActorPlacementOpts{
-			ServerAddrs:     a.actorsConfig.Config.PlacementAddresses,
-			Security:        a.sec,
-			AppID:           a.actorsConfig.Config.AppID,
-			RuntimeHostname: a.actorsConfig.GetRuntimeHostname(),
-			PodName:         a.actorsConfig.Config.PodName,
-			ActorTypes:      a.actorsConfig.Config.HostedActorTypes.ListActorTypes(),
-			Resiliency:      a.resiliency,
-			AppHealthFn:     a.getAppHealthCheckChan,
-			AfterTableUpdateFn: func() {
-				a.drainRebalancedActors()
-				a.actorsReminders.OnPlacementTablesUpdated(ctx)
-			},
-		})
+	a.placementEnabled = true
 
-		a.placement.SetHaltActorFns(a.haltActor, a.haltAllActors)
-		a.placement.SetOnAPILevelUpdate(func(apiLevel uint32) {
-			a.apiLevel.Store(apiLevel)
-			log.Infof("Actor API level in the cluster has been updated to %d", apiLevel)
-		})
+	a.placement.SetOnTableUpdateFn(func() {
+		a.drainRebalancedActors()
+		a.actorsReminders.OnPlacementTablesUpdated(ctx)
+	})
+
+	for _, actorType := range hat {
+		err = a.placement.AddHostedActorType(actorType, a.actorsConfig.GetIdleTimeoutForType(actorType))
+		if err != nil {
+			return fmt.Errorf("failed to register actor '%s': %w", actorType, err)
+		}
 	}
 
 	a.wg.Add(1)
@@ -677,7 +683,7 @@ func (a *actorsRuntime) isActorLocal(targetActorAddress, hostAddress string, grp
 }
 
 func (a *actorsRuntime) GetState(ctx context.Context, req *GetStateRequest) (*StateResponse, error) {
-	store, err := a.stateStore()
+	storeName, store, err := a.stateStore()
 	if err != nil {
 		return nil, err
 	}
@@ -689,7 +695,7 @@ func (a *actorsRuntime) GetState(ctx context.Context, req *GetStateRequest) (*St
 	key := a.constructActorStateKey(actorKey, req.Key)
 
 	policyRunner := resiliency.NewRunner[*state.GetResponse](ctx,
-		a.resiliency.ComponentOutboundPolicy(a.storeName, resiliency.Statestore),
+		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Statestore),
 	)
 	storeReq := &state.GetRequest{
 		Key:      key,
@@ -713,7 +719,7 @@ func (a *actorsRuntime) GetState(ctx context.Context, req *GetStateRequest) (*St
 }
 
 func (a *actorsRuntime) GetBulkState(ctx context.Context, req *GetBulkStateRequest) (BulkStateResponse, error) {
-	store, err := a.stateStore()
+	storeName, store, err := a.stateStore()
 	if err != nil {
 		return nil, err
 	}
@@ -731,7 +737,7 @@ func (a *actorsRuntime) GetBulkState(ctx context.Context, req *GetBulkStateReque
 	}
 
 	policyRunner := resiliency.NewRunner[[]state.BulkGetResponse](ctx,
-		a.resiliency.ComponentOutboundPolicy(a.storeName, resiliency.Statestore),
+		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Statestore),
 	)
 	res, err := policyRunner(func(ctx context.Context) ([]state.BulkGetResponse, error) {
 		return store.BulkGet(ctx, bulkReqs, state.BulkGetOpts{})
@@ -756,12 +762,7 @@ func (a *actorsRuntime) GetBulkState(ctx context.Context, req *GetBulkStateReque
 	return bulkRes, nil
 }
 
-func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *TransactionalRequest) error {
-	store, err := a.stateStore()
-	if err != nil {
-		return err
-	}
-
+func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *TransactionalRequest) (err error) {
 	operations := make([]state.TransactionalStateOperation, len(req.Operations))
 	baseKey := constructCompositeKey(a.actorsConfig.Config.AppID, req.ActorKey())
 	metadata := map[string]string{metadataPartitionKey: baseKey}
@@ -777,10 +778,15 @@ func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *Tr
 		}
 	}
 
-	return a.executeStateStoreTransaction(ctx, store, operations, metadata)
+	return a.executeStateStoreTransaction(ctx, operations, metadata)
 }
 
-func (a *actorsRuntime) executeStateStoreTransaction(ctx context.Context, store internal.TransactionalStateStore, operations []state.TransactionalStateOperation, metadata map[string]string) error {
+func (a *actorsRuntime) executeStateStoreTransaction(ctx context.Context, operations []state.TransactionalStateOperation, metadata map[string]string) error {
+	storeName, store, err := a.stateStore()
+	if err != nil {
+		return err
+	}
+
 	if maxMulti, ok := store.(state.TransactionalStoreMultiMaxSize); ok {
 		max := maxMulti.MultiMaxSize()
 		if max > 0 && len(operations) > max {
@@ -792,9 +798,9 @@ func (a *actorsRuntime) executeStateStoreTransaction(ctx context.Context, store 
 		Metadata:   metadata,
 	}
 	policyRunner := resiliency.NewRunner[struct{}](ctx,
-		a.resiliency.ComponentOutboundPolicy(a.storeName, resiliency.Statestore),
+		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Statestore),
 	)
-	_, err := policyRunner(func(ctx context.Context) (struct{}, error) {
+	_, err = policyRunner(func(ctx context.Context) (struct{}, error) {
 		return struct{}{}, store.Multi(ctx, stateReq)
 	})
 	return err
@@ -1028,7 +1034,7 @@ func (a *actorsRuntime) RegisterInternalActor(ctx context.Context, actorType str
 		log.Debugf("Registering internal actor type: %s", actorType)
 		actor.SetActorRuntime(a)
 		a.actorsConfig.Config.HostedActorTypes.AddActorType(actorType, actorIdleTimeout)
-		if a.placement != nil {
+		if a.placementEnabled {
 			if err := a.placement.AddHostedActorType(actorType, actorIdleTimeout); err != nil {
 				return fmt.Errorf("error updating hosted actor types: %s", err)
 			}
@@ -1043,7 +1049,7 @@ func (a *actorsRuntime) GetRuntimeStatus(ctx context.Context) *runtimev1pb.Actor
 		ActiveActors: a.getActiveActorsCount(ctx),
 	}
 
-	if a.placement != nil {
+	if a.placementEnabled {
 		res.HostReady = a.placement.PlacementHealthy() && a.haveCompatibleStorage()
 		res.Placement = a.placement.StatusMessage()
 	}
@@ -1112,16 +1118,16 @@ func ValidateHostEnvironment(mTLSEnabled bool, mode modes.DaprMode, namespace st
 	return nil
 }
 
-func (a *actorsRuntime) stateStore() (internal.TransactionalStateStore, error) {
+func (a *actorsRuntime) stateStore() (string, internal.TransactionalStateStore, error) {
 	storeS, ok := a.compStore.GetStateStore(a.storeName)
 	if !ok {
-		return nil, errors.New(errStateStoreNotFound)
+		return "", nil, errors.New(errStateStoreNotFound)
 	}
 
 	store, ok := storeS.(internal.TransactionalStateStore)
 	if !ok || !state.FeatureETag.IsPresent(store.Features()) || !state.FeatureTransactional.IsPresent(store.Features()) {
-		return nil, errors.New(errStateStoreNotConfigured)
+		return "", nil, errors.New(errStateStoreNotConfigured)
 	}
 
-	return store, nil
+	return a.storeName, store, nil
 }
