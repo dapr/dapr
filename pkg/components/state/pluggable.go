@@ -22,7 +22,6 @@ import (
 	"strconv"
 	"sync"
 	"time"
-	"unsafe"
 
 	"github.com/dapr/kit/ptr"
 
