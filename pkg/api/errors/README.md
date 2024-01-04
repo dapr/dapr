@@ -19,7 +19,7 @@ As we move predefined errors to the rich error model and a new location (`pkg/ap
 #### Step 2: Adding New Errors
 
 1. **Check for existing errors**: Before creating a new error, check if a relevant error file exists in `/pkg/api/errors/`.
-2. **Create a new error file**: If no relevant file exists, create a new file following the pattern `<building block>.go`.
+2. **Create a new error file**: If no relevant file exists, create a new file following the pattern `<building-block>.go`.
 
 #### Step 3: Designing Rich Error Messages
 
