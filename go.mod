@@ -462,10 +462,11 @@ replace (
 // check for retracted versions: go list -mod=mod -f '{{if .Retracted}}{{.}}{{end}}' -u -m all
 replace github.com/microcosm-cc/bluemonday => github.com/microcosm-cc/bluemonday v1.0.24
 
-// Uncomment for local development for testing with changes in the components-contrib repository.
+// Uncomment for local development for testing with changes in the components-contrib && kit repositories.
 // Don't commit with this uncommented!
 //
 // replace github.com/dapr/components-contrib => ../components-contrib
+// replace github.com/dapr/kit => ../kit
 //
-// Then, run `make modtidy` in this repository.
-// This ensures that go.mod and go.sum are up-to-date.
+// Then, run `make modtidy-all` in this repository.
+// This ensures that go.mod and go.sum are up-to-date for each go.mod file.
