@@ -15,6 +15,7 @@ package api
 
 import (
 	"context"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"os"
@@ -22,6 +23,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -38,6 +41,7 @@ import (
 	subscriptionsapiV2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/client/clientset/versioned/scheme"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
+	"github.com/dapr/dapr/tests/util"
 )
 
 type mockComponentUpdateServer struct {
@@ -345,6 +349,46 @@ func TestHTTPEndpointUpdate(t *testing.T) {
 	})
 }
 
+// type authInfoWrapper struct {
+// 	credentials.AuthInfo
+
+// 	peerID spiffeid.ID
+// }
+
+// func (m *authInfoWrapper) AuthType() string {
+// 	return m.peerID.Path()
+// }
+
+type CertificateAuthority interface {
+	CreateCACertificate() (*x509.Certificate, error)
+}
+
+type MockCertificateAuthority struct {
+	ctrl *gomock.Controller
+}
+
+func NewMockCertificateAuthority(ctrl *gomock.Controller) *MockCertificateAuthority {
+	return &MockCertificateAuthority{ctrl: ctrl}
+}
+
+func (m *MockCertificateAuthority) CreateCACertificate() (*x509.Certificate, error) {
+	ret := m.ctrl.Call(m, "CreateCACertificate")
+	return ret[0].(*x509.Certificate), ret[1].(error)
+}
+
+func main() {
+	ctrl := gomock.NewController(nil)
+	defer ctrl.Finish()
+
+	mockCA := NewMockCertificateAuthority(ctrl)
+	// mockCA.EXPECT().CreateCACertificate().Return(&x509.Certificate{}, errors.New("error creating CA certificate"))
+
+	_, err := mockCA.CreateCACertificate()
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
 func TestListsNamespaced(t *testing.T) {
 	t.Run("list components namespace scoping", func(t *testing.T) {
 		s := runtime.NewScheme()
@@ -423,22 +467,30 @@ func TestListsNamespaced(t *testing.T) {
 				TypeMeta: typeMeta,
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "obj2",
-					Namespace: "dapr-system",
+					Namespace: "dapr-mockns",
 				},
 				Scoped: commonapi.Scoped{
-					Scopes: []string{"dapr:actors"},
+					Scopes: []string{"dapr-actors-mock-service"},
 				},
 			}).
 			Build()
 
-		api := NewAPIServer(Options{Client: client}).(*apiServer)
+		api := NewAPIServer(Options{Client: client, ControlPlaneDynamicServices: []string{"actors-mock-service"}}).(*apiServer)
 
-		os.Setenv("NAMESPACE", "dapr-system")
+		os.Setenv("NAMESPACE", "dapr-mockns")
 		defer os.Unsetenv("NAMESPACE")
 
-		res, err := api.ListComponents(context.TODO(), &operatorv1pb.ListComponentsRequest{
+		appID := spiffeid.RequireFromString("spiffe://example.org/ns/dapr-mockns/dapr-actors-mock-service")
+		serverID := spiffeid.RequireFromString("spiffe://example.org/ns/ns1/sv1")
+		pki := util.GenPKI(t, util.PKIOptions{
+			LeafID:   serverID,
+			ClientID: appID,
+		})
+
+		ctx := pki.ClientGRPCCtx(t)
+		res, err := api.ListComponents(ctx, &operatorv1pb.ListComponentsRequest{
 			PodName:   "dapr-serviceABC",
-			Namespace: "dapr-system",
+			Namespace: "dapr-mockns",
 		})
 		require.NoError(t, err)
 		assert.Len(t, res.GetComponents(), 1)
@@ -447,9 +499,9 @@ func TestListsNamespaced(t *testing.T) {
 		require.NoError(t, yaml.Unmarshal(res.GetComponents()[0], &sub))
 
 		assert.Equal(t, "obj2", sub.Name)
-		assert.Equal(t, "dapr-system", sub.Namespace)
+		assert.Equal(t, "dapr-mockns", sub.Namespace)
 
-		res, err = api.ListComponents(context.TODO(), &operatorv1pb.ListComponentsRequest{
+		res, err = api.ListComponents(ctx, &operatorv1pb.ListComponentsRequest{
 			PodName:   "foo",
 			Namespace: "namespace-a",
 		})
