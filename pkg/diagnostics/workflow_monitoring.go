@@ -39,7 +39,7 @@ const (
 	WorkflowEvent = "event"
 	Timer         = "timer"
 
-	ComponentName = "dapr"
+	WorkflowComponentName = "dapr"
 )
 
 type workflowMetrics struct {
