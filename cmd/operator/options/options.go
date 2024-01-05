@@ -54,6 +54,8 @@ type Options struct {
 	Metrics                            *metrics.Options
 	APIPort                            int
 	HealthzPort                        int
+	ActorsServiceName                  string
+	RemindersServiceName               string
 }
 
 func New() *Options {
@@ -79,6 +81,9 @@ func New() *Options {
 
 	flag.IntVar(&opts.APIPort, "port", 6500, "The port for the operator API server to listen on")
 	flag.IntVar(&opts.HealthzPort, "healthz-port", 8080, "The port for the healthz server to listen on")
+
+	flag.StringVar(&opts.ActorsServiceName, "actors-service-name", "placement", "Name of the actors service")
+	flag.StringVar(&opts.RemindersServiceName, "reminders-service-name", "", "Name of the reminders service")
 
 	opts.Logger = logger.DefaultOptions()
 	opts.Logger.AttachCmdFlags(flag.StringVar, flag.BoolVar)

@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"net"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -41,6 +40,7 @@ import (
 	subscriptionsapiV2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/security"
+	"github.com/dapr/dapr/pkg/security/spiffe"
 	"github.com/dapr/kit/logger"
 )
 
@@ -49,15 +49,15 @@ const (
 	APIVersionV2alpha1        = "dapr.io/v2alpha1"
 	kubernetesSecretStore     = "kubernetes"
 	controlPlanePodNamePrefix = "dapr-"
-	controlPlaneScopePrefix   = "dapr:"
 )
 
 var log = logger.NewLogger("dapr.operator.api")
 
 type Options struct {
-	Client   client.Client
-	Security security.Provider
-	Port     int
+	Client                      client.Client
+	Security                    security.Provider
+	Port                        int
+	ControlPlaneDynamicServices []string
 }
 
 // Server runs the Dapr API server for components and configurations.
@@ -80,6 +80,7 @@ type apiServer struct {
 	allEndpointsUpdateChan map[string]chan *httpendpointsapi.HTTPEndpoint
 	readyCh                chan struct{}
 	running                atomic.Bool
+	cpDynamicServices      []string
 }
 
 // NewAPIServer returns a new API server.
@@ -91,6 +92,7 @@ func NewAPIServer(opts Options) Server {
 		allConnUpdateChan:      make(map[string]chan *componentsapi.Component),
 		allEndpointsUpdateChan: make(map[string]chan *httpendpointsapi.HTTPEndpoint),
 		readyCh:                make(chan struct{}),
+		cpDynamicServices:      opts.ControlPlaneDynamicServices,
 	}
 }
 
@@ -187,9 +189,24 @@ func (a *apiServer) GetConfiguration(ctx context.Context, in *operatorv1pb.GetCo
 func (a *apiServer) ListComponents(ctx context.Context, in *operatorv1pb.ListComponentsRequest) (*operatorv1pb.ListComponentResponse, error) {
 	// by default assume that components are not getting loaded for control plane service
 	controlPlaneServiceReq := false
-	// If the pod name in request starts with dapr- AND is in the same namespace as the operator, then it is a control plane service request.
-	if in.GetNamespace() == security.CurrentNamespace() && strings.HasPrefix(in.GetPodName(), controlPlanePodNamePrefix) {
-		controlPlaneServiceReq = true
+	spiffeID, ok, err := spiffe.FromGRPCContext(ctx)
+
+	if err != nil {
+		log.Debugf("failed to get SPIFFE ID from gRPC connection context: %v", err)
+		return nil, err
+	}
+	if !ok {
+		// Apply the default action
+		log.Debugf("Error while reading spiffe id from client cert. applying default global policy action")
+	}
+
+	if in.GetNamespace() == security.CurrentNamespace() {
+		for _, service := range a.cpDynamicServices {
+			if spiffeID.AppID() == controlPlanePodNamePrefix+service {
+				controlPlaneServiceReq = true
+				break
+			}
+		}
 	}
 	var components componentsapi.ComponentList
 	if err := a.Client.List(ctx, &components, &client.ListOptions{
@@ -204,12 +221,17 @@ func (a *apiServer) ListComponents(ctx context.Context, in *operatorv1pb.ListCom
 		// By default assume that it is not a component for control plane service.
 		controlPlaneComp := false
 		c := components.Items[i] // Make a copy since we will refer to this as a reference in this loop.
-		// If the component is in the same namespace as the operator AND has a scope defined with prefix dapr:, then it is a control plane component.
+		// If the component is in the same namespace as the operator AND has a scope defined with a dynamic control plane service name, then it is a control plane component.
 		if c.ObjectMeta.Namespace == security.CurrentNamespace() {
 			for s := range c.Scopes {
 				scope := c.Scopes[s]
-				if strings.HasPrefix(scope, controlPlaneScopePrefix) {
-					controlPlaneComp = true
+				for _, service := range a.cpDynamicServices {
+					if scope == controlPlanePodNamePrefix+service {
+						controlPlaneComp = true
+						break
+					}
+				}
+				if controlPlaneComp {
 					break
 				}
 			}
