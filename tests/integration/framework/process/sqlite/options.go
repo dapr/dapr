@@ -18,7 +18,7 @@ type options struct {
 	name              string
 	isActorStateStore bool
 	metadata          map[string]string
-	createStateTables bool
+	migrations        []string
 	execs             []string
 }
 
@@ -49,9 +49,22 @@ func WithMetadata(key, value string) Option {
 }
 
 // WithCreateStateTables configures whether the state store should create the state tables.
-func WithCreateStateTables(enabled bool) Option {
+func WithCreateStateTables() Option {
 	return func(o *options) {
-		o.createStateTables = enabled
+		o.migrations = append(o.migrations, `
+CREATE TABLE metadata (
+  key text NOT NULL PRIMARY KEY,
+  value text NOT NULL
+);
+INSERT INTO metadata VALUES('migrations','1');
+CREATE TABLE state (
+  key TEXT NOT NULL PRIMARY KEY,
+  value TEXT NOT NULL,
+  is_binary BOOLEAN NOT NULL,
+  etag TEXT NOT NULL,
+  expiration_time TIMESTAMP DEFAULT NULL,
+  update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);`)
 	}
 }
 

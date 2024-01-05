@@ -365,7 +365,7 @@ func (i *rebalancing) getPlacementStream(t *testing.T, ctx context.Context) plac
 			stream.CloseSend()
 			stream = nil
 		}
-	}, time.Second*5, time.Millisecond*100)
+	}, time.Second*20, time.Millisecond*100)
 
 	return stream
 }
@@ -381,7 +381,7 @@ func (i *rebalancing) reportStatusToPlacement(ctx context.Context, stream placem
 		return fmt.Errorf("failed to send message: %w", err)
 	}
 
-	errCh := make(chan error)
+	errCh := make(chan error, 1)
 	go func() {
 		for {
 			// When the stream ends (which happens when the context is canceled) this returns an error and we can return

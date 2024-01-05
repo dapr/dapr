@@ -62,7 +62,7 @@ func (p *protobufFormat) Setup(t *testing.T) []framework.Option {
 	now := time.Now().UTC().Format(time.RFC3339)
 	p.db = sqlite.New(t,
 		sqlite.WithActorStateStore(true),
-		sqlite.WithCreateStateTables(true),
+		sqlite.WithCreateStateTables(),
 		sqlite.WithExecs(fmt.Sprintf(`
 INSERT INTO state VALUES
   ('actors||myactortype','[{"registeredTime":"%[1]s","period":"2m","actorID":"myactorid","actorType":"myactortype","name":"oldreminder","dueTime":"0"}]',0,'e467f810-4e93-45ed-85d9-e68d9fc7af4a',NULL,'%[1]s'),

@@ -36,13 +36,16 @@ import (
 type Option func(*options)
 
 // SQLite database that can be used in integration tests.
+// Consumers should always run this Process before any other Framework
+// Processes which consume it so all migrations are applied.
 type SQLite struct {
 	dbPath            string
 	name              string
 	metadata          map[string]string
-	createStateTables bool
+	migrations        []string
 	isActorStateStore bool
 	execs             []string
+	conn              *sql.DB
 }
 
 func New(t *testing.T, fopts ...Option) *SQLite {
@@ -64,28 +67,15 @@ func New(t *testing.T, fopts ...Option) *SQLite {
 		dbPath:            dbPath,
 		name:              opts.name,
 		metadata:          opts.metadata,
-		createStateTables: opts.createStateTables,
+		migrations:        opts.migrations,
 		isActorStateStore: opts.isActorStateStore,
 		execs:             opts.execs,
 	}
 }
 
 func (s *SQLite) Run(t *testing.T, ctx context.Context) {
-	if s.createStateTables {
-		_, err := s.GetConnection(t).ExecContext(ctx, `
-CREATE TABLE metadata (
-  key text NOT NULL PRIMARY KEY,
-  value text NOT NULL
-);
-INSERT INTO metadata VALUES('migrations','1');
-CREATE TABLE state (
-  key TEXT NOT NULL PRIMARY KEY,
-  value TEXT NOT NULL,
-  is_binary BOOLEAN NOT NULL,
-  etag TEXT NOT NULL,
-  expiration_time TIMESTAMP DEFAULT NULL,
-  update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-);`)
+	for _, migration := range s.migrations {
+		_, err := s.GetConnection(t).ExecContext(ctx, migration)
 		require.NoError(t, err)
 	}
 
@@ -95,13 +85,20 @@ CREATE TABLE state (
 	}
 }
 
-func (s *SQLite) Cleanup(t *testing.T) {}
+func (s *SQLite) Cleanup(t *testing.T) {
+	if s.conn != nil {
+		require.NoError(t, s.conn.Close())
+	}
+}
 
 // GetConnection returns the connection to the SQLite database.
 func (s *SQLite) GetConnection(t *testing.T) *sql.DB {
+	if s.conn != nil {
+		return s.conn
+	}
 	conn, err := sql.Open("sqlite", "file://"+s.dbPath+"?_txlock=immediate&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)")
 	require.NoError(t, err, "Failed to connect to SQLite database")
-	t.Cleanup(func() { require.NoError(t, conn.Close()) })
+	s.conn = conn
 	return conn
 }
 
