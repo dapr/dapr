@@ -176,7 +176,9 @@ func (p *Service) cleanupHeartbeats() {
 // membershipChangeWorker is the worker to change the state of membership
 // and update the consistent hashing tables for actors.
 func (p *Service) membershipChangeWorker(ctx context.Context) {
-	membershipChangeTimestamp := p.clock.Now().UnixNano()
+	baselineHeartbeatTimestamp := p.clock.Now().UnixNano()
+	log.Infof("Baseline membership heartbeat timestamp: %v", baselineHeartbeatTimestamp)
+
 	faultyHostDetectTimer := p.clock.NewTicker(faultyHostDetectInterval)
 	defer faultyHostDetectTimer.Stop()
 	disseminateTimer := p.clock.NewTicker(disseminateTimerInterval)
@@ -236,7 +238,7 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 					// runtime (pod) is terminated while there is also a leadership change in placement, meaning the host entry
 					// in placement table will never have a heartbeat. With this new behavior, it will eventually expire and be
 					// removed.
-					heartbeat, loaded := p.lastHeartBeat.LoadOrStore(v.Name, membershipChangeTimestamp)
+					heartbeat, loaded := p.lastHeartBeat.LoadOrStore(v.Name, baselineHeartbeatTimestamp)
 					if !loaded {
 						log.Warnf("Heartbeat not found for host: %s", v.Name)
 					}
