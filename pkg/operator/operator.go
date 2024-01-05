@@ -183,10 +183,10 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 
 	cpServices := make([]string, 2)
 	if opts.ActorsServiceName != "" {
-		cpServices = append(cpServices, opts.ActorsServiceName)
+		cpServices[0] = opts.ActorsServiceName
 	}
 	if opts.RemindersServiceName != "" {
-		cpServices = append(cpServices, opts.RemindersServiceName)
+		cpServices[1] = opts.RemindersServiceName
 	}
 
 	return &operator{
