@@ -35,12 +35,12 @@ import (
 )
 
 func init() {
-	suite.Register(new(json))
+	suite.Register(new(jsonFormat))
 }
 
-// json tests:
+// jsonFormat tests:
 // - That reminders are serialized to JSON when the Actors API level in the cluster is < 20
-type json struct {
+type jsonFormat struct {
 	daprd   *daprd.Daprd
 	srv     *prochttp.HTTP
 	handler *httpServer
@@ -48,7 +48,7 @@ type json struct {
 	db      *sqlite.SQLite
 }
 
-func (j *json) Setup(t *testing.T) []framework.Option {
+func (j *jsonFormat) Setup(t *testing.T) []framework.Option {
 	if runtime.GOOS == "windows" {
 		t.Skip("Skipping test on Windows due to SQLite limitations")
 	}
@@ -77,7 +77,7 @@ func (j *json) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (j *json) Run(t *testing.T, ctx context.Context) {
+func (j *jsonFormat) Run(t *testing.T, ctx context.Context) {
 	// Wait for placement to be ready
 	j.place.WaitUntilRunning(t, ctx)
 

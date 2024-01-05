@@ -36,13 +36,13 @@ import (
 )
 
 func init() {
-	suite.Register(new(protobuf))
+	suite.Register(new(protobufFormat))
 }
 
-// protobuf tests:
+// protobufFormat tests:
 // - The ability for daprd to read reminders serialized as JSON and protobuf
 // - That reminders are serialized to protobuf when the Actors API level in the cluster is >= 20
-type protobuf struct {
+type protobufFormat struct {
 	daprd   *daprd.Daprd
 	srv     *prochttp.HTTP
 	handler *httpServer
@@ -50,7 +50,7 @@ type protobuf struct {
 	db      *sqlite.SQLite
 }
 
-func (p *protobuf) Setup(t *testing.T) []framework.Option {
+func (p *protobufFormat) Setup(t *testing.T) []framework.Option {
 	if runtime.GOOS == "windows" {
 		t.Skip("Skipping test on Windows due to SQLite limitations")
 	}
@@ -86,7 +86,7 @@ INSERT INTO state VALUES
 	}
 }
 
-func (p *protobuf) Run(t *testing.T, ctx context.Context) {
+func (p *protobufFormat) Run(t *testing.T, ctx context.Context) {
 	// Wait for placement to be ready
 	p.place.WaitUntilRunning(t, ctx)
 
