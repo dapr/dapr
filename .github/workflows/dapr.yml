@@ -300,6 +300,8 @@ jobs:
         shell: bash
       - name: upload artifacts
         uses: actions/upload-artifact@v4
+        # Avoid publishing duplicate Windows artifacts, which will cause an error
+        if: matrix.windows_version != '1809'
         with:
           name: dapr_${{ matrix.target_os }}_${{ matrix.target_arch }}_${{ matrix.sidecar_flavor }}
           path: ${{ env.ARCHIVE_OUTDIR }}
