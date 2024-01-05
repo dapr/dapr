@@ -116,12 +116,14 @@ func (i *rebalancing) Run(t *testing.T, ctx context.Context) {
 	// Try to invoke an actor to ensure the actor subsystem is ready
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost:%d/v1.0/actors/myactortype/pinger/method/ping", i.daprd[0].HTTPPort()), nil)
-		require.NoError(c, err)
-		resp, rErr := client.Do(req)
-		require.NoError(c, rErr)
-		require.NoError(c, resp.Body.Close())
-		assert.Equal(c, http.StatusOK, resp.StatusCode)
-	}, 10*time.Second, 100*time.Millisecond, "actors not ready")
+		if assert.NoError(c, err) {
+			resp, rErr := client.Do(req)
+			if assert.NoError(c, rErr) {
+				assert.NoError(c, resp.Body.Close())
+				assert.Equal(c, http.StatusOK, resp.StatusCode)
+			}
+		}
+	}, 15*time.Second, 100*time.Millisecond, "actors not ready")
 
 	// Do a bunch of things in parallel
 	errCh := make(chan error)
