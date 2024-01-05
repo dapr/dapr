@@ -50,15 +50,15 @@ const (
 	APIVersionV2alpha1        = "dapr.io/v2alpha1"
 	kubernetesSecretStore     = "kubernetes"
 	controlPlanePodNamePrefix = "dapr-"
-	controlPlaneScopePrefix   = "dapr:"
 )
 
 var log = logger.NewLogger("dapr.operator.api")
 
 type Options struct {
-	Client   client.Client
-	Security security.Provider
-	Port     int
+	Client                      client.Client
+	Security                    security.Provider
+	Port                        int
+	ControlPlaneDynamicServices []string
 }
 
 // Server runs the Dapr API server for components and configurations.
@@ -86,6 +86,7 @@ type apiServer struct {
 	allEndpointsUpdateChan map[string]chan *httpendpointsapi.HTTPEndpoint
 	readyCh                chan struct{}
 	running                atomic.Bool
+	cpDynamicServices      []string
 }
 
 // NewAPIServer returns a new API server.
@@ -97,6 +98,7 @@ func NewAPIServer(opts Options) Server {
 		allConnUpdateChan:      make(map[string]chan *ComponentUpdateEvent),
 		allEndpointsUpdateChan: make(map[string]chan *httpendpointsapi.HTTPEndpoint),
 		readyCh:                make(chan struct{}),
+		cpDynamicServices:      opts.ControlPlaneDynamicServices,
 	}
 }
 
