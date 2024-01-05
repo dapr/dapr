@@ -86,7 +86,6 @@ func (a *UniversalAPI) DeleteActorState(ctx context.Context, in *runtimev1pb.Del
 	res, err := a.Actors.DeleteState(ctx, &actors.DeleteStateRequest{
 		ActorType: in.GetActorType(),
 		ActorID:   actorID,
-		Key:       in.GetKey(),
 	})
 	if err != nil {
 		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrActorStateGet, err))
@@ -94,5 +93,5 @@ func (a *UniversalAPI) DeleteActorState(ctx context.Context, in *runtimev1pb.Del
 		return &runtimev1pb.DeleteActorStateResponse{Count: 0}, err
 	}
 
-	return &runtimev1pb.DeleteActorStateResponse{Count: res.GetCount()}, nil
+	return &runtimev1pb.DeleteActorStateResponse{Count: res.Count}, nil
 }

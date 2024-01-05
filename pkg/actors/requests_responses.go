@@ -88,6 +88,11 @@ type ReminderResponse struct {
 	Period  string `json:"period"`
 }
 
+// DeleteActorStateResponse is the response object for deleting an actor state.
+type DeleteActorStateResponse struct {
+	Count int64 `json:"count"`
+}
+
 // MarshalJSON is a custom JSON marshaler that encodes the data as JSON.
 // Actor SDKs expect "data" to be a base64-encoded message with the JSON representation of the data, so this makes sure that happens.
 // This method implements the json.Marshaler interface.

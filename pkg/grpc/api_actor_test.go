@@ -243,7 +243,6 @@ func TestDeleteActorState(t *testing.T) {
 		_, err := client.DeleteActorState(context.Background(), &runtimev1pb.DeleteActorStateRequest{
 			ActorId:   "fakeActorID",
 			ActorType: "fakeActorType",
-			Key:       "key1",
 		})
 
 		// assert

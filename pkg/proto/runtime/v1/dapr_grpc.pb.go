@@ -61,7 +61,7 @@ type DaprClient interface {
 	UnregisterActorReminder(ctx context.Context, in *UnregisterActorReminderRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Gets the state for a specific actor.
 	GetActorState(ctx context.Context, in *GetActorStateRequest, opts ...grpc.CallOption) (*GetActorStateResponse, error)
-	// Gets the state for a specific actor.
+	// Deletes all state created by an actor
 	DeleteActorState(ctx context.Context, in *DeleteActorStateRequest, opts ...grpc.CallOption) (*DeleteActorStateResponse, error)
 	// Executes state transactions for a specified actor
 	ExecuteActorStateTransaction(ctx context.Context, in *ExecuteActorStateTransactionRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
@@ -771,7 +771,7 @@ type DaprServer interface {
 	UnregisterActorReminder(context.Context, *UnregisterActorReminderRequest) (*emptypb.Empty, error)
 	// Gets the state for a specific actor.
 	GetActorState(context.Context, *GetActorStateRequest) (*GetActorStateResponse, error)
-	// Gets the state for a specific actor.
+	// Deletes all state created by an actor
 	DeleteActorState(context.Context, *DeleteActorStateRequest) (*DeleteActorStateResponse, error)
 	// Executes state transactions for a specified actor
 	ExecuteActorStateTransaction(context.Context, *ExecuteActorStateTransactionRequest) (*emptypb.Empty, error)

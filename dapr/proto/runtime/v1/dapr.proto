@@ -82,7 +82,7 @@ service Dapr {
   // Gets the state for a specific actor.
   rpc GetActorState(GetActorStateRequest) returns (GetActorStateResponse) {}
 
-  // Gets the state for a specific actor.
+  // Deletes all state created by an actor
   rpc DeleteActorState(DeleteActorStateRequest) returns (DeleteActorStateResponse) {}
 
   // Executes state transactions for a specified actor
@@ -549,14 +549,13 @@ message GetActorStateRequest {
   string key = 3;
 }
 
-// DeleteActorStateRequest is the message to get key-value states from specific actor.
+// DeleteActorStateRequest is the request message for DeleteActorState.
 message DeleteActorStateRequest {
   string actor_type = 1;
   string actor_id = 2;
-  string key = 3;
 }
 
-// DeleteActorStateResponse is the response for a delete actor state request
+// DeleteActorStateResponse is the response message for DeleteActorState.
 message DeleteActorStateResponse {
   int64 count = 1;
 }

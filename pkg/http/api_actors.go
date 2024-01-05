@@ -96,7 +96,7 @@ func (a *api) constructActorEndpoints() []endpoints.Endpoint {
 		},
 		{
 			Methods: []string{nethttp.MethodDelete},
-			Route:   "actors/{actorType}/{actorId}/state/{key}",
+			Route:   "actors/{actorType}/{actorId}/state",
 			Version: apiVersionV1,
 			Group:   endpointGroupActorV1State,
 			Handler: a.onDeleteActorStateHandler(),
@@ -165,7 +165,6 @@ func (a *api) onDeleteActorStateHandler() nethttp.HandlerFunc {
 			InModifier: func(r *nethttp.Request, in *runtimev1pb.DeleteActorStateRequest) (*runtimev1pb.DeleteActorStateRequest, error) {
 				in.ActorId = chi.URLParam(r, actorIDParam)
 				in.ActorType = chi.URLParam(r, actorTypeParam)
-				in.Key = chi.URLParam(r, stateKeyParam)
 				return in, nil
 			},
 			SuccessStatusCode: nethttp.StatusNoContent,
