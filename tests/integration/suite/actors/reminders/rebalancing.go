@@ -116,9 +116,12 @@ func (i *rebalancing) Run(t *testing.T, ctx context.Context) {
 	// Try to invoke an actor to ensure the actor subsystem is ready
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost:%d/v1.0/actors/myactortype/pinger/method/ping", i.daprd[0].HTTPPort()), nil)
+		//nolint:testifylint
 		if assert.NoError(c, err) {
 			resp, rErr := client.Do(req)
+			//nolint:testifylint
 			if assert.NoError(c, rErr) {
+				//nolint:testifylint
 				assert.NoError(c, resp.Body.Close())
 				assert.Equal(c, http.StatusOK, resp.StatusCode)
 			}
