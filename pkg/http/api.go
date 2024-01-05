@@ -1700,9 +1700,9 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 			entries[i].Metadata = utils.PopulateMetadataForBulkPublishEntry(metadata, entry.Metadata)
 		}
 		if _, ok := entryIDSet[entry.EntryID]; ok || entry.EntryID == "" {
-			err := apierrors.PubSubMarshalEvents(pubsubName, string(contribMetadata.PubSubType), topic, map[string]string{"appID": a.universal.AppID, "error": "entryId is duplicated or not present for entry"})
-			universalFastHTTPErrorResponder(reqCtx, err)
-			log.Debug(err)
+			nerr := apierrors.PubSubMarshalEvents(pubsubName, string(contribMetadata.PubSubType), topic, map[string]string{"appID": a.universal.AppID, "error": "entryId is duplicated or not present for entry"})
+			universalFastHTTPErrorResponder(reqCtx, nerr)
+			log.Debug(nerr)
 			return
 		}
 		entryIDSet[entry.EntryID] = struct{}{}
