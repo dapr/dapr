@@ -70,7 +70,6 @@ func (c *actorsBackendConfig) String() string {
 }
 
 type ActorBackend struct {
-	actors                    actors.Actors
 	orchestrationWorkItemChan chan *backend.OrchestrationWorkItem
 	activityWorkItemChan      chan *backend.ActivityWorkItem
 	startedOnce               sync.Once
@@ -139,7 +138,6 @@ func (abe *ActorBackend) GetInternalActorsMap() map[string]actors.InternalActor 
 }
 
 func (abe *ActorBackend) SetActorRuntime(ctx context.Context, actorRuntime actors.ActorRuntime) {
-	abe.actors = actorRuntime
 	abe.actorRuntime = actorRuntime
 	if abe.actorsReady.CompareAndSwap(false, true) {
 		close(abe.actorsReadyCh)
@@ -205,7 +203,7 @@ func (abe *ActorBackend) CreateOrchestrationInstance(ctx context.Context, e *bac
 		WithContentType(invokev1.JSONContentType)
 	defer req.Close()
 
-	resp, err := abe.actors.Call(ctx, req)
+	resp, err := abe.actorRuntime.Call(ctx, req)
 	if err != nil {
 		return err
 	}
@@ -222,7 +220,7 @@ func (abe *ActorBackend) GetOrchestrationMetadata(ctx context.Context, id api.In
 		WithContentType(invokev1.OctetStreamContentType)
 	defer req.Close()
 
-	res, err := abe.actors.Call(ctx, req)
+	res, err := abe.actorRuntime.Call(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -275,7 +273,7 @@ func (abe *ActorBackend) AddNewOrchestrationEvent(ctx context.Context, id api.In
 		WithContentType(invokev1.OctetStreamContentType)
 	defer req.Close()
 
-	resp, err := abe.actors.Call(ctx, req)
+	resp, err := abe.actorRuntime.Call(ctx, req)
 	if err != nil {
 		return err
 	}
@@ -349,7 +347,7 @@ func (abe *ActorBackend) PurgeOrchestrationState(ctx context.Context, id api.Ins
 		WithActor(abe.config.workflowActorType, string(id))
 	defer req.Close()
 
-	resp, err := abe.actors.Call(ctx, req)
+	resp, err := abe.actorRuntime.Call(ctx, req)
 	if err != nil {
 		return err
 	}
@@ -377,7 +375,7 @@ func (abe *ActorBackend) String() string {
 }
 
 func (abe *ActorBackend) validateConfiguration() error {
-	if abe.actors == nil {
+	if abe.actorRuntime == nil {
 		return errors.New("actor runtime has not been configured")
 	}
 	return nil
