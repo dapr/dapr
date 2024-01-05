@@ -15,7 +15,6 @@ package api
 
 import (
 	"context"
-	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"os"
@@ -23,7 +22,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -347,46 +345,6 @@ func TestHTTPEndpointUpdate(t *testing.T) {
 
 		assert.Equal(t, int64(1), mockSidecar.Calls.Load())
 	})
-}
-
-// type authInfoWrapper struct {
-// 	credentials.AuthInfo
-
-// 	peerID spiffeid.ID
-// }
-
-// func (m *authInfoWrapper) AuthType() string {
-// 	return m.peerID.Path()
-// }
-
-type CertificateAuthority interface {
-	CreateCACertificate() (*x509.Certificate, error)
-}
-
-type MockCertificateAuthority struct {
-	ctrl *gomock.Controller
-}
-
-func NewMockCertificateAuthority(ctrl *gomock.Controller) *MockCertificateAuthority {
-	return &MockCertificateAuthority{ctrl: ctrl}
-}
-
-func (m *MockCertificateAuthority) CreateCACertificate() (*x509.Certificate, error) {
-	ret := m.ctrl.Call(m, "CreateCACertificate")
-	return ret[0].(*x509.Certificate), ret[1].(error)
-}
-
-func main() {
-	ctrl := gomock.NewController(nil)
-	defer ctrl.Finish()
-
-	mockCA := NewMockCertificateAuthority(ctrl)
-	// mockCA.EXPECT().CreateCACertificate().Return(&x509.Certificate{}, errors.New("error creating CA certificate"))
-
-	_, err := mockCA.CreateCACertificate()
-	if err != nil {
-		log.Fatal(err)
-	}
 }
 
 func TestListsNamespaced(t *testing.T) {

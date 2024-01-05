@@ -190,7 +190,6 @@ func (a *apiServer) ListComponents(ctx context.Context, in *operatorv1pb.ListCom
 	// by default assume that components are not getting loaded for control plane service
 	controlPlaneServiceReq := false
 	spiffeID, ok, err := spiffe.FromGRPCContext(ctx)
-
 	if err != nil {
 		log.Debugf("failed to get SPIFFE ID from gRPC connection context: %v", err)
 		return nil, err
