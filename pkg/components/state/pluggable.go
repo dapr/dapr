@@ -340,11 +340,13 @@ func (ss *grpcStateStore) MultiMaxSize() int {
 		return *multiMaxSize
 	}
 
-	// In a worst case scenario, two or more callers may get to this point,
-	// meaning that we unnecessarily call MultiMaxSize multiple ties,
-	// however this is functionally not a problem and the cost is minimal.
 	ss.lock.Lock()
 	defer ss.lock.Unlock()
+
+	// Check the cached value again in case another goroutine set it
+    if multiMaxSize != nil {
+		return *multiMaxSize
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -357,7 +359,7 @@ func (ss *grpcStateStore) MultiMaxSize() int {
 	}
 
 	// If the pluggable component is on a 64bit system and the dapr runtime is on a 32bit system,
-	// the response will be larger than the maximum int32 value.
+	// the response could be larger than the maximum int32 value.
 	// In this case, we set the max size to the maximum possible value for a 32bit system.
 	is32bitSystem := math.MaxInt == math.MaxInt32
 	if is32bitSystem && resp.GetMaxSize() > int64(math.MaxInt32) {

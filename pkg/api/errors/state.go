@@ -63,7 +63,7 @@ func StateStoreTransactionsNotSupported(storeName string) error {
 	return kiterrors.NewBuilder(
 		codes.Unimplemented,
 		http.StatusInternalServerError,
-		fmt.Sprintf("state store %s doesn't support transaction", storeName),
+		fmt.Sprintf("state store %s doesn't support transactions", storeName),
 		"ERR_STATE_STORE_NOT_SUPPORTED", // TODO: @elena-kolevska this code misleading and also used for different things ("query unsupported"); it should be removed in the next major version
 	).
 		WithErrorInfo(kiterrors.CodePrefixStateStore+"TRANSACTIONS_NOT_SUPPORTED", nil).
