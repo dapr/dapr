@@ -23,7 +23,16 @@ import (
 )
 
 const (
-	PostFixNameEmpty = "NAME_EMPTY"
+	InFixTopic                     = "TOPIC"
+	PostFixNameEmpty               = "NAME_EMPTY"
+	PostFixMetadataDeserialization = "METADATA_DESERIALIZATION"
+	PostFixPublishMessage          = "PUBLISH_MESSAGE"
+	PostFixCloudEventCreation      = "CLOUD_EVENT_CREATION"
+	PostFixMarshalEnvelope         = "MARSHAL_ENVELOPE"
+	PostFixMarshalEvents           = "MARSHAL_EVENTS"
+	PostFixUnMarshalEvents         = "UNMARSHAL_EVENTS"
+	PostFixForbidden               = "FORBIDDEN"
+	PostFixOutbox                  = "OUTBOX"
 )
 
 func PubSubNotFound(name string, pubsubType string, metadata map[string]string) error {
@@ -74,7 +83,7 @@ func PubSubTopicEmpty(name string, pubsubType string, metadata map[string]string
 		message,
 		"ERR_TOPIC_EMPTY",
 	).
-		WithErrorInfo(kiterrors.CodePrefixPubSub+"TOPIC"+PostFixNameEmpty, metadata).
+		WithErrorInfo(kiterrors.CodePrefixPubSub+InFixTopic+PostFixNameEmpty, metadata).
 		WithResourceInfo(pubsubType, name, "", message).
 		Build()
 }
@@ -87,7 +96,7 @@ func PubSubMetadataDeserialize(name string, pubsubType string, metadata map[stri
 		message,
 		"ERR_PUBSUB_REQUEST_METADATA",
 	).
-		WithErrorInfo(kiterrors.CodePrefixPubSub+"METADATA_DESERIALIZATION", metadata).
+		WithErrorInfo(kiterrors.CodePrefixPubSub+PostFixMetadataDeserialization, metadata).
 		WithResourceInfo(pubsubType, name, "", message).
 		Build()
 }
@@ -100,7 +109,7 @@ func PubSubPublishMessage(name string, pubsubType string, topic string, err erro
 		message,
 		"ERR_PUBSUB_PUBLISH_MESSAGE",
 	).
-		WithErrorInfo(kiterrors.CodePrefixPubSub+"PUBLISH_MESSAGE", map[string]string{"topic": topic, "error": err.Error()}).
+		WithErrorInfo(kiterrors.CodePrefixPubSub+PostFixPublishMessage, map[string]string{"topic": topic, "error": err.Error()}).
 		WithResourceInfo(pubsubType, name, "", message).
 		Build()
 }
@@ -114,7 +123,7 @@ func PubSubCloudEventCreation(name string, pubsubType string, metadata map[strin
 		message,
 		"ERR_PUBSUB_CLOUD_EVENTS_SER",
 	).
-		WithErrorInfo(kiterrors.CodePrefixPubSub+"CLOUD_EVENT_CREATION", metadata).
+		WithErrorInfo(kiterrors.CodePrefixPubSub+PostFixCloudEventCreation, metadata).
 		WithResourceInfo(pubsubType, name, "", message).
 		Build()
 }
@@ -128,7 +137,7 @@ func PubSubMarshalEnvelope(name string, topic string, pubsubType string, metadat
 		message,
 		"ERR_PUBSUB_CLOUD_EVENTS_SER",
 	).
-		WithErrorInfo(kiterrors.CodePrefixPubSub+"MARSHAL_ENVELOPE", metadata).
+		WithErrorInfo(kiterrors.CodePrefixPubSub+PostFixMarshalEnvelope, metadata).
 		WithResourceInfo(pubsubType, name, "", message).
 		Build()
 }
@@ -142,7 +151,7 @@ func PubSubMarshalEvents(name string, pubsubType string, topic string, metadata 
 		message+". error: "+metadata["error"],
 		"ERR_PUBSUB_EVENTS_SER",
 	).
-		WithErrorInfo(kiterrors.CodePrefixPubSub+"MARSHAL_EVENTS", metadata).
+		WithErrorInfo(kiterrors.CodePrefixPubSub+PostFixMarshalEvents, metadata).
 		WithResourceInfo(pubsubType, name, "", message).
 		Build()
 }
@@ -157,7 +166,7 @@ func PubSubUnMarshalEvents(name string, pubsubType string, topic string, metadat
 		message,
 		"ERR_PUBSUB_EVENTS_SER",
 	).
-		WithErrorInfo(kiterrors.CodePrefixPubSub+"UNMARSHAL_EVENTS", metadata).
+		WithErrorInfo(kiterrors.CodePrefixPubSub+PostFixUnMarshalEvents, metadata).
 		WithResourceInfo(pubsubType, name, "", message).
 		Build()
 }
@@ -170,7 +179,7 @@ func PubSubPublishForbidden(name string, pubsubType string, topic string, appID 
 		message,
 		"ERR_PUBSUB_FORBIDDEN",
 	).
-		WithErrorInfo(kiterrors.CodePrefixPubSub+"FORBIDDEN", map[string]string{"topic": topic, "error": err.Error()}).
+		WithErrorInfo(kiterrors.CodePrefixPubSub+PostFixForbidden, map[string]string{"topic": topic, "error": err.Error()}).
 		WithResourceInfo(pubsubType, name, "", message).
 		Build()
 }
@@ -199,6 +208,6 @@ func PubSubOubox(appID string, err error) error {
 		message,
 		"ERR_PUBLISH_OUTBOX",
 	).
-		WithErrorInfo(kiterrors.CodePrefixPubSub+"OUTBOX", map[string]string{"appID": appID, "error": err.Error()}).
+		WithErrorInfo(kiterrors.CodePrefixPubSub+PostFixOutbox, map[string]string{"appID": appID, "error": err.Error()}).
 		Build()
 }
