@@ -54,6 +54,8 @@ type workflowMetrics struct {
 	activityExecutionCount *stats.Int64Measure
 	// activityExecutionLatency records time taken to run an activity to completion.
 	activityExecutionLatency *stats.Float64Measure
+	// workflowExecutionLatency records time taken to run a workflow to completion.
+	workflowExecutionLatency *stats.Float64Measure
 	appID                    string
 	enabled                  bool
 	namespace                string
@@ -81,6 +83,10 @@ func newWorkflowMetrics() *workflowMetrics {
 			"runtime/workflow/activity/execution/latency",
 			"The total time taken to run an activity to completion.",
 			stats.UnitMilliseconds),
+		workflowExecutionLatency: stats.Float64(
+			"runtime/workflow/execution/latency",
+			"The total time taken to run workflow to completion.",
+			stats.UnitMilliseconds),
 	}
 }
 
@@ -99,7 +105,8 @@ func (w *workflowMetrics) Init(appID, namespace string) error {
 		diagUtils.NewMeasureView(w.workflowOperationLatency, []tag.Key{appIDKey, componentKey, namespaceKey, operationKey, statusKey}, defaultLatencyDistribution),
 		diagUtils.NewMeasureView(w.workflowExecutionCount, []tag.Key{appIDKey, componentKey, namespaceKey, workflowNameKey, statusKey}, view.Count()),
 		diagUtils.NewMeasureView(w.activityExecutionCount, []tag.Key{appIDKey, componentKey, namespaceKey, activityNameKey, statusKey}, view.Count()),
-		diagUtils.NewMeasureView(w.activityExecutionLatency, []tag.Key{appIDKey, componentKey, namespaceKey, activityNameKey, statusKey}, defaultLatencyDistribution))
+		diagUtils.NewMeasureView(w.activityExecutionLatency, []tag.Key{appIDKey, componentKey, namespaceKey, activityNameKey, statusKey}, defaultLatencyDistribution),
+		diagUtils.NewMeasureView(w.workflowExecutionLatency, []tag.Key{appIDKey, componentKey, namespaceKey, workflowNameKey, statusKey}, defaultLatencyDistribution))
 }
 
 // WorkflowOperationEvent records total number of Successful/Failed workflow Operations requests. It also records latency for those requests.
@@ -117,12 +124,16 @@ func (w *workflowMetrics) WorkflowOperationEvent(ctx context.Context, operation,
 
 // WorkflowExecutionEvent records total number of Successful/Failed/Recoverable workflow executions.
 // Execution latency for workflow is not supported yet.
-func (w *workflowMetrics) WorkflowExecutionEvent(ctx context.Context, component, workflowName, status string) {
+func (w *workflowMetrics) WorkflowExecutionEvent(ctx context.Context, component, workflowName, status string, elapsed float64) {
 	if !w.IsEnabled() {
 		return
 	}
 
 	stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowExecutionCount.Name(), appIDKey, w.appID, componentKey, component, namespaceKey, w.namespace, workflowNameKey, workflowName, statusKey, status), w.workflowExecutionCount.M(1))
+
+	if elapsed > 0 {
+		stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowExecutionLatency.Name(), appIDKey, w.appID, componentKey, component, namespaceKey, w.namespace, workflowNameKey, workflowName, statusKey, status), w.workflowExecutionLatency.M(elapsed))
+	}
 }
 
 // ActivityExecutionEvent records total number of Successful/Failed/Recoverable workflow executions. It also records latency for these executions.

@@ -482,10 +482,12 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 		return newRecoverableError(fmt.Errorf("failed to schedule a workflow execution: %w", err))
 	}
 	// Record metrics for workflow execution
+	wfStartTime := time.Now()
+	wfElapsedTime := float64(0)
 	defer func() {
 		if executionStatus != "" {
 			// execution latency for workflow is not supported yet.
-			diag.DefaultWorkflowMonitoring.WorkflowExecutionEvent(ctx, diag.WorkflowComponentName, workflowName, executionStatus)
+			diag.DefaultWorkflowMonitoring.WorkflowExecutionEvent(ctx, diag.WorkflowComponentName, workflowName, executionStatus, wfElapsedTime)
 		}
 	}()
 
@@ -634,6 +636,8 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 				// Setting executionStatus to failed if workflow has failed/terminated/cancelled
 				executionStatus = diag.StatusFailed
 			}
+
+			wfElapsedTime = diag.ElapsedSince(wfStartTime)
 		}
 	}
 	return nil
