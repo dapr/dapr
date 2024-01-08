@@ -15,9 +15,11 @@ package options
 
 import (
 	"flag"
+	"path/filepath"
 	"strings"
 	"time"
 
+	"k8s.io/client-go/util/homedir"
 	"k8s.io/klog"
 
 	"github.com/spf13/pflag"
@@ -57,6 +59,7 @@ type Options struct {
 	APIPort                            int
 	HealthzPort                        int
 	AdditionalCPServices               []string
+	Kubeconfig                         string
 }
 
 func New(origArgs []string) *Options {
@@ -102,6 +105,12 @@ func New(origArgs []string) *Options {
 	fs.IntVar(&opts.HealthzPort, "healthz-port", 8080, "The port for the healthz server to listen on")
 
 	fs.StringSliceVar(&opts.AdditionalCPServices, "additional-control-plane-services", []string{"placement"}, "Name of the additional control plane services, if any")
+
+	if home := homedir.HomeDir(); home != "" {
+		fs.StringVar(&opts.Kubeconfig, "kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
+	} else {
+		fs.StringVar(&opts.Kubeconfig, "kubeconfig", "", "absolute path to the kubeconfig file")
+	}
 
 	opts.Logger = logger.DefaultOptions()
 	opts.Logger.AttachCmdFlags(fs.StringVar, fs.BoolVar)

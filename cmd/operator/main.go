@@ -21,6 +21,7 @@ import (
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/operator"
 	"github.com/dapr/dapr/pkg/operator/monitoring"
+	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/signals"
@@ -43,6 +44,12 @@ func main() {
 
 	if err := monitoring.InitMetrics(); err != nil {
 		log.Fatal(err)
+	}
+
+	if err := utils.SetEnvVariables(map[string]string{
+		utils.KubeConfigVar: opts.Kubeconfig,
+	}); err != nil {
+		log.Fatalf("Error setting env: %v", err)
 	}
 
 	ctx := signals.Context()
