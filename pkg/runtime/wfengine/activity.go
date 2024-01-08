@@ -189,7 +189,7 @@ func (a *activityActor) executeActivity(ctx context.Context, actorID string, nam
 	// Record metrics on exit
 	defer func() {
 		if executionStatus != "" {
-			diag.DefaultWorkflowMonitoring.ActivityExecutionEvent(ctx, diag.ComponentName, activityName, executionStatus, elapsed)
+			diag.DefaultWorkflowMonitoring.ActivityExecutionEvent(ctx, diag.WorkflowComponentName, activityName, executionStatus, elapsed)
 		}
 	}()
 loop:

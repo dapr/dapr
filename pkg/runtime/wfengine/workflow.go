@@ -485,7 +485,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 	defer func() {
 		if executionStatus != "" {
 			// execution latency for workflow is not supported yet.
-			diag.DefaultWorkflowMonitoring.WorkflowExecutionEvent(ctx, diag.ComponentName, workflowName, executionStatus)
+			diag.DefaultWorkflowMonitoring.WorkflowExecutionEvent(ctx, diag.WorkflowComponentName, workflowName, executionStatus)
 		}
 	}()
 
