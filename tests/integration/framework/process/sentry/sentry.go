@@ -153,6 +153,13 @@ func (s *Sentry) WaitUntilRunning(t *testing.T, ctx context.Context) {
 	}, time.Second*5, 100*time.Millisecond)
 }
 
+func (s *Sentry) TrustAnchorsFile(t *testing.T) string {
+	t.Helper()
+	taf := filepath.Join(t.TempDir(), "ca.pem")
+	require.NoError(t, os.WriteFile(taf, s.CABundle().TrustAnchors, 0o600))
+	return taf
+}
+
 func (s *Sentry) CABundle() ca.Bundle {
 	return s.bundle
 }
