@@ -364,6 +364,20 @@ func (wf *workflowActor) addWorkflowEvent(ctx context.Context, actorID string, h
 	return wf.saveInternalState(ctx, actorID, state)
 }
 
+func (wf *workflowActor) getWorkflowName(oldEvents, newEvents []*backend.HistoryEvent) string {
+	for _, e := range oldEvents {
+		if es := e.GetExecutionStarted(); es != nil {
+			return es.GetName()
+		}
+	}
+	for _, e := range newEvents {
+		if es := e.GetExecutionStarted(); es != nil {
+			return es.GetName()
+		}
+	}
+	return ""
+}
+
 func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, reminderName string, reminderData []byte) error {
 	state, err := wf.loadInternalState(ctx, actorID)
 	if err != nil {
@@ -456,6 +470,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 		// which will skip recording metrics for this execution.
 		executionStatus = ""
 	}
+	workflowName := wf.getWorkflowName(state.History, state.Inbox)
 	// Request to execute workflow
 	wfLogger.Debugf("Workflow actor '%s': scheduling workflow execution with instanceId '%s'", actorID, wi.InstanceID)
 	// Schedule the workflow execution by signaling the backend
@@ -470,7 +485,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 	defer func() {
 		if executionStatus != "" {
 			// execution latency for workflow is not supported yet.
-			diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, diag.ComponentName, diag.Workflow, executionStatus, 0)
+			diag.DefaultWorkflowMonitoring.WorkflowExecutionEvent(ctx, diag.ComponentName, workflowName, executionStatus)
 		}
 	}()
 

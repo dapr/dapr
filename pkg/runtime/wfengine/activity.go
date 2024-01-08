@@ -148,6 +148,12 @@ func (a *activityActor) executeActivity(ctx context.Context, actorID string, nam
 	if err != nil {
 		return err
 	}
+	activityName := ""
+	if ts := taskEvent.GetTaskScheduled(); ts != nil {
+		activityName = ts.GetName()
+	} else {
+		return fmt.Errorf("invalid activity task event: '%s'", taskEvent.String())
+	}
 
 	endIndex := strings.Index(actorID, "::")
 	if endIndex < 0 {
@@ -183,7 +189,7 @@ func (a *activityActor) executeActivity(ctx context.Context, actorID string, nam
 	// Record metrics on exit
 	defer func() {
 		if executionStatus != "" {
-			diag.DefaultWorkflowMonitoring.ExecutionEvent(ctx, diag.ComponentName, diag.Activity, executionStatus, elapsed)
+			diag.DefaultWorkflowMonitoring.ActivityExecutionEvent(ctx, diag.ComponentName, activityName, executionStatus, elapsed)
 		}
 	}()
 loop:
