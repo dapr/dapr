@@ -55,10 +55,10 @@ const (
 var log = logger.NewLogger("dapr.operator.api")
 
 type Options struct {
-	Client                      client.Client
-	Security                    security.Provider
-	Port                        int
-	ControlPlaneDynamicServices []string
+	Client               client.Client
+	Security             security.Provider
+	Port                 int
+	AdditionalCPServices []string
 }
 
 // Server runs the Dapr API server for components and configurations.
@@ -86,7 +86,7 @@ type apiServer struct {
 	allEndpointsUpdateChan map[string]chan *httpendpointsapi.HTTPEndpoint
 	readyCh                chan struct{}
 	running                atomic.Bool
-	cpDynamicServices      []string
+	additionalCPServices   []string
 }
 
 // NewAPIServer returns a new API server.
@@ -98,7 +98,7 @@ func NewAPIServer(opts Options) Server {
 		allConnUpdateChan:      make(map[string]chan *ComponentUpdateEvent),
 		allEndpointsUpdateChan: make(map[string]chan *httpendpointsapi.HTTPEndpoint),
 		readyCh:                make(chan struct{}),
-		cpDynamicServices:      opts.ControlPlaneDynamicServices,
+		additionalCPServices:   opts.AdditionalCPServices,
 	}
 }
 

@@ -14,6 +14,8 @@ limitations under the License.
 package main
 
 import (
+	"os"
+
 	"github.com/dapr/dapr/cmd/operator/options"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/metrics"
@@ -27,7 +29,7 @@ import (
 var log = logger.NewLogger("dapr.operator")
 
 func main() {
-	opts := options.New()
+	opts := options.New(os.Args[1:])
 
 	// Apply options to all loggers.
 	if err := logger.ApplyOptionsToLoggers(&opts.Logger); err != nil {
@@ -57,8 +59,7 @@ func main() {
 		WatchdogCanPatchPodLabels:           opts.WatchdogCanPatchPodLabels,
 		APIPort:                             opts.APIPort,
 		HealthzPort:                         opts.HealthzPort,
-		ActorsServiceName:                   opts.ActorsServiceName,
-		RemindersServiceName:                opts.RemindersServiceName,
+		AdditionalCPServices:                opts.AdditionalCPServices,
 	})
 	if err != nil {
 		log.Fatalf("error creating operator: %v", err)

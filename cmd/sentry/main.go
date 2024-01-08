@@ -73,6 +73,7 @@ func main() {
 	cfg.RootCertPath = rootCertPath
 	cfg.TrustDomain = opts.TrustDomain
 	cfg.Port = opts.Port
+	cfg.AdditionalCPServices = opts.AdditionalCPServices
 
 	var (
 		watchDir    = filepath.Dir(cfg.IssuerCertPath)

@@ -173,11 +173,11 @@ spec:
         - "--watchdog-can-patch-pod-labels"
 {{- end }}
 {{- if .Values.global.actors.enabled }}
-        - "--actors-service-name"
+        - "--additional-control-plane-services"
         - "{{ .Values.global.actors.serviceName }}"
 {{- end }}
 {{- if .Values.global.reminders.serviceName }}
-        - "--reminders-service-name"
+        - "--additional-control-plane-services"
         - "{{ .Values.global.reminders.serviceName }}"
 {{- end }}
       serviceAccountName: dapr-operator
