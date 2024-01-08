@@ -316,7 +316,7 @@ func Test_isControlPlaneService(t *testing.T) {
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			assert.Equal(t, test.exp, isControlPlaneService(test.name))
+			assert.Equal(t, test.exp, isControlPlaneService(test.name, nil))
 		})
 	}
 }

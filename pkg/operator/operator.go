@@ -72,8 +72,7 @@ type Options struct {
 	TrustAnchorsFile                    string
 	APIPort                             int
 	HealthzPort                         int
-	ActorsServiceName                   string
-	RemindersServiceName                string
+	AdditionalCPServices                []string
 }
 
 type operator struct {
@@ -179,24 +178,16 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 		}
 	}
 
-	cpServices := make([]string, 2)
-	if opts.ActorsServiceName != "" {
-		cpServices[0] = opts.ActorsServiceName
-	}
-	if opts.RemindersServiceName != "" {
-		cpServices[1] = opts.RemindersServiceName
-	}
-
 	return &operator{
 		mgr:         mgr,
 		secProvider: secProvider,
 		config:      config,
 		healthzPort: opts.HealthzPort,
 		apiServer: api.NewAPIServer(api.Options{
-			Client:                      mgrClient,
-			Security:                    secProvider,
-			Port:                        opts.APIPort,
-			ControlPlaneDynamicServices: cpServices,
+			Client:               mgrClient,
+			Security:             secProvider,
+			Port:                 opts.APIPort,
+			AdditionalCPServices: opts.AdditionalCPServices,
 		}),
 	}, nil
 }

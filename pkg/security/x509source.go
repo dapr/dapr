@@ -49,8 +49,9 @@ import (
 )
 
 const (
-	sentrySignTimeout = time.Second * 3
-	sentryMaxRetries  = 5
+	sentrySignTimeout         = time.Second * 3
+	sentryMaxRetries          = 5
+	controlPlanePodNamePrefix = "dapr-"
 )
 
 type renewFn func(context.Context) (*x509.Certificate, error)
@@ -144,9 +145,18 @@ func newX509Source(ctx context.Context, clock clock.Clock, cptd spiffeid.TrustDo
 	var trustDomain *string
 	ns := CurrentNamespace()
 
+	var additionalCPServices []string
+	if opts.AdditionalCPServices != nil {
+		additionalCPServices = make([]string, len(opts.AdditionalCPServices))
+		for i, service := range opts.AdditionalCPServices {
+			additionalCPServices[i] = controlPlanePodNamePrefix + service
+			log.Infof("Adding additional control plane service: %s", additionalCPServices[i])
+		}
+	}
+
 	// If the service is a control plane service, set the trust domain to the
 	// control plane trust domain.
-	if isControlPlaneService(opts.AppID) && opts.ControlPlaneNamespace == ns {
+	if isControlPlaneService(opts.AppID, additionalCPServices) && opts.ControlPlaneNamespace == ns {
 		trustDomain = &opts.ControlPlaneTrustDomain
 	}
 
@@ -476,18 +486,29 @@ func renewalTime(notBefore, notAfter time.Time) time.Time {
 	return notBefore.Add(notAfter.Sub(notBefore) * 7 / 10)
 }
 
+func contains(val string, list []string) bool {
+	for _, i := range list {
+		if i == val {
+			return true
+		}
+	}
+	return false
+}
+
 // isControlPlaneService returns true if the app ID corresponds to a Dapr
 // control plane service.
-func isControlPlaneService(id string) bool {
+func isControlPlaneService(id string, additionalCPServices []string) bool {
 	switch id {
 	case "dapr-operator",
 		"dapr-placement",
 		"dapr-injector",
 		"dapr-sentry":
 		return true
-	default:
-		return false
 	}
+	if additionalCPServices != nil {
+		return contains(id, additionalCPServices)
+	}
+	return false
 }
 
 func getSentryIdentifier(appID string) string {

@@ -42,9 +42,10 @@ type Options struct {
 	Logger                logger.Options
 	Metrics               *metrics.Options
 
-	RootCAFilename     string
-	IssuerCertFilename string
-	IssuerKeyFilename  string
+	RootCAFilename       string
+	IssuerCertFilename   string
+	IssuerKeyFilename    string
+	AdditionalCPServices []string
 }
 
 func New(origArgs []string) *Options {
@@ -77,6 +78,7 @@ func New(origArgs []string) *Options {
 	fs.StringVar(&opts.TrustDomain, "trust-domain", "localhost", "The CA trust domain")
 	fs.IntVar(&opts.Port, "port", config.DefaultPort, "The port for the sentry server to listen on")
 	fs.IntVar(&opts.HealthzPort, "healthz-port", 8080, "The port for the healthz server to listen on")
+	fs.StringSliceVar(&opts.AdditionalCPServices, "additional-control-plane-services", []string{"placement"}, "Name of the additional control plane services, if any")
 
 	if home := homedir.HomeDir(); home != "" {
 		fs.StringVar(&opts.Kubeconfig, "kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")

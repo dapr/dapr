@@ -56,17 +56,18 @@ const (
 
 // Config holds the configuration for the Certificate Authority.
 type Config struct {
-	Port             int
-	TrustDomain      string
-	CAStore          string
-	WorkloadCertTTL  time.Duration
-	AllowedClockSkew time.Duration
-	RootCertPath     string
-	IssuerCertPath   string
-	IssuerKeyPath    string
-	Validators       map[sentryv1pb.SignCertificateRequest_TokenValidator]map[string]string
-	DefaultValidator sentryv1pb.SignCertificateRequest_TokenValidator
-	Features         []daprGlobalConfig.FeatureSpec
+	Port                 int
+	TrustDomain          string
+	CAStore              string
+	WorkloadCertTTL      time.Duration
+	AllowedClockSkew     time.Duration
+	RootCertPath         string
+	IssuerCertPath       string
+	IssuerKeyPath        string
+	Validators           map[sentryv1pb.SignCertificateRequest_TokenValidator]map[string]string
+	DefaultValidator     sentryv1pb.SignCertificateRequest_TokenValidator
+	Features             []daprGlobalConfig.FeatureSpec
+	AdditionalCPServices []string
 }
 
 // FromConfigName returns a Sentry configuration based on a configuration spec.
