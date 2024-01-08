@@ -150,7 +150,6 @@ func newX509Source(ctx context.Context, clock clock.Clock, cptd spiffeid.TrustDo
 		additionalCPServices = make([]string, len(opts.AdditionalCPServices))
 		for i, service := range opts.AdditionalCPServices {
 			additionalCPServices[i] = controlPlanePodNamePrefix + service
-			log.Infof("Adding additional control plane service: %s", additionalCPServices[i])
 		}
 	}
 
