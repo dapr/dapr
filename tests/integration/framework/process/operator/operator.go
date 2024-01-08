@@ -21,12 +21,18 @@ import (
 	"testing"
 	"time"
 
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
 
+	"github.com/dapr/dapr/pkg/modes"
+	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
+	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/framework/util"
 )
 
@@ -37,6 +43,7 @@ type Operator struct {
 	port        int
 	metricsPort int
 	healthzPort int
+	namespace   string
 }
 
 func New(t *testing.T, fopts ...Option) *Operator {
@@ -56,7 +63,7 @@ func New(t *testing.T, fopts ...Option) *Operator {
 	}
 
 	require.NotNil(t, opts.trustAnchorsFile, "trustAnchorsFile is required")
-	require.NotNil(t, opts.trustAnchorsFile, "trustAnchorsFile is required")
+	require.NotNil(t, opts.kubeconfigPath, "kubeconfigPath is required")
 	require.NotNil(t, opts.namespace, "namespace is required")
 
 	args := []string{
@@ -86,6 +93,7 @@ func New(t *testing.T, fopts ...Option) *Operator {
 		port:        opts.port,
 		metricsPort: opts.metricsPort,
 		healthzPort: opts.healthzPort,
+		namespace:   *opts.namespace,
 	}
 }
 
@@ -128,4 +136,39 @@ func (o *Operator) MetricsPort() int {
 
 func (o *Operator) HealthzPort() int {
 	return o.healthzPort
+}
+
+func (o *Operator) Dial(t *testing.T, ctx context.Context, ns string, sentry *sentry.Sentry) operatorv1pb.OperatorClient {
+	sec, err := security.New(ctx, security.Options{
+		SentryAddress:           "localhost:" + strconv.Itoa(sentry.Port()),
+		ControlPlaneTrustDomain: "integration.test.dapr.io",
+		ControlPlaneNamespace:   ns,
+		TrustAnchorsFile:        sentry.TrustAnchorsFile(t),
+		AppID:                   "myapp",
+		Mode:                    modes.StandaloneMode,
+		MTLSEnabled:             true,
+	})
+	require.NoError(t, err)
+
+	errCh := make(chan error)
+	ctx, cancel := context.WithCancel(ctx)
+	go func() {
+		errCh <- sec.Run(ctx)
+	}()
+	t.Cleanup(func() {
+		cancel()
+		require.NoError(t, <-errCh)
+	})
+
+	sech, err := sec.Handler(ctx)
+	require.NoError(t, err)
+
+	id, err := spiffeid.FromSegments(sech.ControlPlaneTrustDomain(), "ns", o.namespace, "dapr-operator")
+	require.NoError(t, err)
+
+	conn, err := grpc.DialContext(ctx, "localhost:"+strconv.Itoa(o.Port()), sech.GRPCDialOptionMTLS(id))
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, conn.Close()) })
+
+	return operatorv1pb.NewOperatorClient(conn)
 }

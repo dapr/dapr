@@ -61,8 +61,13 @@ type Options struct {
 type Server interface {
 	Run(context.Context) error
 	Ready(context.Context) error
-	OnComponentUpdated(ctx context.Context, component *componentsapi.Component)
-	OnHTTPEndpointUpdated(ctx context.Context, endpoint *httpendpointsapi.HTTPEndpoint)
+	OnComponentUpdated(context.Context, operatorv1pb.ResourceEventType, *componentsapi.Component)
+	OnHTTPEndpointUpdated(context.Context, *httpendpointsapi.HTTPEndpoint)
+}
+
+type ComponentUpdateEvent struct {
+	Component *componentsapi.Component
+	EventType operatorv1pb.ResourceEventType
 }
 
 type apiServer struct {
@@ -73,7 +78,7 @@ type apiServer struct {
 	// notify all dapr runtime
 	connLock               sync.Mutex
 	endpointLock           sync.Mutex
-	allConnUpdateChan      map[string]chan *componentsapi.Component
+	allConnUpdateChan      map[string]chan *ComponentUpdateEvent
 	allEndpointsUpdateChan map[string]chan *httpendpointsapi.HTTPEndpoint
 	readyCh                chan struct{}
 	running                atomic.Bool
@@ -85,7 +90,7 @@ func NewAPIServer(opts Options) Server {
 		Client:                 opts.Client,
 		sec:                    opts.Security,
 		port:                   strconv.Itoa(opts.Port),
-		allConnUpdateChan:      make(map[string]chan *componentsapi.Component),
+		allConnUpdateChan:      make(map[string]chan *ComponentUpdateEvent),
 		allEndpointsUpdateChan: make(map[string]chan *httpendpointsapi.HTTPEndpoint),
 		readyCh:                make(chan struct{}),
 	}
@@ -125,6 +130,13 @@ func (a *apiServer) Run(ctx context.Context) error {
 	// Block until context is done
 	<-ctx.Done()
 
+	a.connLock.Lock()
+	for key, ch := range a.allConnUpdateChan {
+		close(ch)
+		delete(a.allConnUpdateChan, key)
+	}
+	a.connLock.Unlock()
+
 	s.GracefulStop()
 	err = <-errCh
 	if err != nil {
@@ -137,11 +149,23 @@ func (a *apiServer) Run(ctx context.Context) error {
 	return nil
 }
 
-func (a *apiServer) OnComponentUpdated(_ context.Context, component *componentsapi.Component) {
+func (a *apiServer) OnComponentUpdated(ctx context.Context, eventType operatorv1pb.ResourceEventType, component *componentsapi.Component) {
 	a.connLock.Lock()
+	var wg sync.WaitGroup
+	wg.Add(len(a.allConnUpdateChan))
 	for _, connUpdateChan := range a.allConnUpdateChan {
-		connUpdateChan <- component
+		go func(connUpdateChan chan *ComponentUpdateEvent) {
+			defer wg.Done()
+			select {
+			case connUpdateChan <- &ComponentUpdateEvent{
+				Component: component,
+				EventType: eventType,
+			}:
+			case <-ctx.Done():
+			}
+		}(connUpdateChan)
 	}
+	wg.Wait()
 	a.connLock.Unlock()
 }
 
@@ -169,7 +193,7 @@ func (a *apiServer) GetConfiguration(ctx context.Context, in *operatorv1pb.GetCo
 	key := types.NamespacedName{Namespace: in.GetNamespace(), Name: in.GetName()}
 	var config configurationapi.Configuration
 	if err := a.Client.Get(ctx, key, &config); err != nil {
-		return nil, fmt.Errorf("error getting configuration: %w", err)
+		return nil, fmt.Errorf("error getting configuration %s/%s: %w", in.GetNamespace(), in.GetName(), err)
 	}
 	b, err := json.Marshal(&config)
 	if err != nil {
@@ -402,6 +426,8 @@ func (a *apiServer) ListResiliency(ctx context.Context, in *operatorv1pb.ListRes
 }
 
 // ComponentUpdate updates Dapr sidecars whenever a component in the cluster is modified.
+// TODO: @joshvanl: Authorize pod name and namespace matches the SPIFFE ID of
+// the caller.
 func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv operatorv1pb.Operator_ComponentUpdateServer) error { //nolint:nosnakecase
 	log.Info("sidecar connected for component updates")
 	keyObj, err := uuid.NewRandom()
@@ -411,7 +437,7 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 	key := keyObj.String()
 
 	a.connLock.Lock()
-	a.allConnUpdateChan[key] = make(chan *componentsapi.Component, 1)
+	a.allConnUpdateChan[key] = make(chan *ComponentUpdateEvent)
 	updateChan := a.allConnUpdateChan[key]
 	a.connLock.Unlock()
 
@@ -421,7 +447,7 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 		delete(a.allConnUpdateChan, key)
 	}()
 
-	updateComponentFunc := func(ctx context.Context, c *componentsapi.Component) {
+	updateComponentFunc := func(ctx context.Context, t operatorv1pb.ResourceEventType, c *componentsapi.Component) {
 		if c.Namespace != in.GetNamespace() {
 			return
 		}
@@ -440,13 +466,14 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 
 		err = srv.Send(&operatorv1pb.ComponentUpdateEvent{
 			Component: b,
+			Type:      t,
 		})
 		if err != nil {
 			log.Warnf("error updating sidecar with component %s (%s) from pod %s/%s: %s", c.GetName(), c.Spec.Type, in.GetNamespace(), in.GetPodName(), err)
 			return
 		}
 
-		log.Infof("updated sidecar with component %s (%s) from pod %s/%s", c.GetName(), c.Spec.Type, in.GetNamespace(), in.GetPodName())
+		log.Debugf("updated sidecar with component %s %s (%s) from pod %s/%s", t.String(), c.GetName(), c.Spec.Type, in.GetNamespace(), in.GetPodName())
 	}
 
 	var wg sync.WaitGroup
@@ -462,7 +489,7 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				updateComponentFunc(srv.Context(), c)
+				updateComponentFunc(srv.Context(), c.EventType, c.Component)
 			}()
 		}
 	}

@@ -100,15 +100,10 @@ spec:
 		require.Len(t, resp, 1)
 
 		assert.Equal(t, &rtpbv1.RegisteredComponents{
-			Name:    "123",
-			Type:    "state.in-memory",
-			Version: "v1",
-			Capabilities: []string{
-				"ETAG",
-				"TRANSACTIONAL",
-				"TTL",
-				"ACTOR",
-			},
+			Name:         "123",
+			Type:         "state.in-memory",
+			Version:      "v1",
+			Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
 		}, resp[0])
 
 		s.writeRead(t, ctx, client, "123")

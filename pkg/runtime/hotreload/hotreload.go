@@ -19,9 +19,11 @@ import (
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/config"
+	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/authorizer"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader/disk"
+	"github.com/dapr/dapr/pkg/runtime/hotreload/loader/operator"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/reconciler"
 	"github.com/dapr/dapr/pkg/runtime/processor"
 	"github.com/dapr/kit/concurrency"
@@ -33,6 +35,16 @@ var log = logger.NewLogger("dapr.runtime.hotreload")
 type OptionsReloaderDisk struct {
 	Config         *config.Configuration
 	Dirs           []string
+	ComponentStore *compstore.ComponentStore
+	Authorizer     *authorizer.Authorizer
+	Processor      *processor.Processor
+}
+
+type OptionsReloaderOperator struct {
+	PodName        string
+	Namespace      string
+	Client         operatorv1.OperatorClient
+	Config         *config.Configuration
 	ComponentStore *compstore.ComponentStore
 	Authorizer     *authorizer.Authorizer
 	Processor      *processor.Processor
@@ -61,6 +73,25 @@ func NewDisk(ctx context.Context, opts OptionsReloaderDisk) (*Reloader, error) {
 			Authorizer: opts.Authorizer,
 		}),
 	}, nil
+}
+
+func NewOperator(opts OptionsReloaderOperator) *Reloader {
+	loader := operator.New(operator.Options{
+		PodName:        opts.PodName,
+		Namespace:      opts.Namespace,
+		ComponentStore: opts.ComponentStore,
+		OperatorClient: opts.Client,
+	})
+
+	return &Reloader{
+		isEnabled: opts.Config.IsFeatureEnabled(config.HotReload),
+		componentsReconciler: reconciler.NewComponent(reconciler.Options[componentsapi.Component]{
+			Loader:     loader,
+			CompStore:  opts.ComponentStore,
+			Processor:  opts.Processor,
+			Authorizer: opts.Authorizer,
+		}),
+	}
 }
 
 func (r *Reloader) Run(ctx context.Context) error {
