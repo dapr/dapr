@@ -51,9 +51,6 @@ var log = logger.NewLogger("dapr.runtime.direct_messaging")
 
 const streamingUnsupportedErr = "target app '%s' is running a version of Dapr that does not support streaming-based service invocation"
 
-// Maximum TTL in seconds for the nameresolution cache
-const resolverCacheTTL = 30
-
 // messageClientConnection is the function type to connect to the other
 // applications to send the message using service invocation.
 type messageClientConnection func(ctx context.Context, address string, id string, namespace string, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(destroy bool), error)
@@ -106,9 +103,6 @@ type NewDirectMessagingOpts struct {
 func NewDirectMessaging(opts NewDirectMessagingOpts) invokev1.DirectMessaging {
 	hAddr, _ := utils.GetHostAddress()
 	hName, _ := os.Hostname()
-	resolverCache := ttlcache.NewCache[nr.AddressList](ttlcache.CacheOptions{
-		MaxTTL: resolverCacheTTL,
-	})
 
 	dm := &directMessaging{
 		appID:                opts.AppID,
@@ -125,7 +119,6 @@ func NewDirectMessaging(opts NewDirectMessagingOpts) invokev1.DirectMessaging {
 		hostAddress:          hAddr,
 		hostName:             hName,
 		compStore:            opts.CompStore,
-		resolverCache:        resolverCache,
 	}
 
 	// Set resolverMulti if the resolver implements the ResolverMulti interface
@@ -144,7 +137,9 @@ func (d *directMessaging) Close() error {
 		return nil
 	}
 
-	d.resolverCache.Stop()
+	if d.resolverCache != nil {
+		d.resolverCache.Stop()
+	}
 	return nil
 }
 
@@ -232,7 +227,7 @@ func (d *directMessaging) invokeWithRetry(
 			if code == codes.Unavailable || code == codes.Unauthenticated {
 				// Destroy the connection and force a re-connection on the next attempt
 				// We also remove the resolved name from the cache
-				if app.cacheKey != "" {
+				if app.cacheKey != "" && d.resolverCache != nil {
 					d.resolverCache.Delete(app.cacheKey)
 				}
 				teardown(true)
@@ -602,13 +597,19 @@ func (d *directMessaging) getRemoteApp(appID string) (res remoteApp, err error) 
 
 		// If the component implements ResolverMulti, we can use caching
 		if d.resolverMulti != nil {
-			// Check if the value is in the cache
-			res.cacheKey = request.CacheKey()
-			addresses, _ := d.resolverCache.Get(res.cacheKey)
-			if len(addresses) > 0 {
-				// Pick a random one
-				res.address = addresses.Pick()
-			} else {
+			var addresses nr.AddressList
+			if d.resolverCache != nil {
+				// Check if the value is in the cache
+				res.cacheKey = request.CacheKey()
+				addresses, _ = d.resolverCache.Get(res.cacheKey)
+				if len(addresses) > 0 {
+					// Pick a random one
+					res.address = addresses.Pick()
+				}
+			}
+
+			// If there was nothing in the cache (including the case of the cache disabled)
+			if res.address == "" {
 				// Resolve
 				addresses, err = d.resolverMulti.ResolveIDMulti(context.TODO(), request)
 				if err != nil {
@@ -616,11 +617,13 @@ func (d *directMessaging) getRemoteApp(appID string) (res remoteApp, err error) 
 				}
 				res.address = addresses.Pick()
 
-				// Store the result in cache
-				// Note that we may have a race condition here if another goroutine was resolving the same address
-				// This is acceptable, as the waste caused by an extra DNS resolution is very small
-				// We set the TTL to the maximum so we use the default set in the cache
-				d.resolverCache.Set(res.cacheKey, addresses, math.MaxInt64)
+				if d.resolverCache != nil {
+					// Store the result in cache
+					// Note that we may have a race condition here if another goroutine was resolving the same address
+					// This is acceptable, as the waste caused by an extra DNS resolution is very small
+					// We set the TTL to the maximum so we use the default set in the cache
+					d.resolverCache.Set(res.cacheKey, addresses, math.MaxInt64)
+				}
 			}
 		} else {
 			res.address, err = d.resolver.ResolveID(context.TODO(), request)
