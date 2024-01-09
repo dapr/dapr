@@ -51,6 +51,9 @@ var log = logger.NewLogger("dapr.runtime.direct_messaging")
 
 const streamingUnsupportedErr = "target app '%s' is running a version of Dapr that does not support streaming-based service invocation"
 
+// Maximum TTL in seconds for the nameresolution cache
+const resolverCacheTTL = 20
+
 // messageClientConnection is the function type to connect to the other
 // applications to send the message using service invocation.
 type messageClientConnection func(ctx context.Context, address string, id string, namespace string, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(destroy bool), error)
@@ -123,6 +126,11 @@ func NewDirectMessaging(opts NewDirectMessagingOpts) invokev1.DirectMessaging {
 
 	// Set resolverMulti if the resolver implements the ResolverMulti interface
 	dm.resolverMulti, _ = opts.Resolver.(nr.ResolverMulti)
+	if dm.resolverMulti != nil {
+		dm.resolverCache = ttlcache.NewCache[nr.AddressList](ttlcache.CacheOptions{
+			MaxTTL: resolverCacheTTL,
+		})
+	}
 
 	if dm.proxy != nil {
 		dm.proxy.SetRemoteAppFn(dm.getRemoteApp)
@@ -221,6 +229,10 @@ func (d *directMessaging) invokeWithRetry(
 			rResp, teardown, rErr := fn(ctx, app.id, app.namespace, app.address, req)
 			if rErr == nil {
 				teardown(false)
+				// Remove the resolved name from the cache
+				if app.cacheKey != "" && d.resolverCache != nil {
+					d.resolverCache.Delete(app.cacheKey)
+				}
 				return rResp, nil
 			}
 
@@ -228,10 +240,10 @@ func (d *directMessaging) invokeWithRetry(
 			if code == codes.Unavailable || code == codes.Unauthenticated {
 				// Destroy the connection and force a re-connection on the next attempt
 				// We also remove the resolved name from the cache
+				teardown(true)
 				if app.cacheKey != "" && d.resolverCache != nil {
 					d.resolverCache.Delete(app.cacheKey)
 				}
-				teardown(true)
 				return rResp, fmt.Errorf("failed to invoke target %s after %d retries. Error: %w", app.id, attempt-1, rErr)
 			}
 			teardown(false)
