@@ -287,3 +287,23 @@ message BulkSetRequest {
 
 // reserved for future-proof extensibility
 message BulkSetResponse {}
+
+// TransactionalStoreMultiMaxSize service provides a gRPC interface for
+// compatible transactional state store components which return the maximum
+// number of operations that can be performed in a single transaction.
+service TransactionalStoreMultiMaxSize {
+  // MultiMaxSize returns the maximum number of operations that can be performed
+  // in a single transaction.
+  rpc MultiMaxSize(MultiMaxSizeRequest) returns (MultiMaxSizeResponse) {}
+}
+
+// MultiMaxSizeRequest is the request for MultiMaxSize. It is empty because
+// there are no parameters.
+message MultiMaxSizeRequest {}
+
+// MultiMaxSizeResponse is the response for MultiMaxSize.
+message MultiMaxSizeResponse {
+  // The maximum number of operations that can be performed in a single
+  // transaction.
+  int64 max_size = 1;
+}
