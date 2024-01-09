@@ -27,8 +27,8 @@ import (
 	"github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
-	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/grpcapp"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -37,7 +37,7 @@ func init() {
 }
 
 type basic struct {
-	daprd *procdaprd.Daprd
+	daprd *daprd.Daprd
 	lock  sync.Mutex
 	msg   []byte
 }
@@ -52,8 +52,8 @@ func (o *basic) Setup(t *testing.T) []framework.Option {
 		}, nil
 	}
 
-	srv1 := grpcapp.New(t, grpcapp.WithOnTopicEventFn(onTopicEvent))
-	o.daprd = procdaprd.New(t, procdaprd.WithAppID("outboxtest"), procdaprd.WithAppPort(srv1.Port(t)), procdaprd.WithAppProtocol("grpc"), procdaprd.WithResourceFiles(`
+	srv1 := app.New(t, app.WithOnTopicEventFn(onTopicEvent))
+	o.daprd = daprd.New(t, daprd.WithAppID("outboxtest"), daprd.WithAppPort(srv1.Port(t)), daprd.WithAppProtocol("grpc"), daprd.WithResourceFiles(`
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
