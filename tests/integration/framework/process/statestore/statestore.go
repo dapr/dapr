@@ -54,8 +54,6 @@ func New(t *testing.T, fopts ...Option) *StateStore {
 	socketFile := util.RandomString(t, 8)
 
 	require.NotNil(t, opts.statestore)
-	_, ok := opts.statestore.(state.TransactionalStore)
-	require.True(t, ok, "statestore must implement state.TransactionalStore")
 
 	// Start the listener in New so we can squat on the path immediately, and
 	// keep it for the entire test case.
@@ -82,6 +80,8 @@ func (s *StateStore) Run(t *testing.T, ctx context.Context) {
 	server := grpc.NewServer()
 	compv1pb.RegisterStateStoreServer(server, s.component)
 	compv1pb.RegisterTransactionalStateStoreServer(server, s.component)
+	compv1pb.RegisterQueriableStateStoreServer(server, s.component)
+	compv1pb.RegisterTransactionalStoreMultiMaxSizeServer(server, s.component)
 	reflection.Register(server)
 
 	go func() {
