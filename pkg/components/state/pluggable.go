@@ -344,7 +344,7 @@ func (ss *grpcStateStore) MultiMaxSize() int {
 	defer ss.lock.Unlock()
 
 	// Check the cached value again in case another goroutine set it
-    if multiMaxSize != nil {
+	if multiMaxSize != nil {
 		return *multiMaxSize
 	}
 

@@ -31,7 +31,6 @@ const (
 	ErrStateDeleteBulk = "failed deleting state in state store %s: %s"
 
 	// StateTransaction.
-	ErrStateStoreNotSupported     = "state store %s doesn't support transaction"
 	ErrNotSupportedStateOperation = "operation type %s not supported"
 	ErrStateTransaction           = "error while executing state transaction: %s"
 
