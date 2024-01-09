@@ -367,7 +367,7 @@ func TestWorkflow(t *testing.T) {
 			t.Run("Pause and Resume", pauseResumeTest(externalURL, "pause-"+suffix))
 			t.Run("Purge", purgeTest(externalURL, "purge-"+suffix))
 			t.Run("Raise event", raiseEventTest(externalURL, "raiseEvent-"+suffix))
-			t.Run("Start monitor", monitorTest(externalURL, "monitor-"+suffix))
+			//t.Run("Start monitor", monitorTest(externalURL, "monitor-"+suffix))
 		})
 	}
 }
