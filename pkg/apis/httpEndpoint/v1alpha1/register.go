@@ -24,9 +24,9 @@ import (
 // SchemeGroupVersion is group version used to register these objects.
 var SchemeGroupVersion = schema.GroupVersion{Group: httpendpoint.GroupName, Version: "v1alpha1"}
 
-// GroupKind takes an unqualified kind and returns back a Group
+// GroupKindFromKind takes an unqualified kind and returns back a Group
 // qualified GroupKind.
-func GroupKind(kind string) schema.GroupKind {
+func GroupKindFromKind(kind string) schema.GroupKind {
 	return SchemeGroupVersion.WithKind(kind).GroupKind()
 }
 

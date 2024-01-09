@@ -220,7 +220,9 @@ func TestComponentUpdate(t *testing.T) {
 			api.connLock.Lock()
 			defer api.connLock.Unlock()
 			for key := range api.allConnUpdateChan {
-				api.allConnUpdateChan[key] <- &c
+				api.allConnUpdateChan[key] <- &ComponentUpdateEvent{
+					Component: &c,
+				}
 				close(api.allConnUpdateChan[key])
 			}
 		}()
@@ -264,7 +266,7 @@ func TestComponentUpdate(t *testing.T) {
 			api.connLock.Lock()
 			defer api.connLock.Unlock()
 			for key := range api.allConnUpdateChan {
-				api.allConnUpdateChan[key] <- &c
+				api.allConnUpdateChan[key] <- &ComponentUpdateEvent{Component: &c}
 				close(api.allConnUpdateChan[key])
 			}
 		}()

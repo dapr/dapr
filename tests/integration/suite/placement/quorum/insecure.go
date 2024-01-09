@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"testing"
 	"time"
 
@@ -111,7 +110,7 @@ func (i *insecure) Run(t *testing.T, ctx context.Context) {
 		if j >= 3 {
 			j = 0
 		}
-		host := "localhost:" + strconv.Itoa(i.places[j].Port())
+		host := i.places[j].Address()
 		conn, cerr := grpc.DialContext(ctx, host, grpc.WithBlock(),
 			grpc.WithReturnConnectionError(), sec.GRPCDialOptionMTLS(placeID),
 		)
