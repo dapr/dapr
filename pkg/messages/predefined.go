@@ -87,13 +87,6 @@ var (
 	ErrOutboundHealthNotReady = APIError{"dapr outbound is not ready", "ERR_OUTBOUND_HEALTH_NOT_READY", http.StatusInternalServerError, grpcCodes.Internal}
 	ErrHealthAppIDNotMatch    = APIError{"dapr app-id does not match", "ERR_HEALTH_APPID_NOT_MATCH", http.StatusInternalServerError, grpcCodes.Internal}
 
-	// State.
-	ErrStateStoresNotConfigured    = APIError{"state store is not configured", "ERR_STATE_STORE_NOT_CONFIGURED", http.StatusInternalServerError, grpcCodes.FailedPrecondition}
-	ErrStateStoreNotFound          = APIError{"state store %s is not found", "ERR_STATE_STORE_NOT_FOUND", http.StatusBadRequest, grpcCodes.InvalidArgument}
-	ErrStateQueryFailed            = APIError{"failed query in state store %s: %s", "ERR_STATE_QUERY", http.StatusInternalServerError, grpcCodes.Internal}
-	ErrStateQueryUnsupported       = APIError{"state store does not support querying", "ERR_STATE_STORE_NOT_SUPPORTED", http.StatusInternalServerError, grpcCodes.Internal}
-	ErrStateTooManyTransactionalOp = APIError{"the transaction contains %d operations, which is more than what the state store supports: %d", "ERR_STATE_STORE_TOO_MANY_TRANSACTIONS", http.StatusBadRequest, grpcCodes.InvalidArgument}
-
 	// Secrets.
 	ErrSecretStoreNotConfigured = APIError{"secret store is not configured", "ERR_SECRET_STORES_NOT_CONFIGURED", http.StatusInternalServerError, grpcCodes.FailedPrecondition}
 	ErrSecretStoreNotFound      = APIError{"failed finding secret store with key %s", "ERR_SECRET_STORE_NOT_FOUND", http.StatusUnauthorized, grpcCodes.InvalidArgument}

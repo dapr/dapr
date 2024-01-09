@@ -847,8 +847,8 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 	}
 
 	transactionalStore, ok := store.(state.TransactionalStore)
-	if !ok {
-		err := status.Errorf(codes.Unimplemented, messages.ErrStateStoreNotSupported, in.GetStoreName())
+	if !ok || !state.FeatureTransactional.IsPresent(store.Features()) {
+		err := apierrors.StateStoreTransactionsNotSupported(in.GetStoreName())
 		apiServerLogger.Debug(err)
 		return &emptypb.Empty{}, err
 	}
@@ -913,7 +913,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 	if maxMulti, ok := store.(state.TransactionalStoreMultiMaxSize); ok {
 		max := maxMulti.MultiMaxSize()
 		if max > 0 && len(operations) > max {
-			err := messages.ErrStateTooManyTransactionalOp.WithFormat(len(operations), max)
+			err := apierrors.StateStoreTooManyTransactionalOps(in.GetStoreName(), len(operations), max)
 			apiServerLogger.Debug(err)
 			return &emptypb.Empty{}, err
 		}
