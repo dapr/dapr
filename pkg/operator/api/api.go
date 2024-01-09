@@ -41,6 +41,7 @@ import (
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/pkg/security/spiffe"
+	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 )
 
@@ -223,14 +224,10 @@ func (a *apiServer) ListComponents(ctx context.Context, in *operatorv1pb.ListCom
 		log.Debugf("Error while reading spiffe id from client cert. applying default global policy action")
 	}
 
-	if in.GetNamespace() == security.CurrentNamespace() {
-		for _, service := range a.additionalCPServices {
-			if spiffeID.AppID() == controlPlanePodNamePrefix+service {
-				controlPlaneServiceReq = true
-				break
-			}
-		}
+	if in.GetNamespace() == security.CurrentNamespace() && utils.IsControlPlaneService(spiffeID.AppID(), a.additionalCPServices) {
+		controlPlaneServiceReq = true
 	}
+
 	var components componentsapi.ComponentList
 	if err := a.Client.List(ctx, &components, &client.ListOptions{
 		Namespace: in.GetNamespace(),
@@ -248,13 +245,8 @@ func (a *apiServer) ListComponents(ctx context.Context, in *operatorv1pb.ListCom
 		if c.ObjectMeta.Namespace == security.CurrentNamespace() {
 			for s := range c.Scopes {
 				scope := c.Scopes[s]
-				for _, service := range a.additionalCPServices {
-					if scope == controlPlanePodNamePrefix+service {
-						controlPlaneComp = true
-						break
-					}
-				}
-				if controlPlaneComp {
+				if utils.IsControlPlaneService(scope, a.additionalCPServices) {
+					controlPlaneComp = true
 					break
 				}
 			}

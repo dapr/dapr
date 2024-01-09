@@ -176,12 +176,12 @@ spec:
 {{- end }}
         - "--trust-domain"
         - {{ .Values.global.mtls.controlPlaneTrustDomain }}
-{{- if .Values.global.actors.enabled }}
-        - "--additional-control-plane-services"
+{{- if .Values.global.actors.serviceName }}
+        - "--additional-control-plane-service"
         - "{{ .Values.global.actors.serviceName }}"
 {{- end }}
 {{- if .Values.global.reminders.serviceName }}
-        - "--additional-control-plane-services"
+        - "--additional-control-plane-service"
         - "{{ .Values.global.reminders.serviceName }}"
 {{- end }}
 {{- with .Values.global.issuerFilenames }}

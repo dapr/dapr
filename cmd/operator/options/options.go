@@ -81,7 +81,7 @@ func New() *Options {
 	flag.IntVar(&opts.APIPort, "port", 6500, "The port for the operator API server to listen on")
 	flag.IntVar(&opts.HealthzPort, "healthz-port", 8080, "The port for the healthz server to listen on")
 
-	flag.Var(&opts.AdditionalCPServices, "additional-control-plane-services", "Name of the additional control plane services, if any")
+	flag.Var(&opts.AdditionalCPServices, "additional-control-plane-service", "Name of the additional control plane service, if any")
 
 	opts.Logger = logger.DefaultOptions()
 	opts.Logger.AttachCmdFlags(flag.StringVar, flag.BoolVar)

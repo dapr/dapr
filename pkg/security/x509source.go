@@ -46,6 +46,7 @@ import (
 	"github.com/dapr/dapr/pkg/security/legacy"
 	secpem "github.com/dapr/dapr/pkg/security/pem"
 	sentryToken "github.com/dapr/dapr/pkg/security/token"
+	"github.com/dapr/dapr/utils"
 )
 
 const (
@@ -145,17 +146,9 @@ func newX509Source(ctx context.Context, clock clock.Clock, cptd spiffeid.TrustDo
 	var trustDomain *string
 	ns := CurrentNamespace()
 
-	var additionalCPServices []string
-	if opts.AdditionalCPServices != nil {
-		additionalCPServices = make([]string, len(opts.AdditionalCPServices))
-		for i, service := range opts.AdditionalCPServices {
-			additionalCPServices[i] = controlPlanePodNamePrefix + service
-		}
-	}
-
 	// If the service is a control plane service, set the trust domain to the
 	// control plane trust domain.
-	if isControlPlaneService(opts.AppID, additionalCPServices) && opts.ControlPlaneNamespace == ns {
+	if utils.IsControlPlaneService(opts.AppID, opts.AdditionalCPServices) && opts.ControlPlaneNamespace == ns {
 		trustDomain = &opts.ControlPlaneTrustDomain
 	}
 
@@ -490,22 +483,6 @@ func contains(val string, list []string) bool {
 		if i == val {
 			return true
 		}
-	}
-	return false
-}
-
-// isControlPlaneService returns true if the app ID corresponds to a Dapr
-// control plane service.
-func isControlPlaneService(id string, additionalCPServices []string) bool {
-	switch id {
-	case "dapr-operator",
-		"dapr-placement",
-		"dapr-injector",
-		"dapr-sentry":
-		return true
-	}
-	if additionalCPServices != nil {
-		return contains(id, additionalCPServices)
 	}
 	return false
 }

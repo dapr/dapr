@@ -276,3 +276,37 @@ func BenchmarkFilter(b *testing.B) {
 		Filter(vals, filterFn)
 	}
 }
+
+func Test_isControlPlaneService(t *testing.T) {
+	tests := map[string]struct {
+		name string
+		exp  bool
+	}{
+		"operator should be control plane service": {
+			name: "dapr-operator",
+			exp:  true,
+		},
+		"sentry should be control plane service": {
+			name: "dapr-sentry",
+			exp:  true,
+		},
+		"placement should be control plane service": {
+			name: "dapr-placement",
+			exp:  true,
+		},
+		"sidecar injector should be control plane service": {
+			name: "dapr-injector",
+			exp:  true,
+		},
+		"not a control plane service": {
+			name: "my-app",
+			exp:  false,
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, test.exp, IsControlPlaneService(test.name, nil))
+		})
+	}
+}

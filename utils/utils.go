@@ -17,11 +17,13 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"slices"
 	"strings"
 )
 
 const (
-	DotDelimiter = "."
+	DotDelimiter              = "."
+	controlPlanePodNamePrefix = "dapr-"
 )
 
 // Contains reports whether v is present in s.
@@ -145,4 +147,27 @@ func GetNamespaceOrDefault(defaultNamespace string) string {
 		namespace = defaultNamespace
 	}
 	return namespace
+}
+
+// IsControlPlaneService returns true if the app ID corresponds to a Dapr
+// control plane service.
+func IsControlPlaneService(id string, additionalCPServices []string) bool {
+	switch id {
+	case "dapr-operator",
+		"dapr-placement",
+		"dapr-injector",
+		"dapr-sentry":
+		return true
+	}
+	var prefixedCPServices []string
+	if additionalCPServices != nil {
+		prefixedCPServices = make([]string, len(additionalCPServices))
+		for i, service := range additionalCPServices {
+			prefixedCPServices[i] = controlPlanePodNamePrefix + service
+		}
+	}
+	if len(prefixedCPServices) != 0 {
+		return slices.Contains(prefixedCPServices, id)
+	}
+	return false
 }
