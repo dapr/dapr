@@ -89,7 +89,7 @@ func (s *server) Init(ctx context.Context, opts SchedulerServiceOpts, secHandler
 	cron, err := etcdcron.New()
 
 	if err != nil {
-		schedulerServerLogger.Fatalf("fail to create etcd-cron", err)
+		schedulerServerLogger.Fatalf("fail to create etcd-cron: %s", err)
 	}
 	s.cron = cron
 	cron.Start(context.Background())
@@ -108,7 +108,7 @@ func (s *server) Init(ctx context.Context, opts SchedulerServiceOpts, secHandler
 
 	// Create the gRPC server
 	s.srv = grpc.NewServer(secHandler.GRPCServerOptionMTLS())
-	// schedulerv1pb.RegisterSchedulerServer(s.srv, s)
+	schedulerv1pb.RegisterSchedulerServer(s.srv, s)
 
 	return nil
 }
