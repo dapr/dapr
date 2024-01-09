@@ -640,7 +640,7 @@ func (a *DaprRuntime) initWorkflowEngine(ctx context.Context) error {
 	reg := a.runtimeConfig.registry.Workflows()
 	if reg == nil {
 		log.Info("No workflow registry available, not registering Dapr workflow component.")
-		return fmt.Errorf("No workflow registry available.")
+		return nil
 	}
 
 	log.Infof("Registering component for dapr workflow engine...")
