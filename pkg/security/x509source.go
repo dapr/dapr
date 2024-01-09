@@ -478,15 +478,6 @@ func renewalTime(notBefore, notAfter time.Time) time.Time {
 	return notBefore.Add(notAfter.Sub(notBefore) * 7 / 10)
 }
 
-func contains(val string, list []string) bool {
-	for _, i := range list {
-		if i == val {
-			return true
-		}
-	}
-	return false
-}
-
 func getSentryIdentifier(appID string) string {
 	// return injected identity, default id if not present
 	localID := os.Getenv("SENTRY_LOCAL_IDENTITY")

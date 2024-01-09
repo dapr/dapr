@@ -149,7 +149,7 @@ func GetNamespaceOrDefault(defaultNamespace string) string {
 	return namespace
 }
 
-// IsControlPlaneService returns true if the app ID corresponds to a Dapr
+// IsControlPlaneService returns true if the id corresponds to a Dapr
 // control plane service.
 func IsControlPlaneService(id string, additionalCPServices []string) bool {
 	switch id {
