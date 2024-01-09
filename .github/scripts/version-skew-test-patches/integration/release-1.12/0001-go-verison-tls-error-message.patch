@@ -1,0 +1,13 @@
+diff --git a/tests/integration/suite/daprd/serviceinvocation/http/httpendpoints.go b/tests/integration/suite/daprd/serviceinvocation/http/httpendpoints.go
+index 1bb56944f..18bb9c63a 100644
+--- a/tests/integration/suite/daprd/serviceinvocation/http/httpendpoints.go
++++ b/tests/integration/suite/daprd/serviceinvocation/http/httpendpoints.go
+@@ -209,7 +209,7 @@ func (h *httpendpoints) Run(t *testing.T, ctx context.Context) {
+ 	t.Run("bad PKI", func(t *testing.T) {
+ 		invokeTests(t, http.StatusInternalServerError, func(t *testing.T, body string) {
+ 			assert.Contains(t, body, `"errorCode":"ERR_DIRECT_INVOKE"`)
+-			assert.Contains(t, body, "tls: bad certificate")
++			assert.Contains(t, body, "remote error: tls: unknown certificate authority")
+ 		}, h.daprd2)
+ 	})
+ }
