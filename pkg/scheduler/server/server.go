@@ -29,7 +29,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var logy = logger.NewLogger("dapr.scheduler.server")
+var schedulerServerLogger = logger.NewLogger("dapr.scheduler.server")
 
 type SchedulerServiceOpts struct {
 	// Port is the port that the server will listen on.
@@ -69,42 +69,42 @@ func (s *server) Init(ctx context.Context, opts SchedulerServiceOpts, secHandler
 
 	etcd, err := embed.StartEtcd(conf())
 	if err != nil {
-		logy.Fatal(err)
+		schedulerServerLogger.Fatal(err)
 	}
 	defer etcd.Close()
 
 	select {
 	case <-etcd.Server.ReadyNotify():
-		logy.Info("Etcd server is ready!")
+		schedulerServerLogger.Info("Etcd server is ready!")
 	case <-time.After(1000 * time.Second):
 		etcd.Server.Stop()
-		logy.Info("Etcd server timed out and stopped!")
+		schedulerServerLogger.Info("Etcd server timed out and stopped!")
 	}
 	// err = <-etcd.Err()
-	// logy.Fatal(err)
+	// schedulerServerLogger.Fatal(err)
 
 	// initialize etcd client via go-etcd-cron
 
-	logy.Info("Starting etcdcron")
+	schedulerServerLogger.Info("Starting etcdcron")
 	cron, err := etcdcron.New()
 
 	if err != nil {
-		logy.Fatalf("fail to create etcd-cron", err)
+		schedulerServerLogger.Fatalf("fail to create etcd-cron", err)
 	}
 	s.cron = cron
 	cron.Start(context.Background())
 
 	// // Dummy method
-	// s.ScheduleJob(context.Background(), &schedulerv1pb.ScheduleJobRequest{
-	// 	Job: &runtimev1pb.Job{
-	// 		Name:     "testDummy",
-	// 		Schedule: "*/4 * * * * *",
-	// 	},
-	// 	Namespace: "default",
-	// })
+	//s.ScheduleJob(context.Background(), &schedulerv1pb.ScheduleJobRequest{
+	//	Job: &runtimev1pb.Job{
+	//		Name:     "testDummy2",
+	//		Schedule: "*/4 * * * * *",
+	//	},
+	//	Namespace: "default",
+	//})
 
 	err = <-etcd.Err()
-	logy.Fatal(err)
+	schedulerServerLogger.Fatal(err)
 
 	// Create the gRPC server
 	s.srv = grpc.NewServer(secHandler.GRPCServerOptionMTLS())
@@ -121,7 +121,7 @@ func (s *server) Run(ctx context.Context) error {
 
 	errCh := make(chan error, 1)
 	go func() {
-		logy.Infof("Running gRPC server on port %d", s.opts.Port)
+		schedulerServerLogger.Infof("Running gRPC server on port %d", s.opts.Port)
 		if err := s.srv.Serve(lis); err != nil {
 			errCh <- fmt.Errorf("failed to serve: %w", err)
 			return
@@ -130,7 +130,7 @@ func (s *server) Run(ctx context.Context) error {
 	}()
 
 	<-ctx.Done()
-	logy.Info("Shutting down gRPC server")
+	schedulerServerLogger.Info("Shutting down gRPC server")
 
 	gracefulShutdownCh := make(chan struct{})
 	go func() {
@@ -161,7 +161,7 @@ func (s *server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 		},
 	})
 	if err != nil {
-		logy.Errorf("error scheduling job %s: %s", req.Job.Name, err)
+		schedulerServerLogger.Errorf("error scheduling job %s: %s", req.Job.Name, err)
 		return nil, err
 	}
 	return &schedulerv1pb.ScheduleJobResponse{}, nil
@@ -174,7 +174,7 @@ func (s *server) triggerJob(job *runtimev1pb.Job, namespace string, metadata map
 		Metadata:  metadata,
 	})
 	if err != nil {
-		logy.Errorf("error triggering job %s: %s", job.Name, err)
+		schedulerServerLogger.Errorf("error triggering job %s: %s", job.Name, err)
 		return err
 	}
 	return nil
@@ -196,6 +196,6 @@ func (s *server) DeleteJob(context.Context, *schedulerv1pb.JobRequest) (*schedul
 }
 
 func (s *server) TriggerJob(context.Context, *schedulerv1pb.TriggerJobRequest) (*schedulerv1pb.TriggerJobResponse, error) {
-	logy.Info("Triggering job")
+	schedulerServerLogger.Info("Triggering job")
 	return nil, fmt.Errorf("not implemented")
 }
