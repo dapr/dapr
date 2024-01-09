@@ -35,7 +35,7 @@ import (
 
 var (
 	tr            *runner.TestRunner
-	backends      = []string{"sqlite"}
+	backends      = []string{"actors", "sqlite"}
 	appNamePrefix = "workflowsapp"
 )
 
@@ -167,7 +167,7 @@ func pauseResumeTest(url string, instanceID string) func(t *testing.T) {
 		require.EventuallyWithT(t, func(t *assert.CollectT) {
 			resp, err = utils.HTTPGet(getString)
 			require.NoError(t, err, "failure getting info on workflow")
-			assert.Equalf(t, "Completed", string(resp), "expected workflow to be Running, actual workflow state is: %s", string(resp))
+			assert.Equalf(t, "Running", string(resp), "expected workflow to be Running, actual workflow state is: %s", string(resp))
 		}, 5*time.Second, 100*time.Millisecond)
 	}
 }
