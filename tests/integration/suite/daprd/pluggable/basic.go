@@ -22,6 +22,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dapr/dapr/tests/integration/framework/process/statestore/inmemory"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
@@ -62,7 +64,7 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 
 	store := statestore.New(t,
 		statestore.WithSocketDirectory(socketDir),
-		statestore.WithStateStore(statestore.NewWrappedInMemory(t)),
+		statestore.WithStateStore(inmemory.New(t)),
 	)
 
 	b.daprd = daprd.New(t,
