@@ -95,6 +95,19 @@ func (c *component) BulkGet(ctx context.Context, req *compv1pb.BulkGetRequest) (
 	return &gresp, nil
 }
 
+func (c *component) Query(ctx context.Context, req *compv1pb.QueryRequest) (*compv1pb.QueryResponse, error) {
+	// TODO: @joshvanl implement query API transformation, rather than just
+	// sending nothing and returning error.
+	_, err := c.impl.(state.Querier).Query(ctx, &state.QueryRequest{})
+	return nil, err
+}
+
+func (c *component) MultiMaxSize(context.Context, *compv1pb.MultiMaxSizeRequest) (*compv1pb.MultiMaxSizeResponse, error) {
+	return &compv1pb.MultiMaxSizeResponse{
+		MaxSize: int64(c.impl.(state.TransactionalStoreMultiMaxSize).MultiMaxSize()),
+	}, nil
+}
+
 func (c *component) BulkSet(ctx context.Context, req *compv1pb.BulkSetRequest) (*compv1pb.BulkSetResponse, error) {
 	sr := make([]state.SetRequest, len(req.GetItems()))
 	for i, item := range req.GetItems() {

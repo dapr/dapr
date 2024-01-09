@@ -38,6 +38,7 @@ import (
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
+	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/pkg/channel/http"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
@@ -625,9 +626,9 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 	for i, k := range req.Keys {
 		key, err = stateLoader.GetModifiedStateKey(k, storeName, a.universal.AppID)
 		if err != nil {
-			msg := messages.ErrMalformedRequest.WithFormat(err)
-			universalFastHTTPErrorResponder(reqCtx, msg)
-			log.Debug(err)
+			status := apierrors.StateStoreInvalidKeyName(storeName, k, err.Error())
+			universalFastHTTPErrorResponder(reqCtx, status)
+			log.Debug(status)
 			return
 		}
 		r := state.GetRequest{
@@ -694,7 +695,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 
 func (a *api) getStateStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (state.Store, string, error) {
 	if a.universal.CompStore.StateStoresLen() == 0 {
-		err := messages.ErrStateStoresNotConfigured
+		err := apierrors.StateStoreNotConfigured()
 		log.Debug(err)
 		universalFastHTTPErrorResponder(reqCtx, err)
 		return nil, "", err
@@ -702,14 +703,14 @@ func (a *api) getStateStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (s
 
 	storeName := a.getStateStoreName(reqCtx)
 
-	state, ok := a.universal.CompStore.GetStateStore(storeName)
+	stateStore, ok := a.universal.CompStore.GetStateStore(storeName)
 	if !ok {
-		err := messages.ErrStateStoreNotFound.WithFormat(storeName)
+		err := apierrors.StateStoreNotFound(storeName)
 		log.Debug(err)
 		universalFastHTTPErrorResponder(reqCtx, err)
 		return nil, "", err
 	}
-	return state, storeName, nil
+	return stateStore, storeName, nil
 }
 
 func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
@@ -725,9 +726,10 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 	consistency := string(reqCtx.QueryArgs().Peek(consistencyParam))
 	k, err := stateLoader.GetModifiedStateKey(key, storeName, a.universal.AppID)
 	if err != nil {
-		msg := messages.ErrMalformedRequest.WithFormat(err)
-		universalFastHTTPErrorResponder(reqCtx, msg)
-		log.Debug(err)
+		status := apierrors.StateStoreInvalidKeyName(storeName, key, err.Error())
+		universalFastHTTPErrorResponder(reqCtx, status)
+		log.Debug(status)
+
 		return
 	}
 	req := &state.GetRequest{
@@ -1036,9 +1038,9 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 	metadata := getMetadataFromFastHTTPRequest(reqCtx)
 	k, err := stateLoader.GetModifiedStateKey(key, storeName, a.universal.AppID)
 	if err != nil {
-		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusBadRequest, msg))
-		log.Debug(err)
+		status := apierrors.StateStoreInvalidKeyName(storeName, key, err.Error())
+		universalFastHTTPErrorResponder(reqCtx, status)
+		log.Debug(status)
 		return
 	}
 	req := state.DeleteRequest{
@@ -1118,9 +1120,9 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 
 		reqs[i].Key, err = stateLoader.GetModifiedStateKey(r.Key, storeName, a.universal.AppID)
 		if err != nil {
-			msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
-			fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusBadRequest, msg))
-			log.Debug(err)
+			status := apierrors.StateStoreInvalidKeyName(storeName, r.Key, err.Error())
+			universalFastHTTPErrorResponder(reqCtx, status)
+			log.Debug(status)
 			return
 		}
 
@@ -1566,7 +1568,6 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 		msg := messages.ErrPubSubMetadataDeserialize.WithFormat(metaErr)
 		universalFastHTTPErrorResponder(reqCtx, msg)
 		log.Debug(msg)
-
 		return
 	}
 
@@ -1831,28 +1832,24 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 func (a *api) validateAndGetPubsubAndTopic(reqCtx *fasthttp.RequestCtx) (pubsub.PubSub, string, string, int, *ErrorResponse) {
 	if a.pubsubAdapter == nil {
 		msg := NewErrorResponse("ERR_PUBSUB_NOT_CONFIGURED", messages.ErrPubsubNotConfigured)
-
 		return nil, "", "", nethttp.StatusBadRequest, &msg
 	}
 
 	pubsubName := reqCtx.UserValue(pubsubnameparam).(string)
 	if pubsubName == "" {
 		msg := NewErrorResponse("ERR_PUBSUB_EMPTY", messages.ErrPubsubEmpty)
-
 		return nil, "", "", nethttp.StatusNotFound, &msg
 	}
 
 	thepubsub, ok := a.universal.CompStore.GetPubSub(pubsubName)
 	if !ok {
 		msg := NewErrorResponse("ERR_PUBSUB_NOT_FOUND", fmt.Sprintf(messages.ErrPubsubNotFound, pubsubName))
-
 		return nil, "", "", nethttp.StatusNotFound, &msg
 	}
 
 	topic := reqCtx.UserValue(wildcardParam).(string)
 	if topic == "" {
 		msg := NewErrorResponse("ERR_TOPIC_EMPTY", fmt.Sprintf(messages.ErrTopicEmpty, pubsubName))
-
 		return nil, "", "", nethttp.StatusNotFound, &msg
 	}
 	return thepubsub.Component, pubsubName, topic, nethttp.StatusOK, nil
@@ -1911,7 +1908,7 @@ type stateTransactionRequestBodyOperation struct {
 
 func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	if a.universal.CompStore.StateStoresLen() == 0 {
-		err := messages.ErrStateStoresNotConfigured
+		err := apierrors.StateStoreNotConfigured()
 		log.Debug(err)
 		universalFastHTTPErrorResponder(reqCtx, err)
 		return
@@ -1920,17 +1917,17 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	storeName := reqCtx.UserValue(storeNameParam).(string)
 	store, ok := a.universal.CompStore.GetStateStore(storeName)
 	if !ok {
-		err := messages.ErrStateStoreNotFound.WithFormat(storeName)
+		err := apierrors.StateStoreNotFound(storeName)
 		log.Debug(err)
 		universalFastHTTPErrorResponder(reqCtx, err)
 		return
 	}
 
 	transactionalStore, ok := store.(state.TransactionalStore)
-	if !ok {
-		msg := NewErrorResponse("ERR_STATE_STORE_NOT_SUPPORTED", fmt.Sprintf(messages.ErrStateStoreNotSupported, storeName))
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
-		log.Debug(msg)
+	if !ok || !state.FeatureTransactional.IsPresent(store.Features()) {
+		err := apierrors.StateStoreTransactionsNotSupported(storeName)
+		universalFastHTTPErrorResponder(reqCtx, err)
+		log.Debug(err)
 		return
 	}
 
@@ -1971,9 +1968,9 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 			}
 			upsertReq.Key, err = stateLoader.GetModifiedStateKey(upsertReq.Key, storeName, a.universal.AppID)
 			if err != nil {
-				msg := messages.ErrMalformedRequest.WithFormat(err)
-				universalFastHTTPErrorResponder(reqCtx, msg)
-				log.Debug(err)
+				status := apierrors.StateStoreInvalidKeyName(storeName, upsertReq.Key, err.Error())
+				universalFastHTTPErrorResponder(reqCtx, status)
+				log.Debug(status)
 				return
 			}
 			operations = append(operations, upsertReq)
@@ -1988,9 +1985,10 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 			}
 			delReq.Key, err = stateLoader.GetModifiedStateKey(delReq.Key, storeName, a.universal.AppID)
 			if err != nil {
-				msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
-				fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusBadRequest, msg))
-				log.Debug(msg)
+				status := apierrors.StateStoreInvalidKeyName(storeName, delReq.Key, err.Error())
+				universalFastHTTPErrorResponder(reqCtx, status)
+				log.Debug(status)
+
 				return
 			}
 			operations = append(operations, delReq)
@@ -2007,7 +2005,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	if maxMulti, ok := store.(state.TransactionalStoreMultiMaxSize); ok {
 		max := maxMulti.MultiMaxSize()
 		if max > 0 && len(operations) > max {
-			err := messages.ErrStateTooManyTransactionalOp.WithFormat(len(operations), max)
+			err := apierrors.StateStoreTooManyTransactionalOps(storeName, len(operations), max)
 			log.Debug(err)
 			universalFastHTTPErrorResponder(reqCtx, err)
 			return

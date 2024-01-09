@@ -19,29 +19,29 @@ import (
 	"time"
 
 	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/dapr/pkg/api/errors"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/encryption"
-	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 )
 
 func (a *UniversalAPI) GetStateStore(name string) (state.Store, error) {
 	if a.CompStore.StateStoresLen() == 0 {
-		err := messages.ErrStateStoresNotConfigured
+		err := errors.StateStoreNotConfigured()
 		a.Logger.Debug(err)
 		return nil, err
 	}
 
-	state, ok := a.CompStore.GetStateStore(name)
+	stateStore, ok := a.CompStore.GetStateStore(name)
 	if !ok {
-		err := messages.ErrStateStoreNotFound.WithFormat(name)
+		err := errors.StateStoreNotFound(name)
 		a.Logger.Debug(err)
 		return nil, err
 	}
 
-	return state, nil
+	return stateStore, nil
 }
 
 func (a *UniversalAPI) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryStateRequest) (*runtimev1pb.QueryStateResponse, error) {
@@ -53,20 +53,20 @@ func (a *UniversalAPI) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.Que
 
 	querier, ok := store.(state.Querier)
 	if !ok {
-		err = messages.ErrStateQueryUnsupported
+		err = errors.StateStoreQueryUnsupported(in.GetStoreName())
 		a.Logger.Debug(err)
 		return nil, err
 	}
 
 	if encryption.EncryptedStateStore(in.GetStoreName()) {
-		err = messages.ErrStateQueryFailed.WithFormat(in.GetStoreName(), "cannot query encrypted store")
+		err = errors.StateStoreQueryFailed(in.GetStoreName(), "cannot query encrypted store")
 		a.Logger.Debug(err)
 		return nil, err
 	}
 
 	var req state.QueryRequest
 	if err = json.Unmarshal([]byte(in.GetQuery()), &req.Query); err != nil {
-		err = messages.ErrStateQueryFailed.WithFormat(in.GetStoreName(), "failed to parse JSON query body: "+err.Error())
+		err = errors.StateStoreQueryFailed(in.GetStoreName(), "failed to parse JSON query body: "+err.Error())
 		a.Logger.Debug(err)
 		return nil, err
 	}
@@ -85,7 +85,7 @@ func (a *UniversalAPI) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.Que
 	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.GetStoreName(), diag.StateQuery, err == nil, elapsed)
 
 	if err != nil {
-		err = messages.ErrStateQueryFailed.WithFormat(in.GetStoreName(), err.Error())
+		err = errors.StateStoreQueryFailed(in.GetStoreName(), err.Error())
 		a.Logger.Debug(err)
 		return nil, err
 	}

@@ -18,7 +18,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
+	"sync"
+	"time"
+
+	"github.com/dapr/kit/ptr"
 
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/components-contrib/state/query"
@@ -45,6 +50,8 @@ var (
 	GRPCCodeETagMismatch          = codes.FailedPrecondition
 	GRPCCodeETagInvalid           = codes.InvalidArgument
 	GRPCCodeBulkDeleteRowMismatch = codes.Internal
+
+	log = logger.NewLogger("state-pluggable-logger")
 )
 
 const (
@@ -144,7 +151,9 @@ var (
 type grpcStateStore struct {
 	*pluggable.GRPCConnector[stateStoreClient]
 	// features is the list of state store implemented features.
-	features []state.Feature
+	features     []state.Feature
+	multiMaxSize *int
+	lock         sync.RWMutex
 }
 
 // Init initializes the grpc state passing out the metadata to the grpc component.
@@ -319,6 +328,48 @@ func (ss *grpcStateStore) Multi(ctx context.Context, request *state.Transactiona
 		Metadata:   request.Metadata,
 	})
 	return err
+}
+
+// MultiMaxSize returns the maximum number of operations allowed in a transactional request.
+func (ss *grpcStateStore) MultiMaxSize() int {
+	ss.lock.RLock()
+	multiMaxSize := ss.multiMaxSize
+	ss.lock.RUnlock()
+
+	if multiMaxSize != nil {
+		return *multiMaxSize
+	}
+
+	ss.lock.Lock()
+	defer ss.lock.Unlock()
+
+	// Check the cached value again in case another goroutine set it
+    if multiMaxSize != nil {
+		return *multiMaxSize
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := ss.Client.MultiMaxSize(ctx, new(proto.MultiMaxSizeRequest))
+	if err != nil {
+		log.Error("failed to get multi max size from state store", err)
+		ss.multiMaxSize = ptr.Of(-1)
+		return *ss.multiMaxSize
+	}
+
+	// If the pluggable component is on a 64bit system and the dapr runtime is on a 32bit system,
+	// the response could be larger than the maximum int32 value.
+	// In this case, we set the max size to the maximum possible value for a 32bit system.
+	is32bitSystem := math.MaxInt == math.MaxInt32
+	if is32bitSystem && resp.GetMaxSize() > int64(math.MaxInt32) {
+		log.Warnf("multi max size %d is too large for 32bit systems, setting to max possible", resp.GetMaxSize())
+		ss.multiMaxSize = ptr.Of(math.MaxInt32)
+		return *ss.multiMaxSize
+	}
+
+	ss.multiMaxSize = ptr.Of(int(resp.GetMaxSize()))
+	return *ss.multiMaxSize
 }
 
 // mappers and helpers.
@@ -526,6 +577,7 @@ type stateStoreClient struct {
 	proto.StateStoreClient
 	proto.TransactionalStateStoreClient
 	proto.QueriableStateStoreClient
+	proto.TransactionalStoreMultiMaxSizeClient
 }
 
 // strNilIfEmpty returns nil if string is empty
@@ -547,9 +599,10 @@ func strValueIfNotNil(str *string) string {
 // newStateStoreClient creates a new stateStore client instance.
 func newStateStoreClient(cc grpc.ClientConnInterface) stateStoreClient {
 	return stateStoreClient{
-		StateStoreClient:              proto.NewStateStoreClient(cc),
-		TransactionalStateStoreClient: proto.NewTransactionalStateStoreClient(cc),
-		QueriableStateStoreClient:     proto.NewQueriableStateStoreClient(cc),
+		StateStoreClient:                     proto.NewStateStoreClient(cc),
+		TransactionalStateStoreClient:        proto.NewTransactionalStateStoreClient(cc),
+		QueriableStateStoreClient:            proto.NewQueriableStateStoreClient(cc),
+		TransactionalStoreMultiMaxSizeClient: proto.NewTransactionalStoreMultiMaxSizeClient(cc),
 	}
 }
 

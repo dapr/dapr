@@ -31,25 +31,66 @@ type Option func(*options)
 // and Close are called only once.
 type Wrapped struct {
 	state.Store
-	state.TransactionalStore
+	features  []state.Feature
 	lock      sync.Mutex
 	hasInit   bool
 	hasClosed bool
+}
 
+type WrappedTransactionalMultiMaxSize struct {
+	*Wrapped
+	state.TransactionalStore
+	transactionalStoreMultiMaxSizeFn func() int
+}
+
+type WrappedQuerier struct {
+	*Wrapped
 	queryFunc func(context.Context, *state.QueryRequest) (*state.QueryResponse, error)
 }
 
 func New(t *testing.T, fopts ...Option) state.Store {
-	var opts options
+	opts := options{
+		features: []state.Feature{state.FeatureETag, state.FeatureTransactional, state.FeatureTTL},
+	}
 	for _, fopt := range fopts {
 		fopt(&opts)
 	}
 
 	impl := inmemory.NewInMemoryStateStore(logger.NewLogger(t.Name() + "_state_store"))
 	return &Wrapped{
-		Store:              impl,
-		TransactionalStore: impl.(state.TransactionalStore),
-		queryFunc:          opts.queryFunc,
+		Store:    impl,
+		features: opts.features,
+	}
+}
+
+func NewQuerier(t *testing.T, fopts ...Option) state.Store {
+	opts := options{
+		features: []state.Feature{state.FeatureETag, state.FeatureTransactional, state.FeatureTTL, state.FeatureQueryAPI},
+	}
+	for _, fopt := range fopts {
+		fopt(&opts)
+	}
+
+	impl := inmemory.NewInMemoryStateStore(logger.NewLogger(t.Name() + "_state_store"))
+	return &WrappedQuerier{
+		Wrapped:   &Wrapped{Store: impl, features: opts.features},
+		queryFunc: opts.queryFunc,
+	}
+}
+
+func NewTransactionalMultiMaxSize(t *testing.T, fopts ...Option) state.Store {
+	opts := options{
+		features: []state.Feature{state.FeatureETag, state.FeatureTransactional, state.FeatureTTL},
+	}
+	for _, fopt := range fopts {
+		fopt(&opts)
+	}
+
+	impl := inmemory.NewInMemoryStateStore(logger.NewLogger(t.Name() + "_state_store"))
+	return &WrappedTransactionalMultiMaxSize{
+		Wrapped:                          &Wrapped{Store: impl, features: opts.features},
+		TransactionalStore:               impl.(state.TransactionalStore),
+		transactionalStoreMultiMaxSizeFn: opts.transactionalStoreMultiMaxSizeFn,
 	}
 }
 
@@ -63,13 +104,22 @@ func (w *Wrapped) Init(ctx context.Context, metadata state.Metadata) error {
 	return nil
 }
 
-func (w *Wrapped) Query(ctx context.Context, req *state.QueryRequest) (*state.QueryResponse, error) {
+func (w *WrappedQuerier) Query(ctx context.Context, req *state.QueryRequest) (*state.QueryResponse, error) {
 	w.lock.Lock()
 	defer w.lock.Unlock()
 	if w.queryFunc != nil {
 		return w.queryFunc(ctx, req)
 	}
 	return nil, nil
+}
+
+func (w *WrappedTransactionalMultiMaxSize) MultiMaxSize() int {
+	w.lock.Lock()
+	defer w.lock.Unlock()
+	if w.transactionalStoreMultiMaxSizeFn != nil {
+		return w.transactionalStoreMultiMaxSizeFn()
+	}
+	return -1
 }
 
 func (w *Wrapped) Close() error {
@@ -83,10 +133,5 @@ func (w *Wrapped) Close() error {
 }
 
 func (w *Wrapped) Features() []state.Feature {
-	return []state.Feature{
-		state.FeatureETag,
-		state.FeatureTransactional,
-		state.FeatureTTL,
-		state.FeatureQueryAPI,
-	}
+	return w.features
 }
