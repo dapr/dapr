@@ -193,7 +193,15 @@ func newDaprRuntime(ctx context.Context,
 	var reloader *hotreload.Reloader
 	switch runtimeConfig.mode {
 	case modes.KubernetesMode:
-		log.Warnf("hot reloading is not supported in Kubernetes mode")
+		reloader = hotreload.NewOperator(hotreload.OptionsReloaderOperator{
+			PodName:        podName,
+			Namespace:      namespace,
+			Client:         operatorClient,
+			Config:         globalConfig,
+			ComponentStore: compStore,
+			Authorizer:     authz,
+			Processor:      processor,
+		})
 	case modes.StandaloneMode:
 		reloader, err = hotreload.NewDisk(ctx, hotreload.OptionsReloaderDisk{
 			Config:         globalConfig,
@@ -595,7 +603,9 @@ func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) (err error) {
 	}
 
 	// Initialize workflow engine
-	a.initWorkflowEngine(ctx)
+	if err = a.initWorkflowEngine(ctx); err != nil {
+		return err
+	}
 
 	// We set actors as initialized whether we have an actors runtime or not
 	a.daprUniversalAPI.SetActorsInitDone()
@@ -612,7 +622,7 @@ func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) (err error) {
 	return nil
 }
 
-func (a *DaprRuntime) initWorkflowEngine(ctx context.Context) {
+func (a *DaprRuntime) initWorkflowEngine(ctx context.Context) error {
 	wfComponentFactory := wfengine.BuiltinWorkflowFactory(a.workflowEngine)
 
 	// If actors are not enabled, still invoke SetActorRuntime on the workflow engine with `nil` to unblock startup
@@ -629,8 +639,8 @@ func (a *DaprRuntime) initWorkflowEngine(ctx context.Context) {
 
 	reg := a.runtimeConfig.registry.Workflows()
 	if reg == nil {
-		log.Info("No workflow registry available, not registering Dapr workflow component...")
-		return
+		log.Info("No workflow registry available, not registering Dapr workflow component.")
+		return fmt.Errorf("No workflow registry available.")
 	}
 
 	log.Infof("Registering component for dapr workflow engine...")
@@ -638,6 +648,7 @@ func (a *DaprRuntime) initWorkflowEngine(ctx context.Context) {
 	if !a.processor.AddPendingComponent(ctx, wfengine.ComponentDefinition) {
 		log.Warn("failed to initialize Dapr workflow component")
 	}
+	return nil
 }
 
 // initPluggableComponents discover pluggable components and initialize with their respective registries.
@@ -998,18 +1009,16 @@ func (a *DaprRuntime) flushOutstandingHTTPEndpoints(ctx context.Context) {
 	log.Info("Waiting for all outstanding http endpoints to be processed…")
 	// We flush by sending a no-op http endpoint. Since the processHTTPEndpoints goroutine only reads one http endpoint at a time,
 	// We know that once the no-op http endpoint is read from the channel, all previous http endpoints will have been fully processed.
-	if a.processor.AddPendingEndpoint(ctx, httpEndpointV1alpha1.HTTPEndpoint{}) {
-		log.Info("All outstanding http endpoints processed")
-	}
+	a.processor.AddPendingEndpoint(ctx, httpEndpointV1alpha1.HTTPEndpoint{})
+	log.Info("All outstanding http endpoints processed")
 }
 
 func (a *DaprRuntime) flushOutstandingComponents(ctx context.Context) {
 	log.Info("Waiting for all outstanding components to be processed…")
 	// We flush by sending a no-op component. Since the processComponents goroutine only reads one component at a time,
 	// We know that once the no-op component is read from the channel, all previous components will have been fully processed.
-	if a.processor.AddPendingComponent(ctx, componentsV1alpha1.Component{}) {
-		log.Info("All outstanding components processed")
-	}
+	a.processor.AddPendingComponent(ctx, componentsV1alpha1.Component{})
+	log.Info("All outstanding components processed")
 }
 
 func (a *DaprRuntime) loadHTTPEndpoints(ctx context.Context) error {
