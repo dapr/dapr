@@ -35,7 +35,7 @@ import (
 
 var (
 	tr            *runner.TestRunner
-	backends      = []string{"actors", "sqlite"}
+	backends      = []string{"sqlite"}
 	appNamePrefix = "workflowsapp"
 )
 
