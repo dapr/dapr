@@ -1,0 +1,28 @@
+diff --git a/tests/integration/suite/daprd/metadata/metadata.go b/tests/integration/suite/daprd/metadata/metadata.go
+index 5e5a86452..0cccd8bd8 100644
+--- a/tests/integration/suite/daprd/metadata/metadata.go
++++ b/tests/integration/suite/daprd/metadata/metadata.go
+@@ -19,6 +19,7 @@ import (
+ 	"fmt"
+ 	"io"
+ 	"net/http"
++	"strings"
+ 	"testing"
+ 	"time"
+ 
+@@ -82,11 +83,13 @@ func validateResponse(t *testing.T, appID string, appPort int, body io.Reader) {
+ 	require.NoError(t, err)
+ 
+ 	require.Equal(t, appID, bodyMap["id"])
+-	require.Equal(t, "edge", bodyMap["runtimeVersion"])
++	require.True(t, "edge" == bodyMap["runtimeVersion"].(string) ||
++		strings.HasPrefix(bodyMap["runtimeVersion"].(string), "1.12."))
+ 
+ 	extended, ok := bodyMap["extended"].(map[string]interface{})
+ 	require.True(t, ok)
+-	require.Equal(t, "edge", extended["daprRuntimeVersion"])
++	require.True(t, "edge" == extended["daprRuntimeVersion"].(string) ||
++		strings.HasPrefix(extended["daprRuntimeVersion"].(string), "1.12."))
+ 
+ 	appConnectionProperties, ok := bodyMap["appConnectionProperties"].(map[string]interface{})
+ 	require.True(t, ok)
