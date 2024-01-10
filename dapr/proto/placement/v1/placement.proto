@@ -40,6 +40,7 @@ message PlacementTable {
   repeated uint64 sorted_set = 2;
   map<string, Host> load_map = 3;
   int64 total_load = 4;
+  int64 replication_factor = 5;
 }
 
 message Host {

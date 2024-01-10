@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 
@@ -383,6 +384,10 @@ func (p *Service) performTablesUpdate(ctx context.Context, hosts []placementGRPC
 		return fmt.Errorf("dissemination of 'unlock' failed: %v", err)
 	}
 
+	log.Debugf("\n\n\n-------------------------- %v\n\n\n", p.clock.Since(startedAt))
+	logfile, _ := os.OpenFile("/Users/elenakolevska/placement-work/dissemination_time_with_vnodes.csv", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	logfile.WriteString(fmt.Sprintf("%d, %d, %d\n", len(hosts), len(newTable.GetEntries()), p.clock.Since(startedAt).Microseconds()))
+	logfile.Close()
 	log.Debugf("performTablesUpdate succeed in %v", p.clock.Since(startedAt))
 	return nil
 }
