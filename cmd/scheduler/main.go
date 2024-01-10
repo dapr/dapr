@@ -56,7 +56,7 @@ func main() {
 		ControlPlaneTrustDomain: opts.TrustDomain,
 		ControlPlaneNamespace:   security.CurrentNamespace(),
 		TrustAnchorsFile:        opts.TrustAnchorsFile,
-		AppID:                   "dapr-scheduler",
+		AppID:                   "dapr-scheduler", //hardcoded
 		MTLSEnabled:             opts.TLSEnabled,
 		Mode:                    modes.DaprMode(opts.Mode),
 	})
@@ -72,7 +72,10 @@ func main() {
 			if serr != nil {
 				return serr
 			}
-			return server.Start(ctx, server.SchedulerServiceOpts{}, secHandler)
+			return server.Start(ctx, server.SchedulerServiceOpts{
+				SchedulerPort: opts.SchedulerPort,
+				Security:      secHandler,
+			})
 		},
 		func(ctx context.Context) error {
 			healthzServer := health.NewServer(log)

@@ -103,6 +103,7 @@ type SidecarConfig struct {
 	AppHealthProbeTimeout               int32   `annotation:"dapr.io/app-health-probe-timeout"                default:"500"` // In milliseconds
 	AppHealthThreshold                  int32   `annotation:"dapr.io/app-health-threshold"                    default:"3"`
 	PlacementAddress                    string  `annotation:"dapr.io/placement-host-address"`
+	SchedulerAddress                    string  `annotation:"dapr.io/scheduler-host-address"`
 	PluggableComponents                 string  `annotation:"dapr.io/pluggable-components"`
 	PluggableComponentsSocketsFolder    string  `annotation:"dapr.io/pluggable-components-sockets-folder"`
 	ComponentContainer                  string  `annotation:"dapr.io/component-container"`

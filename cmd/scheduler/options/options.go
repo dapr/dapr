@@ -21,7 +21,6 @@ import (
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/security"
 	securityConsts "github.com/dapr/dapr/pkg/security/consts"
-	"github.com/dapr/dapr/pkg/sentry/config"
 	"github.com/dapr/kit/logger"
 )
 
@@ -31,11 +30,13 @@ const (
 
 	// defaultDaprSystemConfigName is the default resource object name for Dapr System Config.
 	defaultDaprSystemConfigName = "daprsystem"
+	defaultHealthzPort          = 7070
+	defaultSchedulerPort        = 50006
 )
 
 type Options struct {
-	Port        int
-	HealthzPort int
+	SchedulerPort int
+	HealthzPort   int
 
 	TLSEnabled       bool
 	TrustDomain      string
@@ -50,8 +51,8 @@ type Options struct {
 func New() *Options {
 	var opts Options
 
-	flag.IntVar(&opts.Port, "port", config.DefaultPort, "The port for the scheduler server to listen on")
-	flag.IntVar(&opts.HealthzPort, "healthz-port", 8080, "The port for the healthz server to listen on")
+	flag.IntVar(&opts.SchedulerPort, "port", defaultSchedulerPort, "The port for the scheduler server to listen on")
+	flag.IntVar(&opts.HealthzPort, "healthz-port", defaultHealthzPort, "The port for the healthz server to listen on")
 
 	flag.BoolVar(&opts.TLSEnabled, "tls-enabled", false, "Should TLS be enabled for the scheduler gRPC server")
 	flag.StringVar(&opts.TrustDomain, "trust-domain", "localhost", "Trust domain for the Dapr control plane")
