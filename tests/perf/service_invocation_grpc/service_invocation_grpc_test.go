@@ -142,6 +142,7 @@ func TestServiceInvocationGrpcPerformance(t *testing.T) {
 		perf.WithDuration("10s"),
 		perf.WithPayloadSize(1024),
 	)
+	warmup.Grpc = true
 	warmup.Dapr = "capability=invoke,target=dapr,method=load,appid=testapp"
 	warmup.TargetEndpoint = "http://localhost:50001"
 	body, err = json.Marshal(warmup)
@@ -156,6 +157,7 @@ func TestServiceInvocationGrpcPerformance(t *testing.T) {
 	require.False(t, strings.HasPrefix(string(warmupResp), "error"))
 
 	// Perform dapr test
+	p.Grpc = true
 	p.Dapr = "capability=invoke,target=dapr,method=load,appid=testapp"
 	p.TargetEndpoint = "http://localhost:50001"
 	body, err = json.Marshal(p)
