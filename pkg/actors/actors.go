@@ -186,7 +186,6 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) ActorRuntime {
 		AppHealthFn: func(ctx context.Context) <-chan bool {
 			if a.checker == nil {
 				return nil
-
 			}
 			return a.checker.HealthChannel()
 		},
@@ -268,6 +267,11 @@ func (a *actorsRuntime) Init(ctx context.Context) (err error) {
 		a.actorsReminders.OnPlacementTablesUpdated(ctx)
 	})
 
+	a.checker, err = a.getAppHealthChecker()
+	if err != nil {
+		return fmt.Errorf("actors: couldn't create health check: %w", err)
+	}
+
 	if a.checker != nil {
 		a.wg.Add(1)
 		go func() {
@@ -281,7 +285,6 @@ func (a *actorsRuntime) Init(ctx context.Context) (err error) {
 		if err != nil {
 			return fmt.Errorf("failed to register actor '%s': %w", actorType, err)
 		}
-
 	}
 
 	a.wg.Add(1)

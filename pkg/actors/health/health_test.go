@@ -29,7 +29,7 @@ import (
 func TestApplyOptions(t *testing.T) {
 	t.Run("no address should error", func(t *testing.T) {
 		checker, err := New()
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Nil(t, checker)
 	})
 
