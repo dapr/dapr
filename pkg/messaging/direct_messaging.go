@@ -18,7 +18,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"os"
 	"strings"
 	"sync/atomic"
@@ -229,10 +228,6 @@ func (d *directMessaging) invokeWithRetry(
 			rResp, teardown, rErr := fn(ctx, app.id, app.namespace, app.address, req)
 			if rErr == nil {
 				teardown(false)
-				// Remove the resolved name from the cache
-				if app.cacheKey != "" && d.resolverCache != nil {
-					d.resolverCache.Delete(app.cacheKey)
-				}
 				return rResp, nil
 			}
 
@@ -246,7 +241,13 @@ func (d *directMessaging) invokeWithRetry(
 				}
 				return rResp, fmt.Errorf("failed to invoke target %s after %d retries. Error: %w", app.id, attempt-1, rErr)
 			}
+
 			teardown(false)
+			// Remove the resolved name from the cache
+			if app.cacheKey != "" && d.resolverCache != nil {
+				d.resolverCache.Delete(app.cacheKey)
+			}
+
 			return rResp, backoff.Permanent(rErr)
 		})
 	}
@@ -630,12 +631,11 @@ func (d *directMessaging) getRemoteApp(appID string) (res remoteApp, err error) 
 				}
 				res.address = addresses.Pick()
 
-				if d.resolverCache != nil {
+				if len(addresses) > 0 && res.cacheKey != "" {
 					// Store the result in cache
 					// Note that we may have a race condition here if another goroutine was resolving the same address
 					// This is acceptable, as the waste caused by an extra DNS resolution is very small
-					// We set the TTL to the maximum so we use the default set in the cache
-					d.resolverCache.Set(res.cacheKey, addresses, math.MaxInt64)
+					d.resolverCache.Set(res.cacheKey, addresses, resolverCacheTTL)
 				}
 			}
 		} else {
