@@ -442,7 +442,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 
 		require.True(t, ok)
 		require.Equal(t, grpcCodes.Unimplemented, s.Code())
-		require.Equal(t, fmt.Sprintf("state store %s doesn't support transaction", "mystore-non-transactional"), s.Message())
+		require.Equal(t, fmt.Sprintf("state store %s doesn't support transactions", "mystore-non-transactional"), s.Message())
 
 		// Check status details
 		require.Len(t, s.Details(), 3)
