@@ -532,7 +532,7 @@ func (p *actorPlacement) updatePlacements(in *v1pb.PlacementTables) {
 			for lk, lv := range v.GetLoadMap() {
 				loadMap[lk] = hashing.NewHost(lv.GetName(), lv.GetId(), lv.GetLoad(), lv.GetPort())
 			}
-			p.placementTables.Entries[k] = hashing.NewFromExisting(v.GetHosts(), v.GetSortedSet(), loadMap)
+			p.placementTables.Entries[k] = hashing.NewFromExisting(loadMap, int(in.GetReplicationFactor()))
 		}
 
 		updated = true

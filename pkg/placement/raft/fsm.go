@@ -69,15 +69,14 @@ func (c *FSM) PlacementState() *v1pb.PlacementTables {
 	defer c.stateLock.RUnlock()
 
 	newTable := &v1pb.PlacementTables{
-		Version:  strconv.FormatUint(c.state.TableGeneration(), 10),
-		Entries:  make(map[string]*v1pb.PlacementTable),
-		ApiLevel: c.state.APILevel(),
+		Version:           strconv.FormatUint(c.state.TableGeneration(), 10),
+		Entries:           make(map[string]*v1pb.PlacementTable),
+		ApiLevel:          c.state.APILevel(),
+		ReplicationFactor: 100,
 	}
 
 	var (
-		totalHostSize  int
-		totalSortedSet int
-		totalLoadMap   int
+		totalLoadMap int
 	)
 
 	entries := c.state.hashingTableMap()
@@ -85,18 +84,11 @@ func (c *FSM) PlacementState() *v1pb.PlacementTables {
 		var table v1pb.PlacementTable
 		v.ReadInternals(func(hosts map[uint64]string, sortedSet []uint64, loadMap map[string]*hashing.Host, totalLoad int64) {
 			table = v1pb.PlacementTable{
-				Hosts:             make(map[uint64]string),
-				SortedSet:         make([]uint64, len(sortedSet)),
-				TotalLoad:         totalLoad,
-				LoadMap:           make(map[string]*v1pb.Host),
-				ReplicationFactor: 100,
+				Hosts:     make(map[uint64]string),
+				SortedSet: make([]uint64, len(sortedSet)),
+				TotalLoad: totalLoad,
+				LoadMap:   make(map[string]*v1pb.Host),
 			}
-
-			for lk, lv := range hosts {
-				table.Hosts[lk] = lv
-			}
-
-			copy(table.GetSortedSet(), sortedSet)
 
 			for lk, lv := range loadMap {
 				h := v1pb.Host{
@@ -111,12 +103,10 @@ func (c *FSM) PlacementState() *v1pb.PlacementTables {
 
 		newTable.Entries[k] = &table
 
-		totalHostSize += len(table.GetHosts())
-		totalSortedSet += len(table.GetSortedSet())
 		totalLoadMap += len(table.GetLoadMap())
 	}
 
-	logging.Debugf("PlacementTable HostsCount=%d SortedSetCount=%d LoadMapCount=%d ApiLevel=%d", totalHostSize, totalSortedSet, totalLoadMap, newTable.GetApiLevel())
+	logging.Debugf("PlacementTable LoadMapCount=%d ApiLevel=%d ReplicationFactor=%d", totalLoadMap, newTable.GetApiLevel(), newTable.GetReplicationFactor())
 
 	return newTable
 }

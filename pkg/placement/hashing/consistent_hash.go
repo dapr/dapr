@@ -90,12 +90,28 @@ func NewConsistentHash() *Consistent {
 }
 
 // NewFromExisting creates a new consistent hash from existing values.
-func NewFromExisting(hosts map[uint64]string, sortedSet []uint64, loadMap map[string]*Host) *Consistent {
-	return &Consistent{
-		hosts:     hosts,
-		sortedSet: sortedSet,
+func NewFromExisting(loadMap map[string]*Host, replicationFactor int) *Consistent {
+
+	newHash := &Consistent{
+		hosts:     map[uint64]string{},
+		sortedSet: []uint64{},
 		loadMap:   loadMap,
 	}
+
+	for hostName, _ := range loadMap {
+		for i := 0; i < replicationFactor; i++ {
+			h := newHash.hash(fmt.Sprintf("%s%d", hostName, i))
+			newHash.hosts[h] = hostName
+			newHash.sortedSet = append(newHash.sortedSet, h)
+		}
+	}
+
+	// sort hashes in ascending order
+	sort.Slice(newHash.sortedSet, func(i int, j int) bool {
+		return newHash.sortedSet[i] < newHash.sortedSet[j]
+	})
+
+	return newHash
 }
 
 // ReadInternals returns the internal data structure of the consistent hash.
@@ -116,15 +132,6 @@ func (c *Consistent) Add(host, id string, port int64) bool {
 	}
 
 	c.loadMap[host] = &Host{Name: host, AppID: id, Load: 0, Port: port}
-	for i := 0; i < replicationFactor; i++ {
-		h := c.hash(fmt.Sprintf("%s%d", host, i))
-		c.hosts[h] = host
-		c.sortedSet = append(c.sortedSet, h)
-	}
-	// sort hashes ascendingly
-	sort.Slice(c.sortedSet, func(i int, j int) bool {
-		return c.sortedSet[i] < c.sortedSet[j]
-	})
 
 	return false
 }
