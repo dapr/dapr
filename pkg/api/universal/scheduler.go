@@ -112,11 +112,11 @@ func (a *Universal) ListJobs(ctx context.Context, inReq *runtimev1pb.ListJobsReq
 
 	internalListResp, err = a.schedulerClient.ListJobs(ctx, internalListReq)
 	if err != nil {
-		a.logger.Errorf("Error Listing jobs for app %v", err)
-		return response, err
+		a.logger.Errorf("Error Listing jobs for app %s: %v", inReq.AppId, err)
+		return nil, err
 	}
 
-	if len(internalListResp.GetJobs()) > 0 {
+	if len(internalListResp.Jobs) > 0 {
 		response.Jobs = internalListResp.Jobs
 	}
 

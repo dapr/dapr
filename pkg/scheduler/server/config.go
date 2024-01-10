@@ -35,12 +35,15 @@ func parseEtcdUrls(strs []string) ([]url.URL, error) {
 
 func conf() *embed.Config {
 	config := embed.NewConfig()
-	config.Name = "localhost"
+	config.Name = "scheduler-etcd"
 	config.Dir = "/tmp/my-embedded-ectd-cluster"
 	// config.LPUrls = parseEtcdUrls([]string{"http://0.0.0.0:2380"})
 	// config.LCUrls = parseEtcdUrls([]string{"http://0.0.0.0:2379"})
 	// config.APUrls = parseEtcdUrls([]string{"http://localhost:2380"})
 	// config.ACUrls = parseEtcdUrls([]string{"http://localhost:2379"})
 	config.InitialCluster = "localhost=http://localhost:2380"
+
+	config.LogLevel = "error" // Only supports debug, info, warn, error, panic, or fatal. Default 'info'.
+	//TODO: Look into etcd config and if we need to do any raft compacting
 	return config
 }
