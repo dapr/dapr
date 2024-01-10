@@ -65,7 +65,7 @@ func Start(ctx context.Context, opts SchedulerServiceOpts) error {
 }
 
 func (s *server) Run(ctx context.Context) error {
-	schedulerServerLogger.Info("Server is running...")
+	schedulerServerLogger.Info("Dapr Scheduler is starting...")
 
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", s.opts.SchedulerPort))
 	if err != nil {
