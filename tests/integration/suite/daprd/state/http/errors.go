@@ -561,7 +561,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
 		require.True(t, exists)
-		require.Equal(t, fmt.Sprintf("state store %s doesn't support transaction", "mystore-non-transactional"), errMsg)
+		require.Equal(t, fmt.Sprintf("state store %s doesn't support transactions", "mystore-non-transactional"), errMsg)
 
 		// Confirm that the 'details' field exists and has two elements
 		details, exists := data["details"]
