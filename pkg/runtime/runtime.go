@@ -156,9 +156,12 @@ func newDaprRuntime(ctx context.Context,
 		return nil, err
 	}
 
-	schedClient, err := getSchedulerClient(ctx, sec, runtimeConfig)
-	if err != nil {
-		return nil, err
+	var schedClient schedulerv1pb.SchedulerClient
+	if runtimeConfig.SchedulerEnabled() {
+		schedClient, err = getSchedulerClient(ctx, sec, runtimeConfig)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	grpc := createGRPCManager(sec, runtimeConfig, globalConfig)
@@ -185,6 +188,7 @@ func newDaprRuntime(ctx context.Context,
 		Namespace:        namespace,
 		IsHTTP:           runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
 		PlacementEnabled: len(runtimeConfig.placementAddresses) > 0,
+		SchedulerEnabled: len(runtimeConfig.schedulerAddresses) > 0,
 		Registry:         runtimeConfig.registry,
 		ComponentStore:   compStore,
 		Meta:             meta,
@@ -376,9 +380,10 @@ func getOperatorClient(ctx context.Context, sec security.Handler, cfg *internalC
 }
 
 func getSchedulerClient(ctx context.Context, sec security.Handler, cfg *internalConfig) (schedulerv1pb.SchedulerClient, error) {
-	schedClient, _, err := schedulerCli.GetSchedulerClient(ctx, cfg.kubernetes.ControlPlaneAddress, sec)
+	//TODO: make dynamic, not index 0
+	schedClient, _, err := schedulerCli.GetSchedulerClient(ctx, cfg.schedulerAddresses[0], sec)
 	if err != nil {
-		return nil, fmt.Errorf("error creating operator client: %w", err)
+		return nil, fmt.Errorf("error creating scheduler client: %w", err)
 	}
 
 	return schedClient, nil

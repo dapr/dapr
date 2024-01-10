@@ -59,6 +59,7 @@ type Options struct {
 	DaprGracefulShutdownSeconds  int
 	DaprBlockShutdownDuration    *time.Duration
 	PlacementServiceHostAddr     string
+	SchedulerServiceHostAddr     string
 	DaprAPIListenAddresses       string
 	AppHealthProbeInterval       int
 	AppHealthProbeTimeout        int
@@ -119,6 +120,7 @@ func New(origArgs []string) *Options {
 	fs.StringVar(&opts.ControlPlaneTrustDomain, "control-plane-trust-domain", "localhost", "Trust domain of the Dapr control plane")
 	fs.StringVar(&opts.ControlPlaneNamespace, "control-plane-namespace", "default", "Namespace of the Dapr control plane")
 	fs.StringVar(&opts.PlacementServiceHostAddr, "placement-host-address", "", "Addresses for Dapr Actor Placement servers")
+	fs.StringVar(&opts.SchedulerServiceHostAddr, "scheduler-host-address", "", "Addresses for Dapr Scheduler servers")
 	fs.StringVar(&opts.AllowedOrigins, "allowed-origins", cors.DefaultAllowedOrigins, "Allowed HTTP origins")
 	fs.BoolVar(&opts.EnableProfiling, "enable-profiling", false, "Enable profiling")
 	fs.BoolVar(&opts.RuntimeVersion, "version", false, "Prints the runtime version")

@@ -92,6 +92,7 @@ type Config struct {
 	DaprGracefulShutdownSeconds  int
 	DaprBlockShutdownDuration    *time.Duration
 	PlacementServiceHostAddr     string
+	SchedulerServiceHostAddr     string
 	DaprAPIListenAddresses       string
 	AppHealthProbeInterval       int
 	AppHealthProbeTimeout        int
@@ -121,6 +122,7 @@ type internalConfig struct {
 	appConnectionConfig          config.AppConnectionConfig
 	mode                         modes.DaprMode
 	placementAddresses           []string
+	schedulerAddresses           []string
 	allowedOrigins               string
 	standalone                   configmodes.StandaloneConfig
 	kubernetes                   configmodes.KubernetesConfig
@@ -140,6 +142,10 @@ type internalConfig struct {
 
 func (i internalConfig) ActorsEnabled() bool {
 	return len(i.placementAddresses) > 0
+}
+
+func (i internalConfig) SchedulerEnabled() bool {
+	return len(i.schedulerAddresses) > 0
 }
 
 // FromConfig creates a new Dapr Runtime from a configuration.
@@ -373,6 +379,10 @@ func (c *Config) toInternal() (*internalConfig, error) {
 
 	if c.PlacementServiceHostAddr != "" {
 		intc.placementAddresses = parsePlacementAddr(c.PlacementServiceHostAddr)
+	}
+
+	if c.SchedulerServiceHostAddr != "" {
+		intc.schedulerAddresses = parsePlacementAddr(c.SchedulerServiceHostAddr)
 	}
 
 	if intc.appConnectionConfig.MaxConcurrency == -1 {

@@ -33,7 +33,7 @@ var schedulerServerLogger = logger.NewLogger("dapr.scheduler.server")
 
 type SchedulerServiceOpts struct {
 	// Port is the port that the server will listen on.
-	Port int
+	SchedulerPort int
 
 	Security security.Handler
 }
@@ -49,87 +49,98 @@ type server struct {
 }
 
 // Start starts the server. Blocks until the context is cancelled.
-func Start(ctx context.Context, opts SchedulerServiceOpts, secHandler security.Handler) error {
+func Start(ctx context.Context, opts SchedulerServiceOpts) error {
 	// Init the server
 	s := &server{}
-	err := s.Init(ctx, opts, secHandler)
+	err := s.Init(ctx, opts)
 	if err != nil {
 		return fmt.Errorf("failed to init server: %w", err)
 	}
-
 	return s.Run(ctx)
 }
 
-func (s *server) Init(ctx context.Context, opts SchedulerServiceOpts, secHandler security.Handler) (err error) {
+// TODO: move all of init to start() and rm init func
+func (s *server) Init(ctx context.Context, opts SchedulerServiceOpts) (err error) {
 	s.opts = opts
 	s.shutdownCh = make(chan struct{})
 	s.connectedHosts = make(map[string][]string)
 
 	// initialize etcd server at localhost:2379
+	go func() {
+		etcd, err := embed.StartEtcd(conf())
+		if err != nil {
+			schedulerServerLogger.Fatal(err)
+		}
+		defer etcd.Close()
 
-	etcd, err := embed.StartEtcd(conf())
-	if err != nil {
+		select {
+		case <-etcd.Server.ReadyNotify():
+			schedulerServerLogger.Info("Etcd server is ready!")
+		case <-time.After(1000 * time.Second):
+			etcd.Server.Stop()
+			schedulerServerLogger.Info("Etcd server timed out and stopped!")
+		}
+		// err = <-etcd.Err()
+		// schedulerServerLogger.Fatal(err)
+
+		// initialize etcd client via go-etcd-cron
+
+		schedulerServerLogger.Info("Starting etcdcron")
+		cron, err := etcdcron.New()
+
+		if err != nil {
+			schedulerServerLogger.Fatalf("fail to create etcd-cron: %s", err)
+		}
+		s.cron = cron
+		cron.Start(context.Background())
+
+		// // Dummy method
+		//s.ScheduleJob(context.Background(), &schedulerv1pb.ScheduleJobRequest{
+		//	Job: &runtimev1pb.Job{
+		//		Name:     "testDummy2",
+		//		Schedule: "*/4 * * * * *",
+		//	},
+		//	Namespace: "default",
+		//})
+
+		err = <-etcd.Err()
 		schedulerServerLogger.Fatal(err)
-	}
-	defer etcd.Close()
-
-	select {
-	case <-etcd.Server.ReadyNotify():
-		schedulerServerLogger.Info("Etcd server is ready!")
-	case <-time.After(1000 * time.Second):
-		etcd.Server.Stop()
-		schedulerServerLogger.Info("Etcd server timed out and stopped!")
-	}
-	// err = <-etcd.Err()
-	// schedulerServerLogger.Fatal(err)
-
-	// initialize etcd client via go-etcd-cron
-
-	schedulerServerLogger.Info("Starting etcdcron")
-	cron, err := etcdcron.New()
-
-	if err != nil {
-		schedulerServerLogger.Fatalf("fail to create etcd-cron: %s", err)
-	}
-	s.cron = cron
-	cron.Start(context.Background())
-
-	// // Dummy method
-	//s.ScheduleJob(context.Background(), &schedulerv1pb.ScheduleJobRequest{
-	//	Job: &runtimev1pb.Job{
-	//		Name:     "testDummy2",
-	//		Schedule: "*/4 * * * * *",
-	//	},
-	//	Namespace: "default",
-	//})
-
-	err = <-etcd.Err()
-	schedulerServerLogger.Fatal(err)
+	}()
 
 	// Create the gRPC server
-	s.srv = grpc.NewServer(secHandler.GRPCServerOptionMTLS())
+	s.srv = grpc.NewServer(s.opts.Security.GRPCServerOptionMTLS())
+
 	schedulerv1pb.RegisterSchedulerServer(s.srv, s)
 
 	return nil
 }
 
 func (s *server) Run(ctx context.Context) error {
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", s.opts.Port))
+	schedulerServerLogger.Info("HERE")
+	//lis, err := net.Listen("tcp", fmt.Sprintf(":%d", s.opts.SchedulerPort))
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", s.opts.SchedulerPort))
 	if err != nil {
-		return fmt.Errorf("could not listen on port %d: %w", s.opts.Port, err)
+		return fmt.Errorf("could not listen on port %d: %w", s.opts.SchedulerPort, err)
 	}
 
 	errCh := make(chan error, 1)
 	go func() {
-		schedulerServerLogger.Infof("Running gRPC server on port %d", s.opts.Port)
+		//schedulerServerLogger.Debugf("Running gRPC server on port %d", s.opts.Port)
+		schedulerServerLogger.Infof("Running gRPC server on port %d", s.opts.SchedulerPort)
 		if err := s.srv.Serve(lis); err != nil {
 			errCh <- fmt.Errorf("failed to serve: %w", err)
 			return
 		}
-		errCh <- nil
+		//errCh <- nil
 	}()
 
-	<-ctx.Done()
+	select {
+	case err = <-errCh:
+		return err
+	case <-ctx.Done():
+		return nil
+	}
+
 	schedulerServerLogger.Info("Shutting down gRPC server")
 
 	gracefulShutdownCh := make(chan struct{})

@@ -483,7 +483,8 @@ func isControlPlaneService(id string) bool {
 	case "dapr-operator",
 		"dapr-placement",
 		"dapr-injector",
-		"dapr-sentry":
+		"dapr-sentry",
+		"dapr-scheduler":
 		return true
 	default:
 		return false
