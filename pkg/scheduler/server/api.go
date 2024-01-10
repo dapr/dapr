@@ -67,17 +67,55 @@ func (s *Server) triggerJob(job *runtimev1pb.Job, namespace string, metadata map
 }
 
 // ListJobs is a placeholder method that needs to be implemented
-func (s *Server) ListJobs(context.Context, *schedulerv1pb.ListJobsRequest) (*schedulerv1pb.ListJobsResponse, error) {
-	return nil, fmt.Errorf("not implemented")
+func (s *Server) ListJobs(ctx context.Context, req *schedulerv1pb.ListJobsRequest) (*schedulerv1pb.ListJobsResponse, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-s.readyCh:
+	}
+
+	// TODO: need to do some tweaks here to get entries by appID from req.AppId
+
+	entries := s.cron.Entries()
+
+	var jobs []*runtimev1pb.Job
+	for _, entry := range entries {
+		job := &runtimev1pb.Job{
+			Name:     entry.Job.Name,
+			Schedule: entry.Job.Rhythm,
+			// TODO: rest
+			//Data:     nil,
+			//Repeats:  0,
+			//DueTime:  "",
+			//Ttl:      "",
+		}
+		jobs = append(jobs, job)
+	}
+
+	resp := &schedulerv1pb.ListJobsResponse{Jobs: jobs}
+
+	return resp, nil
 }
 
 // GetJob is a placeholder method that needs to be implemented
-func (s *Server) GetJob(context.Context, *schedulerv1pb.JobRequest) (*schedulerv1pb.GetJobResponse, error) {
+func (s *Server) GetJob(ctx context.Context, req *schedulerv1pb.JobRequest) (*schedulerv1pb.GetJobResponse, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-s.readyCh:
+	}
+
 	return nil, fmt.Errorf("not implemented")
 }
 
 // DeleteJob is a placeholder method that needs to be implemented
-func (s *Server) DeleteJob(context.Context, *schedulerv1pb.JobRequest) (*schedulerv1pb.DeleteJobResponse, error) {
+func (s *Server) DeleteJob(ctx context.Context, req *schedulerv1pb.JobRequest) (*schedulerv1pb.DeleteJobResponse, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-s.readyCh:
+	}
+
 	return nil, fmt.Errorf("not implemented")
 }
 
