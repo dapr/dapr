@@ -14,24 +14,23 @@ limitations under the License.
 package server
 
 import (
-	"log"
+	"fmt"
 	"net/url"
 
 	"go.etcd.io/etcd/server/v3/embed"
 )
 
-func parseEtcdUrls(strs []string) []url.URL {
+func parseEtcdUrls(strs []string) ([]url.URL, error) {
 	urls := make([]url.URL, 0, len(strs))
 	for _, str := range strs {
 		u, err := url.Parse(str)
 		if err != nil {
-			log.Printf("Invalid url %s, error: %s", str, err.Error())
-			continue
+			return nil, fmt.Errorf("invalid url %s: %s", str, err)
 		}
 		urls = append(urls, *u)
 	}
-	return urls
 
+	return urls, nil
 }
 
 func conf() *embed.Config {

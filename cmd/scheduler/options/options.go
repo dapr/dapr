@@ -31,12 +31,12 @@ const (
 	// defaultDaprSystemConfigName is the default resource object name for Dapr System Config.
 	defaultDaprSystemConfigName = "daprsystem"
 	defaultHealthzPort          = 7070
-	defaultSchedulerPort        = 50006
+	defaultPort                 = 50006
 )
 
 type Options struct {
-	SchedulerPort int
-	HealthzPort   int
+	Port        int
+	HealthzPort int
 
 	TLSEnabled       bool
 	TrustDomain      string
@@ -51,7 +51,7 @@ type Options struct {
 func New() *Options {
 	var opts Options
 
-	flag.IntVar(&opts.SchedulerPort, "port", defaultSchedulerPort, "The port for the scheduler server to listen on")
+	flag.IntVar(&opts.Port, "port", defaultPort, "The port for the scheduler server to listen on")
 	flag.IntVar(&opts.HealthzPort, "healthz-port", defaultHealthzPort, "The port for the healthz server to listen on")
 
 	flag.BoolVar(&opts.TLSEnabled, "tls-enabled", false, "Should TLS be enabled for the scheduler gRPC server")
