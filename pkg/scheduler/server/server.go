@@ -15,7 +15,6 @@ package server
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 
@@ -62,7 +61,7 @@ func (s *Server) Run(ctx context.Context) error {
 	log.Info("Dapr Scheduler is starting...")
 	return concurrency.NewRunnerManager(
 		s.runServer,
-		s.runETCD,
+		s.runEtcd,
 	).Run(ctx)
 }
 
@@ -85,16 +84,14 @@ func (s *Server) runServer(ctx context.Context) error {
 	case err = <-errCh:
 		return err
 	case <-ctx.Done():
-		log.Info("Shutting down gRPC server")
-
 		s.srv.GracefulStop()
-
+		log.Info("Scheduler GRPC server stopped")
 		return nil
 	}
 }
 
-func (s *Server) runETCD(ctx context.Context) error {
-	log.Info("Starting etcd concurrently...")
+func (s *Server) runEtcd(ctx context.Context) error {
+	log.Info("Starting etcd")
 
 	etcd, err := embed.StartEtcd(conf())
 	if err != nil {
@@ -106,11 +103,10 @@ func (s *Server) runETCD(ctx context.Context) error {
 	case <-etcd.Server.ReadyNotify():
 		log.Info("Etcd server is ready!")
 	case <-ctx.Done():
-		etcd.Server.Stop()
-		return errors.New("etcd server took too long to start")
+		return ctx.Err()
 	}
 
-	log.Info("Starting ETCDCron")
+	log.Info("Starting EtcdCron")
 	cron, err := etcdcron.New()
 	if err != nil {
 		return fmt.Errorf("fail to create etcd-cron: %s", err)
@@ -126,6 +122,7 @@ func (s *Server) runETCD(ctx context.Context) error {
 	case err := <-etcd.Err():
 		return err
 	case <-ctx.Done():
+		log.Info("Embedded Etcd shutting down")
 		return nil
 	}
 }
