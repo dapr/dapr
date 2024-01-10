@@ -430,17 +430,17 @@ func TestListsNamespaced(t *testing.T) {
 					Namespace: "dapr-mockns",
 				},
 				Scoped: commonapi.Scoped{
-					Scopes: []string{"dapr-actors-mock-service"},
+					Scopes: []string{"dapr-placement"},
 				},
 			}).
 			Build()
 
-		api := NewAPIServer(Options{Client: client, AdditionalCPServices: []string{"actors-mock-service"}}).(*apiServer)
+		api := NewAPIServer(Options{Client: client}).(*apiServer)
 
 		os.Setenv("NAMESPACE", "dapr-mockns")
 		defer os.Unsetenv("NAMESPACE")
 
-		appID := spiffeid.RequireFromString("spiffe://example.org/ns/dapr-mockns/dapr-actors-mock-service")
+		appID := spiffeid.RequireFromString("spiffe://example.org/ns/dapr-mockns/dapr-placement")
 		serverID := spiffeid.RequireFromString("spiffe://example.org/ns/ns1/sv1")
 		pki := util.GenPKI(t, util.PKIOptions{
 			LeafID:   serverID,

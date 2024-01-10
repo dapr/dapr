@@ -50,9 +50,8 @@ import (
 )
 
 const (
-	sentrySignTimeout         = time.Second * 3
-	sentryMaxRetries          = 5
-	controlPlanePodNamePrefix = "dapr-"
+	sentrySignTimeout = time.Second * 3
+	sentryMaxRetries  = 5
 )
 
 type renewFn func(context.Context) (*x509.Certificate, error)
@@ -148,7 +147,7 @@ func newX509Source(ctx context.Context, clock clock.Clock, cptd spiffeid.TrustDo
 
 	// If the service is a control plane service, set the trust domain to the
 	// control plane trust domain.
-	if utils.IsControlPlaneService(opts.AppID, opts.AdditionalCPServices) && opts.ControlPlaneNamespace == ns {
+	if utils.IsControlPlaneService(opts.AppID) && opts.ControlPlaneNamespace == ns {
 		trustDomain = &opts.ControlPlaneTrustDomain
 	}
 

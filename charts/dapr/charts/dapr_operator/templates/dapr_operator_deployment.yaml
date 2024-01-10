@@ -172,14 +172,6 @@ spec:
 {{- if .Values.global.operator.watchdogCanPatchPodLabels }}
         - "--watchdog-can-patch-pod-labels"
 {{- end }}
-{{- if .Values.global.actors.serviceName }}
-        - "--additional-control-plane-service"
-        - "{{ .Values.global.actors.serviceName }}"
-{{- end }}
-{{- if .Values.global.reminders.serviceName }}
-        - "--additional-control-plane-service"
-        - "{{ .Values.global.reminders.serviceName }}"
-{{- end }}
       serviceAccountName: dapr-operator
       volumes:
         - name: dapr-operator-tmp

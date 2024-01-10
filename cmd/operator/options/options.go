@@ -54,7 +54,6 @@ type Options struct {
 	Metrics                            *metrics.Options
 	APIPort                            int
 	HealthzPort                        int
-	AdditionalCPServices               stringSliceFlag
 }
 
 func New() *Options {
@@ -80,8 +79,6 @@ func New() *Options {
 
 	flag.IntVar(&opts.APIPort, "port", 6500, "The port for the operator API server to listen on")
 	flag.IntVar(&opts.HealthzPort, "healthz-port", 8080, "The port for the healthz server to listen on")
-
-	flag.Var(&opts.AdditionalCPServices, "additional-control-plane-service", "Name of the additional control plane service, if any")
 
 	opts.Logger = logger.DefaultOptions()
 	opts.Logger.AttachCmdFlags(flag.StringVar, flag.BoolVar)
@@ -110,22 +107,4 @@ func New() *Options {
 	}
 
 	return &opts
-}
-
-// Flag type. Allows passing a flag multiple times to get a slice of strings.
-// It implements the flag.Value interface.
-type stringSliceFlag []string
-
-// String formats the flag value.
-func (f stringSliceFlag) String() string {
-	return strings.Join(f, ",")
-}
-
-// Set the flag value.
-func (f *stringSliceFlag) Set(value string) error {
-	if value == "" {
-		return nil
-	}
-	*f = append(*f, value)
-	return nil
 }

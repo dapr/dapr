@@ -176,14 +176,6 @@ spec:
 {{- end }}
         - "--trust-domain"
         - {{ .Values.global.mtls.controlPlaneTrustDomain }}
-{{- if .Values.global.actors.serviceName }}
-        - "--additional-control-plane-service"
-        - "{{ .Values.global.actors.serviceName }}"
-{{- end }}
-{{- if .Values.global.reminders.serviceName }}
-        - "--additional-control-plane-service"
-        - "{{ .Values.global.reminders.serviceName }}"
-{{- end }}
 {{- with .Values.global.issuerFilenames }}
         - "--issuer-ca-filename"
         - "{{ .ca }}"

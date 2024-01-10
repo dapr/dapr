@@ -113,9 +113,6 @@ type Options struct {
 	// Mode is the operation mode of this security instance (self-hosted or
 	// Kubernetes).
 	Mode modes.DaprMode
-
-	// AdditionalCPServices is the list of additional control plane service names.
-	AdditionalCPServices []string
 }
 
 type provider struct {
