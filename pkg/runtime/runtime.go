@@ -162,6 +162,8 @@ func newDaprRuntime(ctx context.Context,
 		if err != nil {
 			return nil, err
 		}
+
+		log.Infof("Scheduler client initialized")
 	}
 
 	grpc := createGRPCManager(sec, runtimeConfig, globalConfig)

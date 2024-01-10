@@ -72,10 +72,13 @@ func main() {
 			if serr != nil {
 				return serr
 			}
-			return server.Start(ctx, server.SchedulerServiceOpts{
-				SchedulerPort: opts.SchedulerPort,
-				Security:      secHandler,
+
+			server := server.New(server.Options{
+				Port:     opts.Port,
+				Security: secHandler,
 			})
+
+			return server.Run(ctx)
 		},
 		func(ctx context.Context) error {
 			healthzServer := health.NewServer(log)
