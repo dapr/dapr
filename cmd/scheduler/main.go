@@ -87,7 +87,7 @@ func main() {
 		},
 	).Run(ctx)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("error running scheduler: %v", err)
 	}
 
 	log.Info("Scheduler service shut down gracefully")
