@@ -27,7 +27,7 @@ import (
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/grpcapp"
+	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -56,12 +56,12 @@ spec:
     - name: HotReload
       enabled: true`), 0o600))
 
-	srv := grpcapp.New(t,
-		grpcapp.WithOnTopicEventFn(func(_ context.Context, in *rtv1.TopicEventRequest) (*rtv1.TopicEventResponse, error) {
+	srv := app.New(t,
+		app.WithOnTopicEventFn(func(_ context.Context, in *rtv1.TopicEventRequest) (*rtv1.TopicEventResponse, error) {
 			g.topicChan <- in.GetPath()
 			return new(rtv1.TopicEventResponse), nil
 		}),
-		grpcapp.WithListTopicSubscriptions(func(context.Context, *emptypb.Empty) (*rtv1.ListTopicSubscriptionsResponse, error) {
+		app.WithListTopicSubscriptions(func(context.Context, *emptypb.Empty) (*rtv1.ListTopicSubscriptionsResponse, error) {
 			return &rtv1.ListTopicSubscriptionsResponse{
 				Subscriptions: []*rtv1.TopicSubscription{
 					{PubsubName: "pubsub1", Topic: "topic1", Routes: &rtv1.TopicRoutes{Default: "/route1"}},

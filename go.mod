@@ -12,7 +12,7 @@ require (
 	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/cloudevents/sdk-go/v2 v2.14.0
 	github.com/dapr/components-contrib v1.12.1-0.20231219201927-02c6b21ec621
-	github.com/dapr/kit v0.12.2-0.20231219171931-d7281f0c24d0
+	github.com/dapr/kit v0.12.2-0.20231220162141-abe711ef620f
 	github.com/evanphx/json-patch/v5 v5.7.0
 	github.com/go-chi/chi/v5 v5.0.10
 	github.com/go-chi/cors v1.2.1
@@ -67,6 +67,7 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20231012201019-e917dd12ba7a
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20231030173426-d783a09b4405
 	google.golang.org/grpc v1.59.0
+	google.golang.org/grpc/examples v0.0.0-20230224211313-3775f633ce20
 	google.golang.org/protobuf v1.31.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.26.9
@@ -462,10 +463,11 @@ replace (
 // check for retracted versions: go list -mod=mod -f '{{if .Retracted}}{{.}}{{end}}' -u -m all
 replace github.com/microcosm-cc/bluemonday => github.com/microcosm-cc/bluemonday v1.0.24
 
-// Uncomment for local development for testing with changes in the components-contrib repository.
+// Uncomment for local development for testing with changes in the components-contrib && kit repositories.
 // Don't commit with this uncommented!
 //
 // replace github.com/dapr/components-contrib => ../components-contrib
+// replace github.com/dapr/kit => ../kit
 //
-// Then, run `make modtidy` in this repository.
-// This ensures that go.mod and go.sum are up-to-date.
+// Then, run `make modtidy-all` in this repository.
+// This ensures that go.mod and go.sum are up-to-date for each go.mod file.

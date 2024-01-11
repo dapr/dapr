@@ -2,13 +2,14 @@
 
 import { readFile } from 'node:fs/promises'
 
-const match = `// Uncomment for local development for testing with changes in the components-contrib repository.
+const match = `// Uncomment for local development for testing with changes in the components-contrib && kit repositories.
 // Don't commit with this uncommented!
 //
 // replace github.com/dapr/components-contrib => ../components-contrib
+// replace github.com/dapr/kit => ../kit
 //
-// Then, run \`make modtidy\` in this repository.
-// This ensures that go.mod and go.sum are up-to-date.`
+// Then, run \`make modtidy-all\` in this repository.
+// This ensures that go.mod and go.sum are up-to-date for each go.mod file.`
 
 const read = await readFile('go.mod', { encoding: 'utf8' })
 if (!read.includes(match)) {
