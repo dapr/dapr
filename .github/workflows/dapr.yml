@@ -132,6 +132,7 @@ jobs:
       GOPROXY: "https://proxy.golang.org"
       ARCHIVE_OUTDIR: "dist/archives"
       TEST_OUTPUT_FILE_PREFIX: "test_report"
+      DAPR_GO_BUILD_TAGS: "unit"
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v3

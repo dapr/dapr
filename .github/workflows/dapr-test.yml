@@ -334,6 +334,7 @@ jobs:
       - name: Build Dapr and its Docker images
         if: env.TEST_PREFIX != ''
         run: |
+          DAPR_GO_BUILD_TAGS=e2e
           make build
           if [ "${{ env.TARGET_OS }}" = "linux" ] && [ "${{ env.TARGET_ARCH }}" != "arm" ]; then
             # For Linux, we use images based on Mariner

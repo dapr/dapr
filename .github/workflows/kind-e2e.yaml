@@ -164,6 +164,7 @@ jobs:
 
     - name: Build and push Dapr
       run: |
+        DAPR_GO_BUILD_TAGS=e2e
         make build-linux
         make docker-build
         make docker-push

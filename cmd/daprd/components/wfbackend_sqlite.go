@@ -1,4 +1,4 @@
-//go:build allcomponents || stablecomponents
+//go:build e2e || unit || integration || perf
 
 /*
 Copyright 2023 The Dapr Authors
