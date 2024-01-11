@@ -10,7 +10,9 @@ metadata:
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
 spec:
-{{- if or (eq .Values.global.ha.enabled true) (eq .Values.ha true) }}
+{{- if eq .Values.scaleZero true }}
+  replicas: 0
+{{- else if or (eq .Values.global.ha.enabled true) (eq .Values.ha true) }}
   replicas: 3
 {{- else }}
   replicas: 1
