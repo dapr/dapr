@@ -100,7 +100,6 @@ func GenPKIError(opts PKIOptions) (PKI, error) {
 	if err != nil {
 		return PKI{}, err
 	}
-
 	clientCertPEM, clientPKPEM, clientCert, clientPK, err := genLeafCert(rootPK, rootCert, opts.ClientID, opts.ClientDNS)
 	if err != nil {
 		return PKI{}, err

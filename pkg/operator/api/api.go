@@ -171,7 +171,7 @@ func (a *apiServer) OnComponentUpdated(ctx context.Context, eventType operatorv1
 	a.connLock.Unlock()
 }
 
-func (a *apiServer) OnHTTPEndpointUpdated(_ context.Context, endpoint *httpendpointsapi.HTTPEndpoint) {
+func (a *apiServer) OnHTTPEndpointUpdated(ctx context.Context, endpoint *httpendpointsapi.HTTPEndpoint) {
 	a.endpointLock.Lock()
 	for _, endpointUpdateChan := range a.allEndpointsUpdateChan {
 		go func(endpointUpdateChan chan *httpendpointsapi.HTTPEndpoint) {
@@ -192,6 +192,10 @@ func (a *apiServer) Ready(ctx context.Context) error {
 
 // GetConfiguration returns a Dapr configuration.
 func (a *apiServer) GetConfiguration(ctx context.Context, in *operatorv1pb.GetConfigurationRequest) (*operatorv1pb.GetConfigurationResponse, error) {
+	if err := a.authzRequest(ctx, in.GetNamespace()); err != nil {
+		return nil, err
+	}
+
 	key := types.NamespacedName{Namespace: in.GetNamespace(), Name: in.GetName()}
 	var config configurationapi.Configuration
 	if err := a.Client.Get(ctx, key, &config); err != nil {
@@ -391,6 +395,10 @@ func (a *apiServer) ListSubscriptions(ctx context.Context, in *emptypb.Empty) (*
 
 // ListSubscriptionsV2 returns a list of Dapr pub/sub subscriptions. Use ListSubscriptionsRequest to expose pod info.
 func (a *apiServer) ListSubscriptionsV2(ctx context.Context, in *operatorv1pb.ListSubscriptionsRequest) (*operatorv1pb.ListSubscriptionsResponse, error) {
+	if err := a.authzRequest(ctx, in.GetNamespace()); err != nil {
+		return nil, err
+	}
+
 	resp := &operatorv1pb.ListSubscriptionsResponse{
 		Subscriptions: [][]byte{},
 	}
@@ -420,6 +428,10 @@ func (a *apiServer) ListSubscriptionsV2(ctx context.Context, in *operatorv1pb.Li
 
 // GetResiliency returns a specified resiliency object.
 func (a *apiServer) GetResiliency(ctx context.Context, in *operatorv1pb.GetResiliencyRequest) (*operatorv1pb.GetResiliencyResponse, error) {
+	if err := a.authzRequest(ctx, in.GetNamespace()); err != nil {
+		return nil, err
+	}
+
 	key := types.NamespacedName{Namespace: in.GetNamespace(), Name: in.GetName()}
 	var resiliencyConfig resiliencyapi.Resiliency
 	if err := a.Client.Get(ctx, key, &resiliencyConfig); err != nil {
@@ -436,6 +448,10 @@ func (a *apiServer) GetResiliency(ctx context.Context, in *operatorv1pb.GetResil
 
 // ListResiliency gets the list of applied resiliencies.
 func (a *apiServer) ListResiliency(ctx context.Context, in *operatorv1pb.ListResiliencyRequest) (*operatorv1pb.ListResiliencyResponse, error) {
+	if err := a.authzRequest(ctx, in.GetNamespace()); err != nil {
+		return nil, err
+	}
+
 	resp := &operatorv1pb.ListResiliencyResponse{
 		Resiliencies: [][]byte{},
 	}
@@ -463,6 +479,10 @@ func (a *apiServer) ListResiliency(ctx context.Context, in *operatorv1pb.ListRes
 // TODO: @joshvanl: Authorize pod name and namespace matches the SPIFFE ID of
 // the caller.
 func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv operatorv1pb.Operator_ComponentUpdateServer) error { //nolint:nosnakecase
+	if err := a.authzRequest(srv.Context(), in.GetNamespace()); err != nil {
+		return err
+	}
+
 	log.Info("sidecar connected for component updates")
 	keyObj, err := uuid.NewRandom()
 	if err != nil {
@@ -531,6 +551,10 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 
 // GetHTTPEndpoint returns a specified http endpoint object.
 func (a *apiServer) GetHTTPEndpoint(ctx context.Context, in *operatorv1pb.GetResiliencyRequest) (*operatorv1pb.GetHTTPEndpointResponse, error) {
+	if err := a.authzRequest(ctx, in.GetNamespace()); err != nil {
+		return nil, err
+	}
+
 	key := types.NamespacedName{Namespace: in.GetNamespace(), Name: in.GetName()}
 	var endpointConfig httpendpointsapi.HTTPEndpoint
 	if err := a.Client.Get(ctx, key, &endpointConfig); err != nil {
@@ -547,6 +571,10 @@ func (a *apiServer) GetHTTPEndpoint(ctx context.Context, in *operatorv1pb.GetRes
 
 // ListHTTPEndpoints gets the list of applied http endpoints.
 func (a *apiServer) ListHTTPEndpoints(ctx context.Context, in *operatorv1pb.ListHTTPEndpointsRequest) (*operatorv1pb.ListHTTPEndpointsResponse, error) {
+	if err := a.authzRequest(ctx, in.GetNamespace()); err != nil {
+		return nil, err
+	}
+
 	resp := &operatorv1pb.ListHTTPEndpointsResponse{
 		HttpEndpoints: [][]byte{},
 	}
@@ -579,6 +607,10 @@ func (a *apiServer) ListHTTPEndpoints(ctx context.Context, in *operatorv1pb.List
 
 // HTTPEndpointUpdate updates Dapr sidecars whenever an http endpoint in the cluster is modified.
 func (a *apiServer) HTTPEndpointUpdate(in *operatorv1pb.HTTPEndpointUpdateRequest, srv operatorv1pb.Operator_HTTPEndpointUpdateServer) error { //nolint:nosnakecase
+	if err := a.authzRequest(srv.Context(), in.GetNamespace()); err != nil {
+		return err
+	}
+
 	log.Info("sidecar connected for http endpoint updates")
 	keyObj, err := uuid.NewRandom()
 	if err != nil {
