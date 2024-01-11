@@ -28,6 +28,7 @@ import (
 	"github.com/microsoft/durabletask-go/backend"
 
 	"github.com/dapr/dapr/pkg/actors"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 )
 
@@ -147,6 +148,12 @@ func (a *activityActor) executeActivity(ctx context.Context, actorID string, nam
 	if err != nil {
 		return err
 	}
+	activityName := ""
+	if ts := taskEvent.GetTaskScheduled(); ts != nil {
+		activityName = ts.GetName()
+	} else {
+		return fmt.Errorf("invalid activity task event: '%s'", taskEvent.String())
+	}
 
 	endIndex := strings.Index(actorID, "::")
 	if endIndex < 0 {
@@ -175,7 +182,16 @@ func (a *activityActor) executeActivity(ctx context.Context, actorID string, nam
 		}
 		return newRecoverableError(fmt.Errorf("failed to schedule an activity execution: %w", err))
 	}
-
+	// Activity execution started
+	start := time.Now()
+	executionStatus := ""
+	elapsed := float64(0)
+	// Record metrics on exit
+	defer func() {
+		if executionStatus != "" {
+			diag.DefaultWorkflowMonitoring.ActivityExecutionEvent(ctx, activityName, executionStatus, elapsed)
+		}
+	}()
 loop:
 	for {
 		t := time.NewTimer(10 * time.Minute)
@@ -184,6 +200,9 @@ loop:
 			if !t.Stop() {
 				<-t.C
 			}
+			// Activity execution failed with recoverable error
+			elapsed = diag.ElapsedSince(start)
+			executionStatus = diag.StatusRecoverable
 			return ctx.Err() // will be retried
 		case <-t.C:
 			if deadline, ok := ctx.Deadline(); ok {
@@ -195,9 +214,13 @@ loop:
 			if !t.Stop() {
 				<-t.C
 			}
+			// Activity execution completed
+			elapsed = diag.ElapsedSince(start)
 			if completed {
 				break loop
 			} else {
+				// Activity execution failed with recoverable error
+				executionStatus = diag.StatusRecoverable
 				return newRecoverableError(errExecutionAborted) // AbandonActivityWorkItem was called
 			}
 		}
@@ -207,6 +230,8 @@ loop:
 	// publish the result back to the workflow actor as a new event to be processed
 	resultData, err := backend.MarshalHistoryEvent(wi.Result)
 	if err != nil {
+		// Returning non-recoverable error
+		executionStatus = diag.StatusFailed
 		return err
 	}
 	req := invokev1.
@@ -218,7 +243,16 @@ loop:
 
 	resp, err := a.actorRuntime.Call(ctx, req)
 	if err != nil {
+		// Returning recoverable error, record metrics
+		executionStatus = diag.StatusRecoverable
 		return newRecoverableError(fmt.Errorf("failed to invoke '%s' method on workflow actor: %w", AddWorkflowEventMethod, err))
+	}
+	if wi.Result.GetTaskCompleted() != nil {
+		// Activity execution completed successfully
+		executionStatus = diag.StatusSuccess
+	} else if wi.Result.GetTaskFailed() != nil {
+		// Activity execution failed
+		executionStatus = diag.StatusFailed
 	}
 	defer resp.Close()
 	return nil
