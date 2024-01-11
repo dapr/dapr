@@ -205,8 +205,8 @@ func (abe *ActorBackend) CreateOrchestrationInstance(ctx context.Context, e *bac
 		WithContentType(invokev1.JSONContentType)
 	defer req.Close()
 
-	resp, err := abe.actorRuntime.Call(ctx, req)
 	start := time.Now()
+	resp, err := abe.actorRuntime.Call(ctx, req)
 	elapsed := diag.ElapsedSince(start)
 	if err != nil {
 		// failed request to CREATE workflow, record count and latency metrics.
@@ -228,8 +228,8 @@ func (abe *ActorBackend) GetOrchestrationMetadata(ctx context.Context, id api.In
 		WithContentType(invokev1.OctetStreamContentType)
 	defer req.Close()
 
-	res, err := abe.actorRuntime.Call(ctx, req)
 	start := time.Now()
+	resp, err := abe.actorRuntime.Call(ctx, req)
 	elapsed := diag.ElapsedSince(start)
 	if err != nil {
 		// failed request to GET workflow Information, record count and latency metrics.
@@ -239,8 +239,8 @@ func (abe *ActorBackend) GetOrchestrationMetadata(ctx context.Context, id api.In
 	// successful request to GET workflow information, record count and latency metrics.
 	diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.GetWorkflow, diag.StatusSuccess, elapsed)
 
-	defer res.Close()
-	data := res.RawData()
+	defer resp.Close()
+	data := resp.RawData()
 	var metadata api.OrchestrationMetadata
 	if err := actors.DecodeInternalActorData(data, &metadata); err != nil {
 		return nil, fmt.Errorf("failed to decode the internal actor response: %w", err)
@@ -287,8 +287,8 @@ func (abe *ActorBackend) AddNewOrchestrationEvent(ctx context.Context, id api.In
 		WithContentType(invokev1.OctetStreamContentType)
 	defer req.Close()
 
-	resp, err := abe.actorRuntime.Call(ctx, req)
 	start := time.Now()
+	resp, err := abe.actorRuntime.Call(ctx, req)
 	elapsed := diag.ElapsedSince(start)
 	if err != nil {
 		// failed request to ADD EVENT, record count and latency metrics.
@@ -367,8 +367,8 @@ func (abe *ActorBackend) PurgeOrchestrationState(ctx context.Context, id api.Ins
 		WithActor(abe.config.workflowActorType, string(id))
 	defer req.Close()
 
-	resp, err := abe.actorRuntime.Call(ctx, req)
 	start := time.Now()
+	resp, err := abe.actorRuntime.Call(ctx, req)
 	elapsed := diag.ElapsedSince(start)
 	if err != nil {
 		// failed request to PURGE WORKFLOW, record latency and count metrics.
