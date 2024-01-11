@@ -100,15 +100,10 @@ spec:
 		require.Len(t, resp, 1)
 
 		assert.Equal(t, &rtpbv1.RegisteredComponents{
-			Name:    "123",
-			Type:    "state.in-memory",
-			Version: "v1",
-			Capabilities: []string{
-				"ETAG",
-				"TRANSACTIONAL",
-				"TTL",
-				"ACTOR",
-			},
+			Name:         "123",
+			Type:         "state.in-memory",
+			Version:      "v1",
+			Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
 		}, resp[0])
 
 		s.writeRead(t, ctx, client, "123")
@@ -419,7 +414,7 @@ func (s *state) writeExpectError(t *testing.T, ctx context.Context, client *http
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, nil)
 	require.NoError(t, err)
 	s.doReq(t, client, req, expCode, fmt.Sprintf(
-		`\{"errorCode":"(ERR_STATE_STORE_NOT_CONFIGURED|ERR_STATE_STORE_NOT_FOUND)","message":"state store (is not configured|%s is not found)"\}`,
+		`\{"errorCode":"(ERR_STATE_STORE_NOT_CONFIGURED|ERR_STATE_STORE_NOT_FOUND)","message":"state store (is not configured|%s is not found)","details":\[.*\]\}`,
 		compName))
 }
 

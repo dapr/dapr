@@ -22,7 +22,7 @@ import (
 type options struct {
 	execOpts []exec.Option
 
-	bundle        ca.Bundle
+	bundle        *ca.Bundle
 	writeBundle   bool
 	port          int
 	healthzPort   int
@@ -62,7 +62,7 @@ func WithHealthzPort(port int) Option {
 
 func WithCABundle(bundle ca.Bundle) Option {
 	return func(o *options) {
-		o.bundle = bundle
+		o.bundle = &bundle
 	}
 }
 

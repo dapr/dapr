@@ -21,7 +21,7 @@ import (
 
 	commonv1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	procgrpc "github.com/dapr/dapr/tests/integration/framework/process/grpc"
-	"github.com/dapr/dapr/tests/integration/framework/process/grpcapp"
+	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
 	testpb "github.com/dapr/dapr/tests/integration/suite/daprd/serviceinvocation/grpc/proto"
 )
 
@@ -31,11 +31,11 @@ type (
 
 type pingserver struct{}
 
-func newGRPCServer(t *testing.T, onInvoke invokeFn, opts ...procgrpc.Option) *grpcapp.GRPCApp {
-	return grpcapp.New(t,
-		grpcapp.WithGRPCOptions(opts...),
-		grpcapp.WithOnInvokeFn(onInvoke),
-		grpcapp.WithRegister(func(s *grpc.Server) {
+func newGRPCServer(t *testing.T, onInvoke invokeFn, opts ...procgrpc.Option) *app.App {
+	return app.New(t,
+		app.WithGRPCOptions(opts...),
+		app.WithOnInvokeFn(onInvoke),
+		app.WithRegister(func(s *grpc.Server) {
 			testpb.RegisterTestServiceServer(s, new(pingserver))
 		}),
 	)
