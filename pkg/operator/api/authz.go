@@ -14,8 +14,6 @@ limitations under the License.
 package api
 
 import (
-	"context"
-
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -24,12 +22,7 @@ import (
 
 // authzRequest ensures that the requesting identity resides in the same
 // namespace as that of the requested namespace.
-func (a *apiServer) authzRequest(ctx context.Context, namespace string) error {
-	spiffeID, ok, err := spiffe.FromGRPCContext(ctx)
-	if err != nil || !ok {
-		return status.New(codes.PermissionDenied, "failed to determine identity").Err()
-	}
-
+func (a *apiServer) authzRequest(spiffeID *spiffe.Parsed, namespace string) error {
 	if len(namespace) == 0 || spiffeID.Namespace() != namespace {
 		return status.New(codes.PermissionDenied, "identity does not match requested namespace").Err()
 	}

@@ -40,7 +40,6 @@ import (
 	subscriptionsapiV2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/security"
-	"github.com/dapr/dapr/pkg/security/spiffe"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 )
@@ -196,13 +195,17 @@ func (a *apiServer) Ready(ctx context.Context) error {
 
 // GetConfiguration returns a Dapr configuration.
 func (a *apiServer) GetConfiguration(ctx context.Context, in *operatorv1pb.GetConfigurationRequest) (*operatorv1pb.GetConfigurationResponse, error) {
-	if err := a.authzRequest(ctx, in.GetNamespace()); err != nil {
+	spiffeID, err := utils.GetSpiffeIDFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err = a.authzRequest(spiffeID, in.GetNamespace()); err != nil {
 		return nil, err
 	}
 
 	key := types.NamespacedName{Namespace: in.GetNamespace(), Name: in.GetName()}
 	var config configurationapi.Configuration
-	if err := a.Client.Get(ctx, key, &config); err != nil {
+	if err = a.Client.Get(ctx, key, &config); err != nil {
 		return nil, fmt.Errorf("error getting configuration %s/%s: %w", in.GetNamespace(), in.GetName(), err)
 	}
 	b, err := json.Marshal(&config)
@@ -216,17 +219,16 @@ func (a *apiServer) GetConfiguration(ctx context.Context, in *operatorv1pb.GetCo
 
 // ListComponents returns a list of Dapr components.
 func (a *apiServer) ListComponents(ctx context.Context, in *operatorv1pb.ListComponentsRequest) (*operatorv1pb.ListComponentResponse, error) {
-	// by default assume that components are not getting loaded for control plane service
-	controlPlaneServiceReq := false
-	spiffeID, ok, err := spiffe.FromGRPCContext(ctx)
+	spiffeID, err := utils.GetSpiffeIDFromContext(ctx)
 	if err != nil {
-		log.Debugf("failed to get SPIFFE ID from gRPC connection context: %v", err)
 		return nil, err
 	}
-	if !ok {
-		// Apply the default action
-		log.Debugf("Error while reading spiffe id from client cert. applying default global policy action")
+	if err := a.authzRequest(spiffeID, in.GetNamespace()); err != nil {
+		return nil, err
 	}
+
+	// by default assume that components are not getting loaded for control plane service
+	controlPlaneServiceReq := false
 
 	if in.GetNamespace() == security.CurrentNamespace() && utils.IsControlPlaneService(spiffeID.AppID()) {
 		controlPlaneServiceReq = true
@@ -399,7 +401,11 @@ func (a *apiServer) ListSubscriptions(ctx context.Context, in *emptypb.Empty) (*
 
 // ListSubscriptionsV2 returns a list of Dapr pub/sub subscriptions. Use ListSubscriptionsRequest to expose pod info.
 func (a *apiServer) ListSubscriptionsV2(ctx context.Context, in *operatorv1pb.ListSubscriptionsRequest) (*operatorv1pb.ListSubscriptionsResponse, error) {
-	if err := a.authzRequest(ctx, in.GetNamespace()); err != nil {
+	spiffeID, err := utils.GetSpiffeIDFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := a.authzRequest(spiffeID, in.GetNamespace()); err != nil {
 		return nil, err
 	}
 
@@ -432,13 +438,17 @@ func (a *apiServer) ListSubscriptionsV2(ctx context.Context, in *operatorv1pb.Li
 
 // GetResiliency returns a specified resiliency object.
 func (a *apiServer) GetResiliency(ctx context.Context, in *operatorv1pb.GetResiliencyRequest) (*operatorv1pb.GetResiliencyResponse, error) {
-	if err := a.authzRequest(ctx, in.GetNamespace()); err != nil {
+	spiffeID, err := utils.GetSpiffeIDFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err = a.authzRequest(spiffeID, in.GetNamespace()); err != nil {
 		return nil, err
 	}
 
 	key := types.NamespacedName{Namespace: in.GetNamespace(), Name: in.GetName()}
 	var resiliencyConfig resiliencyapi.Resiliency
-	if err := a.Client.Get(ctx, key, &resiliencyConfig); err != nil {
+	if err = a.Client.Get(ctx, key, &resiliencyConfig); err != nil {
 		return nil, fmt.Errorf("error getting resiliency: %w", err)
 	}
 	b, err := json.Marshal(&resiliencyConfig)
@@ -452,7 +462,11 @@ func (a *apiServer) GetResiliency(ctx context.Context, in *operatorv1pb.GetResil
 
 // ListResiliency gets the list of applied resiliencies.
 func (a *apiServer) ListResiliency(ctx context.Context, in *operatorv1pb.ListResiliencyRequest) (*operatorv1pb.ListResiliencyResponse, error) {
-	if err := a.authzRequest(ctx, in.GetNamespace()); err != nil {
+	spiffeID, err := utils.GetSpiffeIDFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := a.authzRequest(spiffeID, in.GetNamespace()); err != nil {
 		return nil, err
 	}
 
@@ -483,7 +497,11 @@ func (a *apiServer) ListResiliency(ctx context.Context, in *operatorv1pb.ListRes
 // TODO: @joshvanl: Authorize pod name and namespace matches the SPIFFE ID of
 // the caller.
 func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv operatorv1pb.Operator_ComponentUpdateServer) error { //nolint:nosnakecase
-	if err := a.authzRequest(srv.Context(), in.GetNamespace()); err != nil {
+	spiffeID, err := utils.GetSpiffeIDFromContext(srv.Context())
+	if err != nil {
+		return err
+	}
+	if err = a.authzRequest(spiffeID, in.GetNamespace()); err != nil {
 		return err
 	}
 
@@ -555,13 +573,17 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 
 // GetHTTPEndpoint returns a specified http endpoint object.
 func (a *apiServer) GetHTTPEndpoint(ctx context.Context, in *operatorv1pb.GetResiliencyRequest) (*operatorv1pb.GetHTTPEndpointResponse, error) {
-	if err := a.authzRequest(ctx, in.GetNamespace()); err != nil {
+	spiffeID, err := utils.GetSpiffeIDFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err = a.authzRequest(spiffeID, in.GetNamespace()); err != nil {
 		return nil, err
 	}
 
 	key := types.NamespacedName{Namespace: in.GetNamespace(), Name: in.GetName()}
 	var endpointConfig httpendpointsapi.HTTPEndpoint
-	if err := a.Client.Get(ctx, key, &endpointConfig); err != nil {
+	if err = a.Client.Get(ctx, key, &endpointConfig); err != nil {
 		return nil, fmt.Errorf("error getting http endpoint: %w", err)
 	}
 	b, err := json.Marshal(&endpointConfig)
@@ -575,7 +597,11 @@ func (a *apiServer) GetHTTPEndpoint(ctx context.Context, in *operatorv1pb.GetRes
 
 // ListHTTPEndpoints gets the list of applied http endpoints.
 func (a *apiServer) ListHTTPEndpoints(ctx context.Context, in *operatorv1pb.ListHTTPEndpointsRequest) (*operatorv1pb.ListHTTPEndpointsResponse, error) {
-	if err := a.authzRequest(ctx, in.GetNamespace()); err != nil {
+	spiffeID, err := utils.GetSpiffeIDFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := a.authzRequest(spiffeID, in.GetNamespace()); err != nil {
 		return nil, err
 	}
 
@@ -611,7 +637,11 @@ func (a *apiServer) ListHTTPEndpoints(ctx context.Context, in *operatorv1pb.List
 
 // HTTPEndpointUpdate updates Dapr sidecars whenever an http endpoint in the cluster is modified.
 func (a *apiServer) HTTPEndpointUpdate(in *operatorv1pb.HTTPEndpointUpdateRequest, srv operatorv1pb.Operator_HTTPEndpointUpdateServer) error { //nolint:nosnakecase
-	if err := a.authzRequest(srv.Context(), in.GetNamespace()); err != nil {
+	spiffeID, err := utils.GetSpiffeIDFromContext(srv.Context())
+	if err != nil {
+		return err
+	}
+	if err = a.authzRequest(spiffeID, in.GetNamespace()); err != nil {
 		return err
 	}
 

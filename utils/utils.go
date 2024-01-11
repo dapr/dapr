@@ -14,15 +14,20 @@ limitations under the License.
 package utils
 
 import (
+	"context"
 	"fmt"
 	"io/fs"
 	"os"
 	"strings"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
+	"github.com/dapr/dapr/pkg/security/spiffe"
 )
 
 const (
-	DotDelimiter              = "."
-	controlPlanePodNamePrefix = "dapr-"
+	DotDelimiter = "."
 )
 
 // Contains reports whether v is present in s.
@@ -160,4 +165,16 @@ func IsControlPlaneService(id string) bool {
 	default:
 		return false
 	}
+}
+
+// GetSpiffeIDFromContext returns the SPIFFE ID from the given context.
+// If the peer does not have a SPIFFE ID, or the credentials for the
+// connection were not provided by this package, the function returns an error.
+func GetSpiffeIDFromContext(ctx context.Context) (*spiffe.Parsed, error) {
+	spiffeID, ok, err := spiffe.FromGRPCContext(ctx)
+	if err != nil || !ok {
+		return nil, status.New(codes.PermissionDenied, "failed to determine identity").Err()
+	}
+
+	return spiffeID, nil
 }

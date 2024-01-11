@@ -509,9 +509,9 @@ func TestListsNamespaced(t *testing.T) {
 		os.Setenv("NAMESPACE", "dapr-mockns")
 		defer os.Unsetenv("NAMESPACE")
 
-		appID := spiffeid.RequireFromString("spiffe://example.org/ns/dapr-mockns/dapr-placement")
-		serverID := spiffeid.RequireFromString("spiffe://example.org/ns/ns1/sv1")
-		pki := util.GenPKI(t, util.PKIOptions{
+		appID = spiffeid.RequireFromString("spiffe://example.org/ns/dapr-mockns/dapr-placement")
+		serverID = spiffeid.RequireFromString("spiffe://example.org/ns/ns1/sv1")
+		pki = util.GenPKI(t, util.PKIOptions{
 			LeafID:   serverID,
 			ClientID: appID,
 		})
@@ -529,6 +529,14 @@ func TestListsNamespaced(t *testing.T) {
 
 		assert.Equal(t, "obj2", sub.Name)
 		assert.Equal(t, "dapr-mockns", sub.Namespace)
+
+		appID = spiffeid.RequireFromString("spiffe://example.org/ns/namespace-a/dapr-placement")
+		pki = util.GenPKI(t, util.PKIOptions{
+			LeafID:   serverID,
+			ClientID: appID,
+		})
+
+		ctx = pki.ClientGRPCCtx(t)
 
 		res, err = api.ListComponents(ctx, &operatorv1pb.ListComponentsRequest{
 			PodName:   "foo",

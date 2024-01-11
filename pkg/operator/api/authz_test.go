@@ -14,7 +14,6 @@ limitations under the License.
 package api
 
 import (
-	"context"
 	"testing"
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
@@ -24,27 +23,23 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/tests/util"
+	"github.com/dapr/dapr/utils"
 )
 
 func Test_authzRequest(t *testing.T) {
 	appID := spiffeid.RequireFromString("spiffe://example.org/ns/ns1/app1")
 	serverID := spiffeid.RequireFromString("spiffe://example.org/ns/dapr-system/dapr-operator")
 	pki := util.GenPKI(t, util.PKIOptions{LeafID: serverID, ClientID: appID})
-
-	t.Run("no auth context should error", func(t *testing.T) {
-		err := new(apiServer).authzRequest(context.Background(), "ns1")
-		require.Error(t, err)
-		assert.Equal(t, codes.PermissionDenied, status.Code(err))
-	})
+	spiffeID, _ := utils.GetSpiffeIDFromContext(pki.ClientGRPCCtx(t))
 
 	t.Run("different namespace should error", func(t *testing.T) {
-		err := new(apiServer).authzRequest(pki.ClientGRPCCtx(t), "ns2")
+		err := new(apiServer).authzRequest(spiffeID, "ns2")
 		require.Error(t, err)
 		assert.Equal(t, codes.PermissionDenied, status.Code(err))
 	})
 
 	t.Run("empty namespace should error", func(t *testing.T) {
-		err := new(apiServer).authzRequest(pki.ClientGRPCCtx(t), "")
+		err := new(apiServer).authzRequest(spiffeID, "")
 		require.Error(t, err)
 		assert.Equal(t, codes.PermissionDenied, status.Code(err))
 	})
@@ -52,13 +47,14 @@ func Test_authzRequest(t *testing.T) {
 	t.Run("invalid SPIFFE path should error", func(t *testing.T) {
 		appID := spiffeid.RequireFromString("spiffe://example.org/foo/bar")
 		pki2 := util.GenPKI(t, util.PKIOptions{LeafID: serverID, ClientID: appID})
-		err := new(apiServer).authzRequest(pki2.ClientGRPCCtx(t), "ns1")
+		spiffeID2, _ := utils.GetSpiffeIDFromContext(pki2.ClientGRPCCtx(t))
+		err := new(apiServer).authzRequest(spiffeID2, "ns1")
 		require.Error(t, err)
 		assert.Equal(t, codes.PermissionDenied, status.Code(err))
 	})
 
 	t.Run("same namespace should no error", func(t *testing.T) {
-		err := new(apiServer).authzRequest(pki.ClientGRPCCtx(t), "ns1")
+		err := new(apiServer).authzRequest(spiffeID, "ns1")
 		require.NoError(t, err)
 	})
 }
