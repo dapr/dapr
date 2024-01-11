@@ -175,11 +175,11 @@ func (be *actorBackend) CreateOrchestrationInstance(ctx context.Context, e *back
 	elapsed := diag.ElapsedSince(start)
 	if err != nil {
 		// failed request to CREATE workflow, record count and latency metrics.
-		diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.CreateWorkflow, diag.WorkflowComponentName, diag.StatusFailed, elapsed)
+		diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.CreateWorkflow, diag.StatusFailed, elapsed)
 		return err
 	}
 	// successful request to CREATE workflow, record count and latency metrics.
-	diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.CreateWorkflow, diag.WorkflowComponentName, diag.StatusSuccess, elapsed)
+	diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.CreateWorkflow, diag.StatusSuccess, elapsed)
 	defer resp.Close()
 	return nil
 }
@@ -198,11 +198,11 @@ func (be *actorBackend) GetOrchestrationMetadata(ctx context.Context, id api.Ins
 	elapsed := diag.ElapsedSince(start)
 	if err != nil {
 		// failed request to GET workflow Information, record count and latency metrics.
-		diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.GetWorkflow, diag.WorkflowComponentName, diag.StatusFailed, elapsed)
+		diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.GetWorkflow, diag.StatusFailed, elapsed)
 		return nil, err
 	}
 	// successful request to GET workflow information, record count and latency metrics.
-	diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.GetWorkflow, diag.WorkflowComponentName, diag.StatusSuccess, elapsed)
+	diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.GetWorkflow, diag.StatusSuccess, elapsed)
 
 	defer res.Close()
 	data := res.RawData()
@@ -257,11 +257,11 @@ func (be *actorBackend) AddNewOrchestrationEvent(ctx context.Context, id api.Ins
 	elapsed := diag.ElapsedSince(start)
 	if err != nil {
 		// failed request to ADD EVENT, record count and latency metrics.
-		diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.AddEvent, diag.WorkflowComponentName, diag.StatusFailed, elapsed)
+		diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.AddEvent, diag.StatusFailed, elapsed)
 		return err
 	}
 	// successful request to ADD EVENT, record count and latency metrics.
-	diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.AddEvent, diag.WorkflowComponentName, diag.StatusSuccess, elapsed)
+	diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.AddEvent, diag.StatusSuccess, elapsed)
 	defer resp.Close()
 	return nil
 }
@@ -337,11 +337,11 @@ func (be *actorBackend) PurgeOrchestrationState(ctx context.Context, id api.Inst
 	elapsed := diag.ElapsedSince(start)
 	if err != nil {
 		// failed request to PURGE WORKFLOW, record latency and count metrics.
-		diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.PurgeWorkflow, diag.WorkflowComponentName, diag.StatusFailed, elapsed)
+		diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.PurgeWorkflow, diag.StatusFailed, elapsed)
 		return err
 	}
 	// successful request to PURGE WORKFLOW, record latency and count metrics.
-	diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.PurgeWorkflow, diag.WorkflowComponentName, diag.StatusSuccess, elapsed)
+	diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.PurgeWorkflow, diag.StatusSuccess, elapsed)
 	defer resp.Close()
 	return nil
 }
