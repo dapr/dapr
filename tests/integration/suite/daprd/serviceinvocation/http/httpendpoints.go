@@ -46,8 +46,8 @@ type httpendpoints struct {
 }
 
 func (h *httpendpoints) Setup(t *testing.T) []framework.Option {
-	pki1 := testsutil.GenPKIT(t, "localhost")
-	pki2 := testsutil.GenPKIT(t, "localhost")
+	pki1 := testsutil.GenPKI(t, testsutil.PKIOptions{LeafDNS: "localhost"})
+	pki2 := testsutil.GenPKI(t, testsutil.PKIOptions{LeafDNS: "localhost"})
 
 	newHTTPServer := func() *prochttp.HTTP {
 		handler := http.NewServeMux()

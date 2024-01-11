@@ -113,7 +113,7 @@ func main() {
 		log.Fatalf("Error creating injector: %v", err)
 	}
 
-	healthzServer := health.NewServer(log)
+	healthzServer := health.NewServer(health.Options{Log: log})
 	caBundleCh := make(chan []byte)
 	mngr := concurrency.NewRunnerManager(
 		metricsExporter.Run,
