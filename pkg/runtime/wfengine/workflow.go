@@ -28,7 +28,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/microsoft/durabletask-go/api"
 	"github.com/microsoft/durabletask-go/backend"
-	"google.golang.org/protobuf/types/known/timestamppb"
 
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 
@@ -418,12 +417,12 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 	// The logic/for loop below purges/removes any leftover state from a completed or failed activity
 	transactionalRequests := make(map[string][]actors.TransactionalOperation)
 	isWorkflowExecutionStarted := false
-	executionStartedTime := time.Now()
+	scheduledStartTimestamp := time.Now()
 	for _, e := range state.Inbox {
 		var taskID int32
 		if es := e.GetExecutionStarted(); es != nil {
 			isWorkflowExecutionStarted = true
-			executionStartedTime = e.Timestamp.AsTime()
+			scheduledStartTimestamp = es.GetScheduledStartTimestamp().AsTime()
 		} else if ts := e.GetTaskCompleted(); ts != nil {
 			taskID = ts.GetTaskScheduledId()
 		} else if tf := e.GetTaskFailed(); tf != nil {
@@ -489,19 +488,11 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 	}
 
 	if isWorkflowExecutionStarted {
-		// Get time difference between executionStartedTime and now
-		timeDiff := float64(time.Since(executionStartedTime).Milliseconds())
-
-		// Log workflow execution latency
-		wfLogger.Debugf("time diff: %v", timeDiff)
-
-		// add a new history event for the execution started event with current time
-		state.History = append(state.History, &backend.HistoryEvent{
-			Timestamp: timestamppb.New(time.Now()),
-		})
+		state.workflowStartTime = time.Now()
+		scheduleDiff := diag.ElapsedSince(scheduledStartTimestamp)
+		diag.DefaultWorkflowMonitoring.WorkflowExecutionEvent(ctx, workflowName, executionStatus, scheduleDiff)
 	}
 
-	wfStartTime := time.Now()
 	wfElapsedTime := float64(0)
 
 	// Log 5 empty lines
@@ -661,8 +652,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 				// Setting executionStatus to failed if workflow has failed/terminated/cancelled
 				executionStatus = diag.StatusFailed
 			}
-
-			wfElapsedTime = diag.ElapsedSince(wfStartTime)
+			wfElapsedTime = diag.ElapsedSince(state.workflowStartTime)
 		}
 	}
 	return nil

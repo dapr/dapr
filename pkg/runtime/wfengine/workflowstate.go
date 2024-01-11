@@ -27,10 +27,11 @@ import (
 )
 
 const (
-	inboxKeyPrefix   = "inbox"
-	historyKeyPrefix = "history"
-	customStatusKey  = "customStatus"
-	metadataKey      = "metadata"
+	inboxKeyPrefix       = "inbox"
+	historyKeyPrefix     = "history"
+	customStatusKey      = "customStatus"
+	workflowStartTimeKey = "workflowStartTime"
+	metadataKey          = "metadata"
 )
 
 type workflowState struct {
@@ -44,6 +45,7 @@ type workflowState struct {
 	inboxRemovedCount   int
 	historyAddedCount   int
 	historyRemovedCount int
+	workflowStartTime   time.Time
 	config              actorsBackendConfig
 }
 
@@ -124,6 +126,14 @@ func (s *workflowState) GetSaveRequest(actorID string) (*actors.TransactionalReq
 
 	if err := addStateOperations(req, historyKeyPrefix, s.History, s.historyAddedCount, s.historyRemovedCount); err != nil {
 		return nil, err
+	}
+
+	// if s.workflowStartTime is not nil then append req.operations with a new operation to update the workflowStartTime
+	if !s.workflowStartTime.IsZero() {
+		req.Operations = append(req.Operations, actors.TransactionalOperation{
+			Operation: actors.Upsert,
+			Request:   actors.TransactionalUpsert{Key: "workflowStartTime", Value: s.workflowStartTime},
+		})
 	}
 
 	// We update the custom status only when the workflow itself has been updated, and not when
@@ -267,6 +277,8 @@ func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID 
 		n++
 	}
 
+	bulkReq.Keys[n] = workflowStartTimeKey
+
 	// Perform the request
 	bulkRes, err := actorRuntime.GetBulkState(ctx, bulkReq)
 	if err != nil {
@@ -301,6 +313,13 @@ func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID 
 		err = json.Unmarshal(bulkRes[customStatusKey], &state.CustomStatus)
 		if err != nil {
 			return nil, fmt.Errorf("failed to unmarshal JSON from custom status key entry: %w", err)
+		}
+	}
+
+	if len(bulkRes[workflowStartTimeKey]) > 0 {
+		err = json.Unmarshal(bulkRes[workflowStartTimeKey], &state.workflowStartTime)
+		if err != nil {
+			return nil, fmt.Errorf("failed to unmarshal JSON from workflow start time key entry: %w", err)
 		}
 	}
 
