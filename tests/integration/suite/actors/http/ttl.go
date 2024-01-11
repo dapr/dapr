@@ -97,19 +97,25 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 
 	daprdURL := "http://localhost:" + strconv.Itoa(l.daprd.HTTPPort())
 
-	req, err := http.NewRequest(http.MethodPost, daprdURL+"/v1.0/actors/myactortype/myactorid/method/foo", nil)
-	require.NoError(t, err)
-	resp, err := client.Do(req)
-	require.NoError(t, err)
-	assert.NoError(t, resp.Body.Close())
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		req, err := http.NewRequest(http.MethodPost, daprdURL+"/v1.0/actors/myactortype/myactorid/method/foo", nil)
+		require.NoError(c, err)
+		resp, err := client.Do(req)
+		require.NoError(c, err)
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(c, err)
+		assert.Equal(c, "OK", string(body))
+		assert.NoError(c, resp.Body.Close())
+		assert.Equal(c, http.StatusOK, resp.StatusCode)
+	}, 10*time.Second, 1*time.Second)
 
 	now := time.Now()
 	reqBody := `[{"operation":"upsert","request":{"key":"key1","value":"value1","metadata":{"ttlInSeconds":"3"}}}]`
-	req, err = http.NewRequest(http.MethodPost, daprdURL+"/v1.0/actors/myactortype/myactorid/state", strings.NewReader(reqBody))
+	req, err := http.NewRequest(http.MethodPost, daprdURL+"/v1.0/actors/myactortype/myactorid/state", strings.NewReader(reqBody))
 	require.NoError(t, err)
-	resp, err = client.Do(req)
+	resp, err := client.Do(req)
 	require.NoError(t, err)
+	assert.True(t, (http.StatusOK == resp.StatusCode) || (http.StatusNoContent == resp.StatusCode))
 	assert.NoError(t, resp.Body.Close())
 
 	t.Run("ensure the state key returns a ttlExpireTime header", func(t *testing.T) {
