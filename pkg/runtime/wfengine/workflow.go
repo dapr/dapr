@@ -28,6 +28,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/microsoft/durabletask-go/api"
 	"github.com/microsoft/durabletask-go/backend"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 
@@ -416,9 +417,14 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 
 	// The logic/for loop below purges/removes any leftover state from a completed or failed activity
 	transactionalRequests := make(map[string][]actors.TransactionalOperation)
+	isWorkflowExecutionStarted := false
+	executionStartedTime := time.Now()
 	for _, e := range state.Inbox {
 		var taskID int32
-		if ts := e.GetTaskCompleted(); ts != nil {
+		if es := e.GetExecutionStarted(); es != nil {
+			isWorkflowExecutionStarted = true
+			executionStartedTime = e.Timestamp.AsTime()
+		} else if ts := e.GetTaskCompleted(); ts != nil {
 			taskID = ts.GetTaskScheduledId()
 		} else if tf := e.GetTaskFailed(); tf != nil {
 			taskID = tf.GetTaskScheduledId()
@@ -481,9 +487,28 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 		}
 		return newRecoverableError(fmt.Errorf("failed to schedule a workflow execution: %w", err))
 	}
-	// Record metrics for workflow execution
+
+	if isWorkflowExecutionStarted {
+		// Get time difference between executionStartedTime and now
+		timeDiff := float64(time.Since(executionStartedTime).Milliseconds())
+
+		// Log workflow execution latency
+		wfLogger.Debugf("time diff: %v", timeDiff)
+
+		// add a new history event for the execution started event with current time
+		state.History = append(state.History, &backend.HistoryEvent{
+			Timestamp: timestamppb.New(time.Now()),
+		})
+	}
+
 	wfStartTime := time.Now()
 	wfElapsedTime := float64(0)
+
+	// Log 5 empty lines
+	wfLogger.Infof("============================================================================================================================================================================================================================================================")
+	// log state object
+	wfLogger.Infof("workflowstate: %v", state)
+	wfLogger.Infof("============================================================================================================================================================================================================================================================")
 	defer func() {
 		if executionStatus != "" {
 			// execution latency for workflow is not supported yet.
