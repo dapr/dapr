@@ -21,11 +21,25 @@ import (
 
 // options contains the options for running an in-memory state store.
 type options struct {
-	queryFunc func(context.Context, *state.QueryRequest) (*state.QueryResponse, error)
+	queryFunc                        func(context.Context, *state.QueryRequest) (*state.QueryResponse, error)
+	transactionalStoreMultiMaxSizeFn func() int
+	features                         []state.Feature
 }
 
 func WithQueryFn(fn func(context.Context, *state.QueryRequest) (*state.QueryResponse, error)) Option {
 	return func(o *options) {
 		o.queryFunc = fn
+	}
+}
+
+func WithTransactionalStoreMultiMaxSizeFn(fn func() int) Option {
+	return func(o *options) {
+		o.transactionalStoreMultiMaxSizeFn = fn
+	}
+}
+
+func WithFeatures(features ...state.Feature) Option {
+	return func(o *options) {
+		o.features = features
 	}
 }

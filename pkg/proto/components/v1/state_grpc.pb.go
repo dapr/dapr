@@ -579,3 +579,91 @@ var StateStore_ServiceDesc = grpc.ServiceDesc{
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "dapr/proto/components/v1/state.proto",
 }
+
+// TransactionalStoreMultiMaxSizeClient is the client API for TransactionalStoreMultiMaxSize service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type TransactionalStoreMultiMaxSizeClient interface {
+	// MultiMaxSize returns the maximum number of operations that can be performed
+	// in a single transaction.
+	MultiMaxSize(ctx context.Context, in *MultiMaxSizeRequest, opts ...grpc.CallOption) (*MultiMaxSizeResponse, error)
+}
+
+type transactionalStoreMultiMaxSizeClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewTransactionalStoreMultiMaxSizeClient(cc grpc.ClientConnInterface) TransactionalStoreMultiMaxSizeClient {
+	return &transactionalStoreMultiMaxSizeClient{cc}
+}
+
+func (c *transactionalStoreMultiMaxSizeClient) MultiMaxSize(ctx context.Context, in *MultiMaxSizeRequest, opts ...grpc.CallOption) (*MultiMaxSizeResponse, error) {
+	out := new(MultiMaxSizeResponse)
+	err := c.cc.Invoke(ctx, "/dapr.proto.components.v1.TransactionalStoreMultiMaxSize/MultiMaxSize", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// TransactionalStoreMultiMaxSizeServer is the server API for TransactionalStoreMultiMaxSize service.
+// All implementations should embed UnimplementedTransactionalStoreMultiMaxSizeServer
+// for forward compatibility
+type TransactionalStoreMultiMaxSizeServer interface {
+	// MultiMaxSize returns the maximum number of operations that can be performed
+	// in a single transaction.
+	MultiMaxSize(context.Context, *MultiMaxSizeRequest) (*MultiMaxSizeResponse, error)
+}
+
+// UnimplementedTransactionalStoreMultiMaxSizeServer should be embedded to have forward compatible implementations.
+type UnimplementedTransactionalStoreMultiMaxSizeServer struct {
+}
+
+func (UnimplementedTransactionalStoreMultiMaxSizeServer) MultiMaxSize(context.Context, *MultiMaxSizeRequest) (*MultiMaxSizeResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method MultiMaxSize not implemented")
+}
+
+// UnsafeTransactionalStoreMultiMaxSizeServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to TransactionalStoreMultiMaxSizeServer will
+// result in compilation errors.
+type UnsafeTransactionalStoreMultiMaxSizeServer interface {
+	mustEmbedUnimplementedTransactionalStoreMultiMaxSizeServer()
+}
+
+func RegisterTransactionalStoreMultiMaxSizeServer(s grpc.ServiceRegistrar, srv TransactionalStoreMultiMaxSizeServer) {
+	s.RegisterService(&TransactionalStoreMultiMaxSize_ServiceDesc, srv)
+}
+
+func _TransactionalStoreMultiMaxSize_MultiMaxSize_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MultiMaxSizeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TransactionalStoreMultiMaxSizeServer).MultiMaxSize(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/dapr.proto.components.v1.TransactionalStoreMultiMaxSize/MultiMaxSize",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TransactionalStoreMultiMaxSizeServer).MultiMaxSize(ctx, req.(*MultiMaxSizeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// TransactionalStoreMultiMaxSize_ServiceDesc is the grpc.ServiceDesc for TransactionalStoreMultiMaxSize service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var TransactionalStoreMultiMaxSize_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "dapr.proto.components.v1.TransactionalStoreMultiMaxSize",
+	HandlerType: (*TransactionalStoreMultiMaxSizeServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "MultiMaxSize",
+			Handler:    _TransactionalStoreMultiMaxSize_MultiMaxSize_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "dapr/proto/components/v1/state.proto",
+}

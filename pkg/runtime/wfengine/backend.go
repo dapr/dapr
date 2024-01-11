@@ -21,11 +21,13 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/microsoft/durabletask-go/api"
 	"github.com/microsoft/durabletask-go/backend"
 
 	"github.com/dapr/dapr/pkg/actors"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/utils"
@@ -164,10 +166,16 @@ func (be *actorBackend) CreateOrchestrationInstance(ctx context.Context, e *back
 		WithActor(be.config.workflowActorType, workflowInstanceID).
 		WithData(requestBytes).
 		WithContentType(invokev1.JSONContentType)
+	start := time.Now()
 	_, err = be.actors.Call(ctx, req)
+	elapsed := diag.ElapsedSince(start)
 	if err != nil {
+		// failed request to CREATE workflow, record count and latency metrics.
+		diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.CreateWorkflow, diag.StatusFailed, elapsed)
 		return err
 	}
+	// successful request to CREATE workflow, record count and latency metrics.
+	diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.CreateWorkflow, diag.StatusSuccess, elapsed)
 	return nil
 }
 
@@ -179,10 +187,16 @@ func (be *actorBackend) GetOrchestrationMetadata(ctx context.Context, id api.Ins
 		WithActor(be.config.workflowActorType, string(id)).
 		WithContentType(invokev1.OctetStreamContentType)
 
+	start := time.Now()
 	res, err := be.actors.Call(ctx, req)
+	elapsed := diag.ElapsedSince(start)
 	if err != nil {
+		// failed request to GET workflow Information, record count and latency metrics.
+		diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.GetWorkflow, diag.StatusFailed, elapsed)
 		return nil, err
 	}
+	// successful request to GET workflow information, record count and latency metrics.
+	diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.GetWorkflow, diag.StatusSuccess, elapsed)
 
 	var metadata api.OrchestrationMetadata
 	err = actors.DecodeInternalActorData(bytes.NewReader(res.GetMessage().GetData().GetValue()), &metadata)
@@ -229,8 +243,18 @@ func (be *actorBackend) AddNewOrchestrationEvent(ctx context.Context, id api.Ins
 		WithActor(be.config.workflowActorType, string(id)).
 		WithData(data).
 		WithContentType(invokev1.OctetStreamContentType)
+
+	start := time.Now()
 	_, err = be.actors.Call(ctx, req)
-	return err
+	elapsed := diag.ElapsedSince(start)
+	if err != nil {
+		// failed request to ADD EVENT, record count and latency metrics.
+		diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.AddEvent, diag.StatusFailed, elapsed)
+		return err
+	}
+	// successful request to ADD EVENT, record count and latency metrics.
+	diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.AddEvent, diag.StatusSuccess, elapsed)
+	return nil
 }
 
 // CompleteActivityWorkItem implements backend.Backend
@@ -298,8 +322,17 @@ func (be *actorBackend) PurgeOrchestrationState(ctx context.Context, id api.Inst
 		NewInternalInvokeRequest(PurgeWorkflowStateMethod).
 		WithActor(be.config.workflowActorType, string(id))
 
+	start := time.Now()
 	_, err := be.actors.Call(ctx, req)
-	return err
+	elapsed := diag.ElapsedSince(start)
+	if err != nil {
+		// failed request to PURGE WORKFLOW, record latency and count metrics.
+		diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.PurgeWorkflow, diag.StatusFailed, elapsed)
+		return err
+	}
+	// successful request to PURGE WORKFLOW, record latency and count metrics.
+	diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.PurgeWorkflow, diag.StatusSuccess, elapsed)
+	return nil
 }
 
 // Start implements backend.Backend

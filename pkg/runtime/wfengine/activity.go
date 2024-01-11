@@ -27,6 +27,7 @@ import (
 	"github.com/microsoft/durabletask-go/backend"
 
 	"github.com/dapr/dapr/pkg/actors"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
@@ -162,6 +163,12 @@ func (a *activityActor) executeActivity(ctx context.Context, name string, eventP
 	if err != nil {
 		return err
 	}
+	activityName := ""
+	if ts := taskEvent.GetTaskScheduled(); ts != nil {
+		activityName = ts.GetName()
+	} else {
+		return fmt.Errorf("invalid activity task event: '%s'", taskEvent.String())
+	}
 
 	endIndex := strings.Index(a.actorID, "::")
 	if endIndex < 0 {
@@ -184,13 +191,22 @@ func (a *activityActor) executeActivity(ctx context.Context, name string, eventP
 	callback := make(chan bool)
 	wi.Properties[CallbackChannelProperty] = callback
 	wfLogger.Debugf("Activity actor '%s': scheduling activity '%s' for workflow with instanceId '%s'", a.actorID, name, wi.InstanceID)
-	if err = a.scheduler(ctx, wi); err != nil {
-		if errors.Is(err, context.DeadlineExceeded) {
-			return newRecoverableError(fmt.Errorf("timed-out trying to schedule an activity execution - this can happen if too many activities are running in parallel or if the workflow engine isn't running: %w", err))
-		}
+	err = a.scheduler(ctx, wi)
+	if errors.Is(err, context.DeadlineExceeded) {
+		return newRecoverableError(fmt.Errorf("timed-out trying to schedule an activity execution - this can happen if too many activities are running in parallel or if the workflow engine isn't running: %w", err))
+	} else if err != nil {
 		return newRecoverableError(fmt.Errorf("failed to schedule an activity execution: %w", err))
 	}
-
+	// Activity execution started
+	start := time.Now()
+	executionStatus := ""
+	elapsed := float64(0)
+	// Record metrics on exit
+	defer func() {
+		if executionStatus != "" {
+			diag.DefaultWorkflowMonitoring.ActivityExecutionEvent(ctx, activityName, executionStatus, elapsed)
+		}
+	}()
 loop:
 	for {
 		t := time.NewTimer(10 * time.Minute)
@@ -199,6 +215,9 @@ loop:
 			if !t.Stop() {
 				<-t.C
 			}
+			// Activity execution failed with recoverable error
+			elapsed = diag.ElapsedSince(start)
+			executionStatus = diag.StatusRecoverable
 			return ctx.Err() // will be retried
 		case <-t.C:
 			if deadline, ok := ctx.Deadline(); ok {
@@ -210,9 +229,13 @@ loop:
 			if !t.Stop() {
 				<-t.C
 			}
+			// Activity execution completed
+			elapsed = diag.ElapsedSince(start)
 			if completed {
 				break loop
 			} else {
+				// Activity execution failed with recoverable error
+				executionStatus = diag.StatusRecoverable
 				return newRecoverableError(errExecutionAborted) // AbandonActivityWorkItem was called
 			}
 		}
@@ -222,6 +245,8 @@ loop:
 	// publish the result back to the workflow actor as a new event to be processed
 	resultData, err := backend.MarshalHistoryEvent(wi.Result)
 	if err != nil {
+		// Returning non-recoverable error
+		executionStatus = diag.StatusFailed
 		return err
 	}
 	req := internalsv1pb.
@@ -231,8 +256,17 @@ loop:
 		WithContentType(invokev1.OctetStreamContentType)
 
 	_, err = a.actorRuntime.Call(ctx, req)
-	if err != nil {
+	switch {
+	case err != nil:
+		// Returning recoverable error, record metrics
+		executionStatus = diag.StatusRecoverable
 		return newRecoverableError(fmt.Errorf("failed to invoke '%s' method on workflow actor: %w", AddWorkflowEventMethod, err))
+	case wi.Result.GetTaskCompleted() != nil:
+		// Activity execution completed successfully
+		executionStatus = diag.StatusSuccess
+	case wi.Result.GetTaskFailed() != nil:
+		// Activity execution failed
+		executionStatus = diag.StatusFailed
 	}
 	return nil
 }
@@ -274,7 +308,8 @@ func (a *activityActor) loadActivityState(ctx context.Context) (*activityState, 
 	}
 
 	state := &activityState{}
-	if err = json.Unmarshal(res.Data, state); err != nil {
+	err = json.Unmarshal(res.Data, state)
+	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal activity state: %w", err)
 	}
 	return state, nil
@@ -304,7 +339,7 @@ func (a *activityActor) saveActivityState(ctx context.Context, state *activitySt
 
 func (a *activityActor) purgeActivityState(ctx context.Context) error {
 	wfLogger.Debugf("Activity actor '%s': purging activity state", a.actorID)
-	req := actors.TransactionalRequest{
+	err := a.actorRuntime.TransactionalStateOperation(ctx, &actors.TransactionalRequest{
 		ActorType: a.config.activityActorType,
 		ActorID:   a.actorID,
 		Operations: []actors.TransactionalOperation{{
@@ -313,8 +348,8 @@ func (a *activityActor) purgeActivityState(ctx context.Context) error {
 				Key: activityStateKey,
 			},
 		}},
-	}
-	if err := a.actorRuntime.TransactionalStateOperation(ctx, &req); err != nil {
+	})
+	if err != nil {
 		return fmt.Errorf("failed to delete activity state with error: %w", err)
 	}
 
