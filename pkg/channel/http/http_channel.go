@@ -231,7 +231,6 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	diag.DefaultHTTPMonitoring.ClientRequestStarted(ctx, int64(len(req.Message().GetData().GetValue())))
 	startRequest := time.Now()
 
-	// Exec pipeline only if at least one handler is specified
 	rw := &RWRecorder{
 		W: &bytes.Buffer{},
 	}
