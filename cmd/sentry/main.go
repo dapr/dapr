@@ -144,7 +144,7 @@ func main() {
 
 	// Healthz server
 	err = mngr.Add(func(ctx context.Context) error {
-		healthzServer := health.NewServer(log)
+		healthzServer := health.NewServer(health.Options{Log: log})
 		healthzServer.Ready()
 		runErr := healthzServer.Run(ctx, opts.HealthzPort)
 		if runErr != nil {
