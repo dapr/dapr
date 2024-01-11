@@ -45,7 +45,7 @@ type Sentry struct {
 	exec     process.Interface
 	freeport *util.FreePort
 
-	bundle      ca.Bundle
+	bundle      *ca.Bundle
 	port        int
 	healthzPort int
 	metricsPort int
@@ -54,14 +54,8 @@ type Sentry struct {
 func New(t *testing.T, fopts ...Option) *Sentry {
 	t.Helper()
 
-	rootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	require.NoError(t, err)
-	bundle, err := ca.GenerateBundle(rootKey, "integration.test.dapr.io", time.Second*5, nil)
-	require.NoError(t, err)
-
 	fp := util.ReservePorts(t, 3)
 	opts := options{
-		bundle:      bundle,
 		port:        fp.Port(t, 0),
 		healthzPort: fp.Port(t, 1),
 		metricsPort: fp.Port(t, 2),
@@ -71,6 +65,19 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 
 	for _, fopt := range fopts {
 		fopt(&opts)
+	}
+
+	// Only generate a bundle if one was not provided.
+	if opts.bundle == nil {
+		td := spiffeid.RequireTrustDomainFromString("default").String()
+		if opts.trustDomain != nil {
+			td = *opts.trustDomain
+		}
+		pk, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		require.NoError(t, err)
+		bundle, err := ca.GenerateBundle(pk, td, time.Second*5, nil)
+		require.NoError(t, err)
+		opts.bundle = &bundle
 	}
 
 	args := []string{
@@ -161,7 +168,7 @@ func (s *Sentry) TrustAnchorsFile(t *testing.T) string {
 }
 
 func (s *Sentry) CABundle() ca.Bundle {
-	return s.bundle
+	return *s.bundle
 }
 
 func (s *Sentry) Port() int {

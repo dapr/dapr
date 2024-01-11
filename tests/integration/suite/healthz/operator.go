@@ -17,21 +17,13 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
-	"strconv"
 	"testing"
 	"time"
 
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
-	httpendapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes"
 	procoperator "github.com/dapr/dapr/tests/integration/framework/process/operator"
@@ -53,30 +45,16 @@ type operator struct {
 func (o *operator) Setup(t *testing.T) []framework.Option {
 	o.sentry = procsentry.New(t, procsentry.WithTrustDomain("integration.test.dapr.io"))
 
-	kubeAPI := kubernetes.New(t,
-		kubernetes.WithDaprConfigurationGet(t, &configapi.Configuration{
-			TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Configuration"},
-			ObjectMeta: metav1.ObjectMeta{Name: "daprsystem", Namespace: "dapr-system"},
-			Spec: configapi.ConfigurationSpec{
-				MTLSSpec: &configapi.MTLSSpec{
-					ControlPlaneTrustDomain: "integration.test.dapr.io",
-					SentryAddress:           "localhost:" + strconv.Itoa(o.sentry.Port()),
-				},
-			},
-		}),
-		kubernetes.WithClusterServiceList(t, new(corev1.ServiceList)),
-		kubernetes.WithClusterStatefulSetList(t, new(appsv1.StatefulSetList)),
-		kubernetes.WithClusterDeploymentList(t, new(appsv1.DeploymentList)),
-		kubernetes.WithClusterDaprComponentList(t, new(compapi.ComponentList)),
-		kubernetes.WithClusterDaprHTTPEndpointList(t, new(httpendapi.HTTPEndpointList)),
-	)
+	kubeAPI := kubernetes.New(t, kubernetes.WithBaseOperatorAPI(t,
+		spiffeid.RequireTrustDomainFromString("integration.test.dapr.io"),
+		"dapr-system",
+		o.sentry.Port(),
+	))
 
-	taf := filepath.Join(t.TempDir(), "ca.pem")
-	require.NoError(t, os.WriteFile(taf, o.sentry.CABundle().TrustAnchors, 0o600))
 	o.proc = procoperator.New(t,
 		procoperator.WithNamespace("dapr-system"),
 		procoperator.WithKubeconfigPath(kubeAPI.KubeconfigPath(t)),
-		procoperator.WithTrustAnchorsFile(taf),
+		procoperator.WithTrustAnchorsFile(o.sentry.TrustAnchorsFile(t)),
 	)
 
 	return []framework.Option{

@@ -111,7 +111,10 @@ func main() {
 			if opts.MetadataEnabled {
 				metadataOptions = append(metadataOptions, health.NewJSONDataRouterOptions[*placement.PlacementTables]("/placement/state", apiServer.GetPlacementTables))
 			}
-			healthzServer := health.NewServer(log, metadataOptions...)
+			healthzServer := health.NewServer(health.Options{
+				Log:           log,
+				RouterOptions: metadataOptions,
+			})
 			healthzServer.Ready()
 			if healthzErr := healthzServer.Run(ctx, opts.HealthzPort); healthzErr != nil {
 				return fmt.Errorf("failed to start healthz server: %w", healthzErr)
