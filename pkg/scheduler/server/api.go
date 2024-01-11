@@ -33,10 +33,16 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 		return nil, ctx.Err()
 	case <-s.readyCh:
 	}
-
+	
+	//TODO: figure out if we need/want namespace in job name
 	err := s.cron.AddJob(etcdcron.Job{
-		Name:   req.Job.Name,
-		Rhythm: req.Job.Schedule,
+		Name:     req.Job.Name,
+		Rhythm:   req.Job.Schedule,
+		Repeats:  req.Job.Repeats,
+		DueTime:  req.Job.DueTime, //TODO: figure out dueTime
+		TTL:      req.Job.Ttl,
+		Data:     req.Job.Data,
+		Metadata: req.Metadata, //TODO: do I need this here?
 		Func: func(context.Context) error {
 			innerErr := s.triggerJob(req.Job, req.Namespace, req.Metadata)
 			if innerErr != nil {
@@ -76,19 +82,20 @@ func (s *Server) ListJobs(ctx context.Context, req *schedulerv1pb.ListJobsReques
 
 	// TODO: need to do some tweaks here to get entries by appID from req.AppId
 
-	entries := s.cron.Entries()
+	//entries := s.cron.Entries()
+	entries := s.cron.ListJobsByAppID(req.AppId)
 
 	var jobs []*runtimev1pb.Job
 	for _, entry := range entries {
 		job := &runtimev1pb.Job{
-			Name:     entry.Job.Name,
-			Schedule: entry.Job.Rhythm,
-			// TODO: rest
-			//Data:     nil,
-			//Repeats:  0,
-			//DueTime:  "",
-			//Ttl:      "",
+			Name:     entry.Name,
+			Schedule: entry.Rhythm,
+			Repeats:  entry.Repeats,
+			DueTime:  entry.DueTime,
+			Ttl:      entry.TTL,
+			Data:     entry.Data,
 		}
+
 		jobs = append(jobs, job)
 	}
 
@@ -105,7 +112,24 @@ func (s *Server) GetJob(ctx context.Context, req *schedulerv1pb.JobRequest) (*sc
 	case <-s.readyCh:
 	}
 
-	return nil, fmt.Errorf("not implemented")
+	//jobName := fmt.Sprintf("%s_%s", req.Metadata["app_id"], req.Job.Name)
+
+	job := s.cron.GetJob(req.JobName)
+	if job != nil {
+		resp := &schedulerv1pb.GetJobResponse{
+			Job: &runtimev1pb.Job{
+				Name:     job.Name,
+				Schedule: job.Rhythm,
+				Repeats:  job.Repeats,
+				DueTime:  job.DueTime,
+				Ttl:      job.TTL,
+				Data:     job.Data,
+			},
+		}
+		return resp, nil
+	}
+
+	return nil, fmt.Errorf("job not found")
 }
 
 // DeleteJob is a placeholder method that needs to be implemented
@@ -116,7 +140,13 @@ func (s *Server) DeleteJob(ctx context.Context, req *schedulerv1pb.JobRequest) (
 	case <-s.readyCh:
 	}
 
-	return nil, fmt.Errorf("not implemented")
+	err := s.cron.DeleteJob(req.JobName)
+	if err != nil {
+		log.Errorf("error deleting job %s: %s", req.JobName, err)
+		return nil, err
+	}
+
+	return &schedulerv1pb.DeleteJobResponse{}, nil
 }
 
 func (s *Server) TriggerJob(context.Context, *schedulerv1pb.TriggerJobRequest) (*schedulerv1pb.TriggerJobResponse, error) {
