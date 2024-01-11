@@ -41,7 +41,6 @@ func (m *httpsCA) Setup(t *testing.T) []framework.Option {
 	// Generate a CA and key pair for the JWKS server
 	caCert, caKey := generateCACertificate(t)
 	serverCert, serverKey := generateTLSCertificates(t, caCert, caKey, "localhost")
-	fmt.Println(string(serverCert))
 
 	jwksServer := prochttp.New(t,
 		prochttp.WithHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
