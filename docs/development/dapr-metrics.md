@@ -101,6 +101,16 @@ Dapr uses prometheus process and go collectors by default.
 * dapr_resiliency_count: The number of times a resiliency policy has been executed.
 * dapr_resiliency_activations_total: Number of times a resiliency policy has been activated in a building block after a failure or after a state change.
 
+#### Workflow metrics
+
+[workflow metrics](../../pkg/diagnostics/workflow_monitoring.go)
+
+* dapr_runtime_workflow_operation_count: The number of successful/failed workflow operation requests.
+* dapr_runtime_workflow_operation_latency: The latencies of responses for workflow operation requests.
+* dapr_runtime_workflow_execution_count: The number of successful/failed/recoverable workflow executions.
+* dapr_runtime_workflow_activity_execution_count: The number of successful/failed/recoverable activity executions.
+* dapr_runtime_workflow_activity_execution_latency: The total time taken to run an activity to completion.
+
 ### gRPC monitoring metrics
 
 Dapr leverages opencensus ocgrpc plugin to generate gRPC server and client metrics.
@@ -173,3 +183,4 @@ We support only server side metrics.
 
 * dapr_component_secret_count: The number of operations performed on the secret component
 * dapr_component_secret_latencies: The latency of the response from the secret component
+
