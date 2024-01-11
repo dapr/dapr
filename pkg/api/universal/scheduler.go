@@ -15,6 +15,7 @@ package universal
 
 import (
 	"context"
+	"fmt"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -26,17 +27,20 @@ func (a *Universal) ScheduleJob(ctx context.Context, inReq *runtimev1pb.Schedule
 	//validate job details, date, schedule, etc??
 	var err error
 
+	metadata := map[string]string{"app_id": a.AppID}
+	jobName := fmt.Sprintf("%s_%s", a.AppID, inReq.GetJob().GetName())
+
 	internalScheduleJobReq := &schedulerv1pb.ScheduleJobRequest{
 		Job: &runtimev1pb.Job{
-			Name:     inReq.GetJob().GetName(),
+			Name:     jobName,
 			Schedule: inReq.GetJob().GetSchedule(),
 			Data:     inReq.GetJob().GetData(),
 			Repeats:  inReq.GetJob().GetRepeats(),
 			DueTime:  inReq.GetJob().GetDueTime(),
 			Ttl:      inReq.GetJob().GetTtl(),
 		},
-		Namespace: "",  //TODO
-		Metadata:  nil, //TODO: this should generate key if jobStateStore is configured
+		Namespace: "",       //TODO
+		Metadata:  metadata, //TODO: this should generate key if jobStateStore is configured
 	}
 
 	//TODO: do something with following response?
@@ -57,8 +61,9 @@ func (a *Universal) DeleteJob(ctx context.Context, inReq *runtimev1pb.DeleteJobR
 		return &emptypb.Empty{}, err
 	}
 
+	jobName := fmt.Sprintf("%s_%s", a.AppID, inReq.GetName())
 	internalDeleteJobReq := &schedulerv1pb.JobRequest{
-		JobName: inReq.GetName(),
+		JobName: jobName,
 	}
 
 	//TODO: do something with following response?
@@ -81,8 +86,9 @@ func (a *Universal) GetJob(ctx context.Context, inReq *runtimev1pb.GetJobRequest
 		return response, err
 	}
 
+	jobName := fmt.Sprintf("%s_%s", a.AppID, inReq.GetName())
 	internalGetJobReq := &schedulerv1pb.JobRequest{
-		JobName: inReq.GetName(),
+		JobName: jobName,
 	}
 
 	internalResp, err = a.schedulerClient.GetJob(ctx, internalGetJobReq)
