@@ -122,6 +122,7 @@ func (i *informer) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("adding a component should become available", func(t *testing.T) {
 		comp := compapi.Component{
+			TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Component"},
 			ObjectMeta: metav1.ObjectMeta{Name: "123", Namespace: "default"},
 			Spec: compapi.ComponentSpec{
 				Type:    "state.in-memory",
