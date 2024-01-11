@@ -56,7 +56,7 @@ global:
   #  sentry:
   #  placement:
   #  operator:
-  #  injector:  
+  #  injector:
   actors:
     enabled: true
   daprControlPlaneOs: linux
