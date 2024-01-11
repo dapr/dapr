@@ -74,7 +74,6 @@ type Options struct {
 	TrustAnchorsFile                    string
 	APIPort                             int
 	HealthzPort                         int
-	AdditionalCPServices                []string
 }
 
 type operator struct {
@@ -186,10 +185,9 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 		config:      config,
 		healthzPort: opts.HealthzPort,
 		apiServer: api.NewAPIServer(api.Options{
-			Client:               mgrClient,
-			Security:             secProvider,
-			Port:                 opts.APIPort,
-			AdditionalCPServices: opts.AdditionalCPServices,
+			Client:   mgrClient,
+			Security: secProvider,
+			Port:     opts.APIPort,
 		}),
 	}, nil
 }

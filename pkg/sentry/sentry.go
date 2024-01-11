@@ -107,7 +107,6 @@ func (s *sentry) Start(parentCtx context.Context) error {
 			}
 			return certs, nil
 		},
-		AdditionalCPServices: s.conf.AdditionalCPServices,
 	})
 	if err != nil {
 		return fmt.Errorf("error creating security: %s", err)

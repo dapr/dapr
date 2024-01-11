@@ -504,7 +504,7 @@ func TestListsNamespaced(t *testing.T) {
 			}).
 			Build()
 
-		api := NewAPIServer(Options{Client: client, AdditionalCPServices: []string{"actors-mock-service"}}).(*apiServer)
+		api := NewAPIServer(Options{Client: client}).(*apiServer)
 
 		os.Setenv("NAMESPACE", "dapr-mockns")
 		defer os.Unsetenv("NAMESPACE")

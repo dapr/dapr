@@ -56,12 +56,9 @@ global:
   #  sentry:
   #  placement:
   #  operator:
-  #  injector:
-  
+  #  injector:  
   actors:
-    # Enables actor functionality in the cluster
     enabled: true
-
   daprControlPlaneOs: linux
   labels: {}
   seccompProfile: ""
