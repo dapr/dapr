@@ -40,8 +40,8 @@ var (
 	DefaultComponentMonitoring = newComponentMetrics()
 	// DefaultResiliencyMonitoring holds resiliency specific metrics.
 	DefaultResiliencyMonitoring = newResiliencyMetrics()
-	// Rules holds regex expressions for metrics labels
-	Rules map[string]string
+	// DefaultWorkflowMonitoring holds workflow specific metrics.
+	DefaultWorkflowMonitoring = newWorkflowMetrics()
 )
 
 // InitMetrics initializes metrics.
@@ -63,6 +63,10 @@ func InitMetrics(appID, namespace string, rules []config.MetricsRule) error {
 	}
 
 	if err := DefaultResiliencyMonitoring.Init(appID); err != nil {
+		return err
+	}
+
+	if err := DefaultWorkflowMonitoring.Init(appID, namespace); err != nil {
 		return err
 	}
 
