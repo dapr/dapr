@@ -132,7 +132,7 @@ func (s *workflowState) GetSaveRequest(actorID string) (*actors.TransactionalReq
 	if !s.workflowStartTime.IsZero() {
 		req.Operations = append(req.Operations, actors.TransactionalOperation{
 			Operation: actors.Upsert,
-			Request:   actors.TransactionalUpsert{Key: "workflowStartTime", Value: s.workflowStartTime},
+			Request:   actors.TransactionalUpsert{Key: workflowStartTimeKey, Value: s.workflowStartTime},
 		})
 	}
 
