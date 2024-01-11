@@ -57,6 +57,7 @@ jobs:
       # Container registry where to cache e2e test images
       DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
       PULL_POLICY: IfNotPresent
+      DAPR_GO_BUILD_TAGS: e2e
     strategy:
       fail-fast: false # Keep running if one leg fails.
       matrix:
@@ -164,7 +165,6 @@ jobs:
 
     - name: Build and push Dapr
       run: |
-        DAPR_GO_BUILD_TAGS=e2e
         make build-linux
         make docker-build
         make docker-push

@@ -330,11 +330,11 @@ jobs:
           echo "DAPR_TEST_TAG=${TEST_PREFIX}" >> $GITHUB_ENV
           echo "TEST_RESOURCE_GROUP=Dapr-E2E-${TEST_PREFIX}" >> $GITHUB_ENV
           echo "WINDOWS_VERSION=${{ matrix.windows_version }}" >> $GITHUB_ENV
+          echo "DAPR_GO_BUILD_TAGS=e2e" >> $GITHUB_ENV
         shell: bash
       - name: Build Dapr and its Docker images
         if: env.TEST_PREFIX != ''
         run: |
-          DAPR_GO_BUILD_TAGS=e2e
           make build
           if [ "${{ env.TARGET_OS }}" = "linux" ] && [ "${{ env.TARGET_ARCH }}" != "arm" ]; then
             # For Linux, we use images based on Mariner
