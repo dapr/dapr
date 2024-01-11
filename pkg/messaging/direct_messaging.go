@@ -243,11 +243,6 @@ func (d *directMessaging) invokeWithRetry(
 			}
 
 			teardown(false)
-			// Remove the resolved name from the cache
-			if app.cacheKey != "" && d.resolverCache != nil {
-				d.resolverCache.Delete(app.cacheKey)
-			}
-
 			return rResp, backoff.Permanent(rErr)
 		})
 	}
