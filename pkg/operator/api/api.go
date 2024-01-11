@@ -223,7 +223,7 @@ func (a *apiServer) ListComponents(ctx context.Context, in *operatorv1pb.ListCom
 	if err != nil {
 		return nil, err
 	}
-	if err := a.authzRequest(spiffeID, in.GetNamespace()); err != nil {
+	if err = a.authzRequest(spiffeID, in.GetNamespace()); err != nil {
 		return nil, err
 	}
 
@@ -235,7 +235,7 @@ func (a *apiServer) ListComponents(ctx context.Context, in *operatorv1pb.ListCom
 	}
 
 	var components componentsapi.ComponentList
-	if err := a.Client.List(ctx, &components, &client.ListOptions{
+	if err = a.Client.List(ctx, &components, &client.ListOptions{
 		Namespace: in.GetNamespace(),
 	}); err != nil {
 		return nil, fmt.Errorf("error getting components: %w", err)
@@ -405,7 +405,7 @@ func (a *apiServer) ListSubscriptionsV2(ctx context.Context, in *operatorv1pb.Li
 	if err != nil {
 		return nil, err
 	}
-	if err := a.authzRequest(spiffeID, in.GetNamespace()); err != nil {
+	if err = a.authzRequest(spiffeID, in.GetNamespace()); err != nil {
 		return nil, err
 	}
 
@@ -415,7 +415,7 @@ func (a *apiServer) ListSubscriptionsV2(ctx context.Context, in *operatorv1pb.Li
 
 	// Only the latest/storage version needs to be returned.
 	var subsV2alpha1 subscriptionsapiV2alpha1.SubscriptionList
-	if err := a.Client.List(ctx, &subsV2alpha1, &client.ListOptions{
+	if err = a.Client.List(ctx, &subsV2alpha1, &client.ListOptions{
 		Namespace: in.GetNamespace(),
 	}); err != nil {
 		return nil, fmt.Errorf("error getting subscriptions: %w", err)
@@ -466,7 +466,7 @@ func (a *apiServer) ListResiliency(ctx context.Context, in *operatorv1pb.ListRes
 	if err != nil {
 		return nil, err
 	}
-	if err := a.authzRequest(spiffeID, in.GetNamespace()); err != nil {
+	if err = a.authzRequest(spiffeID, in.GetNamespace()); err != nil {
 		return nil, err
 	}
 
@@ -475,7 +475,7 @@ func (a *apiServer) ListResiliency(ctx context.Context, in *operatorv1pb.ListRes
 	}
 
 	var resiliencies resiliencyapi.ResiliencyList
-	if err := a.Client.List(ctx, &resiliencies, &client.ListOptions{
+	if err = a.Client.List(ctx, &resiliencies, &client.ListOptions{
 		Namespace: in.GetNamespace(),
 	}); err != nil {
 		return nil, fmt.Errorf("error listing resiliencies: %w", err)
@@ -601,7 +601,7 @@ func (a *apiServer) ListHTTPEndpoints(ctx context.Context, in *operatorv1pb.List
 	if err != nil {
 		return nil, err
 	}
-	if err := a.authzRequest(spiffeID, in.GetNamespace()); err != nil {
+	if err = a.authzRequest(spiffeID, in.GetNamespace()); err != nil {
 		return nil, err
 	}
 
@@ -610,7 +610,7 @@ func (a *apiServer) ListHTTPEndpoints(ctx context.Context, in *operatorv1pb.List
 	}
 
 	var endpoints httpendpointsapi.HTTPEndpointList
-	if err := a.Client.List(ctx, &endpoints, &client.ListOptions{
+	if err = a.Client.List(ctx, &endpoints, &client.ListOptions{
 		Namespace: in.GetNamespace(),
 	}); err != nil {
 		return nil, fmt.Errorf("error listing http endpoints: %w", err)
