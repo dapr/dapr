@@ -24,10 +24,10 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/acl"
+	grpcProxy "github.com/dapr/dapr/pkg/api/grpc/proxy"
+	codec "github.com/dapr/dapr/pkg/api/grpc/proxy/codec"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/diagnostics"
-	grpcProxy "github.com/dapr/dapr/pkg/grpc/proxy"
-	codec "github.com/dapr/dapr/pkg/grpc/proxy/codec"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/proto/common/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
