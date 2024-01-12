@@ -24,8 +24,8 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/dapr/dapr/pkg/api/grpc/metadata"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
-	"github.com/dapr/dapr/pkg/grpc/metadata"
 )
 
 // This implementation is inspired by

@@ -29,10 +29,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/dapr/components-contrib/bindings"
+	"github.com/dapr/dapr/pkg/api/grpc/manager"
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
-	"github.com/dapr/dapr/pkg/grpc/manager"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/resiliency"
