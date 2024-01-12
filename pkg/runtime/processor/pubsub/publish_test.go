@@ -33,9 +33,9 @@ import (
 
 	"github.com/dapr/components-contrib/contenttype"
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
+	"github.com/dapr/dapr/pkg/api/grpc/manager"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	"github.com/dapr/dapr/pkg/config"
-	"github.com/dapr/dapr/pkg/grpc/manager"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
