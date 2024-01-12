@@ -41,6 +41,10 @@ import (
 	nr "github.com/dapr/components-contrib/nameresolution"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/api/grpc"
+	"github.com/dapr/dapr/pkg/api/grpc/manager"
+	"github.com/dapr/dapr/pkg/api/http"
+	"github.com/dapr/dapr/pkg/api/universal"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpEndpointV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/apphealth"
@@ -51,10 +55,6 @@ import (
 	"github.com/dapr/dapr/pkg/config/protocol"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
-	"github.com/dapr/dapr/pkg/grpc"
-	"github.com/dapr/dapr/pkg/grpc/manager"
-	"github.com/dapr/dapr/pkg/grpc/universalapi"
-	"github.com/dapr/dapr/pkg/http"
 	"github.com/dapr/dapr/pkg/httpendpoint"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -96,7 +96,7 @@ type DaprRuntime struct {
 	actorStateStoreLock sync.RWMutex
 	namespace           string
 	podName             string
-	daprUniversalAPI    *universalapi.UniversalAPI
+	daprUniversal       *universal.Universal
 	daprHTTPAPI         http.API
 	daprGRPCAPI         grpc.API
 	operatorClient      operatorv1pb.OperatorClient
@@ -489,7 +489,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	a.populateSecretsConfiguration()
 
 	// Create and start the external gRPC server
-	a.daprUniversalAPI = &universalapi.UniversalAPI{
+	a.daprUniversal = universal.New(universal.Options{
 		AppID:                       a.runtimeConfig.id,
 		Logger:                      logger.NewLogger("dapr.api"),
 		CompStore:                   a.compStore,
@@ -499,11 +499,12 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		ShutdownFn:                  a.ShutdownWithWait,
 		AppConnectionConfig:         a.runtimeConfig.appConnectionConfig,
 		GlobalConfig:                a.globalConfig,
-	}
+	})
 
 	// Create and start internal and external gRPC servers
 	a.daprGRPCAPI = grpc.NewAPI(grpc.APIOpts{
-		UniversalAPI:          a.daprUniversalAPI,
+		Universal:             a.daprUniversal,
+		Logger:                logger.NewLogger("dapr.grpc.api"),
 		Channels:              a.channels,
 		PubsubAdapter:         a.processor.PubSub(),
 		DirectMessaging:       a.directMessaging,
@@ -602,7 +603,7 @@ func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) (err error) {
 				return err
 			}
 
-			a.daprUniversalAPI.SetActorRuntime(a.actor)
+			a.daprUniversal.SetActorRuntime(a.actor)
 		}
 	} else {
 		// If actors are not enabled, still invoke SetActorRuntime on the workflow engine with `nil` to unblock startup
@@ -610,7 +611,7 @@ func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) (err error) {
 	}
 
 	// We set actors as initialized whether we have an actors runtime or not
-	a.daprUniversalAPI.SetActorsInitDone()
+	a.daprUniversal.SetActorsInitDone()
 
 	if cb := a.runtimeConfig.registry.ComponentsCallback(); cb != nil {
 		if err = cb(registry.ComponentRegistry{
@@ -740,7 +741,7 @@ func (a *DaprRuntime) initProxy() {
 
 func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int, allowedOrigins string, pipeline httpMiddleware.Pipeline) error {
 	a.daprHTTPAPI = http.NewAPI(http.APIOpts{
-		UniversalAPI:          a.daprUniversalAPI,
+		Universal:             a.daprUniversal,
 		Channels:              a.channels,
 		DirectMessaging:       a.directMessaging,
 		PubsubAdapter:         a.processor.PubSub(),

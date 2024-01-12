@@ -23,7 +23,7 @@ import (
 	"google.golang.org/grpc"
 	grpcMetadata "google.golang.org/grpc/metadata"
 
-	"github.com/dapr/dapr/pkg/grpc/metadata"
+	"github.com/dapr/dapr/pkg/api/grpc/metadata"
 )
 
 type fakeProxyStream struct {
