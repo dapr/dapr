@@ -87,6 +87,10 @@ func newWorkflowMetrics() *workflowMetrics {
 			"runtime/workflow/execution/latency",
 			"The total time taken to run workflow to completion.",
 			stats.UnitMilliseconds),
+		workflowSchedulingLatency: stats.Float64(
+			"runtime/workflow/scheduling/latency",
+			"The time taken between workflow execution request and actual workflow execution.",
+			stats.UnitMilliseconds),
 	}
 }
 

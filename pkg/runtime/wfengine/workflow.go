@@ -488,11 +488,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 	}
 
 	// Record workflow schedling latency
-	if isWorkflowExecutionStartedEvent {
-		state.workflowStartTime = time.Now()
-		scheduleDiff := diag.ElapsedSince(scheduledStartTimestamp)
-		diag.DefaultWorkflowMonitoring.WorkflowSchedulingLatency(ctx, workflowName, executionStatus, scheduleDiff)
-	}
+	recordWorkflowSchedulingLatency(ctx, isWorkflowExecutionStartedEvent, state, scheduledStartTimestamp, workflowName, executionStatus)
 
 	wfElapsedTime := float64(0)
 	defer func() {
@@ -651,6 +647,22 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 		}
 	}
 	return nil
+}
+
+func recordWorkflowSchedulingLatency(ctx context.Context, isWorkflowExecutionStartedEvent bool, state *workflowState, scheduledStartTimestamp time.Time, workflowName string, executionStatus string) {
+	if isWorkflowExecutionStartedEvent {
+		state.workflowStartTime = time.Now()
+
+		wfSchedulingLatency := float64(0)
+
+		// If scheduledStartTimestamp is zero, then scheduling latency is zero
+		if !scheduledStartTimestamp.IsZero() {
+			// get the time diff between state.workflowStartTime and scheduledStartTimestamp
+			wfSchedulingLatency = float64(state.workflowStartTime.Sub(scheduledStartTimestamp).Milliseconds())
+		}
+
+		diag.DefaultWorkflowMonitoring.WorkflowSchedulingLatency(ctx, workflowName, executionStatus, wfSchedulingLatency)
+	}
 }
 
 func (wf *workflowActor) loadInternalState(ctx context.Context, actorID string) (*workflowState, error) {
