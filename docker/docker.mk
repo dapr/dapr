@@ -90,6 +90,7 @@ DAPR_SENTRY_DOCKER_IMAGE=$(DAPR_REGISTRY)/$(DAPR_SENTRY_IMAGE_NAME)
 DAPR_OPERATOR_DOCKER_IMAGE=$(DAPR_REGISTRY)/$(DAPR_OPERATOR_IMAGE_NAME)
 DAPR_INJECTOR_DOCKER_IMAGE=$(DAPR_REGISTRY)/$(DAPR_INJECTOR_IMAGE_NAME)
 BUILD_TAG=$(DAPR_TAG)-$(DOCKER_IMAGE_VARIANT)
+BUILD_TAG=$(DAPR_TAG)
 
 # To use buildx: https://github.com/docker/buildx#docker-ce
 export DOCKER_CLI_EXPERIMENTAL=enabled
@@ -114,7 +115,7 @@ endif
 docker-build: SHELL := $(shell which bash)
 docker-build: check-docker-env check-arch
 	$(info Building $(DOCKER_IMAGE):$(DAPR_TAG) docker images ...)
-ifeq ($(TARGET_ARCH),amd64)
+ifeq ($(TARGET_ARCH),$(TARGET_ARCH_LOCAL))
 ifeq ($(ONLY_DAPR_IMAGE),true)
 	$(DOCKER) build --build-arg PKG_FILES=* $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DOCKER_IMAGE):$(BUILD_TAG)
 else
@@ -164,7 +165,7 @@ endif
 docker-push: SHELL := $(shell which bash)
 docker-push: docker-build
 	$(info Pushing $(DOCKER_IMAGE):$(DAPR_TAG) docker images ...)
-ifeq ($(TARGET_ARCH),amd64)
+ifeq ($(TARGET_ARCH),$(TARGET_ARCH_LOCAL))
 ifeq ($(ONLY_DAPR_IMAGE),true)
 	$(DOCKER) push $(DOCKER_IMAGE):$(BUILD_TAG)
 else
@@ -215,23 +216,23 @@ docker-push-kind: SHELL := $(shell which bash)
 docker-push-kind: docker-build
 	$(info Pushing $(DOCKER_IMAGE_TAG) docker image to kind cluster...)
 ifeq ($(ONLY_DAPR_IMAGE),true)
-	kind load docker-image $(DOCKER_IMAGE):$(BUILD_TAG)
+	kind load docker-image $(DOCKER_IMAGE):$(BUILD_TAG) --name $(shell kind get clusters | grep "conductor-dp")
 else
 	kind load docker-image $(DOCKER_IMAGE):$(BUILD_TAG)
 	if [[ "$(BINARIES)" == *"daprd"* ]]; then \
-		kind load docker-image $(DAPR_RUNTIME_DOCKER_IMAGE):$(BUILD_TAG); \
+		kind load docker-image $(DAPR_RUNTIME_DOCKER_IMAGE):$(BUILD_TAG) --name $(shell kind get clusters | grep "conductor-dp"); \
 	fi
 	if [[ "$(BINARIES)" == *"placement"* ]]; then \
-		kind load docker-image $(DAPR_PLACEMENT_DOCKER_IMAGE):$(BUILD_TAG); \
+		kind load docker-image $(DAPR_PLACEMENT_DOCKER_IMAGE):$(BUILD_TAG) --name $(shell kind get clusters | grep "conductor-dp"); \
 	fi
 	if [[ "$(BINARIES)" == *"sentry"* ]]; then \
-		kind load docker-image $(DAPR_SENTRY_DOCKER_IMAGE):$(BUILD_TAG); \
+		kind load docker-image $(DAPR_SENTRY_DOCKER_IMAGE):$(BUILD_TAG) --name $(shell kind get clusters | grep "conductor-dp"); \
 	fi
 	if [[ "$(BINARIES)" == *"operator"* ]]; then \
-		kind load docker-image $(DAPR_OPERATOR_DOCKER_IMAGE):$(BUILD_TAG); \
+		kind load docker-image $(DAPR_OPERATOR_DOCKER_IMAGE):$(BUILD_TAG) --name $(shell kind get clusters | grep "conductor-dp"); \
 	fi
 	if [[ "$(BINARIES)" == *"injector"* ]]; then \
-		kind load docker-image $(DAPR_INJECTOR_DOCKER_IMAGE):$(BUILD_TAG); \
+		kind load docker-image $(DAPR_INJECTOR_DOCKER_IMAGE):$(BUILD_TAG) --name $(shell kind get clusters | grep "conductor-dp"); \
 	fi
 endif
 
