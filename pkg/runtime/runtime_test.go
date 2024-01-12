@@ -73,12 +73,12 @@ import (
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/security"
 
+	pb "github.com/dapr/dapr/pkg/api/grpc/proxy/testservice"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
 	modeconfig "github.com/dapr/dapr/pkg/config/modes"
 	"github.com/dapr/dapr/pkg/cors"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
-	pb "github.com/dapr/dapr/pkg/grpc/proxy/testservice"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/resiliency"
