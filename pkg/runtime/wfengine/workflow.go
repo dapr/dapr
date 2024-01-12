@@ -416,12 +416,12 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 
 	// The logic/for loop below purges/removes any leftover state from a completed or failed activity
 	transactionalRequests := make(map[string][]actors.TransactionalOperation)
-	isWorkflowExecutionStarted := false
+	isWorkflowExecutionStartedEvent := false
 	scheduledStartTimestamp := time.Now()
 	for _, e := range state.Inbox {
 		var taskID int32
 		if es := e.GetExecutionStarted(); es != nil {
-			isWorkflowExecutionStarted = true
+			isWorkflowExecutionStartedEvent = true
 			scheduledStartTimestamp = es.GetScheduledStartTimestamp().AsTime()
 		} else if ts := e.GetTaskCompleted(); ts != nil {
 			taskID = ts.GetTaskScheduledId()
@@ -487,17 +487,18 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 		return newRecoverableError(fmt.Errorf("failed to schedule a workflow execution: %w", err))
 	}
 
-	if isWorkflowExecutionStarted {
+	// Record workflow schedling latency
+	if isWorkflowExecutionStartedEvent {
 		state.workflowStartTime = time.Now()
 		scheduleDiff := diag.ElapsedSince(scheduledStartTimestamp)
-		diag.DefaultWorkflowMonitoring.WorkflowExecutionEvent(ctx, workflowName, executionStatus, scheduleDiff)
+		diag.DefaultWorkflowMonitoring.WorkflowSchedulingLatency(ctx, workflowName, executionStatus, scheduleDiff)
 	}
 
 	wfElapsedTime := float64(0)
 	defer func() {
 		if executionStatus != "" {
-			// execution latency for workflow is not supported yet.
-			diag.DefaultWorkflowMonitoring.WorkflowExecutionEvent(ctx, workflowName, executionStatus, wfElapsedTime)
+			diag.DefaultWorkflowMonitoring.WorkflowExecutionEvent(ctx, workflowName, executionStatus)
+			diag.DefaultWorkflowMonitoring.WorkflowExecutionLatency(ctx, workflowName, executionStatus, wfElapsedTime)
 		}
 	}()
 

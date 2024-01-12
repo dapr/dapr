@@ -226,7 +226,7 @@ func TestExecution(t *testing.T) {
 		t.Run("Failed with retryable error", func(t *testing.T) {
 			w := initWorkflowMetrics()
 
-			w.WorkflowExecutionEvent(context.Background(), workflowName, StatusRecoverable, 0)
+			w.WorkflowExecutionEvent(context.Background(), workflowName, StatusRecoverable)
 
 			viewData, _ := view.RetrieveData(countMetricName)
 			v := view.Find(countMetricName)
@@ -237,7 +237,7 @@ func TestExecution(t *testing.T) {
 		t.Run("Failed with not-retryable error", func(t *testing.T) {
 			w := initWorkflowMetrics()
 
-			w.WorkflowExecutionEvent(context.Background(), workflowName, StatusFailed, 0)
+			w.WorkflowExecutionEvent(context.Background(), workflowName, StatusFailed)
 
 			viewData, _ := view.RetrieveData(countMetricName)
 			v := view.Find(countMetricName)
@@ -248,7 +248,7 @@ func TestExecution(t *testing.T) {
 		t.Run("Successful workflow execution", func(t *testing.T) {
 			w := initWorkflowMetrics()
 
-			w.WorkflowExecutionEvent(context.Background(), workflowName, StatusSuccess, 0)
+			w.WorkflowExecutionEvent(context.Background(), workflowName, StatusSuccess)
 
 			viewData, _ := view.RetrieveData(countMetricName)
 			v := view.Find(countMetricName)

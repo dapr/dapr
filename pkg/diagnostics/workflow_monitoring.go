@@ -54,9 +54,11 @@ type workflowMetrics struct {
 	activityExecutionLatency *stats.Float64Measure
 	// workflowExecutionLatency records time taken to run a workflow to completion.
 	workflowExecutionLatency *stats.Float64Measure
-	appID                    string
-	enabled                  bool
-	namespace                string
+	// workflowSchedulingLatency records time taken between workflow execution request and actual workflow execution
+	workflowSchedulingLatency *stats.Float64Measure
+	appID                     string
+	enabled                   bool
+	namespace                 string
 }
 
 func newWorkflowMetrics() *workflowMetrics {
@@ -104,7 +106,8 @@ func (w *workflowMetrics) Init(appID, namespace string) error {
 		diagUtils.NewMeasureView(w.workflowExecutionCount, []tag.Key{appIDKey, namespaceKey, workflowNameKey, statusKey}, view.Count()),
 		diagUtils.NewMeasureView(w.activityExecutionCount, []tag.Key{appIDKey, namespaceKey, activityNameKey, statusKey}, view.Count()),
 		diagUtils.NewMeasureView(w.activityExecutionLatency, []tag.Key{appIDKey, namespaceKey, activityNameKey, statusKey}, defaultLatencyDistribution),
-		diagUtils.NewMeasureView(w.workflowExecutionLatency, []tag.Key{appIDKey, namespaceKey, workflowNameKey, statusKey}, defaultLatencyDistribution))
+		diagUtils.NewMeasureView(w.workflowExecutionLatency, []tag.Key{appIDKey, namespaceKey, workflowNameKey, statusKey}, defaultLatencyDistribution),
+		diagUtils.NewMeasureView(w.workflowSchedulingLatency, []tag.Key{appIDKey, namespaceKey, workflowNameKey, statusKey}, defaultLatencyDistribution))
 }
 
 // WorkflowOperationEvent records total number of Successful/Failed workflow Operations requests. It also records latency for those requests.
@@ -122,15 +125,31 @@ func (w *workflowMetrics) WorkflowOperationEvent(ctx context.Context, operation,
 
 // WorkflowExecutionEvent records total number of Successful/Failed/Recoverable workflow executions.
 // Execution latency for workflow is not supported yet.
-func (w *workflowMetrics) WorkflowExecutionEvent(ctx context.Context, workflowName, status string, elapsed float64) {
+func (w *workflowMetrics) WorkflowExecutionEvent(ctx context.Context, workflowName, status string) {
 	if !w.IsEnabled() {
 		return
 	}
 
 	stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowExecutionCount.Name(), appIDKey, w.appID, namespaceKey, w.namespace, workflowNameKey, workflowName, statusKey, status), w.workflowExecutionCount.M(1))
+}
+
+func (w *workflowMetrics) WorkflowExecutionLatency(ctx context.Context, workflowName, status string, elapsed float64) {
+	if !w.IsEnabled() {
+		return
+	}
 
 	if elapsed > 0 {
 		stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowExecutionLatency.Name(), appIDKey, w.appID, namespaceKey, w.namespace, workflowNameKey, workflowName, statusKey, status), w.workflowExecutionLatency.M(elapsed))
+	}
+}
+
+func (w *workflowMetrics) WorkflowSchedulingLatency(ctx context.Context, workflowName, status string, elapsed float64) {
+	if !w.IsEnabled() {
+		return
+	}
+
+	if elapsed > 0 {
+		stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowSchedulingLatency.Name(), appIDKey, w.appID, namespaceKey, w.namespace, workflowNameKey, workflowName, statusKey, status), w.workflowExecutionLatency.M(elapsed))
 	}
 }
 
