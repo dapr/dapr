@@ -79,9 +79,12 @@ func (w *workflow) startWorkflow(ctx context.Context, t *testing.T, name string,
 }
 
 // terminate workflow
-func (w *workflow) terminateWorkflow(ctx context.Context, t *testing.T, instanceID string, recursive bool) {
+func (w *workflow) terminateWorkflow(ctx context.Context, t *testing.T, instanceID string, recursive string) {
 	// use http client to terminate the workflow
-	reqUrl := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/terminate?recursive=%v", w.daprd.HTTPPort(), instanceID, recursive)
+	reqUrl := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/terminate", w.daprd.HTTPPort(), instanceID)
+	if recursive != "" {
+		reqUrl += "?recursive=" + recursive
+	}
 	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, reqUrl, nil)
@@ -92,9 +95,12 @@ func (w *workflow) terminateWorkflow(ctx context.Context, t *testing.T, instance
 }
 
 // purge workflow
-func (w *workflow) purgeWorkflow(ctx context.Context, t *testing.T, instanceID string, recursive bool) {
+func (w *workflow) purgeWorkflow(ctx context.Context, t *testing.T, instanceID string, recursive string) {
 	// use http client to purge the workflow
-	reqUrl := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/purge?recursive=%v", w.daprd.HTTPPort(), instanceID, recursive)
+	reqUrl := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/purge", w.daprd.HTTPPort(), instanceID)
+	if recursive != "" {
+		reqUrl += "?recursive=" + recursive
+	}
 	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, reqUrl, nil)
@@ -210,7 +216,12 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 		time.Sleep(5 * time.Second)
 
 		// Test terminating with and without recursion
-		for _, recursive := range []bool{true, false} {
+		for _, recursive := range []string{"", "true", "false"} {
+			// `recursive` = "" means no query param, which should default to true
+			recursiveBool := true
+			if recursive == "false" {
+				recursiveBool = false
+			}
 			t.Run(fmt.Sprintf("recursive = %v", recursive), func(t *testing.T) {
 				id := api.InstanceID(w.startWorkflow(ctx, t, "Root", ""))
 
@@ -251,7 +262,7 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 				}
 
 				// Verify tht none of the L2 suborchestrations executed the activity in case of recursive termination
-				assert.NotEqual(t, recursive, executedActivity)
+				assert.NotEqual(t, recursiveBool, executedActivity)
 			})
 		}
 	})
@@ -279,7 +290,12 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 		time.Sleep(5 * time.Second)
 
 		// Test purging workflow with and without recursion
-		for _, recursive := range []bool{true, false} {
+		for _, recursive := range []string{"", "true", "false"} {
+			// `recursive` = "" means no query param, which should default to true
+			recursiveBool := true
+			if recursive == "false" {
+				recursiveBool = false
+			}
 			t.Run(fmt.Sprintf("recursive = %v", recursive), func(t *testing.T) {
 				// Run the orchestration, which will block waiting for external events
 				id := api.InstanceID(w.startWorkflow(ctx, t, "Root", ""))
@@ -295,7 +311,7 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 				_, err = backendClient.FetchOrchestrationMetadata(ctx, id)
 				assert.Contains(t, status.Convert(err).Message(), api.ErrInstanceNotFound.Error())
 
-				if recursive {
+				if recursiveBool {
 					// Verify that L1 and L2 orchestrations have been purged
 					_, err = backendClient.FetchOrchestrationMetadata(ctx, id+"_L1")
 					assert.Contains(t, status.Convert(err).Message(), api.ErrInstanceNotFound.Error())

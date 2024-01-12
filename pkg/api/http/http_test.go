@@ -2813,15 +2813,28 @@ func TestV1Beta1Workflow(t *testing.T) {
 		assert.Nil(t, resp.ErrorBody)
 	})
 
-	t.Run("Terminate with recursive true", func(t *testing.T) {
-		// Note that in case of recursive termination, MockWorkflow intentionally returns fake error, even when it is not an actual error.
-		// This is to test that recursive flag is being passed correctly to the workflow component.
+	t.Run("Terminate with recursive set to true", func(t *testing.T) {
+		// This has the same behavior as the case when recursive parameter is not set.
+		// This is because default case is set to recursive termination.
 
 		apiPath := "v1.0-beta1/workflows/dapr/instanceID/terminate?recursive=true"
+
+		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
+		assert.Equal(t, 202, resp.StatusCode)
+
+		// assert
+		assert.Nil(t, resp.ErrorBody)
+	})
+
+	t.Run("Terminate with recursive false", func(t *testing.T) {
+		// Note that in case of recursive false, MockWorkflow intentionally returns fake error, even when it is not an actual error.
+		// This is to test that recursive flag is being passed correctly to the workflow component.
+
+		apiPath := "v1.0-beta1/workflows/dapr/instanceID/terminate?recursive=false"
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 500, resp.StatusCode)
 		assert.Equal(t, "ERR_TERMINATE_WORKFLOW", resp.ErrorBody["errorCode"])
-		assert.Equal(t, fmt.Sprintf(messages.ErrTerminateWorkflow.Message(), "instanceID", daprt.ErrFakeWorkflowTerminateRecursiveError), resp.ErrorBody["message"])
+		assert.Equal(t, fmt.Sprintf(messages.ErrTerminateWorkflow.Message(), "instanceID", daprt.ErrFakeWorkflowNonRecursiveTerminateError), resp.ErrorBody["message"])
 	})
 
 	///////////////////////////
@@ -2934,15 +2947,27 @@ func TestV1Beta1Workflow(t *testing.T) {
 		// assert
 		assert.Nil(t, resp.ErrorBody)
 	})
+
 	t.Run("Purge with recursive true", func(t *testing.T) {
-		// Note that in case of recursive purge, MockWorkflow intentionally returns fake error, even when it is not an actual error.
-		// This is to test that recursive flag is being passed correctly to the workflow component.
+		// This has the same behavior as the case when recursive parameter is not set.
+		// This is because default case is set to recursive purge.
 
 		apiPath := "v1.0-beta1/workflows/dapr/instanceID/purge?recursive=true"
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
+		assert.Equal(t, 202, resp.StatusCode)
+
+		// assert
+		assert.Nil(t, resp.ErrorBody)
+	})
+	t.Run("Purge with recursive false", func(t *testing.T) {
+		// Note that in case of recursive false, MockWorkflow intentionally returns fake error, even when it is not an actual error.
+		// This is to test that recursive flag is being passed correctly to the workflow component.
+
+		apiPath := "v1.0-beta1/workflows/dapr/instanceID/purge?recursive=false"
+		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 500, resp.StatusCode)
 		assert.Equal(t, "ERR_PURGE_WORKFLOW", resp.ErrorBody["errorCode"])
-		assert.Equal(t, fmt.Sprintf(messages.ErrPurgeWorkflow.Message(), "instanceID", daprt.ErrFakeWorkflowPurgeRecursiveError), resp.ErrorBody["message"])
+		assert.Equal(t, fmt.Sprintf(messages.ErrPurgeWorkflow.Message(), "instanceID", daprt.ErrFakeWorkflowNonRecurisvePurgeError), resp.ErrorBody["message"])
 	})
 }
 
