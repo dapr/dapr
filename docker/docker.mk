@@ -90,7 +90,6 @@ DAPR_SENTRY_DOCKER_IMAGE=$(DAPR_REGISTRY)/$(DAPR_SENTRY_IMAGE_NAME)
 DAPR_OPERATOR_DOCKER_IMAGE=$(DAPR_REGISTRY)/$(DAPR_OPERATOR_IMAGE_NAME)
 DAPR_INJECTOR_DOCKER_IMAGE=$(DAPR_REGISTRY)/$(DAPR_INJECTOR_IMAGE_NAME)
 BUILD_TAG=$(DAPR_TAG)-$(DOCKER_IMAGE_VARIANT)
-BUILD_TAG=$(DAPR_TAG)
 
 # To use buildx: https://github.com/docker/buildx#docker-ce
 export DOCKER_CLI_EXPERIMENTAL=enabled
@@ -216,23 +215,23 @@ docker-push-kind: SHELL := $(shell which bash)
 docker-push-kind: docker-build
 	$(info Pushing $(DOCKER_IMAGE_TAG) docker image to kind cluster...)
 ifeq ($(ONLY_DAPR_IMAGE),true)
-	kind load docker-image $(DOCKER_IMAGE):$(BUILD_TAG) --name $(shell kind get clusters | grep "conductor-dp")
+	kind load docker-image $(DOCKER_IMAGE):$(BUILD_TAG)
 else
 	kind load docker-image $(DOCKER_IMAGE):$(BUILD_TAG)
 	if [[ "$(BINARIES)" == *"daprd"* ]]; then \
-		kind load docker-image $(DAPR_RUNTIME_DOCKER_IMAGE):$(BUILD_TAG) --name $(shell kind get clusters | grep "conductor-dp"); \
+		kind load docker-image $(DAPR_RUNTIME_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"placement"* ]]; then \
-		kind load docker-image $(DAPR_PLACEMENT_DOCKER_IMAGE):$(BUILD_TAG) --name $(shell kind get clusters | grep "conductor-dp"); \
+		kind load docker-image $(DAPR_PLACEMENT_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"sentry"* ]]; then \
-		kind load docker-image $(DAPR_SENTRY_DOCKER_IMAGE):$(BUILD_TAG) --name $(shell kind get clusters | grep "conductor-dp"); \
+		kind load docker-image $(DAPR_SENTRY_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"operator"* ]]; then \
-		kind load docker-image $(DAPR_OPERATOR_DOCKER_IMAGE):$(BUILD_TAG) --name $(shell kind get clusters | grep "conductor-dp"); \
+		kind load docker-image $(DAPR_OPERATOR_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"injector"* ]]; then \
-		kind load docker-image $(DAPR_INJECTOR_DOCKER_IMAGE):$(BUILD_TAG) --name $(shell kind get clusters | grep "conductor-dp"); \
+		kind load docker-image $(DAPR_INJECTOR_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
 endif
 
