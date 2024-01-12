@@ -34,6 +34,8 @@ import (
 	"github.com/microsoft/durabletask-go/client"
 	"github.com/microsoft/durabletask-go/task"
 
+	"google.golang.org/grpc/status"
+
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -41,7 +43,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"google.golang.org/grpc/status"
 )
 
 func init() {
@@ -58,16 +59,17 @@ type workflow struct {
 
 func (w *workflow) startWorkflow(ctx context.Context, t *testing.T, name string, input string) string {
 	// use http client to start the workflow
-	reqUrl := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/start", w.daprd.HTTPPort(), name)
+	reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/start", w.daprd.HTTPPort(), name)
 	data, err := json.Marshal(input)
 	require.NoError(t, err)
 	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, reqUrl, strings.NewReader(string(data)))
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, reqURL, strings.NewReader(string(data)))
 	req.Header.Set("Content-Type", "application/json")
 	require.NoError(t, err)
 	resp, err := w.httpClient.Do(req)
 	require.NoError(t, err)
+	defer resp.Body.Close()
 	require.Equal(t, http.StatusAccepted, resp.StatusCode)
 	var response struct {
 		InstanceID string `json:"instanceID"`
@@ -81,32 +83,34 @@ func (w *workflow) startWorkflow(ctx context.Context, t *testing.T, name string,
 // terminate workflow
 func (w *workflow) terminateWorkflow(ctx context.Context, t *testing.T, instanceID string, recursive string) {
 	// use http client to terminate the workflow
-	reqUrl := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/terminate", w.daprd.HTTPPort(), instanceID)
+	reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/terminate", w.daprd.HTTPPort(), instanceID)
 	if recursive != "" {
-		reqUrl += "?recursive=" + recursive
+		reqURL += "?recursive=" + recursive
 	}
 	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, reqUrl, nil)
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, reqURL, nil)
 	require.NoError(t, err)
 	resp, err := w.httpClient.Do(req)
 	require.NoError(t, err)
+	defer resp.Body.Close()
 	require.Equal(t, http.StatusAccepted, resp.StatusCode)
 }
 
 // purge workflow
 func (w *workflow) purgeWorkflow(ctx context.Context, t *testing.T, instanceID string, recursive string) {
 	// use http client to purge the workflow
-	reqUrl := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/purge", w.daprd.HTTPPort(), instanceID)
+	reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/purge", w.daprd.HTTPPort(), instanceID)
 	if recursive != "" {
-		reqUrl += "?recursive=" + recursive
+		reqURL += "?recursive=" + recursive
 	}
 	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, reqUrl, nil)
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, reqURL, nil)
 	require.NoError(t, err)
 	resp, err := w.httpClient.Do(req)
 	require.NoError(t, err)
+	defer resp.Body.Close()
 	require.Equal(t, http.StatusAccepted, resp.StatusCode)
 }
 
@@ -175,7 +179,7 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 		id := api.InstanceID(w.startWorkflow(ctx, t, "SingleActivity", "Dapr"))
 		metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
-		assert.Equal(t, true, metadata.IsComplete())
+		assert.True(t, metadata.IsComplete())
 		assert.Equal(t, `"Hello, Dapr!"`, metadata.SerializedOutput)
 	})
 
@@ -314,22 +318,21 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 				if recursiveBool {
 					// Verify that L1 and L2 orchestrations have been purged
 					_, err = backendClient.FetchOrchestrationMetadata(ctx, id+"_L1")
-					assert.Contains(t, status.Convert(err).Message(), api.ErrInstanceNotFound.Error())
+					require.Contains(t, status.Convert(err).Message(), api.ErrInstanceNotFound.Error())
 
 					_, err = backendClient.FetchOrchestrationMetadata(ctx, id+"_L1_L2")
-					assert.Contains(t, status.Convert(err).Message(), api.ErrInstanceNotFound.Error())
+					require.Contains(t, status.Convert(err).Message(), api.ErrInstanceNotFound.Error())
 				} else {
 					// Verify that L1 and L2 orchestrations are not purged
 					metadata, err = backendClient.FetchOrchestrationMetadata(ctx, id+"_L1")
-					assert.NoError(t, err)
-					assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, metadata.RuntimeStatus)
+					require.NoError(t, err)
+					require.Equal(t, api.RUNTIME_STATUS_COMPLETED, metadata.RuntimeStatus)
 
 					_, err = backendClient.FetchOrchestrationMetadata(ctx, id+"_L1_L2")
-					assert.NoError(t, err)
-					assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, metadata.RuntimeStatus)
+					require.NoError(t, err)
+					require.Equal(t, api.RUNTIME_STATUS_COMPLETED, metadata.RuntimeStatus)
 				}
 			})
 		}
 	})
-
 }
