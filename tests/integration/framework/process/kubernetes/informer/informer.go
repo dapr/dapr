@@ -31,6 +31,7 @@ import (
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	httpendapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 )
 
 // Informer is a fake informer that adds events to the Kubernetes API server to
@@ -129,6 +130,8 @@ func (i *Informer) objToGVK(t *testing.T, obj runtime.Object) schema.GroupVersio
 		return schema.GroupVersionKind{Group: "dapr.io", Version: "v1alpha1", Kind: "configurations"}
 	case *httpendapi.HTTPEndpoint:
 		return schema.GroupVersionKind{Group: "dapr.io", Version: "v1alpha1", Kind: "httpendpoints"}
+	case *resiliencyapi.Resiliency:
+		return schema.GroupVersionKind{Group: "dapr.io", Version: "v1alpha1", Kind: "resiliencies"}
 	case *corev1.Pod:
 		return schema.GroupVersionKind{Group: "", Version: "v1", Kind: "pods"}
 	case *corev1.Service:
