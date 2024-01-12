@@ -51,6 +51,7 @@ var defaultOptions = &Options{
 
 type Options struct {
 	ArgoRolloutServiceReconcilerEnabled bool
+	AllowedServiceResources             []client.Object
 }
 
 // DaprHandler handles the lifetime for Dapr CRDs.
@@ -60,6 +61,7 @@ type DaprHandler struct {
 	client.Client
 	Scheme                              *runtime.Scheme
 	argoRolloutServiceReconcilerEnabled bool
+	allowedServiceResources             []client.Object
 }
 
 type Reconciler struct {
@@ -81,6 +83,7 @@ func NewDaprHandlerWithOptions(mgr ctrl.Manager, opts *Options) *DaprHandler {
 		Client:                              mgr.GetClient(),
 		Scheme:                              mgr.GetScheme(),
 		argoRolloutServiceReconcilerEnabled: opts.ArgoRolloutServiceReconcilerEnabled,
+		allowedServiceResources:             opts.AllowedServiceResources,
 	}
 }
 
@@ -146,6 +149,25 @@ func (h *DaprHandler) Init(ctx context.Context) error {
 				DaprHandler: h,
 				newWrapper: func() ObjectWrapper {
 					return &RolloutWrapper{}
+				},
+			})
+		if err != nil {
+			return err
+		}
+	}
+
+	// add service for allowed resources
+	for _, object := range h.allowedServiceResources {
+		err = ctrl.NewControllerManagedBy(h.mgr).
+			For(object).
+			Owns(&corev1.Service{}).
+			WithOptions(controller.Options{
+				MaxConcurrentReconciles: 100,
+			}).
+			Complete(&Reconciler{
+				DaprHandler: h,
+				newWrapper: func() ObjectWrapper {
+					return &AllowedServiceCommonWrapper{object}
 				},
 			})
 		if err != nil {

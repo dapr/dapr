@@ -45,14 +45,13 @@ const (
 
 var log = logger.NewLogger("dapr.injector.service")
 
+// AllowedServiceAccountInfos default allowed service accounts
+// You can add other accounts which you want by adding them in helm chart file 'dapr_sidecar_injector/values.yaml'
+// helm chart value: allowedServiceAccounts or allowedServiceAccountsPrefixNames
 var AllowedServiceAccountInfos = []string{
 	"kube-system:replicaset-controller",
 	"kube-system:deployment-controller",
-	"kube-system:cronjob-controller",
-	"kube-system:job-controller",
 	"kube-system:statefulset-controller",
-	"kube-system:daemon-set-controller",
-	"tekton-pipelines:tekton-pipelines-controller",
 }
 
 type (
