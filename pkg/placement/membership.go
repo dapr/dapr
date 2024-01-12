@@ -17,7 +17,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"google.golang.org/grpc/metadata"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -327,6 +329,8 @@ func (p *Service) performTableDissemination(ctx context.Context) error {
 	defer p.disseminateLock.Unlock()
 
 	state := p.raftNode.FSM().PlacementState()
+	stateWithVirtualNodes := p.raftNode.FSM().PlacementStateWithVirtualNodes()
+
 	log.Infof(
 		"Start disseminating tables. memberUpdateCount: %d, streams: %d, targets: %d, table generation: %s",
 		cnt, nStreamConnPool, nTargetConns, state.GetVersion())
@@ -334,7 +338,7 @@ func (p *Service) performTableDissemination(ctx context.Context) error {
 	streamConnPool := make([]placementGRPCStream, len(p.streamConnPool))
 	copy(streamConnPool, p.streamConnPool)
 	p.streamConnPoolLock.RUnlock()
-	if err := p.performTablesUpdate(ctx, streamConnPool, state); err != nil {
+	if err := p.performTablesUpdate(ctx, streamConnPool, state, stateWithVirtualNodes); err != nil {
 		return err
 	}
 	log.Infof(
@@ -352,7 +356,7 @@ func (p *Service) performTableDissemination(ctx context.Context) error {
 // It first locks so no further dapr can be taken it. Once placement table is locked
 // in runtime, it proceeds to update new table to Dapr runtimes and then unlock
 // once all runtimes have been updated.
-func (p *Service) performTablesUpdate(ctx context.Context, hosts []placementGRPCStream, newTable *v1pb.PlacementTables) error {
+func (p *Service) performTablesUpdate(ctx context.Context, hosts []placementGRPCStream, newTable *v1pb.PlacementTables, newTableWithVirtualNodes *v1pb.PlacementTables) error {
 	// TODO: error from disseminationOperation needs to be handle properly.
 	// Otherwise, each Dapr runtime will have inconsistent hashing table.
 	startedAt := p.clock.Now()
@@ -367,36 +371,72 @@ func (p *Service) performTablesUpdate(ctx context.Context, hosts []placementGRPC
 		}
 	}
 
+	// Enforce maximum API level
+	if newTableWithVirtualNodes != nil {
+		if newTableWithVirtualNodes.GetApiLevel() < p.minAPILevel {
+			newTableWithVirtualNodes.ApiLevel = p.minAPILevel
+		}
+		if p.maxAPILevel != nil && newTableWithVirtualNodes.GetApiLevel() > *p.maxAPILevel {
+			newTableWithVirtualNodes.ApiLevel = *p.maxAPILevel
+		}
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
 	// Perform each update on all hosts in sequence
-	err := p.disseminateOperationOnHosts(ctx, hosts, "lock", nil)
+	err := p.disseminateOperationOnHosts(ctx, hosts, "lock", nil, nil)
 	if err != nil {
 		return fmt.Errorf("dissemination of 'lock' failed: %v", err)
 	}
-	err = p.disseminateOperationOnHosts(ctx, hosts, "update", newTable)
+	err = p.disseminateOperationOnHosts(ctx, hosts, "update", newTable, newTableWithVirtualNodes)
 	if err != nil {
 		return fmt.Errorf("dissemination of 'update' failed: %v", err)
 	}
-	err = p.disseminateOperationOnHosts(ctx, hosts, "unlock", nil)
+	err = p.disseminateOperationOnHosts(ctx, hosts, "unlock", nil, nil)
 	if err != nil {
 		return fmt.Errorf("dissemination of 'unlock' failed: %v", err)
 	}
 
+	// Temporary
 	logfile, _ := os.OpenFile("/Users/elenakolevska/placement-work/dissemination_time_with_vnodes.csv", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	logfile.WriteString(fmt.Sprintf("%d, %d, %d\n", len(hosts), len(newTable.GetEntries()), p.clock.Since(startedAt).Microseconds()))
 	logfile.Close()
+	// End temporary
+
 	log.Debugf("performTablesUpdate succeed in %v", p.clock.Since(startedAt))
 	return nil
 }
 
-func (p *Service) disseminateOperationOnHosts(ctx context.Context, hosts []placementGRPCStream, operation string, tables *v1pb.PlacementTables) error {
+func (p *Service) disseminateOperationOnHosts(ctx context.Context, hosts []placementGRPCStream, operation string, tables *v1pb.PlacementTables, tablesWithVirtualNodes *v1pb.PlacementTables) error {
 	errCh := make(chan error)
 
 	for i := 0; i < len(hosts); i++ {
 		go func(i int) {
-			errCh <- p.disseminateOperation(ctx, hosts[i], operation, tables)
+			// Check if the client (daprd) is running a version that expects the vnodes in the table
+			// Versions pre 1.13 don't set metadata on the stream and expect vnodes in the placement table
+			// Versions 1.13 and above set the ApiLevel as metadata on the stream and don't expect vnodes in the placement table
+			md, ok := metadata.FromIncomingContext(hosts[i].Context())
+			if !ok {
+				// Version is pre 1.13 and needs vnodes in the table
+				errCh <- p.disseminateOperation(ctx, hosts[i], operation, tablesWithVirtualNodes)
+				return
+			}
+
+			// Extract client ID from metadata
+			apiLevel := md.Get("ApiLevel")
+			if len(apiLevel) == 0 {
+				errCh <- p.disseminateOperation(ctx, hosts[i], operation, tablesWithVirtualNodes)
+				return
+			}
+
+			level, err := strconv.Atoi(apiLevel[0])
+			if err != nil || level < 20 {
+				errCh <- p.disseminateOperation(ctx, hosts[i], operation, tablesWithVirtualNodes)
+			} else {
+				errCh <- p.disseminateOperation(ctx, hosts[i], operation, tables)
+			}
+
 		}(i)
 	}
 

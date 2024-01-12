@@ -252,7 +252,8 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 				// We need to use a background context here so dissemination isn't tied to the context of this stream
 				// TODO: If each sidecar can report table version, then placement
 				// doesn't need to disseminate tables to each sidecar.
-				err = p.performTablesUpdate(context.Background(), []placementGRPCStream{stream}, p.raftNode.FSM().PlacementState())
+
+				err = p.performTablesUpdate(context.Background(), []placementGRPCStream{stream}, p.raftNode.FSM().PlacementState(), p.raftNode.FSM().PlacementStateWithVirtualNodes())
 				if err != nil {
 					return err
 				}

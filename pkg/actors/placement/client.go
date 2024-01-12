@@ -15,6 +15,8 @@ package placement
 
 import (
 	"context"
+	"google.golang.org/grpc/metadata"
+	"strconv"
 	"sync"
 
 	"google.golang.org/grpc"
@@ -48,7 +50,7 @@ type placementClient struct {
 
 // connectToServer initializes a new connection to the target server and if it succeeds replace the current
 // stream with the connected stream.
-func (c *placementClient) connectToServer(ctx context.Context, serverAddr string) error {
+func (c *placementClient) connectToServer(ctx context.Context, serverAddr string, apiLevel uint32) error {
 	opts, err := c.getGrpcOpts()
 	if err != nil {
 		return err
@@ -63,6 +65,7 @@ func (c *placementClient) connectToServer(ctx context.Context, serverAddr string
 	}
 
 	client := v1pb.NewPlacementClient(conn)
+	ctx = metadata.AppendToOutgoingContext(ctx, "ApiLevel", strconv.Itoa(int(apiLevel)))
 	stream, err := client.ReportDaprStatus(ctx)
 	if err != nil {
 		if conn != nil {

@@ -62,6 +62,10 @@ type Consistent struct {
 	sync.RWMutex
 }
 
+//type HashCache struct {
+//	hosts
+//}
+
 // NewPlacementTables returns new stateful placement tables with a given version.
 func NewPlacementTables(version string, entries map[string]*Consistent) *ConsistentHashTables {
 	return &ConsistentHashTables{
@@ -132,6 +136,24 @@ func (c *Consistent) Add(host, id string, port int64) bool {
 	}
 
 	c.loadMap[host] = &Host{Name: host, AppID: id, Load: 0, Port: port}
+
+	// TODO in v1.14
+	// The optimisation of not disseminating vnodes with the placement table was introduced
+	// in 1.13, and the API level was increased to 20, but we still have to support sidecars
+	// running on 1.12 with placement services on 1.13. That's why we are keeping the
+	// vhosts in the store in v1.13.
+	// This should be removed in 1.14.
+	// --Start remove--
+	for i := 0; i < replicationFactor; i++ {
+		h := c.hash(fmt.Sprintf("%s%d", host, i))
+		c.hosts[h] = host
+		c.sortedSet = append(c.sortedSet, h)
+	}
+	// sort hashes in ascending order
+	sort.Slice(c.sortedSet, func(i int, j int) bool {
+		return c.sortedSet[i] < c.sortedSet[j]
+	})
+	// --End remove--
 
 	return false
 }

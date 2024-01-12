@@ -84,8 +84,6 @@ func (c *FSM) PlacementState() *v1pb.PlacementTables {
 		var table v1pb.PlacementTable
 		v.ReadInternals(func(hosts map[uint64]string, sortedSet []uint64, loadMap map[string]*hashing.Host, totalLoad int64) {
 			table = v1pb.PlacementTable{
-				Hosts:     make(map[uint64]string),
-				SortedSet: make([]uint64, len(sortedSet)),
 				TotalLoad: totalLoad,
 				LoadMap:   make(map[string]*v1pb.Host),
 			}
@@ -107,6 +105,61 @@ func (c *FSM) PlacementState() *v1pb.PlacementTables {
 	}
 
 	logging.Debugf("PlacementTable LoadMapCount=%d ApiLevel=%d ReplicationFactor=%d", totalLoadMap, newTable.GetApiLevel(), newTable.GetReplicationFactor())
+
+	return newTable
+}
+
+// PlacementStateWithVirtualNodes is here for backwards compatibility and should be removed in 1.14
+// TODO in v1.14 remove this method
+func (c *FSM) PlacementStateWithVirtualNodes() *v1pb.PlacementTables {
+	c.stateLock.RLock()
+	defer c.stateLock.RUnlock()
+
+	newTable := &v1pb.PlacementTables{
+		Version: strconv.FormatUint(c.state.TableGeneration(), 10),
+		Entries: make(map[string]*v1pb.PlacementTable),
+	}
+
+	totalHostSize := 0
+	totalSortedSet := 0
+	totalLoadMap := 0
+
+	entries := c.state.hashingTableMap()
+	for k, v := range entries {
+		var table v1pb.PlacementTable
+		v.ReadInternals(func(hosts map[uint64]string, sortedSet []uint64, loadMap map[string]*hashing.Host, totalLoad int64) {
+			table = v1pb.PlacementTable{
+				Hosts:     make(map[uint64]string),
+				SortedSet: make([]uint64, len(sortedSet)),
+				TotalLoad: totalLoad,
+				LoadMap:   make(map[string]*v1pb.Host),
+			}
+
+			for lk, lv := range hosts {
+				table.Hosts[lk] = lv
+			}
+
+			copy(table.SortedSet, sortedSet)
+
+			for lk, lv := range loadMap {
+				h := v1pb.Host{
+					Name: lv.Name,
+					Load: lv.Load,
+					Port: lv.Port,
+					Id:   lv.AppID,
+				}
+				table.LoadMap[lk] = &h
+			}
+		})
+
+		newTable.Entries[k] = &table
+
+		totalHostSize += len(table.Hosts)
+		totalSortedSet += len(table.SortedSet)
+		totalLoadMap += len(table.LoadMap)
+	}
+
+	logging.Debugf("PlacementTable Size, Hosts: %d, SortedSet: %d, LoadMap: %d", totalHostSize, totalSortedSet, totalLoadMap)
 
 	return newTable
 }

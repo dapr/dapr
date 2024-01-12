@@ -121,6 +121,7 @@ func NewActorPlacement(opts internal.ActorsProviderOptions) internal.PlacementSe
 		appHealthFn:   opts.AppHealthFn,
 		closeCh:       make(chan struct{}),
 		resiliency:    opts.Resiliency,
+		apiLevel:      opts.APILevel.Load(),
 	}
 }
 
@@ -156,7 +157,7 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 	p.appHealthy.Store(true)
 	p.resetPlacementTables()
 
-	if !p.establishStreamConn(ctx) {
+	if !p.establishStreamConn(ctx, internal.ActorAPILevel) {
 		return nil
 	}
 
@@ -198,7 +199,7 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 			if !p.running.Load() {
 				break
 			}
-			p.establishStreamConn(ctx)
+			p.establishStreamConn(ctx, internal.ActorAPILevel)
 		}
 	}()
 
@@ -369,7 +370,7 @@ func (p *actorPlacement) doLookupActor(ctx context.Context, actorType, actorID s
 }
 
 //nolint:nosnakecase
-func (p *actorPlacement) establishStreamConn(ctx context.Context) (established bool) {
+func (p *actorPlacement) establishStreamConn(ctx context.Context, apiLevel uint32) (established bool) {
 	// Backoff for reconnecting in case of errors
 	bo := backoff.NewExponentialBackOff()
 	bo.InitialInterval = placementReconnectMinInterval
@@ -401,7 +402,7 @@ func (p *actorPlacement) establishStreamConn(ctx context.Context) (established b
 			log.Debug("try to connect to placement service: " + serverAddr)
 		}
 
-		err := p.client.connectToServer(ctx, serverAddr)
+		err := p.client.connectToServer(ctx, serverAddr, apiLevel)
 		if err == errEstablishingTLSConn {
 			return false
 		}
