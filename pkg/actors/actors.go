@@ -88,6 +88,8 @@ type Actors interface {
 	Call(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error)
 	// GetState retrieves actor state.
 	GetState(ctx context.Context, req *GetStateRequest) (*StateResponse, error)
+	// DeleteState deletes actor state.
+	DeleteState(ctx context.Context, req *DeleteStateRequest) (DeleteActorStateResponse, error)
 	// GetBulkState retrieves actor state in bulk.
 	GetBulkState(ctx context.Context, req *GetBulkStateRequest) (BulkStateResponse, error)
 	// TransactionalStateOperation performs a transactional state operation with the actor state store.
@@ -716,6 +718,35 @@ func (a *actorsRuntime) GetState(ctx context.Context, req *GetStateRequest) (*St
 		Data:     resp.Data,
 		Metadata: resp.Metadata,
 	}, nil
+}
+
+func (a *actorsRuntime) DeleteState(ctx context.Context, req *DeleteStateRequest) (DeleteActorStateResponse, error) {
+	storeName, store, err := a.stateStore()
+	if err != nil {
+		return DeleteActorStateResponse{}, err
+	}
+
+	key := constructCompositeKey(a.actorsConfig.Config.AppID, req.ActorID, req.ActorType)
+
+	policyRunner := resiliency.NewRunner[state.DeleteWithPrefixResponse](ctx,
+		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Statestore),
+	)
+
+	storeReq := state.DeleteWithPrefixRequest{
+		Prefix: key,
+	}
+
+	prefixDelete, ok := store.(state.DeleteWithPrefix)
+	if !ok {
+		return DeleteActorStateResponse{}, fmt.Errorf("Unable to delete actor state on storeName: '%s'. Operation is not possible", storeName)
+	}
+	resp, err := policyRunner(func(ctx context.Context) (state.DeleteWithPrefixResponse, error) {
+		return prefixDelete.DeleteWithPrefix(ctx, storeReq)
+	})
+	if err != nil {
+		return DeleteActorStateResponse{Count: 0}, err
+	}
+	return DeleteActorStateResponse{Count: resp.Count}, err
 }
 
 func (a *actorsRuntime) GetBulkState(ctx context.Context, req *GetBulkStateRequest) (BulkStateResponse, error) {
