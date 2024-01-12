@@ -238,7 +238,19 @@ func (a *api) onTerminateWorkflowHandler() http.HandlerFunc {
 	return UniversalHTTPHandler(
 		a.universal.TerminateWorkflowBeta1,
 		UniversalHTTPHandlerOpts[*runtimev1pb.TerminateWorkflowRequest, *emptypb.Empty]{
-			InModifier:        workflowInModifier[*runtimev1pb.TerminateWorkflowRequest],
+			InModifier: func(r *http.Request, in *runtimev1pb.TerminateWorkflowRequest) (*runtimev1pb.TerminateWorkflowRequest, error) {
+				in.SetWorkflowComponent(chi.URLParam(r, workflowComponent))
+				in.SetInstanceId(chi.URLParam(r, instanceID))
+
+				// Extract recursive option from query string
+				recursive := r.URL.Query().Get("recursive")
+				if recursive == "true" {
+					in.Recursive = true
+				} else {
+					in.Recursive = false
+				}
+				return in, nil
+			},
 			SuccessStatusCode: http.StatusAccepted,
 		})
 }
@@ -292,7 +304,19 @@ func (a *api) onPurgeWorkflowHandler() http.HandlerFunc {
 	return UniversalHTTPHandler(
 		a.universal.PurgeWorkflowBeta1,
 		UniversalHTTPHandlerOpts[*runtimev1pb.PurgeWorkflowRequest, *emptypb.Empty]{
-			InModifier:        workflowInModifier[*runtimev1pb.PurgeWorkflowRequest],
+			InModifier: func(r *http.Request, in *runtimev1pb.PurgeWorkflowRequest) (*runtimev1pb.PurgeWorkflowRequest, error) {
+				in.SetWorkflowComponent(chi.URLParam(r, workflowComponent))
+				in.SetInstanceId(chi.URLParam(r, instanceID))
+
+				// Extract recursive option from query string
+				recursive := r.URL.Query().Get("recursive")
+				if recursive == "true" {
+					in.Recursive = true
+				} else {
+					in.Recursive = false
+				}
+				return in, nil
+			},
 			SuccessStatusCode: http.StatusAccepted,
 		})
 }

@@ -98,6 +98,7 @@ const (
 	workflowComponent        = "workflowComponent"
 	workflowName             = "workflowName"
 	instanceID               = "instanceID"
+	recursive                = "recursive"
 	eventName                = "eventName"
 	consistencyParam         = "consistency"
 	concurrencyParam         = "concurrency"
