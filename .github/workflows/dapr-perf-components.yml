@@ -258,6 +258,7 @@ jobs:
           echo "DAPR_TAG=${TEST_PREFIX}" >> $GITHUB_ENV
           echo "DAPR_TEST_TAG=${TEST_PREFIX}" >> $GITHUB_ENV
           echo "TEST_RESOURCE_GROUP=Dapr-Perf-${TEST_PREFIX}" >> $GITHUB_ENV
+          echo "DAPR_GO_BUILD_TAGS=wfbackendsqlite" >> $GITHUB_ENV
         shell: bash
       - name: Build dapr and its docker image
         if: env.TEST_PREFIX != ''
