@@ -24,6 +24,7 @@ import (
 
 	apiextapi "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 
+	grpcmanager "github.com/dapr/dapr/pkg/api/grpc/manager"
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
@@ -31,7 +32,6 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	configmodes "github.com/dapr/dapr/pkg/config/modes"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	grpcmanager "github.com/dapr/dapr/pkg/grpc/manager"
 	"github.com/dapr/dapr/pkg/internal/apis"
 	"github.com/dapr/dapr/pkg/modes"
 	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
