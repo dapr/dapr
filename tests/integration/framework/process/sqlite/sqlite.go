@@ -19,7 +19,6 @@ import (
 	"encoding/json"
 	"path/filepath"
 	"strconv"
-	"sync"
 	"testing"
 
 	// Blank import for the sqlite driver
@@ -37,120 +36,106 @@ import (
 type Option func(*options)
 
 // SQLite database that can be used in integration tests.
+// Consumers should always run this Process before any other Framework
+// Processes which consume it so all migrations are applied.
 type SQLite struct {
-	dbPath   string
-	connLock sync.RWMutex
-	conn     *sql.DB
-	opts     options
+	dbPath            string
+	name              string
+	metadata          map[string]string
+	migrations        []string
+	isActorStateStore bool
+	execs             []string
+	conn              *sql.DB
 }
 
 func New(t *testing.T, fopts ...Option) *SQLite {
 	t.Helper()
 
-	s := &SQLite{
-		opts: options{
-			name:     "mystore",
-			metadata: map[string]string{},
-		},
+	opts := options{
+		name: "mystore",
 	}
 
 	for _, fopt := range fopts {
-		fopt(&s.opts)
+		fopt(&opts)
 	}
 
 	// Create a SQLite database in the test's temporary directory
-	tmpDir := t.TempDir()
-	s.dbPath = filepath.Join(tmpDir, "test-data.db")
-	t.Logf("Storing SQLite database at %s", s.dbPath)
+	dbPath := filepath.Join(t.TempDir(), "test-data.db")
+	t.Logf("Storing SQLite database at %s", dbPath)
 
-	return s
+	return &SQLite{
+		dbPath:            dbPath,
+		name:              opts.name,
+		metadata:          opts.metadata,
+		migrations:        opts.migrations,
+		isActorStateStore: opts.isActorStateStore,
+		execs:             opts.execs,
+	}
 }
 
 func (s *SQLite) Run(t *testing.T, ctx context.Context) {
-	// Nothing here
+	for _, migration := range s.migrations {
+		_, err := s.GetConnection(t).ExecContext(ctx, migration)
+		require.NoError(t, err)
+	}
+
+	for _, exec := range s.execs {
+		_, err := s.GetConnection(t).ExecContext(ctx, exec)
+		require.NoError(t, err)
+	}
 }
 
 func (s *SQLite) Cleanup(t *testing.T) {
 	if s.conn != nil {
-		err := s.conn.Close()
-		require.NoError(t, err)
+		require.NoError(t, s.conn.Close())
 	}
 }
 
 // GetConnection returns the connection to the SQLite database.
 func (s *SQLite) GetConnection(t *testing.T) *sql.DB {
-	s.connLock.RLock()
-	conn := s.conn
-	s.connLock.RUnlock()
-	if conn != nil {
-		return conn
-	}
-
-	s.connLock.Lock()
-	defer s.connLock.Unlock()
-
-	// Re-check after acquiring write lock
 	if s.conn != nil {
 		return s.conn
 	}
-
-	var err error
-	s.conn, err = sql.Open("sqlite", "file://"+s.dbPath+"?_txlock=immediate&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)")
+	conn, err := sql.Open("sqlite", "file://"+s.dbPath+"?_txlock=immediate&_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)")
 	require.NoError(t, err, "Failed to connect to SQLite database")
-	return s.conn
-}
-
-// CreateStateTables creates the state tables in a new SQLite DB.
-func (s *SQLite) CreateStateTables(t *testing.T) {
-	_, err := s.GetConnection(t).Exec(`
-CREATE TABLE metadata (
-  key text NOT NULL PRIMARY KEY,
-  value text NOT NULL
-);
-INSERT INTO metadata VALUES('migrations','1');
-CREATE TABLE state (
-  key TEXT NOT NULL PRIMARY KEY,
-  value TEXT NOT NULL,
-  is_binary BOOLEAN NOT NULL,
-  etag TEXT NOT NULL,
-  expiration_time TIMESTAMP DEFAULT NULL,
-  update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-);`)
-	require.NoError(t, err)
+	s.conn = conn
+	return conn
 }
 
 // GetComponent returns the Component resource.
-func (s *SQLite) GetComponent() string {
+func (s *SQLite) GetComponent(t *testing.T) string {
 	c := componentsv1alpha1.Component{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Component",
 			APIVersion: "dapr.io/v1alpha1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: s.opts.name,
+			Name: s.name,
 		},
 		Spec: componentsv1alpha1.ComponentSpec{
 			Type:    "state.sqlite",
 			Version: "v1",
 			Metadata: []commonapi.NameValuePair{
-				{Name: "connectionString", Value: toDynamicValue("file:" + s.dbPath)},
-				{Name: "actorStateStore", Value: toDynamicValue(strconv.FormatBool(s.opts.actorStateStore))},
+				{Name: "connectionString", Value: toDynamicValue(t, "file:"+s.dbPath)},
+				{Name: "actorStateStore", Value: toDynamicValue(t, strconv.FormatBool(s.isActorStateStore))},
 			},
 		},
 	}
 
-	for k, v := range s.opts.metadata {
+	for k, v := range s.metadata {
 		c.Spec.Metadata = append(c.Spec.Metadata, commonapi.NameValuePair{
 			Name:  k,
-			Value: toDynamicValue(v),
+			Value: toDynamicValue(t, v),
 		})
 	}
 
-	enc, _ := json.Marshal(c)
+	enc, err := json.Marshal(c)
+	require.NoError(t, err)
 	return string(enc)
 }
 
-func toDynamicValue(val string) commonapi.DynamicValue {
-	j, _ := json.Marshal(val)
+func toDynamicValue(t *testing.T, val string) commonapi.DynamicValue {
+	j, err := json.Marshal(val)
+	require.NoError(t, err)
 	return commonapi.DynamicValue{JSON: v1.JSON{Raw: j}}
 }
