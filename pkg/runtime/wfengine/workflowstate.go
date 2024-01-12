@@ -262,7 +262,7 @@ func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID 
 		ActorType: config.workflowActorType,
 		ActorID:   actorID,
 		// Initializing with size for all the inbox, history, and custom status
-		Keys: make([]string, metadata.InboxLength+metadata.HistoryLength+1),
+		Keys: make([]string, metadata.InboxLength+metadata.HistoryLength+2),
 	}
 
 	var n int
