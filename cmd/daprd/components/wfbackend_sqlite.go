@@ -1,4 +1,4 @@
-//go:build e2e || unit || integration || perf
+//go:build wfbackendsqlite
 
 /*
 Copyright 2023 The Dapr Authors
