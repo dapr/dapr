@@ -118,7 +118,6 @@ type actorsRuntime struct {
 	actorsTable          *sync.Map
 	tracingSpec          configuration.TracingSpec
 	resiliency           resiliency.Provider
-	storeName            string
 	compStore            *compstore.ComponentStore
 	clock                clock.WithTicker
 	internalActors       map[string]InternalActor
@@ -140,7 +139,6 @@ type ActorsOpts struct {
 	Config           Config
 	TracingSpec      configuration.TracingSpec
 	Resiliency       resiliency.Provider
-	StateStoreName   string
 	CompStore        *compstore.ComponentStore
 	Security         security.Handler
 
@@ -164,7 +162,6 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) ActorRuntime {
 		timers:               timers.NewTimersProvider(clock),
 		tracingSpec:          opts.TracingSpec,
 		resiliency:           opts.Resiliency,
-		storeName:            opts.StateStoreName,
 		placement:            opts.MockPlacement,
 		actorsTable:          &sync.Map{},
 		clock:                clock,
@@ -225,7 +222,7 @@ func (a *actorsRuntime) isActorLocallyHosted(ctx context.Context, actorType stri
 }
 
 func (a *actorsRuntime) haveCompatibleStorage() bool {
-	store, ok := a.compStore.GetStateStore(a.storeName)
+	store, _, ok := a.compStore.GetStateStoreActor()
 	if !ok {
 		// If we have hosted actors and no store, we can't initialize the actor runtime
 		return false
@@ -762,7 +759,9 @@ func (a *actorsRuntime) GetBulkState(ctx context.Context, req *GetBulkStateReque
 	return bulkRes, nil
 }
 
-func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *TransactionalRequest) (err error) {
+func (a *actorsRuntime) TransactionalStateOperation(ctx context.Context, req *TransactionalRequest) error {
+	var err error
+
 	operations := make([]state.TransactionalStateOperation, len(req.Operations))
 	baseKey := constructCompositeKey(a.actorsConfig.Config.AppID, req.ActorKey())
 	metadata := map[string]string{metadataPartitionKey: baseKey}
@@ -1119,7 +1118,7 @@ func ValidateHostEnvironment(mTLSEnabled bool, mode modes.DaprMode, namespace st
 }
 
 func (a *actorsRuntime) stateStore() (string, internal.TransactionalStateStore, error) {
-	storeS, ok := a.compStore.GetStateStore(a.storeName)
+	storeS, name, ok := a.compStore.GetStateStoreActor()
 	if !ok {
 		return "", nil, errors.New(errStateStoreNotFound)
 	}
@@ -1129,5 +1128,5 @@ func (a *actorsRuntime) stateStore() (string, internal.TransactionalStateStore, 
 		return "", nil, errors.New(errStateStoreNotConfigured)
 	}
 
-	return a.storeName, store, nil
+	return name, store, nil
 }

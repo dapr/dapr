@@ -112,9 +112,9 @@ func (l *LogLine) checkOut(t *testing.T, ctx context.Context, expLines map[strin
 	go func() {
 		select {
 		case <-ctx.Done():
-			closer.Close()
 		case <-l.closeCh:
 		}
+		closer.Close()
 	}()
 
 	breader := bufio.NewReader(reader)

@@ -30,11 +30,6 @@ type manager interface {
 	Close(componentsapi.Component) error
 }
 
-type StateManager interface {
-	ActorStateStoreName() (string, bool)
-	manager
-}
-
 type SecretManager interface {
 	ProcessResource(context.Context, meta.Resource) (bool, string)
 	manager
@@ -65,12 +60,6 @@ func (p *Processor) managerFromComp(comp componentsapi.Component) (manager, erro
 		return nil, fmt.Errorf("unknown component category: %q", category)
 	}
 	return m, nil
-}
-
-func (p *Processor) State() StateManager {
-	p.lock.RLock()
-	defer p.lock.RUnlock()
-	return p.state
 }
 
 func (p *Processor) Secret() SecretManager {

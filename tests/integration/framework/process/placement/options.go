@@ -13,7 +13,10 @@ limitations under the License.
 
 package placement
 
-import "github.com/dapr/dapr/tests/integration/framework/process/exec"
+import (
+	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
+)
 
 // Option is a function that configures the process.
 type Option func(*options)
@@ -29,12 +32,13 @@ type options struct {
 	metricsPort         int
 	initialCluster      string
 	initialClusterPorts []int
-	tlsEnabled          bool
+	tlsEnabled          *bool
 	sentryAddress       *string
 	trustAnchorsFile    *string
 	maxAPILevel         int
 	minAPILevel         int
 	metadataEnabled     bool
+	sentry              *sentry.Sentry
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
@@ -81,7 +85,7 @@ func WithInitialCluster(initialCluster string) Option {
 
 func WithEnableTLS(enable bool) Option {
 	return func(o *options) {
-		o.tlsEnabled = enable
+		o.tlsEnabled = &enable
 	}
 }
 
@@ -118,5 +122,11 @@ func WithMinAPILevel(val int) Option {
 func WithMetadataEnabled(enabled bool) Option {
 	return func(o *options) {
 		o.metadataEnabled = enabled
+	}
+}
+
+func WithSentry(sentry *sentry.Sentry) Option {
+	return func(o *options) {
+		o.sentry = sentry
 	}
 }

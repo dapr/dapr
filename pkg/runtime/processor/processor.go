@@ -108,7 +108,6 @@ type Options struct {
 type Processor struct {
 	compStore *compstore.ComponentStore
 	managers  map[components.Category]manager
-	state     StateManager
 	secret    SecretManager
 	pubsub    PubsubManager
 	binding   BindingManager
@@ -143,14 +142,6 @@ func New(opts Options) *Processor {
 		ResourcesPath:  opts.Standalone.ResourcesPath,
 	})
 
-	state := state.New(state.Options{
-		PlacementEnabled: opts.PlacementEnabled,
-		Registry:         opts.Registry.StateStores(),
-		ComponentStore:   opts.ComponentStore,
-		Meta:             opts.Meta,
-		Outbox:           ps.Outbox(),
-	})
-
 	secret := secret.New(secret.Options{
 		Registry:       opts.Registry.SecretStores(),
 		ComponentStore: opts.ComponentStore,
@@ -175,7 +166,6 @@ func New(opts Options) *Processor {
 		pendingComponentDependents: make(map[string][]componentsapi.Component),
 		closedCh:                   make(chan struct{}),
 		compStore:                  opts.ComponentStore,
-		state:                      state,
 		pubsub:                     ps,
 		binding:                    binding,
 		secret:                     secret,
@@ -198,7 +188,13 @@ func New(opts Options) *Processor {
 			}),
 			components.CategoryPubSub:      ps,
 			components.CategorySecretStore: secret,
-			components.CategoryStateStore:  state,
+			components.CategoryStateStore: state.New(state.Options{
+				PlacementEnabled: opts.PlacementEnabled,
+				Registry:         opts.Registry.StateStores(),
+				ComponentStore:   opts.ComponentStore,
+				Meta:             opts.Meta,
+				Outbox:           ps.Outbox(),
+			}),
 			components.CategoryWorkflow: workflow.New(workflow.Options{
 				Registry:       opts.Registry.Workflows(),
 				ComponentStore: opts.ComponentStore,

@@ -111,15 +111,14 @@ func newTestActorsRuntimeWithInternalActors(internalActors map[string]InternalAc
 	})
 
 	compStore := compstore.New()
-	compStore.AddStateStore("actorStore", store)
+	compStore.AddStateStoreActor("actorStore", store)
 	a := NewActors(ActorsOpts{
-		CompStore:      compStore,
-		Config:         config,
-		TracingSpec:    spec,
-		Resiliency:     resiliency.New(log),
-		StateStoreName: "actorStore",
-		Security:       fake.New(),
-		MockPlacement:  NewMockPlacement(TestAppID),
+		CompStore:     compStore,
+		Config:        config,
+		TracingSpec:   spec,
+		Resiliency:    resiliency.New(log),
+		Security:      fake.New(),
+		MockPlacement: NewMockPlacement(TestAppID),
 	})
 
 	for actorType, actor := range internalActors {

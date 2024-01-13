@@ -158,13 +158,13 @@ spec:
 
 func WithResourcesDir(dirs ...string) Option {
 	return func(o *options) {
-		o.resourceDirs = dirs
+		o.resourceDirs = append(o.resourceDirs, dirs...)
 	}
 }
 
 func WithConfigs(configs ...string) Option {
 	return func(o *options) {
-		o.configs = configs
+		o.configs = append(o.configs, configs...)
 	}
 }
 

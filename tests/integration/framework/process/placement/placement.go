@@ -17,6 +17,8 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"sync/atomic"
 	"testing"
@@ -69,6 +71,10 @@ func New(t *testing.T, fopts ...Option) *Placement {
 		fopt(&opts)
 	}
 
+	require.False(t, opts.sentry != nil && opts.trustAnchorsFile != nil, "cannot specify both sentry and trustAnchorsFile")
+	require.False(t, opts.sentry != nil && opts.tlsEnabled != nil, "cannot specify both sentry and tlsEnabled")
+	require.False(t, opts.sentry != nil && opts.sentryAddress != nil, "cannot specify both sentry and sentryAddress")
+
 	args := []string{
 		"--log-level=" + opts.logLevel,
 		"--id=" + opts.id,
@@ -76,7 +82,6 @@ func New(t *testing.T, fopts ...Option) *Placement {
 		"--healthz-port=" + strconv.Itoa(opts.healthzPort),
 		"--metrics-port=" + strconv.Itoa(opts.metricsPort),
 		"--initial-cluster=" + opts.initialCluster,
-		"--tls-enabled=" + strconv.FormatBool(opts.tlsEnabled),
 		"--max-api-level=" + strconv.Itoa(opts.maxAPILevel),
 		"--min-api-level=" + strconv.Itoa(opts.minAPILevel),
 		"--metadata-enabled=" + strconv.FormatBool(opts.metadataEnabled),
@@ -86,6 +91,18 @@ func New(t *testing.T, fopts ...Option) *Placement {
 	}
 	if opts.trustAnchorsFile != nil {
 		args = append(args, "--trust-anchors-file="+*opts.trustAnchorsFile)
+	}
+	if opts.tlsEnabled != nil {
+		args = append(args, "--tls-enabled="+strconv.FormatBool(*opts.tlsEnabled))
+	}
+	if opts.sentry != nil {
+		taFile := filepath.Join(t.TempDir(), "ca.pem")
+		require.NoError(t, os.WriteFile(taFile, opts.sentry.CABundle().IssChainPEM, 0o600))
+		args = append(args,
+			"--trust-anchors-file="+taFile,
+			"--tls-enabled=true",
+			"--sentry-address="+opts.sentry.Address(),
+		)
 	}
 
 	return &Placement{

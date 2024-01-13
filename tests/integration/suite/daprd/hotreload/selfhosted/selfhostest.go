@@ -14,6 +14,7 @@ limitations under the License.
 package selfhosted
 
 import (
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/hotreload/selfhosted/actors"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/hotreload/selfhosted/binding"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/hotreload/selfhosted/pubsub"
 )

@@ -66,13 +66,6 @@ type reminders struct {
 	metricsCollector     remindersMetricsCollectorFn
 }
 
-// NewRemindersProviderOpts contains the options for the NewRemindersProvider function.
-type NewRemindersProviderOpts struct {
-	StoreName string
-	Config    internal.Config
-	APILevel  *atomic.Uint32
-}
-
 // NewRemindersProvider returns a reminders provider.
 func NewRemindersProvider(opts internal.ActorsProviderOptions) internal.RemindersProvider {
 	return &reminders{

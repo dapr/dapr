@@ -53,9 +53,8 @@ type state struct {
 	meta      *meta.Meta
 	lock      sync.RWMutex
 
-	actorStateStoreName *string
-	placementEnabled    bool
-	outbox              outbox.Outbox
+	placementEnabled bool
+	outbox           outbox.Outbox
 }
 
 func New(opts Options) *state {
@@ -109,16 +108,6 @@ func (s *state) Init(ctx context.Context, comp compapi.Component) error {
 			return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 		}
 
-		s.compStore.AddStateStore(comp.ObjectMeta.Name, store)
-		err = compstate.SaveStateConfiguration(comp.ObjectMeta.Name, props)
-		if err != nil {
-			diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
-			wrapError := fmt.Errorf("failed to save lock keyprefix: %s", err.Error())
-			return rterrors.NewInit(rterrors.InitComponentFailure, fName, wrapError)
-		}
-
-		s.outbox.AddOrUpdateOutbox(comp)
-
 		// when placement address list is not empty, set specified actor store.
 		if s.placementEnabled {
 			// set specified actor store if "actorStateStore" is true in the spec.
@@ -132,14 +121,22 @@ func (s *state) Init(ctx context.Context, comp compapi.Component) error {
 			}
 
 			if actorStoreSpecified {
-				if s.actorStateStoreName == nil {
-					log.Info("Using '" + comp.ObjectMeta.Name + "' as actor state store")
-					s.actorStateStoreName = &comp.ObjectMeta.Name
-				} else if *s.actorStateStoreName != comp.ObjectMeta.Name {
-					return fmt.Errorf("detected duplicate actor state store: %s and %s", *s.actorStateStoreName, comp.ObjectMeta.Name)
+				if err = s.compStore.AddStateStoreActor(comp.ObjectMeta.Name, store); err != nil {
+					return err
 				}
+				log.Info("Using '" + comp.ObjectMeta.Name + "' as actor state store")
 			}
 		}
+
+		s.compStore.AddStateStore(comp.ObjectMeta.Name, store)
+		err = compstate.SaveStateConfiguration(comp.ObjectMeta.Name, props)
+		if err != nil {
+			diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
+			wrapError := fmt.Errorf("failed to save lock keyprefix: %s", err.Error())
+			return rterrors.NewInit(rterrors.InitComponentFailure, fName, wrapError)
+		}
+
+		s.outbox.AddOrUpdateOutbox(comp)
 
 		diag.DefaultMonitoring.ComponentInitialized(comp.Spec.Type)
 	}
@@ -166,14 +163,4 @@ func (s *state) Close(comp compapi.Component) error {
 	}
 
 	return nil
-}
-
-func (s *state) ActorStateStoreName() (string, bool) {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
-
-	if s.actorStateStoreName == nil {
-		return "", false
-	}
-	return *s.actorStateStoreName, true
 }
