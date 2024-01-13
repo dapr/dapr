@@ -37,6 +37,8 @@ type Options struct {
 	SentryID spiffeid.ID `mapstructure:"-"`
 	// Location of the JWKS: a URL, path on local file, or the actual JWKS (optionally base64-encoded)
 	Source string `mapstructure:"source"`
+	// Optional CA certificate to trust. Can be a path to a local file or an actual, PEM-encoded certificate
+	CACertificate string `mapstructure:"caCertificate"`
 	// Minimum interval before the JWKS can be refrehsed if fetched from a HTTP(S) endpoint.
 	MinRefreshInterval time.Duration `mapstructure:"minRefreshInterval"`
 	// Timeout for network requests.
@@ -71,6 +73,9 @@ func (j *jwks) Start(ctx context.Context) error {
 	}
 	if j.opts.RequestTimeout > time.Millisecond {
 		j.cache.SetRequestTimeout(j.opts.RequestTimeout)
+	}
+	if j.opts.CACertificate != "" {
+		j.cache.SetCACertificate(j.opts.CACertificate)
 	}
 
 	// Start the cache. Note this is a blocking call
