@@ -68,7 +68,7 @@ func (h *httpendpoints) Setup(t *testing.T) []framework.Option {
 			w.Write([]byte("ok-TLS"))
 		})
 
-		return prochttp.New(t, prochttp.WithHandler(handler), prochttp.WithTLS(t, pki1.RootCertPEM, pki1.LeafCertPEM, pki1.LeafPKPEM))
+		return prochttp.New(t, prochttp.WithHandler(handler), prochttp.WithMTLS(t, pki1.RootCertPEM, pki1.LeafCertPEM, pki1.LeafPKPEM))
 	}
 
 	srv1 := newHTTPServer()
