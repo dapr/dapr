@@ -726,6 +726,7 @@ func (a *DaprRuntime) initDirectMessaging(resolver nr.Resolver) {
 		Resiliency:         a.resiliency,
 		CompStore:          a.compStore,
 	})
+	a.runnerCloser.AddCloser(a.directMessaging)
 }
 
 func (a *DaprRuntime) initProxy() {
