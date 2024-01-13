@@ -12,45 +12,30 @@ limitations under the License.
 */
 
 import http from 'k6/http'
-import exec from 'k6/execution'
 import { check } from 'k6'
 
 const possibleScenarios = {
-    t_30_300: {
-        executor: 'shared-iterations',
-        vus: 30,
-        iterations: 300,
-        maxDuration: '200s',
+    average_load: {
+        executor: 'constant-vus',
+        vus: 250, 
+        duration: '10m',
     },
-    t_60_300: {
-        executor: 'shared-iterations',
-        vus: 60,
-        iterations: 300,
-        maxDuration: '380s',
-    },
-    t_90_300: {
-        executor: 'shared-iterations',
-        vus: 90,
-        iterations: 300,
-        maxDuration: '380s',
-    },
-    t_350_1400: {
-        executor: 'shared-iterations',
-        vus: 350,
-        iterations: 1400,
-        maxDuration: '1000s',
-    },
-    t_110_440: {
-        executor: 'shared-iterations',
-        vus: 110,
-        iterations: 440,
-        maxDuration: '450s',
-    },
-    t_80_800: {
-        executor: 'shared-iterations',
-        vus: 80,
-        iterations: 800,
-        maxDuration: '420s',
+    comprehensive_load: {
+        executor: 'ramping-vus',
+        stages: [
+            //quickly ramp up to 200 clients in 10s, burst test
+            { duration: '10s', target: 200 },
+            // average load: 200 VUs run for 3 mins
+            { duration: '3m', target: 200 },
+            // stress load: 300 VUs run for 3 mins
+            { duration: '10s', target: 300 },
+            { duration: '3m', target: 300 },
+            { duration: '30s', target: 0 },
+            // Spike load: 200 VUs in 10s
+            { duration: '10s', target: 200 },
+            { duration: '5s', target: 0 },
+        ],
+        gracefulRampDown: '10s',
     },
 }
 
@@ -60,39 +45,17 @@ enabledScenarios[__ENV.SCENARIO] = possibleScenarios[__ENV.SCENARIO]
 export const options = {
     discardResponseBodies: true,
     thresholds: {
-        checks: [__ENV.RATE_CHECK],
+        // checks: [__ENV.RATE_CHECK],
+        http_req_failed: ['rate<0.01'], // http errors should be less than 1%
     },
     scenarios: enabledScenarios,
 }
 
 const DAPR_ADDRESS = `http://127.0.0.1:${__ENV.DAPR_HTTP_PORT}`
 
-function execute() {
-    console.log(
-        'Executing the execute function with idInTest: ' +
-            `${exec.scenario.iterationInTest}`
-    )
-    let data = JSON.stringify({
-        workflow_name: __ENV.WORKFLOW_NAME,
-        workflow_input: __ENV.WORKFLOW_INPUT,
-    })
-    let params = {
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        timeout: '250s',
-    }
-    const res = http.post(
-        `${__ENV.TARGET_URL}/${exec.scenario.iterationInTest}`,
-        data,
-        params
-    )
-    console.log('http response', JSON.stringify(res))
-    return res
-}
-
 export default function () {
-    let result = execute()
+    const res = http.get(`${__ENV.TARGET_URL}/${exec.scenario.iterationInTest}`)
+    console.log("http response", JSON.stringify(res));
     check(result, {
         'response code was 2xx': (result) =>
             result.status >= 200 && result.status < 300,

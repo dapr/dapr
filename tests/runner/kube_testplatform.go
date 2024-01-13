@@ -381,6 +381,9 @@ func (c *KubeTestPlatform) PortForwardToApp(appName string, targetPorts ...int) 
 // GetAppUsage returns the Cpu and Memory usage for the app container for a given app.
 func (c *KubeTestPlatform) GetAppUsage(appName string) (*AppUsage, error) {
 	app := c.AppResources.FindActiveResource(appName)
+	if app == nil {
+		return nil, fmt.Errorf("%v app not available", appName)
+	}
 	appManager := app.(*kube.AppManager)
 
 	cpu, mem, err := appManager.GetCPUAndMemory(false)
@@ -404,6 +407,9 @@ func (c *KubeTestPlatform) GetTotalRestarts(appName string) (int, error) {
 // GetSidecarUsage returns the Cpu and Memory usage for the dapr container for a given app.
 func (c *KubeTestPlatform) GetSidecarUsage(appName string) (*AppUsage, error) {
 	app := c.AppResources.FindActiveResource(appName)
+	if app == nil {
+		return nil, fmt.Errorf("%v sidecar not available", appName)
+	}
 	appManager := app.(*kube.AppManager)
 
 	cpu, mem, err := appManager.GetCPUAndMemory(true)
