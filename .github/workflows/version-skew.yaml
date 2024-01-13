@@ -129,6 +129,7 @@ jobs:
 
     - name: Build & download binaries
       run: |
+        go mod tidy -v
         make build
         mkdir -p downloads && cd downloads
         curl -so daprd_linux_amd64.tar.gz -L https://github.com/dapr/dapr/releases/download/v${{ env.DAPR_PREV_VERSION }}/daprd_linux_amd64.tar.gz
