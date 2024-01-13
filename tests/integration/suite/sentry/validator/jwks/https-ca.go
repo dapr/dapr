@@ -14,23 +14,44 @@ limitations under the License.
 package jwks
 
 import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"strconv"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/dapr/dapr/tests/integration/framework"
+	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	procsentry "github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
 func init() {
-	suite.Register(new(jwks))
+	suite.Register(new(httpsCA))
 }
 
-// jwks tests Sentry with the JWKS validator.
-type jwks struct {
+// httpsCA tests Sentry with the JWKS validator fetching from a HTTPS URL with a custom CA
+type httpsCA struct {
 	shared
 }
 
-func (m *jwks) Setup(t *testing.T) []framework.Option {
+func (m *httpsCA) Setup(t *testing.T) []framework.Option {
+	// Generate a CA and key pair for the JWKS server
+	caCert, caKey := generateCACertificate(t)
+	serverCert, serverKey := generateTLSCertificates(t, caCert, caKey, "localhost")
+
+	jwksServer := prochttp.New(t,
+		prochttp.WithHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, `{"keys":[`+string(jwtSigningKeyPubJSON)+`]}`)
+		})),
+		prochttp.WithTLS(t, serverCert, serverKey),
+	)
+
+	caCertJSON, err := json.Marshal(string(caCert))
+	require.NoError(t, err)
+
 	jwksConfig := `
 kind: Configuration
 apiVersion: dapr.io/v1alpha1
@@ -44,13 +65,13 @@ spec:
         options:
           minRefreshInterval: 2m
           requestTimeout: 1m
-          source: |
-            {"keys":[` + string(jwtSigningKeyPubJSON) + `]}
+          source: "https://localhost:` + strconv.Itoa(jwksServer.Port()) + `/"
+          caCertificate: ` + string(caCertJSON) + `
 `
 
 	m.proc = procsentry.New(t, procsentry.WithConfiguration(jwksConfig))
 
 	return []framework.Option{
-		framework.WithProcesses(m.proc),
+		framework.WithProcesses(jwksServer, m.proc),
 	}
 }
