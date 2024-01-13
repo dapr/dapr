@@ -95,7 +95,7 @@ func New(t *testing.T, fopts ...Option) *Kubernetes {
 	return &Kubernetes{
 		http: prochttp.New(t,
 			prochttp.WithHandler(handler),
-			prochttp.WithTLS(t, bundle.TrustAnchors, bundle.IssChainPEM, bundle.IssKeyPEM),
+			prochttp.WithMTLS(t, bundle.TrustAnchors, bundle.IssChainPEM, bundle.IssKeyPEM),
 		),
 		bundle:   bundle,
 		informer: informer,
