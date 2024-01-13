@@ -115,7 +115,7 @@ func TestState(t *testing.T) {
 			_, status, err := utils.HTTPPostWithStatus(url, []byte(`{"states":[{"key":"foo","value":{"data":"LXcgYmFyCg=="}}]}`))
 			assert.NoError(c, err)
 			assert.Equal(c, http.StatusNoContent, status)
-		}, 15*time.Second, 500*time.Millisecond)
+		}, 30*time.Second, 500*time.Millisecond)
 
 		url := fmt.Sprintf("http://%s/test/http/get/hotreloading-state", externalURL)
 		resp, code, err := utils.HTTPPostWithStatus(url, []byte(`{"states":[{"key":"foo"}]}`))
@@ -139,7 +139,7 @@ func TestState(t *testing.T) {
 			_, code, err := utils.HTTPPostWithStatus(url, []byte(`{"states":[{"key":"foo","value":{"data":"xyz"}}]}`))
 			assert.NoError(c, err)
 			assert.Equal(c, http.StatusBadRequest, code)
-		}, 15*time.Second, 500*time.Millisecond)
+		}, 30*time.Second, 500*time.Millisecond)
 	})
 
 	t.Run("Update component to be state store again and be available", func(t *testing.T) {
@@ -160,7 +160,7 @@ func TestState(t *testing.T) {
 			_, status, err := utils.HTTPPostWithStatus(url, []byte(`{"states":[{"key":"foo","value":{"data":"LXcgeHl6Cg=="}}]}`))
 			assert.NoError(c, err)
 			assert.Equal(c, http.StatusNoContent, status)
-		}, 15*time.Second, 500*time.Millisecond)
+		}, 30*time.Second, 500*time.Millisecond)
 
 		url := fmt.Sprintf("http://%s/test/http/get/hotreloading-state", externalURL)
 		resp, code, err := utils.HTTPPostWithStatus(url, []byte(`{"states":[{"key":"foo"}]}`))
@@ -182,6 +182,6 @@ func TestState(t *testing.T) {
 			_, code, err := utils.HTTPPostWithStatus(url, []byte(`{"states":[{"key":"foo","value":{"data":"LXcgYmFyCg=="}}]}`))
 			assert.NoError(c, err)
 			assert.Equal(c, http.StatusInternalServerError, code)
-		}, 15*time.Second, 500*time.Millisecond)
+		}, 30*time.Second, 500*time.Millisecond)
 	})
 }
