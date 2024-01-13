@@ -27,6 +27,7 @@ import (
 	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
+	grpcKeepalive "google.golang.org/grpc/keepalive"
 
 	"github.com/dapr/dapr/pkg/channel"
 	grpcChannel "github.com/dapr/dapr/pkg/channel/grpc"
@@ -191,16 +192,25 @@ func (g *Manager) connectRemote(
 	namespace string,
 	customOpts ...grpc.DialOption,
 ) (conn *grpc.ClientConn, err error) {
-	opts := make([]grpc.DialOption, 0, 3+len(customOpts))
-	opts = append(opts, grpc.WithDefaultServiceConfig(grpcServiceConfig))
+	opts := make([]grpc.DialOption, 0, 4+len(customOpts))
+	opts = append(opts,
+		grpc.WithDefaultServiceConfig(grpcServiceConfig),
+		g.sec.GRPCDialOptionMTLSUnknownTrustDomain(namespace, id),
+		grpc.WithKeepaliveParams(grpcKeepalive.ClientParameters{
+			// Ping the server every 10s if there's no activity
+			Time: 10 * time.Second,
+			// Wait 5s for the ping ACK before assuming the connection is dead
+			Timeout: 5 * time.Second,
+			// Send pings even without active streams
+			PermitWithoutStream: true,
+		}),
+	)
 
 	if diag.DefaultGRPCMonitoring.IsEnabled() {
 		opts = append(opts,
 			grpc.WithUnaryInterceptor(diag.DefaultGRPCMonitoring.UnaryClientInterceptor()),
 		)
 	}
-
-	opts = append(opts, g.sec.GRPCDialOptionMTLSUnknownTrustDomain(namespace, id))
 
 	opts = append(opts, customOpts...)
 
