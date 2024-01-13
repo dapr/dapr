@@ -20,6 +20,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -42,38 +43,45 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ttlcache"
 )
 
 var log = logger.NewLogger("dapr.runtime.direct_messaging")
 
 const streamingUnsupportedErr = "target app '%s' is running a version of Dapr that does not support streaming-based service invocation"
 
+// Maximum TTL in seconds for the nameresolution cache
+const resolverCacheTTL = 20
+
 // messageClientConnection is the function type to connect to the other
 // applications to send the message using service invocation.
 type messageClientConnection func(ctx context.Context, address string, id string, namespace string, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(destroy bool), error)
 
 type directMessaging struct {
-	channels                     *channels.Channels
-	resourceHTTPEndpointChannels map[string]channel.HTTPEndpointAppChannel
-	connectionCreatorFn          messageClientConnection
-	appID                        string
-	mode                         modes.DaprMode
-	grpcPort                     int
-	namespace                    string
-	resolver                     nr.Resolver
-	hostAddress                  string
-	hostName                     string
-	maxRequestBodySizeMB         int
-	proxy                        Proxy
-	readBufferSize               int
-	resiliency                   resiliency.Provider
-	compStore                    *compstore.ComponentStore
+	channels             *channels.Channels
+	connectionCreatorFn  messageClientConnection
+	appID                string
+	mode                 modes.DaprMode
+	grpcPort             int
+	namespace            string
+	resolver             nr.Resolver
+	resolverMulti        nr.ResolverMulti
+	hostAddress          string
+	hostName             string
+	maxRequestBodySizeMB int
+	proxy                Proxy
+	readBufferSize       int
+	resiliency           resiliency.Provider
+	compStore            *compstore.ComponentStore
+	resolverCache        *ttlcache.Cache[nr.AddressList]
+	closed               atomic.Bool
 }
 
 type remoteApp struct {
 	id        string
 	namespace string
 	address   string
+	cacheKey  string
 }
 
 // NewDirectMessaging contains the options for NewDirectMessaging.
@@ -86,6 +94,7 @@ type NewDirectMessagingOpts struct {
 	Channels           *channels.Channels
 	ClientConnFn       messageClientConnection
 	Resolver           nr.Resolver
+	MultiResolver      nr.ResolverMulti
 	MaxRequestBodySize int
 	Proxy              Proxy
 	ReadBufferSize     int
@@ -98,21 +107,28 @@ func NewDirectMessaging(opts NewDirectMessagingOpts) invokev1.DirectMessaging {
 	hName, _ := os.Hostname()
 
 	dm := &directMessaging{
-		appID:                        opts.AppID,
-		namespace:                    opts.Namespace,
-		grpcPort:                     opts.Port,
-		mode:                         opts.Mode,
-		channels:                     opts.Channels,
-		connectionCreatorFn:          opts.ClientConnFn,
-		resolver:                     opts.Resolver,
-		maxRequestBodySizeMB:         opts.MaxRequestBodySize,
-		proxy:                        opts.Proxy,
-		readBufferSize:               opts.ReadBufferSize,
-		resiliency:                   opts.Resiliency,
-		hostAddress:                  hAddr,
-		hostName:                     hName,
-		compStore:                    opts.CompStore,
-		resourceHTTPEndpointChannels: map[string]channel.HTTPEndpointAppChannel{},
+		appID:                opts.AppID,
+		namespace:            opts.Namespace,
+		grpcPort:             opts.Port,
+		mode:                 opts.Mode,
+		channels:             opts.Channels,
+		connectionCreatorFn:  opts.ClientConnFn,
+		resolver:             opts.Resolver,
+		maxRequestBodySizeMB: opts.MaxRequestBodySize,
+		proxy:                opts.Proxy,
+		readBufferSize:       opts.ReadBufferSize,
+		resiliency:           opts.Resiliency,
+		hostAddress:          hAddr,
+		hostName:             hName,
+		compStore:            opts.CompStore,
+	}
+
+	// Set resolverMulti if the resolver implements the ResolverMulti interface
+	dm.resolverMulti, _ = opts.Resolver.(nr.ResolverMulti)
+	if dm.resolverMulti != nil {
+		dm.resolverCache = ttlcache.NewCache[nr.AddressList](ttlcache.CacheOptions{
+			MaxTTL: resolverCacheTTL,
+		})
 	}
 
 	if dm.proxy != nil {
@@ -121,6 +137,17 @@ func NewDirectMessaging(opts NewDirectMessagingOpts) invokev1.DirectMessaging {
 	}
 
 	return dm
+}
+
+func (d *directMessaging) Close() error {
+	if !d.closed.CompareAndSwap(false, true) {
+		return nil
+	}
+
+	if d.resolverCache != nil {
+		d.resolverCache.Stop()
+	}
+	return nil
 }
 
 // Invoke takes a message requests and invokes an app, either local or remote.
@@ -206,9 +233,14 @@ func (d *directMessaging) invokeWithRetry(
 			code := status.Code(rErr)
 			if code == codes.Unavailable || code == codes.Unauthenticated {
 				// Destroy the connection and force a re-connection on the next attempt
+				// We also remove the resolved name from the cache
 				teardown(true)
+				if app.cacheKey != "" && d.resolverCache != nil {
+					d.resolverCache.Delete(app.cacheKey)
+				}
 				return rResp, fmt.Errorf("failed to invoke target %s after %d retries. Error: %w", app.id, attempt-1, rErr)
 			}
+
 			teardown(false)
 			return rResp, backoff.Permanent(rErr)
 		})
@@ -546,37 +578,69 @@ func (d *directMessaging) addForwardedHeadersToMetadata(req *invokev1.InvokeMeth
 	addOrCreate(fasthttp.HeaderForwarded, forwardedHeaderValue)
 }
 
-func (d *directMessaging) getRemoteApp(appID string) (remoteApp, error) {
-	id, namespace, err := d.requestAppIDAndNamespace(appID)
+func (d *directMessaging) getRemoteApp(appID string) (res remoteApp, err error) {
+	res.id, res.namespace, err = d.requestAppIDAndNamespace(appID)
 	if err != nil {
-		return remoteApp{}, err
+		return res, err
 	}
 
 	if d.resolver == nil {
-		return remoteApp{}, errors.New("name resolver not initialized")
+		return res, errors.New("name resolver not initialized")
 	}
 
-	var address string
 	// Note: check for case where URL is overwritten for external service invocation,
 	// or if current app id is associated with an http endpoint CRD.
 	// This will also forgo service discovery.
-	if strings.HasPrefix(id, "http://") || strings.HasPrefix(id, "https://") {
-		address = id
-	} else if d.isHTTPEndpoint(id) {
-		address = d.checkHTTPEndpoints(id)
-	} else {
-		request := nr.ResolveRequest{ID: id, Namespace: namespace, Port: d.grpcPort}
-		address, err = d.resolver.ResolveID(context.TODO(), request)
-		if err != nil {
-			return remoteApp{}, err
+	switch {
+	case strings.HasPrefix(res.id, "http://") || strings.HasPrefix(res.id, "https://"):
+		res.address = res.id
+	case d.isHTTPEndpoint(res.id):
+		res.address = d.checkHTTPEndpoints(res.id)
+	default:
+		request := nr.ResolveRequest{
+			ID:        res.id,
+			Namespace: res.namespace,
+			Port:      d.grpcPort,
+		}
+
+		// If the component implements ResolverMulti, we can use caching
+		if d.resolverMulti != nil {
+			var addresses nr.AddressList
+			if d.resolverCache != nil {
+				// Check if the value is in the cache
+				res.cacheKey = request.CacheKey()
+				addresses, _ = d.resolverCache.Get(res.cacheKey)
+				if len(addresses) > 0 {
+					// Pick a random one
+					res.address = addresses.Pick()
+				}
+			}
+
+			// If there was nothing in the cache (including the case of the cache disabled)
+			if res.address == "" {
+				// Resolve
+				addresses, err = d.resolverMulti.ResolveIDMulti(context.TODO(), request)
+				if err != nil {
+					return res, err
+				}
+				res.address = addresses.Pick()
+
+				if len(addresses) > 0 && res.cacheKey != "" {
+					// Store the result in cache
+					// Note that we may have a race condition here if another goroutine was resolving the same address
+					// This is acceptable, as the waste caused by an extra DNS resolution is very small
+					d.resolverCache.Set(res.cacheKey, addresses, resolverCacheTTL)
+				}
+			}
+		} else {
+			res.address, err = d.resolver.ResolveID(context.TODO(), request)
+			if err != nil {
+				return res, err
+			}
 		}
 	}
 
-	return remoteApp{
-		namespace: namespace,
-		id:        id,
-		address:   address,
-	}, nil
+	return res, nil
 }
 
 // ReadChunk reads a chunk of data from a StreamPayload object.

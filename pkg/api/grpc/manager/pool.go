@@ -248,13 +248,13 @@ func (pic *connectionPoolConnection) MarkIdle() {
 
 // RemoteConnectionPool is used to hold connections to remote addresses.
 type RemoteConnectionPool struct {
-	pool *sync.Map
+	pool sync.Map
 }
 
 // NewRemoteConnectionPool creates a new RemoteConnectionPool object.
 func NewRemoteConnectionPool() *RemoteConnectionPool {
 	return &RemoteConnectionPool{
-		pool: &sync.Map{},
+		pool: sync.Map{},
 	}
 }
 

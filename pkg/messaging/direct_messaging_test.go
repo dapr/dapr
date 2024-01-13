@@ -178,6 +178,7 @@ func TestInvokeRemote(t *testing.T) {
 		}).(*directMessaging)
 
 		teardown := func() {
+			messaging.Close()
 			server.Stop()
 			clientConn.Close()
 		}
