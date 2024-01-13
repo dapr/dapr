@@ -24,6 +24,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"log"
+	"math/big"
 	"testing"
 	"time"
 
@@ -145,4 +146,69 @@ func validateCertificateResponse(t *testing.T, res *sentrypbv1.SignCertificateRe
 
 		assert.Equal(t, []string{"cluster.local"}, cert.DNSNames)
 	}
+}
+
+func generateCACertificate(t *testing.T) (caCert []byte, caKey []byte) {
+	// Generate a private key for the CA
+	caPrivateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+
+	// Create a self-signed CA certificate
+	caTemplate := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "CA"},
+		NotBefore:             time.Now().Add(-1 * time.Hour),
+		NotAfter:              time.Now().Add(24 * time.Hour),
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+	}
+
+	caCertificateDER, err := x509.CreateCertificate(rand.Reader, caTemplate, caTemplate, caPrivateKey.Public(), caPrivateKey)
+	require.NoError(t, err)
+	caCert = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caCertificateDER})
+
+	caPrivateKeyDER, err := x509.MarshalPKCS8PrivateKey(caPrivateKey)
+	require.NoError(t, err)
+	caKey = pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: caPrivateKeyDER})
+
+	return caCert, caKey
+}
+
+func generateTLSCertificates(t *testing.T, caCert []byte, caKey []byte, dnsName string) (cert []byte, key []byte) {
+	// Load the CA certificate and key
+	caCertBlock, _ := pem.Decode(caCert)
+	caCertificate, err := x509.ParseCertificate(caCertBlock.Bytes)
+	require.NoError(t, err)
+
+	caKeyBlock, _ := pem.Decode(caKey)
+	caPrivateKey, err := x509.ParsePKCS8PrivateKey(caKeyBlock.Bytes)
+	require.NoError(t, err)
+
+	// Generate a private key for the new cert
+	privKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+
+	// Create a certificate
+	certData := &x509.Certificate{
+		SerialNumber: big.NewInt(10),
+		Subject:      pkix.Name{Organization: []string{"localhost"}},
+		NotBefore:    time.Now().Add(-1 * time.Hour),
+		NotAfter:     time.Now().Add(24 * time.Hour),
+		DNSNames:     []string{dnsName},
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+	}
+	certDER, err := x509.CreateCertificate(rand.Reader, certData, caCertificate, privKey.Public(), caPrivateKey)
+	require.NoError(t, err)
+
+	cert = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
+	require.NoError(t, err)
+
+	keyDER, err := x509.MarshalPKCS8PrivateKey(privKey)
+	require.NoError(t, err)
+	key = pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})
+
+	return cert, key
 }

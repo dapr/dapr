@@ -34,7 +34,21 @@ func WithHandler(handler http.Handler) Option {
 	}
 }
 
-func WithTLS(t *testing.T, ca, cert, key []byte) Option {
+func WithTLS(t *testing.T, cert, key []byte) Option {
+	return func(o *options) {
+		kp, err := tls.X509KeyPair(cert, key)
+		require.NoError(t, err)
+
+		tlsConfig := &tls.Config{
+			MinVersion:   tls.VersionTLS12,
+			Certificates: []tls.Certificate{kp},
+		}
+
+		o.tlsConfig = tlsConfig
+	}
+}
+
+func WithMTLS(t *testing.T, ca, cert, key []byte) Option {
 	return func(o *options) {
 		caCertPool := x509.NewCertPool()
 		require.True(t, caCertPool.AppendCertsFromPEM(ca))
