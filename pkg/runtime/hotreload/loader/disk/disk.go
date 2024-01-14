@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -58,7 +59,7 @@ func New(ctx context.Context, opts Options) (loader.Interface, error) {
 		return nil, fmt.Errorf("failed to create watcher: %w", err)
 	}
 
-	batcher := batcher.New[int](0)
+	batcher := batcher.New(0)
 	eventCh := make(chan struct{})
 
 	d := &disk{
@@ -92,7 +93,7 @@ func New(ctx context.Context, opts Options) (loader.Interface, error) {
 				// Use a separate: index every batch to prevent deduplicates of separate
 				// file updates happening at the same time.
 				i++
-				batcher.Batch(i)
+				batcher.Batch(strconv.Itoa(i))
 			}
 		}
 	}()

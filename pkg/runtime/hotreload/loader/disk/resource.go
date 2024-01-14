@@ -29,7 +29,7 @@ import (
 // resource is a generic implementation of a disk resource loader. resource
 // will watch and load resources from disk.
 type resource[T differ.Resource] struct {
-	batcher    *batcher.Batcher[int]
+	batcher    *batcher.Batcher
 	store      store.Store[T]
 	diskLoader components.ManifestLoader[T]
 
@@ -38,7 +38,7 @@ type resource[T differ.Resource] struct {
 	closed  atomic.Bool
 }
 
-func newResource[T differ.Resource](opts Options, batcher *batcher.Batcher[int], store store.Store[T]) *resource[T] {
+func newResource[T differ.Resource](opts Options, batcher *batcher.Batcher, store store.Store[T]) *resource[T] {
 	return &resource[T]{
 		batcher:    batcher,
 		store:      store,
