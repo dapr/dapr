@@ -466,7 +466,7 @@ replace (
 // check for retracted versions: go list -mod=mod -f '{{if .Retracted}}{{.}}{{end}}' -u -m all
 replace github.com/microcosm-cc/bluemonday => github.com/microcosm-cc/bluemonday v1.0.24
 
-replace github.com/dapr/kit => github.com/joshvanl/kit v0.0.0-20240114035401-89a433933cd6
+replace github.com/dapr/kit => github.com/joshvanl/kit v0.0.0-20240114211428-c517e2d0d025
 
 // Uncomment for local development for testing with changes in the components-contrib && kit repositories.
 // Don't commit with this uncommented!

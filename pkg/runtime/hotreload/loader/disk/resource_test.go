@@ -135,7 +135,7 @@ func Test_Stream(t *testing.T) {
 		err := os.WriteFile(filepath.Join(dir, "f.yaml"), []byte(strings.Join([]string{comp1, comp2, comp3}, "\n---\n")), 0o600)
 		require.NoError(t, err)
 
-		batcher := batcher.New(0)
+		batcher := batcher.New[int](0)
 		store := compstore.New()
 
 		r := newResource[componentsapi.Component](
@@ -144,7 +144,7 @@ func Test_Stream(t *testing.T) {
 			loadercompstore.NewComponent(store),
 		)
 
-		batcher.Batch("0")
+		batcher.Batch(0)
 
 		ch, err := r.Stream(context.Background())
 		require.NoError(t, err)
@@ -196,7 +196,7 @@ func Test_Stream(t *testing.T) {
 		err := os.WriteFile(filepath.Join(dir, "f.yaml"), []byte(strings.Join([]string{comp1, comp2, comp3}, "\n---\n")), 0o600)
 		require.NoError(t, err)
 
-		batcher := batcher.New(0)
+		batcher := batcher.New[int](0)
 		store := compstore.New()
 		require.NoError(t, store.AddPendingComponentForCommit(componentsapi.Component{
 			ObjectMeta: metav1.ObjectMeta{Name: "comp1"},
@@ -211,7 +211,7 @@ func Test_Stream(t *testing.T) {
 			loadercompstore.NewComponent(store),
 		)
 
-		batcher.Batch("0")
+		batcher.Batch(0)
 
 		ch, err := r.Stream(context.Background())
 		require.NoError(t, err)
@@ -255,7 +255,7 @@ func Test_Stream(t *testing.T) {
 		err := os.WriteFile(filepath.Join(dir, "f.yaml"), []byte(strings.Join([]string{comp2, comp3}, "\n---\n")), 0o600)
 		require.NoError(t, err)
 
-		batcher := batcher.New(0)
+		batcher := batcher.New[int](0)
 		store := compstore.New()
 		require.NoError(t, store.AddPendingComponentForCommit(componentsapi.Component{
 			ObjectMeta: metav1.ObjectMeta{Name: "comp1"},
@@ -279,7 +279,7 @@ func Test_Stream(t *testing.T) {
 			loadercompstore.NewComponent(store),
 		)
 
-		batcher.Batch("0")
+		batcher.Batch(0)
 
 		ch, err := r.Stream(context.Background())
 		require.NoError(t, err)
