@@ -278,8 +278,10 @@ func (c *crypto) Run(t *testing.T, ctx context.Context) {
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-			require.NoError(t, err)
-			assert.Len(c, resp.GetRegisteredComponents(), 2)
+			//nolint:testifylint
+			if assert.NoError(c, err) {
+				assert.Len(c, resp.GetRegisteredComponents(), 2)
+			}
 		}, time.Second*10, time.Millisecond*100)
 
 		c.encryptDecryptFail(t, ctx, client, "crypto1")
