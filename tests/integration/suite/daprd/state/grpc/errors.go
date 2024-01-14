@@ -140,10 +140,7 @@ spec:
 func (e *errors) Run(t *testing.T, ctx context.Context) {
 	e.daprd.WaitUntilRunning(t, ctx)
 
-	conn, connErr := grpc.DialContext(ctx, fmt.Sprintf("localhost:%d", e.daprd.GRPCPort()), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
-	require.NoError(t, connErr)
-	t.Cleanup(func() { require.NoError(t, conn.Close()) })
-	client := rtv1.NewDaprClient(conn)
+	client := e.daprd.GRPCClient(t, ctx)
 
 	// Covers errutils.StateStoreNotFound()
 	t.Run("state store doesn't exist", func(t *testing.T) {
