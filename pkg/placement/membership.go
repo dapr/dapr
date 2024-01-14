@@ -418,14 +418,17 @@ func (p *Service) disseminateOperationOnHosts(ctx context.Context, hosts []place
 			// Versions 1.13 and above set the ApiLevel as metadata on the stream and don't expect vnodes in the placement table
 			md, ok := metadata.FromIncomingContext(hosts[i].Context())
 			if !ok {
-				// Version is pre 1.13 and needs vnodes in the table
+				// If no metadata is present, assume the client is pre 1.13
+				// and needs vnodes in the table
 				errCh <- p.disseminateOperation(ctx, hosts[i], operation, tablesWithVirtualNodes)
 				return
 			}
 
-			// Extract client ID from metadata
+			// Extract apiLevel from metadata
 			apiLevel := md.Get("ApiLevel")
 			if len(apiLevel) == 0 {
+				// If the ApiLevel is not set, assume the client is pre 1.13
+				// and needs vnodes in the table
 				errCh <- p.disseminateOperation(ctx, hosts[i], operation, tablesWithVirtualNodes)
 				return
 			}
