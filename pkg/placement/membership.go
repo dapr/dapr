@@ -328,8 +328,8 @@ func (p *Service) performTableDissemination(ctx context.Context) error {
 	p.disseminateLock.Lock()
 	defer p.disseminateLock.Unlock()
 
-	state := p.raftNode.FSM().PlacementState()
-	stateWithVirtualNodes := p.raftNode.FSM().PlacementStateWithVirtualNodes()
+	state := p.raftNode.FSM().PlacementState(false)
+	stateWithVirtualNodes := p.raftNode.FSM().PlacementState(true)
 
 	log.Infof(
 		"Start disseminating tables. memberUpdateCount: %d, streams: %d, targets: %d, table generation: %s",

@@ -64,7 +64,9 @@ func (c *FSM) State() *DaprHostMemberState {
 }
 
 // PlacementState returns the current placement tables.
-func (c *FSM) PlacementState() *v1pb.PlacementTables {
+// the withVirtualNodes parameter is here for backwards compatibility and should be removed in 1.14
+// TODO in v1.14 remove the withVirtualNodes parameter
+func (c *FSM) PlacementState(withVirtualNodes bool) *v1pb.PlacementTables {
 	c.stateLock.RLock()
 	defer c.stateLock.RUnlock()
 
@@ -73,51 +75,6 @@ func (c *FSM) PlacementState() *v1pb.PlacementTables {
 		Entries:           make(map[string]*v1pb.PlacementTable),
 		ApiLevel:          c.state.APILevel(),
 		ReplicationFactor: 100,
-	}
-
-	var (
-		totalLoadMap int
-	)
-
-	entries := c.state.hashingTableMap()
-	for k, v := range entries {
-		var table v1pb.PlacementTable
-		v.ReadInternals(func(hosts map[uint64]string, sortedSet []uint64, loadMap map[string]*hashing.Host, totalLoad int64) {
-			table = v1pb.PlacementTable{
-				TotalLoad: totalLoad,
-				LoadMap:   make(map[string]*v1pb.Host),
-			}
-
-			for lk, lv := range loadMap {
-				h := v1pb.Host{
-					Name: lv.Name,
-					Load: lv.Load,
-					Port: lv.Port,
-					Id:   lv.AppID,
-				}
-				table.LoadMap[lk] = &h
-			}
-		})
-
-		newTable.Entries[k] = &table
-
-		totalLoadMap += len(table.GetLoadMap())
-	}
-
-	logging.Debugf("PlacementTable LoadMapCount=%d ApiLevel=%d ReplicationFactor=%d", totalLoadMap, newTable.GetApiLevel(), newTable.GetReplicationFactor())
-
-	return newTable
-}
-
-// PlacementStateWithVirtualNodes is here for backwards compatibility and should be removed in 1.14
-// TODO in v1.14 remove this method
-func (c *FSM) PlacementStateWithVirtualNodes() *v1pb.PlacementTables {
-	c.stateLock.RLock()
-	defer c.stateLock.RUnlock()
-
-	newTable := &v1pb.PlacementTables{
-		Version: strconv.FormatUint(c.state.TableGeneration(), 10),
-		Entries: make(map[string]*v1pb.PlacementTable),
 	}
 
 	totalHostSize := 0
@@ -135,11 +92,13 @@ func (c *FSM) PlacementStateWithVirtualNodes() *v1pb.PlacementTables {
 				LoadMap:   make(map[string]*v1pb.Host),
 			}
 
-			for lk, lv := range hosts {
-				table.Hosts[lk] = lv
-			}
+			if withVirtualNodes {
+				for lk, lv := range hosts {
+					table.Hosts[lk] = lv
+				}
 
-			copy(table.SortedSet, sortedSet)
+				copy(table.SortedSet, sortedSet)
+			}
 
 			for lk, lv := range loadMap {
 				h := v1pb.Host{
@@ -154,12 +113,18 @@ func (c *FSM) PlacementStateWithVirtualNodes() *v1pb.PlacementTables {
 
 		newTable.Entries[k] = &table
 
-		totalHostSize += len(table.Hosts)
-		totalSortedSet += len(table.SortedSet)
+		if withVirtualNodes {
+			totalHostSize += len(table.Hosts)
+			totalSortedSet += len(table.SortedSet)
+		}
 		totalLoadMap += len(table.LoadMap)
 	}
 
-	logging.Debugf("PlacementTable Size, Hosts: %d, SortedSet: %d, LoadMap: %d", totalHostSize, totalSortedSet, totalLoadMap)
+	if withVirtualNodes {
+		logging.Debugf("PlacementTable Size, Hosts: %d, SortedSet: %d, LoadMap: %d", totalHostSize, totalSortedSet, totalLoadMap)
+	} else {
+		logging.Debugf("PlacementTable LoadMapCount=%d ApiLevel=%d ReplicationFactor=%d", totalLoadMap, newTable.GetApiLevel(), newTable.GetReplicationFactor())
+	}
 
 	return newTable
 }
