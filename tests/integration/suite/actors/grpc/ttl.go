@@ -146,14 +146,14 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 					Key:           "mykey",
 					Value:         &anypb.Any{Value: []byte("myvalue")},
 					Metadata: map[string]string{
-						"ttlInSeconds": "4",
+						"ttlInSeconds": "3",
 					},
 				},
 			},
 		})
 		require.NoError(t, err)
 
-		time.Sleep(time.Second * 3)
+		time.Sleep(time.Second * 1)
 
 		var resp *rtv1.GetActorStateResponse
 		resp, err = client.GetActorState(ctx, &rtv1.GetActorStateRequest{
