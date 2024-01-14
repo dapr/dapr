@@ -107,7 +107,7 @@ spec:
 `), 0o600))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(t, ctx, s.client, s.daprd.HTTPPort()), 1)
+			assert.Len(c, util.GetMetaComponents(c, ctx, s.client, s.daprd.HTTPPort()), 1)
 		}, time.Second*5, time.Millisecond*100)
 		resp := util.GetMetaComponents(t, ctx, s.client, s.daprd.HTTPPort())
 		require.Len(t, resp, 1)
@@ -165,7 +165,7 @@ spec:
 `), 0o600))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(t, ctx, s.client, s.daprd.HTTPPort()), 3)
+			assert.Len(c, util.GetMetaComponents(c, ctx, s.client, s.daprd.HTTPPort()), 3)
 		}, time.Second*5, time.Millisecond*100)
 		resp := util.GetMetaComponents(t, ctx, s.client, s.daprd.HTTPPort())
 		require.Len(t, resp, 3)
@@ -399,7 +399,7 @@ spec:
 `), 0o600))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(t, ctx, s.client, s.daprd.HTTPPort()), 2)
+			assert.Len(c, util.GetMetaComponents(c, ctx, s.client, s.daprd.HTTPPort()), 2)
 		}, time.Second*5, time.Millisecond*100)
 
 		s.read(t, ctx, "123", "SEC_1", "bar1")

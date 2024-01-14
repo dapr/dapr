@@ -133,7 +133,7 @@ func (i *informer) Run(t *testing.T, ctx context.Context) {
 		i.kubeapi.Informer().Add(t, &comp)
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(t, ctx, client, i.daprd.HTTPPort()), 1)
+			assert.Len(c, util.GetMetaComponents(c, ctx, client, i.daprd.HTTPPort()), 1)
 		}, time.Second*10, time.Millisecond*100)
 		metaComponents := util.GetMetaComponents(t, ctx, client, i.daprd.HTTPPort())
 		assert.Equal(t, "state.in-memory", metaComponents[0].GetType())
@@ -160,8 +160,8 @@ func (i *informer) Run(t *testing.T, ctx context.Context) {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			// Assert here, as we might catch the component in the middle of being
 			// updated, i.e. between closed and re-inited.
-			if assert.Len(c, util.GetMetaComponents(t, ctx, client, i.daprd.HTTPPort()), 1) {
-				assert.Equal(c, "state.sqlite", util.GetMetaComponents(t, ctx, client, i.daprd.HTTPPort())[0].GetType())
+			if assert.Len(c, util.GetMetaComponents(c, ctx, client, i.daprd.HTTPPort()), 1) {
+				assert.Equal(c, "state.sqlite", util.GetMetaComponents(c, ctx, client, i.daprd.HTTPPort())[0].GetType())
 			}
 		}, time.Second*10, time.Millisecond*100)
 	})
@@ -171,7 +171,7 @@ func (i *informer) Run(t *testing.T, ctx context.Context) {
 		i.kubeapi.Informer().Delete(t, &comp)
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Empty(c, util.GetMetaComponents(t, ctx, client, i.daprd.HTTPPort()))
+			assert.Empty(c, util.GetMetaComponents(c, ctx, client, i.daprd.HTTPPort()))
 		}, time.Second*10, time.Millisecond*100)
 	})
 }

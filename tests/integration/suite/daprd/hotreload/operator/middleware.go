@@ -155,7 +155,7 @@ func (m *middleware) Run(t *testing.T, ctx context.Context) {
 		)
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(t, ctx, client, m.daprd.HTTPPort()), 2)
+			assert.Len(c, util.GetMetaComponents(c, ctx, client, m.daprd.HTTPPort()), 2)
 		}, time.Second*5, time.Millisecond*100, "expected component to be loaded")
 		m.doReq(t, ctx, client, "/helloworld", http.StatusNotFound)
 	})

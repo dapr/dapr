@@ -21,11 +21,13 @@ import (
 	"os/exec"
 	"strconv"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
-func interrupt(_ *testing.T, cmd *exec.Cmd) {
+func interrupt(t *testing.T, cmd *exec.Cmd) {
 	kill := exec.Command("taskkill", "/T", "/F", "/PID", strconv.Itoa(cmd.Process.Pid))
 	kill.Stdout = os.Stdout
 	kill.Stderr = os.Stderr
-	kill.Run()
+	require.NoError(t, kill.Run())
 }

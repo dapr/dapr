@@ -100,7 +100,7 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 		})
 		//nolint:testifylint
 		assert.NoError(c, err)
-	}, time.Second*10, time.Millisecond*100, "actor not ready")
+	}, time.Second*20, time.Millisecond*100, "actor not ready")
 
 	now := time.Now()
 
