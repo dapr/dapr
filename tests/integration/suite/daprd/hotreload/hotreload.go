@@ -14,6 +14,5 @@ limitations under the License.
 package hotreload
 
 import (
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/hotreload/operator"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/hotreload/selfhosted"
 )
