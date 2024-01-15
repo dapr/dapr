@@ -2,8 +2,10 @@ package errors
 
 import (
 	"fmt"
-	kiterrors "github.com/dapr/kit/errors"
+
 	"google.golang.org/grpc/codes"
+
+	kiterrors "github.com/dapr/kit/errors"
 )
 
 func NotFound(name string, componentType string, metadata map[string]string, grpcCode codes.Code, httpCode int, legacyTag string, reason string) error {

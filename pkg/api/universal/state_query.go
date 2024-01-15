@@ -16,11 +16,13 @@ package universal
 import (
 	"context"
 	"encoding/json"
-	contribMetadata "github.com/dapr/components-contrib/metadata"
-	kiterrors "github.com/dapr/kit/errors"
-	"google.golang.org/grpc/codes"
 	httpCodes "net/http"
 	"time"
+
+	"google.golang.org/grpc/codes"
+
+	contribMetadata "github.com/dapr/components-contrib/metadata"
+	kiterrors "github.com/dapr/kit/errors"
 
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/api/errors"
