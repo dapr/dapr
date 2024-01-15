@@ -351,8 +351,9 @@ func (a *actorsRuntime) haltAllActors() error {
 			err := a.haltActor(a.getActorTypeAndIDFromKey(actorKey))
 			if err != nil {
 				errCh <- fmt.Errorf("failed to deactivate actor '%s': %v", actorKey, err)
+			} else {
+				errCh <- nil
 			}
-			errCh <- nil
 		}(key)
 		return true
 	})
