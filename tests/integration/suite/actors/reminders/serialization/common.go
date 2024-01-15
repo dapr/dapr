@@ -32,10 +32,12 @@ func invokeActor(t *testing.T, ctx context.Context, baseURL string, client *http
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/method/foo", nil)
 		require.NoError(c, err)
 		resp, rErr := client.Do(req)
-		require.NoError(c, rErr)
-		require.NoError(c, resp.Body.Close())
-		assert.Equal(c, http.StatusOK, resp.StatusCode)
-	}, time.Second*10, time.Millisecond*100, "actor not ready in time")
+		//nolint:testifylint
+		if assert.NoError(c, rErr) {
+			assert.NoError(c, resp.Body.Close())
+			assert.Equal(c, http.StatusOK, resp.StatusCode)
+		}
+	}, time.Second*20, time.Millisecond*100, "actor not ready in time")
 }
 
 func storeReminder(t *testing.T, ctx context.Context, baseURL string, client *http.Client) {

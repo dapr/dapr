@@ -17,6 +17,7 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -42,6 +43,7 @@ type initerror struct {
 	configCalled  chan struct{}
 	blockConfig   chan struct{}
 	healthzCalled chan struct{}
+	once          sync.Once
 }
 
 func (i *initerror) Setup(t *testing.T) []framework.Option {
@@ -57,7 +59,9 @@ func (i *initerror) Setup(t *testing.T) []framework.Option {
 	})
 	handler.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		close(i.healthzCalled)
+		i.once.Do(func() {
+			close(i.healthzCalled)
+		})
 	})
 	handler.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`OK`))

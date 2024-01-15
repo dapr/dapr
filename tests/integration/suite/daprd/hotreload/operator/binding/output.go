@@ -15,6 +15,7 @@ package binding
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -53,6 +54,10 @@ type output struct {
 	bindingDir1 string
 	bindingDir2 string
 	bindingDir3 string
+
+	bindingDir1JSON common.DynamicValue
+	bindingDir2JSON common.DynamicValue
+	bindingDir3JSON common.DynamicValue
 }
 
 func (o *output) Setup(t *testing.T) []framework.Option {
@@ -70,6 +75,16 @@ func (o *output) Setup(t *testing.T) []framework.Option {
 	)
 
 	o.bindingDir1, o.bindingDir2, o.bindingDir3 = t.TempDir(), t.TempDir(), t.TempDir()
+
+	dir1J, err := json.Marshal(o.bindingDir1)
+	require.NoError(t, err)
+	dir2J, err := json.Marshal(o.bindingDir2)
+	require.NoError(t, err)
+	dir3J, err := json.Marshal(o.bindingDir3)
+	require.NoError(t, err)
+	o.bindingDir1JSON = common.DynamicValue{JSON: apiextv1.JSON{Raw: dir1J}}
+	o.bindingDir2JSON = common.DynamicValue{JSON: apiextv1.JSON{Raw: dir2J}}
+	o.bindingDir3JSON = common.DynamicValue{JSON: apiextv1.JSON{Raw: dir3J}}
 
 	o.daprd = daprd.New(t,
 		daprd.WithMode("kubernetes"),
@@ -90,7 +105,7 @@ func (o *output) Run(t *testing.T, ctx context.Context) {
 
 	client := util.HTTPClient(t)
 	t.Run("expect no components to be loaded yet", func(t *testing.T) {
-		assert.Empty(t, util.GetMetaComponents(t, ctx, client, o.daprd.HTTPPort()))
+		assert.Len(t, util.GetMetaComponents(t, ctx, client, o.daprd.HTTPPort()), 1)
 	})
 
 	t.Run("adding a component should become available", func(t *testing.T) {
@@ -103,9 +118,7 @@ func (o *output) Run(t *testing.T, ctx context.Context) {
 				Type:    "bindings.localstorage",
 				Version: "v1",
 				Metadata: []common.NameValuePair{{
-					Name: "rootPath", Value: common.DynamicValue{
-						JSON: apiextv1.JSON{Raw: []byte(`"` + o.bindingDir1 + `"`)},
-					},
+					Name: "rootPath", Value: o.bindingDir1JSON,
 				}},
 			},
 		}
@@ -113,8 +126,8 @@ func (o *output) Run(t *testing.T, ctx context.Context) {
 		o.operator.SetComponents(comp)
 		o.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &comp, EventType: operatorv1.ResourceEventType_CREATED})
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(t, ctx, client, o.daprd.HTTPPort()), 1)
-		}, time.Second*5, time.Millisecond*100)
+			assert.Len(c, util.GetMetaComponents(c, ctx, client, o.daprd.HTTPPort()), 2)
+		}, time.Second*10, time.Millisecond*100)
 		o.postBinding(t, ctx, client, "binding1", "file1", "data1")
 		o.postBindingFail(t, ctx, client, "binding2")
 		o.postBindingFail(t, ctx, client, "binding3")
@@ -131,9 +144,7 @@ func (o *output) Run(t *testing.T, ctx context.Context) {
 				Type:    "bindings.localstorage",
 				Version: "v1",
 				Metadata: []common.NameValuePair{{
-					Name: "rootPath", Value: common.DynamicValue{
-						JSON: apiextv1.JSON{Raw: []byte(`"` + o.bindingDir2 + `"`)},
-					},
+					Name: "rootPath", Value: o.bindingDir2JSON,
 				}},
 			},
 		}
@@ -142,8 +153,8 @@ func (o *output) Run(t *testing.T, ctx context.Context) {
 		o.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &comp, EventType: operatorv1.ResourceEventType_CREATED})
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(t, ctx, client, o.daprd.HTTPPort()), 2)
-		}, time.Second*5, time.Millisecond*100)
+			assert.Len(c, util.GetMetaComponents(c, ctx, client, o.daprd.HTTPPort()), 3)
+		}, time.Second*10, time.Millisecond*100)
 		o.postBinding(t, ctx, client, "binding1", "file2", "data2")
 		o.postBinding(t, ctx, client, "binding2", "file1", "data1")
 		o.postBindingFail(t, ctx, client, "binding3")
@@ -161,9 +172,7 @@ func (o *output) Run(t *testing.T, ctx context.Context) {
 				Type:    "bindings.localstorage",
 				Version: "v1",
 				Metadata: []common.NameValuePair{{
-					Name: "rootPath", Value: common.DynamicValue{
-						JSON: apiextv1.JSON{Raw: []byte(`"` + o.bindingDir3 + `"`)},
-					},
+					Name: "rootPath", Value: o.bindingDir3JSON,
 				}},
 			},
 		}
@@ -171,8 +180,8 @@ func (o *output) Run(t *testing.T, ctx context.Context) {
 		o.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &comp, EventType: operatorv1.ResourceEventType_CREATED})
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(t, ctx, client, o.daprd.HTTPPort()), 3)
-		}, time.Second*5, time.Millisecond*100)
+			assert.Len(c, util.GetMetaComponents(c, ctx, client, o.daprd.HTTPPort()), 4)
+		}, time.Second*10, time.Millisecond*100)
 		o.postBinding(t, ctx, client, "binding1", "file3", "data3")
 		o.postBinding(t, ctx, client, "binding2", "file2", "data2")
 		o.postBinding(t, ctx, client, "binding3", "file1", "data1")
@@ -187,8 +196,8 @@ func (o *output) Run(t *testing.T, ctx context.Context) {
 		o.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &comp, EventType: operatorv1.ResourceEventType_DELETED})
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(t, ctx, client, o.daprd.HTTPPort()), 2)
-		}, time.Second*5, time.Millisecond*100)
+			assert.Len(c, util.GetMetaComponents(c, ctx, client, o.daprd.HTTPPort()), 3)
+		}, time.Second*10, time.Millisecond*100)
 
 		o.postBindingFail(t, ctx, client, "binding1")
 		assert.NoFileExists(t, filepath.Join(o.bindingDir1, "file4"))
@@ -206,8 +215,8 @@ func (o *output) Run(t *testing.T, ctx context.Context) {
 		o.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &comp2, EventType: operatorv1.ResourceEventType_DELETED})
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Empty(c, util.GetMetaComponents(t, ctx, client, o.daprd.HTTPPort()))
-		}, time.Second*5, time.Millisecond*100)
+			assert.Len(c, util.GetMetaComponents(c, ctx, client, o.daprd.HTTPPort()), 1)
+		}, time.Second*10, time.Millisecond*100)
 		o.postBindingFail(t, ctx, client, "binding1")
 		o.postBindingFail(t, ctx, client, "binding2")
 		o.postBindingFail(t, ctx, client, "binding3")
@@ -223,17 +232,15 @@ func (o *output) Run(t *testing.T, ctx context.Context) {
 				Type:    "bindings.localstorage",
 				Version: "v1",
 				Metadata: []common.NameValuePair{{
-					Name: "rootPath", Value: common.DynamicValue{
-						JSON: apiextv1.JSON{Raw: []byte(`"` + o.bindingDir2 + `"`)},
-					},
+					Name: "rootPath", Value: o.bindingDir2JSON,
 				}},
 			},
 		}
 		o.operator.AddComponents(comp)
 		o.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &comp, EventType: operatorv1.ResourceEventType_CREATED})
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(t, ctx, client, o.daprd.HTTPPort()), 1)
-		}, time.Second*5, time.Millisecond*100)
+			assert.Len(c, util.GetMetaComponents(c, ctx, client, o.daprd.HTTPPort()), 2)
+		}, time.Second*10, time.Millisecond*100)
 		o.postBinding(t, ctx, client, "binding2", "file5", "data5")
 		o.postBindingFail(t, ctx, client, "binding1")
 		o.postBindingFail(t, ctx, client, "binding3")

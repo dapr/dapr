@@ -15,6 +15,7 @@ package placement
 
 import (
 	"context"
+	"errors"
 	"net"
 	"strconv"
 	"testing"
@@ -53,7 +54,10 @@ func newTestPlacementServer(t *testing.T, raftServer *raft.Server) (string, *Ser
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
 		defer close(serverStopped)
-		require.NoError(t, testServer.Run(ctx, strconv.Itoa(port)))
+		err := testServer.Run(ctx, strconv.Itoa(port))
+		if !errors.Is(err, grpc.ErrServerStopped) {
+			require.NoError(t, err)
+		}
 	}()
 
 	assert.Eventually(t, func() bool {

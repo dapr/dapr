@@ -76,7 +76,7 @@ func (o *output) Run(t *testing.T, ctx context.Context) {
 
 	client := util.HTTPClient(t)
 	t.Run("expect no components to be loaded yet", func(t *testing.T) {
-		assert.Empty(t, util.GetMetaComponents(t, ctx, client, o.daprd.HTTPPort()))
+		assert.Len(t, util.GetMetaComponents(t, ctx, client, o.daprd.HTTPPort()), 1)
 	})
 
 	t.Run("adding a component should become available", func(t *testing.T) {
@@ -94,7 +94,7 @@ spec:
    value: '%s'
 `, o.bindingDir1)), 0o600))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(t, ctx, client, o.daprd.HTTPPort()), 1)
+			assert.Len(c, util.GetMetaComponents(c, ctx, client, o.daprd.HTTPPort()), 2)
 		}, time.Second*5, time.Millisecond*100)
 		o.postBinding(t, ctx, client, "binding1", "file1", "data1")
 		o.postBindingFail(t, ctx, client, "binding2")
@@ -128,7 +128,7 @@ spec:
    value: '%s'
 `, o.bindingDir1, o.bindingDir2)), 0o600))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(t, ctx, client, o.daprd.HTTPPort()), 2)
+			assert.Len(c, util.GetMetaComponents(c, ctx, client, o.daprd.HTTPPort()), 3)
 		}, time.Second*5, time.Millisecond*100)
 		o.postBinding(t, ctx, client, "binding1", "file2", "data2")
 		o.postBinding(t, ctx, client, "binding2", "file1", "data1")
@@ -152,7 +152,7 @@ spec:
    value: '%s'
 `, o.bindingDir3)), 0o600))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(t, ctx, client, o.daprd.HTTPPort()), 3)
+			assert.Len(c, util.GetMetaComponents(c, ctx, client, o.daprd.HTTPPort()), 4)
 		}, time.Second*5, time.Millisecond*100)
 		o.postBinding(t, ctx, client, "binding1", "file3", "data3")
 		o.postBinding(t, ctx, client, "binding2", "file2", "data2")
@@ -177,7 +177,7 @@ spec:
    value: '%s'
 `, o.bindingDir2)), 0o600))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(t, ctx, client, o.daprd.HTTPPort()), 2)
+			assert.Len(c, util.GetMetaComponents(c, ctx, client, o.daprd.HTTPPort()), 3)
 		}, time.Second*5, time.Millisecond*100)
 		o.postBindingFail(t, ctx, client, "binding1")
 		assert.NoFileExists(t, filepath.Join(o.bindingDir1, "file4"))
@@ -191,7 +191,7 @@ spec:
 		require.NoError(t, os.Remove(filepath.Join(o.resDir, "1.yaml")))
 		require.NoError(t, os.Remove(filepath.Join(o.resDir, "2.yaml")))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Empty(c, util.GetMetaComponents(t, ctx, client, o.daprd.HTTPPort()))
+			assert.Len(c, util.GetMetaComponents(c, ctx, client, o.daprd.HTTPPort()), 1)
 		}, time.Second*5, time.Millisecond*100)
 		o.postBindingFail(t, ctx, client, "binding1")
 		o.postBindingFail(t, ctx, client, "binding2")
@@ -213,7 +213,7 @@ spec:
    value: '%s'
 `, o.bindingDir2)), 0o600))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(t, ctx, client, o.daprd.HTTPPort()), 1)
+			assert.Len(c, util.GetMetaComponents(c, ctx, client, o.daprd.HTTPPort()), 2)
 		}, time.Second*5, time.Millisecond*100)
 		o.postBinding(t, ctx, client, "binding2", "file5", "data5")
 		o.postBindingFail(t, ctx, client, "binding1")

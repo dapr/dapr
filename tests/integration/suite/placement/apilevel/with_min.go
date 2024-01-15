@@ -99,14 +99,14 @@ func (n *withMin) Run(t *testing.T, parentCtx context.Context) {
 
 	// Register the first host with API level 10
 	stopCh1 := make(chan struct{})
-	registerHost(ctx, conn, "myapp1", 10, placementMessageCh, stopCh1)
+	registerHost(t, ctx, conn, "myapp1", 10, placementMessageCh, stopCh1)
 
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
 		checkAPILevelInState(t, httpClient, n.place.HealthzPort(), 10)
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// Register the second host with API level 20
-	registerHost(ctx, conn, "myapp2", 20, placementMessageCh, nil)
+	registerHost(t, ctx, conn, "myapp2", 20, placementMessageCh, nil)
 
 	// API level should not increase
 	require.EventuallyWithT(t, func(t *assert.CollectT) {

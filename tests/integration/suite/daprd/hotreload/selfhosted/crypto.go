@@ -79,7 +79,7 @@ func (c *crypto) Run(t *testing.T, ctx context.Context) {
 	t.Run("expect no components to be loaded yet", func(t *testing.T) {
 		resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 		require.NoError(t, err)
-		assert.Empty(t, resp.GetRegisteredComponents())
+		assert.Len(t, resp.GetRegisteredComponents(), 1)
 		c.encryptDecryptFail(t, ctx, client, "crypto1")
 		c.encryptDecryptFail(t, ctx, client, "crypto2")
 	})
@@ -105,7 +105,7 @@ spec:
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
-			assert.Len(c, resp.GetRegisteredComponents(), 1)
+			assert.Len(c, resp.GetRegisteredComponents(), 2)
 		}, time.Second*5, time.Millisecond*100)
 
 		c.encryptDecrypt(t, ctx, client, "crypto1")
@@ -134,7 +134,7 @@ spec:
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
-			assert.Len(c, resp.GetRegisteredComponents(), 2)
+			assert.Len(c, resp.GetRegisteredComponents(), 3)
 		}, time.Second*5, time.Millisecond*100)
 
 		c.encryptDecrypt(t, ctx, client, "crypto1")
@@ -173,7 +173,7 @@ spec:
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
-			assert.Len(c, resp.GetRegisteredComponents(), 3)
+			assert.Len(c, resp.GetRegisteredComponents(), 4)
 		}, time.Second*5, time.Millisecond*100)
 
 		c.encryptDecrypt(t, ctx, client, "crypto1")
@@ -206,6 +206,7 @@ spec:
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
 			assert.ElementsMatch(c, []*rtv1.RegisteredComponents{
+				{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 				{Name: "crypto1", Type: "crypto.dapr.localstorage", Version: "v1"},
 				{Name: "crypto3", Type: "crypto.dapr.localstorage", Version: "v1"},
 				{
@@ -225,7 +226,7 @@ spec:
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
-			assert.Len(c, resp.GetRegisteredComponents(), 2)
+			assert.Len(c, resp.GetRegisteredComponents(), 3)
 		}, time.Second*5, time.Millisecond*100)
 		require.NoError(t, os.WriteFile(filepath.Join(c.resDir, "2.yaml"), []byte(`
 apiVersion: dapr.io/v1alpha1
@@ -241,6 +242,7 @@ spec:
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
 			assert.ElementsMatch(c, []*rtv1.RegisteredComponents{
+				{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 				{
 					Name: "crypto1", Type: "state.in-memory", Version: "v1",
 					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
@@ -269,7 +271,7 @@ spec:
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
-			assert.Len(c, resp.GetRegisteredComponents(), 2)
+			assert.Len(c, resp.GetRegisteredComponents(), 3)
 		}, time.Second*5, time.Millisecond*100)
 
 		c.encryptDecryptFail(t, ctx, client, "crypto1")

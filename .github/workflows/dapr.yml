@@ -244,6 +244,8 @@ jobs:
           key: ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ matrix.target_os }}-${{ matrix.target_arch }}-go-${{ steps.setup-go.outputs.go-version }}-build-
+      - name: Build binaries
+        run: make build
       - name: Run make test-integration
         run: make test-integration
   build:

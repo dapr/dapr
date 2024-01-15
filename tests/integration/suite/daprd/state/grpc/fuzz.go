@@ -25,6 +25,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	fuzz "github.com/google/gofuzz"
 	"github.com/stretchr/testify/assert"
@@ -166,6 +167,10 @@ spec:
 
 func (f *fuzzstate) Run(t *testing.T, ctx context.Context) {
 	f.daprd.WaitUntilRunning(t, ctx)
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Len(c, util.GetMetaComponents(c, ctx, util.HTTPClient(t), f.daprd.HTTPPort()), 2)
+	}, time.Second*20, time.Millisecond*100)
 
 	client := f.daprd.GRPCClient(t, ctx)
 

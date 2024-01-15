@@ -128,7 +128,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 	client := util.HTTPClient(t)
 
 	t.Run("expect 1 component to be loaded", func(t *testing.T) {
-		assert.Len(t, util.GetMetaComponents(t, ctx, client, h.daprd.HTTPPort()), 1)
+		assert.Len(t, util.GetMetaComponents(t, ctx, client, h.daprd.HTTPPort()), 2)
 		h.publishMessage(t, ctx, client, "pubsub1", "topic1", "/route1")
 	})
 
@@ -147,7 +147,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		h.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &comp, EventType: operatorv1.ResourceEventType_CREATED})
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(t, ctx, client, h.daprd.HTTPPort()), 2)
+			assert.Len(c, util.GetMetaComponents(c, ctx, client, h.daprd.HTTPPort()), 3)
 		}, time.Second*5, time.Millisecond*100)
 		h.publishMessage(t, ctx, client, "pubsub1", "topic1", "/route1")
 		h.publishMessage(t, ctx, client, "pubsub2", "topic2", "/route2")
@@ -168,7 +168,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		h.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &comp, EventType: operatorv1.ResourceEventType_CREATED})
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(t, ctx, client, h.daprd.HTTPPort()), 3)
+			assert.Len(c, util.GetMetaComponents(c, ctx, client, h.daprd.HTTPPort()), 4)
 		}, time.Second*5, time.Millisecond*100)
 		h.publishMessage(t, ctx, client, "pubsub1", "topic1", "/route1")
 		h.publishMessage(t, ctx, client, "pubsub2", "topic2", "/route2")
@@ -181,7 +181,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		h.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &comp, EventType: operatorv1.ResourceEventType_DELETED})
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(t, ctx, client, h.daprd.HTTPPort()), 2)
+			assert.Len(c, util.GetMetaComponents(c, ctx, client, h.daprd.HTTPPort()), 3)
 		}, time.Second*5, time.Millisecond*100)
 		h.publishMessage(t, ctx, client, "pubsub1", "topic1", "/route1")
 		h.publishMessageFails(t, ctx, client, "pubsub2", "topic2")
@@ -193,7 +193,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		h.operator.SetComponents(h.operator.Components()[1])
 		h.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &comp, EventType: operatorv1.ResourceEventType_DELETED})
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(t, ctx, client, h.daprd.HTTPPort()), 1)
+			assert.Len(c, util.GetMetaComponents(c, ctx, client, h.daprd.HTTPPort()), 2)
 		}, time.Second*5, time.Millisecond*100)
 		h.publishMessageFails(t, ctx, client, "pubsub1", "topic1")
 		h.publishMessageFails(t, ctx, client, "pubsub2", "topic2")
@@ -205,7 +205,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		h.operator.SetComponents()
 		h.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &comp, EventType: operatorv1.ResourceEventType_DELETED})
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Empty(c, util.GetMetaComponents(t, ctx, client, h.daprd.HTTPPort()))
+			assert.Len(c, util.GetMetaComponents(c, ctx, client, h.daprd.HTTPPort()), 1)
 		}, time.Second*5, time.Millisecond*100)
 		h.publishMessageFails(t, ctx, client, "pubsub1", "topic1")
 		h.publishMessageFails(t, ctx, client, "pubsub2", "topic2")
@@ -226,7 +226,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		h.operator.AddComponents(comp)
 		h.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &comp, EventType: operatorv1.ResourceEventType_CREATED})
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(t, ctx, client, h.daprd.HTTPPort()), 1)
+			assert.Len(c, util.GetMetaComponents(c, ctx, client, h.daprd.HTTPPort()), 2)
 		}, time.Second*5, time.Millisecond*100)
 		h.publishMessageFails(t, ctx, client, "pubsub1", "topic1")
 		h.publishMessage(t, ctx, client, "pubsub2", "topic2", "/route2")

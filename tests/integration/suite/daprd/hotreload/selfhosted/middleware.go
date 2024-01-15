@@ -124,7 +124,7 @@ func (m *middleware) Run(t *testing.T, ctx context.Context) {
 	t.Cleanup(cancel)
 
 	t.Run("expect middleware to be loaded", func(t *testing.T) {
-		assert.Len(t, util.GetMetaComponents(t, ctx, client, m.daprd1.HTTPPort()), 1)
+		assert.Len(t, util.GetMetaComponents(t, ctx, client, m.daprd1.HTTPPort()), 2)
 	})
 
 	t.Run("middleware hot reloading doesn't work yet", func(t *testing.T) {
@@ -153,7 +153,7 @@ spec:
   version: v1
 `), 0o600))
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(t, ctx, client, m.daprd1.HTTPPort()), 2)
+			assert.Len(c, util.GetMetaComponents(c, ctx, client, m.daprd1.HTTPPort()), 3)
 		}, time.Second*5, time.Millisecond*100, "expected component to be loaded")
 		m.doReq(t, ctx, client, "/helloworld", http.StatusNotFound)
 	})

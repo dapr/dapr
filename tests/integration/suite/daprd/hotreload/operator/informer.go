@@ -15,6 +15,7 @@ package operator
 
 import (
 	"context"
+	"encoding/json"
 	"path/filepath"
 	"testing"
 	"time"
@@ -28,6 +29,7 @@ import (
 	"github.com/dapr/dapr/pkg/apis/common"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
+	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
@@ -117,7 +119,7 @@ func (i *informer) Run(t *testing.T, ctx context.Context) {
 	client := util.HTTPClient(t)
 
 	t.Run("expect no components to be loaded yet", func(t *testing.T) {
-		assert.Empty(t, util.GetMetaComponents(t, ctx, client, i.daprd.HTTPPort()))
+		assert.Len(t, util.GetMetaComponents(t, ctx, client, i.daprd.HTTPPort()), 1)
 	})
 
 	t.Run("adding a component should become available", func(t *testing.T) {
@@ -133,21 +135,30 @@ func (i *informer) Run(t *testing.T, ctx context.Context) {
 		i.kubeapi.Informer().Add(t, &comp)
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(t, ctx, client, i.daprd.HTTPPort()), 1)
+			assert.Len(c, util.GetMetaComponents(t, ctx, client, i.daprd.HTTPPort()), 2)
 		}, time.Second*10, time.Millisecond*100)
 		metaComponents := util.GetMetaComponents(t, ctx, client, i.daprd.HTTPPort())
-		assert.Equal(t, "state.in-memory", metaComponents[0].GetType())
+		assert.ElementsMatch(t, metaComponents, []*rtv1.RegisteredComponents{
+			{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
+			{
+				Name: "123", Type: "state.in-memory", Version: "v1",
+				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+			},
+		})
 	})
 
-	tmpDir := t.TempDir()
+	dir := filepath.Join(t.TempDir(), "db.sqlite")
+	dirJSON, err := json.Marshal(dir)
+	require.NoError(t, err)
 	comp := compapi.Component{
+		TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Component"},
 		ObjectMeta: metav1.ObjectMeta{Name: "abc", Namespace: "default"},
 		Spec: compapi.ComponentSpec{
 			Type:    "state.sqlite",
 			Version: "v1",
 			Metadata: []common.NameValuePair{
 				{Name: "connectionString", Value: common.DynamicValue{
-					JSON: apiextv1.JSON{Raw: []byte(`"` + filepath.Join(tmpDir, "db.sqlite") + `"`)},
+					JSON: apiextv1.JSON{Raw: dirJSON},
 				}},
 			},
 		},
@@ -160,8 +171,14 @@ func (i *informer) Run(t *testing.T, ctx context.Context) {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			// Assert here, as we might catch the component in the middle of being
 			// updated, i.e. between closed and re-inited.
-			if assert.Len(c, util.GetMetaComponents(t, ctx, client, i.daprd.HTTPPort()), 1) {
-				assert.Equal(c, "state.sqlite", util.GetMetaComponents(t, ctx, client, i.daprd.HTTPPort())[0].GetType())
+			if assert.Len(c, util.GetMetaComponents(t, ctx, client, i.daprd.HTTPPort()), 2) {
+				assert.ElementsMatch(c, util.GetMetaComponents(t, ctx, client, i.daprd.HTTPPort()), []*rtv1.RegisteredComponents{
+					{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
+					{
+						Name: "abc", Type: "state.sqlite", Version: "v1",
+						Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+					},
+				})
 			}
 		}, time.Second*10, time.Millisecond*100)
 	})
@@ -171,7 +188,7 @@ func (i *informer) Run(t *testing.T, ctx context.Context) {
 		i.kubeapi.Informer().Delete(t, &comp)
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Empty(c, util.GetMetaComponents(t, ctx, client, i.daprd.HTTPPort()))
-		}, time.Second*10, time.Millisecond*100)
+			assert.Len(c, util.GetMetaComponents(c, ctx, client, i.daprd.HTTPPort()), 1)
+		}, time.Second*20, time.Millisecond*100)
 	})
 }

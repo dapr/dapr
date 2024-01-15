@@ -99,7 +99,7 @@ func (m *metrics) Run(t *testing.T, ctx context.Context) {
 	t.Run("HTTP", func(t *testing.T) {
 		t.Run("service invocation", func(t *testing.T) {
 			reqCtx, reqCancel := context.WithTimeout(ctx, time.Second)
-			defer reqCancel()
+			t.Cleanup(reqCancel)
 
 			// Invoke
 			req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, fmt.Sprintf("http://localhost:%d/v1.0/invoke/myapp/method/hi", m.daprd.HTTPPort()), nil)
@@ -113,7 +113,7 @@ func (m *metrics) Run(t *testing.T, ctx context.Context) {
 
 		t.Run("state stores", func(t *testing.T) {
 			reqCtx, reqCancel := context.WithTimeout(ctx, time.Second)
-			defer reqCancel()
+			t.Cleanup(reqCancel)
 
 			// Write state
 			body := `[{"key":"myvalue", "value":"hello world"}]`
@@ -137,7 +137,7 @@ func (m *metrics) Run(t *testing.T, ctx context.Context) {
 	t.Run("gRPC", func(t *testing.T) {
 		t.Run("service invocation", func(t *testing.T) {
 			reqCtx, reqCancel := context.WithTimeout(ctx, time.Second)
-			defer reqCancel()
+			t.Cleanup(reqCancel)
 
 			// Invoke
 			_, err := m.grpcClient.InvokeService(reqCtx, &runtimev1pb.InvokeServiceRequest{
@@ -158,7 +158,7 @@ func (m *metrics) Run(t *testing.T, ctx context.Context) {
 
 		t.Run("state stores", func(t *testing.T) {
 			reqCtx, reqCancel := context.WithTimeout(ctx, time.Second)
-			defer reqCancel()
+			t.Cleanup(reqCancel)
 
 			// Write state
 			_, err := m.grpcClient.SaveState(reqCtx, &runtimev1pb.SaveStateRequest{
@@ -215,11 +215,10 @@ func (m *metrics) Run(t *testing.T, ctx context.Context) {
 			id, err := taskhubClient.ScheduleNewOrchestration(ctx, "workflow", api.WithInput("activity_success"))
 			require.NoError(t, err)
 			timeoutCtx, cancelTimeout := context.WithTimeout(ctx, 30*time.Second)
-			defer cancelTimeout()
+			t.Cleanup(cancelTimeout)
 			metadata, err := taskhubClient.WaitForOrchestrationCompletion(timeoutCtx, id, api.WithFetchPayloads(true))
 			require.NoError(t, err)
 			assert.True(t, metadata.IsComplete())
-			time.Sleep(1 * time.Second)
 
 			// Verify metrics
 			metrics := m.getMetrics(t, ctx)
@@ -231,11 +230,10 @@ func (m *metrics) Run(t *testing.T, ctx context.Context) {
 			id, err := taskhubClient.ScheduleNewOrchestration(ctx, "workflow", api.WithInput("activity_failure"))
 			require.NoError(t, err)
 			timeoutCtx, cancelTimeout := context.WithTimeout(ctx, 30*time.Second)
-			defer cancelTimeout()
+			t.Cleanup(cancelTimeout)
 			metadata, err := taskhubClient.WaitForOrchestrationCompletion(timeoutCtx, id, api.WithFetchPayloads(true))
 			require.NoError(t, err)
 			assert.True(t, metadata.IsComplete())
-			time.Sleep(1 * time.Second)
 
 			// Verify metrics
 			metrics := m.getMetrics(t, ctx)
