@@ -218,9 +218,9 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 		var nerr error
 
 		switch {
-		case errors.Is(err, &runtimePubsub.NotAllowedError{}):
+		case errors.As(err, &runtimePubsub.NotAllowedError{}):
 			nerr = apierrors.PubSubPublishForbidden(pubsubName, string(contribMetadata.PubSubType), topic, a.AppID(), err)
-		case errors.Is(err, &runtimePubsub.NotFoundError{}):
+		case errors.As(err, &runtimePubsub.NotFoundError{}):
 			nerr = apierrors.PubSubTestNotFound(pubsubName, string(contribMetadata.PubSubType), topic, err)
 		default:
 			nerr = apierrors.PubSubPublishMessage(pubsubName, string(contribMetadata.PubSubType), topic, err)
@@ -444,9 +444,9 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 		// Only respond with error if it is permission denied or not found.
 		// On error, the response will be empty.
 		switch {
-		case errors.Is(err, &runtimePubsub.NotAllowedError{}):
+		case errors.As(err, &runtimePubsub.NotAllowedError{}):
 			nerr = apierrors.PubSubPublishForbidden(pubsubName, string(contribMetadata.PubSubType), topic, a.AppID(), err)
-		case errors.Is(err, &runtimePubsub.NotFoundError{}):
+		case errors.As(err, &runtimePubsub.NotFoundError{}):
 			nerr = apierrors.PubSubTestNotFound(pubsubName, string(contribMetadata.PubSubType), topic, err)
 		default:
 			nerr = apierrors.PubSubPublishMessage(pubsubName, string(contribMetadata.PubSubType), topic, err)

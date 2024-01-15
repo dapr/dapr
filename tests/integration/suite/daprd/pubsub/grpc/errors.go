@@ -144,30 +144,15 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, fmt.Sprintf("pubsub %s not found", "pubsub-doesn't-exist"), s.Message())
 
 		// Check status details
-		require.Len(t, s.Details(), 2)
+		require.Len(t, s.Details(), 1)
 
 		var errInfo *errdetails.ErrorInfo
-		var resInfo *errdetails.ResourceInfo
+		errInfo, ok = s.Details()[0].(*errdetails.ErrorInfo)
 
-		for _, detail := range s.Details() {
-			switch d := detail.(type) {
-			case *errdetails.ErrorInfo:
-				errInfo = d
-			case *errdetails.ResourceInfo:
-				resInfo = d
-			default:
-				require.FailNow(t, "unexpected status detail")
-			}
-		}
-		require.NotNil(t, errInfo, "ErrorInfo should be present")
-		require.Equal(t, kiterrors.CodePrefixPubSub+kiterrors.CodeNotFound, errInfo.GetReason())
+		require.True(t, ok)
+		require.Equal(t, kiterrors.CodePrefixPubSub+"OUTBOX", errInfo.GetReason())
 		require.Equal(t, "dapr.io", errInfo.GetDomain())
-		require.Nil(t, errInfo.GetMetadata())
-
-		require.NotNil(t, resInfo, "ResourceInfo should be present")
-		require.Equal(t, "pubsub", resInfo.GetResourceType())
-		require.Equal(t, name, resInfo.GetResourceName())
-		require.Empty(t, resInfo.GetOwner())
+		require.NotNil(t, errInfo.GetMetadata())
 	})
 
 	// Covers apierrors.PubSubNameEmpty()

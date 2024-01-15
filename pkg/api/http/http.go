@@ -1620,10 +1620,11 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 
 	if err != nil {
 		var nerr error
+
 		switch {
-		case errors.Is(err, &runtimePubsub.NotAllowedError{}):
+		case errors.As(err, &runtimePubsub.NotAllowedError{}):
 			nerr = apierrors.PubSubPublishForbidden(pubsubName, string(contribMetadata.PubSubType), topic, a.universal.AppID(), err)
-		case errors.Is(err, &runtimePubsub.NotFoundError{}):
+		case errors.As(err, &runtimePubsub.NotFoundError{}):
 			nerr = apierrors.PubSubTestNotFound(pubsubName, string(contribMetadata.PubSubType), topic, err)
 		default:
 			nerr = apierrors.PubSubPublishMessage(pubsubName, string(contribMetadata.PubSubType), topic, err)
@@ -1631,8 +1632,9 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 
 		universalFastHTTPErrorResponder(reqCtx, nerr)
 		log.Debug(nerr)
+	} else {
+		fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
 	}
-	fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
 }
 
 type bulkPublishMessageEntry struct {
@@ -1787,28 +1789,26 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 			bulkRes.FailedEntries = append(bulkRes.FailedEntries, resEntry)
 		}
 		bulkRes.ErrorCode = "ERR_PUBSUB_PUBLISH_MESSAGE"
-		var nerr error
 
 		switch {
-		case errors.Is(err, &runtimePubsub.NotAllowedError{}):
-			nerr = apierrors.PubSubPublishForbidden(pubsubName, string(contribMetadata.PubSubType), topic, a.universal.AppID(), err)
+		case errors.As(err, &runtimePubsub.NotAllowedError{}):
+			nerr := apierrors.PubSubPublishForbidden(pubsubName, string(contribMetadata.PubSubType), topic, a.universal.AppID(), err)
 			standardizedErr, ok := kiterrors.FromError(nerr)
 			if ok {
 				fasthttpRespond(reqCtx, fasthttpResponseWithError(standardizedErr.HTTPStatusCode(), standardizedErr), closeChildSpans)
 			}
 			log.Debug(nerr)
 			return
-		case errors.Is(err, &runtimePubsub.NotFoundError{}):
-			nerr = apierrors.PubSubTestNotFound(pubsubName, string(contribMetadata.PubSubType), topic, err)
+		case errors.As(err, &runtimePubsub.NotFoundError{}):
+			nerr := apierrors.PubSubTestNotFound(pubsubName, string(contribMetadata.PubSubType), topic, err)
 			standardizedErr, ok := kiterrors.FromError(nerr)
 			if ok {
 				fasthttpRespond(reqCtx, fasthttpResponseWithError(standardizedErr.HTTPStatusCode(), standardizedErr), closeChildSpans)
 			}
-			log.Debug(nerr)
 			return
 		default:
-			nerr = apierrors.PubSubPublishMessage(pubsubName, string(contribMetadata.PubSubType), topic, err)
-			log.Debug(nerr)
+			err = apierrors.PubSubPublishMessage(pubsubName, string(contribMetadata.PubSubType), topic, err)
+			log.Debug(err)
 		}
 
 		// Return the error along with the list of failed entries.
