@@ -34,14 +34,14 @@ import (
 
 func (a *Universal) GetStateStore(name string) (state.Store, error) {
 	if a.compStore.StateStoresLen() == 0 {
-		err := errors.NotConfigured(name, string(contribMetadata.StateStoreType)+" store", map[string]string{"appID": a.AppID()}, codes.FailedPrecondition, http.StatusInternalServerError, "ERR_STATE_STORE_NOT_CONFIGURED", kiterrors.CodePrefixStateStore+kiterrors.CodeNotConfigured)
+		err := errors.NotConfigured(name, string(contribMetadata.StateStoreType)+" store", nil, codes.FailedPrecondition, http.StatusInternalServerError, "ERR_STATE_STORE_NOT_CONFIGURED", kiterrors.CodePrefixStateStore+kiterrors.CodeNotConfigured)
 		a.logger.Debug(err)
 		return nil, err
 	}
 
 	stateStore, ok := a.compStore.GetStateStore(name)
 	if !ok {
-		err := errors.NotFound(name, string(contribMetadata.StateStoreType), map[string]string{"appID": a.AppID()}, codes.InvalidArgument, http.StatusBadRequest, "ERR_STATE_STORE_NOT_FOUND", kiterrors.CodePrefixStateStore+kiterrors.CodeNotFound)
+		err := errors.NotFound(name, string(contribMetadata.StateStoreType)+" store", nil, codes.InvalidArgument, http.StatusBadRequest, "ERR_STATE_STORE_NOT_FOUND", kiterrors.CodePrefixStateStore+kiterrors.CodeNotFound)
 		a.logger.Debug(err)
 		return nil, err
 	}

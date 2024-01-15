@@ -156,7 +156,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
 		require.True(t, exists)
-		require.Equal(t, fmt.Sprintf("pubsub %s not found", name), errMsg)
+		require.Equal(t, fmt.Sprintf("pubsub %s is not found", name), errMsg)
 
 		// Confirm that the 'details' field exists and has one element
 		details, exists := data["details"]

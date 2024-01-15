@@ -141,7 +141,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		s, ok := status.FromError(err)
 		require.True(t, ok)
 		require.Equal(t, grpcCodes.InvalidArgument, s.Code())
-		require.Equal(t, fmt.Sprintf("pubsub %s not found", "pubsub-doesn't-exist"), s.Message())
+		require.Equal(t, fmt.Sprintf("pubsub %s is not found", "pubsub-doesn't-exist"), s.Message())
 
 		// Check status details
 		require.Len(t, s.Details(), 1)
