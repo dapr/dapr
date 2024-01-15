@@ -15,6 +15,7 @@ package operator
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -87,7 +88,7 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 	client := util.HTTPClient(t)
 
 	t.Run("expect no components to be loaded yet", func(t *testing.T) {
-		assert.Empty(t, util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort()))
+		assert.Len(t, util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort()), 1)
 		s.writeExpectError(t, ctx, client, "123", http.StatusInternalServerError)
 	})
 
@@ -103,22 +104,25 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 		s.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &newComp, EventType: operatorv1.ResourceEventType_CREATED})
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort()), 1)
+			assert.Len(c, util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort()), 2)
 		}, time.Second*5, time.Millisecond*100)
 		resp := util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort())
-		require.Len(t, resp, 1)
+		require.Len(t, resp, 2)
 
-		assert.Equal(t, &rtv1.RegisteredComponents{
-			Name:    "123",
-			Type:    "state.in-memory",
-			Version: "v1",
-			Capabilities: []string{
-				"ETAG",
-				"TRANSACTIONAL",
-				"TTL",
-				"ACTOR",
+		assert.ElementsMatch(t, resp, []*rtv1.RegisteredComponents{
+			{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
+			{
+				Name:    "123",
+				Type:    "state.in-memory",
+				Version: "v1",
+				Capabilities: []string{
+					"ETAG",
+					"TRANSACTIONAL",
+					"TTL",
+					"ACTOR",
+				},
 			},
-		}, resp[0])
+		})
 
 		s.writeRead(t, ctx, client, "123")
 	})
@@ -150,12 +154,13 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 		s.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &newComp2, EventType: operatorv1.ResourceEventType_CREATED})
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort()), 3)
+			assert.Len(c, util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort()), 4)
 		}, time.Second*5, time.Millisecond*100)
 		resp := util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort())
-		require.Len(t, resp, 3)
+		require.Len(t, resp, 4)
 
 		assert.ElementsMatch(t, []*rtv1.RegisteredComponents{
+			{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 			{
 				Name: "123", Type: "state.in-memory", Version: "v1",
 				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
@@ -181,6 +186,10 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 		s.writeRead(t, ctx, client, "abc")
 		s.writeRead(t, ctx, client, "xyz")
 
+		dbPath := filepath.Join(tmpDir, "db.sqlite")
+		dbPathJSON, err := json.Marshal(dbPath)
+		require.NoError(t, err)
+
 		newComp := compapi.Component{
 			ObjectMeta: metav1.ObjectMeta{Name: "abc"},
 			Spec: compapi.ComponentSpec{
@@ -188,7 +197,7 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 				Version: "v1",
 				Metadata: []common.NameValuePair{
 					{Name: "connectionString", Value: common.DynamicValue{
-						JSON: apiextv1.JSON{Raw: []byte(`"` + filepath.Join(tmpDir, "db.sqlite") + `"`)},
+						JSON: apiextv1.JSON{Raw: dbPathJSON},
 					}},
 				},
 			},
@@ -199,6 +208,7 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := util.GetMetaComponents(c, ctx, client, s.daprd.HTTPPort())
 			assert.ElementsMatch(c, []*rtv1.RegisteredComponents{
+				{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 				{
 					Name: "123", Type: "state.in-memory", Version: "v1",
 					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
@@ -225,6 +235,10 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 		s.writeRead(t, ctx, client, "xyz")
 		s.writeExpectError(t, ctx, client, "foo", http.StatusBadRequest)
 
+		dbPath := filepath.Join(tmpDir, "db.sqlite")
+		dbPathJSON, err := json.Marshal(dbPath)
+		require.NoError(t, err)
+
 		comp1 := compapi.Component{
 			ObjectMeta: metav1.ObjectMeta{Name: "123"},
 			Spec: compapi.ComponentSpec{
@@ -232,7 +246,7 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 				Version: "v1",
 				Metadata: []common.NameValuePair{
 					{Name: "connectionString", Value: common.DynamicValue{
-						JSON: apiextv1.JSON{Raw: []byte(`"` + filepath.Join(tmpDir, "db.sqlite") + `"`)},
+						JSON: apiextv1.JSON{Raw: dbPathJSON},
 					}},
 				},
 			},
@@ -268,6 +282,7 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := util.GetMetaComponents(c, ctx, client, s.daprd.HTTPPort())
 			assert.ElementsMatch(c, []*rtv1.RegisteredComponents{
+				{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 				{
 					Name: "123", Type: "state.sqlite", Version: "v1",
 					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
@@ -299,6 +314,10 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 		s.writeRead(t, ctx, client, "xyz")
 		s.writeRead(t, ctx, client, "foo")
 
+		dbPath := filepath.Join(tmpDir, "db.sqlite")
+		dbPathJSON, err := json.Marshal(dbPath)
+		require.NoError(t, err)
+
 		comp1 := compapi.Component{
 			ObjectMeta: metav1.ObjectMeta{Name: "abc"},
 			Spec: compapi.ComponentSpec{
@@ -306,7 +325,7 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 				Version: "v1",
 				Metadata: []common.NameValuePair{
 					{Name: "connectionString", Value: common.DynamicValue{
-						JSON: apiextv1.JSON{Raw: []byte(`"` + filepath.Join(tmpDir, "db.sqlite") + `"`)},
+						JSON: apiextv1.JSON{Raw: dbPathJSON},
 					}},
 				},
 			},
@@ -326,6 +345,7 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := util.GetMetaComponents(c, ctx, client, s.daprd.HTTPPort())
 			assert.ElementsMatch(c, []*rtv1.RegisteredComponents{
+				{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 				{
 					Name: "123", Type: "state.sqlite", Version: "v1",
 					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
@@ -360,6 +380,8 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 
 		secPath := filepath.Join(tmpDir, "foo")
 		require.NoError(t, os.WriteFile(secPath, []byte(`{}`), 0o600))
+		secPathJSON, err := json.Marshal(secPath)
+		require.NoError(t, err)
 		component := compapi.Component{
 			ObjectMeta: metav1.ObjectMeta{Name: "bar"},
 			Spec: compapi.ComponentSpec{
@@ -367,7 +389,7 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 				Version: "v1",
 				Metadata: []common.NameValuePair{
 					{Name: "secretsFile", Value: common.DynamicValue{
-						JSON: apiextv1.JSON{Raw: []byte(`"` + secPath + `"`)},
+						JSON: apiextv1.JSON{Raw: secPathJSON},
 					}},
 				},
 			},
@@ -378,6 +400,7 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := util.GetMetaComponents(c, ctx, client, s.daprd.HTTPPort())
 			assert.ElementsMatch(c, []*rtv1.RegisteredComponents{
+				{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 				{Name: "bar", Type: "secretstores.local.file", Version: "v1"},
 				{
 					Name: "123", Type: "state.sqlite", Version: "v1",
@@ -417,6 +440,7 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := util.GetMetaComponents(c, ctx, client, s.daprd.HTTPPort())
 			assert.ElementsMatch(c, []*rtv1.RegisteredComponents{
+				{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 				{Name: "bar", Type: "secretstores.local.file", Version: "v1"},
 			}, resp)
 		}, time.Second*10, time.Millisecond*100)
@@ -438,7 +462,7 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 		s.operator.AddComponents(comp)
 		s.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &comp, EventType: operatorv1.ResourceEventType_CREATED})
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort()), 2)
+			assert.Len(c, util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort()), 3)
 		}, time.Second*5, time.Millisecond*100)
 		s.writeRead(t, ctx, client, "123")
 	})
