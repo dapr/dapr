@@ -57,6 +57,7 @@ jobs:
       # Container registry where to cache e2e test images
       DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
       PULL_POLICY: IfNotPresent
+      DAPR_GO_BUILD_TAGS: wfbackendsqlite
     strategy:
       fail-fast: false # Keep running if one leg fails.
       matrix:
