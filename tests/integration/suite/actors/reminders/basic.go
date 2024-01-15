@@ -87,9 +87,11 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, rErr := client.Do(req)
-		require.NoError(c, rErr)
-		require.NoError(c, resp.Body.Close())
-		assert.Equal(c, http.StatusOK, resp.StatusCode)
+		//nolint:testifylint
+		if assert.NoError(c, rErr) {
+			assert.NoError(c, resp.Body.Close())
+			assert.Equal(c, http.StatusOK, resp.StatusCode)
+		}
 	}, time.Second*10, time.Millisecond*100, "actor not ready in time")
 
 	body := `{"dueTime": "0ms"}`
