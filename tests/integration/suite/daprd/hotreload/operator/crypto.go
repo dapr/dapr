@@ -15,6 +15,7 @@ package operator
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -50,8 +51,10 @@ type crypto struct {
 	daprd    *daprd.Daprd
 	operator *operator.Operator
 
-	cryptoDir1 string
-	cryptoDir2 string
+	cryptoDir1     string
+	cryptoDir2     string
+	cryptoDir1JSON common.DynamicValue
+	cryptoDir2JSON common.DynamicValue
 }
 
 func (c *crypto) Setup(t *testing.T) []framework.Option {
@@ -69,6 +72,13 @@ func (c *crypto) Setup(t *testing.T) []framework.Option {
 	)
 
 	c.cryptoDir1, c.cryptoDir2 = t.TempDir(), t.TempDir()
+
+	dir1J, err := json.Marshal(c.cryptoDir1)
+	require.NoError(t, err)
+	dir2J, err := json.Marshal(c.cryptoDir2)
+	require.NoError(t, err)
+	c.cryptoDir1JSON = common.DynamicValue{JSON: apiextv1.JSON{Raw: dir1J}}
+	c.cryptoDir2JSON = common.DynamicValue{JSON: apiextv1.JSON{Raw: dir2J}}
 
 	c.daprd = daprd.New(t,
 		daprd.WithMode("kubernetes"),
@@ -108,11 +118,9 @@ func (c *crypto) Run(t *testing.T, ctx context.Context) {
 			TypeMeta:   metav1.TypeMeta{Kind: "Component", APIVersion: "dapr.io/v1alpha1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "crypto1"},
 			Spec: compapi.ComponentSpec{
-				Type:    "crypto.dapr.localstorage",
-				Version: "v1",
-				Metadata: []common.NameValuePair{{Name: "path", Value: common.DynamicValue{
-					JSON: apiextv1.JSON{Raw: []byte(`"` + c.cryptoDir1 + `"`)},
-				}}},
+				Type:     "crypto.dapr.localstorage",
+				Version:  "v1",
+				Metadata: []common.NameValuePair{{Name: "path", Value: c.cryptoDir1JSON}},
 			},
 		}
 		c.operator.SetComponents(newComp)
@@ -141,11 +149,9 @@ func (c *crypto) Run(t *testing.T, ctx context.Context) {
 			TypeMeta:   metav1.TypeMeta{Kind: "Component", APIVersion: "dapr.io/v1alpha1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "crypto2"},
 			Spec: compapi.ComponentSpec{
-				Type:    "crypto.dapr.localstorage",
-				Version: "v1",
-				Metadata: []common.NameValuePair{{Name: "path", Value: common.DynamicValue{
-					JSON: apiextv1.JSON{Raw: []byte(`"` + c.cryptoDir2 + `"`)},
-				}}},
+				Type:     "crypto.dapr.localstorage",
+				Version:  "v1",
+				Metadata: []common.NameValuePair{{Name: "path", Value: c.cryptoDir2JSON}},
 			},
 		}
 		c.operator.AddComponents(newComp)
@@ -174,11 +180,9 @@ func (c *crypto) Run(t *testing.T, ctx context.Context) {
 			TypeMeta:   metav1.TypeMeta{Kind: "Component", APIVersion: "dapr.io/v1alpha1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "crypto3"},
 			Spec: compapi.ComponentSpec{
-				Type:    "crypto.dapr.localstorage",
-				Version: "v1",
-				Metadata: []common.NameValuePair{{Name: "path", Value: common.DynamicValue{
-					JSON: apiextv1.JSON{Raw: []byte(`"` + c.cryptoDir2 + `"`)},
-				}}},
+				Type:     "crypto.dapr.localstorage",
+				Version:  "v1",
+				Metadata: []common.NameValuePair{{Name: "path", Value: c.cryptoDir2JSON}},
 			},
 		}
 		c.operator.AddComponents(newComp)
@@ -272,11 +276,9 @@ func (c *crypto) Run(t *testing.T, ctx context.Context) {
 			TypeMeta:   metav1.TypeMeta{Kind: "Component", APIVersion: "dapr.io/v1alpha1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "crypto2"},
 			Spec: compapi.ComponentSpec{
-				Type:    "crypto.dapr.localstorage",
-				Version: "v1",
-				Metadata: []common.NameValuePair{{Name: "path", Value: common.DynamicValue{
-					JSON: apiextv1.JSON{Raw: []byte(`"` + c.cryptoDir2 + `"`)},
-				}}},
+				Type:     "crypto.dapr.localstorage",
+				Version:  "v1",
+				Metadata: []common.NameValuePair{{Name: "path", Value: c.cryptoDir2JSON}},
 			},
 		}
 		c.operator.AddComponents(newComp)
