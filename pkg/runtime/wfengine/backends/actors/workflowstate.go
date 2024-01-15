@@ -262,7 +262,7 @@ func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID 
 	bulkReq := &actors.GetBulkStateRequest{
 		ActorType: config.workflowActorType,
 		ActorID:   actorID,
-		// Initializing with size for all the inbox, history, and custom status
+		// Initializing with size for all the inbox, history, custom status and workflow execution start time
 		Keys: make([]string, metadata.InboxLength+metadata.HistoryLength+2),
 	}
 
