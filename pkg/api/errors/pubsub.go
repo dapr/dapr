@@ -35,33 +35,6 @@ const (
 	PostFixOutbox                  = "OUTBOX"
 )
 
-func PubSubNotFound(name string, pubsubType string, metadata map[string]string) error {
-	message := fmt.Sprintf("pubsub %s not found", name)
-
-	return kiterrors.NewBuilder(
-		grpcCodes.InvalidArgument,
-		http.StatusNotFound,
-		message,
-		"ERR_PUBSUB_NOT_FOUND",
-	).
-		WithErrorInfo(kiterrors.CodePrefixPubSub+kiterrors.CodeNotFound, metadata).
-		WithResourceInfo(pubsubType, name, "", message).
-		Build()
-}
-
-func PubSubNotConfigured(name string, pubsubType string, metadata map[string]string) error {
-	message := "pubsub is not configured"
-	return kiterrors.NewBuilder(
-		grpcCodes.FailedPrecondition,
-		http.StatusBadRequest,
-		message,
-		"ERR_PUBSUB_NOT_CONFIGURED", // legacy
-	).
-		WithErrorInfo(kiterrors.CodePrefixPubSub+kiterrors.CodeNotConfigured, metadata).
-		WithResourceInfo(pubsubType, name, "", message).
-		Build()
-}
-
 func PubSubNameEmpty(name string, pubsubType string, metadata map[string]string) error {
 	message := "pubsub name is empty"
 	return kiterrors.NewBuilder(

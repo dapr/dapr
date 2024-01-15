@@ -164,34 +164,14 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 
 		detailsArray, ok := details.([]interface{})
 		require.True(t, ok)
-		require.Len(t, detailsArray, 2)
+		require.Len(t, detailsArray, 1)
 
-		// Parse the json into go objects
-		var errInfo map[string]interface{}
-		var resInfo map[string]interface{}
-
-		for _, detail := range detailsArray {
-			d, ok := detail.(map[string]interface{})
-			require.True(t, ok)
-			switch d["@type"] {
-			case ErrInfoType:
-				errInfo = d
-			case ResourceInfoType:
-				resInfo = d
-			default:
-				require.FailNow(t, "unexpected status detail")
-			}
-		}
-
-		// Confirm that the ErrorInfo details are correct
-		require.NotEmptyf(t, errInfo, "ErrorInfo not found in %+v", detailsArray)
-		require.Equal(t, "dapr.io", errInfo["domain"])
-		require.Equal(t, kiterrors.CodePrefixPubSub+kiterrors.CodeNotFound, errInfo["reason"])
-
-		// Confirm that the ResourceInfo details are correct
-		require.NotEmptyf(t, resInfo, "ResourceInfo not found in %+v", detailsArray)
-		require.Equal(t, "pubsub", resInfo["resource_type"])
-		require.Equal(t, name, resInfo["resource_name"])
+		// Confirm that the first element of the 'details' array has the correct ErrorInfo details
+		detailsObject, ok := detailsArray[0].(map[string]interface{})
+		require.True(t, ok)
+		require.Equal(t, "dapr.io", detailsObject["domain"])
+		require.Equal(t, kiterrors.CodePrefixPubSub+kiterrors.CodeNotFound, detailsObject["reason"])
+		require.Equal(t, ErrInfoType, detailsObject["@type"])
 	})
 
 	t.Run("pubsub unmarshal events", func(t *testing.T) {

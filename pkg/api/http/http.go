@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	httpCodes "net/http"
 	nethttp "net/http"
 	"strconv"
 	"strings"
@@ -694,18 +695,18 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) getStateStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (state.Store, string, error) {
+	storeName := a.getStateStoreName(reqCtx)
+
 	if a.universal.CompStore().StateStoresLen() == 0 {
-		err := apierrors.StateStoreNotConfigured()
+		err := apierrors.NotConfigured(storeName, string(contribMetadata.StateStoreType), map[string]string{"appID": a.universal.AppID()}, codes.FailedPrecondition, httpCodes.StatusInternalServerError, "ERR_STATE_STORE_NOT_CONFIGURED", kiterrors.CodePrefixStateStore+kiterrors.CodeNotConfigured)
 		log.Debug(err)
 		universalFastHTTPErrorResponder(reqCtx, err)
 		return nil, "", err
 	}
 
-	storeName := a.getStateStoreName(reqCtx)
-
 	stateStore, ok := a.universal.CompStore().GetStateStore(storeName)
 	if !ok {
-		err := apierrors.StateStoreNotFound(storeName)
+		err := apierrors.NotFound(storeName, string(contribMetadata.StateStoreType), map[string]string{"appID": a.universal.AppID()}, codes.InvalidArgument, httpCodes.StatusBadRequest, "ERR_STATE_STORE_NOT_FOUND", kiterrors.CodePrefixStateStore+kiterrors.CodeNotFound)
 		log.Debug(err)
 		universalFastHTTPErrorResponder(reqCtx, err)
 		return nil, "", err
@@ -1839,7 +1840,7 @@ func (a *api) validateAndGetPubsubAndTopic(reqCtx *fasthttp.RequestCtx) (pubsub.
 	metadata := getMetadataFromFastHTTPRequest(reqCtx)
 
 	if a.pubsubAdapter == nil {
-		err = apierrors.PubSubNotConfigured(pubsubName, pubsubType, metadata)
+		err = apierrors.NotConfigured(pubsubName, pubsubType, metadata, codes.FailedPrecondition, httpCodes.StatusBadRequest, "ERR_PUBSUB_NOT_CONFIGURED", kiterrors.CodePrefixPubSub+kiterrors.CodeNotConfigured)
 		return nil, "", "", err
 	}
 
@@ -1850,7 +1851,7 @@ func (a *api) validateAndGetPubsubAndTopic(reqCtx *fasthttp.RequestCtx) (pubsub.
 
 	thepubsub, ok := a.universal.CompStore().GetPubSub(pubsubName)
 	if !ok {
-		err = apierrors.PubSubNotFound(pubsubName, pubsubType, metadata)
+		err = apierrors.NotFound(pubsubName, pubsubType, metadata, codes.InvalidArgument, httpCodes.StatusNotFound, "ERR_PUBSUB_NOT_FOUND", kiterrors.CodePrefixPubSub+kiterrors.CodeNotFound)
 		return nil, "", "", err
 	}
 
@@ -1915,17 +1916,18 @@ type stateTransactionRequestBodyOperation struct {
 }
 
 func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
+	storeName := reqCtx.UserValue(storeNameParam).(string)
+
 	if a.universal.CompStore().StateStoresLen() == 0 {
-		err := apierrors.StateStoreNotConfigured()
+		err := apierrors.NotConfigured(storeName, string(contribMetadata.StateStoreType), map[string]string{"appID": a.universal.AppID()}, codes.FailedPrecondition, httpCodes.StatusInternalServerError, "ERR_STATE_STORE_NOT_CONFIGURED", kiterrors.CodePrefixStateStore+kiterrors.CodeNotConfigured)
 		log.Debug(err)
 		universalFastHTTPErrorResponder(reqCtx, err)
 		return
 	}
 
-	storeName := reqCtx.UserValue(storeNameParam).(string)
 	store, ok := a.universal.CompStore().GetStateStore(storeName)
 	if !ok {
-		err := apierrors.StateStoreNotFound(storeName)
+		err := apierrors.NotFound(storeName, string(contribMetadata.StateStoreType), map[string]string{"appID": a.universal.AppID()}, codes.InvalidArgument, httpCodes.StatusBadRequest, "ERR_STATE_STORE_NOT_FOUND", kiterrors.CodePrefixStateStore+kiterrors.CodeNotFound)
 		log.Debug(err)
 		universalFastHTTPErrorResponder(reqCtx, err)
 		return

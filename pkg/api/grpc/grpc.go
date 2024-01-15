@@ -19,10 +19,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	kiterrors "github.com/dapr/kit/errors"
 
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
 
@@ -127,7 +130,7 @@ func (a *api) validateAndGetPubsubAndTopic(pubsubName, topic string, reqMeta map
 	pubsubType := string(contribMetadata.PubSubType)
 
 	if a.pubsubAdapter == nil {
-		err = apierrors.PubSubNotConfigured(pubsubName, pubsubType, reqMeta)
+		err = apierrors.NotConfigured(pubsubName, pubsubType, reqMeta, codes.FailedPrecondition, http.StatusBadRequest, "ERR_PUBSUB_NOT_CONFIGURED", kiterrors.CodePrefixPubSub+kiterrors.CodeNotConfigured)
 		return nil, "", "", false, err
 	}
 
@@ -138,7 +141,7 @@ func (a *api) validateAndGetPubsubAndTopic(pubsubName, topic string, reqMeta map
 
 	thepubsub, ok := a.Universal.CompStore().GetPubSub(pubsubName)
 	if !ok {
-		err = apierrors.PubSubNotFound(pubsubName, pubsubType, reqMeta)
+		err = apierrors.NotFound(pubsubName, pubsubType, reqMeta, codes.InvalidArgument, http.StatusNotFound, "ERR_PUBSUB_NOT_FOUND", kiterrors.CodePrefixPubSub+kiterrors.CodeNotFound)
 		return nil, "", "", false, err
 	}
 

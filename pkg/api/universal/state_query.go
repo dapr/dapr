@@ -16,6 +16,10 @@ package universal
 import (
 	"context"
 	"encoding/json"
+	contribMetadata "github.com/dapr/components-contrib/metadata"
+	kiterrors "github.com/dapr/kit/errors"
+	"google.golang.org/grpc/codes"
+	httpCodes "net/http"
 	"time"
 
 	"github.com/dapr/components-contrib/state"
@@ -29,14 +33,14 @@ import (
 
 func (a *Universal) GetStateStore(name string) (state.Store, error) {
 	if a.compStore.StateStoresLen() == 0 {
-		err := errors.StateStoreNotConfigured()
+		err := errors.NotConfigured(name, string(contribMetadata.StateStoreType), map[string]string{"appID": a.AppID()}, codes.FailedPrecondition, httpCodes.StatusInternalServerError, "ERR_STATE_STORE_NOT_CONFIGURED", kiterrors.CodePrefixStateStore+kiterrors.CodeNotConfigured)
 		a.logger.Debug(err)
 		return nil, err
 	}
 
 	stateStore, ok := a.compStore.GetStateStore(name)
 	if !ok {
-		err := errors.StateStoreNotFound(name)
+		err := errors.NotFound(name, string(contribMetadata.StateStoreType), map[string]string{"appID": a.AppID()}, codes.InvalidArgument, httpCodes.StatusBadRequest, "ERR_STATE_STORE_NOT_FOUND", kiterrors.CodePrefixStateStore+kiterrors.CodeNotFound)
 		a.logger.Debug(err)
 		return nil, err
 	}
