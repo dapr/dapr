@@ -598,21 +598,12 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 			if errMarshal != nil {
 				return errMarshal
 			}
-			requestBytes := eventData
-			if method == CreateWorkflowInstanceMethod {
-				requestBytes, err = json.Marshal(CreateWorkflowInstanceRequest{
-					Policy:          &api.OrchestrationIdReusePolicy{},
-					StartEventBytes: eventData,
-				})
-				if err != nil {
-					return fmt.Errorf("failed to marshal createWorkflowInstanceRequest: %w", err)
-				}
-			}
+
 			wfLogger.Debugf("Workflow actor '%s': invoking method '%s' on workflow actor '%s'", actorID, method, msg.TargetInstanceID)
 			req := invokev1.
 				NewInvokeMethodRequest(method).
 				WithActor(wf.config.workflowActorType, msg.TargetInstanceID).
-				WithRawDataBytes(requestBytes).
+				WithRawDataBytes(eventData).
 				WithContentType(invokev1.OctetStreamContentType)
 			defer req.Close()
 
