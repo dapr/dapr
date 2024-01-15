@@ -17,6 +17,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/microsoft/durabletask-go/backend"
+
 	"github.com/dapr/components-contrib/bindings"
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
@@ -58,6 +60,10 @@ type BindingManager interface {
 	manager
 }
 
+type WorkflowBackendManager interface {
+	GetBackend() (backend.Backend, bool)
+}
+
 func (p *Processor) managerFromComp(comp componentsapi.Component) (manager, error) {
 	category := p.category(comp)
 	m, ok := p.managers[category]
@@ -89,4 +95,10 @@ func (p *Processor) Binding() BindingManager {
 	p.lock.RLock()
 	defer p.lock.RUnlock()
 	return p.binding
+}
+
+func (p *Processor) WorkflowBackend() WorkflowBackendManager {
+	p.lock.RLock()
+	defer p.lock.RUnlock()
+	return p.workflowBackend
 }
