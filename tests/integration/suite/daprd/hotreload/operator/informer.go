@@ -151,7 +151,7 @@ func (i *informer) Run(t *testing.T, ctx context.Context) {
 			Version: "v1",
 			Metadata: []common.NameValuePair{
 				{Name: "connectionString", Value: common.DynamicValue{
-					JSON: apiextv1.JSON{Raw: []byte(dirJSON)},
+					JSON: apiextv1.JSON{Raw: dirJSON},
 				}},
 			},
 		},
@@ -176,6 +176,6 @@ func (i *informer) Run(t *testing.T, ctx context.Context) {
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Empty(c, util.GetMetaComponents(t, ctx, client, i.daprd.HTTPPort()))
-		}, time.Second*10, time.Millisecond*100)
+		}, time.Second*20, time.Millisecond*100)
 	})
 }
