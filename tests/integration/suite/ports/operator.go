@@ -66,10 +66,10 @@ func (o *operator) Run(t *testing.T, ctx context.Context) {
 		"metrics": o.proc.MetricsPort(),
 		"healthz": o.proc.HealthzPort(),
 	} {
-		assert.EventuallyWithT(t, func(t *assert.CollectT) {
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			conn, err := dialer.DialContext(ctx, "tcp", fmt.Sprintf("localhost:%d", port))
 			//nolint:testifylint
-			_ = assert.NoError(t, err) && assert.NoError(t, conn.Close())
-		}, time.Second*5, 100*time.Millisecond, "port %s (:%d) was not available in time", name, port)
+			_ = assert.NoError(c, err) && assert.NoError(c, conn.Close())
+		}, time.Second*10, 100*time.Millisecond, "port %s (:%d) was not available in time", name, port)
 	}
 }

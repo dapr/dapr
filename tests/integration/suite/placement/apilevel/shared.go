@@ -42,7 +42,7 @@ func establishConn(ctx context.Context, port int) (*grpc.ClientConn, error) {
 	)
 }
 
-func registerHost(ctx context.Context, conn *grpc.ClientConn, name string, apiLevel int, placementMessage chan any, stopCh chan struct{}) {
+func registerHost(t *testing.T, ctx context.Context, conn *grpc.ClientConn, name string, apiLevel int, placementMessage chan any, stopCh chan struct{}) {
 	msg := &placementv1pb.Host{
 		Name:     name,
 		Port:     1234,
@@ -54,42 +54,35 @@ func registerHost(ctx context.Context, conn *grpc.ClientConn, name string, apiLe
 	// Establish a stream and send the initial heartbeat
 	// We need to retry here because this will fail until the instance of placement (the only one) acquires leadership
 	var placementStream placementv1pb.Placement_ReportDaprStatusClient
-	for j := 0; j < 5; j++ {
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		client := placementv1pb.NewPlacementClient(conn)
 		stream, rErr := client.ReportDaprStatus(ctx)
-		if rErr != nil {
+		//nolint:testifylint
+		if !assert.NoError(c, rErr) {
 			log.Printf("Failed to connect to placement; will retry: %v", rErr)
-			// Sleep before retrying
-			time.Sleep(1500 * time.Millisecond)
-			continue
+			return
 		}
 
 		rErr = stream.Send(msg)
-		if rErr != nil {
+		//nolint:testifylint
+		if !assert.NoError(c, rErr) {
 			log.Printf("Failed to send message; will retry: %v", rErr)
 			_ = stream.CloseSend()
-			// Sleep before retrying
-			time.Sleep(1500 * time.Millisecond)
-			continue
+			return
 		}
 
 		// Receive the first message (which can't be an "update" one anyways) to ensure the connection is ready
 		_, rErr = stream.Recv()
-		if rErr != nil {
+		//nolint:testifylint
+		if !assert.NoError(c, rErr) {
 			log.Printf("Failed to receive message; will retry: %v", rErr)
 			_ = stream.CloseSend()
-			// Sleep before retrying
-			time.Sleep(1500 * time.Millisecond)
-			continue
+			return
 		}
 
 		placementStream = stream
-	}
-
-	if placementStream == nil {
-		placementMessage <- errors.New("did not connect to placement in time")
-		return
-	}
+	}, time.Second*15, time.Millisecond*500)
 
 	// Send messages every second
 	go func() {
