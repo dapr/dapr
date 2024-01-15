@@ -25,10 +25,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	kiterrors "github.com/dapr/kit/errors"
-
-	apierrors "github.com/dapr/dapr/pkg/api/errors"
-
 	otelTrace "go.opentelemetry.io/otel/trace"
 	"golang.org/x/exp/slices"
 	"google.golang.org/grpc"
@@ -44,6 +40,7 @@ import (
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
+	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/pkg/api/grpc/metadata"
 	"github.com/dapr/dapr/pkg/api/grpc/proxy/codec"
 	"github.com/dapr/dapr/pkg/api/universal"
@@ -62,6 +59,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/utils"
+	kiterrors "github.com/dapr/kit/errors"
 	"github.com/dapr/kit/logger"
 )
 
@@ -156,7 +154,7 @@ func (a *api) validateAndGetPubsubAndTopic(pubsubName, topic string, reqMeta map
 		return nil, "", "", false, err
 	}
 
-	return thepubsub.Component, pubsubName, topic, rawPayload, err
+	return thepubsub.Component, pubsubName, topic, rawPayload, nil
 }
 
 func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*emptypb.Empty, error) {
@@ -218,15 +216,16 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 
 	if err != nil {
 		var nerr error
-		nerr = apierrors.PubSubPublishMessage(pubsubName, string(contribMetadata.PubSubType), topic, err)
 
-		if errors.As(err, &runtimePubsub.NotAllowedError{}) {
+		switch {
+		case errors.Is(err, &runtimePubsub.NotAllowedError{}):
 			nerr = apierrors.PubSubPublishForbidden(pubsubName, string(contribMetadata.PubSubType), topic, a.AppID(), err)
+		case errors.Is(err, &runtimePubsub.NotFoundError{}):
+			nerr = apierrors.PubSubTestNotFound(pubsubName, string(contribMetadata.PubSubType), topic, err)
+		default:
+			nerr = apierrors.PubSubPublishMessage(pubsubName, string(contribMetadata.PubSubType), topic, err)
 		}
 
-		if errors.As(err, &runtimePubsub.NotFoundError{}) {
-			nerr = apierrors.PubSubTestNotFound(pubsubName, string(contribMetadata.PubSubType), topic, err)
-		}
 		apiServerLogger.Debug(nerr)
 		return &emptypb.Empty{}, nerr
 	}
@@ -444,14 +443,13 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 		var nerr error
 		// Only respond with error if it is permission denied or not found.
 		// On error, the response will be empty.
-		nerr = apierrors.PubSubPublishMessage(pubsubName, string(contribMetadata.PubSubType), topic, err)
-
-		if errors.As(err, &runtimePubsub.NotAllowedError{}) {
+		switch {
+		case errors.Is(err, &runtimePubsub.NotAllowedError{}):
 			nerr = apierrors.PubSubPublishForbidden(pubsubName, string(contribMetadata.PubSubType), topic, a.AppID(), err)
-		}
-
-		if errors.As(err, &runtimePubsub.NotFoundError{}) {
+		case errors.Is(err, &runtimePubsub.NotFoundError{}):
 			nerr = apierrors.PubSubTestNotFound(pubsubName, string(contribMetadata.PubSubType), topic, err)
+		default:
+			nerr = apierrors.PubSubPublishMessage(pubsubName, string(contribMetadata.PubSubType), topic, err)
 		}
 
 		apiServerLogger.Debug(nerr)

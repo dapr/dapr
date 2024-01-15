@@ -25,8 +25,6 @@ import (
 	"strings"
 	"time"
 
-	kiterrors "github.com/dapr/kit/errors"
-
 	"github.com/go-chi/chi/v5"
 	"github.com/mitchellh/mapstructure"
 	"github.com/valyala/fasthttp"
@@ -57,6 +55,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/utils"
+	kiterrors "github.com/dapr/kit/errors"
 )
 
 // API returns a list of HTTP endpoints for Dapr.
@@ -1621,21 +1620,19 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 
 	if err != nil {
 		var nerr error
-		nerr = apierrors.PubSubPublishMessage(pubsubName, string(contribMetadata.PubSubType), topic, err)
-
-		if errors.As(err, &runtimePubsub.NotAllowedError{}) {
+		switch {
+		case errors.Is(err, &runtimePubsub.NotAllowedError{}):
 			nerr = apierrors.PubSubPublishForbidden(pubsubName, string(contribMetadata.PubSubType), topic, a.universal.AppID(), err)
-		}
-
-		if errors.As(err, &runtimePubsub.NotFoundError{}) {
+		case errors.Is(err, &runtimePubsub.NotFoundError{}):
 			nerr = apierrors.PubSubTestNotFound(pubsubName, string(contribMetadata.PubSubType), topic, err)
+		default:
+			nerr = apierrors.PubSubPublishMessage(pubsubName, string(contribMetadata.PubSubType), topic, err)
 		}
 
 		universalFastHTTPErrorResponder(reqCtx, nerr)
 		log.Debug(nerr)
-	} else {
-		fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
 	}
+	fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
 }
 
 type bulkPublishMessageEntry struct {
@@ -1790,31 +1787,28 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 			bulkRes.FailedEntries = append(bulkRes.FailedEntries, resEntry)
 		}
 		bulkRes.ErrorCode = "ERR_PUBSUB_PUBLISH_MESSAGE"
+		var nerr error
 
-		if !errors.As(err, &runtimePubsub.NotAllowedError{}) && !errors.As(err, &runtimePubsub.NotFoundError{}) {
-			err = apierrors.PubSubPublishMessage(pubsubName, string(contribMetadata.PubSubType), topic, err)
-			log.Debug(err)
-		}
-
-		if errors.As(err, &runtimePubsub.NotAllowedError{}) {
-			nerr := apierrors.PubSubPublishForbidden(pubsubName, string(contribMetadata.PubSubType), topic, a.universal.AppID(), err)
+		switch {
+		case errors.Is(err, &runtimePubsub.NotAllowedError{}):
+			nerr = apierrors.PubSubPublishForbidden(pubsubName, string(contribMetadata.PubSubType), topic, a.universal.AppID(), err)
 			standardizedErr, ok := kiterrors.FromError(nerr)
 			if ok {
 				fasthttpRespond(reqCtx, fasthttpResponseWithError(standardizedErr.HTTPStatusCode(), standardizedErr), closeChildSpans)
 			}
 			log.Debug(nerr)
 			return
-		}
-
-		if errors.As(err, &runtimePubsub.NotFoundError{}) {
-			nerr := apierrors.PubSubTestNotFound(pubsubName, string(contribMetadata.PubSubType), topic, err)
+		case errors.Is(err, &runtimePubsub.NotFoundError{}):
+			nerr = apierrors.PubSubTestNotFound(pubsubName, string(contribMetadata.PubSubType), topic, err)
 			standardizedErr, ok := kiterrors.FromError(nerr)
 			if ok {
 				fasthttpRespond(reqCtx, fasthttpResponseWithError(standardizedErr.HTTPStatusCode(), standardizedErr), closeChildSpans)
 			}
-
 			log.Debug(nerr)
 			return
+		default:
+			nerr = apierrors.PubSubPublishMessage(pubsubName, string(contribMetadata.PubSubType), topic, err)
+			log.Debug(nerr)
 		}
 
 		// Return the error along with the list of failed entries.
@@ -1860,7 +1854,7 @@ func (a *api) validateAndGetPubsubAndTopic(reqCtx *fasthttp.RequestCtx) (pubsub.
 		return nil, "", "", err
 	}
 
-	return thepubsub.Component, pubsubName, topic, err
+	return thepubsub.Component, pubsubName, topic, nil
 }
 
 // GetStatusCodeFromMetadata extracts the http status code from the metadata if it exists.
