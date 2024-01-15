@@ -19,9 +19,12 @@ import (
 	"net"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/reflection"
 
 	"github.com/dapr/components-contrib/state"
@@ -37,8 +40,8 @@ type StateStore struct {
 	listener   net.Listener
 	socketName string
 	component  *component
+	server     *grpc.Server
 	srvErrCh   chan error
-	stopCh     chan struct{}
 }
 
 func New(t *testing.T, fopts ...Option) *StateStore {
@@ -61,12 +64,21 @@ func New(t *testing.T, fopts ...Option) *StateStore {
 	listener, err := net.Listen("unix", path)
 	require.NoError(t, err)
 
+	component := newComponent(t, opts)
+
+	server := grpc.NewServer()
+	compv1pb.RegisterStateStoreServer(server, component)
+	compv1pb.RegisterTransactionalStateStoreServer(server, component)
+	compv1pb.RegisterQueriableStateStoreServer(server, component)
+	compv1pb.RegisterTransactionalStoreMultiMaxSizeServer(server, component)
+	reflection.Register(server)
+
 	return &StateStore{
 		listener:   listener,
-		component:  newComponent(t, opts),
+		component:  component,
 		socketName: socketFile,
+		server:     server,
 		srvErrCh:   make(chan error),
-		stopCh:     make(chan struct{}),
 	}
 }
 
@@ -76,26 +88,27 @@ func (s *StateStore) SocketName() string {
 
 func (s *StateStore) Run(t *testing.T, ctx context.Context) {
 	s.component.impl.Init(ctx, state.Metadata{})
-
-	server := grpc.NewServer()
-	compv1pb.RegisterStateStoreServer(server, s.component)
-	compv1pb.RegisterTransactionalStateStoreServer(server, s.component)
-	compv1pb.RegisterQueriableStateStoreServer(server, s.component)
-	compv1pb.RegisterTransactionalStoreMultiMaxSizeServer(server, s.component)
-	reflection.Register(server)
-
 	go func() {
-		s.srvErrCh <- server.Serve(s.listener)
+		s.srvErrCh <- s.server.Serve(s.listener)
 	}()
 
-	go func() {
-		<-s.stopCh
-		server.GracefulStop()
-	}()
+	conn, err := grpc.DialContext(ctx, "unix://"+s.listener.Addr().String(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithBlock(),
+	)
+	require.NoError(t, err)
+
+	client := compv1pb.NewStateStoreClient(conn)
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		_, err = client.Ping(ctx, new(compv1pb.PingRequest))
+		//nolint:testifylint
+		assert.NoError(c, err)
+	}, 10*time.Second, 100*time.Millisecond)
+	require.NoError(t, conn.Close())
 }
 
 func (s *StateStore) Cleanup(t *testing.T) {
-	close(s.stopCh)
+	s.server.GracefulStop()
 	require.NoError(t, <-s.srvErrCh)
 	require.NoError(t, s.component.impl.(io.Closer).Close())
 }
