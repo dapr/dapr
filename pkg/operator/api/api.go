@@ -191,7 +191,7 @@ func (a *apiServer) Ready(ctx context.Context) error {
 
 // GetConfiguration returns a Dapr configuration.
 func (a *apiServer) GetConfiguration(ctx context.Context, in *operatorv1pb.GetConfigurationRequest) (*operatorv1pb.GetConfigurationResponse, error) {
-	spiffeID, err := utils.GetSpiffeIDFromContext(ctx)
+	spiffeID, err := getSpiffeIDFromContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -215,7 +215,7 @@ func (a *apiServer) GetConfiguration(ctx context.Context, in *operatorv1pb.GetCo
 
 // ListComponents returns a list of Dapr components.
 func (a *apiServer) ListComponents(ctx context.Context, in *operatorv1pb.ListComponentsRequest) (*operatorv1pb.ListComponentResponse, error) {
-	spiffeID, err := utils.GetSpiffeIDFromContext(ctx)
+	spiffeID, err := getSpiffeIDFromContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -397,7 +397,7 @@ func (a *apiServer) ListSubscriptions(ctx context.Context, in *emptypb.Empty) (*
 
 // ListSubscriptionsV2 returns a list of Dapr pub/sub subscriptions. Use ListSubscriptionsRequest to expose pod info.
 func (a *apiServer) ListSubscriptionsV2(ctx context.Context, in *operatorv1pb.ListSubscriptionsRequest) (*operatorv1pb.ListSubscriptionsResponse, error) {
-	spiffeID, err := utils.GetSpiffeIDFromContext(ctx)
+	spiffeID, err := getSpiffeIDFromContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -434,7 +434,7 @@ func (a *apiServer) ListSubscriptionsV2(ctx context.Context, in *operatorv1pb.Li
 
 // GetResiliency returns a specified resiliency object.
 func (a *apiServer) GetResiliency(ctx context.Context, in *operatorv1pb.GetResiliencyRequest) (*operatorv1pb.GetResiliencyResponse, error) {
-	spiffeID, err := utils.GetSpiffeIDFromContext(ctx)
+	spiffeID, err := getSpiffeIDFromContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -458,7 +458,7 @@ func (a *apiServer) GetResiliency(ctx context.Context, in *operatorv1pb.GetResil
 
 // ListResiliency gets the list of applied resiliencies.
 func (a *apiServer) ListResiliency(ctx context.Context, in *operatorv1pb.ListResiliencyRequest) (*operatorv1pb.ListResiliencyResponse, error) {
-	spiffeID, err := utils.GetSpiffeIDFromContext(ctx)
+	spiffeID, err := getSpiffeIDFromContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -493,7 +493,7 @@ func (a *apiServer) ListResiliency(ctx context.Context, in *operatorv1pb.ListRes
 // TODO: @joshvanl: Authorize pod name and namespace matches the SPIFFE ID of
 // the caller.
 func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv operatorv1pb.Operator_ComponentUpdateServer) error { //nolint:nosnakecase
-	spiffeID, err := utils.GetSpiffeIDFromContext(srv.Context())
+	spiffeID, err := getSpiffeIDFromContext(srv.Context())
 	if err != nil {
 		return err
 	}
@@ -569,7 +569,7 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 
 // GetHTTPEndpoint returns a specified http endpoint object.
 func (a *apiServer) GetHTTPEndpoint(ctx context.Context, in *operatorv1pb.GetResiliencyRequest) (*operatorv1pb.GetHTTPEndpointResponse, error) {
-	spiffeID, err := utils.GetSpiffeIDFromContext(ctx)
+	spiffeID, err := getSpiffeIDFromContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -593,7 +593,7 @@ func (a *apiServer) GetHTTPEndpoint(ctx context.Context, in *operatorv1pb.GetRes
 
 // ListHTTPEndpoints gets the list of applied http endpoints.
 func (a *apiServer) ListHTTPEndpoints(ctx context.Context, in *operatorv1pb.ListHTTPEndpointsRequest) (*operatorv1pb.ListHTTPEndpointsResponse, error) {
-	spiffeID, err := utils.GetSpiffeIDFromContext(ctx)
+	spiffeID, err := getSpiffeIDFromContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -633,7 +633,7 @@ func (a *apiServer) ListHTTPEndpoints(ctx context.Context, in *operatorv1pb.List
 
 // HTTPEndpointUpdate updates Dapr sidecars whenever an http endpoint in the cluster is modified.
 func (a *apiServer) HTTPEndpointUpdate(in *operatorv1pb.HTTPEndpointUpdateRequest, srv operatorv1pb.Operator_HTTPEndpointUpdateServer) error { //nolint:nosnakecase
-	spiffeID, err := utils.GetSpiffeIDFromContext(srv.Context())
+	spiffeID, err := getSpiffeIDFromContext(srv.Context())
 	if err != nil {
 		return err
 	}

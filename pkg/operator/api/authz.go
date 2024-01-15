@@ -14,6 +14,8 @@ limitations under the License.
 package api
 
 import (
+	"context"
+
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -28,4 +30,16 @@ func (a *apiServer) authzRequest(spiffeID *spiffe.Parsed, namespace string) erro
 	}
 
 	return nil
+}
+
+// getSpiffeIDFromContext returns the SPIFFE ID from the given context.
+// If the peer does not have a SPIFFE ID, or the credentials for the
+// connection were not provided by this package, the function returns an error.
+func getSpiffeIDFromContext(ctx context.Context) (*spiffe.Parsed, error) {
+	spiffeID, ok, err := spiffe.FromGRPCContext(ctx)
+	if err != nil || !ok {
+		return nil, status.New(codes.PermissionDenied, "failed to determine identity").Err()
+	}
+
+	return spiffeID, nil
 }

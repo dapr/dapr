@@ -14,19 +14,13 @@ limitations under the License.
 package utils
 
 import (
-	"context"
 	"net"
 	"os"
 	"runtime"
 	"testing"
 
-	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-
-	"github.com/dapr/dapr/tests/util"
 )
 
 func TestContains(t *testing.T) {
@@ -315,24 +309,4 @@ func Test_isControlPlaneService(t *testing.T) {
 			assert.Equal(t, test.exp, IsControlPlaneService(test.name))
 		})
 	}
-}
-
-func TestGetSpiffeIDFromContext(t *testing.T) {
-	appID := spiffeid.RequireFromString("spiffe://example.org/ns/ns1/app1")
-	serverID := spiffeid.RequireFromString("spiffe://example.org/ns/dapr-system/dapr-operator")
-	pki := util.GenPKI(t, util.PKIOptions{LeafID: serverID, ClientID: appID})
-	// spiffeID, err := GetSpiffeIDFromContext(pki.ClientGRPCCtx(t))
-
-	t.Run("no context should error", func(t *testing.T) {
-		_, err := GetSpiffeIDFromContext(context.Background())
-		require.Error(t, err)
-		assert.Equal(t, codes.PermissionDenied, status.Code(err))
-	})
-	t.Run("correct spiffeid should be fetched", func(t *testing.T) {
-		spiffeID, err := GetSpiffeIDFromContext(pki.ClientGRPCCtx(t))
-		require.NoError(t, err)
-		assert.Equal(t, "app1", spiffeID.AppID())
-		assert.Equal(t, "ns1", spiffeID.Namespace())
-		assert.Equal(t, "example.org", spiffeID.TrustDomain().String())
-	})
 }
