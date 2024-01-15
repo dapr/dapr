@@ -379,8 +379,10 @@ spec:
 			resp := util.GetMetaComponents(c, ctx, s.client, s.daprd.HTTPPort())
 			assert.ElementsMatch(c, []*rtpbv1.RegisteredComponents{
 				{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
-				{Name: "bar", Type: "state.in-memory", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"}},
+				{
+					Name: "bar", Type: "state.in-memory", Version: "v1",
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+				},
 			}, resp)
 		}, time.Second*5, time.Millisecond*100)
 

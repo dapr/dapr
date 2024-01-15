@@ -149,6 +149,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 	t.Run("expect 1 component to be loaded", func(t *testing.T) {
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
+			//nolint:testifylint
 			assert.NoError(c, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 2)
 		}, time.Second*20, time.Millisecond*100)

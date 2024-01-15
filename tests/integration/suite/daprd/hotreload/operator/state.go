@@ -111,7 +111,8 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 
 		assert.ElementsMatch(t, resp, []*rtv1.RegisteredComponents{
 			{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
-			{Name: "123",
+			{
+				Name:    "123",
 				Type:    "state.in-memory",
 				Version: "v1",
 				Capabilities: []string{

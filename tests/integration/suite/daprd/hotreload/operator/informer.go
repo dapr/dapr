@@ -140,7 +140,8 @@ func (i *informer) Run(t *testing.T, ctx context.Context) {
 		metaComponents := util.GetMetaComponents(t, ctx, client, i.daprd.HTTPPort())
 		assert.ElementsMatch(t, metaComponents, []*rtv1.RegisteredComponents{
 			{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
-			{Name: "123", Type: "state.in-memory", Version: "v1",
+			{
+				Name: "123", Type: "state.in-memory", Version: "v1",
 				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
 			},
 		})
@@ -173,7 +174,8 @@ func (i *informer) Run(t *testing.T, ctx context.Context) {
 			if assert.Len(c, util.GetMetaComponents(t, ctx, client, i.daprd.HTTPPort()), 2) {
 				assert.ElementsMatch(c, util.GetMetaComponents(t, ctx, client, i.daprd.HTTPPort()), []*rtv1.RegisteredComponents{
 					{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
-					{Name: "abc", Type: "state.sqlite", Version: "v1",
+					{
+						Name: "abc", Type: "state.sqlite", Version: "v1",
 						Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 					},
 				})

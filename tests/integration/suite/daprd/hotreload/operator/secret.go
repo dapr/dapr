@@ -443,8 +443,10 @@ func (s *secret) Run(t *testing.T, ctx context.Context) {
 			assert.Len(c, resp, 2)
 			assert.ElementsMatch(c, resp, []*rtpbv1.RegisteredComponents{
 				{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
-				{Name: "bar", Type: "state.in-memory", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"}},
+				{
+					Name: "bar", Type: "state.in-memory", Version: "v1",
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+				},
 			})
 		}, time.Second*5, time.Millisecond*100)
 
