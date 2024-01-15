@@ -35,7 +35,7 @@ func parseEtcdUrls(strs []string) ([]url.URL, error) {
 
 func conf() *embed.Config {
 	config := embed.NewConfig()
-	config.Name = "scheduler-etcd"
+	config.Name = "localhost"
 	config.Dir = "/tmp/my-embedded-ectd-cluster"
 	// config.LPUrls = parseEtcdUrls([]string{"http://0.0.0.0:2380"})
 	// config.LCUrls = parseEtcdUrls([]string{"http://0.0.0.0:2379"})
