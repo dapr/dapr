@@ -355,6 +355,10 @@ func (s *workflowState) GetPurgeRequest(actorID string) (*actors.TransactionalRe
 			Operation: actors.Delete,
 			Request:   actors.TransactionalDelete{Key: metadataKey},
 		},
+		actors.TransactionalOperation{
+			Operation: actors.Delete,
+			Request:   actors.TransactionalDelete{Key: workflowStartTimeKey},
+		},
 	)
 
 	return req, nil
