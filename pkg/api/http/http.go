@@ -97,6 +97,7 @@ const (
 	nameParam                = "name"
 	workflowComponent        = "workflowComponent"
 	workflowName             = "workflowName"
+	workflowStartTime        = "dapr.workflow.start_time"
 	instanceID               = "instanceID"
 	eventName                = "eventName"
 	consistencyParam         = "consistency"

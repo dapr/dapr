@@ -255,10 +255,19 @@ func (wf *workflowActor) createIfCompleted(ctx context.Context, runtimeState *ba
 }
 
 func (wf *workflowActor) scheduleWorkflowStart(ctx context.Context, actorID string, startEvent *backend.HistoryEvent, state *workflowState) error {
-	// Schedule a reminder to execute immediately after this operation. The reminder will trigger the actual
+	// Schedule a reminder to execute. The reminder will trigger the actual
 	// workflow execution. This is preferable to using the current thread so that we don't block the client
 	// while the workflow logic is running.
-	if _, err := wf.createReliableReminder(ctx, actorID, "start", nil, 0); err != nil {
+	es := startEvent.GetExecutionStarted()
+	if es == nil {
+		return errors.New("invalid execution start event")
+	}
+	// Get the scheduled start time from the execution start event
+	delay := time.Until(es.GetScheduledStartTimestamp().AsTime())
+	if delay < 0 {
+		delay = 0
+	}
+	if _, err := wf.createReliableReminder(ctx, actorID, "start", nil, delay); err != nil {
 		return err
 	}
 

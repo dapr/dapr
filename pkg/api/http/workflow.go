@@ -210,7 +210,11 @@ func (a *api) onStartWorkflowHandler() http.HandlerFunc {
 					}
 					in.InstanceId = randomID.String()
 				}
-
+				wfStartTimeStr := r.URL.Query().Get(workflowStartTime)
+				if wfStartTimeStr != "" {
+					in.Options = make(map[string]string, 1)
+					in.Options[workflowStartTime] = wfStartTimeStr
+				}
 				// We accept the HTTP request body as the input to the workflow
 				// without making any assumptions about its format.
 				var err error
