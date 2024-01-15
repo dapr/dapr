@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -53,6 +54,10 @@ type errors struct {
 }
 
 func (e *errors) Setup(t *testing.T) []framework.Option {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping unix socket based test on windows")
+	}
+
 	// Darwin enforces a maximum 104 byte socket name limit, so we need to be a
 	// bit fancy on how we generate the name.
 	tmp, err := nettest.LocalPath()
