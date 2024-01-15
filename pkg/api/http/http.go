@@ -1813,8 +1813,7 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 
 		// Return the error along with the list of failed entries.
 		resData, _ := json.Marshal(bulkRes)
-		standardizedErr, ok := kiterrors.FromError(err)
-		if ok {
+		if standardizedErr, ok := kiterrors.FromError(err); ok {
 			fasthttpRespond(reqCtx, fasthttpResponseWithJSON(standardizedErr.HTTPStatusCode(), resData, map[string]string{"responseData": string(resData), "error": standardizedErr.Error()}), closeChildSpans)
 		}
 		return
