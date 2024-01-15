@@ -34,7 +34,7 @@ import (
 
 func (a *Universal) GetStateStore(name string) (state.Store, error) {
 	if a.compStore.StateStoresLen() == 0 {
-		err := errors.NotConfigured(name, string(contribMetadata.StateStoreType), map[string]string{"appID": a.AppID()}, codes.FailedPrecondition, http.StatusInternalServerError, "ERR_STATE_STORE_NOT_CONFIGURED", kiterrors.CodePrefixStateStore+kiterrors.CodeNotConfigured)
+		err := errors.NotConfigured(name, string(contribMetadata.StateStoreType)+" store", map[string]string{"appID": a.AppID()}, codes.FailedPrecondition, http.StatusInternalServerError, "ERR_STATE_STORE_NOT_CONFIGURED", kiterrors.CodePrefixStateStore+kiterrors.CodeNotConfigured)
 		a.logger.Debug(err)
 		return nil, err
 	}
