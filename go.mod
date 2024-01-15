@@ -12,7 +12,7 @@ require (
 	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/cloudevents/sdk-go/v2 v2.14.0
 	github.com/dapr/components-contrib v1.12.1-0.20240111003925-7aa4013ca8b1
-	github.com/dapr/kit v0.12.2-0.20240111185916-c24d1d28cf35
+	github.com/dapr/kit v0.12.2-0.20240115170833-858719eb78ac
 	github.com/evanphx/json-patch/v5 v5.7.0
 	github.com/go-chi/chi/v5 v5.0.10
 	github.com/go-chi/cors v1.2.1
@@ -465,8 +465,6 @@ replace (
 // update retracted indirect dependencies if necessary
 // check for retracted versions: go list -mod=mod -f '{{if .Retracted}}{{.}}{{end}}' -u -m all
 replace github.com/microcosm-cc/bluemonday => github.com/microcosm-cc/bluemonday v1.0.24
-
-replace github.com/dapr/kit => github.com/joshvanl/kit v0.0.0-20240114211428-c517e2d0d025
 
 // Uncomment for local development for testing with changes in the components-contrib && kit repositories.
 // Don't commit with this uncommented!
