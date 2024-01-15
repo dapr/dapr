@@ -76,7 +76,11 @@ func (m *Meta) convertItemsToProps(items []common.NameValuePair) (map[string]str
 	for _, c := range items {
 		val := c.Value.String()
 		for strings.Contains(val, "{uuid}") {
-			val = strings.Replace(val, "{uuid}", uuid.New().String(), 1)
+			u, err := uuid.NewRandom()
+			if err != nil {
+				return nil, fmt.Errorf("failed to generate UUID: %w", err)
+			}
+			val = strings.Replace(val, "{uuid}", u.String(), 1)
 		}
 		if strings.Contains(val, "{podName}") {
 			if m.podName == "" {
@@ -84,7 +88,7 @@ func (m *Meta) convertItemsToProps(items []common.NameValuePair) (map[string]str
 			}
 			val = strings.ReplaceAll(val, "{podName}", m.podName)
 		}
-		val = strings.ReplaceAll(val, "{namespace}", fmt.Sprintf("%s.%s", m.namespace, m.id))
+		val = strings.ReplaceAll(val, "{namespace}", m.namespace+"."+m.id)
 		val = strings.ReplaceAll(val, "{appID}", m.id)
 		properties[c.Name] = val
 	}
