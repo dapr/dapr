@@ -25,6 +25,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	fuzz "github.com/google/gofuzz"
 	"github.com/stretchr/testify/assert"
@@ -152,6 +153,10 @@ func (f *fuzzstate) Run(t *testing.T, ctx context.Context) {
 	f.daprd.WaitUntilRunning(t, ctx)
 
 	httpClient := util.HTTPClient(t)
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Len(c, util.GetMetaComponents(c, ctx, httpClient, f.daprd.HTTPPort()), 2)
+	}, time.Second*20, time.Millisecond*100)
 
 	t.Run("get", func(t *testing.T) {
 		pt := util.NewParallel(t)
