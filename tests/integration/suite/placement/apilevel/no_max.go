@@ -90,7 +90,7 @@ func (n *noMax) Run(t *testing.T, parentCtx context.Context) {
 
 	// Register the first host with API level 10
 	stopCh1 := make(chan struct{})
-	registerHost(ctx, conn, "myapp1", 10, placementMessageCh, stopCh1)
+	registerHost(t, ctx, conn, "myapp1", 10, placementMessageCh, stopCh1)
 
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
 		assert.Equal(t, uint32(10), currentVersion.Load())
@@ -104,7 +104,7 @@ func (n *noMax) Run(t *testing.T, parentCtx context.Context) {
 
 	// Register the second host with API level 20
 	stopCh2 := make(chan struct{})
-	registerHost(ctx, conn, "myapp2", 20, placementMessageCh, stopCh2)
+	registerHost(t, ctx, conn, "myapp2", 20, placementMessageCh, stopCh2)
 
 	// After 3s, we should not receive an update
 	// This can take a while as dissemination happens on intervals

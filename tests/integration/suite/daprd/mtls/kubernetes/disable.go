@@ -17,6 +17,8 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -135,10 +137,17 @@ func (e *disable) Run(t *testing.T, ctx context.Context) {
 		myAppID, err := spiffeid.FromSegments(spiffeid.RequireTrustDomainFromString("public"), "ns", "default", "my-app")
 		require.NoError(t, err)
 
-		gctx, gcancel := context.WithTimeout(ctx, time.Second)
-		t.Cleanup(gcancel)
-		_, err = grpc.DialContext(gctx, e.daprd.InternalGRPCAddress(), sec.GRPCDialOptionMTLS(myAppID),
-			grpc.WithReturnConnectionError())
+		assert.Eventually(t, func() bool {
+			gctx, gcancel := context.WithTimeout(ctx, time.Second)
+			t.Cleanup(gcancel)
+			_, err = grpc.DialContext(gctx, e.daprd.InternalGRPCAddress(), sec.GRPCDialOptionMTLS(myAppID),
+				grpc.WithReturnConnectionError())
+			require.Error(t, err)
+			if runtime.GOOS == "windows" {
+				return !strings.Contains(err.Error(), "An existing connection was forcibly closed by the remote host.")
+			}
+			return true
+		}, 5*time.Second, 100*time.Millisecond)
 		require.ErrorContains(t, err, "tls: first record does not look like a TLS handshake")
 	})
 }

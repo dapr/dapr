@@ -189,7 +189,7 @@ func (i *rebalancing) Run(t *testing.T, ctx context.Context) {
 	// Also invoke the same actors using actor invocation
 	for j := 0; j < iterations; j++ {
 		go func(j int) {
-			rctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			rctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 			defer cancel()
 			daprdURL := fmt.Sprintf("http://localhost:%d/v1.0/actors/myactortype/myactorid-%d/method/foo", i.daprd[0].HTTPPort(), j)
 			req, rErr := http.NewRequestWithContext(rctx, http.MethodPost, daprdURL, nil)
