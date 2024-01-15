@@ -85,6 +85,12 @@ func (c *FSM) PlacementState(withVirtualNodes bool) *v1pb.PlacementTables {
 	for k, v := range entries {
 		var table v1pb.PlacementTable
 		v.ReadInternals(func(hosts map[uint64]string, sortedSet []uint64, loadMap map[string]*hashing.Host, totalLoad int64) {
+
+			sortedSetLen := 0
+			if withVirtualNodes {
+				sortedSetLen = len(sortedSet)
+			}
+
 			table = v1pb.PlacementTable{
 				Hosts:     make(map[uint64]string),
 				SortedSet: make([]uint64, sortedSetLen),
