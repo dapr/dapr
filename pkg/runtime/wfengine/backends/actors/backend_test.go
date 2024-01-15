@@ -16,7 +16,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package wfengine_test
+package actors
 
 import (
 	"context"
@@ -27,33 +27,35 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
-	"github.com/dapr/dapr/pkg/runtime/wfengine"
+	daprt "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/logger"
 )
 
 const (
+	testAppID         = "wf-app"
 	workflowActorType = "dapr.internal.default.wf-app.workflow"
 	activityActorType = "dapr.internal.default.wf-app.activity"
 )
 
 func TestNoWorkflowState(t *testing.T) {
 	actors := getActorRuntime()
-	state, err := wfengine.LoadWorkflowState(context.Background(), actors, "wf1", wfengine.NewActorsBackendConfig(testAppID))
+	state, err := LoadWorkflowState(context.Background(), actors, "wf1", NewActorsBackendConfig(testAppID))
 	require.NoError(t, err)
 	assert.Empty(t, state)
 }
 
 func TestDefaultWorkflowState(t *testing.T) {
-	state := wfengine.NewWorkflowState(wfengine.NewActorsBackendConfig(testAppID))
+	state := NewWorkflowState(NewActorsBackendConfig(testAppID))
 	assert.Equal(t, uint64(1), state.Generation)
 }
 
 func TestAddingToInbox(t *testing.T) {
-	state := wfengine.NewWorkflowState(wfengine.NewActorsBackendConfig(testAppID))
+	state := NewWorkflowState(NewActorsBackendConfig(testAppID))
 	for i := 0; i < 10; i++ {
 		state.AddToInbox(&backend.HistoryEvent{})
 	}
@@ -70,7 +72,7 @@ func TestAddingToInbox(t *testing.T) {
 }
 
 func TestClearingInbox(t *testing.T) {
-	state := wfengine.NewWorkflowState(wfengine.NewActorsBackendConfig(testAppID))
+	state := NewWorkflowState(NewActorsBackendConfig(testAppID))
 	for i := 0; i < 10; i++ {
 		// Simulate the loadng of inbox events from storage
 		state.Inbox = append(state.Inbox, &backend.HistoryEvent{})
@@ -89,7 +91,7 @@ func TestClearingInbox(t *testing.T) {
 }
 
 func TestAddingToHistory(t *testing.T) {
-	wfstate := wfengine.NewWorkflowState(wfengine.NewActorsBackendConfig(testAppID))
+	wfstate := NewWorkflowState(NewActorsBackendConfig(testAppID))
 	runtimeState := backend.NewOrchestrationRuntimeState(api.InstanceID("wf1"), nil)
 	for i := 0; i < 10; i++ {
 		err := runtimeState.AddEvent(&backend.HistoryEvent{})
@@ -109,7 +111,7 @@ func TestAddingToHistory(t *testing.T) {
 }
 
 func TestLoadSavedState(t *testing.T) {
-	wfstate := wfengine.NewWorkflowState(wfengine.NewActorsBackendConfig(testAppID))
+	wfstate := NewWorkflowState(NewActorsBackendConfig(testAppID))
 
 	runtimeState := backend.NewOrchestrationRuntimeState(api.InstanceID("wf1"), nil)
 	for i := 0; i < 10; i++ {
@@ -135,7 +137,7 @@ func TestLoadSavedState(t *testing.T) {
 	err = actors.TransactionalStateOperation(context.Background(), req)
 	require.NoError(t, err)
 
-	wfstate, err = wfengine.LoadWorkflowState(context.Background(), actors, "wf1", wfengine.NewActorsBackendConfig(testAppID))
+	wfstate, err = LoadWorkflowState(context.Background(), actors, "wf1", NewActorsBackendConfig(testAppID))
 	require.NoError(t, err)
 	require.NotNil(t, wfstate)
 
@@ -152,7 +154,7 @@ func TestLoadSavedState(t *testing.T) {
 }
 
 func TestResetLoadedState(t *testing.T) {
-	wfstate := wfengine.NewWorkflowState(wfengine.NewActorsBackendConfig(testAppID))
+	wfstate := NewWorkflowState(NewActorsBackendConfig(testAppID))
 
 	runtimeState := backend.NewOrchestrationRuntimeState(api.InstanceID("wf1"), nil)
 	for i := 0; i < 10; i++ {
@@ -171,7 +173,7 @@ func TestResetLoadedState(t *testing.T) {
 	err = actorRuntime.TransactionalStateOperation(context.Background(), req)
 	require.NoError(t, err)
 
-	wfstate, err = wfengine.LoadWorkflowState(context.Background(), actorRuntime, "wf1", wfengine.NewActorsBackendConfig(testAppID))
+	wfstate, err = LoadWorkflowState(context.Background(), actorRuntime, "wf1", NewActorsBackendConfig(testAppID))
 	require.NoError(t, err)
 	require.NotNil(t, wfstate)
 
@@ -217,4 +219,8 @@ func countOperations(t *testing.T, req *actors.TransactionalRequest) (upsertCoun
 		}
 	}
 	return upsertCount, deleteCount
+}
+
+func fakeStore() state.Store {
+	return daprt.NewFakeStateStore()
 }
