@@ -12,7 +12,8 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
-package wfengine
+
+package actors
 
 import (
 	"context"
@@ -20,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/microsoft/durabletask-go/api"
@@ -28,8 +30,21 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 
 	"github.com/dapr/dapr/pkg/actors"
+	wfbe "github.com/dapr/dapr/pkg/components/wfbackend"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/logger"
+)
+
+var (
+	wfLogger            = logger.NewLogger("dapr.wfengine.backend.actors")
+	errExecutionAborted = errors.New("execution aborted")
+)
+
+const (
+	defaultNamespace     = "default"
+	WorkflowNameLabelKey = "workflow"
+	ActivityNameLabelKey = "activity"
 )
 
 // actorsBackendConfig is the configuration for the workflow engine's actors backend
@@ -53,33 +68,37 @@ func (c *actorsBackendConfig) String() string {
 	if c == nil {
 		return "(nil)"
 	}
-	return fmt.Sprintf("AppID:'%s', workflowActorType:'%s', activityActorType:'%s'", c.AppID, c.workflowActorType, c.activityActorType)
+	return fmt.Sprintf("AppID='%s' workflowActorType='%s' activityActorType='%s'", c.AppID, c.workflowActorType, c.activityActorType)
 }
 
-type actorBackend struct {
-	actors                    actors.Actors
+type ActorBackend struct {
 	orchestrationWorkItemChan chan *backend.OrchestrationWorkItem
 	activityWorkItemChan      chan *backend.ActivityWorkItem
 	startedOnce               sync.Once
 	config                    actorsBackendConfig
 	workflowActor             *workflowActor
 	activityActor             *activityActor
+
+	actorRuntime  actors.ActorRuntime
+	actorsReady   atomic.Bool
+	actorsReadyCh chan struct{}
 }
 
-func NewActorBackend(appID string) *actorBackend {
-	backendConfig := NewActorsBackendConfig(appID)
+func NewActorBackend(md wfbe.Metadata, _ logger.Logger) (backend.Backend, error) {
+	backendConfig := NewActorsBackendConfig(md.AppID)
 
 	// These channels are used by actors to call into this backend object
 	orchestrationWorkItemChan := make(chan *backend.OrchestrationWorkItem)
 	activityWorkItemChan := make(chan *backend.ActivityWorkItem)
 
-	return &actorBackend{
+	return &ActorBackend{
 		orchestrationWorkItemChan: orchestrationWorkItemChan,
 		activityWorkItemChan:      activityWorkItemChan,
 		config:                    backendConfig,
 		workflowActor:             NewWorkflowActor(getWorkflowScheduler(orchestrationWorkItemChan), backendConfig),
 		activityActor:             NewActivityActor(getActivityScheduler(activityWorkItemChan), backendConfig),
-	}
+		actorsReadyCh:             make(chan struct{}),
+	}, nil
 }
 
 // getWorkflowScheduler returns a workflowScheduler func that sends an orchestration work item to the Durable Task Framework.
@@ -113,15 +132,31 @@ func getActivityScheduler(activityWorkItemChan chan *backend.ActivityWorkItem) a
 }
 
 // InternalActors returns a map of internal actors that are used to implement workflows
-func (be *actorBackend) GetInternalActorsMap() map[string]actors.InternalActor {
+func (abe *ActorBackend) GetInternalActorsMap() map[string]actors.InternalActor {
 	internalActors := make(map[string]actors.InternalActor)
-	internalActors[be.config.workflowActorType] = be.workflowActor
-	internalActors[be.config.activityActorType] = be.activityActor
+	internalActors[abe.config.workflowActorType] = abe.workflowActor
+	internalActors[abe.config.activityActorType] = abe.activityActor
 	return internalActors
 }
 
-func (be *actorBackend) SetActorRuntime(actors actors.Actors) {
-	be.actors = actors
+func (abe *ActorBackend) SetActorRuntime(ctx context.Context, actorRuntime actors.ActorRuntime) {
+	abe.actorRuntime = actorRuntime
+	if abe.actorsReady.CompareAndSwap(false, true) {
+		close(abe.actorsReadyCh)
+	}
+}
+
+func (abe *ActorBackend) RegisterActor(ctx context.Context) error {
+	if abe.actorRuntime != nil {
+		for actorType, actor := range abe.GetInternalActorsMap() {
+			err := abe.actorRuntime.RegisterInternalActor(ctx, actorType, actor, time.Minute*1)
+			if err != nil {
+				return fmt.Errorf("failed to register workflow actor %s: %w", actorType, err)
+			}
+		}
+	}
+
+	return nil
 }
 
 // CreateOrchestrationInstance implements backend.Backend and creates a new workflow instance.
@@ -129,8 +164,8 @@ func (be *actorBackend) SetActorRuntime(actors actors.Actors) {
 // Internally, creating a workflow instance also creates a new actor with the same ID. The create
 // request is saved into the actor's "inbox" and then executed via a reminder thread. If the app is
 // scaled out across multiple replicas, the actor might get assigned to a replicas other than this one.
-func (be *actorBackend) CreateOrchestrationInstance(ctx context.Context, e *backend.HistoryEvent, opts ...backend.OrchestrationIdReusePolicyOptions) error {
-	if err := be.validateConfiguration(); err != nil {
+func (abe *ActorBackend) CreateOrchestrationInstance(ctx context.Context, e *backend.HistoryEvent, opts ...backend.OrchestrationIdReusePolicyOptions) error {
+	if err := abe.validateConfiguration(); err != nil {
 		return err
 	}
 
@@ -165,13 +200,13 @@ func (be *actorBackend) CreateOrchestrationInstance(ctx context.Context, e *back
 	// request. Note that this request goes directly to the actor runtime, bypassing the API layer.
 	req := invokev1.
 		NewInvokeMethodRequest(CreateWorkflowInstanceMethod).
-		WithActor(be.config.workflowActorType, workflowInstanceID).
+		WithActor(abe.config.workflowActorType, workflowInstanceID).
 		WithRawDataBytes(requestBytes).
 		WithContentType(invokev1.JSONContentType)
 	defer req.Close()
 
 	start := time.Now()
-	resp, err := be.actors.Call(ctx, req)
+	resp, err := abe.actorRuntime.Call(ctx, req)
 	elapsed := diag.ElapsedSince(start)
 	if err != nil {
 		// failed request to CREATE workflow, record count and latency metrics.
@@ -185,16 +220,16 @@ func (be *actorBackend) CreateOrchestrationInstance(ctx context.Context, e *back
 }
 
 // GetOrchestrationMetadata implements backend.Backend
-func (be *actorBackend) GetOrchestrationMetadata(ctx context.Context, id api.InstanceID) (*api.OrchestrationMetadata, error) {
+func (abe *ActorBackend) GetOrchestrationMetadata(ctx context.Context, id api.InstanceID) (*api.OrchestrationMetadata, error) {
 	// Invoke the corresponding actor, which internally stores its own workflow metadata
 	req := invokev1.
 		NewInvokeMethodRequest(GetWorkflowMetadataMethod).
-		WithActor(be.config.workflowActorType, string(id)).
+		WithActor(abe.config.workflowActorType, string(id)).
 		WithContentType(invokev1.OctetStreamContentType)
 	defer req.Close()
 
 	start := time.Now()
-	res, err := be.actors.Call(ctx, req)
+	resp, err := abe.actorRuntime.Call(ctx, req)
 	elapsed := diag.ElapsedSince(start)
 	if err != nil {
 		// failed request to GET workflow Information, record count and latency metrics.
@@ -204,8 +239,8 @@ func (be *actorBackend) GetOrchestrationMetadata(ctx context.Context, id api.Ins
 	// successful request to GET workflow information, record count and latency metrics.
 	diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.GetWorkflow, diag.StatusSuccess, elapsed)
 
-	defer res.Close()
-	data := res.RawData()
+	defer resp.Close()
+	data := resp.RawData()
 	var metadata api.OrchestrationMetadata
 	if err := actors.DecodeInternalActorData(data, &metadata); err != nil {
 		return nil, fmt.Errorf("failed to decode the internal actor response: %w", err)
@@ -215,7 +250,7 @@ func (be *actorBackend) GetOrchestrationMetadata(ctx context.Context, id api.Ins
 
 // AbandonActivityWorkItem implements backend.Backend. It gets called by durabletask-go when there is
 // an unexpected failure in the workflow activity execution pipeline.
-func (*actorBackend) AbandonActivityWorkItem(ctx context.Context, wi *backend.ActivityWorkItem) error {
+func (*ActorBackend) AbandonActivityWorkItem(ctx context.Context, wi *backend.ActivityWorkItem) error {
 	wfLogger.Warnf("%s: aborting activity execution (::%d)", wi.InstanceID, wi.NewEvent.GetEventId())
 
 	// Sending false signals the waiting activity actor to abort the activity execution.
@@ -227,7 +262,7 @@ func (*actorBackend) AbandonActivityWorkItem(ctx context.Context, wi *backend.Ac
 
 // AbandonOrchestrationWorkItem implements backend.Backend. It gets called by durabletask-go when there is
 // an unexpected failure in the workflow orchestration execution pipeline.
-func (*actorBackend) AbandonOrchestrationWorkItem(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
+func (*ActorBackend) AbandonOrchestrationWorkItem(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
 	wfLogger.Warnf("%s: aborting workflow execution", wi.InstanceID)
 
 	// Sending false signals the waiting workflow actor to abort the workflow execution.
@@ -238,7 +273,7 @@ func (*actorBackend) AbandonOrchestrationWorkItem(ctx context.Context, wi *backe
 }
 
 // AddNewOrchestrationEvent implements backend.Backend and sends the event e to the workflow actor identified by id.
-func (be *actorBackend) AddNewOrchestrationEvent(ctx context.Context, id api.InstanceID, e *backend.HistoryEvent) error {
+func (abe *ActorBackend) AddNewOrchestrationEvent(ctx context.Context, id api.InstanceID, e *backend.HistoryEvent) error {
 	data, err := backend.MarshalHistoryEvent(e)
 	if err != nil {
 		return err
@@ -247,13 +282,13 @@ func (be *actorBackend) AddNewOrchestrationEvent(ctx context.Context, id api.Ins
 	// Send the event to the corresponding workflow actor, which will store it in its event inbox.
 	req := invokev1.
 		NewInvokeMethodRequest(AddWorkflowEventMethod).
-		WithActor(be.config.workflowActorType, string(id)).
+		WithActor(abe.config.workflowActorType, string(id)).
 		WithRawDataBytes(data).
 		WithContentType(invokev1.OctetStreamContentType)
 	defer req.Close()
 
 	start := time.Now()
-	resp, err := be.actors.Call(ctx, req)
+	resp, err := abe.actorRuntime.Call(ctx, req)
 	elapsed := diag.ElapsedSince(start)
 	if err != nil {
 		// failed request to ADD EVENT, record count and latency metrics.
@@ -267,35 +302,35 @@ func (be *actorBackend) AddNewOrchestrationEvent(ctx context.Context, id api.Ins
 }
 
 // CompleteActivityWorkItem implements backend.Backend
-func (*actorBackend) CompleteActivityWorkItem(ctx context.Context, wi *backend.ActivityWorkItem) error {
+func (*ActorBackend) CompleteActivityWorkItem(ctx context.Context, wi *backend.ActivityWorkItem) error {
 	// Sending true signals the waiting activity actor to complete the execution normally.
 	wi.Properties[CallbackChannelProperty].(chan bool) <- true
 	return nil
 }
 
 // CompleteOrchestrationWorkItem implements backend.Backend
-func (*actorBackend) CompleteOrchestrationWorkItem(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
+func (*ActorBackend) CompleteOrchestrationWorkItem(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
 	// Sending true signals the waiting workflow actor to complete the execution normally.
 	wi.Properties[CallbackChannelProperty].(chan bool) <- true
 	return nil
 }
 
 // CreateTaskHub implements backend.Backend
-func (*actorBackend) CreateTaskHub(context.Context) error {
+func (*ActorBackend) CreateTaskHub(context.Context) error {
 	return nil
 }
 
 // DeleteTaskHub implements backend.Backend
-func (*actorBackend) DeleteTaskHub(context.Context) error {
+func (*ActorBackend) DeleteTaskHub(context.Context) error {
 	return errors.New("not supported")
 }
 
 // GetActivityWorkItem implements backend.Backend
-func (be *actorBackend) GetActivityWorkItem(ctx context.Context) (*backend.ActivityWorkItem, error) {
+func (abe *ActorBackend) GetActivityWorkItem(ctx context.Context) (*backend.ActivityWorkItem, error) {
 	// Wait for the activity actor to signal us with some work to do
 	wfLogger.Debug("Actor backend is waiting for an activity actor to schedule an invocation.")
 	select {
-	case wi := <-be.activityWorkItemChan:
+	case wi := <-abe.activityWorkItemChan:
 		wfLogger.Debugf(
 			"Actor backend received a [%s#%d] activity task for workflow '%s'.",
 			wi.NewEvent.GetTaskScheduled().GetName(),
@@ -308,16 +343,16 @@ func (be *actorBackend) GetActivityWorkItem(ctx context.Context) (*backend.Activ
 }
 
 // GetOrchestrationRuntimeState implements backend.Backend
-func (*actorBackend) GetOrchestrationRuntimeState(context.Context, *backend.OrchestrationWorkItem) (*backend.OrchestrationRuntimeState, error) {
+func (*ActorBackend) GetOrchestrationRuntimeState(context.Context, *backend.OrchestrationWorkItem) (*backend.OrchestrationRuntimeState, error) {
 	return nil, errors.New("not supported")
 }
 
 // GetOrchestrationWorkItem implements backend.Backend
-func (be *actorBackend) GetOrchestrationWorkItem(ctx context.Context) (*backend.OrchestrationWorkItem, error) {
+func (abe *ActorBackend) GetOrchestrationWorkItem(ctx context.Context) (*backend.OrchestrationWorkItem, error) {
 	// Wait for the workflow actor to signal us with some work to do
 	wfLogger.Debug("Actor backend is waiting for a workflow actor to schedule an invocation.")
 	select {
-	case wi := <-be.orchestrationWorkItemChan:
+	case wi := <-abe.orchestrationWorkItemChan:
 		wfLogger.Debugf("Actor backend received a workflow task for workflow '%s'.", wi.InstanceID)
 		return wi, nil
 	case <-ctx.Done():
@@ -326,14 +361,14 @@ func (be *actorBackend) GetOrchestrationWorkItem(ctx context.Context) (*backend.
 }
 
 // PurgeOrchestrationState deletes all saved state for the specific orchestration instance.
-func (be *actorBackend) PurgeOrchestrationState(ctx context.Context, id api.InstanceID) error {
+func (abe *ActorBackend) PurgeOrchestrationState(ctx context.Context, id api.InstanceID) error {
 	req := invokev1.
 		NewInvokeMethodRequest(PurgeWorkflowStateMethod).
-		WithActor(be.config.workflowActorType, string(id))
+		WithActor(abe.config.workflowActorType, string(id))
 	defer req.Close()
 
 	start := time.Now()
-	resp, err := be.actors.Call(ctx, req)
+	resp, err := abe.actorRuntime.Call(ctx, req)
 	elapsed := diag.ElapsedSince(start)
 	if err != nil {
 		// failed request to PURGE WORKFLOW, record latency and count metrics.
@@ -347,27 +382,68 @@ func (be *actorBackend) PurgeOrchestrationState(ctx context.Context, id api.Inst
 }
 
 // Start implements backend.Backend
-func (be *actorBackend) Start(ctx context.Context) error {
+func (abe *ActorBackend) Start(ctx context.Context) error {
 	var err error
-	be.startedOnce.Do(func() {
-		err = be.validateConfiguration()
+	abe.startedOnce.Do(func() {
+		err = abe.validateConfiguration()
 	})
 	return err
 }
 
 // Stop implements backend.Backend
-func (*actorBackend) Stop(context.Context) error {
+func (*ActorBackend) Stop(context.Context) error {
 	return nil
 }
 
 // String displays the type information
-func (be *actorBackend) String() string {
+func (abe *ActorBackend) String() string {
 	return "dapr.actors/v1-beta"
 }
 
-func (be *actorBackend) validateConfiguration() error {
-	if be.actors == nil {
+func (abe *ActorBackend) validateConfiguration() error {
+	if abe.actorRuntime == nil {
 		return errors.New("actor runtime has not been configured")
 	}
 	return nil
+}
+
+// WaitForActorsReady blocks until the actor runtime is set in the object (or until the context is canceled).
+func (abe *ActorBackend) WaitForActorsReady(ctx context.Context) {
+	select {
+	case <-ctx.Done():
+		// No-op
+	case <-abe.actorsReadyCh:
+		// No-op
+	}
+}
+
+// DisableActorCaching turns off the default caching done by the workflow and activity actors.
+// This method is primarily intended to be used for testing to ensure correct behavior
+// when actors are newly activated on nodes, but without requiring the actor to actually
+// go through activation.
+func (abe *ActorBackend) DisableActorCaching(disable bool) {
+	abe.workflowActor.cachingDisabled = disable
+	abe.activityActor.cachingDisabled = disable
+}
+
+// SetWorkflowTimeout allows configuring a default timeout for workflow execution steps.
+// If the timeout is exceeded, the workflow execution step will be abandoned and retried.
+// Note that this timeout is for a non-blocking step in the workflow (which is expected
+// to always complete almost immediately) and not for the end-to-end workflow execution.
+func (abe *ActorBackend) SetWorkflowTimeout(timeout time.Duration) {
+	abe.workflowActor.defaultTimeout = timeout
+}
+
+// SetActivityTimeout allows configuring a default timeout for activity executions.
+// If the timeout is exceeded, the activity execution will be abandoned and retried.
+func (abe *ActorBackend) SetActivityTimeout(timeout time.Duration) {
+	abe.activityActor.defaultTimeout = timeout
+}
+
+// SetActorReminderInterval sets the amount of delay between internal retries for
+// workflow and activity actors. This impacts how long it takes for an operation to
+// restart itself after a timeout or a process failure is encountered while running.
+func (abe *ActorBackend) SetActorReminderInterval(interval time.Duration) {
+	abe.workflowActor.reminderInterval = interval
+	abe.activityActor.reminderInterval = interval
 }

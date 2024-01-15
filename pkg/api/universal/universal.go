@@ -23,6 +23,7 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	"github.com/dapr/dapr/pkg/runtime/wfengine"
 	"github.com/dapr/kit/logger"
 )
 
@@ -37,6 +38,7 @@ type Options struct {
 	ExtendedMetadata            map[string]string
 	AppConnectionConfig         config.AppConnectionConfig
 	GlobalConfig                *config.Configuration
+	WorkflowEngine              *wfengine.WorkflowEngine
 }
 
 // Universal contains the implementation of gRPC APIs that are also used by the HTTP server.
@@ -51,6 +53,7 @@ type Universal struct {
 	extendedMetadata            map[string]string
 	appConnectionConfig         config.AppConnectionConfig
 	globalConfig                *config.Configuration
+	workflowEngine              *wfengine.WorkflowEngine
 
 	extendedMetadataLock sync.RWMutex
 	actorsLock           sync.RWMutex
@@ -70,6 +73,7 @@ func New(opts Options) *Universal {
 		extendedMetadata:            opts.ExtendedMetadata,
 		appConnectionConfig:         opts.AppConnectionConfig,
 		globalConfig:                opts.GlobalConfig,
+		workflowEngine:              opts.WorkflowEngine,
 		actorsReadyCh:               make(chan struct{}),
 	}
 }

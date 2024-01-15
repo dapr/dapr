@@ -33,3 +33,4 @@ scopes:
   - grpcmetrics
   - disabledmetric
   - perf-workflowsapp
+  - perf-workflowsapp-actors
