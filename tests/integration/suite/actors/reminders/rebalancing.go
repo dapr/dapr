@@ -28,6 +28,7 @@ import (
 	"time"
 
 	chi "github.com/go-chi/chi/v5"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	grpcinsecure "google.golang.org/grpc/credentials/insecure"
@@ -203,17 +204,23 @@ func (i *rebalancing) Run(t *testing.T, ctx context.Context) {
 				errCh <- fmt.Errorf("failed invoking actor %d: %w", j, rErr)
 				return
 			}
-			resp, rErr := client.Do(req)
-			if rErr != nil {
-				errCh <- fmt.Errorf("failed invoking actor %d: %w", j, rErr)
-				return
-			}
-			defer resp.Body.Close()
-			// We don't check the status code here as it could be 500 if we tried invoking the fake app
-			if resp.StatusCode != http.StatusOK {
-				log.Printf("MYLOG Invoking actor %d on non-existent host", j)
-			}
-			errCh <- nil
+			assert.Eventually(t,
+				func() bool {
+					resp, respErr := client.Do(req)
+					if respErr != nil {
+						rErr = fmt.Errorf("failed invoking actor %d: %w", j, rErr)
+						return false
+					}
+					defer resp.Body.Close()
+					// We don't check the status code here as it could be 500 if we tried invoking the fake app
+					if resp.StatusCode != http.StatusOK {
+						log.Printf("MYLOG Invoking actor %d on non-existent host", j)
+					}
+
+					rErr = nil
+					return true
+				}, 10*time.Second, 1*time.Second)
+			errCh <- rErr
 		}(j)
 	}
 
