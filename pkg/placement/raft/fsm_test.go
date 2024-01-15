@@ -15,6 +15,7 @@ package raft
 
 import (
 	"bytes"
+	"github.com/dapr/dapr/pkg/placement/hashing"
 	"io"
 	"testing"
 
@@ -96,9 +97,12 @@ func TestRestore(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, fsm.State().Members(), 1)
 	assert.Len(t, fsm.State().hashingTableMap(), 2)
+
 }
 
-func TestPlacementState(t *testing.T) {
+func TestPlacementStateWithVirtualNodes(t *testing.T) {
+	hashing.SetReplicationFactor(100)
+
 	fsm := newFSM()
 	m := DaprHostMember{
 		Name:     "127.0.0.1:3030",
@@ -115,7 +119,50 @@ func TestPlacementState(t *testing.T) {
 		Data:  cmdLog,
 	})
 
-	newTable := fsm.PlacementState()
+	newTable := fsm.PlacementState(true)
 	assert.Equal(t, "1", newTable.GetVersion())
 	assert.Len(t, newTable.GetEntries(), 2)
+	// The default replicationFactor is 100
+	assert.Equal(t, newTable.GetReplicationFactor(), int64(100))
+
+	for _, host := range newTable.GetEntries() {
+		assert.Len(t, host.Hosts, 100)
+		assert.Len(t, host.SortedSet, 100)
+		assert.Len(t, host.LoadMap, 1)
+		assert.Contains(t, host.LoadMap, "127.0.0.1:3030")
+	}
+}
+
+func TestPlacementState(t *testing.T) {
+	hashing.SetReplicationFactor(100)
+
+	fsm := newFSM()
+	m := DaprHostMember{
+		Name:     "127.0.0.1:3030",
+		AppID:    "fakeAppID",
+		Entities: []string{"actorTypeOne", "actorTypeTwo"},
+	}
+	cmdLog, err := makeRaftLogCommand(MemberUpsert, m)
+	require.NoError(t, err)
+
+	fsm.Apply(&raft.Log{
+		Index: 1,
+		Term:  1,
+		Type:  raft.LogCommand,
+		Data:  cmdLog,
+	})
+
+	newTable := fsm.PlacementState(false)
+	assert.Equal(t, "1", newTable.GetVersion())
+	assert.Len(t, newTable.GetEntries(), 2)
+	// The default replicationFactor is 100
+	assert.Equal(t, newTable.GetReplicationFactor(), int64(100))
+
+	for _, host := range newTable.GetEntries() {
+		assert.Len(t, host.Hosts, 0)
+		assert.Len(t, host.SortedSet, 0)
+		assert.Len(t, host.LoadMap, 1)
+		assert.Contains(t, host.LoadMap, "127.0.0.1:3030")
+
+	}
 }

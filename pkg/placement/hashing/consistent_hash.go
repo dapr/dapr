@@ -62,18 +62,6 @@ type Consistent struct {
 	sync.RWMutex
 }
 
-//type HashCache struct {
-//	hosts
-//}
-
-// NewPlacementTables returns new stateful placement tables with a given version.
-func NewPlacementTables(version string, entries map[string]*Consistent) *ConsistentHashTables {
-	return &ConsistentHashTables{
-		Version: version,
-		Entries: entries,
-	}
-}
-
 // NewHost returns a new host.
 func NewHost(name, id string, load int64, port int64) *Host {
 	return &Host{
