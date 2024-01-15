@@ -48,6 +48,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/processor/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/processor/secret"
 	"github.com/dapr/dapr/pkg/runtime/processor/state"
+	wfbeProcessor "github.com/dapr/dapr/pkg/runtime/processor/wfbackend"
 	"github.com/dapr/dapr/pkg/runtime/processor/workflow"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/kit/concurrency"
@@ -105,12 +106,13 @@ type Options struct {
 
 // Processor manages the lifecycle of all components categories.
 type Processor struct {
-	compStore *compstore.ComponentStore
-	managers  map[components.Category]manager
-	state     StateManager
-	secret    SecretManager
-	pubsub    PubsubManager
-	binding   BindingManager
+	compStore       *compstore.ComponentStore
+	managers        map[components.Category]manager
+	state           StateManager
+	secret          SecretManager
+	pubsub          PubsubManager
+	binding         BindingManager
+	workflowBackend WorkflowBackendManager
 
 	pendingHTTPEndpoints       chan httpendpointsapi.HTTPEndpoint
 	pendingComponents          chan componentsapi.Component
@@ -168,6 +170,13 @@ func New(opts Options) *Processor {
 		Channels:       opts.Channels,
 	})
 
+	wfbe := wfbeProcessor.New(wfbeProcessor.Options{
+		AppID:          opts.ID,
+		Registry:       opts.Registry.WorkflowBackends(),
+		ComponentStore: opts.ComponentStore,
+		Meta:           opts.Meta,
+	})
+
 	return &Processor{
 		pendingHTTPEndpoints:       make(chan httpendpointsapi.HTTPEndpoint),
 		pendingComponents:          make(chan componentsapi.Component),
@@ -178,6 +187,7 @@ func New(opts Options) *Processor {
 		pubsub:                     ps,
 		binding:                    binding,
 		secret:                     secret,
+		workflowBackend:            wfbe,
 		managers: map[components.Category]manager{
 			components.CategoryBindings: binding,
 			components.CategoryConfiguration: configuration.New(configuration.Options{
@@ -195,9 +205,10 @@ func New(opts Options) *Processor {
 				ComponentStore: opts.ComponentStore,
 				Meta:           opts.Meta,
 			}),
-			components.CategoryPubSub:      ps,
-			components.CategorySecretStore: secret,
-			components.CategoryStateStore:  state,
+			components.CategoryPubSub:          ps,
+			components.CategorySecretStore:     secret,
+			components.CategoryStateStore:      state,
+			components.CategoryWorkflowBackend: wfbe,
 			components.CategoryWorkflow: workflow.New(workflow.Options{
 				Registry:       opts.Registry.Workflows(),
 				ComponentStore: opts.ComponentStore,
