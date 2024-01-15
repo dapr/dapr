@@ -17,14 +17,15 @@ type Category string
 
 // supported components category
 const (
-	CategoryBindings       Category = "bindings"
-	CategoryPubSub         Category = "pubsub"
-	CategorySecretStore    Category = "secretstores"
-	CategoryStateStore     Category = "state"
-	CategoryWorkflow       Category = "workflow"
-	CategoryMiddleware     Category = "middleware"
-	CategoryConfiguration  Category = "configuration"
-	CategoryCryptoProvider Category = "crypto"
-	CategoryLock           Category = "lock"
-	CategoryNameResolution Category = "nameresolution"
+	CategoryBindings        Category = "bindings"
+	CategoryPubSub          Category = "pubsub"
+	CategorySecretStore     Category = "secretstores"
+	CategoryStateStore      Category = "state"
+	CategoryWorkflow        Category = "workflow"
+	CategoryWorkflowBackend Category = "workflowbackend"
+	CategoryMiddleware      Category = "middleware"
+	CategoryConfiguration   Category = "configuration"
+	CategoryCryptoProvider  Category = "crypto"
+	CategoryLock            Category = "lock"
+	CategoryNameResolution  Category = "nameresolution"
 )

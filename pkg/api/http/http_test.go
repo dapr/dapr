@@ -64,6 +64,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
+	"github.com/dapr/dapr/pkg/runtime/wfengine"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
 	"github.com/dapr/dapr/utils"
@@ -2649,11 +2650,17 @@ func TestV1Beta1Workflow(t *testing.T) {
 	resiliencyConfig := resiliency.FromConfigurations(logger.NewLogger("workflow.test"), testResiliency)
 	compStore := compstore.New()
 	compStore.AddWorkflow(componentName, fakeWorkflowComponent)
+
+	spec := config.WorkflowSpec{MaxConcurrentWorkflowInvocations: 100, MaxConcurrentActivityInvocations: 100}
+	wfengine := wfengine.NewWorkflowEngine("testAppID", spec, nil)
+	wfengine.SetWorkflowEngineReadyDone()
+
 	testAPI := &api{
 		universal: universal.New(universal.Options{
-			Logger:     logger.NewLogger("fakeLogger"),
-			CompStore:  compStore,
-			Resiliency: resiliencyConfig,
+			Logger:         logger.NewLogger("fakeLogger"),
+			CompStore:      compStore,
+			Resiliency:     resiliencyConfig,
+			WorkflowEngine: wfengine,
 		}),
 	}
 	testAPI.universal.SetActorsInitDone()
