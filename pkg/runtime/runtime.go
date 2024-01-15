@@ -155,9 +155,6 @@ func newDaprRuntime(ctx context.Context,
 
 	grpc := createGRPCManager(sec, runtimeConfig, globalConfig)
 
-	wfe := wfengine.NewWorkflowEngine(runtimeConfig.id, globalConfig.GetWorkflowSpec())
-	wfe.ConfigureGrpcExecutor()
-
 	authz := authorizer.New(authorizer.Options{
 		ID:           runtimeConfig.id,
 		Namespace:    namespace,
@@ -227,7 +224,6 @@ func newDaprRuntime(ctx context.Context,
 		grpc:              grpc,
 		tracerProvider:    nil,
 		resiliency:        resiliencyProvider,
-		workflowEngine:    wfe,
 		appHealthReady:    nil,
 		compStore:         compStore,
 		meta:              meta,
@@ -469,6 +465,11 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 
 	a.flushOutstandingComponents(ctx)
 
+	// Creating workflow engine after components are loaded
+	wfe := wfengine.NewWorkflowEngine(a.runtimeConfig.id, a.globalConfig.GetWorkflowSpec(), a.processor.WorkflowBackend())
+	wfe.ConfigureGrpcExecutor()
+	a.workflowEngine = wfe
+
 	err = a.loadHTTPEndpoints(ctx)
 	if err != nil {
 		log.Warnf("failed to load HTTP endpoints: %s", err)
@@ -499,6 +500,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		ShutdownFn:                  a.ShutdownWithWait,
 		AppConnectionConfig:         a.runtimeConfig.appConnectionConfig,
 		GlobalConfig:                a.globalConfig,
+		WorkflowEngine:              wfe,
 	})
 
 	// Create and start internal and external gRPC servers
@@ -597,17 +599,13 @@ func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) (err error) {
 		if err != nil {
 			log.Warn(err)
 		} else {
-			// Workflow engine depends on actor runtime being initialized
-			// This needs to be called before "SetActorsInitDone" on the universal API object to prevent a race condition in workflow methods
-			if err = a.initWorkflowEngine(ctx); err != nil {
-				return err
-			}
-
 			a.daprUniversal.SetActorRuntime(a.actor)
 		}
-	} else {
-		// If actors are not enabled, still invoke SetActorRuntime on the workflow engine with `nil` to unblock startup
-		a.workflowEngine.SetActorRuntime(nil)
+	}
+
+	// Initialize workflow engine
+	if err = a.initWorkflowEngine(ctx); err != nil {
+		return err
 	}
 
 	// We set actors as initialized whether we have an actors runtime or not
@@ -628,15 +626,28 @@ func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) (err error) {
 func (a *DaprRuntime) initWorkflowEngine(ctx context.Context) error {
 	wfComponentFactory := wfengine.BuiltinWorkflowFactory(a.workflowEngine)
 
-	a.workflowEngine.SetActorRuntime(a.actor)
-	if reg := a.runtimeConfig.registry.Workflows(); reg != nil {
-		log.Infof("Registering component for dapr workflow engine...")
-		reg.RegisterComponent(wfComponentFactory, "dapr")
-		if !a.processor.AddPendingComponent(ctx, wfengine.ComponentDefinition) {
-			log.Warn("failed to initialize Dapr workflow component")
+	// If actors are not enabled, still invoke SetActorRuntime on the workflow engine with `nil` to unblock startup
+	if abe, ok := a.workflowEngine.Backend.(interface {
+		SetActorRuntime(ctx context.Context, actorRuntime actors.ActorRuntime)
+	}); ok {
+		log.Info("Configuring workflow engine with actors backend")
+		var actorRuntime actors.ActorRuntime
+		if a.runtimeConfig.ActorsEnabled() {
+			actorRuntime = a.actor
 		}
-	} else {
-		log.Infof("No workflow registry available, not registering Dapr workflow component...")
+		abe.SetActorRuntime(ctx, actorRuntime)
+	}
+
+	reg := a.runtimeConfig.registry.Workflows()
+	if reg == nil {
+		log.Info("No workflow registry available, not registering Dapr workflow component.")
+		return nil
+	}
+
+	log.Infof("Registering component for dapr workflow engine...")
+	reg.RegisterComponent(wfComponentFactory, "dapr")
+	if !a.processor.AddPendingComponent(ctx, wfengine.ComponentDefinition) {
+		log.Warn("failed to initialize Dapr workflow component")
 	}
 	return nil
 }
