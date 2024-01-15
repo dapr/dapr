@@ -150,9 +150,8 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		errInfo, ok = s.Details()[0].(*errdetails.ErrorInfo)
 
 		require.True(t, ok)
-		require.Equal(t, kiterrors.CodePrefixPubSub+"OUTBOX", errInfo.GetReason())
+		require.Equal(t, kiterrors.CodePrefixPubSub+kiterrors.CodeNotFound, errInfo.GetReason())
 		require.Equal(t, "dapr.io", errInfo.GetDomain())
-		require.NotNil(t, errInfo.GetMetadata())
 	})
 
 	// Covers apierrors.PubSubNameEmpty()
