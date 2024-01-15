@@ -118,6 +118,17 @@ func NewFromExisting(loadMap map[string]*Host, replicationFactor int) *Consisten
 	return newHash
 }
 
+// NewFromExistingWithVirtNodes creates a new consistent hash from existing values with vnodes
+// It's a legacy function needed for backwards compatibility (daprd >= 1.13 with placement < 1.13)
+// TODO in v1.14 remove this function
+func NewFromExistingWithVirtNodes(hosts map[uint64]string, sortedSet []uint64, loadMap map[string]*Host) *Consistent {
+	return &Consistent{
+		hosts:     hosts,
+		sortedSet: sortedSet,
+		loadMap:   loadMap,
+	}
+}
+
 // ReadInternals returns the internal data structure of the consistent hash.
 func (c *Consistent) ReadInternals(reader func(map[uint64]string, []uint64, map[string]*Host, int64)) {
 	c.RLock()
