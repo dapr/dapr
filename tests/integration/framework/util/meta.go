@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	rtpbv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -38,11 +39,14 @@ func getMeta(t require.TestingT, ctx context.Context, client *http.Client, port 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, metaURL, nil)
 	require.NoError(t, err)
 
-	resp, err := client.Do(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
 	var meta metaResponse
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&meta))
+	resp, err := client.Do(req)
+	//nolint:testifylint
+	if assert.NoError(t, err) {
+		defer resp.Body.Close()
+		//nolint:testifylint
+		assert.NoError(t, json.NewDecoder(resp.Body).Decode(&meta))
+	}
 
 	return meta
 }

@@ -104,7 +104,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 	t.Run("expect 1 component to be loaded", func(t *testing.T) {
 		resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 		require.NoError(t, err)
-		assert.Len(t, resp.GetRegisteredComponents(), 1)
+		assert.Len(t, resp.GetRegisteredComponents(), 2)
 		g.publishMessage(t, ctx, client, "pubsub1", "topic1", "/route1")
 		g.publishMessageFails(t, ctx, client, "pubsub2", "topic2")
 		g.publishMessageFails(t, ctx, client, "pubsub3", "topic3")
@@ -124,7 +124,7 @@ spec:
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
-			assert.Len(c, resp.GetRegisteredComponents(), 2)
+			assert.Len(c, resp.GetRegisteredComponents(), 3)
 		}, time.Second*5, time.Millisecond*100)
 		g.publishMessage(t, ctx, client, "pubsub1", "topic1", "/route1")
 		g.publishMessage(t, ctx, client, "pubsub2", "topic2", "/route2")
@@ -152,7 +152,7 @@ spec:
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
-			assert.Len(c, resp.GetRegisteredComponents(), 3)
+			assert.Len(c, resp.GetRegisteredComponents(), 4)
 		}, time.Second*5, time.Millisecond*100)
 		g.publishMessage(t, ctx, client, "pubsub1", "topic1", "/route1")
 		g.publishMessage(t, ctx, client, "pubsub2", "topic2", "/route2")
@@ -173,7 +173,7 @@ spec:
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
-			assert.Len(c, resp.GetRegisteredComponents(), 2)
+			assert.Len(c, resp.GetRegisteredComponents(), 3)
 		}, time.Second*5, time.Millisecond*100)
 		g.publishMessage(t, ctx, client, "pubsub1", "topic1", "/route1")
 		g.publishMessageFails(t, ctx, client, "pubsub2", "topic2")
@@ -185,7 +185,7 @@ spec:
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
-			assert.Len(c, resp.GetRegisteredComponents(), 1)
+			assert.Len(c, resp.GetRegisteredComponents(), 2)
 		}, time.Second*5, time.Millisecond*100)
 		g.publishMessageFails(t, ctx, client, "pubsub1", "topic1")
 		g.publishMessageFails(t, ctx, client, "pubsub2", "topic2")
@@ -197,7 +197,7 @@ spec:
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
-			assert.Empty(c, resp.GetRegisteredComponents())
+			assert.Len(c, resp.GetRegisteredComponents(), 1)
 		}, time.Second*5, time.Millisecond*100)
 		g.publishMessageFails(t, ctx, client, "pubsub1", "topic1")
 		g.publishMessageFails(t, ctx, client, "pubsub2", "topic2")
@@ -218,7 +218,7 @@ spec:
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
-			assert.Len(c, resp.GetRegisteredComponents(), 1)
+			assert.Len(c, resp.GetRegisteredComponents(), 2)
 		}, time.Second*5, time.Millisecond*100)
 		g.publishMessageFails(t, ctx, client, "pubsub1", "topic1")
 		g.publishMessage(t, ctx, client, "pubsub2", "topic2", "/route2")

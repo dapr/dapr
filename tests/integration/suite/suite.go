@@ -16,6 +16,7 @@ package suite
 import (
 	"context"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 
@@ -32,20 +33,37 @@ type Case interface {
 	Run(*testing.T, context.Context)
 }
 
+// NamedCase is a test case with a searchable name.
+type NamedCase struct {
+	name string
+	Case
+}
+
+// Name returns the name of the test case.
+func (c NamedCase) Name() string {
+	return c.name
+}
+
 // Register registers a test case.
 func Register(c Case) {
 	cases = append(cases, c)
 }
 
 // All returns all registered test cases.
-func All(t *testing.T) map[string]Case {
-	mcases := make(map[string]Case)
-	for _, tcase := range cases {
+// The returned slice is sorted by name.
+func All(t *testing.T) []NamedCase {
+	all := make([]NamedCase, len(cases))
+	for i, tcase := range cases {
 		tof := reflect.TypeOf(tcase).Elem()
 		_, aft, ok := strings.Cut(tof.PkgPath(), "tests/integration/suite/")
 		require.True(t, ok)
-		mcases[aft+"/"+tof.Name()] = tcase
+		name := aft + "/" + tof.Name()
+		all[i] = NamedCase{name, tcase}
 	}
 
-	return mcases
+	sort.Slice(all, func(i, j int) bool {
+		return all[i].name < all[j].name
+	})
+
+	return all
 }
