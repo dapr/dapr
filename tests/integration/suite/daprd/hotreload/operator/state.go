@@ -88,7 +88,7 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 	client := util.HTTPClient(t)
 
 	t.Run("expect no components to be loaded yet", func(t *testing.T) {
-		assert.Empty(t, util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort()))
+		assert.Len(t, util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort()), 1)
 		s.writeExpectError(t, ctx, client, "123", http.StatusInternalServerError)
 	})
 
@@ -104,22 +104,24 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 		s.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &newComp, EventType: operatorv1.ResourceEventType_CREATED})
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort()), 1)
+			assert.Len(c, util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort()), 2)
 		}, time.Second*5, time.Millisecond*100)
 		resp := util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort())
-		require.Len(t, resp, 1)
+		require.Len(t, resp, 2)
 
-		assert.Equal(t, &rtv1.RegisteredComponents{
-			Name:    "123",
-			Type:    "state.in-memory",
-			Version: "v1",
-			Capabilities: []string{
-				"ETAG",
-				"TRANSACTIONAL",
-				"TTL",
-				"ACTOR",
+		assert.ElementsMatch(t, resp, []*rtv1.RegisteredComponents{
+			{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
+			{Name: "123",
+				Type:    "state.in-memory",
+				Version: "v1",
+				Capabilities: []string{
+					"ETAG",
+					"TRANSACTIONAL",
+					"TTL",
+					"ACTOR",
+				},
 			},
-		}, resp[0])
+		})
 
 		s.writeRead(t, ctx, client, "123")
 	})
@@ -151,12 +153,13 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 		s.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &newComp2, EventType: operatorv1.ResourceEventType_CREATED})
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort()), 3)
+			assert.Len(c, util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort()), 4)
 		}, time.Second*5, time.Millisecond*100)
 		resp := util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort())
-		require.Len(t, resp, 3)
+		require.Len(t, resp, 4)
 
 		assert.ElementsMatch(t, []*rtv1.RegisteredComponents{
+			{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 			{
 				Name: "123", Type: "state.in-memory", Version: "v1",
 				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
@@ -204,6 +207,7 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := util.GetMetaComponents(c, ctx, client, s.daprd.HTTPPort())
 			assert.ElementsMatch(c, []*rtv1.RegisteredComponents{
+				{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 				{
 					Name: "123", Type: "state.in-memory", Version: "v1",
 					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
@@ -277,6 +281,7 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := util.GetMetaComponents(c, ctx, client, s.daprd.HTTPPort())
 			assert.ElementsMatch(c, []*rtv1.RegisteredComponents{
+				{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 				{
 					Name: "123", Type: "state.sqlite", Version: "v1",
 					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
@@ -339,6 +344,7 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := util.GetMetaComponents(c, ctx, client, s.daprd.HTTPPort())
 			assert.ElementsMatch(c, []*rtv1.RegisteredComponents{
+				{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 				{
 					Name: "123", Type: "state.sqlite", Version: "v1",
 					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
@@ -393,6 +399,7 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := util.GetMetaComponents(c, ctx, client, s.daprd.HTTPPort())
 			assert.ElementsMatch(c, []*rtv1.RegisteredComponents{
+				{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 				{Name: "bar", Type: "secretstores.local.file", Version: "v1"},
 				{
 					Name: "123", Type: "state.sqlite", Version: "v1",
@@ -432,6 +439,7 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := util.GetMetaComponents(c, ctx, client, s.daprd.HTTPPort())
 			assert.ElementsMatch(c, []*rtv1.RegisteredComponents{
+				{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 				{Name: "bar", Type: "secretstores.local.file", Version: "v1"},
 			}, resp)
 		}, time.Second*10, time.Millisecond*100)
@@ -453,7 +461,7 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 		s.operator.AddComponents(comp)
 		s.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &comp, EventType: operatorv1.ResourceEventType_CREATED})
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort()), 2)
+			assert.Len(c, util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort()), 3)
 		}, time.Second*5, time.Millisecond*100)
 		s.writeRead(t, ctx, client, "123")
 	})
