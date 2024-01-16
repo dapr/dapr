@@ -13,7 +13,7 @@ require (
 	github.com/cloudevents/sdk-go/v2 v2.14.0
 	github.com/dapr/components-contrib v1.12.1-0.20240116181555-28a3d649a377
 	github.com/dapr/kit v0.12.2-0.20240115170833-858719eb78ac
-	github.com/evanphx/json-patch/v5 v5.7.0
+	github.com/evanphx/json-patch/v5 v5.8.1
 	github.com/go-chi/chi/v5 v5.0.11
 	github.com/go-chi/cors v1.2.1
 	github.com/go-logr/logr v1.4.1
