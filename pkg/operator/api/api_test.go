@@ -34,7 +34,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/yaml"
 
-	"github.com/dapr/dapr/pkg/apis/common"
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpendpointapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
@@ -279,7 +278,7 @@ func TestComponentUpdate(t *testing.T) {
 				Namespace: "ns1",
 			},
 			Spec: componentsapi.ComponentSpec{},
-			Scoped: common.Scoped{
+			Scoped: commonapi.Scoped{
 				Scopes: []string{"dapr-placement"},
 			},
 		}

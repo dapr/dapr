@@ -130,7 +130,7 @@ func (l *listcomponents) Run(t *testing.T, ctx context.Context) {
 
 	client := l.operator.Dial(t, ctx, "default", "myapp", l.sentry)
 
-	t.Run("LIST", func(t *testing.T) {
+	t.Run("APP-LIST", func(t *testing.T) {
 		var resp *operatorv1.ListComponentResponse
 
 		// Test that the operator lists components ONLY meant for the app.
@@ -153,6 +153,10 @@ func (l *listcomponents) Run(t *testing.T, ctx context.Context) {
 			assert.JSONEq(t, string(b1), string(resp.GetComponents()[1]))
 			assert.JSONEq(t, string(b2), string(resp.GetComponents()[0]))
 		}
+	})
+
+	t.Run("CP-LIST", func(t *testing.T) {
+		var resp *operatorv1.ListComponentResponse
 
 		// Test that the operator lists components ONLY meant for the control plane.
 		ctrlClient := l.operator.Dial(t, ctx, "default", "dapr-placement", l.sentry)
@@ -163,9 +167,9 @@ func (l *listcomponents) Run(t *testing.T, ctx context.Context) {
 			assert.Len(c, resp.GetComponents(), 1)
 		}, time.Second*20, time.Millisecond*100)
 
-		cmp1, err := json.Marshal(l.ctrlPlaneComp)
+		ctrlPlaneComp, err := json.Marshal(l.ctrlPlaneComp)
 		require.NoError(t, err)
 
-		assert.JSONEq(t, string(cmp1), string(resp.GetComponents()[0]))
+		assert.JSONEq(t, string(ctrlPlaneComp), string(resp.GetComponents()[0]))
 	})
 }
