@@ -286,7 +286,10 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 			// No delay if stream connection is not alive.
 			if p.client.isConnected() {
 				diag.DefaultMonitoring.ActorStatusReported("send")
-				time.Sleep(statusReportHeartbeatInterval)
+				select {
+				case <-time.After(statusReportHeartbeatInterval):
+				case <-p.closeCh:
+				}
 			}
 		}
 	}()
@@ -389,7 +392,10 @@ func (p *actorPlacement) establishStreamConn(ctx context.Context) (established b
 		// Stop reconnecting to placement until app is healthy.
 		if !p.appHealthy.Load() {
 			// We are not using an exponential backoff here because we haven't begun to establish connections yet
-			time.Sleep(placementReadinessWaitInterval)
+			select {
+			case <-p.closeCh:
+			case <-time.After(placementReadinessWaitInterval):
+			}
 			continue
 		}
 
@@ -429,6 +435,8 @@ func (p *actorPlacement) establishStreamConn(ctx context.Context) (established b
 			select {
 			case <-time.After(bo.NextBackOff()):
 			case <-ctx.Done():
+				return false
+			case <-p.closeCh:
 				return false
 			}
 			continue
