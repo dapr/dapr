@@ -335,4 +335,36 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 			})
 		}
 	})
+
+	t.Run("child workflow", func(t *testing.T) {
+		r := task.NewTaskRegistry()
+		r.AddOrchestratorN("root", func(ctx *task.OrchestrationContext) (any, error) {
+			var input string
+			if err := ctx.GetInput(&input); err != nil {
+				return nil, err
+			}
+			var output string
+			err := ctx.CallSubOrchestrator("child", task.WithSubOrchestratorInput(input)).Await(&output)
+			return output, err
+		})
+		r.AddOrchestratorN("child", func(ctx *task.OrchestrationContext) (any, error) {
+			var input string
+			if err := ctx.GetInput(&input); err != nil {
+				return nil, err
+			}
+			return fmt.Sprintf("Hello, %s!", input), nil
+		})
+		taskhubCtx, cancelTaskhub := context.WithCancel(ctx)
+		backendClient.StartWorkItemListener(taskhubCtx, r)
+		defer cancelTaskhub()
+
+		// Wait for wfEngine to be ready
+		time.Sleep(5 * time.Second)
+
+		id := api.InstanceID(w.startWorkflow(ctx, t, "root", "Dapr"))
+		metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
+		require.NoError(t, err)
+		assert.True(t, metadata.IsComplete())
+		assert.Equal(t, `"Hello, Dapr!"`, metadata.SerializedOutput)
+	})
 }
