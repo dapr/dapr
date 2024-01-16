@@ -15,9 +15,10 @@ package raft
 
 import (
 	"bytes"
-	"github.com/dapr/dapr/pkg/placement/hashing"
 	"io"
 	"testing"
+
+	"github.com/dapr/dapr/pkg/placement/hashing"
 
 	"github.com/hashicorp/raft"
 	"github.com/stretchr/testify/assert"
@@ -97,7 +98,6 @@ func TestRestore(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, fsm.State().Members(), 1)
 	assert.Len(t, fsm.State().hashingTableMap(), 2)
-
 }
 
 func TestPlacementStateWithVirtualNodes(t *testing.T) {
@@ -123,13 +123,13 @@ func TestPlacementStateWithVirtualNodes(t *testing.T) {
 	assert.Equal(t, "1", newTable.GetVersion())
 	assert.Len(t, newTable.GetEntries(), 2)
 	// The default replicationFactor is 100
-	assert.Equal(t, newTable.GetReplicationFactor(), int64(100))
+	assert.Equal(t, int64(100), newTable.GetReplicationFactor())
 
 	for _, host := range newTable.GetEntries() {
-		assert.Len(t, host.Hosts, 100)
-		assert.Len(t, host.SortedSet, 100)
-		assert.Len(t, host.LoadMap, 1)
-		assert.Contains(t, host.LoadMap, "127.0.0.1:3030")
+		assert.Len(t, host.GetHosts(), 100)
+		assert.Len(t, host.GetSortedSet(), 100)
+		assert.Len(t, host.GetLoadMap(), 1)
+		assert.Contains(t, host.GetLoadMap(), "127.0.0.1:3030")
 	}
 }
 
@@ -156,13 +156,12 @@ func TestPlacementState(t *testing.T) {
 	assert.Equal(t, "1", newTable.GetVersion())
 	assert.Len(t, newTable.GetEntries(), 2)
 	// The default replicationFactor is 100
-	assert.Equal(t, newTable.GetReplicationFactor(), int64(100))
+	assert.Equal(t, int64(100), newTable.GetReplicationFactor())
 
 	for _, host := range newTable.GetEntries() {
-		assert.Len(t, host.Hosts, 0)
-		assert.Len(t, host.SortedSet, 0)
-		assert.Len(t, host.LoadMap, 1)
-		assert.Contains(t, host.LoadMap, "127.0.0.1:3030")
-
+		assert.Empty(t, host.GetHosts())
+		assert.Empty(t, host.GetSortedSet())
+		assert.Len(t, host.GetLoadMap(), 1)
+		assert.Contains(t, host.GetLoadMap(), "127.0.0.1:3030")
 	}
 }

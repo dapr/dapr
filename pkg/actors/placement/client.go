@@ -15,9 +15,10 @@ package placement
 
 import (
 	"context"
-	"google.golang.org/grpc/metadata"
 	"strconv"
 	"sync"
+
+	"google.golang.org/grpc/metadata"
 
 	"google.golang.org/grpc"
 

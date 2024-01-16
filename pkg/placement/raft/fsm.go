@@ -85,7 +85,6 @@ func (c *FSM) PlacementState(withVirtualNodes bool) *v1pb.PlacementTables {
 	for k, v := range entries {
 		var table v1pb.PlacementTable
 		v.ReadInternals(func(hosts map[uint64]string, sortedSet []uint64, loadMap map[string]*hashing.Host, totalLoad int64) {
-
 			sortedSetLen := 0
 			if withVirtualNodes {
 				sortedSetLen = len(sortedSet)
@@ -100,10 +99,10 @@ func (c *FSM) PlacementState(withVirtualNodes bool) *v1pb.PlacementTables {
 
 			if withVirtualNodes {
 				for lk, lv := range hosts {
-					table.Hosts[lk] = lv
+					table.GetHosts()[lk] = lv
 				}
 
-				copy(table.SortedSet, sortedSet)
+				copy(table.GetSortedSet(), sortedSet)
 			}
 
 			for lk, lv := range loadMap {
@@ -120,10 +119,10 @@ func (c *FSM) PlacementState(withVirtualNodes bool) *v1pb.PlacementTables {
 		newTable.Entries[k] = &table
 
 		if withVirtualNodes {
-			totalHostSize += len(table.Hosts)
-			totalSortedSet += len(table.SortedSet)
+			totalHostSize += len(table.GetHosts())
+			totalSortedSet += len(table.GetSortedSet())
 		}
-		totalLoadMap += len(table.LoadMap)
+		totalLoadMap += len(table.GetLoadMap())
 	}
 
 	if withVirtualNodes {

@@ -83,14 +83,13 @@ func NewConsistentHash() *Consistent {
 
 // NewFromExisting creates a new consistent hash from existing values.
 func NewFromExisting(loadMap map[string]*Host, replicationFactor int) *Consistent {
-
 	newHash := &Consistent{
 		hosts:     map[uint64]string{},
 		sortedSet: []uint64{},
 		loadMap:   loadMap,
 	}
 
-	for hostName, _ := range loadMap {
+	for hostName := range loadMap {
 		for i := 0; i < replicationFactor; i++ {
 			h := newHash.hash(fmt.Sprintf("%s%d", hostName, i))
 			newHash.hosts[h] = hostName
