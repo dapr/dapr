@@ -110,6 +110,7 @@ TARGET_OS ?= linux
 TARGET_ARCH ?= amd64
 TEST_OUTPUT_FILE_PREFIX ?= ./test_report
 
+GOLANGCI_LINT_TAGS=allcomponents,subtlecrypto
 ifeq ($(GOOS),windows)
 BINARY_EXT_LOCAL:=.exe
 GOLANGCI_LINT:=golangci-lint.exe
@@ -377,7 +378,7 @@ test-integration: test-deps
 # You can download version v1.51.2 at https://github.com/golangci/golangci-lint/releases/tag/v1.51.2
 .PHONY: lint
 lint: check-linter
-	$(GOLANGCI_LINT) run --build-tags=allcomponents --timeout=20m
+	$(GOLANGCI_LINT) run --build-tags=$(GOLANGCI_LINT_TAGS) --timeout=20m
 
 
 ################################################################################
