@@ -47,26 +47,29 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v4
         with:
-          repository: ${{ env.CHECKOUT_REPO }}
-          ref: ${{ env.CHECKOUT_REF }}
+          repository: ${{ github.repository }}
+          ref: ${{ github.ref }}
       - name: Set up Go
         id: setup-go
         uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
       - name: Build Dapr's sidecar
-        run: make ./dist/${GOOS}_${GOARCH}/release/daprd
-      - name: Check out code at master branch for PR validation
+        run: |
+          git status
+          make ./dist/${GOOS}_${GOARCH}/release/daprd
+      - name: "Check out code at ${{ github.base_ref }} for PR validation"
         if: github.event_name == 'pull_request'
         uses: actions/checkout@v4
         with:
-          repository: ${{ env.CHECKOUT_REPO }}
-          ref: master
-          path: .master
-      - name: Build and override daprd with master version
+          repository: ${{ github.repository }}
+          ref: ${{ github.base_ref }}
+          path: .baseline
+      - name: "Build and override daprd from ${{ github.base_ref }}"
         if: github.event_name == 'pull_request'
         run: |
-          cd .master
+          cd .baseline
+          git status
           make ./dist/${GOOS}_${GOARCH}/release/daprd
           mkdir -p $HOME/.dapr/bin/
           cp dist/${GOOS}_${GOARCH}/release/daprd $HOME/.dapr/bin/daprd
