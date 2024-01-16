@@ -90,7 +90,7 @@ jobs:
             Commit ref: ${{ env.CHECKOUT_REF }}
 
       - name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.CHECKOUT_REF }}
@@ -100,11 +100,11 @@ jobs:
           python-version: "3.9"
       - name: "Set up Go"
         id: setup-go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
       - name: Checkout python-sdk repo to run tests.
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: dapr/python-sdk
           path: python-sdk
@@ -219,7 +219,7 @@ jobs:
 
             Commit ref: ${{ env.CHECKOUT_REF }}
       - name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.CHECKOUT_REF }}
@@ -230,11 +230,11 @@ jobs:
           java-version: ${{ env.JDK_VER }}
       - name: "Set up Go"
         id: setup-go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
       - name: Checkout java-sdk repo to run tests.
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: dapr/java-sdk
           path: java-sdk
@@ -273,24 +273,24 @@ jobs:
         id: integration_tests
         run: cd java-sdk && PRODUCT_SPRING_BOOT_VERSION=${{ env.JAVA_SPRING_BOOT_VERSION }} mvn -B -f sdk-tests/pom.xml verify
       - name: Upload test report for sdk
-        uses: actions/upload-artifact@master
+        uses: actions/upload-artifact@v4
         with:
           name: report-dapr-java-sdk
           path: java-sdk/sdk/target/jacoco-report/
       - name: Upload test report for sdk-actors
-        uses: actions/upload-artifact@master
+        uses: actions/upload-artifact@v4
         with:
           name: report-dapr-java-sdk-actors
           path: java-sdk/sdk-actors/target/jacoco-report/
       - name: Upload failsafe test report for sdk-tests on failure
         if: ${{ failure() && steps.integration_tests.conclusion == 'failure' }}
-        uses: actions/upload-artifact@master
+        uses: actions/upload-artifact@v4
         with:
           name: failsafe-report-sdk-tests
           path: java-sdk/sdk-tests/target/failsafe-reports
       - name: Upload surefire test report for sdk-tests on failure
         if: ${{ failure() && steps.integration_tests.conclusion == 'failure' }}
-        uses: actions/upload-artifact@master
+        uses: actions/upload-artifact@v4
         with:
           name: surefire-report-sdk-tests
           path: java-sdk/sdk-tests/target/surefire-reports
@@ -392,7 +392,7 @@ jobs:
 
             Commit ref: ${{ env.CHECKOUT_REF }}
       - name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.CHECKOUT_REF }}
@@ -402,11 +402,11 @@ jobs:
           node-version: ${{ env.NODE_VER }}
       - name: "Set up Go"
         id: setup-go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
       - name: Checkout js-sdk repo to run tests.
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: dapr/js-sdk
           path: js-sdk
@@ -518,13 +518,13 @@ jobs:
 
             Commit ref: ${{ env.CHECKOUT_REF }}
       - name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.CHECKOUT_REF }}
       - name: "Set up Go"
         id: setup-go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
       - name: Set up Python 3.9
@@ -532,7 +532,7 @@ jobs:
         with:
           python-version: 3.9
       - name: Checkout go-sdk repo to run tests.
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: dapr/go-sdk
           path: go-sdk
