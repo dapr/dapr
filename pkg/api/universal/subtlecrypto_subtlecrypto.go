@@ -28,12 +28,20 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwk"
 
 	contribCrypto "github.com/dapr/components-contrib/crypto"
+	"github.com/dapr/dapr/pkg/buildinfo"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	kitCrypto "github.com/dapr/kit/crypto"
 )
+
+// TODO: Remove this when the build tag is removed
+func init() {
+	// Add a fake feature "_SubtleCrypto" which is not a real preview feature
+	// This is then exposed in the sidecar's metadata endpoint so tests (and users) can query for this.
+	buildinfo.AddFeature("_SubtleCrypto")
+}
 
 // SubtleGetKeyAlpha1 returns the public part of an asymmetric key stored in the vault.
 func (a *Universal) SubtleGetKeyAlpha1(ctx context.Context, in *runtimev1pb.SubtleGetKeyRequest) (*runtimev1pb.SubtleGetKeyResponse, error) {
