@@ -163,12 +163,11 @@ func (hc *VirtualNodesCache) setHashes(replicationFactor int64, host string) []u
 	}
 
 	hashMap := newHashMap()
-	hashMap.hashes[host] = []uint64{}
+	hashMap.hashes[host] = make([]uint64, replicationFactor)
 
 	c := &Consistent{}
 	for i := 0; i < int(replicationFactor); i++ {
-		h := c.hash(fmt.Sprintf("%s%d", host, i))
-		hashMap.hashes[host] = append(hashMap.hashes[host], h)
+		hashMap.hashes[host][i] = c.hash(host + strconv.Itoa(i))
 	}
 
 	hc.data[replicationFactor] = hashMap
