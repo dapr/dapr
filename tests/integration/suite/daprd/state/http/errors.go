@@ -308,7 +308,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
 		require.True(t, exists)
-		require.Equal(t, "state store is not configured", errMsg)
+		require.Equal(t, fmt.Sprintf("state store %s is not configured", storeName), errMsg)
 
 		// Confirm that the 'details' field exists and has one element
 		details, exists := data["details"]
