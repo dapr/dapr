@@ -501,6 +501,13 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 		return err
 	}
 
+	// by default assume that components are not getting loaded for control plane service
+	controlPlaneServiceReq := false
+
+	if in.GetNamespace() == security.CurrentNamespace() && utils.IsControlPlaneService(spiffeID.AppID()) {
+		controlPlaneServiceReq = true
+	}
+
 	log.Info("sidecar connected for component updates")
 	keyObj, err := uuid.NewRandom()
 	if err != nil {
@@ -523,15 +530,20 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 		if c.Namespace != in.GetNamespace() {
 			return
 		}
+		// By default assume that it is not a component for control plane service.
+		controlPlaneComp := false
 		if c.ObjectMeta.Namespace == security.CurrentNamespace() {
 			for s := range c.Scopes {
 				scope := c.Scopes[s]
 				if utils.IsControlPlaneService(scope) {
-					return
+					controlPlaneComp = true
+					break
 				}
 			}
 		}
-
+		if (!controlPlaneServiceReq && controlPlaneComp) || (controlPlaneServiceReq && !controlPlaneComp) {
+			return
+		}
 		err := processComponentSecrets(ctx, c, in.GetNamespace(), a.Client)
 		if err != nil {
 			log.Warnf("error processing component %s secrets from pod %s/%s: %s", c.Name, in.GetNamespace(), in.GetPodName(), err)
