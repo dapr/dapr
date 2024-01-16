@@ -274,7 +274,7 @@ func TestExecution(t *testing.T) {
 		t.Run("workflow scheduling latency", func(t *testing.T) {
 			w := initWorkflowMetrics()
 
-			w.WorkflowSchedulingLatency(context.Background(), workflowName, StatusSuccess, 10)
+			w.WorkflowSchedulingLatency(context.Background(), workflowName, 10)
 
 			viewData, _ := view.RetrieveData(schedulingLatencyMetricName)
 			v := view.Find(schedulingLatencyMetricName)

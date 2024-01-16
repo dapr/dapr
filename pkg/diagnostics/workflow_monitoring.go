@@ -111,7 +111,7 @@ func (w *workflowMetrics) Init(appID, namespace string) error {
 		diagUtils.NewMeasureView(w.activityExecutionCount, []tag.Key{appIDKey, namespaceKey, activityNameKey, statusKey}, view.Count()),
 		diagUtils.NewMeasureView(w.activityExecutionLatency, []tag.Key{appIDKey, namespaceKey, activityNameKey, statusKey}, defaultLatencyDistribution),
 		diagUtils.NewMeasureView(w.workflowExecutionLatency, []tag.Key{appIDKey, namespaceKey, workflowNameKey, statusKey}, defaultLatencyDistribution),
-		diagUtils.NewMeasureView(w.workflowSchedulingLatency, []tag.Key{appIDKey, namespaceKey, workflowNameKey, statusKey}, defaultLatencyDistribution))
+		diagUtils.NewMeasureView(w.workflowSchedulingLatency, []tag.Key{appIDKey, namespaceKey, workflowNameKey}, defaultLatencyDistribution))
 }
 
 // WorkflowOperationEvent records total number of Successful/Failed workflow Operations requests. It also records latency for those requests.
@@ -147,13 +147,13 @@ func (w *workflowMetrics) WorkflowExecutionLatency(ctx context.Context, workflow
 	}
 }
 
-func (w *workflowMetrics) WorkflowSchedulingLatency(ctx context.Context, workflowName, status string, elapsed float64) {
+func (w *workflowMetrics) WorkflowSchedulingLatency(ctx context.Context, workflowName string, elapsed float64) {
 	if !w.IsEnabled() {
 		return
 	}
 
 	if elapsed > 0 {
-		stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowSchedulingLatency.Name(), appIDKey, w.appID, namespaceKey, w.namespace, workflowNameKey, workflowName, statusKey, status), w.workflowSchedulingLatency.M(elapsed))
+		stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowSchedulingLatency.Name(), appIDKey, w.appID, namespaceKey, w.namespace, workflowNameKey, workflowName), w.workflowSchedulingLatency.M(elapsed))
 	}
 }
 
