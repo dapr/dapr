@@ -100,6 +100,25 @@ func (c *componentupdate) Run(t *testing.T, ctx context.Context) {
 		},
 	}
 
+	ctrlComp := &compapi.Component{
+		ObjectMeta: metav1.ObjectMeta{Name: "ctrl_comp", Namespace: "default", CreationTimestamp: metav1.Time{}},
+		Spec: compapi.ComponentSpec{
+			Type:         "state.redis",
+			Version:      "v1",
+			IgnoreErrors: false,
+			Metadata: []common.NameValuePair{
+				{
+					Name: "connectionString", Value: common.DynamicValue{
+						JSON: apiextv1.JSON{Raw: []byte(`"foobar"`)},
+					},
+				},
+			},
+		},
+		Scoped: common.Scoped{
+			Scopes: []string{"dapr-placement"},
+		},
+	}
+
 	t.Run("CREATE", func(t *testing.T) {
 		c.store.Add(comp)
 		c.kubeapi.Informer().Add(t, comp)
@@ -154,5 +173,29 @@ func (c *componentupdate) Run(t *testing.T, ctx context.Context) {
 		assert.JSONEq(t, string(b), string(event.GetComponent()))
 		assert.Equal(t, operatorv1.ResourceEventType_DELETED, event.GetType())
 		assert.Equal(t, "DELETED", event.GetType().String())
+	})
+
+	ctrlClient := c.operator.Dial(t, ctx, "default", "dapr-placement", c.sentry)
+
+	ctrlClientStream, err := ctrlClient.ComponentUpdate(ctx, &operatorv1.ComponentUpdateRequest{Namespace: "default"})
+	require.NoError(t, err)
+
+	t.Run("CTRL_COMP_CREATE", func(t *testing.T) {
+		c.store.Add(ctrlComp)
+		c.kubeapi.Informer().Add(t, ctrlComp)
+
+		event, err := ctrlClientStream.Recv()
+		require.NoError(t, err)
+		assert.JSONEq(t, `{
+"metadata": { "name": "ctrl_comp", "namespace": "default", "creationTimestamp": null },
+"spec": {
+"ignoreErrors": false, "initTimeout": "", "type": "state.redis", "version": "v1", "metadata":
+[ { "name": "connectionString", "secretKeyRef": { "key": "", "name": "" }, "value": "foobar" } ] },
+"auth": { "secretStore": "" },
+"scopes": ["dapr-placement"]
+}`, string(event.GetComponent()))
+
+		assert.Equal(t, operatorv1.ResourceEventType_CREATED, event.GetType())
+		assert.Equal(t, "CREATED", event.GetType().String())
 	})
 }
