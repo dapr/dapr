@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+//nolint:protogetter
 package universal
 
 import (
@@ -39,9 +40,9 @@ func TestSubtleGetKeyAlpha1(t *testing.T) {
 	compStore := compstore.New()
 	compStore.AddCryptoProvider("myvault", fakeCryptoProvider)
 	fakeAPI := &Universal{
-		Logger:     testLogger,
-		Resiliency: resiliency.New(nil),
-		CompStore:  compStore,
+		logger:     testLogger,
+		resiliency: resiliency.New(nil),
+		compStore:  compStore,
 	}
 
 	t.Run("return key in PEM format", func(t *testing.T) {
@@ -102,7 +103,7 @@ func TestSubtleGetKeyAlpha1(t *testing.T) {
 	})
 
 	t.Run("no provider configured", func(t *testing.T) {
-		fakeAPI.CompStore.DeleteCryptoProvider("myvault")
+		fakeAPI.compStore.DeleteCryptoProvider("myvault")
 		defer func() {
 			compStore.AddCryptoProvider("myvault", fakeCryptoProvider)
 		}()
@@ -146,9 +147,9 @@ func TestSubtleEncryptAlpha1(t *testing.T) {
 	compStore := compstore.New()
 	compStore.AddCryptoProvider("myvault", fakeCryptoProvider)
 	fakeAPI := &Universal{
-		Logger:     testLogger,
-		Resiliency: resiliency.New(nil),
-		CompStore:  compStore,
+		logger:     testLogger,
+		resiliency: resiliency.New(nil),
+		compStore:  compStore,
 	}
 
 	t.Run("encrypt message", func(t *testing.T) {
@@ -165,7 +166,7 @@ func TestSubtleEncryptAlpha1(t *testing.T) {
 	})
 
 	t.Run("no provider configured", func(t *testing.T) {
-		fakeAPI.CompStore.DeleteCryptoProvider("myvault")
+		fakeAPI.compStore.DeleteCryptoProvider("myvault")
 		defer func() {
 			compStore.AddCryptoProvider("myvault", fakeCryptoProvider)
 		}()
@@ -200,9 +201,9 @@ func TestSubtleDecryptAlpha1(t *testing.T) {
 	compStore := compstore.New()
 	compStore.AddCryptoProvider("myvault", fakeCryptoProvider)
 	fakeAPI := &Universal{
-		Logger:     testLogger,
-		Resiliency: resiliency.New(nil),
-		CompStore:  compStore,
+		logger:     testLogger,
+		resiliency: resiliency.New(nil),
+		compStore:  compStore,
 	}
 
 	t.Run("decrypt message", func(t *testing.T) {
@@ -218,7 +219,7 @@ func TestSubtleDecryptAlpha1(t *testing.T) {
 	})
 
 	t.Run("no provider configured", func(t *testing.T) {
-		fakeAPI.CompStore.DeleteCryptoProvider("myvault")
+		fakeAPI.compStore.DeleteCryptoProvider("myvault")
 		defer func() {
 			compStore.AddCryptoProvider("myvault", fakeCryptoProvider)
 		}()
@@ -253,9 +254,9 @@ func TestSubtleWrapKeyAlpha1(t *testing.T) {
 	compStore := compstore.New()
 	compStore.AddCryptoProvider("myvault", fakeCryptoProvider)
 	fakeAPI := &Universal{
-		Logger:     testLogger,
-		Resiliency: resiliency.New(nil),
-		CompStore:  compStore,
+		logger:     testLogger,
+		resiliency: resiliency.New(nil),
+		compStore:  compStore,
 	}
 
 	t.Run("wrap key", func(t *testing.T) {
@@ -271,7 +272,7 @@ func TestSubtleWrapKeyAlpha1(t *testing.T) {
 	})
 
 	t.Run("no provider configured", func(t *testing.T) {
-		fakeAPI.CompStore.DeleteCryptoProvider("myvault")
+		fakeAPI.compStore.DeleteCryptoProvider("myvault")
 		defer func() {
 			compStore.AddCryptoProvider("myvault", fakeCryptoProvider)
 		}()
@@ -317,9 +318,9 @@ func TestSubtleUnwrapKeyAlpha1(t *testing.T) {
 	compStore := compstore.New()
 	compStore.AddCryptoProvider("myvault", fakeCryptoProvider)
 	fakeAPI := &Universal{
-		Logger:     testLogger,
-		Resiliency: resiliency.New(nil),
-		CompStore:  compStore,
+		logger:     testLogger,
+		resiliency: resiliency.New(nil),
+		compStore:  compStore,
 	}
 
 	t.Run("unwrap key", func(t *testing.T) {
@@ -335,7 +336,7 @@ func TestSubtleUnwrapKeyAlpha1(t *testing.T) {
 	})
 
 	t.Run("no provider configured", func(t *testing.T) {
-		fakeAPI.CompStore.DeleteCryptoProvider("myvault")
+		fakeAPI.compStore.DeleteCryptoProvider("myvault")
 		defer func() {
 			compStore.AddCryptoProvider("myvault", fakeCryptoProvider)
 		}()
@@ -371,9 +372,9 @@ func TestSubtleSignAlpha1(t *testing.T) {
 	compStore := compstore.New()
 	compStore.AddCryptoProvider("myvault", fakeCryptoProvider)
 	fakeAPI := &Universal{
-		Logger:     testLogger,
-		Resiliency: resiliency.New(nil),
-		CompStore:  compStore,
+		logger:     testLogger,
+		resiliency: resiliency.New(nil),
+		compStore:  compStore,
 	}
 
 	t.Run("sign message", func(t *testing.T) {
@@ -389,7 +390,7 @@ func TestSubtleSignAlpha1(t *testing.T) {
 	})
 
 	t.Run("no provider configured", func(t *testing.T) {
-		fakeAPI.CompStore.DeleteCryptoProvider("myvault")
+		fakeAPI.compStore.DeleteCryptoProvider("myvault")
 		defer func() {
 			compStore.AddCryptoProvider("myvault", fakeCryptoProvider)
 		}()
@@ -425,9 +426,9 @@ func TestSubtleVerifyAlpha1(t *testing.T) {
 	compStore := compstore.New()
 	compStore.AddCryptoProvider("myvault", fakeCryptoProvider)
 	fakeAPI := &Universal{
-		Logger:     testLogger,
-		Resiliency: resiliency.New(nil),
-		CompStore:  compStore,
+		logger:     testLogger,
+		resiliency: resiliency.New(nil),
+		compStore:  compStore,
 	}
 
 	t.Run("signature is valid", func(t *testing.T) {
@@ -455,7 +456,7 @@ func TestSubtleVerifyAlpha1(t *testing.T) {
 	})
 
 	t.Run("no provider configured", func(t *testing.T) {
-		fakeAPI.CompStore.DeleteCryptoProvider("myvault")
+		fakeAPI.compStore.DeleteCryptoProvider("myvault")
 		defer func() {
 			compStore.AddCryptoProvider("myvault", fakeCryptoProvider)
 		}()
