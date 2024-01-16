@@ -557,8 +557,7 @@ func TestListsNamespaced(t *testing.T) {
 
 		api := NewAPIServer(Options{Client: client}).(*apiServer)
 
-		os.Setenv("NAMESPACE", "dapr-mockns")
-		defer os.Unsetenv("NAMESPACE")
+		t.Setenv("NAMESPACE", "dapr-mockns")
 
 		appID = spiffeid.RequireFromString("spiffe://example.org/ns/dapr-mockns/dapr-placement")
 		serverID = spiffeid.RequireFromString("spiffe://example.org/ns/ns1/sv1")
