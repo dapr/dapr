@@ -1,0 +1,479 @@
+#
+# Copyright 2023 The Dapr Authors
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+name: Version Skew tests
+
+on:
+  # Run when a PR is merged to master.
+  push:
+    branches:
+      - master
+  # Dispatch on external events
+  repository_dispatch:
+    types:
+    - test-version-skew
+
+defaults:
+  run:
+    shell: bash
+
+# Jobs can be triggered with the `/test-version-skew` command. You can also
+# supply a specific version to test against, overriding the current latest
+# release, e.g. `/test-version-skew 1.10.5`. This is useful for testing
+# against a specific patch or release candidate. This version must be a
+# valid tag and artefacts be publicly available. Remember that Dapr only
+# guarantees N-1.
+jobs:
+  # Dapr guarantees that the control plane and Dapr sidecars may have a version
+  # skew of N-1 and still be fully functional. This workflow verifies this
+  # guarantee holds for master and the previous release (or overridden version
+  # reference).
+
+  # This workflow runs the previous releases integration tests against the
+  # matrix of master/latest-release daprd/control-plane. This ensures the
+  # previous assertions hold for the current HEAD, and version skew works
+  # between daprd and the control plane.
+  integration-version-skew:
+    name: integration-version-skew
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false # Keep running if one leg fails.
+      matrix:
+        mode:
+        - control-plane-master
+        - dapr-sidecar-master
+    steps:
+    - name: Set up for Dapr lastest release
+      run: |
+        echo "DAPR_PREV_VERSION=$(curl -s https://api.github.com/repos/dapr/dapr/releases/latest | jq -r '.tag_name' | cut -c 2-)" >> $GITHUB_ENV
+    - name: Set up for master
+      if: github.event_name != 'repository_dispatch'
+      run: |
+        echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
+        echo "CHECKOUT_REF=refs/heads/master" >> $GITHUB_ENV
+      shell: bash
+    - name: Setup test output
+      shell: bash
+      run: |
+        export TEST_OUTPUT_FILE_PREFIX=$GITHUB_WORKSPACE/test_report
+        echo "TEST_OUTPUT_FILE_PREFIX=$TEST_OUTPUT_FILE_PREFIX" >> $GITHUB_ENV
+    - name: Parse test payload
+      if: github.event_name == 'repository_dispatch'
+      uses: actions/github-script@v6.2.0
+      with:
+        github-token: ${{secrets.DAPR_BOT_TOKEN}}
+        script: |
+          const testPayload = context.payload.client_payload;
+          if (testPayload) {
+            var fs = require('fs');
+            var envs = `CHECKOUT_REPO=${testPayload.pull_head_repo}\n`+
+              `CHECKOUT_REF=${testPayload.pull_head_ref}\n`+
+              `PR_NUMBER=${testPayload.issue.number}`;
+            if (testPayload.previous_version) {
+              envs += `\nDAPR_PREV_VERSION=${testPayload.previous_version}`;
+            }
+            // Set environment variables
+            fs.appendFileSync(process.env.GITHUB_ENV, envs);
+          }
+    - name: Create PR comment
+      if: env.PR_NUMBER != ''
+      uses: artursouza/sticky-pull-request-comment@v2.2.0
+      with:
+        header: ${{ github.run_id }}-version-skew-integration-${{ matrix.mode }}-${{ env.DAPR_PREV_VERSION }}
+        number: ${{ env.PR_NUMBER }}
+        hide: true
+        hide_classify: OUTDATED
+        GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+        message: |
+          # Dapr Version Skew integration test (${{ matrix.mode }} - ${{ env.DAPR_PREV_VERSION }})
+
+          🔗 **[Link to Action run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})**
+
+          Commit ref: ${{ env.CHECKOUT_REF }}
+    - name: Check out code
+      uses: actions/checkout@v3
+      with:
+        repository: ${{ env.CHECKOUT_REPO }}
+        ref: ${{ env.CHECKOUT_REF }}
+    - name: Checkout last release repo
+      uses: actions/checkout@v3
+      with:
+        repository: dapr/dapr
+        path: latest-release
+        ref: v${{ env.DAPR_PREV_VERSION }}
+    - name: Apply patches to latest release
+      run: |
+        export DAPR_LATEST_MAJOR_MINOR=$(echo ${{ env.DAPR_PREV_VERSION }} | cut -d. -f1-2)
+        export DAPR_PATCH_DIR="$(pwd)/.github/scripts/version-skew-test-patches/integration/release-$DAPR_LATEST_MAJOR_MINOR"
+        if [ -d "$DAPR_PATCH_DIR" ]; then
+          cd latest-release
+          echo "Applying patches from $DAPR_PATCH_DIR to $(pwd)"
+          git apply --ignore-space-change --ignore-whitespace $DAPR_PATCH_DIR/*.patch
+          git diff
+        fi
+    - name: Set up Go
+      id: setup-go
+      uses: actions/setup-go@v4
+      with:
+        go-version-file: 'go.mod'
+
+    - name: Build & download binaries
+      run: |
+        go mod tidy -v
+        make build
+        mkdir -p downloads && cd downloads
+        curl -so daprd_linux_amd64.tar.gz -L https://github.com/dapr/dapr/releases/download/v${{ env.DAPR_PREV_VERSION }}/daprd_linux_amd64.tar.gz
+        curl -so sentry_linux_amd64.tar.gz -L https://github.com/dapr/dapr/releases/download/v${{ env.DAPR_PREV_VERSION }}/sentry_linux_amd64.tar.gz
+        curl -so placement_linux_amd64.tar.gz -L https://github.com/dapr/dapr/releases/download/v${{ env.DAPR_PREV_VERSION }}/placement_linux_amd64.tar.gz
+        curl -so injector_linux_amd64.tar.gz -L https://github.com/dapr/dapr/releases/download/v${{ env.DAPR_PREV_VERSION }}/injector_linux_amd64.tar.gz
+        curl -so operator_linux_amd64.tar.gz -L https://github.com/dapr/dapr/releases/download/v${{ env.DAPR_PREV_VERSION }}/operator_linux_amd64.tar.gz
+        tar xvf daprd_linux_amd64.tar.gz
+        tar xvf sentry_linux_amd64.tar.gz
+        tar xvf placement_linux_amd64.tar.gz
+        tar xvf injector_linux_amd64.tar.gz
+        tar xvf operator_linux_amd64.tar.gz
+
+    - name: Setup DAPR_INTEGRATION_X_PATH - control-plane master
+      if: matrix.mode == 'control-plane-master'
+      run: |
+        echo "DAPR_INTEGRATION_DAPRD_PATH=$(pwd)/downloads/daprd" >> $GITHUB_ENV
+        echo "DAPR_INTEGRATION_PLACEMENT_PATH=$(pwd)/dist/linux_amd64/release/placement" >> $GITHUB_ENV
+        echo "DAPR_INTEGRATION_OPERATOR_PATH=$(pwd)/dist/linux_amd64/release/operator" >> $GITHUB_ENV
+        echo "DAPR_INTEGRATION_SENTRY_PATH=$(pwd)/dist/linux_amd64/release/sentry" >> $GITHUB_ENV
+        echo "DAPR_INTEGRATION_INJECTOR_PATH=$(pwd)/dist/linux_amd64/release/injector" >> $GITHUB_ENV
+
+    - name: Setup DAPR_INTEGRATION_X_PATH - dapr-sidecar master
+      if: matrix.mode == 'dapr-sidecar-master'
+      run: |
+        echo "DAPR_INTEGRATION_DAPRD_PATH=$(pwd)/dist/linux_amd64/release/daprd" >> $GITHUB_ENV
+        echo "DAPR_INTEGRATION_PLACEMENT_PATH=$(pwd)/downloads/placement" >> $GITHUB_ENV
+        echo "DAPR_INTEGRATION_SENTRY_PATH=$(pwd)/downloads/sentry" >> $GITHUB_ENV
+        echo "DAPR_INTEGRATION_OPERATOR_PATH=$(pwd)/downloads/operator" >> $GITHUB_ENV
+        echo "DAPR_INTEGRATION_INJECTOR_PATH=$(pwd)/downloads/injector" >> $GITHUB_ENV
+
+    - name: Run make test-integration
+      run: cd latest-release && make test-integration
+
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@master
+      with:
+        name: latest-release/${{ matrix.mode }}_test_e2e.json
+        path: latest-release/${{ env.TEST_OUTPUT_FILE_PREFIX }}_integration.*
+    - name: Update PR comment for success
+      if: ${{ success() }}
+      uses: artursouza/sticky-pull-request-comment@v2.2.0
+      with:
+        header: ${{ github.run_id }}-version-skew-integration-${{ matrix.mode }}-${{ env.DAPR_PREV_VERSION }}
+        number: ${{ env.PR_NUMBER }}
+        append: true
+        GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+        message: |
+          ## ✅ Version Skew tests passed
+    - name: Update PR comment for failure
+      if: ${{ failure() }}
+      uses: artursouza/sticky-pull-request-comment@v2.2.0
+      with:
+        header: ${{ github.run_id }}-version-skew-integration-${{ matrix.mode }}-${{ env.DAPR_PREV_VERSION }}
+        number: ${{ env.PR_NUMBER }}
+        append: true
+        GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+        message: |
+          ## ❌ Version Skew tests failed
+
+          Please check the logs for details on the error.
+    - name: Update PR comment for cancellation
+      if: ${{ cancelled() }}
+      uses: artursouza/sticky-pull-request-comment@v2.2.0
+      with:
+        header: ${{ github.run_id }}-version-skew-integration-${{ matrix.mode }}-${{ env.DAPR_PREV_VERSION }}
+        number: ${{ env.PR_NUMBER }}
+        append: true
+        GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+        message: |
+          ## ⚠️ Version Skew tests cancelled
+
+          The Action has been canceled
+
+  # This workflow runs our e2e tests on KinD. Tests are performed with the
+  # control plane on master and side car on the previous release, and vice
+  # versa.
+  #
+  # The e2e tests from the previous release are run against this deployment.
+  e2e-version-skew:
+    name: e2e-version-skew
+    runs-on: ubuntu-latest
+    env:
+      REGISTRY_PORT: 5000
+      REGISTRY_NAME: kind-registry
+      DAPR_REGISTRY: localhost:5000/dapr
+      DAPR_TAG: dev
+      DAPR_NAMESPACE: dapr-tests
+      DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
+      PULL_POLICY: Always
+    strategy:
+      fail-fast: false # Keep running if one leg fails.
+      matrix:
+        mode:
+        - control-plane-master
+        - dapr-sidecar-master
+    steps:
+    - name: Set up for Dapr lastest release
+      run: |
+        echo "DAPR_PREV_VERSION=$(curl -s https://api.github.com/repos/dapr/dapr/releases/latest | jq -r '.tag_name' | cut -c 2-)" >> $GITHUB_ENV
+    - name: Set up for master
+      if: github.event_name != 'repository_dispatch'
+      run: |
+        echo "CHECKOUT_REPO=${{ github.repository }}" >> $GITHUB_ENV
+        echo "CHECKOUT_REF=refs/heads/master" >> $GITHUB_ENV
+      shell: bash
+    - name: Parse test payload
+      if: github.event_name == 'repository_dispatch'
+      uses: actions/github-script@v6.2.0
+      with:
+        github-token: ${{secrets.DAPR_BOT_TOKEN}}
+        script: |
+          const testPayload = context.payload.client_payload;
+          if (testPayload) {
+            var fs = require('fs');
+            var envs = `CHECKOUT_REPO=${testPayload.pull_head_repo}\n`+
+              `CHECKOUT_REF=${testPayload.pull_head_ref}\n`+
+              `PR_NUMBER=${testPayload.issue.number}`;
+            if (testPayload.previous_version) {
+              envs += `\nDAPR_PREV_VERSION=${testPayload.previous_version}`;
+            }
+            // Set environment variables
+            fs.appendFileSync(process.env.GITHUB_ENV, envs);
+          }
+    - name: Create PR comment
+      if: env.PR_NUMBER != ''
+      uses: artursouza/sticky-pull-request-comment@v2.2.0
+      with:
+        header: ${{ github.run_id }}-version-skew-e2e-${{ matrix.mode }}-${{ env.DAPR_PREV_VERSION }}
+        number: ${{ env.PR_NUMBER }}
+        hide: true
+        hide_classify: OUTDATED
+        GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+        message: |
+          # Dapr Version Skew e2e test (${{ matrix.mode }} - ${{ env.DAPR_PREV_VERSION }})
+
+          🔗 **[Link to Action run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})**
+
+          Commit ref: ${{ env.CHECKOUT_REF }}
+    - name: Check out code
+      uses: actions/checkout@v4
+      with:
+        repository: ${{ env.CHECKOUT_REPO }}
+        ref: ${{ env.CHECKOUT_REF }}
+    - name: Checkout last release repo
+      uses: actions/checkout@v4
+      with:
+        repository: dapr/dapr
+        path: latest-release
+        ref: v${{ env.DAPR_PREV_VERSION }}
+    - name: Apply patches to latest release
+      run: |
+        export DAPR_LATEST_MAJOR_MINOR=$(echo ${{ env.DAPR_PREV_VERSION }} | cut -d. -f1-2)
+        export DAPR_PATCH_DIR="$(pwd)/.github/scripts/version-skew-test-patches/e2e/release-$DAPR_LATEST_MAJOR_MINOR/${{ matrix.mode }}"
+        if [ -d "$DAPR_PATCH_DIR" ]; then
+          echo "Applying patches from $DAPR_PATCH_DIR"
+          cd latest-release
+          echo "Applying patches from $DAPR_PATCH_DIR to $(pwd)"
+          git apply --ignore-space-change --ignore-whitespace $DAPR_PATCH_DIR/*.patch
+          git diff
+        fi
+    - name: Set up Go
+      id: setup-go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: 'go.mod'
+    - name: Configure KinD
+      run: |
+        cat > kind.yaml <<EOF
+        apiVersion: kind.x-k8s.io/v1alpha4
+        kind: Cluster
+        nodes:
+        - role: control-plane
+          image: kindest/node:v1.25.3@sha256:f52781bc0d7a19fb6c405c2af83abfeb311f130707a0e219175677e366cc45d1
+        - role: worker
+          image: kindest/node:v1.25.3@sha256:f52781bc0d7a19fb6c405c2af83abfeb311f130707a0e219175677e366cc45d1
+        - role: worker
+          image: kindest/node:v1.25.3@sha256:f52781bc0d7a19fb6c405c2af83abfeb311f130707a0e219175677e366cc45d1
+        - role: worker
+          image: kindest/node:v1.25.3@sha256:f52781bc0d7a19fb6c405c2af83abfeb311f130707a0e219175677e366cc45d1
+        containerdConfigPatches:
+        - |-
+          [plugins."io.containerd.grpc.v1.cri".registry.mirrors."localhost:$REGISTRY_PORT"]
+            endpoint = ["http://$REGISTRY_NAME:$REGISTRY_PORT"]
+        EOF
+
+        # Log the generated kind.yaml for easy reference.
+        cat kind.yaml
+
+        # Set log target directories
+        echo "DAPR_CONTAINER_LOG_PATH=$GITHUB_WORKSPACE/container_logs/v1.25.3_ha" >> $GITHUB_ENV
+        echo "DAPR_TEST_LOG_PATH=$GITHUB_WORKSPACE/test_logs/v1.25.3_ha" >> $GITHUB_ENV
+
+    - name: Create KinD Cluster
+      uses: helm/kind-action@v1.5.0
+      with:
+        config: kind.yaml
+        cluster_name: kind
+        version: v0.17.0
+
+    - name: Get KinD info
+      run: |
+        kubectl cluster-info --context kind-kind
+        NODE_IP=$(kubectl get nodes \
+                  -lkubernetes.io/hostname!=kind-control-plane \
+                  -ojsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+        echo "MINIKUBE_NODE_IP=$NODE_IP" >> $GITHUB_ENV
+
+    - name: Setup test output
+      shell: bash
+      run: |
+        export TEST_OUTPUT_FILE_PREFIX=$GITHUB_WORKSPACE/test_report
+        echo "TEST_OUTPUT_FILE_PREFIX=$TEST_OUTPUT_FILE_PREFIX" >> $GITHUB_ENV
+
+    - name: Setup local registry
+      run: |
+        # Run a registry.
+        docker run -d --restart=always \
+          -p $REGISTRY_PORT:$REGISTRY_PORT --name $REGISTRY_NAME registry:2
+        # Connect the registry to the KinD network.
+        docker network connect "kind" $REGISTRY_NAME
+
+    - name: Setup Helm
+      uses: azure/setup-helm@v3
+      with:
+        version: v3.3.4
+
+    - name: Build and push Dapr
+      run: |
+        make build-linux
+        make docker-build
+        make docker-push
+
+    - name: Build and push test apps
+      run: |
+        cd latest-release && make build-push-e2e-app-all
+
+    - name: Setup Dapr - control-plane master
+      if: matrix.mode == 'control-plane-master'
+      run: |
+        make setup-helm-init
+        make create-test-namespace
+        export ADDITIONAL_HELM_SET="dapr_operator.logLevel=debug,dapr_sidecar_injector.image.name=ghcr.io/dapr/daprd:${{env.DAPR_PREV_VERSION}}"
+        export HA_MODE=true
+        make docker-deploy-k8s
+
+    - name: Setup Dapr - control-plane previous release
+      if: matrix.mode == 'dapr-sidecar-master'
+      run: |
+        make setup-helm-init
+        make create-test-namespace
+        export DAPR_CLI_LATEST_VERSION=$(curl -s https://api.github.com/repos/dapr/cli/releases/latest | jq -r '.tag_name' | cut -c 2-)
+        wget -q https://raw.githubusercontent.com/dapr/cli/master/install/install.sh -O - | /bin/bash -s $DAPR_CLI_LATEST_VERSION
+        dapr uninstall --all
+        dapr init -k --runtime-version ${{ env.DAPR_PREV_VERSION }} \
+          --set dapr_operator.logLevel=debug,dapr_sidecar_injector.image.name=localhost:5000/dapr/daprd:dev-linux-amd64 \
+          -n dapr-tests --enable-ha
+
+    - name: Setup Components
+      run: |
+        cd latest-release
+
+        make setup-helm-init
+        make setup-test-env-redis
+        make setup-test-env-kafka
+        make setup-test-env-zipkin
+        make setup-test-env-postgres
+        make setup-test-components
+
+    - name: Free up some diskspace
+      run: |
+        docker image prune -a -f
+
+    - name: Run tests
+      run: |
+        cd latest-release && make test-e2e-all
+
+    - name: Save control plane logs
+      if: always()
+      run: |
+        cd latest-release && make save-dapr-control-plane-k8s-logs
+
+    # Container log files can be bigger than the maximum file size allowed by GitHub
+    - name: Compress logs
+      if: always()
+      run: |
+        gzip --fast -r ${{ env.DAPR_CONTAINER_LOG_PATH }}
+        gzip --fast -r ${{ env.DAPR_TEST_LOG_PATH }}
+      shell: bash
+
+    - name: Upload container logs
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.mode}}_container_logs
+        path: ${{ env.DAPR_CONTAINER_LOG_PATH }}
+        compression-level: 0 # Content is already compressed
+
+    - name: Upload test logs
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.mode}}_test_logs
+        path: ${{ env.DAPR_TEST_LOG_PATH }}
+        compression-level: 0 # Content is already compressed
+
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.mode }}_test_e2e.json
+        path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_e2e.*
+    - name: Update PR comment for success
+      if: ${{ success() }}
+      uses: artursouza/sticky-pull-request-comment@v2.2.0
+      with:
+        header: ${{ github.run_id }}-version-skew-e2e-${{ matrix.mode }}-${{ env.DAPR_PREV_VERSION }}
+        number: ${{ env.PR_NUMBER }}
+        append: true
+        GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+        message: |
+          ## ✅ Version Skew tests passed
+    - name: Update PR comment for failure
+      if: ${{ failure() }}
+      uses: artursouza/sticky-pull-request-comment@v2.2.0
+      with:
+        header: ${{ github.run_id }}-version-skew-e2e-${{ matrix.mode }}-${{ env.DAPR_PREV_VERSION }}
+        number: ${{ env.PR_NUMBER }}
+        append: true
+        GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+        message: |
+          ## ❌ Version Skew tests failed
+
+          Please check the logs for details on the error.
+    - name: Update PR comment for cancellation
+      if: ${{ cancelled() }}
+      uses: artursouza/sticky-pull-request-comment@v2.2.0
+      with:
+        header: ${{ github.run_id }}-version-skew-e2e-${{ matrix.mode }}-${{ env.DAPR_PREV_VERSION }}
+        number: ${{ env.PR_NUMBER }}
+        append: true
+        GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+        message: |
+          ## ⚠️ Version Skew tests cancelled
+
+          The Action has been canceled

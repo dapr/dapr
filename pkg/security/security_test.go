@@ -152,7 +152,7 @@ func Test_Start(t *testing.T) {
 			curr, err := prov.sec.source.trustAnchors.Marshal()
 			require.NoError(t, err)
 			return bytes.Equal(root2, curr)
-		}, time.Second*5, time.Millisecond)
+		}, time.Second*5, time.Millisecond*750)
 
 		t.Run("should expect that the trust bundle watch is updated", func(t *testing.T) {
 			select {

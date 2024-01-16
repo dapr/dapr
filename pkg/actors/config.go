@@ -38,16 +38,17 @@ const (
 
 // ConfigOpts contains options for NewConfig.
 type ConfigOpts struct {
-	HostAddress        string
-	AppID              string
-	PlacementAddresses []string
-	Port               int
-	Namespace          string
-	AppConfig          daprAppConfig.ApplicationConfig
-	HealthHTTPClient   *http.Client
-	HealthEndpoint     string
-	AppChannelAddress  string
-	PodName            string
+	HostAddress       string
+	AppID             string
+	ActorsService     string
+	RemindersService  string
+	Port              int
+	Namespace         string
+	AppConfig         daprAppConfig.ApplicationConfig
+	HealthHTTPClient  *http.Client
+	HealthEndpoint    string
+	AppChannelAddress string
+	PodName           string
 }
 
 // NewConfig returns the actor runtime configuration.
@@ -55,7 +56,8 @@ func NewConfig(opts ConfigOpts) Config {
 	c := internal.Config{
 		HostAddress:                   opts.HostAddress,
 		AppID:                         opts.AppID,
-		PlacementAddresses:            opts.PlacementAddresses,
+		ActorsService:                 opts.ActorsService,
+		RemindersService:              opts.RemindersService,
 		Port:                          opts.Port,
 		Namespace:                     opts.Namespace,
 		DrainRebalancedActors:         opts.AppConfig.DrainRebalancedActors,
