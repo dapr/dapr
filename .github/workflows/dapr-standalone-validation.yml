@@ -38,6 +38,8 @@ jobs:
       GOARCH: amd64
       DAPR_INSTALL_URL: https://raw.githubusercontent.com/dapr/cli/master/install/install.sh
     steps:
+      - name: Install required packages
+        run: pip3 install scipy psutil
       # This is a good example where we want to always compare against the latest stable release.
       # Pinning to a given Dapr version does not add any value in this workflow.
       - name: Install latest Dapr CLI
@@ -75,4 +77,4 @@ jobs:
         env:
           SECONDS_FOR_PROCESS_TO_RUN: 30
           LIMIT_DELTA_BINARY_SIZE: 7168  # KB (7 MB)
-        run: ./.github/scripts/validate-sidecar-resources.sh
+        run: ./.github/scripts/validate_sidecar_resources.py
