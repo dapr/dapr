@@ -386,6 +386,45 @@ func TestConcurrentActivityExecution(t *testing.T) {
 	}
 }
 
+// TestChildWorkflow creates a workflow that calls a child workflow and verifies that the child workflow
+// completes successfully.
+func TestChildWorkflow(t *testing.T) {
+	r := task.NewTaskRegistry()
+	r.AddOrchestratorN("root", func(ctx *task.OrchestrationContext) (any, error) {
+		var input string
+		if err := ctx.GetInput(&input); err != nil {
+			return nil, err
+		}
+		var output string
+		err := ctx.CallSubOrchestrator("child", task.WithSubOrchestratorInput(input)).Await(&output)
+		return output, err
+	})
+	r.AddOrchestratorN("child", func(ctx *task.OrchestrationContext) (any, error) {
+		var name string
+		if err := ctx.GetInput(&name); err != nil {
+			return nil, err
+		}
+		return fmt.Sprintf("Hello, %s!", name), nil
+	})
+
+	ctx := context.Background()
+	client, engine := startEngine(ctx, t, r)
+
+	for _, opt := range GetTestOptions() {
+		t.Run(opt(engine), func(t *testing.T) {
+			// Run the root orchestration
+			id, err := client.ScheduleNewOrchestration(ctx, "root", api.WithInput("世界"))
+			require.NoError(t, err)
+			timeoutCtx, cancelTimeout := context.WithTimeout(ctx, 30*time.Second)
+			defer cancelTimeout()
+			metadata, err := client.WaitForOrchestrationCompletion(timeoutCtx, id)
+			require.NoError(t, err)
+			assert.True(t, metadata.IsComplete())
+			assert.Equal(t, `"Hello, 世界!"`, metadata.SerializedOutput)
+		})
+	}
+}
+
 // TestContinueAsNewWorkflow verifies that a workflow can "continue-as-new" to restart itself with a new input.
 func TestContinueAsNewWorkflow(t *testing.T) {
 	r := task.NewTaskRegistry()

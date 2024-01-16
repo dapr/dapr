@@ -30,4 +30,5 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/serviceinvocation"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/shutdown"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/state"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow"
 )
