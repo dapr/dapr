@@ -12,9 +12,7 @@
 # limitations under the License.
 #
 
-# This script parses release version from Git tag and set the parsed version to
-# environment variable, REL_VERSION. If the tag is the final version, it sets
-# LATEST_RELEASE to true to add 'latest' tag to docker image.
+# This script validates resource utilization of a Dapr sidecar.
 
 import re
 import subprocess
@@ -77,14 +75,17 @@ def run_sidecar(executable, app_id):
     memory_data = []
     goroutine_data = []
 
+    # Initial wait to remove any noise from initialization.
+    time.sleep(10)
+
     # Collect resident memory every second for X seconds
     cycles = int(getenv("SECONDS_FOR_PROCESS_TO_RUN", 5))
     for _ in range(cycles):
         time.sleep(1)
-        resident_memory = get_memory_info(background_process)
+        memory = get_memory_info(background_process)
         goroutine_count = get_goroutine_count()
-        if resident_memory is not None:
-            memory_data.append(resident_memory)
+        if memory is not None:
+            memory_data.append(memory)
         if goroutine_count is not None:
             goroutine_data.append(goroutine_count)
             
