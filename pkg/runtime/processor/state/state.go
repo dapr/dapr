@@ -40,11 +40,11 @@ const (
 var log = logger.NewLogger("dapr.runtime.processor.state")
 
 type Options struct {
-	Registry         *compstate.Registry
-	ComponentStore   *compstore.ComponentStore
-	Meta             *meta.Meta
-	PlacementEnabled bool
-	Outbox           outbox.Outbox
+	Registry       *compstate.Registry
+	ComponentStore *compstore.ComponentStore
+	Meta           *meta.Meta
+	ActorsEnabled  bool
+	Outbox         outbox.Outbox
 }
 
 type state struct {
@@ -54,17 +54,17 @@ type state struct {
 	lock      sync.RWMutex
 
 	actorStateStoreName *string
-	placementEnabled    bool
+	actorsEnabled       bool
 	outbox              outbox.Outbox
 }
 
 func New(opts Options) *state {
 	return &state{
-		registry:         opts.Registry,
-		compStore:        opts.ComponentStore,
-		meta:             opts.Meta,
-		placementEnabled: opts.PlacementEnabled,
-		outbox:           opts.Outbox,
+		registry:      opts.Registry,
+		compStore:     opts.ComponentStore,
+		meta:          opts.Meta,
+		actorsEnabled: opts.ActorsEnabled,
+		outbox:        opts.Outbox,
 	}
 }
 
@@ -120,7 +120,7 @@ func (s *state) Init(ctx context.Context, comp compapi.Component) error {
 		s.outbox.AddOrUpdateOutbox(comp)
 
 		// when placement address list is not empty, set specified actor store.
-		if s.placementEnabled {
+		if s.actorsEnabled {
 			// set specified actor store if "actorStateStore" is true in the spec.
 			actorStoreSpecified := false
 			for k, v := range props {
