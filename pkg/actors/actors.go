@@ -1120,6 +1120,7 @@ func isInternalActor(actorType string) bool {
 func (a *actorsRuntime) Close() error {
 	defer a.wg.Wait()
 
+	var errs []error
 	if a.closed.CompareAndSwap(false, true) {
 		defer func() { close(a.closeCh) }()
 		if a.checker != nil {
@@ -1127,12 +1128,12 @@ func (a *actorsRuntime) Close() error {
 		}
 		if a.placement != nil {
 			if err := a.placement.Close(); err != nil {
-				return fmt.Errorf("failed to close placement service: %w", err)
+				errs = append(errs, fmt.Errorf("failed to close placement service: %w", err))
 			}
 		}
 	}
 
-	return nil
+	return errors.Join(errs...)
 }
 
 // ValidateHostEnvironment validates that actors can be initialized properly given a set of parameters
