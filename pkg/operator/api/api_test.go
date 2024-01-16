@@ -313,8 +313,7 @@ func TestComponentUpdate(t *testing.T) {
 			}
 		}()
 
-		os.Setenv("NAMESPACE", "ns1")
-		defer os.Unsetenv("NAMESPACE")
+		t.Setenv("NAMESPACE", "ns1")
 
 		// Start sidecar update loop
 		require.NoError(t, api.ComponentUpdate(&operatorv1pb.ComponentUpdateRequest{
