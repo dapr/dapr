@@ -23,28 +23,6 @@ import (
 	kiterrors "github.com/dapr/kit/errors"
 )
 
-func StateStoreNotConfigured() error {
-	return kiterrors.NewBuilder(
-		codes.FailedPrecondition,
-		http.StatusInternalServerError,
-		"state store is not configured",
-		"ERR_STATE_STORE_NOT_CONFIGURED",
-	).
-		WithErrorInfo(kiterrors.CodePrefixStateStore+kiterrors.CodeNotConfigured, nil).
-		Build()
-}
-
-func StateStoreNotFound(storeName string) error {
-	return kiterrors.NewBuilder(
-		codes.InvalidArgument, // TODO We should change this at some point. It should be codes.NotFound, but it will be a breaking change.
-		http.StatusBadRequest,
-		fmt.Sprintf("state store %s is not found", storeName),
-		"ERR_STATE_STORE_NOT_FOUND",
-	).
-		WithErrorInfo(kiterrors.CodePrefixStateStore+kiterrors.CodeNotFound, nil).
-		Build()
-}
-
 func StateStoreInvalidKeyName(storeName string, key string, msg string) error {
 	return kiterrors.NewBuilder(
 		codes.InvalidArgument,

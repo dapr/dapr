@@ -16,10 +16,11 @@ package http
 import (
 	"net/http"
 
+	kiterrors "github.com/dapr/kit/errors"
+
 	"github.com/valyala/fasthttp"
 
 	"github.com/dapr/dapr/pkg/messages"
-	kiterrors "github.com/dapr/kit/errors"
 )
 
 type fasthttpResponseOption = func(ctx *fasthttp.RequestCtx)
