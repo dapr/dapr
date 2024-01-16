@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -32,6 +33,7 @@ import (
 	"github.com/dapr/dapr/pkg/placement/hashing"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
 )
@@ -108,7 +110,8 @@ type actorPlacement struct {
 
 // NewActorPlacement initializes ActorPlacement for the actor service.
 func NewActorPlacement(opts internal.ActorsProviderOptions) internal.PlacementService {
-	servers := addDNSResolverPrefix(opts.Config.PlacementAddresses)
+	addrs := utils.ParseServiceAddr(strings.TrimPrefix(opts.Config.ActorsService, "placement:"))
+	servers := addDNSResolverPrefix(addrs)
 	return &actorPlacement{
 		config:     opts.Config,
 		serverAddr: servers,
