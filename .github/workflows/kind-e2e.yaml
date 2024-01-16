@@ -89,10 +89,10 @@ jobs:
           mode: non-ha
     steps:
     - name: Check out code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
     - name: Set up Go
       id: setup-go
-      uses: actions/setup-go@v3
+      uses: actions/setup-go@v5
       with:
         go-version-file: 'go.mod'
     - name: Configure KinD
@@ -232,21 +232,23 @@ jobs:
 
     - name: Upload container logs
       if: always()
-      uses: actions/upload-artifact@master
+      uses: actions/upload-artifact@v4
       with:
         name: ${{ matrix.k8s-version }}_${{ matrix.mode}}_container_logs
         path: ${{ env.DAPR_CONTAINER_LOG_PATH }}
+        compression-level: 0 # Content is already compressed
 
     - name: Upload test logs
       if: always()
-      uses: actions/upload-artifact@master
+      uses: actions/upload-artifact@v4
       with:
         name: ${{ matrix.k8s-version }}_${{ matrix.mode}}_test_logs
         path: ${{ env.DAPR_TEST_LOG_PATH }}
+        compression-level: 0 # Content is already compressed
 
     - name: Upload test results
       if: always()
-      uses: actions/upload-artifact@master
+      uses: actions/upload-artifact@v4
       with:
         #TODO: .json suffix can be removed from artifact name after test analytics scripts are updated
         name: ${{ matrix.k8s-version }}_${{ matrix.mode }}_test_e2e.json
