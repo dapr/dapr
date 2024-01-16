@@ -16,6 +16,7 @@ package http
 import (
 	"io"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -242,12 +243,14 @@ func (a *api) onTerminateWorkflowHandler() http.HandlerFunc {
 				in.SetWorkflowComponent(chi.URLParam(r, workflowComponent))
 				in.SetInstanceId(chi.URLParam(r, instanceID))
 
-				// Default to false if not specified
-				in.NonRecursive = false
 				// Extract non_recursive option from query string
 				nonRecursive := r.URL.Query().Get(nonRecursive)
-				if nonRecursive == "true" {
-					in.NonRecursive = true
+				if nonRecursive != "" {
+					var err error
+					in.NonRecursive, err = strconv.ParseBool(nonRecursive)
+					if err != nil {
+						return nil, err
+					}
 				}
 				return in, nil
 			},
@@ -308,12 +311,14 @@ func (a *api) onPurgeWorkflowHandler() http.HandlerFunc {
 				in.SetWorkflowComponent(chi.URLParam(r, workflowComponent))
 				in.SetInstanceId(chi.URLParam(r, instanceID))
 
-				// Default to false if not specified
-				in.NonRecursive = false
 				// Extract non_recursive option from query string
 				nonRecursive := r.URL.Query().Get(nonRecursive)
-				if nonRecursive == "true" {
-					in.NonRecursive = true
+				if nonRecursive != "" {
+					var err error
+					in.NonRecursive, err = strconv.ParseBool(nonRecursive)
+					if err != nil {
+						return nil, err
+					}
 				}
 				return in, nil
 			},

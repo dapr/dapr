@@ -324,7 +324,6 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 					_, err = backendClient.FetchOrchestrationMetadata(ctx, id+"_L1_L2")
 					require.NoError(t, err)
 					require.Equal(t, api.RUNTIME_STATUS_COMPLETED, metadata.RuntimeStatus)
-
 				} else {
 					// Verify that L1 and L2 orchestrations have been purged
 					_, err = backendClient.FetchOrchestrationMetadata(ctx, id+"_L1")
