@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -71,12 +72,12 @@ func TestPlacementStream_RoundRobin(t *testing.T) {
 
 	testPlacement := NewActorPlacement(internal.ActorsProviderOptions{
 		Config: internal.Config{
-			PlacementAddresses: address,
-			AppID:              "testAppID",
-			HostAddress:        "127.0.0.1",
-			Port:               1000,
-			PodName:            "testPodName",
-			HostedActorTypes:   internal.NewHostedActors([]string{"actorOne", "actorTwo"}),
+			ActorsService:    "placement:" + strings.Join(address, ","),
+			AppID:            "testAppID",
+			HostAddress:      "127.0.0.1",
+			Port:             1000,
+			PodName:          "testPodName",
+			HostedActorTypes: internal.NewHostedActors([]string{"actorOne", "actorTwo"}),
 		},
 		AppHealthFn: func(ctx context.Context) <-chan bool { return nil },
 		Security:    testSecurity(t),
@@ -131,12 +132,12 @@ func TestAppHealthyStatus(t *testing.T) {
 
 	testPlacement := NewActorPlacement(internal.ActorsProviderOptions{
 		Config: internal.Config{
-			PlacementAddresses: []string{address},
-			AppID:              "testAppID",
-			HostAddress:        "127.0.0.1",
-			Port:               1000,
-			PodName:            "testPodName",
-			HostedActorTypes:   internal.NewHostedActors([]string{"actorOne", "actorTwo"}),
+			ActorsService:    "placement:" + address,
+			AppID:            "testAppID",
+			HostAddress:      "127.0.0.1",
+			Port:             1000,
+			PodName:          "testPodName",
+			HostedActorTypes: internal.NewHostedActors([]string{"actorOne", "actorTwo"}),
 		},
 		AppHealthFn: func(ctx context.Context) <-chan bool { return appHealthCh },
 		Security:    testSecurity(t),
@@ -167,12 +168,12 @@ func TestOnPlacementOrder(t *testing.T) {
 	tableUpdateFunc := func() { tableUpdateCount.Add(1) }
 	testPlacement := NewActorPlacement(internal.ActorsProviderOptions{
 		Config: internal.Config{
-			PlacementAddresses: []string{},
-			AppID:              "testAppID",
-			HostAddress:        "127.0.0.1",
-			Port:               1000,
-			PodName:            "testPodName",
-			HostedActorTypes:   internal.NewHostedActors([]string{"actorOne", "actorTwo"}),
+			ActorsService:    "placement:",
+			AppID:            "testAppID",
+			HostAddress:      "127.0.0.1",
+			Port:             1000,
+			PodName:          "testPodName",
+			HostedActorTypes: internal.NewHostedActors([]string{"actorOne", "actorTwo"}),
 		},
 		AppHealthFn: func(ctx context.Context) <-chan bool { return nil },
 		Security:    testSecurity(t),
@@ -236,12 +237,12 @@ func TestOnPlacementOrder(t *testing.T) {
 func TestWaitUntilPlacementTableIsReady(t *testing.T) {
 	testPlacement := NewActorPlacement(internal.ActorsProviderOptions{
 		Config: internal.Config{
-			PlacementAddresses: []string{},
-			AppID:              "testAppID",
-			HostAddress:        "127.0.0.1",
-			Port:               1000,
-			PodName:            "testPodName",
-			HostedActorTypes:   internal.NewHostedActors([]string{"actorOne", "actorTwo"}),
+			ActorsService:    "placement:",
+			AppID:            "testAppID",
+			HostAddress:      "127.0.0.1",
+			Port:             1000,
+			PodName:          "testPodName",
+			HostedActorTypes: internal.NewHostedActors([]string{"actorOne", "actorTwo"}),
 		},
 		AppHealthFn: func(ctx context.Context) <-chan bool { return nil },
 		Security:    testSecurity(t),
@@ -375,12 +376,12 @@ func TestWaitUntilPlacementTableIsReady(t *testing.T) {
 func TestLookupActor(t *testing.T) {
 	testPlacement := NewActorPlacement(internal.ActorsProviderOptions{
 		Config: internal.Config{
-			PlacementAddresses: []string{},
-			AppID:              "testAppID",
-			HostAddress:        "127.0.0.1",
-			Port:               1000,
-			PodName:            "testPodName",
-			HostedActorTypes:   internal.NewHostedActors([]string{"actorOne", "actorTwo"}),
+			ActorsService:    "placement:",
+			AppID:            "testAppID",
+			HostAddress:      "127.0.0.1",
+			Port:             1000,
+			PodName:          "testPodName",
+			HostedActorTypes: internal.NewHostedActors([]string{"actorOne", "actorTwo"}),
 		},
 		AppHealthFn: func(ctx context.Context) <-chan bool { return nil },
 		Security:    testSecurity(t),
@@ -432,12 +433,12 @@ func TestLookupActor(t *testing.T) {
 func TestConcurrentUnblockPlacements(t *testing.T) {
 	testPlacement := NewActorPlacement(internal.ActorsProviderOptions{
 		Config: internal.Config{
-			PlacementAddresses: []string{},
-			AppID:              "testAppID",
-			HostAddress:        "127.0.0.1",
-			Port:               1000,
-			PodName:            "testPodName",
-			HostedActorTypes:   internal.NewHostedActors([]string{"actorOne", "actorTwo"}),
+			ActorsService:    "placement:",
+			AppID:            "testAppID",
+			HostAddress:      "127.0.0.1",
+			Port:             1000,
+			PodName:          "testPodName",
+			HostedActorTypes: internal.NewHostedActors([]string{"actorOne", "actorTwo"}),
 		},
 		AppHealthFn: func(ctx context.Context) <-chan bool { return nil },
 		Security:    testSecurity(t),

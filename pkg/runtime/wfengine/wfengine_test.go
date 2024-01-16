@@ -929,19 +929,20 @@ func getEngine(t *testing.T, ctx context.Context) *wfengine.WorkflowEngine {
 	engine := wfengine.NewWorkflowEngine(testAppID, spec, processor.WorkflowBackend())
 	store := fakeStore()
 	cfg := actors.NewConfig(actors.ConfigOpts{
-		AppID:              testAppID,
-		PlacementAddresses: []string{"placement:5050"},
-		AppConfig:          config.ApplicationConfig{},
+		AppID:         testAppID,
+		ActorsService: "placement:placement:5050",
+		AppConfig:     config.ApplicationConfig{},
 	})
 	compStore := compstore.New()
 	compStore.AddStateStore("workflowStore", store)
-	actors := actors.NewActors(actors.ActorsOpts{
+	actors, err := actors.NewActors(actors.ActorsOpts{
 		CompStore:      compStore,
 		Config:         cfg,
 		StateStoreName: "workflowStore",
 		MockPlacement:  actors.NewMockPlacement(testAppID),
 		Resiliency:     resiliency.New(logger.NewLogger("test")),
 	})
+	require.NoError(t, err)
 
 	if err := actors.Init(context.Background()); err != nil {
 		require.NoError(t, err)
@@ -960,20 +961,21 @@ func getEngineAndStateStore(t *testing.T, ctx context.Context) (*wfengine.Workfl
 	engine := wfengine.NewWorkflowEngine(testAppID, spec, processor.WorkflowBackend())
 	store := fakeStore().(*daprt.FakeStateStore)
 	cfg := actors.NewConfig(actors.ConfigOpts{
-		AppID:              testAppID,
-		PlacementAddresses: []string{"placement:5050"},
-		AppConfig:          config.ApplicationConfig{},
+		AppID:         testAppID,
+		ActorsService: "placement:placement:5050",
+		AppConfig:     config.ApplicationConfig{},
 	})
 	compStore := compstore.New()
 	compStore.AddStateStore("workflowStore", store)
 
-	actors := actors.NewActors(actors.ActorsOpts{
+	actors, err := actors.NewActors(actors.ActorsOpts{
 		CompStore:      compStore,
 		Config:         cfg,
 		StateStoreName: "workflowStore",
 		MockPlacement:  actors.NewMockPlacement(testAppID),
 		Resiliency:     resiliency.New(logger.NewLogger("test")),
 	})
+	require.NoError(t, err)
 
 	require.NoError(t, actors.Init(context.Background()))
 	abe, _ := engine.Backend.(*actorsbe.ActorBackend)

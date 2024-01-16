@@ -35,8 +35,6 @@ import (
 	"github.com/dapr/components-contrib/state"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/internal"
-	"github.com/dapr/dapr/pkg/actors/placement"
-	"github.com/dapr/dapr/pkg/actors/reminders"
 	"github.com/dapr/dapr/pkg/actors/timers"
 	"github.com/dapr/dapr/pkg/channel"
 	configuration "github.com/dapr/dapr/pkg/config"
@@ -152,11 +150,11 @@ type ActorsOpts struct {
 }
 
 // NewActors create a new actors runtime with given config.
-func NewActors(opts ActorsOpts) ActorRuntime {
+func NewActors(opts ActorsOpts) (ActorRuntime, error) {
 	return newActorsWithClock(opts, &clock.RealClock{})
 }
 
-func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) ActorRuntime {
+func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) (ActorRuntime, error) {
 	a := &actorsRuntime{
 		appChannel:           opts.AppChannel,
 		grpcConnectionFn:     opts.GRPCConnectionFn,
@@ -187,11 +185,21 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) ActorRuntime {
 		APILevel:    &a.apiLevel,
 		Resiliency:  a.resiliency,
 	}
-	a.actorsReminders = reminders.NewRemindersProvider(providerOpts)
+
+	// Initialize the placement client if we don't have a mocked one already
 	if a.placement == nil {
-		// Initialize the placement client if we don't have a mocked one already
-		a.placement = placement.NewActorPlacement(providerOpts)
+		factory, fErr := opts.Config.GetPlacementProvider()
+		if fErr != nil {
+			return nil, fmt.Errorf("failed to initialize placement provider: %w", fErr)
+		}
+		a.placement = factory(providerOpts)
 	}
+
+	factory, err := opts.Config.GetRemindersProvider(a.placement)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize reminders provider: %w", err)
+	}
+	a.actorsReminders = factory(providerOpts)
 
 	a.actorsReminders.SetExecuteReminderFn(a.executeReminder)
 	a.actorsReminders.SetStateStoreProviderFn(a.stateStore)
@@ -205,7 +213,7 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) ActorRuntime {
 
 	a.timers.SetExecuteTimerFn(a.executeTimer)
 
-	return a
+	return a, nil
 }
 
 func (a *actorsRuntime) isActorLocallyHosted(ctx context.Context, actorType string, actorID string) (isLocal bool, actorAddress string) {
@@ -240,8 +248,8 @@ func (a *actorsRuntime) Init(ctx context.Context) (err error) {
 		return errors.New("actors runtime has already been closed")
 	}
 
-	if len(a.actorsConfig.PlacementAddresses) == 0 {
-		return errors.New("actors: couldn't connect to placement service: address is empty")
+	if len(a.actorsConfig.ActorsService) == 0 {
+		return errors.New("actors: couldn't connect to actors service: address is empty")
 	}
 
 	hat := a.actorsConfig.Config.HostedActorTypes.ListActorTypes()

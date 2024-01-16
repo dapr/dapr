@@ -91,7 +91,8 @@ type Config struct {
 	ApplicationPort              string
 	DaprGracefulShutdownSeconds  int
 	DaprBlockShutdownDuration    *time.Duration
-	PlacementServiceHostAddr     string
+	ActorsService                string
+	RemindersService             string
 	SchedulerServiceHostAddr     string
 	DaprAPIListenAddresses       string
 	AppHealthProbeInterval       int
@@ -121,8 +122,9 @@ type internalConfig struct {
 	apiListenAddresses           []string
 	appConnectionConfig          config.AppConnectionConfig
 	mode                         modes.DaprMode
-	placementAddresses           []string
 	schedulerAddresses           []string
+	actorsService                string
+	remindersService             string
 	allowedOrigins               string
 	standalone                   configmodes.StandaloneConfig
 	kubernetes                   configmodes.KubernetesConfig
@@ -141,7 +143,7 @@ type internalConfig struct {
 }
 
 func (i internalConfig) ActorsEnabled() bool {
-	return len(i.placementAddresses) > 0
+	return i.actorsService != ""
 }
 
 func (i internalConfig) SchedulerEnabled() bool {
@@ -295,6 +297,8 @@ func (c *Config) toInternal() (*internalConfig, error) {
 		registry:              registry.New(c.Registry),
 		metricsExporter:       metrics.NewExporterWithOptions(log, metrics.DefaultMetricNamespace, c.Metrics),
 		blockShutdownDuration: c.DaprBlockShutdownDuration,
+		actorsService:         c.ActorsService,
+		remindersService:      c.RemindersService,
 	}
 
 	if len(intc.standalone.ResourcesPath) == 0 && c.ComponentsPath != "" {
@@ -377,10 +381,6 @@ func (c *Config) toInternal() (*internalConfig, error) {
 		intc.gracefulShutdownDuration = time.Duration(c.DaprGracefulShutdownSeconds) * time.Second
 	}
 
-	if c.PlacementServiceHostAddr != "" {
-		intc.placementAddresses = parsePlacementAddr(c.PlacementServiceHostAddr)
-	}
-
 	if c.SchedulerServiceHostAddr != "" {
 		intc.schedulerAddresses = parsePlacementAddr(c.SchedulerServiceHostAddr)
 	}
@@ -455,12 +455,4 @@ func (c *Config) toInternal() (*internalConfig, error) {
 	}
 
 	return intc, nil
-}
-
-func parsePlacementAddr(val string) []string {
-	p := strings.Split(val, ",")
-	for i, v := range p {
-		p[i] = strings.TrimSpace(v)
-	}
-	return p
 }

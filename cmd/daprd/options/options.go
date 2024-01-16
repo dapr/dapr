@@ -58,8 +58,9 @@ type Options struct {
 	AppPort                      string
 	DaprGracefulShutdownSeconds  int
 	DaprBlockShutdownDuration    *time.Duration
-	PlacementServiceHostAddr     string
 	SchedulerServiceHostAddr     string
+	ActorsService                string
+	RemindersService             string
 	DaprAPIListenAddresses       string
 	AppHealthProbeInterval       int
 	AppHealthProbeTimeout        int
@@ -119,7 +120,6 @@ func New(origArgs []string) *Options {
 	fs.StringVar(&opts.SentryAddress, "sentry-address", "", "Address for the Sentry CA service")
 	fs.StringVar(&opts.ControlPlaneTrustDomain, "control-plane-trust-domain", "localhost", "Trust domain of the Dapr control plane")
 	fs.StringVar(&opts.ControlPlaneNamespace, "control-plane-namespace", "default", "Namespace of the Dapr control plane")
-	fs.StringVar(&opts.PlacementServiceHostAddr, "placement-host-address", "", "Addresses for Dapr Actor Placement servers")
 	fs.StringVar(&opts.SchedulerServiceHostAddr, "scheduler-host-address", "", "Addresses for Dapr Scheduler servers")
 	fs.StringVar(&opts.AllowedOrigins, "allowed-origins", cors.DefaultAllowedOrigins, "Allowed HTTP origins")
 	fs.BoolVar(&opts.EnableProfiling, "enable-profiling", false, "Enable profiling")
@@ -144,6 +144,13 @@ func New(origArgs []string) *Options {
 	fs.IntVar(&opts.AppHealthThreshold, "app-health-threshold", int(config.AppHealthConfigDefaultThreshold), "Number of consecutive failures for the app to be considered unhealthy")
 	fs.StringVar(&opts.AppChannelAddress, "app-channel-address", runtime.DefaultChannelAddress, "The network address the application listens on")
 
+	// Add flags for actors, placement, and reminders
+	// --placement-host-address is a legacy (but not deprecated) flag that is translated to the actors-service flag
+	var placementServiceHostAddr string
+	fs.StringVar(&placementServiceHostAddr, "placement-host-address", "", "Addresses for Dapr Actor Placement servers (overrides actors-service)")
+	fs.StringVar(&opts.ActorsService, "actors-service", "", "Type and address of the actors service, in the format 'type:address'")
+	fs.StringVar(&opts.RemindersService, "reminders-service", "", "Type and address of the reminders service, in the format 'type:address'")
+
 	// Add flags for logger and metrics
 	opts.Logger = logger.DefaultOptions()
 	opts.Logger.AttachCmdFlags(fs.StringVar, fs.BoolVar)
@@ -158,6 +165,11 @@ func New(origArgs []string) *Options {
 	// For this flag, we need the third state (unset) so we need to do a bit more work here to check if it's unset, then mark "enableAPILogging" as nil
 	if !*opts.EnableAPILogging && !fs.Changed("enable-api-logging") {
 		opts.EnableAPILogging = nil
+	}
+
+	// If placement-host-address is set, that always takes priority over actors-service
+	if placementServiceHostAddr != "" {
+		opts.ActorsService = "placement:" + placementServiceHostAddr
 	}
 
 	opts.TrustAnchors = []byte(os.Getenv(consts.TrustAnchorsEnvVar))

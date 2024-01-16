@@ -1,4 +1,4 @@
-{{- if eq .Values.global.actors.enabled true }}
+{{- if and (eq .Values.global.actors.enabled true) (eq .Values.global.actors.serviceName "placement") }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
