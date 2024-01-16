@@ -34,8 +34,9 @@ import (
 
 const (
 	// raftApplyCommandMaxConcurrency is the max concurrency to apply command log to raft.
-	raftApplyCommandMaxConcurrency = 10
-	barrierWriteTimeout            = 2 * time.Minute
+	raftApplyCommandMaxConcurrency          = 10
+	barrierWriteTimeout                     = 2 * time.Minute
+	NoVirtualNodesInPlacementTablesApiLevel = 20
 )
 
 // MonitorLeadership is used to monitor if we acquire or lose our role
@@ -410,25 +411,9 @@ func (p *Service) disseminateOperationOnHosts(ctx context.Context, hosts []place
 			// Check if the client (daprd) is running a version that expects the vnodes in the table
 			// Versions pre 1.13 don't set metadata on the stream and expect vnodes in the placement table
 			// Versions 1.13 and above set the ApiLevel as metadata on the stream and don't expect vnodes in the placement table
-			md, ok := metadata.FromIncomingContext(hosts[i].Context())
-			if !ok {
-				// If no metadata is present, assume the client is pre 1.13
-				// and needs vnodes in the table
-				errCh <- p.disseminateOperation(ctx, hosts[i], operation, tablesWithVirtualNodes)
-				return
-			}
-
-			// Extract apiLevel from metadata
-			apiLevel := md.Get("ApiLevel")
-			if len(apiLevel) == 0 {
-				// If the ApiLevel is not set, assume the client is pre 1.13
-				// and needs vnodes in the table
-				errCh <- p.disseminateOperation(ctx, hosts[i], operation, tablesWithVirtualNodes)
-				return
-			}
-
-			level, err := strconv.Atoi(apiLevel[0])
-			if err != nil || level < 20 {
+			// Dapr Version 1.13 corresponds to API level 20 (as defined in pkg/actors/internal/api_level.go)
+			apiLevel := getHostApiLevel(hosts[i])
+			if apiLevel < NoVirtualNodesInPlacementTablesApiLevel {
 				errCh <- p.disseminateOperation(ctx, hosts[i], operation, tablesWithVirtualNodes)
 			} else {
 				errCh <- p.disseminateOperation(ctx, hosts[i], operation, tables)
@@ -480,4 +465,24 @@ func (p *Service) disseminateOperation(ctx context.Context, target placementGRPC
 		func(err error, d time.Duration) { log.Debugf("Attempting to disseminate again after error: %v", err) },
 		func() { log.Debug("Dissemination successful after failure") },
 	)
+}
+
+func getHostApiLevel(stream placementGRPCStream) int {
+	md, ok := metadata.FromIncomingContext(stream.Context())
+	if !ok {
+		return 0
+	}
+
+	// Extract apiLevel from metadata
+	apiLevel := md.Get("ApiLevel")
+	if len(apiLevel) == 0 {
+		return 0
+	}
+
+	level, err := strconv.Atoi(apiLevel[0])
+	if err != nil {
+		return 0
+	}
+
+	return level
 }

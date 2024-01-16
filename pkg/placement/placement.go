@@ -253,7 +253,16 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 				// TODO: If each sidecar can report table version, then placement
 				// doesn't need to disseminate tables to each sidecar.
 
-				err = p.performTablesUpdate(context.Background(), []placementGRPCStream{stream}, p.raftNode.FSM().PlacementState(false), p.raftNode.FSM().PlacementState(true))
+				placementTable := &placementv1pb.PlacementTables{}
+				placementTableWithVirtualNodes := &placementv1pb.PlacementTables{}
+				apiLevel := req.GetApiLevel()
+				if apiLevel >= NoVirtualNodesInPlacementTablesApiLevel {
+					placementTable = p.raftNode.FSM().PlacementState(false)
+				} else {
+					placementTableWithVirtualNodes = p.raftNode.FSM().PlacementState(true)
+				}
+
+				err = p.performTablesUpdate(context.Background(), []placementGRPCStream{stream}, placementTable, placementTableWithVirtualNodes)
 				if err != nil {
 					return err
 				}
