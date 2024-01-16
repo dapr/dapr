@@ -631,7 +631,7 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *internalv1pb.In
 		msg.Method = originalMethod
 	}()
 
-	// Original code overrides method with PUT. Why?
+	// Per API contract, actor invocations over HTTP always use PUT as request method
 	if msg.GetHttpExtension() == nil {
 		imReq.WithHTTPExtension(http.MethodPut, "")
 	} else {
