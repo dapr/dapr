@@ -2820,11 +2820,11 @@ func TestV1Beta1Workflow(t *testing.T) {
 		assert.Nil(t, resp.ErrorBody)
 	})
 
-	t.Run("Terminate with recursive set to true", func(t *testing.T) {
-		// This has the same behavior as the case when recursive parameter is not set.
+	t.Run("Terminate with non_recursive set to false", func(t *testing.T) {
+		// This has the same behavior as the case when non_recursive parameter is not set.
 		// This is because default case is set to recursive termination.
 
-		apiPath := "v1.0-beta1/workflows/dapr/instanceID/terminate?recursive=true"
+		apiPath := "v1.0-beta1/workflows/dapr/instanceID/terminate?non_recursive=false"
 
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 202, resp.StatusCode)
@@ -2833,11 +2833,11 @@ func TestV1Beta1Workflow(t *testing.T) {
 		assert.Nil(t, resp.ErrorBody)
 	})
 
-	t.Run("Terminate with recursive false", func(t *testing.T) {
-		// Note that in case of recursive false, MockWorkflow intentionally returns fake error, even when it is not an actual error.
-		// This is to test that recursive flag is being passed correctly to the workflow component.
+	t.Run("Terminate with non_recursive true", func(t *testing.T) {
+		// Note that in case of non_recursive true, MockWorkflow intentionally returns fake error, even when it is not an actual error.
+		// This is to test that non_recursive flag is being passed correctly to the workflow component.
 
-		apiPath := "v1.0-beta1/workflows/dapr/instanceID/terminate?recursive=false"
+		apiPath := "v1.0-beta1/workflows/dapr/instanceID/terminate?non_recursive=true"
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 500, resp.StatusCode)
 		assert.Equal(t, "ERR_TERMINATE_WORKFLOW", resp.ErrorBody["errorCode"])
@@ -2955,22 +2955,22 @@ func TestV1Beta1Workflow(t *testing.T) {
 		assert.Nil(t, resp.ErrorBody)
 	})
 
-	t.Run("Purge with recursive true", func(t *testing.T) {
-		// This has the same behavior as the case when recursive parameter is not set.
+	t.Run("Purge with non_recursive false", func(t *testing.T) {
+		// This has the same behavior as the case when non_recursive parameter is not set.
 		// This is because default case is set to recursive purge.
 
-		apiPath := "v1.0-beta1/workflows/dapr/instanceID/purge?recursive=true"
+		apiPath := "v1.0-beta1/workflows/dapr/instanceID/purge?non_recursive=false"
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 202, resp.StatusCode)
 
 		// assert
 		assert.Nil(t, resp.ErrorBody)
 	})
-	t.Run("Purge with recursive false", func(t *testing.T) {
-		// Note that in case of recursive false, MockWorkflow intentionally returns fake error, even when it is not an actual error.
-		// This is to test that recursive flag is being passed correctly to the workflow component.
+	t.Run("Purge with non_recursive true", func(t *testing.T) {
+		// Note that in case of non_recursive true, MockWorkflow intentionally returns fake error, even when it is not an actual error.
+		// This is to test that non_recursive flag is being passed correctly to the workflow component.
 
-		apiPath := "v1.0-beta1/workflows/dapr/instanceID/purge?recursive=false"
+		apiPath := "v1.0-beta1/workflows/dapr/instanceID/purge?non_recursive=true"
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 500, resp.StatusCode)
 		assert.Equal(t, "ERR_PURGE_WORKFLOW", resp.ErrorBody["errorCode"])

@@ -81,11 +81,11 @@ func (w *workflow) startWorkflow(ctx context.Context, t *testing.T, name string,
 }
 
 // terminate workflow
-func (w *workflow) terminateWorkflow(ctx context.Context, t *testing.T, instanceID string, recursive string) {
+func (w *workflow) terminateWorkflow(ctx context.Context, t *testing.T, instanceID string, nonRecursive string) {
 	// use http client to terminate the workflow
 	reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/terminate", w.daprd.HTTPPort(), instanceID)
-	if recursive != "" {
-		reqURL += "?recursive=" + recursive
+	if nonRecursive != "" {
+		reqURL += "?non_recursive=" + nonRecursive
 	}
 	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
@@ -98,11 +98,11 @@ func (w *workflow) terminateWorkflow(ctx context.Context, t *testing.T, instance
 }
 
 // purge workflow
-func (w *workflow) purgeWorkflow(ctx context.Context, t *testing.T, instanceID string, recursive string) {
+func (w *workflow) purgeWorkflow(ctx context.Context, t *testing.T, instanceID string, nonRecursive string) {
 	// use http client to purge the workflow
 	reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/purge", w.daprd.HTTPPort(), instanceID)
-	if recursive != "" {
-		reqURL += "?recursive=" + recursive
+	if nonRecursive != "" {
+		reqURL += "?non_recursive=" + nonRecursive
 	}
 	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
@@ -220,13 +220,13 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 		time.Sleep(5 * time.Second)
 
 		// Test terminating with and without recursion
-		for _, recursive := range []string{"", "true", "false"} {
-			// `recursive` = "" means no query param, which should default to true
-			recursiveBool := true
-			if recursive == "false" {
-				recursiveBool = false
+		for _, nonRecursive := range []string{"", "false", "true"} {
+			// `non_recursive` = "" means no query param, which should default to false
+			nonRecursiveBool := false
+			if nonRecursive == "true" {
+				nonRecursiveBool = true
 			}
-			t.Run(fmt.Sprintf("recursive = %v", recursive), func(t *testing.T) {
+			t.Run(fmt.Sprintf("non_recursive = %v", nonRecursive), func(t *testing.T) {
 				id := api.InstanceID(w.startWorkflow(ctx, t, "Root", ""))
 
 				// Wait long enough to ensure all orchestrations have started (but not longer than the timer delay)
@@ -247,8 +247,8 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 					return true
 				}, 2*time.Second, 100*time.Millisecond)
 
-				// Terminate the root orchestration and mark whether a recursive termination
-				w.terminateWorkflow(ctx, t, string(id), recursive)
+				// Terminate the root orchestration and mark whether a nonRecursive termination
+				w.terminateWorkflow(ctx, t, string(id), nonRecursive)
 
 				// Wait for the root orchestration to complete and verify its terminated status
 				metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, id)
@@ -266,7 +266,7 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 				}
 
 				// Verify tht none of the L2 suborchestrations executed the activity in case of recursive termination
-				assert.NotEqual(t, recursiveBool, executedActivity)
+				assert.Equal(t, nonRecursiveBool, executedActivity)
 			})
 		}
 	})
@@ -293,14 +293,14 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 		// Wait for wfEngine to be ready
 		time.Sleep(5 * time.Second)
 
-		// Test purging workflow with and without recursion
-		for _, recursive := range []string{"", "true", "false"} {
-			// `recursive` = "" means no query param, which should default to true
-			recursiveBool := true
-			if recursive == "false" {
-				recursiveBool = false
+		// Test purging with and without recursion
+		for _, nonRecursive := range []string{"", "false", "true"} {
+			// `non_recursive` = "" means no query param, which should default to false
+			nonRecursiveBool := false
+			if nonRecursive == "true" {
+				nonRecursiveBool = true
 			}
-			t.Run(fmt.Sprintf("recursive = %v", recursive), func(t *testing.T) {
+			t.Run(fmt.Sprintf("non_recursive = %v", nonRecursive), func(t *testing.T) {
 				// Run the orchestration, which will block waiting for external events
 				id := api.InstanceID(w.startWorkflow(ctx, t, "Root", ""))
 
@@ -309,20 +309,13 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 				require.Equal(t, api.RUNTIME_STATUS_COMPLETED, metadata.RuntimeStatus)
 
 				// Purge the root orchestration
-				w.purgeWorkflow(ctx, t, string(id), recursive)
+				w.purgeWorkflow(ctx, t, string(id), nonRecursive)
 
 				// Verify that root Orchestration has been purged
 				_, err = backendClient.FetchOrchestrationMetadata(ctx, id)
 				assert.Contains(t, status.Convert(err).Message(), api.ErrInstanceNotFound.Error())
 
-				if recursiveBool {
-					// Verify that L1 and L2 orchestrations have been purged
-					_, err = backendClient.FetchOrchestrationMetadata(ctx, id+"_L1")
-					require.Contains(t, status.Convert(err).Message(), api.ErrInstanceNotFound.Error())
-
-					_, err = backendClient.FetchOrchestrationMetadata(ctx, id+"_L1_L2")
-					require.Contains(t, status.Convert(err).Message(), api.ErrInstanceNotFound.Error())
-				} else {
+				if nonRecursiveBool {
 					// Verify that L1 and L2 orchestrations are not purged
 					metadata, err = backendClient.FetchOrchestrationMetadata(ctx, id+"_L1")
 					require.NoError(t, err)
@@ -331,6 +324,14 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 					_, err = backendClient.FetchOrchestrationMetadata(ctx, id+"_L1_L2")
 					require.NoError(t, err)
 					require.Equal(t, api.RUNTIME_STATUS_COMPLETED, metadata.RuntimeStatus)
+
+				} else {
+					// Verify that L1 and L2 orchestrations have been purged
+					_, err = backendClient.FetchOrchestrationMetadata(ctx, id+"_L1")
+					require.Contains(t, status.Convert(err).Message(), api.ErrInstanceNotFound.Error())
+
+					_, err = backendClient.FetchOrchestrationMetadata(ctx, id+"_L1_L2")
+					require.Contains(t, status.Convert(err).Message(), api.ErrInstanceNotFound.Error())
 				}
 			})
 		}

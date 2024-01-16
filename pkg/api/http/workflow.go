@@ -242,12 +242,12 @@ func (a *api) onTerminateWorkflowHandler() http.HandlerFunc {
 				in.SetWorkflowComponent(chi.URLParam(r, workflowComponent))
 				in.SetInstanceId(chi.URLParam(r, instanceID))
 
-				// Default to true if not specified
-				in.Recursive = true
-				// Extract recursive option from query string
-				recursive := r.URL.Query().Get("recursive")
-				if recursive == "false" {
-					in.Recursive = false
+				// Default to false if not specified
+				in.NonRecursive = false
+				// Extract non_recursive option from query string
+				nonRecursive := r.URL.Query().Get(nonRecursive)
+				if nonRecursive == "true" {
+					in.NonRecursive = true
 				}
 				return in, nil
 			},
@@ -308,12 +308,12 @@ func (a *api) onPurgeWorkflowHandler() http.HandlerFunc {
 				in.SetWorkflowComponent(chi.URLParam(r, workflowComponent))
 				in.SetInstanceId(chi.URLParam(r, instanceID))
 
-				// Default to true if not specified
-				in.Recursive = true
-				// Extract recursive option from query string
-				recursive := r.URL.Query().Get("recursive")
-				if recursive == "false" {
-					in.Recursive = false
+				// Default to false if not specified
+				in.NonRecursive = false
+				// Extract non_recursive option from query string
+				nonRecursive := r.URL.Query().Get(nonRecursive)
+				if nonRecursive == "true" {
+					in.NonRecursive = true
 				}
 				return in, nil
 			},
