@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strconv"
 	"sync"
 	"sync/atomic"
 
@@ -140,6 +141,7 @@ func (hc *VirtualNodesCache) GetHashes(replicationFactor int64, host string) []u
 	hc.RLock()
 	if hashMap, exists := hc.data[replicationFactor]; exists {
 		if hashes, found := hashMap.hashes[host]; found {
+			hc.RUnlock()
 			return hashes
 		}
 	}
@@ -177,7 +179,7 @@ func (hc *VirtualNodesCache) setHashes(replicationFactor int64, host string) []u
 
 // NewFromExistingWithVirtNodes creates a new consistent hash from existing values with vnodes
 // It's a legacy function needed for backwards compatibility (daprd >= 1.13 with placement < 1.13)
-// TODO in v1.14 remove this function
+// TODO in v1.15 remove this function
 func NewFromExistingWithVirtNodes(hosts map[uint64]string, sortedSet []uint64, loadMap map[string]*Host) *Consistent {
 	return &Consistent{
 		hosts:     hosts,
@@ -205,7 +207,7 @@ func (c *Consistent) Add(host, id string, port int64) bool {
 
 	c.loadMap[host] = &Host{Name: host, AppID: id, Load: 0, Port: port}
 
-	// TODO in v1.14
+	// TODO in v1.15
 	// The optimisation of not disseminating vnodes with the placement table was introduced
 	// in 1.13, and the API level was increased to 20, but we still have to support sidecars
 	// running on 1.12 with placement services on 1.13. That's why we are keeping the
@@ -213,7 +215,7 @@ func (c *Consistent) Add(host, id string, port int64) bool {
 	// This should be removed in 1.14.
 	// --Start remove--
 	for i := 0; i < replicationFactor; i++ {
-		h := c.hash(fmt.Sprintf("%s%d", host, i))
+		h := c.hash(host + strconv.Itoa(i))
 		c.hosts[h] = host
 		c.sortedSet = append(c.sortedSet, h)
 	}
@@ -340,7 +342,7 @@ func (c *Consistent) Remove(host string) bool {
 	defer c.Unlock()
 
 	for i := 0; i < replicationFactor; i++ {
-		h := c.hash(fmt.Sprintf("%s%d", host, i))
+		h := c.hash(host + strconv.Itoa(i))
 		delete(c.hosts, h)
 		c.delSlice(h)
 	}

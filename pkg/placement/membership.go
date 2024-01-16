@@ -330,7 +330,13 @@ func (p *Service) performTableDissemination(ctx context.Context) error {
 	defer p.disseminateLock.Unlock()
 
 	state := p.raftNode.FSM().PlacementState(false)
-	stateWithVirtualNodes := p.raftNode.FSM().PlacementState(true)
+
+	// We only need to calculate the virtual nodes if the min API level is lower than 20,
+	// otherwise, they're calculated in daprd.
+	stateWithVirtualNodes := &v1pb.PlacementTables{}
+	if p.minAPILevel >= NoVirtualNodesInPlacementTablesAPILevel {
+		stateWithVirtualNodes = p.raftNode.FSM().PlacementState(true)
+	}
 
 	log.Infof(
 		"Start disseminating tables. memberUpdateCount: %d, streams: %d, targets: %d, table generation: %s",

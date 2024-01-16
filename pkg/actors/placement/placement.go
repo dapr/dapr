@@ -537,7 +537,7 @@ func (p *actorPlacement) updatePlacements(in *v1pb.PlacementTables) {
 				loadMap[lk] = hashing.NewHost(lv.GetName(), lv.GetId(), lv.GetLoad(), lv.GetPort())
 			}
 
-			// TODO in v1.14 remove the check for versions < 1.13
+			// TODO in v1.15 remove the check for versions < 1.13
 			// only keep `hashing.NewFromExisting`
 			if in.GetReplicationFactor() > 0 && len(v.GetHosts()) == 0 {
 				p.placementTables.Entries[k] = hashing.NewFromExisting(loadMap, int(in.GetReplicationFactor()), p.virtualNodesCache)

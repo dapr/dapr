@@ -65,7 +65,7 @@ func (c *FSM) State() *DaprHostMemberState {
 
 // PlacementState returns the current placement tables.
 // the withVirtualNodes parameter is here for backwards compatibility and should be removed in 1.14
-// TODO in v1.14 remove the withVirtualNodes parameter
+// TODO in v1.15 remove the withVirtualNodes parameter
 func (c *FSM) PlacementState(withVirtualNodes bool) *v1pb.PlacementTables {
 	c.stateLock.RLock()
 	defer c.stateLock.RUnlock()
