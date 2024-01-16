@@ -186,22 +186,22 @@ func newDaprRuntime(ctx context.Context,
 	})
 
 	processor := processor.New(processor.Options{
-		ID:               runtimeConfig.id,
-		Namespace:        namespace,
-		IsHTTP:           runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
-		PlacementEnabled: len(runtimeConfig.placementAddresses) > 0,
+		ID:             runtimeConfig.id,
+		Namespace:      namespace,
+		IsHTTP:         runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
+		ActorsEnabled:  len(runtimeConfig.actorsService) > 0,
 		SchedulerEnabled: len(runtimeConfig.schedulerAddresses) > 0,
-		Registry:         runtimeConfig.registry,
-		ComponentStore:   compStore,
-		Meta:             meta,
-		GlobalConfig:     globalConfig,
-		Resiliency:       resiliencyProvider,
-		Mode:             runtimeConfig.mode,
-		PodName:          podName,
-		Standalone:       runtimeConfig.standalone,
-		OperatorClient:   operatorClient,
-		GRPC:             grpc,
-		Channels:         channels,
+		Registry:       runtimeConfig.registry,
+		ComponentStore: compStore,
+		Meta:           meta,
+		GlobalConfig:   globalConfig,
+		Resiliency:     resiliencyProvider,
+		Mode:           runtimeConfig.mode,
+		PodName:        podName,
+		Standalone:     runtimeConfig.standalone,
+		OperatorClient: operatorClient,
+		GRPC:           grpc,
+		Channels:       channels,
 	})
 
 	var reloader *hotreload.Reloader
@@ -958,19 +958,20 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 		log.Info("actors: state store is not configured - this is okay for clients but services with hosted actors will fail to initialize!")
 	}
 	actorConfig := actors.NewConfig(actors.ConfigOpts{
-		HostAddress:        a.hostAddress,
-		AppID:              a.runtimeConfig.id,
-		PlacementAddresses: a.runtimeConfig.placementAddresses,
-		Port:               a.runtimeConfig.internalGRPCPort,
-		Namespace:          a.namespace,
-		AppConfig:          a.appConfig,
-		HealthHTTPClient:   a.channels.AppHTTPClient(),
-		HealthEndpoint:     a.channels.AppHTTPEndpoint(),
-		AppChannelAddress:  a.runtimeConfig.appConnectionConfig.ChannelAddress,
-		PodName:            getPodName(),
+		HostAddress:       a.hostAddress,
+		AppID:             a.runtimeConfig.id,
+		ActorsService:     a.runtimeConfig.actorsService,
+		RemindersService:  a.runtimeConfig.remindersService,
+		Port:              a.runtimeConfig.internalGRPCPort,
+		Namespace:         a.namespace,
+		AppConfig:         a.appConfig,
+		HealthHTTPClient:  a.channels.AppHTTPClient(),
+		HealthEndpoint:    a.channels.AppHTTPEndpoint(),
+		AppChannelAddress: a.runtimeConfig.appConnectionConfig.ChannelAddress,
+		PodName:           getPodName(),
 	})
 
-	act := actors.NewActors(actors.ActorsOpts{
+	act, err := actors.NewActors(actors.ActorsOpts{
 		AppChannel:       a.channels.AppChannel(),
 		GRPCConnectionFn: a.grpc.GetGRPCConnection,
 		Config:           actorConfig,
@@ -982,12 +983,15 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 		StateTTLEnabled: a.globalConfig.IsFeatureEnabled(config.ActorStateTTL),
 		Security:        a.sec,
 	})
-	err = act.Init(ctx)
-	if err == nil {
-		a.actor = act
-		return nil
+	if err != nil {
+		return rterrors.NewInit(rterrors.InitFailure, "actors", err)
 	}
-	return rterrors.NewInit(rterrors.InitFailure, "actors", err)
+	err = act.Init(ctx)
+	if err != nil {
+		return rterrors.NewInit(rterrors.InitFailure, "actors", err)
+	}
+	a.actor = act
+	return nil
 }
 
 func (a *DaprRuntime) loadComponents(ctx context.Context) error {

@@ -47,9 +47,9 @@ const (
 
 func newTestReminders() *reminders {
 	conf := internal.Config{
-		AppID:              TestAppID,
-		PlacementAddresses: []string{"placement:5050"},
-		HostedActorTypes:   internal.NewHostedActors([]string{"cat"}),
+		AppID:            TestAppID,
+		ActorsService:    "placement:placement:5050",
+		HostedActorTypes: internal.NewHostedActors([]string{"cat"}),
 	}
 	clock := clocktesting.NewFakeClock(startOfTime)
 	apiLevel := &atomic.Uint32{}
@@ -457,7 +457,7 @@ func newTestRemindersWithMockAndActorMetadataPartition() *reminders {
 	}
 	conf := internal.Config{
 		AppID:                      TestAppID,
-		PlacementAddresses:         []string{"placement:5050"},
+		ActorsService:              "placement:placement:5050",
 		DrainRebalancedActors:      appConfig.DrainRebalancedActors,
 		HostedActorTypes:           internal.NewHostedActors(appConfig.Entities),
 		Reentrancy:                 appConfig.Reentrancy,
