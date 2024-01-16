@@ -38,6 +38,8 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
+var apiLevel atomic.Uint32
+
 func TestAddDNSResolverPrefix(t *testing.T) {
 	testCases := []struct {
 		addr          []string
@@ -69,6 +71,7 @@ func TestPlacementStream_RoundRobin(t *testing.T) {
 		address[i], testSrv[i], cleanup[i] = newTestServer()
 	}
 
+	apiLevel.Store(1)
 	testPlacement := NewActorPlacement(internal.ActorsProviderOptions{
 		Config: internal.Config{
 			PlacementAddresses: address,
@@ -81,6 +84,7 @@ func TestPlacementStream_RoundRobin(t *testing.T) {
 		AppHealthFn: func(ctx context.Context) <-chan bool { return nil },
 		Security:    testSecurity(t),
 		Resiliency:  resiliency.New(logger.NewLogger("test")),
+		APILevel:    &apiLevel,
 	}).(*actorPlacement)
 
 	t.Run("found leader placement in a round robin way", func(t *testing.T) {
@@ -129,6 +133,7 @@ func TestAppHealthyStatus(t *testing.T) {
 
 	appHealthCh := make(chan bool)
 
+	apiLevel.Store(1)
 	testPlacement := NewActorPlacement(internal.ActorsProviderOptions{
 		Config: internal.Config{
 			PlacementAddresses: []string{address},
@@ -141,6 +146,7 @@ func TestAppHealthyStatus(t *testing.T) {
 		AppHealthFn: func(ctx context.Context) <-chan bool { return appHealthCh },
 		Security:    testSecurity(t),
 		Resiliency:  resiliency.New(logger.NewLogger("test")),
+		APILevel:    &apiLevel,
 	}).(*actorPlacement)
 
 	// act
@@ -165,6 +171,7 @@ func TestAppHealthyStatus(t *testing.T) {
 func TestOnPlacementOrder(t *testing.T) {
 	tableUpdateCount := atomic.Int64{}
 	tableUpdateFunc := func() { tableUpdateCount.Add(1) }
+	apiLevel.Store(1)
 	testPlacement := NewActorPlacement(internal.ActorsProviderOptions{
 		Config: internal.Config{
 			PlacementAddresses: []string{},
@@ -177,6 +184,7 @@ func TestOnPlacementOrder(t *testing.T) {
 		AppHealthFn: func(ctx context.Context) <-chan bool { return nil },
 		Security:    testSecurity(t),
 		Resiliency:  resiliency.New(logger.NewLogger("test")),
+		APILevel:    &apiLevel,
 	}).(*actorPlacement)
 	testPlacement.SetOnTableUpdateFn(tableUpdateFunc)
 
@@ -234,6 +242,7 @@ func TestOnPlacementOrder(t *testing.T) {
 }
 
 func TestWaitUntilPlacementTableIsReady(t *testing.T) {
+	apiLevel.Store(1)
 	testPlacement := NewActorPlacement(internal.ActorsProviderOptions{
 		Config: internal.Config{
 			PlacementAddresses: []string{},
@@ -246,6 +255,7 @@ func TestWaitUntilPlacementTableIsReady(t *testing.T) {
 		AppHealthFn: func(ctx context.Context) <-chan bool { return nil },
 		Security:    testSecurity(t),
 		Resiliency:  resiliency.New(logger.NewLogger("test")),
+		APILevel:    &apiLevel,
 	}).(*actorPlacement)
 
 	// Set the hasPlacementTablesCh channel to nil for the first tests, indicating that the placement tables already exist
@@ -373,6 +383,7 @@ func TestWaitUntilPlacementTableIsReady(t *testing.T) {
 }
 
 func TestLookupActor(t *testing.T) {
+	apiLevel.Store(1)
 	testPlacement := NewActorPlacement(internal.ActorsProviderOptions{
 		Config: internal.Config{
 			PlacementAddresses: []string{},
@@ -385,6 +396,7 @@ func TestLookupActor(t *testing.T) {
 		AppHealthFn: func(ctx context.Context) <-chan bool { return nil },
 		Security:    testSecurity(t),
 		Resiliency:  resiliency.New(logger.NewLogger("test")),
+		APILevel:    &apiLevel,
 	}).(*actorPlacement)
 
 	t.Run("Placement table is unset", func(t *testing.T) {
@@ -430,6 +442,7 @@ func TestLookupActor(t *testing.T) {
 }
 
 func TestConcurrentUnblockPlacements(t *testing.T) {
+	apiLevel.Store(1)
 	testPlacement := NewActorPlacement(internal.ActorsProviderOptions{
 		Config: internal.Config{
 			PlacementAddresses: []string{},
@@ -442,6 +455,7 @@ func TestConcurrentUnblockPlacements(t *testing.T) {
 		AppHealthFn: func(ctx context.Context) <-chan bool { return nil },
 		Security:    testSecurity(t),
 		Resiliency:  resiliency.New(logger.NewLogger("test")),
+		APILevel:    &apiLevel,
 	}).(*actorPlacement)
 
 	// Set the hasPlacementTablesCh channel to nil for the first tests, indicating that the placement tables already exist

@@ -96,7 +96,7 @@ func TestConnectToServer(t *testing.T) {
 		// All keys in the returned MD are lowercase, as per the http spec for header fields
 		// https://httpwg.org/specs/rfc7540.html#rfc.section.8.1.2
 		apiLevelValues := md["apilevel"]
-		require.Len(t, len(apiLevelValues), 1)
+		require.Len(t, apiLevelValues, 1)
 
 		apiLevelStr := apiLevelValues[0]
 		require.Equal(t, "10", apiLevelStr)
