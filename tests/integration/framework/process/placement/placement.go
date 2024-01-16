@@ -124,6 +124,10 @@ func (p *Placement) Port() int {
 	return p.port
 }
 
+func (p *Placement) Address() string {
+	return "localhost:" + strconv.Itoa(p.port)
+}
+
 func (p *Placement) HealthzPort() int {
 	return p.healthzPort
 }

@@ -177,7 +177,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
-      - name: Build binaries
+      - name: Run make build
         run: make build
       - name: Run make test-integration
         run: make test-integration
