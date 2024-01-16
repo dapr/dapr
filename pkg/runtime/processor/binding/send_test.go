@@ -171,9 +171,8 @@ func TestStartReadingFromBindings(t *testing.T) {
 		}))
 		require.NoError(t, b.compStore.CommitPendingComponent())
 		err := b.StartReadingFromBindings(context.Background())
-
 		require.NoError(t, err)
-		assert.True(t, mockAppChannel.AssertNotCalled(t, "InvokeMethod", mock.Anything, mock.Anything))
+		assert.True(t, mockAppChannel.AssertCalled(t, "InvokeMethod", mock.Anything, mock.Anything))
 	})
 }
 
