@@ -135,10 +135,32 @@ func TestServiceInvocationGrpcPerformance(t *testing.T) {
 	// fast fail if daprResp starts with error
 	require.False(t, strings.HasPrefix(string(baselineResp), "error"))
 
+	// Perform an initial run with Dapr as warmup
+	warmup := perf.Params(
+		perf.WithQPS(100),
+		perf.WithConnections(16),
+		perf.WithDuration("10s"),
+		perf.WithPayloadSize(1024),
+	)
+	warmup.Grpc = true
+	warmup.Dapr = "capability=invoke,target=dapr,method=load,appid=testapp"
+	warmup.TargetEndpoint = "http://localhost:50001"
+	body, err = json.Marshal(warmup)
+	require.NoError(t, err)
+
+	t.Log("running warmup...")
+	warmupResp, err := utils.HTTPPost(fmt.Sprintf("%s/test", testerAppURL), body)
+	t.Logf("warmup results: %s", string(warmupResp))
+	require.NoError(t, err)
+	require.NotEmpty(t, warmupResp)
+	// fast fail if warmupResp starts with error
+	require.False(t, strings.HasPrefix(string(warmupResp), "error"))
+
 	// Perform dapr test
+	p.Grpc = true
 	p.Dapr = "capability=invoke,target=dapr,method=load,appid=testapp"
 	p.TargetEndpoint = "http://localhost:50001"
-	body, err = json.Marshal(&p)
+	body, err = json.Marshal(p)
 	require.NoError(t, err)
 
 	t.Log("running dapr test...")
