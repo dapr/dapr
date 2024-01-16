@@ -36,7 +36,7 @@ const (
 	// raftApplyCommandMaxConcurrency is the max concurrency to apply command log to raft.
 	raftApplyCommandMaxConcurrency          = 10
 	barrierWriteTimeout                     = 2 * time.Minute
-	NoVirtualNodesInPlacementTablesApiLevel = 20
+	NoVirtualNodesInPlacementTablesAPILevel = 20
 )
 
 // MonitorLeadership is used to monitor if we acquire or lose our role
@@ -412,8 +412,8 @@ func (p *Service) disseminateOperationOnHosts(ctx context.Context, hosts []place
 			// Versions pre 1.13 don't set metadata on the stream and expect vnodes in the placement table
 			// Versions 1.13 and above set the ApiLevel as metadata on the stream and don't expect vnodes in the placement table
 			// Dapr Version 1.13 corresponds to API level 20 (as defined in pkg/actors/internal/api_level.go)
-			apiLevel := getHostApiLevel(hosts[i])
-			if apiLevel < NoVirtualNodesInPlacementTablesApiLevel {
+			apiLevel := getHostAPILevel(hosts[i])
+			if apiLevel < NoVirtualNodesInPlacementTablesAPILevel {
 				errCh <- p.disseminateOperation(ctx, hosts[i], operation, tablesWithVirtualNodes)
 			} else {
 				errCh <- p.disseminateOperation(ctx, hosts[i], operation, tables)
@@ -467,7 +467,7 @@ func (p *Service) disseminateOperation(ctx context.Context, target placementGRPC
 	)
 }
 
-func getHostApiLevel(stream placementGRPCStream) int {
+func getHostAPILevel(stream placementGRPCStream) int {
 	md, ok := metadata.FromIncomingContext(stream.Context())
 	if !ok {
 		return 0

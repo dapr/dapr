@@ -256,7 +256,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 				placementTable := &placementv1pb.PlacementTables{}
 				placementTableWithVirtualNodes := &placementv1pb.PlacementTables{}
 				apiLevel := req.GetApiLevel()
-				if apiLevel >= NoVirtualNodesInPlacementTablesApiLevel {
+				if apiLevel >= NoVirtualNodesInPlacementTablesAPILevel {
 					placementTable = p.raftNode.FSM().PlacementState(false)
 				} else {
 					placementTableWithVirtualNodes = p.raftNode.FSM().PlacementState(true)

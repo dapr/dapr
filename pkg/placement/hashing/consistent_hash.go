@@ -82,7 +82,7 @@ func NewConsistentHash() *Consistent {
 }
 
 // NewFromExisting creates a new consistent hash from existing values.
-func NewFromExisting(loadMap map[string]*Host, replicationFactor int) *Consistent {
+func NewFromExisting(loadMap map[string]*Host, replicationFactor int, virtualNodesCache *VirtualNodesCache) *Consistent {
 	newHash := &Consistent{
 		hosts:     map[uint64]string{},
 		sortedSet: []uint64{},
@@ -90,11 +90,11 @@ func NewFromExisting(loadMap map[string]*Host, replicationFactor int) *Consisten
 	}
 
 	for hostName := range loadMap {
-		for i := 0; i < replicationFactor; i++ {
-			h := newHash.hash(fmt.Sprintf("%s%d", hostName, i))
+		hashes := virtualNodesCache.GetHashes(int64(replicationFactor), hostName)
+		for _, h := range hashes {
 			newHash.hosts[h] = hostName
-			newHash.sortedSet = append(newHash.sortedSet, h)
 		}
+		newHash.sortedSet = append(newHash.sortedSet, hashes...)
 	}
 
 	// sort hashes in ascending order
@@ -103,6 +103,77 @@ func NewFromExisting(loadMap map[string]*Host, replicationFactor int) *Consisten
 	})
 
 	return newHash
+}
+
+// VirtualNodesCache data example:
+//
+//	100 -> (the replication factor)
+//		"192.168.1.89:62362" -> ["10056481384176189962", "10100244799470048543"...] (100 elements)
+//		"192.168.1.89:62362" -> ["10056481384176189962", "10100244799470048543"...]
+//	200 ->
+//		"192.168.1.89:62362" -> ["10056481384176189962", "10100244799470048543"...] (200 elements)
+//		"192.168.1.89:62362" -> ["10056481384176189962", "10100244799470048543"...]
+type VirtualNodesCache struct {
+	sync.RWMutex
+	data map[int64]*hashMap
+}
+
+// hashMap represents a mapping of IP addresses to their hashes.
+type hashMap struct {
+	hashes map[string][]uint64
+}
+
+func newHashMap() *hashMap {
+	return &hashMap{
+		hashes: make(map[string][]uint64),
+	}
+}
+
+func NewVirtualNodesCache() *VirtualNodesCache {
+	return &VirtualNodesCache{
+		data: make(map[int64]*hashMap),
+	}
+}
+
+// GetHashes retrieves the hashes for the given replication factor and IP address.
+func (hc *VirtualNodesCache) GetHashes(replicationFactor int64, host string) []uint64 {
+	hc.RLock()
+	if hashMap, exists := hc.data[replicationFactor]; exists {
+		if hashes, found := hashMap.hashes[host]; found {
+			return hashes
+		}
+	}
+	hc.RUnlock()
+
+	return hc.setHashes(replicationFactor, host)
+}
+
+// SetHashes sets the hashes for the given replication factor and IP address.
+func (hc *VirtualNodesCache) setHashes(replicationFactor int64, host string) []uint64 {
+	hc.Lock()
+	defer hc.Unlock()
+
+	// We have to check once again if the hash map exists, because by this point
+	// we already released the previous lock (in getHashes) and another goroutine might have
+	// created the hash map in the meantime.
+	if hashMap, exists := hc.data[replicationFactor]; exists {
+		if hashes, found := hashMap.hashes[host]; found {
+			return hashes
+		}
+	}
+
+	hashMap := newHashMap()
+	hashMap.hashes[host] = []uint64{}
+
+	c := &Consistent{}
+	for i := 0; i < int(replicationFactor); i++ {
+		h := c.hash(fmt.Sprintf("%s%d", host, i))
+		hashMap.hashes[host] = append(hashMap.hashes[host], h)
+	}
+
+	hc.data[replicationFactor] = hashMap
+
+	return hashMap.hashes[host]
 }
 
 // NewFromExistingWithVirtNodes creates a new consistent hash from existing values with vnodes

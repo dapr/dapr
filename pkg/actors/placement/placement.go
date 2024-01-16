@@ -104,6 +104,8 @@ type actorPlacement struct {
 	closeCh chan struct{}
 
 	resiliency resiliency.Provider
+
+	virtualNodesCache *hashing.VirtualNodesCache
 }
 
 // NewActorPlacement initializes ActorPlacement for the actor service.
@@ -116,12 +118,13 @@ func NewActorPlacement(opts internal.ActorsProviderOptions) internal.PlacementSe
 		client:          newPlacementClient(getGrpcOptsGetter(servers, opts.Security)),
 		placementTables: &hashing.ConsistentHashTables{Entries: make(map[string]*hashing.Consistent)},
 
-		actorTypes:    []string{},
-		unblockSignal: make(chan struct{}, 1),
-		appHealthFn:   opts.AppHealthFn,
-		closeCh:       make(chan struct{}),
-		resiliency:    opts.Resiliency,
-		apiLevel:      opts.APILevel.Load(),
+		actorTypes:        []string{},
+		unblockSignal:     make(chan struct{}, 1),
+		appHealthFn:       opts.AppHealthFn,
+		closeCh:           make(chan struct{}),
+		resiliency:        opts.Resiliency,
+		apiLevel:          opts.APILevel.Load(),
+		virtualNodesCache: hashing.NewVirtualNodesCache(),
 	}
 }
 
@@ -537,7 +540,7 @@ func (p *actorPlacement) updatePlacements(in *v1pb.PlacementTables) {
 			// TODO in v1.14 remove the check for versions < 1.13
 			// only keep `hashing.NewFromExisting`
 			if in.GetReplicationFactor() > 0 && len(v.GetHosts()) == 0 {
-				p.placementTables.Entries[k] = hashing.NewFromExisting(loadMap, int(in.GetReplicationFactor()))
+				p.placementTables.Entries[k] = hashing.NewFromExisting(loadMap, int(in.GetReplicationFactor()), p.virtualNodesCache)
 			} else {
 				p.placementTables.Entries[k] = hashing.NewFromExistingWithVirtNodes(v.GetHosts(), v.GetSortedSet(), loadMap)
 			}
