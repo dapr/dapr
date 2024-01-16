@@ -243,7 +243,7 @@ func (a *apiServer) ListComponents(ctx context.Context, in *operatorv1pb.ListCom
 		// By default assume that it is not a component for control plane service.
 		controlPlaneComp := false
 		c := components.Items[i] // Make a copy since we will refer to this as a reference in this loop.
-		// If the component is in the same namespace as the operator AND has a scope defined with a dynamic control plane service name, then it is a control plane component.
+		// If the component is in the same namespace as the operator AND has a scope defined with a control plane service name, then it is a control plane component.
 		if c.ObjectMeta.Namespace == security.CurrentNamespace() {
 			for s := range c.Scopes {
 				scope := c.Scopes[s]
