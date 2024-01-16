@@ -34,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/yaml"
 
+	"github.com/dapr/dapr/pkg/apis/common"
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpendpointapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
@@ -263,6 +264,58 @@ func TestComponentUpdate(t *testing.T) {
 				close(api.allConnUpdateChan[key])
 			}
 		}()
+
+		// Start sidecar update loop
+		require.NoError(t, api.ComponentUpdate(&operatorv1pb.ComponentUpdateRequest{
+			Namespace: "ns1",
+		}, mockSidecar))
+
+		assert.Equal(t, int64(0), mockSidecar.Calls.Load())
+	})
+
+	t.Run("skip sidecar update if component meant for control plane", func(t *testing.T) {
+		c := componentsapi.Component{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "ns1",
+			},
+			Spec: componentsapi.ComponentSpec{},
+			Scoped: common.Scoped{
+				Scopes: []string{"dapr-placement"},
+			},
+		}
+
+		s := runtime.NewScheme()
+		err := scheme.AddToScheme(s)
+		require.NoError(t, err)
+
+		err = corev1.AddToScheme(s)
+		require.NoError(t, err)
+
+		client := fake.NewClientBuilder().
+			WithScheme(s).Build()
+
+		mockSidecar := &mockComponentUpdateServer{ctx: pki.ClientGRPCCtx(t)}
+		api := NewAPIServer(Options{Client: client}).(*apiServer)
+
+		go func() {
+			assert.Eventually(t, func() bool {
+				api.connLock.Lock()
+				defer api.connLock.Unlock()
+				return len(api.allConnUpdateChan) == 1
+			}, time.Second, 10*time.Millisecond)
+
+			api.connLock.Lock()
+			defer api.connLock.Unlock()
+			for key := range api.allConnUpdateChan {
+				api.allConnUpdateChan[key] <- &ComponentUpdateEvent{
+					Component: &c,
+				}
+				close(api.allConnUpdateChan[key])
+			}
+		}()
+
+		os.Setenv("NAMESPACE", "ns1")
+		defer os.Unsetenv("NAMESPACE")
 
 		// Start sidecar update loop
 		require.NoError(t, api.ComponentUpdate(&operatorv1pb.ComponentUpdateRequest{

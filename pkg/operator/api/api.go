@@ -523,6 +523,14 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 		if c.Namespace != in.GetNamespace() {
 			return
 		}
+		if c.ObjectMeta.Namespace == security.CurrentNamespace() {
+			for s := range c.Scopes {
+				scope := c.Scopes[s]
+				if utils.IsControlPlaneService(scope) {
+					return
+				}
+			}
+		}
 
 		err := processComponentSecrets(ctx, c, in.GetNamespace(), a.Client)
 		if err != nil {

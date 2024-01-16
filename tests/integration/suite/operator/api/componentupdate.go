@@ -79,7 +79,7 @@ func (c *componentupdate) Run(t *testing.T, ctx context.Context) {
 	c.sentry.WaitUntilRunning(t, ctx)
 	c.operator.WaitUntilRunning(t, ctx)
 
-	client := c.operator.Dial(t, ctx, "default", c.sentry)
+	client := c.operator.Dial(t, ctx, "default", "myapp", c.sentry)
 
 	stream, err := client.ComponentUpdate(ctx, &operatorv1.ComponentUpdateRequest{Namespace: "default"})
 	require.NoError(t, err)

@@ -46,8 +46,9 @@ type listcomponents struct {
 	kubeapi  *kubernetes.Kubernetes
 	operator *operator.Operator
 
-	comp1 *compapi.Component
-	comp2 *compapi.Component
+	comp1         *compapi.Component
+	comp2         *compapi.Component
+	ctrlPlaneComp *compapi.Component
 }
 
 func (l *listcomponents) Setup(t *testing.T) []framework.Option {
@@ -88,6 +89,18 @@ func (l *listcomponents) Setup(t *testing.T) []framework.Option {
 		},
 	}
 
+	l.ctrlPlaneComp = &compapi.Component{
+		TypeMeta:   metav1.TypeMeta{Kind: "Component", APIVersion: "dapr.io/v1alpha1"},
+		ObjectMeta: metav1.ObjectMeta{Name: "ctrl-plane-comp", Namespace: "default"},
+		Spec: compapi.ComponentSpec{
+			Type:    "state.inmemory",
+			Version: "v1",
+		},
+		Scoped: common.Scoped{
+			Scopes: []string{"dapr-placement"},
+		},
+	}
+
 	l.kubeapi = kubernetes.New(t,
 		kubernetes.WithBaseOperatorAPI(t,
 			spiffeid.RequireTrustDomainFromString("integration.test.dapr.io"),
@@ -96,7 +109,7 @@ func (l *listcomponents) Setup(t *testing.T) []framework.Option {
 		),
 		kubernetes.WithClusterDaprComponentList(t, &compapi.ComponentList{
 			TypeMeta: metav1.TypeMeta{Kind: "ComponentList", APIVersion: "dapr.io/v1alpha1"},
-			Items:    []compapi.Component{*l.comp1, *l.comp2, *comp3},
+			Items:    []compapi.Component{*l.comp1, *l.comp2, *comp3, *l.ctrlPlaneComp},
 		}),
 	)
 
@@ -115,10 +128,12 @@ func (l *listcomponents) Run(t *testing.T, ctx context.Context) {
 	l.sentry.WaitUntilRunning(t, ctx)
 	l.operator.WaitUntilRunning(t, ctx)
 
-	client := l.operator.Dial(t, ctx, "default", l.sentry)
+	client := l.operator.Dial(t, ctx, "default", "myapp", l.sentry)
 
 	t.Run("LIST", func(t *testing.T) {
 		var resp *operatorv1.ListComponentResponse
+
+		// Test that the operator lists components ONLY meant for the app.
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			var err error
 			resp, err = client.ListComponents(ctx, &operatorv1.ListComponentsRequest{Namespace: "default"})
@@ -138,5 +153,19 @@ func (l *listcomponents) Run(t *testing.T, ctx context.Context) {
 			assert.JSONEq(t, string(b1), string(resp.GetComponents()[1]))
 			assert.JSONEq(t, string(b2), string(resp.GetComponents()[0]))
 		}
+
+		// Test that the operator lists components ONLY meant for the control plane.
+		ctrlClient := l.operator.Dial(t, ctx, "default", "dapr-placement", l.sentry)
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			var err error
+			resp, err = ctrlClient.ListComponents(ctx, &operatorv1.ListComponentsRequest{Namespace: "default"})
+			require.NoError(t, err)
+			assert.Len(c, resp.GetComponents(), 1)
+		}, time.Second*20, time.Millisecond*100)
+
+		cmp1, err := json.Marshal(l.ctrlPlaneComp)
+		require.NoError(t, err)
+
+		assert.JSONEq(t, string(cmp1), string(resp.GetComponents()[0]))
 	})
 }
