@@ -160,3 +160,11 @@ func IsControlPlaneService(id string) bool {
 		return false
 	}
 }
+
+func ParseServiceAddr(val string) []string {
+	p := strings.Split(val, ",")
+	for i, v := range p {
+		p[i] = strings.TrimSpace(v)
+	}
+	return p
+}

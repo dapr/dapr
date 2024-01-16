@@ -74,9 +74,8 @@ type Options struct {
 	// PodName is the name of the pod.
 	PodName string
 
-	// PlacementEnabled indicates whether placement service is enabled in this
-	// Dapr cluster.
-	PlacementEnabled bool
+	// ActorsEnabled indicates whether placement service is enabled in this Dapr cluster.
+	ActorsEnabled bool
 
 	// IsHTTP indicates whether the connection to the application is using the
 	// HTTP protocol.
@@ -146,11 +145,11 @@ func New(opts Options) *Processor {
 	})
 
 	state := state.New(state.Options{
-		PlacementEnabled: opts.PlacementEnabled,
-		Registry:         opts.Registry.StateStores(),
-		ComponentStore:   opts.ComponentStore,
-		Meta:             opts.Meta,
-		Outbox:           ps.Outbox(),
+		ActorsEnabled:  opts.ActorsEnabled,
+		Registry:       opts.Registry.StateStores(),
+		ComponentStore: opts.ComponentStore,
+		Meta:           opts.Meta,
+		Outbox:         ps.Outbox(),
 	})
 
 	secret := secret.New(secret.Options{
