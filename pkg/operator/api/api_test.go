@@ -17,7 +17,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"os"
 	"sync/atomic"
 	"testing"
 	"time"
