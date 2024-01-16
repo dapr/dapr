@@ -93,26 +93,6 @@ type api struct {
 	wg                    sync.WaitGroup
 }
 
-// DeleteJob implements API.
-func (*api) DeleteJob(context.Context, *runtimev1pb.DeleteJobRequest) (*emptypb.Empty, error) {
-	panic("unimplemented")
-}
-
-// GetJob implements API.
-func (*api) GetJob(context.Context, *runtimev1pb.GetJobRequest) (*runtimev1pb.GetJobResponse, error) {
-	panic("unimplemented")
-}
-
-// ListJobs implements API.
-func (*api) ListJobs(context.Context, *runtimev1pb.ListJobsRequest) (*runtimev1pb.ListJobsResponse, error) {
-	panic("unimplemented")
-}
-
-// ScheduleJob implements API.
-func (*api) ScheduleJob(context.Context, *runtimev1pb.ScheduleJobRequest) (*emptypb.Empty, error) {
-	panic("unimplemented")
-}
-
 // APIOpts contains options for NewAPI.
 type APIOpts struct {
 	Universal             *universal.Universal

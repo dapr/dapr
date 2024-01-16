@@ -40,6 +40,7 @@ type Options struct {
 	AppConnectionConfig         config.AppConnectionConfig
 	GlobalConfig                *config.Configuration
 	WorkflowEngine              *wfengine.WorkflowEngine
+	SchedulerClient             schedulerv1pb.SchedulerClient
 }
 
 // Universal contains the implementation of gRPC APIs that are also used by the HTTP server.
@@ -77,6 +78,7 @@ func New(opts Options) *Universal {
 		globalConfig:                opts.GlobalConfig,
 		workflowEngine:              opts.WorkflowEngine,
 		actorsReadyCh:               make(chan struct{}),
+		schedulerClient:             opts.SchedulerClient,
 	}
 }
 

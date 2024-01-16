@@ -27,8 +27,8 @@ func (a *Universal) ScheduleJob(ctx context.Context, inReq *runtimev1pb.Schedule
 	//validate job details, date, schedule, etc??
 	var err error
 
-	metadata := map[string]string{"app_id": a.AppID}
-	jobName := fmt.Sprintf("%s_%s", a.AppID, inReq.GetJob().GetName())
+	metadata := map[string]string{"app_id": a.AppID()}
+	jobName := fmt.Sprintf("%s_%s", a.AppID(), inReq.GetJob().GetName())
 
 	internalScheduleJobReq := &schedulerv1pb.ScheduleJobRequest{
 		Job: &runtimev1pb.Job{
@@ -61,7 +61,7 @@ func (a *Universal) DeleteJob(ctx context.Context, inReq *runtimev1pb.DeleteJobR
 		return &emptypb.Empty{}, err
 	}
 
-	jobName := fmt.Sprintf("%s_%s", a.AppID, inReq.GetName())
+	jobName := fmt.Sprintf("%s_%s", a.AppID(), inReq.GetName())
 	internalDeleteJobReq := &schedulerv1pb.JobRequest{
 		JobName: jobName,
 	}
@@ -77,7 +77,7 @@ func (a *Universal) DeleteJob(ctx context.Context, inReq *runtimev1pb.DeleteJobR
 }
 
 func (a *Universal) GetJob(ctx context.Context, inReq *runtimev1pb.GetJobRequest) (*runtimev1pb.GetJobResponse, error) {
-	var response *runtimev1pb.GetJobResponse
+	response := &runtimev1pb.GetJobResponse{}
 	var internalResp *schedulerv1pb.GetJobResponse
 	var err error
 
@@ -86,7 +86,7 @@ func (a *Universal) GetJob(ctx context.Context, inReq *runtimev1pb.GetJobRequest
 		return response, err
 	}
 
-	jobName := fmt.Sprintf("%s_%s", a.AppID, inReq.GetName())
+	jobName := fmt.Sprintf("%s_%s", a.AppID(), inReq.GetName())
 	internalGetJobReq := &schedulerv1pb.JobRequest{
 		JobName: jobName,
 	}
@@ -94,7 +94,7 @@ func (a *Universal) GetJob(ctx context.Context, inReq *runtimev1pb.GetJobRequest
 	internalResp, err = a.schedulerClient.GetJob(ctx, internalGetJobReq)
 	if err != nil {
 		a.logger.Errorf("Error Getting job %v", err)
-		return response, err
+		return nil, err
 	}
 
 	response.Job = internalResp.Job
@@ -103,7 +103,10 @@ func (a *Universal) GetJob(ctx context.Context, inReq *runtimev1pb.GetJobRequest
 }
 
 func (a *Universal) ListJobs(ctx context.Context, inReq *runtimev1pb.ListJobsRequest) (*runtimev1pb.ListJobsResponse, error) {
-	var response *runtimev1pb.ListJobsResponse
+	response := &runtimev1pb.ListJobsResponse{
+		Jobs: []*runtimev1pb.Job{},
+	}
+
 	var internalListResp *schedulerv1pb.ListJobsResponse
 	var err error
 
