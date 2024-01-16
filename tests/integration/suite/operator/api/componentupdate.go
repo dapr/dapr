@@ -177,15 +177,15 @@ func (c *componentupdate) Run(t *testing.T, ctx context.Context) {
 
 	ctrlClient := c.operator.Dial(t, ctx, "default", "dapr-placement", c.sentry)
 
-	ctrlClientStream, err := ctrlClient.ComponentUpdate(ctx, &operatorv1.ComponentUpdateRequest{Namespace: "default"})
-	require.NoError(t, err)
+	ctrlClientStream, errCtrl := ctrlClient.ComponentUpdate(ctx, &operatorv1.ComponentUpdateRequest{Namespace: "default"})
+	require.NoError(t, errCtrl)
 
 	t.Run("CTRL_COMP_CREATE", func(t *testing.T) {
 		c.store.Add(ctrlComp)
 		c.kubeapi.Informer().Add(t, ctrlComp)
 
-		event, err := ctrlClientStream.Recv()
-		require.NoError(t, err)
+		event, errCtrl := ctrlClientStream.Recv()
+		require.NoError(t, errCtrl)
 		assert.JSONEq(t, `{
 "metadata": { "name": "ctrl_comp", "namespace": "default", "creationTimestamp": null },
 "spec": {
