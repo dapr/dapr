@@ -47,20 +47,20 @@ jobs:
       - name: Initialize with latest Dapr runtime
         run: dapr init --slim
       - name: Check out code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.CHECKOUT_REF }}
       - name: Set up Go
         id: setup-go
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
       - name: Build Dapr's sidecar
         run: make ./dist/${GOOS}_${GOARCH}/release/daprd
       - name: Check out code at master branch for PR validation
         if: github.event_name == 'pull_request'
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: master
