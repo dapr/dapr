@@ -161,6 +161,6 @@ func (p *Placement) InitialClusterPorts() []int {
 	return p.initialClusterPorts
 }
 
-func (p *Placement) CurrentActorsApiLevel() int {
+func (p *Placement) CurrentActorsAPILevel() int {
 	return 20 // Defined in pkg/actors/internal/api_level.go
 }

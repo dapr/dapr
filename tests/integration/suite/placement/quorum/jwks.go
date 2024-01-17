@@ -20,12 +20,13 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
-	"google.golang.org/grpc/metadata"
 	"os"
 	"path/filepath"
 	"strconv"
 	"testing"
 	"time"
+
+	"google.golang.org/grpc/metadata"
 
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
@@ -166,7 +167,7 @@ func (j *jwks) Run(t *testing.T, ctx context.Context) {
 		}
 		t.Cleanup(func() { require.NoError(t, conn.Close()) })
 		client := v1pb.NewPlacementClient(conn)
-		ctx = metadata.AppendToOutgoingContext(ctx, "ApiLevel", strconv.Itoa(j.places[i].CurrentActorsApiLevel()))
+		ctx = metadata.AppendToOutgoingContext(ctx, "ApiLevel", strconv.Itoa(j.places[i].CurrentActorsAPILevel()))
 
 		stream, err = client.ReportDaprStatus(ctx)
 		if err != nil {

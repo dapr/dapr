@@ -16,12 +16,13 @@ package quorum
 import (
 	"context"
 	"fmt"
-	"google.golang.org/grpc/metadata"
 	"os"
 	"path/filepath"
 	"strconv"
 	"testing"
 	"time"
+
+	"google.golang.org/grpc/metadata"
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
@@ -121,7 +122,7 @@ func (i *insecure) Run(t *testing.T, ctx context.Context) {
 		}
 		t.Cleanup(func() { require.NoError(t, conn.Close()) })
 		client := v1pb.NewPlacementClient(conn)
-		ctx = metadata.AppendToOutgoingContext(ctx, "ApiLevel", strconv.Itoa(i.places[j].CurrentActorsApiLevel()))
+		ctx = metadata.AppendToOutgoingContext(ctx, "ApiLevel", strconv.Itoa(i.places[j].CurrentActorsAPILevel()))
 
 		stream, err = client.ReportDaprStatus(ctx)
 		if err != nil {
