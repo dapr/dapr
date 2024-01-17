@@ -180,6 +180,7 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 		defer p.shutdownConnLoop.Done()
 		ch := p.appHealthFn(ctx)
 		if ch == nil {
+			p.appHealthy.Store(true)
 			return
 		}
 
