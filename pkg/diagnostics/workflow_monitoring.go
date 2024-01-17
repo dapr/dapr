@@ -89,7 +89,7 @@ func newWorkflowMetrics() *workflowMetrics {
 			stats.UnitMilliseconds),
 		workflowSchedulingLatency: stats.Float64(
 			"runtime/workflow/scheduling/latency",
-			"The time taken between workflow execution request and actual workflow execution.",
+			"Interval between workflow execution request and workflow execution.",
 			stats.UnitMilliseconds),
 	}
 }
