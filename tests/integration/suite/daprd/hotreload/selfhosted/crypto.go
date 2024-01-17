@@ -211,7 +211,7 @@ spec:
 				{Name: "crypto3", Type: "crypto.dapr.localstorage", Version: "v1"},
 				{
 					Name: "crypto2", Type: "state.in-memory", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 				},
 			}, resp.GetRegisteredComponents())
 		}, time.Second*5, time.Millisecond*100)
@@ -245,7 +245,7 @@ spec:
 				{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 				{
 					Name: "crypto1", Type: "state.in-memory", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 				},
 			}, resp.GetRegisteredComponents())
 		}, time.Second*5, time.Millisecond*100)
