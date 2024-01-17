@@ -37,7 +37,7 @@ func init() {
 }
 
 // noappentities ensures that actors work even though no entities have been
-// defined and the app healthz endpoint is disabled.
+// defined and the app healthchecks is disabled.
 type noappentities struct {
 	daprdNoHealthz  *daprd.Daprd
 	daprd           *daprd.Daprd
