@@ -41,7 +41,7 @@ type withMax struct {
 func (n *withMax) Setup(t *testing.T) []framework.Option {
 	n.place = placement.New(t,
 		placement.WithLogLevel("debug"),
-		placement.WithMaxAPILevel(15),
+		placement.WithMaxAPILevel(25),
 		placement.WithMetadataEnabled(true),
 	)
 
@@ -51,6 +51,9 @@ func (n *withMax) Setup(t *testing.T) []framework.Option {
 }
 
 func (n *withMax) Run(t *testing.T, parentCtx context.Context) {
+	const level1 = 20
+	const level2 = 30
+
 	httpClient := util.HTTPClient(t)
 
 	ctx, cancel := context.WithCancel(parentCtx)
@@ -89,21 +92,21 @@ func (n *withMax) Run(t *testing.T, parentCtx context.Context) {
 		}
 	}()
 
-	// Register the first host with API level 10
+	// Register the first host with the lower API level
 	stopCh1 := make(chan struct{})
-	registerHost(t, ctx, conn, "myapp1", 10, placementMessageCh, stopCh1)
+	registerHost(t, ctx, conn, "myapp1", level1, placementMessageCh, stopCh1)
 
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		assert.Equal(t, uint32(10), currentVersion.Load())
+		assert.Equal(t, uint32(level1), currentVersion.Load())
 	}, 10*time.Second, 50*time.Millisecond)
 	lastUpdate := lastVersionUpdate.Load()
 
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		checkAPILevelInState(t, httpClient, n.place.HealthzPort(), 10)
+		checkAPILevelInState(t, httpClient, n.place.HealthzPort(), level1)
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// Register the second host with API level 20
-	registerHost(t, ctx, conn, "myapp2", 20, placementMessageCh, nil)
+	registerHost(t, ctx, conn, "myapp2", level2, placementMessageCh, nil)
 
 	// After 3s, we should not receive an update
 	// This can take a while as dissemination happens on intervals
@@ -112,16 +115,16 @@ func (n *withMax) Run(t *testing.T, parentCtx context.Context) {
 
 	// API level should not increase
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		checkAPILevelInState(t, httpClient, n.place.HealthzPort(), 10)
+		checkAPILevelInState(t, httpClient, n.place.HealthzPort(), level1)
 	}, 5*time.Second, 100*time.Millisecond)
 
-	// Stop the first host, and the in API level should increase to the max (15)
+	// Stop the first host, and the in API level should increase to the max (25)
 	close(stopCh1)
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		assert.Equal(t, uint32(15), currentVersion.Load())
+		assert.Equal(t, uint32(25), currentVersion.Load())
 	}, 15*time.Second, 50*time.Millisecond)
 
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		checkAPILevelInState(t, httpClient, n.place.HealthzPort(), 15)
+		checkAPILevelInState(t, httpClient, n.place.HealthzPort(), 25)
 	}, 5*time.Second, 100*time.Millisecond)
 }
