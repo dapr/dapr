@@ -38,7 +38,7 @@ func init() {
 }
 
 // noapp ensures that the daprd `/healthz` endpoint is called and actors
-// will respond successfully when invoked, even when the app healthz endpoint is
+// will respond successfully when invoked, even when the app health checks is
 // disabled but entities have been defined.
 type noapp struct {
 	daprd         *daprd.Daprd
