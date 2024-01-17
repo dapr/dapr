@@ -445,11 +445,10 @@ func (c *Consistent) VirtualNodes() map[uint64]string {
 	return virtualNodes
 }
 
-func (c *Consistent) SortedSet() []uint64 {
+func (c *Consistent) SortedSet() (sortedSet []uint64) {
 	c.RLock()
 	defer c.RUnlock()
 
-	var sortedSet []uint64
 	for k := range c.sortedSet {
 		sortedSet = append(sortedSet, uint64(k))
 	}
