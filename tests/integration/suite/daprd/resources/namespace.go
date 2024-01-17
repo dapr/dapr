@@ -104,11 +104,11 @@ func (n *namespace) Run(t *testing.T, ctx context.Context) {
 		{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 		{
 			Name: "abc", Type: "state.in-memory", Version: "v1",
-			Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+			Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 		},
 		{
 			Name: "def", Type: "state.in-memory", Version: "v1",
-			Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+			Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 		},
 	}, resp.GetRegisteredComponents())
 }
