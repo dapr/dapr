@@ -16,8 +16,12 @@ package universal
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"time"
 
+	"google.golang.org/grpc/codes"
+
+	contribMetadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/api/errors"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
@@ -25,18 +29,19 @@ import (
 	"github.com/dapr/dapr/pkg/encryption"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	kiterrors "github.com/dapr/kit/errors"
 )
 
 func (a *Universal) GetStateStore(name string) (state.Store, error) {
 	if a.compStore.StateStoresLen() == 0 {
-		err := errors.StateStoreNotConfigured()
+		err := errors.NotConfigured(name, string(contribMetadata.StateStoreType)+" store", nil, codes.FailedPrecondition, http.StatusInternalServerError, "ERR_STATE_STORE_NOT_CONFIGURED", kiterrors.CodePrefixStateStore+kiterrors.CodeNotConfigured)
 		a.logger.Debug(err)
 		return nil, err
 	}
 
 	stateStore, ok := a.compStore.GetStateStore(name)
 	if !ok {
-		err := errors.StateStoreNotFound(name)
+		err := errors.NotFound(name, string(contribMetadata.StateStoreType)+" store", nil, codes.InvalidArgument, http.StatusBadRequest, "ERR_STATE_STORE_NOT_FOUND", kiterrors.CodePrefixStateStore+kiterrors.CodeNotFound)
 		a.logger.Debug(err)
 		return nil, err
 	}

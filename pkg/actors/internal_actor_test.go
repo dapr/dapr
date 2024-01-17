@@ -106,13 +106,13 @@ func newTestActorsRuntimeWithInternalActors(internalActors map[string]InternalAc
 	spec := config.TracingSpec{SamplingRate: "1"}
 	store := fakeStore()
 	config := NewConfig(ConfigOpts{
-		AppID:              TestAppID,
-		PlacementAddresses: []string{"placement:5050"},
+		AppID:         TestAppID,
+		ActorsService: "placement:placement:5050",
 	})
 
 	compStore := compstore.New()
 	compStore.AddStateStore("actorStore", store)
-	a := NewActors(ActorsOpts{
+	a, err := NewActors(ActorsOpts{
 		CompStore:      compStore,
 		Config:         config,
 		TracingSpec:    spec,
@@ -121,6 +121,9 @@ func newTestActorsRuntimeWithInternalActors(internalActors map[string]InternalAc
 		Security:       fake.New(),
 		MockPlacement:  NewMockPlacement(TestAppID),
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	for actorType, actor := range internalActors {
 		if err := a.RegisterInternalActor(context.TODO(), actorType, actor, 0); err != nil {
