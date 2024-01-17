@@ -352,7 +352,7 @@ spec:
 					{Name: "foo", Type: "secretstores.local.env", Version: "v1"},
 					{
 						Name: "bar", Type: "state.in-memory", Version: "v1",
-						Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+						Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 					},
 				}, resp)
 		}, time.Second*5, time.Millisecond*100)
@@ -381,7 +381,7 @@ spec:
 				{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 				{
 					Name: "bar", Type: "state.in-memory", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 				},
 			}, resp)
 		}, time.Second*5, time.Millisecond*100)
