@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
@@ -97,6 +98,18 @@ func (n *noentities) Run(t *testing.T, ctx context.Context) {
 	n.place.WaitUntilRunning(t, ctx)
 	n.daprd.WaitUntilRunning(t, ctx)
 	n.daprdWithEntities.WaitUntilRunning(t, ctx)
+
+	gclient := n.daprd.GRPCClient(t, ctx)
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		meta, err := gclient.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
+		//nolint:testifylint
+		assert.NoError(c, err)
+		assert.True(c, meta.GetActorRuntime().GetHostReady())
+		assert.Empty(c, meta.GetActorRuntime().GetActiveActors())
+		assert.Equal(c, rtv1.ActorRuntime_RUNNING, meta.GetActorRuntime().GetRuntimeStatus())
+		assert.Equal(c, "placement: connected", meta.GetActorRuntime().GetPlacement())
+	}, time.Second*15, time.Millisecond*100)
 
 	select {
 	case <-n.healthzCalled:

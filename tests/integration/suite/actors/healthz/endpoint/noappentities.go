@@ -102,8 +102,19 @@ func (n *noappentities) Setup(t *testing.T) []framework.Option {
 
 func (n *noappentities) Run(t *testing.T, ctx context.Context) {
 	n.place.WaitUntilRunning(t, ctx)
-	n.daprd.WaitUntilRunning(t, ctx)
-	n.daprdNoHealthz.WaitUntilRunning(t, ctx)
+	n.daprd.WaitUntilAppHealth(t, ctx)
+	n.daprdNoHealthz.WaitUntilAppHealth(t, ctx)
+
+	gclient := n.daprdNoHealthz.GRPCClient(t, ctx)
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		meta, err := gclient.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
+		//nolint:testifylint
+		assert.NoError(c, err)
+		assert.True(c, meta.GetActorRuntime().GetHostReady())
+		assert.Empty(c, meta.GetActorRuntime().GetActiveActors())
+		assert.Equal(c, rtv1.ActorRuntime_RUNNING, meta.GetActorRuntime().GetRuntimeStatus())
+		assert.Equal(c, "placement: connected", meta.GetActorRuntime().GetPlacement())
+	}, time.Second*15, time.Millisecond*100)
 
 	select {
 	case <-n.healthzCalled:
@@ -130,13 +141,6 @@ func (n *noappentities) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	assert.True(t, meta.GetActorRuntime().GetHostReady())
 	assert.Len(t, meta.GetActorRuntime().GetActiveActors(), 1)
-	assert.Equal(t, rtv1.ActorRuntime_RUNNING, meta.GetActorRuntime().GetRuntimeStatus())
-	assert.Equal(t, "placement: connected", meta.GetActorRuntime().GetPlacement())
-
-	meta, err = n.daprdNoHealthz.GRPCClient(t, ctx).GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-	require.NoError(t, err)
-	assert.True(t, meta.GetActorRuntime().GetHostReady())
-	assert.Empty(t, meta.GetActorRuntime().GetActiveActors())
 	assert.Equal(t, rtv1.ActorRuntime_RUNNING, meta.GetActorRuntime().GetRuntimeStatus())
 	assert.Equal(t, "placement: connected", meta.GetActorRuntime().GetPlacement())
 }
