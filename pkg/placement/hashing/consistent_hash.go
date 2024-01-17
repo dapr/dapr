@@ -434,6 +434,28 @@ func (c *Consistent) delSlice(val uint64) {
 	}
 }
 
+func (c *Consistent) VirtualNodes() map[uint64]string {
+	c.RLock()
+	defer c.RUnlock()
+
+	virtualNodes := make(map[uint64]string, len(c.hosts))
+	for vn, h := range c.hosts {
+		virtualNodes[vn] = h
+	}
+	return virtualNodes
+}
+
+func (c *Consistent) SortedSet() []uint64 {
+	c.RLock()
+	defer c.RUnlock()
+
+	var sortedSet []uint64
+	for k := range c.sortedSet {
+		sortedSet = append(sortedSet, uint64(k))
+	}
+	return sortedSet
+}
+
 func (c *Consistent) hash(key string) uint64 {
 	out := blake2b.Sum512([]byte(key))
 	return binary.LittleEndian.Uint64(out[:])
