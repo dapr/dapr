@@ -88,9 +88,6 @@ func TestGetAndSetVirtualNodeCacheHashes(t *testing.T) {
 	assert.Equal(t, uint64(12165331075625862737), hashes[3])
 	assert.Equal(t, uint64(9528020266818944582), hashes[4])
 
-	// On second call with the same arguments, setHashes should not be called
-	hashes = cache.GetHashes(replicationFactor, host)
-
 	// Test GetHashes and SetHashes for a different replication factor and host
 	replicationFactor = int64(3)
 	host = "192.168.1.89:62362"
