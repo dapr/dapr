@@ -681,7 +681,7 @@ func (*workflowActor) recordWorkflowExecutionTimestamps(ctx context.Context, sta
 			} else {
 				// if scheduledStartTimestamp is nil, then use the event timestamp to consider scheduling latency
 				// This case will happen when the workflow is created and started immediately
-				scheduledStartTimestamp = e.Timestamp.AsTime()
+				scheduledStartTimestamp = e.GetTimestamp().AsTime()
 			}
 
 			wfSchedulingLatency := float64(currentTimestamp.Sub(scheduledStartTimestamp).Milliseconds())
