@@ -29,7 +29,8 @@ import (
 type Config struct {
 	HostAddress                   string
 	AppID                         string
-	PlacementAddresses            []string
+	ActorsService                 string
+	RemindersService              string
 	HostedActorTypes              *hostedActors
 	Port                          int
 	HeartbeatInterval             time.Duration

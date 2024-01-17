@@ -343,8 +343,13 @@ func (abe *ActorBackend) GetActivityWorkItem(ctx context.Context) (*backend.Acti
 }
 
 // GetOrchestrationRuntimeState implements backend.Backend
-func (*ActorBackend) GetOrchestrationRuntimeState(context.Context, *backend.OrchestrationWorkItem) (*backend.OrchestrationRuntimeState, error) {
-	return nil, errors.New("not supported")
+func (abe *ActorBackend) GetOrchestrationRuntimeState(ctx context.Context, owi *backend.OrchestrationWorkItem) (*backend.OrchestrationRuntimeState, error) {
+	state, err := LoadWorkflowState(ctx, abe.actorRuntime, string(owi.InstanceID), abe.config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load workflow state: %w", err)
+	}
+	runtimeState := getRuntimeState(string(owi.InstanceID), state)
+	return runtimeState, nil
 }
 
 // GetOrchestrationWorkItem implements backend.Backend

@@ -1,3 +1,4 @@
+{{- if and (eq .Values.global.actors.enabled true) (eq .Values.global.actors.serviceName "placement") }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -7,7 +8,9 @@ metadata:
     {{- range $key, $value := .Values.global.k8sLabels }}
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
+{{- end }}
 ---
+{{- if and (eq .Values.global.actors.enabled true) (eq .Values.global.actors.serviceName "placement") }}
 {{- if eq .Values.global.rbac.namespaced true }}
 kind: Role
 {{- else }}
@@ -21,7 +24,9 @@ metadata:
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
 rules: []
+{{- end }}
 ---
+{{- if and (eq .Values.global.actors.enabled true) (eq .Values.global.actors.serviceName "placement") }}
 {{- if eq .Values.global.rbac.namespaced true }}
 kind: RoleBinding
 {{- else }}
@@ -46,3 +51,4 @@ roleRef:
   kind: ClusterRole
 {{- end }}
   name: dapr-placement
+{{- end }}
