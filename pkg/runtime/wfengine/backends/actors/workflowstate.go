@@ -28,11 +28,10 @@ import (
 )
 
 const (
-	inboxKeyPrefix       = "inbox"
-	historyKeyPrefix     = "history"
-	customStatusKey      = "customStatus"
-	workflowStartTimeKey = "workflowStartTime"
-	metadataKey          = "metadata"
+	inboxKeyPrefix   = "inbox"
+	historyKeyPrefix = "history"
+	customStatusKey  = "customStatus"
+	metadataKey      = "metadata"
 )
 
 type workflowState struct {
@@ -51,9 +50,10 @@ type workflowState struct {
 }
 
 type workflowStateMetadata struct {
-	InboxLength   int
-	HistoryLength int
-	Generation    uint64
+	InboxLength       int
+	HistoryLength     int
+	Generation        uint64
+	WorkflowStartTime time.Time
 }
 
 func NewWorkflowState(config actorsBackendConfig) *workflowState {
@@ -129,14 +129,6 @@ func (s *workflowState) GetSaveRequest(actorID string) (*actors.TransactionalReq
 		return nil, err
 	}
 
-	// if s.workflowStartTime is not nil then append req.operations with a new operation to update the workflowStartTime
-	if !s.workflowStartTime.IsZero() {
-		req.Operations = append(req.Operations, actors.TransactionalOperation{
-			Operation: actors.Upsert,
-			Request:   actors.TransactionalUpsert{Key: workflowStartTimeKey, Value: s.workflowStartTime},
-		})
-	}
-
 	// We update the custom status only when the workflow itself has been updated, and not when
 	// we're saving changes only to the workflow inbox.
 	// CONSIDER: Only save custom status if it has changed. However, need a way to track this.
@@ -150,9 +142,10 @@ func (s *workflowState) GetSaveRequest(actorID string) (*actors.TransactionalReq
 	// Every time we save, we also update the metadata with information about the size of the history and inbox,
 	// as well as the generation of the workflow.
 	metadata := workflowStateMetadata{
-		InboxLength:   len(s.Inbox),
-		HistoryLength: len(s.History),
-		Generation:    s.Generation,
+		InboxLength:       len(s.Inbox),
+		HistoryLength:     len(s.History),
+		Generation:        s.Generation,
+		WorkflowStartTime: s.workflowStartTime,
 	}
 	req.Operations = append(req.Operations, actors.TransactionalOperation{
 		Operation: actors.Upsert,
@@ -258,6 +251,7 @@ func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID 
 	state.Generation = metadata.Generation
 	state.Inbox = make([]*backend.HistoryEvent, metadata.InboxLength)
 	state.History = make([]*backend.HistoryEvent, metadata.HistoryLength)
+	state.workflowStartTime = metadata.WorkflowStartTime
 
 	bulkReq := &actors.GetBulkStateRequest{
 		ActorType: config.workflowActorType,
@@ -277,8 +271,6 @@ func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID 
 		bulkReq.Keys[n] = getMultiEntryKeyName(historyKeyPrefix, i)
 		n++
 	}
-
-	bulkReq.Keys[n] = workflowStartTimeKey
 
 	// Perform the request
 	bulkRes, err := actorRuntime.GetBulkState(ctx, bulkReq)
@@ -317,13 +309,6 @@ func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID 
 		}
 	}
 
-	if len(bulkRes[workflowStartTimeKey]) > 0 {
-		err = json.Unmarshal(bulkRes[workflowStartTimeKey], &state.workflowStartTime)
-		if err != nil {
-			return nil, fmt.Errorf("failed to unmarshal JSON from workflow start time key entry: %w", err)
-		}
-	}
-
 	wfLogger.Infof("%s: loaded %d state records in %v", actorID, loadedRecords, time.Since(loadStartTime))
 	return state, nil
 }
@@ -354,10 +339,6 @@ func (s *workflowState) GetPurgeRequest(actorID string) (*actors.TransactionalRe
 		actors.TransactionalOperation{
 			Operation: actors.Delete,
 			Request:   actors.TransactionalDelete{Key: metadataKey},
-		},
-		actors.TransactionalOperation{
-			Operation: actors.Delete,
-			Request:   actors.TransactionalDelete{Key: workflowStartTimeKey},
 		},
 	)
 
