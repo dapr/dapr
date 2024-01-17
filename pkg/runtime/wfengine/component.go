@@ -121,7 +121,7 @@ func (c *workflowEngineComponent) Terminate(ctx context.Context, req *workflows.
 		return errors.New("a workflow instance ID is required")
 	}
 
-	if err := c.client.TerminateOrchestration(ctx, api.InstanceID(req.InstanceID)); err != nil {
+	if err := c.client.TerminateOrchestration(ctx, api.InstanceID(req.InstanceID), api.WithRecursiveTerminate(req.Recursive)); err != nil {
 		if errors.Is(err, api.ErrInstanceNotFound) {
 			c.logger.Infof("No such instance exists: '%s'", req.InstanceID)
 			return err
@@ -138,7 +138,7 @@ func (c *workflowEngineComponent) Purge(ctx context.Context, req *workflows.Purg
 		return errors.New("a workflow instance ID is required")
 	}
 
-	if err := c.client.PurgeOrchestrationState(ctx, api.InstanceID(req.InstanceID)); err != nil {
+	if err := c.client.PurgeOrchestrationState(ctx, api.InstanceID(req.InstanceID), api.WithRecursivePurge(req.Recursive)); err != nil {
 		if errors.Is(err, api.ErrInstanceNotFound) {
 			c.logger.Warnf("Unable to purge the instance: '%s', no such instance exists", req.InstanceID)
 			return err

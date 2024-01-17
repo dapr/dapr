@@ -37,7 +37,7 @@ require (
 	github.com/jhump/protoreflect v1.15.2
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/lestrrat-go/jwx/v2 v2.0.18
-	github.com/microsoft/durabletask-go v0.4.0
+	github.com/microsoft/durabletask-go v0.4.1-0.20231222205218-fc5756737d3c
 	github.com/mitchellh/mapstructure v1.5.1-0.20220423185008-bf980b35cac4
 	github.com/phayes/freeport v0.0.0-20220201140144-74d24b5ae9f5
 	github.com/prometheus/client_golang v1.16.0
