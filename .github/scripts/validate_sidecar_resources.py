@@ -18,7 +18,6 @@ import re
 import subprocess
 import time
 import os
-import signal
 import numpy as np
 import psutil
 import requests
@@ -98,25 +97,43 @@ def run_sidecar(executable, app_id):
     print(f"Collected metrics for {executable}.")
     return memory_data, goroutine_data
 
-def ttest_diff(arr_old, arr_new, label):
+def test_diff(arr_old, arr_new, label, test='ttest'):
     # Output mean and median for memory utilization
+    
+    p25_new, p50_new, p75_new = np.percentile(arr_new, [25, 50, 75])
+    p25_old, p50_old, p75_old = np.percentile(arr_old, [25, 50, 75])
+
     print(f"Mean for {label} (new): {np.mean(arr_new):.2f}")
-    print(f"Median for {label} (new): {np.median(arr_new):.2f}")
+    print(f"25th percentile for {label} (new): {p25_new:.2f}")
+    print(f"50th percentile (median) for {label} (new): {p50_new:.2f}")
+    print(f"75th percentile for {label} (new): {p75_new:.2f}")
 
     print(f"Mean for {label} (old): {np.mean(arr_old):.2f}")
-    print(f"Median for {label} (old): {np.median(arr_old):.2f}")
+    print(f"25th percentile for {label} (old): {p25_old:.2f}")
+    print(f"50th percentile (median) for {label} (old): {p50_old:.2f}")
+    print(f"75th percentile for {label} (old): {p75_old:.2f}")
 
-    # Perform t-test to invalidate a > b.
-    t_statistic, p_value = ttest_ind(a=arr_new, b=arr_old, alternative="greater")
+    if test == 'ttest':
+        # Perform t-test to invalidate a > b.
+        t_statistic, p_value = ttest_ind(a=arr_new, b=arr_old, alternative="greater", trim=.2)
+        print(f"T-Statistic ({label}): {t_statistic}")
+        print(f"P-Value ({label}): {p_value}")
 
-    print(f"T-Statistic ({label}): {t_statistic}")
-    print(f"P-Value ({label}): {p_value}")
+        if p_value < 0.05:
+            print(f"Warning! Found statistically significant increase in {label}.")
+            return True
 
-    if p_value < 0.05:
-        print(f"Warning! Found statistically significant increase in {label}.")
-        return True
+        print(f"Passed! Did not find statistically significant increase in {label}.")
+    elif test == 'tp75_plus_5percent':
+        # Memory measurement has enough variation that the t-test is too strict.
+        # So, we created this custom comparison to avoid false positives.
+        # Picking 5% as a good enough margin observed by various runs with the same binary.
+        if p75_new > p75_old * 1.05:
+            print(f"Warning! Found significant increase in {label}.")
+            return True
 
-    print(f"Passed! Did not find statistically significant increase in {label}.")
+        print(f"Passed! Did not find significant increase in {label}.")
+
     return False
 
 def size_diff(old_binary, new_binary):
@@ -148,8 +165,8 @@ if __name__ == "__main__":
     memory_data_new, goroutine_data_new = run_sidecar(new_binary, "treatment")
     memory_data_old, goroutine_data_old = run_sidecar(old_binary, "control")
 
-    memory_diff = ttest_diff(memory_data_old, memory_data_new, "memory utilization (in MB)")
-    goroutine_diff = ttest_diff(goroutine_data_old, goroutine_data_new, "number of go routines")
+    memory_diff = test_diff(memory_data_old, memory_data_new, "memory utilization (in MB)", "tp75_plus_5percent")
+    goroutine_diff = test_diff(goroutine_data_old, goroutine_data_new, "number of go routines", "ttest")
 
     if binary_size_diff or memory_diff or goroutine_diff:
         raise Exception("Found significant differences.")
