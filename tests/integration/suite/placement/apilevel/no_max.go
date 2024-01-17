@@ -50,6 +50,9 @@ func (n *noMax) Setup(t *testing.T) []framework.Option {
 }
 
 func (n *noMax) Run(t *testing.T, parentCtx context.Context) {
+	const level1 = 20
+	const level2 = 30
+
 	httpClient := util.HTTPClient(t)
 
 	ctx, cancel := context.WithCancel(parentCtx)
@@ -88,43 +91,43 @@ func (n *noMax) Run(t *testing.T, parentCtx context.Context) {
 		}
 	}()
 
-	// Register the first host with API level 10
+	// Register the first host with the lower API level
 	stopCh1 := make(chan struct{})
-	registerHost(t, ctx, conn, "myapp1", 10, placementMessageCh, stopCh1)
+	registerHost(t, ctx, conn, "myapp1", level1, placementMessageCh, stopCh1)
 
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		assert.Equal(t, uint32(10), currentVersion.Load())
+		assert.Equal(t, uint32(level1), currentVersion.Load())
 	}, 10*time.Second, 50*time.Millisecond)
 	lastUpdate := lastVersionUpdate.Load()
 
 	var tableVersion int
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		tableVersion = checkAPILevelInState(t, httpClient, n.place.HealthzPort(), 10)
+		tableVersion = checkAPILevelInState(t, httpClient, n.place.HealthzPort(), level1)
 	}, 5*time.Second, 100*time.Millisecond)
 
-	// Register the second host with API level 20
+	// Register the second host with the higher API level
 	stopCh2 := make(chan struct{})
-	registerHost(t, ctx, conn, "myapp2", 20, placementMessageCh, stopCh2)
+	registerHost(t, ctx, conn, "myapp2", level2, placementMessageCh, stopCh2)
 
 	// After 3s, we should not receive an update
 	// This can take a while as dissemination happens on intervals
 	time.Sleep(3 * time.Second)
 	require.Equal(t, lastUpdate, lastVersionUpdate.Load())
 
-	// API level should still be 10 (but table version should have increased)
+	// API level should still be lower (20), but table version should have increased
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		newTableVersion := checkAPILevelInState(t, httpClient, n.place.HealthzPort(), 10)
+		newTableVersion := checkAPILevelInState(t, httpClient, n.place.HealthzPort(), level1)
 		assert.Greater(t, newTableVersion, tableVersion)
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// Stop the first host, and the in API level should increase
 	close(stopCh1)
 	assert.EventuallyWithT(t, func(t *assert.CollectT) {
-		assert.Equal(t, uint32(20), currentVersion.Load())
+		assert.Equal(t, uint32(level2), currentVersion.Load())
 	}, 10*time.Second, 50*time.Millisecond)
 
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		tableVersion = checkAPILevelInState(t, httpClient, n.place.HealthzPort(), 20)
+		tableVersion = checkAPILevelInState(t, httpClient, n.place.HealthzPort(), level2)
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// Trying to register a host with version 5 should fail
@@ -135,10 +138,10 @@ func (n *noMax) Run(t *testing.T, parentCtx context.Context) {
 
 	// Ensure that the table version increases, but the API level remains the same
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		newTableVersion := checkAPILevelInState(t, httpClient, n.place.HealthzPort(), 20)
+		newTableVersion := checkAPILevelInState(t, httpClient, n.place.HealthzPort(), level2)
 		assert.Greater(t, newTableVersion, tableVersion)
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// Trying to register a host with version 10 should fail
-	registerHostFailing(t, ctx, conn, 10)
+	registerHostFailing(t, ctx, conn, level1)
 }

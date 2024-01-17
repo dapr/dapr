@@ -25,6 +25,8 @@ import (
 	"testing"
 	"time"
 
+	"google.golang.org/grpc/metadata"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -57,6 +59,8 @@ func registerHost(t *testing.T, ctx context.Context, conn *grpc.ClientConn, name
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		client := placementv1pb.NewPlacementClient(conn)
+		ctx = metadata.AppendToOutgoingContext(ctx, "ApiLevel", strconv.Itoa(apiLevel))
+
 		stream, rErr := client.ReportDaprStatus(ctx)
 		//nolint:testifylint
 		if !assert.NoError(c, rErr) {

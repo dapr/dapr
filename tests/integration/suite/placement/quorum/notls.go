@@ -16,8 +16,11 @@ package quorum
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"testing"
 	"time"
+
+	"google.golang.org/grpc/metadata"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -80,6 +83,8 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 		}
 		t.Cleanup(func() { require.NoError(t, conn.Close()) })
 		client := v1pb.NewPlacementClient(conn)
+		ctx = metadata.AppendToOutgoingContext(ctx, "ApiLevel", strconv.Itoa(n.places[j].CurrentActorsAPILevel()))
+
 		stream, err = client.ReportDaprStatus(ctx)
 		if err != nil {
 			return false
