@@ -20,6 +20,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"google.golang.org/grpc/metadata"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -165,6 +166,8 @@ func (j *jwks) Run(t *testing.T, ctx context.Context) {
 		}
 		t.Cleanup(func() { require.NoError(t, conn.Close()) })
 		client := v1pb.NewPlacementClient(conn)
+		ctx = metadata.AppendToOutgoingContext(ctx, "ApiLevel", strconv.Itoa(j.places[i].CurrentActorsApiLevel()))
+
 		stream, err = client.ReportDaprStatus(ctx)
 		if err != nil {
 			return false

@@ -15,6 +15,8 @@ package authz
 
 import (
 	"context"
+	"google.golang.org/grpc/metadata"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -55,6 +57,7 @@ func (n *nomtls) Run(t *testing.T, ctx context.Context) {
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
 
 	client := v1pb.NewPlacementClient(conn)
+	ctx = metadata.AppendToOutgoingContext(ctx, "ApiLevel", strconv.Itoa(n.place.CurrentActorsApiLevel()))
 
 	// Can create hosts with any appIDs or namespaces.
 	stream := establishStream(t, ctx, client)
