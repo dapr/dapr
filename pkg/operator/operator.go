@@ -46,9 +46,11 @@ import (
 	"github.com/dapr/dapr/pkg/operator/api"
 	operatorcache "github.com/dapr/dapr/pkg/operator/cache"
 	"github.com/dapr/dapr/pkg/operator/handlers"
+	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 )
 
 var log = logger.NewLogger("dapr.operator")
@@ -190,12 +192,18 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 	}, nil
 }
 
-func (o *operator) syncComponent(ctx context.Context) func(obj interface{}) {
+func (o *operator) syncComponent(ctx context.Context, eventType operatorv1pb.ResourceEventType) func(obj interface{}) {
 	return func(obj interface{}) {
-		c, ok := obj.(*componentsapi.Component)
-		if ok {
+		var c *componentsapi.Component
+		switch o := obj.(type) {
+		case *componentsapi.Component:
+			c = o
+		case cache.DeletedFinalStateUnknown:
+			c = o.Obj.(*componentsapi.Component)
+		}
+		if c != nil {
 			log.Debugf("Observed component to be synced: %s/%s", c.Namespace, c.Name)
-			o.apiServer.OnComponentUpdated(ctx, c)
+			o.apiServer.OnComponentUpdated(ctx, eventType, c)
 		}
 	}
 }
@@ -212,7 +220,10 @@ func (o *operator) syncHTTPEndpoint(ctx context.Context) func(obj interface{}) {
 
 func (o *operator) Run(ctx context.Context) error {
 	log.Info("Dapr Operator is starting")
-	healthzServer := health.NewServer(log)
+	healthzServer := health.NewServer(health.Options{
+		Log:     log,
+		Targets: ptr.Of(5),
+	})
 
 	/*
 		Make sure to set `ENABLE_WEBHOOKS=false` when we run locally.
@@ -243,6 +254,7 @@ func (o *operator) Run(ctx context.Context) error {
 			if rErr != nil {
 				return rErr
 			}
+			healthzServer.Ready()
 			return o.mgr.Start(ctx)
 		},
 		func(ctx context.Context) error {
@@ -294,6 +306,8 @@ func (o *operator) Run(ctx context.Context) error {
 					return rErr
 				}
 
+				healthzServer.Ready()
+
 				select {
 				case caBundle = <-caBundleCh:
 				case <-ctx.Done():
@@ -319,14 +333,16 @@ func (o *operator) Run(ctx context.Context) error {
 				return fmt.Errorf("unable to get setup components informer: %w", rErr)
 			}
 			_, rErr = componentInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-				AddFunc: o.syncComponent(ctx),
+				AddFunc: o.syncComponent(ctx, operatorv1pb.ResourceEventType_CREATED),
 				UpdateFunc: func(_, newObj interface{}) {
-					o.syncComponent(ctx)(newObj)
+					o.syncComponent(ctx, operatorv1pb.ResourceEventType_UPDATED)(newObj)
 				},
+				DeleteFunc: o.syncComponent(ctx, operatorv1pb.ResourceEventType_DELETED),
 			})
 			if rErr != nil {
 				return fmt.Errorf("unable to add components informer event handler: %w", rErr)
 			}
+			healthzServer.Ready()
 			<-ctx.Done()
 			return nil
 		},
@@ -349,6 +365,7 @@ func (o *operator) Run(ctx context.Context) error {
 			if rErr != nil {
 				return fmt.Errorf("unable to add http endpoint informer event handler: %w", rErr)
 			}
+			healthzServer.Ready()
 			<-ctx.Done()
 			return nil
 		},

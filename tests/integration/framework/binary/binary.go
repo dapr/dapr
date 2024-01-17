@@ -36,10 +36,15 @@ func BuildAll(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(len(binaryNames))
 	for _, name := range binaryNames {
-		go func(name string) {
-			defer wg.Done()
+		if runtime.GOOS == "windows" {
 			Build(t, name)
-		}(name)
+			wg.Done()
+		} else {
+			go func(name string) {
+				defer wg.Done()
+				Build(t, name)
+			}(name)
+		}
 	}
 	wg.Wait()
 }

@@ -64,3 +64,4 @@ scopes:
 - perf-actor-id
 - perf-actor-type
 - workflowsapp
+- workflowsapp-actors

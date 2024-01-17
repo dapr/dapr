@@ -29,7 +29,7 @@ import (
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/grpcapp"
+	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -66,8 +66,8 @@ spec:
 
 	g.registered[0].Store(true)
 
-	srv := grpcapp.New(t,
-		grpcapp.WithOnBindingEventFn(func(ctx context.Context, in *rtv1.BindingEventRequest) (*rtv1.BindingEventResponse, error) {
+	srv := app.New(t,
+		app.WithOnBindingEventFn(func(ctx context.Context, in *rtv1.BindingEventRequest) (*rtv1.BindingEventResponse, error) {
 			switch in.GetName() {
 			case "binding1":
 				assert.True(t, g.registered[0].Load())
@@ -92,7 +92,7 @@ spec:
 			}
 			return new(rtv1.BindingEventResponse), nil
 		}),
-		grpcapp.WithListInputBindings(func(context.Context, *emptypb.Empty) (*rtv1.ListInputBindingsResponse, error) {
+		app.WithListInputBindings(func(context.Context, *emptypb.Empty) (*rtv1.ListInputBindingsResponse, error) {
 			return &rtv1.ListInputBindingsResponse{
 				Bindings: []string{"binding1", "binding2", "binding3"},
 			}, nil
@@ -134,7 +134,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 	t.Run("expect 1 component to be loaded", func(t *testing.T) {
 		resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 		require.NoError(t, err)
-		assert.Len(t, resp.GetRegisteredComponents(), 1)
+		assert.Len(t, resp.GetRegisteredComponents(), 2)
 		g.expectBinding(t, 0, "binding1")
 	})
 
@@ -157,7 +157,7 @@ spec:
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
-			assert.Len(c, resp.GetRegisteredComponents(), 2)
+			assert.Len(c, resp.GetRegisteredComponents(), 3)
 		}, time.Second*5, time.Millisecond*100)
 		g.expectBindings(t, []bindingPair{
 			{0, "binding1"},
@@ -197,7 +197,7 @@ spec:
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
-			assert.Len(c, resp.GetRegisteredComponents(), 3)
+			assert.Len(c, resp.GetRegisteredComponents(), 4)
 		}, time.Second*5, time.Millisecond*100)
 		g.expectBindings(t, []bindingPair{
 			{0, "binding1"},
@@ -224,7 +224,7 @@ spec:
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
-			assert.Len(c, resp.GetRegisteredComponents(), 2)
+			assert.Len(c, resp.GetRegisteredComponents(), 3)
 		}, time.Second*5, time.Millisecond*100)
 		g.registered[0].Store(false)
 		g.expectBindings(t, []bindingPair{
@@ -239,7 +239,7 @@ spec:
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
-			assert.Empty(c, resp.GetRegisteredComponents())
+			assert.Len(c, resp.GetRegisteredComponents(), 1)
 		}, time.Second*5, time.Millisecond*100)
 		g.registered[1].Store(false)
 		g.registered[2].Store(false)
@@ -266,7 +266,7 @@ spec:
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
-			assert.Len(c, resp.GetRegisteredComponents(), 1)
+			assert.Len(c, resp.GetRegisteredComponents(), 2)
 		}, time.Second*5, time.Millisecond*100)
 		g.expectBinding(t, 0, "binding1")
 	})
