@@ -45,7 +45,6 @@ type workflowState struct {
 	inboxRemovedCount   int
 	historyAddedCount   int
 	historyRemovedCount int
-	workflowStartTime   time.Time
 	config              actorsBackendConfig
 }
 
@@ -142,10 +141,9 @@ func (s *workflowState) GetSaveRequest(actorID string) (*actors.TransactionalReq
 	// Every time we save, we also update the metadata with information about the size of the history and inbox,
 	// as well as the generation of the workflow.
 	metadata := workflowStateMetadata{
-		InboxLength:       len(s.Inbox),
-		HistoryLength:     len(s.History),
-		Generation:        s.Generation,
-		WorkflowStartTime: s.workflowStartTime,
+		InboxLength:   len(s.Inbox),
+		HistoryLength: len(s.History),
+		Generation:    s.Generation,
 	}
 	req.Operations = append(req.Operations, actors.TransactionalOperation{
 		Operation: actors.Upsert,
@@ -251,7 +249,6 @@ func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID 
 	state.Generation = metadata.Generation
 	state.Inbox = make([]*backend.HistoryEvent, metadata.InboxLength)
 	state.History = make([]*backend.HistoryEvent, metadata.HistoryLength)
-	state.workflowStartTime = metadata.WorkflowStartTime
 
 	bulkReq := &actors.GetBulkStateRequest{
 		ActorType: config.workflowActorType,

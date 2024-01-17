@@ -29,6 +29,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/microsoft/durabletask-go/api"
 	"github.com/microsoft/durabletask-go/backend"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 
@@ -417,8 +418,6 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 
 	// The logic/for loop below purges/removes any leftover state from a completed or failed activity
 	transactionalRequests := make(map[string][]actors.TransactionalOperation)
-	isWorkflowExecutionStartedEvent := false
-	scheduledStartTimestamp := time.Time{}
 
 	for _, e := range state.Inbox {
 		var taskID int32
@@ -427,14 +426,6 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 		} else if tf := e.GetTaskFailed(); tf != nil {
 			taskID = tf.GetTaskScheduledId()
 		} else {
-			// If the event is an execution started event, then we need to record the scheduled start timestamp
-			if es := e.GetExecutionStarted(); es != nil {
-				isWorkflowExecutionStartedEvent = true
-				timestamp := es.GetScheduledStartTimestamp()
-				if timestamp != nil {
-					scheduledStartTimestamp = timestamp.AsTime()
-				}
-			}
 			continue
 		}
 		op := actors.TransactionalOperation{
@@ -494,7 +485,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 		return newRecoverableError(fmt.Errorf("failed to schedule a workflow execution: %w", err))
 	}
 
-	wf.recordWorkflowSchedulingLatency(ctx, isWorkflowExecutionStartedEvent, state, scheduledStartTimestamp, workflowName)
+	wf.recordWorkflowExecutionTimestamps(ctx, state, workflowName)
 	wfExecutionElapsedTime := float64(0)
 
 	defer func() {
@@ -649,20 +640,44 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, actorID string, remind
 				// Setting executionStatus to failed if workflow has failed/terminated/cancelled
 				executionStatus = diag.StatusFailed
 			}
-			wfExecutionElapsedTime = diag.ElapsedSince(state.workflowStartTime)
+			wfExecutionElapsedTime = wf.calculateWorkflowExecutionElapsedTime(state)
 		}
 	}
 	return nil
 }
 
-func (wf *workflowActor) recordWorkflowSchedulingLatency(ctx context.Context, isWorkflowExecutionStartedEvent bool, state *workflowState, scheduledStartTimestamp time.Time, workflowName string) {
-	if isWorkflowExecutionStartedEvent {
-		state.workflowStartTime = time.Now()
-		// If scheduledStartTimestamp is zero, then scheduling latency is zero
-		if !scheduledStartTimestamp.IsZero() {
-			// get the time diff between state.workflowStartTime and scheduledStartTimestamp
-			wfSchedulingLatency := float64(state.workflowStartTime.Sub(scheduledStartTimestamp).Milliseconds())
+func (*workflowActor) calculateWorkflowExecutionElapsedTime(state *workflowState) (wfExecutionElapsedTime float64) {
+	var execStartedTimestamp time.Time
+	for _, e := range state.History {
+		if es := e.GetExecutionStarted(); es != nil {
+			execStartedTimestamp = es.GetExecutionStartedTimestamp().AsTime()
+			return diag.ElapsedSince(execStartedTimestamp)
+		}
+	}
+	return 0
+}
+
+func (*workflowActor) recordWorkflowExecutionTimestamps(ctx context.Context, state *workflowState, workflowName string) {
+	for _, e := range state.Inbox {
+		// If the event is an execution started event, then we need to record the scheduled start timestamp
+		if es := e.GetExecutionStarted(); es != nil {
+			currentTimestamp := time.Now()
+			es.ExecutionStartedTimestamp = timestamppb.New(currentTimestamp)
+
+			var scheduledStartTimestamp time.Time
+			timestamp := es.GetScheduledStartTimestamp()
+
+			if timestamp != nil {
+				scheduledStartTimestamp = timestamp.AsTime()
+			} else {
+				// if scheduledStartTimestamp is nil, then use the event timestamp to consider scheduling latency
+				// This case will happen when the workflow is created and started immediately
+				scheduledStartTimestamp = e.Timestamp.AsTime()
+			}
+
+			wfSchedulingLatency := float64(currentTimestamp.Sub(scheduledStartTimestamp).Milliseconds())
 			diag.DefaultWorkflowMonitoring.WorkflowSchedulingLatency(ctx, workflowName, wfSchedulingLatency)
+			break
 		}
 	}
 }
