@@ -29,11 +29,17 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	"github.com/microsoft/durabletask-go/api"
+	"github.com/microsoft/durabletask-go/backend"
+	"github.com/microsoft/durabletask-go/client"
+	"github.com/microsoft/durabletask-go/task"
+
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
+	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -47,6 +53,7 @@ type metrics struct {
 	daprd      *procdaprd.Daprd
 	httpClient *http.Client
 	grpcClient runtimev1pb.DaprClient
+	place      *placement.Placement
 }
 
 func (m *metrics) Setup(t *testing.T) []framework.Option {
@@ -54,21 +61,26 @@ func (m *metrics) Setup(t *testing.T) []framework.Option {
 	handler.HandleFunc("/hi", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, "OK")
 	})
+	handler.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(""))
+	})
 	srv := prochttp.New(t, prochttp.WithHandler(handler))
-
+	m.place = placement.New(t)
 	m.daprd = procdaprd.New(t,
 		procdaprd.WithAppID("myapp"),
 		procdaprd.WithAppPort(srv.Port()),
 		procdaprd.WithAppProtocol("http"),
+		procdaprd.WithPlacementAddresses(m.place.Address()),
 		procdaprd.WithInMemoryActorStateStore("mystore"),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(srv, m.daprd),
+		framework.WithProcesses(m.place, srv, m.daprd),
 	}
 }
 
 func (m *metrics) Run(t *testing.T, ctx context.Context) {
+	m.place.WaitUntilRunning(t, ctx)
 	m.daprd.WaitUntilRunning(t, ctx)
 
 	m.httpClient = util.HTTPClient(t)
@@ -87,7 +99,7 @@ func (m *metrics) Run(t *testing.T, ctx context.Context) {
 	t.Run("HTTP", func(t *testing.T) {
 		t.Run("service invocation", func(t *testing.T) {
 			reqCtx, reqCancel := context.WithTimeout(ctx, time.Second)
-			defer reqCancel()
+			t.Cleanup(reqCancel)
 
 			// Invoke
 			req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, fmt.Sprintf("http://localhost:%d/v1.0/invoke/myapp/method/hi", m.daprd.HTTPPort()), nil)
@@ -101,7 +113,7 @@ func (m *metrics) Run(t *testing.T, ctx context.Context) {
 
 		t.Run("state stores", func(t *testing.T) {
 			reqCtx, reqCancel := context.WithTimeout(ctx, time.Second)
-			defer reqCancel()
+			t.Cleanup(reqCancel)
 
 			// Write state
 			body := `[{"key":"myvalue", "value":"hello world"}]`
@@ -125,7 +137,7 @@ func (m *metrics) Run(t *testing.T, ctx context.Context) {
 	t.Run("gRPC", func(t *testing.T) {
 		t.Run("service invocation", func(t *testing.T) {
 			reqCtx, reqCancel := context.WithTimeout(ctx, time.Second)
-			defer reqCancel()
+			t.Cleanup(reqCancel)
 
 			// Invoke
 			_, err := m.grpcClient.InvokeService(reqCtx, &runtimev1pb.InvokeServiceRequest{
@@ -146,7 +158,7 @@ func (m *metrics) Run(t *testing.T, ctx context.Context) {
 
 		t.Run("state stores", func(t *testing.T) {
 			reqCtx, reqCancel := context.WithTimeout(ctx, time.Second)
-			defer reqCancel()
+			t.Cleanup(reqCancel)
 
 			// Write state
 			_, err := m.grpcClient.SaveState(reqCtx, &runtimev1pb.SaveStateRequest{
@@ -168,6 +180,66 @@ func (m *metrics) Run(t *testing.T, ctx context.Context) {
 			metrics := m.getMetrics(t, ctx)
 			assert.Equal(t, 1, int(metrics["dapr_grpc_io_server_completed_rpcs|app_id:myapp|grpc_server_method:/dapr.proto.runtime.v1.Dapr/SaveState|grpc_server_status:OK"]))
 			assert.Equal(t, 1, int(metrics["dapr_grpc_io_server_completed_rpcs|app_id:myapp|grpc_server_method:/dapr.proto.runtime.v1.Dapr/GetState|grpc_server_status:OK"]))
+		})
+	})
+
+	t.Run("workflow", func(t *testing.T) {
+		// Register workflow
+		r := task.NewTaskRegistry()
+		r.AddActivityN("activity_success", func(ctx task.ActivityContext) (any, error) {
+			return "success", nil
+		})
+		r.AddActivityN("activity_failure", func(ctx task.ActivityContext) (any, error) {
+			return nil, fmt.Errorf("failure")
+		})
+		r.AddOrchestratorN("workflow", func(ctx *task.OrchestrationContext) (any, error) {
+			var input string
+			if err := ctx.GetInput(&input); err != nil {
+				return nil, err
+			}
+			activityName := input
+			err := ctx.CallActivity(activityName).Await(nil)
+			if err != nil {
+				return nil, err
+			}
+			return nil, nil
+		})
+		taskhubClient := client.NewTaskHubGrpcClient(conn, backend.DefaultLogger())
+		taskhubCtx, cancelTaskhub := context.WithCancel(ctx)
+		taskhubClient.StartWorkItemListener(taskhubCtx, r)
+		defer cancelTaskhub()
+
+		time.Sleep(5 * time.Second)
+
+		t.Run("successful workflow execution", func(t *testing.T) {
+			id, err := taskhubClient.ScheduleNewOrchestration(ctx, "workflow", api.WithInput("activity_success"))
+			require.NoError(t, err)
+			timeoutCtx, cancelTimeout := context.WithTimeout(ctx, 30*time.Second)
+			t.Cleanup(cancelTimeout)
+			metadata, err := taskhubClient.WaitForOrchestrationCompletion(timeoutCtx, id, api.WithFetchPayloads(true))
+			require.NoError(t, err)
+			assert.True(t, metadata.IsComplete())
+
+			// Verify metrics
+			metrics := m.getMetrics(t, ctx)
+			assert.Equal(t, 1, int(metrics["dapr_runtime_workflow_operation_count|app_id:myapp|namespace:|operation:create_workflow|status:success"]))
+			assert.Equal(t, 1, int(metrics["dapr_runtime_workflow_execution_count|app_id:myapp|namespace:|status:success|workflow_name:workflow"]))
+			assert.Equal(t, 1, int(metrics["dapr_runtime_workflow_activity_execution_count|activity_name:activity_success|app_id:myapp|namespace:|status:success"]))
+		})
+		t.Run("failed workflow execution", func(t *testing.T) {
+			id, err := taskhubClient.ScheduleNewOrchestration(ctx, "workflow", api.WithInput("activity_failure"))
+			require.NoError(t, err)
+			timeoutCtx, cancelTimeout := context.WithTimeout(ctx, 30*time.Second)
+			t.Cleanup(cancelTimeout)
+			metadata, err := taskhubClient.WaitForOrchestrationCompletion(timeoutCtx, id, api.WithFetchPayloads(true))
+			require.NoError(t, err)
+			assert.True(t, metadata.IsComplete())
+
+			// Verify metrics
+			metrics := m.getMetrics(t, ctx)
+			assert.Equal(t, 2, int(metrics["dapr_runtime_workflow_operation_count|app_id:myapp|namespace:|operation:create_workflow|status:success"]))
+			assert.Equal(t, 1, int(metrics["dapr_runtime_workflow_execution_count|app_id:myapp|namespace:|status:failed|workflow_name:workflow"]))
+			assert.Equal(t, 1, int(metrics["dapr_runtime_workflow_activity_execution_count|activity_name:activity_failure|app_id:myapp|namespace:|status:failed"]))
 		})
 	})
 }

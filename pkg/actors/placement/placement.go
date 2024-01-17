@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -32,6 +33,7 @@ import (
 	"github.com/dapr/dapr/pkg/placement/hashing"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
 )
@@ -108,7 +110,8 @@ type actorPlacement struct {
 
 // NewActorPlacement initializes ActorPlacement for the actor service.
 func NewActorPlacement(opts internal.ActorsProviderOptions) internal.PlacementService {
-	servers := addDNSResolverPrefix(opts.Config.PlacementAddresses)
+	addrs := utils.ParseServiceAddr(strings.TrimPrefix(opts.Config.ActorsService, "placement:"))
+	servers := addDNSResolverPrefix(addrs)
 	return &actorPlacement{
 		config:     opts.Config,
 		serverAddr: servers,
@@ -283,7 +286,10 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 			// No delay if stream connection is not alive.
 			if p.client.isConnected() {
 				diag.DefaultMonitoring.ActorStatusReported("send")
-				time.Sleep(statusReportHeartbeatInterval)
+				select {
+				case <-time.After(statusReportHeartbeatInterval):
+				case <-p.closeCh:
+				}
 			}
 		}
 	}()
@@ -386,7 +392,10 @@ func (p *actorPlacement) establishStreamConn(ctx context.Context) (established b
 		// Stop reconnecting to placement until app is healthy.
 		if !p.appHealthy.Load() {
 			// We are not using an exponential backoff here because we haven't begun to establish connections yet
-			time.Sleep(placementReadinessWaitInterval)
+			select {
+			case <-p.closeCh:
+			case <-time.After(placementReadinessWaitInterval):
+			}
 			continue
 		}
 
@@ -426,6 +435,8 @@ func (p *actorPlacement) establishStreamConn(ctx context.Context) (established b
 			select {
 			case <-time.After(bo.NextBackOff()):
 			case <-ctx.Done():
+				return false
+			case <-p.closeCh:
 				return false
 			}
 			continue

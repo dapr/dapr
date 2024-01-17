@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -40,11 +41,15 @@ func init() {
 }
 
 type ttl struct {
-	daprd *daprd.Daprd
-	place *placement.Placement
+	daprd         *daprd.Daprd
+	place         *placement.Placement
+	healthzCalled chan struct{}
 }
 
 func (l *ttl) Setup(t *testing.T) []framework.Option {
+	l.healthzCalled = make(chan struct{})
+	var once sync.Once
+
 	configFile := filepath.Join(t.TempDir(), "config.yaml")
 	require.NoError(t, os.WriteFile(configFile, []byte(`
 apiVersion: dapr.io/v1alpha1
@@ -62,6 +67,9 @@ spec:
 		w.Write([]byte(`{"entities": ["myactortype"]}`))
 	})
 	handler.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		once.Do(func() {
+			close(l.healthzCalled)
+		})
 		w.WriteHeader(http.StatusOK)
 	})
 	handler.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -86,6 +94,12 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 	l.place.WaitUntilRunning(t, ctx)
 	l.daprd.WaitUntilRunning(t, ctx)
 
+	select {
+	case <-l.healthzCalled:
+	case <-time.After(time.Second * 15):
+		t.Fatal("timed out waiting for healthz call")
+	}
+
 	client := util.HTTPClient(t)
 
 	daprdURL := "http://localhost:" + strconv.Itoa(l.daprd.HTTPPort())
@@ -95,9 +109,11 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, rErr := client.Do(req)
-		require.NoError(c, rErr)
-		require.NoError(c, resp.Body.Close())
-		assert.Equal(c, http.StatusOK, resp.StatusCode)
+		//nolint:testifylint
+		if assert.NoError(c, rErr) {
+			require.NoError(c, resp.Body.Close())
+			assert.Equal(c, http.StatusOK, resp.StatusCode)
+		}
 	}, time.Second*20, time.Millisecond*100, "actor not ready")
 
 	now := time.Now()

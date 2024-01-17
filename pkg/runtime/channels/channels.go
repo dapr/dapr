@@ -27,6 +27,7 @@ import (
 	"golang.org/x/net/http2"
 
 	contribmiddle "github.com/dapr/components-contrib/middleware"
+	"github.com/dapr/dapr/pkg/api/grpc/manager"
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	compsv1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpendpapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
@@ -35,7 +36,6 @@ import (
 	compmiddlehttp "github.com/dapr/dapr/pkg/components/middleware/http"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/config/protocol"
-	"github.com/dapr/dapr/pkg/grpc/manager"
 	middlehttp "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/meta"

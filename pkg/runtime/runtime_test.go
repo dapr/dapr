@@ -73,12 +73,12 @@ import (
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/security"
 
+	pb "github.com/dapr/dapr/pkg/api/grpc/proxy/testservice"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
 	modeconfig "github.com/dapr/dapr/pkg/config/modes"
 	"github.com/dapr/dapr/pkg/cors"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
-	pb "github.com/dapr/dapr/pkg/grpc/proxy/testservice"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -801,8 +801,8 @@ func NewTestDaprRuntimeWithProtocol(t *testing.T, mode modes.DaprMode, protocol 
 
 func NewTestDaprRuntimeConfig(t *testing.T, mode modes.DaprMode, appProtocol string, appPort int) *internalConfig {
 	return &internalConfig{
-		id:                 daprt.TestRuntimeConfigID,
-		placementAddresses: []string{"10.10.10.12"},
+		id:            daprt.TestRuntimeConfigID,
+		actorsService: "placement:10.10.10.12",
 		kubernetes: modeconfig.KubernetesConfig{
 			ControlPlaneAddress: "10.10.10.11",
 		},
@@ -1961,18 +1961,18 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 	mockAppChannel.On("InvokeMethod", mock.MatchedBy(daprt.MatchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
 	// Create new processor with mocked app channel.
 	rt.processor = processor.New(processor.Options{
-		ID:               rt.runtimeConfig.id,
-		IsHTTP:           rt.runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
-		PlacementEnabled: len(rt.runtimeConfig.placementAddresses) > 0,
-		Registry:         rt.runtimeConfig.registry,
-		ComponentStore:   rt.compStore,
-		Meta:             rt.meta,
-		GlobalConfig:     rt.globalConfig,
-		Resiliency:       rt.resiliency,
-		Mode:             rt.runtimeConfig.mode,
-		Standalone:       rt.runtimeConfig.standalone,
-		Channels:         rt.channels,
-		GRPC:             rt.grpc,
+		ID:             rt.runtimeConfig.id,
+		IsHTTP:         rt.runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
+		ActorsEnabled:  len(rt.runtimeConfig.actorsService) > 0,
+		Registry:       rt.runtimeConfig.registry,
+		ComponentStore: rt.compStore,
+		Meta:           rt.meta,
+		GlobalConfig:   rt.globalConfig,
+		Resiliency:     rt.resiliency,
+		Mode:           rt.runtimeConfig.mode,
+		Standalone:     rt.runtimeConfig.standalone,
+		Channels:       rt.channels,
+		GRPC:           rt.grpc,
 	})
 
 	require.NoError(t, rt.processor.Init(context.Background(), cPubSub))
