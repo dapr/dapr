@@ -179,7 +179,6 @@ func newDaprRuntime(ctx context.Context,
 	})
 
 	processor := processor.New(processor.Options{
-
 		ID:             runtimeConfig.id,
 		Namespace:      namespace,
 		IsHTTP:         runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
