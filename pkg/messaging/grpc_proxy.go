@@ -139,7 +139,7 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 	outCtx = p.telemetryFn(outCtx)
 	outCtx = metadata.AppendToOutgoingContext(outCtx, invokev1.CallerIDHeader, p.appID, invokev1.CalleeIDHeader, target.id)
 
-	var appMetadataToken = security.GetAppToken()
+	appMetadataToken := security.GetAppToken()
 	if appMetadataToken != "" {
 		outCtx = metadata.AppendToOutgoingContext(outCtx, securityConsts.APITokenHeader, appMetadataToken)
 	}
