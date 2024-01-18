@@ -167,7 +167,7 @@ func (j *jwks) Run(t *testing.T, ctx context.Context) {
 		}
 		t.Cleanup(func() { require.NoError(t, conn.Close()) })
 		client := v1pb.NewPlacementClient(conn)
-		ctx = metadata.AppendToOutgoingContext(ctx, "ApiLevel", strconv.Itoa(j.places[i].CurrentActorsAPILevel()))
+		ctx = metadata.AppendToOutgoingContext(ctx, "dapr-placement-api-level", strconv.Itoa(j.places[i].CurrentActorsAPILevel()))
 
 		stream, err = client.ReportDaprStatus(ctx)
 		if err != nil {

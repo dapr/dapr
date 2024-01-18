@@ -59,7 +59,7 @@ func registerHost(t *testing.T, ctx context.Context, conn *grpc.ClientConn, name
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		client := placementv1pb.NewPlacementClient(conn)
-		ctx = metadata.AppendToOutgoingContext(ctx, "ApiLevel", strconv.Itoa(apiLevel))
+		ctx = metadata.AppendToOutgoingContext(ctx, "dapr-placement-api-level", strconv.Itoa(apiLevel))
 
 		stream, rErr := client.ReportDaprStatus(ctx)
 		//nolint:testifylint
