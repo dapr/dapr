@@ -37,6 +37,7 @@ const (
 	raftApplyCommandMaxConcurrency          = 10
 	barrierWriteTimeout                     = 2 * time.Minute
 	NoVirtualNodesInPlacementTablesAPILevel = 20
+	GRPCContextKeyAPILevel                  = "dapr-placement-api-level"
 )
 
 // MonitorLeadership is used to monitor if we acquire or lose our role
@@ -480,7 +481,7 @@ func getHostAPILevel(stream placementGRPCStream) int {
 	}
 
 	// Extract apiLevel from metadata
-	apiLevel := md.Get("ApiLevel")
+	apiLevel := md.Get(GRPCContextKeyAPILevel)
 	if len(apiLevel) == 0 {
 		return 0
 	}
