@@ -97,68 +97,6 @@ func IsJSONContentType(contentType string) bool {
 	return strings.HasPrefix(strings.ToLower(contentType), JSONContentType)
 }
 
-// metadataToInternalMetadata converts metadata to Dapr internal metadata map.
-func metadataToInternalMetadata(md map[string][]string) DaprInternalMetadata {
-	internalMD := make(DaprInternalMetadata, len(md))
-	for k, values := range md {
-		if strings.HasSuffix(k, gRPCBinaryMetadataSuffix) {
-			// Binary key requires base64 encoding for the value
-			vals := make([]string, len(values))
-			for i, val := range values {
-				vals[i] = base64.StdEncoding.EncodeToString([]byte(val))
-			}
-			internalMD[k] = &internalv1pb.ListStringValue{
-				Values: vals,
-			}
-		} else {
-			internalMD[k] = &internalv1pb.ListStringValue{
-				Values: values,
-			}
-		}
-	}
-
-	return internalMD
-}
-
-// httpHeadersToInternalMetadata converts http headers to Dapr internal metadata map.
-func httpHeadersToInternalMetadata(header http.Header) DaprInternalMetadata {
-	internalMD := make(DaprInternalMetadata, len(header))
-	for key, val := range header {
-		// Note: HTTP headers can never be binary (only gRPC supports binary headers)
-		if len(internalMD[key].GetValues()) == 0 {
-			internalMD[key] = &internalv1pb.ListStringValue{
-				Values: val,
-			}
-		} else {
-			internalMD[key].Values = append(internalMD[key].GetValues(), val...)
-		}
-	}
-	return internalMD
-}
-
-// Covers *fasthttp.RequestHeader and *fasthttp.ResponseHeader
-type fasthttpHeaders interface {
-	Len() int
-	VisitAll(f func(key []byte, value []byte))
-}
-
-// fasthttpHeadersToInternalMetadata converts fasthttp headers to Dapr internal metadata map.
-func fasthttpHeadersToInternalMetadata(header fasthttpHeaders) DaprInternalMetadata {
-	internalMD := make(DaprInternalMetadata, header.Len())
-	header.VisitAll(func(key []byte, value []byte) {
-		// Note: fasthttp headers can never be binary (only gRPC supports binary headers)
-		keyStr := string(key)
-		if internalMD[keyStr] == nil || len(internalMD[keyStr].GetValues()) == 0 {
-			internalMD[keyStr] = &internalv1pb.ListStringValue{
-				Values: []string{string(value)},
-			}
-		} else {
-			internalMD[keyStr].Values = append(internalMD[keyStr].GetValues(), string(value))
-		}
-	})
-	return internalMD
-}
-
 // isPermanentHTTPHeader checks whether hdr belongs to the list of
 // permanent request headers maintained by IANA.
 // http://www.iana.org/assignments/message-headers/message-headers.xml
