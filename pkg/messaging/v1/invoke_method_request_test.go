@@ -83,7 +83,7 @@ func TestInternalInvokeRequest(t *testing.T) {
 			Message: m,
 		}
 
-		ir, err := InternalInvokeRequest(&pb)
+		ir, err := FromInternalInvokeRequest(&pb)
 		require.NoError(t, err)
 		defer ir.Close()
 		assert.NotNil(t, ir.r.GetMessage())
@@ -106,7 +106,7 @@ func TestInternalInvokeRequest(t *testing.T) {
 			Message: m,
 		}
 
-		ir, err := InternalInvokeRequest(&pb)
+		ir, err := FromInternalInvokeRequest(&pb)
 		require.NoError(t, err)
 		defer ir.Close()
 		assert.NotNil(t, ir.r.GetMessage())
@@ -126,7 +126,7 @@ func TestInternalInvokeRequest(t *testing.T) {
 			Message: nil,
 		}
 
-		_, err := InternalInvokeRequest(&pb)
+		_, err := FromInternalInvokeRequest(&pb)
 		require.Error(t, err)
 	})
 }
@@ -315,7 +315,7 @@ func TestRequestProto(t *testing.T) {
 			Message: m,
 		}
 
-		ir, err := InternalInvokeRequest(&pb)
+		ir, err := FromInternalInvokeRequest(&pb)
 		require.NoError(t, err)
 		defer ir.Close()
 		req2 := ir.Proto()
@@ -341,7 +341,7 @@ func TestRequestProto(t *testing.T) {
 			Message: m,
 		}
 
-		ir, err := InternalInvokeRequest(&pb)
+		ir, err := FromInternalInvokeRequest(&pb)
 		require.NoError(t, err)
 		defer ir.Close()
 		ir.data = newReaderCloser(strings.NewReader("test"))
@@ -368,7 +368,7 @@ func TestRequestProtoWithData(t *testing.T) {
 			Message: m,
 		}
 
-		ir, err := InternalInvokeRequest(&pb)
+		ir, err := FromInternalInvokeRequest(&pb)
 		require.NoError(t, err)
 		defer ir.Close()
 		req2, err := ir.ProtoWithData()
@@ -388,7 +388,7 @@ func TestRequestProtoWithData(t *testing.T) {
 			Message: m,
 		}
 
-		ir, err := InternalInvokeRequest(&pb)
+		ir, err := FromInternalInvokeRequest(&pb)
 		require.NoError(t, err)
 		defer ir.Close()
 		ir.data = newReaderCloser(strings.NewReader("test"))
