@@ -50,6 +50,7 @@ import (
 	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/channels"
@@ -1433,17 +1434,12 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 
 	policyDef := a.universal.Resiliency().ActorPreLockPolicy(actorType, actorID)
 
-	req := invokev1.NewInvokeMethodRequest(method).
+	req := internalsv1pb.NewInternalInvokeRequest(method).
 		WithActor(actorType, actorID).
 		WithHTTPExtension(verb, reqCtx.QueryArgs().String()).
-		WithRawDataBytes(reqCtx.PostBody()).
+		WithData(reqCtx.PostBody()).
 		WithContentType(string(reqCtx.Request.Header.ContentType())).
-		// Save headers to internal metadata
 		WithFastHTTPHeaders(&reqCtx.Request.Header)
-	if policyDef != nil {
-		req.WithReplay(policyDef.HasRetries())
-	}
-	defer req.Close()
 
 	// Unlike other actor calls, resiliency is handled here for invocation.
 	// This is due to actor invocation involving a lookup for the host.
@@ -1452,19 +1448,10 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 	// should technically wait forever on the locking mechanism. If we timeout while
 	// waiting for the lock, we can also create a queue of calls that will try and continue
 	// after the timeout.
-	policyRunner := resiliency.NewRunnerWithOptions(reqCtx, policyDef,
-		resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
-			Disposer: resiliency.DisposerCloser[*invokev1.InvokeMethodResponse],
-		},
-	)
-	resp, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
+	policyRunner := resiliency.NewRunner[*internalsv1pb.InternalInvokeResponse](reqCtx, policyDef)
+	res, err := policyRunner(func(ctx context.Context) (*internalsv1pb.InternalInvokeResponse, error) {
 		return a.universal.Actors().Call(ctx, req)
 	})
-
-	if resp != nil {
-		defer resp.Close()
-	}
-
 	if err != nil {
 		actorErr, isActorError := actorerrors.As(err)
 		if !isActorError {
@@ -1485,7 +1472,7 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 
-	if resp == nil {
+	if res == nil {
 		msg := NewErrorResponse("ERR_ACTOR_INVOKE_METHOD", fmt.Sprintf(messages.ErrActorInvoke, "failed to cast response"))
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
 		log.Debug(msg)
@@ -1493,19 +1480,13 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	// Use Add to ensure headers are appended and not replaced
-	invokev1.InternalMetadataToHTTPHeader(reqCtx, resp.Headers(), reqCtx.Response.Header.Add)
-	body, err := resp.RawDataFull()
-	if err != nil {
-		msg := NewErrorResponse("ERR_ACTOR_INVOKE_METHOD", fmt.Sprintf(messages.ErrActorInvoke, err))
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
-		log.Debug(msg)
-		return
-	}
-	reqCtx.Response.Header.SetContentType(resp.ContentType())
+	invokev1.InternalMetadataToHTTPHeader(reqCtx, res.GetHeaders(), reqCtx.Response.Header.Add)
+	body := res.GetMessage().GetData().GetValue()
+	reqCtx.Response.Header.SetContentType(res.GetMessage().GetContentType())
 
 	// Construct response.
-	statusCode := int(resp.Status().GetCode())
-	if !resp.IsHTTPResponse() {
+	statusCode := int(res.GetStatus().GetCode())
+	if !res.IsHTTPResponse() {
 		statusCode = invokev1.HTTPStatusFromCode(codes.Code(statusCode))
 	}
 	fasthttpRespond(reqCtx, fasthttpResponseWith(statusCode, body))

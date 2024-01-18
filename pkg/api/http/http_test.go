@@ -60,6 +60,7 @@ import (
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
+	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -1651,19 +1652,19 @@ func TestV1ActorEndpoints(t *testing.T) {
 		mockActors := new(actors.MockActors)
 		fakeData := []byte("fakeData")
 
-		response := invokev1.NewInvokeMethodResponse(206, "OK", nil)
-		defer response.Close()
-		mockActors.On("Call", mock.MatchedBy(func(imr *invokev1.InvokeMethodRequest) bool {
-			m, err := imr.ProtoWithData()
-			if err != nil {
+		response := &internalsv1pb.InternalInvokeResponse{
+			Status: &internalsv1pb.Status{
+				Code:    206,
+				Message: "OK",
+			},
+		}
+		mockActors.On("Call", mock.MatchedBy(func(m *internalsv1pb.InternalInvokeRequest) bool {
+			if m.GetActor().GetActorType() != "fakeActorType" || m.GetActor().GetActorId() != "fakeActorID" {
 				return false
 			}
 
-			if m.GetActor() == nil || m.GetActor().GetActorType() != "fakeActorType" || m.GetActor().GetActorId() != "fakeActorID" {
-				return false
-			}
-
-			if m.GetMessage() == nil || m.GetMessage().GetData() == nil || len(m.GetMessage().GetData().GetValue()) == 0 || !bytes.Equal(m.GetMessage().GetData().GetValue(), fakeData) {
+			v := m.GetMessage().GetData().GetValue()
+			if len(v) == 0 || !bytes.Equal(v, fakeData) {
 				return false
 			}
 			return true
@@ -1682,17 +1683,13 @@ func TestV1ActorEndpoints(t *testing.T) {
 	t.Run("Direct Message - 500 for actor call failure", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/method/method1"
 		mockActors := new(actors.MockActors)
-		mockActors.On("Call", mock.MatchedBy(func(imr *invokev1.InvokeMethodRequest) bool {
-			m, err := imr.ProtoWithData()
-			if err != nil {
+		mockActors.On("Call", mock.MatchedBy(func(m *internalsv1pb.InternalInvokeRequest) bool {
+			if m.GetActor().GetActorType() != "fakeActorType" || m.GetActor().GetActorId() != "fakeActorID" {
 				return false
 			}
 
-			if m.GetActor() == nil || m.GetActor().GetActorType() != "fakeActorType" || m.GetActor().GetActorId() != "fakeActorID" {
-				return false
-			}
-
-			if m.GetMessage() == nil || m.GetMessage().GetData() == nil || len(m.GetMessage().GetData().GetValue()) == 0 || !bytes.Equal(m.GetMessage().GetData().GetValue(), []byte("fakeData")) {
+			v := m.GetMessage().GetData().GetValue()
+			if len(v) == 0 || !bytes.Equal(v, []byte("fakeData")) {
 				return false
 			}
 			return true
