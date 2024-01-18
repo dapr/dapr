@@ -29,6 +29,7 @@ import (
 	"github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 )
 
 func connectionFn(ctx context.Context, address, id string, namespace string, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(bool), error) {
@@ -215,6 +216,8 @@ func TestIntercept(t *testing.T) {
 			}, nil
 		})
 
+		t.Setenv(securityConsts.AppAPITokenEnvVar, "token1")
+
 		ctx := metadata.NewIncomingContext(context.TODO(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"b"}})
 		proxy := p.(*proxy)
 		ctx, conn, _, teardown, err := proxy.intercept(ctx, "/test")
@@ -228,6 +231,7 @@ func TestIntercept(t *testing.T) {
 		assert.Equal(t, "b", md["a"][0])
 		assert.Equal(t, "a", md[invokev1.CallerIDHeader][0])
 		assert.Equal(t, "b", md[invokev1.CalleeIDHeader][0])
+		assert.Equal(t, "token1", md[securityConsts.APITokenHeader][0])
 	})
 
 	t.Run("access policies applied", func(t *testing.T) {
