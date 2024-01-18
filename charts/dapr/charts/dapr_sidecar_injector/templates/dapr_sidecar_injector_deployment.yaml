@@ -42,6 +42,9 @@ spec:
       {{- if .Values.hostNetwork }}
       hostNetwork: true
       {{- end }}
+      {{- if .Values.dnsPolicy }}
+      dnsPolicy: {{ .Values.dnsPolicy }}
+      {{- end }}      
       serviceAccountName: dapr-injector
       containers:
       - name: dapr-sidecar-injector
