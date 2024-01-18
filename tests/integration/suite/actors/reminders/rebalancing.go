@@ -56,7 +56,6 @@ type rebalancing struct {
 	handler            [2]*httpServer
 	db                 *sqlite.SQLite
 	place              *placement.Placement
-	placementStream    placementv1pb.Placement_ReportDaprStatusClient
 	activeActors       []atomic.Bool
 	doubleActivationCh chan string
 }
@@ -83,7 +82,7 @@ func (i *rebalancing) Setup(t *testing.T) []framework.Option {
 		}
 		i.srv[j] = prochttp.New(t, prochttp.WithHandler(i.handler[j].NewHandler(j)))
 		i.daprd[j] = daprd.New(t,
-			daprd.WithResourceFiles(i.db.GetComponent()),
+			daprd.WithResourceFiles(i.db.GetComponent(t)),
 			daprd.WithPlacementAddresses(i.place.Address()),
 			daprd.WithAppPort(i.srv[j].Port()),
 			// Daprd is super noisy in debug mode when connecting to placement.
@@ -110,28 +109,24 @@ func (i *rebalancing) Run(t *testing.T, ctx context.Context) {
 	}
 
 	// Establish a connection to the placement service
-	placementClientReady := make(chan error)
-	placementCtx, placementCancel := context.WithCancel(ctx)
-	defer placementCancel()
-	go i.getPlacementClient(placementCtx, placementClientReady)
-	select {
-	case <-ctx.Done():
-		require.Fail(t, "Placement client not ready in time")
-	case err := <-placementClientReady:
-		require.NoError(t, err)
-	}
+	stream := i.getPlacementStream(t, ctx)
 
 	client := util.HTTPClient(t)
 
 	// Try to invoke an actor to ensure the actor subsystem is ready
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost:%d/v1.0/actors/myactortype/pinger/method/ping", i.daprd[0].HTTPPort()), nil)
-		require.NoError(c, err)
-		resp, rErr := client.Do(req)
-		require.NoError(c, rErr)
-		require.NoError(c, resp.Body.Close())
-		assert.Equal(c, http.StatusOK, resp.StatusCode)
-	}, 10*time.Second, 100*time.Millisecond, "actors not ready")
+		//nolint:testifylint
+		if assert.NoError(c, err) {
+			resp, rErr := client.Do(req)
+			//nolint:testifylint
+			if assert.NoError(c, rErr) {
+				//nolint:testifylint
+				assert.NoError(c, resp.Body.Close())
+				assert.Equal(c, http.StatusOK, resp.StatusCode)
+			}
+		}
+	}, 15*time.Second, 100*time.Millisecond, "actors not ready")
 
 	// Do a bunch of things in parallel
 	errCh := make(chan error)
@@ -183,7 +178,7 @@ func (i *rebalancing) Run(t *testing.T, ctx context.Context) {
 
 	// In parallel, add another node to the placement which will trigger a rebalancing
 	go func() {
-		rErr := i.reportStatusToPlacement(ctx, i.placementStream, []string{"myactortype"})
+		rErr := i.reportStatusToPlacement(ctx, stream, []string{"myactortype"})
 		if rErr != nil {
 			errCh <- fmt.Errorf("failed to trigger rebalancing: %w", rErr)
 		} else {
@@ -194,7 +189,7 @@ func (i *rebalancing) Run(t *testing.T, ctx context.Context) {
 	// Also invoke the same actors using actor invocation
 	for j := 0; j < iterations; j++ {
 		go func(j int) {
-			rctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			rctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 			defer cancel()
 			daprdURL := fmt.Sprintf("http://localhost:%d/v1.0/actors/myactortype/myactorid-%d/method/foo", i.daprd[0].HTTPPort(), j)
 			req, rErr := http.NewRequestWithContext(rctx, http.MethodPost, daprdURL, nil)
@@ -344,53 +339,35 @@ func (h *httpServer) WaitForActorsReady(ctx context.Context) error {
 	}
 }
 
-func (i *rebalancing) getPlacementClient(ctx context.Context, placementClientReady chan error) {
+func (i *rebalancing) getPlacementStream(t *testing.T, ctx context.Context) placementv1pb.Placement_ReportDaprStatusClient {
 	// Establish a connection with placement
 	conn, err := grpc.DialContext(ctx, "localhost:"+strconv.Itoa(i.place.Port()),
 		grpc.WithBlock(),
 		grpc.WithTransportCredentials(grpcinsecure.NewCredentials()),
 	)
-	if err != nil {
-		placementClientReady <- err
-		return
-	}
-	defer func() { conn.Close() }()
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, conn.Close()) })
+	client := placementv1pb.NewPlacementClient(conn)
 
 	// Establish a stream and send the initial heartbeat, with no actors
-	// We need to retry here because this will fail until the instance of placement (the only one) acquires leadership
-	for j := 0; j < 4; j++ {
-		client := placementv1pb.NewPlacementClient(conn)
-		stream, rErr := client.ReportDaprStatus(ctx)
-		if rErr != nil {
-			log.Printf("Failed to connect to placement; will retry: %v", rErr)
-			// Sleep before retrying
-			time.Sleep(time.Second)
-			continue
-		}
+	// We need to retry here because this will fail until the instance of
+	// placement (the only one) acquires leadership.
+	var stream placementv1pb.Placement_ReportDaprStatusClient
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		stream, err = client.ReportDaprStatus(ctx)
+		require.NoError(c, err)
 
-		reportCtx, reportCancel := context.WithTimeout(ctx, time.Second)
-		defer reportCancel()
-		rErr = i.reportStatusToPlacement(reportCtx, stream, []string{})
-		if rErr != nil {
-			log.Printf("Failed to report status to placement; will retry: %v", rErr)
+		pctx, cancel := context.WithTimeout(ctx, time.Second)
+		defer cancel()
+		err = i.reportStatusToPlacement(pctx, stream, []string{})
+		//nolint:testifylint
+		if !assert.NoError(c, err) {
 			stream.CloseSend()
-			// Sleep before retrying
-			time.Sleep(time.Second)
-			continue
+			stream = nil
 		}
-		i.placementStream = stream
-	}
+	}, time.Second*20, time.Millisecond*100)
 
-	if i.placementStream == nil {
-		placementClientReady <- errors.New("did not connect to placement in time")
-		return
-	}
-
-	// Report that we received a rebalancing message
-	placementClientReady <- nil
-
-	// Block until context is done
-	<-ctx.Done()
+	return stream
 }
 
 func (i *rebalancing) reportStatusToPlacement(ctx context.Context, stream placementv1pb.Placement_ReportDaprStatusClient, entities []string) error {
@@ -404,21 +381,18 @@ func (i *rebalancing) reportStatusToPlacement(ctx context.Context, stream placem
 		return fmt.Errorf("failed to send message: %w", err)
 	}
 
-	errCh := make(chan error)
+	errCh := make(chan error, 1)
 	go func() {
-		var sent bool
 		for {
 			// When the stream ends (which happens when the context is canceled) this returns an error and we can return
 			o, rerr := stream.Recv()
 			if rerr != nil {
-				if !sent {
-					errCh <- fmt.Errorf("error from placement: %w", rerr)
-				}
+				errCh <- fmt.Errorf("error from placement: %w", rerr)
 				return
 			}
-			if o.GetOperation() == "update" && !sent {
+			if o.GetOperation() == "update" {
 				errCh <- nil
-				sent = true
+				return
 			}
 		}
 	}()

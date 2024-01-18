@@ -17,6 +17,8 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -31,9 +33,9 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
-	procgrpc "github.com/dapr/dapr/tests/integration/framework/process/grpc"
-	procplacement "github.com/dapr/dapr/tests/integration/framework/process/placement"
-	procsentry "github.com/dapr/dapr/tests/integration/framework/process/sentry"
+	"github.com/dapr/dapr/tests/integration/framework/process/grpc/operator"
+	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -44,14 +46,14 @@ func init() {
 // disable tests Kubernetes daprd with mTLS disabled.
 type disable struct {
 	daprd        *procdaprd.Daprd
-	sentry       *procsentry.Sentry
-	placement    *procplacement.Placement
-	operator     *procgrpc.GRPC
+	sentry       *sentry.Sentry
+	placement    *placement.Placement
+	operator     *operator.Operator
 	trustAnchors []byte
 }
 
 func (e *disable) Setup(t *testing.T) []framework.Option {
-	e.sentry = procsentry.New(t)
+	e.sentry = sentry.New(t)
 
 	bundle := e.sentry.CABundle()
 	e.trustAnchors = bundle.TrustAnchors
@@ -59,13 +61,13 @@ func (e *disable) Setup(t *testing.T) []framework.Option {
 	// Control plane services always serves with mTLS in kubernetes mode.
 	taFile := filepath.Join(t.TempDir(), "ca.pem")
 	require.NoError(t, os.WriteFile(taFile, bundle.TrustAnchors, 0o600))
-	e.placement = procplacement.New(t,
-		procplacement.WithEnableTLS(true),
-		procplacement.WithTrustAnchorsFile(taFile),
-		procplacement.WithSentryAddress(e.sentry.Address()),
+	e.placement = placement.New(t,
+		placement.WithEnableTLS(true),
+		placement.WithTrustAnchorsFile(taFile),
+		placement.WithSentryAddress(e.sentry.Address()),
 	)
 
-	e.operator = newOperator(t, bundle.TrustAnchors, e.sentry.Address())
+	e.operator = operator.New(t, operator.WithSentry(e.sentry))
 
 	e.daprd = procdaprd.New(t,
 		procdaprd.WithAppID("my-app"),
@@ -135,10 +137,17 @@ func (e *disable) Run(t *testing.T, ctx context.Context) {
 		myAppID, err := spiffeid.FromSegments(spiffeid.RequireTrustDomainFromString("public"), "ns", "default", "my-app")
 		require.NoError(t, err)
 
-		gctx, gcancel := context.WithTimeout(ctx, time.Second)
-		t.Cleanup(gcancel)
-		_, err = grpc.DialContext(gctx, e.daprd.InternalGRPCAddress(), sec.GRPCDialOptionMTLS(myAppID),
-			grpc.WithReturnConnectionError())
+		assert.Eventually(t, func() bool {
+			gctx, gcancel := context.WithTimeout(ctx, time.Second)
+			t.Cleanup(gcancel)
+			_, err = grpc.DialContext(gctx, e.daprd.InternalGRPCAddress(), sec.GRPCDialOptionMTLS(myAppID),
+				grpc.WithReturnConnectionError())
+			require.Error(t, err)
+			if runtime.GOOS == "windows" {
+				return !strings.Contains(err.Error(), "An existing connection was forcibly closed by the remote host.")
+			}
+			return true
+		}, 5*time.Second, 100*time.Millisecond)
 		require.ErrorContains(t, err, "tls: first record does not look like a TLS handshake")
 	})
 }

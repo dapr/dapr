@@ -20,9 +20,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/components-contrib/bindings"
+	"github.com/dapr/dapr/pkg/api/grpc/manager"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/config"
-	"github.com/dapr/dapr/pkg/grpc/manager"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/meta"

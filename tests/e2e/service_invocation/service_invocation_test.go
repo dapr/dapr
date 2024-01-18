@@ -36,6 +36,7 @@ import (
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
 	"github.com/dapr/dapr/tests/util"
+	kitUtils "github.com/dapr/kit/utils"
 	apiv1 "k8s.io/api/core/v1"
 )
 
@@ -80,7 +81,9 @@ func TestMain(m *testing.M) {
 	utils.SetupLogs("service_invocation")
 	utils.InitHTTPClient(false)
 
-	pki, err := util.GenPKI("service-invocation-external")
+	pki, err := util.GenPKIError(util.PKIOptions{
+		LeafDNS: "service-invocation-external",
+	})
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(-1)
@@ -136,7 +139,7 @@ func TestMain(m *testing.M) {
 			AppName:        "serviceinvocation-callee-2",
 			DaprEnabled:    true,
 			ImageName:      "e2e-service_invocation",
-			Replicas:       1,
+			Replicas:       2,
 			MetricsEnabled: true,
 			Config:         "app-channel-pipeline",
 		},
@@ -175,15 +178,6 @@ func TestMain(m *testing.M) {
 			MaxRequestSizeMB: 6,
 		},
 		{
-			AppName:        "grpcproxyserverexternal",
-			DaprEnabled:    false,
-			ImageName:      "e2e-service_invocation_grpc_proxy_server",
-			Replicas:       1,
-			MetricsEnabled: true,
-			AppProtocol:    "grpc",
-			AppPort:        50051,
-		},
-		{
 			AppName:           "grpcproxyserver",
 			DaprEnabled:       true,
 			ImageName:         "e2e-service_invocation_grpc_proxy_server",
@@ -195,30 +189,44 @@ func TestMain(m *testing.M) {
 			MaxRequestSizeMB:  6,
 		},
 		{
-			AppName:        "serviceinvocation-callee-external",
+			AppName:        "grpcproxyserverexternal",
 			DaprEnabled:    false,
-			ImageName:      "e2e-service_invocation_external",
+			ImageName:      "e2e-service_invocation_grpc_proxy_server",
 			Replicas:       1,
-			IngressEnabled: true,
 			MetricsEnabled: true,
-			AppProtocol:    "http",
-			Volumes: []apiv1.Volume{
-				{
-					Name: "secret-volume",
-					VolumeSource: apiv1.VolumeSource{
-						Secret: &apiv1.SecretVolumeSource{
-							SecretName: "external-tls",
+			AppProtocol:    "grpc",
+			AppPort:        50051,
+		},
+	}
+
+	if !kitUtils.IsTruthy(os.Getenv("SKIP_EXTERNAL_INVOCATION")) {
+		testApps = append(testApps,
+			kube.AppDescription{
+				AppName:        "serviceinvocation-callee-external",
+				DaprEnabled:    false,
+				ImageName:      "e2e-service_invocation_external",
+				Replicas:       1,
+				IngressEnabled: true,
+				MetricsEnabled: true,
+				AppProtocol:    "http",
+				Volumes: []apiv1.Volume{
+					{
+						Name: "secret-volume",
+						VolumeSource: apiv1.VolumeSource{
+							Secret: &apiv1.SecretVolumeSource{
+								SecretName: "external-tls",
+							},
 						},
 					},
 				},
-			},
-			AppVolumeMounts: []apiv1.VolumeMount{
-				{
-					Name:      "secret-volume",
-					MountPath: "/tmp/testdata/certs",
+				AppVolumeMounts: []apiv1.VolumeMount{
+					{
+						Name:      "secret-volume",
+						MountPath: "/tmp/testdata/certs",
+					},
 				},
 			},
-		},
+		)
 	}
 
 	tr = runner.NewTestRunner("hellodapr", testApps, nil, nil)
@@ -542,6 +550,10 @@ func TestServiceInvocation(t *testing.T) {
 }
 
 func TestServiceInvocationExternally(t *testing.T) {
+	if kitUtils.IsTruthy(os.Getenv("SKIP_EXTERNAL_INVOCATION")) {
+		t.Skip()
+	}
+
 	testFn := func(targetApp string) func(t *testing.T) {
 		return func(t *testing.T) {
 			externalURL := tr.Platform.AcquireAppExternalURL(targetApp)
@@ -680,6 +692,10 @@ func TestGRPCProxy(t *testing.T) {
 }
 
 func TestHeadersExternal(t *testing.T) {
+	if kitUtils.IsTruthy(os.Getenv("SKIP_EXTERNAL_INVOCATION")) {
+		t.Skip()
+	}
+
 	targetApp := "serviceinvocation-caller"
 	externalURL := tr.Platform.AcquireAppExternalURL(targetApp)
 	require.NotEmpty(t, externalURL, "external URL must not be empty!")
@@ -1372,6 +1388,40 @@ func TestUppercaseMiddlewareServiceInvocation(t *testing.T) {
 	t.Run("serviceinvocation-caller", testFn("serviceinvocation-caller"))
 }
 
+func TestLoadBalancing(t *testing.T) {
+	externalURL := tr.Platform.AcquireAppExternalURL("serviceinvocation-caller")
+	require.NotEmpty(t, externalURL, "external URL must not be empty!")
+
+	// This initial probe makes the test wait a little bit longer when needed,
+	// making this test less flaky due to delays in the deployment.
+	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
+	require.NoError(t, err)
+
+	// Make 50 invocations and make sure that we get responses from both apps
+	foundPIDs := map[string]int{}
+	var total int
+	for i := 0; i < 50; i++ {
+		resp, err := utils.HTTPPost(fmt.Sprintf("%s/tests/loadbalancing", externalURL), nil)
+		require.NoError(t, err)
+
+		var appResp appResponse
+		err = json.Unmarshal(resp, &appResp)
+		require.NoErrorf(t, err, "Failed to unmarshal response: %s", string(resp))
+		require.NotEmpty(t, appResp.Message)
+
+		foundPIDs[appResp.Message]++
+		total++
+	}
+
+	t.Logf("Found PIDs: %v", foundPIDs)
+	assert.Equal(t, 50, total)
+	assert.Len(t, foundPIDs, 2)
+	for pid, count := range foundPIDs {
+		// We won't have a perfect 50/50 distribution, so ensure that at least 5 requests (10%) hit each one
+		assert.GreaterOrEqualf(t, count, 5, "Instance with PID %s did not get at least 5 requests", pid)
+	}
+}
+
 func TestNegativeCases(t *testing.T) {
 	testFn := func(targetApp string) func(t *testing.T) {
 		return func(t *testing.T) {
@@ -1443,7 +1493,8 @@ func TestNegativeCases(t *testing.T) {
 				// TODO: This doesn't return as an error, it should be handled more gracefully in dapr
 				require.False(t, testResults.MainCallSuccessful)
 				require.Equal(t, 500, status)
-				require.Contains(t, string(testResults.RawBody), "failed to invoke target missing-service-0 after 3 retries")
+				require.Contains(t, string(testResults.RawBody), "failed to invoke")
+				require.Contains(t, string(testResults.RawBody), "missing-service-0")
 				require.Nil(t, err)
 			})
 
@@ -1466,7 +1517,8 @@ func TestNegativeCases(t *testing.T) {
 				require.Nil(t, testResults.RawBody)
 				require.Nil(t, err)
 				require.NotNil(t, testResults.RawError)
-				require.Contains(t, testResults.RawError, "failed to invoke target missing-service-0 after 3 retries")
+				require.Contains(t, testResults.RawError, "failed to invoke")
+				require.Contains(t, testResults.RawError, "missing-service-0")
 			})
 
 			t.Run("service_timeout_http", func(t *testing.T) {
@@ -1619,6 +1671,10 @@ func TestNegativeCases(t *testing.T) {
 }
 
 func TestNegativeCasesExternal(t *testing.T) {
+	if kitUtils.IsTruthy(os.Getenv("SKIP_EXTERNAL_INVOCATION")) {
+		t.Skip()
+	}
+
 	testFn := func(targetApp string) func(t *testing.T) {
 		return func(t *testing.T) {
 			externalURL := tr.Platform.AcquireAppExternalURL(targetApp)
@@ -1727,8 +1783,6 @@ func TestCrossNamespaceCases(t *testing.T) {
 }
 
 func TestPathURLNormalization(t *testing.T) {
-	t.Parallel()
-
 	externalURL := tr.Platform.AcquireAppExternalURL("serviceinvocation-caller")
 	require.NotEmpty(t, externalURL, "external URL must not be empty!")
 

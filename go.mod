@@ -8,15 +8,16 @@ require (
 	contrib.go.opencensus.io/exporter/prometheus v0.4.2
 	github.com/PaesslerAG/jsonpath v0.1.1
 	github.com/PuerkitoBio/purell v1.2.1
+	github.com/alphadose/haxmap v1.3.1
 	github.com/argoproj/argo-rollouts v1.4.1
 	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/cloudevents/sdk-go/v2 v2.14.0
-	github.com/dapr/components-contrib v1.12.1-0.20231219201927-02c6b21ec621
-	github.com/dapr/kit v0.12.2-0.20231219171931-d7281f0c24d0
-	github.com/evanphx/json-patch/v5 v5.7.0
-	github.com/go-chi/chi/v5 v5.0.10
+	github.com/dapr/components-contrib v1.12.1-0.20240116181555-28a3d649a377
+	github.com/dapr/kit v0.12.2-0.20240115170833-858719eb78ac
+	github.com/evanphx/json-patch/v5 v5.8.1
+	github.com/go-chi/chi/v5 v5.0.11
 	github.com/go-chi/cors v1.2.1
-	github.com/go-logr/logr v1.3.0
+	github.com/go-logr/logr v1.4.1
 	github.com/golang/mock v1.6.0
 	github.com/golang/protobuf v1.5.3
 	github.com/google/cel-go v0.13.0
@@ -24,19 +25,19 @@ require (
 	github.com/google/gofuzz v1.2.0
 	github.com/google/uuid v1.5.0
 	github.com/gorilla/mux v1.8.1
-	github.com/gorilla/websocket v1.5.0
+	github.com/gorilla/websocket v1.5.1
 	github.com/grafana/k6-operator v0.0.8
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0
 	github.com/hashicorp/go-hclog v1.5.0
-	github.com/hashicorp/go-msgpack/v2 v2.1.0
+	github.com/hashicorp/go-msgpack/v2 v2.1.1
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/hashicorp/raft v1.4.0
 	github.com/hashicorp/raft-boltdb v0.0.0-20230125174641-2a8082862702
-	github.com/jackc/pgx/v5 v5.5.1
+	github.com/jackc/pgx/v5 v5.5.2
 	github.com/jhump/protoreflect v1.15.2
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/lestrrat-go/jwx/v2 v2.0.18
-	github.com/microsoft/durabletask-go v0.4.0
+	github.com/microsoft/durabletask-go v0.4.1-0.20231222205218-fc5756737d3c
 	github.com/mitchellh/mapstructure v1.5.1-0.20220423185008-bf980b35cac4
 	github.com/phayes/freeport v0.0.0-20220201140144-74d24b5ae9f5
 	github.com/prometheus/client_golang v1.16.0
@@ -60,13 +61,14 @@ require (
 	go.opentelemetry.io/otel/trace v1.21.0
 	go.uber.org/automaxprocs v1.5.3
 	go.uber.org/ratelimit v0.3.0
-	golang.org/x/crypto v0.17.0
-	golang.org/x/exp v0.0.0-20231219160207-73b9e39aefca
-	golang.org/x/net v0.19.0
-	golang.org/x/sync v0.5.0
-	google.golang.org/genproto/googleapis/api v0.0.0-20231012201019-e917dd12ba7a
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20231030173426-d783a09b4405
-	google.golang.org/grpc v1.59.0
+	golang.org/x/crypto v0.18.0
+	golang.org/x/exp v0.0.0-20240112132812-db7319d0e0e3
+	golang.org/x/net v0.20.0
+	golang.org/x/sync v0.6.0
+	google.golang.org/genproto/googleapis/api v0.0.0-20231120223509-83a465c0220f
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20231212172506-995d672761c0
+	google.golang.org/grpc v1.60.1
+	google.golang.org/grpc/examples v0.0.0-20230224211313-3775f633ce20
 	google.golang.org/protobuf v1.31.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.26.9
@@ -77,20 +79,20 @@ require (
 	k8s.io/code-generator v0.26.9
 	k8s.io/klog v1.0.0
 	k8s.io/metrics v0.26.3
-	k8s.io/utils v0.0.0-20231127182322-b307cd553661
+	k8s.io/utils v0.0.0-20240102154912-e7106e64919e
 	modernc.org/sqlite v1.28.0
 	sigs.k8s.io/controller-runtime v0.14.6
 	sigs.k8s.io/yaml v1.4.0
 )
 
 require (
-	cloud.google.com/go v0.110.8 // indirect
-	cloud.google.com/go/compute v1.23.1 // indirect
+	cloud.google.com/go v0.110.10 // indirect
+	cloud.google.com/go/compute v1.23.3 // indirect
 	cloud.google.com/go/compute/metadata v0.2.3 // indirect
 	cloud.google.com/go/datastore v1.15.0 // indirect
-	cloud.google.com/go/iam v1.1.3 // indirect
+	cloud.google.com/go/iam v1.1.5 // indirect
 	cloud.google.com/go/pubsub v1.33.0 // indirect
-	cloud.google.com/go/secretmanager v1.11.2 // indirect
+	cloud.google.com/go/secretmanager v1.11.4 // indirect
 	cloud.google.com/go/storage v1.33.0 // indirect
 	dubbo.apache.org/dubbo-go/v3 v3.0.3-0.20230118042253-4f159a2b38f3 // indirect
 	github.com/99designs/go-keychain v0.0.0-20191008050251-8e49817e8af4 // indirect
@@ -100,7 +102,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/ai/azopenai v0.3.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.9.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.4.0 // indirect
-	github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig v0.6.0 // indirect
+	github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig v1.0.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/data/azcosmos v0.3.6 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/data/aztables v1.1.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.5.0 // indirect
@@ -198,7 +200,7 @@ require (
 	github.com/dubbogo/gost v1.13.1 // indirect
 	github.com/dubbogo/triple v1.1.8 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/dvsekhvalnov/jose2go v1.5.0 // indirect
+	github.com/dvsekhvalnov/jose2go v1.6.0 // indirect
 	github.com/eapache/go-resiliency v1.4.0 // indirect
 	github.com/eapache/go-xerial-snappy v0.0.0-20230731223053-c322873962e3 // indirect
 	github.com/eapache/queue v1.1.0 // indirect
@@ -245,9 +247,9 @@ require (
 	github.com/google/flatbuffers v2.0.8+incompatible // indirect
 	github.com/google/gnostic v0.6.9 // indirect
 	github.com/google/pprof v0.0.0-20221118152302-e6195bd50e26 // indirect
-	github.com/google/s2a-go v0.1.5 // indirect
+	github.com/google/s2a-go v0.1.7 // indirect
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
-	github.com/googleapis/enterprise-certificate-proxy v0.2.5 // indirect
+	github.com/googleapis/enterprise-certificate-proxy v0.3.2 // indirect
 	github.com/googleapis/gax-go/v2 v2.12.0 // indirect
 	github.com/gorilla/css v1.0.0 // indirect
 	github.com/grandcat/zeroconf v1.0.0 // indirect
@@ -302,7 +304,7 @@ require (
 	github.com/lestrrat-go/iter v1.0.2 // indirect
 	github.com/lestrrat-go/option v1.0.1 // indirect
 	github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de // indirect
-	github.com/linkedin/goavro/v2 v2.9.8 // indirect
+	github.com/linkedin/goavro/v2 v2.12.0 // indirect
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
 	github.com/machinebox/graphql v0.2.2 // indirect
 	github.com/magiconair/properties v1.8.6 // indirect
@@ -351,7 +353,9 @@ require (
 	github.com/rabbitmq/amqp091-go v1.8.1 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
+	github.com/riferrei/srclient v0.6.0 // indirect
 	github.com/rs/zerolog v1.28.0 // indirect
+	github.com/santhosh-tekuri/jsonschema/v5 v5.0.0 // indirect
 	github.com/segmentio/asm v1.2.0 // indirect
 	github.com/sendgrid/rest v2.6.9+incompatible // indirect
 	github.com/sendgrid/sendgrid-go v3.13.0+incompatible // indirect
@@ -401,16 +405,16 @@ require (
 	golang.org/x/arch v0.3.0 // indirect
 	golang.org/x/mod v0.14.0 // indirect
 	golang.org/x/oauth2 v0.13.0 // indirect
-	golang.org/x/sys v0.15.0 // indirect
-	golang.org/x/term v0.15.0 // indirect
+	golang.org/x/sys v0.16.0 // indirect
+	golang.org/x/term v0.16.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/time v0.3.0 // indirect
-	golang.org/x/tools v0.16.1 // indirect
+	golang.org/x/tools v0.17.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.2.0 // indirect
-	google.golang.org/api v0.138.0 // indirect
+	google.golang.org/api v0.149.0 // indirect
 	google.golang.org/appengine v1.6.8 // indirect
-	google.golang.org/genproto v0.0.0-20231016165738-49dd2c1f3d0b // indirect
+	google.golang.org/genproto v0.0.0-20231211222908-989df2bf70f3 // indirect
 	gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc // indirect
 	gopkg.in/couchbase/gocb.v1 v1.6.7 // indirect
 	gopkg.in/couchbase/gocbcore.v7 v7.1.18 // indirect
@@ -462,10 +466,11 @@ replace (
 // check for retracted versions: go list -mod=mod -f '{{if .Retracted}}{{.}}{{end}}' -u -m all
 replace github.com/microcosm-cc/bluemonday => github.com/microcosm-cc/bluemonday v1.0.24
 
-// Uncomment for local development for testing with changes in the components-contrib repository.
+// Uncomment for local development for testing with changes in the components-contrib && kit repositories.
 // Don't commit with this uncommented!
 //
 // replace github.com/dapr/components-contrib => ../components-contrib
+// replace github.com/dapr/kit => ../kit
 //
-// Then, run `make modtidy` in this repository.
-// This ensures that go.mod and go.sum are up-to-date.
+// Then, run `make modtidy-all` in this repository.
+// This ensures that go.mod and go.sum are up-to-date for each go.mod file.

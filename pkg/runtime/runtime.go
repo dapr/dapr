@@ -41,6 +41,10 @@ import (
 	nr "github.com/dapr/components-contrib/nameresolution"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/api/grpc"
+	"github.com/dapr/dapr/pkg/api/grpc/manager"
+	"github.com/dapr/dapr/pkg/api/http"
+	"github.com/dapr/dapr/pkg/api/universal"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpEndpointV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/apphealth"
@@ -51,10 +55,6 @@ import (
 	"github.com/dapr/dapr/pkg/config/protocol"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
-	"github.com/dapr/dapr/pkg/grpc"
-	"github.com/dapr/dapr/pkg/grpc/manager"
-	"github.com/dapr/dapr/pkg/grpc/universalapi"
-	"github.com/dapr/dapr/pkg/http"
 	"github.com/dapr/dapr/pkg/httpendpoint"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -96,7 +96,7 @@ type DaprRuntime struct {
 	actorStateStoreLock sync.RWMutex
 	namespace           string
 	podName             string
-	daprUniversalAPI    *universalapi.UniversalAPI
+	daprUniversal       *universal.Universal
 	daprHTTPAPI         http.API
 	daprGRPCAPI         grpc.API
 	operatorClient      operatorv1pb.OperatorClient
@@ -155,9 +155,6 @@ func newDaprRuntime(ctx context.Context,
 
 	grpc := createGRPCManager(sec, runtimeConfig, globalConfig)
 
-	wfe := wfengine.NewWorkflowEngine(runtimeConfig.id, globalConfig.GetWorkflowSpec())
-	wfe.ConfigureGrpcExecutor()
-
 	authz := authorizer.New(authorizer.Options{
 		ID:           runtimeConfig.id,
 		Namespace:    namespace,
@@ -176,27 +173,35 @@ func newDaprRuntime(ctx context.Context,
 	})
 
 	processor := processor.New(processor.Options{
-		ID:               runtimeConfig.id,
-		Namespace:        namespace,
-		IsHTTP:           runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
-		PlacementEnabled: len(runtimeConfig.placementAddresses) > 0,
-		Registry:         runtimeConfig.registry,
-		ComponentStore:   compStore,
-		Meta:             meta,
-		GlobalConfig:     globalConfig,
-		Resiliency:       resiliencyProvider,
-		Mode:             runtimeConfig.mode,
-		PodName:          podName,
-		Standalone:       runtimeConfig.standalone,
-		OperatorClient:   operatorClient,
-		GRPC:             grpc,
-		Channels:         channels,
+		ID:             runtimeConfig.id,
+		Namespace:      namespace,
+		IsHTTP:         runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
+		ActorsEnabled:  len(runtimeConfig.actorsService) > 0,
+		Registry:       runtimeConfig.registry,
+		ComponentStore: compStore,
+		Meta:           meta,
+		GlobalConfig:   globalConfig,
+		Resiliency:     resiliencyProvider,
+		Mode:           runtimeConfig.mode,
+		PodName:        podName,
+		Standalone:     runtimeConfig.standalone,
+		OperatorClient: operatorClient,
+		GRPC:           grpc,
+		Channels:       channels,
 	})
 
 	var reloader *hotreload.Reloader
 	switch runtimeConfig.mode {
 	case modes.KubernetesMode:
-		log.Warnf("hot reloading is not supported in Kubernetes mode")
+		reloader = hotreload.NewOperator(hotreload.OptionsReloaderOperator{
+			PodName:        podName,
+			Namespace:      namespace,
+			Client:         operatorClient,
+			Config:         globalConfig,
+			ComponentStore: compStore,
+			Authorizer:     authz,
+			Processor:      processor,
+		})
 	case modes.StandaloneMode:
 		reloader, err = hotreload.NewDisk(ctx, hotreload.OptionsReloaderDisk{
 			Config:         globalConfig,
@@ -219,7 +224,6 @@ func newDaprRuntime(ctx context.Context,
 		grpc:              grpc,
 		tracerProvider:    nil,
 		resiliency:        resiliencyProvider,
-		workflowEngine:    wfe,
 		appHealthReady:    nil,
 		compStore:         compStore,
 		meta:              meta,
@@ -461,6 +465,11 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 
 	a.flushOutstandingComponents(ctx)
 
+	// Creating workflow engine after components are loaded
+	wfe := wfengine.NewWorkflowEngine(a.runtimeConfig.id, a.globalConfig.GetWorkflowSpec(), a.processor.WorkflowBackend())
+	wfe.ConfigureGrpcExecutor()
+	a.workflowEngine = wfe
+
 	err = a.loadHTTPEndpoints(ctx)
 	if err != nil {
 		log.Warnf("failed to load HTTP endpoints: %s", err)
@@ -481,7 +490,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	a.populateSecretsConfiguration()
 
 	// Create and start the external gRPC server
-	a.daprUniversalAPI = &universalapi.UniversalAPI{
+	a.daprUniversal = universal.New(universal.Options{
 		AppID:                       a.runtimeConfig.id,
 		Logger:                      logger.NewLogger("dapr.api"),
 		CompStore:                   a.compStore,
@@ -491,11 +500,13 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		ShutdownFn:                  a.ShutdownWithWait,
 		AppConnectionConfig:         a.runtimeConfig.appConnectionConfig,
 		GlobalConfig:                a.globalConfig,
-	}
+		WorkflowEngine:              wfe,
+	})
 
 	// Create and start internal and external gRPC servers
 	a.daprGRPCAPI = grpc.NewAPI(grpc.APIOpts{
-		UniversalAPI:          a.daprUniversalAPI,
+		Universal:             a.daprUniversal,
+		Logger:                logger.NewLogger("dapr.grpc.api"),
 		Channels:              a.channels,
 		PubsubAdapter:         a.processor.PubSub(),
 		DirectMessaging:       a.directMessaging,
@@ -588,19 +599,17 @@ func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) (err error) {
 		if err != nil {
 			log.Warn(err)
 		} else {
-			// Workflow engine depends on actor runtime being initialized
-			// This needs to be called before "SetActorsInitDone" on the universal API object to prevent a race condition in workflow methods
-			a.initWorkflowEngine(ctx)
-
-			a.daprUniversalAPI.SetActorRuntime(a.actor)
+			a.daprUniversal.SetActorRuntime(a.actor)
 		}
-	} else {
-		// If actors are not enabled, still invoke SetActorRuntime on the workflow engine with `nil` to unblock startup
-		a.workflowEngine.SetActorRuntime(nil)
+	}
+
+	// Initialize workflow engine
+	if err = a.initWorkflowEngine(ctx); err != nil {
+		return err
 	}
 
 	// We set actors as initialized whether we have an actors runtime or not
-	a.daprUniversalAPI.SetActorsInitDone()
+	a.daprUniversal.SetActorsInitDone()
 
 	if cb := a.runtimeConfig.registry.ComponentsCallback(); cb != nil {
 		if err = cb(registry.ComponentRegistry{
@@ -614,19 +623,33 @@ func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) (err error) {
 	return nil
 }
 
-func (a *DaprRuntime) initWorkflowEngine(ctx context.Context) {
+func (a *DaprRuntime) initWorkflowEngine(ctx context.Context) error {
 	wfComponentFactory := wfengine.BuiltinWorkflowFactory(a.workflowEngine)
 
-	a.workflowEngine.SetActorRuntime(a.actor)
-	if reg := a.runtimeConfig.registry.Workflows(); reg != nil {
-		log.Infof("Registering component for dapr workflow engine...")
-		reg.RegisterComponent(wfComponentFactory, "dapr")
-		if !a.processor.AddPendingComponent(ctx, wfengine.ComponentDefinition) {
-			log.Warn("failed to initialize Dapr workflow component")
+	// If actors are not enabled, still invoke SetActorRuntime on the workflow engine with `nil` to unblock startup
+	if abe, ok := a.workflowEngine.Backend.(interface {
+		SetActorRuntime(ctx context.Context, actorRuntime actors.ActorRuntime)
+	}); ok {
+		log.Info("Configuring workflow engine with actors backend")
+		var actorRuntime actors.ActorRuntime
+		if a.runtimeConfig.ActorsEnabled() {
+			actorRuntime = a.actor
 		}
-	} else {
-		log.Infof("No workflow registry available, not registering Dapr workflow component...")
+		abe.SetActorRuntime(ctx, actorRuntime)
 	}
+
+	reg := a.runtimeConfig.registry.Workflows()
+	if reg == nil {
+		log.Info("No workflow registry available, not registering Dapr workflow component.")
+		return nil
+	}
+
+	log.Infof("Registering component for dapr workflow engine...")
+	reg.RegisterComponent(wfComponentFactory, "dapr")
+	if !a.processor.AddPendingComponent(ctx, wfengine.ComponentDefinition) {
+		log.Warn("failed to initialize Dapr workflow component")
+	}
+	return nil
 }
 
 // initPluggableComponents discover pluggable components and initialize with their respective registries.
@@ -714,6 +737,7 @@ func (a *DaprRuntime) initDirectMessaging(resolver nr.Resolver) {
 		Resiliency:         a.resiliency,
 		CompStore:          a.compStore,
 	})
+	a.runnerCloser.AddCloser(a.directMessaging)
 }
 
 func (a *DaprRuntime) initProxy() {
@@ -729,7 +753,7 @@ func (a *DaprRuntime) initProxy() {
 
 func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int, allowedOrigins string, pipeline httpMiddleware.Pipeline) error {
 	a.daprHTTPAPI = http.NewAPI(http.APIOpts{
-		UniversalAPI:          a.daprUniversalAPI,
+		Universal:             a.daprUniversal,
 		Channels:              a.channels,
 		DirectMessaging:       a.directMessaging,
 		PubsubAdapter:         a.processor.PubSub(),
@@ -908,19 +932,20 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 		log.Info("actors: state store is not configured - this is okay for clients but services with hosted actors will fail to initialize!")
 	}
 	actorConfig := actors.NewConfig(actors.ConfigOpts{
-		HostAddress:        a.hostAddress,
-		AppID:              a.runtimeConfig.id,
-		PlacementAddresses: a.runtimeConfig.placementAddresses,
-		Port:               a.runtimeConfig.internalGRPCPort,
-		Namespace:          a.namespace,
-		AppConfig:          a.appConfig,
-		HealthHTTPClient:   a.channels.AppHTTPClient(),
-		HealthEndpoint:     a.channels.AppHTTPEndpoint(),
-		AppChannelAddress:  a.runtimeConfig.appConnectionConfig.ChannelAddress,
-		PodName:            getPodName(),
+		HostAddress:       a.hostAddress,
+		AppID:             a.runtimeConfig.id,
+		ActorsService:     a.runtimeConfig.actorsService,
+		RemindersService:  a.runtimeConfig.remindersService,
+		Port:              a.runtimeConfig.internalGRPCPort,
+		Namespace:         a.namespace,
+		AppConfig:         a.appConfig,
+		HealthHTTPClient:  a.channels.AppHTTPClient(),
+		HealthEndpoint:    a.channels.AppHTTPEndpoint(),
+		AppChannelAddress: a.runtimeConfig.appConnectionConfig.ChannelAddress,
+		PodName:           getPodName(),
 	})
 
-	act := actors.NewActors(actors.ActorsOpts{
+	act, err := actors.NewActors(actors.ActorsOpts{
 		AppChannel:       a.channels.AppChannel(),
 		GRPCConnectionFn: a.grpc.GetGRPCConnection,
 		Config:           actorConfig,
@@ -932,12 +957,15 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 		StateTTLEnabled: a.globalConfig.IsFeatureEnabled(config.ActorStateTTL),
 		Security:        a.sec,
 	})
-	err = act.Init(ctx)
-	if err == nil {
-		a.actor = act
-		return nil
+	if err != nil {
+		return rterrors.NewInit(rterrors.InitFailure, "actors", err)
 	}
-	return rterrors.NewInit(rterrors.InitFailure, "actors", err)
+	err = act.Init(ctx)
+	if err != nil {
+		return rterrors.NewInit(rterrors.InitFailure, "actors", err)
+	}
+	a.actor = act
+	return nil
 }
 
 func (a *DaprRuntime) loadComponents(ctx context.Context) error {
@@ -987,18 +1015,16 @@ func (a *DaprRuntime) flushOutstandingHTTPEndpoints(ctx context.Context) {
 	log.Info("Waiting for all outstanding http endpoints to be processed…")
 	// We flush by sending a no-op http endpoint. Since the processHTTPEndpoints goroutine only reads one http endpoint at a time,
 	// We know that once the no-op http endpoint is read from the channel, all previous http endpoints will have been fully processed.
-	if a.processor.AddPendingEndpoint(ctx, httpEndpointV1alpha1.HTTPEndpoint{}) {
-		log.Info("All outstanding http endpoints processed")
-	}
+	a.processor.AddPendingEndpoint(ctx, httpEndpointV1alpha1.HTTPEndpoint{})
+	log.Info("All outstanding http endpoints processed")
 }
 
 func (a *DaprRuntime) flushOutstandingComponents(ctx context.Context) {
 	log.Info("Waiting for all outstanding components to be processed…")
 	// We flush by sending a no-op component. Since the processComponents goroutine only reads one component at a time,
 	// We know that once the no-op component is read from the channel, all previous components will have been fully processed.
-	if a.processor.AddPendingComponent(ctx, componentsV1alpha1.Component{}) {
-		log.Info("All outstanding components processed")
-	}
+	a.processor.AddPendingComponent(ctx, componentsV1alpha1.Component{})
+	log.Info("All outstanding components processed")
 }
 
 func (a *DaprRuntime) loadHTTPEndpoints(ctx context.Context) error {

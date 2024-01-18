@@ -33,10 +33,10 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/dapr/dapr/pkg/api/http/endpoints"
 	"github.com/dapr/dapr/pkg/config"
 	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
-	"github.com/dapr/dapr/pkg/http/endpoints"
 	"github.com/dapr/dapr/pkg/responsewriter"
 )
 
