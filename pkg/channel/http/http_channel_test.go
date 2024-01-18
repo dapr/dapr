@@ -841,7 +841,7 @@ func TestNoInvalidTraceContext(t *testing.T) {
 	traceparent, hasTraceparent := actual["Traceparent"]
 	require.NoError(t, err)
 	if hasTraceparent {
-		assert.NotEqual(t, traceparent, "00-00000000000000000000000000000000-0000000000000000-00")
+		assert.NotEqual(t, "00-00000000000000000000000000000000-0000000000000000-00", traceparent)
 	}
 	testServer.Close()
 }
