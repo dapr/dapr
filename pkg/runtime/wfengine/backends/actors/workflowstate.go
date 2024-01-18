@@ -49,10 +49,9 @@ type workflowState struct {
 }
 
 type workflowStateMetadata struct {
-	InboxLength       int
-	HistoryLength     int
-	Generation        uint64
-	WorkflowStartTime time.Time
+	InboxLength   int
+	HistoryLength int
+	Generation    uint64
 }
 
 func NewWorkflowState(config actorsBackendConfig) *workflowState {
