@@ -76,6 +76,10 @@ func New(t *testing.T, fopts ...Option) *Kubernetes {
 		w.Write([]byte(apisDaprV1alpha1))
 	})
 
+	handler.HandleFunc("/apis/dapr.io/v2alpha1", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(apisDaprV2alpha1))
+	})
+
 	handler.HandleFunc("/apis/apps/v1", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(apisAppsV1))
 	})
