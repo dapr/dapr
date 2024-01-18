@@ -17,12 +17,13 @@ import (
 	"context"
 	"net/http"
 	"strconv"
-	"sync"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
@@ -38,18 +39,15 @@ func init() {
 // initerror tests that Daprd will block actor calls until actors have been
 // initialized.
 type initerror struct {
-	daprd         *daprd.Daprd
-	place         *placement.Placement
-	configCalled  chan struct{}
-	blockConfig   chan struct{}
-	healthzCalled chan struct{}
-	once          sync.Once
+	daprd        *daprd.Daprd
+	place        *placement.Placement
+	configCalled chan struct{}
+	blockConfig  chan struct{}
 }
 
 func (i *initerror) Setup(t *testing.T) []framework.Option {
 	i.configCalled = make(chan struct{})
 	i.blockConfig = make(chan struct{})
-	i.healthzCalled = make(chan struct{})
 
 	handler := http.NewServeMux()
 	handler.HandleFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
@@ -59,9 +57,6 @@ func (i *initerror) Setup(t *testing.T) []framework.Option {
 	})
 	handler.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		i.once.Do(func() {
-			close(i.healthzCalled)
-		})
 	})
 	handler.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`OK`))
@@ -73,8 +68,6 @@ func (i *initerror) Setup(t *testing.T) []framework.Option {
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithPlacementAddresses(i.place.Address()),
 		daprd.WithAppPort(srv.Port()),
-		// Daprd is super noisy in debug mode when connecting to placement.
-		daprd.WithLogLevel("info"),
 	)
 
 	return []framework.Option{
@@ -106,13 +99,12 @@ func (i *initerror) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, resp.Body.Close())
 	}
 
-	close(i.blockConfig)
+	meta, err := i.daprd.GRPCClient(t, ctx).GetMetadata(ctx, new(rtv1.GetMetadataRequest))
+	require.NoError(t, err)
+	assert.Empty(t, meta.GetActorRuntime().GetActiveActors())
+	assert.Equal(t, rtv1.ActorRuntime_INITIALIZING, meta.GetActorRuntime().GetRuntimeStatus())
 
-	select {
-	case <-i.healthzCalled:
-	case <-time.After(time.Second * 15):
-		t.Fatal("timed out waiting for healthz call")
-	}
+	close(i.blockConfig)
 
 	req, err = http.NewRequestWithContext(ctx, http.MethodPost, daprdURL, nil)
 	require.NoError(t, err)
@@ -120,4 +112,11 @@ func (i *initerror) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	require.NoError(t, resp.Body.Close())
+
+	meta, err = i.daprd.GRPCClient(t, ctx).GetMetadata(ctx, new(rtv1.GetMetadataRequest))
+	require.NoError(t, err)
+	if assert.Len(t, meta.GetActorRuntime().GetActiveActors(), 1) {
+		assert.Equal(t, "myactortype", meta.GetActorRuntime().GetActiveActors()[0].GetType())
+	}
+	assert.Equal(t, rtv1.ActorRuntime_RUNNING, meta.GetActorRuntime().GetRuntimeStatus())
 }
