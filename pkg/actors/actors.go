@@ -34,15 +34,13 @@ import (
 
 	"github.com/dapr/components-contrib/state"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
+	"github.com/dapr/dapr/pkg/actors/health"
 	"github.com/dapr/dapr/pkg/actors/internal"
-	"github.com/dapr/dapr/pkg/actors/placement"
-	"github.com/dapr/dapr/pkg/actors/reminders"
 	"github.com/dapr/dapr/pkg/actors/timers"
 	"github.com/dapr/dapr/pkg/channel"
 	configuration "github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
-	"github.com/dapr/dapr/pkg/health"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -124,6 +122,7 @@ type actorsRuntime struct {
 	internalActors       map[string]InternalActor
 	internalActorChannel *internalActorChannel
 	sec                  security.Handler
+	checker              *health.Checker
 	wg                   sync.WaitGroup
 	closed               atomic.Bool
 	closeCh              chan struct{}
@@ -152,11 +151,11 @@ type ActorsOpts struct {
 }
 
 // NewActors create a new actors runtime with given config.
-func NewActors(opts ActorsOpts) ActorRuntime {
+func NewActors(opts ActorsOpts) (ActorRuntime, error) {
 	return newActorsWithClock(opts, &clock.RealClock{})
 }
 
-func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) ActorRuntime {
+func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) (ActorRuntime, error) {
 	a := &actorsRuntime{
 		appChannel:           opts.AppChannel,
 		grpcConnectionFn:     opts.GRPCConnectionFn,
@@ -180,18 +179,33 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) ActorRuntime {
 
 	// Init reminders and placement
 	providerOpts := internal.ActorsProviderOptions{
-		Config:      a.actorsConfig.Config,
-		Security:    a.sec,
-		AppHealthFn: a.getAppHealthCheckChan,
-		Clock:       a.clock,
-		APILevel:    &a.apiLevel,
-		Resiliency:  a.resiliency,
+		Config:   a.actorsConfig.Config,
+		Security: a.sec,
+		AppHealthFn: func(ctx context.Context) <-chan bool {
+			if a.checker == nil {
+				return nil
+			}
+			return a.checker.HealthChannel()
+		},
+		Clock:      a.clock,
+		APILevel:   &a.apiLevel,
+		Resiliency: a.resiliency,
 	}
-	a.actorsReminders = reminders.NewRemindersProvider(providerOpts)
+
+	// Initialize the placement client if we don't have a mocked one already
 	if a.placement == nil {
-		// Initialize the placement client if we don't have a mocked one already
-		a.placement = placement.NewActorPlacement(providerOpts)
+		factory, fErr := opts.Config.GetPlacementProvider()
+		if fErr != nil {
+			return nil, fmt.Errorf("failed to initialize placement provider: %w", fErr)
+		}
+		a.placement = factory(providerOpts)
 	}
+
+	factory, err := opts.Config.GetRemindersProvider(a.placement)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize reminders provider: %w", err)
+	}
+	a.actorsReminders = factory(providerOpts)
 
 	a.actorsReminders.SetExecuteReminderFn(a.executeReminder)
 	a.actorsReminders.SetStateStoreProviderFn(a.stateStore)
@@ -205,7 +219,7 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) ActorRuntime {
 
 	a.timers.SetExecuteTimerFn(a.executeTimer)
 
-	return a
+	return a, nil
 }
 
 func (a *actorsRuntime) isActorLocallyHosted(ctx context.Context, actorType string, actorID string) (isLocal bool, actorAddress string) {
@@ -240,8 +254,8 @@ func (a *actorsRuntime) Init(ctx context.Context) (err error) {
 		return errors.New("actors runtime has already been closed")
 	}
 
-	if len(a.actorsConfig.PlacementAddresses) == 0 {
-		return errors.New("actors: couldn't connect to placement service: address is empty")
+	if len(a.actorsConfig.ActorsService) == 0 {
+		return errors.New("actors: couldn't connect to actors service: address is empty")
 	}
 
 	hat := a.actorsConfig.Config.HostedActorTypes.ListActorTypes()
@@ -260,6 +274,19 @@ func (a *actorsRuntime) Init(ctx context.Context) (err error) {
 		a.drainRebalancedActors()
 		a.actorsReminders.OnPlacementTablesUpdated(ctx)
 	})
+
+	a.checker, err = a.getAppHealthChecker()
+	if err != nil {
+		return fmt.Errorf("actors: couldn't create health check: %w", err)
+	}
+
+	if a.checker != nil {
+		a.wg.Add(1)
+		go func() {
+			defer a.wg.Done()
+			a.checker.Run(ctx)
+		}()
+	}
 
 	for _, actorType := range hat {
 		err = a.placement.AddHostedActorType(actorType, a.actorsConfig.GetIdleTimeoutForType(actorType))
@@ -286,26 +313,27 @@ func (a *actorsRuntime) Init(ctx context.Context) (err error) {
 	return nil
 }
 
-func (a *actorsRuntime) getAppHealthCheckChan(ctx context.Context) <-chan bool {
+func (a *actorsRuntime) getAppHealthChecker() (*health.Checker, error) {
 	if len(a.actorsConfig.Config.HostedActorTypes.ListActorTypes()) == 0 || a.appChannel == nil {
-		return nil
+		return nil, nil
 	}
 
 	// Be careful to configure healthz endpoint option. If app healthz returns unhealthy status, Dapr will
 	// disconnect from placement to remove the node from consistent hashing ring.
 	// i.e if app is busy state, the healthz status would be flaky, which leads to frequent
 	// actor rebalancing. It will impact the entire service.
-	return a.getAppHealthCheckChanWithOptions(ctx,
+	return a.getAppHealthCheckerWithOptions(
 		health.WithFailureThreshold(4),
-		health.WithInterval(5*time.Second),
+		health.WithHealthyStateInterval(5*time.Second),
+		health.WithUnHealthyStateInterval(time.Second/2),
 		health.WithRequestTimeout(2*time.Second),
 		health.WithHTTPClient(a.actorsConfig.HealthHTTPClient),
 	)
 }
 
-func (a *actorsRuntime) getAppHealthCheckChanWithOptions(ctx context.Context, opts ...health.Option) <-chan bool {
+func (a *actorsRuntime) getAppHealthCheckerWithOptions(opts ...health.Option) (*health.Checker, error) {
 	opts = append(opts, health.WithAddress(a.actorsConfig.HealthEndpoint+"/healthz"))
-	return health.StartEndpointHealthCheck(ctx, opts...)
+	return health.New(opts...)
 }
 
 func constructCompositeKey(keys ...string) string {
@@ -351,8 +379,9 @@ func (a *actorsRuntime) haltAllActors() error {
 			err := a.haltActor(a.getActorTypeAndIDFromKey(actorKey))
 			if err != nil {
 				errCh <- fmt.Errorf("failed to deactivate actor '%s': %v", actorKey, err)
+			} else {
+				errCh <- nil
 			}
-			errCh <- nil
 		}(key)
 		return true
 	})
@@ -1091,19 +1120,20 @@ func isInternalActor(actorType string) bool {
 func (a *actorsRuntime) Close() error {
 	defer a.wg.Wait()
 
+	var errs []error
 	if a.closed.CompareAndSwap(false, true) {
-		defer close(a.closeCh)
-		errs := []error{}
+		defer func() { close(a.closeCh) }()
+		if a.checker != nil {
+			a.checker.Close()
+		}
 		if a.placement != nil {
-			err := a.placement.Close()
-			if err != nil {
+			if err := a.placement.Close(); err != nil {
 				errs = append(errs, fmt.Errorf("failed to close placement service: %w", err))
 			}
 		}
-		return errors.Join(errs...)
 	}
 
-	return nil
+	return errors.Join(errs...)
 }
 
 // ValidateHostEnvironment validates that actors can be initialized properly given a set of parameters

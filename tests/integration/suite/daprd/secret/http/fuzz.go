@@ -25,6 +25,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	fuzz "github.com/google/gofuzz"
 	"github.com/stretchr/testify/assert"
@@ -118,6 +119,10 @@ func (f *fuzzsecret) Run(t *testing.T, ctx context.Context) {
 	f.daprd.WaitUntilRunning(t, ctx)
 
 	client := util.HTTPClient(t)
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Len(c, util.GetMetaComponents(c, ctx, client, f.daprd.HTTPPort()), 2)
+	}, time.Second*20, time.Millisecond*100)
 
 	pt := util.NewParallel(t)
 	for key, value := range f.values {

@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -32,6 +33,7 @@ import (
 	"github.com/dapr/dapr/pkg/placement/hashing"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
 )
@@ -104,11 +106,14 @@ type actorPlacement struct {
 	closeCh chan struct{}
 
 	resiliency resiliency.Provider
+
+	virtualNodesCache *hashing.VirtualNodesCache
 }
 
 // NewActorPlacement initializes ActorPlacement for the actor service.
 func NewActorPlacement(opts internal.ActorsProviderOptions) internal.PlacementService {
-	servers := addDNSResolverPrefix(opts.Config.PlacementAddresses)
+	addrs := utils.ParseServiceAddr(strings.TrimPrefix(opts.Config.ActorsService, "placement:"))
+	servers := addDNSResolverPrefix(addrs)
 	return &actorPlacement{
 		config:     opts.Config,
 		serverAddr: servers,
@@ -116,11 +121,13 @@ func NewActorPlacement(opts internal.ActorsProviderOptions) internal.PlacementSe
 		client:          newPlacementClient(getGrpcOptsGetter(servers, opts.Security)),
 		placementTables: &hashing.ConsistentHashTables{Entries: make(map[string]*hashing.Consistent)},
 
-		actorTypes:    []string{},
-		unblockSignal: make(chan struct{}, 1),
-		appHealthFn:   opts.AppHealthFn,
-		closeCh:       make(chan struct{}),
-		resiliency:    opts.Resiliency,
+		actorTypes:        []string{},
+		unblockSignal:     make(chan struct{}, 1),
+		appHealthFn:       opts.AppHealthFn,
+		closeCh:           make(chan struct{}),
+		resiliency:        opts.Resiliency,
+		apiLevel:          opts.APILevel.Load(),
+		virtualNodesCache: hashing.NewVirtualNodesCache(),
 	}
 }
 
@@ -156,7 +163,7 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 	p.appHealthy.Store(true)
 	p.resetPlacementTables()
 
-	if !p.establishStreamConn(ctx) {
+	if !p.establishStreamConn(ctx, internal.ActorAPILevel) {
 		return nil
 	}
 
@@ -198,7 +205,7 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 			if !p.running.Load() {
 				break
 			}
-			p.establishStreamConn(ctx)
+			p.establishStreamConn(ctx, internal.ActorAPILevel)
 		}
 	}()
 
@@ -283,7 +290,10 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 			// No delay if stream connection is not alive.
 			if p.client.isConnected() {
 				diag.DefaultMonitoring.ActorStatusReported("send")
-				time.Sleep(statusReportHeartbeatInterval)
+				select {
+				case <-time.After(statusReportHeartbeatInterval):
+				case <-p.closeCh:
+				}
 			}
 		}
 	}()
@@ -369,7 +379,7 @@ func (p *actorPlacement) doLookupActor(ctx context.Context, actorType, actorID s
 }
 
 //nolint:nosnakecase
-func (p *actorPlacement) establishStreamConn(ctx context.Context) (established bool) {
+func (p *actorPlacement) establishStreamConn(ctx context.Context, apiLevel uint32) (established bool) {
 	// Backoff for reconnecting in case of errors
 	bo := backoff.NewExponentialBackOff()
 	bo.InitialInterval = placementReconnectMinInterval
@@ -386,7 +396,10 @@ func (p *actorPlacement) establishStreamConn(ctx context.Context) (established b
 		// Stop reconnecting to placement until app is healthy.
 		if !p.appHealthy.Load() {
 			// We are not using an exponential backoff here because we haven't begun to establish connections yet
-			time.Sleep(placementReadinessWaitInterval)
+			select {
+			case <-p.closeCh:
+			case <-time.After(placementReadinessWaitInterval):
+			}
 			continue
 		}
 
@@ -401,7 +414,7 @@ func (p *actorPlacement) establishStreamConn(ctx context.Context) (established b
 			log.Debug("try to connect to placement service: " + serverAddr)
 		}
 
-		err := p.client.connectToServer(ctx, serverAddr)
+		err := p.client.connectToServer(ctx, serverAddr, apiLevel)
 		if err == errEstablishingTLSConn {
 			return false
 		}
@@ -426,6 +439,8 @@ func (p *actorPlacement) establishStreamConn(ctx context.Context) (established b
 			select {
 			case <-time.After(bo.NextBackOff()):
 			case <-ctx.Done():
+				return false
+			case <-p.closeCh:
 				return false
 			}
 			continue
@@ -532,7 +547,14 @@ func (p *actorPlacement) updatePlacements(in *v1pb.PlacementTables) {
 			for lk, lv := range v.GetLoadMap() {
 				loadMap[lk] = hashing.NewHost(lv.GetName(), lv.GetId(), lv.GetLoad(), lv.GetPort())
 			}
-			p.placementTables.Entries[k] = hashing.NewFromExisting(v.GetHosts(), v.GetSortedSet(), loadMap)
+
+			// TODO in v1.15 remove the check for versions < 1.13
+			// only keep `hashing.NewFromExisting`
+			if in.GetReplicationFactor() > 0 && len(v.GetHosts()) == 0 {
+				p.placementTables.Entries[k] = hashing.NewFromExisting(loadMap, int(in.GetReplicationFactor()), p.virtualNodesCache)
+			} else {
+				p.placementTables.Entries[k] = hashing.NewFromExistingWithVirtNodes(v.GetHosts(), v.GetSortedSet(), loadMap)
+			}
 		}
 
 		updated = true

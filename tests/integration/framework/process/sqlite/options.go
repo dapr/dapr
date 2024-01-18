@@ -15,9 +15,11 @@ package sqlite
 
 // options contains the options for using a SQLite database in integration tests.
 type options struct {
-	name            string
-	actorStateStore bool
-	metadata        map[string]string
+	name              string
+	isActorStateStore bool
+	metadata          map[string]string
+	migrations        []string
+	execs             []string
 }
 
 // WithName sets the name for the state store.
@@ -31,7 +33,7 @@ func WithName(name string) Option {
 // WithActorStateStore configures whether the state store is enabled as actor state store.
 func WithActorStateStore(enabled bool) Option {
 	return func(o *options) {
-		o.actorStateStore = enabled
+		o.isActorStateStore = enabled
 	}
 }
 
@@ -39,6 +41,36 @@ func WithActorStateStore(enabled bool) Option {
 // This can be invoked multiple times.
 func WithMetadata(key, value string) Option {
 	return func(o *options) {
+		if o.metadata == nil {
+			o.metadata = make(map[string]string)
+		}
 		o.metadata[key] = value
+	}
+}
+
+// WithCreateStateTables configures whether the state store should create the state tables.
+func WithCreateStateTables() Option {
+	return func(o *options) {
+		o.migrations = append(o.migrations, `
+CREATE TABLE metadata (
+  key text NOT NULL PRIMARY KEY,
+  value text NOT NULL
+);
+INSERT INTO metadata VALUES('migrations','1');
+CREATE TABLE state (
+  key TEXT NOT NULL PRIMARY KEY,
+  value TEXT NOT NULL,
+  is_binary BOOLEAN NOT NULL,
+  etag TEXT NOT NULL,
+  expiration_time TIMESTAMP DEFAULT NULL,
+  update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);`)
+	}
+}
+
+// WithExecs defines the execs to run against the database on Run.
+func WithExecs(execs ...string) Option {
+	return func(o *options) {
+		o.execs = execs
 	}
 }

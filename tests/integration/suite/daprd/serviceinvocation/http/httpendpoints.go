@@ -68,7 +68,7 @@ func (h *httpendpoints) Setup(t *testing.T) []framework.Option {
 			w.Write([]byte("ok-TLS"))
 		})
 
-		return prochttp.New(t, prochttp.WithHandler(handler), prochttp.WithTLS(t, pki1.RootCertPEM, pki1.LeafCertPEM, pki1.LeafPKPEM))
+		return prochttp.New(t, prochttp.WithHandler(handler), prochttp.WithMTLS(t, pki1.RootCertPEM, pki1.LeafCertPEM, pki1.LeafPKPEM))
 	}
 
 	srv1 := newHTTPServer()
@@ -219,7 +219,7 @@ func (h *httpendpoints) Run(t *testing.T, ctx context.Context) {
 						status, body := doReq(http.MethodGet, ts.url, ts.headers)
 						assert.Equal(t, expTLSCode, status)
 						if runtime.GOOS == "windows" &&
-							strings.Contains(body, "wsasenv: An existing connection was forcibly closed by the remote host.") {
+							strings.Contains(body, "An existing connection was forcibly closed by the remote host.") {
 							t.Logf("retrying due to: %s", body)
 							select {
 							case <-ctx.Done():
