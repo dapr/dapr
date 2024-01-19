@@ -105,7 +105,7 @@ func (s *slowappstartup) Run(t *testing.T, ctx context.Context) {
 		resp, err = client.InvokeService(ctx, &rtv1.InvokeServiceRequest{
 			Id: s.daprd.AppID(),
 			Message: &commonv1.InvokeRequest{
-				Method: "Ping",
+				Method: "TiggerCallbBack",
 				Data:   req,
 			},
 		})
