@@ -250,19 +250,9 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 				registeredMemberID = req.GetName()
 				p.addStreamConn(stream)
 				// We need to use a background context here so dissemination isn't tied to the context of this stream
-				// TODO: If each sidecar can report table version, then placement
-				// doesn't need to disseminate tables to each sidecar.
+				placementTable := p.raftNode.FSM().PlacementState(p.minAPILevel < NoVirtualNodesInPlacementTablesAPILevel)
 
-				placementTable := &placementv1pb.PlacementTables{}
-				placementTableWithVirtualNodes := &placementv1pb.PlacementTables{}
-				apiLevel := req.GetApiLevel()
-				if apiLevel >= NoVirtualNodesInPlacementTablesAPILevel {
-					placementTable = p.raftNode.FSM().PlacementState(false)
-				} else {
-					placementTableWithVirtualNodes = p.raftNode.FSM().PlacementState(true)
-				}
-
-				err = p.performTablesUpdate(context.Background(), []placementGRPCStream{stream}, placementTable, placementTableWithVirtualNodes)
+				err = p.performTablesUpdate(context.Background(), []placementGRPCStream{stream}, placementTable)
 				if err != nil {
 					return err
 				}
