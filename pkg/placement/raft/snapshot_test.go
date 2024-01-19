@@ -42,7 +42,7 @@ func (m *MockSnapShotSink) Close() error {
 
 func TestPersist(t *testing.T) {
 	// arrange
-	fsm := newFSM()
+	fsm := newFSM(10)
 	testMember := DaprHostMember{
 		Name:     "127.0.0.1:3030",
 		AppID:    "fakeAppID",
@@ -65,7 +65,7 @@ func TestPersist(t *testing.T) {
 	snap.Persist(fakeSink)
 
 	// assert
-	restoredState := newDaprHostMemberState()
+	restoredState := newDaprHostMemberState(10)
 	err = restoredState.restore(buf)
 	require.NoError(t, err)
 

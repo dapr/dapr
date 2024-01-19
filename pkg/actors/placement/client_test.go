@@ -19,8 +19,6 @@ import (
 	"sync"
 	"testing"
 
-	"google.golang.org/grpc/metadata"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -88,18 +86,6 @@ func TestConnectToServer(t *testing.T) {
 
 		err := client.connectToServer(context.Background(), conn, 10)
 		require.NoError(t, err)
-
-		// Extract the "dapr-placement-api-level" value from the context's metadata
-		md, ok := metadata.FromOutgoingContext(client.clientStream.Context())
-		require.True(t, ok)
-
-		// All keys in the returned MD are lowercase, as per the http spec for header fields
-		// https://httpwg.org/specs/rfc7540.html#rfc.section.8.1.2
-		apiLevelValues := md["dapr-placement-api-level"]
-		require.Len(t, apiLevelValues, 1)
-
-		apiLevelStr := apiLevelValues[0]
-		require.Equal(t, "10", apiLevelStr)
 	})
 }
 

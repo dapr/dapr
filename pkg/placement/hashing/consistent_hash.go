@@ -34,8 +34,6 @@ import (
 	"golang.org/x/crypto/blake2b"
 )
 
-var replicationFactor int
-
 // ErrNoHosts is an error for no hosts.
 var ErrNoHosts = errors.New("no hosts added")
 
@@ -55,10 +53,11 @@ type Host struct {
 
 // Consistent represents a data structure for consistent hashing.
 type Consistent struct {
-	hosts     map[uint64]string
-	sortedSet []uint64
-	loadMap   map[string]*Host
-	totalLoad int64
+	hosts             map[uint64]string
+	sortedSet         []uint64
+	loadMap           map[string]*Host
+	totalLoad         int64
+	replicationFactor int
 
 	sync.RWMutex
 }
@@ -74,20 +73,22 @@ func NewHost(name, id string, load int64, port int64) *Host {
 }
 
 // NewConsistentHash returns a new consistent hash.
-func NewConsistentHash() *Consistent {
+func NewConsistentHash(replicationFactory int) *Consistent {
 	return &Consistent{
-		hosts:     map[uint64]string{},
-		sortedSet: []uint64{},
-		loadMap:   map[string]*Host{},
+		hosts:             map[uint64]string{},
+		sortedSet:         []uint64{},
+		loadMap:           map[string]*Host{},
+		replicationFactor: replicationFactory,
 	}
 }
 
 // NewFromExisting creates a new consistent hash from existing values.
 func NewFromExisting(loadMap map[string]*Host, replicationFactor int, virtualNodesCache *VirtualNodesCache) *Consistent {
 	newHash := &Consistent{
-		hosts:     map[uint64]string{},
-		sortedSet: []uint64{},
-		loadMap:   loadMap,
+		hosts:             map[uint64]string{},
+		sortedSet:         []uint64{},
+		loadMap:           loadMap,
+		replicationFactor: replicationFactor,
 	}
 
 	for hostName := range loadMap {
@@ -167,9 +168,8 @@ func (hc *VirtualNodesCache) setHashes(replicationFactor int64, host string) []u
 	hashMap := newHashMap()
 	hashMap.hashes[host] = make([]uint64, replicationFactor)
 
-	c := &Consistent{}
 	for i := 0; i < int(replicationFactor); i++ {
-		hashMap.hashes[host][i] = c.hash(host + strconv.Itoa(i))
+		hashMap.hashes[host][i] = hash(host + strconv.Itoa(i))
 	}
 
 	hc.data[replicationFactor] = hashMap
@@ -179,7 +179,7 @@ func (hc *VirtualNodesCache) setHashes(replicationFactor int64, host string) []u
 
 // NewFromExistingWithVirtNodes creates a new consistent hash from existing values with vnodes
 // It's a legacy function needed for backwards compatibility (daprd >= 1.13 with placement < 1.13)
-// TODO in v1.15 remove this function
+// TODO: @elena in v1.15 remove this function
 func NewFromExistingWithVirtNodes(hosts map[uint64]string, sortedSet []uint64, loadMap map[string]*Host) *Consistent {
 	return &Consistent{
 		hosts:     hosts,
@@ -207,15 +207,15 @@ func (c *Consistent) Add(host, id string, port int64) bool {
 
 	c.loadMap[host] = &Host{Name: host, AppID: id, Load: 0, Port: port}
 
-	// TODO in v1.15
+	// TODO: @elena in v1.15
 	// The optimisation of not disseminating vnodes with the placement table was introduced
 	// in 1.13, and the API level was increased to 20, but we still have to support sidecars
 	// running on 1.12 with placement services on 1.13. That's why we are keeping the
 	// vhosts in the store in v1.13.
 	// This should be removed in 1.14.
 	// --Start remove--
-	for i := 0; i < replicationFactor; i++ {
-		h := c.hash(host + strconv.Itoa(i))
+	for i := 0; i < c.replicationFactor; i++ {
+		h := hash(host + strconv.Itoa(i))
 		c.hosts[h] = host
 		c.sortedSet = append(c.sortedSet, h)
 	}
@@ -241,7 +241,7 @@ func (c *Consistent) Get(key string) (string, error) {
 		return "", ErrNoHosts
 	}
 
-	h := c.hash(key)
+	h := hash(key)
 	idx := c.search(h)
 	return c.hosts[c.sortedSet[idx]], nil
 }
@@ -271,7 +271,7 @@ func (c *Consistent) GetLeast(key string) (string, error) {
 		return "", ErrNoHosts
 	}
 
-	h := c.hash(key)
+	h := hash(key)
 	idx := c.search(h)
 
 	i := idx
@@ -341,8 +341,8 @@ func (c *Consistent) Remove(host string) bool {
 	c.Lock()
 	defer c.Unlock()
 
-	for i := 0; i < replicationFactor; i++ {
-		h := c.hash(host + strconv.Itoa(i))
+	for i := 0; i < c.replicationFactor; i++ {
+		h := hash(host + strconv.Itoa(i))
 		delete(c.hosts, h)
 		c.delSlice(h)
 	}
@@ -455,12 +455,7 @@ func (c *Consistent) SortedSet() (sortedSet []uint64) {
 	return sortedSet
 }
 
-func (c *Consistent) hash(key string) uint64 {
+func hash(key string) uint64 {
 	out := blake2b.Sum512([]byte(key))
 	return binary.LittleEndian.Uint64(out[:])
-}
-
-// SetReplicationFactor sets the replication factor for actor placement on vnodes.
-func SetReplicationFactor(factor int) {
-	replicationFactor = factor
 }
