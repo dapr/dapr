@@ -114,7 +114,8 @@ The Helm chart has the follow configuration options that can be supplied:
 | `global.reminders.serviceName` | Name of the service that provides reminders functionality. If empty (the default), uses the built-in reminders capabilities in Dapr sidecars. | |
 | `global.seccompProfile` | SeccompProfile for Dapr control plane services | `""` |
 | `global.rbac.namespaced`                  | Removes cluster wide permissions where applicable  | `false` |
-| `global.argoRolloutServiceReconciler.enabled` | Enable the service reconciler for Dapr-enabled Argo Rollouts         | `false` |
+| `global.argoRolloutServiceReconciler.enabled` | Enable the service reconciler for Dapr-enabled Argo Rollouts        | `false`                 |
+| `global.priorityClassName`                | Adds `priorityClassName` to Dapr pods                                   | `""`                    |
 
 ### Dapr Operator options:
 | Parameter                                  | Description                                                                                                                                                                                   | Default     |
