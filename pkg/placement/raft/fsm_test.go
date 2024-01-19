@@ -18,15 +18,13 @@ import (
 	"io"
 	"testing"
 
-	"github.com/dapr/dapr/pkg/placement/hashing"
-
 	"github.com/hashicorp/raft"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestFSMApply(t *testing.T) {
-	fsm := newFSM()
+	fsm := newFSM(100)
 
 	t.Run("upsertMember", func(t *testing.T) {
 		cmdLog, err := makeRaftLogCommand(MemberUpsert, DaprHostMember{
@@ -79,9 +77,9 @@ func TestFSMApply(t *testing.T) {
 
 func TestRestore(t *testing.T) {
 	// arrange
-	fsm := newFSM()
+	fsm := newFSM(100)
 
-	s := newDaprHostMemberState()
+	s := newDaprHostMemberState(100)
 	s.upsertMember(&DaprHostMember{
 		Name:     "127.0.0.1:8080",
 		AppID:    "FakeID",
@@ -101,9 +99,7 @@ func TestRestore(t *testing.T) {
 }
 
 func TestPlacementStateWithVirtualNodes(t *testing.T) {
-	hashing.SetReplicationFactor(100)
-
-	fsm := newFSM()
+	fsm := newFSM(100)
 	m := DaprHostMember{
 		Name:     "127.0.0.1:3030",
 		AppID:    "fakeAppID",
@@ -134,9 +130,7 @@ func TestPlacementStateWithVirtualNodes(t *testing.T) {
 }
 
 func TestPlacementState(t *testing.T) {
-	hashing.SetReplicationFactor(100)
-
-	fsm := newFSM()
+	fsm := newFSM(100)
 	m := DaprHostMember{
 		Name:     "127.0.0.1:3030",
 		AppID:    "fakeAppID",
