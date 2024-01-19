@@ -67,9 +67,9 @@ func TestMain(m *testing.M) {
 		}
 
 		// Validate multi workflow backend
-		validateMultiWorkflowBackendFailure(testApps, m)
+		validateMultiWorkflowBackendFailure(m)
 		// Validate invalid workflow backend
-		validateInvalidWorkflowBackendFailure(testApps, m)
+		validateInvalidWorkflowBackendFailure(m)
 
 		tr = runner.NewTestRunner("workflowsapp", testApps, comps, nil)
 
@@ -79,9 +79,9 @@ func TestMain(m *testing.M) {
 	}
 }
 
-func validateMultiWorkflowBackendFailure(testApps []kube.AppDescription, m *testing.M) {
+func validateMultiWorkflowBackendFailure(m *testing.M) {
 	var multiBackendTestApps []kube.AppDescription
-	multiBackendTestApps = append(testApps, getTestApp("multibackend"))
+	multiBackendTestApps = append(multiBackendTestApps, getTestApp("multibackend"))
 	multiBackendComps := []kube.ComponentDescription{
 		{
 			Name:     "sqlitebackend2",
@@ -107,9 +107,9 @@ func validateMultiWorkflowBackendFailure(testApps []kube.AppDescription, m *test
 	}
 }
 
-func validateInvalidWorkflowBackendFailure(testApps []kube.AppDescription, m *testing.M) {
+func validateInvalidWorkflowBackendFailure(m *testing.M) {
 	var invalidbackendTestApps []kube.AppDescription
-	invalidbackendTestApps = append(testApps, getTestApp("invalidbackend"))
+	invalidbackendTestApps = append(invalidbackendTestApps, getTestApp("invalidbackend"))
 	invalidbackendComps := []kube.ComponentDescription{
 		{
 			Name:     "invalidbackend",
