@@ -17,11 +17,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 	"sync"
 	"time"
-
-	"google.golang.org/grpc/metadata"
 
 	"google.golang.org/grpc/peer"
 
@@ -37,7 +34,6 @@ const (
 	raftApplyCommandMaxConcurrency          = 10
 	barrierWriteTimeout                     = 2 * time.Minute
 	NoVirtualNodesInPlacementTablesAPILevel = 20
-	GRPCContextKeyAPILevel                  = "dapr-placement-api-level"
 )
 
 // MonitorLeadership is used to monitor if we acquire or lose our role
@@ -330,14 +326,7 @@ func (p *Service) performTableDissemination(ctx context.Context) error {
 	p.disseminateLock.Lock()
 	defer p.disseminateLock.Unlock()
 
-	state := p.raftNode.FSM().PlacementState(false)
-
-	// We only need to calculate the virtual nodes if the min API level is lower than 20,
-	// otherwise, they're calculated in daprd.
-	stateWithVirtualNodes := &v1pb.PlacementTables{}
-	if p.minAPILevel >= NoVirtualNodesInPlacementTablesAPILevel {
-		stateWithVirtualNodes = p.raftNode.FSM().PlacementState(true)
-	}
+	state := p.raftNode.FSM().PlacementState(p.minAPILevel < NoVirtualNodesInPlacementTablesAPILevel)
 
 	log.Infof(
 		"Start disseminating tables. memberUpdateCount: %d, streams: %d, targets: %d, table generation: %s",
@@ -346,7 +335,7 @@ func (p *Service) performTableDissemination(ctx context.Context) error {
 	streamConnPool := make([]placementGRPCStream, len(p.streamConnPool))
 	copy(streamConnPool, p.streamConnPool)
 	p.streamConnPoolLock.RUnlock()
-	if err := p.performTablesUpdate(ctx, streamConnPool, state, stateWithVirtualNodes); err != nil {
+	if err := p.performTablesUpdate(ctx, streamConnPool, state); err != nil {
 		return err
 	}
 	log.Infof(
@@ -364,7 +353,7 @@ func (p *Service) performTableDissemination(ctx context.Context) error {
 // It first locks so no further dapr can be taken it. Once placement table is locked
 // in runtime, it proceeds to update new table to Dapr runtimes and then unlock
 // once all runtimes have been updated.
-func (p *Service) performTablesUpdate(ctx context.Context, hosts []placementGRPCStream, newTable *v1pb.PlacementTables, newTableWithVirtualNodes *v1pb.PlacementTables) error {
+func (p *Service) performTablesUpdate(ctx context.Context, hosts []placementGRPCStream, newTable *v1pb.PlacementTables) error {
 	// TODO: error from disseminationOperation needs to be handle properly.
 	// Otherwise, each Dapr runtime will have inconsistent hashing table.
 	startedAt := p.clock.Now()
@@ -379,29 +368,19 @@ func (p *Service) performTablesUpdate(ctx context.Context, hosts []placementGRPC
 		}
 	}
 
-	// Enforce maximum API level
-	if newTableWithVirtualNodes != nil {
-		if newTableWithVirtualNodes.GetApiLevel() < p.minAPILevel {
-			newTableWithVirtualNodes.ApiLevel = p.minAPILevel
-		}
-		if p.maxAPILevel != nil && newTableWithVirtualNodes.GetApiLevel() > *p.maxAPILevel {
-			newTableWithVirtualNodes.ApiLevel = *p.maxAPILevel
-		}
-	}
-
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
 	// Perform each update on all hosts in sequence
-	err := p.disseminateOperationOnHosts(ctx, hosts, "lock", nil, nil)
+	err := p.disseminateOperationOnHosts(ctx, hosts, "lock", nil)
 	if err != nil {
 		return fmt.Errorf("dissemination of 'lock' failed: %v", err)
 	}
-	err = p.disseminateOperationOnHosts(ctx, hosts, "update", newTable, newTableWithVirtualNodes)
+	err = p.disseminateOperationOnHosts(ctx, hosts, "update", newTable)
 	if err != nil {
 		return fmt.Errorf("dissemination of 'update' failed: %v", err)
 	}
-	err = p.disseminateOperationOnHosts(ctx, hosts, "unlock", nil, nil)
+	err = p.disseminateOperationOnHosts(ctx, hosts, "unlock", nil)
 	if err != nil {
 		return fmt.Errorf("dissemination of 'unlock' failed: %v", err)
 	}
@@ -410,21 +389,12 @@ func (p *Service) performTablesUpdate(ctx context.Context, hosts []placementGRPC
 	return nil
 }
 
-func (p *Service) disseminateOperationOnHosts(ctx context.Context, hosts []placementGRPCStream, operation string, tables *v1pb.PlacementTables, tablesWithVirtualNodes *v1pb.PlacementTables) error {
+func (p *Service) disseminateOperationOnHosts(ctx context.Context, hosts []placementGRPCStream, operation string, tables *v1pb.PlacementTables) error {
 	errCh := make(chan error)
 
 	for i := 0; i < len(hosts); i++ {
 		go func(i int) {
-			// Check if the client (daprd) is running a version that expects the vnodes in the table
-			// Versions pre 1.13 don't set metadata on the stream and expect vnodes in the placement table
-			// Versions 1.13 and above set the ApiLevel as metadata on the stream and don't expect vnodes in the placement table
-			// Dapr Version 1.13 corresponds to API level 20 (as defined in pkg/actors/internal/api_level.go)
-			apiLevel := getHostAPILevel(hosts[i])
-			if apiLevel < NoVirtualNodesInPlacementTablesAPILevel {
-				errCh <- p.disseminateOperation(ctx, hosts[i], operation, tablesWithVirtualNodes)
-			} else {
-				errCh <- p.disseminateOperation(ctx, hosts[i], operation, tables)
-			}
+			errCh <- p.disseminateOperation(ctx, hosts[i], operation, tables)
 		}(i)
 	}
 
@@ -472,24 +442,4 @@ func (p *Service) disseminateOperation(ctx context.Context, target placementGRPC
 		func(err error, d time.Duration) { log.Debugf("Attempting to disseminate again after error: %v", err) },
 		func() { log.Debug("Dissemination successful after failure") },
 	)
-}
-
-func getHostAPILevel(stream placementGRPCStream) int {
-	md, ok := metadata.FromIncomingContext(stream.Context())
-	if !ok {
-		return 0
-	}
-
-	// Extract apiLevel from metadata
-	apiLevel := md.Get(GRPCContextKeyAPILevel)
-	if len(apiLevel) == 0 {
-		return 0
-	}
-
-	level, err := strconv.Atoi(apiLevel[0])
-	if err != nil {
-		return 0
-	}
-
-	return level
 }
