@@ -76,6 +76,7 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 	sidecar.SidecarDropALLCapabilities = i.config.GetDropCapabilities()
 	sidecar.ControlPlaneNamespace = i.controlPlaneNamespace
 	sidecar.ControlPlaneTrustDomain = i.controlPlaneTrustDomain
+	sidecar.SentrySPIFFEID = i.sentrySPIFFEID.String()
 	sidecar.CurrentTrustAnchors = trustAnchors
 	sidecar.CertChain = string(daprdCert)
 	sidecar.CertKey = string(daprdPrivateKey)
