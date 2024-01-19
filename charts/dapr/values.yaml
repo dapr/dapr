@@ -21,6 +21,7 @@ global:
   #   - pullSecret2
   imagePullSecrets: ""
 
+  priorityClassName: ""
   nodeSelector: {}
   tolerations: []
   rbac:
