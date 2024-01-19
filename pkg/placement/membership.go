@@ -31,8 +31,9 @@ import (
 
 const (
 	// raftApplyCommandMaxConcurrency is the max concurrency to apply command log to raft.
-	raftApplyCommandMaxConcurrency = 10
-	barrierWriteTimeout            = 2 * time.Minute
+	raftApplyCommandMaxConcurrency          = 10
+	barrierWriteTimeout                     = 2 * time.Minute
+	NoVirtualNodesInPlacementTablesAPILevel = 20
 )
 
 // MonitorLeadership is used to monitor if we acquire or lose our role
@@ -325,7 +326,8 @@ func (p *Service) performTableDissemination(ctx context.Context) error {
 	p.disseminateLock.Lock()
 	defer p.disseminateLock.Unlock()
 
-	state := p.raftNode.FSM().PlacementState()
+	state := p.raftNode.FSM().PlacementState(p.minAPILevel < NoVirtualNodesInPlacementTablesAPILevel)
+
 	log.Infof(
 		"Start disseminating tables. memberUpdateCount: %d, streams: %d, targets: %d, table generation: %s",
 		cnt, nStreamConnPool, nTargetConns, state.GetVersion())
