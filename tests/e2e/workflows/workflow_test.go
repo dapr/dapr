@@ -55,6 +55,8 @@ func TestMain(m *testing.M) {
 			testApps = append(testApps, getTestApp(backend))
 		}
 
+		testApps = append(testApps, getTestApp("multibackend"))
+
 		comps := []kube.ComponentDescription{
 			{
 				Name:     "sqlitebackend",
@@ -63,6 +65,19 @@ func TestMain(m *testing.M) {
 					"connectionString": {Raw: `""`},
 				},
 				Scopes: []string{appNamePrefix + "-sqlite"},
+			},
+			{
+				Name:     "sqlitebackend2",
+				TypeName: "workflowbackend.sqlite",
+				MetaData: map[string]kube.MetadataValue{
+					"connectionString": {Raw: `""`},
+				},
+				Scopes: []string{appNamePrefix + "-multibackend"},
+			},
+			{
+				Name:     "actorbackend",
+				TypeName: "workflowbackend.actor",
+				Scopes:   []string{appNamePrefix + "-multibackend"},
 			},
 		}
 
@@ -370,4 +385,15 @@ func TestWorkflow(t *testing.T) {
 			t.Run("Start monitor", monitorTest(externalURL, "monitor-"+suffix))
 		})
 	}
+}
+
+func TestWorkflowWithMultipleBackends(t *testing.T) {
+	// Get the ingress external url of test app
+	externalURL := getAppEndpoint(appNamePrefix + "-multibackend")
+	require.NotEmpty(t, externalURL, "external URL must not be empty")
+
+	err := utils.HealthCheckApps(externalURL)
+
+	// Check if test app endpoint is available
+	require.Error(t, err, "cannot create more than one workflow backend component")
 }
