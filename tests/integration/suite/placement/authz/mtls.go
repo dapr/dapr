@@ -98,7 +98,7 @@ func (m *mtls) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
 	client := v1pb.NewPlacementClient(conn)
-	ctx = metadata.AppendToOutgoingContext(ctx, "ApiLevel", strconv.Itoa(m.place.CurrentActorsAPILevel()))
+	ctx = metadata.AppendToOutgoingContext(ctx, "dapr-placement-api-level", strconv.Itoa(m.place.CurrentActorsAPILevel()))
 
 	// Can only create hosts where the app ID match.
 	stream := establishStream(t, ctx, client)
