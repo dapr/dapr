@@ -269,4 +269,8 @@ spec:
     {{- end }}
   {{- end }}
 {{- end }}
+{{- if .Values.global.priorityClassName }}
+      priorityClassName:
+{{ toYaml .Values.global.priorityClassName | indent 8 }}
+{{- end }}
 {{- end }}
