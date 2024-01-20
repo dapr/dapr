@@ -19,6 +19,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: dapr-trust-bundle
+  namespace: {{ .Release.Namespace }}
   labels:
     app: dapr-sentry
     {{- range $key, $value := .Values.global.k8sLabels }}
