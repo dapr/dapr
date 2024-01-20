@@ -247,6 +247,8 @@ github.com/armon/go-radix v0.0.0-20180808171621-7fddfc383310/go.mod h1:ufUuZ+zHj
 github.com/armon/go-radix v1.0.0/go.mod h1:ufUuZ+zHj4x4TnLV4JWEpy2hxWSpsRywHrMgIH9cCH8=
 github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5 h1:0CwZNZbxp69SHPdPJAN/hZIm0C4OItdklCFmMRWYpio=
 github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5/go.mod h1:wHh0iHkYZB8zMSxRWpUBQtwG5a7fFgvEO+odwuTv2gs=
+github.com/artursouza/components-contrib v0.0.0-20240119234530-8ad6e8a6a843 h1:9ORTHb6LuoKo2guOXS6dRVfWMnAXKwuvJfgVL/5Vp+I=
+github.com/artursouza/components-contrib v0.0.0-20240119234530-8ad6e8a6a843/go.mod h1:8O0PgN/d8fEj/lNkkuxOX8AlGwdvJ8RHxCzyZ3skrSo=
 github.com/aryann/difflib v0.0.0-20170710044230-e206f873d14a/go.mod h1:DAHtR1m6lCRdSC2Tm3DSWRPvIPr6xNKyeHdqDQSQT+A=
 github.com/asaskevich/govalidator v0.0.0-20200108200545-475eaeb16496/go.mod h1:oGkLhpf+kjZl6xBf758TQhh5XrAeiJv/7FRz/2spLIg=
 github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 h1:DklsrG3dyBCFEj5IhUbnKptjxatkF07cF2ak3yi77so=
@@ -435,8 +437,6 @@ github.com/dancannon/gorethink v4.0.0+incompatible h1:KFV7Gha3AuqT+gr0B/eKvGhbjm
 github.com/dancannon/gorethink v4.0.0+incompatible/go.mod h1:BLvkat9KmZc1efyYwhz3WnybhRZtgF1K929FD8z1avU=
 github.com/danieljoos/wincred v1.1.2 h1:QLdCxFs1/Yl4zduvBdcHB8goaYk9RARS2SgLLRuAyr0=
 github.com/danieljoos/wincred v1.1.2/go.mod h1:GijpziifJoIBfYh+S7BbkdUTU4LfM+QnGqR5Vl2tAx0=
-github.com/dapr/components-contrib v1.12.1-0.20240116181555-28a3d649a377 h1:X1rjT4wCvQLFS+g3gC71iNOdWtjkR9WKZywf/NCefzM=
-github.com/dapr/components-contrib v1.12.1-0.20240116181555-28a3d649a377/go.mod h1:8O0PgN/d8fEj/lNkkuxOX8AlGwdvJ8RHxCzyZ3skrSo=
 github.com/dapr/kit v0.12.2-0.20240115170833-858719eb78ac h1:hSroth18KVr6BNeADdQ3vQukLuI0F5KsmMbAhEZS5AA=
 github.com/dapr/kit v0.12.2-0.20240115170833-858719eb78ac/go.mod h1:VyHrelNXPbtS/VcQX0Y/uzW0lfEVuveJ+1E5bDys8mo=
 github.com/dave/jennifer v1.4.0/go.mod h1:fIb+770HOpJ2fmN9EPPKOqm1vMGhB+TwXKMZhrIygKg=
