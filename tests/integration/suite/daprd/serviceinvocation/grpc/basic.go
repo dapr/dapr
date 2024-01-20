@@ -92,10 +92,10 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 
 		case "testing_proto_data":
 			// Based on the 'getaccount' call in .Net SDK example
-			if in.Data.TypeUrl != "type.googleapis.com/GetAccountRequest" {
-				return nil, errors.New("unexpected request data's type_url: " + in.Data.TypeUrl)
+			if in.GetData().GetTypeUrl() != "type.googleapis.com/GetAccountRequest" {
+				return nil, errors.New("unexpected request data's type_url: " + in.GetData().GetTypeUrl())
 			}
-			if base64.StdEncoding.EncodeToString(in.Data.Value) != "CgIxNw==" {
+			if base64.StdEncoding.EncodeToString(in.GetData().GetValue()) != "CgIxNw==" {
 				return nil, errors.New("unexpected request data")
 			}
 
@@ -229,9 +229,9 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		require.NotNil(t, resp)
 
-		assert.Equal(t, "type.googleapis.com/Account", resp.Data.TypeUrl)
-		assert.Equal(t, "CgIxNxDIBQ==", base64.StdEncoding.EncodeToString(resp.Data.Value))
-		assert.Equal(t, "", resp.ContentType)
+		assert.Equal(t, "type.googleapis.com/Account", resp.GetData().GetTypeUrl())
+		assert.Equal(t, "CgIxNxDIBQ==", base64.StdEncoding.EncodeToString(resp.GetData().GetValue()))
+		assert.Equal(t, "", resp.GetContentType())
 	})
 
 	t.Run("no method", func(t *testing.T) {
