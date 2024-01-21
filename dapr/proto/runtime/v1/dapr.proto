@@ -1079,6 +1079,8 @@ message TerminateWorkflowRequest {
   string instance_id = 1 [json_name = "instanceID"];
   // Name of the workflow component.
   string workflow_component = 2 [json_name = "workflowComponent"];
+  // Indicates whether this is a non_recursive terminate request
+  bool non_recursive = 3 [json_name = "non_recursive"];
 }
 
 // PauseWorkflowRequest is the request for PauseWorkflowBeta1.
@@ -1115,6 +1117,8 @@ message PurgeWorkflowRequest {
   string instance_id = 1 [json_name = "instanceID"];
   // Name of the workflow component.
   string workflow_component = 2 [json_name = "workflowComponent"];
+  // Indicates whether this is a non_recursive purge request
+  bool non_recursive = 3 [json_name = "non_recursive"];
 }
 
 // ShutdownRequest is the request for Shutdown.

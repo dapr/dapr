@@ -17,8 +17,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -31,11 +34,11 @@ import (
 	clocktesting "k8s.io/utils/clock/testing"
 
 	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/dapr/pkg/actors/health"
 	"github.com/dapr/dapr/pkg/actors/internal"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
-	"github.com/dapr/dapr/pkg/health"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -122,7 +125,7 @@ func (m *mockAppChannel) InvokeMethod(ctx context.Context, req *invokev1.InvokeM
 
 type reentrantAppChannel struct {
 	channel.AppChannel
-	nextCall []*invokev1.InvokeMethodRequest
+	nextCall []*internalsv1pb.InternalInvokeRequest
 	callLog  []string
 	a        *actorsRuntime
 }
@@ -133,16 +136,18 @@ func (r *reentrantAppChannel) InvokeMethod(ctx context.Context, req *invokev1.In
 		nextReq := r.nextCall[0]
 		r.nextCall = r.nextCall[1:]
 
-		if val, ok := req.Metadata()["Dapr-Reentrancy-Id"]; ok {
-			nextReq.AddMetadata(map[string][]string{
-				"Dapr-Reentrancy-Id": val.GetValues(),
-			})
+		if val := req.Metadata()["Dapr-Reentrancy-Id"]; val != nil {
+			if nextReq.Metadata == nil { //nolint:protogetter
+				nextReq.Metadata = make(map[string]*internalsv1pb.ListStringValue)
+			}
+			nextReq.Metadata["Dapr-Reentrancy-Id"] = &internalsv1pb.ListStringValue{
+				Values: val.GetValues(),
+			}
 		}
-		resp, err := r.a.callLocalActor(context.Background(), nextReq)
+		_, err := r.a.callLocalActor(context.Background(), nextReq)
 		if err != nil {
 			return nil, err
 		}
-		defer resp.Close()
 	}
 	r.callLog = append(r.callLog, "Exiting "+req.Message().GetMethod())
 
@@ -796,8 +801,9 @@ func TestCallLocalActor(t *testing.T) {
 		testMethod    = "bite"
 	)
 
-	req := invokev1.NewInvokeMethodRequest(testMethod).WithActor(testActorType, testActorID)
-	defer req.Close()
+	req := internalsv1pb.
+		NewInternalInvokeRequest(testMethod).
+		WithActor(testActorType, testActorID)
 
 	t.Run("invoke actor successfully", func(t *testing.T) {
 		testActorsRuntime := newTestActorsRuntime(t)
@@ -806,7 +812,6 @@ func TestCallLocalActor(t *testing.T) {
 		resp, err := testActorsRuntime.callLocalActor(context.Background(), req)
 		require.NoError(t, err)
 		assert.NotNil(t, resp)
-		defer resp.Close()
 	})
 
 	t.Run("actor is already disposed", func(t *testing.T) {
@@ -1031,22 +1036,45 @@ func TestActorsAppHealthCheck(t *testing.T) {
 			defer testActorsRuntime.Close()
 			clock := testActorsRuntime.clock.(*clocktesting.FakeClock)
 
+			var i int
+			testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if i == 0 {
+					w.WriteHeader(http.StatusOK)
+				} else {
+					w.WriteHeader(http.StatusInternalServerError)
+				}
+				i++
+			}))
+			t.Cleanup(testServer.Close)
+
 			testActorsRuntime.actorsConfig.Config.HostedActorTypes = internal.NewHostedActors([]string{"actor1"})
+			testActorsRuntime.actorsConfig.HealthEndpoint = testServer.URL
 			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
+			t.Cleanup(cancel)
 
 			opts := []health.Option{
 				health.WithClock(clock),
 				health.WithFailureThreshold(1),
-				health.WithInterval(1 * time.Second),
+				health.WithHealthyStateInterval(2 * time.Second),
+				health.WithUnHealthyStateInterval(2 * time.Second),
 				health.WithRequestTimeout(100 * time.Millisecond),
 			}
-			closingCh := make(chan struct{})
+			var wg sync.WaitGroup
+
+			checker, err := testActorsRuntime.getAppHealthCheckerWithOptions(opts...)
+			require.NoError(t, err)
+
+			wg.Add(2)
+			go func() {
+				defer wg.Done()
+				checker.Run(ctx)
+			}()
+
 			healthy := atomic.Bool{}
 			healthy.Store(true)
 			go func() {
-				defer close(closingCh)
-				for v := range testActorsRuntime.getAppHealthCheckChanWithOptions(ctx, opts...) {
+				defer wg.Done()
+				for v := range checker.HealthChannel() {
 					healthy.Store(v)
 				}
 			}()
@@ -1060,7 +1088,7 @@ func TestActorsAppHealthCheck(t *testing.T) {
 
 			// Cancel now which should cause the shutdown
 			cancel()
-			<-closingCh
+			wg.Wait()
 		}
 	}
 
@@ -1073,23 +1101,40 @@ func TestActorsAppHealthCheck(t *testing.T) {
 		defer testActorsRuntime.Close()
 		clock := testActorsRuntime.clock.(*clocktesting.FakeClock)
 
+		testServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+		t.Cleanup(testServer.Close)
+
 		testActorsRuntime.actorsConfig.HostedActorTypes = internal.NewHostedActors([]string{})
+		testActorsRuntime.actorsConfig.HealthEndpoint = testServer.URL
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
 		opts := []health.Option{
 			health.WithClock(clock),
 			health.WithFailureThreshold(1),
-			health.WithInterval(1 * time.Second),
+			health.WithHealthyStateInterval(2 * time.Second),
+			health.WithUnHealthyStateInterval(2 * time.Second),
 			health.WithRequestTimeout(100 * time.Millisecond),
 		}
 
-		closingCh := make(chan struct{})
+		var wg sync.WaitGroup
+		checker, err := testActorsRuntime.getAppHealthCheckerWithOptions(opts...)
+		require.NoError(t, err)
+
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			checker.Run(ctx)
+		}()
+
 		healthy := atomic.Bool{}
 		healthy.Store(true)
+
 		go func() {
-			defer close(closingCh)
-			for v := range testActorsRuntime.getAppHealthCheckChanWithOptions(ctx, opts...) {
+			defer wg.Done()
+			for v := range checker.HealthChannel() {
 				healthy.Store(v)
 			}
 		}()
@@ -1100,7 +1145,7 @@ func TestActorsAppHealthCheck(t *testing.T) {
 
 		// Cancel now which should cause the shutdown
 		cancel()
-		<-closingCh
+		wg.Wait()
 	})
 }
 
@@ -1152,10 +1197,12 @@ func TestHostValidation(t *testing.T) {
 }
 
 func TestBasicReentrantActorLocking(t *testing.T) {
-	req := invokev1.NewInvokeMethodRequest("first").WithActor("reentrant", "1")
-	defer req.Close()
-	req2 := invokev1.NewInvokeMethodRequest("second").WithActor("reentrant", "1")
-	defer req2.Close()
+	req := internalsv1pb.
+		NewInternalInvokeRequest("first").
+		WithActor("reentrant", "1")
+	req2 := internalsv1pb.
+		NewInternalInvokeRequest("second").
+		WithActor("reentrant", "1")
 
 	appConfig := DefaultAppConfig
 	appConfig.Reentrancy = config.ReentrancyConfig{Enabled: true}
@@ -1165,7 +1212,7 @@ func TestBasicReentrantActorLocking(t *testing.T) {
 		AppConfig:     appConfig,
 	})
 	reentrantAppChannel := new(reentrantAppChannel)
-	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{req2}
+	reentrantAppChannel.nextCall = []*internalsv1pb.InternalInvokeRequest{req2}
 	reentrantAppChannel.callLog = []string{}
 	builder := runtimeBuilder{
 		appChannel: reentrantAppChannel,
@@ -1177,20 +1224,24 @@ func TestBasicReentrantActorLocking(t *testing.T) {
 	resp, err := testActorsRuntime.callLocalActor(context.Background(), req)
 	require.NoError(t, err)
 	assert.NotNil(t, resp)
-	defer resp.Close()
 	assert.Equal(t, []string{
-		"Entering actors/reentrant/1/method/first", "Entering actors/reentrant/1/method/second",
-		"Exiting actors/reentrant/1/method/second", "Exiting actors/reentrant/1/method/first",
+		"Entering actors/reentrant/1/method/first",
+		"Entering actors/reentrant/1/method/second",
+		"Exiting actors/reentrant/1/method/second",
+		"Exiting actors/reentrant/1/method/first",
 	}, reentrantAppChannel.callLog)
 }
 
 func TestReentrantActorLockingOverMultipleActors(t *testing.T) {
-	req := invokev1.NewInvokeMethodRequest("first").WithActor("reentrant", "1")
-	defer req.Close()
-	req2 := invokev1.NewInvokeMethodRequest("second").WithActor("other", "1")
-	defer req2.Close()
-	req3 := invokev1.NewInvokeMethodRequest("third").WithActor("reentrant", "1")
-	defer req3.Close()
+	req := internalsv1pb.
+		NewInternalInvokeRequest("first").
+		WithActor("reentrant", "1")
+	req2 := internalsv1pb.
+		NewInternalInvokeRequest("second").
+		WithActor("other", "1")
+	req3 := internalsv1pb.
+		NewInternalInvokeRequest("third").
+		WithActor("reentrant", "1")
 
 	appConfig := DefaultAppConfig
 	appConfig.Reentrancy = config.ReentrancyConfig{Enabled: true}
@@ -1200,7 +1251,7 @@ func TestReentrantActorLockingOverMultipleActors(t *testing.T) {
 		AppConfig:     appConfig,
 	})
 	reentrantAppChannel := new(reentrantAppChannel)
-	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{req2, req3}
+	reentrantAppChannel.nextCall = []*internalsv1pb.InternalInvokeRequest{req2, req3}
 	reentrantAppChannel.callLog = []string{}
 	builder := runtimeBuilder{
 		appChannel: reentrantAppChannel,
@@ -1212,17 +1263,20 @@ func TestReentrantActorLockingOverMultipleActors(t *testing.T) {
 	resp, err := testActorsRuntime.callLocalActor(context.Background(), req)
 	require.NoError(t, err)
 	assert.NotNil(t, resp)
-	defer resp.Close()
 	assert.Equal(t, []string{
-		"Entering actors/reentrant/1/method/first", "Entering actors/other/1/method/second",
-		"Entering actors/reentrant/1/method/third", "Exiting actors/reentrant/1/method/third",
-		"Exiting actors/other/1/method/second", "Exiting actors/reentrant/1/method/first",
+		"Entering actors/reentrant/1/method/first",
+		"Entering actors/other/1/method/second",
+		"Entering actors/reentrant/1/method/third",
+		"Exiting actors/reentrant/1/method/third",
+		"Exiting actors/other/1/method/second",
+		"Exiting actors/reentrant/1/method/first",
 	}, reentrantAppChannel.callLog)
 }
 
 func TestReentrancyStackLimit(t *testing.T) {
-	req := invokev1.NewInvokeMethodRequest("first").WithActor("reentrant", "1")
-	defer req.Close()
+	req := internalsv1pb.
+		NewInternalInvokeRequest("first").
+		WithActor("reentrant", "1")
 
 	stackDepth := 0
 	appConfig := DefaultAppConfig
@@ -1233,7 +1287,7 @@ func TestReentrancyStackLimit(t *testing.T) {
 		AppConfig:     appConfig,
 	})
 	reentrantAppChannel := new(reentrantAppChannel)
-	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{}
+	reentrantAppChannel.nextCall = []*internalsv1pb.InternalInvokeRequest{}
 	reentrantAppChannel.callLog = []string{}
 	builder := runtimeBuilder{
 		appChannel: reentrantAppChannel,
@@ -1248,10 +1302,12 @@ func TestReentrancyStackLimit(t *testing.T) {
 }
 
 func TestReentrancyPerActor(t *testing.T) {
-	req := invokev1.NewInvokeMethodRequest("first").WithActor("reentrantActor", "1")
-	defer req.Close()
-	req2 := invokev1.NewInvokeMethodRequest("second").WithActor("reentrantActor", "1")
-	defer req2.Close()
+	req := internalsv1pb.
+		NewInternalInvokeRequest("first").
+		WithActor("reentrantActor", "1")
+	req2 := internalsv1pb.
+		NewInternalInvokeRequest("second").
+		WithActor("reentrantActor", "1")
 
 	appConfig := DefaultAppConfig
 	appConfig.Reentrancy = config.ReentrancyConfig{Enabled: false}
@@ -1269,7 +1325,7 @@ func TestReentrancyPerActor(t *testing.T) {
 		AppConfig:     appConfig,
 	})
 	reentrantAppChannel := new(reentrantAppChannel)
-	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{req2}
+	reentrantAppChannel.nextCall = []*internalsv1pb.InternalInvokeRequest{req2}
 	reentrantAppChannel.callLog = []string{}
 	builder := runtimeBuilder{
 		appChannel: reentrantAppChannel,
@@ -1281,16 +1337,17 @@ func TestReentrancyPerActor(t *testing.T) {
 	resp, err := testActorsRuntime.callLocalActor(context.Background(), req)
 	require.NoError(t, err)
 	assert.NotNil(t, resp)
-	defer resp.Close()
 	assert.Equal(t, []string{
-		"Entering actors/reentrantActor/1/method/first", "Entering actors/reentrantActor/1/method/second",
-		"Exiting actors/reentrantActor/1/method/second", "Exiting actors/reentrantActor/1/method/first",
+		"Entering actors/reentrantActor/1/method/first",
+		"Entering actors/reentrantActor/1/method/second",
+		"Exiting actors/reentrantActor/1/method/second",
+		"Exiting actors/reentrantActor/1/method/first",
 	}, reentrantAppChannel.callLog)
 }
 
 func TestReentrancyStackLimitPerActor(t *testing.T) {
-	req := invokev1.NewInvokeMethodRequest("first").WithActor("reentrantActor", "1")
-	defer req.Close()
+	req := internalsv1pb.NewInternalInvokeRequest("first").
+		WithActor("reentrantActor", "1")
 
 	stackDepth := 0
 	appConfig := DefaultAppConfig
@@ -1310,7 +1367,7 @@ func TestReentrancyStackLimitPerActor(t *testing.T) {
 		AppConfig:     appConfig,
 	})
 	reentrantAppChannel := new(reentrantAppChannel)
-	reentrantAppChannel.nextCall = []*invokev1.InvokeMethodRequest{}
+	reentrantAppChannel.nextCall = []*internalsv1pb.InternalInvokeRequest{}
 	reentrantAppChannel.callLog = []string{}
 	builder := runtimeBuilder{
 		appChannel: reentrantAppChannel,
@@ -1365,10 +1422,8 @@ func TestActorsRuntimeResiliency(t *testing.T) {
 	runtime := builder.buildActorRuntime(t)
 
 	t.Run("callLocalActor times out with resiliency", func(t *testing.T) {
-		req := invokev1.NewInvokeMethodRequest("actorMethod").
-			WithActor("failingActorType", "timeoutId").
-			WithReplay(true)
-		defer req.Close()
+		req := internalsv1pb.NewInternalInvokeRequest("actorMethod").
+			WithActor("failingActorType", "timeoutId")
 
 		start := time.Now()
 		resp, err := runtime.callLocalActor(context.Background(), req)
