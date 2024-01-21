@@ -70,6 +70,7 @@ type server struct {
 	apiSpec            config.APISpec
 	servers            []*http.Server
 	profilingListeners []net.Listener
+	sec                security.Handler
 	wg                 sync.WaitGroup
 }
 
@@ -81,6 +82,7 @@ type NewServerOpts struct {
 	MetricSpec  config.MetricSpec
 	Middleware  middleware.HTTP
 	APISpec     config.APISpec
+	Security    security.Handler
 }
 
 // NewServer returns a new HTTP server.
@@ -93,6 +95,7 @@ func NewServer(opts NewServerOpts) Server {
 		metricSpec:  opts.MetricSpec,
 		middleware:  opts.Middleware,
 		apiSpec:     opts.APISpec,
+		sec:         opts.Security,
 	}
 }
 
@@ -170,22 +173,68 @@ func (s *server) StartNonBlocking() error {
 		s.useContextSetup(publicR)
 		s.useTracing(publicR)
 		s.useMetrics(publicR)
+		s.setupRoutes(publicR, s.api.HealthzEndpoints())
 
-		s.setupRoutes(publicR, s.api.PublicEndpoints())
+		infoLog.Infof("HTTP Healthz server starting on :%d", *s.config.PublicPort)
 
-		healthServer := &http.Server{
+		healthzServer := &http.Server{
 			Addr:              fmt.Sprintf(":%d", *s.config.PublicPort),
 			Handler:           publicR,
 			ReadHeaderTimeout: 10 * time.Second,
 			MaxHeaderBytes:    s.config.ReadBufferSize,
 		}
-		s.servers = append(s.servers, healthServer)
+		s.servers = append(s.servers, healthzServer)
 
 		s.wg.Add(1)
 		go func() {
 			defer s.wg.Done()
-			if err := healthServer.ListenAndServe(); err != http.ErrServerClosed {
+			if err := healthzServer.ListenAndServe(); err != http.ErrServerClosed {
 				log.Fatal(err)
+			}
+		}()
+	}
+
+	if s.config.MetadataPort != nil {
+		metaR := s.getRouter()
+		s.useContextSetup(metaR)
+		s.useTracing(metaR)
+		s.useMetrics(metaR)
+		s.setupRoutes(metaR, s.api.MetadataEndpoints())
+
+		infoLog.Infof("HTTP Metadata server starting on :%d mTLS=%t", *s.config.MetadataPort, s.sec.MTLSEnabled())
+
+		metadataServer := &http.Server{
+			Addr:              fmt.Sprintf(":%d", *s.config.MetadataPort),
+			Handler:           metaR,
+			ReadHeaderTimeout: 10 * time.Second,
+			MaxHeaderBytes:    s.config.ReadBufferSizeKB << 10, // To bytes
+		}
+
+		if s.sec.MTLSEnabled() {
+			if len(s.config.MetadataAuthorizedIDs) == 0 {
+				log.Warn("No Metadata Authorized IDs configured. No clients will be authorized to access the metadata endpoint in mTLS mode")
+			}
+
+			tlsConfig, err := s.sec.MTLSServerConfigClientAuth(s.config.MetadataAuthorizedIDs...)
+			if err != nil {
+				return err
+			}
+			metadataServer.TLSConfig = tlsConfig
+		}
+
+		s.servers = append(s.servers, metadataServer)
+
+		s.wg.Add(1)
+		go func() {
+			defer s.wg.Done()
+			if s.sec.MTLSEnabled() {
+				if err := metadataServer.ListenAndServeTLS("", ""); err != http.ErrServerClosed {
+					log.Fatal(err)
+				}
+			} else {
+				if err := metadataServer.ListenAndServe(); err != http.ErrServerClosed {
+					log.Fatal(err)
+				}
 			}
 		}()
 	}

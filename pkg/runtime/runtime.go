@@ -534,7 +534,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	}
 
 	// Start HTTP Server
-	err = a.startHTTPServer(a.runtimeConfig.httpPort, a.runtimeConfig.publicPort, a.runtimeConfig.profilePort, a.runtimeConfig.allowedOrigins)
+	err = a.startHTTPServer(pipeline)
 	if err != nil {
 		return fmt.Errorf("failed to start HTTP server: %w", err)
 	}
@@ -765,7 +765,7 @@ func (a *DaprRuntime) initProxy() {
 	})
 }
 
-func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int, allowedOrigins string) error {
+func (a *DaprRuntime) startHTTPServer(pipeline httpMiddleware.Pipeline) error {
 	a.daprHTTPAPI = http.NewAPI(http.APIOpts{
 		Universal:             a.daprUniversal,
 		Channels:              a.channels,
@@ -779,11 +779,13 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 	serverConf := http.ServerConfig{
 		AppID:                   a.runtimeConfig.id,
 		HostAddress:             a.hostAddress,
-		Port:                    port,
+		Port:                    a.runtimeConfig.httpPort,
 		APIListenAddresses:      a.runtimeConfig.apiListenAddresses,
-		PublicPort:              publicPort,
-		ProfilePort:             profilePort,
-		AllowedOrigins:          allowedOrigins,
+		ProfilePort:             a.runtimeConfig.profilePort,
+		PublicPort:              a.runtimeConfig.publicPort,
+		MetadataPort:            a.runtimeConfig.metadataPort,
+		MetadataAuthorizedIDs:   a.runtimeConfig.metadataAuthorizedIDs,
+		AllowedOrigins:          a.runtimeConfig.allowedOrigins,
 		EnableProfiling:         a.runtimeConfig.enableProfiling,
 		MaxRequestBodySize:      a.runtimeConfig.maxRequestBodySize,
 		UnixDomainSocket:        a.runtimeConfig.unixDomainSocket,
@@ -800,6 +802,7 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		MetricSpec:  a.globalConfig.GetMetricsSpec(),
 		Middleware:  a.httpMiddleware.BuildPipelineFromSpec("server", a.globalConfig.Spec.HTTPPipelineSpec),
 		APISpec:     a.globalConfig.GetAPISpec(),
+		Security:    a.sec,
 	})
 	if err := server.StartNonBlocking(); err != nil {
 		return err

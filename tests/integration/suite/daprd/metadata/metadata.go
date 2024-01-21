@@ -20,12 +20,11 @@ import (
 	"io"
 	"net/http"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
-	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -36,7 +35,7 @@ func init() {
 
 // metadata tests Dapr's response to metadata API requests.
 type metadata struct {
-	proc *procdaprd.Daprd
+	daprd *daprd.Daprd
 }
 
 func (m *metadata) Setup(t *testing.T) []framework.Option {
@@ -58,37 +57,43 @@ spec:
   route: /B
   pubsubname: pubsub
 `
-	m.proc = procdaprd.New(t, procdaprd.WithResourceFiles(subComponentAndConfiguration))
+	m.daprd = daprd.New(t, daprd.WithResourceFiles(subComponentAndConfiguration))
 	return []framework.Option{
-		framework.WithProcesses(m.proc),
+		framework.WithProcesses(m.daprd),
 	}
 }
 
-func (m *metadata) Run(t *testing.T, parentCtx context.Context) {
-	m.proc.WaitUntilRunning(t, parentCtx)
+func (m *metadata) Run(t *testing.T, ctx context.Context) {
+	m.daprd.WaitUntilRunning(t, ctx)
 
-	httpClient := util.HTTPClient(t)
+	client := util.HTTPClient(t)
 
 	t.Run("test HTTP", func(t *testing.T) {
 		tests := map[string]string{
-			"public endpoint": fmt.Sprintf("http://localhost:%d/v1.0/metadata", m.proc.PublicPort()),
-			"API endpoint":    fmt.Sprintf("http://localhost:%d/v1.0/metadata", m.proc.HTTPPort()),
+			"metadata endpoint": fmt.Sprintf("http://localhost:%d/v1.0/metadata", m.daprd.MetadataPort()),
+			"API endpoint":      fmt.Sprintf("http://localhost:%d/v1.0/metadata", m.daprd.HTTPPort()),
 		}
 		for testName, reqURL := range tests {
 			t.Run(testName, func(t *testing.T) {
-				ctx, cancel := context.WithTimeout(parentCtx, time.Second*5)
-				defer cancel()
-
 				req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 				require.NoError(t, err)
 
-				resp, err := httpClient.Do(req)
+				resp, err := client.Do(req)
 				require.NoError(t, err)
 				defer resp.Body.Close()
 
-				validateResponse(t, m.proc.AppID(), m.proc.AppPort(), resp.Body)
+				validateResponse(t, m.daprd.AppID(), m.daprd.AppPort(), resp.Body)
 			})
 		}
+	})
+
+	t.Run("metadata endpoint not available on public port", func(t *testing.T) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/v1.0/metadata", m.daprd.PublicPort()), nil)
+		require.NoError(t, err)
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+		require.Equal(t, http.StatusNotFound, resp.StatusCode)
 	})
 }
 

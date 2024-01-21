@@ -21,18 +21,10 @@ import (
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
 	"github.com/dapr/dapr/pkg/injector/patcher"
 	"github.com/dapr/dapr/pkg/security/token"
-)
-
-const (
-	defaultConfig      = "daprsystem"
-	defaultMtlsEnabled = true
 )
 
 func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.AdmissionReview) (patchOps jsonpatch.Patch, err error) {
@@ -60,12 +52,17 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 		return nil, err
 	}
 
+	globalConfig, err := getGlobalConfig(i.daprClient, i.controlPlaneNamespace)
+	if err != nil {
+		return nil, err
+	}
+
 	// Create the sidecar configuration object from the pod
 	sidecar := patcher.NewSidecarConfig(pod)
 	sidecar.GetInjectedComponentContainers = i.getInjectedComponentContainers
 	sidecar.Mode = injectorConsts.ModeKubernetes
 	sidecar.Namespace = ar.Request.Namespace
-	sidecar.MTLSEnabled = mTLSEnabled(i.controlPlaneNamespace, i.daprClient)
+	sidecar.MTLSEnabled = globalConfig.mtlsEnabled
 	sidecar.Identity = ar.Request.Namespace + ":" + pod.Spec.ServiceAccountName
 	sidecar.IgnoreEntrypointTolerations = i.config.GetIgnoreEntrypointTolerations()
 	sidecar.ImagePullPolicy = i.config.GetPullPolicy()
@@ -82,6 +79,7 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 	sidecar.CertChain = string(daprdCert)
 	sidecar.CertKey = string(daprdPrivateKey)
 	sidecar.DisableTokenVolume = !token.HasKubernetesToken()
+	sidecar.SidecarMetadataAuthorizedIDs = globalConfig.metadataAuthorizedIDs
 
 	// Set addresses for actor services
 	// Even if actors are disabled, however, the placement-host-address flag will still be included if explicitly set in the annotation dapr.io/placement-host-address
@@ -126,21 +124,4 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 		return nil, err
 	}
 	return patch, nil
-}
-
-func mTLSEnabled(controlPlaneNamespace string, daprClient scheme.Interface) bool {
-	resp, err := daprClient.ConfigurationV1alpha1().
-		Configurations(controlPlaneNamespace).
-		Get(defaultConfig, metav1.GetOptions{})
-	if apierrors.IsNotFound(err) {
-		log.Infof("Dapr system configuration '%s' does not exist; using default value %t for mTLSEnabled", defaultConfig, defaultMtlsEnabled)
-		return defaultMtlsEnabled
-	}
-
-	if err != nil {
-		log.Errorf("Failed to load dapr configuration from k8s, use default value %t for mTLSEnabled: %s", defaultMtlsEnabled, err)
-		return defaultMtlsEnabled
-	}
-
-	return resp.Spec.MTLSSpec.GetEnabled()
 }

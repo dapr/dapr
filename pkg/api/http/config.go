@@ -20,6 +20,8 @@ type ServerConfig struct {
 	Port                    int
 	APIListenAddresses      []string
 	PublicPort              *int
+	MetadataPort            *int
+	MetadataAuthorizedIDs   []string
 	ProfilePort             int
 	AllowedOrigins          string
 	EnableProfiling         bool

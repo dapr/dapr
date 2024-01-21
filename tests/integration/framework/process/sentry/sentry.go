@@ -34,6 +34,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 
+	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/pkg/sentry/server/ca"
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/framework/process"
@@ -49,6 +50,7 @@ type Sentry struct {
 	port        int
 	healthzPort int
 	metricsPort int
+	trustDomain spiffeid.TrustDomain
 }
 
 func New(t *testing.T, fopts ...Option) *Sentry {
@@ -59,6 +61,7 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 		port:        fp.Port(t, 0),
 		healthzPort: fp.Port(t, 1),
 		metricsPort: fp.Port(t, 2),
+		trustDomain: "localhost",
 		writeBundle: true,
 		writeConfig: true,
 	}
@@ -67,15 +70,14 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 		fopt(&opts)
 	}
 
+	td, err := spiffeid.TrustDomainFromString(opts.trustDomain)
+	require.NoError(t, err)
+
 	// Only generate a bundle if one was not provided.
 	if opts.bundle == nil {
-		td := spiffeid.RequireTrustDomainFromString("default").String()
-		if opts.trustDomain != nil {
-			td = *opts.trustDomain
-		}
 		pk, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 		require.NoError(t, err)
-		bundle, err := ca.GenerateBundle(pk, td, time.Second*5, nil)
+		bundle, err := ca.GenerateBundle(pk, td.String(), time.Second*5, nil)
 		require.NoError(t, err)
 		opts.bundle = &bundle
 	}
@@ -88,6 +90,7 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 		"-issuer-key-filename=issuer.key",
 		"-metrics-port=" + strconv.Itoa(opts.metricsPort),
 		"-healthz-port=" + strconv.Itoa(opts.healthzPort),
+		"-trust-domain=" + opts.trustDomain,
 	}
 
 	if opts.writeBundle {
@@ -115,10 +118,6 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 		args = append(args, "-kubeconfig="+*opts.kubeconfig)
 	}
 
-	if opts.trustDomain != nil {
-		args = append(args, "-trust-domain="+*opts.trustDomain)
-	}
-
 	if opts.writeConfig {
 		configPath := filepath.Join(t.TempDir(), "sentry-config.yaml")
 		require.NoError(t, os.WriteFile(configPath, []byte(opts.configuration), 0o600))
@@ -136,6 +135,7 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 		port:        opts.port,
 		metricsPort: opts.metricsPort,
 		healthzPort: opts.healthzPort,
+		trustDomain: td,
 	}
 }
 
@@ -216,4 +216,37 @@ func (s *Sentry) DialGRPC(t *testing.T, ctx context.Context, sentryID string) *g
 	})
 
 	return conn
+}
+
+func (s *Sentry) Security(t *testing.T, ctx context.Context, ns, appID string) security.Handler {
+	t.Setenv("NAMESPACE", ns)
+	secProv, err := security.New(ctx, security.Options{
+		SentryAddress:           "localhost:" + strconv.Itoa(s.Port()),
+		ControlPlaneTrustDomain: s.trustDomain.String(),
+		ControlPlaneNamespace:   "default",
+		TrustAnchors:            s.CABundle().TrustAnchors,
+		AppID:                   appID,
+		MTLSEnabled:             true,
+	})
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(ctx)
+	secProvErr := make(chan error)
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-time.After(5 * time.Second):
+			assert.Fail(t, "timed out waiting for security provider to stop")
+		case err = <-secProvErr:
+			require.NoError(t, err)
+		}
+	})
+
+	go func() {
+		secProvErr <- secProv.Run(ctx)
+	}()
+
+	sec, err := secProv.Handler(ctx)
+	require.NoError(t, err)
+	return sec
 }

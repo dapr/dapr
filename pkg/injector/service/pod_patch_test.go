@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
@@ -24,10 +25,13 @@ import (
 	"github.com/dapr/kit/ptr"
 )
 
-func Test_mtlsEnabled(t *testing.T) {
+func Test_globalConfig(t *testing.T) {
 	t.Run("if configuration doesn't exist, return true", func(t *testing.T) {
 		cl := clientfake.NewSimpleClientset()
-		assert.True(t, mTLSEnabled("test-ns", cl))
+		config, err := getGlobalConfig(cl, "test-ns")
+		require.NoError(t, err)
+		assert.True(t, config.mtlsEnabled)
+		assert.Empty(t, config.metadataAuthorizedIDs)
 	})
 
 	t.Run("if configuration exists and is false, return false", func(t *testing.T) {
@@ -38,10 +42,16 @@ func Test_mtlsEnabled(t *testing.T) {
 					Name:      "daprsystem",
 					Namespace: "test-ns",
 				},
-				Spec: configapi.ConfigurationSpec{MTLSSpec: &configapi.MTLSSpec{Enabled: ptr.Of(false)}},
+				Spec: configapi.ConfigurationSpec{MTLSSpec: &configapi.MTLSSpec{
+					Enabled:               ptr.Of(false),
+					MetadataAuthorizedIDs: []string{"test1", "test2"},
+				}},
 			},
 		)
-		assert.False(t, mTLSEnabled("test-ns", cl))
+		config, err := getGlobalConfig(cl, "test-ns")
+		require.NoError(t, err)
+		assert.False(t, config.mtlsEnabled)
+		assert.Equal(t, []string{"test1", "test2"}, config.metadataAuthorizedIDs)
 	})
 
 	t.Run("if configuration exists and is true, return true", func(t *testing.T) {
@@ -52,10 +62,16 @@ func Test_mtlsEnabled(t *testing.T) {
 					Name:      "daprsystem",
 					Namespace: "test-ns",
 				},
-				Spec: configapi.ConfigurationSpec{MTLSSpec: &configapi.MTLSSpec{Enabled: ptr.Of(true)}},
+				Spec: configapi.ConfigurationSpec{MTLSSpec: &configapi.MTLSSpec{
+					Enabled:               ptr.Of(true),
+					MetadataAuthorizedIDs: []string{},
+				}},
 			},
 		)
-		assert.True(t, mTLSEnabled("test-ns", cl))
+		config, err := getGlobalConfig(cl, "test-ns")
+		require.NoError(t, err)
+		assert.True(t, config.mtlsEnabled)
+		assert.Empty(t, config.metadataAuthorizedIDs)
 	})
 
 	t.Run("if configuration exists and is nil, return true", func(t *testing.T) {
@@ -66,9 +82,15 @@ func Test_mtlsEnabled(t *testing.T) {
 					Name:      "daprsystem",
 					Namespace: "test-ns",
 				},
-				Spec: configapi.ConfigurationSpec{MTLSSpec: &configapi.MTLSSpec{Enabled: nil}},
+				Spec: configapi.ConfigurationSpec{MTLSSpec: &configapi.MTLSSpec{
+					Enabled:               nil,
+					MetadataAuthorizedIDs: []string{"test1", "test2"},
+				}},
 			},
 		)
-		assert.True(t, mTLSEnabled("test-ns", cl))
+		config, err := getGlobalConfig(cl, "test-ns")
+		require.NoError(t, err)
+		assert.True(t, config.mtlsEnabled)
+		assert.Equal(t, []string{"test1", "test2"}, config.metadataAuthorizedIDs)
 	})
 }

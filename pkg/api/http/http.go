@@ -62,7 +62,8 @@ import (
 // API returns a list of HTTP endpoints for Dapr.
 type API interface {
 	APIEndpoints() []endpoints.Endpoint
-	PublicEndpoints() []endpoints.Endpoint
+	HealthzEndpoints() []endpoints.Endpoint
+	MetadataEndpoints() []endpoints.Endpoint
 	MarkStatusAsReady()
 	MarkStatusAsOutboundReady()
 }
@@ -70,7 +71,8 @@ type API interface {
 type api struct {
 	universal             *universal.Universal
 	endpoints             []endpoints.Endpoint
-	publicEndpoints       []endpoints.Endpoint
+	healthzEndpoints      []endpoints.Endpoint
+	metadataEndpoints     []endpoints.Endpoint
 	directMessaging       invokev1.DirectMessaging
 	channels              *channels.Channels
 	pubsubAdapter         runtimePubsub.Adapter
@@ -151,8 +153,8 @@ func NewAPI(opts APIOpts) API {
 	api.endpoints = append(api.endpoints, api.constructDistributedLockEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructWorkflowEndpoints()...)
 
-	api.publicEndpoints = append(api.publicEndpoints, metadataEndpoints...)
-	api.publicEndpoints = append(api.publicEndpoints, healthEndpoints...)
+	api.healthzEndpoints = append(api.healthzEndpoints, healthEndpoints...)
+	api.metadataEndpoints = append(api.metadataEndpoints, metadataEndpoints...)
 
 	return api
 }
@@ -162,9 +164,14 @@ func (a *api) APIEndpoints() []endpoints.Endpoint {
 	return a.endpoints
 }
 
-// PublicEndpoints returns the list of registered endpoints.
-func (a *api) PublicEndpoints() []endpoints.Endpoint {
-	return a.publicEndpoints
+// HealthzEndpoints returns the list of registered endpoints.
+func (a *api) HealthzEndpoints() []endpoints.Endpoint {
+	return a.healthzEndpoints
+}
+
+// MetadataEndpoints returns the list of registered endpoints.
+func (a *api) MetadataEndpoints() []endpoints.Endpoint {
+	return a.metadataEndpoints
 }
 
 // MarkStatusAsReady marks the ready status of dapr.

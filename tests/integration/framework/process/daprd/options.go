@@ -36,6 +36,8 @@ type options struct {
 	httpPort                int
 	internalGRPCPort        int
 	publicPort              int
+	metadataPort            int
+	metadataAuthorizedIDs   []string
 	metricsPort             int
 	profilePort             int
 	appProtocol             string
@@ -46,6 +48,7 @@ type options struct {
 	resourceFiles           []string
 	resourceDirs            []string
 	configs                 []string
+	configContents          []string
 	placementAddresses      []string
 	logLevel                string
 	mode                    string
@@ -124,6 +127,20 @@ func WithPublicPort(port int) Option {
 	}
 }
 
+func WithMetadataPort(port int) Option {
+	return func(o *options) {
+		o.metadataPort = port
+	}
+}
+
+func WithMetadataAuthorizedIDs(ids ...string) Option {
+	return func(o *options) {
+		for _, id := range ids {
+			o.metadataAuthorizedIDs = append(o.metadataAuthorizedIDs, id)
+		}
+	}
+}
+
 func WithMetricsPort(port int) Option {
 	return func(o *options) {
 		o.metricsPort = port
@@ -190,6 +207,12 @@ func WithResourcesDir(dirs ...string) Option {
 func WithConfigs(configs ...string) Option {
 	return func(o *options) {
 		o.configs = configs
+	}
+}
+
+func WithConfigContents(contents ...string) Option {
+	return func(o *options) {
+		o.configContents = contents
 	}
 }
 

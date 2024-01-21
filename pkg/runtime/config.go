@@ -22,6 +22,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
+
 	"github.com/dapr/dapr/pkg/acl"
 	"github.com/dapr/dapr/pkg/config"
 	env "github.com/dapr/dapr/pkg/config/env"
@@ -90,6 +92,8 @@ type Config struct {
 	ProfilePort                  string
 	DaprInternalGRPCPort         string
 	DaprPublicPort               string
+	DaprMetadataPort             string
+	DaprMetadataAuthorizedIDs    []string
 	ApplicationPort              string
 	DaprGracefulShutdownSeconds  int
 	DaprBlockShutdownDuration    *time.Duration
@@ -116,6 +120,8 @@ type internalConfig struct {
 	id                           string
 	httpPort                     int
 	publicPort                   *int
+	metadataPort                 *int
+	metadataAuthorizedIDs        []string
 	profilePort                  int
 	enableProfiling              bool
 	apiGRPCPort                  int
@@ -258,6 +264,19 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 		return nil, err
 	}
 
+	for _, id := range globalConfig.GetMTLSSpec().MetadataAuthorizedIDs {
+		intc.metadataAuthorizedIDs = append(intc.metadataAuthorizedIDs, id)
+	}
+	var errs []error
+	for _, id := range intc.metadataAuthorizedIDs {
+		if _, err := spiffeid.FromString(id); err != nil {
+			errs = append(errs, fmt.Errorf("invalid SPIFFE ID %q in default metadata authorized IDs: %w", id, err))
+		}
+	}
+	if len(errs) > 0 {
+		return nil, errors.Join(errs...)
+	}
+
 	// API logging can be enabled for this app or for every app, globally in the config
 	if intc.enableAPILogging == nil {
 		intc.enableAPILogging = ptr.Of(globalConfig.GetAPILoggingSpec().Enabled)
@@ -296,6 +315,7 @@ func (c *Config) toInternal() (*internalConfig, error) {
 		blockShutdownDuration: c.DaprBlockShutdownDuration,
 		actorsService:         c.ActorsService,
 		remindersService:      c.RemindersService,
+		metadataAuthorizedIDs: c.DaprMetadataAuthorizedIDs,
 	}
 
 	if len(intc.standalone.ResourcesPath) == 0 && c.ComponentsPath != "" {
@@ -347,6 +367,15 @@ func (c *Config) toInternal() (*internalConfig, error) {
 			return nil, fmt.Errorf("error parsing dapr-public-port: %w", err)
 		}
 		intc.publicPort = &port
+	}
+
+	if c.DaprMetadataPort != "" {
+		var port int
+		port, err = strconv.Atoi(c.DaprMetadataPort)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing dapr-metadata-port: %w", err)
+		}
+		intc.metadataPort = &port
 	}
 
 	if c.ApplicationPort != "" {

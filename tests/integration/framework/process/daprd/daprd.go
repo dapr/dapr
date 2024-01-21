@@ -55,6 +55,7 @@ type Daprd struct {
 	httpPort         int
 	internalGRPCPort int
 	publicPort       int
+	metadataPort     int
 	metricsPort      int
 	profilePort      int
 }
@@ -67,7 +68,7 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 
 	appHTTP := prochttp.New(t)
 
-	fp := util.ReservePorts(t, 6)
+	fp := util.ReservePorts(t, 7)
 	opts := options{
 		appID:            uid.String(),
 		appPort:          appHTTP.Port(),
@@ -76,8 +77,9 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		httpPort:         fp.Port(t, 1),
 		internalGRPCPort: fp.Port(t, 2),
 		publicPort:       fp.Port(t, 3),
-		metricsPort:      fp.Port(t, 4),
-		profilePort:      fp.Port(t, 5),
+		metadataPort:     fp.Port(t, 4),
+		metricsPort:      fp.Port(t, 5),
+		profilePort:      fp.Port(t, 6),
 		logLevel:         "info",
 		mode:             "standalone",
 	}
@@ -100,6 +102,8 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		"--dapr-http-port=" + strconv.Itoa(opts.httpPort),
 		"--dapr-internal-grpc-port=" + strconv.Itoa(opts.internalGRPCPort),
 		"--dapr-public-port=" + strconv.Itoa(opts.publicPort),
+		"--dapr-metadata-port=" + strconv.Itoa(opts.metadataPort),
+		"--dapr-metadata-authorized-ids=" + strings.Join(opts.metadataAuthorizedIDs, ","),
 		"--metrics-port=" + strconv.Itoa(opts.metricsPort),
 		"--profile-port=" + strconv.Itoa(opts.profilePort),
 		"--enable-app-health-check=" + strconv.FormatBool(opts.appHealthCheck),
@@ -117,10 +121,13 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	for _, dir := range opts.resourceDirs {
 		args = append(args, "--resources-path="+dir)
 	}
-	if len(opts.configs) > 0 {
-		for _, c := range opts.configs {
-			args = append(args, "--config="+c)
-		}
+	for _, c := range opts.configContents {
+		configFile := filepath.Join(t.TempDir(), "config.yaml")
+		require.NoError(t, os.WriteFile(configFile, []byte(c), 0o600))
+		opts.configs = append(opts.configs, configFile)
+	}
+	for _, c := range opts.configs {
+		args = append(args, "--config="+c)
 	}
 	if len(opts.placementAddresses) > 0 {
 		args = append(args, "--placement-host-address="+strings.Join(opts.placementAddresses, ","))
@@ -160,6 +167,7 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		httpPort:         opts.httpPort,
 		internalGRPCPort: opts.internalGRPCPort,
 		publicPort:       opts.publicPort,
+		metadataPort:     opts.metadataPort,
 		metricsPort:      opts.metricsPort,
 		profilePort:      opts.profilePort,
 	}
@@ -318,6 +326,10 @@ func (d *Daprd) InternalGRPCAddress() string {
 
 func (d *Daprd) PublicPort() int {
 	return d.publicPort
+}
+
+func (d *Daprd) MetadataPort() int {
+	return d.metadataPort
 }
 
 func (d *Daprd) MetricsPort() int {

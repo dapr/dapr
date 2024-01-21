@@ -323,6 +323,9 @@ type MTLSSpec struct {
 	AllowedClockSkew        string `json:"allowedClockSkew,omitempty"        yaml:"allowedClockSkew,omitempty"`
 	SentryAddress           string `json:"sentryAddress,omitempty"           yaml:"sentryAddress,omitempty"`
 	ControlPlaneTrustDomain string `json:"controlPlaneTrustDomain,omitempty" yaml:"controlPlaneTrustDomain,omitempty"`
+
+	MetadataAuthorizedIDs []string `json:"metadataAuthorizedIDs,omitempty" yaml:"metadataAuthorizedIDs,omitempty"`
+
 	// Additional token validators to use.
 	// When Dapr is running in Kubernetes mode, this is in addition to the built-in "kubernetes" validator.
 	// In self-hosted mode, enabling a custom validator will disable the built-in "insecure" validator.

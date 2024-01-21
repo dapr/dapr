@@ -55,6 +55,8 @@ type Handler interface {
 	GRPCDialOptionMTLS(spiffeid.ID) grpc.DialOption
 
 	TLSServerConfigNoClientAuth() *tls.Config
+	MTLSServerConfigClientAuth(...string) (*tls.Config, error)
+	MTLSClientConfig(id spiffeid.ID) (*tls.Config, error)
 	NetListenerID(net.Listener, spiffeid.ID) net.Listener
 	NetDialerID(context.Context, spiffeid.ID, time.Duration) func(network, addr string) (net.Conn, error)
 
@@ -375,6 +377,40 @@ func (s *security) WatchTrustAnchors(ctx context.Context, trustAnchors chan<- []
 // chains against the trust anchors.
 func (s *security) TLSServerConfigNoClientAuth() *tls.Config {
 	return tlsconfig.TLSServerConfig(s.source)
+}
+
+// MTLSServerConfigClientAuth returns a TLS server config which instruments
+// using the current signed server certificate. Authorizes client certificate
+// chains against the trust anchors. Ensures clients are one of the given
+// SPIFFE IDs.
+// Returns error if mTLS is disabled.
+func (s *security) MTLSServerConfigClientAuth(clients ...string) (*tls.Config, error) {
+	if !s.mtls {
+		return nil, errors.New("mTLS is disabled")
+	}
+
+	ids := make([]spiffeid.ID, 0, len(clients))
+	for _, c := range clients {
+		id, err := spiffeid.FromString(c)
+		if err != nil {
+			return nil, fmt.Errorf("invalid SPIFFE ID %q: %w", c, err)
+		}
+		ids = append(ids, id)
+	}
+
+	return tlsconfig.MTLSServerConfig(s.source, s.source, tlsconfig.AuthorizeOneOf(ids...)), nil
+}
+
+// MTLSClientConfig returns a TLS client config which instruments using the
+// current signed client certificate. Authorizes server certificate chains
+// against the trust anchors. Ensures server is the given SPIFFE ID.
+// Returns error if mTLS is disabled.
+func (s *security) MTLSClientConfig(id spiffeid.ID) (*tls.Config, error) {
+	if !s.mtls {
+		return nil, errors.New("mTLS is disabled")
+	}
+
+	return tlsconfig.MTLSClientConfig(s.source, s.source, tlsconfig.AuthorizeID(id)), nil
 }
 
 // NetListenerID returns a mTLS net listener which instruments using the

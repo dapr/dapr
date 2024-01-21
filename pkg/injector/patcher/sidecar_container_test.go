@@ -344,6 +344,8 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-internal-grpc-port", "50002",
 			"--dapr-listen-addresses", "[::1],127.0.0.1",
 			"--dapr-public-port", "3501",
+			"--dapr-metadata-port", "3502",
+			"--dapr-metadata-authorized-ids", "",
 			"--app-id", "app_id",
 			"--app-protocol", "http",
 			"--log-level", "info",
@@ -397,6 +399,9 @@ func TestGetSidecarContainer(t *testing.T) {
 		c.CertChain = "my-cert-chain"
 		c.CertKey = "my-cert-key"
 		c.EnableK8sDownwardAPIs = true
+		c.SidecarPublicPort = 3505
+		c.SidecarMetadataPort = 3506
+		c.SidecarMetadataAuthorizedIDs = []string{"id1", "id2"}
 
 		c.SetFromPodAnnotations()
 
@@ -417,7 +422,9 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-grpc-port", "50001",
 			"--dapr-internal-grpc-port", "50002",
 			"--dapr-listen-addresses", "[::1],127.0.0.1",
-			"--dapr-public-port", "3501",
+			"--dapr-public-port", "3505",
+			"--dapr-metadata-port", "3506",
+			"--dapr-metadata-authorized-ids", "id1,id2",
 			"--app-id", "app_id",
 			"--app-protocol", "http",
 			"--log-level", "info",

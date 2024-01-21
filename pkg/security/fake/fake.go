@@ -39,6 +39,8 @@ type Fake struct {
 	tlsServerConfigMTLSFn               func(spiffeid.TrustDomain) (*tls.Config, error)
 	tlsServerConfigNoClientAuthFn       func() *tls.Config
 	tlsServerConfigNoClientAuthOptionFn func(*tls.Config)
+	mtlsServerConfigClientAuth          func(...string) (*tls.Config, error)
+	mtlsClientConfig                    func(id spiffeid.ID) (*tls.Config, error)
 	netListenerIDFn                     func(net.Listener, spiffeid.ID) net.Listener
 	netDialerIDFn                       func(context.Context, spiffeid.ID, time.Duration) func(network, addr string) (net.Conn, error)
 
@@ -63,6 +65,12 @@ func New() *Fake {
 			return new(tls.Config)
 		},
 		tlsServerConfigNoClientAuthOptionFn: func(*tls.Config) {},
+		mtlsServerConfigClientAuth: func(...string) (*tls.Config, error) {
+			return new(tls.Config), nil
+		},
+		mtlsClientConfig: func(id spiffeid.ID) (*tls.Config, error) {
+			return new(tls.Config), nil
+		},
 		grpcDialOptionFn: func(spiffeid.ID) grpc.DialOption {
 			return grpc.WithTransportCredentials(insecure.NewCredentials())
 		},
@@ -116,6 +124,16 @@ func (f *Fake) WithTLSServerConfigNoClientAuthOptionFn(fn func(*tls.Config)) *Fa
 	return f
 }
 
+func (f *Fake) WithMTLSServerConfigClientAuth(fn func(...string) (*tls.Config, error)) *Fake {
+	f.mtlsServerConfigClientAuth = fn
+	return f
+}
+
+func (f *Fake) WithMTLSClientConfig(fn func(id spiffeid.ID) (*tls.Config, error)) *Fake {
+	f.mtlsClientConfig = fn
+	return f
+}
+
 func (f *Fake) WithGRPCDialOptionMTLSFn(fn func(spiffeid.ID) grpc.DialOption) *Fake {
 	f.grpcDialOptionFn = fn
 	return f
@@ -159,6 +177,14 @@ func (f *Fake) TLSServerConfigNoClientAuth() *tls.Config {
 
 func (f *Fake) TLSServerConfigNoClientAuthOption(cfg *tls.Config) {
 	f.tlsServerConfigNoClientAuthOptionFn(cfg)
+}
+
+func (f *Fake) MTLSServerConfigClientAuth(roots ...string) (*tls.Config, error) {
+	return f.mtlsServerConfigClientAuth(roots...)
+}
+
+func (f *Fake) MTLSClientConfig(id spiffeid.ID) (*tls.Config, error) {
+	return f.mtlsClientConfig(id)
 }
 
 func (f *Fake) GRPCDialOptionMTLS(id spiffeid.ID) grpc.DialOption {

@@ -1,4 +1,3 @@
-
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -36,7 +35,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: ConfigurationSpec is the spec for an configuration.
+            description: ConfigurationSpec is the spec for a configuration.
             properties:
               accessControl:
                 description: AccessControlSpec is the spec object in ConfigurationSpec.
@@ -85,9 +84,11 @@ spec:
                 description: APISpec describes the configuration for Dapr APIs.
                 properties:
                   allowed:
-                    description: List of allowed APIs. Can be used in conjunction with denied.
+                    description: List of allowed APIs. Can be used in conjunction
+                      with denied.
                     items:
-                      description: APIAccessRule describes an access rule for allowing or denying a Dapr API.
+                      description: APIAccessRule describes an access rule for allowing
+                        or denying a Dapr API.
                       properties:
                         name:
                           type: string
@@ -101,9 +102,11 @@ spec:
                       type: object
                     type: array
                   denied:
-                    description: List of denied APIs. Can be used in conjunction with allowed.
+                    description: List of denied APIs. Can be used in conjunction with
+                      allowed.
                     items:
-                      description: APIAccessRule describes an access rule for allowing or denying a Dapr API.
+                      description: APIAccessRule describes an access rule for allowing
+                        or denying a Dapr API.
                       properties:
                         name:
                           type: string
@@ -345,6 +348,14 @@ spec:
                     type: string
                   enabled:
                     type: boolean
+                  metadataAuthorizedIDs:
+                    description: MetadataAuthorizedIDs is a list of SPIFFE client
+                      IDs that are authorized to access all Dapr metadata APIs. Is
+                      appended to the list of authorized clients specified in the
+                      Dapr CLI flag --dapr-metadata-authorized-ids.
+                    items:
+                      type: string
+                    type: array
                   sentryAddress:
                     type: string
                   tokenValidators:
@@ -450,10 +461,36 @@ spec:
                 - samplingRate
                 type: object
               wasm:
-                description: WasmSpec describes the security profile for all Dapr Wasm components.
+                description: WasmSpec describes the security profile for all Dapr
+                  Wasm components.
                 properties:
                   strictSandbox:
+                    description: Force enabling strict sandbox mode for all WASM components.
+                      When this is enabled, WASM components always run in strict mode
+                      regardless of their configuration. Strict mode enhances security
+                      of the WASM sandbox by limiting access to certain capabilities
+                      such as real-time clocks and random number generators.
                     type: boolean
+                type: object
+              workflow:
+                description: WorkflowSpec defines the configuration for Dapr workflows.
+                properties:
+                  maxConcurrentActivityInvocations:
+                    description: maxConcurrentActivityInvocations is the maximum number
+                      of concurrent activities that can be processed by a single Dapr
+                      instance. Attempted invocations beyond this will be queued until
+                      the number of concurrent invocations drops below this value.
+                      If omitted, the default value of 100 will be used.
+                    format: int32
+                    type: integer
+                  maxConcurrentWorkflowInvocations:
+                    description: maxConcurrentWorkflowInvocations is the maximum number
+                      of concurrent workflow invocations that can be scheduled by
+                      a single Dapr instance. Attempted invocations beyond this will
+                      be queued until the number of concurrent invocations drops below
+                      this value. If omitted, the default value of 100 will be used.
+                    format: int32
+                    type: integer
                 type: object
             type: object
         type: object

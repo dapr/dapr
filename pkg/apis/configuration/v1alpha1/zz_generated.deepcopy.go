@@ -423,6 +423,11 @@ func (in *MTLSSpec) DeepCopyInto(out *MTLSSpec) {
 		*out = new(string)
 		**out = **in
 	}
+	if in.MetadataAuthorizedIDs != nil {
+		in, out := &in.MetadataAuthorizedIDs, &out.MetadataAuthorizedIDs
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
 	if in.TokenValidators != nil {
 		in, out := &in.TokenValidators, &out.TokenValidators
 		*out = make([]ValidatorSpec, len(*in))

@@ -30,7 +30,7 @@ type options struct {
 	configuration string
 	writeConfig   bool
 	kubeconfig    *string
-	trustDomain   *string
+	trustDomain   string
 	namespace     *string
 }
 
@@ -87,7 +87,7 @@ func WithKubeconfig(kubeconfig string) Option {
 
 func WithTrustDomain(trustDomain string) Option {
 	return func(o *options) {
-		o.trustDomain = &trustDomain
+		o.trustDomain = trustDomain
 	}
 }
 
