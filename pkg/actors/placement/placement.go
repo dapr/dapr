@@ -528,20 +528,20 @@ func (p *actorPlacement) updatePlacements(in *v1pb.PlacementTables) {
 	updated := false
 	var updatedAPILevel *uint32
 	func() {
-		p.placementTableLock.Lock()
-		defer p.placementTableLock.Unlock()
-
+		p.placementTableLock.RLock()
 		if in.GetVersion() == p.placementTables.Version {
+			p.placementTableLock.RUnlock()
 			return
 		}
+		p.placementTableLock.RUnlock()
 
 		if in.GetApiLevel() != p.apiLevel {
 			p.apiLevel = in.GetApiLevel()
 			updatedAPILevel = ptr.Of(in.GetApiLevel())
 		}
 
-		maps.Clear(p.placementTables.Entries)
-		p.placementTables.Version = in.GetVersion()
+		entries := map[string]*hashing.Consistent{}
+
 		for k, v := range in.GetEntries() {
 			loadMap := make(map[string]*hashing.Host, len(v.GetLoadMap()))
 			for lk, lv := range v.GetLoadMap() {
@@ -551,11 +551,18 @@ func (p *actorPlacement) updatePlacements(in *v1pb.PlacementTables) {
 			// TODO: @elena in v1.15 remove the check for versions < 1.13
 			// only keep `hashing.NewFromExisting`
 			if p.apiLevel < placement.NoVirtualNodesInPlacementTablesAPILevel {
-				p.placementTables.Entries[k] = hashing.NewFromExistingWithVirtNodes(v.GetHosts(), v.GetSortedSet(), loadMap)
+				entries[k] = hashing.NewFromExistingWithVirtNodes(v.GetHosts(), v.GetSortedSet(), loadMap)
 			} else {
-				p.placementTables.Entries[k] = hashing.NewFromExisting(loadMap, int(in.GetReplicationFactor()), p.virtualNodesCache)
+				entries[k] = hashing.NewFromExisting(loadMap, int(in.GetReplicationFactor()), p.virtualNodesCache)
 			}
 		}
+
+		p.placementTableLock.Lock()
+		defer p.placementTableLock.Unlock()
+
+		maps.Clear(p.placementTables.Entries)
+		p.placementTables.Version = in.GetVersion()
+		p.placementTables.Entries = entries
 
 		updated = true
 		if p.hasPlacementTablesCh != nil {
