@@ -177,8 +177,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
-      - name: Build binaries
-        run: make build
+          cache: ${{ matrix.target_os != 'windows' }}
       - name: Run make test-integration
         run: make test-integration
   build:
