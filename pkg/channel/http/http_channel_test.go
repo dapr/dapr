@@ -896,6 +896,7 @@ func TestNoInvalidTraceContext(t *testing.T) {
 		baseAddress: testServer.URL,
 		client:      http.DefaultClient,
 		compStore:   compstore.New(),
+		middleware:  httpMiddleware.New().BuildPipelineFromSpec("test", nil),
 	}
 	req := invokev1.NewInvokeMethodRequest("method").
 		WithContentType("text/plain").

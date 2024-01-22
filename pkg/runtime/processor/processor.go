@@ -211,11 +211,6 @@ func New(opts Options) *Processor {
 			components.CategorySecretStore:     secret,
 			components.CategoryStateStore:      state,
 			components.CategoryWorkflowBackend: wfbe,
-			components.CategoryWorkflow: workflow.New(workflow.Options{
-				Registry:       opts.Registry.Workflows(),
-				ComponentStore: opts.ComponentStore,
-				Meta:           opts.Meta,
-			}),
 			components.CategoryMiddleware: middleware.New(middleware.Options{
 				Meta:         opts.Meta,
 				RegistryHTTP: opts.Registry.HTTPMiddlewares(),
