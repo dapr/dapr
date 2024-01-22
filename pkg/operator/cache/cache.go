@@ -6,7 +6,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/rand"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatormeta "github.com/dapr/dapr/pkg/operator/meta"
 )
@@ -36,81 +38,86 @@ var (
 // to limit what items end up in the cache. The following is removed/clear from the resources:
 // - pods -> managed fields, status (we care for spec to find out containers, the rests are set to empty)
 // - deploy/sts -> template.spec, status, managedfields (we only care about template/metadata except for injector deployment)
-func GetFilteredCache(podSelector labels.Selector) cache.NewCacheFunc {
-	cacheOptions := cache.Options{
-		TransformByObject: getTransformerFunctions(),
-	}
-
-	if podSelector != nil {
-		// The only pods we are interested are in watchdog. we don't need to list/watch pods that we are almost sure have dapr sidecar already
-		cacheOptions.SelectorsByObject = cache.SelectorsByObject{
-			&corev1.Pod{}: {
-				Label: podSelector,
-			},
+func GetFilteredCache(namespace string, podSelector labels.Selector) cache.NewCacheFunc {
+	return func(config *rest.Config, opts cache.Options) (cache.Cache, error) {
+		// The only pods we are interested are in watchdog. we don't need to
+		// list/watch pods that we are almost sure have dapr sidecar already.
+		opts.ByObject = getTransformerFunctions(podSelector)
+		if len(namespace) > 0 {
+			opts.DefaultNamespaces = map[string]cache.Config{
+				namespace: {},
+			}
 		}
+		return cache.New(config, opts)
 	}
-	return cache.BuilderWithOptions(cacheOptions)
 }
 
 // getTransformerFunctions creates transformers that are called by the DeltaFifo before they are inserted in the cache
 // the transformations here try to reduce size of objects, and for some others objects that we don't care about (non-dapr)
 // we set all these objects to store a single one, a sort of sinkhole
-func getTransformerFunctions() cache.TransformByObject {
-	return cache.TransformByObject{
-		&corev1.Pod{}: func(i any) (any, error) {
-			obj, ok := i.(*corev1.Pod)
-			if !ok { // probably deletedfinalstateunknown
-				return i, nil
-			}
+func getTransformerFunctions(podSelector labels.Selector) map[client.Object]cache.ByObject {
+	return map[client.Object]cache.ByObject{
+		&corev1.Pod{}: {
+			Label: podSelector,
+			Transform: func(i any) (any, error) {
+				obj, ok := i.(*corev1.Pod)
+				if !ok { // probably deletedfinalstateunknown
+					return i, nil
+				}
 
-			if operatormeta.IsAnnotatedForDapr(obj.ObjectMeta.GetAnnotations()) && !operatormeta.IsSidecarPresent(obj.ObjectMeta.GetLabels()) {
-				objClone := obj.DeepCopy()
-				objClone.ObjectMeta.ManagedFields = []metav1.ManagedFieldsEntry{}
-				objClone.Status = podEmptyStatus
-				return objClone, nil
-			}
+				if operatormeta.IsAnnotatedForDapr(obj.ObjectMeta.GetAnnotations()) && !operatormeta.IsSidecarPresent(obj.ObjectMeta.GetLabels()) {
+					objClone := obj.DeepCopy()
+					objClone.ObjectMeta.ManagedFields = []metav1.ManagedFieldsEntry{}
+					objClone.Status = podEmptyStatus
+					return objClone, nil
+				}
 
-			return podDevNull, nil
+				return podDevNull, nil
+			},
 		},
-		&appsv1.Deployment{}: func(i any) (any, error) {
-			obj, ok := i.(*appsv1.Deployment)
-			if !ok {
-				return i, nil
-			}
+		&appsv1.Deployment{}: {
+			Transform: func(i any) (any, error) {
+				obj, ok := i.(*appsv1.Deployment)
+				if !ok {
+					return i, nil
+				}
 
-			// store injector deployment as is
-			if obj.GetLabels()["app"] == operatormeta.SidecarInjectorDeploymentName {
-				return i, nil
-			}
+				// store injector deployment as is
+				if obj.GetLabels()["app"] == operatormeta.SidecarInjectorDeploymentName {
+					return i, nil
+				}
 
-			// slim down dapr deployments and sinkhole non-dapr ones
-			if operatormeta.IsAnnotatedForDapr(obj.Spec.Template.ObjectMeta.GetAnnotations()) {
-				// keep metadata but remove the rest
-				objClone := obj.DeepCopy()
-				objClone.ObjectMeta.ManagedFields = []metav1.ManagedFieldsEntry{}
-				objClone.Spec.Template.Spec = podEmptySpec
-				objClone.Status = deployEmptyStatus
-				return objClone, nil
-			}
+				// slim down dapr deployments and sinkhole non-dapr ones
+				if operatormeta.IsAnnotatedForDapr(obj.Spec.Template.ObjectMeta.GetAnnotations()) {
+					// keep metadata but remove the rest
+					objClone := obj.DeepCopy()
+					objClone.ObjectMeta.ManagedFields = []metav1.ManagedFieldsEntry{}
+					objClone.Spec.Template.Spec = podEmptySpec
+					objClone.Status = deployEmptyStatus
+					return objClone, nil
+				}
 
-			return deployDevNull, nil
+				return deployDevNull, nil
+			},
 		},
-		&appsv1.StatefulSet{}: func(i any) (any, error) {
-			obj, ok := i.(*appsv1.StatefulSet)
-			if !ok {
-				return i, nil
-			}
+		&appsv1.StatefulSet{}: {
+			Transform: func(i any) (any, error) {
+				obj, ok := i.(*appsv1.StatefulSet)
+				if !ok {
+					return i, nil
+				}
 
-			if operatormeta.IsAnnotatedForDapr(obj.Spec.Template.ObjectMeta.GetAnnotations()) {
-				// keep metadata but remove the rest
-				objClone := obj.DeepCopy()
-				objClone.ObjectMeta.ManagedFields = []metav1.ManagedFieldsEntry{}
-				objClone.Spec.Template.Spec = podEmptySpec
-				objClone.Status = stsEmptyStatus
-				return objClone, nil
-			}
+				if operatormeta.IsAnnotatedForDapr(obj.Spec.Template.ObjectMeta.GetAnnotations()) {
+					// keep metadata but remove the rest
+					objClone := obj.DeepCopy()
+					objClone.ObjectMeta.ManagedFields = []metav1.ManagedFieldsEntry{}
+					objClone.Spec.Template.Spec = podEmptySpec
+					objClone.Status = stsEmptyStatus
+					return objClone, nil
+				}
 
-			return stsDevNull, nil
+				return stsDevNull, nil
+			},
 		},
 	}
 }
