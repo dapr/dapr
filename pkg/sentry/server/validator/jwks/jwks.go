@@ -90,8 +90,8 @@ func (j *jwks) Validate(ctx context.Context, req *sentryv1pb.SignCertificateRequ
 		return spiffeid.TrustDomain{}, errors.New("the request does not contain a token")
 	}
 
-	if err = j.cache.WaitForCacheReady(ctx); err != nil {
-		return td, false, errors.New("jwks validator not ready")
+	if err := j.cache.WaitForCacheReady(ctx); err != nil {
+		return spiffeid.TrustDomain{}, errors.New("jwks validator not ready")
 	}
 
 	// Validate the internal request

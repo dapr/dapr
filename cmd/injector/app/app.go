@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"os"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -38,7 +39,7 @@ import (
 var log = logger.NewLogger("dapr.injector")
 
 func Run() {
-	opts := options.New()
+	opts := options.New(os.Args[1:])
 
 	// Apply options to all loggers
 	err := logger.ApplyOptionsToLoggers(&opts.Logger)
@@ -111,7 +112,7 @@ func Run() {
 		log.Fatalf("Error creating injector: %v", err)
 	}
 
-	healthzServer := health.NewServer(log)
+	healthzServer := health.NewServer(health.Options{Log: log})
 	caBundleCh := make(chan []byte)
 	mngr := concurrency.NewRunnerManager(
 		metricsExporter.Run,
@@ -121,8 +122,13 @@ func Run() {
 			if rerr != nil {
 				return rerr
 			}
+			sentryID, rerr := security.SentryID(sec.ControlPlaneTrustDomain(), security.CurrentNamespace())
+			if err != nil {
+				return rerr
+			}
 			return inj.Run(ctx,
 				sec.TLSServerConfigNoClientAuth(),
+				sentryID,
 				sec.CurrentTrustAnchors,
 			)
 		},
