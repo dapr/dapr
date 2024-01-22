@@ -460,7 +460,6 @@ replace (
 replace (
 	github.com/chenzhuoyu/iasm => github.com/chenzhuoyu/iasm v0.9.0
 	github.com/chzyer/logex => github.com/chzyer/logex v1.2.1
-	github.com/dapr/components-contrib => github.com/artursouza/components-contrib v0.0.0-20240119234530-8ad6e8a6a843
 	github.com/gobwas/pool => github.com/gobwas/pool v0.2.1
 	github.com/toolkits/concurrent => github.com/niean/gotools v0.0.0-20151221085310-ff3f51fc5c60
 )
@@ -473,7 +472,6 @@ replace github.com/microcosm-cc/bluemonday => github.com/microcosm-cc/bluemonday
 // Don't commit with this uncommented!
 //
 // replace github.com/dapr/components-contrib => ../components-contrib
-
 // replace github.com/dapr/kit => ../kit
 //
 // Then, run `make modtidy-all` in this repository.
