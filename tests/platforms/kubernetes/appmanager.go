@@ -236,11 +236,12 @@ func (m *AppManager) WaitUntilJobState(isState func(*batchv1.Job, error) bool) (
 
 	var lastJob *batchv1.Job
 
-	waitErr := wait.PollImmediate(PollInterval, PollTimeout, func() (bool, error) {
+	ctx, cancel := context.WithTimeout(m.ctx, PollTimeout)
+	defer cancel()
+
+	waitErr := wait.PollUntilContextCancel(ctx, PollInterval, true, func(ctx context.Context) (bool, error) {
 		var err error
-		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 		lastJob, err = jobsClient.Get(ctx, m.app.AppName, metav1.GetOptions{})
-		cancel()
 		done := isState(lastJob, err)
 		if !done && err != nil {
 			return true, err
@@ -280,10 +281,11 @@ func (m *AppManager) WaitUntilDeploymentState(isState func(*appsv1.Deployment, e
 
 	var lastDeployment *appsv1.Deployment
 
-	waitErr := wait.PollImmediate(PollInterval, PollTimeout, func() (bool, error) {
+	ctx, cancel := context.WithTimeout(m.ctx, PollTimeout)
+	defer cancel()
+
+	waitErr := wait.PollUntilContextCancel(ctx, PollInterval, true, func(ctx context.Context) (bool, error) {
 		var err error
-		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
-		defer cancel()
 		lastDeployment, err = deploymentsClient.Get(ctx, m.app.AppName, metav1.GetOptions{})
 		done := isState(lastDeployment, err)
 		if !done && err != nil {
@@ -341,7 +343,10 @@ func (m *AppManager) WaitUntilDeploymentState(isState func(*appsv1.Deployment, e
 
 // WaitUntilSidecarPresent waits until Dapr sidecar is present.
 func (m *AppManager) WaitUntilSidecarPresent() error {
-	waitErr := wait.PollImmediate(PollInterval, PollTimeout, func() (bool, error) {
+	ctx, cancel := context.WithTimeout(m.ctx, PollTimeout)
+	defer cancel()
+
+	waitErr := wait.PollUntilContextCancel(ctx, PollInterval, true, func(ctx context.Context) (bool, error) {
 		allDaprd, minContainerCount, maxContainerCount, err := m.getContainerInfo()
 		log.Printf(
 			"Checking if Dapr sidecar is present on app %s (minContainerCount=%d, maxContainerCount=%d, allDaprd=%v): %v ...",
@@ -603,11 +608,12 @@ func (m *AppManager) WaitUntilServiceState(svcName string, isState func(*apiv1.S
 	serviceClient := m.client.Services(m.namespace)
 	var lastService *apiv1.Service
 
-	waitErr := wait.PollImmediate(PollInterval, PollTimeout, func() (bool, error) {
+	ctx, cancel := context.WithTimeout(m.ctx, PollTimeout)
+	defer cancel()
+
+	waitErr := wait.PollUntilContextCancel(ctx, PollInterval, true, func(ctx context.Context) (bool, error) {
 		var err error
-		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 		lastService, err = serviceClient.Get(ctx, svcName, metav1.GetOptions{})
-		cancel()
 		done := isState(lastService, err)
 		if !done && err != nil {
 			log.Printf("wait for %s: %s", svcName, err)
