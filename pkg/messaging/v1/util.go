@@ -50,12 +50,12 @@ const (
 
 	// ContentTypeHeader is the header key of content-type.
 	ContentTypeHeader = "content-type"
+	// ContentLengthHeader is the header key of content-length.
+	ContentLengthHeader = "content-length"
 	// DaprHeaderPrefix is the prefix if metadata is defined by non user-defined http headers.
 	DaprHeaderPrefix = "dapr-"
 	// gRPCBinaryMetadata is the suffix of grpc metadata binary value.
 	gRPCBinaryMetadataSuffix = "-bin"
-	// ContentLengthHeader is the header key of content-length.
-	ContentLengthHeader = "content-length"
 
 	// W3C trace correlation headers.
 	traceparentHeader = "traceparent"
@@ -233,7 +233,9 @@ func InternalMetadataToHTTPHeader(ctx context.Context, internalMD DaprInternalMe
 			continue
 		}
 
-		if strings.HasSuffix(keyName, gRPCBinaryMetadataSuffix) || keyName == ContentTypeHeader {
+		if strings.HasSuffix(keyName, gRPCBinaryMetadataSuffix) ||
+			keyName == ContentTypeHeader ||
+			keyName == ContentLengthHeader {
 			continue
 		}
 
@@ -454,6 +456,13 @@ func ProtobufToJSON(message protoreflect.ProtoMessage) ([]byte, error) {
 // WithCustomGRPCMetadata applies a metadata map to the outgoing context metadata.
 func WithCustomGRPCMetadata(ctx context.Context, md map[string]string) context.Context {
 	for k, v := range md {
+		if strings.EqualFold(k, ContentTypeHeader) ||
+			strings.EqualFold(k, ContentLengthHeader) {
+			// There is no use of the original payload's content-length because
+			// the entire data is already in the cloud event.
+			continue
+		}
+
 		// Uppercase keys will be converted to lowercase.
 		ctx = metadata.AppendToOutgoingContext(ctx, k, v)
 	}
