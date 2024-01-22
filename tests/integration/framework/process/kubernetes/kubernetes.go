@@ -72,6 +72,22 @@ func New(t *testing.T, fopts ...Option) *Kubernetes {
 		w.Write([]byte(apisDiscovery))
 	})
 
+	handler.HandleFunc("/apis/dapr.io/v1alpha1", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(apisDaprV1alpha1))
+	})
+
+	handler.HandleFunc("/apis/dapr.io/v2alpha1", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(apisDaprV2alpha1))
+	})
+
+	handler.HandleFunc("/apis/apps/v1", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(apisAppsV1))
+	})
+
+	handler.HandleFunc("/api/v1", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(apiV1))
+	})
+
 	for crdName, crd := range parseCRDs(t) {
 		handler.HandleFunc("/apis/apiextensions.k8s.io/v1/customresourcedefinitions/"+crdName, func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Add("Content-Type", "application/json")
@@ -84,6 +100,10 @@ func New(t *testing.T, fopts ...Option) *Kubernetes {
 	for path, handle := range opts.handlers {
 		handler.HandleFunc(path, informer.Handler(t, handle))
 	}
+
+	handler.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	})
 
 	// We need to run the Kubernetes API server with TLS so that HTTP/2.0 is
 	// enabled, which is required for informers.
