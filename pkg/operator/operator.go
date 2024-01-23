@@ -271,6 +271,8 @@ func (o *operator) Run(ctx context.Context) error {
 		},
 		func(ctx context.Context) error {
 			if !enableConversionWebhooks {
+				healthzServer.Ready()
+				<-ctx.Done()
 				return nil
 			}
 
@@ -283,6 +285,8 @@ func (o *operator) Run(ctx context.Context) error {
 		},
 		func(ctx context.Context) error {
 			if !enableConversionWebhooks {
+				healthzServer.Ready()
+				<-ctx.Done()
 				return nil
 			}
 
