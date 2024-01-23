@@ -34,7 +34,9 @@ func TestReplicationFactor(t *testing.T) {
 		factors := []int{1, 100, 1000, 10000}
 
 		for _, f := range factors {
-			h := NewConsistentHash(f)
+			SetReplicationFactor(f)
+
+			h := NewConsistentHash()
 			for _, n := range nodes {
 				s := h.Add(n, n, 1)
 				assert.False(t, s)
@@ -63,6 +65,13 @@ func TestReplicationFactor(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestSetReplicationFactor(t *testing.T) {
+	f := 10
+	SetReplicationFactor(f)
+
+	assert.Equal(t, f, replicationFactor)
 }
 
 func TestGetAndSetVirtualNodeCacheHashes(t *testing.T) {

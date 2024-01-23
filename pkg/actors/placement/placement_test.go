@@ -39,6 +39,8 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
+var apiLevel atomic.Uint32
+
 func TestAddDNSResolverPrefix(t *testing.T) {
 	testCases := []struct {
 		addr          []string
@@ -70,7 +72,6 @@ func TestPlacementStream_RoundRobin(t *testing.T) {
 		address[i], testSrv[i], cleanup[i] = newTestServer()
 	}
 
-	var apiLevel atomic.Uint32
 	apiLevel.Store(1)
 	testPlacement := NewActorPlacement(internal.ActorsProviderOptions{
 		Config: internal.Config{
@@ -133,7 +134,6 @@ func TestAppHealthyStatus(t *testing.T) {
 
 	appHealthCh := make(chan bool)
 
-	var apiLevel atomic.Uint32
 	apiLevel.Store(1)
 	testPlacement := NewActorPlacement(internal.ActorsProviderOptions{
 		Config: internal.Config{
@@ -172,6 +172,7 @@ func TestAppHealthyStatus(t *testing.T) {
 func TestOnPlacementOrder(t *testing.T) {
 	tableUpdateCount := atomic.Int64{}
 	tableUpdateFunc := func() { tableUpdateCount.Add(1) }
+	apiLevel.Store(1)
 	testPlacement := NewActorPlacement(internal.ActorsProviderOptions{
 		Config: internal.Config{
 			ActorsService:    "placement:",
@@ -184,6 +185,7 @@ func TestOnPlacementOrder(t *testing.T) {
 		AppHealthFn: func(ctx context.Context) <-chan bool { return nil },
 		Security:    testSecurity(t),
 		Resiliency:  resiliency.New(logger.NewLogger("test")),
+		APILevel:    &apiLevel,
 	}).(*actorPlacement)
 	testPlacement.SetOnTableUpdateFn(tableUpdateFunc)
 
@@ -246,17 +248,12 @@ func TestOnPlacementOrder(t *testing.T) {
 			},
 		}
 
-		testPlacement.apiLevel = 20
-		t.Cleanup(func() {
-			testPlacement.apiLevel = 10
-		})
-
 		testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{
 			Operation: "update",
 			Tables: &placementv1pb.PlacementTables{
 				Version:           tableVersion,
 				Entries:           entries,
-				ApiLevel:          20,
+				ApiLevel:          10,
 				ReplicationFactor: 3,
 			},
 		})
@@ -343,7 +340,6 @@ func TestOnPlacementOrder(t *testing.T) {
 }
 
 func TestWaitUntilPlacementTableIsReady(t *testing.T) {
-	var apiLevel atomic.Uint32
 	apiLevel.Store(1)
 	testPlacement := NewActorPlacement(internal.ActorsProviderOptions{
 		Config: internal.Config{
@@ -485,7 +481,6 @@ func TestWaitUntilPlacementTableIsReady(t *testing.T) {
 }
 
 func TestLookupActor(t *testing.T) {
-	var apiLevel atomic.Uint32
 	apiLevel.Store(1)
 	testPlacement := NewActorPlacement(internal.ActorsProviderOptions{
 		Config: internal.Config{
@@ -517,7 +512,9 @@ func TestLookupActor(t *testing.T) {
 			Entries: map[string]*hashing.Consistent{},
 		}
 
-		actorOneHashing := hashing.NewConsistentHash(10)
+		// set vnode size
+		hashing.SetReplicationFactor(10)
+		actorOneHashing := hashing.NewConsistentHash()
 		actorOneHashing.Add(testPlacement.config.GetRuntimeHostname(), testPlacement.config.AppID, 0)
 		testPlacement.placementTables.Entries["actorOne"] = actorOneHashing
 
@@ -543,7 +540,6 @@ func TestLookupActor(t *testing.T) {
 }
 
 func TestConcurrentUnblockPlacements(t *testing.T) {
-	var apiLevel atomic.Uint32
 	apiLevel.Store(1)
 	testPlacement := NewActorPlacement(internal.ActorsProviderOptions{
 		Config: internal.Config{

@@ -26,6 +26,7 @@ import (
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/placement"
+	"github.com/dapr/dapr/pkg/placement/hashing"
 	"github.com/dapr/dapr/pkg/placement/monitoring"
 	"github.com/dapr/dapr/pkg/placement/raft"
 	"github.com/dapr/dapr/pkg/security"
@@ -57,11 +58,10 @@ func Run() {
 
 	// Start Raft cluster.
 	raftServer := raft.New(raft.Options{
-		ID:                opts.RaftID,
-		InMem:             opts.RaftInMemEnabled,
-		Peers:             opts.RaftPeers,
-		LogStorePath:      opts.RaftLogStorePath,
-		ReplicationFactor: int64(opts.ReplicationFactor),
+		ID:           opts.RaftID,
+		InMem:        opts.RaftInMemEnabled,
+		Peers:        opts.RaftPeers,
+		LogStorePath: opts.RaftLogStorePath,
 	})
 	if raftServer == nil {
 		log.Fatal("Failed to create raft server.")
@@ -80,6 +80,8 @@ func Run() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	hashing.SetReplicationFactor(opts.ReplicationFactor)
 
 	placementOpts := placement.PlacementServiceOpts{
 		RaftNode:    raftServer,

@@ -64,13 +64,11 @@ type DaprHostMemberStateData struct {
 type DaprHostMemberState struct {
 	lock sync.RWMutex
 
-	replicationFactor int
-	data              DaprHostMemberStateData
+	data DaprHostMemberStateData
 }
 
-func newDaprHostMemberState(replicationFactor int) *DaprHostMemberState {
+func newDaprHostMemberState() *DaprHostMemberState {
 	return &DaprHostMemberState{
-		replicationFactor: replicationFactor,
 		data: DaprHostMemberStateData{
 			Members:         map[string]*DaprHostMember{},
 			hashingTableMap: map[string]*hashing.Consistent{},
@@ -143,7 +141,6 @@ func (s *DaprHostMemberState) clone() *DaprHostMemberState {
 	defer s.lock.RUnlock()
 
 	newMembers := &DaprHostMemberState{
-		replicationFactor: s.replicationFactor,
 		data: DaprHostMemberStateData{
 			Index:           s.data.Index,
 			TableGeneration: s.data.TableGeneration,
@@ -169,7 +166,7 @@ func (s *DaprHostMemberState) clone() *DaprHostMemberState {
 func (s *DaprHostMemberState) updateHashingTables(host *DaprHostMember) {
 	for _, e := range host.Entities {
 		if _, ok := s.data.hashingTableMap[e]; !ok {
-			s.data.hashingTableMap[e] = hashing.NewConsistentHash(s.replicationFactor)
+			s.data.hashingTableMap[e] = hashing.NewConsistentHash()
 		}
 
 		s.data.hashingTableMap[e].Add(host.Name, host.AppID, 0)

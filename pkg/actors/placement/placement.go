@@ -30,7 +30,6 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors/internal"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	"github.com/dapr/dapr/pkg/placement"
 	"github.com/dapr/dapr/pkg/placement/hashing"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -127,6 +126,7 @@ func NewActorPlacement(opts internal.ActorsProviderOptions) internal.PlacementSe
 		appHealthFn:       opts.AppHealthFn,
 		closeCh:           make(chan struct{}),
 		resiliency:        opts.Resiliency,
+		apiLevel:          opts.APILevel.Load(),
 		virtualNodesCache: hashing.NewVirtualNodesCache(),
 	}
 }
@@ -548,12 +548,12 @@ func (p *actorPlacement) updatePlacements(in *v1pb.PlacementTables) {
 				loadMap[lk] = hashing.NewHost(lv.GetName(), lv.GetId(), lv.GetLoad(), lv.GetPort())
 			}
 
-			// TODO: @elena in v1.15 remove the check for versions < 1.13
+			// TODO in v1.15 remove the check for versions < 1.13
 			// only keep `hashing.NewFromExisting`
-			if p.apiLevel < placement.NoVirtualNodesInPlacementTablesAPILevel {
-				p.placementTables.Entries[k] = hashing.NewFromExistingWithVirtNodes(v.GetHosts(), v.GetSortedSet(), loadMap)
-			} else {
+			if in.GetReplicationFactor() > 0 && len(v.GetHosts()) == 0 {
 				p.placementTables.Entries[k] = hashing.NewFromExisting(loadMap, int(in.GetReplicationFactor()), p.virtualNodesCache)
+			} else {
+				p.placementTables.Entries[k] = hashing.NewFromExistingWithVirtNodes(v.GetHosts(), v.GetSortedSet(), loadMap)
 			}
 		}
 

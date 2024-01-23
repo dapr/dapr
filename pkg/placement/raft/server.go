@@ -77,12 +77,11 @@ type Server struct {
 }
 
 type Options struct {
-	ID                string
-	InMem             bool
-	Peers             []PeerInfo
-	LogStorePath      string
-	Clock             clock.Clock
-	ReplicationFactor int64
+	ID           string
+	InMem        bool
+	Peers        []PeerInfo
+	LogStorePath string
+	Clock        clock.Clock
 }
 
 // New creates Raft server node.
@@ -105,7 +104,6 @@ func New(opts Options) *Server {
 		raftLogStorePath: opts.LogStorePath,
 		clock:            cl,
 		raftReady:        make(chan struct{}),
-		fsm:              newFSM(opts.ReplicationFactor),
 	}
 }
 
@@ -154,6 +152,8 @@ func (s *Server) StartRaft(ctx context.Context, sec security.Handler, config *ra
 			}
 		}
 	}()
+
+	s.fsm = newFSM()
 
 	addr, err := s.tryResolveRaftAdvertiseAddr(ctx, s.raftBind)
 	if err != nil {
