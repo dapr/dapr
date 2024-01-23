@@ -124,7 +124,7 @@ func (h *httpMetrics) ServerRequestCompleted(ctx context.Context, method, path, 
 	if h.legacy {
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(h.serverRequestCount.Name(), appIDKey, h.appID, httpMethodKey, method, httpStatusCodeKey, status),
+			diagUtils.WithTags(h.serverRequestCount.Name(), appIDKey, h.appID, httpMethodKey, method, httpPathKey, path, httpStatusCodeKey, status),
 			h.serverRequestCount.M(1))
 		stats.RecordWithTags(
 			ctx,
@@ -133,7 +133,7 @@ func (h *httpMetrics) ServerRequestCompleted(ctx context.Context, method, path, 
 	} else {
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(h.serverRequestCount.Name(), appIDKey, h.appID, httpMethodKey, method, httpPathKey, path, httpStatusCodeKey, status),
+			diagUtils.WithTags(h.serverRequestCount.Name(), appIDKey, h.appID, httpMethodKey, method, httpStatusCodeKey, status),
 			h.serverRequestCount.M(1))
 		stats.RecordWithTags(
 			ctx,
@@ -275,11 +275,16 @@ func (h *httpMetrics) HTTPMiddleware(next http.Handler) http.Handler {
 		status := strconv.Itoa(rw.Status())
 		respSize := int64(rw.Size())
 
-		// Check if the context contains a MethodName method
-		endpointData, _ := r.Context().Value(endpoints.EndpointCtxKey{}).(*endpoints.EndpointCtxData)
-		method := endpointData.GetEndpointName()
-		if endpointData != nil && endpointData.Group != nil && endpointData.Group.MethodName != nil {
-			method = endpointData.Group.MethodName(r)
+		var method string
+		if h.legacy {
+			method = r.Method
+		} else {
+			// Check if the context contains a MethodName method
+			endpointData, _ := r.Context().Value(endpoints.EndpointCtxKey{}).(*endpoints.EndpointCtxData)
+			method = endpointData.GetEndpointName()
+			if endpointData != nil && endpointData.Group != nil && endpointData.Group.MethodName != nil {
+				method = endpointData.Group.MethodName(r)
+			}
 		}
 
 		// Record the request

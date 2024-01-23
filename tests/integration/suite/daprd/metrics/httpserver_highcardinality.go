@@ -70,7 +70,7 @@ func (m *httpServerHighCardinality) Run(t *testing.T, ctx context.Context) {
 
 		// Verify metrics
 		metrics := m.getMetrics(t, ctx)
-		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:InvokeService/myapp|status:200"]))
+		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:GET|path:/v1.0/invoke/myapp/method/hi|status:200"]))
 	})
 
 	t.Run("state stores", func(t *testing.T) {
@@ -91,7 +91,7 @@ func (m *httpServerHighCardinality) Run(t *testing.T, ctx context.Context) {
 
 		// Verify metrics
 		metrics := m.getMetrics(t, ctx)
-		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:SaveState|status:204"]))
-		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:GetState|status:200"]))
+		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:POST|path:/v1.0/state/mystore|status:204"]))
+		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:GET|path:/v1.0/state/mystore|status:200"]))
 	})
 }
