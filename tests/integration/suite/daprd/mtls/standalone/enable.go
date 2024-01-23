@@ -20,6 +20,8 @@ import (
 	"testing"
 	"time"
 
+	procscheduler "github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -45,6 +47,7 @@ type enable struct {
 	daprd        *procdaprd.Daprd
 	sentry       *procsentry.Sentry
 	placement    *procplacement.Placement
+	scheduler    *procscheduler.Scheduler
 	trustAnchors []byte
 }
 
@@ -57,6 +60,13 @@ func (e *enable) Setup(t *testing.T) []framework.Option {
 	// Control plane services always serves with mTLS in kubernetes mode.
 	taFile := filepath.Join(t.TempDir(), "ca.pem")
 	require.NoError(t, os.WriteFile(taFile, bundle.TrustAnchors, 0o600))
+
+	e.scheduler = procscheduler.New(t,
+		procscheduler.WithEnableTLS(true),
+		procscheduler.WithTrustAnchorsFile(taFile),
+		procscheduler.WithSentryAddress(e.sentry.Address()),
+	)
+
 	e.placement = procplacement.New(t,
 		procplacement.WithEnableTLS(true),
 		procplacement.WithTrustAnchorsFile(taFile),
@@ -69,19 +79,21 @@ func (e *enable) Setup(t *testing.T) []framework.Option {
 		procdaprd.WithExecOptions(exec.WithEnvVars("DAPR_TRUST_ANCHORS", string(bundle.TrustAnchors))),
 		procdaprd.WithSentryAddress(e.sentry.Address()),
 		procdaprd.WithPlacementAddresses(e.placement.Address()),
+		procdaprd.WithSchedulerAddresses(e.scheduler.Address()),
 
 		// Enable mTLS
 		procdaprd.WithEnableMTLS(true),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(e.sentry, e.placement, e.daprd),
+		framework.WithProcesses(e.sentry, e.placement, e.scheduler, e.daprd),
 	}
 }
 
 func (e *enable) Run(t *testing.T, ctx context.Context) {
 	e.sentry.WaitUntilRunning(t, ctx)
 	e.placement.WaitUntilRunning(t, ctx)
+	e.scheduler.WaitUntilRunning(t, ctx)
 	e.daprd.WaitUntilRunning(t, ctx)
 
 	t.Run("trying plain text connection to Dapr API should fail", func(t *testing.T) {

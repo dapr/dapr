@@ -41,6 +41,7 @@ type options struct {
 	resourceDirs            []string
 	configs                 []string
 	placementAddresses      []string
+	schedulerAddresses      []string
 	logLevel                string
 	mode                    string
 	enableMTLS              bool
@@ -171,6 +172,12 @@ func WithConfigs(configs ...string) Option {
 func WithPlacementAddresses(addresses ...string) Option {
 	return func(o *options) {
 		o.placementAddresses = addresses
+	}
+}
+
+func WithSchedulerAddresses(addresses ...string) Option {
+	return func(o *options) {
+		o.schedulerAddresses = addresses
 	}
 }
 

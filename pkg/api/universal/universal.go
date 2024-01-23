@@ -16,9 +16,10 @@ limitations under the License.
 package universal
 
 import (
-	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"sync"
 	"sync/atomic"
+
+	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/config"

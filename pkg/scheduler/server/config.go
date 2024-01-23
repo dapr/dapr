@@ -44,6 +44,6 @@ func conf() *embed.Config {
 	config.InitialCluster = "localhost=http://localhost:2380"
 
 	config.LogLevel = "error" // Only supports debug, info, warn, error, panic, or fatal. Default 'info'.
-	//TODO: Look into etcd config and if we need to do any raft compacting
+	// TODO: Look into etcd config and if we need to do any raft compacting
 	return config
 }

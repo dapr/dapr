@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	etcdcron "github.com/Scalingo/go-etcd-cron"
+
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 )
@@ -33,18 +34,18 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 		return nil, ctx.Err()
 	case <-s.readyCh:
 	}
-	
-	//TODO: figure out if we need/want namespace in job name
+
+	// TODO: figure out if we need/want namespace in job name
 	err := s.cron.AddJob(etcdcron.Job{
-		Name:     req.Job.Name,
-		Rhythm:   req.Job.Schedule,
-		Repeats:  req.Job.Repeats,
-		DueTime:  req.Job.DueTime, //TODO: figure out dueTime
-		TTL:      req.Job.Ttl,
-		Data:     req.Job.Data,
-		Metadata: req.Metadata, //TODO: do I need this here?
+		Name:     req.GetJob().GetName(),
+		Rhythm:   req.GetJob().GetSchedule(),
+		Repeats:  req.GetJob().GetRepeats(),
+		DueTime:  req.GetJob().GetDueTime(), // TODO: figure out dueTime
+		TTL:      req.GetJob().GetTtl(),
+		Data:     req.GetJob().GetData(),
+		Metadata: req.GetMetadata(), // TODO: do I need this here?
 		Func: func(context.Context) error {
-			innerErr := s.triggerJob(req.Job, req.Namespace, req.Metadata)
+			innerErr := s.triggerJob(req.GetJob(), req.GetNamespace(), req.GetMetadata())
 			if innerErr != nil {
 				return innerErr
 			}
@@ -52,7 +53,7 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 		},
 	})
 	if err != nil {
-		log.Errorf("error scheduling job %s: %s", req.Job.Name, err)
+		log.Errorf("error scheduling job %s: %s", req.GetJob().GetName(), err)
 		return nil, err
 	}
 
@@ -61,12 +62,12 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 
 func (s *Server) triggerJob(job *runtimev1pb.Job, namespace string, metadata map[string]string) error {
 	_, err := s.TriggerJob(context.Background(), &schedulerv1pb.TriggerJobRequest{
-		JobName:   job.Name,
+		JobName:   job.GetName(),
 		Namespace: namespace,
 		Metadata:  metadata,
 	})
 	if err != nil {
-		log.Errorf("error triggering job %s: %s", job.Name, err)
+		log.Errorf("error triggering job %s: %s", job.GetName(), err)
 		return err
 	}
 	return nil
@@ -82,10 +83,10 @@ func (s *Server) ListJobs(ctx context.Context, req *schedulerv1pb.ListJobsReques
 
 	// TODO: need to do some tweaks here to get entries by appID from req.AppId
 
-	//entries := s.cron.Entries()
-	entries := s.cron.ListJobsByAppID(req.AppId)
+	// entries := s.cron.Entries()
+	entries := s.cron.ListJobsByAppID(req.GetAppId())
 
-	var jobs []*runtimev1pb.Job
+	jobs := make([]*runtimev1pb.Job, 0, len(entries))
 	for _, entry := range entries {
 		job := &runtimev1pb.Job{
 			Name:     entry.Name,
@@ -112,9 +113,9 @@ func (s *Server) GetJob(ctx context.Context, req *schedulerv1pb.JobRequest) (*sc
 	case <-s.readyCh:
 	}
 
-	//jobName := fmt.Sprintf("%s_%s", req.Metadata["app_id"], req.Job.Name)
+	// jobName := fmt.Sprintf("%s_%s", req.Metadata["app_id"], req.Job.Name)
 
-	job := s.cron.GetJob(req.JobName)
+	job := s.cron.GetJob(req.GetJobName())
 	if job != nil {
 		resp := &schedulerv1pb.GetJobResponse{
 			Job: &runtimev1pb.Job{
@@ -140,9 +141,9 @@ func (s *Server) DeleteJob(ctx context.Context, req *schedulerv1pb.JobRequest) (
 	case <-s.readyCh:
 	}
 
-	err := s.cron.DeleteJob(req.JobName)
+	err := s.cron.DeleteJob(req.GetJobName())
 	if err != nil {
-		log.Errorf("error deleting job %s: %s", req.JobName, err)
+		log.Errorf("error deleting job %s: %s", req.GetJobName(), err)
 		return nil, err
 	}
 
