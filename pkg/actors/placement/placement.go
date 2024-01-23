@@ -560,6 +560,14 @@ func (p *actorPlacement) updatePlacements(in *v1pb.PlacementTables) {
 		p.placementTableLock.Lock()
 		defer p.placementTableLock.Unlock()
 
+		// Check if the table was updated in the meantime
+		// This is not needed atm, because the placement leader is the only one sending updates,
+		// but it might be needed soon because there's plans to allow other nodes to send updates
+		// This is a very cheap check, so it's a good idea to keep it
+		if in.GetVersion() == p.placementTables.Version {
+			return
+		}
+
 		maps.Clear(p.placementTables.Entries)
 		p.placementTables.Version = in.GetVersion()
 		p.placementTables.Entries = entries
