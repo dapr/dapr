@@ -243,6 +243,9 @@ func (c *Consistent) Get(key string) (string, error) {
 
 	h := hash(key)
 	c.RLock()
+	if len(c.hosts) == 0 {
+		return "", ErrNoHosts
+	}
 	idx := c.search(h)
 	c.RUnlock()
 	return c.hosts[c.sortedSet[idx]], nil
