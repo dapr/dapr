@@ -564,6 +564,11 @@ func (p *actorPlacement) updatePlacements(in *v1pb.PlacementTables) {
 		p.placementTableLock.Lock()
 		defer p.placementTableLock.Unlock()
 
+		// Check if the table was updated in the meantime
+		if in.GetVersion() == p.placementTables.Version {
+			return
+		}
+
 		maps.Clear(p.placementTables.Entries)
 		p.placementTables.Version = in.GetVersion()
 		p.placementTables.Entries = entries
