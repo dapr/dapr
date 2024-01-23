@@ -14,11 +14,13 @@ limitations under the License.
 package http
 
 import (
-	"github.com/dapr/dapr/pkg/api/http/endpoints"
-	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"net/http"
+
 	"github.com/go-chi/chi/v5"
 	"google.golang.org/protobuf/types/known/emptypb"
-	"net/http"
+
+	"github.com/dapr/dapr/pkg/api/http/endpoints"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
 var endpointGroupSchedulerV1Alpha1 = &endpoints.EndpointGroup{
@@ -91,7 +93,7 @@ func (a *api) onCreateScheduleHandler() http.HandlerFunc {
 			},
 			OutModifier: func(out *emptypb.Empty) (any, error) {
 				// Nullify the response so status code is 204
-				return nil, nil //empty body
+				return nil, nil // empty body
 			},
 		},
 	)
@@ -109,7 +111,7 @@ func (a *api) onDeleteJobHandler() http.HandlerFunc {
 			},
 			OutModifier: func(out *emptypb.Empty) (any, error) {
 				// Nullify the response so status code is 204
-				return nil, nil //empty body
+				return nil, nil // empty body
 			},
 		},
 	)
@@ -127,9 +129,9 @@ func (a *api) onGetJobHandler() http.HandlerFunc {
 			},
 			OutModifier: func(out *runtimev1pb.GetJobResponse) (any, error) {
 				if out == nil || out.GetJob() == nil {
-					return nil, nil //empty body
+					return nil, nil // empty body
 				}
-				return out.GetJob(), nil //empty body
+				return out.GetJob(), nil // empty body
 			},
 		},
 	)
@@ -147,9 +149,9 @@ func (a *api) onListJobsHandler() http.HandlerFunc {
 			},
 			OutModifier: func(out *runtimev1pb.ListJobsResponse) (any, error) {
 				if out == nil || out.GetJobs() == nil {
-					return nil, nil //empty body
+					return nil, nil // empty body
 				}
-				return out.GetJobs(), nil //empty body
+				return out.GetJobs(), nil // empty body
 			},
 		},
 	)

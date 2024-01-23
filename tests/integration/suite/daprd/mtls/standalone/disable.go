@@ -20,6 +20,8 @@ import (
 	"testing"
 	"time"
 
+	procscheduler "github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -44,6 +46,7 @@ type disable struct {
 	daprd        *procdaprd.Daprd
 	sentry       *procsentry.Sentry
 	placement    *procplacement.Placement
+	scheduler    *procscheduler.Scheduler
 	trustAnchors []byte
 }
 
@@ -56,23 +59,30 @@ func (e *disable) Setup(t *testing.T) []framework.Option {
 		procplacement.WithSentryAddress(e.sentry.Address()),
 	)
 
+	e.scheduler = procscheduler.New(t,
+		procscheduler.WithEnableTLS(false),
+		procscheduler.WithSentryAddress(e.sentry.Address()),
+	)
+
 	e.daprd = procdaprd.New(t,
 		procdaprd.WithAppID("my-app"),
 		procdaprd.WithMode("standalone"),
 		procdaprd.WithSentryAddress(e.sentry.Address()),
 		procdaprd.WithPlacementAddresses(e.placement.Address()),
+		procdaprd.WithSchedulerAddresses(e.scheduler.Address()),
 
 		// Disable mTLS
 		procdaprd.WithEnableMTLS(false),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(e.sentry, e.placement, e.daprd),
+		framework.WithProcesses(e.sentry, e.placement, e.scheduler, e.daprd),
 	}
 }
 
 func (e *disable) Run(t *testing.T, ctx context.Context) {
 	e.placement.WaitUntilRunning(t, ctx)
+	e.scheduler.WaitUntilRunning(t, ctx)
 	e.daprd.WaitUntilRunning(t, ctx)
 
 	t.Run("trying plain text connection to Dapr API should succeed", func(t *testing.T) {
