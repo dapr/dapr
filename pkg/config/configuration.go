@@ -275,7 +275,7 @@ type MetricHTTP struct {
 	// If false, metrics for the HTTP server are collected with increased cardinality.
 	// The default is true in Dapr 1.13, but will be changed to false in 1.14+
 	// TODO @ItalyPaleAle: Metrics cardinality
-	IncreasedCardinality *bool `json:"increasedCardinality,omitempty"`
+	IncreasedCardinality *bool `json:"increasedCardinality,omitempty" yaml:"increasedCardinality,omitempty"`
 }
 
 // MetricsRu le defines configuration options for a metric.
@@ -666,14 +666,20 @@ func (c *Configuration) String() string {
 
 // Apply .metrics if set. If not, retain .metric.
 func (c *Configuration) sortMetricsSpec() {
-	if c.Spec.MetricsSpec != nil {
-		if c.Spec.MetricsSpec.Enabled != nil {
-			c.Spec.MetricSpec.Enabled = c.Spec.MetricsSpec.Enabled
-		}
+	if c.Spec.MetricsSpec == nil {
+		return
+	}
 
-		if len(c.Spec.MetricsSpec.Rules) > 0 {
-			c.Spec.MetricSpec.Rules = c.Spec.MetricsSpec.Rules
-		}
+	if c.Spec.MetricsSpec.Enabled != nil {
+		c.Spec.MetricSpec.Enabled = c.Spec.MetricsSpec.Enabled
+	}
+
+	if len(c.Spec.MetricsSpec.Rules) > 0 {
+		c.Spec.MetricSpec.Rules = c.Spec.MetricsSpec.Rules
+	}
+
+	if c.Spec.MetricsSpec.HTTP != nil {
+		c.Spec.MetricSpec.HTTP = c.Spec.MetricsSpec.HTTP
 	}
 }
 
