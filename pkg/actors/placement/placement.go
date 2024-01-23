@@ -161,7 +161,9 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 	p.serverIndex.Store(0)
 	p.running.Store(true)
 	p.appHealthy.Store(true)
+	p.placementTableLock.Lock()
 	p.resetPlacementTables()
+	p.placementTableLock.Unlock()
 
 	if !p.establishStreamConn(ctx, internal.ActorAPILevel) {
 		return nil
@@ -433,7 +435,9 @@ func (p *actorPlacement) establishStreamConn(ctx context.Context, apiLevel uint3
 			if p.haltAllActorsFn != nil {
 				p.haltAllActorsFn()
 			}
+			p.placementTableLock.Lock()
 			p.resetPlacementTables()
+			p.placementTableLock.Unlock()
 
 			// Sleep with an exponential backoff
 			select {
