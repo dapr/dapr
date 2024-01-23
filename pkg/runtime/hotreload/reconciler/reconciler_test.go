@@ -95,11 +95,13 @@ func Test_Run(t *testing.T) {
 		mngr.Loader = compLoader
 		updateCh := make(chan componentsapi.Component)
 		deleteCh := make(chan componentsapi.Component)
-		mngr.deleteFn = func(c componentsapi.Component) {
+		mngr.deleteFn = func(c componentsapi.Component) error {
 			deleteCh <- c
+			return nil
 		}
-		mngr.updateFn = func(_ context.Context, c componentsapi.Component) {
+		mngr.updateFn = func(_ context.Context, c componentsapi.Component) error {
 			updateCh <- c
+			return nil
 		}
 
 		r.manager = mngr
@@ -180,11 +182,13 @@ func Test_reconcile(t *testing.T) {
 
 	eventCh := make(chan componentsapi.Component)
 	mngr := newFakeManager()
-	mngr.deleteFn = func(c componentsapi.Component) {
+	mngr.deleteFn = func(c componentsapi.Component) error {
 		eventCh <- c
+		return nil
 	}
-	mngr.updateFn = func(_ context.Context, c componentsapi.Component) {
+	mngr.updateFn = func(_ context.Context, c componentsapi.Component) error {
 		eventCh <- c
+		return nil
 	}
 
 	r := &Reconciler[componentsapi.Component]{
@@ -249,13 +253,15 @@ func Test_handleEvent(t *testing.T) {
 	updateCalled, deleteCalled := 0, 0
 	comp1 := componentsapi.Component{ObjectMeta: metav1.ObjectMeta{Name: "foo"}}
 
-	mngr.deleteFn = func(c componentsapi.Component) {
+	mngr.deleteFn = func(c componentsapi.Component) error {
 		assert.Equal(t, comp1, c)
 		deleteCalled++
+		return nil
 	}
-	mngr.updateFn = func(_ context.Context, c componentsapi.Component) {
+	mngr.updateFn = func(_ context.Context, c componentsapi.Component) error {
 		assert.Equal(t, comp1, c)
 		updateCalled++
+		return nil
 	}
 
 	r := &Reconciler[componentsapi.Component]{manager: mngr}
@@ -287,25 +293,27 @@ func Test_handleEvent(t *testing.T) {
 
 type fakeManager struct {
 	loader.Loader[componentsapi.Component]
-	updateFn func(context.Context, componentsapi.Component)
-	deleteFn func(componentsapi.Component)
+	updateFn func(context.Context, componentsapi.Component) error
+	deleteFn func(componentsapi.Component) error
 }
 
 func newFakeManager() *fakeManager {
 	return &fakeManager{
-		updateFn: func(context.Context, componentsapi.Component) {
+		updateFn: func(context.Context, componentsapi.Component) error {
+			return nil
 		},
-		deleteFn: func(componentsapi.Component) {
+		deleteFn: func(componentsapi.Component) error {
+			return nil
 		},
 	}
 }
 
 //nolint:unused
-func (f *fakeManager) update(ctx context.Context, comp componentsapi.Component) {
-	f.updateFn(ctx, comp)
+func (f *fakeManager) update(ctx context.Context, comp componentsapi.Component) error {
+	return f.updateFn(ctx, comp)
 }
 
 //nolint:unused
-func (f *fakeManager) delete(comp componentsapi.Component) {
-	f.deleteFn(comp)
+func (f *fakeManager) delete(comp componentsapi.Component) error {
+	return f.deleteFn(comp)
 }
