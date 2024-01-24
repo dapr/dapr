@@ -34,7 +34,7 @@ import (
 )
 
 const (
-	propertyKeyActorStateStore = "actorstatestore"
+	PropertyKeyActorStateStore = "actorstatestore"
 )
 
 var log = logger.NewLogger("dapr.runtime.processor.state")
@@ -125,7 +125,7 @@ func (s *state) Init(ctx context.Context, comp compapi.Component) error {
 			actorStoreSpecified := false
 			for k, v := range props {
 				//nolint:gocritic
-				if strings.ToLower(k) == propertyKeyActorStateStore {
+				if strings.ToLower(k) == PropertyKeyActorStateStore {
 					actorStoreSpecified = utils.IsTruthy(v)
 					break
 				}

@@ -15,6 +15,7 @@ package reconciler
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
@@ -23,6 +24,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
 	"github.com/dapr/dapr/pkg/runtime/processor"
+	"github.com/dapr/dapr/pkg/runtime/processor/state"
 )
 
 type component struct {
@@ -36,10 +38,9 @@ type component struct {
 // the generic reconciler.
 //
 //nolint:unused
-func (c *component) update(ctx context.Context, comp componentsapi.Component) {
-	if strings.HasPrefix(comp.Spec.Type, "middleware.") {
-		log.Warnf("Hotreload is not supported for middleware components: %s", comp.LogName())
-		return
+func (c *component) update(ctx context.Context, comp componentsapi.Component) error {
+	if err := c.verify(comp); err != nil {
+		return err
 	}
 
 	oldComp, exists := c.store.GetComponent(comp.Name)
@@ -48,20 +49,20 @@ func (c *component) update(ctx context.Context, comp componentsapi.Component) {
 	if exists {
 		if differ.AreSame(oldComp, comp) {
 			log.Debugf("Component update skipped: no changes detected: %s", comp.LogName())
-			return
+			return nil
 		}
 
 		log.Infof("Closing existing Component to reload: %s", oldComp.LogName())
 		// TODO: change close to accept pointer
 		if err := c.proc.Close(oldComp); err != nil {
-			log.Errorf("error closing old component: %w", err)
-			return
+			log.Errorf("error closing old component: %s", err)
+			return nil
 		}
 	}
 
 	if !c.auth.IsObjectAuthorized(comp) {
 		log.Warnf("Received unauthorized component update, ignored: %s", comp.LogName())
-		return
+		return nil
 	}
 
 	log.Infof("Adding Component for processing: %s", comp.LogName())
@@ -69,11 +70,39 @@ func (c *component) update(ctx context.Context, comp componentsapi.Component) {
 		log.Infof("Component updated: %s", comp.LogName())
 		c.proc.WaitForEmptyComponentQueue()
 	}
+
+	return nil
 }
 
 //nolint:unused
-func (c *component) delete(comp componentsapi.Component) {
-	if err := c.proc.Close(comp); err != nil {
-		log.Errorf("error closing deleted component: %w", err)
+func (c *component) delete(comp componentsapi.Component) error {
+	if err := c.verify(comp); err != nil {
+		return err
 	}
+
+	if err := c.proc.Close(comp); err != nil {
+		log.Errorf("error closing deleted component: %s", err)
+	}
+
+	return nil
+}
+
+//nolint:unused
+func (c *component) verify(vcomp componentsapi.Component) error {
+	toverify := []componentsapi.Component{vcomp}
+	if comp, ok := c.store.GetComponent(vcomp.Name); ok {
+		toverify = append(toverify, comp)
+	}
+
+	for _, comp := range toverify {
+		if strings.HasPrefix(comp.Spec.Type, "state.") {
+			for _, meta := range comp.Spec.Metadata {
+				if strings.EqualFold(meta.Name, state.PropertyKeyActorStateStore) {
+					return fmt.Errorf("aborting to hot-reload a state store component that is used as an actor state store: %s", comp.LogName())
+				}
+			}
+		}
+	}
+
+	return nil
 }
