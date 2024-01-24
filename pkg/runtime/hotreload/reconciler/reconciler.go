@@ -117,7 +117,7 @@ func (r *Reconciler[T]) watchForEvents(ctx context.Context, stream <-chan *loade
 			}
 
 			if err := r.reconcile(ctx, differ.Diff(resources)); err != nil {
-				return fmt.Errorf("error reconciling %s: %s", r.kind, err)
+				return err
 			}
 		case event := <-stream:
 			if err := r.handleEvent(ctx, event); err != nil {
@@ -140,7 +140,7 @@ func (r *Reconciler[T]) reconcile(ctx context.Context, result *differ.Result[T])
 		{result.Updated, operatorpb.ResourceEventType_UPDATED},
 		{result.Created, operatorpb.ResourceEventType_CREATED},
 	} {
-		errCh := make(chan error)
+		errCh := make(chan error, len(group.resources))
 		for _, resource := range group.resources {
 			go func(resource T, eventType operatorpb.ResourceEventType) {
 				errCh <- r.handleEvent(ctx, &loader.Event[T]{

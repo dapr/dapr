@@ -39,7 +39,7 @@ type component struct {
 //nolint:unused
 func (c *component) update(ctx context.Context, comp componentsapi.Component) error {
 	if strings.HasPrefix(comp.Spec.Type, "workflowbackend.") {
-		return fmt.Errorf("attempting to HotReload a workflowbackend component which is not supported: %s", comp.LogName())
+		return fmt.Errorf("aborting to hot-reload a workflowbackend component which is not supported: %s", comp.LogName())
 	}
 
 	oldComp, exists := c.store.GetComponent(comp.Name)
@@ -54,7 +54,7 @@ func (c *component) update(ctx context.Context, comp componentsapi.Component) er
 		log.Infof("Closing existing Component to reload: %s", oldComp.LogName())
 		// TODO: change close to accept pointer
 		if err := c.proc.Close(oldComp); err != nil {
-			log.Errorf("error closing old component: %w", err)
+			log.Errorf("error closing old component: %s", err)
 			return nil
 		}
 	}
@@ -76,11 +76,11 @@ func (c *component) update(ctx context.Context, comp componentsapi.Component) er
 //nolint:unused
 func (c *component) delete(comp componentsapi.Component) error {
 	if strings.HasPrefix(comp.Spec.Type, "workflowbackend.") {
-		return fmt.Errorf("attempting to HotReload a workflowbackend component which is not supported: %s", comp.LogName())
+		return fmt.Errorf("aborting to hot-reload a workflowbackend component which is not supported: %s", comp.LogName())
 	}
 
 	if err := c.proc.Close(comp); err != nil {
-		log.Errorf("error closing deleted component: %w", err)
+		log.Errorf("error closing deleted component: %s", err)
 	}
 
 	return nil
