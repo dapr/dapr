@@ -34,6 +34,7 @@ import (
 	clocktesting "k8s.io/utils/clock/testing"
 
 	"github.com/dapr/components-contrib/state"
+	actorconfig "github.com/dapr/dapr/pkg/actors/config"
 	"github.com/dapr/dapr/pkg/actors/health"
 	"github.com/dapr/dapr/pkg/actors/internal"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
@@ -432,8 +433,8 @@ func TestDeactivationTicker(t *testing.T) {
 		secondType := "b"
 		actorID := "1"
 
-		testActorsRuntime.actorsConfig.EntityConfigs[firstType] = internal.EntityConfig{Entities: []string{firstType}, ActorIdleTimeout: time.Second * 2}
-		testActorsRuntime.actorsConfig.EntityConfigs[secondType] = internal.EntityConfig{Entities: []string{secondType}, ActorIdleTimeout: time.Second * 5}
+		testActorsRuntime.actorsConfig.EntityConfigs[firstType] = actorconfig.EntityConfig{Entities: []string{firstType}, ActorIdleTimeout: time.Second * 2}
+		testActorsRuntime.actorsConfig.EntityConfigs[secondType] = actorconfig.EntityConfig{Entities: []string{secondType}, ActorIdleTimeout: time.Second * 5}
 		testActorsRuntime.actorsConfig.ActorDeactivationScanInterval = time.Second * 1
 
 		ch1 := deactivateActorWithDuration(testActorsRuntime, firstType, actorID)
@@ -1007,7 +1008,7 @@ func TestActiveActorsCount(t *testing.T) {
 		expectedCounts := []*runtimev1pb.ActiveActorsCount{{Type: "cat", Count: 2}, {Type: "dog", Count: 1}}
 
 		testActorsRuntime := newTestActorsRuntime(t)
-		testActorsRuntime.actorsConfig.Config.HostedActorTypes = internal.NewHostedActors([]string{"cat", "dog"})
+		testActorsRuntime.actorsConfig.Config.HostedActorTypes = actorconfig.NewHostedActors([]string{"cat", "dog"})
 		defer testActorsRuntime.Close()
 
 		fakeCallAndActivateActor(testActorsRuntime, "cat", "abcd", testActorsRuntime.clock)
@@ -1022,7 +1023,7 @@ func TestActiveActorsCount(t *testing.T) {
 		expectedCounts := []*runtimev1pb.ActiveActorsCount{}
 
 		testActorsRuntime := newTestActorsRuntime(t)
-		testActorsRuntime.actorsConfig.Config.HostedActorTypes = internal.NewHostedActors([]string{})
+		testActorsRuntime.actorsConfig.Config.HostedActorTypes = actorconfig.NewHostedActors([]string{})
 		defer testActorsRuntime.Close()
 
 		actualCounts := testActorsRuntime.getActiveActorsCount(ctx)
@@ -1047,7 +1048,7 @@ func TestActorsAppHealthCheck(t *testing.T) {
 			}))
 			t.Cleanup(testServer.Close)
 
-			testActorsRuntime.actorsConfig.Config.HostedActorTypes = internal.NewHostedActors([]string{"actor1"})
+			testActorsRuntime.actorsConfig.Config.HostedActorTypes = actorconfig.NewHostedActors([]string{"actor1"})
 			testActorsRuntime.actorsConfig.HealthEndpoint = testServer.URL
 			ctx, cancel := context.WithCancel(context.Background())
 			t.Cleanup(cancel)
@@ -1106,7 +1107,7 @@ func TestActorsAppHealthCheck(t *testing.T) {
 		}))
 		t.Cleanup(testServer.Close)
 
-		testActorsRuntime.actorsConfig.HostedActorTypes = internal.NewHostedActors([]string{})
+		testActorsRuntime.actorsConfig.HostedActorTypes = actorconfig.NewHostedActors([]string{})
 		testActorsRuntime.actorsConfig.HealthEndpoint = testServer.URL
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
