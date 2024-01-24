@@ -28,6 +28,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/dapr/dapr/pkg/actors/config"
 	"github.com/dapr/dapr/pkg/actors/internal"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/placement"
@@ -60,7 +61,7 @@ const (
 // tables to discover the actor while interacting with Placement service.
 type actorPlacement struct {
 	actorTypes []string
-	config     internal.Config
+	config     config.Config
 
 	// client is the placement client.
 	client *placementClient
@@ -89,7 +90,7 @@ type actorPlacement struct {
 	operationUpdateLock sync.Mutex
 
 	// appHealthFn returns the appHealthCh
-	appHealthFn internal.AppHealthFn
+	appHealthFn config.AppHealthFn
 	// appHealthy contains the result of the app health checks.
 	appHealthy atomic.Bool
 	// afterTableUpdateFn is the function invoked after table updates,
@@ -112,7 +113,7 @@ type actorPlacement struct {
 }
 
 // NewActorPlacement initializes ActorPlacement for the actor service.
-func NewActorPlacement(opts internal.ActorsProviderOptions) PlacementService {
+func NewActorPlacement(opts config.ActorsProviderOptions) PlacementService {
 	addrs := utils.ParseServiceAddr(strings.TrimPrefix(opts.Config.ActorsService, "placement:"))
 	servers := addDNSResolverPrefix(addrs)
 	return &actorPlacement{

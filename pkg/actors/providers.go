@@ -18,24 +18,25 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/dapr/dapr/pkg/actors/config"
 	"github.com/dapr/dapr/pkg/actors/internal"
 	"github.com/dapr/dapr/pkg/actors/placement"
 	"github.com/dapr/dapr/pkg/actors/reminders"
 )
 
 type (
-	placementProviderFactory = func(opts internal.ActorsProviderOptions) placement.PlacementService
-	remindersProviderFactory = func(opts internal.ActorsProviderOptions) internal.RemindersProvider
+	placementProviderFactory = func(opts config.ActorsProviderOptions) placement.PlacementService
+	remindersProviderFactory = func(opts config.ActorsProviderOptions) internal.RemindersProvider
 )
 
 var (
 	placementProviders map[string]func(config Config) (placementProviderFactory, error) = map[string]func(config Config) (placementProviderFactory, error){
-		"placement": func(config Config) (func(opts internal.ActorsProviderOptions) placement.PlacementService, error) {
+		"placement": func(config Config) (func(opts config.ActorsProviderOptions) placement.PlacementService, error) {
 			return placement.NewActorPlacement, nil
 		},
 	}
 	remindersProviders map[string]func(config Config, placement placement.PlacementService) (remindersProviderFactory, error) = map[string]func(config Config, placement placement.PlacementService) (remindersProviderFactory, error){
-		"default": func(config Config, placement placement.PlacementService) (func(opts internal.ActorsProviderOptions) internal.RemindersProvider, error) {
+		"default": func(config Config, placement placement.PlacementService) (func(opts config.ActorsProviderOptions) internal.RemindersProvider, error) {
 			return reminders.NewRemindersProvider, nil
 		},
 	}
