@@ -19,13 +19,13 @@ import (
 
 	"golang.org/x/exp/maps"
 
-	"github.com/dapr/dapr/pkg/actors/internal"
+	"github.com/dapr/dapr/pkg/actors/config"
 	daprAppConfig "github.com/dapr/dapr/pkg/config"
 )
 
 // Config is the actor runtime configuration.
 type Config struct {
-	internal.Config
+	config.Config
 }
 
 const (
@@ -53,7 +53,7 @@ type ConfigOpts struct {
 
 // NewConfig returns the actor runtime configuration.
 func NewConfig(opts ConfigOpts) Config {
-	c := internal.Config{
+	c := config.Config{
 		HostAddress:                   opts.HostAddress,
 		AppID:                         opts.AppID,
 		ActorsService:                 opts.ActorsService,
@@ -61,7 +61,7 @@ func NewConfig(opts ConfigOpts) Config {
 		Port:                          opts.Port,
 		Namespace:                     opts.Namespace,
 		DrainRebalancedActors:         opts.AppConfig.DrainRebalancedActors,
-		HostedActorTypes:              internal.NewHostedActors(opts.AppConfig.Entities),
+		HostedActorTypes:              config.NewHostedActors(opts.AppConfig.Entities),
 		Reentrancy:                    opts.AppConfig.Reentrancy,
 		RemindersStoragePartitions:    opts.AppConfig.RemindersStoragePartitions,
 		HealthHTTPClient:              opts.HealthHTTPClient,
@@ -70,7 +70,7 @@ func NewConfig(opts ConfigOpts) Config {
 		ActorDeactivationScanInterval: defaultActorScanInterval,
 		ActorIdleTimeout:              defaultActorIdleTimeout,
 		DrainOngoingCallTimeout:       defaultOngoingCallTimeout,
-		EntityConfigs:                 make(map[string]internal.EntityConfig),
+		EntityConfigs:                 make(map[string]config.EntityConfig),
 		AppChannelAddress:             opts.AppChannelAddress,
 		PodName:                       opts.PodName,
 	}
@@ -148,8 +148,8 @@ func (c *Config) GetReentrancyForType(actorType string) daprAppConfig.Reentrancy
 	return c.Reentrancy
 }
 
-func translateEntityConfig(appConfig daprAppConfig.EntityConfig) internal.EntityConfig {
-	domainConfig := internal.EntityConfig{
+func translateEntityConfig(appConfig daprAppConfig.EntityConfig) config.EntityConfig {
+	domainConfig := config.EntityConfig{
 		Entities:                   appConfig.Entities,
 		ActorIdleTimeout:           defaultActorIdleTimeout,
 		DrainOngoingCallTimeout:    defaultOngoingCallTimeout,

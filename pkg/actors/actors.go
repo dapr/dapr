@@ -36,6 +36,7 @@ import (
 	"k8s.io/utils/clock"
 
 	"github.com/dapr/components-contrib/state"
+	actorconfig "github.com/dapr/dapr/pkg/actors/config"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/health"
 	"github.com/dapr/dapr/pkg/actors/internal"
@@ -183,7 +184,7 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) (ActorRuntime, 
 	}
 
 	// Init reminders and placement
-	providerOpts := internal.ActorsProviderOptions{
+	providerOpts := actorconfig.ActorsProviderOptions{
 		Config:   a.actorsConfig.Config,
 		Security: a.sec,
 		AppHealthFn: func(ctx context.Context) <-chan bool {
