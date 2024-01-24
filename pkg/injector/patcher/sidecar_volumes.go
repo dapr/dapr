@@ -20,6 +20,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
+	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 	"github.com/dapr/kit/ptr"
 )
 
@@ -77,7 +78,7 @@ func (c *SidecarConfig) getTokenVolume() corev1.Volume {
 				DefaultMode: ptr.Of(int32(420)),
 				Sources: []corev1.VolumeProjection{{
 					ServiceAccountToken: &corev1.ServiceAccountTokenProjection{
-						Audience:          c.SentrySPIFFEID,
+						Audience:          securityConsts.ServiceAccountTokenAudience,
 						ExpirationSeconds: ptr.Of(int64(7200)),
 						Path:              "token",
 					},

@@ -23,7 +23,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -63,7 +62,7 @@ type (
 
 // Injector is the interface for the Dapr runtime sidecar injection component.
 type Injector interface {
-	Run(context.Context, *tls.Config, spiffeid.ID, signDaprdCertificateFn, currentTrustAnchorsFn) error
+	Run(context.Context, *tls.Config, signDaprdCertificateFn, currentTrustAnchorsFn) error
 	Ready(context.Context) error
 }
 
@@ -88,7 +87,6 @@ type injector struct {
 	controlPlaneNamespace   string
 	controlPlaneTrustDomain string
 	currentTrustAnchors     currentTrustAnchorsFn
-	sentrySPIFFEID          spiffeid.ID
 	signDaprdCertificate    signDaprdCertificateFn
 
 	namespaceNameMatcher *namespacednamematcher.EqualPrefixNameNamespaceMatcher
@@ -215,7 +213,7 @@ func getServiceAccount(ctx context.Context, kubeClient kubernetes.Interface, all
 	return allowedUids, nil
 }
 
-func (i *injector) Run(ctx context.Context, tlsConfig *tls.Config, sentryID spiffeid.ID, signDaprdFn signDaprdCertificateFn, currentTrustAnchors currentTrustAnchorsFn) error {
+func (i *injector) Run(ctx context.Context, tlsConfig *tls.Config, signDaprdFn signDaprdCertificateFn, currentTrustAnchors currentTrustAnchorsFn) error {
 	select {
 	case <-i.ready:
 		return errors.New("injector already running")
@@ -227,7 +225,6 @@ func (i *injector) Run(ctx context.Context, tlsConfig *tls.Config, sentryID spif
 
 	i.currentTrustAnchors = currentTrustAnchors
 	i.signDaprdCertificate = signDaprdFn
-	i.sentrySPIFFEID = sentryID
 	i.server.TLSConfig = tlsConfig
 
 	errCh := make(chan error, 1)

@@ -83,10 +83,15 @@ func Run() {
 		log.Fatalf("Failed to get authentication uids from services accounts: %s", err)
 	}
 
+	namespace, err := security.CurrentNamespaceOrError()
+	if err != nil {
+		log.Fatalf("Failed to get current namespace: %s", err)
+	}
+
 	secProvider, err := security.New(ctx, security.Options{
 		SentryAddress:           cfg.SentryAddress,
 		ControlPlaneTrustDomain: cfg.ControlPlaneTrustDomain,
-		ControlPlaneNamespace:   security.CurrentNamespace(),
+		ControlPlaneNamespace:   namespace,
 		TrustAnchorsFile:        cfg.TrustAnchorsFile,
 		AppID:                   "dapr-injector",
 		MTLSEnabled:             true,
@@ -129,7 +134,6 @@ func Run() {
 			})
 			return inj.Run(ctx,
 				sec.TLSServerConfigNoClientAuth(),
-				sentryID,
 				requester.RequestCertificateFromSentry,
 				sec.CurrentTrustAnchors,
 			)

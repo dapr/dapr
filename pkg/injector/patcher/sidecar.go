@@ -53,7 +53,6 @@ type SidecarConfig struct {
 	ControlPlaneTrustDomain     string
 	ActorsService               string
 	RemindersService            string
-	SentrySPIFFEID              string
 	SidecarHTTPPort             int32 `default:"3500"`
 	SidecarAPIGRPCPort          int32 `default:"50001"`
 	SidecarInternalGRPCPort     int32 `default:"50002"`
