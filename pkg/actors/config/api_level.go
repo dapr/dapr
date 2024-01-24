@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package internal
+package config
 
 // ActorAPILevel is the level of the Actor APIs supported by this runtime.
 // It is sent to the Placement service and disseminated to all other Dapr runtimes.

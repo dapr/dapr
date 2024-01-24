@@ -701,7 +701,7 @@ func (r *reminders) saveRemindersInPartitionRequest(stateKey string, reminders [
 
 	// If APILevelFeatureRemindersProtobuf is enabled, then serialize as protobuf which is more efficient
 	// Otherwise, fall back to sending the data as-is in the request (which will serialize it as JSON)
-	if internal.APILevelFeatureRemindersProtobuf.IsEnabled(r.apiLevel.Load()) {
+	if actors_config.APILevelFeatureRemindersProtobuf.IsEnabled(r.apiLevel.Load()) {
 		var err error
 		req.Value, err = r.serializeRemindersToProto(reminders)
 		if err != nil {
