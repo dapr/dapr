@@ -186,22 +186,22 @@ func newDaprRuntime(ctx context.Context,
 	})
 
 	processor := processor.New(processor.Options{
-		ID:             runtimeConfig.id,
-		Namespace:      namespace,
-		IsHTTP:         runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
-		ActorsEnabled:  len(runtimeConfig.actorsService) > 0,
+		ID:               runtimeConfig.id,
+		Namespace:        namespace,
+		IsHTTP:           runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
+		ActorsEnabled:    len(runtimeConfig.actorsService) > 0,
 		SchedulerEnabled: len(runtimeConfig.schedulerAddresses) > 0,
-		Registry:       runtimeConfig.registry,
-		ComponentStore: compStore,
-		Meta:           meta,
-		GlobalConfig:   globalConfig,
-		Resiliency:     resiliencyProvider,
-		Mode:           runtimeConfig.mode,
-		PodName:        podName,
-		Standalone:     runtimeConfig.standalone,
-		OperatorClient: operatorClient,
-		GRPC:           grpc,
-		Channels:       channels,
+		Registry:         runtimeConfig.registry,
+		ComponentStore:   compStore,
+		Meta:             meta,
+		GlobalConfig:     globalConfig,
+		Resiliency:       resiliencyProvider,
+		Mode:             runtimeConfig.mode,
+		PodName:          podName,
+		Standalone:       runtimeConfig.standalone,
+		OperatorClient:   operatorClient,
+		GRPC:             grpc,
+		Channels:         channels,
 	})
 
 	var reloader *hotreload.Reloader
@@ -382,7 +382,7 @@ func getOperatorClient(ctx context.Context, sec security.Handler, cfg *internalC
 }
 
 func getSchedulerClient(ctx context.Context, sec security.Handler, cfg *internalConfig) (schedulerv1pb.SchedulerClient, error) {
-	//TODO: make dynamic, not index 0
+	// TODO: make dynamic, not index 0
 	schedClient, _, err := schedulerCli.GetSchedulerClient(ctx, cfg.schedulerAddresses[0], sec)
 	if err != nil {
 		return nil, fmt.Errorf("error creating scheduler client: %w", err)

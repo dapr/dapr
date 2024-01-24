@@ -16,15 +16,17 @@ package universal
 import (
 	"context"
 	"fmt"
+
+	"google.golang.org/protobuf/types/known/emptypb"
+
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 // Service layer funcs
 
 func (a *Universal) ScheduleJob(ctx context.Context, inReq *runtimev1pb.ScheduleJobRequest) (*emptypb.Empty, error) {
-	//validate job details, date, schedule, etc??
+	// validate job details, date, schedule, etc??
 	var err error
 
 	metadata := map[string]string{"app_id": a.AppID()}
@@ -39,11 +41,11 @@ func (a *Universal) ScheduleJob(ctx context.Context, inReq *runtimev1pb.Schedule
 			DueTime:  inReq.GetJob().GetDueTime(),
 			Ttl:      inReq.GetJob().GetTtl(),
 		},
-		Namespace: "",       //TODO
-		Metadata:  metadata, //TODO: this should generate key if jobStateStore is configured
+		Namespace: "",       // TODO
+		Metadata:  metadata, // TODO: this should generate key if jobStateStore is configured
 	}
 
-	//TODO: do something with following response?
+	// TODO: do something with following response?
 	_, err = a.schedulerClient.ScheduleJob(ctx, internalScheduleJobReq)
 	if err != nil {
 		a.logger.Errorf("Error Scheduling job %v", err)
@@ -66,7 +68,7 @@ func (a *Universal) DeleteJob(ctx context.Context, inReq *runtimev1pb.DeleteJobR
 		JobName: jobName,
 	}
 
-	//TODO: do something with following response?
+	// TODO: do something with following response?
 	_, err = a.schedulerClient.DeleteJob(ctx, internalDeleteJobReq)
 	if err != nil {
 		a.logger.Errorf("Error Deleting job %v", err)
@@ -97,7 +99,7 @@ func (a *Universal) GetJob(ctx context.Context, inReq *runtimev1pb.GetJobRequest
 		return nil, err
 	}
 
-	response.Job = internalResp.Job
+	response.Job = internalResp.GetJob()
 
 	return response, err
 }
@@ -121,12 +123,12 @@ func (a *Universal) ListJobs(ctx context.Context, inReq *runtimev1pb.ListJobsReq
 
 	internalListResp, err = a.schedulerClient.ListJobs(ctx, internalListReq)
 	if err != nil {
-		a.logger.Errorf("Error Listing jobs for app %s: %v", inReq.AppId, err)
+		a.logger.Errorf("Error Listing jobs for app %s: %v", inReq.GetAppId(), err)
 		return nil, err
 	}
 
-	if len(internalListResp.Jobs) > 0 {
-		response.Jobs = internalListResp.Jobs
+	if len(internalListResp.GetJobs()) > 0 {
+		response.Jobs = internalListResp.GetJobs()
 	}
 
 	return response, err

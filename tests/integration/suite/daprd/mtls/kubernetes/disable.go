@@ -32,6 +32,8 @@ import (
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/operator"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
@@ -49,6 +51,7 @@ type disable struct {
 	sentry       *sentry.Sentry
 	placement    *placement.Placement
 	operator     *operator.Operator
+	scheduler    *scheduler.Scheduler
 	trustAnchors []byte
 }
 
@@ -61,10 +64,17 @@ func (e *disable) Setup(t *testing.T) []framework.Option {
 	// Control plane services always serves with mTLS in kubernetes mode.
 	taFile := filepath.Join(t.TempDir(), "ca.pem")
 	require.NoError(t, os.WriteFile(taFile, bundle.TrustAnchors, 0o600))
+
 	e.placement = placement.New(t,
 		placement.WithEnableTLS(true),
 		placement.WithTrustAnchorsFile(taFile),
 		placement.WithSentryAddress(e.sentry.Address()),
+	)
+
+	e.scheduler = scheduler.New(t,
+		scheduler.WithEnableTLS(true),
+		scheduler.WithTrustAnchorsFile(taFile),
+		scheduler.WithSentryAddress(e.sentry.Address()),
 	)
 
 	e.operator = operator.New(t, operator.WithSentry(e.sentry))
@@ -77,19 +87,21 @@ func (e *disable) Setup(t *testing.T) []framework.Option {
 		procdaprd.WithControlPlaneAddress(e.operator.Address(t)),
 		procdaprd.WithDisableK8sSecretStore(true),
 		procdaprd.WithPlacementAddresses(e.placement.Address()),
+		procdaprd.WithSchedulerAddresses(e.scheduler.Address()),
 
 		// Disable mTLS
 		procdaprd.WithEnableMTLS(false),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(e.sentry, e.placement, e.operator, e.daprd),
+		framework.WithProcesses(e.sentry, e.placement, e.operator, e.scheduler, e.daprd),
 	}
 }
 
 func (e *disable) Run(t *testing.T, ctx context.Context) {
 	e.sentry.WaitUntilRunning(t, ctx)
 	e.placement.WaitUntilRunning(t, ctx)
+	e.scheduler.WaitUntilRunning(t, ctx)
 	e.daprd.WaitUntilRunning(t, ctx)
 
 	t.Run("trying plain text connection to Dapr API should succeed", func(t *testing.T) {

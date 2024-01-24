@@ -22,6 +22,7 @@ import (
 	"google.golang.org/grpc"
 
 	etcdcron "github.com/Scalingo/go-etcd-cron"
+
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
@@ -74,8 +75,8 @@ func (s *Server) runServer(ctx context.Context) error {
 	errCh := make(chan error)
 	go func() {
 		log.Infof("Running gRPC server on port %d", s.port)
-		if err := s.srv.Serve(lis); err != nil {
-			errCh <- fmt.Errorf("failed to serve: %w", err)
+		if nerr := s.srv.Serve(lis); nerr != nil {
+			errCh <- fmt.Errorf("failed to serve: %w", nerr)
 			return
 		}
 	}()
