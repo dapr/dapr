@@ -29,7 +29,6 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/actors/config"
-	"github.com/dapr/dapr/pkg/actors/internal"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/placement"
 	"github.com/dapr/dapr/pkg/placement/hashing"
@@ -164,7 +163,7 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 	p.appHealthy.Store(true)
 	p.resetPlacementTables()
 
-	if !p.establishStreamConn(ctx, internal.ActorAPILevel) {
+	if !p.establishStreamConn(ctx, config.ActorAPILevel) {
 		return nil
 	}
 
@@ -206,7 +205,7 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 			if !p.running.Load() {
 				break
 			}
-			p.establishStreamConn(ctx, internal.ActorAPILevel)
+			p.establishStreamConn(ctx, config.ActorAPILevel)
 		}
 	}()
 
@@ -279,7 +278,7 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 				Pod:      p.config.PodName,
 				// Port is redundant because Name should include port number
 				// Port: 0,
-				ApiLevel: internal.ActorAPILevel,
+				ApiLevel: config.ActorAPILevel,
 			}
 
 			err := p.client.send(&host)
