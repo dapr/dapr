@@ -42,7 +42,7 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 		return nil, status.Error(codes.Internal, messages.ErrChannelNotFound)
 	}
 
-	req, err := invokev1.FromInternalInvokeRequest(in)
+	req, err := invokev1.InternalInvokeRequest(in)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, messages.ErrInternalInvokeRequest, err.Error())
 	}
@@ -102,7 +102,7 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 	// Create the request object
 	// The "rawData" of the object will be a pipe to which content is added chunk-by-chunk
 	pr, pw := io.Pipe()
-	req, err := invokev1.FromInternalInvokeRequest(chunk.GetRequest())
+	req, err := invokev1.InternalInvokeRequest(chunk.GetRequest())
 	if err != nil {
 		return status.Errorf(codes.InvalidArgument, messages.ErrInternalInvokeRequest, err.Error())
 	}
@@ -281,23 +281,34 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 
 // CallActor invokes a virtual actor.
 func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-	// We don't do resiliency here as it is handled in the API layer. See InvokeActor().
-	res, err := a.Actors().Call(ctx, in)
+	req, err := invokev1.InternalInvokeRequest(in)
 	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, messages.ErrInternalInvokeRequest, err.Error())
+	}
+	defer req.Close()
+
+	// We don't do resiliency here as it is handled in the API layer. See InvokeActor().
+	resp, err := a.Actors().Call(ctx, req)
+	if err != nil {
+		// We have to remove the error to keep the body, so callers must re-inspect for the header in the actual response.
 		actorErr, isActorErr := actorerrors.As(err)
-		if res != nil && isActorErr {
-			// We have to remove the error to keep the body, so callers must re-inspect for the header in the actual response.
-			res.Message.Data = &anypb.Any{
-				Value: actorErr.Body(),
+		if resp != nil && isActorErr {
+			defer resp.Close()
+			r, eErr := resp.ProtoWithData()
+			if eErr == nil {
+				r.Message.Data = &anypb.Any{
+					Value: actorErr.Body(),
+				}
+				r.Headers = actorErr.Headers()
 			}
-			res.Headers = actorErr.Headers()
-			return res, nil
+			return r, eErr
 		}
 
 		err = status.Errorf(codes.Internal, messages.ErrActorInvoke, err)
 		return nil, err
 	}
-	return res, nil
+	defer resp.Close()
+	return resp.ProtoWithData()
 }
 
 // Used by CallLocal and CallLocalStream to check the request against the access control list

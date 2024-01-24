@@ -66,8 +66,8 @@ func FromInvokeRequestMessage(pb *commonv1pb.InvokeRequest) *InvokeMethodRequest
 	}
 }
 
-// FromInternalInvokeRequest creates InvokeMethodRequest object from FromInternalInvokeRequest pb object.
-func FromInternalInvokeRequest(pb *internalv1pb.InternalInvokeRequest) (*InvokeMethodRequest, error) {
+// InternalInvokeRequest creates InvokeMethodRequest object from InternalInvokeRequest pb object.
+func InternalInvokeRequest(pb *internalv1pb.InternalInvokeRequest) (*InvokeMethodRequest, error) {
 	req := &InvokeMethodRequest{r: pb}
 	if pb.GetMessage() == nil {
 		return nil, errors.New("field Message is nil")
@@ -84,19 +84,19 @@ func (imr *InvokeMethodRequest) WithActor(actorType, actorID string) *InvokeMeth
 
 // WithMetadata sets metadata.
 func (imr *InvokeMethodRequest) WithMetadata(md map[string][]string) *InvokeMethodRequest {
-	imr.r.Metadata = internalv1pb.MetadataToInternalMetadata(md)
+	imr.r.Metadata = metadataToInternalMetadata(md)
 	return imr
 }
 
-// WithHTTPHeaders sets metadata from HTTP request headers.
+// WithHTTPHeaders sets HTTP request headers.
 func (imr *InvokeMethodRequest) WithHTTPHeaders(header http.Header) *InvokeMethodRequest {
-	imr.r.Metadata = internalv1pb.HTTPHeadersToInternalMetadata(header)
+	imr.r.Metadata = httpHeadersToInternalMetadata(header)
 	return imr
 }
 
-// WithFastHTTPHeaders sets metadata from fasthttp request headers.
+// WithFastHTTPHeaders sets fasthttp request headers.
 func (imr *InvokeMethodRequest) WithFastHTTPHeaders(header *fasthttp.RequestHeader) *InvokeMethodRequest {
-	imr.r.Metadata = internalv1pb.FastHTTPHeadersToInternalMetadata(header)
+	imr.r.Metadata = fasthttpHeadersToInternalMetadata(header)
 	return imr
 }
 
@@ -324,7 +324,7 @@ func (imr *InvokeMethodRequest) AddMetadata(md map[string][]string) {
 		return
 	}
 
-	for key, val := range internalv1pb.MetadataToInternalMetadata(md) {
+	for key, val := range metadataToInternalMetadata(md) {
 		// We're only adding new values, not overwriting existing
 		if _, ok := imr.r.GetMetadata()[key]; !ok {
 			imr.r.Metadata[key] = val

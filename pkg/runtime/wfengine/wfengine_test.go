@@ -331,10 +331,8 @@ func TestActivityChainingWorkflow(t *testing.T) {
 		t.Run(opt(engine), func(t *testing.T) {
 			id, err := client.ScheduleNewOrchestration(ctx, "ActivityChain")
 			require.NoError(t, err)
-
 			metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
 			require.NoError(t, err)
-
 			assert.True(t, metadata.IsComplete())
 			assert.Equal(t, `10`, metadata.SerializedOutput)
 		})
@@ -379,7 +377,6 @@ func TestConcurrentActivityExecution(t *testing.T) {
 			require.NoError(t, err)
 			metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
 			require.NoError(t, err)
-
 			assert.True(t, metadata.IsComplete())
 			assert.Equal(t, `["9","8","7","6","5","4","3","2","1","0"]`, metadata.SerializedOutput)
 
@@ -802,7 +799,7 @@ func TestPurge(t *testing.T) {
 
 			for _, item := range keysPostPurge {
 				if strings.Contains(item, string(id)) {
-					assert.Truef(t, false, "Found key post-purge that should not have existed: %v", item)
+					assert.True(t, false)
 				}
 			}
 		})

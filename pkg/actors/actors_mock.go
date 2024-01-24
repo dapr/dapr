@@ -24,11 +24,9 @@ import (
 	"time"
 
 	mock "github.com/stretchr/testify/mock"
-	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/dapr/dapr/pkg/actors/internal"
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
-	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	daprt "github.com/dapr/dapr/pkg/testing"
 )
@@ -88,7 +86,6 @@ func (*MockPlacement) Close() error {
 
 // SetOnTableUpdateFn implements internal.PlacementService
 func (*MockPlacement) SetOnTableUpdateFn(fn func()) {
-	// No-op
 }
 
 // SetOnAPILevelUpdate implements internal.PlacementService
@@ -126,25 +123,27 @@ type MockActors struct {
 	mock.Mock
 }
 
-func (_m *MockActors) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActorFactory, actorIdleTimeout time.Duration) error {
+func (_m *MockActors) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor,
+	actorIdleTimeout time.Duration,
+) error {
 	return nil
 }
 
 // Call provides a mock function with given fields: req
-func (_m *MockActors) Call(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
+func (_m *MockActors) Call(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	ret := _m.Called(req)
 
-	var r0 *internalsv1pb.InternalInvokeResponse
-	if rf, ok := ret.Get(0).(func(*internalsv1pb.InternalInvokeRequest) *internalsv1pb.InternalInvokeResponse); ok {
+	var r0 *invokev1.InvokeMethodResponse
+	if rf, ok := ret.Get(0).(func(*invokev1.InvokeMethodRequest) *invokev1.InvokeMethodResponse); ok {
 		r0 = rf(req)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*internalsv1pb.InternalInvokeResponse)
+			r0 = ret.Get(0).(*invokev1.InvokeMethodResponse)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*internalsv1pb.InternalInvokeRequest) error); ok {
+	if rf, ok := ret.Get(1).(func(*invokev1.InvokeMethodRequest) error); ok {
 		r1 = rf(req)
 	} else {
 		r1 = ret.Error(1)
@@ -348,33 +347,30 @@ type FailingActors struct {
 	Failure daprt.Failure
 }
 
-func (f *FailingActors) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActorFactory, actorIdleTimeout time.Duration) error {
+func (f *FailingActors) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor,
+	actorIdleTimeout time.Duration,
+) error {
 	return nil
 }
 
-func (f *FailingActors) Call(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
-	if req == nil || req.Actor == nil {
-		return nil, errors.New("req.Actor is nil")
+func (f *FailingActors) Call(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+	proto, err := req.ProtoWithData()
+	if err != nil {
+		return nil, err
 	}
-	if err := f.Failure.PerformFailure(req.Actor.ActorId); err != nil {
+	if proto == nil || proto.Actor == nil {
+		return nil, errors.New("proto.Actor is nil")
+	}
+	if err := f.Failure.PerformFailure(proto.Actor.ActorId); err != nil {
 		return nil, err
 	}
 	var data []byte
-	if req.Message != nil && req.Message.Data != nil {
-		data = req.Message.Data.Value
+	if proto.Message != nil && proto.Message.Data != nil {
+		data = proto.Message.Data.Value
 	}
-	res := &internalsv1pb.InternalInvokeResponse{
-		Status: &internalsv1pb.Status{
-			Code:    200,
-			Message: "Success",
-		},
-		Message: &commonv1pb.InvokeResponse{
-			Data: &anypb.Any{
-				Value: data,
-			},
-		},
-	}
-	return res, nil
+	resp := invokev1.NewInvokeMethodResponse(200, "Success", nil).
+		WithRawDataBytes(data)
+	return resp, nil
 }
 
 func (f *FailingActors) Init(_ context.Context) error {
