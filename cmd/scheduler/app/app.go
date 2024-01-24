@@ -25,12 +25,15 @@ import (
 	"github.com/dapr/dapr/pkg/placement/monitoring"
 	"github.com/dapr/dapr/pkg/scheduler/server"
 	"github.com/dapr/dapr/pkg/security"
+	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/signals"
 )
 
 var log = logger.NewLogger("dapr.scheduler")
+
+const appID = "dapr-scheduler"
 
 func Run() {
 	opts := options.New()
@@ -56,12 +59,17 @@ func Run() {
 		ControlPlaneTrustDomain: opts.TrustDomain,
 		ControlPlaneNamespace:   security.CurrentNamespace(),
 		TrustAnchorsFile:        opts.TrustAnchorsFile,
-		AppID:                   "dapr-scheduler",
+		AppID:                   appID,
 		MTLSEnabled:             opts.TLSEnabled,
 		Mode:                    modes.DaprMode(opts.Mode),
 	})
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	hostAddress, err := utils.GetHostAddress()
+	if err != nil {
+		log.Fatal(fmt.Errorf("failed to determine host address: %w", err))
 	}
 
 	err = concurrency.NewRunnerManager(
@@ -74,8 +82,11 @@ func Run() {
 			}
 
 			server := server.New(server.Options{
-				Port:     opts.Port,
-				Security: secHandler,
+				AppID:            appID,
+				HostAddress:      hostAddress,
+				Port:             opts.Port,
+				Security:         secHandler,
+				PlacementAddress: opts.PlacementAddress,
 			})
 
 			return server.Run(ctx)
