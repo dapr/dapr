@@ -31,6 +31,7 @@ import (
 	"k8s.io/utils/clock"
 
 	"github.com/dapr/components-contrib/state"
+	actors_config "github.com/dapr/dapr/pkg/actors/config"
 	"github.com/dapr/dapr/pkg/actors/internal"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -61,7 +62,7 @@ type reminders struct {
 	evaluationQueue      chan struct{}
 	stateStoreProviderFn internal.StateStoreProviderFn
 	resiliency           resiliency.Provider
-	config               internal.Config
+	config               actors_config.Config
 	lookUpActorFn        internal.LookupActorFn
 	metricsCollector     remindersMetricsCollectorFn
 }
@@ -69,12 +70,12 @@ type reminders struct {
 // NewRemindersProviderOpts contains the options for the NewRemindersProvider function.
 type NewRemindersProviderOpts struct {
 	StoreName string
-	Config    internal.Config
+	Config    actors_config.Config
 	APILevel  *atomic.Uint32
 }
 
 // NewRemindersProvider returns a reminders provider.
-func NewRemindersProvider(opts internal.ActorsProviderOptions) internal.RemindersProvider {
+func NewRemindersProvider(opts actors_config.ActorsProviderOptions) internal.RemindersProvider {
 	return &reminders{
 		clock:            opts.Clock,
 		apiLevel:         opts.APILevel,
@@ -700,7 +701,7 @@ func (r *reminders) saveRemindersInPartitionRequest(stateKey string, reminders [
 
 	// If APILevelFeatureRemindersProtobuf is enabled, then serialize as protobuf which is more efficient
 	// Otherwise, fall back to sending the data as-is in the request (which will serialize it as JSON)
-	if internal.APILevelFeatureRemindersProtobuf.IsEnabled(r.apiLevel.Load()) {
+	if actors_config.APILevelFeatureRemindersProtobuf.IsEnabled(r.apiLevel.Load()) {
 		var err error
 		req.Value, err = r.serializeRemindersToProto(reminders)
 		if err != nil {

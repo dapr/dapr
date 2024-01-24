@@ -28,7 +28,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/dapr/dapr/pkg/actors/internal"
+	"github.com/dapr/dapr/pkg/actors/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/placement"
 	"github.com/dapr/dapr/pkg/placement/hashing"
@@ -60,7 +60,7 @@ const (
 // tables to discover the actor while interacting with Placement service.
 type actorPlacement struct {
 	actorTypes []string
-	config     internal.Config
+	config     config.Config
 
 	// client is the placement client.
 	client *placementClient
@@ -89,7 +89,7 @@ type actorPlacement struct {
 	operationUpdateLock sync.Mutex
 
 	// appHealthFn returns the appHealthCh
-	appHealthFn internal.AppHealthFn
+	appHealthFn config.AppHealthFn
 	// appHealthy contains the result of the app health checks.
 	appHealthy atomic.Bool
 	// afterTableUpdateFn is the function invoked after table updates,
@@ -97,7 +97,7 @@ type actorPlacement struct {
 	afterTableUpdateFn func()
 
 	// callback invoked to halt all active actors
-	haltAllActorsFn internal.HaltAllActorsFn
+	haltAllActorsFn HaltAllActorsFn
 
 	// running is the flag when runtime is running.
 	running atomic.Bool
@@ -112,7 +112,7 @@ type actorPlacement struct {
 }
 
 // NewActorPlacement initializes ActorPlacement for the actor service.
-func NewActorPlacement(opts internal.ActorsProviderOptions) internal.PlacementService {
+func NewActorPlacement(opts config.ActorsProviderOptions) PlacementService {
 	addrs := utils.ParseServiceAddr(strings.TrimPrefix(opts.Config.ActorsService, "placement:"))
 	servers := addDNSResolverPrefix(addrs)
 	return &actorPlacement{
@@ -163,7 +163,7 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 	p.appHealthy.Store(true)
 	p.resetPlacementTables()
 
-	if !p.establishStreamConn(ctx, internal.ActorAPILevel) {
+	if !p.establishStreamConn(ctx, config.ActorAPILevel) {
 		return nil
 	}
 
@@ -205,7 +205,7 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 			if !p.running.Load() {
 				break
 			}
-			p.establishStreamConn(ctx, internal.ActorAPILevel)
+			p.establishStreamConn(ctx, config.ActorAPILevel)
 		}
 	}()
 
@@ -278,7 +278,7 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 				Pod:      p.config.PodName,
 				// Port is redundant because Name should include port number
 				// Port: 0,
-				ApiLevel: internal.ActorAPILevel,
+				ApiLevel: config.ActorAPILevel,
 			}
 
 			err := p.client.send(&host)
@@ -342,11 +342,11 @@ func (p *actorPlacement) WaitUntilReady(ctx context.Context) error {
 }
 
 // LookupActor resolves to actor service instance address using consistent hashing table.
-func (p *actorPlacement) LookupActor(ctx context.Context, req internal.LookupActorRequest) (internal.LookupActorResponse, error) {
+func (p *actorPlacement) LookupActor(ctx context.Context, req LookupActorRequest) (LookupActorResponse, error) {
 	// Retry here to allow placement table dissemination/rebalancing to happen.
 	policyDef := p.resiliency.BuiltInPolicy(resiliency.BuiltInActorNotFoundRetries)
-	policyRunner := resiliency.NewRunner[internal.LookupActorResponse](ctx, policyDef)
-	return policyRunner(func(ctx context.Context) (res internal.LookupActorResponse, rErr error) {
+	policyRunner := resiliency.NewRunner[LookupActorResponse](ctx, policyDef)
+	return policyRunner(func(ctx context.Context) (res LookupActorResponse, rErr error) {
 		rAddr, rAppID, rErr := p.doLookupActor(ctx, req.ActorType, req.ActorID)
 		if rErr != nil {
 			return res, fmt.Errorf("error finding address for actor %s/%s: %w", req.ActorType, req.ActorID, rErr)
@@ -590,7 +590,7 @@ func (p *actorPlacement) ReportActorDeactivation(ctx context.Context, actorType,
 	return nil
 }
 
-func (p *actorPlacement) SetHaltActorFns(haltFn internal.HaltActorFn, haltAllFn internal.HaltAllActorsFn) {
+func (p *actorPlacement) SetHaltActorFns(haltFn HaltActorFn, haltAllFn HaltAllActorsFn) {
 	// haltFn isn't used in this implementation
 	p.haltAllActorsFn = haltAllFn
 	return
