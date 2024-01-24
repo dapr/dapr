@@ -48,7 +48,7 @@ type placementClient struct {
 
 // connectToServer initializes a new connection to the target server and if it succeeds replace the current
 // stream with the connected stream.
-func (c *placementClient) connectToServer(ctx context.Context, serverAddr string, apiLevel uint32) error {
+func (c *placementClient) connectToServer(ctx context.Context, serverAddr string) error {
 	opts, err := c.getGrpcOpts()
 	if err != nil {
 		return err

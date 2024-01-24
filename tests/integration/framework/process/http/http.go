@@ -38,21 +38,12 @@ type HTTP struct {
 func New(t *testing.T, fopts ...Option) *HTTP {
 	t.Helper()
 
-	var opts options
-	for _, fopt := range fopts {
-		fopt(&opts)
+	opts := options{
+		handler: http.NewServeMux(),
 	}
 
-	require.False(t, len(opts.handlerFuncs) > 0 && opts.handler != nil,
-		"handler and handlerFuncs are mutually exclusive, handlerFuncs: %d, handler: %v",
-		len(opts.handlerFuncs), opts.handler)
-
-	if opts.handler == nil {
-		handler := http.NewServeMux()
-		for path, fn := range opts.handlerFuncs {
-			handler.HandleFunc(path, fn)
-		}
-		opts.handler = handler
+	for _, fopt := range fopts {
+		fopt(&opts)
 	}
 
 	// Start the listener in New so we can squat on the port immediately, and

@@ -350,11 +350,9 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 
 	// HTTP client needs to inject traceparent header for proper tracing stack.
 	span := diagUtils.SpanFromContext(ctx)
-	if span.SpanContext().HasTraceID() {
-		tp := diag.SpanContextToW3CString(span.SpanContext())
-		channelReq.Header.Set("traceparent", tp)
-	}
+	tp := diag.SpanContextToW3CString(span.SpanContext())
 	ts := diag.TraceStateToW3CString(span.SpanContext())
+	channelReq.Header.Set("traceparent", tp)
 	if ts != "" {
 		channelReq.Header.Set("tracestate", ts)
 	}

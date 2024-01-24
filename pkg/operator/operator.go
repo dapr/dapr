@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -33,8 +34,6 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	ctrl "sigs.k8s.io/controller-runtime"
-	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
@@ -99,6 +98,12 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 		return nil, fmt.Errorf("unable to load configuration, config: %s, err: %w", opts.Config, err)
 	}
 
+	certDir, err := os.MkdirTemp("", "dapr-operator")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create operator SVID directory: %w", err)
+	}
+	certDir = filepath.Join(certDir, "/var/run/secrets/dapr.io/webhook/tls")
+
 	secProvider, err := security.New(ctx, security.Options{
 		SentryAddress:           config.SentryAddress,
 		ControlPlaneTrustDomain: config.ControlPlaneTrustDomain,
@@ -106,8 +111,9 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 		TrustAnchorsFile:        opts.TrustAnchorsFile,
 		AppID:                   "dapr-operator",
 		// mTLS is always enabled for the operator.
-		MTLSEnabled: true,
-		Mode:        modes.KubernetesMode,
+		MTLSEnabled:    true,
+		WriteSVIDToDir: &certDir,
+		Mode:           modes.KubernetesMode,
 	})
 	if err != nil {
 		return nil, err
@@ -121,29 +127,27 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 	}
 
 	mgr, err := ctrl.NewManager(conf, ctrl.Options{
-		Scheme: scheme,
-		WebhookServer: webhook.NewServer(webhook.Options{
-			Port: 19443,
-			TLSOpts: []func(*tls.Config){
-				func(tlsConfig *tls.Config) {
-					sec, sErr := secProvider.Handler(ctx)
-					// Error here means that the context has been cancelled before security
-					// is ready.
-					if sErr != nil {
-						return
-					}
-					*tlsConfig = *sec.TLSServerConfigNoClientAuth()
-				},
-			},
-		}),
-		HealthProbeBindAddress: "0",
-		Metrics: metricsserver.Options{
-			BindAddress: "0",
-		},
+		Scheme:                        scheme,
+		Port:                          19443,
+		HealthProbeBindAddress:        "0",
+		MetricsBindAddress:            "0",
 		LeaderElection:                opts.LeaderElection,
 		LeaderElectionID:              "operator.dapr.io",
-		NewCache:                      operatorcache.GetFilteredCache(opts.WatchNamespace, watchdogPodSelector),
+		Namespace:                     opts.WatchNamespace,
+		NewCache:                      operatorcache.GetFilteredCache(watchdogPodSelector),
+		CertDir:                       certDir,
 		LeaderElectionReleaseOnCancel: true,
+		TLSOpts: []func(*tls.Config){
+			func(tlsConfig *tls.Config) {
+				sec, sErr := secProvider.Handler(ctx)
+				// Error here means that the context has been cancelled before security
+				// is ready.
+				if sErr != nil {
+					return
+				}
+				*tlsConfig = *sec.TLSServerConfigNoClientAuth()
+			},
+		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("unable to start manager: %w", err)
@@ -271,8 +275,6 @@ func (o *operator) Run(ctx context.Context) error {
 		},
 		func(ctx context.Context) error {
 			if !enableConversionWebhooks {
-				healthzServer.Ready()
-				<-ctx.Done()
 				return nil
 			}
 
@@ -285,8 +287,6 @@ func (o *operator) Run(ctx context.Context) error {
 		},
 		func(ctx context.Context) error {
 			if !enableConversionWebhooks {
-				healthzServer.Ready()
-				<-ctx.Done()
 				return nil
 			}
 

@@ -46,15 +46,13 @@ type FSM struct {
 	// racing with Restore(), which is called by Raft (it puts in a totally
 	// new state store). Everything internal here is synchronized by the
 	// Raft side, so doesn't need to lock this.
-	stateLock         sync.RWMutex
-	state             *DaprHostMemberState
-	replicationFactor int64
+	stateLock sync.RWMutex
+	state     *DaprHostMemberState
 }
 
-func newFSM(replicationFactor int64) *FSM {
+func newFSM() *FSM {
 	return &FSM{
-		state:             newDaprHostMemberState(int(replicationFactor)),
-		replicationFactor: replicationFactor,
+		state: newDaprHostMemberState(),
 	}
 }
 
@@ -66,46 +64,38 @@ func (c *FSM) State() *DaprHostMemberState {
 }
 
 // PlacementState returns the current placement tables.
-// the withVirtualNodes parameter is here for backwards compatibility and should be removed in 1.14
-// TODO in v1.15 remove the withVirtualNodes parameter
-func (c *FSM) PlacementState(withVirtualNodes bool) *v1pb.PlacementTables {
+func (c *FSM) PlacementState() *v1pb.PlacementTables {
 	c.stateLock.RLock()
 	defer c.stateLock.RUnlock()
 
 	newTable := &v1pb.PlacementTables{
-		Version:           strconv.FormatUint(c.state.TableGeneration(), 10),
-		Entries:           make(map[string]*v1pb.PlacementTable),
-		ApiLevel:          c.state.APILevel(),
-		ReplicationFactor: c.replicationFactor,
+		Version:  strconv.FormatUint(c.state.TableGeneration(), 10),
+		Entries:  make(map[string]*v1pb.PlacementTable),
+		ApiLevel: c.state.APILevel(),
 	}
 
-	totalHostSize := 0
-	totalSortedSet := 0
-	totalLoadMap := 0
+	var (
+		totalHostSize  int
+		totalSortedSet int
+		totalLoadMap   int
+	)
 
 	entries := c.state.hashingTableMap()
 	for k, v := range entries {
 		var table v1pb.PlacementTable
 		v.ReadInternals(func(hosts map[uint64]string, sortedSet []uint64, loadMap map[string]*hashing.Host, totalLoad int64) {
-			sortedSetLen := 0
-			if withVirtualNodes {
-				sortedSetLen = len(sortedSet)
-			}
-
 			table = v1pb.PlacementTable{
 				Hosts:     make(map[uint64]string),
-				SortedSet: make([]uint64, sortedSetLen),
+				SortedSet: make([]uint64, len(sortedSet)),
 				TotalLoad: totalLoad,
 				LoadMap:   make(map[string]*v1pb.Host),
 			}
 
-			if withVirtualNodes {
-				for lk, lv := range hosts {
-					table.GetHosts()[lk] = lv
-				}
-
-				copy(table.GetSortedSet(), sortedSet)
+			for lk, lv := range hosts {
+				table.Hosts[lk] = lv
 			}
+
+			copy(table.GetSortedSet(), sortedSet)
 
 			for lk, lv := range loadMap {
 				h := v1pb.Host{
@@ -120,18 +110,12 @@ func (c *FSM) PlacementState(withVirtualNodes bool) *v1pb.PlacementTables {
 
 		newTable.Entries[k] = &table
 
-		if withVirtualNodes {
-			totalHostSize += len(table.GetHosts())
-			totalSortedSet += len(table.GetSortedSet())
-		}
+		totalHostSize += len(table.GetHosts())
+		totalSortedSet += len(table.GetSortedSet())
 		totalLoadMap += len(table.GetLoadMap())
 	}
 
-	if withVirtualNodes {
-		logging.Debugf("PlacementTable Size, Hosts: %d, SortedSet: %d, LoadMap: %d", totalHostSize, totalSortedSet, totalLoadMap)
-	} else {
-		logging.Debugf("PlacementTable LoadMapCount=%d ApiLevel=%d ReplicationFactor=%d", totalLoadMap, newTable.GetApiLevel(), newTable.GetReplicationFactor())
-	}
+	logging.Debugf("PlacementTable HostsCount=%d SortedSetCount=%d LoadMapCount=%d ApiLevel=%d", totalHostSize, totalSortedSet, totalLoadMap, newTable.GetApiLevel())
 
 	return newTable
 }
@@ -209,7 +193,7 @@ func (c *FSM) Snapshot() (raft.FSMSnapshot, error) {
 func (c *FSM) Restore(old io.ReadCloser) error {
 	defer old.Close()
 
-	members := newDaprHostMemberState(int(c.replicationFactor))
+	members := newDaprHostMemberState()
 	if err := members.restore(old); err != nil {
 		return err
 	}

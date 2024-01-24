@@ -70,8 +70,6 @@ func TestPlacementStream_RoundRobin(t *testing.T) {
 		address[i], testSrv[i], cleanup[i] = newTestServer()
 	}
 
-	var apiLevel atomic.Uint32
-	apiLevel.Store(1)
 	testPlacement := NewActorPlacement(internal.ActorsProviderOptions{
 		Config: internal.Config{
 			ActorsService:    "placement:" + strings.Join(address, ","),
@@ -84,7 +82,6 @@ func TestPlacementStream_RoundRobin(t *testing.T) {
 		AppHealthFn: func(ctx context.Context) <-chan bool { return nil },
 		Security:    testSecurity(t),
 		Resiliency:  resiliency.New(logger.NewLogger("test")),
-		APILevel:    &apiLevel,
 	}).(*actorPlacement)
 
 	t.Run("found leader placement in a round robin way", func(t *testing.T) {
@@ -133,8 +130,6 @@ func TestAppHealthyStatus(t *testing.T) {
 
 	appHealthCh := make(chan bool)
 
-	var apiLevel atomic.Uint32
-	apiLevel.Store(1)
 	testPlacement := NewActorPlacement(internal.ActorsProviderOptions{
 		Config: internal.Config{
 			ActorsService:    "placement:" + address,
@@ -147,7 +142,6 @@ func TestAppHealthyStatus(t *testing.T) {
 		AppHealthFn: func(ctx context.Context) <-chan bool { return appHealthCh },
 		Security:    testSecurity(t),
 		Resiliency:  resiliency.New(logger.NewLogger("test")),
-		APILevel:    &apiLevel,
 	}).(*actorPlacement)
 
 	// act
@@ -225,108 +219,6 @@ func TestOnPlacementOrder(t *testing.T) {
 
 		assert.Equal(t, int64(1), tableUpdateCount.Load())
 	})
-	t.Run("update operation without vnodes (after v1.13)", func(t *testing.T) {
-		tableVersion := "2"
-
-		//
-		entries := map[string]*placementv1pb.PlacementTable{
-			"actorOne": {
-				LoadMap: map[string]*placementv1pb.Host{
-					"hostname1": {
-						Name: "app-1",
-						Port: 3000,
-						Id:   "id-1",
-					},
-					"hostname2": {
-						Name: "app-2",
-						Port: 3000,
-						Id:   "id-2",
-					},
-				},
-			},
-		}
-
-		testPlacement.apiLevel = 20
-		t.Cleanup(func() {
-			testPlacement.apiLevel = 10
-		})
-
-		testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{
-			Operation: "update",
-			Tables: &placementv1pb.PlacementTables{
-				Version:           tableVersion,
-				Entries:           entries,
-				ApiLevel:          20,
-				ReplicationFactor: 3,
-			},
-		})
-
-		table := testPlacement.placementTables.Entries
-
-		assert.Len(t, table, 1)
-		assert.Containsf(t, table, "actorOne", "actorOne should be in the table")
-		assert.Len(t, table["actorOne"].VirtualNodes(), 6)
-		assert.Len(t, table["actorOne"].SortedSet(), 6)
-	})
-
-	t.Run("update operation with vnodes (before v1.13)", func(t *testing.T) {
-		tableVersion := "3"
-		tableUpdateCount.Store(0)
-
-		//
-		entries := map[string]*placementv1pb.PlacementTable{
-			"actorOne": {
-				LoadMap: map[string]*placementv1pb.Host{
-					"hostname1": {
-						Name: "app-1",
-						Port: 3000,
-						Id:   "id-1",
-					},
-					"hostname2": {
-						Name: "app-2",
-						Port: 3000,
-						Id:   "id-2",
-					},
-				},
-				Hosts: map[uint64]string{
-					0: "hostname1",
-					1: "hostname1",
-					3: "hostname1",
-					4: "hostname2",
-					5: "hostname2",
-					6: "hostname2",
-				},
-				SortedSet: []uint64{0, 1, 3, 4, 5, 6},
-			},
-		}
-
-		testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{
-			Operation: "update",
-			Tables: &placementv1pb.PlacementTables{
-				Version:  tableVersion,
-				Entries:  entries,
-				ApiLevel: 10,
-			},
-		})
-
-		table := testPlacement.placementTables.Entries
-
-		assert.Len(t, table, 1)
-		assert.Containsf(t, table, "actorOne", "actorOne should be in the table")
-		assert.Len(t, table["actorOne"].VirtualNodes(), 6)
-		assert.Len(t, table["actorOne"].SortedSet(), 6)
-
-		// By not sending the replication factor, we simulate an older placement service
-		// In that case, we expect the vnodes and sorted set to be sent by the placement service
-		testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{
-			Operation: "update",
-			Tables: &placementv1pb.PlacementTables{
-				Version:  tableVersion,
-				Entries:  entries,
-				ApiLevel: 10,
-			},
-		})
-	})
 
 	t.Run("unlock operation", func(t *testing.T) {
 		testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{
@@ -343,8 +235,6 @@ func TestOnPlacementOrder(t *testing.T) {
 }
 
 func TestWaitUntilPlacementTableIsReady(t *testing.T) {
-	var apiLevel atomic.Uint32
-	apiLevel.Store(1)
 	testPlacement := NewActorPlacement(internal.ActorsProviderOptions{
 		Config: internal.Config{
 			ActorsService:    "placement:",
@@ -357,7 +247,6 @@ func TestWaitUntilPlacementTableIsReady(t *testing.T) {
 		AppHealthFn: func(ctx context.Context) <-chan bool { return nil },
 		Security:    testSecurity(t),
 		Resiliency:  resiliency.New(logger.NewLogger("test")),
-		APILevel:    &apiLevel,
 	}).(*actorPlacement)
 
 	// Set the hasPlacementTablesCh channel to nil for the first tests, indicating that the placement tables already exist
@@ -485,8 +374,6 @@ func TestWaitUntilPlacementTableIsReady(t *testing.T) {
 }
 
 func TestLookupActor(t *testing.T) {
-	var apiLevel atomic.Uint32
-	apiLevel.Store(1)
 	testPlacement := NewActorPlacement(internal.ActorsProviderOptions{
 		Config: internal.Config{
 			ActorsService:    "placement:",
@@ -499,7 +386,6 @@ func TestLookupActor(t *testing.T) {
 		AppHealthFn: func(ctx context.Context) <-chan bool { return nil },
 		Security:    testSecurity(t),
 		Resiliency:  resiliency.New(logger.NewLogger("test")),
-		APILevel:    &apiLevel,
 	}).(*actorPlacement)
 
 	t.Run("Placement table is unset", func(t *testing.T) {
@@ -517,7 +403,9 @@ func TestLookupActor(t *testing.T) {
 			Entries: map[string]*hashing.Consistent{},
 		}
 
-		actorOneHashing := hashing.NewConsistentHash(10)
+		// set vnode size
+		hashing.SetReplicationFactor(10)
+		actorOneHashing := hashing.NewConsistentHash()
 		actorOneHashing.Add(testPlacement.config.GetRuntimeHostname(), testPlacement.config.AppID, 0)
 		testPlacement.placementTables.Entries["actorOne"] = actorOneHashing
 
@@ -543,8 +431,6 @@ func TestLookupActor(t *testing.T) {
 }
 
 func TestConcurrentUnblockPlacements(t *testing.T) {
-	var apiLevel atomic.Uint32
-	apiLevel.Store(1)
 	testPlacement := NewActorPlacement(internal.ActorsProviderOptions{
 		Config: internal.Config{
 			ActorsService:    "placement:",
@@ -557,7 +443,6 @@ func TestConcurrentUnblockPlacements(t *testing.T) {
 		AppHealthFn: func(ctx context.Context) <-chan bool { return nil },
 		Security:    testSecurity(t),
 		Resiliency:  resiliency.New(logger.NewLogger("test")),
-		APILevel:    &apiLevel,
 	}).(*actorPlacement)
 
 	// Set the hasPlacementTablesCh channel to nil for the first tests, indicating that the placement tables already exist

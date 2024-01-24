@@ -283,10 +283,7 @@ func testPublishBulk(t *testing.T, publisherExternalURL string, protocol string)
 }
 
 func testPublish(t *testing.T, publisherExternalURL string, protocol string) receivedMessagesResponse {
-	metadataContentLengthConflict := map[string]string{
-		"content-length": "9999999",
-	}
-	sentTopicAMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-a-topic", protocol, metadataContentLengthConflict, "")
+	sentTopicAMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-a-topic", protocol, nil, "")
 	require.NoError(t, err)
 	offset += numberOfMessagesToPublish + 1
 
@@ -298,10 +295,10 @@ func testPublish(t *testing.T, publisherExternalURL string, protocol string) rec
 	require.NoError(t, err)
 	offset += numberOfMessagesToPublish + 1
 
-	metadataRawPayload := map[string]string{
+	metadata := map[string]string{
 		"rawPayload": "true",
 	}
-	sentTopicRawMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-raw-topic", protocol, metadataRawPayload, "")
+	sentTopicRawMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-raw-topic", protocol, metadata, "")
 	require.NoError(t, err)
 	offset += numberOfMessagesToPublish + 1
 

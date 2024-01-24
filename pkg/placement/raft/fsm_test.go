@@ -24,7 +24,7 @@ import (
 )
 
 func TestFSMApply(t *testing.T) {
-	fsm := newFSM(100)
+	fsm := newFSM()
 
 	t.Run("upsertMember", func(t *testing.T) {
 		cmdLog, err := makeRaftLogCommand(MemberUpsert, DaprHostMember{
@@ -77,9 +77,9 @@ func TestFSMApply(t *testing.T) {
 
 func TestRestore(t *testing.T) {
 	// arrange
-	fsm := newFSM(100)
+	fsm := newFSM()
 
-	s := newDaprHostMemberState(100)
+	s := newDaprHostMemberState()
 	s.upsertMember(&DaprHostMember{
 		Name:     "127.0.0.1:8080",
 		AppID:    "FakeID",
@@ -98,39 +98,8 @@ func TestRestore(t *testing.T) {
 	assert.Len(t, fsm.State().hashingTableMap(), 2)
 }
 
-func TestPlacementStateWithVirtualNodes(t *testing.T) {
-	fsm := newFSM(100)
-	m := DaprHostMember{
-		Name:     "127.0.0.1:3030",
-		AppID:    "fakeAppID",
-		Entities: []string{"actorTypeOne", "actorTypeTwo"},
-	}
-	cmdLog, err := makeRaftLogCommand(MemberUpsert, m)
-	require.NoError(t, err)
-
-	fsm.Apply(&raft.Log{
-		Index: 1,
-		Term:  1,
-		Type:  raft.LogCommand,
-		Data:  cmdLog,
-	})
-
-	newTable := fsm.PlacementState(true)
-	assert.Equal(t, "1", newTable.GetVersion())
-	assert.Len(t, newTable.GetEntries(), 2)
-	// The default replicationFactor is 100
-	assert.Equal(t, int64(100), newTable.GetReplicationFactor())
-
-	for _, host := range newTable.GetEntries() {
-		assert.Len(t, host.GetHosts(), 100)
-		assert.Len(t, host.GetSortedSet(), 100)
-		assert.Len(t, host.GetLoadMap(), 1)
-		assert.Contains(t, host.GetLoadMap(), "127.0.0.1:3030")
-	}
-}
-
 func TestPlacementState(t *testing.T) {
-	fsm := newFSM(100)
+	fsm := newFSM()
 	m := DaprHostMember{
 		Name:     "127.0.0.1:3030",
 		AppID:    "fakeAppID",
@@ -146,16 +115,7 @@ func TestPlacementState(t *testing.T) {
 		Data:  cmdLog,
 	})
 
-	newTable := fsm.PlacementState(false)
+	newTable := fsm.PlacementState()
 	assert.Equal(t, "1", newTable.GetVersion())
 	assert.Len(t, newTable.GetEntries(), 2)
-	// The default replicationFactor is 100
-	assert.Equal(t, int64(100), newTable.GetReplicationFactor())
-
-	for _, host := range newTable.GetEntries() {
-		assert.Empty(t, host.GetHosts())
-		assert.Empty(t, host.GetSortedSet())
-		assert.Len(t, host.GetLoadMap(), 1)
-		assert.Contains(t, host.GetLoadMap(), "127.0.0.1:3030")
-	}
 }
