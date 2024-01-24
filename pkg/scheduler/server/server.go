@@ -17,13 +17,18 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
+	"sync/atomic"
 
 	"go.etcd.io/etcd/server/v3/embed"
 	"google.golang.org/grpc"
 
 	etcdcron "github.com/Scalingo/go-etcd-cron"
 
+	"github.com/dapr/dapr/pkg/actors/config"
+	"github.com/dapr/dapr/pkg/actors/placement"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
+	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
@@ -32,9 +37,14 @@ import (
 var log = logger.NewLogger("dapr.scheduler.server")
 
 type Options struct {
+	AppID       string
+	HostAddress string
 	// Port is the port that the server will listen on.
-	Port     int
+	Port int
+
 	Security security.Handler
+
+	PlacementAddress string
 }
 
 // Server is the gRPC server for the Scheduler service.
@@ -44,6 +54,8 @@ type Server struct {
 
 	cron    *etcdcron.Cron
 	readyCh chan struct{}
+
+	actorPlacement placement.PlacementService
 }
 
 func New(opts Options) *Server {
@@ -55,11 +67,35 @@ func New(opts Options) *Server {
 	s.srv = grpc.NewServer(opts.Security.GRPCServerOptionMTLS())
 	schedulerv1pb.RegisterSchedulerServer(s.srv, s)
 
+	apiLevel := &atomic.Uint32{}
+	apiLevel.Store(config.ActorAPILevel)
+
+	if opts.PlacementAddress != "" {
+		actorOptions := config.ActorsProviderOptions{
+			Config: config.Config{
+				ActorsService:    "placement:" + opts.PlacementAddress,
+				AppID:            opts.AppID,
+				HostAddress:      opts.HostAddress,
+				Port:             s.port,
+				PodName:          os.Getenv("POD_NAME"),
+				HostedActorTypes: config.NewHostedActors([]string{}),
+			},
+			AppHealthFn: func(ctx context.Context) <-chan bool { return nil },
+			Security:    opts.Security,
+			Resiliency:  resiliency.New(log),
+			APILevel:    apiLevel,
+		}
+		s.actorPlacement = placement.NewActorPlacement(actorOptions)
+	}
 	return s
 }
 
 func (s *Server) Run(ctx context.Context) error {
 	log.Info("Dapr Scheduler is starting...")
+
+	if s.actorPlacement != nil {
+		s.actorPlacement.Start(ctx)
+	}
 	return concurrency.NewRunnerManager(
 		s.runServer,
 		s.runEtcd,
