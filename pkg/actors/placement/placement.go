@@ -165,7 +165,7 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 	p.resetPlacementTables()
 	p.placementTableLock.Unlock()
 
-	if !p.establishStreamConn(ctx, internal.ActorAPILevel) {
+	if !p.establishStreamConn(ctx) {
 		return nil
 	}
 
@@ -207,7 +207,7 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 			if !p.running.Load() {
 				break
 			}
-			p.establishStreamConn(ctx, internal.ActorAPILevel)
+			p.establishStreamConn(ctx)
 		}
 	}()
 
@@ -381,7 +381,7 @@ func (p *actorPlacement) doLookupActor(ctx context.Context, actorType, actorID s
 }
 
 //nolint:nosnakecase
-func (p *actorPlacement) establishStreamConn(ctx context.Context, apiLevel uint32) (established bool) {
+func (p *actorPlacement) establishStreamConn(ctx context.Context) (established bool) {
 	// Backoff for reconnecting in case of errors
 	bo := backoff.NewExponentialBackOff()
 	bo.InitialInterval = placementReconnectMinInterval
@@ -416,7 +416,7 @@ func (p *actorPlacement) establishStreamConn(ctx context.Context, apiLevel uint3
 			log.Debug("try to connect to placement service: " + serverAddr)
 		}
 
-		err := p.client.connectToServer(ctx, serverAddr, apiLevel)
+		err := p.client.connectToServer(ctx, serverAddr)
 		if err == errEstablishingTLSConn {
 			return false
 		}
