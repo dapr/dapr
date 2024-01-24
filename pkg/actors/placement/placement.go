@@ -97,7 +97,7 @@ type actorPlacement struct {
 	afterTableUpdateFn func()
 
 	// callback invoked to halt all active actors
-	haltAllActorsFn internal.HaltAllActorsFn
+	haltAllActorsFn HaltAllActorsFn
 
 	// running is the flag when runtime is running.
 	running atomic.Bool
@@ -112,7 +112,7 @@ type actorPlacement struct {
 }
 
 // NewActorPlacement initializes ActorPlacement for the actor service.
-func NewActorPlacement(opts internal.ActorsProviderOptions) internal.PlacementService {
+func NewActorPlacement(opts internal.ActorsProviderOptions) PlacementService {
 	addrs := utils.ParseServiceAddr(strings.TrimPrefix(opts.Config.ActorsService, "placement:"))
 	servers := addDNSResolverPrefix(addrs)
 	return &actorPlacement{
@@ -342,11 +342,11 @@ func (p *actorPlacement) WaitUntilReady(ctx context.Context) error {
 }
 
 // LookupActor resolves to actor service instance address using consistent hashing table.
-func (p *actorPlacement) LookupActor(ctx context.Context, req internal.LookupActorRequest) (internal.LookupActorResponse, error) {
+func (p *actorPlacement) LookupActor(ctx context.Context, req LookupActorRequest) (LookupActorResponse, error) {
 	// Retry here to allow placement table dissemination/rebalancing to happen.
 	policyDef := p.resiliency.BuiltInPolicy(resiliency.BuiltInActorNotFoundRetries)
-	policyRunner := resiliency.NewRunner[internal.LookupActorResponse](ctx, policyDef)
-	return policyRunner(func(ctx context.Context) (res internal.LookupActorResponse, rErr error) {
+	policyRunner := resiliency.NewRunner[LookupActorResponse](ctx, policyDef)
+	return policyRunner(func(ctx context.Context) (res LookupActorResponse, rErr error) {
 		rAddr, rAppID, rErr := p.doLookupActor(ctx, req.ActorType, req.ActorID)
 		if rErr != nil {
 			return res, fmt.Errorf("error finding address for actor %s/%s: %w", req.ActorType, req.ActorID, rErr)
@@ -590,7 +590,7 @@ func (p *actorPlacement) ReportActorDeactivation(ctx context.Context, actorType,
 	return nil
 }
 
-func (p *actorPlacement) SetHaltActorFns(haltFn internal.HaltActorFn, haltAllFn internal.HaltAllActorsFn) {
+func (p *actorPlacement) SetHaltActorFns(haltFn HaltActorFn, haltAllFn HaltAllActorsFn) {
 	// haltFn isn't used in this implementation
 	p.haltAllActorsFn = haltAllFn
 	return

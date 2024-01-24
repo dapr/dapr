@@ -103,7 +103,7 @@ func TestConfig_GetRemindersProvider(t *testing.T) {
 		nilProvider := func(opts internal.ActorsProviderOptions) internal.RemindersProvider {
 			return struct{ internal.RemindersProvider }{}
 		}
-		remindersProviders["custom"] = func(config Config, placement internal.PlacementService) (remindersProviderFactory, error) {
+		remindersProviders["custom"] = func(config Config, placement placement.PlacementService) (remindersProviderFactory, error) {
 			return nilProvider, nil
 		}
 		t.Cleanup(func() {
