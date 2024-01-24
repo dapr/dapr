@@ -39,6 +39,7 @@ import (
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/health"
 	"github.com/dapr/dapr/pkg/actors/internal"
+	"github.com/dapr/dapr/pkg/actors/placement"
 	"github.com/dapr/dapr/pkg/actors/timers"
 	"github.com/dapr/dapr/pkg/channel"
 	configuration "github.com/dapr/dapr/pkg/config"
@@ -111,7 +112,7 @@ type GRPCConnectionFn func(ctx context.Context, address string, id string, names
 
 type actorsRuntime struct {
 	appChannel         channel.AppChannel
-	placement          internal.PlacementService
+	placement          placement.PlacementService
 	placementEnabled   bool
 	grpcConnectionFn   GRPCConnectionFn
 	actorsConfig       Config
@@ -151,7 +152,7 @@ type ActorsOpts struct {
 	StateTTLEnabled bool
 
 	// MockPlacement is a placement service implementation used for testing
-	MockPlacement internal.PlacementService
+	MockPlacement placement.PlacementService
 }
 
 // NewActors create a new actors runtime with given config.
@@ -227,7 +228,7 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) (ActorRuntime, 
 }
 
 func (a *actorsRuntime) isActorLocallyHosted(ctx context.Context, actorType string, actorID string) (isLocal bool, actorAddress string) {
-	lar, err := a.placement.LookupActor(ctx, internal.LookupActorRequest{
+	lar, err := a.placement.LookupActor(ctx, placement.LookupActorRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 	})
@@ -464,7 +465,7 @@ func (a *actorsRuntime) getActorTypeAndIDFromKey(key string) (string, string) {
 	return typ, id
 }
 
-func (a *actorsRuntime) deactivationTicker(configuration Config, haltFn internal.HaltActorFn) {
+func (a *actorsRuntime) deactivationTicker(configuration Config, haltFn placement.HaltActorFn) {
 	ticker := a.clock.NewTicker(configuration.ActorDeactivationScanInterval)
 	ch := ticker.C()
 	defer ticker.Stop()
@@ -522,7 +523,7 @@ func (a *actorsRuntime) Call(ctx context.Context, req *internalv1pb.InternalInvo
 	// Do a lookup to check if the actor is local
 	actor := req.GetActor()
 	actorType := actor.GetActorType()
-	lar, err := a.placement.LookupActor(ctx, internal.LookupActorRequest{
+	lar, err := a.placement.LookupActor(ctx, placement.LookupActorRequest{
 		ActorType: actorType,
 		ActorID:   actor.GetActorId(),
 	})
@@ -971,7 +972,7 @@ func (a *actorsRuntime) drainRebalancedActors() {
 			// for each actor, deactivate if no longer hosted locally
 			actorKey := key.(string)
 			actorType, actorID := a.getActorTypeAndIDFromKey(actorKey)
-			lar, _ := a.placement.LookupActor(context.TODO(), internal.LookupActorRequest{
+			lar, _ := a.placement.LookupActor(context.TODO(), placement.LookupActorRequest{
 				ActorType: actorType,
 				ActorID:   actorID,
 			})
