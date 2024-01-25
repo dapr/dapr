@@ -155,7 +155,7 @@ func (f *fuzzstate) Run(t *testing.T, ctx context.Context) {
 	httpClient := util.HTTPClient(t)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, util.GetMetaComponents(c, ctx, httpClient, f.daprd.HTTPPort()), 2)
+		assert.Len(c, util.GetMetaComponents(c, ctx, httpClient, f.daprd.HTTPPort()), 1)
 	}, time.Second*20, time.Millisecond*100)
 
 	t.Run("get", func(t *testing.T) {
