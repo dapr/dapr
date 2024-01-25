@@ -212,7 +212,7 @@ func (c *Consistent) Add(host, id string, port int64) bool {
 	// in 1.13, and the API level was increased to 20, but we still have to support sidecars
 	// running on 1.12 with placement services on 1.13. That's why we are keeping the
 	// vhosts in the store in v1.13.
-	// This should be removed in 1.15.
+	// This should be removed in 1.14.
 	// --Start remove--
 	for i := 0; i < replicationFactor; i++ {
 		h := c.hash(host + strconv.Itoa(i))
@@ -234,17 +234,15 @@ func (c *Consistent) Add(host, id string, port int64) bool {
 //
 // It returns ErrNoHosts if the ring has no hosts in it.
 func (c *Consistent) Get(key string) (string, error) {
-	// Do a cheap check first for an early return
 	c.RLock()
+	defer c.RUnlock()
+
 	if len(c.hosts) == 0 {
 		return "", ErrNoHosts
 	}
-	c.RUnlock()
 
 	h := c.hash(key)
-	c.RLock()
 	idx := c.search(h)
-	c.RUnlock()
 	return c.hosts[c.sortedSet[idx]], nil
 }
 
