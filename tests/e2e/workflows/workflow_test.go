@@ -49,6 +49,7 @@ func TestMain(m *testing.M) {
 	// Then run this test with the env var "WORKFLOW_APP_ENDPOINT" pointing to the address of the app. For example:
 	//   WORKFLOW_APP_ENDPOINT=http://localhost:3000 DAPR_E2E_TEST="workflows" make test-clean test-e2e-all |& tee test.log
 	if os.Getenv("WORKFLOW_APP_ENDPOINT") == "" {
+		fmt.Printf("Starting test runner with %d apps\n", len(backends))
 		// Set the configuration as environment variables for the test app.
 		var testApps []kube.AppDescription
 		for _, backend := range backends {
@@ -66,67 +67,17 @@ func TestMain(m *testing.M) {
 			},
 		}
 
+		tr = runner.NewTestRunner("workflowsapp", testApps, comps, nil)
+
+		exitCode := tr.Start(m)
 		// Validate multi workflow backend
 		validateMultiWorkflowBackendFailure(m)
 		// Validate invalid workflow backend
 		validateInvalidWorkflowBackendFailure(m)
 
-		tr = runner.NewTestRunner("workflowsapp", testApps, comps, nil)
-
-		os.Exit(tr.Start(m))
+		os.Exit(exitCode)
 	} else {
 		os.Exit(m.Run())
-	}
-}
-
-func validateMultiWorkflowBackendFailure(m *testing.M) {
-	var multiBackendTestApps []kube.AppDescription
-	multiBackendTestApps = append(multiBackendTestApps, getTestApp("multibackend"))
-	multiBackendComps := []kube.ComponentDescription{
-		{
-			Name:     "sqlitebackend2",
-			TypeName: "workflowbackend.sqlite",
-			MetaData: map[string]kube.MetadataValue{
-				"connectionString": {Raw: `""`},
-			},
-			Scopes: []string{appNamePrefix + "-multibackend"},
-		},
-		{
-			Name:     "actorbackend",
-			TypeName: "workflowbackend.actor",
-			Scopes:   []string{appNamePrefix + "-multibackend"},
-		},
-	}
-
-	tr = runner.NewTestRunner("workflowsapp-multibackend", multiBackendTestApps, multiBackendComps, nil)
-	exitCode := tr.Start(m)
-
-	// If there are multiple workflow backend is defined, then app should not start
-	if exitCode != 1 {
-		os.Exit(exitCode)
-	}
-}
-
-func validateInvalidWorkflowBackendFailure(m *testing.M) {
-	var invalidbackendTestApps []kube.AppDescription
-	invalidbackendTestApps = append(invalidbackendTestApps, getTestApp("invalidbackend"))
-	invalidbackendComps := []kube.ComponentDescription{
-		{
-			Name:     "invalidbackend",
-			TypeName: "workflowbackend.invalidbackend",
-			MetaData: map[string]kube.MetadataValue{
-				"connectionString": {Raw: `""`},
-			},
-			Scopes: []string{appNamePrefix + "-invalidbackend"},
-		},
-	}
-
-	tr = runner.NewTestRunner("workflowsapp-invalidbackend", invalidbackendTestApps, invalidbackendComps, nil)
-	exitCode := tr.Start(m)
-
-	// If the backend is invalid, then app should not start
-	if exitCode != 1 {
-		os.Exit(exitCode)
 	}
 }
 
@@ -404,6 +355,8 @@ func monitorTest(url string, instanceID string) func(t *testing.T) {
 }
 
 func TestWorkflow(t *testing.T) {
+	// log message saying starting tests
+	fmt.Println("starting TestWorkflow")
 	for _, backend := range backends {
 		t.Run(backend, func(t *testing.T) {
 			// Get the ingress external url of test app
@@ -426,5 +379,58 @@ func TestWorkflow(t *testing.T) {
 			t.Run("Raise event", raiseEventTest(externalURL, "raiseEvent-"+suffix))
 			t.Run("Start monitor", monitorTest(externalURL, "monitor-"+suffix))
 		})
+	}
+}
+
+func validateMultiWorkflowBackendFailure(m *testing.M) {
+	var multiBackendTestApps []kube.AppDescription
+	multiBackendTestApps = append(multiBackendTestApps, getTestApp("multibackend"))
+	multiBackendComps := []kube.ComponentDescription{
+		{
+			Name:     "sqlitebackend2",
+			TypeName: "workflowbackend.sqlite",
+			MetaData: map[string]kube.MetadataValue{
+				"connectionString": {Raw: `""`},
+			},
+			Scopes: []string{appNamePrefix + "-multibackend"},
+		},
+		{
+			Name:     "actorbackend",
+			TypeName: "workflowbackend.actor",
+			Scopes:   []string{appNamePrefix + "-multibackend"},
+		},
+	}
+
+	tr2 := runner.NewTestRunner("workflowsapp-multibackend", multiBackendTestApps, multiBackendComps, nil)
+	exitCode := tr2.Start(m)
+
+	// If there are multiple workflow backend is defined, then app should not start
+	if exitCode != 1 {
+		// create panic when exitCode is not 1
+		panic("Workflow with multiple backend should not start")
+	}
+}
+
+func validateInvalidWorkflowBackendFailure(m *testing.M) {
+	var invalidbackendTestApps []kube.AppDescription
+	invalidbackendTestApps = append(invalidbackendTestApps, getTestApp("invalidbackend"))
+	invalidbackendComps := []kube.ComponentDescription{
+		{
+			Name:     "invalidbackend",
+			TypeName: "workflowbackend.invalidbackend",
+			MetaData: map[string]kube.MetadataValue{
+				"connectionString": {Raw: `""`},
+			},
+			Scopes: []string{appNamePrefix + "-invalidbackend"},
+		},
+	}
+
+	tr3 := runner.NewTestRunner("workflowsapp-invalidbackend", invalidbackendTestApps, invalidbackendComps, nil)
+	exitCode := tr3.Start(m)
+
+	// If the backend is invalid, then app should not start
+	if exitCode != 1 {
+		// create panic when exitCode is not 1
+		panic("Workflow with invalid backend should not start")
 	}
 }
