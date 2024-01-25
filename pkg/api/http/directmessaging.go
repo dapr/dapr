@@ -254,8 +254,6 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 	// Log with debug level and send the error to the client in the body
 	log.Debugf("HTTP service invocation failed to complete with error: %v", err)
 
-	var headersSet bool
-
 	if resp != nil {
 		resp.Close()
 
@@ -263,7 +261,6 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 		headers := resp.Headers()
 		if len(headers) > 0 {
 			invokev1.InternalMetadataToHTTPHeader(r.Context(), headers, w.Header().Add)
-			headersSet = true
 		}
 	}
 
@@ -273,7 +270,7 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 	)
 	switch {
 	case errors.As(err, &codeErr):
-		if len(codeErr.headers) > 0 && !headersSet {
+		if len(codeErr.headers) > 0 {
 			invokev1.InternalMetadataToHTTPHeader(r.Context(), codeErr.headers, w.Header().Add)
 		}
 		respondWithHTTPRawResponse(w, &UniversalHTTPRawResponse{
