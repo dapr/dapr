@@ -71,6 +71,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/hotreload"
 	"github.com/dapr/dapr/pkg/runtime/meta"
 	"github.com/dapr/dapr/pkg/runtime/processor"
+	"github.com/dapr/dapr/pkg/runtime/processor/workflow"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
 	schedulerCli "github.com/dapr/dapr/pkg/scheduler/client"
@@ -670,12 +671,22 @@ func (a *DaprRuntime) initWorkflowEngine(ctx context.Context) error {
 		return nil
 	}
 
-	log.Infof("Registering component for dapr workflow engine...")
+	log.Info("Registering component for dapr workflow engine...")
 	reg.RegisterComponent(wfComponentFactory, "dapr")
-	if !a.processor.AddPendingComponent(ctx, wfengine.ComponentDefinition) {
-		log.Warn("failed to initialize Dapr workflow component")
+	wfe := workflow.New(workflow.Options{
+		Registry:       a.runtimeConfig.registry.Workflows(),
+		ComponentStore: a.compStore,
+		Meta:           a.meta,
+	})
+	if err := wfe.Init(ctx, wfengine.ComponentDefinition()); err != nil {
+		return fmt.Errorf("failed to initialize Dapr workflow component: %w", err)
 	}
-	return nil
+
+	log.Info("Workflow engine initialized.")
+
+	return a.runnerCloser.AddCloser(func() error {
+		return wfe.Close(wfengine.ComponentDefinition())
+	})
 }
 
 // initPluggableComponents discover pluggable components and initialize with their respective registries.

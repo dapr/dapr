@@ -48,8 +48,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/processor/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/processor/secret"
 	"github.com/dapr/dapr/pkg/runtime/processor/state"
-	wfbeProcessor "github.com/dapr/dapr/pkg/runtime/processor/wfbackend"
-	"github.com/dapr/dapr/pkg/runtime/processor/workflow"
+	"github.com/dapr/dapr/pkg/runtime/processor/wfbackend"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
@@ -174,7 +173,7 @@ func New(opts Options) *Processor {
 		Channels:       opts.Channels,
 	})
 
-	wfbe := wfbeProcessor.New(wfbeProcessor.Options{
+	wfbe := wfbackend.New(wfbackend.Options{
 		AppID:          opts.ID,
 		Registry:       opts.Registry.WorkflowBackends(),
 		ComponentStore: opts.ComponentStore,
@@ -213,12 +212,7 @@ func New(opts Options) *Processor {
 			components.CategorySecretStore:     secret,
 			components.CategoryStateStore:      state,
 			components.CategoryWorkflowBackend: wfbe,
-			components.CategoryWorkflow: workflow.New(workflow.Options{
-				Registry:       opts.Registry.Workflows(),
-				ComponentStore: opts.ComponentStore,
-				Meta:           opts.Meta,
-			}),
-			components.CategoryMiddleware: middleware.New(),
+			components.CategoryMiddleware:      middleware.New(),
 		},
 	}
 }
