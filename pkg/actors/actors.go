@@ -51,9 +51,11 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/retry"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	schedulerclient "github.com/dapr/dapr/pkg/scheduler/client"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
@@ -114,6 +116,8 @@ type GRPCConnectionFn func(ctx context.Context, address string, id string, names
 type actorsRuntime struct {
 	appChannel         channel.AppChannel
 	placement          placement.PlacementService
+	scheduler          schedulerv1pb.SchedulerClient
+	clientConn         *grpc.ClientConn
 	placementEnabled   bool
 	grpcConnectionFn   GRPCConnectionFn
 	actorsConfig       Config
@@ -224,6 +228,18 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) (ActorRuntime, 
 	})
 
 	a.timers.SetExecuteTimerFn(a.executeTimer)
+
+	if opts.Config.SchedulerService != "" {
+		log.Warn("Using scheduler service for reminders.")
+		// TODO: have a wrapper that includes both client and conn.
+		schedulerClient, schedulerConn, err := schedulerclient.GetSchedulerClient(context.TODO(), opts.Config.SchedulerService, opts.Security)
+		if err != nil {
+			return nil, err
+		}
+
+		a.scheduler = schedulerClient
+		a.clientConn = schedulerConn
+	}
 
 	return a, nil
 }
@@ -1175,6 +1191,40 @@ func (a *actorsRuntime) doExecuteReminderOrTimer(ctx context.Context, reminder *
 }
 
 func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderRequest) error {
+	if a.scheduler != nil {
+		metadata := map[string]string{
+			"appId":        a.actorsConfig.AppID,
+			"actorType":    req.ActorType,
+			"actorId":      req.ActorID,
+			"reminder":     req.Name,
+			"content-type": "application/json",
+		}
+
+		jobName := constructCompositeKey(
+			"reminder",
+			req.ActorType,
+			req.ActorID,
+			req.Name,
+		)
+
+		// TODO: change the 3rd party library to take our format
+		jobSchedule := "@every " + req.Period
+		internalScheduleJobReq := &schedulerv1pb.ScheduleJobRequest{
+			Job: &runtimev1pb.Job{
+				Name:     jobName,
+				Schedule: jobSchedule,
+				Data:     req.Data,
+				DueTime:  req.DueTime,
+				Ttl:      req.TTL,
+			},
+			Namespace: "",       // TODO
+			Metadata:  metadata, // TODO: this should generate key if jobStateStore is configured
+		}
+
+		_, err := a.scheduler.ScheduleJob(ctx, internalScheduleJobReq)
+		return err
+	}
+
 	if !a.actorsConfig.Config.HostedActorTypes.IsActorTypeHosted(req.ActorType) {
 		return ErrReminderOpActorNotHosted
 	}

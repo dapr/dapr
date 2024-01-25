@@ -18,7 +18,9 @@ import (
 	"fmt"
 
 	etcdcron "github.com/Scalingo/go-etcd-cron"
+	"google.golang.org/protobuf/types/known/anypb"
 
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 )
@@ -37,12 +39,15 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 
 	// TODO: figure out if we need/want namespace in job name
 	err := s.cron.AddJob(etcdcron.Job{
-		Name:     req.GetJob().GetName(),
-		Rhythm:   req.GetJob().GetSchedule(),
-		Repeats:  req.GetJob().GetRepeats(),
-		DueTime:  req.GetJob().GetDueTime(), // TODO: figure out dueTime
-		TTL:      req.GetJob().GetTtl(),
-		Data:     req.GetJob().GetData(),
+		Name:    req.GetJob().GetName(),
+		Rhythm:  req.GetJob().GetSchedule(),
+		Repeats: req.GetJob().GetRepeats(),
+		DueTime: req.GetJob().GetDueTime(), // TODO: figure out dueTime
+		TTL:     req.GetJob().GetTtl(),
+		Data: &anypb.Any{
+			TypeUrl: "type.googleapis.com/google.protobuf.BytesValue",
+			Value:   req.GetJob().GetData(),
+		},
 		Metadata: req.GetMetadata(), // TODO: do I need this here?
 		Func: func(context.Context) error {
 			innerErr := s.triggerJob(req.GetJob(), req.GetNamespace(), req.GetMetadata())
@@ -91,7 +96,7 @@ func (s *Server) ListJobs(ctx context.Context, req *schedulerv1pb.ListJobsReques
 			Repeats:  entry.Repeats,
 			DueTime:  entry.DueTime,
 			Ttl:      entry.TTL,
-			Data:     entry.Data,
+			Data:     entry.Data.GetValue(),
 		}
 
 		jobs = append(jobs, job)
@@ -119,7 +124,7 @@ func (s *Server) GetJob(ctx context.Context, req *schedulerv1pb.JobRequest) (*sc
 				Repeats:  job.Repeats,
 				DueTime:  job.DueTime,
 				Ttl:      job.TTL,
-				Data:     job.Data,
+				Data:     job.Data.GetValue(),
 			},
 		}
 		return resp, nil
@@ -145,7 +150,27 @@ func (s *Server) DeleteJob(ctx context.Context, req *schedulerv1pb.JobRequest) (
 	return &schedulerv1pb.DeleteJobResponse{}, nil
 }
 
-func (s *Server) TriggerJob(context.Context, *schedulerv1pb.TriggerJobRequest) (*schedulerv1pb.TriggerJobResponse, error) {
+func (s *Server) TriggerJob(ctx context.Context, req *schedulerv1pb.TriggerJobRequest) (*schedulerv1pb.TriggerJobResponse, error) {
 	log.Info("Triggering job")
+	metadata := req.GetMetadata()
+	actorType := metadata["actorType"]
+	actorID := metadata["actorId"]
+	reminderName := metadata["reminder"]
+	if actorType != "" && actorID != "" && reminderName != "" {
+		if s.actorRuntime == nil {
+			return nil, fmt.Errorf("actor runtime is not configured")
+		}
+
+		invokeMethod := "remind/" + reminderName
+		contentType := metadata["content-type"]
+		invokeReq := internalv1pb.NewInternalInvokeRequest(invokeMethod).
+			WithActor(actorType, actorID).
+			WithData(req.GetData()).
+			WithContentType(contentType)
+
+		_, err := s.actorRuntime.Call(ctx, invokeReq)
+		return nil, err
+
+	}
 	return nil, fmt.Errorf("not implemented")
 }
