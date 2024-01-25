@@ -46,13 +46,20 @@ func BuiltinWorkflowFactory(engine *WorkflowEngine) func(logger.Logger) workflow
 		return &workflowEngineComponent{
 			logger: logger,
 			client: backend.NewTaskHubClient(engine.Backend),
+			autoStartEngineCallback: func() error {
+				// We don't propagate any context here because that would cause the engine to shut
+				// down based on whatever the passed-in context is. Once the engine starts up we
+				// we want to keep it running until the runtime shuts down by calling engine.Close
+				return engine.Start(context.Background())
+			},
 		}
 	}
 }
 
 type workflowEngineComponent struct {
-	logger logger.Logger
-	client backend.TaskHubClient
+	logger                  logger.Logger
+	client                  backend.TaskHubClient
+	autoStartEngineCallback func() error
 }
 
 func (c *workflowEngineComponent) Init(metadata workflows.Metadata) error {
@@ -61,6 +68,11 @@ func (c *workflowEngineComponent) Init(metadata workflows.Metadata) error {
 }
 
 func (c *workflowEngineComponent) Start(ctx context.Context, req *workflows.StartRequest) (*workflows.StartResponse, error) {
+	err := c.autoStartEngineCallback()
+	if err != nil {
+		return nil, fmt.Errorf("failed to auto-start the workflow engine: %w", err)
+	}
+
 	if req.WorkflowName == "" {
 		return nil, errors.New("a workflow name is required")
 	}
@@ -102,6 +114,11 @@ func (c *workflowEngineComponent) Start(ctx context.Context, req *workflows.Star
 }
 
 func (c *workflowEngineComponent) Terminate(ctx context.Context, req *workflows.TerminateRequest) error {
+	err := c.autoStartEngineCallback()
+	if err != nil {
+		return fmt.Errorf("failed to auto-start the workflow engine: %w", err)
+	}
+
 	if req.InstanceID == "" {
 		return errors.New("a workflow instance ID is required")
 	}
@@ -119,6 +136,11 @@ func (c *workflowEngineComponent) Terminate(ctx context.Context, req *workflows.
 }
 
 func (c *workflowEngineComponent) Purge(ctx context.Context, req *workflows.PurgeRequest) error {
+	err := c.autoStartEngineCallback()
+	if err != nil {
+		return fmt.Errorf("failed to auto-start the workflow engine: %w", err)
+	}
+
 	if req.InstanceID == "" {
 		return errors.New("a workflow instance ID is required")
 	}
@@ -136,6 +158,11 @@ func (c *workflowEngineComponent) Purge(ctx context.Context, req *workflows.Purg
 }
 
 func (c *workflowEngineComponent) RaiseEvent(ctx context.Context, req *workflows.RaiseEventRequest) error {
+	err := c.autoStartEngineCallback()
+	if err != nil {
+		return fmt.Errorf("failed to auto-start the workflow engine: %w", err)
+	}
+
 	if req.InstanceID == "" {
 		return errors.New("a workflow instance ID is required")
 	}
@@ -159,6 +186,11 @@ func (c *workflowEngineComponent) RaiseEvent(ctx context.Context, req *workflows
 }
 
 func (c *workflowEngineComponent) Get(ctx context.Context, req *workflows.GetRequest) (*workflows.StateResponse, error) {
+	err := c.autoStartEngineCallback()
+	if err != nil {
+		return nil, fmt.Errorf("failed to auto-start the workflow engine: %w", err)
+	}
+
 	if req.InstanceID == "" {
 		return nil, errors.New("a workflow instance ID is required")
 	}
@@ -198,6 +230,11 @@ func (c *workflowEngineComponent) Get(ctx context.Context, req *workflows.GetReq
 }
 
 func (c *workflowEngineComponent) Pause(ctx context.Context, req *workflows.PauseRequest) error {
+	err := c.autoStartEngineCallback()
+	if err != nil {
+		return fmt.Errorf("failed to auto-start the workflow engine: %w", err)
+	}
+
 	if req.InstanceID == "" {
 		return errors.New("a workflow instance ID is required")
 	}
@@ -211,6 +248,11 @@ func (c *workflowEngineComponent) Pause(ctx context.Context, req *workflows.Paus
 }
 
 func (c *workflowEngineComponent) Resume(ctx context.Context, req *workflows.ResumeRequest) error {
+	err := c.autoStartEngineCallback()
+	if err != nil {
+		return fmt.Errorf("failed to auto-start the workflow engine: %w", err)
+	}
+
 	if req.InstanceID == "" {
 		return errors.New("a workflow instance ID is required")
 	}
@@ -224,6 +266,11 @@ func (c *workflowEngineComponent) Resume(ctx context.Context, req *workflows.Res
 }
 
 func (c *workflowEngineComponent) PurgeWorkflow(ctx context.Context, req *workflows.PurgeRequest) error {
+	err := c.autoStartEngineCallback()
+	if err != nil {
+		return fmt.Errorf("failed to auto-start the workflow engine: %w", err)
+	}
+
 	if req.InstanceID == "" {
 		return errors.New("a workflow instance ID is required")
 	}
